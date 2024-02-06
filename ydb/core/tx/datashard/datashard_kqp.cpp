@@ -899,19 +899,21 @@ void KqpCommitLocks(ui64 origin, const NKikimrDataEvents::TKqpLocks* kqpLocks, T
 }
 
 void KqpPrepareInReadsets(TInputOpData::TInReadSets& inReadSets,
-    const NKikimrDataEvents::TKqpLocks& kqpLocks, const NKqp::TKqpTasksRunner& tasksRunner, ui64 tabletId)
+    const NKikimrDataEvents::TKqpLocks& kqpLocks, const NKqp::TKqpTasksRunner* tasksRunner, ui64 tabletId)
 {
-    for (auto& [taskId, task] : tasksRunner.GetTasks()) {
-        for (ui32 i = 0; i < task.InputsSize(); ++i) {
-            for (auto& channel : task.GetInputs(i).GetChannels()) {
-                if (channel.GetIsPersistent()) {
-                    MKQL_ENSURE_S(channel.GetSrcEndpoint().HasTabletId());
-                    MKQL_ENSURE_S(channel.GetDstEndpoint().HasTabletId());
+    if (tasksRunner) {
+        for (auto& [taskId, task] : tasksRunner->GetTasks()) {
+            for (ui32 i = 0; i < task.InputsSize(); ++i) {
+                for (auto& channel : task.GetInputs(i).GetChannels()) {
+                    if (channel.GetIsPersistent()) {
+                        MKQL_ENSURE_S(channel.GetSrcEndpoint().HasTabletId());
+                        MKQL_ENSURE_S(channel.GetDstEndpoint().HasTabletId());
 
-                    auto key = std::make_pair(channel.GetSrcEndpoint().GetTabletId(),
-                        channel.GetDstEndpoint().GetTabletId());
+                        auto key = std::make_pair(channel.GetSrcEndpoint().GetTabletId(),
+                            channel.GetDstEndpoint().GetTabletId());
 
-                    inReadSets.emplace(key, TVector<TRSData>());
+                        inReadSets.emplace(key, TVector<TRSData>());
+                    }
                 }
             }
         }

@@ -541,9 +541,7 @@ void TActiveTransaction::ReleaseTxData(NTabletFlatExecutor::TTxMemoryProviderBas
     DataTx->ReleaseTxData();
     // Immediate transactions have no body stored.
     if (!IsImmediate() && !HasVolatilePrepareFlag()) {
-        UntrackMemory();
-        TxBody.clear();
-        TrackMemory();
+        ClearTxBody();
     }
 
     //InReadSets.clear();

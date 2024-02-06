@@ -146,7 +146,7 @@ public:
         DataShard.ReleaseCache(*writeOp);
 
         if (writeOp->IsTxDataReleased()) {
-            switch (Pipeline.RestoreDataTx(writeOp, txc, ctx)) {
+            switch (Pipeline.RestoreDataTx(writeOp, txc)) {
                 case ERestoreDataStatus::Ok:
                     break;
 
@@ -179,7 +179,7 @@ public:
         }
 
         if (writeTx->CheckCancelled()) {
-            writeOp->ReleaseTxData(txc, ctx);
+            writeOp->ReleaseTxData(txc);
             writeOp->SetError(NKikimrDataEvents::TEvWriteResult::STATUS_CANCELLED, "Tx was cancelled");
             DataShard.IncCounter(COUNTER_WRITE_CANCELLED);
             return EExecutionStatus::Executed;
@@ -280,7 +280,7 @@ public:
 
             if (Pipeline.AddLockDependencies(op, guardLocks)) {
                 writeTx->ResetCollectedChanges();
-                writeOp->ReleaseTxData(txc, ctx);
+                writeOp->ReleaseTxData(txc);
                 if (txc.DB.HasChanges()) {
                     txc.DB.RollbackChanges();
                 }
@@ -370,7 +370,7 @@ public:
         DataShard.IncCounter(writeOp->GetWriteResult()->Record.status() == NKikimrDataEvents::TEvWriteResult::STATUS_COMPLETED ?
             COUNTER_WRITE_SUCCESS : COUNTER_WRITE_ERROR);
 
-        ctx.Send(writeOp->GetEv()->Sender, writeOp->ReleaseWriteResult().release(), 0, writeOp->GetEv()->Cookie);
+        ctx.Send(op->GetTarget(), writeOp->ReleaseWriteResult().release(), 0, op->GetCookie());
     }
 
 };  // TWriteUnit

@@ -19,7 +19,7 @@ class TValidatedWriteTx: TNonCopyable, public TValidatedTx {
 public:
     using TPtr = std::shared_ptr<TValidatedWriteTx>;
 
-    TValidatedWriteTx(TDataShard* self, TTransactionContext& txc, const TActorContext& ctx, ui64 globalTxId, TInstant receivedAt, const TRowVersion& readVersion, const TRowVersion& writeVersion, const NEvents::TDataEvents::TEvWrite::TPtr& ev);
+    TValidatedWriteTx(TDataShard* self, TTransactionContext& txc, ui64 globalTxId, TInstant receivedAt, const TRowVersion& readVersion, const TRowVersion& writeVersion, const NEvents::TDataEvents::TEvWrite::TPtr& ev);
     ~TValidatedWriteTx();
 
     EType GetType() const override { 
@@ -30,18 +30,10 @@ public:
         return 100;
     }
 
-    const NEvents::TDataEvents::TEvWrite::TPtr& GetEv() const {
-        return Ev;
-    }
-
-    const NKikimrDataEvents::TEvWrite& GetRecord() const {
-        return Ev->Get()->Record;
-    }
-
     const NKikimrDataEvents::TEvWrite::TOperation& RecordOperation() const {
-        Y_ABORT_UNLESS(GetRecord().operations().size() == 1, "Only one operation is supported now");
-        Y_ABORT_UNLESS(GetRecord().operations(0).GetType() == NKikimrDataEvents::TEvWrite::TOperation::OPERATION_UPSERT, "Only UPSERT operation is supported now");
-        return GetRecord().operations(0);
+        Y_ABORT_UNLESS(Record.operations().size() == 1, "Only one operation is supported now");
+        Y_ABORT_UNLESS(Record.operations(0).GetType() == NKikimrDataEvents::TEvWrite::TOperation::OPERATION_UPSERT, "Only UPSERT operation is supported now");
+        return Record.operations(0);
     }
 
     ui64 GetTxId() const override {
@@ -49,13 +41,13 @@ public:
     }
 
     ui64 LockTxId() const {
-        return GetRecord().locktxid();
+        return Record.locktxid();
     }
     ui32 LockNodeId() const {
-        return GetRecord().locknodeid();
+        return Record.locknodeid();
     }
     bool Immediate() const {
-        return GetRecord().txmode() == NKikimrDataEvents::TEvWrite::MODE_IMMEDIATE;
+        return Record.txmode() == NKikimrDataEvents::TEvWrite::MODE_IMMEDIATE;
     }
     bool NeedDiagnostics() const {
         return true;
@@ -133,20 +125,20 @@ public:
 
 
     const ::NKikimrDataEvents::TKqpLocks& GetKqpLocks() const {
-        return GetRecord().locks();
+        return Record.locks();
     }
     bool HasKqpLocks() const {
-        return GetRecord().has_locks();
+        return Record.has_locks();
     }
 
-    bool ParseOperations(const TUserTable::TTableInfos& tableInfos);
+    bool ParseOperations(const NEvents::TDataEvents::TEvWrite::TPtr& ev, const TUserTable::TTableInfos& tableInfos);
     void SetTxKeys(const ::google::protobuf::RepeatedField<::NProtoBuf::uint32>& columnIds);
 
     ui32 ExtractKeys(bool allowErrors);
     bool ReValidateKeys();
 
     ui64 HasOperations() const {
-        return GetRecord().operations().size() != 0;
+        return Record.operations().size() != 0;
     }
 
     ui32 KeysCount() const {
@@ -175,13 +167,13 @@ public:
     }
 
 private:
-    const NEvents::TDataEvents::TEvWrite::TPtr& Ev;
     TDataShardUserDb UserDb;
     TKeyValidator KeyValidator;
     NMiniKQL::TEngineHostCounters EngineHostCounters;
+    // TODO: may be remove record
+    NKikimrDataEvents::TEvWrite Record;
 
     const ui64 TabletId;
-    const TActorContext& Ctx;
 
     YDB_READONLY_DEF(TTableId, TableId);
     YDB_READONLY_DEF(TSerializedCellMatrix, Matrix);
@@ -201,25 +193,24 @@ private:
 class TWriteOperation : public TOperation {
     friend class TWriteUnit;
 public:
-    static TWriteOperation* CastWriteOperation(TOperation::TPtr op);
-    
-    explicit TWriteOperation(const TBasicOpInfo& op, NEvents::TDataEvents::TEvWrite::TPtr ev, TDataShard* self, TTransactionContext& txc, const TActorContext& ctx);
+    using TPtr = TIntrusivePtr<TWriteOperation>;
 
+    static TWriteOperation* CastWriteOperation(TOperation::TPtr op);
+
+    explicit TWriteOperation(const TBasicOpInfo& op, ui64 tabletId);
+    explicit TWriteOperation(const TBasicOpInfo& op, NEvents::TDataEvents::TEvWrite::TPtr ev, TDataShard* self, TTransactionContext& txc);
     ~TWriteOperation();
 
     void FillTxData(TValidatedWriteTx::TPtr dataTx);
-    void FillTxData(TDataShard* self, TTransactionContext& txc, const TActorContext& ctx, const TActorId& target, NEvents::TDataEvents::TEvWrite::TPtr&& ev, const TVector<TSysTables::TLocksTable::TLock>& locks, ui64 artifactFlags);
-    void FillVolatileTxData(TDataShard* self, TTransactionContext& txc, const TActorContext& ctx);
+    void FillTxData(TDataShard* self, TTransactionContext& txc, const TActorId& target, const TString& txBody, const TVector<TSysTables::TLocksTable::TLock>& locks, ui64 artifactFlags);
+    void FillVolatileTxData(TDataShard* self, TTransactionContext& txc);
 
-    const NEvents::TDataEvents::TEvWrite::TPtr& GetEv() const {
-        return Ev;
-    }
-    TString GetTxBody() const {
-        return Ev->GetChainBuffer()->GetString();
-    }
+    TString GetTxBody() const;
+    void SetTxBody(const TString& txBody);
+
     void ClearTxBody() {
         UntrackMemory();
-        Ev->ReleaseChainBuffer();
+        Ev.Reset();
         TrackMemory();
     }
 
@@ -278,8 +269,8 @@ public:
         return requiredMem;
     }
 
-    void ReleaseTxData(NTabletFlatExecutor::TTxMemoryProviderBase& provider, const TActorContext& ctx);
-    ERestoreDataStatus RestoreTxData(TDataShard* self, TTransactionContext& txc, const TActorContext& ctx);
+    void ReleaseTxData(NTabletFlatExecutor::TTxMemoryProviderBase& provider);
+    ERestoreDataStatus RestoreTxData(TDataShard* self, TTransactionContext& txc);
     void FinalizeWriteTxPlan();
 
     // TOperation iface.
@@ -321,7 +312,7 @@ public:
     TValidatedWriteTx::TPtr& GetWriteTx() {
         return WriteTx;
     }
-    TValidatedWriteTx::TPtr BuildWriteTx(TDataShard* self, TTransactionContext& txc, const TActorContext& ctx);
+    TValidatedWriteTx::TPtr BuildWriteTx(TDataShard* self, TTransactionContext& txc);
 
     void ClearWriteTx() { 
         WriteTx = nullptr; 
@@ -351,7 +342,6 @@ private:
     std::unique_ptr<NEvents::TDataEvents::TEvWriteResult> WriteResult;
 
     const ui64 TabletId;
-    const TActorContext& Ctx;
 
     YDB_READONLY_DEF(ui64, ArtifactFlags);
     YDB_ACCESSOR_DEF(ui64, TxCacheUsage);

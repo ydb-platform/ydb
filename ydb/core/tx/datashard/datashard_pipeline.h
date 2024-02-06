@@ -122,6 +122,7 @@ public:
     bool IsReadyOp(TOperation::TPtr op);
 
     bool LoadTxDetails(TTransactionContext &txc, const TActorContext &ctx, TActiveTransaction::TPtr tx);
+    bool LoadWriteDetails(TTransactionContext& txc, const TActorContext& ctx, TWriteOperation::TPtr tx);
 
     void DeactivateOp(TOperation::TPtr op, TTransactionContext& txc, const TActorContext &ctx);
     void RemoveTx(TStepOrder stepTxId);
@@ -271,7 +272,7 @@ public:
     TOperation::TPtr BuildOperation(NEvents::TDataEvents::TEvWrite::TPtr &ev,
                                     TInstant receivedAt, ui64 tieBreakerIndex,
                                     NTabletFlatExecutor::TTransactionContext &txc,
-                                    const TActorContext &ctx, NWilson::TSpan &&operationSpan);
+                                    NWilson::TSpan &&operationSpan);
     void BuildDataTx(TActiveTransaction *tx,
                      TTransactionContext &txc,
                      const TActorContext &ctx);
@@ -285,11 +286,10 @@ public:
 
     ERestoreDataStatus RestoreDataTx(
         TWriteOperation* tx,
-        TTransactionContext& txc,
-        const TActorContext& ctx
+        TTransactionContext& txc
     )
     {
-        return tx->RestoreTxData(Self, txc, ctx);
+        return tx->RestoreTxData(Self, txc);
     }
 
     void RegisterDistributedWrites(const TOperation::TPtr& op, NTable::TDatabase& db);

@@ -595,6 +595,55 @@ bool TPipeline::LoadTxDetails(TTransactionContext &txc,
     return true;
 }
 
+bool TPipeline::LoadWriteDetails(TTransactionContext& txc, const TActorContext& ctx, TWriteOperation::TPtr writeOp)
+{
+    auto it = DataTxCache.find(writeOp->GetTxId());
+    if (it != DataTxCache.end()) {
+        auto baseTx = it->second;
+        Y_ABORT_UNLESS(baseTx->GetType() == TValidatedTx::EType::WriteTx, "Wrong writeOp type in cache");
+        TValidatedWriteTx::TPtr dataTx = std::dynamic_pointer_cast<TValidatedWriteTx>(baseTx);
+
+        writeOp->FillTxData(dataTx);
+        // Remove writeOp from cache.
+        ForgetTx(writeOp->GetTxId());
+
+        LOG_DEBUG_S(ctx, NKikimrServices::TX_DATASHARD, "LoadWriteDetails at " << Self->TabletID() << " got data writeOp from cache " << writeOp->GetStep() << ":" << writeOp->GetTxId());
+    } else if (writeOp->HasVolatilePrepareFlag()) {
+        // Since transaction is volatile it was never stored on disk, and it
+        // shouldn't have any artifacts yet.
+        writeOp->FillVolatileTxData(Self, txc);
+
+        ui32 keysCount = 0;
+        keysCount = writeOp->ExtractKeys();
+
+        LOG_DEBUG_S(ctx, NKikimrServices::TX_DATASHARD, "LoadWriteDetails at " << Self->TabletID() << " loaded writeOp from memory " << writeOp->GetStep() << ":" << writeOp->GetTxId() << " keys extracted: " << keysCount);
+    } else {
+        NIceDb::TNiceDb db(txc.DB);
+        TActorId target;
+        TString txBody;
+        TVector<TSysTables::TLocksTable::TLock> locks;
+        ui64 artifactFlags = 0;
+        bool ok = Self->TransQueue.LoadTxDetails(db, writeOp->GetTxId(), target, txBody, locks, artifactFlags);
+        if (!ok)
+            return false;
+
+        // Check we have enough memory to parse writeOp.
+        ui64 requiredMem = txBody.size() * 10;
+        if (MaybeRequestMoreTxMemory(requiredMem, txc))
+            return false;
+
+        writeOp->FillTxData(Self, txc, target, txBody, std::move(locks), artifactFlags);
+
+        ui32 keysCount = 0;
+        //if (Config.LimitActiveTx > 1)
+        keysCount = writeOp->ExtractKeys();
+
+        LOG_DEBUG_S(ctx, NKikimrServices::TX_DATASHARD, "LoadWriteDetails at " << Self->TabletID() << " loaded writeOp from db " << writeOp->GetStep() << ":" << writeOp->GetTxId() << " keys extracted: " << keysCount);
+    }
+
+    return true;
+}
+
 void TPipeline::DeactivateOp(TOperation::TPtr op,
                              TTransactionContext& txc,
                              const TActorContext &ctx)
@@ -1578,11 +1627,11 @@ TOperation::TPtr TPipeline::BuildOperation(TEvDataShard::TEvProposeTransaction::
 TOperation::TPtr TPipeline::BuildOperation(NEvents::TDataEvents::TEvWrite::TPtr& ev,
                                            TInstant receivedAt, ui64 tieBreakerIndex,
                                            NTabletFlatExecutor::TTransactionContext& txc,
-                                           const TActorContext& ctx, NWilson::TSpan &&operationSpan)
+                                           NWilson::TSpan &&operationSpan)
 {
     const auto& rec = ev->Get()->Record;
     TBasicOpInfo info(rec.GetTxId(), EOperationKind::WriteTx, EvWrite::Convertor::GetProposeFlags(rec.GetTxMode()), 0, receivedAt, tieBreakerIndex);
-    auto writeOp = MakeIntrusive<TWriteOperation>(info, ev, Self, txc, ctx);
+    auto writeOp = MakeIntrusive<TWriteOperation>(info, ev, Self, txc);
     writeOp->OperationSpan = std::move(operationSpan);
     auto writeTx = writeOp->GetWriteTx();
     Y_ABORT_UNLESS(writeTx);

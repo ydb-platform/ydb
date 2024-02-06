@@ -77,8 +77,9 @@ EExecutionStatus TCompleteOperationUnit::Execute(TOperation::TPtr op,
 void TCompleteOperationUnit::CompleteOperation(TOperation::TPtr op,
                                                const TActorContext &ctx)
 {
-    TActiveTransaction *tx = dynamic_cast<TActiveTransaction*>(op.Get());
-    Y_VERIFY_S(tx, "cannot cast operation of kind " << op->GetKind());
+    TActiveTransaction* tx = dynamic_cast<TActiveTransaction*>(op.Get());
+    TWriteOperation* writeOp = dynamic_cast<TWriteOperation*>(op.Get());
+    Y_VERIFY_S(tx || writeOp, "cannot cast operation of kind " << op->GetKind());
 
     auto duration = TAppData::TimeProvider->Now() - op->GetStartExecutionAt();
 

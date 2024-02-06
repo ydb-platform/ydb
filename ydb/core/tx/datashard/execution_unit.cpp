@@ -48,6 +48,8 @@ THolder<TExecutionUnit> CreateExecutionUnit(EExecutionUnitKind kind,
         return CreatePlanQueueUnit(dataShard, pipeline);
     case EExecutionUnitKind::LoadTxDetails:
         return CreateLoadTxDetailsUnit(dataShard, pipeline);
+    case EExecutionUnitKind::LoadWriteDetails:
+        return CreateLoadWriteDetailsUnit(dataShard, pipeline);
     case EExecutionUnitKind::FinalizeDataTxPlan:
         return CreateFinalizeDataTxPlanUnit(dataShard, pipeline);
     case EExecutionUnitKind::FinalizeWriteTxPlan:
@@ -66,6 +68,8 @@ THolder<TExecutionUnit> CreateExecutionUnit(EExecutionUnitKind kind,
         return CreatePrepareDataTxInRSUnit(dataShard, pipeline);
     case EExecutionUnitKind::PrepareKqpDataTxInRS:
         return CreatePrepareKqpDataTxInRSUnit(dataShard, pipeline);
+    case EExecutionUnitKind::PrepareWriteTxInRS:
+        return CreatePrepareWriteTxInRSUnit(dataShard, pipeline);
     case EExecutionUnitKind::PrepareDistributedEraseTxInRS:
         return CreatePrepareDistributedEraseTxInRSUnit(dataShard, pipeline);
     case EExecutionUnitKind::LoadAndWaitInRS:

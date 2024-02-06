@@ -11,6 +11,8 @@ using namespace Tests;
 using namespace NDataShardReadTableTest;
 
 Y_UNIT_TEST_SUITE(DataShardWrite) {
+    const TString etalonTableState3 = "key = 0, value = 1\nkey = 2, value = 3\nkey = 4, value = 5\n";
+
     std::tuple<TTestActorRuntime&, Tests::TServer::TPtr, TActorId> TestCreateServer() {
         TPortManager pm;
         TServerSettings serverSettings(pm.GetPort(2134));
@@ -43,10 +45,7 @@ Y_UNIT_TEST_SUITE(DataShardWrite) {
         ExecSQL(server, sender, Q_("UPSERT INTO `/Root/table-1` (key, value) VALUES (4, 5);"));
 
         auto tableState = TReadTableState(server, MakeReadTableSettings("/Root/table-1")).All();
-
-        UNIT_ASSERT_VALUES_EQUAL(tableState, "key = 0, value = 1\n"
-                                              "key = 2, value = 3\n"
-                                              "key = 4, value = 5\n");
+        UNIT_ASSERT_VALUES_EQUAL(tableState, etalonTableState3);
     }
 
     Y_UNIT_TEST(WriteImmediateOnShard) {
@@ -60,10 +59,7 @@ Y_UNIT_TEST_SUITE(DataShardWrite) {
         Write(runtime, sender, shards[0], tableId, opts.Columns_, rowCount, txId, NKikimrDataEvents::TEvWrite::MODE_IMMEDIATE);
 
         auto tableState = TReadTableState(server, MakeReadTableSettings("/Root/table-1")).All();
-
-        UNIT_ASSERT_VALUES_EQUAL(tableState, "key = 0, value = 1\n"
-                                              "key = 2, value = 3\n"
-                                              "key = 4, value = 5\n");
+        UNIT_ASSERT_VALUES_EQUAL(tableState, etalonTableState3);
     }
 
     Y_UNIT_TEST(WriteImmediateOnShardManyColumns) {
@@ -107,19 +103,51 @@ Y_UNIT_TEST_SUITE(DataShardWrite) {
         auto [runtime, server, sender] = TestCreateServer();
 
         TShardedTableOptions opts;
-        auto [shards, tableId] = CreateShardedTable(server, sender, "/Root", "table-1", opts);
-
-        const ui32 rowCount = 3;
+        const auto [shards, tableId] = CreateShardedTable(server, sender, "/Root", "table-1", opts);
+        const ui64 shard = shards[0];
         ui64 txId = 100;
+        ui64 stepId;
 
-        const auto writeResult = Write(runtime, sender, shards[0], tableId, opts.Columns_, rowCount, txId, NKikimrDataEvents::TEvWrite::MODE_PREPARE);
+        Cout << "========= Send prepare =========\n";
+        {
+            const auto writeResult = Write(runtime, sender, shard, tableId, opts.Columns_, 3, txId, NKikimrDataEvents::TEvWrite::MODE_PREPARE);
 
-        UNIT_ASSERT_VALUES_EQUAL(writeResult.GetStatus(), NKikimrDataEvents::TEvWriteResult::STATUS_PREPARED);
-        UNIT_ASSERT_GT(writeResult.GetMinStep(), 0);
-        UNIT_ASSERT_GT(writeResult.GetMaxStep(), writeResult.GetMinStep());
-        UNIT_ASSERT_VALUES_EQUAL(writeResult.GetOrigin(), shards[0]);
-        UNIT_ASSERT_VALUES_EQUAL(writeResult.GetTxId(), txId);
-        UNIT_ASSERT_VALUES_EQUAL(writeResult.GetDomainCoordinators().size(), 1);
-    }
-}
-}
+            UNIT_ASSERT_VALUES_EQUAL(writeResult.GetStatus(), NKikimrDataEvents::TEvWriteResult::STATUS_PREPARED);
+            UNIT_ASSERT_GT(writeResult.GetMinStep(), 0);
+            UNIT_ASSERT_GT(writeResult.GetMaxStep(), writeResult.GetMinStep());
+            UNIT_ASSERT_VALUES_EQUAL(writeResult.GetOrigin(), shard);
+            UNIT_ASSERT_VALUES_EQUAL(writeResult.GetTxId(), txId);
+            UNIT_ASSERT_VALUES_EQUAL(writeResult.GetDomainCoordinators().size(), 1);
+
+            stepId = writeResult.GetMinStep();
+        }
+
+        Cout << "========= Send plan step =========\n";
+        {
+            ui64 mediatorId = ChangeStateStorage(Mediator, server->GetSettings().Domain);
+            auto planStep = new TEvTxProcessing::TEvPlanStep(stepId, mediatorId, shard);
+            auto plannedTx = planStep->Record.MutableTransactions()->Add();
+            plannedTx->SetTxId(txId);
+            ActorIdToProto(sender, plannedTx->MutableAckTo());
+            runtime.SendToPipe(shard, sender, planStep);
+        }
+
+        Cout << "========= Wait for result =========\n";
+        {
+            auto ev = runtime.GrabEdgeEventRethrow<NEvents::TDataEvents::TEvWriteResult>(sender);
+            auto resultRecord = ev->Get()->Record;
+
+            UNIT_ASSERT_C(resultRecord.GetStatus() == NKikimrDataEvents::TEvWriteResult::STATUS_COMPLETED, "Status: " << resultRecord.GetStatus() << " Issues: " << resultRecord.GetIssues());
+
+        }
+
+        Cout << "========= Read table =========\n";
+        {
+            auto tableState = TReadTableState(server, MakeReadTableSettings("/Root/table-1")).All();
+            UNIT_ASSERT_VALUES_EQUAL(tableState, etalonTableState3);
+        }
+
+    } // Y_UNIT_TEST
+
+} // Y_UNIT_TEST_SUITE
+} // namespace NKikimr

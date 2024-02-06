@@ -24,7 +24,8 @@ THolder<TExecutionUnit> CreateCompletedOperationsUnit(TDataShard& dataShard, TPi
 THolder<TExecutionUnit> CreateWaitForPlanUnit(TDataShard &dataShard, TPipeline &pipeline);
 THolder<TExecutionUnit> CreatePlanQueueUnit(TDataShard &dataShard, TPipeline &pipeline);
 THolder<TExecutionUnit> CreateLoadTxDetailsUnit(TDataShard &dataShard, TPipeline &pipeline);
-THolder<TExecutionUnit> CreateFinalizeDataTxPlanUnit(TDataShard &dataShard, TPipeline &pipeline);
+THolder<TExecutionUnit> CreateLoadWriteDetailsUnit(TDataShard& dataShard, TPipeline& pipeline);
+THolder<TExecutionUnit> CreateFinalizeDataTxPlanUnit(TDataShard& dataShard, TPipeline& pipeline);
 THolder<TExecutionUnit> CreateFinalizeWriteTxPlanUnit(TDataShard& dataShard, TPipeline& pipeline);
 THolder<TExecutionUnit> CreateProtectSchemeEchoesUnit(TDataShard& dataShard, TPipeline& pipeline);
 THolder<TExecutionUnit> CreateBuildDataTxOutRSUnit(TDataShard &dataShard, TPipeline &pipeline);
@@ -33,7 +34,8 @@ THolder<TExecutionUnit> CreateBuildKqpDataTxOutRSUnit(TDataShard &dataShard, TPi
 THolder<TExecutionUnit> CreateStoreAndSendOutRSUnit(TDataShard &dataShard, TPipeline &pipeline);
 THolder<TExecutionUnit> CreatePrepareDataTxInRSUnit(TDataShard &dataShard, TPipeline &pipeline);
 THolder<TExecutionUnit> CreatePrepareKqpDataTxInRSUnit(TDataShard &dataShard, TPipeline &pipeline);
-THolder<TExecutionUnit> CreatePrepareDistributedEraseTxInRSUnit(TDataShard &dataShard, TPipeline &pipeline);
+THolder<TExecutionUnit> CreatePrepareWriteTxInRSUnit(TDataShard& dataShard, TPipeline& pipeline);
+THolder<TExecutionUnit> CreatePrepareDistributedEraseTxInRSUnit(TDataShard& dataShard, TPipeline& pipeline);
 THolder<TExecutionUnit> CreateLoadAndWaitInRSUnit(TDataShard &dataShard, TPipeline &pipeline);
 THolder<TExecutionUnit> CreateExecuteDataTxUnit(TDataShard &dataShard, TPipeline &pipeline);
 THolder<TExecutionUnit> CreateExecuteKqpDataTxUnit(TDataShard &dataShard, TPipeline &pipeline);

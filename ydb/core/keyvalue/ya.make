@@ -45,7 +45,6 @@ PEERDIR(
     ydb/library/actors/protos
     ydb/core/base
     ydb/core/blobstorage/base
-    ydb/core/control/common_controls
     ydb/core/engine/minikql
     ydb/core/keyvalue/protos
     ydb/core/protos

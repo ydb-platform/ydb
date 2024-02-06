@@ -1299,7 +1299,7 @@ message TImmediateControlsConfig {
     optional TCoordinatorControls CoordinatorControls = 3;
     optional TSchemeShardControls SchemeShardControls = 4;
     optional TTCMallocControls TCMallocControls = 5;
-    optional TTracingControls TracingControls = 6;
+    reserved 6;
 };
 
 message TMeteringConfig {

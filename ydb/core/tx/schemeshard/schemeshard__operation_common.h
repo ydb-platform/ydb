@@ -7,7 +7,6 @@
 #include <ydb/core/persqueue/writer/source_id_encoding.h>
 #include <ydb/core/tx/columnshard/columnshard.h>
 #include <ydb/core/tx/tx_processing.h>
-#include <ydb/library/dbgtrace/debug_trace.h>
 
 namespace NKikimr {
 namespace NSchemeShard {
@@ -568,7 +567,6 @@ public:
     bool HandleReply(TEvPersQueue::TEvProposeTransactionResult::TPtr& ev, TOperationContext& context) override;
 
     bool HandleReply(TEvPersQueue::TEvUpdateConfigResponse::TPtr& ev, TOperationContext& context) override {
-        DBGTRACE("NPQState::TConfigureParts::HandleReply(TEvPersQueue::TEvUpdateConfigResponse)");
         TTabletId ssId = context.SS->SelfTabletId();
 
         LOG_INFO_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
@@ -626,7 +624,6 @@ public:
 
 
     bool ProgressState(TOperationContext& context) override {
-        DBGTRACE("NPQState::TConfigureParts::ProgressState");
         TTabletId ssId = context.SS->SelfTabletId();
 
         LOG_INFO_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
@@ -836,7 +833,6 @@ public:
 
 private:
     static void FillPartition(NKikimrPQ::TPQTabletConfig::TPartition& partition, const TTopicTabletInfo::TTopicPartitionInfo* pq, ui64 tabletId) {
-        DBGTRACE("NPQState::TConfigureParts::FillPartition");
         partition.SetPartitionId(pq->PqId);
         partition.SetCreateVersion(pq->CreateVersion);
         if (pq->KeyRange) {
@@ -865,7 +861,6 @@ private:
                                    const TString& databaseId,
                                    const TString& databasePath)
     {
-        DBGTRACE("NPQState::TConfigureParts::MakePQTabletConfig");
         ParsePQTabletConfig(config, pqGroup);
 
         config.SetTopicName(topicName);
@@ -901,7 +896,6 @@ private:
     static void ParsePQTabletConfig(NKikimrPQ::TPQTabletConfig& config,
                                     const TTopicInfo& pqGroup)
     {
-        DBGTRACE("NPQState::TConfigureParts::ParsePQTabletConfig");
         const TString* source = &pqGroup.TabletConfig;
         if (pqGroup.AlterData) {
             if (!pqGroup.AlterData->TabletConfig.empty())
@@ -962,7 +956,6 @@ public:
     bool HandleReply(TEvPersQueue::TEvProposeTransactionAttachResult::TPtr& ev, TOperationContext& context) override;
 
     bool HandleReply(TEvPrivate::TEvOperationPlan::TPtr& ev, TOperationContext& context) override {
-        DBGTRACE("NPQState::TPropose::HandleReply(TEvPrivate::TEvOperationPlan)");
         TStepId step = TStepId(ev->Get()->StepId);
         TTabletId ssId = context.SS->SelfTabletId();
 
@@ -990,7 +983,6 @@ public:
     }
 
     bool ProgressState(TOperationContext& context) override {
-        DBGTRACE("NPQState::TPropose::ProgressState");
         TTabletId ssId = context.SS->SelfTabletId();
 
         LOG_INFO_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,

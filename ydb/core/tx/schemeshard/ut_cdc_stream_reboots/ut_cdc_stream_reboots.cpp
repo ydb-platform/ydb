@@ -3,7 +3,6 @@
 #include <ydb/core/persqueue/writer/source_id_encoding.h>
 
 #include <contrib/libs/protobuf/src/google/protobuf/text_format.h>
-#include <ydb/library/dbgtrace/debug_trace.h>
 
 using namespace NSchemeShardUT_Private;
 
@@ -476,7 +475,6 @@ Y_UNIT_TEST_SUITE(TCdcStreamWithRebootsTests) {
             {
                 TInactiveZone inactive(activeZone);
 
-                DBGTRACE_LOG("create table");
                 TestCreateTable(runtime, ++t.TxId, "/MyRoot", R"(
                     Name: "Table"
                     Columns { Name: "key" Type: "Uint64" }
@@ -485,7 +483,6 @@ Y_UNIT_TEST_SUITE(TCdcStreamWithRebootsTests) {
                 )");
                 t.TestEnv->TestWaitNotification(runtime, t.TxId);
 
-                DBGTRACE_LOG("execute queries");
                 for (ui64 i = 1; i < 10; ++i) {
                     NKikimrMiniKQL::TResult result;
                     TString error;
@@ -501,7 +498,6 @@ Y_UNIT_TEST_SUITE(TCdcStreamWithRebootsTests) {
                     UNIT_ASSERT_VALUES_EQUAL(error, "");
                 }
 
-                DBGTRACE_LOG("create stream");
                 TestCreateCdcStream(runtime, ++t.TxId, "/MyRoot", R"(
                     TableName: "Table"
                     StreamDescription {
@@ -514,7 +510,6 @@ Y_UNIT_TEST_SUITE(TCdcStreamWithRebootsTests) {
                 t.TestEnv->TestWaitNotification(runtime, t.TxId);
             }
 
-            DBGTRACE_LOG("describe stream");
             NKikimrSchemeOp::ECdcStreamState state;
             do {
                 state = DescribePrivatePath(runtime, "/MyRoot/Table/Stream")
@@ -581,11 +576,9 @@ Y_UNIT_TEST_SUITE(TCdcStreamWithRebootsTests) {
     }
 
     Y_UNIT_TEST_WITH_REBOOTS(SplitTable) {
-        DBGTRACE("TCdcStreamWithRebootsTests::SplitTable");
         T t;
         t.Run([&](TTestActorRuntime& runtime, bool& activeZone) {
             {
-                DBGTRACE_LOG("create table");
                 TInactiveZone inactive(activeZone);
                 TestCreateTable(runtime, ++t.TxId, "/MyRoot", R"(
                     Name: "Table"
@@ -595,7 +588,6 @@ Y_UNIT_TEST_SUITE(TCdcStreamWithRebootsTests) {
                 )");
                 t.TestEnv->TestWaitNotification(runtime, t.TxId);
 
-                DBGTRACE_LOG("create cdc stream");
                 TestCreateCdcStream(runtime, ++t.TxId, "/MyRoot", R"(
                     TableName: "Table"
                     StreamDescription {
@@ -607,7 +599,6 @@ Y_UNIT_TEST_SUITE(TCdcStreamWithRebootsTests) {
                 t.TestEnv->TestWaitNotification(runtime, t.TxId);
             }
 
-            DBGTRACE_LOG("split table");
             TestSplitTable(runtime, ++t.TxId, "/MyRoot/Table", Sprintf(R"(
                 SourceTabletId: %lu
                 SplitBoundary {
@@ -618,14 +609,12 @@ Y_UNIT_TEST_SUITE(TCdcStreamWithRebootsTests) {
             )", TTestTxConfig::FakeHiveTablets));
             t.TestEnv->TestWaitNotification(runtime, t.TxId);
 
-            DBGTRACE_LOG("upload rows");
             {
                 TInactiveZone inactive(activeZone);
                 UploadRows(runtime, "/MyRoot/Table", 0, {1}, {2}, {1});
                 UploadRows(runtime, "/MyRoot/Table", 1, {1}, {2}, {Max<ui32>()});
                 CheckRegistrations(runtime, {"/MyRoot/Table", 2}, {"/MyRoot/Table/Stream/streamImpl", 1});
             }
-            DBGTRACE_LOG("");
         });
     }
 

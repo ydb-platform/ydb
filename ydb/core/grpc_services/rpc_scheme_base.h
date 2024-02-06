@@ -5,7 +5,6 @@
 
 #include <ydb/core/ydb_convert/tx_proxy_status.h>
 #include <ydb/library/persqueue/topic_parser/topic_parser.h>
-#include <ydb/library/dbgtrace/debug_trace.h>
 
 namespace NKikimr::NGRpcService {
 
@@ -56,14 +55,11 @@ protected:
     }
 
     void Handle(TEvTxUserProxy::TEvProposeTransactionStatus::TPtr& ev, const TActorContext& ctx) {
-        DBGTRACE("TRpcSchemeRequestActor::Handle(TEvTxUserProxy::TEvProposeTransactionStatus)");
         TEvTxUserProxy::TEvProposeTransactionStatus* msg = ev->Get();
         auto issueMessage = msg->Record.GetIssues();
 
         Ydb::StatusIds::StatusCode ydbStatus = NKikimr::YdbStatusFromProxyStatus(msg);
-        DBGTRACE_LOG("ydbStatus=" << (int)ydbStatus);
         if (!NKikimr::IsTxProxyInProgress(ydbStatus)) {
-            DBGTRACE_LOG("ReplyWithResult");
             return this->ReplyWithResult(ydbStatus, issueMessage, ctx);
         }
     
@@ -75,16 +71,13 @@ protected:
     }
 
     void Handle(NSchemeShard::TEvSchemeShard::TEvNotifyTxCompletionResult::TPtr& ev, const TActorContext& ctx) {
-        DBGTRACE("TRpcSchemeRequestActor::Handle(TEvSchemeShard::TEvNotifyTxCompletionResult)");
         return this->OnNotifyTxCompletionResult(ev, ctx);
     }
 
     void Handle(NSchemeShard::TEvSchemeShard::TEvNotifyTxCompletionRegistered::TPtr&, const TActorContext&) {
-        DBGTRACE("TRpcSchemeRequestActor::Handle(TEvSchemeShard::TEvNotifyTxCompletionRegistered)");
     }
 
     virtual void OnNotifyTxCompletionResult(NSchemeShard::TEvSchemeShard::TEvNotifyTxCompletionResult::TPtr& ev, const TActorContext& ctx) {
-        DBGTRACE("TRpcSchemeRequestActor::OnNotifyTxCompletionResult");
         Y_UNUSED(ev);
         return this->Reply(Ydb::StatusIds::SUCCESS, ctx);
     }

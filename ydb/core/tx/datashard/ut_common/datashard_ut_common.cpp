@@ -22,7 +22,6 @@
 #include <google/protobuf/text_format.h>
 
 #include <util/system/valgrind.h>
-#include <ydb/library/dbgtrace/debug_trace.h>
 
 namespace NKikimr {
 
@@ -1092,7 +1091,6 @@ static ui64 RunSchemeTx(
         bool viaActorSystem = false,
         TEvTxUserProxy::TEvProposeTransactionStatus::EStatus expectedStatus = TEvTxUserProxy::TEvProposeTransactionStatus::EStatus::ExecInProgress)
 {
-    DBGTRACE("RunSchemeTx");
     if (!sender) {
         sender = runtime.AllocateEdgeActor();
     }
@@ -1670,7 +1668,6 @@ ui64 AsyncAlterAddStream(
         const TString& tableName,
         const TShardedTableOptions::TCdcStream& streamDesc)
 {
-    DBGTRACE("AsyncAlterAddStream");
     auto request = SchemeTxTemplate(NKikimrSchemeOp::ESchemeOpCreateCdcStream, workingDir);
     request->Record.SetRequestType("_document_api_request");
 
@@ -1723,15 +1720,12 @@ ui64 AsyncAlterDropStream(
 }
 
 void WaitTxNotification(Tests::TServer::TPtr server, TActorId sender, ui64 txId) {
-    DBGTRACE("WaitTxNotification");
-    DBGTRACE_LOG("txId=" << txId);
     auto &runtime = *server->GetRuntime();
     auto &settings = server->GetSettings();
 
     auto request = MakeHolder<NSchemeShard::TEvSchemeShard::TEvNotifyTxCompletion>();
     request->Record.SetTxId(txId);
     auto tid = ChangeStateStorage(SchemeRoot, settings.Domain);
-    DBGTRACE_LOG("tid=" << tid);
     runtime.SendToPipe(tid, sender, request.Release(), 0, GetPipeConfigWithRetries());
     runtime.GrabEdgeEventRethrow<TEvSchemeShard::TEvNotifyTxCompletionResult>(sender);
 }

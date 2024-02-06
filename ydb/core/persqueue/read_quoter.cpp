@@ -1,6 +1,5 @@
 #include "read_quoter.h"
 #include "account_read_quoter.h"
-#include <ydb/library/dbgtrace/debug_trace.h>
 
 
 namespace NKikimr {
@@ -14,9 +13,7 @@ void TReadQuoter::Bootstrap(const TActorContext &ctx) {
 }
 
 void TReadQuoter::HandleQuotaRequest(TEvPQ::TEvRequestQuota::TPtr& ev, const TActorContext& ctx) {
-    DBGTRACE("TReadQuoter::HandleQuotaRequest");
     auto readRequest = ev->Get()->ReadRequest;
-    DBGTRACE_LOG("clientId=" << readRequest->Get()->ClientId);
     GetOrCreateConsumerQuota(readRequest->Get()->ClientId, ctx);
     QuotaRequestedTimes.emplace(readRequest->Cookie, ctx.Now());
     if (RequestsInflight >= AppData(ctx)->PQConfig.GetMaxInflightReadRequestsPerPartition() || !WaitingInflightReadRequests.empty()) {
@@ -29,7 +26,6 @@ void TReadQuoter::HandleQuotaRequest(TEvPQ::TEvRequestQuota::TPtr& ev, const TAc
 }
 
 void TReadQuoter::StartQuoting(TEvPQ::TEvRead::TPtr ev, const TActorContext& ctx) {
-    DBGTRACE("TReadQuoter::StartQuoting");
     RequestsInflight++;
     TConsumerReadQuota* consumerQuota = GetOrCreateConsumerQuota(ev->Get()->ClientId, ctx);
     if (consumerQuota->AccountQuotaTracker) {
@@ -44,7 +40,6 @@ void TReadQuoter::HandleAccountQuotaApproved(NAccountReadQuoterEvents::TEvRespon
 }
 
 void TReadQuoter::CheckConsumerPerPartitionQuota(TEvPQ::TEvRead::TPtr ev, const TActorContext& ctx) {
-    DBGTRACE("TReadQuoter::CheckConsumerPerPartitionQuota");
     auto consumerQuota = GetOrCreateConsumerQuota(ev->Get()->ClientId, ctx);
     if (!consumerQuota->PartitionPerConsumerQuotaTracker.CanExaust(ctx.Now()) || !consumerQuota->ReadRequests.empty()) {
         consumerQuota->ReadRequests.push_back(ev);
@@ -54,7 +49,6 @@ void TReadQuoter::CheckConsumerPerPartitionQuota(TEvPQ::TEvRead::TPtr ev, const 
 }
 
 void TReadQuoter::CheckTotalPartitionQuota(TEvPQ::TEvRead::TPtr ev, const TActorContext& ctx) {
-    DBGTRACE("TReadQuoter::CheckTotalPartitionQuota");
     if (!PartitionTotalQuotaTracker.CanExaust(ctx.Now()) || !WaitingTotalPartitionQuotaReadRequests.empty()) {
         WaitingTotalPartitionQuotaReadRequests.push_back(ev);
         return;
@@ -63,7 +57,6 @@ void TReadQuoter::CheckTotalPartitionQuota(TEvPQ::TEvRead::TPtr ev, const TActor
 }
 
 void TReadQuoter::ApproveQuota(TEvPQ::TEvRead::TPtr ev, const TActorContext& ctx) {
-    DBGTRACE("TReadQuoter::ApproveQuota");
     auto waitTime = TDuration::Zero();
     auto waitTimeIter = QuotaRequestedTimes.find(ev->Get()->Cookie);
     if (waitTimeIter != QuotaRequestedTimes.end()) {

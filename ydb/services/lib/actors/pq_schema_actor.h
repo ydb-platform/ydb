@@ -9,7 +9,6 @@
 #include <ydb/library/actors/core/actor.h>
 #include <ydb/library/actors/core/event_local.h>
 #include <ydb/library/actors/core/hfunc.h>
-#include <ydb/library/dbgtrace/debug_trace.h>
 
 
 struct TMsgPqCodes {
@@ -131,7 +130,6 @@ namespace NKikimr::NGRpcProxy::V1 {
 
 
         void SendDescribeProposeRequest(const NActors::TActorContext& ctx, bool showPrivate) {
-            DBGTRACE("TPQSchemaBase::SendDescribeProposeRequest");
             auto navigateRequest = std::make_unique<NSchemeCache::TSchemeCacheNavigate>();
             navigateRequest->DatabaseName = CanonizePath(Database);
 
@@ -337,7 +335,6 @@ namespace NKikimr::NGRpcProxy::V1 {
         }
 
         void SendDescribeProposeRequest(const NActors::TActorContext& ctx, bool showPrivate = false) {
-            DBGTRACE("TPQGrpcSchemaBase::SendDescribeProposeRequest");
             return TActorBase::SendDescribeProposeRequest(ctx, showPrivate || PrivateTopicName.Defined());
         }
 
@@ -470,13 +467,11 @@ namespace NKikimr::NGRpcProxy::V1 {
         }
 
         void Handle(TEvTxUserProxy::TEvProposeTransactionStatus::TPtr& ev, const TActorContext& ctx) {
-            DBGTRACE("TUpdateSchemeActor::Handle(TEvTxUserProxy::TEvProposeTransactionStatus)");
             auto msg = ev->Get();
             const auto status = static_cast<TEvTxUserProxy::TEvProposeTransactionStatus::EStatus>(ev->Get()->Record.GetStatus());
 
             if (status ==  TEvTxUserProxy::TResultStatus::ExecError && msg->Record.GetSchemeShardStatus() == NKikimrScheme::EStatus::StatusPreconditionFailed)
             {
-                DBGTRACE_LOG("reply with error");
                 return TBase::ReplyWithError(Ydb::StatusIds::OVERLOADED,
                                                          Ydb::PersQueue::ErrorCode::OVERLOAD,
                                                          TStringBuilder() << "Topic with name " << TBase::GetTopicPath() << " has another alter in progress",
@@ -523,7 +518,6 @@ namespace NKikimr::NGRpcProxy::V1 {
         }
 
         void SendDescribeProposeRequest() {
-            DBGTRACE("TPQInternalSchemaActor::SendDescribeProposeRequest");
             return TBase::SendDescribeProposeRequest(this->ActorContext(), false);
         }
 

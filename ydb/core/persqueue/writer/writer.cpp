@@ -19,7 +19,6 @@
 #include <util/generic/guid.h>
 #include <util/generic/map.h>
 #include <util/string/builder.h>
-#include <ydb/library/dbgtrace/debug_trace.h>
 
 namespace NKikimr::NPQ {
 
@@ -165,15 +164,11 @@ class TPartitionWriter: public TActorBootstrapped<TPartitionWriter>, private TRl
     }
 
     void InitResult(const TString& reason, NKikimrClient::TResponse&& response) {
-        DBGTRACE("TPartitionWriter::InitResult");
-        DBGTRACE_LOG("reason=" << reason);
         SendInitResult(reason, std::move(response));
         BecomeZombie(EErrorCode::InternalError, "Init error");
     }
 
     void InitResult(const TString& ownerCookie, const TEvPartitionWriter::TEvInitResult::TSourceIdInfo& sourceIdInfo, ui64 writeId) {
-        DBGTRACE("TPartitionWriter::InitResult");
-        DBGTRACE_LOG("ownerCookie=" << ownerCookie);
         SendInitResult(ownerCookie, sourceIdInfo, writeId);
     }
 
@@ -275,7 +270,6 @@ class TPartitionWriter: public TActorBootstrapped<TPartitionWriter>, private TRl
     /// GetOwnership
 
     void GetOwnership() {
-        DBGTRACE("TPartitionWriter::GetOwnership");
         auto ev = MakeRequest(PartitionId, PipeClient);
 
         auto& cmd = *ev->Record.MutablePartitionRequest()->MutableCmdGetOwnership();
@@ -300,7 +294,6 @@ class TPartitionWriter: public TActorBootstrapped<TPartitionWriter>, private TRl
     }
 
     void HandleOwnership(TEvPersQueue::TEvResponse::TPtr& ev) {
-        DBGTRACE("TPartitionWriter::HandleOwnership");
         auto& record = ev->Get()->Record;
 
         TString error;
@@ -324,7 +317,6 @@ class TPartitionWriter: public TActorBootstrapped<TPartitionWriter>, private TRl
     /// GetMaxSeqNo
 
     void GetMaxSeqNo() {
-        DBGTRACE("TPartitionWriter::GetMaxSeqNo");
         auto ev = MakeRequest(PartitionId, PipeClient);
 
         auto& cmd = *ev->Record.MutablePartitionRequest()->MutableCmdGetMaxSeqNo();
@@ -344,7 +336,6 @@ class TPartitionWriter: public TActorBootstrapped<TPartitionWriter>, private TRl
     }
 
     void HandleMaxSeqNo(TEvPersQueue::TEvResponse::TPtr& ev, const TActorContext& ctx) {
-        DBGTRACE("TPartitionWriter::HandleMaxSeqNo");
         auto& record = ev->Get()->Record;
 
         TString error;
@@ -366,18 +357,15 @@ class TPartitionWriter: public TActorBootstrapped<TPartitionWriter>, private TRl
         if (Opts.CheckState) {
             switch (sourceIdInfo.GetState()) {
             case NKikimrPQ::TMessageGroupInfo::STATE_REGISTERED:
-                DBGTRACE_LOG("STATE_REGISTERED");
                 Registered = true;
                 break;
             case NKikimrPQ::TMessageGroupInfo::STATE_PENDING_REGISTRATION:
-                DBGTRACE_LOG("STATE_PENDING_REGISTRATION");
                 if (Opts.AutoRegister) {
                     return RegisterMessageGroup();
                 } else {
                     return InitResult("Source is not registered", std::move(record));
                 }
             default:
-                DBGTRACE_LOG("unknown source state");
                 return InitResult("Unknown source state", std::move(record));
             }
         }
@@ -791,7 +779,6 @@ public:
     }
 
     void Bootstrap(const TActorContext& ctx) {
-        DBGTRACE("TPartitionWriter::Bootstrap");
         NTabletPipe::TClientConfig config;
         config.RetryPolicy = {
             .RetryLimitCount = 6,
@@ -871,7 +858,6 @@ IActor* CreatePartitionWriter(const TActorId& client,
                               ui64 tabletId,
                               ui32 partitionId, 
                               const TPartitionWriterOpts& opts) {
-    DBGTRACE("CreatePartitionWriter");
     return new TPartitionWriter(client, tabletId, partitionId, opts);
 }
 

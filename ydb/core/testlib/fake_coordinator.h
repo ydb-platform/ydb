@@ -4,7 +4,6 @@
 #include <ydb/core/tablet_flat/tablet_flat_executed.h>
 #include <ydb/core/testlib/basics/runtime.h>
 #include <ydb/core/engine/minikql/flat_local_tx_factory.h>
-#include <ydb/library/dbgtrace/debug_trace.h>
 
 namespace NKikimr {
 
@@ -31,7 +30,6 @@ namespace NKikimr {
             , State(state)
             , Pipes(NTabletPipe::CreateUnboundedClientCache(GetPipeClientConfig()))
         {
-            DBGTRACE("TFakeCoordinator::TFakeCoordinator");
 
         }
 
@@ -48,43 +46,31 @@ namespace NKikimr {
         }
 
         void DefaultSignalTabletActive(const TActorContext &) override {
-            DBGTRACE("TFakeCoordinator::DefaultSignalTabletActive");
-            DBGTRACE_LOG("TabletID=" << TabletID());
             // must be empty
         }
 
         void OnActivateExecutor(const TActorContext &ctx) final {
-            DBGTRACE("TFakeCoordinator::OnActivateExecutor");
-            DBGTRACE_LOG("TabletID=" << TabletID());
             Become(&TFakeCoordinator::StateWork);
             SignalTabletActive(ctx);
             SendQueued(ctx);
         }
 
         void OnDetach(const TActorContext &ctx) override {
-            DBGTRACE("TFakeCoordinator::OnDetach");
-            DBGTRACE_LOG("TabletID=" << TabletID());
             Pipes->Detach(ctx);
             Die(ctx);
         }
 
         void OnTabletDead(TEvTablet::TEvTabletDead::TPtr &ev, const TActorContext &ctx) override {
-            DBGTRACE("TFakeCoordinator::OnTabletDead");
-            DBGTRACE_LOG("TabletID=" << TabletID());
             Y_UNUSED(ev);
             Pipes->Detach(ctx);
             Die(ctx);
         }
 
         void StateInit(STFUNC_SIG) {
-            DBGTRACE("TFakeCoordinator::StateInit");
-            DBGTRACE_LOG("TabletID=" << TabletID());
             StateInitImpl(ev, SelfId());
         }
 
         void StateWork(STFUNC_SIG) {
-            DBGTRACE("TFakeCoordinator::StateWork");
-            DBGTRACE_LOG("TabletID=" << TabletID());
             switch (ev->GetTypeRewrite()) {
                 HFunc(TEvTablet::TEvTabletDead, HandleTabletDead);
                 HFunc(TEvTxProxy::TEvProposeTransaction, Handle);
@@ -96,18 +82,13 @@ namespace NKikimr {
         }
 
         void BrokenState(STFUNC_SIG) {
-            DBGTRACE("TFakeCoordinator::BrokenState");
-            DBGTRACE_LOG("TabletID=" << TabletID());
             switch (ev->GetTypeRewrite()) {
                 HFunc(TEvTablet::TEvTabletDead, HandleTabletDead);
             }
         }
 
         void Handle(TEvTxProxy::TEvProposeTransaction::TPtr& ev, const TActorContext& ctx) {
-            DBGTRACE("TFakeCoordinator::Handle(TEvTxProxy::TEvProposeTransaction)");
-            DBGTRACE_LOG("TabletID=" << TabletID());
             auto tx = ev->Get()->Record.GetTransaction();
-            DBGTRACE_LOG("txId=" << tx.GetTxId());
             if (State->TxIds.find(tx.GetTxId()) != State->TxIds.end()) {
                 SendQueued(ctx);
                 return;
@@ -134,8 +115,6 @@ namespace NKikimr {
         }
 
         void Handle(TEvTabletPipe::TEvClientConnected::TPtr& ev, const TActorContext& ctx) {
-            DBGTRACE("TFakeCoordinator::Handle(TEvTabletPipe::TEvClientConnected)");
-            DBGTRACE_LOG("TabletID=" << TabletID());
             if (!Pipes->OnConnect(ev)) {
                 if (ev->Get()->Dead) {
                     AckPlanStepsForDeadTablet(ev->Get()->TabletId);
@@ -148,15 +127,11 @@ namespace NKikimr {
         }
 
         void Handle(TEvTabletPipe::TEvClientDestroyed::TPtr& ev, const TActorContext& ctx) {
-            DBGTRACE("TFakeCoordinator::Handle(TEvTabletPipe::TEvClientDestroyed)");
-            DBGTRACE_LOG("TabletID=" << TabletID());
             Pipes->OnDisconnect(ev);
             SendQueued(ctx, ev->Get()->TabletId);
         }
 
         void Handle(TEvTxProcessing::TEvPlanStepAccepted::TPtr& ev, const TActorContext& ctx) {
-            DBGTRACE("TFakeCoordinator::Handle(TEvTxProcessing::TEvPlanStepAccepted)");
-            DBGTRACE_LOG("TabletID=" << TabletID());
             auto stepIt = State->QueuedPlans.find(std::make_pair(ev->Get()->Record.GetTabletId(), ev->Get()->Record.GetStep()));
             if (stepIt == State->QueuedPlans.end()) {
                 return;
@@ -173,8 +148,6 @@ namespace NKikimr {
         }
 
         void UnlinkTx(ui64 tabletId, ui64 txId) {
-            DBGTRACE("TFakeCoordinator::UnlinkTx");
-            DBGTRACE_LOG("TabletID=" << TabletID());
             auto txIt = State->TxIds.find(txId);
             if (txIt != State->TxIds.end()) {
                 txIt->second.erase(tabletId);
@@ -186,8 +159,6 @@ namespace NKikimr {
         }
 
         void AckPlanStepsForDeadTablet(ui64 tabletId) {
-            DBGTRACE("TFakeCoordinator::AckPlanStepsForDeadTablet");
-            DBGTRACE_LOG("TabletID=" << TabletID());
             auto pit = State->QueuedPlans.lower_bound(std::make_pair(tabletId, 0));
             while (pit != State->QueuedPlans.end() && pit->first.first == tabletId) {
                 Cerr << "FAKE_COORDINATOR: forgetting step " << pit->first.second << " for dead tablet " << pit->first.first << Endl;
@@ -213,8 +184,6 @@ namespace NKikimr {
         }
 
         void AdvancePlan(const TActorContext& ctx, ui64 onlyForTabletId = 0) {
-            DBGTRACE("TFakeCoordinator::AdvancePlan");
-            DBGTRACE_LOG("TabletID=" << TabletID());
             ui64 minStep = GetMinStep();
 
             if (minStep == Max<ui64>()) {
@@ -233,8 +202,6 @@ namespace NKikimr {
         }
 
         void SendQueued(const TActorContext& ctx, ui64 onlyForTabletId = 0) {
-            DBGTRACE("TFakeCoordinator::SendQueued");
-            DBGTRACE_LOG("TabletID=" << TabletID());
 
             for (auto& kv : State->QueuedPlans) {
                 ui64 tabletId = kv.first.first;
@@ -257,8 +224,6 @@ namespace NKikimr {
         }
 
         void Handle(TEvents::TEvPoisonPill::TPtr &ev, const TActorContext &ctx) {
-            DBGTRACE("TFakeCoordinator::Handle(TEvents::TEvPoisonPill)");
-            DBGTRACE_LOG("TabletID=" << TabletID());
             Y_UNUSED(ev);
             Become(&TThis::BrokenState);
             ctx.Send(Tablet(), new TEvents::TEvPoisonPill);

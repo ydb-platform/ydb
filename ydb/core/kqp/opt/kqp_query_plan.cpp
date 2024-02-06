@@ -2000,7 +2000,7 @@ NJson::TJsonValue SimplifyQueryPlan(NJson::TJsonValue& plan) {
 }
 
 TString AddSimplifiedPlan(const TString& planText, bool analyzeMode) {
-    Y_USUSED(analyzeMode);
+    Y_UNUSED(analyzeMode);
     NJson::TJsonValue planJson;
     NJson::ReadJsonTree(planText, &planJson, true);
 

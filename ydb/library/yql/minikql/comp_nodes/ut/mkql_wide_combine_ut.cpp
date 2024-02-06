@@ -122,6 +122,10 @@ TRuntimeNode Combine(TProgramBuilder& pb, TRuntimeNode stream, std::function<TRu
 #if !defined(MKQL_RUNTIME_VERSION) || MKQL_RUNTIME_VERSION >= 18u
 Y_UNIT_TEST_SUITE(TMiniKQLWideCombinerTest) {
     Y_UNIT_TEST_LLVM(TestLongStringsRefCounting) {
+        if (RuntimeVersion < 46u) {
+            return;
+        }
+
         TSetup<LLVM> setup;
         TProgramBuilder& pb = *setup.PgmBuilder;
 
@@ -199,6 +203,10 @@ Y_UNIT_TEST_SUITE(TMiniKQLWideCombinerTest) {
     }
 
     Y_UNIT_TEST_LLVM(TestLongStringsPasstroughtRefCounting) {
+        if (RuntimeVersion < 46u) {
+            return;
+        }
+
         TSetup<LLVM> setup;
         TProgramBuilder& pb = *setup.PgmBuilder;
 
@@ -274,6 +282,10 @@ Y_UNIT_TEST_SUITE(TMiniKQLWideCombinerTest) {
     }
 
     Y_UNIT_TEST_LLVM(TestDoNotCalculateUnusedInput) {
+        if (RuntimeVersion < 46u) {
+            return;
+        }
+
         TSetup<LLVM> setup;
         TProgramBuilder& pb = *setup.PgmBuilder;
 
@@ -427,8 +439,12 @@ Y_UNIT_TEST_SUITE(TMiniKQLWideCombinerTest) {
         UNIT_ASSERT(!iterator.Next(item));
         UNIT_ASSERT(!iterator.Next(item));
     }
-#if !defined(MKQL_RUNTIME_VERSION) || MKQL_RUNTIME_VERSION >= 46u
+
     Y_UNIT_TEST_LLVM(TestHasLimitButPasstroughtYields) {
+        if (RuntimeVersion < 46u) {
+            return;
+        }
+
         TSetup<LLVM> setup(GetNodeFactory());
         TProgramBuilder& pb = *setup.PgmBuilder;
 
@@ -458,7 +474,6 @@ Y_UNIT_TEST_SUITE(TMiniKQLWideCombinerTest) {
         UNIT_ASSERT_EQUAL(streamVal.Fetch(result), NUdf::EFetchStatus::Finish);
         UNIT_ASSERT_EQUAL(streamVal.Fetch(result), NUdf::EFetchStatus::Finish);
     }
-#endif
 }
 
 Y_UNIT_TEST_SUITE(TMiniKQLWideCombinerPerfTest) {

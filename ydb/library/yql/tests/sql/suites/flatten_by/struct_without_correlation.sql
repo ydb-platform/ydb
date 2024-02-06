@@ -10,5 +10,5 @@ select
   mod, `struct`.`struct`
 from $data_dict as dd
 flatten by list_struct as `struct`
-order by mod
+order by mod, column1;
 --order by mod, iv, ls;

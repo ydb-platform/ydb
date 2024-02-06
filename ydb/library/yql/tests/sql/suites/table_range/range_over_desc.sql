@@ -4,4 +4,4 @@
 use plato;
 
 select t.*, TableName() as path from range("","Input1", "Input2") as t
-order by path;
+order by path, key, value;

@@ -531,7 +531,7 @@ Y_UNIT_TEST_SUITE(TChargeBTreeIndex) {
                                         // do not count first main page
                                         size += part.GetPageSize(pageId, groupId);
                                     }
-                                    if (!groupId.IsMain() && !loaded.contains(pageId)) {
+                                    if (groupId.IsHistoric() && !loaded.contains(pageId)) {
                                         // only check that we loaded consecutive pages
                                         break;
                                     }

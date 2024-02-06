@@ -93,19 +93,22 @@ namespace NYql::NDqs {
                     }
 
                     YQL_CLOG(INFO, ProviderDq) << "DqsRewritePhyBlockReadOnDqIntegration";
-                    return Build<TCoWideFromBlocks>(ctx, node->Pos())
-                            .Input(
-                                Build<TCoToFlow>(ctx, node->Pos())
-                                .Input(ctx.Builder(node->Pos()).Callable("BlockExpandChunked")
-                                    .Add(0, Build<TDqReadBlockWideWrap>(ctx, node->Pos())
+                    auto reader = Build<TDqReadBlockWideWrap>(ctx, node->Pos())
                                                 .Input(readWideWrap.Input())
                                                 .Flags(readWideWrap.Flags())
                                                 .Token(readWideWrap.Token())
-                                            .Done().Ptr())
-                                    .Seal().Build()
-                                )
-                                .Done()
-                            )
+                                            .Done().Ptr();
+                    auto dechunkedReader = 
+                        ctx.Builder(node->Pos())
+                        .Callable("BlockExpandChunked")
+                            .Add(0, reader)
+                            .Seal()
+                        .Build();
+                    return Build<TCoWideFromBlocks>(ctx, node->Pos())
+                            .Input(
+                                Build<TCoToFlow>(ctx, node->Pos())
+                                .Input(dechunkedReader)
+                                .Done())
                             .Done().Ptr();
                 }, ctx, optSettings);
         });

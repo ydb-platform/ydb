@@ -4,7 +4,6 @@
 
 #include <yt/yt/core/ytree/ephemeral_node_factory.h>
 #include <yt/yt/core/ytree/fluent.h>
-#include <yt/yt/core/ytree/serialization_traits.h>
 #include <yt/yt/core/ytree/tree_builder.h>
 #include <yt/yt/core/ytree/tree_visitor.h>
 #include <yt/yt/core/ytree/ypath_client.h>
@@ -18,166 +17,6 @@
 #include <array>
 
 namespace NYT::NYTree {
-
-////////////////////////////////////////////////////////////////////////////////
-
-namespace {
-
-struct TTestTraitConfig
-{
-    int Field1;
-    double Field2;
-};
-
-class TTestTraitConfigSerializer
-    : public virtual TExternalizedYsonStruct
-{
-public:
-    REGISTER_EXTERNALIZED_YSON_STRUCT(TTestTraitConfig, TTestTraitConfigSerializer);
-
-    static void Register(TRegistrar registrar)
-    {
-        registrar.ExternalClassParameter("field1", &TThat::Field1);
-        registrar.ExternalClassParameter("field2", &TThat::Field2);
-    }
-};
-
-////////////////////////////////////////////////////////////////////////////////
-
-struct TTestProcessorsTraitConfig
-{
-    int Field1 = 11;
-    int Field2 = 33;
-
-    static inline bool PostprocessorCalled = false;
-    static inline bool PreprocessorCalled = false;
-};
-
-class TTestProcessorsTraitConfigSerializer
-    : public TExternalizedYsonStruct
-{
-public:
-    REGISTER_EXTERNALIZED_YSON_STRUCT(TTestProcessorsTraitConfig, TTestProcessorsTraitConfigSerializer);
-
-    static void Register(TRegistrar registrar)
-    {
-        registrar.ExternalClassParameter("field1", &TThat::Field1)
-            .Default(42)
-            .CheckThat([] (const int& field1) {
-                return field1 % 2 == 0;
-            });
-        registrar.ExternalClassParameter("field2", &TThat::Field2)
-            .Default(180);
-
-        registrar.ExternalPreprocessor([] (TThat* podstruct) {
-            //! NB(arkady-e1ppa): Preprocessor is called twice during deserialization.
-            //! Same behavior is present for a normal YsonStructLite so I can't be
-            //! bothered fixing this for my struct and introduce inconsistent behavior.
-            // EXPECT_FALSE(TThat::PreprocessorCalled);
-            EXPECT_FALSE(TThat::PostprocessorCalled);
-            TThat::PreprocessorCalled = true;
-            podstruct->Field2 = 88;
-        });
-
-        registrar.ExternalPostprocessor([] (TThat* podstruct) {
-            EXPECT_TRUE(TThat::PreprocessorCalled);
-            EXPECT_FALSE(TThat::PostprocessorCalled);
-            TThat::PostprocessorCalled = true;
-            podstruct->Field1 = 37;
-        });
-    }
-};
-
-////////////////////////////////////////////////////////////////////////////////
-
-struct TTestDerivedPodConfig
-    : public TTestTraitConfig
-{
-    int Field3;
-};
-
-class TTestDerivedPodConfigSerializer
-    : public TTestTraitConfigSerializer
-{
-public:
-    REGISTER_DERIVED_EXTERNALIZED_YSON_STRUCT(TTestDerivedPodConfig, TTestDerivedPodConfigSerializer, (TTestTraitConfigSerializer));
-
-    static void Register(TRegistrar registrar)
-    {
-        registrar.ExternalClassParameter("field_3", &TThat::Field3);
-    }
-};
-
-struct TTestDoubleDerivedPodConfig
-    : public TTestDerivedPodConfig
-{
-    int Field4;
-};
-
-class TTestDoubleDerivedPodConfigSerializer
-    : public TTestDerivedPodConfigSerializer
-{
-public:
-    REGISTER_DERIVED_EXTERNALIZED_YSON_STRUCT(TTestDoubleDerivedPodConfig, TTestDoubleDerivedPodConfigSerializer, (TTestDerivedPodConfigSerializer));
-
-    static void Register(TRegistrar registrar)
-    {
-        registrar.ExternalClassParameter("field_4", &TThat::Field4);
-    }
-};
-
-struct TTestDerivedSecondBase
-{
-    int Field5;
-    int Field6;
-};
-
-class TTestDerivedSecondBaseSerializer
-    : public virtual TExternalizedYsonStruct
-{
-public:
-    REGISTER_EXTERNALIZED_YSON_STRUCT(TTestDerivedSecondBase, TTestDerivedSecondBaseSerializer);
-
-    static void Register(TRegistrar registrar)
-    {
-        registrar.ExternalClassParameter("field_5", &TThat::Field5);
-        registrar.ExternalClassParameter("field_6", &TThat::Field6);
-    }
-};
-
-struct TTestDerivedTwoBasesConfig
-    : public TTestDoubleDerivedPodConfig
-    , public TTestDerivedSecondBase
-{ };
-
-class TTestDerivedTwoBasesConfigSerializer
-    : public TTestDoubleDerivedPodConfigSerializer
-    , public TTestDerivedSecondBaseSerializer
-{
-public:
-    REGISTER_DERIVED_EXTERNALIZED_YSON_STRUCT(
-        TTestDerivedTwoBasesConfig,
-        TTestDerivedTwoBasesConfigSerializer,
-        (TTestDoubleDerivedPodConfigSerializer)
-        (TTestDerivedSecondBaseSerializer));
-
-    static void Register(TRegistrar)
-    { }
-};
-
-} // namespace
-
-ASSIGN_EXTERNAL_YSON_SERIALIZER(TTestTraitConfig, TTestTraitConfigSerializer);
-
-ASSIGN_EXTERNAL_YSON_SERIALIZER(TTestProcessorsTraitConfig, TTestProcessorsTraitConfigSerializer);
-
-ASSIGN_EXTERNAL_YSON_SERIALIZER(TTestDerivedPodConfig, TTestDerivedPodConfigSerializer);
-
-ASSIGN_EXTERNAL_YSON_SERIALIZER(TTestDoubleDerivedPodConfig, TTestDoubleDerivedPodConfigSerializer);
-
-ASSIGN_EXTERNAL_YSON_SERIALIZER(TTestDerivedSecondBase, TTestDerivedSecondBaseSerializer);
-
-ASSIGN_EXTERNAL_YSON_SERIALIZER(TTestDerivedTwoBasesConfig, TTestDerivedTwoBasesConfigSerializer);
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -1835,6 +1674,27 @@ TEST(TYsonStructTest, TestOptionalNoInit)
 
 ////////////////////////////////////////////////////////////////////////////////
 
+struct TTestTraitConfig
+{
+    int Field1;
+    double Field2;
+};
+
+class TTestTraitConfigSerializer
+    : public virtual TExternalizedYsonStruct
+{
+public:
+    REGISTER_EXTERNALIZED_YSON_STRUCT(TTestTraitConfig, TTestTraitConfigSerializer);
+
+    static void Register(TRegistrar registrar)
+    {
+        registrar.ExternalClassParameter("field1", &TThat::Field1);
+        registrar.ExternalClassParameter("field2", &TThat::Field2);
+    }
+};
+
+ASSIGN_EXTERNAL_YSON_SERIALIZER(TTestTraitConfig, TTestTraitConfigSerializer);
+
 class TFieldTester
     : public NYT::NYTree::TYsonStructLite
 {
@@ -1849,7 +1709,7 @@ public:
     }
 };
 
-TEST(TYsonStructTest, SerializableByTraitsField)
+TEST(TYsonStructTest, ExternalizedYsonStructField)
 {
     TFieldTester writer = {};
     writer.Field = {55, 34,};
@@ -1866,6 +1726,54 @@ TEST(TYsonStructTest, SerializableByTraitsField)
     EXPECT_EQ(reader.Field.Field2, 34);
 }
 
+////////////////////////////////////////////////////////////////////////////////
+
+struct TTestProcessorsTraitConfig
+{
+    int Field1 = 11;
+    int Field2 = 33;
+
+    static inline bool PostprocessorCalled = false;
+    static inline bool PreprocessorCalled = false;
+};
+
+class TTestProcessorsTraitConfigSerializer
+    : public TExternalizedYsonStruct
+{
+public:
+    REGISTER_EXTERNALIZED_YSON_STRUCT(TTestProcessorsTraitConfig, TTestProcessorsTraitConfigSerializer);
+
+    static void Register(TRegistrar registrar)
+    {
+        registrar.ExternalClassParameter("field1", &TThat::Field1)
+            .Default(42)
+            .CheckThat([] (const int& field1) {
+                return field1 % 2 == 0;
+            });
+        registrar.ExternalClassParameter("field2", &TThat::Field2)
+            .Default(180);
+
+        registrar.ExternalPreprocessor([] (TThat* podstruct) {
+            //! NB(arkady-e1ppa): Preprocessor is called twice during deserialization.
+            //! Same behavior is present for a normal YsonStructLite so I can't be
+            //! bothered fixing this for my struct and introduce inconsistent behavior.
+            // EXPECT_FALSE(TThat::PreprocessorCalled);
+            EXPECT_FALSE(TThat::PostprocessorCalled);
+            TThat::PreprocessorCalled = true;
+            podstruct->Field2 = 88;
+        });
+
+        registrar.ExternalPostprocessor([] (TThat* podstruct) {
+            EXPECT_TRUE(TThat::PreprocessorCalled);
+            EXPECT_FALSE(TThat::PostprocessorCalled);
+            TThat::PostprocessorCalled = true;
+            podstruct->Field1 = 37;
+        });
+    }
+};
+
+ASSIGN_EXTERNAL_YSON_SERIALIZER(TTestProcessorsTraitConfig, TTestProcessorsTraitConfigSerializer);
+
 class TFieldTesterForProcessor
     : public NYT::NYTree::TYsonStructLite
 {
@@ -1880,7 +1788,7 @@ public:
     }
 };
 
-TEST(TYsonStructTest, SerializableByTraitsPostPreprocessors)
+TEST(TYsonStructTest, ExternalizedYsonStructPostPreprocessors)
 {
     TTestProcessorsTraitConfig::PreprocessorCalled = false;
     TTestProcessorsTraitConfig::PostprocessorCalled = false;
@@ -1915,6 +1823,26 @@ TEST(TYsonStructTest, SerializableByTraitsPostPreprocessors)
     EXPECT_EQ(reader.Field.Field2, 33);
 }
 
+////////////////////////////////////////////////////////////////////////////////
+
+struct TTestDerivedPodConfig
+    : public TTestTraitConfig
+{
+    int Field3;
+};
+
+class TTestDerivedPodConfigSerializer
+    : public TTestTraitConfigSerializer
+{
+public:
+    REGISTER_DERIVED_EXTERNALIZED_YSON_STRUCT(TTestDerivedPodConfig, TTestDerivedPodConfigSerializer, (TTestTraitConfigSerializer));
+
+    static void Register(TRegistrar registrar)
+    {
+        registrar.ExternalClassParameter("field_3", &TThat::Field3);
+    }
+};
+
 class TDerivedFieldTester
     : public NYT::NYTree::TYsonStructLite
 {
@@ -1929,7 +1857,9 @@ public:
     }
 };
 
-TEST(TYsonStructTest, SerializableByTraitsDerivedFromExternalized)
+ASSIGN_EXTERNAL_YSON_SERIALIZER(TTestDerivedPodConfig, TTestDerivedPodConfigSerializer);
+
+TEST(TYsonStructTest, ExternalizedYsonStructDerivedFromExternalized)
 {
     TDerivedFieldTester writer = {};
     writer.Field = {{55, 34}, 37};
@@ -1948,6 +1878,26 @@ TEST(TYsonStructTest, SerializableByTraitsDerivedFromExternalized)
     EXPECT_EQ(reader.Field.Field3, 37);
 }
 
+struct TTestDoubleDerivedPodConfig
+    : public TTestDerivedPodConfig
+{
+    int Field4;
+};
+
+class TTestDoubleDerivedPodConfigSerializer
+    : public TTestDerivedPodConfigSerializer
+{
+public:
+    REGISTER_DERIVED_EXTERNALIZED_YSON_STRUCT(TTestDoubleDerivedPodConfig, TTestDoubleDerivedPodConfigSerializer, (TTestDerivedPodConfigSerializer));
+
+    static void Register(TRegistrar registrar)
+    {
+        registrar.ExternalClassParameter("field_4", &TThat::Field4);
+    }
+};
+
+ASSIGN_EXTERNAL_YSON_SERIALIZER(TTestDoubleDerivedPodConfig, TTestDoubleDerivedPodConfigSerializer);
+
 class TDoubleDerivedFieldTester
     : public NYT::NYTree::TYsonStructLite
 {
@@ -1962,7 +1912,7 @@ public:
     }
 };
 
-TEST(TYsonStructTest, SerializableByTraitsDoubleDerivedFromExternalized)
+TEST(TYsonStructTest, ExternalizedYsonStructDoubleDerivedFromExternalized)
 {
     TDoubleDerivedFieldTester writer = {};
     writer.Field = {{{55, 34}, 37}, 77};
@@ -1983,6 +1933,49 @@ TEST(TYsonStructTest, SerializableByTraitsDoubleDerivedFromExternalized)
     EXPECT_EQ(reader.Field.Field4, 77);
 }
 
+struct TTestDerivedSecondBase
+{
+    int Field5;
+    int Field6;
+};
+
+class TTestDerivedSecondBaseSerializer
+    : public virtual TExternalizedYsonStruct
+{
+public:
+    REGISTER_EXTERNALIZED_YSON_STRUCT(TTestDerivedSecondBase, TTestDerivedSecondBaseSerializer);
+
+    static void Register(TRegistrar registrar)
+    {
+        registrar.ExternalClassParameter("field_5", &TThat::Field5);
+        registrar.ExternalClassParameter("field_6", &TThat::Field6);
+    }
+};
+
+ASSIGN_EXTERNAL_YSON_SERIALIZER(TTestDerivedSecondBase, TTestDerivedSecondBaseSerializer);
+
+struct TTestDerivedTwoBasesConfig
+    : public TTestDoubleDerivedPodConfig
+    , public TTestDerivedSecondBase
+{ };
+
+class TTestDerivedTwoBasesConfigSerializer
+    : public TTestDoubleDerivedPodConfigSerializer
+    , public TTestDerivedSecondBaseSerializer
+{
+public:
+    REGISTER_DERIVED_EXTERNALIZED_YSON_STRUCT(
+        TTestDerivedTwoBasesConfig,
+        TTestDerivedTwoBasesConfigSerializer,
+        (TTestDoubleDerivedPodConfigSerializer)
+        (TTestDerivedSecondBaseSerializer));
+
+    static void Register(TRegistrar)
+    { }
+};
+
+ASSIGN_EXTERNAL_YSON_SERIALIZER(TTestDerivedTwoBasesConfig, TTestDerivedTwoBasesConfigSerializer);
+
 class TTwoBasesFieldTester
     : public NYT::NYTree::TYsonStructLite
 {
@@ -1997,7 +1990,7 @@ public:
     }
 };
 
-TEST(TYsonStructTest, SerializableByTraitsDerivedFromTwoExternalizedBases)
+TEST(TYsonStructTest, ExternalizedYsonStructDerivedFromTwoExternalizedBases)
 {
     TTwoBasesFieldTester writer = {};
     writer.Field = {{{{55, 34}, 37}, 77}, {7, 8}};

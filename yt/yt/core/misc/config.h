@@ -130,7 +130,6 @@ public:
     static void Register(TRegistrar registrar);
 };
 
-
 ////////////////////////////////////////////////////////////////////////////////
 
 class TConstantBackoffOptionsSerializer
@@ -144,9 +143,9 @@ public:
 
 } // namespace NDetail
 
+ASSIGN_EXTERNAL_YSON_SERIALIZER(TExponentialBackoffOptions, NDetail::TExponentialBackoffOptionsSerializer);
+ASSIGN_EXTERNAL_YSON_SERIALIZER(TConstantBackoffOptions, NDetail::TConstantBackoffOptionsSerializer);
+
 ////////////////////////////////////////////////////////////////////////////////
 
 } // namespace NYT
-
-ASSIGN_EXTERNAL_YSON_SERIALIZER(NYT::TExponentialBackoffOptions, NYT::NDetail::TExponentialBackoffOptionsSerializer);
-ASSIGN_EXTERNAL_YSON_SERIALIZER(NYT::TConstantBackoffOptions, NYT::NDetail::TConstantBackoffOptionsSerializer);

@@ -46,16 +46,6 @@ class ManyRetriesConfigExtension(ExtensionPoint):
         ]
 
 
-@pytest.fixture
-def kikimr_many_retries(request: pytest.FixtureRequest, yq_version: str):
-    kikimr_extensions = [DefaultConfigExtension(""),
-                         ManyRetriesConfigExtension(),
-                         YQv2Extension(yq_version),
-                         ComputeExtension()]
-    with start_kikimr(request, kikimr_extensions) as kikimr:
-        yield kikimr
-
-
 def create_client(kikimr, request):
     return FederatedQueryClient(request.param["folder_id"] if request is not None else "my_folder",
                                 streaming_over_kikimr=kikimr)
@@ -64,8 +54,3 @@ def create_client(kikimr, request):
 @pytest.fixture
 def client(kikimr, request=None):
     return create_client(kikimr, request)
-
-
-@pytest.fixture
-def client_many_retries(kikimr_many_retries, request=None):
-    return create_client(kikimr_many_retries, request)

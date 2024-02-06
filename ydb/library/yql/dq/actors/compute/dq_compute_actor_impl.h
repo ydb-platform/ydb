@@ -311,7 +311,7 @@ protected:
     }
 
     virtual void DoExecuteImpl() {
-        auto sourcesState = GetSourcesState();
+        auto sourcesState = static_cast<TDerived*>(this)->GetSourcesState();
 
         PollAsyncInput();
         ERunStatus status = TaskRunner->Run();
@@ -319,7 +319,7 @@ protected:
         CA_LOG_T("Resume execution, run status: " << status);
 
         if (status != ERunStatus::Finished) {
-            PollSources(std::move(sourcesState));
+            static_cast<TDerived*>(this)->PollSources(std::move(sourcesState));
         }
 
         if ((status == ERunStatus::PendingInput || status == ERunStatus::Finished) && Checkpoints && Checkpoints->HasPendingCheckpoint() && !Checkpoints->ComputeActorStateSaved() && ReadyToCheckpoint()) {
@@ -1049,13 +1049,6 @@ protected:
 protected:
     // virtual methods (TODO: replace with static_cast<TDerived*>(this)->Foo()
 
-    virtual std::any GetSourcesState() {
-        return nullptr;
-    }
-
-    virtual void PollSources(std::any /* state */) {
-    }
-
     virtual void TerminateSources(const TIssues& /* issues */, bool /* success */) {
     }
 
@@ -1070,6 +1063,15 @@ protected:
     virtual bool SayHelloOnBootstrap() {
         return true;
     }
+
+protected:
+    // methods that are called via static_cast<TDerived*>(this) and may be overriden by a dervied class
+    void* GetSourcesState() const {
+        return nullptr;
+    }
+    void PollSources(void* /* state */) {
+    }
+
 
 protected:
     void HandleExecuteBase(TEvDqCompute::TEvResumeExecution::TPtr&) {

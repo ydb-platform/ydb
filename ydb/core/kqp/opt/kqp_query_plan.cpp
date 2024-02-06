@@ -2502,7 +2502,8 @@ TString SerializeScriptPlan(const TVector<const TString>& queryPlans) {
             writer.WriteKey("Plan");
             writer.WriteJsonValue(dqPlan);
             writer.WriteKey("SimplifiedPlan");
-            writer.WriteJsonValue(SimplifyQueryPlan(dqPlan));
+            auto simplifiedPlan = SimplifyQueryPlan(*dqPlan);
+            writer.WriteJsonValue(&simplifiedPlan);
         }
         writer.EndObject();
     }

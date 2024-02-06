@@ -1621,8 +1621,8 @@ message TTracingConfig {
     reserved 1 to 5;
 
     optional TBackendConfig Backend = 6;
-    optional TSamplingScope Sampling = 7;
-    optional TExternalThrottlingScope ExternalThrottling = 8;
+    repeated TSamplingScope Sampling = 7;
+    repeated TExternalThrottlingScope ExternalThrottling = 8;
 }
 
 message TFailureInjectionConfig {

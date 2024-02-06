@@ -27,13 +27,13 @@ TMaybe<TString> TSamplingThrottlingConfigurator::HandleConfigs(const NKikimrConf
 
     if (config.SamplingSize() == 1) {
         const auto& samplingConfig = config.GetSampling(0);
-        if (!(samplingConfig.HasFraction() && samplingConfig.HasLevel() && samplingConfig.HasMaxRatePerMinute() && samplingConfig.HasMaxBurst())) {
-            return "At least one required field is missing in scope " + samplingConfig.ShortDebugString();
+        if (!(samplingConfig.HasFraction() && samplingConfig.HasLevel() && samplingConfig.HasMaxRatePerMinute())) {
+            return "At least one required field (fraction, level, max_rate_per_minute) is missing in scope " + samplingConfig.ShortDebugString();
         }
         const auto samplingFraction = samplingConfig.GetFraction();
 
         if (samplingFraction < 0 || samplingFraction > 1) {
-            return "Fraction violates range [0, 1] " + ToString(samplingFraction);
+            return "Sampling fraction violates range [0, 1] " + ToString(samplingFraction);
         }
 
         SamplingPPM.Set(samplingFraction * 1000000);
@@ -44,8 +44,8 @@ TMaybe<TString> TSamplingThrottlingConfigurator::HandleConfigs(const NKikimrConf
 
     if (config.ExternalThrottlingSize()) {
         const auto& throttlingConfig = config.externalthrottling(0);
-        if (!(throttlingConfig.HasMaxRatePerMinute() && throttlingConfig.HasMaxBurst())) {
-            return "At least one required field is missing in scope " + throttlingConfig.ShortDebugString();
+        if (!throttlingConfig.HasMaxRatePerMinute()) {
+            return "max_rate_per_minute is missing in this scope: " + throttlingConfig.ShortDebugString();
         }
 
         MaxExternalPerMinute.Set(throttlingConfig.GetMaxRatePerMinute());

@@ -28,24 +28,6 @@ def kikimr(request: pytest.FixtureRequest, yq_version: str, stats_mode: str):
         yield kikimr
 
 
-class ManyRetriesConfigExtension(ExtensionPoint):
-    def __init__(self):
-        super().__init__()
-
-    def is_applicable(self, request):
-        return True
-
-    def apply_to_kikimr(self, request, kikimr):
-        kikimr.compute_plane.fq_config['control_plane_storage']['retry_policy_mapping'] = [
-            {
-                'status_code': [2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13],
-                'policy': {
-                    'retry_count': 10000
-                }
-            }
-        ]
-
-
 def create_client(kikimr, request):
     return FederatedQueryClient(request.param["folder_id"] if request is not None else "my_folder",
                                 streaming_over_kikimr=kikimr)

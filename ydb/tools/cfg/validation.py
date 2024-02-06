@@ -180,7 +180,7 @@ TRACING_SCHEMA = dict(
                     max_rate_per_minute=dict(type="integer", minimum=0),
                     max_burst=dict(type="integer", minimum=0),
                 ),
-                required=["fraction", "level", "max_rate_per_minute", "max_burst"],
+                required=["fraction", "level", "max_rate_per_minute"],
             ),
         ),
         external_throttling=dict(
@@ -192,7 +192,7 @@ TRACING_SCHEMA = dict(
                     max_rate_per_minute=dict(type="integer", minimum=0),
                     max_burst=dict(type="integer", minimum=0),
                 ),
-                required=["max_rate_per_minute", "max_burst"],
+                required=["max_rate_per_minute"],
             ),
         ),
     ),

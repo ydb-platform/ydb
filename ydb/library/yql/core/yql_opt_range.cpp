@@ -168,14 +168,10 @@ TExprNode::TPtr MakeWidePointRangeLambda(TPositionHandle pos, const TTypeAnnotat
         case EDataSlot::Int64:  name = "Int64"; maxValueStr = ToString(Max<i64>()); break;
         case EDataSlot::Uint64: name = "Uint64"; maxValueStr = ToString(Max<ui64>()); break;
 
-        case EDataSlot::Date:        name = "Date"; maxValueStr = ToString(NUdf::MAX_DATE - 1); break;
-        case EDataSlot::Datetime:    name = "Datetime"; maxValueStr = ToString(NUdf::MAX_DATETIME - 1); break;
-        case EDataSlot::Timestamp:   name = "Timestamp"; maxValueStr = ToString(NUdf::MAX_TIMESTAMP - 1); break;
-        case EDataSlot::Date32:      name = "Date32"; maxValueStr = ToString(NUdf::MAX_DATE32); break;
-        case EDataSlot::Datetime64:  name = "Datetime64"; maxValueStr = ToString(NUdf::MAX_DATETIME64); break;
-        case EDataSlot::Timestamp64: name = "Timestamp64"; maxValueStr = ToString(NUdf::MAX_TIMESTAMP64); break;
-        default:
-            ythrow yexception() << "Unexpected type: " << baseKeyType->Cast<TDataExprType>()->GetName();
+        case EDataSlot::Date:     name = "Date"; maxValueStr = ToString(NUdf::MAX_DATE - 1); break;
+        case EDataSlot::Datetime: name = "Datetime"; maxValueStr = ToString(NUdf::MAX_DATETIME - 1); break;
+        case EDataSlot::Timestamp: name = "Timestamp"; maxValueStr = ToString(NUdf::MAX_TIMESTAMP - 1); break;
+        default: Y_ABORT("unexpected type "); // TODO
     }
 
     TExprNode::TPtr maxValue = ctx.NewCallable(pos, name, { ctx.NewAtom(pos, maxValueStr, TNodeFlags::Default) });

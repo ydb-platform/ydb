@@ -1715,21 +1715,18 @@ bool AdjustLowerValue(TString& lowerValue, bool& lowerInclude, EDataSlot lowerDa
                 valMax = static_cast<i64>(std::numeric_limits<i64>::max());
                 break;
             case EDataSlot::Date32:
-                valMin = MIN_DATE32;
-                valMax = MAX_DATE32;
+                valMin = static_cast<i64>(MIN_DATE32);
+                valMax = static_cast<i64>(MAX_DATE32);
                 break;
             case EDataSlot::Datetime64:
                 valMin = MIN_DATETIME64;
                 valMax = MAX_DATETIME64;
-                break;
             case EDataSlot::Timestamp64:
                 valMin = MIN_TIMESTAMP64;
                 valMax = MAX_TIMESTAMP64;
-                break;
             case EDataSlot::Interval64:
                 valMin = -MAX_INTERVAL64;
                 valMax = MAX_INTERVAL64;
-                break;
             default:
                 break;
             }

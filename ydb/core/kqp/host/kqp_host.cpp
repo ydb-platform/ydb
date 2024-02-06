@@ -1153,10 +1153,16 @@ private:
         }
 
         YQL_ENSURE(queryAst->Root);
+
+        Cerr << "TEST:BEFORE:: " << Endl;
+        queryAst->Root->PrettyPrintTo(Cerr, NYql::TAstPrintFlags::PerLine | NYql::TAstPrintFlags::ShortQuote);
+        Cerr << Endl;
         TExprNode::TPtr result;
         if (!CompileExpr(*queryAst->Root, result, ctx, ModuleResolver.get(), nullptr)) {
             return nullptr;
         }
+
+        Cerr << "TEST:AFTER:: " << KqpExprToPrettyString(*result, ctx) << Endl;
 
         YQL_CLOG(INFO, ProviderKqp) << "Compiled query:\n" << KqpExprToPrettyString(*result, ctx);
 
@@ -1370,6 +1376,7 @@ private:
         if (!queryExpr) {
             return nullptr;
         }
+        Cerr << "TEST:COMPILED: " << KqpExprToPrettyString(*queryExpr, ctx) << Endl;
 
         return MakeIntrusive<TAsyncPrepareYqlResult>(queryExpr.Get(), ctx, *YqlTransformer, SessionCtx->QueryPtr(),
             query.Text, sqlVersion, TransformCtx);

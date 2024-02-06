@@ -6,7 +6,7 @@ NKikimr::TConclusionStatus TSerializerContainer::DeserializeFromProto(const NKik
     NKikimrSchemeOp::TOlapColumn::TSerializer serializerProto;
     serializerProto.SetClassName(NArrow::NSerialization::TNativeSerializer::GetClassNameStatic());
     *serializerProto.MutableArrowCompression() = proto;
-    AFL_VERIFY(Initialize(NArrow::NSerialization::TNativeSerializer::GetClassNameStatic()));
+    AFL_VERIFY(Initialize(NArrow::NSerialization::TNativeSerializer::GetClassNameStatic(), true));
     return GetObjectPtr()->DeserializeFromProto(serializerProto);
 }
 

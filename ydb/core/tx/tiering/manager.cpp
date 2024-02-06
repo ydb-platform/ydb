@@ -24,7 +24,7 @@ public:
 
     }
     ~TActor() {
-        Owner->Stop();
+        Owner->Stop(false);
     }
 
     STATEFN(StateMain) {
@@ -162,11 +162,11 @@ TTiersManager& TTiersManager::Start(std::shared_ptr<TTiersManager> ownerPtr) {
     return *this;
 }
 
-TTiersManager& TTiersManager::Stop() {
+TTiersManager& TTiersManager::Stop(const bool needStopActor) {
     if (!Actor) {
         return *this;
     }
-    if (TlsActivationContext) {
+    if (TlsActivationContext && needStopActor) {
         TActivationContext::AsActorContext().Send(Actor->SelfId(), new NActors::TEvents::TEvPoison);
     }
     Actor = nullptr;

@@ -1,6 +1,7 @@
 #include "mkql_computation_node_ut.h"
 
 #include <ydb/library/yql/minikql/computation/mkql_computation_node_holders.h>
+#include <ydb/library/yql/minikql/mkql_runtime_version.h>
 
 #include <arrow/compute/exec_internal.h>
 #include <arrow/array/builder_primitive.h>
@@ -264,6 +265,10 @@ Y_UNIT_TEST(TestScalar) {
 }
 
 Y_UNIT_TEST_LLVM(TestReplicateScalar) {
+    if (RuntimeVersion < 43u) {
+        return;
+    }
+
     const ui64 count = 1000;
     const ui32 value = 42;
 

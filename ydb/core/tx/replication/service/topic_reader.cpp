@@ -11,6 +11,18 @@ namespace NKikimr::NReplication::NService {
 class TRemoteTopicReader: public TActor<TRemoteTopicReader> {
     using TReadSessionSettings = NYdb::NTopic::TReadSessionSettings;
 
+    TStringBuf GetLogPrefix() const {
+        if (!LogPrefix) {
+            LogPrefix = TStringBuilder()
+                << "[RemoteTopicReader]"
+                << "[" << Settings.Topics_[0].Path_ << "]"
+                << "[" << Settings.Topics_[0].PartitionIds_[0] << "]"
+                << SelfId() << " ";
+        }
+
+        return LogPrefix.GetRef();
+    }
+
     void Handle(TEvWorker::TEvHandshake::TPtr& ev) {
         Worker = ev->Sender;
         LOG_D("Handshake"
@@ -112,6 +124,7 @@ public:
 private:
     const TActorId YdbProxy;
     const TReadSessionSettings Settings;
+    mutable TMaybe<TString> LogPrefix;
 
     TActorId Worker;
     TActorId ReadSession;

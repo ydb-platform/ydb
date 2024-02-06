@@ -2003,12 +2003,14 @@ TString AddSimplifiedPlan(const TString& planText, bool analyzeMode) {
     Y_UNUSED(analyzeMode);
     NJson::TJsonValue planJson;
     NJson::ReadJsonTree(planText, &planJson, true);
-
     if (!planJson.GetMapSafe().contains("Plan")){
         return planText;
     }
 
-    planJson["SimplifiedPlan"] = SimplifyQueryPlan(planJson.GetMapSafe().at("Plan"));
+    NJson::TJsonValue planCopy;
+    NJson::ReadJsonTree(planText, &planCopy, true);
+
+    planJson["SimplifiedPlan"] = SimplifyQueryPlan(planCopy.GetMapSafe().at("Plan"));
 
     // Don't print the OLAP plan yet, there are some non UTF-8 symbols there that need to be fixed
     //TTempBufOutput stringStream;

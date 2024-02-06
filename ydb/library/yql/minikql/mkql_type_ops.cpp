@@ -2063,6 +2063,18 @@ NUdf::TUnboxedValuePod ValueFromString(NUdf::EDataSlot type, NUdf::TStringRef bu
     case NUdf::EDataSlot::TzTimestamp:
         return ParseTzTimestamp(buf);
 
+    case NUdf::EDataSlot::Date32:
+        return ParseDate32(buf);
+
+    case NUdf::EDataSlot::Datetime64:
+        return ParseDatetime64(buf);
+
+    case NUdf::EDataSlot::Timestamp64:
+        return ParseTimestamp64(buf);
+
+    case NUdf::EDataSlot::Interval64:
+        return ParseInterval<NUdf::MAX_INTERVAL64, NUdf::MAX_DATE32 - NUdf::MIN_DATE32>(buf);
+
     case NUdf::EDataSlot::DyNumber: {
         auto dyNumber = NDyNumber::ParseDyNumberString(buf);
         if (!dyNumber.Defined()) {
@@ -2080,18 +2092,6 @@ NUdf::TUnboxedValuePod ValueFromString(NUdf::EDataSlot type, NUdf::TStringRef bu
         }
         return MakeString(TStringBuf(binaryJson->Data(), binaryJson->Size()));
     }
-
-    case NUdf::EDataSlot::Date32:
-        return ParseDate32(buf);
-
-    case NUdf::EDataSlot::Datetime64:
-        return ParseDatetime64(buf);
-
-    case NUdf::EDataSlot::Timestamp64:
-        return ParseTimestamp64(buf);
-
-    case NUdf::EDataSlot::Interval64:
-        return ParseInterval<NUdf::MAX_INTERVAL64, NUdf::MAX_DATE32 - NUdf::MIN_DATE32>(buf);
 
     case NUdf::EDataSlot::Decimal:
     default:

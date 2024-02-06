@@ -170,10 +170,8 @@ TExprNode::TPtr MakeWidePointRangeLambda(TPositionHandle pos, const TTypeAnnotat
 
         case EDataSlot::Date:     name = "Date"; maxValueStr = ToString(NUdf::MAX_DATE - 1); break;
         case EDataSlot::Datetime: name = "Datetime"; maxValueStr = ToString(NUdf::MAX_DATETIME - 1); break;
-        default:
-            YQL_ENSURE(keySlot == EDataSlot::Timestamp);
-            name = "Timestamp";
-            maxValueStr = ToString(NUdf::MAX_TIMESTAMP - 1);
+        case EDataSlot::Timestamp: name = "Timestamp"; maxValueStr = ToString(NUdf::MAX_TIMESTAMP - 1); break;
+        default: Y_ABORT("unexpected type "); // TODO
     }
 
     TExprNode::TPtr maxValue = ctx.NewCallable(pos, name, { ctx.NewAtom(pos, maxValueStr, TNodeFlags::Default) });

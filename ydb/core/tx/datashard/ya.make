@@ -181,7 +181,6 @@ SRCS(
     receive_snapshot_unit.cpp
     remove_lock_change_records.cpp
     remove_locks.cpp
-    range_avl_tree.cpp
     range_ops.cpp
     read_iterator.h
     restore_unit.cpp
@@ -292,9 +291,7 @@ RECURSE_FOR_TESTS(
     ut_minikql
     ut_minstep
     ut_order
-    ut_range_avl_tree
     ut_range_ops
-    ut_range_treap
     ut_read_iterator
     ut_read_table
     ut_reassign

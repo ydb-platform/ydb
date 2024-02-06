@@ -567,10 +567,8 @@ void TLockLocker::RemoveOneLock(ui64 lockTxId, ILocksDb* db) {
         TLockInfo::TPtr txLock = it->second;
 
         TDuration lifetime = TAppData::TimeProvider->Now() - txLock->GetCreationTime();
-        if (Self->TabletCounters) {
-            Self->IncCounter(COUNTER_LOCKS_LIFETIME, lifetime);
-            Self->IncCounter(COUNTER_LOCKS_REMOVED);
-        }
+        Self->IncCounter(COUNTER_LOCKS_LIFETIME, lifetime);
+        Self->IncCounter(COUNTER_LOCKS_REMOVED);
 
         ExpireQueue.Remove(txLock.Get());
         if (txLock->InBrokenLocks) {
@@ -663,9 +661,7 @@ void TLockLocker::ScheduleRemoveBrokenRanges(ui64 lockId, const TRowVersion& at)
         CleanupPending.push_back(lockId);
     }
 
-    if (Self->TabletCounters) {
-        Self->IncCounter(COUNTER_LOCKS_BROKEN);
-    }
+    Self->IncCounter(COUNTER_LOCKS_BROKEN);
 }
 
 void TLockLocker::RemoveSubscribedLock(ui64 lockId, ILocksDb* db) {
@@ -744,7 +740,7 @@ TVector<TSysLocks::TLock> TSysLocks::ApplyLocks() {
         ++erases;
     }
 
-    if (erases > 0 && Self->TabletCounters) {
+    if (erases > 0) {
         Self->IncCounter(COUNTER_LOCKS_ERASED, erases);
     }
 
@@ -777,9 +773,7 @@ TVector<TSysLocks::TLock> TSysLocks::ApplyLocks() {
         } else {
             if (shardLock) {
                 Locker.AddShardLock(lock, Update->ReadTables);
-                if (Self->TabletCounters) {
-                    Self->IncCounter(COUNTER_LOCKS_WHOLE_SHARD);
-                }
+                Self->IncCounter(COUNTER_LOCKS_WHOLE_SHARD);
             } else {
                 for (const auto& key : Update->PointLocks) {
                     Locker.AddPointLock(lock, key);
@@ -828,17 +822,11 @@ TVector<TSysLocks::TLock> TSysLocks::ApplyLocks() {
 }
 
 void TSysLocks::UpdateCounters() {
-    if (!Self->TabletCounters)
-        return;
-
     Self->IncCounter(COUNTER_LOCKS_ACTIVE_PER_SHARD, LocksCount());
     Self->IncCounter(COUNTER_LOCKS_BROKEN_PER_SHARD, BrokenLocksCount());
 }
 
 void TSysLocks::UpdateCounters(ui64 counter) {
-    if (!Self->TabletCounters)
-        return;
-
     UpdateCounters();
 
     if (TLock::IsError(counter)) {

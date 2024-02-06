@@ -239,7 +239,7 @@ public:
     }
 
     inline TRowVersion LastCompleteTxVersion() const {
-        return TRowVersion(LastCompletedStep, LastCompletedTxId);
+        return TRowVersion(LastCompletedTx.GetPlanStep(), LastCompletedTx.GetTxId());
     }
 
     ui32 Generation() const { return Executor()->Generation(); }
@@ -308,9 +308,6 @@ protected:
             break;
         }
     }
-
-public:
-    TTabletCountersBase* TabletCounters;
 
 private:
     std::unique_ptr<TTxController> ProgressTxController;
@@ -391,8 +388,7 @@ private:
     TWriteId LastWriteId = TWriteId{0};
     ui64 LastPlannedStep = 0;
     ui64 LastPlannedTxId = 0;
-    ui64 LastCompletedStep = 0;
-    ui64 LastCompletedTxId = 0;
+    NOlap::TSnapshot LastCompletedTx = NOlap::TSnapshot::Zero();
     ui64 LastExportNo = 0;
 
     ui64 OwnerPathId = 0;
@@ -419,6 +415,7 @@ private:
     TTablesManager TablesManager;
     std::shared_ptr<TTiersManager> Tiers;
     std::unique_ptr<TTabletCountersBase> TabletCountersPtr;
+    TTabletCountersBase* TabletCounters;
     std::unique_ptr<NTabletPipe::IClientCache> PipeClientCache;
     std::unique_ptr<NOlap::TInsertTable> InsertTable;
     std::shared_ptr<NOlap::NResourceBroker::NSubscribe::TSubscriberCounters> SubscribeCounters;

@@ -73,11 +73,6 @@ public:
 
 class TLocksDataShard {
 public:
-    TLocksDataShard(TTabletCountersBase* const &tabletCounters)
-        : TabletCounters(tabletCounters)
-    {
-    }
-
     virtual ~TLocksDataShard() = default;
 
     virtual void IncCounter(ECumulativeCounters counter,
@@ -91,8 +86,6 @@ public:
     virtual bool IsUserTable(const TTableId& tableId) const = 0;
     virtual ui32 Generation() const = 0;
     virtual TRowVersion LastCompleteTxVersion() const = 0;
-
-    TTabletCountersBase* const &TabletCounters;
 };
 
 template <typename T>
@@ -100,8 +93,7 @@ class TLocksDataShardAdapter : public TLocksDataShard
 {
 public:
     TLocksDataShardAdapter(const T *self)
-        : TLocksDataShard(self->TabletCounters)
-        , Self(self)
+        : Self(self)
     {
     }
 

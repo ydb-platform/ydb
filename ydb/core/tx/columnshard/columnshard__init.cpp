@@ -37,6 +37,7 @@ void TTxInit::SetDefaults() {
     Self->LastWriteId = TWriteId{0};
     Self->LastPlannedStep = 0;
     Self->LastPlannedTxId = 0;
+    Self->LastCompletedTx = NOlap::TSnapshot::Zero();
     Self->OwnerPathId = 0;
     Self->OwnerPath.clear();
     Self->LongTxWrites.clear();
@@ -71,6 +72,14 @@ bool TTxInit::Precharge(TTransactionContext& txc) {
     ready = ready && Schema::GetSpecialValue(db, Schema::EValueIds::LastExportNumber, Self->LastExportNo);
     ready = ready && Schema::GetSpecialValue(db, Schema::EValueIds::OwnerPathId, Self->OwnerPathId);
     ready = ready && Schema::GetSpecialValue(db, Schema::EValueIds::OwnerPath, Self->OwnerPath);
+
+    {
+        ui64 lastCompletedStep = 0;
+        ui64 lastCompletedTx = 0;
+        ready = ready && Schema::GetSpecialValue(db, Schema::EValueIds::LastCompletedStep, lastCompletedStep);
+        ready = ready && Schema::GetSpecialValue(db, Schema::EValueIds::LastCompletedTxId, lastCompletedTx);
+        Self->LastCompletedTx = NOlap::TSnapshot(lastCompletedStep, lastCompletedTx);
+    }
 
     if (!ready) {
         return false;

@@ -34,6 +34,8 @@ extern const char* const AuthServiceTicketMetadataKey;
 extern const char* const ErrorMetadataKey;
 extern const char* const MessageBodySizeMetadataKey;
 extern const char* const ProtocolVersionMetadataKey;
+extern const char* const RequestCodecKey;
+extern const char* const ResponseCodecKey;
 
 // After adding a new metadata key, do not forget to add it in GetNativeMetadataKeys.
 const THashSet<TStringBuf>& GetNativeMetadataKeys();

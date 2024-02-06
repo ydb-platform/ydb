@@ -2,7 +2,7 @@ PY3_LIBRARY()
 
 PROVIDES(numpy)
 
-VERSION(1.26.3)
+VERSION(1.26.4)
 
 LICENSE(BSD-3-Clause)
 

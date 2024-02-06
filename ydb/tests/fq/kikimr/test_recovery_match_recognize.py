@@ -7,8 +7,7 @@ import os
 import time
 
 import ydb.tests.library.common.yatest_common as yatest_common
-from ydb.tests.tools.fq_runner.kikimr_runner import StreamingOverKikimr
-from ydb.tests.tools.fq_runner.kikimr_runner import StreamingOverKikimrConfig
+from ydb.tests.tools.fq_runner.kikimr_runner import StreamingOverKikimr, StreamingOverKikimrConfig, TenantConfig
 import library.python.retry as retry
 from ydb.tests.tools.fq_runner.kikimr_utils import yq_v1
 from ydb.tests.tools.datastreams_helpers.test_yds_base import TestYdsBase
@@ -17,7 +16,7 @@ import ydb.public.api.protos.draft.fq_pb2 as fq
 
 @pytest.fixture
 def kikimr(request):
-    kikimr_conf = StreamingOverKikimrConfig(cloud_mode=True, node_count=2)
+    kikimr_conf = StreamingOverKikimrConfig(cloud_mode=True, node_count={"/cp": TenantConfig(1), "/compute": TenantConfig(1)})
     kikimr = StreamingOverKikimr(kikimr_conf)
     kikimr.start_mvp_mock_server()
     kikimr.start()
@@ -33,12 +32,12 @@ class TestRecoveryMatchRecognize(TestYdsBase):
         # for retry
         cls.retry_conf = retry.RetryConf().upto(seconds=30).waiting(0.1)
 
-    @retry.retry_intrusive
-    def get_graph_master_node_id(self, kikimr, query_id):
-        for node_index in kikimr.control_plane.kikimr_cluster.nodes:
-            if kikimr.control_plane.get_task_count(node_index, query_id) > 0:
-                return node_index
-        assert False, "No active graphs found"
+    # @retry.retry_intrusive
+    # def get_graph_master_node_id(self, kikimr, query_id):
+    #     for node_index in kikimr.compute_plane.kikimr_cluster.nodes:
+    #         if kikimr.compute_plane.get_task_count(node_index, query_id) > 0:
+    #             return node_index
+    #     assert False, "No active graphs found"
 
     def get_ca_count(self, kikimr, node_index):
         result = kikimr.control_plane.get_sensors(node_index, "utils").find_sensor(
@@ -73,22 +72,27 @@ class TestRecoveryMatchRecognize(TestYdsBase):
     def restart_node(self, kikimr, query_id):
         # restart node with CA
 
-        master_node_index = self.get_graph_master_node_id(kikimr, query_id)
-        logging.debug("Master node {}".format(master_node_index))
+
+        # master_node_index = self.get_graph_master_node_id(kikimr, query_id)
+        # logging.debug("Master node {}".format(master_node_index))
 
         node_to_restart = None
-        for node_index in kikimr.control_plane.kikimr_cluster.nodes:
-            wc = kikimr.control_plane.get_worker_count(node_index)
+
+        # for node_index in kikimr.control_plane.kikimr_cluster.nodes:
+        #     logging.debug("Master node {}".format(master_node_index))
+
+        for node_index in kikimr.compute_plane.kikimr_cluster.nodes:
+            wc = kikimr.compute_plane.get_worker_count(node_index)
             if wc is not None:
-                if wc > 0 and node_index != master_node_index and node_to_restart is None:
+                if wc > 0 and node_to_restart is None:
                     node_to_restart = node_index
-        assert node_to_restart is not None, "Can't find any task on non master node"
+        assert node_to_restart is not None, "Can't find any task on node"
 
-        logging.debug("Restart non-master node {}".format(node_to_restart))
+        logging.debug("Restart compute node {}".format(node_to_restart))
 
-        kikimr.control_plane.kikimr_cluster.nodes[node_to_restart].stop()
-        kikimr.control_plane.kikimr_cluster.nodes[node_to_restart].start()
-        kikimr.control_plane.wait_bootstrap(node_to_restart)
+        kikimr.compute_plane.kikimr_cluster.nodes[node_to_restart].stop()
+        kikimr.compute_plane.kikimr_cluster.nodes[node_to_restart].start()
+        kikimr.compute_plane.wait_bootstrap(node_to_restart)
 
     @yq_v1
     @pytest.mark.parametrize("kikimr", [(None, None, None)], indirect=["kikimr"])
@@ -192,7 +196,8 @@ class TestRecoveryMatchRecognize(TestYdsBase):
                    LAST(A.dt) as dt_begin,
                    LAST(C.dt) as dt_end,
                    LAST(A.str) as a_str,
-                   LAST(B.str) as b_str
+                   LAST(B.str) as b_str,
+                   LAST(C.str) as c_str
                 ONE ROW PER MATCH
                 PATTERN ( A B C )
                 DEFINE
@@ -212,8 +217,12 @@ class TestRecoveryMatchRecognize(TestYdsBase):
         messages1 = [
             '{"dt": 1696849942000001, "str": "A" }',
             '{"dt": 1696849942500001, "str": "B" }',
-            '{"dt": 1696849943000001, "str": "C" }']
+            '{"dt": 1696849943000001, "str": "C" }',
+            '{"dt": 1696849943600001, "str": "D" }']       # push A+B from TimeOrderRecoverer to MatchRecognize 
         self.write_stream(messages1)
+
+        # A + B : in MatchRecognize
+        # C + D : in TimeOrderRecoverer
 
         logging.debug("get_completed_checkpoints {}".format(kikimr.compute_plane.get_completed_checkpoints(query_id)))
         kikimr.compute_plane.wait_completed_checkpoints(
@@ -222,11 +231,11 @@ class TestRecoveryMatchRecognize(TestYdsBase):
 
         self.restart_node(kikimr, query_id)
 
-        self.write_stream(['{"dt": 1696849943500001, "str": "D" }', '{"dt": 1696849944100001, "str": "F" }'])
+        self.write_stream(['{"dt": 1696849944100001, "str": "E" }'])
 
         assert client.get_query_status(query_id) == fq.QueryMeta.RUNNING
 
-        expected = ['{"a_str":"A","b_str":"B","dt_begin":1696849942000001,"dt_end":1696849943000001}']
+        expected = ['{"a_str":"A","b_str":"B","c_str":"C",,"dt_begin":1696849942000001,"dt_end":1696849943000001}']
 
         read_data = self.read_stream(1)
         logging.info("Data was read: {}".format(read_data))

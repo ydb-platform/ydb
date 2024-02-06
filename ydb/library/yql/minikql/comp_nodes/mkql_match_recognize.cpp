@@ -423,12 +423,22 @@ public:
     NUdf::TUnboxedValue DoCalculate(NUdf::TUnboxedValue &stateValue, TComputationContext &ctx) const {
         if (stateValue.IsInvalid()) {
             stateValue = ctx.HolderFactory.Create<State>(
-                    InputRowArg,
-                    PartitionKey,
-                    PartitionKeyType,
-                    Parameters,
-                    Cache
+                InputRowArg,
+                PartitionKey,
+                PartitionKeyType,
+                Parameters,
+                Cache
             );
+        } else if (stateValue.HasValue() && !stateValue.IsBoxed()) {
+            // Load from saved state.
+            NUdf::TUnboxedValue state = ctx.HolderFactory.Create<State>(
+                InputRowArg,
+                PartitionKey,
+                PartitionKeyType,
+                Parameters,
+                Cache);
+            state.Load(stateValue.AsStringRef());
+            stateValue = state;
         }
         auto state = static_cast<State*>(stateValue.AsBoxed().Get());
         while (true) {
@@ -578,6 +588,8 @@ std::pair<TUnboxedValueVector, THashMap<TString, size_t>> ConvertListOfStrings(c
 
 
 IComputationNode* WrapMatchRecognizeCore(TCallable& callable, const TComputationNodeFactoryContext& ctx) {
+    std::cerr << "WrapMatchRecognizeCore" << std::endl;
+
     using namespace NMatchRecognize;
     size_t inputIndex = 0;
     const auto& inputFlow = callable.GetInput(inputIndex++);

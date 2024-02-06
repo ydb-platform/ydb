@@ -135,10 +135,12 @@ private:
         bool isEnableExternalDataSources = AppData(ctx)->FeatureFlags.GetEnableExternalDataSources();
         bool isEnablePgConstsToParams = Config->EnablePgConstsToParams;
 
+        Cerr << "TEST:SetQueryAst << " << QueryId.Text << Endl;
         auto astResult = ParseQuery(ConvertType(QueryId.Settings.QueryType), QueryId.Settings.Syntax, QueryId.Text, QueryId.QueryParameterTypes, QueryId.IsSql(), cluster, kqpTablePathPrefix, kqpYqlSyntaxVersion, bindingsMode, isEnableExternalDataSources, isEnablePgConstsToParams);
         YQL_ENSURE(astResult.Ast);
         if (astResult.Ast->IsOk()) {
             AstResult = std::move(astResult);
+            Cerr << "TEST:SetQueryAst >> " << AstResult->Ast->Root->ToString() << Endl;
         }
     }
 

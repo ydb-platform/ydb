@@ -808,12 +808,13 @@ TNodePtr BuildInputTables(TPosition pos, const TTableList& tables, bool inSubque
 
 class TCreateTableNode final: public TAstListNode {
 public:
-    TCreateTableNode(TPosition pos, const TTableRef& tr, bool existingOk, bool replaceIfExists, const TCreateTableParameters& params, TScopedStatePtr scoped)
+    TCreateTableNode(TPosition pos, const TTableRef& tr, bool existingOk, bool replaceIfExists, const TCreateTableParameters& params, TSourcePtr values, TScopedStatePtr scoped)
         : TAstListNode(pos)
         , Table(tr)
         , Params(params)
         , ExistingOk(existingOk)
         , ReplaceIfExists(replaceIfExists)
+        , Values(std::move(values))
         , Scoped(scoped)
     {
         scoped->UseCluster(Table.Service, Table.Cluster);
@@ -1144,11 +1145,40 @@ public:
             opts = L(opts, Q(Y(Q("temporary"))));
         }
 
-        Add("block", Q(Y(
+        TNodePtr node = nullptr;
+        if (Values) {
+            if (!Values->Init(ctx, nullptr)) {
+                return false;
+            }
+            TTableList tableList;
+            Values->GetInputTables(tableList);
+            auto valuesSource = Values.Get();
+            auto values = Values->Build(ctx);
+            if (!Values) {
+                return false;
+            }
+
+            TNodePtr inputTables(BuildInputTables(Pos, tableList, false, Scoped));
+            if (!inputTables->Init(ctx, valuesSource)) {
+                return false;
+            }
+
+            node = inputTables;
+            node = L(node, Y("let", "values", values));
+        } else {
+            node = Y(Y("let", "values", Y("Void")));
+        }
+
+        auto write = Y(
             Y("let", "sink", Y("DataSink", BuildQuotedAtom(Pos, Table.Service), Scoped->WrapCluster(Table.Cluster, ctx))),
-            Y("let", "world", Y(TString(WriteName), "world", "sink", keys, Y("Void"), Q(opts))),
+            Y("let", "world", Y(TString(WriteName), "world", "sink", keys, "values", Q(opts))),
             Y("return", ctx.PragmaAutoCommit ? Y(TString(CommitName), "world", "sink") : AstNode("world"))
-        )));
+        );
+
+        node = L(node, Y("let", "world", Y("block", Q(write))));
+        node = L(node, Y("return", "world"));
+
+        Add("block", Q(node));
 
         return TAstListNode::DoInit(ctx, src);
     }
@@ -1161,12 +1191,35 @@ private:
     const TCreateTableParameters Params;
     const bool ExistingOk;
     const bool ReplaceIfExists;
+    const TSourcePtr Values;
     TScopedStatePtr Scoped;
 };
 
-TNodePtr BuildCreateTable(TPosition pos, const TTableRef& tr, bool existingOk, bool replaceIfExists, const TCreateTableParameters& params, TScopedStatePtr scoped)
+/*class TCreateTableAsNode final: public TAstListNode {
+public:
+    TCreateTableAsNode(TPosition pos, const TTableRef& tr, bool existingOk, bool replaceIfExists, const TCreateTableParameters& params, TSourcePtr values, TScopedStatePtr scoped)
+        : TAstListNode(pos)
+        , Table(tr)
+        , Params(params)
+        , ExistingOk(existingOk)
+        , ReplaceIfExists(replaceIfExists)
+        , Values(std::move(values))
+        , Scoped(scoped)
+    {
+    }
+
+private:
+    const TTableRef Table;
+    const TCreateTableParameters Params;
+    const bool ExistingOk;
+    const bool ReplaceIfExists;
+    const TSourcePtr Values;
+    TScopedStatePtr Scoped;
+}*/
+
+TNodePtr BuildCreateTable(TPosition pos, const TTableRef& tr, bool existingOk, bool replaceIfExists, const TCreateTableParameters& params, TSourcePtr values, TScopedStatePtr scoped)
 {
-    return new TCreateTableNode(pos, tr, existingOk, replaceIfExists, params, scoped);
+    return new TCreateTableNode(pos, tr, existingOk, replaceIfExists, params, std::move(values), scoped);
 }
 
 class TAlterTableNode final: public TAstListNode {

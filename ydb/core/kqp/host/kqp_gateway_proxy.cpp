@@ -520,7 +520,7 @@ public:
 
     TFuture<TGenericResult> CreateTable(TKikimrTableMetadataPtr metadata, bool createDir, bool existingOk, bool replaceIfExists) override {
         Y_UNUSED(replaceIfExists);
-        CHECK_PREPARED_DDL(CreateTable);
+        //CHECK_PREPARED_DDL(CreateTable);
 
         std::pair<TString, TString> pathPair;
         TString error;
@@ -1291,7 +1291,7 @@ public:
 
     TFuture<TGenericResult> CreateColumnTable(TKikimrTableMetadataPtr metadata,
             bool createDir, bool existingOk) override {
-        CHECK_PREPARED_DDL(CreateColumnTable);
+        //CHECK_PREPARED_DDL(CreateColumnTable);
 
         try {
             const auto& cluster = metadata->Cluster;

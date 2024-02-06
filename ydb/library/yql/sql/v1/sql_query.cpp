@@ -243,11 +243,19 @@ bool TSqlQuery::Statement(TVector<TNodePtr>& blocks, const TRule_sql_stmt_core& 
                 return false;
             }
 
+            TSourcePtr tableSource = nullptr;
+            if (rule.HasBlock15()) {
+                tableSource = TSqlIntoValues(Ctx, Mode).Build(rule.GetBlock15().GetRule_table_as_source1().GetRule_into_values_source2(), "ReplaceInto");
+                if (!tableSource) {
+                    return false;
+                }
+            }
+
             if (!ValidateExternalTable(params)) {
                 return false;
             }
 
-            AddStatementToBlocks(blocks, BuildCreateTable(Ctx.Pos(), tr, existingOk, replaceIfExists, params, Ctx.Scoped));
+            AddStatementToBlocks(blocks, BuildCreateTable(Ctx.Pos(), tr, existingOk, replaceIfExists, params, std::move(tableSource), Ctx.Scoped));
             break;
         }
         case TRule_sql_stmt_core::kAltSqlStmtCore5: {

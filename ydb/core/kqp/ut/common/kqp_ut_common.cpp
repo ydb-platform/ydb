@@ -1163,13 +1163,13 @@ void FindPlanStagesImpl(const NJson::TJsonValue& node, std::vector<NJson::TJsonV
 
 std::vector<NJson::TJsonValue> FindPlanNodes(const NJson::TJsonValue& plan, const TString& key) {
     std::vector<NJson::TJsonValue> results;
-    FindPlanStagesImpl(plan.GetMapSafe().at("Plan"), stages);
+    FindPlanNodesImpl(plan, key, results);
     return results;
 }
 
 std::vector<NJson::TJsonValue> FindPlanStages(const NJson::TJsonValue& plan) {
     std::vector<NJson::TJsonValue> stages;
-    FindPlanStagesImpl(plan, stages);
+    FindPlanStagesImpl(plan.GetMapSafe().at("Plan"), stages);    
     return stages;
 }
 

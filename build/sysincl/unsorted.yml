@@ -7,9 +7,6 @@
   includes:
   - stat.h
   - libutf8.h
-  #if defined(_OS_QNX) && CONTRIB
-  - devctl.h
-  #endif
   - CrashReporterClient.h
   - Errors.h
   - ICSupport.h
@@ -478,9 +475,6 @@
   - lwp.h
   - perfuse.h
   #endif
-  #if V8_OS_QNX
-  - sys/syspage.h
-  #endif
   #if V8_OS_AIX
   - sys/systemcfg.h
   - sys/thread.h
@@ -778,9 +772,6 @@
   #endif
   #if defined(_TRASH_) && TODO
   - google/profiler.h
-  #endif
-  #if defined(__QNXNTO__)
-  - sys/cpuinline.h
   #endif
   - net/errno.h
   - sys/mode.h

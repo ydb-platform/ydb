@@ -569,7 +569,7 @@ TColumnFilter TColumnFilter::CombineSequentialAnd(const TColumnFilter& extFilter
                 ++itExt;
             }
         }
-        Y_ABORT_UNLESS(itSelf == Filter.end() && itExt == extFilter.Filter.cend());
+        AFL_VERIFY(itSelf == Filter.end() && itExt == extFilter.Filter.cend());
         TColumnFilter result = TColumnFilter::BuildAllowFilter();
         std::swap(resultFilter, result.Filter);
         std::swap(curCurrent, result.LastValue);

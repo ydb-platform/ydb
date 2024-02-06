@@ -17,6 +17,11 @@ public:
         db.Table<NColumnShard::Schema::Locks>().Key(lockId).Delete();
         HasChanges_ = true;
     }
+
+    bool MayAddLock(ui64) override {
+        return true;
+    }
+
 };
 
 }

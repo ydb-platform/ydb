@@ -35,6 +35,17 @@ public:
             Self.ScheduleRemoveLockChanges(lockId);
         }
     }
+
+    bool MayAddLock(ui64 lockId) override {
+        for (auto& pr : Self.GetUserTables()) {
+            auto tid = pr.second->LocalTid;
+            // We cannot start a new lockId if it has any uncompacted data
+            if (DB.HasTxData(tid, lockId)) {
+                return false;
+            }
+        }
+        return true;
+    }
 };
 
 } // namespace NKikimr::NDataShard

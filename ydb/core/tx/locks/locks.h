@@ -19,8 +19,6 @@
 namespace NKikimr {
 namespace NDataShard {
 
-struct TUserTable;
-
 class ILocksDb {
 protected:
     ~ILocksDb() = default;
@@ -577,7 +575,7 @@ public:
         };
     }
 
-    void UpdateSchema(const TPathId& tableId, const TUserTable& tableInfo);
+    void UpdateSchema(const TPathId& tableId, const TVector<NScheme::TTypeInfo>& keyColumnTypes);
     void RemoveSchema(const TPathId& tableId);
     bool ForceShardLock(const TPathId& tableId) const;
     bool ForceShardLock(const TIntrusiveList<TTableLocks, TTableLocksReadListTag>& readTables) const;
@@ -813,8 +811,8 @@ public:
         return Update->LockTxId;
     }
 
-    void UpdateSchema(const TPathId& tableId, const TUserTable& tableInfo) {
-        Locker.UpdateSchema(tableId, tableInfo);
+    void UpdateSchema(const TPathId& tableId, const TVector<NScheme::TTypeInfo>& keyColumnTypes) {
+        Locker.UpdateSchema(tableId, keyColumnTypes);
     }
 
     void RemoveSchema(const TPathId& tableId) {

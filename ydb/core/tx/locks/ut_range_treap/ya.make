@@ -1,4 +1,4 @@
-UNITTEST_FOR(ydb/core/tx/datashard)
+UNITTEST_FOR(ydb/core/tx/locks)
 
 FORK_SUBTESTS()
 

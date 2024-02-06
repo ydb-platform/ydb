@@ -1,6 +1,6 @@
 #pragma once
 
-#include "range_tree_base.h"
+#include <ydb/core/tx/locks/range_tree_base.h>
 
 #include <util/generic/hash.h>
 #include <util/generic/intrlist.h>

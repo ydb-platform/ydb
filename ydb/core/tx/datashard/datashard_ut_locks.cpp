@@ -152,7 +152,7 @@ namespace NTest {
             TmpLockVec.emplace_back(TCell::Make(TmpLock.SchemeShard));
             TmpLockVec.emplace_back(TCell::Make(TmpLock.PathId));
 
-            Locks.UpdateSchema(tableId.PathId, DataShard.TableInfos[tid]);
+            Locks.UpdateSchema(tableId.PathId, DataShard.TableInfos[tid].KeyColumnTypes);
         }
 
         //

@@ -113,17 +113,6 @@ public:
         return true;
     }
 
-    bool MayAddLock(ui64 lockId) override {
-        for (auto& pr : Self.GetUserTables()) {
-            auto tid = pr.second->LocalTid;
-            // We cannot start a new lockId if it has any uncompacted data
-            if (DB.HasTxData(tid, lockId)) {
-                return false;
-            }
-        }
-        return true;
-    }
-
     void PersistAddLock(ui64 lockId, ui32 lockNodeId, ui32 generation, ui64 counter, ui64 createTs, ui64 flags = 0) override {
         using Schema = TSchemaDescription;
         NIceDb::TNiceDb db(DB);

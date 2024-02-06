@@ -28,8 +28,6 @@
 #include <ydb/core/tx/locks/locks.h>
 #include <ydb/services/metadata/service.h>
 
-#include <ydb/core/tx/datashard/datashard_user_table.h>
-
 namespace NKikimr::NOlap {
 class TCleanupColumnEngineChanges;
 class TTTLColumnEngineChanges;
@@ -227,7 +225,7 @@ public:
         TabletCounters->Simple()[counter].Add(num);
     }
 
-    // For systable
+    // For syslocks
     void IncCounter(NDataShard::ECumulativeCounters counter, ui64 num = 1) const {
         TabletCounters->Cumulative()[counter].Increment(num);
     }
@@ -247,11 +245,7 @@ public:
     ui32 Generation() const { return Executor()->Generation(); }
 
     bool IsUserTable(const TTableId&) const {
-        return false;
-    }
-
-    const THashMap<ui64, NDataShard::TUserTable::TCPtr> &GetUserTables() const {
-        return Default<THashMap<ui64, NDataShard::TUserTable::TCPtr>>();
+        return true;
     }
 
 private:

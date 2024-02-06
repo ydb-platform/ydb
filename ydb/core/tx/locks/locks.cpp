@@ -2,10 +2,7 @@
 #include "time_counters.h"
 
 #include <ydb/core/tablet_flat/flat_dbase_scheme.h>
-
 #include <ydb/core/base/appdata.h>
-
-#include <ydb/core/tx/datashard/datashard_user_table.h>
 
 namespace NKikimr {
 namespace NDataShard {
@@ -610,11 +607,11 @@ void TLockLocker::RemoveLock(ui64 lockId, ILocksDb* db) {
     RemoveOneLock(lockId, db);
 }
 
-void TLockLocker::UpdateSchema(const TPathId& tableId, const TUserTable& tableInfo) {
+void TLockLocker::UpdateSchema(const TPathId& tableId, const TVector<NScheme::TTypeInfo>& keyColumnTypes) {
     TTableLocks::TPtr& table = Tables[tableId];
     if (!table)
         table.Reset(new TTableLocks(tableId));
-    table->UpdateKeyColumnsTypes(tableInfo.KeyColumnTypes);
+    table->UpdateKeyColumnsTypes(keyColumnTypes);
 }
 
 void TLockLocker::RemoveSchema(const TPathId& tableId) {

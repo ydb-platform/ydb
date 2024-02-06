@@ -68,6 +68,12 @@ yqlrun_yt_results.cache = {}
 
 
 def run_test(provider, prepare, suite, case, tmpdir, what):
+    if "TimeOrder" in suite:
+        pytest.skip('Unsupported in runtime version v39')
+
+    if "SelfJoinCore" in case:
+        pytest.skip('Unsupported in runtime version v39')
+
     if get_param('TARGET_PLATFORM'):
         if "ArcPython" in case:
             pytest.skip('ArcPython is not supported on non-default target platform')

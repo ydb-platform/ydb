@@ -5542,9 +5542,11 @@ TRuntimeNode TProgramBuilder::PgTableContent(
     const std::string_view& cluster,
     const std::string_view& table,
     TType* returnType) {
-    if constexpr (RuntimeVersion < 47U) {
-        THROW yexception() << "Runtime version (" << RuntimeVersion << ") too old for " << __func__;
-    }
+
+    // Disable runtime compatibility checks for PG callables in 24-1
+    // if constexpr (RuntimeVersion < 47U) {
+    //     THROW yexception() << "Runtime version (" << RuntimeVersion << ") too old for " << __func__;
+    // }
 
     TCallableBuilder callableBuilder(Env, __func__, returnType);
     callableBuilder.Add(NewDataLiteral<NUdf::EDataSlot::String>(cluster));

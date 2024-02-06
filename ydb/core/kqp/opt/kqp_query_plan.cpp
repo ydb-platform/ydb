@@ -2009,10 +2009,11 @@ TString AddSimplifiedPlan(const TString& planText, bool analyzeMode) {
 
     planJson["SimplifiedPlan"] = SimplifyQueryPlan(planJson.GetMapSafe().at("Plan"));
 
-    TTempBufOutput stringStream;
-    NYdb::NConsoleClient::TQueryPlanPrinter printer(NYdb::NConsoleClient::EOutputFormat::PrettyTable, analyzeMode, stringStream);
-    printer.Print(planJson.GetStringRobust());
-    planJson["OLAPText"] = stringStream.Data();
+    // Don't print the OLAP plan yet, there are some non UTF-8 symbols there that need to be fixed
+    //TTempBufOutput stringStream;
+    //NYdb::NConsoleClient::TQueryPlanPrinter printer(NYdb::NConsoleClient::EOutputFormat::PrettyTable, analyzeMode, stringStream);
+    //printer.Print(planJson.GetStringRobust());
+    //planJson["OLAPText"] = stringStream.Data();
     return planJson.GetStringRobust();
 }
 

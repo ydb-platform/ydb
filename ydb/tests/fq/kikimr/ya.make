@@ -20,6 +20,7 @@ PY_SRCS(
 )
 
 TEST_SRCS(
+    test_recovery.py
     test_recovery_match_recognize.py
     test_recovery_mz.py
 )

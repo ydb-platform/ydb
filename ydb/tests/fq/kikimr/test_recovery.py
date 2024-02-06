@@ -30,6 +30,7 @@ def run_with_sleep(args):
         yatest.common.execute(program_args)
         time.sleep(random.uniform(time_min, time_max))
 
+
 @pytest.fixture
 def kikimr():
     kikimr_conf = StreamingOverKikimrConfig(node_count=8, cloud_mode=True)
@@ -39,6 +40,7 @@ def kikimr():
     yield kikimr
     kikimr.stop()
     kikimr.stop_mvp_mock_server()
+
 
 class TestRecovery(TestYdsBase):
     @classmethod
@@ -268,7 +270,7 @@ class TestRecovery(TestYdsBase):
                 d[n] = d[n] + 1
             else:
                 d[n] = 1
-        
+
         assert len(d) == 20
 
         logging.debug("Restart Master node {}".format(master_node_index))
@@ -344,7 +346,7 @@ class TestRecovery(TestYdsBase):
         for node_index in self.kikimr.control_plane.kikimr_cluster.nodes:
             self.kikimr.control_plane.wait_discovery(node_index)
 
-        self.kikimr = kikimr      
+        self.kikimr = kikimr
         self.init_topics("disconnection", partitions_count=2)
         input_topic_1 = "disconnection_i_1"
         input_topic_2 = "disconnection_i_2"

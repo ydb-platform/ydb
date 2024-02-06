@@ -97,6 +97,7 @@ message TKeyValueRequest {
         optional bytes OriginalKey = 1;
         optional bytes PatchedKey = 2;
         repeated TDiff Diffs = 3;
+        optional EStorageChannel StorageChannel = 4; // (default = MAIN)
     }
 
     optional uint64 TabletId = 1; // mandatory

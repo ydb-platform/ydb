@@ -1127,11 +1127,11 @@ void TKeyValueState::ProcessCmd(TIntermediate::TPatch &request,
 
     if (legacyResponse) {
         legacyResponse->SetStatus(NKikimrProto::OK);
-        // legacyResponse->SetStatusFlags(request.StatusFlags.Raw);
+        legacyResponse->SetStatusFlags(request.StatusFlags.Raw);
     }
     if (response) {
         response->set_status(NKikimrKeyValue::Statuses::RSTATUS_OK);
-        // response->set_status_flag(GetStatusFlag(request.StatusFlags));
+        response->set_status_flag(GetStatusFlag(request.StatusFlags));
         response->set_storage_channel(storage_channel);
     }
 }
@@ -2379,7 +2379,7 @@ bool TKeyValueState::PrepareCmdWrite(const TActorContext &ctx, NKikimrClient::TK
 }
 
 bool TKeyValueState::PrepareCmdPatch(const TActorContext &ctx, NKikimrClient::TKeyValueRequest &kvRequest,
-        TEvKeyValue::TEvRequest& ev, THolder<TIntermediate> &intermediate, const TTabletStorageInfo */*info*/) {
+        TEvKeyValue::TEvRequest& ev, THolder<TIntermediate> &intermediate, const TTabletStorageInfo *info) {
 
     intermediate->PatchIndices.reserve(kvRequest.CmdPatchSize());
     for (ui32 patchIdx = 0; patchIdx < kvRequest.CmdPatchSize(); ++patchIdx) {
@@ -2431,7 +2431,7 @@ bool TKeyValueState::PrepareCmdPatch(const TActorContext &ctx, NKikimrClient::TK
             return true;
         }
 
-        interm.Diffs.reserve(request.DiffsSize());
+        interm.Diffs.resize(request.DiffsSize());
         for (ui32 diffIdx = 0; diffIdx < request.DiffsSize(); ++diffIdx) {
             auto &diff = request.GetDiffs(diffIdx);
             switch (diff.GetDataCase()) {
@@ -2454,8 +2454,31 @@ bool TKeyValueState::PrepareCmdPatch(const TActorContext &ctx, NKikimrClient::TK
             interm.Diffs[diffIdx].Offset = diff.GetOffset(); 
         }
 
+        ui32 storageChannelIdx = BLOB_CHANNEL;
+        if (request.HasStorageChannel()) {
+            auto storageChannel = request.GetStorageChannel();
+            ui32 storageChannelOffset = (ui32)storageChannel;
+            
+            if (storageChannelOffset == NKikimrClient::TKeyValueRequest::INLINE) {
+                TStringStream str;
+                str << "KeyValue# " << TabletId;
+                str << " Patching blob can't be store in inline channel CmdPatch(" << patchIdx << ") Marker# KV91";
+                ReplyError(ctx, str.Str(), NMsgBusProxy::MSTATUS_INTERNALERROR, NKikimrKeyValue::Statuses::RSTATUS_INTERNAL_ERROR, intermediate);
+                return true;
+            }
+
+            storageChannelIdx = storageChannelOffset + BLOB_CHANNEL;
+            ui32 endChannel = info->Channels.size();
+            if (storageChannelIdx >= endChannel) {
+                storageChannelIdx = BLOB_CHANNEL;
+                LOG_INFO_S(ctx, NKikimrServices::KEYVALUE, "KeyValue# " << TabletId
+                        << " CmdPatch StorageChannel# " << storageChannelOffset
+                        << " does not exist, using MAIN");
+            }
+        }
+
         interm.OriginalBlobId = indexRecord.Chain[0].LogoBlobId;
-        interm.PatchedBlobId = TLogoBlobID(0, 0, 0, interm.OriginalBlobId.Channel(), interm.OriginalBlobId.BlobSize(), 0);
+        interm.PatchedBlobId = TLogoBlobID(0, 0, 0, storageChannelIdx, interm.OriginalBlobId.BlobSize(), 0);
     }
     return false;
 }
@@ -3059,7 +3082,9 @@ void TKeyValueState::RegisterRequestActor(const TActorContext &ctx, THolder<TInt
 
     auto fixPatch = [&](TIntermediate::TPatch& patch) {
         Y_ABORT_UNLESS(patch.PatchedBlobId.TabletID() == 0);
-        patch.PatchedBlobId = AllocatePatchedLogoBlobId(patch.PatchedBlobId.BlobSize(), patch.PatchedBlobId.Channel(), 0, 0, intermediate->RequestUid);
+        ui64 originalGroupId = info->GroupFor(patch.OriginalBlobId.Channel(), patch.OriginalBlobId.Generation());
+        ui64 patchedGroupId = info->GroupFor(patch.PatchedBlobId.Channel(), patch.PatchedBlobId.Generation());
+        patch.PatchedBlobId = AllocatePatchedLogoBlobId(patch.PatchedBlobId.BlobSize(), patch.PatchedBlobId.Channel(), originalGroupId, patchedGroupId, intermediate->RequestUid);
         ui32 newRefCount = ++RefCounts[patch.PatchedBlobId];
         Y_ABORT_UNLESS(newRefCount == 1);
         intermediate->RefCountsIncr.emplace_back(patch.PatchedBlobId, true);

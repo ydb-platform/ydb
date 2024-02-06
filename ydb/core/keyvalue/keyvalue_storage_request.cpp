@@ -168,11 +168,13 @@ public:
 
         NKikimrProto::EReplyStatus status = ev->Get()->Status;
         if (status != NKikimrProto::OK) {
+            Cerr << "Patch Not OK response!\n" << NKikimrProto::EReplyStatus_Name(status) << Endl;
+            Cerr << ev->Get()->ErrorReason << Endl;
             TInstant now = TAppData::TimeProvider->Now();
 
             TStringStream str;
             str << "KeyValue# " << TabletInfo->TabletID;
-            str << " Unexpected EvPut result# " << NKikimrProto::EReplyStatus_Name(status).data();
+            str << " Unexpected EvPatch result# " << NKikimrProto::EReplyStatus_Name(status).data();
             str << " Deadline# " << IntermediateResults->Deadline.MilliSeconds();
             str << " Now# " << now.MilliSeconds();
             str << " GotAt# " << IntermediateResults->Stat.IntermediateCreatedAt.MilliSeconds();
@@ -189,6 +191,8 @@ public:
                 logPriority);
             return;
         }
+
+        Cerr << "Patch OK response!\n";
         ui64 cookie = ev->Cookie;
         ui64 patchIdx = cookie;
         if (patchIdx >= IntermediateResults->Patches.size() && patchIdx >= IntermediateResults->Commands.size()) {
@@ -202,6 +206,13 @@ public:
             return;
         }
 
+        TIntermediate::TPatch *patch = nullptr;
+        if (IntermediateResults->Patches.size()) {
+            patch = &IntermediateResults->Patches[patchIdx];
+        } else {
+            patch = &std::get<TIntermediate::TPatch>(IntermediateResults->Commands[patchIdx]);
+        }
+        patch->StatusFlags.Merge(ev->Get()->StatusFlags.Raw);
         ++PatchRequestsReplied;
         IntermediateResults->Stat.GroupWrittenBytes[std::make_pair(ev->Get()->Id.Channel(), groupId)] += ev->Get()->Id.BlobSize();
         IntermediateResults->Stat.GroupWrittenIops[std::make_pair(ev->Get()->Id.Channel(), groupId)] += 1;
@@ -760,7 +771,7 @@ public:
 
         for (ui64 i : IntermediateResults->PatchIndices) {
             auto &cmd = IntermediateResults->Commands[i];
-            Y_ABORT_UNLESS(std::holds_alternative<TIntermediate::TWrite>(cmd));
+            Y_ABORT_UNLESS(std::holds_alternative<TIntermediate::TPatch>(cmd));
             auto& patch = std::get<TIntermediate::TPatch>(cmd);
             sendPatch(i, patch);
         }

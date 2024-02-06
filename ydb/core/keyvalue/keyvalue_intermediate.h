@@ -114,6 +114,7 @@ struct TIntermediate {
         TLogoBlobID PatchedBlobId;
 
         NKikimrProto::EReplyStatus Status;
+        TStorageStatusFlags StatusFlags;
 
         TVector<TDiff> Diffs;
     };

@@ -122,6 +122,7 @@ SYS_SCHEMA = {
             "type": "string",
             "enum": NodeType.all_node_type_names(),
         },
+        "force_io_pool_threads": {"type": "integer"},
     },
     "additionalProperties": False,
 }

@@ -270,7 +270,9 @@ void TTablesManager::AddSchemaVersion(const ui32 presetId, const NOlap::TSnapsho
 }
 
 void TTablesManager::AddTableVersion(const ui64 pathId, const NOlap::TSnapshot& version, const TTableInfo::TTableVersionInfo& versionInfo, NIceDb::TNiceDb& db) {
-    auto& table = Tables.at(pathId);
+    auto it = Tables.find(pathId);
+    AFL_VERIFY(it != Tables.end());
+    auto& table = it->second;
 
     if (versionInfo.HasSchemaPresetId()) {
         Y_ABORT_UNLESS(SchemaPresets.contains(versionInfo.GetSchemaPresetId()));

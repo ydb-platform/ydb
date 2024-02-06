@@ -708,7 +708,6 @@ const TTypedColumn BuildLogicalProgram(const TExprNode::TChildrenType& args, con
         logicalFunc->SetFunctionType(TProgram::YQL_KERNEL);
         logicalFunc->SetYqlOperationId((ui32)function);
     } else {
-        logicalFunc->SetFunctionType(function);
         logicalFunc->SetId((ui32)function);
     }
 

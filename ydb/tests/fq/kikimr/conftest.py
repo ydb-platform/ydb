@@ -5,7 +5,6 @@ import pytest
 
 from ydb.tests.tools.fq_runner.fq_client import FederatedQueryClient
 from ydb.tests.tools.fq_runner.custom_hooks import *  # noqa: F401,F403 Adding custom hooks for YQv2 support
-from ydb.tests.tools.fq_runner.kikimr_utils import ExtensionPoint
 from ydb.tests.tools.fq_runner.kikimr_utils import YQv2Extension
 from ydb.tests.tools.fq_runner.kikimr_utils import ComputeExtension
 from ydb.tests.tools.fq_runner.kikimr_utils import DefaultConfigExtension

@@ -3,7 +3,7 @@
 #include "datashard.h"
 #include "datashard_user_table.h"
 #include "datashard_active_transaction.h"
-#include "range_treap.h"
+#include <ydb/core/tx/locks/range_treap.h>
 
 #include <library/cpp/containers/absl_flat_hash/flat_hash_map.h>
 

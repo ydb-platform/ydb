@@ -1,6 +1,7 @@
 #include <ydb/core/kqp/ut/common/kqp_ut_common.h>
 #include <ydb/core/kqp/counters/kqp_counters.h>
 #include <ydb/core/tx/scheme_cache/scheme_cache.h>
+#include <ydb/core/tx/datashard/datashard_impl.h>
 
 #include <ydb/core/base/tablet_pipecache.h>
 #include <ydb/core/kqp/runtime/kqp_read_actor.h>

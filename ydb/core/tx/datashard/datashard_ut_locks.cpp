@@ -1,5 +1,5 @@
 #include "defs.h"
-#include "datashard_locks.h"
+#include <ydb/core/tx/locks/locks.h>
 #include <ydb/core/tx/datashard/ut_common/datashard_ut_common.h>
 
 #include <ydb/core/tablet_flat/flat_dbase_apply.h>
@@ -152,7 +152,7 @@ namespace NTest {
             TmpLockVec.emplace_back(TCell::Make(TmpLock.SchemeShard));
             TmpLockVec.emplace_back(TCell::Make(TmpLock.PathId));
 
-            Locks.UpdateSchema(tableId.PathId, DataShard.TableInfos[tid]);
+            Locks.UpdateSchema(tableId.PathId, DataShard.TableInfos[tid].KeyColumnTypes);
         }
 
         //

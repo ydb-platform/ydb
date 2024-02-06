@@ -3,7 +3,7 @@
 #include "path.h"
 
 #include <ydb/core/tablet_flat/flat_cxx_database.h>
-#include <ydb/core/tx/datashard/sys_tables.h>
+#include <ydb/core/tx/locks/sys_tables.h>
 
 namespace NKikimr {
 namespace NSysView {

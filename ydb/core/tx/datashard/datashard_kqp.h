@@ -3,8 +3,13 @@
 #include "datashard.h"
 #include "datashard_active_transaction.h"
 
+#include "operation.h"
+#include "key_validator.h"
+#include "datashard_user_db.h"
+
 #include <ydb/core/engine/minikql/minikql_engine_host.h>
 #include <ydb/core/kqp/runtime/kqp_tasks_runner.h>
+#include <ydb/core/tx/locks/locks_db.h>
 
 #include <util/generic/ptr.h>
 

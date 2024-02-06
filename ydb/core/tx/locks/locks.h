@@ -19,8 +19,6 @@
 namespace NKikimr {
 namespace NDataShard {
 
-struct TUserTable;
-
 class ILocksDb {
 protected:
     ~ILocksDb() = default;
@@ -76,11 +74,6 @@ public:
 
 class TLocksDataShard {
 public:
-    TLocksDataShard(TTabletCountersBase* const &tabletCounters)
-        : TabletCounters(tabletCounters)
-    {
-    }
-
     virtual ~TLocksDataShard() = default;
 
     virtual void IncCounter(ECumulativeCounters counter,
@@ -94,8 +87,6 @@ public:
     virtual bool IsUserTable(const TTableId& tableId) const = 0;
     virtual ui32 Generation() const = 0;
     virtual TRowVersion LastCompleteTxVersion() const = 0;
-
-    TTabletCountersBase* const &TabletCounters;
 };
 
 template <typename T>
@@ -103,8 +94,7 @@ class TLocksDataShardAdapter : public TLocksDataShard
 {
 public:
     TLocksDataShardAdapter(const T *self)
-        : TLocksDataShard(self->TabletCounters)
-        , Self(self)
+        : Self(self)
     {
     }
 
@@ -600,7 +590,7 @@ public:
         };
     }
 
-    void UpdateSchema(const TPathId& tableId, const TUserTable& tableInfo);
+    void UpdateSchema(const TPathId& tableId, const TVector<NScheme::TTypeInfo>& keyColumnTypes);
     void RemoveSchema(const TPathId& tableId);
     bool ForceShardLock(const TPathId& tableId) const;
     bool ForceShardLock(const TIntrusiveList<TTableLocks, TTableLocksReadListTag>& readTables) const;
@@ -836,8 +826,8 @@ public:
         return Update->LockTxId;
     }
 
-    void UpdateSchema(const TPathId& tableId, const TUserTable& tableInfo) {
-        Locker.UpdateSchema(tableId, tableInfo);
+    void UpdateSchema(const TPathId& tableId, const TVector<NScheme::TTypeInfo>& keyColumnTypes) {
+        Locker.UpdateSchema(tableId, keyColumnTypes);
     }
 
     void RemoveSchema(const TPathId& tableId) {

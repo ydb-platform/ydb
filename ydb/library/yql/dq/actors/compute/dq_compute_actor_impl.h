@@ -1758,9 +1758,8 @@ private:
         }
     }
 
-    virtual const NYql::NDq::TTaskRunnerStatsBase* GetTaskRunnerStats() {
-        return TaskRunner ? TaskRunner->GetStats() : nullptr;
-    }
+    virtual const NYql::NDq::TTaskRunnerStatsBase* GetTaskRunnerStats() = 0;
+    virtual const NYql::NDq::TDqMeteringStats* GetMeteringStats() = 0;
 
     virtual const IDqAsyncOutputBuffer* GetSink(ui64, const TAsyncOutputInfoBase& sinkInfo) const {
         return sinkInfo.Buffer.Get();
@@ -1820,8 +1819,7 @@ public:
 
             for (auto& [inputIndex, sourceInfo] : SourcesMap) {
                 if (auto* source = sourceInfo.AsyncInput) {
-                    // TODO: support async CA
-                    source->FillExtraStats(protoTask, last, TaskRunner ? TaskRunner->GetMeteringStats() : nullptr);
+                    source->FillExtraStats(protoTask, last, GetMeteringStats());
                 }
             }
             FillTaskRunnerStats(Task.GetId(), Task.GetStageId(), *taskStats, protoTask, RuntimeSettings.GetCollectStatsLevel());
@@ -1926,8 +1924,7 @@ public:
                 }
 
                 if (auto* transform = transformInfo.AsyncInput) {
-                    // TODO: support async CA
-                    transform->FillExtraStats(protoTask, last, TaskRunner ? TaskRunner->GetMeteringStats() : 0);
+                    transform->FillExtraStats(protoTask, last, GetMeteringStats());
                 }
             }
 

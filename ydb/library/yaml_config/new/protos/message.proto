@@ -46,9 +46,9 @@ message THosts {
 message TCombinedDiskInfo {
     option (ConfigCombinedType) = true;
     optional string NodeID = 1; // +allow string // have to copy manually
-    optional uint32 PDiskID = 2 [(ConfigCopyTo) = "TVDiskLocation", (ConfigCopyTo) = "TVDiskLocation"];
+    optional uint32 PDiskID = 2 [(ConfigCopyTo) = "TVDiskLocation", (ConfigCopyTo) = "TPDisk"];
     optional uint32 VDiskSlotID = 3 [(ConfigCopyTo) = "TVDiskLocation"];
-    optional uint64 PDiskGuid = 4 [(ConfigCopyTo) = "TVDiskLocation"];
+    optional uint64 PDiskGuid = 4 [(ConfigCopyTo) = "TVDiskLocation", (ConfigCopyTo) = "TPDisk"];
 
     optional NKikimrBlobStorage.TVDiskID VDiskID = 101 [(ConfigCopyTo) = "TVDisk"];
     optional NKikimrBlobStorage.TVDiskLocation VDiskLocation = 102 [(ConfigCopyTo) = "TVDisk"];
@@ -75,5 +75,5 @@ message TEphemeralInputFields {
     optional string StaticErasure = 2;
     repeated THosts Hosts = 3;
     repeated NKikimrBlobStorage.TDefineHostConfig HostConfigs = 4;
-    reserved "StorageConfigGeneration";
+    optional uint32 StorageConfigGeneration = 5;
 }

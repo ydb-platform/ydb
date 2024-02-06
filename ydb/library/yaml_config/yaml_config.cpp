@@ -24,14 +24,6 @@ NKikimrConfig::TAppConfig YamlToProto(
 
     NJson::ReadJsonTree(resolvedJsonConfig, &json);
 
-    NYaml::TTransformContext ctx;
-    if (preTransform) {
-        ExtractExtraFields(json, ctx);
-        NKikimr::NYaml::TransformJsonConfig(json, true);
-    }
-
-    NKikimrConfig::TAppConfig yamlProtoConfig;
-
     NProtobufJson::TJson2ProtoConfig c;
     c.SetFieldNameMode(NProtobufJson::TJson2ProtoConfig::FieldNameSnakeCaseDense);
     c.SetEnumValueMode(NProtobufJson::TJson2ProtoConfig::EnumCaseInsensetive);
@@ -40,10 +32,21 @@ NKikimrConfig::TAppConfig YamlToProto(
     c.AllowUnknownFields = allowUnknown;
     c.UnknownFieldsCollector = std::move(unknownFieldsCollector);
 
+    NYaml::TTransformContext ctx;
+    NKikimrConfig::TEphemeralInputFields ephemeralConfig;
+    if (preTransform) {
+        NYaml::ExtractExtraFields(json, ctx);
+        NJson::TJsonValue ephemeralJsonNode = json;
+        NYaml::ClearNonEphemeralFields(ephemeralJsonNode);
+        NProtobufJson::MergeJson2Proto(ephemeralJsonNode, ephemeralConfig, c);
+        NYaml::ClearEphemeralFields(json);
+    }
+
+    NKikimrConfig::TAppConfig yamlProtoConfig;
     NProtobufJson::MergeJson2Proto(json, yamlProtoConfig, c);
 
     if (preTransform) {
-        NKikimr::NYaml::TransformProtoConfig(ctx, yamlProtoConfig);
+        NKikimr::NYaml::TransformProtoConfig(ctx, yamlProtoConfig, ephemeralConfig);
     }
 
     return yamlProtoConfig;
@@ -102,11 +105,17 @@ void ResolveAndParseYamlConfig(
     Y_ABORT_UNLESS(NJson::ReadJsonTree(resolvedJsonConfigStream.Str(), &json), "Got invalid config from Console");
 
     NYaml::TTransformContext ctx;
-    ExtractExtraFields(json, ctx);
-    NKikimr::NYaml::TransformJsonConfig(json, true);
+    NYaml::ExtractExtraFields(json, ctx);
+
+    NJson::TJsonValue ephemeralJsonNode = json;
+    NYaml::ClearNonEphemeralFields(ephemeralJsonNode);
+    NKikimrConfig::TEphemeralInputFields ephemeralConfig;
+    NProtobufJson::MergeJson2Proto(ephemeralJsonNode, ephemeralConfig, NYamlConfig::GetJsonToProtoConfig().SetAllowUnknownFields(true));
+    NYaml::ClearEphemeralFields(json);
+
     NProtobufJson::MergeJson2Proto(json, appConfig, NYamlConfig::GetJsonToProtoConfig().SetAllowUnknownFields(true));
-    NKikimr::NYaml::TransformProtoConfig(ctx, appConfig);
-}
+    TransformProtoConfig(ctx, appConfig, ephemeralConfig);
+ }
 
 void ReplaceUnmanagedKinds(const NKikimrConfig::TAppConfig& from, NKikimrConfig::TAppConfig& to) {
     if (from.HasNameserviceConfig()) {

@@ -31,6 +31,7 @@ namespace NKikimr::NYaml {
         bool ExplicitEmptyDefaultGroups;
         bool ExplicitEmptyDefaultAccess;
         std::map<TCombinedDiskInfoKey, NKikimrConfig::TCombinedDiskInfo> CombinedDiskInfo;
+        std::map<ui32, TString> GroupErasureSpecies;
     };
 
     NJson::TJsonValue Yaml2Json(const YAML::Node& yaml, bool isRoot);
@@ -38,9 +39,10 @@ namespace NKikimr::NYaml {
     NKikimrBlobStorage::TConfigRequest BuildInitDistributedStorageCommand(const TString& data);
 
     void ExtractExtraFields(NJson::TJsonValue& json, TTransformContext& ctx);
+    void ClearEphemeralFields(NJson::TJsonValue& json);
+    void ClearNonEphemeralFields(NJson::TJsonValue& json);
 
-    void TransformJsonConfig(NJson::TJsonValue& config, bool relaxed = false);
-    void TransformProtoConfig(const TTransformContext& ctx, NKikimrConfig::TAppConfig& config, bool relaxed = false);
+    void TransformProtoConfig(TTransformContext& ctx, NKikimrConfig::TAppConfig& config, NKikimrConfig::TEphemeralInputFields& ephemeralConfig, bool relaxed = false);
 
     NKikimrConfig::TAppConfig Parse(const TString& data);
 }

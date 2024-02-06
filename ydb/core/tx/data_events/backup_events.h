@@ -8,17 +8,17 @@ namespace NKikimr::NEvents {
 struct TBackupEvents {
     // @TODO discuss
     enum EEventType {
-        EvBackupShardProposeReady = EventSpaceBegin(TKikimrEvents::ES_DATA_OPERATIONS),
+        EvBackupShardPropose = EventSpaceBegin(TKikimrEvents::ES_BACKUP_SHARD),
         EvBackupShardProposeResult,
         EvEnd
     };
 
-    static_assert(EEventType::EvEnd < EventSpaceEnd(TKikimrEvents::ES_DATA_OPERATIONS),
-                  "expect EvEnd < EventSpaceEnd(TKikimrEvents::ES_DATA_OPERATIONS)");
+    static_assert(EEventType::EvEnd < EventSpaceEnd(TKikimrEvents::ES_BACKUP_SHARD),
+                  "expect EvEnd < EventSpaceEnd(TKikimrEvents::ES_BACKUP_SHARD)");
 
     struct TEvBackupShardPropose
         : public NActors::TEventPB<TEvBackupShardPropose, NKikimrBackupEvents::TEvBackupShardPropose,
-                                   EvBackupShardProposeReady> {
+                                   EvBackupShardPropose> {
         TEvBackupShardPropose() = default;
 
         TActorId GetSource() const {

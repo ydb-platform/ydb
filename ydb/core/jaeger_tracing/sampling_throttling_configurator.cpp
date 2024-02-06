@@ -39,7 +39,7 @@ TMaybe<TString> TSamplingThrottlingConfigurator::HandleConfigs(const NKikimrConf
         SamplingPPM.Set(samplingFraction * 1000000);
         SamplingLevel.Set(samplingConfig.GetLevel());
         MaxSampledPerMinute.Set(samplingConfig.GetMaxRatePerMinute());
-        MaxSampledBurst.Set(samplingConfig.Get);
+        MaxSampledBurst.Set(samplingConfig.GetMaxBurst());
     }
 
     if (config.ExternalThrottlingSize()) {

@@ -210,20 +210,20 @@ Y_UNIT_TEST(PgConvertNumericDecimal128BigScale3) {
     checkResult<false>(expected, result, &reader, numeric_out);
 }
 
-/*Y_UNIT_TEST(PgConvertNumericDecimal128BigScale6) {
+Y_UNIT_TEST(PgConvertNumericDecimal128BigScale1) {
     TArenaMemoryContext arena;
 
-    int32_t precision = 24;
-    int32_t scale = 5;
+    int32_t precision = 26;
+    int32_t scale = 1;
     std::shared_ptr<arrow::DataType> type(new arrow::Decimal128Type(precision, scale));
     arrow::Decimal128Builder builder(type);
 
     const char* expected[] = {
-        "3623458934881474191.03245", "-3623458934881474191.03245", nullptr
+        "3868562622766813359059763.2", "-3868562622766813359059763.2", nullptr
     };
 
-    ARROW_OK(builder.Append(arrow::Decimal128::FromString("3623458934881474191.03245").ValueOrDie()));
-    ARROW_OK(builder.Append(arrow::Decimal128::FromString("-3623458934881474191.03245").ValueOrDie()));
+    ARROW_OK(builder.Append(arrow::Decimal128::FromString("3868562622766813359059763.2").ValueOrDie()));
+    ARROW_OK(builder.Append(arrow::Decimal128::FromString("-3868562622766813359059763.2").ValueOrDie()));
     ARROW_OK(builder.AppendNull());
 
     std::shared_ptr<arrow::Array> array;
@@ -233,7 +233,7 @@ Y_UNIT_TEST(PgConvertNumericDecimal128BigScale3) {
 
     NYql::NUdf::TStringBlockReader<arrow::BinaryType, true> reader;
     checkResult<false>(expected, result, &reader, numeric_out);
-}*/
+}
 
 Y_UNIT_TEST(PgConvertNumericInt) {
     TArenaMemoryContext arena;

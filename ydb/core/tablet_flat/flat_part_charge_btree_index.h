@@ -661,10 +661,6 @@ private:
 
         const auto iterateLevel = [&](const auto& tryHandleChild) {
             for (const auto &node : level) {
-                if (node.EndRowId <= beginRowId || node.BeginRowId >= endRowId) {
-                    continue;
-                }
-
                 TRecIdx from = 0, to = node.GetChildrenCount();
                 if (node.BeginRowId < beginRowId) {
                     from = node.Seek(beginRowId);

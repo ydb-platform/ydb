@@ -2003,6 +2003,10 @@ TString AddSimplifiedPlan(const TString& planText, bool analyzeMode) {
     NJson::TJsonValue planJson;
     NJson::ReadJsonTree(planText, &planJson, true);
 
+    if (!planJson.GetMapSafe().contains("Plan")){
+        return planText;
+    }
+
     planJson["SimplifiedPlan"] = SimplifyQueryPlan(planJson.GetMapSafe().at("Plan"));
 
     TTempBufOutput stringStream;
@@ -2497,6 +2501,8 @@ TString SerializeScriptPlan(const TVector<const TString>& queryPlans) {
         if (auto dqPlan = planMap.FindPtr("Plan")) {
             writer.WriteKey("Plan");
             writer.WriteJsonValue(dqPlan);
+            writer.WriteKey("SimplifiedPlan");
+            writer.WriteJsonValue(SimplifyQueryPlan(dqPlan));
         }
         writer.EndObject();
     }

@@ -837,6 +837,8 @@ void TBasicServicesInitializer::InitializeServices(NActors::TActorSystemSetup* s
         switch (tracing_backend.GetBackendCase()) {
             case NKikimrConfig::TTracingConfig::TBackendConfig::BackendCase::kOpentelemetry: {
                 const auto& opentelemetry = tracing_backend.GetOpentelemetry();
+                Y_ABORT_UNLESS(opentelemetry.HasCollectorUrl() && opentelemetry.HasServiceName(),
+                               "Both collector_url and service_name should be present in opentelemetry backedn config");
                 wilsonUploader = NWilson::WilsonUploaderParams {
                     .CollectorUrl = opentelemetry.GetCollectorUrl(),
                     .ServiceName = opentelemetry.GetServiceName(),
@@ -846,7 +848,7 @@ void TBasicServicesInitializer::InitializeServices(NActors::TActorSystemSetup* s
             }
 
             case NKikimrConfig::TTracingConfig::TBackendConfig::BackendCase::BACKEND_NOT_SET: {
-                Y_DEBUG_ABORT_UNLESS(false, "No backend option was provided in backend config");
+                Y_ABORT_UNLESS(false, "No backend option was provided in backend config");
                 break;
             }
         }

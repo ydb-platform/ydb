@@ -107,6 +107,7 @@ PEERDIR(
     ydb/services/ydb
 
     ydb/core/http_proxy
+    ydb/library/dbgtrace
 )
 
 YQL_LAST_ABI_VERSION()

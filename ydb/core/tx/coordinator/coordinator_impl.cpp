@@ -13,6 +13,7 @@
 #include <library/cpp/time_provider/time_provider.h>
 #include <ydb/library/actors/core/monotonic_provider.h>
 #include <ydb/library/actors/interconnect/interconnect.h>
+#include <ydb/library/dbgtrace/debug_trace.h>
 
 namespace NKikimr {
 namespace NFlatTxCoordinator {
@@ -25,6 +26,7 @@ static constexpr TDuration MaxPlanTickDelay = TDuration::Seconds(30);
 
 static void SendTransactionStatus(const TActorId &proxy, TEvTxProxy::TEvProposeTransactionStatus::EStatus status,
         ui64 txid, ui64 stepId, const TActorContext &ctx, ui64 tabletId) {
+    DBGTRACE("SendTransactionStatus");
     LOG_DEBUG_S(ctx, NKikimrServices::TX_COORDINATOR, "tablet# " << tabletId << " txid# " << txid
         << " step# " << stepId << " Status# " << status << " SEND to# " << proxy.ToString() << " Proxy marker# C1");
     ctx.Send(proxy, new TEvTxProxy::TEvProposeTransactionStatus(status, txid, stepId));
@@ -124,10 +126,12 @@ void TTxCoordinator::Die(const TActorContext &ctx) {
 }
 
 void TTxCoordinator::PlanTx(TTransactionProposal &&proposal, const TActorContext &ctx) {
+    DBGTRACE("TTxCoordinator::PlanTx");
     proposal.AcceptMoment = ctx.Now();
     MonCounters.PlanTxCalls->Inc();
 
     if (proposal.MaxStep <= VolatileState.LastPlanned) {
+        DBGTRACE_LOG("proposal.MaxStep=" << proposal.MaxStep << ", VolatileState.LastPlanned=" << VolatileState.LastPlanned);
         MonCounters.PlanTxOutdated->Inc();
         return SendTransactionStatus(proposal.Proxy
                                      , TEvTxProxy::TEvProposeTransactionStatus::EStatus::StatusOutdated
@@ -135,6 +139,7 @@ void TTxCoordinator::PlanTx(TTransactionProposal &&proposal, const TActorContext
     }
 
     if (Stopping) {
+        DBGTRACE_LOG("stopping");
         return SendTransactionStatus(proposal.Proxy,
                 TEvTxProxy::TEvProposeTransactionStatus::EStatus::StatusRestarting,
                 proposal.TxId, 0, ctx, TabletID());
@@ -154,8 +159,10 @@ void TTxCoordinator::PlanTx(TTransactionProposal &&proposal, const TActorContext
         planStep = Max(planStep, Min(proposal.MaxStep - 1,
                 (proposal.MinStep + Config.Resolution - 1) / Config.Resolution * Config.Resolution));
     }
+    DBGTRACE_LOG("planStep=" << planStep);
 
     if (planStep >= proposal.MaxStep) {
+        DBGTRACE_LOG("proposal.MaxStep=" << proposal.MaxStep);
         MonCounters.PlanTxOutdated->Inc();
         return SendTransactionStatus(proposal.Proxy,
             TEvTxProxy::TEvProposeTransactionStatus::EStatus::StatusOutdated, proposal.TxId, 0, ctx, TabletID());
@@ -165,6 +172,7 @@ void TTxCoordinator::PlanTx(TTransactionProposal &&proposal, const TActorContext
         // Step is already aligned
         rapidTx = false;
     }
+    DBGTRACE_LOG("rapidTx=" << rapidTx);
 
     MonCounters.PlanTxAccepted->Inc();
     SendTransactionStatus(proposal.Proxy, TEvTxProxy::TEvProposeTransactionStatus::EStatus::StatusAccepted,
@@ -175,6 +183,7 @@ void TTxCoordinator::PlanTx(TTransactionProposal &&proposal, const TActorContext
         rapidSlot.push_back(std::move(proposal));
 
         if (rapidSlot.size() < Config.RapidSlotFlushSize) {
+            DBGTRACE_LOG("rapidSlot.size=" << rapidSlot.size() << ", RapidSlotFlushSize=" << Config.RapidSlotFlushSize);
             // Wait for the next aligned step until enough rapid transactions
             SchedulePlanTickAligned(planStep);
             return;
@@ -189,6 +198,7 @@ void TTxCoordinator::PlanTx(TTransactionProposal &&proposal, const TActorContext
 }
 
 void TTxCoordinator::Handle(TEvTxProxy::TEvProposeTransaction::TPtr &ev, const TActorContext &ctx) {
+    DBGTRACE("TTxCoordinator::Handle(TEvTxProxy::TEvProposeTransaction)");
     TTransactionProposal proposal = MakeTransactionProposal(ev, MonCounters.TxIn);
     LOG_DEBUG_S(ctx, NKikimrServices::TX_COORDINATOR, "tablet# " << TabletID() << " txid# " << proposal.TxId
         << " HANDLE EvProposeTransaction marker# C0");
@@ -225,6 +235,7 @@ bool TTxCoordinator::AllowReducedPlanResolution() const {
 }
 
 void TTxCoordinator::SchedulePlanTick() {
+    DBGTRACE("TTxCoordinator::SchedulePlanTick");
     const ui64 resolution = Config.Resolution;
     const ui64 timeShiftMs = PlanAheadTimeShiftMs;
     const TInstant now = TAppData::TimeProvider->Now() + TDuration::MilliSeconds(timeShiftMs);
@@ -280,15 +291,20 @@ void TTxCoordinator::SchedulePlanTick() {
     } else {
         Send(SelfId(), new TEvPrivate::TEvPlanTick(next));
     }
+    DBGTRACE_LOG("next=" << next);
     PendingPlanTicks.push_front(next);
 }
 
 void TTxCoordinator::SchedulePlanTickExact(ui64 next) {
+    DBGTRACE("TTxCoordinator::SchedulePlanTickExact");
+    DBGTRACE_LOG("next=" << next);
     if (next <= VolatileState.LastPlanned) {
+        DBGTRACE_LOG("VolatileState.LastPlanned=" << VolatileState.LastPlanned);
         return;
     }
 
     if (!PendingPlanTicks.empty() && PendingPlanTicks.front() <= next) {
+        DBGTRACE_LOG("PendingPlanTicks.empty=" << PendingPlanTicks.empty() << ", PendingPlanTicks.front=" << PendingPlanTicks.front());
         return;
     }
 
@@ -305,10 +321,13 @@ void TTxCoordinator::SchedulePlanTickExact(ui64 next) {
     } else {
         Send(SelfId(), new TEvPrivate::TEvPlanTick(next));
     }
+    DBGTRACE_LOG("next=" << next);
     PendingPlanTicks.push_front(next);
 }
 
 void TTxCoordinator::SchedulePlanTickAligned(ui64 next) {
+    DBGTRACE("TTxCoordinator::SchedulePlanTickAligned");
+    DBGTRACE_LOG("next=" << next);
     if (next <= VolatileState.LastPlanned) {
         return;
     }

@@ -165,11 +165,15 @@ class TPartitionWriter: public TActorBootstrapped<TPartitionWriter>, private TRl
     }
 
     void InitResult(const TString& reason, NKikimrClient::TResponse&& response) {
+        DBGTRACE("TPartitionWriter::InitResult");
+        DBGTRACE_LOG("reason=" << reason);
         SendInitResult(reason, std::move(response));
         BecomeZombie(EErrorCode::InternalError, "Init error");
     }
 
     void InitResult(const TString& ownerCookie, const TEvPartitionWriter::TEvInitResult::TSourceIdInfo& sourceIdInfo, ui64 writeId) {
+        DBGTRACE("TPartitionWriter::InitResult");
+        DBGTRACE_LOG("ownerCookie=" << ownerCookie);
         SendInitResult(ownerCookie, sourceIdInfo, writeId);
     }
 
@@ -362,15 +366,18 @@ class TPartitionWriter: public TActorBootstrapped<TPartitionWriter>, private TRl
         if (Opts.CheckState) {
             switch (sourceIdInfo.GetState()) {
             case NKikimrPQ::TMessageGroupInfo::STATE_REGISTERED:
+                DBGTRACE_LOG("STATE_REGISTERED");
                 Registered = true;
                 break;
             case NKikimrPQ::TMessageGroupInfo::STATE_PENDING_REGISTRATION:
+                DBGTRACE_LOG("STATE_PENDING_REGISTRATION");
                 if (Opts.AutoRegister) {
                     return RegisterMessageGroup();
                 } else {
                     return InitResult("Source is not registered", std::move(record));
                 }
             default:
+                DBGTRACE_LOG("unknown source state");
                 return InitResult("Unknown source state", std::move(record));
             }
         }

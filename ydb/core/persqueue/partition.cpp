@@ -579,6 +579,7 @@ void TPartition::UpdateUserInfoEndOffset(const TInstant& now) {
 
 void TPartition::Handle(TEvPQ::TEvChangePartitionConfig::TPtr& ev, const TActorContext& ctx) {
     DBGTRACE("TPartition::Handle(TEvPQ::TEvChangePartitionConfig)");
+    DBGTRACE_LOG("Partition=" << Partition);
     PushBackDistrTx(ev->Release());
 
     ProcessTxsAndUserActs(ctx);
@@ -862,6 +863,7 @@ void TPartition::Handle(TEvPQ::TEvUpdateWriteTimestamp::TPtr& ev, const TActorCo
 void TPartition::Handle(TEvPersQueue::TEvProposeTransaction::TPtr& ev, const TActorContext& ctx)
 {
     DBGTRACE("TPartition::Handle(TEvPersQueue::TEvProposeTransaction)");
+    DBGTRACE_LOG("Partition=" << Partition);
     const NKikimrPQ::TEvProposeTransaction& event = ev->Get()->Record;
     Y_ABORT_UNLESS(event.GetTxBodyCase() == NKikimrPQ::TEvProposeTransaction::kData);
     Y_ABORT_UNLESS(event.HasData());
@@ -889,6 +891,7 @@ void TPartition::Handle(TEvPersQueue::TEvProposeTransaction::TPtr& ev, const TAc
 void TPartition::Handle(TEvPQ::TEvProposePartitionConfig::TPtr& ev, const TActorContext& ctx)
 {
     DBGTRACE("TPartition::Handle(TEvPQ::TEvProposePartitionConfig)");
+    DBGTRACE_LOG("Partition=" << Partition);
     PushBackDistrTx(ev->Release());
 
     ProcessTxsAndUserActs(ctx);
@@ -917,6 +920,7 @@ void TPartition::HandleOnInit(TEvPQ::TEvProposePartitionConfig::TPtr& ev, const 
 void TPartition::Handle(TEvPQ::TEvTxCalcPredicate::TPtr& ev, const TActorContext& ctx)
 {
     DBGTRACE("TPartition::Handle(TEvPQ::TEvTxCalcPredicate)");
+    DBGTRACE_LOG("Partition=" << Partition);
     PushBackDistrTx(ev->Release());
 
     ProcessTxsAndUserActs(ctx);
@@ -925,6 +929,7 @@ void TPartition::Handle(TEvPQ::TEvTxCalcPredicate::TPtr& ev, const TActorContext
 void TPartition::Handle(TEvPQ::TEvTxCommit::TPtr& ev, const TActorContext& ctx)
 {
     DBGTRACE("TPartition::Handle(TEvPQ::TEvTxCommit)");
+    DBGTRACE_LOG("Partition=" << Partition);
     EndTransaction(*ev->Get(), ctx);
 
     TxInProgress = false;
@@ -935,6 +940,7 @@ void TPartition::Handle(TEvPQ::TEvTxCommit::TPtr& ev, const TActorContext& ctx)
 void TPartition::Handle(TEvPQ::TEvTxRollback::TPtr& ev, const TActorContext& ctx)
 {
     DBGTRACE("TPartition::Handle(TEvPQ::TEvTxRollback)");
+    DBGTRACE_LOG("Partition=" << Partition);
     EndTransaction(*ev->Get(), ctx);
 
     TxInProgress = false;
@@ -1328,6 +1334,7 @@ void TPartition::Handle(NReadQuoterEvents::TEvQuotaUpdated::TPtr& ev, const TAct
 }
 
 void TPartition::Handle(TEvKeyValue::TEvResponse::TPtr& ev, const TActorContext& ctx) {
+    DBGTRACE("TPartition::Handle(TEvKeyValue::TEvResponse)");
     auto& response = ev->Get()->Record;
 
     //check correctness of response
@@ -1863,6 +1870,7 @@ void TPartition::EndChangePartitionConfig(const NKikimrPQ::TPQTabletConfig& conf
                                           NPersQueue::TTopicConverterPtr topicConverter,
                                           const TActorContext& ctx)
 {
+    DBGTRACE("TPartition::EndChangePartitionConfig");
     Config = config;
     PartitionConfig = GetPartitionConfig(Config);
     PartitionGraph = MakePartitionGraph(Config);

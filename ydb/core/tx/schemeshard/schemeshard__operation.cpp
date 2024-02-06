@@ -13,6 +13,7 @@
 #include <ydb/core/tablet_flat/tablet_flat_executor.h>
 
 #include <util/generic/algorithm.h>
+#include <ydb/library/dbgtrace/debug_trace.h>
 
 namespace NKikimr::NSchemeShard {
 
@@ -1446,6 +1447,7 @@ void TOperation::ProposePart(TSubTxId partId, TTabletId tableId) {
 }
 
 void TOperation::DoPropose(TSchemeShard* ss, TSideEffects& sideEffects, const TActorContext& ctx) const {
+    DBGTRACE("TOperation::DoPropose");
     Y_ABORT_UNLESS(IsReadyToPropose());
 
     //aggregate
@@ -1483,6 +1485,7 @@ void TOperation::DoPropose(TSchemeShard* ss, TSideEffects& sideEffects, const TA
         auto* reqAffectedSet = proposal->MutableAffectedSet();
         reqAffectedSet->Reserve(shards.size());
         for (auto affectedTablet : shards) {
+            DBGTRACE_LOG("affectedTablet=" << affectedTablet);
             auto* x = reqAffectedSet->Add();
             x->SetTabletId(ui64(affectedTablet));
             x->SetFlags(2 /*todo: use generic enum*/);

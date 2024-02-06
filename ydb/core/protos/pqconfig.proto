@@ -920,6 +920,17 @@ message TEvCancelTransactionProposal {
     optional uint64 TxId = 1;
 };
 
+message TEvProposeTransactionAttach {
+    optional uint64 TabletId = 1;
+    optional uint64 TxId = 2;
+}
+
+message TEvProposeTransactionAttachResult {
+    optional uint64 TabletId = 1;
+    optional uint64 TxId = 2;
+    optional NKikimrProto.EReplyStatus Status = 3;
+}
+
 message TEvPeriodicTopicStats {
     required uint64 PathId = 1;
 

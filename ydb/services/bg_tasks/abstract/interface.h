@@ -164,10 +164,12 @@ public:
     }
 
     const IInterface* operator->() const {
+        AFL_VERIFY(Object);
         return Object.get();
     }
 
     IInterface* operator->() {
+        AFL_VERIFY(Object);
         return Object.get();
     }
 

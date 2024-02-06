@@ -1,6 +1,7 @@
 #pragma once
 #include <ydb/core/protos/flat_scheme_op.pb.h>
-#include <ydb/core/tx/columnshard/engines/column_engine.h>
+#include <ydb/core/tx/columnshard/engines/scheme/tier_info.h>
+
 #include <ydb/services/metadata/abstract/decoder.h>
 #include <ydb/services/metadata/service.h>
 #include <ydb/services/metadata/manager/object.h>

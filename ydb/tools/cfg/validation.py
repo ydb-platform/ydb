@@ -153,7 +153,7 @@ TRACING_SCHEMA = dict(
                                 secret_file=dict(type="string"),
                                 secret_environment_variable=dict(type="string"),
                             ),
-                            required=["url", "self_tvm_id", "tracing_tvm_id"],
+                            required=["self_tvm_id", "tracing_tvm_id"],
                         )
                     ),
                     required=["tvm"],

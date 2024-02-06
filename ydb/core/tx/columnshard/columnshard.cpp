@@ -20,7 +20,7 @@ void TColumnShard::CleanupActors(const TActorContext& ctx) {
 
     StoragesManager->Stop();
     if (Tiers) {
-        Tiers->Stop();
+        Tiers->Stop(true);
     }
 }
 

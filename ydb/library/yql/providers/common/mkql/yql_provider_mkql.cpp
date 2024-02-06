@@ -753,10 +753,16 @@ TMkqlCommonCallableCompiler::TShared::TShared() {
             return MkqlBuildWideLambda(node.Tail(), ctx, keys);
         };
 
-        if (withLimit)
+        if (withLimit) {
+            if (RuntimeVersion < 46U && memLimit < 0) {
+                memLimit = -memLimit;
+            }
+
             return ctx.ProgramBuilder.WideCombiner(flow, memLimit, keyExtractor, init, update, finish);
-        else
+        }
+        else {
             return ctx.ProgramBuilder.WideLastCombiner(flow, keyExtractor, init, update, finish);
+        }
     });
 
     AddCallable("WideChopper", [](const TExprNode& node, TMkqlBuildContext& ctx) {

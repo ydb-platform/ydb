@@ -221,6 +221,18 @@ public:
     , Cache(cache)
     , Terminating(false)
     {}
+
+    NUdf::TUnboxedValue Save() const override {
+        std::cerr << "TStateForNonInterleavedPartitions::Save()" << std::endl;
+        TString out;
+        auto strRef = NUdf::TStringRef(out.data(), out.size());
+        return MakeString(strRef);
+    }
+
+    void Load(const NUdf::TStringRef& state) override {
+        std::cerr << "TStateForNonInterleavedPartitions::Load()" << std::endl;
+    }
+
     bool ProcessInputRow(NUdf::TUnboxedValue&& row, TComputationContext& ctx) {
         MKQL_ENSURE(not DelayedRow, "Internal logic error"); //we're finalizing previous partition
         InputRowArg->SetValue(ctx, NUdf::TUnboxedValue(row));
@@ -311,9 +323,21 @@ public:
     , Parameters(parameters)
     , NfaTransitionGraph(TNfaTransitionGraphBuilder::Create(parameters.Pattern, parameters.VarNamesLookup))
     , Cache(cache)
-{
-}
-   bool ProcessInputRow(NUdf::TUnboxedValue&& row, TComputationContext& ctx) {
+    {
+    }
+
+    NUdf::TUnboxedValue Save() const override {
+        std::cerr << "TStateForInterleavedPartitions::Save()" << std::endl;
+        TString out;
+        auto strRef = NUdf::TStringRef(out.data(), out.size());
+        return MakeString(strRef);
+    }
+
+    void Load(const NUdf::TStringRef& state) override {
+        std::cerr << "TStateForInterleavedPartitions::Load()" << std::endl;
+    }
+
+    bool ProcessInputRow(NUdf::TUnboxedValue&& row, TComputationContext& ctx) {
         auto partition = GetPartitionHandler(row, ctx);
         if (partition->second->ProcessInputRow(std::move(row), ctx)) {
             HasReadyOutput.push(partition);
@@ -378,8 +402,8 @@ private:
 };
 
 template<class State>
-class TMatchRecognizeWrapper : public TStatefulFlowComputationNode<TMatchRecognizeWrapper<State>> {
-    using TBaseComputation = TStatefulFlowComputationNode<TMatchRecognizeWrapper<State>>;
+class TMatchRecognizeWrapper : public TStatefulFlowComputationNode<TMatchRecognizeWrapper<State>, true> {
+    using TBaseComputation = TStatefulFlowComputationNode<TMatchRecognizeWrapper<State>, true>;
 public:
     TMatchRecognizeWrapper(TComputationMutables &mutables, EValueRepresentation kind, IComputationNode *inputFlow,
        IComputationExternalNode *inputRowArg,
@@ -409,6 +433,7 @@ public:
         auto state = static_cast<State*>(stateValue.AsBoxed().Get());
         while (true) {
             if (auto output = state->GetOutputIfReady(ctx); output) {
+                std::cerr << "DoCalculate: return output" << std::endl;
                 return output;
             }
             auto item = InputFlow->GetValue(ctx);
@@ -418,6 +443,7 @@ public:
             } else if (item.IsSpecial()) {
                 return item;
             }
+            std::cerr << "ProcessInputRow2" << std::endl;
             state->ProcessInputRow(std::move(item), ctx);
         }
     }

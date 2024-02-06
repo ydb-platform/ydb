@@ -1131,9 +1131,9 @@
     ],
     "test.test[flatten_by-struct_without_correlation-default.txt-Debug]": [
         {
-            "checksum": "6960858506d5c723c4ed0f2a021d33b4",
-            "size": 2862,
-            "uri": "https://{canondata_backend}/1937001/b50cbf33819e30c3dbd3f1d7aa3988fe10d7563d/resource.tar.gz#test.test_flatten_by-struct_without_correlation-default.txt-Debug_/opt.yql_patched"
+            "checksum": "3eae9729a64e8366dd8449eb2322fd3e",
+            "size": 2933,
+            "uri": "https://{canondata_backend}/1777230/5929a5f68e30c5cd123eff09f1b1487815a8578e/resource.tar.gz#test.test_flatten_by-struct_without_correlation-default.txt-Debug_/opt.yql_patched"
         }
     ],
     "test.test[flatten_by-struct_without_correlation-default.txt-Plan]": [

@@ -2620,9 +2620,9 @@
     ],
     "test.test[table_range-range_over_desc--Debug]": [
         {
-            "checksum": "39890d766487deb53ca4878bd0353c5c",
-            "size": 2300,
-            "uri": "https://{canondata_backend}/1599023/9fb10775fd57dc9adafaafe2a658f6533a20dc46/resource.tar.gz#test.test_table_range-range_over_desc--Debug_/opt.yql_patched"
+            "checksum": "3dd1f4df8426fb522624a0556da07bff",
+            "size": 2439,
+            "uri": "https://{canondata_backend}/1784826/66abdb7f6ea46c5c7564f94f24f2656a0e2aa349/resource.tar.gz#test.test_table_range-range_over_desc--Debug_/opt.yql_patched"
         }
     ],
     "test.test[table_range-range_over_desc--Plan]": [

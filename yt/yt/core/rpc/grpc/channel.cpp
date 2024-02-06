@@ -339,13 +339,16 @@ private:
                 return;
             }
 
+            if (Request_->Header().has_request_codec()) {
+                InitialMetadataBuilder_.Add(RequestCodecKey, ToString(Request_->Header().request_codec()));
+            }
+            if (Request_->Header().has_response_codec()) {
+                InitialMetadataBuilder_.Add(ResponseCodecKey, ToString(Request_->Header().response_codec()));
+            }
+
             YT_VERIFY(RequestBody_.Size() >= 2);
             TMessageWithAttachments messageWithAttachments;
-            if (Request_->IsLegacyRpcCodecsEnabled()) {
-                messageWithAttachments.Message = ExtractMessageFromEnvelopedMessage(RequestBody_[1]);
-            } else {
-                messageWithAttachments.Message = RequestBody_[1];
-            }
+            messageWithAttachments.Message = RequestBody_[1];
 
             for (int index = 2; index < std::ssize(RequestBody_); ++index) {
                 messageWithAttachments.Attachments.push_back(RequestBody_[index]);
@@ -622,6 +625,9 @@ private:
 
             NRpc::NProto::TResponseHeader responseHeader;
             ToProto(responseHeader.mutable_request_id(), Request_->GetRequestId());
+            if (Request_->Header().has_response_codec()) {
+                responseHeader.set_codec(Request_->Header().response_codec());
+            }
 
             auto responseMessage = CreateResponseMessage(
                 responseHeader,

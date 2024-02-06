@@ -256,6 +256,12 @@ namespace NTi::NIo {
                     case ETypeName::Timestamp:
                         type = TTimestampType::InstanceRaw();
                         break;
+                    case ETypeName::Datetime64:
+                        type = TDatetime64Type::InstanceRaw();
+                        break;
+                    case ETypeName::Timestamp64:
+                        type = TTimestamp64Type::InstanceRaw();
+                        break;
                     case ETypeName::TzDate:
                         type = TTzDateType::InstanceRaw();
                         break;
@@ -267,6 +273,9 @@ namespace NTi::NIo {
                         break;
                     case ETypeName::Interval:
                         type = TIntervalType::InstanceRaw();
+                        break;
+                    case ETypeName::Interval64:
+                        type = TInterval64Type::InstanceRaw();
                         break;
                     case ETypeName::Decimal: {
                         if (!std::holds_alternative<TDecimalData>(data)) {
@@ -695,6 +704,12 @@ namespace NTi::NIo {
             [&consumer](const TTimestampType*) {
                 consumer.OnScalarString("timestamp");
             },
+            [&consumer](const TDatetime64Type*) {
+                consumer.OnScalarString("datetime64");
+            },
+            [&consumer](const TTimestamp64Type*) {
+                consumer.OnScalarString("timestamp64");
+            },
             [&consumer](const TTzDateType*) {
                 consumer.OnScalarString("tz_date");
             },
@@ -706,6 +721,9 @@ namespace NTi::NIo {
             },
             [&consumer](const TIntervalType*) {
                 consumer.OnScalarString("interval");
+            },
+            [&consumer](const TInterval64Type*) {
+                consumer.OnScalarString("interval64");
             },
             [&consumer](const TJsonType*) {
                 consumer.OnScalarString("json");
@@ -956,6 +974,12 @@ namespace NTi::NIo {
             [&consumer](const TTimestampType*) {
                 WriteDataType(consumer, EPrimitiveTypeName::Timestamp);
             },
+            [&consumer](const TDatetime64Type*) {
+                WriteDataType(consumer, EPrimitiveTypeName::Datetime64);
+            },
+            [&consumer](const TTimestamp64Type*) {
+                WriteDataType(consumer, EPrimitiveTypeName::Timestamp64);
+            },
             [&consumer](const TTzDateType*) {
                 WriteDataType(consumer, EPrimitiveTypeName::TzDate);
             },
@@ -967,6 +991,9 @@ namespace NTi::NIo {
             },
             [&consumer](const TIntervalType*) {
                 WriteDataType(consumer, EPrimitiveTypeName::Interval);
+            },
+            [&consumer](const TInterval64Type*) {
+                WriteDataType(consumer, EPrimitiveTypeName::Interval64);
             },
             [&consumer](const TJsonType*) {
                 WriteDataType(consumer, EPrimitiveTypeName::Json);
@@ -1145,10 +1172,13 @@ namespace NTi::NIo {
                 [](const TDate32Type*) -> TStringBuf { return "int32"; },
                 [](const TDatetimeType*) -> TStringBuf { return "uint32"; },
                 [](const TTimestampType*) -> TStringBuf { return "uint64"; },
+                [](const TDatetime64Type*) -> TStringBuf { return "int64"; },
+                [](const TTimestamp64Type*) -> TStringBuf { return "int64"; },
                 [](const TTzDateType*) -> TStringBuf { return "string"; },
                 [](const TTzDatetimeType*) -> TStringBuf { return "string"; },
                 [](const TTzTimestampType*) -> TStringBuf { return "string"; },
                 [](const TIntervalType*) -> TStringBuf { return "int64"; },
+                [](const TInterval64Type*) -> TStringBuf { return "int64"; },
                 [](const TJsonType*) -> TStringBuf { return "string"; },
                 [](const TYsonType*) -> TStringBuf { return "any"; },
                 [](const TUuidType*) -> TStringBuf { return "string"; },

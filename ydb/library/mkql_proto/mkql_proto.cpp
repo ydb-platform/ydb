@@ -86,9 +86,6 @@ Y_FORCE_INLINE void HandleKindDataExport(const TType* type, const NUdf::TUnboxed
         case NUdf::TDataType<NUdf::TDate>::Id:
             res.set_uint32_value(value.Get<ui16>());
             break;
-        case NUdf::TDataType<NUdf::TDate32>::Id:
-            res.set_int32_value(value.Get<i32>());
-            break;
         case NUdf::TDataType<NUdf::TDatetime>::Id:
             res.set_uint32_value(value.Get<ui32>());
             break;
@@ -454,9 +451,6 @@ Y_FORCE_INLINE void HandleKindDataExport(const TType* type, const NUdf::TUnboxed
         case NUdf::TDataType<NUdf::TDate>::Id:
             res.SetUint32(value.Get<ui16>());
             break;
-        case NUdf::TDataType<NUdf::TDate32>::Id:
-            res.SetInt32(value.Get<i32>());
-            break;
         case NUdf::TDataType<NUdf::TDatetime>::Id:
             res.SetUint32(value.Get<ui32>());
             break;
@@ -768,9 +762,6 @@ Y_FORCE_INLINE NUdf::TUnboxedValue HandleKindDataImport(const TType* type, const
         case NUdf::TDataType<NUdf::TDate>::Id:
             MKQL_ENSURE_S(oneOfCase == NKikimrMiniKQL::TValue::ValueValueCase::kUint32);
             return NUdf::TUnboxedValuePod(ui16(value.GetUint32()));
-        case NUdf::TDataType<NUdf::TDate32>::Id:
-            MKQL_ENSURE_S(oneOfCase == NKikimrMiniKQL::TValue::ValueValueCase::kInt32);
-            return NUdf::TUnboxedValuePod(value.GetInt32());
         case NUdf::TDataType<NUdf::TDatetime>::Id:
             MKQL_ENSURE_S(oneOfCase == NKikimrMiniKQL::TValue::ValueValueCase::kUint32);
             return NUdf::TUnboxedValuePod(value.GetUint32());
@@ -1203,9 +1194,6 @@ TNode* TProtoImporter::ImportNodeFromProto(TType* type, const NKikimrMiniKQL::TV
                 case NUdf::TDataType<NUdf::TDate>::Id:
                     dataNode = TDataLiteral::Create(NUdf::TUnboxedValuePod(ui16(value.GetUint32())), dataType, env);
                     break;
-                case NUdf::TDataType<NUdf::TDate32>::Id:
-                    dataNode = TDataLiteral::Create(NUdf::TUnboxedValuePod(value.GetInt32()), dataType, env);
-                    break;
                 case NUdf::TDataType<NUdf::TDatetime>::Id:
                     dataNode = TDataLiteral::Create(NUdf::TUnboxedValuePod(value.GetUint32()), dataType, env);
                     break;
@@ -1519,13 +1507,6 @@ Y_FORCE_INLINE NUdf::TUnboxedValue KindDataImport(const TType* type, const Ydb::
                 throw yexception() << "Invalid Date value";
             }
             return NUdf::TUnboxedValuePod(ui16(value.uint32_value()));
-        }
-        case NUdf::TDataType<NUdf::TDate32>::Id: {
-            CheckTypeId(value.value_case(), Ydb::Value::kUint32Value, "Date32");
-            if (value.int32_value() < NUdf::MIN_DATE32 || value.int32_value() > NUdf::MAX_DATE32) {
-                throw yexception() << "Invalid Date value";
-            }
-            return NUdf::TUnboxedValuePod(value.int32_value());
         }
         case NUdf::TDataType<NUdf::TDatetime>::Id: {
             CheckTypeId(value.value_case(), Ydb::Value::kUint32Value, "Datetime");

@@ -149,16 +149,32 @@ namespace NTi {
         return TDatetimeType::Instance();
     }
 
+    TDatetime64TypePtr ITypeFactory::Datetime64() {
+        return TDatetime64Type::Instance();
+    }
+
     const TDatetimeType* IPoolTypeFactory::DatetimeRaw() {
         return TDatetimeType::InstanceRaw();
+    }
+
+    const TDatetime64Type* IPoolTypeFactory::Datetime64Raw() {
+        return TDatetime64Type::InstanceRaw();
     }
 
     TTimestampTypePtr ITypeFactory::Timestamp() {
         return TTimestampType::Instance();
     }
 
+    TTimestamp64TypePtr ITypeFactory::Timestamp64() {
+        return TTimestamp64Type::Instance();
+    }
+
     const TTimestampType* IPoolTypeFactory::TimestampRaw() {
         return TTimestampType::InstanceRaw();
+    }
+
+    const TTimestamp64Type* IPoolTypeFactory::Timestamp64Raw() {
+        return TTimestamp64Type::InstanceRaw();
     }
 
     TTzDateTypePtr ITypeFactory::TzDate() {
@@ -191,6 +207,14 @@ namespace NTi {
 
     const TIntervalType* IPoolTypeFactory::IntervalRaw() {
         return TIntervalType::InstanceRaw();
+    }
+
+    TInterval64TypePtr ITypeFactory::Interval64() {
+        return TInterval64Type::Instance();
+    }
+
+    const TInterval64Type* IPoolTypeFactory::Interval64Raw() {
+        return TInterval64Type::InstanceRaw();
     }
 
     TDecimalTypePtr ITypeFactory::Decimal(ui8 precision, ui8 scale) {

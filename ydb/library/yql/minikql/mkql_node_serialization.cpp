@@ -736,9 +736,6 @@ namespace {
                     case NUdf::TDataType<NUdf::TDate>::Id:
                         Owner.WriteVar32(value.Get<NUdf::TDataType<NUdf::TDate>::TLayout>());
                         break;
-                    case NUdf::TDataType<NUdf::TDate32>::Id:
-                        Owner.WriteVar32(ZigZagEncode(value.Get<NUdf::TDataType<NUdf::TDate32>::TLayout>()));
-                        break;
                     case NUdf::TDataType<NUdf::TDatetime>::Id:
                         Owner.WriteVar32(value.Get<NUdf::TDataType<NUdf::TDatetime>::TLayout>());
                         break;
@@ -1692,11 +1689,6 @@ namespace {
             case NUdf::TDataType<NUdf::TDate>::Id:
             {
                 value = NUdf::TUnboxedValuePod(static_cast<NUdf::TDataType<NUdf::TDate>::TLayout>(ReadVar32()));
-                break;
-            }
-            case NUdf::TDataType<NUdf::TDate32>::Id:
-            {
-                value = NUdf::TUnboxedValuePod(static_cast<NUdf::TDataType<NUdf::TDate32>::TLayout>(ZigZagDecode(ReadVar32())));
                 break;
             }
             case NUdf::TDataType<NUdf::TDatetime>::Id:

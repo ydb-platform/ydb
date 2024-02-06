@@ -1038,10 +1038,6 @@ NUdf::TUnboxedValue GetCellValue(const TCell& cell, NScheme::TTypeInfo type) {
             NUdf::TDataType<NUdf::TDate>::TLayout v = cell.AsValue<ui16>();
             return NUdf::TUnboxedValuePod(v);
         }
-        case NYql::NProto::TypeIds::Date32: {
-            NUdf::TDataType<NUdf::TDate32>::TLayout v = cell.AsValue<i32>();
-            return NUdf::TUnboxedValuePod(v);
-        }
         case NYql::NProto::TypeIds::Datetime: {
             NUdf::TDataType<NUdf::TDatetime>::TLayout v = cell.AsValue<ui32>();
             return NUdf::TUnboxedValuePod(v);

@@ -347,8 +347,6 @@ NYT::TNode DataValueToNode(const NKikimr::NUdf::TUnboxedValuePod& value, NKikimr
             return NYT::NodeFromYsonString(TString(value.AsStringRef()));
         case NUdf::TDataType<NUdf::TDate>::Id:
             return NYT::TNode((ui64)value.Get<ui16>());
-        case NUdf::TDataType<NUdf::TDate32>::Id:
-            return NYT::TNode((i64)value.Get<i32>());
         case NUdf::TDataType<NUdf::TDatetime>::Id:
             return NYT::TNode((ui64)value.Get<ui32>());
         case NUdf::TDataType<NUdf::TTimestamp>::Id:
@@ -946,13 +944,6 @@ NUdf::TUnboxedValue ReadYsonValue(TType* type,
                 return NUdf::TUnboxedValuePod((ui16)buf.ReadVarUI64());
             }
             return NUdf::TUnboxedValuePod(ReadNextSerializedNumber<ui16>(cmd, buf));
-
-        case NUdf::TDataType<NUdf::TDate32>::Id:
-            if (isTableFormat) {
-                CHECK_EXPECTED(cmd, Int64Marker);
-                return NUdf::TUnboxedValuePod((i32)buf.ReadVarI64());
-            }
-            return NUdf::TUnboxedValuePod(ReadNextSerializedNumber<i32>(cmd, buf));
 
         case NUdf::TDataType<NUdf::TDatetime>::Id:
             if (isTableFormat) {
@@ -1623,6 +1614,9 @@ void SkipSkiffField(NKikimr::NMiniKQL::TType* type, ui64 nativeYtTypeFlags, TInp
         case NUdf::TDataType<i64>::Id:
         case NUdf::TDataType<NUdf::TInterval>::Id:
         case NUdf::TDataType<NUdf::TDate32>::Id:
+        case NUdf::TDataType<NUdf::TDatetime64>::Id:
+        case NUdf::TDataType<NUdf::TTimestamp64>::Id:
+        case NUdf::TDataType<NUdf::TInterval64>::Id:
             buf.SkipMany(sizeof(i64));
             break;
 
@@ -2079,11 +2073,6 @@ void WriteYsonValueInTableFormat(TOutputBuf& buf, TType* type, const NUdf::TUnbo
         case NUdf::TDataType<NUdf::TDate>::Id:
             buf.Write(Uint64Marker);
             buf.WriteVarUI64(value.Get<ui16>());
-            break;
-
-        case NUdf::TDataType<NUdf::TDate32>::Id:
-            buf.Write(Int64Marker);
-            buf.WriteVarI64(value.Get<i32>());
             break;
 
         case NUdf::TDataType<NUdf::TDatetime>::Id:

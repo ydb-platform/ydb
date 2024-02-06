@@ -494,18 +494,23 @@ private:
         const auto& meta = groupId.IsHistoric() ? Part->IndexPages.BTreeHistoric[groupId.Index] : Part->IndexPages.BTreeGroups[groupId.Index];
 
         TVector<TNodeState> level, nextLevel(::Reserve(3));
-        ui64 prevBeginDataSize = 0;
-        ui64 prevBeginBytesLimitDataSize = bytesLimit ? GetPrevDataSize(meta, beginBytesLimitRowId) : 0;
+        
+        ui64 prevBeginBytesLimitDataSize = 0;
+        if (bytesLimit) {
+            prevBeginBytesLimitDataSize = GetPrevDataSize(meta, beginBytesLimitRowId);
+            if (beginBytesLimitRowId < beginRowId) {
+                ui64 prevBeginDataSize = GetPrevDataSize(meta, beginRowId);
+                if (LimitExceeded(prevBeginDataSize - prevBeginBytesLimitDataSize, bytesLimit)) {
+                    return true;
+                }
+            }
+        }
 
         const auto iterateLevel = [&](const auto& tryHandleChild) {
-            ui64 prevChildDataSize = prevBeginDataSize;
             for (const auto &node : level) {
                 TRecIdx from = 0, to = node.GetChildrenCount();
                 if (node.BeginRowId < beginRowId) {
                     from = node.Seek(beginRowId);
-                    if (from) {
-                        prevChildDataSize = prevBeginDataSize = node.GetShortChild(from - 1).DataSize;
-                    }
                 }
                 if (node.EndRowId > endRowId) {
                     to = node.Seek(endRowId - 1) + 1;
@@ -515,13 +520,12 @@ private:
                     auto prevChild = pos ? node.GetShortChildRef(pos - 1) : nullptr;
                     TRowId childBeginRowId = prevChild ? prevChild->RowCount : node.BeginRowId;
                     TRowId childEndRowId = child->RowCount;
+                    ready &= tryHandleChild(TChildState(child->PageId, childBeginRowId, childEndRowId));
                     if (bytesLimit) {
-                        if (prevChildDataSize > prevBeginBytesLimitDataSize && LimitExceeded(prevChildDataSize - prevBeginBytesLimitDataSize, bytesLimit)) {
+                        if (child->DataSize > prevBeginBytesLimitDataSize && LimitExceeded(child->DataSize - prevBeginBytesLimitDataSize, bytesLimit)) {
                             return;
                         }
                     }
-                    ready &= tryHandleChild(TChildState(child->PageId, childBeginRowId, childEndRowId));
-                    prevChildDataSize = child->DataSize;
                 }
             }
         };
@@ -534,7 +538,7 @@ private:
             return HasDataPage(child.PageId, groupId);
         };
 
-        for (ui32 height = 0; height < meta.LevelCount && ready; height++) {
+        for (ui32 height = 0; height < meta.LevelCount; height++) {
             if (height == 0) {
                 ready &= tryHandleNode(TChildState(meta.PageId, 0, meta.RowCount));
             } else {
@@ -542,10 +546,6 @@ private:
             }
             level.swap(nextLevel);
             nextLevel.clear();
-        }
-
-        if (!ready) { // some index pages are missing, do not continue
-            return ready;
         }
 
         if (meta.LevelCount == 0) {
@@ -598,7 +598,7 @@ private:
             return HasDataPage(child.PageId, groupId);
         };
 
-        for (ui32 height = 0; height < meta.LevelCount && ready; height++) {
+        for (ui32 height = 0; height < meta.LevelCount; height++) {
             if (height == 0) {
                 ready &= tryHandleNode(TChildState(meta.PageId, 0, meta.RowCount));
             } else {
@@ -606,10 +606,6 @@ private:
             }
             level.swap(nextLevel);
             nextLevel.clear();
-        }
-
-        if (!ready) { // some index pages are missing, do not continue
-            return ready;
         }
 
         if (meta.LevelCount == 0) {

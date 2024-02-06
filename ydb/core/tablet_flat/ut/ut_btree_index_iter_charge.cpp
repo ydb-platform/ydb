@@ -79,15 +79,16 @@ namespace {
         }
     }
 
-    struct TMakePartParams {
+    struct TTestParams {
         const ui32 Levels = Max<ui32>();
         const bool Groups = false;
         const bool History = false;
         const bool Slices = false;
         const ui32 Rows = 40;
+        const bool PrechargeSome = false;
     };
 
-    TPartEggs MakePart(TMakePartParams params) {
+    TPartEggs MakePart(TTestParams params) {
         NPage::TConf conf;
         switch (params.Levels) {
         case 0:
@@ -370,7 +371,7 @@ Y_UNIT_TEST_SUITE(TPartBtreeIndexIt) {
         }
     }
 
-    void CheckPart(TMakePartParams params) {
+    void CheckPart(TTestParams params) {
         TPartEggs eggs = MakePart(params);
         const auto part = *eggs.Lone();
 
@@ -394,6 +395,19 @@ Y_UNIT_TEST_SUITE(TPartBtreeIndexIt) {
 }
 
 Y_UNIT_TEST_SUITE(TChargeBTreeIndex) {
+    void PrepareEnvs(TTestParams params, const TPartStore& part, TTagsRef tags, const TKeyCellDefaults &keyDefaults, TTouchEnv& bTreeEnv, TTouchEnv& flatEnv) {
+        if (params.PrechargeSome) {
+            TChargeBTreeIndex bTree(&bTreeEnv, part, tags, true);
+            
+            for (int times = 0; times < 5; times++) {
+                bTree.ICharge::Do(10, 10, keyDefaults, 0, 0);
+                bTreeEnv.LoadTouched();
+            }
+
+            flatEnv.Loaded = bTreeEnv.Loaded;
+        }
+    }
+
     void DoChargeRowId(ICharge& charge, TTouchEnv& env, const TRowId row1, const TRowId row2, ui64 itemsLimit, ui64 bytesLimit,
             bool reverse, const TKeyCellDefaults &keyDefaults, const TString& message, ui32 failsAllowed = 10) {
         while (true) {
@@ -424,7 +438,7 @@ Y_UNIT_TEST_SUITE(TChargeBTreeIndex) {
         Y_UNREACHABLE();
     }
 
-    void CheckChargeRowId(const TPartStore& part, TTagsRef tags, const TKeyCellDefaults *keyDefaults) {
+    void CheckChargeRowId(TTestParams params, const TPartStore& part, TTagsRef tags, const TKeyCellDefaults *keyDefaults) {
         for (bool reverse : {false, true}) {
             for (ui64 itemsLimit : TVector<ui64>{0, 1, 2, 5, 13, 19, part.Stat.Rows - 2, part.Stat.Rows - 1}) {
                 for (TRowId rowId1 : xrange<TRowId>(0, part.Stat.Rows - 1)) {
@@ -432,6 +446,7 @@ Y_UNIT_TEST_SUITE(TChargeBTreeIndex) {
                         TTouchEnv bTreeEnv, flatEnv;
                         TChargeBTreeIndex bTree(&bTreeEnv, part, tags, true);
                         TCharge flat(&flatEnv, part, tags, true);
+                        PrepareEnvs(params, part, tags, *keyDefaults, bTreeEnv, flatEnv);
 
                         TString message = TStringBuilder() << (reverse ? "ChargeRowIdReverse " : "ChargeRowId ") << rowId1 << " " << rowId2 << " items " << itemsLimit;
                         DoChargeRowId(bTree, bTreeEnv, rowId1, rowId2, itemsLimit, 0, reverse, *keyDefaults, message);
@@ -444,7 +459,7 @@ Y_UNIT_TEST_SUITE(TChargeBTreeIndex) {
         }
     }
 
-    void CheckChargeKeys(const TPartStore& part, TTagsRef tags, const TKeyCellDefaults *keyDefaults) {
+    void CheckChargeKeys(TTestParams params, const TPartStore& part, TTagsRef tags, const TKeyCellDefaults *keyDefaults) {
         for (bool reverse : {false, true}) {
             for (ui64 itemsLimit : TVector<ui64>{0, 1, 2, 5, 13, 19, part.Stat.Rows - 2, part.Stat.Rows - 1}) {
                 for (ui32 firstCellKey1 : xrange<ui32>(0, part.Stat.Rows / 7 + 1)) {
@@ -457,6 +472,7 @@ Y_UNIT_TEST_SUITE(TChargeBTreeIndex) {
                                 TTouchEnv bTreeEnv, flatEnv;
                                 TChargeBTreeIndex bTree(&bTreeEnv, part, tags, true);
                                 TCharge flat(&flatEnv, part, tags, true);
+                                PrepareEnvs(params, part, tags, *keyDefaults, bTreeEnv, flatEnv);
 
                                 TStringBuilder message = TStringBuilder() << (reverse ? "ChargeKeysReverse " : "ChargeKeys ") << "(";
                                 for (auto c : key1) {
@@ -487,7 +503,7 @@ Y_UNIT_TEST_SUITE(TChargeBTreeIndex) {
         }
     }
 
-    void CheckChargeBytesLimit(const TPartStore& part, TTagsRef tags, const TKeyCellDefaults *keyDefaults) {
+    void CheckChargeBytesLimit(TTestParams params, const TPartStore& part, TTagsRef tags, const TKeyCellDefaults *keyDefaults) {
         for (bool reverse : {false, true}) {
             for (ui64 bytesLimit : xrange<ui64>(1, part.Stat.Bytes + 100, part.Stat.Bytes / 100)) {
                 for (ui32 firstCellKey1 : xrange<ui32>(0, part.Stat.Rows / 7 + 1)) {
@@ -497,6 +513,7 @@ Y_UNIT_TEST_SUITE(TChargeBTreeIndex) {
                         TTouchEnv limitedEnv, unlimitedEnv;
                         TChargeBTreeIndex limitedCharge(&limitedEnv, part, tags, true);
                         TChargeBTreeIndex unlimitedCharge(&unlimitedEnv, part, tags, true);
+                        PrepareEnvs(params, part, tags, *keyDefaults, limitedEnv, unlimitedEnv);
 
                         TStringBuilder message = TStringBuilder() << (reverse ? "ChargeBytesLimitReverse " : "ChargeBytesLimit ") << "(";
                         for (auto c : key1) {
@@ -551,7 +568,7 @@ Y_UNIT_TEST_SUITE(TChargeBTreeIndex) {
         }
     }
 
-    void CheckPart(TMakePartParams params) {
+    void CheckPart(TTestParams params) {
         TPartEggs eggs = MakePart(params);
         const auto part = *eggs.Lone();
 
@@ -560,9 +577,9 @@ Y_UNIT_TEST_SUITE(TChargeBTreeIndex) {
             tags.push_back(c.Tag);
         }
 
-        CheckChargeRowId(part, tags, eggs.Scheme->Keys.Get());
-        CheckChargeKeys(part, tags, eggs.Scheme->Keys.Get());
-        CheckChargeBytesLimit(part, tags, eggs.Scheme->Keys.Get());
+        CheckChargeRowId(params, part, tags, eggs.Scheme->Keys.Get());
+        CheckChargeKeys(params, part, tags, eggs.Scheme->Keys.Get());
+        CheckChargeBytesLimit(params, part, tags, eggs.Scheme->Keys.Get());
     }
 
     Y_UNIT_TEST(NoNodes) {
@@ -756,7 +773,7 @@ Y_UNIT_TEST_SUITE(TPartBtreeIndexIteration) {
         }
     }
 
-    void CheckPart(TMakePartParams params) {
+    void CheckPart(TTestParams params) {
         TPartEggs eggs = MakePart(params);
         const auto part = *eggs.Lone();
 

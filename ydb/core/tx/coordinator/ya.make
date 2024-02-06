@@ -38,7 +38,6 @@ PEERDIR(
     ydb/core/tx
     ydb/core/tx/coordinator/public
     ydb/core/util
-    ydb/library/dbgtrace
 )
 
 END()

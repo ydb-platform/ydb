@@ -1,5 +1,4 @@
 #include "schemeshard__operation_common.h"
-#include <ydb/library/dbgtrace/debug_trace.h>
 
 namespace NKikimr {
 namespace NSchemeShard {
@@ -95,7 +94,6 @@ bool CollectProposeTxResults(
         TFuncCheck checkPrepared,
         TFuncToString toString)
 {
-    DBGTRACE("CollectProposeTxResults");
     auto ssId = context.SS->SelfTabletId();
 
     LOG_INFO_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
@@ -104,10 +102,6 @@ bool CollectProposeTxResults(
     auto tabletId = TTabletId(ev->Get()->Record.GetOrigin());
     auto shardMinStep = TStepId(ev->Get()->Record.GetMinStep());
     auto status = ev->Get()->Record.GetStatus();
-
-    DBGTRACE_LOG("tabletId=" << tabletId);
-    DBGTRACE_LOG("shardMinStep=" << shardMinStep);
-    DBGTRACE_LOG("status=" << (int)status);
 
     // Ignore COMPLETE
     if (!checkPrepared(status)) {
@@ -125,7 +119,6 @@ bool CollectProposeTxResults(
     TTxState& txState = *context.SS->FindTx(operationId);
 
     if (txState.MinStep < shardMinStep) {
-        DBGTRACE_LOG("change min step to " << shardMinStep);
         txState.MinStep = shardMinStep;
         context.SS->PersistTxMinStep(db, operationId, txState.MinStep);
     }
@@ -144,7 +137,6 @@ bool CollectProposeTxResults(
     }
 
     txState.ShardsInProgress.erase(shardIdx);
-    DBGTRACE_LOG("txState.ShardsInProgress.size=" << txState.ShardsInProgress.size());
     context.OnComplete.UnbindMsgFromPipe(operationId, tabletId, shardIdx);
 
     LOG_DEBUG_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
@@ -592,7 +584,6 @@ bool CollectProposeTransactionResults(const TOperationId& operationId,
                                       const TEvPersQueue::TEvProposeTransactionResult::TPtr& ev,
                                       TOperationContext& context)
 {
-    DBGTRACE("NPQState::CollectProposeTransactionResults");
     auto prepared = [](NKikimrPQ::TEvProposeTransactionResult::EStatus status) -> bool {
         return status == NKikimrPQ::TEvProposeTransactionResult::PREPARED;
     };
@@ -608,7 +599,6 @@ bool CollectPQConfigChanged(const TOperationId& operationId,
                             const TEvPersQueue::TEvProposeTransactionResult::TPtr& ev,
                             TOperationContext& context)
 {
-    DBGTRACE("NPQState::CollectPQConfigChanged");
     Y_ABORT_UNLESS(context.SS->FindTx(operationId));
     TTxState& txState = *context.SS->FindTx(operationId);
 
@@ -691,7 +681,6 @@ bool CollectPQConfigChanged(const TOperationId& operationId,
 
 bool TConfigureParts::HandleReply(TEvPersQueue::TEvProposeTransactionResult::TPtr& ev, TOperationContext& context)
 {
-    DBGTRACE("NPQState::TConfigureParts::HandleReply(TEvPersQueue::TEvProposeTransactionResult)");
     const TTabletId ssId = context.SS->SelfTabletId();
 
     LOG_INFO_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
@@ -780,7 +769,6 @@ THolder<TEvPersQueue::TEvUpdateConfig> TConfigureParts::MakeEvUpdateConfig(TTxId
 
 bool TPropose::HandleReply(TEvPersQueue::TEvProposeTransactionResult::TPtr& ev, TOperationContext& context)
 {
-    DBGTRACE("NPQState::TPropose::HandleReply(TEvPersQueue::TEvProposeTransactionResult)");
     const TTabletId ssId = context.SS->SelfTabletId();
     const auto& evRecord = ev->Get()->Record;
 
@@ -800,7 +788,6 @@ bool TPropose::HandleReply(TEvPersQueue::TEvProposeTransactionResult::TPtr& ev, 
 
 bool TPropose::HandleReply(TEvPersQueue::TEvProposeTransactionAttachResult::TPtr& ev, TOperationContext& context)
 {
-    DBGTRACE("NPQState::TPropose::HandleReply(TEvPersQueue::TEvProposeTransactionAttachResult)");
     const auto ssId = context.SS->SelfTabletId();
     const auto& evRecord = ev->Get()->Record;
 
@@ -820,7 +807,6 @@ bool TPropose::HandleReply(TEvPersQueue::TEvProposeTransactionAttachResult::TPtr
 
 void TPropose::PrepareShards(TTxState& txState, TSet<TTabletId>& shardSet, TOperationContext& context)
 {
-    DBGTRACE("NPQState::TPropose::PrepareShards");
     txState.UpdateShardsInProgress();
  
     for (const auto& shard : txState.Shards) {
@@ -832,7 +818,6 @@ void TPropose::PrepareShards(TTxState& txState, TSet<TTabletId>& shardSet, TOper
         //
         if (shard.TabletType == ETabletType::PersQueue) {
             const TTabletId tablet = context.SS->ShardInfos.at(idx).TabletID;
-            DBGTRACE_LOG("tablet=" << tablet);
 
             shardSet.insert(tablet);
 
@@ -845,14 +830,11 @@ void TPropose::PrepareShards(TTxState& txState, TSet<TTabletId>& shardSet, TOper
             txState.ShardsInProgress.erase(idx);
         }
     }
-
-    DBGTRACE_LOG("shardSet.size=" << shardSet.size());
 }
 
 void TPropose::SendEvProposeTransactionAttach(TShardIdx shard, TTabletId tablet,
                                               TOperationContext& context)
 {
-    DBGTRACE("NPQState::TPropose::SendEvProposeTransactionAttach");
     auto event =
         MakeHolder<TEvPersQueue::TEvProposeTransactionAttach>(ui64(tablet),
                                                               ui64(OperationId.GetTxId()));
@@ -862,7 +844,6 @@ void TPropose::SendEvProposeTransactionAttach(TShardIdx shard, TTabletId tablet,
 bool TPropose::CanPersistState(const TTxState& txState,
                                TOperationContext& context)
 {
-    DBGTRACE("NPQState::TPropose::CanPersistState");
     if (!txState.ShardsInProgress.empty()) {
         LOG_DEBUG_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
                     DebugHint() << " can't persist state: " <<
@@ -886,7 +867,6 @@ bool TPropose::CanPersistState(const TTxState& txState,
 void TPropose::PersistState(const TTxState& txState,
                             TOperationContext& context) const
 {
-    DBGTRACE("NPQState::TPropose::PersistState");
     NIceDb::TNiceDb db(context.GetDB());
 
     if (txState.TxType == TTxState::TxCreatePQGroup  || txState.TxType == TTxState::TxAllocatePQ) {
@@ -911,7 +891,6 @@ void TPropose::PersistState(const TTxState& txState,
 
 bool TPropose::TryPersistState(TOperationContext& context)
 {
-    DBGTRACE("NPQState::TPropose::TryPersistState");
     TTxState* txState = context.SS->FindTx(OperationId);
     Y_ABORT_UNLESS(txState);
 

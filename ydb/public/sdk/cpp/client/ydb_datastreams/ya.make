@@ -11,7 +11,6 @@ PEERDIR(
     ydb/public/lib/operation_id
     ydb/public/sdk/cpp/client/impl/ydb_internal/make_request
     ydb/public/sdk/cpp/client/ydb_driver
-    ydb/library/dbgtrace
 )
 
 END()

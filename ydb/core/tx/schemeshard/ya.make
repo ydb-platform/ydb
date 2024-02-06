@@ -270,7 +270,6 @@ PEERDIR(
     ydb/library/login/protos
     ydb/library/yql/minikql
     ydb/services/bg_tasks
-    ydb/library/dbgtrace
 )
 
 YQL_LAST_ABI_VERSION()

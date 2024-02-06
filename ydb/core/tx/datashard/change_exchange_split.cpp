@@ -15,7 +15,6 @@
 
 #include <util/generic/hash.h>
 #include <util/string/builder.h>
-#include <ydb/library/dbgtrace/debug_trace.h>
 
 namespace NKikimr {
 namespace NDataShard {
@@ -269,7 +268,6 @@ class TCdcWorker
     }
 
     void HandleCdcStream(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr& ev) {
-        DBGTRACE("TCdcWorker::HandleCdcStream");
         const auto& result = ev->Get()->Request;
 
         LOG_D("Handle TEvTxProxySchemeCache::TEvNavigateKeySetResult"
@@ -329,7 +327,6 @@ class TCdcWorker
     }
 
     void HandleTopic(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr& ev) {
-        DBGTRACE("TCdcWorker::HandleTopic");
         const auto& result = ev->Get()->Request;
 
         LOG_D("Handle TEvTxProxySchemeCache::TEvNavigateKeySetResult"

@@ -19,7 +19,6 @@ PEERDIR(
     ydb/core/tx
     ydb/core/tx/schemeshard/ut_helpers
     ydb/library/yql/public/udf/service/exception_policy
-    ydb/library/dbgtrace
 )
 
 YQL_LAST_ABI_VERSION()

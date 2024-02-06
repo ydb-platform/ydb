@@ -45,7 +45,6 @@ PEERDIR(
     ydb/library/aclib
     ydb/library/mkql_proto/protos
     ydb/public/lib/base
-    ydb/library/dbgtrace
 )
 
 YQL_LAST_ABI_VERSION()

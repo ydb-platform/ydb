@@ -8,7 +8,6 @@
 #include <ydb/library/yql/public/issue/yql_issue_message.h>
 
 #include <ydb/public/sdk/cpp/client/ydb_common_client/impl/client.h>
-#include <ydb/library/dbgtrace/debug_trace.h>
 
 namespace NYdb::NDataStreams::V1 {
 
@@ -63,7 +62,6 @@ namespace NYdb::NDataStreams::V1 {
         }
 
         TAsyncCreateStreamResult CreateStream(const TString &path, TCreateStreamSettings settings) {
-            DBGTRACE("TDataStreamsClient::TImpl::CreateStream");
             if (settings.RetentionPeriodHours_.Defined() && settings.RetentionStorageMegabytes_.Defined()) {
                 return NThreading::MakeFuture(TProtoResultWrapper<Ydb::DataStreams::V1::CreateStreamResult>(
                     NYdb::TPlainStatus(NYdb::EStatus::BAD_REQUEST, "both retention types can not be set"),
@@ -94,7 +92,6 @@ namespace NYdb::NDataStreams::V1 {
         }
 
         TAsyncListStreamsResult ListStreams(TListStreamsSettings settings) {
-            DBGTRACE("TDataStreamsClient::TImpl::ListStreams");
             return CallImpl<Ydb::DataStreams::V1::DataStreamsService,
                     Ydb::DataStreams::V1::ListStreamsRequest,
                     Ydb::DataStreams::V1::ListStreamsResponse,
@@ -107,7 +104,6 @@ namespace NYdb::NDataStreams::V1 {
         }
 
         TAsyncDescribeStreamResult DescribeStream(TDescribeStreamSettings settings) {
-            DBGTRACE("TDataStreamsClient::TImpl::DescribeStream");
             return CallImpl<Ydb::DataStreams::V1::DataStreamsService,
                     Ydb::DataStreams::V1::DescribeStreamRequest,
                     Ydb::DataStreams::V1::DescribeStreamResponse,
@@ -117,7 +113,6 @@ namespace NYdb::NDataStreams::V1 {
         TAsyncListShardsResult ListShards(const TString &path,
             const Ydb::DataStreams::V1::ShardFilter& shardFilter,
             TListShardsSettings settings) {
-            DBGTRACE("TDataStreamsClient::TImpl::ListShards");
             return CallImpl<Ydb::DataStreams::V1::DataStreamsService,
                     Ydb::DataStreams::V1::ListShardsRequest,
                     Ydb::DataStreams::V1::ListShardsResponse,
@@ -133,7 +128,6 @@ namespace NYdb::NDataStreams::V1 {
         }
 
         TAsyncPutRecordsResult PutRecords(const TString& path, const std::vector<TDataRecord>& records, TPutRecordsSettings settings) {
-            DBGTRACE("TDataStreamsClient::TImpl::PutRecords");
             return CallImpl<Ydb::DataStreams::V1::DataStreamsService,
                     Ydb::DataStreams::V1::PutRecordsRequest,
                     Ydb::DataStreams::V1::PutRecordsResponse,
@@ -150,7 +144,6 @@ namespace NYdb::NDataStreams::V1 {
         }
 
         TAsyncGetRecordsResult GetRecords(const TString& shardIterator, TGetRecordsSettings settings) {
-            DBGTRACE("TDataStreamsClient::TImpl::GetRecords");
             return CallImpl<Ydb::DataStreams::V1::DataStreamsService,
                     Ydb::DataStreams::V1::GetRecordsRequest,
                     Ydb::DataStreams::V1::GetRecordsResponse,
@@ -164,7 +157,6 @@ namespace NYdb::NDataStreams::V1 {
         TAsyncGetShardIteratorResult GetShardIterator(const TString& path, const TString& shardId,
                                                       Ydb::DataStreams::V1::ShardIteratorType shardIteratorType,
                                                       TGetShardIteratorSettings settings) {
-            DBGTRACE("TDataStreamsClient::TImpl::GetShardIterator");
             return CallImpl<Ydb::DataStreams::V1::DataStreamsService,
                     Ydb::DataStreams::V1::GetShardIteratorRequest,
                     Ydb::DataStreams::V1::GetShardIteratorResponse,
@@ -186,7 +178,6 @@ namespace NYdb::NDataStreams::V1 {
         }*/
 
         TAsyncDescribeLimitsResult DescribeLimits(TDescribeLimitsSettings settings) {
-            DBGTRACE("TDataStreamsClient::TImpl::DescribeLimits");
             return CallImpl<Ydb::DataStreams::V1::DataStreamsService,
                     Ydb::DataStreams::V1::DescribeLimitsRequest,
                     Ydb::DataStreams::V1::DescribeLimitsResponse,
@@ -194,7 +185,6 @@ namespace NYdb::NDataStreams::V1 {
         }
 
         TAsyncDescribeStreamSummaryResult DescribeStreamSummary(const TString& path, TDescribeStreamSummarySettings settings) {
-            DBGTRACE("TDataStreamsClient::TImpl::DescribeStreamSummary");
             return CallImpl<Ydb::DataStreams::V1::DataStreamsService,
                     Ydb::DataStreams::V1::DescribeStreamSummaryRequest,
                     Ydb::DataStreams::V1::DescribeStreamSummaryResponse,
@@ -205,7 +195,6 @@ namespace NYdb::NDataStreams::V1 {
         }
 
         TAsyncDecreaseStreamRetentionPeriodResult DecreaseStreamRetentionPeriod(const TString& path, TDecreaseStreamRetentionPeriodSettings settings) {
-            DBGTRACE("TDataStreamsClient::TImpl::DecreaseStreamRetentionPeriod");
             return CallImpl<Ydb::DataStreams::V1::DataStreamsService,
                     Ydb::DataStreams::V1::DecreaseStreamRetentionPeriodRequest,
                     Ydb::DataStreams::V1::DecreaseStreamRetentionPeriodResponse,
@@ -218,7 +207,6 @@ namespace NYdb::NDataStreams::V1 {
         }
 
         TAsyncIncreaseStreamRetentionPeriodResult IncreaseStreamRetentionPeriod(const TString& path, TIncreaseStreamRetentionPeriodSettings settings) {
-            DBGTRACE("TDataStreamsClient::TImpl::IncreaseStreamRetentionPeriod");
             return CallImpl<Ydb::DataStreams::V1::DataStreamsService,
                     Ydb::DataStreams::V1::IncreaseStreamRetentionPeriodRequest,
                     Ydb::DataStreams::V1::IncreaseStreamRetentionPeriodResponse,
@@ -231,7 +219,6 @@ namespace NYdb::NDataStreams::V1 {
         }
 
         TAsyncUpdateShardCountResult UpdateShardCount(const TString& path, TUpdateShardCountSettings settings) {
-            DBGTRACE("TDataStreamsClient::TImpl::UpdateShardCount");
             return CallImpl<Ydb::DataStreams::V1::DataStreamsService,
                     Ydb::DataStreams::V1::UpdateShardCountRequest,
                     Ydb::DataStreams::V1::UpdateShardCountResponse,
@@ -243,7 +230,6 @@ namespace NYdb::NDataStreams::V1 {
         }
 
         TAsyncUpdateStreamModeResult UpdateStreamMode(const TString& path, TUpdateStreamModeSettings settings) {
-            DBGTRACE("TDataStreamsClient::TImpl::UpdateStreamMode");
             return CallImpl<Ydb::DataStreams::V1::DataStreamsService,
                     Ydb::DataStreams::V1::UpdateStreamModeRequest,
                     Ydb::DataStreams::V1::UpdateStreamModeResponse,
@@ -258,7 +244,6 @@ namespace NYdb::NDataStreams::V1 {
         }
 
         TAsyncRegisterStreamConsumerResult RegisterStreamConsumer(const TString& path, const TString& consumer_name, TRegisterStreamConsumerSettings settings) {
-            DBGTRACE("TDataStreamsClient::TImpl::RegisterStreamConsumer");
             return CallImpl<Ydb::DataStreams::V1::DataStreamsService,
                     Ydb::DataStreams::V1::RegisterStreamConsumerRequest,
                     Ydb::DataStreams::V1::RegisterStreamConsumerResponse,
@@ -270,7 +255,6 @@ namespace NYdb::NDataStreams::V1 {
         }
 
         TAsyncDeregisterStreamConsumerResult DeregisterStreamConsumer(const TString& path, const TString& consumer_name, TDeregisterStreamConsumerSettings settings) {
-            DBGTRACE("TDataStreamsClient::TImpl::DeregisterStreamConsumer");
             return CallImpl<Ydb::DataStreams::V1::DataStreamsService,
                     Ydb::DataStreams::V1::DeregisterStreamConsumerRequest,
                     Ydb::DataStreams::V1::DeregisterStreamConsumerResponse,
@@ -282,7 +266,6 @@ namespace NYdb::NDataStreams::V1 {
         }
 
         TAsyncDescribeStreamConsumerResult DescribeStreamConsumer(TDescribeStreamConsumerSettings settings) {
-            DBGTRACE("TDataStreamsClient::TImpl::DescribeStreamConsumer");
             return CallImpl<Ydb::DataStreams::V1::DataStreamsService,
                     Ydb::DataStreams::V1::DescribeStreamConsumerRequest,
                     Ydb::DataStreams::V1::DescribeStreamConsumerResponse,
@@ -290,7 +273,6 @@ namespace NYdb::NDataStreams::V1 {
         }
 
         TAsyncListStreamConsumersResult ListStreamConsumers(const TString& path, TListStreamConsumersSettings settings) {
-            DBGTRACE("TDataStreamsClient::TImpl::ListStreamConsumers");
             return CallImpl<Ydb::DataStreams::V1::DataStreamsService,
                     Ydb::DataStreams::V1::ListStreamConsumersRequest,
                     Ydb::DataStreams::V1::ListStreamConsumersResponse,
@@ -302,7 +284,6 @@ namespace NYdb::NDataStreams::V1 {
         }
 
         TAsyncAddTagsToStreamResult AddTagsToStream(TAddTagsToStreamSettings settings) {
-            DBGTRACE("TDataStreamsClient::TImpl::AddTagsToStream");
             return CallImpl<Ydb::DataStreams::V1::DataStreamsService,
                     Ydb::DataStreams::V1::AddTagsToStreamRequest,
                     Ydb::DataStreams::V1::AddTagsToStreamResponse,
@@ -310,7 +291,6 @@ namespace NYdb::NDataStreams::V1 {
         }
 
         TAsyncDisableEnhancedMonitoringResult DisableEnhancedMonitoring(TDisableEnhancedMonitoringSettings settings) {
-            DBGTRACE("TDataStreamsClient::TImpl::DisableEnhancedMonitoring");
             return CallImpl<Ydb::DataStreams::V1::DataStreamsService,
                     Ydb::DataStreams::V1::DisableEnhancedMonitoringRequest,
                     Ydb::DataStreams::V1::DisableEnhancedMonitoringResponse,
@@ -318,7 +298,6 @@ namespace NYdb::NDataStreams::V1 {
         }
 
         TAsyncEnableEnhancedMonitoringResult EnableEnhancedMonitoring(TEnableEnhancedMonitoringSettings settings) {
-            DBGTRACE("TDataStreamsClient::TImpl::EnableEnhancedMonitoring");
             return CallImpl<Ydb::DataStreams::V1::DataStreamsService,
                     Ydb::DataStreams::V1::EnableEnhancedMonitoringRequest,
                     Ydb::DataStreams::V1::EnableEnhancedMonitoringResponse,
@@ -326,7 +305,6 @@ namespace NYdb::NDataStreams::V1 {
         }
 
         TAsyncListTagsForStreamResult ListTagsForStream(TListTagsForStreamSettings settings) {
-            DBGTRACE("TDataStreamsClient::TImpl::ListTagsForStream");
             return CallImpl<Ydb::DataStreams::V1::DataStreamsService,
                     Ydb::DataStreams::V1::ListTagsForStreamRequest,
                     Ydb::DataStreams::V1::ListTagsForStreamResponse,
@@ -334,7 +312,6 @@ namespace NYdb::NDataStreams::V1 {
         }
 
         TAsyncMergeShardsResult MergeShards(TMergeShardsSettings settings) {
-            DBGTRACE("TDataStreamsClient::TImpl::MergeShards");
             return CallImpl<Ydb::DataStreams::V1::DataStreamsService,
                     Ydb::DataStreams::V1::MergeShardsRequest,
                     Ydb::DataStreams::V1::MergeShardsResponse,
@@ -342,7 +319,6 @@ namespace NYdb::NDataStreams::V1 {
         }
 
         TAsyncRemoveTagsFromStreamResult RemoveTagsFromStream(TRemoveTagsFromStreamSettings settings) {
-            DBGTRACE("TDataStreamsClient::TImpl::RemoveTagsFromStream");
             return CallImpl<Ydb::DataStreams::V1::DataStreamsService,
                     Ydb::DataStreams::V1::RemoveTagsFromStreamRequest,
                     Ydb::DataStreams::V1::RemoveTagsFromStreamResponse,
@@ -350,7 +326,6 @@ namespace NYdb::NDataStreams::V1 {
         }
 
         TAsyncSplitShardResult SplitShard(TSplitShardSettings settings) {
-            DBGTRACE("TDataStreamsClient::TImpl::SplitShard");
             return CallImpl<Ydb::DataStreams::V1::DataStreamsService,
                     Ydb::DataStreams::V1::SplitShardRequest,
                     Ydb::DataStreams::V1::SplitShardResponse,
@@ -358,7 +333,6 @@ namespace NYdb::NDataStreams::V1 {
         }
 
         TAsyncStartStreamEncryptionResult StartStreamEncryption(TStartStreamEncryptionSettings settings) {
-            DBGTRACE("TDataStreamsClient::TImpl::StartStreamEncryption");
             return CallImpl<Ydb::DataStreams::V1::DataStreamsService,
                     Ydb::DataStreams::V1::StartStreamEncryptionRequest,
                     Ydb::DataStreams::V1::StartStreamEncryptionResponse,
@@ -366,7 +340,6 @@ namespace NYdb::NDataStreams::V1 {
         }
 
         TAsyncStopStreamEncryptionResult StopStreamEncryption(TStopStreamEncryptionSettings settings) {
-            DBGTRACE("TDataStreamsClient::TImpl::StopStreamEncryption");
             return CallImpl<Ydb::DataStreams::V1::DataStreamsService,
                     Ydb::DataStreams::V1::StopStreamEncryptionRequest,
                     Ydb::DataStreams::V1::StopStreamEncryptionResponse,
@@ -374,7 +347,6 @@ namespace NYdb::NDataStreams::V1 {
         }
 
         TAsyncUpdateStreamResult UpdateStream(const TString& streamName, TUpdateStreamSettings settings) {
-            DBGTRACE("TDataStreamsClient::TImpl::UpdateStream");
             if (settings.RetentionPeriodHours_.Defined() && settings.RetentionStorageMegabytes_.Defined()) {
                 return NThreading::MakeFuture(TProtoResultWrapper<Ydb::DataStreams::V1::UpdateStreamResult>(
                     NYdb::TPlainStatus(NYdb::EStatus::BAD_REQUEST, "both retention types can not be set"),
@@ -404,7 +376,6 @@ namespace NYdb::NDataStreams::V1 {
         }
 
         TAsyncDeleteStreamResult DeleteStream(const TString &path, TDeleteStreamSettings settings) {
-            DBGTRACE("TDataStreamsClient::TImpl::DeleteStream");
             return CallImpl<Ydb::DataStreams::V1::DataStreamsService,
                     Ydb::DataStreams::V1::DeleteStreamRequest,
                     Ydb::DataStreams::V1::DeleteStreamResponse,
@@ -417,7 +388,6 @@ namespace NYdb::NDataStreams::V1 {
         }
 
         TAsyncDescribeStreamResult DescribeStream(const TString &path, TDescribeStreamSettings settings) {
-            DBGTRACE("TDataStreamsClient::TImpl::DescribeStream");
             return CallImpl<Ydb::DataStreams::V1::DataStreamsService,
                     Ydb::DataStreams::V1::DescribeStreamRequest,
                     Ydb::DataStreams::V1::DescribeStreamResponse,
@@ -430,7 +400,6 @@ namespace NYdb::NDataStreams::V1 {
         }
 
         TAsyncPutRecordResult PutRecord(const TString &path, const TDataRecord& record, TPutRecordSettings settings) {
-            DBGTRACE("TDataStreamsClient::TImpl::PutRecord");
             return CallImpl<Ydb::DataStreams::V1::DataStreamsService,
                     Ydb::DataStreams::V1::PutRecordRequest,
                     Ydb::DataStreams::V1::PutRecordResponse,

@@ -20,7 +20,6 @@
 #include <util/folder/path.h>
 #include <util/string/escape.h>
 #include <util/system/byteorder.h>
-#include <ydb/library/dbgtrace/debug_trace.h>
 
 #define VERIFY_RESULT_BLOB(blob, pos) \
     Y_ABORT_UNLESS(!blob.Data.empty(), "Empty data. SourceId: %s, SeqNo: %" PRIu64, blob.SourceId.data(), blob.SeqNo); \
@@ -645,7 +644,6 @@ TVector<TClientBlob> TPartition::GetReadRequestFromHead(
 }
 
 void TPartition::Handle(TEvPQ::TEvRead::TPtr& ev, const TActorContext& ctx) {
-    DBGTRACE("TPartition::Handle(TEvPQ::TEvRead)");
     auto read = ev->Get();
 
     if (read->Count == 0) {
@@ -684,13 +682,10 @@ void TPartition::Handle(TEvPQ::TEvRead::TPtr& ev, const TActorContext& ctx) {
         return;
     }
     const TString& user = read->ClientId;
-    DBGTRACE_LOG("user=" << user);
 
     Y_ABORT_UNLESS(read->Offset <= EndOffset);
 
     auto& userInfo = UsersInfoStorage->GetOrCreate(user, ctx);
-    DBGTRACE_LOG("read->SessionId=" << read->SessionId);
-    DBGTRACE_LOG("userInfo.NoConsumer=" << userInfo.NoConsumer);
   
     if (!read->SessionId.empty() && !userInfo.NoConsumer) {
         if (userInfo.Session != read->SessionId) {
@@ -706,15 +701,12 @@ void TPartition::Handle(TEvPQ::TEvRead::TPtr& ev, const TActorContext& ctx) {
 }
 
 void TPartition::Handle(TEvPQ::TEvApproveQuota::TPtr& ev, const TActorContext& ctx) {
-    DBGTRACE("TPartition::Handle(TEvPQ::TEvApproveQuota)");
     DoRead(ev->Get()->ReadRequest.Release(), ev->Get()->WaitTime, ctx);
 }
 
 void TPartition::DoRead(TEvPQ::TEvRead::TPtr ev, TDuration waitQuotaTime, const TActorContext& ctx) {
-    DBGTRACE("TPartition::DoRead");
     auto read = ev->Get();
     const TString& user = read->ClientId;
-    DBGTRACE_LOG("user=" << user);
     auto userInfo = UsersInfoStorage->GetIfExists(user);
     if(!userInfo) {
         ReplyError(ctx, read->Cookie,  NPersQueue::NErrorCode::BAD_REQUEST,
@@ -748,7 +740,6 @@ void TPartition::DoRead(TEvPQ::TEvRead::TPtr ev, TDuration waitQuotaTime, const 
                 << " max time lag " << read->MaxTimeLagMs << "ms effective offset " << offset);
 
 
-    DBGTRACE_LOG("offset=" << offset << ", EndOffset=" << EndOffset);
     if (offset == EndOffset) {
         if (read->Timeout > 30000) {
             LOG_DEBUG_S(
@@ -777,7 +768,6 @@ void TPartition::DoRead(TEvPQ::TEvRead::TPtr ev, TDuration waitQuotaTime, const 
 }
 
 void TPartition::OnReadRequestFinished(ui64 cookie, ui64 answerSize, const TString& consumer, const TActorContext& ctx) {
-    DBGTRACE("TPartition::OnReadRequestFinished");
     AvgReadBytes.Update(answerSize, ctx.Now());
     Send(ReadQuotaTrackerActor, new TEvPQ::TEvConsumed(answerSize, cookie, consumer));
 }
@@ -935,7 +925,6 @@ void TPartition::ProcessTimestampRead(const TActorContext& ctx) {
 }
 
 void TPartition::ProcessRead(const TActorContext& ctx, TReadInfo&& info, const ui64 cookie, bool subscription) {
-    DBGTRACE("TPartition::ProcessRead");
     ui32 count = 0;
     ui32 size = 0;
 

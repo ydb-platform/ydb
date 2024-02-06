@@ -5,7 +5,6 @@
 #include <ydb/core/base/subdomain.h>
 #include <ydb/core/persqueue/config/config.h>
 #include <ydb/core/mind/hive/hive.h>
-#include <ydb/library/dbgtrace/debug_trace.h>
 
 namespace {
 
@@ -32,20 +31,15 @@ class TAlterPQ: public TSubOperation {
     }
 
     TSubOperationState::TPtr SelectStateFunc(TTxState::ETxState state) override {
-        DBGTRACE("TAlterPQ::SelectStateFunc");
         switch (state) {
         case TTxState::Waiting:
         case TTxState::CreateParts:
-            DBGTRACE_LOG("TCreateParts");
             return MakeHolder<TCreateParts>(OperationId);
         case TTxState::ConfigureParts:
-            DBGTRACE_LOG("NPQState::TConfigureParts");
             return MakeHolder<NPQState::TConfigureParts>(OperationId);
         case TTxState::Propose:
-            DBGTRACE_LOG("NPQState::TPropose");
             return MakeHolder<NPQState::TPropose>(OperationId);
         case TTxState::Done:
-            DBGTRACE_LOG("TDone");
             return MakeHolder<TDone>(OperationId);
         default:
             return nullptr;
@@ -61,7 +55,6 @@ public:
             const NKikimrSchemeOp::TPersQueueGroupDescription& alter,
             TString& errStr)
     {
-        DBGTRACE("TAlterPQ::ParseParams");
         bool splitMergeEnabled = AppData()->FeatureFlags.GetEnableTopicSplitMerge();
 
         TTopicInfo::TPtr params = new TTopicInfo();
@@ -236,8 +229,6 @@ public:
             const TChannelsBindings& pqChannelsBinding,
             TOperationContext& context)
     {
-        DBGTRACE("TAlterPQ::PrepareChanges");
-        DBGTRACE("TAlterPQ::PrepareChanges");
         TPathElement::TPtr item = path.Base();
         NIceDb::TNiceDb db(context.GetDB());
 

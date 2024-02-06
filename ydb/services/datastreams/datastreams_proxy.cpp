@@ -20,7 +20,6 @@
 #include <util/folder/path.h>
 
 #include <iterator>
-#include <ydb/library/dbgtrace/debug_trace.h>
 
 using namespace NActors;
 using namespace NKikimrClient;
@@ -1055,7 +1054,6 @@ namespace NKikimr::NDataStreams::V1 {
     }
 
     void TRegisterStreamConsumerActor::Bootstrap(const NActors::TActorContext& ctx) {
-        DBGTRACE("TRegisterStreamConsumerActor::Bootstrap");
         TBase::Bootstrap(ctx);
         SendDescribeProposeRequest(ctx);
         Become(&TRegisterStreamConsumerActor::StateWork);
@@ -1067,7 +1065,6 @@ namespace NKikimr::NDataStreams::V1 {
         const NKikimrSchemeOp::TPersQueueGroupDescription& pqGroupDescription,
         const NKikimrSchemeOp::TDirEntry& selfInfo
     ) {
-        DBGTRACE("TRegisterStreamConsumerActor::ModifyPersqueueConfig");
         Y_UNUSED(pqGroupDescription);
 
         auto* pqConfig = groupConfig.MutablePQTabletConfig();
@@ -1102,7 +1099,6 @@ namespace NKikimr::NDataStreams::V1 {
     }
 
     void TRegisterStreamConsumerActor::OnNotifyTxCompletionResult(NSchemeShard::TEvSchemeShard::TEvNotifyTxCompletionResult::TPtr& ev, const TActorContext& ctx) {
-        DBGTRACE("TRegisterStreamConsumerActor::OnNotifyTxCompletionResult");
         Y_UNUSED(ev);
         Ydb::DataStreams::V1::RegisterStreamConsumerResult result;
         auto consumer = result.Mutableconsumer();

@@ -1915,6 +1915,10 @@ NJson::TJsonValue ReconstructQueryPlanRec(const NJson::TJsonValue& plan,
 
     if (plan.GetMapSafe().contains("CTE Name") && plan.GetMapSafe().at("Node Type") == "ConstantExpr") {
         auto precompute = plan.GetMapSafe().at("CTE Name").GetStringSafe();
+        if (!precomputes.contains(precompute)) {
+            result["Node Type"] = "ConstantExpr";
+            return result;
+        }
         return ReconstructQueryPlanRec(precomputes.at(precompute), 0, planIndex, precomputes, nodeCounter);
     }
 

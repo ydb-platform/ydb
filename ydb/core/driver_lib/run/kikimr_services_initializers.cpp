@@ -39,6 +39,7 @@
 #include <ydb/core/cms/console/configs_cache.h>
 #include <ydb/core/cms/console/console.h>
 #include <ydb/core/cms/console/immediate_controls_configurator.h>
+#include <ydb/core/cms/console/jaeger_tracing_configurator.h>
 #include <ydb/core/cms/console/log_settings_configurator.h>
 #include <ydb/core/cms/console/shared_cache_configurator.h>
 #include <ydb/core/cms/console/validators/core_validators.h>
@@ -826,22 +827,34 @@ void TBasicServicesInitializer::InitializeServices(NActors::TActorSystemSetup* s
         }
     }
 
-    if (Config.HasTracingConfig()) {
-        const auto& tracing = Config.GetTracingConfig();
+    if (Config.HasTracingConfig() && Config.GetTracingConfig().HasBackend()) {
+        const auto& tracing_backend = Config.GetTracingConfig().GetBackend();
         std::unique_ptr<NWilson::IGrpcSigner> grpcSigner;
-        if (tracing.HasAuthConfig() && Factories && Factories->WilsonGrpcSignerFactory) {
-            grpcSigner = Factories->WilsonGrpcSignerFactory(tracing.GetAuthConfig());
+        if (tracing_backend.HasAuthConfig() && Factories && Factories->WilsonGrpcSignerFactory) {
+            grpcSigner = Factories->WilsonGrpcSignerFactory(tracing_backend.GetAuthConfig());
         }
-        auto wilsonUploader = NWilson::WilsonUploaderParams {
-            .Host = tracing.GetHost(),
-            .Port = static_cast<ui16>(tracing.GetPort()),
-            .RootCA = tracing.GetRootCA(),
-            .ServiceName = tracing.GetServiceName(),
-            .GrpcSigner = std::move(grpcSigner),
-        }.CreateUploader();
-        setup->LocalServices.emplace_back(
-            NWilson::MakeWilsonUploaderId(),
-            TActorSetupCmd(wilsonUploader, TMailboxType::ReadAsFilled, appData->BatchPoolId));
+        NActors::IActor* wilsonUploader = nullptr;
+        switch (tracing_backend.GetBackendCase()) {
+            case NKikimrConfig::TTracingConfig::TBackendConfig::BackendCase::kOpentelemetry: {
+                const auto& opentelemetry = tracing_backend.GetOpentelemetry();
+                wilsonUploader = NWilson::WilsonUploaderParams {
+                    .CollectorUrl = opentelemetry.GetCollectorUrl(),
+                    .ServiceName = opentelemetry.GetServiceName(),
+                    .GrpcSigner = std::move(grpcSigner),
+                }.CreateUploader();
+                break;
+            }
+
+            case NKikimrConfig::TTracingConfig::TBackendConfig::BackendCase::BACKEND_NOT_SET: {
+                Y_DEBUG_ABORT_UNLESS(false, "No backend option was provided in backend config");
+                break;
+            }
+        }
+        if (wilsonUploader) {
+            setup->LocalServices.emplace_back(
+                NWilson::MakeWilsonUploaderId(),
+                TActorSetupCmd(wilsonUploader, TMailboxType::ReadAsFilled, appData->BatchPoolId));
+        }
     }
 }
 
@@ -1616,15 +1629,22 @@ void TGRpcServicesInitializer::InitializeServices(NActors::TActorSystemSetup* se
 
     if (!IsServiceInitialized(setup, NGRpcService::CreateGRpcRequestProxyId(0))) {
         const size_t proxyCount = Config.HasGRpcConfig() ? Config.GetGRpcConfig().GetGRpcProxyCount() : 1UL;
+        NJaegerTracing::TSamplingThrottlingConfigurator tracingConfigurator(appData->TimeProvider, appData->RandomProvider);
         for (size_t i = 0; i < proxyCount; ++i) {
             auto grpcReqProxy = Config.HasGRpcConfig() && Config.GetGRpcConfig().GetSkipSchemeCheck()
                 ? NGRpcService::CreateGRpcRequestProxySimple(Config)
-                : NGRpcService::CreateGRpcRequestProxy(Config, appData->Icb);
+                : NGRpcService::CreateGRpcRequestProxy(Config, tracingConfigurator.GetControl());
             setup->LocalServices.push_back(std::pair<TActorId,
                                            TActorSetupCmd>(NGRpcService::CreateGRpcRequestProxyId(i),
                                                            TActorSetupCmd(grpcReqProxy, TMailboxType::ReadAsFilled,
                                                                           appData->UserPoolId)));
         }
+        setup->LocalServices.push_back(std::pair<TActorId, TActorSetupCmd>(
+                TActorId(),
+                TActorSetupCmd(
+                    NConsole::CreateJaegerTracingConfigurator(std::move(tracingConfigurator), Config.GetTracingConfig()),
+                    TMailboxType::ReadAsFilled,
+                    appData->UserPoolId)));
     }
 
     if (!IsServiceInitialized(setup, NKesus::MakeKesusProxyServiceId())) {

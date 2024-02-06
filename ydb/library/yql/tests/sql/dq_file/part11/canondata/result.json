@@ -2067,9 +2067,9 @@
     ],
     "test.test[pg_catalog-pg_roles-default.txt-Debug]": [
         {
-            "checksum": "2b3e29957c8a5bac294b21ccb291c57f",
-            "size": 645,
-            "uri": "https://{canondata_backend}/1942671/18f32d5eb8ab2aab65012dda63f9cfd635ed3680/resource.tar.gz#test.test_pg_catalog-pg_roles-default.txt-Debug_/opt.yql_patched"
+            "checksum": "0a55cf50f6f6ea3c33d91ce0769d0fd1",
+            "size": 641,
+            "uri": "https://{canondata_backend}/1942525/d140db22959141111740879cdd2464012e1a4760/resource.tar.gz#test.test_pg_catalog-pg_roles-default.txt-Debug_/opt.yql_patched"
         }
     ],
     "test.test[pg_catalog-pg_roles-default.txt-Plan]": [

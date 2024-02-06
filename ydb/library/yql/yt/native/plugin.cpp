@@ -1,18 +1,26 @@
+#include "dq_manager.h"
 #include "plugin.h"
 
 #include "error_helpers.h"
 #include "progress_merger.h"
 
+#include <ydb/library/yql/providers/yt/comp_nodes/dq/dq_yt_factory.h>
 #include <ydb/library/yql/providers/yt/gateway/native/yql_yt_native.h>
 #include <ydb/library/yql/providers/yt/lib/log/yt_logger.h>
 #include <ydb/library/yql/providers/yt/lib/yt_download/yt_download.h>
 #include <ydb/library/yql/providers/yt/provider/yql_yt_provider.h>
 
+#include <ydb/library/yql/providers/common/comp_nodes/yql_factory.h>
 #include <ydb/library/yql/providers/common/proto/gateways_config.pb.h>
 #include <ydb/library/yql/providers/common/provider/yql_provider_names.h>
 #include <ydb/library/yql/providers/common/udf_resolve/yql_simple_udf_resolver.h>
 
+#include <ydb/library/yql/providers/dq/provider/yql_dq_gateway.h>
+#include <ydb/library/yql/providers/dq/provider/yql_dq_provider.h>
+#include <ydb/library/yql/providers/dq/provider/exec/yql_dq_exectransformer.h>
+
 #include <ydb/library/yql/ast/yql_expr.h>
+#include <ydb/library/yql/dq/comp_nodes/yql_common_dq_factory.h>
 #include <ydb/library/yql/core/facade/yql_facade.h>
 #include <ydb/library/yql/core/file_storage/file_storage.h>
 #include <ydb/library/yql/core/file_storage/proto/file_storage.pb.h>
@@ -21,6 +29,7 @@
 #include <ydb/library/yql/core/url_preprocessing/url_preprocessing.h>
 #include <ydb/library/yql/minikql/invoke_builtins/mkql_builtins.h>
 #include <ydb/library/yql/minikql/mkql_function_registry.h>
+#include <ydb/library/yql/minikql/comp_nodes/mkql_factories.h>
 #include <ydb/library/yql/utils/backtrace/backtrace.h>
 #include <ydb/library/yql/utils/log/log.h>
 
@@ -126,6 +135,7 @@ class TYqlPlugin
 {
 public:
     TYqlPlugin(TYqlPluginOptions options)
+        : DqManagerConfig_(options.DqManagerConfig ? NYTree::ConvertTo<TDqManagerConfigPtr>(options.DqManagerConfig) : nullptr)
     {
         try {
             auto singletonsConfig = NYTree::ConvertTo<TSingletonsConfigPtr>(options.SingletonsConfig);
@@ -147,6 +157,14 @@ public:
 
             NYson::TProtobufWriterOptions protobufWriterOptions;
             protobufWriterOptions.ConvertSnakeToCamelCase = true;
+
+            auto* gatewayDqConfig = GatewaysConfig_.MutableDq();
+            if (DqManagerConfig_) {
+                gatewayDqConfig->ParseFromStringOrThrow(NYson::YsonStringToProto(
+                    options.DqGatewayConfig,
+                    NYson::ReflectProtobufMessageType<NYql::TDqGatewayConfig>(),
+                    protobufWriterOptions));
+            }
 
             auto* gatewayYtConfig = GatewaysConfig_.MutableYt();
             gatewayYtConfig->ParseFromStringOrThrow(NYson::YsonStringToProto(
@@ -188,6 +206,14 @@ public:
                     continue;
                 }
                 FuncRegistry_->LoadUdfs(path, emptyRemappings, 0);
+                if (DqManagerConfig_) {
+                    DqManagerConfig_->UdfsWithMd5.emplace(path, MD5::File(path));
+                }
+            }
+
+            if (DqManagerConfig_) {
+                DqManagerConfig_->FileStorage = FileStorage_;
+                DqManager_ =  New<TDqManager>(DqManagerConfig_);
             }
 
             gatewayYtConfig->ClearMrJobUdfsDir();
@@ -224,6 +250,17 @@ public:
             ytServices.FunctionRegistry = FuncRegistry_.Get();
             ytServices.FileStorage = FileStorage_;
             ytServices.Config = std::make_shared<NYql::TYtGatewayConfig>(*gatewayYtConfig);
+
+            if (DqManagerConfig_) {
+                auto dqGateway = NYql::CreateDqGateway("localhost", DqManagerConfig_->GrpcPort);
+                auto dqCompFactory = NKikimr::NMiniKQL::GetCompositeWithBuiltinFactory({
+                    NYql::GetCommonDqFactory(),
+                    NYql::GetDqYtFactory(),
+                    NKikimr::NMiniKQL::GetYqlFactory(),
+                });
+                dataProvidersInit.push_back(GetDqDataProviderInitializer(&NYql::CreateDqExecTransformer, dqGateway, dqCompFactory, {}, FileStorage_));
+            }
+
             auto ytNativeGateway = CreateYtNativeGateway(ytServices);
             dataProvidersInit.push_back(GetYtNativeDataProviderInitializer(ytNativeGateway));
 
@@ -435,6 +472,8 @@ public:
     }
 
 private:
+    const TDqManagerConfigPtr DqManagerConfig_;
+    TDqManagerPtr DqManager_;
     NYql::TFileStoragePtr FileStorage_;
     NYql::TExprContext ExprContext_;
     ::TIntrusivePtr<NKikimr::NMiniKQL::IMutableFunctionRegistry> FuncRegistry_;

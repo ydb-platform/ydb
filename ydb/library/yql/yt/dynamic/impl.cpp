@@ -30,6 +30,8 @@ TBridgeYqlPlugin* BridgeCreateYqlPlugin(const TBridgeYqlPluginOptions* bridgeOpt
     TYqlPluginOptions options{
         .SingletonsConfig = singletonsConfig,
         .GatewayConfig = TYsonString(TStringBuf(bridgeOptions->GatewayConfig, bridgeOptions->GatewayConfigLength)),
+        .DqGatewayConfig = TYsonString(TStringBuf(bridgeOptions->DqGatewayConfig, bridgeOptions->DqGatewayConfigLength)),
+        .DqManagerConfig = TYsonString(TStringBuf(bridgeOptions->DqManagerConfig, bridgeOptions->DqManagerConfigLength)),
         .FileStorageConfig = TYsonString(TStringBuf(bridgeOptions->FileStorageConfig, bridgeOptions->FileStorageConfigLength)),
         .OperationAttributes = TYsonString(TStringBuf(bridgeOptions->OperationAttributes, bridgeOptions->OperationAttributesLength)),
         .YTTokenPath = TString(bridgeOptions->YTTokenPath),

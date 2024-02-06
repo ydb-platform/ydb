@@ -18,6 +18,9 @@ ASTDIFF_PATH = yql_binary_path('ydb/library/yql/tools/astdiff/astdiff')
 
 
 def run_test(suite, case, cfg, tmpdir, what, yql_http_file_server):
+    if "match_recognize" in suite:
+        pytest.skip('Unsupported TimeOrder* in runtime version v39')
+
     if get_param('SQL_FLAGS'):
         if what == 'Debug' or what == 'Plan' or what == 'Peephole' or what == 'Lineage':
             pytest.skip('SKIP')

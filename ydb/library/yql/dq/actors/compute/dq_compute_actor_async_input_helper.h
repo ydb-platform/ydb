@@ -83,8 +83,9 @@ public:
                     Pause(*watermark);
                 }
             }
+            const bool emptyBatch = batch.empty();
             AsyncInputPush(std::move(batch), space, finished);
-            if (!batch.empty()) {
+            if (!emptyBatch) {
                 // If we have read some data, we must run such reading again
                 // to process the case when async input notified us about new data
                 // but we haven't read all of it.

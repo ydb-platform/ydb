@@ -123,6 +123,14 @@ protected:
             this->TaskRunner->GetRandomProvider()
         );
     }
+
+    const NYql::NDq::TTaskRunnerStatsBase* GetTaskRunnerStats() override {
+        return this->TaskRunner ? this->TaskRunner->GetStats() : nullptr;
+    }
+
+    const NYql::NDq::TDqMeteringStats* GetMeteringStats() override {
+        return this->TaskRunner ? this->TaskRunner->GetMeteringStats() : nullptr;
+    }
 };
 
 } //namespace NYql::NDq

@@ -160,9 +160,13 @@ PEERDIR(
     ydb/library/yql/public/issue/protos
 )
 
+IF (ARCH_X86_64)
+
 CFLAGS(
     -mprfchw
 )
+
+ENDIF()
 
 YQL_LAST_ABI_VERSION()
 

@@ -1245,61 +1245,12 @@ message TImmediateControlsConfig {
             DefaultValue: 8388608 }];
     }
 
-    message TTracingControls {
-        message TSamplingThrottlingOptions {
-            message TThrottlingOptions {
-                optional uint64 MaxRatePerMinute = 1 [(ControlOptions) = {
-                    Description: "Maximum amount of traced requests per minute",
-                    MinValue: 0,
-                    MaxValue: 300,
-                    DefaultValue: 0,
-                }];
-                optional uint64 MaxBurst = 2 [(ControlOptions) = {
-                    Description: "Maximum burst of traced events",
-                    MinValue: 0,
-                    MaxValue: 300, 
-                    DefaultValue: 0,
-                }];
-            }
-
-            message TSamplingOptions {
-                optional uint64 PPM = 1 [(ControlOptions) = {
-                    Description: "Average amount of sampled requests per one million",
-                    MinValue: 0,
-                    MaxValue: 1000000,
-                    DefaultValue: 0,
-                }];
-                optional uint64 Level = 2 [(ControlOptions) = {
-                    Description: "Tracing level of sampled requests",
-                    MinValue: 1,
-                    MaxValue: 15,
-                    DefaultValue: 15,
-                }];
-            }
-
-            optional TSamplingOptions Sampling = 1;
-            optional TThrottlingOptions SampledThrottling = 2;
-            optional TThrottlingOptions ExternalThrottling = 3;
-        }
-
-        message TKeyValue {
-            optional TSamplingThrottlingOptions AcquireLock = 1;
-            optional TSamplingThrottlingOptions ExecuteTransaction = 2;
-            optional TSamplingThrottlingOptions Read = 3;
-            optional TSamplingThrottlingOptions ReadRange = 4;
-            optional TSamplingThrottlingOptions ListRange = 5;
-            optional TSamplingThrottlingOptions GetStorageChannelStatus = 6;
-        }
-
-        optional TKeyValue KeyValue = 1;
-    }
-
     optional TDataShardControls DataShardControls = 1;
     optional TTxLimitControls TxLimitControls = 2;
     optional TCoordinatorControls CoordinatorControls = 3;
     optional TSchemeShardControls SchemeShardControls = 4;
     optional TTCMallocControls TCMallocControls = 5;
-    optional TTracingControls TracingControls = 6;
+    reserved 6;
 };
 
 message TMeteringConfig {

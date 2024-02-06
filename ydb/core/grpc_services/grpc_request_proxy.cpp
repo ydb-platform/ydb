@@ -8,7 +8,6 @@
 #include <ydb/core/base/nameservice.h>
 #include <ydb/core/cms/console/configs_dispatcher.h>
 #include <ydb/core/cms/console/console.h>
-#include <ydb/core/control/common_controls/tracing_control.h>
 #include <ydb/core/grpc_services/counters/proxy_counters.h>
 #include <ydb/core/jaeger_tracing/sampling_throttling_control.h>
 #include <ydb/core/tx/tx_proxy/proxy.h>

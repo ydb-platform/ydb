@@ -1,20 +1,20 @@
 #include "dq_manager.h"
 
-#include <contrib/ydb/library/yql/providers/dq/actors/yt/resource_manager.h>
-#include <contrib/ydb/library/yql/providers/dq/actors/dynamic_nameserver.h>
-#include <contrib/ydb/library/yql/providers/dq/metrics/metrics_printer.h>
-#include <contrib/ydb/library/yql/providers/dq/provider/yql_dq_control.h>
-#include <contrib/ydb/library/yql/providers/dq/service/interconnect_helpers.h>
-#include <contrib/ydb/library/yql/providers/dq/stats_collector/pool_stats_collector.h>
-#include <contrib/ydb/library/yql/providers/dq/worker_manager/interface/events.h>
+#include <ydb/library/yql/providers/dq/actors/yt/resource_manager.h>
+#include <ydb/library/yql/providers/dq/actors/dynamic_nameserver.h>
+#include <ydb/library/yql/providers/dq/metrics/metrics_printer.h>
+#include <ydb/library/yql/providers/dq/provider/yql_dq_control.h>
+#include <ydb/library/yql/providers/dq/service/interconnect_helpers.h>
+#include <ydb/library/yql/providers/dq/stats_collector/pool_stats_collector.h>
+#include <ydb/library/yql/providers/dq/worker_manager/interface/events.h>
 
-#include <contrib/ydb/library/yql/providers/yt/dq_task_preprocessor/yql_yt_dq_task_preprocessor.h>
+#include <ydb/library/yql/providers/yt/dq_task_preprocessor/yql_yt_dq_task_preprocessor.h>
 
-#include <contrib/ydb/library/yql/minikql/invoke_builtins/mkql_builtins.h>
+#include <ydb/library/yql/minikql/invoke_builtins/mkql_builtins.h>
 
-#include <contrib/ydb/library/yql/utils/backtrace/backtrace.h>
-#include <contrib/ydb/library/yql/utils/log/log.h>
-#include <contrib/ydb/library/yql/utils/log/proto/logger_config.pb.h>
+#include <ydb/library/yql/utils/backtrace/backtrace.h>
+#include <ydb/library/yql/utils/log/log.h>
+#include <ydb/library/yql/utils/log/proto/logger_config.pb.h>
 
 #include <library/cpp/digest/md5/md5.h>
 

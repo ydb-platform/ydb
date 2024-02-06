@@ -1,14 +1,23 @@
 GO_LIBRARY()
-
-SRCS(
-    utf16.go
-)
-
-GO_TEST_SRCS(export_test.go)
-
-GO_XTEST_SRCS(utf16_test.go)
-
+IF (OS_DARWIN AND ARCH_ARM64)
+    SRCS(
+		utf16.go
+    )
+ELSEIF (OS_DARWIN AND ARCH_X86_64)
+    SRCS(
+		utf16.go
+    )
+ELSEIF (OS_LINUX AND ARCH_AARCH64)
+    SRCS(
+		utf16.go
+    )
+ELSEIF (OS_LINUX AND ARCH_X86_64)
+    SRCS(
+		utf16.go
+    )
+ELSEIF (OS_WINDOWS AND ARCH_X86_64)
+    SRCS(
+		utf16.go
+    )
+ENDIF()
 END()
-
-RECURSE(
-)

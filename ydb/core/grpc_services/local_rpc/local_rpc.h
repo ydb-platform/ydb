@@ -183,7 +183,7 @@ public:
         Y_ABORT("Unimplemented for local rpc");
     }
 
-    virtual void SendSerializedResult(TString&&, Ydb::StatusIds::StatusCode) override {
+    virtual void SendSerializedResult(TString&&, Ydb::StatusIds::StatusCode, EStreamCtrl) override {
         Y_ABORT("Unimplemented for local rpc");
     }
 

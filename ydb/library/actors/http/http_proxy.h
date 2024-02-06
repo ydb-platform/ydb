@@ -16,6 +16,8 @@
 
 namespace NHttp {
 
+const ui32 DEFAULT_MAX_RECYCLED_REQUESTS_COUNT = 1000;
+
 struct TSocketDescriptor : NActors::TSharedDescriptor, THttpConfig {
     SocketType Socket;
 
@@ -64,6 +66,8 @@ struct TEvHttpProxy {
         TString PrivateKeyFile;
         TString SslCertificatePem;
         std::vector<TString> CompressContentTypes;
+
+        ui32 MaxRecycledRequestsCount = DEFAULT_MAX_RECYCLED_REQUESTS_COUNT;
 
         TEvAddListeningPort() = default;
 

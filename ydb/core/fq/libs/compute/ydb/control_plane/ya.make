@@ -4,6 +4,8 @@ SRCS(
     cms_grpc_client_actor.cpp
     compute_database_control_plane_service.cpp
     compute_databases_cache.cpp
+    database_monitoring.cpp
+    monitoring_grpc_client_actor.cpp
     ydbcp_grpc_client_actor.cpp
 )
 

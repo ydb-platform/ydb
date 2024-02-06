@@ -122,7 +122,7 @@ struct TAggInfo {
     std::vector<ui32> ArgsColumns;
 };
 
-class TProgramBuilder : private TNonCopyable {
+class TProgramBuilder : public TMoveOnly {
 public:
     TProgramBuilder(const TTypeEnvironment& env, const IFunctionRegistry& functionRegistry, bool voidWithEffects = false);
 

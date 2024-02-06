@@ -20,7 +20,7 @@ Y_UNIT_TEST(TestPartitionedBlobSimpleTest) {
     THead head;
     THead newHead;
 
-    TPartitionedBlob blob(0, 0, "sourceId", 1, 1, 10, head, newHead, false, false, 8_MB);
+    TPartitionedBlob blob(TPartitionId(0), 0, "sourceId", 1, 1, 10, head, newHead, false, false, 8_MB);
     TClientBlob clientBlob("sourceId", 1, "valuevalue", TMaybe<TPartData>(), TInstant::MilliSeconds(1), TInstant::MilliSeconds(1), 0, "123", "123");
     UNIT_ASSERT(blob.IsInited());
     TString error;
@@ -73,7 +73,7 @@ void Test(bool headCompacted, ui32 parts, ui32 partSize, ui32 leftInHead)
     newHead.PackedSize = newHead.Batches.back().GetUnpackedSize();
     TString value2(partSize, 'b');
     ui32 maxBlobSize = 8 << 20;
-    TPartitionedBlob blob(0, newHead.GetNextOffset(), "sourceId3", 1, parts, parts * value2.size(), head, newHead, headCompacted, false, maxBlobSize);
+    TPartitionedBlob blob(TPartitionId(0), newHead.GetNextOffset(), "sourceId3", 1, parts, parts * value2.size(), head, newHead, headCompacted, false, maxBlobSize);
 
     TVector<std::pair<TKey, TString>> formed;
 

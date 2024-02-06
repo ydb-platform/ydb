@@ -636,7 +636,7 @@ TAuditLogFragment MakeAuditLogFragment(const NKikimrSchemeOp::TModifyScheme& tx)
     auto [aclAdd, aclRemove] = ExtractACLChange(tx);
     auto [userAttrsAdd, userAttrsRemove] = ExtractUserAttrChange(tx);
     auto [loginUser, loginGroup, loginMember] = ExtractLoginChange(tx);
-    
+
     return {
         .Operation = DefineUserOperationName(tx),
         .Paths = ExtractChangingPaths(tx),

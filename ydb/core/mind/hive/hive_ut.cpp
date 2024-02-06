@@ -2786,6 +2786,7 @@ Y_UNIT_TEST_SUITE(THiveTest) {
         Setup(runtime, true, 2, [](TAppPrepare& app) {
             app.HiveConfig.SetMinPeriodBetweenReassign(0);
             app.HiveConfig.SetStorageInfoRefreshFrequency(200);
+            app.HiveConfig.SetMinStorageScatterToBalance(0.5);
         });
         const ui64 hiveTablet = MakeDefaultHiveID(0);
         const ui64 testerTablet = MakeDefaultHiveID(1);

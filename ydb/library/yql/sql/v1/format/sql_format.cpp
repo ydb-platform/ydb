@@ -891,27 +891,24 @@ private:
         Visit(msg.GetToken1());
         Visit(msg.GetBlock2());
         Visit(msg.GetBlock3());
-        Visit(msg.GetRule_simple_table_ref4());
-        Visit(msg.GetToken5());
+        Visit(msg.GetBlock4());
+        Visit(msg.GetRule_simple_table_ref5());
+        Visit(msg.GetToken6());
         PushCurrentIndent();
         NewLine();
-        Visit(msg.GetRule_create_table_entry6());
-        for (const auto& b : msg.GetBlock7()) {
+        Visit(msg.GetRule_create_table_entry7());
+        for (const auto& b : msg.GetBlock8()) {
             Visit(b.GetToken1());
             NewLine();
             Visit(b.GetRule_create_table_entry2());
         }
-        if (msg.HasBlock8()) {
-            Visit(msg.GetBlock8());
+        if (msg.HasBlock9()) {
+            Visit(msg.GetBlock9());
         }
 
         PopCurrentIndent();
         NewLine();
-        Visit(msg.GetToken9());
-        if (msg.HasBlock10()) {
-            NewLine();
-            Visit(msg.GetBlock10());
-        }
+        Visit(msg.GetToken10());
         if (msg.HasBlock11()) {
             NewLine();
             Visit(msg.GetBlock11());
@@ -923,6 +920,10 @@ private:
         if (msg.HasBlock13()) {
             NewLine();
             Visit(msg.GetBlock13());
+        }
+        if (msg.HasBlock14()) {
+            NewLine();
+            Visit(msg.GetBlock14());
         }
     }
 

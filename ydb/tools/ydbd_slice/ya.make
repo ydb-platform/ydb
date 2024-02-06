@@ -11,6 +11,7 @@ PY_SRCS(
     kube/api.py
     kube/cms.py
     kube/docker.py
+    kube/dynconfig.py
     kube/generate.py
     kube/handlers.py
     kube/kubectl.py
@@ -21,6 +22,8 @@ PY_SRCS(
 
 PEERDIR(
     ydb/tools/cfg
+    ydb/public/sdk/python
+    ydb/public/sdk/python/enable_v3_new_behavior
     contrib/python/PyYAML
     contrib/python/ruamel.yaml
     contrib/python/kubernetes
@@ -32,6 +35,7 @@ PEERDIR(
 RESOURCE(
     kube/templates/common/namespace.yaml /ydbd_slice/templates/common/namespace.yaml
     kube/templates/common/database.yaml /ydbd_slice/templates/common/database.yaml
+    kube/templates/common/dynconfig.yaml /ydbd_slice/templates/common/dynconfig.yaml
     kube/templates/8-node-block-4-2/nodeclaim.yaml /ydbd_slice/templates/8-node-block-4-2/nodeclaim.yaml
     kube/templates/8-node-block-4-2/storage.yaml /ydbd_slice/templates/8-node-block-4-2/storage.yaml
     kube/templates/legacy-cms-config-items/table-profile.txt /ydbd_slice/templates/legacy-cms-config-items/table-profile.txt

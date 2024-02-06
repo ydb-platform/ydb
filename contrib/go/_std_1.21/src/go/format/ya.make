@@ -1,18 +1,28 @@
 GO_LIBRARY()
-
-SRCS(
-    format.go
-    internal.go
-)
-
-GO_TEST_SRCS(format_test.go)
-
-GO_XTEST_SRCS(
-    benchmark_test.go
-    example_test.go
-)
-
+IF (OS_DARWIN AND ARCH_ARM64)
+    SRCS(
+		format.go
+		internal.go
+    )
+ELSEIF (OS_DARWIN AND ARCH_X86_64)
+    SRCS(
+		format.go
+		internal.go
+    )
+ELSEIF (OS_LINUX AND ARCH_AARCH64)
+    SRCS(
+		format.go
+		internal.go
+    )
+ELSEIF (OS_LINUX AND ARCH_X86_64)
+    SRCS(
+		format.go
+		internal.go
+    )
+ELSEIF (OS_WINDOWS AND ARCH_X86_64)
+    SRCS(
+		format.go
+		internal.go
+    )
+ENDIF()
 END()
-
-RECURSE(
-)

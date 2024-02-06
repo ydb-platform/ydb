@@ -683,18 +683,13 @@ TEST(TErrorTest, CompositeYTExceptionToError)
     }
 }
 
-TString HostSanitizer(TStringBuf)
-{
-    return "";
-}
-
 TEST(TErrorTest, ErrorSanitizer)
 {
     auto checkSantizied = [&] (const TError& error) {
         EXPECT_FALSE(error.HasOriginAttributes());
         EXPECT_FALSE(error.HasTracingAttributes());
 
-        EXPECT_EQ("", error.GetHost());
+        EXPECT_EQ("<host-override>", error.GetHost());
         EXPECT_EQ(0, error.GetPid());
         EXPECT_EQ(NThreading::InvalidThreadId, error.GetTid());
         EXPECT_EQ(NConcurrency::InvalidFiberId, error.GetFid());
@@ -705,7 +700,7 @@ TEST(TErrorTest, ErrorSanitizer)
     auto checkNotSanitized = [&] (const TError& error) {
         EXPECT_TRUE(error.HasOriginAttributes());
 
-        EXPECT_FALSE(error.GetHost() == "");
+        EXPECT_FALSE(error.GetHost() == "<host-override>");
         EXPECT_FALSE(error.GetPid() == 0);
 
         auto now = TInstant::Now();
@@ -717,7 +712,9 @@ TEST(TErrorTest, ErrorSanitizer)
 
     {
         auto instant1 = TInstant::Days(123);
-        TErrorSanitizerGuard guard1(instant1, BIND(&HostSanitizer));
+        TErrorSanitizerGuard guard1(
+            instant1,
+            /*localHostNameOverride*/ TSharedRef::FromString("<host-override>"));
 
         auto error2 = TError("error2");
         checkSantizied(error2);
@@ -725,7 +722,10 @@ TEST(TErrorTest, ErrorSanitizer)
 
         {
             auto instant2 = TInstant::Days(234);
-            TErrorSanitizerGuard guard2(instant2, BIND(&HostSanitizer));
+            TErrorSanitizerGuard guard2(
+                instant2,
+                /*localHostNameOverride*/
+                TSharedRef::FromString("<host-override>"));
 
             auto error3 = TError("error3");
             checkSantizied(error3);

@@ -105,11 +105,6 @@ bool THistogramSnapshot::operator == (const THistogramSnapshot& other) const
     return Values == other.Values && Bounds == other.Bounds;
 }
 
-bool THistogramSnapshot::operator != (const THistogramSnapshot& other) const
-{
-    return !(*this == other);
-}
-
 ////////////////////////////////////////////////////////////////////////////////
 
 } // namespace NYT::NProfiling

@@ -101,8 +101,11 @@ namespace NKikimr::NTable::NPage {
 
             auto operator<=>(const TChild&) const = default;
 
-            TString ToString() const noexcept
-            {
+            TRowId GetNonErasedRowCount() const noexcept {
+                return RowCount - ErasedRowCount;
+            }
+
+            TString ToString() const noexcept {
                 return TStringBuilder() << "PageId: " << PageId << " RowCount: " << RowCount << " DataSize: " << DataSize << " ErasedRowCount: " << ErasedRowCount;
             }
         } Y_PACKED;
@@ -268,6 +271,11 @@ namespace NKikimr::NTable::NPage {
             return ReadUnaligned<NPage::TLabel>(Raw.data());
         }
 
+        bool IsShortChildFormat() const noexcept
+        {
+            return Header->IsShortChildFormat;
+        }
+
         bool IsFixedFormat() const noexcept
         {
             return Header->FixedKeySize != Header->MaxFixedKeySize;
@@ -293,23 +301,26 @@ namespace NKikimr::NTable::NPage {
             return GetCells<TCellsIter>(pos, columns);
         }
 
-        const TShortChild& GetShortChild(TRecIdx pos) const noexcept
+        const TShortChild* GetShortChildRef(TRecIdx pos) const noexcept
         {
-            if (Header->IsShortChildFormat) {
-                return *TDeref<const TShortChild>::At(Children, pos * sizeof(TShortChild));
-            } else {
-                return *TDeref<const TShortChild>::At(Children, pos * sizeof(TChild));
-            }
+            return TDeref<const TShortChild>::At(Children, 
+                pos * (Header->IsShortChildFormat ? sizeof(TShortChild) : sizeof(TChild)));
         }
 
-        TChild GetChild(TRecIdx pos) const noexcept
+        const TShortChild& GetShortChild(TRecIdx pos) const noexcept
         {
-            if (Header->IsShortChildFormat) {
-                const TShortChild* const shortChild = TDeref<const TShortChild>::At(Children, pos * sizeof(TShortChild));
-                return { shortChild->PageId, shortChild->RowCount, shortChild->DataSize, 0 };
-            } else {
-                return *TDeref<const TChild>::At(Children, pos * sizeof(TChild));
-            }
+            return *GetShortChildRef(pos);
+        }
+
+        const TChild* GetChildRef(TRecIdx pos) const noexcept
+        {
+            Y_DEBUG_ABORT_UNLESS(!Header->IsShortChildFormat, "GetShortChildRef should be used instead");
+            return TDeref<const TChild>::At(Children, pos * sizeof(TChild));
+        }
+
+        const TChild& GetChild(TRecIdx pos) const noexcept
+        {
+            return *GetChildRef(pos);
         }
 
         static bool Has(TRowId rowId, TRowId beginRowId, TRowId endRowId) noexcept {

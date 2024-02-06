@@ -289,6 +289,15 @@ struct Schema : NIceDb::Schema {
         using TColumns = TableColumns<Begin, End, OwnerId>;
     };
 
+    struct TabletAvailabilityRestrictions : Table<20> {
+        struct Node : Column<1, Schema::Node::ID::ColumnType> {};
+        struct TabletType : Column<2, NScheme::NTypeIds::Uint64> { using Type = TTabletTypes::EType;  };
+        struct MaxCount : Column<3, NScheme::NTypeIds::Uint64> {};
+
+        using TKey = TableKey<Node, TabletType>;
+        using TColumns = TableColumns<Node, TabletType, MaxCount>;
+    };
+
     using TTables = SchemaTables<
                                 State,
                                 Tablet,
@@ -303,7 +312,8 @@ struct Schema : NIceDb::Schema {
                                 Metrics,
                                 SubDomain,
                                 BlockedOwner,
-                                TabletOwners
+                                TabletOwners,
+                                TabletAvailabilityRestrictions
                                 >;
     using TSettings = SchemaSettings<
                                     ExecutorLogBatching<true>,

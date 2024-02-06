@@ -265,7 +265,7 @@ public:
 
     const TSnapshot& GetRequestSnapshot() const { return RequestSnapshot; }
 
-    std::optional<std::string> GetColumnNameDef(const ui32 columnId) const { 
+    std::optional<std::string> GetColumnNameDef(const ui32 columnId) const {
         if (!ResultIndexSchema) {
             return {};
         }
@@ -274,6 +274,17 @@ public:
             return {};
         }
         return f->name();
+    }
+
+    std::optional<std::string> GetEntityName(const ui32 entityId) const {
+        if (!ResultIndexSchema) {
+            return {};
+        }
+        auto result = ResultIndexSchema->GetIndexInfo().GetColumnNameOptional(entityId);
+        if (!!result) {
+            return result;
+        }
+        return ResultIndexSchema->GetIndexInfo().GetIndexNameOptional(entityId);
     }
 
     explicit TReadStatsMetadata(ui64 tabletId, const ESorting sorting, const TProgramContainer& ssaProgram, const std::shared_ptr<ISnapshotSchema>& schema, const TSnapshot& requestSnapshot)

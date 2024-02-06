@@ -178,11 +178,65 @@ bool NeedSnapshot(const TKqpTransactionContext& txCtx, const NYql::TKikimrConfig
     return readPhases > 1;
 }
 
-bool HasOlapTableInTx(const NKqpProto::TKqpPhyQuery& physicalQuery) {
+bool HasOlapTableReadInTx(const NKqpProto::TKqpPhyQuery& physicalQuery) {
     for (const auto &tx : physicalQuery.GetTransactions()) {
         for (const auto &stage : tx.GetStages()) {
             for (const auto &tableOp : stage.GetTableOps()) {
                 if (tableOp.GetTypeCase() == NKqpProto::TKqpPhyTableOperation::kReadOlapRange) {
+                    return true;
+                }
+            }
+        }
+    }
+    return false;
+}
+
+bool HasOlapTableWriteInTx(const NKqpProto::TKqpPhyQuery& physicalQuery) {
+    for (const auto &tx : physicalQuery.GetTransactions()) {
+        for (const auto &stage : tx.GetStages()) {
+            for (const auto& sink : stage.GetSinks()) {
+                if (sink.GetTypeCase() == NKqpProto::TKqpSink::kInternalSink) {
+                    return true;
+                }
+            }
+        }
+    }
+    return false;
+}
+
+bool HasOltpTableReadInTx(const NKqpProto::TKqpPhyQuery& physicalQuery) {
+    for (const auto &tx : physicalQuery.GetTransactions()) {
+        for (const auto &stage : tx.GetStages()) {
+            for (const auto &source : stage.GetSources()) {
+                if (source.GetTypeCase() == NKqpProto::TKqpSource::kReadRangesSource){
+                    return true;
+                }
+            }
+            for (const auto &tableOp : stage.GetTableOps()) {
+                switch (tableOp.GetTypeCase()) {
+                    case NKqpProto::TKqpPhyTableOperation::kReadRange:
+                    case NKqpProto::TKqpPhyTableOperation::kLookup:
+                    case NKqpProto::TKqpPhyTableOperation::kReadRanges:
+                        return true;
+                    case NKqpProto::TKqpPhyTableOperation::kReadOlapRange:
+                    case NKqpProto::TKqpPhyTableOperation::kUpsertRows:
+                    case NKqpProto::TKqpPhyTableOperation::kDeleteRows:
+                        break;
+                    default:
+                        YQL_ENSURE(false, "unexpected type");
+                }
+            }
+        }
+    }
+    return false;
+}
+
+bool HasOltpTableWriteInTx(const NKqpProto::TKqpPhyQuery& physicalQuery) {
+    for (const auto &tx : physicalQuery.GetTransactions()) {
+        for (const auto &stage : tx.GetStages()) {
+            for (const auto &tableOp : stage.GetTableOps()) {
+                if (tableOp.GetTypeCase() == NKqpProto::TKqpPhyTableOperation::kUpsertRows
+                    || tableOp.GetTypeCase() == NKqpProto::TKqpPhyTableOperation::kDeleteRows) {
                     return true;
                 }
             }

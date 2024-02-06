@@ -150,3 +150,501 @@ SELECT 'tricky' AS U&"\" UESCAPE '!';
 (1 row)
 
 RESET standard_conforming_strings;
+-- bytea
+SET bytea_output TO hex;
+SELECT E'\\xDeAdBeEf'::bytea;
+   bytea    
+------------
+ \xdeadbeef
+(1 row)
+
+SELECT E'\\x De Ad Be Ef '::bytea;
+   bytea    
+------------
+ \xdeadbeef
+(1 row)
+
+SELECT E'\\xDeAdBeE'::bytea;
+ERROR:  invalid hexadecimal data: odd number of digits
+LINE 1: SELECT E'\\xDeAdBeE'::bytea;
+               ^
+SELECT E'\\xDeAdBeEx'::bytea;
+ERROR:  invalid hexadecimal digit: "x"
+LINE 1: SELECT E'\\xDeAdBeEx'::bytea;
+               ^
+SELECT E'\\xDe00BeEf'::bytea;
+   bytea    
+------------
+ \xde00beef
+(1 row)
+
+SELECT E'DeAdBeEf'::bytea;
+       bytea        
+--------------------
+ \x4465416442654566
+(1 row)
+
+SELECT E'De\\000dBeEf'::bytea;
+       bytea        
+--------------------
+ \x4465006442654566
+(1 row)
+
+SELECT E'De\123dBeEf'::bytea;
+       bytea        
+--------------------
+ \x4465536442654566
+(1 row)
+
+SELECT E'De\\123dBeEf'::bytea;
+       bytea        
+--------------------
+ \x4465536442654566
+(1 row)
+
+SELECT E'De\\678dBeEf'::bytea;
+ERROR:  invalid input syntax for type bytea
+LINE 1: SELECT E'De\\678dBeEf'::bytea;
+               ^
+SET bytea_output TO escape;
+SELECT E'\\xDeAdBeEf'::bytea;
+      bytea       
+------------------
+ \336\255\276\357
+(1 row)
+
+SELECT E'\\x De Ad Be Ef '::bytea;
+      bytea       
+------------------
+ \336\255\276\357
+(1 row)
+
+SELECT E'\\xDe00BeEf'::bytea;
+      bytea       
+------------------
+ \336\000\276\357
+(1 row)
+
+SELECT E'DeAdBeEf'::bytea;
+  bytea   
+----------
+ DeAdBeEf
+(1 row)
+
+SELECT E'De\\000dBeEf'::bytea;
+    bytea    
+-------------
+ De\000dBeEf
+(1 row)
+
+SELECT E'De\\123dBeEf'::bytea;
+  bytea   
+----------
+ DeSdBeEf
+(1 row)
+
+SELECT CAST(name 'namefield' AS text) AS "text(name)";
+ text(name) 
+------------
+ namefield
+(1 row)
+
+SELECT CAST(name 'namefield' AS char(10)) AS "char(name)";
+ char(name) 
+------------
+ namefield 
+(1 row)
+
+SELECT CAST(name 'namefield' AS varchar) AS "varchar(name)";
+ varchar(name) 
+---------------
+ namefield
+(1 row)
+
+--
+-- test SQL string functions
+-- E### and T### are feature reference numbers from SQL99
+--
+-- E021-09 trim function
+SELECT TRIM(BOTH FROM '  bunch o blanks  ') = 'bunch o blanks' AS "bunch o blanks";
+ bunch o blanks 
+----------------
+ t
+(1 row)
+
+SELECT TRIM(LEADING FROM '  bunch o blanks  ') = 'bunch o blanks  ' AS "bunch o blanks  ";
+ bunch o blanks   
+------------------
+ t
+(1 row)
+
+SELECT TRIM(TRAILING FROM '  bunch o blanks  ') = '  bunch o blanks' AS "  bunch o blanks";
+   bunch o blanks 
+------------------
+ t
+(1 row)
+
+SELECT TRIM(BOTH 'x' FROM 'xxxxxsome Xsxxxxx') = 'some Xs' AS "some Xs";
+ some Xs 
+---------
+ t
+(1 row)
+
+-- E021-06 substring expression
+SELECT SUBSTRING('1234567890' FROM 3) = '34567890' AS "34567890";
+ 34567890 
+----------
+ t
+(1 row)
+
+SELECT SUBSTRING('1234567890' FROM 4 FOR 3) = '456' AS "456";
+ 456 
+-----
+ t
+(1 row)
+
+-- test overflow cases
+SELECT SUBSTRING('string' FROM 2 FOR 2147483646) AS "tring";
+ tring 
+-------
+ tring
+(1 row)
+
+SELECT SUBSTRING('string' FROM -10 FOR 2147483646) AS "string";
+ string 
+--------
+ string
+(1 row)
+
+SELECT SUBSTRING('string' FROM -10 FOR -2147483646) AS "error";
+ERROR:  negative substring length not allowed
+SELECT SUBSTRING(NULL SIMILAR '%' ESCAPE '#') IS NULL AS "True";
+ True 
+------
+ t
+(1 row)
+
+SELECT SUBSTRING('abcdefg' SIMILAR NULL ESCAPE '#') IS NULL AS "True";
+ True 
+------
+ t
+(1 row)
+
+-- substring() with just two arguments is not allowed by SQL spec;
+-- we accept it, but we interpret the pattern as a POSIX regexp not SQL
+SELECT SUBSTRING('abcdefg' FROM 'c.e') AS "cde";
+ cde 
+-----
+ cde
+(1 row)
+
+-- With a parenthesized subexpression, return only what matches the subexpr
+SELECT SUBSTRING('abcdefg' FROM 'b(.*)f') AS "cde";
+ cde 
+-----
+ cde
+(1 row)
+
+-- Test back reference in regexp_replace
+SELECT regexp_replace('1112223333', E'(\\d{3})(\\d{3})(\\d{4})', E'(\\1) \\2-\\3');
+ regexp_replace 
+----------------
+ (111) 222-3333
+(1 row)
+
+SELECT regexp_replace('AAA   BBB   CCC   ', E'\\s+', ' ', 'g');
+ regexp_replace 
+----------------
+ AAA BBB CCC 
+(1 row)
+
+SELECT regexp_replace('AAA', '^|$', 'Z', 'g');
+ regexp_replace 
+----------------
+ ZAAAZ
+(1 row)
+
+SELECT regexp_replace('AAA aaa', 'A+', 'Z', 'gi');
+ regexp_replace 
+----------------
+ Z Z
+(1 row)
+
+-- invalid regexp option
+SELECT regexp_replace('AAA aaa', 'A+', 'Z', 'z');
+ERROR:  invalid regular expression option: "z"
+-- set so we can tell NULL from empty string
+\pset null '\\N'
+-- split string on regexp
+SELECT foo, length(foo) FROM regexp_split_to_table('the quick brown fox jumps over the lazy dog', $re$\s+$re$) AS foo;
+  foo  | length 
+-------+--------
+ the   |      3
+ quick |      5
+ brown |      5
+ fox   |      3
+ jumps |      5
+ over  |      4
+ the   |      3
+ lazy  |      4
+ dog   |      3
+(9 rows)
+
+SELECT regexp_split_to_array('the quick brown fox jumps over the lazy dog', $re$\s+$re$);
+             regexp_split_to_array             
+-----------------------------------------------
+ {the,quick,brown,fox,jumps,over,the,lazy,dog}
+(1 row)
+
+SELECT foo, length(foo) FROM regexp_split_to_table('the quick brown fox jumps over the lazy dog', $re$\s*$re$) AS foo;
+ foo | length 
+-----+--------
+ t   |      1
+ h   |      1
+ e   |      1
+ q   |      1
+ u   |      1
+ i   |      1
+ c   |      1
+ k   |      1
+ b   |      1
+ r   |      1
+ o   |      1
+ w   |      1
+ n   |      1
+ f   |      1
+ o   |      1
+ x   |      1
+ j   |      1
+ u   |      1
+ m   |      1
+ p   |      1
+ s   |      1
+ o   |      1
+ v   |      1
+ e   |      1
+ r   |      1
+ t   |      1
+ h   |      1
+ e   |      1
+ l   |      1
+ a   |      1
+ z   |      1
+ y   |      1
+ d   |      1
+ o   |      1
+ g   |      1
+(35 rows)
+
+SELECT regexp_split_to_array('the quick brown fox jumps over the lazy dog', $re$\s*$re$);
+                          regexp_split_to_array                          
+-------------------------------------------------------------------------
+ {t,h,e,q,u,i,c,k,b,r,o,w,n,f,o,x,j,u,m,p,s,o,v,e,r,t,h,e,l,a,z,y,d,o,g}
+(1 row)
+
+SELECT foo, length(foo) FROM regexp_split_to_table('the quick brown fox jumps over the lazy dog', '') AS foo;
+ foo | length 
+-----+--------
+ t   |      1
+ h   |      1
+ e   |      1
+     |      1
+ q   |      1
+ u   |      1
+ i   |      1
+ c   |      1
+ k   |      1
+     |      1
+ b   |      1
+ r   |      1
+ o   |      1
+ w   |      1
+ n   |      1
+     |      1
+ f   |      1
+ o   |      1
+ x   |      1
+     |      1
+ j   |      1
+ u   |      1
+ m   |      1
+ p   |      1
+ s   |      1
+     |      1
+ o   |      1
+ v   |      1
+ e   |      1
+ r   |      1
+     |      1
+ t   |      1
+ h   |      1
+ e   |      1
+     |      1
+ l   |      1
+ a   |      1
+ z   |      1
+ y   |      1
+     |      1
+ d   |      1
+ o   |      1
+ g   |      1
+(43 rows)
+
+-- case insensitive
+SELECT foo, length(foo) FROM regexp_split_to_table('thE QUick bROWn FOx jUMPs ovEr The lazy dOG', 'e', 'i') AS foo;
+            foo            | length 
+---------------------------+--------
+ th                        |      2
+  QUick bROWn FOx jUMPs ov |     25
+ r Th                      |      4
+  lazy dOG                 |      9
+(4 rows)
+
+SELECT regexp_split_to_array('thE QUick bROWn FOx jUMPs ovEr The lazy dOG', 'e', 'i');
+                regexp_split_to_array                
+-----------------------------------------------------
+ {th," QUick bROWn FOx jUMPs ov","r Th"," lazy dOG"}
+(1 row)
+
+-- no match of pattern
+SELECT foo, length(foo) FROM regexp_split_to_table('the quick brown fox jumps over the lazy dog', 'nomatch') AS foo;
+                     foo                     | length 
+---------------------------------------------+--------
+ the quick brown fox jumps over the lazy dog |     43
+(1 row)
+
+SELECT regexp_split_to_array('the quick brown fox jumps over the lazy dog', 'nomatch');
+              regexp_split_to_array              
+-------------------------------------------------
+ {"the quick brown fox jumps over the lazy dog"}
+(1 row)
+
+-- some corner cases
+SELECT regexp_split_to_array('123456','1');
+ regexp_split_to_array 
+-----------------------
+ {"",23456}
+(1 row)
+
+SELECT regexp_split_to_array('123456','6');
+ regexp_split_to_array 
+-----------------------
+ {12345,""}
+(1 row)
+
+SELECT regexp_split_to_array('123456','.');
+ regexp_split_to_array  
+------------------------
+ {"","","","","","",""}
+(1 row)
+
+SELECT regexp_split_to_array('123456','');
+ regexp_split_to_array 
+-----------------------
+ {1,2,3,4,5,6}
+(1 row)
+
+SELECT regexp_split_to_array('123456','(?:)');
+ regexp_split_to_array 
+-----------------------
+ {1,2,3,4,5,6}
+(1 row)
+
+SELECT regexp_split_to_array('1','');
+ regexp_split_to_array 
+-----------------------
+ {1}
+(1 row)
+
+-- errors
+SELECT foo, length(foo) FROM regexp_split_to_table('thE QUick bROWn FOx jUMPs ovEr The lazy dOG', 'e', 'zippy') AS foo;
+ERROR:  invalid regular expression option: "z"
+SELECT regexp_split_to_array('thE QUick bROWn FOx jUMPs ovEr The lazy dOG', 'e', 'iz');
+ERROR:  invalid regular expression option: "z"
+-- global option meaningless for regexp_split
+SELECT foo, length(foo) FROM regexp_split_to_table('thE QUick bROWn FOx jUMPs ovEr The lazy dOG', 'e', 'g') AS foo;
+ERROR:  regexp_split_to_table() does not support the "global" option
+SELECT regexp_split_to_array('thE QUick bROWn FOx jUMPs ovEr The lazy dOG', 'e', 'g');
+ERROR:  regexp_split_to_array() does not support the "global" option
+-- change NULL-display back
+\pset null ''
+-- E021-11 position expression
+SELECT POSITION('4' IN '1234567890') = '4' AS "4";
+ 4 
+---
+ t
+(1 row)
+
+SELECT POSITION('5' IN '1234567890') = '5' AS "5";
+ 5 
+---
+ t
+(1 row)
+
+-- T312 character overlay function
+SELECT OVERLAY('abcdef' PLACING '45' FROM 4) AS "abc45f";
+ abc45f 
+--------
+ abc45f
+(1 row)
+
+SELECT OVERLAY('yabadoo' PLACING 'daba' FROM 5) AS "yabadaba";
+ yabadaba 
+----------
+ yabadaba
+(1 row)
+
+SELECT OVERLAY('yabadoo' PLACING 'daba' FROM 5 FOR 0) AS "yabadabadoo";
+ yabadabadoo 
+-------------
+ yabadabadoo
+(1 row)
+
+SELECT OVERLAY('babosa' PLACING 'ubb' FROM 2 FOR 4) AS "bubba";
+ bubba 
+-------
+ bubba
+(1 row)
+
+--
+-- test LIKE
+-- Be sure to form every test as a LIKE/NOT LIKE pair.
+--
+-- simplest examples
+-- E061-04 like predicate
+SELECT 'hawkeye' LIKE 'h%' AS "true";
+ true 
+------
+ t
+(1 row)
+
+SELECT 'hawkeye' NOT LIKE 'h%' AS "false";
+ false 
+-------
+ f
+(1 row)
+
+SELECT 'hawkeye' LIKE 'H%' AS "false";
+ false 
+-------
+ f
+(1 row)
+
+SELECT 'hawkeye' NOT LIKE 'H%' AS "true";
+ true 
+------
+ t
+(1 row)
+
+SELECT 'hawkeye' LIKE 'indio%' AS "false";
+ false 
+-------
+ f
+(1 row)
+
+SELECT 'hawkeye' NOT LIKE 'indio%' AS "true";
+ true 
+------
+ t
+(1 row)
+

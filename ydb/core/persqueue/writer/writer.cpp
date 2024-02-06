@@ -1,3 +1,4 @@
+#include "common.h"
 #include "source_id_encoding.h"
 #include "util/generic/fwd.h"
 #include "writer.h"
@@ -127,27 +128,6 @@ class TPartitionWriter: public TActorBootstrapped<TPartitionWriter>, private TRl
         FillHeader(*ev->Record.MutablePartitionRequest(), std::forward<Args>(args)...);
 
         return ev;
-    }
-
-    static bool BasicCheck(const NKikimrClient::TResponse& response, TString& error, bool mustHaveResponse = true) {
-        if (response.GetStatus() != NMsgBusProxy::MSTATUS_OK) {
-            error = TStringBuilder() << "Status is not ok"
-                << ": status# " << static_cast<ui32>(response.GetStatus());
-            return false;
-        }
-
-        if (response.GetErrorCode() != NPersQueue::NErrorCode::OK) {
-            error = TStringBuilder() << "Error code is not ok"
-                << ": code# " << static_cast<ui32>(response.GetErrorCode());
-            return false;
-        }
-
-        if (mustHaveResponse && !response.HasPartitionResponse()) {
-            error = "Absent partition response";
-            return false;
-        }
-
-        return true;
     }
 
     static NKikimrClient::TResponse MakeResponse(ui64 cookie) {
@@ -326,6 +306,10 @@ class TPartitionWriter: public TActorBootstrapped<TPartitionWriter>, private TRl
             return InitResult("Absent Ownership result", std::move(record));
         }
 
+        if (NKikimrPQ::ETopicPartitionStatus::Active != response.GetCmdGetOwnershipResult().GetStatus()) {
+            return InitResult("Partition is inactive", std::move(record));
+        }
+
         OwnerCookie = response.GetCmdGetOwnershipResult().GetOwnerCookie();
         GetMaxSeqNo();
     }
@@ -359,17 +343,17 @@ class TPartitionWriter: public TActorBootstrapped<TPartitionWriter>, private TRl
             return InitResult(error, std::move(record));
         }
 
-        const auto& response = record.GetPartitionResponse();
+        auto& response = *record.MutablePartitionResponse();
         if (!response.HasCmdGetMaxSeqNoResult()) {
             return InitResult("Absent MaxSeqNo result", std::move(record));
         }
 
-        const auto& result = response.GetCmdGetMaxSeqNoResult();
+        auto& result = *response.MutableCmdGetMaxSeqNoResult();
         if (result.SourceIdInfoSize() < 1) {
             return InitResult("Empty source id info", std::move(record));
         }
 
-        const auto& sourceIdInfo = result.GetSourceIdInfo(0);
+        auto& sourceIdInfo = *result.MutableSourceIdInfo(0);
         if (Opts.CheckState) {
             switch (sourceIdInfo.GetState()) {
             case NKikimrPQ::TMessageGroupInfo::STATE_REGISTERED:
@@ -384,6 +368,11 @@ class TPartitionWriter: public TActorBootstrapped<TPartitionWriter>, private TRl
             default:
                 return InitResult("Unknown source state", std::move(record));
             }
+        }
+
+        Y_VERIFY(sourceIdInfo.GetSeqNo() >= 0);
+        if (Opts.InitialSeqNo && (ui64)sourceIdInfo.GetSeqNo() < Opts.InitialSeqNo.value()) {
+            sourceIdInfo.SetSeqNo(Opts.InitialSeqNo.value());
         }
 
         InitResult(OwnerCookie, sourceIdInfo, WriteId);
@@ -625,12 +614,16 @@ class TPartitionWriter: public TActorBootstrapped<TPartitionWriter>, private TRl
 
         auto& request = *ev->Record.MutablePartitionRequest();
         request.SetMessageNo(MessageNo++);
+        if (Opts.InitialSeqNo) {
+            request.SetInitialSeqNo(Opts.InitialSeqNo.value());
+        }
 
         SetWriteId(request);
 
         if (!Opts.UseDeduplication) {
             request.SetPartition(PartitionId);
         }
+
         NTabletPipe::SendData(SelfId(), PipeClient, ev.Release());
 
         PendingWrite.emplace_back(cookie);

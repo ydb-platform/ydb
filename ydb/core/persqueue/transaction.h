@@ -48,6 +48,7 @@ struct TDistributedTransaction {
     THashSet<ui64> Senders;        // список отправителей TEvReadSet
     THashSet<ui64> Receivers;      // список получателей TEvReadSet
     TVector<NKikimrPQ::TPartitionOperation> Operations;
+    TMaybe<ui64> WriteId;
 
     EDecision SelfDecision = NKikimrTx::TReadSetData::DECISION_UNKNOWN;
     EDecision ParticipantsDecision = NKikimrTx::TReadSetData::DECISION_UNKNOWN;

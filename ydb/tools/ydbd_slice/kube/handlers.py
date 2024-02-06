@@ -2,13 +2,13 @@ import re
 import os
 import sys
 import logging
-
+import time
 
 from collections import defaultdict
 from kubernetes.client import Configuration
 
 from ydb.tools.ydbd_slice import nodes, handlers
-from ydb.tools.ydbd_slice.kube import api, kubectl, yaml, generate, cms
+from ydb.tools.ydbd_slice.kube import api, kubectl, yaml, generate, cms, dynconfig
 
 
 logger = logging.getLogger(__name__)
@@ -148,6 +148,13 @@ def get_nodes(api_client, project_path, manifests):
     return node_list
 
 
+def get_domain(api_client, project_path, manifests):
+    for (_, _, kind, _, _, data) in manifests:
+        if kind != 'storage':
+            continue
+        return data['spec']['domain']
+
+
 def manifests_ydb_set_image(project_path, manifests, image):
     for (path, api_version, kind, namespace, name, data) in manifests:
         if not (kind in ['storage', 'database'] and api_version in ['ydb.tech/v1alpha1']):
@@ -245,9 +252,20 @@ def slice_nodeclaim_delete(api_client, project_path, manifests):
             sys.exit(e.args[0])
 
 
+def wait_for_storage(api_client, project_path, manifests):
+    for (path, api_version, kind, namespace, name, data) in manifests:
+        if not (kind in ['storage'] and api_version in ['ydb.tech/v1alpha1']):
+            continue
+        namespace = data['metadata']['namespace']
+        name = data['metadata']['name']
+        try:
+            api.wait_storage_state_ready(api_client, namespace, name)
+        except TimeoutError as e:
+            sys.exit(e.args[0])
+
 #
 # macro level ydb functions
-def slice_ydb_apply(api_client, project_path, manifests):
+def slice_ydb_apply(api_client, project_path, manifests, dynamic_config_type):
     # process storages first
     for (path, api_version, kind, namespace, name, data) in manifests:
         if not (kind in ['storage', 'database'] and api_version in ['ydb.tech/v1alpha1']):
@@ -264,28 +282,36 @@ def slice_ydb_apply(api_client, project_path, manifests):
             data['spec'] = new_data['spec']
             update_manifest(path, data)
 
-    config_items = cms.get_from_files(project_path)
-    if config_items is not None:
-        logger.debug(
-            f'found {len(config_items)} legacy cms config items, '
-            'need to wait for storage to become ready to apply configs'
-        )
-        # if configs present, then wait for storage
-        for (path, api_version, kind, namespace, name, data) in manifests:
-            if not (kind in ['storage'] and api_version in ['ydb.tech/v1alpha1']):
-                continue
-            namespace = data['metadata']['namespace']
-            name = data['metadata']['name']
-            try:
-                api.wait_storage_state_ready(api_client, namespace, name)
-            except TimeoutError as e:
-                sys.exit(e.args[0])
+    if dynamic_config_type in ['both', 'yaml']:
+        local_config = dynconfig.get_local_config(project_path)
+        if local_config is not None:
+            wait_for_storage(api_client, project_path, manifests)
 
-        # and apply configs
-        node_list = get_nodes(api_client, project_path, manifests)
-        if len(node_list) == 0:
-            raise RuntimeError('no nodes found, cannot apply legacy cms config items.')
-        cms.apply_legacy_cms_config_items(config_items, [f'grpc://{i}:2135' for i in node_list])
+            node_list = get_nodes(api_client, project_path, manifests)
+            domain = get_domain(api_client, project_path, manifests)
+
+            with dynconfig.Client(node_list, domain) as dynconfig_client:
+                remote_config = dynconfig.get_remote_config(dynconfig_client)
+
+                if remote_config is None or remote_config != local_config:
+                    new_config = dynconfig.apply_config(dynconfig_client, project_path)
+                    dynconfig.write_local_config(project_path, new_config)
+
+    if dynamic_config_type in ['both', 'proto']:
+        config_items = cms.get_from_files(project_path)
+        if config_items is not None:
+            logger.debug(
+                f'found {len(config_items)} legacy cms config items, '
+                'need to wait for storage to become ready to apply configs'
+            )
+            # if configs present, then wait for storage
+            wait_for_storage(api_client, project_path, manifests)
+
+            # and apply configs
+            node_list = get_nodes(api_client, project_path, manifests)
+            if len(node_list) == 0:
+                raise RuntimeError('no nodes found, cannot apply legacy cms config items.')
+            cms.apply_legacy_cms_config_items(config_items, [f'grpc://{i}:2135' for i in node_list])
 
     # process databases later
     for (path, api_version, kind, namespace, name, data) in manifests:
@@ -432,7 +458,7 @@ def slice_generate(project_path, user, slice_name, template, template_vars):
         sys.exit(f'Slice template {template} not implemented.')
 
 
-def slice_install(project_path, manifests, wait_ready):
+def slice_install(project_path, manifests, wait_ready, dynamic_config_type):
     with api.ApiClient() as api_client:
         slice_namespace_apply(api_client, project_path, manifests)
         slice_nodeclaim_apply(api_client, project_path, manifests)
@@ -440,15 +466,15 @@ def slice_install(project_path, manifests, wait_ready):
         slice_ydb_delete(api_client, project_path, manifests)
         slice_ydb_storage_wait_pods_deleted(api_client, project_path, manifests)
         slice_nodeclaim_format(api_client, project_path, manifests)
-        slice_ydb_apply(api_client, project_path, manifests)
+        slice_ydb_apply(api_client, project_path, manifests, dynamic_config_type)
         slice_ydb_wait_ready(api_client, project_path, manifests, wait_ready)
 
 
-def slice_update(project_path, manifests, wait_ready):
+def slice_update(project_path, manifests, wait_ready, dynamic_config_type):
     with api.ApiClient() as api_client:
         slice_nodeclaim_apply(api_client, project_path, manifests)
         slice_nodeclaim_wait_ready(api_client, project_path, manifests)
-        slice_ydb_apply(api_client, project_path, manifests)
+        slice_ydb_apply(api_client, project_path, manifests, dynamic_config_type)
         slice_ydb_restart(api_client, project_path, manifests)
         slice_ydb_wait_ready(api_client, project_path, manifests, wait_ready)
 
@@ -458,9 +484,9 @@ def slice_stop(project_path, manifests):
         slice_ydb_delete(api_client, project_path, manifests)
 
 
-def slice_start(project_path, manifests, wait_ready):
+def slice_start(project_path, manifests, wait_ready, dynamic_config_type):
     with api.ApiClient() as api_client:
-        slice_ydb_apply(api_client, project_path, manifests)
+        slice_ydb_apply(api_client, project_path, manifests, dynamic_config_type)
         slice_ydb_wait_ready(api_client, project_path, manifests, wait_ready)
 
 
@@ -474,12 +500,12 @@ def slice_nodes(project_path, manifests):
         slice_nodeclaim_nodes(api_client, project_path, manifests)
 
 
-def slice_format(project_path, manifests, wait_ready):
+def slice_format(project_path, manifests, wait_ready, dynamic_config_type):
     with api.ApiClient() as api_client:
         slice_ydb_delete(api_client, project_path, manifests)
         slice_ydb_storage_wait_pods_deleted(api_client, project_path, manifests)
         slice_nodeclaim_format(api_client, project_path, manifests)
-        slice_ydb_apply(api_client, project_path, manifests)
+        slice_ydb_apply(api_client, project_path, manifests, dynamic_config_type)
         slice_ydb_wait_ready(api_client, project_path, manifests, wait_ready)
 
 

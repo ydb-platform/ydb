@@ -1,20 +1,28 @@
 GO_LIBRARY()
-
-SRCS(
-    gunzip.go
-    gzip.go
-)
-
-GO_TEST_SRCS(
-    fuzz_test.go
-    gunzip_test.go
-    gzip_test.go
-    issue14937_test.go
-)
-
-GO_XTEST_SRCS(example_test.go)
-
+IF (OS_DARWIN AND ARCH_ARM64)
+    SRCS(
+		gunzip.go
+		gzip.go
+    )
+ELSEIF (OS_DARWIN AND ARCH_X86_64)
+    SRCS(
+		gunzip.go
+		gzip.go
+    )
+ELSEIF (OS_LINUX AND ARCH_AARCH64)
+    SRCS(
+		gunzip.go
+		gzip.go
+    )
+ELSEIF (OS_LINUX AND ARCH_X86_64)
+    SRCS(
+		gunzip.go
+		gzip.go
+    )
+ELSEIF (OS_WINDOWS AND ARCH_X86_64)
+    SRCS(
+		gunzip.go
+		gzip.go
+    )
+ENDIF()
 END()
-
-RECURSE(
-)

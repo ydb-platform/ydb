@@ -52,7 +52,7 @@ bool TDataShard::TTxWrite::Execute(TTransactionContext& txc, const TActorContext
                 LOG_LOG_S_THROTTLE(Self->GetLogThrottler(TDataShard::ELogThrottlerType::TxProposeTransactionBase_Execute), ctx, NActors::NLog::PRI_ERROR, NKikimrServices::TX_DATASHARD, 
                     "TTxWrite:: errors while proposing transaction txid " << TxId << " at tablet " << Self->TabletID() << " status: " << status << " error: " << errMessage);
 
-                auto result = NEvents::TDataEvents::TEvWriteResult::BuildError(Self->TabletID(), TxId, NKikimrDataEvents::TEvWriteResult::STATUS_INTERNAL_ERROR, errMessage);
+                auto result = NEvents::TDataEvents::TEvWriteResult::BuildError(Self->TabletID(), TxId, NKikimrDataEvents::TEvWriteResult::STATUS_SCHEME_CHANGED, errMessage);
 
                 TActorId target = Op ? Op->GetTarget() : Ev->Sender;
                 ui64 cookie = Op ? Op->GetCookie() : Ev->Cookie;
@@ -275,6 +275,21 @@ NKikimrTxDataShard::TEvProposeTransactionResult::EStatus EvWrite::Convertor::Get
             return NKikimrTxDataShard::TEvProposeTransactionResult::PREPARED;
         default:
             return NKikimrTxDataShard::TEvProposeTransactionResult::ERROR;
+    }
+}
+
+NKikimrDataEvents::TEvWriteResult::EStatus EvWrite::Convertor::ConvertErrCode(NKikimrTxDataShard::TError::EKind code) {
+    switch (code) {
+        case NKikimrTxDataShard::TError_EKind_OK:
+            return NKikimrDataEvents::TEvWriteResult::STATUS_COMPLETED;
+        case NKikimrTxDataShard::TError_EKind_BAD_ARGUMENT:
+        case NKikimrTxDataShard::TError_EKind_SCHEME_ERROR:
+        case NKikimrTxDataShard::TError_EKind_WRONG_PAYLOAD_TYPE:
+            return NKikimrDataEvents::TEvWriteResult::STATUS_BAD_REQUEST;
+        case NKikimrTxDataShard::TError_EKind_SCHEME_CHANGED:
+            return NKikimrDataEvents::TEvWriteResult::STATUS_SCHEME_CHANGED;
+        default:
+            return NKikimrDataEvents::TEvWriteResult::STATUS_INTERNAL_ERROR;
     }
 }
 }

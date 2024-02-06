@@ -153,7 +153,7 @@ public:
         Y_UNUSED(status);
     };
 
-    void SendSerializedResult(TString&& in, Ydb::StatusIds::StatusCode status) override {
+    void SendSerializedResult(TString&& in, Ydb::StatusIds::StatusCode status, EStreamCtrl) override {
         Y_UNUSED(in);
         Y_UNUSED(status);
     };

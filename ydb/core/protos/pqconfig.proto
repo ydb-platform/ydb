@@ -936,32 +936,15 @@ message TEvSubDomainStatus {
     required bool SubDomainOutOfSpace = 1;
 };
 
-message TEvSourceIdRequest {
+message TEvCheckPartitionStatusRequest {
     optional uint32 Partition = 1;
-    repeated string SourceId = 2;
+    optional string SourceId = 2;
 };
 
-message TEvSourceIdResponse {
-    enum EState {
-        Unknown = 0;
-        Registered = 1;
-        PendingRegistration = 2;
-    };
-
-    message TSource {
-        optional string Id = 1;
-        optional EState State = 2;
-        optional uint64 SeqNo = 3;
-        optional uint64 Offset = 4;
-        optional bool Explicit = 5;
-        optional uint64 WriteTimestamp = 6;
-
-    };
-    optional string Error = 1;
-    optional uint32 Partition = 2;
-    repeated TSource Source = 3;
+message TEvCheckPartitionStatusResponse {
+    optional ETopicPartitionStatus Status = 1;
+    optional uint64 SeqNo = 2;
 };
-
 
 message TTransaction {
     enum EKind {

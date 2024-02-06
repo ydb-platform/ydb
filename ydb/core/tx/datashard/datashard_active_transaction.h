@@ -23,6 +23,7 @@ using NTabletFlatExecutor::TTransactionContext;
 using NTabletFlatExecutor::TTableSnapshotContext;
 
 class TDataShard;
+class TDataShardUserDb;
 class TSysLocks;
 struct TReadSetKey;
 class TActiveTransaction;
@@ -173,16 +174,15 @@ public:
     const NMiniKQL::TEngineHostCounters& GetCounters() { return EngineBay.GetCounters(); }
     void ResetCounters() { EngineBay.ResetCounters(); }
 
+    TDataShardUserDb& GetUserDb();
+    const TDataShardUserDb& GetUserDb() const;
+
     bool CanCancel();
     bool CheckCancelled(ui64 tabletId);
 
     void SetWriteVersion(TRowVersion writeVersion) { EngineBay.SetWriteVersion(writeVersion); }
     void SetReadVersion(TRowVersion readVersion) { EngineBay.SetReadVersion(readVersion); }
     void SetVolatileTxId(ui64 txId) { EngineBay.SetVolatileTxId(txId); }
-
-    void CommitChanges(const TTableId& tableId, ui64 lockId, const TRowVersion& writeVersion) {
-        EngineBay.CommitChanges(tableId, lockId, writeVersion);
-    }
 
     TVector<IDataShardChangeCollector::TChange> GetCollectedChanges() const { return EngineBay.GetCollectedChanges(); }
     void ResetCollectedChanges() { EngineBay.ResetCollectedChanges(); }

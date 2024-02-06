@@ -108,7 +108,9 @@ Y_UNIT_TEST_SUITE(Initializer) {
         ui32 grpcPort = pm.GetPort();
         ui32 msgbPort = pm.GetPort();
 
-        Tests::TServerSettings serverSettings(msgbPort);
+        NKikimrProto::TAuthConfig authConfig;
+        authConfig.SetUseBuiltinDomain(true);
+        Tests::TServerSettings serverSettings(msgbPort, authConfig);
         serverSettings.Port = msgbPort;
         serverSettings.GrpcPort = grpcPort;
         serverSettings.SetDomainName("Root")

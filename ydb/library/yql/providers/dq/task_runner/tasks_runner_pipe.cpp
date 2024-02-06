@@ -1394,8 +1394,8 @@ public:
         return AllocatedHolder->HolderFactory;
     }
 
-    std::shared_ptr<NMiniKQL::TScopedAlloc> GetAllocatorPtr() const {
-        return Alloc;
+    NMiniKQL::TScopedAlloc& GetAllocator() const {
+        return *Alloc.get();
     }
 
     const THashMap<TString, TString>& GetSecureParams() const override {
@@ -1697,8 +1697,8 @@ public:
         return Delegate->GetHolderFactory();
     }
 
-    std::shared_ptr<NKikimr::NMiniKQL::TScopedAlloc> GetAllocatorPtr() const override {
-        return Delegate->GetAllocatorPtr();
+    NKikimr::NMiniKQL::TScopedAlloc& GetAllocator() const override {
+        return Delegate->GetAllocator();
     }
 
     const THashMap<TString, TString>& GetSecureParams() const override {
@@ -1881,7 +1881,8 @@ public:
         TaskScheduler.Start();
     }
 
-    ITaskRunner::TPtr GetOld(const NDq::TDqTaskSettings& tmp, const TString& traceId) override {
+    ITaskRunner::TPtr GetOld(NKikimr::NMiniKQL::TScopedAlloc& alloc, const NDq::TDqTaskSettings& tmp, const TString& traceId) override {
+        Y_UNUSED(alloc);
         Yql::DqsProto::TTaskMeta taskMeta;
         tmp.GetMeta().UnpackTo(&taskMeta);
         ui64 stageId = taskMeta.GetStageId();
@@ -1890,9 +1891,10 @@ public:
         return new TTaskRunner(task, std::move(result), stageId, traceId);
     }
 
-    TIntrusivePtr<NDq::IDqTaskRunner> Get(const NDq::TDqTaskSettings& tmp, NDqProto::EDqStatsMode statsMode, const TString& traceId) override
+    TIntrusivePtr<NDq::IDqTaskRunner> Get(NKikimr::NMiniKQL::TScopedAlloc& alloc, const NDq::TDqTaskSettings& tmp, NDqProto::EDqStatsMode statsMode, const TString& traceId) override
     {
         Y_UNUSED(statsMode);
+        Y_UNUSED(alloc);
         Yql::DqsProto::TTaskMeta taskMeta;
         tmp.GetMeta().UnpackTo(&taskMeta);
 

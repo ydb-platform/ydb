@@ -1,15 +1,28 @@
 GO_LIBRARY()
-
-SRCS(
-    embed.go
-)
-
-GO_XTEST_SRCS(example_test.go)
-
-GO_XTEST_EMBED_PATTERN(internal/embedtest/testdata/*.txt)
-
+IF (OS_DARWIN AND ARCH_ARM64)
+    SRCS(
+		embed.go
+    )
+ELSEIF (OS_DARWIN AND ARCH_X86_64)
+    SRCS(
+		embed.go
+    )
+ELSEIF (OS_LINUX AND ARCH_AARCH64)
+    SRCS(
+		embed.go
+    )
+ELSEIF (OS_LINUX AND ARCH_X86_64)
+    SRCS(
+		embed.go
+    )
+ELSEIF (OS_WINDOWS AND ARCH_X86_64)
+    SRCS(
+		embed.go
+    )
+ENDIF()
 END()
 
+
 RECURSE(
-    # internal # tests don't work due to fail to embed hidden folders
+	# internal
 )

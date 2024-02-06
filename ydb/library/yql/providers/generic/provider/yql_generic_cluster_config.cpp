@@ -172,6 +172,11 @@ namespace NYql {
                        NYql::TGenericClusterConfig& clusterConfig) {
         using namespace NConnector::NApi;
 
+        if (clusterConfig.GetKind() == EDataSourceKind::YDB) {
+            clusterConfig.SetProtocol(EProtocol::NATIVE);
+            return;
+        }
+
         auto it = properties.find("protocol");
         if (it == properties.cend()) {
             ythrow yexception() << "missing 'PROTOCOL' value";

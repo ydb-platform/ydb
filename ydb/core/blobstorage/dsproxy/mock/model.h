@@ -176,11 +176,11 @@ namespace NFake {
             // TODO(kruall): check bad diffs
             TString buffer = TString::Uninitialized(data.Buffer.GetSize());
             auto originalBuffer = data.Buffer.GetContiguousSpan();
-            memcpy(buffer.begin(), originalBuffer.data(), buffer.size());
+            memcpy(buffer.Detach(), originalBuffer.data(), buffer.size());
             for (ui32 diffIdx = 0; diffIdx < msg->DiffCount; ++diffIdx) {
                 auto &diff = msg->Diffs[diffIdx];
                 auto diffBuffer = diff.Buffer.GetContiguousSpan();
-                memcpy(buffer.begin() + diff.Offset, diffBuffer.data(), diffBuffer.size());
+                memcpy(buffer.Detach() + diff.Offset, diffBuffer.data(), diffBuffer.size());
             }
 
 

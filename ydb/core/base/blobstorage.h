@@ -1468,6 +1468,10 @@ struct TEvBlobStorage {
             }
         }
 
+        static ui8 BlobPlacementKind(const TLogoBlobID &blob) {
+            return blob.Hash() % BaseDomainsCount;
+        }
+
         static bool GetBlobIdWithSamePlacement(const TLogoBlobID &originalId, TLogoBlobID *patchedId,
                 ui32 bitsForBruteForce, ui32 originalGroupId, ui32 currentGroupId)
         {

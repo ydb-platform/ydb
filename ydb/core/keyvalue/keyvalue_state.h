@@ -403,7 +403,7 @@ public:
 
     void Step();
     TLogoBlobID AllocateLogoBlobId(ui32 size, ui32 storageChannelIdx, ui64 requestUid);
-    TLogoBlobID AllocatePatchedLogoBlobId(ui32 size, ui32 storageChannelIdx, ui64 originalGroupId, ui64 currentGroupId, ui64 requestUid);
+    TLogoBlobID AllocatePatchedLogoBlobId(ui32 size, ui32 storageChannelIdx, TLogoBlobID originalBlobId, ui64 requestUid);
     TIntrusivePtr<TCollectOperation>& GetCollectOperation() {
         return CollectOperation;
     }

@@ -765,15 +765,18 @@ TLogoBlobID TKeyValueState::AllocateLogoBlobId(ui32 size, ui32 storageChannelIdx
     return id;
 }
 
-TLogoBlobID TKeyValueState::AllocatePatchedLogoBlobId(ui32 size, ui32 storageChannelIdx, ui64 originalGroupId, ui64 currentGroupId, ui64 requestUid) {
+TLogoBlobID TKeyValueState::AllocatePatchedLogoBlobId(ui32 size, ui32 storageChannelIdx, TLogoBlobID originalBlobId, ui64 requestUid) {
     ui32 generation = ExecutorGeneration;
-    TLogoBlobID id(TabletId, generation, NextLogoBlobStep, storageChannelIdx, size, NextLogoBlobCookie);
-    TEvBlobStorage::TEvPatch::GetBlobIdWithSamePlacement(id, &id, TLogoBlobID::MaxCookie, originalGroupId, currentGroupId);
-    if (id.Cookie() < TLogoBlobID::MaxCookie) {
-        NextLogoBlobCookie = id.Cookie() + 1;
-    } else {
-        Step();
-    }
+    TLogoBlobID id;
+    using TEvPatch = TEvBlobStorage::TEvPatch;
+    do {
+        id = TLogoBlobID(TabletId, generation, NextLogoBlobStep, storageChannelIdx, size, NextLogoBlobCookie);
+        if (NextLogoBlobCookie < TLogoBlobID::MaxCookie) {
+            NextLogoBlobCookie++;
+        } else {
+            Step();
+        }
+    } while (TEvPatch::BlobPlacementKind(id) != TEvPatch::BlobPlacementKind(originalBlobId));
     Y_ABORT_UNLESS(!CollectOperation || THelpers::GenerationStep(id) >
         THelpers::TGenerationStep(CollectOperation->Header.GetCollectGeneration(), CollectOperation->Header.GetCollectStep()));
     ++InFlightForStep[id.Step()];
@@ -3082,9 +3085,7 @@ void TKeyValueState::RegisterRequestActor(const TActorContext &ctx, THolder<TInt
 
     auto fixPatch = [&](TIntermediate::TPatch& patch) {
         Y_ABORT_UNLESS(patch.PatchedBlobId.TabletID() == 0);
-        ui64 originalGroupId = info->GroupFor(patch.OriginalBlobId.Channel(), patch.OriginalBlobId.Generation());
-        ui64 patchedGroupId = info->GroupFor(patch.PatchedBlobId.Channel(), patch.PatchedBlobId.Generation());
-        patch.PatchedBlobId = AllocatePatchedLogoBlobId(patch.PatchedBlobId.BlobSize(), patch.PatchedBlobId.Channel(), originalGroupId, patchedGroupId, intermediate->RequestUid);
+        patch.PatchedBlobId = AllocatePatchedLogoBlobId(patch.PatchedBlobId.BlobSize(), patch.PatchedBlobId.Channel(), patch.OriginalBlobId, intermediate->RequestUid);
         ui32 newRefCount = ++RefCounts[patch.PatchedBlobId];
         Y_ABORT_UNLESS(newRefCount == 1);
         intermediate->RefCountsIncr.emplace_back(patch.PatchedBlobId, true);

@@ -21,6 +21,7 @@
 #include <util/folder/path.h>
 #include <util/string/escape.h>
 #include <util/system/byteorder.h>
+#include <ydb/library/dbgtrace/debug_trace.h>
 
 namespace NKikimr::NPQ {
 
@@ -120,6 +121,7 @@ ui64 GetOffsetEstimate(const std::deque<TDataKey>& container, TInstant timestamp
 }
 
 void TPartition::ReplyError(const TActorContext& ctx, const ui64 dst, NPersQueue::NErrorCode::EErrorCode errorCode, const TString& error) {
+    DBGTRACE("TPartition::ReplyError");
     ReplyPersQueueError(
         dst == 0 ? ctx.SelfID : Tablet, ctx, TabletID, TopicName(), Partition,
         TabletCounters, NKikimrServices::PERSQUEUE, dst, errorCode, error, true
@@ -491,6 +493,7 @@ bool CheckDiskStatus(const TStorageStatusFlags status) {
 }
 
 void TPartition::InitComplete(const TActorContext& ctx) {
+    DBGTRACE("TPartition::InitComplete");
     if (StartOffset == EndOffset && EndOffset == 0) {
         for (auto& [user, info] : UsersInfoStorage->GetAll()) {
             if (info.Offset > 0 && StartOffset < (ui64)info.Offset) {
@@ -575,6 +578,8 @@ void TPartition::UpdateUserInfoEndOffset(const TInstant& now) {
 }
 
 void TPartition::Handle(TEvPQ::TEvChangePartitionConfig::TPtr& ev, const TActorContext& ctx) {
+    DBGTRACE("TPartition::Handle(TEvPQ::TEvChangePartitionConfig)");
+    DBGTRACE_LOG("Partition=" << Partition);
     PushBackDistrTx(ev->Release());
 
     ProcessTxsAndUserActs(ctx);
@@ -857,6 +862,8 @@ void TPartition::Handle(TEvPQ::TEvUpdateWriteTimestamp::TPtr& ev, const TActorCo
 
 void TPartition::Handle(TEvPersQueue::TEvProposeTransaction::TPtr& ev, const TActorContext& ctx)
 {
+    DBGTRACE("TPartition::Handle(TEvPersQueue::TEvProposeTransaction)");
+    DBGTRACE_LOG("Partition=" << Partition);
     const NKikimrPQ::TEvProposeTransaction& event = ev->Get()->Record;
     Y_ABORT_UNLESS(event.GetTxBodyCase() == NKikimrPQ::TEvProposeTransaction::kData);
     Y_ABORT_UNLESS(event.HasData());
@@ -883,6 +890,8 @@ void TPartition::Handle(TEvPersQueue::TEvProposeTransaction::TPtr& ev, const TAc
 
 void TPartition::Handle(TEvPQ::TEvProposePartitionConfig::TPtr& ev, const TActorContext& ctx)
 {
+    DBGTRACE("TPartition::Handle(TEvPQ::TEvProposePartitionConfig)");
+    DBGTRACE_LOG("Partition=" << Partition);
     PushBackDistrTx(ev->Release());
 
     ProcessTxsAndUserActs(ctx);
@@ -910,6 +919,8 @@ void TPartition::HandleOnInit(TEvPQ::TEvProposePartitionConfig::TPtr& ev, const 
 
 void TPartition::Handle(TEvPQ::TEvTxCalcPredicate::TPtr& ev, const TActorContext& ctx)
 {
+    DBGTRACE("TPartition::Handle(TEvPQ::TEvTxCalcPredicate)");
+    DBGTRACE_LOG("Partition=" << Partition);
     PushBackDistrTx(ev->Release());
 
     ProcessTxsAndUserActs(ctx);
@@ -917,6 +928,8 @@ void TPartition::Handle(TEvPQ::TEvTxCalcPredicate::TPtr& ev, const TActorContext
 
 void TPartition::Handle(TEvPQ::TEvTxCommit::TPtr& ev, const TActorContext& ctx)
 {
+    DBGTRACE("TPartition::Handle(TEvPQ::TEvTxCommit)");
+    DBGTRACE_LOG("Partition=" << Partition);
     EndTransaction(*ev->Get(), ctx);
 
     TxInProgress = false;
@@ -926,6 +939,8 @@ void TPartition::Handle(TEvPQ::TEvTxCommit::TPtr& ev, const TActorContext& ctx)
 
 void TPartition::Handle(TEvPQ::TEvTxRollback::TPtr& ev, const TActorContext& ctx)
 {
+    DBGTRACE("TPartition::Handle(TEvPQ::TEvTxRollback)");
+    DBGTRACE_LOG("Partition=" << Partition);
     EndTransaction(*ev->Get(), ctx);
 
     TxInProgress = false;
@@ -1319,6 +1334,7 @@ void TPartition::Handle(NReadQuoterEvents::TEvQuotaUpdated::TPtr& ev, const TAct
 }
 
 void TPartition::Handle(TEvKeyValue::TEvResponse::TPtr& ev, const TActorContext& ctx) {
+    DBGTRACE("TPartition::Handle(TEvKeyValue::TEvResponse)");
     auto& response = ev->Get()->Record;
 
     //check correctness of response
@@ -1463,6 +1479,7 @@ size_t TPartition::GetUserActCount(const TString& consumer) const
 
 void TPartition::ProcessTxsAndUserActs(const TActorContext& ctx)
 {
+    DBGTRACE("TPartition::ProcessTxsAndUserActs");
     if (UsersInfoWriteInProgress || UserActionAndTransactionEvents.empty() || TxInProgress) {
         return;
     }
@@ -1476,6 +1493,7 @@ void TPartition::ProcessTxsAndUserActs(const TActorContext& ctx)
 
 void TPartition::ContinueProcessTxsAndUserActs(const TActorContext& ctx)
 {
+    DBGTRACE("TPartition::ContinueProcessTxsAndUserActs");
     Y_ABORT_UNLESS(!UsersInfoWriteInProgress);
     Y_ABORT_UNLESS(!TxInProgress);
 
@@ -1532,6 +1550,7 @@ void TPartition::RemoveDistrTx()
 bool TPartition::ProcessUserActionOrTransaction(TTransaction& t,
                                                 const TActorContext& ctx)
 {
+    DBGTRACE("TPartition::ProcessUserActionOrTransaction(TTransaction)");
     Y_ABORT_UNLESS(!TxInProgress);
 
     if (t.Tx) {
@@ -1573,6 +1592,7 @@ bool TPartition::ProcessUserActionOrTransaction(TTransaction& t,
 bool TPartition::BeginTransaction(const TEvPQ::TEvTxCalcPredicate& tx,
                                   const TActorContext& ctx)
 {
+    DBGTRACE("TPartition::BeginTransaction(TEvPQ::TEvTxCalcPredicate)");
     Y_UNUSED(ctx);
     bool predicate = true;
 
@@ -1637,6 +1657,7 @@ bool TPartition::BeginTransaction(const TEvPQ::TEvTxCalcPredicate& tx,
 
 bool TPartition::BeginTransaction(const TEvPQ::TEvProposePartitionConfig& event)
 {
+    DBGTRACE("TPartition::BeginTransaction(TEvPQ::TEvProposePartitionConfig)");
     ChangeConfig =
         MakeSimpleShared<TEvPQ::TEvChangePartitionConfig>(TopicConverter,
                                                           event.Config);
@@ -1650,6 +1671,7 @@ bool TPartition::BeginTransaction(const TEvPQ::TEvProposePartitionConfig& event)
 void TPartition::EndTransaction(const TEvPQ::TEvTxCommit& event,
                                 const TActorContext& ctx)
 {
+    DBGTRACE("TPartition::EndTransaction");
     if (PlanStep.Defined() && TxId.Defined()) {
         if (GetStepAndTxId(event) < GetStepAndTxId(*PlanStep, *TxId)) {
             ctx.Send(Tablet, MakeCommitDone(event.Step, event.TxId).Release());
@@ -1769,6 +1791,7 @@ void TPartition::BeginChangePartitionConfig(const NKikimrPQ::TPQTabletConfig& co
 }
 
 void TPartition::OnProcessTxsAndUserActsWriteComplete(ui64 cookie, const TActorContext& ctx) {
+    DBGTRACE("TPartition::OnProcessTxsAndUserActsWriteComplete");
     Y_ABORT_UNLESS(cookie == SET_OFFSET_COOKIE);
 
     if (ChangeConfig) {
@@ -1847,6 +1870,7 @@ void TPartition::EndChangePartitionConfig(const NKikimrPQ::TPQTabletConfig& conf
                                           NPersQueue::TTopicConverterPtr topicConverter,
                                           const TActorContext& ctx)
 {
+    DBGTRACE("TPartition::EndChangePartitionConfig");
     Config = config;
     PartitionConfig = GetPartitionConfig(Config);
     PartitionGraph = MakePartitionGraph(Config);
@@ -1906,6 +1930,7 @@ void TPartition::ResendPendingEvents(const TActorContext& ctx)
 bool TPartition::ProcessUserActionOrTransaction(const TEvPersQueue::TEvProposeTransaction& event,
                                                 const TActorContext& ctx)
 {
+    DBGTRACE("TPartition::ProcessUserActionOrTransaction(TEvPersQueue::TEvProposeTransaction)");
     if (AffectedUsers.size() >= MAX_USERS) {
         return false;
     }
@@ -1968,6 +1993,7 @@ void TPartition::ProcessImmediateTx(const NKikimrPQ::TEvProposeTransaction& tx,
 bool TPartition::ProcessUserActionOrTransaction(TEvPQ::TEvSetClientInfo& act,
                                                 const TActorContext& ctx)
 {
+    DBGTRACE("TPartition::ProcessUserActionOrTransaction(TEvPQ::TEvSetClientInfo)");
     if (AffectedUsers.size() >= MAX_USERS) {
         return false;
     }

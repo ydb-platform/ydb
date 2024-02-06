@@ -18,6 +18,7 @@
 #include <ydb/library/actors/core/log.h>
 
 #include <library/cpp/json/json_writer.h>
+#include <ydb/library/dbgtrace/debug_trace.h>
 
 namespace NKikimr::NDataShard {
 
@@ -41,6 +42,8 @@ class TCdcChangeSenderPartition: public TActorBootstrapped<TCdcChangeSenderParti
     /// Init
 
     void Init() {
+        DBGTRACE("TCdcChangeSenderPartition::Init");
+        DBGTRACE_LOG("SourceId=" << SourceId);
         auto opts = TPartitionWriterOpts()
             .WithCheckState(true)
             .WithAutoRegister(true)
@@ -397,15 +400,18 @@ class TCdcChangeSenderMain
     }
 
     void Retry() {
+        DBGTRACE("TCdcChangeSenderMain::Retry");
         Schedule(TDuration::Seconds(1), new TEvents::TEvWakeup());
     }
 
     void LogCritAndRetry(const TString& error) {
+        DBGTRACE("TCdcChangeSenderMain::LogCritAndRetry");
         LOG_C(error);
         Retry();
     }
 
     void LogWarnAndRetry(const TString& error) {
+        DBGTRACE("TCdcChangeSenderMain::LogWarnAndRetry");
         LOG_W(error);
         Retry();
     }
@@ -416,26 +422,32 @@ class TCdcChangeSenderMain
     }
 
     bool CheckNotEmpty(const TAutoPtr<TNavigate>& result) {
+        DBGTRACE("TCdcChangeSenderMain::CheckNotEmpty(TNavigate)");
         return Check(&TSchemeCacheHelpers::CheckNotEmpty<TNavigate>, &TThis::LogCritAndRetry, result);
     }
 
     bool CheckEntriesCount(const TAutoPtr<TNavigate>& result, ui32 expected) {
+        DBGTRACE("TCdcChangeSenderMain::CheckEntriesCount");
         return Check(&TSchemeCacheHelpers::CheckEntriesCount<TNavigate>, &TThis::LogCritAndRetry, result, expected);
     }
 
     bool CheckTableId(const TNavigate::TEntry& entry, const TTableId& expected) {
+        DBGTRACE("TCdcChangeSenderMain::CheckTableId");
         return Check(&TSchemeCacheHelpers::CheckTableId<TNavigate::TEntry>, &TThis::LogCritAndRetry, entry, expected);
     }
 
     bool CheckEntrySucceeded(const TNavigate::TEntry& entry) {
+        DBGTRACE("TCdcChangeSenderMain::CheckEntrySucceeded");
         return Check(&TSchemeCacheHelpers::CheckEntrySucceeded<TNavigate::TEntry>, &TThis::LogWarnAndRetry, entry);
     }
 
     bool CheckEntryKind(const TNavigate::TEntry& entry, TNavigate::EKind expected) {
+        DBGTRACE("TCdcChangeSenderMain::CheckEntryKind");
         return Check(&TSchemeCacheHelpers::CheckEntryKind<TNavigate::TEntry>, &TThis::LogWarnAndRetry, entry, expected);
     }
 
     bool CheckNotEmpty(const TIntrusiveConstPtr<TNavigate::TCdcStreamInfo>& streamInfo) {
+        DBGTRACE("TCdcChangeSenderMain::CheckNotEmpty(TNavigate::TCdcStreamInfo)");
         if (streamInfo) {
             return true;
         }
@@ -445,6 +457,7 @@ class TCdcChangeSenderMain
     }
 
     bool CheckNotEmpty(const TIntrusiveConstPtr<TNavigate::TPQGroupInfo>& pqInfo) {
+        DBGTRACE("TCdcChangeSenderMain::CheckNotEmpty(TNavigate::TPQGroupInfo)");
         if (pqInfo) {
             return true;
         }
@@ -466,6 +479,7 @@ class TCdcChangeSenderMain
     /// ResolveCdcStream
 
     void ResolveCdcStream() {
+        DBGTRACE("TCdcChangeSenderMain::ResolveCdcStream");
         auto request = MakeHolder<TNavigate>();
         request->ResultSet.emplace_back(MakeNavigateEntry(PathId, TNavigate::OpList));
 
@@ -483,6 +497,7 @@ class TCdcChangeSenderMain
     }
 
     void HandleCdcStream(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr& ev) {
+        DBGTRACE("TCdcChangeSenderMain::HandleCdcStream");
         const auto& result = ev->Get()->Request;
 
         LOG_D("Handle TEvTxProxySchemeCache::TEvNavigateKeySetResult"
@@ -536,6 +551,7 @@ class TCdcChangeSenderMain
     /// ResolveTopic
 
     void ResolveTopic() {
+        DBGTRACE("TCdcChangeSenderMain::ResolveTopic");
         auto request = MakeHolder<TNavigate>();
         request->ResultSet.emplace_back(MakeNavigateEntry(TopicPathId, TNavigate::OpTopic));
 
@@ -553,6 +569,7 @@ class TCdcChangeSenderMain
     }
 
     void HandleTopic(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr& ev) {
+        DBGTRACE("TCdcChangeSenderMain::HandleTopic");
         const auto& result = ev->Get()->Request;
 
         LOG_D("Handle TEvTxProxySchemeCache::TEvNavigateKeySetResult"
@@ -768,9 +785,11 @@ public:
         , DataShard(dataShard)
         , TopicVersion(0)
     {
+        DBGTRACE("TCdcChangeSenderMain::TCdcChangeSenderMain");
     }
 
     void Bootstrap() {
+        DBGTRACE("TCdcChangeSenderMain::Bootstrap");
         ResolveCdcStream();
     }
 

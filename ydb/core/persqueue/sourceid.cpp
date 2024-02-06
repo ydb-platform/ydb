@@ -6,6 +6,7 @@
 #include <util/generic/size_literals.h>
 
 #include <algorithm>
+#include <ydb/library/dbgtrace/debug_trace.h>
 
 namespace NKikimr::NPQ {
 
@@ -337,6 +338,7 @@ bool TSourceIdStorage::DropOldSourceIds(TEvKeyValue::TEvRequest* request, TInsta
 }
 
 void TSourceIdStorage::LoadSourceIdInfo(const TString& key, const TString& data, TInstant now) {
+    DBGTRACE("TSourceIdStorage::LoadSourceIdInfo");
     Y_ABORT_UNLESS(key.size() >= TKeyPrefix::MarkedSize());
 
     const auto mark = TKeyPrefix::EMark(key[TKeyPrefix::MarkPosition()]);
@@ -351,6 +353,7 @@ void TSourceIdStorage::LoadSourceIdInfo(const TString& key, const TString& data,
 }
 
 void TSourceIdStorage::LoadRawSourceIdInfo(const TString& key, const TString& data, TInstant now) {
+    DBGTRACE("TSourceIdStorage::LoadRawSourceIdInfo");
     Y_ABORT_UNLESS(key.size() >= TKeyPrefix::MarkedSize());
     Y_ABORT_UNLESS(key[TKeyPrefix::MarkPosition()] == TKeyPrefix::MarkSourceId);
 
@@ -358,6 +361,7 @@ void TSourceIdStorage::LoadRawSourceIdInfo(const TString& key, const TString& da
 }
 
 void TSourceIdStorage::LoadProtoSourceIdInfo(const TString& key, const TString& data) {
+    DBGTRACE("TSourceIdStorage::LoadProtoSourceIdInfo");
     Y_ABORT_UNLESS(key.size() >= TKeyPrefix::MarkedSize());
     Y_ABORT_UNLESS(key[TKeyPrefix::MarkPosition()] == TKeyPrefix::MarkProtoSourceId);
 
@@ -369,6 +373,8 @@ void TSourceIdStorage::LoadProtoSourceIdInfo(const TString& key, const TString& 
 }
 
 void TSourceIdStorage::RegisterSourceIdInfo(const TString& sourceId, TSourceIdInfo&& sourceIdInfo, bool load) {
+    DBGTRACE("TSourceIdStorage::RegisterSourceIdInfo");
+    DBGTRACE_LOG("sourceId=" << sourceId);
     auto it = InMemorySourceIds.find(sourceId);
     if (it != InMemorySourceIds.end()) {
         if (!load || it->second.Offset < sourceIdInfo.Offset) {
@@ -400,6 +406,8 @@ void TSourceIdStorage::RegisterSourceIdInfo(const TString& sourceId, TSourceIdIn
 }
 
 void TSourceIdStorage::RegisterSourceIdOwner(const TString& sourceId, const TStringBuf& ownerCookie) {
+    DBGTRACE("TSourceIdStorage::RegisterSourceIdOwner");
+    DBGTRACE_LOG("sourceId=" << sourceId << ", ownerCookie=" << ownerCookie);
     if (ownerCookie == "default") {
         // cookie for legacy http protocol - skip it, we use one cookie for all write sessions
         return;
@@ -432,6 +440,7 @@ TInstant TSourceIdStorage::MinAvailableTimestamp(TInstant now) const {
 
 void TSourceIdStorage::UpdateConfig(const NKikimrPQ::TBootstrapConfig& config, TInstant now)
 {
+    DBGTRACE("TSourceIdStorage::UpdateConfig");
     for (const auto& mg : config.GetExplicitMessageGroups()) {
 
         TMaybe<TPartitionKeyRange> keyRange;
@@ -492,6 +501,7 @@ TKeyPrefix::EMark TSourceIdWriter::FormatToMark(ESourceIdFormat format) {
 }
 
 void TSourceIdWriter::FillRequest(TEvKeyValue::TEvRequest* request, const TPartitionId& partition) {
+    DBGTRACE("TSourceIdWriter::FillRequest");
     TKeyPrefix key(TKeyPrefix::TypeInfo, partition, FormatToMark(Format));
     TBuffer data;
 

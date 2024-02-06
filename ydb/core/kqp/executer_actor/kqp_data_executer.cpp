@@ -1595,13 +1595,13 @@ private:
                     for (const auto& sink : stage.GetSinks()) {
                         if (sink.GetTypeCase() == NKqpProto::TKqpSink::kExternalSink) {
                             SaveScriptExternalEffectRequired = true;
-                            scriptExternalEffect->Sinks.push_back(sink.GetExternalSink());
+                            scriptExternalEffect->Description.Sinks.push_back(sink.GetExternalSink());
                         }
                     }
                 }
             }
         }
-        scriptExternalEffect->SecretNames = SecretNames;
+        scriptExternalEffect->Description.SecretNames = SecretNames;
 
         if (!WaitRequired()) {
             return Execute();

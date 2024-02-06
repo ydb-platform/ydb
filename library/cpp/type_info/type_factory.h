@@ -605,6 +605,12 @@ namespace NTi {
         /// Create a new `Timestamp` type. See `NTi::TTimestampType` for more info.
         TTimestampTypePtr Timestamp();
 
+        /// Create a new `Datetime` type. See `NTi::TDatetimeType` for more info.
+        TDatetime64TypePtr Datetime64();
+
+        /// Create a new `Timestamp` type. See `NTi::TTimestampType` for more info.
+        TTimestamp64TypePtr Timestamp64();
+
         /// Create a new `TzDate` type. See `NTi::TTzDateType` for more info.
         TTzDateTypePtr TzDate();
 
@@ -616,6 +622,9 @@ namespace NTi {
 
         /// Create a new `Interval` type. See `NTi::TIntervalType` for more info.
         TIntervalTypePtr Interval();
+
+        /// Create a new `Interval` type. See `NTi::TIntervalType` for more info.
+        TInterval64TypePtr Interval64();
 
         /// Create a new `Decimal` type. See `NTi::TDecimalType` for more info.
         TDecimalTypePtr Decimal(ui8 precision, ui8 scale);
@@ -787,6 +796,14 @@ namespace NTi {
         /// The returned object will live for as long as this factory lives.
         const TTimestampType* TimestampRaw();
 
+        /// Create a new `Datetime64` type. See `NTi::TDatetime64Type` for more info.
+        /// The returned object will live for as long as this factory lives.
+        const TDatetime64Type* Datetime64Raw();
+
+        /// Create a new `Timestamp64` type. See `NTi::TTimestamp64Type` for more info.
+        /// The returned object will live for as long as this factory lives.
+        const TTimestamp64Type* Timestamp64Raw();
+
         /// Create a new `TzDate` type. See `NTi::TTzDateType` for more info.
         /// The returned object will live for as long as this factory lives.
         const TTzDateType* TzDateRaw();
@@ -802,6 +819,10 @@ namespace NTi {
         /// Create a new `Interval` type. See `NTi::TIntervalType` for more info.
         /// The returned object will live for as long as this factory lives.
         const TIntervalType* IntervalRaw();
+
+        /// Create a new `Interval64` type. See `NTi::TInterval64Type` for more info.
+        /// The returned object will live for as long as this factory lives.
+        const TInterval64Type* Interval64Raw();
 
         /// Create a new `Decimal` type. See `NTi::TDecimalType` for more info.
         /// The returned object will live for as long as this factory lives.

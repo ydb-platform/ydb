@@ -265,8 +265,11 @@ public:
         }
 
         case NUdf::TDataType<NUdf::TTimestamp>::Id:
-        case NUdf::TDataType<ui64>::Id:
         case NUdf::TDataType<NUdf::TInterval>::Id:
+        case NUdf::TDataType<NUdf::TInterval64>::Id:
+        case NUdf::TDataType<NUdf::TDatetime64>::Id:
+        case NUdf::TDataType<NUdf::TTimestamp64>::Id:
+        case NUdf::TDataType<ui64>::Id:
         case NUdf::TDataType<i64>::Id: {
             const auto data = CastInst::Create(Instruction::Trunc, elem, Type::getInt64Ty(context), "data", Block_);
             CallInst::Create(module.getFunction("Write64"), { buf, data }, "", Block_);
@@ -645,6 +648,9 @@ private:
             break;
         }
         case NUdf::TDataType<NUdf::TInterval>::Id:
+        case NUdf::TDataType<NUdf::TInterval64>::Id:
+        case NUdf::TDataType<NUdf::TDatetime64>::Id:
+        case NUdf::TDataType<NUdf::TTimestamp64>::Id:
         case NUdf::TDataType<i64>::Id: {
             CallInst::Create(module.getFunction("ReadInt64"), { buf, velemPtr }, "", Block_);
             break;
@@ -790,6 +796,9 @@ private:
             case NUdf::TDataType<i32>::Id:
             case NUdf::TDataType<i64>::Id:
             case NUdf::TDataType<NUdf::TDate32>::Id:
+            case NUdf::TDataType<NUdf::TDatetime64>::Id:
+            case NUdf::TDataType<NUdf::TTimestamp64>::Id:
+            case NUdf::TDataType<NUdf::TInterval64>::Id:
             case NUdf::TDataType<NUdf::TInterval>::Id: {
                 const auto sizeConst = ConstantInt::get(Type::getInt64Ty(context), (ui64)sizeof(i64));
                 CallInst::Create(module.getFunction("SkipFixedData"), { buf, sizeConst }, "", Block_);

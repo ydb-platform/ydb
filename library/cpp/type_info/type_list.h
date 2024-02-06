@@ -61,6 +61,9 @@ namespace NTi {
         Uuid,
 
         Date32,
+        Datetime64,
+        Timestamp64,
+        Interval64,
     };
 
     /// Enum with names of all types, including primitives.
@@ -96,6 +99,9 @@ namespace NTi {
         Interval,
 
         Date32,
+        Datetime64,
+        Timestamp64,
+        Interval64,
 
         Decimal,
         Json,

@@ -686,6 +686,52 @@ namespace NTi {
         Y_UNUSED(factory);
     }
 
+    TDatetime64Type::TDatetime64Type()
+        : TPrimitiveType({}, EPrimitiveTypeName::Datetime64)
+    {
+    }
+
+    TDatetime64TypePtr TDatetime64Type::Instance() {
+        return InstanceRaw()->AsPtr();
+    }
+
+    const TDatetime64Type* TDatetime64Type::InstanceRaw() {
+        static auto singleton = TDatetime64Type();
+        return &singleton;
+    }
+
+    const TDatetime64Type* TDatetime64Type::Clone(ITypeFactoryInternal& factory) const noexcept {
+        Y_UNUSED(factory);
+        return InstanceRaw();
+    }
+
+    void TDatetime64Type::Drop(ITypeFactoryInternal& factory) noexcept {
+        Y_UNUSED(factory);
+    }
+
+    TTimestamp64Type::TTimestamp64Type()
+        : TPrimitiveType({}, EPrimitiveTypeName::Timestamp64)
+    {
+    }
+
+    TTimestamp64TypePtr TTimestamp64Type::Instance() {
+        return InstanceRaw()->AsPtr();
+    }
+
+    const TTimestamp64Type* TTimestamp64Type::InstanceRaw() {
+        static auto singleton = TTimestamp64Type();
+        return &singleton;
+    }
+
+    const TTimestamp64Type* TTimestamp64Type::Clone(ITypeFactoryInternal& factory) const noexcept {
+        Y_UNUSED(factory);
+        return InstanceRaw();
+    }
+
+    void TTimestamp64Type::Drop(ITypeFactoryInternal& factory) noexcept {
+        Y_UNUSED(factory);
+    }
+
     TTzDateType::TTzDateType()
         : TPrimitiveType({}, EPrimitiveTypeName::TzDate)
     {
@@ -775,6 +821,29 @@ namespace NTi {
     }
 
     void TIntervalType::Drop(ITypeFactoryInternal& factory) noexcept {
+        Y_UNUSED(factory);
+    }
+
+    TInterval64Type::TInterval64Type()
+        : TPrimitiveType({}, EPrimitiveTypeName::Interval64)
+    {
+    }
+
+    TInterval64TypePtr TInterval64Type::Instance() {
+        return InstanceRaw()->AsPtr();
+    }
+
+    const TInterval64Type* TInterval64Type::InstanceRaw() {
+        static auto singleton = TInterval64Type();
+        return &singleton;
+    }
+
+    const TInterval64Type* TInterval64Type::Clone(ITypeFactoryInternal& factory) const noexcept {
+        Y_UNUSED(factory);
+        return InstanceRaw();
+    }
+
+    void TInterval64Type::Drop(ITypeFactoryInternal& factory) noexcept {
         Y_UNUSED(factory);
     }
 
@@ -1354,10 +1423,6 @@ namespace NTi {
         return NPrivate::GetDefaultHeapFactory()->Date();
     }
 
-    TDate32TypePtr Date32() {
-        return NPrivate::GetDefaultHeapFactory()->Date32();
-    }
-
     TDatetimeTypePtr Datetime() {
         return NPrivate::GetDefaultHeapFactory()->Datetime();
     }
@@ -1380,6 +1445,22 @@ namespace NTi {
 
     TIntervalTypePtr Interval() {
         return NPrivate::GetDefaultHeapFactory()->Interval();
+    }
+
+    TDate32TypePtr Date32() {
+        return NPrivate::GetDefaultHeapFactory()->Date32();
+    }
+
+    TDatetime64TypePtr Datetime64() {
+        return NPrivate::GetDefaultHeapFactory()->Datetime64();
+    }
+
+    TTimestamp64TypePtr Timestamp64() {
+        return NPrivate::GetDefaultHeapFactory()->Timestamp64();
+    }
+
+    TInterval64TypePtr Interval64() {
+        return NPrivate::GetDefaultHeapFactory()->Interval64();
     }
 
     TDecimalTypePtr Decimal(ui8 precision, ui8 scale) {
@@ -1542,6 +1623,16 @@ Y_DECLARE_OUT_SPEC(, NTi::TTimestampType, o, v) {
     o << "Timestamp";
 }
 
+Y_DECLARE_OUT_SPEC(, NTi::TDatetime64Type, o, v) {
+    Y_UNUSED(v);
+    o << "Datetime64";
+}
+
+Y_DECLARE_OUT_SPEC(, NTi::TTimestamp64Type, o, v) {
+    Y_UNUSED(v);
+    o << "Timestamp64";
+}
+
 Y_DECLARE_OUT_SPEC(, NTi::TTzDateType, o, v) {
     Y_UNUSED(v);
     o << "TzDate";
@@ -1560,6 +1651,11 @@ Y_DECLARE_OUT_SPEC(, NTi::TTzTimestampType, o, v) {
 Y_DECLARE_OUT_SPEC(, NTi::TIntervalType, o, v) {
     Y_UNUSED(v);
     o << "Interval";
+}
+
+Y_DECLARE_OUT_SPEC(, NTi::TInterval64Type, o, v) {
+    Y_UNUSED(v);
+    o << "Interval64";
 }
 
 Y_DECLARE_OUT_SPEC(, NTi::TDecimalType, o, v) {
@@ -1674,12 +1770,15 @@ static_assert(std::is_trivially_destructible_v<NTi::TStringType>);
 static_assert(std::is_trivially_destructible_v<NTi::TUtf8Type>);
 static_assert(std::is_trivially_destructible_v<NTi::TDateType>);
 static_assert(std::is_trivially_destructible_v<NTi::TDate32Type>);
+static_assert(std::is_trivially_destructible_v<NTi::TDatetime64Type>);
+static_assert(std::is_trivially_destructible_v<NTi::TTimestamp64Type>);
 static_assert(std::is_trivially_destructible_v<NTi::TDatetimeType>);
 static_assert(std::is_trivially_destructible_v<NTi::TTimestampType>);
 static_assert(std::is_trivially_destructible_v<NTi::TTzDateType>);
 static_assert(std::is_trivially_destructible_v<NTi::TTzDatetimeType>);
 static_assert(std::is_trivially_destructible_v<NTi::TTzTimestampType>);
 static_assert(std::is_trivially_destructible_v<NTi::TIntervalType>);
+static_assert(std::is_trivially_destructible_v<NTi::TInterval64Type>);
 static_assert(std::is_trivially_destructible_v<NTi::TDecimalType>);
 static_assert(std::is_trivially_destructible_v<NTi::TJsonType>);
 static_assert(std::is_trivially_destructible_v<NTi::TYsonType>);

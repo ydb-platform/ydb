@@ -2400,6 +2400,10 @@ size_t CalcMaxBlockItemSize(const TType* type) {
         case NUdf::EDataSlot::Interval:
         case NUdf::EDataSlot::Uint64:
         case NUdf::EDataSlot::Timestamp:
+        case NUdf::EDataSlot::Date32:
+        case NUdf::EDataSlot::Datetime64:
+        case NUdf::EDataSlot::Timestamp64:
+        case NUdf::EDataSlot::Interval64:
         case NUdf::EDataSlot::Float:
         case NUdf::EDataSlot::Double: {
             size_t sz = GetDataTypeInfo(slot).FixedSize;

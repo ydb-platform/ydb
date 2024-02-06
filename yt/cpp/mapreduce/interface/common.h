@@ -406,6 +406,12 @@ enum EValueType : int
 
     /// Date, number of days since Unix epoch (signed)
     VT_DATE32,
+    /// Datetime, number of seconds since Unix epoch (signed)
+    VT_DATETIME64,
+    /// Timestamp, number of milliseconds since Unix epoch (signed)
+    VT_TIMESTAMP64,
+    /// Interval, difference between two timestamp64 (signed)
+    VT_INTERVAL64,
 };
 
 ///

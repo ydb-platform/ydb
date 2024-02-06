@@ -624,7 +624,6 @@ private:
 private:
     bool DoHistory(TRowId keyBeginRowId, TRowId keyEndRowId) const noexcept {
         bool ready = true;
-        bool hasValidRowsRange = bool(Groups); // false value means that beginRowId, endRowId are invalid and shouldn't be used
 
         // Minimum key is (startRowId, max, max)
         ui64 startStep = Max<ui64>();
@@ -661,20 +660,17 @@ private:
         TPageId key1PageId = meta.PageId, key2PageId = meta.PageId;
 
         const auto iterateLevel = [&](const auto& tryHandleChild) {
-            // tryHandleChild may update them, copy for simplicity
-            const TRowId levelBeginRowId = beginRowId, levelEndRowId = endRowId;
-
             for (const auto &node : level) {
-                if (node.EndRowId <= levelBeginRowId || node.BeginRowId >= levelEndRowId) {
+                if (node.EndRowId <= beginRowId || node.BeginRowId >= endRowId) {
                     continue;
                 }
 
                 TRecIdx from = 0, to = node.GetChildrenCount();
-                if (node.BeginRowId < levelBeginRowId) {
-                    from = node.Seek(levelBeginRowId);
+                if (node.BeginRowId < beginRowId) {
+                    from = node.Seek(beginRowId);
                 }
-                if (node.EndRowId > levelEndRowId) {
-                    to = node.Seek(levelEndRowId - 1) + 1;
+                if (node.EndRowId > endRowId) {
+                    to = node.Seek(endRowId - 1) + 1;
                 }
                 for (TRecIdx pos : xrange(from, to)) {
                     auto& child = node.GetShortChild(pos);
@@ -711,10 +707,6 @@ private:
                         auto& key2Child = node.GetShortChild(pos);
                         key2PageId = key2Child.PageId;
                         endRowId = Min(endRowId, key2Child.RowCount); // move endRowId to the first key > key2
-                        if (Y_UNLIKELY(key2Child.RowCount <= beginRowId)) {
-                            Y_DEBUG_ABORT_UNLESS(false, "State is invalid for history");
-                            hasValidRowsRange = false; // key2 is before current slice
-                        }
                     }
                     return true;
                 } else {
@@ -727,7 +719,7 @@ private:
         };
 
         const auto tryHandleDataPage = [&](TChildState child) -> bool {
-            if (hasValidRowsRange && (child.PageId == key1PageId || child.PageId == key2PageId)) {
+            if (Groups && (child.PageId == key1PageId || child.PageId == key2PageId)) {
                 const auto page = TryGetDataPage(child.PageId, groupId);
                 if (page) {
                     auto data = NPage::TDataPage(page);
@@ -749,7 +741,7 @@ private:
             }
         };
 
-        for (ui32 height = 0; height < meta.LevelCount && ready; height++) {
+        for (ui32 height = 0; height < meta.LevelCount; height++) {
             if (height == 0) {
                 ready &= tryHandleNode(TChildState(meta.PageId, 0, meta.RowCount));
             } else {
@@ -759,26 +751,21 @@ private:
             nextLevel.clear();
         }
 
-        if (!ready) { // some index pages are missing, do not continue
-            ready &= DoHistoricGroups(hasValidRowsRange, beginRowId, endRowId); // precharge historic groups using the latest row bounds
-            return ready;
-        }
-
         if (meta.LevelCount == 0) {
             ready &= tryHandleDataPage(TChildState(meta.PageId, 0, meta.RowCount));
         } else {
             iterateLevel(tryHandleDataPage);
         }
 
-        ready &= DoHistoricGroups(hasValidRowsRange, beginRowId, endRowId); // precharge historic groups using the latest row bounds
+        ready &= DoHistoricGroups(beginRowId, endRowId); // precharge historic groups using the latest row bounds
 
         return ready;
     }
 
-    bool DoHistoricGroups(bool hasValidRowsRange, TRowId beginRowId, TRowId endRowId) const noexcept {
+    bool DoHistoricGroups(TRowId beginRowId, TRowId endRowId) const noexcept {
         bool ready = true;
         
-        if (hasValidRowsRange && beginRowId < endRowId) {
+        if (beginRowId < endRowId) {
             for (auto groupIndex : Groups) {
                 ready &= DoGroup(TGroupId(groupIndex, true), beginRowId, endRowId, 0, 0);
             }

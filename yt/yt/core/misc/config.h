@@ -42,6 +42,8 @@ struct TConstantBackoffOptions
 
 ////////////////////////////////////////////////////////////////////////////////
 
+//! TODO(arkady-e1ppa): Make configs below pairs of POD-structs and TExternalizedYsonStruct.
+
 class TLogDigestConfig
     : public NYTree::TYsonStruct
 {
@@ -92,35 +94,6 @@ DEFINE_REFCOUNTED_TYPE(THistogramDigestConfig)
 
 ////////////////////////////////////////////////////////////////////////////////
 
-DEFINE_ENUM(EHistoricUsageAggregationMode,
-    ((None)                     (0))
-    ((ExponentialMovingAverage) (1))
-);
-
-// TODO(arkady-e1ppa): Use YsonExternalSerializer from pr5052145 once it's ready.
-class THistoricUsageConfig
-    : public NYTree::TYsonStruct
-{
-public:
-    EHistoricUsageAggregationMode AggregationMode;
-
-    //! Parameter of exponential moving average (EMA) of the aggregated usage.
-    //! Roughly speaking, it means that current usage ratio is twice as relevant for the
-    //! historic usage as the usage ratio alpha seconds ago.
-    //! EMA for unevenly spaced time series was adapted from here: https://clck.ru/HaGZs
-    double EmaAlpha;
-
-    bool ResetOnNewParameters;
-
-    REGISTER_YSON_STRUCT(THistoricUsageConfig);
-
-    static void Register(TRegistrar registrar);
-};
-
-DEFINE_REFCOUNTED_TYPE(THistoricUsageConfig)
-
-////////////////////////////////////////////////////////////////////////////////
-
 class TAdaptiveHedgingManagerConfig
     : public virtual NYTree::TYsonStruct
 {
@@ -168,8 +141,6 @@ public:
 
     static void Register(TRegistrar registrar);
 };
-
-
 
 } // namespace NDetail
 

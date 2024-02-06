@@ -1,10 +1,9 @@
 #include "fair_share_invoker_pool.h"
 
-#include "scheduler.h"
-
 #include <yt/yt/core/actions/current_invoker.h>
 #include <yt/yt/core/actions/invoker_detail.h>
 
+#include <yt/yt/core/misc/finally.h>
 #include <yt/yt/core/misc/ring_queue.h>
 
 #include <yt/yt/core/profiling/timing.h>
@@ -129,7 +128,7 @@ public:
         IInvokerPtr underlyingInvoker,
         int invokerCount,
         TFairShareCallbackQueueFactory callbackQueueFactory,
-        THistoricUsageAggregationParameters aggregatorParameters)
+        TDuration actionTimeRelevancyHalflife)
         : UnderlyingInvoker_(std::move(underlyingInvoker))
         , Queue_(callbackQueueFactory(invokerCount))
     {
@@ -137,16 +136,16 @@ public:
         InvokerQueueStates_.reserve(invokerCount);
         for (int index = 0; index < invokerCount; ++index) {
             Invokers_.push_back(New<TInvoker>(UnderlyingInvoker_, index, MakeWeak(this)));
-            InvokerQueueStates_.emplace_back(aggregatorParameters);
+            InvokerQueueStates_.emplace_back(actionTimeRelevancyHalflife);
         }
     }
 
-    void UpdateActionTimeAggregatorParameters(THistoricUsageAggregationParameters newParameters) override
+    void UpdateActionTimeRelevancyHalflife(TDuration newHalflife) override
     {
         auto guard = Guard(InvokerQueueStatesLock_);
 
         for (auto& queueState : InvokerQueueStates_) {
-            queueState.UpdateActionTimeAggregatorParameters(newParameters);
+            queueState.UpdateActionTimeRelevancyHalflife(newHalflife);
         }
     }
 
@@ -200,8 +199,8 @@ private:
     {
     public:
         explicit TInvokerQueueState(
-            const THistoricUsageAggregationParameters& parameters)
-            : AverageTimeAggregator_(parameters)
+            TDuration halflife)
+            : AverageTimeAggregator_(halflife)
         { }
 
         void OnActionEnqueued(TInstant now)
@@ -240,17 +239,13 @@ private:
             };
         }
 
-        void UpdateActionTimeAggregatorParameters(THistoricUsageAggregationParameters newParameters)
+        void UpdateActionTimeRelevancyHalflife(TDuration newHalflife)
         {
-            AverageTimeAggregator_.UpdateParameters(THistoricUsageAggregationParameters{
-                newParameters.Mode,
-                newParameters.EmaAlpha,
-                /*resetOnNewParameters*/ false,
-            });
+            AverageTimeAggregator_.SetHalflife(newHalflife, /*resetOnNewHalflife*/ false);
         }
 
     private:
-        THistoricUsageAggregator AverageTimeAggregator_;
+        TAdjustedExponentialMovingAverage AverageTimeAggregator_;
         TRingQueue<TInstant> ActionEnqueueTimes_;
 
         i64 EnqueuedActionCount_ = 0;
@@ -262,7 +257,7 @@ private:
             //! to account for the case when everything was fine
             //! and then invoker gets stuck for a very long time.
             auto maxWaitTime = GetMaxWaitTimeInQueue(now);
-            auto totalWaitTimeMilliseconds = AverageTimeAggregator_.SimulateUpdate(now, maxWaitTime.MillisecondsFloat());
+            auto totalWaitTimeMilliseconds = AverageTimeAggregator_.EstimateAverageWithNewValue(now, maxWaitTime.MillisecondsFloat());
             return TDuration::MilliSeconds(totalWaitTimeMilliseconds);
         }
 
@@ -387,14 +382,14 @@ TDiagnosableInvokerPoolPtr CreateFairShareInvokerPool(
     IInvokerPtr underlyingInvoker,
     int invokerCount,
     TFairShareCallbackQueueFactory callbackQueueFactory,
-    THistoricUsageAggregationParameters aggregatorParameters)
+    TDuration actionTimeRelevancyHalflife)
 {
     YT_VERIFY(0 < invokerCount && invokerCount < 100);
     return New<TFairShareInvokerPool>(
         std::move(underlyingInvoker),
         invokerCount,
         std::move(callbackQueueFactory),
-        aggregatorParameters);
+        actionTimeRelevancyHalflife);
 }
 
 ////////////////////////////////////////////////////////////////////////////////

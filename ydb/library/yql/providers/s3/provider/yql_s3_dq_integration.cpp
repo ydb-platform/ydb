@@ -408,7 +408,7 @@ public:
             auto useRuntimeListing = State_->Configuration->UseRuntimeListing.Get().GetOrElse(false);
             srcDesc.SetUseRuntimeListing(useRuntimeListing);
 
-            auto fileQueueBatchSizeLimit = State_->Configuration->FileQueueBatchSizeLimit.Get().GetOrElse(1'000'000);
+            auto fileQueueBatchSizeLimit = State_->Configuration->FileQueueBatchSizeLimit.Get().GetOrElse(1000000);
             srcDesc.MutableSettings()->insert({"fileQueueBatchSizeLimit", ToString(fileQueueBatchSizeLimit)});
 
             auto fileQueueBatchObjectCountLimit = State_->Configuration->FileQueueBatchObjectCountLimit.Get().GetOrElse(1000);
@@ -480,7 +480,7 @@ public:
                     }
                 }
 
-                size_t maxTasksPerStage = State_->KikimrConfig->MaxTasksPerStage.Get().GetOrElse(TDqSettings::TDefault::MaxTasksPerStage);
+                size_t maxTasksPerStage = State_->MaxTasksPerStage.GetOrElse(TDqSettings::TDefault::MaxTasksPerStage);
 
                 auto consumersCount = hasDirectories ? maxTasksPerStage : Min(paths.size(), maxTasksPerStage);
 

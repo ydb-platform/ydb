@@ -1,7 +1,5 @@
 #pragma once
 
-#include <ydb/core/kqp/provider/yql_kikimr_settings.h>
-
 #include <ydb/library/yql/core/yql_data_provider.h>
 #include <ydb/library/yql/providers/common/token_accessor/client/factory.h>
 #include <ydb/library/yql/providers/common/http_gateway/yql_http_gateway.h>
@@ -30,7 +28,7 @@ struct TS3State : public TThrRefBase
     const NKikimr::NMiniKQL::IFunctionRegistry* FunctionRegistry = nullptr;
     ISecuredServiceAccountCredentialsFactory::TPtr CredentialsFactory;
     IHTTPGateway::TPtr Gateway;
-    TKikimrConfiguration::TPtr KikimrConfig;
+    TMaybe<ui64> MaxTasksPerStage;
 };
 
 TDataProviderInitializer GetS3DataProviderInitializer(IHTTPGateway::TPtr gateway, ISecuredServiceAccountCredentialsFactory::TPtr credentialsFactory = nullptr, bool allowLocalFiles = false);

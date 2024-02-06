@@ -26,7 +26,6 @@ PEERDIR(
     library/cpp/retry
     library/cpp/time_provider
     library/cpp/xml/document
-    ydb/core/kqp/provider
     ydb/library/yql/ast
     ydb/library/yql/core
     ydb/library/yql/core/type_ann

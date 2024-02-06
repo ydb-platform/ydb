@@ -65,7 +65,7 @@ Pear,15,33'''
 
         sql = f'''
             pragma s3.UseRuntimeListing="{str(runtime_listing).lower()}";
-            ''' + R'''
+
             SELECT *
             FROM bindings.my_binding;
             '''
@@ -169,7 +169,7 @@ Banana,3,100'''
 
         sql = f'''
             pragma s3.UseRuntimeListing="{str(runtime_listing).lower()}";
-            ''' + R'''
+
             SELECT *
             FROM bindings.my_binding;
             '''
@@ -256,7 +256,7 @@ Apple,2,22'''
 
         sql = f'''
             pragma s3.UseRuntimeListing="{str(runtime_listing).lower()}";
-            ''' + R'''
+
             SELECT *
             FROM bindings.my_binding where year > 2020 order by Fruit;
             '''
@@ -481,7 +481,7 @@ Banana,3,100'''
 
         sql = f'''
             pragma s3.UseRuntimeListing="{str(runtime_listing).lower()}";
-            ''' + R'''
+
             SELECT *
             FROM bindings.my_binding;
             '''
@@ -1242,7 +1242,7 @@ Banana,3,100'''
         sql = f'''
             pragma s3.UseBlocksSource="{str(blocks).lower()}";
             pragma s3.UseRuntimeListing="{str(runtime_listing).lower()}";
-            ''' + R'''
+
             SELECT foo, bar, x FROM pb.`part/`
             WITH
             (

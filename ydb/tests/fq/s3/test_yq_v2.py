@@ -59,7 +59,6 @@ Pear;15;33'''
 
         sql = f'''
             pragma s3.UseRuntimeListing="{str(runtime_listing).lower()}";
-            ''' + R'''
             pragma s3.UseBlocksSource="false";
             SELECT *
             FROM my_binding; -- syntax without bindings. supported only in yqv2

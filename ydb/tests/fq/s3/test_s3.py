@@ -48,7 +48,7 @@ Pear,15,33'''
 
         sql = f'''
             pragma s3.UseRuntimeListing="{str(runtime_listing).lower()}";
-            ''' + R'''
+
             SELECT *
             FROM fruitbucket.`fruits.csv`
             WITH (format=csv_with_names, SCHEMA (
@@ -117,7 +117,7 @@ Pear,15,33'''
 
         sql = f'''
             pragma s3.UseRuntimeListing="{str(runtime_listing).lower()}";
-            ''' + R'''
+
             SELECT Data
             FROM rawbucket.`*`
             WITH (format=raw, SCHEMA (
@@ -174,7 +174,7 @@ Pear,15,33'''
 
         sql = f'''
             pragma s3.UseRuntimeListing="{str(runtime_listing).lower()}";
-            ''' + R'''
+
             SELECT Data
             FROM limbucket.`*`
             WITH (format=raw, SCHEMA (
@@ -189,7 +189,7 @@ Pear,15,33'''
 
         sql = f'''
             pragma s3.UseRuntimeListing="{str(runtime_listing).lower()}";
-            ''' + R'''
+
             SELECT *
             FROM limbucket.`*`
             WITH (format=csv_with_names, SCHEMA (
@@ -233,7 +233,7 @@ Pear,15,33'''
 
         sql = f'''
             pragma s3.UseRuntimeListing="{str(runtime_listing).lower()}";
-            ''' + R'''
+
             select * from badbucket.`*.*` with (format=json_list, schema (data string)) limit 1;
             '''
 
@@ -473,7 +473,7 @@ Pear,15,33'''
 
         sql = f'''
             pragma s3.UseRuntimeListing="{str(runtime_listing).lower()}";
-            ''' + R'''
+
             select count(*) as Cnt from prebucket.`file1.txt` with (format=raw, schema(
                 Data String NOT NULL
             ))
@@ -524,7 +524,7 @@ Pear,15,33'''
 
         sql = f'''
             pragma s3.UseRuntimeListing="{str(runtime_listing).lower()}";
-            ''' + R'''
+
             insert into fp.`path/` with (format=json_each_row)
             select * from AS_TABLE([<|foo:123, bar:"xxx"u|>,<|foo:456, bar:"yyy"u|>]);
             '''
@@ -534,7 +534,7 @@ Pear,15,33'''
 
         sql = f'''
             pragma s3.UseRuntimeListing="{str(runtime_listing).lower()}";
-            ''' + R'''
+
             select count(*) from fp.`path/` with (format=json_each_row, schema(
                 foo Int NOT NULL,
                 bar String NOT NULL
@@ -589,7 +589,7 @@ Pear,15,33'''
 
         sql = f'''
             pragma s3.UseRuntimeListing="{str(runtime_listing).lower()}";
-            ''' + R'''
+
             SELECT *
             FROM fruitbucket.`fruits.csv`
             WITH (format=csv_with_names, SCHEMA (
@@ -639,7 +639,7 @@ Pear,15,33'''
 
         sql = f'''
             pragma s3.UseRuntimeListing="{str(runtime_listing).lower()}";
-            ''' + R'''
+
             $data = SELECT *
             FROM fruitbucket.`fruits.csv`
             WITH (format=csv_with_names, SCHEMA (
@@ -715,7 +715,7 @@ Pear,15,33'''
 
         sql = f'''
             pragma s3.UseRuntimeListing="{str(runtime_listing).lower()}";
-            ''' + R'''
+
             SELECT count(*) as cnt
             FROM i18nbucket.`{path}`
             WITH (format={format}, SCHEMA (
@@ -862,7 +862,7 @@ Pear,15,33'''
 
         sql = f'''
             pragma s3.UseRuntimeListing="{str(runtime_listing).lower()}";
-            ''' + R'''
+
             select count(*) from hugebucket.`path/` with (format=csv_with_names, schema(
                 s String NOT NULL
             ))

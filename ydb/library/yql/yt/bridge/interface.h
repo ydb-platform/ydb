@@ -48,6 +48,7 @@ struct TBridgeYqlPluginOptions
 using TBridgeYqlPlugin = void;
 
 using TFuncBridgeCreateYqlPlugin = TBridgeYqlPlugin*(const TBridgeYqlPluginOptions* options);
+using TFuncBridgeStartYqlPlugin = void(TBridgeYqlPlugin* plugin);
 using TFuncBridgeFreeYqlPlugin = void(TBridgeYqlPlugin* plugin);
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -114,6 +115,7 @@ using TFuncBridgeFreeAbortResult = void(TBridgeAbortResult* result);
 
 #define FOR_EACH_BRIDGE_INTERFACE_FUNCTION(XX) \
     XX(BridgeCreateYqlPlugin) \
+    XX(BridgeStartYqlPlugin) \
     XX(BridgeFreeYqlPlugin) \
     XX(BridgeFreeQueryResult) \
     XX(BridgeRun) \

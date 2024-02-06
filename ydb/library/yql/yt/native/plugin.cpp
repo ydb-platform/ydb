@@ -213,7 +213,7 @@ public:
 
             if (DqManagerConfig_) {
                 DqManagerConfig_->FileStorage = FileStorage_;
-                DqManager_ =  New<TDqManager>(DqManagerConfig_);
+                DqManager_ = New<TDqManager>(DqManagerConfig_);
             }
 
             gatewayYtConfig->ClearMrJobUdfsDir();
@@ -284,6 +284,13 @@ public:
             exit(1);
         }
         YQL_LOG(INFO) << "YQL plugin initialized";
+    }
+
+    void Start() override
+    {
+        if (DqManager_) {
+            DqManager_->Start();
+        }
     }
 
     TQueryResult GuardedRun(

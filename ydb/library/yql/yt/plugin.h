@@ -72,6 +72,8 @@ struct TAbortResult
 */
 struct IYqlPlugin
 {
+    virtual void Start() = 0;
+
     virtual TQueryResult Run(
         TQueryId queryId,
         TString impersonationUser,

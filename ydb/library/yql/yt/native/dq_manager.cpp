@@ -50,23 +50,27 @@ void TDqManagerConfig::Register(TRegistrar registrar)
 //////////////////////////////////////////////////////////////////////////////
 
 TDqManager::TDqManager(const TDqManagerConfigPtr& config)
+    : Config_(config)
+{ }
+
+void TDqManager::Start()
 {
     NYson::TProtobufWriterOptions protobufWriterOptions;
     protobufWriterOptions.ConvertSnakeToCamelCase = true;
 
-    if (!config->YtCoordinator) {
+    if (!Config_->YtCoordinator) {
         YQL_LOG(FATAL) << "YtCoordinator config is not specified";
         exit(1);
     }
     NYql::NProto::TDqConfig::TYtCoordinator coordinatorConfig;
     coordinatorConfig.ParseFromStringOrThrow(NYson::YsonStringToProto(
-        ConvertToYsonString(config->YtCoordinator),
+        ConvertToYsonString(Config_->YtCoordinator),
         NYson::ReflectProtobufMessageType<NYql::NProto::TDqConfig::TYtCoordinator>(),
         protobufWriterOptions));
 
-    auto threads = config->ActorThreads;
-    auto interconnectPort = config->InterconnectPort;
-    auto grpcPort = config->GrpcPort;
+    auto threads = Config_->ActorThreads;
+    auto interconnectPort = Config_->InterconnectPort;
+    auto grpcPort = Config_->GrpcPort;
     if (interconnectPort == grpcPort) {
         YQL_LOG(FATAL) << "Interconnect and grpc ports must be different";
         exit(1);
@@ -75,14 +79,14 @@ TDqManager::TDqManager(const TDqManagerConfigPtr& config)
     TString hostName, localAddress;
     std::tie(hostName, localAddress) = NYql::NDqs::GetLocalAddress(
         coordinatorConfig.HasHostName() ? &coordinatorConfig.GetHostName() : nullptr,
-        config->UseIPv4 ? AF_INET : AF_INET6
+        Config_->UseIPv4 ? AF_INET : AF_INET6
     );
     YQL_LOG(INFO) << hostName + ":" + ToString(localAddress) << Endl;
 
     NYql::NProto::TDqConfig::TScheduler schedulerConfig;
-    if (config->Scheduler) {
+    if (Config_->Scheduler) {
         schedulerConfig.ParseFromStringOrThrow(NYson::YsonStringToProto(
-            ConvertToYsonString(config->Scheduler),
+            ConvertToYsonString(Config_->Scheduler),
             NYson::ReflectProtobufMessageType<NYql::NProto::TDqConfig::TScheduler>(),
             protobufWriterOptions));
     }
@@ -116,9 +120,9 @@ TDqManager::TDqManager(const TDqManagerConfigPtr& config)
     serviceNodeConfig.GrpcPort = grpcPort;
 
     NYql::NProto::TDqConfig::TICSettings iCSettings;
-    if (config->ICSettings) {
+    if (Config_->ICSettings) {
         iCSettings.ParseFromStringOrThrow(NYson::YsonStringToProto(
-            ConvertToYsonString(config->ICSettings),
+            ConvertToYsonString(Config_->ICSettings),
             NYson::ReflectProtobufMessageType<NYql::NProto::TDqConfig::TICSettings >(),
             protobufWriterOptions));
     }
@@ -147,14 +151,14 @@ TDqManager::TDqManager(const TDqManagerConfigPtr& config)
     ServiceNode_->StartService(dqTaskPreprocessorFactories);
 
     TVector<NActors::TActorId> ytRMs;
-    ytRMs.reserve(config->YtBackends.size());
+    ytRMs.reserve(Config_->YtBackends.size());
 
     TVector<TResourceManagerOptions> uploadResourcesOptions;
     auto nodesPerCluster = static_cast<ui32>(NDqs::ENodeIdLimits::MaxWorkerNodeId) - static_cast<ui32>(NDqs::ENodeIdLimits::MinWorkerNodeId);
-    nodesPerCluster /= config->YtBackends.size();
+    nodesPerCluster /= Config_->YtBackends.size();
     auto startNodeId = static_cast<ui32>(NDqs::ENodeIdLimits::MinWorkerNodeId);
 
-    for (const auto& ytBackendConfig : config->YtBackends) {
+    for (const auto& ytBackendConfig : Config_->YtBackends) {
         TResourceManagerOptions rmOptions;
         rmOptions.YtBackend.ParseFromStringOrThrow(NYson::YsonStringToProto(
             ConvertToYsonString(ytBackendConfig),
@@ -232,7 +236,7 @@ TDqManager::TDqManager(const TDqManagerConfigPtr& config)
             rmOptions.LockName = TString("ytrm.") + rmOptions.YtBackend.GetClusterName();
             rmOptions.UploadPrefix = rmOptions.YtBackend.GetUploadPrefix() + "/bin/" + ToString(GetProgramCommitId());
             rmOptions.Counters = MetricsRegistry_->GetSensors()->GetSubgroup("counters", "ytrm")->GetSubgroup("ytname", rmOptions.YtBackend.GetClusterName());
-            rmOptions.ForceIPv4 = config->UseIPv4;
+            rmOptions.ForceIPv4 = Config_->UseIPv4;
             ActorSystem_->Register(CreateResourceManager(rmOptions, Coordinator_));
         }
         rmOptions.UploadPrefix = rmOptions.YtBackend.GetUploadPrefix();
@@ -243,7 +247,7 @@ TDqManager::TDqManager(const TDqManagerConfigPtr& config)
     Coordinator_->StartGlobalWorker(ActorSystem_, uploadResourcesOptions, MetricsRegistry_);
 
     // Wait here until the DQ component is ready
-    auto dqControlFactory = CreateDqControlFactory(grpcPort, uploadResourcesOptions[0].YtBackend.GetVanillaJobLite(), MD5::File(uploadResourcesOptions[0].YtBackend.GetVanillaJobLite()), true, {}, config->UdfsWithMd5, config->FileStorage);
+    auto dqControlFactory = CreateDqControlFactory(grpcPort, uploadResourcesOptions[0].YtBackend.GetVanillaJobLite(), MD5::File(uploadResourcesOptions[0].YtBackend.GetVanillaJobLite()), true, {}, Config_->UdfsWithMd5, Config_->FileStorage);
     auto dqControl = dqControlFactory->GetControl();
     auto isDqReady = dqControl->IsReady({});
     YQL_LOG(INFO) << "DQ warmup initiated, current status: " << isDqReady;
@@ -252,8 +256,7 @@ TDqManager::TDqManager(const TDqManagerConfigPtr& config)
         Sleep(TDuration::Seconds(3));
         isDqReady = dqControl->IsReady();
     }
-    YQL_LOG(INFO) << "DQ component is ready " << isDqReady;
-
+    YQL_LOG(INFO) << "DQ component is ready";
 }
 
 //////////////////////////////////////////////////////////////////////////////

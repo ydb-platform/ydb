@@ -48,12 +48,15 @@ DEFINE_REFCOUNTED_TYPE(TDqManagerConfig)
 ////////////////////////////////////////////////////////////////////////////////
 
 class TDqManager
-    : public virtual TRefCounted
+    : public TRefCounted
 {
 public:
-    TDqManager(const TDqManagerConfigPtr& config);
+    explicit TDqManager(const TDqManagerConfigPtr& config);
+    void Start();
 
 private:
+    const TDqManagerConfigPtr& Config_;
+
     NActors::TActorSystem* ActorSystem_;
     ICoordinationHelper::TPtr Coordinator_;
     THolder<TServiceNode> ServiceNode_;

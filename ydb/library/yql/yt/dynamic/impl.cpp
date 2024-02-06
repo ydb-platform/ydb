@@ -41,6 +41,12 @@ TBridgeYqlPlugin* BridgeCreateYqlPlugin(const TBridgeYqlPluginOptions* bridgeOpt
     return nativePlugin.release();
 }
 
+void BridgeStartYqlPlugin(TBridgeYqlPlugin* plugin)
+{
+    auto* nativePlugin = reinterpret_cast<IYqlPlugin*>(plugin);
+    nativePlugin->Start();
+}
+
 void BridgeFreeYqlPlugin(TBridgeYqlPlugin* plugin)
 {
     auto* nativePlugin = reinterpret_cast<IYqlPlugin*>(plugin);

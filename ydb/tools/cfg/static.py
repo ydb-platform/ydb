@@ -1133,7 +1133,6 @@ class StaticConfigGenerator(object):
             sampling_scope_pb.MaxBurst = sampling['max_burst']
             return sampling_scope_pb
 
-
         def get_external_throttling(throttling):
             throttling_scope_pb = config_pb2.TTracingConfig.TExternalThrottlingScope()
             selectors = throttling.get("scope")

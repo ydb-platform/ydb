@@ -1608,7 +1608,7 @@ message TTracingConfig {
     message TBackendConfig {
         message TAuthConfig {
             message TTvmAuth {
-                required string Url = 1;
+                optional string Url = 1;
 
                 required uint32 SelfTvmId = 2;
                 required uint32 TracingTvmId = 3;

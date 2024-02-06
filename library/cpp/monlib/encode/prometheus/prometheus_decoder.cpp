@@ -531,10 +531,12 @@ namespace NMonitoring {
             }
 
             void ConsumeCounter(TStringBuf name, const TLabelsMap& labels, TInstant time, double value) {
-                i64 intValue{0};
+                ui64 uintValue{0};
                 // not nan
-                if (value == value) {
-                    Y_PARSER_ENSURE(TryStaticCast(value, intValue), "value " << value << " is out of range");
+                if (value == value && value > 0) {
+                    if (!TryStaticCast(value, uintValue)) {
+                        uintValue = std::numeric_limits<ui64>::max();
+                    }
                 }
 
                 // see https://st.yandex-team.ru/SOLOMON-4142 for more details
@@ -542,7 +544,7 @@ namespace NMonitoring {
                 // TODO: need to fix after server-side aggregation become correct for COUNTERs
                 Consumer_->OnMetricBegin(EMetricType::RATE);
                 ConsumeLabels(name, labels);
-                Consumer_->OnUint64(time, intValue);
+                Consumer_->OnUint64(time, uintValue);
                 Consumer_->OnMetricEnd();
             }
 

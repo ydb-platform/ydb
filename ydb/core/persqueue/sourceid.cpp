@@ -6,6 +6,7 @@
 #include <util/generic/size_literals.h>
 
 #include <algorithm>
+#include <ydb/library/dbgtrace/debug_trace.h>
 
 namespace NKikimr::NPQ {
 
@@ -57,6 +58,8 @@ NKikimrPQ::TMessageGroupInfo::EState TSourceIdInfo::ConvertState(TSourceIdInfo::
 }
 
 void FillWrite(const TKeyPrefix& key, const TBuffer& data, NKikimrClient::TKeyValueRequest::TCmdWrite& cmd) {
+    DBGTRACE("FillWrite");
+    DBGTRACE_LOG("key=" << TString(key.Data(), key.Size()));
     cmd.SetKey(key.Data(), key.Size());
     cmd.SetValue(data.Data(), data.Size());
     cmd.SetStorageChannel(NKikimrClient::TKeyValueRequest::INLINE);
@@ -369,6 +372,8 @@ void TSourceIdStorage::LoadProtoSourceIdInfo(const TString& key, const TString& 
 }
 
 void TSourceIdStorage::RegisterSourceIdInfo(const TString& sourceId, TSourceIdInfo&& sourceIdInfo, bool load) {
+    DBGTRACE("TSourceIdStorage::RegisterSourceIdInfo");
+    DBGTRACE_LOG("sourceId=" << sourceId);
     auto it = InMemorySourceIds.find(sourceId);
     if (it != InMemorySourceIds.end()) {
         if (!load || it->second.Offset < sourceIdInfo.Offset) {
@@ -432,6 +437,7 @@ TInstant TSourceIdStorage::MinAvailableTimestamp(TInstant now) const {
 
 void TSourceIdStorage::UpdateConfig(const NKikimrPQ::TBootstrapConfig& config, TInstant now)
 {
+    DBGTRACE("TSourceIdStorage::UpdateConfig");
     for (const auto& mg : config.GetExplicitMessageGroups()) {
 
         TMaybe<TPartitionKeyRange> keyRange;
@@ -492,6 +498,8 @@ TKeyPrefix::EMark TSourceIdWriter::FormatToMark(ESourceIdFormat format) {
 }
 
 void TSourceIdWriter::FillRequest(TEvKeyValue::TEvRequest* request, const TPartitionId& partition) {
+    DBGTRACE("TSourceIdWriter::FillRequest");
+    DBGTRACE_LOG("partition=" << partition);
     TKeyPrefix key(TKeyPrefix::TypeInfo, partition, FormatToMark(Format));
     TBuffer data;
 

@@ -2559,7 +2559,8 @@ public:
     TAstNode* BuildTableKeyExpression(const TStringBuf relname,
         const TStringBuf cluster, bool isScheme = false
     ) {
-        TString tableName = (cluster == "pg_catalog") ? TString(relname) : TablePathPrefix + relname;
+        bool noPrefix = (cluster == "pg_catalog" || cluster == "information_schema");
+        TString tableName = noPrefix ? TString(relname) : TablePathPrefix + relname;
         return L(A("Key"), QL(QA(isScheme ? "tablescheme" : "table"),
                             L(A("String"), QAX(std::move(tableName)))));
     }

@@ -312,7 +312,6 @@ std::shared_ptr<TCleanupColumnEngineChanges> TColumnEngineForLogs::StartCleanup(
 
 TDuration TColumnEngineForLogs::ProcessTiering(const ui64 pathId, const TTiering& ttl, TTieringProcessContext& context) const {
     AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("event", "ProcessTiering")("path_id", pathId)("ttl", ttl.GetDebugString());
-    ui64 evictionSize = 0;
     ui64 dropBlobs = 0;
     auto& indexInfo = VersionedIndex.GetLastSchema()->GetIndexInfo();
     Y_ABORT_UNLESS(context.Changes->Tiering.emplace(pathId, ttl).second);
@@ -340,9 +339,8 @@ TDuration TColumnEngineForLogs::ProcessTiering(const ui64 pathId, const TTiering
             continue;
         }
 
-        context.AllowEviction = (evictionSize <= context.MaxEvictBytes);
         context.AllowDrop = (dropBlobs <= TCompactionLimits::MAX_BLOBS_TO_DELETE);
-        const bool tryEvictPortion = context.AllowEviction && ttl.HasTiers();
+        const bool tryEvictPortion = ttl.HasTiers() && context.HasMemoryForEviction();
 
         if (auto max = info->MaxValue(ttlColumnId)) {
             bool keep = !expireTimestampOpt;
@@ -390,8 +388,8 @@ TDuration TColumnEngineForLogs::ProcessTiering(const ui64 pathId, const TTiering
                 }
                 if (currentTierName != tierName) {
                     AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("event", "tiering switch detected")("from", currentTierName)("to", tierName);
-                    evictionSize += info->BlobsSizes().first;
                     context.Changes->AddPortionToEvict(*info, TPortionEvictionFeatures(tierName, pathId, StoragesManager->GetOperator(tierName)));
+                    context.AppPortionForCheckMemoryUsage(*info);
                     SignalCounters.OnPortionToEvict(info->BlobsBytes());
                 }
             }
@@ -406,7 +404,7 @@ TDuration TColumnEngineForLogs::ProcessTiering(const ui64 pathId, const TTiering
             SignalCounters.OnPortionNoBorder(info->BlobsBytes());
         }
     }
-    if (dWaiting > TDuration::MilliSeconds(500) && (!context.AllowEviction || !context.AllowDrop)) {
+    if (dWaiting > TDuration::MilliSeconds(500) && (!context.HasMemoryForEviction() || !context.AllowDrop)) {
         dWaiting = TDuration::MilliSeconds(500);
     }
     Y_ABORT_UNLESS(!!dWaiting);
@@ -447,7 +445,7 @@ bool TColumnEngineForLogs::DrainEvictionQueue(std::map<TMonotonic, std::vector<T
     return hasChanges;
 }
 
-std::shared_ptr<TTTLColumnEngineChanges> TColumnEngineForLogs::StartTtl(const THashMap<ui64, TTiering>& pathEviction, const THashSet<TPortionAddress>& busyPortions, ui64 maxEvictBytes) noexcept {
+std::shared_ptr<TTTLColumnEngineChanges> TColumnEngineForLogs::StartTtl(const THashMap<ui64, TTiering>& pathEviction, const THashSet<TPortionAddress>& busyPortions, const ui64 memoryUsageLimit) noexcept {
     AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("event", "StartTtl")("external", pathEviction.size())
         ("internal", EvictionsController.MutableNextCheckInstantForTierings().size())
         ;
@@ -456,7 +454,7 @@ std::shared_ptr<TTTLColumnEngineChanges> TColumnEngineForLogs::StartTtl(const TH
 
     auto changes = std::make_shared<TTTLColumnEngineChanges>(TSplitSettings(), saverContext);
 
-    TTieringProcessContext context(maxEvictBytes, changes, busyPortions);
+    TTieringProcessContext context(memoryUsageLimit, changes, busyPortions, TTTLColumnEngineChanges::BuildMemoryPredictor());
     bool hasExternalChanges = false;
     for (auto&& i : pathEviction) {
         context.DurationsForced[i.first] = ProcessTiering(i.first, i.second, context);
@@ -575,9 +573,11 @@ void TColumnEngineForLogs::DoRegisterTable(const ui64 pathId) {
     AFL_VERIFY(Tables.emplace(pathId, std::make_shared<TGranuleMeta>(pathId, GranulesStorage, SignalCounters.RegisterGranuleDataCounters(), VersionedIndex)).second);
 }
 
-TColumnEngineForLogs::TTieringProcessContext::TTieringProcessContext(const ui64 maxEvictBytes, std::shared_ptr<TTTLColumnEngineChanges> changes, const THashSet<TPortionAddress>& busyPortions)
-    : Now(TlsActivationContext ? AppData()->TimeProvider->Now() : TInstant::Now())
-    , MaxEvictBytes(maxEvictBytes)
+TColumnEngineForLogs::TTieringProcessContext::TTieringProcessContext(const ui64 memoryUsageLimit,
+    std::shared_ptr<TTTLColumnEngineChanges> changes, const THashSet<TPortionAddress>& busyPortions, const std::shared_ptr<TColumnEngineChanges::IMemoryPredictor>& memoryPredictor)
+    : MemoryUsageLimit(memoryUsageLimit)
+    , MemoryPredictor(memoryPredictor)
+    , Now(TlsActivationContext ? AppData()->TimeProvider->Now() : TInstant::Now())
     , Changes(changes)
     , BusyPortions(busyPortions)
 {

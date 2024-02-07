@@ -35,6 +35,7 @@ SRCS(
     ut_insert_table.cpp
     ut_logs_engine.cpp
     ut_program.cpp
+    helper.cpp
     ydb/core/tx/columnshard/columnshard_ut_common.cpp
 )
 

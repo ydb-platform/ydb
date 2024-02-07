@@ -2001,6 +2001,19 @@ void UploadRows(TTestActorRuntime& runtime, const TString& tablePath, const TVec
     UNIT_ASSERT_VALUES_EQUAL_C(ev->Get()->Status, Ydb::StatusIds::SUCCESS, "Status: " << ev->Get()->Status << " Issues: " << ev->Get()->Issues);
 }
 
+void SendPlanStep(Tests::TServer::TPtr server, ui64 tabletId, ui64 stepId, ui64 txId)
+{
+    auto& runtime = *server->GetRuntime();
+    auto sender = runtime.AllocateEdgeActor();
+
+    ui64 mediatorId = ChangeStateStorage(Mediator, server->GetSettings().Domain);
+    auto planStep = new TEvTxProcessing::TEvPlanStep(stepId, mediatorId, tabletId);
+    auto plannedTx = planStep->Record.MutableTransactions()->Add();
+    plannedTx->SetTxId(txId);
+    ActorIdToProto(sender, plannedTx->MutableAckTo());
+    runtime.SendToPipe(tabletId, sender, planStep);
+}
+
 void WaitTabletBecomesOffline(TServer::TPtr server, ui64 tabletId)
 {
     struct IsShardStateChange

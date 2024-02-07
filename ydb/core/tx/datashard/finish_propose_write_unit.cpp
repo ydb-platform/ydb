@@ -171,8 +171,7 @@ void TFinishProposeWriteUnit::CompleteRequest(TOperation::TPtr op, const TActorC
         DataShard.CheckMvccStateChangeCanStart(ctx);
     }
 
-    if (op->HasNeedDiagnosticsFlag())
-        AddDiagnosticsResult(*res);
+    AddDiagnosticsResult(*res);
 
     if (!gSkipRepliesFailPoint.Check(DataShard.TabletID(), op->GetTxId())) {
         if (res->IsPrepared()) {

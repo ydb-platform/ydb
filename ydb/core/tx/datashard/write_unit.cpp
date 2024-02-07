@@ -278,6 +278,11 @@ public:
 
             writeOp->SetWriteResult(NEvents::TDataEvents::TEvWriteResult::BuildCompleted(DataShard.TabletID(), writeOp->GetTxId()));
 
+            auto& writeResult = writeOp->GetWriteResult();
+            writeResult->Record.SetOrderId(op->GetTxId());
+            if (!op->IsImmediate())
+                writeResult->Record.SetStep(op->GetStep());
+
             if (Pipeline.AddLockDependencies(op, guardLocks)) {
                 writeTx->ResetCollectedChanges();
                 writeOp->ReleaseTxData(txc);

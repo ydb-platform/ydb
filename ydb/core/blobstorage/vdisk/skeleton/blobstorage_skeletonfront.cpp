@@ -1632,7 +1632,9 @@ namespace NKikimr {
             extQueue.Completed(ctx, msgCtx, event);
             TIntQueueClass &intQueue = GetIntQueue(msgCtx.IntQueueId);
             intQueue.Completed(ctx, msgCtx, *this, id);
-            TActivationContext::Send(event.release());
+            if (!ev->Get()->DoNotResend) {
+                TActivationContext::Send(event.release());
+            }
         }
 
         void ChangeGeneration(const TVDiskID& vdiskId, const TIntrusivePtr<TBlobStorageGroupInfo>& info,

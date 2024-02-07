@@ -207,6 +207,11 @@ struct TPDiskMockState::TImpl {
         }
     }
 
+    bool HasCorruptedArea(ui32 chunkIdx, ui32 begin, ui32 end) {
+        const ui64 chunkBegin = ui64(chunkIdx) * ChunkSize;
+        return static_cast<bool>(Corrupted & TIntervalSet{chunkBegin + begin, chunkBegin + end});
+    }
+
     std::set<ui32> GetChunks() {
         std::set<ui32> res;
         for (auto& [ownerId, owner] : Owners) {
@@ -288,6 +293,10 @@ TPDiskMockState::~TPDiskMockState()
 
 void TPDiskMockState::SetCorruptedArea(ui32 chunkIdx, ui32 begin, ui32 end, bool enabled) {
     Impl->SetCorruptedArea(chunkIdx, begin, end, enabled);
+}
+
+bool TPDiskMockState::HasCorruptedArea(ui32 chunkIdx, ui32 begin, ui32 end) {
+    return Impl->HasCorruptedArea(chunkIdx, begin, end);
 }
 
 std::set<ui32> TPDiskMockState::GetChunks() {

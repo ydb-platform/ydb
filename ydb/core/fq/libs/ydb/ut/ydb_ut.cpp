@@ -18,6 +18,6 @@ Y_UNIT_TEST_SUITE(TFqYdbTest) {
         UNIT_ASSERT(issues.Size() == 1);
         UNIT_ASSERT(issues.ToString().Contains(text));
     }
-};
+}
 
 } // namespace NFq

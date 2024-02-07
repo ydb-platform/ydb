@@ -2341,10 +2341,12 @@ class Cuda(object):
         emit('_SRC_CU_CMD', cmd)
         emit('_SRC_CU_PEERDIR', ' '.join(sorted(self.peerdirs)))
 
+    # This method is only used to set HAVE_CUDA=no automatically during ymake initialization
+    # (i.e. is used only in `auto_have_cuda` invocation)
     def have_cuda_in_arcadia(self):
         host, target = self.build.host_target
 
-        if not any((host.is_linux_x86_64, host.is_macos_x86_64, host.is_windows_x86_64, host.is_linux_powerpc)):
+        if not any((host.is_linux_x86_64, host.is_windows_x86_64)):
             return False
 
         if host != target:
@@ -2365,9 +2367,6 @@ class Cuda(object):
         if is_positive('MUSL'):
             return False
         if self.build.is_sanitized:
-            return False
-        if self.build.host_target[1].is_macos_x86_64 or self.build.host_target[1].is_macos_arm64:
-            # DEVTOOLSSUPPORT-19178 CUDA is rarely needed on Mac. Disable it by default but allow explicit builds with CUDA.
             return False
         return self.cuda_root.from_user or self.use_arcadia_cuda.value and self.have_cuda_in_arcadia()
 
@@ -2441,8 +2440,6 @@ class Cuda(object):
         return select((
             (host.is_linux_x86_64 and target.is_linux_x86_64, '$CUDA_HOST_TOOLCHAIN_RESOURCE_GLOBAL/bin/clang'),
             (host.is_linux_x86_64 and target.is_linux_armv8, '$CUDA_HOST_TOOLCHAIN_RESOURCE_GLOBAL/bin/clang'),
-            (host.is_linux_powerpc and target.is_linux_powerpc, '$CUDA_HOST_TOOLCHAIN_RESOURCE_GLOBAL/bin/clang'),
-            (host.is_macos_x86_64 and target.is_macos_x86_64, '$CUDA_HOST_TOOLCHAIN_RESOURCE_GLOBAL/usr/bin/clang'),
         ))
 
     def cuda_windows_host_compiler(self):

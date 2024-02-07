@@ -14,6 +14,7 @@
 #include <ydb/library/yql/dq/opt/dq_opt_peephole.h>
 #include <ydb/library/yql/core/services/yql_transform_pipeline.h>
 #include <ydb/library/yql/providers/common/transform/yql_optimize.h>
+#include <ydb/library/yql/minikql/mkql_runtime_version.h>
 
 #include <util/generic/size_literals.h>
 #include <util/string/cast.h>
@@ -181,6 +182,10 @@ public:
     }
 private:
     TMaybeNode<TExprBase> SetCombinerMemoryLimit(TExprBase node, TExprContext& ctx) {
+        if (NMiniKQL::RuntimeVersion < 46U) {
+            return node;
+        }
+
         if (const auto limit = node.Ref().Child(TCoWideCombiner::idx_MemLimit); limit->IsAtom("0")) {
             if (const auto limitSetting = Config->_KqpYqlCombinerMemoryLimit.Get(); limitSetting && *limitSetting) {
                 return ctx.ChangeChild(node.Ref(), TCoWideCombiner::idx_MemLimit, ctx.RenameNode(*limit, ToString(-i64(*limitSetting))));

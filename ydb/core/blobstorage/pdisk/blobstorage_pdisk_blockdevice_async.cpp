@@ -474,9 +474,13 @@ class TRealBlockDevice : public IBlockDevice {
 
                 if ((ui64)*Device.Mon.DeviceOverestimationRatio > Device.CriticalOverestimationRatio) {
                     if (CriticalOverestimationBeginsAtCycle) {
-                        ui64 ms = HPMilliSeconds(eventGotAtCycle - CriticalOverestimationBeginsAtCycle);
-                        if (ms >= Device.CriticalOverestimationTimeMs) {
-                            Device.CriticalOverestimationDetected.store(true);
+                        if (eventGotAtCycle < CriticalOverestimationBeginsAtCycle) {
+                            CriticalOverestimationBeginsAtCycle = eventGotAtCycle;
+                        } else {
+                            ui64 ms = HPMilliSeconds(eventGotAtCycle - CriticalOverestimationBeginsAtCycle);
+                            if (ms >= Device.CriticalOverestimationTimeMs) {
+                                Device.CriticalOverestimationDetected.store(true);
+                            }
                         }
                     } else {
                         CriticalOverestimationBeginsAtCycle = eventGotAtCycle;

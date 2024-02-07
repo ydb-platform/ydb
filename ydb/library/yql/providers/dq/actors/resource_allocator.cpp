@@ -249,8 +249,8 @@ private:
             request->Record.SetFreeWorkerAfterMs(Timeout.MilliSeconds());
         }
         request->Record.SetTraceId(TraceId);
+        request->Record.SetCreateComputeActor(true);
         if (!Tasks.empty()) {
-            request->Record.SetCreateComputeActor(true);
             request->Record.SetComputeActorType(ComputeActorType);
             ActorIdToProto(ControlId, request->Record.MutableResultActorId());
             *request->Record.AddTask() = node.Task;

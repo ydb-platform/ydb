@@ -3,7 +3,6 @@
 
 #include <ydb/library/yql/providers/dq/actors/actor_helpers.h>
 #include <ydb/library/yql/providers/dq/actors/compute_actor.h>
-#include <ydb/library/yql/providers/dq/actors/worker_actor.h>
 #include <ydb/library/yql/providers/dq/runtime/runtime_data.h>
 #include <ydb/library/yql/dq/actors/compute/dq_compute_actor.h>
 #include <ydb/library/yql/dq/actors/compute/dq_compute_actor_impl.h>
@@ -217,13 +216,8 @@ private:
             resourceId = resource.Data;
             ResourceId.Counter ++;
         }
-        bool createComputeActor = ev->Get()->Record.GetCreateComputeActor();
+        Y_ABORT_UNLESS(ev->Get()->Record.GetCreateComputeActor());
         TString computeActorType = ev->Get()->Record.GetComputeActorType();
-
-        if (createComputeActor && !Options.CanUseComputeActor) {
-            Send(ev->Sender, MakeHolder<TEvAllocateWorkersResponse>("Compute Actor Disabled", NYql::NDqProto::StatusIds::BAD_REQUEST), 0, ev->Cookie);
-            return;
-        }
 
         YQL_LOG_CTX_ROOT_SESSION_SCOPE(ev->Get()->Record.GetTraceId());
         YQL_CLOG(DEBUG, ProviderDq) << "TLocalWorkerManager::TEvAllocateWorkersRequest " << resourceId;
@@ -237,19 +231,15 @@ private:
 
         ui64 totalInitialTaskMemoryLimit = 0;
         std::vector<ui64> quotas;
-        if (createComputeActor) {
-            Y_ABORT_UNLESS(static_cast<int>(tasks.size()) == static_cast<int>(count));
-            quotas.reserve(count);
-            for (auto& task : tasks) {
-                auto taskLimit = task.GetInitialTaskMemoryLimit();
-                if (taskLimit == 0) {
-                    taskLimit = Options.MkqlInitialMemoryLimit;
-                }
-                quotas.push_back(taskLimit);
-                totalInitialTaskMemoryLimit += taskLimit;
+        Y_ABORT_UNLESS(static_cast<int>(tasks.size()) == static_cast<int>(count));
+        quotas.reserve(count);
+        for (auto& task : tasks) {
+            auto taskLimit = task.GetInitialTaskMemoryLimit();
+            if (taskLimit == 0) {
+                taskLimit = Options.MkqlInitialMemoryLimit;
             }
-        } else {
-            totalInitialTaskMemoryLimit = count * Options.MkqlInitialMemoryLimit;
+            quotas.push_back(taskLimit);
+            totalInitialTaskMemoryLimit += taskLimit;
         }
 
         bool canAllocate = MemoryQuoter->Allocate(traceId, 0, totalInitialTaskMemoryLimit);
@@ -272,7 +262,7 @@ private:
             auto resultId = ActorIdFromProto(ev->Get()->Record.GetResultActorId());
             ::NMonitoring::TDynamicCounterPtr taskCounters;
 
-            if (createComputeActor && TaskCounters) {
+            if (TaskCounters) {
                 auto& info = TaskCountersMap[traceId];
                 if (!info.TaskCounters) {
                     info.TaskCounters = TaskCounters->GetSubgroup("operation", traceId);
@@ -283,29 +273,20 @@ private:
 
             for (ui32 i = 0; i < count; i++) {
                 THolder<NActors::IActor> actor;
-
-                if (createComputeActor) {
-                    YQL_CLOG(DEBUG, ProviderDq) << "Create compute actor: " << computeActorType;
-                    NYql::NDqProto::TDqTask* taskPtr = &(tasks[i]);
-                    actor.Reset(NYql::CreateComputeActor(
-                        Options,
-                        std::make_shared<TMemoryQuotaManager>(MemoryQuoter, allocationInfo.TxId, quotas[i]),
-                        resultId,
-                        traceId,
-                        taskPtr,
-                        computeActorType,
-                        Options.TaskRunnerActorFactory,
-                        taskCounters,
-                        ev->Get()->Record.GetStatsMode()));
-                } else {
-                    actor.Reset(CreateWorkerActor(
-                        Options.RuntimeData,
-                        traceId,
-                        Options.TaskRunnerActorFactory,
-                        Options.AsyncIoFactory));
-                }
+                YQL_CLOG(DEBUG, ProviderDq) << "Create compute actor: " << computeActorType;
+                NYql::NDqProto::TDqTask* taskPtr = &(tasks[i]);
+                actor.Reset(NYql::CreateComputeActor(
+                    Options,
+                    std::make_shared<TMemoryQuotaManager>(MemoryQuoter, allocationInfo.TxId, quotas[i]),
+                    resultId,
+                    traceId,
+                    taskPtr,
+                    computeActorType,
+                    Options.TaskRunnerActorFactory,
+                    taskCounters,
+                    ev->Get()->Record.GetStatsMode()));
                 allocationInfo.WorkerActors.emplace_back(RegisterChild(
-                    actor.Release(), createComputeActor ? NYql::NDq::TEvDq::TEvAbortExecution::Unavailable("Aborted by LWM").Release() : nullptr
+                    actor.Release(), NYql::NDq::TEvDq::TEvAbortExecution::Unavailable("Aborted by LWM").Release()
                 ));
             }
 

@@ -107,6 +107,16 @@ void ComputeJoinConditions(const TCoEquiJoinTuple& joinTuple,
     }
 }
 
+/**
+ * Internal Join nodes are used inside the CBO. They don't own join condition data structures
+ * and therefore avoid copying them during generation of candidate plans.
+ * 
+ * These datastructures are owned by the query graph, so it is important to keep the graph around
+ * while internal nodes are being used.
+ * 
+ * After join enumeration, internal nodes need to be converted to regular nodes, that own the data
+ * structures
+*/
 struct TJoinOptimizerNodeInternal : public IBaseOptimizerNode {
     std::shared_ptr<IBaseOptimizerNode> LeftArg;
     std::shared_ptr<IBaseOptimizerNode> RightArg;
@@ -152,6 +162,13 @@ TVector<TString> TJoinOptimizerNodeInternal::Labels() {
     return res;
 }
 
+/**
+ * Convert a tree of internal optimizer nodes to external nodes that own the data structures.
+ * 
+ * The internal node tree can have references to external nodes (since some subtrees are optimized
+ * separately if the plan contains non-orderable joins). So we check the instances and if we encounter
+ * an external node, we return the whole subtree unchanged.
+*/
 std::shared_ptr<TJoinOptimizerNode> ConvertFromInternal(const std::shared_ptr<IBaseOptimizerNode> internal) {
     Y_ENSURE(internal->Kind == EOptimizerNodeKind::JoinNodeType);
     
@@ -202,7 +219,7 @@ void TJoinOptimizerNodeInternal::Print(std::stringstream& stream, int ntabs) {
 }
 
 /**
- * Create a new join and compute its statistics and cost
+ * Create a new external join node and compute its statistics and cost
 */
 std::shared_ptr<TJoinOptimizerNode> MakeJoin(std::shared_ptr<IBaseOptimizerNode> left, 
     std::shared_ptr<IBaseOptimizerNode> right, 
@@ -220,7 +237,7 @@ std::shared_ptr<TJoinOptimizerNode> MakeJoin(std::shared_ptr<IBaseOptimizerNode>
 }
 
 /**
- * Create a new join and compute its statistics and cost
+ * Create a new internal join node and compute its statistics and cost
 */
 std::shared_ptr<TJoinOptimizerNodeInternal> MakeJoinInternal(std::shared_ptr<IBaseOptimizerNode> left, 
     std::shared_ptr<IBaseOptimizerNode> right, 
@@ -1008,6 +1025,9 @@ TExprBase RearrangeEquiJoinTree(TExprContext& ctx, const TCoEquiJoin& equiJoin,
         .Done();
 }
 
+/**
+ * Collects EquiJoin inputs with statistics for cost based optimization
+*/
 bool DqCollectJoinRelationsWithStats(
     TVector<std::shared_ptr<TRelOptimizerNode>>& rels,
     TTypeAnnotationContext& typesCtx, 

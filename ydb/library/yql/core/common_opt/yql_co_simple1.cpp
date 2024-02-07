@@ -75,7 +75,7 @@ TExprNode::TPtr OptimizePgCastOverPgConst(const TExprNode::TPtr& input, TExprCon
         return input;
     }
     auto val = input->Child(0);
-    if (!val->IsCallable("PgConst")) { 
+    if (!val->IsCallable("PgConst")) {
         return input;
     }
 
@@ -85,7 +85,7 @@ TExprNode::TPtr OptimizePgCastOverPgConst(const TExprNode::TPtr& input, TExprCon
         YQL_CLOG(DEBUG, Core) << "Remove PgCast unknown->text over PgConst";
         return ctx.ChangeChild(*val, 1, castToType);
     }
-    
+
     return input;
 }
 
@@ -6285,7 +6285,48 @@ void RegisterCoSimpleCallables1(TCallableOptimizerMap& map) {
     map["ShuffleByKeys"] = map["PartitionsByKeys"] = [](const TExprNode::TPtr& node, TExprContext& ctx, TOptimizeContext& optCtx) {
         if (IsEmpty(node->Head(), *optCtx.Types)) {
             YQL_CLOG(DEBUG, Core) << node->Content() << " over empty input.";
-            auto lambdaResult = ctx.Builder(node->Pos()).Apply(node->Tail()).With(0, KeepConstraints(node->HeadPtr(), node->Tail().Head().Head(), ctx)).Seal().Build();
+
+            // lambda argument type:
+            auto& lambdaArg = node->Tail().Head().Head();
+            auto* lambdaArgType = lambdaArg.GetTypeAnn();
+            YQL_ENSURE(lambdaArgType, "No argument type for lambda in " << node->Content());
+
+            // sequence type:
+            auto* sequenceType = node->Head().GetTypeAnn();
+            YQL_ENSURE(sequenceType, "No argument type for sequence in " << node->Content());
+
+            TStringBuf typeConversionFunc;
+            if (sequenceType->GetKind() != lambdaArgType->GetKind()) {
+                switch (lambdaArgType->GetKind()) {
+                    case ETypeAnnotationKind::List:
+                        if (sequenceType->GetKind() == ETypeAnnotationKind::Optional) {
+                            typeConversionFunc = "ToList";
+                        } else if (IsIn({ ETypeAnnotationKind::Stream, ETypeAnnotationKind::Flow }, sequenceType->GetKind())) {
+                            typeConversionFunc = "ForwardList";
+                        }
+                        break;
+                    case ETypeAnnotationKind::Flow:
+                        typeConversionFunc = "ToFlow";
+                        break;
+                    case ETypeAnnotationKind::Stream:
+                        typeConversionFunc = "ToStream";
+                        break;
+                    case ETypeAnnotationKind::Optional:
+                        if (sequenceType->GetKind() == ETypeAnnotationKind::List) {
+                            typeConversionFunc = "ToOptional";
+                        }
+                        // TODO: convert from Stream/Flow to Optional
+                        break;
+                    default:
+                        break;
+                }
+            }
+
+            TExprNode::TPtr sequence = KeepConstraints(node->HeadPtr(), lambdaArg, ctx);
+            if (typeConversionFunc) {
+                sequence = KeepConstraints(ctx.NewCallable(sequence->Pos(), typeConversionFunc, { sequence }), lambdaArg, ctx);
+            }
+            auto lambdaResult = ctx.Builder(node->Pos()).Apply(node->Tail()).With(0, sequence).Seal().Build();
             if (node->IsCallable("ShuffleByKeys")) {
                 auto lambdaType = node->Tail().GetTypeAnn();
                 if (lambdaType->GetKind() == ETypeAnnotationKind::Optional) {

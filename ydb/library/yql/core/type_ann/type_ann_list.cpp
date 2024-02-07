@@ -1915,18 +1915,14 @@ namespace {
     }
 
     IGraphTransformer::TStatus ForwardListWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TContext& ctx) {
+        Y_UNUSED(output);
         if (!EnsureArgsCount(*input, 1, ctx.Expr)) {
             return IGraphTransformer::TStatus::Error;
         }
 
         const TTypeAnnotationNode* itemType = nullptr;
-        if (!EnsureNewSeqType<false, true>(input->Head(), ctx.Expr, &itemType)) {
+        if (!EnsureNewSeqType<false, false>(input->Head(), ctx.Expr, &itemType)) {
             return IGraphTransformer::TStatus::Error;
-        }
-
-        if (input->Head().GetTypeAnn()->GetKind() == ETypeAnnotationKind::List) { // Already a list, remove ForwardList
-            output = input->HeadPtr();
-            return IGraphTransformer::TStatus::Repeat;
         }
 
         input->SetTypeAnn(ctx.Expr.MakeType<TListExprType>(itemType));

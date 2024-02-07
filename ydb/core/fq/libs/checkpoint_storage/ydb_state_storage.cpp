@@ -365,7 +365,7 @@ TFuture<IStateStorage::TCountStatesResult> TStateStorage::CountStates(
 
     return StatusToIssues(future).Apply(
         [context] (const TFuture<TIssues>& future) {
-            return TCountStatesResult{context->Count, std::move(future.GetValue())};
+            return TCountStatesResult{context->Count, future.GetValue()};
         });
 }
 TExecDataQuerySettings TStateStorage::DefaultExecDataQuerySettings() {

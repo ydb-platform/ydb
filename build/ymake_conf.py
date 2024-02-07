@@ -2421,7 +2421,7 @@ class Cuda(object):
                  'sm_80', 'sm_86',
                  'compute_86'])
         else:
-            return []
+            return ''
 
     def auto_use_arcadia_cuda(self):
         return not self.cuda_root.from_user

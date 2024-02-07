@@ -30,7 +30,7 @@ Y_UNIT_TEST_SUITE(DataShardWrite) {
         return {runtime, server, sender};
     }
 
-    Y_UNIT_TEST_TWIN(Upsert, EvWrite) {
+    Y_UNIT_TEST_TWIN(UpsertImmediate, EvWrite) {
         auto [runtime, server, sender] = TestCreateServer();
 
         auto opts = TShardedTableOptions();
@@ -53,7 +53,36 @@ Y_UNIT_TEST_SUITE(DataShardWrite) {
         }
     }
 
-    Y_UNIT_TEST(WriteImmediateOnShard) {
+    Y_UNIT_TEST_TWIN(UpsertPrepared, EvWrite) {
+        auto [runtime, server, sender] = TestCreateServer();
+
+        // Disable volatile transactions, since EvWrite has not yet supported them.
+        runtime.GetAppData().FeatureFlags.SetEnableDataShardVolatileTransactions(false);
+
+        auto opts = TShardedTableOptions();
+        auto [shards1, tableId1] = CreateShardedTable(server, sender, "/Root", "table-1", opts);
+        auto [shards2, tableId2] = CreateShardedTable(server, sender, "/Root", "table-2", opts);
+
+        auto rows = EvWrite ? TEvWriteRows{{{0, 1}}, {{2, 3}}} : TEvWriteRows{};
+        auto evWriteObservers = ReplaceEvProposeTransactionWithEvWrite(runtime, rows);
+
+        Cout << "========= Send distributed write =========\n";
+        {
+            ExecSQL(server, sender, Q_(
+                "UPSERT INTO `/Root/table-1` (key, value) VALUES (0, 1);"
+                "UPSERT INTO `/Root/table-2` (key, value) VALUES (2, 3);"));
+        }
+
+        Cout << "========= Read tables =========\n";
+        {
+            auto tableState1 = TReadTableState(server, MakeReadTableSettings("/Root/table-1")).All();
+            auto tableState2 = TReadTableState(server, MakeReadTableSettings("/Root/table-2")).All();
+            UNIT_ASSERT_VALUES_EQUAL(tableState1, "key = 0, value = 1\n");
+            UNIT_ASSERT_VALUES_EQUAL(tableState2, "key = 2, value = 3\n");
+        }
+    }
+
+    Y_UNIT_TEST(WriteImmediate) {
         auto [runtime, server, sender] = TestCreateServer();
 
         auto opts = TShardedTableOptions().Columns({{"key", "Uint32", true, false}, {"value", "Uint32", false, false}});
@@ -84,7 +113,7 @@ Y_UNIT_TEST_SUITE(DataShardWrite) {
         }
     }
 
-    Y_UNIT_TEST(WriteImmediateOnShardManyColumns) {
+    Y_UNIT_TEST(WriteImmediateManyColumns) {
         auto [runtime, server, sender] = TestCreateServer();
 
         auto opts = TShardedTableOptions().Columns({{"key64", "Uint64", true, false}, {"key32", "Uint32", true, false},
@@ -131,7 +160,7 @@ Y_UNIT_TEST_SUITE(DataShardWrite) {
         }
     }
 
-    Y_UNIT_TEST(WritePreparedOnShard) {
+    Y_UNIT_TEST(WritePrepared) {
         auto [runtime, server, sender] = TestCreateServer();
 
         TShardedTableOptions opts;

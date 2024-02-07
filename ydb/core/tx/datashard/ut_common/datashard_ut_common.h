@@ -723,6 +723,7 @@ struct TEvWriteRow {
     enum EStatus {
         Init,
         Processing,
+        Prepared,
         Completed
     } Status = Init;
 };
@@ -739,8 +740,14 @@ class TEvWriteRows : public std::vector<TEvWriteRow> {
         Cerr << "Processing next EvWrite row\n";
         return *processedRow;
     }
-    void CompleteNextRow() {
+    void PrepareNextRow() {
         auto processedRow = std::find_if(begin(), end(), [](const auto& row) { return row.Status == TEvWriteRow::EStatus::Processing; });
+        Y_VERIFY_S(processedRow != end(), "There should be at lest one EvWrite row processing.");
+        processedRow->Status = TEvWriteRow::EStatus::Prepared;
+        Cerr << "Prepared next EvWrite row\n";
+    }
+    void CompleteNextRow() {
+        auto processedRow = std::find_if(begin(), end(), [](const auto& row) { return row.Status == TEvWriteRow::EStatus::Processing || row.Status == TEvWriteRow::EStatus::Prepared; });
         Y_VERIFY_S(processedRow != end(), "There should be at lest one EvWrite row processing.");
         processedRow->Status = TEvWriteRow::EStatus::Completed;
         Cerr << "Completed next EvWrite row\n";

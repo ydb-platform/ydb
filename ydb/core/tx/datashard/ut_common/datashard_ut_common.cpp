@@ -1957,7 +1957,7 @@ TTestActorRuntimeBase::TEventObserverHolderPair ReplaceEvProposeTransactionWithE
         if (event->GetTypeRewrite() != NEvents::TDataEvents::EvWriteResult)
             return;
 
-        rows.CompleteNextRow();
+
 
         const auto& record = event->Get<NEvents::TDataEvents::TEvWriteResult>()->Record;
         Cerr << "EvWriteResult event is observed and will be replaced with EvProposeTransactionResult: " << record.ShortDebugString() << Endl;
@@ -1968,6 +1968,16 @@ TTestActorRuntimeBase::TEventObserverHolderPair ReplaceEvProposeTransactionWithE
         auto status = NKikimr::NDataShard::EvWrite::Convertor::GetStatus(record.GetStatus());
 
         auto evResult = std::make_unique<TEvDataShard::TEvProposeTransactionResult>(NKikimrTxDataShard::TX_KIND_DATA, origin, txId, status);
+        
+        if (status == NKikimrTxDataShard::TEvProposeTransactionResult::PREPARED) {
+            evResult->SetPrepared(record.GetMinStep(), record.GetMaxStep(), {});
+            evResult->Record.MutableDomainCoordinators()->CopyFrom(record.GetDomainCoordinators());
+            
+            rows.PrepareNextRow();
+        }
+        else {
+            rows.CompleteNextRow();
+        }
 
         // Replace event
         auto handle = new IEventHandle(event->Recipient, event->Sender, evResult.release(), 0, event->Cookie);

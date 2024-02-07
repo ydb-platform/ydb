@@ -103,6 +103,7 @@ struct TJobTableDescriptor
         const int UpdateTime;
         const int Address;
         const int Error;
+        const int InterruptionInfo;
         const int Statistics;
         const int BriefStatistics;
         const int StatisticsLz4;

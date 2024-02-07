@@ -1,4 +1,4 @@
-#include "operation_archive_schema.h"
+#include "operations_archive_schema.h"
 
 namespace NYT::NApi {
 
@@ -101,6 +101,7 @@ TJobTableDescriptor::TIndex::TIndex(const TNameTablePtr& nameTable)
     , UpdateTime(nameTable->RegisterName("update_time"))
     , Address(nameTable->RegisterName("address"))
     , Error(nameTable->RegisterName("error"))
+    , InterruptionInfo(nameTable->RegisterName("interruption_info"))
     , Statistics(nameTable->RegisterName("statistics"))
     , BriefStatistics(nameTable->RegisterName("brief_statistics"))
     , StatisticsLz4(nameTable->RegisterName("statistics_lz4"))

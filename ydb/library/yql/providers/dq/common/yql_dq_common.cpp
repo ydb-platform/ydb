@@ -135,5 +135,4 @@ bool NeedFallback(const NDq::TEvDq::TEvAbortExecution::TPtr& ev) {
 }
 
 } // namespace NCommon
-
 } // namespace NYql

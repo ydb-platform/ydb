@@ -314,7 +314,7 @@ def deploy(arguments):
         for flag_name in flags:
             enable_feature_flags.append(flag_name)
 
-    if 'YDB_PG_EXPERIMENTAL' in os.environ:
+    if 'YDB_EXPERIMENTAL_PG' in os.environ:
         optionals['pg_compatible_expirement'] = True
 
     configuration = KikimrConfigGenerator(

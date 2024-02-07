@@ -8,7 +8,6 @@
 #include <ydb/core/tx/columnshard/engines/changes/compaction.h>
 #include <ydb/core/tx/columnshard/blobs_action/bs/storage.h>
 #include <ydb/core/tx/columnshard/hooks/testing/controller.h>
-#include <ydb/core/tx/columnshard/data_sharing/manager/shared_blobs.h>
 
 
 namespace NKikimr {
@@ -378,22 +377,12 @@ class TTestStoragesManager: public NOlap::IStoragesManager {
 private:
     using TBase = NOlap::IStoragesManager;
     TIntrusivePtr<TTabletStorageInfo> TabletInfo = new TTabletStorageInfo();
-    std::shared_ptr<NOlap::NDataSharing::TSharedBlobsManager> SharedBlobsManager = std::make_shared<NOlap::NDataSharing::TSharedBlobsManager>();
 protected:
-    virtual bool DoLoadIdempotency(NTable::TDatabase& /*database*/) override {
-        return true;
-    }
-
     virtual std::shared_ptr<NOlap::IBlobsStorageOperator> DoBuildOperator(const TString& storageId) override {
         if (storageId == TBase::DefaultStorageId) {
-            return std::make_shared<NOlap::NBlobOperations::NBlobStorage::TOperator>(storageId, NActors::TActorId(), TabletInfo,
-                1, SharedBlobsManager->GetStorageManagerGuarantee(TBase::DefaultStorageId));
+            return std::make_shared<NOlap::NBlobOperations::NBlobStorage::TOperator>(storageId, NActors::TActorId(), TabletInfo, 1);
         } else 
             return nullptr;
-    }
-public:
-    virtual const std::shared_ptr<NDataSharing::TSharedBlobsManager>& GetSharedBlobsManager() const override {
-        return SharedBlobsManager;
     }
 };
 

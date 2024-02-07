@@ -33,6 +33,8 @@ target_link_libraries(yql-yt-native PUBLIC
   core-services-mounts
   yql-core-user_data
   library-yql-minikql
+  minikql-invoke_builtins-llvm14
+  minikql-comp_nodes-llvm14
   library-yql-protos
   udf-service-exception_policy
   yql-utils-backtrace
@@ -47,6 +49,8 @@ target_link_libraries(yql-yt-native PUBLIC
   yt-lib-log
   yt-lib-yt_download
   providers-yt-provider
+  yt-codec-codegen
+  yt-comp_nodes-llvm14
   library-yql-yt
 )
 target_sources(yql-yt-native PRIVATE
@@ -80,6 +84,8 @@ target_link_libraries(yql-yt-native.global PUBLIC
   core-services-mounts
   yql-core-user_data
   library-yql-minikql
+  minikql-invoke_builtins-llvm14
+  minikql-comp_nodes-llvm14
   library-yql-protos
   udf-service-exception_policy
   yql-utils-backtrace
@@ -94,6 +100,8 @@ target_link_libraries(yql-yt-native.global PUBLIC
   yt-lib-log
   yt-lib-yt_download
   providers-yt-provider
+  yt-codec-codegen
+  yt-comp_nodes-llvm14
   library-yql-yt
 )
 target_sources(yql-yt-native.global PRIVATE

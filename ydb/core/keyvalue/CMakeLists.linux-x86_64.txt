@@ -19,7 +19,6 @@ target_link_libraries(ydb-core-keyvalue PUBLIC
   library-actors-protos
   ydb-core-base
   core-blobstorage-base
-  core-control-common_controls
   core-engine-minikql
   core-keyvalue-protos
   ydb-core-protos

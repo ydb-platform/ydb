@@ -9,6 +9,9 @@
 add_subdirectory(ut)
 
 add_library(yql-utils-backtrace)
+target_include_directories(yql-utils-backtrace PRIVATE
+  ${CMAKE_SOURCE_DIR}/contrib/libs/libunwind/include
+)
 target_link_libraries(yql-utils-backtrace PUBLIC
   contrib-libs-linux-headers
   contrib-libs-cxxsupp

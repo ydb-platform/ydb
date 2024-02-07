@@ -6,6 +6,8 @@
 # original buildsystem will not be accepted.
 
 
+add_subdirectory(dq_vanilla_job)
+add_subdirectory(dq_vanilla_job.lite)
 add_subdirectory(dynamic)
 add_subdirectory(native)
 

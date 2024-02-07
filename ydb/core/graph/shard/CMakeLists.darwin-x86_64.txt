@@ -15,6 +15,7 @@ target_link_libraries(core-graph-shard PUBLIC
   yutil
   library-actors-core
   ydb-core-base
+  core-cms-console
   ydb-core-tablet
   ydb-core-tablet_flat
   core-graph-api
@@ -27,8 +28,8 @@ target_sources(core-graph-shard PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/core/graph/shard/shard_impl.h
   ${CMAKE_SOURCE_DIR}/ydb/core/graph/shard/backends.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/graph/shard/shard_impl.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/graph/shard/tx_aggregate_data.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/graph/shard/tx_change_backend.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/graph/shard/tx_clear_data.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/graph/shard/tx_get_metrics.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/graph/shard/tx_init_schema.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/graph/shard/tx_monitoring.cpp

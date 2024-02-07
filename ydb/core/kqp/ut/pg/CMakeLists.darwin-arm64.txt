@@ -36,6 +36,7 @@ target_link_options(ydb-core-kqp-ut-pg PRIVATE
 )
 target_sources(ydb-core-kqp-ut-pg PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/core/kqp/ut/pg/kqp_pg_ut.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/kqp/ut/pg/pg_catalog_ut.cpp
 )
 set_property(
   TARGET

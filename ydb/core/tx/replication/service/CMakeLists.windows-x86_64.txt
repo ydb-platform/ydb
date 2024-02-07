@@ -6,6 +6,7 @@
 # original buildsystem will not be accepted.
 
 
+add_subdirectory(ut_table_writer)
 add_subdirectory(ut_topic_reader)
 
 add_library(tx-replication-service)

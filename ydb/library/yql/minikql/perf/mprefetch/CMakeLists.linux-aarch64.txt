@@ -9,7 +9,6 @@
 
 add_executable(mprefetch)
 target_compile_options(mprefetch PRIVATE
-  -mprfchw
   -DUSE_CURRENT_UDF_ABI_VERSION
 )
 target_link_libraries(mprefetch PUBLIC

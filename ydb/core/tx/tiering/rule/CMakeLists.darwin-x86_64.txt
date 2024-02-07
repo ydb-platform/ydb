@@ -17,6 +17,7 @@ target_link_libraries(tx-tiering-rule PUBLIC
   services-metadata-abstract
   services-metadata-common
   services-metadata-initializer
+  services-metadata-manager
   services-bg_tasks-abstract
   core-tx-schemeshard
 )
@@ -38,6 +39,7 @@ target_link_libraries(tx-tiering-rule.global PUBLIC
   services-metadata-abstract
   services-metadata-common
   services-metadata-initializer
+  services-metadata-manager
   services-bg_tasks-abstract
   core-tx-schemeshard
 )

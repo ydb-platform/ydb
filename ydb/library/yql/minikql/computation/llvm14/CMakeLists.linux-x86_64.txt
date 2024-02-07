@@ -46,6 +46,8 @@ target_link_libraries(minikql-computation-llvm14 PUBLIC
 )
 target_sources(minikql-computation-llvm14 PRIVATE
   ${CMAKE_BINARY_DIR}/ydb/library/yql/minikql/computation/llvm14/ydb/library/yql/minikql/computation/mkql_computation_node_codegen.h
+  ${CMAKE_BINARY_DIR}/ydb/library/yql/minikql/computation/llvm14/ydb/library/yql/minikql/computation/mkql_llvm_base.h
+  ${CMAKE_BINARY_DIR}/ydb/library/yql/minikql/computation/llvm14/ydb/library/yql/minikql/computation/mkql_block_impl_codegen.h
   ${CMAKE_BINARY_DIR}/ydb/library/yql/minikql/computation/llvm14/mkql_computation_node_codegen.cpp
   ${CMAKE_BINARY_DIR}/ydb/library/yql/minikql/computation/llvm14/mkql_computation_node_graph.cpp
   ${CMAKE_BINARY_DIR}/ydb/library/yql/minikql/computation/llvm14/mkql_computation_node_graph_saveload.cpp
@@ -75,4 +77,12 @@ copy_file(
 copy_file(
   ${CMAKE_SOURCE_DIR}/ydb/library/yql/minikql/computation/mkql_computation_node_codegen.h.txt
   ${CMAKE_BINARY_DIR}/ydb/library/yql/minikql/computation/llvm14/ydb/library/yql/minikql/computation/mkql_computation_node_codegen.h
+)
+copy_file(
+  ${CMAKE_SOURCE_DIR}/ydb/library/yql/minikql/computation/mkql_llvm_base.h.txt
+  ${CMAKE_BINARY_DIR}/ydb/library/yql/minikql/computation/llvm14/ydb/library/yql/minikql/computation/mkql_llvm_base.h
+)
+copy_file(
+  ${CMAKE_SOURCE_DIR}/ydb/library/yql/minikql/computation/mkql_block_impl_codegen.h.txt
+  ${CMAKE_BINARY_DIR}/ydb/library/yql/minikql/computation/llvm14/ydb/library/yql/minikql/computation/mkql_block_impl_codegen.h
 )

@@ -107,7 +107,7 @@ public:
             ops.reserve(matrix.GetColCount() - TableInfo_.KeyColumnIds.size());
 
             for (ui16 valueColIdx = TableInfo_.KeyColumnIds.size(); valueColIdx < matrix.GetColCount(); ++valueColIdx) {
-                ui32 columnTag = writeTx->RecordOperation().GetColumnIds(valueColIdx);
+                ui32 columnTag = writeTx->GetColumnIds()[valueColIdx];
                 const TCell& cell = matrix.GetCell(rowIdx, valueColIdx);
 
                 NScheme::TTypeInfo vtypeInfo = scheme.GetColumnInfo(tableInfo, columnTag)->PType;
@@ -187,7 +187,7 @@ public:
 
         try {
             const ui64 txId = writeTx->GetTxId();
-            const auto* kqpLocks = writeTx->HasKqpLocks() ? &writeTx->GetKqpLocks() : nullptr;
+            const auto* kqpLocks = writeTx->GetKqpLocks() ? writeTx->GetKqpLocks().get() : nullptr;
             const auto& inReadSets = op->InReadSets();
             auto& awaitingDecisions = op->AwaitingDecisions();
             auto& outReadSets = op->OutReadSets();

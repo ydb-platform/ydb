@@ -152,7 +152,6 @@ public:
 
     bool Ready() const { return ErrCode == NKikimrTxDataShard::TError::OK; }
     bool RequirePrepare() const { return ErrCode == NKikimrTxDataShard::TError::SNAPSHOT_NOT_READY_YET; }
-    bool RequireWrites() const { return TxInfo().HasWrites() || !Immediate(); }
     bool HasWrites() const { return TxInfo().HasWrites(); }
     bool HasLockedWrites() const { return HasWrites() && LockTxId(); }
     bool HasDynamicWrites() const { return TxInfo().DynKeysCount != 0; }

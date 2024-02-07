@@ -30,24 +30,18 @@ public:
         return 100;
     }
 
-    const NKikimrDataEvents::TEvWrite::TOperation& RecordOperation() const {
-        Y_ABORT_UNLESS(Record.operations().size() == 1, "Only one operation is supported now");
-        Y_ABORT_UNLESS(Record.operations(0).GetType() == NKikimrDataEvents::TEvWrite::TOperation::OPERATION_UPSERT, "Only UPSERT operation is supported now");
-        return Record.operations(0);
-    }
-
     ui64 GetTxId() const override {
         return UserDb.GetGlobalTxId();
     }
 
     ui64 LockTxId() const {
-        return Record.locktxid();
+        return UserDb.GetLockTxId();
     }
     ui32 LockNodeId() const {
-        return Record.locknodeid();
+        return UserDb.GetLockNodeId();
     }
     bool Immediate() const {
-        return Record.txmode() == NKikimrDataEvents::TEvWrite::MODE_IMMEDIATE;
+        return UserDb.GetIsImmediateTx();
     }
     bool NeedDiagnostics() const {
         return true;
@@ -60,9 +54,6 @@ public:
     }
     bool RequirePrepare() const {
         return ErrCode == NKikimrTxDataShard::TError::SNAPSHOT_NOT_READY_YET;
-    }
-    bool RequireWrites() const {
-        return TxInfo().HasWrites() || !Immediate();
     }
     bool HasWrites() const {
         return TxInfo().HasWrites();
@@ -123,24 +114,12 @@ public:
         return UserDb.GetVolatileCommitOrdered();
     }
 
-
-    const ::NKikimrDataEvents::TKqpLocks& GetKqpLocks() const {
-        return Record.locks();
-    }
-    bool HasKqpLocks() const {
-        return Record.has_locks();
-    }
-
-    bool ParseOperations(const NEvents::TDataEvents::TEvWrite::TPtr& ev, const TUserTable::TTableInfos& tableInfos);
-    void SetTxKeys(const ::google::protobuf::RepeatedField<::NProtoBuf::uint32>& columnIds);
-
     ui32 ExtractKeys(bool allowErrors);
     bool ReValidateKeys();
-
+    
     ui64 HasOperations() const {
-        return Record.operations().size() != 0;
+        return Matrix.GetRowCount() != 0;
     }
-
     ui32 KeysCount() const {
         return TxInfo().WritesCount;
     }
@@ -167,15 +146,22 @@ public:
     }
 
 private:
+    bool ParseOperation(const NEvents::TDataEvents::TEvWrite::TPtr& ev, const NKikimrDataEvents::TEvWrite::TOperation& recordOperation, const TUserTable::TTableInfos& tableInfos);
+    void SetTxKeys();
+    TVector<TKeyValidator::TColumnWriteMeta> GetColumnWrites() const;
+
+    void ComputeTxSize();
+
+private:
     TDataShardUserDb UserDb;
     TKeyValidator KeyValidator;
     NMiniKQL::TEngineHostCounters EngineHostCounters;
-    // TODO: may be remove record
-    NKikimrDataEvents::TEvWrite Record;
 
     const ui64 TabletId;
 
     YDB_READONLY_DEF(TTableId, TableId);
+    YDB_READONLY_DEF(std::unique_ptr<NKikimrDataEvents::TKqpLocks>, KqpLocks);
+    YDB_READONLY_DEF(std::vector<ui32>, ColumnIds);
     YDB_READONLY_DEF(TSerializedCellMatrix, Matrix);
     YDB_READONLY_DEF(TInstant, ReceivedAt);
 
@@ -186,8 +172,6 @@ private:
     YDB_READONLY_DEF(bool, IsReleased);
 
     const TUserTable* TableInfo;
-private:
-    void ComputeTxSize();
 };
 
 class TWriteOperation : public TOperation {

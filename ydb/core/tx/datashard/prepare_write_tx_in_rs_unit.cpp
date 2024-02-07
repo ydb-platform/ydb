@@ -59,7 +59,7 @@ EExecutionStatus TPrepareWriteTxInRSUnit::Execute(TOperation::TPtr op, TTransact
     }
 
     try {
-        KqpPrepareInReadsets(op->InReadSets(), writeTx->GetKqpLocks(), nullptr, DataShard.TabletID());
+        KqpPrepareInReadsets(op->InReadSets(), writeTx->GetKqpLocks() ? writeTx->GetKqpLocks().get() : nullptr, nullptr, DataShard.TabletID());
     } catch (const yexception& e) {
         LOG_CRIT_S(ctx, NKikimrServices::TX_DATASHARD, "Exception while preparing in-readsets for KQP transaction "
             << *op << " at " << DataShard.TabletID() << ": " << CurrentExceptionMessage());

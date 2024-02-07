@@ -35,7 +35,7 @@ void KqpFillOutReadSets(TOutputOpData::TOutReadSets& outReadSets, const NKikimrD
     NKqp::TKqpTasksRunner& tasksRunner, TSysLocks& sysLocks, ui64 tabletId);
 
 void KqpPrepareInReadsets(TInputOpData::TInReadSets& inReadSets,
-    const NKikimrDataEvents::TKqpLocks& kqpLocks, const NKqp::TKqpTasksRunner* tasksRunner, ui64 tabletId);
+    const NKikimrDataEvents::TKqpLocks* kqpLocks, const NKqp::TKqpTasksRunner* tasksRunner, ui64 tabletId);
 
 std::tuple<bool, TVector<NKikimrDataEvents::TLock>> KqpValidateLocks(ui64 tabletId, TSysLocks& sysLocks, 
     const NKikimrDataEvents::TKqpLocks* kqpLocks, bool useGenericReadSets, const TInputOpData::TInReadSets& inReadSets);

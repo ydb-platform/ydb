@@ -899,7 +899,7 @@ void KqpCommitLocks(ui64 origin, const NKikimrDataEvents::TKqpLocks* kqpLocks, T
 }
 
 void KqpPrepareInReadsets(TInputOpData::TInReadSets& inReadSets,
-    const NKikimrDataEvents::TKqpLocks& kqpLocks, const NKqp::TKqpTasksRunner* tasksRunner, ui64 tabletId)
+    const NKikimrDataEvents::TKqpLocks* kqpLocks, const NKqp::TKqpTasksRunner* tasksRunner, ui64 tabletId)
 {
     if (tasksRunner) {
         for (auto& [taskId, task] : tasksRunner->GetTasks()) {
@@ -919,8 +919,8 @@ void KqpPrepareInReadsets(TInputOpData::TInReadSets& inReadSets,
         }
     }
 
-    if (ReceiveLocks(kqpLocks, tabletId)) {
-        for (ui64 shardId : kqpLocks.GetSendingShards()) {
+    if (kqpLocks && ReceiveLocks(*kqpLocks, tabletId)) {
+        for (ui64 shardId : kqpLocks->GetSendingShards()) {
             if (shardId == tabletId) {
                 continue;
             }

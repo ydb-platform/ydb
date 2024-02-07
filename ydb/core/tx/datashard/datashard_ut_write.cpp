@@ -11,7 +11,7 @@ using namespace Tests;
 using namespace NDataShardReadTableTest;
 
 Y_UNIT_TEST_SUITE(DataShardWrite) {
-    const TString etalonTableState3 = "key = 0, value = 1\nkey = 2, value = 3\nkey = 4, value = 5\n";
+    const TString expectedTableState = "key = 0, value = 1\nkey = 2, value = 3\nkey = 4, value = 5\n";
 
     std::tuple<TTestActorRuntime&, Tests::TServer::TPtr, TActorId> TestCreateServer() {
         TPortManager pm;
@@ -49,7 +49,7 @@ Y_UNIT_TEST_SUITE(DataShardWrite) {
         Cout << "========= Read table =========\n";
         {
             auto tableState = TReadTableState(server, MakeReadTableSettings("/Root/table-1")).All();
-            UNIT_ASSERT_VALUES_EQUAL(tableState, etalonTableState3);
+            UNIT_ASSERT_VALUES_EQUAL(tableState, expectedTableState);
         }
     }
 
@@ -109,7 +109,7 @@ Y_UNIT_TEST_SUITE(DataShardWrite) {
         Cout << "========= Read table =========\n";
         {
             auto tableState = TReadTableState(server, MakeReadTableSettings("/Root/table-1")).All();
-            UNIT_ASSERT_VALUES_EQUAL(tableState, etalonTableState3);
+            UNIT_ASSERT_VALUES_EQUAL(tableState, expectedTableState);
         }
     }
 
@@ -212,7 +212,7 @@ Y_UNIT_TEST_SUITE(DataShardWrite) {
         Cout << "========= Read table =========\n";
         {
             auto tableState = TReadTableState(server, MakeReadTableSettings("/Root/table-1")).All();
-            UNIT_ASSERT_VALUES_EQUAL(tableState, etalonTableState3);
+            UNIT_ASSERT_VALUES_EQUAL(tableState, expectedTableState);
         }
 
     } // Y_UNIT_TEST

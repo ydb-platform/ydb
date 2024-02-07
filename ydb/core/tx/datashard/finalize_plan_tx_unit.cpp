@@ -28,7 +28,7 @@ public:
         Y_VERIFY_S(tx, "cannot cast operation of kind " << op->GetKind());
         Y_VERIFY_S(tx->IsDataTx(), "unexpected non-data tx");
 
-        if (auto dataTx = tx->GetDataTx()) {
+        if (auto& dataTx = tx->GetDataTx()) {
             // Restore transaction type flags
             if (dataTx->IsKqpDataTx() && !tx->IsKqpDataTransaction())
                 tx->SetKqpDataTransactionFlag();

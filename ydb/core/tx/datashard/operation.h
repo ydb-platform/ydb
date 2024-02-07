@@ -538,8 +538,7 @@ public:
     YDB_ACCESSOR_DEF(ui64, TxCacheUsage);
 };
 
-struct TOperationAllListTag {
-};
+struct TOperationAllListTag {};
 struct TOperationGlobalListTag {};
 struct TOperationDelayedReadListTag {};
 struct TOperationDelayedWriteListTag {};

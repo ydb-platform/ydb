@@ -142,7 +142,7 @@ bool TValidatedWriteTx::ParseOperation(const NEvents::TDataEvents::TEvWrite::TPt
             ErrCode = NKikimrTxDataShard::TError::SCHEME_ERROR;
             ErrStr = TStringBuilder() << "Key column schema at position " << i;
             return false;
-            }
+        }
     }
 
     for (ui32 columnTag : ColumnIds) {

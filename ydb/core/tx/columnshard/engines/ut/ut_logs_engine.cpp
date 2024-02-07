@@ -1,12 +1,14 @@
+#include "helper.h"
 #include <library/cpp/testing/unittest/registar.h>
-#include "column_engine_logs.h"
-#include "predicate/predicate.h"
-#include "changes/cleanup.h"
+#include <ydb/core/tx/columnshard/engines/column_engine_logs.h>
+#include <ydb/core/tx/columnshard/engines/predicate/predicate.h>
+#include <ydb/core/tx/columnshard/engines/changes/cleanup.h>
 
 #include <ydb/core/tx/columnshard/columnshard_ut_common.h>
 #include <ydb/core/tx/columnshard/engines/changes/compaction.h>
 #include <ydb/core/tx/columnshard/blobs_action/bs/storage.h>
 #include <ydb/core/tx/columnshard/hooks/testing/controller.h>
+#include <ydb/core/tx/columnshard/data_sharing/manager/shared_blobs.h>
 
 
 namespace NKikimr {
@@ -16,6 +18,7 @@ namespace NTypeIds = NScheme::NTypeIds;
 using TTypeId = NScheme::TTypeId;
 using TTypeInfo = NScheme::TTypeInfo;
 using TDefaultTestsController = NKikimr::NYDBTest::NColumnShard::TController;
+using namespace NKikimr::NOlap::NEngines::NTest;
 
 namespace {
 
@@ -375,12 +378,22 @@ class TTestStoragesManager: public NOlap::IStoragesManager {
 private:
     using TBase = NOlap::IStoragesManager;
     TIntrusivePtr<TTabletStorageInfo> TabletInfo = new TTabletStorageInfo();
+    std::shared_ptr<NOlap::NDataSharing::TSharedBlobsManager> SharedBlobsManager = std::make_shared<NOlap::NDataSharing::TSharedBlobsManager>();
 protected:
+    virtual bool DoLoadIdempotency(NTable::TDatabase& /*database*/) override {
+        return true;
+    }
+
     virtual std::shared_ptr<NOlap::IBlobsStorageOperator> DoBuildOperator(const TString& storageId) override {
         if (storageId == TBase::DefaultStorageId) {
-            return std::make_shared<NOlap::NBlobOperations::NBlobStorage::TOperator>(storageId, NActors::TActorId(), TabletInfo, 1);
+            return std::make_shared<NOlap::NBlobOperations::NBlobStorage::TOperator>(storageId, NActors::TActorId(), TabletInfo,
+                1, SharedBlobsManager->GetStorageManagerGuarantee(TBase::DefaultStorageId));
         } else 
             return nullptr;
+    }
+public:
+    virtual const std::shared_ptr<NDataSharing::TSharedBlobsManager>& GetSharedBlobsManager() const override {
+        return SharedBlobsManager;
     }
 };
 
@@ -411,8 +424,8 @@ Y_UNIT_TEST_SUITE(TColumnEngineTestLogs) {
         engine.Load(db);
 
         std::vector<TInsertedData> dataToIndex = {
-            TInsertedData(2, paths[0], "", blobRanges[0].BlobId, {}, 0, {}),
-            TInsertedData(1, paths[0], "", blobRanges[1].BlobId, {}, 0, {})
+            TInsertedData(2, paths[0], "", blobRanges[0].BlobId, TLocalHelper::GetMetaProto(), 0, {}),
+            TInsertedData(1, paths[0], "", blobRanges[1].BlobId, TLocalHelper::GetMetaProto(), 0, {})
         };
 
         // write
@@ -507,7 +520,7 @@ Y_UNIT_TEST_SUITE(TColumnEngineTestLogs) {
             // PlanStep, TxId, PathId, DedupId, BlobId, Data, [Metadata]
             std::vector<TInsertedData> dataToIndex;
             dataToIndex.push_back(
-                TInsertedData(txId, pathId, "", blobRange.BlobId, {}, 0, {}));
+                TInsertedData(txId, pathId, "", blobRange.BlobId, TLocalHelper::GetMetaProto(), 0, {}));
 
             bool ok = Insert(engine, db, TSnapshot(planStep, txId), std::move(dataToIndex), blobs, step);
             UNIT_ASSERT(ok);
@@ -605,7 +618,7 @@ Y_UNIT_TEST_SUITE(TColumnEngineTestLogs) {
             // PlanStep, TxId, PathId, DedupId, BlobId, Data, [Metadata]
             std::vector<TInsertedData> dataToIndex;
             dataToIndex.push_back(
-                TInsertedData(txId, pathId, "", blobRange.BlobId, {}, 0, {}));
+                TInsertedData(txId, pathId, "", blobRange.BlobId, TLocalHelper::GetMetaProto(), 0, {}));
 
             bool ok = Insert(engine, db, TSnapshot(planStep, txId), std::move(dataToIndex), blobs, step);
             for (auto&& i : blobs) {
@@ -639,7 +652,7 @@ Y_UNIT_TEST_SUITE(TColumnEngineTestLogs) {
             // PlanStep, TxId, PathId, DedupId, BlobId, Data, [Metadata]
             std::vector<TInsertedData> dataToIndex;
             dataToIndex.push_back(
-                TInsertedData(txId, pathId, "", blobRange.BlobId, {}, 0, {}));
+                TInsertedData(txId, pathId, "", blobRange.BlobId, TLocalHelper::GetMetaProto(), 0, {}));
 
             bool ok = Insert(engine, db, TSnapshot(planStep, txId), std::move(dataToIndex), blobs, step);
             UNIT_ASSERT(ok);
@@ -680,7 +693,7 @@ Y_UNIT_TEST_SUITE(TColumnEngineTestLogs) {
                 // PlanStep, TxId, PathId, DedupId, BlobId, Data, [Metadata]
                 std::vector<TInsertedData> dataToIndex;
                 dataToIndex.push_back(
-                    TInsertedData(txId, pathId, "", blobRange.BlobId, {}, 0, {}));
+                    TInsertedData(txId, pathId, "", blobRange.BlobId, TLocalHelper::GetMetaProto(), 0, {}));
 
                 bool ok = Insert(engine, db, TSnapshot(planStep, txId), std::move(dataToIndex), blobs, step);
                 UNIT_ASSERT(ok);

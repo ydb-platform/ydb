@@ -505,7 +505,6 @@ private:
 
         MkqlMemoryLimit = ev->Get()->MkqlMemoryLimit;
         ProfileStats = std::move(ev->Get()->ProfileStats);
-        auto sourcesState = GetSourcesState();
         auto status = ev->Get()->RunStatus;
 
         CA_LOG_T("Resume execution, run status: " << status << " checkpoint: " << (bool) ev->Get()->ProgramState
@@ -522,10 +521,6 @@ private:
             if (it != SourcesMap.end()) {
                 it->second.FreeSpace = freeSpace;
             }
-        }
-
-        if (status != ERunStatus::Finished) {
-            PollSources(std::move(sourcesState));
         }
 
         if (ev->Get()->WatermarkInjectedToOutputs && !WatermarksTracker.HasOutputChannels()) {

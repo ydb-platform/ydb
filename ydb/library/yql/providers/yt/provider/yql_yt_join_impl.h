@@ -66,4 +66,9 @@ IGraphTransformer::TStatus RewriteYtEquiJoin(TYtEquiJoin equiJoin, TYtJoinNodeOp
 TMaybeNode<TExprBase> ExportYtEquiJoin(TYtEquiJoin equiJoin, const TYtJoinNodeOp& op, TExprContext& ctx, const TYtState::TPtr& state);
 TYtJoinNodeOp::TPtr OrderJoins(TYtJoinNodeOp::TPtr op, const TYtState::TPtr& state, TExprContext& ctx, bool debug = false);
 
+struct IBaseOptimizerNode;
+struct IProviderContext;
+
+void BuildOptimizerJoinTree(std::shared_ptr<IBaseOptimizerNode>& tree, std::shared_ptr<IProviderContext>& ctx, TYtJoinNodeOp::TPtr op);
+
 }

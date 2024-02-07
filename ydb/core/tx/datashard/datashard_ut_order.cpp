@@ -3386,6 +3386,72 @@ Y_UNIT_TEST_TWIN(TestShardRestartPlannedCommitShouldSucceed, StreamLookup) {
     }
 }
 
+Y_UNIT_TEST(TestShardRestartDuringWaitingRead) {
+    TPortManager pm;
+    NKikimrConfig::TAppConfig app;
+    app.MutableTableServiceConfig()->SetEnableKqpDataQuerySourceRead(true);
+    TServerSettings serverSettings(pm.GetPort(2134));
+    serverSettings.SetDomainName("Root")
+        .SetUseRealThreads(false)
+        .SetAppConfig(app)
+        // We read from an unresolved volatile tx
+        .SetEnableDataShardVolatileTransactions(true);
+
+    Tests::TServer::TPtr server = new TServer(serverSettings);
+    auto &runtime = *server->GetRuntime();
+    auto sender = runtime.AllocateEdgeActor();
+
+    InitRoot(server, sender);
+
+    CreateShardedTable(server, sender, "/Root", "table-1", 1);
+    CreateShardedTable(server, sender, "/Root", "table-2", 1);
+    auto table1shards = GetTableShards(server, sender, "/Root/table-1");
+
+    ExecSQL(server, sender, Q_("UPSERT INTO `/Root/table-1` (key, value) VALUES (1, 10)"));
+    ExecSQL(server, sender, Q_("UPSERT INTO `/Root/table-2` (key, value) VALUES (2, 20)"));
+
+    // Block readset exchange
+    std::vector<std::unique_ptr<IEventHandle>> readSets;
+    auto blockReadSets = runtime.AddObserver<TEvTxProcessing::TEvReadSet>([&](TEvTxProcessing::TEvReadSet::TPtr& ev) {
+        readSets.emplace_back(ev.Release());
+    });
+
+    // Start a distributed write to both tables
+    TString sessionId = CreateSessionRPC(runtime, "/Root");
+    auto upsertResult = SendRequest(
+        runtime,
+        MakeSimpleRequestRPC(R"(
+            UPSERT INTO `/Root/table-1` (key, value) VALUES (3, 30);
+            UPSERT INTO `/Root/table-2` (key, value) VALUES (4, 40);
+            )", sessionId, /* txId */ "", /* commitTx */ true),
+        "/Root");
+    WaitFor(runtime, [&]{ return readSets.size() >= 4; }, "readsets");
+
+    // Start reading the first table
+    TString readSessionId = CreateSessionRPC(runtime, "/Root");
+    auto readResult = SendRequest(
+        runtime,
+        MakeSimpleRequestRPC(R"(
+            SELECT key, value FROM `/Root/table-1`
+            ORDER BY key;
+            )", readSessionId, /* txId */ "", /* commitTx */ true),
+        "/Root");
+
+    // Sleep to ensure read is properly waiting
+    runtime.SimulateSleep(TDuration::Seconds(1));
+
+    // Gracefully restart the first table shard
+    blockReadSets.Remove();
+    GracefulRestartTablet(runtime, table1shards[0], sender);
+
+    // Read succeeds because it is automatically retried
+    // No assert should be triggered in debug builds
+    UNIT_ASSERT_VALUES_EQUAL(
+        FormatResult(AwaitResponse(runtime, std::move(readResult))),
+        "{ items { uint32_value: 1 } items { uint32_value: 10 } }, "
+        "{ items { uint32_value: 3 } items { uint32_value: 30 } }");
+}
+
 Y_UNIT_TEST(TestShardSnapshotReadNoEarlyReply) {
     TPortManager pm;
     TServerSettings serverSettings(pm.GetPort(2134));

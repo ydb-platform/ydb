@@ -15,7 +15,9 @@ public:
 
     bool ExecuteQuery(const TString& query, NKikimrKqp::EQueryAction action, const TString& traceId) const;
 
-    bool WriteScriptResults() const;
+    bool FetchScriptResults();
+
+    void PrintScriptResults() const;
 
 private:
     class TImpl;

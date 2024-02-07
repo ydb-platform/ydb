@@ -832,13 +832,19 @@ void TBasicServicesInitializer::InitializeServices(NActors::TActorSystemSetup* s
         std::unique_ptr<NWilson::IGrpcSigner> grpcSigner;
         if (tracing_backend.HasAuthConfig() && Factories && Factories->WilsonGrpcSignerFactory) {
             grpcSigner = Factories->WilsonGrpcSignerFactory(tracing_backend.GetAuthConfig());
+            if (!grpcSigner) {
+                Cerr << "Failed to initialize wilson grpc signer due to misconfiguration. Config provided: "
+                        << tracing_backend.GetAuthConfig().DebugString() << Endl;
+            }
         }
         NActors::IActor* wilsonUploader = nullptr;
         switch (tracing_backend.GetBackendCase()) {
             case NKikimrConfig::TTracingConfig::TBackendConfig::BackendCase::kOpentelemetry: {
                 const auto& opentelemetry = tracing_backend.GetOpentelemetry();
-                Y_ABORT_UNLESS(opentelemetry.HasCollectorUrl() && opentelemetry.HasServiceName(),
-                               "Both collector_url and service_name should be present in opentelemetry backedn config");
+                if (!(opentelemetry.HasCollectorUrl() && opentelemetry.HasServiceName())) {
+                    Cerr << "Both collector_url and service_name should be present in opentelemetry backend config" << Endl;
+                    break;
+                }
                 wilsonUploader = NWilson::WilsonUploaderParams {
                     .CollectorUrl = opentelemetry.GetCollectorUrl(),
                     .ServiceName = opentelemetry.GetServiceName(),
@@ -848,7 +854,7 @@ void TBasicServicesInitializer::InitializeServices(NActors::TActorSystemSetup* s
             }
 
             case NKikimrConfig::TTracingConfig::TBackendConfig::BackendCase::BACKEND_NOT_SET: {
-                Y_ABORT_UNLESS(false, "No backend option was provided in backend config");
+                Cerr << "No backend option was provided in tracing config" << Endl;
                 break;
             }
         }

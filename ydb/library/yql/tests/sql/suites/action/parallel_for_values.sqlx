@@ -1,4 +1,4 @@
 evaluate parallel for $i in [1,2,3] do begin
-select $i;
+values ($i);
 end do;
 

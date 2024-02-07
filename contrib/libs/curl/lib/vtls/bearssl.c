@@ -25,7 +25,7 @@
 
 #ifdef USE_BEARSSL
 
-#include <bearssl.h>
+#error #include <bearssl.h>
 
 #include "bearssl.h"
 #include "urldata.h"

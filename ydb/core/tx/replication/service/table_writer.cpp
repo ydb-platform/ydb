@@ -1,4 +1,5 @@
 #include "json_change_record.h"
+#include "logging.h"
 #include "table_writer.h"
 #include "worker.h"
 
@@ -16,6 +17,18 @@
 namespace NKikimr::NReplication::NService {
 
 class TTablePartitionWriter: public TActorBootstrapped<TTablePartitionWriter> {
+    TStringBuf GetLogPrefix() const {
+        if (!LogPrefix) {
+            LogPrefix = TStringBuilder()
+                << "[TablePartitionWriter]"
+                << TablePathId
+                << "[" << TabletId << "]"
+                << SelfId() << " ";
+        }
+
+        return LogPrefix.GetRef();
+    }
+
     void GetProxyServices() {
         Send(MakeTxProxyID(), new TEvTxUserProxy::TEvGetProxyServicesRequest());
         Become(&TThis::StateGetProxyServices);
@@ -30,6 +43,8 @@ class TTablePartitionWriter: public TActorBootstrapped<TTablePartitionWriter> {
     }
 
     void Handle(TEvTxUserProxy::TEvGetProxyServicesResponse::TPtr& ev) {
+        LOG_D("Handle " << ev->Get()->ToString());
+
         LeaderPipeCache = ev->Get()->Services.LeaderPipeCache;
         Ready();
     }
@@ -48,8 +63,9 @@ class TTablePartitionWriter: public TActorBootstrapped<TTablePartitionWriter> {
     }
 
     void Handle(NChangeExchange::TEvChangeExchange::TEvRecords::TPtr& ev) {
-        auto event = MakeHolder<TEvDataShard::TEvApplyReplicationChanges>();
+        LOG_D("Handle " << ev->Get()->ToString());
 
+        auto event = MakeHolder<TEvDataShard::TEvApplyReplicationChanges>();
         auto& tableId = *event->Record.MutableTableId();
         tableId.SetOwnerId(TablePathId.OwnerId);
         tableId.SetTableId(TablePathId.LocalPathId);
@@ -73,8 +89,20 @@ class TTablePartitionWriter: public TActorBootstrapped<TTablePartitionWriter> {
         }
     }
 
-    void Handle(TEvDataShard::TEvApplyReplicationChangesResult::TPtr&) {
-        // TODO: handle result
+    void Handle(TEvDataShard::TEvApplyReplicationChangesResult::TPtr& ev) {
+        LOG_D("Handle " << ev->Get()->ToString());
+
+        const auto& record = ev->Get()->Record;
+        switch (record.GetStatus()) {
+        case NKikimrTxDataShard::TEvApplyReplicationChangesResult::STATUS_OK:
+            return Ready();
+        default:
+            LOG_E("Apply result"
+                << ": status# " << static_cast<ui32>(record.GetStatus())
+                << ", reason# " << static_cast<ui32>(record.GetReason())
+                << ", error# " << record.GetErrorDescription());
+            return Leave();
+        }
     }
 
     void Handle(TEvPipeCache::TEvDeliveryProblem::TPtr& ev) {
@@ -122,6 +150,7 @@ private:
     const TActorId Parent;
     const ui64 TabletId;
     const TPathId TablePathId;
+    mutable TMaybe<TString> LogPrefix;
 
     TActorId LeaderPipeCache;
 
@@ -133,6 +162,17 @@ class TLocalTableWriter
     , public NChangeExchange::IChangeSenderResolver
     , private NSchemeCache::TSchemeCacheHelpers
 {
+    TStringBuf GetLogPrefix() const {
+        if (!LogPrefix) {
+            LogPrefix = TStringBuilder()
+                << "[LocalTableWriter]"
+                << PathId
+                << SelfId() << " ";
+        }
+
+        return LogPrefix.GetRef();
+    }
+
     static TSerializedTableRange GetFullRange(ui32 keyColumnsCount) {
         TVector<TCell> fromValues(keyColumnsCount);
         TVector<TCell> toValues;
@@ -140,12 +180,12 @@ class TLocalTableWriter
     }
 
     void LogCritAndLeave(const TString& error) {
-        Y_UNUSED(error);
+        LOG_C(error);
         Leave();
     }
 
     void LogWarnAndRetry(const TString& error) {
-        Y_UNUSED(error);
+        LOG_W(error);
         Retry();
     }
 
@@ -207,6 +247,9 @@ class TLocalTableWriter
 
     void Handle(TEvWorker::TEvHandshake::TPtr& ev) {
         Worker = ev->Sender;
+        LOG_D("Handshake"
+            << ": worker# " << Worker);
+
         ResolveTable();
     }
 
@@ -220,6 +263,9 @@ class TLocalTableWriter
 
     void Handle(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr& ev) {
         const auto& result = ev->Get()->Request;
+
+        LOG_D("Handle TEvTxProxySchemeCache::TEvNavigateKeySetResult"
+            << ": result# " << (result ? result->ToString(*AppData()->TypeRegistry) : "nullptr"));
 
         if (!CheckNotEmpty(result)) {
             return;
@@ -280,6 +326,9 @@ class TLocalTableWriter
 
     void Handle(TEvTxProxySchemeCache::TEvResolveKeySetResult::TPtr& ev) {
         const auto& result = ev->Get()->Request;
+
+        LOG_D("Handle TEvTxProxySchemeCache::TEvResolveKeySetResult"
+            << ": result# " << (result ? result->ToString(*AppData()->TypeRegistry) : "nullptr"));
 
         if (!CheckNotEmpty(result)) {
             return;
@@ -342,12 +391,15 @@ class TLocalTableWriter
     }
 
     void Handle(TEvWorker::TEvData::TPtr& ev) {
-        Y_ABORT_UNLESS(PendingRecords.empty());
+        LOG_D("Handle " << ev->Get()->ToString());
 
+        Y_ABORT_UNLESS(PendingRecords.empty());
         TVector<NChangeExchange::TEvChangeExchange::TEvEnqueueRecords::TRecordInfo> records(::Reserve(ev->Get()->Records.size()));
+
         for (auto& record : ev->Get()->Records) {
             records.emplace_back(record.Offset, PathId, record.Data.size());
             auto res = PendingRecords.emplace(record.Offset, TChangeRecordBuilder()
+                .WithOrder(record.Offset)
                 .WithBody(std::move(record.Data))
                 .WithSchema(Schema)
                 .Build()
@@ -359,7 +411,10 @@ class TLocalTableWriter
     }
 
     void Handle(NChangeExchange::TEvChangeExchange::TEvRequestRecords::TPtr& ev) {
+        LOG_D("Handle " << ev->Get()->ToString());
+
         TVector<NChangeExchange::IChangeRecord::TPtr> records(::Reserve(ev->Get()->Records.size()));
+
         for (const auto& record : ev->Get()->Records) {
             auto it = PendingRecords.find(record.Order);
             Y_ABORT_UNLESS(it != PendingRecords.end());
@@ -370,6 +425,8 @@ class TLocalTableWriter
     }
 
     void Handle(NChangeExchange::TEvChangeExchange::TEvRemoveRecords::TPtr& ev) {
+        LOG_D("Handle " << ev->Get()->ToString());
+
         for (const auto& record : ev->Get()->Records) {
             PendingRecords.erase(record);
         }
@@ -380,10 +437,12 @@ class TLocalTableWriter
     }
 
     void Handle(NChangeExchange::TEvChangeExchangePrivate::TEvReady::TPtr& ev) {
+        LOG_D("Handle " << ev->Get()->ToString());
         OnReady(ev->Get()->PartitionId);
     }
 
     void Handle(NChangeExchange::TEvChangeExchangePrivate::TEvGone::TPtr& ev) {
+        LOG_D("Handle " << ev->Get()->ToString());
         OnGone(ev->Get()->PartitionId);
     }
 
@@ -424,6 +483,8 @@ public:
     }
 
 private:
+    mutable TMaybe<TString> LogPrefix;
+
     TActorId Worker;
     ui64 TableVersion = 0;
     THolder<TKeyDesc> KeyDesc;

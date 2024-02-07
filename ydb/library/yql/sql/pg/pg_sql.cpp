@@ -294,9 +294,15 @@ public:
         }
 
         for (const auto& [cluster, provider] : Settings.ClusterMapping) {
-            Provider = provider;
-            break;
+            if (provider != PgProviderName) {
+                Provider = provider;
+                break;
+            }
         }
+        if (!Provider) {
+            Provider = PgProviderName;
+        }
+        Y_ENSURE(!Provider.Empty());
 
         for (size_t i = 0; i < Settings.PgParameterTypeOids.size(); ++i) {
             const auto paramName = PREPARED_PARAM_PREFIX + ToString(i + 1);
@@ -2551,9 +2557,11 @@ public:
     }
 
     TAstNode* BuildTableKeyExpression(const TStringBuf relname,
-                                      bool isScheme = false) {
+        const TStringBuf cluster, bool isScheme = false
+    ) {
+        TString tableName = (cluster == "pg_catalog") ? TString(relname) : TablePathPrefix + relname;
         return L(A("Key"), QL(QA(isScheme ? "tablescheme" : "table"),
-                            L(A("String"), QAX(TablePathPrefix + relname))));
+                            L(A("String"), QAX(std::move(tableName)))));
     }
 
     TReadWriteKeyExprs ParseQualifiedRelationName(const TStringBuf catalogname,
@@ -2571,7 +2579,7 @@ public:
 
       const auto cluster = ResolveCluster(schemaname);
       const auto sinkOrSource = BuildClusterSinkOrSourceExpression(isSink, cluster);
-      const auto key = BuildTableKeyExpression(relname, isScheme);
+      const auto key = BuildTableKeyExpression(relname, cluster, isScheme);
       return {sinkOrSource, key};
     }
 

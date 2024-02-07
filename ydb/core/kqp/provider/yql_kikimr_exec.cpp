@@ -59,7 +59,7 @@ namespace {
             .Done();
 
         astNode.Ptr()->SetTypeAnn(ctx.MakeType<TUnitExprType>());
-
+        astNode.Ptr()->SetState(TExprNode::EState::ConstrComplete);
         exec.Ptr()->ChildRef(TKiExecDataQuery::idx_Ast) = astNode.Ptr();
     }
 
@@ -605,6 +605,15 @@ public:
 
         if (input->Content() == "Result") {
             auto result = TMaybeNode<TResult>(input).Cast();
+
+            if (auto maybeNth = result.Input().Maybe<TCoNth>()) {
+                if (auto maybeExecQuery = maybeNth.Tuple().Maybe<TCoRight>().Input().Maybe<TKiExecDataQuery>()) {
+                    input->SetState(TExprNode::EState::ExecutionComplete);
+                    input->SetResult(ctx.NewWorld(input->Pos()));
+                    return SyncOk();
+                }
+            }
+
             NKikimrMiniKQL::TType resultType;
             TString program;
             TStatus status = GetLambdaBody(result.Input().Ptr(), resultType, ctx, program);

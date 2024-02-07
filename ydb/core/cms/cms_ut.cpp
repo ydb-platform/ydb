@@ -2026,6 +2026,12 @@ Y_UNIT_TEST_SUITE(TCmsTest) {
     {
         TCmsTestEnv env(TTestEnvOpts(8).WithEnableCMSRequestPriorities());
 
+        // Without node limits
+        NKikimrCms::TCmsConfig config;
+        config.MutableClusterLimits()->SetDisabledNodesLimit(0);
+        config.MutableClusterLimits()->SetDisabledNodesRatioLimit(0);
+        env.SetCmsConfig(config);
+
         // Start rolling restart
         auto rollingRestart = env.CheckPermissionRequest
             ("user", true, false, true, true, -80, TStatus::ALLOW_PARTIAL,
@@ -2041,7 +2047,7 @@ Y_UNIT_TEST_SUITE(TCmsTest) {
         UNIT_ASSERT_VALUES_EQUAL(rollingRestart.PermissionsSize(), 1);
 
         // Wall-E soft maintainance task is blocked by rolling restart
-        env.CheckWalleCreateTask("task-1", "temporary-unreachable", false, TStatus::DISALLOW_TEMP, env.GetNodeId(1));
+        env.CheckWalleCreateTask("task-1", "temporary-unreachable", false, TStatus::DISALLOW_TEMP, env.GetNodeId(2));
 
         // Wall-E reboot task is blocked by rolling restart
         env.CheckWalleCreateTask("task-2", "reboot", false, TStatus::DISALLOW_TEMP, env.GetNodeId(1));
@@ -2050,7 +2056,7 @@ Y_UNIT_TEST_SUITE(TCmsTest) {
         env.CheckDonePermission("user", rollingRestart.GetPermissions(0).GetId());
 
         // Wall-E soft maintainance task is blocked by Wall-E reboot task
-        env.CheckWalleCheckTask("task-1", TStatus::DISALLOW_TEMP, env.GetNodeId(1));
+        env.CheckWalleCheckTask("task-1", TStatus::DISALLOW_TEMP, env.GetNodeId(2));
 
         // Wall-E reboot task can continue
         env.CheckWalleCheckTask("task-2", TStatus::ALLOW, env.GetNodeId(1));
@@ -2059,7 +2065,7 @@ Y_UNIT_TEST_SUITE(TCmsTest) {
         env.CheckWalleRemoveTask("task-2");
 
         // Wall-E soft maintainance task can continue
-        env.CheckWalleCheckTask("task-1", TStatus::ALLOW, env.GetNodeId(1));
+        env.CheckWalleCheckTask("task-1", TStatus::ALLOW, env.GetNodeId(2));
     }
 }
 

@@ -492,8 +492,8 @@ void ExportValueToProtoImpl(TType* type, const NUdf::TUnboxedValuePod& value, NK
 
         case TType::EKind::Pg: {
             if (!value) {
-                // do not set Text field
-                return;
+                res.SetNullFlagValue(::google::protobuf::NULL_VALUE);
+                break;
             }
             auto pgType = static_cast<TPgType*>(type);
             auto textValue = NYql::NCommon::PgValueToNativeText(value, pgType->GetTypeId());
@@ -599,8 +599,8 @@ void ExportValueToProtoImpl(TType* type, const NUdf::TUnboxedValuePod& value, Yd
 
         case TType::EKind::Pg: {
             if (!value) {
-                // do not set Text field
-                return;
+                res.set_null_flag_value(::google::protobuf::NULL_VALUE);
+                break;
             }
             auto pgType = static_cast<TPgType*>(type);
             auto textValue = NYql::NCommon::PgValueToNativeText(value, pgType->GetTypeId());
@@ -1698,6 +1698,9 @@ NUdf::TUnboxedValue TProtoImporter::ImportValueFromProto(const TType* type, cons
     }
 
     case TType::EKind::Pg: {
+        if (value.GetValueCase() == Ydb::Value::kNullFlagValue) {
+            return NYql::NUdf::TUnboxedValue();
+        }
         const TPgType* pgType = static_cast<const TPgType*>(type);
         NYql::NUdf::TUnboxedValue unboxedValue;
         if (value.Hastext_value()) {
@@ -1705,7 +1708,7 @@ NUdf::TUnboxedValue TProtoImporter::ImportValueFromProto(const TType* type, cons
         } else if (value.Hasbytes_value()) {
             unboxedValue = NYql::NCommon::PgValueFromNativeBinary(value.Getbytes_value(), pgType->GetTypeId());
         } else {
-            MKQL_ENSURE(false, "empty pg value proto");
+            MKQL_ENSURE(false, "malformed pg value");
         }
         return unboxedValue;
     }
@@ -1728,10 +1731,16 @@ NUdf::TUnboxedValue TProtoImporter::ImportValueFromProto(const TType* type, cons
 
         case TType::EKind::Pg: {
             auto pgType = static_cast<const TPgType*>(type);
-            if (!value.HasBytes()) {
+            if (value.GetValueValueCase() == NKikimrMiniKQL::TValue::kNullFlagValue) {
                 return NUdf::TUnboxedValue();
             }
-            return NYql::NCommon::PgValueFromNativeBinary(value.GetBytes(), pgType->GetTypeId());
+            if (value.HasBytes()) {
+                return NYql::NCommon::PgValueFromNativeBinary(value.GetBytes(), pgType->GetTypeId());
+            }
+            if (value.HasText()) {
+                return NYql::NCommon::PgValueFromNativeText(value.GetBytes(), pgType->GetTypeId());
+            }
+            MKQL_ENSURE(false, "malformed pg value");
         }
 
         case TType::EKind::Optional: {

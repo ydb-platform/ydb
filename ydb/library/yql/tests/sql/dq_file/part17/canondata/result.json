@@ -2100,9 +2100,9 @@
     ],
     "test.test[pg_catalog-pg_timezone_names-default.txt-Debug]": [
         {
-            "checksum": "e2533b4d21ac0d1b5ff40de375f82edb",
-            "size": 423,
-            "uri": "https://{canondata_backend}/1880306/c56e2bb8307f2239f8acf535a621c40b5a08a363/resource.tar.gz#test.test_pg_catalog-pg_timezone_names-default.txt-Debug_/opt.yql_patched"
+            "checksum": "89970ef7c0c85bbb3cc3024996d58ac3",
+            "size": 437,
+            "uri": "https://{canondata_backend}/1942525/18e16d542ee9c79a05f084ab32f39082f6b68a6b/resource.tar.gz#test.test_pg_catalog-pg_timezone_names-default.txt-Debug_/opt.yql_patched"
         }
     ],
     "test.test[pg_catalog-pg_timezone_names-default.txt-Plan]": [

@@ -1,3 +1,4 @@
+/* hybridfile can not YQL-17763 */
 select cast("-144170-12-31" as date32), cast(cast("-144170-12-31" as date32) as string);
 select cast("-144169-01-01" as date32), cast(cast("-144169-01-01" as date32) as string);
 select cast("-1-1-1" as date32), cast(cast("-1-1-1" as date32) as string);

@@ -2515,9 +2515,9 @@
     ],
     "test.test[pg_catalog-pg_class-default.txt-Debug]": [
         {
-            "checksum": "48c1e7df973ab53841f9705a3a6f1d3e",
-            "size": 549,
-            "uri": "https://{canondata_backend}/1937367/a0981807726fa8e5aad90985bda23ee6596b1473/resource.tar.gz#test.test_pg_catalog-pg_class-default.txt-Debug_/opt.yql_patched"
+            "checksum": "4009e78737c55a4ee1b67c0acaf4117b",
+            "size": 6996,
+            "uri": "https://{canondata_backend}/1599023/bd802d54da82e1a9c05e09556d3dac1f568780f6/resource.tar.gz#test.test_pg_catalog-pg_class-default.txt-Debug_/opt.yql_patched"
         }
     ],
     "test.test[pg_catalog-pg_class-default.txt-Plan]": [
@@ -2559,9 +2559,9 @@
     ],
     "test.test[pg_catalog-pg_timezone_abbrevs-default.txt-Debug]": [
         {
-            "checksum": "1c21cdfaefd86779f137aa70b1d0a294",
-            "size": 427,
-            "uri": "https://{canondata_backend}/1942525/253d2e760c7825837b0d53337823dd5ebf4d6d89/resource.tar.gz#test.test_pg_catalog-pg_timezone_abbrevs-default.txt-Debug_/opt.yql_patched"
+            "checksum": "6f605d73a6bd7f2b16f01dd4d2bfd4bc",
+            "size": 435,
+            "uri": "https://{canondata_backend}/1937429/3a60abcb17840fc03db4764b4d570c4c3c65e98f/resource.tar.gz#test.test_pg_catalog-pg_timezone_abbrevs-default.txt-Debug_/opt.yql_patched"
         }
     ],
     "test.test[pg_catalog-pg_timezone_abbrevs-default.txt-Plan]": [
@@ -2581,9 +2581,9 @@
     ],
     "test.test[produce-native_desc_reduce_with_presort--Debug]": [
         {
-            "checksum": "4f15c54e3a1d9f2838fc83b114b169d3",
-            "size": 5065,
-            "uri": "https://{canondata_backend}/1880306/234eadcde1cd54bffae64f4516628981e02b093d/resource.tar.gz#test.test_produce-native_desc_reduce_with_presort--Debug_/opt.yql_patched"
+            "checksum": "8f7a0efe0d718bbbd304c63081d76f31",
+            "size": 5063,
+            "uri": "https://{canondata_backend}/1031349/d3a88498ca54cabc05c19bf5a97272e7679a8ab7/resource.tar.gz#test.test_produce-native_desc_reduce_with_presort--Debug_/opt.yql_patched"
         }
     ],
     "test.test[produce-native_desc_reduce_with_presort--Plan]": [

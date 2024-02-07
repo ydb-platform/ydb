@@ -491,6 +491,19 @@ Y_UNIT_TEST_SUITE(KqpYql) {
         ])", FormatResultSetYson(result.GetResultSet(0)));
     }
 
+    Y_UNIT_TEST(EvaluateExprPgNull) {
+        TKikimrRunner kikimr;
+        auto db = kikimr.GetTableClient();
+        auto session = db.CreateSession().GetValueSync().GetSession();
+
+        auto result = session.ExecuteDataQuery(Q1_(R"(
+            SELECT EvaluateExpr( CAST(NULL AS PgInt8) );
+        )"), TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+
+        CompareYson(R"([[#]])", FormatResultSetYson(result.GetResultSet(0)));
+    }
+
     Y_UNIT_TEST(Discard) {
         auto kikimr = DefaultKikimrRunner();
         auto db = kikimr.GetQueryClient();
@@ -720,13 +733,13 @@ Y_UNIT_TEST_SUITE(KqpYql) {
                     .EndList()
                     .Build()
                 .Build();
-            
+
             const auto query = Q_(R"(
                 DECLARE $rows AS
                     List<Struct<
                         Key: Uuid,
                         Value: Int32?>>;
-                
+
                 SELECT * FROM AS_TABLE($rows) ORDER BY Key;
             )");
             auto result = session.ExecuteDataQuery(query, TTxControl::BeginTx().CommitTx(), params).ExtractValueSync();

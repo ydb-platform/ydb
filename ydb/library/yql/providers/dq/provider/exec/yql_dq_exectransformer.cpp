@@ -280,10 +280,10 @@ private:
             dqInt->ConfigurePeepholePipeline(true, ProviderParams_, pipeline);
         });
 
-        if (State_->Settings->UseBlockReader.Get().GetOrElse(false)) {
-            pipeline->Add(NDqs::CreateDqsRewritePhyBlockReadOnDqIntegrationTransformer(*pipeline->GetTypeAnnotationContext()), "ReplaceWideReadsWithBlock");
-        }
         TTypeAnnotationContext& typesCtx = *pipeline->GetTypeAnnotationContext();
+        if (State_->Settings->UseBlockReader.Get().GetOrElse(typesCtx.BlockEngineMode != EBlockEngineMode::Disable)) {
+            pipeline->Add(NDqs::CreateDqsRewritePhyBlockReadOnDqIntegrationTransformer(typesCtx), "ReplaceWideReadsWithBlock");
+        }
         NDq::EChannelMode mode = GetConfiguredChannelMode(State_, typesCtx);
         pipeline->Add(
             NDq::CreateDqBuildPhyStagesTransformer(!State_->Settings->SplitStageOnDqReplicate.Get().GetOrElse(true), typesCtx, mode),

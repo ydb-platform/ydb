@@ -611,7 +611,7 @@ void THive::BuildCurrentConfig() {
     BLOG_D("THive::BuildCurrentConfig CurrentConfig = " << CurrentConfig.ShortDebugString());
     TabletLimit.clear();
     for (const auto& tabletLimit : CurrentConfig.GetDefaultTabletLimit()) {
-        TabletLimit.emplace(tabletLimit.GetType(), tabletLimit);
+        TabletLimit.insert_or_assign(tabletLimit.GetType(), tabletLimit);
     }
     DefaultDataCentersPreference.clear();
     for (const NKikimrConfig::THiveTabletPreference& tabletPreference : CurrentConfig.GetDefaultTabletPreference()) {

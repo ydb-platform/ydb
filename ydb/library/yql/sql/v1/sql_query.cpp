@@ -1620,7 +1620,16 @@ TNodePtr TSqlQuery::PragmaStatement(const TRule_pragma_stmt& stmt, bool& success
     }
 
     const bool withConfigure = prefix || normalizedPragma == "file" || normalizedPragma == "folder" || normalizedPragma == "udf";
-    static const THashSet<TStringBuf> lexicalScopePragmas = {"classicdivision", "strictjoinkeytypes", "disablestrictjoinkeytypes", "checkedops"};
+    static const THashSet<TStringBuf> lexicalScopePragmas = {
+        "classicdivision",
+        "strictjoinkeytypes",
+        "disablestrictjoinkeytypes",
+        "checkedops",
+        "unicodeliterals",
+        "disableunicodeliterals",
+        "warnuntypedstringliterals",
+        "disablewarnuntypedstringliterals",
+    };
     const bool hasLexicalScope = withConfigure || lexicalScopePragmas.contains(normalizedPragma);
     const bool withFileAlias = normalizedPragma == "file" || normalizedPragma == "folder" || normalizedPragma == "library" || normalizedPragma == "udf";
     for (auto pragmaValue : pragmaValues) {
@@ -2190,6 +2199,18 @@ TNodePtr TSqlQuery::PragmaStatement(const TRule_pragma_stmt& stmt, bool& success
         } else if (normalizedPragma == "disablestrictjoinkeytypes") {
             Ctx.Scoped->StrictJoinKeyTypes = false;
             Ctx.IncrementMonCounter("sql_pragma", "DisableStrictJoinKeyTypes");
+        } else if (normalizedPragma == "unicodeliterals") {
+            Ctx.Scoped->UnicodeLiterals = true;
+            Ctx.IncrementMonCounter("sql_pragma", "UnicodeLiterals");
+        } else if (normalizedPragma == "disableunicodeliterals") {
+            Ctx.Scoped->UnicodeLiterals = false;
+            Ctx.IncrementMonCounter("sql_pragma", "DisableUnicodeLiterals");
+        } else if (normalizedPragma == "warnuntypedstringliterals") {
+            Ctx.Scoped->WarnUntypedStringLiterals = true;
+            Ctx.IncrementMonCounter("sql_pragma", "WarnUntypedStringLiterals");
+        } else if (normalizedPragma == "disablewarnuntypedstringliterals") {
+            Ctx.Scoped->WarnUntypedStringLiterals = false;
+            Ctx.IncrementMonCounter("sql_pragma", "DisableWarnUntypedStringLiterals");
         } else if (normalizedPragma == "unorderedsubqueries") {
             Ctx.UnorderedSubqueries = true;
             Ctx.IncrementMonCounter("sql_pragma", "UnorderedSubqueries");

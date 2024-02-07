@@ -1468,6 +1468,10 @@ struct TEvBlobStorage {
             }
         }
 
+        static ui8 BlobPlacementKind(const TLogoBlobID &blob) {
+            return blob.Hash() % BaseDomainsCount;
+        }
+
         static bool GetBlobIdWithSamePlacement(const TLogoBlobID &originalId, TLogoBlobID *patchedId,
                 ui32 bitsForBruteForce, ui32 originalGroupId, ui32 currentGroupId)
         {
@@ -2403,6 +2407,21 @@ inline bool SendPutToGroup(const TActorContext &ctx, ui32 groupId, TTabletStorag
     };
     Y_ABORT_UNLESS(checkGroupId(), "groupId# %" PRIu32 " does not match actual one LogoBlobId# %s", groupId,
         event->Id.ToString().data());
+    return SendToBSProxy(ctx, groupId, event.Release(), cookie, std::move(traceId));
+    // TODO(alexvru): check if return status is actually needed?
+}
+
+inline bool SendPatchToGroup(const TActorContext &ctx, ui32 groupId, TTabletStorageInfo *storage,
+        THolder<TEvBlobStorage::TEvPatch> event, ui64 cookie = 0, NWilson::TTraceId traceId = {}) {
+    auto checkGroupId = [&] {
+        const TLogoBlobID &id = event->PatchedId;
+        const ui32 expectedGroupId = storage->GroupFor(id.Channel(), id.Generation());
+        const TLogoBlobID &originalId = event->OriginalId;
+        const ui32 expectedOriginalGroupId = storage->GroupFor(originalId.Channel(), originalId.Generation());
+        return id.TabletID() == storage->TabletID && expectedGroupId != Max<ui32>() && groupId == expectedGroupId && event->OriginalGroupId == expectedOriginalGroupId;
+    };
+    Y_VERIFY_S(checkGroupId(), "groupIds# (" << event->OriginalGroupId << ',' << groupId << ") does not match actual ones LogoBlobIds# (" <<
+        event->OriginalId.ToString() << ',' << event->PatchedId.ToString() << ')');
     return SendToBSProxy(ctx, groupId, event.Release(), cookie, std::move(traceId));
     // TODO(alexvru): check if return status is actually needed?
 }

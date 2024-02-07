@@ -37,7 +37,9 @@ public:
     }
 
     void Bootstrap(const TActorContext& ctx) {
-        TThis::Initialize(ctx);
+        if (!TThis::Initialize(ctx)) {
+            return;
+        }
         TThis::InitTable(ctx);
     }
 

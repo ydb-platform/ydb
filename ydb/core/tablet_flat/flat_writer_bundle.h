@@ -129,7 +129,7 @@ namespace NWriter {
 
             size_t offset = 0;
             size_t left = body.size();
-            for (auto blobId : largeGlobId.Blobs()) {
+            for (const auto& blobId : largeGlobId.Blobs()) {
                 const NPageCollection::TGlobId glob(blobId, largeGlobId.Group);
                 const auto chunk = glob.Bytes();
                 const auto slice = body.Slice(offset, chunk);

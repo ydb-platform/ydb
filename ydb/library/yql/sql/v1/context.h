@@ -50,6 +50,8 @@ namespace NSQLTranslationV1 {
         bool PragmaClassicDivision = true;
         bool PragmaCheckedOps = false;
         bool StrictJoinKeyTypes = false;
+        bool UnicodeLiterals = false;
+        bool WarnUntypedStringLiterals = false;
         TNamedNodesMap NamedNodes;
 
         struct TLocal {

@@ -279,7 +279,11 @@ namespace NKikimr::NAutoConfigInitializer {
             auto *executor = executors[poolIdx];
             if (names[poolIdx] == TASPools::IOPoolName) {
                 executor->SetType(NKikimrConfig::TActorSystemConfig::TExecutor::IO);
-                executor->SetThreads(GetIOThreadCount(cpuCount));
+                ui32 ioThreadCount = GetIOThreadCount(cpuCount);
+                if (config->HasForceIOPoolThreads()) {
+                    ioThreadCount = config->GetForceIOPoolThreads();
+                }
+                executor->SetThreads(ioThreadCount);
                 executor->SetName(names[poolIdx]);
                 continue;
             }

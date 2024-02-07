@@ -7435,6 +7435,14 @@ private:
         if (!rowSpec.IsSorted()) {
             return node;
         }
+        TMaybeNode<TExprBase> columns;
+        if (rowSpec.HasAuxColumns()) {
+            TSet<TStringBuf> members;
+            for (auto item: rowSpec.GetType()->GetItems()) {
+                members.insert(item->GetName());
+            }
+            columns = TExprBase(ToAtomList(members, merge.Pos(), ctx));
+        }
 
         auto mergeSection = merge.Input().Item(0);
         if (NYql::HasSettingsExcept(mergeSection.Settings().Ref(), EYtSettingType::KeyFilter | EYtSettingType::KeyFilter2)) {
@@ -7467,7 +7475,10 @@ private:
                         .Input()
                             .Add()
                                 .Paths()
-                                    .Add(path)
+                                    .Add<TYtPath>()
+                                        .InitFrom(path)
+                                        .Columns(columns.IsValid() ? columns.Cast() : path.Columns())
+                                    .Build()
                                 .Build()
                                 .Settings(section.Settings())
                             .Build()

@@ -2599,9 +2599,9 @@
     ],
     "test.test[window-win_func_part_by_expr_new-default.txt-Analyze]": [
         {
-            "checksum": "3616480a037ff99e46a8a96e2ae79b1c",
-            "size": 5182,
-            "uri": "https://{canondata_backend}/1600758/32cfdeb8c6377a2e7e62c6c4adbb95f25af7669b/resource.tar.gz#test.test_window-win_func_part_by_expr_new-default.txt-Analyze_/plan.txt"
+            "checksum": "8edf0b02e6b73fd117023ac5daa90d1e",
+            "size": 5202,
+            "uri": "https://{canondata_backend}/1773845/58669ef67391607d0bea8c241fd7cfc291b1e4a8/resource.tar.gz#test.test_window-win_func_part_by_expr_new-default.txt-Analyze_/plan.txt"
         },
         {
             "uri": "file://test.test_window-win_func_part_by_expr_new-default.txt-Analyze_/extracted"
@@ -2609,16 +2609,16 @@
     ],
     "test.test[window-win_func_part_by_expr_new-default.txt-Debug]": [
         {
-            "checksum": "8e7f9a08b9186bbe5bca3d6330e37a36",
-            "size": 3303,
-            "uri": "https://{canondata_backend}/1600758/32cfdeb8c6377a2e7e62c6c4adbb95f25af7669b/resource.tar.gz#test.test_window-win_func_part_by_expr_new-default.txt-Debug_/opt.yql_patched"
+            "checksum": "593f180f482e1a448e661029d671ba7d",
+            "size": 3314,
+            "uri": "https://{canondata_backend}/1773845/58669ef67391607d0bea8c241fd7cfc291b1e4a8/resource.tar.gz#test.test_window-win_func_part_by_expr_new-default.txt-Debug_/opt.yql_patched"
         }
     ],
     "test.test[window-win_func_part_by_expr_new-default.txt-Plan]": [
         {
-            "checksum": "3616480a037ff99e46a8a96e2ae79b1c",
-            "size": 5182,
-            "uri": "https://{canondata_backend}/1600758/32cfdeb8c6377a2e7e62c6c4adbb95f25af7669b/resource.tar.gz#test.test_window-win_func_part_by_expr_new-default.txt-Plan_/plan.txt"
+            "checksum": "8edf0b02e6b73fd117023ac5daa90d1e",
+            "size": 5202,
+            "uri": "https://{canondata_backend}/1773845/58669ef67391607d0bea8c241fd7cfc291b1e4a8/resource.tar.gz#test.test_window-win_func_part_by_expr_new-default.txt-Plan_/plan.txt"
         }
     ],
     "test.test[window-win_func_part_by_expr_new-default.txt-Results]": [

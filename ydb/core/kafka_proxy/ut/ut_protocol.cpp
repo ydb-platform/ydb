@@ -532,7 +532,12 @@ public:
         TReadInfo readInfo;
         for (;;) {
             readInfo = JoinAndSyncGroup(topics, groupId);
-            if (readInfo.Partitions.size() == expectedPartitionsCount) {
+            ui32 partitionsCount = 0;
+            for (auto topicPartitions: readInfo.Partitions) {
+                partitionsCount += topicPartitions.Partitions.size();
+            }
+
+            if (partitionsCount == expectedPartitionsCount) {
                 break;
             }
             WaitRebalance(readInfo.MemberId, readInfo.GenerationId, groupId);    

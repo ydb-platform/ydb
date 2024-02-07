@@ -63,14 +63,10 @@ public:
     }
 
     void AddFilter(const std::shared_ptr<NArrow::TColumnFilter>& filter) {
-        if (UseFilter && Table && filter) {
-            AFL_VERIFY(filter->Apply(Table));
+        if (!filter) {
+            return;
         }
-        if (!Filter) {
-            Filter = filter;
-        } else if (filter) {
-            *Filter = Filter->CombineSequentialAnd(*filter);
-        }
+        return AddFilter(*filter);
     }
 
     void AddFilter(const NArrow::TColumnFilter& filter) {
@@ -79,8 +75,10 @@ public:
         }
         if (!Filter) {
             Filter = std::make_shared<NArrow::TColumnFilter>(filter);
-        } else {
+        } else if (UseFilter) {
             *Filter = Filter->CombineSequentialAnd(filter);
+        } else {
+            *Filter = Filter->And(filter);
         }
     }
 

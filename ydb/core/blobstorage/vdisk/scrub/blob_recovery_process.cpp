@@ -7,46 +7,56 @@ namespace NKikimr {
         STLOG(PRI_DEBUG, BS_VDISK_SCRUB, VDS32, VDISKP(LogPrefix, "AddBlobQuery"), (SelfId, SelfId()),
             (Id, id), (Needed, needed), (RequestId, context->RequestId));
         const TInstant deadline = context->Iterator->first;
-        const TBlobStorageGroupType& gtype = Info->Type;
         TBlobStorageGroupInfo::TOrderNums nums;
         Info->GetTopology().PickSubgroup(id.Hash(), nums);
         ui32 blobReplyCounter = 0;
         for (ui32 i = 0; i < nums.size(); ++i) {
             const TVDiskID& vdiskId = Info->GetVDiskId(i); // obtain VDisk
-            if (TVDiskIdShort(vdiskId) == VCtx->ShortSelfVDisk) {
-                continue;
+            if (TVDiskIdShort(vdiskId) != VCtx->ShortSelfVDisk) {
+                AddExtremeQuery(vdiskId, id, deadline, i);
+                ++blobReplyCounter;
             }
+        }
+        VGetResultMap.emplace(id, TPerBlobInfo{context, item, blobReplyCounter});
+    }
+
+    void TBlobRecoveryActor::AddExtremeQuery(const TVDiskID& vdiskId, const TLogoBlobID& id, TInstant deadline, ui32 idxInSubgroup) {
+        const auto [_, inserted] = GetsInFlight.emplace(vdiskId, id);
+
+        ui32 worstReplySize = 0;
+        if (inserted) {
+            const TBlobStorageGroupType& gtype = Info->Type;
             switch (TIngress::IngressMode(gtype)) {
                 case TIngress::EMode::GENERIC:
-                    ui32 maxSize;
-                    maxSize = 0;
                     if (gtype.GetErasure() == TBlobStorageGroupType::ErasureMirror3dc) {
-                        maxSize += gtype.PartSize(TLogoBlobID(id, i % 3 + 1));
+                        worstReplySize = gtype.PartSize(TLogoBlobID(id, idxInSubgroup % 3 + 1));
                     } else {
                         for (ui32 k = 0; k < gtype.TotalPartCount(); ++k) {
-                            maxSize += i >= gtype.TotalPartCount() || k == i ? gtype.PartSize(TLogoBlobID(id, k + 1)) : 0;
+                            worstReplySize += idxInSubgroup >= gtype.TotalPartCount() || k == idxInSubgroup
+                                ? gtype.PartSize(TLogoBlobID(id, k + 1)) : 0;
                         }
                     }
-                    AddExtremeQuery(vdiskId, id, deadline, maxSize);
                     break;
 
                 case TIngress::EMode::MIRROR3OF4:
-                    AddExtremeQuery(vdiskId, id, deadline, gtype.PartSize(TLogoBlobID(id, 1)) +
-                        gtype.PartSize(TLogoBlobID(id, 2)));
+                    for (ui32 i = 0; i < 2; ++i) {
+                        if (idxInSubgroup % 2 == i || idxInSubgroup >= 4) {
+                            worstReplySize += gtype.PartSize(TLogoBlobID(id, i + 1));
+                        }
+                    }
                     break;
             }
-            ++blobReplyCounter;
         }
-        VGetResultMap.emplace(id, TPerBlobInfo{context->Iterator->first, context, item, blobReplyCounter});
-    }
 
-    void TBlobRecoveryActor::AddExtremeQuery(const TVDiskID& vdiskId, const TLogoBlobID& id, TInstant deadline, ui32 worstReplySize) {
         STLOG(PRI_DEBUG, BS_VDISK_SCRUB, VDS33, VDISKP(LogPrefix, "AddExtremeQuery"), (SelfId, SelfId()),
-            (VDiskId, vdiskId), (Id, id), (WorstReplySize, worstReplySize));
+            (VDiskId, vdiskId), (Id, id), (WorstReplySize, worstReplySize), (AlreadyInFlight, !inserted));
+        if (!inserted) { // the request is already in flight
+            return;
+        }
 
         TQuery& query = Queries[vdiskId];
 
-        const ui32 maxReplySize = 10000000; // FIXME
+        const ui32 maxReplySize = 32_MB;
         if (query.VGet && query.WorstReplySize + worstReplySize > maxReplySize) { // send the request on overflow
             query.Pending.push_back(std::move(query.VGet));
             query.WorstReplySize = 0;
@@ -79,35 +89,51 @@ namespace NKikimr {
         STLOG(PRI_DEBUG, BS_VDISK_SCRUB, VDS35, VDISKP(LogPrefix, "received TEvVGetResult"), (SelfId, SelfId()),
             (Msg, ev->Get()->ToString()));
 
+        const TInstant now = TActivationContext::Now();
         const auto& record = ev->Get()->Record;
+        const TVDiskID vdiskId = VDiskIDFromVDiskID(record.GetVDiskID());
+        std::unordered_map<TLogoBlobID, TInstant, THash<TLogoBlobID>> rerequest;
+        std::unordered_set<TLogoBlobID> done;
+
         for (const auto& res : record.GetResult()) {
             const TLogoBlobID& id = LogoBlobIDFromLogoBlobID(res.GetBlobID());
             const TLogoBlobID& fullId = id.FullID(); // whole blob id
-            auto r = VGetResultMap.equal_range(fullId);
-            for (auto it = r.first; it != r.second; ) {
+            done.insert(fullId);
+            const NKikimrProto::EReplyStatus status = res.GetStatus();
+            auto [begin, end] = VGetResultMap.equal_range(fullId);
+            for (auto it = begin; it != end; ) {
                 TPerBlobInfo& info = it->second;
                 if (auto context = info.Context.lock()) { // context acquired, request is still intact
-                    auto& item = *info.Item; // only here we can access item, after obtaining context pointer
-                    TRope data = ev->Get()->GetBlobData(res);
-                    bool update = false;
-                    if (res.GetStatus() == NKikimrProto::OK && data) {
-                        item.SetPartData(id, std::move(data));
-                        update = true;
-                    }
-                    const bool term = !--info.BlobReplyCounter;
-                    if (item.Status == NKikimrProto::UNKNOWN && (term || update)) {
-                        const NKikimrProto::EReplyStatus prevStatus = std::exchange(item.Status, ProcessItemData(item));
-                        if (item.Status == NKikimrProto::UNKNOWN && term) { // not enough parts to fulfill request
-                            item.Status = NKikimrProto::NODATA;
+                    if (status == NKikimrProto::DEADLINE && now < context->Iterator->first) {
+                        auto& deadline = rerequest[fullId];
+                        deadline = Max(deadline, context->Iterator->first);
+                    } else {
+                        auto& item = *info.Item; // only here we can access item, after obtaining context pointer
+                        TRope data = ev->Get()->GetBlobData(res);
+                        bool update = false;
+                        if (res.GetStatus() == NKikimrProto::OK && data) {
+                            item.SetPartData(id, std::move(data));
+                            update = true;
                         }
-                        STLOG(PRI_DEBUG, BS_VDISK_SCRUB, VDS36, VDISKP(LogPrefix, "processing item"),
-                            (SelfId, SelfId()), (RequestId, context->RequestId), (Id, id),
-                            (Status, res.GetStatus()), (Last, term), (DataUpdated, update),
-                            (EntryStatus, prevStatus), (ExitStatus, item.Status));
-                    }
-                    if (item.Status != NKikimrProto::UNKNOWN && !--context->NumUnrespondedBlobs) {
-                        context->SendResult(SelfId());
-                        InFlight.erase(context->Iterator);
+                        const bool term = !--info.BlobReplyCounter;
+                        if (item.Status == NKikimrProto::UNKNOWN && (term || update)) {
+                            const NKikimrProto::EReplyStatus prevStatus = std::exchange(item.Status, ProcessItemData(item));
+                            if (item.Status == NKikimrProto::UNKNOWN && term) { // not enough parts to fulfill request
+                                item.Status = NKikimrProto::NODATA;
+                            }
+                            STLOG(PRI_DEBUG, BS_VDISK_SCRUB, VDS36, VDISKP(LogPrefix, "processing item"),
+                                (SelfId, SelfId()), (RequestId, context->RequestId), (Id, id),
+                                (Status, res.GetStatus()), (Last, term), (DataUpdated, update),
+                                (EntryStatus, prevStatus), (ExitStatus, item.Status));
+                        }
+                        if (item.Status != NKikimrProto::UNKNOWN && !--context->NumUnrespondedBlobs) { // request fully completed
+                            context->SendResult(SelfId());
+                            InFlight.erase(context->Iterator);
+                        }
+                        if (term) { // this was the last reply for current blob
+                            it = VGetResultMap.erase(it);
+                            continue;
+                        }
                     }
                     ++it;
                 } else { // request deadlined or canceled, we erase it from the map
@@ -115,6 +141,15 @@ namespace NKikimr {
                 }
             }
         }
+
+        for (const auto& id : done) {
+            const size_t n = GetsInFlight.erase(std::make_tuple(vdiskId, id));
+            Y_DEBUG_ABORT_UNLESS(n == 1);
+        }
+        for (const auto& [id, deadline] : rerequest) {
+            AddExtremeQuery(vdiskId, id, deadline, Info->GetTopology().GetIdxInSubgroup(vdiskId, id.Hash()));
+        }
+        SendPendingQueries();
     }
 
     NKikimrProto::EReplyStatus TBlobRecoveryActor::ProcessItemData(TEvRecoverBlobResult::TItem& item) {

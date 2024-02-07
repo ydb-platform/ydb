@@ -67,7 +67,6 @@ public:
 public:
     TResult Do(TCells key1, TCells key2, TRowId beginRowId, TRowId endRowId, 
             const TKeyCellDefaults &keyDefaults, ui64 itemsLimit, ui64 bytesLimit) const noexcept override {
-        Cerr << "Do " << beginRowId << " " << endRowId << " " << itemsLimit << Endl;
         endRowId++; // current interface accepts inclusive row2 bound
 
         bool ready = true, overshot = true, hasValidRowsRange = true;
@@ -88,8 +87,8 @@ public:
 
         const auto iterateLevel = [&](const auto& tryHandleChild) {
             // tryHandleChild may update them, copy for simplicity
-            // ??? always load beginRowId regardless of keys
-            const TRowId levelBeginRowId = beginRowId, levelEndRowId = endRowId;
+            // always load beginRowId regardless of keys
+            const TRowId levelBeginRowId = beginRowId, levelEndRowId = Max(endRowId, beginRowId + 1);
             
             for (const auto &node : level) {
                 if (node.EndRowId <= levelBeginRowId || node.BeginRowId >= levelEndRowId) {
@@ -103,7 +102,6 @@ public:
                         auto& child = node.GetChild(from);
                         auto prevChild = from ? node.GetChildRef(from - 1) : nullptr;
                         firstChild = BuildChildState(node, child, prevChild);
-                        Cerr << "  first " << firstChild.PageId << " " << firstChild.BeginRowId << " " << firstChild.EndRowId << Endl;
                     }
                 }
                 if (node.EndRowId > levelEndRowId) {
@@ -129,16 +127,13 @@ public:
             }
             if (child.PageId == key1PageId) {
                 beginRowId = Max(beginRowId, child.EndRowId);
-                Cerr << "  beginRowId " << beginRowId << Endl;
             }
             if (child.PageId == key2PageId) {
                 endRowId = Min(endRowId, child.BeginRowId);
-                Cerr << "  endRowId " << endRowId << Endl;
             }
         };
 
         const auto tryHandleNode = [&](const TChildState& child) -> bool {
-            Cerr << "  node " << child.PageId << " " << child.BeginRowId << " " << child.EndRowId << Endl;
             if (child.PageId == firstChild.PageId || child.PageId == key1PageId || child.PageId == key2PageId) {
                 if (TryLoadNode(child, nextLevel)) {
                     const auto& node = nextLevel.back();
@@ -170,7 +165,6 @@ public:
         };
 
         const auto tryHandleDataPage = [&](const TChildState& child) -> bool {
-            Cerr << "  data " << child.PageId << " " << child.BeginRowId << " " << child.EndRowId << Endl;
             if (hasValidRowsRange && (child.PageId == key1PageId || child.PageId == key2PageId)) {
                 const auto page = TryGetDataPage(child.PageId, { });
                 if (page) {
@@ -202,7 +196,6 @@ public:
             level.swap(nextLevel);
             nextLevel.clear();
             if (firstChild.PageId == Max<TPageId>()) { // first child is unloaded, consider all first's child rows are needed for next levels
-                Cerr << "  move " << firstChild.Items << " -> " << firstChild.PrevItems << Endl;
                 firstChild.Items = firstChild.PrevItems;
                 firstChild.Bytes = firstChild.PrevBytes;
             }
@@ -855,7 +848,6 @@ private:
     }
 
     bool LimitExceeded(ui64 prev, ui64 current, ui64 limit) const noexcept {
-        Cerr << "  check limit " << prev << " " << current << " " << limit << Endl;
         return limit && current > prev && current - prev > limit;
     }
 

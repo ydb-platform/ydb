@@ -99,7 +99,7 @@ namespace {
         const bool History = false;
         const bool Slices = false;
         const ui32 Rows = 40;
-        const bool StickSomePages = true;
+        const bool StickSomePages = false;
     };
 
     TPartEggs MakePart(TTestParams params) {
@@ -330,7 +330,7 @@ Y_UNIT_TEST_SUITE(TPartBtreeIndexIt) {
     }
 
     void CheckSeekKey(const TPartStore& part, const TKeyCellDefaults *keyDefaults) {
-        for (bool reverse : {false}) {
+        for (bool reverse : {false, true}) {
             for (ESeek seek : {ESeek::Exact, ESeek::Lower, ESeek::Upper}) {
                 for (ui32 firstCell : xrange<ui32>(0, part.Stat.Rows / 7 + 1)) {
                     for (ui32 secondCell : xrange<ui32>(0, 14)) {
@@ -642,8 +642,16 @@ Y_UNIT_TEST_SUITE(TChargeBTreeIndex) {
         CheckPart({.Levels = 3, .History = true});
     }
 
+    Y_UNIT_TEST(FewNodes_Sticky) {
+        CheckPart({.Levels = 3, .StickSomePages = true});
+    }
+
     Y_UNIT_TEST(FewNodes_Groups_History) {
         CheckPart({.Levels = 3, .Groups = true, .History = true});
+    }
+
+    Y_UNIT_TEST(FewNodes_Groups_History_Sticky) {
+        CheckPart({.Levels = 3, .Groups = true, .History = true, .StickSomePages = true});
     }
 }
 
@@ -849,6 +857,10 @@ Y_UNIT_TEST_SUITE(TPartBtreeIndexIteration) {
         CheckPart({.Levels = 3, .History = true});
     }
 
+    Y_UNIT_TEST(FewNodes_Sticky) {
+        CheckPart({.Levels = 3, .StickSomePages = true});
+    }
+
     Y_UNIT_TEST(FewNodes_Slices) {
         CheckPart({.Levels = 3, .Slices = true});
     }
@@ -863,6 +875,10 @@ Y_UNIT_TEST_SUITE(TPartBtreeIndexIteration) {
 
     Y_UNIT_TEST(FewNodes_Groups_History_Slices) {
         CheckPart({.Levels = 3, .Groups = true, .History = true, .Slices = true});
+    }
+
+    Y_UNIT_TEST(FewNodes_Groups_History_Slices_Sticky) {
+        CheckPart({.Levels = 3, .Groups = true, .History = true, .Slices = true, .StickSomePages = true});
     }
 }
 

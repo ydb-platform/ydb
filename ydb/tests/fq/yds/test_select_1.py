@@ -2,7 +2,6 @@
 # -*- coding: utf-8 -*-
 
 import logging
-import sys
 
 from ydb.tests.tools.fq_runner.kikimr_utils import yq_v1, yq_all
 

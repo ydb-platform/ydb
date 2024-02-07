@@ -19,7 +19,7 @@ namespace {
         const TSharedData* TryGetPage(const TPart *part, TPageId pageId, TGroupId groupId) override
         {
             Touched[groupId].insert(pageId);
-            if (Loaded[groupId].contains(pageId)) {
+            if (Loaded[groupId].contains(pageId) || Sticky[groupId].contains(pageId)) {
                 return NTest::TTestEnv::TryGetPage(part, pageId, groupId);
             }
             return nullptr;
@@ -32,8 +32,17 @@ namespace {
             Touched.clear();
         }
 
+        void StickLoaded() {
+            for (const auto &g : Loaded) {
+                Sticky[g.first].insert(g.second.begin(), g.second.end());
+            }
+            Touched.clear();
+            Loaded.clear();
+        }
+
         TMap<TGroupId, TSet<TPageId>> Loaded;
         TMap<TGroupId, TSet<TPageId>> Touched;
+        TMap<TGroupId, TSet<TPageId>> Sticky;
     };
 
     void AssertLoadedTheSame(const TPartStore& part, const TTouchEnv& bTree, const TTouchEnv& flat, const TString& message, 
@@ -85,7 +94,7 @@ namespace {
         const bool History = false;
         const bool Slices = false;
         const ui32 Rows = 40;
-        const bool PrechargeSome = false;
+        const bool StickSomePages = true;
     };
 
     TPartEggs MakePart(TTestParams params) {
@@ -395,8 +404,8 @@ Y_UNIT_TEST_SUITE(TPartBtreeIndexIt) {
 }
 
 Y_UNIT_TEST_SUITE(TChargeBTreeIndex) {
-    void PrepareEnvs(TTestParams params, const TPartStore& part, TTagsRef tags, const TKeyCellDefaults &keyDefaults, TTouchEnv& bTreeEnv, TTouchEnv& flatEnv) {
-        if (params.PrechargeSome) {
+    void StickSomePages(TTestParams params, const TPartStore& part, TTagsRef tags, const TKeyCellDefaults &keyDefaults, TTouchEnv& bTreeEnv, TTouchEnv& flatEnv) {
+        if (params.StickSomePages) {
             TChargeBTreeIndex bTree(&bTreeEnv, part, tags, true);
             
             for (int times = 0; times < 5; times++) {
@@ -405,6 +414,8 @@ Y_UNIT_TEST_SUITE(TChargeBTreeIndex) {
             }
 
             flatEnv.Loaded = bTreeEnv.Loaded;
+            flatEnv.StickLoaded();
+            bTreeEnv.StickLoaded();
         }
     }
 
@@ -446,7 +457,7 @@ Y_UNIT_TEST_SUITE(TChargeBTreeIndex) {
                         TTouchEnv bTreeEnv, flatEnv;
                         TChargeBTreeIndex bTree(&bTreeEnv, part, tags, true);
                         TCharge flat(&flatEnv, part, tags, true);
-                        PrepareEnvs(params, part, tags, *keyDefaults, bTreeEnv, flatEnv);
+                        StickSomePages(params, part, tags, *keyDefaults, bTreeEnv, flatEnv);
 
                         TString message = TStringBuilder() << (reverse ? "ChargeRowIdReverse " : "ChargeRowId ") << rowId1 << " " << rowId2 << " items " << itemsLimit;
                         DoChargeRowId(bTree, bTreeEnv, rowId1, rowId2, itemsLimit, 0, reverse, *keyDefaults, message);
@@ -472,7 +483,7 @@ Y_UNIT_TEST_SUITE(TChargeBTreeIndex) {
                                 TTouchEnv bTreeEnv, flatEnv;
                                 TChargeBTreeIndex bTree(&bTreeEnv, part, tags, true);
                                 TCharge flat(&flatEnv, part, tags, true);
-                                PrepareEnvs(params, part, tags, *keyDefaults, bTreeEnv, flatEnv);
+                                StickSomePages(params, part, tags, *keyDefaults, bTreeEnv, flatEnv);
 
                                 TStringBuilder message = TStringBuilder() << (reverse ? "ChargeKeysReverse " : "ChargeKeys ") << "(";
                                 for (auto c : key1) {
@@ -513,7 +524,7 @@ Y_UNIT_TEST_SUITE(TChargeBTreeIndex) {
                         TTouchEnv limitedEnv, unlimitedEnv;
                         TChargeBTreeIndex limitedCharge(&limitedEnv, part, tags, true);
                         TChargeBTreeIndex unlimitedCharge(&unlimitedEnv, part, tags, true);
-                        PrepareEnvs(params, part, tags, *keyDefaults, limitedEnv, unlimitedEnv);
+                        StickSomePages(params, part, tags, *keyDefaults, limitedEnv, unlimitedEnv);
 
                         TStringBuilder message = TStringBuilder() << (reverse ? "ChargeBytesLimitReverse " : "ChargeBytesLimit ") << "(";
                         for (auto c : key1) {

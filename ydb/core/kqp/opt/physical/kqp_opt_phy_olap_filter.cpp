@@ -140,6 +140,7 @@ std::vector<std::pair<TExprBase, TExprBase>> ExtractComparisonParameters(const T
 
 TMaybeNode<TExprBase> ComparisonPushdown(const std::vector<std::pair<TExprBase, TExprBase>>& parameters, const TCoCompare& predicate, TExprContext& ctx, TPositionHandle pos);
 
+[[maybe_unused]]
 TMaybeNode<TExprBase> YqlCoalescePushdown(const TCoCoalesce& coalesce, TExprContext& ctx) {
     if (const auto params = ExtractBinaryFunctionParameters(coalesce, ctx, coalesce.Pos())) {
         return Build<TKqpOlapFilterBinaryOp>(ctx, coalesce.Pos())

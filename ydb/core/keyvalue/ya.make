@@ -52,7 +52,6 @@ PEERDIR(
     ydb/core/tx
     ydb/core/util
     ydb/public/lib/base
-    ydb/library/dbgtrace
 )
 
 END()

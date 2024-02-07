@@ -16,7 +16,6 @@
 #include <library/cpp/json/writer/json_value.h>
 #include <util/string/escape.h>
 #include <util/charset/utf8.h>
-#include <ydb/library/dbgtrace/debug_trace.h>
 
 // Set to 1 in order for tablet to reboot instead of failing a Y_ABORT_UNLESS on database damage
 #define KIKIMR_KEYVALUE_ALLOW_DAMAGE 0
@@ -888,17 +887,14 @@ void TKeyValueState::DropRefCountsOnError(std::deque<std::pair<TLogoBlobID, bool
 
 void TKeyValueState::Reply(THolder<TIntermediate> &intermediate, const TActorContext &ctx,
         const TTabletStorageInfo *info) {
-    DBGTRACE("TKeyValueState::Reply");
     if (!intermediate->IsReplied) {
         if (intermediate->EvType == TEvKeyValue::TEvRequest::EventType) {
-            DBGTRACE_LOG("TEvKeyValue::TEvRequest");
             THolder<TEvKeyValue::TEvResponse> response(new TEvKeyValue::TEvResponse);
             response->Record = intermediate->Response;
             for (auto& item : intermediate->Payload) {
                 response->AddPayload(std::move(item));
             }
             ResourceMetrics->Network.Increment(response->Record.ByteSize());
-            DBGTRACE_LOG("RespondTo=" << intermediate->RespondTo);
             ctx.Send(intermediate->RespondTo, response.Release());
         }
         if (intermediate->EvType == TEvKeyValue::TEvExecuteTransaction::EventType) {
@@ -945,7 +941,6 @@ void TKeyValueState::ProcessCmd(TIntermediate::TRead &request,
         ISimpleDb &/*db*/, const TActorContext &/*ctx*/, TRequestStat &/*stat*/, ui64 /*unixTime*/,
         TIntermediate *intermediate)
 {
-    DBGTRACE("TKeyValueState::ProcessCmd(TRead)");
     NKikimrProto::EReplyStatus outStatus = request.CumulativeStatus();
     request.Status = outStatus;
     legacyResponse->SetStatus(outStatus);
@@ -992,7 +987,6 @@ void TKeyValueState::ProcessCmd(TIntermediate::TRangeRead &request,
         ISimpleDb &/*db*/, const TActorContext &/*ctx*/, TRequestStat &/*stat*/, ui64 /*unixTime*/,
         TIntermediate *intermediate)
 {
-    DBGTRACE("TKeyValueState::ProcessCmd(TRangeRead)");
     for (ui64 r = 0; r < request.Reads.size(); ++r) {
         auto &read = request.Reads[r];
         auto *resultKv = legacyResponse->AddPair();
@@ -1068,7 +1062,6 @@ void TKeyValueState::ProcessCmd(TIntermediate::TWrite &request,
         ISimpleDb &db, const TActorContext &ctx, TRequestStat &/*stat*/, ui64 unixTime,
         TIntermediate* /*intermediate*/)
 {
-    DBGTRACE("TKeyValueState::ProcessCmd(TWrite)");
     TIndexRecord& record = Index[request.Key];
     Dereference(record, db, ctx);
 
@@ -1105,12 +1098,10 @@ void TKeyValueState::ProcessCmd(TIntermediate::TWrite &request,
     UpdateKeyValue(request.Key, record, db, ctx);
 
     if (legacyResponse) {
-        DBGTRACE_LOG("legacyResponse");
         legacyResponse->SetStatus(NKikimrProto::OK);
         legacyResponse->SetStatusFlags(request.StatusFlags.Raw);
     }
     if (response) {
-        DBGTRACE_LOG("response");
         response->set_status(NKikimrKeyValue::Statuses::RSTATUS_OK);
         response->set_status_flag(GetStatusFlag(request.StatusFlags));
         response->set_storage_channel(storage_channel);
@@ -1155,7 +1146,6 @@ void TKeyValueState::ProcessCmd(const TIntermediate::TDelete &request,
         ISimpleDb &db, const TActorContext &ctx, TRequestStat &stat, ui64 /*unixTime*/,
         TIntermediate* /*intermediate*/)
 {
-    DBGTRACE("TKeyValueState::ProcessCmd(TDelete)");
     TraverseRange(request.Range, [&](TIndex::iterator it) {
         stat.Deletes++;
         stat.DeleteBytes += it->second.GetFullValueSize();
@@ -1175,7 +1165,6 @@ void TKeyValueState::ProcessCmd(const TIntermediate::TRename &request,
         ISimpleDb &db, const TActorContext &ctx, TRequestStat &/*stat*/, ui64 unixTime,
         TIntermediate* /*intermediate*/)
 {
-    DBGTRACE("TKeyValueState::ProcessCmd(TRename)");
     auto oldIter = Index.find(request.OldKey);
     Y_ABORT_UNLESS(oldIter != Index.end());
     TIndexRecord& source = oldIter->second;
@@ -1201,7 +1190,6 @@ void TKeyValueState::ProcessCmd(const TIntermediate::TCopyRange &request,
         ISimpleDb &db, const TActorContext &ctx, TRequestStat &/*stat*/, ui64 /*unixTime*/,
         TIntermediate *intermediate)
 {
-    DBGTRACE("TKeyValueState::ProcessCmd(TCopyRange)");
     TVector<TIndex::iterator> itemsToClone;
 
     TraverseRange(request.Range, [&](TIndex::iterator it) {
@@ -1244,7 +1232,6 @@ void TKeyValueState::ProcessCmd(const TIntermediate::TConcat &request,
         ISimpleDb &db, const TActorContext &ctx, TRequestStat& /*stat*/, ui64 unixTime,
         TIntermediate *intermediate)
 {
-    DBGTRACE("TKeyValueState::ProcessCmd(TConcat)");
     TVector<TIndexRecord::TChainItem> chain;
     ui64 offset = 0;
 
@@ -1660,7 +1647,6 @@ bool TKeyValueState::CheckCmds(THolder<TIntermediate>& intermediate, const TActo
 
 void TKeyValueState::ProcessCmds(THolder<TIntermediate> &intermediate, ISimpleDb &db, const TActorContext &ctx,
         const TTabletStorageInfo *info) {
-    DBGTRACE("TKeyValueState::ProcessCmds");
     LOG_DEBUG_S(ctx, NKikimrServices::KEYVALUE, "KeyValue# " << TabletId << " TTxRequest ProcessCmds");
 
     TKeySet keys(Index);
@@ -1684,7 +1670,6 @@ void TKeyValueState::ProcessCmds(THolder<TIntermediate> &intermediate, ISimpleDb
     success = success && CheckCmds(intermediate, intermediate->Patches, ctx, keys, info);
     success = success && CheckCmds(intermediate, ctx, keys, info);
     success = success && CheckCmds(intermediate, intermediate->GetStatuses, ctx, keys, info);
-    DBGTRACE_LOG("success=" << success);
     if (!success) {
         DropRefCountsOnErrorInTx(std::exchange(intermediate->RefCountsIncr, {}), db, ctx);
     } else {
@@ -1773,7 +1758,6 @@ void TKeyValueState::PushTrashBeingCommitted(TVector<TLogoBlobID>& trashBeingCom
 
 void TKeyValueState::UpdateKeyValue(const TString& key, const TIndexRecord& record, ISimpleDb& db,
         const TActorContext& ctx) {
-    DBGTRACE("TKeyValueState::UpdateKeyValue");
     TString value = record.Serialize();
     THelpers::DbUpdateUserKeyValue(key, value, db, ctx);
 }

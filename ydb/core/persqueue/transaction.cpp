@@ -1,6 +1,5 @@
 #include "transaction.h"
 #include "utils.h"
-#include <ydb/library/dbgtrace/debug_trace.h>
 
 namespace NKikimr::NPQ {
  
@@ -198,16 +197,13 @@ void TDistributedTransaction::OnTxCalcPredicateResult(const TEvPQ::TEvTxCalcPred
 
 void TDistributedTransaction::OnProposePartitionConfigResult(const TEvPQ::TEvProposePartitionConfigResult& event)
 {
-    DBGTRACE("TDistributedTransaction::OnProposePartitionConfigResult");
     OnPartitionResult(event,
                       NKikimrTx::TReadSetData::DECISION_COMMIT);
-    DBGTRACE_LOG("PartitionRepliesCount=" << PartitionRepliesCount << ", PartitionRepliesExpected=" << PartitionRepliesExpected);
 }
 
 template<class E>
 void TDistributedTransaction::OnPartitionResult(const E& event, EDecision decision)
 {
-    DBGTRACE("TDistributedTransaction::OnPartitionResult");
     Y_ABORT_UNLESS(Step == event.Step);
     Y_ABORT_UNLESS(TxId == event.TxId);
 
@@ -276,10 +272,6 @@ auto TDistributedTransaction::GetDecision() const -> EDecision
 
 bool TDistributedTransaction::HaveParticipantsDecision() const
 {
-    DBGTRACE("TDistributedTransaction::HaveParticipantsDecision");
-    DBGTRACE_LOG("Senders.size=" << Senders.size());
-    DBGTRACE_LOG("ReadSetCount=" << ReadSetCount);
-    DBGTRACE_LOG("ParticipantsDecision=" << (int)ParticipantsDecision);
     return
         (Senders.size() == ReadSetCount) &&
         (ParticipantsDecision != NKikimrTx::TReadSetData::DECISION_UNKNOWN) ||

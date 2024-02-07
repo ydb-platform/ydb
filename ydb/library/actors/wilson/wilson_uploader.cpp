@@ -65,13 +65,20 @@ namespace NWilson {
             static constexpr char ActorName[] = "WILSON_UPLOADER_ACTOR";
 
             void Bootstrap() {
-                Become(&TThis::StateFunc);
+                Become(&TThis::StateWork);
 
                 TStringBuf scheme;
                 TStringBuf host;
                 ui16 port;
-                GetSchemeHostAndPort(CollectorUrl, scheme, host, port);
-                Y_ABORT_UNLESS(scheme == "grpc://" || scheme == "grpcs://", "Only grpc and grpcs schemes are supported for traces collector");
+                if (!TryGetSchemeHostAndPort(CollectorUrl, scheme, host, port)) {
+                    LOG_ERROR_S(*TlsActivationContext, WILSON_SERVICE_ID, "Failed to parse collector url (" << CollectorUrl << " was provided). Wilson wouldn't work");
+                    Become(&TThis::StateBroken);
+                    return;
+                } else if (scheme != "grpc://" && scheme != "grpcs://") {
+                    LOG_ERROR_S(*TlsActivationContext, WILSON_SERVICE_ID, "Wrong scheme provided: " << scheme << " (only grpc:// and grpcs:// are supported). Wilson wouldn't work");
+                    Become(&TThis::StateBroken);
+                    return;
+                }
                 Channel = grpc::CreateChannel(TStringBuilder() << host << ":" << port,
                                               scheme == "grpcs://" ? grpc::SslCredentials({}) : grpc::InsecureChannelCredentials());
                 Stub = NServiceProto::TraceService::NewStub(Channel);
@@ -189,9 +196,13 @@ namespace NWilson {
                 TryToSend();
             }
 
-            STRICT_STFUNC(StateFunc,
+            STRICT_STFUNC(StateWork,
                 hFunc(TEvWilson, Handle);
                 cFunc(TEvents::TSystem::Wakeup, HandleWakeup);
+            );
+
+            STRICT_STFUNC(StateBroken,
+                IgnoreFunc(TEvWilson);
             );
         };
 

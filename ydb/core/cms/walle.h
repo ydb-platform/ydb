@@ -13,6 +13,9 @@ namespace NKikimr::NCms {
 constexpr const char *WALLE_CMS_USER = "Wall-E";
 constexpr const char *WALLE_API_URL_PREFIX = "/api/walle/v11/";
 
+constexpr const i32 WALLE_DEFAULT_PRIORITY = 20;
+constexpr const i32 WALLE_SOFT_MAINTAINANCE_PRIORITY = 50;
+
 IActor *CreateWalleAdapter(TEvCms::TEvWalleCreateTaskRequest::TPtr &ev, TActorId cms);
 IActor *CreateWalleAdapter(TEvCms::TEvWalleListTasksRequest::TPtr &ev, const TCmsStatePtr state);
 IActor *CreateWalleAdapter(TEvCms::TEvWalleCheckTaskRequest::TPtr &ev, const TCmsStatePtr state, TActorId cms);

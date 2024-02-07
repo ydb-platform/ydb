@@ -1807,6 +1807,266 @@ Y_UNIT_TEST_SUITE(TCmsTest) {
         // reject until prepared
         env.CheckRejectRequest("user", request3.GetRequestId());
     }
+
+    Y_UNIT_TEST(EmergencyDuringRollingRestart)
+    {
+        TCmsTestEnv env(TTestEnvOpts(8).WithEnableCMSRequestPriorities());
+
+        // Start rolling restart
+        auto rollingRestart = env.CheckPermissionRequest
+            ("user", true, false, true, true, -80, TStatus::ALLOW_PARTIAL,
+             MakeAction(TAction::RESTART_SERVICES, env.GetNodeId(0), 60000000, "storage"),
+             MakeAction(TAction::RESTART_SERVICES, env.GetNodeId(1), 60000000, "storage"));
+        UNIT_ASSERT_VALUES_EQUAL(rollingRestart.PermissionsSize(), 1);
+
+        // Done with restarting first node
+        env.CheckDonePermission("user", rollingRestart.GetPermissions(0).GetId());
+
+        // Emergency request
+        auto emergency = env.CheckPermissionRequest
+            ("user", true, false, true, true, -100, TStatus::ALLOW,
+             MakeAction(TAction::RESTART_SERVICES, env.GetNodeId(1), 60000000, "storage"));
+    
+        // Rolling restart is blocked by emergency request
+        env.CheckRequest("user", rollingRestart.GetRequestId(), false, TStatus::DISALLOW_TEMP, 0);
+
+        // Done with emergency request
+        env.CheckDonePermission("user", emergency.GetPermissions(0).GetId());
+
+        // Rolling restart can continue
+        env.CheckRequest("user", rollingRestart.GetRequestId(), false, TStatus::ALLOW, 1);
+    }
+
+    Y_UNIT_TEST(ScheduledEmergencyDuringRollingRestart)
+    {
+        TCmsTestEnv env(TTestEnvOpts(8).WithEnableCMSRequestPriorities());
+
+        // Start rolling restart
+        auto rollingRestart = env.CheckPermissionRequest
+            ("user", true, false, true, true, -80, TStatus::ALLOW_PARTIAL,
+             MakeAction(TAction::RESTART_SERVICES, env.GetNodeId(0), 60000000, "storage"),
+             MakeAction(TAction::RESTART_SERVICES, env.GetNodeId(1), 60000000, "storage"));
+        UNIT_ASSERT_VALUES_EQUAL(rollingRestart.PermissionsSize(), 1);
+
+        // Emergency request
+        auto emergency = env.CheckPermissionRequest
+            ("user", true, false, true, true, -100, TStatus::DISALLOW_TEMP,
+             MakeAction(TAction::RESTART_SERVICES, env.GetNodeId(1), 60000000, "storage"));
+    
+        // Done with restarting first node
+        env.CheckDonePermission("user", rollingRestart.GetPermissions(0).GetId());
+
+        // Rolling restart is blocked by emergency request
+        env.CheckRequest("user", rollingRestart.GetRequestId(), false, TStatus::DISALLOW_TEMP, 0);
+
+        // Emergency request is not blocked
+        emergency = env.CheckRequest("user", emergency.GetRequestId(), false, TStatus::ALLOW, 1);
+
+        // Done with emergency request
+        env.CheckDonePermission("user", emergency.GetPermissions(0).GetId());
+
+        // Rolling restart can continue
+        env.CheckRequest("user", rollingRestart.GetRequestId(), false, TStatus::ALLOW, 1);
+    }
+
+    Y_UNIT_TEST(WalleRequestDuringRollingRestart)
+    {
+        TCmsTestEnv env(TTestEnvOpts(8).WithEnableCMSRequestPriorities());
+
+        // Start rolling restart
+        auto rollingRestart = env.CheckPermissionRequest
+            ("user", true, false, true, true, -80, TStatus::ALLOW_PARTIAL,
+             MakeAction(TAction::RESTART_SERVICES, env.GetNodeId(0), 60000000, "storage"),
+             MakeAction(TAction::RESTART_SERVICES, env.GetNodeId(1), 60000000, "storage"));
+        UNIT_ASSERT_VALUES_EQUAL(rollingRestart.PermissionsSize(), 1);
+
+        // Done with restarting first node
+        env.CheckDonePermission("user", rollingRestart.GetPermissions(0).GetId());
+
+        // Wall-E task is blocked by rolling restart
+        env.CheckWalleCreateTask("task-1", "reboot", false, TStatus::DISALLOW_TEMP, env.GetNodeId(1));
+    
+        // Rolling restart is not blocked
+        rollingRestart = env.CheckRequest("user", rollingRestart.GetRequestId(), false, TStatus::ALLOW, 1);
+        UNIT_ASSERT_VALUES_EQUAL(rollingRestart.PermissionsSize(), 1);
+
+        // Done with restarting second node
+        env.CheckDonePermission("user", rollingRestart.GetPermissions(0).GetId());
+
+        // Wall-E task can continue
+        env.CheckWalleCheckTask("task-1", TStatus::ALLOW, env.GetNodeId(1));
+    }
+
+    Y_UNIT_TEST(ScheduledWalleRequestDuringRollingRestart)
+    {
+        TCmsTestEnv env(TTestEnvOpts(8).WithEnableCMSRequestPriorities());
+
+        // Start rolling restart
+        auto rollingRestart = env.CheckPermissionRequest
+            ("user", true, false, true, true, -80, TStatus::ALLOW_PARTIAL,
+             MakeAction(TAction::RESTART_SERVICES, env.GetNodeId(0), 60000000, "storage"),
+             MakeAction(TAction::RESTART_SERVICES, env.GetNodeId(1), 60000000, "storage"));
+        UNIT_ASSERT_VALUES_EQUAL(rollingRestart.PermissionsSize(), 1);
+
+        // Wall-E task is blocked by rolling restart
+        env.CheckWalleCreateTask("task-1", "reboot", false, TStatus::DISALLOW_TEMP, env.GetNodeId(1));
+
+        // Done with restarting first node
+        env.CheckDonePermission("user", rollingRestart.GetPermissions(0).GetId());
+
+        // Wall-E task is stil blocked
+        env.CheckWalleCheckTask("task-1", TStatus::DISALLOW_TEMP, env.GetNodeId(1));
+
+        // Rolling restart is not blocked
+        rollingRestart = env.CheckRequest("user", rollingRestart.GetRequestId(), false, TStatus::ALLOW, 1);
+        UNIT_ASSERT_VALUES_EQUAL(rollingRestart.PermissionsSize(), 1);
+
+        // Done with restarting second node
+        env.CheckDonePermission("user", rollingRestart.GetPermissions(0).GetId());
+
+        // Wall-E task can continue
+        env.CheckWalleCheckTask("task-1", TStatus::ALLOW, env.GetNodeId(1));
+    }
+
+    Y_UNIT_TEST(EnableCMSRequestPrioritiesFeatureFlag)
+    {
+        TCmsTestEnv env(8);
+        // Start rolling restart with specified priority
+        auto rollingRestart = env.CheckPermissionRequest
+            ("user", true, false, true, true, -80, TStatus::WRONG_REQUEST,
+             MakeAction(TAction::RESTART_SERVICES, env.GetNodeId(0), 60000000, "storage"),
+             MakeAction(TAction::RESTART_SERVICES, env.GetNodeId(1), 60000000, "storage"));
+
+        const TString expectedReason = "Unsupported: feature flag EnableCMSRequestPriorities is off";
+        UNIT_ASSERT_VALUES_EQUAL(rollingRestart.GetStatus().GetReason(), expectedReason);
+    }
+
+    Y_UNIT_TEST(SamePriorityRequest)
+    {
+        TCmsTestEnv env(TTestEnvOpts(8).WithEnableCMSRequestPriorities());
+
+        // Start rolling restart
+        auto rollingRestart = env.CheckPermissionRequest
+            ("user", true, false, true, true, -80, TStatus::ALLOW_PARTIAL,
+             MakeAction(TAction::RESTART_SERVICES, env.GetNodeId(0), 60000000, "storage"),
+             MakeAction(TAction::RESTART_SERVICES, env.GetNodeId(1), 60000000, "storage"));
+        UNIT_ASSERT_VALUES_EQUAL(rollingRestart.PermissionsSize(), 1);
+
+        // Issue same priority request
+        auto samePriorityRequest = env.CheckPermissionRequest
+            ("user", true, false, true, true, -80, TStatus::DISALLOW_TEMP,
+             MakeAction(TAction::RESTART_SERVICES, env.GetNodeId(1), 60000000, "storage"));
+    
+        // Done with restarting first node
+        env.CheckDonePermission("user", rollingRestart.GetPermissions(0).GetId());
+
+        // Rolling restart is not blocked by same priority request
+        rollingRestart = env.CheckRequest("user", rollingRestart.GetRequestId(), false, TStatus::ALLOW, 1);
+        UNIT_ASSERT_VALUES_EQUAL(rollingRestart.PermissionsSize(), 1);
+
+        // Done with restarting second node
+        env.CheckDonePermission("user", rollingRestart.GetPermissions(0).GetId());
+
+        // Same priority can continue
+        env.CheckRequest("user", samePriorityRequest.GetRequestId(), false, TStatus::ALLOW, 1);
+    }
+
+    Y_UNIT_TEST(SamePriorityRequest2)
+    {
+        TCmsTestEnv env(TTestEnvOpts(8).WithEnableCMSRequestPriorities());
+
+        // Start rolling restart
+        auto rollingRestart = env.CheckPermissionRequest
+            ("user", true, false, true, true, -80, TStatus::ALLOW_PARTIAL,
+             MakeAction(TAction::RESTART_SERVICES, env.GetNodeId(0), 60000000, "storage"),
+             MakeAction(TAction::RESTART_SERVICES, env.GetNodeId(1), 60000000, "storage"));
+        UNIT_ASSERT_VALUES_EQUAL(rollingRestart.PermissionsSize(), 1);
+
+        // Issue same priority request
+        auto samePriorityRequest = env.CheckPermissionRequest
+            ("user", true, false, true, true, -80, TStatus::DISALLOW_TEMP,
+             MakeAction(TAction::RESTART_SERVICES, env.GetNodeId(1), 60000000, "storage"));
+    
+        // Done with restarting first node
+        env.CheckDonePermission("user", rollingRestart.GetPermissions(0).GetId());
+
+        // Request is not blocked by rolling restart of same priority
+        samePriorityRequest = env.CheckRequest("user", samePriorityRequest.GetRequestId(), false, TStatus::ALLOW, 1);
+        UNIT_ASSERT_VALUES_EQUAL(samePriorityRequest.PermissionsSize(), 1);
+
+        // Done with same priority request permissions
+        env.CheckDonePermission("user", samePriorityRequest.GetPermissions(0).GetId());
+
+        // Rolling restart can continue
+        env.CheckRequest("user", rollingRestart.GetRequestId(), false, TStatus::ALLOW, 1);
+    }
+
+    Y_UNIT_TEST(PriorityRange)
+    {
+        TCmsTestEnv env(TTestEnvOpts(8).WithEnableCMSRequestPriorities());
+
+        const TString expectedReason = "Priority value is out of range";
+        
+        // Out of range priority
+        auto request = env.CheckPermissionRequest
+            ("user", true, false, true, true, -101, TStatus::WRONG_REQUEST,
+             MakeAction(TAction::RESTART_SERVICES, env.GetNodeId(0), 60000000, "storage"),
+             MakeAction(TAction::RESTART_SERVICES, env.GetNodeId(1), 60000000, "storage"));
+        UNIT_ASSERT_VALUES_EQUAL(request.GetStatus().GetReason(), expectedReason);
+        
+        // Out of range priority
+        request = env.CheckPermissionRequest
+            ("user", true, false, true, true, 101, TStatus::WRONG_REQUEST,
+             MakeAction(TAction::RESTART_SERVICES, env.GetNodeId(0), 60000000, "storage"),
+             MakeAction(TAction::RESTART_SERVICES, env.GetNodeId(1), 60000000, "storage"));
+        UNIT_ASSERT_VALUES_EQUAL(request.GetStatus().GetReason(), expectedReason);
+    }
+
+    Y_UNIT_TEST(WalleTasksDifferentPriorities)
+    {
+        TCmsTestEnv env(TTestEnvOpts(8).WithEnableCMSRequestPriorities());
+
+        // Without node limits
+        NKikimrCms::TCmsConfig config;
+        config.MutableClusterLimits()->SetDisabledNodesLimit(0);
+        config.MutableClusterLimits()->SetDisabledNodesRatioLimit(0);
+        env.SetCmsConfig(config);
+
+        // Start rolling restart
+        auto rollingRestart = env.CheckPermissionRequest
+            ("user", true, false, true, true, -80, TStatus::ALLOW_PARTIAL,
+             MakeAction(TAction::RESTART_SERVICES, env.GetNodeId(0), 60000000, "storage"),
+             MakeAction(TAction::RESTART_SERVICES, env.GetNodeId(1), 60000000, "storage"));
+        UNIT_ASSERT_VALUES_EQUAL(rollingRestart.PermissionsSize(), 1);
+
+        // Done with restarting first node
+        env.CheckDonePermission("user", rollingRestart.GetPermissions(0).GetId());
+    
+        // Rolling restart is continue
+        rollingRestart = env.CheckRequest("user", rollingRestart.GetRequestId(), false, TStatus::ALLOW, 1);
+        UNIT_ASSERT_VALUES_EQUAL(rollingRestart.PermissionsSize(), 1);
+
+        // Wall-E soft maintainance task is blocked by rolling restart
+        env.CheckWalleCreateTask("task-1", "temporary-unreachable", false, TStatus::DISALLOW_TEMP, env.GetNodeId(2));
+
+        // Wall-E reboot task is blocked by rolling restart
+        env.CheckWalleCreateTask("task-2", "reboot", false, TStatus::DISALLOW_TEMP, env.GetNodeId(1));
+
+        // Done with restarting second node
+        env.CheckDonePermission("user", rollingRestart.GetPermissions(0).GetId());
+
+        // Wall-E soft maintainance task is blocked by Wall-E reboot task
+        env.CheckWalleCheckTask("task-1", TStatus::DISALLOW_TEMP, env.GetNodeId(2));
+
+        // Wall-E reboot task can continue
+        env.CheckWalleCheckTask("task-2", TStatus::ALLOW, env.GetNodeId(1));
+
+        // Done with Wall-E reboot task
+        env.CheckWalleRemoveTask("task-2");
+
+        // Wall-E soft maintainance task can continue
+        env.CheckWalleCheckTask("task-1", TStatus::ALLOW, env.GetNodeId(2));
+    }
 }
 
 }

@@ -1162,6 +1162,7 @@ keyword_as_compat:
   | OMIT
   | ONE
   | OPTION
+  | PARALLEL
   | PAST
   | PATTERN
   | PER

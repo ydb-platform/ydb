@@ -6282,58 +6282,38 @@ void RegisterCoSimpleCallables1(TCallableOptimizerMap& map) {
         return node;
     };
 
-    map["ShuffleByKeys"] = map["PartitionsByKeys"] = [](const TExprNode::TPtr& node, TExprContext& ctx, TOptimizeContext& optCtx) {
+    map["PartitionsByKeys"] = [](const TExprNode::TPtr& node, TExprContext& ctx, TOptimizeContext& optCtx) {
         if (IsEmpty(node->Head(), *optCtx.Types)) {
             YQL_CLOG(DEBUG, Core) << node->Content() << " over empty input.";
 
-            // lambda argument type:
-            auto& lambdaArg = node->Tail().Head().Head();
-            auto* lambdaArgType = lambdaArg.GetTypeAnn();
-            YQL_ENSURE(lambdaArgType, "No argument type for lambda in " << node->Content());
+            TExprNode::TPtr sequence = KeepConstraints(node->HeadPtr(), node->Tail().Head().Head(), ctx);
+            auto lambdaResult = ctx.Builder(node->Pos()).Apply(node->Tail()).With(0, sequence).Seal().Build();
+            return lambdaResult;
+        }
+        return node;
+    };
 
-            // sequence type:
-            auto* sequenceType = node->Head().GetTypeAnn();
+    map["ShuffleByKeys"] = [](const TExprNode::TPtr& node, TExprContext& ctx, TOptimizeContext& optCtx) {
+        if (IsEmpty(node->Head(), *optCtx.Types)) {
+            YQL_CLOG(DEBUG, Core) << node->Content() << " over empty input.";
+
+            auto& lambdaArg = node->Tail().Head().Head();
+
+            TExprNode::TPtr sequence = node->HeadPtr();
+            auto* sequenceType = sequence->GetTypeAnn();
             YQL_ENSURE(sequenceType, "No argument type for sequence in " << node->Content());
 
-            TStringBuf typeConversionFunc;
-            if (sequenceType->GetKind() != lambdaArgType->GetKind()) {
-                switch (lambdaArgType->GetKind()) {
-                    case ETypeAnnotationKind::List:
-                        if (sequenceType->GetKind() == ETypeAnnotationKind::Optional) {
-                            typeConversionFunc = "ToList";
-                        } else if (IsIn({ ETypeAnnotationKind::Stream, ETypeAnnotationKind::Flow }, sequenceType->GetKind())) {
-                            typeConversionFunc = "ForwardList";
-                        }
-                        break;
-                    case ETypeAnnotationKind::Flow:
-                        typeConversionFunc = "ToFlow";
-                        break;
-                    case ETypeAnnotationKind::Stream:
-                        typeConversionFunc = "ToStream";
-                        break;
-                    case ETypeAnnotationKind::Optional:
-                        if (sequenceType->GetKind() == ETypeAnnotationKind::List) {
-                            typeConversionFunc = "ToOptional";
-                        }
-                        // TODO: convert from Stream/Flow to Optional
-                        break;
-                    default:
-                        break;
-                }
+            if (sequenceType->GetKind() != ETypeAnnotationKind::Stream) {
+                sequence = ctx.NewCallable(sequence->Pos(), "ToStream", { sequence });
             }
+            sequence = KeepConstraints(sequence, lambdaArg, ctx);
 
-            TExprNode::TPtr sequence = KeepConstraints(node->HeadPtr(), lambdaArg, ctx);
-            if (typeConversionFunc) {
-                sequence = KeepConstraints(ctx.NewCallable(sequence->Pos(), typeConversionFunc, { sequence }), lambdaArg, ctx);
-            }
             auto lambdaResult = ctx.Builder(node->Pos()).Apply(node->Tail()).With(0, sequence).Seal().Build();
-            if (node->IsCallable("ShuffleByKeys")) {
-                auto lambdaType = node->Tail().GetTypeAnn();
-                if (lambdaType->GetKind() == ETypeAnnotationKind::Optional) {
-                    lambdaResult = ctx.NewCallable(lambdaResult->Pos(), "ToList", { lambdaResult });
-                } else if (lambdaType->GetKind() == ETypeAnnotationKind::Stream) {
-                    lambdaResult = ctx.NewCallable(lambdaResult->Pos(), "ForwardList", { lambdaResult });
-                }
+            auto lambdaType = node->Tail().GetTypeAnn();
+            if (lambdaType->GetKind() == ETypeAnnotationKind::Optional) {
+                lambdaResult = ctx.NewCallable(lambdaResult->Pos(), "ToList", { lambdaResult });
+            } else if (lambdaType->GetKind() == ETypeAnnotationKind::Stream || lambdaType->GetKind() == ETypeAnnotationKind::Flow) {
+                lambdaResult = ctx.NewCallable(lambdaResult->Pos(), "ForwardList", { lambdaResult });
             }
             return lambdaResult;
         }

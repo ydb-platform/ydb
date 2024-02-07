@@ -1,7 +1,7 @@
 #pragma once
 
 #include "datashard_impl.h"
-#include "datashard_locks.h"
+#include <ydb/core/tx/locks/locks.h>
 #include "datashard__engine_host.h"
 #include "datashard_user_db.h"
 #include "operation.h"

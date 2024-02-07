@@ -1,4 +1,4 @@
-UNITTEST_FOR(ydb/core/tx/datashard)
+UNITTEST_FOR(ydb/core/tx/locks)
 
 FORK_SUBTESTS()
 
@@ -30,7 +30,7 @@ PEERDIR(
 YQL_LAST_ABI_VERSION()
 
 SRCS(
-    range_avl_tree_ut.cpp
+    range_treap_ut.cpp
 )
 
 REQUIREMENTS(ram:32)

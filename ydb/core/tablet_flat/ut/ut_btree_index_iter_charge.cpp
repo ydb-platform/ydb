@@ -75,7 +75,7 @@ namespace {
                 flatDataPages.insert(*bTreeDataPages.rbegin());
             }
             UNIT_ASSERT_VALUES_EQUAL_C(flatDataPages, bTreeDataPages,
-                TStringBuilder() << message << " Group {" << groupId.Index << "," << groupId.IsHistoric() << "}");
+                TStringBuilder() << message << " Group " << groupId);
         }
     }
 
@@ -131,7 +131,9 @@ namespace {
         // making part with key gaps
         const TVector<ui32> secondCells = {1, 3, 4, 6, 7, 8, 10};
         for (ui32 i : xrange<ui32>(0, 40)) {
-            cook.Add(*TSchemedCookRow(*lay).Col(i / 7, secondCells[i % 7], i, static_cast<ui64>(i), TString("xxxxxxxxxx_" + std::to_string(i))));
+            for (int ver = params.History ? i % 3 : 0; ver >= 0; ver--) {
+                cook.Ver({0, ui64(ver)}).Add(*TSchemedCookRow(*lay).Col(i / 7, secondCells[i % 7], i, static_cast<ui64>(i), TString("xxxxxxxxxx_" + std::to_string(i))));
+            }
         }
 
         TPartEggs eggs = cook.Finish();
@@ -408,7 +410,7 @@ Y_UNIT_TEST_SUITE(TChargeBTreeIndex) {
     }
 
     bool DoChargeKeys(const TPartStore& part, ICharge& charge, TTouchEnv& env, const TCells key1, const TCells key2, ui64 itemsLimit, ui64 bytesLimit,
-            bool reverse, const TKeyCellDefaults &keyDefaults, const TString& message, ui32 failsAllowed = 10) {
+            bool reverse, const TKeyCellDefaults &keyDefaults, const TString& message, ui32 failsAllowed = 15) {
         while (true) {
             auto result = reverse
                 ? charge.DoReverse(key1, key2, part.Stat.Rows - 1, 0, keyDefaults, itemsLimit, bytesLimit)
@@ -502,8 +504,8 @@ Y_UNIT_TEST_SUITE(TChargeBTreeIndex) {
                         }
                         message << ") bytes " << bytesLimit;
 
-                        DoChargeKeys(part, limitedCharge, limitedEnv, key1, { }, 0, bytesLimit, reverse, *keyDefaults, message);
                         DoChargeKeys(part, unlimitedCharge, unlimitedEnv, key1, { }, 0, 0, reverse, *keyDefaults, message);
+                        DoChargeKeys(part, limitedCharge, limitedEnv, key1, { }, 0, bytesLimit, reverse, *keyDefaults, message);
                         
                         TSet<TGroupId> groupIds;
                         for (const auto &c : {limitedEnv.Loaded, unlimitedEnv.Loaded}) {
@@ -518,11 +520,20 @@ Y_UNIT_TEST_SUITE(TChargeBTreeIndex) {
                             if (reverse) {
                                 std::reverse(unlimitedLoaded.begin(), unlimitedLoaded.end());
                             }
+                            for (auto pageId : limitedEnv.Loaded[groupId]) {
+                                if (part.GetPageType(pageId, groupId) == EPage::DataPage) {
+                                    loaded.insert(pageId);
+                                }
+                            }
                             for (auto pageId : unlimitedLoaded) {
                                 if (part.GetPageType(pageId, groupId) == EPage::DataPage) {
-                                    if (expected || !groupId.IsMain()) {
+                                    if (!groupId.IsHistoric() && (expected || !groupId.IsMain())) {
                                         // do not count first main page
                                         size += part.GetPageSize(pageId, groupId);
+                                    }
+                                    if (!groupId.IsMain() && !loaded.contains(pageId)) {
+                                        // only check that we loaded consecutive pages
+                                        break;
                                     }
                                     expected.insert(pageId);
                                     if (size > bytesLimit) {
@@ -530,14 +541,9 @@ Y_UNIT_TEST_SUITE(TChargeBTreeIndex) {
                                     }
                                 }
                             }
-                            for (auto pageId : limitedEnv.Loaded[groupId]) {
-                                if (part.GetPageType(pageId, groupId) == EPage::DataPage) {
-                                    loaded.insert(pageId);
-                                }
-                            }
 
                             UNIT_ASSERT_VALUES_EQUAL_C(expected, loaded,
-                                TStringBuilder() << message << " Group {" << groupId.Index << "," << groupId.IsHistoric() << "}");
+                                TStringBuilder() << message << " Group " << groupId);
                         }
                     }
                 }
@@ -567,6 +573,14 @@ Y_UNIT_TEST_SUITE(TChargeBTreeIndex) {
         CheckPart({.Levels = 0, .Groups = true});
     }
 
+    Y_UNIT_TEST(NoNodes_History) {
+        CheckPart({.Levels = 0, .History = true});
+    }
+
+    Y_UNIT_TEST(NoNodes_Groups_History) {
+        CheckPart({.Levels = 0, .Groups = true, .History = true});
+    }
+
     Y_UNIT_TEST(OneNode) {
         CheckPart({.Levels = 1});
     }
@@ -575,12 +589,28 @@ Y_UNIT_TEST_SUITE(TChargeBTreeIndex) {
         CheckPart({.Levels = 1, .Groups = true});
     }
 
+    Y_UNIT_TEST(OneNode_History) {
+        CheckPart({.Levels = 1, .History = true});
+    }
+
+    Y_UNIT_TEST(OneNode_Groups_History) {
+        CheckPart({.Levels = 1, .Groups = true, .History = true});
+    }
+
     Y_UNIT_TEST(FewNodes) {
         CheckPart({.Levels = 3});
     }
 
     Y_UNIT_TEST(FewNodes_Groups) {
         CheckPart({.Levels = 3, .Groups = true});
+    }
+
+    Y_UNIT_TEST(FewNodes_History) {
+        CheckPart({.Levels = 3, .History = true});
+    }
+
+    Y_UNIT_TEST(FewNodes_Groups_History) {
+        CheckPart({.Levels = 3, .Groups = true, .History = true});
     }
 }
 
@@ -618,7 +648,7 @@ Y_UNIT_TEST_SUITE(TPartBtreeIndexIteration) {
     }
 
     void Charge(const TRun &run, const TVector<TTag> tags, TTouchEnv& env, const TCells key1, const TCells key2, ui64 itemsLimit, ui64 bytesLimit,
-            bool reverse, const TKeyCellDefaults &keyDefaults, const TString& message, ui32 failsAllowed = 10) {
+            bool reverse, const TKeyCellDefaults &keyDefaults, const TString& message, ui32 failsAllowed = 15) {
         while (true) {
             auto result = reverse
                 ? ChargeRangeReverse(&env, key1, key2, run, keyDefaults, tags, itemsLimit, bytesLimit, true)
@@ -742,12 +772,20 @@ Y_UNIT_TEST_SUITE(TPartBtreeIndexIteration) {
         CheckPart({.Levels = 0, .Groups = true});
     }
 
+    Y_UNIT_TEST(NoNodes_History) {
+        CheckPart({.Levels = 0, .History = true});
+    }
+
     Y_UNIT_TEST(OneNode) {
         CheckPart({.Levels = 1});
     }
 
     Y_UNIT_TEST(OneNode_Groups) {
         CheckPart({.Levels = 1, .Groups = true});
+    }
+
+    Y_UNIT_TEST(OneNode_History) {
+        CheckPart({.Levels = 1, .History = true});
     }
 
     Y_UNIT_TEST(OneNode_Slices) {
@@ -758,6 +796,14 @@ Y_UNIT_TEST_SUITE(TPartBtreeIndexIteration) {
         CheckPart({.Levels = 1, .Groups = true, .Slices = true});
     }
 
+    Y_UNIT_TEST(OneNode_History_Slices) {
+        CheckPart({.Levels = 1, .History = true, .Slices = true});
+    }
+
+    Y_UNIT_TEST(OneNode_Groups_History_Slices) {
+        CheckPart({.Levels = 1, .Groups = true, .History = true, .Slices = true});
+    }
+
     Y_UNIT_TEST(FewNodes) {
         CheckPart({.Levels = 3});
     }
@@ -766,12 +812,24 @@ Y_UNIT_TEST_SUITE(TPartBtreeIndexIteration) {
         CheckPart({.Levels = 3, .Groups = true});
     }
 
+    Y_UNIT_TEST(FewNodes_History) {
+        CheckPart({.Levels = 3, .History = true});
+    }
+
     Y_UNIT_TEST(FewNodes_Slices) {
         CheckPart({.Levels = 3, .Slices = true});
     }
 
     Y_UNIT_TEST(FewNodes_Groups_Slices) {
         CheckPart({.Levels = 3, .Groups = true, .Slices = true});
+    }
+
+    Y_UNIT_TEST(FewNodes_History_Slices) {
+        CheckPart({.Levels = 3, .History = true, .Slices = true});
+    }
+
+    Y_UNIT_TEST(FewNodes_Groups_History_Slices) {
+        CheckPart({.Levels = 3, .Groups = true, .History = true, .Slices = true});
     }
 }
 

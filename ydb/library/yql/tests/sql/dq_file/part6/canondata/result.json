@@ -1821,6 +1821,28 @@
         }
     ],
     "test.test[order_by-literal_single_item_sort--Results]": [],
+    "test.test[order_by-order_by_missing_project_column-default.txt-Analyze]": [
+        {
+            "checksum": "b5c2e8e2b9513028037ab15707571f52",
+            "size": 14060,
+            "uri": "https://{canondata_backend}/1871002/2fcd813e80c98be1c3c62b9a854d09ccca8851f8/resource.tar.gz#test.test_order_by-order_by_missing_project_column-default.txt-Analyze_/plan.txt"
+        }
+    ],
+    "test.test[order_by-order_by_missing_project_column-default.txt-Debug]": [
+        {
+            "checksum": "749e10f58df2a7d1b43d444d02d08b4c",
+            "size": 4022,
+            "uri": "https://{canondata_backend}/1871002/2fcd813e80c98be1c3c62b9a854d09ccca8851f8/resource.tar.gz#test.test_order_by-order_by_missing_project_column-default.txt-Debug_/opt.yql_patched"
+        }
+    ],
+    "test.test[order_by-order_by_missing_project_column-default.txt-Plan]": [
+        {
+            "checksum": "b5c2e8e2b9513028037ab15707571f52",
+            "size": 14060,
+            "uri": "https://{canondata_backend}/1871002/2fcd813e80c98be1c3c62b9a854d09ccca8851f8/resource.tar.gz#test.test_order_by-order_by_missing_project_column-default.txt-Plan_/plan.txt"
+        }
+    ],
+    "test.test[order_by-order_by_missing_project_column-default.txt-Results]": [],
     "test.test[order_by-sort_with_take--Analyze]": [
         {
             "checksum": "c78b6f43c8394d398e0c63aa70d6458c",

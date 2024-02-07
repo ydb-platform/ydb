@@ -2950,6 +2950,11 @@ Y_UNIT_TEST_SUITE(SqlToYQLErrors) {
         UNIT_ASSERT_NO_DIFF(Err2Str(res), "<main>:1:45: Error: You should use in ORDER BY column name, qualified field, callable function or expression\n");
     }
 
+    Y_UNIT_TEST(ErrorsInOrderByWhenColumnIsMissingInProjection) {
+        ExpectFailWithError("select subkey from (select 1 as subkey) order by key", "<main>:1:50: Error: Column key is not in source column set\n");
+        ExpectFailWithError("select subkey from plato.Input as a order by x.key", "<main>:1:46: Error: Unknown correlation name: x\n");
+    }
+
     Y_UNIT_TEST(SelectAggregatedWhere) {
         NYql::TAstParseResult res = SqlToYql("select * from plato.Input where count(key)");
         UNIT_ASSERT(!res.Root);
@@ -3200,12 +3205,6 @@ Y_UNIT_TEST_SUITE(SqlToYQLErrors) {
         NYql::TAstParseResult res = SqlToYql("select in.key, subkey as key from plato.Input as in;");
         UNIT_ASSERT(!res.Root);
         UNIT_ASSERT_NO_DIFF(Err2Str(res), "<main>:1:1: Error: Duplicate column: key\n");
-    }
-
-    Y_UNIT_TEST(SelectOrderByUnknownLabel) {
-        NYql::TAstParseResult res = SqlToYql("select a from plato.Input order by b");
-        UNIT_ASSERT(!res.Root);
-        UNIT_ASSERT_NO_DIFF(Err2Str(res), "<main>:1:36: Error: Column b is not in source column set. Did you mean a?\n");
     }
 
     Y_UNIT_TEST(SelectFlattenBySameColumns) {

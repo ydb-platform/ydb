@@ -1,47 +1,51 @@
 #pragma once
+#include <ydb/core/tx/locks/locks_db.h>
+
 #include "datashard_impl.h"
 
 namespace NKikimr::NDataShard {
 
-class TDataShardLocksDb
-    : public ILocksDb
-{
-public:
-    TDataShardLocksDb(TDataShard& self, TTransactionContext& txc)
-        : Self(self)
-        , DB(txc.DB)
-    { }
+class TDataShardLocksDb : public NLocks::TShardLocksDb<TDataShard, TDataShard::Schema> {
+private:
+    using TBase = NLocks::TShardLocksDb<TDataShard, TDataShard::Schema>;
 
-    bool HasChanges() const {
-        return HasChanges_;
+public:
+    using TBase::TBase;
+
+    void PersistRemoveLock(ui64 lockId) override {
+        // We remove lock changes unless it's managed by volatile tx manager
+        bool isVolatile = Self.GetVolatileTxManager().FindByCommitTxId(lockId);
+        if (!isVolatile) {
+            for (auto& pr : Self.GetUserTables()) {
+                auto tid = pr.second->LocalTid;
+                // Removing the lock also removes any uncommitted data
+                if (DB.HasOpenTx(tid, lockId)) {
+                    DB.RemoveTx(tid, lockId);
+                    Self.GetConflictsCache().GetTableCache(tid).RemoveUncommittedWrites(lockId, DB);
+                }
+            }
+        }
+
+        using Schema = TDataShard::Schema;
+        NIceDb::TNiceDb db(DB);
+        db.Table<typename Schema::Locks>().Key(lockId).Delete();
+        HasChanges_ = true;
+
+        if (!isVolatile) {
+            Self.ScheduleRemoveLockChanges(lockId);
+        }
     }
 
-    bool Load(TVector<TLockRow>& rows) override;
-
-    bool MayAddLock(ui64 lockId) override;
-
-    // Persist adding/removing a lock info
-    void PersistAddLock(ui64 lockId, ui32 lockNodeId, ui32 generation, ui64 counter, ui64 createTs, ui64 flags = 0) override;
-    void PersistLockCounter(ui64 lockId, ui64 counter) override;
-    void PersistRemoveLock(ui64 lockId) override;
-
-    // Persist adding/removing info on locked ranges
-    void PersistAddRange(ui64 lockId, ui64 rangeId, const TPathId& tableId, ui64 flags = 0, const TString& data = {}) override;
-    void PersistRangeFlags(ui64 lockId, ui64 rangeId, ui64 flags) override;
-    void PersistRemoveRange(ui64 lockId, ui64 rangeId) override;
-
-    // Persist a conflict, i.e. this lock must break some other lock on commit
-    void PersistAddConflict(ui64 lockId, ui64 otherLockId) override;
-    void PersistRemoveConflict(ui64 lockId, ui64 otherLockId) override;
-
-    // Persist volatile dependencies, i.e. which undecided transactions must be waited for on commit
-    void PersistAddVolatileDependency(ui64 lockId, ui64 txId) override;
-    void PersistRemoveVolatileDependency(ui64 lockId, ui64 txId) override;
-
-private:
-    TDataShard& Self;
-    NTable::TDatabase& DB;
-    bool HasChanges_ = false;
+    bool MayAddLock(ui64 lockId) override {
+        for (auto& pr : Self.GetUserTables()) {
+            auto tid = pr.second->LocalTid;
+            // We cannot start a new lockId if it has any uncompacted data
+            if (DB.HasTxData(tid, lockId)) {
+                return false;
+            }
+        }
+        return true;
+    }
 };
 
 } // namespace NKikimr::NDataShard

@@ -117,8 +117,8 @@ public:
         static_assert(std::is_base_of<IInterface, TDerived>::value);
     }
 
-    bool Initialize(const TString& className) {
-        AFL_VERIFY(!Object)("problem", "initialize for not-empty-object");
+    bool Initialize(const TString& className, const bool maybeExists = false) {
+        AFL_VERIFY(maybeExists || !Object)("problem", "initialize for not-empty-object");
         Object.reset(TFactory::Construct(className));
         if (!Object) {
             ALS_ERROR(NKikimrServices::BG_TASKS) << "incorrect class name: " << className << " for " << typeid(IInterface).name();
@@ -164,10 +164,12 @@ public:
     }
 
     const IInterface* operator->() const {
+        AFL_VERIFY(Object);
         return Object.get();
     }
 
     IInterface* operator->() {
+        AFL_VERIFY(Object);
         return Object.get();
     }
 

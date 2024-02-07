@@ -93,6 +93,7 @@ TColumnShard::TColumnShard(TTabletStorageInfo* info, const TActorId& tablet)
     , ScanCounters("Scan")
     , WritesMonitor(*this)
     , NormalizerController(StoragesManager, SubscribeCounters)
+    , SysLocks(this)
 {
     TabletCountersPtr.reset(new TProtobufTabletCounters<
         ESimpleCounters_descriptor,

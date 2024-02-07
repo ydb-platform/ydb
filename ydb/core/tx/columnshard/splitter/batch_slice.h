@@ -73,7 +73,11 @@ public:
     }
 
     virtual std::optional<TColumnSerializationStat> GetColumnSerializationStats(const ui32 columnId) const override {
-        return Stats->GetColumnInfo(columnId);
+        auto stats = Stats->GetColumnInfo(columnId);
+        if (stats && stats->GetRecordsCount() != 0) {
+            return stats;
+        }
+        return std::nullopt;
     }
     virtual std::optional<TBatchSerializationStat> GetBatchSerializationStats(const std::shared_ptr<arrow::RecordBatch>& rb) const override {
         return Stats->GetStatsForRecordBatch(rb);

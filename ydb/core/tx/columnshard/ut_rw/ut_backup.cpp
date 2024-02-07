@@ -40,6 +40,9 @@ constexpr ui64 txId = 111;
 constexpr int writePlanStep = 11;
 constexpr ui64 tableId = 1;
 
+const std::vector<std::pair<TString, TTypeInfo>> schema = {{"key", TTypeInfo(NTypeIds::Uint64)},
+                                                               {"field", TTypeInfo(NTypeIds::Utf8)}};
+
 class TDisableCompactionController : public NKikimr::NYDBTest::NColumnShard::TController {
 protected:
     virtual bool DoOnStartCompaction(std::shared_ptr<NOlap::TColumnEngineChanges>& changes) {
@@ -54,10 +57,8 @@ TActorIdentity PrepareCSTable(TTestBasicRuntime& runtime, TActorId& sender) {
     using namespace NArrow;
 
     const ui64 ownerId = 0;
-
     const ui64 schemaVersion = 1;
-    const std::vector<std::pair<TString, TTypeInfo>> schema = {{"key", TTypeInfo(NTypeIds::Uint64)},
-                                                               {"field", TTypeInfo(NTypeIds::Utf8)}};
+    
     const std::vector<ui32> columnsIds = {1, 2};
     auto res = PrepareTabletActor(runtime, tableId, schema);
 
@@ -110,6 +111,27 @@ Y_UNIT_TEST_SUITE(TColumnShardBackup) {
         auto event = runtime.GrabEdgeEvent<NKikimr::NEvents::TBackupEvents::TEvBackupShardProposeResult>(handle);
 
         UNIT_ASSERT(event);
+
+        Cerr << "\n ======================================================================== \n" << Endl;
+
+        // {
+        //     NActors::TLogContextGuard guard = NActors::TLogContextBuilder::Build(NKikimrServices::TX_COLUMNSHARD)("TEST_STEP", 3);
+        //     NOlap::NTests::TShardReader reader(runtime, TTestTxConfig::TxTablet0, tableId, NOlap::TSnapshot(writePlanStep, txId));
+
+        //     for(const auto& name : TTestSchema::ExtractNames(schema)) {
+        //         Cerr << "column: " << name << Endl;
+        //     }
+        //     reader.SetReplyColumns(TTestSchema::ExtractNames(schema));
+            
+        //     auto rb = reader.ReadAll();
+        //     UNIT_ASSERT(rb);
+        //     NArrow::ExtractColumnsValidate(rb, TTestSchema::ExtractNames(schema));
+        //     UNIT_ASSERT((ui32)rb->num_columns() == TTestSchema::ExtractNames(schema).size());
+        //     UNIT_ASSERT(rb->num_rows());
+        //     UNIT_ASSERT(reader.IsCorrectlyFinished());
+
+        //     Cerr << "reader read_all: " << rb->ToString() << Endl;
+        // }
     }
 }
 

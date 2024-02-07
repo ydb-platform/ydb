@@ -26,6 +26,9 @@ target_link_options(ydb-core-cms-console-validators-ut PRIVATE
   -Wl,--no-as-needed
   -fPIC
   -fPIC
+  -lpthread
+  -lrt
+  -ldl
 )
 target_sources(ydb-core-cms-console-validators-ut PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/core/cms/console/validators/validator_ut_common.h
@@ -58,7 +61,6 @@ set_yunittest_property(
   PROPERTY
   LABELS
   MEDIUM
-  $FILTER_ONLY_TEST_TAGS
 )
 set_yunittest_property(
   TEST

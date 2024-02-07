@@ -7,10 +7,7 @@
 
 
 
-add_library(yt-comp_nodes-llvm14 STATIC)
-set_property(TARGET yt-comp_nodes-llvm14 PROPERTY
-  LINKER_LANGUAGE CXX
-)
+add_library(yt-comp_nodes-llvm14)
 target_compile_options(yt-comp_nodes-llvm14 PRIVATE
   -DUSE_CURRENT_UDF_ABI_VERSION
   $<IF:$<CXX_COMPILER_ID:MSVC>,,-Wno-everything>
@@ -51,6 +48,46 @@ target_sources(yt-comp_nodes-llvm14 PRIVATE
   ${CMAKE_BINARY_DIR}/ydb/library/yql/providers/yt/comp_nodes/llvm14/ydb/library/yql/minikql/invoke_builtins/mkql_builtins_codegen_llvm.h
   ${CMAKE_BINARY_DIR}/ydb/library/yql/providers/yt/comp_nodes/llvm14/ydb/library/yql/minikql/invoke_builtins/mkql_builtins_impl.h
   ${CMAKE_BINARY_DIR}/ydb/library/yql/providers/yt/comp_nodes/llvm14/ydb/library/yql/minikql/invoke_builtins/mkql_builtins_decimal.h
+  ${CMAKE_BINARY_DIR}/ydb/library/yql/providers/yt/comp_nodes/llvm14/yql_mkql_file_input_state.cpp
+  ${CMAKE_BINARY_DIR}/ydb/library/yql/providers/yt/comp_nodes/llvm14/yql_mkql_file_list.cpp
+  ${CMAKE_BINARY_DIR}/ydb/library/yql/providers/yt/comp_nodes/llvm14/yql_mkql_input_stream.cpp
+  ${CMAKE_BINARY_DIR}/ydb/library/yql/providers/yt/comp_nodes/llvm14/yql_mkql_input.cpp
+  ${CMAKE_BINARY_DIR}/ydb/library/yql/providers/yt/comp_nodes/llvm14/yql_mkql_output.cpp
+  ${CMAKE_BINARY_DIR}/ydb/library/yql/providers/yt/comp_nodes/llvm14/yql_mkql_table_content.cpp
+  ${CMAKE_BINARY_DIR}/ydb/library/yql/providers/yt/comp_nodes/llvm14/yql_mkql_table.cpp
+  ${CMAKE_BINARY_DIR}/ydb/library/yql/providers/yt/comp_nodes/llvm14/yql_mkql_ungrouping_list.cpp
+)
+copy_file(
+  ${CMAKE_SOURCE_DIR}/ydb/library/yql/providers/yt/comp_nodes/yql_mkql_file_input_state.cpp
+  ${CMAKE_BINARY_DIR}/ydb/library/yql/providers/yt/comp_nodes/llvm14/yql_mkql_file_input_state.cpp
+)
+copy_file(
+  ${CMAKE_SOURCE_DIR}/ydb/library/yql/providers/yt/comp_nodes/yql_mkql_file_list.cpp
+  ${CMAKE_BINARY_DIR}/ydb/library/yql/providers/yt/comp_nodes/llvm14/yql_mkql_file_list.cpp
+)
+copy_file(
+  ${CMAKE_SOURCE_DIR}/ydb/library/yql/providers/yt/comp_nodes/yql_mkql_input_stream.cpp
+  ${CMAKE_BINARY_DIR}/ydb/library/yql/providers/yt/comp_nodes/llvm14/yql_mkql_input_stream.cpp
+)
+copy_file(
+  ${CMAKE_SOURCE_DIR}/ydb/library/yql/providers/yt/comp_nodes/yql_mkql_input.cpp
+  ${CMAKE_BINARY_DIR}/ydb/library/yql/providers/yt/comp_nodes/llvm14/yql_mkql_input.cpp
+)
+copy_file(
+  ${CMAKE_SOURCE_DIR}/ydb/library/yql/providers/yt/comp_nodes/yql_mkql_output.cpp
+  ${CMAKE_BINARY_DIR}/ydb/library/yql/providers/yt/comp_nodes/llvm14/yql_mkql_output.cpp
+)
+copy_file(
+  ${CMAKE_SOURCE_DIR}/ydb/library/yql/providers/yt/comp_nodes/yql_mkql_table_content.cpp
+  ${CMAKE_BINARY_DIR}/ydb/library/yql/providers/yt/comp_nodes/llvm14/yql_mkql_table_content.cpp
+)
+copy_file(
+  ${CMAKE_SOURCE_DIR}/ydb/library/yql/providers/yt/comp_nodes/yql_mkql_table.cpp
+  ${CMAKE_BINARY_DIR}/ydb/library/yql/providers/yt/comp_nodes/llvm14/yql_mkql_table.cpp
+)
+copy_file(
+  ${CMAKE_SOURCE_DIR}/ydb/library/yql/providers/yt/comp_nodes/yql_mkql_ungrouping_list.cpp
+  ${CMAKE_BINARY_DIR}/ydb/library/yql/providers/yt/comp_nodes/llvm14/yql_mkql_ungrouping_list.cpp
 )
 copy_file(
   ${CMAKE_SOURCE_DIR}/ydb/library/yql/minikql/computation/mkql_computation_node_codegen.h.txt

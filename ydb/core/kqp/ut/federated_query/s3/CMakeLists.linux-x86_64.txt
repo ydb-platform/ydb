@@ -33,6 +33,9 @@ target_link_options(ydb-core-kqp-ut-federated_query-s3 PRIVATE
   -Wl,--no-as-needed
   -fPIC
   -fPIC
+  -lpthread
+  -lrt
+  -ldl
 )
 target_sources(ydb-core-kqp-ut-federated_query-s3 PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/core/kqp/ut/federated_query/s3/kqp_federated_query_ut.cpp
@@ -65,7 +68,6 @@ set_yunittest_property(
   PROPERTY
   LABELS
   MEDIUM
-  $FILTER_ONLY_TEST_TAGS
 )
 set_yunittest_property(
   TEST

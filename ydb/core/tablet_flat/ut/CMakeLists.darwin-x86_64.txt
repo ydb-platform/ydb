@@ -34,6 +34,8 @@ target_link_options(ydb-core-tablet_flat-ut PRIVATE
   -Wl,-platform_version,macos,11.0,11.0
   -fPIC
   -fPIC
+  -framework
+  CoreFoundation
 )
 target_sources(ydb-core-tablet_flat-ut PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/core/tablet_flat/ut/flat_test_db.h
@@ -105,7 +107,6 @@ set_yunittest_property(
   PROPERTY
   LABELS
   MEDIUM
-  $FILTER_ONLY_TEST_TAGS
 )
 set_yunittest_property(
   TEST

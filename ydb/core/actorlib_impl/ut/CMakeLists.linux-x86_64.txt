@@ -35,6 +35,9 @@ target_link_options(ydb-core-actorlib_impl-ut PRIVATE
   -Wl,--no-as-needed
   -fPIC
   -fPIC
+  -lpthread
+  -lrt
+  -ldl
 )
 target_sources(ydb-core-actorlib_impl-ut PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/core/actorlib_impl/actor_activity_ut.cpp
@@ -68,7 +71,6 @@ set_yunittest_property(
   PROPERTY
   LABELS
   MEDIUM
-  $FILTER_ONLY_TEST_TAGS
 )
 set_yunittest_property(
   TEST

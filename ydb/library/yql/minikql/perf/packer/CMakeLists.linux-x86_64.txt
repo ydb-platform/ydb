@@ -27,6 +27,9 @@ target_link_options(packer PRIVATE
   -Wl,--no-as-needed
   -fPIC
   -fPIC
+  -lpthread
+  -lrt
+  -ldl
 )
 target_sources(packer PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/library/yql/minikql/perf/packer/packer.cpp

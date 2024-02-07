@@ -55,7 +55,6 @@ set_yunittest_property(
   PROPERTY
   LABELS
   medium
-  $FILTER_ONLY_TEST_TAGS
 )
 set_yunittest_property(
   TEST

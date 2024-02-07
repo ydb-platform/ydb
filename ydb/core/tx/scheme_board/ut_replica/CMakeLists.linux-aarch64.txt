@@ -30,6 +30,9 @@ target_link_options(ydb-core-tx-scheme_board-ut_replica PRIVATE
   -Wl,--no-as-needed
   -fPIC
   -fPIC
+  -lpthread
+  -lrt
+  -ldl
 )
 target_sources(ydb-core-tx-scheme_board-ut_replica PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/core/tx/scheme_board/replica_ut.cpp
@@ -60,7 +63,6 @@ set_yunittest_property(
   PROPERTY
   LABELS
   MEDIUM
-  $FILTER_ONLY_TEST_TAGS
 )
 set_yunittest_property(
   TEST

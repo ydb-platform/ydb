@@ -28,6 +28,9 @@ target_link_options(ydb-library-yql-public-purecalc-io_specs-mkql-ut PRIVATE
   -Wl,--no-as-needed
   -fPIC
   -fPIC
+  -lpthread
+  -lrt
+  -ldl
 )
 target_sources(ydb-library-yql-public-purecalc-io_specs-mkql-ut PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/library/yql/public/purecalc/io_specs/mkql/ut/test_spec.cpp
@@ -57,7 +60,6 @@ set_yunittest_property(
   PROPERTY
   LABELS
   MEDIUM
-  $FILTER_ONLY_TEST_TAGS
 )
 set_yunittest_property(
   TEST

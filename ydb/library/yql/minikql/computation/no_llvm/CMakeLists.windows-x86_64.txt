@@ -7,10 +7,7 @@
 
 
 
-add_library(minikql-computation-no_llvm STATIC)
-set_property(TARGET minikql-computation-no_llvm PROPERTY
-  LINKER_LANGUAGE CXX
-)
+add_library(minikql-computation-no_llvm)
 target_compile_options(minikql-computation-no_llvm PRIVATE
   -DMKQL_DISABLE_CODEGEN
   -DUSE_CURRENT_UDF_ABI_VERSION
@@ -42,6 +39,31 @@ target_link_libraries(minikql-computation-no_llvm PUBLIC
 )
 target_sources(minikql-computation-no_llvm PRIVATE
   ${CMAKE_BINARY_DIR}/ydb/library/yql/minikql/computation/no_llvm/ydb/library/yql/minikql/computation/mkql_computation_node_codegen.h
+  ${CMAKE_BINARY_DIR}/ydb/library/yql/minikql/computation/no_llvm/mkql_computation_node_codegen.cpp
+  ${CMAKE_BINARY_DIR}/ydb/library/yql/minikql/computation/no_llvm/mkql_computation_node_graph.cpp
+  ${CMAKE_BINARY_DIR}/ydb/library/yql/minikql/computation/no_llvm/mkql_computation_node_graph_saveload.cpp
+  ${CMAKE_BINARY_DIR}/ydb/library/yql/minikql/computation/no_llvm/mkql_computation_node_holders_codegen.cpp
+  ${CMAKE_BINARY_DIR}/ydb/library/yql/minikql/computation/no_llvm/mkql_llvm_base.cpp
+)
+copy_file(
+  ${CMAKE_SOURCE_DIR}/ydb/library/yql/minikql/computation/mkql_computation_node_codegen.cpp
+  ${CMAKE_BINARY_DIR}/ydb/library/yql/minikql/computation/no_llvm/mkql_computation_node_codegen.cpp
+)
+copy_file(
+  ${CMAKE_SOURCE_DIR}/ydb/library/yql/minikql/computation/mkql_computation_node_graph.cpp
+  ${CMAKE_BINARY_DIR}/ydb/library/yql/minikql/computation/no_llvm/mkql_computation_node_graph.cpp
+)
+copy_file(
+  ${CMAKE_SOURCE_DIR}/ydb/library/yql/minikql/computation/mkql_computation_node_graph_saveload.cpp
+  ${CMAKE_BINARY_DIR}/ydb/library/yql/minikql/computation/no_llvm/mkql_computation_node_graph_saveload.cpp
+)
+copy_file(
+  ${CMAKE_SOURCE_DIR}/ydb/library/yql/minikql/computation/mkql_computation_node_holders_codegen.cpp
+  ${CMAKE_BINARY_DIR}/ydb/library/yql/minikql/computation/no_llvm/mkql_computation_node_holders_codegen.cpp
+)
+copy_file(
+  ${CMAKE_SOURCE_DIR}/ydb/library/yql/minikql/computation/mkql_llvm_base.cpp
+  ${CMAKE_BINARY_DIR}/ydb/library/yql/minikql/computation/no_llvm/mkql_llvm_base.cpp
 )
 copy_file(
   ${CMAKE_SOURCE_DIR}/ydb/library/yql/minikql/computation/mkql_computation_node_codegen.h.txt

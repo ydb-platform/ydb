@@ -21,6 +21,8 @@ target_link_options(perf PRIVATE
   -Wl,-platform_version,macos,11.0,11.0
   -fPIC
   -fPIC
+  -framework
+  CoreFoundation
 )
 target_sources(perf PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/library/yql/sql/v1/perf/parse.cpp

@@ -81,6 +81,10 @@ target_link_options(mrrun PRIVATE
   -Wl,--no-as-needed
   -fPIC
   -fPIC
+  -lpthread
+  -lrt
+  -ldl
+  -lutil
 )
 target_sources(mrrun PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/library/yql/tools/mrrun/mrrun.h

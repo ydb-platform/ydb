@@ -23,6 +23,8 @@ target_link_options(benchmark PRIVATE
   -Wl,-platform_version,macos,11.0,11.0
   -fPIC
   -fPIC
+  -framework
+  CoreFoundation
 )
 target_sources(benchmark PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/core/tablet_flat/benchmark/b_charge.cpp
@@ -40,7 +42,6 @@ set_property(
   PROPERTY
   LABELS
   SMALL
-  $FILTER_ONLY_TEST_TAGS
 )
 set_property(
   TEST

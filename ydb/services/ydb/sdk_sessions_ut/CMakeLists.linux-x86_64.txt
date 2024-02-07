@@ -32,6 +32,9 @@ target_link_options(ydb-services-ydb-sdk_sessions_ut PRIVATE
   -Wl,--no-as-needed
   -fPIC
   -fPIC
+  -lpthread
+  -lrt
+  -ldl
 )
 target_sources(ydb-services-ydb-sdk_sessions_ut PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/services/ydb/sdk_sessions_ut/sdk_sessions_ut.cpp
@@ -61,7 +64,6 @@ set_yunittest_property(
   PROPERTY
   LABELS
   MEDIUM
-  $FILTER_ONLY_TEST_TAGS
 )
 set_yunittest_property(
   TEST

@@ -24,6 +24,9 @@ target_link_options(add_columns PRIVATE
   -Wl,--no-as-needed
   -fPIC
   -fPIC
+  -lpthread
+  -lrt
+  -ldl
 )
 target_sources(add_columns PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/library/yql/utils/simd/exec/add_columns/main.cpp

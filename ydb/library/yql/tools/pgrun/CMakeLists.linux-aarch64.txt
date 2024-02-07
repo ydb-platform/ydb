@@ -51,6 +51,10 @@ target_link_options(pgrun PRIVATE
   -Wl,--no-as-needed
   -fPIC
   -fPIC
+  -lpthread
+  -lrt
+  -ldl
+  -lutil
 )
 target_sources(pgrun PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/library/yql/tools/pgrun/pgrun.cpp

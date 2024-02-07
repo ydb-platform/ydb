@@ -29,6 +29,9 @@ target_link_options(ydb-library-yql-public-purecalc-ut PRIVATE
   -Wl,--no-as-needed
   -fPIC
   -fPIC
+  -lpthread
+  -lrt
+  -ldl
 )
 target_sources(ydb-library-yql-public-purecalc-ut PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/library/yql/public/purecalc/ut/empty_stream.h
@@ -67,7 +70,6 @@ set_yunittest_property(
   PROPERTY
   LABELS
   MEDIUM
-  $FILTER_ONLY_TEST_TAGS
 )
 set_yunittest_property(
   TEST

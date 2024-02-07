@@ -24,6 +24,9 @@ target_link_options(blobsan PRIVATE
   -Wl,--no-as-needed
   -fPIC
   -fPIC
+  -lpthread
+  -lrt
+  -ldl
 )
 target_sources(blobsan PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/tools/blobsan/main.cpp

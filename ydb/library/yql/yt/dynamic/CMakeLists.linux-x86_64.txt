@@ -21,6 +21,10 @@ target_link_options(yqlplugin PRIVATE
   -fPIC
   -Wl,-z,notext
   -fPIC
+  -lpthread
+  -lrt
+  -ldl
+  -lutil
 )
 target_sources(yqlplugin PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/library/yql/yt/dynamic/impl.cpp

@@ -54,6 +54,8 @@ target_link_options(worker_node PRIVATE
   -Wl,-platform_version,macos,11.0,11.0
   -fPIC
   -fPIC
+  -framework
+  CoreFoundation
 )
 target_sources(worker_node PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/library/yql/tools/dq/worker_node/main.cpp

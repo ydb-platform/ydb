@@ -29,6 +29,8 @@ target_link_options(ydb-core-tx-replication-service-ut_topic_reader PRIVATE
   -Wl,-platform_version,macos,11.0,11.0
   -fPIC
   -fPIC
+  -framework
+  CoreFoundation
 )
 target_sources(ydb-core-tx-replication-service-ut_topic_reader PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/core/tx/replication/service/topic_reader_ut.cpp
@@ -58,7 +60,6 @@ set_yunittest_property(
   PROPERTY
   LABELS
   MEDIUM
-  $FILTER_ONLY_TEST_TAGS
 )
 set_yunittest_property(
   TEST

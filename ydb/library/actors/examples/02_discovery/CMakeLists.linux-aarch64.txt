@@ -36,6 +36,9 @@ target_link_options(example_02_discovery PRIVATE
   -Wl,--no-as-needed
   -fPIC
   -fPIC
+  -lpthread
+  -lrt
+  -ldl
 )
 target_proto_messages(example_02_discovery PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/library/actors/examples/02_discovery/protocol.proto

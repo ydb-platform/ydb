@@ -35,6 +35,11 @@ target_link_options(ydb-library-yql-minikql-invoke_builtins-llvm14-ut PRIVATE
   -Wl,-platform_version,macos,11.0,11.0
   -fPIC
   -fPIC
+  -framework
+  CoreFoundation
+)
+target_sources(ydb-library-yql-minikql-invoke_builtins-llvm14-ut PRIVATE
+  ${CMAKE_BINARY_DIR}/ydb/library/yql/minikql/invoke_builtins/llvm14/ut/mkql_builtins_ut.cpp
 )
 set_property(
   TARGET
@@ -61,7 +66,6 @@ set_yunittest_property(
   PROPERTY
   LABELS
   MEDIUM
-  $FILTER_ONLY_TEST_TAGS
 )
 set_yunittest_property(
   TEST
@@ -76,6 +80,10 @@ set_yunittest_property(
   PROPERTY
   TIMEOUT
   600
+)
+copy_file(
+  ${CMAKE_SOURCE_DIR}/ydb/library/yql/minikql/invoke_builtins/mkql_builtins_ut.cpp
+  ${CMAKE_BINARY_DIR}/ydb/library/yql/minikql/invoke_builtins/llvm14/ut/mkql_builtins_ut.cpp
 )
 target_allocator(ydb-library-yql-minikql-invoke_builtins-llvm14-ut
   system_allocator

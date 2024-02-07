@@ -23,6 +23,8 @@ target_link_options(ydb-library-yql-public-embedded-ut-no_llvm PRIVATE
   -Wl,-platform_version,macos,11.0,11.0
   -fPIC
   -fPIC
+  -framework
+  CoreFoundation
 )
 target_sources(ydb-library-yql-public-embedded-ut-no_llvm PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/library/yql/public/embedded/ut/yql_embedded_ut.cpp
@@ -52,7 +54,6 @@ set_yunittest_property(
   PROPERTY
   LABELS
   MEDIUM
-  $FILTER_ONLY_TEST_TAGS
 )
 set_yunittest_property(
   TEST

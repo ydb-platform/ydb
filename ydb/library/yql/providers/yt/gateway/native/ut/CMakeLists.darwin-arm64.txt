@@ -31,6 +31,8 @@ target_link_options(ydb-library-yql-providers-yt-gateway-native-ut PRIVATE
   -Wl,-platform_version,macos,11.0,11.0
   -fPIC
   -fPIC
+  -framework
+  CoreFoundation
 )
 target_sources(ydb-library-yql-providers-yt-gateway-native-ut PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/library/yql/providers/yt/gateway/native/ut/yql_yt_native_folders_ut.cpp
@@ -60,7 +62,6 @@ set_yunittest_property(
   PROPERTY
   LABELS
   SMALL
-  $FILTER_ONLY_TEST_TAGS
 )
 set_yunittest_property(
   TEST

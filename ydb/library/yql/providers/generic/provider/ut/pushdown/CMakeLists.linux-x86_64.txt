@@ -42,6 +42,9 @@ target_link_options(yql-providers-generic-provider-ut-pushdown PRIVATE
   -Wl,--no-as-needed
   -fPIC
   -fPIC
+  -lpthread
+  -lrt
+  -ldl
 )
 target_sources(yql-providers-generic-provider-ut-pushdown PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/library/yql/providers/generic/provider/ut/pushdown/pushdown_ut.cpp
@@ -71,7 +74,6 @@ set_yunittest_property(
   PROPERTY
   LABELS
   SMALL
-  $FILTER_ONLY_TEST_TAGS
 )
 set_yunittest_property(
   TEST

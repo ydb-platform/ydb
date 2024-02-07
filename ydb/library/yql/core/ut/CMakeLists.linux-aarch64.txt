@@ -45,6 +45,10 @@ target_link_options(ydb-library-yql-core-ut PRIVATE
   -Wl,--no-as-needed
   -fPIC
   -fPIC
+  -lpthread
+  -lrt
+  -ldl
+  -lutil
 )
 target_sources(ydb-library-yql-core-ut PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/library/yql/core/ut/yql_csv_ut.cpp
@@ -83,7 +87,6 @@ set_yunittest_property(
   PROPERTY
   LABELS
   MEDIUM
-  $FILTER_ONLY_TEST_TAGS
 )
 set_yunittest_property(
   TEST

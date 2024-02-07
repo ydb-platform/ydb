@@ -416,6 +416,7 @@ public:
                     "client_min_messages",                  // pg_dump
                     "row_security",                        // pg_dump
                     "escape_string_warning",               // zabbix
+                    "bytea_output",                        // zabbix
                     NULL,
                 };
 
@@ -2322,6 +2323,9 @@ public:
         }
         if (varName == "server_version_num") {
             return GetPostgresServerVersionNum();
+        }
+        if (varName == "standard_conforming_strings"){
+            return "on";
         }
         return {};
     }

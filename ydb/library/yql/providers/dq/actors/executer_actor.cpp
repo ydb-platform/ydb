@@ -150,8 +150,8 @@ private:
         AddChild(ResultId);
 
         int workerCount = ev->Get()->Record.GetRequest().GetTask().size();
-        const bool enableComputeActor = Settings->EnableComputeActor.Get().GetOrElse(false);
-        YQL_CLOG(INFO, ProviderDq) << (TStringBuilder() << "Trying to allocate " << workerCount << " workers [EnableComputeActor=" << enableComputeActor << "]");
+        Y_ABORT_UNLESS(Settings->EnableComputeActor.Get().GetOrElse(true));
+        YQL_CLOG(INFO, ProviderDq) << (TStringBuilder() << "Trying to allocate " << workerCount << " workers");
 
         THashMap<TString, Yql::DqsProto::TFile> files;
         TVector<NDqProto::TDqTask> tasks;
@@ -193,17 +193,15 @@ private:
             GwmActorId, SelfId(), ControlId, workerCount,
             TraceId, Settings,
             Counters,
-            enableComputeActor ? tasks : TVector<NYql::NDqProto::TDqTask>(),
+            tasks,
             computeActorType,
             StatsMode));
         auto allocateRequest = MakeHolder<TEvAllocateWorkersRequest>(workerCount, Username);
         allocateRequest->Record.SetTraceId(TraceId);
-        allocateRequest->Record.SetCreateComputeActor(enableComputeActor);
+        allocateRequest->Record.SetCreateComputeActor(true);
         allocateRequest->Record.SetComputeActorType(computeActorType);
         allocateRequest->Record.SetStatsMode(StatsMode);
-        if (enableComputeActor) {
-            ActorIdToProto(ControlId, allocateRequest->Record.MutableResultActorId());
-        }
+        ActorIdToProto(ControlId, allocateRequest->Record.MutableResultActorId());
         for (const auto& [_, f] : files) {
             *allocateRequest->Record.AddFiles() = f;
         }
@@ -222,9 +220,7 @@ private:
             *filter->MutableFile() = taskMeta.GetFiles();
             filter->SetClusterNameHint(taskMeta.GetClusterNameHint());
 
-            if (enableComputeActor) {
-                *allocateRequest->Record.AddTask() = task;
-            }
+            *allocateRequest->Record.AddTask() = task;
 
             MergeFilter(filter, pragmaFilter);
         }

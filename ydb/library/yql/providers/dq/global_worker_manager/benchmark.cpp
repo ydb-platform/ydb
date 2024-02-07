@@ -56,7 +56,7 @@ private:
 
         auto allocateRequest = MakeHolder<TEvAllocateWorkersRequest>(Options.WorkerCount, "TestUser");
         allocateRequest->Record.SetTraceId(operationId);
-
+        allocateRequest->Record.SetCreateComputeActor(true);
         TActivationContext::Send(
             new IEventHandle(
                 WorkerManagerId, resourceAllocator, allocateRequest.Release()));

@@ -10,7 +10,6 @@ SRCS(
     graph_execution_events_actor.cpp
     resource_allocator.cpp
     task_controller.cpp
-    worker_actor.cpp
     result_aggregator.cpp
     result_receiver.cpp
     full_result_writer.cpp

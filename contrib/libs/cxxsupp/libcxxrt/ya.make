@@ -11,7 +11,7 @@ LICENSE(
 
 LICENSE_TEXTS(.yandex_meta/licenses.list.txt)
 
-VERSION(2023-10-11)
+VERSION(2024-02-04)
 
 ORIGINAL_SOURCE(https://github.com/libcxxrt/libcxxrt/archive/39f76d286ffa70e15ae45632fe3fa5ea96cd46e4.tar.gz)
 

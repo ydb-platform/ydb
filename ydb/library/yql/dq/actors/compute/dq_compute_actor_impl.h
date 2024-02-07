@@ -304,30 +304,14 @@ protected:
             ReportStats(TInstant::Now(), ESendStats::IfPossible);
         }
         if (Terminated) {
-            TaskRunner.Reset();
+            DoTerminateImpl();
             MemoryQuota.Reset();
             MemoryLimits.MemoryQuotaManager.reset();
         }
     }
 
-    virtual void DoExecuteImpl() {
-        auto sourcesState = static_cast<TDerived*>(this)->GetSourcesState();
-
-        PollAsyncInput();
-        ERunStatus status = TaskRunner->Run();
-
-        CA_LOG_T("Resume execution, run status: " << status);
-
-        if (status != ERunStatus::Finished) {
-            static_cast<TDerived*>(this)->PollSources(std::move(sourcesState));
-        }
-
-        if ((status == ERunStatus::PendingInput || status == ERunStatus::Finished) && Checkpoints && Checkpoints->HasPendingCheckpoint() && !Checkpoints->ComputeActorStateSaved() && ReadyToCheckpoint()) {
-            Checkpoints->DoCheckpoint();
-        }
-
-        ProcessOutputsImpl(status);
-    }
+    virtual void DoExecuteImpl() = 0;
+    virtual void DoTerminateImpl() {}
 
     virtual bool DoHandleChannelsAfterFinishImpl() {
         Y_ABORT_UNLESS(Checkpoints);
@@ -606,12 +590,11 @@ protected:
         InternalError(statusCode, TIssues({std::move(issue)}));
     }
 
+    virtual void InvalidateMeminfo() {}
+
     void InternalError(NYql::NDqProto::StatusIds::StatusCode statusCode, TIssues issues) {
         CA_LOG_E(InternalErrorLogString(statusCode, issues));
-        if (TaskRunner) {
-            TaskRunner->GetAllocator().InvalidateMemInfo();
-            TaskRunner->GetAllocator().DisableStrictAllocationCheck();
-        }
+        InvalidateMeminfo();
         State = NDqProto::COMPUTE_STATE_FAILURE;
         ReportStateAndMaybeDie(statusCode, issues);
     }
@@ -1064,13 +1047,6 @@ protected:
         return true;
     }
 
-protected:
-    // methods that are called via static_cast<TDerived*>(this) and may be overriden by a dervied class
-    void* GetSourcesState() const {
-        return nullptr;
-    }
-    void PollSources(void* /* state */) {
-    }
 
 
 protected:

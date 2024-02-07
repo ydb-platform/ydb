@@ -221,13 +221,13 @@ private:
     THashMap<TString, TIntrusivePtr<TEvTabletCounters::TInFlightCookie>> CounterEventsInflight;
 
     struct TTxWriteInfo {
-        THashMap<ui32, ui32> Partitions;
+        THashMap<ui32, TPartitionId> Partitions;
         TMaybe<ui64> TxId;
         NKikimrLongTxService::TEvLockStatus::EStatus LongTxSubscriptionStatus = NKikimrLongTxService::TEvLockStatus::STATUS_UNSPECIFIED;
     };
 
     THashMap<ui64, TTxWriteInfo> TxWrites;
-    THashMap<ui32, TPartitionInfo> ShadowPartitions; // TxWrites -> shadowPartitionId -> ShadowPartitions
+    THashMap<TPartitionId, TPartitionInfo> ShadowPartitions; // TxWrites -> shadowPartitionId -> ShadowPartitions
     ui32 NextShadowPartitionId = 100'000;
 
     TActorId CacheActor;
@@ -478,9 +478,9 @@ private:
     TDeque<TCmdGetOwnershipRequestParams> GetOwnershipRequests;
     TDeque<TCmdGetOwnershipRequestParams> HandleGetOwnershipRequestParams;
 
-    TPartitionInfo& GetPartitionInfo(ui32 partitionId);
-    void AddShadowPartition(ui32 shadowPartitionId);
-    void CreateShadowPartitionActor(ui32 shadowPartitionId, const TActorContext& ctx);
+    TPartitionInfo& GetPartitionInfo(const TPartitionId& partitionId);
+    void AddShadowPartition(const TPartitionId& shadowPartitionId);
+    void CreateShadowPartitionActor(const TPartitionId& shadowPartitionId, const TActorContext& ctx);
     void SubscribeWriteId(ui64 writeId, const TActorContext& ctx);
 
     bool AllPartitionsInited() const;

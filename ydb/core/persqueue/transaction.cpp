@@ -137,7 +137,11 @@ void TDistributedTransaction::OnProposeTransaction(const NKikimrPQ::TDataTransac
 
     InitPartitions(txBody.GetOperations());
 
-    WriteId = txBody.HasWriteId() ? txBody.GetWriteId() : Max<ui64>();
+    if (txBody.HasWriteId()) {
+        WriteId = txBody.GetWriteId();
+    } else {
+        WriteId = Nothing();
+    }
 
     PartitionRepliesCount = 0;
     PartitionRepliesExpected = 0;
@@ -340,8 +344,8 @@ void TDistributedTransaction::AddCmdWriteDataTx(NKikimrPQ::TTransaction& tx)
     if (ParticipantsDecision != NKikimrTx::TReadSetData::DECISION_UNKNOWN) {
         tx.SetAggrPredicate(ParticipantsDecision == NKikimrTx::TReadSetData::DECISION_COMMIT);
     }
-    if (WriteId != Max<ui64>()) {
-        tx.SetWriteId(WriteId);
+    if (WriteId.Defined()) {
+        tx.SetWriteId(*WriteId);
     }
 }
 

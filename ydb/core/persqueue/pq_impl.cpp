@@ -876,7 +876,7 @@ void TPersQueue::ReadTxWrites(const NKikimrClient::TKeyValueResponse::TReadResul
     }
 }
 
-void TPersQueue::AddShadowPartition(ui32 shadowPartitionId)
+void TPersQueue::AddShadowPartition(const TPartitionId& shadowPartitionId)
 {
     ShadowPartitions.emplace(shadowPartitionId,
                              TPartitionInfo(TActorId(),
@@ -884,7 +884,7 @@ void TPersQueue::AddShadowPartition(ui32 shadowPartitionId)
                                             *Counters));
 }
 
-void TPersQueue::CreateShadowPartitionActor(ui32 shadowPartitionId,
+void TPersQueue::CreateShadowPartitionActor(const TPartitionId& shadowPartitionId,
                                             const TActorContext& ctx)
 {
     Y_ABORT_UNLESS(ShadowPartitions.contains(shadowPartitionId));
@@ -906,15 +906,15 @@ void TPersQueue::InitTxWrites(const NKikimrPQ::TTabletTxInfo& info,
         auto& txWrite = info.GetTxWrites(i);
         ui64 writeId = txWrite.GetWriteId();
         ui32 partitionId = txWrite.GetPartitionId();
-        ui32 shadowPartitionId = txWrite.GetShadowPartitionId();
+        TPartitionId shadowPartitionId(partitionId, writeId, txWrite.GetShadowPartitionId());
 
-        TxWrites[writeId].Partitions[partitionId] = shadowPartitionId;
+        TxWrites[writeId].Partitions.emplace(partitionId, shadowPartitionId);
 
         AddShadowPartition(shadowPartitionId);
         CreateShadowPartitionActor(shadowPartitionId, ctx);
         SubscribeWriteId(writeId, ctx);
 
-        NextShadowPartitionId = Max(NextShadowPartitionId, shadowPartitionId + 1);
+        NextShadowPartitionId = Max(NextShadowPartitionId, shadowPartitionId.InternalPartitionId + 1);
     }
 }
 
@@ -1200,7 +1200,7 @@ void TPersQueue::Handle(TEvPQ::TEvMetering::TPtr& ev, const TActorContext&)
     MeteringSink.IncreaseQuantity(ev->Get()->Type, ev->Get()->Quantity);
 }
 
-TPartitionInfo& TPersQueue::GetPartitionInfo(ui32 partitionId)
+TPartitionInfo& TPersQueue::GetPartitionInfo(const TPartitionId& partitionId)
 {
     auto it = Partitions.find(partitionId);
     if (it == Partitions.end()) {
@@ -2471,7 +2471,7 @@ void TPersQueue::HandleGetOwnershipRequestForShadowPartition(const ui64 response
     ui32 partitionId = req.GetPartition();
 
     if (TxWrites.contains(writeId) && TxWrites[writeId].Partitions.contains(partitionId)) {
-        ui32 shadowPartitionId = TxWrites[writeId].Partitions[partitionId];
+        TPartitionId shadowPartitionId = TxWrites[writeId].Partitions.at(partitionId);
         Y_ABORT_UNLESS(ShadowPartitions.contains(shadowPartitionId));
         TPartitionInfo& partition = ShadowPartitions.at(shadowPartitionId);
 
@@ -2502,7 +2502,7 @@ void TPersQueue::HandleReserveBytesRequestForShadowPartition(const ui64 response
 
     Y_ABORT_UNLESS(TxWrites.contains(writeId) && TxWrites[writeId].Partitions.contains(partitionId));
 
-    ui32 shadowPartitionId = TxWrites[writeId].Partitions[partitionId];
+    TPartitionId shadowPartitionId = TxWrites[writeId].Partitions.at(partitionId);
     Y_ABORT_UNLESS(ShadowPartitions.contains(shadowPartitionId));
     const TPartitionInfo& partition = ShadowPartitions.at(shadowPartitionId);
     Y_ABORT_UNLESS(partition.InitDone);
@@ -2523,7 +2523,7 @@ void TPersQueue::HandleWriteRequestForShadowPartition(const ui64 responseCookie,
 
     Y_ABORT_UNLESS(TxWrites.contains(writeId) && TxWrites[writeId].Partitions.contains(partitionId));
 
-    ui32 shadowPartitionId = TxWrites[writeId].Partitions[partitionId];
+    TPartitionId shadowPartitionId = TxWrites[writeId].Partitions.at(partitionId);
     Y_ABORT_UNLESS(ShadowPartitions.contains(shadowPartitionId));
     const TPartitionInfo& partition = ShadowPartitions.at(shadowPartitionId);
     Y_ABORT_UNLESS(partition.InitDone);
@@ -3209,7 +3209,7 @@ void TPersQueue::ForwardGetOwnershipToShadowPartitions(const TActorContext& ctx)
         ui32 partitionId = params.Request.GetPartition();
         Y_ABORT_UNLESS(TxWrites.contains(writeId) && TxWrites[writeId].Partitions.contains(partitionId));
         TTxWriteInfo& txWrite = TxWrites.at(writeId);
-        ui32 shadowPartitionId = txWrite.Partitions[partitionId];
+        TPartitionId shadowPartitionId = txWrite.Partitions.at(partitionId);
         Y_ABORT_UNLESS(ShadowPartitions.contains(shadowPartitionId));
 
         CreateShadowPartitionActor(shadowPartitionId, ctx);
@@ -3238,9 +3238,9 @@ void TPersQueue::ProcessGetOwnershipQueue()
     for (auto& request : GetOwnershipRequests) {
         ui64 writeId = request.Request.GetWriteId();
         ui32 partitionId = request.Request.GetPartition();
-        ui32 shadowPartitionId = NextShadowPartitionId++;
+        TPartitionId shadowPartitionId(partitionId, writeId, NextShadowPartitionId++);
 
-        TxWrites[writeId].Partitions[partitionId] = shadowPartitionId;
+        TxWrites[writeId].Partitions.emplace(partitionId, shadowPartitionId);
 
         AddShadowPartition(shadowPartitionId);
     }
@@ -3507,7 +3507,7 @@ void TPersQueue::SaveTxWrites(NKikimrPQ::TTabletTxInfo& info)
             auto* txWrite = info.MutableTxWrites()->Add();
             txWrite->SetWriteId(writeId);
             txWrite->SetPartitionId(partitionId);
-            txWrite->SetShadowPartitionId(shadowPartitionId);
+            txWrite->SetShadowPartitionId(shadowPartitionId.InternalPartitionId);
         }
     }
 }

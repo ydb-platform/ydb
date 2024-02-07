@@ -54,7 +54,6 @@ struct TDistributedTransaction {
     EDecision ParticipantsDecision = NKikimrTx::TReadSetData::DECISION_UNKNOWN;
     NActors::TActorId SourceActor; // отправитель TEvProposeTransaction
     THashSet<ui32> Partitions;     // список участвующих партиций
-    ui64 WriteId = Max<ui64>();
 
     size_t PartitionRepliesCount = 0;
     size_t PartitionRepliesExpected = 0;

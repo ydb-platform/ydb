@@ -9,12 +9,18 @@
 
 Чтобы начать работать с Terraform для {{ ydb-short-name }}, установите и настройте [Terraform provider for {{ ydb-short-name }}](https://github.com/ydb-platform/terraform-provider-ydb/).
 
+{% note warning %}
+
+Для работы с ресурсами Terraform, БД должна быть создана заранее.
+
+{% endnote %}
+
 ## Настройка Terraform провайдера для работы с {{ ydb-short-name }} {#setup}
 
 1. Нужно скачать [код провайдера](https://github.com/ydb-platform/terraform-provider-ydb/)
 2. Собрать провайдер, выполнив `make local-build`
 Провайдер установится в папку плагинов Terraform - `~/.terraform.d/plugins/terraform.storage.ydb.tech/...`
-3. Настроить `~/.terraformrc`, добавив в секцию `provider_installation` следующее содержание:
+3. Настроить `~/.terraformrc`, добавив в секцию `provider_installation` (если такая секция уже есть, то в текущую) следующее содержание:
 
     ```tf
     direct {
@@ -55,7 +61,7 @@
 * `database_endpoint` - алиас к первому пункту `connection_string` используется при создании/изменении топиков.
 * `token` - указывается токен доступа к БД, если он необходим.
 
-Если на сервере {{ ydb-short-name }} не включена авторизация, то в конфиге БД (`config.yaml`) нужно указать:
+Если на сервере {{ ydb-short-name }} не включена авторизация, то в конфиге БД [config.yaml](../deploy/configuration/config.md) нужно указать:
 
 ```yaml
 ...
@@ -73,9 +79,9 @@ pqconfig:
 Пример:
 
 ```tf
-  resource "ydb_table" "table" {
+  resource "ydb_table" "ydb_table" {
     path = "path/to/table"
-    connection_string = "grpc(s)://HOST:PORT/?database=/database/path"
+    connection_string = "grpc(s)://HOST:PORT/?database=/database/path" # в примерах ниже мы поместим в переменную tf
     column {
       name = "a"
       type = "Utf8"
@@ -88,8 +94,20 @@ pqconfig:
     }
     column {
       name = "c"
-      type = Bytes
+      type = String
       not_null = false
+    }
+    column {
+      name = "f"
+      type = "Utf8"
+    }
+    column {
+      name = "e"
+      type = "String"
+    }
+    column {
+      name = "d"
+      type = "Timestamp"
     }
     primary_key = ["b", "a"]
   }
@@ -113,9 +131,9 @@ pqconfig:
 
 Аргумент `column` описывает [свойства колонки](../yql/reference/syntax/create_table.md#columns) таблицы.
 
-{% note info %}
+{% note warning %}
 
-При помощи Terraform нельзя удалить колонку, можно только добавить. Чтобы удалить колонку, используйте средства {{ ydb-short-name }}, затем удалите колонку из описания ресурса.
+При помощи Terraform нельзя удалить колонку, можно только добавить. Чтобы удалить колонку, используйте средства {{ ydb-short-name }}, затем удалите колонку из описания ресурса. При попытке "прокатки" изменений колонок таблицы (смена типа, имени), Terraform не попытается их удалить, а попытается сделать update-in-place, но изменения применены не будут.
 
 {% endnote %}
 
@@ -217,7 +235,7 @@ ttl {
 Пример:
 
 ```tf
-resource "ydb_table_index" "table_index" {
+resource "ydb_table_index" "ydb_table_index" {
   table_path        = "path/to/table"
   connection_string = "grpc(s)://HOST:PORT/?database=/database/path"
   name              = "my_index"
@@ -251,8 +269,8 @@ resource "ydb_table_index" "table_index" {
 Пример:
 
 ```tf
-resource "ydb_table_changefeed" "table_changefeed" {
-  table_id = ydb_table.table.id
+resource "ydb_table_changefeed" "ydb_table_changefeed" {
+  table_id = ydb_table.ydb_table.id
   name     = "changefeed"
   mode     = "NEW_IMAGE"
   format   = "JSON"
@@ -291,9 +309,10 @@ provider "ydb" {
 
 variable "my_db_connection_string" {
   type = string
+  default = "grpc(s)://HOST:PORT/?database=/database/path" # можно передавать другими способами в tf
 }
 
-resource "ydb_table" "my_table" {
+resource "ydb_table" "ydb_table" {
   # Путь до таблицы
   path = "path/tf_table" # Создать таблицу по пути `path/tf_table`
 
@@ -309,7 +328,23 @@ resource "ydb_table" "my_table" {
     type     = "Uint32"
     not_null = true
   }
-
+  column {
+    name = "c"
+    type = String
+    not_null = false
+  }
+  column {
+    name = "f"
+    type = "Utf8"
+  }
+  column {
+    name = "e"
+    type = "String"
+  }
+  column {
+    name = "d"
+    type = "Timestamp"
+  }
   # Первичный ключ
   primary_key = [
     "a", "b"
@@ -329,7 +364,7 @@ resource "ydb_table" "ydb_table" {
   path = "path/tf_table" # Создать таблицу по пути `path/tf_table`
   
   # ConnectionString до базы данных.
-  # connection_string = "grpc(s)://HOST:PORT/?database=/database/path"
+  connection_string = var.my_db_connection_string
 
   column {
     name = "a"
@@ -351,7 +386,7 @@ resource "ydb_table" "ydb_table" {
   }
   column {
     name = "e"
-    type = "Bytes"
+    type = "String"
   }
   column {
     name = "d"
@@ -381,7 +416,7 @@ resource "ydb_table" "ydb_table" {
   key_bloom_filter = true # Default = false
 }
 
-resource "ydb_table_changefeed" "ydb_changefeed" {
+resource "ydb_table_changefeed" "ydb_table_changefeed" {
   table_id = ydb_table.ydb_table.id
   name = "changefeed"
   mode = "NEW_IMAGE"
@@ -412,8 +447,8 @@ resource "ydb_table_index" "ydb_table_index" {
 Пример:
 
 ```tf
-resource "ydb_topic" "test" {
-  database_endpoint = "grpc(s)://HOST:PORT/?database=/database/path"
+resource "ydb_topic" "ydb_topic" {
+  database_endpoint = var.my_db_connection_string
   name              = "test/test1"
   supported_codecs  = ["zstd"]
 
@@ -440,7 +475,7 @@ resource "ydb_topic" "test" {
 Поддерживаются следующие аргументы:
 
 * `name` - (обязательный) имя топика.
-* `database_endpoint` - (обязательный) полный путь до базы данных, например: `"grpcs://example.com:2135/?database=/Root/testdb0"`.
+* `database_endpoint` - (обязательный) полный путь до базы данных, например: `"grpcs://example.com:2135/?database=/Root/testdb0"` (передаем в переменной tf - `var.my_db_connection_string`).
 * `retention_period_ms` - время хранения данных, значение по умолчанию - `86400000` миллисекунд.
 * `partitions_count` - количество партиций, значение по умолчанию - `2`.
 * `supported_codecs` - поддерживаемые кодировки сжатия данных, значение по умолчанию - `"gzip", "raw", "zstd"` (всего 3 типа кодеков).

@@ -1,6 +1,5 @@
 #include "partition.h"
 #include "partition_util.h"
-#include <ydb/library/dbgtrace/debug_trace.h>
 
 namespace NKikimr::NPQ {
 
@@ -158,7 +157,6 @@ void TInitConfigStep::Execute(const TActorContext& ctx) {
 }
 
 void TInitConfigStep::Handle(TEvKeyValue::TEvResponse::TPtr& ev, const TActorContext& ctx) {
-    DBGTRACE("TInitConfigStep::Handle(TEvKeyValue::TEvResponse)");
     if (!ValidateResponse(*this, ev, ctx)) {
         PoisonPill(ctx);
         return;
@@ -171,7 +169,6 @@ void TInitConfigStep::Handle(TEvKeyValue::TEvResponse::TPtr& ev, const TActorCon
 
     switch (response.GetStatus()) {
     case NKikimrProto::OK:
-        DBGTRACE_LOG("OK");
         Y_ABORT_UNLESS(Partition()->Config.ParseFromString(response.GetValue()));
         if (Partition()->Config.GetVersion() < Partition()->TabletConfig.GetVersion()) {
             auto event = MakeHolder<TEvPQ::TEvChangePartitionConfig>(Partition()->TopicConverter,
@@ -181,21 +178,18 @@ void TInitConfigStep::Handle(TEvKeyValue::TEvResponse::TPtr& ev, const TActorCon
         break;
 
     case NKikimrProto::NODATA:
-        DBGTRACE_LOG("NODATA");
         Partition()->Config = Partition()->TabletConfig;
         Partition()->PartitionConfig = GetPartitionConfig(Partition()->Config, Partition()->Partition.OriginalPartitionId);
         Partition()->PartitionGraph = MakePartitionGraph(Partition()->Config);
         break;
 
     case NKikimrProto::ERROR:
-        DBGTRACE_LOG("ERROR");
         LOG_ERROR_S(ctx, NKikimrServices::PERSQUEUE,
                     "Partition " << Partition()->Partition << " can't read config");
         PoisonPill(ctx);
         return;
 
     default:
-        DBGTRACE_LOG("unknown");
         Cerr << "ERROR " << response.GetStatus() << "\n";
         Y_ABORT("bad status");
     };
@@ -235,7 +229,6 @@ void TInitDiskStatusStep::Execute(const TActorContext& ctx) {
 }
 
 void TInitDiskStatusStep::Handle(TEvKeyValue::TEvResponse::TPtr& ev, const TActorContext& ctx) {
-    DBGTRACE("TInitDiskStatusStep::Handle(TEvKeyValue::TEvResponse)");
     if (!ValidateResponse(*this, ev, ctx)) {
         PoisonPill(ctx);
         return;
@@ -277,7 +270,6 @@ void TInitMetaStep::Execute(const TActorContext& ctx) {
 }
 
 void TInitMetaStep::Handle(TEvKeyValue::TEvResponse::TPtr &ev, const TActorContext &ctx) {
-    DBGTRACE("TInitMetaStep::Handle(TEvKeyValue::TEvResponse)");
     if (!ValidateResponse(*this, ev, ctx)) {
         PoisonPill(ctx);
         return;
@@ -289,14 +281,11 @@ void TInitMetaStep::Handle(TEvKeyValue::TEvResponse::TPtr &ev, const TActorConte
     auto handleReadResult = [&](const NKikimrClient::TKeyValueResponse::TReadResult& response, auto&& action) {
         switch (response.GetStatus()) {
         case NKikimrProto::OK:
-            DBGTRACE_LOG("OK");
             action(response);
             break;
         case NKikimrProto::NODATA:
-            DBGTRACE_LOG("NODATA");
             break;
         case NKikimrProto::ERROR:
-            DBGTRACE_LOG("ERROR");
             LOG_ERROR_S(
                     ctx, NKikimrServices::PERSQUEUE,
                     "read topic '" << TopicName() << "' partition " << PartitionId() << " error"
@@ -304,7 +293,6 @@ void TInitMetaStep::Handle(TEvKeyValue::TEvResponse::TPtr &ev, const TActorConte
             PoisonPill(ctx);
             break;
         default:
-            DBGTRACE_LOG("unknown");
             Cerr << "ERROR " << response.GetStatus() << "\n";
             Y_ABORT("bad status");
         };
@@ -336,7 +324,6 @@ void TInitMetaStep::Handle(TEvKeyValue::TEvResponse::TPtr &ev, const TActorConte
         if (meta.HasTxId()) {
             Partition()->TxId = meta.GetTxId();
         }
-        DBGTRACE_LOG("PlanStep=" << Partition()->PlanStep << ", TxId=" << Partition()->TxId);
     };
     handleReadResult(response.GetReadResult(1), loadTxMeta);
 
@@ -357,7 +344,6 @@ void TInitInfoRangeStep::Execute(const TActorContext &ctx) {
 }
 
 void TInitInfoRangeStep::Handle(TEvKeyValue::TEvResponse::TPtr &ev, const TActorContext &ctx) {
-    DBGTRACE("TInitInfoRangeStep::Handle(TEvKeyValue::TEvResponse)");
     if (!ValidateResponse(*this, ev, ctx)) {
         PoisonPill(ctx);
         return;
@@ -376,7 +362,6 @@ void TInitInfoRangeStep::Handle(TEvKeyValue::TEvResponse::TPtr &ev, const TActor
     switch (range.GetStatus()) {
         case NKikimrProto::OK:
         case NKikimrProto::OVERRUN: {
-            DBGTRACE_LOG("OK or OVERRUN");
             auto& sourceIdStorage = Partition()->SourceIdStorage;
             auto& usersInfoStorage = Partition()->UsersInfoStorage;
 
@@ -419,11 +404,9 @@ void TInitInfoRangeStep::Handle(TEvKeyValue::TEvResponse::TPtr &ev, const TActor
             break;
         }
         case NKikimrProto::NODATA:
-            DBGTRACE_LOG("NODATA");
             Done(ctx);
             break;
         case NKikimrProto::ERROR:
-            DBGTRACE_LOG("ERROR");
             LOG_ERROR_S(
                     ctx, NKikimrServices::PERSQUEUE,
                     "read topic '" << TopicName() << "' partition " << PartitionId() << " error"
@@ -431,7 +414,6 @@ void TInitInfoRangeStep::Handle(TEvKeyValue::TEvResponse::TPtr &ev, const TActor
             PoisonPill(ctx);
             break;
         default:
-            DBGTRACE_LOG("unknown");
             Cerr << "ERROR " << range.GetStatus() << "\n";
             Y_ABORT("bad status");
     };
@@ -451,7 +433,6 @@ void TInitDataRangeStep::Execute(const TActorContext &ctx) {
 }
 
 void TInitDataRangeStep::Handle(TEvKeyValue::TEvResponse::TPtr &ev, const TActorContext &ctx) {
-    DBGTRACE("TInitDataRangeStep::Handle(TEvKeyValue::TEvResponse)");
     if (!ValidateResponse(*this, ev, ctx)) {
         PoisonPill(ctx);
         return;
@@ -466,7 +447,6 @@ void TInitDataRangeStep::Handle(TEvKeyValue::TEvResponse::TPtr &ev, const TActor
     switch(range.GetStatus()) {
         case NKikimrProto::OK:
         case NKikimrProto::OVERRUN:
-            DBGTRACE_LOG("OK or OVERRUN");
 
             FillBlobsMetaData(range, ctx);
 
@@ -480,11 +460,9 @@ void TInitDataRangeStep::Handle(TEvKeyValue::TEvResponse::TPtr &ev, const TActor
             Done(ctx);
             break;
         case NKikimrProto::NODATA:
-            DBGTRACE_LOG("NODATA");
             Done(ctx);
             break;
         default:
-            DBGTRACE_LOG("unknown");
             Cerr << "ERROR " << range.GetStatus() << "\n";
             Y_ABORT("bad status");
     };
@@ -592,7 +570,6 @@ void TInitDataStep::Execute(const TActorContext &ctx) {
 }
 
 void TInitDataStep::Handle(TEvKeyValue::TEvResponse::TPtr &ev, const TActorContext &ctx) {
-    DBGTRACE("TInitDataStep::Handle(TEvKeyValue::TEvResponse)");
     if (!ValidateResponse(*this, ev, ctx)) {
         PoisonPill(ctx);
         return;
@@ -614,7 +591,6 @@ void TInitDataStep::Handle(TEvKeyValue::TEvResponse::TPtr &ev, const TActorConte
         Y_ABORT_UNLESS(read.HasStatus());
         switch(read.GetStatus()) {
             case NKikimrProto::OK: {
-                DBGTRACE_LOG("OK");
                 const TKey& key = headKeys[i].Key;
                 Y_ABORT_UNLESS(key.IsHead());
 
@@ -648,15 +624,12 @@ void TInitDataStep::Handle(TEvKeyValue::TEvResponse::TPtr &ev, const TActorConte
                 break;
                 }
             case NKikimrProto::OVERRUN:
-                DBGTRACE_LOG("OVERRUN");
                 Y_ABORT("implement overrun in readresult!!");
                 return;
             case NKikimrProto::NODATA:
-                DBGTRACE_LOG("NODATA");
                 Y_ABORT("NODATA can't be here");
                 return;
             case NKikimrProto::ERROR:
-                DBGTRACE_LOG("ERROR");
                 LOG_ERROR_S(
                         ctx, NKikimrServices::PERSQUEUE,
                         "tablet " << Partition()->TabletID << " HandleOnInit topic '" << TopicName()
@@ -667,7 +640,6 @@ void TInitDataStep::Handle(TEvKeyValue::TEvResponse::TPtr &ev, const TActorConte
                 PoisonPill(ctx);
                 return;
             default:
-                DBGTRACE_LOG("unknown");
                 Cerr << "ERROR " << read.GetStatus() << " message: \"" << read.GetMessage() << "\"\n";
                 Y_ABORT("bad status");
 
@@ -683,7 +655,6 @@ void TInitDataStep::Handle(TEvKeyValue::TEvResponse::TPtr &ev, const TActorConte
 //
 
 void TPartition::Bootstrap(const TActorContext& ctx) {
-    DBGTRACE("TPartition::Bootstrap");
     Become(&TThis::StateInit);
     Initializer.Execute(ctx);
 }

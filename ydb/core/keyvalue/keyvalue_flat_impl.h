@@ -26,7 +26,6 @@
 #include <ydb/core/protos/counters_keyvalue.pb.h>
 #include <ydb/core/util/stlog.h>
 #include <util/string/escape.h>
-#include <ydb/library/dbgtrace/debug_trace.h>
 
 // Uncomment the following macro to enable consistency check before every transactions in TTxRequest
 //#define KIKIMR_KEYVALUE_CONSISTENCY_CHECKS
@@ -386,7 +385,6 @@ protected:
     }
 
     void Handle(TEvKeyValue::TEvIntermediate::TPtr &ev, const TActorContext &ctx) {
-        DBGTRACE("TKeyValueFlat::Handle(TEvKeyValue::TEvIntermediate)");
         LOG_DEBUG_S(ctx, NKikimrServices::KEYVALUE, "KeyValue# " << TabletID()
                 << " Handle TEvIntermediate " << ev->Get()->ToString());
 
@@ -439,7 +437,6 @@ protected:
     }
 
     void Handle(TEvKeyValue::TEvRequest::TPtr ev, const TActorContext &ctx) {
-        DBGTRACE("TKeyValueFlat::Handle(TEvKeyValue::TEvRequest)");
         LOG_DEBUG_S(ctx, NKikimrServices::KEYVALUE, "KeyValue# " << TabletID()
                 << " Handle TEvRequest " << ev->Get()->ToString());
         UpdateTabletYellow();

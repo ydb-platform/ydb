@@ -18,19 +18,27 @@ TDqComputeStorage::~TDqComputeStorage() {
 }
 
 NThreading::TFuture<NKikimr::NMiniKQL::ISpiller::TKey> TDqComputeStorage::Put(TRope&& blob) {
-    return ComputeStorageActor_->Put(std::move(blob));
+    auto promise = NThreading::NewPromise<NKikimr::NMiniKQL::ISpiller::TKey>();
+    auto future = promise.GetFuture();
+
+    ActorSystem_->Send(ComputeStorageActorId_, new TEvPut(std::move(blob), std::move(promise)));
+    return future;
 }
 
 std::optional<NThreading::TFuture<TRope>> TDqComputeStorage::Get(TKey key) {
-    return ComputeStorageActor_->Get(key);
+    auto promise = NThreading::NewPromise<TRope>();
+    auto future = promise.GetFuture();
+
+    ActorSystem_->Send(ComputeStorageActorId_, new TEvGet(key, std::move(promise)));
+    return future;
 }
 
-NThreading::TFuture<void> TDqComputeStorage::Delete(TKey key) {
-    return ComputeStorageActor_->Delete(key);
+NThreading::TFuture<void> TDqComputeStorage::Delete(TKey) {
+    return {};
 }
 
-std::optional<NThreading::TFuture<TRope>> TDqComputeStorage::Extract(TKey key) {
-    return ComputeStorageActor_->Extract(key);
+std::optional<NThreading::TFuture<TRope>> TDqComputeStorage::Extract(TKey) {
+    return {};
 }
 
 } // namespace NYql::NDq

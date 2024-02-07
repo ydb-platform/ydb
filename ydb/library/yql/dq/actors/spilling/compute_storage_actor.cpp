@@ -49,8 +49,10 @@ public:
     }
 
     void Bootstrap() {
+        auto spillingActor = CreateDqLocalFileSpillingActor(TxId_, SpillerName_,
+            SelfId(), false);
+        SpillingActorId_ = Register(spillingActor);
         Become(&TDqComputeStorageActor::WorkState);
-        IsBootstraped = true;
     }
 
     static constexpr char ActorName[] = "DQ_COMPUTE_STORAGE";
@@ -59,85 +61,19 @@ public:
         return this;
     }
 
-    NThreading::TFuture<IDqComputeStorageActor::TKey> Put(TRope&& blob) override {
-        InitializeIfNot();
-        // Use lock to prevent race when state is changed on event processing and on Put call
-        std::lock_guard lock(Mutex_);
-
-        FailOnError();
-
-        ui64 size = blob.size();
-
-        ActorSystem_->Send(SpillingActorId_, new TEvDqSpilling::TEvWrite(NextBlobId, std::move(blob)));
-
-        auto it = WritingBlobs_.emplace(NextBlobId, std::make_pair(size, NThreading::NewPromise<IDqComputeStorageActor::TKey>())).first;
-        WritingBlobsSize_ += size;
-
-        ++NextBlobId;
-
-        auto& promise = it->second.second;
-
-        return promise.GetFuture();
-    }
-
-    std::optional<NThreading::TFuture<TRope>> Get(IDqComputeStorageActor::TKey blobId) override {
-        return GetInternal(blobId, false);
-    }
-
-    std::optional<NThreading::TFuture<TRope>> Extract(IDqComputeStorageActor::TKey blobId) override {
-        return GetInternal(blobId, true);
-    }
-
-    NThreading::TFuture<void> Delete(IDqComputeStorageActor::TKey blobId) override {
-        InitializeIfNot();
-        // Use lock to prevent race when state is changed on event processing and on Delete call
-        std::lock_guard lock(Mutex_);
-
-        FailOnError();
-
-        auto promise = NThreading::NewPromise<void>();
-        auto future = promise.GetFuture();
-
-        if (!StoredBlobs_.contains(blobId)) {
-            promise.SetValue();
-            return future;
-        }
-
-        DeletingBlobs_.emplace(blobId, std::move(promise));
-
-        ActorSystem_->Send(SpillingActorId_, new TEvDqSpilling::TEvRead(blobId, true));
-
-        return future;
-    }
 
 protected:
-    std::optional<NThreading::TFuture<TRope>>GetInternal(IDqComputeStorageActor::TKey blobId, bool removeAfterRead) {
-        InitializeIfNot();
-        // Use lock to prevent race when state is changed on event processing and on Get call
-        std::lock_guard lock(Mutex_);
-
-        FailOnError();
-
-        if (!StoredBlobs_.contains(blobId)) return std::nullopt;
-
-        TLoadingBlobInfo loadingblobInfo = std::make_pair(removeAfterRead, NThreading::NewPromise<TRope>());
-        auto it = LoadingBlobs_.emplace(blobId, std::move(loadingblobInfo)).first;
-
-        ActorSystem_->Send(SpillingActorId_, new TEvDqSpilling::TEvRead(blobId, false));
-
-        auto& promise = it->second.second;
-        return promise.GetFuture();
-    }
 
     void PassAway() override {
         InitializeIfNot();
-        ActorSystem_->Send(SpillingActorId_, new TEvents::TEvPoison);
+        Send(SpillingActorId_, new TEvents::TEvPoison);
         TBase::PassAway();
     }
 
     void FailOnError() {
         InitializeIfNot();
         if (Error_) {
+            assert(false);
             LOG_E("Error: " << *Error_);
             ActorSystem_->Send(SpillingActorId_, new TEvents::TEvPoison);
         }
@@ -149,6 +85,8 @@ private:
             hFunc(TEvDqSpilling::TEvWriteResult, HandleWork);
             hFunc(TEvDqSpilling::TEvReadResult, HandleWork);
             hFunc(TEvDqSpilling::TEvError, HandleWork);
+            hFunc(TEvGet, HandleWork);
+            hFunc(TEvPut, HandleWork);
             cFunc(TEvents::TEvPoison::EventType, PassAway);
             default:
                 Y_ABORT("TDqComputeStorageActor::WorkState unexpected event type: %" PRIx32 " event: %s",
@@ -157,15 +95,35 @@ private:
         }
     }
 
+    void HandleWork(TEvPut::TPtr& ev) {
+        auto& msg = *ev->Get();
+        ui64 size = msg.Blob_.size();
+
+        Send(SpillingActorId_, new TEvDqSpilling::TEvWrite(NextBlobId, std::move(msg.Blob_)));
+
+        WritingBlobs_.emplace(NextBlobId, std::make_pair(size, std::move(msg.Promise_)));
+        WritingBlobsSize_ += size;
+
+        ++NextBlobId;
+    }
+
+    void HandleWork(TEvGet::TPtr& ev) {
+        auto& msg = *ev->Get();
+
+        TLoadingBlobInfo loadingblobInfo = std::make_pair(true, std::move(msg.Promise_));
+        LoadingBlobs_.emplace(msg.Key_, std::move(loadingblobInfo));
+
+        Send(SpillingActorId_, new TEvDqSpilling::TEvRead(msg.Key_, true));
+    }
+
     void HandleWork(TEvDqSpilling::TEvWriteResult::TPtr& ev) {
         auto& msg = *ev->Get();
         LOG_T("[TEvWriteResult] blobId: " << msg.BlobId);
 
-        // Use lock to prevent race when state is changed on event processing and on Put call
-        std::lock_guard lock(Mutex_);
 
         auto it = WritingBlobs_.find(msg.BlobId);
         if (it == WritingBlobs_.end()) {
+            assert(false);
             LOG_E("Got unexpected TEvWriteResult, blobId: " << msg.BlobId);
 
             Error_ = "Internal error";
@@ -195,7 +153,6 @@ private:
         LOG_T("[TEvReadResult] blobId: " << msg.BlobId << ", size: " << msg.Blob.size());
 
         // Use lock to prevent race when state is changed on event processing and on Put call
-        std::lock_guard lock(Mutex_);
 
         // Deletion is read without fetching the results. So, after the deletion library sends TEvReadResult event
         // Check if the intention was to delete and complete correct future in this case.
@@ -206,6 +163,7 @@ private:
 
         auto it = LoadingBlobs_.find(msg.BlobId);
         if (it == LoadingBlobs_.end()) {
+            assert(false);
             LOG_E("Got unexpected TEvReadResult, blobId: " << msg.BlobId);
 
             Error_ = "Internal error";
@@ -261,9 +219,6 @@ private:
     // In current implementation it's still possible to leave inner actor uninitialized that is why it's planned to split this class into Actor part + non actor part
     void InitializeIfNot() {
         if (IsInitialized_) return;
-        auto spillingActor = CreateDqLocalFileSpillingActor(TxId_, SpillerName_,
-            SelfId(), false);
-        SpillingActorId_ = Register(spillingActor);
 
         IsInitialized_ = true;
     }
@@ -294,10 +249,6 @@ private:
     bool IsInitialized_ = false;
 
     std::function<void()> WakeupCallback_;
-
-    private:
-    std::mutex Mutex_;
-    bool IsBootstraped = false;
 
 };
 

@@ -1,5 +1,5 @@
 GO_LIBRARY()
-IF (OS_DARWIN AND ARCH_ARM64)
+IF (OS_DARWIN AND ARCH_ARM64 AND RACE OR OS_DARWIN AND ARCH_ARM64 AND NOT RACE)
     SRCS(
 		asan0.go
 		asm_darwin_arm64.s
@@ -33,7 +33,7 @@ IF (OS_DARWIN AND ARCH_ARM64)
 		zsysnum_darwin_arm64.go
 		ztypes_darwin_arm64.go
     )
-ELSEIF (OS_DARWIN AND ARCH_X86_64)
+ELSEIF (OS_DARWIN AND ARCH_X86_64 AND RACE OR OS_DARWIN AND ARCH_X86_64 AND NOT RACE)
     SRCS(
 		asan0.go
 		asm_darwin_amd64.s
@@ -67,7 +67,7 @@ ELSEIF (OS_DARWIN AND ARCH_X86_64)
 		zsysnum_darwin_amd64.go
 		ztypes_darwin_amd64.go
     )
-ELSEIF (OS_LINUX AND ARCH_AARCH64)
+ELSEIF (OS_LINUX AND ARCH_AARCH64 AND RACE OR OS_LINUX AND ARCH_AARCH64 AND NOT RACE)
     SRCS(
 		asan0.go
 		asm_linux_arm64.s
@@ -100,7 +100,7 @@ ELSEIF (OS_LINUX AND ARCH_AARCH64)
 		zsysnum_linux_arm64.go
 		ztypes_linux_arm64.go
     )
-ELSEIF (OS_LINUX AND ARCH_X86_64)
+ELSEIF (OS_LINUX AND ARCH_X86_64 AND RACE OR OS_LINUX AND ARCH_X86_64 AND NOT RACE)
     SRCS(
 		asan0.go
 		asm_linux_amd64.s
@@ -133,7 +133,7 @@ ELSEIF (OS_LINUX AND ARCH_X86_64)
 		zsysnum_linux_amd64.go
 		ztypes_linux_amd64.go
     )
-ELSEIF (OS_WINDOWS AND ARCH_X86_64)
+ELSEIF (OS_WINDOWS AND ARCH_X86_64 AND RACE OR OS_WINDOWS AND ARCH_X86_64 AND NOT RACE)
     SRCS(
 		asan0.go
 		dll_windows.go

@@ -32,7 +32,7 @@ std::string ToString(BackupActorState s) {
         }
         case BackupActorState::Done: {
             return "Done";
-        } 
+        }
     }
 }
 
@@ -43,11 +43,11 @@ class BackupActor : public TActorBootstrapped<BackupActor> {
     const ui64 PlanStep;
     const ui64 TableId;
 
-    BackupActorState State = BackupActorState::Invalid; 
+    BackupActorState State = BackupActorState::Invalid;
 
     // @TODO think about columns
     NKikimrSSA::TProgram ProgramProto = NKikimrSSA::TProgram();
-    const std::vector<TString> replyColumns {"key", "field"};
+    const std::vector<TString> replyColumns{"key", "field"};
 
     std::optional<NActors::TActorId> ScanActorId;
 
@@ -219,12 +219,13 @@ private:
 
         LOG_S_DEBUG("BackupActor::SendScanDataAck ScanActorId=" << ScanActorId->ToString());
 
-        ctx.Send(*ScanActorId, new NKqp::TEvKqpCompute::TEvScanDataAck(DefaultFreeSpace, DefaultGeneration, DefaultMaxChunks));
+        ctx.Send(*ScanActorId,
+                 new NKqp::TEvKqpCompute::TEvScanDataAck(DefaultFreeSpace, DefaultGeneration, DefaultMaxChunks));
     }
 
     void SendBackupShardProposeResult(const TActorContext& ctx) {
-        auto propose_result = std::make_unique<NEvents::TBackupEvents::TEvBackupShardProposeResult>();
-        ctx.Send(SenderActorId, propose_result.release()); 
+        auto ProposeResult = std::make_unique<NEvents::TBackupEvents::TEvBackupShardProposeResult>();
+        ctx.Send(SenderActorId, ProposeResult.release());
     }
 
     void Dump() const {

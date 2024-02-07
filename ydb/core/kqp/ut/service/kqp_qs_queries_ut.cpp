@@ -553,6 +553,29 @@ Y_UNIT_TEST_SUITE(KqpQueryService) {
         UNIT_ASSERT_VALUES_EQUAL(totalTasks, 2);
     }
 
+    Y_UNIT_TEST(ExecStatsAst) {
+        auto kikimr = DefaultKikimrRunner();
+        auto db = kikimr.GetQueryClient();
+
+        auto settings = TExecuteQuerySettings()
+            .StatsMode(EStatsMode::Full);
+
+        std::vector<std::pair<TString, EStatus>> cases = {
+            { "SELECT 42 AS test_ast_column", EStatus::SUCCESS },
+            { "SELECT test_ast_column FROM TwoShard", EStatus::GENERIC_ERROR },
+            { "SELECT UNWRAP(42 / 0) AS test_ast_column", EStatus::PRECONDITION_FAILED },
+        };
+
+        for (const auto& [sql, status] : cases) {
+            auto result = db.ExecuteQuery(sql, TTxControl::BeginTx().CommitTx(), settings).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), status, result.GetIssues().ToString());
+
+            UNIT_ASSERT(result.GetStats().Defined());
+            UNIT_ASSERT(result.GetStats()->GetAst().Defined());
+            UNIT_ASSERT_STRING_CONTAINS(*result.GetStats()->GetAst(), "test_ast_column");
+        }
+    }
+
     Y_UNIT_TEST(Ddl) {
         NKikimrConfig::TAppConfig appConfig;
         appConfig.MutableTableServiceConfig()->SetEnablePreparedDdl(true);

@@ -7,7 +7,6 @@ SRCS(
     blob_cache.cpp
     blob_manager.cpp
     columnshard__init.cpp
-    columnshard__backup.cpp
     columnshard__notify_tx_completion.cpp
     columnshard__plan_step.cpp
     columnshard__progress_tx.cpp

@@ -16,6 +16,7 @@ struct TBackupEvents {
     static_assert(EEventType::EvEnd < EventSpaceEnd(TKikimrEvents::ES_BACKUP_SHARD),
                   "expect EvEnd < EventSpaceEnd(TKikimrEvents::ES_BACKUP_SHARD)");
 
+    // @TODO TEvBackupShardPropose useless. Need only result.
     struct TEvBackupShardPropose
         : public NActors::TEventPB<TEvBackupShardPropose, NKikimrBackupEvents::TEvBackupShardPropose,
                                    EvBackupShardPropose> {

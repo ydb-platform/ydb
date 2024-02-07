@@ -55,7 +55,7 @@ class TOperationsManager;
 
 extern bool gAllowLogBatchingDefaultValue;
 
-IActor* CreatBackupActor(TActorId tabletId, const TPathId& TargetPathId, ui64 planStep, ui64 txId);
+IActor* CreatBackupActor(TActorId senderActorId, TActorIdentity csActorId, ui64 TxId, int PlanStep, ui64 TableId);
 IActor* CreateWriteActor(ui64 tabletId, IWriteController::TPtr writeController, const TInstant deadline);
 IActor* CreateColumnShardScan(const TActorId& scanComputeActor, ui32 scanId, ui64 txId);
 
@@ -160,7 +160,6 @@ class TColumnShard
     void Handle(TEvPrivate::TEvWriteIndex::TPtr& ev, const TActorContext& ctx);
     void Handle(NMetadata::NProvider::TEvRefreshSubscriberData::TPtr& ev);
     void Handle(NEvents::TDataEvents::TEvWrite::TPtr& ev, const TActorContext& ctx);
-    void Handle(NEvents::TBackupEvents::TEvBackupShardPropose::TPtr& ev, const TActorContext&);
     void Handle(TEvPrivate::TEvWriteDraft::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvPrivate::TEvGarbageCollectionFinished::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvPrivate::TEvTieringModified::TPtr& ev, const TActorContext&);
@@ -271,7 +270,6 @@ protected:
             HFunc(TEvPrivate::TEvReadFinished, Handle);
             HFunc(TEvPrivate::TEvPeriodicWakeup, Handle);
             HFunc(NEvents::TDataEvents::TEvWrite, Handle);
-            HFunc(NEvents::TBackupEvents::TEvBackupShardPropose, Handle);
             HFunc(TEvPrivate::TEvWriteDraft, Handle);
             HFunc(TEvPrivate::TEvGarbageCollectionFinished, Handle);
             HFunc(TEvPrivate::TEvTieringModified, Handle);

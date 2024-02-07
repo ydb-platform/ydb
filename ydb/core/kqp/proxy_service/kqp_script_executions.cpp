@@ -991,7 +991,7 @@ private:
 
 class TForgetScriptExecutionOperationActor : public TActorBootstrapped<TForgetScriptExecutionOperationActor> {
 public:
-    using TForgetOperationUpdateRetryActor = TQueryRetryActor<TForgetScriptExecutionOperationQueryActor, TEvForgetScriptExecutionOperationResponse, TString, TString, TInstant>;
+    using TForgetOperationRetryActor = TQueryRetryActor<TForgetScriptExecutionOperationQueryActor, TEvForgetScriptExecutionOperationResponse, TString, TString, TInstant>;
 
     explicit TForgetScriptExecutionOperationActor(TEvForgetScriptExecutionOperation::TPtr ev)
         : Request(std::move(ev))
@@ -1035,9 +1035,9 @@ public:
             return;
         }
 
-        Register(new TForgetOperationUpdateRetryActor(
+        Register(new TForgetOperationRetryActor(
             SelfId(),
-            TForgetOperationUpdateRetryActor::IRetryPolicy::GetExponentialBackoffPolicy(TForgetOperationUpdateRetryActor::Retryable, minDelay, TDuration::MilliSeconds(200), TDuration::Seconds(1), std::numeric_limits<size_t>::max(), maxTime),
+            TForgetOperationRetryActor::IRetryPolicy::GetExponentialBackoffPolicy(TForgetOperationRetryActor::Retryable, minDelay, TDuration::MilliSeconds(200), TDuration::Seconds(1), std::numeric_limits<size_t>::max(), maxTime),
             ExecutionId, Request->Get()->Database, TInstant::Now() + maxTime
         ));
     }

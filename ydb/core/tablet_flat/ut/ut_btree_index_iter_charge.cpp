@@ -18,8 +18,12 @@ namespace {
     struct TTouchEnv : public NTest::TTestEnv {
         const TSharedData* TryGetPage(const TPart *part, TPageId pageId, TGroupId groupId) override
         {
+            if (Sticky[groupId].contains(pageId)) {
+                Loaded[groupId].insert(pageId);
+            }
+
             Touched[groupId].insert(pageId);
-            if (Loaded[groupId].contains(pageId) || Sticky[groupId].contains(pageId)) {
+            if (Loaded[groupId].contains(pageId)) {
                 return NTest::TTestEnv::TryGetPage(part, pageId, groupId);
             }
             return nullptr;
@@ -47,6 +51,7 @@ namespace {
 
     void AssertLoadedTheSame(const TPartStore& part, const TTouchEnv& bTree, const TTouchEnv& flat, const TString& message, 
             bool allowAdditionalFirstLastPartPages = false, bool allowAdditionalFirstLoadedPage = false, bool allowLastLoadedPageDifference = false) {
+
         TSet<TGroupId> groupIds;
         for (const auto &c : {bTree.Loaded, flat.Loaded}) {
             for (const auto &g : c) {

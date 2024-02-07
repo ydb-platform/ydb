@@ -16,20 +16,25 @@ class TChargeBTreeIndex : public ICharge {
 
     struct TChildState {
         TPageId PageId;
-        TRowId BeginRowId;
-        TRowId EndRowId;
+        TRowId BeginRowId, EndRowId;
+        TRowId PrevItems, Items;
+        ui64 PrevDataSize, DataSize;
 
-        TChildState(TPageId pageId, TRowId beginRowId, TRowId endRowId)
+        TChildState(TPageId pageId, TRowId beginRowId, TRowId endRowId, TRowId prevItems, TRowId items, ui64 prevDataSize, ui64 dataSize)
             : PageId(pageId)
             , BeginRowId(beginRowId)
             , EndRowId(endRowId)
+            , PrevItems(prevItems)
+            , Items(items)
+            , PrevDataSize(prevDataSize)
+            , DataSize(dataSize)
         {
         }
     };
 
     struct TNodeState : TChildState, TBtreeIndexNode {
-        TNodeState(TSharedData data, TPageId pageId, TRowId beginRowId, TRowId endRowId)
-            : TChildState(pageId, beginRowId, endRowId)
+        TNodeState(TSharedData data, TPageId pageId, TRowId beginRowId, TRowId endRowId, TRowId prevItems, TRowId items, ui64 prevDataSize, ui64 dataSize)
+            : TChildState(pageId, beginRowId, endRowId, prevItems, items, prevDataSize, dataSize)
             , TBtreeIndexNode(data)
         {
         }
@@ -62,13 +67,11 @@ public:
 public:
     TResult Do(TCells key1, TCells key2, TRowId beginRowId, TRowId endRowId, 
             const TKeyCellDefaults &keyDefaults, ui64 itemsLimit, ui64 bytesLimit) const noexcept override {
+        Cerr << "Do " << beginRowId << " " << endRowId << " " << itemsLimit << Endl;
         endRowId++; // current interface accepts inclusive row2 bound
         Y_ABORT_UNLESS(beginRowId < endRowId);
 
-        bool ready = true, overshot = true;
-        bool hasValidRowsRange = Groups || IncludeHistory; // false value means that beginRowId, endRowId are invalid and shouldn't be used
-        ui64 chargeGroupsItemsLimit = itemsLimit; // pessimistic items limit for groups
-        TRowId beginBytesLimitRowId = Max<TRowId>(); // first unloaded probably needed row
+        bool ready = true, overshot = true, hasValidRowsRange = true;
 
         const auto& meta = Part->IndexPages.BTreeGroups[0];
         Y_ABORT_UNLESS(endRowId <= meta.RowCount);
@@ -82,91 +85,79 @@ public:
         TVector<TNodeState> level, nextLevel(::Reserve(3));
         TPageId key1PageId = key1 ? meta.PageId : Max<TPageId>();
         TPageId key2PageId = key2 ? meta.PageId : Max<TPageId>();
-        ui64 key1Items = 0, prevKey1Items = 0;
+        TChildState firstChild = BuildRootChildState(meta);
 
         const auto iterateLevel = [&](const auto& tryHandleChild) {
             // tryHandleChild may update them, copy for simplicity
             // always load beginRowId regardless of keys
-            const TRowId levelBeginRowId = beginRowId, levelEndRowId = Max(endRowId, beginRowId + 1);
-            const TChild* levelFirstChild = nullptr;
-
+            const TRowId levelBeginRowId = beginRowId, levelEndRowId = endRowId;
+            
             for (const auto &node : level) {
                 if (node.EndRowId <= levelBeginRowId || node.BeginRowId >= levelEndRowId) {
                     continue;
                 }
 
                 TRecIdx from = 0, to = node.GetChildrenCount();
-                if (node.BeginRowId < levelBeginRowId) {
+                if (node.BeginRowId <= levelBeginRowId) {
                     from = node.Seek(levelBeginRowId);
+                    if (firstChild.PageId != Max<TPageId>()) { // still valid and should be updated
+                        auto& child = node.GetChild(from);
+                        auto prevChild = from ? node.GetChildRef(from - 1) : nullptr;
+                        firstChild = BuildChildState(node, child, prevChild);
+                        Cerr << "  first " << firstChild.PageId << " " << firstChild.BeginRowId << " " << firstChild.EndRowId << Endl;
+                    }
                 }
                 if (node.EndRowId > levelEndRowId) {
                     to = node.Seek(levelEndRowId - 1) + 1;
                 }
                 for (TRecIdx pos : xrange(from, to)) {
-                    auto child = node.GetChildRef(pos);
+                    auto child = node.GetChild(pos);
                     auto prevChild = pos ? node.GetChildRef(pos - 1) : nullptr;
-                    TRowId childBeginRowId = prevChild ? prevChild->RowCount : node.BeginRowId;
-                    TRowId childEndRowId = child->RowCount;
-                    ready &= tryHandleChild(TChildState(child->PageId, childBeginRowId, childEndRowId));
-                    if (itemsLimit || bytesLimit) {
-                        if (!levelFirstChild) {
-                            // do not apply limits on the first child because beginRowId/key1 position is uncertain
-                            levelFirstChild = child;
-                        } else {
-                            if (itemsLimit) {
-                                ui64 items = child->GetNonErasedRowCount() - levelFirstChild->GetNonErasedRowCount();
-                                if (LimitExceeded(items, itemsLimit)) {
-                                    overshot = false;
-                                    return;
-                                }
-                            }
-                            if (bytesLimit) {
-                                ui64 bytes = child->DataSize - levelFirstChild->DataSize;
-                                if (LimitExceeded(bytes, bytesLimit)) {
-                                    endRowId = Min(endRowId, childEndRowId);
-                                    overshot = false;
-                                    return;
-                                }
-                            }
+                    auto childState = BuildChildState(node, child, prevChild);
+                    if (itemsLimit) {
+                        if (LimitExceeded(firstChild.Items, childState.PrevItems, itemsLimit)) {
+                            overshot = false;
+                            return;
                         }
                     }
+                    if (bytesLimit) {
+                        // ui64 bytes = child->DataSize - firstChild.DataSize;
+                        // if (LimitExceeded(bytes, bytesLimit)) {
+                        //     endRowId = Min(endRowId, childEndRowId);
+                        //     overshot = false;
+                        //     return;
+                        // }
+                    }
+                    ready &= tryHandleChild(childState);
                 }
             }
         };
 
         const auto skipUnloadedRows = [&](const TChildState& child) {
+            if (child.PageId == firstChild.PageId) {
+                firstChild.PageId = Max<TPageId>(); // mark first child unloaded
+            }
             if (child.PageId == key1PageId) {
-                if (hasValidRowsRange && chargeGroupsItemsLimit) {
-                    ui64 unloadedItems = key1Items - prevKey1Items;
-                    if (unloadedItems < chargeGroupsItemsLimit) {
-                        chargeGroupsItemsLimit -= unloadedItems;
-                    } else {
-                        hasValidRowsRange = false;
-                    }
-                }
-                if (hasValidRowsRange && bytesLimit) {
-                    beginBytesLimitRowId = Max(beginRowId, child.BeginRowId);
-                }
                 beginRowId = Max(beginRowId, child.EndRowId);
+                Cerr << "  beginRowId " << beginRowId << Endl;
             }
             if (child.PageId == key2PageId) {
                 endRowId = Min(endRowId, child.BeginRowId);
+                Cerr << "  endRowId " << endRowId << Endl;
             }
         };
 
-        const auto tryHandleNode = [&](TChildState child) -> bool {
-            if (child.PageId == key1PageId || child.PageId == key2PageId) {
+        const auto tryHandleNode = [&](const TChildState& child) -> bool {
+            Cerr << "  node " << child.PageId << " " << child.BeginRowId << " " << child.EndRowId << Endl;
+            if (child.PageId == firstChild.PageId || child.PageId == key1PageId || child.PageId == key2PageId) {
                 if (TryLoadNode(child, nextLevel)) {
                     const auto& node = nextLevel.back();
                     if (child.PageId == key1PageId) {
                         TRecIdx pos = node.Seek(ESeek::Lower, key1, Scheme.Groups[0].ColsKeyIdx, &keyDefaults);
                         auto& key1Child = node.GetChild(pos);
                         key1PageId = key1Child.PageId;
-                        key1Items = key1Child.GetNonErasedRowCount();
                         if (pos) {
-                            auto& prevKey1Child = node.GetChild(pos - 1);
-                            prevKey1Items = prevKey1Child.GetNonErasedRowCount();
-                            beginRowId = Max(beginRowId, prevKey1Child.RowCount); // move beginRowId to the first key >= key1
+                            beginRowId = Max(beginRowId, node.GetChild(pos - 1).RowCount); // move beginRowId to the first key >= key1
                         }
                     }
                     if (child.PageId == key2PageId) {
@@ -188,7 +179,8 @@ public:
             }
         };
 
-        const auto tryHandleDataPage = [&](TChildState child) -> bool {
+        const auto tryHandleDataPage = [&](const TChildState& child) -> bool {
+            Cerr << "  data " << child.PageId << " " << child.BeginRowId << " " << child.EndRowId << Endl;
             if (hasValidRowsRange && (child.PageId == key1PageId || child.PageId == key2PageId)) {
                 const auto page = TryGetDataPage(child.PageId, { });
                 if (page) {
@@ -211,19 +203,19 @@ public:
             }
         };
 
-        for (ui32 height = 0; height < meta.LevelCount && ready; height++) {
+        for (ui32 height = 0; height < meta.LevelCount; height++) {
             if (height == 0) {
-                ready &= tryHandleNode(TChildState(meta.PageId, 0, meta.RowCount));
+                auto root = BuildRootChildState(meta);
+                ready &= tryHandleNode(root);
             } else {
                 iterateLevel(tryHandleNode);
             }
             level.swap(nextLevel);
             nextLevel.clear();
-        }
-
-        if (!ready) { // some index pages are missing, do not continue
-            ready &= DoGroupsAndHistory(hasValidRowsRange, beginRowId, endRowId, beginBytesLimitRowId, chargeGroupsItemsLimit, bytesLimit); // precharge groups using the latest row bounds
-            return {ready, false};
+            if (firstChild.PageId == Max<TPageId>()) { // first child is unloaded, consider all first's child rows are needed for next levels
+                Cerr << "  move " << firstChild.Items << " -> " << firstChild.PrevItems << Endl;
+                firstChild.Items = firstChild.PrevItems;
+            }
         }
 
         // flat index doesn't treat key placement within data page, so let's do the same
@@ -231,12 +223,13 @@ public:
         overshot &= endRowId == sliceEndRowId;
 
         if (meta.LevelCount == 0) {
-            ready &= tryHandleDataPage(TChildState(meta.PageId, 0, meta.RowCount));
+            auto root = BuildRootChildState(meta);
+            ready &= tryHandleDataPage(root);
         } else {
             iterateLevel(tryHandleDataPage);
         }
 
-        ready &= DoGroupsAndHistory(hasValidRowsRange, beginRowId, endRowId, beginBytesLimitRowId, chargeGroupsItemsLimit, bytesLimit); // precharge groups using the latest row bounds
+        // ready &= DoGroupsAndHistory(hasValidRowsRange, beginRowId, endRowId, beginLimitRowId, chargeGroupsItemsLimit, bytesLimit); // precharge groups using the latest row bounds
 
         return {ready, overshot};
     }
@@ -285,36 +278,35 @@ public:
                     to = node.Seek(levelEndRowId - 1) + 1;
                 }
                 for (TRecIdx posExt = to; posExt > from; posExt--) {
-                    auto child = node.GetChildRef(posExt - 1);
+                    auto& child = node.GetChild(posExt - 1);
                     auto prevChild = posExt - 1 ? node.GetChildRef(posExt - 2) : nullptr;
-                    TRowId childBeginRowId = prevChild ? prevChild->RowCount : node.BeginRowId;
-                    TRowId childEndRowId = child->RowCount;
+                    auto childState = BuildChildState(node, child, prevChild);
                     if (itemsLimit || bytesLimit) {
                         if (!levelLastChild) {
                             // do not apply limits on the last child because endRowId/key1 position is uncertain
-                            levelLastChild = child;
+                            levelLastChild = &child;
                         } else {
                             if (!levelPrevLastChild) {
-                                levelPrevLastChild = child;
+                                levelPrevLastChild = &child;
                             }
                             if (itemsLimit) {
-                                ui64 items = levelPrevLastChild->GetNonErasedRowCount() - child->GetNonErasedRowCount();
+                                ui64 items = levelPrevLastChild->GetNonErasedRowCount() - child.GetNonErasedRowCount();
                                 if (LimitExceeded(items, itemsLimit)) {
                                     overshot = false;
                                     return;
                                 }
                             }
                             if (bytesLimit) {
-                                ui64 bytes = levelPrevLastChild->DataSize - child->DataSize;
-                                if (LimitExceeded(bytes, bytesLimit)) {
-                                    beginRowId = Max(beginRowId, childEndRowId);
-                                    overshot = false;
-                                    return;
-                                }
+                                // ui64 bytes = levelPrevLastChild->DataSize - child.DataSize;
+                                // if (LimitExceeded(bytes, bytesLimit)) {
+                                //     beginRowId = Max(beginRowId, childEndRowId);
+                                //     overshot = false;
+                                //     return;
+                                // }
                             }
                         }
                     }
-                    ready &= tryHandleChild(TChildState(child->PageId, childBeginRowId, childEndRowId));
+                    ready &= tryHandleChild(childState);
                 }
             }
         };
@@ -339,7 +331,7 @@ public:
             }
         };
 
-        const auto tryHandleNode = [&](TChildState child) -> bool {
+        const auto tryHandleNode = [&](const TChildState& child) -> bool {
             if (child.PageId == key1PageId || child.PageId == key2PageId) {
                 if (TryLoadNode(child, nextLevel)) {
                     const auto& node = nextLevel.back();
@@ -375,7 +367,7 @@ public:
             }
         };
 
-        const auto tryHandleDataPage = [&](TChildState child) -> bool {
+        const auto tryHandleDataPage = [&](const TChildState& child) -> bool {
             if (hasValidRowsRange && (child.PageId == key1PageId || child.PageId == key2PageId)) {
                 const auto page = TryGetDataPage(child.PageId, { });
                 if (page) {
@@ -410,7 +402,8 @@ public:
 
         for (ui32 height = 0; height < meta.LevelCount && ready; height++) {
             if (height == 0) {
-                ready &= tryHandleNode(TChildState(meta.PageId, 0, meta.RowCount));
+                auto root = BuildRootChildState(meta);
+                ready &= tryHandleNode(root);
             } else {
                 iterateLevel(tryHandleNode);
             }
@@ -428,7 +421,8 @@ public:
         overshot &= beginRowId == sliceBeginRowId;
 
         if (meta.LevelCount == 0) {
-            ready &= tryHandleDataPage(TChildState(meta.PageId, 0, meta.RowCount));
+            auto root = BuildRootChildState(meta);
+            ready &= tryHandleDataPage(root);
         } else {
             iterateLevel(tryHandleDataPage);
         }
@@ -516,31 +510,31 @@ private:
                     to = node.Seek(endRowId - 1) + 1;
                 }
                 for (TRecIdx pos : xrange(from, to)) {
-                    auto child = node.GetShortChildRef(pos);
+                    auto& child = node.GetShortChild(pos);
                     auto prevChild = pos ? node.GetShortChildRef(pos - 1) : nullptr;
-                    TRowId childBeginRowId = prevChild ? prevChild->RowCount : node.BeginRowId;
-                    TRowId childEndRowId = child->RowCount;
-                    ready &= tryHandleChild(TChildState(child->PageId, childBeginRowId, childEndRowId));
+                    auto childState = BuildChildState(node, child, prevChild);
+                    ready &= tryHandleChild(childState);
                     if (bytesLimit) {
-                        if (child->DataSize > prevBeginBytesLimitDataSize && LimitExceeded(child->DataSize - prevBeginBytesLimitDataSize, bytesLimit)) {
-                            return;
-                        }
+                        // if (child->DataSize > prevBeginBytesLimitDataSize && LimitExceeded(child->DataSize - prevBeginBytesLimitDataSize, bytesLimit)) {
+                        //     return;
+                        // }
                     }
                 }
             }
         };
 
-        const auto tryHandleNode = [&](TChildState child) -> bool {
+        const auto tryHandleNode = [&](const TChildState& child) -> bool {
             return TryLoadNode(child, nextLevel);
         };
 
-        const auto tryHandleDataPage = [&](TChildState child) -> bool {
+        const auto tryHandleDataPage = [&](const TChildState& child) -> bool {
             return HasDataPage(child.PageId, groupId);
         };
 
         for (ui32 height = 0; height < meta.LevelCount; height++) {
             if (height == 0) {
-                ready &= tryHandleNode(TChildState(meta.PageId, 0, meta.RowCount));
+                auto root = BuildRootChildState(meta);
+                ready &= tryHandleNode(root);
             } else {
                 iterateLevel(tryHandleNode);
             }
@@ -549,7 +543,8 @@ private:
         }
 
         if (meta.LevelCount == 0) {
-            ready &= tryHandleDataPage(TChildState(meta.PageId, 0, meta.RowCount));
+            auto root = BuildRootChildState(meta);
+            ready &= tryHandleDataPage(root);
         } else {
             iterateLevel(tryHandleDataPage);
         }
@@ -576,31 +571,32 @@ private:
                     to = node.Seek(endRowId - 1) + 1;
                 }
                 for (TRecIdx posExt = to; posExt > from; posExt--) {
-                    auto child = node.GetShortChildRef(posExt - 1);
+                    auto& child = node.GetShortChild(posExt - 1);
                     auto prevChild = posExt - 1 ? node.GetShortChildRef(posExt - 2) : nullptr;
-                    TRowId childBeginRowId = prevChild ? prevChild->RowCount : node.BeginRowId;
-                    TRowId childEndRowId = child->RowCount;
+                    auto childState = BuildChildState(node, child, prevChild);
                     if (bytesLimit) {
-                        if (endBytesLimitDataSize > child->DataSize && LimitExceeded(endBytesLimitDataSize - child->DataSize, bytesLimit)) {
-                            return;
-                        }
+                        Y_UNUSED(endBytesLimitDataSize);
+                        // if (endBytesLimitDataSize > child->DataSize && LimitExceeded(endBytesLimitDataSize - child->DataSize, bytesLimit)) {
+                        //     return;
+                        // }
                     }
-                    ready &= tryHandleChild(TChildState(child->PageId, childBeginRowId, childEndRowId));
+                    ready &= tryHandleChild(childState);
                 }
             }
         };
 
-        const auto tryHandleNode = [&](TChildState child) -> bool {
+        const auto tryHandleNode = [&](const TChildState& child) -> bool {
             return TryLoadNode(child, nextLevel);
         };
 
-        const auto tryHandleDataPage = [&](TChildState child) -> bool {
+        const auto tryHandleDataPage = [&](const TChildState& child) -> bool {
             return HasDataPage(child.PageId, groupId);
         };
 
         for (ui32 height = 0; height < meta.LevelCount; height++) {
             if (height == 0) {
-                ready &= tryHandleNode(TChildState(meta.PageId, 0, meta.RowCount));
+                auto root = BuildRootChildState(meta);
+                ready &= tryHandleNode(root);
             } else {
                 iterateLevel(tryHandleNode);
             }
@@ -609,7 +605,8 @@ private:
         }
 
         if (meta.LevelCount == 0) {
-            ready &= tryHandleDataPage(TChildState(meta.PageId, 0, meta.RowCount));
+            auto root = BuildRootChildState(meta);
+            ready &= tryHandleDataPage(root);
         } else {
             iterateLevel(tryHandleDataPage);
         }
@@ -666,9 +663,9 @@ private:
                 }
                 for (TRecIdx pos : xrange(from, to)) {
                     auto& child = node.GetShortChild(pos);
-                    TRowId childBeginRowId = pos ? node.GetShortChild(pos - 1).RowCount : node.BeginRowId;
-                    TRowId childEndRowId = child.RowCount;
-                    ready &= tryHandleChild(TChildState(child.PageId, childBeginRowId, childEndRowId));
+                    auto prevChild = pos ? node.GetShortChildRef(pos - 1) : nullptr;
+                    auto childState = BuildChildState(node, child, prevChild);
+                    ready &= tryHandleChild(childState);
                 }
             }
         };
@@ -682,7 +679,7 @@ private:
             }
         };
 
-        const auto tryHandleNode = [&](TChildState child) -> bool {
+        const auto tryHandleNode = [&](const TChildState& child) -> bool {
             if (child.PageId == key1PageId || child.PageId == key2PageId) {
                 if (TryLoadNode(child, nextLevel)) {
                     const auto& node = nextLevel.back();
@@ -710,7 +707,7 @@ private:
             }
         };
 
-        const auto tryHandleDataPage = [&](TChildState child) -> bool {
+        const auto tryHandleDataPage = [&](const TChildState& child) -> bool {
             if (Groups && (child.PageId == key1PageId || child.PageId == key2PageId)) {
                 const auto page = TryGetDataPage(child.PageId, groupId);
                 if (page) {
@@ -735,7 +732,8 @@ private:
 
         for (ui32 height = 0; height < meta.LevelCount; height++) {
             if (height == 0) {
-                ready &= tryHandleNode(TChildState(meta.PageId, 0, meta.RowCount));
+                auto root = BuildRootChildState(meta);
+                ready &= tryHandleNode(root);
             } else {
                 iterateLevel(tryHandleNode);
             }
@@ -744,7 +742,8 @@ private:
         }
 
         if (meta.LevelCount == 0) {
-            ready &= tryHandleDataPage(TChildState(meta.PageId, 0, meta.RowCount));
+            auto root = BuildRootChildState(meta);
+            ready &= tryHandleDataPage(root);
         } else {
             iterateLevel(tryHandleDataPage);
         }
@@ -841,8 +840,34 @@ private:
             : (left.size() > right.size() ? -1 : 1);
     }
 
+    TChildState BuildRootChildState(const TBtreeIndexMeta& meta) const noexcept {
+        return TChildState(meta.PageId,
+            0, meta.RowCount,
+            0, meta.GetNonErasedRowCount(),
+            0, meta.DataSize);
+    }
+
+    TChildState BuildChildState(const TNodeState& parent, TChild child, const TChild* prevChild) const noexcept {
+        return TChildState(child.PageId,
+            prevChild ? prevChild->RowCount : parent.BeginRowId, child.RowCount,
+            prevChild ? prevChild->GetNonErasedRowCount() : parent.PrevItems, child.GetNonErasedRowCount(),
+            prevChild ? prevChild->DataSize : parent.PrevDataSize, child.DataSize);
+    }
+
+    TChildState BuildChildState(const TNodeState& parent, TShortChild child, const TShortChild* prevChild) const noexcept {
+        return TChildState(child.PageId,
+            prevChild ? prevChild->RowCount : parent.BeginRowId, child.RowCount,
+            prevChild ? prevChild->RowCount : parent.BeginRowId, child.RowCount,
+            prevChild ? prevChild->DataSize : parent.PrevDataSize, child.DataSize);
+    }
+
     bool LimitExceeded(ui64 value, ui64 limit) const noexcept {
         return limit && value > limit;
+    }
+
+    bool LimitExceeded(ui64 prev, ui64 current, ui64 limit) const noexcept {
+        Cerr << "  check limit " << prev << " " << current << " " << limit << Endl;
+        return limit && current > prev && current - prev > limit;
     }
 
 private:

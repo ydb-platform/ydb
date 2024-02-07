@@ -981,42 +981,24 @@ private:
         }
         if (-1 != lambdaIdx && !hasOtherSortedOuts) {
             if (isFill) {
-                if (node.ChildPtr(lambdaIdx)->GetConstraint<TSortedConstraintNode>()) {
-                    lambda = Build<TCoLambda>(ctx, node.ChildPtr(lambdaIdx)->Pos())
-                        .Args({})
-                        .Body<TCoUnordered>()
-                            .Input<TExprApplier>()
-                                .Apply(TCoLambda(node.ChildPtr(lambdaIdx)))
-                            .Build()
+                lambda = Build<TCoLambda>(ctx, node.ChildPtr(lambdaIdx)->Pos())
+                    .Args({})
+                    .Body<TCoUnordered>()
+                        .Input<TExprApplier>()
+                            .Apply(TCoLambda(node.ChildPtr(lambdaIdx)))
                         .Build()
-                        .Done().Ptr();
-                }
+                    .Build()
+                    .Done().Ptr();
             } else {
-                TProcessedNodesSet processedNodes;
-                TNodeOnNodeOwnedMap remaps;
-                VisitExpr(node.ChildPtr(lambdaIdx), [&processedNodes, &remaps, &ctx](const TExprNode::TPtr& node) {
-                    if (TYtOutput::Match(node.Get())) {
-                        // Stop traversing dependent operations
-                        processedNodes.insert(node->UniqueId());
-                        return false;
-                    }
-                    auto name = node->Content();
-                    if (node->IsCallable() && node->ChildrenSize() > 0 && name.SkipPrefix("Ordered")) {
-                        const auto inputKind = node->Child(0)->GetTypeAnn()->GetKind();
-                        if (inputKind == ETypeAnnotationKind::Stream || inputKind == ETypeAnnotationKind::Flow) {
-                            remaps[node.Get()] = ctx.RenameNode(*node, name);
-                        }
-                    }
-                    return true;
-                });
-                if (!remaps.empty()) {
-                    TOptimizeExprSettings settings{State_->Types};
-                    settings.ProcessedNodes = &processedNodes;
-                    auto status = RemapExpr(node.ChildPtr(lambdaIdx), lambda, remaps, ctx, settings);
-                    if (status.Level == IGraphTransformer::TStatus::Error) {
-                        return {};
-                    }
-                }
+                lambda = Build<TCoLambda>(ctx, node.ChildPtr(lambdaIdx)->Pos())
+                    .Args({"stream"})
+                    .Body<TCoUnordered>()
+                        .Input<TExprApplier>()
+                            .Apply(TCoLambda(node.ChildPtr(lambdaIdx)))
+                            .With(0, "stream")
+                        .Build()
+                    .Build()
+                    .Done().Ptr();
             }
         }
 
@@ -1034,16 +1016,28 @@ private:
                     lambda = node.ChildPtr(lambdaIdx);
                 }
                 if (op.Output().Size() == 1) {
-                    lambda = Build<TCoLambda>(ctx, lambda->Pos())
-                        .Args({"stream"})
-                        .Body<TCoExtractMembers>()
-                            .Input<TExprApplier>()
-                                .Apply(TCoLambda(lambda))
-                                .With(0, "stream")
+                    if (isFill) {
+                        lambda = Build<TCoLambda>(ctx, lambda->Pos())
+                            .Args({})
+                            .Body<TCoExtractMembers>()
+                                .Input<TExprApplier>()
+                                    .Apply(TCoLambda(lambda))
+                                .Build()
+                                .Members(filterColumns[0])
                             .Build()
-                            .Members(filterColumns[0])
-                        .Build()
-                        .Done().Ptr();
+                            .Done().Ptr();
+                    } else {
+                        lambda = Build<TCoLambda>(ctx, lambda->Pos())
+                            .Args({"stream"})
+                            .Body<TCoExtractMembers>()
+                                .Input<TExprApplier>()
+                                    .Apply(TCoLambda(lambda))
+                                    .With(0, "stream")
+                                .Build()
+                                .Members(filterColumns[0])
+                            .Build()
+                            .Done().Ptr();
+                    }
                 } else {
                     auto varType = ExpandType(lambda->Pos(), *GetSeqItemType(node.Child(lambdaIdx)->GetTypeAnn()), ctx);
                     TVector<TExprBase> visitArgs;
@@ -1081,27 +1075,50 @@ private:
                         }
                     }
 
-                    lambda = Build<TCoLambda>(ctx, lambda->Pos())
-                        .Args({"stream"})
-                        .Body<TCoFlatMapBase>()
-                            .CallableName(hasOtherSortedOuts ? TCoOrderedFlatMap::CallableName() : TCoFlatMap::CallableName())
-                            .Input<TExprApplier>()
-                                .Apply(TCoLambda(lambda))
-                                .With(0, "stream")
-                            .Build()
-                            .Lambda()
-                                .Args({"var"})
-                                .Body<TCoJust>()
-                                    .Input<TCoVisit>()
-                                        .Input("var")
-                                        .FreeArgs()
-                                            .Add(visitArgs)
+                    if (isFill) {
+                        lambda = Build<TCoLambda>(ctx, lambda->Pos())
+                            .Args({})
+                            .Body<TCoFlatMapBase>()
+                                .CallableName(hasOtherSortedOuts ? TCoOrderedFlatMap::CallableName() : TCoFlatMap::CallableName())
+                                .Input<TExprApplier>()
+                                    .Apply(TCoLambda(lambda))
+                                .Build()
+                                .Lambda()
+                                    .Args({"var"})
+                                    .Body<TCoJust>()
+                                        .Input<TCoVisit>()
+                                            .Input("var")
+                                            .FreeArgs()
+                                                .Add(visitArgs)
+                                            .Build()
                                         .Build()
                                     .Build()
                                 .Build()
                             .Build()
-                        .Build()
-                        .Done().Ptr();
+                            .Done().Ptr();
+                    } else {
+                        lambda = Build<TCoLambda>(ctx, lambda->Pos())
+                            .Args({"stream"})
+                            .Body<TCoFlatMapBase>()
+                                .CallableName(hasOtherSortedOuts ? TCoOrderedFlatMap::CallableName() : TCoFlatMap::CallableName())
+                                .Input<TExprApplier>()
+                                    .Apply(TCoLambda(lambda))
+                                    .With(0, "stream")
+                                .Build()
+                                .Lambda()
+                                    .Args({"var"})
+                                    .Body<TCoJust>()
+                                        .Input<TCoVisit>()
+                                            .Input("var")
+                                            .FreeArgs()
+                                                .Add(visitArgs)
+                                            .Build()
+                                        .Build()
+                                    .Build()
+                                .Build()
+                            .Build()
+                            .Done().Ptr();
+                    }
                 }
             }
         }
@@ -1110,41 +1127,27 @@ private:
             res = ctx.ChangeChild(res ? *res : node, lambdaIdx, std::move(lambda));
         }
 
-        if (op.Maybe<TYtTransientOpBase>()) {
+        if (TYtMerge::Match(&node) || TYtSort::Match(&node)) {
             auto trOp = TYtTransientOpBase(&node);
-            if (!hasOtherSortedOuts && NYql::HasSetting(trOp.Settings().Ref(), EYtSettingType::Ordered)) {
-                res = ctx.ChangeChild(res ? *res : node, TYtTransientOpBase::idx_Settings,
-                    NYql::RemoveSetting(trOp.Settings().Ref(), EYtSettingType::Ordered, ctx));
+            // Push Unordered and columns to operation inputs
+            bool changedInput = false;
+            TVector<TYtSection> updatedSections;
+            for (size_t i = 0; i < trOp.Input().Size(); ++i) {
+                auto section = trOp.Input().Item(i);
+                section = MakeUnorderedSection(section, ctx);
+                if (section.Raw() != trOp.Input().Item(i).Raw()) {
+                    changedInput = true;
+                }
+                if (filterColumns[i]) {
+                    section = UpdateInputFields(section, TExprBase(filterColumns[i]), ctx);
+                    changedInput = true;
+                }
+                updatedSections.push_back(section);
             }
 
-            if (TYtMap::Match(&node)) {
-                Fill(filterColumns.begin(), filterColumns.end(), TExprNode::TPtr());
-                filterColumns.resize(trOp.Input().Size());
-            }
-
-            if (!TYtReduce::Match(&node)) {
-                // Push Unordered and columns to operation inputs
-                bool changedInput = false;
-                TVector<TYtSection> updatedSections;
-                for (size_t i = 0; i < trOp.Input().Size(); ++i) {
-                    auto section = trOp.Input().Item(i);
-                    if (!hasOtherSortedOuts) {
-                        section = MakeUnorderedSection(section, ctx);
-                        if (section.Raw() != trOp.Input().Item(i).Raw()) {
-                            changedInput = true;
-                        }
-                    }
-                    if (filterColumns[i]) {
-                        section = UpdateInputFields(section, TExprBase(filterColumns[i]), ctx);
-                        changedInput = true;
-                    }
-                    updatedSections.push_back(section);
-                }
-
-                if (changedInput) {
-                    res = ctx.ChangeChild(res ? *res : node, TYtTransientOpBase::idx_Input,
-                        Build<TYtSectionList>(ctx, trOp.Pos()).Add(updatedSections).Done().Ptr());
-                }
+            if (changedInput) {
+                res = ctx.ChangeChild(res ? *res : node, TYtTransientOpBase::idx_Input,
+                    Build<TYtSectionList>(ctx, trOp.Pos()).Add(updatedSections).Done().Ptr());
             }
         }
 

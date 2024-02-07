@@ -27,6 +27,9 @@ struct ColumnMapping
     /// Whether we have any columns that are not read from file at all,
     /// and must be always initialized with defaults.
     bool have_always_default_columns{false};
+
+    /// The list of column names in input data. Needed for better exception messages.
+    std::vector<String> names_of_columns;
 };
 
 using ColumnMappingPtr = std::shared_ptr<ColumnMapping>;

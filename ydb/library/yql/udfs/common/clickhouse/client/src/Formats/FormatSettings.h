@@ -1,6 +1,7 @@
 #pragma once
 
 #include <common/types.h>
+#include <Core/Defines.h>
 
 
 namespace NDB
@@ -25,12 +26,19 @@ struct FormatSettings
 
     bool skip_unknown_fields = false;
     bool with_names_use_header = false;
+    bool with_types_use_header = false;
     bool write_statistics = true;
     bool import_nested_json = false;
     bool null_as_default = true;
     bool decimal_trailing_zeros = false;
     String date_time_format;
     String timestamp_format;
+
+    UInt64 max_rows_to_read_for_schema_inference = 100;
+
+    bool try_infer_integers = false;
+    bool try_infer_dates = false;
+    bool try_infer_datetimes = false;
 
     enum class DateTimeFormat {
         Unspecified,
@@ -65,10 +73,23 @@ struct FormatSettings
         UnixTimestamp
     };
 
+    enum class EscapingRule
+    {
+        None,
+        Escaped,
+        Quoted,
+        CSV,
+        JSON,
+        XML,
+        Raw
+    };
+
     DateTimeOutputFormat date_time_output_format = DateTimeOutputFormat::Simple;
 
     UInt64 input_allow_errors_num = 0;
     Float32 input_allow_errors_ratio = 0;
+
+    UInt64 max_parser_depth = DBMS_DEFAULT_MAX_PARSER_DEPTH;
 
     struct
     {
@@ -85,6 +106,9 @@ struct FormatSettings
         bool allow_missing_fields = false;
         String string_column_pattern;
     } avro;
+
+    String bool_true_representation = "true";
+    String bool_false_representation = "false";
 
     struct CSV
     {
@@ -106,7 +130,7 @@ struct FormatSettings
         std::string row_after_delimiter;
         std::string row_between_delimiter;
         std::string field_delimiter;
-        std::string escaping_rule;
+        EscapingRule escaping_rule = EscapingRule::Escaped;
     } custom;
 
     struct
@@ -165,7 +189,7 @@ struct FormatSettings
     struct
     {
         std::string regexp;
-        std::string escaping_rule;
+        EscapingRule escaping_rule = EscapingRule::Raw;
         bool skip_unmatched = false;
     } regexp;
 

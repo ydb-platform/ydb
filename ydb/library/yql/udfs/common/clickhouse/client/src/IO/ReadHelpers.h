@@ -176,6 +176,15 @@ inline void assertChar(char symbol, ReadBuffer & buf)
     ++buf.position();
 }
 
+inline bool checkCharCaseInsensitive(char c, ReadBuffer & buf)
+{
+    char a;
+    if (!buf.peek(a) || !equalsCaseInsensitive(a, c))
+        return false;
+    buf.ignore();
+    return true;
+}
+
 inline void assertString(const String & s, ReadBuffer & buf)
 {
     assertString(s.c_str(), buf);
@@ -507,6 +516,9 @@ void readStringUntilWhitespace(String & s, ReadBuffer & buf);
   */
 void readCSVString(String & s, ReadBuffer & buf, const FormatSettings::CSV & settings);
 
+/// Differ from readCSVString in that it doesn't remove quotes around field if any.
+void readCSVField(String & s, ReadBuffer & buf, const FormatSettings::CSV & settings);
+
 
 /// Read and append result to array of characters.
 template <typename Vector>
@@ -542,6 +554,9 @@ bool tryReadJSONStringInto(Vector & s, ReadBuffer & buf)
 {
     return readJSONStringInto<Vector, bool>(s, buf);
 }
+
+template <typename Vector>
+bool tryReadQuotedStringInto(Vector & s, ReadBuffer & buf);
 
 template <typename Vector>
 void readStringUntilWhitespaceInto(Vector & s, ReadBuffer & buf);
@@ -1329,5 +1344,9 @@ struct PcgDeserializer
         rng.state_ = state;
     }
 };
+
+void readQuotedFieldIntoString(String & s, ReadBuffer & buf);
+
+void readJSONFieldIntoString(String & s, ReadBuffer & buf);
 
 }

@@ -14,8 +14,6 @@
 #include <Processors/Formats/Impl/ParallelFormattingOutputFormat.h>
 #include <Poco/URI.h>
 
-#include <IO/ReadHelpers.h>
-
 namespace NDB
 {
 
@@ -110,6 +108,8 @@ FormatSettings getFormatSettings(ContextPtr context, const Settings & settings)
     format_settings.arrow.low_cardinality_as_dictionary = settings.output_format_arrow_low_cardinality_as_dictionary;
     format_settings.arrow.import_nested = settings.input_format_arrow_import_nested;
     format_settings.orc.import_nested = settings.input_format_orc_import_nested;
+    format_settings.msgpack.number_of_columns = settings.input_format_msgpack_number_of_columns;
+    format_settings.max_rows_to_read_for_schema_inference = settings.input_format_max_rows_to_read_for_schema_inference;
 
     /// Validate avro_schema_registry_url with RemoteHostFilter when non-empty and in Server context
     if (format_settings.schema.is_server)
@@ -363,6 +363,31 @@ OutputFormatPtr FormatFactory::getOutputFormat(
     return format;
 }
 
+SchemaReaderPtr FormatFactory::getSchemaReader(
+    const String & name,
+    ReadBuffer & buf,
+    const FormatSettings & _format_settings) const
+{
+    const auto & schema_reader_creator = dict.at(name).schema_reader_creator;
+    if (!schema_reader_creator)
+        throw Exception("FormatFactory: Format " + name + " doesn't support schema inference.", ErrorCodes::LOGICAL_ERROR);
+
+    return schema_reader_creator(buf, _format_settings, nullptr);
+}
+
+ExternalSchemaReaderPtr FormatFactory::getExternalSchemaReader(
+    const String & name,
+    ContextPtr context,
+    const std::optional<FormatSettings> & _format_settings) const
+{
+    const auto & external_schema_reader_creator = dict.at(name).external_schema_reader_creator;
+    if (!external_schema_reader_creator)
+        throw Exception("FormatFactory: Format " + name + " doesn't support schema inference.", ErrorCodes::LOGICAL_ERROR);
+
+    auto format_settings = _format_settings ? *_format_settings : getFormatSettings(context);
+    return external_schema_reader_creator(format_settings);
+}
+
 
 void FormatFactory::registerInputFormat(const String & name, InputCreator input_creator)
 {
@@ -412,6 +437,22 @@ void FormatFactory::registerFileSegmentationEngine(const String & name, FileSegm
     target = std::move(file_segmentation_engine);
 }
 
+void FormatFactory::registerSchemaReader(const String & name, SchemaReaderCreator schema_reader_creator)
+{
+    auto & target = dict[name].schema_reader_creator;
+    if (target)
+        throw Exception("FormatFactory: Schema reader " + name + " is already registered", ErrorCodes::LOGICAL_ERROR);
+    target = std::move(schema_reader_creator);
+}
+
+void FormatFactory::registerExternalSchemaReader(const String & name, ExternalSchemaReaderCreator external_schema_reader_creator)
+{
+    auto & target = dict[name].external_schema_reader_creator;
+    if (target)
+        throw Exception("FormatFactory: Schema reader " + name + " is already registered", ErrorCodes::LOGICAL_ERROR);
+    target = std::move(external_schema_reader_creator);
+}
+
 
 void FormatFactory::markOutputFormatSupportsParallelFormatting(const String & name)
 {
@@ -435,6 +476,23 @@ bool FormatFactory::checkIfFormatIsColumnOriented(const String & name)
 {
     const auto & target = getCreators(name);
     return target.is_column_oriented;
+}
+
+bool FormatFactory::checkIfFormatHasSchemaReader(const String & name)
+{
+    const auto & target = getCreators(name);
+    return bool(target.schema_reader_creator);
+}
+
+bool FormatFactory::checkIfFormatHasExternalSchemaReader(const String & name)
+{
+    const auto & target = getCreators(name);
+    return bool(target.external_schema_reader_creator);
+}
+
+bool FormatFactory::checkIfFormatHasAnySchemaReader(const String & name)
+{
+    return checkIfFormatHasSchemaReader(name) || checkIfFormatHasExternalSchemaReader(name);
 }
 
 FormatFactory & FormatFactory::instance()

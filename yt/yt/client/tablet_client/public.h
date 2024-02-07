@@ -186,6 +186,7 @@ DEFINE_ENUM(ETableReplicaStatus,
 DEFINE_ENUM(ETabletActionKind,
     ((Move)                     (0))
     ((Reshard)                  (1))
+    ((SmoothMove)               (2))
 );
 
 DEFINE_ENUM(ETabletActionState,
@@ -200,6 +201,10 @@ DEFINE_ENUM(ETabletActionState,
     ((Completed)                (7))
     ((Failing)                  (8))
     ((Failed)                   (9))
+
+    ((MountingAuxiliary)        (11))
+    ((WaitingForSmoothMove)     (12))
+    ((AbortingSmoothMove)       (13))
 );
 
 DEFINE_ENUM(ETabletServiceFeatures,

@@ -17,8 +17,11 @@ Y_UNIT_TEST_SUITE(TSchemeShardAllocatePQTest) {
     }
 
     Y_UNIT_TEST(AllocatePQ) { //+
+        TTestEnvOptions opts;
+        opts.EnablePQConfigTransactionsAtSchemeShard(false);
+
         TTestBasicRuntime runtime;
-        TTestEnv env(runtime);
+        TTestEnv env(runtime, opts);
         ui64 txId = 1000;
 
         TestMkDir(runtime, ++txId, "/MyRoot", "DirA");

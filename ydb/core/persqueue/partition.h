@@ -24,6 +24,7 @@
 #include <util/generic/set.h>
 
 #include <variant>
+#include <ydb/library/dbgtrace/debug_trace.h>
 
 namespace NKikimr::NPQ {
 
@@ -404,6 +405,7 @@ private:
 
     STFUNC(StateInit)
     {
+        DBGTRACE("TPartition::StateInit");
         NPersQueue::TCounterTimeKeeper keeper(TabletCounters.Cumulative()[COUNTER_PQ_TABLET_CPU_USAGE]);
 
         ALOG_TRACE(NKikimrServices::PERSQUEUE, EventStr("StateInit", ev));
@@ -429,7 +431,9 @@ private:
             HFuncTraced(NReadQuoterEvents::TEvAccountQuotaCountersUpdated, Handle);
             HFuncTraced(NReadQuoterEvents::TEvQuotaCountersUpdated, Handle);
         default:
+            DBGTRACE_LOG("route to Initializer");
             if (!Initializer.Handle(ev)) {
+                DBGTRACE_LOG("unexpected event: " << EventStr("", ev));
                 ALOG_ERROR(NKikimrServices::PERSQUEUE, "Unexpected " << EventStr("StateInit", ev));
             }
             break;
@@ -438,6 +442,8 @@ private:
 
     STFUNC(StateIdle)
     {
+        DBGTRACE("TPartition::StateIdle");
+        DBGTRACE_LOG("EventType=" << ev->GetTypeName());
         NPersQueue::TCounterTimeKeeper keeper(TabletCounters.Cumulative()[COUNTER_PQ_TABLET_CPU_USAGE]);
 
         ALOG_TRACE(NKikimrServices::PERSQUEUE, EventStr("StateIdle", ev));
@@ -486,6 +492,7 @@ private:
             HFuncTraced(NReadQuoterEvents::TEvAccountQuotaCountersUpdated, Handle);
             HFuncTraced(NReadQuoterEvents::TEvQuotaCountersUpdated, Handle);
         default:
+            DBGTRACE_LOG("unexpected event: " << EventStr("", ev));
             ALOG_ERROR(NKikimrServices::PERSQUEUE, "Unexpected " << EventStr("StateIdle", ev));
             break;
         };
@@ -493,6 +500,7 @@ private:
 
     STFUNC(StateWrite)
     {
+        DBGTRACE("TPartition::StateWrite");
         NPersQueue::TCounterTimeKeeper keeper(TabletCounters.Cumulative()[COUNTER_PQ_TABLET_CPU_USAGE]);
 
         ALOG_TRACE(NKikimrServices::PERSQUEUE, EventStr("StateWrite", ev));
@@ -542,6 +550,7 @@ private:
             HFuncTraced(NReadQuoterEvents::TEvAccountQuotaCountersUpdated, Handle);
             HFuncTraced(NReadQuoterEvents::TEvQuotaCountersUpdated, Handle);
         default:
+            DBGTRACE_LOG("unexpected event: " << EventStr("", ev));
             ALOG_ERROR(NKikimrServices::PERSQUEUE, "Unexpected " << EventStr("StateWrite", ev));
             break;
         };

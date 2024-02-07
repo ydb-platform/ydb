@@ -732,11 +732,13 @@ void TPartition::HandleOnWrite(TEvPQ::TEvDeregisterMessageGroup::TPtr& ev, const
 }
 
 void TPartition::HandleOnIdle(TEvPQ::TEvSplitMessageGroup::TPtr& ev, const TActorContext& ctx) {
+    DBGTRACE("TPartition::HandleOnIdle(TEvPQ::TEvSplitMessageGroup)");
     HandleOnWrite(ev, ctx);
     HandleWrites(ctx);
 }
 
 void TPartition::HandleOnWrite(TEvPQ::TEvSplitMessageGroup::TPtr& ev, const TActorContext& ctx) {
+    DBGTRACE("TPartition::HandleOnWrite(TEvPQ::TEvSplitMessageGroup)");
     PQ_LOG_T("TPartition::HandleOnWrite TEvSplitMessageGroup.");
 
     if (ev->Get()->Deregistrations.size() > 1) {

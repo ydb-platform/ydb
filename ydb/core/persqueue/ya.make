@@ -61,6 +61,7 @@ PEERDIR(
     ydb/library/persqueue/topic_parser
     ydb/public/lib/base
     ydb/public/sdk/cpp/client/ydb_persqueue_core
+    ydb/library/dbgtrace
 )
 
 END()

@@ -633,6 +633,7 @@ NSchemeShardUT_Private::TTestEnv::TTestEnv(TTestActorRuntime &runtime, ui32 ncha
 }
 
 void NSchemeShardUT_Private::TTestEnv::SetupLogging(TTestActorRuntime &runtime) {
+    runtime.SetLogPriority(NKikimrServices::KEYVALUE, NActors::NLog::PRI_DEBUG);
     runtime.SetLogPriority(NKikimrServices::PERSQUEUE, NActors::NLog::PRI_ERROR);
     runtime.SetLogPriority(NKikimrServices::BS_CONTROLLER, NActors::NLog::PRI_ERROR);
     runtime.SetLogPriority(NKikimrServices::PIPE_CLIENT, NActors::NLog::PRI_ERROR);

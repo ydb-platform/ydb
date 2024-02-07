@@ -3,6 +3,7 @@
 #include "mkql_match_recognize_matched_vars.h"
 #include "../computation/mkql_computation_node_holders.h"
 #include "../computation/mkql_computation_node_impl.h"
+#include <ydb/library/yql/minikql/comp_nodes/mkql_saveload.h>
 #include <ydb/library/yql/core/sql_types/match_recognize.h>
 #include <util/generic/hash_table.h>
 #include <util/generic/string.h>
@@ -327,6 +328,12 @@ public:
 
     size_t GetActiveStatesCount() const {
         return ActiveStates.size();
+    }
+
+    void Save(TString& out) {
+    }
+
+    void Load(TStringBuf& in) {
     }
 
 private:

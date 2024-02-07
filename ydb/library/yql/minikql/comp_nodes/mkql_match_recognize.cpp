@@ -3,6 +3,7 @@
 #include "mkql_match_recognize_measure_arg.h"
 #include "mkql_match_recognize_nfa.h"
 #include <ydb/library/yql/core/sql_types/match_recognize.h>
+#include <ydb/library/yql/minikql/comp_nodes/mkql_saveload.h>
 #include <ydb/library/yql/minikql/computation/mkql_computation_node_impl.h>
 #include <ydb/library/yql/minikql/computation/mkql_computation_node_holders.h>
 #include <ydb/library/yql/minikql/computation/mkql_computation_node_holders_codegen.h>
@@ -16,6 +17,8 @@
 namespace NKikimr::NMiniKQL {
 
 namespace NMatchRecognize {
+
+constexpr ui32 StateVersion = 1;
 
 enum class EOutputColumnSource {PartitionKey, Measure};
 using TOutputColumnOrder = std::vector<std::pair<EOutputColumnSource, size_t>, TMKQLAllocator<std::pair<EOutputColumnSource, size_t>>>;
@@ -34,6 +37,10 @@ struct TMatchRecognizeProcessorParameters {
     TMeasureInputColumnOrder  MeasureInputColumnOrder;
     TComputationNodePtrVector Measures;
     TOutputColumnOrder        OutputColumnOrder;
+    // 
+    TType* const              StateType;
+    TMutableObjectOverBoxedValue<TValuePackerBoxed> Packer;
+
 };
 
 class TBackTrackingMatchRecognize {
@@ -71,6 +78,7 @@ public:
     }
 
     bool ProcessInputRow(NUdf::TUnboxedValue&& row, TComputationContext& ctx) {
+        std::cerr << "TBackTrackingMatchRecognize::ProcessInputRow()" << std::endl;
         Y_UNUSED(ctx);
         Rows.Append(std::move(row));
         return false;
@@ -111,6 +119,7 @@ public:
             for (size_t v = 0; v != Parameters.Defines.size(); ++v) {
                 const auto &d = Parameters.Defines[v]->GetValue(ctx);
                 if (d && d.GetOptionalValue().Get<bool>()) {
+                    std::cerr << "Defines return true "<< std::endl;
                     Extend(CurMatchedVars[v], TRange{i});
                 }
             }
@@ -147,6 +156,7 @@ public:
         const TContainerCacheOnContext& cache
     )
     : PartitionKey(std::move(partitionKey))
+    , Rows(parameters)
     , Parameters(parameters)
     , Nfa(nfaTransitions, parameters.MatchedVarsArg, parameters.Defines)
     , Cache(cache)
@@ -154,11 +164,17 @@ public:
     }
 
     bool ProcessInputRow(NUdf::TUnboxedValue&& row, TComputationContext& ctx) {
+        std::cerr << "class TStreamingMatchRecognize::ProcessInputRow()" << std::endl;
         Parameters.InputDataArg->SetValue(ctx, ctx.HolderFactory.Create<TListValue<TSparseList>>(Rows));
         Parameters.CurrentRowIndexArg->SetValue(ctx, NUdf::TUnboxedValuePod(Rows.Size()));
         Nfa.ProcessRow(Rows.Append(std::move(row)), ctx);
+        return HasMatched();
+    }
+
+    bool HasMatched() {
         return Nfa.HasMatched();
     }
+
     NUdf::TUnboxedValue GetOutputIfReady(TComputationContext& ctx) {
         auto match = Nfa.GetMatched();
         if (!match.has_value())
@@ -189,6 +205,21 @@ public:
         Y_UNUSED(ctx);
         return false;
     }
+
+    void Save(TString& out) {
+        std::cerr << "TStreamingMatchRecognize::Save()" << std::endl;
+        Rows.Save(out);
+        Nfa.Save(out);
+        WriteUi64(out, MatchNumber);
+    }
+
+    void Load(TStringBuf& in) {
+        std::cerr << "TStreamingMatchRecognize::Load()" << std::endl;
+        Rows.Load(in);
+        Nfa.Load(in);
+        MatchNumber = ReadUi64(in);
+    }
+
 private:
     const NUdf::TUnboxedValue PartitionKey;
     const TMatchRecognizeProcessorParameters& Parameters;
@@ -225,6 +256,8 @@ public:
     NUdf::TUnboxedValue Save() const override {
         std::cerr << "TStateForNonInterleavedPartitions::Save()" << std::endl;
         TString out;
+
+
         auto strRef = NUdf::TStringRef(out.data(), out.size());
         return MakeString(strRef);
     }
@@ -234,6 +267,7 @@ public:
     }
 
     bool ProcessInputRow(NUdf::TUnboxedValue&& row, TComputationContext& ctx) {
+        std::cerr << "TStateForNonInterleavedPartitions::ProcessInputRow()" << std::endl;
         MKQL_ENSURE(not DelayedRow, "Internal logic error"); //we're finalizing previous partition
         InputRowArg->SetValue(ctx, NUdf::TUnboxedValue(row));
         auto partitionKey = PartitionKey->GetValue(ctx);
@@ -329,15 +363,57 @@ public:
     NUdf::TUnboxedValue Save() const override {
         std::cerr << "TStateForInterleavedPartitions::Save()" << std::endl;
         TString out;
+        WriteUi32(out, StateVersion);
+        WriteUi32(out, Partitions.size());
+        for (const auto& [key, state] : Partitions) {
+            WriteString(out, key);
+            state->Save(out);
+            std::cerr << "partitions.HasMatched() " << state->HasMatched() << std::endl;
+        }
+
+        // WriteUi32(out, HasReadyOutput.size());
+        // for (const auto it : HasReadyOutput) {
+        //     auto& key = it->first;
+        //     WriteString(out, key);
+        // }
+
+        std::cerr << "HasReadyOutput size " << HasReadyOutput.size() << std::endl;
+        
         auto strRef = NUdf::TStringRef(out.data(), out.size());
         return MakeString(strRef);
     }
 
     void Load(const NUdf::TStringRef& state) override {
         std::cerr << "TStateForInterleavedPartitions::Load()" << std::endl;
+
+        TStringBuf in(state.Data(), state.Size());
+
+        const auto stateVersion = ReadUi32(in);
+        if (stateVersion == 1) {
+            Partitions.clear();
+            auto partitionsSize = ReadUi32(in);
+            for (size_t i = 0; i < partitionsSize; ++i) {
+                auto key = ReadString(in);
+                auto pair = Partitions.emplace(key, std::make_unique<TStreamingMatchRecognize>(
+                    NYql::NUdf::TUnboxedValuePod(NYql::NUdf::TStringValue(key)),
+                    Parameters,
+                    NfaTransitionGraph,
+                    Cache));
+                (pair.first)->second->Load(in);
+            }
+
+            std::cerr << "partitionsSize " << partitionsSize << std::endl;
+            for (auto it = Partitions.begin(); it != Partitions.end(); ++it) {
+                std::cerr << "it->second->HasMatched() " << it->second->HasMatched() << std::endl;
+                if (it->second->HasMatched()) {
+                    HasReadyOutput.push(it);
+                }
+            }
+        }
     }
 
     bool ProcessInputRow(NUdf::TUnboxedValue&& row, TComputationContext& ctx) {
+        std::cerr << "TStateForInterleavedPartitions::ProcessInputRow()" << std::endl;
         auto partition = GetPartitionHandler(row, ctx);
         if (partition->second->ProcessInputRow(std::move(row), ctx)) {
             HasReadyOutput.push(partition);
@@ -375,6 +451,7 @@ private:
         InputRowArg->SetValue(ctx, NUdf::TUnboxedValue(row));
         auto partitionKey = PartitionKey->GetValue(ctx);
         const auto packedKey = PartitionKeyPacker.Pack(partitionKey);
+        std::cerr << "partitionKey " << TString(packedKey)<< std::endl;
         if (const auto it = Partitions.find(TString(packedKey)); it != Partitions.end()) {
             return it;
         } else {
@@ -418,6 +495,7 @@ public:
     , PartitionKeyType(partitionKeyType)
     , Parameters(parameters)
     , Cache(mutables)
+    , StateType(stateType)
     {}
 
     NUdf::TUnboxedValue DoCalculate(NUdf::TUnboxedValue &stateValue, TComputationContext &ctx) const {
@@ -448,9 +526,11 @@ public:
             }
             auto item = InputFlow->GetValue(ctx);
             if (item.IsFinish()) {
+                std::cerr << "call ProcessEndOfData()" << std::endl;
                 state->ProcessEndOfData(ctx);
                 continue;
             } else if (item.IsSpecial()) {
+                std::cerr << "IsSpecial" << std::endl;
                 return item;
             }
             std::cerr << "ProcessInputRow2" << std::endl;
@@ -484,6 +564,8 @@ private:
     const TMatchRecognizeProcessorParameters Parameters;
     TNfaTransitionGraph::TPtr NfaTransitionGraph;
     const TContainerCacheOnContext Cache;
+    
+    
 };
 
 TOutputColumnOrder GetOutputColumnOrder(TRuntimeNode partitionKyeColumnsIndexes, TRuntimeNode measureColumnsIndexes) {
@@ -617,6 +699,7 @@ IComputationNode* WrapMatchRecognizeCore(TCallable& callable, const TComputation
     MKQL_ENSURE(callable.GetInputsCount() == inputIndex, "Wrong input count");
 
     const auto& [vars, varsLookup] = ConvertListOfStrings(varNames);
+    auto* rowType = AS_TYPE(TStructType, AS_TYPE(TFlowType, inputFlow.GetStaticType())->GetItemType());
 
     const auto parameters = TMatchRecognizeProcessorParameters {
         static_cast<IComputationExternalNode*>(LocateNode(ctx.NodeLocator, *inputDataArg.GetNode()))
@@ -633,6 +716,8 @@ IComputationNode* WrapMatchRecognizeCore(TCallable& callable, const TComputation
         )
         , ConvertVectorOfCallables(measures, ctx)
         , GetOutputColumnOrder(partitionColumnIndexes, measureColumnIndexes)
+        , rowType
+        , ctx.Mutables
     };
     if (AS_VALUE(TDataLiteral, streamingMode)->AsValue().Get<bool>()) {
         return new TMatchRecognizeWrapper<TStateForInterleavedPartitions>(ctx.Mutables

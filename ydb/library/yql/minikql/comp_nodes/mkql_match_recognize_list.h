@@ -2,6 +2,7 @@
 #include <ydb/library/yql/minikql/defs.h>
 #include <ydb/library/yql/minikql/computation/mkql_computation_node_impl.h>
 #include <ydb/library/yql/minikql/computation/mkql_computation_node_holders.h>
+#include <ydb/library/yql/minikql/comp_nodes/mkql_saveload.h>
 #include <ydb/library/yql/public/udf/udf_value.h>
 #include <unordered_map>
 
@@ -95,6 +96,10 @@ class TSparseList {
     public:
         using TPtr = TIntrusivePtr<TContainer>;
 
+        TContainer(const TMatchRecognizeProcessorParameters& parameters)
+            : Parameters(parameters) {
+        }
+
         void Add(size_t index, NUdf::TUnboxedValue&& value) {
             const auto& [iter, newOne] = Storage.emplace(index, TItem{std::move(value), 1});
             MKQL_ENSURE(newOne, "Internal logic error");
@@ -131,6 +136,27 @@ class TSparseList {
             }
         }
 
+        void Save(TString& out) {
+            std::cerr << "TContainer::Save()" << std::endl;
+            WriteUi64(out, Storage.size());
+            for (const auto& [key, item]: Storage) {
+                WriteUi64(out, key);
+                //   WriteUi64(out, item.Value); TODO
+                WriteUnboxedValue(out, Parameters.Packer.RefMutableObject(Ctx, false, Parameters.StateType), item.Value);
+                WriteUi64(out, item.LockCount);
+            }
+        }
+
+        void Load(TStringBuf& in) {
+            std::cerr << "TContainer::Load()" << std::endl;
+            auto size = ReadUi64(in);
+            for (size_t i =0; i < size; ++i) {
+                auto key = ReadUi64(in);
+                auto lockCount = ReadUi64(in);
+                Storage.emplace(key, TItem{NUdf::TUnboxedValue{}, lockCount});
+            }
+        }
+
     private:
         //TODO consider to replace hash table with contiguous chunks
         using TAllocator = TMKQLAllocator<std::pair<const size_t, TItem>, EMemorySubPool::Temporary>;
@@ -140,6 +166,7 @@ class TSparseList {
             std::hash<size_t>,
             std::equal_to<size_t>,
             TAllocator> Storage;
+        const TMatchRecognizeProcessorParameters& Parameters;
     };
     using TContainerPtr = TContainer::TPtr;
 
@@ -272,6 +299,11 @@ public:
         size_t ToIndex;
     };
 
+    TSparseList(const TMatchRecognizeProcessorParameters& parameters)
+        : Parameters(parameters)
+        , Container(MakeIntrusive<TContainer>(parameters)) {
+    }
+
 public:
     TRange Append(NUdf::TUnboxedValue&& value) {
         const auto index = ListSize++;
@@ -297,9 +329,22 @@ public:
         return Size() == 0;
     }
 
+    void Save(TString& out) {
+        std::cerr << "TSparseList::Save()" << std::endl;
+        Container->Save(out);
+        WriteUi64(out, ListSize);
+    }
+
+    void Load(TStringBuf& in) {
+        std::cerr << "TSparseList::Load()" << std::endl;
+        Container->Load(in);
+        ListSize = ReadUi64(in);
+    }
+
 private:
-    TContainerPtr Container = MakeIntrusive<TContainer>();
+    TContainerPtr Container;
     size_t ListSize = 0; //impl: max index ever stored + 1
+    const TMatchRecognizeProcessorParameters& Parameters;
 };
 
 template<typename L>

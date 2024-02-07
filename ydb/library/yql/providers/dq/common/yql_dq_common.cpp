@@ -1,5 +1,4 @@
 #include "yql_dq_common.h"
-#include "yql_dq_settings.h"
 
 #include <ydb/library/yql/core/issue/protos/issue_id.pb.h>
 
@@ -13,15 +12,6 @@
 #include <ydb/library/yql/sql/settings/translation_settings.h>
 
 #include <util/string/split.h>
-
-#include <ydb/library/yql/dq/opt/dq_opt_log.h>
-
-#include <ydb/library/yql/utils/log/log.h>
-
-#include <ydb/library/yql/core/expr_nodes_gen/yql_expr_nodes_gen.h>
-#include <ydb/library/yql/providers/common/provider/yql_provider_names.h>
-#include <ydb/library/yql/dq/integration/yql_dq_integration.h>
-#include <ydb/library/yql/minikql/mkql_program_builder.h>
 
 namespace NYql {
 namespace NCommon {

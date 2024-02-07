@@ -4210,7 +4210,9 @@ TNodePtr TSqlTranslation::ForStatement(const TRule_for_stmt& stmt) {
     }
 
     itemArgName = PushNamedAtom(itemArgNamePos, itemArgName);
+    ++Ctx.ParallelModeCount;
     auto bodyNode = DoStatement(stmt.GetRule_do_stmt7(), true, { itemArgName });
+    --Ctx.ParallelModeCount;
     PopNamedNode(itemArgName);
     if (!bodyNode) {
         return{};

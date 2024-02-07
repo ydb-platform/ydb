@@ -100,6 +100,11 @@ bool TSqlQuery::Statement(TVector<TNodePtr>& blocks, const TRule_sql_stmt_core& 
             break;
         }
         case TRule_sql_stmt_core::kAltSqlStmtCore2: {
+            if (Ctx.ParallelModeCount > 0) {
+                Error() << humanStatementName << " statement is not supported in parallel mode";
+                return false;
+            }
+
             Ctx.BodyPart();
             TSqlSelect select(Ctx, Mode);
             TPosition pos;
@@ -425,6 +430,11 @@ bool TSqlQuery::Statement(TVector<TNodePtr>& blocks, const TRule_sql_stmt_core& 
             break;
         }
         case TRule_sql_stmt_core::kAltSqlStmtCore21: {
+            if (Ctx.ParallelModeCount > 0) {
+                Error() << humanStatementName << " statement is not supported in parallel mode";
+                return false;
+            }
+
             Ctx.BodyPart();
             TSqlValues values(Ctx, Mode);
             TPosition pos;

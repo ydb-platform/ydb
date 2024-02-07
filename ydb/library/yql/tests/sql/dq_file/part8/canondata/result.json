@@ -50,23 +50,26 @@
     "test.test[action-nested_eval-default.txt-Results]": [],
     "test.test[action-parallel_for-default.txt-Analyze]": [
         {
-            "checksum": "e4a7f738cecdca14d6748330e1ee6ec0",
-            "size": 5913,
-            "uri": "https://{canondata_backend}/1936273/2681640d5b010fded34103a5bad09c955d96632e/resource.tar.gz#test.test_action-parallel_for-default.txt-Analyze_/plan.txt"
+            "checksum": "4a219d8f559a62f5a7a92c0e72dc36fd",
+            "size": 9893,
+            "uri": "https://{canondata_backend}/1942415/24f05a669ac876daf55df920342a0776d0748790/resource.tar.gz#test.test_action-parallel_for-default.txt-Analyze_/plan.txt"
+        },
+        {
+            "uri": "file://test.test_action-parallel_for-default.txt-Analyze_/extracted"
         }
     ],
     "test.test[action-parallel_for-default.txt-Debug]": [
         {
-            "checksum": "6e674e25048d71c4c90433359b136f10",
-            "size": 1725,
-            "uri": "https://{canondata_backend}/1936273/2681640d5b010fded34103a5bad09c955d96632e/resource.tar.gz#test.test_action-parallel_for-default.txt-Debug_/opt.yql_patched"
+            "checksum": "d89d8c979433b118dc38d1383e73cfd4",
+            "size": 3368,
+            "uri": "https://{canondata_backend}/1942415/24f05a669ac876daf55df920342a0776d0748790/resource.tar.gz#test.test_action-parallel_for-default.txt-Debug_/opt.yql_patched"
         }
     ],
     "test.test[action-parallel_for-default.txt-Plan]": [
         {
-            "checksum": "3cb299aedf2acba3a5473e8b04159245",
-            "size": 6157,
-            "uri": "https://{canondata_backend}/1936273/2681640d5b010fded34103a5bad09c955d96632e/resource.tar.gz#test.test_action-parallel_for-default.txt-Plan_/plan.txt"
+            "checksum": "7f07c14475e1efd8e6d1ec4128c3a930",
+            "size": 12723,
+            "uri": "https://{canondata_backend}/1942415/24f05a669ac876daf55df920342a0776d0748790/resource.tar.gz#test.test_action-parallel_for-default.txt-Plan_/plan.txt"
         }
     ],
     "test.test[action-parallel_for-default.txt-Results]": [],

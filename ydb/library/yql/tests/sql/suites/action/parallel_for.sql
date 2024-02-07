@@ -1,9 +1,10 @@
 use plato;
 
-define action $f($i) as 
-    insert into Output
-    select $i;
-end define;
+evaluate parallel for $i in [5,2,7] do begin
+insert into Output
+select $i as a;
+end do;
 
-evaluate parallel for $i in [1,2,3] do $f($i);
-
+commit;
+insert into Output with truncate
+select a from Output order by a;

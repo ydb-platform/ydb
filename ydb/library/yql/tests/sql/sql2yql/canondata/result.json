@@ -491,9 +491,9 @@
     ],
     "test_sql2yql.test[action-parallel_for]": [
         {
-            "checksum": "602193fe0fa7d84be8be913067764289",
-            "size": 1190,
-            "uri": "https://{canondata_backend}/1924537/6cd6f98d4e4042c1209ece932e52592cb94d5fa0/resource.tar.gz#test_sql2yql.test_action-parallel_for_/sql.yql"
+            "checksum": "34682c2587cd1d351c27be358498307e",
+            "size": 2103,
+            "uri": "https://{canondata_backend}/1942415/2241aee432ab474d9b77948c0a7cbceef22aba8f/resource.tar.gz#test_sql2yql.test_action-parallel_for_/sql.yql"
         }
     ],
     "test_sql2yql.test[action-pass_action_as_param]": [
@@ -17998,9 +17998,9 @@
     ],
     "test_sql_format.test[action-parallel_for]": [
         {
-            "checksum": "96ce23d671daefe3d8d87e1d177c2102",
-            "size": 148,
-            "uri": "https://{canondata_backend}/1924537/6cd6f98d4e4042c1209ece932e52592cb94d5fa0/resource.tar.gz#test_sql_format.test_action-parallel_for_/formatted.sql"
+            "checksum": "73070ec575e3ea3887857b7486df1ecb",
+            "size": 225,
+            "uri": "https://{canondata_backend}/1942415/2241aee432ab474d9b77948c0a7cbceef22aba8f/resource.tar.gz#test_sql_format.test_action-parallel_for_/formatted.sql"
         }
     ],
     "test_sql_format.test[action-pass_action_as_param]": [
@@ -32456,6 +32456,20 @@
             "checksum": "0fad6da8e4c5a2ab2c1e5a231ea430d1",
             "size": 105,
             "uri": "https://{canondata_backend}/1923547/d4a40b8dc00b9fd8e4cceadb8bcb11779bfdfafc/resource.tar.gz#test_sql_negative.test_action-no_columns_in_do-default.txt_/err_file.out"
+        }
+    ],
+    "test_sql_negative.test[action-parallel_for_select-default.txt]": [
+        {
+            "checksum": "82522d29f3441633dfd821a58fd07b89",
+            "size": 163,
+            "uri": "https://{canondata_backend}/1942415/2241aee432ab474d9b77948c0a7cbceef22aba8f/resource.tar.gz#test_sql_negative.test_action-parallel_for_select-default.txt_/err_file.out"
+        }
+    ],
+    "test_sql_negative.test[action-parallel_for_values-default.txt]": [
+        {
+            "checksum": "82522d29f3441633dfd821a58fd07b89",
+            "size": 163,
+            "uri": "https://{canondata_backend}/1942415/2241aee432ab474d9b77948c0a7cbceef22aba8f/resource.tar.gz#test_sql_negative.test_action-parallel_for_values-default.txt_/err_file.out"
         }
     ],
     "test_sql_negative.test[aggregate-fail_group_by_struct_member-default.txt]": [

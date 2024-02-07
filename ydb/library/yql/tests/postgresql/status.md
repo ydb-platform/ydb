@@ -26,10 +26,10 @@
 || 22 | interval | 168 | 115 | 68.45 | 25.10.2023 | ||
 || 23 | horology | 306 | 79 | 25.82 | 10.08.2023 | SET, DateStyle, TimeZone, автоматически назначаемые имена колонкам-выражениям, SET TIME ZOME, RESET TIME ZONE, интервальный тип ПГ, ||
 || 24 | comments | 7 | 7 | 100.0 | 25.05.2023 |  ||
-|| 25 | expressions | 63 | 14 | 22.22 | 25.10.2023 | ||
+|| 25 | expressions | 63 | 14 | 22.22 | 25.10.2023 | YQL-17784 ||
 || 26 | unicode | 13 | 4 | 30.77 | 10.08.2023 | ||
 || 27 | create_table | 368 | 43 | 11.68 | 12.12.2023 | YQL-17664 ||
-|| 28 | insert | 357 | 15 | 4.2 | 12.12.2023 | CREATE TEMP TABLE, ALTER TABLE, DROP TABLE, CREATE TYPE, CREATE RULE, \d+, DROP TYPE, create table...partition by range, create table ... partition of ..., tableoid::regclass, create or replace function, create operator, ||
+|| 28 | insert | 357 | 15 | 4.2 | 12.12.2023 | YQL-17785 ||
 || 29 | create_misc | 76 | 3 | 3.95 | 29.09.2023 | ||
 || 30 | select | 88 | 9 | 10.23 | 12.12.2023 | порядок сортировки в виде  ORDER BY поле using > или <, а также NULLS FIRST/LAST; ANALYZE, переменные enable_seqscan, enable_bitmapscan, enable_sort,  whole-row Var referencing a subquery, подзапросы внутри values, INSERT INTO ... DEFAULT VALUES, Range sub select unsupported lateral, CREATE INDEX, DROP INDEX, explain (опции costs, analyze, timing, summary), SELECT 1 AS x ORDER BY x; CREATE FUNCTION, DROP FUNCTION, table inheritance, PARTITION BY ||
 || 31 | select_into | 67 | 3 | 4.48 | 27.07.2023 | ||
@@ -54,7 +54,7 @@
 || 50 | jsonpath | 169 | 152 | 89.94 | 29.05.2023 | числа с точкой без целой части (например .1), литерал '00' ||
 || 51 | jsonpath_encoding | 31 | 31 | 100.0 | 29.05.2023 | ||
 || 52 | jsonb_jsonpath | 427 | 88 | 20.61 | 12.12.2023 | ||
-|| 53 | limit | 84 | 5 | 5.95 | 10.08.2023 | ||
+|| 53 | limit | 84 | 5 | 5.95 | 10.08.2023 | YQL-17783 ||
 || 54 | truncate | 193 | 36 (+3) | 18.65 | 30.01.2024 | YQL-17740 ||
 || 55 | alter_table | 1679 | 11 | 0.66 | 12.12.2023 | YQL-17688 ||
 || 56 | xml | 234 | 14 | 5.98 | 30.01.2024 | YQL-17681 ||

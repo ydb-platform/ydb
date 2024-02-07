@@ -3,7 +3,6 @@
 #include "fetched_data.h"
 #include "plain_read_data.h"
 #include "constructor.h"
-#include <ydb/core/formats/arrow/serializer/full.h>
 #include <ydb/core/tx/columnshard/blobs_reader/actor.h>
 #include <ydb/core/tx/columnshard/blobs_reader/events.h>
 #include <ydb/core/tx/conveyor/usage/service.h>
@@ -15,7 +14,7 @@ namespace NKikimr::NOlap::NPlainReader {
 void IDataSource::InitFetchingPlan(const std::shared_ptr<IFetchingStep>& fetchingFirstStep, const std::shared_ptr<IDataSource>& sourcePtr, const bool isExclusive) {
     AFL_VERIFY(fetchingFirstStep);
     if (AtomicCas(&FilterStageFlag, 1, 0)) {
-        StageData = std::make_shared<TFetchedData>(isExclusive);
+        StageData = std::make_unique<TFetchedData>(isExclusive);
         AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("InitFetchingPlan", fetchingFirstStep->DebugString())("source_idx", SourceIdx);
         NActors::TLogContextGuard logGuard(NActors::TLogContextBuilder::Build()("source", SourceIdx)("method", "InitFetchingPlan"));
         if (IsAborted()) {

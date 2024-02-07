@@ -140,7 +140,7 @@ void TFinishProposeWriteUnit::Complete(TOperation::TPtr op, const TActorContext 
         Pipeline.RemoveActiveOp(op);
 
         DataShard.EnqueueChangeRecords(std::move(op->ChangeRecords()));
-        DataShard.EmitHeartbeats(ctx);
+        DataShard.EmitHeartbeats();
     }
 
     DataShard.SendRegistrationRequestTimeCast(ctx);

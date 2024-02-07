@@ -25,7 +25,7 @@ namespace NKikimr::NColumnShard {
         }
 
         virtual bool Complete(TColumnShard& owner, const TActorContext& ctx) override {
-            auto result = NEvents::TDataEvents::TEvWriteResult::BuildCommited(owner.TabletID(), GetTxId());
+            auto result = NEvents::TDataEvents::TEvWriteResult::BuildCompleted(owner.TabletID(), GetTxId());
             ctx.Send(TxInfo.Source, result.release(), 0, TxInfo.Cookie);
             return true;
         }

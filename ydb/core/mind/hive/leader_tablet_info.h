@@ -338,6 +338,8 @@ public:
     TString GetChannelStoragePoolName(const TChannelProfiles::TProfile::TChannel& channel);
     TString GetChannelStoragePoolName(ui32 channelId);
     TStoragePoolInfo& GetStoragePool(ui32 channelId);
+
+    void SetType(TTabletTypes::EType type);
 };
 
 } // NHive

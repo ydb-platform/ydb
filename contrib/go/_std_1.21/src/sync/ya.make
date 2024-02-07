@@ -1,36 +1,5 @@
 GO_LIBRARY()
-IF (FALSE)
-    MESSAGE(FATAL this shall never happen)
-
-ELSEIF (OS_LINUX AND ARCH_X86_64)
-    SRCS(
-		cond.go
-		map.go
-		mutex.go
-		once.go
-		oncefunc.go
-		pool.go
-		poolqueue.go
-		runtime.go
-		runtime2.go
-		rwmutex.go
-		waitgroup.go
-    )
-ELSEIF (OS_LINUX AND ARCH_ARM64)
-    SRCS(
-		cond.go
-		map.go
-		mutex.go
-		once.go
-		oncefunc.go
-		pool.go
-		poolqueue.go
-		runtime.go
-		runtime2.go
-		rwmutex.go
-		waitgroup.go
-    )
-ELSEIF (OS_LINUX AND ARCH_AARCH64)
+IF (OS_DARWIN AND ARCH_ARM64)
     SRCS(
 		cond.go
 		map.go
@@ -58,7 +27,7 @@ ELSEIF (OS_DARWIN AND ARCH_X86_64)
 		rwmutex.go
 		waitgroup.go
     )
-ELSEIF (OS_DARWIN AND ARCH_ARM64)
+ELSEIF (OS_LINUX AND ARCH_AARCH64)
     SRCS(
 		cond.go
 		map.go
@@ -72,7 +41,7 @@ ELSEIF (OS_DARWIN AND ARCH_ARM64)
 		rwmutex.go
 		waitgroup.go
     )
-ELSEIF (OS_DARWIN AND ARCH_AARCH64)
+ELSEIF (OS_LINUX AND ARCH_X86_64)
     SRCS(
 		cond.go
 		map.go
@@ -87,34 +56,6 @@ ELSEIF (OS_DARWIN AND ARCH_AARCH64)
 		waitgroup.go
     )
 ELSEIF (OS_WINDOWS AND ARCH_X86_64)
-    SRCS(
-		cond.go
-		map.go
-		mutex.go
-		once.go
-		oncefunc.go
-		pool.go
-		poolqueue.go
-		runtime.go
-		runtime2.go
-		rwmutex.go
-		waitgroup.go
-    )
-ELSEIF (OS_WINDOWS AND ARCH_ARM64)
-    SRCS(
-		cond.go
-		map.go
-		mutex.go
-		once.go
-		oncefunc.go
-		pool.go
-		poolqueue.go
-		runtime.go
-		runtime2.go
-		rwmutex.go
-		waitgroup.go
-    )
-ELSEIF (OS_WINDOWS AND ARCH_AARCH64)
     SRCS(
 		cond.go
 		map.go

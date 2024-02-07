@@ -2,11 +2,11 @@
 
 #include "datashard_active_transaction.h"
 #include "datashard_kqp.h"
-#include "datashard_locks.h"
 #include "datashard_impl.h"
 #include "datashard_failpoints.h"
 #include "key_conflicts.h"
 
+#include <ydb/core/tx/locks/locks.h>
 #include <ydb/library/actors/util/memory_track.h>
 
 namespace NKikimr {
@@ -204,6 +204,13 @@ TValidatedDataTx::TValidatedDataTx(TDataShard *self,
 
 TValidatedDataTx::~TValidatedDataTx() {
     NActors::NMemory::TLabel<MemoryLabelValidatedDataTx>::Sub(TxSize);
+}
+
+TDataShardUserDb& TValidatedDataTx::GetUserDb() {
+    return EngineBay.GetUserDb();
+}
+const TDataShardUserDb& TValidatedDataTx::GetUserDb() const {
+    return EngineBay.GetUserDb();
 }
 
 ui32 TValidatedDataTx::ExtractKeys(bool allowErrors)

@@ -17,6 +17,7 @@
 #include <ydb/core/kqp/provider/yql_kikimr_results.h>
 #include <ydb/core/kqp/rm_service/kqp_snapshot_manager.h>
 #include <ydb/core/ydb_convert/ydb_convert.h>
+#include <ydb/core/tx/schemeshard/schemeshard.h>
 #include <ydb/public/lib/operation_id/operation_id.h>
 
 #include <ydb/core/util/ulid.h>
@@ -155,7 +156,8 @@ public:
             NYql::NDq::IDqAsyncIoFactory::TPtr asyncIoFactory,
             TIntrusivePtr<TModuleResolverState> moduleResolverState, TIntrusivePtr<TKqpCounters> counters,
             const NKikimrConfig::TQueryServiceConfig& queryServiceConfig,
-            const NKikimrConfig::TMetadataProviderConfig& metadataProviderConfig)
+            const NKikimrConfig::TMetadataProviderConfig& metadataProviderConfig,
+            const TActorId& kqpTempTablesAgentActor)
         : Owner(owner)
         , SessionId(sessionId)
         , Counters(counters)
@@ -168,6 +170,7 @@ public:
         , Transactions(*Config->_KqpMaxActiveTxPerSession.Get(), TDuration::Seconds(*Config->_KqpTxIdleTimeoutSec.Get()))
         , QueryServiceConfig(queryServiceConfig)
         , MetadataProviderConfig(metadataProviderConfig)
+        , KqpTempTablesAgentActor(kqpTempTablesAgentActor)
     {
         RequestCounters = MakeIntrusive<TKqpRequestCounters>();
         RequestCounters->Counters = Counters;
@@ -761,6 +764,12 @@ public:
 
             request.StatsMode = queryState->GetStatsMode();
             request.ProgressStatsPeriod = queryState->GetProgressStatsPeriod();
+            request.QueryType = queryState->GetType();
+            if (Y_LIKELY(queryState->PreparedQuery)) {
+                ui64 resultSetsCount = queryState->PreparedQuery->GetPhysicalQuery().ResultBindingsSize();
+                request.AllowTrailingResults = (resultSetsCount == 1);
+                request.AllowTrailingResults &= (QueryState->RequestEv->GetSupportsStreamTrailingResult());
+            }
         }
 
         const auto& limits = GetQueryLimits(Settings);
@@ -1072,7 +1081,7 @@ public:
         bool temporary = GetTemporaryTableInfo(tx).has_value();
 
         auto executerActor = CreateKqpSchemeExecuter(tx, QueryState->GetType(), SelfId(), requestType, Settings.Database, userToken,
-            temporary, TempTablesState.SessionId, QueryState->UserRequestContext);
+            temporary, TempTablesState.SessionId, QueryState->UserRequestContext, KqpTempTablesAgentActor);
 
         ExecuterId = RegisterWithSameMailbox(executerActor);
     }
@@ -1175,6 +1184,7 @@ public:
         if (!tx) {
             return std::nullopt;
         }
+
         auto optPath = tx->GetSchemeOpTempTablePath();
         if (!optPath) {
             return std::nullopt;
@@ -1201,6 +1211,7 @@ public:
         if (!tx) {
             return;
         }
+
         auto optInfo = GetTemporaryTableInfo(tx);
         if (optInfo) {
             auto [isCreate, info] = *optInfo;
@@ -1532,10 +1543,24 @@ public:
 
         // Result for scan query is sent directly to target actor.
         Y_ABORT_UNLESS(response->GetArena());
-        if (QueryState->PreparedQuery && !QueryState->IsStreamResult()) {
+        if (QueryState->PreparedQuery) {
             bool useYdbResponseFormat = QueryState->GetUsePublicResponseDataFormat();
             auto& phyQuery = QueryState->PreparedQuery->GetPhysicalQuery();
+            size_t trailingResultsCount = 0;
             for (size_t i = 0; i < phyQuery.ResultBindingsSize(); ++i) {
+                if (QueryState->IsStreamResult()) {
+                    auto ydbResult = QueryState->QueryData->GetTrailingTxResult(
+                        phyQuery.GetResultBindings(i), response->GetArena());
+
+                    if (ydbResult) {
+                        ++trailingResultsCount;
+                        YQL_ENSURE(trailingResultsCount <= 1);
+                        response->AddYdbResults()->Swap(ydbResult);
+                    }
+
+                    continue;
+                }
+
                 if (useYdbResponseFormat) {
                     TMaybe<ui64> effectiveRowsLimit = FillSettings.RowsLimitPerWrite;
                     if (QueryState->PreparedQuery->GetResults(i).GetRowsLimit()) {
@@ -1888,6 +1913,7 @@ public:
             LOG_D("Cleanup temp tables: " << TempTablesState.TempTables.size());
             auto tempTablesManager = CreateKqpTempTablesManager(
                 std::move(TempTablesState), SelfId(), Settings.Database);
+
             RegisterWithSameMailbox(tempTablesManager);
             return;
         } else {
@@ -2221,6 +2247,7 @@ private:
 
     NKikimrConfig::TQueryServiceConfig QueryServiceConfig;
     NKikimrConfig::TMetadataProviderConfig MetadataProviderConfig;
+    TActorId KqpTempTablesAgentActor;
     std::shared_ptr<std::atomic<bool>> CompilationCookie;
 };
 
@@ -2232,11 +2259,12 @@ IActor* CreateKqpSessionActor(const TActorId& owner, const TString& sessionId,
     NYql::NDq::IDqAsyncIoFactory::TPtr asyncIoFactory,
     TIntrusivePtr<TModuleResolverState> moduleResolverState, TIntrusivePtr<TKqpCounters> counters,
     const NKikimrConfig::TQueryServiceConfig& queryServiceConfig,
-    const NKikimrConfig::TMetadataProviderConfig& metadataProviderConfig)
+    const NKikimrConfig::TMetadataProviderConfig& metadataProviderConfig,
+    const TActorId& kqpTempTablesAgentActor)
 {
     return new TKqpSessionActor(owner, sessionId, kqpSettings, workerSettings, federatedQuerySetup,
                                 std::move(asyncIoFactory),  std::move(moduleResolverState), counters,
-                                queryServiceConfig, metadataProviderConfig
+                                queryServiceConfig, metadataProviderConfig, kqpTempTablesAgentActor
                                 );
 }
 

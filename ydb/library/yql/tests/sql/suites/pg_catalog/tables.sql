@@ -1,7 +1,9 @@
 --!syntax_pg
 select
-table_schema,
-table_name
-from information_schema.tables
-order by table_schema, table_name;
+count(*),
+min(table_schema),
+min(table_name),
+max(table_schema),
+max(table_name)
+from information_schema.tables;
 

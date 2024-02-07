@@ -26,6 +26,7 @@ struct TKqpProviderContext : public NYql::IProviderContext {
     virtual bool IsJoinApplicable(const std::shared_ptr<NYql::IBaseOptimizerNode>& left, 
         const std::shared_ptr<NYql::IBaseOptimizerNode>& right, 
         const std::set<std::pair<NYql::NDq::TJoinColumn, NYql::NDq::TJoinColumn>>& joinConditions,
+        const TVector<TString>& leftJoinKeys, const TVector<TString>& rightJoinKeys,
         NYql::EJoinAlgoType joinAlgo) override;
 
     virtual double ComputeJoinCost(const NYql::TOptimizerStatistics& leftStats, const NYql::TOptimizerStatistics& rightStats, NYql::EJoinAlgoType joinAlgo) const override;

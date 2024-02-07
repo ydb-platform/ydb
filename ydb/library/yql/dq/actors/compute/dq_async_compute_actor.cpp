@@ -113,7 +113,7 @@ public:
             }
         }
         std::tie(TaskRunnerActor, actor) = TaskRunnerActorFactory->Create(
-            this, GetTxId(), Task.GetId(), std::move(inputWithDisabledCheckpointing), InitMemoryQuota());
+            this, TBase::GetAllocatorPtr(), GetTxId(), Task.GetId(), std::move(inputWithDisabledCheckpointing), InitMemoryQuota());
         TaskRunnerActorId = RegisterWithSameMailbox(actor);
 
         TDqTaskRunnerMemoryLimits limits;
@@ -461,18 +461,6 @@ private:
         return inputChannel->FreeSpace;
     }
 
-    TGuard<NKikimr::NMiniKQL::TScopedAlloc> BindAllocator() override {
-        return TypeEnv->BindAllocator();
-    }
-
-    std::optional<TGuard<NKikimr::NMiniKQL::TScopedAlloc>> MaybeBindAllocator() override {
-        std::optional<TGuard<NKikimr::NMiniKQL::TScopedAlloc>> guard;
-        if (TypeEnv) {
-            guard.emplace(TypeEnv->BindAllocator());
-        }
-        return guard;
-    }
-
     void OnTaskRunnerCreated(NTaskRunnerActor::TEvTaskRunnerCreateFinished::TPtr& ev) {
         const auto& secureParams = ev->Get()->SecureParams;
         const auto& taskParams = ev->Get()->TaskParams;
@@ -483,7 +471,7 @@ private:
             Stat->AddCounters2(ev->Get()->Sensors);
         }
         TypeEnv = const_cast<NKikimr::NMiniKQL::TTypeEnvironment*>(&typeEnv);
-        FillIoMaps(holderFactory, typeEnv, secureParams, taskParams, readRanges);
+        FillIoMaps(holderFactory, typeEnv, secureParams, taskParams, readRanges, nullptr);
 
         {
             // say "Hello" to executer
@@ -517,7 +505,6 @@ private:
 
         MkqlMemoryLimit = ev->Get()->MkqlMemoryLimit;
         ProfileStats = std::move(ev->Get()->ProfileStats);
-        auto sourcesState = GetSourcesState();
         auto status = ev->Get()->RunStatus;
 
         CA_LOG_T("Resume execution, run status: " << status << " checkpoint: " << (bool) ev->Get()->ProgramState
@@ -534,10 +521,6 @@ private:
             if (it != SourcesMap.end()) {
                 it->second.FreeSpace = freeSpace;
             }
-        }
-
-        if (status != ERunStatus::Finished) {
-            PollSources(std::move(sourcesState));
         }
 
         if (ev->Get()->WatermarkInjectedToOutputs && !WatermarksTracker.HasOutputChannels()) {
@@ -799,6 +782,11 @@ private:
 
     const NYql::NDq::TTaskRunnerStatsBase* GetTaskRunnerStats() override {
         return TaskRunnerStats.Get();
+    }
+
+    const NYql::NDq::TDqMeteringStats* GetMeteringStats() override {
+        // TODO: support async CA
+        return nullptr;
     }
 
     template<typename TSecond>

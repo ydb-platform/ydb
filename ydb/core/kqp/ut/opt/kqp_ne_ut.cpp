@@ -2,6 +2,7 @@
 
 #include <ydb/public/sdk/cpp/client/ydb_proto/accessor.h>
 #include <ydb/core/kqp/runtime/kqp_read_actor.h>
+#include <ydb/core/tx/datashard/datashard_impl.h>
 
 namespace NKikimr::NKqp {
 
@@ -3520,14 +3521,14 @@ Y_UNIT_TEST_SUITE(KqpNewEngine) {
 
             NJson::TJsonValue plan;
             NJson::ReadJsonTree(result.GetQueryPlan(), &plan, true);
-            auto streamLookup = FindPlanNodeByKv(plan, "Node Type", "TableLookup");
+            auto streamLookup = FindPlanNodeByKv(plan, "Node Type", "TableRangeScan");
             UNIT_ASSERT(streamLookup.IsDefined());
 
             auto stats = NYdb::TProtoAccessor::GetProto(*result.GetStats());
-            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases().size(), 1);
-            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(0).table_access().size(), 1);
-            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(0).table_access(0).name(), "/Root/KeyValue");
-            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(0).table_access(0).reads().rows(), 2);
+            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases().size(), 2);
+            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(1).table_access().size(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(1).table_access(0).name(), "/Root/KeyValue");
+            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(1).table_access(0).reads().rows(), 2);
         }
     }
 

@@ -57,7 +57,7 @@ struct TDqSettings {
         static constexpr ETaskRunnerStats TaskRunnerStats = ETaskRunnerStats::Basic;
         static constexpr ESpillingEngine SpillingEngine = ESpillingEngine::Disable;
         static constexpr ui32 CostBasedOptimizationLevel = 0;
-        static constexpr ui32 MaxDPccpDPTableSize = 10000U;
+        static constexpr ui32 MaxDPccpDPTableSize = 16400U;
 
     };
 

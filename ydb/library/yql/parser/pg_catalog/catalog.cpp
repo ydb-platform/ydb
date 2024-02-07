@@ -1402,133 +1402,20 @@ struct TCatalog {
             "lo_unlink"
         }),
         StaticTables({
-            {"pg_catalog", "pg_type"},
-            {"pg_catalog", "pg_database"},
-            {"pg_catalog", "pg_tablespace"},
-            {"pg_catalog", "pg_shdescription"},
-            {"pg_catalog", "pg_trigger"},
-            {"pg_catalog", "pg_locks"},
-            {"pg_catalog", "pg_stat_gssapi"},
-            {"pg_catalog", "pg_inherits"},
-            {"pg_catalog", "pg_stat_activity"},
-            {"pg_catalog", "pg_timezone_names"},
-            {"pg_catalog", "pg_timezone_abbrevs"},
-            {"pg_catalog", "pg_tables"},
-            {"pg_catalog", "pg_description"},
-            {"pg_catalog", "pg_am"},
-            {"pg_catalog", "pg_namespace"},
-            {"pg_catalog", "pg_auth_members"},
-            {"pg_catalog", "pg_roles"},
-            {"information_schema", "tables"},
-            {"information_schema", "columns"},
-            {"information_schema", "table_constraints"},
+#include "pg_class.generated.h"
         }),
         AllStaticColumns({
-            {"pg_catalog", "pg_type", "oid", "oid"},
-            {"pg_catalog", "pg_type", "typname", "name"},
-            {"pg_catalog", "pg_type", "typinput", "regproc"},
-            {"pg_catalog", "pg_type", "typnamespace", "oid"},
-            {"pg_catalog", "pg_type", "typtype", "char"},
-
-            {"pg_catalog", "pg_database", "oid", "oid"},
-            {"pg_catalog", "pg_database", "datname", "name"},
-            {"pg_catalog", "pg_database", "encoding", "int4"},
-            {"pg_catalog", "pg_database", "datallowconn", "bool"},
-            {"pg_catalog", "pg_database", "datistemplate", "bool"},
-            {"pg_catalog", "pg_database", "datdba", "oid"},
-
-            {"pg_catalog", "pg_tablespace", "oid", "oid"},
-            {"pg_catalog", "pg_tablespace", "spcname", "name"},
-
-            {"pg_catalog", "pg_shdescription", "objoid", "oid"},
-            {"pg_catalog", "pg_shdescription", "classoid", "oid"},
-            {"pg_catalog", "pg_shdescription", "description", "text"},
-
-            {"pg_catalog", "pg_trigger", "tgrelid", "oid"},
-            {"pg_catalog", "pg_trigger", "tgenabled", "char"},
-
-            {"pg_catalog", "pg_locks", "transactionid", "xid"},
-
-            {"pg_catalog", "pg_stat_gssapi", "encrypted", "bool"},
-            {"pg_catalog", "pg_stat_gssapi", "gss_authenticated", "bool"},
-            {"pg_catalog", "pg_stat_gssapi", "pid", "int4"},
-
-            {"pg_catalog", "pg_inherits", "inhrelid", "oid"},
-            {"pg_catalog", "pg_inherits", "inhparent", "oid"},
-
-            {"pg_catalog", "pg_stat_activity", "application_name", "text"},
-            {"pg_catalog", "pg_stat_activity", "backend_start", "timestamptz"},
-            {"pg_catalog", "pg_stat_activity", "backend_type", "text"},
-            {"pg_catalog", "pg_stat_activity", "client_addr", "inet"},
-            {"pg_catalog", "pg_stat_activity", "datname", "name"},
-            {"pg_catalog", "pg_stat_activity", "pid", "int4"},
-            {"pg_catalog", "pg_stat_activity", "query", "text"},
-            {"pg_catalog", "pg_stat_activity", "query_start", "timestamptz"},
-            {"pg_catalog", "pg_stat_activity", "state", "text"},
-            {"pg_catalog", "pg_stat_activity", "state_change", "timestamptz"},
-            {"pg_catalog", "pg_stat_activity", "usename", "name"},
-            {"pg_catalog", "pg_stat_activity", "wait_event", "text"},
-            {"pg_catalog", "pg_stat_activity", "wait_event_type", "text"},
-            {"pg_catalog", "pg_stat_activity", "xact_start", "timestamptz"},
-
-            {"pg_catalog", "pg_timezone_names", "name", "text"},
-            {"pg_catalog", "pg_timezone_names", "is_dst", "bool"},
-
-            {"pg_catalog", "pg_timezone_abbrevs", "abbrev", "text"},
-            {"pg_catalog", "pg_timezone_abbrevs", "is_dst", "bool"},
-
-            {"pg_catalog", "pg_tables", "schemaname", "name"},
-            {"pg_catalog", "pg_tables", "tablename", "name"},
-
-            {"pg_catalog", "pg_description", "objoid", "oid"},
-            {"pg_catalog", "pg_description", "classoid", "oid"},
-            {"pg_catalog", "pg_description", "objsubid", "int4"},
-            {"pg_catalog", "pg_description", "description", "text"},
-
-            {"pg_catalog", "pg_am", "oid", "oid"},
-            {"pg_catalog", "pg_am", "amname", "name"},
-            {"pg_catalog", "pg_am", "amtype", "char"},
-
-            {"pg_catalog", "pg_namespace", "nspname", "name"},
-            {"pg_catalog", "pg_namespace", "oid", "oid"},
-
-            {"pg_catalog", "pg_auth_members", "roleid", "oid"},
-            {"pg_catalog", "pg_auth_members", "member", "oid"},
-            {"pg_catalog", "pg_auth_members", "grantor", "oid"},
-            {"pg_catalog", "pg_auth_members", "admin_option", "bool"},
-
-            {"pg_catalog", "pg_roles", "rolname", "name"},
-            {"pg_catalog", "pg_roles", "oid", "oid"},
-            {"pg_catalog", "pg_roles", "rolbypassrls", "bool"},
-            {"pg_catalog", "pg_roles", "rolcanlogin", "bool"},
-            {"pg_catalog", "pg_roles", "rolconfig", "_text"},
-            {"pg_catalog", "pg_roles", "rolconnlimit", "int4"},
-            {"pg_catalog", "pg_roles", "rolcreatedb", "bool"},
-            {"pg_catalog", "pg_roles", "rolcreaterole", "bool"},
-            {"pg_catalog", "pg_roles", "rolinherit", "bool"},
-            {"pg_catalog", "pg_roles", "rolreplication", "bool"},
-            {"pg_catalog", "pg_roles", "rolsuper", "bool"},
-            {"pg_catalog", "pg_roles", "rolvaliduntil", "timestamptz"},
-
-            {"information_schema", "tables", "table_schema", "name"},
-            {"information_schema", "tables", "table_name", "name"},
-
-            {"information_schema", "columns", "table_schema", "name"},
-            {"information_schema", "columns", "table_name", "name"},
-            {"information_schema", "columns", "column_name", "name"},
-            {"information_schema", "columns", "udt_name", "name"},
-
-            {"information_schema", "table_constraints", "constraint_schema", "name"},
-            {"information_schema", "table_constraints", "table_name", "name"},
-            {"information_schema", "table_constraints", "constraint_type", "varchar"},
+#include "columns.generated.h"
         })
     {
+        THashSet<ui32> usedTableOids;
         for (const auto& t : StaticTables) {
             StaticColumns.insert(std::make_pair(t, TVector<TColumnInfo>()));
+            Y_ENSURE(usedTableOids.insert(t.Oid).first);
         }
 
         for (const auto& c: AllStaticColumns) {
-            auto tablePtr = StaticColumns.FindPtr(TTableInfo{c.Schema, c.TableName});
+            auto tablePtr = StaticColumns.FindPtr(TTableInfoKey{c.Schema, c.TableName});
             Y_ENSURE(tablePtr);
             tablePtr->push_back(c);
         }
@@ -1740,7 +1627,7 @@ struct TCatalog {
 
     TVector<TTableInfo> StaticTables;
     TVector<TColumnInfo> AllStaticColumns;
-    THashMap<TTableInfo, TVector<TColumnInfo>> StaticColumns;
+    THashMap<TTableInfoKey, TVector<TColumnInfo>> StaticColumns;
 };
 
 bool ValidateArgs(const TVector<ui32>& descArgTypeIds, const TVector<ui32>& argTypeIds) {
@@ -2904,7 +2791,7 @@ const TVector<TTableInfo>& GetStaticTables() {
     return catalog.StaticTables;
 }
 
-const THashMap<TTableInfo, TVector<TColumnInfo>>& GetStaticColumns() {
+const THashMap<TTableInfoKey, TVector<TColumnInfo>>& GetStaticColumns() {
     const auto& catalog = TCatalog::Instance();
     return catalog.StaticColumns;
 }

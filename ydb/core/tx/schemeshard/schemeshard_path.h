@@ -75,6 +75,8 @@ public:
         const TChecker& IsLikeDirectory(EStatus status = EStatus::StatusPathIsNotDirectory) const;
         const TChecker& IsDirectory(EStatus status = EStatus::StatusPathIsNotDirectory) const;
         const TChecker& IsTheSameDomain(const TPath& another, EStatus status = EStatus::StatusInvalidParameter) const;
+        const TChecker& FailOnWrongType(const TSet<TPathElement::EPathType>& expectedTypes) const;
+        const TChecker& FailOnWrongType(TPathElement::EPathType expectedType) const;
         const TChecker& FailOnExist(const TSet<TPathElement::EPathType>& expectedTypes, bool acceptAlreadyExist) const;
         const TChecker& FailOnExist(TPathElement::EPathType expectedType, bool acceptAlreadyExist) const;
         const TChecker& IsValidLeafName(EStatus status = EStatus::StatusSchemeError) const;

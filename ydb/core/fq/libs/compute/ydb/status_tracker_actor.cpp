@@ -7,6 +7,7 @@
 #include <ydb/core/fq/libs/compute/common/run_actor_params.h>
 #include <ydb/core/fq/libs/compute/common/utils.h>
 #include <ydb/core/fq/libs/compute/ydb/events/events.h>
+#include <ydb/core/fq/libs/compute/ydb/control_plane/compute_database_control_plane_service.h>
 #include <ydb/core/fq/libs/ydb/ydb.h>
 #include <ydb/core/util/backoff.h>
 #include <ydb/library/services/services.pb.h>
@@ -232,7 +233,12 @@ public:
         pingTaskRequest.set_pending_status_code(StatusCode);
         PrepareAstAndPlan(pingTaskRequest, QueryStats.query_plan(), QueryStats.query_ast());
         try {
-            pingTaskRequest.set_statistics(GetV1StatFromV2Plan(QueryStats.query_plan()));
+            TDuration duration = TDuration::MicroSeconds(QueryStats.total_duration_us());
+            double cpuUsage = 0.0;
+            pingTaskRequest.set_statistics(GetV1StatFromV2Plan(QueryStats.query_plan(), &cpuUsage));
+            if (duration && cpuUsage) {
+                Send(NFq::ComputeDatabaseControlPlaneServiceActorId(), new TEvYdbCompute::TEvCpuQuotaAdjust(Params.Scope.ToString(), duration, cpuUsage)); 
+            }
         } catch(const NJson::TJsonException& ex) {
             LOG_E("Error statistics conversion: " << ex.what());
         }
@@ -249,7 +255,12 @@ public:
         pingTaskRequest.set_status(ComputeStatus);
         PrepareAstAndPlan(pingTaskRequest, QueryStats.query_plan(), QueryStats.query_ast());
         try {
-            pingTaskRequest.set_statistics(GetV1StatFromV2Plan(QueryStats.query_plan()));
+            TDuration duration = TDuration::MicroSeconds(QueryStats.total_duration_us());
+            double cpuUsage = 0.0;
+            pingTaskRequest.set_statistics(GetV1StatFromV2Plan(QueryStats.query_plan(), &cpuUsage));
+            if (duration && cpuUsage) {
+                Send(NFq::ComputeDatabaseControlPlaneServiceActorId(), new TEvYdbCompute::TEvCpuQuotaAdjust(Params.Scope.ToString(), duration, cpuUsage)); 
+            }
         } catch(const NJson::TJsonException& ex) {
             LOG_E("Error statistics conversion: " << ex.what());
         }

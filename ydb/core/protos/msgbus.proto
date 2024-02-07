@@ -207,6 +207,7 @@ message TResponse {
     repeated TKeyValueResponse.TGetStatusResult GetStatusResult = 909;
     optional TKeyValueResponse.TTrimLeakedBlobsResult TrimLeakedBlobsResult = 910;
     optional TKeyValueResponse.TSetExecutorFastLogPolicyResult SetExecutorFastLogPolicyResult = 911;
+    repeated TKeyValueResponse.TPatchResult PatchResult = 912;
 
     // THiveCreateTablet
     message TCreateTabletResult {

@@ -1,6 +1,7 @@
 #include "ydb_proxy.h"
 
 #include <ydb/core/tx/replication/ut_helpers/test_env.h>
+#include <ydb/core/tx/replication/ut_helpers/write_topic.h>
 #include <ydb/public/sdk/cpp/client/ydb_topic/topic.h>
 
 #include <library/cpp/testing/unittest/registar.h>
@@ -578,25 +579,6 @@ Y_UNIT_TEST_SUITE(YdbProxyTests) {
         UNIT_ASSERT(ev->Get()->Result);
 
         return ev->Get()->Result;
-    }
-
-    template <typename Env>
-    bool WriteTopic(const Env& env, const TString& topicPath, const TString& data) {
-        NYdb::NTopic::TTopicClient client(env.GetDriver(), NYdb::NTopic::TTopicClientSettings()
-            .DiscoveryEndpoint(env.GetEndpoint())
-            .Database(env.GetDatabase())
-        );
-
-        auto session = client.CreateSimpleBlockingWriteSession(NYdb::NTopic::TWriteSessionSettings()
-            .Path(topicPath)
-            .ProducerId("producer")
-            .MessageGroupId("producer")
-        );
-
-        const auto result = session->Write(data);
-        session->Close();
-
-        return result;
     }
 
     template <typename Env>

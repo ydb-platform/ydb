@@ -43,6 +43,134 @@ public:
     {
         return inputTransformInfo.Buffer.Get();
     }
+protected:
+
+    void DoExecuteImpl() override{
+        auto sourcesState = static_cast<TDerived*>(this)->GetSourcesState();
+
+        TBase::PollAsyncInput();
+        ERunStatus status = this->TaskRunner->Run();
+
+        CA_LOG_T("Resume execution, run status: " << status);
+
+        if (status != ERunStatus::Finished) {
+             static_cast<TDerived*>(this)->PollSources(std::move(sourcesState));
+        }
+
+        if ((status == ERunStatus::PendingInput || status == ERunStatus::Finished) && this->Checkpoints && this->Checkpoints->HasPendingCheckpoint() && !this->Checkpoints->ComputeActorStateSaved() && TBase::ReadyToCheckpoint()) {
+            this->Checkpoints->DoCheckpoint();
+        }
+
+        TBase::ProcessOutputsImpl(status);
+    }
+
+    void DoTerminateImpl() override {
+        this->TaskRunner.Reset();
+    }
+
+    void InvalidateMeminfo() override {
+        if (this->TaskRunner) {
+            this->TaskRunner->GetAllocator().InvalidateMemInfo();
+            this->TaskRunner->GetAllocator().DisableStrictAllocationCheck();
+        }
+    }
+
+    void SaveState(const NDqProto::TCheckpoint& checkpoint, NDqProto::TComputeActorState& state) const override {
+        CA_LOG_D("Save state");
+        NDqProto::TMiniKqlProgramState& mkqlProgramState = *state.MutableMiniKqlProgram();
+        mkqlProgramState.SetRuntimeVersion(NDqProto::RUNTIME_VERSION_YQL_1_0);
+        NDqProto::TStateData::TData& data = *mkqlProgramState.MutableData()->MutableStateData();
+        data.SetVersion(TDqComputeActorCheckpoints::ComputeActorCurrentStateVersion);
+        data.SetBlob(this->TaskRunner->Save());
+
+        for (auto& [inputIndex, source] : this->SourcesMap) {
+            YQL_ENSURE(source.AsyncInput, "Source[" << inputIndex << "] is not created");
+            NDqProto::TSourceState& sourceState = *state.AddSources();
+            source.AsyncInput->SaveState(checkpoint, sourceState);
+            sourceState.SetInputIndex(inputIndex);
+        }
+    }
+
+    void DoLoadRunnerState(TString&& blob) override {
+        TMaybe<TString> error = Nothing();
+        try {
+            this->TaskRunner->Load(blob);
+        } catch (const std::exception& e) {
+            error = e.what();
+        }
+        this->Checkpoints->AfterStateLoading(error);
+    }
+
+    void SetTaskRunner(const TIntrusivePtr<IDqTaskRunner>& taskRunner) {
+        this->TaskRunner = taskRunner;
+    }
+
+    void PrepareTaskRunner(const IDqTaskRunnerExecutionContext& execCtx) {
+        YQL_ENSURE(this->TaskRunner);
+
+        auto guard = TBase::BindAllocator();
+        auto* alloc = guard.GetMutex();
+        alloc->SetLimit(this->MemoryQuota->GetMkqlMemoryLimit());
+
+        this->MemoryQuota->TrySetIncreaseMemoryLimitCallback(alloc);
+
+        TDqTaskRunnerMemoryLimits limits;
+        limits.ChannelBufferSize = this->MemoryLimits.ChannelBufferSize;
+        limits.OutputChunkMaxSize = GetDqExecutionSettings().FlowControl.MaxOutputChunkSize;
+
+        this->TaskRunner->Prepare(this->Task, limits, execCtx);
+
+        for (auto& [channelId, channel] : this->InputChannelsMap) {
+            channel.Channel = this->TaskRunner->GetInputChannel(channelId);
+        }
+
+        for (auto& [inputIndex, source] : this->SourcesMap) {
+            source.Buffer = this->TaskRunner->GetSource(inputIndex);
+            Y_ABORT_UNLESS(source.Buffer);
+        }
+
+        for (auto& [inputIndex, transform] : this->InputTransformsMap) {
+            std::tie(transform.InputBuffer, transform.Buffer) = this->TaskRunner->GetInputTransform(inputIndex);
+        }
+
+        for (auto& [channelId, channel] : this->OutputChannelsMap) {
+            channel.Channel = this->TaskRunner->GetOutputChannel(channelId);
+        }
+
+        for (auto& [outputIndex, transform] : this->OutputTransformsMap) {
+            std::tie(transform.Buffer, transform.OutputBuffer) = this->TaskRunner->GetOutputTransform(outputIndex);
+        }
+
+        for (auto& [outputIndex, sink] : this->SinksMap) {
+            sink.Buffer = this->TaskRunner->GetSink(outputIndex);
+        }
+
+        TBase::FillIoMaps(
+            this->TaskRunner->GetHolderFactory(),
+            this->TaskRunner->GetTypeEnv(),
+            this->TaskRunner->GetSecureParams(),
+            this->TaskRunner->GetTaskParams(),
+            this->TaskRunner->GetReadRanges(),
+            this->TaskRunner->GetRandomProvider()
+        );
+    }
+
+    const NYql::NDq::TTaskRunnerStatsBase* GetTaskRunnerStats() override {
+        return this->TaskRunner ? this->TaskRunner->GetStats() : nullptr;
+    }
+
+    const NYql::NDq::TDqMeteringStats* GetMeteringStats() override {
+        return this->TaskRunner ? this->TaskRunner->GetMeteringStats() : nullptr;
+    }
+
+protected:
+    // methods that are called via static_cast<TDerived*>(this) and may be overriden by a dervied class
+    void* GetSourcesState() const {
+        return nullptr;
+    }
+    void PollSources(void* /* state */) {
+    }
+
 };
 
 } //namespace NYql::NDq

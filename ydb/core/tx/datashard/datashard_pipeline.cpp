@@ -1595,6 +1595,11 @@ TOperation::TPtr TPipeline::BuildOperation(NEvents::TDataEvents::TEvWrite::TPtr&
 
     writeTx->ExtractKeys(true);
 
+    if (!writeTx->Ready()) {
+        badRequest(EvWrite::Convertor::ConvertErrCode(writeOp->GetWriteTx()->GetErrCode()), TStringBuilder() << "Cannot parse tx keys " << writeOp->GetTxId() << ". " << writeOp->GetWriteTx()->GetErrCode() << ": " << writeOp->GetWriteTx()->GetErrStr());
+        return writeOp;
+    }
+
     switch (rec.txmode()) {
         case NKikimrDataEvents::TEvWrite::MODE_PREPARE:
             break;
@@ -1729,9 +1734,11 @@ EExecutionStatus TPipeline::RunExecutionPlan(TOperation::TPtr op,
         auto status = unit.Execute(op, txc, ctx);
         op->AddExecutionTime(timer.GetTime());
         
-        unitSpan.Attribute("Type", TypeName(unit))
-                .Attribute("Status", static_cast<int>(status))
-                .EndOk();
+        if (unitSpan) {
+            unitSpan.Attribute("Type", TypeName(unit))
+                    .Attribute("Status", static_cast<int>(status))
+                    .EndOk();
+        }
 
         LOG_TRACE_S(ctx, NKikimrServices::TX_DATASHARD,
                     "Execution status for " << *op << " at " << Self->TabletID()

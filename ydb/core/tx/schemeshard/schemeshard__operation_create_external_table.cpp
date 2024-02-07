@@ -192,7 +192,7 @@ private:
     }
 
     static bool IsDataSourceValid(const THolder<TProposeResponse>& result,
-                           const TExternalDataSourceInfo::TPtr& externalDataSource) {
+                                  const TExternalDataSourceInfo::TPtr& externalDataSource) {
         if (!externalDataSource) {
             result->SetError(NKikimrScheme::StatusSchemeError, "Data source doesn't exist");
             return false;
@@ -393,8 +393,47 @@ public:
 
 namespace NKikimr::NSchemeShard {
 
-ISubOperation::TPtr CreateNewExternalTable(TOperationId id, const TTxTransaction& tx) {
-    return MakeSubOperation<TCreateExternalTable>(id, tx);
+TVector<ISubOperation::TPtr> CreateNewExternalTable(TOperationId id, const TTxTransaction& tx, TOperationContext& context) {
+    Y_ABORT_UNLESS(tx.GetOperationType() == NKikimrSchemeOp::ESchemeOpCreateExternalTable);
+
+    LOG_I("CreateNewExternalTable, opId " << id << ", feature flag EnableReplaceIfExistsForExternalEntities "
+                                               << context.SS->EnableReplaceIfExistsForExternalEntities << ", tx "
+                                               << tx.ShortDebugString());
+
+    auto errorResult = [&id](NKikimrScheme::EStatus status, const TStringBuf& msg) -> TVector<ISubOperation::TPtr> {
+        return {CreateReject(id, status, TStringBuilder() << "Invalid TCreateExternalTable request: " << msg)};
+    };
+
+    const auto &operation = tx.GetCreateExternalTable();
+    const auto replaceIfExists = operation.GetReplaceIfExists();
+    const TString &name = operation.GetName();
+
+    if (replaceIfExists && !context.SS->EnableReplaceIfExistsForExternalEntities) {
+        return errorResult(NKikimrScheme::StatusPreconditionFailed, "Unsupported: feature flag EnableReplaceIfExistsForExternalEntities is off");
+    }
+
+    const TString& parentPathStr = tx.GetWorkingDir();
+    const TPath parentPath = TPath::Resolve(parentPathStr, context.SS);
+
+    {
+        const auto checks = NExternalTable::IsParentPathValid(parentPath);
+        if (!checks) {
+            return errorResult(checks.GetStatus(), checks.GetError());
+        }
+    }
+
+    if (replaceIfExists) {
+        const TPath dstPath = parentPath.Child(name);
+        const auto isAlreadyExists =
+            dstPath.Check()
+                .IsResolved()
+                .NotUnderDeleting();
+        if (isAlreadyExists) {
+            return {CreateAlterExternalTable(id, tx)};
+        }
+    }
+
+    return {MakeSubOperation<TCreateExternalTable>(id, tx)};
 }
 
 ISubOperation::TPtr CreateNewExternalTable(TOperationId id, TTxState::ETxState state) {

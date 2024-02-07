@@ -106,19 +106,9 @@ bool operator ==(const TNamedValue::TAny& lhs, const TNamedValue::TAny& rhs)
     return lhs.Value == rhs.Value;
 }
 
-bool operator !=(const TNamedValue::TAny& lhs, const TNamedValue::TAny& rhs)
-{
-    return !(lhs == rhs);
-}
-
 bool operator ==(const TNamedValue::TComposite& lhs, const TNamedValue::TComposite& rhs)
 {
     return lhs.Value == rhs.Value;
-}
-
-bool operator !=(const TNamedValue::TComposite& lhs, const TNamedValue::TComposite& rhs)
-{
-    return !(lhs.Value == rhs.Value);
 }
 
 ////////////////////////////////////////////////////////////////////////////////

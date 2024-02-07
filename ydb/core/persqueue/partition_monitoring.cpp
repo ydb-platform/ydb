@@ -74,7 +74,7 @@ void TPartition::HandleMonitoring(TEvPQ::TEvMonRequest::TPtr& ev, const TActorCo
         Y_ABORT("");
     }
     TStringStream out;
-    out << "Partition " << i32(Partition) << ": " << str;  res.push_back(out.Str()); out.Clear();
+    out << "Partition " << Partition << ": " << str;  res.push_back(out.Str()); out.Clear();
     if (DiskIsFull) {
         out << "DISK IS FULL";
         res.push_back(out.Str());
@@ -111,7 +111,7 @@ void TPartition::HandleMonitoring(TEvPQ::TEvMonRequest::TPtr& ev, const TActorCo
     }
     out << Config.DebugString(); res.push_back(out.Str()); out.Clear();
     HTML(out) {
-        DIV_CLASS_ID("tab-pane fade", Sprintf("partition_%u", ui32(Partition))) {
+        DIV_CLASS_ID("tab-pane fade", Sprintf("partition_%u", Partition.InternalPartitionId)) {
             TABLE_SORTABLE_CLASS("table") {
                 TABLEHEAD() {
                     TABLER() {

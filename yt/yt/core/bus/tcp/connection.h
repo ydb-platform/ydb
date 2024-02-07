@@ -224,6 +224,8 @@ private:
 
     std::atomic<EMultiplexingBand> MultiplexingBand_ = EMultiplexingBand::Default;
 
+    EMultiplexingBand ActualMultiplexingBand_ = EMultiplexingBand::Default;
+
     TAtomicObject<TError> Error_;
 
     NNet::IAsyncDialerSessionPtr DialerSession_;

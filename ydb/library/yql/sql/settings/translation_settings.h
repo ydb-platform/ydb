@@ -114,6 +114,7 @@ namespace NSQLTranslation {
         THashSet<TString> AutoParametrizeExprDisabledScopes = {};
 
         TGUCSettings::TPtr GUCSettings = std::make_shared<TGUCSettings>();
+        bool UnicodeLiterals = false;
     };
 
     bool ParseTranslationSettings(const TString& query, NSQLTranslation::TTranslationSettings& settings, NYql::TIssues& issues);

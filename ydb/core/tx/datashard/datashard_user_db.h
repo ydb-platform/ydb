@@ -32,7 +32,12 @@ public:
 
     virtual void EraseRow(
             const TTableId& tableId,
-            const TArrayRef<const TRawTypeValue> key) = 0;            
+            const TArrayRef<const TRawTypeValue> key) = 0;
+
+    virtual void CommitChanges(
+            const TTableId& tableId,
+            ui64 lockId,
+            const TRowVersion& writeVersion) = 0;
 };
 
 class IDataShardConflictChecker {
@@ -89,6 +94,11 @@ public:
             const TTableId& tableId,
             const TArrayRef<const TRawTypeValue> key) override;
 
+    void CommitChanges(
+            const TTableId& tableId, 
+            ui64 lockId, 
+            const TRowVersion& writeVersion) override;
+
 //IDataShardChangeGroupProvider
 public:  
     std::optional<ui64> GetCurrentChangeGroup() const override;
@@ -110,7 +120,6 @@ public:
     void ResetCollectedChanges();
 
 public:
-    void CommitChanges(const TTableId& tableId, ui64 lockId, const TRowVersion& writeVersion);
     bool NeedToReadBeforeWrite(const TTableId& tableId);
     void AddCommitTxId(const TTableId& tableId, ui64 txId, const TRowVersion& commitVersion);
     ui64 GetWriteTxId(const TTableId& tableId);
@@ -143,6 +152,7 @@ private:
     YDB_ACCESSOR_DEF(ui32, LockNodeId);
     YDB_ACCESSOR_DEF(ui64, VolatileTxId);
     YDB_ACCESSOR_DEF(bool, IsImmediateTx);
+    YDB_ACCESSOR_DEF(bool, IsWriteTx);
     YDB_ACCESSOR_DEF(bool, IsRepeatableSnapshot);
 
     YDB_ACCESSOR_DEF(TRowVersion, ReadVersion);

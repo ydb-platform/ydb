@@ -66,10 +66,11 @@ void TKeyValidator::AddWriteRange(const TTableId& tableId, const TTableRange& ra
 }
 
 TKeyValidator::TValidateOptions::TValidateOptions(const TDataShardUserDb& userDb)
-    : LockTxId(userDb.GetLockTxId())
-    , LockNodeId(userDb.GetLockNodeId())
+    : IsLockTxId(static_cast<bool>(userDb.GetLockTxId()))
+    , IsLockNodeId(static_cast<bool>(userDb.GetLockNodeId()))
     , IsRepeatableSnapshot(userDb.GetIsRepeatableSnapshot())
     , IsImmediateTx(userDb.GetIsImmediateTx())
+    , IsWriteTx(userDb.GetIsWriteTx())
 {
 }
 
@@ -77,17 +78,16 @@ bool TKeyValidator::IsValidKey(TKeyDesc& key, const TValidateOptions& opt) const
     if (TSysTables::IsSystemTable(key.TableId))
         return true;
 
-    if (opt.LockTxId) {
+    if (key.RowOperation != TKeyDesc::ERowOperation::Read && !opt.IsWriteTx) {
         // Prevent updates/erases with LockTxId set, unless it's allowed for immediate mvcc txs
-        if (key.RowOperation != TKeyDesc::ERowOperation::Read &&
-            (!Self.GetEnableLockedWrites() || !opt.IsImmediateTx || !opt.IsRepeatableSnapshot || !opt.LockNodeId))
-        {
-            key.Status = TKeyDesc::EStatus::OperationNotSupported;
-            return false;
+        if (opt.IsLockTxId) {
+            if (!(Self.GetEnableLockedWrites() && opt.IsImmediateTx && opt.IsRepeatableSnapshot && opt.IsLockNodeId)) {
+                key.Status = TKeyDesc::EStatus::OperationNotSupported;
+                return false;
+            }
         }
-    } else if (opt.IsRepeatableSnapshot) {
         // Prevent updates/erases in repeatable mvcc txs
-        if (key.RowOperation != TKeyDesc::ERowOperation::Read) {
+        else if (opt.IsRepeatableSnapshot) {
             key.Status = TKeyDesc::EStatus::OperationNotSupported;
             return false;
         }

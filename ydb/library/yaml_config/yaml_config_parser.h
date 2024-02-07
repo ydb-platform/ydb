@@ -19,5 +19,5 @@ namespace NKikimr::NYaml {
 
     void TransformConfig(NJson::TJsonValue& config, bool relaxed = false);
 
-    void Parse(const TString& data, NKikimrConfig::TAppConfig& config);
+    void Parse(const TString& data, NKikimrConfig::TAppConfig& config, bool needsTransforming = true);
 }

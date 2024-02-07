@@ -20,6 +20,7 @@
 #include <ydb/library/yql/providers/s3/provider/yql_s3_provider.h>
 #include <ydb/library/yql/providers/generic/expr_nodes/yql_generic_expr_nodes.h>
 #include <ydb/library/yql/providers/generic/provider/yql_generic_provider.h>
+#include <ydb/library/yql/providers/pg/provider/yql_pg_provider_impl.h>
 #include <ydb/library/yql/providers/generic/provider/yql_generic_state.h>
 #include <ydb/library/yql/minikql/invoke_builtins/mkql_builtins.h>
 
@@ -1501,6 +1502,14 @@ private:
         TypesCtx->AddDataSink(NYql::GenericProviderName, NYql::CreateGenericDataSink(state));
     }
 
+    void InitPgProvider() {
+        auto state = MakeIntrusive<NYql::TPgState>();
+        state->Types = TypesCtx.Get();
+
+        TypesCtx->AddDataSource(NYql::PgProviderName, NYql::CreatePgDataSource(state));
+        TypesCtx->AddDataSink(NYql::PgProviderName, NYql::CreatePgDataSink(state));
+    }
+
     void Init(EKikimrQueryType queryType) {
         KqpRunner = CreateKqpRunner(Gateway, Cluster, TypesCtx, SessionCtx, *FuncRegistry);
 
@@ -1534,6 +1543,8 @@ private:
             InitS3Provider(queryType);
             InitGenericProvider();
         }
+
+        InitPgProvider();
 
         TypesCtx->UdfResolver = CreateSimpleUdfResolver(FuncRegistry);
         TypesCtx->TimeProvider = TAppData::TimeProvider;

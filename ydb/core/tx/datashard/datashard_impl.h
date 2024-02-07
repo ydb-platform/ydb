@@ -1,7 +1,6 @@
 #pragma once
 
 #include "datashard.h"
-#include "datashard_locks.h"
 #include "datashard_trans_queue.h"
 #include "datashard_outreadset.h"
 #include "datashard_pipeline.h"
@@ -29,6 +28,7 @@
 #include <ydb/core/tx/tx_processing.h>
 #include <ydb/core/tx/tx_proxy/proxy.h>
 #include <ydb/core/tx/schemeshard/schemeshard.h>
+#include <ydb/core/tx/locks/locks.h>
 
 #include <ydb/core/base/appdata.h>
 #include <ydb/core/base/tablet_pipe.h>
@@ -1586,7 +1586,7 @@ public:
 
     void AddUserTable(const TPathId& tableId, TUserTable::TPtr tableInfo) {
         TableInfos[tableId.LocalPathId] = tableInfo;
-        SysLocks.UpdateSchema(tableId, *tableInfo);
+        SysLocks.UpdateSchema(tableId, tableInfo->KeyColumnTypes);
         Pipeline.GetDepTracker().UpdateSchema(tableId, *tableInfo);
     }
 

@@ -29,12 +29,6 @@ protected:
 public:
     using TBase::TBase;
 
-    class IMemoryPredictor {
-    public:
-        virtual ui64 AddPortion(const TPortionInfo& portionInfo) = 0;
-        virtual ~IMemoryPredictor() = default;
-    };
-
     class TMemoryPredictorSimplePolicy: public IMemoryPredictor {
     private:
         ui64 SumMemory = 0;

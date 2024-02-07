@@ -2,7 +2,7 @@
 
 #include "datashard_write_operation.h"
 #include "datashard_kqp.h"
-#include "datashard_locks.h"
+#include <ydb/core/tx/locks/locks.h>
 #include "datashard_impl.h"
 #include "datashard_failpoints.h"
 

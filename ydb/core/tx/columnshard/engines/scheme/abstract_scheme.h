@@ -1,5 +1,6 @@
 #pragma once
 
+#include <ydb/core/tx/columnshard/common/snapshot.h>
 #include <ydb/core/tx/columnshard/engines/defs.h>
 #include <ydb/core/tx/columnshard/engines/column_features.h>
 

@@ -304,30 +304,14 @@ protected:
             ReportStats(TInstant::Now(), ESendStats::IfPossible);
         }
         if (Terminated) {
-            TaskRunner.Reset();
+            DoTerminateImpl();
             MemoryQuota.Reset();
             MemoryLimits.MemoryQuotaManager.reset();
         }
     }
 
-    virtual void DoExecuteImpl() {
-        auto sourcesState = GetSourcesState();
-
-        PollAsyncInput();
-        ERunStatus status = TaskRunner->Run();
-
-        CA_LOG_T("Resume execution, run status: " << status);
-
-        if (status != ERunStatus::Finished) {
-            PollSources(std::move(sourcesState));
-        }
-
-        if ((status == ERunStatus::PendingInput || status == ERunStatus::Finished) && Checkpoints && Checkpoints->HasPendingCheckpoint() && !Checkpoints->ComputeActorStateSaved() && ReadyToCheckpoint()) {
-            Checkpoints->DoCheckpoint();
-        }
-
-        ProcessOutputsImpl(status);
-    }
+    virtual void DoExecuteImpl() = 0;
+    virtual void DoTerminateImpl() {}
 
     virtual bool DoHandleChannelsAfterFinishImpl() {
         Y_ABORT_UNLESS(Checkpoints);
@@ -606,12 +590,11 @@ protected:
         InternalError(statusCode, TIssues({std::move(issue)}));
     }
 
+    virtual void InvalidateMeminfo() {}
+
     void InternalError(NYql::NDqProto::StatusIds::StatusCode statusCode, TIssues issues) {
         CA_LOG_E(InternalErrorLogString(statusCode, issues));
-        if (TaskRunner) {
-            TaskRunner->GetAllocator().InvalidateMemInfo();
-            TaskRunner->GetAllocator().DisableStrictAllocationCheck();
-        }
+        InvalidateMeminfo();
         State = NDqProto::COMPUTE_STATE_FAILURE;
         ReportStateAndMaybeDie(statusCode, issues);
     }
@@ -1049,13 +1032,6 @@ protected:
 protected:
     // virtual methods (TODO: replace with static_cast<TDerived*>(this)->Foo()
 
-    virtual std::any GetSourcesState() {
-        return nullptr;
-    }
-
-    virtual void PollSources(std::any /* state */) {
-    }
-
     virtual void TerminateSources(const TIssues& /* issues */, bool /* success */) {
     }
 
@@ -1070,6 +1046,8 @@ protected:
     virtual bool SayHelloOnBootstrap() {
         return true;
     }
+
+
 
 protected:
     void HandleExecuteBase(TEvDqCompute::TEvResumeExecution::TPtr&) {

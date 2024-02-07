@@ -16,7 +16,7 @@
 
 {% endnote %}
 
-Скачать репозиторий с плейбуком для установки {{ ydb-short-name }} на кластер можно с GitHub – `git clone https://github.com/ydb-platform/ydb-ansible-examples.git`. Будут скачены шаблоны установки YDB на кластер из восьми серверов – `8-nodes-block-4-2`и девяти серверов – `9-nodes-mirror-3-dc`, а также скрипты для генерации TLS-сертификатов и файлы requirements для установки необходимых Python пакетов.
+Скачать репозиторий с плейбуком для установки {{ ydb-short-name }} на кластер можно с GitHub – `git clone https://github.com/ydb-platform/ydb-ansible-examples.git`. Этот репозиторий содержит: шаблоны установки YDB на кластер из восьми серверов – `8-nodes-block-4-2`и девяти серверов – `9-nodes-mirror-3-dc`, а также скрипты для генерации TLS-сертификатов и файлы requirements для установки необходимых Python пакетов.
 
 {% cut "Структура репозитория" %}
 

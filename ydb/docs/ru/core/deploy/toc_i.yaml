@@ -3,8 +3,6 @@ items:
   href: manual/deploy-ydb-on-premises.md
 - name: Развертывание одноузлового кластера
   include: { mode: link, path: ../getting_started/self_hosted/toc_p.yaml }
-- name: Развертывание кластера с помощью Ansible
-  href: ydb-ansible-cluster/ansible-ydb-cluster.md
 - name: Конфигурация
   href: configuration/config.md
 - name: Промышленные конфигурации BlobStorage

@@ -8,6 +8,8 @@ items:
     href: getting_started/quickstart.md
   - name: Kubernetes
     href: getting_started/kubernetes.md
+  - name: Развертывание кластера с помощью Ansible
+    href: getting_started/ydb-ansible-cluster/ansible-ydb-cluster.md  
 
 # Main
 - { name: Концепции,                               include: { mode: link, path: concepts/toc_p.yaml } }

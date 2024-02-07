@@ -70,7 +70,7 @@ public:
         endRowId++; // current interface accepts inclusive row2 bound
 
         bool ready = true, overshot = true, hasValidRowsRange = true;
-        const TRowId sliceEndRowId = endRowId;
+        const TRowId sliceBeginRowId = beginRowId, sliceEndRowId = endRowId;
         const auto& meta = Part->IndexPages.BTreeGroups[0];
         Y_ABORT_UNLESS(beginRowId < endRowId);
         Y_ABORT_UNLESS(endRowId <= meta.RowCount);
@@ -87,8 +87,7 @@ public:
 
         const auto iterateLevel = [&](const auto& tryHandleChild) {
             // tryHandleChild may update them, copy for simplicity
-            // always load beginRowId regardless of keys
-            const TRowId levelBeginRowId = beginRowId, levelEndRowId = Max(endRowId, beginRowId + 1);
+            const TRowId levelBeginRowId = beginRowId, levelEndRowId = endRowId;
             
             for (const auto &node : level) {
                 if (node.EndRowId <= levelBeginRowId || node.BeginRowId >= levelEndRowId) {
@@ -150,8 +149,9 @@ public:
                         auto& key2Child = node.GetChild(pos);
                         key2PageId = key2Child.PageId;
                         endRowId = Min(endRowId, key2Child.RowCount + 1); // move endRowId - 1 to the first key > key2
-                        if (key2Child.RowCount <= beginRowId) {
+                        if (key2Child.RowCount <= sliceBeginRowId) {
                             hasValidRowsRange = false; // key2 is before current slice
+                            endRowId = Max(endRowId, sliceBeginRowId + 1); // always load sliceBeginRowId regardless of key2
                         }
                     }
                     return true;
@@ -211,7 +211,7 @@ public:
             iterateLevel(tryHandleDataPage);
         }
 
-        // ready &= DoGroupsAndHistory(hasValidRowsRange, beginRowId, endRowId, beginLimitRowId, chargeGroupsItemsLimit, bytesLimit); // precharge groups using the latest row bounds
+        ready &= DoGroupsAndHistory(hasValidRowsRange, beginRowId, endRowId, firstChild, itemsLimit, bytesLimit); // precharge groups using the latest row bounds
 
         return {ready, overshot};
     }
@@ -384,8 +384,7 @@ public:
 
         for (ui32 height = 0; height < meta.LevelCount && ready; height++) {
             if (height == 0) {
-                auto root = BuildRootChildState(meta);
-                ready &= tryHandleNode(root);
+                ready &= tryHandleNode(BuildRootChildState(meta));
             } else {
                 iterateLevel(tryHandleNode);
             }
@@ -403,8 +402,7 @@ public:
         overshot &= beginRowId == sliceBeginRowId;
 
         if (meta.LevelCount == 0) {
-            auto root = BuildRootChildState(meta);
-            ready &= tryHandleDataPage(root);
+            ready &= tryHandleDataPage(BuildRootChildState(meta));
         } else {
             iterateLevel(tryHandleDataPage);
         }
@@ -415,25 +413,32 @@ public:
     }
 
 private:
-    bool DoGroupsAndHistory(bool hasValidRowsRange, TRowId beginRowId, TRowId endRowId, TRowId beginBytesLimitRowId, ui64 itemsLimit, ui64 bytesLimit) const noexcept {
+    bool DoGroupsAndHistory(bool hasValidRowsRange, TRowId beginRowId, TRowId endRowId, const TChildState& firstChild, ui64 itemsLimit, ui64 bytesLimit) const noexcept {
         bool ready = true;
         
-        if (hasValidRowsRange && beginRowId < endRowId) {
-            if (itemsLimit && endRowId - beginRowId - 1 >= itemsLimit) {
-                endRowId = beginRowId + itemsLimit + 1;
-            }
-            
-            if (beginBytesLimitRowId == Max<TRowId>()) {
-                beginBytesLimitRowId = beginRowId;
+        if (!hasValidRowsRange) {
+            return ready;
+        }
+        if (beginRowId >= endRowId) {
+            return ready;
+        }
 
-                if (IncludeHistory) {
-                    ready &= DoHistory(beginRowId, endRowId);
-                } // otherwise beginBytesLimitRowId is specified, so we do not know where to start charging history
+        if (itemsLimit) {
+            TRowId limitFromRowId = firstChild.PageId == Max<TPageId>() ? firstChild.BeginRowId : beginRowId;
+            if (endRowId - limitFromRowId - 1 > itemsLimit) {
+                endRowId = limitFromRowId + itemsLimit + 1;
             }
+            if (beginRowId >= endRowId) {
+                return ready;
+            }
+        }
 
-            for (auto groupIndex : Groups) {
-                ready &= DoGroup(TGroupId(groupIndex), beginRowId, endRowId, beginBytesLimitRowId, bytesLimit);
-            }
+        if (IncludeHistory && (!bytesLimit || firstChild.PageId != Max<TPageId>())) {
+            ready &= DoHistory(beginRowId, endRowId);
+        }
+
+        for (auto groupIndex : Groups) {
+            ready &= DoGroup(TGroupId(groupIndex), beginRowId, endRowId, firstChild.BeginRowId, bytesLimit);
         }
 
         return ready;
@@ -464,23 +469,12 @@ private:
     }
 
 private:
-    bool DoGroup(TGroupId groupId, TRowId beginRowId, TRowId endRowId, TRowId beginBytesLimitRowId, ui64 bytesLimit) const noexcept {
+    bool DoGroup(TGroupId groupId, TRowId beginRowId, TRowId endRowId, TRowId firstChildBeginRowId, ui64 bytesLimit) const noexcept {
         bool ready = true;
-
         const auto& meta = groupId.IsHistoric() ? Part->IndexPages.BTreeHistoric[groupId.Index] : Part->IndexPages.BTreeGroups[groupId.Index];
 
         TVector<TNodeState> level, nextLevel(::Reserve(3));
-        
-        ui64 prevBeginBytesLimitDataSize = 0;
-        if (bytesLimit) {
-            prevBeginBytesLimitDataSize = GetPrevDataSize(meta, beginBytesLimitRowId);
-            if (beginBytesLimitRowId < beginRowId) {
-                ui64 prevBeginDataSize = GetPrevDataSize(meta, beginRowId);
-                if (LimitExceeded(prevBeginDataSize - prevBeginBytesLimitDataSize, bytesLimit)) {
-                    return true;
-                }
-            }
-        }
+        ui64 firstChildPrevBytes = bytesLimit ? GetPrevDataSize(meta, firstChildBeginRowId) : 0;
 
         const auto iterateLevel = [&](const auto& tryHandleChild) {
             for (const auto &node : level) {
@@ -495,12 +489,12 @@ private:
                     auto& child = node.GetShortChild(pos);
                     auto prevChild = pos ? node.GetShortChildRef(pos - 1) : nullptr;
                     auto childState = BuildChildState(node, child, prevChild);
-                    ready &= tryHandleChild(childState);
                     if (bytesLimit) {
-                        // if (child->DataSize > prevBeginBytesLimitDataSize && LimitExceeded(child->DataSize - prevBeginBytesLimitDataSize, bytesLimit)) {
-                        //     return;
-                        // }
+                        if (LimitExceeded(firstChildPrevBytes, childState.PrevBytes, bytesLimit)) {
+                            return;
+                        }
                     }
+                    ready &= tryHandleChild(childState);
                 }
             }
         };
@@ -515,8 +509,7 @@ private:
 
         for (ui32 height = 0; height < meta.LevelCount; height++) {
             if (height == 0) {
-                auto root = BuildRootChildState(meta);
-                ready &= tryHandleNode(root);
+                ready &= tryHandleNode(BuildRootChildState(meta));
             } else {
                 iterateLevel(tryHandleNode);
             }
@@ -525,8 +518,7 @@ private:
         }
 
         if (meta.LevelCount == 0) {
-            auto root = BuildRootChildState(meta);
-            ready &= tryHandleDataPage(root);
+            ready &= tryHandleDataPage(BuildRootChildState(meta));
         } else {
             iterateLevel(tryHandleDataPage);
         }
@@ -577,8 +569,7 @@ private:
 
         for (ui32 height = 0; height < meta.LevelCount; height++) {
             if (height == 0) {
-                auto root = BuildRootChildState(meta);
-                ready &= tryHandleNode(root);
+                ready &= tryHandleNode(BuildRootChildState(meta));
             } else {
                 iterateLevel(tryHandleNode);
             }
@@ -587,8 +578,7 @@ private:
         }
 
         if (meta.LevelCount == 0) {
-            auto root = BuildRootChildState(meta);
-            ready &= tryHandleDataPage(root);
+            ready &= tryHandleDataPage(BuildRootChildState(meta));
         } else {
             iterateLevel(tryHandleDataPage);
         }
@@ -714,8 +704,7 @@ private:
 
         for (ui32 height = 0; height < meta.LevelCount; height++) {
             if (height == 0) {
-                auto root = BuildRootChildState(meta);
-                ready &= tryHandleNode(root);
+                ready &= tryHandleNode(BuildRootChildState(meta));
             } else {
                 iterateLevel(tryHandleNode);
             }
@@ -724,8 +713,7 @@ private:
         }
 
         if (meta.LevelCount == 0) {
-            auto root = BuildRootChildState(meta);
-            ready &= tryHandleDataPage(root);
+            ready &= tryHandleDataPage(BuildRootChildState(meta));
         } else {
             iterateLevel(tryHandleDataPage);
         }

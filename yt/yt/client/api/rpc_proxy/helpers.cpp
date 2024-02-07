@@ -908,6 +908,10 @@ void ToProto(NProto::TJob* protoJob, const NApi::TJob& job)
     if (job.Error) {
         protoJob->set_error(job.Error.ToString());
     }
+    if (job.InterruptionInfo) {
+        protoJob->set_interruption_info(job.InterruptionInfo.ToString());
+    }
+
     if (job.BriefStatistics) {
         protoJob->set_brief_statistics(job.BriefStatistics.ToString());
     }
@@ -1015,6 +1019,11 @@ void FromProto(NApi::TJob* job, const NProto::TJob& protoJob)
         job->Error = TYsonString(protoJob.error());
     } else {
         job->Error = TYsonString();
+    }
+    if (protoJob.has_interruption_info()) {
+        job->InterruptionInfo = TYsonString(protoJob.interruption_info());
+    } else {
+        job->InterruptionInfo = TYsonString();
     }
     if (protoJob.has_brief_statistics()) {
         job->BriefStatistics = TYsonString(protoJob.brief_statistics());

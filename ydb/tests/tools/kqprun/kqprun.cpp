@@ -121,7 +121,7 @@ void RunMain(int argc, const char* argv[]) {
         .Optional()
         .RequiredArgument("FILE")
         .StoreResult(&schemeQueryFile);
-    options.AddLongOption("app-config", "File with app config (TAppConfig)")
+    options.AddLongOption('c', "app-config", "File with app config (TAppConfig)")
         .Optional()
         .RequiredArgument("FILE")
         .DefaultValue(appConfigFile)
@@ -153,33 +153,33 @@ void RunMain(int argc, const char* argv[]) {
         .NoArgument()
         .DefaultValue(executionOptions.ClearExecution)
         .SetFlag(&executionOptions.ClearExecution);
-    options.AddLongOption("trace-opt", "print AST in the begin of each transformation, one of { scheme | script | all }")
+    options.AddLongOption('T', "trace-opt", "print AST in the begin of each transformation, one of { scheme | script | all }")
         .Optional()
         .RequiredArgument("STR")
         .DefaultValue(traceOptType)
         .StoreResult(&traceOptType);
-    options.AddLongOption("script-action", "Script query execute action, one of { execute | explain }")
+    options.AddLongOption('A', "script-action", "Script query execute action, one of { execute | explain }")
         .Optional()
         .RequiredArgument("STR")
         .DefaultValue(scriptQueryAction)
         .StoreResult(&scriptQueryAction);
-    options.AddLongOption("plan-format", "Script query plan format, one of { pretty | table | json }")
+    options.AddLongOption('P', "plan-format", "Script query plan format, one of { pretty | table | json }")
         .Optional()
         .RequiredArgument("STR")
         .DefaultValue(planOutputFormat)
         .StoreResult(&planOutputFormat);
-    options.AddLongOption("result-format", "Script query result format, one of { rows | full }")
+    options.AddLongOption('R', "result-format", "Script query result format, one of { rows | full }")
         .Optional()
         .RequiredArgument("STR")
         .DefaultValue(resultOutputFormat)
         .StoreResult(&resultOutputFormat);
-    options.AddLongOption("result-rows-limit", "Rows limit for script execution results")
+    options.AddLongOption('L', "result-rows-limit", "Rows limit for script execution results")
         .Optional()
         .RequiredArgument("INT")
         .DefaultValue(resultsRowsLimit)
         .StoreResult(&resultsRowsLimit);
 
-    options.AddLongOption("udf", "Load shared library with UDF by given path")
+    options.AddLongOption('u', "udf", "Load shared library with UDF by given path")
         .Optional()
         .RequiredArgument("FILE")
         .AppendTo(&udfsPaths);

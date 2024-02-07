@@ -1,5 +1,6 @@
-#include "db_wrapper.h"
-#include "insert_table/insert_table.h"
+#include "helper.h"
+#include <ydb/core/tx/columnshard/engines/db_wrapper.h>
+#include <ydb/core/tx/columnshard/engines/insert_table/insert_table.h>
 
 #include <ydb/core/tx/columnshard/columnshard_schema.h>
 
@@ -9,6 +10,7 @@
 namespace NKikimr {
 
 using namespace NOlap;
+using namespace NKikimr::NOlap::NEngines::NTest;
 
 namespace {
 
@@ -40,7 +42,6 @@ public:
 
 }
 
-
 Y_UNIT_TEST_SUITE(TColumnEngineTestInsertTable) {
     Y_UNIT_TEST(TestInsertCommit) {
         ui64 writeId = 0;
@@ -53,16 +54,16 @@ Y_UNIT_TEST_SUITE(TColumnEngineTestInsertTable) {
         ui64 indexSnapshot = 0;
 
         // insert, not commited
-        bool ok = insertTable.Insert(dbTable, TInsertedData(writeId, tableId, dedupId, blobId1, {}, indexSnapshot, {}));
+        bool ok = insertTable.Insert(dbTable, TInsertedData(writeId, tableId, dedupId, blobId1, TLocalHelper::GetMetaProto(), indexSnapshot, {}));
         UNIT_ASSERT(ok);
 
         // insert the same blobId1 again
-        ok = insertTable.Insert(dbTable, TInsertedData(writeId, tableId, dedupId, blobId1, {}, indexSnapshot, {}));
+        ok = insertTable.Insert(dbTable, TInsertedData(writeId, tableId, dedupId, blobId1, TLocalHelper::GetMetaProto(), indexSnapshot, {}));
         UNIT_ASSERT(!ok);
 
         // insert different blodId with the same writeId and dedupId
         TUnifiedBlobId blobId2(2222, 1, 2, 100, 1);
-        ok = insertTable.Insert(dbTable, TInsertedData(writeId, tableId, dedupId, blobId2, {}, indexSnapshot, {}));
+        ok = insertTable.Insert(dbTable, TInsertedData(writeId, tableId, dedupId, blobId2, TLocalHelper::GetMetaProto(), indexSnapshot, {}));
         UNIT_ASSERT(!ok);
 
         // read nothing

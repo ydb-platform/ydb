@@ -144,6 +144,7 @@ public:
         const TValidatedWriteTx::TPtr& writeTx = writeOp->GetWriteTx();
 
         DataShard.ReleaseCache(*writeOp);
+        writeTx->GetUserDb().ResetCounters();
 
         if (writeOp->IsTxDataReleased()) {
             switch (Pipeline.RestoreDataTx(writeOp, txc)) {
@@ -328,6 +329,10 @@ public:
             if (auto changes = std::move(writeTx->GetCollectedChanges())) {
                 op->ChangeRecords() = std::move(changes);
             }
+
+            auto& counters = writeTx->GetUserDb().GetCounters();
+            KqpUpdateDataShardStatCounters(DataShard, counters);
+            KqpFillTxStats(DataShard, counters, *writeResult->Record.MutableTxStats());
 
         } catch (const TNeedGlobalTxId&) {
             Y_VERIFY_S(op->GetGlobalTxId() == 0,

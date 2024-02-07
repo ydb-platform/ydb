@@ -59,19 +59,22 @@ Y_UNIT_TEST_SUITE(DataShardWrite) {
         auto opts = TShardedTableOptions().Columns({{"key", "Uint32", true, false}, {"value", "Uint32", false, false}});
         auto [shards, tableId] = CreateShardedTable(server, sender, "/Root", "table-1", opts);
         const ui64 shard = shards[0];
-
         const ui32 rowCount = 3;
+
         ui64 txId = 100;
 
         Cout << "========= Send immediate write =========\n";
         {
             const auto writeResult = Write(runtime, sender, shard, tableId, opts.Columns_, rowCount, txId, NKikimrDataEvents::TEvWrite::MODE_IMMEDIATE);
+            
             UNIT_ASSERT_VALUES_EQUAL(writeResult.GetOrigin(), shard);
             UNIT_ASSERT_VALUES_EQUAL(writeResult.GetStep(), 0);
             UNIT_ASSERT_VALUES_EQUAL(writeResult.GetOrderId(), txId);
             UNIT_ASSERT_VALUES_EQUAL(writeResult.GetTxId(), txId);
-            UNIT_ASSERT_VALUES_EQUAL(writeResult.GetDomainCoordinators().size(), 1);
-            UNIT_ASSERT_VALUES_EQUAL(writeResult.GetTabletInfo().GetTabletId(), shard);
+
+            const auto& tableAccessStats = writeResult.GetTxStats().GetTableAccessStats(0);
+            UNIT_ASSERT_VALUES_EQUAL(tableAccessStats.GetTableInfo().GetName(), "/Root/table-1");
+            UNIT_ASSERT_VALUES_EQUAL(tableAccessStats.GetUpdateRow().GetCount(), rowCount);
         }
 
         Cout << "========= Read table =========\n";
@@ -87,13 +90,14 @@ Y_UNIT_TEST_SUITE(DataShardWrite) {
         auto opts = TShardedTableOptions().Columns({{"key64", "Uint64", true, false}, {"key32", "Uint32", true, false},
                                                     {"value64", "Uint64", false, false}, {"value32", "Uint32", false, false}, {"valueUtf8", "Utf8", false, false}});
         auto [shards, tableId] = CreateShardedTable(server, sender, "/Root", "table-1", opts);
-
+        const ui64 shard = shards[0];
         const ui32 rowCount = 3;
+
         ui64 txId = 100;
 
         Cout << "========= Send immediate write =========\n";
         {
-            Write(runtime, sender, shards[0], tableId, opts.Columns_, rowCount, txId, NKikimrDataEvents::TEvWrite::MODE_IMMEDIATE);
+            Write(runtime, sender, shard, tableId, opts.Columns_, rowCount, txId, NKikimrDataEvents::TEvWrite::MODE_IMMEDIATE);
         }
 
         Cout << "========= Read table =========\n";
@@ -110,6 +114,7 @@ Y_UNIT_TEST_SUITE(DataShardWrite) {
 
         auto opts = TShardedTableOptions().Columns({{"key", "Utf8", true, false}});
         auto [shards, tableId] = CreateShardedTable(server, sender, "/Root", "table-1", opts);
+        const ui64 shard = shards[0];
 
         Cout << "========= Send immediate write =========\n";
         {
@@ -120,7 +125,7 @@ Y_UNIT_TEST_SUITE(DataShardWrite) {
             ui64 payloadIndex = NKikimr::NEvWrite::TPayloadWriter<NKikimr::NEvents::TDataEvents::TEvWrite>(*evWrite).AddDataToPayload(matrix.ReleaseBuffer());
             evWrite->AddOperation(NKikimrDataEvents::TEvWrite::TOperation::OPERATION_UPSERT, tableId, {1}, payloadIndex, NKikimrDataEvents::FORMAT_CELLVEC);
 
-            const auto writeResult = Write(runtime, sender, shards[0], std::move(evWrite), NKikimrDataEvents::TEvWriteResult::STATUS_BAD_REQUEST);
+            const auto writeResult = Write(runtime, sender, shard, std::move(evWrite), NKikimrDataEvents::TEvWriteResult::STATUS_BAD_REQUEST);
             UNIT_ASSERT_VALUES_EQUAL(writeResult.GetIssues().size(), 1);
             UNIT_ASSERT(writeResult.GetIssues(0).message().Contains("Row key size of 1049601 bytes is larger than the allowed threshold 1049600"));
         }
@@ -133,13 +138,14 @@ Y_UNIT_TEST_SUITE(DataShardWrite) {
         const auto [shards, tableId] = CreateShardedTable(server, sender, "/Root", "table-1", opts);
         const ui64 shard = shards[0];
         const ui64 coordinator = ChangeStateStorage(Coordinator, server->GetSettings().Domain);
+        const ui32 rowCount = 3;
 
         ui64 txId = 100;
         ui64 stepId;
 
         Cout << "========= Send prepare =========\n";
         {
-            const auto writeResult = Write(runtime, sender, shard, tableId, opts.Columns_, 3, txId, NKikimrDataEvents::TEvWrite::MODE_PREPARE);
+            const auto writeResult = Write(runtime, sender, shard, tableId, opts.Columns_, rowCount, txId, NKikimrDataEvents::TEvWrite::MODE_PREPARE);
 
             UNIT_ASSERT_VALUES_EQUAL(writeResult.GetStatus(), NKikimrDataEvents::TEvWriteResult::STATUS_PREPARED);
             UNIT_ASSERT_GT(writeResult.GetMinStep(), 0);
@@ -162,11 +168,16 @@ Y_UNIT_TEST_SUITE(DataShardWrite) {
         {
             auto ev = runtime.GrabEdgeEventRethrow<NEvents::TDataEvents::TEvWriteResult>(sender);
             auto writeResult = ev->Get()->Record;
+            
             UNIT_ASSERT_C(writeResult.GetStatus() == NKikimrDataEvents::TEvWriteResult::STATUS_COMPLETED, "Status: " << writeResult.GetStatus() << " Issues: " << writeResult.GetIssues());
             UNIT_ASSERT_VALUES_EQUAL(writeResult.GetOrigin(), shard);
             UNIT_ASSERT_VALUES_EQUAL(writeResult.GetStep(), stepId);
             UNIT_ASSERT_VALUES_EQUAL(writeResult.GetOrderId(), txId);
             UNIT_ASSERT_VALUES_EQUAL(writeResult.GetTxId(), txId);
+
+            const auto& tableAccessStats = writeResult.GetTxStats().GetTableAccessStats(0);
+            UNIT_ASSERT_VALUES_EQUAL(tableAccessStats.GetTableInfo().GetName(), "/Root/table-1");
+            UNIT_ASSERT_VALUES_EQUAL(tableAccessStats.GetUpdateRow().GetCount(), rowCount);
         }
 
         Cout << "========= Read table =========\n";

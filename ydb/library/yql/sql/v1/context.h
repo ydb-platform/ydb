@@ -312,6 +312,7 @@ namespace NSQLTranslationV1 {
         TMaybe<bool> CompactGroupBy;
         bool BlockEngineEnable = false;
         bool BlockEngineForce = false;
+        ui64 ParallelModeCount = 0;
     };
 
     class TColumnRefScope {

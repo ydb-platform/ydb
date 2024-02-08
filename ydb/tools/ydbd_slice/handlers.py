@@ -111,11 +111,11 @@ def slice_install(components, nodes, cluster_details, configurator, do_clear_log
         format_drivers(nodes)
 
         if 'bin' in components.get('kikimr', []):
-            update_kikimr(nodes, configurator.kikimr_bin, configurator.kikimr_compressed_bin, args.no_copy_optimization)
+            update_kikimr(nodes, configurator.kikimr_bin, configurator.kikimr_compressed_bin)
 
         if 'cfg' in components.get('kikimr', []):
             static_cfg_path = configurator.create_static_cfg()
-            update_cfg(nodes, static_cfg_path, args.no_copy_optimization)
+            update_cfg(nodes, static_cfg_path)
             deploy_secrets(nodes, args.yav_version)
 
         start_static(nodes)
@@ -355,18 +355,18 @@ slice_cfg_path = '/Berkanavt/kikimr/cfg'
 slice_secrets_path = '/Berkanavt/kikimr/token'
 
 
-def update_kikimr(nodes, bin_path, compressed_path, no_copy_optimization):
+def update_kikimr(nodes, bin_path, compressed_path):
     bin_directory = os.path.dirname(bin_path)
-    nodes.copy(bin_path, slice_kikimr_path, compressed_path=compressed_path, no_copy_optimization=no_copy_optimization)
+    nodes.copy(bin_path, slice_kikimr_path, compressed_path=compressed_path)
     for lib in ['libiconv.so', 'liblibaio-dynamic.so', 'liblibidn-dynamic.so']:
         lib_path = os.path.join(bin_directory, lib)
         if os.path.exists(lib_path):
             remote_lib_path = os.path.join('/lib', lib)
-            nodes.copy(lib_path, remote_lib_path, no_copy_optimization=no_copy_optimization)
+            nodes.copy(lib_path, remote_lib_path)
 
 
-def update_cfg(nodes, cfg_path, no_copy_optimization):
-    nodes.copy(cfg_path, slice_cfg_path, directory=True, no_copy_optimization=no_copy_optimization)
+def update_cfg(nodes, cfg_path):
+    nodes.copy(cfg_path, slice_cfg_path, directory=True)
 
 
 def deploy_secrets(nodes, yav_version):
@@ -404,13 +404,13 @@ def slice_update(components, nodes, cluster_details, configurator, do_clear_logs
 
     if 'kikimr' in components:
         if 'bin' in components.get('kikimr', []):
-            update_kikimr(nodes, configurator.kikimr_bin, configurator.kikimr_compressed_bin, args.no_copy_optimization)
+            update_kikimr(nodes, configurator.kikimr_bin, configurator.kikimr_compressed_bin)
 
     slice_stop(components, nodes, cluster_details)
     if 'kikimr' in components:
         if 'cfg' in components.get('kikimr', []):
             static = configurator.create_static_cfg()
-            update_cfg(nodes, static, args.no_copy_optimization)
+            update_cfg(nodes, static)
             deploy_secrets(nodes, args.yav_version)
 
     deploy_slot_configs(components, nodes, cluster_details)

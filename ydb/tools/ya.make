@@ -4,5 +4,4 @@ RECURSE(
     ydbd_slice
     tsserver
     tstool
-    s3meta
 )

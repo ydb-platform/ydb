@@ -1,8 +1,7 @@
 #pragma once
-#include "defs.h"
 
 #include "blobstorage_pdisk_color_limits.h"
-#include "blobstorage_pdisk_data.h"
+#include "blobstorage_pdisk_state.h"
 #include "blobstorage_pdisk_defs.h"
 #include "blobstorage_pdisk_keeper_params.h"
 #include "blobstorage_pdisk_quota_record.h"

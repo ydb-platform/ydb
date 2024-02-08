@@ -1,5 +1,4 @@
 #pragma once
-#include "defs.h"
 
 #include <ydb/library/pdisk_io/sector_map.h>
 

@@ -1,9 +1,14 @@
 #pragma once
-#include "defs.h"
 
-#include "blobstorage_pdisk_ut.h"
-
+#include "blobstorage_pdisk.h"
+#include "blobstorage_pdisk_signature.h"
 #include "blobstorage_pdisk_ut_config.h"
+#include "blobstorage_pdisk_ut_helpers.h"
+#include "blobstorage_pdisk_ut_defs.h"
+
+#include <ydb/core/base/tablet.h>
+#include <ydb/core/blobstorage/base/blobstorage_events.h>
+#include <ydb/core/node_whiteboard/node_whiteboard.h>
 
 namespace NKikimr {
 

@@ -1,4 +1,3 @@
-#include "defs.h"
 #include "blobstorage_pdisk_crypto.h"
 #include "blobstorage_pdisk_impl.h"
 #include "blobstorage_pdisk_logreader.h"

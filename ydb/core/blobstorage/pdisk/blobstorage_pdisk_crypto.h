@@ -1,8 +1,8 @@
 #pragma once
-#include "defs.h"
 
 #include <ydb/core/base/compile_time_flags.h>
 #include <ydb/core/blobstorage/crypto/crypto.h>
+#include <ydb/core/debug/valgrind_check.h>
 
 namespace NKikimr {
 namespace NPDisk {

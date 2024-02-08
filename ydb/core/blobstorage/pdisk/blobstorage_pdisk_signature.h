@@ -1,6 +1,8 @@
 #pragma once
 
-#include "defs.h"
+#include <util/generic/string.h>
+#include <util/string/builder.h>
+#include <util/system/types.h>
 
 namespace NKikimr {
 

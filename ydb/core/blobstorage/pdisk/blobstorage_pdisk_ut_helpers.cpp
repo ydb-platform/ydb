@@ -29,12 +29,7 @@ TString MakeDatabasePath(const char *dir) {
 }
 
 TString MakePDiskPath(const char *dir) {
-    TString databaseDirectory = MakeDatabasePath(dir);
-    if (IsRealBlockDevice) {
-        return RealBlockDevicePath;
-    } else {
-        return databaseDirectory + "/pdisk.dat";
-    }
+    return MakeDatabasePath(dir) + "/pdisk.dat";
 }
 
 void FormatPDiskForTest(TString path, ui64 guid, ui32& chunkSize, ui64 diskSize, bool isErasureEncodeUserLog,

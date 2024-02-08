@@ -16,8 +16,7 @@ SRCS(
 PEERDIR(
     util
     ydb/library/yql/ast
-    ydb/library/yql/public/udf
-    ydb/library/yql/public/udf/arrow
+    contrib/libs/apache/arrow
     ydb/library/yql/core/cbo
 )
 

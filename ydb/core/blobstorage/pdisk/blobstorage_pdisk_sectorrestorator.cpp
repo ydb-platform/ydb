@@ -2,6 +2,8 @@
 #include "blobstorage_pdisk_internal_interface.h"
 #include "blobstorage_pdisk_sectorrestorator.h"
 
+#include <ydb/core/debug/valgrind_check.h>
+
 namespace NKikimr {
 namespace NPDisk {
 

@@ -1,12 +1,12 @@
 #pragma once
-#include "defs.h"
-#include "blobstorage_pdisk.h"
-#include "blobstorage_pdisk_abstract.h"
+
 #include <ydb/library/actors/util/thread.h>
 #include <util/system/thread.h>
 
 namespace NKikimr {
 namespace NPDisk {
+
+class IPDisk;
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 // PDisk Thread

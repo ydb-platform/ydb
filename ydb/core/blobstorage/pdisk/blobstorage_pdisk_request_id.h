@@ -2,8 +2,6 @@
 
 #include <util/stream/output.h>
 
-class IOutputStream;
-
 namespace NKikimr {
 namespace NPDisk {
 

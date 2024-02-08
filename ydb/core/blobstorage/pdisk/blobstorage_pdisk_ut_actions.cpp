@@ -1,4 +1,5 @@
 #include "blobstorage_pdisk_ut_actions.h"
+#include "blobstorage_pdisk_ut_defs.h"
 
 namespace NKikimr {
 

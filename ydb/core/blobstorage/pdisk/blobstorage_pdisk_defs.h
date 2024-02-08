@@ -1,10 +1,7 @@
 #pragma once
-#include "defs.h"
 #include <ydb/core/base/blobstorage.h>
 #include <ydb/core/blobstorage/crypto/default.h>
 #include <ydb/core/protos/blobstorage.pb.h>
-
-#include "blobstorage_pdisk_signature.h"
 
 #include <ydb/core/util/text.h>
 

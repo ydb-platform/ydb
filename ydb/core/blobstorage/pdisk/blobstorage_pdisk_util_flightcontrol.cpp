@@ -1,3 +1,4 @@
+#include "blobstorage_pdisk_mon.h"
 #include "blobstorage_pdisk_util_flightcontrol.h"
 
 namespace NKikimr {

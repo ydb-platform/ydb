@@ -1,6 +1,7 @@
 #pragma once
-#include "defs.h"
-#include "blobstorage_pdisk_defs.h"
+
+#include <util/generic/string.h>
+#include <ydb/core/protos/blobstorage_disk_color.pb.h>
 
 namespace NKikimr {
 namespace NPDisk {

@@ -5,7 +5,12 @@
 #include <util/digest/numeric.h>
 #include <util/generic/vector.h>
 
-#include <arrow/compute/kernel.h>
+//#include <arrow/compute/kernel.h>
+
+namespace arrow::compute {
+    class FunctionOptions;
+    struct ScalarKernel;
+}
 
 namespace NKikimr {
 

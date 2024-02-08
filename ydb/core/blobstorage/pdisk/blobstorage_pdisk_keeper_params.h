@@ -1,6 +1,8 @@
 #pragma once
-#include "defs.h"
-#include <ydb/core/blobstorage/pdisk/blobstorage_pdisk_defs.h>
+
+#include "blobstorage_pdisk_defs.h"
+
+#include <ydb/core/blobstorage/base/blobstorage_vdiskid.h>
 
 #include <util/generic/map.h>
 

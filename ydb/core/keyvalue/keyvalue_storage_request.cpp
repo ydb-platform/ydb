@@ -168,8 +168,6 @@ public:
 
         NKikimrProto::EReplyStatus status = ev->Get()->Status;
         if (status != NKikimrProto::OK) {
-            Cerr << "Patch Not OK response!\n" << NKikimrProto::EReplyStatus_Name(status) << Endl;
-            Cerr << ev->Get()->ErrorReason << Endl;
             TInstant now = TAppData::TimeProvider->Now();
 
             TStringStream str;
@@ -192,7 +190,6 @@ public:
             return;
         }
 
-        Cerr << "Patch OK response!\n";
         ui64 cookie = ev->Cookie;
         ui64 patchIdx = cookie;
         if (patchIdx >= IntermediateResults->Patches.size() && patchIdx >= IntermediateResults->Commands.size()) {

@@ -194,11 +194,15 @@ Y_UNIT_TEST(PgConvertNumericDecimal128BigScale3) {
     arrow::Decimal128Builder builder(type);
 
     const char* expected[] = {
-        "36893488147419103.245", "-36893488147419103.245", nullptr
+        "36893488147419103.245", "-36893488147419103.245",
+        "46116860184273879.041", "-46116860184273879.041",
+        nullptr
     };
 
     ARROW_OK(builder.Append(arrow::Decimal128::FromString("36893488147419103.245").ValueOrDie()));
     ARROW_OK(builder.Append(arrow::Decimal128::FromString("-36893488147419103.245").ValueOrDie()));
+    ARROW_OK(builder.Append(arrow::Decimal128::FromString("46116860184273879.041").ValueOrDie()));
+    ARROW_OK(builder.Append(arrow::Decimal128::FromString("-46116860184273879.041").ValueOrDie()));
     ARROW_OK(builder.AppendNull());
 
     std::shared_ptr<arrow::Array> array;

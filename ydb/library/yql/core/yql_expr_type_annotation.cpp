@@ -1316,7 +1316,7 @@ const TDataExprType* CommonType(TPositionHandle pos, const TDataExprType* one, c
         const auto scale = std::min<ui8>(NDecimal::MaxPrecision - whole, std::max<ui8>(parts1.second, parts2.second));
         return ctx.MakeType<TDataExprParamsType>(EDataSlot::Decimal, ToString(whole + scale), ToString(scale));
     } else if (!(IsDataTypeDecimal(slot1) || IsDataTypeDecimal(slot2))) {
-        if (const auto super = GetSuperType(slot1, slot2))
+        if (const auto super = GetSuperType(slot1, slot2, true, &ctx, &pos))
             return ctx.MakeType<TDataExprType>(*super);
     }
 
@@ -4249,13 +4249,29 @@ ui8 GetDecimalWidthOfIntegral(EDataSlot dataSlot) {
     return NUdf::GetDataTypeInfo(dataSlot).DecimalDigits;
 }
 
-TMaybe<EDataSlot> GetSuperType(EDataSlot dataSlot1, EDataSlot dataSlot2) {
+TMaybe<EDataSlot> GetSuperType(EDataSlot dataSlot1, EDataSlot dataSlot2, bool warn, TExprContext* ctx, TPositionHandle* pos) {
     if (dataSlot1 == dataSlot2) {
         return dataSlot1;
     }
 
     if (IsDataTypeNumeric(dataSlot1) && IsDataTypeNumeric(dataSlot2)) {
-        return GetNumericDataTypeByLevel(Max(GetNumericDataTypeLevel(dataSlot1), GetNumericDataTypeLevel(dataSlot2)));
+        auto lvl1 = GetNumericDataTypeLevel(dataSlot1);
+        auto lvl2 = GetNumericDataTypeLevel(dataSlot2);
+        if (lvl1 > lvl2) {
+            std::swap(lvl1, lvl2);
+        }
+        bool isFromSignedToUnsigned = (lvl1 & 1) && !(lvl2 & 1);
+        bool isFromUnsignedToSignedSameWidth = ((lvl1 == (lvl2 & ~1u)) && ((lvl1 ^ lvl2) & 1));
+        if (warn && (isFromSignedToUnsigned || isFromUnsignedToSignedSameWidth)) {
+            auto issue = TIssue(ctx->GetPosition(*pos), TStringBuilder() <<
+                "Consider using explicit CAST or BITCAST to convert from " <<
+                NKikimr::NUdf::GetDataTypeInfo(dataSlot1).Name << " to " << NKikimr::NUdf::GetDataTypeInfo(dataSlot2).Name);
+            SetIssueCode(EYqlIssueCode::TIssuesIds_EIssueCode_CORE_IMPLICIT_BITCAST, issue);
+            if (!ctx->AddWarning(issue)) {
+                return {};
+            }
+        }
+        return GetNumericDataTypeByLevel(lvl2);
     }
 
     if (IsDataTypeString(dataSlot1) && IsDataTypeString(dataSlot2)) {

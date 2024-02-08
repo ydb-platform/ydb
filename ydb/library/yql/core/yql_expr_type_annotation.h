@@ -247,7 +247,7 @@ IGraphTransformer::TStatus TrySilentConvertTo(TExprNode::TPtr& node, const TType
     TConvertFlags flags = {});
 IGraphTransformer::TStatus TrySilentConvertTo(TExprNode::TPtr& node, const TTypeAnnotationNode& sourceType,
     const TTypeAnnotationNode& expectedType, TExprContext& ctx, TConvertFlags flags = {});
-TMaybe<EDataSlot> GetSuperType(EDataSlot dataSlot1, EDataSlot dataSlot2);
+TMaybe<EDataSlot> GetSuperType(EDataSlot dataSlot1, EDataSlot dataSlot2, bool warn = false, TExprContext* ctx = nullptr, TPositionHandle* pos = nullptr);
 IGraphTransformer::TStatus SilentInferCommonType(TExprNode::TPtr& node1, TExprNode::TPtr& node2, TExprContext& ctx,
     const TTypeAnnotationNode*& commonType, TConvertFlags flags = {});
 IGraphTransformer::TStatus SilentInferCommonType(TExprNode::TPtr& node1, const TTypeAnnotationNode& type1,

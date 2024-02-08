@@ -2174,6 +2174,8 @@ class Python(object):
         self.tc = tc
 
     def configure_posix(self, python=None, python_config=None):
+        self.check_configuration()
+
         python = python or preset('PYTHON_BIN') or which('python')
         python_config = python_config or preset('PYTHON_CONFIG') or which('python-config')
 
@@ -2194,8 +2196,21 @@ class Python(object):
         # They are not used separately and get overriden together, so it is safe.
         # TODO(somov): Удалить эту переменную и PYTHON_LIBRARIES из makelist-ов.
         self.libraries = ''
-        if preset('USE_ARCADIA_PYTHON') == 'no' and not preset('USE_SYSTEM_PYTHON') and not self.tc.os_sdk_local:
-            raise Exception("Use fixed python (see https://clubs.at.yandex-team.ru/arcadia/15392) or set OS_SDK=local flag")
+
+    def check_configuration(self):
+        if preset('USE_ARCADIA_PYTHON') == 'no':
+
+            # Set USE_LOCAL_PYTHON to enable configuration
+            # when we still using fixed OS SDK,
+            # but at the same time using Python from the local system.
+            #
+            # This configuration is not guaranteed to work,
+            # for example, if local and fixed OS SDKs differ much.
+            if preset('USE_LOCAL_PYTHON') == 'yes':
+                return
+
+            if not preset('USE_SYSTEM_PYTHON') and not self.tc.os_sdk_local:
+                raise Exception("Use fixed python (see https://clubs.at.yandex-team.ru/arcadia/15392) or set OS_SDK=local flag")
 
     def print_variables(self):
         variables = Variables({

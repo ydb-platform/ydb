@@ -280,9 +280,6 @@ def validate_test(unit, kw):
                     tags.add(consts.YaTestTags.External)
                     tags.add("ya:yt_research_pool")
 
-    if valid_kw.get("USE_ARCADIA_PYTHON") == "yes" and valid_kw.get("SCRIPT-REL-PATH") == "py.test":
-        errors.append("PYTEST_SCRIPT is deprecated")
-
     partition = valid_kw.get('TEST_PARTITION', 'SEQUENTIAL')
     if partition not in PARTITION_MODS:
         raise ValueError('partition mode should be one of {}, detected: {}'.format(PARTITION_MODS, partition))

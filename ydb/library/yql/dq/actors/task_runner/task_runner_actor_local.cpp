@@ -72,13 +72,13 @@ public:
             }
         } catch (const NKikimr::TMemoryLimitExceededException& e) {
             Send(
-                ev->Sender,
+                ParentId,
                 GetError(e).Release(),
                 0,
                 ev->Cookie);
         } catch (...) {
             Send(
-                ev->Sender,
+                ParentId,
                 GetError(CurrentExceptionMessage()).Release(),
                 /*flags=*/0,
                 ev->Cookie);
@@ -100,7 +100,7 @@ private:
 
         ev->Get()->Stats = TDqTaskRunnerStatsView(TaskRunner->GetStats(), std::move(sinks), std::move(inputTransforms));
         Send(
-            ev->Sender,
+            ParentId,
             ev->Release().Release(),
             /*flags=*/0,
             ev->Cookie);
@@ -115,7 +115,7 @@ private:
             error = e.what();
         }
         Send(
-            ev->Sender,
+            ParentId,
             new TEvLoadTaskRunnerFromStateDone(std::move(error)),
             /*flags=*/0,
             ev->Cookie);
@@ -241,7 +241,7 @@ private:
             }
 
             st->Stats = TDqTaskRunnerStatsView(TaskRunner->GetStats(), std::move(sinks), std::move(inputTransforms));
-            Send(ev->Sender, st.Release());
+            Send(ParentId, st.Release());
         }
 
         bool wasSent = Send(
@@ -287,7 +287,7 @@ private:
 
         // run
         Send(
-            ev->Sender,
+            ParentId,
             new TEvPushFinished(channelId, freeSpace),
             /*flags=*/0,
             ev->Cookie);
@@ -371,7 +371,7 @@ private:
         }
 
         Send(
-            ev->Sender,
+            ParentId,
             new TEvChannelPopFinished(
                 channelId,
                 std::move(chunks),
@@ -450,7 +450,7 @@ private:
             TaskRunner->GetHolderFactory());
 
         Send(
-            ev->Sender,
+            ParentId,
             event.Release(),
             /*flags=*/0,
             ev->Cookie);

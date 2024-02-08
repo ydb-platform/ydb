@@ -64,12 +64,6 @@ public:
 
 protected:
 
-    void PassAway() override {
-        InitializeIfNot();
-        Send(SpillingActorId_, new TEvents::TEvPoison);
-        TBase::PassAway();
-    }
-
     void FailOnError() {
         InitializeIfNot();
         if (Error_) {
@@ -87,12 +81,17 @@ private:
             hFunc(TEvDqSpilling::TEvError, HandleWork);
             hFunc(TEvGet, HandleWork);
             hFunc(TEvPut, HandleWork);
-            cFunc(TEvents::TEvPoison::EventType, PassAway);
+            hFunc(TEvents::TEvPoison, HandleWork);
             default:
                 Y_ABORT("TDqComputeStorageActor::WorkState unexpected event type: %" PRIx32 " event: %s",
                     ev->GetTypeRewrite(),
                     ev->ToString().data());
         }
+    }
+
+    void HandleWork(TEvents::TEvPoison::TPtr&) {
+        Send(SpillingActorId_, new TEvents::TEvPoison);
+        PassAway();
     }
 
     void HandleWork(TEvPut::TPtr& ev) {

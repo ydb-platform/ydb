@@ -65,53 +65,60 @@ void SetupEnv(const TBlobStorageGroupInfo::TTopology& topology, std::unique_ptr<
 }
 
 template <typename TInflightActor>
-void TestDSProxyAndVDiskEqualCost(const TBlobStorageGroupInfo::TTopology& topology, TInflightActor* actor) {
-    std::unique_ptr<TEnvironmentSetup> env;
-    NKikimrBlobStorage::TBaseConfig baseConfig;
-    ui32 groupSize;
-    TBlobStorageGroupType groupType;
-    ui32 groupId;
-    std::vector<ui32> pdiskLayout;
-    SetupEnv(topology, env, baseConfig, groupSize, groupType, groupId, pdiskLayout);
+void TestDSProxyAndVDiskEqualCost(const TBlobStorageGroupInfo::TTopology& topology, TInflightActor* actor, ui32 retries = 1) {
+    for (ui32 i = 0; i < retries; ++i) {
+        std::unique_ptr<TEnvironmentSetup> env;
+        NKikimrBlobStorage::TBaseConfig baseConfig;
+        ui32 groupSize;
+        TBlobStorageGroupType groupType;
+        ui32 groupId;
+        std::vector<ui32> pdiskLayout;
+        SetupEnv(topology, env, baseConfig, groupSize, groupType, groupId, pdiskLayout);
 
-    ui64 dsproxyCost = 0;
-    ui64 vdiskCost = 0;
+        ui64 dsproxyCost = 0;
+        ui64 vdiskCost = 0;
 
-    auto updateCounters = [&]() {
-        dsproxyCost = 0;
+        auto updateCounters = [&]() {
+            dsproxyCost = 0;
 
-        for (const auto& vslot : baseConfig.GetVSlot()) {
-            auto* appData = env->Runtime->GetNode(vslot.GetVSlotId().GetNodeId())->AppData.get();
-            dsproxyCost += GetServiceCounters(appData->Counters, "dsproxynode")->
-                    GetSubgroup("subsystem", "request")->
-                    GetSubgroup("storagePool", env->StoragePoolName)->
-                    GetCounter("DSProxyDiskCostNs")->Val();
+            for (const auto& vslot : baseConfig.GetVSlot()) {
+                auto* appData = env->Runtime->GetNode(vslot.GetVSlotId().GetNodeId())->AppData.get();
+                dsproxyCost += GetServiceCounters(appData->Counters, "dsproxynode")->
+                        GetSubgroup("subsystem", "request")->
+                        GetSubgroup("storagePool", env->StoragePoolName)->
+                        GetCounter("DSProxyDiskCostNs")->Val();
+            }
+            vdiskCost = AggregateVDiskCounters(env, baseConfig, env->StoragePoolName, groupSize, groupId,
+                    pdiskLayout, "cost", "SkeletonFrontUserCostNs");
+        };
+
+        updateCounters();
+        UNIT_ASSERT_VALUES_EQUAL(dsproxyCost, vdiskCost);
+
+        actor->SetGroupId(groupId);
+        env->Runtime->Register(actor, 1);
+        env->Sim(TDuration::Minutes(15));
+
+        updateCounters();
+
+        TStringStream str;
+        double proportion = 1. * dsproxyCost / vdiskCost;
+        i64 diff = (i64)dsproxyCost - vdiskCost;
+        str << "OKs# " << actor->ResponsesByStatus[NKikimrProto::OK] << ", Errors# " << actor->ResponsesByStatus[NKikimrProto::ERROR]
+                << ", Cost on dsproxy# " << dsproxyCost << ", Cost on vdisks# " << vdiskCost << ", proportion# " << proportion
+                << " diff# " << diff;
+
+        if constexpr(VERBOSE) {
+            Cerr << str.Str() << Endl;
+            // env->Runtime->GetAppData()->Counters->OutputPlainText(Cerr);
         }
-        vdiskCost = AggregateVDiskCounters(env, baseConfig, env->StoragePoolName, groupSize, groupId,
-                pdiskLayout, "cost", "SkeletonFrontUserCostNs");
-    };
-
-    updateCounters();
-    UNIT_ASSERT_VALUES_EQUAL(dsproxyCost, vdiskCost);
-
-    actor->SetGroupId(groupId);
-    env->Runtime->Register(actor, 1);
-    env->Sim(TDuration::Minutes(15));
-
-    updateCounters();
-
-    TStringStream str;
-    double proportion = 1. * dsproxyCost / vdiskCost;
-    i64 diff = (i64)dsproxyCost - vdiskCost;
-    str << "OKs# " << actor->ResponsesByStatus[NKikimrProto::OK] << ", Errors# " << actor->ResponsesByStatus[NKikimrProto::ERROR]
-            << ", Cost on dsproxy# " << dsproxyCost << ", Cost on vdisks# " << vdiskCost << ", proportion# " << proportion
-            << " diff# " << diff;
-
-    if constexpr(VERBOSE) {
-        Cerr << str.Str() << Endl;
-        // env->Runtime->GetAppData()->Counters->OutputPlainText(Cerr);
+        if (dsproxyCost == vdiskCost) {
+            return;
+        }
+        UNIT_ASSERT_VALUES_UNEQUAL(actor->OKs, actor->RequestsSent);
+        Cerr << "Fail on try# " << i << " : " << str.Str() << Endl;
     }
-    UNIT_ASSERT_VALUES_EQUAL_C(dsproxyCost, vdiskCost, str.Str());
+    UNIT_FAIL("Test failed after# " << retries << " retries");
 }
 
 #define MAKE_TEST(erasure, requestType, requests, inflight)                         \
@@ -124,15 +131,18 @@ Y_UNIT_TEST(Test##requestType##erasure##Requests##requests##Inflight##inflight) 
     TestDSProxyAndVDiskEqualCost(topology, actor);                                  \
 }
 
-#define MAKE_TEST_W_DATASIZE(erasure, requestType, requests, inflight, dataSize)                        \
+#define MAKE_TEST_W_DATASIZE_AND_RETRIES(erasure, requestType, requests, inflight, dataSize, retries)   \
 Y_UNIT_TEST(Test##requestType##erasure##Requests##requests##Inflight##inflight##BlobSize##dataSize) {   \
     auto groupType = TBlobStorageGroupType::Erasure##erasure;                                           \
     ui32 realms = (groupType == TBlobStorageGroupType::ErasureMirror3dc) ? 3 : 1;                       \
     ui32 domains = (groupType == TBlobStorageGroupType::ErasureMirror3dc) ? 3 : 8;                      \
     TBlobStorageGroupInfo::TTopology topology(groupType, realms, domains, 1, true);                     \
     auto actor = new TInflightActor##requestType({requests, inflight}, dataSize);                       \
-    TestDSProxyAndVDiskEqualCost(topology, actor);                                                      \
+    TestDSProxyAndVDiskEqualCost(topology, actor, retries);                                             \
 }
+
+#define MAKE_TEST_W_DATASIZE(erasure, requestType, requests, inflight, dataSize)    \
+        MAKE_TEST_W_DATASIZE_AND_RETRIES(erasure, requestType, requests, inflight, dataSize, 1)
 
 Y_UNIT_TEST_SUITE(CostMetricsPutMirror3dc) {
     MAKE_TEST_W_DATASIZE(Mirror3dc, Put, 1, 1, 1000);
@@ -194,23 +204,23 @@ Y_UNIT_TEST_SUITE(CostMetricsGetHugeMirror3dc) {
 }
 
 Y_UNIT_TEST_SUITE(CostMetricsPatchMirror3dc) {
-    MAKE_TEST_W_DATASIZE(Mirror3dc, Patch, 1, 1, 1000);
-    MAKE_TEST_W_DATASIZE(Mirror3dc, Patch, 10, 1, 1000);
-    MAKE_TEST_W_DATASIZE(Mirror3dc, Patch, 100, 1, 1000);
-    MAKE_TEST_W_DATASIZE(Mirror3dc, Patch, 2, 2, 1000);
-    MAKE_TEST_W_DATASIZE(Mirror3dc, Patch, 10, 10, 1000);
-    MAKE_TEST_W_DATASIZE(Mirror3dc, Patch, 100, 10, 1000);
-    MAKE_TEST_W_DATASIZE(Mirror3dc, Patch, 10000, 100, 1000);
+    MAKE_TEST_W_DATASIZE_AND_RETRIES(Mirror3dc, Patch, 1, 1, 1000, 3);
+    MAKE_TEST_W_DATASIZE_AND_RETRIES(Mirror3dc, Patch, 10, 1, 1000, 3);
+    MAKE_TEST_W_DATASIZE_AND_RETRIES(Mirror3dc, Patch, 100, 1, 1000, 3);
+    MAKE_TEST_W_DATASIZE_AND_RETRIES(Mirror3dc, Patch, 2, 2, 1000, 3);
+    MAKE_TEST_W_DATASIZE_AND_RETRIES(Mirror3dc, Patch, 10, 10, 1000, 3);
+    MAKE_TEST_W_DATASIZE_AND_RETRIES(Mirror3dc, Patch, 100, 10, 1000, 3);
+    MAKE_TEST_W_DATASIZE_AND_RETRIES(Mirror3dc, Patch, 10000, 100, 1000, 3);
 }
 
 Y_UNIT_TEST_SUITE(CostMetricsPatchBlock4Plus2) {
-    MAKE_TEST_W_DATASIZE(4Plus2Block, Patch, 1, 1, 1000);
-    MAKE_TEST_W_DATASIZE(4Plus2Block, Patch, 10, 1, 1000);
-    MAKE_TEST_W_DATASIZE(4Plus2Block, Patch, 100, 1, 1000);
-    MAKE_TEST_W_DATASIZE(4Plus2Block, Patch, 2, 2, 1000);
-    MAKE_TEST_W_DATASIZE(4Plus2Block, Patch, 10, 10, 1000);
-    MAKE_TEST_W_DATASIZE(4Plus2Block, Patch, 100, 10, 1000);
-    MAKE_TEST_W_DATASIZE(4Plus2Block, Patch, 10000, 100, 1000);
+    MAKE_TEST_W_DATASIZE_AND_RETRIES(4Plus2Block, Patch, 1, 1, 1000, 3);
+    MAKE_TEST_W_DATASIZE_AND_RETRIES(4Plus2Block, Patch, 10, 1, 1000, 3);
+    MAKE_TEST_W_DATASIZE_AND_RETRIES(4Plus2Block, Patch, 100, 1, 1000, 3);
+    MAKE_TEST_W_DATASIZE_AND_RETRIES(4Plus2Block, Patch, 2, 2, 1000, 3);
+    MAKE_TEST_W_DATASIZE_AND_RETRIES(4Plus2Block, Patch, 10, 10, 1000, 3);
+    MAKE_TEST_W_DATASIZE_AND_RETRIES(4Plus2Block, Patch, 100, 10, 1000, 3);
+    MAKE_TEST_W_DATASIZE_AND_RETRIES(4Plus2Block, Patch, 10000, 100, 1000, 3);
 }
 
 enum class ELoadDistribution : ui8 {

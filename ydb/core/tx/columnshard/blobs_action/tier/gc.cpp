@@ -9,12 +9,12 @@ void TGCTask::DoOnExecuteTxAfterCleaning(NColumnShard::TColumnShard& /*self*/, N
     size_t numBlobs = 0;
 
     for (; DraftBlobIds.size() && numBlobs < NColumnShard::TLimits::MAX_BLOBS_TO_DELETE; ++numBlobs) {
-        dbBlobs.RemoveTierDraftBlobId(DraftBlobIds.front());
+        dbBlobs.RemoveTierDraftBlobId(GetStorageId(), DraftBlobIds.front());
         DraftBlobIds.pop_front();
     }
 
     for (; DeleteBlobIds.size() && numBlobs < NColumnShard::TLimits::MAX_BLOBS_TO_DELETE; ++numBlobs) {
-        dbBlobs.RemoveTierBlobToDelete(DeleteBlobIds.front());
+        dbBlobs.RemoveTierBlobToDelete(GetStorageId(), DeleteBlobIds.front());
         DeleteBlobIds.pop_front();
     }
 }

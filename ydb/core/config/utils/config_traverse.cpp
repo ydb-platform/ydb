@@ -2,6 +2,8 @@
 
 #include <ydb/core/protos/config.pb.h>
 
+#include <contrib/libs/protobuf/src/google/protobuf/descriptor.h>
+
 #include <util/generic/deque.h>
 #include <util/generic/map.h>
 #include <util/generic/set.h>

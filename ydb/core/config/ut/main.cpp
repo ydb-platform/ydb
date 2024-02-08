@@ -3,6 +3,8 @@
 #include <library/cpp/testing/unittest/registar.h>
 #include <library/cpp/protobuf/json/util.h>
 
+#include <contrib/libs/protobuf/src/google/protobuf/descriptor.h>
+
 #include <util/string/join.h>
 
 #include <unordered_set>

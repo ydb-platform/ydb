@@ -112,7 +112,6 @@ public:
                     auto childState = BuildChildState(node, child, prevChild);
                     if (LimitExceeded(firstChild.Items, childState.PrevItems, itemsLimit) || LimitExceeded(firstChild.Bytes, childState.PrevBytes, bytesLimit)) {
                         endRowId = Min(endRowId, childState.BeginRowId);
-                        overshot = false;
                         return;
                     }
                     ready &= tryHandleChild(childState);
@@ -264,7 +263,6 @@ public:
                     auto childState = BuildChildState(node, child, prevChild);
                     if (LimitExceeded(childState.Items, lastChild.PrevItems, itemsLimit) || LimitExceeded(childState.Bytes, lastChild.PrevBytes, bytesLimit)) {
                         beginRowId = Max(beginRowId, childState.EndRowId);
-                        overshot = false;
                         return;
                     }
                     ready &= tryHandleChild(childState);
@@ -797,10 +795,6 @@ private:
             prevChild ? prevChild->RowCount : parent.BeginRowId, child.RowCount,
             prevChild ? prevChild->RowCount : parent.BeginRowId, child.RowCount,
             prevChild ? prevChild->DataSize : parent.PrevBytes, child.DataSize);
-    }
-
-    bool LimitExceeded(ui64 value, ui64 limit) const noexcept {
-        return limit && value > limit;
     }
 
     bool LimitExceeded(ui64 prev, ui64 current, ui64 limit) const noexcept {

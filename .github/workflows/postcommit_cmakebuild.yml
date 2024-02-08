@@ -3,12 +3,8 @@ on:
   push:
     branches:
       - 'cmakebuild'
-    paths-ignore:
-      - 'ydb/docs/**'
-      - '.github/**'
-concurrency:
-  group: ${{ github.workflow }}
-  cancel-in-progress: true
+    paths:
+      - 'ydb/ci/cmakegen.txt'
 jobs:
   build_and_test:
     if: ${{vars.CHECKS_SWITCH != '' && fromJSON(vars.CHECKS_SWITCH).postcommit_cmake == true}}

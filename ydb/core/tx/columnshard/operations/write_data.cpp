@@ -5,7 +5,7 @@
 
 namespace NKikimr::NColumnShard {
 
-bool TArrowData::Parse(const NKikimrDataEvents::TEvWrite_TOperation& proto, const NEvWrite::IPayloadData& payload) {
+bool TArrowData::Parse(const NKikimrDataEvents::TEvWrite_TOperation& proto, const NEvWrite::IPayloadReader& payload) {
     if(proto.GetPayloadFormat() != NKikimrDataEvents::FORMAT_ARROW)
     {
         AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("event", "invalid_payload_format")("payload_format", (ui64)proto.GetPayloadFormat());

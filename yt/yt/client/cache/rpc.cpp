@@ -85,6 +85,18 @@ NApi::NRpcProxy::TConnectionConfigPtr GetConnectionConfig(const TConfig& config)
         connectionConfig->RetryingChannel->RetryTimeout = TDuration::MilliSeconds(config.GetRetryTimeout());
     }
 
+    if (config.HasClusterTag()) {
+        connectionConfig->ClusterTag = NApi::TClusterTag(config.GetClusterTag());
+    }
+
+    if (config.HasClockClusterTag()) {
+        connectionConfig->ClockClusterTag = NObjectClient::TCellTag(config.GetClockClusterTag());
+    }
+
+    if (config.HasUdfRegistryPath()) {
+        connectionConfig->UdfRegistryPath = config.GetUdfRegistryPath();
+    }
+
     connectionConfig->Postprocess();
 
     return connectionConfig;

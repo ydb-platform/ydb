@@ -1,7 +1,7 @@
 # Передача внешнего trace-id в {{ ydb-short-name }}
 
 {{ ydb-short-name }} поддерживает передачу внешних trace-id для построения цельной трассы операции.
-Передача trace-id производится согласно [спецификации trace context](https://w3c.github.io/trace-context/#traceparent-header) ---
+Передача trace-id производится согласно [спецификации trace context](https://w3c.github.io/trace-context/#traceparent-header) —
 через заголовок `traceparent` gRPC запроса должна передаваться строка вида `00-0af7651916cd43dd8448eb211c80319c-b7ad6b7169203331-01`.
 Только версия (version) 00 поддерживается, флаги (trace-flags) игнорируются. Если заголовок не соответствует спецификации, он игнорируется.
 

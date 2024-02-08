@@ -16,7 +16,13 @@ bool CanPushFlatMap(const NYql::NNodes::TCoFlatMapBase& flatMap, const NYql::TKi
     auto flatMapLambdaConditional = flatMapLambda.Body().Cast<NYql::NNodes::TCoConditionalValueBase>();
 
     TSet<TString> lambdaSubset;
-    if (!HaveFieldsSubset(flatMapLambdaConditional.Predicate().Ptr(), flatMapLambdaArgument, lambdaSubset, parentsMap, true, true)) {
+    auto isSubSet = HaveFieldsSubset(flatMapLambdaConditional.Predicate().Ptr(), flatMapLambdaArgument, lambdaSubset, parentsMap, true);
+    auto argType = NYql::RemoveOptionalType(flatMapLambdaArgument.GetTypeAnn());
+    if (argType->GetKind() != NYql::ETypeAnnotationKind::Struct) {
+        return false;
+    }
+    // helper doesn't accept if all columns are used
+    if (!isSubSet && lambdaSubset.size() != argType->Cast<NYql::TStructExprType>()->GetSize()) {
         return false;
     }
 

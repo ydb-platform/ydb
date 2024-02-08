@@ -370,7 +370,7 @@ TExprNode::TPtr KeepColumnOrder(const TExprNode::TPtr& node, const TExprNode& sr
 }
 
 template<class TFieldsSet>
-bool HaveFieldsSubset(const TExprNode::TPtr& start, const TExprNode& arg, TFieldsSet& usedFields, const TParentsMap& parentsMap, bool allowDependsOn, bool allowTrivial) {
+bool HaveFieldsSubset(const TExprNode::TPtr& start, const TExprNode& arg, TFieldsSet& usedFields, const TParentsMap& parentsMap, bool allowDependsOn) {
     const TTypeAnnotationNode* argType = RemoveOptionalType(arg.GetTypeAnn());
     if (argType->GetKind() != ETypeAnnotationKind::Struct) {
         return false;
@@ -412,15 +412,15 @@ bool HaveFieldsSubset(const TExprNode::TPtr& start, const TExprNode& arg, TField
         }
     }
 
-    return allowTrivial || usedFields.size() < inputStructType->GetSize();
+    return usedFields.size() < inputStructType->GetSize();
 }
 
 template bool HaveFieldsSubset(const TExprNode::TPtr& start, const TExprNode& arg, TSet<TStringBuf>& usedFields, const TParentsMap& parentsMap,
-                            bool allowDependsOn, bool allowTrivial);
+                            bool allowDependsOn);
 template bool HaveFieldsSubset(const TExprNode::TPtr& start, const TExprNode& arg, TSet<TString>& usedFields, const TParentsMap& parentsMap,
-                            bool allowDependsOn, bool allowTrivial);
+                            bool allowDependsOn);
 template bool HaveFieldsSubset(const TExprNode::TPtr& start, const TExprNode& arg, std::map<std::string_view, TExprNode::TPtr>& usedFields,
-                            const TParentsMap& parentsMap, bool allowDependsOn, bool allowTrivial);
+                            const TParentsMap& parentsMap, bool allowDependsOn);
 
 TExprNode::TPtr AddMembersUsedInside(const TExprNode::TPtr& start, const TExprNode& arg, TExprNode::TPtr&& members, const TParentsMap& parentsMap, TExprContext& ctx) {
     if (!members || !start || &arg == start.Get()) {

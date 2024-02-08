@@ -582,6 +582,8 @@ Y_UNIT_TEST_SUITE(CheckSqlFormatter) {
              "EVALUATE FOR $x IN []\n\tDO BEGIN\n\t\tSELECT\n\t\t\t$x;\n\tEND DO;\n"},
             {"evaluate for $x in [] do begin select $x; end do else do begin select 2; end do",
              "EVALUATE FOR $x IN []\n\tDO BEGIN\n\t\tSELECT\n\t\t\t$x;\n\tEND DO\nELSE\n\tDO BEGIN\n\t\tSELECT\n\t\t\t2;\n\tEND DO;\n"},
+            {"evaluate parallel for $x in [] do $a($x)",
+             "EVALUATE PARALLEL FOR $x IN []\n\tDO $a($x);\n"},
         };
 
         TSetup setup;

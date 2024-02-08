@@ -3,10 +3,8 @@ pragma UnicodeLiterals;
 $f = ()->{
     return (
 	    "a"s,
-	    "b"b,
-	    "c"t,
-	    "d"u,
-	    "e");
+	    "b"u,
+	    "c");
 };
 
 select $f();
@@ -16,10 +14,8 @@ pragma DisableUnicodeLiterals;
 $g = ()->{
     return (
 	    "a"s,
-	    "b"b,
-	    "c"t,
-	    "d"u,
-	    "e");
+	    "b"u,
+	    "c");
 };
 
 select $g();

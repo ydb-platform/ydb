@@ -1023,9 +1023,9 @@
     ],
     "test.test[expr-unicode_literals-default.txt-Debug]": [
         {
-            "checksum": "9201dbe44a3334deb0a063d58468a160",
-            "size": 522,
-            "uri": "https://{canondata_backend}/1871002/fb6fb37c565974a6f0c497e8b3e58f6b5bf320b2/resource.tar.gz#test.test_expr-unicode_literals-default.txt-Debug_/opt.yql_patched"
+            "checksum": "a65d6b9299b9ecfa68d1377414a3d814",
+            "size": 462,
+            "uri": "https://{canondata_backend}/1925842/c2ce7c5eeafa7c99dd47a4e0bc6a7304dd057c69/resource.tar.gz#test.test_expr-unicode_literals-default.txt-Debug_/opt.yql_patched"
         }
     ],
     "test.test[expr-unicode_literals-default.txt-Plan]": [

@@ -222,6 +222,7 @@ public:
         bool AllowOver = false;
         bool AllowReturnSet = false;
         bool AllowSubLinks = false;
+        bool AutoParametrizeEnabled = true;
         TVector<TAstNode*>* WindowItems = nullptr;
         TString Scope;
     };
@@ -416,6 +417,7 @@ public:
                     "client_min_messages",                  // pg_dump
                     "row_security",                        // pg_dump
                     "escape_string_warning",               // zabbix
+                    "bytea_output",                        // zabbix
                     NULL,
                 };
 
@@ -1709,6 +1711,7 @@ private:
                         TExprSettings settings;
                         settings.AllowColumns = false;
                         settings.Scope = "DEFAULT";
+                        settings.AutoParametrizeEnabled = false;
                         cinfo.Default = ParseExpr(constraintNode->raw_expr, settings);
                         if (!cinfo.Default) {
                             return false;
@@ -2323,6 +2326,9 @@ public:
         if (varName == "server_version_num") {
             return GetPostgresServerVersionNum();
         }
+        if (varName == "standard_conforming_strings"){
+            return "on";
+        }
         return {};
     }
 
@@ -2559,7 +2565,8 @@ public:
     TAstNode* BuildTableKeyExpression(const TStringBuf relname,
         const TStringBuf cluster, bool isScheme = false
     ) {
-        TString tableName = (cluster == "pg_catalog") ? TString(relname) : TablePathPrefix + relname;
+        bool noPrefix = (cluster == "pg_catalog" || cluster == "information_schema");
+        TString tableName = noPrefix ? TString(relname) : TablePathPrefix + relname;
         return L(A("Key"), QL(QA(isScheme ? "tablescheme" : "table"),
                             L(A("String"), QAX(std::move(tableName)))));
     }
@@ -3107,7 +3114,7 @@ public:
             ? L(A("PgType"), QA(TPgConst::ToString(valueNType->type)))
             : L(A("PgType"), QA("unknown"));
 
-        if (Settings.AutoParametrizeEnabled && !Settings.AutoParametrizeExprDisabledScopes.contains(settings.Scope)) {
+        if (Settings.AutoParametrizeEnabled && settings.AutoParametrizeEnabled) {
             return AutoParametrizeConst(std::move(valueNType.GetRef()), pgTypeNode);
         }
 

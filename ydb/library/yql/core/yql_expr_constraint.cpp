@@ -2653,9 +2653,10 @@ private:
     }
 
     template<bool Wide>
-    static TPartOfConstraintBase::TSetType GetSimpleKeys(const TExprNode& body, const TExprNode::TChildrenType& args, TExprContext& ctx) {
+    static TPartOfConstraintBase::TSetType GetSimpleKeys(const TExprNode& node, const TExprNode::TChildrenType& args, TExprContext& ctx) {
         TPartOfConstraintBase::TSetType keys;
-        if (body.IsCallable("AggrNotEquals")) {
+        if (node.IsCallable("AggrNotEquals")) {
+            const TExprNode& body = node.Head().IsCallable("StablePickle") ? node.Head() : node;
             if (body.Head().IsList() && body.Tail().IsList() && body.Head().ChildrenSize() == body.Tail().ChildrenSize()) {
                 keys.reserve(body.Tail().ChildrenSize());
                 for (auto i = 0U; i < body.Head().ChildrenSize(); ++i){
@@ -2678,10 +2679,10 @@ private:
                     keys.insert_unique(r->first);
                 }
             }
-        } else if (body.IsCallable("Or")) {
-            keys.reserve(body.ChildrenSize());
-            for (auto i = 0U; i < body.ChildrenSize(); ++i) {
-                const auto& part = GetSimpleKeys<Wide>(*body.Child(i), args, ctx);
+        } else if (node.IsCallable("Or")) {
+            keys.reserve(node.ChildrenSize());
+            for (auto i = 0U; i < node.ChildrenSize(); ++i) {
+                const auto& part = GetSimpleKeys<Wide>(*node.Child(i), args, ctx);
                 keys.insert_unique(part.cbegin(), part.cend());
             }
         }

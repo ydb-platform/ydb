@@ -2019,6 +2019,8 @@ std::optional<std::pair<TPartOfConstraintBase::TPathType, ui32>> GetPathToKey(co
         } else if (body.IsCallable({"CastStruct","FilterMembers"}))  {
             return GetPathToKey(body.Head(), args);
         }
+    } else if (body.IsCallable("StablePickle")) {
+        return GetPathToKey(body.Head(), args);
     }
 
     return std::nullopt;
@@ -2052,6 +2054,8 @@ std::optional<TPartOfConstraintBase::TPathType> GetPathToKey(const TExprNode& bo
         return GetPathToKey(body.Head().Tail().Head(), arg);
     if (IsTransparentIfPresent(body) && &body.Head() == &arg)
         return GetPathToKey(body.Child(1)->Tail().Head(), body.Child(1)->Head().Head());
+    if (body.IsCallable("StablePickle"))
+        return GetPathToKey(body.Head(), arg);
 
     return std::nullopt;
 }

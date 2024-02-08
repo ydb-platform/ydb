@@ -32,6 +32,7 @@ target_link_libraries(minikql-computation-llvm14 PUBLIC
   lib-Transforms-IPO
   libs-apache-arrow
   library-actors-util
+  dq-actors-spilling
   library-cpp-enumbitset
   library-cpp-packedtypes
   library-cpp-random_provider

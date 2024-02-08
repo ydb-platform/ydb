@@ -25,6 +25,7 @@ target_link_libraries(minikql-computation-no_llvm PUBLIC
   yutil
   libs-apache-arrow
   library-actors-util
+  dq-actors-spilling
   library-cpp-enumbitset
   library-cpp-packedtypes
   library-cpp-random_provider

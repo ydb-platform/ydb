@@ -188,7 +188,7 @@ public:
 
         try {
             const ui64 txId = writeTx->GetTxId();
-            const auto* kqpLocks = writeTx->GetKqpLocks() ? writeTx->GetKqpLocks().get() : nullptr;
+            const auto* kqpLocks = writeTx->GetKqpLocks() ? &writeTx->GetKqpLocks().value() : nullptr;
             const auto& inReadSets = op->InReadSets();
             auto& awaitingDecisions = op->AwaitingDecisions();
             auto& outReadSets = op->OutReadSets();

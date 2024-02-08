@@ -77,7 +77,7 @@ TValidatedWriteTx::TValidatedWriteTx(TDataShard* self, TTransactionContext& txc,
     }
 
     if (record.HasLocks()) {
-        KqpLocks = std::make_unique<NKikimrDataEvents::TKqpLocks>(record.GetLocks());
+        KqpLocks = record.GetLocks();
         KqpSetTxLocksKeys(record.GetLocks(), self->SysLocksTable(), KeyValidator);
     }
     KeyValidator.GetInfo().SetLoaded();

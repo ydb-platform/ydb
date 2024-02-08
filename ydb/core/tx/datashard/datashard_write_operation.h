@@ -160,7 +160,7 @@ private:
     const ui64 TabletId;
 
     YDB_READONLY_DEF(TTableId, TableId);
-    YDB_READONLY_DEF(std::unique_ptr<NKikimrDataEvents::TKqpLocks>, KqpLocks);
+    YDB_READONLY_DEF(std::optional<NKikimrDataEvents::TKqpLocks>, KqpLocks);
     YDB_READONLY_DEF(std::vector<ui32>, ColumnIds);
     YDB_READONLY_DEF(TSerializedCellMatrix, Matrix);
     YDB_READONLY_DEF(TInstant, ReceivedAt);

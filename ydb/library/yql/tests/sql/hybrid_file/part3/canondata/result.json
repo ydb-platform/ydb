@@ -1219,9 +1219,9 @@
     ],
     "test.test[insert-append_sorted-to_sorted-Debug]": [
         {
-            "checksum": "6cb8badad29ce9bd85822df84f50c512",
-            "size": 9204,
-            "uri": "https://{canondata_backend}/1936842/11d23d4a39031af80d6dc470ce99f9427771e7d4/resource.tar.gz#test.test_insert-append_sorted-to_sorted-Debug_/opt.yql_patched"
+            "checksum": "d97e8798bedf2372ab576858af7f2074",
+            "size": 9572,
+            "uri": "https://{canondata_backend}/1600758/6fee1497dd83eb1ec0f60e014f4e056a6288049f/resource.tar.gz#test.test_insert-append_sorted-to_sorted-Debug_/opt.yql_patched"
         }
     ],
     "test.test[insert-append_sorted-to_sorted-Plan]": [
@@ -1233,9 +1233,9 @@
     ],
     "test.test[insert-insert_from_other--Debug]": [
         {
-            "checksum": "aafeb68ed59abc06e3b5b163e8fb8037",
-            "size": 2117,
-            "uri": "https://{canondata_backend}/1936842/11d23d4a39031af80d6dc470ce99f9427771e7d4/resource.tar.gz#test.test_insert-insert_from_other--Debug_/opt.yql_patched"
+            "checksum": "ef6c5cf709675ac53e1ff849c511fcca",
+            "size": 2137,
+            "uri": "https://{canondata_backend}/1600758/6fee1497dd83eb1ec0f60e014f4e056a6288049f/resource.tar.gz#test.test_insert-insert_from_other--Debug_/opt.yql_patched"
         }
     ],
     "test.test[insert-insert_from_other--Plan]": [
@@ -1247,9 +1247,9 @@
     ],
     "test.test[insert-replace_inferred--Debug]": [
         {
-            "checksum": "5fa6ea6667469678dfac32016c2bee0c",
-            "size": 2798,
-            "uri": "https://{canondata_backend}/1936842/11d23d4a39031af80d6dc470ce99f9427771e7d4/resource.tar.gz#test.test_insert-replace_inferred--Debug_/opt.yql_patched"
+            "checksum": "7a94cbfc230cdeca7e5e572eab74adab",
+            "size": 2818,
+            "uri": "https://{canondata_backend}/1600758/6fee1497dd83eb1ec0f60e014f4e056a6288049f/resource.tar.gz#test.test_insert-replace_inferred--Debug_/opt.yql_patched"
         }
     ],
     "test.test[insert-replace_inferred--Plan]": [
@@ -1261,9 +1261,9 @@
     ],
     "test.test[insert-trivial_literals-default.txt-Debug]": [
         {
-            "checksum": "6b564ef2654716889d24ee685a4e2328",
-            "size": 1110,
-            "uri": "https://{canondata_backend}/1936842/11d23d4a39031af80d6dc470ce99f9427771e7d4/resource.tar.gz#test.test_insert-trivial_literals-default.txt-Debug_/opt.yql_patched"
+            "checksum": "833eb9613277b7d1a45982ada93b9dac",
+            "size": 1130,
+            "uri": "https://{canondata_backend}/1600758/6fee1497dd83eb1ec0f60e014f4e056a6288049f/resource.tar.gz#test.test_insert-trivial_literals-default.txt-Debug_/opt.yql_patched"
         }
     ],
     "test.test[insert-trivial_literals-default.txt-Plan]": [
@@ -1513,9 +1513,9 @@
     ],
     "test.test[json-jsondocument/insert--Debug]": [
         {
-            "checksum": "b4b05899ef5a778328ef38d999ed9adb",
-            "size": 1751,
-            "uri": "https://{canondata_backend}/1936842/11d23d4a39031af80d6dc470ce99f9427771e7d4/resource.tar.gz#test.test_json-jsondocument_insert--Debug_/opt.yql_patched"
+            "checksum": "0ec77b4009a61d8d19794b3a6140ecd9",
+            "size": 1771,
+            "uri": "https://{canondata_backend}/1600758/6fee1497dd83eb1ec0f60e014f4e056a6288049f/resource.tar.gz#test.test_json-jsondocument_insert--Debug_/opt.yql_patched"
         }
     ],
     "test.test[json-jsondocument/insert--Plan]": [
@@ -2423,9 +2423,9 @@
     ],
     "test.test[schema-insert_sorted-row_spec-Debug]": [
         {
-            "checksum": "1d65c381acddd4af22795a7002cbd2a1",
-            "size": 2680,
-            "uri": "https://{canondata_backend}/1936842/11d23d4a39031af80d6dc470ce99f9427771e7d4/resource.tar.gz#test.test_schema-insert_sorted-row_spec-Debug_/opt.yql_patched"
+            "checksum": "76991f43dcbc7c7be7a989a36ba87f0a",
+            "size": 2700,
+            "uri": "https://{canondata_backend}/1600758/6fee1497dd83eb1ec0f60e014f4e056a6288049f/resource.tar.gz#test.test_schema-insert_sorted-row_spec-Debug_/opt.yql_patched"
         }
     ],
     "test.test[schema-insert_sorted-row_spec-Plan]": [

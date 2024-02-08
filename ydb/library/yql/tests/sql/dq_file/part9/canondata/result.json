@@ -1012,9 +1012,9 @@
     ],
     "test.test[insert-merge_publish--Debug]": [
         {
-            "checksum": "696dc6b5ed6e9c40b4f70d3a68b739bd",
-            "size": 6077,
-            "uri": "https://{canondata_backend}/1936947/4e75efdf8bb6c4502b7bcfedc52bbdf182bdb39c/resource.tar.gz#test.test_insert-merge_publish--Debug_/opt.yql_patched"
+            "checksum": "9beccf35b68ed7460c8134982b6edbb9",
+            "size": 6173,
+            "uri": "https://{canondata_backend}/1775319/51c3a56c67678c3d2a0dc1fc0b8bad4d612addb3/resource.tar.gz#test.test_insert-merge_publish--Debug_/opt.yql_patched"
         }
     ],
     "test.test[insert-merge_publish--Plan]": [
@@ -1034,9 +1034,9 @@
     ],
     "test.test[insert-two_input_tables--Debug]": [
         {
-            "checksum": "639c2f1649c9efca4b194684c770ea33",
-            "size": 2647,
-            "uri": "https://{canondata_backend}/1936947/bdcead4c91b8f1faeec3f1fbf12ee03ca7392e44/resource.tar.gz#test.test_insert-two_input_tables--Debug_/opt.yql_patched"
+            "checksum": "4363fdb925c19f92d7f0b9a525ce1575",
+            "size": 2685,
+            "uri": "https://{canondata_backend}/1775319/51c3a56c67678c3d2a0dc1fc0b8bad4d612addb3/resource.tar.gz#test.test_insert-two_input_tables--Debug_/opt.yql_patched"
         }
     ],
     "test.test[insert-two_input_tables--Plan]": [
@@ -1056,9 +1056,9 @@
     ],
     "test.test[insert_monotonic-several2-default.txt-Debug]": [
         {
-            "checksum": "239e77aa29f5495c1a02af0ee40b01d8",
-            "size": 3751,
-            "uri": "https://{canondata_backend}/1936947/bdcead4c91b8f1faeec3f1fbf12ee03ca7392e44/resource.tar.gz#test.test_insert_monotonic-several2-default.txt-Debug_/opt.yql_patched"
+            "checksum": "4748af8801d497e8eeab069121f01ccf",
+            "size": 3825,
+            "uri": "https://{canondata_backend}/1775319/51c3a56c67678c3d2a0dc1fc0b8bad4d612addb3/resource.tar.gz#test.test_insert_monotonic-several2-default.txt-Debug_/opt.yql_patched"
         }
     ],
     "test.test[insert_monotonic-several2-default.txt-Plan]": [

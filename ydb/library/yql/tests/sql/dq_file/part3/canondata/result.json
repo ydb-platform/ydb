@@ -584,9 +584,9 @@
     ],
     "test.test[column_order-insert_tmp-default.txt-Debug]": [
         {
-            "checksum": "05fed459cf8744d5041bcb1abf76f11e",
-            "size": 6148,
-            "uri": "https://{canondata_backend}/1784117/dc8f44274ccb936704660862f695bfcfbffcd1f2/resource.tar.gz#test.test_column_order-insert_tmp-default.txt-Debug_/opt.yql_patched"
+            "checksum": "5176d233f1cc64844b2635b734e53a02",
+            "size": 6191,
+            "uri": "https://{canondata_backend}/1942415/42f023aa89a69415cadca29b0048d54ece1df54a/resource.tar.gz#test.test_column_order-insert_tmp-default.txt-Debug_/opt.yql_patched"
         }
     ],
     "test.test[column_order-insert_tmp-default.txt-Plan]": [
@@ -897,9 +897,9 @@
     ],
     "test.test[insert-drop_sortness-calc-Debug]": [
         {
-            "checksum": "61be8bf3c123d95192f9f88416e87392",
-            "size": 1975,
-            "uri": "https://{canondata_backend}/1784117/dc8f44274ccb936704660862f695bfcfbffcd1f2/resource.tar.gz#test.test_insert-drop_sortness-calc-Debug_/opt.yql_patched"
+            "checksum": "35ef5394fa8652f01559055b7c5f9d2b",
+            "size": 1995,
+            "uri": "https://{canondata_backend}/1942415/42f023aa89a69415cadca29b0048d54ece1df54a/resource.tar.gz#test.test_insert-drop_sortness-calc-Debug_/opt.yql_patched"
         }
     ],
     "test.test[insert-drop_sortness-calc-Plan]": [
@@ -919,9 +919,9 @@
     ],
     "test.test[insert-replace_inferred_op--Debug]": [
         {
-            "checksum": "cfa1b19dbede3b77cb73b454958c3186",
-            "size": 2792,
-            "uri": "https://{canondata_backend}/1784117/dc8f44274ccb936704660862f695bfcfbffcd1f2/resource.tar.gz#test.test_insert-replace_inferred_op--Debug_/opt.yql_patched"
+            "checksum": "842adbedb022d0227cb7c92c0214d135",
+            "size": 2812,
+            "uri": "https://{canondata_backend}/1942415/42f023aa89a69415cadca29b0048d54ece1df54a/resource.tar.gz#test.test_insert-replace_inferred_op--Debug_/opt.yql_patched"
         }
     ],
     "test.test[insert-replace_inferred_op--Plan]": [

@@ -3,6 +3,6 @@
     <tmp_path>/program.sql:<main>:3:42: Error: At function: YtWriteTable!
     	insert into plato.Output with (truncate, keepmeta)
 	                                         ^
-        <tmp_path>/program.sql:<main>:3:42: Error: Table "Output" has non-strict schema, truncate with keep meta is not allowed
+        <tmp_path>/program.sql:<main>:3:42: Error: Setting keepmeta is not accepted here
         	insert into plato.Output with (truncate, keepmeta)
 	                                         ^

@@ -845,9 +845,9 @@
     ],
     "test.test[insert-trivial_literals-default.txt-Debug]": [
         {
-            "checksum": "90b74b2b447592b1156ceb6fa8e3d34f",
-            "size": 1111,
-            "uri": "https://{canondata_backend}/1599023/6ea95a71ae6e3995d639ef495d263a106e521882/resource.tar.gz#test.test_insert-trivial_literals-default.txt-Debug_/opt.yql_patched"
+            "checksum": "631ecdabf984c56f84125ba7135422ac",
+            "size": 1131,
+            "uri": "https://{canondata_backend}/1775319/1964a58b726ec8cbf6829b28927d8edd78ceddd1/resource.tar.gz#test.test_insert-trivial_literals-default.txt-Debug_/opt.yql_patched"
         }
     ],
     "test.test[insert-trivial_literals-default.txt-Plan]": [
@@ -867,9 +867,9 @@
     ],
     "test.test[insert_monotonic-to_empty--Debug]": [
         {
-            "checksum": "db2482d5aa7594e9c79ba1f56a273bfe",
-            "size": 2616,
-            "uri": "https://{canondata_backend}/1599023/6ea95a71ae6e3995d639ef495d263a106e521882/resource.tar.gz#test.test_insert_monotonic-to_empty--Debug_/opt.yql_patched"
+            "checksum": "22595a5d9eab13863fdca3c0b77f57ae",
+            "size": 2654,
+            "uri": "https://{canondata_backend}/1775319/1964a58b726ec8cbf6829b28927d8edd78ceddd1/resource.tar.gz#test.test_insert_monotonic-to_empty--Debug_/opt.yql_patched"
         }
     ],
     "test.test[insert_monotonic-to_empty--Plan]": [
@@ -1723,9 +1723,9 @@
     ],
     "test.test[limit-insert_with_limit-dynamic-Debug]": [
         {
-            "checksum": "d78c2f4a7204e1884bdc169bdf6f4ae4",
-            "size": 2359,
-            "uri": "https://{canondata_backend}/1599023/6ea95a71ae6e3995d639ef495d263a106e521882/resource.tar.gz#test.test_limit-insert_with_limit-dynamic-Debug_/opt.yql_patched"
+            "checksum": "d434f13059a611e013acd26062792bec",
+            "size": 2397,
+            "uri": "https://{canondata_backend}/1775319/1964a58b726ec8cbf6829b28927d8edd78ceddd1/resource.tar.gz#test.test_limit-insert_with_limit-dynamic-Debug_/opt.yql_patched"
         }
     ],
     "test.test[limit-insert_with_limit-dynamic-Plan]": [

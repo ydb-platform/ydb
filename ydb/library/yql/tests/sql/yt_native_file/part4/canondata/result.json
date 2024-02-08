@@ -1926,9 +1926,9 @@
     "test.test[schema-copy-yamred_dsv_raw-Results]": [],
     "test.test[schema-insert_sorted-row_spec-Debug]": [
         {
-            "checksum": "ae9984b1cdef30f100ff000eb6cea6a0",
-            "size": 2611,
-            "uri": "https://{canondata_backend}/1781765/c7a61535f70c019cc0ae312713a964d1cd876793/resource.tar.gz#test.test_schema-insert_sorted-row_spec-Debug_/opt.yql"
+            "checksum": "6f1df044fa5cb7f34a6b18f702021a4c",
+            "size": 2631,
+            "uri": "https://{canondata_backend}/1775319/4f2a13c8f560de0d848e01aadf20c5596039e081/resource.tar.gz#test.test_schema-insert_sorted-row_spec-Debug_/opt.yql"
         }
     ],
     "test.test[schema-insert_sorted-row_spec-Plan]": [

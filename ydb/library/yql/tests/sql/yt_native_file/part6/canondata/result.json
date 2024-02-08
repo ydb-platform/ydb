@@ -1117,9 +1117,9 @@
     ],
     "test.test[insert-after_group_by-default.txt-Debug]": [
         {
-            "checksum": "dc749ffe2817773002ae4ea765fbb48d",
-            "size": 4069,
-            "uri": "https://{canondata_backend}/1942525/cdaba11b012714b2f901e3a9c159ed14bf01f9a5/resource.tar.gz#test.test_insert-after_group_by-default.txt-Debug_/opt.yql"
+            "checksum": "693ee672e0d1cf914e5c5ce86169fa34",
+            "size": 4089,
+            "uri": "https://{canondata_backend}/212715/a33fff2684cec7518585040f0198f61540fbec5a/resource.tar.gz#test.test_insert-after_group_by-default.txt-Debug_/opt.yql"
         }
     ],
     "test.test[insert-after_group_by-default.txt-Plan]": [
@@ -1138,9 +1138,9 @@
     ],
     "test.test[insert-part_sortness--Debug]": [
         {
-            "checksum": "0e0724ab32eef43a550f73e3d659cd58",
-            "size": 1541,
-            "uri": "https://{canondata_backend}/1871182/9a09a43ecfb06fb9472ddfe3ae195c15411d3a5b/resource.tar.gz#test.test_insert-part_sortness--Debug_/opt.yql"
+            "checksum": "ead9cf62af413cba6cafcaa6beb15f83",
+            "size": 1561,
+            "uri": "https://{canondata_backend}/212715/a33fff2684cec7518585040f0198f61540fbec5a/resource.tar.gz#test.test_insert-part_sortness--Debug_/opt.yql"
         }
     ],
     "test.test[insert-part_sortness--Plan]": [
@@ -1159,9 +1159,9 @@
     ],
     "test.test[insert-replace_ordered_by_key-default.txt-Debug]": [
         {
-            "checksum": "7e30c47a8cae8668366b54118b453a25",
-            "size": 1427,
-            "uri": "https://{canondata_backend}/1781765/c6c4741c6e6726e0705a9922b386a839af2165b7/resource.tar.gz#test.test_insert-replace_ordered_by_key-default.txt-Debug_/opt.yql"
+            "checksum": "f73e50a1900fd99021827b51e0a2924f",
+            "size": 1447,
+            "uri": "https://{canondata_backend}/212715/a33fff2684cec7518585040f0198f61540fbec5a/resource.tar.gz#test.test_insert-replace_ordered_by_key-default.txt-Debug_/opt.yql"
         }
     ],
     "test.test[insert-replace_ordered_by_key-default.txt-Plan]": [
@@ -1180,9 +1180,9 @@
     ],
     "test.test[insert-select_subquery--Debug]": [
         {
-            "checksum": "549f3b6959e0d1686982de9b5f2b4e31",
-            "size": 2257,
-            "uri": "https://{canondata_backend}/1781765/c6c4741c6e6726e0705a9922b386a839af2165b7/resource.tar.gz#test.test_insert-select_subquery--Debug_/opt.yql"
+            "checksum": "121ed43bfe5225b45675f4ad57f41510",
+            "size": 2285,
+            "uri": "https://{canondata_backend}/212715/a33fff2684cec7518585040f0198f61540fbec5a/resource.tar.gz#test.test_insert-select_subquery--Debug_/opt.yql"
         }
     ],
     "test.test[insert-select_subquery--Plan]": [
@@ -1201,9 +1201,9 @@
     ],
     "test.test[insert-select_with_sort_limit-default.txt-Debug]": [
         {
-            "checksum": "13e33a4c9c41b5e47d965451c95f7a9f",
-            "size": 1651,
-            "uri": "https://{canondata_backend}/1781765/c6c4741c6e6726e0705a9922b386a839af2165b7/resource.tar.gz#test.test_insert-select_with_sort_limit-default.txt-Debug_/opt.yql"
+            "checksum": "5827091a351f52d4d53b2aba80dc7c80",
+            "size": 1671,
+            "uri": "https://{canondata_backend}/212715/a33fff2684cec7518585040f0198f61540fbec5a/resource.tar.gz#test.test_insert-select_with_sort_limit-default.txt-Debug_/opt.yql"
         }
     ],
     "test.test[insert-select_with_sort_limit-default.txt-Plan]": [
@@ -1222,9 +1222,9 @@
     ],
     "test.test[insert-trivial_select-default.txt-Debug]": [
         {
-            "checksum": "b839b48ed900c170e774d7248a652a08",
-            "size": 1200,
-            "uri": "https://{canondata_backend}/1871182/9a09a43ecfb06fb9472ddfe3ae195c15411d3a5b/resource.tar.gz#test.test_insert-trivial_select-default.txt-Debug_/opt.yql"
+            "checksum": "a9699e58a7528c39aec215dc164d4a47",
+            "size": 1220,
+            "uri": "https://{canondata_backend}/212715/a33fff2684cec7518585040f0198f61540fbec5a/resource.tar.gz#test.test_insert-trivial_select-default.txt-Debug_/opt.yql"
         }
     ],
     "test.test[insert-trivial_select-default.txt-Plan]": [

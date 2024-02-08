@@ -57,9 +57,9 @@
     ],
     "test.test[action-insert_after_eval--Debug]": [
         {
-            "checksum": "c7dd5020fe87b1bae4f995c57aa17b9b",
-            "size": 1314,
-            "uri": "https://{canondata_backend}/1936273/85968a675c17dd0728c8d7ba5fd43bd0b237dc65/resource.tar.gz#test.test_action-insert_after_eval--Debug_/opt.yql_patched"
+            "checksum": "3b484efaceb9b01762a2fc72bbfd3158",
+            "size": 1334,
+            "uri": "https://{canondata_backend}/1781765/3a9a1e25150b3bbce0d6b145856add06e5cb7e0f/resource.tar.gz#test.test_action-insert_after_eval--Debug_/opt.yql_patched"
         }
     ],
     "test.test[action-insert_after_eval--Plan]": [
@@ -71,16 +71,16 @@
     ],
     "test.test[action-parallel_for-default.txt-Debug]": [
         {
-            "checksum": "6171dfef0e867aef7c8fd5d4eaa3433f",
-            "size": 2524,
-            "uri": "https://{canondata_backend}/1937367/c7268da119a08337b1efcf8aaaaf126f474a8b6a/resource.tar.gz#test.test_action-parallel_for-default.txt-Debug_/opt.yql_patched"
+            "checksum": "6858d2acca4899ebd3639cc0b8504c8b",
+            "size": 2535,
+            "uri": "https://{canondata_backend}/1942525/ac605f327122319e15210101cb2e3ce916343f53/resource.tar.gz#test.test_action-parallel_for-default.txt-Debug_/opt.yql_patched"
         }
     ],
     "test.test[action-parallel_for-default.txt-Plan]": [
         {
-            "checksum": "a10014163abc4b56652882ebff80c91d",
-            "size": 10137,
-            "uri": "https://{canondata_backend}/1937367/c7268da119a08337b1efcf8aaaaf126f474a8b6a/resource.tar.gz#test.test_action-parallel_for-default.txt-Plan_/plan.txt"
+            "checksum": "58f7f1962f1412bc90c6259c1c6a9094",
+            "size": 11567,
+            "uri": "https://{canondata_backend}/1942525/ac605f327122319e15210101cb2e3ce916343f53/resource.tar.gz#test.test_action-parallel_for-default.txt-Plan_/plan.txt"
         }
     ],
     "test.test[action-subquery_orderby2-default.txt-Debug]": [
@@ -1079,9 +1079,9 @@
     ],
     "test.test[insert-insert_null-default.txt-Debug]": [
         {
-            "checksum": "35cee1012137d35060fe7467d23301f8",
-            "size": 973,
-            "uri": "https://{canondata_backend}/1936273/85968a675c17dd0728c8d7ba5fd43bd0b237dc65/resource.tar.gz#test.test_insert-insert_null-default.txt-Debug_/opt.yql_patched"
+            "checksum": "f14c091bf2201035ba985c80508c64b7",
+            "size": 993,
+            "uri": "https://{canondata_backend}/1781765/3a9a1e25150b3bbce0d6b145856add06e5cb7e0f/resource.tar.gz#test.test_insert-insert_null-default.txt-Debug_/opt.yql_patched"
         }
     ],
     "test.test[insert-insert_null-default.txt-Plan]": [
@@ -1107,9 +1107,9 @@
     ],
     "test.test[insert-override-from_sorted-Debug]": [
         {
-            "checksum": "b005eb1ea7cd12f929ddbd6a5c30cd98",
-            "size": 2137,
-            "uri": "https://{canondata_backend}/1936273/85968a675c17dd0728c8d7ba5fd43bd0b237dc65/resource.tar.gz#test.test_insert-override-from_sorted-Debug_/opt.yql_patched"
+            "checksum": "ce556c8d8262ad3dbe6e5e08e3554160",
+            "size": 2157,
+            "uri": "https://{canondata_backend}/1781765/3a9a1e25150b3bbce0d6b145856add06e5cb7e0f/resource.tar.gz#test.test_insert-override-from_sorted-Debug_/opt.yql_patched"
         }
     ],
     "test.test[insert-override-from_sorted-Plan]": [
@@ -1121,9 +1121,9 @@
     ],
     "test.test[insert_monotonic-several2-default.txt-Debug]": [
         {
-            "checksum": "40b7cb785105fe2279b61abf9c9ea721",
-            "size": 3768,
-            "uri": "https://{canondata_backend}/1936273/85968a675c17dd0728c8d7ba5fd43bd0b237dc65/resource.tar.gz#test.test_insert_monotonic-several2-default.txt-Debug_/opt.yql_patched"
+            "checksum": "20239a2a37bbf68f26ce3ada145a1689",
+            "size": 3824,
+            "uri": "https://{canondata_backend}/1781765/3a9a1e25150b3bbce0d6b145856add06e5cb7e0f/resource.tar.gz#test.test_insert_monotonic-several2-default.txt-Debug_/opt.yql_patched"
         }
     ],
     "test.test[insert_monotonic-several2-default.txt-Plan]": [

@@ -670,9 +670,9 @@
     ],
     "test.test[column_order-insert_with_reorder_cols--Debug]": [
         {
-            "checksum": "3e047b48aceaaaef703cb2b6b2068543",
-            "size": 3067,
-            "uri": "https://{canondata_backend}/1923547/5154c8bd8ef9ead4f609771f831f20c15e795571/resource.tar.gz#test.test_column_order-insert_with_reorder_cols--Debug_/opt.yql"
+            "checksum": "7cf09c6ecfa17012411765a384799d3c",
+            "size": 3087,
+            "uri": "https://{canondata_backend}/1937001/6f244b492d06799632c61dc23c72a9d6cb4ac1d9/resource.tar.gz#test.test_column_order-insert_with_reorder_cols--Debug_/opt.yql"
         }
     ],
     "test.test[column_order-insert_with_reorder_cols--Plan]": [
@@ -1240,9 +1240,9 @@
     ],
     "test.test[insert-append_sorted-to_sorted_calc-Debug]": [
         {
-            "checksum": "70019a0d0f7ab9dbe103285f2d6a6619",
-            "size": 3252,
-            "uri": "https://{canondata_backend}/1923547/5154c8bd8ef9ead4f609771f831f20c15e795571/resource.tar.gz#test.test_insert-append_sorted-to_sorted_calc-Debug_/opt.yql"
+            "checksum": "7a62f6ebf16029c7e674836e765aed57",
+            "size": 3601,
+            "uri": "https://{canondata_backend}/1937001/6f244b492d06799632c61dc23c72a9d6cb4ac1d9/resource.tar.gz#test.test_insert-append_sorted-to_sorted_calc-Debug_/opt.yql"
         }
     ],
     "test.test[insert-append_sorted-to_sorted_calc-Plan]": [
@@ -1306,9 +1306,9 @@
     ],
     "test.test[insert-select_relabel-default.txt-Debug]": [
         {
-            "checksum": "73eee2404ffe59214862beacf83829b1",
-            "size": 1341,
-            "uri": "https://{canondata_backend}/1923547/5154c8bd8ef9ead4f609771f831f20c15e795571/resource.tar.gz#test.test_insert-select_relabel-default.txt-Debug_/opt.yql"
+            "checksum": "3890c049f6cd5b688aa4a5af92848e72",
+            "size": 1361,
+            "uri": "https://{canondata_backend}/1937001/6f244b492d06799632c61dc23c72a9d6cb4ac1d9/resource.tar.gz#test.test_insert-select_relabel-default.txt-Debug_/opt.yql"
         }
     ],
     "test.test[insert-select_relabel-default.txt-Plan]": [

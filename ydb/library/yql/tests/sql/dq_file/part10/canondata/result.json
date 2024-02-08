@@ -1037,9 +1037,9 @@
     ],
     "test.test[insert-double_append_to_anonymous--Debug]": [
         {
-            "checksum": "60d31c24b538a750af98ba2fe35a3a38",
-            "size": 2491,
-            "uri": "https://{canondata_backend}/1600758/32cfdeb8c6377a2e7e62c6c4adbb95f25af7669b/resource.tar.gz#test.test_insert-double_append_to_anonymous--Debug_/opt.yql_patched"
+            "checksum": "5197ddd521048e287c091281a04296c2",
+            "size": 2545,
+            "uri": "https://{canondata_backend}/1942415/ad5ade59004e97b62f357b05c8baba968f696aa5/resource.tar.gz#test.test_insert-double_append_to_anonymous--Debug_/opt.yql_patched"
         }
     ],
     "test.test[insert-double_append_to_anonymous--Plan]": [
@@ -1059,9 +1059,9 @@
     ],
     "test.test[insert-replace_inferred--Debug]": [
         {
-            "checksum": "1d3d29b32c726ccc9f3bbdfafbf04096",
-            "size": 2799,
-            "uri": "https://{canondata_backend}/1600758/32cfdeb8c6377a2e7e62c6c4adbb95f25af7669b/resource.tar.gz#test.test_insert-replace_inferred--Debug_/opt.yql_patched"
+            "checksum": "a150123bc33eb7942a50c79446859b06",
+            "size": 2819,
+            "uri": "https://{canondata_backend}/1942415/ad5ade59004e97b62f357b05c8baba968f696aa5/resource.tar.gz#test.test_insert-replace_inferred--Debug_/opt.yql_patched"
         }
     ],
     "test.test[insert-replace_inferred--Plan]": [
@@ -2215,9 +2215,9 @@
     ],
     "test.test[schema-insert-schema-Debug]": [
         {
-            "checksum": "82fa4c098e6ea6770642257b18016045",
-            "size": 2882,
-            "uri": "https://{canondata_backend}/1600758/32cfdeb8c6377a2e7e62c6c4adbb95f25af7669b/resource.tar.gz#test.test_schema-insert-schema-Debug_/opt.yql_patched"
+            "checksum": "34b6c7ae9902821e81cb19edab1e0ecc",
+            "size": 2950,
+            "uri": "https://{canondata_backend}/1942415/ad5ade59004e97b62f357b05c8baba968f696aa5/resource.tar.gz#test.test_schema-insert-schema-Debug_/opt.yql_patched"
         }
     ],
     "test.test[schema-insert-schema-Plan]": [
@@ -2413,9 +2413,9 @@
     ],
     "test.test[type_v3-insert_struct_v3_with_native--Debug]": [
         {
-            "checksum": "7251ed5ac5deb03a27a15b6ccf1e484b",
-            "size": 5158,
-            "uri": "https://{canondata_backend}/1600758/32cfdeb8c6377a2e7e62c6c4adbb95f25af7669b/resource.tar.gz#test.test_type_v3-insert_struct_v3_with_native--Debug_/opt.yql_patched"
+            "checksum": "a9d8d4df01650c1a934396299ba0f22c",
+            "size": 5262,
+            "uri": "https://{canondata_backend}/1942415/ad5ade59004e97b62f357b05c8baba968f696aa5/resource.tar.gz#test.test_type_v3-insert_struct_v3_with_native--Debug_/opt.yql_patched"
         }
     ],
     "test.test[type_v3-insert_struct_v3_with_native--Plan]": [

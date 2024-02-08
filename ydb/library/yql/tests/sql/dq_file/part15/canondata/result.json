@@ -665,9 +665,9 @@
     ],
     "test.test[column_order-insert_with_desc_sort_and_native_types-default.txt-Debug]": [
         {
-            "checksum": "424e0d61d1d4b1a19b48d5dc3468a503",
-            "size": 4743,
-            "uri": "https://{canondata_backend}/1600758/aad142702907f13e911494c1a7b312bad34f692a/resource.tar.gz#test.test_column_order-insert_with_desc_sort_and_native_types-default.txt-Debug_/opt.yql_patched"
+            "checksum": "1a4a2a05031e1484d1aa7adcd0864dfd",
+            "size": 4763,
+            "uri": "https://{canondata_backend}/212715/7f23eb7613e022b32c2a34a6e06cb7c849d68d04/resource.tar.gz#test.test_column_order-insert_with_desc_sort_and_native_types-default.txt-Debug_/opt.yql_patched"
         }
     ],
     "test.test[column_order-insert_with_desc_sort_and_native_types-default.txt-Plan]": [
@@ -919,9 +919,9 @@
     ],
     "test.test[insert-part_sortness-desc-Debug]": [
         {
-            "checksum": "c1c6d69a431fe8333cc6423bd68a56c2",
-            "size": 2096,
-            "uri": "https://{canondata_backend}/1600758/aad142702907f13e911494c1a7b312bad34f692a/resource.tar.gz#test.test_insert-part_sortness-desc-Debug_/opt.yql_patched"
+            "checksum": "bedf2187db4120b52ea9c3290939c87c",
+            "size": 2116,
+            "uri": "https://{canondata_backend}/212715/7f23eb7613e022b32c2a34a6e06cb7c849d68d04/resource.tar.gz#test.test_insert-part_sortness-desc-Debug_/opt.yql_patched"
         }
     ],
     "test.test[insert-part_sortness-desc-Plan]": [
@@ -944,9 +944,9 @@
     ],
     "test.test[insert-select_operate_with_columns--Debug]": [
         {
-            "checksum": "9f078f45c853865b600763bc2b9fa3a7",
-            "size": 2601,
-            "uri": "https://{canondata_backend}/1600758/aad142702907f13e911494c1a7b312bad34f692a/resource.tar.gz#test.test_insert-select_operate_with_columns--Debug_/opt.yql_patched"
+            "checksum": "1b6a9f29774791512538a486dd7819e8",
+            "size": 2621,
+            "uri": "https://{canondata_backend}/212715/7f23eb7613e022b32c2a34a6e06cb7c849d68d04/resource.tar.gz#test.test_insert-select_operate_with_columns--Debug_/opt.yql_patched"
         }
     ],
     "test.test[insert-select_operate_with_columns--Plan]": [

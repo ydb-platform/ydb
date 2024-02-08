@@ -570,9 +570,9 @@
     ],
     "test.test[column_order-insert_tmp-default.txt-Debug]": [
         {
-            "checksum": "d038e3d727fd6ad3bebef6668b2dcfcd",
-            "size": 3389,
-            "uri": "https://{canondata_backend}/1936997/43379553890a43c724981724c68f89a1aa3f693b/resource.tar.gz#test.test_column_order-insert_tmp-default.txt-Debug_/opt.yql"
+            "checksum": "e5a42de9f39c9e8353686e500f436c77",
+            "size": 3432,
+            "uri": "https://{canondata_backend}/1937001/37d4c830ff863bdef852c86cce3f10f79959d3df/resource.tar.gz#test.test_column_order-insert_tmp-default.txt-Debug_/opt.yql"
         }
     ],
     "test.test[column_order-insert_tmp-default.txt-Plan]": [
@@ -860,9 +860,9 @@
     ],
     "test.test[insert-drop_sortness-calc-Debug]": [
         {
-            "checksum": "3470e42d79570181cccd98a69bfba97c",
-            "size": 1433,
-            "uri": "https://{canondata_backend}/1817427/38b723c547fce19193153ac49abc06a6f7966d4c/resource.tar.gz#test.test_insert-drop_sortness-calc-Debug_/opt.yql"
+            "checksum": "d68fb32181b251eb0077e3b0e18b2a81",
+            "size": 1453,
+            "uri": "https://{canondata_backend}/1937001/37d4c830ff863bdef852c86cce3f10f79959d3df/resource.tar.gz#test.test_insert-drop_sortness-calc-Debug_/opt.yql"
         }
     ],
     "test.test[insert-drop_sortness-calc-Plan]": [
@@ -881,9 +881,9 @@
     ],
     "test.test[insert-replace_inferred_op--Debug]": [
         {
-            "checksum": "0277773c74832033eb96aa09a9083c3a",
-            "size": 2047,
-            "uri": "https://{canondata_backend}/1817427/38b723c547fce19193153ac49abc06a6f7966d4c/resource.tar.gz#test.test_insert-replace_inferred_op--Debug_/opt.yql"
+            "checksum": "5f231091947c22dec05fcd928c350360",
+            "size": 2067,
+            "uri": "https://{canondata_backend}/1937001/37d4c830ff863bdef852c86cce3f10f79959d3df/resource.tar.gz#test.test_insert-replace_inferred_op--Debug_/opt.yql"
         }
     ],
     "test.test[insert-replace_inferred_op--Plan]": [

@@ -127,9 +127,9 @@
     ],
     "test.test[action-insert_after_eval--Debug]": [
         {
-            "checksum": "504a48d29ac0b6db0c5358865aa24a64",
-            "size": 1244,
-            "uri": "https://{canondata_backend}/1937027/16b7289b1b8f5fdff728155d836fa2b238949b2d/resource.tar.gz#test.test_action-insert_after_eval--Debug_/opt.yql"
+            "checksum": "12f955372bc0d07973b8a601d39f2cea",
+            "size": 1264,
+            "uri": "https://{canondata_backend}/1775319/ace33ccf4c016eed4a8698bd631f307632ecbd4c/resource.tar.gz#test.test_action-insert_after_eval--Debug_/opt.yql"
         }
     ],
     "test.test[action-insert_after_eval--Plan]": [
@@ -1038,9 +1038,9 @@
     ],
     "test.test[insert-override-with_view-Debug]": [
         {
-            "checksum": "4107780cccf17af7f6c58e921e8ed163",
-            "size": 1540,
-            "uri": "https://{canondata_backend}/1937027/16b7289b1b8f5fdff728155d836fa2b238949b2d/resource.tar.gz#test.test_insert-override-with_view-Debug_/opt.yql"
+            "checksum": "4de4236adf200a25d476286fcb059759",
+            "size": 1560,
+            "uri": "https://{canondata_backend}/1775319/ace33ccf4c016eed4a8698bd631f307632ecbd4c/resource.tar.gz#test.test_insert-override-with_view-Debug_/opt.yql"
         }
     ],
     "test.test[insert-override-with_view-Plan]": [
@@ -1059,9 +1059,9 @@
     ],
     "test.test[insert-replace_ordered_by_key_desc-default.txt-Debug]": [
         {
-            "checksum": "23fd3e6a8cba42813cdf6a05d1724729",
-            "size": 2263,
-            "uri": "https://{canondata_backend}/1937027/16b7289b1b8f5fdff728155d836fa2b238949b2d/resource.tar.gz#test.test_insert-replace_ordered_by_key_desc-default.txt-Debug_/opt.yql"
+            "checksum": "f257881fac685841bf194a764948b8b4",
+            "size": 2283,
+            "uri": "https://{canondata_backend}/1775319/ace33ccf4c016eed4a8698bd631f307632ecbd4c/resource.tar.gz#test.test_insert-replace_ordered_by_key_desc-default.txt-Debug_/opt.yql"
         }
     ],
     "test.test[insert-replace_ordered_by_key_desc-default.txt-Plan]": [
@@ -1087,9 +1087,9 @@
     ],
     "test.test[insert_monotonic-truncate_and_append-default.txt-Debug]": [
         {
-            "checksum": "7c6b01e0bca82d3599b8c4ec4c7ad948",
-            "size": 1808,
-            "uri": "https://{canondata_backend}/1937027/16b7289b1b8f5fdff728155d836fa2b238949b2d/resource.tar.gz#test.test_insert_monotonic-truncate_and_append-default.txt-Debug_/opt.yql"
+            "checksum": "162e6936dd6652f19f010c0c60b9389d",
+            "size": 1864,
+            "uri": "https://{canondata_backend}/1775319/ace33ccf4c016eed4a8698bd631f307632ecbd4c/resource.tar.gz#test.test_insert_monotonic-truncate_and_append-default.txt-Debug_/opt.yql"
         }
     ],
     "test.test[insert_monotonic-truncate_and_append-default.txt-Plan]": [
@@ -2169,9 +2169,9 @@
     ],
     "test.test[sampling-insert--Debug]": [
         {
-            "checksum": "05b99513b17b6fa96edbfd0c094b609a",
-            "size": 1766,
-            "uri": "https://{canondata_backend}/1937027/16b7289b1b8f5fdff728155d836fa2b238949b2d/resource.tar.gz#test.test_sampling-insert--Debug_/opt.yql"
+            "checksum": "19e019ae26cf69b8ac8a33040aaf7bf2",
+            "size": 1786,
+            "uri": "https://{canondata_backend}/1775319/ace33ccf4c016eed4a8698bd631f307632ecbd4c/resource.tar.gz#test.test_sampling-insert--Debug_/opt.yql"
         }
     ],
     "test.test[sampling-insert--Plan]": [
@@ -2183,9 +2183,9 @@
     ],
     "test.test[schema-insert_sorted-schema-Debug]": [
         {
-            "checksum": "ae9984b1cdef30f100ff000eb6cea6a0",
-            "size": 2611,
-            "uri": "https://{canondata_backend}/1937027/16b7289b1b8f5fdff728155d836fa2b238949b2d/resource.tar.gz#test.test_schema-insert_sorted-schema-Debug_/opt.yql"
+            "checksum": "6f1df044fa5cb7f34a6b18f702021a4c",
+            "size": 2631,
+            "uri": "https://{canondata_backend}/1775319/ace33ccf4c016eed4a8698bd631f307632ecbd4c/resource.tar.gz#test.test_schema-insert_sorted-schema-Debug_/opt.yql"
         }
     ],
     "test.test[schema-insert_sorted-schema-Plan]": [

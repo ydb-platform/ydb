@@ -995,9 +995,9 @@
     ],
     "test.test[insert-drop_sortness--Debug]": [
         {
-            "checksum": "ecf7b3490205694cf819ae94f07f0798",
-            "size": 2050,
-            "uri": "https://{canondata_backend}/1781765/028f42f897160b53900546b39900217bb2eb9fb1/resource.tar.gz#test.test_insert-drop_sortness--Debug_/opt.yql_patched"
+            "checksum": "9dca7538038727fbe114dd7d42afc550",
+            "size": 2070,
+            "uri": "https://{canondata_backend}/1600758/351cbb6e8b8bd13e36fbf453cee761c378e4d905/resource.tar.gz#test.test_insert-drop_sortness--Debug_/opt.yql_patched"
         }
     ],
     "test.test[insert-drop_sortness--Plan]": [
@@ -1009,9 +1009,9 @@
     ],
     "test.test[insert-insert_relabeled-default.txt-Debug]": [
         {
-            "checksum": "53a7faae040450b5e88cb4519b457af5",
-            "size": 2324,
-            "uri": "https://{canondata_backend}/1781765/028f42f897160b53900546b39900217bb2eb9fb1/resource.tar.gz#test.test_insert-insert_relabeled-default.txt-Debug_/opt.yql_patched"
+            "checksum": "95b3d263d6bde6856bd692e8eed64162",
+            "size": 2344,
+            "uri": "https://{canondata_backend}/1600758/351cbb6e8b8bd13e36fbf453cee761c378e4d905/resource.tar.gz#test.test_insert-insert_relabeled-default.txt-Debug_/opt.yql_patched"
         }
     ],
     "test.test[insert-insert_relabeled-default.txt-Plan]": [
@@ -1037,9 +1037,9 @@
     ],
     "test.test[insert_monotonic-several1-default.txt-Debug]": [
         {
-            "checksum": "99df32dcef4a8b18ff122dcdfb2534ee",
-            "size": 2856,
-            "uri": "https://{canondata_backend}/1781765/028f42f897160b53900546b39900217bb2eb9fb1/resource.tar.gz#test.test_insert_monotonic-several1-default.txt-Debug_/opt.yql_patched"
+            "checksum": "bae8e4d24cfcdd12f041635df1a695ec",
+            "size": 2876,
+            "uri": "https://{canondata_backend}/1600758/351cbb6e8b8bd13e36fbf453cee761c378e4d905/resource.tar.gz#test.test_insert_monotonic-several1-default.txt-Debug_/opt.yql_patched"
         }
     ],
     "test.test[insert_monotonic-several1-default.txt-Plan]": [

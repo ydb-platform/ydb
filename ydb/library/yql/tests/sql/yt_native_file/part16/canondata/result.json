@@ -865,9 +865,9 @@
     ],
     "test.test[insert-trivial_literals-default.txt-Debug]": [
         {
-            "checksum": "02eea1d243ad1e9ae2379a1447d271c8",
-            "size": 1041,
-            "uri": "https://{canondata_backend}/1924537/d66bfe69aa802f6a81aadbac897621b721f31b4b/resource.tar.gz#test.test_insert-trivial_literals-default.txt-Debug_/opt.yql"
+            "checksum": "19354580803f3973f2d434c1bb1c9e56",
+            "size": 1061,
+            "uri": "https://{canondata_backend}/212715/97c5490faeda667792ff8bc9a27d06be793dd4c3/resource.tar.gz#test.test_insert-trivial_literals-default.txt-Debug_/opt.yql"
         }
     ],
     "test.test[insert-trivial_literals-default.txt-Plan]": [
@@ -886,9 +886,9 @@
     ],
     "test.test[insert_monotonic-to_empty--Debug]": [
         {
-            "checksum": "cf60bddc9c5f101bd7bc329cbd78117b",
-            "size": 1427,
-            "uri": "https://{canondata_backend}/1924537/d66bfe69aa802f6a81aadbac897621b721f31b4b/resource.tar.gz#test.test_insert_monotonic-to_empty--Debug_/opt.yql"
+            "checksum": "c9cc66061a8b5487f8a3576f1862153b",
+            "size": 1447,
+            "uri": "https://{canondata_backend}/212715/97c5490faeda667792ff8bc9a27d06be793dd4c3/resource.tar.gz#test.test_insert_monotonic-to_empty--Debug_/opt.yql"
         }
     ],
     "test.test[insert_monotonic-to_empty--Plan]": [
@@ -1323,9 +1323,9 @@
     ],
     "test.test[limit-insert_with_limit-dynamic-Debug]": [
         {
-            "checksum": "9c2f18ea45d3ca723ba4e0bf7a5886b4",
-            "size": 1894,
-            "uri": "https://{canondata_backend}/1924537/d66bfe69aa802f6a81aadbac897621b721f31b4b/resource.tar.gz#test.test_limit-insert_with_limit-dynamic-Debug_/opt.yql"
+            "checksum": "b91886be88ae7290db870f7ed018ad4e",
+            "size": 1914,
+            "uri": "https://{canondata_backend}/212715/97c5490faeda667792ff8bc9a27d06be793dd4c3/resource.tar.gz#test.test_limit-insert_with_limit-dynamic-Debug_/opt.yql"
         }
     ],
     "test.test[limit-insert_with_limit-dynamic-Plan]": [

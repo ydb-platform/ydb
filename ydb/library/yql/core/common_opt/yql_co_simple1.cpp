@@ -6299,13 +6299,8 @@ void RegisterCoSimpleCallables1(TCallableOptimizerMap& map) {
 
             auto& lambdaArg = node->Tail().Head().Head();
 
-            TExprNode::TPtr sequence = node->HeadPtr();
-            auto* sequenceType = sequence->GetTypeAnn();
-            YQL_ENSURE(sequenceType, "No argument type for sequence in " << node->Content());
-
-            if (sequenceType->GetKind() != ETypeAnnotationKind::Stream) {
-                sequence = ctx.NewCallable(sequence->Pos(), "ToStream", { sequence });
-            }
+            TExprNode::TPtr sequence = node->HeadPtr(); // param (list)
+            sequence = ctx.NewCallable(sequence->Pos(), "ToStream", { sequence }); // lambda accepts stream, but we have list type
             sequence = KeepConstraints(sequence, lambdaArg, ctx);
 
             auto lambdaResult = ctx.Builder(node->Pos()).Apply(node->Tail()).With(0, sequence).Seal().Build();

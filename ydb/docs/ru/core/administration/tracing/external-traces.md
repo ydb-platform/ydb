@@ -13,7 +13,7 @@
 
 {% endnote %}
 
-В большинстве случаев пропускная способность коллектора спанов не позволяет трассировать все запросы. Для избежания перегрузки коллектора спанов в {{ ydb-short-name }} предусмотрен rate limiting аналогичный механизму в [сэмплировании запросов](./sampling.md). Для включения rate limiting нужно добавить секцию `external_throttling` в `tracing_config`:
+Для контроля количества трассируемых извне запросов, в {{ ydb-short-name }} предусмотрен rate limiting аналогичный механизму в [сэмплировании запросов](./sampling.md). Для включения rate limiting нужно добавить секцию `external_throttling` в `tracing_config`:
 
 ```yaml
 tracing_config:
@@ -22,8 +22,9 @@ tracing_config:
     - max_rate_per_minute: 60
       max_burst: 3
     - scope:
-        request_type: "KeyValue.ReadRange"
+        request_type: KeyValue.ReadRange
       max_rate_per_minute: 10
 ```
 
-Семантика всех настроек, а так же допустимые значения аналогичны соответствующим настройкам в [сэмплировании](./sampling.md).
+Семантика всех настроек, а так же допустимые значения аналогичны соответствующим настройкам в [сэмплировании](./sampling.md#semantics).
+Если секция `external_throttling` пустая, либо отсутствует, все trace-id, приходящие извне, будут игнорироваться.

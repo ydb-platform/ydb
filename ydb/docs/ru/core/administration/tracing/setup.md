@@ -18,5 +18,7 @@ tracing_config:
 * `service_name` --- имя сервиса, которым будут подписываться все спаны
 
 {% note info %}
+
 Обновление backend с помощью механизма [динамической конфигурации](../../maintenance/manual/dynamic-config.md) на данный момент недоступно.
+
 {% endnote %}

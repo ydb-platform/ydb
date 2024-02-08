@@ -3,10 +3,6 @@ on:
   schedule:
     - cron: "0 * * * *"
   workflow_dispatch:
-    inputs:
-      test_label_regexp:
-        required: false
-        type: string
 jobs:
   build:
     runs-on: ubuntu-latest
@@ -16,8 +12,7 @@ jobs:
         ref: cmakebuild
     - name: Sync
       run: |
-        git checkout main -- ydb/ci/sync_cmakebuild.sh
-        cp ydb/ci/sync_cmakebuild.sh ~
-        git restore ydb/ci/sync_cmakebuild.sh
+        curl https://raw.githubusercontent.com/ydb-platform/ydb/main/ydb/ci/sync_cmakebuild.sh > ~/sync_cmakebuild.sh
+        chmod +x ~/sync_cmakebuild.sh
         ~/sync_cmakebuild.sh
         git push

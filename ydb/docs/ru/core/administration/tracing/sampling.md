@@ -30,7 +30,7 @@ tracing_config:
 
 ## Выборочное сэмплирование запросов
 
-Запросы так же можно сэмплировать по их типу, например:
+Запросы так же можно сэмплировать по их типу или другим параметрам, например:
 
 ```yaml
 tracing_config:
@@ -38,7 +38,7 @@ tracing_config:
   sampling:
     # ...
     - scope:
-        request_type: "KeyValue.ExecuteTransaction"
+        request_type: KeyValue.ExecuteTransaction
       fraction: 0.05
       level: 10
       max_rate_per_minute: 10

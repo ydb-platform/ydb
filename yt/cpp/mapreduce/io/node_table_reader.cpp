@@ -352,7 +352,7 @@ void TNodeTableReader::PrepareParsing()
 
 void TNodeTableReader::OnStreamError(std::exception_ptr exception, TString error)
 {
-    YT_LOG_ERROR("Read error: %v", error);
+    YT_LOG_ERROR("Read error (RangeIndex: %v, RowIndex: %v, Error: %v)", RangeIndex_, RowIndex_, error);
     Exception_ = exception;
     if (Input_.Retry(RangeIndex_, RowIndex_)) {
         if (RangeIndex_) {

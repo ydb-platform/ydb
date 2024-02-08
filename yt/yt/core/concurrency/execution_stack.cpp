@@ -1,8 +1,6 @@
 #include "execution_stack.h"
 #include "private.h"
 
-#include <yt/yt/core/misc/ref_tracked.h>
-
 #if defined(_unix_)
 #   include <sys/mman.h>
 #   include <limits.h>
@@ -16,6 +14,9 @@
 #include <yt/yt/core/misc/object_pool.h>
 
 #include <library/cpp/yt/memory/ref.h>
+#include <library/cpp/yt/memory/ref_tracked.h>
+
+#include <library/cpp/yt/misc/tls.h>
 
 #include <util/system/sanitizers.h>
 
@@ -129,7 +130,7 @@ TExecutionStack::~TExecutionStack()
     ::DeleteFiber(Handle_);
 }
 
-static thread_local void* FiberTrampolineOpaque;
+static YT_THREAD_LOCAL(void*) FiberTrampolineOpaque;
 
 void TExecutionStack::SetOpaque(void* opaque)
 {

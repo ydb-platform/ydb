@@ -7,36 +7,115 @@ Y_UNIT_TEST_SUITE(MdbEndpoingGenerator) {
     Y_UNIT_TEST(Legacy) {
         auto transformer = NFq::MakeMdbEndpointGeneratorLegacy();
 
-        UNIT_ASSERT_VALUES_EQUAL(
-            transformer->ToEndpoint(NYql::EDatabaseType::ClickHouse, "rc1c-p5waby2y5y1kb5ue.db.yandex.net", true),
-            TEndpoint("rc1c-p5waby2y5y1kb5ue.db.yandex.net", 8443));
+        auto params = NYql::IMdbEndpointGenerator::TParams{
+            .DatabaseType = NYql::EDatabaseType::ClickHouse,
+            .MdbHost = "rc1c-p5waby2y5y1kb5ue.db.yandex.net",
+            .UseTls = true,
+            .Protocol = NYql::NConnector::NApi::EProtocol::HTTP,
+        };
 
         UNIT_ASSERT_VALUES_EQUAL(
-            transformer->ToEndpoint(NYql::EDatabaseType::ClickHouse, "ya.ru", false),
+            transformer->ToEndpoint(params),
+            TEndpoint("rc1c-p5waby2y5y1kb5ue.db.yandex.net", 8443));
+
+        params = NYql::IMdbEndpointGenerator::TParams{
+            .DatabaseType = NYql::EDatabaseType::ClickHouse,
+            .MdbHost = "ya.ru",
+            .UseTls = false,
+            .Protocol = NYql::NConnector::NApi::EProtocol::HTTP,
+        };
+
+        UNIT_ASSERT_VALUES_EQUAL(
+            transformer->ToEndpoint(params),
             TEndpoint("ya.db.yandex.net", 8123));
     }
 
     Y_UNIT_TEST(Generic_NoTransformHost) {
         auto transformer = NFq::MakeMdbEndpointGeneratorGeneric(false);
 
-        UNIT_ASSERT_VALUES_EQUAL(
-            transformer->ToEndpoint(NYql::EDatabaseType::ClickHouse, "rc1a-d6dv17lv47v5mcop.mdb.yandexcloud.net", true),
-            TEndpoint("rc1a-d6dv17lv47v5mcop.mdb.yandexcloud.net", 8443));
+        auto params = NYql::IMdbEndpointGenerator::TParams{
+            .DatabaseType = NYql::EDatabaseType::ClickHouse,
+            .MdbHost = "rc1a-d6dv17lv47v5mcop.mdb.yandexcloud.net",
+            .UseTls = true,
+            .Protocol = NYql::NConnector::NApi::EProtocol::HTTP,
+        };
 
         UNIT_ASSERT_VALUES_EQUAL(
-            transformer->ToEndpoint(NYql::EDatabaseType::PostgreSQL, "rc1b-eyt6dtobu96rwydq.mdb.yandexcloud.net", false),
+            transformer->ToEndpoint(params),
+            TEndpoint("rc1a-d6dv17lv47v5mcop.mdb.yandexcloud.net", 8443));
+
+        params = NYql::IMdbEndpointGenerator::TParams{
+            .DatabaseType = NYql::EDatabaseType::PostgreSQL,
+            .MdbHost = "rc1b-eyt6dtobu96rwydq.mdb.yandexcloud.net",
+            .UseTls = false,
+            .Protocol = NYql::NConnector::NApi::EProtocol::NATIVE,
+        };
+
+        UNIT_ASSERT_VALUES_EQUAL(
+            transformer->ToEndpoint(params),
             TEndpoint("rc1b-eyt6dtobu96rwydq.mdb.yandexcloud.net", 6432));
     }
 
     Y_UNIT_TEST(Generic_WithTransformHost) {
         auto transformer = NFq::MakeMdbEndpointGeneratorGeneric(true);
 
-        UNIT_ASSERT_VALUES_EQUAL(
-            transformer->ToEndpoint(NYql::EDatabaseType::ClickHouse, "rc1a-d6dv17lv47v5mcop.mdb.yandexcloud.net", false),
-            TEndpoint("rc1a-d6dv17lv47v5mcop.db.yandex.net", 8123));
+        // ClickHouse
+
+        auto params = NYql::IMdbEndpointGenerator::TParams{
+            .DatabaseType = NYql::EDatabaseType::ClickHouse,
+            .MdbHost = "rc1a-d6dv17lv47v5mcop.mdb.yandexcloud.net",
+            .UseTls = false,
+            .Protocol = NYql::NConnector::NApi::EProtocol::HTTP,
+        };
 
         UNIT_ASSERT_VALUES_EQUAL(
-            transformer->ToEndpoint(NYql::EDatabaseType::PostgreSQL, "rc1b-eyt6dtobu96rwydq.mdb.yandexcloud.net", true),
+            transformer->ToEndpoint(params),
+            TEndpoint("rc1a-d6dv17lv47v5mcop.db.yandex.net", 8123));
+
+        params = NYql::IMdbEndpointGenerator::TParams{
+            .DatabaseType = NYql::EDatabaseType::ClickHouse,
+            .MdbHost = "rc1a-d6dv17lv47v5mcop.mdb.yandexcloud.net",
+            .UseTls = false,
+            .Protocol = NYql::NConnector::NApi::EProtocol::NATIVE,
+        };
+
+        UNIT_ASSERT_VALUES_EQUAL(
+            transformer->ToEndpoint(params),
+            TEndpoint("rc1a-d6dv17lv47v5mcop.db.yandex.net", 9000));
+
+        params = NYql::IMdbEndpointGenerator::TParams{
+            .DatabaseType = NYql::EDatabaseType::ClickHouse,
+            .MdbHost = "rc1a-d6dv17lv47v5mcop.mdb.yandexcloud.net",
+            .UseTls = true,
+            .Protocol = NYql::NConnector::NApi::EProtocol::HTTP,
+        };
+
+        UNIT_ASSERT_VALUES_EQUAL(
+            transformer->ToEndpoint(params),
+            TEndpoint("rc1a-d6dv17lv47v5mcop.db.yandex.net", 8443));
+
+        params = NYql::IMdbEndpointGenerator::TParams{
+            .DatabaseType = NYql::EDatabaseType::ClickHouse,
+            .MdbHost = "rc1a-d6dv17lv47v5mcop.mdb.yandexcloud.net",
+            .UseTls = true,
+            .Protocol = NYql::NConnector::NApi::EProtocol::NATIVE,
+        };
+
+        UNIT_ASSERT_VALUES_EQUAL(
+            transformer->ToEndpoint(params),
+            TEndpoint("rc1a-d6dv17lv47v5mcop.db.yandex.net", 9440));
+
+        // PostgreSQL
+
+        params = NYql::IMdbEndpointGenerator::TParams{
+            .DatabaseType = NYql::EDatabaseType::PostgreSQL,
+            .MdbHost = "rc1b-eyt6dtobu96rwydq.mdb.yandexcloud.net",
+            .UseTls = true,
+            .Protocol = NYql::NConnector::NApi::EProtocol::NATIVE,
+        };
+
+        UNIT_ASSERT_VALUES_EQUAL(
+            transformer->ToEndpoint(params),
             TEndpoint("rc1b-eyt6dtobu96rwydq.db.yandex.net", 6432));
     }
 }

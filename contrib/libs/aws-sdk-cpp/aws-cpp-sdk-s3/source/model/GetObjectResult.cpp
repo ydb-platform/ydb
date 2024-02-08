@@ -41,6 +41,10 @@ GetObjectResult::GetObjectResult(GetObjectResult&& toMove) :
     m_lastModified(std::move(toMove.m_lastModified)),
     m_contentLength(toMove.m_contentLength),
     m_eTag(std::move(toMove.m_eTag)),
+    m_checksumCRC32(std::move(toMove.m_checksumCRC32)),
+    m_checksumCRC32C(std::move(toMove.m_checksumCRC32C)),
+    m_checksumSHA1(std::move(toMove.m_checksumSHA1)),
+    m_checksumSHA256(std::move(toMove.m_checksumSHA256)),
     m_missingMeta(toMove.m_missingMeta),
     m_versionId(std::move(toMove.m_versionId)),
     m_cacheControl(std::move(toMove.m_cacheControl)),
@@ -85,6 +89,10 @@ GetObjectResult& GetObjectResult::operator=(GetObjectResult&& toMove)
    m_lastModified = std::move(toMove.m_lastModified);
    m_contentLength = toMove.m_contentLength;
    m_eTag = std::move(toMove.m_eTag);
+   m_checksumCRC32 = std::move(toMove.m_checksumCRC32);
+   m_checksumCRC32C = std::move(toMove.m_checksumCRC32C);
+   m_checksumSHA1 = std::move(toMove.m_checksumSHA1);
+   m_checksumSHA256 = std::move(toMove.m_checksumSHA256);
    m_missingMeta = toMove.m_missingMeta;
    m_versionId = std::move(toMove.m_versionId);
    m_cacheControl = std::move(toMove.m_cacheControl);
@@ -164,7 +172,7 @@ GetObjectResult& GetObjectResult::operator =(Aws::AmazonWebServiceResult<Respons
   const auto& lastModifiedIter = headers.find("last-modified");
   if(lastModifiedIter != headers.end())
   {
-    m_lastModified = DateTime(lastModifiedIter->second, DateFormat::RFC822);
+    m_lastModified = DateTime(lastModifiedIter->second, Aws::Utils::DateFormat::RFC822);
   }
 
   const auto& contentLengthIter = headers.find("content-length");
@@ -177,6 +185,30 @@ GetObjectResult& GetObjectResult::operator =(Aws::AmazonWebServiceResult<Respons
   if(eTagIter != headers.end())
   {
     m_eTag = eTagIter->second;
+  }
+
+  const auto& checksumCRC32Iter = headers.find("x-amz-checksum-crc32");
+  if(checksumCRC32Iter != headers.end())
+  {
+    m_checksumCRC32 = checksumCRC32Iter->second;
+  }
+
+  const auto& checksumCRC32CIter = headers.find("x-amz-checksum-crc32c");
+  if(checksumCRC32CIter != headers.end())
+  {
+    m_checksumCRC32C = checksumCRC32CIter->second;
+  }
+
+  const auto& checksumSHA1Iter = headers.find("x-amz-checksum-sha1");
+  if(checksumSHA1Iter != headers.end())
+  {
+    m_checksumSHA1 = checksumSHA1Iter->second;
+  }
+
+  const auto& checksumSHA256Iter = headers.find("x-amz-checksum-sha256");
+  if(checksumSHA256Iter != headers.end())
+  {
+    m_checksumSHA256 = checksumSHA256Iter->second;
   }
 
   const auto& missingMetaIter = headers.find("x-amz-missing-meta");
@@ -230,7 +262,7 @@ GetObjectResult& GetObjectResult::operator =(Aws::AmazonWebServiceResult<Respons
   const auto& expiresIter = headers.find("expires");
   if(expiresIter != headers.end())
   {
-    m_expires = DateTime(expiresIter->second, DateFormat::RFC822);
+    m_expires = DateTime(expiresIter->second, Aws::Utils::DateFormat::RFC822);
   }
 
   const auto& websiteRedirectLocationIter = headers.find("x-amz-website-redirect-location");
@@ -319,7 +351,7 @@ GetObjectResult& GetObjectResult::operator =(Aws::AmazonWebServiceResult<Respons
   const auto& objectLockRetainUntilDateIter = headers.find("x-amz-object-lock-retain-until-date");
   if(objectLockRetainUntilDateIter != headers.end())
   {
-    m_objectLockRetainUntilDate = DateTime(objectLockRetainUntilDateIter->second, DateFormat::ISO_8601);
+    m_objectLockRetainUntilDate = DateTime(objectLockRetainUntilDateIter->second, Aws::Utils::DateFormat::ISO_8601);
   }
 
   const auto& objectLockLegalHoldStatusIter = headers.find("x-amz-object-lock-legal-hold");

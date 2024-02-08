@@ -176,29 +176,36 @@ namespace NUdf {
 
 #define UDF_RUN(udfName, typeBody) UDF_RUN_IMPL(udfName, typeBody, ;, ;, "", "")
 
+#define SIMPLE_UDF_IMPL_EX(udfName, typeBody, signature, irResourceId, irFunctionName, blockType, create_impl) \
+    UDF_IMPL_EX(udfName, typeBody, const ::NYql::NUdf::TType* ReturnType_;, ReturnType_ = ::NYql::NUdf::NImpl::TSimpleSignatureHelper<signature>::BuildReturnType(builder);, irResourceId, irFunctionName, blockType, create_impl)
+
+#define SIMPLE_UDF_IMPL(udfName, typeBody, signature, irResourceId, irFunctionName, blockType) \
+    SIMPLE_UDF_IMPL_EX(udfName, typeBody, signature, irResourceId, irFunctionName, blockType, builder.Implementation(new udfName(builder));)
+
+
 #define SIMPLE_UDF(udfName, signature) \
-    UDF(udfName, builder.SimpleSignature<signature>();)
+    SIMPLE_UDF_IMPL(udfName, builder.SimpleSignature<signature>();, signature, "", "", void)
 
 #define SIMPLE_STRICT_UDF(udfName, signature) \
-    UDF(udfName, builder.SimpleSignature<signature>().IsStrict();)
+    SIMPLE_UDF_IMPL(udfName, builder.SimpleSignature<signature>().IsStrict();, signature, "", "", void)
 
 #define SIMPLE_STRICT_UDF_WITH_IR(udfName, signature, optionalArgsCount, irResourceId, irFunctionName) \
-    UDF_IMPL(udfName, builder.SimpleSignature<signature>().OptionalArgs(optionalArgsCount).IsStrict();, ;, ;, irResourceId, irFunctionName, void)
+    SIMPLE_UDF_IMPL(udfName, builder.SimpleSignature<signature>().OptionalArgs(optionalArgsCount).IsStrict();, signature, irResourceId, irFunctionName, void)
 
 #define SIMPLE_UDF_WITH_CREATE_IMPL(udfName, signature, create_impl) \
-    UDF_IMPL_EX(udfName, builder.SimpleSignature<signature>();, ;, ;, "", "", void, create_impl)
+    SIMPLE_UDF_IMPL_EX(udfName, builder.SimpleSignature<signature>();, signature, "", "", void, create_impl)
 
 #define SIMPLE_UDF_OPTIONS(udfName, signature, options) \
-    UDF(udfName, builder.SimpleSignature<signature>(); options;)
+    SIMPLE_UDF_IMPL(udfName, builder.SimpleSignature<signature>(); options;, signature, "", "", void)
 
 #define SIMPLE_UDF_WITH_OPTIONAL_ARGS(udfName, signature, optionalArgsCount) \
-    UDF(udfName, builder.SimpleSignature<signature>().OptionalArgs(optionalArgsCount);)
+    SIMPLE_UDF_IMPL(udfName, builder.SimpleSignature<signature>().OptionalArgs(optionalArgsCount);, signature, "", "", void)
 
 #define SIMPLE_STRICT_UDF_OPTIONS(udfName, signature, options) \
-    UDF(udfName, builder.SimpleSignature<signature>().IsStrict(); options;)
+    SIMPLE_UDF_IMPL(udfName, builder.SimpleSignature<signature>().IsStrict(); options;, signature, "", "", void)
 
 #define SIMPLE_STRICT_UDF_WITH_OPTIONAL_ARGS(udfName, signature, optionalArgsCount) \
-    UDF(udfName, builder.SimpleSignature<signature>().OptionalArgs(optionalArgsCount).IsStrict();)
+    SIMPLE_UDF_IMPL(udfName, builder.SimpleSignature<signature>().OptionalArgs(optionalArgsCount).IsStrict();, signature, "", "", void)
 
 #define SIMPLE_UDF_RUN_OPTIONS(udfName, signature, options) \
     UDF_RUN(udfName, builder.SimpleSignature<signature>(); options;)

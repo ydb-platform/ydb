@@ -407,10 +407,12 @@ public:
     bool DryRun;
     bool Schedule;
     bool AllowPartial;
+    bool EvictVDisks;
     ui32 Hours;
     ui32 Minutes;
     TString TenantPolicy;
     TString AvailabilityMode;
+    i32 Priority;
 
     TClientCommandMakeRequest(const TString &description,
                              NKikimrCms::TAction::EType type,
@@ -429,8 +431,10 @@ public:
         DryRun = false;
         Schedule = false;
         AllowPartial = false;
+        EvictVDisks = false;
         Hours = 0;
         Minutes = 0;
+        Priority = 0;
 
         config.Opts->AddLongOption("user", "User name").Required()
             .RequiredArgument("NAME").StoreResult(&User);
@@ -449,6 +453,11 @@ public:
             .NoArgument().SetFlag(&AllowPartial);
         config.Opts->AddLongOption("availability-mode", "Availability mode")
             .RequiredArgument("max|keep|force").DefaultValue("max").StoreResult(&AvailabilityMode);
+        config.Opts->AddLongOption("evict-vdisks", "Evict vdisks before granting permission(s)")
+            .NoArgument().SetFlag(&EvictVDisks);
+        config.Opts->AddLongOption("priority", "Request priority")
+            .RequiredArgument("NUM").StoreResult(&Priority);
+            
     }
 
     void Parse(TConfig& config) override
@@ -467,6 +476,8 @@ public:
             rec.SetSchedule(Schedule);
         if (AllowPartial)
             rec.SetPartialPermissionAllowed(AllowPartial);
+        if (EvictVDisks)
+            rec.SetEvictVDisks(EvictVDisks);
         if (TenantPolicy) {
             if (TenantPolicy == "none")
                 rec.SetTenantPolicy(NKikimrCms::NONE);
@@ -488,6 +499,9 @@ public:
         if (Hours || Minutes) {
             auto duration = TDuration::Minutes(Minutes) + TDuration::Hours(Hours);
             rec.SetDuration(duration.GetValue());
+        }
+        if (Priority) {
+            rec.SetPriority(Priority);
         }
     }
 };

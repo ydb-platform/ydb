@@ -10,8 +10,8 @@
 #include <ydb/library/yql/providers/dq/actors/events/events.h>
 #include <ydb/library/yql/providers/dq/common/attrs.h>
 
-#include <library/cpp/actors/core/events.h>
-#include <library/cpp/actors/core/hfunc.h>
+#include <ydb/library/actors/core/events.h>
+#include <ydb/library/actors/core/hfunc.h>
 #include <library/cpp/yson/node/node_io.h>
 
 #include <yt/cpp/mapreduce/interface/fluent.h>

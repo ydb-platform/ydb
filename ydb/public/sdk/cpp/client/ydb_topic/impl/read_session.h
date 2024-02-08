@@ -8,8 +8,7 @@
 
 namespace NYdb::NTopic {
 
-class TReadSession : public IReadSession,
-                     public std::enable_shared_from_this<TReadSession> {
+class TReadSession : public IReadSession {
 public:
     TReadSession(const TReadSessionSettings& settings,
                  std::shared_ptr<TTopicClient::TImpl> client,
@@ -87,7 +86,6 @@ private:
     TAdaptiveLock Lock;
     std::shared_ptr<NPersQueue::TReadSessionEventsQueue<false>> EventsQueue;
 
-    NPersQueue::TSingleClusterReadSessionImpl<false>::TPtr Session;
     std::shared_ptr<NPersQueue::TCallbackContext<NPersQueue::TSingleClusterReadSessionImpl<false>>> CbContext;
     TVector<TTopicReadSettings> Topics;
 

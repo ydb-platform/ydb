@@ -4,6 +4,8 @@ PROVIDES(
     yql_pg_runtime
 )
 
+CXXFLAGS(-DMKQL_DISABLE_CODEGEN)
+
 YQL_LAST_ABI_VERSION()
 
 ADDINCL(
@@ -35,6 +37,7 @@ SRCS(
     config.cpp
     cost_mocks.cpp
     syscache.cpp
+    pg_utils_wrappers.cpp
 )
 
 IF (ARCH_X86_64)
@@ -48,14 +51,12 @@ IF (ARCH_X86_64)
     )
 ENDIF()
 
-# DTCC-950
-NO_COMPILER_WARNINGS()
-
 INCLUDE(pg_sources.inc)
 
 INCLUDE(pg_kernel_sources.inc)
 
 IF (NOT OPENSOURCE AND NOT OS_WINDOWS AND NOT SANITIZER_TYPE AND NOT BUILD_TYPE == "DEBUG")
+USE_LLVM_BC14()
 INCLUDE(pg_bc.all.inc)
 ELSE()
 CFLAGS(-DUSE_SLOW_PG_KERNELS)
@@ -66,8 +67,9 @@ PEERDIR(
     library/cpp/yson
     ydb/library/yql/core
     ydb/library/yql/minikql/arrow
-    ydb/library/yql/minikql/computation/llvm
+    ydb/library/yql/minikql/computation
     ydb/library/yql/parser/pg_catalog
+    ydb/library/yql/parser/pg_wrapper/interface
     ydb/library/yql/providers/common/codec
     ydb/library/yql/public/issue
     ydb/library/yql/public/udf
@@ -123,6 +125,16 @@ ELSEIF (OS_WINDOWS)
         postgresql/src/port/win32stat.c
     )
 ENDIF()
+
+# Service files must be listed as dependencies to be included in export
+FILES(
+    copy_src.py
+    copy_src.sh
+    generate_kernels.py
+    generate_patch.sh
+    vars.txt
+    verify.sh
+)
 
 END()
 

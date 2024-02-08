@@ -176,7 +176,7 @@ static int GetWeekDayNumberFromStr(const char* timeString, size_t startIndex, si
     }
 }
 
-//Get the 0-11 monthy number from a string representing Month. Case insensitive and will stop on abbreviation
+//Get the 0-11 monthly number from a string representing Month. Case insensitive and will stop on abbreviation
 static int GetMonthNumberFromStr(const char* timeString, size_t startIndex, size_t stopIndex)
 {
     if (stopIndex - startIndex < 3)
@@ -842,7 +842,9 @@ public:
 
                     break;
                 case 6:
-                    if ((c == 'Z' || c == '+' || c == '-' ) && (index - stateStartIndex == 3))
+                    if ((c == 'Z' || c == '+' || c == '-' ) &&
+                        (index - stateStartIndex >= 3) &&
+                        (index - stateStartIndex <= 9))
                     {
                         m_tz[0] = c;
                         m_state = 7;
@@ -1265,6 +1267,12 @@ Aws::String DateTime::ToGmtString(const char* formatStr) const
 double DateTime::SecondsWithMSPrecision() const
 {
     std::chrono::duration<double, std::chrono::seconds::period> timestamp(m_time.time_since_epoch());
+    return timestamp.count();
+}
+
+int64_t DateTime::Seconds() const
+{
+    auto timestamp = std::chrono::duration_cast<std::chrono::seconds>(m_time.time_since_epoch());
     return timestamp.count();
 }
 

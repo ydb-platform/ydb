@@ -5,8 +5,13 @@
 
 namespace NKikimr::NColumnShard {
 
-bool TArrowData::Parse(const NKikimrDataEvents::TOperationData& proto, const IPayloadData& payload) {
-    IncomingData = payload.GetDataFromPayload(proto.GetArrowData().GetPayloadIndex());
+bool TArrowData::Parse(const NKikimrDataEvents::TEvWrite_TOperation& proto, const NEvWrite::IPayloadData& payload) {
+    if(proto.GetPayloadFormat() != NKikimrDataEvents::FORMAT_ARROW)
+    {
+        AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("event", "invalid_payload_format")("payload_format", (ui64)proto.GetPayloadFormat());
+        return false;
+    }
+    IncomingData = payload.GetDataFromPayload(proto.GetPayloadIndex());
 
     std::vector<ui32> columns;
     for (auto&& columnId : proto.GetColumnIds()) {

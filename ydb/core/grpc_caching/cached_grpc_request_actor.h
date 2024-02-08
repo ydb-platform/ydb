@@ -7,10 +7,10 @@
 #include <ydb/core/base/events.h>
 #include <ydb/core/util/simple_cache.h>
 
-#include <library/cpp/actors/core/actor_bootstrapped.h>
-#include <library/cpp/actors/core/event_local.h>
-#include <library/cpp/actors/core/log.h>
-#include <library/cpp/grpc/client/grpc_client_low.h>
+#include <ydb/library/actors/core/actor_bootstrapped.h>
+#include <ydb/library/actors/core/event_local.h>
+#include <ydb/library/actors/core/log.h>
+#include <ydb/library/grpc/client/grpc_client_low.h>
 
 #include <util/datetime/base.h>
 
@@ -29,8 +29,8 @@ namespace NKikimr {
             using TEvRequestType = TEvRequest;
             using TEvResponseType = TEvResponse;
             using TEvResultType = TEvCachedResult;
-            using TServiceConnection = NGrpc::TServiceConnection<TProtoService>;
-            using TGrpcRequestType = typename NGrpc::TSimpleRequestProcessor<typename TProtoService::Stub, TProtoRequest, TProtoResponse>::TAsyncRequest;
+            using TServiceConnection = NYdbGrpc::TServiceConnection<TProtoService>;
+            using TGrpcRequestType = typename NYdbGrpc::TSimpleRequestProcessor<typename TProtoService::Stub, TProtoRequest, TProtoResponse>::TAsyncRequest;
 
             struct TEvRequest : TEventLocal<TEvRequest, RequestTag> {
                 TProtoRequest Request;
@@ -50,7 +50,7 @@ namespace NKikimr {
             struct TEvResponse : TEventLocal<TEvResponse, ResponseTag> {
                 THolder <IEventHandle> Request;
                 TProtoResponse Response;
-                NGrpc::TGrpcStatus Status;
+                NYdbGrpc::TGrpcStatus Status;
             };
 
             struct TEvCachedResult : TEventLocal<TEvCachedResult, ResultTag> {
@@ -65,7 +65,7 @@ namespace NKikimr {
 
                 TIntrusivePtr<TCachedItem> CacheItem;
                 TProtoResponse Response;
-                NGrpc::TGrpcStatus Status;
+                NYdbGrpc::TGrpcStatus Status;
 
                 TEvCachedResult(TIntrusivePtr<TCachedItem> cacheItem)
                         : CacheItem(cacheItem) {}
@@ -90,8 +90,8 @@ namespace NKikimr {
         using TEvRequestType = typename TTypes::TEvRequest;
         using TEvResponseType = typename TTypes::TEvResponse;
         using TEvResultType = typename TTypes::TEvCachedResult;
-        using TServiceConnection = NGrpc::TServiceConnection<TService>;
-        using TGrpcRequestType = typename NGrpc::TSimpleRequestProcessor<typename TService::Stub, TRequest, TResponse>::TAsyncRequest;
+        using TServiceConnection = NYdbGrpc::TServiceConnection<TService>;
+        using TGrpcRequestType = typename NYdbGrpc::TSimpleRequestProcessor<typename TService::Stub, TRequest, TResponse>::TAsyncRequest;
 
         struct TEvPrivate {
             enum EEv {
@@ -109,9 +109,9 @@ namespace NKikimr {
             };
 
             struct TEvError : TEventLocal<TEvError, EvError> {
-                NGrpc::TGrpcStatus Status;
+                NYdbGrpc::TGrpcStatus Status;
 
-                TEvError(NGrpc::TGrpcStatus&& status)
+                TEvError(NYdbGrpc::TGrpcStatus&& status)
                         : Status(std::move(status))
                 {}
             };
@@ -121,10 +121,10 @@ namespace NKikimr {
 
         TSimpleCache<TString, typename TTypes::TCachedItemPtr> Cache;
         std::shared_ptr<TServiceConnection> GrpcConnection;
-        NGrpc::IQueueClientContextProvider& GrpcContextProvider;
+        NYdbGrpc::IQueueClientContextProvider& GrpcContextProvider;
         TGrpcRequestType GrpcProcessor;
 
-        TCachedRequestProcessor(std::shared_ptr<TServiceConnection> connection, NGrpc::IQueueClientContextProvider& contextProvider, TGrpcRequestType processor)
+        TCachedRequestProcessor(std::shared_ptr<TServiceConnection> connection, NYdbGrpc::IQueueClientContextProvider& contextProvider, TGrpcRequestType processor)
             : GrpcConnection(connection)
             , GrpcContextProvider(contextProvider)
             , GrpcProcessor(processor)
@@ -138,13 +138,13 @@ namespace NKikimr {
             TActorId Sender;
             TCachedItemPtr CacheItem;
             std::shared_ptr<TServiceConnection> Connection;
-            std::shared_ptr<NGrpc::IQueueClientContext> Context;
+            std::shared_ptr<NYdbGrpc::IQueueClientContext> Context;
             TGrpcRequestType GrpcProcessor;
 
         public:
             TGrpcRequestActor(
                 std::shared_ptr<TServiceConnection> connection,
-                std::shared_ptr<NGrpc::IQueueClientContext> context,
+                std::shared_ptr<NYdbGrpc::IQueueClientContext> context,
                 const TActorId& sender,
                 TCachedItemPtr item,
                 TGrpcRequestType processor
@@ -160,8 +160,8 @@ namespace NKikimr {
                 TActorId actorId = ctx.SelfID;
                 TActorSystem* actorSystem = ctx.ExecutorThread.ActorSystem;
 
-                NGrpc::TResponseCallback<TResponse> responseCb =
-                        [actorId, actorSystem](NGrpc::TGrpcStatus&& status, TResponse&& response) -> void {
+                NYdbGrpc::TResponseCallback<TResponse> responseCb =
+                        [actorId, actorSystem](NYdbGrpc::TGrpcStatus&& status, TResponse&& response) -> void {
                             if (status.Ok()) {
                                 actorSystem->Send(actorId, new typename TEvPrivate::TEvResponse(std::move(response)));
                             } else {
@@ -190,7 +190,7 @@ namespace NKikimr {
 
             void HandleTimeout(const TActorContext& ctx) {
                 THolder<TEvResultType> result = MakeHolder<TEvResultType>(CacheItem);
-                result->Status = NGrpc::TGrpcStatus("Timeout", grpc::StatusCode::DEADLINE_EXCEEDED, true);
+                result->Status = NYdbGrpc::TGrpcStatus("Timeout", grpc::StatusCode::DEADLINE_EXCEEDED, true);
                 ctx.Send(Sender, result.Release());
                 TBase::Die(ctx);
             }

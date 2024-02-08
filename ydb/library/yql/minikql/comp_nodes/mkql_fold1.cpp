@@ -1,5 +1,5 @@
 #include "mkql_fold1.h"
-#include <ydb/library/yql/minikql/computation/mkql_computation_node_codegen.h>
+#include <ydb/library/yql/minikql/computation/mkql_computation_node_codegen.h>  // Y_IGNORE
 
 namespace NKikimr {
 namespace NMiniKQL {

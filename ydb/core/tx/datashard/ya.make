@@ -26,14 +26,13 @@ SRCS(
     change_sender.cpp
     change_sender_async_index.cpp
     change_sender_cdc_stream.cpp
-    change_sender_common_ops.cpp
-    change_sender_monitoring.cpp
     check_commit_writes_tx_unit.cpp
     check_data_tx_unit.cpp
     check_distributed_erase_tx_unit.cpp
     check_read_unit.cpp
     check_scheme_tx_unit.cpp
     check_snapshot_tx_unit.cpp
+    check_write_unit.cpp
     complete_data_tx_unit.cpp
     completed_operations_unit.cpp
     conflicts_cache.cpp
@@ -71,15 +70,13 @@ SRCS(
     datashard__stats.cpp
     datashard__store_table_path.cpp
     datashard__store_scan_state.cpp
+    datashard__write.cpp
     datashard_change_receiving.cpp
     datashard_change_sender_activation.cpp
     datashard_change_sending.cpp
-    datashard_counters.cpp
     datashard_loans.cpp
     datashard_locks_db.cpp
     datashard_locks_db.h
-    datashard_locks.h
-    datashard_locks.cpp
     datashard_split_dst.cpp
     datashard_split_src.cpp
     datashard_switch_mvcc_state.cpp
@@ -127,6 +124,7 @@ SRCS(
     datashard_repl_offsets_client.cpp
     datashard_repl_offsets_server.cpp
     datashard_subdomain_path_id.cpp
+    datashard_write_operation.cpp
     datashard_txs.h
     datashard.cpp
     datashard.h
@@ -153,10 +151,12 @@ SRCS(
     export_scan.cpp
     finalize_build_index_unit.cpp
     finish_propose_unit.cpp
+    finish_propose_write_unit.cpp
     follower_edge.cpp
     initiate_build_index_unit.cpp
     key_conflicts.cpp
     key_conflicts.h
+    key_validator.cpp
     load_and_wait_in_rs_unit.cpp
     load_tx_details_unit.cpp
     make_scan_snapshot_unit.cpp
@@ -181,9 +181,7 @@ SRCS(
     receive_snapshot_unit.cpp
     remove_lock_change_records.cpp
     remove_locks.cpp
-    range_avl_tree.cpp
     range_ops.cpp
-    range_treap.cpp
     read_iterator.h
     restore_unit.cpp
     setup_sys_locks.h
@@ -196,12 +194,12 @@ SRCS(
     volatile_tx.cpp
     wait_for_plan_unit.cpp
     wait_for_stream_clearance_unit.cpp
+    write_unit.cpp
     upload_stats.cpp
 )
 
 GENERATE_ENUM_SERIALIZATION(backup_restore_traits.h)
 GENERATE_ENUM_SERIALIZATION(change_exchange.h)
-GENERATE_ENUM_SERIALIZATION(change_record.h)
 GENERATE_ENUM_SERIALIZATION(datashard.h)
 GENERATE_ENUM_SERIALIZATION(datashard_active_transaction.h)
 GENERATE_ENUM_SERIALIZATION(datashard_s3_upload.h)
@@ -215,7 +213,8 @@ RESOURCE(
 
 PEERDIR(
     contrib/libs/zstd
-    library/cpp/actors/core
+    ydb/library/actors/core
+    ydb/library/actors/http
     library/cpp/containers/absl_flat_hash
     library/cpp/containers/stack_vector
     library/cpp/digest/md5
@@ -229,10 +228,11 @@ PEERDIR(
     library/cpp/string_utils/quote
     ydb/core/actorlib_impl
     ydb/core/base
+    ydb/core/change_exchange
     ydb/core/engine
     ydb/core/engine/minikql
     ydb/core/formats
-    ydb/core/io_formats
+    ydb/core/io_formats/ydb_dump
     ydb/core/kqp/runtime
     ydb/core/persqueue/partition_key_range
     ydb/core/persqueue/writer
@@ -240,6 +240,7 @@ PEERDIR(
     ydb/core/tablet
     ydb/core/tablet_flat
     ydb/core/tx/long_tx_service/public
+    ydb/core/tx/locks
     ydb/core/util
     ydb/core/wrappers
     ydb/core/ydb_convert
@@ -290,9 +291,7 @@ RECURSE_FOR_TESTS(
     ut_minikql
     ut_minstep
     ut_order
-    ut_range_avl_tree
     ut_range_ops
-    ut_range_treap
     ut_read_iterator
     ut_read_table
     ut_reassign
@@ -303,4 +302,6 @@ RECURSE_FOR_TESTS(
     ut_stats
     ut_upload_rows
     ut_volatile
+    ut_write
+    ut_trace
 )

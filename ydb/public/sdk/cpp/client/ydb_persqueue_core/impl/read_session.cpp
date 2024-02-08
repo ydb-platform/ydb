@@ -206,20 +206,20 @@ void TReadSession::CreateClusterSessionsImpl(TDeferredActions<true>& deferred) {
             AbortImpl(EStatus::ABORTED, DRIVER_IS_STOPPING_DESCRIPTION, deferred);
             return;
         }
-        clusterSessionInfo.Session =
-            std::make_shared<TSingleClusterReadSessionImpl<true>>(
-                sessionSettings,
-                DbDriverState->Database,
-                SessionId,
-                clusterName,
-                Log,
-                subclient->CreateReadSessionConnectionProcessorFactory(),
-                EventsQueue,
-                context,
-                partitionStreamIdStart++,
-                clusterSessionsCount);
+        CbContexts.push_back(MakeWithCallbackContext<TSingleClusterReadSessionImpl<true>>(
+            sessionSettings,
+            DbDriverState->Database,
+            SessionId,
+            clusterName,
+            Log,
+            subclient->CreateReadSessionConnectionProcessorFactory(),
+            EventsQueue,
+            context,
+            partitionStreamIdStart++,
+            clusterSessionsCount
+        ));
 
-        CbContexts.push_back(clusterSessionInfo.Session->MakeCallbackContext());
+        clusterSessionInfo.Session = CbContexts.back()->TryGet();
         deferred.DeferStartSession(CbContexts.back());
     }
 }

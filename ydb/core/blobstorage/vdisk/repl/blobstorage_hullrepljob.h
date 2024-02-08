@@ -17,6 +17,7 @@ namespace NKikimr {
             TQueueActorMapPtr queueActorMapPtr,
             TBlobIdQueuePtr blobsToReplicatePtr,
             TBlobIdQueuePtr unreplicatedBlobsPtr,
-            const std::optional<std::pair<TVDiskID, TActorId>>& donor);
+            const std::optional<std::pair<TVDiskID, TActorId>>& donor,
+            TUnreplicatedBlobRecords&& ubr);
 
 } // NKikimr

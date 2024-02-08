@@ -16,10 +16,11 @@ DEFAULT_FLAKE8_FILE_PROCESSING_TIME = "1.5"  # in seconds
 def _split_macro_call(macro_call, data, item_size, chunk_size=1024):
     index = 0
     length = len(data)
-    offset = item_size*chunk_size
+    offset = item_size * chunk_size
     while index + 1 < length:
-        macro_call(data[index:index+offset])
+        macro_call(data[index : index + offset])
         index += offset
+
 
 def is_arc_src(src, unit):
     return (
@@ -82,7 +83,8 @@ def mangle(name):
 
 
 def parse_pyx_includes(filename, path, source_root, seen=None):
-    normpath = lambda *x: os.path.normpath(os.path.join(*x))
+    def normpath(*args):
+        return os.path.normpath(os.path.join(*args))
 
     abs_path = normpath(source_root, filename)
     seen = seen or set()
@@ -143,9 +145,10 @@ def add_python_lint_checks(unit, py_ver, files):
                 resolved_files.append(resolved)
         return resolved_files
 
+    upath = unit.path()[3:]
+
     no_lint_value = get_no_lint_value(unit)
     if no_lint_value == "none":
-
         no_lint_allowed_paths = (
             "contrib/",
             "devtools/",
@@ -160,8 +163,6 @@ def add_python_lint_checks(unit, py_ver, files):
             "yt/python/",  # YT-20053
         )
 
-        upath = unit.path()[3:]
-
         if not upath.startswith(no_lint_allowed_paths):
             ymake.report_configure_error("NO_LINT() is allowed only in " + ", ".join(no_lint_allowed_paths))
 
@@ -171,7 +172,7 @@ def add_python_lint_checks(unit, py_ver, files):
             flake8_cfg = 'build/config/tests/flake8/flake8.conf'
             migrations_cfg = 'build/rules/flake8/migrations.yaml'
             resource = "build/external_resources/flake8_py{}".format(py_ver)
-            lint_name = "py{}_flake8".format(py_ver)
+            lint_name = "py2_flake8" if py_ver == 2 else "flake8"
             params = [lint_name, "tools/flake8_linter/flake8_linter"]
             params += ["FILES"] + resolved_files
             params += ["GLOBAL_RESOURCES", resource]
@@ -192,12 +193,31 @@ def add_python_lint_checks(unit, py_ver, files):
                 params += ["EXTRA_PARAMS"] + extra_params
             unit.on_add_linter_check(params)
 
+    # ruff related stuff
+    if unit.get('STYLE_RUFF_VALUE') == 'yes':
+        if no_lint_value in ("none", "none_internal"):
+            ymake.report_configure_error(
+                'NO_LINT() and STYLE_RUFF() can\'t be enabled both at the same time',
+            )
+        # temporary allow using ruff for taxi only
+        ruff_allowed_paths = ("taxi/",)
+        if not upath.startswith(ruff_allowed_paths):
+            ymake.report_configure_error("STYLE_RUFF() is allowed only in " + ", ".join(ruff_allowed_paths))
+
+        resolved_files = get_resolved_files()
+        if resolved_files:
+            resource = "build/external_resources/ruff"
+            params = ["ruff", "tools/ruff_linter/bin/ruff_linter"]
+            params += ["FILES"] + resolved_files
+            params += ["GLOBAL_RESOURCES", resource]
+            ruff_cfg = unit.get('STYLE_RUFF_PYPROJECT_VALUE') or 'build/config/tests/ruff/ruff.toml'
+            params += ['CONFIGS', ruff_cfg]
+            unit.on_add_linter_check(params)
+
     if files and unit.get('STYLE_PYTHON_VALUE') == 'yes' and is_py3(unit):
         resolved_files = get_resolved_files()
         if resolved_files:
-            black_cfg = (
-                unit.get('STYLE_PYTHON_PYPROJECT_VALUE') or 'build/config/tests/py_style/config.toml'
-            )
+            black_cfg = unit.get('STYLE_PYTHON_PYPROJECT_VALUE') or 'build/config/tests/py_style/config.toml'
             params = ['black', 'tools/black_linter/black_linter']
             params += ['FILES'] + resolved_files
             params += ['CONFIGS', black_cfg]
@@ -233,11 +253,14 @@ def onpy_srcs(unit, *args):
     """
     @usage PY_SRCS({| CYTHONIZE_PY} {| CYTHON_C} { | TOP_LEVEL | NAMESPACE ns} Files...)
 
-    PY_SRCS() - is rule to build extended versions of Python interpreters and containing all application code in its executable file. It can be used to collect only the executables but not shared libraries, and, in particular, not to collect the modules that are imported using import directive.
+    PY_SRCS() - is rule to build extended versions of Python interpreters and containing all application code in its executable file.
+    It can be used to collect only the executables but not shared libraries, and, in particular, not to collect the modules that are imported using import directive.
     The main disadvantage is the lack of IDE support; There is also no readline yet.
     The application can be collect from any of the sources from which the C library, and with the help of PY_SRCS .py , .pyx,.proto and .swg files.
-    At the same time extensions for Python on C language generating from .pyx and .swg, will be registered in Python's as built-in modules, and sources on .py are stored as static data: when the interpreter starts, the initialization code will add a custom loader of these modules to sys.meta_path.
-    You can compile .py files as Cython sources with CYTHONIZE_PY directive (Use carefully, as build can get too slow). However, with it you won't have profiling info by default. To enable it, add "# cython: profile=True" line to the beginning of every cythonized source.
+    At the same time extensions for Python on C language generating from .pyx and .swg, will be registered in Python's as built-in modules, and sources on .py are stored as static data:
+    when the interpreter starts, the initialization code will add a custom loader of these modules to sys.meta_path.
+    You can compile .py files as Cython sources with CYTHONIZE_PY directive (Use carefully, as build can get too slow). However, with it you won't have profiling info by default.
+    To enable it, add "# cython: profile=True" line to the beginning of every cythonized source.
     By default .pyx files are collected as C++-extensions. To collect them as C (similar to BUILDWITH_CYTHON_C, but with the ability to specify namespace), you must specify the Directive CYTHON_C.
     Building with pyx automatically registers modules, you do not need to call PY_REGISTER for them
     __init__.py never required, but if present (and specified in PY_SRCS), it will be imported when you import package modules with __init__.py Oh.

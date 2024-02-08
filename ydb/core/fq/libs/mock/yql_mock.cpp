@@ -5,11 +5,11 @@
 
 #include <ydb/library/yql/public/issue/yql_issue_message.h>
 
-#include <library/cpp/actors/core/actorsystem.h>
-#include <library/cpp/actors/core/events.h>
-#include <library/cpp/actors/core/hfunc.h>
-#include <library/cpp/actors/http/http.h>
-#include <library/cpp/actors/http/http_proxy.h>
+#include <ydb/library/actors/core/actorsystem.h>
+#include <ydb/library/actors/core/events.h>
+#include <ydb/library/actors/core/hfunc.h>
+#include <ydb/library/actors/http/http.h>
+#include <ydb/library/actors/http/http_proxy.h>
 #include <library/cpp/json/json_writer.h>
 #include <library/cpp/protobuf/json/proto2json.h>
 #include <library/cpp/protobuf/json/json2proto.h>

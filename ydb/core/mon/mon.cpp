@@ -7,42 +7,35 @@ namespace NActors {
 
 using namespace NMonitoring;
 
-IMonPage* TMon::RegisterActorPage(TIndexMonPage* index, const TString& relPath,
-    const TString& title, bool preTag, TActorSystem* actorSystem, const TActorId& actorId, bool useAuth, bool sortPages) {
-    return RegisterActorPage({
-        .Title = title,
-        .RelPath = relPath,
-        .ActorSystem = actorSystem,
-        .Index = index,
-        .PreTag = preTag,
-        .ActorId = actorId,
-        .UseAuth = useAuth,
-        .SortPages = sortPages,
-    });
+namespace {
+
+const std::vector<NKikimr::TEvTicketParser::TEvAuthorizeTicket::TEntry>& GetEntries(const TString& ticket) {
+    if (ticket.StartsWith("Bearer")) {
+        static std::vector<NKikimr::TEvTicketParser::TEvAuthorizeTicket::TEntry> entries = {
+            {NKikimr::TEvTicketParser::TEvAuthorizeTicket::ToPermissions({"ydb.developerApi.get", "ydb.developerApi.update"}), {{"gizmo_id", "gizmo"}}}
+        };
+        return entries;
+    }
+    static std::vector<NKikimr::TEvTicketParser::TEvAuthorizeTicket::TEntry> emptyEntries = {};
+    return emptyEntries;
 }
 
-NActors::IEventHandle* TMon::DefaultAuthorizer(const NActors::TActorId& owner, NMonitoring::IMonHttpRequest& request) {
+} // namespace
+
+NActors::IEventHandle* SelectAuthorizationScheme(const NActors::TActorId& owner, NMonitoring::IMonHttpRequest& request) {
     TStringBuf ydbSessionId = request.GetCookie("ydb_session_id");
     TStringBuf authorization = request.GetHeader("Authorization");
     if (!authorization.empty()) {
-        return new NActors::IEventHandle(
-            NKikimr::MakeTicketParserID(),
-            owner,
-            new NKikimr::TEvTicketParser::TEvAuthorizeTicket({
-                .Ticket = TString(authorization)
-            }),
-            IEventHandle::FlagTrackDelivery
-        );
+        return GetAuthorizeTicketHandle(owner, TString(authorization));
     } else if (!ydbSessionId.empty()) {
-        return new NActors::IEventHandle(
-            NKikimr::MakeTicketParserID(),
-            owner,
-            new NKikimr::TEvTicketParser::TEvAuthorizeTicket({
-                .Ticket = TString("Login ") + TString(ydbSessionId)
-            }),
-            IEventHandle::FlagTrackDelivery
-        );
-    } else if (NKikimr::AppData()->EnforceUserTokenRequirement && NKikimr::AppData()->DefaultUserSIDs.empty()) {
+        return GetAuthorizeTicketHandle(owner, TString("Login ") + TString(ydbSessionId));
+    } else {
+        return nullptr;
+    }
+}
+
+NActors::IEventHandle* GetAuthorizeTicketResult(const NActors::TActorId& owner) {
+    if (NKikimr::AppData()->EnforceUserTokenRequirement && NKikimr::AppData()->DefaultUserSIDs.empty()) {
         return new NActors::IEventHandle(
             owner,
             owner,
@@ -61,6 +54,40 @@ NActors::IEventHandle* TMon::DefaultAuthorizer(const NActors::TActorId& owner, N
     } else {
         return nullptr;
     }
+}
+
+IEventHandle* GetAuthorizeTicketHandle(const NActors::TActorId& owner, const TString& ticket) {
+    return new NActors::IEventHandle(
+        NKikimr::MakeTicketParserID(),
+        owner,
+        new NKikimr::TEvTicketParser::TEvAuthorizeTicket({
+            .Ticket = ticket,
+            .Entries = GetEntries(ticket),
+        }),
+        IEventHandle::FlagTrackDelivery
+    );
+}
+
+IMonPage* TMon::RegisterActorPage(TIndexMonPage* index, const TString& relPath,
+    const TString& title, bool preTag, TActorSystem* actorSystem, const TActorId& actorId, bool useAuth, bool sortPages) {
+    return RegisterActorPage({
+        .Title = title,
+        .RelPath = relPath,
+        .ActorSystem = actorSystem,
+        .Index = index,
+        .PreTag = preTag,
+        .ActorId = actorId,
+        .UseAuth = useAuth,
+        .SortPages = sortPages,
+    });
+}
+
+NActors::IEventHandle* TMon::DefaultAuthorizer(const NActors::TActorId& owner, NMonitoring::IMonHttpRequest& request) {
+    NActors::IEventHandle* eventHandle = SelectAuthorizationScheme(owner, request);
+    if (eventHandle != nullptr) {
+        return eventHandle;
+    }
+    return GetAuthorizeTicketResult(owner);
 }
 
 }

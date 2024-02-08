@@ -74,7 +74,7 @@ namespace NKikimr::NOlap {
             }
 
             std::shared_ptr<TColumnLoader> GetLoader() const {
-                return Schema->GetColumnLoader(Key.GetColumnIdx());
+                return Schema->GetColumnLoaderVerified(Key.GetColumnIdx());
             }
             void InitSchema(const NColumnShard::TTablesManager& tm);
 
@@ -93,18 +93,9 @@ namespace NKikimr::NOlap {
             return name;
         }
 
-        virtual bool WaitResult() const override {
-            return AtomicGet(ActiveTasksCount) > 0;
-        }
-
-        void OnResultReady() override {
-            AtomicDecrement(ActiveTasksCount);
-        }
-
         virtual TConclusion<std::vector<INormalizerTask::TPtr>> Init(const TNormalizationController& controller, NTabletFlatExecutor::TTransactionContext& txc) override;
 
     private:
         NColumnShard::TBlobGroupSelector DsGroupSelector;
-        TAtomic ActiveTasksCount = 0;
-    };     
+    };
 }

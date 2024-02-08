@@ -707,7 +707,8 @@ THolder<TEvPersQueue::TEvProposeTransaction> TConfigureParts::MakeEvProposeTrans
     event->Record.SetTxId(ui64(txId));
     ActorIdToProto(context.SS->SelfId(), event->Record.MutableSourceActor());
 
-    MakePQTabletConfig(*event->Record.MutableConfig()->MutableTabletConfig(),
+    MakePQTabletConfig(context,
+                      *event->Record.MutableConfig()->MutableTabletConfig(),
                        pqGroup,
                        pqShard,
                        topicName,
@@ -744,7 +745,8 @@ THolder<TEvPersQueue::TEvUpdateConfig> TConfigureParts::MakeEvUpdateConfig(TTxId
     auto event = MakeHolder<TEvPersQueue::TEvUpdateConfig>();
     event->Record.SetTxId(ui64(txId));
 
-    MakePQTabletConfig(*event->Record.MutableTabletConfig(),
+    MakePQTabletConfig(context,
+                       *event->Record.MutableTabletConfig(),
                        pqGroup,
                        pqShard,
                        topicName,

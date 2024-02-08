@@ -20,7 +20,7 @@ target_link_libraries(ydb-core-tx-scheme_board-ut_subscriber PUBLIC
   yutil
   cpp-testing-unittest_main
   core-tx-scheme_board
-  cpp-actors-interconnect
+  library-actors-interconnect
   cpp-testing-unittest
   testlib-basics-default
 )

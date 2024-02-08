@@ -23,7 +23,7 @@
 #include <ydb/library/folder_service/folder_service.h>
 #include <ydb/library/yql/providers/common/metrics/service_counters.h>
 
-#include <library/cpp/actors/http/http_proxy.h>
+#include <ydb/library/actors/http/http_proxy.h>
 #include <library/cpp/protobuf/json/json2proto.h>
 #include <library/cpp/protobuf/json/proto2json.h>
 
@@ -246,6 +246,7 @@ void Init(
         if (!mkqlAllocSize) {
             mkqlAllocSize = 30_MB;
         }
+        Y_ABORT_UNLESS(appData->FunctionRegistry);
         NYql::NDqs::TLocalWorkerManagerOptions lwmOptions;
         lwmOptions.Counters = workerManagerCounters;
         lwmOptions.Factory = NYql::NTaskRunnerProxy::CreateFactory(appData->FunctionRegistry, dqCompFactory, dqTaskTransformFactory, nullptr, false);
@@ -257,8 +258,8 @@ void Init(
         lwmOptions.MkqlProgramHardMemoryLimit = protoConfig.GetResourceManager().GetMkqlTaskHardMemoryLimit();
         lwmOptions.MkqlMinAllocSize = mkqlAllocSize;
         lwmOptions.TaskRunnerActorFactory = NYql::NDq::NTaskRunnerActor::CreateLocalTaskRunnerActorFactory(
-            [=](const NYql::NDq::TDqTaskSettings& task, NYql::NDqProto::EDqStatsMode statsMode, const NYql::NDq::TLogFunc&) {
-                return lwmOptions.Factory->Get(task, statsMode);
+            [=](NKikimr::NMiniKQL::TScopedAlloc& alloc, const NYql::NDq::TDqTaskSettings& task, NYql::NDqProto::EDqStatsMode statsMode, const NYql::NDq::TLogFunc&) {
+                return lwmOptions.Factory->Get(alloc, task, statsMode);
             });
         if (protoConfig.GetRateLimiter().GetDataPlaneEnabled()) {
             lwmOptions.QuoterServiceActorId = NFq::YqQuoterServiceActorId();

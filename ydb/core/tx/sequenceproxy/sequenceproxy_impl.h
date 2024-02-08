@@ -5,11 +5,25 @@
 #include <ydb/core/tx/scheme_cache/scheme_cache.h>
 #include <ydb/core/tx/sequenceproxy/public/events.h>
 
-#include <library/cpp/actors/core/actor_bootstrapped.h>
-#include <library/cpp/actors/core/hfunc.h>
+#include <ydb/core/base/counters.h>
+#include <library/cpp/monlib/dynamic_counters/counters.h>
+#include <ydb/library/actors/core/actor_bootstrapped.h>
+#include <ydb/library/actors/core/hfunc.h>
+#include <ydb/library/actors/core/monotonic_provider.h>
 
 namespace NKikimr {
 namespace NSequenceProxy {
+
+    struct TSequenceProxyCounters : TAtomicRefCount<TSequenceProxyCounters> {
+        ::NMonitoring::TDynamicCounters::TCounterPtr RequestCount;
+        ::NMonitoring::TDynamicCounters::TCounterPtr ResponseCount;
+        ::NMonitoring::TDynamicCounters::TCounterPtr ErrorsCount;
+
+        ::NMonitoring::THistogramPtr SequenceShardAllocateCount;
+        ::NMonitoring::THistogramPtr NextValLatency;
+
+        TSequenceProxyCounters();
+    };
 
     class TSequenceProxy : public TActorBootstrapped<TSequenceProxy> {
     public:
@@ -58,6 +72,7 @@ namespace NSequenceProxy {
             TActorId Sender;
             ui64 Cookie;
             TIntrusivePtr<NACLib::TUserToken> UserToken;
+            TMonotonic StartAt;
         };
 
         struct TCachedAllocation {
@@ -127,13 +142,15 @@ namespace NSequenceProxy {
         void Handle(TEvPrivate::TEvAllocateResult::TPtr& ev);
         void Handle(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr& ev);
 
+        void Reply(const TNextValRequestInfo& request, Ydb::StatusIds::StatusCode status, const NYql::TIssues& issues);
+        void Reply(const TNextValRequestInfo& request, const TPathId& pathId, i64 value);
         ui64 StartResolve(const TString& database, const std::variant<TString, TPathId>& path, bool syncVersion);
         ui64 StartAllocate(ui64 tabletId, const TString& database, const TPathId& pathId, ui64 cache);
         void MaybeStartResolve(const TString& database, const TString& path, TSequenceByName& info);
         void DoNextVal(TNextValRequestInfo&& request, const TString& database, const TString& path);
         void DoNextVal(TNextValRequestInfo&& request, const TString& database, const TPathId& pathId, bool needRefresh = true);
-        void OnResolveError(const TString& database, const TString& path, Ydb::StatusIds::StatusCode status, NYql::TIssues&& issues);
-        void OnResolveError(const TString& database, const TPathId& pathId, Ydb::StatusIds::StatusCode status, NYql::TIssues&& issues);
+        void OnResolveError(const TString& database, const TString& path, Ydb::StatusIds::StatusCode status, const NYql::TIssues& issues);
+        void OnResolveError(const TString& database, const TPathId& pathId, Ydb::StatusIds::StatusCode status, const NYql::TIssues& issues);
         void OnResolveResult(const TString& database, const TString& path, TResolveResult&& result);
         void OnResolveResult(const TString& database, const TPathId& pathId, TResolveResult&& result);
         void OnResolved(const TString& database, const TPathId& pathId, TSequenceByPathId& info, TList<TNextValRequestInfo>& resolved);
@@ -148,6 +165,7 @@ namespace NSequenceProxy {
         THashMap<ui64, TResolveInFlight> ResolveInFlight;
         THashMap<ui64, TAllocateInFlight> AllocateInFlight;
         ui64 LastCookie = 0;
+        TIntrusivePtr<TSequenceProxyCounters> Counters;
     };
 
 } // namespace NSequenceProxy

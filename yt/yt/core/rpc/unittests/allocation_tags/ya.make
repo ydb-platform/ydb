@@ -12,7 +12,7 @@ SRCS(
     yt/yt/core/rpc/unittests/rpc_allocation_tags_ut.cpp
 )
 
-INCLUDE(${ARCADIA_ROOT}/yt/opensource_tests.inc)
+INCLUDE(${ARCADIA_ROOT}/yt/opensource.inc)
 
 PEERDIR(
     yt/yt/library/ytprof

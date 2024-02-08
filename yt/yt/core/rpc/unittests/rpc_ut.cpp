@@ -797,6 +797,16 @@ TYPED_TEST(TRpcTest, CustomErrorMessage)
     EXPECT_EQ("Some Error", rspOrError.GetMessage());
 }
 
+TYPED_TEST(TRpcTest, ServerStopped)
+{
+    this->Server_->Stop().Get().ThrowOnError();
+    TTestProxy proxy(this->CreateChannel());
+    auto req = proxy.SomeCall();
+    req->set_a(42);
+    auto rspOrError = req->Invoke().Get();
+    EXPECT_EQ(NRpc::EErrorCode::TransportError, rspOrError.GetCode());
+}
+
 TYPED_TEST(TRpcTest, ConnectionLost)
 {
     TTestProxy proxy(this->CreateChannel());
@@ -807,7 +817,7 @@ TYPED_TEST(TRpcTest, ConnectionLost)
     Sleep(TDuration::Seconds(0.5));
 
     EXPECT_FALSE(asyncRspOrError.IsSet());
-    this->Server_->Stop(false);
+    YT_UNUSED_FUTURE(this->Server_->Stop(false));
 
     Sleep(TDuration::Seconds(2));
 

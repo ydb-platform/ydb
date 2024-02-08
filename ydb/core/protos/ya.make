@@ -23,7 +23,9 @@ SRCS(
     blobstorage_vdisk_internal.proto
     blobstorage_config.proto
     blockstore_config.proto
+    datashard_config.proto
     db_metadata_cache.proto
+    feature_flags.proto
     filestore_config.proto
     bootstrapper.proto
     change_exchange.proto
@@ -49,15 +51,16 @@ SRCS(
     counters_replication.proto
     counters_schemeshard.proto
     counters_sequenceshard.proto
+    counters_statistics_aggregator.proto
     counters_sysview_processor.proto
     counters_testshard.proto
     counters_tx_proxy.proto
     counters_mediator.proto
     counters.proto
     database_basic_sausage_metainfo.proto
+    data_events.proto
     datashard_load.proto
     drivemodel.proto
-    ev_write.proto
     export.proto
     external_sources.proto
     flat_tx_scheme.proto
@@ -102,6 +105,7 @@ SRCS(
     statistics.proto
     stream.proto
     subdomains.proto
+    table_service_config.proto
     table_stats.proto
     tablet.proto
     tablet_counters.proto
@@ -140,7 +144,7 @@ GENERATE_ENUM_SERIALIZATION(blobstorage_pdisk_config.pb.h)
 GENERATE_ENUM_SERIALIZATION(datashard_load.pb.h)
 
 PEERDIR(
-    library/cpp/actors/protos
+    ydb/library/actors/protos
     ydb/core/fq/libs/config/protos
     ydb/core/scheme/protos
     ydb/library/login/protos

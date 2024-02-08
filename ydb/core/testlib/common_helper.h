@@ -48,11 +48,19 @@ protected:
     void WaitForSchemeOperation(TActorId sender, ui64 txId);
     void PrintResultSet(const NYdb::TResultSet& resultSet, NYson::TYsonWriter& writer) const;
 
+    void StartSchemaRequestTableServiceImpl(const TString& request, const bool expectSuccess, const bool waiting) const;
+    void StartSchemaRequestQueryServiceImpl(const TString& request, const bool expectSuccess, const bool waiting) const;
+
     Tests::TServer& Server;
+    bool UseQueryService = false;
 public:
     THelper(TServer& server)
         : Server(server) {
 
+    }
+
+    void SetUseQueryService(bool use = true) {
+        UseQueryService = use;
     }
 
     void DropTable(const TString& tablePath);

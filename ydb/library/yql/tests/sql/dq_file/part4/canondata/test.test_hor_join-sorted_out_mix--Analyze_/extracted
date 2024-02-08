@@ -1,7 +1,0 @@
-<tmp_path>/program.sql:<main>: Info: DQ cannot execute the query
-
-    <tmp_path>/program.sql:<main>: Info: Optimization
-    
-        <tmp_path>/program.sql:<main>:18:1: Info: Failed to execute callable with name: ResWrite!, you possibly used cross provider/cluster operations or pulled not materialized result in refselect mode
-        	SELECT * FROM (PROCESS $i1, $i2, $i3 using $udf(TableRow())) ORDER BY key;
-	^

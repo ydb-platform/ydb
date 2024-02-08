@@ -10,10 +10,10 @@
 #include <ydb/core/kqp/proxy_service/kqp_script_executions.h>
 #include <ydb/public/api/protos/ydb_query.pb.h>
 
-#include <library/cpp/actors/core/actor_bootstrapped.h>
-#include <library/cpp/actors/core/events.h>
-#include <library/cpp/actors/core/hfunc.h>
-#include <library/cpp/actors/core/interconnect.h>
+#include <ydb/library/actors/core/actor_bootstrapped.h>
+#include <ydb/library/actors/core/events.h>
+#include <ydb/library/actors/core/hfunc.h>
+#include <ydb/library/actors/core/interconnect.h>
 
 namespace NKikimr::NGRpcService {
 

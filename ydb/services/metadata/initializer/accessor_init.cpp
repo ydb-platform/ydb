@@ -6,7 +6,7 @@
 #include <ydb/services/metadata/abstract/common.h>
 #include <ydb/services/metadata/manager/alter.h>
 #include <ydb/services/metadata/service.h>
-#include <library/cpp/actors/core/invoke.h>
+#include <ydb/library/actors/core/invoke.h>
 
 namespace NKikimr::NMetadata::NInitializer {
 
@@ -79,7 +79,7 @@ void TDSAccessorInitialized::OnAlteringProblem(const TString& errorMessage) {
     }, TDuration::Seconds(1));
 }
 
-void TDSAccessorInitialized::OnModificationFailed(const TString& errorMessage, const TString& modificationId) {
+void TDSAccessorInitialized::OnModificationFailed(Ydb::StatusIds::StatusCode /*status*/, const TString& errorMessage, const TString& modificationId) {
     AFL_ERROR(NKikimrServices::METADATA_INITIALIZER)("event", "OnModificationFailed")("error", errorMessage)("modificationId", modificationId);
     NActors::ScheduleInvokeActivity([self = this->SelfPtr]() {
         Y_ABORT_UNLESS(self->Modifiers.size());

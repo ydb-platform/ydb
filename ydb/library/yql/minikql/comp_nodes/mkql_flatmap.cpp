@@ -1,6 +1,6 @@
 #include "mkql_flatmap.h"
 #include <ydb/library/yql/minikql/computation/mkql_computation_node_holders.h>
-#include <ydb/library/yql/minikql/computation/mkql_computation_node_codegen.h>
+#include <ydb/library/yql/minikql/computation/mkql_computation_node_codegen.h>  // Y_IGNORE
 #include <ydb/library/yql/minikql/mkql_node_cast.h>
 #include <ydb/library/yql/utils/cast.h>
 
@@ -713,7 +713,7 @@ public:
         , Flow(flow)
         , Items(std::move(items))
         , NewItem(newItem)
-        , PasstroughItem(GetPasstroughtMap({NewItem}, Items).front())
+        , PasstroughItem(GetPasstroughtMap(TComputationNodePtrVector{NewItem}, Items).front())
         , WideFieldsIndex(mutables.IncrementWideFieldsIndex(Items.size()))
     {}
 

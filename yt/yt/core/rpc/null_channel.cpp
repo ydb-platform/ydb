@@ -43,6 +43,11 @@ public:
 
     DEFINE_SIGNAL_OVERRIDE(void(const TError&), Terminated);
 
+    int GetInflightRequestCount() override
+    {
+        return 0;
+    }
+
 private:
     const TString Address_;
 };

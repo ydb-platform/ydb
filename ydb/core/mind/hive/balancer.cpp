@@ -1,5 +1,6 @@
 #include <random>
-#include <library/cpp/actors/core/actor_bootstrapped.h>
+#include <ydb/library/actors/core/actor_bootstrapped.h>
+#include <library/cpp/random_provider/random_provider.h>
 #include "hive_impl.h"
 #include "hive_log.h"
 #include "node_info.h"
@@ -121,6 +122,12 @@ protected:
     int Movements;
     TBalancerSettings Settings;
     TBalancerStats& Stats;
+    std::vector<TNodeId> Nodes;
+    std::vector<TNodeId>::iterator NextNode;
+    std::vector<TFullTabletId> Tablets;
+    std::vector<TFullTabletId>::iterator NextTablet;
+
+    static constexpr ui64 MAX_TABLETS_PROCESSED = 10;
 
     TString GetLogPrefix() const {
         return Hive->GetLogPrefix();
@@ -158,37 +165,24 @@ protected:
         PassAway();
     }
 
+    TString GetDescription() const override {
+        return TStringBuilder() << "Balancer(" << EBalancerTypeName(Settings.Type) << ")";
+    }
+
+    TSubActorId GetId() const override {
+        return SelfId().LocalId();
+    }
+
     bool CanKickNextTablet() const {
-        return KickInFlight < Settings.MaxInFlight;
+        return KickInFlight < Settings.MaxInFlight
+               && (Settings.MaxMovements == 0 || Movements < Settings.MaxMovements);
     }
 
     void UpdateProgress() {
         Stats.CurrentMovements = Movements;
     }
 
-    void KickNextTablet() {
-        if (!CanKickNextTablet()) {
-            return;
-        }
-        if (Settings.MaxMovements != 0 && Movements >= Settings.MaxMovements) {
-            if (KickInFlight > 0) {
-                return;
-            } else {
-                return PassAway();
-            }
-        }
-
-        struct TBalancerNodeInfo {
-            const TNodeInfo* Node;
-            double Usage;
-
-            TBalancerNodeInfo(const TNodeInfo* node, double usage)
-                : Node(node)
-                , Usage(usage)
-            {}
-        };
-
-        TInstant now = TActivationContext::Now();
+    void BalanceNodes() {
         std::vector<TNodeInfo*> nodes;
         if (!Settings.FilterNodeIds.empty()) {
             nodes.reserve(Settings.FilterNodeIds.size());
@@ -221,7 +215,25 @@ protected:
             BalanceNodes<NKikimrConfig::THiveConfig::HIVE_NODE_BALANCE_STRATEGY_RANDOM>(nodes, Settings.ResourceToBalance);
             break;
         }
-        for (const TNodeInfo* node : nodes) {
+
+        Nodes.reserve(nodes.size());
+        for (auto node : nodes) {
+            Nodes.push_back(node->Id);
+        }
+
+        NextNode = Nodes.begin();
+        Tablets.clear();
+    }
+
+    std::optional<TFullTabletId> GetNextTablet(TInstant now) {
+        for (; Tablets.empty() || NextTablet == Tablets.end(); ++NextNode) {
+            if (NextNode == Nodes.end()) {
+                return std::nullopt;
+            }
+            TNodeInfo* node = Hive->FindNode(*NextNode);
+            if (node == nullptr) {
+                continue;
+            }
             BLOG_TRACE("Balancer selected node " << node->Id);
             auto itTablets = node->Tablets.find(TTabletInfo::EVolatileState::TABLET_VOLATILE_STATE_RUNNING);
             if (itTablets == node->Tablets.end()) {
@@ -236,7 +248,7 @@ protected:
                     tablets.emplace_back(tablet);
                 }
             }
-            BLOG_TRACE("Balancer on node " << node->Id <<  ": " << tablets.size() << "/" << nodeTablets.size() << " tablets is suitable for balancing");
+            BLOG_TRACE("Balancer on node " << node->Id <<  ": " << tablets.size() << "/" << nodeTablets.size() << " tablets are suitable for balancing");
             if (!tablets.empty()) {
                 switch (Hive->GetTabletBalanceStrategy()) {
                 case NKikimrConfig::THiveConfig::HIVE_TABLET_BALANCE_STRATEGY_OLD_WEIGHTED_RANDOM:
@@ -252,29 +264,62 @@ protected:
                     BalanceTablets<NKikimrConfig::THiveConfig::HIVE_TABLET_BALANCE_STRATEGY_RANDOM>(tablets, Settings.ResourceToBalance);
                     break;
                 }
-                for (TTabletInfo* tablet : tablets) {
-                    BLOG_TRACE("Balancer selected tablet " << tablet->ToString());
-                    THive::TBestNodeResult result = Hive->FindBestNode(*tablet);
-                    if (result.BestNode != nullptr && result.BestNode != tablet->Node) {
-                        if (Hive->IsTabletMoveExpedient(*tablet, *result.BestNode)) {
-                            tablet->MakeBalancerDecision(now);
-                            tablet->ActorsToNotifyOnRestart.emplace_back(SelfId()); // volatile settings, will not persist upon restart
-                            ++KickInFlight;
-                            ++Movements;
-                            BLOG_D("Balancer moving tablet " << tablet->ToString() << " " << tablet->GetResourceValues()
-                                   << " from node " << tablet->Node->Id << " " << tablet->Node->ResourceValues
-                                   << " to node " << result.BestNode->Id << " " << result.BestNode->ResourceValues);
-                            Hive->RecordTabletMove({now, tablet->GetFullTabletId(), tablet->Node->Id, result.BestNode->Id});
-                            Hive->Execute(Hive->CreateRestartTablet(tablet->GetFullTabletId(), result.BestNode->Id));
-                            UpdateProgress();
-                            if (!CanKickNextTablet()) {
-                                return;
-                            }
-                        }
-                    }
+                Tablets.clear();
+                Tablets.reserve(tablets.size());
+                for (auto tablet : tablets) {
+                    Tablets.push_back(tablet->GetFullTabletId());
                 }
             }
+            NextTablet = Tablets.begin();
         }
+        return *(NextTablet++);
+    }
+
+    void KickNextTablet() {
+        if (Settings.MaxMovements != 0 && Movements >= Settings.MaxMovements) {
+            if (KickInFlight > 0) {
+                return;
+            } else {
+                return PassAway();
+            }
+        }
+
+        TInstant now = TActivationContext::Now();
+        ui64 tabletsProcessed = 0;
+
+        while (CanKickNextTablet()) {
+            if (tabletsProcessed == MAX_TABLETS_PROCESSED) {
+                BLOG_TRACE("Balancer - rescheduling");
+                Send(SelfId(), new TEvents::TEvWakeup);
+                return;
+            }
+            std::optional<TFullTabletId> tabletId = GetNextTablet(now);
+            if (!tabletId) {
+                break;
+            }
+            TTabletInfo* tablet = Hive->FindTablet(*tabletId);
+            if (tablet == nullptr || !tablet->IsRunning()) {
+                continue;
+            }
+            BLOG_TRACE("Balancer selected tablet " << tablet->ToString());
+            THive::TBestNodeResult result = Hive->FindBestNode(*tablet);
+            if (result.BestNode != nullptr && result.BestNode != tablet->Node) {
+                if (Hive->IsTabletMoveExpedient(*tablet, *result.BestNode)) {
+                    tablet->MakeBalancerDecision(now);
+                    tablet->ActorsToNotifyOnRestart.emplace_back(SelfId()); // volatile settings, will not persist upon restart
+                    ++KickInFlight;
+                    ++Movements;
+                    BLOG_D("Balancer moving tablet " << tablet->ToString() << " " << tablet->GetResourceValues()
+                           << " from node " << tablet->Node->Id << " " << tablet->Node->ResourceValues
+                           << " to node " << result.BestNode->Id << " " << result.BestNode->ResourceValues);
+                    Hive->RecordTabletMove(THive::TTabletMoveInfo(now, *tablet, tablet->Node->Id, result.BestNode->Id));
+                    Hive->Execute(Hive->CreateRestartTablet(tablet->GetFullTabletId(), result.BestNode->Id));
+                    UpdateProgress();
+                }
+            }
+            ++tabletsProcessed;
+        }
+
         if (KickInFlight == 0) {
             return PassAway();
         }
@@ -283,12 +328,10 @@ protected:
     void Handle(TEvPrivate::TEvRestartComplete::TPtr& ev) {
         BLOG_D("Balancer " << SelfId() << " received " << ev->Get()->Status << " for tablet " << ev->Get()->TabletId);
         --KickInFlight;
+        BalanceNodes();
         KickNextTablet();
     }
 
-    void Timeout() {
-        PassAway();
-    }
 
 public:
     static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
@@ -311,7 +354,8 @@ public:
     void Bootstrap() {
         UpdateProgress();
         Hive->TabletCounters->Cumulative()[NHive::COUNTER_BALANCER_EXECUTED].Increment(1);
-        Become(&THiveBalancer::StateWork, TIMEOUT, new TEvents::TEvWakeup());
+        Become(&THiveBalancer::StateWork, TIMEOUT, new TEvents::TEvPoison());
+        BalanceNodes();
         KickNextTablet();
     }
 
@@ -319,7 +363,7 @@ public:
         switch (ev->GetTypeRewrite()) {
             cFunc(TEvents::TSystem::PoisonPill, PassAway);
             hFunc(TEvPrivate::TEvRestartComplete, Handle);
-            cFunc(TEvents::TSystem::Wakeup, Timeout);
+            cFunc(TEvents::TSystem::Wakeup, KickNextTablet);
         }
     }
 };

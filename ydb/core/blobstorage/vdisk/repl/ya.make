@@ -1,7 +1,7 @@
 LIBRARY()
 
 PEERDIR(
-    library/cpp/actors/core
+    ydb/library/actors/core
     library/cpp/monlib/service/pages
     ydb/core/base
     ydb/core/blobstorage/backpressure
@@ -26,6 +26,7 @@ SRCS(
     blobstorage_replproxy.cpp
     blobstorage_replproxy.h
     blobstorage_replrecoverymachine.h
+    blobstorage_replmonhandler.cpp
     defs.h
     query_donor.h
     repl_quoter.h

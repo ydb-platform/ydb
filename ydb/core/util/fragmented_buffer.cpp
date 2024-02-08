@@ -1,7 +1,7 @@
 #include "fragmented_buffer.h"
 
 #include <util/stream/str.h>
-#include <library/cpp/actors/util/shared_data_rope_backend.h>
+#include <ydb/library/actors/util/shared_data_rope_backend.h>
 
 namespace NKikimr {
 

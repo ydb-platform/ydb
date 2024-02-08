@@ -6,7 +6,6 @@
 #include <ydb/core/kqp/common/kqp_yql.h>
 #include <ydb/core/kqp/opt/kqp_query_plan.h>
 #include <ydb/core/kqp/provider/yql_kikimr_provider_impl.h>
-#include <ydb/core/kqp/provider/yql_kikimr_results.h>
 
 #include <ydb/library/yql/core/yql_opt_proposed_by_data.h>
 #include <ydb/library/yql/core/services/yql_plan.h>
@@ -17,11 +16,13 @@
 #include <ydb/library/yql/providers/common/codec/yql_codec.h>
 #include <ydb/library/yql/providers/common/provider/yql_provider_names.h>
 #include <ydb/library/yql/providers/common/udf_resolve/yql_simple_udf_resolver.h>
+#include <ydb/library/yql/providers/s3/expr_nodes/yql_s3_expr_nodes.h>
 #include <ydb/library/yql/providers/s3/provider/yql_s3_provider.h>
+#include <ydb/library/yql/providers/generic/expr_nodes/yql_generic_expr_nodes.h>
 #include <ydb/library/yql/providers/generic/provider/yql_generic_provider.h>
+#include <ydb/library/yql/providers/pg/provider/yql_pg_provider_impl.h>
 #include <ydb/library/yql/providers/generic/provider/yql_generic_state.h>
 #include <ydb/library/yql/minikql/invoke_builtins/mkql_builtins.h>
-#include <ydb/library/yql/sql/sql.h>
 
 #include <library/cpp/cache/cache.h>
 #include <library/cpp/random_provider/random_provider.h>
@@ -717,6 +718,7 @@ public:
 
                 auto queryAstStr = SerializeExpr(ctx, *query);
 
+                bool useGenericQuery = ShouldUseGenericQuery(dataQueryBlocks);
                 bool useScanQuery = ShouldUseScanQuery(dataQueryBlocks, settings);
 
                 IKqpGateway::TAstQuerySettings querySettings;
@@ -725,7 +727,16 @@ public:
                 TFuture<TQueryResult> future;
                 switch (queryType) {
                 case EKikimrQueryType::YqlScript:
-                    if (useScanQuery) {
+                    if (useGenericQuery) {
+                        Ydb::Table::TransactionSettings txSettings;
+                        txSettings.mutable_serializable_read_write();
+                        if (SessionCtx->Query().PrepareOnly) {
+                            future = Gateway->ExplainGenericQuery(Cluster, SessionCtx->Query().PreparingQuery->GetText());
+                        } else {
+                            future = Gateway->ExecGenericQuery(Cluster, SessionCtx->Query().PreparingQuery->GetText(), CollectParameters(query),
+                                querySettings, txSettings);
+                        }
+                    } else if (useScanQuery) {
                         ui64 rowsLimit = 0;
                         if (dataQueryBlocks.ArgCount() && !dataQueryBlocks.Arg(0).Results().Empty()) {
                             const auto& queryBlock = dataQueryBlocks.Arg(0);
@@ -799,6 +810,24 @@ private:
         });
 
         return result;
+    }
+
+    bool ShouldUseGenericQuery(const TKiDataQueryBlocks& queryBlocks) {
+        const auto& queryBlock = queryBlocks.Arg(0);
+
+        bool hasFederatedSorcesOrSinks = false;
+        VisitExpr(queryBlock.Ptr(), [&hasFederatedSorcesOrSinks](const TExprNode::TPtr& exprNode) {
+            auto node = TExprBase(exprNode);
+
+            hasFederatedSorcesOrSinks = hasFederatedSorcesOrSinks
+                || node.Maybe<TS3DataSource>()
+                || node.Maybe<TS3DataSink>()
+                || node.Maybe<TGenDataSource>();
+
+            return !hasFederatedSorcesOrSinks;
+        });
+
+        return hasFederatedSorcesOrSinks;
     }
 
     bool ShouldUseScanQuery(const TKiDataQueryBlocks& queryBlocks, const TExecuteSettings& settings) {
@@ -893,9 +922,10 @@ class TKqpHost : public IKqpHost {
 public:
     TKqpHost(TIntrusivePtr<IKqpGateway> gateway, const TString& cluster, const TString& database,
         TKikimrConfiguration::TPtr config, IModuleResolver::TPtr moduleResolver,
-        std::optional<TKqpFederatedQuerySetup> federatedQuerySetup,
+        std::optional<TKqpFederatedQuerySetup> federatedQuerySetup, const TIntrusiveConstPtr<NACLib::TUserToken>& userToken,
         const NKikimr::NMiniKQL::IFunctionRegistry* funcRegistry, bool keepConfigChanges,
-        bool isInternalCall, TKqpTempTablesState::TConstPtr tempTablesState = nullptr)
+        bool isInternalCall, TKqpTempTablesState::TConstPtr tempTablesState = nullptr,
+        NActors::TActorSystem* actorSystem = nullptr)
         : Gateway(gateway)
         , Cluster(cluster)
         , ExprCtx(new TExprContext())
@@ -903,12 +933,12 @@ public:
         , KeepConfigChanges(keepConfigChanges)
         , IsInternalCall(isInternalCall)
         , FederatedQuerySetup(federatedQuerySetup)
-        , SessionCtx(new TKikimrSessionContext(funcRegistry, config, TAppData::TimeProvider, TAppData::RandomProvider))
-        , ClustersMap({{Cluster, TString(KikimrProviderName)}})
+        , SessionCtx(new TKikimrSessionContext(funcRegistry, config, TAppData::TimeProvider, TAppData::RandomProvider, userToken))
         , TypesCtx(MakeIntrusive<TTypeAnnotationContext>())
         , PlanBuilder(CreatePlanBuilder(*TypesCtx))
         , FakeWorld(ExprCtx->NewWorld(TPosition()))
         , ExecuteCtx(MakeIntrusive<TExecuteContext>())
+        , ActorSystem(actorSystem ? actorSystem : NActors::TActivationContext::ActorSystem())
     {
         if (funcRegistry) {
             FuncRegistry = funcRegistry;
@@ -918,6 +948,7 @@ public:
         }
 
         SessionCtx->SetDatabase(database);
+        SessionCtx->SetCluster(cluster);
         SessionCtx->SetTempTables(std::move(tempTablesState));
     }
 
@@ -1064,101 +1095,31 @@ private:
     TExprNode::TPtr CompileQuery(const TKqpQueryRef& query, bool isSql, bool sqlAutoCommit, TExprContext& ctx,
         TMaybe<TSqlVersion>& sqlVersion, const TMaybe<bool>& usePgParser) const
     {
-        TAstParseResult astRes;
-        if (isSql) {
-            NSQLTranslation::TTranslationSettings settings{};
-            if (usePgParser) {
-                settings.PgParser = *usePgParser;
-            }
-            if (sqlVersion) {
-                settings.SyntaxVersion = *sqlVersion;
-
-                if (*sqlVersion > 0) {
-                    // Restrict fallback to V0
-                    settings.V0Behavior = NSQLTranslation::EV0Behavior::Disable;
-                }
-            } else {
-                settings.SyntaxVersion = SessionCtx->Config()._KqpYqlSyntaxVersion.Get().GetRef();
-                settings.V0Behavior = NSQLTranslation::EV0Behavior::Silent;
-            }
-
-            if (SessionCtx->Config().FeatureFlags.GetEnableExternalDataSources()) {
-                settings.DynamicClusterProvider = NYql::KikimrProviderName;
-                settings.BindingsMode = SessionCtx->Config().BindingsMode;
-            }
-
-            settings.InferSyntaxVersion = true;
-            settings.V0ForceDisable = false;
-            settings.WarnOnV0 = false;
-            settings.DefaultCluster = Cluster;
-            settings.ClusterMapping = ClustersMap;
-            auto tablePathPrefix = SessionCtx->Config()._KqpTablePathPrefix.Get().GetRef();
-            if (!tablePathPrefix.empty()) {
-                settings.PathPrefix = tablePathPrefix;
-            }
-            settings.EndOfQueryCommit = sqlAutoCommit;
-            settings.Flags.insert("FlexibleTypes");
-            settings.Flags.insert("AnsiLike");
-
-            if (SessionCtx->Query().Type == EKikimrQueryType::Scan
-                || SessionCtx->Query().Type == EKikimrQueryType::YqlScript
-                || SessionCtx->Query().Type == EKikimrQueryType::YqlScriptStreaming
-                || SessionCtx->Query().Type == EKikimrQueryType::Query
-                || SessionCtx->Query().Type == EKikimrQueryType::Script)
-            {
-                // We enable EmitAggApply for filter and aggregate pushdowns to Column Shards
-                settings.Flags.insert("EmitAggApply");
-            } else {
-                settings.Flags.insert("DisableEmitStartsWith");
-            }
-
-            if (SessionCtx->Query().Type == EKikimrQueryType::Query
-                || SessionCtx->Query().Type == EKikimrQueryType::Script)
-            {
-                settings.Flags.insert("AnsiOptionalAs");
-                settings.Flags.insert("WarnOnAnsiAliasShadowing");
-                settings.Flags.insert("AnsiCurrentRow");
-                settings.Flags.insert("AnsiInForEmptyOrNullableItemsCollections");
-            }
-
-            if (query.ParameterTypes) {
-                NSQLTranslation::TTranslationSettings versionSettings = settings;
-                NYql::TIssues versionIssues;
-
-                if (ParseTranslationSettings(query.Text, versionSettings, versionIssues) && versionSettings.SyntaxVersion == 1) {
-                    for (const auto& [paramName, paramType] : *(query.ParameterTypes)) {
-                        auto type = NYql::ParseTypeFromYdbType(paramType, ctx);
-                        if (type != nullptr) {
-                            if (paramName.StartsWith("$")) {
-                                settings.DeclaredNamedExprs[paramName.substr(1)] = NYql::FormatType(type);
-                            } else {
-                                settings.DeclaredNamedExprs[paramName] = NYql::FormatType(type);
-                            }
-                        }
-                    }
-                }
-            }
-
-            ui16 actualSyntaxVersion = 0;
-            astRes = NSQLTranslation::SqlToYql(query.Text, settings, nullptr, &actualSyntaxVersion);
-            TypesCtx->DeprecatedSQL = (actualSyntaxVersion == 0);
-            sqlVersion = actualSyntaxVersion;
+        std::shared_ptr<NYql::TAstParseResult> queryAst;
+        if (!query.AstResult) {
+            auto astRes = ParseQuery(SessionCtx->Query().Type, usePgParser,
+                query.Text, query.ParameterTypes, isSql, sqlAutoCommit, sqlVersion, TypesCtx->DeprecatedSQL,
+                Cluster, SessionCtx->Config()._KqpTablePathPrefix.Get().GetRef(),
+                SessionCtx->Config()._KqpYqlSyntaxVersion.Get().GetRef(), SessionCtx->Config().BindingsMode,
+                SessionCtx->Config().FeatureFlags.GetEnableExternalDataSources(), ctx, SessionCtx->Config().EnablePgConstsToParams);
+            queryAst = std::make_shared<NYql::TAstParseResult>(std::move(astRes));
         } else {
-            sqlVersion = {};
-            astRes = ParseAst(query.Text);
-
-            // Do not check SQL constraints on s-expressions input, as it may come from both V0/V1.
-            // Constraints were already checked on type annotation of SQL query.
-            TypesCtx->DeprecatedSQL = true;
+            queryAst = query.AstResult->Ast;
+            sqlVersion = query.AstResult->SqlVersion;
+            if (query.AstResult->DeprecatedSQL) {
+               TypesCtx->DeprecatedSQL = *query.AstResult->DeprecatedSQL;
+            }
         }
 
-        ctx.IssueManager.AddIssues(astRes.Issues);
-        if (!astRes.IsOk()) {
+        YQL_ENSURE(queryAst);
+        ctx.IssueManager.AddIssues(queryAst->Issues);
+        if (!queryAst->IsOk()) {
             return nullptr;
         }
 
+        YQL_ENSURE(queryAst->Root);
         TExprNode::TPtr result;
-        if (!CompileExpr(*astRes.Root, result, ctx, ModuleResolver.get(), nullptr)) {
+        if (!CompileExpr(*queryAst->Root, result, ctx, ModuleResolver.get(), nullptr)) {
             return nullptr;
         }
 
@@ -1424,6 +1385,7 @@ private:
         SessionCtx->Query().Deadlines = settings.Deadlines;
         SessionCtx->Query().StatsMode = settings.StatsMode;
         SessionCtx->Query().PreparingQuery = std::make_unique<NKikimrKqp::TPreparedQuery>();
+        SessionCtx->Query().PreparingQuery->SetText(script.Text);
         SessionCtx->Query().PreparedQuery.reset();
 
         TMaybe<TSqlVersion> sqlVersion;
@@ -1468,6 +1430,7 @@ private:
         SessionCtx->Query().PrepareOnly = true;
         SessionCtx->Query().SuppressDdlChecks = true;
         SessionCtx->Query().PreparingQuery = std::make_unique<NKikimrKqp::TPreparedQuery>();
+        SessionCtx->Query().PreparingQuery->SetText(script.Text);
         SessionCtx->Query().PreparedQuery.reset();
 
         TMaybe<TSqlVersion> sqlVersion;
@@ -1493,6 +1456,7 @@ private:
         SessionCtx->Query().PrepareOnly = true;
         SessionCtx->Query().SuppressDdlChecks = true;
         SessionCtx->Query().PreparingQuery = std::make_unique<NKikimrKqp::TPreparedQuery>();
+        SessionCtx->Query().PreparingQuery->SetText(script.Text);
 
         TMaybe<TSqlVersion> sqlVersion;
         auto scriptExpr = CompileYqlQuery(script, true, true, ctx, sqlVersion, {});
@@ -1504,12 +1468,13 @@ private:
             *PlanBuilder, sqlVersion, true /* UseDqExplain */);
     }
 
-    void InitS3Provider() {
+    void InitS3Provider(EKikimrQueryType queryType) {
         auto state = MakeIntrusive<NYql::TS3State>();
         state->Types = TypesCtx.Get();
         state->FunctionRegistry = FuncRegistry;
         state->CredentialsFactory = FederatedQuerySetup->CredentialsFactory;
         state->Configuration->WriteThroughDqIntegration = true;
+        state->Configuration->AllowAtomicUploadCommit = queryType == EKikimrQueryType::Script;
 
         state->Configuration->Init(FederatedQuerySetup->S3GatewayConfig, TypesCtx);
 
@@ -1537,6 +1502,14 @@ private:
         TypesCtx->AddDataSink(NYql::GenericProviderName, NYql::CreateGenericDataSink(state));
     }
 
+    void InitPgProvider() {
+        auto state = MakeIntrusive<NYql::TPgState>();
+        state->Types = TypesCtx.Get();
+
+        TypesCtx->AddDataSource(NYql::PgProviderName, NYql::CreatePgDataSource(state));
+        TypesCtx->AddDataSink(NYql::PgProviderName, NYql::CreatePgDataSink(state));
+    }
+
     void Init(EKikimrQueryType queryType) {
         KqpRunner = CreateKqpRunner(Gateway, Cluster, TypesCtx, SessionCtx, *FuncRegistry);
 
@@ -1549,7 +1522,7 @@ private:
         };
 
         // Kikimr provider
-        auto gatewayProxy = CreateKqpGatewayProxy(Gateway, SessionCtx);
+        auto gatewayProxy = CreateKqpGatewayProxy(Gateway, SessionCtx, ActorSystem);
 
         auto queryExecutor = MakeIntrusive<TKqpQueryExecutor>(Gateway, Cluster, SessionCtx, KqpRunner);
         auto kikimrDataSource = CreateKikimrDataSource(*FuncRegistry, *TypesCtx, gatewayProxy, SessionCtx,
@@ -1564,10 +1537,14 @@ private:
         TypesCtx->AddDataSource(providerNames, kikimrDataSource);
         TypesCtx->AddDataSink(providerNames, kikimrDataSink);
 
-        if ((queryType == EKikimrQueryType::Script || queryType == EKikimrQueryType::Query) && FederatedQuerySetup) {
-            InitS3Provider();
+        bool addExternalDataSources = queryType == EKikimrQueryType::Script || queryType == EKikimrQueryType::Query
+            || queryType == EKikimrQueryType::YqlScript && AppData()->FeatureFlags.GetEnableExternalDataSources();
+        if (addExternalDataSources && FederatedQuerySetup) {
+            InitS3Provider(queryType);
             InitGenericProvider();
         }
+
+        InitPgProvider();
 
         TypesCtx->UdfResolver = CreateSimpleUdfResolver(FuncRegistry);
         TypesCtx->TimeProvider = TAppData::TimeProvider;
@@ -1592,6 +1569,7 @@ private:
                 || settingName == "DisableOrderedColumns"
                 || settingName == "Warning"
                 || settingName == "UseBlocks"
+                || settingName == "BlockEngine"
                 ;
         };
         auto configProvider = CreateConfigProvider(*TypesCtx, gatewaysConfig, {}, allowSettings);
@@ -1668,7 +1646,6 @@ private:
     std::optional<TKqpFederatedQuerySetup> FederatedQuerySetup;
 
     TIntrusivePtr<TKikimrSessionContext> SessionCtx;
-    THashMap<TString, TString> ClustersMap;
 
     TIntrusivePtr<NKikimr::NMiniKQL::IFunctionRegistry> FuncRegistryHolder;
     const NKikimr::NMiniKQL::IFunctionRegistry* FuncRegistry;
@@ -1683,9 +1660,10 @@ private:
 
     TIntrusivePtr<TExecuteContext> ExecuteCtx;
     TIntrusivePtr<IKqpRunner> KqpRunner;
-    NExternalSource::IExternalSourceFactory::TPtr ExternalSourceFactory{NExternalSource::CreateExternalSourceFactory()};
+    NExternalSource::IExternalSourceFactory::TPtr ExternalSourceFactory{NExternalSource::CreateExternalSourceFactory({})};
 
     TKqpTempTablesState::TConstPtr TempTablesState;
+    NActors::TActorSystem* ActorSystem = nullptr;
 };
 
 } // namespace
@@ -1705,12 +1683,12 @@ Ydb::Table::QueryStatsCollection::Mode GetStatsMode(NYql::EKikimrStatsMode stats
 
 TIntrusivePtr<IKqpHost> CreateKqpHost(TIntrusivePtr<IKqpGateway> gateway,
     const TString& cluster, const TString& database, TKikimrConfiguration::TPtr config, IModuleResolver::TPtr moduleResolver,
-    std::optional<TKqpFederatedQuerySetup> federatedQuerySetup,
+    std::optional<TKqpFederatedQuerySetup> federatedQuerySetup, const TIntrusiveConstPtr<NACLib::TUserToken>& userToken,
     const NKikimr::NMiniKQL::IFunctionRegistry* funcRegistry, bool keepConfigChanges, bool isInternalCall,
-    TKqpTempTablesState::TConstPtr tempTablesState)
+    TKqpTempTablesState::TConstPtr tempTablesState, NActors::TActorSystem* actorSystem)
 {
-    return MakeIntrusive<TKqpHost>(gateway, cluster, database, config, moduleResolver, federatedQuerySetup, funcRegistry,
-                                   keepConfigChanges, isInternalCall, std::move(tempTablesState));
+    return MakeIntrusive<TKqpHost>(gateway, cluster, database, config, moduleResolver, federatedQuerySetup, userToken, funcRegistry,
+                                   keepConfigChanges, isInternalCall, std::move(tempTablesState), actorSystem);
 }
 
 } // namespace NKqp

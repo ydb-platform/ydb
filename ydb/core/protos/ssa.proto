@@ -33,6 +33,28 @@ message TProgram {
             double Double = 7;
             bytes Bytes = 8;
             string Text = 9;
+            int32 Int8 = 10;
+            uint32 Uint8 = 11;
+            int32 Int16 = 12;
+            uint32 Uint16 = 13;
+        }
+    }
+
+    message TBloomFilterChecker {
+        repeated uint64 HashValues = 1;
+    }
+
+    message TOlapIndexChecker {
+        optional uint32 IndexId = 1;
+        optional string ClassName = 2;
+
+        message TCompositeChecker {
+            repeated TOlapIndexChecker ChildrenCheckers = 1;
+        }
+
+        oneof Implementation {
+            TBloomFilterChecker BloomFilter = 40;
+            TCompositeChecker Composite = 41;
         }
     }
 
@@ -92,6 +114,7 @@ message TProgram {
             repeated TColumn Arguments = 2;
             optional EFunctionType FunctionType = 3 [ default = SIMPLE_ARROW ];
             optional uint32 KernelIdx = 4;
+            optional uint32 YqlOperationId = 5; // TKernelRequestBuilder::EBinaryOp
         }
 
         message TExternalFunction {
@@ -181,4 +204,5 @@ message TOlapProgram {
     // RecordBatch deserialization require arrow::Schema, thus store it here
     optional bytes ParametersSchema = 2;
     optional bytes Parameters = 3;
+    optional TProgram.TOlapIndexChecker IndexChecker = 4;
 }

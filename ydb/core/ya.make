@@ -4,6 +4,7 @@ RECURSE(
     blobstorage
     blob_depot
     blockstore
+    change_exchange
     client
     cms
     control
@@ -17,6 +18,7 @@ RECURSE(
     filestore
     fq
     formats
+    graph
     grpc_caching
     grpc_services
     grpc_streaming
@@ -58,6 +60,7 @@ RECURSE(
     ymq
     driver_lib
     yql_testlib
+    jaeger_tracing
 )
 
 RECURSE_FOR_TESTS(

@@ -67,8 +67,8 @@ namespace NYql {
             MATCH_ATOM(Double, DOUBLE, double, double);
             MATCH_ATOM(String, STRING, bytes, TString);
             MATCH_ATOM(Utf8, UTF8, text, TString);
-            MATCH_ARITHMETICAL(Minus, SUB);
-            MATCH_ARITHMETICAL(Plus, ADD);
+            MATCH_ARITHMETICAL(Sub, SUB);
+            MATCH_ARITHMETICAL(Add, ADD);
             MATCH_ARITHMETICAL(Mul, MUL);
 
             if (auto maybeNull = expression.Maybe<TCoNull>()) {

@@ -7,6 +7,10 @@
 #include <util/generic/hash.h>
 #include <util/generic/ptr.h>
 
+namespace NKikimrConfig{
+    class TMonitoringConfig;
+}
+
 namespace NKikimr {
 
 struct TEvTenantPool {

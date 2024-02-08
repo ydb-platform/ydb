@@ -10,65 +10,9 @@ namespace NKqp {
 using namespace NYdb;
 using namespace NYdb::NTable;
 
-static const ui32 LargeTableShards = 8;
-static const ui32 LargeTableKeysPerShard = 1000000;
-
 namespace {
     bool IsRetryable(const EStatus& status) {
         return status == EStatus::OVERLOADED;
-    }
-}
-
-static void CreateLargeTable(TKikimrRunner& kikimr, ui32 rowsPerShard, ui32 keyTextSize,
-    ui32 dataTextSize, ui32 batchSizeRows = 100, ui32 fillShardsCount = LargeTableShards)
-{
-    kikimr.GetTestClient().CreateTable("/Root", R"(
-        Name: "LargeTable"
-        Columns { Name: "Key", Type: "Uint64" }
-        Columns { Name: "KeyText", Type: "String" }
-        Columns { Name: "Data", Type: "Int64" }
-        Columns { Name: "DataText", Type: "String" }
-        KeyColumnNames: ["Key", "KeyText"],
-        SplitBoundary { KeyPrefix { Tuple { Optional { Uint64: 1000000 } } } }
-        SplitBoundary { KeyPrefix { Tuple { Optional { Uint64: 2000000 } } } }
-        SplitBoundary { KeyPrefix { Tuple { Optional { Uint64: 3000000 } } } }
-        SplitBoundary { KeyPrefix { Tuple { Optional { Uint64: 4000000 } } } }
-        SplitBoundary { KeyPrefix { Tuple { Optional { Uint64: 5000000 } } } }
-        SplitBoundary { KeyPrefix { Tuple { Optional { Uint64: 6000000 } } } }
-        SplitBoundary { KeyPrefix { Tuple { Optional { Uint64: 7000000 } } } }
-    )");
-
-    auto client = kikimr.GetTableClient();
-
-    for (ui32 shardIdx = 0; shardIdx < fillShardsCount; ++shardIdx) {
-        ui32 rowIndex = 0;
-        while (rowIndex < rowsPerShard) {
-
-            auto rowsBuilder = TValueBuilder();
-            rowsBuilder.BeginList();
-            for (ui32 i = 0; i < batchSizeRows; ++i) {
-                rowsBuilder.AddListItem()
-                    .BeginStruct()
-                    .AddMember("Key")
-                        .OptionalUint64(shardIdx * LargeTableKeysPerShard + rowIndex)
-                    .AddMember("KeyText")
-                        .OptionalString(TString(keyTextSize, '0' + (i + shardIdx) % 10))
-                    .AddMember("Data")
-                        .OptionalInt64(rowIndex)
-                    .AddMember("DataText")
-                        .OptionalString(TString(dataTextSize, '0' + (i + shardIdx + 1) % 10))
-                    .EndStruct();
-
-                ++rowIndex;
-                if (rowIndex == rowsPerShard) {
-                    break;
-                }
-            }
-            rowsBuilder.EndList();
-
-            auto result = client.BulkUpsert("/Root/LargeTable", rowsBuilder.Build()).ExtractValueSync();
-            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
-        }
     }
 }
 
@@ -881,6 +825,133 @@ Y_UNIT_TEST_SUITE(KqpLimits) {
         }
     }
 
+    Y_UNIT_TEST(ManyPartitions) {
+        SetRandomSeed(42);
+
+        auto settings = TKikimrSettings()
+            .SetWithSampleTables(false)
+            .SetForceColumnTablesCompositeMarks(true);
+        TKikimrRunner kikimr(settings);
+        CreateManyShardsTable(kikimr, 1000, 100, 1000);
+
+        NYdb::NQuery::TExecuteQuerySettings querySettings;
+        querySettings.StatsMode(NYdb::NQuery::EStatsMode::Full);
+
+        auto db = kikimr.GetQueryClient();
+        auto result = db.ExecuteQuery(R"(
+            SELECT COUNT(*) FROM `/Root/ManyShardsTable`;
+        )", NYdb::NQuery::TTxControl::BeginTx().CommitTx(),
+        querySettings).ExtractValueSync();
+
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        UNIT_ASSERT(result.GetStats());
+        UNIT_ASSERT(result.GetStats()->GetPlan());
+
+        NJson::TJsonValue plan;
+        NJson::ReadJsonTree(*result.GetStats()->GetPlan(), &plan, true);
+        Cout << plan;
+
+        UNIT_ASSERT_VALUES_EQUAL(plan["Plan"]["Plans"][0]["Plans"][0]["Plans"][0]["Plans"][0]["Plans"][0]["Node Type"].GetStringSafe(), "TableFullScan");
+        UNIT_ASSERT_VALUES_EQUAL(plan["Plan"]["Plans"][0]["Plans"][0]["Plans"][0]["Plans"][0]["Plans"][0]["Tables"][0].GetStringSafe(), "ManyShardsTable");
+        UNIT_ASSERT(plan["Plan"]["Plans"][0]["Plans"][0]["Plans"][0]["Plans"][0]["Stats"]["Tasks"].GetIntegerSafe() < 100);
+        UNIT_ASSERT(plan["Plan"]["Plans"][0]["Plans"][0]["Plans"][0]["Plans"][0]["Stats"]["Tasks"].GetIntegerSafe() > 1);
+    }
+
+    Y_UNIT_TEST(ManyPartitionsSorting) {
+        SetRandomSeed(42);
+
+        auto settings = TKikimrSettings()
+            .SetWithSampleTables(false)
+            .SetForceColumnTablesCompositeMarks(true);
+        TKikimrRunner kikimr(settings);
+        CreateManyShardsTable(kikimr, 1100, 100, 1000);
+
+        NYdb::NQuery::TExecuteQuerySettings querySettings;
+        querySettings.StatsMode(NYdb::NQuery::EStatsMode::Full);
+
+        auto db = kikimr.GetQueryClient();
+        auto result = db.ExecuteQuery(R"(
+            SELECT Key, Data FROM `/Root/ManyShardsTable` ORDER BY Key;
+        )", NYdb::NQuery::TTxControl::BeginTx().CommitTx(),
+        querySettings).ExtractValueSync();
+
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        UNIT_ASSERT(result.GetStats());
+        UNIT_ASSERT(result.GetStats()->GetPlan());
+
+        NJson::TJsonValue plan;
+        NJson::ReadJsonTree(*result.GetStats()->GetPlan(), &plan, true);
+
+        UNIT_ASSERT_VALUES_EQUAL(plan["Plan"]["Node Type"].GetStringSafe(), "Query");
+        UNIT_ASSERT_VALUES_EQUAL(plan["Plan"]["Plans"][0]["Node Type"].GetStringSafe(), "ResultSet");
+        UNIT_ASSERT_VALUES_EQUAL(plan["Plan"]["Plans"][0]["Plans"][0]["Node Type"].GetStringSafe(), "Collect");
+        UNIT_ASSERT_VALUES_EQUAL(plan["Plan"]["Plans"][0]["Plans"][0]["Plans"][0]["Node Type"].GetStringSafe(), "Merge");
+        UNIT_ASSERT_VALUES_EQUAL(plan["Plan"]["Plans"][0]["Plans"][0]["Plans"][0]["SortColumns"].GetArraySafe()[0], "Key (Asc)");
+
+        UNIT_ASSERT_VALUES_EQUAL(plan["Plan"]["Plans"][0]["Plans"][0]["Plans"][0]["Plans"][0]["Plans"][0]["Node Type"].GetStringSafe(), "TableFullScan");
+        UNIT_ASSERT_VALUES_EQUAL(plan["Plan"]["Plans"][0]["Plans"][0]["Plans"][0]["Plans"][0]["Plans"][0]["Tables"][0].GetStringSafe(), "ManyShardsTable");
+        UNIT_ASSERT(plan["Plan"]["Plans"][0]["Plans"][0]["Plans"][0]["Plans"][0]["Stats"]["Tasks"].GetIntegerSafe() < 100);
+        UNIT_ASSERT(plan["Plan"]["Plans"][0]["Plans"][0]["Plans"][0]["Plans"][0]["Stats"]["Tasks"].GetIntegerSafe() > 1);
+
+        const auto resultSet = result.GetResultSet(0);
+        UNIT_ASSERT_VALUES_EQUAL(resultSet.RowsCount(), 1100);
+        ui32 last = 0;
+        NYdb::TResultSetParser parser(resultSet);
+        while (parser.TryNextRow()) {
+            const ui32 current = *parser.ColumnParser(0).GetOptionalUint32();
+            UNIT_ASSERT(current >= last);
+            last = current;
+        }
+    }
+
+    Y_UNIT_TEST(ManyPartitionsSortingLimit) {
+        SetRandomSeed(42);
+
+        auto settings = TKikimrSettings()
+            .SetWithSampleTables(false)
+            .SetForceColumnTablesCompositeMarks(true);
+        TKikimrRunner kikimr(settings);
+        CreateManyShardsTable(kikimr, 5000, 100, 1000);
+
+        NYdb::NQuery::TExecuteQuerySettings querySettings;
+        querySettings.StatsMode(NYdb::NQuery::EStatsMode::Full);
+
+        auto db = kikimr.GetQueryClient();
+        auto result = db.ExecuteQuery(R"(
+            SELECT Key, Data FROM `/Root/ManyShardsTable` ORDER BY Key LIMIT 1100;
+        )", NYdb::NQuery::TTxControl::BeginTx().CommitTx(),
+        querySettings).ExtractValueSync();
+
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        UNIT_ASSERT(result.GetStats());
+        UNIT_ASSERT(result.GetStats()->GetPlan());
+
+        NJson::TJsonValue plan;
+        NJson::ReadJsonTree(*result.GetStats()->GetPlan(), &plan, true);
+        Cout << plan;
+
+        UNIT_ASSERT_VALUES_EQUAL(plan["Plan"]["Node Type"].GetStringSafe(), "Query");
+        UNIT_ASSERT_VALUES_EQUAL(plan["Plan"]["Plans"][0]["Node Type"].GetStringSafe(), "ResultSet");
+        UNIT_ASSERT_VALUES_EQUAL(plan["Plan"]["Plans"][0]["Plans"][0]["Node Type"].GetStringSafe(), "Limit");
+        UNIT_ASSERT_VALUES_EQUAL(plan["Plan"]["Plans"][0]["Plans"][0]["Plans"][0]["Node Type"].GetStringSafe(), "Merge");
+        UNIT_ASSERT_VALUES_EQUAL(plan["Plan"]["Plans"][0]["Plans"][0]["Plans"][0]["SortColumns"].GetArraySafe()[0], "Key (Asc)");
+
+        UNIT_ASSERT_VALUES_EQUAL(plan["Plan"]["Plans"][0]["Plans"][0]["Plans"][0]["Plans"][0]["Plans"][0]["Node Type"].GetStringSafe(), "TableFullScan");
+        UNIT_ASSERT_VALUES_EQUAL(plan["Plan"]["Plans"][0]["Plans"][0]["Plans"][0]["Plans"][0]["Plans"][0]["Tables"][0].GetStringSafe(), "ManyShardsTable");
+        UNIT_ASSERT_VALUES_EQUAL(plan["Plan"]["Plans"][0]["Plans"][0]["Plans"][0]["Plans"][0]["Stats"]["Tasks"].GetIntegerSafe(), 1);
+
+        const auto resultSet = result.GetResultSet(0);
+        UNIT_ASSERT_VALUES_EQUAL(resultSet.RowsCount(), 1100);
+        ui32 last = 0;
+        NYdb::TResultSetParser parser(resultSet);
+        while (parser.TryNextRow()) {
+            const ui32 current = *parser.ColumnParser(0).GetOptionalUint32();
+            UNIT_ASSERT(current >= last);
+            const ui32 limit = (std::numeric_limits<ui32>::max() / 5000) * 1100 + 1;
+            UNIT_ASSERT(current < limit);
+            last = current;
+        }
+    }
 }
 
 } // namespace NKqp

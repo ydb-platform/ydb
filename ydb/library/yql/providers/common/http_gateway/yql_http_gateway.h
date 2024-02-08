@@ -1,5 +1,7 @@
 #pragma once
 
+#include "yql_http_header.h"
+
 #include <ydb/library/yql/providers/common/proto/gateways_config.pb.h>
 
 #include <ydb/library/yql/public/issue/yql_issue.h>
@@ -64,7 +66,7 @@ public:
         long HttpResponseCode;
     };
 
-    using THeaders = TSmallVec<TString>;
+    using THeaders = THttpHeader;
     struct TResult {
         TResult(TContent&& content) : Content(std::move(content)), CurlResponseCode(CURLE_OK) {}
         TResult(CURLcode curlResponseCode, const TIssues& issues) : Content(""), CurlResponseCode(curlResponseCode), Issues(issues) {}
@@ -128,7 +130,12 @@ public:
         
     virtual ui64 GetBuffersSizePerStream() = 0;
 
-    static THeaders MakeYcHeaders(const TString& requestId, const TString& token = "", const TString& contentType = "");
+    static THeaders MakeYcHeaders(
+        const TString& requestId,
+        const TString& token = {},
+        const TString& contentType = {},
+        const TString& userPwd = {},
+        const TString& awsSigV4 = {});
 };
 
 }

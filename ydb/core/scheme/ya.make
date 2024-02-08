@@ -11,7 +11,7 @@ SRCS(
 )
 
 PEERDIR(
-    library/cpp/actors/core
+    ydb/library/actors/core
     library/cpp/charset
     library/cpp/containers/bitseq
     library/cpp/deprecated/enum_codegen

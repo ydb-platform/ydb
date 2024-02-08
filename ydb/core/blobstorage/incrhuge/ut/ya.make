@@ -12,7 +12,7 @@ ELSE()
 ENDIF()
 
 PEERDIR(
-    library/cpp/actors/protos
+    ydb/library/actors/protos
     ydb/core/blobstorage
     ydb/core/blobstorage/incrhuge
     ydb/core/blobstorage/pdisk

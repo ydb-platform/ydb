@@ -204,6 +204,30 @@ void FromProto(
     NQueueClient::TQueueRowBatchReadOptions* result,
     const NProto::TRowBatchReadOptions& proto);
 
+void ToProto(
+    NProto::TTableBackupManifest* protoManifest,
+    const NApi::TTableBackupManifestPtr& manifest);
+
+void FromProto(
+    NApi::TTableBackupManifestPtr* manifest,
+    const NProto::TTableBackupManifest& protoManifest);
+
+void ToProto(
+    NProto::TBackupManifest::TClusterManifest* protoEntry,
+    const std::pair<TString, std::vector<NApi::TTableBackupManifestPtr>>& entry);
+
+void FromProto(
+    std::pair<TString, std::vector<NApi::TTableBackupManifestPtr>>* entry,
+    const NProto::TBackupManifest::TClusterManifest& protoEntry);
+
+void ToProto(
+    NProto::TBackupManifest* protoManifest,
+    const NApi::TBackupManifest& manifest);
+
+void FromProto(
+    NApi::TBackupManifest* manifest,
+    const NProto::TBackupManifest& protoManifest);
+
 NProto::EOperationType ConvertOperationTypeToProto(
     NScheduler::EOperationType operationType);
 

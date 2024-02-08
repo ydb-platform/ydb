@@ -10,9 +10,9 @@
 #include <ydb/library/yql/dq/runtime/dq_transport.h>
 #include <ydb/library/yql/public/issue/yql_issue.h>
 
-#include <library/cpp/actors/core/actor_bootstrapped.h>
-#include <library/cpp/actors/core/hfunc.h>
-#include <library/cpp/actors/core/log.h>
+#include <ydb/library/actors/core/actor_bootstrapped.h>
+#include <ydb/library/actors/core/hfunc.h>
+#include <ydb/library/actors/core/log.h>
 
 namespace NYql {
 namespace NDq {
@@ -21,7 +21,15 @@ struct TEvDqCompute {
     struct TEvState : public NActors::TEventPB<TEvState, NDqProto::TEvComputeActorState, TDqComputeEvents::EvState> {};
     struct TEvStateRequest : public NActors::TEventPB<TEvStateRequest, NDqProto::TEvComputeStateRequest, TDqComputeEvents::EvStateRequest> {};
 
-    struct TEvResumeExecution : public NActors::TEventLocal<TEvResumeExecution, TDqComputeEvents::EvResumeExecution> {};
+    struct TEvResumeExecution : public NActors::TEventLocal<TEvResumeExecution, TDqComputeEvents::EvResumeExecution> {
+        TEvResumeExecution(EResumeSource source)
+            : Source(source)
+        { }
+
+        TEvResumeExecution() = default;
+
+        EResumeSource Source = EResumeSource::Default;
+    };
 
     struct TEvChannelsInfo : public NActors::TEventPB<TEvChannelsInfo, NDqProto::TEvChannelsInfo,
         TDqComputeEvents::EvChannelsInfo> {};
@@ -239,6 +247,8 @@ struct TComputeRuntimeSettings {
     std::function<void(bool success, const TIssues& issues)> TerminateHandler;
     TMaybe<NDqProto::TRlPath> RlPath;
 
+    i64 AsyncInputPushLimit = std::numeric_limits<i64>::max();
+
     inline bool CollectNone() const {
         return StatsMode <= NDqProto::DQ_STATS_MODE_NONE;
     }
@@ -355,7 +365,7 @@ struct TComputeMemoryLimits {
 };
 
 using TTaskRunnerFactory = std::function<
-    TIntrusivePtr<IDqTaskRunner>(const TDqTaskSettings& task, NDqProto::EDqStatsMode statsMode, const TLogFunc& logFunc)
+    TIntrusivePtr<IDqTaskRunner>(NKikimr::NMiniKQL::TScopedAlloc& alloc, const TDqTaskSettings& task, NDqProto::EDqStatsMode statsMode, const TLogFunc& logFunc)
 >;
 
 void FillAsyncStats(NDqProto::TDqAsyncBufferStats& proto, TDqAsyncStats stats);

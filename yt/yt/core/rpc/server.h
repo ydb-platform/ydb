@@ -31,7 +31,9 @@ struct IServer
     virtual IServicePtr GetServiceOrThrow(const TServiceId& serviceId) const = 0;
 
     //! Reconfigures the server on-the-fly.
-    virtual void Configure(TServerConfigPtr config) = 0;
+    virtual void Configure(const TServerConfigPtr& config) = 0;
+
+    virtual void OnDynamicConfigChanged(const TServerDynamicConfigPtr& config) = 0;
 
     //! Starts the server.
     /*!

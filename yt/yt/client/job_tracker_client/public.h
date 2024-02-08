@@ -2,21 +2,24 @@
 
 #include <library/cpp/yt/misc/enum.h>
 #include <library/cpp/yt/misc/guid.h>
+#include <library/cpp/yt/misc/strong_typedef.h>
 
 namespace NYT::NJobTrackerClient {
 
 ////////////////////////////////////////////////////////////////////////////////
 
-using TJobId = TGuid;
+YT_DEFINE_STRONG_TYPEDEF(TJobId, TGuid);
+
 extern const TJobId NullJobId;
 
-using TOperationId = TGuid;
+YT_DEFINE_STRONG_TYPEDEF(TOperationId, TGuid);
+
 extern const TOperationId NullOperationId;
 
 ////////////////////////////////////////////////////////////////////////////////
 
 // NB: Please keep the range of values small as this type
-// is used as a key of TEnumIndexedVector.
+// is used as a key of TEnumIndexedArray.
 DEFINE_ENUM(EJobType,
     // Scheduler jobs
     ((Map)               (  1))
@@ -55,7 +58,7 @@ constexpr auto FirstMasterJobType = EJobType::ReplicateChunk;
 constexpr auto LastMasterJobType = EJobType::ReincarnateChunk;
 
 // NB: Please keep the range of values small as this type
-// is used as a key of TEnumIndexedVector.
+// is used as a key of TEnumIndexedArray.
 DEFINE_ENUM(EJobState,
     ((Waiting)    (0))
     ((Running)    (1))

@@ -10,6 +10,8 @@ SRCS(
     math_udf.cpp
 )
 
+USE_LLVM_BC14()
+
 LLVM_BC(
     math_ir.cpp
     lib/erfinv.cpp
@@ -18,6 +20,10 @@ LLVM_BC(
     PiIR
     EIR
     EpsIR
+    RoundDownwardIR
+    RoundToNearestIR
+    RoundTowardZeroIR
+    RoundUpwardIR
     AbsIR
     AcosIR
     AsinIR
@@ -67,3 +73,8 @@ PEERDIR(
 )
 
 END()
+
+RECURSE_FOR_TESTS(
+   test
+)
+

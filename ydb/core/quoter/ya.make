@@ -11,7 +11,7 @@ SRCS(
 )
 
 PEERDIR(
-    library/cpp/actors/core
+    ydb/library/actors/core
     library/cpp/containers/ring_buffer
     ydb/core/base
     ydb/core/kesus/tablet

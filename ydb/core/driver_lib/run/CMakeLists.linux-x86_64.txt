@@ -17,16 +17,16 @@ target_link_libraries(run PUBLIC
   contrib-libs-cxxsupp
   yutil
   contrib-libs-protobuf
-  cpp-actors-core
-  cpp-actors-dnsresolver
-  cpp-actors-interconnect
-  cpp-actors-memory_log
-  cpp-actors-prof
-  cpp-actors-protos
-  cpp-actors-util
+  library-actors-core
+  library-actors-dnsresolver
+  library-actors-interconnect
+  library-actors-memory_log
+  library-actors-prof
+  library-actors-protos
+  library-actors-util
   cpp-getopt-small
-  cpp-grpc-client
-  cpp-grpc-server
+  library-grpc-client
+  library-grpc-server
   grpc-server-actors
   library-cpp-logger
   cpp-malloc-api
@@ -70,6 +70,7 @@ target_link_libraries(run PUBLIC
   ydb-core-kafka_proxy
   ydb-core-kqp
   core-kqp-federated_query
+  core-kqp-finalize_script_service
   core-kqp-rm_service
   ydb-core-load_test
   ydb-core-local_pgwire
@@ -90,6 +91,7 @@ target_link_libraries(run PUBLIC
   ydb-core-scheme_types
   ydb-core-security
   ydb-core-statistics
+  core-statistics-aggregator
   core-sys_view-processor
   core-sys_view-service
   ydb-core-tablet

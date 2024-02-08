@@ -10,6 +10,12 @@ ELSE()
     ENDIF()
 ENDIF()
 
+
+IF (OS_DARWIN)
+    STRIP()
+    NO_SPLIT_DWARF()
+ENDIF()
+
 IF (OS_WINDOWS)
     CFLAGS(
         -DKIKIMR_DISABLE_S3_OPS
@@ -41,6 +47,7 @@ PEERDIR(
     ydb/library/yql/parser/pg_wrapper
     ydb/library/yql/sql/pg
     ydb/library/yql/udfs/common/clickhouse/client
+    ydb/library/yql/udfs/common/compress_base
     ydb/library/yql/udfs/common/datetime
     ydb/library/yql/udfs/common/datetime2
     ydb/library/yql/udfs/common/digest
@@ -71,6 +78,7 @@ CHECK_DEPENDENT_DIRS(
     ALLOW_ONLY
     PEERDIRS
     arc/api/public
+    build/internal/platform
     build/platform
     certs
     contrib

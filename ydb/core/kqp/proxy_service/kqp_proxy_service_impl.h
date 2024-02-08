@@ -6,7 +6,7 @@
 #include <ydb/core/kqp/rm_service/kqp_rm_service.h>
 #include <ydb/core/protos/kqp.pb.h>
 
-#include <library/cpp/actors/core/actorid.h>
+#include <ydb/library/actors/core/actorid.h>
 
 #include <util/datetime/base.h>
 
@@ -87,10 +87,11 @@ struct TKqpSessionInfo {
     std::list<TKqpSessionInfo*>::iterator IdlePos;
     TNodeId AttachedNodeId;
     TActorId AttachedRpcId;
+    bool PgWire;
 
     TKqpSessionInfo(const TString& sessionId, const TActorId& workerId,
         const TString& database, TKqpDbCountersPtr dbCounters, std::vector<i32>&& pos,
-        NActors::TMonotonic idleTimeout, std::list<TKqpSessionInfo*>::iterator idlePos)
+        NActors::TMonotonic idleTimeout, std::list<TKqpSessionInfo*>::iterator idlePos, bool pgWire = false)
         : SessionId(sessionId)
         , WorkerId(workerId)
         , Database(database)
@@ -100,6 +101,7 @@ struct TKqpSessionInfo {
         , IdleTimeout(idleTimeout)
         , IdlePos(idlePos)
         , AttachedNodeId(0)
+        , PgWire(pgWire)
     {
     }
 };
@@ -130,7 +132,7 @@ public:
 
     TKqpSessionInfo* Create(const TString& sessionId, const TActorId& workerId,
         const TString& database, TKqpDbCountersPtr dbCounters, bool supportsBalancing,
-        TDuration idleDuration)
+        TDuration idleDuration, bool pgWire = false)
     {
         std::vector<i32> pos(2, -1);
         pos[0] = ReadySessions[0].size();
@@ -143,7 +145,7 @@ public:
 
         auto result = LocalSessions.emplace(sessionId,
             TKqpSessionInfo(sessionId, workerId, database, dbCounters, std::move(pos),
-                NActors::TActivationContext::Monotonic() + idleDuration, IdleSessions.end()));
+                NActors::TActivationContext::Monotonic() + idleDuration, IdleSessions.end(), pgWire));
         SessionsCountPerDatabase[database]++;
         Y_ABORT_UNLESS(result.second, "Duplicate session id!");
         TargetIdIndex.emplace(workerId, sessionId);
@@ -181,8 +183,13 @@ public:
     }
 
     void StartIdleCheck(const TKqpSessionInfo* sessionInfo, const TDuration idleDuration) {
-        if (!sessionInfo)
+        if (!sessionInfo) {
             return;
+        }
+
+        if (sessionInfo->PgWire) {
+            return;
+        }
 
         TKqpSessionInfo* info = const_cast<TKqpSessionInfo*>(sessionInfo);
 
@@ -195,8 +202,13 @@ public:
     }
 
     void StopIdleCheck(const TKqpSessionInfo* sessionInfo) {
-        if (!sessionInfo)
+        if (!sessionInfo) {
             return;
+        }
+
+        if (sessionInfo->PgWire) {
+            return;
+        }
 
         TKqpSessionInfo* info = const_cast<TKqpSessionInfo*>(sessionInfo);
         if (info->IdlePos != IdleSessions.end()) {

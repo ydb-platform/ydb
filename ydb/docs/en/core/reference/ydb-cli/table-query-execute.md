@@ -19,17 +19,35 @@ View the description of the YQL query command:
 
 ## Parameters of the subcommand {#options}
 
-| Name | Description |
----|---
-| `--timeout` | The time within which the operation should be completed on the server. |
-| `-t`, `--type` | Query type.<br>Acceptable values:<ul><li>`data`: A YQL query that includes [DML]{% if lang == "ru" %}(https://ru.wikipedia.org/wiki/Data_Manipulation_Language){% endif %}{% if lang == "en" %}(https://en.wikipedia.org/wiki/Data_Manipulation_Language){% endif %} operations; it can be used both to update data in the database and fetch several selections limited to 1,000 rows per selection.</li><li>`scan`: A YQL query of the [scan](../../concepts/scan_query.md) type. It can only be used to read data from the database. It returns a single selection, but without a limit on the number of records in it. The algorithm of executing a `scan` query on the server is more sophisticated compared to a `data` query. Hence, if you don't need to return more than 1,000 rows, `data` queries are more effective.</li><li>`scheme`: A YQL query that includes [DDL]{% if lang == "ru" %}(https://ru.wikipedia.org/wiki/Data_Definition_Language){% endif %}{% if lang == "en" %}(https://en.wikipedia.org/wiki/Data_Definition_Language){% endif %} operations.</li></ul>The default value is `data`. |
-| `--stats` | Statistics mode.<br>Acceptable values:<ul><li>`none`: Do not collect statistics.</li><li>`basic`: Collect statistics for basic events.</li><li>`full`: Collect statistics for all events.</li></ul>Defaults to `none`. |
-| `-s` | Enable statistics collection in the `basic` mode. |
-| `--tx-mode` | [Transaction mode](../../concepts/transactions.md#modes) (for `data` queries).<br>Acceptable values:<ul><li>`serializable-rw`: The result of parallel transactions is equivalent to their serial execution.</li><li>`online-ro`: Each of the reads in the transaction reads data that is most recent at the time of its execution.</li><li>`stale-ro`: Data reads in a transaction return results with a possible delay (fractions of a second).</li></ul>Default value: `serializable-rw`. |
-| `-q`, `--query` | Text of the YQL query to be executed. |
-| `-f,` `--file` | Path to the text of the YQL query to be executed. |
-| `--format` | Result format.<br>Possible values:<ul><li>`pretty` (default): Human-readable format.</li><li>`json-unicode`: [Newline-delimited JSON stream](https://en.wikipedia.org/wiki/JSON_streaming). For each selected row, a separate line is added in the output. Each such line is formatted as a single-line JSON. If your query includes multiple selections, their records are output one-by-one, without additional separators.</li><li>`json-unicode-array`: A single JSON document that includes an array of selected rows.</li><li>`json-base64`: This format is similar to `json-unicode`, but columns containing binary strings (with the `String` type) are [Base64]{% if lang == "ru" %}(https://ru.wikipedia.org/wiki/Base64){% endif %}{% if lang == "en" %}(https://en.wikipedia.org/wiki/Base64)-encoded{% endif %}.</li><li>`json-base64-array`: This format is similar to `json-unicode-array`, but columns with binary strings (with the `String` type) are [Base64]{% if lang == "ru" %}(https://ru.wikipedia.org/wiki/Base64){% endif %}{% if lang == "en" %}(https://en.wikipedia.org/wiki/Base64)-encoded{% endif %}.</li><li>`csv`: Output in [CSV](https://ru.wikipedia.org/wiki/CSV) format.</li><li>`tsv`: Output in [TSV](https://ru.wikipedia.org/wiki/TSV) format.</li></ul> |
+#|
+|| **Name** | **Description** ||
+|| `--timeout` | The time within which the operation should be completed on the server. ||
+|| `-t`, `--type` | Query type.
+Acceptable values:
+* `data`: A YQL query that includes [DML]{% if lang == "ru" %}(https://ru.wikipedia.org/wiki/Data_Manipulation_Language){% endif %}{% if lang == "en" %}(https://en.wikipedia.org/wiki/Data_Manipulation_Language){% endif %} operations; it can be used both to update data in the database and fetch several selections limited to 1,000 rows per selection.
+* `scan`: A YQL query of the [scan](../../concepts/scan_query.md) type. It can only be used to read data from the database. It returns a single selection, but without a limit on the number of records in it. The algorithm of executing a `scan` query on the server is more sophisticated compared to a `data` query. Hence, if you don't need to return more than 1,000 rows, `data` queries are more effective.
+* `scheme`: A YQL query that includes [DDL]{% if lang == "ru" %}(https://ru.wikipedia.org/wiki/Data_Definition_Language){% endif %}{% if lang == "en" %}(https://en.wikipedia.org/wiki/Data_Definition_Language){% endif %} operations.
+    The default value is `data`. ||
+|| `--stats` | Statistics mode.
+Acceptable values:
+* `none`: Do not collect statistics.
+* `basic`: Collect statistics for basic events.
+* `full`: Collect statistics for all events.
+    Defaults to `none`. ||
+|| `-s` | Enable statistics collection in the `basic` mode. ||
+|| `--tx-mode` | [Transaction mode](../../concepts/transactions.md#modes) (for `data` queries).
+Acceptable values:<li>`serializable-rw`: The result of parallel transactions is equivalent to their serial execution.<li>`online-ro`: Each of the reads in the transaction reads data that is most recent at the time of its execution.<li>`stale-ro`: Data reads in a transaction return results with a possible delay (fractions of a second).Default value: `serializable-rw`. ||
+|| `-q`, `--query` | Text of the YQL query to be executed. ||
+|| `-f,` `--file` | Path to the text of the YQL query to be executed. ||
+|| `--format` | Result format.
+Possible values:
 
+{% include notitle [format](./_includes/result_format_common.md) %}
+
+{% include notitle [format](./_includes/result_format_csv_tsv.md) %}
+
+||
+|#
 ### Working with parameterized queries {#parameterized-query}
 
 {% include [parameterized-query](../../_includes/parameterized-query.md) %}

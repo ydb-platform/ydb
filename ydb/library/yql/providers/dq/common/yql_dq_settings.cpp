@@ -83,6 +83,15 @@ TDqConfiguration::TDqConfiguration() {
         .ValueSetter([this](const TString&, TDqSettings::ESpillingEngine value) {
             SpillingEngine = value;
             if (value != TDqSettings::ESpillingEngine::Disable) {
+                SplitStageOnDqReplicate = false;
+                EnableDqReplicate = true;
+            }
+        });
+    REGISTER_SETTING(*this, DisableLLVMForBlockStages);
+    REGISTER_SETTING(*this, SplitStageOnDqReplicate)
+        .ValueSetter([this](const TString&, bool value) {
+            SplitStageOnDqReplicate = value;
+            if (!value) {
                 EnableDqReplicate = true;
             }
         });

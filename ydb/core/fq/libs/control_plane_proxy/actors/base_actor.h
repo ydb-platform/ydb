@@ -3,8 +3,8 @@
 #include "counters.h"
 
 #include <contrib/libs/fmt/include/fmt/format.h>
-#include <library/cpp/actors/core/actor.h>
-#include <library/cpp/actors/core/actor_bootstrapped.h>
+#include <ydb/library/actors/core/actor.h>
+#include <ydb/library/actors/core/actor_bootstrapped.h>
 
 #include <ydb/core/fq/libs/actors/logging/log.h>
 #include <ydb/core/fq/libs/config/protos/issue_id.pb.h>
@@ -24,7 +24,6 @@ class TPlainBaseActor : public NActors::TActorBootstrapped<TDerived> {
 public:
     using TBase = NActors::TActorBootstrapped<TDerived>;
     using TBase::Become;
-    using TBase::PassAway;
     using TBase::SelfId;
     using TBase::Send;
 
@@ -67,12 +66,17 @@ public:
     }
 
     void HandleTimeout() {
-        CPP_LOG_D("TBaseActor Timeout occurred. Actor id: "
+        CPP_LOG_W("TBaseActor Timeout occurred. Actor id: "
                   << SelfId());
         Counters->Timeout->Inc();
         SendErrorMessageToSender(MakeTimeoutEventImpl(
             MakeErrorIssue(TIssuesIds::TIMEOUT,
                            "Timeout occurred. Try repeating the request later")));
+    }
+
+    void PassAway() override {
+        Counters->InFly->Dec();
+        TBase::PassAway();
     }
 
 protected:

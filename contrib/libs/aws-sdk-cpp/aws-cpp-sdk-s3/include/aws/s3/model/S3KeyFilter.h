@@ -29,14 +29,14 @@ namespace Model
    * href="http://docs.aws.amazon.com/goto/WebAPI/s3-2006-03-01/S3KeyFilter">AWS API
    * Reference</a></p>
    */
-  class AWS_S3_API S3KeyFilter
+  class S3KeyFilter
   {
   public:
-    S3KeyFilter();
-    S3KeyFilter(const Aws::Utils::Xml::XmlNode& xmlNode);
-    S3KeyFilter& operator=(const Aws::Utils::Xml::XmlNode& xmlNode);
+    AWS_S3_API S3KeyFilter();
+    AWS_S3_API S3KeyFilter(const Aws::Utils::Xml::XmlNode& xmlNode);
+    AWS_S3_API S3KeyFilter& operator=(const Aws::Utils::Xml::XmlNode& xmlNode);
 
-    void AddToNode(Aws::Utils::Xml::XmlNode& parentNode) const;
+    AWS_S3_API void AddToNode(Aws::Utils::Xml::XmlNode& parentNode) const;
 
 
     
@@ -66,7 +66,7 @@ namespace Model
   private:
 
     Aws::Vector<FilterRule> m_filterRules;
-    bool m_filterRulesHasBeenSet;
+    bool m_filterRulesHasBeenSet = false;
   };
 
 } // namespace Model

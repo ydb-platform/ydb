@@ -10,7 +10,7 @@
 #include <ydb/library/yql/public/udf/udf_value.h>
 
 #include <library/cpp/enumbitset/enumbitset.h>
-#include <library/cpp/actors/util/rope.h>
+#include <ydb/library/actors/util/rope.h>
 
 #include <util/stream/output.h>
 #include <util/generic/buffer.h>
@@ -109,6 +109,8 @@ private:
 
     arrow::MemoryPool& ArrowPool_;
     bool IsBlock_ = false;
+    bool IsLegacyBlock_ = false;
+    ui32 BlockLenIndex_ = 0;
 
     TVector<std::unique_ptr<IBlockSerializer>> BlockSerializers_;
     TVector<std::unique_ptr<IBlockReader>> BlockReaders_;

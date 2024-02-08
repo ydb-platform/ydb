@@ -69,27 +69,42 @@ public:
                 << ": id# " << id
                 << ", validity# " << TInstant::MicroSeconds(deadline)
                 << ", action# " << actionStr);
+
+            if (Scheduled && Scheduled->Request.GetEvictVDisks()) {
+                auto ret = Self->SetHostMarker(permission.GetAction().GetHost(), NKikimrCms::MARKER_DISK_FAULTY, txc, ctx);
+                std::move(ret.begin(), ret.end(), std::back_inserter(UpdateMarkers));
+            }
         }
 
         if (Scheduled) {
             auto &id = Scheduled->RequestId;
             auto &owner = Scheduled->Owner;
 
-            if (Scheduled->Request.ActionsSize()) {
+            if (Scheduled->Request.ActionsSize() || Scheduled->Request.GetEvictVDisks()) {
                 ui64 order = Scheduled->Order;
+                i32 priority = Scheduled->Priority;
                 TString requestStr;
                 google::protobuf::TextFormat::PrintToString(Scheduled->Request, &requestStr);
 
                 auto row = db.Table<Schema::Request>().Key(id);
                 row.Update(NIceDb::TUpdate<Schema::Request::Owner>(owner),
                            NIceDb::TUpdate<Schema::Request::Order>(order),
+                           NIceDb::TUpdate<Schema::Request::Priority>(priority),
                            NIceDb::TUpdate<Schema::Request::Content>(requestStr));
 
                 Self->AuditLog(ctx, TStringBuilder() << "Store request"
                     << ": id# " << id
                     << ", owner# " << owner
                     << ", order# " << order
+                    << ", priority# " << priority
                     << ", body# " << requestStr);
+
+                if (Scheduled->Request.GetEvictVDisks()) {
+                    for (const auto &action : Scheduled->Request.GetActions()) {
+                        auto ret = Self->SetHostMarker(action.GetHost(), NKikimrCms::MARKER_DISK_FAULTY, txc, ctx);
+                        std::move(ret.begin(), ret.end(), std::back_inserter(UpdateMarkers));
+                    }
+                }
             } else {
                 db.Table<Schema::Request>().Key(id).Delete();
 
@@ -108,6 +123,7 @@ public:
 
         Self->Reply(Request.Get(), Response, ctx);
         Self->SchedulePermissionsCleanup(ctx);
+        Self->SentinelUpdateHostMarkers(std::move(UpdateMarkers), ctx);
     }
 
 private:
@@ -118,6 +134,7 @@ private:
     const TMaybe<TString> MaintenanceTaskId;
     ui64 NextPermissionId;
     ui64 NextRequestId;
+    TVector<TEvSentinel::TEvUpdateHostMarkers::THostMarkers> UpdateMarkers;
 };
 
 ITransaction *TCms::CreateTxStorePermissions(THolder<IEventBase> req, TAutoPtr<IEventHandle> resp,

@@ -14,7 +14,9 @@ class TReadHunksCommand
     : public TTypedCommand<NApi::TReadHunksOptions>
 {
 public:
-    TReadHunksCommand();
+    REGISTER_YSON_STRUCT_LITE(TReadHunksCommand);
+
+    static void Register(TRegistrar registrar);
 
 private:
     std::vector<NApi::TSerializableHunkDescriptorPtr> Descriptors;
@@ -31,7 +33,9 @@ class TWriteHunksCommand
     : public TTypedCommand<NApi::TWriteHunksOptions>
 {
 public:
-    TWriteHunksCommand();
+    REGISTER_YSON_STRUCT_LITE(TWriteHunksCommand);
+
+    static void Register(TRegistrar registrar);
 
 private:
     NYTree::TYPath Path;
@@ -47,7 +51,9 @@ class TLockHunkStoreCommand
     : public TTypedCommand<NApi::TLockHunkStoreOptions>
 {
 public:
-    TLockHunkStoreCommand();
+    REGISTER_YSON_STRUCT_LITE(TLockHunkStoreCommand);
+
+    static void Register(TRegistrar registrar);
 
 private:
     NYTree::TYPath Path;
@@ -64,7 +70,9 @@ class TUnlockHunkStoreCommand
     : public TTypedCommand<NApi::TUnlockHunkStoreOptions>
 {
 public:
-    TUnlockHunkStoreCommand();
+    REGISTER_YSON_STRUCT_LITE(TUnlockHunkStoreCommand);
+
+    static void Register(TRegistrar registrar);
 
 private:
     NYTree::TYPath Path;
@@ -84,9 +92,84 @@ class TGetConnectionConfigCommand
     : public TTypedCommand<TGetConnectionConfigCommandOptions>
 {
 public:
-    TGetConnectionConfigCommand() = default;
+    REGISTER_YSON_STRUCT_LITE(TGetConnectionConfigCommand);
+
+    static void Register(TRegistrar /*registrar*/)
+    { }
 
 private:
+    void DoExecute(ICommandContextPtr context) override;
+};
+
+////////////////////////////////////////////////////////////////////////////////
+
+class TIssueLeaseCommand
+    : public TTypedCommand<NApi::TIssueLeaseOptions>
+{
+public:
+    REGISTER_YSON_STRUCT_LITE(TIssueLeaseCommand);
+
+    static void Register(TRegistrar registrar);
+
+private:
+    NHydra::TCellId CellId;
+    NObjectClient::TObjectId LeaseId;
+
+    void DoExecute(ICommandContextPtr context) override;
+};
+
+////////////////////////////////////////////////////////////////////////////////
+
+class TRevokeLeaseCommand
+    : public TTypedCommand<NApi::TRevokeLeaseOptions>
+{
+public:
+    REGISTER_YSON_STRUCT_LITE(TRevokeLeaseCommand);
+
+    static void Register(TRegistrar registrar);
+
+private:
+    NHydra::TCellId CellId;
+    NObjectClient::TObjectId LeaseId;
+    bool Force;
+
+    void DoExecute(ICommandContextPtr context) override;
+};
+
+////////////////////////////////////////////////////////////////////////////////
+
+class TReferenceLeaseCommand
+    : public TTypedCommand<NApi::TReferenceLeaseOptions>
+{
+public:
+    REGISTER_YSON_STRUCT_LITE(TReferenceLeaseCommand);
+
+    static void Register(TRegistrar registrar);
+
+private:
+    NHydra::TCellId CellId;
+    NObjectClient::TObjectId LeaseId;
+    bool Persistent;
+    bool Force;
+
+    void DoExecute(ICommandContextPtr context) override;
+};
+
+////////////////////////////////////////////////////////////////////////////////
+
+class TUnreferenceLeaseCommand
+    : public TTypedCommand<NApi::TUnreferenceLeaseOptions>
+{
+public:
+    REGISTER_YSON_STRUCT_LITE(TUnreferenceLeaseCommand);
+
+    static void Register(TRegistrar registrar);
+
+private:
+    NHydra::TCellId CellId;
+    NObjectClient::TObjectId LeaseId;
+    bool Persistent;
+
     void DoExecute(ICommandContextPtr context) override;
 };
 

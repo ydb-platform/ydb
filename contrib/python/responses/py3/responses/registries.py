@@ -11,7 +11,7 @@ if TYPE_CHECKING:  # pragma: no cover
     from responses import BaseResponse
 
 
-class FirstMatchRegistry(object):
+class FirstMatchRegistry:
     def __init__(self) -> None:
         self._responses: List["BaseResponse"] = []
 
@@ -67,9 +67,7 @@ class FirstMatchRegistry(object):
         try:
             index = self.registered.index(response)
         except ValueError:
-            raise ValueError(
-                "Response is not registered for URL {}".format(response.url)
-            )
+            raise ValueError(f"Response is not registered for URL {response.url}")
         self.registered[index] = response
         return response
 

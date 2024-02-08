@@ -5,6 +5,8 @@
 #include <ydb/core/base/blobstorage.h>
 #include <ydb/core/base/appdata.h>
 #include <ydb/core/blobstorage/vdisk/common/vdisk_pdiskctx.h>
+#include <library/cpp/time_provider/time_provider.h>
+
 
 namespace NKikimr {
 

@@ -56,7 +56,7 @@ namespace NYql::NConnector {
         }
     }
 
-    NApi::TError ErrorFromGRPCStatus(const NGrpc::TGrpcStatus& status) {
+    NApi::TError ErrorFromGRPCStatus(const NYdbGrpc::TGrpcStatus& status) {
         NApi::TError result;
 
         if (status.GRpcStatusCode == grpc::OK) {

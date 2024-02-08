@@ -127,6 +127,8 @@ struct TChunkIdWithIndex
     TChunkId Id;
     int ReplicaIndex;
 
+    bool operator==(const TChunkIdWithIndex& other) const = default;
+
     void Save(TStreamSaveContext& context) const;
     void Load(TStreamLoadContext& context);
 };
@@ -142,23 +144,25 @@ struct TChunkIdWithIndexes
 
     int MediumIndex;
 
+    bool operator==(const TChunkIdWithIndexes& other) const = default;
+
     void Save(TStreamSaveContext& context) const;
     void Load(TStreamLoadContext& context);
 };
 
 ////////////////////////////////////////////////////////////////////////////////
 
-bool operator==(const TChunkIdWithIndex& lhs, const TChunkIdWithIndex& rhs);
-bool operator!=(const TChunkIdWithIndex& lhs, const TChunkIdWithIndex& rhs);
 bool operator<(const TChunkIdWithIndex& lhs, const TChunkIdWithIndex& rhs);
 
 TString ToString(const TChunkIdWithIndex& id);
 
-bool operator==(const TChunkIdWithIndexes& lhs, const TChunkIdWithIndexes& rhs);
-bool operator!=(const TChunkIdWithIndexes& lhs, const TChunkIdWithIndexes& rhs);
+////////////////////////////////////////////////////////////////////////////////
+
 bool operator<(const TChunkIdWithIndexes& lhs, const TChunkIdWithIndexes& rhs);
 
 TString ToString(const TChunkIdWithIndexes& id);
+
+////////////////////////////////////////////////////////////////////////////////
 
 //! Returns |true| iff this is an artifact chunk.
 bool IsArtifactChunkId(TChunkId id);

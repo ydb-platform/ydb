@@ -1,6 +1,7 @@
 PROTO_LIBRARY()
 
 SRCS(
+    credentials.proto
     range.proto
     retry_config.proto
     sink.proto

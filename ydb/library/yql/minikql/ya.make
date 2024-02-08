@@ -54,7 +54,7 @@ SRCS(
 PEERDIR(
     contrib/libs/apache/arrow
     contrib/libs/cctz/tzdata
-    library/cpp/actors/util
+    ydb/library/actors/util
     library/cpp/deprecated/enum_codegen
     library/cpp/enumbitset
     library/cpp/monlib/dynamic_counters
@@ -86,7 +86,6 @@ END()
 
 RECURSE(
     arrow
-    benchmark
     codegen
     comp_nodes
     computation
@@ -99,5 +98,6 @@ RECURSE(
 )
 
 RECURSE_FOR_TESTS(
+    benchmark
     ut
 )

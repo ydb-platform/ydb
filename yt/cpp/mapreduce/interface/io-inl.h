@@ -784,7 +784,7 @@ public:
     ~TTableWriterBase() override
     {
         if (Locks_.RefCount() == 1) {
-            NDetail::FinishOrDie(this, "TTableWriterBase");
+            NDetail::FinishOrDie(this, /*autoFinish*/ true, "TTableWriterBase");
         }
     }
 

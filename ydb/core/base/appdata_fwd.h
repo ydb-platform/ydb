@@ -31,7 +31,7 @@ namespace NKikimrSharedCache {
 
 namespace NKikimrProto {
     class TKeyConfig;
-    class TAuthConfig;    
+    class TAuthConfig;
 
     namespace NFolderService {
         class TFolderServiceConfig;
@@ -59,6 +59,9 @@ namespace NKikimrConfig {
     class TDomainsConfig;
     class TBootstrap;
     class TAwsCompatibilityConfig;
+    class TS3ProxyResolverConfig;
+    class TBackgroundCleaningConfig;
+    class TGraphConfig;
 }
 
 namespace NKikimrNetClassifier {
@@ -152,7 +155,7 @@ struct TAppData {
 
     NHttpProxy::IAuthFactory* DataStreamsAuthFactory = nullptr;
 
-    NActors::IActor*(*FolderServiceFactory)(const NKikimrProto::NFolderService::TFolderServiceConfig&);
+    NActors::IActor*(*FolderServiceFactory)(const NKikimrProto::NFolderService::TFolderServiceConfig&) = nullptr;
 
     const NMsgBusProxy::IPersQueueGetReadSessionsInfoWorkerFactory* PersQueueGetReadSessionsInfoWorkerFactory = nullptr;
     const NPQ::IPersQueueMirrorReaderFactory* PersQueueMirrorReaderFactory = nullptr;
@@ -201,7 +204,10 @@ struct TAppData {
     std::unique_ptr<NKikimrConfig::TDomainsConfig> DomainsConfigPtr;
     std::unique_ptr<NKikimrConfig::TBootstrap> BootstrapConfigPtr;
     std::unique_ptr<NKikimrConfig::TAwsCompatibilityConfig> AwsCompatibilityConfigPtr;
+    std::unique_ptr<NKikimrConfig::TS3ProxyResolverConfig> S3ProxyResolverConfigPtr;
+    std::unique_ptr<NKikimrConfig::TGraphConfig> GraphConfigPtr;
     std::unique_ptr<NKikimrSharedCache::TSharedCacheConfig> SharedCacheConfigPtr;
+    std::unique_ptr<NKikimrConfig::TBackgroundCleaningConfig> BackgroundCleaningConfigPtr;
 
     NKikimrStream::TStreamingConfig& StreamingConfig;
     NKikimrPQ::TPQConfig& PQConfig;
@@ -223,6 +229,9 @@ struct TAppData {
     NKikimrConfig::TDomainsConfig& DomainsConfig;
     NKikimrConfig::TBootstrap& BootstrapConfig;
     NKikimrConfig::TAwsCompatibilityConfig& AwsCompatibilityConfig;
+    NKikimrConfig::TS3ProxyResolverConfig& S3ProxyResolverConfig;
+    NKikimrConfig::TBackgroundCleaningConfig& BackgroundCleaningConfig;
+    NKikimrConfig::TGraphConfig& GraphConfig;
     bool EnforceUserTokenRequirement = false;
     bool AllowHugeKeyValueDeletes = true; // delete when all clients limit deletes per request
     bool EnableKqpSpilling = false;
@@ -277,9 +286,22 @@ struct TAppData {
 
 inline TAppData* AppData(NActors::TActorSystem* actorSystem) {
     Y_DEBUG_ABORT_UNLESS(actorSystem);
-    TAppData * const x = actorSystem->AppData<TAppData>();
+    TAppData* const x = actorSystem->AppData<TAppData>();
     Y_DEBUG_ABORT_UNLESS(x && x->Magic == TAppData::MagicTag);
     return x;
+}
+
+inline bool HasAppData() {
+    return !!NActors::TlsActivationContext;
+}
+
+inline TAppData& AppDataVerified() {
+    Y_ABORT_UNLESS(HasAppData());
+    auto& actorSystem = NActors::TlsActivationContext->ExecutorThread.ActorSystem;
+    Y_ABORT_UNLESS(actorSystem);
+    TAppData* const x = actorSystem->AppData<TAppData>();
+    Y_ABORT_UNLESS(x && x->Magic == TAppData::MagicTag);
+    return *x;
 }
 
 inline TAppData* AppData() {

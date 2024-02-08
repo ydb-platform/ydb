@@ -35,6 +35,8 @@ enum ENodeType : int
     NT_USER                 /* "user" */,
     NT_SCHEDULER_POOL       /* "scheduler_pool" */,
     NT_LINK                 /* "link" */,
+    NT_GROUP                /* "group" */,
+    NT_PORTAL               /* "portal_entrance" */,
 };
 
 ///
@@ -536,6 +538,16 @@ struct TFileWriterOptions
     FLUENT_FIELD_OPTION(bool, ComputeMD5);
 
     ///
+    /// @brief Wheter to call Finish automatically in writer destructor.
+    ///
+    /// If set to true (default) Finish() is called automatically in the destructor of writer.
+    /// It is convenient for simple usecases but might be error-prone if writing exception safe code
+    /// (In case of exceptions it's common to abort writer and not commit partial data).
+    ///
+    /// If set to false Finish() has to be called explicitly.
+    FLUENT_FIELD_DEFAULT(bool, AutoFinish, true);
+
+    ///
     /// @brief Options to control how YT server side writes data.
     ///
     /// @see NYT::TWriterOptions
@@ -685,6 +697,16 @@ struct TTableWriterOptions
     /// @note Default values for this option may differ depending on the row type.
     /// For protobuf it's currently false by default.
     FLUENT_FIELD_OPTION(bool, InferSchema);
+
+    ///
+    /// @brief Wheter to call Finish automatically in writer destructor.
+    ///
+    /// If set to true (default) Finish() is called automatically in the destructor of writer.
+    /// It is convenient for simple usecases but might be error-prone if writing exception safe code
+    /// (In case of exceptions it's common to abort writer and not commit partial data).
+    ///
+    /// If set to false Finish() has to be called explicitly.
+    FLUENT_FIELD_DEFAULT(bool, AutoFinish, true);
 
     ///
     /// @brief Options to control how YT server side writes data.
@@ -1054,7 +1076,7 @@ struct TCreateClientOptions
     /// @brief Use HTTPs (use HTTP client from yt/yt/core always).
     ///
     /// @see UseCoreHttpClient
-    FLUENT_FIELD_DEFAULT(bool, UseTLS, false);
+    FLUENT_FIELD_OPTION(bool, UseTLS);
 
     /// @brief Use HTTP client from yt/yt/core.
     FLUENT_FIELD_DEFAULT(bool, UseCoreHttpClient, false);

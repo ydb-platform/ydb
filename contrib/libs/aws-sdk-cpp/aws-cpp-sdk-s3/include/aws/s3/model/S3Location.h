@@ -35,14 +35,14 @@ namespace Model
    * href="http://docs.aws.amazon.com/goto/WebAPI/s3-2006-03-01/S3Location">AWS API
    * Reference</a></p>
    */
-  class AWS_S3_API S3Location
+  class S3Location
   {
   public:
-    S3Location();
-    S3Location(const Aws::Utils::Xml::XmlNode& xmlNode);
-    S3Location& operator=(const Aws::Utils::Xml::XmlNode& xmlNode);
+    AWS_S3_API S3Location();
+    AWS_S3_API S3Location(const Aws::Utils::Xml::XmlNode& xmlNode);
+    AWS_S3_API S3Location& operator=(const Aws::Utils::Xml::XmlNode& xmlNode);
 
-    void AddToNode(Aws::Utils::Xml::XmlNode& parentNode) const;
+    AWS_S3_API void AddToNode(Aws::Utils::Xml::XmlNode& parentNode) const;
 
 
     /**
@@ -323,28 +323,28 @@ namespace Model
   private:
 
     Aws::String m_bucketName;
-    bool m_bucketNameHasBeenSet;
+    bool m_bucketNameHasBeenSet = false;
 
     Aws::String m_prefix;
-    bool m_prefixHasBeenSet;
+    bool m_prefixHasBeenSet = false;
 
     Encryption m_encryption;
-    bool m_encryptionHasBeenSet;
+    bool m_encryptionHasBeenSet = false;
 
     ObjectCannedACL m_cannedACL;
-    bool m_cannedACLHasBeenSet;
+    bool m_cannedACLHasBeenSet = false;
 
     Aws::Vector<Grant> m_accessControlList;
-    bool m_accessControlListHasBeenSet;
+    bool m_accessControlListHasBeenSet = false;
 
     Tagging m_tagging;
-    bool m_taggingHasBeenSet;
+    bool m_taggingHasBeenSet = false;
 
     Aws::Vector<MetadataEntry> m_userMetadata;
-    bool m_userMetadataHasBeenSet;
+    bool m_userMetadataHasBeenSet = false;
 
     StorageClass m_storageClass;
-    bool m_storageClassHasBeenSet;
+    bool m_storageClassHasBeenSet = false;
   };
 
 } // namespace Model

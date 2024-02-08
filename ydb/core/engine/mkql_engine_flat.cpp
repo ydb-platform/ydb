@@ -3,7 +3,7 @@
 #include "mkql_engine_flat_impl.h"
 #include "mkql_proto.h"
 
-#include <library/cpp/actors/core/log.h>
+#include <ydb/library/actors/core/log.h>
 #include <ydb/library/yql/minikql/computation/mkql_computation_node.h>
 #include <ydb/library/yql/minikql/computation/mkql_computation_node_pack.h>
 #include <ydb/library/yql/minikql/mkql_node_cast.h>
@@ -156,7 +156,7 @@ private:
 
 TRuntimeNode ReplaceAsVoid(TCallable& callable, const TTypeEnvironment& env) {
     Y_UNUSED(callable);
-    return TRuntimeNode(env.GetVoid(), true);
+    return TRuntimeNode(env.GetVoidLazy(), true);
 };
 
 TRuntimeNode RenameCallable(TCallable& callable, const TStringBuf& newName, const TTypeEnvironment& env) {
@@ -257,7 +257,7 @@ public:
         , IsCancelled(false)
     {
         Ui64Type = TDataType::Create(NUdf::TDataType<ui64>::Id, Env);
-        ResultType = Env.GetEmptyStruct()->GetType();
+        ResultType = Env.GetEmptyStructLazy()->GetType();
         Alloc.DisableStrictAllocationCheck();
         Alloc.Release();
     }
@@ -760,11 +760,10 @@ public:
     EResult ValidateKeys(TValidationInfo& validationInfo) override {
         EResult result = EResult::Ok;
 
-        std::pair<ui64, ui64> maxSnapshotTime = {0,0}; // unused for now
         for (auto& validKey : validationInfo.Keys) {
             TKeyDesc * key = validKey.Key.get();
 
-            bool valid = Settings.Host->IsValidKey(*key, maxSnapshotTime);
+            bool valid = Settings.Host->IsValidKey(*key);
 
             if (valid) {
                 auto curSchemaVersion = Settings.Host->GetTableSchemaVersion(key->TableId);
@@ -1042,7 +1041,7 @@ public:
         }
 
         if (Y_LIKELY(result == EResult::Ok)) {
-            validationInfo.Loaded = true;
+            validationInfo.SetLoaded();
         }
 
         IsProgramValidated = true;
@@ -2064,7 +2063,7 @@ private:
                 }
             }
 
-            return TRuntimeNode(env.GetVoid(), true);
+            return TRuntimeNode(env.GetVoidLazy(), true);
         };
 
         auto lpoProvider = GetLiteralPropagationOptimizationFuncProvider();

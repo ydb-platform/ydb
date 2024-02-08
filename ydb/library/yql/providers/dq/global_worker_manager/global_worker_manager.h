@@ -7,7 +7,7 @@
 #include <ydb/library/yql/providers/dq/actors/yt/resource_manager.h>
 #include <ydb/library/yql/providers/common/metrics/metrics_registry.h>
 
-#include <library/cpp/actors/core/events.h>
+#include <ydb/library/actors/core/events.h>
 
 namespace NYql {
 

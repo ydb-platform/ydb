@@ -14,7 +14,7 @@ void TDSAccessorSimple::OnConstructSnapshotError(const TString& errorMessage) {
 }
 
 void TDSAccessorSimple::OnBootstrap() {
-    Become(&TDSAccessorSimple::StateMain);
+    UnsafeBecome(&TDSAccessorSimple::StateMain);
     InputController = std::make_shared<TInputController>(SelfId());
     for (auto&& i : SnapshotConstructor->GetManagers()) {
         PathesInCheck.emplace(i->GetStorageTablePath());

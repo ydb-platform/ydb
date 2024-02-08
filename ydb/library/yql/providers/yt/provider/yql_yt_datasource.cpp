@@ -10,6 +10,7 @@
 #include <ydb/library/yql/providers/result/expr_nodes/yql_res_expr_nodes.h>
 #include <ydb/library/yql/providers/yt/common/yql_names.h>
 #include <ydb/library/yql/providers/yt/common/yql_configuration.h>
+#include <ydb/library/yql/providers/yt/lib/schema/schema.h>
 #include <ydb/library/yql/providers/common/provider/yql_provider_names.h>
 #include <ydb/library/yql/providers/common/provider/yql_provider.h>
 #include <ydb/library/yql/providers/common/provider/yql_data_provider_impl.h>
@@ -216,7 +217,9 @@ public:
     }
 
     void PostRewriteIO() final {
-        State_->TablesData->CleanupCompiledSQL();
+        if (!State_->Types->EvaluationInProgress) {
+            State_->TablesData->CleanupCompiledSQL();
+        }
     }
 
     void Reset() final {
@@ -431,6 +434,15 @@ public:
         else {
             writer.OnStringScalar("(tmp)");
         }
+    }
+
+    bool WriteSchemaHeader(NYson::TYsonWriter& writer) override {
+        writer.OnKeyedItem("YtSchema");
+        return true;
+    }
+
+    void WriteTypeDetails(NYson::TYsonWriter& writer, const TTypeAnnotationNode& type) override {
+        writer.OnStringScalar(GetTypeV3String(type));
     }
 
     ITrackableNodeProcessor& GetTrackableNodeProcessor() override {
@@ -661,6 +673,7 @@ private:
 
             if (tableDesc.View) {
                 auto root = tableDesc.View->CompiledSql;
+                YQL_ENSURE(root);
                 if (readNode.World().Ref().Type() != TExprNode::World) {
                     // Inject original Read! dependencies
                     auto status = OptimizeExpr(root, root, [&readNode](const TExprNode::TPtr& node, TExprContext& ctx) {

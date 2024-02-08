@@ -13,7 +13,7 @@
 #include <ydb/library/yql/utils/log/log.h>
 #include <ydb/library/yql/public/issue/yql_issue_message.h>
 
-#include <library/cpp/actors/core/hfunc.h>
+#include <ydb/library/actors/core/hfunc.h>
 #include <library/cpp/protobuf/util/pb_io.h>
 
 #include <ydb/library/yql/utils/failure_injector/failure_injector.h>
@@ -242,8 +242,8 @@ private:
         Timeout = tasks.size() == 1
             ? TDuration::MilliSeconds(Settings->_LiteralTimeout.Get().GetOrElse(TDqSettings::TDefault::LiteralTimeout))
             : TDuration::MilliSeconds(Settings->_TableTimeout.Get().GetOrElse(TDqSettings::TDefault::TableTimeout));
-        
-        YQL_CLOG(DEBUG, ProviderDq) << "Dq timeouts are set to: " 
+
+        YQL_CLOG(DEBUG, ProviderDq) << "Dq timeouts are set to: "
             << ToString(Timeout) << " (global), "
             << ToString(WorkersAllocationFailTimeout) << " (workers allocation fail), "
             << ToString(WorkersAllocationWarnTimeout) << " (workers allocation warn) ";

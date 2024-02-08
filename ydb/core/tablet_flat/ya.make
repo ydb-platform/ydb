@@ -41,9 +41,12 @@ SRCS(
     flat_sausagecache.cpp
     flat_sausagecache.h
     flat_sausage_meta.cpp
+    flat_part_charge_create.cpp
+    flat_part_charge_range.cpp
     flat_page_label.cpp
     flat_part_dump.cpp
     flat_part_iter_multi.cpp
+    flat_part_index_iter_create.cpp
     flat_part_loader.cpp
     flat_part_overlay.cpp
     flat_part_outset.cpp
@@ -59,6 +62,8 @@ SRCS(
     flat_table_part.cpp
     flat_table_part.h
     flat_table_misc.cpp
+    flat_table_observer.cpp
+    flat_table_observer.h
     flat_update_op.h
     probes.cpp
     shared_handle.cpp
@@ -88,7 +93,7 @@ ENDIF()
 
 PEERDIR(
     contrib/libs/protobuf
-    library/cpp/actors/util
+    ydb/library/actors/util
     library/cpp/containers/absl_flat_hash
     library/cpp/containers/intrusive_rb_tree
     library/cpp/containers/stack_vector

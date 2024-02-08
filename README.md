@@ -7,14 +7,14 @@
 ## YDB
 
 [Website](https://ydb.tech) |
-[Documentation](https://ydb.tech/en/docs) |
+[Documentation](https://ydb.tech/docs/en/) |
 [Official Repository](https://github.com/ydb-platform/ydb) |
 [Blog](https://blog-redirect.ydb.tech) |
 [YouTube](https://www.youtube.com/c/YDBPlatform) |
 [Discord](https://discord.gg/R5MvZTESWc) |
 [Telegram](https://t.me/ydb_en) |
 [LinkedIn](https://www.linkedin.com/company/ydb-platform) |
-[X](https://x.com/YDBPlatform) 
+[X](https://x.com/YDBPlatform)
 
 YDB is an open source Distributed SQL Database that combines high availability and scalability with strict consistency and ACID transactions.
 
@@ -71,7 +71,6 @@ For development purposes we test that YDB could be built and run under latest ve
 1. Run available [example application](https://ydb.tech/en/docs/reference/ydb-sdk/example/go/).
 1. Develop an application using [YDB SDK](https://ydb.tech/en/docs/reference/ydb-sdk/).
 
-
 ## How to Build from Source Code
 * Build server (ydbd) and client (ydb) binaries [from source code](BUILD.md).
 
@@ -91,3 +90,4 @@ We are glad to welcome new contributors!
 ## Success Stories
 
 Take a look at YDB [web site](https://ydb.tech/) for the latest success stories and user scenarios.
+

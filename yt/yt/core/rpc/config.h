@@ -90,6 +90,40 @@ DEFINE_REFCOUNTED_TYPE(TServerConfig)
 
 ////////////////////////////////////////////////////////////////////////////////
 
+// Common options shared between all services in one server.
+class TServiceCommonDynamicConfig
+    : public NYTree::TYsonStruct
+{
+public:
+    std::optional<bool> EnablePerUserProfiling;
+    std::optional<THistogramConfigPtr> HistogramTimerProfiling;
+    std::optional<bool> EnableErrorCodeCounting;
+    std::optional<ERequestTracingMode> TracingMode;
+
+    REGISTER_YSON_STRUCT(TServiceCommonDynamicConfig);
+
+    static void Register(TRegistrar registrar);
+};
+
+DEFINE_REFCOUNTED_TYPE(TServiceCommonDynamicConfig)
+
+////////////////////////////////////////////////////////////////////////////////
+
+class TServerDynamicConfig
+    : public TServiceCommonDynamicConfig
+{
+public:
+    THashMap<TString, NYTree::INodePtr> Services;
+
+    REGISTER_YSON_STRUCT(TServerDynamicConfig);
+
+    static void Register(TRegistrar registrar);
+};
+
+DEFINE_REFCOUNTED_TYPE(TServerDynamicConfig)
+
+////////////////////////////////////////////////////////////////////////////////
+
 class TServiceConfig
     : public NYTree::TYsonStruct
 {
@@ -229,6 +263,8 @@ public:
     //! If you want to set bigger values, you must also increase MaxPeerCount to accommodate more peers.
     int MinPeerCountForPriorityAwareness;
 
+    bool EnablePowerOfTwoChoicesStrategy;
+
     REGISTER_YSON_STRUCT(TViablePeerRegistryConfig);
 
     static void Register(TRegistrar registrar);
@@ -291,6 +327,11 @@ public:
     //! First option: static list of addresses.
     std::optional<std::vector<TString>> Addresses;
 
+    //! Disables discovery and balancing when just one address is given.
+    //! This is vital for jobs since node's redirector is incapable of handling
+    //! discover requests properly.
+    bool DisableBalancingOnSingleAddress;
+
     //! Second option: SD endpoints.
     TServiceDiscoveryEndpointsConfigPtr Endpoints;
 
@@ -347,8 +388,16 @@ public:
     //! For how long responses are kept in memory.
     TDuration ExpirationTime;
 
+    //! How often an eviction tick is initiated. Eviction drops old responses
+    //! that need no longer be kept in memory.
+    TDuration EvictionPeriod;
+
     //! Maximum time an eviction tick can spend.
     TDuration MaxEvictionTickTime;
+
+    //! The number of responses to evict between checking whether the tick is
+    //! taking too long (longer than MaxEvictionTickTime).
+    int EvictionTickTimeCheckPeriod;
 
     //! If |true| then initial warmup is enabled. In particular, #WarmupTime and #ExpirationTime are
     //! checked against each other. If |false| then initial warmup is disabled and #WarmupTime is ignored.

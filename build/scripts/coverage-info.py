@@ -49,7 +49,7 @@ def recast(in_file, out_file, probe_path, update_stat):
             if line.startswith('TN:'):
                 output.write(line + '\n')
             elif line.startswith(PREFIX):
-                path = line[len(PREFIX):]
+                path = line[len(PREFIX) :]
                 probed_path = probe_path(path)
                 if probed_path:
                     output.write(PREFIX + probed_path + '\n')
@@ -72,16 +72,28 @@ def print_stat(da, fnda, teamcity_stat_output):
     func_total = len(fnda.values())
     func_coverage = 100.0 * func_hit / func_total if func_total else 0
 
-    print >>sys.stderr, '[[imp]]Lines[[rst]]     {: >16} {: >16} {: >16.1f}%'.format(lines_hit, lines_total, lines_coverage)
-    print >>sys.stderr, '[[imp]]Functions[[rst]] {: >16} {: >16} {: >16.1f}%'.format(func_hit, func_total, func_coverage)
+    print >> sys.stderr, '[[imp]]Lines[[rst]]     {: >16} {: >16} {: >16.1f}%'.format(
+        lines_hit, lines_total, lines_coverage
+    )
+    print >> sys.stderr, '[[imp]]Functions[[rst]] {: >16} {: >16} {: >16.1f}%'.format(
+        func_hit, func_total, func_coverage
+    )
 
     if teamcity_stat_output:
         with open(teamcity_stat_output, 'w') as tc_file:
             tc_file.write("##teamcity[blockOpened name='Code Coverage Summary']\n")
-            tc_file.write("##teamcity[buildStatisticValue key=\'CodeCoverageAbsLTotal\' value='{}']\n".format(lines_total))
-            tc_file.write("##teamcity[buildStatisticValue key=\'CodeCoverageAbsLCovered\' value='{}']\n".format(lines_hit))
-            tc_file.write("##teamcity[buildStatisticValue key=\'CodeCoverageAbsMTotal\' value='{}']\n".format(func_total))
-            tc_file.write("##teamcity[buildStatisticValue key=\'CodeCoverageAbsMCovered\' value='{}']\n".format(func_hit))
+            tc_file.write(
+                "##teamcity[buildStatisticValue key=\'CodeCoverageAbsLTotal\' value='{}']\n".format(lines_total)
+            )
+            tc_file.write(
+                "##teamcity[buildStatisticValue key=\'CodeCoverageAbsLCovered\' value='{}']\n".format(lines_hit)
+            )
+            tc_file.write(
+                "##teamcity[buildStatisticValue key=\'CodeCoverageAbsMTotal\' value='{}']\n".format(func_total)
+            )
+            tc_file.write(
+                "##teamcity[buildStatisticValue key=\'CodeCoverageAbsMCovered\' value='{}']\n".format(func_hit)
+            )
             tc_file.write("##teamcity[blockClosed name='Code Coverage Summary']\n")
 
 
@@ -93,7 +105,7 @@ def chunks(l, n):
     [[0, 1, 2, 3, 4], [5, 6, 7, 8, 9]]
     """
     for i in xrange(0, len(l), n):
-        yield l[i:i + n]
+        yield l[i : i + n]
 
 
 def combine_info_files(lcov, files, out_file):
@@ -107,7 +119,7 @@ def combine_info_files(lcov, files, out_file):
         for trace in chunk:
             assert os.path.exists(trace), "Trace file does not exist: {} (cwd={})".format(trace, os.getcwd())
             combine_cmd += ["-a", os.path.abspath(trace)]
-        print >>sys.stderr, '## lcov', ' '.join(combine_cmd[1:])
+        print >> sys.stderr, '## lcov', ' '.join(combine_cmd[1:])
         out_file_tmp = "combined.tmp"
         with open(out_file_tmp, "w") as stdout:
             subprocess.check_call(combine_cmd, stdout=stdout)
@@ -121,7 +133,9 @@ def probe_path_global(path, source_root, prefix_filter, exclude_files):
         return None
 
     for suff in reversed(list(suffixes(path))):
-        if (not prefix_filter or suff.startswith(prefix_filter)) and (not exclude_files or not exclude_files.match(suff)):
+        if (not prefix_filter or suff.startswith(prefix_filter)) and (
+            not exclude_files or not exclude_files.match(suff)
+        ):
             full_path = source_root + os.sep + suff
             if os.path.isfile(full_path):
                 return full_path
@@ -131,11 +145,11 @@ def probe_path_global(path, source_root, prefix_filter, exclude_files):
 
 def update_stat_global(src_file, line, fnda, da):
     if line.startswith("FNDA:"):
-        visits, func_name = line[len("FNDA:"):].split(',')
+        visits, func_name = line[len("FNDA:") :].split(',')
         fnda[src_file + func_name] += int(visits)
 
     if line.startswith("DA"):
-        line_number, visits = line[len("DA:"):].split(',')
+        line_number, visits = line[len("DA:") :].split(',')
         if visits == '=====':
             visits = 0
 
@@ -143,25 +157,29 @@ def update_stat_global(src_file, line, fnda, da):
 
 
 def gen_info_global(cmd, cov_info, probe_path, update_stat, lcov_args):
-    print >>sys.stderr, '## geninfo', ' '.join(cmd)
+    print >> sys.stderr, '## geninfo', ' '.join(cmd)
     subprocess.check_call(cmd)
     if recast(cov_info + '.tmp', cov_info, probe_path, update_stat):
         lcov_args.append(cov_info)
 
 
-def init_all_coverage_files(gcno_archive, fname2gcno, fname2info, geninfo_executable, gcov_tool, gen_info, prefix_filter, exclude_files):
+def init_all_coverage_files(
+    gcno_archive, fname2gcno, fname2info, geninfo_executable, gcov_tool, gen_info, prefix_filter, exclude_files
+):
     with tarfile.open(gcno_archive) as gcno_tf:
         for gcno_item in gcno_tf:
             if gcno_item.isfile() and gcno_item.name.endswith(GCNO_EXT):
                 gcno_tf.extract(gcno_item)
 
                 gcno_name = gcno_item.name
-                source_fname = gcno_name[:-len(GCNO_EXT)]
+                source_fname = gcno_name[: -len(GCNO_EXT)]
                 if prefix_filter and not source_fname.startswith(prefix_filter):
                     sys.stderr.write("Skipping {} (doesn't match prefix '{}')\n".format(source_fname, prefix_filter))
                     continue
                 if exclude_files and exclude_files.search(source_fname):
-                    sys.stderr.write("Skipping {} (matched exclude pattern '{}')\n".format(source_fname, exclude_files.pattern))
+                    sys.stderr.write(
+                        "Skipping {} (matched exclude pattern '{}')\n".format(source_fname, exclude_files.pattern)
+                    )
                     continue
 
                 fname2gcno[source_fname] = gcno_name
@@ -171,9 +189,12 @@ def init_all_coverage_files(gcno_archive, fname2gcno, fname2info, geninfo_execut
                     fname2info[source_fname].append(coverage_info)
                     geninfo_cmd = [
                         geninfo_executable,
-                        '--gcov-tool', gcov_tool,
-                        '-i', gcno_name,
-                        '-o', coverage_info + '.tmp'
+                        '--gcov-tool',
+                        gcov_tool,
+                        '-i',
+                        gcno_name,
+                        '-o',
+                        coverage_info + '.tmp',
                     ]
                     gen_info(geninfo_cmd, coverage_info)
 
@@ -183,7 +204,7 @@ def process_all_coverage_files(gcda_archive, fname2gcno, fname2info, geninfo_exe
         for gcda_item in gcda_tf:
             if gcda_item.isfile() and gcda_item.name.endswith(GCDA_EXT):
                 gcda_name = gcda_item.name
-                source_fname = gcda_name[:-len(GCDA_EXT)]
+                source_fname = gcda_name[: -len(GCDA_EXT)]
                 for suff in suffixes(source_fname):
                     if suff in fname2gcno:
                         gcda_new_name = suff + GCDA_EXT
@@ -194,27 +215,38 @@ def process_all_coverage_files(gcda_archive, fname2gcno, fname2info, geninfo_exe
                             fname2info[suff].append(coverage_info)
                             geninfo_cmd = [
                                 geninfo_executable,
-                                '--gcov-tool', gcov_tool,
+                                '--gcov-tool',
+                                gcov_tool,
                                 gcda_new_name,
-                                '-o', coverage_info + '.tmp'
+                                '-o',
+                                coverage_info + '.tmp',
                             ]
                             gen_info(geninfo_cmd, coverage_info)
 
 
 def gen_cobertura(tool, output, combined_info):
-    cmd = [
-        tool,
-        combined_info,
-        '-b', '#hamster#',
-        '-o', output
-    ]
+    cmd = [tool, combined_info, '-b', '#hamster#', '-o', output]
     p = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
     out, err = p.communicate()
     if p.returncode:
-        raise Exception('lcov_cobertura failed with exit code {}\nstdout: {}\nstderr: {}'.format(p.returncode, out, err))
+        raise Exception(
+            'lcov_cobertura failed with exit code {}\nstdout: {}\nstderr: {}'.format(p.returncode, out, err)
+        )
 
 
-def main(source_root, output, gcno_archive, gcda_archive, gcov_tool, prefix_filter, exclude_regexp, teamcity_stat_output, coverage_report_path, gcov_report, lcov_cobertura):
+def main(
+    source_root,
+    output,
+    gcno_archive,
+    gcda_archive,
+    gcov_tool,
+    prefix_filter,
+    exclude_regexp,
+    teamcity_stat_output,
+    coverage_report_path,
+    gcov_report,
+    lcov_cobertura,
+):
     exclude_files = re.compile(exclude_regexp) if exclude_regexp else None
 
     fname2gcno = {}
@@ -234,7 +266,9 @@ def main(source_root, output, gcno_archive, gcda_archive, gcov_tool, prefix_filt
     def gen_info(cmd, cov_info):
         gen_info_global(cmd, cov_info, probe_path, update_stat, lcov_args)
 
-    init_all_coverage_files(gcno_archive, fname2gcno, fname2info, geninfo_executable, gcov_tool, gen_info, prefix_filter, exclude_files)
+    init_all_coverage_files(
+        gcno_archive, fname2gcno, fname2info, geninfo_executable, gcov_tool, gen_info, prefix_filter, exclude_files
+    )
     process_all_coverage_files(gcda_archive, fname2gcno, fname2info, geninfo_executable, gcov_tool, gen_info)
 
     if coverage_report_path:
@@ -253,8 +287,17 @@ def main(source_root, output, gcno_archive, gcda_archive, gcov_tool, prefix_filt
     if lcov_args:
         output_trace = "combined.info"
         combine_info_files(os.path.join(source_root, 'devtools', 'lcov', 'lcov'), lcov_args, output_trace)
-        cmd = [os.path.join(source_root, 'devtools', 'lcov', 'genhtml'), '-p', source_root, '--ignore-errors', 'source', '-o', output_dir, output_trace]
-        print >>sys.stderr, '## genhtml', ' '.join(cmd)
+        cmd = [
+            os.path.join(source_root, 'devtools', 'lcov', 'genhtml'),
+            '-p',
+            source_root,
+            '--ignore-errors',
+            'source',
+            '-o',
+            output_dir,
+            output_trace,
+        ]
+        print >> sys.stderr, '## genhtml', ' '.join(cmd)
         subprocess.check_call(cmd)
         if lcov_cobertura:
             gen_cobertura(lcov_cobertura, gcov_report, output_trace)

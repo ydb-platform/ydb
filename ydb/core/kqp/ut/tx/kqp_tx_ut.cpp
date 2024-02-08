@@ -133,6 +133,7 @@ Y_UNIT_TEST_SUITE(KqpTx) {
         auto value = parser.ColumnParser("Value").GetOptionalString();
 
         auto tx = result.GetTransaction();
+        UNIT_ASSERT(tx->IsActive());
 
         auto params = db.GetParamsBuilder()
             .AddParam("$name")
@@ -146,11 +147,13 @@ Y_UNIT_TEST_SUITE(KqpTx) {
                 (10, $name, 500);
         )"), TTxControl::Tx(*tx).CommitTx(), params).ExtractValueSync();
         UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        UNIT_ASSERT(!result.GetTransaction()->IsActive());
 
         result = session.ExecuteDataQuery(Q_(R"(
             SELECT * FROM `/Root/Test` WHERE Group = 10;
         )"), TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx()).ExtractValueSync();
         UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        UNIT_ASSERT(!result.GetTransaction()->IsActive());
         CompareYson(R"([[[500u];#;[10u];["One"]]])", FormatResultSetYson(result.GetResultSet(0)));
     }
 
@@ -354,12 +357,7 @@ Y_UNIT_TEST_SUITE(KqpTx) {
         }
 
         auto commitResult = tx->Commit().ExtractValueSync();
-        if (kikimr.IsUsingSnapshotReads()) {
-            UNIT_ASSERT_VALUES_EQUAL_C(commitResult.GetStatus(), EStatus::SUCCESS, commitResult.GetIssues().ToString());
-        } else {
-            UNIT_ASSERT_VALUES_EQUAL_C(commitResult.GetStatus(), EStatus::ABORTED, commitResult.GetIssues().ToString());
-            UNIT_ASSERT(HasIssue(commitResult.GetIssues(), NYql::TIssuesIds::KIKIMR_LOCKS_INVALIDATED));
-        }
+        UNIT_ASSERT_VALUES_EQUAL_C(commitResult.GetStatus(), EStatus::SUCCESS, commitResult.GetIssues().ToString());
     }
 
     Y_UNIT_TEST(EmptyTxOnCommit) {

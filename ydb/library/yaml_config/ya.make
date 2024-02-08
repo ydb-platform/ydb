@@ -13,9 +13,9 @@ PEERDIR(
     contrib/libs/openssl
     contrib/libs/protobuf
     contrib/libs/yaml-cpp
-    library/cpp/actors/core
+    ydb/library/actors/core
     library/cpp/protobuf/json
-    library/cpp/yaml/fyamlcpp
+    ydb/library/fyamlcpp
     ydb/core/base
     ydb/core/cms/console/util
     ydb/core/erasure

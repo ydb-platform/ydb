@@ -4,7 +4,7 @@
 
 #include <ydb/library/yql/providers/common/metrics/service_counters.h>
 
-#include <library/cpp/actors/core/actor.h>
+#include <ydb/library/actors/core/actor.h>
 
 namespace NFq {
 

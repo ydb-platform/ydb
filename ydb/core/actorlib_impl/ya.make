@@ -18,8 +18,6 @@ SRCS(
     melancholic_gopher.cpp
     name_service_client_protocol.cpp
     name_service_client_protocol.h
-    node_identifier.cpp
-    node_identifier.h
     proto_ready_actor.h
     read_data_protocol.cpp
     read_data_protocol.h
@@ -31,9 +29,9 @@ SRCS(
 )
 
 PEERDIR(
-    library/cpp/actors/core
-    library/cpp/actors/dnscachelib
-    library/cpp/actors/protos
+    ydb/library/actors/core
+    ydb/library/actors/dnscachelib
+    ydb/library/actors/protos
     library/cpp/containers/stack_vector
     library/cpp/digest/crc32c
     library/cpp/html/pcdata

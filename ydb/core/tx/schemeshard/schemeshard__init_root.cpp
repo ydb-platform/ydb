@@ -396,6 +396,10 @@ struct TSchemeShard::TTxInitTenantSchemeShard : public TSchemeShard::TRwTxBase {
             subdomain->SetAuditSettings(record.GetAuditSettings());
         }
 
+        if (record.HasServerlessComputeResourcesMode()) {
+            subdomain->SetServerlessComputeResourcesMode(record.GetServerlessComputeResourcesMode());
+        }
+
         RegisterShard(db, subdomain, processingParams.GetCoordinators(), TTabletTypes::Coordinator);
         RegisterShard(db, subdomain, processingParams.GetMediators(), TTabletTypes::Mediator);
         RegisterShard(db, subdomain, TVector<ui64>{processingParams.GetSchemeShard()}, TTabletTypes::SchemeShard);
@@ -404,6 +408,12 @@ struct TSchemeShard::TTxInitTenantSchemeShard : public TSchemeShard::TRwTxBase {
         }
         if (processingParams.HasSysViewProcessor()) {
             RegisterShard(db, subdomain, TVector<ui64>{processingParams.GetSysViewProcessor()}, TTabletTypes::SysViewProcessor);
+        }
+        if (processingParams.HasStatisticsAggregator()) {
+            RegisterShard(db, subdomain, TVector<ui64>{processingParams.GetStatisticsAggregator()}, TTabletTypes::StatisticsAggregator);
+        }
+        if (processingParams.HasGraphShard()) {
+            RegisterShard(db, subdomain, TVector<ui64>{processingParams.GetGraphShard()}, TTabletTypes::GraphShard);
         }
 
         subdomain->Initialize(Self->ShardInfos);

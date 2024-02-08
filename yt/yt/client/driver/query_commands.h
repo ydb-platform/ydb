@@ -14,7 +14,9 @@ class TStartQueryCommand
     : public TTypedCommand<NApi::TStartQueryOptions>
 {
 public:
-    TStartQueryCommand();
+    REGISTER_YSON_STRUCT_LITE(TStartQueryCommand);
+
+    static void Register(TRegistrar registrar);
 
 private:
     NQueryTrackerClient::EQueryEngine Engine;
@@ -29,7 +31,9 @@ class TAbortQueryCommand
     : public TTypedCommand<NApi::TAbortQueryOptions>
 {
 public:
-    TAbortQueryCommand();
+    REGISTER_YSON_STRUCT_LITE(TAbortQueryCommand);
+
+    static void Register(TRegistrar registrar);
 
 private:
     NQueryTrackerClient::TQueryId QueryId;
@@ -43,7 +47,9 @@ class TGetQueryResultCommand
     : public TTypedCommand<NApi::TGetQueryResultOptions>
 {
 public:
-    TGetQueryResultCommand();
+    REGISTER_YSON_STRUCT_LITE(TGetQueryResultCommand);
+
+    static void Register(TRegistrar registrar);
 
 private:
     NQueryTrackerClient::TQueryId QueryId;
@@ -58,7 +64,9 @@ class TReadQueryResultCommand
     : public TTypedCommand<NApi::TReadQueryResultOptions>
 {
 public:
-    TReadQueryResultCommand();
+    REGISTER_YSON_STRUCT_LITE(TReadQueryResultCommand);
+
+    static void Register(TRegistrar registrar);
 
 private:
     NQueryTrackerClient::TQueryId QueryId;
@@ -73,7 +81,9 @@ class TGetQueryCommand
     : public TTypedCommand<NApi::TGetQueryOptions>
 {
 public:
-    TGetQueryCommand();
+    REGISTER_YSON_STRUCT_LITE(TGetQueryCommand);
+
+    static void Register(TRegistrar registrar);
 
 private:
     NQueryTrackerClient::TQueryId QueryId;
@@ -87,7 +97,9 @@ class TListQueriesCommand
     : public TTypedCommand<NApi::TListQueriesOptions>
 {
 public:
-    TListQueriesCommand();
+    REGISTER_YSON_STRUCT_LITE(TListQueriesCommand);
+
+    static void Register(TRegistrar registrar);
 
 private:
     void DoExecute(ICommandContextPtr context) override;
@@ -99,7 +111,9 @@ class TAlterQueryCommand
     : public TTypedCommand<NApi::TAlterQueryOptions>
 {
 public:
-    TAlterQueryCommand();
+    REGISTER_YSON_STRUCT_LITE(TAlterQueryCommand);
+
+    static void Register(TRegistrar registrar);
 
 private:
     NQueryTrackerClient::TQueryId QueryId;

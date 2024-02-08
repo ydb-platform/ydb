@@ -3,7 +3,7 @@
 #include <ydb/core/base/events.h>
 #include <ydb/core/scheme/scheme_pathid.h>
 #include <ydb/core/protos/statistics.pb.h>
-#include <library/cpp/actors/core/events.h>
+#include <ydb/library/actors/core/events.h>
 
 namespace NKikimr {
 namespace NStat {
@@ -44,8 +44,17 @@ struct TEvStatistics {
         EvGetStatisticsFromSS, // deprecated
         EvGetStatisticsFromSSResult, // deprecated
 
-        EvBroadcastStatistics,
-        EvRegisterNode,
+        EvBroadcastStatistics, // deprecated
+        EvRegisterNode, // deprecated
+
+        EvConfigureAggregator,
+
+        EvConnectSchemeShard,
+        EvSchemeShardStats,
+        EvConnectNode,
+        EvRequestStats,
+        EvPropagateStatistics,
+        EvStatisticsIsDisabled,
 
         EvEnd
     };
@@ -58,17 +67,53 @@ struct TEvStatistics {
         bool Success = true;
         std::vector<TResponse> StatResponses;
     };
+    
+    struct TEvConfigureAggregator : public TEventPB<
+        TEvConfigureAggregator,
+        NKikimrStat::TEvConfigureAggregator,
+        EvConfigureAggregator>
+    {
+        TEvConfigureAggregator() = default;
 
-    struct TEvBroadcastStatistics : public TEventPreSerializedPB<
-        TEvBroadcastStatistics,
-        NKikimrStat::TEvBroadcastStatistics,
-        EvBroadcastStatistics>
+        explicit TEvConfigureAggregator(const TString& database) {
+            Record.SetDatabase(database);
+        }
+    };
+
+    struct TEvConnectSchemeShard : public TEventPB<
+        TEvConnectSchemeShard,
+        NKikimrStat::TEvConnectSchemeShard,
+        EvConnectSchemeShard>
     {};
 
-    struct TEvRegisterNode : public TEventPB<
-        TEvRegisterNode,
-        NKikimrStat::TEvRegisterNode,
-        EvRegisterNode>
+    struct TEvSchemeShardStats : public TEventPB<
+        TEvSchemeShardStats,
+        NKikimrStat::TEvSchemeShardStats,
+        EvSchemeShardStats>
+    {};
+
+    struct TEvConnectNode : public TEventPB<
+        TEvConnectNode,
+        NKikimrStat::TEvConnectNode,
+        EvConnectNode>
+    {};
+
+    struct TEvRequestStats : public TEventPB<
+        TEvRequestStats,
+        NKikimrStat::TEvRequestStats,
+        EvRequestStats>
+    {};
+
+    struct TEvPropagateStatistics : public TEventPreSerializedPB<
+        TEvPropagateStatistics,
+        NKikimrStat::TEvPropagateStatistics,
+        EvPropagateStatistics>
+    {};
+
+    struct TEvStatisticsIsDisabled : public TEventPB<
+        TEvStatisticsIsDisabled,
+        NKikimrStat::TEvStatisticsIsDisabled,
+        EvStatisticsIsDisabled>
     {};
 };
 

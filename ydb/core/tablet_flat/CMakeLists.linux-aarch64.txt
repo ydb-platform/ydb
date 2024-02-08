@@ -60,7 +60,7 @@ target_link_libraries(ydb-core-tablet_flat PUBLIC
   yutil
   tools-enum_parser-enum_serialization_runtime
   contrib-libs-protobuf
-  cpp-actors-util
+  library-actors-util
   cpp-containers-absl_flat_hash
   cpp-containers-intrusive_rb_tree
   cpp-containers-stack_vector
@@ -108,9 +108,12 @@ target_sources(ydb-core-tablet_flat PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/core/tablet_flat/flat_mem_warm.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/tablet_flat/flat_sausagecache.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/tablet_flat/flat_sausage_meta.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/tablet_flat/flat_part_charge_create.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/tablet_flat/flat_part_charge_range.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/tablet_flat/flat_page_label.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/tablet_flat/flat_part_dump.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/tablet_flat/flat_part_iter_multi.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/tablet_flat/flat_part_index_iter_create.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/tablet_flat/flat_part_loader.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/tablet_flat/flat_part_overlay.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/tablet_flat/flat_part_outset.cpp
@@ -122,6 +125,7 @@ target_sources(ydb-core-tablet_flat PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/core/tablet_flat/flat_table.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/tablet_flat/flat_table_part.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/tablet_flat/flat_table_misc.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/tablet_flat/flat_table_observer.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/tablet_flat/probes.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/tablet_flat/shared_handle.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/tablet_flat/shared_sausagecache.cpp

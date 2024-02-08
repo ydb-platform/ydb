@@ -241,7 +241,10 @@ struct TDefaultArgsPolicy {
     static constexpr std::array<bool, 0> IsFixedArg = {};
 };
 
+Y_PRAGMA_DIAGNOSTIC_PUSH
+Y_PRAGMA("GCC diagnostic ignored \"-Wreturn-type-c-linkage\"")
 extern "C" TPgKernelState& GetPGKernelState(arrow::compute::KernelContext* ctx);
+Y_PRAGMA_DIAGNOSTIC_POP
 
 template <typename TFunc, bool IsStrict, bool IsFixedResult, typename TArgsPolicy = TDefaultArgsPolicy>
 struct TGenericExec {
@@ -1299,3 +1302,4 @@ TExecFunc FindExec(Oid oid);
 const NPg::TAggregateDesc& ResolveAggregation(const TString& name, NKikimr::NMiniKQL::TTupleType* tupleType, const std::vector<ui32>& argsColumns, NKikimr::NMiniKQL::TType* returnType);
 
 }
+

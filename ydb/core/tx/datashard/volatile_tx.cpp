@@ -164,6 +164,11 @@ namespace NKikimr::NDataShard {
             Y_ABORT_UNLESS(info && info->State == EVolatileTxState::Aborting);
             Y_ABORT_UNLESS(info->AddCommitted);
 
+            for (auto& ev : info->DelayedAcks) {
+                TActivationContext::Send(ev.Release());
+            }
+            info->DelayedAcks.clear();
+
             // Make a copy since it will disappear soon
             auto commitTxIds = info->CommitTxIds;
 
@@ -572,6 +577,9 @@ namespace NKikimr::NDataShard {
 
         NIceDb::TNiceDb db(txc.DB);
 
+        for (ui64 shardId : info->DelayedConfirmations) {
+            db.Table<Schema::TxVolatileParticipants>().Key(info->TxId, shardId).Delete();
+        }
         for (ui64 shardId : info->Participants) {
             db.Table<Schema::TxVolatileParticipants>().Key(info->TxId, shardId).Delete();
             Self->RemoveExpectation(shardId, info->TxId);
@@ -590,11 +598,19 @@ namespace NKikimr::NDataShard {
 
         UnblockWaitingRemovalOperations(info);
 
+        TRowVersion prevUncertain = GetMinUncertainVersion();
+
         for (ui64 commitTxId : info->CommitTxIds) {
             VolatileTxByCommitTxId.erase(commitTxId);
         }
         VolatileTxByVersion.erase(info);
         VolatileTxs.erase(txId);
+
+        if (prevUncertain < GetMinUncertainVersion()) {
+            Self->PromoteFollowerReadEdge();
+        }
+
+        Self->EmitHeartbeats();
 
         if (!WaitingSnapshotEvents.empty()) {
             TVolatileTxInfo* next = !VolatileTxByVersion.empty() ? *VolatileTxByVersion.begin() : nullptr;
@@ -702,8 +718,9 @@ namespace NKikimr::NDataShard {
         RemoveFromCommitOrder(info);
     }
 
-    void TVolatileTxManager::ProcessReadSet(
+    bool TVolatileTxManager::ProcessReadSet(
             const TEvTxProcessing::TEvReadSet& rs,
+            THolder<IEventHandle>&& ack,
             TTransactionContext& txc)
     {
         using Schema = TDataShard::Schema;
@@ -714,9 +731,19 @@ namespace NKikimr::NDataShard {
         auto* info = FindByTxId(txId);
         Y_ABORT_UNLESS(info, "ProcessReadSet called for an unknown volatile tx");
 
-        if (info->State != EVolatileTxState::Waiting) {
-            // Transaction is already decided
-            return;
+        switch (info->State) {
+            case EVolatileTxState::Waiting:
+                break;
+
+            case EVolatileTxState::Committed:
+                // We may ack normally, since committed state is persistent
+                return true;
+
+            case EVolatileTxState::Aborting:
+                // Aborting state will not change as long as we're still leader
+                return true;
+                // Ack readset normally as long as we're still a leader
+                return true;
         }
 
         ui64 srcTabletId = record.GetTabletSource();
@@ -725,12 +752,17 @@ namespace NKikimr::NDataShard {
         if (dstTabletId != Self->TabletID()) {
             LOG_WARN_S(*TlsActivationContext, NKikimrServices::TX_DATASHARD,
                 "Unexpected readset from " << srcTabletId << " to " << dstTabletId << " at tablet " << Self->TabletID());
-            return;
+            return true;
         }
 
         if (!info->Participants.contains(srcTabletId)) {
             // We are not waiting for readset from this participant
-            return;
+            if (info->DelayedConfirmations.contains(srcTabletId)) {
+                // Confirmation is delayed, delay this new ack as well
+                info->DelayedAcks.push_back(std::move(ack));
+                return false;
+            }
+            return true;
         }
 
         bool committed = [&]() {
@@ -767,13 +799,15 @@ namespace NKikimr::NDataShard {
 
         if (!committed) {
             AbortWaitingTransaction(info);
-            return;
+            return true;
         }
 
-        info->Participants.erase(srcTabletId);
-
         NIceDb::TNiceDb db(txc.DB);
-        db.Table<Schema::TxVolatileParticipants>().Key(txId, srcTabletId).Delete();
+
+        info->Participants.erase(srcTabletId);
+        info->DelayedAcks.push_back(std::move(ack));
+        info->DelayedConfirmations.insert(srcTabletId);
+
         Self->RemoveExpectation(srcTabletId, txId);
 
         if (info->Participants.empty()) {
@@ -783,6 +817,29 @@ namespace NKikimr::NDataShard {
             info->State = EVolatileTxState::Committed;
             db.Table<Schema::TxVolatileDetails>().Key(txId).Update(
                 NIceDb::TUpdate<Schema::TxVolatileDetails::State>(info->State));
+
+            // Remove all delayed confirmations, since this tx is already writing
+            for (ui64 shardId : info->DelayedConfirmations) {
+                db.Table<Schema::TxVolatileParticipants>().Key(txId, shardId).Delete();
+            }
+            info->DelayedConfirmations.clear();
+
+            // Send delayed acks on commit
+            // TODO: maybe move it into a parameter?
+            struct TDelayedAcksState : public TThrRefBase {
+                TVector<THolder<IEventHandle>> DelayedAcks;
+
+                TDelayedAcksState(TVolatileTxInfo* info)
+                    : DelayedAcks(std::move(info->DelayedAcks))
+                {}
+            };
+            txc.DB.OnCommit([state = MakeIntrusive<TDelayedAcksState>(info)]() {
+                for (auto& ev : state->DelayedAcks) {
+                    TActivationContext::Send(ev.Release());
+                }
+            });
+            info->DelayedAcks.clear();
+
             // We may run callbacks immediately when effects are committed
             if (info->AddCommitted) {
                 RunCommitCallbacks(info);
@@ -791,6 +848,8 @@ namespace NKikimr::NDataShard {
                 AddPendingCommit(txId);
             }
         }
+
+        return false;
     }
 
     void TVolatileTxManager::RunCommitCallbacks(TVolatileTxInfo* info) {

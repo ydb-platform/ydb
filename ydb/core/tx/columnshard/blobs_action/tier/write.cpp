@@ -15,8 +15,8 @@ void TWriteAction::DoSendWriteBlobRequest(const TString& data, const TUnifiedBlo
     ExternalStorageOperator->Execute(evPtr);
 }
 
-void TWriteAction::DoOnExecuteTxAfterWrite(NColumnShard::TColumnShard& /*self*/, NColumnShard::TBlobManagerDb& dbBlobs, const bool success) {
-    if (success) {
+void TWriteAction::DoOnExecuteTxAfterWrite(NColumnShard::TColumnShard& /*self*/, NColumnShard::TBlobManagerDb& dbBlobs, const bool blobsWroteSuccessfully) {
+    if (blobsWroteSuccessfully) {
         for (auto&& i : GetBlobsForWrite()) {
             dbBlobs.RemoveTierDraftBlobId(GetStorageId(), i.first);
         }

@@ -31,6 +31,31 @@ class TProgramBuilder;
 
 namespace NYql::NDq {
 
+enum class EResumeSource : ui32 {
+    Default,
+    ChannelsHandleWork,
+    ChannelsHandleUndeliveredData,
+    ChannelsHandleUndeliveredAck,
+    AsyncPopFinished,
+    CheckpointRegister,
+    CheckpointInject,
+    CABootstrap,
+    CABootstrapWakeup,
+    CAPendingInput,
+    CATakeInput,
+    CASinkFinished,
+    CATransformFinished,
+    CAStart,
+    CAPollAsync,
+    CAPollAsyncNoSpace,
+    CANewAsyncInput,
+    CADataSent,
+    CAPendingOutput,
+    CATaskRunnerCreated,
+
+    Last,
+};
+
 struct IMemoryQuotaManager {
     using TPtr = std::shared_ptr<IMemoryQuotaManager>;
     using TWeakPtr = std::weak_ptr<IMemoryQuotaManager>;
@@ -136,7 +161,7 @@ struct IDqComputeActorAsyncInput {
 // 8. When checkpoint is written into database, checkpoints actor calls IDqComputeActorAsyncOutput::CommitState() to apply all side effects.
 struct IDqComputeActorAsyncOutput {
     struct ICallbacks { // Compute actor
-        virtual void ResumeExecution() = 0;
+        virtual void ResumeExecution(EResumeSource source = EResumeSource::Default) = 0;
         virtual void OnAsyncOutputError(ui64 outputIndex, const TIssues& issues, NYql::NDqProto::StatusIds::StatusCode fatalCode) = 0;
 
         // Checkpointing
@@ -192,6 +217,7 @@ public:
         IMemoryQuotaManager::TPtr MemoryQuotaManager;
         const google::protobuf::Message* SourceSettings = nullptr;  // used only in case if we execute compute actor locally
         TIntrusivePtr<NActors::TProtoArenaHolder> Arena;  // Arena for SourceSettings
+        NWilson::TTraceId TraceId;
     };
 
     struct TSinkArguments {
@@ -222,6 +248,7 @@ public:
         const NKikimr::NMiniKQL::THolderFactory& HolderFactory;
         NKikimr::NMiniKQL::TProgramBuilder& ProgramBuilder;
         std::shared_ptr<NKikimr::NMiniKQL::TScopedAlloc> Alloc;
+        NWilson::TTraceId TraceId;
     };
 
     struct TOutputTransformArguments {

@@ -54,6 +54,7 @@ public:
         , CompressionLevel(compressionLevel)
         , MinBytes(minBytes)
         , Context(ZSTD_createCCtx())
+        , ErrorCode(0)
         , BytesRaw(0)
     {
         Reset();

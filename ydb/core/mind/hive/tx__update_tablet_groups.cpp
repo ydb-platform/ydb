@@ -160,6 +160,9 @@ public:
             ui32 fromGeneration;
             if (channel->History.empty()) {
                 fromGeneration = 0;
+            } else if (channel->History.back().GroupID == group->GetGroupID()) {
+                // We decided to keep the group the same
+                continue;
             } else {
                 needToIncreaseGeneration = true;
                 fromGeneration = tablet->KnownGeneration + 1;
@@ -250,6 +253,9 @@ public:
                         tablet->ChannelProfileNewGroup.reset(channelId);
                     }
                 }
+                for (const TActorId& actor : tablet->ActorsToNotifyOnRestart) {
+                    SideEffects.Send(actor, new TEvPrivate::TEvRestartCancelled(tablet->GetFullTabletId()));
+                }
                 newTabletState = ETabletState::ReadyToWork;
             }
         }
@@ -279,6 +285,7 @@ public:
                 // Use best effort to kill currently running tablet
                 SideEffects.Register(CreateTabletKiller(TabletId, /* nodeId */ 0, tablet->KnownGeneration));
             }
+            SideEffects.Callback([counters = Self->TabletCounters] { counters->Cumulative()[NHive::COUNTER_TABLETS_STORAGE_REASSIGNED].Increment(1); });
         }
         if (needToIncreaseGeneration) {
             tablet->IncreaseGeneration();

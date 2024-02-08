@@ -177,6 +177,7 @@ int main(int argc, char** argv) {
     opts.AddLongOption("disable_pipe", "Disable pipe").NoArgument();
     opts.AddLongOption("log_level", "Log Level");
     opts.AddLongOption("ipv4", "Use ipv4").NoArgument();
+    opts.AddLongOption("enable-spilling", "Enable disk spilling").NoArgument();
 
     ui32 threads = THREAD_PER_NODE;
     TString host;
@@ -265,9 +266,6 @@ int main(int argc, char** argv) {
     backendConfig.SetToken(coordinatorConfig.GetToken());
     backendConfig.SetClusterName(coordinatorConfig.GetClusterName());
 
-    TString fileCacheDir = "./file_cache123";
-    IFileCache::TPtr fileCache = new TFileCache(fileCacheDir, 16000000000L);
-
     Cerr << host + ":" + ToString(ip) << Endl;
 
     TMaybe<ui32> maybeNodeId;
@@ -283,6 +281,9 @@ int main(int argc, char** argv) {
     );
 
     Cerr << "My nodeId: " << nodeId << Endl;
+    TString fileCacheDir = "./file_cache/" + ToString(nodeId);
+    IFileCache::TPtr fileCache = new TFileCache(fileCacheDir, 16000000000L);
+
 
     TString udfsDir = res.GetOrElse("udfs", "");
 
@@ -313,8 +314,8 @@ int main(int argc, char** argv) {
 
         for (auto& m : functionRegistry->GetAllModuleNames()) {
             auto path = *functionRegistry->FindUdfPath(m);
-            Cout << m << '\t' << path << Endl;
             TString objectId = MD5::Calc(path); // Production env uses MD5::File as an Id. For testing purpose we use fast version.
+            Cout << m << '\t' << path << "\t" << objectId << Endl;
             if (!fileCache->Contains(objectId)) {
                 TString newPath = fileCacheDir + "/" + objectId;
                 NFs::Copy(path, newPath);
@@ -388,7 +389,6 @@ int main(int argc, char** argv) {
         NYql::NDqs::TLocalWorkerManagerOptions lwmOptions;
         bool disablePipe = res.Has("disable_pipe");
         NKikimr::NMiniKQL::IStatsRegistryPtr statsRegistry = NKikimr::NMiniKQL::CreateDefaultStatsRegistry();
-
         lwmOptions.Factory = disablePipe
             ? NTaskRunnerProxy::CreateFactory(functionRegistry.Get(), dqCompFactory, dqTaskTransformFactory, patternCache, true)
             : NTaskRunnerProxy::CreatePipeFactory(pfOptions);
@@ -398,30 +398,33 @@ int main(int argc, char** argv) {
         lwmOptions.TaskRunnerInvokerFactory = disablePipe
             ? TTaskRunnerInvokerFactory::TPtr(new NDqs::TTaskRunnerInvokerFactory())
             : TTaskRunnerInvokerFactory::TPtr(new TConcurrentInvokerFactory(2*capacity));
+        YQL_ENSURE(functionRegistry);
         lwmOptions.TaskRunnerActorFactory = disablePipe
-            ? NDq::NTaskRunnerActor::CreateLocalTaskRunnerActorFactory([=](const NDq::TDqTaskSettings& task, NDqProto::EDqStatsMode statsMode, const NDq::TLogFunc& )
+            ? NDq::NTaskRunnerActor::CreateLocalTaskRunnerActorFactory([=](NKikimr::NMiniKQL::TScopedAlloc& alloc, const NDq::TDqTaskSettings& task, NDqProto::EDqStatsMode statsMode, const NDq::TLogFunc& )
                 {
-                    return lwmOptions.Factory->Get(task, statsMode);
+                    return lwmOptions.Factory->Get(alloc, task, statsMode);
                 })
             : NTaskRunnerActor::CreateTaskRunnerActorFactory(lwmOptions.Factory, lwmOptions.TaskRunnerInvokerFactory);
         lwmOptions.ComputeActorOwnsCounters = true;
-        lwmOptions.UseSpilling = true;
+        bool enableSpilling = res.Has("enable-spilling");
         auto resman = NDqs::CreateLocalWorkerManager(lwmOptions);
 
         auto workerManagerActorId = actorSystem->Register(resman);
         actorSystem->RegisterLocalService(MakeWorkerManagerActorID(nodeId), workerManagerActorId);
 
-        auto spillingActor = actorSystem->Register(
-            NDq::CreateDqLocalFileSpillingService(
-                NDq::TFileSpillingServiceConfig{
-                    .Root = "./spilling",
-                    .CleanupOnShutdown = true
-                },
-                MakeIntrusive<NDq::TSpillingCounters>(dqSensors)
-            )
-        );
+        if (enableSpilling) {
+            auto spillingActor = actorSystem->Register(
+                NDq::CreateDqLocalFileSpillingService(
+                    NDq::TFileSpillingServiceConfig{
+                        .Root = "./spilling",
+                        .CleanupOnShutdown = true
+                    },
+                    MakeIntrusive<NDq::TSpillingCounters>(dqSensors)
+                )
+            );
 
-        actorSystem->RegisterLocalService(NDq::MakeDqLocalFileSpillingServiceID(nodeId), spillingActor);
+            actorSystem->RegisterLocalService(NDq::MakeDqLocalFileSpillingServiceID(nodeId), spillingActor);
+        }
 
         auto endFuture = ShouldContinue.GetFuture();
 

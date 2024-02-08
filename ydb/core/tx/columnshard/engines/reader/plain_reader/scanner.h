@@ -40,25 +40,16 @@ private:
     std::map<ui32, std::shared_ptr<IDataSource>> CurrentSegments;
     std::optional<NIndexedReader::TSortableBatchPosition> CurrentStart;
     std::map<ui32, std::shared_ptr<TFetchingInterval>> FetchingIntervals;
-    THashMap<ui32, std::shared_ptr<arrow::RecordBatch>> ReadyIntervals;
+    THashMap<ui32, std::shared_ptr<TPartialReadResult>> ReadyIntervals;
     ui32 SegmentIdxCounter = 0;
     std::vector<TIntervalStat> IntervalStats;
     void DrainSources();
-
+    ui64 InFlightLimit = 1;
+    ui64 ZeroCount = 0;
 public:
 
-    TFetchingPlan GetColumnsFetchingPlan(const bool exclusiveSource) const;
-
     bool IsReverse() const;
-
-    void Abort() {
-        for (auto&& i : FetchingIntervals) {
-            i.second->Abort();
-        }
-        FetchingIntervals.clear();
-        BorderPoints.clear();
-        Y_ABORT_UNLESS(IsFinished());
-    }
+    void Abort();
 
     bool IsFinished() const {
         return BorderPoints.empty() && FetchingIntervals.empty();
@@ -74,7 +65,7 @@ public:
         return sb;
     }
 
-    void OnIntervalResult(const std::shared_ptr<arrow::RecordBatch>& batch, const ui32 intervalIdx, TPlainReadData& reader);
+    void OnIntervalResult(const std::optional<NArrow::TShardedRecordBatch>& batch, const std::shared_ptr<arrow::RecordBatch>& lastPK, const ui32 intervalIdx, TPlainReadData& reader);
 
     TScanHead(std::deque<std::shared_ptr<IDataSource>>&& sources, const std::shared_ptr<TSpecialReadContext>& context);
 

@@ -508,7 +508,7 @@ TSortedConstraintNode::DoGetComplicatedForType(const TTypeAnnotationNode& type, 
 
 const TConstraintWithFieldsNode*
 TSortedConstraintNode::DoGetSimplifiedForType(const TTypeAnnotationNode& type, TExprContext& ctx) const {
-    if (Content_.size() == 1U && Content_.front().first.size() == 1U && Content_.front().first.front().size() == 1U && Content_.front().first.front().front().empty())
+    if (Content_.size() == 1U && Content_.front().first.size() == 1U && Content_.front().first.front().empty())
         return DoGetComplicatedForType(type, ctx);
 
     const auto& rowType = GetSeqItemType(type);
@@ -542,7 +542,8 @@ TSortedConstraintNode::DoGetSimplifiedForType(const TTypeAnnotationNode& type, T
                         ++it;
 
                     if (ssize_t(GetElementsCount(subType)) == std::distance(from, it)) {
-                        *from++ = std::make_pair(TPartOfConstraintBase::TSetType{std::move(prefix)}, from->second);
+                        *from = std::make_pair(TPartOfConstraintBase::TSetType{std::move(prefix)}, from->second);
+                        ++from;
                         it = content.erase(from, it);
                         changed = setChanged = true;
                     }
@@ -1574,7 +1575,7 @@ TPartOfConstraintNode<TOriginalConstraintNode>::GetCommonMapping(const TOriginal
 
 template<class TOriginalConstraintNode>
 void TPartOfConstraintNode<TOriginalConstraintNode>::UniqueMerge(TMapType& output, TMapType&& input) {
-    output.merge(std::move(input));
+    output.merge(input);
     while (!input.empty()) {
         const auto exists = input.extract(input.cbegin());
         auto& target = output[exists.key()];

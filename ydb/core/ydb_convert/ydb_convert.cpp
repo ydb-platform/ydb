@@ -615,8 +615,17 @@ void ConvertMiniKQLValueToYdbValue(const NKikimrMiniKQL::TType& inputType,
             break;
         }
         case NKikimrMiniKQL::ETypeKind::Pg: {
-            const auto& stringRef = inputValue.GetText();
-            output.set_text_value(stringRef.data(), stringRef.size());
+            if (inputValue.GetValueValueCase() == NKikimrMiniKQL::TValue::kNullFlagValue) {
+                output.Setnull_flag_value(::google::protobuf::NULL_VALUE);
+            } else if (inputValue.HasBytes()) {
+                const auto& stringRef = inputValue.GetBytes();
+                output.set_bytes_value(stringRef.data(), stringRef.size());
+            } else if (inputValue.HasText()) {
+                const auto& stringRef = inputValue.GetText();
+                output.set_text_value(stringRef.data(), stringRef.size());
+            } else {
+                Y_ENSURE(false, "malformed pg value");
+            }
             break;
         }
         default: {
@@ -1190,8 +1199,7 @@ bool CellFromProtoVal(NScheme::TTypeInfo type, i32 typmod, const Ydb::Value* vp,
         if (!text.empty()) {
             isText = true;
             auto desc = type.GetTypeDesc();
-            auto id = NPg::PgTypeIdFromTypeDesc(desc);
-            auto res = NPg::PgNativeBinaryFromNativeText(text, id);
+            auto res = NPg::PgNativeBinaryFromNativeText(text, desc);
             if (res.Error) {
                 err = TStringBuilder() << "Invalid text value for "
                     << NPg::PgTypeNameFromTypeDesc(desc) << ": " << *res.Error;

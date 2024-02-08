@@ -40,7 +40,7 @@ TEST(TCompositeCompare, Simple)
     EXPECT_EQ(-1, compare("foo", "fooo"));
     EXPECT_EQ(0, compare("foo", "foo"));
 
-    // Tuple<Int64,Int64> or List<Int64>
+    // Tuple<Int64, Int64> or List<Int64>
     EXPECT_EQ(-1, compare("[1; 2]", "[1; 3]"));
     EXPECT_EQ(1, compare("[1; 3]", "[1; 2]"));
 

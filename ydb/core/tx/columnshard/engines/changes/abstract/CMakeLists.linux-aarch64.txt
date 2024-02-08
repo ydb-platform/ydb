@@ -26,7 +26,6 @@ target_link_libraries(engines-changes-abstract PUBLIC
 )
 target_sources(engines-changes-abstract PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/core/tx/columnshard/engines/changes/abstract/abstract.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/tx/columnshard/engines/changes/abstract/mark.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/tx/columnshard/engines/changes/abstract/compaction_info.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/tx/columnshard/engines/changes/abstract/settings.cpp
 )

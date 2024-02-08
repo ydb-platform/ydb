@@ -1,20 +1,23 @@
 
 ## fast_float number parsing library: 4x faster than strtod
 [![Fuzzing Status](https://oss-fuzz-build-logs.storage.googleapis.com/badges/fast_float.svg)](https://bugs.chromium.org/p/oss-fuzz/issues/list?sort=-opened&can=1&q=proj:fast_float)
-[![VS17-CI](https://github.com/fastfloat/fast_float/actions/workflows/vs17-ci.yml/badge.svg)](https://github.com/fastfloat/fast_float/actions/workflows/vs17-ci.yml)
 [![Ubuntu 22.04 CI (GCC 11)](https://github.com/fastfloat/fast_float/actions/workflows/ubuntu22.yml/badge.svg)](https://github.com/fastfloat/fast_float/actions/workflows/ubuntu22.yml)
 
 The fast_float library provides fast header-only implementations for the C++ from_chars
-functions for `float` and `double` types.  These functions convert ASCII strings representing
-decimal values (e.g., `1.3e10`) into binary types. We provide exact rounding (including
+functions for `float` and `double` types as well as integer types.  These functions convert ASCII strings representing decimal values (e.g., `1.3e10`) into binary types. We provide exact rounding (including
 round to even). In our experience, these `fast_float` functions many times faster than comparable number-parsing functions from existing C++ standard libraries.
 
-Specifically, `fast_float` provides the following two functions with a C++17-like syntax (the library itself only requires C++11):
+Specifically, `fast_float` provides the following two functions to parse floating-point numbers with a C++17-like syntax (the library itself only requires C++11):
 
 ```C++
 from_chars_result from_chars(const char* first, const char* last, float& value, ...);
 from_chars_result from_chars(const char* first, const char* last, double& value, ...);
 ```
+
+You can also parse integer types:
+
+
+
 
 The return type (`from_chars_result`) is defined as the struct:
 ```C++
@@ -55,6 +58,34 @@ int main() {
 }
 ```
 
+You can parse delimited numbers:
+```C++
+  const std::string input =   "234532.3426362,7869234.9823,324562.645";
+  double result;
+  auto answer = fast_float::from_chars(input.data(), input.data()+input.size(), result);
+  if(answer.ec != std::errc()) {
+    // check error
+  }
+  // we have result == 234532.3426362.
+  if(answer.ptr[0] != ',') {
+    // unexpected delimiter
+  }
+  answer = fast_float::from_chars(answer.ptr + 1, input.data()+input.size(), result);
+  if(answer.ec != std::errc()) {
+    // check error
+  }
+  // we have result == 7869234.9823.
+  if(answer.ptr[0] != ',') {
+    // unexpected delimiter
+  }
+  answer = fast_float::from_chars(answer.ptr + 1, input.data()+input.size(), result);
+  if(answer.ec != std::errc()) {
+    // check error
+  }
+  // we have result == 324562.645.
+```
+
+
 
 Like the C++17 standard, the `fast_float::from_chars` functions take an optional last argument of
 the type `fast_float::chars_format`. It is a bitset value: we check whether
@@ -75,6 +106,43 @@ Furthermore, we have the following restrictions:
 We support Visual Studio, macOS, Linux, freeBSD. We support big and little endian. We support 32-bit and 64-bit systems.
 
 We assume that the rounding mode is set to nearest (`std::fegetround() == FE_TONEAREST`).
+
+
+## Integer types
+
+You can also parse integer types using different bases (e.g., 2, 10, 16). The following code will
+print the number 22250738585072012 three times:
+
+
+```C++
+  uint64_t i;
+  const char str[] = "22250738585072012";
+  auto answer = fast_float::from_chars(str, str + strlen(str), i);
+  if (answer.ec != std::errc()) {
+    std::cerr << "parsing failure\n";
+    return EXIT_FAILURE;
+  }
+  std::cout << "parsed the number "<< i << std::endl;
+
+  const char binstr[] = "1001111000011001110110111001001010110100111000110001100";
+
+  answer = fast_float::from_chars(binstr, binstr + strlen(binstr), i, 2);
+  if (answer.ec != std::errc()) {
+    std::cerr << "parsing failure\n";
+    return EXIT_FAILURE;
+  }
+  std::cout << "parsed the number "<< i << std::endl;
+
+
+  const char hexstr[] = "4f0cedc95a718c";
+
+  answer = fast_float::from_chars(hexstr, hexstr + strlen(hexstr), i, 16);
+  if (answer.ec != std::errc()) {
+    std::cerr << "parsing failure\n";
+    return EXIT_FAILURE;
+  }
+  std::cout << "parsed the number "<< i << std::endl;
+```
 
 ## C++20: compile-time evaluation (constexpr)
 
@@ -115,7 +183,7 @@ int main() {
 }
 ```
 
-## Using commas as decimal separator
+## Advanced options:  using commas as decimal separator, JSON and Fortran
 
 
 The C++ standard stipulate that `from_chars` has to be locale-independent. In
@@ -140,33 +208,72 @@ int main() {
 }
 ```
 
-You can parse delimited numbers:
+You can also parse Fortran-like inputs:
+
 ```C++
-  const std::string input =   "234532.3426362,7869234.9823,324562.645";
-  double result;
-  auto answer = fast_float::from_chars(input.data(), input.data()+input.size(), result);
-  if(answer.ec != std::errc()) {
-    // check error
-  }
-  // we have result == 234532.3426362.
-  if(answer.ptr[0] != ',') {
-    // unexpected delimiter
-  }
-  answer = fast_float::from_chars(answer.ptr + 1, input.data()+input.size(), result);
-  if(answer.ec != std::errc()) {
-    // check error
-  }
-  // we have result == 7869234.9823.
-  if(answer.ptr[0] != ',') {
-    // unexpected delimiter
-  }
-  answer = fast_float::from_chars(answer.ptr + 1, input.data()+input.size(), result);
-  if(answer.ec != std::errc()) {
-    // check error
-  }
-  // we have result == 324562.645.
+#include "fast_float/fast_float.h"
+#include <iostream>
+
+int main() {
+    const std::string input =  "1d+4";
+    double result;
+    fast_float::parse_options options{ fast_float::chars_format::fortran };
+    auto answer = fast_float::from_chars_advanced(input.data(), input.data()+input.size(), result, options);
+    if((answer.ec != std::errc()) || ((result != 10000))) { std::cerr << "parsing failure\n"; return EXIT_FAILURE; }
+    std::cout << "parsed the number " << result << std::endl;
+    return EXIT_SUCCESS;
+}
 ```
 
+You may also enforce the JSON format ([RFC 8259](https://datatracker.ietf.org/doc/html/rfc8259#section-6)):
+
+
+```C++
+#include "fast_float/fast_float.h"
+#include <iostream>
+
+int main() {
+    const std::string input =  "+.1"; // not valid
+    double result;
+    fast_float::parse_options options{ fast_float::chars_format::json };
+    auto answer = fast_float::from_chars_advanced(input.data(), input.data()+input.size(), result, options);
+    if(answer.ec == std::errc()) { std::cerr << "should have failed\n"; return EXIT_FAILURE; }
+    return EXIT_SUCCESS;
+}
+```
+
+By default the JSON format does not allow `inf`:
+
+```C++
+
+#include "fast_float/fast_float.h"
+#include <iostream>
+
+int main() {
+    const std::string input =  "inf"; // not valid in JSON
+    double result;
+    fast_float::parse_options options{ fast_float::chars_format::json };
+    auto answer = fast_float::from_chars_advanced(input.data(), input.data()+input.size(), result, options);
+    if(answer.ec == std::errc()) { std::cerr << "should have failed\n"; return EXIT_FAILURE; }
+}
+```
+
+
+You can allow it with a non-standard `json_or_infnan` variant:
+
+```C++
+#include "fast_float/fast_float.h"
+#include <iostream>
+
+int main() {
+    const std::string input =  "inf"; // not valid in JSON but we allow it with json_or_infnan
+    double result;
+    fast_float::parse_options options{ fast_float::chars_format::json_or_infnan };
+    auto answer = fast_float::from_chars_advanced(input.data(), input.data()+input.size(), result, options);
+    if(answer.ec != std::errc() || (!std::isinf(result))) { std::cerr << "should have parsed infinity\n"; return EXIT_FAILURE; }
+    return EXIT_SUCCESS;
+}
+``````
 
 ## Relation With Other Work
 
@@ -264,7 +371,7 @@ the command line help.
 
 You may directly download automatically generated single-header files:
 
-https://github.com/fastfloat/fast_float/releases/download/v5.2.0/fast_float.h
+https://github.com/fastfloat/fast_float/releases/download/v6.0.0/fast_float.h
 
 ## Credit
 

@@ -1,6 +1,6 @@
 #pragma once
 
-#include <library/cpp/actors/util/queue_oneone_inplace.h>
+#include <ydb/library/actors/util/queue_oneone_inplace.h>
 #include <library/cpp/monlib/dynamic_counters/counters.h>
 #include <library/cpp/threading/queue/mpsc_read_as_filled.h>
 #include <library/cpp/threading/queue/mpsc_vinfarr_obstructive.h>

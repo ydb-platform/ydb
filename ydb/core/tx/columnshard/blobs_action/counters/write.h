@@ -16,6 +16,8 @@ private:
     NMonitoring::TDynamicCounters::TCounterPtr ReplyBytes;
     NMonitoring::THistogramPtr ReplyDurationByCount;
     NMonitoring::THistogramPtr ReplyDurationBySize;
+    NMonitoring::THistogramPtr WritesBySize;
+    NMonitoring::THistogramPtr VolumeByChunkSize;
 
     NMonitoring::TDynamicCounters::TCounterPtr FailsCount;
     NMonitoring::TDynamicCounters::TCounterPtr FailBytes;
@@ -34,6 +36,8 @@ public:
         ReplyBytes->Add(bytes);
         ReplyDurationByCount->Collect((i64)d.MilliSeconds());
         ReplyDurationBySize->Collect((i64)d.MilliSeconds(), (i64)bytes);
+        WritesBySize->Collect((i64)bytes);
+        VolumeByChunkSize->Collect((i64)bytes, (i64)bytes);
     }
 
     void OnFail(const ui64 bytes, const TDuration d) const {

@@ -89,7 +89,7 @@ class TFakeActor : public NActors::TActor<TFakeActor> {
     struct TAsyncOutputCallbacks : public IDqComputeActorAsyncOutput::ICallbacks {
         explicit TAsyncOutputCallbacks(TFakeActor& parent) : Parent(parent) {}
 
-        void ResumeExecution() override {
+        void ResumeExecution(EResumeSource) override {
             Parent.AsyncOutputPromises.ResumeExecution.SetValue();
             Parent.AsyncOutputPromises.ResumeExecution = NThreading::NewPromise();
         };

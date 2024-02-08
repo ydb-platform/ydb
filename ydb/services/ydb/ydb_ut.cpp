@@ -15,7 +15,7 @@
 #include <ydb/public/api/grpc/draft/dummy.grpc.pb.h>
 #include <ydb/public/api/protos/ydb_table.pb.h>
 
-#include <library/cpp/grpc/client/grpc_client_low.h>
+#include <ydb/library/grpc/client/grpc_client_low.h>
 
 #include <google/protobuf/any.h>
 
@@ -127,13 +127,13 @@ Y_UNIT_TEST_SUITE(TGRpcClientLowTest) {
         bool allDoneOk = false;
 
         {
-            NGrpc::TGRpcClientLow clientLow;
+            NYdbGrpc::TGRpcClientLow clientLow;
             auto connection = clientLow.CreateGRpcServiceConnection<Ydb::Table::V1::TableService>(clientConfig);
 
             Ydb::Table::CreateSessionRequest request;
 
-            NGrpc::TResponseCallback<Ydb::Table::CreateSessionResponse> responseCb =
-                [&allDoneOk](NGrpc::TGrpcStatus&& grpcStatus, Ydb::Table::CreateSessionResponse&& response) -> void {
+            NYdbGrpc::TResponseCallback<Ydb::Table::CreateSessionResponse> responseCb =
+                [&allDoneOk](NYdbGrpc::TGrpcStatus&& grpcStatus, Ydb::Table::CreateSessionResponse&& response) -> void {
                     UNIT_ASSERT(!grpcStatus.InternalError);
                     UNIT_ASSERT(grpcStatus.GRpcStatusCode == 0);
                     auto deferred = response.operation();
@@ -154,15 +154,15 @@ Y_UNIT_TEST_SUITE(TGRpcClientLowTest) {
         bool allDoneOk = false;
 
         {
-            NGrpc::TGRpcClientLow clientLow;
+            NYdbGrpc::TGRpcClientLow clientLow;
             auto connection = clientLow.CreateGRpcServiceConnection<Draft::Dummy::DummyService>(clientConfig);
 
             Draft::Dummy::PingRequest request;
             request.set_copy(true);
             request.set_payload("abc");
 
-            NGrpc::TResponseCallback<Draft::Dummy::PingResponse> responseCb =
-                [&allDoneOk](NGrpc::TGrpcStatus&& grpcStatus, Draft::Dummy::PingResponse&& response) -> void {
+            NYdbGrpc::TResponseCallback<Draft::Dummy::PingResponse> responseCb =
+                [&allDoneOk](NYdbGrpc::TGrpcStatus&& grpcStatus, Draft::Dummy::PingResponse&& response) -> void {
                     UNIT_ASSERT(!grpcStatus.InternalError);
                     UNIT_ASSERT(grpcStatus.GRpcStatusCode == 0);
                     UNIT_ASSERT(response.payload() == "abc");
@@ -183,11 +183,11 @@ Y_UNIT_TEST_SUITE(TGRpcClientLowTest) {
         TString location = TStringBuilder() << "localhost:" << grpc;
         auto clientConfig = NGRpcProxy::TGRpcClientConfig(location);
         auto doTest = [&](const TString& database) {
-            NGrpc::TCallMeta meta;
+            NYdbGrpc::TCallMeta meta;
             meta.Aux.push_back({YDB_AUTH_TICKET_HEADER, "root@builtin"});
             meta.Aux.push_back({YDB_DATABASE_HEADER, database});
 
-            NGrpc::TGRpcClientLow clientLow;
+            NYdbGrpc::TGRpcClientLow clientLow;
             auto connection = clientLow.CreateGRpcServiceConnection<Ydb::Table::V1::TableService>(clientConfig);
 
             Ydb::StatusIds::StatusCode status;
@@ -196,8 +196,8 @@ Y_UNIT_TEST_SUITE(TGRpcClientLowTest) {
             do {
                 auto promise = NThreading::NewPromise<void>();
                 Ydb::Table::CreateSessionRequest request;
-                NGrpc::TResponseCallback<Ydb::Table::CreateSessionResponse> responseCb =
-                    [&status, &gStatus, promise](NGrpc::TGrpcStatus&& grpcStatus, Ydb::Table::CreateSessionResponse&& response)  mutable {
+                NYdbGrpc::TResponseCallback<Ydb::Table::CreateSessionResponse> responseCb =
+                    [&status, &gStatus, promise](NYdbGrpc::TGrpcStatus&& grpcStatus, Ydb::Table::CreateSessionResponse&& response)  mutable {
                         UNIT_ASSERT(!grpcStatus.InternalError);
                         gStatus = grpcStatus.GRpcStatusCode;
                         auto deferred = response.operation();
@@ -225,10 +225,10 @@ Y_UNIT_TEST_SUITE(TGRpcClientLowTest) {
         TString location = TStringBuilder() << "localhost:" << grpc;
         auto clientConfig = NGRpcProxy::TGRpcClientConfig(location);
         auto doTest = [&](const TString& database) {
-            NGrpc::TCallMeta meta;
+            NYdbGrpc::TCallMeta meta;
             meta.Aux.push_back({YDB_DATABASE_HEADER, database});
 
-            NGrpc::TGRpcClientLow clientLow;
+            NYdbGrpc::TGRpcClientLow clientLow;
             auto connection = clientLow.CreateGRpcServiceConnection<Ydb::Table::V1::TableService>(clientConfig);
 
             Ydb::StatusIds::StatusCode status;
@@ -237,8 +237,8 @@ Y_UNIT_TEST_SUITE(TGRpcClientLowTest) {
             do {
                 auto promise = NThreading::NewPromise<void>();
                 Ydb::Table::CreateSessionRequest request;
-                NGrpc::TResponseCallback<Ydb::Table::CreateSessionResponse> responseCb =
-                    [&status, &gStatus, promise](NGrpc::TGrpcStatus&& grpcStatus, Ydb::Table::CreateSessionResponse&& response)  mutable {
+                NYdbGrpc::TResponseCallback<Ydb::Table::CreateSessionResponse> responseCb =
+                    [&status, &gStatus, promise](NYdbGrpc::TGrpcStatus&& grpcStatus, Ydb::Table::CreateSessionResponse&& response)  mutable {
                         UNIT_ASSERT(!grpcStatus.InternalError);
                         gStatus = grpc::StatusCode(grpcStatus.GRpcStatusCode);
                         auto deferred = response.operation();
@@ -265,24 +265,24 @@ Y_UNIT_TEST_SUITE(TGRpcClientLowTest) {
         ui16 grpc = server.GetPort();
         TString location = TStringBuilder() << "localhost:" << grpc;
         auto clientConfig = NGRpcProxy::TGRpcClientConfig(location);
-        NGrpc::TCallMeta meta;
+        NYdbGrpc::TCallMeta meta;
         meta.Aux.push_back({YDB_AUTH_TICKET_HEADER, "root@builtin"});
         {
             using TRequest = Draft::Dummy::PingRequest;
             using TResponse = Draft::Dummy::PingResponse;
-            using TProcessor = typename NGrpc::IStreamRequestReadWriteProcessor<TRequest, TResponse>::TPtr;
-            NGrpc::TGRpcClientLow clientLow;
+            using TProcessor = typename NYdbGrpc::IStreamRequestReadWriteProcessor<TRequest, TResponse>::TPtr;
+            NYdbGrpc::TGRpcClientLow clientLow;
             auto connection = clientLow.CreateGRpcServiceConnection<Draft::Dummy::DummyService>(clientConfig);
 
             auto promise = NThreading::NewPromise<void>();
-            auto finishCb = [promise](NGrpc::TGrpcStatus&& status) mutable {
+            auto finishCb = [promise](NYdbGrpc::TGrpcStatus&& status) mutable {
                 UNIT_ASSERT_EQUAL(status.GRpcStatusCode, grpc::StatusCode::UNAUTHENTICATED);
                 promise.SetValue();
             };
 
             TResponse response;
             auto getReadCb = [finishCb](TProcessor processor) {
-                auto readCb = [finishCb, processor](NGrpc::TGrpcStatus&& status) {
+                auto readCb = [finishCb, processor](NYdbGrpc::TGrpcStatus&& status) {
                     UNIT_ASSERT(status.Ok());
                     processor->Finish(finishCb);
                 };
@@ -290,7 +290,7 @@ Y_UNIT_TEST_SUITE(TGRpcClientLowTest) {
             };
 
             auto lowCallback = [getReadCb, &response]
-                (NGrpc::TGrpcStatus grpcStatus, TProcessor processor) mutable {
+                (NYdbGrpc::TGrpcStatus grpcStatus, TProcessor processor) mutable {
                     UNIT_ASSERT(grpcStatus.Ok());
                     Draft::Dummy::PingRequest request;
                     request.set_copy(true);
@@ -318,18 +318,18 @@ Y_UNIT_TEST_SUITE(TGRpcClientLowTest) {
         ui16 grpc = server.GetPort();
         TString location = TStringBuilder() << "localhost:" << grpc;
         auto clientConfig = NGRpcProxy::TGRpcClientConfig(location);
-        NGrpc::TCallMeta meta;
+        NYdbGrpc::TCallMeta meta;
         meta.Aux.push_back({YDB_AUTH_TICKET_HEADER, "root@builtin"});
         {
             using TRequest = Draft::Dummy::PingRequest;
             using TResponse = Draft::Dummy::PingResponse;
-            using TProcessor = typename NGrpc::IStreamRequestReadWriteProcessor<TRequest, TResponse>::TPtr;
-            NGrpc::TGRpcClientLow clientLow(/* numWorkerThreads = */ 0);
+            using TProcessor = typename NYdbGrpc::IStreamRequestReadWriteProcessor<TRequest, TResponse>::TPtr;
+            NYdbGrpc::TGRpcClientLow clientLow(/* numWorkerThreads = */ 0);
             auto connection = clientLow.CreateGRpcServiceConnection<Draft::Dummy::DummyService>(clientConfig);
 
-            auto promise = NThreading::NewPromise<NGrpc::TGrpcStatus>();
+            auto promise = NThreading::NewPromise<NYdbGrpc::TGrpcStatus>();
             auto lowCallback = [promise]
-                (NGrpc::TGrpcStatus grpcStatus, TProcessor /*processor*/) mutable {
+                (NYdbGrpc::TGrpcStatus grpcStatus, TProcessor /*processor*/) mutable {
                     promise.SetValue(grpcStatus);
                 };
 
@@ -364,13 +364,13 @@ Y_UNIT_TEST_SUITE(TGRpcClientLowTest) {
         const size_t numRequests = 1000;
 
         {
-            NGrpc::TGRpcClientLow clientLow;
+            NYdbGrpc::TGRpcClientLow clientLow;
             auto connection = clientLow.CreateGRpcServiceConnection<Ydb::Table::V1::TableService>(clientConfig);
 
             Ydb::Table::CreateSessionRequest request;
             for (size_t i = 0; i < numRequests; i++) {
-                NGrpc::TResponseCallback<Ydb::Table::CreateSessionResponse> responseCb =
-                    [&okResponseCounter](NGrpc::TGrpcStatus&& grpcStatus, Ydb::Table::CreateSessionResponse&& response) -> void {
+                NYdbGrpc::TResponseCallback<Ydb::Table::CreateSessionResponse> responseCb =
+                    [&okResponseCounter](NYdbGrpc::TGrpcStatus&& grpcStatus, Ydb::Table::CreateSessionResponse&& response) -> void {
                         UNIT_ASSERT(!grpcStatus.InternalError);
                         UNIT_ASSERT(grpcStatus.GRpcStatusCode == 0);
                         auto deferred = response.operation();
@@ -391,7 +391,7 @@ Y_UNIT_TEST_SUITE(TGRpcClientLowTest) {
         auto clientConfig = NGRpcProxy::TGRpcClientConfig(location);
 
         {
-            NGrpc::TGRpcClientLow clientLow;
+            NYdbGrpc::TGRpcClientLow clientLow;
             auto connection = clientLow.CreateGRpcServiceConnection<Ydb::Scheme::V1::SchemeService>(clientConfig);
 
             Ydb::Scheme::MakeDirectoryRequest request;
@@ -399,8 +399,8 @@ Y_UNIT_TEST_SUITE(TGRpcClientLowTest) {
                 "path: \"/Root/TheDirectory\"");
             ::google::protobuf::TextFormat::ParseFromString(scheme, &request);
 
-            NGrpc::TResponseCallback<Ydb::Scheme::MakeDirectoryResponse> responseCb =
-                [](NGrpc::TGrpcStatus&& grpcStatus, Ydb::Scheme::MakeDirectoryResponse&& response) -> void {
+            NYdbGrpc::TResponseCallback<Ydb::Scheme::MakeDirectoryResponse> responseCb =
+                [](NYdbGrpc::TGrpcStatus&& grpcStatus, Ydb::Scheme::MakeDirectoryResponse&& response) -> void {
                     UNIT_ASSERT(!grpcStatus.InternalError);
                     UNIT_ASSERT(grpcStatus.GRpcStatusCode == 0);
                     auto deferred = response.operation();
@@ -410,7 +410,7 @@ Y_UNIT_TEST_SUITE(TGRpcClientLowTest) {
             connection->DoRequest(request, std::move(responseCb), &Ydb::Scheme::V1::SchemeService::Stub::AsyncMakeDirectory);
         }
         {
-            NGrpc::TGRpcClientLow clientLow;
+            NYdbGrpc::TGRpcClientLow clientLow;
             auto connection = clientLow.CreateGRpcServiceConnection<Ydb::Scheme::V1::SchemeService>(clientConfig);
 
             Ydb::Scheme::ModifyPermissionsRequest request;
@@ -422,8 +422,8 @@ Y_UNIT_TEST_SUITE(TGRpcClientLowTest) {
             perm->add_permission_names("ydb.generic.read");
 
 
-            NGrpc::TResponseCallback<Ydb::Scheme::ModifyPermissionsResponse> responseCb =
-                [](NGrpc::TGrpcStatus&& grpcStatus, Ydb::Scheme::ModifyPermissionsResponse&& response) -> void {
+            NYdbGrpc::TResponseCallback<Ydb::Scheme::ModifyPermissionsResponse> responseCb =
+                [](NYdbGrpc::TGrpcStatus&& grpcStatus, Ydb::Scheme::ModifyPermissionsResponse&& response) -> void {
                     UNIT_ASSERT(!grpcStatus.InternalError);
                     UNIT_ASSERT(grpcStatus.GRpcStatusCode == 0);
                     auto deferred = response.operation();
@@ -434,7 +434,7 @@ Y_UNIT_TEST_SUITE(TGRpcClientLowTest) {
             connection->DoRequest(request, std::move(responseCb), &Ydb::Scheme::V1::SchemeService::Stub::AsyncModifyPermissions);
         }
         {
-            NGrpc::TGRpcClientLow clientLow;
+            NYdbGrpc::TGRpcClientLow clientLow;
             auto connection = clientLow.CreateGRpcServiceConnection<Ydb::Scheme::V1::SchemeService>(clientConfig);
 
             Ydb::Scheme::DescribePathRequest request;
@@ -442,8 +442,8 @@ Y_UNIT_TEST_SUITE(TGRpcClientLowTest) {
                 "path: \"/Root/TheDirectory\"");
             ::google::protobuf::TextFormat::ParseFromString(scheme, &request);
 
-            NGrpc::TResponseCallback<Ydb::Scheme::DescribePathResponse> responseCb =
-            [](NGrpc::TGrpcStatus&& grpcStatus, Ydb::Scheme::DescribePathResponse&& response) -> void {
+            NYdbGrpc::TResponseCallback<Ydb::Scheme::DescribePathResponse> responseCb =
+            [](NYdbGrpc::TGrpcStatus&& grpcStatus, Ydb::Scheme::DescribePathResponse&& response) -> void {
                     UNIT_ASSERT(!grpcStatus.InternalError);
                     UNIT_ASSERT(grpcStatus.GRpcStatusCode == 0);
                     auto deferred = response.operation();

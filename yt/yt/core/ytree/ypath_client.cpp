@@ -223,7 +223,12 @@ void TYPathResponse::Deserialize(const TSharedRefArray& message)
             message.Size());
     }
 
-    if (!TryDeserializeBody(message[1])) {
+    // COMPAT(danilalexeev): legacy RPC codecs
+    auto codecId = header.has_codec()
+        ? std::make_optional(CheckedEnumCast<NCompression::ECodec>(header.codec()))
+        : std::nullopt;
+
+    if (!TryDeserializeBody(message[1], codecId)) {
         THROW_ERROR_EXCEPTION(NRpc::EErrorCode::ProtocolError, "Error deserializing response body");
     }
 

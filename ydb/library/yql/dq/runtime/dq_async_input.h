@@ -1,5 +1,6 @@
 #pragma once
 #include "dq_input.h"
+#include "dq_transport.h"
 
 namespace NYql::NDq {
 
@@ -19,7 +20,8 @@ public:
     virtual const TDqAsyncInputBufferStats& GetPushStats() const = 0;
 
     virtual void Push(NKikimr::NMiniKQL::TUnboxedValueBatch&& batch, i64 space) = 0;
-
+    virtual void Push(TDqSerializedBatch&& batch, i64 space) = 0;
+ 
     virtual void Finish() = 0;
 };
 

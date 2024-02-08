@@ -645,6 +645,7 @@ struct v4l2_pix_format {
 #define V4L2_PIX_FMT_NV12_4L4 v4l2_fourcc('V', 'T', '1', '2')   /* 12  Y/CbCr 4:2:0  4x4 tiles */
 #define V4L2_PIX_FMT_NV12_16L16 v4l2_fourcc('H', 'M', '1', '2') /* 12  Y/CbCr 4:2:0 16x16 tiles */
 #define V4L2_PIX_FMT_NV12_32L32 v4l2_fourcc('S', 'T', '1', '2') /* 12  Y/CbCr 4:2:0 32x32 tiles */
+#define V4L2_PIX_FMT_NV15_4L4 v4l2_fourcc('V', 'T', '1', '5') /* 15 Y/CbCr 4:2:0 10-bit 4x4 tiles */
 #define V4L2_PIX_FMT_P010_4L4 v4l2_fourcc('T', '0', '1', '0') /* 12  Y/CbCr 4:2:0 10-bit 4x4 macroblocks */
 #define V4L2_PIX_FMT_NV12_8L128       v4l2_fourcc('A', 'T', '1', '2') /* Y/CbCr 4:2:0 8x128 tiles */
 #define V4L2_PIX_FMT_NV12_10BE_8L128  v4l2_fourcc_be('A', 'X', '1', '2') /* Y/CbCr 4:2:0 10-bit 8x128 tiles */
@@ -731,6 +732,7 @@ struct v4l2_pix_format {
 #define V4L2_PIX_FMT_FWHT_STATELESS     v4l2_fourcc('S', 'F', 'W', 'H') /* Stateless FWHT (vicodec) */
 #define V4L2_PIX_FMT_H264_SLICE v4l2_fourcc('S', '2', '6', '4') /* H264 parsed slices */
 #define V4L2_PIX_FMT_HEVC_SLICE v4l2_fourcc('S', '2', '6', '5') /* HEVC parsed slices */
+#define V4L2_PIX_FMT_AV1_FRAME v4l2_fourcc('A', 'V', '1', 'F') /* AV1 parsed frame */
 #define V4L2_PIX_FMT_SPK      v4l2_fourcc('S', 'P', 'K', '0') /* Sorenson Spark */
 #define V4L2_PIX_FMT_RV30     v4l2_fourcc('R', 'V', '3', '0') /* RealVideo 8 */
 #define V4L2_PIX_FMT_RV40     v4l2_fourcc('R', 'V', '4', '0') /* RealVideo 9 & 10 */
@@ -1776,6 +1778,10 @@ struct v4l2_ext_control {
 		struct v4l2_ctrl_hevc_slice_params *p_hevc_slice_params;
 		struct v4l2_ctrl_hevc_scaling_matrix *p_hevc_scaling_matrix;
 		struct v4l2_ctrl_hevc_decode_params *p_hevc_decode_params;
+		struct v4l2_ctrl_av1_sequence *p_av1_sequence;
+		struct v4l2_ctrl_av1_tile_group_entry *p_av1_tile_group_entry;
+		struct v4l2_ctrl_av1_frame *p_av1_frame;
+		struct v4l2_ctrl_av1_film_grain *p_av1_film_grain;
 		void *ptr;
 	};
 } __attribute__ ((packed));
@@ -1845,6 +1851,11 @@ enum v4l2_ctrl_type {
 	V4L2_CTRL_TYPE_HEVC_SLICE_PARAMS	= 0x0272,
 	V4L2_CTRL_TYPE_HEVC_SCALING_MATRIX	= 0x0273,
 	V4L2_CTRL_TYPE_HEVC_DECODE_PARAMS	= 0x0274,
+
+	V4L2_CTRL_TYPE_AV1_SEQUENCE	    = 0x280,
+	V4L2_CTRL_TYPE_AV1_TILE_GROUP_ENTRY = 0x281,
+	V4L2_CTRL_TYPE_AV1_FRAME	    = 0x282,
+	V4L2_CTRL_TYPE_AV1_FILM_GRAIN	    = 0x283,
 };
 
 /*  Used in the VIDIOC_QUERYCTRL ioctl for querying controls */

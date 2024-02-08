@@ -95,6 +95,8 @@ public:
     NKikimr::NMiniKQL::TRuntimeNode MakeTuple(const TVector<NKikimr::NMiniKQL::TRuntimeNode>& items) const;
 
     NKikimr::NMiniKQL::TRuntimeNode UpdateLambdaCode(TString& code, size_t& nodes, NKikimr::NMiniKQL::TCallableVisitFuncProvider funcProvider);
+    NKikimr::NMiniKQL::TRuntimeNode Deserialize(const TString& code);
+    std::pair<TString, size_t> Serialize(NKikimr::NMiniKQL::TRuntimeNode rootNode);
 
 protected:
     const NKikimr::NMiniKQL::IFunctionRegistry* FunctionRegistry;

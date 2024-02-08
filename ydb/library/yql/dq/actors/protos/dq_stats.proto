@@ -171,13 +171,20 @@ message TDqTaskStats {
     uint64 BuildCpuTimeUs = 103;   // prepare task time: build computation graph, prepare parameters, ...
     uint64 ComputeCpuTimeUs = 102; // compute time only
 
-    repeated TDqDataProviderStats Ingress = 13;
-    repeated TDqDataProviderStats Egress = 14;
+    reserved 13;
+    reserved 14;
 
     uint64 InputRows = 6;
     uint64 InputBytes = 7;
     uint64 OutputRows = 8;
     uint64 OutputBytes = 9;
+    uint64 ResultRows = 20;
+    uint64 ResultBytes = 21;
+
+    uint64 IngressBytes = 16;
+    uint64 IngressRows = 17;
+    uint64 EgressBytes = 18;
+    uint64 EgressRows = 19;
 
     // full stats
     repeated TDqAsyncInputBufferStats Sources = 150;
@@ -201,21 +208,26 @@ message TDqTaskStats {
 
     google.protobuf.Any Extra = 200;
 
-    // to be reviewed
+    // BASIC: StartTs from TR since we don't have better times
+    // FULL+: min(FirstMessageMs) from all Inputs
     uint64 StartTimeMs = 158;
-    uint64 FinishTimeMs = 5;     // task finish time, timestamp in millis
-    uint64 FirstRowTimeMs = 4;   // first row time, timestamp in millis
-    uint64 WaitTimeUs = 104;       // total wait (input + output) wall time
+
+    // always FinishTs from TR
+    uint64 FinishTimeMs = 5;
+
+    reserved 4;   // was FirstRowTimeMs
+    reserved 104;
+    uint64 WaitInputTimeUs = 111;  // wait input wall time  (any input: channels, source, ...)
     uint64 WaitOutputTimeUs = 105; // wait output wall time (any output: channels, sinks, ...)
-    uint64 PendingInputTimeUs = 107; // time waiting input data
-    uint64 PendingOutputTimeUs = 108; // time waiting output data
-    uint64 FinishTimeUs = 109; // time in finished state // ComputeCpuTimeUs + PendingInputTimeUs + PendingOutputTimeUs + FinishTimeUs == 100% (or == const in aggregated graphs for several stages/tasks)
+    reserved 107;
+    reserved 108;
+    reserved 109;
 }
 
 message TDqComputeActorStats {
     // basic stats
     uint64 CpuTimeUs = 1;  // total cpu time: tasks cpu time + self cpu time
-    uint64 DurationUs = 2; // compute actor duration, wall time (from FirstRowTime to FinishTime)
+    uint64 DurationUs = 2; // task.FinishTimeMs - task.StartTimeMs
     repeated TDqTaskStats Tasks = 3; // in the BASIC_MODE only basic fields are used
     uint64 MaxMemoryUsage = 4;
 
@@ -296,13 +308,29 @@ message TDqStageStats {
     TDqStatsAggr InputBytes = 10;
     TDqStatsAggr OutputRows = 11;
     TDqStatsAggr OutputBytes = 12;
+    TDqStatsAggr ResultRows = 26;
+    TDqStatsAggr ResultBytes = 27;
 
-    TDqStatsMinMax FirstRowTimeMs = 13;
-    TDqStatsMinMax FinishTimeMs = 14;
-    TDqStatsMinMax StartTimeMs = 21;
-    uint64 DurationUs = 15; // microseconds from min(task_first_row_time) to max(task_finish_time)
+    TDqStatsAggr IngressBytes = 28;
+    TDqStatsAggr IngressRows = 29;
+    TDqStatsAggr EgressBytes = 30;
+    TDqStatsAggr EgressRows = 31;
 
-    repeated TDqTableAggrStats Tables = 16; // is it required?
+    reserved 13; // FirstRowTimeMs
+    reserved 14; // FinishTimeMs
+    reserved 21; // StartTimeMs
+    uint64 StageDurationUs = 15; // FinishTimeMs.Max - StartTimeMs.Min
+
+    // Sum has no meaning for times and should not be rendered
+    // important metric is Avg = Sum/Cnt
+    TDqStatsAggr FinishTimeMs = 32;
+    TDqStatsAggr StartTimeMs = 33;
+    TDqStatsAggr DurationUs = 34;    // just aggregate over task.DurationUs
+
+    TDqStatsAggr WaitInputTimeUs = 35;
+    TDqStatsAggr WaitOutputTimeUs = 36;
+
+    repeated TDqTableAggrStats Tables = 16;
 
     repeated TDqComputeActorStats ComputeActors = 17; // more detailed stats
     oneof LlvmOptions {
@@ -325,8 +353,9 @@ message TDqExecutionStats {
     uint64 CpuTimeUs = 1;  // total cpu time, executer + compute actors + ...
     uint64 DurationUs = 2; // execution wall time
 
-    uint64 ResultRows = 3;
-    uint64 ResultBytes = 4;
+    // these feilds are never used, needs to be reviewed
+    reserved 3; // uint64 ResultRows = 3;
+    reserved 4; // uint64 ResultBytes = 4;
 
     repeated TDqTableStats Tables = 6;
 

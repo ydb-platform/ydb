@@ -1,7 +1,7 @@
 #include "lock_handle.h"
 #include "events.h"
 
-#include <library/cpp/actors/core/actorsystem.h>
+#include <ydb/library/actors/core/actorsystem.h>
 
 namespace NKikimr {
 namespace NLongTxService {

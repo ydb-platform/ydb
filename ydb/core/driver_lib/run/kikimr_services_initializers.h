@@ -3,7 +3,7 @@
 #include "factories.h"
 #include "service_initializer.h"
 
-#include <library/cpp/actors/util/affinity.h>
+#include <ydb/library/actors/util/affinity.h>
 #include <ydb/core/base/appdata.h>
 #include <ydb/core/base/statestorage.h>
 #include <ydb/core/tablet/tablet_setup.h>
@@ -16,12 +16,12 @@
 
 #include <ydb/core/fq/libs/shared_resources/interface/shared_resources.h>
 
-#include <library/cpp/actors/core/defs.h>
-#include <library/cpp/actors/core/actorsystem.h>
-#include <library/cpp/actors/core/log_settings.h>
-#include <library/cpp/actors/core/scheduler_actor.h>
-#include <library/cpp/actors/core/scheduler_basic.h>
-#include <library/cpp/actors/interconnect/poller_tcp.h>
+#include <ydb/library/actors/core/defs.h>
+#include <ydb/library/actors/core/actorsystem.h>
+#include <ydb/library/actors/core/log_settings.h>
+#include <ydb/library/actors/core/scheduler_actor.h>
+#include <ydb/library/actors/core/scheduler_basic.h>
+#include <ydb/library/actors/interconnect/poller_tcp.h>
 #include <library/cpp/monlib/dynamic_counters/counters.h>
 
 #include <util/generic/vector.h>
@@ -49,8 +49,10 @@ class TBasicServicesInitializer : public IKikimrServicesInitializer {
 
     static ISchedulerThread* CreateScheduler(const NKikimrConfig::TActorSystemConfig::TScheduler &config);
 
+    std::shared_ptr<TModuleFactories> Factories;
+
 public:
-    TBasicServicesInitializer(const TKikimrRunConfig& runConfig);
+    TBasicServicesInitializer(const TKikimrRunConfig& runConfig, std::shared_ptr<TModuleFactories> factories);
 
     void InitializeServices(NActors::TActorSystemSetup *setup, const NKikimr::TAppData *appData) override;
 };
@@ -289,13 +291,6 @@ public:
     void InitializeServices(NActors::TActorSystemSetup *setup, const NKikimr::TAppData *appData) override;
 };
 
-class TNodeIdentifierInitializer : public IKikimrServicesInitializer {
-public:
-    TNodeIdentifierInitializer(const TKikimrRunConfig& runConfig);
-
-    void InitializeServices(NActors::TActorSystemSetup *setup, const NKikimr::TAppData *appData) override;
-};
-
 class TTabletMonitorInitializer : public IKikimrServicesInitializer {
     TIntrusivePtr<NNodeTabletMonitor::ITabletStateClassifier> TabletStateClassifier;
     TIntrusivePtr<NNodeTabletMonitor::ITabletListRenderer> TabletListRenderer;
@@ -351,6 +346,13 @@ public:
 class TPersQueueClusterTrackerInitializer : public IKikimrServicesInitializer {
 public:
     TPersQueueClusterTrackerInitializer(const TKikimrRunConfig& runConfig);
+
+    void InitializeServices(NActors::TActorSystemSetup* setup, const NKikimr::TAppData* appData) override;
+};
+
+class TPersQueueDirectReadCacheInitializer : public IKikimrServicesInitializer {
+public:
+    TPersQueueDirectReadCacheInitializer(const TKikimrRunConfig& runConfig);
 
     void InitializeServices(NActors::TActorSystemSetup* setup, const NKikimr::TAppData* appData) override;
 };
@@ -479,6 +481,7 @@ private:
     TMap<TString, TString> Labels;
     NKikimrConfig::TAppConfig InitialCmsConfig;
     NKikimrConfig::TAppConfig InitialCmsYamlConfig;
+    THashMap<ui32, TConfigItemInfo> ConfigInitInfo;
 };
 
 class TConfigsCacheInitializer : public IKikimrServicesInitializer {
@@ -604,5 +607,13 @@ public:
 
     void InitializeServices(NActors::TActorSystemSetup* setup, const NKikimr::TAppData* appData) override;
 };
+
+class TGraphServiceInitializer : public IKikimrServicesInitializer {
+public:
+    TGraphServiceInitializer(const TKikimrRunConfig& runConfig);
+
+    void InitializeServices(NActors::TActorSystemSetup* setup, const NKikimr::TAppData* appData) override;
+};
+
 } // namespace NKikimrServicesInitializers
 } // namespace NKikimr

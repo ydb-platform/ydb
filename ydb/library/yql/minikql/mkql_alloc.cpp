@@ -37,7 +37,8 @@ void TAllocState::CleanupPAllocList(TListEntry* root) {
     for (auto curr = root->Right; curr != root; ) {
         auto next = curr->Right;
         auto size = ((TMkqlPAllocHeader*)curr)->Size;
-        MKQLFreeWithSize(curr, size, EMemorySubPool::Default); // may free items from OffloadedBlocksRoot
+	auto fullSize = size + sizeof(TMkqlPAllocHeader);
+        MKQLFreeWithSize(curr, fullSize, EMemorySubPool::Default); // may free items from OffloadedBlocksRoot
         curr = next;
     }
 
@@ -193,7 +194,7 @@ void* MKQLAllocSlow(size_t sz, TAllocState* state, const EMemorySubPool mPool) {
 void MKQLFreeSlow(TAllocPageHeader* header, TAllocState *state, const EMemorySubPool mPool) noexcept {
     Y_DEBUG_ABORT_UNLESS(state);
     Y_DEBUG_ABORT_UNLESS(header->MyAlloc == state, "%s", (TStringBuilder() << "wrong allocator was used; "
-        "allocated with: " << header->MyAlloc->GetInfo() << " freed with: " << TlsAllocState->GetInfo()).data());
+        "allocated with: " << header->MyAlloc->GetDebugInfo() << " freed with: " << TlsAllocState->GetDebugInfo()).data());
     state->ReturnBlock(header, header->Capacity);
     if (header == state->CurrentPages[(TMemorySubPoolIdx)mPool]) {
         state->CurrentPages[(TMemorySubPoolIdx)mPool] = &TAllocState::EmptyPageHeader;

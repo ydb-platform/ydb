@@ -59,7 +59,10 @@ public:
     {
         ui16 port = PortManager.GetPort(2134);
         ui16 grpc = PortManager.GetPort(2135);
-        ServerSettings = new TServerSettings(port);
+
+        NKikimrProto::TAuthConfig authConfig = appConfig.GetAuthConfig();
+        authConfig.SetUseBuiltinDomain(true);
+        ServerSettings = new TServerSettings(port, authConfig);
         ServerSettings->SetGrpcPort(grpc);
         ServerSettings->SetLogBackend(logBackend);
         ServerSettings->SetDomainName("Root");
@@ -77,8 +80,7 @@ public:
             ServerSettings->AddStoragePoolType("hdd1");
             ServerSettings->AddStoragePoolType("hdd2");
         }
-        ServerSettings->AppConfig.MergeFrom(appConfig);
-        ServerSettings->AuthConfig = appConfig.GetAuthConfig();
+        ServerSettings->AppConfig->MergeFrom(appConfig);
         ServerSettings->FeatureFlags = appConfig.GetFeatureFlags();
         ServerSettings->SetKqpSettings(kqpSettings);
         ServerSettings->SetEnableDataColumnForIndexTable(true);
@@ -114,13 +116,13 @@ public:
             Server_->GetRuntime()->SetLogPriority(NKikimrServices::YQ_CONTROL_PLANE_PROXY, NActors::NLog::PRI_DEBUG);
         }
 
-        NGrpc::TServerOptions grpcOption;
+        NYdbGrpc::TServerOptions grpcOption;
         if (TestSettings::AUTH) {
             grpcOption.SetUseAuth(true);
         }
         grpcOption.SetPort(grpc);
         if (TestSettings::SSL) {
-            NGrpc::TSslData sslData;
+            NYdbGrpc::TSslData sslData;
             sslData.Cert = TestSettings::GetServerCrt();
             sslData.Key = TestSettings::GetServerKey();
             sslData.Root =TestSettings::GetCaCrt();
@@ -131,7 +133,7 @@ public:
         Server_->EnableGRpc(grpcOption);
 
         TClient annoyingClient(*ServerSettings);
-        if (ServerSettings->AppConfig.GetDomainsConfig().GetSecurityConfig().GetEnforceUserTokenRequirement()) {
+        if (ServerSettings->AppConfig->GetDomainsConfig().GetSecurityConfig().GetEnforceUserTokenRequirement()) {
             annoyingClient.SetSecurityToken("root@builtin");
         }
         annoyingClient.InitRootScheme("Root");

@@ -1,12 +1,12 @@
 #include "tablet_impl.h"
-#include <library/cpp/actors/core/actor_bootstrapped.h>
-#include <library/cpp/actors/core/hfunc.h>
+#include <ydb/library/actors/core/actor_bootstrapped.h>
+#include <ydb/library/actors/core/hfunc.h>
 #include <ydb/core/tablet/tablet_metrics.h>
 #include <util/generic/map.h>
 #include <util/generic/set.h>
 #include <util/string/builder.h>
 
-#include <library/cpp/actors/core/log.h>
+#include <ydb/library/actors/core/log.h>
 #include <ydb/library/services/services.pb.h>
 #include <google/protobuf/text_format.h>
 

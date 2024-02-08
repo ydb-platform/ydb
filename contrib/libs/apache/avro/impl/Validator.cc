@@ -71,7 +71,7 @@ bool Validator::countingSetup() {
 
 void Validator::countingAdvance() {
     if (countingSetup()) {
-        auto index = (compoundStack_.back().pos)++;
+        size_t index = (compoundStack_.back().pos)++;
         const NodePtr &node = compoundStack_.back().node;
 
         if (index < node->leaves()) {

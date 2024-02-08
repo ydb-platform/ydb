@@ -4,7 +4,7 @@ INCLUDE(${ARCADIA_ROOT}/yt/ya_cpp.make.inc)
 
 SRCS(map_ut.cpp)
 
-INCLUDE(${ARCADIA_ROOT}/yt/opensource_tests.inc)
+INCLUDE(${ARCADIA_ROOT}/yt/opensource.inc)
 
 PEERDIR(
     yt/yt/core

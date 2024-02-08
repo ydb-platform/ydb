@@ -25,14 +25,14 @@ namespace Model
    * href="http://docs.aws.amazon.com/goto/WebAPI/s3-2006-03-01/ParquetInput">AWS API
    * Reference</a></p>
    */
-  class AWS_S3_API ParquetInput
+  class ParquetInput
   {
   public:
-    ParquetInput();
-    ParquetInput(const Aws::Utils::Xml::XmlNode& xmlNode);
-    ParquetInput& operator=(const Aws::Utils::Xml::XmlNode& xmlNode);
+    AWS_S3_API ParquetInput();
+    AWS_S3_API ParquetInput(const Aws::Utils::Xml::XmlNode& xmlNode);
+    AWS_S3_API ParquetInput& operator=(const Aws::Utils::Xml::XmlNode& xmlNode);
 
-    void AddToNode(Aws::Utils::Xml::XmlNode& parentNode) const;
+    AWS_S3_API void AddToNode(Aws::Utils::Xml::XmlNode& parentNode) const;
 
   };
 

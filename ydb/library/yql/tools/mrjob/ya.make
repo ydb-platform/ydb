@@ -20,6 +20,11 @@ PEERDIR(
     ydb/library/yql/parser/pg_wrapper
     ydb/library/yql/sql/pg
     ydb/library/yql/providers/yt/job
+    ydb/library/yql/providers/yt/codec/codegen
+    ydb/library/yql/providers/yt/comp_nodes/llvm14
+    ydb/library/yql/minikql/computation/llvm14
+    ydb/library/yql/minikql/invoke_builtins/llvm14
+    ydb/library/yql/minikql/comp_nodes/llvm14
 )
 
 YQL_LAST_ABI_VERSION()

@@ -4,7 +4,7 @@ PEERDIR(
     ydb/core/scheme
     ydb/library/mkql_proto/protos
     ydb/library/yql/dq/actors/protos
-    ydb/library/yql/minikql/computation/llvm
+    ydb/library/yql/minikql/computation
     ydb/library/yql/providers/common/structured_token
     ydb/library/yql/providers/ydb/proto
     ydb/public/lib/experimental

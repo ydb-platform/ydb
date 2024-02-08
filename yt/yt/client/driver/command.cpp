@@ -16,7 +16,6 @@ using namespace NConcurrency;
 
 ////////////////////////////////////////////////////////////////////////////////
 
-
 void ProduceOutput(
     ICommandContextPtr context,
     const std::function<void(IYsonConsumer*)>& producer)
@@ -63,9 +62,9 @@ void ProduceSingleOutput(
 
 ////////////////////////////////////////////////////////////////////////////////
 
-TCommandBase::TCommandBase()
+void TCommandBase::Register(TRegistrar registrar)
 {
-    SetUnrecognizedStrategy(NYTree::EUnrecognizedStrategy::Keep);
+    registrar.UnrecognizedStrategy(NYTree::EUnrecognizedStrategy::Keep);
 }
 
 void TCommandBase::Execute(ICommandContextPtr context)
@@ -99,19 +98,6 @@ void TCommandBase::ProduceResponseParameters(
     if (context->Request().ResponseParametersFinishedCallback) {
         context->Request().ResponseParametersFinishedCallback();
     }
-}
-
-////////////////////////////////////////////////////////////////////////////////
-
-// Keep sync with yt/ytlib/scheduler/helpers.cpp.
-TYPath GetNewOperationPath(TGuid operationId)
-{
-    int hashByte = operationId.Parts32[0] & 0xff;
-    return
-        "//sys/operations/" +
-        Format("%02x", hashByte) +
-        "/" +
-        ToYPathLiteral(ToString(operationId));
 }
 
 ////////////////////////////////////////////////////////////////////////////////

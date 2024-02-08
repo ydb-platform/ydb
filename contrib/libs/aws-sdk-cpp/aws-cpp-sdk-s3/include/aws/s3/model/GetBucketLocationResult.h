@@ -24,12 +24,12 @@ namespace S3
 {
 namespace Model
 {
-  class AWS_S3_API GetBucketLocationResult
+  class GetBucketLocationResult
   {
   public:
-    GetBucketLocationResult();
-    GetBucketLocationResult(const Aws::AmazonWebServiceResult<Aws::Utils::Xml::XmlDocument>& result);
-    GetBucketLocationResult& operator=(const Aws::AmazonWebServiceResult<Aws::Utils::Xml::XmlDocument>& result);
+    AWS_S3_API GetBucketLocationResult();
+    AWS_S3_API GetBucketLocationResult(const Aws::AmazonWebServiceResult<Aws::Utils::Xml::XmlDocument>& result);
+    AWS_S3_API GetBucketLocationResult& operator=(const Aws::AmazonWebServiceResult<Aws::Utils::Xml::XmlDocument>& result);
 
 
     /**

@@ -34,6 +34,7 @@ public:
         auto maintenanceTasksRowset = db.Table<Schema::MaintenanceTasks>().Range().Select<Schema::MaintenanceTasks::TColumns>();
         auto notificationRowset = db.Table<Schema::Notification>().Range().Select<Schema::Notification::TColumns>();
         auto nodeTenantRowset = db.Table<Schema::NodeTenant>().Range().Select<Schema::NodeTenant::TColumns>();
+        auto hostMarkersRowset = db.Table<Schema::HostMarkers>().Range().Select<Schema::HostMarkers::TColumns>();
         auto logRowset = db.Table<Schema::LogRecords>().Range().Select<Schema::LogRecords::Timestamp>();
 
         if (!paramRow.IsReady()
@@ -42,6 +43,7 @@ public:
             || !walleTaskRowset.IsReady()
             || !maintenanceTasksRowset.IsReady()
             || !notificationRowset.IsReady()
+            || !hostMarkersRowset.IsReady()
             || !logRowset.IsReady())
             return false;
 
@@ -81,12 +83,14 @@ public:
             TString id = requestRowset.GetValue<Schema::Request::ID>();
             TString owner = requestRowset.GetValue<Schema::Request::Owner>();
             ui64 order = requestRowset.GetValue<Schema::Request::Order>();
+            i32 priority = requestRowset.GetValueOrDefault<Schema::Request::Priority>();
             TString requestStr = requestRowset.GetValue<Schema::Request::Content>();
 
             TRequestInfo request;
             request.RequestId = id;
             request.Owner = owner;
             request.Order = order;
+            request.Priority = priority;
             google::protobuf::TextFormat::ParseFromString(requestStr, &request.Request);
 
             LOG_DEBUG(ctx, NKikimrServices::CMS, "Loaded request %s owned by %s: %s",
@@ -202,6 +206,16 @@ public:
             state->InitialNodeTenants[nodeId] = tenant;
 
             if (!nodeTenantRowset.Next())
+                return false;
+        }
+
+        while (!hostMarkersRowset.EndOfSet()) {
+            TString host = hostMarkersRowset.GetValue<Schema::HostMarkers::Host>();
+            TVector<NKikimrCms::EMarker> markers = hostMarkersRowset.GetValue<Schema::HostMarkers::Markers>();
+
+            state->HostMarkers[host].insert(markers.begin(), markers.end());
+
+            if (!hostMarkersRowset.Next())
                 return false;
         }
 

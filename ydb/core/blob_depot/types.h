@@ -44,8 +44,14 @@ namespace NKikimr::NBlobDepot {
         friend bool operator > (const TBlobSeqId& x, const TBlobSeqId& y) { return x.AsTuple() >  y.AsTuple(); }
         friend bool operator >=(const TBlobSeqId& x, const TBlobSeqId& y) { return x.AsTuple() >= y.AsTuple(); }
 
+        void Output(IOutputStream& s) const {
+            s << "{" << Channel << ":" << Generation << ":" << Step << ":" << Index << "}";
+        }
+
         TString ToString() const {
-            return TStringBuilder() << "{" << Channel << ":" << Generation << ":" << Step << ":" << Index << "}";
+            TStringStream s;
+            Output(s);
+            return s.Str();
         }
 
         explicit operator bool() const {
@@ -233,6 +239,11 @@ namespace NKikimr::NBlobDepot {
             TStringStream s;
             Output(s);
             return s.Str();
+        }
+
+        TGenStep Previous() const {
+            Y_ABORT_UNLESS(Value);
+            return TGenStep(Value - 1);
         }
 
         friend bool operator ==(const TGenStep& x, const TGenStep& y) { return x.Value == y.Value; }

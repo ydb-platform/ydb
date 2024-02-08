@@ -1,0 +1,60 @@
+{
+    "test_monitoring.TestSolomon.test_pq_read_solomon_write[v1]": [
+        {
+            "labels": [
+                [
+                    "label1",
+                    "key1"
+                ],
+                [
+                    "name",
+                    "sensor1"
+                ]
+            ],
+            "ts": "1970-01-01T00:00:01.000000Z",
+            "value": 1
+        },
+        {
+            "labels": [
+                [
+                    "label1",
+                    "key2"
+                ],
+                [
+                    "name",
+                    "sensor1"
+                ]
+            ],
+            "ts": "1970-01-01T00:00:03.000000Z",
+            "value": 2
+        },
+        {
+            "labels": [
+                [
+                    "label1",
+                    "key2"
+                ],
+                [
+                    "name",
+                    "sensor1"
+                ]
+            ],
+            "ts": "1970-01-01T00:00:04.000000Z",
+            "value": 3
+        },
+        {
+            "labels": [
+                [
+                    "label1",
+                    "key1"
+                ],
+                [
+                    "name",
+                    "sensor1"
+                ]
+            ],
+            "ts": "1970-01-01T00:00:07.000000Z",
+            "value": 4
+        }
+    ]
+}

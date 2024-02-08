@@ -17,12 +17,18 @@
 #undef SIZEOF_SIZE_T
 
 extern "C" {
+Y_PRAGMA_DIAGNOSTIC_PUSH
+#ifdef _win_
+Y_PRAGMA("GCC diagnostic ignored \"-Wshift-count-overflow\"")
+#endif
+Y_PRAGMA("GCC diagnostic ignored \"-Wunused-parameter\"")
 #include "postgres.h"
 #include "miscadmin.h"
 #include "optimizer/paths.h"
 #include "nodes/print.h"
 #include "utils/selfuncs.h"
 #include "utils/palloc.h"
+Y_PRAGMA_DIAGNOSTIC_POP
 }
 
 #undef Min
@@ -40,6 +46,9 @@ bool RelationStatsHook(
     AttrNumber attnum,
     VariableStatData *vardata)
 {
+    Y_UNUSED(root);
+    Y_UNUSED(rte);
+    Y_UNUSED(attnum);
     vardata->statsTuple = nullptr;
     return true;
 }
@@ -224,8 +233,8 @@ int TPgOptimizer::MakeOutputJoin(TOutput& output, Path* path) {
 
         for (int i = 0; i < list_length(jpath->joinrestrictinfo); i++) {
             RestrictInfo* rinfo = (RestrictInfo*)jpath->joinrestrictinfo->elements[i].ptr_value;
-            Var* left;
-            Var* right;
+            Var* left = nullptr;
+            Var* right = nullptr;
 
             if (jpath->jointype == JOIN_INNER) {
                 YQL_ENSURE(rinfo->left_em->em_expr->type == T_Var, "Unsupported left em type");
@@ -279,7 +288,7 @@ void TPgOptimizer::MakeLeftOrRightRestrictions(std::vector<RestrictInfo*>& dst, 
         ri->clause = (Expr*)oe;
 
         bool left = true;
-        for (const auto [relId, varId] : eq.Vars) {
+        for (const auto& [relId, varId] : eq.Vars) {
             ri->required_relids = bms_add_member(ri->required_relids, relId);
             ri->clause_relids = bms_add_member(ri->clause_relids, relId);
             if (left) {
@@ -332,7 +341,7 @@ RelOptInfo* TPgOptimizer::JoinSearchInternal() {
         root.simple_rel_array_size
         * sizeof(RelOptInfo*));
     root.simple_rte_array = (RangeTblEntry**)palloc0(
-        root.simple_rel_array_size * sizeof(RangeTblEntry)
+        root.simple_rel_array_size * sizeof(RangeTblEntry*)
     );
     for (int i = 0; i <= rels->length; i++) {
         root.simple_rte_array[i] = makeNode(RangeTblEntry);

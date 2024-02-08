@@ -102,6 +102,8 @@ TString EntryTypeToString(NScheme::ESchemeEntryType entry) {
         return "external-data-source";
     case NScheme::ESchemeEntryType::ExternalTable:
         return "external-table";
+    case NScheme::ESchemeEntryType::View:
+        return "view";
     case NScheme::ESchemeEntryType::Unknown:
     case NScheme::ESchemeEntryType::Sequence:
     case NScheme::ESchemeEntryType::Replication:

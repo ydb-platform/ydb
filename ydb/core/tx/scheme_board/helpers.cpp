@@ -4,8 +4,8 @@
 #include <google/protobuf/io/zero_copy_stream_impl_lite.h>
 #include <google/protobuf/wire_format_lite.h>
 
-#include <library/cpp/actors/core/executor_thread.h>
-#include <library/cpp/actors/core/interconnect.h>
+#include <ydb/library/actors/core/executor_thread.h>
+#include <ydb/library/actors/core/interconnect.h>
 
 #include <util/stream/format.h>
 

@@ -16,8 +16,8 @@ target_link_libraries(ydb-core-http_proxy PUBLIC
   contrib-libs-cxxsupp
   yutil
   contrib-restricted-nlohmann_json
-  cpp-actors-http
-  cpp-actors-core
+  library-actors-http
+  library-actors-core
   ydb-core-base
   ydb-core-protos
   core-grpc_services-local_rpc

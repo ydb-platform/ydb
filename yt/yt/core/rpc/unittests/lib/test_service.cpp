@@ -228,7 +228,7 @@ public:
         context->SetRequestInfo();
 
         auto promise = NewPromise<void>();
-        context->SubscribeCanceled(BIND([=] () mutable {
+        context->SubscribeCanceled(BIND([=] (const TError&) mutable {
             promise.Set();
         }));
 

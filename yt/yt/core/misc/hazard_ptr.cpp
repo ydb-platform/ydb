@@ -15,6 +15,8 @@
 
 #include <library/cpp/yt/memory/free_list.h>
 
+#include <library/cpp/yt/misc/tls.h>
+
 namespace NYT {
 
 using namespace NConcurrency;
@@ -30,7 +32,7 @@ namespace NDetail {
 
 ////////////////////////////////////////////////////////////////////////////
 
-thread_local THazardPointerSet HazardPointers;
+YT_THREAD_LOCAL(THazardPointerSet) HazardPointers;
 
 //! A simple container based on free list which supports only Enqueue and DequeueAll.
 template <class T>
@@ -110,8 +112,8 @@ struct THazardThreadState
     { }
 };
 
-thread_local THazardThreadState* HazardThreadState;
-thread_local bool HazardThreadStateDestroyed;
+YT_THREAD_LOCAL(THazardThreadState*) HazardThreadState;
+YT_THREAD_LOCAL(bool) HazardThreadStateDestroyed;
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -182,7 +184,8 @@ THazardPointerManager::THazardPointerManager()
 void THazardPointerManager::Shutdown()
 {
     if (auto* logFile = TryGetShutdownLogFile()) {
-        ::fprintf(logFile, "*** Hazard Pointer Manager shutdown started (ThreadCount: %d)\n",
+        ::fprintf(logFile, "%s\t*** Hazard Pointer Manager shutdown started (ThreadCount: %d)\n",
+            GetInstant().ToString().c_str(),
             ThreadCount_.load());
     }
 
@@ -193,7 +196,8 @@ void THazardPointerManager::Shutdown()
     });
 
     if (auto* logFile = TryGetShutdownLogFile()) {
-        ::fprintf(logFile, "*** Hazard Pointer Manager shutdown completed (DeletedPtrCount: %d)\n",
+        ::fprintf(logFile, "%s\t*** Hazard Pointer Manager shutdown completed (DeletedPtrCount: %d)\n",
+            GetInstant().ToString().c_str(),
             count);
     }
 }
@@ -258,7 +262,7 @@ void THazardPointerManager::InitThreadState()
 
 THazardThreadState* THazardPointerManager::AllocateThreadState()
 {
-    auto* threadState = new THazardThreadState(&HazardPointers);
+    auto* threadState = new THazardThreadState(&GetTlsRef(HazardPointers));
 
     struct THazardThreadStateDestroyer
     {
@@ -271,7 +275,7 @@ THazardThreadState* THazardPointerManager::AllocateThreadState()
     };
 
     // Unregisters thread from hazard ptr manager on thread exit.
-    static thread_local THazardThreadStateDestroyer destroyer{threadState};
+    YT_THREAD_LOCAL(THazardThreadStateDestroyer) destroyer{threadState};
 
     {
         auto guard = WriterGuard(ThreadRegistryLock_);
@@ -280,7 +284,8 @@ THazardThreadState* THazardPointerManager::AllocateThreadState()
     }
 
     if (auto* logFile = TryGetShutdownLogFile()) {
-        ::fprintf(logFile, "*** Hazard Pointer Manager thread state allocated (ThreadId: %" PRISZT ")\n",
+        ::fprintf(logFile, "%s\t*** Hazard Pointer Manager thread state allocated (ThreadId: %" PRISZT ")\n",
+            GetInstant().ToString().c_str(),
             GetCurrentThreadId());
     }
 
@@ -372,7 +377,8 @@ void THazardPointerManager::DestroyThreadState(THazardThreadState* threadState)
     }
 
     if (auto* logFile = TryGetShutdownLogFile()) {
-        ::fprintf(logFile, "*** Hazard Pointer Manager thread state destroyed (ThreadId: %" PRISZT ", RetiredPtrCount: %d)\n",
+        ::fprintf(logFile, "%s\t*** Hazard Pointer Manager thread state destroyed (ThreadId: %" PRISZT ", RetiredPtrCount: %d)\n",
+            GetInstant().ToString().c_str(),
             GetCurrentThreadId(),
             count);
     }

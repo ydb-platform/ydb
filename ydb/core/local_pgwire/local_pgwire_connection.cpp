@@ -15,7 +15,7 @@
 #include <ydb/public/sdk/cpp/client/draft/ydb_scripting.h>
 #include <ydb/public/api/grpc/ydb_scripting_v1.grpc.pb.h>
 #include <ydb/library/yql/public/issue/yql_issue_message.h>
-#include <library/cpp/actors/core/actor_bootstrapped.h>
+#include <ydb/library/actors/core/actor_bootstrapped.h>
 
 namespace NLocalPgWire {
 
@@ -47,7 +47,9 @@ public:
             database = ConnectionParams["database"];
         }
         auto ev = MakeHolder<NKqp::TEvKqp::TEvCreateSessionRequest>();
-        NKikimrKqp::TCreateSessionRequest& request = *ev->Record.MutableRequest();
+        auto& record = ev->Record;
+        record.SetPgWire(true);
+        NKikimrKqp::TCreateSessionRequest& request = *record.MutableRequest();
         request.SetDatabase(database);
         BLOG_D("Sent CreateSessionRequest to kqpProxy " << ev->Record.ShortDebugString());
         Send(NKqp::MakeKqpProxyID(SelfId().NodeId()), ev.Release());

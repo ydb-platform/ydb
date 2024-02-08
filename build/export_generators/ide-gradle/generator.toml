@@ -1,3 +1,5 @@
+use_managed_peers_closure = true
+
 [root]
 template="settings.gradle.kts.jinja"
 copy=[
@@ -14,29 +16,54 @@ template="build.gradle.kts.jinja"
 template={ path="build.gradle.kts.proto.jinja", dest="build.gradle.kts" }
 
 [attrs.target]
-proto_files="list"
-proto_grpc="flag"
-proto_namespace="str"
 required_jdk="str"
 add_vcs_info_to_mf="bool"
 junit4_test="flag"
 junit5_test="flag"
 app_main_class="str"
+jar_source_set="list"
+
 publish="flag"
 publish_group="str"
 publish_version="str"
-applied_excludes="list"
-peers_closure="list"
-peers_closure_coords="list"
-excludes_rules="list"
-exclude="list"
+
+proto_files="list"
+proto_namespace="str"
+proto_compiler_version="str"
+proto_runtime_version="str"
+proto_common_version="str"
+
+proto_grpc="flag"
+proto_grpc_version="str"
+
+kotlin_version="str"
+with_kotlin="bool"
+with_kotlinc_plugin_allopen="bool"
+with_kotlinc_plugin_lombok="bool"
+with_kotlinc_plugin_noarg="bool"
+with_kotlinc_plugin_serialization="bool"
+
+runs="list"
+runs-args="list"
+runs-classpath="list"
+runs-cwd="str"
+runs-in="list"
+runs-in_dir="list"
+runs-in_dirs_inputs="list"
+runs-in_noparse="list"
+runs-out="list"
+runs-out_dir="list"
+runs-tool="list"
 
 [attrs.root]
 
 [attrs.dir]
 
 [attrs.induced]
-consumer_classpath="list"
+consumer-classpath="str"
+consumer-jar="str"
+consumer-type="str"
+consumer-prebuilt="flag"
 
 [merge]
 test=[

@@ -50,10 +50,24 @@ public:
         return *result;
     }
 
+    TResult& MutableResult() {
+        auto result = std::get_if<TResult>(&Result);
+        Y_ABORT_UNLESS(result, "incorrect object for result request");
+        return *result;
+    }
+
     TResult&& DetachResult() {
         auto result = std::get_if<TResult>(&Result);
         Y_ABORT_UNLESS(result, "incorrect object for result request");
         return std::move(*result);
+    }
+
+    const TResult* operator->() const {
+        return &GetResult();
+    }
+
+    TResult* operator->() {
+        return &MutableResult();
     }
 
     const TResult& operator*() const {
@@ -74,6 +88,15 @@ public:
             return Default<TString>();
         } else {
             return status->GetErrorMessage();
+        }
+    }
+
+    Ydb::StatusIds::StatusCode GetStatus() const {
+        auto* status = std::get_if<TConclusionStatus>(&Result);
+        if (!status) {
+            return Ydb::StatusIds::SUCCESS;
+        } else {
+            return status->GetStatus();
         }
     }
 };

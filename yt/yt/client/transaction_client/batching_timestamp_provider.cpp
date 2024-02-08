@@ -54,7 +54,7 @@ public:
         return Underlying_->GetLatestTimestamp();
     }
 
- private:
+private:
     const ITimestampProviderPtr Underlying_;
     const TDuration BatchPeriod_;
 
@@ -110,7 +110,7 @@ public:
         std::vector<TRequest> requests;
         requests.swap(PendingRequests_);
 
-        auto [traceContext, sampled] = BatchTrace_.StartSpan("BatchingTimestampProvider:SendGenerateRequest");
+        auto [traceContext, _] = BatchTrace_.StartSpan("BatchingTimestampProvider:SendGenerateRequest");
 
         guard.Release();
 

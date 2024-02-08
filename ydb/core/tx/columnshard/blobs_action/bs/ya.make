@@ -6,6 +6,7 @@ SRCS(
     write.cpp
     read.cpp
     storage.cpp
+    remove.cpp
 )
 
 PEERDIR(

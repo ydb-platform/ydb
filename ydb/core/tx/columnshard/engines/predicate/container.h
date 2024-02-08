@@ -29,6 +29,10 @@ private:
 
 public:
 
+    bool IsEmpty() const {
+        return !Object;
+    }
+
     template <class TArrayColumn>
     std::optional<typename TArrayColumn::value_type> Get(const ui32 colIndex, const ui32 rowIndex,
         const std::optional<typename TArrayColumn::value_type> defaultValue = {}) const {

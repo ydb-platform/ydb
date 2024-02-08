@@ -4,10 +4,10 @@
 #include <ydb/core/grpc_services/rpc_calls.h>
 #include <ydb/core/grpc_services/grpc_helper.h>
 
-#include <library/cpp/actors/core/actor_bootstrapped.h>
-#include <library/cpp/actors/core/events.h>
-#include <library/cpp/actors/http/http.h>
-#include <library/cpp/actors/core/hfunc.h>
+#include <ydb/library/actors/core/actor_bootstrapped.h>
+#include <ydb/library/actors/core/events.h>
+#include <ydb/library/actors/http/http.h>
+#include <ydb/library/actors/core/hfunc.h>
 #include <library/cpp/uri/uri.h>
 
 #include <util/generic/guid.h>
@@ -30,7 +30,7 @@ public:
         //                << " trace: " << ReqCtx->GetPeerMetaValues(NYdb::YDB_TRACE_ID_HEADER) << " ";
     }
 
-    TGRpcRequestActor(NGrpc::IRequestContextBase *ctx)
+    TGRpcRequestActor(NYdbGrpc::IRequestContextBase *ctx)
         : ReqCtx(ctx)
         , RequestId(CreateGuidAsString())
     {
@@ -121,12 +121,12 @@ private:
         return google::protobuf::Arena::CreateMessage<Ydb::Discovery::ListEndpointsResponse>(ReqCtx->GetArena());
     }
 
-    TIntrusivePtr<NGrpc::IRequestContextBase> ReqCtx;
+    TIntrusivePtr<NYdbGrpc::IRequestContextBase> ReqCtx;
     TString RequestId;
 };
 
 
-static TString GetSdkBuildInfo(NGrpc::IRequestContextBase* reqCtx) {
+static TString GetSdkBuildInfo(NYdbGrpc::IRequestContextBase* reqCtx) {
     const auto& res = reqCtx->GetPeerMetaValues(NYdb::YDB_SDK_BUILD_INFO_HEADER);
     if (res.empty()) {
         return {};
@@ -143,12 +143,12 @@ TGRpcDiscoveryService::TGRpcDiscoveryService(NActors::TActorSystem *system, std:
 
 }
 
-void TGRpcDiscoveryService::InitService(grpc::ServerCompletionQueue *cq, NGrpc::TLoggerPtr logger) {
+void TGRpcDiscoveryService::InitService(grpc::ServerCompletionQueue *cq, NYdbGrpc::TLoggerPtr logger) {
     CQ_ = cq;
     SetupIncomingRequests(std::move(logger));
 }
 
-void TGRpcDiscoveryService::SetGlobalLimiterHandle(NGrpc::TGlobalLimiter *limiter) {
+void TGRpcDiscoveryService::SetGlobalLimiterHandle(NYdbGrpc::TGlobalLimiter *limiter) {
     Limiter_ = limiter;
 }
 
@@ -161,14 +161,14 @@ void TGRpcDiscoveryService::DecRequest() {
     Y_ASSERT(Limiter_->GetCurrentInFlight() >= 0);
 }
 
-void TGRpcDiscoveryService::SetupIncomingRequests(NGrpc::TLoggerPtr logger) {
+void TGRpcDiscoveryService::SetupIncomingRequests(NYdbGrpc::TLoggerPtr logger) {
     auto getCounterBlock = NGRpcService::CreateCounterCb(Counters_, ActorSystem_);
 #ifdef ADD_REQUEST
 #error ADD_REQUEST macro already defined
 #endif
 #define ADD_REQUEST(NAME, IN, OUT, ACTION) \
      MakeIntrusive<TGRpcRequest<Ydb::Discovery::IN, Ydb::Discovery::OUT, TGRpcDiscoveryService>>(this, &Service_, CQ_, \
-         [this](NGrpc::IRequestContextBase *reqCtx) { \
+         [this](NYdbGrpc::IRequestContextBase *reqCtx) { \
             NGRpcService::ReportGrpcReqToMon(*ActorSystem_, reqCtx->GetPeer(), GetSdkBuildInfo(reqCtx)); \
             ACTION; \
          }, &Ydb::Discovery::V1::DiscoveryService::AsyncService::Request ## NAME, \

@@ -1,7 +1,7 @@
 #include "mkql_tostring.h"
 
 #include <ydb/library/yql/minikql/computation/mkql_computation_node_holders.h>
-#include <ydb/library/yql/minikql/computation/mkql_computation_node_codegen.h>
+#include <ydb/library/yql/minikql/computation/mkql_computation_node_codegen.h>  // Y_IGNORE
 #include <ydb/library/yql/minikql/mkql_node_cast.h>
 #include <ydb/library/yql/minikql/mkql_node_builder.h>
 #include <ydb/library/yql/minikql/mkql_type_ops.h>
@@ -11,6 +11,8 @@
 #include <ydb/library/yql/public/udf/udf_terminator.h>
 
 #ifndef MKQL_DISABLE_CODEGEN
+Y_PRAGMA_DIAGNOSTIC_PUSH
+Y_PRAGMA("GCC diagnostic ignored \"-Wreturn-type-c-linkage\"")
 extern "C" NYql::NUdf::TUnboxedValuePod DataToString(NYql::NUdf::TUnboxedValuePod data, NYql::NUdf::EDataSlot slot) {
     return NKikimr::NMiniKQL::ValueToString(slot, data);
 }
@@ -21,6 +23,7 @@ extern "C" NYql::NUdf::TUnboxedValuePod DecimalToString(NYql::NDecimal::TInt128 
     }
     return NYql::NUdf::TUnboxedValuePod();
 }
+Y_PRAGMA_DIAGNOSTIC_POP
 #endif
 
 namespace NKikimr {

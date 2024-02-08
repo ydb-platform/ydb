@@ -68,10 +68,10 @@ protected:
         return;
     }
 
-    virtual void DoOnExecuteTxAfterWrite(NColumnShard::TColumnShard& /*self*/, NColumnShard::TBlobManagerDb& /*dbBlobs*/, const bool /*success*/) override {
+    virtual void DoOnExecuteTxAfterWrite(NColumnShard::TColumnShard& /*self*/, NColumnShard::TBlobManagerDb& /*dbBlobs*/, const bool /*blobsWroteSuccessfully*/) override {
 
     }
-    virtual void DoOnCompleteTxAfterWrite(NColumnShard::TColumnShard& /*self*/) override {
+    virtual void DoOnCompleteTxAfterWrite(NColumnShard::TColumnShard& /*self*/, const bool /*blobsWroteSuccessfully*/) override {
 
     }
 public:
@@ -101,12 +101,12 @@ protected:
 
     }
 
-    virtual void DoOnExecuteTxAfterRemoving(NColumnShard::TColumnShard& /*self*/, NColumnShard::TBlobManagerDb& /*dbBlobs*/, const bool /*success*/) {
+    virtual void DoOnExecuteTxAfterRemoving(NColumnShard::TColumnShard& /*self*/, NColumnShard::TBlobManagerDb& /*dbBlobs*/, const bool /*blobsWroteSuccessfully*/) {
         for (auto&& i : GetDeclaredBlobs()) {
             Storage->DeclareDataForRemove(i);
         }
     }
-    virtual void DoOnCompleteTxAfterRemoving(NColumnShard::TColumnShard& /*self*/) {
+    virtual void DoOnCompleteTxAfterRemoving(NColumnShard::TColumnShard& /*self*/, const bool /*blobsWroteSuccessfully*/) {
 
     }
 public:

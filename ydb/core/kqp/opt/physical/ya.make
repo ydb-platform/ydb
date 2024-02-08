@@ -18,6 +18,7 @@ PEERDIR(
     ydb/core/kqp/opt/physical/effects
     ydb/library/yql/dq/common
     ydb/library/yql/dq/opt
+    ydb/library/yql/dq/type_ann
     ydb/library/yql/providers/common/pushdown
 )
 

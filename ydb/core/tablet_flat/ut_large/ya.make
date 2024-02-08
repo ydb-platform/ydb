@@ -13,6 +13,7 @@ ENDIF()
 
 SRCS(
     flat_executor_ut_large.cpp
+    ut_btree_index_large.cpp
 )
 
 PEERDIR(

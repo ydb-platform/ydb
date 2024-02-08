@@ -5,9 +5,9 @@
 
 #include <ydb/core/blobstorage/base/blobstorage_events.h>
 
-#include <library/cpp/actors/core/hfunc.h>
-#include <library/cpp/actors/core/actor_bootstrapped.h>
-#include <library/cpp/actors/core/mon.h>
+#include <ydb/library/actors/core/hfunc.h>
+#include <ydb/library/actors/core/actor_bootstrapped.h>
+#include <ydb/library/actors/core/mon.h>
 #include <library/cpp/monlib/service/pages/templates.h>
 
 namespace NKikimr {
@@ -1160,7 +1160,7 @@ namespace NKikimr {
                     cfg->BaseInfo.PDiskId, selfVDiskId, MakeBlobStorageNodeWardenID(skeletonFrontID.NodeId()), notifyId, ev->Sender
                 );
             } else {
-                return new TMonErrorActor(notifyId, ev, 
+                return new TMonErrorActor(notifyId, ev,
                     "VDisk restart in the normal state is not allowed <br>\n"
                     "<a class=\"btn btn-default\" href=\"?\">Go back to the main VDisk page</a>"
                 );

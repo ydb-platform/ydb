@@ -27,14 +27,14 @@ namespace Model
    * href="http://docs.aws.amazon.com/goto/WebAPI/s3-2006-03-01/ObjectLockRule">AWS
    * API Reference</a></p>
    */
-  class AWS_S3_API ObjectLockRule
+  class ObjectLockRule
   {
   public:
-    ObjectLockRule();
-    ObjectLockRule(const Aws::Utils::Xml::XmlNode& xmlNode);
-    ObjectLockRule& operator=(const Aws::Utils::Xml::XmlNode& xmlNode);
+    AWS_S3_API ObjectLockRule();
+    AWS_S3_API ObjectLockRule(const Aws::Utils::Xml::XmlNode& xmlNode);
+    AWS_S3_API ObjectLockRule& operator=(const Aws::Utils::Xml::XmlNode& xmlNode);
 
-    void AddToNode(Aws::Utils::Xml::XmlNode& parentNode) const;
+    AWS_S3_API void AddToNode(Aws::Utils::Xml::XmlNode& parentNode) const;
 
 
     /**
@@ -94,7 +94,7 @@ namespace Model
   private:
 
     DefaultRetention m_defaultRetention;
-    bool m_defaultRetentionHasBeenSet;
+    bool m_defaultRetentionHasBeenSet = false;
   };
 
 } // namespace Model

@@ -3,7 +3,7 @@ option java_package = "ru.yandex.kikimr.proto";
 option cc_enable_arenas = true;
 
 import "google/protobuf/duration.proto";
-import "library/cpp/actors/protos/actors.proto";
+import "ydb/library/actors/protos/actors.proto";
 import "ydb/core/scheme/protos/type_info.proto";
 import "ydb/core/protos/kqp_physical.proto";
 import "ydb/core/protos/kqp_stats.proto";
@@ -143,7 +143,7 @@ message TKqpColumnMetadataProto {
     optional bool NotNull = 6 [default = false];
     optional string DefaultFromSequence = 8;
     optional EDefaultKind DefaultKind = 9;
-    optional NKikimrMiniKQL.TResult DefaultFromLiteral = 10;
+    optional Ydb.TypedValue DefaultFromLiteral = 10;
 };
 
 message TKqpTableMetadataProto {
@@ -326,11 +326,13 @@ message TEvCreateSessionRequest {
     // If flag is true, kqp proxy will create session  on the different node,
     // if flag is false, in this case proxy will create session locally.
     optional bool CanCreateRemoteSession = 4 [default = false];
-    optional bool SupportsBalancing = 5 [ default = false];
+    optional bool SupportsBalancing = 5 [default = false];
+    optional bool PgWire = 6 [default = false];
 }
 
 message TCreateSessionResponse {
     optional bytes SessionId = 1;
+    optional int64 NodeId = 2;
 }
 
 message TEvCreateSessionResponse {
@@ -418,12 +420,16 @@ message TEvExecuterStreamData {
     optional Ydb.ResultSet ResultSet = 1;
     optional uint64 SeqNo = 2;
     optional uint32 QueryResultIndex = 3;
+    optional uint32 ChannelId = 4;
+    optional NActorsProto.TActorId ChannelActorId = 5;
 };
 
 message TEvExecuterStreamDataAck {
     optional uint64 SeqNo = 1;
     optional int64 FreeSpace = 2;
     optional bool Enough = 3 [default = false];
+    optional uint32 ChannelId = 4;
+    optional NActorsProto.TActorId ChannelActorId = 5;
 };
 
 message TEvExecuterStreamProfile {
@@ -431,8 +437,12 @@ message TEvExecuterStreamProfile {
     optional NYql.NDqProto.TDqExecutionStats Profile = 2;
 };
 
+// 1. Executer fills progress stats from it's own execution
+// 2. Session adds stats from early finished executions and builds complete plan
 message TEvExecuterProgress {
     optional NActorsProto.TActorId ExecuterActorId = 1;
+    optional string QueryPlan = 2;
+    optional NKqpProto.TKqpStatsQuery QueryStats = 3;
 };
 
 message TKqpProxyNodeResources {
@@ -576,12 +586,14 @@ message TEvScanInitActor {
     optional uint64 ScanId = 1;
     optional NActorsProto.TActorId ScanActorId = 2;
     optional uint32 Generation = 3;
+    optional uint64 TabletId = 4;
 };
 
 message TEvScanError {
     optional Ydb.StatusIds.StatusCode Status = 1;
     repeated Ydb.Issue.IssueMessage Issues = 2;
     optional uint32 Generation = 3;
+    optional uint64 TabletId = 4;
 }
 
 message TEvRemoteScanData {
@@ -634,6 +646,14 @@ message TEvRemoteCostData {
 }
 
 message TEvKillScanTablet {
+}
+
+message TKqpTableSinkSettings {
+    optional NKqpProto.TKqpPhyTableId Table = 3;
+    repeated TKqpColumnMetadataProto KeyColumns = 4;
+    repeated TKqpColumnMetadataProto Columns = 5;
+    optional uint64 LockTxId = 6;
+    optional uint64 LockNodeId = 7;
 }
 
 message TKqpStreamLookupSettings {

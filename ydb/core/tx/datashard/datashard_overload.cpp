@@ -10,6 +10,10 @@ void TDataShard::OnYellowChannelsChanged() {
 
 void TDataShard::OnRejectProbabilityRelaxed() {
     NotifyOverloadSubscribers(ERejectReason::OverloadByProbability);
+    for (auto& ev : DelayedS3UploadRows) {
+        TActivationContext::Send(ev.Release());
+    }
+    DelayedS3UploadRows.clear();
 }
 
 bool TDataShard::HasPipeServer(const TActorId& pipeServerId) {

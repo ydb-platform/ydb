@@ -1,4 +1,5 @@
 #include "transaction.h"
+#include "utils.h"
 
 namespace NKikimr::NPQ {
  
@@ -13,6 +14,13 @@ TDistributedTransaction::TDistributedTransaction(const NKikimrPQ::TTransaction& 
     State = tx.GetState();
     MinStep = tx.GetMinStep();
     MaxStep = tx.GetMaxStep();
+
+    for (ui64 tabletId : tx.GetSenders()) {
+        Senders.insert(tabletId);
+    }
+    for (ui64 tabletId : tx.GetReceivers()) {
+        Receivers.insert(tabletId);
+    }
 
     switch (Kind) {
     case NKikimrPQ::TTransaction::KIND_DATA:
@@ -40,13 +48,6 @@ TDistributedTransaction::TDistributedTransaction(const NKikimrPQ::TTransaction& 
 
 void TDistributedTransaction::InitDataTransaction(const NKikimrPQ::TTransaction& tx)
 {
-    for (ui64 tabletId : tx.GetSenders()) {
-        Senders.insert(tabletId);
-    }
-    for (ui64 tabletId : tx.GetReceivers()) {
-        Receivers.insert(tabletId);
-    }
-
     InitPartitions(tx.GetOperations());
 }
 
@@ -65,20 +66,20 @@ void TDistributedTransaction::InitConfigTransaction(const NKikimrPQ::TTransactio
     TabletConfig = tx.GetTabletConfig();
     BootstrapConfig = tx.GetBootstrapConfig();
 
-    InitPartitions(TabletConfig);
+    InitPartitions();
 }
 
-void TDistributedTransaction::InitPartitions(const NKikimrPQ::TPQTabletConfig& config)
+void TDistributedTransaction::InitPartitions()
 {
     Partitions.clear();
 
-    if (config.PartitionsSize()) {
-        for (const auto& partition : config.GetPartitions()) {
-            Partitions.insert(partition.GetPartitionId());
+    if (TabletConfig.PartitionsSize()) {
+        for (const auto& partition : TabletConfig.GetPartitions()) {
+            Partitions.emplace(partition.GetPartitionId());
         }
     } else {
-        for (auto partitionId : config.GetPartitionIds()) {
-            Partitions.insert(partitionId);
+        for (auto partitionId : TabletConfig.GetPartitionIds()) {
+            Partitions.emplace(partitionId);
         }
     }
 }
@@ -103,7 +104,7 @@ void TDistributedTransaction::OnProposeTransaction(const NKikimrPQ::TEvProposeTr
     case NKikimrPQ::TEvProposeTransaction::kConfig:
         Y_ABORT_UNLESS(event.HasConfig());
         MaxStep = Max<ui64>();
-        OnProposeTransaction(event.GetConfig());
+        OnProposeTransaction(event.GetConfig(), extractTabletId);
         break;
     default:
         Y_FAIL_S("unknown TxBody case");
@@ -138,14 +139,41 @@ void TDistributedTransaction::OnProposeTransaction(const NKikimrPQ::TDataTransac
     ReadSetCount = 0;
 }
 
-void TDistributedTransaction::OnProposeTransaction(const NKikimrPQ::TConfigTransaction& txBody)
+void TDistributedTransaction::OnProposeTransaction(const NKikimrPQ::TConfigTransaction& txBody,
+                                                   ui64 extractTabletId)
 {
     Kind = NKikimrPQ::TTransaction::KIND_CONFIG;
 
     TabletConfig = txBody.GetTabletConfig();
     BootstrapConfig = txBody.GetBootstrapConfig();
 
-    InitPartitions(TabletConfig);
+    TPartitionGraph graph = MakePartitionGraph(TabletConfig);
+
+    for (const auto& p : TabletConfig.GetPartitions()) {
+        auto node = graph.GetPartition(p.GetPartitionId());
+        if (!node) {
+            // Old configuration format without AllPartitions. Split/Merge is not supported.
+            continue;
+        }
+
+        if (node->Children.empty()) {
+            for (const auto* r : node->Parents) {
+                if (extractTabletId != r->TabletId) {
+                    Senders.insert(r->TabletId);
+                }
+            }
+        }
+
+        for (const auto* r : node->Children) {
+            if (r->Children.empty()) {
+                if (extractTabletId != r->TabletId) {
+                    Receivers.insert(r->TabletId);
+                }
+            }
+        }
+    }
+    
+    InitPartitions();
 
     PartitionRepliesCount = 0;
     PartitionRepliesExpected = 0;
@@ -179,7 +207,7 @@ void TDistributedTransaction::OnPartitionResult(const E& event, EDecision decisi
     Y_ABORT_UNLESS(Step == event.Step);
     Y_ABORT_UNLESS(TxId == event.TxId);
 
-    Y_ABORT_UNLESS(Partitions.contains(event.Partition));
+    Y_ABORT_UNLESS(Partitions.contains(event.Partition.OriginalPartitionId));
 
     SetDecision(SelfDecision, decision);
 
@@ -219,7 +247,7 @@ void TDistributedTransaction::OnTxCommitDone(const TEvPQ::TEvTxCommitDone& event
     Y_ABORT_UNLESS(Step == event.Step);
     Y_ABORT_UNLESS(TxId == event.TxId);
 
-    Y_ABORT_UNLESS(Partitions.contains(event.Partition));
+    Y_ABORT_UNLESS(Partitions.contains(event.Partition.OriginalPartitionId));
 
     ++PartitionRepliesCount;
 }

@@ -4,17 +4,10 @@ OWNER(g:devtools-contrib)
 
 NO_UTIL()
 
-IF (CLANG16)
 PEERDIR(
-    contrib/libs/clang16-rt/lib/tsan
-    contrib/libs/clang16-rt/lib/tsan_cxx
+    contrib/libs/clang${CLANG_VER}-rt/lib/tsan
+    contrib/libs/clang${CLANG_VER}-rt/lib/tsan_cxx
 )
-ELSE()
-PEERDIR(
-    contrib/libs/clang14-rt/lib/tsan
-    contrib/libs/clang14-rt/lib/tsan_cxx
-)
-ENDIF()
 
 END()
 

@@ -46,6 +46,12 @@ typedef void(aws_event_stream_rpc_server_connection_protocol_message_fn)(
 /**
  * Invoked when a new stream has been received on the connection. If you return AWS_OP_SUCCESS (0),
  * You must fill in the fields for continuation options or the program will assert and exit.
+ *
+ * A failure path MUST leave the ref count of the continuation alone.
+ *
+ * A success path should probably take a ref which will leave the continuation (assuming no other interference)
+ * at two AFTER creation is complete: 1 for the connection's continuation table, and one for the callback
+ * recipient which is presumably tracking it as well.
  */
 typedef int(aws_event_stream_rpc_server_on_incoming_stream_fn)(
     struct aws_event_stream_rpc_server_connection *connection,
@@ -127,6 +133,13 @@ AWS_EVENT_STREAM_API void aws_event_stream_rpc_server_listener_acquire(
     struct aws_event_stream_rpc_server_listener *listener);
 AWS_EVENT_STREAM_API void aws_event_stream_rpc_server_listener_release(
     struct aws_event_stream_rpc_server_listener *listener);
+
+/**
+ * Get the local port which the listener's socket is bound to.
+ */
+AWS_EVENT_STREAM_API
+uint16_t aws_event_stream_rpc_server_listener_get_bound_port(
+    const struct aws_event_stream_rpc_server_listener *listener);
 
 /**
  * Bypasses server, and creates a connection on an already existing channel. No connection lifetime callbacks will be

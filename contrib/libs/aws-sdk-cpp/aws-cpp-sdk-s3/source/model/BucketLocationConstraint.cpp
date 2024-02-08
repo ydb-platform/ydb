@@ -28,6 +28,7 @@ namespace Aws
         static const int ap_south_1_HASH = HashingUtils::HashString("ap-south-1");
         static const int ap_southeast_1_HASH = HashingUtils::HashString("ap-southeast-1");
         static const int ap_southeast_2_HASH = HashingUtils::HashString("ap-southeast-2");
+        static const int ap_southeast_3_HASH = HashingUtils::HashString("ap-southeast-3");
         static const int ca_central_1_HASH = HashingUtils::HashString("ca-central-1");
         static const int cn_north_1_HASH = HashingUtils::HashString("cn-north-1");
         static const int cn_northwest_1_HASH = HashingUtils::HashString("cn-northwest-1");
@@ -45,6 +46,7 @@ namespace Aws
         static const int us_gov_west_1_HASH = HashingUtils::HashString("us-gov-west-1");
         static const int us_west_1_HASH = HashingUtils::HashString("us-west-1");
         static const int us_west_2_HASH = HashingUtils::HashString("us-west-2");
+        static const int us_iso_west_1_HASH = HashingUtils::HashString("us-iso-west-1");
         static const int us_east_1_HASH = HashingUtils::HashString("us-east-1");
 
 
@@ -82,6 +84,10 @@ namespace Aws
           else if (hashCode == ap_southeast_2_HASH)
           {
             return BucketLocationConstraint::ap_southeast_2;
+          }
+          else if (hashCode == ap_southeast_3_HASH)
+          {
+            return BucketLocationConstraint::ap_southeast_3;
           }
           else if (hashCode == ca_central_1_HASH)
           {
@@ -151,6 +157,10 @@ namespace Aws
           {
             return BucketLocationConstraint::us_west_2;
           }
+          else if (hashCode == us_iso_west_1_HASH)
+          {
+            return BucketLocationConstraint::us_iso_west_1;
+          }
           else if (hashCode == us_east_1_HASH)
           {
             return BucketLocationConstraint::us_east_1;
@@ -185,6 +195,8 @@ namespace Aws
             return "ap-southeast-1";
           case BucketLocationConstraint::ap_southeast_2:
             return "ap-southeast-2";
+          case BucketLocationConstraint::ap_southeast_3:
+            return "ap-southeast-3";
           case BucketLocationConstraint::ca_central_1:
             return "ca-central-1";
           case BucketLocationConstraint::cn_north_1:
@@ -219,6 +231,8 @@ namespace Aws
             return "us-west-1";
           case BucketLocationConstraint::us_west_2:
             return "us-west-2";
+          case BucketLocationConstraint::us_iso_west_1:
+            return "us-iso-west-1";
           case BucketLocationConstraint::us_east_1:
             return "us-east-1";
           default:

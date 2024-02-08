@@ -4,7 +4,7 @@
 
 #include <yt/yt/client/chaos_client/replication_card.h>
 
-#include <yt/yt/core/ytree/yson_serializable.h>
+#include <yt/yt/core/ytree/yson_struct.h>
 
 namespace NYT::NDriver {
 
@@ -14,7 +14,9 @@ class TUpdateChaosTableReplicaProgressCommand
     : public TTypedCommand<NApi::TUpdateChaosTableReplicaProgressOptions>
 {
 public:
-    TUpdateChaosTableReplicaProgressCommand();
+    REGISTER_YSON_STRUCT_LITE(TUpdateChaosTableReplicaProgressCommand);
+
+    static void Register(TRegistrar registrar);
 
 private:
     NChaosClient::TReplicaId ReplicaId;
@@ -28,7 +30,9 @@ class TAlterReplicationCardCommand
     : public TTypedCommand<NApi::TAlterReplicationCardOptions>
 {
 public:
-    TAlterReplicationCardCommand();
+    REGISTER_YSON_STRUCT_LITE(TAlterReplicationCardCommand);
+
+    static void Register(TRegistrar registrar);
 
 private:
     NChaosClient::TReplicationCardId ReplicationCardId;

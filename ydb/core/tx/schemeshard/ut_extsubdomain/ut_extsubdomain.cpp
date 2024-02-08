@@ -680,6 +680,42 @@ Y_UNIT_TEST_SUITE(TSchemeShardExtSubDomainTest) {
         );
     }
 
+    Y_UNIT_TEST_FLAG(AlterCantChangeExternalStatisticsAggregator, AlterDatabaseCreateHiveFirst) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime, TTestEnvOptions().EnableAlterDatabaseCreateHiveFirst(AlterDatabaseCreateHiveFirst));
+        ui64 txId = 100;
+
+        TestCreateExtSubDomain(runtime, ++txId,  "/MyRoot", R"(Name: "USER_0")");
+        env.TestWaitNotification(runtime, txId);
+
+        // Minimally correct ExtSubDomain settings
+        TestAlterExtSubDomain(runtime, ++txId,  "/MyRoot",
+            R"(
+                Name: "USER_0"
+                ExternalSchemeShard: true
+                PlanResolution: 50
+                Coordinators: 1
+                Mediators: 1
+                TimeCastBucketsPerMediator: 2
+                StoragePools {
+                  Name: "pool-1"
+                  Kind: "hdd"
+                }
+
+                ExternalStatisticsAggregator: true
+            )"
+        );
+        env.TestWaitNotification(runtime, txId);
+
+        TestAlterExtSubDomain(runtime, ++txId,  "/MyRoot",
+            R"(
+                Name: "USER_0"
+                ExternalStatisticsAggregator: false
+            )",
+            {{NKikimrScheme::StatusInvalidParameter, "ExternalStatisticsAggregator could only be added, not removed"}}
+        );
+    }
+
     Y_UNIT_TEST_FLAG(AlterCantChangeSetParams, AlterDatabaseCreateHiveFirst) {
         TTestBasicRuntime runtime;
         TTestEnv env(runtime, TTestEnvOptions().EnableAlterDatabaseCreateHiveFirst(AlterDatabaseCreateHiveFirst));
@@ -1327,6 +1363,108 @@ Y_UNIT_TEST_SUITE(TSchemeShardExtSubDomainTest) {
                             NLs::ExtractTenantSysViewProcessor(&tenantSVPOnTSS)});
 
         UNIT_ASSERT_EQUAL(tenantSVP, tenantSVPOnTSS);
+    }
+
+    Y_UNIT_TEST_FLAG(StatisticsAggregatorSync, AlterDatabaseCreateHiveFirst) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime, TTestEnvOptions().EnableAlterDatabaseCreateHiveFirst(AlterDatabaseCreateHiveFirst));
+        ui64 txId = 100;
+
+        NSchemeShard::TSchemeLimits lowLimits;
+        lowLimits.MaxShardsInPath = 3;
+        SetSchemeshardSchemaLimits(runtime, lowLimits);
+
+        TestCreateExtSubDomain(runtime, ++txId,  "/MyRoot",
+            R"(Name: "USER_0")"
+        );
+
+        // check that limits have a power, try create 4 shards
+        TestAlterExtSubDomain(runtime, ++txId,  "/MyRoot",
+            R"(
+                Name: "USER_0"
+                PlanResolution: 50
+                Coordinators: 2
+                Mediators: 1
+                TimeCastBucketsPerMediator: 2
+                ExternalSchemeShard: true
+            )",
+            {{NKikimrScheme::StatusResourceExhausted}}
+        );
+
+        // create 3 shards
+        TestAlterExtSubDomain(runtime, ++txId,  "/MyRoot",
+            R"(
+                Name: "USER_0"
+                PlanResolution: 50
+                Coordinators: 1
+                Mediators: 1
+                TimeCastBucketsPerMediator: 2
+                ExternalSchemeShard: true
+                StoragePools {
+                    Name: "/dc-1/users/tenant-1:hdd"
+                    Kind: "hdd"
+                }
+            )"
+        );
+        env.TestWaitNotification(runtime, {txId, txId - 1});
+
+        lowLimits.MaxShardsInPath = 2;
+        SetSchemeshardSchemaLimits(runtime, lowLimits);
+
+        // one more, but for free
+        TestAlterExtSubDomain(runtime, ++txId,  "/MyRoot",
+            R"(
+                Name: "USER_0"
+                ExternalStatisticsAggregator: true
+            )"
+        );
+
+        env.TestWaitNotification(runtime, txId);
+
+        ui64 tenantSchemeShard = 0;
+        ui64 tenantSA = 0;
+        TestDescribeResult(DescribePath(runtime, "/MyRoot/USER_0"),
+                           {NLs::PathExist,
+                            NLs::IsExternalSubDomain("USER_0"),
+                            NLs::ExtractTenantSchemeshard(&tenantSchemeShard),
+                            NLs::ExtractTenantStatisticsAggregator(&tenantSA)});
+
+        UNIT_ASSERT(tenantSchemeShard != 0
+                    && tenantSchemeShard != (ui64)-1
+                    && tenantSchemeShard != TTestTxConfig::SchemeShard);
+
+        UNIT_ASSERT(tenantSA != 0 && tenantSA != (ui64)-1);
+
+        ui64 tenantSAOnTSS = 0;
+        TestDescribeResult(DescribePath(runtime, tenantSchemeShard, "/MyRoot/USER_0"),
+                           {NLs::PathExist,
+                            NLs::ExtractTenantStatisticsAggregator(&tenantSAOnTSS)});
+
+        UNIT_ASSERT_EQUAL(tenantSA, tenantSAOnTSS);
+
+        RebootTablet(runtime, tenantSchemeShard, runtime.AllocateEdgeActor());
+
+        TestCreateTable(runtime, tenantSchemeShard, ++txId, "/MyRoot/USER_0",
+            R"(
+                Name: "table"
+                Columns { Name: "RowId"      Type: "Uint64"}
+                Columns { Name: "Value"      Type: "Utf8"}
+                KeyColumnNames: ["RowId"]
+            )"
+        );
+
+        env.TestWaitNotification(runtime, txId, tenantSchemeShard);
+
+        TestDescribeResult(DescribePath(runtime, tenantSchemeShard, "/MyRoot/USER_0/table"),
+                           {NLs::PathExist});
+
+        RebootTablet(runtime, tenantSchemeShard, runtime.AllocateEdgeActor());
+
+        TestDescribeResult(DescribePath(runtime, tenantSchemeShard, "/MyRoot/USER_0"),
+                           {NLs::PathExist,
+                            NLs::ExtractTenantStatisticsAggregator(&tenantSAOnTSS)});
+
+        UNIT_ASSERT_EQUAL(tenantSA, tenantSAOnTSS);
     }
 
     Y_UNIT_TEST_FLAG(SchemeQuotas, AlterDatabaseCreateHiveFirst) {

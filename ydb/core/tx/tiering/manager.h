@@ -3,8 +3,8 @@
 
 #include <functional>
 
-#include <library/cpp/actors/core/actor_bootstrapped.h>
-#include <library/cpp/actors/core/actor.h>
+#include <ydb/library/actors/core/actor_bootstrapped.h>
+#include <ydb/library/actors/core/actor.h>
 
 #include <ydb/public/sdk/cpp/client/ydb_types/s3_settings.h>
 #include <ydb/services/metadata/secret/snapshot.h>
@@ -15,7 +15,8 @@
 namespace NKikimr::NColumnShard {
 namespace NTiers {
 
-NArrow::TCompression ConvertCompression(const NKikimrSchemeOp::TCompressionOptions& compression);
+NArrow::NSerialization::TSerializerContainer ConvertCompression(const NKikimrSchemeOp::TOlapColumn::TSerializer& serializerProto);
+NArrow::NSerialization::TSerializerContainer ConvertCompression(const NKikimrSchemeOp::TCompressionOptions& compressionProto);
 
 class TManager {
 private:
@@ -80,7 +81,7 @@ public:
     }
 
     TTiersManager& Start(std::shared_ptr<TTiersManager> ownerPtr);
-    TTiersManager& Stop();
+    TTiersManager& Stop(const bool needStopActor);
     const NTiers::TManager& GetManagerVerified(const TString& tierId) const;
     const NTiers::TManager* GetManagerOptional(const TString& tierId) const;
     NMetadata::NFetcher::ISnapshotsFetcher::TPtr GetExternalDataManipulation() const;

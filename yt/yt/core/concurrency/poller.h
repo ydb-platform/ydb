@@ -82,7 +82,10 @@ struct IPoller
 
     //! Tries to register a pollable entity but does not arm the poller yet.
     //! Returns |false| if the poller is already shutting down.
-    virtual bool TryRegister(const IPollablePtr& pollable) = 0;
+    virtual bool TryRegister(const IPollablePtr& pollable, TString poolName = "default") = 0;
+
+    //! Method must be called inside OnEvent.
+    virtual void SetExecutionPool(const IPollablePtr& pollable, TString poolName) = 0;
 
     //! Unregisters the previously registered entity.
     /*!
@@ -106,8 +109,7 @@ struct IPoller
     virtual void Arm(TFileDescriptor fd, const IPollablePtr& pollable, EPollControl control) = 0;
 
     //! Schedule call of #IPollable::OnEvent with EPollControl::Retry.
-    //! From OnEvent could be called with wakeup = false to not wake new thread.
-    virtual void Retry(const IPollablePtr& pollable, bool wakeup = true) = 0;
+    virtual void Retry(const IPollablePtr& pollable) = 0;
 
     //! Unarms the poller.
     virtual void Unarm(TFileDescriptor fd, const IPollablePtr& pollable) = 0;

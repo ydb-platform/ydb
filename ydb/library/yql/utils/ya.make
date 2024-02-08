@@ -8,8 +8,8 @@ SRCS(
     debug_info.h
     future_action.cpp
     future_action.h
-    hash.h
     hash.cpp
+    hash.h
     md5_stream.cpp
     md5_stream.h
     method_index.cpp
@@ -40,7 +40,7 @@ SRCS(
 )
 
 PEERDIR(
-    library/cpp/actors/util
+    ydb/library/actors/util
     library/cpp/digest/md5
     library/cpp/messagebus
     library/cpp/string_utils/quote
@@ -60,7 +60,10 @@ RECURSE(
     failure_injector
     fetch
     log
+    plan
     simd
+    signals
+    sys
     test_http_server
     threading
 )

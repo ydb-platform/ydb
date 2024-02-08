@@ -3,6 +3,43 @@
 
 namespace NYdb::NFederatedTopic {
 
+// TFederatedReadSessionSettings
+// Read policy settings
+
+using TReadOriginalSettings = TFederatedReadSessionSettings::TReadOriginalSettings;
+TReadOriginalSettings& TReadOriginalSettings::AddDatabase(TString database) {
+    Databases.insert(std::move(database));
+    return *this;
+}
+
+TReadOriginalSettings& TReadOriginalSettings::AddDatabases(std::vector<TString> databases) {
+    std::move(std::begin(databases), std::end(databases), std::inserter(Databases, Databases.end()));
+    return *this;
+}
+
+TReadOriginalSettings& TReadOriginalSettings::AddLocal() {
+    Databases.insert("_local");
+    return *this;
+}
+
+TFederatedReadSessionSettings& TFederatedReadSessionSettings::ReadOriginal(TReadOriginalSettings settings) {
+    std::swap(DatabasesToReadFrom, settings.Databases);
+    ReadMirroredEnabled = false;
+    return *this;
+}
+
+TFederatedReadSessionSettings& TFederatedReadSessionSettings::ReadMirrored(TString database) {
+    if (database == "_local") {
+        ythrow TContractViolation("Reading from local database not supported, use specific database");
+    }
+    DatabasesToReadFrom.clear();
+    DatabasesToReadFrom.insert(std::move(database));
+    ReadMirroredEnabled = true;
+    return *this;
+}
+
+// TFederatedTopicClient
+
 NTopic::TTopicClientSettings FromFederated(const TFederatedTopicClientSettings& settings) {
     return NTopic::TTopicClientSettings()
         .DefaultCompressionExecutor(settings.DefaultCompressionExecutor_)
@@ -14,17 +51,17 @@ TFederatedTopicClient::TFederatedTopicClient(const TDriver& driver, const TFeder
 {
 }
 
-std::shared_ptr<IFederatedReadSession> TFederatedTopicClient::CreateFederatedReadSession(const TFederatedReadSessionSettings& settings) {
-    return Impl_->CreateFederatedReadSession(settings);
+std::shared_ptr<IFederatedReadSession> TFederatedTopicClient::CreateReadSession(const TFederatedReadSessionSettings& settings) {
+    return Impl_->CreateReadSession(settings);
 }
 
-// std::shared_ptr<NTopic::ISimpleBlockingWriteSession> TFederatedTopicClient::CreateSimpleBlockingFederatedWriteSession(
+// std::shared_ptr<NTopic::ISimpleBlockingWriteSession> TFederatedTopicClient::CreateSimpleBlockingWriteSession(
 //     const TFederatedWriteSessionSettings& settings) {
-//     return Impl_->CreateSimpleFederatedWriteSession(settings);
+//     return Impl_->CreateSimpleBlockingWriteSession(settings);
 // }
 
-// std::shared_ptr<NTopic::IWriteSession> TFederatedTopicClient::CreateFederatedWriteSession(const TFederatedWriteSessionSettings& settings) {
-//     return Impl_->CreateFederatedWriteSession(settings);
-// }
+std::shared_ptr<NTopic::IWriteSession> TFederatedTopicClient::CreateWriteSession(const TFederatedWriteSessionSettings& settings) {
+    return Impl_->CreateWriteSession(settings);
+}
 
 } // namespace NYdb::NFederatedTopic

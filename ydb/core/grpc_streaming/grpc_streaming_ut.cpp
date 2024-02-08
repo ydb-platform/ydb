@@ -31,7 +31,7 @@ namespace {
 }
 
 template<class TImplActor>
-class TStreamingService : public NGrpc::TGrpcServiceBase<NStreamingTest::TStreamingService> {
+class TStreamingService : public NYdbGrpc::TGrpcServiceBase<NStreamingTest::TStreamingService> {
 public:
     using TSelf = TStreamingService<TImplActor>;
 
@@ -46,7 +46,7 @@ public:
         , Counters(std::move(counters))
     { }
 
-    void InitService(grpc::ServerCompletionQueue* cq, NGrpc::TLoggerPtr) override {
+    void InitService(grpc::ServerCompletionQueue* cq, NYdbGrpc::TLoggerPtr) override {
         CQ = cq;
 
         auto getCounterBlock = NGRpcService::CreateCounterCb(Counters, &ActorSystem);
@@ -64,7 +64,7 @@ public:
             getCounterBlock("streaming", "Session"));
     }
 
-    void SetGlobalLimiterHandle(NGrpc::TGlobalLimiter* limiter) override {
+    void SetGlobalLimiterHandle(NYdbGrpc::TGlobalLimiter* limiter) override {
         Limiter = limiter;
     }
 
@@ -81,7 +81,7 @@ private:
     TIntrusivePtr<::NMonitoring::TDynamicCounters> const Counters;
 
     grpc::ServerCompletionQueue* CQ = nullptr;
-    NGrpc::TGlobalLimiter* Limiter = nullptr;
+    NYdbGrpc::TGlobalLimiter* Limiter = nullptr;
 };
 
 template<class TImplActor>
@@ -96,9 +96,9 @@ public:
 
         Server->GetRuntime()->SetLogPriority(NKikimrServices::GRPC_SERVER, NActors::NLog::PRI_DEBUG);
 
-        NGrpc::TServerOptions options;
+        NYdbGrpc::TServerOptions options;
         options.SetPort(grpc);
-        GRpcServer.Reset(new NGrpc::TGRpcServer(options));
+        GRpcServer.Reset(new NYdbGrpc::TGRpcServer(options));
 
         auto* as = Server->GetRuntime()->GetAnyNodeActorSystem();
         TIntrusivePtr<::NMonitoring::TDynamicCounters> counters(MakeIntrusive<::NMonitoring::TDynamicCounters>());
@@ -118,7 +118,7 @@ public:
 public:
     TServerSettings::TPtr ServerSettings;
     TServer::TPtr Server;
-    THolder<NGrpc::TGRpcServer> GRpcServer;
+    THolder<NYdbGrpc::TGRpcServer> GRpcServer;
     TString GRpcEndpoint;
 
 private:

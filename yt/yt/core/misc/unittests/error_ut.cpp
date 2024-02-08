@@ -1,9 +1,11 @@
+#include "library/cpp/testing/gtest_extensions/assertions.h"
 #include <yt/yt/core/test_framework/framework.h>
 
 #include <yt/yt/core/misc/error.h>
 
 #include <yt/yt/core/yson/string.h>
 
+#include <yt/yt/core/ytree/attributes.h>
 #include <yt/yt/core/ytree/convert.h>
 
 #include <util/stream/str.h>
@@ -17,6 +19,371 @@ using namespace NYson;
 using namespace NYTree;
 
 ////////////////////////////////////////////////////////////////////////////////
+
+class TAdlException
+    : public std::exception
+{
+public:
+    static int ResetCallCount()
+    {
+        return std::exchange(OverloadCallCount, 0);
+    }
+
+    const char* what() const noexcept override
+    {
+        return "Adl exception";
+    }
+
+    // Simulate overload from TAdlException::operator <<
+    template <class TLikeThis, class TArg>
+        requires std::derived_from<std::decay_t<TLikeThis>, TAdlException>
+    friend TLikeThis&& operator << (TLikeThis&& ex, const TArg& /*other*/)
+    {
+        ++OverloadCallCount;
+        return std::forward<TLikeThis>(ex);
+    }
+
+private:
+    static inline int OverloadCallCount = 0;
+};
+
+class TAdlArgument
+{
+public:
+    static int ResetCallCount()
+    {
+        return std::exchange(OverloadCallCount, 0);
+    }
+
+    // Simulate overload TAdlArgument::operator <<
+    friend TError operator << (TError&& error, const TAdlArgument& /*other*/)
+    {
+        static const TErrorAttribute Attr("attr", "attr_value");
+        ++OverloadCallCount;
+        return std::move(error) << Attr;
+    }
+
+    friend TError operator << (const TError& error, const TAdlArgument& /*other*/)
+    {
+        static const TErrorAttribute Attr("attr", "attr_value");
+        ++OverloadCallCount;
+        return error << Attr;
+    }
+
+private:
+    static inline int OverloadCallCount = 0;
+};
+
+class TWidget
+{
+public:
+    TWidget()
+    {
+        DefaultConstructorCalls++;
+    };
+
+    TWidget(const TWidget&)
+    {
+        CopyConstructorCalls++;
+    }
+    TWidget& operator = (const TWidget&) = delete;
+
+    TWidget(TWidget&&)
+    {
+        MoveConstructorCalls++;
+    }
+    TWidget& operator = (TWidget&&) = delete;
+
+    static int ResetDefaultCount()
+    {
+        return std::exchange(DefaultConstructorCalls, 0);
+    }
+
+    static int ResetCopyCount()
+    {
+        return std::exchange(CopyConstructorCalls, 0);
+    }
+
+    static int ResetMoveCount()
+    {
+        return std::exchange(MoveConstructorCalls, 0);
+    }
+
+private:
+    static inline int DefaultConstructorCalls = 0;
+    static inline int CopyConstructorCalls = 0;
+    static inline int MoveConstructorCalls = 0;
+};
+
+////////////////////////////////////////////////////////////////////////////////
+
+template <class TOverloadTest, bool LeftOperandHasUserDefinedOverload = false>
+void IterateTestOverEveryRightOperand(TOverloadTest& tester)
+{
+    {
+        TErrorAttribute attribute("attr", "attr_value");
+        const auto& attributeRef = attribute;
+        tester(attributeRef);
+    }
+
+    {
+        std::vector<TErrorAttribute> attributeVector{{"attr1", "attr_value"}, {"attr2", "attr_value"}};
+        const auto& attributeVectorRef = attributeVector;
+        tester(attributeVectorRef);
+    }
+
+    {
+        TError error("Error");
+
+        const auto& errorRef = error;
+        tester(errorRef);
+
+        auto errorCopy = error;
+        tester(std::move(errorCopy));
+
+        if constexpr (!LeftOperandHasUserDefinedOverload) {
+            EXPECT_TRUE(errorCopy.IsOK());
+        }
+    }
+
+    {
+        std::vector<TError> vectorError{TError("Error"), TError("Error")};
+
+        const auto& vectorErrorRef = vectorError;
+        tester(vectorErrorRef);
+
+        auto vectorErrorCopy = vectorError;
+        tester(std::move(vectorErrorCopy));
+
+        if constexpr (!LeftOperandHasUserDefinedOverload) {
+            for (const auto& errorCopy : vectorErrorCopy) {
+                EXPECT_TRUE(errorCopy.IsOK());
+            }
+        }
+    }
+
+    {
+        TError error("Error");
+
+        const auto& attributeDictionaryRef = error.Attributes();
+        tester(attributeDictionaryRef);
+    }
+
+    {
+        try {
+            THROW_ERROR TError("Test error");
+        } catch(const NYT::TErrorException& ex) {
+            const auto& exRef = ex;
+            tester(exRef);
+
+            auto exCopy = ex;
+            tester(std::move(exCopy));
+        }
+    }
+
+    {
+        TErrorOr<int> err(std::exception{});
+
+        const auto& errRef = err;
+        tester(errRef);
+
+        auto errCopy = err;
+        tester(std::move(errCopy));
+
+        if constexpr (!LeftOperandHasUserDefinedOverload) {
+            EXPECT_TRUE(errCopy.IsOK());
+        }
+    }
+
+    {
+        TAdlArgument adlArg;
+
+        const TAdlArgument& adlArgRef = adlArg;
+        tester(adlArgRef);
+
+        if constexpr (!LeftOperandHasUserDefinedOverload) {
+            EXPECT_EQ(TAdlArgument::ResetCallCount(), 1);
+        }
+    }
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
+TEST(TErrorTest, BitshiftOverloadsExplicitLeftOperand)
+{
+    // TError&& overload.
+    auto moveTester = [] (auto&& arg) {
+        TError error = TError("Test error");
+        TError moved = std::move(error) << std::forward<decltype(arg)>(arg);
+        EXPECT_TRUE(error.IsOK());
+        EXPECT_EQ(moved.GetMessage(), "Test error");
+    };
+    IterateTestOverEveryRightOperand(moveTester);
+
+    // const TError& overloads.
+    auto copyTester = [] (auto&& arg) {
+        TError error = TError("Test error");
+        TError copy = error << std::forward<decltype(arg)>(arg);
+        EXPECT_EQ(error.GetMessage(), copy.GetMessage());
+    };
+    IterateTestOverEveryRightOperand(copyTester);
+
+    // Test that TError pr value binds correctly and the call itself is unambiguous.
+    auto prvalueTester = [] (auto&& arg) {
+        TError error = TError("Test error") << std::forward<decltype(arg)>(arg);
+        EXPECT_EQ(error.GetMessage(), "Test error");
+    };
+    IterateTestOverEveryRightOperand(prvalueTester);
+}
+
+TEST(TErrorTest, BitshiftOverloadsImplicitLeftOperand)
+{
+    // We want to be able to write THROW_ERROR ex
+    auto throwErrorTester1 = [] (auto&& arg) {
+        try {
+            try {
+                THROW_ERROR TError("Test error");
+            } catch(const NYT::TErrorException& ex) {
+                THROW_ERROR ex << std::forward<decltype(arg)>(arg);
+            }
+        } catch(const NYT::TErrorException& ex) {
+            TError error = ex;
+            EXPECT_EQ(error.GetMessage(), "Test error");
+        }
+    };
+    IterateTestOverEveryRightOperand(throwErrorTester1);
+
+    // We also want to be able to write THROW_ERROR TError(smth) without compiler errors
+    auto throwErrorTester2 = [] (auto&& arg) {
+        try {
+            try {
+                THROW_ERROR TError("Test error");
+            } catch(const NYT::TErrorException& ex) {
+                THROW_ERROR TError(ex) << std::forward<decltype(arg)>(arg);
+            }
+        } catch(const NYT::TErrorException& ex) {
+            TError error = ex;
+            EXPECT_EQ(error.GetMessage(), "Test error");
+        }
+    };
+    IterateTestOverEveryRightOperand(throwErrorTester2);
+
+    // Left operand ADL finds the user-defined overload over NYT one.
+    // In this case AdlException should find templated function
+    // specialization with perfect match for args over conversions.
+    auto adlResolutionTester = [] (auto&& arg) {
+        TAdlException ex;
+        auto result = ex << std::forward<decltype(arg)>(arg);
+        static_assert(std::same_as<TAdlException, std::decay_t<decltype(result)>>);
+        EXPECT_EQ(TAdlException::ResetCallCount(), 1);
+    };
+    IterateTestOverEveryRightOperand<
+        decltype(adlResolutionTester),
+        /*LeftOperandHasUserDefinedOverload=*/ true>(adlResolutionTester);
+
+    // Make sure no ambiguous calls.
+    auto genericErrorOrTester = [] (auto&& arg) {
+        TErrorOr<int> err(std::exception{});
+        TError error = err << std::forward<decltype(arg)>(arg);
+        EXPECT_EQ(error.GetCode(), NYT::EErrorCode::Generic);
+    };
+    IterateTestOverEveryRightOperand(genericErrorOrTester);
+}
+
+TEST(TErrorTest, Wrap)
+{
+    TError error("Error");
+
+    auto wrapped = error.Wrap("Wrapped error");
+    EXPECT_EQ(wrapped.GetCode(), NYT::EErrorCode::Generic);
+    EXPECT_EQ(wrapped.GetMessage(), "Wrapped error");
+    EXPECT_EQ(wrapped.InnerErrors().size(), 1u);
+    EXPECT_EQ(wrapped.InnerErrors()[0], error);
+
+    auto triviallyWrapped = error.Wrap();
+    EXPECT_EQ(triviallyWrapped, error);
+}
+
+TEST(TErrorTest, WrapRValue)
+{
+    TError error("Error");
+
+    TError errorCopy = error;
+    auto wrapped = std::move(errorCopy).Wrap("Wrapped error");
+    EXPECT_TRUE(errorCopy.IsOK());
+    EXPECT_EQ(wrapped.GetCode(), NYT::EErrorCode::Generic);
+    EXPECT_EQ(wrapped.GetMessage(), "Wrapped error");
+    EXPECT_EQ(wrapped.InnerErrors().size(), 1u);
+    EXPECT_EQ(wrapped.InnerErrors()[0], error);
+
+    TError anotherErrorCopy = error;
+    auto trviallyWrapped = std::move(anotherErrorCopy).Wrap();
+    EXPECT_TRUE(anotherErrorCopy.IsOK());
+    EXPECT_EQ(trviallyWrapped, error);
+}
+
+TEST(TErrorTest, ThrowErrorExceptionIfFailedMacroJustWorks)
+{
+    TError error;
+
+    EXPECT_NO_THROW(THROW_ERROR_EXCEPTION_IF_FAILED(error, "Outer error"));
+
+    error = TError("Real error");
+
+    TError errorCopy = error;
+
+    try {
+        THROW_ERROR_EXCEPTION_IF_FAILED(errorCopy, "Outer error");
+    } catch (const std::exception& ex) {
+        TError outerError(ex);
+
+        EXPECT_TRUE(errorCopy.IsOK());
+        EXPECT_EQ(outerError.GetMessage(), "Outer error");
+        EXPECT_EQ(outerError.InnerErrors().size(), 1u);
+        EXPECT_EQ(outerError.InnerErrors()[0], error);
+    }
+}
+
+TEST(TErrorTest, ThrowErrorExceptionIfFailedMacroExpression)
+{
+    try {
+        THROW_ERROR_EXCEPTION_IF_FAILED(
+            TError("Inner error")
+                << TErrorAttribute("attr", "attr_value"),
+            "Outer error");
+    } catch (const std::exception& ex) {
+        TError outerError(ex);
+
+        EXPECT_EQ(outerError.GetMessage(), "Outer error");
+        EXPECT_EQ(outerError.InnerErrors().size(), 1u);
+        EXPECT_EQ(outerError.InnerErrors()[0].GetMessage(), "Inner error");
+        EXPECT_EQ(outerError.InnerErrors()[0].Attributes().Get<TString>("attr"), "attr_value");
+    }
+}
+
+TEST(TErrorTest, ThrowErrorExceptionIfFailedMacroDontStealValue)
+{
+    TErrorOr<TWidget> widget = TWidget();
+    EXPECT_TRUE(widget.IsOK());
+    EXPECT_EQ(TWidget::ResetDefaultCount(), 1);
+    EXPECT_EQ(TWidget::ResetCopyCount(), 0);
+    EXPECT_EQ(TWidget::ResetMoveCount(), 1);
+
+    EXPECT_NO_THROW(THROW_ERROR_EXCEPTION_IF_FAILED(widget));
+    EXPECT_TRUE(widget.IsOK());
+    EXPECT_NO_THROW(widget.ValueOrThrow());
+    EXPECT_EQ(TWidget::ResetDefaultCount(), 0);
+    EXPECT_EQ(TWidget::ResetCopyCount(), 0);
+    EXPECT_EQ(TWidget::ResetMoveCount(), 0);
+}
+
+TEST(TErrorTest, ThrowErrorExceptionIfFailedMacroDontDupeCalls)
+{
+    EXPECT_NO_THROW(THROW_ERROR_EXCEPTION_IF_FAILED(TErrorOr<TWidget>(TWidget())));
+    EXPECT_EQ(TWidget::ResetDefaultCount(), 1);
+    EXPECT_EQ(TWidget::ResetCopyCount(), 0);
+    EXPECT_EQ(TWidget::ResetMoveCount(), 1);
+}
 
 TEST(TErrorTest, SerializationDepthLimit)
 {
@@ -51,6 +418,50 @@ TEST(TErrorTest, SerializationDepthLimit)
             ASSERT_EQ(originalErrorDepth->GetValue<i64>(), i + ErrorSerializationDepthLimit);
         } else {
             ASSERT_FALSE(originalErrorDepth);
+        }
+    }
+}
+
+TEST(TErrorTest, DoNotDuplicateOriginalErrorDepth)
+{
+    constexpr int Depth = 20;
+    ASSERT_GE(Depth, ErrorSerializationDepthLimit);
+
+    auto error = TError(TErrorCode(Depth), "error");
+    for (int i = Depth; i >= 2; --i) {
+        error = TError(TErrorCode(i), "error") << std::move(error);
+    }
+
+    auto errorYson = ConvertToYsonString(error);
+    error = ConvertTo<TError>(errorYson);
+
+    // Due to reserialization, error already contains "original_error_depth" attribute.
+    // It should not be duplicated after the next serialization.
+    error = TError(TErrorCode(1), "error") << std::move(error);
+
+    // Use intermediate conversion to test YSON parser depth limit simultaneously.
+    errorYson = ConvertToYsonString(error);
+    auto errorNode = ConvertTo<IMapNodePtr>(errorYson);
+
+    error = ConvertTo<TError>(errorYson);
+    for (int index = 0; index < ErrorSerializationDepthLimit - 1; ++index) {
+        ASSERT_FALSE(error.Attributes().Contains("original_error_depth"));
+        error = error.InnerErrors()[0];
+    }
+
+    const auto& children = error.InnerErrors();
+    ASSERT_EQ(std::ssize(children), Depth - ErrorSerializationDepthLimit + 1);
+    for (int index = 0; index < std::ssize(children); ++index) {
+        const auto& child = children[index];
+        if (index == 0) {
+            ASSERT_FALSE(child.Attributes().Contains("original_error_depth"));
+        } else {
+            ASSERT_TRUE(child.Attributes().Contains("original_error_depth"));
+            if (index == 1) {
+                ASSERT_EQ(child.Attributes().Get<i64>("original_error_depth"), index + ErrorSerializationDepthLimit);
+            } else {
+                ASSERT_EQ(child.Attributes().Get<i64>("original_error_depth"), index + ErrorSerializationDepthLimit - 1);
+            }
         }
     }
 }
@@ -111,7 +522,7 @@ TEST(TErrorTest, TruncateSimpleRValue)
         << TError("Inner error");
     auto errorCopy = error;
     auto truncatedError = std::move(errorCopy).Truncate();
-    EXPECT_EQ(NYT::EErrorCode::OK, errorCopy.GetCode());
+    EXPECT_TRUE(errorCopy.IsOK());
 
     EXPECT_EQ(error.GetCode(), truncatedError.GetCode());
     EXPECT_EQ(error.GetMessage(), truncatedError.GetMessage());
@@ -135,7 +546,7 @@ TEST(TErrorTest, TruncateLargeRValue)
 
     auto errorCopy = error;
     auto truncatedError = std::move(errorCopy).Truncate(/*maxInnerErrorCount*/ 3, /*stringLimit*/ 10);
-    EXPECT_EQ(NYT::EErrorCode::OK, errorCopy.GetCode());
+    EXPECT_TRUE(errorCopy.IsOK());
 
     EXPECT_EQ(error.GetCode(), truncatedError.GetCode());
     EXPECT_EQ("Some long ...<message truncated>", truncatedError.GetMessage());
@@ -278,7 +689,7 @@ TEST(TErrorTest, ErrorSanitizer)
         EXPECT_FALSE(error.HasOriginAttributes());
         EXPECT_FALSE(error.HasTracingAttributes());
 
-        EXPECT_EQ("", error.GetHost());
+        EXPECT_EQ("<host-override>", error.GetHost());
         EXPECT_EQ(0, error.GetPid());
         EXPECT_EQ(NThreading::InvalidThreadId, error.GetTid());
         EXPECT_EQ(NConcurrency::InvalidFiberId, error.GetFid());
@@ -289,7 +700,7 @@ TEST(TErrorTest, ErrorSanitizer)
     auto checkNotSanitized = [&] (const TError& error) {
         EXPECT_TRUE(error.HasOriginAttributes());
 
-        EXPECT_FALSE(error.GetHost() == "");
+        EXPECT_FALSE(error.GetHost() == "<host-override>");
         EXPECT_FALSE(error.GetPid() == 0);
 
         auto now = TInstant::Now();
@@ -301,7 +712,9 @@ TEST(TErrorTest, ErrorSanitizer)
 
     {
         auto instant1 = TInstant::Days(123);
-        TErrorSanitizerGuard guard1(instant1);
+        TErrorSanitizerGuard guard1(
+            instant1,
+            /*localHostNameOverride*/ TSharedRef::FromString("<host-override>"));
 
         auto error2 = TError("error2");
         checkSantizied(error2);
@@ -309,7 +722,10 @@ TEST(TErrorTest, ErrorSanitizer)
 
         {
             auto instant2 = TInstant::Days(234);
-            TErrorSanitizerGuard guard2(instant2);
+            TErrorSanitizerGuard guard2(
+                instant2,
+                /*localHostNameOverride*/
+                TSharedRef::FromString("<host-override>"));
 
             auto error3 = TError("error3");
             checkSantizied(error3);

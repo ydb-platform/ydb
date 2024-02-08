@@ -357,20 +357,6 @@ TString GetDataCenterName(ui64 dataCenterId) {
     }
 }
 
-TString LongToShortTabletName(const TString& longTabletName) {
-    TString shortName;
-
-    for (char c : longTabletName) {
-        if (c >= 'A' && c <= 'Z') {
-            shortName += c;
-        }
-    }
-    if (shortName.empty()) {
-        shortName = longTabletName;
-    }
-    return shortName;
-}
-
 TString GetLocationString(const NActors::TNodeLocation& location) {
     NActorsInterconnect::TNodeLocation proto;
     location.Serialize(&proto, false);
@@ -384,7 +370,7 @@ void MakeTabletTypeSet(std::vector<TTabletTypes::EType>& list) {
 
 bool IsValidTabletType(TTabletTypes::EType type) {
     return (type > TTabletTypes::Unknown
-            && type < TTabletTypes::Reserved40
+            && type < TTabletTypes::EType_MAX
             );
 }
 
@@ -417,5 +403,67 @@ TString GetRunningTabletsText(ui64 runningTablets, ui64 totalTablets, bool warmU
     return str;
 }
 
+bool IsResourceDrainingState(TTabletInfo::EVolatileState state) {
+    switch (state) {
+    case TTabletInfo::EVolatileState::TABLET_VOLATILE_STATE_STARTING:
+    case TTabletInfo::EVolatileState::TABLET_VOLATILE_STATE_RUNNING:
+    case TTabletInfo::EVolatileState::TABLET_VOLATILE_STATE_UNKNOWN:
+        return true;
+    default:
+        return false;
+    }
+}
+
+bool IsAliveState(TTabletInfo::EVolatileState state) {
+    switch (state) {
+    case TTabletInfo::EVolatileState::TABLET_VOLATILE_STATE_STARTING:
+    case TTabletInfo::EVolatileState::TABLET_VOLATILE_STATE_RUNNING:
+        return true;
+    default:
+        return false;
+    }
+}
+
+TString GetTabletTypeShortName(TTabletTypes::EType type) {
+    auto it = TABLET_TYPE_SHORT_NAMES.find(type);
+    if (it == TABLET_TYPE_SHORT_NAMES.end()) {
+        return TStringBuilder() << (ui32)type;
+    } else {
+        return it->second;
+    }
+}
+
+TTabletTypes::EType GetTabletTypeByShortName(const TString& name) {
+    auto it = TABLET_TYPE_BY_SHORT_NAME.find(name);
+    if (it == TABLET_TYPE_BY_SHORT_NAME.end()) {
+        return TTabletTypes::TypeInvalid;
+    } else {
+        return it->second;
+    }
+}
+
+TString GetTypesHtml(const std::set<TTabletTypes::EType>& typesToShow, const std::unordered_map<TTabletTypes::EType, NKikimrConfig::THiveTabletLimit>& tabletLimits) {
+    TStringBuilder str;
+    for (auto type : typesToShow) {
+        if (!str.empty()) {
+            str << " ";
+        }
+        auto it = tabletLimits.find(type);
+        auto shortTypeName = GetTabletTypeShortName(type);
+        auto longTypeName = TTabletTypes::TypeToStr(type);
+        if (it == tabletLimits.end() || it->second.GetMaxCount() > 0) {
+            str << "<span class='box' title='" << longTypeName
+                << "' onclick='applySetting(this,\"DefaultTabletLimit\",\"" << shortTypeName
+                << ":0\")'>";
+        } else {
+            str << "<span class='box disabled' title='" << longTypeName
+                << "' onclick='applySetting(this, \"DefaultTabletLimit\", \"" << shortTypeName
+                << ":" << TNodeInfo::MAX_TABLET_COUNT_DEFAULT_VALUE << "\")'>";
+        }
+        str << shortTypeName;
+        str << "</span>";
+    }
+    return str;
+}
 } // NHive
 } // NKikimr

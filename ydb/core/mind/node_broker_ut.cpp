@@ -7,8 +7,8 @@
 #include <ydb/core/testlib/tablet_helpers.h>
 #include <ydb/core/testlib/fake_coordinator.h>
 
-#include <library/cpp/actors/interconnect/events_local.h>
-#include <library/cpp/actors/interconnect/interconnect_impl.h>
+#include <ydb/library/actors/interconnect/events_local.h>
+#include <ydb/library/actors/interconnect/interconnect_impl.h>
 #include <ydb/core/node_whiteboard/node_whiteboard.h>
 #include <ydb/core/base/tablet_resolver.h>
 #include <ydb/core/base/statestorage_impl.h>

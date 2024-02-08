@@ -29,7 +29,7 @@ target_link_libraries(library-yql-minikql PUBLIC
   yutil
   libs-apache-arrow
   libs-cctz-tzdata
-  cpp-actors-util
+  library-actors-util
   cpp-deprecated-enum_codegen
   library-cpp-enumbitset
   cpp-monlib-dynamic_counters

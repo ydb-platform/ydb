@@ -59,6 +59,7 @@ namespace NKikimr::NBsController {
         };
 
         using TGroup = std::vector<TPDiskInfo*>;
+        using TGroupConstraints = std::vector<TTargetDiskConstraints>;
 
         // PDomain/PRealm - TPDiskLayoutPosition, Fail Domain/Fail Realm - VDiskId
 
@@ -123,6 +124,15 @@ namespace NKikimr::NBsController {
                     return {};
                 }
 
+                return res;
+            }
+            
+            TGroupConstraints ProcessGroupConstraints(const TGroupConstraintsDefinition& groupConstraints) {
+                TGroupConstraints res(Topology.GetTotalVDisksNum());
+                Traverse(groupConstraints, [&](TVDiskIdShort vdisk, TTargetDiskConstraints diskConstraints) {
+                    const ui32 orderNumber = Topology.GetOrderNumber(vdisk);
+                    res[orderNumber] = diskConstraints;
+                });
                 return res;
             }
 
@@ -293,7 +303,7 @@ namespace NKikimr::NBsController {
             {
             }
 
-            bool FillInGroup(ui32 maxScore, TUndoLog& undo, TGroup& group) {
+            bool FillInGroup(ui32 maxScore, TUndoLog& undo, TGroup& group, const TGroupConstraints& constraints) {
                 // determine PDisks that fit our requirements (including score)
                 auto v = SetupMatchingDisks(maxScore);
 
@@ -314,7 +324,7 @@ namespace NKikimr::NBsController {
                 auto allocate = [&](auto what, ui32 index) {
                     TDynBitMap forbiddenEntities;
                     forbiddenEntities.Reserve(Self.DomainMapper.GetIdCount());
-                    if (!AllocateWholeEntity(what, group, undo, index, {v.begin(), v.end()}, forbiddenEntities)) {
+                    if (!AllocateWholeEntity(what, group, constraints, undo, index, {v.begin(), v.end()}, forbiddenEntities)) {
                         Revert(undo, group, 0);
                         return false;
                     }
@@ -407,7 +417,7 @@ namespace NKikimr::NBsController {
             using TDiskRange = std::pair<TPDiskByPosition::const_iterator, TPDiskByPosition::const_iterator>;
 
             template<typename T>
-            TAllocateResult AllocateWholeEntity(T, TGroup& group, TUndoLog& undo, ui32 parentEntityIndex, TDiskRange range,
+            TAllocateResult AllocateWholeEntity(T, TGroup& group, const TGroupConstraints& constraints, TUndoLog& undo, ui32 parentEntityIndex, TDiskRange range,
                     TDynBitMap& forbiddenEntities) {
                 // number of enclosed child entities within this one
                 const ui32 entityCount = (Topology.*T::GetEntityCount)();
@@ -423,7 +433,7 @@ namespace NKikimr::NBsController {
 
                     for (ui32 index = 0;; ++index) {
                         // allocate nested entity
-                        prefix = AllocateWholeEntity(typename T::TNestedEntity(), group, undo, parentEntityIndex + index,
+                        prefix = AllocateWholeEntity(typename T::TNestedEntity(), group, constraints, undo, parentEntityIndex + index,
                             {from, to}, forbiddenEntities);
 
                         if (prefix) {
@@ -453,7 +463,14 @@ namespace NKikimr::NBsController {
                 }
             }
 
-            TAllocateResult AllocateWholeEntity(TAllocateDisk, TGroup& group, TUndoLog& undo, ui32 index, TDiskRange range,
+            bool CheckConstraints(
+                const TPDiskInfo& pdisk,
+                const TTargetDiskConstraints& constraints
+            ) {
+                return !constraints.NodeId.has_value() || constraints.NodeId.value() == pdisk.PDiskId.NodeId;
+            }
+
+            TAllocateResult AllocateWholeEntity(TAllocateDisk, TGroup& group, const TGroupConstraints& constraints, TUndoLog& undo, ui32 index, TDiskRange range,
                     TDynBitMap& forbiddenEntities) {
                 TPDiskInfo *pdisk = group[index];
                 Y_ABORT_UNLESS(!pdisk);
@@ -462,7 +479,7 @@ namespace NKikimr::NBsController {
                         pdisk = candidate;
                     }
                 };
-                FindMatchingDiskBasedOnScore(process, group, index, range, forbiddenEntities);
+                FindMatchingDiskBasedOnScore(process, group, constraints, index, range, forbiddenEntities);
                 if (pdisk) {
                     AddDiskViaUndoLog(undo, group, index, pdisk);
                     pdisk->Matching = false;
@@ -493,14 +510,16 @@ namespace NKikimr::NBsController {
 
             template<typename TCallback>
             void FindMatchingDiskBasedOnScore(
-                    TCallback&&   cb,                  // callback to be invoked for every matching candidate
-                    const TGroup& group,               // group with peer disks
-                    ui32          orderNumber,         // order number of disk being allocated
-                    TDiskRange    range,               // range of PDisk candidates to scan
-                    TDynBitMap&   forbiddenEntities) { // a set of forbidden TEntityId's prevented from allocation
+                    TCallback&&   cb,                     // callback to be invoked for every matching candidate
+                    const TGroup& group,                  // group with peer disks
+                    const TGroupConstraints& constraints, // disk constraints for group
+                    ui32          orderNumber,            // order number of disk being allocated
+                    TDiskRange    range,                  // range of PDisk candidates to scan
+                    TDynBitMap&   forbiddenEntities) {    // a set of forbidden TEntityId's prevented from allocation
                 // first, find the best score for current group layout -- we can't make failure model inconsistency
                 // any worse than it already is
                 TScore bestScore = CalculateWorstScoreWithCache(group);
+                const TTargetDiskConstraints& constraint = constraints[orderNumber];
 
                 std::vector<TPDiskInfo*> candidates;
 
@@ -510,6 +529,8 @@ namespace NKikimr::NBsController {
 
                     // skip inappropriate disks, whole realm groups, realms and domains
                     if (!pdisk->Matching) {
+                        // just do nothing, skip this candidate disk
+                    } else if (!CheckConstraints(*pdisk, constraint)) {
                         // just do nothing, skip this candidate disk
                     } else if (forbiddenEntities[position.RealmGroup.Index()]) {
                         range.first += Min<ui32>(std::distance(range.first, range.second), pdisk->SkipToNextRealmGroup - 1);
@@ -912,8 +933,8 @@ namespace NKikimr::NBsController {
             return s.Str();
         }
 
-        bool AllocateGroup(ui32 groupId, TGroupDefinition& groupDefinition, const THashMap<TVDiskIdShort, TPDiskId>& replacedDisks,
-                TForbiddenPDisks forbid, i64 requiredSpace, bool requireOperational,
+        bool AllocateGroup(ui32 groupId, TGroupDefinition& groupDefinition, TGroupMapper::TGroupConstraintsDefinition& constraints,
+                const THashMap<TVDiskIdShort, TPDiskId>& replacedDisks, TForbiddenPDisks forbid, i64 requiredSpace, bool requireOperational,
                 TString& error) {
             if (Dirty) {
                 std::sort(PDiskByPosition.begin(), PDiskByPosition.end());
@@ -929,6 +950,7 @@ namespace NKikimr::NBsController {
             // fill in the allocation context
             TAllocator allocator(*this, Geom, requiredSpace, requireOperational, std::move(forbid), replacedDisks);
             TGroup group = allocator.ProcessExistingGroup(groupDefinition, error);
+            TGroupConstraints groupConstraints = allocator.ProcessGroupConstraints(constraints);
             if (group.empty()) {
                 return false;
             }
@@ -959,7 +981,7 @@ namespace NKikimr::NBsController {
             while (begin < end) {
                 const ui32 mid = begin + (end - begin) / 2;
                 TAllocator::TUndoLog undo;
-                if (allocator.FillInGroup(scores[mid], undo, group)) {
+                if (allocator.FillInGroup(scores[mid], undo, group, groupConstraints)) {
                     result = group;
                     allocator.Revert(undo, group, 0);
                     end = mid;
@@ -1115,9 +1137,15 @@ namespace NKikimr::NBsController {
         return Impl->AdjustSpaceAvailable(pdiskId, increment);
     }
 
+    bool TGroupMapper::AllocateGroup(ui32 groupId, TGroupDefinition& group, TGroupMapper::TGroupConstraintsDefinition& constraints,
+            const THashMap<TVDiskIdShort, TPDiskId>& replacedDisks, TForbiddenPDisks forbid, i64 requiredSpace, bool requireOperational, TString& error) {
+        return Impl->AllocateGroup(groupId, group, constraints, replacedDisks, std::move(forbid), requiredSpace, requireOperational, error);
+    }
+
     bool TGroupMapper::AllocateGroup(ui32 groupId, TGroupDefinition& group, const THashMap<TVDiskIdShort, TPDiskId>& replacedDisks,
             TForbiddenPDisks forbid, i64 requiredSpace, bool requireOperational, TString& error) {
-        return Impl->AllocateGroup(groupId, group, replacedDisks, std::move(forbid), requiredSpace, requireOperational, error);
+        TGroupMapper::TGroupConstraintsDefinition emptyConstraints;
+        return AllocateGroup(groupId, group, emptyConstraints, replacedDisks, std::move(forbid), requiredSpace, requireOperational, error);
     }
 
     TGroupMapper::TMisplacedVDisks TGroupMapper::FindMisplacedVDisks(const TGroupDefinition& group) {

@@ -1,10 +1,9 @@
 #pragma once
 #include "flat_part_iface.h"
-#include "flat_part_index_iter.h"
+#include "flat_part_index_iter_iface.h"
 #include "flat_part_slice.h"
 #include "flat_sausage_fetch.h"
 #include "flat_sausagecache.h"
-#include "util_fmt_abort.h"
 
 namespace NKikimr {
 namespace NTable {
@@ -82,7 +81,7 @@ namespace NTable {
         explicit TKeysLoader(const TPart* part, IPages* env)
             : Part(part)
             , Env(env)
-            , Index(Part, Env, {})
+            , Index(CreateIndexIter(part, env, {}))
         {
         }
 
@@ -151,7 +150,7 @@ namespace NTable {
                     return true;
                 }
 
-                auto ready = Index.Seek(rowId);
+                auto ready = Index->Seek(rowId);
                 if (ready == EReady::Page) {
                     return false;
                 } else if (ready == EReady::Gone) {
@@ -161,11 +160,11 @@ namespace NTable {
                     return true;
                 }
 
-                Y_ABORT_UNLESS(Index.GetRowId() <= rowId, "SeekIndex invariant failure");
-                if (!LoadPage(Index.GetPageId())) {
+                Y_ABORT_UNLESS(Index->GetRowId() <= rowId, "SeekIndex invariant failure");
+                if (!LoadPage(Index->GetPageId())) {
                     return false;
                 }
-                Y_ABORT_UNLESS(Page.BaseRow() == Index.GetRowId(), "Index and data are out of sync");
+                Y_ABORT_UNLESS(Page.BaseRow() == Index->GetRowId(), "Index and data are out of sync");
                 auto lastRowId = Page.BaseRow() + (Page->Count - 1);
                 if (lastRowId < rowId) {
                     // Row is out of range for this page
@@ -180,16 +179,16 @@ namespace NTable {
 
         bool SeekLastRow() noexcept
         {
-            auto hasLast = Index.SeekLast();
+            auto hasLast = Index->SeekLast();
             if (hasLast == EReady::Page) {
                 return false;
             }
             Y_ABORT_UNLESS(hasLast != EReady::Gone, "Unexpected failure to find the last index record");
 
-            if (!LoadPage(Index.GetPageId())) {
+            if (!LoadPage(Index->GetPageId())) {
                 return false;
             }
-            Y_ABORT_UNLESS(Page.BaseRow() == Index.GetRowId(), "Index and data are out of sync");
+            Y_ABORT_UNLESS(Page.BaseRow() == Index->GetRowId(), "Index and data are out of sync");
             auto lastRowId = Page.BaseRow() + (Page->Count - 1);
             LoadRow(lastRowId);
             return true;
@@ -227,7 +226,7 @@ namespace NTable {
         IPages* Env;
         TRowId RowId = Max<TRowId>();
         TPageId PageId = Max<TPageId>();
-        TPartIndexIt Index;
+        THolder<IIndexIter> Index;
         NPage::TDataPage Page;
         TSmallVec<TCell> Key;
     };

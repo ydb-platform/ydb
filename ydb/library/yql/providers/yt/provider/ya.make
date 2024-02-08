@@ -17,6 +17,7 @@ SRCS(
     yql_yt_helpers.cpp
     yql_yt_intent_determination.cpp
     yql_yt_io_discovery.cpp
+    yql_yt_io_discovery_walk_folders.cpp
     yql_yt_join_impl.cpp
     yql_yt_join_reorder.cpp
     yql_yt_key.cpp
@@ -64,6 +65,7 @@ PEERDIR(
     ydb/library/yql/core/url_lister/interface
     ydb/library/yql/dq/integration
     ydb/library/yql/dq/opt
+    ydb/library/yql/dq/type_ann
     ydb/library/yql/minikql
     ydb/library/yql/providers/common/codec
     ydb/library/yql/providers/common/config
@@ -87,6 +89,7 @@ PEERDIR(
     ydb/library/yql/providers/yt/lib/mkql_helpers
     ydb/library/yql/providers/yt/lib/res_pull
     ydb/library/yql/providers/yt/lib/row_spec
+    ydb/library/yql/providers/yt/lib/schema
     ydb/library/yql/providers/yt/lib/skiff
     ydb/library/yql/providers/yt/lib/yson_helpers
     ydb/library/yql/providers/yt/opt

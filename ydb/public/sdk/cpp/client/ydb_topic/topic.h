@@ -2,6 +2,7 @@
 #include <ydb/public/api/grpc/ydb_topic_v1.grpc.pb.h>
 #include <ydb/public/sdk/cpp/client/ydb_driver/driver.h>
 #include <ydb/public/sdk/cpp/client/ydb_scheme/scheme.h>
+#include <ydb/public/sdk/cpp/client/ydb_types/exceptions/exceptions.h>
 
 #include <library/cpp/monlib/dynamic_counters/counters.h>
 #include <library/cpp/logger/log.h>
@@ -652,10 +653,33 @@ struct TWriteStat : public TThrRefBase {
     using TPtr = TIntrusivePtr<TWriteStat>;
 };
 
-class TContinuationToken : public TMoveOnly {
-    friend class TWriteSessionImpl;
+class TContinuationToken : public TNonCopyable {
+    friend class TContinuationTokenIssuer;
+
+    bool Valid = true;
+
+public:
+    TContinuationToken& operator=(TContinuationToken&& other) {
+        if (!other.Valid) {
+            ythrow TContractViolation("Cannot move invalid token");
+        }
+        Valid = std::exchange(other.Valid, false);
+        return *this;
+    }
+
+    TContinuationToken(TContinuationToken&& other) {
+        *this = std::move(other);
+    }
+
 private:
     TContinuationToken() = default;
+};
+
+class TContinuationTokenIssuer {
+protected:
+    static auto IssueContinuationToken() {
+        return TContinuationToken{};
+    }
 };
 
 struct TWriterCounters : public TThrRefBase {
@@ -1212,7 +1236,6 @@ struct TWriteSessionEvent {
         TMaybe<TWrittenMessageDetails> Details;
         //! Write stats from server. See TWriteStat. nullptr for DISCARDED event.
         TWriteStat::TPtr Stat;
-
     };
 
     struct TAcksEvent : public TPrintable<TAcksEvent> {
@@ -1224,7 +1247,19 @@ struct TWriteSessionEvent {
     //! Indicates that a writer is ready to accept new message(s).
     //! Continuation token should be kept and then used in write methods.
     struct TReadyToAcceptEvent : public TPrintable<TReadyToAcceptEvent> {
-        TContinuationToken ContinuationToken;
+        mutable TContinuationToken ContinuationToken;
+
+        TReadyToAcceptEvent() = delete;
+        TReadyToAcceptEvent(TContinuationToken&& t) : ContinuationToken(std::move(t)) {
+        }
+        TReadyToAcceptEvent(TReadyToAcceptEvent&&) = default;
+        TReadyToAcceptEvent(const TReadyToAcceptEvent& other) : ContinuationToken(std::move(other.ContinuationToken)) {
+        }
+        TReadyToAcceptEvent& operator=(TReadyToAcceptEvent&&) = default;
+        TReadyToAcceptEvent& operator=(const TReadyToAcceptEvent& other) {
+            ContinuationToken = std::move(other.ContinuationToken);
+            return *this;
+        }
     };
 
     using TEvent = std::variant<TAcksEvent, TReadyToAcceptEvent, TSessionClosedEvent>;
@@ -1333,7 +1368,10 @@ struct TWriteSessionSettings : public TRequestSettings<TWriteSessionSettings> {
         //! Function to handle ReadyToAccept event.
         //! If this handler is set, write these events will be handled by handler,
         //! otherwise sent to TWriteSession::GetEvent().
-        FLUENT_SETTING(TReadyToAcceptHandler, ReadyToAcceptHander);
+        FLUENT_SETTING(TReadyToAcceptHandler, ReadyToAcceptHandler);
+        TSelf& ReadyToAcceptHander(const TReadyToAcceptHandler& value) {
+            return ReadyToAcceptHandler(value);
+        }
 
         //! Function to handle close session events.
         //! If this handler is set, close session events will be handled by handler

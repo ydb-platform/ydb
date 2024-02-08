@@ -12,12 +12,13 @@
 #include <ydb/core/protos/pqconfig.pb.h>
 #include <ydb/core/persqueue/writer/source_id_encoding.h>
 
-#include <library/cpp/actors/core/actor_bootstrapped.h>
+#include <ydb/library/actors/core/actor_bootstrapped.h>
 
-#include <library/cpp/actors/core/hfunc.h>
+#include <ydb/library/actors/core/hfunc.h>
 
 #include <ydb/library/persqueue/topic_parser/topic_parser.h>
 #include <ydb/core/persqueue/events/global.h>
+#include <ydb/core/persqueue/writer/partition_chooser.h>
 #include <ydb/core/persqueue/writer/writer.h>
 #include <ydb/core/persqueue/percentile_counter.h>
 #include <ydb/core/base/appdata.h>
@@ -388,7 +389,6 @@ private:
             HFunc(TEvPQProxy::TEvWriteInit,  Handle)
             HFunc(TEvPQProxy::TEvWrite, Handle)
             HFunc(TEvPQProxy::TEvDone, Handle)
-            HFunc(TEvPersQueue::TEvGetPartitionIdForWriteResponse, Handle)
 
             HFunc(TEvDescribeTopicsResponse, Handle);
 
@@ -399,18 +399,16 @@ private:
             HFunc(TEvTabletPipe::TEvClientDestroyed, Handle);
             HFunc(TEvTabletPipe::TEvClientConnected, Handle);
 
-            HFunc(NKqp::TEvKqp::TEvQueryResponse, Handle);
-            HFunc(NKqp::TEvKqp::TEvCreateSessionResponse, Handle);
-            HFunc(NMetadata::NProvider::TEvManagerPrepared, Handle);
-
+            HFunc(NPQ::TEvPartitionChooser::TEvChooseResult, Handle);
+            HFunc(NPQ::TEvPartitionChooser::TEvChooseError, Handle);
         default:
             break;
         };
     }
 
-    void Handle(NKqp::TEvKqp::TEvQueryResponse::TPtr &ev, const TActorContext &ctx);
-    void Handle(NKqp::TEvKqp::TEvCreateSessionResponse::TPtr &ev, const NActors::TActorContext& ctx);
-    void TryCloseSession(const TActorContext& ctx);
+    void DiscoverPartition(const NActors::TActorContext& ctx);
+    void Handle(NPQ::TEvPartitionChooser::TEvChooseResult::TPtr& ev, const NActors::TActorContext& ctx);
+    void Handle(NPQ::TEvPartitionChooser::TEvChooseError::TPtr& ev, const NActors::TActorContext& ctx);
 
     TString CheckSupportedCodec(const ui32 codecId);
     void CheckACL(const TActorContext& ctx);
@@ -419,24 +417,11 @@ private:
     void Handle(TEvPQProxy::TEvWriteInit::TPtr& ev,  const NActors::TActorContext& ctx);
     void Handle(TEvPQProxy::TEvWrite::TPtr& ev, const NActors::TActorContext& ctx);
     void Handle(TEvPQProxy::TEvDone::TPtr& ev, const NActors::TActorContext& ctx);
-    void Handle(TEvPersQueue::TEvGetPartitionIdForWriteResponse::TPtr& ev, const NActors::TActorContext& ctx);
 
     void LogSession(const TActorContext& ctx);
 
     void InitAfterDiscovery(const TActorContext& ctx);
-    void DiscoverPartition(const NActors::TActorContext& ctx);
-    TString GetDatabaseName(const NActors::TActorContext& ctx);
-    void StartSession(const NActors::TActorContext& ctx);
-    void SendCreateManagerRequest(const TActorContext& ctx);
-
-    void SendSelectPartitionRequest(const TString& topic, const NActors::TActorContext& ctx);
-    void UpdatePartition(const NActors::TActorContext& ctx);
-    void RequestNextPartition(const NActors::TActorContext& ctx);
     void ProceedPartition(const ui32 partition, const NActors::TActorContext& ctx);
-
-    THolder<NKqp::TEvKqp::TEvQueryRequest> MakeUpdateSourceIdMetadataRequest(const TString& topic,
-                                                                             const TActorContext& ctx);
-
 
     void Handle(TEvDescribeTopicsResponse::TPtr& ev, const NActors::TActorContext& ctx);
 
@@ -446,7 +431,6 @@ private:
     void Handle(NPQ::TEvPartitionWriter::TEvDisconnected::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvTabletPipe::TEvClientConnected::TPtr& ev, const NActors::TActorContext& ctx);
     void Handle(TEvTabletPipe::TEvClientDestroyed::TPtr& ev, const NActors::TActorContext& ctx);
-    void Handle(NMetadata::NProvider::TEvManagerPrepared::TPtr &ev, const NActors::TActorContext& ctx);
 
     void HandlePoison(TEvPQProxy::TEvDieCommand::TPtr& ev, const NActors::TActorContext& ctx);
     void HandleWakeup(const NActors::TActorContext& ctx);
@@ -468,10 +452,7 @@ private:
     enum EState {
         ES_CREATED = 1,
         ES_WAIT_SCHEME = 2,
-        ES_WAIT_SESSION = 3,
-        ES_WAIT_TABLE_REQUEST_1 = 4,
-        ES_WAIT_NEXT_PARTITION = 5,
-        ES_WAIT_TABLE_REQUEST_2 = 6,
+        ES_WAIT_PARTITION = 3,
         ES_WAIT_WRITER_INIT = 7,
         ES_INITED = 8,
         ES_DYING = 9,
@@ -486,12 +467,10 @@ private:
     ui64 Cookie;
 
     ui32 Partition;
-    bool PartitionFound = false;
+    ui64 PartitionTabletId;
     ui32 PreferedPartition;
     TString SourceId;
-    ui32 SelectReqsInflight = 0;
-    ui64 MaxSrcIdAccessTime = 0;
-    NPQ::NSourceIdEncoding::TEncodedSourceId EncodedSourceId;
+    std::optional<ui64> InitialSeqNo;
     TString OwnerCookie;
     TString UserAgent;
 
@@ -521,7 +500,7 @@ private:
 
     bool WritesDone;
 
-    THashMap<ui32, ui64> PartitionToTablet;
+    NKikimrSchemeOp::TPersQueueGroupDescription Config;
 
     TIntrusivePtr<NMonitoring::TDynamicCounters> Counters;
 
@@ -551,25 +530,15 @@ private:
     TInstant LastACLCheckTimestamp;
     TInstant LogSessionDeadline;
 
-    ui64 BalancerTabletId;
     TString DatabaseId;
     TString FolderId;
-    TActorId PipeToBalancer;
     TIntrusivePtr<TSecurityObject> SecurityObject;
     TPQGroupInfoPtr PQInfo;
 
     NKikimrPQClient::TDataChunk InitMeta;
     TString LocalDC;
     TString ClientDC;
-    TString SelectSourceIdQuery;
-    TString UpdateSourceIdQuery;
     TInstant LastSourceIdUpdate;
-    TString TxId;
-    TString KqpSessionId;
-
-    ui64 SourceIdCreateTime = 0;
-    ui32 SourceIdUpdatesInflight = 0;
-
 
     TVector<NPersQueue::TPQLabelsInfo> Aggr;
     NKikimr::NPQ::TMultiCounter SLITotal;
@@ -583,7 +552,8 @@ private:
     NPersQueue::TTopicConverterPtr FullConverter;
 
     NPersQueue::TWriteRequest::TInit InitRequest;
-    NPQ::ESourceIdTableGeneration SrcIdTableGeneration;
+
+    TActorId PartitionChooser;
 };
 
 class TReadSessionActor : public TActorBootstrapped<TReadSessionActor> {

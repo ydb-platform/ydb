@@ -33,14 +33,14 @@ namespace Model
    * href="http://docs.aws.amazon.com/goto/WebAPI/s3-2006-03-01/DefaultRetention">AWS
    * API Reference</a></p>
    */
-  class AWS_S3_API DefaultRetention
+  class DefaultRetention
   {
   public:
-    DefaultRetention();
-    DefaultRetention(const Aws::Utils::Xml::XmlNode& xmlNode);
-    DefaultRetention& operator=(const Aws::Utils::Xml::XmlNode& xmlNode);
+    AWS_S3_API DefaultRetention();
+    AWS_S3_API DefaultRetention(const Aws::Utils::Xml::XmlNode& xmlNode);
+    AWS_S3_API DefaultRetention& operator=(const Aws::Utils::Xml::XmlNode& xmlNode);
 
-    void AddToNode(Aws::Utils::Xml::XmlNode& parentNode) const;
+    AWS_S3_API void AddToNode(Aws::Utils::Xml::XmlNode& parentNode) const;
 
 
     /**
@@ -138,13 +138,13 @@ namespace Model
   private:
 
     ObjectLockRetentionMode m_mode;
-    bool m_modeHasBeenSet;
+    bool m_modeHasBeenSet = false;
 
     int m_days;
-    bool m_daysHasBeenSet;
+    bool m_daysHasBeenSet = false;
 
     int m_years;
-    bool m_yearsHasBeenSet;
+    bool m_yearsHasBeenSet = false;
   };
 
 } // namespace Model

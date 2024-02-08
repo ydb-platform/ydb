@@ -49,7 +49,7 @@ ares_parse_naptr_reply (const unsigned char *abuf, int alen,
 {
   unsigned int qdcount, ancount, i;
   const unsigned char *aptr, *vptr;
-  int status, rr_type, rr_class, rr_len, rr_ttl;
+  int status, rr_type, rr_class, rr_len;
   long len;
   char *hostname = NULL, *rr_name = NULL;
   struct ares_naptr_reply *naptr_head = NULL;
@@ -102,7 +102,6 @@ ares_parse_naptr_reply (const unsigned char *abuf, int alen,
       rr_type = DNS_RR_TYPE (aptr);
       rr_class = DNS_RR_CLASS (aptr);
       rr_len = DNS_RR_LEN (aptr);
-      rr_ttl = DNS_RR_TTL (aptr);
       aptr += RRFIXEDSZ;
       if (aptr + rr_len > abuf + alen)
         {
@@ -139,7 +138,6 @@ ares_parse_naptr_reply (const unsigned char *abuf, int alen,
             }
           naptr_last = naptr_curr;
 
-          naptr_curr->ttl = rr_ttl;
           vptr = aptr;
           naptr_curr->order = DNS__16BIT(vptr);
           vptr += sizeof(unsigned short);

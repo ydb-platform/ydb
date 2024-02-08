@@ -7,19 +7,20 @@
 #include "import_s3.h"
 
 #include <ydb/core/base/appdata.h>
+#include <ydb/core/protos/datashard_config.pb.h>
 #include <ydb/core/protos/flat_scheme_op.pb.h>
 #include <ydb/library/services/services.pb.h>
 #include <ydb/core/scheme/scheme_types_proto.h>
 #include <ydb/core/tablet/resource_broker.h>
 #include <ydb/core/wrappers/s3_wrapper.h>
 #include <ydb/core/wrappers/s3_storage.h>
-#include <ydb/core/io_formats/csv.h>
+#include <ydb/core/io_formats/ydb_dump/csv_ydb_dump.h>
 #include <ydb/public/lib/scheme_types/scheme_type_id.h>
 
 #include <contrib/libs/zstd/include/zstd.h>
-#include <library/cpp/actors/core/actor_bootstrapped.h>
-#include <library/cpp/actors/core/hfunc.h>
-#include <library/cpp/actors/core/log.h>
+#include <ydb/library/actors/core/actor_bootstrapped.h>
+#include <ydb/library/actors/core/hfunc.h>
+#include <ydb/library/actors/core/log.h>
 
 #include <util/generic/buffer.h>
 #include <util/generic/ptr.h>
@@ -310,7 +311,6 @@ class TS3Downloader: public TActorBootstrapped<TS3Downloader> {
 
     enum class EWakeupTag: ui64 {
         Restart,
-        RetryUpload,
     };
 
     void AllocateResource() {
@@ -573,9 +573,6 @@ class TS3Downloader: public TActorBootstrapped<TS3Downloader> {
         case NKikimrTxDataShard::TError::OK:
             return ProcessDownloadInfo(ev->Get()->Info, TStringBuf("UploadResponse"));
 
-        case NKikimrTxDataShard::TError::WRONG_SHARD_STATE: // OVERLOADED
-            return RetryUpload();
-
         case NKikimrTxDataShard::TError::SCHEME_ERROR:
         case NKikimrTxDataShard::TError::BAD_ARGUMENT:
             return Finish(false, record.GetErrorDescription());
@@ -659,10 +656,6 @@ class TS3Downloader: public TActorBootstrapped<TS3Downloader> {
         return true;
     }
 
-    void RetryUpload() {
-        Schedule(TDuration::MilliSeconds(50), new TEvents::TEvWakeup(static_cast<ui64>(EWakeupTag::RetryUpload)));
-    }
-
     void RestartOrFinish(const TString& error) {
         if (Attempt++ < Retries) {
             Delay = Min(Delay * Attempt, MaxDelay);
@@ -678,8 +671,6 @@ class TS3Downloader: public TActorBootstrapped<TS3Downloader> {
         switch (static_cast<EWakeupTag>(ev->Get()->Tag)) {
         case EWakeupTag::Restart:
             return Restart();
-        case EWakeupTag::RetryUpload:
-            return UploadRows();
         }
     }
 

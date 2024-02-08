@@ -230,15 +230,9 @@ TStringBuilder TSingleClusterReadSessionImpl<UseMigrationProtocol>::GetLogPrefix
     return TStringBuilder() << GetDatabaseLogPrefix(Database) << "[" << SessionId << "] [" << ClusterName << "] ";
 }
 
-template <bool UseMigrationProtocol>
-TCallbackContextPtr<UseMigrationProtocol> TSingleClusterReadSessionImpl<UseMigrationProtocol>::MakeCallbackContext() {
-    CbContext = std::make_shared<TCallbackContext<TSelf>>(this->shared_from_this());
-    return CbContext;
-}
-
 template<bool UseMigrationProtocol>
 void TSingleClusterReadSessionImpl<UseMigrationProtocol>::Start() {
-    Y_ABORT_UNLESS(CbContext);
+    Y_ABORT_UNLESS(this->SelfContext);
     Settings.DecompressionExecutor_->Start();
     Settings.EventHandlers_.HandlersExecutor_->Start();
     if (!Reconnect(TPlainStatus())) {
@@ -249,17 +243,11 @@ void TSingleClusterReadSessionImpl<UseMigrationProtocol>::Start() {
 template<bool UseMigrationProtocol>
 bool TSingleClusterReadSessionImpl<UseMigrationProtocol>::Reconnect(const TPlainStatus& status) {
     TDuration delay = TDuration::Zero();
-    NGrpc::IQueueClientContextPtr delayContext = nullptr;
-    NGrpc::IQueueClientContextPtr connectContext = ClientContext->CreateContext();
-    NGrpc::IQueueClientContextPtr connectTimeoutContext = ClientContext->CreateContext();
-    if (!connectContext || !connectTimeoutContext) {
-        return false;
-    }
 
     // Previous operations contexts.
-    NGrpc::IQueueClientContextPtr prevConnectContext;
-    NGrpc::IQueueClientContextPtr prevConnectTimeoutContext;
-    NGrpc::IQueueClientContextPtr prevConnectDelayContext;
+    NYdbGrpc::IQueueClientContextPtr prevConnectContext;
+    NYdbGrpc::IQueueClientContextPtr prevConnectTimeoutContext;
+    NYdbGrpc::IQueueClientContextPtr prevConnectDelayContext;
 
     // Callbacks
     std::function<void(TPlainStatus&&, typename IProcessor::TPtr&&)> connectCallback;
@@ -270,8 +258,18 @@ bool TSingleClusterReadSessionImpl<UseMigrationProtocol>::Reconnect(const TPlain
                                             << ". Description: " << IssuesSingleLineString(status.Issues));
     }
 
+    NYdbGrpc::IQueueClientContextPtr delayContext = nullptr;
+    NYdbGrpc::IQueueClientContextPtr connectContext = nullptr;
+    NYdbGrpc::IQueueClientContextPtr connectTimeoutContext = nullptr;
+
     TDeferredActions<UseMigrationProtocol> deferred;
     with_lock (Lock) {
+        connectContext = ClientContext->CreateContext();
+        connectTimeoutContext = ClientContext->CreateContext();
+        if (!connectContext || !connectTimeoutContext) {
+            return false;
+        }
+
         if (Aborting) {
             Cancel(connectContext);
             Cancel(connectTimeoutContext);
@@ -324,16 +322,16 @@ bool TSingleClusterReadSessionImpl<UseMigrationProtocol>::Reconnect(const TPlain
         // Destroy all partition streams before connecting.
         DestroyAllPartitionStreamsImpl(deferred);
 
-        Y_ABORT_UNLESS(CbContext);
+        Y_ABORT_UNLESS(this->SelfContext);
 
-        connectCallback = [cbContext = CbContext,
+        connectCallback = [cbContext = this->SelfContext,
                            connectContext = connectContext](TPlainStatus&& st, typename IProcessor::TPtr&& processor) {
             if (auto borrowedSelf = cbContext->LockShared()) {
                 borrowedSelf->OnConnect(std::move(st), std::move(processor), connectContext); // OnConnect could be called inplace!
             }
         };
 
-        connectTimeoutCallback = [cbContext = CbContext,
+        connectTimeoutCallback = [cbContext = this->SelfContext,
                                   connectTimeoutContext = connectTimeoutContext](bool ok) {
             if (ok) {
                 if (auto borrowedSelf = cbContext->LockShared()) {
@@ -375,11 +373,11 @@ void TSingleClusterReadSessionImpl<UseMigrationProtocol>::BreakConnectionAndReco
     Processor = nullptr;
     RetryState = Settings.RetryPolicy_->CreateRetryState(); // Explicitly create retry state to determine whether we should connect to server again.
 
-    deferred.DeferReconnection(CbContext, std::move(status));
+    deferred.DeferReconnection(this->SelfContext, std::move(status));
 }
 
 template<bool UseMigrationProtocol>
-void TSingleClusterReadSessionImpl<UseMigrationProtocol>::OnConnectTimeout(const NGrpc::IQueueClientContextPtr& connectTimeoutContext) {
+void TSingleClusterReadSessionImpl<UseMigrationProtocol>::OnConnectTimeout(const NYdbGrpc::IQueueClientContextPtr& connectTimeoutContext) {
     with_lock (Lock) {
         if (ConnectTimeoutContext == connectTimeoutContext) {
             Cancel(ConnectContext);
@@ -406,7 +404,7 @@ void TSingleClusterReadSessionImpl<UseMigrationProtocol>::OnConnectTimeout(const
 
 template <bool UseMigrationProtocol>
 void TSingleClusterReadSessionImpl<UseMigrationProtocol>::OnConnect(
-    TPlainStatus&& st, typename IProcessor::TPtr&& processor, const NGrpc::IQueueClientContextPtr& connectContext) {
+    TPlainStatus&& st, typename IProcessor::TPtr&& processor, const NYdbGrpc::IQueueClientContextPtr& connectContext) {
     TDeferredActions<UseMigrationProtocol> deferred;
     with_lock (Lock) {
         if (ConnectContext == connectContext) {
@@ -824,13 +822,13 @@ void TSingleClusterReadSessionImpl<UseMigrationProtocol>::ReadFromProcessorImpl(
     if (Processor && !Closing) {
         ServerMessage->Clear();
 
-        Y_ABORT_UNLESS(CbContext);
+        Y_ABORT_UNLESS(this->SelfContext);
 
-        auto callback = [cbContext = CbContext,
+        auto callback = [cbContext = this->SelfContext,
                          connectionGeneration = ConnectionGeneration,
                          // Capture message & processor not to read in freed memory.
                          serverMessage = ServerMessage,
-                         processor = Processor](NGrpc::TGrpcStatus&& grpcStatus) {
+                         processor = Processor](NYdbGrpc::TGrpcStatus&& grpcStatus) {
             if (auto borrowedSelf = cbContext->LockShared()) {
                 borrowedSelf->OnReadDone(std::move(grpcStatus), connectionGeneration);
             }
@@ -841,7 +839,7 @@ void TSingleClusterReadSessionImpl<UseMigrationProtocol>::ReadFromProcessorImpl(
 }
 
 template<bool UseMigrationProtocol>
-void TSingleClusterReadSessionImpl<UseMigrationProtocol>::OnReadDone(NGrpc::TGrpcStatus&& grpcStatus, size_t connectionGeneration) {
+void TSingleClusterReadSessionImpl<UseMigrationProtocol>::OnReadDone(NYdbGrpc::TGrpcStatus&& grpcStatus, size_t connectionGeneration) {
     TPlainStatus errorStatus;
     if (!grpcStatus.Ok()) {
         errorStatus = TPlainStatus(std::move(grpcStatus));
@@ -896,6 +894,10 @@ void TSingleClusterReadSessionImpl<UseMigrationProtocol>::OnReadDone(NGrpc::TGrp
                     case TServerMessage<false>::kStartPartitionSessionRequest:
                         OnReadDoneImpl(std::move(*ServerMessage->mutable_start_partition_session_request()), deferred);
                         break;
+                    case TServerMessage<false>::kUpdatePartitionSession:
+                        OnReadDoneImpl(std::move(*ServerMessage->mutable_update_partition_session()), deferred);
+                        break;
+
                     case TServerMessage<false>::kStopPartitionSessionRequest:
                         OnReadDoneImpl(std::move(*ServerMessage->mutable_stop_partition_session_request()), deferred);
                         break;
@@ -909,6 +911,9 @@ void TSingleClusterReadSessionImpl<UseMigrationProtocol>::OnReadDone(NGrpc::TGrp
                         OnReadDoneImpl(std::move(*ServerMessage->mutable_update_token_response()), deferred);
                         break;
                     case TServerMessage<false>::SERVER_MESSAGE_NOT_SET:
+                        errorStatus = TPlainStatus::Internal("Server message is not set");
+                        break;
+                    default:
                         errorStatus = TPlainStatus::Internal("Unexpected response from server");
                         break;
                     }
@@ -1018,7 +1023,7 @@ inline void TSingleClusterReadSessionImpl<true>::OnReadDoneImpl(
         }
 
         auto decompressionInfo = std::make_shared<TDataDecompressionInfo<true>>(std::move(partitionData),
-                                                                                CbContext,
+                                                                                SelfContext,
                                                                                 Settings.Decompress_);
         Y_ABORT_UNLESS(decompressionInfo);
 
@@ -1044,7 +1049,7 @@ inline void TSingleClusterReadSessionImpl<true>::OnReadDoneImpl(
         NextPartitionStreamId, msg.topic().path(), msg.cluster(),
         msg.partition() + 1, // Group.
         msg.partition(),     // Partition.
-        msg.assign_id(), msg.read_offset(), CbContext);
+        msg.assign_id(), msg.read_offset(), SelfContext);
     NextPartitionStreamId += PartitionStreamIdStep;
 
     // Renew partition stream.
@@ -1262,7 +1267,7 @@ inline void TSingleClusterReadSessionImpl<false>::OnReadDoneImpl(
         partitionStream->SetFirstNotReadOffset(desiredOffset);
 
         auto decompressionInfo = std::make_shared<TDataDecompressionInfo<false>>(std::move(partitionData),
-                                                                                 CbContext,
+                                                                                 SelfContext,
                                                                                  Settings.Decompress_,
                                                                                  serverBytesSize);
         // TODO (ildar-khisam@): share serverBytesSize between partitions data according to their actual sizes;
@@ -1290,7 +1295,7 @@ inline void TSingleClusterReadSessionImpl<false>::OnReadDoneImpl(
     auto partitionStream = MakeIntrusive<TPartitionStreamImpl<false>>(
         NextPartitionStreamId, msg.partition_session().path(), msg.partition_session().partition_id(),
         msg.partition_session().partition_session_id(), msg.committed_offset(),
-        CbContext);
+        SelfContext);
     NextPartitionStreamId += PartitionStreamIdStep;
 
     // Renew partition stream.
@@ -1317,6 +1322,21 @@ inline void TSingleClusterReadSessionImpl<false>::OnReadDoneImpl(
         AbortImpl();
         return;
     }
+}
+
+template <>
+template <>
+inline void TSingleClusterReadSessionImpl<false>::OnReadDoneImpl(
+    Ydb::Topic::StreamReadMessage::UpdatePartitionSession&& msg,
+    TDeferredActions<false>& deferred) {
+    Y_ABORT_UNLESS(Lock.IsLocked());
+    Y_UNUSED(deferred);
+
+    auto partitionStreamIt = PartitionStreams.find(msg.partition_session_id());
+    if (partitionStreamIt == PartitionStreams.end()) {
+        return;
+    }
+    //TODO: update generation/nodeid info
 }
 
 template <>
@@ -1559,11 +1579,6 @@ void TSingleClusterReadSessionImpl<UseMigrationProtocol>::AbortImpl() {
         Cancel(ConnectContext);
         Cancel(ConnectTimeoutContext);
         Cancel(ConnectDelayContext);
-
-        if (ClientContext) {
-            ClientContext->Cancel();
-            ClientContext.reset();
-        }
 
         if (Processor) {
             Processor->Cancel();
@@ -2319,8 +2334,7 @@ i64 TDataDecompressionInfo<UseMigrationProtocol>::StartDecompressionTasks(
 
 template<bool UseMigrationProtocol>
 void TDataDecompressionInfo<UseMigrationProtocol>::PlanDecompressionTasks(double averageCompressionRatio,
-                                                                          TIntrusivePtr<TPartitionStreamImpl<UseMigrationProtocol>> partitionStream)
-{
+                                                                          TIntrusivePtr<TPartitionStreamImpl<UseMigrationProtocol>> partitionStream) {
     constexpr size_t TASK_LIMIT = 512_KB;
 
     auto session = CbContext->LockShared();
@@ -2349,10 +2363,8 @@ void TDataDecompressionInfo<UseMigrationProtocol>::PlanDecompressionTasks(double
                                                      TDataDecompressionInfo::shared_from_this(),
                                                      ReadyThresholds.back().Ready);
             if (!pushRes) {
-                // with_lock(session->Lock) {
-                session->Abort();
+                session->AbortImpl();
                 return;
-                // }
             }
         }
 

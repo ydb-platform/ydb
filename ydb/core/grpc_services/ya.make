@@ -80,6 +80,7 @@ SRCS(
     query/rpc_execute_script.cpp
     query/rpc_fetch_script_results.cpp
     query/rpc_attach_session.cpp
+    query/rpc_kqp_tx.cpp
     query/service_query.h
 )
 
@@ -103,7 +104,7 @@ PEERDIR(
     ydb/core/grpc_services/cancelation
     ydb/core/grpc_services/auth_processor
     ydb/core/health_check
-    ydb/core/io_formats
+    ydb/core/io_formats/ydb_dump
     ydb/core/kesus/tablet
     ydb/core/kqp/common
     ydb/core/protos
@@ -113,7 +114,7 @@ PEERDIR(
     ydb/core/tx/datashard
     ydb/core/tx/sharding
     ydb/core/tx/long_tx_service/public
-    ydb/core/tx/ev_write
+    ydb/core/tx/data_events
     ydb/core/ydb_convert
     ydb/core/security
     ydb/library/aclib
@@ -123,6 +124,7 @@ PEERDIR(
     ydb/library/persqueue/topic_parser
     ydb/library/yql/parser/pg_wrapper/interface
     ydb/library/yql/public/types
+    ydb/library/yql/public/issue
     ydb/library/services
     ydb/public/api/grpc/draft
     ydb/public/api/protos

@@ -10,9 +10,9 @@
 #include <ydb/library/time_series_vec/time_series_vec.h>
 #include <ydb/library/yql/public/issue/yql_issue_message.h>
 
-#include <library/cpp/actors/core/hfunc.h>
-#include <library/cpp/actors/core/log.h>
-#include <library/cpp/actors/core/actor_bootstrapped.h>
+#include <ydb/library/actors/core/hfunc.h>
+#include <ydb/library/actors/core/log.h>
+#include <ydb/library/actors/core/actor_bootstrapped.h>
 
 #include <util/generic/map.h>
 #include <util/generic/hash.h>
@@ -66,6 +66,7 @@ class TKesusQuoterProxy : public TActorBootstrapped<TKesusQuoterProxy> {
         THolder<TTimeSeriesVec<double>> History;
         bool PendingAccountingReport = false; // History contains data to send
         TInstant HistoryAccepted; // Do not report history before this instant
+        TInstant LastAccountingReportEnd; // Do not write history before this instant
         TInstant LastAccountingReport; // Aligned to `ReportPeriod` grid timestamp of last sent report
         TDuration AccountingReportPeriod = TDuration::Max();
 
@@ -78,8 +79,8 @@ class TKesusQuoterProxy : public TActorBootstrapped<TKesusQuoterProxy> {
         std::deque<TReportHistoryItem> ReportHistory;
         size_t MaxReportHistory = 120;
         ui32 ReportId = 0;
-        double TotalConsumed; // Since last replication enabled
-        double TotalAllocated;
+        double TotalConsumed = 0; // Since last replication enabled
+        double TotalAllocated = 0;
         TInstant LastReplicationReport; // Aligned to `ReportPeriod` grid timestamp of last sent report
         TDuration ReplicationReportPeriod = TDuration::Max();
 
@@ -699,6 +700,7 @@ private:
                 resInfo->SetResourceId(res.ResId);
                 resInfo->SetStartUs(start.MicroSeconds());
                 resInfo->SetIntervalUs(res.History->Interval().MicroSeconds());
+                res.LastAccountingReportEnd = start + resInfo->GetAmount().size() * res.History->Interval();
             } else {
                 // We have no useful data to report
                 res.PendingAccountingReport = false;
@@ -734,7 +736,7 @@ private:
                 res.QueueWeight = stat.QueueWeight;
                 res.Counters.AddConsumed(stat.Consumed);
                 if (res.History) {
-                    res.History->Add(stat.History);
+                    res.History->AddShifted(stat.History, res.LastAccountingReportEnd);
                     res.PendingAccountingReport = true;
                     CheckAccountingReport(res, TActivationContext::Now());
                 }

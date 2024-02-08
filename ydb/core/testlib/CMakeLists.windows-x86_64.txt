@@ -18,10 +18,10 @@ target_compile_options(ydb-core-testlib PRIVATE
 target_link_libraries(ydb-core-testlib PUBLIC
   contrib-libs-cxxsupp
   yutil
-  cpp-actors-core
-  cpp-actors-interconnect
-  cpp-grpc-client
-  cpp-grpc-server
+  library-actors-core
+  library-actors-interconnect
+  library-grpc-client
+  library-grpc-server
   grpc-server-actors
   cpp-regex-pcre
   cpp-testing-gmock_in_unittest
@@ -48,6 +48,7 @@ target_link_libraries(ydb-core-testlib PUBLIC
   ydb-core-keyvalue
   ydb-core-kqp
   core-kqp-federated_query
+  core-kqp-finalize_script_service
   ydb-core-metering
   ydb-core-mind
   core-mind-address_classification
@@ -57,6 +58,7 @@ target_link_libraries(ydb-core-testlib PUBLIC
   ydb-core-persqueue
   ydb-core-protos
   ydb-core-security
+  core-statistics-aggregator
   core-sys_view-processor
   core-sys_view-service
   core-testlib-actors

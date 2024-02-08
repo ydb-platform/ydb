@@ -21,12 +21,13 @@
 #include <ydb/library/yql/dq/opt/dq_opt.h>
 #include <ydb/library/yql/dq/tasks/dq_connection_builder.h>
 #include <ydb/library/yql/dq/tasks/dq_task_program.h>
+#include <ydb/library/yql/dq/type_ann/dq_type_ann.h>
 #include <ydb/library/yql/utils/log/log.h>
 #include <ydb/library/yql/core/services/yql_transform_pipeline.h>
 #include <ydb/library/yql/minikql/aligned_page_pool.h>
 #include <ydb/library/yql/minikql/mkql_node_serialization.h>
 
-#include <library/cpp/actors/core/event_pb.h>
+#include <ydb/library/actors/core/event_pb.h>
 
 #include <stack>
 
@@ -240,7 +241,7 @@ namespace NYql::NDqs {
             YQL_ENSURE(!stageInfo.Tasks.empty());
 
             auto stageSettings = NDq::TDqStageSettings::Parse(stage);
-            if (stageSettings.SinglePartition) {
+            if (stageSettings.PartitionMode == NDq::TDqStageSettings::EPartitionMode::Single) {
                 YQL_ENSURE(stageInfo.Tasks.size() == 1, "Unexpected multiple tasks in single-partition stage");
             }
         }
@@ -442,8 +443,12 @@ namespace NYql::NDqs {
                 }
             }
 
+            bool enableSpilling = false;
+            if (task.Outputs.size() > 1) {
+                enableSpilling = Settings->IsSpillingEnabled();
+            }
             for (auto& output : task.Outputs) {
-                FillOutputDesc(*taskDesc.AddOutputs(), output);
+                FillOutputDesc(*taskDesc.AddOutputs(), output, enableSpilling);
             }
 
             auto& program = *taskDesc.MutableProgram();
@@ -456,6 +461,13 @@ namespace NYql::NDqs {
             taskDesc.MutableMeta()->PackFrom(taskMeta);
             taskDesc.SetStageId(stageId);
 
+            if (Settings->DisableLLVMForBlockStages.Get().GetOrElse(true)) {
+                auto& stage = TasksGraph.GetStageInfo(task.StageId).Meta.Stage;
+                auto settings = TDqStageSettings::Parse(stage);
+                if (settings.BlockStatus.Defined() && settings.BlockStatus == TDqStageSettings::EBlockStatus::Full) {
+                    taskDesc.SetUseLlvm(false);
+                }
+            }
             plan.emplace_back(std::move(taskDesc));
         }
 
@@ -537,7 +549,7 @@ namespace NYql::NDqs {
         YQL_ENSURE(datasource);
         const auto stageSettings = TDqStageSettings::Parse(stage);
         auto tasksPerStage = Settings->MaxTasksPerStage.Get().GetOrElse(TDqSettings::TDefault::MaxTasksPerStage);
-        const size_t maxPartitions = stageSettings.SinglePartition ? 1ULL : tasksPerStage;
+        const size_t maxPartitions = TDqStageSettings::EPartitionMode::Single == stageSettings.PartitionMode ? 1ULL : tasksPerStage;
         TVector<TString> parts;
         if (auto dqIntegration = (*datasource)->GetDqIntegration()) {
             TString clusterName;
@@ -563,26 +575,29 @@ namespace NYql::NDqs {
         return !parts.empty();
     }
 
-#define BUILD_CONNECTION(TYPE, BUILDER)                  \
-    if (auto conn = input.Maybe<TYPE>()) {               \
-        BUILDER(TasksGraph, stage, inputIndex, logFunc); \
-        continue;                                        \
-    }
+    const static std::unordered_map<
+        std::string_view,
+        void(*)(TDqsTasksGraph&, const NNodes::TDqPhyStage&, ui32,  const TChannelLogFunc&)
+    > ConnectionBuilders = {
+        {TDqCnUnionAll::CallableName(), &BuildUnionAllChannels},
+        {TDqCnHashShuffle::CallableName(), &BuildHashShuffleChannels},
+        {TDqCnBroadcast::CallableName(), &BuildBroadcastChannels},
+        {TDqCnMap::CallableName(), BuildMapChannels},
+        {TDqCnMerge::CallableName(), BuildMergeChannels},
+    };
 
-    void TDqsExecutionPlanner::BuildConnections( const NNodes::TDqPhyStage& stage) {
+    void TDqsExecutionPlanner::BuildConnections(const NNodes::TDqPhyStage& stage) {
         NDq::TChannelLogFunc logFunc = [](ui64, ui64, ui64, TStringBuf, bool) {};
-
         for (ui32 inputIndex = 0; inputIndex < stage.Inputs().Size(); ++inputIndex) {
-            const auto& input = stage.Inputs().Item(inputIndex);
+            const auto &input = stage.Inputs().Item(inputIndex);
             if (input.Maybe<TDqConnection>()) {
-                BUILD_CONNECTION(TDqCnUnionAll, BuildUnionAllChannels);
-                BUILD_CONNECTION(TDqCnHashShuffle, BuildHashShuffleChannels);
-                BUILD_CONNECTION(TDqCnBroadcast, BuildBroadcastChannels);
-                BUILD_CONNECTION(TDqCnMap, BuildMapChannels);
-                BUILD_CONNECTION(TDqCnMerge, BuildMergeChannels);
-                YQL_ENSURE(false, "Unknown stage connection type: " << input.Cast<NNodes::TCallable>().CallableName());
+                if (const auto it = ConnectionBuilders.find(input.Cast<NNodes::TCallable>().CallableName()); it != ConnectionBuilders.cend()) {
+                    it->second(TasksGraph, stage, inputIndex, logFunc);
+                } else {
+                    YQL_ENSURE(false, "Unknown stage connection type: " << input.Cast<NNodes::TCallable>().CallableName());
+                }
             } else {
-                YQL_ENSURE(input.Maybe<TDqSource>());
+                YQL_ENSURE(input.Maybe<TDqSource>(), "Unknown stage input: " << input.Cast<NNodes::TCallable>().CallableName());
             }
         }
     }
@@ -632,22 +647,15 @@ void TDqsExecutionPlanner::BuildAllPrograms() {
         }
     }
 
-    void TDqsExecutionPlanner::FillChannelDesc(NDqProto::TChannel& channelDesc, const NDq::TChannel& channel) {
+    void TDqsExecutionPlanner::FillChannelDesc(NDqProto::TChannel& channelDesc, const NDq::TChannel& channel, bool enableSpilling) {
         channelDesc.SetId(channel.Id);
         channelDesc.SetSrcStageId(std::get<2>(StagePrograms[channel.SrcStageId]));
         channelDesc.SetDstStageId(std::get<2>(StagePrograms[channel.DstStageId]));
         channelDesc.SetSrcTaskId(channel.SrcTask);
         channelDesc.SetDstTaskId(channel.DstTask);
         channelDesc.SetCheckpointingMode(channel.CheckpointingMode);
-        const bool fastPickle = Settings->UseFastPickleTransport.Get().GetOrElse(TDqSettings::TDefault::UseFastPickleTransport);
-        const bool oob = Settings->UseOOBTransport.Get().GetOrElse(TDqSettings::TDefault::UseOOBTransport);
-        if (oob) {
-            channelDesc.SetTransportVersion(fastPickle ? NDqProto::EDataTransportVersion::DATA_TRANSPORT_OOB_FAST_PICKLE_1_0 :
-                                                         NDqProto::EDataTransportVersion::DATA_TRANSPORT_OOB_PICKLE_1_0);
-        } else {
-            channelDesc.SetTransportVersion(fastPickle ? NDqProto::EDataTransportVersion::DATA_TRANSPORT_UV_FAST_PICKLE_1_0 :
-                                                         NDqProto::EDataTransportVersion::DATA_TRANSPORT_UV_PICKLE_1_0);
-        }
+        channelDesc.SetTransportVersion(Settings->GetDataTransportVersion());
+        channelDesc.SetEnableSpilling(enableSpilling);
 
         if (channel.SrcTask) {
             NActors::ActorIdToProto(TasksGraph.GetTask(channel.SrcTask).ComputeActorId,
@@ -688,11 +696,11 @@ void TDqsExecutionPlanner::BuildAllPrograms() {
 
         for (ui64 channel : input.Channels) {
             auto& channelDesc = *inputDesc.AddChannels();
-            FillChannelDesc(channelDesc, TasksGraph.GetChannel(channel));
+            FillChannelDesc(channelDesc, TasksGraph.GetChannel(channel), /*enableSpilling*/false);
         }
     }
 
-    void TDqsExecutionPlanner::FillOutputDesc(NDqProto::TTaskOutput& outputDesc, const TTaskOutput& output) {
+    void TDqsExecutionPlanner::FillOutputDesc(NDqProto::TTaskOutput& outputDesc, const TTaskOutput& output, bool enableSpilling) {
         switch (output.Type) {
             case TTaskOutputType::Map:
                 YQL_ENSURE(output.Channels.size() == 1);
@@ -733,7 +741,7 @@ void TDqsExecutionPlanner::BuildAllPrograms() {
 
         for (auto& channel : output.Channels) {
             auto& channelDesc = *outputDesc.AddChannels();
-            FillChannelDesc(channelDesc, TasksGraph.GetChannel(channel));
+            FillChannelDesc(channelDesc, TasksGraph.GetChannel(channel), enableSpilling);
         }
 
         if (output.Transform) {

@@ -1,6 +1,6 @@
 #include "mkql_builtins_compare.h"
 #include "mkql_builtins_datetime.h"
-#include "mkql_builtins_decimal.h"
+#include "mkql_builtins_decimal.h" // Y_IGNORE
 #include "mkql_builtins_string_kernels.h"
 
 #include <ydb/library/yql/minikql/mkql_type_ops.h>
@@ -155,7 +155,7 @@ struct TLessOrEqualOp;
 
 template<typename TLeft, typename TRight>
 struct TLessOrEqualOp<TLeft, TRight, bool> : public TLessOrEqual<TLeft, TRight, false> {
-    static constexpr bool DefaultNulls = true;
+    static constexpr auto NullMode = TKernel::ENullMode::Default;
 };
 
 template<typename TLeft, typename TRight, bool Aggr>
@@ -183,7 +183,7 @@ struct TDiffDateLessOrEqualOp;
 
 template<typename TLeft, typename TRight>
 struct TDiffDateLessOrEqualOp<TLeft, TRight, NUdf::TDataType<bool>> : public TDiffDateLessOrEqual<TLeft, TRight, false> {
-    static constexpr bool DefaultNulls = true;
+    static constexpr auto NullMode = TKernel::ENullMode::Default;
 };
 
 template<typename TLeft, typename TRight, bool Aggr>

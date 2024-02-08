@@ -1,6 +1,7 @@
 #include "counters.h"
 
 #include <ydb/core/base/appdata.h>
+#include <ydb/core/base/feature_flags.h>
 #include <ydb/core/base/counters.h>
 #include <ydb/core/sys_view/service/db_counters.h>
 #include <ydb/core/sys_view/service/sysview_service.h>
@@ -95,7 +96,7 @@ struct TYdbRpcCounters {
     THashMap<ui32, std::shared_ptr<TResponseStatusCounter>> ResponseByStatus;
 };
 
-class TYdbCounterBlock : public NGrpc::ICounterBlock {
+class TYdbCounterBlock : public NYdbGrpc::ICounterBlock {
 protected:
     const bool Streaming = false;
 
@@ -224,7 +225,7 @@ public:
         Histo->Collect(requestDuration.MilliSeconds());
     }
 
-    NGrpc::ICounterBlockPtr Clone() override {
+    NYdbGrpc::ICounterBlockPtr Clone() override {
         return this;
     }
 };
@@ -544,7 +545,7 @@ private:
 };
 
 
-class TYdbCounterBlockWrapper : public NGrpc::ICounterBlock {
+class TYdbCounterBlockWrapper : public NYdbGrpc::ICounterBlock {
     TYdbCounterBlockPtr Common;
     const TString ServiceName;
     const TString RequestName;
@@ -621,7 +622,7 @@ public:
         Db->FinishProcessing(requestSize, responseSize, ok, status, requestDuration);
     }
 
-    NGrpc::ICounterBlockPtr Clone() override {
+    NYdbGrpc::ICounterBlockPtr Clone() override {
         return new TYdbCounterBlockWrapper(Common, ServiceName, RequestName, Streaming);
     }
 
@@ -646,12 +647,12 @@ TServiceCounterCB::TServiceCounterCB(::NMonitoring::TDynamicCounterPtr counters,
     }
 }
 
-NGrpc::ICounterBlockPtr TServiceCounterCB::operator()(const char* serviceName,
+NYdbGrpc::ICounterBlockPtr TServiceCounterCB::operator()(const char* serviceName,
     const char* requestName, bool streaming) const
 {
     auto block = MakeIntrusive<TYdbCounterBlock>(Counters, serviceName, requestName, streaming);
 
-    NGrpc::ICounterBlockPtr res(block);
+    NYdbGrpc::ICounterBlockPtr res(block);
     if (ActorSystem && AppData(ActorSystem)->FeatureFlags.GetEnableDbCounters()) {
         res = MakeIntrusive<TYdbCounterBlockWrapper>(block, serviceName, requestName, streaming);
     }

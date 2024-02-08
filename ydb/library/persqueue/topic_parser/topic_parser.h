@@ -1,6 +1,6 @@
 #pragma once
 
-#include <library/cpp/actors/core/actor.h>
+#include <ydb/library/actors/core/actor.h>
 
 #include <util/generic/string.h>
 #include <util/generic/hash.h>
@@ -264,6 +264,7 @@ public:
 
     bool IsFirstClass() const;
 
+    operator bool() const { return Valid && !ClientsideName; };
 
 private:
     void BuildInternals(const NKikimrPQ::TPQTabletConfig& config);

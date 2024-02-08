@@ -181,6 +181,8 @@ namespace NTable {
         TPageId TxIdStatsId = Max<TPageId>();
         TVector<TPageId> GroupIndexesIds;
         TVector<TPageId> HistoricIndexesIds;
+        TVector<NPage::TBtreeIndexMeta> BTreeGroupIndexes;
+        TVector<NPage::TBtreeIndexMeta> BTreeHistoricIndexes;
         TRowVersion MinRowVersion;
         TRowVersion MaxRowVersion;
         NProto::TRoot Root;

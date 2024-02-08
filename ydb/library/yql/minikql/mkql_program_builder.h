@@ -122,7 +122,7 @@ struct TAggInfo {
     std::vector<ui32> ArgsColumns;
 };
 
-class TProgramBuilder : private TNonCopyable {
+class TProgramBuilder : public TMoveOnly {
 public:
     TProgramBuilder(const TTypeEnvironment& env, const IFunctionRegistry& functionRegistry, bool voidWithEffects = false);
 
@@ -418,7 +418,7 @@ public:
     TRuntimeNode WideTakeWhileInclusive(TRuntimeNode flow, const TNarrowLambda& handler);
     TRuntimeNode WideSkipWhileInclusive(TRuntimeNode flow, const TNarrowLambda& handler);
 
-    TRuntimeNode WideCombiner(TRuntimeNode flow, ui64 memLimit, const TWideLambda& keyExtractor, const TBinaryWideLambda& init, const TTernaryWideLambda& update, const TBinaryWideLambda& finish);
+    TRuntimeNode WideCombiner(TRuntimeNode flow, i64 memLimit, const TWideLambda& keyExtractor, const TBinaryWideLambda& init, const TTernaryWideLambda& update, const TBinaryWideLambda& finish);
     TRuntimeNode WideLastCombiner(TRuntimeNode flow, const TWideLambda& keyExtractor, const TBinaryWideLambda& init, const TTernaryWideLambda& update, const TBinaryWideLambda& finish);
     TRuntimeNode WideCondense1(TRuntimeNode stream, const TWideLambda& init, const TWideSwitchLambda& switcher, const TBinaryWideLambda& handler, bool useCtx = false);
 
@@ -693,6 +693,10 @@ public:
     TRuntimeNode WithContext(TRuntimeNode input, const std::string_view& contextType);
     TRuntimeNode PgInternal0(TType* returnType);
     TRuntimeNode PgArray(const TArrayRef<const TRuntimeNode>& args, TType* returnType);
+    TRuntimeNode PgTableContent(
+        const std::string_view& cluster,
+        const std::string_view& table,
+        TType* returnType);
 
     TRuntimeNode ScalarApply(const TArrayRef<const TRuntimeNode>& args, const TArrayLambda& handler);
 

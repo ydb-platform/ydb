@@ -3,12 +3,10 @@
 #include <ydb/core/base/tablet_pipe.h>
 #include <ydb/core/base/appdata.h>
 #include <ydb/library/yql/providers/common/gateway/yql_provider_gateway.h>
-#include <ydb/services/metadata/secret/fetcher.h>
-#include <ydb/services/metadata/secret/snapshot.h>
 
-#include <library/cpp/actors/core/actor_bootstrapped.h>
-#include <library/cpp/actors/core/hfunc.h>
-#include <library/cpp/actors/core/log.h>
+#include <ydb/library/actors/core/actor_bootstrapped.h>
+#include <ydb/library/actors/core/hfunc.h>
+#include <ydb/library/actors/core/log.h>
 
 
 namespace NKikimr::NKqp {
@@ -111,99 +109,6 @@ public:
 
 private:
     TActorId ActorId;
-};
-
-struct TDescribeSecretsResponse {
-    TDescribeSecretsResponse(Ydb::StatusIds::StatusCode status, NYql::TIssues issues)
-        : Status(status)
-        , Issues(std::move(issues))
-    {}
-
-    TDescribeSecretsResponse(const TVector<TString>& secretValues)
-        : SecretValues(secretValues)
-        , Status(Ydb::StatusIds::SUCCESS)
-    {}
-
-    TVector<TString> SecretValues;
-    Ydb::StatusIds::StatusCode Status;
-    NYql::TIssues Issues;
-};
-
-class TDescribeSecretsActor: public NActors::TActorBootstrapped<TDescribeSecretsActor> {
-    STRICT_STFUNC(StateFunc,
-        hFunc(NMetadata::NProvider::TEvRefreshSubscriberData, Handle);
-        hFunc(NActors::TEvents::TEvWakeup, Handle);
-    )
-
-    void Handle(NMetadata::NProvider::TEvRefreshSubscriberData::TPtr& ev) {
-        auto snapshot = ev->Get()->GetSnapshotAs<NMetadata::NSecret::TSnapshot>();
-
-        TVector<TString> secretValues;
-        secretValues.reserve(SecretIds.size());
-        for (const auto& secretId: SecretIds) {
-            TString secretValue;
-            const bool isFound = snapshot->GetSecretValue(NMetadata::NSecret::TSecretIdOrValue::BuildAsId(secretId), secretValue);
-            if (!isFound) {
-                LastResponse = TDescribeSecretsResponse(Ydb::StatusIds::BAD_REQUEST, { NYql::TIssue("secret with name '" + secretId.GetSecretId() + "' not found") });
-                return;
-            }
-            secretValues.push_back(secretValue);
-        }
-        Promise.SetValue(TDescribeSecretsResponse(secretValues));
-
-        UnsubscribeFromSecrets();
-        PassAway();
-    }
-
-    void Handle(NActors::TEvents::TEvWakeup::TPtr&) {
-        Promise.SetValue(LastResponse);
-
-        UnsubscribeFromSecrets();
-        PassAway();
-    }
-
-    NMetadata::NFetcher::ISnapshotsFetcher::TPtr GetSecretsSnapshotParser() {
-        return std::make_shared<NMetadata::NSecret::TSnapshotsFetcher>();
-    }
-
-    void UnsubscribeFromSecrets() {
-        this->Send(NMetadata::NProvider::MakeServiceId(SelfId().NodeId()), new NMetadata::NProvider::TEvUnsubscribeExternal(GetSecretsSnapshotParser()));
-    }
-
-public:
-    TDescribeSecretsActor(const TString& ownerUserId, const TVector<TString>& secretIds, NThreading::TPromise<TDescribeSecretsResponse> promise, TDuration maximalSecretsSnapshotWaitTime)
-        : SecretIds(CreateSecretIds(ownerUserId, secretIds))
-        , Promise(promise)
-        , LastResponse(Ydb::StatusIds::TIMEOUT, { NYql::TIssue("secrets snapshot fetching timeout") })
-        , MaximalSecretsSnapshotWaitTime(maximalSecretsSnapshotWaitTime)
-    {}
-
-    void Bootstrap() {
-        if (!NMetadata::NProvider::TServiceOperator::IsEnabled()) {
-            Promise.SetValue(TDescribeSecretsResponse(Ydb::StatusIds::INTERNAL_ERROR, { NYql::TIssue("metadata service is not active") }));
-            PassAway();
-            return;
-        }
-
-        this->Send(NMetadata::NProvider::MakeServiceId(SelfId().NodeId()), new NMetadata::NProvider::TEvSubscribeExternal(GetSecretsSnapshotParser()));
-        this->Schedule(MaximalSecretsSnapshotWaitTime, new NActors::TEvents::TEvWakeup());
-        Become(&TDescribeSecretsActor::StateFunc);
-    }
-
-private:
-    static TVector<NMetadata::NSecret::TSecretId> CreateSecretIds(const TString& ownerUserId, const TVector<TString>& secretIds) {
-        TVector<NMetadata::NSecret::TSecretId> result;
-        for (const auto& secretId: secretIds) {
-            result.emplace_back(ownerUserId, secretId);
-        }
-        return result;
-    }
-
-private:
-    const TVector<NMetadata::NSecret::TSecretId> SecretIds;
-    NThreading::TPromise<TDescribeSecretsResponse> Promise;
-    TDescribeSecretsResponse LastResponse;
-    TDuration MaximalSecretsSnapshotWaitTime;
 };
 
 }

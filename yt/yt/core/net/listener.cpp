@@ -73,7 +73,7 @@ public:
                 }
             }
         } catch (const TErrorException& ex) {
-            auto error = ex << TErrorAttribute("listener", Name_);
+            auto error = TError(ex) << TErrorAttribute("listener", Name_);
             Abort(error);
             YT_LOG_FATAL(error, "Listener crashed with fatal error");
         }
@@ -93,11 +93,12 @@ public:
                 Error_ = TError("Listener is shut down");
             }
             std::swap(Queue_, queue);
+            Acceptor_->Unarm(ServerSocket_, this);
             YT_VERIFY(TryClose(ServerSocket_, false));
         }
 
         for (auto& promise : queue) {
-           promise.Set(Error_);
+            promise.Set(Error_);
         }
     }
 

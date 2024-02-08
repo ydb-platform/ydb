@@ -1,11 +1,11 @@
 #include "statestorage_impl.h"
 #include "tabletid.h"
 #include <ydb/library/services/services.pb.h>
-#include <library/cpp/actors/core/interconnect.h>
+#include <ydb/library/actors/core/interconnect.h>
 #include <library/cpp/monlib/service/pages/templates.h>
-#include <library/cpp/actors/core/mon.h>
-#include <library/cpp/actors/core/hfunc.h>
-#include <library/cpp/actors/core/actor_bootstrapped.h>
+#include <ydb/library/actors/core/mon.h>
+#include <ydb/library/actors/core/hfunc.h>
+#include <ydb/library/actors/core/actor_bootstrapped.h>
 
 namespace NKikimr {
 
@@ -208,6 +208,7 @@ public:
         , Query(query)
         , ProxyReplyTime(TDuration::MicroSeconds(Max<ui64>()))
         , WaitingForReplicas(0)
+        , SelfConfigContentHash(0)
     {}
 
     void Bootstrap(const TActorContext &ctx) {

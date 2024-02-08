@@ -56,9 +56,9 @@ TCompatibilityInfo::TCompatibilityInfo() {
         );                                                                                      \
     } while (false)
 
-    EMPLACE_DEFAULT_COMPATIBILITY_INFO(PDisk, "ydb", 23, 2, 12, 0);
+    EMPLACE_DEFAULT_COMPATIBILITY_INFO(PDisk, "ydb", 23, 3, 13, 0);
     EMPLACE_DEFAULT_COMPATIBILITY_INFO(VDisk, "ydb", 23, 2, 12, 0);
-    EMPLACE_DEFAULT_COMPATIBILITY_INFO(BlobStorageController, "ydb", 23, 2, 12, 0);
+    EMPLACE_DEFAULT_COMPATIBILITY_INFO(BlobStorageController, "ydb", 23, 3, 13, 0);
 
 #undef EMPLACE_DEFAULT_COMPATIBILITY_INFO
 }
@@ -648,10 +648,6 @@ bool TCompatibilityInfo::CheckCompatibility(const TCurrent* current, const TOldF
                 + PrintStoredAndCurrent(peer, current);
         return false;
     }
-
-    errorReason = "Peer version tag doesn't match any current compatibility rule, current version is not in accepted tags list, "
-            + PrintStoredAndCurrent(peer, current);
-    return false;
 }
 
 bool TCompatibilityInfo::CheckCompatibility(const TOldFormat& peer, TComponentId componentId, TString& errorReason) const {

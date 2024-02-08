@@ -1,5 +1,6 @@
 #include "format.h"
 
+#include "arrow_parser.h"
 #include "arrow_writer.h"
 #include "dsv_parser.h"
 #include "dsv_writer.h"
@@ -7,12 +8,10 @@
 #include "protobuf_writer.h"
 #include "schemaful_dsv_parser.h"
 #include "schemaful_dsv_writer.h"
-#include "schemaful_writer.h"
 #include "web_json_writer.h"
 #include "schemaless_writer_adapter.h"
 #include "skiff_parser.h"
 #include "skiff_writer.h"
-#include "versioned_writer.h"
 #include "yamred_dsv_parser.h"
 #include "yamred_dsv_writer.h"
 #include "yamr_parser.h"
@@ -20,6 +19,8 @@
 #include "yson_parser.h"
 
 #include <yt/yt/client/formats/parser.h>
+#include <yt/yt/client/formats/versioned_writer.h>
+#include <yt/yt/client/formats/schemaful_writer.h>
 
 #include <yt/yt/client/table_client/name_table.h>
 #include <yt/yt/client/table_client/table_consumer.h>
@@ -466,7 +467,7 @@ std::unique_ptr<IParser> CreateParserForFormat(const TFormat& format, EDataType 
         case EFormatType::Json: {
             auto config = ConvertTo<TJsonFormatConfigPtr>(&format.Attributes());
             if (config->NestingLevelLimit == 0) {
-                config->NestingLevelLimit = NYT::NJson::NestingLevelLimit;
+                config->NestingLevelLimit = NJson::NestingLevelLimit;
             }
             return std::unique_ptr<IParser>(new TParserAdapter<TJsonParser>(consumer, config, DataTypeToYsonType(dataType)));
         }
@@ -516,6 +517,12 @@ std::vector<std::unique_ptr<IParser>> CreateParsersForFormat(
             auto skiffSchemas = ParseSkiffSchemas(config->SkiffSchemaRegistry, config->TableSkiffSchemas);
             for (int tableIndex = 0; tableIndex < parserCount; ++tableIndex) {
                 parsers.emplace_back(CreateParserForSkiff(valueConsumers[tableIndex], skiffSchemas, config, tableIndex));
+            }
+            break;
+        }
+        case EFormatType::Arrow: {
+            for (int tableIndex = 0; tableIndex < parserCount; ++tableIndex) {
+                parsers.emplace_back(CreateParserForArrow(valueConsumers[tableIndex]));
             }
             break;
         }

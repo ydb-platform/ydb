@@ -29,14 +29,14 @@ namespace Model
    * href="http://docs.aws.amazon.com/goto/WebAPI/s3-2006-03-01/StorageClassAnalysis">AWS
    * API Reference</a></p>
    */
-  class AWS_S3_API StorageClassAnalysis
+  class StorageClassAnalysis
   {
   public:
-    StorageClassAnalysis();
-    StorageClassAnalysis(const Aws::Utils::Xml::XmlNode& xmlNode);
-    StorageClassAnalysis& operator=(const Aws::Utils::Xml::XmlNode& xmlNode);
+    AWS_S3_API StorageClassAnalysis();
+    AWS_S3_API StorageClassAnalysis(const Aws::Utils::Xml::XmlNode& xmlNode);
+    AWS_S3_API StorageClassAnalysis& operator=(const Aws::Utils::Xml::XmlNode& xmlNode);
 
-    void AddToNode(Aws::Utils::Xml::XmlNode& parentNode) const;
+    AWS_S3_API void AddToNode(Aws::Utils::Xml::XmlNode& parentNode) const;
 
 
     /**
@@ -78,7 +78,7 @@ namespace Model
   private:
 
     StorageClassAnalysisDataExport m_dataExport;
-    bool m_dataExportHasBeenSet;
+    bool m_dataExportHasBeenSet = false;
   };
 
 } // namespace Model

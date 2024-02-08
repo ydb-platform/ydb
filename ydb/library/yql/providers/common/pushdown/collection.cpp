@@ -222,7 +222,8 @@ bool IsComparableTypes(const TExprBase& leftNode, const TExprBase& rightNode, bo
                 // SSA program cast those values to Int32
                 if (rightTypeId == NYql::NProto::Int8 ||
                     rightTypeId == NYql::NProto::Int16 ||
-                    rightTypeId == NYql::NProto::Int32)
+                    rightTypeId == NYql::NProto::Int32 ||
+                    (settings.IsEnabled(TSettings::EFeatureFlag::ImplicitConversionToInt64) && rightTypeId == NYql::NProto::Int64))
                 {
                     return ECompareOptions::Comparable;
                 }
@@ -237,7 +238,8 @@ bool IsComparableTypes(const TExprBase& leftNode, const TExprBase& rightNode, bo
                 // SSA program cast those values to Uint32
                 if (rightTypeId == NYql::NProto::Uint8 ||
                     rightTypeId == NYql::NProto::Uint16 ||
-                    rightTypeId == NYql::NProto::Uint32)
+                    rightTypeId == NYql::NProto::Uint32 ||
+                    (settings.IsEnabled(TSettings::EFeatureFlag::ImplicitConversionToInt64) && rightTypeId == NYql::NProto::Uint64))
                 {
                     return ECompareOptions::Comparable;
                 }
@@ -254,9 +256,25 @@ bool IsComparableTypes(const TExprBase& leftNode, const TExprBase& rightNode, bo
                     return ECompareOptions::Comparable;
                 }
                 break;
-            case NYql::NProto::Bool:
             case NYql::NProto::Int64:
+                if (settings.IsEnabled(TSettings::EFeatureFlag::ImplicitConversionToInt64) && (
+                    rightTypeId == NYql::NProto::Int8 ||
+                    rightTypeId == NYql::NProto::Int16 ||
+                    rightTypeId == NYql::NProto::Int32))
+                {
+                    return ECompareOptions::Comparable;
+                }
+                break;
             case NYql::NProto::Uint64:
+                if (settings.IsEnabled(TSettings::EFeatureFlag::ImplicitConversionToInt64) && (
+                    rightTypeId == NYql::NProto::Uint8 ||
+                    rightTypeId == NYql::NProto::Uint16 ||
+                    rightTypeId == NYql::NProto::Uint32))
+                {
+                    return ECompareOptions::Comparable;
+                }
+                break;
+            case NYql::NProto::Bool:
             case NYql::NProto::Float:
             case NYql::NProto::Double:
             case NYql::NProto::Decimal:
@@ -312,13 +330,6 @@ bool IsMemberColumn(const TExprBase& node, const TExprNode* lambdaArg) {
     return false;
 }
 
-bool IsSupportedArithmeticalExpression(const TExprBase& node, const TSettings& settings) {
-    if (!settings.IsEnabled(TSettings::EFeatureFlag::ArithmeticalExpressions)) {
-        return false;
-    }
-    return node.Maybe<TCoMul>() || node.Maybe<TCoPlus>() || node.Maybe<TCoMinus>();
-}
-
 bool CheckExpressionNodeForPushdown(const TExprBase& node, const TExprNode* lambdaArg, const TSettings& settings) {
     if (auto maybeSafeCast = node.Maybe<TCoSafeCast>()) {
         return IsSupportedCast(maybeSafeCast.Cast(), settings);
@@ -340,11 +351,11 @@ bool CheckExpressionNodeForPushdown(const TExprBase& node, const TExprNode* lamb
         return true;
     } else if (settings.IsEnabled(TSettings::EFeatureFlag::ParameterExpression) && node.Maybe<TCoParameter>()) {
         return true;
-    } else if (IsSupportedArithmeticalExpression(node, settings)) {
-        TCoBinaryArithmetic op = node.Cast<TCoBinaryArithmetic>();
-        return CheckExpressionNodeForPushdown(op.Left(), lambdaArg, settings) && CheckExpressionNodeForPushdown(op.Right(), lambdaArg, settings);
+    } else if (const auto op = node.Maybe<TCoUnaryArithmetic>(); op && settings.IsEnabled(TSettings::EFeatureFlag::UnaryOperators)) {
+        return CheckExpressionNodeForPushdown(op.Cast().Arg(), lambdaArg, settings);
+    } else if (const auto op = node.Maybe<TCoBinaryArithmetic>(); op && settings.IsEnabled(TSettings::EFeatureFlag::ArithmeticalExpressions)) {
+        return CheckExpressionNodeForPushdown(op.Cast().Left(), lambdaArg, settings) && CheckExpressionNodeForPushdown(op.Cast().Right(), lambdaArg, settings);
     }
-
     return false;
 }
 
@@ -371,18 +382,21 @@ bool CheckComparisonParametersForPushdown(const TCoCompare& compare, const TExpr
         return false;
     }
 
-    bool equality = compare.Maybe<TCoCmpEqual>() || compare.Maybe<TCoCmpNotEqual>();
-    auto leftList = GetComparisonNodes(compare.Left());
-    auto rightList = GetComparisonNodes(compare.Right());
+    const auto leftList = GetComparisonNodes(compare.Left());
+    const auto rightList = GetComparisonNodes(compare.Right());
     YQL_ENSURE(leftList.size() == rightList.size(), "Different sizes of lists in comparison!");
 
     for (size_t i = 0; i < leftList.size(); ++i) {
         if (!CheckExpressionNodeForPushdown(leftList[i], lambdaArg, settings) || !CheckExpressionNodeForPushdown(rightList[i], lambdaArg, settings)) {
             return false;
         }
-        if (!IsComparableTypes(leftList[i], rightList[i], equality, inputType, settings)) {
-            return false;
+
+        if (!settings.IsEnabled(TSettings::EFeatureFlag::DoNotCheckCompareArgumentsTypes)) {
+            if (!IsComparableTypes(leftList[i], rightList[i], compare.Maybe<TCoCmpEqual>() || compare.Maybe<TCoCmpNotEqual>(), inputType, settings)) {
+                return false;
+            }
         }
+
         if (IsLikeOperator(compare) && settings.IsEnabled(TSettings::EFeatureFlag::LikeOperatorOnlyForUtf8) && !IsSupportedLikeForUtf8(leftList[i], rightList[i])) {
             // (KQP OLAP) If SSA_RUNTIME_VERSION == 2 Column Shard doesn't have LIKE kernel for binary strings
             return false;

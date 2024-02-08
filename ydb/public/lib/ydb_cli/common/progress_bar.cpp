@@ -24,6 +24,12 @@ void TProgressBar::AddProgress(size_t value) {
     Render();
 }
 
+TProgressBar::~TProgressBar() {
+    if (!Finished) {
+        Cerr << Endl;
+    }
+}
+
 void TProgressBar::Render()
 {
     std::optional<size_t> barLenOpt = GetTerminalWidth();
@@ -31,7 +37,8 @@ void TProgressBar::Render()
         return;
 
     size_t barLen = *barLenOpt;
-    TString output = ToString(CurProgress * 100 / Capacity);
+    TString output = "\r";
+    output += ToString(CurProgress * 100 / Capacity);
     output += "% |";
     TString outputEnd = "| [";
     outputEnd += ToString(CurProgress);
@@ -39,8 +46,8 @@ void TProgressBar::Render()
     outputEnd += ToString(Capacity);
     outputEnd += "]";
 
-    if (barLen > output.Size()) {
-        barLen -= output.Size();
+    if (barLen > output.Size() - 1) {
+        barLen -= output.Size() - 1;
     } else {
         barLen = 1;
     }
@@ -55,12 +62,12 @@ void TProgressBar::Render()
     output += TString("█") * filledBarLen;
     output += TString("░") * (barLen - filledBarLen);
     output += outputEnd;
-    output += "\r";
-    Cout << output;
+    Cerr << output;
     if (CurProgress == Capacity) {
-        Cout << "\n";
+        Cerr << "\n";
+        Finished = true;
     }
-    Cout.Flush();
+    Cerr.Flush();
 }
 
 } // namespace NConsoleClient

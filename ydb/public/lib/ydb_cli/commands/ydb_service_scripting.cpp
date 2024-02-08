@@ -38,7 +38,8 @@ void TCommandExecuteYqlScript::Config(TConfig& config) {
         EOutputFormat::JsonUnicode,
         EOutputFormat::JsonUnicodeArray,
         EOutputFormat::JsonBase64,
-        EOutputFormat::JsonBase64Array
+        EOutputFormat::JsonBase64Array,
+        EOutputFormat::Parquet,
     });
 
     AddParametersOption(config);

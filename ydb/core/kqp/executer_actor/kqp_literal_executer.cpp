@@ -19,7 +19,7 @@ using namespace NYql::NDq;
 
 namespace {
 
-std::unique_ptr<TDqTaskRunnerContext> CreateTaskRunnerContext(NMiniKQL::TKqpComputeContextBase* computeCtx, NMiniKQL::TScopedAlloc* alloc,
+std::unique_ptr<TDqTaskRunnerContext> CreateTaskRunnerContext(NMiniKQL::TKqpComputeContextBase* computeCtx,
     NMiniKQL::TTypeEnvironment* typeEnv)
 {
     std::unique_ptr<TDqTaskRunnerContext> context = std::make_unique<TDqTaskRunnerContext>();
@@ -44,7 +44,6 @@ std::unique_ptr<TDqTaskRunnerContext> CreateTaskRunnerContext(NMiniKQL::TKqpComp
         return nullptr;
     };
 
-    context->Alloc = alloc;
     context->TypeEnv = typeEnv;
     context->ApplyCtx = nullptr;
     return context;
@@ -117,7 +116,6 @@ public:
     }
 
     void ExecuteLiteralImpl() {
-        NWilson::TSpan prepareTasksSpan(TWilsonKqp::LiteralExecuterPrepareTasks, LiteralExecuterSpan.GetTraceId(), "PrepareTasks", NWilson::EFlags::AUTO_END);
         if (Stats) {
             Stats->StartTs = TInstant::Now();
         }
@@ -166,35 +164,25 @@ public:
             }
         });
 
-        if (prepareTasksSpan) {
-            prepareTasksSpan.EndOk();
-        }
-
-        NWilson::TSpan runTasksSpan(TWilsonKqp::LiteralExecuterRunTasks, LiteralExecuterSpan.GetTraceId(), "RunTasks", NWilson::EFlags::AUTO_END);
-
         // task runner settings
         ComputeCtx = std::make_unique<NMiniKQL::TKqpComputeContextBase>();
-        RunnerContext = CreateTaskRunnerContext(ComputeCtx.get(), &Request.TxAlloc->Alloc, &Request.TxAlloc->TypeEnv);
+        RunnerContext = CreateTaskRunnerContext(ComputeCtx.get(), &Request.TxAlloc->TypeEnv);
         RunnerContext->PatternCache = GetKqpResourceManager()->GetPatternCache();
         TDqTaskRunnerSettings settings = CreateTaskRunnerSettings(Request.StatsMode);
 
         for (auto& task : TasksGraph.GetTasks()) {
-            RunTask(task, *RunnerContext, settings);
+            RunTask(Request.TxAlloc->Alloc, task, *RunnerContext, settings);
 
             if (TerminateIfTimeout()) {
                 return;
             }
         }
 
-        if (runTasksSpan) {
-            runTasksSpan.End();
-        }
-
         Finalize();
         UpdateCounters();
     }
 
-    void RunTask(TTask& task, const TDqTaskRunnerContext& context, const TDqTaskRunnerSettings& settings) {
+    void RunTask(NMiniKQL::TScopedAlloc& alloc, TTask& task, const TDqTaskRunnerContext& context, const TDqTaskRunnerSettings& settings) {
         auto& stageInfo = TasksGraph.GetStageInfo(task.StageId);
         auto& stage = stageInfo.Meta.GetStage(stageInfo.Id);
 
@@ -229,7 +217,7 @@ public:
                 << message);
         };
 
-        auto taskRunner = CreateKqpTaskRunner(context, settings, log);
+        auto taskRunner = MakeDqTaskRunner(alloc, context, settings, log);
         TaskRunners.emplace_back(taskRunner);
 
         auto taskSettings = NDq::TDqTaskSettings(&protoTask);
@@ -239,7 +227,7 @@ public:
         auto status = taskRunner->Run();
         YQL_ENSURE(status == ERunStatus::Finished);
 
-        with_lock (*context.Alloc) { // allocator is used only by outputChannel->PopAll()
+        with_lock (alloc) { // allocator is used only by outputChannel->PopAll()
             for (auto& taskOutput : task.Outputs) {
                 for (ui64 outputChannelId : taskOutput.Channels) {
                     auto outputChannel = taskRunner->GetOutputChannel(outputChannelId);
@@ -297,9 +285,7 @@ public:
         }
 
         LWTRACK(KqpLiteralExecuterFinalize, ResponseEv->Orbit, TxId);
-        if (LiteralExecuterSpan) {
-            LiteralExecuterSpan.EndOk();
-        }
+        LiteralExecuterSpan.EndOk();
         CleanupCtx();
         LOG_D("Execution is complete, results: " << ResponseEv->ResultsSize());
     }
@@ -377,9 +363,7 @@ private:
 
         LWTRACK(KqpLiteralExecuterCreateErrorResponse, ResponseEv->Orbit, TxId);
 
-        if (LiteralExecuterSpan) {
-            LiteralExecuterSpan.EndError(response.DebugString());
-        }
+        LiteralExecuterSpan.EndError(response.DebugString());
 
         CleanupCtx();
         UpdateCounters();

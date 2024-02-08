@@ -1,10 +1,10 @@
 #pragma once
 
-#include <library/cpp/actors/core/actorsystem.h>
+#include <ydb/library/actors/core/actorsystem.h>
 
 #include <ydb/services/deprecated/persqueue_v0/api/grpc/persqueue.grpc.pb.h>
 
-#include <library/cpp/grpc/server/grpc_server.h>
+#include <ydb/library/grpc/server/grpc_server.h>
 
 
 namespace NKikimr {
@@ -17,28 +17,28 @@ namespace NGRpcProxy {
 namespace NGRpcService {
 
 class TGRpcPersQueueService
-    : public NGrpc::TGrpcServiceBase<NPersQueue::PersQueueService>
+    : public NYdbGrpc::TGrpcServiceBase<NPersQueue::PersQueueService>
 {
 public:
     TGRpcPersQueueService(NActors::TActorSystem* system, TIntrusivePtr<NMonitoring::TDynamicCounters> counters, const NActors::TActorId& schemeCache);
 
-    void InitService(grpc::ServerCompletionQueue* cq, NGrpc::TLoggerPtr logger) override;
-    void SetGlobalLimiterHandle(NGrpc::TGlobalLimiter* limiter) override;
+    void InitService(grpc::ServerCompletionQueue* cq, NYdbGrpc::TLoggerPtr logger) override;
+    void SetGlobalLimiterHandle(NYdbGrpc::TGlobalLimiter* limiter) override;
     void StopService() noexcept override;
 
-    using NGrpc::TGrpcServiceBase<NPersQueue::PersQueueService>::GetService;
+    using NYdbGrpc::TGrpcServiceBase<NPersQueue::PersQueueService>::GetService;
 
     bool IncRequest();
     void DecRequest();
 
 private:
-    void SetupIncomingRequests(NGrpc::TLoggerPtr logger);
+    void SetupIncomingRequests(NYdbGrpc::TLoggerPtr logger);
 
     NActors::TActorSystem* ActorSystem;
     grpc::ServerCompletionQueue* CQ = nullptr;
 
     TIntrusivePtr<NMonitoring::TDynamicCounters> Counters;
-    NGrpc::TGlobalLimiter* Limiter = nullptr;
+    NYdbGrpc::TGlobalLimiter* Limiter = nullptr;
     NActors::TActorId SchemeCache;
 
     std::shared_ptr<NGRpcProxy::TPQWriteService> WriteService;

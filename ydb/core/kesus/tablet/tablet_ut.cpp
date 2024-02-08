@@ -5,7 +5,7 @@
 
 #include <ydb/core/metering/metering.h>
 
-#include <library/cpp/actors/interconnect/interconnect_impl.h>
+#include <ydb/library/actors/interconnect/interconnect_impl.h>
 
 #include <util/random/random.h>
 

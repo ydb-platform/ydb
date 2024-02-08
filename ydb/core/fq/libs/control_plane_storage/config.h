@@ -30,6 +30,7 @@ struct TControlPlaneStorageConfig {
     TRetryPolicyItem TaskLeaseRetryPolicy;
     TDuration QuotaTtl;
     TDuration MetricsTtl;
+    TSet<FederatedQuery::ConnectionSetting::ConnectionCase> AvailableStreamingConnections;
 
     TControlPlaneStorageConfig(const NConfig::TControlPlaneStorageConfig& config, const NYql::TS3GatewayConfig& s3Config, const NConfig::TCommonConfig& common, const NConfig::TComputeConfig& computeConfigProto);
 };

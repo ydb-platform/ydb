@@ -119,6 +119,6 @@ int main() {
     auto worker = NSimd::SelectSimdTraits(tp);
 
     bool fine = true;
-    fine &= worker->StoreStream(true);
+    fine &= worker->StoreStream(false);
     return !fine;
 }

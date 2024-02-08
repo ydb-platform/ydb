@@ -20,8 +20,8 @@ target_link_libraries(dq-actors-spilling PUBLIC
   yql-dq-actors
   yql-dq-runtime
   library-yql-utils
-  cpp-actors-core
-  cpp-actors-util
+  library-actors-core
+  library-actors-util
   cpp-monlib-dynamic_counters
   monlib-service-pages
 )

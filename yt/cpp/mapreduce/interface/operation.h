@@ -538,6 +538,9 @@ struct TOperationSpecBase
 
     /// How much resources can be consumed by operation.
     FLUENT_FIELD_OPTION_ENCAPSULATED(TSchedulerResources, ResourceLimits);
+
+    /// How many jobs can fail before operation is failed.
+    FLUENT_FIELD_OPTION(ui64, MaxFailedJobCount);
 };
 
 ///
@@ -549,9 +552,6 @@ struct TUserOperationSpecBase
     /// @cond Doxygen_Suppress
     using TSelf = TDerived;
     /// @endcond
-
-    /// How many jobs can fail before operation is failed.
-    FLUENT_FIELD_OPTION(ui64, MaxFailedJobCount);
 
     /// On any unsuccessful job completion (i.e. abortion or failure) force the whole operation to fail.
     FLUENT_FIELD_OPTION(bool, FailOnJobRestart);
@@ -1990,6 +1990,19 @@ public:
     virtual void Load(IInputStream& stream) override { Load(&stream); } \
     Y_PASS_VA_ARGS(Y_SAVELOAD_DEFINE(__VA_ARGS__))
 
+///
+/// @brief Same as the macro above, but also calls Base class's SaveLoad methods.
+#define Y_SAVELOAD_JOB_DERIVED(Base, ...) \
+    virtual void Save(IOutputStream& stream) const override { \
+        Base::Save(stream); \
+        Save(&stream); \
+    } \
+    virtual void Load(IInputStream& stream) override { \
+        Base::Load(stream); \
+        Load(&stream); \
+    } \
+    Y_PASS_VA_ARGS(Y_SAVELOAD_DEFINE(__VA_ARGS__))
+
 ////////////////////////////////////////////////////////////////////////////////
 
 ///
@@ -2219,7 +2232,7 @@ private:
 ///
 /// @see https://ytsaurus.tech/docs/en/user-guide/data-processing/operations/vanilla
 class IVanillaJobBase
-   : public virtual IStructuredJob
+    : public virtual IStructuredJob
 {
 public:
     /// Type of job implemented by this class.

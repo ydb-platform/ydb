@@ -40,6 +40,7 @@ namespace NYql {
 
     private:
         TString MakeStructuredToken(const TGenericClusterConfig& clusterConfig, const TCredentials::TPtr& credentials) const;
+        TString DumpGenericClusterConfig(const TGenericClusterConfig& clusterConfig) const;
 
     public:
         THashMap<TString, TString> Tokens;

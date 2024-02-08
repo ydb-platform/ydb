@@ -31,14 +31,14 @@ namespace Model
    * href="http://docs.aws.amazon.com/goto/WebAPI/s3-2006-03-01/NotificationConfigurationFilter">AWS
    * API Reference</a></p>
    */
-  class AWS_S3_API NotificationConfigurationFilter
+  class NotificationConfigurationFilter
   {
   public:
-    NotificationConfigurationFilter();
-    NotificationConfigurationFilter(const Aws::Utils::Xml::XmlNode& xmlNode);
-    NotificationConfigurationFilter& operator=(const Aws::Utils::Xml::XmlNode& xmlNode);
+    AWS_S3_API NotificationConfigurationFilter();
+    AWS_S3_API NotificationConfigurationFilter(const Aws::Utils::Xml::XmlNode& xmlNode);
+    AWS_S3_API NotificationConfigurationFilter& operator=(const Aws::Utils::Xml::XmlNode& xmlNode);
 
-    void AddToNode(Aws::Utils::Xml::XmlNode& parentNode) const;
+    AWS_S3_API void AddToNode(Aws::Utils::Xml::XmlNode& parentNode) const;
 
 
     
@@ -62,7 +62,7 @@ namespace Model
   private:
 
     S3KeyFilter m_key;
-    bool m_keyHasBeenSet;
+    bool m_keyHasBeenSet = false;
   };
 
 } // namespace Model

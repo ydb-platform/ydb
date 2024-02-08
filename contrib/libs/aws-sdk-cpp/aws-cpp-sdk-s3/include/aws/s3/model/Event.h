@@ -32,7 +32,17 @@ namespace Model
     s3_Replication_OperationFailedReplication,
     s3_Replication_OperationNotTracked,
     s3_Replication_OperationMissedThreshold,
-    s3_Replication_OperationReplicatedAfterThreshold
+    s3_Replication_OperationReplicatedAfterThreshold,
+    s3_ObjectRestore_Delete,
+    s3_LifecycleTransition,
+    s3_IntelligentTiering,
+    s3_ObjectAcl_Put,
+    s3_LifecycleExpiration,
+    s3_LifecycleExpiration_Delete,
+    s3_LifecycleExpiration_DeleteMarkerCreated,
+    s3_ObjectTagging,
+    s3_ObjectTagging_Put,
+    s3_ObjectTagging_Delete
   };
 
 namespace EventMapper

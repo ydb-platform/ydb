@@ -24,6 +24,7 @@ target_link_libraries(providers-s3-object_listers PUBLIC
   cpp-string_utils-quote
   cpp-xml-document
   providers-common-http_gateway
+  providers-s3-credentials
   library-yql-utils
   yql-utils-threading
 )

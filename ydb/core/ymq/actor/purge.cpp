@@ -9,6 +9,9 @@
 #include <ydb/core/ymq/base/query_id.h>
 #include <ydb/core/ymq/queues/common/key_hashes.h>
 
+#include <util/generic/guid.h>
+
+
 using NKikimr::NClient::TValue;
 
 namespace NKikimr::NSQS {

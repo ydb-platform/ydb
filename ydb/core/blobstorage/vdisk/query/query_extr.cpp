@@ -78,9 +78,10 @@ namespace NKikimr {
                 TBarriersSnapshot &&barrierSnapshot,
                 TEvBlobStorage::TEvVGet::TPtr &ev,
                 std::unique_ptr<TEvBlobStorage::TEvVGetResult> result,
-                TActorId replSchedulerId)
+                TActorId replSchedulerId,
+                const char* name)
             : TLevelIndexQueryBase(queryCtx, parentId, std::move(logoBlobsSnapshot), std::move(barrierSnapshot),
-                    ev, std::move(result), replSchedulerId)
+                    ev, std::move(result), replSchedulerId, name)
         {}
     };
 
@@ -125,7 +126,8 @@ namespace NKikimr {
                     NMatrix::TVectorType missingParts = mustHave - actuallyHave;
 
                     // If we don't have something locally we return NOT_YET unless that blob is going to be collected
-                    auto status = IsBlobDeleted(query->LogoBlobID, Merger) ? NKikimrProto::NODATA :
+                    auto status = mustHave.Empty() ? NKikimrProto::NODATA : // we do not have any parts of this blob
+                        IsBlobDeleted(query->LogoBlobID, Merger) ? NKikimrProto::NODATA :
                         missingParts.Empty() ? NKikimrProto::OK : NKikimrProto::NOT_YET;
 
                     // Add result
@@ -160,7 +162,8 @@ namespace NKikimr {
                 std::unique_ptr<TEvBlobStorage::TEvVGetResult> result,
                 TActorId replSchedulerId)
             : TLevelIndexExtremeQueryViaBatcherBase(queryCtx, parentId, std::move(logoBlobsSnapshot),
-                    std::move(barrierSnapshot), ev, std::move(result), replSchedulerId)
+                    std::move(barrierSnapshot), ev, std::move(result), replSchedulerId,
+                    "VDisk.LevelIndexExtremeQueryViaBatcherIndexOnly")
             , TActorBootstrapped<TLevelIndexExtremeQueryViaBatcherIndexOnly>()
             , Merger(QueryCtx->HullCtx->VCtx->Top->GType)
         {}
@@ -366,11 +369,10 @@ namespace NKikimr {
                 SendResponseAndDie(ctx, this);
             } else {
                 ui8 priority = PDiskPriority();
-                std::unique_ptr<IActor> a(Batcher.CreateAsyncDataReader(ctx.SelfID, priority, /*std::move(Result->TraceId)*/ NWilson::TTraceId(), // FIXME: trace
-                    IsRepl()));
+                std::unique_ptr<IActor> a(Batcher.CreateAsyncDataReader(ctx.SelfID, priority, Span.GetTraceId(), IsRepl()));
                 if (a) {
                     auto aid = ctx.Register(a.release());
-                    ActiveActors.Insert(aid);
+                    ActiveActors.Insert(aid, __FILE__, __LINE__, ctx, NKikimrServices::BLOBSTORAGE);
                     Become(&TThis::StateFunc);
                     // wait for reply
                 } else {
@@ -384,6 +386,7 @@ namespace NKikimr {
         void HandlePoison(TEvents::TEvPoisonPill::TPtr &ev, const TActorContext &ctx) {
             Y_UNUSED(ev);
             ActiveActors.KillAndClear(ctx);
+            Span.EndError("TEvPoisonPill");
             Die(ctx);
         }
 
@@ -408,7 +411,8 @@ namespace NKikimr {
                 std::unique_ptr<TEvBlobStorage::TEvVGetResult> result,
                 TActorId replSchedulerId)
             : TLevelIndexExtremeQueryViaBatcherBase(queryCtx, parentId, std::move(logoBlobsSnapshot),
-                    std::move(barrierSnapshot), ev, std::move(result), replSchedulerId)
+                    std::move(barrierSnapshot), ev, std::move(result), replSchedulerId,
+                    "VDisk.LevelIndexExtremeQueryViaBatcherMergeData")
             , TActorBootstrapped<TLevelIndexExtremeQueryViaBatcherMergeData>()
             , GType(QueryCtx->HullCtx->VCtx->Top->GType)
             , Batcher(BatcherCtx)

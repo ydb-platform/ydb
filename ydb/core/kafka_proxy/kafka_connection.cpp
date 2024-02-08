@@ -1,4 +1,4 @@
-#include <library/cpp/actors/core/actor_bootstrapped.h>
+#include <ydb/library/actors/core/actor_bootstrapped.h>
 #include <ydb/core/raw_socket/sock_config.h>
 #include <ydb/core/util/address_classifier.h>
 
@@ -7,6 +7,7 @@
 #include "kafka_events.h"
 #include "kafka_log_impl.h"
 #include "kafka_metrics.h"
+#include "actors/kafka_read_session_actor.h"
 
 
 #include <strstream>
@@ -80,6 +81,7 @@ public:
     size_t InflightSize;
 
     TActorId ProduceActorId;
+    TActorId ReadSessionActorId;
 
     TContext::TPtr Context;
 
@@ -113,6 +115,9 @@ public:
         ConnectionEstablished = false;
         if (ProduceActorId) {
             Send(ProduceActorId, new TEvents::TEvPoison());
+        }
+        if (ReadSessionActorId) {
+            Send(ReadSessionActorId, new TEvents::TEvPoison());
         }
         Send(ListenerActorId, new TEvents::TEvUnsubscribe());
         Shutdown();
@@ -229,6 +234,38 @@ protected:
         Send(ProduceActorId, new TEvKafka::TEvProduceRequest(header->CorrelationId, message));
     }
 
+    void HandleMessage(const TRequestHeaderData* header, const TMessagePtr<TSyncGroupRequestData>& message, const TActorContext& ctx) {
+        if (!ReadSessionActorId) {
+            ReadSessionActorId = ctx.RegisterWithSameMailbox(CreateKafkaReadSessionActor(Context, 0));
+        }
+
+        Send(ReadSessionActorId, new TEvKafka::TEvSyncGroupRequest(header->CorrelationId, message));
+    }
+
+    void HandleMessage(const TRequestHeaderData* header, const TMessagePtr<THeartbeatRequestData>& message, const TActorContext& ctx) {
+        if (!ReadSessionActorId) {
+            ReadSessionActorId = ctx.RegisterWithSameMailbox(CreateKafkaReadSessionActor(Context, 0));
+        }
+
+        Send(ReadSessionActorId, new TEvKafka::TEvHeartbeatRequest(header->CorrelationId, message));
+    }
+
+    void HandleMessage(const TRequestHeaderData* header, const TMessagePtr<TJoinGroupRequestData>& message, const TActorContext& ctx) {
+        if (!ReadSessionActorId) {
+            ReadSessionActorId = ctx.RegisterWithSameMailbox(CreateKafkaReadSessionActor(Context, 0));
+        }
+
+        Send(ReadSessionActorId, new TEvKafka::TEvJoinGroupRequest(header->CorrelationId, message));
+    }
+
+    void HandleMessage(const TRequestHeaderData* header, const TMessagePtr<TLeaveGroupRequestData>& message, const TActorContext& ctx) {
+        if (!ReadSessionActorId) {
+            ReadSessionActorId = ctx.RegisterWithSameMailbox(CreateKafkaReadSessionActor(Context, 0));
+        }
+
+        Send(ReadSessionActorId, new TEvKafka::TEvLeaveGroupRequest(header->CorrelationId, message));
+    }
+
     void HandleMessage(const TRequestHeaderData* header, const TMessagePtr<TInitProducerIdRequestData>& message) {
         Register(CreateKafkaInitProducerIdActor(Context, header->CorrelationId, message));
     }
@@ -253,6 +290,26 @@ protected:
         Register(CreateKafkaFetchActor(Context, header->CorrelationId, message));
     }
 
+    void HandleMessage(const TRequestHeaderData* header, const TMessagePtr<TFindCoordinatorRequestData>& message) {
+        Register(CreateKafkaFindCoordinatorActor(Context, header->CorrelationId, message));
+    }
+
+    void HandleMessage(const TRequestHeaderData* header, const TMessagePtr<TOffsetFetchRequestData>& message) {
+        Register(CreateKafkaOffsetFetchActor(Context, header->CorrelationId, message));
+    }
+
+    void HandleMessage(const TRequestHeaderData* header, const TMessagePtr<TOffsetCommitRequestData>& message) {
+        Register(CreateKafkaOffsetCommitActor(Context, header->CorrelationId, message));
+    }
+
+    void HandleMessage(const TRequestHeaderData* header, const TMessagePtr<TCreateTopicsRequestData>& message) {
+        Register(CreateKafkaCreateTopicsActor(Context, header->CorrelationId, message));
+    }
+
+    void HandleMessage(const TRequestHeaderData* header, const TMessagePtr<TCreatePartitionsRequestData>& message) {
+        Register(CreateKafkaCreatePartitionsActor(Context, header->CorrelationId, message));
+    }
+
     template<class T>
     TMessagePtr<T> Cast(std::shared_ptr<Msg>& request) {
         return TMessagePtr<T>(request->Buffer, request->Message);
@@ -262,12 +319,23 @@ protected:
         KAFKA_LOG_D("process message: ApiKey=" << Request->Header.RequestApiKey << ", ExpectedSize=" << Request->ExpectedSize
                                                << ", Size=" << Request->Size);
 
-        Request->Method = EApiKeyNames.find(static_cast<EApiKey>(Request->Header.RequestApiKey))->second;
+        auto apiKeyNameIt = EApiKeyNames.find(static_cast<EApiKey>(Request->Header.RequestApiKey));
+        if (apiKeyNameIt == EApiKeyNames.end()) {
+            KAFKA_LOG_ERROR("Unsupported message: ApiKey=" << Request->Header.RequestApiKey);
+            PassAway();
+            return false;
+        }
+
+        Request->Method = apiKeyNameIt->second;
 
         PendingRequestsQueue.push_back(Request);
         PendingRequests[Request->Header.CorrelationId] = Request;
 
         SendRequestMetrics(ctx);
+        if (Request->Header.ClientId.has_value() && Request->Header.ClientId != "") {
+            Context->KafkaClient = Request->Header.ClientId.value();
+        }
+        
         switch (Request->Header.RequestApiKey) {
             case PRODUCE:
                 HandleMessage(&Request->Header, Cast<TProduceRequestData>(Request), ctx);
@@ -300,6 +368,42 @@ protected:
             case FETCH:
                 HandleMessage(&Request->Header, Cast<TFetchRequestData>(Request));
                 break;
+            
+            case JOIN_GROUP:
+                HandleMessage(&Request->Header, Cast<TJoinGroupRequestData>(Request), ctx);
+                break;
+
+            case SYNC_GROUP:
+                HandleMessage(&Request->Header, Cast<TSyncGroupRequestData>(Request), ctx);
+                break;
+
+            case LEAVE_GROUP:
+                HandleMessage(&Request->Header, Cast<TLeaveGroupRequestData>(Request), ctx);
+                break;
+
+            case HEARTBEAT:
+                HandleMessage(&Request->Header, Cast<THeartbeatRequestData>(Request), ctx);
+                break;
+            
+            case FIND_COORDINATOR:
+                HandleMessage(&Request->Header, Cast<TFindCoordinatorRequestData>(Request));
+                break;
+            
+            case OFFSET_FETCH:
+                HandleMessage(&Request->Header, Cast<TOffsetFetchRequestData>(Request));
+                break;
+
+            case OFFSET_COMMIT:
+                HandleMessage(&Request->Header, Cast<TOffsetCommitRequestData>(Request));
+                break;
+
+            case CREATE_TOPICS:
+                HandleMessage(&Request->Header, Cast<TCreateTopicsRequestData>(Request));
+                break;
+
+            case CREATE_PARTITIONS:
+                HandleMessage(&Request->Header, Cast<TCreatePartitionsRequestData>(Request));
+                break;
 
             default:
                 KAFKA_LOG_ERROR("Unsupported message: ApiKey=" << Request->Header.RequestApiKey);
@@ -319,6 +423,11 @@ protected:
     void Handle(TEvKafka::TEvResponse::TPtr response, const TActorContext& ctx) {
         auto r = response->Get();
         Reply(r->CorrelationId, r->Response, r->ErrorCode, ctx);
+    }
+
+    void Handle(TEvKafka::TEvReadSessionInfo::TPtr readInfo, const TActorContext& /*ctx*/) {
+        auto r = readInfo->Get();
+        Context->GroupId = r->GroupId;
     }
 
     void Handle(TEvKafka::TEvAuthResult::TPtr ev, const TActorContext& ctx) {
@@ -358,6 +467,15 @@ protected:
 
         Context->SaslMechanism = event->SaslMechanism;
         Context->AuthenticationStep = authStep;
+    }
+
+    void HandleKillReadSession() {
+        if (ReadSessionActorId) {
+            Send(ReadSessionActorId, new TEvents::TEvPoison());
+            
+            TActorId emptyActor;
+            ReadSessionActorId = emptyActor;
+        }
     }
 
     void Reply(const ui64 correlationId, TApiMessage::TPtr response, EKafkaErrors errorCode, const TActorContext& ctx) {
@@ -495,6 +613,8 @@ protected:
 
                         Step = INFLIGTH_CHECK;
 
+                        [[fallthrough]];
+
                     case INFLIGTH_CHECK:
                         if (!Context->Authenticated() && !PendingRequestsQueue.empty()) {
                             // Allow only one message to be processed at a time for non-authenticated users
@@ -506,6 +626,8 @@ protected:
                         }
                         InflightSize += Request->ExpectedSize;
                         Step = MESSAGE_READ;
+
+                        [[fallthrough]];
 
                     case HEADER_READ:
                         KAFKA_LOG_T("start read header. ExpectedSize=" << Request->ExpectedSize);
@@ -537,6 +659,8 @@ protected:
                         }
 
                         Step = MESSAGE_READ;
+
+                        [[fallthrough]];
 
                     case MESSAGE_READ:
                         KAFKA_LOG_T("start read new message. ExpectedSize=" << Request->ExpectedSize);
@@ -629,7 +753,9 @@ protected:
             hFunc(TEvPollerRegisterResult, HandleConnected);
             HFunc(TEvKafka::TEvResponse, Handle);
             HFunc(TEvKafka::TEvAuthResult, Handle);
+            HFunc(TEvKafka::TEvReadSessionInfo, Handle);
             HFunc(TEvKafka::TEvHandshakeResult, Handle);
+            sFunc(TEvKafka::TEvKillReadSession, HandleKillReadSession);
             sFunc(NActors::TEvents::TEvPoison, PassAway);
             default:
                 KAFKA_LOG_ERROR("TKafkaConnection: Unexpected " << ev.Get()->GetTypeName());

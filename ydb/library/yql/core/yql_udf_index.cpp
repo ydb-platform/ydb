@@ -41,6 +41,14 @@ TVector<TResourceInfo::TPtr> ConvertResolveResultToResources(const TResolveResul
             newFunction.RunConfigType = udf.GetRunConfigType();
         }
 
+        if (udf.HasIsStrict()) {
+            newFunction.IsStrict = udf.GetIsStrict();
+        }
+
+        if (udf.HasSupportsBlocks()) {
+            newFunction.SupportsBlocks = udf.GetSupportsBlocks();
+        }
+
         functionIndex[package].push_back(newFunction);
     }
 

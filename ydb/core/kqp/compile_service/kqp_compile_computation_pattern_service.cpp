@@ -1,8 +1,8 @@
 #include "kqp_compile_service.h"
 
-#include <library/cpp/actors/core/actor_bootstrapped.h>
-#include <library/cpp/actors/core/hfunc.h>
-#include <library/cpp/actors/core/events.h>
+#include <ydb/library/actors/core/actor_bootstrapped.h>
+#include <ydb/library/actors/core/hfunc.h>
+#include <ydb/library/actors/core/events.h>
 
 #include <ydb/library/aclib/aclib.h>
 
@@ -69,11 +69,11 @@ private:
             compilationIntervalMs -= static_cast<i64>(timer.Get().MilliSeconds());
         }
 
+        Counters->CompileComputationPatternsQueueSize->Set(PatternsToCompile.size() - PatternToCompileIndex);
+
         if (PatternToCompileIndex == patternsToCompileSize) {
             PatternsToCompile.clear();
         }
-
-        Counters->CompileComputationPatternsQueueSize->Set(PatternsToCompile.size());
 
         ScheduleWakeup(ctx);
     }

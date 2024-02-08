@@ -1,6 +1,6 @@
 #include "defs.h"
 
-#include <library/cpp/actors/util/affinity.h>
+#include <ydb/library/actors/util/affinity.h>
 #include <library/cpp/svnversion/svnversion.h>
 #include <library/cpp/testing/unittest/registar.h>
 

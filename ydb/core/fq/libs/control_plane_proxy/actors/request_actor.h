@@ -4,7 +4,7 @@
 #include "utils.h"
 
 #include <contrib/libs/fmt/include/fmt/format.h>
-#include <library/cpp/actors/core/event.h>
+#include <ydb/library/actors/core/event.h>
 #include <util/generic/maybe.h>
 
 #include <ydb/core/fq/libs/actors/logging/log.h>
@@ -205,7 +205,7 @@ public:
     }
 
     void OnBootstrap() override {
-        Become(&TCreateQueryRequestActor::StateFunc);
+        this->UnsafeBecome(&TCreateQueryRequestActor::StateFunc);
         if (RequestProxy->Get()->Quotas) {
             SendCreateRateLimiterResourceRequest();
         } else {

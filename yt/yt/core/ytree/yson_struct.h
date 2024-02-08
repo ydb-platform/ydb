@@ -93,6 +93,8 @@ public:
 
     std::vector<TString> GetAllParameterAliases(const TString& key) const;
 
+    void WriteSchema(NYson::IYsonConsumer* consumer) const;
+
 private:
     template <class TValue>
     friend class TYsonStructParameter;
@@ -145,6 +147,34 @@ class TYsonStructLite
 
 ////////////////////////////////////////////////////////////////////////////////
 
+class TExternalizedYsonStruct
+    : public TYsonStructLite
+{
+public:
+    //! NB(arkady-e1ppa): Due to still present bug in clang which makes it
+    //! incapable of processing constraints, which refer to class template
+    //! parameters, we cannot properly constraint TSerializer here and
+    //! fallback on static_assert inside of function body.
+
+    //! TODO(arkady-e1ppa): If this bug ever gets fixed,
+    //! replace class with std::derived_from<TExternalizedYsonStruct<TStruct>>
+    //! and remove exposition-only "requires" statements
+
+    template <std::default_initializable TStruct, class TSerializer>
+        // requires std::derived_from<TSerializer, TExternalizedYsonStruct<TStruct>>
+    static TSerializer CreateWritable(TStruct& writable);
+
+    template <std::default_initializable TStruct, class TSerializer>
+        // requires std::derived_from<TSerializer, TExternalizedYsonStruct<TStruct>>
+    static TSerializer CreateReadOnly(const TStruct& readOnly);
+
+protected:
+    template <std::default_initializable TStruct>
+    static TStruct* GetDefault() noexcept;
+};
+
+////////////////////////////////////////////////////////////////////////////////
+
 class TYsonStructRegistry
 {
 public:
@@ -156,13 +186,16 @@ public:
     void InitializeStruct(TStruct* target);
 
 private:
-    static inline thread_local IYsonStructMeta* CurrentlyInitializingMeta_ = nullptr;
+    static inline YT_THREAD_LOCAL(IYsonStructMeta*) CurrentlyInitializingMeta_ = nullptr;
 
     template <class TStruct>
     friend class TYsonStructRegistrar;
 
     template <class TStruct, class TValue>
     friend class TYsonFieldAccessor;
+
+    template <class TStruct, class TValue>
+    friend class TUniversalYsonParameterAccessor;
 
     //! Performs dynamic cast using thread safe cache.
     /*!
@@ -207,9 +240,36 @@ public:
     template <class TBase, class TValue>
     TYsonStructParameter<TValue>& BaseClassParameter(const TString& key, TValue(TBase::*field));
 
+    template <class TValue>
+    TYsonStructParameter<TValue>& ParameterWithUniversalAccessor(const TString& key, std::function<TValue&(TStruct*)> accessor);
+
     void Preprocessor(std::function<void(TStruct*)> preprocessor);
 
     void Postprocessor(std::function<void(TStruct*)> postprocessor);
+
+    //! NB(arkady-e1ppa): clang-14 doesn't treat constraint below as a SFINAE error
+    //! in case when TStruct doesn't have an alias for TExternal.
+    //! Thus this constraint is commented out for now and compensated for
+    //! with a static assert inside of the function body.
+    //! This issue is fixed since clang-16.
+
+    //! TODO(arkady-e1ppa): restore these constraints once clang-14 usage is completely abolished.
+    //! For Pre-/Post- processors write
+    //! template <CInvocable<void(typename TStruct::TExternal*)> TExternalPreprocessor>
+    //! (and TExternalPostprocessor in case of ExternalPostprocessor) and remove
+    //! these exposition-only "requires" statements
+
+    template <class TExternal, class TValue>
+        // requires std::derived_from<TStruct, TExternalizedYsonStruct<TExternal, TStruct>>
+    TYsonStructParameter<TValue>& ExternalClassParameter(const TString& key, TValue(TExternal::*field));
+
+    template <class TExternalPreprocessor>
+        // requires (CInvocable<TExternalPreprocessor, void(typename TStruct::TExternal*)>)
+    void ExternalPreprocessor(TExternalPreprocessor preprocessor);
+
+    template <class TExternalPostprocessor>
+        // requires (CInvocable<TExternalPostprocessor, void(typename TStruct::TExternal*)>)
+    void ExternalPostprocessor(TExternalPostprocessor postprocessor);
 
     void UnrecognizedStrategy(EUnrecognizedStrategy strategy);
 
@@ -275,7 +335,7 @@ void UpdateYsonStructField(TIntrusivePtr<TDst>& dst, const TIntrusivePtr<TSrc>& 
 #define REGISTER_YSON_STRUCT(TStruct)
 
 //! Declare non-ref-counted Yson Struct auxiliary methods and fields. Must be
-//! supplemented by DEFINE_YSON_STRUCT.
+//! supplemented by DEFINE_YSON_STRUCT_LITE.
 #define DECLARE_YSON_STRUCT_LITE(TStruct)
 
 //! Declare non-ref-counted Yson Struct auxiliary methods and define them inplace.
@@ -283,6 +343,14 @@ void UpdateYsonStructField(TIntrusivePtr<TDst>& dst, const TIntrusivePtr<TSrc>& 
 
 //! Define Yson Struct auxiliary methods out of class.
 #define DEFINE_YSON_STRUCT(TStruct)
+
+//! Define non-ref-counted Yson Struct auxiliary methods out of class.
+#define DEFINE_YSON_STRUCT_LITE(TStruct)
+
+//! Define non-ref-counted Yson external serializer methods and fields.
+#define REGISTER_EXTERNALIZED_YSON_STRUCT(TStruct, TSerializer)
+
+#define REGISTER_DERIVED_EXTERNALIZED_YSON_STRUCT(TStruct, TSerializer, TBases)
 
 ////////////////////////////////////////////////////////////////////////////////
 

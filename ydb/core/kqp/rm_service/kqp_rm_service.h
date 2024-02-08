@@ -5,7 +5,7 @@
 #include <ydb/core/kqp/counters/kqp_counters.h>
 #include <ydb/library/yql/minikql/computation/mkql_computation_pattern_cache.h>
 
-#include <library/cpp/actors/core/actor.h>
+#include <ydb/library/actors/core/actor.h>
 
 #include <util/datetime/base.h>
 #include <util/string/builder.h>

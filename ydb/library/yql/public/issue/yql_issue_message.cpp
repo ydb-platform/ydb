@@ -5,6 +5,8 @@
 
 #include <util/generic/deque.h>
 #include <util/generic/yexception.h>
+#include <util/stream/output.h>
+#include <util/string/join.h>
 
 #include <tuple>
 
@@ -137,4 +139,11 @@ TIssue IssueFromBinaryMessage(const TString& binaryMessage) {
     return IssueFromMessage(protobuf);
 }
 
+}
+
+Y_DECLARE_OUT_SPEC(, google::protobuf::RepeatedPtrField<Ydb::Issue::IssueMessage>, stream, issues) {
+    stream << JoinSeq("", issues);
+}
+Y_DECLARE_OUT_SPEC(, google::protobuf::RepeatedPtrField<NYql::NIssue::NProto::IssueMessage>, stream, issues) {
+    stream << JoinSeq("", issues);
 }

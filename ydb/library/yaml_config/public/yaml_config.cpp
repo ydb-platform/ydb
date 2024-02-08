@@ -4,8 +4,8 @@
 #include <util/digest/sequence.h>
 
 template <>
-struct THash<NYamlConfig::TLabel> {
-    inline size_t operator()(const NYamlConfig::TLabel& value) const {
+struct THash<NKikimr::NYamlConfig::TLabel> {
+    inline size_t operator()(const NKikimr::NYamlConfig::TLabel& value) const {
         return CombineHashes(THash<TString>{}(value.Value), (size_t)value.Type);
     }
 };
@@ -22,9 +22,9 @@ struct THash<TVector<TString>> {
 };
 
 template <>
-struct THash<TVector<NYamlConfig::TLabel>> : public TSimpleRangeHash {};
+struct THash<TVector<NKikimr::NYamlConfig::TLabel>> : public TSimpleRangeHash {};
 
-namespace NYamlConfig {
+namespace NKikimr::NYamlConfig {
 
 inline const TMap<TString, EYamlConfigLabelTypeClass> ClassMapping{
     std::pair{TString("enum"), EYamlConfigLabelTypeClass::Closed},
@@ -751,9 +751,9 @@ TString StripMetadata(const TString& config) {
     return sstr.Str();
 }
 
-} // namespace NYamlConfig
+} // namespace NKikimr::NYamlConfig
 
 template <>
-void Out<NYamlConfig::TLabel>(IOutputStream& out, const NYamlConfig::TLabel& value) {
+void Out<NKikimr::NYamlConfig::TLabel>(IOutputStream& out, const NKikimr::NYamlConfig::TLabel& value) {
     out << (int)value.Type << ":" << value.Value;
 }

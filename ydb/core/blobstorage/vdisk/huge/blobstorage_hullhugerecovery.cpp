@@ -1,5 +1,7 @@
 #include "blobstorage_hullhugerecovery.h"
 #include "blobstorage_hullhugeheap.h"
+#include <library/cpp/random_provider/random_provider.h>
+
 
 using namespace NKikimrServices;
 

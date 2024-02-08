@@ -4,8 +4,15 @@ import sys
 
 def fix(s):
     # we use '#' instead of ',' because ymake always splits args by comma
-    if 'internalize' in s:
+    if s.startswith('-internalize-public-api-list'):
         return s.replace('#', ',')
+
+    # Dirty hack to eliminate double quotes from value of passes option.
+    # Note that these double quoted are required by cmake.
+    if s.startswith('-passes'):
+        name, value = s.split('=', 1)
+        value = value.strip('"')
+        return '='.join([name, value])
 
     return s
 

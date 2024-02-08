@@ -63,3 +63,13 @@ Aws::Http::HeaderValueCollection DeletePublicAccessBlockRequest::GetRequestSpeci
 
   return headers;
 }
+
+DeletePublicAccessBlockRequest::EndpointParameters DeletePublicAccessBlockRequest::GetEndpointContextParams() const
+{
+    EndpointParameters parameters;
+    // Operation context parameters
+    if (BucketHasBeenSet()) {
+        parameters.emplace_back(Aws::String("Bucket"), this->GetBucket(), Aws::Endpoint::EndpointParameter::ParameterOrigin::OPERATION_CONTEXT);
+    }
+    return parameters;
+}

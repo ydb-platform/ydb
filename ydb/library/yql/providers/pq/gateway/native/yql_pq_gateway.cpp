@@ -17,7 +17,7 @@ public:
     ~TPqNativeGateway();
 
     NThreading::TFuture<void> OpenSession(const TString& sessionId, const TString& username) override;
-    void CloseSession(const TString& sessionId) override;
+    NThreading::TFuture<void> CloseSession(const TString& sessionId) override;
 
     NPq::NConfigurationManager::TAsyncDescribePathResult DescribePath(
         const TString& sessionId,
@@ -108,10 +108,12 @@ NThreading::TFuture<void> TPqNativeGateway::OpenSession(const TString& sessionId
     return NThreading::MakeFuture();
 }
 
-void TPqNativeGateway::CloseSession(const TString& sessionId) {
+NThreading::TFuture<void> TPqNativeGateway::CloseSession(const TString& sessionId) {
     with_lock (Mutex) {
         Sessions.erase(sessionId);
     }
+
+    return NThreading::MakeFuture();
 }
 
 TPqSession::TPtr TPqNativeGateway::GetExistingSession(const TString& sessionId) const {

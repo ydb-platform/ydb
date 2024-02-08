@@ -1,0 +1,14 @@
+[
+  {
+    "Time": "2022-10-19 16:40:47",
+    "Fruit": "Banana",
+    "Price": 3,
+    "Weight": 100
+  },
+  {
+    "Time": "2022-10-19 16:41:47",
+    "Fruit": "Apple",
+    "Price": 2,
+    "Weight": 22
+  }
+]

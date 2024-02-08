@@ -16,18 +16,30 @@ using namespace NYTree;
 
 ////////////////////////////////////////////////////////////////////////////////
 
-TReadFileCommand::TReadFileCommand()
+void TReadFileCommand::Register(TRegistrar registrar)
 {
-    RegisterParameter("path", Path);
-    RegisterParameter("offset", Options.Offset)
-        .Optional();
-    RegisterParameter("length", Options.Length)
-        .Optional();
-    RegisterParameter("file_reader", FileReader)
+    registrar.Parameter("path", &TThis::Path);
+
+    registrar.Parameter("file_reader", &TThis::FileReader)
         .Default(nullptr);
-    RegisterParameter("etag", Etag)
+
+    registrar.Parameter("etag", &TThis::Etag)
         .Alias("etag_revision")
         .Default();
+
+    registrar.ParameterWithUniversalAccessor<std::optional<i64>>(
+        "offset",
+        [] (TThis* command) -> auto& {
+            return command->Options.Offset;
+        })
+        .Optional(/*init*/ false);
+
+    registrar.ParameterWithUniversalAccessor<std::optional<i64>>(
+        "length",
+        [] (TThis* command) -> auto& {
+            return command->Options.Length;
+        })
+        .Optional(/*init*/ false);
 }
 
 void TReadFileCommand::DoExecute(ICommandContextPtr context)
@@ -83,12 +95,12 @@ bool TReadFileCommand::HasResponseParameters() const
 
 ////////////////////////////////////////////////////////////////////////////////
 
-TWriteFileCommand::TWriteFileCommand()
+void TWriteFileCommand::Register(TRegistrar registrar)
 {
-    RegisterParameter("path", Path);
-    RegisterParameter("file_writer", FileWriter)
+    registrar.Parameter("path", &TThis::Path);
+    registrar.Parameter("file_writer", &TThis::FileWriter)
         .Default();
-    RegisterParameter("compute_md5", ComputeMD5)
+    registrar.Parameter("compute_md5", &TThis::ComputeMD5)
         .Default(false);
 }
 
@@ -131,10 +143,15 @@ void TWriteFileCommand::DoExecute(ICommandContextPtr context)
 
 ////////////////////////////////////////////////////////////////////////////////
 
-TGetFileFromCacheCommand::TGetFileFromCacheCommand()
+void TGetFileFromCacheCommand::Register(TRegistrar registrar)
 {
-    RegisterParameter("md5", MD5);
-    RegisterParameter("cache_path", Options.CachePath);
+    registrar.Parameter("md5", &TThis::MD5);
+
+    registrar.ParameterWithUniversalAccessor<TYPath>(
+        "cache_path",
+        [] (TThis* command) -> auto& {
+            return command->Options.CachePath;
+        });
 }
 
 void TGetFileFromCacheCommand::DoExecute(ICommandContextPtr context)
@@ -148,13 +165,24 @@ void TGetFileFromCacheCommand::DoExecute(ICommandContextPtr context)
 
 ////////////////////////////////////////////////////////////////////////////////
 
-TPutFileToCacheCommand::TPutFileToCacheCommand()
+void TPutFileToCacheCommand::Register(TRegistrar registrar)
 {
-    RegisterParameter("path", Path);
-    RegisterParameter("md5", MD5);
-    RegisterParameter("cache_path", Options.CachePath);
-    RegisterParameter("preserve_expiration_timeout", Options.PreserveExpirationTimeout)
-        .Optional();
+    registrar.Parameter("path", &TThis::Path);
+
+    registrar.Parameter("md5", &TThis::MD5);
+
+    registrar.ParameterWithUniversalAccessor<TYPath>(
+        "cache_path",
+        [] (TThis* command) -> auto& {
+            return command->Options.CachePath;
+        });
+
+    registrar.ParameterWithUniversalAccessor<bool>(
+        "preserve_expiration_timeout",
+        [] (TThis* command) -> auto& {
+            return command->Options.PreserveExpirationTimeout;
+        })
+        .Optional(/*init*/ false);
 }
 
 void TPutFileToCacheCommand::DoExecute(ICommandContextPtr context)

@@ -23,6 +23,14 @@ bool CheckColumnTypesConstraints(NKikimrSchemeOp::TTableDescription& desc, TStri
     THashSet<TString> keyColumns(desc.GetKeyColumnNames().begin(), desc.GetKeyColumnNames().end());
 
     for (const auto& column : desc.GetColumns()) {
+        const auto& type = column.GetType();
+        if (type == "Uuid") {
+            if (!AppData()->FeatureFlags.GetEnableUuidAsPrimaryKey() && keyColumns.contains(column.GetName())) {
+                errMsg = TStringBuilder() << "Uuid as primary key is forbiden by configuration: " << column.GetName();
+                return false;
+            }
+        }
+
         if (column.GetNotNull()) {
             bool isPrimaryKey = keyColumns.contains(column.GetName());
 
@@ -92,7 +100,6 @@ bool InitPartitioning(const NKikimrSchemeOp::TTableDescription& op,
 
     return true;
 }
-
 
 bool DoInitPartitioning(TTableInfo::TPtr tableInfo,
                         const NKikimrSchemeOp::TTableDescription& op,
@@ -530,7 +537,7 @@ public:
 
         TString errStr;
 
-        if ((schema.HasTemporary() && schema.GetTemporary()) && !AppData()->FeatureFlags.GetEnableTempTables()) {
+        if ((schema.HasTemporary() && schema.GetTemporary()) && !context.SS->EnableTempTables) {
             result->SetError(NKikimrScheme::StatusPreconditionFailed,
                 TStringBuilder() << "It is not allowed to create temp table: " << schema.GetName());
             return result;
@@ -556,7 +563,7 @@ public:
 
         const NScheme::TTypeRegistry* typeRegistry = AppData()->TypeRegistry;
         const TSchemeLimits& limits = domainInfo->GetSchemeLimits();
-        TTableInfo::TAlterDataPtr alterData = TTableInfo::CreateAlterData(nullptr, schema, *typeRegistry, limits, *domainInfo, errStr, LocalSequences);
+        TTableInfo::TAlterDataPtr alterData = TTableInfo::CreateAlterData(nullptr, schema, *typeRegistry, limits, *domainInfo, context.SS->EnableTablePgTypes, errStr, LocalSequences);
         if (!alterData.Get()) {
             result->SetError(NKikimrScheme::StatusSchemeError, errStr);
             return result;
@@ -637,6 +644,11 @@ public:
 
         Y_ABORT_UNLESS(tableInfo->GetPartitions().back().EndOfRange.empty(), "End of last range must be +INF");
 
+        if (schema.HasTemporary() && schema.GetTemporary()) {
+            tableInfo->IsTemporary = true;
+            tableInfo->OwnerActorId = ActorIdFromProto(Transaction.GetTempTableOwnerActorId());
+        }
+
         context.SS->Tables[newTable->PathId] = tableInfo;
         context.SS->TabletCounters->Simple()[COUNTER_TABLE_COUNT].Add(1);
         context.SS->IncrementPathDbRefCount(newTable->PathId, "new path created");
@@ -684,6 +696,17 @@ public:
 
         context.SS->ClearDescribePathCaches(dstPath.Base());
         context.OnComplete.PublishToSchemeBoard(OperationId, dstPath.Base()->PathId);
+
+        if (schema.HasTemporary() && schema.GetTemporary()) {
+            const auto& ownerActorId = tableInfo->OwnerActorId;
+            LOG_DEBUG_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
+                    "Processing create temp table with Name: " << name
+                    << ", WorkingDir: " << parentPathStr
+                    << ", OwnerActorId: " << ownerActorId
+                    << ", PathId: " << newTable->PathId);
+            context.OnComplete.UpdateTempTablesToCreateState(
+                ownerActorId, newTable->PathId);
+        }
 
         Y_ABORT_UNLESS(shardsToCreate == txState.Shards.size());
         dstPath.DomainInfo()->IncPathsInside();

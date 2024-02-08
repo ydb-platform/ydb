@@ -19,7 +19,7 @@ import re
 import sys
 import textwrap
 import types
-from functools import wraps
+from functools import partial, wraps
 from io import StringIO
 from keyword import iskeyword
 from tokenize import COMMENT, detect_encoding, generate_tokens, untokenize
@@ -306,8 +306,12 @@ def extract_lambda_source(f):
     This is not a good function and I am sorry for it. Forgive me my
     sins, oh lord
     """
+    # You might be wondering how a lambda can have a return-type annotation?
+    # The answer is that we add this at runtime, in new_given_signature(),
+    # and we do support strange choices as applying @given() to a lambda.
     sig = inspect.signature(f)
-    assert sig.return_annotation is inspect.Parameter.empty
+    assert sig.return_annotation in (inspect.Parameter.empty, None), sig
+
     if sig.parameters:
         if_confused = f"lambda {str(sig)[1:-1]}: <unknown>"
     else:
@@ -428,6 +432,8 @@ def extract_lambda_source(f):
 
 
 def get_pretty_function_description(f):
+    if isinstance(f, partial):
+        return pretty(f)
     if not hasattr(f, "__name__"):
         return repr(f)
     name = f.__name__

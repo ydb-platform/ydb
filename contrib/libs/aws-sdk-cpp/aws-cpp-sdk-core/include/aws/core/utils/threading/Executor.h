@@ -42,6 +42,12 @@ namespace Aws
                     return SubmitToThread(std::move(callable));
                 }
 
+                /* explicit _overload_ of the template function above to avoid template bloat */
+                bool Submit(std::function<void()>&& callable)
+                {
+                    return SubmitToThread(std::move(callable));
+                }
+
             protected:
                 /**
                 * To implement your own executor implementation, then simply subclass Executor and implement this method.
@@ -71,7 +77,7 @@ namespace Aws
 
             enum class OverflowPolicy
             {
-                QUEUE_TASKS_EVENLY_ACCROSS_THREADS,
+                QUEUE_TASKS_EVENLY_ACROSS_THREADS,
                 REJECT_IMMEDIATELY
             };
 
@@ -81,7 +87,7 @@ namespace Aws
             class AWS_CORE_API PooledThreadExecutor : public Executor
             {
             public:
-                PooledThreadExecutor(size_t poolSize, OverflowPolicy overflowPolicy = OverflowPolicy::QUEUE_TASKS_EVENLY_ACCROSS_THREADS);
+                PooledThreadExecutor(size_t poolSize, OverflowPolicy overflowPolicy = OverflowPolicy::QUEUE_TASKS_EVENLY_ACROSS_THREADS);
                 ~PooledThreadExecutor();
 
                 /**

@@ -14,8 +14,8 @@ target_compile_options(dq-worker_manager-interface PRIVATE
 target_link_libraries(dq-worker_manager-interface PUBLIC
   contrib-libs-cxxsupp
   yutil
-  cpp-actors-core
-  cpp-actors-interconnect
+  library-actors-core
+  library-actors-interconnect
   yql-utils-log
   yql-dq-common
   providers-common-metrics

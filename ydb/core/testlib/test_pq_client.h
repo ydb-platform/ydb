@@ -25,14 +25,14 @@ using namespace NKikimr::Tests;
 
 const static ui32 PQ_DEFAULT_NODE_COUNT = 2;
 
-inline Tests::TServerSettings PQSettings(ui16 port = 0, ui32 nodesCount = PQ_DEFAULT_NODE_COUNT, bool roundrobin = true, const TString& yql_timeout = "10", const THolder<TTempFileHandle>& netDataFile = nullptr) {
+inline Tests::TServerSettings PQSettings(ui16 port = 0, ui32 nodesCount = PQ_DEFAULT_NODE_COUNT, const TString& yql_timeout = "10", const THolder<TTempFileHandle>& netDataFile = nullptr) {
     NKikimrPQ::TPQConfig pqConfig;
     NKikimrProto::TAuthConfig authConfig;
+    authConfig.SetUseBuiltinDomain(true);
     authConfig.SetUseBlackBox(false);
     authConfig.SetUseAccessService(false);
     authConfig.SetUseAccessServiceTLS(false);
     authConfig.SetUseStaff(false);
-    pqConfig.SetRoundRobinPartitionMapping(roundrobin);
 
     pqConfig.SetEnabled(true);
     pqConfig.SetMaxReadCookies(10);
@@ -70,6 +70,13 @@ inline Tests::TServerSettings PQSettings(ui16 port = 0, ui32 nodesCount = PQ_DEF
         settings.NetClassifierConfig.SetNetDataFilePath(netDataFile->Name());
 
     return settings;
+}
+
+// deprecated.
+inline Tests::TServerSettings PQSettings(ui16 port, ui32 nodesCount, bool roundrobin, const TString& yql_timeout = "10", const THolder<TTempFileHandle>& netDataFile = nullptr) {
+    Y_UNUSED(roundrobin);
+
+    return PQSettings(port, nodesCount, yql_timeout, netDataFile);
 }
 
 const TString TopicPrefix = "/Root/PQ/";
@@ -536,7 +543,7 @@ public:
         auto driverConfig = NYdb::TDriverConfig()
             .SetEndpoint(endpoint)
             .SetLog(CreateLogBackend("cerr", ELogPriority::TLOG_DEBUG));
-        if (databaseName) 
+        if (databaseName)
             driverConfig.SetDatabase(*databaseName);
         Driver.Reset(MakeHolder<NYdb::TDriver>(driverConfig));
 
@@ -593,6 +600,7 @@ public:
            "Columns { Name: \"Partition\"        Type: \"Uint32\"}"
            "Columns { Name: \"CreateTime\"       Type: \"Uint64\"}"
            "Columns { Name: \"AccessTime\"       Type: \"Uint64\"}"
+           "Columns { Name: \"SeqNo\"            Type: \"Uint64\"}"
            "KeyColumnNames: [\"Hash\", \"SourceId\", \"Topic\"]"
         );
     }
@@ -784,7 +792,7 @@ public:
     {
         auto response = RequestTopicMetadata(name);
 
-        if (response.GetErrorCode() != (ui32)NPersQueue::NErrorCode::OK) 
+        if (response.GetErrorCode() != (ui32)NPersQueue::NErrorCode::OK)
             return 0;
 
         UNIT_ASSERT(response.HasMetaResponse());
@@ -982,17 +990,31 @@ public:
         THolder<NMsgBusProxy::TBusPersQueue> alterRequest = requestDescr.GetRequest();
 
         ui32 prevVersion = GetTopicVersionFromMetadata(name);
+        while (prevVersion == 0) {
+            Sleep(TDuration::MilliSeconds(500));
 
+            prevVersion = GetTopicVersionFromMetadata(name);
+        }
         CallPersQueueGRPC(alterRequest->Record);
+        Cerr << "Alter got " << prevVersion << "\n";
 
         const TInstant start = TInstant::Now();
         AlterTopic();
-        while (GetTopicVersionFromMetadata(name, cacheSize) != prevVersion + 1) {
+        auto ver = GetTopicVersionFromMetadata(name, cacheSize);
+        while (ver != prevVersion + 1) {
+            Cerr << "Alter1 got " << ver << "\n";
+
             Sleep(TDuration::MilliSeconds(500));
+            ver = GetTopicVersionFromMetadata(name, cacheSize);
             UNIT_ASSERT(TInstant::Now() - start < ::DEFAULT_DISPATCH_TIMEOUT);
         }
-        while (GetTopicVersionFromPath(name) != prevVersion + 1) {
+        auto ver2 = GetTopicVersionFromPath(name);
+        while (ver2 != prevVersion + 1) {
+            Cerr << "Alter2 got " << ver << "\n";
+
             Sleep(TDuration::MilliSeconds(500));
+            ver2 = GetTopicVersionFromPath(name);
+
             UNIT_ASSERT(TInstant::Now() - start < ::DEFAULT_DISPATCH_TIMEOUT);
         }
 
@@ -1060,7 +1082,7 @@ public:
         Cerr << "ChooseProxy response:\n" << PrintToString(response) << Endl;
 
         UNIT_ASSERT_C(status.ok(), status.error_message());
- 
+
         UNIT_ASSERT_VALUES_EQUAL_C((NMsgBusProxy::EResponseStatus)response.GetStatus(), NMsgBusProxy::MSTATUS_OK, "proxy failure");
     }
 
@@ -1075,7 +1097,7 @@ public:
         TString cookie = GetOwnership({writeRequest.Topic, writeRequest.Partition}, expectedOwnerStatus);
 
         THolder<NMsgBusProxy::TBusPersQueue> request = writeRequest.GetRequest(data, cookie);
-        if (!ticket.empty()) 
+        if (!ticket.empty())
             request.Get()->Record.SetTicket(ticket);
 
         auto response = CallPersQueueGRPC(request->Record);
@@ -1406,6 +1428,8 @@ public:
         auto settings = NYdb::NPersQueue::TCreateTopicSettings().PartitionsCount(params.PartsCount).ClientWriteDisabled(!params.CanWrite);
         settings.FederationAccount(params.Account);
         settings.SupportedCodecs(params.Codecs);
+        //settings.MaxPartitionWriteSpeed(50_MB);
+        //settings.MaxPartitionWriteBurst(50_MB);
         TVector<NYdb::NPersQueue::TReadRuleSettings> rrSettings;
         for (auto &user : params.ReadRules) {
             rrSettings.push_back({NYdb::NPersQueue::TReadRuleSettings{}.ConsumerName(user)});

@@ -9,9 +9,9 @@
 #include <yt/yt/core/misc/singleton.h>
 #include <yt/yt/core/misc/string_builder.h>
 
-#include <yt/yt/core/ytree/yson_serializable.h>
-
 #include <library/cpp/ytalloc/api/ytalloc.h>
+
+#include <library/cpp/yt/yson_string/string.h>
 
 #include <util/system/env.h>
 
@@ -127,7 +127,7 @@ private:
     void PushSmallArenaStatistics(
         NProfiling::ISensorWriter* writer,
         size_t rank,
-        const TEnumIndexedVector<ESmallArenaCounter, ssize_t>& counters)
+        const TEnumIndexedArray<ESmallArenaCounter, ssize_t>& counters)
     {
         NProfiling::TWithTagGuard withTagGuard(writer, "rank", ToString(rank));
         PushAllocationCounterStatistics(writer, "/small_arena", counters);
@@ -147,7 +147,7 @@ private:
     void PushLargeArenaStatistics(
         NProfiling::ISensorWriter* writer,
         size_t rank,
-        const TEnumIndexedVector<ELargeArenaCounter, ssize_t>& counters)
+        const TEnumIndexedArray<ELargeArenaCounter, ssize_t>& counters)
     {
         NProfiling::TWithTagGuard withTagGuard(writer, "rank", ToString(rank));
 

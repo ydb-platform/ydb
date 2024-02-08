@@ -16,6 +16,7 @@
   * [{#T}](selfheal.md).
   * [{#T}](../../administration/decommissioning.md).
   * [{#T}](moving_vdisks.md).
+  * [{#T}](replacing_nodes.md).
 
 * Решение проблем:
 

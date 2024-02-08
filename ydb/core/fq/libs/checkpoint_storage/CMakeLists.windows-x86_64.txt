@@ -8,6 +8,7 @@
 
 add_subdirectory(events)
 add_subdirectory(proto)
+add_subdirectory(ut)
 
 add_library(fq-libs-checkpoint_storage)
 target_compile_options(fq-libs-checkpoint_storage PRIVATE
@@ -17,7 +18,7 @@ target_link_libraries(fq-libs-checkpoint_storage PUBLIC
   contrib-libs-cxxsupp
   yutil
   contrib-libs-fmt
-  cpp-actors-core
+  library-actors-core
   libs-actors-logging
   fq-libs-control_plane_storage
   fq-libs-ydb

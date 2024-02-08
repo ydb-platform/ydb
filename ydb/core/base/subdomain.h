@@ -2,6 +2,7 @@
 
 #include <ydb/core/protos/subdomains.pb.h>
 
+#include <util/generic/maybe.h>
 #include <util/system/types.h>
 #include <utility>
 
@@ -29,6 +30,8 @@ struct TSubDomainKey : public std::pair<ui64, ui64> {
 };
 
 static const TSubDomainKey InvalidSubDomainKey = TSubDomainKey();
+
+using TMaybeServerlessComputeResourcesMode = TMaybeFail<NKikimrSubDomains::EServerlessComputeResourcesMode>;
 }
 
 template <>

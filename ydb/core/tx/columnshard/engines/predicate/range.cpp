@@ -1,5 +1,5 @@
 #include "range.h"
-#include <library/cpp/actors/core/log.h>
+#include <ydb/library/actors/core/log.h>
 
 namespace NKikimr::NOlap {
 
@@ -40,7 +40,7 @@ NKikimr::NArrow::TColumnFilter TPKRangeFilter::BuildFilter(const arrow::Datum& d
 }
 
 bool TPKRangeFilter::IsPortionInUsage(const TPortionInfo& info, const TIndexInfo& indexInfo) const {
-    if (auto from = PredicateFrom.ExtractKey(indexInfo.GetIndexKey())) {
+    if (auto from = PredicateFrom.ExtractKey(indexInfo.GetPrimaryKey())) {
         const auto& portionEnd = info.IndexKeyEnd();
         const int commonSize = std::min(from->Size(), portionEnd.Size());
         if (std::is_gt(from->ComparePartNotNull(portionEnd, commonSize))) {
@@ -48,7 +48,7 @@ bool TPKRangeFilter::IsPortionInUsage(const TPortionInfo& info, const TIndexInfo
         }
     }
 
-    if (auto to = PredicateTo.ExtractKey(indexInfo.GetIndexKey())) {
+    if (auto to = PredicateTo.ExtractKey(indexInfo.GetPrimaryKey())) {
         const auto& portionStart = info.IndexKeyStart();
         const int commonSize = std::min(to->Size(), portionStart.Size());
         if (std::is_lt(to->ComparePartNotNull(portionStart, commonSize))) {
@@ -57,6 +57,37 @@ bool TPKRangeFilter::IsPortionInUsage(const TPortionInfo& info, const TIndexInfo
     }
 
     return true;
+}
+
+bool TPKRangeFilter::IsPortionInPartialUsage(const NArrow::TReplaceKey& start, const NArrow::TReplaceKey& end, const TIndexInfo& indexInfo) const {
+    bool startUsage = false;
+    bool endUsage = false;
+    if (auto from = PredicateFrom.ExtractKey(indexInfo.GetPrimaryKey())) {
+        AFL_VERIFY(from->Size() <= start.Size());
+        if (PredicateFrom.IsInclude()) {
+            startUsage = std::is_lt(start.ComparePartNotNull(*from, from->Size()));
+        } else {
+            startUsage = std::is_lteq(start.ComparePartNotNull(*from, from->Size()));
+        }
+    } else {
+        startUsage = true;
+    }
+
+    if (auto to = PredicateTo.ExtractKey(indexInfo.GetPrimaryKey())) {
+        AFL_VERIFY(to->Size() <= end.Size());
+        if (PredicateTo.IsInclude()) {
+            endUsage = std::is_gt(end.ComparePartNotNull(*to, to->Size()));
+        } else {
+            endUsage = std::is_gteq(end.ComparePartNotNull(*to, to->Size()));
+        }
+    } else {
+        endUsage = true;
+    }
+
+//    AFL_ERROR(NKikimrServices::TX_COLUMNSHARD)("start", start.DebugString())("end", end.DebugString())("from", PredicateFrom.DebugString())("to", PredicateTo.DebugString())
+//        ("start_usage", startUsage)("end_usage", endUsage);
+
+    return endUsage || startUsage;
 }
 
 std::optional<NKikimr::NOlap::TPKRangeFilter> TPKRangeFilter::Build(TPredicateContainer&& from, TPredicateContainer&& to) {

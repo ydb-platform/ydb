@@ -1,5 +1,5 @@
 #include "mkql_ifpresent.h"
-#include <ydb/library/yql/minikql/computation/mkql_computation_node_codegen.h>
+#include <ydb/library/yql/minikql/computation/mkql_computation_node_codegen.h>  // Y_IGNORE
 #include <ydb/library/yql/minikql/mkql_node_cast.h>
 
 namespace NKikimr {
@@ -297,7 +297,8 @@ IComputationNode* WrapIfPresent(TCallable& callable, const TComputationNodeFacto
     const auto presentBranch = LocateNode(ctx.NodeLocator, callable, 2);
     const auto missingBranch = LocateNode(ctx.NodeLocator, callable, 3);
     const auto itemArg = LocateExternalNode(ctx.NodeLocator, callable, 1);
-    const bool multiOptional = AS_TYPE(TOptionalType, callable.GetInput(0U).GetStaticType())->GetItemType()->IsOptional();
+    const auto innerType = AS_TYPE(TOptionalType, callable.GetInput(0U).GetStaticType())->GetItemType();
+    const bool multiOptional = innerType->IsOptional() || innerType->IsPg();
     if (const auto type = callable.GetType()->GetReturnType(); type->IsFlow()) {
         const auto presWide = dynamic_cast<IComputationWideFlowNode*>(presentBranch);
         const auto missWide = dynamic_cast<IComputationWideFlowNode*>(missingBranch);

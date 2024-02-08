@@ -1,6 +1,7 @@
 #include "kqp_rm_service.h"
 
 #include <ydb/core/base/location.h>
+#include <ydb/core/base/domain.h>
 #include <ydb/core/base/statestorage.h>
 #include <ydb/core/cms/console/configs_dispatcher.h>
 #include <ydb/core/cms/console/console.h>
@@ -8,8 +9,8 @@
 #include <ydb/core/mind/tenant_pool.h>
 #include <ydb/core/kqp/common/kqp_event_ids.h>
 
-#include <library/cpp/actors/core/actor_bootstrapped.h>
-#include <library/cpp/actors/interconnect/interconnect.h>
+#include <ydb/library/actors/core/actor_bootstrapped.h>
+#include <ydb/library/actors/interconnect/interconnect.h>
 
 #include <ydb/core/util/ulid.h>
 

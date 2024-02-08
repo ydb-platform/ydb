@@ -1,9 +1,11 @@
 #include "converter.h"
 #include "switch_type.h"
 
+#include <ydb/library/binary_json/read.h>
 #include <ydb/library/binary_json/write.h>
 #include <ydb/library/dynumber/dynumber.h>
 
+#include <util/generic/set.h>
 #include <util/memory/pool.h>
 #include <library/cpp/containers/stack_vector/stack_vec.h>
 
@@ -47,16 +49,21 @@ static bool ConvertData(TCell& cell, const NScheme::TTypeInfo& colType, TMemoryP
 }
 
 static bool ConvertColumn(const NScheme::TTypeInfo colType, std::shared_ptr<arrow::Array>& column, std::shared_ptr<arrow::Field>& field) {
-    if (colType.GetTypeId() == NScheme::NTypeIds::Decimal) {
+    switch (colType.GetTypeId()) {
+    case NScheme::NTypeIds::Decimal:
         return false;
+    case NScheme::NTypeIds::JsonDocument: {
+        const static TSet<arrow::Type::type> jsonDocArrowTypes{ arrow::Type::BINARY, arrow::Type::STRING };
+        if (!jsonDocArrowTypes.contains(column->type()->id())) {
+            return false;
+        }
+        break;
     }
-
-    if ((colType.GetTypeId() == NScheme::NTypeIds::JsonDocument) &&
-        (column->type()->id() == arrow::Type::BINARY || column->type()->id() == arrow::Type::STRING))
-    {
-        ;
-    } else if (column->type()->id() != arrow::Type::BINARY) {
-        return false;
+    default:
+        if (column->type()->id() != arrow::Type::BINARY) {
+            return false;
+        }
+        break;
     }
 
     auto& binaryArray = static_cast<arrow::BinaryArray&>(*column);
@@ -73,6 +80,7 @@ static bool ConvertColumn(const NScheme::TTypeInfo colType, std::shared_ptr<arro
                     return false;
                 }
             }
+	    break;
         }
         case NScheme::NTypeIds::JsonDocument: {
             for (i32 i = 0; i < binaryArray.length(); ++i) {
@@ -81,11 +89,19 @@ static bool ConvertColumn(const NScheme::TTypeInfo colType, std::shared_ptr<arro
                     Y_ABORT_UNLESS(builder.AppendNull().ok());
                     continue;
                 }
-                const auto binaryJson = NBinaryJson::SerializeToBinaryJson(TStringBuf(value.data(), value.size()));
-                if (!binaryJson.Defined() || !builder.Append(binaryJson->Data(), binaryJson->Size()).ok()) {
-                    return false;
+                const TStringBuf valueBuf(value.data(), value.size());
+                if (NBinaryJson::IsValidBinaryJson(valueBuf)) {
+                    if (!builder.Append(value).ok()) {
+                        return false;
+                    }
+                } else {
+                    const auto binaryJson = NBinaryJson::SerializeToBinaryJson(valueBuf);
+                    if (!binaryJson.Defined() || !builder.Append(binaryJson->Data(), binaryJson->Size()).ok()) {
+                        return false;
+                    }
                 }
             }
+	    break;
         }
         default:
             break;

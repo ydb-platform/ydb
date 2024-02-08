@@ -15,6 +15,7 @@ def fix_args(args):
             just_replace_it = False
         yield arg
 
+
 if __name__ == '__main__':
     res = list(fix_args(sys.argv[1:]))
     if platform.system() == 'Windows':

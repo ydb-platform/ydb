@@ -1,7 +1,7 @@
 #pragma once
 
-#include <library/cpp/yaml/fyamlcpp/fyamlcpp.h>
-#include <library/cpp/actors/core/actor.h>
+#include <ydb/library/fyamlcpp/fyamlcpp.h>
+#include <ydb/library/actors/core/actor.h>
 
 #include <openssl/sha.h>
 
@@ -15,7 +15,7 @@
 #include <map>
 #include <string>
 
-namespace NYamlConfig {
+namespace NKikimr::NYamlConfig {
 
 struct TYamlConfigEx : public yexception {};
 
@@ -223,4 +223,4 @@ bool IsMainConfig(const TString& config);
  */
 TString StripMetadata(const TString& config);
 
-} // namespace NYamlConfig
+} // namespace NKikimr::NYamlConfig

@@ -1158,8 +1158,11 @@ IComputationExternalNode* LocateExternalNode(const TNodeLocator& nodeLocator, TC
 
 using TPasstroughtMap = std::vector<std::optional<size_t>>;
 
-TPasstroughtMap GetPasstroughtMap(const TComputationExternalNodePtrVector& args, const TComputationNodePtrVector& roots);
-TPasstroughtMap GetPasstroughtMap(const TComputationNodePtrVector& roots, const TComputationExternalNodePtrVector& args);
+template<class TContainerOne, class TContainerTwo>
+TPasstroughtMap GetPasstroughtMap(const TContainerOne& from, const TContainerTwo& to);
+
+template<class TContainerOne, class TContainerTwo>
+TPasstroughtMap GetPasstroughtMapOneToOne(const TContainerOne& from, const TContainerTwo& to);
 
 std::optional<size_t> IsPasstrought(const IComputationNode* root, const TComputationExternalNodePtrVector& args);
 

@@ -1,5 +1,8 @@
 #include "yql_kikimr_settings.h"
 
+#include <ydb/core/protos/config.pb.h>
+#include <util/generic/size_literals.h>
+
 namespace NYql {
 
 using namespace NCommon;
@@ -41,6 +44,7 @@ TKikimrConfiguration::TKikimrConfiguration() {
     REGISTER_SETTING(*this, _KqpMaxComputeActors);
     REGISTER_SETTING(*this, _KqpEnableSpilling);
     REGISTER_SETTING(*this, _KqpDisableLlvmForUdfStages);
+    REGISTER_SETTING(*this, _KqpYqlCombinerMemoryLimit).Lower(0ULL).Upper(1_GB);
 
     REGISTER_SETTING(*this, KqpPushOlapProcess);
 
@@ -53,22 +57,25 @@ TKikimrConfiguration::TKikimrConfiguration() {
     REGISTER_SETTING(*this, EnableLlvm);
     REGISTER_SETTING(*this, HashJoinMode).Parser([](const TString& v) { return FromString<NDq::EHashJoinMode>(v); });
 
-    REGISTER_SETTING(*this, OptDisableJoinRewrite);
-    REGISTER_SETTING(*this, OptDisableJoinTableLookup);
-    REGISTER_SETTING(*this, OptDisableJoinReverseTableLookup);
-    REGISTER_SETTING(*this, OptDisableJoinReverseTableLookupLeftSemi);
     REGISTER_SETTING(*this, OptDisableTopSort);
     REGISTER_SETTING(*this, OptDisableSqlInToJoin);
     REGISTER_SETTING(*this, OptEnableInplaceUpdate);
     REGISTER_SETTING(*this, OptEnablePredicateExtract);
     REGISTER_SETTING(*this, OptEnableOlapPushdown);
+    REGISTER_SETTING(*this, OptEnableOlapProvideComputeSharding);
+
     REGISTER_SETTING(*this, OptUseFinalizeByKey);
-    REGISTER_SETTING(*this, OptEnableCostBasedOptimization);
+    REGISTER_SETTING(*this, CostBasedOptimizationLevel);
+    REGISTER_SETTING(*this, OptEnableConstantFolding);
+
+    REGISTER_SETTING(*this, MaxDPccpDPTableSize);
 
     REGISTER_SETTING(*this, MaxTasksPerStage);
 
     /* Runtime */
     REGISTER_SETTING(*this, ScanQuery);
+
+    IndexAutoChooserMode = NKikimrConfig::TTableServiceConfig_EIndexAutoChooseMode_DISABLED;
 }
 
 bool TKikimrSettings::HasAllowKqpUnsafeCommit() const {
@@ -91,22 +98,6 @@ bool TKikimrSettings::DisableLlvmForUdfStages() const {
     return GetFlagValue(_KqpDisableLlvmForUdfStages.Get());
 }
 
-bool TKikimrSettings::HasOptDisableJoinRewrite() const {
-    return GetFlagValue(OptDisableJoinRewrite.Get());
-}
-
-bool TKikimrSettings::HasOptDisableJoinTableLookup() const {
-    return GetFlagValue(OptDisableJoinTableLookup.Get());
-}
-
-bool TKikimrSettings::HasOptDisableJoinReverseTableLookup() const {
-    return GetFlagValue(OptDisableJoinReverseTableLookup.Get());
-}
-
-bool TKikimrSettings::HasOptDisableJoinReverseTableLookupLeftSemi() const {
-    return GetFlagValue(OptDisableJoinReverseTableLookupLeftSemi.Get());
-}
-
 bool TKikimrSettings::HasOptDisableTopSort() const {
     return GetFlagValue(OptDisableTopSort.Get());
 }
@@ -123,12 +114,16 @@ bool TKikimrSettings::HasOptEnableOlapPushdown() const {
     return GetOptionalFlagValue(OptEnableOlapPushdown.Get()) != EOptionalFlag::Disabled;
 }
 
+bool TKikimrSettings::HasOptEnableOlapProvideComputeSharding() const {
+    return GetOptionalFlagValue(OptEnableOlapProvideComputeSharding.Get()) == EOptionalFlag::Enabled;
+}
+
 bool TKikimrSettings::HasOptUseFinalizeByKey() const {
     return GetOptionalFlagValue(OptUseFinalizeByKey.Get()) != EOptionalFlag::Disabled;
 }
 
-bool TKikimrSettings::HasOptEnableCostBasedOptimization() const {
-    return GetOptionalFlagValue(OptEnableCostBasedOptimization.Get()) == EOptionalFlag::Enabled;
+bool TKikimrSettings::HasOptEnableConstantFolding() const {
+    return GetOptionalFlagValue(OptEnableConstantFolding.Get()) == EOptionalFlag::Enabled;
 }
 
 

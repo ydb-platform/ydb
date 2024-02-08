@@ -15,10 +15,18 @@
 ## Example of Local Usage
 
 ```bash
-dqrun -s -p query.sql --gateways-cfg examples/gateways.cfg --fs-cfg examples/fs.cfg --bindings-file examples/bindings_tpch.json
+dqrun -s -p query.sql --gateways-cfg examples/gateways.conf --fs-cfg examples/fs.conf --bindings-file examples/bindings_tpch.json
 ```
 
 In this example, `dqrun` will use SQL from the file `query.sql`, engine configuration from the file [examples/gateways.conf](examples/gateways.conf), file cache configuration from the file [examples/fs.conf](examples/fs.conf), and data schema from the file [examples/bindings_tpch.json](examples/bindings_tpch.json).
+
+Download `tpc` data using one of `download_files_h_*.sh` scripts from `yql/queries/tpc_benchmark` number in the name corresponds to the size of data. To download minimal working example use `download_files_h_1.sh`. Move the downloaded `tpc` folder to current directory.
+
+To run dq you will also need a query. The simple example of a query:
+
+```sql
+SELECT * FROM bindings.customer LIMIT 10;
+```
 
 ## Example of Usage as a Client to Test Utilities
 

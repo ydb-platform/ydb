@@ -11,7 +11,7 @@ add_library(services-lib-actors)
 target_link_libraries(services-lib-actors PUBLIC
   contrib-libs-cxxsupp
   yutil
-  cpp-grpc-server
+  library-grpc-server
   cpp-digest-md5
   ydb-core-grpc_services
   core-grpc_services-base

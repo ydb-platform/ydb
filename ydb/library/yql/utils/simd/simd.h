@@ -29,10 +29,8 @@ template<typename TFactory>
 auto SelectSimdTraits(const TFactory& factory) {
     if (NX86::HaveAVX2()) {
         return factory.template Create<TSimdAVX2Traits>();
-    } else if (NX86::HaveSSE42()) {
-        return factory.template Create<TSimdSSE42Traits>();
     } else {
-        return factory.template Create<TSimdFallbackTraits>();
+        return factory.template Create<TSimdSSE42Traits>();
     }
 }
 

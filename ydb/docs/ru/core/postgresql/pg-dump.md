@@ -1,4 +1,4 @@
-# Импорт данных из PostrgeSQL
+# Импорт данных из PostgreSQL
 
 Данные из PostgreSQL в YDB можно перенести c помощью утилит [pg_dump](https://www.postgresql.org/docs/current/app-pgdump.html), [psql](https://www.postgresql.org/docs/current/app-psql.html) и [YDB CLI](../reference/ydb-cli/index.md). Утилиты [pg_dump](https://www.postgresql.org/docs/current/app-pgdump.html) и [psql](https://www.postgresql.org/docs/current/app-psql.html) устанавливаются вместе с PostgreSQL, [YDB CLI](../reference/ydb-cli/index.md) — консольный клиент YDB, который [устанавливается отдельно](../reference/ydb-cli/install.md).
 
@@ -14,7 +14,7 @@
 
 ## Команда pg-convert {#pg-convert}
 
-Команда `ydb tools pg-convert` считывает из файла или stdin'а дамп, полученный утилитой [pg_dump](https://www.postgresql.org/docs/current/app-pgdump.html), выполняет преобразования и выводит в stdout дамп, который можно отправить в postgres-совместимую прослойку YDB.
+Команда `ydb tools pg-convert` считывает из файла или stdin'а дамп, полученный утилитой [pg_dump](https://www.postgresql.org/docs/current/app-pgdump.html), выполняет преобразования и выводит в stdout дамп, который можно отправить в PostgreSQL-совместимую прослойку YDB.
 
 `ydb tools pg-convert` выполняет следующие преобразования:
 
@@ -45,7 +45,7 @@
 
 {% note warning %}
 
-При загрузке больших дампов считывание из stdin'a не рекомендуется, поскольку в таком случае весь дамп будет сохранен в оперативной памяти. Рекомедуется использовать опцию с файлом, в таком случае CLI будет держать в памяти небольшую часть дампа.
+При загрузке больших дампов считывание из stdin'a не рекомендуется, поскольку в таком случае весь дамп будет сохранен в оперативной памяти. Рекомендуется использовать опцию с файлом, в таком случае CLI будет держать в памяти небольшую часть дампа.
 
 {% endnote %}
 

@@ -38,10 +38,6 @@ namespace NYql {
             ythrow yexception() << "missing 'PASSWORD' value";
         }
 
-        if (!it->second) {
-            ythrow yexception() << "empty 'PASSWORD' value";
-        }
-
         clusterConfig.MutableCredentials()->Mutablebasic()->Setpassword(it->second);
     }
 
@@ -176,6 +172,11 @@ namespace NYql {
                        NYql::TGenericClusterConfig& clusterConfig) {
         using namespace NConnector::NApi;
 
+        if (clusterConfig.GetKind() == EDataSourceKind::YDB) {
+            clusterConfig.SetProtocol(EProtocol::NATIVE);
+            return;
+        }
+
         auto it = properties.find("protocol");
         if (it == properties.cend()) {
             ythrow yexception() << "missing 'PROTOCOL' value";
@@ -277,7 +278,7 @@ namespace NYql {
             R"(
             {context}: invalid cluster config: {msg}.
 
-            Full config dump: 
+            Full config dump:
             Name={name},
             Kind={kind},
             Location.Endpoint.host={host},

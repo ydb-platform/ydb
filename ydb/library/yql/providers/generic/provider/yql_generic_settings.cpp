@@ -3,7 +3,6 @@
 
 #include <ydb/library/yql/providers/common/structured_token/yql_token_builder.h>
 #include <ydb/library/yql/utils/log/log.h>
-#include <util/system/env.h>
 
 namespace NYql {
 
@@ -35,15 +34,10 @@ namespace NYql {
                                            const TCredentials::TPtr& credentials) {
         ValidateGenericClusterConfig(clusterConfig, "TGenericConfiguration::AddCluster");
 
+        YQL_CLOG(INFO, ProviderGeneric) << "generic provider add cluster: " << DumpGenericClusterConfig(clusterConfig);
+
         const auto& clusterName = clusterConfig.GetName();
         const auto& databaseId = clusterConfig.GetDatabaseId();
-        const auto& endpoint = clusterConfig.GetEndpoint();
-
-        YQL_CLOG(INFO, ProviderGeneric)
-            << "generic provider add cluster"
-            << ": name = " << clusterName
-            << ", database id = " << databaseId
-            << ", endpoint = " << endpoint;
 
         if (databaseId) {
             if (!databaseResolver) {
@@ -53,7 +47,11 @@ namespace NYql {
             const auto token = MakeStructuredToken(clusterConfig, credentials);
 
             databaseAuth[std::make_pair(databaseId, DatabaseTypeFromDataSourceKind(clusterConfig.GetKind()))] =
-                NYql::TDatabaseAuth{token, /*AddBearer=*/true, clusterConfig.GetUseSsl()};
+                NYql::TDatabaseAuth{
+                    .StructuredToken = token,
+                    .AddBearerToToken = true,
+                    .UseTls = clusterConfig.GetUseSsl(),
+                    .Protocol = clusterConfig.GetProtocol()};
 
             DatabaseIdsToClusterNames[databaseId].emplace_back(clusterName);
             YQL_CLOG(DEBUG, ProviderGeneric) << "database id '" << databaseId << "' added to mapping";
@@ -84,7 +82,7 @@ namespace NYql {
         const auto iamToken = credentials->FindCredentialContent(
             "default_" + cluster.name(),
             "default_generic",
-            cluster.GetToken() ? cluster.GetToken() : GetEnv("YQL_TOKEN"));
+            cluster.GetToken());
         if (iamToken) {
             return b.SetIAMToken(iamToken).ToJson();
         }
@@ -95,6 +93,23 @@ namespace NYql {
 
         ythrow yexception() << "you should either provide IAM Token via credential system or cluster config, "
                                "or set (ServiceAccountId && ServiceAccountIdSignature) in cluster config";
+    }
+
+    TString TGenericConfiguration::DumpGenericClusterConfig(const TGenericClusterConfig& clusterConfig) const {
+        TStringBuilder sb;
+        sb << "name = " << clusterConfig.GetName()
+           << ", kind = " << NConnector::NApi::EDataSourceKind_Name(clusterConfig.GetKind())
+           << ", database name = " << clusterConfig.GetDatabaseName()
+           << ", database id = " << clusterConfig.GetName()
+           << ", endpoint = " << clusterConfig.GetEndpoint()
+           << ", use tls = " << clusterConfig.GetUseSsl()
+           << ", protocol = " << NConnector::NApi::EProtocol_Name(clusterConfig.GetProtocol());
+
+        for (const auto& [key, value] : clusterConfig.GetDataSourceOptions()) {
+            sb << ", " << key << " = " << value;
+        }
+
+        return sb;
     }
 
     TGenericSettings::TConstPtr TGenericConfiguration::Snapshot() const {

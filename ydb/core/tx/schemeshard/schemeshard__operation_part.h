@@ -31,6 +31,7 @@
     action(TEvHive::TEvDeleteTabletReply,        NSchemeShard::TXTYPE_FREE_TABLET_RESULT)                \
     action(TEvHive::TEvDeleteOwnerTabletsReply,           NSchemeShard::TXTYPE_FREE_OWNER_TABLETS_RESULT)\
     action(TEvHive::TEvUpdateTabletsObjectReply, NSchemeShard::TXTYPE_CREATE_TABLET_REPLY)               \
+    action(TEvHive::TEvUpdateDomainReply,        NSchemeShard::TXTYPE_UPDATE_DOMAIN_REPLY)               \
 \
     action(TEvDataShard::TEvProposeTransactionResult,     NSchemeShard::TXTYPE_DATASHARD_PROPOSE_RESULT) \
     action(TEvDataShard::TEvSchemaChanged,       NSchemeShard::TXTYPE_DATASHARD_SCHEMA_CHANGED)          \
@@ -368,19 +369,33 @@ ISubOperation::TPtr CreateUpdateMainTableOnIndexMove(TOperationId id, TTxState::
 
 // External Table
 // Create
-ISubOperation::TPtr CreateNewExternalTable(TOperationId id, const TTxTransaction& tx);
+TVector<ISubOperation::TPtr> CreateNewExternalTable(TOperationId id, const TTxTransaction& tx, TOperationContext& context);
 ISubOperation::TPtr CreateNewExternalTable(TOperationId id, TTxState::ETxState state);
+// Alter
+ISubOperation::TPtr CreateAlterExternalTable(TOperationId id, const TTxTransaction& tx);
+ISubOperation::TPtr CreateAlterExternalTable(TOperationId id, TTxState::ETxState state);
 // Drop
 ISubOperation::TPtr CreateDropExternalTable(TOperationId id, const TTxTransaction& tx);
 ISubOperation::TPtr CreateDropExternalTable(TOperationId id, TTxState::ETxState state);
 
 // External Data Source
 // Create
-ISubOperation::TPtr CreateNewExternalDataSource(TOperationId id, const TTxTransaction& tx);
+TVector<ISubOperation::TPtr> CreateNewExternalDataSource(TOperationId id, const TTxTransaction& tx, TOperationContext& context);
 ISubOperation::TPtr CreateNewExternalDataSource(TOperationId id, TTxState::ETxState state);
+// Alter
+ISubOperation::TPtr CreateAlterExternalDataSource(TOperationId id, const TTxTransaction& tx);
+ISubOperation::TPtr CreateAlterExternalDataSource(TOperationId id, TTxState::ETxState state);
 // Drop
 ISubOperation::TPtr CreateDropExternalDataSource(TOperationId id, const TTxTransaction& tx);
 ISubOperation::TPtr CreateDropExternalDataSource(TOperationId id, TTxState::ETxState state);
+
+// View
+// Create
+ISubOperation::TPtr CreateNewView(TOperationId id, const TTxTransaction& tx);
+ISubOperation::TPtr CreateNewView(TOperationId id, TTxState::ETxState state);
+// Drop
+ISubOperation::TPtr CreateDropView(TOperationId id, const TTxTransaction& tx);
+ISubOperation::TPtr CreateDropView(TOperationId id, TTxState::ETxState state);
 
 /// CDC
 // Create

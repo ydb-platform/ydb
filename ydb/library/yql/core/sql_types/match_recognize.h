@@ -9,6 +9,7 @@
 namespace NYql::NMatchRecognize {
 
 constexpr size_t MaxPatternNesting = 20; //Limit recursion for patterns
+constexpr size_t MaxPermutedItems = 6;
 
 //Mixin columns for calculating measures
 enum class EMeasureInputDataSpecialColumns {
@@ -35,6 +36,7 @@ struct TRowPatternFactor {
     uint64_t QuantityMax;
     bool Greedy;
     bool Output; //include in output with ALL ROW PER MATCH
+    bool Unused; // optimization flag; is true when the variable is not used in defines and measures
 };
 
 THashSet<TString> GetPatternVars(const TRowPattern&);

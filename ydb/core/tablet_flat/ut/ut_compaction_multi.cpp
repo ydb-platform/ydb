@@ -128,6 +128,8 @@ Y_UNIT_TEST_SUITE(TCompactionMulti) {
         const TMass mass(new TModelStd(false), 32 * 1025);
 
         auto initialConf = NPage::TConf{ };
+        // precise size estimation doesn't work with cut keys
+        initialConf.CutIndexKeys = false;
         initialConf.SmallEdge = 19;
         initialConf.LargeEdge = 29;
         initialConf.ByKeyFilter = true;
@@ -141,6 +143,8 @@ Y_UNIT_TEST_SUITE(TCompactionMulti) {
         const TMass mass(new TModelStd(false), 32 * 1025);
 
         auto initialConf = NPage::TConf{ };
+        // precise size estimation doesn't work with cut keys
+        initialConf.CutIndexKeys = false;
         initialConf.SmallEdge = 19;
         initialConf.LargeEdge = 29;
         initialConf.ByKeyFilter = true;
@@ -190,6 +194,8 @@ Y_UNIT_TEST_SUITE(TCompactionMulti) {
         }
 
         auto initialConf = NPage::TConf{ false, 2044 };
+        // precise size estimation doesn't work with cut keys
+        initialConf.CutIndexKeys = false;
         initialConf.ByKeyFilter = true;
         initialConf.MaxRows = rows.Size();
 
@@ -219,6 +225,8 @@ Y_UNIT_TEST_SUITE(TCompactionMulti) {
         }
 
         auto initialConf = NPage::TConf{ false, 2044 };
+        // precise size estimation doesn't work with cut keys
+        initialConf.CutIndexKeys = false;
         initialConf.ByKeyFilter = true;
         initialConf.MaxRows = rows.Size();
         initialConf.SmallEdge = 13;
@@ -249,6 +257,8 @@ Y_UNIT_TEST_SUITE(TCompactionMulti) {
         }
 
         auto initialConf = NPage::TConf{ false, 2044 };
+        // precise size estimation doesn't work with cut keys
+        initialConf.CutIndexKeys = false;
         initialConf.ByKeyFilter = true;
         initialConf.MaxRows = rows.Size();
         initialConf.LargeEdge = 13;

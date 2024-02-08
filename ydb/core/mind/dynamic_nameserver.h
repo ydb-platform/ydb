@@ -2,8 +2,8 @@
 
 #include "defs.h"
 
-#include <library/cpp/actors/core/actor.h>
-#include <library/cpp/actors/interconnect/interconnect.h>
+#include <ydb/library/actors/core/actor.h>
+#include <ydb/library/actors/interconnect/interconnect.h>
 #include <ydb/core/base/domain.h>
 #include <ydb/core/protos/node_broker.pb.h>
 

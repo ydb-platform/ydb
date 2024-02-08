@@ -1,6 +1,6 @@
 #pragma once
-#include <library/cpp/actors/core/actor_bootstrapped.h>
-#include <library/cpp/actors/core/mon.h>
+#include <ydb/library/actors/core/actor_bootstrapped.h>
+#include <ydb/library/actors/core/mon.h>
 #include <ydb/core/base/tablet.h>
 #include <ydb/core/base/tablet_pipe.h>
 #include <ydb/core/persqueue/events/global.h>
@@ -275,7 +275,7 @@ public:
         ctx.Send(TxProxy, request.Release());
         ++Requests;
         ctx.Send(BrowseContext.Owner, new NViewerEvents::TEvBrowseRequestSent(TxProxy, TEvTxUserProxy::EvNavigate));
-        Become(&TThis::StateWork);
+        UnsafeBecome(&TThis::StateWork);
     }
 
     void ReplyAndDie(const TActorContext &ctx) override = 0;

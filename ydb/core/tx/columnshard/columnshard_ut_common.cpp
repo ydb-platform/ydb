@@ -1,6 +1,7 @@
 #include "columnshard_ut_common.h"
 
 #include "columnshard__stats_scan.h"
+#include "common/tests/shard_reader.h"
 
 #include <ydb/core/base/tablet.h>
 #include <ydb/core/base/tablet_resolver.h>
@@ -87,7 +88,7 @@ void PlanWriteTx(TTestBasicRuntime& runtime, TActorId& sender, NOlap::TSnapshot 
         auto ev = runtime.GrabEdgeEvent<NEvents::TDataEvents::TEvWriteResult>(sender);
         const auto& res = ev->Get()->Record;
         UNIT_ASSERT_EQUAL(res.GetTxId(), snap.GetTxId());
-        UNIT_ASSERT_EQUAL(res.GetStatus(), NKikimrDataEvents::TEvWriteResult::COMPLETED);
+        UNIT_ASSERT_EQUAL(res.GetStatus(), NKikimrDataEvents::TEvWriteResult::STATUS_COMPLETED);
     }
 }
 
@@ -194,7 +195,7 @@ void ScanIndexStats(TTestBasicRuntime& runtime, TActorId& sender, const std::vec
 
     record.MutableSnapshot()->SetStep(snap.GetPlanStep());
     record.MutableSnapshot()->SetTxId(snap.GetTxId());
-    record.SetDataFormat(NKikimrTxDataShard::EScanDataFormat::ARROW);
+    record.SetDataFormat(NKikimrDataEvents::FORMAT_ARROW);
 
     ForwardToTablet(runtime, TTestTxConfig::TxTablet0, sender, scan.release());
 }
@@ -374,10 +375,10 @@ NMetadata::NFetcher::ISnapshot::TPtr TTestSchema::BuildSnapshot(const TTableSpec
             cProto.SetName(tier.Name);
             *cProto.MutableObjectStorage() = tier.S3;
             if (tier.Codec) {
-                cProto.MutableCompression()->SetCompressionCodec(tier.GetCodecId());
+                cProto.MutableCompression()->SetCodec(tier.GetCodecId());
             }
             if (tier.CompressionLevel) {
-                cProto.MutableCompression()->SetCompressionLevel(*tier.CompressionLevel);
+                cProto.MutableCompression()->SetLevel(*tier.CompressionLevel);
             }
             NColumnShard::NTiers::TTierConfig tConfig(tier.Name, cProto);
             cs->MutableTierConfigs().emplace(tConfig.GetTierName(), tConfig);
@@ -449,26 +450,15 @@ namespace NKikimr::NColumnShard {
     }
 
     std::shared_ptr<arrow::RecordBatch> ReadAllAsBatch(TTestBasicRuntime& runtime, const ui64 tableId, const NOlap::TSnapshot& snapshot, const std::vector<std::pair<TString, NScheme::TTypeInfo>>& schema) {
-        using namespace NTxUT;
-        TActorId sender = runtime.AllocateEdgeActor();
-
-        ForwardToTablet(runtime, TTestTxConfig::TxTablet0, sender,
-                new TEvColumnShard::TEvRead(sender, TTestTxConfig::TxTablet1, snapshot.GetPlanStep(), snapshot.GetTxId(), tableId));
-
-        std::vector<std::shared_ptr<arrow::RecordBatch>> batches;
-        while(true) {
-            TAutoPtr<IEventHandle> handle;
-            auto event = runtime.GrabEdgeEvent<TEvColumnShard::TEvReadResult>(handle);
-            UNIT_ASSERT(event);
-            auto b = event->GetArrowBatch();
-            if (b) {
-                batches.push_back(b);
-            }
-            if (!event->HasMore()) {
-                break;
-            }
+        std::vector<TString> fields;
+        for (auto&& f : schema) {
+            fields.emplace_back(f.first);
         }
-        auto res = NArrow::CombineBatches(batches);
-        return res ? res : NArrow::MakeEmptyBatch(NArrow::MakeArrowSchema(schema));
+
+        NOlap::NTests::TShardReader reader(runtime, TTestTxConfig::TxTablet0, tableId, snapshot);
+        reader.SetReplyColumns(fields);
+        auto rb = reader.ReadAll();
+        UNIT_ASSERT(reader.IsCorrectlyFinished());
+        return rb ? rb : NArrow::MakeEmptyBatch(NArrow::MakeArrowSchema(schema));
     }
 }

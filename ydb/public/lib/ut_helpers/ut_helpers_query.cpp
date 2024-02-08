@@ -1,31 +1,32 @@
 #include "ut_helpers_query.h"
 
 #include <ydb/public/api/grpc/ydb_query_v1.grpc.pb.h>
-#include <library/cpp/grpc/client/grpc_common.h>
-#include <library/cpp/grpc/client/grpc_client_low.h>
+#include <ydb/library/grpc/client/grpc_common.h>
+#include <ydb/library/grpc/client/grpc_client_low.h>
 #include <library/cpp/threading/future/future.h>
 
 #include <util/generic/string.h>
 
 #include <library/cpp/testing/unittest/registar.h>
 
-using namespace NGrpc;
+using namespace NYdbGrpc;
 
 namespace NTestHelpers {
 
 TString CreateQuerySession(const TGRpcClientConfig& clientConfig) {
-    NGrpc::TGRpcClientLow clientLow;
+    NYdbGrpc::TGRpcClientLow clientLow;
     auto connection = clientLow.CreateGRpcServiceConnection<Ydb::Query::V1::QueryService>(clientConfig);
 
     Ydb::Query::CreateSessionRequest request;
     TString sessionId;
 
-    NGrpc::TResponseCallback<Ydb::Query::CreateSessionResponse> responseCb =
-        [&sessionId](NGrpc::TGrpcStatus&& grpcStatus, Ydb::Query::CreateSessionResponse&& response) -> void {
+    NYdbGrpc::TResponseCallback<Ydb::Query::CreateSessionResponse> responseCb =
+        [&sessionId](NYdbGrpc::TGrpcStatus&& grpcStatus, Ydb::Query::CreateSessionResponse&& response) -> void {
             UNIT_ASSERT(!grpcStatus.InternalError);
             UNIT_ASSERT_C(grpcStatus.GRpcStatusCode == 0, grpcStatus.Msg + " " + grpcStatus.Details);
             UNIT_ASSERT_VALUES_EQUAL(response.status(), Ydb::StatusIds::SUCCESS);
             UNIT_ASSERT(response.session_id() != "");
+            UNIT_ASSERT(response.node_id() != 0);
             sessionId = response.session_id();
     };
 
@@ -34,7 +35,7 @@ TString CreateQuerySession(const TGRpcClientConfig& clientConfig) {
     return sessionId;
 }
 
-NGrpc::IStreamRequestCtrl::TPtr CheckAttach(NGrpc::TGRpcClientLow& clientLow, const TGRpcClientConfig& clientConfig,
+NYdbGrpc::IStreamRequestCtrl::TPtr CheckAttach(NYdbGrpc::TGRpcClientLow& clientLow, const TGRpcClientConfig& clientConfig,
     const TString& id, int code, bool& allDoneOk)
 {
     const Ydb::StatusIds::StatusCode expected = static_cast<Ydb::StatusIds::StatusCode>(code);
@@ -43,7 +44,7 @@ NGrpc::IStreamRequestCtrl::TPtr CheckAttach(NGrpc::TGRpcClientLow& clientLow, co
     Ydb::Query::AttachSessionRequest request;
     request.set_session_id(id);
 
-    using TProcessor = typename NGrpc::IStreamRequestReadProcessor<Ydb::Query::SessionState>::TPtr;
+    using TProcessor = typename NYdbGrpc::IStreamRequestReadProcessor<Ydb::Query::SessionState>::TPtr;
     auto promise = NThreading::NewPromise<TProcessor>();
     auto cb = [&allDoneOk, promise, expected](TGrpcStatus grpcStatus, TProcessor processor) mutable {
         UNIT_ASSERT(grpcStatus.GRpcStatusCode == grpc::StatusCode::OK);
@@ -67,19 +68,19 @@ NGrpc::IStreamRequestCtrl::TPtr CheckAttach(NGrpc::TGRpcClientLow& clientLow, co
 }
 
 void CheckAttach(const TGRpcClientConfig& clientConfig, const TString& id, int expected, bool& allDoneOk) {
-    NGrpc::TGRpcClientLow clientLow;
+    NYdbGrpc::TGRpcClientLow clientLow;
     CheckAttach(clientLow, clientConfig, id, expected, allDoneOk)->Cancel();
 }
 
 void CheckDelete(const TGRpcClientConfig& clientConfig, const TString& id, int expected, bool& allDoneOk) {
-    NGrpc::TGRpcClientLow clientLow;
+    NYdbGrpc::TGRpcClientLow clientLow;
     auto connection = clientLow.CreateGRpcServiceConnection<Ydb::Query::V1::QueryService>(clientConfig);
 
     Ydb::Query::DeleteSessionRequest request;
     request.set_session_id(id);
 
-    NGrpc::TResponseCallback<Ydb::Query::DeleteSessionResponse> responseCb =
-        [&allDoneOk, expected](NGrpc::TGrpcStatus&& grpcStatus, Ydb::Query::DeleteSessionResponse&& response) -> void {
+    NYdbGrpc::TResponseCallback<Ydb::Query::DeleteSessionResponse> responseCb =
+        [&allDoneOk, expected](NYdbGrpc::TGrpcStatus&& grpcStatus, Ydb::Query::DeleteSessionResponse&& response) -> void {
             UNIT_ASSERT(!grpcStatus.InternalError);
             UNIT_ASSERT_C(grpcStatus.GRpcStatusCode == 0, grpcStatus.Msg + " " + grpcStatus.Details);
             allDoneOk &= (response.status() == expected);
@@ -91,9 +92,9 @@ void CheckDelete(const TGRpcClientConfig& clientConfig, const TString& id, int e
     connection->DoRequest(request, std::move(responseCb), &Ydb::Query::V1::QueryService::Stub::AsyncDeleteSession);
 }
 
-void EnsureSessionClosed(NGrpc::IStreamRequestCtrl::TPtr p, int expected, bool& allDoneOk) {
-    using TProcessor = typename NGrpc::IStreamRequestReadProcessor<Ydb::Query::SessionState>::TPtr;
-    TProcessor processor = dynamic_cast<NGrpc::IStreamRequestReadProcessor<Ydb::Query::SessionState>*>(p.Get());
+void EnsureSessionClosed(NYdbGrpc::IStreamRequestCtrl::TPtr p, int expected, bool& allDoneOk) {
+    using TProcessor = typename NYdbGrpc::IStreamRequestReadProcessor<Ydb::Query::SessionState>::TPtr;
+    TProcessor processor = dynamic_cast<NYdbGrpc::IStreamRequestReadProcessor<Ydb::Query::SessionState>*>(p.Get());
     UNIT_ASSERT(processor);
 
     auto promise = NThreading::NewPromise<void>();

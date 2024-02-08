@@ -51,11 +51,21 @@ TDynBitMap KindsToBitMap(const TVector<ui32> &kinds)
     return result;
 }
 
+TDynBitMap KindsToBitMap(const THashSet<ui32> &kinds)
+{
+    TDynBitMap result;
+    for (auto &kind : kinds)
+        result.Set(kind);
+
+    return result;
+}
+
 void ReplaceConfigItems(
     const NKikimrConfig::TAppConfig &from,
     NKikimrConfig::TAppConfig &to,
     const TDynBitMap &kinds,
-    const NKikimrConfig::TAppConfig &fallback)
+    const NKikimrConfig::TAppConfig &fallback,
+    bool cleanupFallback)
 {
     NKikimrConfig::TAppConfig fromCopy = from;
     NKikimrConfig::TAppConfig fallbackCopy = fallback;
@@ -78,7 +88,9 @@ void ReplaceConfigItems(
                 if (reflection->HasField(fromCopy, field)) {
                     reflection->ClearField(&fromCopy, field);
                 }
-                reflection->ClearField(&fallbackCopy, field);
+                if (cleanupFallback) {
+                    reflection->ClearField(&fallbackCopy, field);
+                }
             }
         } else {
             reflection->ClearField(&to, field);

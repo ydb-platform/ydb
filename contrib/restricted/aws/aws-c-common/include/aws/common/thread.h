@@ -6,6 +6,7 @@
  * SPDX-License-Identifier: Apache-2.0.
  */
 #include <aws/common/byte_buf.h>
+#include <aws/common/string.h>
 
 #ifndef _WIN32
 #    include <pthread.h>
@@ -23,7 +24,7 @@ enum aws_thread_detach_state {
  * in the managed thread system.  The managed thread system provides logic to guarantee a join on all participating
  * threads at the cost of laziness (the user cannot control when joins happen).
  *
- * Manual - thread does not particpate in the managed thread system; any joins must be done by the user.  This
+ * Manual - thread does not participate in the managed thread system; any joins must be done by the user.  This
  * is the default.  The user must call aws_thread_clean_up(), but only after any desired join operation has completed.
  * Not doing so will cause the windows handle to leak.
  *
@@ -236,6 +237,31 @@ AWS_COMMON_API void aws_thread_increment_unjoined_count(void);
  * aws_thread_join_all_managed() will not return until this count has gone to zero.
  */
 AWS_COMMON_API void aws_thread_decrement_unjoined_count(void);
+
+/**
+ * Gets name of the current thread.
+ * Caller is responsible for destroying returned string.
+ * If thread does not have a name, AWS_OP_SUCCESS is returned and out_name is
+ * set to NULL.
+ * If underlying OS call fails,  AWS_ERROR_SYS_CALL_FAILURE will be raised
+ * If OS does not support getting thread name, AWS_ERROR_PLATFORM_NOT_SUPPORTED
+ * will be raised
+ */
+AWS_COMMON_API int aws_thread_current_name(struct aws_allocator *allocator, struct aws_string **out_name);
+
+/**
+ * Gets name of the thread.
+ * Caller is responsible for destroying returned string.
+ * If thread does not have a name, AWS_OP_SUCCESS is returned and out_name is
+ * set to NULL.
+ * If underlying OS call fails,  AWS_ERROR_SYS_CALL_FAILURE will be raised
+ * If OS does not support getting thread name, AWS_ERROR_PLATFORM_NOT_SUPPORTED
+ * will be raised
+ */
+AWS_COMMON_API int aws_thread_name(
+    struct aws_allocator *allocator,
+    aws_thread_id_t thread_id,
+    struct aws_string **out_name);
 
 AWS_EXTERN_C_END
 

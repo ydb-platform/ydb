@@ -11,8 +11,8 @@ add_library(yql-utils-actor_log)
 target_link_libraries(yql-utils-actor_log PUBLIC
   contrib-libs-cxxsupp
   yutil
-  cpp-actors-core
-  cpp-actors-protos
+  library-actors-core
+  library-actors-protos
   ydb-library-services
 )
 target_sources(yql-utils-actor_log PRIVATE

@@ -8,6 +8,7 @@
 namespace NYql {
 namespace NTypeAnnImpl {
 
+TExprNodePtr WrapWithPgCast(TExprNodePtr&& node, ui32 targetTypeId, TExprContext& ctx);
 TString MakeAliasedColumn(TStringBuf alias, TStringBuf column);
 const TItemExprType* AddAlias(const TString& alias, const TItemExprType* item, TExprContext& ctx);
 TStringBuf RemoveAlias(TStringBuf column);

@@ -451,11 +451,15 @@ public:
         subdomain.SetName(Subdomain.second);
         if (Tenant->IsExternalSubdomain) {
             subdomain.SetExternalSchemeShard(true);
+            subdomain.SetGraphShard(true);
             if (Tenant->IsExternalHive) {
                 subdomain.SetExternalHive(true);
             }
             if (Tenant->IsExternalSysViewProcessor) {
                 subdomain.SetExternalSysViewProcessor(true);
+            }
+            if (Tenant->IsExternalStatisticsAggregator) {
+                subdomain.SetExternalStatisticsAggregator(true);
             }
         }
 
@@ -478,6 +482,9 @@ public:
             }
             if (Tenant->IsExternalSysViewProcessor) {
                 subdomain.SetExternalSysViewProcessor(true);
+            }
+            if (Tenant->IsExternalStatisticsAggregator) {
+                subdomain.SetExternalStatisticsAggregator(true);
             }
         }
         if (tablets) {
@@ -1188,6 +1195,7 @@ TTenantsManager::TTenant::TTenant(const TString &path,
     , IsExternalSubdomain(false)
     , IsExternalHive(false)
     , IsExternalSysViewProcessor(false)
+    , IsExternalStatisticsAggregator(false)
     , AreResourcesShared(false)
 {
 }
@@ -2265,6 +2273,7 @@ void TTenantsManager::DbAddTenant(TTenant::TPtr tenant,
                 << " isExternalSubDomain=" << tenant->IsExternalSubdomain
                 << " isExternalHive=" << tenant->IsExternalHive
                 << " isExternalSysViewProcessor=" << tenant->IsExternalSysViewProcessor
+                << " isExternalStatisticsAggregator=" << tenant->IsExternalStatisticsAggregator
                 << " areResourcesShared=" << tenant->AreResourcesShared
                 << " sharedDomainId=" << tenant->SharedDomainId);
 
@@ -2286,6 +2295,7 @@ void TTenantsManager::DbAddTenant(TTenant::TPtr tenant,
                 NIceDb::TUpdate<Schema::Tenants::IsExternalSubDomain>(tenant->IsExternalSubdomain),
                 NIceDb::TUpdate<Schema::Tenants::IsExternalHive>(tenant->IsExternalHive),
                 NIceDb::TUpdate<Schema::Tenants::IsExternalSysViewProcessor>(tenant->IsExternalSysViewProcessor),
+                NIceDb::TUpdate<Schema::Tenants::IsExternalStatisticsAggregator>(tenant->IsExternalStatisticsAggregator),
                 NIceDb::TUpdate<Schema::Tenants::AreResourcesShared>(tenant->AreResourcesShared),
                 NIceDb::TUpdate<Schema::Tenants::CreateIdempotencyKey>(tenant->CreateIdempotencyKey));
 
@@ -2390,6 +2400,7 @@ bool TTenantsManager::DbLoadState(TTransactionContext &txc, const TActorContext 
         bool isExternalSubDomain = tenantRowset.GetValueOrDefault<Schema::Tenants::IsExternalSubDomain>(false);
         bool isExternalHive = tenantRowset.GetValueOrDefault<Schema::Tenants::IsExternalHive>(false);
         bool isExternalSysViewProcessor = tenantRowset.GetValueOrDefault<Schema::Tenants::IsExternalSysViewProcessor>(false);
+        bool isExternalStatisticsAggregator = tenantRowset.GetValueOrDefault<Schema::Tenants::IsExternalStatisticsAggregator>(false);
         const bool areResourcesShared = tenantRowset.GetValueOrDefault<Schema::Tenants::AreResourcesShared>(false);
 
         TTenant::TPtr tenant = new TTenant(path, state, userToken);
@@ -2409,6 +2420,7 @@ bool TTenantsManager::DbLoadState(TTransactionContext &txc, const TActorContext 
         tenant->IsExternalSubdomain = isExternalSubDomain;
         tenant->IsExternalHive = isExternalHive;
         tenant->IsExternalSysViewProcessor = isExternalSysViewProcessor;
+        tenant->IsExternalStatisticsAggregator = isExternalStatisticsAggregator;
         tenant->AreResourcesShared = areResourcesShared;
 
         if (tenantRowset.HaveValue<Schema::Tenants::SchemaOperationQuotas>()) {

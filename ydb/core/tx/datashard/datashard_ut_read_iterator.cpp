@@ -3,12 +3,17 @@
 #include "datashard_active_transaction.h"
 #include "read_iterator.h"
 
+#include <ydb/core/testlib/tablet_helpers.h>
 #include <ydb/core/formats/arrow/arrow_helpers.h>
 #include <ydb/core/formats/arrow/converter.h>
 #include <ydb/core/kqp/ut/common/kqp_ut_common.h>
 #include <ydb/core/tablet_flat/shared_cache_events.h>
 #include <ydb/core/tx/tx_proxy/proxy.h>
 #include <ydb/core/tx/tx_proxy/read_table.h>
+#include <ydb/core/tx/long_tx_service/public/lock_handle.h>
+
+#include <ydb/core/tx/data_events/events.h>
+#include <ydb/core/tx/data_events/payload_helper.h>
 
 #include <ydb/public/sdk/cpp/client/ydb_result/result.h>
 
@@ -25,46 +30,52 @@ namespace {
 
 using TCellVec = std::vector<TCell>;
 
-void CreateTable(Tests::TServer::TPtr server,
+TVector<TShardedTableOptions::TColumn> GetColumns() {
+    TVector<TShardedTableOptions::TColumn> columns = {
+        {"key1", "Uint32", true, false},
+        {"key2", "Uint32", true, false},
+        {"key3", "Uint32", true, false},
+        {"value", "Uint32", false, false}};
+
+    return columns;
+}
+
+TVector<TShardedTableOptions::TColumn> GetMoviesColumns() {
+    TVector<TShardedTableOptions::TColumn> columns = {
+        {"id", "Uint32", true, false},
+        {"title", "String", false, false},
+        {"rating", "Uint32", false, false}};
+
+    return columns;
+}
+
+std::tuple<TVector<ui64>, TTableId> CreateTable(Tests::TServer::TPtr server,
                  TActorId sender,
                  const TString &root,
                  const TString &name,
                  bool withFollower = false,
                  ui64 shardCount = 1)
 {
-    TVector<TShardedTableOptions::TColumn> columns = {
-        {"key1", "Uint32", true, false},
-        {"key2", "Uint32", true, false},
-        {"key3", "Uint32", true, false},
-        {"value", "Uint32", false, false}
-    };
-
     auto opts = TShardedTableOptions()
         .Shards(shardCount)
-        .Columns(columns);
+        .Columns(GetColumns());
 
     if (withFollower)
         opts.Followers(1);
 
-    CreateShardedTable(server, sender, root, name, opts);
+    return CreateShardedTable(server, sender, root, name, opts);
 }
 
-void CreateMoviesTable(Tests::TServer::TPtr server,
+std::tuple<TVector<ui64>, TTableId> CreateMoviesTable(Tests::TServer::TPtr server,
                        TActorId sender,
                        const TString &root,
                        const TString &name)
 {
-    TVector<TShardedTableOptions::TColumn> columns = {
-        {"id", "Uint32", true, false},
-        {"title", "String", false, false},
-        {"rating", "Uint32", false, false}
-    };
-
     auto opts = TShardedTableOptions()
         .Shards(1)
-        .Columns(columns);
+        .Columns(GetMoviesColumns());
 
-    CreateShardedTable(server, sender, root, name, opts);
+    return CreateShardedTable(server, sender, root, name, opts);
 }
 
 struct TRowWriter : public NArrow::IRowWriter {
@@ -193,10 +204,10 @@ void CheckResult(
     UNIT_ASSERT_VALUES_EQUAL(record.GetStatus().GetCode(), Ydb::StatusIds::SUCCESS);
     if (gold.size()) {
         switch (record.GetResultFormat()) {
-        case NKikimrTxDataShard::ARROW:
+        case NKikimrDataEvents::FORMAT_ARROW:
             CheckResultArrow(userTable, result, gold, goldTypes, columns);
             break;
-        case NKikimrTxDataShard::CELLVEC:
+        case NKikimrDataEvents::FORMAT_CELLVEC:
             CheckResultCellVec(userTable, result, gold, goldTypes, columns);
             break;
         default:
@@ -308,11 +319,13 @@ void AddRangeQuery(
 struct TTableInfo {
     TString Name;
 
+    TTableId TableId;
     ui64 TabletId;
-    ui64 OwnerId;
     NKikimrTxDataShard::TEvGetInfoResponse::TUserTable UserTable;
 
     TActorId ClientId;
+
+    TVector<TShardedTableOptions::TColumn> Columns;
 };
 
 struct TTestHelper {
@@ -345,7 +358,7 @@ struct TTestHelper {
         {
             auto& table1 = Tables["table-1"];
             table1.Name = "table-1";
-            CreateTable(Server, Sender, "/Root", "table-1", WithFollower, ShardCount);
+            auto [shards, tableId] = CreateTable(Server, Sender, "/Root", "table-1", WithFollower, ShardCount);
             ExecSQL(Server, Sender, R"(
                 UPSERT INTO `/Root/table-1`
                 (key1, key2, key3, value)
@@ -360,20 +373,21 @@ struct TTestHelper {
                 (11, 11, 11, 1111);
             )");
 
-            auto shards = GetTableShards(Server, Sender, "/Root/table-1");
+            table1.TableId = tableId;
             table1.TabletId = shards.at(0);
 
             auto [tables, ownerId] = GetTables(Server, table1.TabletId);
-            table1.OwnerId = ownerId;
             table1.UserTable = tables["table-1"];
 
             table1.ClientId = runtime.ConnectToPipe(table1.TabletId, Sender, 0, GetTestPipeConfig());
+
+            table1.Columns = GetColumns();
         }
 
         {
             auto& table2 = Tables["movies"];
             table2.Name = "movies";
-            CreateMoviesTable(Server, Sender, "/Root", "movies");
+            auto [shards, tableId] = CreateMoviesTable(Server, Sender, "/Root", "movies");
             ExecSQL(Server, Sender, R"(
                 UPSERT INTO `/Root/movies`
                 (id, title, rating)
@@ -383,29 +397,31 @@ struct TTestHelper {
                 (3, "Hard die", 8);
             )");
 
-            auto shards = GetTableShards(Server, Sender, "/Root/movies");
+            table2.TableId = tableId;
             table2.TabletId = shards.at(0);
 
             auto [tables, ownerId] = GetTables(Server, table2.TabletId);
-            table2.OwnerId = ownerId;
             table2.UserTable = tables["movies"];
 
             table2.ClientId = runtime.ConnectToPipe(table2.TabletId, Sender, 0, GetTestPipeConfig());
+
+            table2.Columns = GetMoviesColumns();
         }
 
         {
             auto& table3 = Tables["table-1-many"];
             table3.Name = "table-1-many";
-            CreateTable(Server, Sender, "/Root", "table-1-many", WithFollower, ShardCount);
+            auto [shards, tableId] = CreateTable(Server, Sender, "/Root", "table-1-many", WithFollower, ShardCount);
 
-            auto shards = GetTableShards(Server, Sender, "/Root/table-1-many");
+            table3.TableId = tableId;
             table3.TabletId = shards.at(0);
 
             auto [tables, ownerId] = GetTables(Server, table3.TabletId);
-            table3.OwnerId = ownerId;
             table3.UserTable = tables["table-1-many"];
 
             table3.ClientId = runtime.ConnectToPipe(table3.TabletId, Sender, 0, GetTestPipeConfig());
+
+            table3.Columns = GetColumns();
         }
     }
 
@@ -481,7 +497,7 @@ struct TTestHelper {
     std::unique_ptr<TEvDataShard::TEvRead> GetBaseReadRequest(
         const TString& tableName,
         ui64 readId,
-        NKikimrTxDataShard::EScanDataFormat format = NKikimrTxDataShard::ARROW,
+        NKikimrDataEvents::EDataFormat format = NKikimrDataEvents::FORMAT_ARROW,
         const TRowVersion& snapshot = {})
     {
         const auto& table = Tables[tableName];
@@ -490,7 +506,7 @@ struct TTestHelper {
         auto& record = request->Record;
 
         record.SetReadId(readId);
-        record.MutableTableId()->SetOwnerId(table.OwnerId);
+        record.MutableTableId()->SetOwnerId(table.TableId.PathId.OwnerId);
         record.MutableTableId()->SetTableId(table.UserTable.GetPathId());
 
         const auto& description = table.UserTable.GetDescription();
@@ -536,7 +552,7 @@ struct TTestHelper {
         record.AddColumns(1);
         record.AddColumns(2);
 
-        record.SetResultFormat(NKikimrTxDataShard::CELLVEC);
+        record.SetResultFormat(NKikimrDataEvents::FORMAT_CELLVEC);
 
         return request;
     }
@@ -653,14 +669,14 @@ struct TTestHelper {
 
         auto readResult = SendRead(tableName, request.release());
 
-        const NKikimrTxDataShard::TLock* prevLock;
+        const NKikimrDataEvents::TLock* prevLock;
         if (prevResult.Record.TxLocksSize()) {
             prevLock = &prevResult.Record.GetTxLocks(0);
         } else {
             prevLock = &prevResult.Record.GetBrokenTxLocks(0);
         }
 
-        const NKikimrTxDataShard::TLock* newLock;
+        const NKikimrDataEvents::TLock* newLock;
         if (readResult->Record.TxLocksSize()) {
             newLock = &readResult->Record.GetTxLocks(0);
         } else {
@@ -676,7 +692,7 @@ struct TTestHelper {
     void TestChunkRead(ui32 chunkSize, ui32 rowCount, ui32 ranges = 1, ui32 limit = Max<ui32>()) {
         UpsertMany(1, rowCount);
 
-        auto request = GetBaseReadRequest("table-1-many", 1, NKikimrTxDataShard::CELLVEC, TRowVersion::Max());
+        auto request = GetBaseReadRequest("table-1-many", 1, NKikimrDataEvents::FORMAT_CELLVEC, TRowVersion::Max());
         request->Record.ClearSnapshot();
 
         ui32 base = 1;
@@ -715,6 +731,64 @@ struct TTestHelper {
         }
 
         UNIT_ASSERT_VALUES_EQUAL(rowsRead, Min(rowCount, limit));
+    }
+
+    void TestReadOneKey(const TString& tableName, const std::vector<ui32>& keys, ui32 value)
+    {
+        auto readRequest = GetBaseReadRequest(tableName, 1);
+        AddKeyQuery(*readRequest, keys);
+
+        auto readResult = SendRead(tableName, readRequest.release());
+
+        std::vector<std::vector<ui32>> gold(1);
+        std::copy(keys.begin(), keys.end(), std::back_inserter(gold[0]));
+        gold[0].push_back(value);
+
+        CheckResult(Tables[tableName].UserTable, *readResult, gold);
+    }
+
+    void WriteRowTwin(const TString& tableName, const TVector<ui32>& values, bool isEvWrite) {
+        if(isEvWrite)
+            WriteRow(tableName, values);
+        else
+            ExecSQL(Server, Sender, TStringBuilder() 
+                << "UPSERT INTO `/Root/" << tableName << "`\n"
+                << "(" << JoinSeq(",", MakeMappedRange(Tables[tableName].Columns, [](const auto& col) { return col.Name; })) << ")\n"
+                << "VALUES\n(" << JoinSeq(",", values) << ");");
+    }
+
+    std::unique_ptr<NEvents::TDataEvents::TEvWrite> MakeWriteRequest(const TString& tableName, ui64 txId, const TVector<ui32>& values, NKikimrDataEvents::TEvWrite::ETxMode txMode = NKikimrDataEvents::TEvWrite::MODE_IMMEDIATE) {
+        const auto& table = Tables[tableName];
+
+        auto opts = TShardedTableOptions().Columns(table.Columns);
+        size_t columnCount = table.Columns.size();
+
+        std::vector<ui32> columnIds(columnCount);
+        std::iota(columnIds.begin(), columnIds.end(), 1);
+
+        Y_ABORT_UNLESS(values.size() == columnCount);
+
+        TVector<TCell> cells;
+        for (ui32 col = 0; col < columnCount; ++col)
+            cells.emplace_back(TCell((const char*)&values[col], sizeof(ui32)));
+
+        TSerializedCellMatrix matrix(cells, 1, columnCount);
+
+        auto evWrite = std::make_unique<NKikimr::NEvents::TDataEvents::TEvWrite>(txId, txMode);
+        ui64 payloadIndex = NKikimr::NEvWrite::TPayloadHelper<NKikimr::NEvents::TDataEvents::TEvWrite>(*evWrite).AddDataToPayload(matrix.ReleaseBuffer());
+        evWrite->AddOperation(NKikimrDataEvents::TEvWrite::TOperation::OPERATION_UPSERT, table.TableId, columnIds, payloadIndex, NKikimrDataEvents::FORMAT_CELLVEC);
+
+        return evWrite;
+    }
+
+    NKikimrDataEvents::TEvWriteResult SendWrite(ui64 tabletId, std::unique_ptr<NEvents::TDataEvents::TEvWrite> writeRequest, NKikimrDataEvents::TEvWriteResult::EStatus expectedStatus = NKikimrDataEvents::TEvWriteResult::STATUS_UNSPECIFIED) {
+        return Write(*Server->GetRuntime(), Sender, tabletId, std::move(writeRequest), expectedStatus);
+    }
+
+    NKikimrDataEvents::TEvWriteResult WriteRow(const TString& tableName, const TVector<ui32>& values) {
+        auto writeRequest = MakeWriteRequest(tableName, ++TxId, values);
+
+        return SendWrite(Tables[tableName].TabletId, std::move(writeRequest));
     }
 
     struct THangedReturn {
@@ -867,11 +941,12 @@ public:
     ui64 ShardCount = 1;
     Tests::TServer::TPtr Server;
     TActorId Sender;
+    ui64 TxId = 100;
 
     THashMap<TString, TTableInfo> Tables;
 };
 
-void TestReadKey(NKikimrTxDataShard::EScanDataFormat format, bool withFollower = false) {
+void TestReadKey(NKikimrDataEvents::EDataFormat format, bool withFollower = false) {
     TTestHelper helper(withFollower);
 
     for (ui32 k: {1, 3, 5}) {
@@ -883,7 +958,7 @@ void TestReadKey(NKikimrTxDataShard::EScanDataFormat format, bool withFollower =
     }
 }
 
-void TestReadRangeInclusiveEnds(NKikimrTxDataShard::EScanDataFormat format) {
+void TestReadRangeInclusiveEnds(NKikimrDataEvents::EDataFormat format) {
     TTestHelper helper;
 
     auto request = helper.GetBaseReadRequest("table-1", 1, format);
@@ -903,7 +978,7 @@ void TestReadRangeInclusiveEnds(NKikimrTxDataShard::EScanDataFormat format) {
     });
 }
 
-void TestReadRangeMovies(NKikimrTxDataShard::EScanDataFormat format) {
+void TestReadRangeMovies(NKikimrDataEvents::EDataFormat format) {
     // test just to check if non-trivial type like string is properly replied
     TTestHelper helper;
 
@@ -938,19 +1013,19 @@ void TestReadRangeMovies(NKikimrTxDataShard::EScanDataFormat format) {
 
 Y_UNIT_TEST_SUITE(DataShardReadIterator) {
     Y_UNIT_TEST(ShouldReadKeyCellVec) {
-        TestReadKey(NKikimrTxDataShard::CELLVEC);
+        TestReadKey(NKikimrDataEvents::FORMAT_CELLVEC);
     }
 
     Y_UNIT_TEST(ShouldReadKeyArrow) {
-        TestReadKey(NKikimrTxDataShard::ARROW);
+        TestReadKey(NKikimrDataEvents::FORMAT_ARROW);
     }
 
     Y_UNIT_TEST(ShouldReadRangeCellVec) {
-        TestReadRangeMovies(NKikimrTxDataShard::CELLVEC);
+        TestReadRangeMovies(NKikimrDataEvents::FORMAT_CELLVEC);
     }
 
     Y_UNIT_TEST(ShouldReadRangeArrow) {
-        TestReadRangeMovies(NKikimrTxDataShard::ARROW);
+        TestReadRangeMovies(NKikimrDataEvents::FORMAT_ARROW);
     }
 
     Y_UNIT_TEST(ShouldReadKeyOnlyValueColumn) {
@@ -1017,7 +1092,7 @@ Y_UNIT_TEST_SUITE(DataShardReadIterator) {
         // KIKIMR-16897: no columns mean we want to calc row count
         TTestHelper helper;
 
-        auto request = helper.GetBaseReadRequest("table-1", 1, NKikimrTxDataShard::CELLVEC);
+        auto request = helper.GetBaseReadRequest("table-1", 1, NKikimrDataEvents::FORMAT_CELLVEC);
         request->Record.ClearColumns();
         AddKeyQuery(*request, {3, 3, 3});
         AddKeyQuery(*request, {1, 1, 1});
@@ -1037,7 +1112,7 @@ Y_UNIT_TEST_SUITE(DataShardReadIterator) {
         // KIKIMR-16897: no columns mean we want to calc row count
         TTestHelper helper;
 
-        auto request = helper.GetBaseReadRequest("table-1", 1, NKikimrTxDataShard::ARROW);
+        auto request = helper.GetBaseReadRequest("table-1", 1, NKikimrDataEvents::FORMAT_ARROW);
         request->Record.ClearColumns();
         AddKeyQuery(*request, {3, 3, 3});
         AddKeyQuery(*request, {1, 1, 1});
@@ -1057,7 +1132,7 @@ Y_UNIT_TEST_SUITE(DataShardReadIterator) {
         // KIKIMR-16897: no columns mean we want to calc row count
         TTestHelper helper;
 
-        auto request = helper.GetBaseReadRequest("table-1", 1, NKikimrTxDataShard::CELLVEC);
+        auto request = helper.GetBaseReadRequest("table-1", 1, NKikimrDataEvents::FORMAT_CELLVEC);
         request->Record.ClearColumns();
         AddRangeQuery<ui32>(
             *request,
@@ -1081,7 +1156,7 @@ Y_UNIT_TEST_SUITE(DataShardReadIterator) {
         // KIKIMR-16897: no columns mean we want to calc row count
         TTestHelper helper;
 
-        auto request = helper.GetBaseReadRequest("table-1", 1, NKikimrTxDataShard::ARROW);
+        auto request = helper.GetBaseReadRequest("table-1", 1, NKikimrDataEvents::FORMAT_ARROW);
         request->Record.ClearColumns();
         AddRangeQuery<ui32>(
             *request,
@@ -1718,11 +1793,11 @@ Y_UNIT_TEST_SUITE(DataShardReadIterator) {
     }
 
     Y_UNIT_TEST(ShouldReadRangeInclusiveEndsCellVec) {
-        TestReadRangeInclusiveEnds(NKikimrTxDataShard::CELLVEC);
+        TestReadRangeInclusiveEnds(NKikimrDataEvents::FORMAT_CELLVEC);
     }
 
     Y_UNIT_TEST(ShouldReadRangeInclusiveEndsArrow) {
-        TestReadRangeInclusiveEnds(NKikimrTxDataShard::ARROW);
+        TestReadRangeInclusiveEnds(NKikimrDataEvents::FORMAT_ARROW);
     }
 
     Y_UNIT_TEST(ShouldReadRangeReverse) {
@@ -2372,7 +2447,7 @@ Y_UNIT_TEST_SUITE(DataShardReadIterator) {
     }
 
     Y_UNIT_TEST(ShouldReadFromFollower) {
-        TestReadKey(NKikimrTxDataShard::CELLVEC, true);
+        TestReadKey(NKikimrDataEvents::FORMAT_CELLVEC, true);
     }
 
     Y_UNIT_TEST(ShouldNotReadFutureMvccFromFollower) {
@@ -2385,7 +2460,7 @@ Y_UNIT_TEST_SUITE(DataShardReadIterator) {
         TTestHelper helper(serverSettings, shardCount, true);
 
         TRowVersion someVersion = TRowVersion(10000, Max<ui64>());
-        auto request = helper.GetBaseReadRequest("table-1", 1, NKikimrTxDataShard::ARROW, someVersion);
+        auto request = helper.GetBaseReadRequest("table-1", 1, NKikimrDataEvents::FORMAT_ARROW, someVersion);
         AddKeyQuery(*request, {3, 3, 3});
         auto readResult = helper.SendRead("table-1", request.release());
         const auto& record = readResult->Record;
@@ -2401,7 +2476,7 @@ Y_UNIT_TEST_SUITE(DataShardReadIterator) {
         const ui64 shardCount = 1;
         TTestHelper helper(serverSettings, shardCount, true);
 
-        auto request = helper.GetBaseReadRequest("table-1", 1, NKikimrTxDataShard::ARROW, TRowVersion::Max());
+        auto request = helper.GetBaseReadRequest("table-1", 1, NKikimrDataEvents::FORMAT_ARROW, TRowVersion::Max());
         request->Record.ClearSnapshot();
         AddKeyQuery(*request, {3, 3, 3});
         auto readResult = helper.SendRead("table-1", request.release());
@@ -2508,7 +2583,7 @@ Y_UNIT_TEST_SUITE(DataShardReadIterator) {
         // read from HEAD when there is no conflicting operation
         TTestHelper helper;
 
-        auto request = helper.GetBaseReadRequest("table-1", 1, NKikimrTxDataShard::ARROW, TRowVersion::Max());
+        auto request = helper.GetBaseReadRequest("table-1", 1, NKikimrDataEvents::FORMAT_ARROW, TRowVersion::Max());
         request->Record.ClearSnapshot();
         AddKeyQuery(*request, {3, 3, 3});
 
@@ -2535,7 +2610,7 @@ Y_UNIT_TEST_SUITE(DataShardReadIterator) {
         auto hangedInfo = helper.HangWithTransactionWaitingRS(shardCount, false);
 
         {
-            auto request = helper.GetBaseReadRequest("table-1", 1, NKikimrTxDataShard::ARROW, TRowVersion::Max());
+            auto request = helper.GetBaseReadRequest("table-1", 1, NKikimrDataEvents::FORMAT_ARROW, TRowVersion::Max());
             request->Record.ClearSnapshot();
             AddKeyQuery(*request, {3, 3, 3});
             AddKeyQuery(*request, {1, 1, 1});
@@ -2590,7 +2665,7 @@ Y_UNIT_TEST_SUITE(DataShardReadIterator) {
 
         {
             // now read HEAD
-            auto request = helper.GetBaseReadRequest("table-1", 1, NKikimrTxDataShard::ARROW, TRowVersion::Max());
+            auto request = helper.GetBaseReadRequest("table-1", 1, NKikimrDataEvents::FORMAT_ARROW, TRowVersion::Max());
             request->Record.ClearSnapshot();
             AddKeyQuery(*request, {3, 3, 3});
             AddKeyQuery(*request, {1, 1, 1});
@@ -2687,7 +2762,7 @@ Y_UNIT_TEST_SUITE(DataShardReadIterator) {
         // 2a: read prior data
         {
             auto oldVersion = TRowVersion(hangedStep - 1, Max<ui64>());
-            auto request = helper.GetBaseReadRequest("table-1", 1, NKikimrTxDataShard::ARROW, oldVersion);
+            auto request = helper.GetBaseReadRequest("table-1", 1, NKikimrDataEvents::FORMAT_ARROW, oldVersion);
             AddKeyQuery(*request, {3, 3, 3});
 
             auto readResult = helper.SendRead("table-1", request.release());
@@ -2701,7 +2776,7 @@ Y_UNIT_TEST_SUITE(DataShardReadIterator) {
         // 2b-1 (key): try to read hanged step, note that we have hanged write to the same key
         {
             auto oldVersion = TRowVersion(hangedStep, Max<ui64>());
-            auto request = helper.GetBaseReadRequest("table-1", 1, NKikimrTxDataShard::ARROW, oldVersion);
+            auto request = helper.GetBaseReadRequest("table-1", 1, NKikimrDataEvents::FORMAT_ARROW, oldVersion);
             AddKeyQuery(*request, {3, 3, 3});
 
             auto readResult = helper.SendRead(
@@ -2716,7 +2791,7 @@ Y_UNIT_TEST_SUITE(DataShardReadIterator) {
         // 2b-2 (range): try to read hanged step, note that we have hanged write to the same key
         {
             auto oldVersion = TRowVersion(hangedStep, Max<ui64>());
-            auto request = helper.GetBaseReadRequest("table-1", 2, NKikimrTxDataShard::ARROW, oldVersion);
+            auto request = helper.GetBaseReadRequest("table-1", 2, NKikimrDataEvents::FORMAT_ARROW, oldVersion);
 
             AddRangeQuery<ui32>(
                 *request,
@@ -2738,7 +2813,7 @@ Y_UNIT_TEST_SUITE(DataShardReadIterator) {
         // 2b-3 (key prefix, equals to range): try to read hanged step, note that we have hanged write to the same key
         {
             auto oldVersion = TRowVersion(hangedStep, Max<ui64>());
-            auto request = helper.GetBaseReadRequest("table-1", 3, NKikimrTxDataShard::ARROW, oldVersion);
+            auto request = helper.GetBaseReadRequest("table-1", 3, NKikimrDataEvents::FORMAT_ARROW, oldVersion);
             AddKeyQuery(*request, {3});
 
             auto readResult = helper.SendRead(
@@ -2798,7 +2873,7 @@ Y_UNIT_TEST_SUITE(DataShardReadIterator) {
         // 4: try to read hanged step again
         {
             auto oldVersion = TRowVersion(hangedStep, Max<ui64>());
-            auto request = helper.GetBaseReadRequest("table-1", 4, NKikimrTxDataShard::ARROW, oldVersion);
+            auto request = helper.GetBaseReadRequest("table-1", 4, NKikimrDataEvents::FORMAT_ARROW, oldVersion);
             AddKeyQuery(*request, {3, 3, 3});
 
             auto readResult = helper.SendRead("table-1", request.release());
@@ -2812,7 +2887,7 @@ Y_UNIT_TEST_SUITE(DataShardReadIterator) {
         // 5: read prior data again
         {
             auto oldVersion = TRowVersion(hangedStep - 1, Max<ui64>());
-            auto request = helper.GetBaseReadRequest("table-1", 5, NKikimrTxDataShard::ARROW, oldVersion);
+            auto request = helper.GetBaseReadRequest("table-1", 5, NKikimrDataEvents::FORMAT_ARROW, oldVersion);
             AddKeyQuery(*request, {3, 3, 3});
 
             auto readResult = helper.SendRead("table-1", request.release());
@@ -2906,7 +2981,7 @@ Y_UNIT_TEST_SUITE(DataShardReadIterator) {
         // future snapshot
         snapshot = TRowVersion(lastStep + 3000, Max<ui64>());
 
-        auto request1 = helper.GetBaseReadRequest("table-1", 1, NKikimrTxDataShard::ARROW, snapshot);
+        auto request1 = helper.GetBaseReadRequest("table-1", 1, NKikimrDataEvents::FORMAT_ARROW, snapshot);
         AddKeyQuery(*request1, {3, 3, 3});
         AddKeyQuery(*request1, {1, 1, 1});
         AddKeyQuery(*request1, {5, 5, 5});
@@ -3042,7 +3117,7 @@ Y_UNIT_TEST_SUITE(DataShardReadIterator) {
         // future snapshot
         snapshot = TRowVersion(lastStep + 3000, Max<ui64>());
 
-        auto request1 = helper.GetBaseReadRequest("table-1", 1, NKikimrTxDataShard::ARROW, snapshot);
+        auto request1 = helper.GetBaseReadRequest("table-1", 1, NKikimrDataEvents::FORMAT_ARROW, snapshot);
         AddKeyQuery(*request1, {3, 3, 3});
         AddKeyQuery(*request1, {1, 1, 1});
         AddKeyQuery(*request1, {5, 5, 5});
@@ -3068,34 +3143,236 @@ Y_UNIT_TEST_SUITE(DataShardReadIterator) {
         UNIT_ASSERT_VALUES_EQUAL(readResults, 0);
     }
 
-    Y_UNIT_TEST(ShouldReturnBrokenLockWhenReadKey) {
+    Y_UNIT_TEST(ShouldCommitLocksWhenReadWriteInOneTransaction) {
+        TTestHelper helper;
+
+        auto runtime = helper.Server->GetRuntime();
+
+        const ui64 lockTxId = 1011121314;
+        const TString tableName = "table-1";
+        const ui64 tabletId = helper.Tables["table-1"].TabletId;
+        const ui64 nodeId = runtime->GetNodeId();
+
+        NLongTxService::TLockHandle lockHandle(lockTxId, runtime->GetActorSystem(0));
+
+        // Read in a transaction.
+        auto readRequest1 = helper.GetBaseReadRequest(tableName, 1);
+        readRequest1->Record.SetLockTxId(lockTxId);
+        AddKeyQuery(*readRequest1, {1, 1, 1});
+
+        auto readResult1 = helper.SendRead(tableName, readRequest1.release());
+
+        CheckResult(helper.Tables[tableName].UserTable, *readResult1, { {1, 1, 1, 100} });
+
+        UNIT_ASSERT_VALUES_EQUAL(readResult1->Record.TxLocksSize(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(readResult1->Record.BrokenTxLocksSize(), 0);
+        const auto& readLock = readResult1->Record.GetTxLocks(0);
+
+        // Write in the same transaction.
+        {
+            auto writeRequest = helper.MakeWriteRequest(tableName, ++helper.TxId, {1, 1, 1, 101});
+            writeRequest->Record.SetLockTxId(lockTxId);
+            writeRequest->Record.SetLockNodeId(nodeId);
+
+            NKikimrDataEvents::TEvWriteResult writeResult = helper.SendWrite(tabletId, std::move(writeRequest));
+
+            UNIT_ASSERT_VALUES_EQUAL(writeResult.GetStatus(), NKikimrDataEvents::TEvWriteResult::STATUS_COMPLETED);
+            UNIT_ASSERT(writeResult.TxLocksSize() == 1);
+            const auto& writeLock = writeResult.GetTxLocks(0);
+            UNIT_ASSERT_VALUES_EQUAL(writeLock.GetLockId(), readLock.GetLockId());
+            UNIT_ASSERT_VALUES_EQUAL(writeLock.GetDataShard(), readLock.GetDataShard());
+            UNIT_ASSERT_VALUES_EQUAL(writeLock.GetGeneration(), readLock.GetGeneration());
+            UNIT_ASSERT_VALUES_EQUAL(writeLock.GetCounter(), readLock.GetCounter());
+            UNIT_ASSERT_VALUES_EQUAL(writeLock.GetSchemeShard(), readLock.GetSchemeShard());
+            UNIT_ASSERT_VALUES_EQUAL(writeLock.GetPathId(), readLock.GetPathId());
+            UNIT_ASSERT_VALUES_UNEQUAL(writeLock.GetHasWrites(), readLock.GetHasWrites());
+        }
+
+        // Commit locks.
+        {
+            auto writeRequest = std::make_unique<NKikimr::NEvents::TDataEvents::TEvWrite>(++helper.TxId, NKikimrDataEvents::TEvWrite::MODE_IMMEDIATE);
+            NKikimrDataEvents::TKqpLocks& kqpLocks = *writeRequest->Record.MutableLocks();
+            kqpLocks.MutableLocks()->CopyFrom(readResult1->Record.GetTxLocks());
+            kqpLocks.AddSendingShards(tabletId);
+            kqpLocks.AddReceivingShards(tabletId);
+            kqpLocks.SetOp(::NKikimrDataEvents::TKqpLocks::Commit);
+
+            NKikimrDataEvents::TEvWriteResult writeResult = helper.SendWrite(tabletId, std::move(writeRequest));
+
+            UNIT_ASSERT_VALUES_EQUAL(writeResult.GetStatus(), NKikimrDataEvents::TEvWriteResult::STATUS_COMPLETED);
+        }
+
+        // Read written data.
+        helper.TestReadOneKey(tableName, {1, 1, 1}, 101);
+    }
+
+    Y_UNIT_TEST(ShouldCommitLocksWhenReadWriteInSeparateTransactions) {
+        TTestHelper helper;
+
+        auto runtime = helper.Server->GetRuntime();
+
+        const ui64 lockTxId = 1011121314;
+        const TString tableName = "table-1";
+        const ui64 tabletId = helper.Tables["table-1"].TabletId;
+        const ui64 nodeId = runtime->GetNodeId();
+
+        NLongTxService::TLockHandle lockHandle(lockTxId, runtime->GetActorSystem(0));
+
+        // Write in first transaction.
+        auto writeRequest = helper.MakeWriteRequest(tableName, ++helper.TxId, {1, 1, 1, 101});
+        writeRequest->Record.SetLockTxId(lockTxId);
+        writeRequest->Record.SetLockNodeId(nodeId);
+
+        NKikimrDataEvents::TEvWriteResult writeResult = helper.SendWrite(tabletId, std::move(writeRequest));
+
+        UNIT_ASSERT_VALUES_EQUAL(writeResult.GetStatus(), NKikimrDataEvents::TEvWriteResult::STATUS_COMPLETED);
+        UNIT_ASSERT(writeResult.TxLocksSize() == 1);
+        const auto& writeLock = writeResult.GetTxLocks(0);
+        UNIT_ASSERT_VALUES_EQUAL(writeLock.GetLockId(), lockTxId);
+        UNIT_ASSERT_VALUES_EQUAL(writeLock.GetDataShard(), tabletId);
+        UNIT_ASSERT_VALUES_EQUAL(writeLock.GetGeneration(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(writeLock.GetCounter(), 0);
+        UNIT_ASSERT_VALUES_EQUAL(writeLock.GetHasWrites(), true);
+
+        // Read in separate transaction. No dirty-read.
+        helper.TestReadOneKey(tableName, {1, 1, 1}, 100);
+
+        // Commit locks in first transaction. 
+        auto writeRequest2 = std::make_unique<NKikimr::NEvents::TDataEvents::TEvWrite>(++helper.TxId, NKikimrDataEvents::TEvWrite::MODE_IMMEDIATE);
+        NKikimrDataEvents::TKqpLocks& kqpLocks2 = *writeRequest2->Record.MutableLocks();
+        kqpLocks2.MutableLocks()->CopyFrom(writeResult.GetTxLocks());
+        kqpLocks2.AddSendingShards(tabletId);
+        kqpLocks2.AddReceivingShards(tabletId);
+        kqpLocks2.SetOp(::NKikimrDataEvents::TKqpLocks::Commit);
+
+        NKikimrDataEvents::TEvWriteResult writeResult2 = helper.SendWrite(tabletId, std::move(writeRequest2));
+
+        UNIT_ASSERT_VALUES_EQUAL(writeResult.GetStatus(), NKikimrDataEvents::TEvWriteResult::STATUS_COMPLETED);
+
+        // Read written data.
+        helper.TestReadOneKey(tableName, {1, 1, 1}, 101);
+    }
+
+    Y_UNIT_TEST(ShouldRollbackLocksWhenWrite) {
+        TTestHelper helper;
+
+        auto runtime = helper.Server->GetRuntime();
+
+        const ui64 lockTxId = 1011121314;
+        const TString tableName = "table-1";
+        const ui64 tabletId = helper.Tables["table-1"].TabletId;
+        const ui64 nodeId = runtime->GetNodeId();
+
+        NLongTxService::TLockHandle lockHandle(lockTxId, runtime->GetActorSystem(0));
+
+        // Write in transaction.
+        auto writeRequest = helper.MakeWriteRequest(tableName, ++helper.TxId, {1, 1, 1, 101});
+        writeRequest->Record.SetLockTxId(lockTxId);
+        writeRequest->Record.SetLockNodeId(nodeId);
+
+        NKikimrDataEvents::TEvWriteResult writeResult = helper.SendWrite(tabletId, std::move(writeRequest));
+
+        UNIT_ASSERT_VALUES_EQUAL(writeResult.GetStatus(), NKikimrDataEvents::TEvWriteResult::STATUS_COMPLETED);
+        UNIT_ASSERT(writeResult.TxLocksSize() == 1);
+        const auto& writeLock = writeResult.GetTxLocks(0);
+        UNIT_ASSERT_VALUES_EQUAL(writeLock.GetLockId(), lockTxId);
+        UNIT_ASSERT_VALUES_EQUAL(writeLock.GetDataShard(), tabletId);
+        UNIT_ASSERT_VALUES_EQUAL(writeLock.GetGeneration(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(writeLock.GetCounter(), 0);
+        UNIT_ASSERT_VALUES_EQUAL(writeLock.GetHasWrites(), true);
+
+        // Rollback locks in transaction.
+        auto writeRequest2 = std::make_unique<NKikimr::NEvents::TDataEvents::TEvWrite>(++helper.TxId, NKikimrDataEvents::TEvWrite::MODE_IMMEDIATE);
+        NKikimrDataEvents::TKqpLocks& kqpLocks2 = *writeRequest2->Record.MutableLocks();
+        kqpLocks2.MutableLocks()->CopyFrom(writeResult.GetTxLocks());
+        kqpLocks2.SetOp(::NKikimrDataEvents::TKqpLocks::Rollback);
+
+        NKikimrDataEvents::TEvWriteResult writeResult2 = helper.SendWrite(tabletId, std::move(writeRequest2));
+
+        UNIT_ASSERT_VALUES_EQUAL(writeResult2.GetStatus(), NKikimrDataEvents::TEvWriteResult::STATUS_COMPLETED);
+
+        // Read origin data.
+        helper.TestReadOneKey(tableName, {1, 1, 1}, 100);
+    }    
+
+    Y_UNIT_TEST_TWIN(ShouldReturnBrokenLockWhenWriteInSeparateTransactions, EvWrite) {
+        TTestHelper helper;
+
+        auto runtime = helper.Server->GetRuntime();
+
+        const ui64 lockTxId = 1011121314;
+        const TString tableName = "table-1";
+        const ui64 tabletId = helper.Tables["table-1"].TabletId;
+        const ui64 nodeId = runtime->GetNodeId();
+
+        NLongTxService::TLockHandle lockHandle(lockTxId, runtime->GetActorSystem(0));
+
+        // Write in first transaction.
+        auto writeRequest = helper.MakeWriteRequest(tableName, ++helper.TxId, {1, 1, 1, 101});
+        writeRequest->Record.SetLockTxId(lockTxId);
+        writeRequest->Record.SetLockNodeId(nodeId);
+
+        NKikimrDataEvents::TEvWriteResult writeResult = helper.SendWrite(tabletId, std::move(writeRequest));
+
+        UNIT_ASSERT_VALUES_EQUAL(writeResult.GetStatus(), NKikimrDataEvents::TEvWriteResult::STATUS_COMPLETED);
+        UNIT_ASSERT(writeResult.TxLocksSize() == 1);
+        const auto& writeLock = writeResult.GetTxLocks(0);
+        UNIT_ASSERT_VALUES_EQUAL(writeLock.GetLockId(), lockTxId);
+        UNIT_ASSERT_VALUES_EQUAL(writeLock.GetDataShard(), tabletId);
+        UNIT_ASSERT_VALUES_EQUAL(writeLock.GetGeneration(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(writeLock.GetCounter(), 0);
+        UNIT_ASSERT_VALUES_EQUAL(writeLock.GetHasWrites(), true);
+
+        // Breaks lock obtained above using write in separate transaction.
+        helper.WriteRowTwin(tableName, {1, 1, 1, 202}, EvWrite);
+
+        // Commit locks in first transaction. They should be broken.
+        auto writeRequest2 = std::make_unique<NKikimr::NEvents::TDataEvents::TEvWrite>(++helper.TxId, NKikimrDataEvents::TEvWrite::MODE_IMMEDIATE);
+        NKikimrDataEvents::TKqpLocks& kqpLocks2 = *writeRequest2->Record.MutableLocks();
+        kqpLocks2.MutableLocks()->CopyFrom(writeResult.GetTxLocks());
+        kqpLocks2.AddSendingShards(tabletId);
+        kqpLocks2.AddReceivingShards(tabletId);
+        kqpLocks2.SetOp(::NKikimrDataEvents::TKqpLocks::Commit);
+
+        NKikimrDataEvents::TEvWriteResult writeResult2 = helper.SendWrite(tabletId, std::move(writeRequest2), NKikimrDataEvents::TEvWriteResult::STATUS_LOCKS_BROKEN);
+
+        UNIT_ASSERT_VALUES_EQUAL(writeResult2.GetStatus(), NKikimrDataEvents::TEvWriteResult::STATUS_LOCKS_BROKEN);
+        UNIT_ASSERT(writeResult2.TxLocksSize() == 1);
+        const auto& writeLock2 = writeResult2.GetTxLocks(0);
+        UNIT_ASSERT_VALUES_EQUAL(writeLock2.GetLockId(), writeLock.GetLockId());
+        UNIT_ASSERT_VALUES_EQUAL(writeLock2.GetDataShard(), writeLock.GetDataShard());
+        UNIT_ASSERT_VALUES_EQUAL(writeLock2.GetGeneration(), writeLock.GetGeneration());
+        UNIT_ASSERT_VALUES_EQUAL(writeLock2.GetCounter(), writeLock.GetCounter());
+        UNIT_ASSERT_VALUES_EQUAL(writeLock2.GetHasWrites(), writeLock.GetHasWrites());
+
+        // read written data
+        helper.TestReadOneKey(tableName, {1, 1, 1}, 202);
+    }
+
+    Y_UNIT_TEST_TWIN(ShouldReturnBrokenLockWhenReadKey, EvWrite) {
         TTestHelper helper;
 
         const ui64 lockTxId = 1011121314;
+        const TString tableName = "table-1";
 
-        auto request1 = helper.GetBaseReadRequest("table-1", 1);
+        auto request1 = helper.GetBaseReadRequest(tableName, 1);
         request1->Record.SetLockTxId(lockTxId);
         AddKeyQuery(*request1, {1, 1, 1});
 
-        auto readResult1 = helper.SendRead("table-1", request1.release());
+        auto readResult1 = helper.SendRead(tableName, request1.release());
 
         UNIT_ASSERT_VALUES_EQUAL(readResult1->Record.TxLocksSize(), 1);
         UNIT_ASSERT_VALUES_EQUAL(readResult1->Record.BrokenTxLocksSize(), 0);
 
         // breaks lock obtained above
-        ExecSQL(helper.Server, helper.Sender, R"(
-            UPSERT INTO `/Root/table-1`
-            (key1, key2, key3, value)
-            VALUES
-            (1, 1, 1, 101);
-        )");
+        helper.WriteRowTwin(tableName, {1, 1, 1, 101}, EvWrite);
 
         // we use request2 to obtain same lock as in request1 to check it
-        auto request2 = helper.GetBaseReadRequest("table-1", 1);
+        auto request2 = helper.GetBaseReadRequest(tableName, 1);
         request2->Record.SetLockTxId(lockTxId);
         AddKeyQuery(*request2, {1, 1, 1});
 
-        auto readResult2 = helper.SendRead("table-1", request2.release());
+        auto readResult2 = helper.SendRead(tableName, request2.release());
 
         UNIT_ASSERT_VALUES_EQUAL(readResult2->Record.TxLocksSize(), 0);
         UNIT_ASSERT_VALUES_EQUAL(readResult2->Record.BrokenTxLocksSize(), 1);
@@ -3106,62 +3383,35 @@ Y_UNIT_TEST_SUITE(DataShardReadIterator) {
         UNIT_ASSERT(lock.GetCounter() < brokenLock.GetCounter());
     }
 
-    Y_UNIT_TEST(ShouldReturnBrokenLockWhenReadRange) {
+    Y_UNIT_TEST_TWIN(ShouldReturnBrokenLockWhenReadRange, EvWrite) {
         // upsert into "left border -1 " and to the "right border + 1" - lock not broken
         // upsert inside range - broken
         TTestHelper helper;
 
         const ui64 lockTxId = 1011121314;
+        const TString tableName = "table-1";
+        const TVector<ui32> checkKey = {11, 11, 11};
 
-        auto request1 = helper.GetBaseReadRequest("table-1", 1);
+        auto request1 = helper.GetBaseReadRequest(tableName, 1);
         request1->Record.SetLockTxId(lockTxId);
-        AddRangeQuery<ui32>(
-            *request1,
-            {3, 3, 3},
-            true,
-            {8, 0, 1},
-            true
-        );
+        AddRangeQuery<ui32>(*request1, {3, 3, 3}, true, {8, 0, 1}, true);
+        auto readResult1 = helper.SendRead(tableName, request1.release());
 
-        auto readResult1 = helper.SendRead("table-1", request1.release());
+        // upsert to the left and check that lock is not broken
+        helper.WriteRowTwin(tableName, {1, 1, 1, 101}, EvWrite);
+        helper.CheckLockValid(tableName, 2, checkKey, lockTxId);
 
-        {
-            // upsert to the left and check that lock is not broken
-            ExecSQL(helper.Server, helper.Sender, R"(
-                UPSERT INTO `/Root/table-1`
-                (key1, key2, key3, value)
-                VALUES
-                (1, 1, 1, 101);
-            )");
-
-            helper.CheckLockValid("table-1", 2, {11, 11, 11}, lockTxId);
-        }
-
-        {
-            // upsert to the right and check that lock is not broken
-            ExecSQL(helper.Server, helper.Sender, R"(
-                UPSERT INTO `/Root/table-1`
-                (key1, key2, key3, value)
-                VALUES
-                (8, 1, 0, 802);
-            )");
-
-            helper.CheckLockValid("table-1", 2, {11, 11, 11}, lockTxId);
-        }
+        // upsert to the right and check that lock is not broken
+        helper.WriteRowTwin(tableName, {8, 1, 0, 802}, EvWrite);
+        helper.CheckLockValid(tableName, 2, checkKey, lockTxId);
 
         // breaks lock
         // also we modify range: insert new key
-        ExecSQL(helper.Server, helper.Sender, R"(
-            UPSERT INTO `/Root/table-1`
-            (key1, key2, key3, value)
-            VALUES
-            (4, 4, 4, 400);
-        )");
-
-        helper.CheckLockBroken("table-1", 3, {11, 11, 11}, lockTxId, *readResult1);
+        helper.WriteRowTwin(tableName, {4, 4, 4, 400}, EvWrite);
+        helper.CheckLockBroken(tableName, 3, checkKey, lockTxId, *readResult1);
     }
 
-    Y_UNIT_TEST(ShouldReturnBrokenLockWhenReadRangeInvisibleRowSkips) {
+    Y_UNIT_TEST_TWIN(ShouldReturnBrokenLockWhenReadRangeInvisibleRowSkips, EvWrite) {
         // If we read in v1, write in v2, then write breaks lock.
         // Because of out of order execution, v2 can happen before v1
         // and we should properly handle it in DS to break lock.
@@ -3175,29 +3425,20 @@ Y_UNIT_TEST_SUITE(DataShardReadIterator) {
             {"/Root/movies", "/Root/table-1"},
             TDuration::Hours(1));
 
-        // write new data above snapshot
-        ExecSQL(helper.Server, helper.Sender, R"(
-            UPSERT INTO `/Root/table-1`
-            (key1, key2, key3, value)
-            VALUES
-            (4, 4, 4, 4444);
-        )");
-
         const ui64 lockTxId = 1011121314;
+        const TString tableName = "table-1";
 
-        auto request1 = helper.GetBaseReadRequest("table-1", 1, NKikimrTxDataShard::ARROW, readVersion);
+        // write new data above snapshot
+        helper.WriteRowTwin(tableName, {4, 4, 4, 44441}, EvWrite);
+
+
+        auto request1 = helper.GetBaseReadRequest(tableName, 1, NKikimrDataEvents::FORMAT_ARROW, readVersion);
         request1->Record.SetLockTxId(lockTxId);
 
-        AddRangeQuery<ui32>(
-            *request1,
-            {1, 1, 1},
-            true,
-            {5, 5, 5},
-            true
-        );
+        AddRangeQuery<ui32>(*request1, {1, 1, 1}, true, {5, 5, 5}, true);
 
-        auto readResult1 = helper.SendRead("table-1", request1.release());
-        CheckResult(helper.Tables["table-1"].UserTable, *readResult1, {
+        auto readResult1 = helper.SendRead(tableName, request1.release());
+        CheckResult(helper.Tables[tableName].UserTable, *readResult1, {
             {1, 1, 1, 100},
             {3, 3, 3, 300},
             {5, 5, 5, 500},
@@ -3206,7 +3447,7 @@ Y_UNIT_TEST_SUITE(DataShardReadIterator) {
         UNIT_ASSERT_VALUES_EQUAL(readResult1->Record.TxLocksSize(), 0);
         UNIT_ASSERT_VALUES_EQUAL(readResult1->Record.BrokenTxLocksSize(), 1);
 
-        helper.CheckLockBroken("table-1", 10, {11, 11, 11}, lockTxId, *readResult1);
+        helper.CheckLockBroken(tableName, 10, {11, 11, 11}, lockTxId, *readResult1);
     }
 
     Y_UNIT_TEST(ShouldReturnBrokenLockWhenReadRangeInvisibleRowSkips2) {
@@ -3223,19 +3464,14 @@ Y_UNIT_TEST_SUITE(DataShardReadIterator) {
             TDuration::Hours(1));
 
         const ui64 lockTxId = 1011121314;
+        const TString tableName = "table-1";
 
-        auto request1 = helper.GetBaseReadRequest("table-1", 1, NKikimrTxDataShard::ARROW, readVersion);
+        auto request1 = helper.GetBaseReadRequest(tableName, 1, NKikimrDataEvents::FORMAT_ARROW, readVersion);
         request1->Record.SetLockTxId(lockTxId);
-        AddRangeQuery<ui32>(
-            *request1,
-            {100, 0, 0},
-            true,
-            {200, 0, 0},
-            true
-        );
+        AddRangeQuery<ui32>(*request1, {100, 0, 0}, true, {200, 0, 0}, true);
 
-        auto readResult1 = helper.SendRead("table-1", request1.release());
-        CheckResult(helper.Tables["table-1"].UserTable, *readResult1, {});
+        auto readResult1 = helper.SendRead(tableName, request1.release());
+        CheckResult(helper.Tables[tableName].UserTable, *readResult1, {});
         UNIT_ASSERT_VALUES_EQUAL(readResult1->Record.TxLocksSize(), 1);
         UNIT_ASSERT_VALUES_EQUAL(readResult1->Record.BrokenTxLocksSize(), 0);
 
@@ -3248,199 +3484,136 @@ Y_UNIT_TEST_SUITE(DataShardReadIterator) {
             (300, 0, 0, 3000);
         )");
 
-        auto request2 = helper.GetBaseReadRequest("table-1", 2, NKikimrTxDataShard::ARROW, readVersion);
+        auto request2 = helper.GetBaseReadRequest(tableName, 2, NKikimrDataEvents::FORMAT_ARROW, readVersion);
         request2->Record.SetLockTxId(lockTxId);
-        AddRangeQuery<ui32>(
-            *request2,
-            {300, 0, 0},
-            true,
-            {300, 0, 0},
-            true
-        );
+        AddRangeQuery<ui32>(*request2, {300, 0, 0}, true, {300, 0, 0}, true);
 
-        auto readResult2 = helper.SendRead("table-1", request2.release());
+        auto readResult2 = helper.SendRead(tableName, request2.release());
         UNIT_ASSERT_VALUES_EQUAL(readResult2->Record.TxLocksSize(), 0);
         UNIT_ASSERT_VALUES_EQUAL(readResult2->Record.BrokenTxLocksSize(), 1);
-        helper.CheckLockBroken("table-1", 10, {300, 0, 0}, lockTxId, *readResult2);
+        helper.CheckLockBroken(tableName, 10, {300, 0, 0}, lockTxId, *readResult2);
     }
 
-    Y_UNIT_TEST(ShouldReturnBrokenLockWhenReadRangeLeftBorder) {
+    Y_UNIT_TEST_TWIN(ShouldReturnBrokenLockWhenReadRangeLeftBorder, EvWrite) {
         TTestHelper helper;
 
         const ui64 lockTxId = 1011121314;
+        const TString tableName = "table-1";
 
-        auto request1 = helper.GetBaseReadRequest("table-1", 1);
+        auto request1 = helper.GetBaseReadRequest(tableName, 1);
         request1->Record.SetLockTxId(lockTxId);
-        AddRangeQuery<ui32>(
-            *request1,
-            {3, 3, 3},
-            true,
-            {8, 0, 1},
-            true
-        );
+        AddRangeQuery<ui32>(*request1, {3, 3, 3}, true, {8, 0, 1}, true);
 
-        auto readResult1 = helper.SendRead("table-1", request1.release());
+        auto readResult1 = helper.SendRead(tableName, request1.release());
 
         // breaks lock
         // also we modify range: insert new key
-        ExecSQL(helper.Server, helper.Sender, R"(
-            UPSERT INTO `/Root/table-1`
-            (key1, key2, key3, value)
-            VALUES
-            (3, 3, 3, 0xdead);
-        )");
-
-        helper.CheckLockBroken("table-1", 3, {11, 11, 11}, lockTxId, *readResult1);
+        helper.WriteRowTwin(tableName, {3, 3, 3, 0xdead}, EvWrite);
+        helper.CheckLockBroken(tableName, 3, {11, 11, 11}, lockTxId, *readResult1);
     }
 
-    Y_UNIT_TEST(ShouldReturnBrokenLockWhenReadRangeRightBorder) {
+    Y_UNIT_TEST_TWIN(ShouldReturnBrokenLockWhenReadRangeRightBorder, EvWrite) {
         TTestHelper helper;
 
         const ui64 lockTxId = 1011121314;
+        const TString tableName = "table-1";
 
-        auto request1 = helper.GetBaseReadRequest("table-1", 1);
+        auto request1 = helper.GetBaseReadRequest(tableName, 1);
         request1->Record.SetLockTxId(lockTxId);
-        AddRangeQuery<ui32>(
-            *request1,
-            {3, 3, 3},
-            true,
-            {8, 0, 1},
-            true
-        );
+        AddRangeQuery<ui32>(*request1, {3, 3, 3}, true, {8, 0, 1}, true);
 
-        auto readResult1 = helper.SendRead("table-1", request1.release());
+        auto readResult1 = helper.SendRead(tableName, request1.release());
 
         // breaks lock
         // also we modify range: insert new key
-        ExecSQL(helper.Server, helper.Sender, R"(
-            UPSERT INTO `/Root/table-1`
-            (key1, key2, key3, value)
-            VALUES
-            (8, 0, 1, 0xdead);
-        )");
-
-        helper.CheckLockBroken("table-1", 3, {11, 11, 11}, lockTxId, *readResult1);
+        helper.WriteRowTwin(tableName, {8, 0, 1, 0xdead}, EvWrite);
+        helper.CheckLockBroken(tableName, 3, {11, 11, 11}, lockTxId, *readResult1);
     }
 
-    Y_UNIT_TEST(ShouldReturnBrokenLockWhenReadKeyPrefix) {
+    Y_UNIT_TEST_TWIN(ShouldReturnBrokenLockWhenReadKeyPrefix, EvWrite) {
         // upsert into "left border -1 " and to the "right border + 1" - lock not broken
         // upsert inside range - broken
         TTestHelper helper;
 
         const ui64 lockTxId = 1011121314;
+        const TString tableName = "table-1";
 
-        auto request1 = helper.GetBaseReadRequest("table-1", 1);
+        auto request1 = helper.GetBaseReadRequest(tableName, 1);
         request1->Record.SetLockTxId(lockTxId);
         AddKeyQuery(*request1, {8});
 
-        auto readResult1 = helper.SendRead("table-1", request1.release());
+        auto readResult1 = helper.SendRead(tableName, request1.release());
 
-        {
-            // upsert to the left and check that lock is not broken
-            ExecSQL(helper.Server, helper.Sender, R"(
-                UPSERT INTO `/Root/table-1`
-                (key1, key2, key3, value)
-                VALUES
-                (5, 5, 5, 555);
-            )");
+        // upsert to the left and check that lock is not broken
+        helper.WriteRowTwin(tableName, {5, 5, 5, 555}, EvWrite);
+        helper.CheckLockValid(tableName, 2, {11, 11, 11}, lockTxId);
 
-            helper.CheckLockValid("table-1", 2, {11, 11, 11}, lockTxId);
-        }
-
-        {
-            // upsert to the right and check that lock is not broken
-            ExecSQL(helper.Server, helper.Sender, R"(
-                UPSERT INTO `/Root/table-1`
-                (key1, key2, key3, value)
-                VALUES
-                (9, 0, 0, 900);
-            )");
-
-            helper.CheckLockValid("table-1", 2, {11, 11, 11}, lockTxId);
-        }
+        // upsert to the right and check that lock is not broken
+        helper.WriteRowTwin(tableName, {9, 0, 0, 900}, EvWrite);
+        helper.CheckLockValid(tableName, 2, {11, 11, 11}, lockTxId);
 
         // breaks lock obtained above
         // also we modify range: insert new key
-        ExecSQL(helper.Server, helper.Sender, R"(
-            UPSERT INTO `/Root/table-1`
-            (key1, key2, key3, value)
-            VALUES
-            (8, 1, 1, 8000);
-        )");
-
-        helper.CheckLockBroken("table-1", 3, {11, 11, 11}, lockTxId, *readResult1);
+        helper.WriteRowTwin(tableName, {8, 1, 1, 8000}, EvWrite);
+        helper.CheckLockBroken(tableName, 3, {11, 11, 11}, lockTxId, *readResult1);
     }
 
-    Y_UNIT_TEST(ShouldReturnBrokenLockWhenReadKeyPrefixLeftBorder) {
+    Y_UNIT_TEST_TWIN(ShouldReturnBrokenLockWhenReadKeyPrefixLeftBorder, EvWrite) {
         TTestHelper helper;
 
         const ui64 lockTxId = 1011121314;
+        const TString tableName = "table-1";
 
-        auto request1 = helper.GetBaseReadRequest("table-1", 1);
+        auto request1 = helper.GetBaseReadRequest(tableName, 1);
         request1->Record.SetLockTxId(lockTxId);
         AddKeyQuery(*request1, {8});
 
-        auto readResult1 = helper.SendRead("table-1", request1.release());
+        auto readResult1 = helper.SendRead(tableName, request1.release());
 
         // breaks lock obtained above
         // also we modify range: insert new key
-        ExecSQL(helper.Server, helper.Sender, R"(
-            UPSERT INTO `/Root/table-1`
-            (key1, key2, key3, value)
-            VALUES
-            (8, 0, 0, 8000);
-        )");
-
-        helper.CheckLockBroken("table-1", 3, {11, 11, 11}, lockTxId, *readResult1);
+        helper.WriteRowTwin(tableName, {8, 0, 0, 8000}, EvWrite);
+        helper.CheckLockBroken(tableName, 3, {11, 11, 11}, lockTxId, *readResult1);
     }
 
-    Y_UNIT_TEST(ShouldReturnBrokenLockWhenReadKeyPrefixRightBorder) {
+    Y_UNIT_TEST_TWIN(ShouldReturnBrokenLockWhenReadKeyPrefixRightBorder, EvWrite) {
         TTestHelper helper;
 
         const ui64 lockTxId = 1011121314;
+        const TString tableName = "table-1";
 
-        auto request1 = helper.GetBaseReadRequest("table-1", 1);
+        auto request1 = helper.GetBaseReadRequest(tableName, 1);
         request1->Record.SetLockTxId(lockTxId);
         AddKeyQuery(*request1, {8});
 
-        auto readResult1 = helper.SendRead("table-1", request1.release());
+        auto readResult1 = helper.SendRead(tableName, request1.release());
 
         // breaks lock obtained above
         // also we modify range: insert new key
-        ExecSQL(helper.Server, helper.Sender, R"(
-            UPSERT INTO `/Root/table-1`
-            (key1, key2, key3, value)
-            VALUES
-            (8, 1, 1, 8000);
-        )");
-
-        helper.CheckLockBroken("table-1", 3, {11, 11, 11}, lockTxId, *readResult1);
+        helper.WriteRowTwin(tableName, {8, 1, 1, 8000}, EvWrite);
+        helper.CheckLockBroken(tableName, 3, {11, 11, 11}, lockTxId, *readResult1);
     }
 
-    Y_UNIT_TEST(ShouldReturnBrokenLockWhenReadKeyWithContinue) {
+    Y_UNIT_TEST_TWIN(ShouldReturnBrokenLockWhenReadKeyWithContinue, EvWrite) {
         TTestHelper helper;
 
         const ui64 lockTxId = 1011121314;
+        const TString tableName = "table-1";
 
-        auto request1 = helper.GetBaseReadRequest("table-1", 1);
+        auto request1 = helper.GetBaseReadRequest(tableName, 1);
         AddKeyQuery(*request1, {3, 3, 3});
         AddKeyQuery(*request1, {1, 1, 1});
         AddKeyQuery(*request1, {5, 5, 5});
         request1->Record.SetMaxRows(1);
         request1->Record.SetLockTxId(lockTxId);
 
-        auto readResult1 = helper.SendRead("table-1", request1.release());
+        auto readResult1 = helper.SendRead(tableName, request1.release());
 
         // breaks lock obtained above
         // also we modify range: insert new key
-        ExecSQL(helper.Server, helper.Sender, R"(
-            UPSERT INTO `/Root/table-1`
-            (key1, key2, key3, value)
-            VALUES
-            (1, 1, 1, 1000);
-        )");
+        helper.WriteRowTwin(tableName, {1, 1, 1, 1000}, EvWrite);
+        helper.SendReadAck(tableName, readResult1->Record, 3, 10000);
 
-        helper.SendReadAck("table-1", readResult1->Record, 3, 10000);
         auto readResult2 = helper.WaitReadResult();
         UNIT_ASSERT_VALUES_EQUAL(readResult2->Record.BrokenTxLocksSize(), 1UL);
 
@@ -3450,7 +3623,7 @@ Y_UNIT_TEST_SUITE(DataShardReadIterator) {
         UNIT_ASSERT(lock.GetCounter() < brokenLock.GetCounter());
     }
 
-    Y_UNIT_TEST(ShouldReturnBrokenLockWhenReadKeyWithContinueInvisibleRowSkips) {
+    Y_UNIT_TEST_TWIN(ShouldReturnBrokenLockWhenReadKeyWithContinueInvisibleRowSkips, EvWrite) {
         // If we read in v1, write in v2, then write breaks lock.
         // Because of out of order execution, v2 can happen before v1
         // and we should properly handle it in DS to break lock.
@@ -3462,30 +3635,20 @@ Y_UNIT_TEST_SUITE(DataShardReadIterator) {
             {"/Root/movies", "/Root/table-1"},
             TDuration::Hours(1));
 
-        // write new data above snapshot
-        ExecSQL(helper.Server, helper.Sender, R"(
-            UPSERT INTO `/Root/table-1`
-            (key1, key2, key3, value)
-            VALUES
-            (4, 4, 4, 4444);
-        )");
-
         const ui64 lockTxId = 1011121314;
+        const TString tableName = "table-1";
 
-        auto request1 = helper.GetBaseReadRequest("table-1", 1, NKikimrTxDataShard::ARROW, readVersion);
+        // write new data above snapshot
+        helper.WriteRowTwin(tableName, {4, 4, 4, 4444}, EvWrite);
+
+        auto request1 = helper.GetBaseReadRequest(tableName, 1, NKikimrDataEvents::FORMAT_ARROW, readVersion);
         request1->Record.SetLockTxId(lockTxId);
         request1->Record.SetMaxRows(1); // set quota so that DS hangs waiting for ACK
 
-        AddRangeQuery<ui32>(
-            *request1,
-            {1, 1, 1},
-            true,
-            {5, 5, 5},
-            true
-        );
+        AddRangeQuery<ui32>(*request1, {1, 1, 1}, true, {5, 5, 5}, true);
 
-        auto readResult1 = helper.SendRead("table-1", request1.release());
-        CheckResult(helper.Tables["table-1"].UserTable, *readResult1, {
+        auto readResult1 = helper.SendRead(tableName, request1.release());
+        CheckResult(helper.Tables[tableName].UserTable, *readResult1, {
             {1, 1, 1, 100},
         });
 
@@ -3493,9 +3656,9 @@ Y_UNIT_TEST_SUITE(DataShardReadIterator) {
         UNIT_ASSERT_VALUES_EQUAL(readResult1->Record.TxLocksSize(), 1);
         UNIT_ASSERT_VALUES_EQUAL(readResult1->Record.BrokenTxLocksSize(), 0);
 
-        helper.SendReadAck("table-1", readResult1->Record, 100, 10000);
+        helper.SendReadAck(tableName, readResult1->Record, 100, 10000);
         auto readResult2 = helper.WaitReadResult();
-        CheckResult(helper.Tables["table-1"].UserTable, *readResult2, {
+        CheckResult(helper.Tables[tableName].UserTable, *readResult2, {
             {3, 3, 3, 300},
             {5, 5, 5, 500},
         });
@@ -3508,7 +3671,7 @@ Y_UNIT_TEST_SUITE(DataShardReadIterator) {
         UNIT_ASSERT_VALUES_EQUAL(lock.GetLockId(), brokenLock.GetLockId());
         UNIT_ASSERT(lock.GetCounter() < brokenLock.GetCounter());
 
-        helper.CheckLockBroken("table-1", 10, {11, 11, 11}, lockTxId, *readResult1);
+        helper.CheckLockBroken(tableName, 10, {11, 11, 11}, lockTxId, *readResult1);
     }
 
     Y_UNIT_TEST(HandlePersistentSnapshotGoneInContinue) {
@@ -3595,7 +3758,7 @@ Y_UNIT_TEST_SUITE(DataShardReadIteratorSysTables) {
             true
         );
 
-        request->Record.SetResultFormat(NKikimrTxDataShard::ARROW);
+        request->Record.SetResultFormat(NKikimrDataEvents::FORMAT_ARROW);
 
         auto readResult = helper.SendRead("table-1", request.release());
         const auto& record = readResult->Record;
@@ -3683,13 +3846,12 @@ Y_UNIT_TEST_SUITE(DataShardReadIteratorPageFaults) {
                 .Columns({
                     {"key", "Uint32", true, false},
                     {"value", "Uint32", false, false}});
-        CreateShardedTable(server, sender, "/Root", "table-1", opts);
+        auto [shards, tableId1] = CreateShardedTable(server, sender, "/Root", "table-1", opts);
 
         ExecSQL(server, sender, Q_("UPSERT INTO `/Root/table-1` (key, value) VALUES (1, 1), (2, 2), (3, 3), (4, 4), (5, 5), (6, 6)"));
         SimulateSleep(runtime, TDuration::Seconds(1));
 
-        const auto shard1 = GetTableShards(server, sender, "/Root/table-1").at(0);
-        const auto tableId1 = ResolveTableId(server, sender, "/Root/table-1");
+        const auto shard1 = shards.at(0);
         CompactTable(runtime, shard1, tableId1, false);
         RebootTablet(runtime, shard1, sender);
         SimulateSleep(runtime, TDuration::Seconds(1));

@@ -6,7 +6,7 @@
 
 #include <ydb/core/base/events.h>
 
-#include <library/cpp/grpc/client/grpc_client_low.h>
+#include <ydb/library/grpc/client/grpc_client_low.h>
 
 #include <ydb/public/sdk/cpp/client/ydb_driver/driver.h>
 
@@ -60,7 +60,7 @@ namespace NKikimr::NHttpProxy {
 
         struct TEvUpdateDatabasesEvent : public TEventLocal<TEvUpdateDatabasesEvent, EvUpdateDatabasesEvent> {
             std::vector<TDatabase> Databases;
-            std::unique_ptr<NGrpc::TGrpcStatus> Status;
+            std::unique_ptr<NYdbGrpc::TGrpcStatus> Status;
         };
 
         struct TEvDiscoverDatabaseEndpointResult : public TEventLocal<TEvDiscoverDatabaseEndpointResult, EvDiscoverDatabaseEndpointResult> {
@@ -84,7 +84,7 @@ namespace NKikimr::NHttpProxy {
 
         struct TEvListEndpointsResponse : public TEventLocal<TEvListEndpointsResponse, EvListEndpointsResponse> {
              std::unique_ptr<Ydb::Discovery::ListEndpointsResponse> Record;
-             std::shared_ptr<NGrpc::TGrpcStatus> Status;
+             std::shared_ptr<NYdbGrpc::TGrpcStatus> Status;
         };
 
         struct TEvCounter : public TEventLocal<TEvCounter, EvCounter> {

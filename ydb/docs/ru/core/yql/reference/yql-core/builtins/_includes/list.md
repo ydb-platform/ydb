@@ -857,3 +857,38 @@ SELECT ToSet($l);  -- {1,2,3}
 ToSet(List<T>)->Set<T>
 ToSet(List<T>?)->Set<T>?
 ```
+
+## ListFromTuple
+Строит список из кортежа, в котором типы элементов совместимы друг с другом. Для опционального кортежа на выходе получается опциональный список. Для NULL аргумента - NULL. Для пустого кортежа - EmptyList.
+
+**Примеры**
+```yql
+$t = (1,2,3);
+SELECT ListFromTuple($t);  -- [1,2,3]
+```
+
+**Сигнатура**
+```
+ListFromTuple(Null)->Null
+ListFromTuple(Tuple<>)->EmptyList
+ListFromTuple(Tuple<T1,T2,...>)->List<T>
+ListFromTuple(Tuple<T1,T2,...>?)->List<T>?
+```
+
+## ListToTuple
+Строит кортеж из списка и явно указанной ширины кортежа. Все элементы кортежа будут иметь тот же тип, что и тип элемента списка. Если длина списка не соотвествует указанной ширине кортежа, будет возвращена ошибка. Для опционального списка на выходе получается опциональный кортеж. Для NULL аргумента - NULL.
+
+**Примеры**
+```yql
+$l = [1,2,3];
+SELECT ListToTuple($l, 3);  -- (1,2,3)
+```
+
+**Сигнатура**
+```
+ListToTuple(Null,N)->Null
+ListToTuple(EmptyList,N)->()) -- N должен быть 0
+ListToTuple(List<T>, N)->Tuple<T,T,...T> -- ширина кортежа N
+ListToTuple(List<T>?, N)->Tuple<T,T,...T>? -- ширина кортежа N
+```
+

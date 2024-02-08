@@ -1,16 +1,18 @@
 #pragma once
 
-#include <library/cpp/actors/core/actor.h>
+#include <ydb/library/actors/core/actor.h>
 #include <queue>
 
 namespace NKikimr::NSchemeShard {
 
-struct TSVPMigrationInfo {
+struct TMigrationInfo {
     TString WorkingDir;
     TString DbName;
+    bool CreateSVP = false;
+    bool CreateSA = false;
 };
 
-THolder<NActors::IActor> CreateSVPMigrator(ui64 ssTabletId, NActors::TActorId ssActorId,
-    std::queue<TSVPMigrationInfo>&& migrations);
+THolder<NActors::IActor> CreateTabletMigrator(ui64 ssTabletId, NActors::TActorId ssActorId,
+    std::queue<TMigrationInfo>&& migrations);
 
 } // namespace NKikimr::NSchemeShard

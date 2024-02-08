@@ -25,24 +25,25 @@ namespace Model
   /**
    * <p>Container for the transition rule that describes when noncurrent objects
    * transition to the <code>STANDARD_IA</code>, <code>ONEZONE_IA</code>,
-   * <code>INTELLIGENT_TIERING</code>, <code>GLACIER</code>, or
-   * <code>DEEP_ARCHIVE</code> storage class. If your bucket is versioning-enabled
+   * <code>INTELLIGENT_TIERING</code>, <code>GLACIER_IR</code>, <code>GLACIER</code>,
+   * or <code>DEEP_ARCHIVE</code> storage class. If your bucket is versioning-enabled
    * (or versioning is suspended), you can set this action to request that Amazon S3
    * transition noncurrent object versions to the <code>STANDARD_IA</code>,
-   * <code>ONEZONE_IA</code>, <code>INTELLIGENT_TIERING</code>, <code>GLACIER</code>,
-   * or <code>DEEP_ARCHIVE</code> storage class at a specific period in the object's
-   * lifetime.</p><p><h3>See Also:</h3>   <a
+   * <code>ONEZONE_IA</code>, <code>INTELLIGENT_TIERING</code>,
+   * <code>GLACIER_IR</code>, <code>GLACIER</code>, or <code>DEEP_ARCHIVE</code>
+   * storage class at a specific period in the object's lifetime.</p><p><h3>See
+   * Also:</h3>   <a
    * href="http://docs.aws.amazon.com/goto/WebAPI/s3-2006-03-01/NoncurrentVersionTransition">AWS
    * API Reference</a></p>
    */
-  class AWS_S3_API NoncurrentVersionTransition
+  class NoncurrentVersionTransition
   {
   public:
-    NoncurrentVersionTransition();
-    NoncurrentVersionTransition(const Aws::Utils::Xml::XmlNode& xmlNode);
-    NoncurrentVersionTransition& operator=(const Aws::Utils::Xml::XmlNode& xmlNode);
+    AWS_S3_API NoncurrentVersionTransition();
+    AWS_S3_API NoncurrentVersionTransition(const Aws::Utils::Xml::XmlNode& xmlNode);
+    AWS_S3_API NoncurrentVersionTransition& operator=(const Aws::Utils::Xml::XmlNode& xmlNode);
 
-    void AddToNode(Aws::Utils::Xml::XmlNode& parentNode) const;
+    AWS_S3_API void AddToNode(Aws::Utils::Xml::XmlNode& parentNode) const;
 
 
     /**
@@ -116,13 +117,53 @@ namespace Model
      */
     inline NoncurrentVersionTransition& WithStorageClass(TransitionStorageClass&& value) { SetStorageClass(std::move(value)); return *this;}
 
+
+    /**
+     * <p>Specifies how many noncurrent versions Amazon S3 will retain. If there are
+     * this many more recent noncurrent versions, Amazon S3 will take the associated
+     * action. For more information about noncurrent versions, see <a
+     * href="https://docs.aws.amazon.com/AmazonS3/latest/userguide/intro-lifecycle-rules.html">Lifecycle
+     * configuration elements</a> in the <i>Amazon S3 User Guide</i>.</p>
+     */
+    inline int GetNewerNoncurrentVersions() const{ return m_newerNoncurrentVersions; }
+
+    /**
+     * <p>Specifies how many noncurrent versions Amazon S3 will retain. If there are
+     * this many more recent noncurrent versions, Amazon S3 will take the associated
+     * action. For more information about noncurrent versions, see <a
+     * href="https://docs.aws.amazon.com/AmazonS3/latest/userguide/intro-lifecycle-rules.html">Lifecycle
+     * configuration elements</a> in the <i>Amazon S3 User Guide</i>.</p>
+     */
+    inline bool NewerNoncurrentVersionsHasBeenSet() const { return m_newerNoncurrentVersionsHasBeenSet; }
+
+    /**
+     * <p>Specifies how many noncurrent versions Amazon S3 will retain. If there are
+     * this many more recent noncurrent versions, Amazon S3 will take the associated
+     * action. For more information about noncurrent versions, see <a
+     * href="https://docs.aws.amazon.com/AmazonS3/latest/userguide/intro-lifecycle-rules.html">Lifecycle
+     * configuration elements</a> in the <i>Amazon S3 User Guide</i>.</p>
+     */
+    inline void SetNewerNoncurrentVersions(int value) { m_newerNoncurrentVersionsHasBeenSet = true; m_newerNoncurrentVersions = value; }
+
+    /**
+     * <p>Specifies how many noncurrent versions Amazon S3 will retain. If there are
+     * this many more recent noncurrent versions, Amazon S3 will take the associated
+     * action. For more information about noncurrent versions, see <a
+     * href="https://docs.aws.amazon.com/AmazonS3/latest/userguide/intro-lifecycle-rules.html">Lifecycle
+     * configuration elements</a> in the <i>Amazon S3 User Guide</i>.</p>
+     */
+    inline NoncurrentVersionTransition& WithNewerNoncurrentVersions(int value) { SetNewerNoncurrentVersions(value); return *this;}
+
   private:
 
     int m_noncurrentDays;
-    bool m_noncurrentDaysHasBeenSet;
+    bool m_noncurrentDaysHasBeenSet = false;
 
     TransitionStorageClass m_storageClass;
-    bool m_storageClassHasBeenSet;
+    bool m_storageClassHasBeenSet = false;
+
+    int m_newerNoncurrentVersions;
+    bool m_newerNoncurrentVersionsHasBeenSet = false;
   };
 
 } // namespace Model

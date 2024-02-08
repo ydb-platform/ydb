@@ -14,7 +14,7 @@ target_compile_options(libs-control_plane_storage-internal PRIVATE
 target_link_libraries(libs-control_plane_storage-internal PUBLIC
   contrib-libs-cxxsupp
   yutil
-  cpp-actors-core
+  library-actors-core
   cpp-lwtrace-mon
   monlib-service-pages
   ydb-core-base

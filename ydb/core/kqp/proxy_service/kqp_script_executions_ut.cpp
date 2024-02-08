@@ -1,14 +1,14 @@
 #include "kqp_script_executions.h"
 #include "kqp_script_executions_impl.h"
-#include "kqp_table_creator.h"
 
 #include <ydb/core/testlib/test_client.h>
 #include <ydb/core/testlib/basics/appdata.h>
+#include <ydb/library/table_creator/table_creator.h>
 #include <ydb/services/ydb/ydb_common_ut.h>
 #include <ydb/public/sdk/cpp/client/ydb_driver/driver.h>
 #include <ydb/public/sdk/cpp/client/ydb_table/table.h>
 
-#include <library/cpp/actors/interconnect/interconnect_impl.h>
+#include <ydb/library/actors/interconnect/interconnect_impl.h>
 
 namespace NKikimr::NKqp {
 
@@ -153,13 +153,14 @@ struct TScriptExecutionsYdbSetup {
                              TMaybe<NKikimrSchemeOp::TTTLSettings> ttlSettings = Nothing()) {
         const ui32 node = 0;
         TActorId edgeActor = GetRuntime()->AllocateEdgeActor(node);
-        GetRuntime()->Register(CreateTableCreator(std::move(pathComponents), std::move(columns), std::move(keyColumns), std::move(ttlSettings)), 0, 0, TMailboxType::Simple, 0, edgeActor);
+        GetRuntime()->Register(CreateTableCreator(std::move(pathComponents), std::move(columns), std::move(keyColumns),
+            NKikimrServices::KQP_PROXY, std::move(ttlSettings)), 0, 0, TMailboxType::Simple, 0, edgeActor);
         return edgeActor;
     }
 
     void WaitTableCreation(TVector<TActorId> edgeActors) {
         for (const auto& actor: edgeActors) {
-            GetRuntime()->GrabEdgeEvent<NPrivate::TEvPrivate::TEvCreateTableResponse>(actor);
+            GetRuntime()->GrabEdgeEvent<TEvTableCreator::TEvCreateTableResponse>(actor);
         }
     }
 
@@ -189,7 +190,7 @@ struct TScriptExecutionsYdbSetup {
     NPrivate::TEvPrivate::TEvLeaseCheckResult::TPtr CheckLeaseStatus(const TString& executionId) {
         const ui32 node = 0;
         TActorId edgeActor = GetRuntime()->AllocateEdgeActor(node);
-        GetRuntime()->Register(NPrivate::CreateCheckLeaseStatusActor(TestDatabase, executionId), 0, 0, TMailboxType::Simple, 0, edgeActor);
+        GetRuntime()->Register(NPrivate::CreateCheckLeaseStatusActor(edgeActor, TestDatabase, executionId));
 
         auto reply = GetRuntime()->GrabEdgeEvent<NPrivate::TEvPrivate::TEvLeaseCheckResult>(edgeActor);
         UNIT_ASSERT(reply->Get()->Status == Ydb::StatusIds::SUCCESS);

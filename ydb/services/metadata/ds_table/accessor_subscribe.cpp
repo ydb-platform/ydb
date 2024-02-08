@@ -1,5 +1,5 @@
 #include "accessor_subscribe.h"
-#include <library/cpp/actors/core/log.h>
+#include <ydb/library/actors/core/log.h>
 
 namespace NKikimr::NMetadata::NProvider {
 
@@ -56,7 +56,7 @@ void TDSAccessorNotifier::OnSnapshotRefresh() {
 
 void TDSAccessorNotifier::OnBootstrap() {
     TBase::OnBootstrap();
-    Become(&TDSAccessorNotifier::StateMain);
+    UnsafeBecome(&TDSAccessorNotifier::StateMain);
 }
 
 }

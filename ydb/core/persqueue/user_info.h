@@ -6,6 +6,7 @@
 #include "quota_tracker.h"
 #include "account_read_quoter.h"
 #include "metering_sink.h"
+#include "dread_cache_service/caching_service.h"
 
 #include <ydb/core/base/counters.h>
 #include <ydb/core/protos/counters_pq.pb.h>
@@ -47,6 +48,9 @@ struct TUserInfoBase {
 
     bool Important = false;
     TInstant ReadFromTimestamp;
+
+    ui64 PartitionSessionId = 0;
+    TActorId PipeClient;
 };
 
 struct TUserInfo: public TUserInfoBase {
@@ -88,6 +92,8 @@ struct TUserInfo: public TUserInfoBase {
 
     std::shared_ptr<TPercentileCounter> ReadTimeLag;
     bool NoConsumer = false;
+
+    bool DoInternalRead = false;
     bool MeterRead = true;
 
     bool Parsed = false;
@@ -163,11 +169,12 @@ struct TUserInfo: public TUserInfoBase {
         NMonitoring::TDynamicCounterPtr streamCountersSubgroup,
         const TString& user,
         const ui64 readRuleGeneration, const bool important, const NPersQueue::TTopicConverterPtr& topicConverter,
-        const ui32 partition, const TString &session, ui32 gen, ui32 step, i64 offset,
+        const ui32 partition, const TString& session, ui64 partitionSession, ui32 gen, ui32 step, i64 offset,
         const ui64 readOffsetRewindSum, const TString& dcId, TInstant readFromTimestamp,
-        const TString& dbPath, bool meterRead
+        const TString& dbPath, bool meterRead, const TActorId& pipeClient
     )
-        : TUserInfoBase{user, readRuleGeneration, session, gen, step, offset, important, readFromTimestamp}
+        : TUserInfoBase{user, readRuleGeneration, session, gen, step, offset, important,
+                        readFromTimestamp, partitionSession, pipeClient}
         , WriteTimestamp(TAppData::TimeProvider->Now())
         , CreateTimestamp(TAppData::TimeProvider->Now())
         , ReadTimestamp(TAppData::TimeProvider->Now())
@@ -385,8 +392,9 @@ public:
     TUserInfoBase CreateUserInfo(const TString& user,
                              TMaybe<ui64> readRuleGeneration = {}) const;
     TUserInfo& Create(
-        const TActorContext& ctx, const TString& user, const ui64 readRuleGeneration, bool important, const TString &session,
-        ui32 gen, ui32 step, i64 offset, ui64 readOffsetRewindSum, TInstant readFromTimestamp
+        const TActorContext& ctx, const TString& user, const ui64 readRuleGeneration, bool important, const TString& session,
+        ui64 partitionSessionId, ui32 gen, ui32 step, i64 offset, ui64 readOffsetRewindSum,
+        TInstant readFromTimestamp, const TActorId& pipeClient
     );
 
     void Clear(const TActorContext& ctx);
@@ -400,8 +408,9 @@ private:
                              const ui64 readRuleGeneration,
                              bool important,
                              const TString& session,
+                             ui64 partitionSessionId,
                              ui32 gen, ui32 step, i64 offset, ui64 readOffsetRewindSum,
-                             TInstant readFromTimestamp) const;
+                             TInstant readFromTimestamp, const TActorId& pipeClient) const;
 
 private:
     THashMap<TString, TUserInfo> UsersInfo;

@@ -2,6 +2,7 @@
 
 # Copyright (c) IPython Development Team.
 # Distributed under the terms of the Modified BSD License.
+from __future__ import annotations
 
 import copy
 import os
@@ -123,9 +124,8 @@ class TestFileCL(TestCase):
         with JSONFileConfigLoader(fname, log=log) as config:
             config.A.b = 1
 
-        with self.assertRaises(TypeError):
-            with JSONFileConfigLoader(fname, log=log) as config:
-                config.A.cant_json = lambda x: x
+        with self.assertRaises(TypeError), JSONFileConfigLoader(fname, log=log) as config:
+            config.A.cant_json = lambda x: x
 
         loader = JSONFileConfigLoader(fname, log=log)
         cfg = loader.load_config()
@@ -629,7 +629,7 @@ class TestConfig(TestCase):
         """
         With multiple config files (systemwide and users), we want compounding.
 
-        If systemwide overwirte and user append, we want both in the right
+        If systemwide overwrite and user append, we want both in the right
         order.
         """
         c1 = Config()
@@ -702,7 +702,7 @@ class TestConfig(TestCase):
         """
         With multiple config files (systemwide and users), we want compounding.
 
-        dict update shoudl be in the right order.
+        dict update should be in the right order.
         """
         c1 = Config()
         c2 = Config()
@@ -720,7 +720,7 @@ class TestConfig(TestCase):
         """
         With multiple config files (systemwide and users), we want compounding.
 
-        Later dict overwrite lazyness
+        Later dict overwrite laziness
         """
         c1 = Config()
         c2 = Config()
@@ -738,7 +738,7 @@ class TestConfig(TestCase):
         """
         With multiple config files (systemwide and users), we want compounding.
 
-        Later dict overwrite lazyness
+        Later dict overwrite laziness
         """
         c1 = Config()
         c2 = Config()

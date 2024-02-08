@@ -26,7 +26,7 @@ target_link_libraries(minikql-comp_nodes-no_llvm PUBLIC
   public-udf-arrow
   parser-pg_wrapper-interface
   library-yql-utils
-  cpp-actors-core
+  library-actors-core
   minikql-invoke_builtins-no_llvm
 )
 target_sources(minikql-comp_nodes-no_llvm PRIVATE

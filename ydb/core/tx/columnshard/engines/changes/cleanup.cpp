@@ -17,7 +17,6 @@ void TCleanupColumnEngineChanges::DoDebugString(TStringOutput& out) const {
 
 void TCleanupColumnEngineChanges::DoWriteIndex(NColumnShard::TColumnShard& self, TWriteIndexContext& context) {
     self.IncCounter(NColumnShard::COUNTER_PORTIONS_ERASED, PortionsToDrop.size());
-    THashSet<TUnifiedBlobId> blobIds;
     THashSet<ui64> pathIds;
     for (auto&& p : PortionsToDrop) {
         auto removing = BlobsAction.GetRemoving(p);
@@ -33,15 +32,12 @@ void TCleanupColumnEngineChanges::DoWriteIndex(NColumnShard::TColumnShard& self,
 }
 
 bool TCleanupColumnEngineChanges::DoApplyChanges(TColumnEngineForLogs& self, TApplyChangesContext& context) {
-    THashSet<TUnifiedBlobId> blobIds;
     for (auto& portionInfo : PortionsToDrop) {
         if (!self.ErasePortion(portionInfo)) {
             AFL_WARN(NKikimrServices::TX_COLUMNSHARD)("event", "Cannot erase portion")("portion", portionInfo.DebugString());
             continue;
         }
-        for (auto& record : portionInfo.Records) {
-            self.ColumnsTable->Erase(context.DB, portionInfo, record);
-        }
+        portionInfo.RemoveFromDatabase(context.DB);
     }
 
     return true;

@@ -46,8 +46,9 @@ struct TPDiskMockState::TImpl {
     NPDisk::TStatusFlags StatusFlags;
     THashSet<ui32> ReadOnlyVDisks;
     TString StateErrorReason;
+    NPDisk::EDeviceType DeviceType;
 
-    TImpl(ui32 nodeId, ui32 pdiskId, ui64 pdiskGuid, ui64 size, ui32 chunkSize)
+    TImpl(ui32 nodeId, ui32 pdiskId, ui64 pdiskGuid, ui64 size, ui32 chunkSize, NPDisk::EDeviceType deviceType)
         : NodeId(nodeId)
         , PDiskId(pdiskId)
         , PDiskGuid(pdiskGuid)
@@ -57,6 +58,7 @@ struct TPDiskMockState::TImpl {
         , AppendBlockSize(4096)
         , NextFreeChunk(1)
         , StatusFlags(NPDisk::TStatusFlags{})
+        , DeviceType(deviceType)
     {}
 
     TImpl(const TImpl&) = default;
@@ -207,6 +209,11 @@ struct TPDiskMockState::TImpl {
         }
     }
 
+    bool HasCorruptedArea(ui32 chunkIdx, ui32 begin, ui32 end) {
+        const ui64 chunkBegin = ui64(chunkIdx) * ChunkSize;
+        return static_cast<bool>(Corrupted & TIntervalSet{chunkBegin + begin, chunkBegin + end});
+    }
+
     std::set<ui32> GetChunks() {
         std::set<ui32> res;
         for (auto& [ownerId, owner] : Owners) {
@@ -275,8 +282,9 @@ struct TPDiskMockState::TImpl {
     }
 };
 
-TPDiskMockState::TPDiskMockState(ui32 nodeId, ui32 pdiskId, ui64 pdiskGuid, ui64 size, ui32 chunkSize)
-    : TPDiskMockState(std::make_unique<TImpl>(nodeId, pdiskId, pdiskGuid, size, chunkSize))
+TPDiskMockState::TPDiskMockState(ui32 nodeId, ui32 pdiskId, ui64 pdiskGuid, ui64 size, ui32 chunkSize,
+        NPDisk::EDeviceType deviceType)
+    : TPDiskMockState(std::make_unique<TImpl>(nodeId, pdiskId, pdiskGuid, size, chunkSize, deviceType))
 {}
 
 TPDiskMockState::TPDiskMockState(std::unique_ptr<TImpl>&& impl)
@@ -288,6 +296,10 @@ TPDiskMockState::~TPDiskMockState()
 
 void TPDiskMockState::SetCorruptedArea(ui32 chunkIdx, ui32 begin, ui32 end, bool enabled) {
     Impl->SetCorruptedArea(chunkIdx, begin, end, enabled);
+}
+
+bool TPDiskMockState::HasCorruptedArea(ui32 chunkIdx, ui32 begin, ui32 end) {
+    return Impl->HasCorruptedArea(chunkIdx, begin, end);
 }
 
 std::set<ui32> TPDiskMockState::GetChunks() {
@@ -406,9 +418,10 @@ public:
 
             // fill in the response
             TVector<TChunkIdx> ownedChunks(owner->CommittedChunks.begin(), owner->CommittedChunks.end());
-            const ui64 seekTimeUs = 100;
-            const ui64 readSpeedBps = 100 * 1000 * 1000;
-            const ui64 writeSpeedBps = 100 * 1000 * 1000;
+            const auto& performanceParams = NPDisk::DevicePerformance.at(Impl.DeviceType);
+            const ui64 seekTimeUs = (performanceParams.SeekTimeNs + 1000) / 1000 - 1;
+            const ui64 readSpeedBps = performanceParams.FirstSectorReadBytesPerSec;
+            const ui64 writeSpeedBps = performanceParams.FirstSectorWriteBytesPerSec;
             const ui64 readBlockSize = 65536;
             const ui64 writeBlockSize = 65536;
             const ui64 bulkWriteBlockSize = 65536;
@@ -482,7 +495,7 @@ public:
         if (LogQ.empty()) {
             TActivationContext::Send(new IEventHandle(EvResume, 0, SelfId(), TActorId(), nullptr, 0));
         }
-        for (auto& msg : ev->Get()->Logs) {
+        for (auto& [msg, _] : ev->Get()->Logs) {
             Y_ABORT_UNLESS(!Impl.CheckIsReadOnlyOwner(msg.Get()));
             LogQ.emplace_back(ev->Sender, std::move(msg));
         }
@@ -824,14 +837,6 @@ public:
         Send(ev->Sender, res.release());
     }
 
-    void Handle(TEvBlobStorage::TEvAskWardenRestartPDiskResult::TPtr &ev) {
-        bool restartAllowed = ev->Get()->RestartAllowed;
-
-        if (restartAllowed) {    
-            Send(ev->Sender, new TEvBlobStorage::TEvNotifyWardenPDiskRestarted(Impl.PDiskId));
-        }
-    }
-
     void Handle(NPDisk::TEvConfigureScheduler::TPtr ev) {
         auto *msg = ev->Get();
         auto res = std::make_unique<NPDisk::TEvConfigureSchedulerResult>(NKikimrProto::OK, TString());
@@ -861,7 +866,7 @@ public:
     void ErrorHandle(NPDisk::TEvMultiLog::TPtr &ev) {
         const NPDisk::TEvMultiLog &evMultiLog = *ev->Get();
         THolder<NPDisk::TEvLogResult> result(new NPDisk::TEvLogResult(NKikimrProto::CORRUPTED, 0, State->GetStateErrorReason()));
-        for (auto &log : evMultiLog.Logs) {
+        for (auto &[log, _] : evMultiLog.Logs) {
             result->Results.push_back(NPDisk::TEvLogResult::TRecord(log->Lsn, log->Cookie));
         }
         Send(ev->Sender, result.Release());
@@ -939,7 +944,6 @@ public:
         hFunc(NPDisk::TEvSlay, Handle);
         hFunc(NPDisk::TEvHarakiri, Handle);
         hFunc(NPDisk::TEvConfigureScheduler, Handle);
-        hFunc(TEvBlobStorage::TEvAskWardenRestartPDiskResult, Handle);
         cFunc(TEvents::TSystem::Wakeup, ReportMetrics);
 
         cFunc(EvBecomeError, HandleMoveToErrorState);

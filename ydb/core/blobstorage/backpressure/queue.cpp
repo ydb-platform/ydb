@@ -203,9 +203,9 @@ void TBlobStorageQueue::SendToVDisk(const TActorContext& ctx, const TActorId& re
         ++*QueueItemsSent;
 
         // send item
-        item.Span.Event("SendToVDisk", {{
+        item.Span && item.Span.Event("SendToVDisk", {
             {"VDiskOrderNumber", vdiskOrderNumber}
-        }});
+        });
         item.Event.SendToVDisk(ctx, remoteVDisk, item.QueueCookie, item.MsgId, item.SequenceId, sendMeCostSettings,
             item.Span.GetTraceId(), ClientId, item.ProcessingTimer);
 

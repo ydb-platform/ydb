@@ -236,10 +236,10 @@ struct TTestSchema {
         }
 
         if (specials.HasCodec()) {
-            schema->MutableDefaultCompression()->SetCompressionCodec(specials.GetCodecId());
+            schema->MutableDefaultCompression()->SetCodec(specials.GetCodecId());
         }
         if (specials.CompressionLevel) {
-            schema->MutableDefaultCompression()->SetCompressionLevel(*specials.CompressionLevel);
+            schema->MutableDefaultCompression()->SetLevel(*specials.CompressionLevel);
         }
     }
 
@@ -533,29 +533,6 @@ namespace NKikimr::NColumnShard {
         std::vector<std::pair<TString, NScheme::TTypeInfo>> Schema = NTxUT::TTestSchema::YdbSchema();
         std::vector<std::pair<TString, NScheme::TTypeInfo>> Pk = NTxUT::TTestSchema::YdbPkSchema();
         bool InStore = true;
-    };
-
-    class TArrowDataConstructor : public NKikimr::NEvents::IDataConstructor {
-        std::vector<std::pair<TString, NScheme::TTypeInfo>> YdbSchema;
-        ui64 Index;
-
-    public:
-        TArrowDataConstructor(const std::vector<std::pair<TString, NScheme::TTypeInfo>>& ydbSchema, const ui64 idx)
-            : YdbSchema(ydbSchema)
-            , Index(idx)
-        {
-        }
-
-        void Serialize(NKikimrDataEvents::TOperationData& proto) const override {
-            for (ui32 i = 0; i < YdbSchema.size(); ++i) {
-                proto.AddColumnIds(i + 1);
-            }
-            proto.MutableArrowData()->SetPayloadIndex(Index);
-        }
-
-        ui64 GetSchemaVersion() const override {
-            return 1;
-        }
     };
 
     void SetupSchema(TTestBasicRuntime& runtime, TActorId& sender, ui64 pathId,

@@ -4,7 +4,7 @@ This section provides information on deploying and configuring multi-node YDB cl
 
 * [{#T}](../../cluster/system-requirements.md).
 * [{#T}](../../cluster/topology.md).
-* [Deployment in Kubernetes](../orchestrated/concepts.md).
+* [Deployment in Kubernetes](../../getting_started/kubernetes.md).
 * [Deployment on virtual and physical servers](../manual/deploy-ydb-on-premises.md).
 * [Configuration](../configuration/config.md).
 * [BlobStorage production configurations](../../administration/production-storage-config.md).

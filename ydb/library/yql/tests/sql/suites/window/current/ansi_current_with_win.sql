@@ -13,4 +13,4 @@ WINDOW w AS (
     PARTITION BY value
     ORDER BY key
 )
-ORDER BY value, key;
+ORDER BY value, key, subkey;

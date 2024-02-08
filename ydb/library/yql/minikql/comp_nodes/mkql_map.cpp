@@ -1,6 +1,6 @@
 #include "mkql_map.h"
 #include <ydb/library/yql/minikql/computation/mkql_computation_node_holders.h>
-#include <ydb/library/yql/minikql/computation/mkql_computation_node_codegen.h>
+#include <ydb/library/yql/minikql/computation/mkql_computation_node_codegen.h>  // Y_IGNORE
 #include <ydb/library/yql/minikql/mkql_node_cast.h>
 
 namespace NKikimr {
@@ -304,12 +304,12 @@ public:
         if (auto elements = list.GetElements()) {
             auto size = list.GetListLength();
             NUdf::TUnboxedValue* items = nullptr;
-            const auto result = ctx.HolderFactory.CreateDirectArrayHolder(size, items);
+            NUdf::TUnboxedValue result = ctx.HolderFactory.CreateDirectArrayHolder(size, items);
             while (size--) {
                 Item->SetValue(ctx, NUdf::TUnboxedValue(*elements++));
                 *items++ = NewItem->GetValue(ctx);
             }
-            return result;
+            return result.Release();
         }
 
         return ctx.HolderFactory.Create<TListValue>(ctx, std::move(list), Item, NewItem);

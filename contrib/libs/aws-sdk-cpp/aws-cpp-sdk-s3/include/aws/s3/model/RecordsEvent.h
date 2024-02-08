@@ -19,11 +19,11 @@ namespace Model
    * href="http://docs.aws.amazon.com/goto/WebAPI/s3-2006-03-01/RecordsEvent">AWS API
    * Reference</a></p>
    */
-  class AWS_S3_API RecordsEvent
+  class RecordsEvent
   {
   public:
-    RecordsEvent() = default;
-    RecordsEvent(Aws::Vector<unsigned char>&& value) { m_payload = std::move(value); }
+    AWS_S3_API RecordsEvent() = default;
+    AWS_S3_API RecordsEvent(Aws::Vector<unsigned char>&& value) { m_payload = std::move(value); }
 
     /**
      * <p>The byte array of partial, one or more result records.</p>
@@ -58,7 +58,7 @@ namespace Model
   private:
 
     Aws::Vector<unsigned char> m_payload;
-    bool m_payloadHasBeenSet;
+    bool m_payloadHasBeenSet = false;
   };
 
 } // namespace Model

@@ -33,9 +33,9 @@ namespace NWriter {
             Blocks.resize(Groups.size() + 1);
             for (size_t group : xrange(Groups.size())) {
                 Blocks[group].Reset(
-                    new TBlocks(this, Groups[group].Channel, Groups[group].Cache, Groups[group].MaxBlobSize));
+                    new TBlocks(this, Groups[group].Channel, Groups[group].Cache, Groups[group].MaxBlobSize, conf.StickyFlatIndex));
             }
-            Blocks[Groups.size()].Reset(new TBlocks(this, conf.OuterChannel, none, Groups[0].MaxBlobSize));
+            Blocks[Groups.size()].Reset(new TBlocks(this, conf.OuterChannel, none, Groups[0].MaxBlobSize, conf.StickyFlatIndex));
 
             Growth = new NTable::TScreen::TCook;
         }
@@ -129,7 +129,7 @@ namespace NWriter {
 
             size_t offset = 0;
             size_t left = body.size();
-            for (auto blobId : largeGlobId.Blobs()) {
+            for (const auto& blobId : largeGlobId.Blobs()) {
                 const NPageCollection::TGlobId glob(blobId, largeGlobId.Group);
                 const auto chunk = glob.Bytes();
                 const auto slice = body.Slice(offset, chunk);

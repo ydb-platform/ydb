@@ -31,14 +31,14 @@ namespace Model
    * href="http://docs.aws.amazon.com/goto/WebAPI/s3-2006-03-01/LifecycleRuleFilter">AWS
    * API Reference</a></p>
    */
-  class AWS_S3_API LifecycleRuleFilter
+  class LifecycleRuleFilter
   {
   public:
-    LifecycleRuleFilter();
-    LifecycleRuleFilter(const Aws::Utils::Xml::XmlNode& xmlNode);
-    LifecycleRuleFilter& operator=(const Aws::Utils::Xml::XmlNode& xmlNode);
+    AWS_S3_API LifecycleRuleFilter();
+    AWS_S3_API LifecycleRuleFilter(const Aws::Utils::Xml::XmlNode& xmlNode);
+    AWS_S3_API LifecycleRuleFilter& operator=(const Aws::Utils::Xml::XmlNode& xmlNode);
 
-    void AddToNode(Aws::Utils::Xml::XmlNode& parentNode) const;
+    AWS_S3_API void AddToNode(Aws::Utils::Xml::XmlNode& parentNode) const;
 
 
     /**
@@ -159,6 +159,48 @@ namespace Model
     inline LifecycleRuleFilter& WithTag(Tag&& value) { SetTag(std::move(value)); return *this;}
 
 
+    /**
+     * <p>Minimum object size to which the rule applies.</p>
+     */
+    inline long long GetObjectSizeGreaterThan() const{ return m_objectSizeGreaterThan; }
+
+    /**
+     * <p>Minimum object size to which the rule applies.</p>
+     */
+    inline bool ObjectSizeGreaterThanHasBeenSet() const { return m_objectSizeGreaterThanHasBeenSet; }
+
+    /**
+     * <p>Minimum object size to which the rule applies.</p>
+     */
+    inline void SetObjectSizeGreaterThan(long long value) { m_objectSizeGreaterThanHasBeenSet = true; m_objectSizeGreaterThan = value; }
+
+    /**
+     * <p>Minimum object size to which the rule applies.</p>
+     */
+    inline LifecycleRuleFilter& WithObjectSizeGreaterThan(long long value) { SetObjectSizeGreaterThan(value); return *this;}
+
+
+    /**
+     * <p>Maximum object size to which the rule applies.</p>
+     */
+    inline long long GetObjectSizeLessThan() const{ return m_objectSizeLessThan; }
+
+    /**
+     * <p>Maximum object size to which the rule applies.</p>
+     */
+    inline bool ObjectSizeLessThanHasBeenSet() const { return m_objectSizeLessThanHasBeenSet; }
+
+    /**
+     * <p>Maximum object size to which the rule applies.</p>
+     */
+    inline void SetObjectSizeLessThan(long long value) { m_objectSizeLessThanHasBeenSet = true; m_objectSizeLessThan = value; }
+
+    /**
+     * <p>Maximum object size to which the rule applies.</p>
+     */
+    inline LifecycleRuleFilter& WithObjectSizeLessThan(long long value) { SetObjectSizeLessThan(value); return *this;}
+
+
     
     inline const LifecycleRuleAndOperator& GetAnd() const{ return m_and; }
 
@@ -180,13 +222,19 @@ namespace Model
   private:
 
     Aws::String m_prefix;
-    bool m_prefixHasBeenSet;
+    bool m_prefixHasBeenSet = false;
 
     Tag m_tag;
-    bool m_tagHasBeenSet;
+    bool m_tagHasBeenSet = false;
+
+    long long m_objectSizeGreaterThan;
+    bool m_objectSizeGreaterThanHasBeenSet = false;
+
+    long long m_objectSizeLessThan;
+    bool m_objectSizeLessThanHasBeenSet = false;
 
     LifecycleRuleAndOperator m_and;
-    bool m_andHasBeenSet;
+    bool m_andHasBeenSet = false;
   };
 
 } // namespace Model

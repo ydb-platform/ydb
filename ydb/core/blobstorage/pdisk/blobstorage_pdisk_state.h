@@ -60,7 +60,7 @@ struct TOwnerData {
     struct TLogEndPosition {
         ui32 ChunkIdx;
         ui32 SectorIdx;
-        
+
         explicit TLogEndPosition(ui32 chunkIdx, ui32 sectorIdx) : ChunkIdx(chunkIdx), SectorIdx(sectorIdx) {}
     };
     TMap<TLogSignature, NPDisk::TLogRecord> StartingPoints;
@@ -196,6 +196,7 @@ struct TOwnerData {
         CurrentFirstLsnToKeep = 0;
         LastWrittenCommitLsn = 0;
         CutLogId = TActorId();
+        LogEndPosition = TLogEndPosition(0, 0);
         WhiteboardProxyId = TActorId();
         LogRecordsInitiallyRead = 0;
         LogRecordsConsequentlyRead = 0;

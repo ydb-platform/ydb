@@ -8,7 +8,8 @@ import process_command_files as pcf
 # Remove after DTCC-1902
 CLANG_RT_VERSIONS = [14, 16]
 
-def copy_clang_rt_profile(cmd, build_root, arch) -> None:
+
+def copy_clang_rt_profile(cmd, build_root, arch):
     profile_rt_lib = None
     resource_dir = None
 
@@ -18,7 +19,7 @@ def copy_clang_rt_profile(cmd, build_root, arch) -> None:
                 profile_rt_lib = arg
                 break
         if arg.startswith('-resource-dir='):
-            resource_dir = arg[len('-resource-dir='):]
+            resource_dir = arg[len('-resource-dir=') :]
 
     profile_rt_path = os.path.join(build_root, profile_rt_lib)
     profile_name = os.path.basename(profile_rt_path)

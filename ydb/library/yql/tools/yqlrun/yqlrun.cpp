@@ -11,6 +11,7 @@
 #include <ydb/library/yql/sql/v1/format/sql_format.h>
 
 #include <ydb/library/yql/providers/dq/provider/yql_dq_provider.h>
+#include <ydb/library/yql/providers/pg/provider/yql_pg_provider.h>
 #include <ydb/library/yql/providers/common/codec/yql_codec.h>
 #include <ydb/library/yql/providers/common/provider/yql_provider_names.h>
 #include <ydb/library/yql/providers/common/udf_resolve/yql_simple_udf_resolver.h>
@@ -250,7 +251,7 @@ public:
             }
 
             void AfterOptimize(TTransformationPipeline* pipeline) const final {
-                pipeline->Add(CreateTYtWideFlowTransformer(nullptr), "WideFlow");
+                pipeline->Add(CreateYtWideFlowTransformer(nullptr), "WideFlow");
                 pipeline->Add(MakePeepholeOptimization(pipeline->GetTypeAnnotationContext()), "PeepHole");
             }
         };
@@ -398,6 +399,8 @@ int Main(int argc, const char *argv[])
     THashMap<TString, TString> clusterMapping;
     THashSet<TString> sqlFlags;
     clusterMapping["plato"] = YtProviderName;
+    clusterMapping["pg_catalog"] = PgProviderName;
+    clusterMapping["information_schema"] = PgProviderName;
     ui32 progsConcurrentCount = 0;
     TString paramsFile;
     ui16 syntaxVersion;
@@ -635,6 +638,7 @@ int Main(int argc, const char *argv[])
     dataProvidersInit.push_back(GetDqDataProviderInitializer([](const TDqStatePtr&){
        return new TNullTransformer;
     }, {}, dqCompFactory, {}, fileStorage));
+    dataProvidersInit.push_back(GetPgDataProviderInitializer());
 
     bool emulateOutputForMultirun = false;
     if (hasValidate) {

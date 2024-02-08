@@ -16,7 +16,7 @@ target_link_libraries(fq-libs-shared_resources PUBLIC
   contrib-libs-linux-headers
   contrib-libs-cxxsupp
   yutil
-  cpp-actors-core
+  library-actors-core
   cpp-monlib-dynamic_counters
   fq-libs-common
   fq-libs-config

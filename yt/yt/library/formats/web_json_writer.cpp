@@ -60,6 +60,11 @@ public:
         return AcceptByMaxCount(columnId);
     }
 
+    bool IsRequestedColumnName(TStringBuf columnName)
+    {
+        return Names_ && AcceptByNames(columnName);
+    }
+
 private:
     const int MaxSelectedColumnCount_;
     std::optional<THashSet<TString>> Names_;
@@ -153,7 +158,7 @@ TStringBuf GetSimpleYqlTypeName(ESimpleLogicalValueType type)
 
 void SerializeAsYqlType(TFluentAny fluent, const TLogicalTypePtr& type)
 {
-     auto serializeStruct = [] (TFluentList fluentList, const TStructLogicalTypeBase& structType) {
+    auto serializeStruct = [] (TFluentList fluentList, const TStructLogicalTypeBase& structType) {
         fluentList
             .Item().Value("StructType")
             .Item().DoListFor(structType.GetFields(), [] (TFluentList innerFluentList, const TStructField& field) {
@@ -296,7 +301,7 @@ public:
                 Converters_.push_back(
                     CreateUnversionedValueToYqlConverter(column.LogicalType(), converterConfig, Consumer_));
                 auto [it, inserted] = TableIndexAndColumnNameToTypeIndex_.emplace(
-                    std::make_pair(tableIndex, column.Name()),
+                    std::pair(tableIndex, column.Name()),
                     static_cast<int>(Types_.size()) - 1);
                 YT_VERIFY(inserted);
             }
@@ -338,7 +343,7 @@ private:
     std::vector<TLogicalTypePtr> Types_;
     std::vector<std::vector<int>> TableIndexToColumnIdToTypeIndex_;
     THashMap<std::pair<int, TString>, int> TableIndexAndColumnNameToTypeIndex_;
-    TEnumIndexedVector<EValueType, int> ValueTypeToTypeIndex_;
+    TEnumIndexedArray<EValueType, int> ValueTypeToTypeIndex_;
 
 private:
     int GetTypeIndex(int tableIndex, ui16 columnId, TStringBuf columnName, EValueType valueType)
@@ -353,7 +358,7 @@ private:
         if (typeIndex == UnschematizedTypeIndex) {
             typeIndex = ValueTypeToTypeIndex_[valueType];
         } else if (typeIndex == UnknownTypeIndex) {
-            auto it = TableIndexAndColumnNameToTypeIndex_.find(std::make_pair(tableIndex, columnName));
+            auto it = TableIndexAndColumnNameToTypeIndex_.find(std::pair(tableIndex, columnName));
             if (it == TableIndexAndColumnNameToTypeIndex_.end()) {
                 typeIndex = ValueTypeToTypeIndex_[valueType];
                 columnIdToTypeIndex[columnId] = UnschematizedTypeIndex;
@@ -414,7 +419,7 @@ public:
             case EValueType::Any:
             case EValueType::Composite: {
                 const auto data = value.AsStringBuf();
-                auto key = std::pair<int,int>(tableIndex, value.Id);
+                auto key = std::pair<int, int>(tableIndex, value.Id);
                 auto it = YsonConverters_.find(key);
                 if (it == YsonConverters_.end()) {
                     Consumer_->OnNodeWeightLimited(data, FieldWeightLimit_);
@@ -611,7 +616,8 @@ TFuture<void> TWriterForWebJson<TValueWriter>::Flush()
 template <typename TValueWriter>
 bool TWriterForWebJson<TValueWriter>::TryRegisterColumn(ui16 columnId, TStringBuf columnName)
 {
-    if (SkipSystemColumn(columnName)) {
+    // Don't skip system column if it was requested.
+    if (SkipSystemColumn(columnName) && !ColumnFilter_.IsRequestedColumnName(columnName)) {
         return false;
     }
 

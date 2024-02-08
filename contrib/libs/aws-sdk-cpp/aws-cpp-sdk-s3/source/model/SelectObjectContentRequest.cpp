@@ -31,7 +31,7 @@ SelectObjectContentRequest::SelectObjectContentRequest() :
     m_scanRangeHasBeenSet(false),
     m_expectedBucketOwnerHasBeenSet(false),
     m_customizedAccessLogTagHasBeenSet(false),
-    m_decoder(Aws::Utils::Event::EventStreamDecoder(&m_handler))
+    m_handler(), m_decoder(Aws::Utils::Event::EventStreamDecoder(&m_handler))
 {
 }
 
@@ -137,4 +137,14 @@ Aws::Http::HeaderValueCollection SelectObjectContentRequest::GetRequestSpecificH
   }
 
   return headers;
+}
+
+SelectObjectContentRequest::EndpointParameters SelectObjectContentRequest::GetEndpointContextParams() const
+{
+    EndpointParameters parameters;
+    // Operation context parameters
+    if (BucketHasBeenSet()) {
+        parameters.emplace_back(Aws::String("Bucket"), this->GetBucket(), Aws::Endpoint::EndpointParameter::ParameterOrigin::OPERATION_CONTEXT);
+    }
+    return parameters;
 }

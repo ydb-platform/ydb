@@ -11,7 +11,7 @@
 #include <ydb/core/tx/schemeshard/schemeshard_import.h>
 #include <ydb/public/lib/operation_id/operation_id.h>
 
-#include <library/cpp/actors/core/hfunc.h>
+#include <ydb/library/actors/core/hfunc.h>
 
 namespace NKikimr {
 namespace NGRpcService {
@@ -97,7 +97,7 @@ class TForgetOperationRPC: public TRpcOperationRequestActor<TForgetOperationRPC,
     }
 
     void SendForgetScriptExecutionOperation() {
-        Send(NKqp::MakeKqpProxyID(SelfId().NodeId()), new NKqp::TEvForgetScriptExecutionOperation(DatabaseName, OperationId));
+        Send(NKqp::MakeKqpProxyID(SelfId().NodeId()), new NKqp::TEvForgetScriptExecutionOperation(DatabaseName, OperationId, Request->GetDeadline()));
     }
 
 public:

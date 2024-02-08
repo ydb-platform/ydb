@@ -4,6 +4,7 @@
 #include "cms.h"
 #include "config.h"
 #include "logger.h"
+#include "sentinel.h"
 #include "services.h"
 #include "walle.h"
 
@@ -16,8 +17,8 @@
 #include <ydb/core/tablet/tablet_counters_protobuf.h>
 #include <ydb/core/tablet_flat/tablet_flat_executed.h>
 
-#include <library/cpp/actors/core/hfunc.h>
-#include <library/cpp/actors/core/interconnect.h>
+#include <ydb/library/actors/core/hfunc.h>
+#include <ydb/library/actors/core/interconnect.h>
 
 #include <util/datetime/base.h>
 #include <util/generic/queue.h>
@@ -77,6 +78,11 @@ public:
     };
 
     void PersistNodeTenants(TTransactionContext &txc, const TActorContext &ctx);
+
+    using THostMarkers = TEvSentinel::TEvUpdateHostMarkers::THostMarkers;
+    TVector<THostMarkers> SetHostMarker(const TString &host, NKikimrCms::EMarker marker, TTransactionContext &txc, const TActorContext &ctx);
+    TVector<THostMarkers> ResetHostMarkers(const TString &host, TTransactionContext &txc, const TActorContext &ctx);
+    void SentinelUpdateHostMarkers(TVector<THostMarkers> &&updateMarkers, const TActorContext &ctx);
 
     static void AddHostState(const TClusterInfoPtr &clusterInfo, const TNodeInfo &node, NKikimrCms::TClusterStateResponse &resp, TInstant timestamp);
 
@@ -294,8 +300,12 @@ private:
         NKikimrCms::TStatus::ECode &code,
         TString &error,
         const TActorContext &ctx);
-    bool CheckAction(const NKikimrCms::TAction &action, const TActionOptions &options,
-        TErrorInfo &error, const TActorContext &ctx) const;
+    bool CheckEvictVDisks(const NKikimrCms::TAction &action,
+        TErrorInfo &error) const;
+    bool CheckAction(const NKikimrCms::TAction &action,
+        const TActionOptions &opts,
+        TErrorInfo &error,
+        const TActorContext &ctx) const;
     bool CheckActionShutdownNode(const NKikimrCms::TAction &action,
         const TActionOptions &options,
         const TNodeInfo &node,
@@ -453,6 +463,8 @@ private:
     TTabletCountersBase *TabletCounters;
 
     TInstant InfoCollectorStartTime;
+
+    bool EnableCMSRequestPriorities = false;
 
 private:
     TString GenerateStat();

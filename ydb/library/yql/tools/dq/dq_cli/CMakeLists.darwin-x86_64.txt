@@ -13,7 +13,7 @@ target_link_libraries(dq_cli PUBLIC
   yutil
   library-cpp-cpuid_check
   library-cpp-getopt
-  cpp-grpc-client
+  library-grpc-client
   cpp-protobuf-util
   cpp-threading-future
   library-yql-utils

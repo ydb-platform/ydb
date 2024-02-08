@@ -9,7 +9,7 @@ SRCS(
 )
 
 PEERDIR(
-    library/cpp/grpc/server
+    ydb/library/grpc/server
     ydb/core/base
     ydb/core/client/server
     ydb/core/grpc_services

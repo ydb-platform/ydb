@@ -43,6 +43,11 @@ struct TDict {
     using ValueType = TValue;
 };
 
+template <typename TKey>
+struct TSetType {
+    using KeyType = TKey;
+};
+
 template <typename... TArgs>
 struct TTuple;
 
@@ -66,6 +71,8 @@ struct TBlockType { using ItemType = T; };
 
 template <typename T>
 struct TScalarType { using ItemType = T; };
+
+struct TVoid {};
 
 //////////////////////////////////////////////////////////////////////////////
 // ITypeBuilder
@@ -874,6 +881,23 @@ struct TTypeBuilderHelper<TDict<TKey, TValue>> {
     }
 };
 
+template <typename TKey>
+struct TTypeBuilderHelper<TSetType<TKey>> {
+    static TType* Build(const IFunctionTypeInfoBuilder& builder) {
+        return builder.Dict()->
+                Key(TTypeBuilderHelper<TKey>::Build(builder))
+                .Value(builder.Void())
+                .Build();
+    }
+};
+
+template <>
+struct TTypeBuilderHelper<TVoid> {
+    static TType* Build(const IFunctionTypeInfoBuilder& builder) {
+        return builder.Void();
+    }
+};
+
 template <typename T>
 struct TTypeBuilderHelper<TStream<T>> {
     static TType* Build(const IFunctionTypeInfoBuilder& builder) {
@@ -1031,8 +1055,11 @@ struct TArgsHelper<TArg, TArgs...> {
 
 template <typename TReturn, typename... TArgs>
 struct TSimpleSignatureHelper<TReturn(TArgs...)> {
+    static TType* BuildReturnType(IFunctionTypeInfoBuilder& builder) {
+        return TTypeBuilderHelper<TReturn>::Build(builder);
+    }
     static void Register(IFunctionTypeInfoBuilder& builder) {
-        builder.Returns(TTypeBuilderHelper<TReturn>::Build(builder));
+        builder.Returns(BuildReturnType(builder));
         TArgsHelper<TArgs...>::Add(*builder.Args());
     }
 };

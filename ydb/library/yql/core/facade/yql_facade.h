@@ -186,7 +186,8 @@ public:
     bool HasActiveProcesses();
     bool NeedWaitForActiveProcesses();
 
-    void Abort();
+    [[nodiscard]]
+    NThreading::TFuture<void> Abort();
 
     inline TIssues Issues() {
         if (ExprCtx_) {
@@ -238,6 +239,10 @@ public:
 
     void SetDiagnosticFormat(NYson::EYsonFormat format) {
         DiagnosticFormat_ = format;
+    }
+
+    void SetResultType(IDataProvider::EResultFormat type) {
+        ResultType_ = type;
     }
 
     TMaybe<TString> GetDiagnostics();
@@ -358,8 +363,10 @@ private:
 
     NThreading::TFuture<void> OpenSession(const TString& username);
 
-    void CleanupLastSession();
-    void CloseLastSession();
+    [[nodiscard]]
+    NThreading::TFuture<void> CleanupLastSession();
+    [[nodiscard]]
+    NThreading::TFuture<void> CloseLastSession();
 
     TFutureStatus RemoteKikimrValidate(const TString& cluster);
     TFutureStatus RemoteKikimrOptimize(const TString& cluster, const IPipelineConfigurator* pipelineConf);
@@ -380,6 +387,7 @@ private:
     const TIntrusivePtr<ITimeProvider> TimeProvider_;
     const ui64 NextUniqueId_;
     TVector<TDataProviderInitializer> DataProvidersInit_;
+    TAdaptiveLock DataProvidersLock_;
     TVector<TDataProviderInfo> DataProviders_;
     TYqlOperationOptions OperationOptions_;
     TCredentials::TPtr Credentials_;
@@ -409,6 +417,7 @@ private:
     TAutoPtr<IGraphTransformer> Transformer_;
     TIntrusivePtr<TResultProviderConfig> ResultProviderConfig_;
     bool SupportsResultPosition_ = false;
+    IDataProvider::EResultFormat ResultType_;
     NYson::EYsonFormat ResultFormat_;
     NYson::EYsonFormat OutputFormat_;
     TMaybe<NYson::EYsonFormat> DiagnosticFormat_;

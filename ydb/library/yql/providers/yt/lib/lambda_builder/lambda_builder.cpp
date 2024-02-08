@@ -208,15 +208,22 @@ TRuntimeNode TLambdaBuilder::MakeTuple(const TVector<TRuntimeNode>& items) const
     return pgmBuilder.NewTuple(items);
 }
 
-TRuntimeNode TLambdaBuilder::UpdateLambdaCode(TString& code, size_t& nodes, TCallableVisitFuncProvider funcProvider) {
-    TRuntimeNode rootNode = DeserializeRuntimeNode(code, GetTypeEnvironment());
-    rootNode = TransformAndOptimizeProgram(rootNode, funcProvider);
+TRuntimeNode TLambdaBuilder::Deserialize(const TString& code) {
+    return DeserializeRuntimeNode(code, GetTypeEnvironment());
+}
 
+std::pair<TString, size_t> TLambdaBuilder::Serialize(TRuntimeNode rootNode) {
     TExploringNodeVisitor explorer;
     explorer.Walk(rootNode.GetNode(), GetTypeEnvironment());
-    code = SerializeRuntimeNode(explorer, rootNode, GetTypeEnvironment());
-    nodes = explorer.GetNodes().size();
+    TString code = SerializeRuntimeNode(explorer, rootNode, GetTypeEnvironment());
+    size_t nodes = explorer.GetNodes().size();
+    return std::make_pair(code, nodes);
+}
 
+TRuntimeNode TLambdaBuilder::UpdateLambdaCode(TString& code, size_t& nodes, TCallableVisitFuncProvider funcProvider) {
+    TRuntimeNode rootNode = Deserialize(code);
+    rootNode = TransformAndOptimizeProgram(rootNode, funcProvider);
+    std::tie(code, nodes) = Serialize(rootNode);
     return rootNode;
 }
 

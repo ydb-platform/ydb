@@ -663,6 +663,12 @@ public:
     /// @ref https://ytsaurus.tech/docs/en/user-guide/storage/static-schema
     FLUENT_FIELD_OPTION_ENCAPSULATED(TString, Group);
 
+    // StableName for renamed and deleted columns.
+    FLUENT_FIELD_OPTION_ENCAPSULATED(TString, StableName);
+
+    /// Deleted column
+    FLUENT_FIELD_OPTION_ENCAPSULATED(bool, Deleted);
+
     ///
     /// @brief Column requiredness.
     ///

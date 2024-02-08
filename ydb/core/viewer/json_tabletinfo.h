@@ -1,7 +1,7 @@
 #pragma once
-#include <library/cpp/actors/core/actor_bootstrapped.h>
-#include <library/cpp/actors/core/interconnect.h>
-#include <library/cpp/actors/core/mon.h>
+#include <ydb/library/actors/core/actor_bootstrapped.h>
+#include <ydb/library/actors/core/interconnect.h>
+#include <ydb/library/actors/core/mon.h>
 #include <ydb/library/services/services.pb.h>
 #include <ydb/core/protos/node_whiteboard.pb.h>
 #include <ydb/core/tx/schemeshard/schemeshard.h>
@@ -106,7 +106,7 @@ public:
 
             TActorId txproxy = MakeTxProxyID();
             TBase::Send(txproxy, request.Release());
-            Become(&TThis::StateRequestedDescribe, TDuration::MilliSeconds(TBase::RequestSettings.Timeout), new TEvents::TEvWakeup());
+            UnsafeBecome(&TThis::StateRequestedDescribe, TDuration::MilliSeconds(TBase::RequestSettings.Timeout), new TEvents::TEvWakeup());
         } else {
             TBase::Bootstrap();
             if (!TBase::RequestSettings.FilterFields.empty()) {

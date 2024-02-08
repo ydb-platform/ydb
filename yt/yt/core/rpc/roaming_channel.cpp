@@ -177,9 +177,13 @@ public:
     void UnsubscribeTerminated(const TCallback<void(const TError&)>& /*callback*/) override
     { }
 
+    int GetInflightRequestCount() override
+    {
+        return 0;
+    }
+
 private:
     const IRoamingChannelProviderPtr Provider_;
-
 };
 
 IChannelPtr CreateRoamingChannel(IRoamingChannelProviderPtr provider)

@@ -18,7 +18,7 @@ TTopicOffsetsActor::TTopicOffsetsActor(const TEvKafka::TGetOffsetsRequest& reque
 void TTopicOffsetsActor::Bootstrap(const NActors::TActorContext&)
 {
     SendDescribeProposeRequest();
-    Become(&TTopicOffsetsActor::StateWork);
+    UnsafeBecome(&TTopicOffsetsActor::StateWork);
 }
 
 void TTopicOffsetsActor::StateWork(TAutoPtr<IEventHandle>& ev) {

@@ -5,15 +5,17 @@
 #include <ydb/core/base/tabletid.h>
 #include <ydb/core/base/tablet.h>
 #include <ydb/core/base/appdata.h>
-#include <library/cpp/actors/core/hfunc.h>
-#include <library/cpp/actors/core/log.h>
-#include <library/cpp/actors/core/interconnect.h>
-#include <library/cpp/actors/core/actor_bootstrapped.h>
-#include <library/cpp/actors/interconnect/interconnect.h>
+#include <ydb/library/actors/core/hfunc.h>
+#include <ydb/library/actors/core/log.h>
+#include <ydb/library/actors/core/interconnect.h>
+#include <ydb/library/actors/core/actor_bootstrapped.h>
+#include <ydb/library/actors/interconnect/interconnect.h>
 #include <ydb/core/util/cache.h>
 #include <ydb/core/util/queue_oneone_inplace.h>
 #include <util/generic/map.h>
 #include <util/generic/deque.h>
+#include <library/cpp/random_provider/random_provider.h>
+
 
 namespace NKikimr {
 
@@ -647,8 +649,9 @@ class TTabletResolver : public TActorBootstrapped<TTabletResolver> {
                     if (!(entry.KnownLeaderTablet == msg->CurrentLeaderTablet || !entry.KnownLeaderTablet)) {
                         DropEntry(tabletId, entry, ctx); // got info but not full, occurs on transitional cluster states
                     } else {
-                        entry.KnownLeaderTablet = msg->CurrentLeaderTablet;
                         entry.State = TEntry::StProblemPing;
+                        entry.KnownLeaderTablet = msg->CurrentLeaderTablet;
+                        entry.KnownFollowers = std::move(msg->Followers);
                         SendPing(tabletId, entry, ctx);
                     }
                 } else {

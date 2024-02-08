@@ -28,3 +28,13 @@ HashResult Sha256::Calculate(Aws::IStream& stream)
 {
     return m_hashImpl->Calculate(stream);
 }
+
+void Sha256::Update(unsigned char* buffer, size_t bufferSize)
+{
+    return m_hashImpl->Update(buffer, bufferSize);
+}
+
+HashResult Sha256::GetHash()
+{
+    return m_hashImpl->GetHash();
+}

@@ -197,7 +197,8 @@ struct TPDiskConfig : public TThrRefBase {
         DriveModelBulkWrieBlockSize = choose(64'000, 1 << 20, 2 << 20);
         DriveModelTrimSpeedBps = choose(6ull << 30, 6ull << 30, 0);
         ReorderingMs = choose(1, 7, 50);
-        DeviceInFlight = choose(128, 4, 4);
+        const ui64 hddInFlight = FeatureFlags.GetEnablePDiskHighHDDInFlight() ? 32 : 4;
+        DeviceInFlight = choose(128, 4, hddInFlight);
         CostLimitNs = choose(500'000ull, 20'000'000ull, 50'000'000ull);
 
         UseSpdkNvmeDriver = Path.StartsWith("PCIe:");

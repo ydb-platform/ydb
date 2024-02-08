@@ -81,6 +81,8 @@ struct TKqpExecuterTxResult {
     const TVector<ui32>* ColumnOrder = nullptr;
     TMaybe<ui32> QueryResultIndex = 0;
     NKikimr::NMiniKQL::TUnboxedValueBatch Rows;
+    Ydb::ResultSet TrailingResult;
+    bool HasTrailingResult = false;
 
     explicit TKqpExecuterTxResult(
         bool isStream,
@@ -98,6 +100,7 @@ struct TKqpExecuterTxResult {
     NKikimrMiniKQL::TResult* GetMkql(google::protobuf::Arena* arena);
     NKikimrMiniKQL::TResult GetMkql();
     Ydb::ResultSet* GetYdb(google::protobuf::Arena* arena, TMaybe<ui64> rowsLimitPerWrite);
+    Ydb::ResultSet* GetTrailingYdb(google::protobuf::Arena* arena);
 
     void FillMkql(NKikimrMiniKQL::TResult* mkqlResult);
     void FillYdb(Ydb::ResultSet* ydbResult, TMaybe<ui64> rowsLimitPerWrite);
@@ -176,7 +179,7 @@ public:
     std::pair<NKikimr::NMiniKQL::TType*, NUdf::TUnboxedValue> GetInternalBindingValue(const NKqpProto::TKqpPhyParamBinding& paramBinding);
 };
 
-class TQueryData {
+class TQueryData : NMiniKQL::ITerminator {
 private:
     using TTypedUnboxedValue = std::pair<NKikimr::NMiniKQL::TType*, NUdf::TUnboxedValue>;
     using TNamedUnboxedValue = std::pair<const TString, TTypedUnboxedValue>;
@@ -250,6 +253,7 @@ public:
     TTypedUnboxedValue GetTxResult(ui32 txIndex, ui32 resultIndex);
     NKikimrMiniKQL::TResult* GetMkqlTxResult(const NKqpProto::TKqpPhyResultBinding& rb, google::protobuf::Arena* arena);
     Ydb::ResultSet* GetYdbTxResult(const NKqpProto::TKqpPhyResultBinding& rb, google::protobuf::Arena* arena, TMaybe<ui64> rowsLimitPerWrite);
+    Ydb::ResultSet* GetTrailingTxResult(const NKqpProto::TKqpPhyResultBinding& rb, google::protobuf::Arena* arena);
 
     std::pair<NKikimr::NMiniKQL::TType*, NUdf::TUnboxedValue> GetInternalBindingValue(const NKqpProto::TKqpPhyParamBinding& paramBinding);
     TTypedUnboxedValue& GetParameterUnboxedValue(const TString& name);
@@ -277,6 +281,8 @@ public:
             return false;
         };
     }
+
+    void Terminate(const char* message) const final;
 };
 
 

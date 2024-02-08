@@ -9,8 +9,8 @@
 #include <ydb/core/kqp/provider/yql_kikimr_settings.h>
 #include <ydb/core/protos/kqp.pb.h>
 
-#include <library/cpp/actors/core/actor.h>
-#include <library/cpp/actors/core/log.h>
+#include <ydb/library/actors/core/actor.h>
+#include <ydb/library/actors/core/log.h>
 #include <library/cpp/json/json_reader.h>
 
 #include <util/datetime/base.h>
@@ -148,6 +148,7 @@ IActor* CreateKqpWorkerActor(const TActorId& owner, const TString& sessionId,
     std::optional<TKqpFederatedQuerySetup> federatedQuerySetup,
     TIntrusivePtr<TModuleResolverState> moduleResolverState,
     TIntrusivePtr<TKqpCounters> counters,
+    const NKikimrConfig::TQueryServiceConfig& queryServiceConfig,
     const NKikimrConfig::TMetadataProviderConfig& metadataProviderConfig
     );
 

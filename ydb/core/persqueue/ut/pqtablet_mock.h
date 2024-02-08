@@ -5,7 +5,7 @@
 #include <ydb/core/testlib/actors/test_runtime.h>
 #include <ydb/core/tx/tx_processing.h>
 
-#include <library/cpp/actors/core/actor.h>
+#include <ydb/library/actors/core/actor.h>
 
 namespace NKikimr::NPQ::NHelpers {
 
@@ -59,6 +59,7 @@ private:
         switch (ev->GetTypeRewrite()) {
             HFunc(TEvTabletPipe::TEvClientConnected, Handle);
             HFunc(TEvTabletPipe::TEvClientDestroyed, Handle);
+            // TX
             HFunc(TEvTxProcessing::TEvReadSet, Handle);
             HFunc(TEvTxProcessing::TEvReadSetAck, Handle);
             HFunc(TEvPQTablet::TEvSendReadSet, Handle);

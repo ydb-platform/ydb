@@ -5,7 +5,7 @@
 #include <ydb/core/base/events.h>
 #include <ydb/core/protos/datashard_load.pb.h>
 
-#include <library/cpp/actors/core/event_pb.h>
+#include <ydb/library/actors/core/event_pb.h>
 
 namespace NKikimr {
 

@@ -1,0 +1,11 @@
+NOTICES FOR USERS UPGRADING FROM EARLIER VERSIONS TO 6.x
+
+As of 6.0, libpqxx requires C++11 or better.  Make sure that your libpqxx is
+built against the same version of the C++ standard as your own application, or
+there may be build problems.
+
+It may be possible to paper over some mismatches.  If your application build
+fails with errors about `std::experimental::optional`, try defining a macro
+`PQXX_HIDE_EXP_OPTIONAL` in your application's build.  This will suppress
+support for `std::experimental::optional` even if libpqxx was built to assume
+that the feature is present.

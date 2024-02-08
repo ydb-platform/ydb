@@ -1,6 +1,6 @@
 #pragma once
 #include <util/generic/strbuf.h>
-#include <library/cpp/actors/core/actorid.h>
+#include <ydb/library/actors/core/actorid.h>
 
 namespace NKikimr::NKqp {
 
@@ -33,6 +33,11 @@ inline NActors::TActorId MakeKqpNodeServiceID(ui32 nodeId) {
 
 inline NActors::TActorId MakeKqpCompileComputationPatternServiceID(ui32 nodeId) {
     const char name[12] = "kqp_comp_cp";
+    return NActors::TActorId(nodeId, TStringBuf(name, 12));
+}
+
+inline NActors::TActorId MakeKqpFinalizeScriptServiceId(ui32 nodeId) {
+    const char name[12] = "kqp_sfinal";
     return NActors::TActorId(nodeId, TStringBuf(name, 12));
 }
 

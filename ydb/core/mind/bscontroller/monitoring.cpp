@@ -1,6 +1,8 @@
 #include "impl.h"
 
 #include <library/cpp/json/json_writer.h>
+#include <google/protobuf/util/json_util.h>
+
 
 namespace NKikimr {
 namespace NBsController {

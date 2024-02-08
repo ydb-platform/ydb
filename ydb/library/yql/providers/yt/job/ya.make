@@ -7,7 +7,6 @@ SRCS(
     yql_job_infer_schema.cpp
     yql_job_registry.h
     yql_job_stats_writer.cpp
-    yql_job_table_content.cpp
     yql_job_user.cpp
 )
 
@@ -18,7 +17,7 @@ PEERDIR(
     library/cpp/yson/node
     yt/cpp/mapreduce/interface
     yt/cpp/mapreduce/library/user_job_statistics
-    ydb/library/yql/minikql/comp_nodes/llvm
+    ydb/library/yql/minikql/comp_nodes
     ydb/library/yql/public/udf
     ydb/library/yql/utils
     ydb/library/yql/utils/backtrace

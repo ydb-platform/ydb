@@ -4,7 +4,14 @@
 #include <ydb/core/base/statestorage.h>
 #include <ydb/core/base/statestorage_impl.h>
 #include <ydb/core/base/tablet_resolver.h>
-#include <library/cpp/actors/interconnect/interconnect.h>
+#include <ydb/library/actors/interconnect/interconnect.h>
+#include <library/cpp/time_provider/time_provider.h>
+#include <ydb/core/control/immediate_control_board_impl.h>
+#include <ydb/core/grpc_services/grpc_helper.h>
+#include <ydb/core/base/feature_flags.h>
+#include <ydb/core/base/nameservice.h>
+#include <ydb/core/base/channel_profiles.h>
+#include <ydb/core/base/domain.h>
 
 #include <util/generic/singleton.h>
 
@@ -218,8 +225,7 @@ void TTestActorSystem::SetupTabletRuntime(const std::function<TNodeLocation(ui32
 }
 
 void TTestActorSystem::SetupStateStorage(ui32 nodeId, ui32 stateStorageNodeId) {
-    auto *appData = GetAppData();
-    for (const auto& [id, domain] : appData->DomainsInfo->Domains) {
+    for (const auto& [id, domain] : GetDomainsInfo()->Domains) {
         const ui64 stateStorageGroup = domain->DefaultStateStorageGroup;
         ui32 numReplicas = 3;
 
@@ -275,5 +281,7 @@ TIntrusivePtr<IMonotonicTimeProvider> TTestActorSystem::CreateMonotonicTimeProvi
     };
     return MakeIntrusive<TTestActorMonotonicTimeProvider>();
 }
+
+const ui32 TTestActorSystem::SYSTEM_POOL_ID = 0;
 
 }

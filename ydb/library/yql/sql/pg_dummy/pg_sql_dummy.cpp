@@ -465,13 +465,25 @@ TCoerceResult PgNativeBinaryCoerce(const TStringBuf binary, void* typeDesc, i32 
     throw yexception() << "PG types are not supported";
 }
 
+TConvertResult PgNativeBinaryFromNativeText(const TString& str, void* typeDesc) {
+    Y_UNUSED(str);
+    Y_UNUSED(typeDesc);
+    throw yexception() << "PG types are not supported";
+}
+
 TConvertResult PgNativeBinaryFromNativeText(const TString& str, ui32 pgTypeId) {
     Y_UNUSED(str);
     Y_UNUSED(pgTypeId);
     throw yexception() << "PG types are not supported";
 }
 
-TConvertResult PgNativeTextFromNativeBinary(const TString& binary, ui32 pgTypeId) {
+TConvertResult PgNativeTextFromNativeBinary(const TStringBuf binary, void* typeDesc) {
+    Y_UNUSED(binary);
+    Y_UNUSED(typeDesc);
+    throw yexception() << "PG types are not supported";
+}
+
+TConvertResult PgNativeTextFromNativeBinary(const TStringBuf binary, ui32 pgTypeId) {
     Y_UNUSED(binary);
     Y_UNUSED(pgTypeId);
     throw yexception() << "PG types are not supported";
@@ -485,3 +497,15 @@ TString GetPostgresServerVersionStr() {
 }
 
 } // namespace NKikimr::NPg
+
+namespace NYql {
+
+ui64 HexEncode(const char *src, size_t len, char *dst) {
+    Y_UNUSED(src);
+    Y_UNUSED(len);
+    Y_UNUSED(dst);
+
+    throw yexception() << "HexEncode in pg_dummy does nothing";
+}
+
+} // NYql

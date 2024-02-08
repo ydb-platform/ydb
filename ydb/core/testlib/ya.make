@@ -22,11 +22,11 @@ SRCS(
 )
 
 PEERDIR(
-    library/cpp/actors/core
-    library/cpp/actors/interconnect
-    library/cpp/grpc/client
-    library/cpp/grpc/server
-    library/cpp/grpc/server/actors
+    ydb/library/actors/core
+    ydb/library/actors/interconnect
+    ydb/library/grpc/client
+    ydb/library/grpc/server
+    ydb/library/grpc/server/actors
     library/cpp/regex/pcre
     library/cpp/testing/gmock_in_unittest
     library/cpp/testing/unittest
@@ -52,6 +52,7 @@ PEERDIR(
     ydb/core/keyvalue
     ydb/core/kqp
     ydb/core/kqp/federated_query
+    ydb/core/kqp/finalize_script_service
     ydb/core/metering
     ydb/core/mind
     ydb/core/mind/address_classification
@@ -61,6 +62,7 @@ PEERDIR(
     ydb/core/persqueue
     ydb/core/protos
     ydb/core/security
+    ydb/core/statistics/aggregator
     ydb/core/sys_view/processor
     ydb/core/sys_view/service
     ydb/core/testlib/actors
@@ -79,12 +81,13 @@ PEERDIR(
     ydb/library/mkql_proto/protos
     ydb/library/persqueue/topic_parser
     ydb/library/security
-    ydb/library/yql/minikql/comp_nodes/llvm
+    ydb/library/yql/minikql/comp_nodes/llvm14
     ydb/library/yql/public/udf/service/exception_policy
     ydb/public/lib/base
     ydb/public/lib/deprecated/kicli
     ydb/public/sdk/cpp/client/ydb_driver
     ydb/public/sdk/cpp/client/ydb_persqueue_public/codecs
+    ydb/public/sdk/cpp/client/ydb_query
     ydb/public/sdk/cpp/client/ydb_table
     ydb/services/auth
     ydb/services/cms

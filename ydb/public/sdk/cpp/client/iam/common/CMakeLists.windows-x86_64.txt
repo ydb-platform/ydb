@@ -11,7 +11,7 @@ add_library(client-iam-common)
 target_link_libraries(client-iam-common PUBLIC
   contrib-libs-cxxsupp
   yutil
-  cpp-grpc-client
+  library-grpc-client
   cpp-http-simple
   library-cpp-json
   cpp-threading-atomic

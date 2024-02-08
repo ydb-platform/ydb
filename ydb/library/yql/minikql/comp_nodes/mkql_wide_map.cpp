@@ -1,6 +1,6 @@
 #include "mkql_wide_map.h"
 #include <ydb/library/yql/minikql/computation/mkql_computation_node_holders.h>
-#include <ydb/library/yql/minikql/computation/mkql_computation_node_codegen.h>
+#include <ydb/library/yql/minikql/computation/mkql_computation_node_codegen.h>  // Y_IGNORE
 #include <ydb/library/yql/minikql/mkql_node_cast.h>
 #include <ydb/library/yql/utils/cast.h>
 
@@ -88,8 +88,8 @@ public:
         , Flow(flow)
         , Items(std::move(items))
         , NewItems(std::move(newItems))
-        , PasstroughtMap(GetPasstroughtMap(Items, NewItems))
-        , ReversePasstroughtMap(GetPasstroughtMap(NewItems, Items))
+        , PasstroughtMap(GetPasstroughtMapOneToOne(Items, NewItems))
+        , ReversePasstroughtMap(GetPasstroughtMapOneToOne(NewItems, Items))
         , WideFieldsIndex(mutables.IncrementWideFieldsIndex(Items.size()))
     {}
 
@@ -97,11 +97,11 @@ public:
         auto** fields = ctx.WideFields.data() + WideFieldsIndex;
 
         for (auto i = 0U; i < Items.size(); ++i)
-            if (Items[i]->GetDependencesCount() > 0U)
-                fields[i] = &Items[i]->RefValue(ctx);
-            else if (const auto& map = PasstroughtMap[i])
+            if (const auto& map = PasstroughtMap[i]; map && !Items[i]->GetDependencesCount()) {
                 if (const auto out = output[*map])
                     fields[i] = out;
+            } else
+                fields[i] = &Items[i]->RefValue(ctx);
 
         if (const auto result = Flow->FetchValues(ctx, fields); EFetchResult::One != result)
             return result;
@@ -125,8 +125,6 @@ public:
     TGenerateResult DoGenGetValues(const TCodegenContext& ctx, BasicBlock*& block) const {
         auto& context = ctx.Codegen.GetContext();
 
-        const auto valueType = Type::getInt128Ty(context);
-
         const auto result = GetNodeValues(Flow, ctx, block);
 
         const auto good = CmpInst::Create(Instruction::ICmp, ICmpInst::ICMP_SGT, result.first, ConstantInt::get(result.first->getType(), 0), "good", block);
@@ -139,7 +137,7 @@ public:
         block = work;
 
         for (auto i = 0U; i < Items.size(); ++i)
-            if (Items[i]->GetDependencesCount() > 0U)
+            if (Items[i]->GetDependencesCount() > 0U || !PasstroughtMap[i])
                 EnsureDynamicCast<ICodegeneratorExternalNode*>(Items[i])->CreateSetValue(ctx, block, result.second[i](ctx, block));
 
         BranchInst::Create(pass, block);
@@ -182,7 +180,7 @@ public:
         , Flow(flow)
         , Items(std::move(items))
         , NewItem(newItem)
-        , PasstroughItem(GetPasstroughtMap({NewItem}, Items).front())
+        , PasstroughItem(GetPasstroughtMap(TComputationNodePtrVector{NewItem}, Items).front())
         , WideFieldsIndex(mutables.IncrementWideFieldsIndex(Items.size()))
     {}
 

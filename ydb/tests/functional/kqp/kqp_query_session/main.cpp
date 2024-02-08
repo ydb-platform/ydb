@@ -7,7 +7,7 @@
 #include <ydb/public/sdk/cpp/client/draft/ydb_scripting.h>
 
 #include <library/cpp/threading/local_executor/local_executor.h>
-#include <library/cpp/grpc/client/grpc_common.h>
+#include <ydb/library/grpc/client/grpc_common.h>
 
 #include <ydb/public/api/grpc/ydb_query_v1.grpc.pb.h>
 
@@ -48,7 +48,7 @@ Y_UNIT_TEST_SUITE(KqpQuerySession)
         UNIT_ASSERT_C(Exec("whoami") != "root\n", "Do not run this test as root user. "
             "This test will kill processes");
 
-        using namespace NGrpc;
+        using namespace NYdbGrpc;
 
         TString connectionString = GetEnv("YDB_ENDPOINT") + "/?database=" + GetEnv("YDB_DATABASE");
         auto config = TDriverConfig(connectionString);
@@ -82,9 +82,9 @@ Y_UNIT_TEST_SUITE(KqpQuerySession)
 
         bool allDoneOk = true;
 
-        NGrpc::TGRpcClientLow clientLow;
+        NYdbGrpc::TGRpcClientLow clientLow;
 
-        auto readyToKill = NThreading::NewPromise<NGrpc::IStreamRequestCtrl::TPtr>();
+        auto readyToKill = NThreading::NewPromise<NYdbGrpc::IStreamRequestCtrl::TPtr>();
         auto doCheckAttach = [&] {
             auto p = CheckAttach(clientLow, TGRpcClientConfig(CreateHostWithPort(host2->first)), sessionId, Ydb::StatusIds::SUCCESS, allDoneOk);
             readyToKill.SetValue(p);

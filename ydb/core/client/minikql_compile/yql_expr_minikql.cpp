@@ -3,9 +3,9 @@
 #include "compile_context.h"
 #include "db_key_resolver.h"
 
-#include <library/cpp/actors/core/actor_bootstrapped.h>
-#include <library/cpp/actors/core/executor_thread.h>
-#include <library/cpp/actors/core/hfunc.h>
+#include <ydb/library/actors/core/actor_bootstrapped.h>
+#include <ydb/library/actors/core/executor_thread.h>
+#include <ydb/library/actors/core/hfunc.h>
 #include <ydb/core/base/appdata.h>
 #include <ydb/core/base/domain.h>
 #include <ydb/core/kqp/provider/yql_kikimr_provider_impl.h>
@@ -965,7 +965,6 @@ TIntrusivePtr<NCommon::IMkqlCallableCompiler> CreateMkqlCompiler(TContext::TPtr 
             bool includeFrom = true;
             bool includeTo = true;
             auto rangeTuple = node.Child(1);
-            ui32 keyCount = 0;
             ui32 fromComponents = 0;
             ui32 toComponents = 0;
             for (auto rangeItem : rangeTuple->Children()) {
@@ -989,7 +988,6 @@ TIntrusivePtr<NCommon::IMkqlCallableCompiler> CreateMkqlCompiler(TContext::TPtr 
                     continue;
                 }
 
-                ++keyCount;
                 if (!rangeItem->Child(1)->IsCallable("Void")) {
                     ++fromComponents;
                 }

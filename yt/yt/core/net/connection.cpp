@@ -33,7 +33,7 @@
 namespace NYT::NNet {
 
 using namespace NConcurrency;
-using namespace NProfiling;
+// using namespace NProfiling;
 
 #ifdef _unix_
     using TIOVecBasePtr = void*;
@@ -213,7 +213,7 @@ public:
 
     void SetResult() override
     {
-        ResultPromise_.Set(std::make_pair(Position_, RemoteAddress_));
+        ResultPromise_.Set(std::pair(Position_, RemoteAddress_));
     }
 
     TFuture<std::pair<size_t, TNetworkAddress>> ToFuture() const
@@ -484,6 +484,7 @@ public:
             WriteDirection_.Operation.reset();
         }
 
+        Poller_->Unarm(FD_, this);
         YT_VERIFY(TryClose(FD_, false));
         FD_ = -1;
 
@@ -971,7 +972,7 @@ private:
         } else if (!result.Value().Retry) {
             operation->SetResult();
         } else if (needRetry) {
-            Poller_->Retry(this, false);
+            Poller_->Retry(this);
         }
 
         if (needUnregister) {
@@ -1178,7 +1179,7 @@ std::pair<IConnectionPtr, IConnectionPtr> CreateConnectionPair(const IPollerPtr&
 
         auto first = New<TFDConnection>(fds[0], address0, address1, poller);
         auto second = New<TFDConnection>(fds[1], address1, address0, poller);
-        return std::make_pair(std::move(first), std::move(second));
+        return std::pair(std::move(first), std::move(second));
     } catch (...) {
         YT_VERIFY(TryClose(fds[0], false));
         YT_VERIFY(TryClose(fds[1], false));
@@ -1227,7 +1228,8 @@ IConnectionReaderPtr CreateInputConnectionFromPath(
 IConnectionWriterPtr CreateOutputConnectionFromPath(
     const TString& pipePath,
     const IPollerPtr& poller,
-    const TRefCountedPtr& pipeHolder)
+    const TRefCountedPtr& pipeHolder,
+    std::optional<int> capacity)
 {
 #ifdef _unix_
     int flags = O_WRONLY | O_CLOEXEC;
@@ -1239,6 +1241,10 @@ IConnectionWriterPtr CreateOutputConnectionFromPath(
     }
 
     try {
+        if (capacity) {
+            SafeSetPipeCapacity(fd, *capacity);
+        }
+
         SafeMakeNonblocking(fd);
     } catch (...) {
         SafeClose(fd, false);

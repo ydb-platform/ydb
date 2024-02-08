@@ -8,7 +8,7 @@ namespace NYdb {
 using std::string;
 
 TPlainStatus::TPlainStatus(
-    const NGrpc::TGrpcStatus& grpcStatus,
+    const NYdbGrpc::TGrpcStatus& grpcStatus,
     const string& endpoint,
     std::multimap<TStringType, TStringType>&& metadata)
     : Endpoint(endpoint)

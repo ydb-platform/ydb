@@ -5,14 +5,15 @@
 
 #include <ydb/core/base/appdata.h>
 #include <ydb/core/base/counters.h>
+#include <ydb/core/base/domain.h>
 #include <ydb/core/base/tablet_pipe.h>
 #include <ydb/core/blobstorage/base/blobstorage_events.h>
 #include <ydb/core/node_whiteboard/node_whiteboard.h>
 #include <ydb/library/services/services.pb.h>
 
-#include <library/cpp/actors/core/actor_bootstrapped.h>
-#include <library/cpp/actors/core/hfunc.h>
-#include <library/cpp/actors/core/log.h>
+#include <ydb/library/actors/core/actor_bootstrapped.h>
+#include <ydb/library/actors/core/hfunc.h>
+#include <ydb/library/actors/core/log.h>
 
 #include <util/generic/algorithm.h>
 #include <util/string/builder.h>
@@ -61,6 +62,11 @@ void TPDiskStatusComputer::AddState(EPDiskState state) {
 }
 
 EPDiskStatus TPDiskStatusComputer::Compute(EPDiskStatus current, TString& reason) const {
+    if (ForcedStatus) {
+        reason = "Forced status";
+        return *ForcedStatus;
+    }
+
     if (!StateCounter) {
         reason = "Uninitialized StateCounter";
         return current;
@@ -71,12 +77,12 @@ EPDiskStatus TPDiskStatusComputer::Compute(EPDiskStatus current, TString& reason
 
     if (!stateLimit || StateCounter < stateLimit) {
         reason = TStringBuilder()
-            << " PrevState# " << PrevState
+            <<  "PrevState# " << PrevState
             << " State# " << State
             << " StateCounter# " << StateCounter
             << " current# " << current;
         switch (PrevState) {
-            case  NKikimrBlobStorage::TPDiskState::Unknown:
+            case NKikimrBlobStorage::TPDiskState::Unknown:
                 return current;
             default:
                 return EPDiskStatus::INACTIVE;
@@ -84,7 +90,7 @@ EPDiskStatus TPDiskStatusComputer::Compute(EPDiskStatus current, TString& reason
     }
 
     reason = TStringBuilder()
-        << " PrevState# " << PrevState
+        <<  "PrevState# " << PrevState
         << " State# " << State
         << " StateCounter# " << StateCounter
         << " StateLimit# " << stateLimit;
@@ -115,6 +121,14 @@ void TPDiskStatusComputer::Reset() {
     StateCounter = 0;
 }
 
+void TPDiskStatusComputer::SetForcedStatus(EPDiskStatus status) {
+    ForcedStatus = status;
+}
+
+void TPDiskStatusComputer::ResetForcedStatus() {
+    ForcedStatus.Clear();
+}
+
 /// TPDiskStatus
 
 TPDiskStatus::TPDiskStatus(EPDiskStatus initialStatus, const ui32& defaultStateLimit, const TLimitsMap& stateLimits)
@@ -128,13 +142,9 @@ void TPDiskStatus::AddState(EPDiskState state) {
     TPDiskStatusComputer::AddState(state);
 }
 
-bool TPDiskStatus::IsChanged(TString& reason) const {
-    return Current != Compute(Current, reason);
-}
-
 bool TPDiskStatus::IsChanged() const {
     TString unused;
-    return IsChanged(unused);
+    return Current != Compute(Current, unused);
 }
 
 void TPDiskStatus::ApplyChanges(TString& reason) {
@@ -193,6 +203,13 @@ TPDiskInfo::TPDiskInfo(EPDiskStatus initialStatus, const ui32& defaultStateLimit
 void TPDiskInfo::AddState(EPDiskState state) {
     TPDiskStatus::AddState(state);
     Touch();
+}
+
+/// TNodeInfo
+
+bool TNodeInfo::HasFaultyMarker() const {
+    return Markers.contains(NKikimrCms::MARKER_DISK_FAULTY)
+        || Markers.contains(NKikimrCms::MARKER_DISK_BROKEN);
 }
 
 /// TClusterMap
@@ -411,9 +428,15 @@ class TConfigUpdater: public TUpdaterBase<TEvSentinel::TEvConfigUpdated, TConfig
             SentinelState->Nodes.clear();
             for (const auto& host : record.GetState().GetHosts()) {
                 if (host.HasNodeId() && host.HasLocation() && host.HasName()) {
+                    THashSet<NKikimrCms::EMarker> markers;
+                    for (auto marker : host.GetMarkers()) {
+                        markers.insert(static_cast<NKikimrCms::EMarker>(marker));
+                    }
+
                     SentinelState->Nodes.emplace(host.GetNodeId(), TNodeInfo{
                         .Host = host.GetName(),
                         .Location = NActors::TNodeLocation(host.GetLocation()),
+                        .Markers = std::move(markers),
                     });
                 }
             }
@@ -861,11 +884,18 @@ class TSentinel: public TActorBootstrapped<TSentinel> {
             const TPDiskID& id = pdisk.first;
             TPDiskInfo& info = *(pdisk.second);
 
-            if (!SentinelState->Nodes.contains(id.NodeId)) {
+            auto it = SentinelState->Nodes.find(id.NodeId);
+            if (it == SentinelState->Nodes.end()) {
                 LOG_E("Missing node info"
                     << ": pdiskId# " << id);
                 info.IgnoreReason = NKikimrCms::TPDiskInfo::MISSING_NODE;
                 continue;
+            }
+
+            if (it->second.HasFaultyMarker()) {
+                info.SetForcedStatus(EPDiskStatus::FAULTY);
+            } else {
+                info.ResetForcedStatus();
             }
 
             all.AddPDisk(id);
@@ -958,6 +988,18 @@ class TSentinel: public TActorBootstrapped<TSentinel> {
         }
 
         NTabletPipe::SendData(SelfId(), CmsState->BSControllerPipe, request.Release(), ++SentinelState->ChangeRequestId);
+    }
+
+    void Handle(TEvSentinel::TEvUpdateHostMarkers::TPtr& ev) {
+        for (auto& [nodeId, markers] : ev->Get()->HostMarkers) {
+            auto it = SentinelState->Nodes.find(nodeId);
+            if (it == SentinelState->Nodes.end()) {
+                // markers will be updated upon next ConfigUpdate iteration
+                continue;
+            }
+
+            it->second.Markers = std::move(markers);
+        }
     }
 
     void Handle(TEvCms::TEvGetSentinelStateRequest::TPtr& ev) {
@@ -1140,7 +1182,7 @@ class TSentinel: public TActorBootstrapped<TSentinel> {
     }
 
     void OnPipeDisconnected() {
-        if (const TActorId& actor = std::exchange(ConfigUpdater.Id, {})) {
+        if (const TActorId& actor = ConfigUpdater.Id) {
             Send(actor, new TEvSentinel::TEvBSCPipeDisconnected());
         }
 
@@ -1191,6 +1233,7 @@ public:
             sFunc(TEvSentinel::TEvConfigUpdated, OnConfigUpdated);
             sFunc(TEvSentinel::TEvUpdateState, UpdateState);
             sFunc(TEvSentinel::TEvStateUpdated, OnStateUpdated);
+            hFunc(TEvSentinel::TEvUpdateHostMarkers, Handle);
             sFunc(TEvSentinel::TEvBSCPipeDisconnected, OnPipeDisconnected);
 
             hFunc(TEvCms::TEvGetSentinelStateRequest, Handle);

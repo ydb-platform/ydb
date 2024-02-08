@@ -1,0 +1,71 @@
+--- create_table.sql	2023-07-24 18:02:30.058334000 +0300
++++ create_table.sql	2023-07-27 11:26:22.063095000 +0300
+@@ -256,21 +256,7 @@
+ -- invalid: non-lowercase quoted reloptions identifiers
+ CREATE TABLE tas_case WITH ("Fillfactor" = 10) AS SELECT 1 a;
+ 
+-CREATE UNLOGGED TABLE unlogged1 (a int primary key);			-- OK
+-CREATE TEMPORARY TABLE unlogged2 (a int primary key);			-- OK
+-SELECT relname, relkind, relpersistence FROM pg_class WHERE relname ~ '^unlogged\d' ORDER BY relname;
+-REINDEX INDEX unlogged1_pkey;
+-REINDEX INDEX unlogged2_pkey;
+-SELECT relname, relkind, relpersistence FROM pg_class WHERE relname ~ '^unlogged\d' ORDER BY relname;
+-DROP TABLE unlogged2;
+-INSERT INTO unlogged1 VALUES (42);
+-CREATE UNLOGGED TABLE public.unlogged2 (a int primary key);		-- also OK
+-CREATE UNLOGGED TABLE pg_temp.unlogged3 (a int primary key);	-- not OK
+-CREATE TABLE pg_temp.implicitly_temp (a int primary key);		-- OK
+ CREATE TEMP TABLE explicitly_temp (a int primary key);			-- also OK
+-CREATE TEMP TABLE pg_temp.doubly_temp (a int primary key);		-- also OK
+-CREATE TEMP TABLE public.temp_to_perm (a int primary key);		-- not OK
+-DROP TABLE unlogged1, public.unlogged2;
+ 
+ CREATE TABLE as_select1 AS SELECT * FROM pg_class WHERE relkind = 'r';
+ CREATE TABLE as_select1 AS SELECT * FROM pg_class WHERE relkind = 'r';
+@@ -301,8 +287,10 @@
+ CREATE TABLE withoid() WITH (oids = true);
+ 
+ -- but explicitly not adding oids is still supported
+-CREATE TEMP TABLE withoutoid() WITHOUT OIDS; DROP TABLE withoutoid;
+-CREATE TEMP TABLE withoutoid() WITH (oids = false); DROP TABLE withoutoid;
++CREATE TEMP TABLE withoutoid() WITHOUT OIDS;
++DROP TABLE withoutoid;
++CREATE TEMP TABLE withoutoid() WITH (oids = false);
++DROP TABLE withoutoid;
+ 
+ -- check restriction with default expressions
+ -- invalid use of column reference in default expressions
+@@ -321,7 +309,9 @@
+ -- Verify that subtransaction rollback restores rd_createSubid.
+ BEGIN;
+ CREATE TABLE remember_create_subid (c int);
+-SAVEPOINT q; DROP TABLE remember_create_subid; ROLLBACK TO q;
++SAVEPOINT q;
++DROP TABLE remember_create_subid;
++ROLLBACK TO q;
+ COMMIT;
+ DROP TABLE remember_create_subid;
+ 
+@@ -329,7 +319,9 @@
+ CREATE TABLE remember_node_subid (c int);
+ BEGIN;
+ ALTER TABLE remember_node_subid ALTER c TYPE bigint;
+-SAVEPOINT q; DROP TABLE remember_node_subid; ROLLBACK TO q;
++SAVEPOINT q;
++DROP TABLE remember_node_subid;
++ROLLBACK TO q;
+ COMMIT;
+ DROP TABLE remember_node_subid;
+ 
+@@ -753,11 +745,6 @@
+ 
+ CREATE TABLE part_a PARTITION OF parted FOR VALUES IN ('a');
+ 
+--- only inherited attributes (never local ones)
+-SELECT attname, attislocal, attinhcount FROM pg_attribute
+-  WHERE attrelid = 'part_a'::regclass and attnum > 0
+-  ORDER BY attnum;
+-
+ -- able to specify column default, column constraint, and table constraint
+ 
+ -- first check the "column specified more than once" error

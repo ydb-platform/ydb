@@ -111,7 +111,7 @@ THashMap<ui64, TShardParamValuesAndRanges> PartitionParamByKey(
 
 THashMap<ui64, TShardParamValuesAndRanges> PartitionParamByKeyPrefix(
     const NUdf::TUnboxedValue& value, NKikimr::NMiniKQL::TType* type,
-    const TTableId& tableId, const TIntrusiveConstPtr<TKqpTableKeys::TTableConstInfo>& tableInfo, const TKeyDesc& key,
+    const TTableId& tableId, const TIntrusiveConstPtr<TTableConstInfo>& tableInfo, const TKeyDesc& key,
     const NMiniKQL::THolderFactory&, const NMiniKQL::TTypeEnvironment& typeEnv)
 {
     YQL_ENSURE(tableInfo);

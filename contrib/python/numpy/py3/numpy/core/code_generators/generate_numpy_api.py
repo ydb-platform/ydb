@@ -1,6 +1,8 @@
+#!/usr/bin/env python3
 import os
-import genapi
+import argparse
 
+import genapi
 from genapi import \
         TypeApi, GlobalVarApi, FunctionApi, BoolValuesApi
 
@@ -53,7 +55,6 @@ _import_array(void)
   c_api = PyObject_GetAttrString(numpy, "_ARRAY_API");
   Py_DECREF(numpy);
   if (c_api == NULL) {
-      PyErr_SetString(PyExc_AttributeError, "_ARRAY_API not found");
       return -1;
   }
 
@@ -139,19 +140,12 @@ void *PyArray_API[] = {
 };
 """
 
-c_api_header = """
-===========
-NumPy C-API
-===========
-"""
-
 def generate_api(output_dir, force=False):
     basename = 'multiarray_api'
 
     h_file = os.path.join(output_dir, '__%s.h' % basename)
     c_file = os.path.join(output_dir, '__%s.c' % basename)
-    d_file = os.path.join(output_dir, '%s.txt' % basename)
-    targets = (h_file, c_file, d_file)
+    targets = (h_file, c_file)
 
     sources = numpy_api.multiarray_api
 
@@ -165,7 +159,6 @@ def generate_api(output_dir, force=False):
 def do_generate_api(targets, sources):
     header_file = targets[0]
     c_file = targets[1]
-    doc_file = targets[2]
 
     global_vars = sources[0]
     scalar_bool_values = sources[1]
@@ -234,11 +227,30 @@ def do_generate_api(targets, sources):
     s = c_template % ',\n'.join(init_list)
     genapi.write_file(c_file, s)
 
-    # write to documentation
-    s = c_api_header
-    for func in numpyapi_list:
-        s += func.to_ReST()
-        s += '\n\n'
-    genapi.write_file(doc_file, s)
-
     return targets
+
+
+def main():
+    parser = argparse.ArgumentParser()
+    parser.add_argument(
+        "-o",
+        "--outdir",
+        type=str,
+        help="Path to the output directory"
+    )
+    parser.add_argument(
+        "-i",
+        "--ignore",
+        type=str,
+        help="An ignored input - may be useful to add a "
+             "dependency between custom targets"
+    )
+    args = parser.parse_args()
+
+    outdir_abs = os.path.join(os.getcwd(), args.outdir)
+
+    generate_api(outdir_abs)
+
+
+if __name__ == "__main__":
+    main()

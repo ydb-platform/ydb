@@ -19,7 +19,7 @@ Y_UNIT_TEST_SUITE(BlobDepot) {
         ui32 seed;
         LoadSeed(seed);
         TBlobDepotTestEnvironment tenv(seed);
-        
+
         TestBasicPutAndGet(tenv, 1, tenv.RegularGroups[0]);
         TestBasicPutAndGet(tenv, 11, tenv.BlobDepot);
     }
@@ -48,7 +48,7 @@ Y_UNIT_TEST_SUITE(BlobDepot) {
         // block all tablet generations <= tabletGeneration
         VerifiedBlock(env, nodeId, groupId, tabletId, tabletGeneration, state);
 
-        // do TEvGet with Reader* params 
+        // do TEvGet with Reader* params
         auto mustRestoreFirst = false;
         auto isIndexOnly = false;
 
@@ -78,7 +78,7 @@ Y_UNIT_TEST_SUITE(BlobDepot) {
         ui32 seed;
         LoadSeed(seed);
         TBlobDepotTestEnvironment tenv(seed);
-        
+
         TestBasicRange(tenv, 1, tenv.RegularGroups[0]);
         TestBasicRange(tenv, 100, tenv.BlobDepot);
     }
@@ -87,7 +87,7 @@ Y_UNIT_TEST_SUITE(BlobDepot) {
         ui32 seed;
         LoadSeed(seed);
         TBlobDepotTestEnvironment tenv(seed);
-        
+
         TestBasicDiscover(tenv, 1000, tenv.RegularGroups[0]);
         TestBasicDiscover(tenv, 100, tenv.BlobDepot);
     }
@@ -96,7 +96,7 @@ Y_UNIT_TEST_SUITE(BlobDepot) {
         ui32 seed;
         LoadSeed(seed);
         TBlobDepotTestEnvironment tenv(seed);
-        
+
         TestBasicBlock(tenv, 15, tenv.RegularGroups[0]);
         TestBasicBlock(tenv, 100, tenv.BlobDepot);
     }
@@ -105,7 +105,7 @@ Y_UNIT_TEST_SUITE(BlobDepot) {
         ui32 seed;
         LoadSeed(seed);
         TBlobDepotTestEnvironment tenv(seed);
-        
+
         TestBasicCollectGarbage(tenv, 15, tenv.RegularGroups[0]);
         TestBasicCollectGarbage(tenv, 100, tenv.BlobDepot);
     }
@@ -114,7 +114,7 @@ Y_UNIT_TEST_SUITE(BlobDepot) {
         ui32 seed;
         LoadSeed(seed);
         TBlobDepotTestEnvironment tenv(seed);
-        
+
         // TestVerifiedRandom(tenv, 8, 15, tenv.RegularGroups[0], 1000);
         TestVerifiedRandom(tenv, 8, 100, tenv.BlobDepot, 1000);
     }
@@ -123,7 +123,7 @@ Y_UNIT_TEST_SUITE(BlobDepot) {
         ui32 seed;
         LoadSeed(seed);
         TBlobDepotTestEnvironment tenv(seed);
-        
+
         // TestLoadPutAndGet(tenv, 100, tenv.BlobDepot, 1 << 10, 1 << 15, 500);
         TestLoadPutAndGet(tenv, 100, tenv.BlobDepot, 100, 1 << 10, 500);
     }
@@ -132,7 +132,7 @@ Y_UNIT_TEST_SUITE(BlobDepot) {
         ui32 seed;
         LoadSeed(seed);
         TBlobDepotTestEnvironment tenv(seed);
-        
+
         TestLoadPutAndGet(tenv, 15, tenv.RegularGroups[0], 100, 1 << 10, 500, true, 10, { 5, 1, 5, 1, 1, 0 });
         // no blob depot restarts performed
     }
@@ -141,7 +141,7 @@ Y_UNIT_TEST_SUITE(BlobDepot) {
         ui32 seed;
         LoadSeed(seed);
         TBlobDepotTestEnvironment tenv(seed);
-        
+
         TestVerifiedRandom(tenv, 8, 15, tenv.RegularGroups[0], 1000, 500, 10, { 10, 10, 3, 3, 2, 1, 1, 3, 3, 0 });
         // no blob depot restarts performed
     }

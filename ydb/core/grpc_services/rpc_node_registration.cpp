@@ -1,11 +1,13 @@
 #include "service_discovery.h"
 
 #include <ydb/core/grpc_services/base/base.h>
-#include <library/cpp/actors/core/actor_bootstrapped.h>
-#include <library/cpp/actors/interconnect/interconnect.h>
+#include <ydb/core/base/feature_flags.h>
+#include <ydb/library/actors/core/actor_bootstrapped.h>
+#include <ydb/library/actors/interconnect/interconnect.h>
 #include <ydb/core/grpc_services/auth_processor/dynamic_node_auth_processor.h>
 #include <ydb/core/base/tablet_pipe.h>
 #include <ydb/core/base/appdata.h>
+#include <ydb/core/base/nameservice.h>
 #include <ydb/core/mind/node_broker.h>
 #include <ydb/core/protos/node_broker.pb.h>
 #include <ydb/public/api/protos/ydb_discovery.pb.h>

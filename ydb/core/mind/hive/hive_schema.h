@@ -267,9 +267,10 @@ struct Schema : NIceDb::Schema {
         struct Path : Column<3, NScheme::NTypeIds::Utf8> {};
         struct Primary : Column<4, NScheme::NTypeIds::Bool> {};
         struct HiveId : Column<5, NScheme::NTypeIds::Uint64> {};
+        struct ServerlessComputeResourcesMode : Column<6, NScheme::NTypeIds::Uint32> { using Type = NKikimrSubDomains::EServerlessComputeResourcesMode; };
 
         using TKey = TableKey<SchemeshardId, PathId>;
-        using TColumns = TableColumns<SchemeshardId, PathId, Path, Primary, HiveId>;
+        using TColumns = TableColumns<SchemeshardId, PathId, Path, Primary, HiveId, ServerlessComputeResourcesMode>;
     };
 
     struct BlockedOwner : Table<18> {
@@ -288,6 +289,15 @@ struct Schema : NIceDb::Schema {
         using TColumns = TableColumns<Begin, End, OwnerId>;
     };
 
+    struct TabletAvailabilityRestrictions : Table<20> {
+        struct Node : Column<1, Schema::Node::ID::ColumnType> {};
+        struct TabletType : Column<2, NScheme::NTypeIds::Uint64> { using Type = TTabletTypes::EType;  };
+        struct MaxCount : Column<3, NScheme::NTypeIds::Uint64> {};
+
+        using TKey = TableKey<Node, TabletType>;
+        using TColumns = TableColumns<Node, TabletType, MaxCount>;
+    };
+
     using TTables = SchemaTables<
                                 State,
                                 Tablet,
@@ -302,7 +312,8 @@ struct Schema : NIceDb::Schema {
                                 Metrics,
                                 SubDomain,
                                 BlockedOwner,
-                                TabletOwners
+                                TabletOwners,
+                                TabletAvailabilityRestrictions
                                 >;
     using TSettings = SchemaSettings<
                                     ExecutorLogBatching<true>,

@@ -12,6 +12,11 @@
                         "Node Type": "Limit",
                         "Operators": [
                             {
+                                "Inputs": [
+                                    {
+                                        "ExternalPlanNodeId": 8
+                                    }
+                                ],
                                 "Limit": "1001",
                                 "Name": "Limit"
                             }
@@ -27,14 +32,33 @@
                                         "Node Type": "Limit-Filter-LeftJoin (MapJoin)",
                                         "Operators": [
                                             {
+                                                "Inputs": [
+                                                    {
+                                                        "InternalOperatorId": 1
+                                                    }
+                                                ],
                                                 "Limit": "1001",
                                                 "Name": "Limit"
                                             },
                                             {
+                                                "Inputs": [
+                                                    {
+                                                        "InternalOperatorId": 2
+                                                    }
+                                                ],
                                                 "Name": "Filter",
-                                                "Predicate": "Not And item.a.ten == 2 Or item.b.hundred == 3"
+                                                "Predicate": "Not Exist(item.b.unique2) And item.a.ten == 2 Or item.b.hundred == 3"
                                             },
                                             {
+                                                "Condition": "unique2 = tenthous",
+                                                "Inputs": [
+                                                    {
+                                                        "ExternalPlanNodeId": 6
+                                                    },
+                                                    {
+                                                        "ExternalPlanNodeId": 4
+                                                    }
+                                                ],
                                                 "Name": "LeftJoin (MapJoin)"
                                             }
                                         ],
@@ -58,6 +82,7 @@
                                                                         "Node Type": "TableFullScan",
                                                                         "Operators": [
                                                                             {
+                                                                                "Inputs": [],
                                                                                 "Name": "TableFullScan",
                                                                                 "ReadColumns": [
                                                                                     "hundred",
@@ -88,10 +113,11 @@
                                                 "PlanNodeType": "Connection",
                                                 "Plans": [
                                                     {
-                                                        "Node Type": "TablePointLookup",
+                                                        "Node Type": "TableRangeScan",
                                                         "Operators": [
                                                             {
-                                                                "Name": "TablePointLookup",
+                                                                "Inputs": [],
+                                                                "Name": "TableRangeScan",
                                                                 "ReadColumns": [
                                                                     "ten",
                                                                     "unique2"
@@ -151,7 +177,7 @@
                     "scan_by": [
                         "unique2 (-\u221e, +\u221e)"
                     ],
-                    "type": "Lookup"
+                    "type": "Scan"
                 }
             ]
         }

@@ -21,7 +21,7 @@
 
 #include "Config.hh"
 #include "NodeImpl.hh"
-#include "CustomFields.hh"
+#include "CustomAttributes.hh"
 #include <string>
 
 /// \file
@@ -103,7 +103,7 @@ public:
     void addField(const std::string &name, const Schema &fieldSchema);
     // Add a field with custom attributes
     void addField(const std::string &name, const Schema &fieldSchema,
-                  const CustomFields &customFields);
+                  const CustomAttributes &customAttributes);
 
     std::string getDoc() const;
     void setDoc(const std::string &);

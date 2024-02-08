@@ -4,7 +4,7 @@
 
 namespace NKikimr::NSharding {
 
-void TUnboxedValueReader::BuildStringForHash(const NKikimr::NUdf::TUnboxedValue& value, IHashCalcer& hashCalcer) const {
+void TUnboxedValueReader::BuildStringForHash(const NKikimr::NUdf::TUnboxedValue& value, NArrow::NHash::NXX64::TStreamStringHashCalcer& hashCalcer) const {
     for (auto&& i : ColumnsInfo) {
         auto columnValue = value.GetElement(i.Idx);
         if (columnValue.IsString()) {

@@ -1,6 +1,6 @@
 #pragma once
-#include <library/cpp/actors/core/actor_bootstrapped.h>
-#include <library/cpp/actors/core/mon.h>
+#include <ydb/library/actors/core/actor_bootstrapped.h>
+#include <ydb/library/actors/core/mon.h>
 #include <library/cpp/protobuf/json/json2proto.h>
 #include <ydb/core/base/tablet_pipe.h>
 #include <ydb/library/services/services.pb.h>
@@ -10,7 +10,7 @@
 #include "json_pipe_req.h"
 
 #include <ydb/public/api/grpc/ydb_topic_v1.grpc.pb.h>
-#include <ydb/core/grpc_services/rpc_calls.h>
+#include <ydb/core/grpc_services/rpc_calls_topic.h>
 #include <ydb/core/grpc_services/local_rpc/local_rpc.h>
 #include <ydb/public/sdk/cpp/client/ydb_types/status/status.h>
 

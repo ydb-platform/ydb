@@ -24,7 +24,7 @@ public:
     };
 
     using TResponse = Ydb::Query::SessionState;
-    using TStreamProcessorPtr = NGrpc::IStreamRequestReadProcessor<TResponse>::TPtr;
+    using TStreamProcessorPtr = NYdbGrpc::IStreamRequestReadProcessor<TResponse>::TPtr;
     TImpl(TStreamProcessorPtr ptr, const TString& id, const TString& endpoint);
     ~TImpl();
 

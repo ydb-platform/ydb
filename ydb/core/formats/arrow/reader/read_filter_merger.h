@@ -3,8 +3,9 @@
 #include <ydb/core/formats/arrow/arrow_filter.h>
 #include <ydb/core/formats/arrow/arrow_helpers.h>
 #include <ydb/core/formats/arrow/switch/switch_type.h>
+#include <ydb/core/formats/arrow/permutations.h>
 #include <contrib/libs/apache/arrow/cpp/src/arrow/record_batch.h>
-#include <library/cpp/actors/core/log.h>
+#include <ydb/library/actors/core/log.h>
 #include <util/generic/hash.h>
 #include <util/string/join.h>
 #include <set>
@@ -20,6 +21,16 @@ private:
 public:
     TSortableScanData() = default;
     TSortableScanData(const std::shared_ptr<arrow::RecordBatch>& batch, const std::vector<std::string>& columns);
+
+    std::shared_ptr<arrow::RecordBatch> ExtractPosition(const ui64 pos) const {
+        std::vector<std::shared_ptr<arrow::Array>> columns;
+        std::shared_ptr<arrow::Schema> schema = std::make_shared<arrow::Schema>(Fields);
+        for (ui32 i = 0; i < Columns.size(); ++i) {
+            auto extracted = NArrow::CopyRecords(Columns[i], {pos});
+            columns.emplace_back(extracted);
+        }
+        return arrow::RecordBatch::Make(schema, 1, columns);
+    }
 
     std::shared_ptr<arrow::RecordBatch> Slice(const ui64 offset, const ui64 count) const {
         std::vector<std::shared_ptr<arrow::Array>> slicedArrays;
@@ -80,9 +91,18 @@ private:
 public:
     TSortableBatchPosition() = default;
 
-    std::shared_ptr<arrow::RecordBatch> Slice(const ui64 offset, const ui64 count) const {
+    std::shared_ptr<arrow::RecordBatch> ExtractSortingPosition() const {
+        return Sorting->ExtractPosition(Position);
+    }
+
+    std::shared_ptr<arrow::RecordBatch> SliceData(const ui64 offset, const ui64 count) const {
         AFL_VERIFY(Data);
         return Data->Slice(offset, count);
+    }
+
+    std::shared_ptr<arrow::RecordBatch> SliceKeys(const ui64 offset, const ui64 count) const {
+        AFL_VERIFY(Sorting);
+        return Sorting->Slice(offset, count);
     }
 
     class TFoundPosition {
@@ -248,7 +268,7 @@ public:
         return Sorting->IsSameSchema(schema);
     }
 
-    TSortableBatchPosition(std::shared_ptr<arrow::RecordBatch> batch, const ui32 position, const std::vector<std::string>& sortingColumns, const std::vector<std::string>& dataColumns, const bool reverseSort)
+    TSortableBatchPosition(const std::shared_ptr<arrow::RecordBatch>& batch, const ui32 position, const std::vector<std::string>& sortingColumns, const std::vector<std::string>& dataColumns, const bool reverseSort)
         : Position(position)
         , ReverseSort(reverseSort)
     {

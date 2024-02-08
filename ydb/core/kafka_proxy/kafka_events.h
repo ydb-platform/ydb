@@ -1,6 +1,6 @@
 #pragma once
 
-#include <library/cpp/actors/core/event_local.h>
+#include <ydb/library/actors/core/event_local.h>
 #include <ydb/core/base/events.h>
 #include <ydb/services/persqueue_v1/actors/events.h>
 
@@ -22,6 +22,14 @@ struct TEvKafka {
         EvUpdateCounter,
         EvUpdateHistCounter,
         EvTopicOffsetsResponse,
+        EvJoinGroupRequest,
+        EvSyncGroupRequest,
+        EvHeartbeatRequest,
+        EvLeaveGroupRequest,
+        EvKillReadSession,
+        EvCommitedOffsetsResponse,
+        EvCreateTopicsResponse,
+        EvReadSessionInfo,
         EvResponse = EvRequest + 256,
         EvInternalEvents = EvResponse + 256,
         EvEnd
@@ -40,6 +48,46 @@ struct TEvKafka {
 
         ui64 CorrelationId;
         const TMessagePtr<TProduceRequestData> Request;
+    };
+
+    struct TEvJoinGroupRequest : public TEventLocal<TEvJoinGroupRequest, EvJoinGroupRequest> {
+        TEvJoinGroupRequest(const ui64 correlationId, const TMessagePtr<TJoinGroupRequestData>& request)
+        : CorrelationId(correlationId)
+        , Request(request)
+        {}
+
+        ui64 CorrelationId;
+        const TMessagePtr<TJoinGroupRequestData> Request;
+    };
+
+    struct TEvLeaveGroupRequest : public TEventLocal<TEvLeaveGroupRequest, EvLeaveGroupRequest> {
+        TEvLeaveGroupRequest(const ui64 correlationId, const TMessagePtr<TLeaveGroupRequestData>& request)
+        : CorrelationId(correlationId)
+        , Request(request)
+        {}
+
+        ui64 CorrelationId;
+        const TMessagePtr<TLeaveGroupRequestData> Request;
+    };
+
+    struct TEvSyncGroupRequest : public TEventLocal<TEvSyncGroupRequest, EvSyncGroupRequest> {
+        TEvSyncGroupRequest(const ui64 correlationId, const TMessagePtr<TSyncGroupRequestData>& request)
+        : CorrelationId(correlationId)
+        , Request(request)
+        {}
+
+        ui64 CorrelationId;
+        const TMessagePtr<TSyncGroupRequestData> Request;
+    };
+
+    struct TEvHeartbeatRequest : public TEventLocal<TEvHeartbeatRequest, EvHeartbeatRequest> {
+        TEvHeartbeatRequest(const ui64 correlationId, const TMessagePtr<THeartbeatRequestData>& request)
+        : CorrelationId(correlationId)
+        , Request(request)
+        {}
+
+        ui64 CorrelationId;
+        const TMessagePtr<THeartbeatRequestData> Request;
     };
 
     struct TEvResponse : public TEventLocal<TEvResponse, EvResponse> {
@@ -118,6 +166,16 @@ struct TEvKafka {
         {}
     };
 
+    struct TEvReadSessionInfo : public TEventLocal<TEvReadSessionInfo, EvReadSessionInfo> {
+        TEvReadSessionInfo(const TString& groupId)
+        : GroupId(groupId)
+        {}
+
+        TString GroupId;
+    };
+
+    struct TEvKillReadSession : public TEventLocal<TEvKillReadSession, EvKillReadSession> {};
+
     struct TEvUpdateHistCounter : public TEventLocal<TEvUpdateHistCounter, EvUpdateHistCounter> {
         i64 Value;
         ui64 Count;
@@ -159,6 +217,35 @@ struct TEvTopicOffsetsResponse : public NActors::TEventLocal<TEvTopicOffsetsResp
     TVector<TPartitionOffsetsInfo> Partitions;
 };
 
+struct TEvCommitedOffsetsResponse : public NActors::TEventLocal<TEvCommitedOffsetsResponse, EvTopicOffsetsResponse> 
+                           , public NKikimr::NGRpcProxy::V1::TEvPQProxy::TLocalResponseBase
+{
+    TEvCommitedOffsetsResponse()
+    {}
+
+    TString TopicName;
+    EKafkaErrors Status;
+    std::shared_ptr<std::unordered_map<ui32, std::unordered_map<TString, ui32>>> PartitionIdToOffsets;
+};
+
+struct TEvTopicModificationResponse : public NActors::TEventLocal<TEvTopicModificationResponse, EvCreateTopicsResponse> 
+                           , public NKikimr::NGRpcProxy::V1::TEvPQProxy::TLocalResponseBase
+{
+    enum EStatus {
+        OK,
+        ERROR,
+        BAD_REQUEST,
+        INVALID_CONFIG,
+        TOPIC_DOES_NOT_EXIST,
+    };
+
+    TEvTopicModificationResponse()
+    {}
+
+    TString TopicPath;
+    EKafkaErrors Status;
+    TString Message;
+};
 };
 
 } // namespace NKafka

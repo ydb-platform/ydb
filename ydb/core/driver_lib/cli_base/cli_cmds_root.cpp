@@ -188,7 +188,7 @@ public:
         if (!hostname) {
             NMsgBusProxy::TMsgBusClientConfig::CrackAddress(Address, hostname, port);
         }
-        CommandConfig.ClientConfig = NGrpc::TGRpcClientConfig(hostname + ':' + ToString(port));
+        CommandConfig.ClientConfig = NYdbGrpc::TGRpcClientConfig(hostname + ':' + ToString(port));
         if (config.EnableSsl) {
             CommandConfig.ClientConfig.EnableSsl = config.EnableSsl;
             CommandConfig.ClientConfig.SslCredentials.pem_root_certs = config.CaCerts;

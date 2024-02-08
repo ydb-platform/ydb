@@ -11,7 +11,7 @@ SRCS(
 
 PEERDIR(
     ydb/library/accessor
-    library/cpp/actors/core
+    ydb/library/actors/core
     ydb/public/api/protos
     ydb/services/bg_tasks/protos
     ydb/core/base

@@ -123,7 +123,7 @@ class Configurable(HasTraits):
             setattr(self, name, kwargs[name])
 
     # -------------------------------------------------------------------------
-    # Static trait notifiations
+    # Static trait notifications
     # -------------------------------------------------------------------------
 
     @classmethod
@@ -161,7 +161,10 @@ class Configurable(HasTraits):
         return my_config
 
     def _load_config(
-        self, cfg: Config, section_names: list[str] | None = None, traits: list[str] | None = None
+        self,
+        cfg: Config,
+        section_names: list[str] | None = None,
+        traits: dict[str, TraitType[t.Any, t.Any]] | None = None,
     ) -> None:
         """load traits from a Config object"""
 
@@ -321,7 +324,7 @@ class Configurable(HasTraits):
     @classmethod
     def class_print_help(cls, inst: HasTraits | None = None) -> None:
         """Get the help string for a single trait and print it."""
-        print(cls.class_get_help(inst))
+        print(cls.class_get_help(inst))  # noqa: T201
 
     @classmethod
     def _defining_class(
@@ -344,6 +347,7 @@ class Configurable(HasTraits):
             if the defining class is not in `classes`.
         """
         defining_cls = cls
+        assert trait.name is not None
         for parent in cls.mro():
             if (
                 issubclass(parent, Configurable)
@@ -382,9 +386,9 @@ class Configurable(HasTraits):
             desc = desc.default_value
         if not desc:
             # no description from trait, use __doc__
-            desc = getattr(cls, "__doc__", "")
+            desc = getattr(cls, "__doc__", "")  # type:ignore[arg-type]
         if desc:
-            lines.append(c(desc))
+            lines.append(c(desc))  # type:ignore[arg-type]
             lines.append("")
 
         for name, trait in sorted(cls.class_traits(config=True).items()):
@@ -424,12 +428,14 @@ class Configurable(HasTraits):
         for _, trait in sorted(cls.class_traits(config=True).items()):
             ttype = trait.__class__.__name__
 
+            if not trait.name:
+                continue
             termline = classname + "." + trait.name
 
             # Choices or type
             if "Enum" in ttype:
                 # include Enum choices
-                termline += " : " + trait.info_rst()
+                termline += " : " + trait.info_rst()  # type:ignore[attr-defined]
             else:
                 termline += " : " + ttype
             lines.append(termline)
@@ -475,7 +481,7 @@ class LoggingConfigurable(Configurable):
                 UserWarning,
                 stacklevel=2,
             )
-        return proposal.value  # type:ignore[no-any-return]
+        return t.cast(LoggerType, proposal.value)
 
     @default("log")
     def _log_default(self) -> LoggerType:
@@ -496,14 +502,16 @@ class LoggingConfigurable(Configurable):
         """
         if not self.log:
             return None
-        logger = self.log if isinstance(self.log, logging.Logger) else self.log.logger
+        logger: logging.Logger = (
+            self.log if isinstance(self.log, logging.Logger) else self.log.logger
+        )
         if not getattr(logger, "handlers", None):
             # no handlers attribute or empty handlers list
             return None
-        return logger.handlers[0]  # type:ignore[no-any-return]
+        return logger.handlers[0]
 
 
-CT = t.TypeVar('CT', bound='SingletonConfigurable')
+CT = t.TypeVar("CT", bound="SingletonConfigurable")
 
 
 class SingletonConfigurable(LoggingConfigurable):
@@ -540,7 +548,7 @@ class SingletonConfigurable(LoggingConfigurable):
             if isinstance(subclass._instance, cls):
                 # only clear instances that are instances
                 # of the calling class
-                subclass._instance = None
+                subclass._instance = None  # type:ignore[unreachable]
 
     @classmethod
     def instance(cls: type[CT], *args: t.Any, **kwargs: t.Any) -> CT:
@@ -562,7 +570,7 @@ class SingletonConfigurable(LoggingConfigurable):
             >>> foo == Foo.instance()
             True
 
-        Create a subclass that is retrived using the base class instance::
+        Create a subclass that is retrieved using the base class instance::
 
             >>> class Bar(SingletonConfigurable): pass
             >>> class Bam(Bar): pass

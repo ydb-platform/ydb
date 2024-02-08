@@ -1,5 +1,6 @@
 #include "tpch.h"
 
+#include <contrib/libs/fmt/include/fmt/format.h>
 #include <util/string/split.h>
 #include <util/stream/file.h>
 #include <util/string/strip.h>
@@ -30,21 +31,27 @@ namespace {
 
 TVector<TString> TTpchCommandRun::GetQueries() const {
     TVector<TString> queries;
-    TFsPath queriesDir(ExternalQueriesDir);
-    TVector<TString> queriesList;
-    queriesDir.ListNames(queriesList);
-    std::sort(queriesList.begin(), queriesList.end(), [](const TString& l, const TString& r) {
-        auto leftNum = l.substr(1);
-        auto rightNum = r.substr(1);
-        return std::stoi(leftNum) < std::stoi(rightNum);
-        });
-    for (auto&& queryFileName : queriesList) {
-        const TString expectedFileName = "q" + ::ToString(getQueryNumber(queries.size())) + ".sql";
-        Y_ABORT_UNLESS(queryFileName == expectedFileName, "incorrect files naming. have to be q<number>.sql where number in [1, N], where N is requests count");
-        TFileInput fInput(ExternalQueriesDir + "/" + expectedFileName);
-        auto query = fInput.ReadAll();
+    if (!ExternalQueriesDir.Empty()) {
+        TFsPath queriesDir(ExternalQueriesDir);
+        TVector<TString> queriesList;
+        queriesDir.ListNames(queriesList);
+        std::sort(queriesList.begin(), queriesList.end(), [](const TString& l, const TString& r) {
+            auto leftNum = l.substr(1);
+            auto rightNum = r.substr(1);
+            return std::stoi(leftNum) < std::stoi(rightNum);
+            });
+        for (auto&& queryFileName : queriesList) {
+            const TString expectedFileName = "q" + ::ToString(getQueryNumber(queries.size())) + ".sql";
+            Y_ABORT_UNLESS(queryFileName == expectedFileName, "incorrect files naming. have to be q<number>.sql where number in [1, N], where N is requests count");
+            TFileInput fInput(ExternalQueriesDir + "/" + expectedFileName);
+            queries.emplace_back(fInput.ReadAll());
+        }
+    } else {
+        queries = StringSplitter(NResource::Find("tpch_queries.sql")).SplitByString("-- end query").ToList<TString>();
+    }
+
+    for (auto& query : queries) {
         SubstGlobal(query, "{path}", TablesPath);
-        queries.emplace_back(query);
     }
     return queries;
 }
@@ -124,11 +131,11 @@ bool TTpchCommandRun::RunBench(TConfig& config)
             testInfo.ColdTime.MilliSeconds() * 0.001, testInfo.Min.MilliSeconds() * 0.001, testInfo.Max.MilliSeconds() * 0.001,
             testInfo.Mean * 0.001, testInfo.Std * 0.001) << Endl;
         if (collectJsonSensors) {
-            jsonReport.AppendValue(GetSensorValue("ColdTime", testInfo.ColdTime, queryN));
-            jsonReport.AppendValue(GetSensorValue("Min", testInfo.Min, queryN));
-            jsonReport.AppendValue(GetSensorValue("Max", testInfo.Max, queryN));
-            jsonReport.AppendValue(GetSensorValue("Mean", testInfo.Mean, queryN));
-            jsonReport.AppendValue(GetSensorValue("Std", testInfo.Std, queryN));
+            jsonReport.AppendValue(GetSensorValue("ColdTime", testInfo.ColdTime, getQueryNumber(queryN)));
+            jsonReport.AppendValue(GetSensorValue("Min", testInfo.Min, getQueryNumber(queryN)));
+            jsonReport.AppendValue(GetSensorValue("Max", testInfo.Max, getQueryNumber(queryN)));
+            jsonReport.AppendValue(GetSensorValue("Mean", testInfo.Mean, getQueryNumber(queryN)));
+            jsonReport.AppendValue(GetSensorValue("Std", testInfo.Std, getQueryNumber(queryN)));
         }
     }
 
@@ -216,10 +223,17 @@ void TTpchCommandInit::Config(TConfig& config) {
             TablesPath = arg;
         });
     config.Opts->AddLongOption("store", "Storage type."
-            " Options: row, column\n"
+            " Options: row, column, s3\n"
             "row - use row-based storage engine;\n"
-            "column - use column-based storage engine.")
+            "column - use column-based storage engine.\n"
+            "s3 - use cloud tpc bucket")
         .DefaultValue("row").StoreResult(&StoreType);
+    config.Opts->AddLongOption("s3-prefix", "Root path to TPC-H dataset in s3 storage")
+        .Optional()
+        .StoreResult(&S3Prefix);
+    config.Opts->AddLongOption('e', "s3-endpoint", "Endpoint of S3 bucket with TPC-H dataset")
+        .Optional()
+        .StoreResult(&S3Endpoint);
 };
 
 void TTpchCommandInit::SetPartitionByCols(TString& createSql) {
@@ -246,11 +260,28 @@ void TTpchCommandInit::SetPartitionByCols(TString& createSql) {
 
 int TTpchCommandInit::Run(TConfig& config) {
     StoreType = to_lower(StoreType);
-    TString storageType = "";
+    TString storageType = "-- ";
     TString notNull = "";
+    TString createExternalDataSource;
+    TString external;
+    TString partitioning = "AUTO_PARTITIONING_MIN_PARTITIONS_COUNT";
+    TString primaryKey = ", PRIMARY KEY";
     if (StoreType == "column") {
-        storageType = "STORE = COLUMN,";
+        storageType = "STORE = COLUMN, --";
         notNull = "NOT NULL";
+    } else if (StoreType == "s3") {
+        storageType = fmt::format(R"(DATA_SOURCE = "{}_tpc_s3_external_source", FORMAT = "parquet", LOCATION = )", TablesPath);
+        notNull = "NOT NULL";
+        createExternalDataSource = fmt::format(R"(
+            CREATE EXTERNAL DATA SOURCE `{}_tpc_s3_external_source` WITH (
+                SOURCE_TYPE="ObjectStorage",
+                LOCATION="{}",
+                AUTH_METHOD="NONE"
+            );
+        )", TablesPath, S3Endpoint);
+        external = "EXTERNAL";
+        partitioning = "--";
+        primaryKey = "--";
     } else if (StoreType != "row") {
         throw yexception() << "Incorrect storage type. Available options: \"row\", \"column\"." << Endl;
     }
@@ -260,10 +291,17 @@ int TTpchCommandInit::Run(TConfig& config) {
     TString createSql = NResource::Find("tpch_schema.sql");
     TTableClient client(driver);
 
+    SubstGlobal(createSql, "{createExternal}", createExternalDataSource);
+    SubstGlobal(createSql, "{external}", external);
     SubstGlobal(createSql, "{notnull}", notNull);
+    SubstGlobal(createSql, "{partitioning}", partitioning);
     SubstGlobal(createSql, "{path}", TablesPath);
+    SubstGlobal(createSql, "{primary_key}", primaryKey);
+    SubstGlobal(createSql, "{s3_prefix}", S3Prefix);
     SubstGlobal(createSql, "{store}", storageType);
     SetPartitionByCols(createSql);
+
+    Cout << createSql << Endl;
 
     ThrowOnError(client.RetryOperationSync([createSql](TSession session) {
         return session.ExecuteSchemeQuery(createSql).GetValueSync();
@@ -281,24 +319,33 @@ TTpchCommandClean::TTpchCommandClean()
 void TTpchCommandClean::Config(TConfig& config) {
     NYdb::NConsoleClient::TClientCommand::Config(config);
     config.SetFreeArgsNum(0);
+    config.Opts->AddLongOption('e', "external", "Drop tables as external. Use if initialized with external storage")
+        .Optional()
+        .StoreTrue(&IsExternal);
+    config.Opts->AddLongOption('p', "path", "Folder name where benchmark tables are located")
+        .Optional()
+        .StoreResult(&TablesPath);
 };
 
 int TTpchCommandClean::Run(TConfig& config) {
     auto driver = CreateDriver(config);
     TTableClient client(driver);
 
-    static const char DropDdlTmpl[] = "DROP TABLE `%s`;";
-    char dropDdl[sizeof(DropDdlTmpl) + 8192*3]; // 32*256 for DbPath
-    for (auto& table : Tables) {
-        TString fullPath = FullTablePath(config.Database, table);
-        int res = std::sprintf(dropDdl, DropDdlTmpl, fullPath.c_str());
-        if (res < 0) {
-            Cerr << "Failed to generate DROP DDL query for `" << fullPath << "` table." << Endl;
-            return -1;
-        }
+    TString dropDdl;
+    for (const auto& table : Tables) {
+        TString fullPath = FullTablePath(config.Database, fmt::format("{}{}", TablesPath, table));
+        fmt::format_to(std::back_inserter(dropDdl), "DROP {} TABLE `{}`", IsExternal ? "EXTERNAL" : "", fullPath);
 
-        ThrowOnError(client.RetryOperationSync([dropDdl](TSession session) {
+        ThrowOnError(client.RetryOperationSync([&dropDdl](TSession session) {
             return session.ExecuteSchemeQuery(dropDdl).GetValueSync();
+        }));
+        dropDdl.clear();
+    }
+
+    if (IsExternal) {
+        TString fullPath = FullTablePath(config.Database, fmt::format("{}_tpc_s3_external_source", TablesPath));
+        ThrowOnError(client.RetryOperationSync([&](TSession session) {
+            return session.ExecuteSchemeQuery(fmt::format("DROP EXTERNAL DATA SOURCE `{}`;", fullPath)).GetValueSync();
         }));
     }
 
@@ -381,23 +428,23 @@ void TTpchCommandRun::Config(TConfig& config) {
 
     config.Opts->MutuallyExclusiveOpt(includeOpt, excludeOpt);
 
-    config.Opts->AddLongOption("executor", "Query executor type."
+    config.Opts->AddLongOption("executer", "Query executer type."
             " Options: scan, generic\n"
             "scan - use scan queries;\n"
             "generic - use generic queries.")
-        .DefaultValue("scan").StoreResult(&QueryExecutorType);
+        .DefaultValue("scan").StoreResult(&QueryExecuterType);
 };
 
 
 int TTpchCommandRun::Run(TConfig& config) {
-    if (QueryExecutorType == "scan") {
+    if (QueryExecuterType == "scan") {
         const bool okay = RunBench<NYdb::NTable::TTableClient>(config);
         return !okay;
-    } else if (QueryExecutorType == "generic") {
+    } else if (QueryExecuterType == "generic") {
         const bool okay = RunBench<NYdb::NQuery::TQueryClient>(config);
         return !okay;
     } else {
-        ythrow yexception() << "Incorrect executor type. Available options: \"scan\", \"generic\"." << Endl;
+        ythrow yexception() << "Incorrect executer type. Available options: \"scan\", \"generic\"." << Endl;
     }
 };
 

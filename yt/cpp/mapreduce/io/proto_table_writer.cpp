@@ -7,6 +7,8 @@
 
 #include <yt/cpp/mapreduce/interface/io.h>
 
+#include <yt/cpp/mapreduce/io/job_writer.h>
+
 #include <yt/yt_proto/yt/formats/extension.pb.h>
 
 #include <google/protobuf/unknown_field_set.h>
@@ -187,6 +189,30 @@ void TLenvalProtoTableWriter::AddRow(Message&& row, size_t tableIndex)
 void TLenvalProtoTableWriter::Abort()
 {
     Output_->Abort();
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
+TLenvalProtoSingleTableWriter::TLenvalProtoSingleTableWriter(
+    THolder<IProxyOutput> output,
+    const Descriptor* descriptor)
+    : TLenvalProtoTableWriter(std::move(output), {descriptor})
+{ }
+
+void TLenvalProtoSingleTableWriter::AddRow(const Message& row, size_t tableIndex)
+{
+    ValidateProtoDescriptor(row, 0, Descriptors_, false);
+
+    Y_ABORT_UNLESS(row.GetReflection()->GetUnknownFields(row).empty(),
+        "Message has unknown fields. This probably means bug in client code.\n"
+        "Message: %s", row.DebugString().data());
+
+    auto* stream = Output_->GetStream(tableIndex);
+    i32 size = row.ByteSize();
+    stream->Write(&size, sizeof(size));
+    bool serializedOk = row.SerializeToArcadiaStream(stream);
+    Y_ENSURE(serializedOk, "Failed to serialize protobuf message");
+    Output_->OnRowFinished(tableIndex);
 }
 
 ////////////////////////////////////////////////////////////////////////////////

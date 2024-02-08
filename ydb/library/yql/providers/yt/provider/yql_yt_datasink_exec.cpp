@@ -55,23 +55,25 @@ bool NeedFallback(const TIssues& issues) {
     return false;
 }
 
-TIssue WrapIssuesOnHybridFallback(TPosition pos, const TIssues& issues) {
-    TIssue result(pos, "Hybrid execution fallback on YT");
-    result.SetCode(TIssuesIds::DQ_GATEWAY_NEED_FALLBACK_ERROR, TSeverityIds::S_WARNING);
+TIssue WrapIssuesOnHybridFallback(TPosition pos, const TIssues& issues, TString fallbackOpName) {
+    TIssue result(pos, "Hybrid execution fallback on YT: " + fallbackOpName);
+    result.SetCode(TIssuesIds::DQ_GATEWAY_NEED_FALLBACK_ERROR, TSeverityIds::S_INFO);
 
-    const std::function<void(TIssue& issue)> toWarning = [&](TIssue& issue) {
-        if (issue.Severity == TSeverityIds::S_ERROR || issue.Severity == TSeverityIds::S_FATAL) {
-            issue.Severity = TSeverityIds::S_WARNING;
+    const std::function<void(TIssue& issue)> toInfo = [&](TIssue& issue) {
+        if (issue.Severity == TSeverityIds::S_ERROR
+            || issue.Severity == TSeverityIds::S_FATAL
+            || issue.Severity == TSeverityIds::S_WARNING) {
+            issue.Severity = TSeverityIds::S_INFO;
         }
         for (const auto& subissue : issue.GetSubIssues()) {
-            toWarning(*subissue);
+            toInfo(*subissue);
         }
     };
 
     for (const auto& issue : issues) {
-        TIssuePtr warning(new TIssue(issue));
-        toWarning(*warning);
-        result.AddSubIssue(std::move(warning));
+        TIssuePtr info(new TIssue(issue));
+        toInfo(*info);
+        result.AddSubIssue(std::move(info));
     }
 
     return result;
@@ -125,6 +127,12 @@ private:
     static TExprNode::TPtr FinalizeOutputOp(const TYtState::TPtr& state, const TString& operationHash,
         const IYtGateway::TRunResult& res, const TExprNode::TPtr& input, TExprNode::TPtr& output, TExprContext& ctx, bool markFinished)
     {
+        if (markFinished && !TYtDqProcessWrite::Match(input.Get())) {
+            with_lock(state->StatisticsMutex) {
+                state->HybridStatistics[input->Content()].Entries.emplace_back(TString{"YtExecution"}, 0, 0, 0, 0, 1);
+                state->Statistics[Max<ui32>()].Entries.emplace_back(TString{"YtExecution"}, 0, 0, 0, 0, 1);
+            }
+        }
         auto outSection = TYtOutputOpBase(input).Output();
         YQL_ENSURE(outSection.Size() == res.OutTableStats.size(), "Invalid output table count in IYtGateway::TRunResult");
         TExprNode::TListType newOutTables;
@@ -214,7 +222,7 @@ private:
         }
 
         bool hasNonDeterministicFunctions = false;
-        if (const auto status = PeepHoleOptimizeBeforeExec<true>(optimizedNode, optimizedNode, State_, hasNonDeterministicFunctions, ctx); status.Level != TStatus::Ok) {
+        if (const auto status = PeepHoleOptimizeBeforeExec(optimizedNode, optimizedNode, State_, hasNonDeterministicFunctions, ctx); status.Level != TStatus::Ok) {
             return SyncStatus(status);
         }
 
@@ -286,14 +294,21 @@ private:
                 State_->Statistics[Max<ui32>()].Entries.emplace_back(TString{name}, 0, 0, 0, 0, 1);
             }
         };
+        auto hybridStatWriter = [this](TStringBuf statName, TStringBuf opName) {
+            with_lock(State_->StatisticsMutex) {
+                State_->HybridStatistics[opName].Entries.emplace_back(TString{statName}, 0, 0, 0, 0, 1);
+            }
+        };
 
         switch (input->Head().GetState()) {
             case TExprNode::EState::ExecutionComplete:
                 statWriter("HybridExecution");
+                hybridStatWriter("Execution", input->TailPtr()->Content());
                 output = input->HeadPtr();
                 break;
             case TExprNode::EState::Error: {
                 statWriter("HybridFallback");
+                hybridStatWriter("Fallback", input->TailPtr()->Content());
                 if (State_->Configuration->HybridDqExecutionFallback.Get().GetOrElse(true)) {
                     output = input->TailPtr();
                 } else {
@@ -614,7 +629,7 @@ private:
         }
 
         bool hasNonDeterministicFunctions = false;
-        if (const auto status = PeepHoleOptimizeBeforeExec<false>(optimizedNode, optimizedNode, State_, hasNonDeterministicFunctions, ctx); status.Level != TStatus::Ok) {
+        if (const auto status = PeepHoleOptimizeBeforeExec(optimizedNode, optimizedNode, State_, hasNonDeterministicFunctions, ctx); status.Level != TStatus::Ok) {
             return SyncStatus(status);
         }
 
@@ -671,50 +686,100 @@ private:
             auto clusterStr = TString{cluster.Value()};
 
             delegatedNode = input->ChildPtr(TYtDqProcessWrite::idx_Input);
-            if (const auto status = SubstTables(delegatedNode, State_, false, ctx); status.Level == TStatus::Error) {
-                return SyncStatus(status);
+
+            auto server = State_->Gateway->GetClusterServer(clusterStr);
+            YQL_ENSURE(server, "Invalid YT cluster: " << clusterStr);
+
+            NYT::TRichYPath realTable = State_->Gateway->GetWriteTable(State_->SessionId, clusterStr, tmpTable.Name().StringValue(), tmpFolder);
+            realTable.Append(true);
+            YQL_ENSURE(realTable.TransactionId_.Defined(), "Expected TransactionId");
+
+            NYT::TNode writerOptions = NYT::TNode::CreateMap();
+            if (auto maxRowWeight = config->MaxRowWeight.Get(clusterStr)) {
+                writerOptions["max_row_weight"] = static_cast<i64>(maxRowWeight->GetValue());
             }
-            bool hasNonDeterministicFunctions = false;
-            TYtExtraPeepHoleSettings settings;
-            settings.CurrentCluster = clusterStr;
-            settings.TmpTable = &tmpTable;
-            settings.TmpFolder = tmpFolder;
-            settings.Config = config;
-            if (const auto status = PeepHoleOptimizeBeforeExec<false>(delegatedNode, delegatedNode, State_, 
-                hasNonDeterministicFunctions, ctx, settings); status.Level == TStatus::Error) {
-                return SyncStatus(status);
+
+            NYT::TNode outSpec;
+            NYT::TNode type;
+            {
+                auto rowSpec = TYqlRowSpecInfo(tmpTable.RowSpec());
+                NYT::TNode spec;
+                rowSpec.FillCodecNode(spec[YqlRowSpecAttribute]);
+                outSpec = NYT::TNode::CreateMap()(TString{YqlIOSpecTables}, NYT::TNode::CreateList().Add(spec));
+                type = rowSpec.GetTypeNode();
+            }
+
+            // These settings will be passed to YT peephole callback from DQ
+            auto settings = Build<TCoNameValueTupleList>(ctx, delegatedNode->Pos())
+                .Add()
+                    .Name().Value("yt_cluster", TNodeFlags::Default).Build()
+                    .Value<TCoAtom>().Value(clusterStr).Build()
+                .Build()
+                .Add()
+                    .Name().Value("yt_server", TNodeFlags::Default).Build()
+                    .Value<TCoAtom>().Value(server).Build()
+                .Build()
+                .Add()
+                    .Name().Value("yt_table", TNodeFlags::Default).Build()
+                    .Value<TCoAtom>().Value(NYT::NodeToYsonString(NYT::PathToNode(realTable))).Build()
+                .Build()
+                .Add()
+                    .Name().Value("yt_tableName", TNodeFlags::Default).Build()
+                    .Value<TCoAtom>().Value(tmpTable.Name().Value()).Build()
+                .Build()
+                .Add()
+                    .Name().Value("yt_tableType", TNodeFlags::Default).Build()
+                    .Value<TCoAtom>().Value(NYT::NodeToYsonString(type)).Build()
+                .Build()
+                .Add()
+                    .Name().Value("yt_writeOptions", TNodeFlags::Default).Build()
+                    .Value<TCoAtom>().Value(NYT::NodeToYsonString(writerOptions)).Build()
+                .Build()
+                .Add()
+                    .Name().Value("yt_outSpec", TNodeFlags::Default).Build()
+                    .Value<TCoAtom>().Value(NYT::NodeToYsonString(outSpec)).Build()
+                .Build()
+                .Add()
+                    .Name().Value("yt_tx", TNodeFlags::Default).Build()
+                    .Value<TCoAtom>().Value(GetGuidAsString(*realTable.TransactionId_), TNodeFlags::Default).Build()
+                .Build()
+                .Done().Ptr();
+
+            auto atomType = ctx.MakeType<TUnitExprType>();
+
+            for (auto child: settings->Children()) {
+                child->Child(0)->SetTypeAnn(atomType);
+                child->Child(0)->SetState(TExprNode::EState::ConstrComplete);
+                child->Child(1)->SetTypeAnn(atomType);
+                child->Child(1)->SetState(TExprNode::EState::ConstrComplete);
             }
 
             delegatedNode = Build<TPull>(ctx, delegatedNode->Pos())
                     .Input(std::move(delegatedNode))
                     .BytesLimit()
                         .Value(TString())
-                        .Build()
+                    .Build()
                     .RowsLimit()
                         .Value(0U)
-                        .Build()
+                    .Build()
                     .FormatDetails()
                         .Value(ui32(NYson::EYsonFormat::Binary))
-                        .Build()
-                    .Settings()
-                        .Build()
+                    .Build()
+                    .Settings(settings)
                     .Format()
                         .Value(0U)
-                        .Build()
+                    .Build()
                     .PublicId()
                         .Value(ToString(State_->Types->TranslateOperationId(input->UniqueId())))
-                        .Build()
+                    .Build()
                     .Discard()
                         .Value(ToString(true), TNodeFlags::Default)
-                        .Build()
+                    .Build()
                     .Origin(input)
-                    .Done()
-                    .Ptr();
-
-            auto atomType = ctx.MakeType<TUnitExprType>();
+                    .Done().Ptr();
 
             for (auto idx: {TResOrPullBase::idx_BytesLimit, TResOrPullBase::idx_RowsLimit, TResOrPullBase::idx_FormatDetails,
-                TResOrPullBase::idx_Format, TResOrPullBase::idx_PublicId, TResOrPullBase::idx_Discard }) {
+                TResOrPullBase::idx_Settings, TResOrPullBase::idx_Format, TResOrPullBase::idx_PublicId, TResOrPullBase::idx_Discard }) {
                 delegatedNode->Child(idx)->SetTypeAnn(atomType);
                 delegatedNode->Child(idx)->SetState(TExprNode::EState::ConstrComplete);
             }
@@ -736,13 +801,21 @@ private:
         if (auto status = dqProvider->GetCallableExecutionTransformer().Transform(delegatedNode, delegatedNodeOutput, ctx); status.Level != TStatus::Async) {
             YQL_ENSURE(status.Level != TStatus::Ok, "Asynchronous execution is expected in a happy path.");
             if (const auto flags = op.Flags()) {
+                TString fallbackOpName;
+                for (const auto& atom : flags.Cast()) {
+                    TStringBuf flagName = atom.Value();
+                    if (flagName.SkipPrefix("FallbackOp")) {
+                        fallbackOpName = flagName;
+                        break;
+                    }
+                }
                 for (const auto& atom : flags.Cast()) {
                     if (atom.Value() == "FallbackOnError") {
                         input->SetResult(atom.Ptr());
                         input->SetState(TExprNode::EState::Error);
                         if (const auto issies = ctx.AssociativeIssues.extract(delegatedNode.Get())) {
                             if (NeedFallback(issies.mapped())) {
-                                ctx.IssueManager.RaiseIssue(WrapIssuesOnHybridFallback(ctx.GetPosition(input->Pos()), issies.mapped()));
+                                ctx.IssueManager.RaiseIssue(WrapIssuesOnHybridFallback(ctx.GetPosition(input->Pos()), issies.mapped(), fallbackOpName));
                                 return SyncStatus(IGraphTransformer::TStatus(IGraphTransformer::TStatus::Repeat, true));
                             } else {
                                 ctx.IssueManager.RaiseIssues(issies.mapped());
@@ -794,13 +867,21 @@ private:
                         if (dqWriteStatus != TStatus::Ok) {
                             output = input;
                             if (const auto flags = TYtDqProcessWrite(input).Flags()) {
+                                TString fallbackOpName;
+                                for (const auto& atom : flags.Cast()) {
+                                    TStringBuf flagName = atom.Value();
+                                    if (flagName.SkipPrefix("FallbackOp")) {
+                                        fallbackOpName = flagName;
+                                        break;
+                                    }
+                                }
                                 for (const auto& atom : flags.Cast()) {
                                     if (atom.Value() == "FallbackOnError") {
                                         output->SetResult(atom.Ptr());
                                         output->SetState(TExprNode::EState::Error);
                                         if (const auto issies = ctx.AssociativeIssues.extract(delegatedNode.Get())) {
                                             if (NeedFallback(issies.mapped())) {
-                                                ctx.IssueManager.RaiseIssue(WrapIssuesOnHybridFallback(ctx.GetPosition(input->Pos()), issies.mapped()));
+                                                ctx.IssueManager.RaiseIssue(WrapIssuesOnHybridFallback(ctx.GetPosition(input->Pos()), issies.mapped(), fallbackOpName));
                                                 return IGraphTransformer::TStatus(IGraphTransformer::TStatus::Repeat, true);
                                             } else {
                                                 ctx.IssueManager.RaiseIssues(issies.mapped());

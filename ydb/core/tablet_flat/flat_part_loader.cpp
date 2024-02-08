@@ -3,8 +3,8 @@
 #include "flat_part_overlay.h"
 #include "flat_part_keys.h"
 #include "util_fmt_abort.h"
-
-#include <typeinfo>
+#include "ydb/core/base/appdata_fwd.h"
+#include "ydb/core/base/feature_flags.h"
 
 namespace NKikimr {
 namespace NTable {
@@ -74,6 +74,23 @@ void TLoader::StageParseMeta() noexcept
         HistoricIndexesIds.clear();
         for (ui32 id : layout.GetHistoricIndexes()) {
             HistoricIndexesIds.push_back(id);
+        }
+
+        BTreeGroupIndexes.clear();
+        BTreeHistoricIndexes.clear();
+        if (AppData()->FeatureFlags.GetEnableLocalDBBtreeIndex()) {
+            for (bool history : {false, true}) {
+                for (const auto &meta : history ? layout.GetBTreeHistoricIndexes() : layout.GetBTreeGroupIndexes()) {
+                    NPage::TBtreeIndexMeta converted{{
+                        meta.GetRootPageId(), 
+                        meta.GetRowCount(), 
+                        meta.GetDataSize(), 
+                        meta.GetErasedRowCount()}, 
+                        meta.GetLevelCount(), 
+                        meta.GetIndexSize()};
+                    (history ? BTreeHistoricIndexes : BTreeGroupIndexes).push_back(converted);
+                }
+            }
         }
 
     } else { /* legacy page collection w/o layout data, (Evolution < 14) */
@@ -167,8 +184,15 @@ TAutoPtr<NPageCollection::TFetch> TLoader::StageCreatePartView() noexcept
     // TODO: put index size to stat?
     // TODO: include history indexes bytes
     size_t indexesRawSize = 0;
-    for (auto indexPage : groupIndexesIds) {
-        indexesRawSize += GetPageSize(indexPage);
+    if (BTreeGroupIndexes) {
+        for (const auto &meta : BTreeGroupIndexes) {
+            indexesRawSize += meta.IndexSize;
+        }
+        // Note: although we also have flat index, it shouldn't be loaded; so let's not count it here
+    } else {
+        for (auto indexPage : groupIndexesIds) {
+            indexesRawSize += GetPageSize(indexPage);
+        }
     }
 
     auto *partStore = new TPartStore(
@@ -176,7 +200,7 @@ TAutoPtr<NPageCollection::TFetch> TLoader::StageCreatePartView() noexcept
         {
             epoch,
             TPartScheme::Parse(*scheme, Rooted),
-            { std::move(groupIndexesIds), HistoricIndexesIds },
+            { std::move(groupIndexesIds), HistoricIndexesIds, BTreeGroupIndexes, BTreeHistoricIndexes },
             blobs ? new NPage::TExtBlobs(*blobs, extra) : nullptr,
             byKey ? new NPage::TBloom(*byKey) : nullptr,
             large ? new NPage::TFrames(*large) : nullptr,
@@ -238,7 +262,7 @@ TAutoPtr<NPageCollection::TFetch> TLoader::StageSliceBounds() noexcept
     } else if (auto fetches = KeysEnv->GetFetches()) {
         return fetches;
     } else {
-        Y_ABORT("Screen keys loader stalled withoud result");
+        Y_ABORT("Screen keys loader stalled without result");
     }
 }
 

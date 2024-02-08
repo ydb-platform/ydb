@@ -13,8 +13,8 @@ target_link_libraries(ydb-core-grpc_streaming PUBLIC
   contrib-libs-cxxsupp
   yutil
   contrib-libs-grpc
-  cpp-actors-core
-  cpp-grpc-server
+  library-actors-core
+  library-grpc-server
   ydb-core-base
 )
 target_sources(ydb-core-grpc_streaming PRIVATE

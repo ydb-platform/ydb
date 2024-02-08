@@ -1,0 +1,29 @@
+import "ydb/core/protos/counters.proto";
+
+package NKikimr.NGraphShard;
+
+option java_package = "ru.yandex.kikimr.proto";
+
+option (TabletTypeName) = "GraphShard"; // Used as prefix for all counters
+
+enum ESimpleCounters {
+    COUNTER_SIMPLE_IGNORE = 0;
+}
+
+enum ECumulativeCounters {
+    COUNTER_CUMULATIVE_IGNORE = 0;
+}
+
+enum EPercentileCounters {
+    COUNTER_PERCENTILE_IGNORE = 0;
+}
+
+enum ETxTypes {
+    TXTYPE_INIT_SCHEMA = 1                                [(TxTypeOpts) = {Name: "TxInitSchema"}];
+    TXTYPE_MONITORING = 2                                 [(TxTypeOpts) = {Name: "TxMonitoring"}];
+    TXTYPE_STORE_METRICS = 3                              [(TxTypeOpts) = {Name: "TxStoreMetrics"}];
+    TXTYPE_AGGREGATE_DATA = 4                             [(TxTypeOpts) = {Name: "TxAggregateData"}];
+    TXTYPE_GET_METRICS = 5                                [(TxTypeOpts) = {Name: "TxGetMetrics"}];
+    TXTYPE_STARTUP = 6                                    [(TxTypeOpts) = {Name: "TxStartup"}];
+    TXTYPE_CHANGE_BACKEND = 7                             [(TxTypeOpts) = {Name: "TxChangeBackend"}];
+}

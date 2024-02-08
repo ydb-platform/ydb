@@ -443,7 +443,7 @@ bool GatherConsumersImpl(const TExprNode& node, TNodeMap<TNodeMultiSet>& consume
     for (const auto& child : node.Children()) {
         if (auto connection = TMaybeNode<TDqConnection>(child)) {
             consumers[connection.Cast().Raw()].insert(&node);
-            consumers[connection.Cast().Output().Raw()].insert(&node);
+            consumers[connection.Cast().Output().Raw()].insert(connection.Raw());
         }
 
         if (!GatherConsumersImpl(*child, consumers, visited)) {

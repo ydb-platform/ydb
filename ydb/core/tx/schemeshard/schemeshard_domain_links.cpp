@@ -20,15 +20,20 @@ THolder<TEvSchemeShard::TEvSyncTenantSchemeShard> TParentDomainLink::MakeSyncMsg
     Y_ABORT_UNLESS(Self->PathsById.contains(Self->RootPathId()));
     auto& rootSubdomain = Self->SubDomains.at(Self->RootPathId());
 
-    return MakeHolder<TEvSchemeShard::TEvSyncTenantSchemeShard>(Self->ParentDomainId,
-                                                                    Self->TabletID(),
-                                                                    Self->Generation(),
-                                                                    Self->ParentDomainEffectiveACLVersion,
-                                                                    rootSubdomain->GetVersion(),
-                                                                    rootPath->UserAttrs->AlterVersion,
-                                                                    ui64(rootSubdomain->GetTenantHiveID()),
-                                                                    ui64(rootSubdomain->GetTenantSysViewProcessorID()),
-                                                                    rootPath->ACL);
+    TEvSchemeShard::TEvSyncTenantSchemeShard* ptr = new TEvSchemeShard::TEvSyncTenantSchemeShard({
+        .DomainKey = Self->ParentDomainId,
+        .TabletId = Self->TabletID(),
+        .Generation = Self->Generation(),
+        .EffectiveACLVersion = Self->ParentDomainEffectiveACLVersion,
+        .SubdomainVersion = rootSubdomain->GetVersion(),
+        .UserAttrsVersion = rootPath->UserAttrs->AlterVersion,
+        .TenantHive = ui64(rootSubdomain->GetTenantHiveID()),
+        .TenantSysViewProcessor = ui64(rootSubdomain->GetTenantSysViewProcessorID()),
+        .TenantStatisticsAggregator = ui64(rootSubdomain->GetTenantStatisticsAggregatorID()),
+        .TenantGraphShard = ui64(rootSubdomain->GetTenantGraphShardID()),
+        .RootACL = rootPath->ACL
+    });
+    return THolder<TEvSchemeShard::TEvSyncTenantSchemeShard>(ptr);
 }
 
 void TParentDomainLink::SendSync(const TActorContext &ctx) {
@@ -107,6 +112,8 @@ void TSubDomainsLinks::TLink::Out(IOutputStream& stream) const {
            << ", UserAttributesVersion: " << UserAttributesVersion
            << ", TenantHive: " << TenantHive
            << ", TenantSysViewProcessor: " << TenantSysViewProcessor
+           << ", TenantStatisticsAggregator: " << TenantStatisticsAggregator
+           << ", TenantGraphShard: " << TenantGraphShard
            << ", TenantRootACL: " << TenantRootACL
            << "}";
 }
@@ -121,6 +128,10 @@ TSubDomainsLinks::TLink::TLink(const NKikimrScheme::TEvSyncTenantSchemeShard &re
     , TenantHive(record.HasTenantHive() ? TTabletId(record.GetTenantHive()) : InvalidTabletId)
     , TenantSysViewProcessor(record.HasTenantSysViewProcessor() ?
         TTabletId(record.GetTenantSysViewProcessor()) : InvalidTabletId)
+    , TenantStatisticsAggregator(record.HasTenantStatisticsAggregator() ?
+        TTabletId(record.GetTenantStatisticsAggregator()) : InvalidTabletId)
+    , TenantGraphShard(record.HasTenantGraphShard() ?
+        TTabletId(record.GetTenantGraphShard()) : InvalidTabletId)
     , TenantRootACL(record.GetTenantRootACL())
 {}
 

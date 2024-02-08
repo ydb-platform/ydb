@@ -4,6 +4,7 @@
 #include "blobstorage_hullcompactworker.h"
 #include <ydb/core/blobstorage/vdisk/hullop/blobstorage_hullload.h>
 #include <ydb/core/blobstorage/vdisk/huge/blobstorage_hullhuge.h>
+#include <library/cpp/random_provider/random_provider.h>
 
 #include <util/generic/queue.h>
 
@@ -120,7 +121,7 @@ namespace NKikimr {
             // build handoff map (use LevelSnap by ref)
             auto hProxyAid = Hmp->BuildMap(ctx, LevelSnap, It, ctx.SelfID);
             if (hProxyAid) {
-                ActiveActors.Insert(hProxyAid);
+                ActiveActors.Insert(hProxyAid, __FILE__, __LINE__, ctx, NKikimrServices::BLOBSTORAGE);
             }
 
             // build gc map (use LevelSnap by ref)
@@ -169,6 +170,7 @@ namespace NKikimr {
         // the same logic for every yard response: apply response and restart main cycle
         void HandleYardResponse(NPDisk::TEvChunkReadResult::TPtr& ev, const TActorContext &ctx) {
             --PendingResponses;
+            HullCtx->VCtx->CostTracker->CountPDiskResponse();
             if (ev->Get()->Status != NKikimrProto::CORRUPTED) {
                 CHECK_PDISK_RESPONSE(HullCtx->VCtx, ev, ctx);
             }
@@ -201,6 +203,7 @@ namespace NKikimr {
 
         void HandleYardResponse(NPDisk::TEvChunkWriteResult::TPtr& ev, const TActorContext &ctx) {
             --PendingResponses;
+            HullCtx->VCtx->CostTracker->CountPDiskResponse();
             CHECK_PDISK_RESPONSE(HullCtx->VCtx, ev, ctx);
             if (FinalizeIfAborting(ctx)) {
                 return;

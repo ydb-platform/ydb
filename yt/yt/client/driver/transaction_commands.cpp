@@ -20,40 +20,111 @@ using namespace NConcurrency;
 
 ////////////////////////////////////////////////////////////////////////////////
 
-TStartTransactionCommand::TStartTransactionCommand()
+void TStartTransactionCommand::Register(TRegistrar registrar)
 {
-    RegisterParameter("type", Type)
+    registrar.Parameter("type", &TThis::Type)
         .Default(NTransactionClient::ETransactionType::Master);
-    RegisterParameter("attributes", Attributes)
+
+    registrar.Parameter("attributes", &TThis::Attributes)
         .Default(nullptr);
-    RegisterParameter("sticky", Options.Sticky)
-        .Optional();
-    RegisterParameter("timeout", Options.Timeout)
-        .Optional();
-    RegisterParameter("transaction_id_override", Options.Id)
-        .Optional();
-    RegisterParameter("start_timestamp_override", Options.StartTimestamp)
-        .Optional();
-    RegisterParameter("transaction_id", Options.ParentId)
-        .Optional();
-    RegisterParameter("ping_ancestor_transactions", Options.PingAncestors)
-        .Optional();
-    RegisterParameter("prerequisite_transaction_ids", Options.PrerequisiteTransactionIds)
-        .Optional();
-    RegisterParameter("deadline", Options.Deadline)
-        .Optional();
-    RegisterParameter("atomicity", Options.Atomicity)
-        .Optional();
-    RegisterParameter("durability", Options.Durability)
-        .Optional();
-    RegisterParameter("suppress_start_timestamp_generation", Options.SuppressStartTimestampGeneration)
-        .Optional();
-    RegisterParameter("coordinator_master_cell_tag", Options.CoordinatorMasterCellTag)
-        .Optional();
-    RegisterParameter("replicate_to_master_cell_tags", Options.ReplicateToMasterCellTags)
-        .Optional();
-    RegisterParameter("start_cypress_transaction", Options.StartCypressTransaction)
-        .Optional();
+
+    registrar.ParameterWithUniversalAccessor<bool>(
+        "sticky",
+        [] (TThis* command) -> auto& {
+            return command->Options.Sticky;
+        })
+        .Optional(/*init*/ false);
+
+    registrar.ParameterWithUniversalAccessor<std::optional<TDuration>>(
+        "timeout",
+        [] (TThis* command) -> auto& {
+            return command->Options.Timeout;
+        })
+        .Optional(/*init*/ false);
+
+    registrar.ParameterWithUniversalAccessor<TTransactionId>(
+        "transaction_id_override",
+        [] (TThis* command) -> auto& {
+            return command->Options.Id;
+        })
+        .Optional(/*init*/ false);
+
+    registrar.ParameterWithUniversalAccessor<TTimestamp>(
+        "start_timestamp_override",
+        [] (TThis* command) -> auto& {
+            return command->Options.StartTimestamp;
+        })
+        .Optional(/*init*/ false);
+
+    registrar.ParameterWithUniversalAccessor<TTransactionId>(
+        "transaction_id",
+        [] (TThis* command) -> auto& {
+            return command->Options.ParentId;
+        })
+        .Optional(/*init*/ false);
+
+    registrar.ParameterWithUniversalAccessor<bool>(
+        "ping_ancestor_transactions",
+        [] (TThis* command) -> auto& {
+            return command->Options.PingAncestors;
+        })
+        .Optional(/*init*/ false);
+
+    registrar.ParameterWithUniversalAccessor<std::vector<TTransactionId>>(
+        "prerequisite_transaction_ids",
+        [] (TThis* command) -> auto& {
+            return command->Options.PrerequisiteTransactionIds;
+        })
+        .Optional(/*init*/ false);
+
+    registrar.ParameterWithUniversalAccessor<std::optional<TInstant>>(
+        "deadline",
+        [] (TThis* command) -> auto& {
+            return command->Options.Deadline;
+        })
+        .Optional(/*init*/ false);
+
+    registrar.ParameterWithUniversalAccessor<EAtomicity>(
+        "atomicity",
+        [] (TThis* command) -> auto& {
+            return command->Options.Atomicity;
+        })
+        .Optional(/*init*/ false);
+
+    registrar.ParameterWithUniversalAccessor<EDurability>(
+        "durability",
+        [] (TThis* command) -> auto& {
+            return command->Options.Durability;
+        })
+        .Optional(/*init*/ false);
+
+    registrar.ParameterWithUniversalAccessor<bool>(
+        "suppress_start_timestamp_generation",
+        [] (TThis* command) -> auto& {
+            return command->Options.SuppressStartTimestampGeneration;
+        })
+        .Optional(/*init*/ false);
+
+    registrar.ParameterWithUniversalAccessor<TCellTag>(
+        "coordinator_master_cell_tag",
+        [] (TThis* command) -> auto& {
+            return command->Options.CoordinatorMasterCellTag;
+        })
+        .Optional(/*init*/ false);
+
+    registrar.ParameterWithUniversalAccessor<std::optional<TCellTagList>>(
+        "replicate_to_master_cell_tags",
+        [] (TThis* command) -> auto& {
+            return command->Options.ReplicateToMasterCellTags;
+        })
+        .Optional(/*init*/ false);
+
+    registrar.ParameterWithUniversalAccessor<bool>(
+        "start_cypress_transaction",
+        [] (TThis* command) -> auto& {
+            return command->Options.StartCypressTransaction;
+        })
+        .Optional(/*init*/ false);
 }
 
 void TStartTransactionCommand::DoExecute(ICommandContextPtr context)
@@ -110,10 +181,14 @@ void TCommitTransactionCommand::DoExecute(ICommandContextPtr context)
 
 ////////////////////////////////////////////////////////////////////////////////
 
-TAbortTransactionCommand::TAbortTransactionCommand()
+void TAbortTransactionCommand::Register(TRegistrar registrar)
 {
-    RegisterParameter("force", Options.Force)
-        .Optional();
+    registrar.ParameterWithUniversalAccessor<bool>(
+        "force",
+        [] (TThis* command) -> auto& {
+            return command->Options.Force;
+        })
+        .Optional(/*init*/ false);
 }
 
 void TAbortTransactionCommand::DoExecute(ICommandContextPtr context)

@@ -10,6 +10,19 @@ namespace NKikimr::NTable {
 namespace {
     using namespace NTest;
 
+    struct TTouchEnv : public NTest::TTestEnv {
+        const TSharedData* TryGetPage(const TPart *part, TPageId id, TGroupId groupId) override
+        {
+            UNIT_ASSERT_C(part->GetPageType(id) == EPage::Index, "Shouldn't request non-index pages");
+            if (!Touched[groupId].insert(id).second) {
+                return NTest::TTestEnv::TryGetPage(part, id, groupId);
+            }
+            return nullptr;
+        }
+
+        TMap<TGroupId, TSet<TPageId>> Touched;
+    };
+
     NPage::TConf PageConf(size_t groups = 1) noexcept
     {
         NPage::TConf conf{ true, 2 * 1024 };
@@ -17,6 +30,7 @@ namespace {
         conf.Groups.resize(groups);
         for (size_t group : xrange(groups)) {
             conf.Group(group).IndexMin = 1024; /* Should cover index buffer grow code */
+            conf.Group(group).BTreeIndexNodeTargetSize = 512; /* Should cover up/down moves */
         }
         conf.SmallEdge = 19;  /* Packed to page collection large cell values */
         conf.LargeEdge = 29;  /* Large values placed to single blobs */
@@ -28,15 +42,29 @@ namespace {
     const NTest::TMass Mass0(new NTest::TModelStd(false), 24000);
     const NTest::TMass Mass1(new NTest::TModelStd(true), 24000);
 
+    template<typename TEnv>
     void Check(const TSubset& subset, ui64 expectedRows, ui64 expectedData, ui64 expectedIndex) {
         TStats stats;
-        TTestEnv testEnv;
-        UNIT_ASSERT(NTable::BuildStats(subset, stats, 310, 3105, &testEnv));
+        TEnv env;
+
+        const ui32 attempts = 10;
+        for (ui32 attempt : xrange(attempts)) {
+            if (NTable::BuildStats(subset, stats, 310, 3105, &env)) {
+                break;
+            }
+            UNIT_ASSERT_C(attempt + 1 < attempts, "Too many attempts");
+        }
 
         Cerr << "Stats: " << stats.RowCount << " " << stats.DataSize.Size << " " << stats.IndexSize.Size << " " << stats.DataSizeHistogram.size() << " " << stats.RowCountHistogram.size() << Endl;
         UNIT_ASSERT_VALUES_EQUAL(stats.RowCount, expectedRows);
         UNIT_ASSERT_VALUES_EQUAL(stats.DataSize.Size, expectedData);
         UNIT_ASSERT_VALUES_EQUAL(stats.IndexSize.Size, expectedIndex);
+    }
+    
+    
+    void Check(const TSubset& subset, ui64 expectedRows, ui64 expectedData, ui64 expectedIndex) {
+        Check<TTestEnv>(subset, expectedRows, expectedData, expectedIndex);
+        Check<TTouchEnv>(subset, expectedRows, expectedData, expectedIndex);
     }
 }
 

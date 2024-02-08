@@ -3,7 +3,7 @@
 #include "mon_events.h"
 #include "monitoring.h"
 
-#include <library/cpp/actors/core/actor_bootstrapped.h>
+#include <ydb/library/actors/core/actor_bootstrapped.h>
 
 #include <library/cpp/json/json_value.h>
 

@@ -24,13 +24,7 @@ static TIntrusivePtr<TBlobStorageGroupInfo> PrepareEnv(TEnvironmentSetup& env, T
 
     for (;;) {
         const TLogoBlobID id(1, 1, index /*step*/, 0, data.size(), 0);
-        const ui32 hash = id.FullID().Hash();
-        if (!info->GetTopology().BelongsToSubgroup(vdiskId, hash)) {
-            continue;
-        }
-        const ui32 idxInSubgroup = info->GetTopology().GetIdxInSubgroup(vdiskId, hash);
-        const ui32 partIdx = idxInSubgroup & 1; // 0 1 0 1 01 01 01 01 possible layouts; this fits them
-        env.PutBlob(vdiskId, TLogoBlobID(id, partIdx + 1), data);
+        env.PutBlob(vdiskId, TLogoBlobID(id, 1), data);
         ++index;
 
         env.Sim();
@@ -67,13 +61,6 @@ static TIntrusivePtr<TBlobStorageGroupInfo> PrepareEnv(TEnvironmentSetup& env, T
 
     // wait for sync
     env.Sim(TDuration::Seconds(3));
-
-    // partition
-    for (const ui32 node : env.Runtime->GetNodes()) {
-        env.StopNode(node);
-    }
-    env.StartNode(actorId.NodeId());
-    env.Sim(TDuration::Seconds(20));
 
     for (;;) {
         // trigger compaction
@@ -115,8 +102,8 @@ static TIntrusivePtr<TBlobStorageGroupInfo> PrepareEnv(TEnvironmentSetup& env, T
 Y_UNIT_TEST_SUITE(Defragmentation) {
     Y_UNIT_TEST(DoesItWork) {
         TEnvironmentSetup env(TEnvironmentSetup::TSettings{
-            .NodeCount = 8,
-            .Erasure = TBlobStorageGroupType::ErasureMirror3of4,
+            .NodeCount = 1,
+            .Erasure = TBlobStorageGroupType::ErasureNone,
         });
 
         TVector<TLogoBlobID> keep;
@@ -150,8 +137,8 @@ Y_UNIT_TEST_SUITE(Defragmentation) {
 
     Y_UNIT_TEST(DefragCompactionRace) {
         TEnvironmentSetup env(TEnvironmentSetup::TSettings{
-            .NodeCount = 8,
-            .Erasure = TBlobStorageGroupType::ErasureMirror3of4,
+            .NodeCount = 1,
+            .Erasure = TBlobStorageGroupType::ErasureNone,
         });
 
         TVector<TLogoBlobID> keep;
@@ -177,13 +164,6 @@ Y_UNIT_TEST_SUITE(Defragmentation) {
 
         while (!caughtPut) {
             env.Sim(TDuration::Minutes(1));
-        }
-
-        // unpartition
-        for (const ui32 node : env.Runtime->GetNodes()) {
-            if (node != actorId.NodeId()) {
-                env.StartNode(node);
-            }
         }
 
         // issue collect garbage command
@@ -262,8 +242,8 @@ Y_UNIT_TEST_SUITE(Defragmentation) {
                         readMsg = ev->Release<NPDisk::TEvChunkReadResult>();
                         env.Runtime->Send(
                             new IEventHandle(
-                                *rewriterActorId, 
-                                ev->Sender, 
+                                *rewriterActorId,
+                                ev->Sender,
                                 messChunkReadResult(readMsg.Get())),
                             ev->Sender.NodeId());
 
@@ -306,7 +286,7 @@ Y_UNIT_TEST_SUITE(Defragmentation) {
     Y_UNIT_TEST(CorruptedReadHandling) {
         TestReadErrorHandlingBase([] (const NPDisk::TEvChunkReadResult* msg) {
             return new NPDisk::TEvChunkReadResult(
-                NKikimrProto::EReplyStatus::CORRUPTED, 
+                NKikimrProto::EReplyStatus::CORRUPTED,
                 msg->ChunkIdx,
                 msg->Offset,
                 msg->Cookie,
@@ -319,7 +299,7 @@ Y_UNIT_TEST_SUITE(Defragmentation) {
     Y_UNIT_TEST(GappedReadHandling) {
         TestReadErrorHandlingBase([] (const NPDisk::TEvChunkReadResult* msg) {
              NPDisk::TEvChunkReadResult* res = new NPDisk::TEvChunkReadResult(
-                NKikimrProto::EReplyStatus::OK, 
+                NKikimrProto::EReplyStatus::OK,
                 msg->ChunkIdx,
                 msg->Offset,
                 msg->Cookie,

@@ -1,15 +1,12 @@
 #include "formatter.h"
 
 #include "private.h"
-// #include "log.h"
 
 #include <yt/yt/build/build.h>
 
 #include <yt/yt/core/json/json_writer.h>
 
 #include <yt/yt/core/ytree/fluent.h>
-
-// #include <yt/yt/core/yson/writer.h>
 
 #include <util/stream/length.h>
 
@@ -92,7 +89,7 @@ TLogEvent GetSkippedLogStructuredEvent(i64 count, TStringBuf skippedBy)
 TPlainTextLogFormatter::TPlainTextLogFormatter(
     bool enableSystemMessages,
     bool enableSourceLocation)
-    : EnableSystemMessages_(enableSystemMessages && Logger)
+    : TLogFormatterBase(enableSystemMessages, enableSourceLocation)
     , EventFormatter_(enableSourceLocation)
 { }
 
@@ -118,16 +115,35 @@ void TPlainTextLogFormatter::WriteLogReopenSeparator(IOutputStream* outputStream
 
 void TPlainTextLogFormatter::WriteLogStartEvent(IOutputStream* outputStream)
 {
-    if (EnableSystemMessages_) {
+    if (AreSystemMessagesEnabled()) {
         WriteFormatted(outputStream, GetStartLogEvent());
     }
 }
 
 void TPlainTextLogFormatter::WriteLogSkippedEvent(IOutputStream* outputStream, i64 count, TStringBuf skippedBy)
 {
-    if (EnableSystemMessages_) {
+    if (AreSystemMessagesEnabled()) {
         WriteFormatted(outputStream, GetSkippedLogEvent(count, skippedBy));
     }
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
+TLogFormatterBase::TLogFormatterBase(
+    bool enableSystemMessages,
+    bool enableSourceLocation)
+    : EnableSystemMessages_(enableSystemMessages)
+    , EnableSourceLocation_(enableSourceLocation)
+{ }
+
+bool TLogFormatterBase::AreSystemMessagesEnabled() const
+{
+    return EnableSystemMessages_ && GetDefaultLogManager();
+}
+
+bool TLogFormatterBase::IsSourceLocationEnabled() const
+{
+    return EnableSourceLocation_;
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -139,10 +155,9 @@ TStructuredLogFormatter::TStructuredLogFormatter(
     bool enableSourceLocation,
     bool enableInstant,
     NJson::TJsonFormatConfigPtr jsonFormat)
-    : Format_(format)
+    : TLogFormatterBase(enableSystemMessages, enableSourceLocation)
+    , Format_(format)
     , CommonFields_(std::move(commonFields))
-    , EnableSystemMessages_(enableSystemMessages)
-    , EnableSourceLocation_(enableSourceLocation)
     , EnableInstant_(enableInstant)
     , JsonFormat_(!jsonFormat && (Format_ == ELogFormat::Json)
         ? New<NJson::TJsonFormatConfig>()
@@ -196,7 +211,7 @@ i64 TStructuredLogFormatter::WriteFormatted(IOutputStream* stream, const TLogEve
                 if (event.TraceId != TTraceId()) {
                     fluent.Item("trace_id").Value(event.TraceId);
                 }
-                if (EnableSourceLocation_ && event.SourceFile) {
+                if (IsSourceLocationEnabled() && event.SourceFile) {
                     auto sourceFile = event.SourceFile;
                     fluent.Item("source_file").Value(Format("%v:%v", sourceFile.RNextTok(LOCSLASH_C), event.SourceLine));
                 }
@@ -219,14 +234,14 @@ void TStructuredLogFormatter::WriteLogReopenSeparator(IOutputStream* /*outputStr
 
 void TStructuredLogFormatter::WriteLogStartEvent(IOutputStream* outputStream)
 {
-    if (EnableSystemMessages_) {
+    if (AreSystemMessagesEnabled()) {
         WriteFormatted(outputStream, GetStartLogStructuredEvent());
     }
 }
 
 void TStructuredLogFormatter::WriteLogSkippedEvent(IOutputStream* outputStream, i64 count, TStringBuf skippedBy)
 {
-    if (EnableSystemMessages_) {
+    if (AreSystemMessagesEnabled()) {
         WriteFormatted(outputStream, GetSkippedLogStructuredEvent(count, skippedBy));
     }
 }

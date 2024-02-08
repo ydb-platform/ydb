@@ -2,7 +2,7 @@
 
 #include <util/system/file.h>
 
-#include <library/cpp/actors/core/actor.h>
+#include <ydb/library/actors/core/actor.h>
 #include <ydb/library/yql/providers/dq/config/config.pb.h>
 
 #include <ydb/library/yql/providers/dq/task_runner/file_cache.h>
@@ -19,6 +19,7 @@ namespace NYql {
         extern const TString OPERATION_SIZE;
         extern const TString YT_COORDINATOR;
         extern const TString YT_BACKEND;
+        extern const TString YT_FORCE_IPV4;
     }
 
     class ICoordinationHelper;
@@ -67,6 +68,8 @@ namespace NYql {
 
         int Capabilities = 0;
         int MaxRetries = -1;
+
+        bool ForceIPv4 = false;
 
         // Pinger
         TString DieOnFileAbsence; // see YQL-14099

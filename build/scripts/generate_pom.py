@@ -132,7 +132,7 @@ def build_pom_and_export_to_maven(**kwargs):
 
     project = et.Element(
         '{}{}{}project'.format('{', DEFAULT_NAMESPACE, '}'),
-        attrib={'{}{}{}schemaLocation'.format('{', XSI_NAMESPACE, '}'): SCHEMA_LOCATION}
+        attrib={'{}{}{}schemaLocation'.format('{', XSI_NAMESPACE, '}'): SCHEMA_LOCATION},
     )
 
     group_id, artifact_id, version = target.split(':')
@@ -185,7 +185,9 @@ def build_pom_and_export_to_maven(**kwargs):
     if test_resource_dirs:
         test_resource_element = et.SubElement(build, 'testResources')
         for test_resource_dir in test_resource_dirs:
-            et.SubElement(et.SubElement(test_resource_element, 'testResource'), 'directory').text = '${basedir}' + (('/' + test_resource_dir) if test_resource_dir != '.' else '')
+            et.SubElement(et.SubElement(test_resource_element, 'testResource'), 'directory').text = '${basedir}' + (
+                ('/' + test_resource_dir) if test_resource_dir != '.' else ''
+            )
 
     plugins = et.SubElement(build, 'plugins')
 
@@ -294,7 +296,9 @@ def build_pom_and_export_to_maven(**kwargs):
         et.SubElement(surefire_plugin, 'groupId').text = MAVEN_SUREFIRE_GROUP_ID
         et.SubElement(surefire_plugin, 'artifactId').text = MAVEN_SUREFIRE_ARTIFACT_ID
         et.SubElement(surefire_plugin, 'version').text = MAVEN_SUREFIRE_VERSION
-        classpath_excludes = et.SubElement(et.SubElement(surefire_plugin, 'configuration'), 'classpathDependencyExcludes')
+        classpath_excludes = et.SubElement(
+            et.SubElement(surefire_plugin, 'configuration'), 'classpathDependencyExcludes'
+        )
         for classpath_exclude in test_target_dependencies_exclude:
             et.SubElement(classpath_excludes, 'classpathDependencyExclude').text = classpath_exclude
 

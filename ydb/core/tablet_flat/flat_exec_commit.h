@@ -27,10 +27,11 @@ namespace NTabletFlatExecutor {
     struct TLogCommit {
         using ETactic = TEvBlobStorage::TEvPut::ETactic;
 
-        TLogCommit(bool sync, ui32 step, ECommit type)
+        TLogCommit(bool sync, ui32 step, ECommit type, NWilson::TTraceId traceId)
             : Step(step)
             , Type(type)
             , Sync(sync)
+            , TraceId(std::move(traceId))
         {
 
         }
@@ -57,6 +58,7 @@ namespace NTabletFlatExecutor {
         TVector<TEvTablet::TLogEntryReference> Refs;
         TGCBlobDelta GcDelta;
         TVector<TEvTablet::TCommitMetadata> Metadata;
+        NWilson::TTraceId TraceId;
         TSeat *FirstTx = nullptr;
         TSeat *LastTx = nullptr;
     };

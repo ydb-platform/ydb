@@ -2,6 +2,7 @@
 
 #include <ydb/library/yql/dq/tasks/dq_tasks_graph.h>
 #include <ydb/library/yql/dq/opt/dq_opt.h>
+#include <ydb/library/yql/dq/type_ann/dq_type_ann.h>
 
 
 namespace NYql::NDq {
@@ -9,9 +10,10 @@ namespace NYql::NDq {
 using TChannelLogFunc = std::function<void(ui64 channel, ui64 from, ui64 to, TStringBuf type, bool enableSpilling)>;
 
 template <class TGraphMeta, class TStageInfoMeta, class TTaskMeta, class TInputMeta, class TOutputMeta>
-void CommonBuildTasks(double hashShuffleTasksRatio, ui32 maxHashShuffleTasks, TDqTasksGraph<TGraphMeta, TStageInfoMeta, TTaskMeta, TInputMeta, TOutputMeta>& graph, const NNodes::TDqPhyStage& stage) {
+void CommonBuildTasks(double aggrTasksRatio, ui32 maxHashShuffleTasks, TDqTasksGraph<TGraphMeta, TStageInfoMeta, TTaskMeta, TInputMeta, TOutputMeta>& graph, const NNodes::TDqPhyStage& stage) {
     ui32 partitionsCount = 1;
 
+    const auto partitionMode = TDqStageSettings::Parse(stage).PartitionMode;
 
     auto& stageInfo = graph.GetStageInfo(stage);
     for (ui32 inputIndex = 0; inputIndex < stage.Inputs().Size(); ++inputIndex) {
@@ -36,7 +38,13 @@ void CommonBuildTasks(double hashShuffleTasksRatio, ui32 maxHashShuffleTasks, TD
         } else if (auto maybeCnShuffle = input.Maybe<NNodes::TDqCnHashShuffle>()) {
             auto shuffle = maybeCnShuffle.Cast();
             const auto& originStageInfo = graph.GetStageInfo(shuffle.Output().Stage());
-            partitionsCount = std::max(partitionsCount, (ui32) (originStageInfo.Tasks.size() * hashShuffleTasksRatio) );
+            ui32 srcTasks = originStageInfo.Tasks.size();
+            if (TDqStageSettings::EPartitionMode::Aggregate == partitionMode) {
+                srcTasks = ui32(srcTasks * aggrTasksRatio);
+            } else {
+                YQL_ENSURE(TDqStageSettings::EPartitionMode::Default == partitionMode);
+            }
+            partitionsCount = std::max(partitionsCount, srcTasks);
             partitionsCount = std::min(partitionsCount, maxHashShuffleTasks);
         } else if (auto maybeCnMap = input.Maybe<NNodes::TDqCnMap>()) {
             auto cnMap = maybeCnMap.Cast();

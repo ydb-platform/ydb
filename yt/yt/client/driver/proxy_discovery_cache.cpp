@@ -23,21 +23,6 @@ using namespace NApi::NRpcProxy;
 
 ////////////////////////////////////////////////////////////////////////////////
 
-bool TProxyDiscoveryRequest::operator==(const TProxyDiscoveryRequest& other) const
-{
-    return
-        Type == other.Type &&
-        Role == other.Role &&
-        AddressType == other.AddressType &&
-        NetworkName == other.NetworkName &&
-        IgnoreBalancers == other.IgnoreBalancers;
-}
-
-bool TProxyDiscoveryRequest::operator!=(const TProxyDiscoveryRequest& other) const
-{
-    return !(*this == other);
-}
-
 TProxyDiscoveryRequest::operator size_t() const
 {
     return MultiHash(

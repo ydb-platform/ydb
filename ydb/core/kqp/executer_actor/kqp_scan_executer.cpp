@@ -1,7 +1,6 @@
 #include "kqp_executer.h"
 #include "kqp_executer_impl.h"
 #include "kqp_partition_helper.h"
-#include "kqp_result_channel.h"
 #include "kqp_tasks_graph.h"
 #include "kqp_tasks_validate.h"
 #include "kqp_shards_resolver.h"
@@ -23,10 +22,10 @@
 #include <ydb/library/yql/minikql/mkql_node_serialization.h>
 #include <ydb/library/yql/public/issue/yql_issue_message.h>
 
-#include <library/cpp/actors/core/actor_bootstrapped.h>
-#include <library/cpp/actors/core/hfunc.h>
-#include <library/cpp/actors/core/interconnect.h>
-#include <library/cpp/actors/core/log.h>
+#include <ydb/library/actors/core/actor_bootstrapped.h>
+#include <ydb/library/actors/core/hfunc.h>
+#include <ydb/library/actors/core/interconnect.h>
+#include <ydb/library/actors/core/log.h>
 
 namespace NKikimr {
 namespace NKqp {
@@ -52,7 +51,8 @@ public:
         const NKikimrConfig::TTableServiceConfig::EChannelTransportVersion chanTransportVersion,
         TDuration maximalSecretsSnapshotWaitTime, const TIntrusivePtr<TUserRequestContext>& userRequestContext)
         : TBase(std::move(request), database, userToken, counters, executerRetriesConfig, chanTransportVersion, aggregation,
-            maximalSecretsSnapshotWaitTime, userRequestContext, TWilsonKqp::ScanExecuter, "ScanExecuter"
+            maximalSecretsSnapshotWaitTime, userRequestContext, TWilsonKqp::ScanExecuter, "ScanExecuter",
+            false
         )
         , PreparedQuery(preparedQuery)
     {
@@ -65,13 +65,13 @@ public:
         size_t resultsSize = Request.Transactions[0].Body->ResultsSize();
         YQL_ENSURE(resultsSize != 0);
 
-        bool streamResult = Request.Transactions[0].Body->GetResults(0).GetIsStream();
+        StreamResult = Request.Transactions[0].Body->GetResults(0).GetIsStream();
 
-        if (streamResult) {
+        if (StreamResult) {
             YQL_ENSURE(resultsSize == 1);
         } else {
             for (size_t i = 1; i < resultsSize; ++i) {
-                YQL_ENSURE(Request.Transactions[0].Body->GetResults(i).GetIsStream() == streamResult);
+                YQL_ENSURE(Request.Transactions[0].Body->GetResults(i).GetIsStream() == StreamResult);
             }
         }
     }
@@ -110,7 +110,8 @@ private:
         try {
             switch (ev->GetTypeRewrite()) {
                 hFunc(TEvDqCompute::TEvState, HandleComputeStats);
-                hFunc(TEvKqpExecuter::TEvStreamDataAck, HandleExecute);
+                hFunc(TEvDqCompute::TEvChannelData, HandleChannelData); // from CA
+                hFunc(TEvKqpExecuter::TEvStreamDataAck, HandleStreamAck);
                 hFunc(TEvKqp::TEvAbortExecution, HandleAbortExecution);
                 hFunc(TEvents::TEvUndelivered, HandleUndelivered);
                 hFunc(TEvPrivate::TEvRetry, HandleRetry);
@@ -127,25 +128,6 @@ private:
         ReportEventElapsedTime();
     }
 
-    void HandleExecute(TEvKqpExecuter::TEvStreamDataAck::TPtr& ev) {
-        LOG_T("Recv stream data ack, seqNo: " << ev->Get()->Record.GetSeqNo()
-            << ", freeSpace: " << ev->Get()->Record.GetFreeSpace()
-            << ", enough: " << ev->Get()->Record.GetEnough()
-            << ", from: " << ev->Sender);
-
-        auto& resultChannelProxies = GetResultChannelProxies();
-        if (resultChannelProxies.empty()) {
-            return;
-        }
-
-        // Forward only for stream results, data results acks event theirselves.
-        YQL_ENSURE(!ResponseEv->TxResults.empty() && ResponseEv->TxResults[0].IsStream);
-
-        auto channelIt = resultChannelProxies.begin();
-        auto handle = ev->Forward(channelIt->second->SelfId());
-        channelIt->second->Receive(handle);
-    }
-
 private:
     void HandleResolve(TEvKqpExecuter::TEvTableResolveStatus::TPtr& ev) {
         if (!TBase::HandleResolve(ev)) return;
@@ -159,6 +141,7 @@ private:
         }
         if (shardIds) {
             LOG_D("Start resolving tablets nodes... (" << shardIds.size() << ")");
+            ExecuterStateSpan = NWilson::TSpan(TWilsonKqp::ExecuterShardsResolve, ExecuterSpan.GetTraceId(), "WaitForShardsResolve", NWilson::EFlags::AUTO_END);
             auto kqpShardsResolver = CreateKqpShardsResolver(
                 this->SelfId(), TxId, false, std::move(shardIds));
             KqpShardsResolverId = this->RegisterWithSameMailbox(kqpShardsResolver);
@@ -183,7 +166,6 @@ private:
 
     void Execute() {
         LWTRACK(KqpScanExecuterStartExecute, ResponseEv->Orbit, TxId);
-        NWilson::TSpan prepareTasksSpan(TWilsonKqp::ScanExecuterPrepareTasks, ExecuterStateSpan.GetTraceId(), "PrepareTasks", NWilson::EFlags::AUTO_END);
 
         auto& tx = Request.Transactions[0];
         for (ui32 stageIdx = 0; stageIdx < tx.Body->StagesSize(); ++stageIdx) {
@@ -197,15 +179,18 @@ private:
             if (stage.SourcesSize() > 0) {
                 switch (stage.GetSources(0).GetTypeCase()) {
                     case NKqpProto::TKqpSource::kReadRangesSource:
-                        BuildScanTasksFromSource(stageInfo, {});
+                        BuildScanTasksFromSource(
+                            stageInfo,
+                            /* shardsResolved */ true,
+                            /* limitTasksPerNode */ false);
                         break;
                     default:
                         YQL_ENSURE(false, "unknown source type");
                 }
             } else if (stageInfo.Meta.ShardOperations.empty()) {
-                BuildComputeTasks(stageInfo, {});
+                BuildComputeTasks(stageInfo, ShardsOnNode.size());
             } else if (stageInfo.Meta.IsSysView()) {
-                BuildSysViewScanTasks(stageInfo, {});
+                BuildSysViewScanTasks(stageInfo);
             } else if (stageInfo.Meta.IsOlap() || stageInfo.Meta.IsDatashard()) {
                 HasOlapTable = true;
                 BuildScanTasksFromShards(stageInfo);
@@ -245,8 +230,6 @@ private:
         ui32 nShardScans = 0;
         TVector<ui64> computeTasks;
 
-        InitializeChannelProxies();
-
         // calc stats
         for (auto& task : TasksGraph.GetTasks()) {
             auto& stageInfo = TasksGraph.GetStageInfo(task.StageId);
@@ -276,26 +259,20 @@ private:
             return;
         }
 
-        if (prepareTasksSpan) {
-            prepareTasksSpan.End();
-        }
-
         LOG_D("TotalShardScans: " << nShardScans);
 
+        ExecuterStateSpan = NWilson::TSpan(TWilsonKqp::ScanExecuterRunTasks, ExecuterSpan.GetTraceId(), "RunTasks", NWilson::EFlags::AUTO_END);
         ExecuteScanTx();
 
         Become(&TKqpScanExecuter::ExecuteState);
-        if (ExecuterStateSpan) {
-            ExecuterStateSpan.End();
-            ExecuterStateSpan = NWilson::TSpan(TWilsonKqp::ScanExecuterExecuteState, ExecuterSpan.GetTraceId(), "ExecuteState", NWilson::EFlags::AUTO_END);
-        }
     }
 
 public:
-    void Finalize() {
+
+    void FillResponseStats(Ydb::StatusIds::StatusCode status) {
         auto& response = *ResponseEv->Record.MutableResponse();
 
-        response.SetStatus(Ydb::StatusIds::SUCCESS);
+        response.SetStatus(status);
 
         if (Stats) {
             ReportEventElapsedTime();
@@ -316,6 +293,10 @@ public:
                 }
             }
         }
+    }
+
+    void Finalize() {
+        FillResponseStats(Ydb::StatusIds::SUCCESS);
 
         LWTRACK(KqpScanExecuterFinalize, ResponseEv->Orbit, TxId, LastTaskId, LastComputeActorId, ResponseEv->ResultsSize());
 

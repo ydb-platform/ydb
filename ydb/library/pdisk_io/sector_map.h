@@ -1,7 +1,7 @@
 #pragma once
 
 #include <ydb/library/yverify_stream/yverify_stream.h>
-#include <library/cpp/actors/util/ticket_lock.h>
+#include <ydb/library/actors/util/ticket_lock.h>
 
 #include <util/datetime/base.h>
 #include <util/datetime/cputimer.h>
@@ -114,7 +114,7 @@ public:
 
         Y_ABORT_UNLESS((ui32)diskMode < DM_COUNT);
         EDeviceType deviceType = DiskModeToDeviceType(diskMode);
-        DiskModeParams.SeekSleepMicroSeconds = DevicePerformance.at(deviceType).SeekTimeNs;
+        DiskModeParams.SeekSleepMicroSeconds = (DevicePerformance.at(deviceType).SeekTimeNs + 1000) / 1000 - 1;
         DiskModeParams.FirstSectorReadRate = DevicePerformance.at(deviceType).FirstSectorReadBytesPerSec;
         DiskModeParams.LastSectorReadRate = DevicePerformance.at(deviceType).LastSectorReadBytesPerSec;
         DiskModeParams.FirstSectorWriteRate = DevicePerformance.at(deviceType).FirstSectorWriteBytesPerSec;

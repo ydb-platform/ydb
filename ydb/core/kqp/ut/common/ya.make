@@ -6,9 +6,12 @@ SRCS(
     kqp_ut_common.h
     re2_udf.cpp
     string_udf.cpp
+    columnshard.cpp
+    datetime2_udf.cpp
 )
 
 PEERDIR(
+    library/cpp/testing/common
     ydb/core/kqp/federated_query
     ydb/core/testlib
     ydb/library/yql/public/udf

@@ -15,7 +15,7 @@ target_compile_options(core-kqp-node_service PRIVATE
 target_link_libraries(core-kqp-node_service PUBLIC
   contrib-libs-cxxsupp
   yutil
-  cpp-actors-core
+  library-actors-core
   ydb-core-actorlib_impl
   ydb-core-base
   core-cms-console

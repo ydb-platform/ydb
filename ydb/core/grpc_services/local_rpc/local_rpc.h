@@ -175,7 +175,7 @@ public:
         ReplyWithYdbStatus(Ydb::StatusIds::GENERIC_ERROR);
     }
 
-    void SetStreamingNotify(NGrpc::IRequestContextBase::TOnNextReply&&) override {
+    void SetStreamingNotify(NYdbGrpc::IRequestContextBase::TOnNextReply&&) override {
         Y_ABORT("Unimplemented for local rpc");
     }
 
@@ -183,12 +183,16 @@ public:
         Y_ABORT("Unimplemented for local rpc");
     }
 
-    virtual void SendSerializedResult(TString&&, Ydb::StatusIds::StatusCode) override {
+    virtual void SendSerializedResult(TString&&, Ydb::StatusIds::StatusCode, EStreamCtrl) override {
         Y_ABORT("Unimplemented for local rpc");
     }
 
     TMaybe<TString> GetTraceId() const override {
         return Nothing();
+    }
+
+    NWilson::TTraceId GetWilsonTraceId() const override {
+        return {};
     }
 
     TInstant GetDeadline() const override {

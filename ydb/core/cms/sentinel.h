@@ -16,6 +16,8 @@ struct TEvSentinel {
         EvTimeout,
         EvBSCPipeDisconnected,
 
+        EvUpdateHostMarkers,
+
         EvEnd,
     };
 
@@ -29,6 +31,20 @@ struct TEvSentinel {
 
     struct TEvTimeout: public TEventLocal<TEvTimeout, EvTimeout> {};
     struct TEvBSCPipeDisconnected: public TEventLocal<TEvBSCPipeDisconnected, EvBSCPipeDisconnected> {};
+
+    struct TEvUpdateHostMarkers: public TEventLocal<TEvUpdateHostMarkers, EvUpdateHostMarkers> {
+        struct THostMarkers {
+            ui32 NodeId;
+            THashSet<NKikimrCms::EMarker> Markers;
+        };
+
+        TVector<THostMarkers> HostMarkers;
+
+        explicit TEvUpdateHostMarkers(TVector<THostMarkers>&& hostMarkers)
+            : HostMarkers(std::move(hostMarkers))
+        {
+        }
+    };
 
 }; // TEvSentinel
 

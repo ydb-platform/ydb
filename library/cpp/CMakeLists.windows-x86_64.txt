@@ -7,7 +7,6 @@
 
 
 add_subdirectory(accurate_accumulate)
-add_subdirectory(actors)
 add_subdirectory(archive)
 add_subdirectory(balloc)
 add_subdirectory(binsaver)
@@ -37,7 +36,6 @@ add_subdirectory(dns)
 add_subdirectory(enumbitset)
 add_subdirectory(execprofile)
 add_subdirectory(getopt)
-add_subdirectory(grpc)
 add_subdirectory(histogram)
 add_subdirectory(html)
 add_subdirectory(http)

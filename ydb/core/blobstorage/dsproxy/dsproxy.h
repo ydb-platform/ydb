@@ -14,8 +14,8 @@
 #include <ydb/core/blobstorage/base/blobstorage_events.h>
 #include <ydb/core/blobstorage/base/transparent.h>
 #include <ydb/core/blobstorage/backpressure/queue_backpressure_client.h>
-#include <library/cpp/actors/core/interconnect.h>
-#include <library/cpp/actors/wilson/wilson_span.h>
+#include <ydb/library/actors/core/interconnect.h>
+#include <ydb/library/actors/wilson/wilson_span.h>
 #include <ydb/core/base/appdata.h>
 #include <ydb/core/base/group_stat.h>
 #include <ydb/library/wilson_ids/wilson.h>
@@ -159,7 +159,7 @@ inline void SetExecutionRelay(IEventBase& ev, std::shared_ptr<TEvBlobStorage::TE
 }
 
 template<typename TDerived>
-class TBlobStorageGroupRequestActor : public TActor<TBlobStorageGroupRequestActor<TDerived>> {
+class TBlobStorageGroupRequestActor : public TActor<TDerived> {
 public:
     static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
         return NKikimrServices::TActivity::BS_GROUP_REQUEST;
@@ -170,7 +170,7 @@ public:
             NKikimrServices::EServiceKikimr logComponent, bool logAccEnabled, TMaybe<TGroupStat::EKind> latencyQueueKind,
             TInstant now, TIntrusivePtr<TStoragePoolCounters> &storagePoolCounters, ui32 restartCounter, TString name,
             std::shared_ptr<TEvBlobStorage::TExecutionRelay> executionRelay)
-        : TActor<TBlobStorageGroupRequestActor<TDerived>>(&TThis::InitialStateFunc, TDerived::ActorActivityType())
+        : TActor<TDerived>(&TThis::InitialStateFunc, TDerived::ActorActivityType())
         , Info(std::move(info))
         , GroupQueues(std::move(groupQueues))
         , Mon(std::move(mon))
@@ -216,7 +216,7 @@ public:
     }
 
     template<typename TEvent>
-    bool CheckForTermErrors(TAutoPtr<TEventHandle<TEvent>>& ev) {
+    bool CheckForTermErrors(TAutoPtr<TEventHandle<TEvent>>& ev, bool suppressCommonErrors) {
         auto& record = ev->Get()->Record;
         auto& self = Derived();
 
@@ -260,6 +260,9 @@ public:
         if (status != NKikimrProto::RACE && status != NKikimrProto::BLOCKED && status != NKikimrProto::DEADLINE) {
             return false; // these statuses are non-terminal
         } else if (status != NKikimrProto::RACE) {
+            if (suppressCommonErrors) {
+                return false; // these errors will be handled in host code
+            }
             // this status is terminal and we have nothing to do about it
             return done(status, TStringBuilder() << "status# " << NKikimrProto::EReplyStatus_Name(status) << " from# "
                 << vdiskId.ToString());
@@ -314,9 +317,9 @@ public:
         return true;
     }
 
-    bool ProcessEvent(TAutoPtr<IEventHandle>& ev) {
+    bool ProcessEvent(TAutoPtr<IEventHandle>& ev, bool suppressCommonErrors = false) {
         switch (ev->GetTypeRewrite()) {
-#define CHECK(T) case TEvBlobStorage::T::EventType: return CheckForTermErrors(reinterpret_cast<TEvBlobStorage::T::TPtr&>(ev))
+#define CHECK(T) case TEvBlobStorage::T::EventType: return CheckForTermErrors(reinterpret_cast<TEvBlobStorage::T::TPtr&>(ev), suppressCommonErrors)
             CHECK(TEvVPutResult);
             CHECK(TEvVMultiPutResult);
             CHECK(TEvVGetResult);
@@ -351,17 +354,23 @@ public:
         return false;
     }
 
-    void CountPuts(const TDeque<std::unique_ptr<TEvBlobStorage::TEvVPut>>& q) {
+    template<typename TEv>
+    void CountPut(const std::unique_ptr<TEv>& ev) {
+        ++GeneratedSubrequests;
+        GeneratedSubrequestBytes += ev->GetBufferBytes();
+    }
+
+    template<typename TEv>
+    void CountPuts(const TDeque<std::unique_ptr<TEv>>& q) {
         for (const auto& item : q) {
-            ++GeneratedSubrequests;
-            GeneratedSubrequestBytes += item->GetBufferBytes();
+            CountPut(item);
         }
     }
 
-    void CountPuts(const TDeque<std::unique_ptr<TEvBlobStorage::TEvVMultiPut>>& q) {
+    template<typename... TOptions>
+    void CountPuts(const TDeque<std::variant<TOptions...>>& q) {
         for (const auto& item : q) {
-            ++GeneratedSubrequests;
-            GeneratedSubrequestBytes += item->GetBufferBytes();
+            std::visit([&](auto& item) { CountPut(item); }, item);
         }
     }
 
@@ -396,8 +405,7 @@ public:
 
     void SendToQueues(TDeque<std::unique_ptr<TEvBlobStorage::TEvVGet>> &vGets, bool timeStatsEnabled) {
         for (auto& request : vGets) {
-            Y_ABORT_UNLESS(request->Record.HasCookie());
-            ui64 messageCookie = request->Record.GetCookie();
+            const ui64 messageCookie = request->Record.GetCookie();
             CountEvent(*request);
             const ui64 cyclesPerUs = NHPTimer::GetCyclesPerSecond() / 1000000;
             request->Record.MutableTimestamps()->SetSentByDSProxyUs(GetCycleCountFast() / cyclesPerUs);
@@ -433,7 +441,6 @@ public:
     template <typename TEvent>
     void SendToQueues(TDeque<std::unique_ptr<TEvent>> &events, bool timeStatsEnabled) {
         for (auto& request : events) {
-            Y_ABORT_UNLESS(request->Record.HasCookie());
             ui64 messageCookie = request->Record.GetCookie();
             CountEvent(*request);
             const ui64 cyclesPerUs = NHPTimer::GetCyclesPerSecond() / 1000000;
@@ -641,8 +648,7 @@ IActor* CreateBlobStorageGroupGetRequest(const TIntrusivePtr<TBlobStorageGroupIn
     const TIntrusivePtr<TGroupQueues> &state, const TActorId &source,
     const TIntrusivePtr<TBlobStorageGroupProxyMon> &mon, TEvBlobStorage::TEvGet *ev,
     ui64 cookie, NWilson::TTraceId traceId, TNodeLayoutInfoPtr&& nodeLayout,
-    TMaybe<TGroupStat::EKind> latencyQueueKind, TInstant now, TIntrusivePtr<TStoragePoolCounters> &storagePoolCounters,
-    bool isVMultiPutMode);
+    TMaybe<TGroupStat::EKind> latencyQueueKind, TInstant now, TIntrusivePtr<TStoragePoolCounters> &storagePoolCounters);
 
 IActor* CreateBlobStorageGroupPatchRequest(const TIntrusivePtr<TBlobStorageGroupInfo> &info,
     const TIntrusivePtr<TGroupQueues> &state, const TActorId &source,

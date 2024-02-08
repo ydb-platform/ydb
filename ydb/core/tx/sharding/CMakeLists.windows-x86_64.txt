@@ -18,12 +18,12 @@ target_link_libraries(core-tx-sharding PUBLIC
   library-yql-minikql
   library-yql-utils
   yql-public-udf
+  formats-arrow-hash
   ydb-core-formats
   ydb-core-protos
 )
 target_sources(core-tx-sharding PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/core/tx/sharding/sharding.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/tx/sharding/hash.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/tx/sharding/xx_hash.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/tx/sharding/unboxed_reader.cpp
 )

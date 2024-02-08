@@ -1,3 +1,6 @@
+import itertools
+import os
+import os.path
 import sys
 import subprocess
 import optparse
@@ -36,8 +39,61 @@ CUDA_LIBRARIES = {
     '-lnvinfer_static': '-lnvinfer',
     '-lnvinfer_plugin_static': '-lnvinfer_plugin',
     '-lnvonnxparser_static': '-lnvonnxparser',
-    '-lnvparsers_static': '-lnvparsers'
+    '-lnvparsers_static': '-lnvparsers',
 }
+
+
+def prune_cuda_libraries(cmd, prune_arches, nvprune_exe, build_root):
+    def name_generator(prefix):
+        for idx in itertools.count():
+            yield prefix + '_' + str(idx)
+
+    def compute_arch(arch):
+        _, ver = arch.split('_', 1)
+        return 'compute_{}'.format(ver)
+
+    libs_to_prune = set(CUDA_LIBRARIES)
+
+    # does not contain device code, nothing to prune
+    libs_to_prune.remove('-lcudart_static')
+
+    tmp_names_gen = name_generator('cuda_pruned_libs')
+
+    arch_args = []
+    for arch in prune_arches.split(':'):
+        arch_args.append('-gencode')
+        arch_args.append('arch={},code={}'.format(compute_arch(arch), arch))
+
+    flags = []
+    cuda_deps = set()
+    for flag in reversed(cmd):
+        if flag in libs_to_prune:
+            cuda_deps.add('lib' + flag[2:] + '.a')
+            flag += '_pruned'
+        elif flag.startswith('-L') and os.path.exists(flag[2:]) and os.path.isdir(flag[2:]) and any(f in cuda_deps for f in os.listdir(flag[2:])):
+            from_dirpath = flag[2:]
+            from_deps = list(cuda_deps & set(os.listdir(from_dirpath)))
+
+            if from_deps:
+                to_dirpath = os.path.abspath(os.path.join(build_root, next(tmp_names_gen)))
+                os.makedirs(to_dirpath)
+
+                for f in from_deps:
+                    # prune lib
+                    from_path = os.path.join(from_dirpath, f)
+                    to_path = os.path.join(to_dirpath, f[:-2] + '_pruned.a')
+                    subprocess.check_call([nvprune_exe] + arch_args + ['--output-file', to_path, from_path])
+                    cuda_deps.remove(f)
+
+                # do not remove current directory
+                # because it can contain other libraries we want link to
+                # instead we just add new directory with pruned libs
+                flags.append('-L' + to_dirpath)
+
+        flags.append(flag)
+
+    assert not cuda_deps, ('Unresolved CUDA deps: ' + ','.join(cuda_deps))
+    return reversed(flags)
 
 
 def remove_excessive_flags(cmd):
@@ -48,7 +104,7 @@ def remove_excessive_flags(cmd):
     return flags
 
 
-def fix_sanitize_flag(cmd):
+def fix_sanitize_flag(cmd, opts):
     """
     Remove -fsanitize=address flag if sanitazers are linked explicitly for linux target.
     """
@@ -56,16 +112,14 @@ def fix_sanitize_flag(cmd):
         if flag.startswith('--target') and 'linux' not in flag.lower():
             # use toolchained sanitize libraries
             return cmd
-    if 'CLANG16_YES_PLEASE' in str(cmd):
-        CLANG_RT = 'contrib/libs/clang16-rt/lib/'
-    else:
-        CLANG_RT = 'contrib/libs/clang14-rt/lib/'
+    assert opts.clang_ver
+    CLANG_RT = 'contrib/libs/clang' + opts.clang_ver + '-rt/lib/'
     sanitize_flags = {
         '-fsanitize=address': CLANG_RT + 'asan',
         '-fsanitize=memory': CLANG_RT + 'msan',
         '-fsanitize=leak': CLANG_RT + 'lsan',
         '-fsanitize=undefined': CLANG_RT + 'ubsan',
-        '-fsanitize=thread': CLANG_RT + 'tsan'
+        '-fsanitize=thread': CLANG_RT + 'tsan',
     }
 
     used_sanitize_libs = []
@@ -149,7 +203,12 @@ def parse_args():
     parser.add_option('--custom-step')
     parser.add_option('--python')
     parser.add_option('--source-root')
+    parser.add_option('--clang-ver')
     parser.add_option('--dynamic-cuda', action='store_true')
+    parser.add_option('--cuda-architectures',
+                      help='List of supported CUDA architectures, separated by ":" (e.g. "sm_52:compute_70:lto_90a"')
+    parser.add_option('--nvprune-exe')
+    parser.add_option('--build-root')
     parser.add_option('--arch')
     parser.add_option('--linker-output')
     parser.add_option('--whole-archive-peers', action='append')
@@ -166,7 +225,7 @@ if __name__ == '__main__':
     if opts.musl:
         cmd = fix_cmd_for_musl(cmd)
 
-    cmd = fix_sanitize_flag(cmd)
+    cmd = fix_sanitize_flag(cmd, opts)
 
     if 'ld.lld' in str(cmd):
         if '-fPIE' in str(cmd) or '-fPIC' in str(cmd):
@@ -177,6 +236,8 @@ if __name__ == '__main__':
 
     if opts.dynamic_cuda:
         cmd = fix_cmd_for_dynamic_cuda(cmd)
+    elif opts.cuda_architectures:
+        cmd = prune_cuda_libraries(cmd, opts.cuda_architectures, opts.nvprune_exe, opts.build_root)
     cmd = ProcessWholeArchiveOption(opts.arch, opts.whole_archive_peers, opts.whole_archive_libs).construct_cmd(cmd)
 
     if opts.custom_step:

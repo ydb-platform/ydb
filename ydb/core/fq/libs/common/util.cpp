@@ -1,9 +1,11 @@
 #include "util.h"
 
+#include <regex>
+#include <re2/re2.h>
+
 #include <util/generic/string.h>
 #include <util/string/builder.h>
 #include <util/string/subst.h>
-#include <regex>
 
 namespace NFq {
 
@@ -40,6 +42,25 @@ EYdbComputeAuth GetBasicAuthMethod(const FederatedQuery::IamAuth& auth) {
             return EYdbComputeAuth::UNKNOWN;
     }
 }
+
+class TIssueDatabaseRemover {
+public:
+    explicit TIssueDatabaseRemover(const TString& databasePath) 
+        : DatabasePath(databasePath) {}
+
+    TIntrusivePtr<NYql::TIssue> Run(const NYql::TIssue& issue) {
+        auto msg = RemoveDatabaseFromStr(issue.GetMessage(), DatabasePath);
+        auto newIssue = MakeIntrusive<NYql::TIssue>(issue.Position, issue.EndPosition, msg);
+        newIssue->SetCode(issue.GetCode(), issue.GetSeverity());
+        for (auto issue : issue.GetSubIssues()) {
+            newIssue->AddSubIssue(Run(*issue));
+        }
+        return newIssue;
+    }
+
+private:
+    TString DatabasePath; 
+};
 
 }
 
@@ -194,6 +215,23 @@ FederatedQuery::IamAuth GetAuth(const FederatedQuery::Connection& connection) {
     case FederatedQuery::ConnectionSetting::CONNECTION_NOT_SET:
         return FederatedQuery::IamAuth{};
     }
+}
+
+TString RemoveDatabaseFromStr(TString str, const TString& databasePath) {
+    TString escapedPath = RE2::QuoteMeta(databasePath);
+    RE2::GlobalReplace(&str,
+                       TStringBuilder {} << R"(db.\[)" << escapedPath << R"(\/([^ '"]+)\]|)" << escapedPath << R"(\/([^ '"]+))",
+                       R"(\1\2)");
+    return str;
+}
+
+NYql::TIssues RemoveDatabaseFromIssues(const NYql::TIssues& issues, const TString& databasePath) {
+    TIssueDatabaseRemover remover(databasePath);
+    TVector<NYql::TIssue> newIssues; 
+    for (const auto& issue : issues) {
+        newIssues.emplace_back(*remover.Run(issue));
+    }
+    return NYql::TIssues(newIssues);
 }
 
 } // namespace NFq

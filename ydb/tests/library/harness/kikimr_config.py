@@ -143,7 +143,6 @@ class KikimrConfigGenerator(object):
             public_http_config=None,
             enable_datastreams=False,
             auth_config_path=None,
-            disable_mvcc=False,
             enable_public_api_external_blobs=False,
             node_kind=None,
             bs_cache_file_path=None,
@@ -158,6 +157,10 @@ class KikimrConfigGenerator(object):
             extra_feature_flags=None,  # list[str]
             extra_grpc_services=None,  # list[str]
             hive_config=None,
+            datashard_config=None,
+            enforce_user_token_requirement=False,
+            default_user_sid=None,
+            pg_compatible_expirement=False,
     ):
         if extra_feature_flags is None:
             extra_feature_flags = []
@@ -258,7 +261,6 @@ class KikimrConfigGenerator(object):
             self.yaml_config["table_service_config"]["enable_kqp_data_query_stream_lookup"] = False
 
         self.yaml_config["feature_flags"]["enable_public_api_external_blobs"] = enable_public_api_external_blobs
-        self.yaml_config["feature_flags"]["enable_mvcc"] = "VALUE_FALSE" if disable_mvcc else "VALUE_TRUE"
         for extra_feature_flag in extra_feature_flags:
             self.yaml_config["feature_flags"][extra_feature_flag] = True
         if enable_alter_database_create_hive_first:
@@ -342,6 +344,9 @@ class KikimrConfigGenerator(object):
         if hive_config:
             self.yaml_config["hive_config"] = hive_config
 
+        if datashard_config:
+            self.yaml_config["data_shard_config"] = datashard_config
+
         self.__build()
 
         if self.grpc_ssl_enable:
@@ -365,6 +370,20 @@ class KikimrConfigGenerator(object):
 
         if os.getenv("YDB_ALLOW_ORIGIN") is not None:
             self.yaml_config["monitoring_config"] = {"allow_origin": str(os.getenv("YDB_ALLOW_ORIGIN"))}
+
+        if enforce_user_token_requirement:
+            self.yaml_config["domains_config"]["security_config"]["enforce_user_token_requirement"] = True
+
+        if default_user_sid:
+            self.yaml_config["domains_config"]["security_config"]["default_user_sids"] = [default_user_sid]
+
+        if pg_compatible_expirement:
+            self.yaml_config["table_service_config"]["enable_prepared_ddl"] = True
+            # self.yaml_config["table_service_config"]["enable_ast_cache"] = True
+            # self.yaml_config["table_service_config"]["enable_pg_consts_to_params"] = True
+            self.yaml_config["table_service_config"]["index_auto_choose_mode"] = 'max_used_prefix'
+            self.yaml_config["feature_flags"]['enable_temp_tables'] = True
+            self.yaml_config["feature_flags"]['enable_table_pg_types'] = True
 
     @property
     def pdisks_info(self):

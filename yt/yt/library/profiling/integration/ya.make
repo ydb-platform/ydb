@@ -1,6 +1,6 @@
 PY3TEST()
 
-INCLUDE(${ARCADIA_ROOT}/yt/opensource_tests.inc)
+INCLUDE(${ARCADIA_ROOT}/yt/opensource.inc)
 
 PEERDIR(
     contrib/python/requests

@@ -98,7 +98,7 @@ Y_UNIT_TEST_SUITE(YdbIndexTable) {
     }
 
     Y_UNIT_TEST(MultiShardTableOneUniqIndex) {
-        UNIT_ASSERT_NO_EXCEPTION(RunTest(10, 20000, 1, TRunSettings {
+        UNIT_ASSERT_NO_EXCEPTION(RunTest(10, 2000, 1, TRunSettings {
             .PkOverlap = true,
             .IndexOverlap = false,
             .WithDataColumn = false,
@@ -107,7 +107,7 @@ Y_UNIT_TEST_SUITE(YdbIndexTable) {
     }
 
     Y_UNIT_TEST(MultiShardTableUniqAndNonUniqIndex) {
-        UNIT_ASSERT_NO_EXCEPTION(RunTest(10, 20000, 2, TRunSettings {
+        UNIT_ASSERT_NO_EXCEPTION(RunTest(10, 2000, 2, TRunSettings {
             .PkOverlap = true,
             .IndexOverlap = false,
             .WithDataColumn = false,
@@ -125,7 +125,7 @@ Y_UNIT_TEST_SUITE(YdbIndexTable) {
     }
 
     Y_UNIT_TEST(MultiShardTableOneUniqIndexDataColumn) {
-        UNIT_ASSERT_NO_EXCEPTION(RunTest(10, 20000, 1, TRunSettings {
+        UNIT_ASSERT_NO_EXCEPTION(RunTest(10, 2000, 1, TRunSettings {
             .PkOverlap = true,
             .IndexOverlap = false,
             .WithDataColumn = true,

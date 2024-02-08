@@ -60,7 +60,7 @@ bool TLogicRedo::TerminateTransaction(TAutoPtr<TSeat> seat, const TActorContext 
     if (CompletionQueue.empty()) {
         const TTxType txType = seat->Self->GetTxType();
 
-        seat->Self->Terminate(seat->TerminationReason, ctx.MakeFor(ownerID));
+        seat->Terminate(seat->TerminationReason, ctx.MakeFor(ownerID));
         Counters->Cumulative()[TExecutorCounters::TX_TERMINATED].Increment(1);
         if (AppTxCounters && txType != UnknownTxType)
             AppTxCounters->TxCumulative(txType, COUNTER_TT_TERMINATED).Increment(1);
@@ -79,7 +79,7 @@ void CompleteRoTransaction(TAutoPtr<TSeat> seat, const TActorContext &ownerCtx, 
 
     THPTimer completeTimer;
     LWTRACK(TransactionCompleteBegin, seat->Self->Orbit, seat->UniqID);
-    seat->Complete(ownerCtx);
+    seat->Complete(ownerCtx, false);
     LWTRACK(TransactionCompleteEnd, seat->Self->Orbit, seat->UniqID);
 
     const ui64 completeTimeus = ui64(1000000. * completeTimer.Passed());
@@ -145,7 +145,7 @@ TLogicRedo::TCommitRWTransactionResult TLogicRedo::CommitRWTransaction(
     if (force || MaxItemsToBatch < 2 || change.Redo.size() > MaxBytesToBatch) {
         FlushBatchedLog();
 
-        auto commit = CommitManager->Begin(true, ECommit::Redo);
+        auto commit = CommitManager->Begin(true, ECommit::Redo, seat->GetTxTraceId());
 
         commit->PushTx(seat.Get());
         CompletionQueue.push_back({ seat, commit->Step });
@@ -181,10 +181,36 @@ TLogicRedo::TCommitRWTransactionResult TLogicRedo::CommitRWTransaction(
         if (Batch->Bytes + change.Redo.size() > MaxBytesToBatch)
             FlushBatchedLog();
 
-        if (!Batch->Commit)
-            Batch->Commit = CommitManager->Begin(false, ECommit::Redo);
+        if (!Batch->Commit) {
+            Batch->Commit = CommitManager->Begin(false, ECommit::Redo, seat->GetTxTraceId());
+        } else {
+            const TAutoPtr<ITransaction> &tx = seat->Self;
+            // Batch commit's TraceId will be used for all blobstorage requests of the batch.
+            if (!Batch->Commit->TraceId && tx->TxSpan) {
+                // It is possible that the original or consequent transactions didn't have a TraceId,
+                // but if a new transaction of a batch has TraceId, use it for the whole batch
+                // (and consequent traced transactions).
+                Batch->Commit->TraceId = seat->GetTxTraceId();
+            } else {
+                tx->TxSpan.Link(Batch->Commit->TraceId, {});
+            }
 
+            i64 batchSize = Batch->Bodies.size() + 1;
+
+            for (TSeat* curSeat = Batch->Commit->FirstTx; curSeat != nullptr; curSeat = curSeat->NextCommitTx) {
+                // Update batch size of the transaction, whose TraceId the commit uses (first transaction in batch, that has TraceId).
+                if (curSeat->Self->TxSpan) {
+                    curSeat->Self->TxSpan.Attribute("BatchSize", batchSize);
+                    break;
+                }
+            }
+
+            tx->TxSpan.Attribute("Batched", true)
+                      .Attribute("BatchSize", batchSize);
+        }
+        
         Batch->Commit->PushTx(seat.Get());
+
         CompletionQueue.push_back({ seat, Batch->Commit->Step });
 
         Batch->Add(std::move(change.Redo), change.Affects);
@@ -251,7 +277,7 @@ ui64 TLogicRedo::Confirm(ui32 step, const TActorContext &ctx, const TActorId &ow
         ++confirmedTransactions;
         THPTimer completeTimer;
         LWTRACK(TransactionCompleteBegin, seat->Self->Orbit, seat->UniqID);
-        entry.InFlyRWTransaction->Complete(ownerCtx);
+        entry.InFlyRWTransaction->Complete(ownerCtx, true);
         LWTRACK(TransactionCompleteEnd, seat->Self->Orbit, seat->UniqID);
 
         const ui64 completeTimeus = ui64(1000000. * completeTimer.Passed());
@@ -271,7 +297,7 @@ ui64 TLogicRedo::Confirm(ui32 step, const TActorContext &ctx, const TActorId &ow
 
         for (auto &x : entry.WaitingTerminatedTransactions) {
             const TTxType roTxType = x->Self->GetTxType();
-            x->Self->Terminate(x->TerminationReason, ownerCtx);
+            x->Terminate(x->TerminationReason, ownerCtx);
 
             Counters->Cumulative()[TExecutorCounters::TX_TERMINATED].Increment(1);
             if (AppTxCounters && roTxType != UnknownTxType)

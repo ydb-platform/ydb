@@ -5,7 +5,7 @@ import "ydb/core/protos/blobstorage_disk.proto";
 import "ydb/core/protos/blobstorage_disk_color.proto";
 import "ydb/core/protos/blobstorage_pdisk_config.proto";
 import "ydb/core/protos/blob_depot_config.proto";
-import "library/cpp/actors/protos/interconnect.proto";
+import "ydb/library/actors/protos/interconnect.proto";
 
 package NKikimrBlobStorage;
 
@@ -259,6 +259,7 @@ message TReassignGroupDisk {
     uint32 VDiskIdx = 5;
     TPDiskId TargetPDiskId = 6; // optional; when not specified, selected automatically
     bool SuppressDonorMode = 7; // when set, donor mode is not used even if it is enabled through BSC
+    reserved 8;
 }
 
 message TSanitizeGroup {
@@ -399,10 +400,6 @@ message TWipeVDisk {
     NKikimrBlobStorage.TVDiskID VDiskId = 2;
 }
 
-message TRestartPDisk {
-    TPDiskId TargetPDiskId = 1;
-}
-
 message TSetScrubPeriodicity {
     uint32 ScrubPeriodicity = 1; // in seconds; 0 = disable
 }
@@ -450,6 +447,8 @@ message TUpdateSettings {
     // TODO
     // repeated TSerialManagementStage.E SerialManagementStage = 11;
     repeated bool AllowMultipleRealmsOccupation = 12;
+    repeated bool UseSelfHealLocalPolicy = 13;
+    repeated bool TryToRelocateBrokenDisksLocallyFirst = 14;
 }
 
 message TBoxStoragePoolId {
@@ -533,7 +532,6 @@ message TConfigRequest {
             TReadSettings ReadSettings = 43;
             TCancelVirtualGroup CancelVirtualGroup = 44;
             TSetVDiskReadOnly SetVDiskReadOnly = 47;
-            TRestartPDisk RestartPDisk = 48;
 
             // commands intended for internal use
             TReassignGroupDisk ReassignGroupDisk = 19;

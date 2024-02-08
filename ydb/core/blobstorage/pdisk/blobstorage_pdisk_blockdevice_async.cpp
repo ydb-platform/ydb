@@ -18,8 +18,8 @@
 #include <ydb/library/pdisk_io/spdk_state.h>
 #include <ydb/library/pdisk_io/wcache.h>
 
-#include <library/cpp/actors/core/log.h>
-#include <library/cpp/actors/util/thread.h>
+#include <ydb/library/actors/core/log.h>
+#include <ydb/library/actors/util/thread.h>
 #include <library/cpp/containers/stack_vector/stack_vec.h>
 
 #include <util/generic/deque.h>
@@ -230,7 +230,11 @@ class TRealBlockDevice : public IBlockDevice {
 
             Device.IncrementMonInFlight(op->GetType(), op->GetSize());
 
-            action->OperationIdx = Device.FlightControl.Schedule();
+            double blockedMs = 0;
+            action->OperationIdx = Device.FlightControl.Schedule(blockedMs);
+
+            *Device.Mon.DeviceWaitTimeMs += blockedMs;
+
             if (action->FlushAction) {
                 action->FlushAction->OperationIdx = action->OperationIdx;
             }
@@ -483,7 +487,7 @@ class TRealBlockDevice : public IBlockDevice {
     ////////////////////////////////////////////////////////
     // TSubmitGetThread
     ////////////////////////////////////////////////////////
-    class TSubmitGetThread : public TSubmitThreadBase{
+    class TSubmitGetThread : public TSubmitThreadBase {
     public:
         TSubmitGetThread(TRealBlockDevice &device)
             : TSubmitThreadBase(device, &ThreadProc, this)
@@ -512,7 +516,18 @@ class TRealBlockDevice : public IBlockDevice {
 
             action->OperationIdx = Device.FlightControl.TrySchedule();
             if (action->OperationIdx == 0) {
+                if (OpScheduleFailedTime == 0) {
+                    // If failed to schedule, remember the time to use it when scheduling succeeds.
+                    OpScheduleFailedTime = HPNow();
+                }
                 return false;
+            }
+
+            if (OpScheduleFailedTime != 0) {
+                // Scheduling failed previously, calculate how much time operation had to wait for scheduling.
+                *Device.Mon.DeviceWaitTimeMs += HPMilliSecondsFloat(OpScheduleFailedTime - HPNow());
+
+                OpScheduleFailedTime = 0;
             }
 
             if (!Device.QuitCounter.Increment()) {
@@ -615,6 +630,8 @@ class TRealBlockDevice : public IBlockDevice {
 
             Y_ABORT_UNLESS(OperationsToBeSubmit.GetWaitingSize() == 0);
         }
+    private:
+        NHPTimer::STime OpScheduleFailedTime = 0;
     };
 
     ////////////////////////////////////////////////////////
@@ -1342,7 +1359,7 @@ public:
 
             for (auto it = range.first; it != range.second; ++it) {
                 TRead &read = it->second;
-                
+
                 Y_ABORT_UNLESS(read.CompletionAction);
 
                 read.CompletionAction->SetResult(completion->Result);

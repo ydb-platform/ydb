@@ -69,27 +69,29 @@ void TBlobStorageController::TGroupInfo::CalculateGroupStatus() {
         TBlobStorageGroupInfo::TGroupVDisks failed(Topology.get());
         TBlobStorageGroupInfo::TGroupVDisks failedByPDisk(Topology.get());
         for (const TVSlotInfo *slot : VDisksInGroup) {
-            if (!slot->IsReady || slot->PDisk->Mood == TPDiskMood::Restarting) {
+            if (!slot->IsReady) {
                 failed |= {Topology.get(), slot->GetShortVDiskId()};
             } else if (!slot->PDisk->HasGoodExpectedStatus()) {
                 failedByPDisk |= {Topology.get(), slot->GetShortVDiskId()};
             }
         }
-        auto deriveStatus = [&](const auto& failed) {
-            auto& checker = *Topology->QuorumChecker;
-            if (!failed.GetNumSetItems()) { // all disks of group are operational
-                return NKikimrBlobStorage::TGroupStatus::FULL;
-            } else if (!checker.CheckFailModelForGroup(failed)) { // fail model exceeded
-                return NKikimrBlobStorage::TGroupStatus::DISINTEGRATED;
-            } else if (checker.IsDegraded(failed)) { // group degraded
-                return NKikimrBlobStorage::TGroupStatus::DEGRADED;
-            } else if (failed.GetNumSetItems()) { // group partially available, but not degraded
-                return NKikimrBlobStorage::TGroupStatus::PARTIAL;
-            } else {
-                Y_ABORT("unexpected case");
-            }
-        };
-        Status.MakeWorst(deriveStatus(failed), deriveStatus(failed | failedByPDisk));
+        Status.MakeWorst(DeriveStatus(Topology.get(), failed), DeriveStatus(Topology.get(), failed | failedByPDisk));
+    }
+}
+
+NKikimrBlobStorage::TGroupStatus::E TBlobStorageController::DeriveStatus(const TBlobStorageGroupInfo::TTopology *topology,
+        const TBlobStorageGroupInfo::TGroupVDisks& failed) {
+    auto& checker = *topology->QuorumChecker;
+    if (!failed.GetNumSetItems()) { // all disks of group are operational
+        return NKikimrBlobStorage::TGroupStatus::FULL;
+    } else if (!checker.CheckFailModelForGroup(failed)) { // fail model exceeded
+        return NKikimrBlobStorage::TGroupStatus::DISINTEGRATED;
+    } else if (checker.IsDegraded(failed)) { // group degraded
+        return NKikimrBlobStorage::TGroupStatus::DEGRADED;
+    } else if (failed.GetNumSetItems()) { // group partially available, but not degraded
+        return NKikimrBlobStorage::TGroupStatus::PARTIAL;
+    } else {
+        Y_ABORT("unexpected case");
     }
 }
 
@@ -446,7 +448,6 @@ ui32 TBlobStorageController::GetEventPriority(IEventHandle *ev) {
                     case NKikimrBlobStorage::TConfigRequest::TCommand::kSanitizeGroup:
                     case NKikimrBlobStorage::TConfigRequest::TCommand::kCancelVirtualGroup:
                     case NKikimrBlobStorage::TConfigRequest::TCommand::kSetVDiskReadOnly:
-                    case NKikimrBlobStorage::TConfigRequest::TCommand::kRestartPDisk:
                         return 2; // read-write commands go with higher priority as they are needed to keep cluster intact
 
                     case NKikimrBlobStorage::TConfigRequest::TCommand::kReadHostConfig:

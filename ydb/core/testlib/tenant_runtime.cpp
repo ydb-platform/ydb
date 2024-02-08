@@ -24,9 +24,10 @@
 #include <ydb/core/tx/tx_proxy/proxy.h>
 #include <ydb/core/sys_view/processor/processor.h>
 #include <ydb/core/persqueue/pq.h>
+#include <ydb/core/statistics/aggregator/aggregator.h>
 
-#include <library/cpp/actors/core/interconnect.h>
-#include <library/cpp/actors/interconnect/interconnect.h>
+#include <ydb/library/actors/core/interconnect.h>
+#include <ydb/library/actors/interconnect/interconnect.h>
 #include <library/cpp/testing/unittest/registar.h>
 
 #include <util/folder/dirut.h>
@@ -451,6 +452,8 @@ class TFakeHive : public TActor<TFakeHive>, public TTabletExecutedFlat {
                 bootstrapperActorId = Boot(ctx, type, &NReplication::CreateController, DataGroupErasure);
             } else if (type == TTabletTypes::PersQueue) {
                 bootstrapperActorId = Boot(ctx, type, &NKikimr::CreatePersQueue, DataGroupErasure);
+            } else if (type == TTabletTypes::StatisticsAggregator) {
+                bootstrapperActorId = Boot(ctx, type, &NStat::CreateStatisticsAggregator, DataGroupErasure);
             } else {
                 status = NKikimrProto::ERROR;
             }
@@ -790,11 +793,11 @@ void TTenantTestRuntime::Setup(bool createTenantPools)
     if (ENABLE_DETAILED_LOG) {
         SetLogPriority(NKikimrServices::LOCAL, NLog::PRI_DEBUG);
         SetLogPriority(NKikimrServices::TENANT_POOL, NLog::PRI_DEBUG);
-        SetLogPriority(NKikimrServices::LABELS_MAINTAINER, NLog::PRI_DEBUG);
+        //SetLogPriority(NKikimrServices::LABELS_MAINTAINER, NLog::PRI_DEBUG);
         SetLogPriority(NKikimrServices::TENANT_SLOT_BROKER, NLog::PRI_DEBUG);
-        SetLogPriority(NKikimrServices::CMS, NLog::PRI_DEBUG);
-        SetLogPriority(NKikimrServices::CMS_CONFIGS, NLog::PRI_TRACE);
-        SetLogPriority(NKikimrServices::CMS_TENANTS, NLog::PRI_TRACE);
+        //SetLogPriority(NKikimrServices::CMS, NLog::PRI_DEBUG);
+        //SetLogPriority(NKikimrServices::CMS_CONFIGS, NLog::PRI_TRACE);
+        //SetLogPriority(NKikimrServices::CMS_TENANTS, NLog::PRI_TRACE);
         SetLogPriority(NKikimrServices::CONFIGS_DISPATCHER, NLog::PRI_TRACE);
         SetLogPriority(NKikimrServices::CONFIGS_CACHE, NLog::PRI_TRACE);
         SetLogPriority(NKikimrServices::HIVE, NLog::PRI_DEBUG);

@@ -25,22 +25,6 @@ TSerializableAccessControlEntry::TSerializableAccessControlEntry(
     , InheritanceMode(inheritanceMode)
 { }
 
-bool operator == (const TSerializableAccessControlEntry& lhs, const TSerializableAccessControlEntry& rhs)
-{
-    return
-        lhs.Action == rhs.Action &&
-        lhs.Subjects == rhs.Subjects &&
-        lhs.Permissions == rhs.Permissions &&
-        lhs.InheritanceMode == rhs.InheritanceMode &&
-        lhs.Columns == rhs.Columns &&
-        lhs.Vital == rhs.Vital;
-}
-
-bool operator != (const TSerializableAccessControlEntry& lhs, const TSerializableAccessControlEntry& rhs)
-{
-    return !(lhs == rhs);
-}
-
 // NB(levysotsky): We don't use TYsonStruct here
 // because we want to mirror the TAccessControlList structure,
 // and a vector of TYsonStruct-s cannot be declared (as it has no move constructor).
@@ -54,6 +38,7 @@ void Serialize(const TSerializableAccessControlEntry& ace, NYson::IYsonConsumer*
             // TODO(max42): YT-16347.
             // Do not serialize this field by default
             .Item("inheritance_mode").Value(ace.InheritanceMode)
+            .OptionalItem("subject_tag_filter", ace.SubjectTagFilter)
             .OptionalItem("columns", ace.Columns)
             .OptionalItem("vital", ace.Vital)
         .EndMap();
@@ -102,6 +87,11 @@ void Deserialize(TSerializableAccessControlEntry& ace, NYTree::INodePtr node)
     } else {
         ace.InheritanceMode = EAceInheritanceMode::ObjectAndDescendants;
     }
+    if (auto tagFilterNode = mapNode->FindChild("subject_tag_filter")) {
+        Deserialize(ace.SubjectTagFilter, tagFilterNode);
+    } else {
+        ace.SubjectTagFilter = {};
+    }
     if (auto columnsNode = mapNode->FindChild("columns")) {
         Deserialize(ace.Columns, columnsNode);
     } else {
@@ -121,6 +111,7 @@ void Deserialize(TSerializableAccessControlEntry& ace, NYson::TYsonPullParserCur
     auto HasSubjects = false;
     auto HasPermissions = false;
     ace.InheritanceMode = EAceInheritanceMode::ObjectAndDescendants;
+    ace.SubjectTagFilter = {};
     cursor->ParseMap([&] (TYsonPullParserCursor* cursor) {
         auto key = cursor->GetCurrent().UncheckedAsString();
         if (key == TStringBuf("action")) {
@@ -138,6 +129,9 @@ void Deserialize(TSerializableAccessControlEntry& ace, NYson::TYsonPullParserCur
         } else if (key == TStringBuf("inheritance_mode")) {
             cursor->Next();
             Deserialize(ace.InheritanceMode, cursor);
+        } else if (key == TStringBuf("subject_tag_filter")) {
+            cursor->Next();
+            Deserialize(ace.SubjectTagFilter, cursor);
         } else if (key == TStringBuf("columns")) {
             cursor->Next();
             Deserialize(ace.Columns, cursor);
@@ -163,17 +157,18 @@ void TSerializableAccessControlEntry::Persist(const TStreamPersistenceContext& c
     Persist(context, Subjects);
     Persist(context, Permissions);
     Persist(context, InheritanceMode);
+    // COMPAT(vovamelnikov)
+    if (context.IsLoad() && context.GetVersion() < 301305) {
+        SubjectTagFilter =  {};
+    } else {
+        Persist(context, SubjectTagFilter);
+    }
     // NB: Columns and Vital are not persisted since this method is intended only for use in controller.
 }
 
 bool operator == (const TSerializableAccessControlList& lhs, const TSerializableAccessControlList& rhs)
 {
     return lhs.Entries == rhs.Entries;
-}
-
-bool operator != (const TSerializableAccessControlList& lhs, const TSerializableAccessControlList& rhs)
-{
-    return !(lhs == rhs);
 }
 
 void Serialize(const TSerializableAccessControlList& acl, NYson::IYsonConsumer* consumer)

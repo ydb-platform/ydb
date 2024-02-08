@@ -828,44 +828,44 @@ TString MakeDeepListJson(int depth)
     return result;
 }
 
-TEST(TJsonParser, ParseDeepMapNoExcept)
+TEST(TJsonParserTest, ParseDeepMapNoExcept)
 {
     TStringStream yson;
     NYT::NYson::TYsonWriter writer(&yson);
-    auto configPtr = NYT::New<NYT::NJson::TJsonFormatConfig>();
-    configPtr->NestingLevelLimit = 20;
-    NYT::NJson::TJsonParser parser(&writer, configPtr, NYT::NJson::EYsonType::Node);
-    EXPECT_NO_THROW(parser.Read(MakeDeepMapJson(configPtr->NestingLevelLimit)));
+    auto config = NYT::New<TJsonFormatConfig>();
+    config->NestingLevelLimit = 20;
+    TJsonParser parser(&writer, config, EYsonType::Node);
+    EXPECT_NO_THROW(parser.Read(MakeDeepMapJson(config->NestingLevelLimit)));
 }
 
-TEST(TJsonParser, ParseDeepMapExcept)
+TEST(TJsonParserTest, ParseDeepMapExcept)
 {
     TStringStream yson;
     NYT::NYson::TYsonWriter writer(&yson);
-    auto configPtr = NYT::New<NYT::NJson::TJsonFormatConfig>();
-    configPtr->NestingLevelLimit = 20;
-    NYT::NJson::TJsonParser parser(&writer, configPtr, NYT::NJson::EYsonType::Node);
-    EXPECT_THROW(parser.Read(MakeDeepMapJson(configPtr->NestingLevelLimit + 1)), NYT::TErrorException);
+    auto config = NYT::New<TJsonFormatConfig>();
+    config->NestingLevelLimit = 20;
+    TJsonParser parser(&writer, config, EYsonType::Node);
+    EXPECT_THROW(parser.Read(MakeDeepMapJson(config->NestingLevelLimit + 1)), NYT::TErrorException);
 }
 
-TEST(TJsonParser, ParseDeepListNoExcept)
+TEST(TJsonParserTest, ParseDeepListNoExcept)
 {
     TStringStream yson;
     NYT::NYson::TYsonWriter writer(&yson);
-    auto configPtr = NYT::New<NYT::NJson::TJsonFormatConfig>();
-    configPtr->NestingLevelLimit = 20;
-    NYT::NJson::TJsonParser parser(&writer, configPtr, NYT::NJson::EYsonType::Node);
-    EXPECT_NO_THROW(parser.Read(MakeDeepListJson(configPtr->NestingLevelLimit)));
+    auto config = NYT::New<TJsonFormatConfig>();
+    config->NestingLevelLimit = 20;
+    TJsonParser parser(&writer, config, EYsonType::Node);
+    EXPECT_NO_THROW(parser.Read(MakeDeepListJson(config->NestingLevelLimit)));
 }
 
-TEST(TJsonParser, ParseDeepListExcept)
+TEST(TJsonParserTest, ParseDeepListExcept)
 {
     TStringStream yson;
     NYT::NYson::TYsonWriter writer(&yson);
-    auto configPtr = NYT::New<NYT::NJson::TJsonFormatConfig>();
-    configPtr->NestingLevelLimit = 20;
-    NYT::NJson::TJsonParser parser(&writer, configPtr, NYT::NJson::EYsonType::Node);
-    EXPECT_THROW(parser.Read(MakeDeepListJson(configPtr->NestingLevelLimit + 1)), NYT::TErrorException);
+    auto config = NYT::New<TJsonFormatConfig>();
+    config->NestingLevelLimit = 20;
+    TJsonParser parser(&writer, config, EYsonType::Node);
+    EXPECT_THROW(parser.Read(MakeDeepListJson(config->NestingLevelLimit + 1)), NYT::TErrorException);
 }
 
 ////////////////////////////////////////////////////////////////////////////////

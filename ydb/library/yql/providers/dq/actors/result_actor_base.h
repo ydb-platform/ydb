@@ -16,6 +16,64 @@
 
 namespace NYql::NDqs::NExecutionHelpers {
 
+struct TQueueItem {
+    TQueueItem(NDq::TDqSerializedBatch&& data, const TString& messageId)
+        : Data(std::move(data))
+        , MessageId(messageId)
+        , SentProcessedEvent(false)
+        , IsFinal(false)
+        , Size(Data.Size())
+        {
+        }
+
+    static TQueueItem Final() {
+        TQueueItem item({}, "FinalMessage");
+        item.SentProcessedEvent = true;
+        item.IsFinal = true;
+        return item;
+    }
+
+    NDq::TDqSerializedBatch Data;
+    const TString MessageId;
+    bool SentProcessedEvent = false;
+    bool IsFinal = false;
+    ui64 Size = 0;
+};
+
+struct TWriteQueue {
+    TQueue<TQueueItem> Queue;
+    ui64 ByteSize = 0;
+
+    template< class... Args >
+    decltype(auto) emplace( Args&&... args) {
+        Queue.emplace(std::forward<Args>(args)...);
+        ByteSize += Queue.back().Size;
+    }
+
+    auto& front() {
+        return Queue.front();
+    }
+
+    auto& back() {
+        return Queue.back();
+    }
+
+    auto pop() {
+        YQL_ENSURE(ByteSize >= Queue.front().Size);
+        ByteSize -= Queue.front().Size;
+        return Queue.pop();
+    }
+
+    auto empty() const {
+        return Queue.empty();
+    }
+
+    void clear() {
+        Queue.clear();
+        ByteSize = 0;
+    }
+};
+
     template <class TDerived>
     class TResultActorBase : public NYql::TSynchronizableRichActor<TDerived>, public NYql::TCounters {
     protected:
@@ -144,9 +202,8 @@ namespace NYql::NDqs::NExecutionHelpers {
             FinishCalled = true;
 
             if (FullResultWriterID) {
-                NDqProto::TFullResultWriterWriteRequest requestRecord;
-                requestRecord.SetFinish(true);
-                TBase::Send(FullResultWriterID, MakeHolder<TEvFullResultWriterWriteRequest>(std::move(requestRecord)));
+                WriteQueue.emplace(TQueueItem::Final());
+                TryWriteToFullResultTable();
             } else {
                 DoFinish();
             }
@@ -181,6 +238,10 @@ namespace NYql::NDqs::NExecutionHelpers {
             }
         }
 
+        ui64 InflightBytes() {
+            return WriteQueue.ByteSize;
+        }
+
     private:
         void OnQueryResult(TEvQueryResponse::TPtr& ev, const NActors::TActorContext&) {
             YQL_LOG_CTX_ROOT_SESSION_SCOPE(TraceId);
@@ -213,6 +274,8 @@ namespace NYql::NDqs::NExecutionHelpers {
             if (ev->Get()->Record.IssuesSize() == 0) {  // weird way used by writer to acknowledge it's death
                 DoFinish();
             } else {
+                WaitingAckFromFRW = false;
+                WriteQueue.clear();
                 Y_ABORT_UNLESS(ev->Get()->Record.GetStatusCode() != NYql::NDqProto::StatusIds::SUCCESS);
                 TBase::Send(ExecuterID, ev->Release().Release());
             }
@@ -343,24 +406,10 @@ namespace NYql::NDqs::NExecutionHelpers {
             if (!src.Data.Payload.IsEmpty()) {
                 req->Record.MutableData()->SetPayloadId(req->AddPayload(std::move(src.Data.Payload)));
             }
+            req->Record.SetFinish(src.IsFinal);
 
             TBase::Send(FullResultWriterID, std::move(req));
         }
-
-    private:
-        struct TQueueItem {
-            TQueueItem(NDq::TDqSerializedBatch&& data, const TString& messageId)
-                : Data(std::move(data))
-                , MessageId(messageId)
-                , SentProcessedEvent(false)
-            {
-            }
-
-            //NDqProto::TFullResultWriterWriteRequest WriteRequest;
-            NDq::TDqSerializedBatch Data;
-            const TString MessageId;
-            bool SentProcessedEvent;
-        };
 
     protected:
         const NActors::TActorId ExecuterID;
@@ -373,7 +422,7 @@ namespace NYql::NDqs::NExecutionHelpers {
         const bool FullResultTableEnabled;
         const NActors::TActorId GraphExecutionEventsId;
         const bool Discard;
-        TQueue<TQueueItem> WriteQueue;
+        TWriteQueue WriteQueue;
         ui64 SizeLimit;
         TMaybe<ui64> RowsLimit;
         ui64 Rows;

@@ -101,6 +101,7 @@ struct TYtSettings {
     NCommon::TConfSetting<TDuration, false> FileCacheTtl;
     NCommon::TConfSetting<TString, false> _ImpersonationUser;
     NCommon::TConfSetting<EInferSchemaMode, false> InferSchemaMode;
+    NCommon::TConfSetting<ui32, false> BatchListFolderConcurrency;
 
     // Job runtime
     NCommon::TConfSetting<TString, true> Pool;
@@ -161,6 +162,8 @@ struct TYtSettings {
     NCommon::TConfSetting<NYT::TNode, true> JobEnv;
     NCommon::TConfSetting<NYT::TNode, true> OperationSpec;
     NCommon::TConfSetting<NYT::TNode, true> Annotations;
+    NCommon::TConfSetting<NYT::TNode, true> StartedBy;
+    NCommon::TConfSetting<NYT::TNode, true> Description;
     NCommon::TConfSetting<bool, true> UseSkiff;
     NCommon::TConfSetting<ui32, true> TableContentCompressLevel;
     NCommon::TConfSetting<bool, true> DisableJobSplitting;
@@ -233,6 +236,7 @@ struct TYtSettings {
     NCommon::TConfSetting<NSize::TSize, false> TableContentMinAvgChunkSize;
     NCommon::TConfSetting<ui32, false> TableContentMaxInputTables;
     NCommon::TConfSetting<ui32, false> TableContentMaxChunksForNativeDelivery;
+    NCommon::TConfSetting<bool, false> TableContentLocalExecution;
     NCommon::TConfSetting<bool, false> UseTypeV2;
     NCommon::TConfSetting<bool, false> UseNativeYtTypes;
     NCommon::TConfSetting<bool, false> UseNativeDescSort;
@@ -261,6 +265,7 @@ struct TYtSettings {
     NCommon::TConfSetting<double, false> MaxReplicationFactorToFuseMultiOuts;
     NCommon::TConfSetting<ui64, false> ApplyStoredConstraints;
     NCommon::TConfSetting<bool, false> ViewIsolation;
+    NCommon::TConfSetting<bool, false> PartitionByConstantKeysViaMap;
 };
 
 EReleaseTempDataMode GetReleaseTempDataMode(const TYtSettings& settings);

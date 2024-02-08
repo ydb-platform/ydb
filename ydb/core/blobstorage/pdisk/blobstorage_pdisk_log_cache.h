@@ -1,6 +1,6 @@
 #pragma once
 #include "defs.h"
-#include <library/cpp/actors/util/rc_buf.h>
+#include <ydb/library/actors/util/rc_buf.h>
 #include <util/generic/intrlist.h>
 #include <util/generic/hash.h>
 

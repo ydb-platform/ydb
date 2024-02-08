@@ -63,7 +63,7 @@ void MultiTxStatsFullExp(
     if (!node.IsDefined()) {
         node = FindPlanNodeByKv(plan, "Node Type", "TopSort-Filter-TableRangeScan");
     }
-    UNIT_ASSERT_EQUAL(node.GetMap().at("Stats").GetMapSafe().at("TotalTasks").GetIntegerSafe(), 2);
+    UNIT_ASSERT_EQUAL(node.GetMap().at("Stats").GetMapSafe().at("Tasks").GetIntegerSafe(), 2);
 }
 
 Y_UNIT_TEST(MultiTxStatsFullExpYql) {
@@ -102,6 +102,7 @@ TCollectedStreamResult JoinStatsBasic(
         std::function<Iterator(TKikimrRunner&, ECollectQueryStatsMode, const TString&)> getIter) {
     NKikimrConfig::TAppConfig appConfig;
     appConfig.MutableTableServiceConfig()->SetEnableKqpScanQueryStreamLookup(false);
+    appConfig.MutableTableServiceConfig()->SetEnableKqpDataQueryStreamLookup(false);
     appConfig.MutableTableServiceConfig()->SetEnableKqpScanQuerySourceRead(true);
     auto settings = TKikimrSettings()
         .SetAppConfig(appConfig);
@@ -175,11 +176,9 @@ void MultiTxStatsFull(
     UNIT_ASSERT(res.PlanJson);
     NJson::TJsonValue plan;
     NJson::ReadJsonTree(*res.PlanJson, &plan, true);
-    auto node = FindPlanNodeByKv(plan, "Node Type", "TopSort-TableRangeScan");
-    if (!node.IsDefined()) {
-        node = FindPlanNodeByKv(plan, "Node Type", "TopSort-Filter-TableRangeScan");
-    }
-    UNIT_ASSERT_EQUAL(node.GetMap().at("Stats").GetMapSafe().at("TotalTasks").GetIntegerSafe(), 2);
+    Cout << plan;
+    auto node = FindPlanNodeByKv(plan, "Node Type", "TopSort");
+    UNIT_ASSERT_EQUAL(node.GetMap().at("Stats").GetMapSafe().at("Tasks").GetIntegerSafe(), 2);
 }
 
 Y_UNIT_TEST(MultiTxStatsFullYql) {
@@ -210,7 +209,7 @@ Y_UNIT_TEST(DeferredEffects) {
     //
     // NJson::ReadJsonTree(result.GetQueryPlan(), &plan, true);
     // auto node = FindPlanNodeByKv(plan, "Node Type", "TablePointLookup");
-    // UNIT_ASSERT_EQUAL(node.GetMap().at("Stats").GetMapSafe().at("TotalTasks").GetIntegerSafe(), 1);
+    // UNIT_ASSERT_EQUAL(node.GetMap().at("Stats").GetMapSafe().at("Tasks").GetIntegerSafe(), 1);
 
     auto tx = result.GetTransaction();
     UNIT_ASSERT(tx);
@@ -272,7 +271,7 @@ Y_UNIT_TEST(DataQueryWithEffects) {
     NJson::ReadJsonTree(result.GetQueryPlan(), &plan, true);
 
     auto node = FindPlanNodeByKv(plan, "Node Type", "Upsert-ConstantExpr");
-    UNIT_ASSERT_EQUAL(node.GetMap().at("Stats").GetMapSafe().at("TotalTasks").GetIntegerSafe(), 2);
+    UNIT_ASSERT_EQUAL(node.GetMap().at("Stats").GetMapSafe().at("Tasks").GetIntegerSafe(), 2);
 }
 
 Y_UNIT_TEST(DataQueryMulti) {
@@ -395,7 +394,7 @@ Y_UNIT_TEST(StatsProfile) {
     NJson::TJsonValue plan;
     NJson::ReadJsonTree(result.GetQueryPlan(), &plan, true);
 
-    auto node1 = FindPlanNodeByKv(plan, "Node Type", "Aggregate-TableFullScan");
+    auto node1 = FindPlanNodeByKv(plan, "Node Type", "Aggregate");
     UNIT_ASSERT_EQUAL(node1.GetMap().at("Stats").GetMapSafe().at("ComputeNodes").GetArraySafe().size(), 2);
 
     //auto node2 = FindPlanNodeByKv(plan, "Node Type", "Aggregate");
@@ -435,6 +434,187 @@ Y_UNIT_TEST(StreamLookupStats) {
     AssertTableStats(result, "/Root/TwoShard", {
         .ExpectedReads = 2,
     });
+}
+
+Y_UNIT_TEST(SysViewTimeout) {
+    TKikimrRunner kikimr;
+    CreateLargeTable(kikimr, 500000, 10, 100, 5000, 1);
+
+    auto db = kikimr.GetTableClient();
+    auto session = db.CreateSession().GetValueSync().GetSession();
+
+    {
+        TStringStream request;
+        request << "SELECT * FROM `/Root/.sys/top_queries_by_read_bytes_one_hour` ORDER BY Duration";
+
+        auto it = db.StreamExecuteScanQuery(request.Str()).GetValueSync();
+        UNIT_ASSERT_C(it.IsSuccess(), it.GetIssues().ToString());
+
+        ui64 rowsCount = 0;
+        for (;;) {
+            auto streamPart = it.ReadNext().GetValueSync();
+            if (!streamPart.IsSuccess()) {
+                UNIT_ASSERT_C(streamPart.EOS(), streamPart.GetIssues().ToString());
+                break;
+            }
+
+            if (streamPart.HasResultSet()) {
+                auto resultSet = streamPart.ExtractResultSet();
+
+                NYdb::TResultSetParser parser(resultSet);
+                while (parser.TryNextRow()) {
+                    auto value = parser.ColumnParser("QueryText").GetOptionalUtf8();
+                    UNIT_ASSERT(value);
+                    rowsCount++;
+                }
+            }
+        }
+        UNIT_ASSERT(rowsCount == 1);
+    }
+
+    auto settings = TStreamExecScanQuerySettings();
+    settings.ClientTimeout(TDuration::MilliSeconds(50));
+
+    TStringStream request;
+    request << R"(
+        SELECT COUNT(*) FROM `/Root/LargeTable` WHERE SUBSTRING(DataText, 50, 5) = "22222";
+    )";
+
+    auto result = db.StreamExecuteScanQuery(request.Str(), settings).GetValueSync();
+
+    if (result.IsSuccess()) {
+        try {
+            auto yson = StreamResultToYson(result, true);
+            UNIT_ASSERT(false);
+        } catch (const TStreamReadError& ex) {
+            UNIT_ASSERT_VALUES_EQUAL(ex.Status, NYdb::EStatus::CLIENT_DEADLINE_EXCEEDED);
+        } catch (const std::exception& ex) {
+            UNIT_ASSERT_C(false, "unknown exception during the test");
+        }
+    } else {
+        UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), NYdb::EStatus::CLIENT_DEADLINE_EXCEEDED);
+    }
+
+    {
+        TStringStream request;
+        request << "SELECT * FROM `/Root/.sys/top_queries_by_read_bytes_one_hour` ORDER BY Duration";
+
+        auto it = db.StreamExecuteScanQuery(request.Str()).GetValueSync();
+        UNIT_ASSERT_C(it.IsSuccess(), it.GetIssues().ToString());
+
+        ui64 queryCount = 0;
+        ui64 rowsCount = 0;
+        for (;;) {
+            auto streamPart = it.ReadNext().GetValueSync();
+            if (!streamPart.IsSuccess()) {
+                UNIT_ASSERT_C(streamPart.EOS(), streamPart.GetIssues().ToString());
+                break;
+            }
+
+            if (streamPart.HasResultSet()) {
+                auto resultSet = streamPart.ExtractResultSet();
+
+                NYdb::TResultSetParser parser(resultSet);
+                while (parser.TryNextRow()) {
+                    auto value = parser.ColumnParser("QueryText").GetOptionalUtf8();
+                    UNIT_ASSERT(value);
+                    if (*value == request.Str()) {
+                        queryCount++;
+                    }
+                    rowsCount++;
+                }
+            }
+        }
+
+        UNIT_ASSERT(queryCount == 1);
+        UNIT_ASSERT(rowsCount == 2);
+    }
+}
+
+Y_UNIT_TEST(SysViewCancelled) {
+    TKikimrRunner kikimr;
+    CreateLargeTable(kikimr, 500000, 10, 100, 5000, 1);
+
+    auto db = kikimr.GetTableClient();
+    auto session = db.CreateSession().GetValueSync().GetSession();
+
+    {
+        TStringStream request;
+        request << "SELECT * FROM `/Root/.sys/top_queries_by_read_bytes_one_hour` ORDER BY Duration";
+
+        auto it = db.StreamExecuteScanQuery(request.Str()).GetValueSync();
+        UNIT_ASSERT_C(it.IsSuccess(), it.GetIssues().ToString());
+
+        ui64 rowsCount = 0;
+        for (;;) {
+            auto streamPart = it.ReadNext().GetValueSync();
+            if (!streamPart.IsSuccess()) {
+                UNIT_ASSERT_C(streamPart.EOS(), streamPart.GetIssues().ToString());
+                break;
+            }
+
+            if (streamPart.HasResultSet()) {
+                auto resultSet = streamPart.ExtractResultSet();
+
+                NYdb::TResultSetParser parser(resultSet);
+                while (parser.TryNextRow()) {
+                    auto value = parser.ColumnParser("QueryText").GetOptionalUtf8();
+                    UNIT_ASSERT(value);
+                    rowsCount++;
+                }
+            }
+        }
+        UNIT_ASSERT(rowsCount == 1);
+    }
+
+    auto prepareResult = session.PrepareDataQuery(Q_(R"(
+        SELECT COUNT(*) FROM `/Root/LargeTable` WHERE SUBSTRING(DataText, 50, 5) = "33333";
+    )")).GetValueSync();
+    UNIT_ASSERT_VALUES_EQUAL_C(prepareResult.GetStatus(), NYdb::EStatus::SUCCESS, prepareResult.GetIssues().ToString());
+    auto dataQuery = prepareResult.GetQuery();
+
+    auto settings = TExecDataQuerySettings();
+    settings.CancelAfter(TDuration::MilliSeconds(100));
+
+    auto result = dataQuery.Execute(TTxControl::BeginTx().CommitTx(), settings).GetValueSync();
+
+    result.GetIssues().PrintTo(Cerr);
+    UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(),  NYdb::EStatus::CANCELLED);
+
+    {
+        TStringStream request;
+        request << "SELECT * FROM `/Root/.sys/top_queries_by_read_bytes_one_hour` ORDER BY Duration";
+
+        auto it = db.StreamExecuteScanQuery(request.Str()).GetValueSync();
+        UNIT_ASSERT_C(it.IsSuccess(), it.GetIssues().ToString());
+
+        ui64 queryCount = 0;
+        ui64 rowsCount = 0;
+        for (;;) {
+            auto streamPart = it.ReadNext().GetValueSync();
+            if (!streamPart.IsSuccess()) {
+                UNIT_ASSERT_C(streamPart.EOS(), streamPart.GetIssues().ToString());
+                break;
+            }
+
+            if (streamPart.HasResultSet()) {
+                auto resultSet = streamPart.ExtractResultSet();
+
+                NYdb::TResultSetParser parser(resultSet);
+                while (parser.TryNextRow()) {
+                    auto value = parser.ColumnParser("QueryText").GetOptionalUtf8();
+                    UNIT_ASSERT(value);
+                    if (*value == request.Str()) {
+                        queryCount++;
+                    }
+                    rowsCount++;
+                }
+            }
+        }
+
+        UNIT_ASSERT(queryCount == 1);
+        UNIT_ASSERT(rowsCount == 2);
+    }
 }
 
 } // suite

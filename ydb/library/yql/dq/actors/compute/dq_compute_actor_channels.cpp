@@ -206,7 +206,7 @@ void TDqComputeActorChannels::HandleWork(TEvDqCompute::TEvChannelDataAck::TPtr& 
     }
 
     LOG_T("Resume compute actor");
-    Cbs->ResumeExecution();
+    Cbs->ResumeExecution(EResumeSource::ChannelsHandleWork);
 }
 
 void TDqComputeActorChannels::HandleWork(TEvDqCompute::TEvRetryChannelData::TPtr& ev) {
@@ -387,7 +387,7 @@ void TDqComputeActorChannels::HandleUndeliveredEvChannelData(ui64 channelId, NAc
     if (outputChannel.Finished && outputChannel.EarlyFinish && !SupportCheckpoints) {
         LOG_I("Ignore undelivered TEvChannelData event due to early finish, channelId: " << channelId);
         outputChannel.InFlight.clear();
-        Cbs->ResumeExecution();
+        Cbs->ResumeExecution(EResumeSource::ChannelsHandleUndeliveredData);
         return;
     }
 
@@ -418,7 +418,7 @@ void TDqComputeActorChannels::HandleUndeliveredEvChannelDataAck(ui64 channelId, 
         LOG_I("Handle undelivered event: TEvChannelDataAck, channelId: " << channelId << ", reason: " << reason
             << ". Ignore, channel is finished.");
         inputChannel.InFlight.clear();
-        Cbs->ResumeExecution();
+        Cbs->ResumeExecution(EResumeSource::ChannelsHandleUndeliveredAck);
         return;
     }
 

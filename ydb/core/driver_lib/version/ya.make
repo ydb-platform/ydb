@@ -7,7 +7,7 @@ SRCS(
 
 PEERDIR(
     contrib/libs/protobuf
-    library/cpp/actors/interconnect
+    ydb/library/actors/interconnect
     library/cpp/monlib/service/pages
     library/cpp/svnversion
     ydb/core/protos

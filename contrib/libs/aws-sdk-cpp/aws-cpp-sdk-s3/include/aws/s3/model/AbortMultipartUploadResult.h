@@ -24,12 +24,12 @@ namespace S3
 {
 namespace Model
 {
-  class AWS_S3_API AbortMultipartUploadResult
+  class AbortMultipartUploadResult
   {
   public:
-    AbortMultipartUploadResult();
-    AbortMultipartUploadResult(const Aws::AmazonWebServiceResult<Aws::Utils::Xml::XmlDocument>& result);
-    AbortMultipartUploadResult& operator=(const Aws::AmazonWebServiceResult<Aws::Utils::Xml::XmlDocument>& result);
+    AWS_S3_API AbortMultipartUploadResult();
+    AWS_S3_API AbortMultipartUploadResult(const Aws::AmazonWebServiceResult<Aws::Utils::Xml::XmlDocument>& result);
+    AWS_S3_API AbortMultipartUploadResult& operator=(const Aws::AmazonWebServiceResult<Aws::Utils::Xml::XmlDocument>& result);
 
 
     

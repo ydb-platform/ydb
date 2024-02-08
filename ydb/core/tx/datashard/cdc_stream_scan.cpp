@@ -2,6 +2,8 @@
 #include "change_record_body_serializer.h"
 #include "datashard_impl.h"
 
+#include <ydb/core/protos/datashard_config.pb.h>
+
 #include <util/generic/maybe.h>
 #include <util/string/builder.h>
 
@@ -282,7 +284,7 @@ public:
                     Y_FAIL_S("Invalid stream mode: " << static_cast<ui32>(it->second.Mode));
             }
 
-            auto record = TChangeRecordBuilder(TChangeRecord::EKind::CdcDataChange)
+            auto recordPtr = TChangeRecordBuilder(TChangeRecord::EKind::CdcDataChange)
                 .WithOrder(Self->AllocateChangeRecordOrder(db))
                 .WithGroup(0)
                 .WithStep(readVersion.Step)
@@ -294,6 +296,9 @@ public:
                 .WithSource(TChangeRecord::ESource::InitialScan)
                 .Build();
 
+            const auto& record = *recordPtr->Get<TChangeRecord>();
+            Self->PersistChangeRecord(db, record);
+
             ChangeRecords.push_back(IDataShardChangeCollector::TChange{
                 .Order = record.GetOrder(),
                 .Group = record.GetGroup(),
@@ -304,8 +309,6 @@ public:
                 .TableId = record.GetTableId(),
                 .SchemaVersion = record.GetSchemaVersion(),
             });
-
-            Self->PersistChangeRecord(db, record);
         }
 
         if (pageFault) {

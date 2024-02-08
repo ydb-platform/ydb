@@ -38,7 +38,7 @@ class YQLRun(object):
             self.sql2yql_binary = None
 
         try:
-            self.udf_resolver_binary = yql_utils.yql_binary_path('yql/tools/udf_resolver/udf_resolver')
+            self.udf_resolver_binary = yql_utils.yql_binary_path(os.getenv('YQL_UDFRESOLVER_PATH') or 'ydb/library/yql/tools/udf_resolver/udf_resolver')
         except Exception:
             self.udf_resolver_binary = None
 
@@ -61,14 +61,11 @@ class YQLRun(object):
         if gateway_config is not None:
             text_format.Merge(gateway_config, self.gateway_config)
 
-        if cfg_dir is None:
-            cfg_dir = 'ydb/library/yql/cfg/tests'
-        with open(yql_utils.yql_source_path(cfg_dir + '/' + yql_utils.get_gateway_cfg_filename())) as f:
-            text_format.Merge(f.read(), self.gateway_config)
+        yql_utils.merge_default_gateway_cfg(cfg_dir or 'ydb/library/yql/cfg/tests', self.gateway_config)
 
         self.fs_config = file_storage_pb2.TFileStorageConfig()
 
-        with open(yql_utils.yql_source_path(cfg_dir + '/fs.conf')) as f:
+        with open(yql_utils.yql_source_path(os.path.join(cfg_dir or 'ydb/library/yql/cfg/tests', 'fs.conf'))) as f:
             text_format.Merge(f.read(), self.fs_config)
 
         if fs_config is not None:
@@ -85,7 +82,7 @@ class YQLRun(object):
 
     def yql_exec(self, program=None, program_file=None, files=None, urls=None,
                  run_sql=False, verbose=False, check_error=True, tables=None, pretty_plan=True,
-                 wait=True, parameters={}, extra_env={}):
+                 wait=True, parameters={}, extra_env={}, require_udf_resolver=False, scan_udfs=True):
         del pretty_plan
 
         res_dir = self.res_dir
@@ -235,10 +232,13 @@ class YQLRun(object):
             else:
                 cmd += '--run '
 
-        if yql_utils.get_param('UDF_RESOLVER'):
-            cmd += '--udf-resolver=' + self.udf_resolver_binary + ' --scan-udfs '
+        if yql_utils.get_param('UDF_RESOLVER') or require_udf_resolver:
+            assert self.udf_resolver_binary, "Missing udf_resolver binary"
+            cmd += '--udf-resolver=' + self.udf_resolver_binary + ' '
+            if scan_udfs:
+                cmd += '--scan-udfs '
             if not yatest.common.context.sanitize:
-                cmd += ' --udf-resolver-filter-syscalls '
+                cmd += '--udf-resolver-filter-syscalls '
 
         if run_sql and not self.use_sql2yql:
             cmd += '--sql '
@@ -246,7 +246,7 @@ class YQLRun(object):
         if parameters:
             parameters_file = res_file_path('params.yson')
             with open(parameters_file, 'w') as f:
-                f.write(yson.dumps(parameters))
+                f.write(six.ensure_str(yson.dumps(parameters)))
             cmd += '--params-file=%s ' % parameters_file
 
         if verbose:

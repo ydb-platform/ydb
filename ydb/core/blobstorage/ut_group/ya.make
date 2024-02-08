@@ -16,7 +16,7 @@ ELSE()
 ENDIF()
 
 PEERDIR(
-    library/cpp/actors/interconnect/mock
+    ydb/library/actors/interconnect/mock
     library/cpp/testing/unittest
     ydb/core/blobstorage/crypto
     ydb/core/blobstorage/dsproxy

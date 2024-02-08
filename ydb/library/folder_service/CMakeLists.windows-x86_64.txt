@@ -13,7 +13,7 @@ add_library(ydb-library-folder_service)
 target_link_libraries(ydb-library-folder_service PUBLIC
   contrib-libs-cxxsupp
   yutil
-  cpp-actors-core
+  library-actors-core
   ydb-core-base
   library-folder_service-proto
 )

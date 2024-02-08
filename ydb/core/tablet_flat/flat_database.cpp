@@ -495,6 +495,11 @@ const TDbStats& TDatabase::Counters() const noexcept
     return DatabaseImpl->Stats;
 }
 
+void TDatabase::SetTableObserver(ui32 table, TIntrusivePtr<ITableObserver> ptr) noexcept
+{
+    Require(table)->SetTableObserver(std::move(ptr));
+}
+
 TDatabase::TChg TDatabase::Head(ui32 table) const noexcept
 {
     if (table == Max<ui32>()) {

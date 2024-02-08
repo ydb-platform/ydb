@@ -4,10 +4,10 @@
 #include <ydb/core/ymq/base/counters.h>
 #include <ydb/public/lib/deprecated/kicli/kicli.h>
 
-#include <library/cpp/actors/core/actor_bootstrapped.h>
-#include <library/cpp/actors/core/hfunc.h>
-#include <library/cpp/actors/core/actorsystem.h>
-#include <library/cpp/actors/core/log.h>
+#include <ydb/library/actors/core/actor_bootstrapped.h>
+#include <ydb/library/actors/core/hfunc.h>
+#include <ydb/library/actors/core/actorsystem.h>
+#include <ydb/library/actors/core/log.h>
 
 
 namespace NKikimr::NSQS {

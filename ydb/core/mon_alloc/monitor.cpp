@@ -4,21 +4,22 @@
 #include <ydb/core/base/counters.h>
 #include <ydb/core/base/appdata.h>
 #include <ydb/core/mon/mon.h>
+#include <ydb/library/services/services.pb.h>
 
-#include <library/cpp/actors/core/actor_bootstrapped.h>
-#include <library/cpp/actors/core/hfunc.h>
-#include <library/cpp/actors/prof/tag.h>
+#include <ydb/library/actors/core/actor_bootstrapped.h>
+#include <ydb/library/actors/core/hfunc.h>
+#include <ydb/library/actors/prof/tag.h>
 #include <library/cpp/html/pcdata/pcdata.h>
 #include <library/cpp/lfalloc/dbg_info/dbg_info.h>
 #include <library/cpp/malloc/api/malloc.h>
 #include <library/cpp/monlib/dynamic_counters/counters.h>
 #include <library/cpp/monlib/service/pages/templates.h>
-#include <library/cpp/ytalloc/api/ytalloc.h>
-#include <library/cpp/yt/memory/memory_tag.h>
 
 #include <util/datetime/base.h>
 #include <util/generic/hash.h>
 #include <util/stream/str.h>
+#include <util/stream/file.h>
+
 
 namespace NKikimr {
     using TDynamicCountersPtr = TIntrusivePtr<::NMonitoring::TDynamicCounters>;
@@ -258,117 +259,6 @@ namespace NKikimr {
             }
         };
 
-        class TYtAllocMonitor: public IAllocMonitor {
-        private:
-            TDynamicCountersPtr CounterGroup;
-            THashMap<TString, TDynamicCounterPtr> PerTag;
-
-        public:
-            TYtAllocMonitor(TDynamicCountersPtr group) {
-                CounterGroup = group->GetSubgroup("component", "ytalloc_profile");
-            }
-
-            void Update(TDuration interval) override {
-                Y_UNUSED(interval);
-#ifdef PROFILE_MEMORY_ALLOCATIONS
-                using namespace NYT;
-
-                size_t maxTag = NProfiling::GetTagsCount();
-
-                TVector<TMemoryTag> tags(maxTag);
-                std::iota(tags.begin(), tags.end(), 1);
-
-                TVector<size_t> usages(maxTag);
-                GetMemoryUsageForTags(tags.data(), tags.size(), usages.data());
-
-                for (size_t tag = 0; tag < maxTag; ++tag) {
-                    if (!usages[tag]) {
-                        continue;
-                    }
-
-                    auto tagName = NProfiling::GetTag(tag);
-                    if (tagName == nullptr) {
-                        tagName = "__DEFAULT__";
-                    }
-
-                    TDynamicCounterPtr& perTag = PerTag[tagName];
-                    if (!perTag) {
-                        perTag = CounterGroup->GetCounter(tagName);
-                    }
-
-                    *perTag = usages[tag];
-                }
-#endif
-            }
-
-            void Dump(IOutputStream& out, const TString& relPath) override {
-                Y_UNUSED(relPath);
-#ifdef PROFILE_MEMORY_ALLOCATIONS
-                using namespace NYT;
-
-                size_t maxTag = NProfiling::GetTagsCount();
-
-                TVector<TMemoryTag> tags(maxTag);
-                std::iota(tags.begin(), tags.end(), 1);
-
-                TVector<size_t> usages(maxTag);
-                GetMemoryUsageForTags(tags.data(), tags.size(), usages.data());
-
-                HTML(out) {
-                    TAG(TH3) {
-                        out << "YTAlloc" << Endl;
-                    }
-                    out << "<hr>" << Endl;
-                    TABLE_SORTABLE_CLASS("table") {
-                        TABLEHEAD() {
-                            TABLER() {
-                                TABLEH() {
-                                    out << "<span data-toggle='tooltip' "
-                                           "title='Allocation Tag'>Tag</span>";
-                                }
-                                TABLEH() {
-                                    out << "<span data-toggle='tooltip' "
-                                           "title='Total amount of allocated RAM space'>"
-                                           "Total Space</span>";
-                                }
-                            }
-                        }
-
-                        TABLEBODY() {
-                            for (size_t tag = 0; tag < maxTag; ++tag) {
-                                if (!usages[tag]) {
-                                    continue;
-                                }
-
-                                auto tagName = NProfiling::GetTag(tag);
-                                if (tagName == nullptr) {
-                                    tagName = "__DEFAULT__";
-                                }
-
-                                TABLER() {
-                                    TABLED() {
-                                        out << tagName;
-                                    }
-                                    TABLED() {
-                                        out << usages[tag];
-                                    }
-                                }
-                            }
-                        }
-                    }
-                }
-#else
-                HTML(out) {
-                    TAG(TH3) {
-                        out << "YTAlloc" << Endl;
-                    }
-                    out << "<hr>" << Endl;
-                    out << "PROFILE_MEMORY_ALLOCATIONS is off" << Endl;
-                }
-#endif
-            }
-        };
-
         struct TFakeAllocMonitor: public IAllocMonitor {
             void Update(TDuration interval) override {
                 Y_UNUSED(interval);
@@ -387,8 +277,6 @@ namespace NKikimr {
             std::unique_ptr<IAllocMonitor> monitor;
             if (name.StartsWith("lf")) {
                 monitor = std::make_unique<TLfAllocMonitor>(std::move(group));
-            } else if (name.StartsWith("yt")) {
-                monitor = std::make_unique<TYtAllocMonitor>(std::move(group));
             } else if (name.StartsWith("tc")) {
                 monitor = std::move(CreateTcMallocMonitor(std::move(group)));
             }

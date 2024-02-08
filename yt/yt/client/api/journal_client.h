@@ -17,6 +17,19 @@ struct TJournalReaderOptions
     TJournalReaderConfigPtr Config;
 };
 
+////////////////////////////////////////////////////////////////////////////////
+
+struct IJournalWritesObserver
+    : public TRefCounted
+{
+    virtual void RegisterPayloadWrite(int payloadBytes) = 0;
+    virtual void RegisterJournalWrite(int journalBytes, int mediumBytes) = 0;
+};
+
+DEFINE_REFCOUNTED_TYPE(IJournalWritesObserver)
+
+////////////////////////////////////////////////////////////////////////////////
+
 struct TJournalWriterPerformanceCounters
 {
     TJournalWriterPerformanceCounters() = default;
@@ -36,6 +49,12 @@ struct TJournalWriterPerformanceCounters
     NProfiling::TEventTimer SealChunkTimer;
     NProfiling::TEventTimer WriteQuorumLag;
     NProfiling::TEventTimer MaxReplicaLag;
+
+    NProfiling::TCounter MediumWrittenBytes;
+    NProfiling::TCounter IORequestCount;
+    NProfiling::TCounter JournalWrittenBytes;
+
+    IJournalWritesObserverPtr JournalWritesObserver;
 };
 
 struct TJournalWriterOptions
@@ -62,6 +81,8 @@ struct TTruncateJournalOptions
 
 struct IJournalClientBase
 {
+    virtual ~IJournalClientBase() = default;
+
     virtual IJournalReaderPtr CreateJournalReader(
         const NYPath::TYPath& path,
         const TJournalReaderOptions& options = {}) = 0;
@@ -75,6 +96,8 @@ struct IJournalClientBase
 
 struct IJournalClient
 {
+    virtual ~IJournalClient() = default;
+
     virtual TFuture<void> TruncateJournal(
         const NYPath::TYPath& path,
         i64 rowCount,

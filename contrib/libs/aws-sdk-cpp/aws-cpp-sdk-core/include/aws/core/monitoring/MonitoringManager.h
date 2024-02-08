@@ -57,7 +57,8 @@ namespace Aws
         AWS_CORE_API void InitMonitoring(const std::vector<MonitoringFactoryCreateFunction>& monitoringFactoryCreateFunctions);
 
         /**
-         * Clean up monitoring related global variables
+         * Clean up monitoring related global variables. This should be done first at shutdown, to avoid a race condition in
+         * testing whether the global Monitoring instance has been destructed.
          */
         AWS_CORE_API void CleanupMonitoring();
     }

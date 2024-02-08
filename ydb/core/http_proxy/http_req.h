@@ -10,9 +10,9 @@
 #include <ydb/library/http_proxy/authorization/signature.h>
 #include <ydb/public/api/grpc/draft/ydb_datastreams_v1.grpc.pb.h>
 
-#include <library/cpp/actors/core/actorsystem.h>
-#include <library/cpp/actors/http/http.h>
-#include <library/cpp/grpc/client/grpc_client_low.h>
+#include <ydb/library/actors/core/actorsystem.h>
+#include <ydb/library/actors/http/http.h>
+#include <ydb/library/grpc/client/grpc_client_low.h>
 #include <library/cpp/http/server/http.h>
 #include <library/cpp/json/json_value.h>
 #include <library/cpp/json/json_reader.h>
@@ -110,7 +110,7 @@ public:
 class THttpRequestProcessors {
 public:
     using TService = Ydb::DataStreams::V1::DataStreamsService;
-    using TServiceConnection = NGrpc::TServiceConnection<TService>;
+    using TServiceConnection = NYdbGrpc::TServiceConnection<TService>;
 
 public:
     void Initialize();

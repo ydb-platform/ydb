@@ -6,8 +6,11 @@
 #include "net_classifier_updater.h"
 
 #include <ydb/core/base/counters.h>
+#include <ydb/core/base/domain.h>
+#include <ydb/core/base/feature_flags.h>
 #include <ydb/core/cms/console/validators/registry.h>
 
+#include <ydb/library/actors/core/actor_bootstrapped.h>
 #include <library/cpp/monlib/service/pages/templates.h>
 
 namespace NKikimr::NConsole {

@@ -22,13 +22,15 @@ namespace Model
 
 MetricsAndOperator::MetricsAndOperator() : 
     m_prefixHasBeenSet(false),
-    m_tagsHasBeenSet(false)
+    m_tagsHasBeenSet(false),
+    m_accessPointArnHasBeenSet(false)
 {
 }
 
 MetricsAndOperator::MetricsAndOperator(const XmlNode& xmlNode) : 
     m_prefixHasBeenSet(false),
-    m_tagsHasBeenSet(false)
+    m_tagsHasBeenSet(false),
+    m_accessPointArnHasBeenSet(false)
 {
   *this = xmlNode;
 }
@@ -57,6 +59,12 @@ MetricsAndOperator& MetricsAndOperator::operator =(const XmlNode& xmlNode)
 
       m_tagsHasBeenSet = true;
     }
+    XmlNode accessPointArnNode = resultNode.FirstChild("AccessPointArn");
+    if(!accessPointArnNode.IsNull())
+    {
+      m_accessPointArn = Aws::Utils::Xml::DecodeEscapedXmlText(accessPointArnNode.GetText());
+      m_accessPointArnHasBeenSet = true;
+    }
   }
 
   return *this;
@@ -79,6 +87,12 @@ void MetricsAndOperator::AddToNode(XmlNode& parentNode) const
      XmlNode tagsNode = tagsParentNode.CreateChildElement("Tag");
      item.AddToNode(tagsNode);
    }
+  }
+
+  if(m_accessPointArnHasBeenSet)
+  {
+   XmlNode accessPointArnNode = parentNode.CreateChildElement("AccessPointArn");
+   accessPointArnNode.SetText(m_accessPointArn);
   }
 
 }

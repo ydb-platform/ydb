@@ -92,6 +92,10 @@ bool EnsureMultiType(const TExprNode& node, TExprContext& ctx);
 bool EnsureMultiType(TPositionHandle position, const TTypeAnnotationNode& type, TExprContext& ctx);
 bool EnsureVariantType(const TExprNode& node, TExprContext& ctx);
 bool EnsureVariantType(TPositionHandle position, const TTypeAnnotationNode& type, TExprContext& ctx);
+bool EnsureDataOrPgType(const TExprNode& node, TExprContext& ctx);
+bool EnsureDataOrPgType(TPositionHandle position, const TTypeAnnotationNode& type, TExprContext& ctx);
+bool EnsurePgType(const TExprNode& node, TExprContext& ctx);
+bool EnsurePgType(TPositionHandle position, const TTypeAnnotationNode& type, TExprContext& ctx);
 bool EnsureDataType(const TExprNode& node, TExprContext& ctx);
 bool EnsureDataType(TPositionHandle position, const TTypeAnnotationNode& type, TExprContext& ctx);
 bool EnsureSpecificDataType(const TExprNode& node, EDataSlot expectedDataSlot, TExprContext& ctx, bool allowOptional = false);
@@ -125,6 +129,7 @@ bool EnsureWideFlowType(TPositionHandle position, const TTypeAnnotationNode& typ
 bool EnsureWideStreamType(const TExprNode& node, TExprContext& ctx);
 bool EnsureWideStreamType(TPositionHandle position, const TTypeAnnotationNode& type, TExprContext& ctx);
 bool IsWideBlockType(const TTypeAnnotationNode& type);
+bool IsWideSequenceBlockType(const TTypeAnnotationNode& type);
 bool IsSupportedAsBlockType(TPositionHandle pos, const TTypeAnnotationNode& type, TExprContext& ctx, TTypeAnnotationContext& types);
 bool EnsureSupportedAsBlockType(TPositionHandle pos, const TTypeAnnotationNode& type, TExprContext& ctx, TTypeAnnotationContext& types);
 bool EnsureWideBlockType(TPositionHandle position, const TTypeAnnotationNode& type, TTypeAnnotationNode::TListType& blockItemTypes, TExprContext& ctx, bool allowScalar = true);

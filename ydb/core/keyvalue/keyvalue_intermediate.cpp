@@ -1,5 +1,7 @@
 #include "keyvalue_intermediate.h"
 #include <ydb/core/base/appdata.h>
+#include <ydb/library/wilson_ids/wilson.h>
+#include <library/cpp/time_provider/time_provider.h>
 
 namespace NKikimr {
 namespace NKeyValue {
@@ -11,6 +13,7 @@ TIntermediate::TRead::TRead()
     , ValueSize(0)
     , CreationUnixTime(0)
     , StorageChannel(NKikimrClient::TKeyValueRequest::MAIN)
+    , HandleClass(NKikimrBlobStorage::AsyncRead)
     , Status(NKikimrProto::UNKNOWN)
 {}
 
@@ -22,6 +25,7 @@ TIntermediate::TRead::TRead(const TString &key, ui32 valueSize, ui64 creationUni
     , ValueSize(valueSize)
     , CreationUnixTime(creationUnixTime)
     , StorageChannel(storageChannel)
+    , HandleClass(NKikimrBlobStorage::AsyncRead)
     , Status(NKikimrProto::UNKNOWN)
 {}
 
@@ -58,7 +62,7 @@ TRope TIntermediate::TRead::BuildRope() {
 }
 
 TIntermediate::TIntermediate(TActorId respondTo, TActorId keyValueActorId, ui64 channelGeneration, ui64 channelStep,
-        TRequestType::EType requestType)
+        TRequestType::EType requestType, NWilson::TTraceId traceId)
     : Cookie(0)
     , Generation(0)
     , Deadline(TInstant::Max())
@@ -76,6 +80,7 @@ TIntermediate::TIntermediate(TActorId respondTo, TActorId keyValueActorId, ui64 
     , CreatedAtGeneration(channelGeneration)
     , CreatedAtStep(channelStep)
     , IsReplied(false)
+    , Span(TWilsonTablet::Tablet, std::move(traceId), "KeyValue.Intermediate", NWilson::EFlags::AUTO_END)
 {
     Stat.IntermediateCreatedAt = TAppData::TimeProvider->Now();
     Stat.RequestType = requestType;

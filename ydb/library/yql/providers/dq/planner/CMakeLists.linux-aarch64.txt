@@ -19,6 +19,7 @@ target_link_libraries(providers-dq-planner PUBLIC
   minikql-comp_nodes-llvm
   yql-dq-integration
   yql-dq-opt
+  yql-dq-type_ann
   yql-dq-tasks
   providers-common-mkql
   dq-api-protos

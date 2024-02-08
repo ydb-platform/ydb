@@ -298,6 +298,9 @@ public:
             case ETabletType::SysViewProcessor:
                 context.SS->TabletCounters->Simple()[COUNTER_SYS_VIEW_PROCESSOR_COUNT].Add(1);
                 break;
+            case ETabletType::StatisticsAggregator:
+                context.SS->TabletCounters->Simple()[COUNTER_STATISTICS_AGGREGATOR_COUNT].Add(1);
+                break;
             default:
                 break;
             }
@@ -829,7 +832,26 @@ public:
     }
 
 private:
-    static void MakePQTabletConfig(NKikimrPQ::TPQTabletConfig& config,
+    static void FillPartition(NKikimrPQ::TPQTabletConfig::TPartition& partition, const TTopicTabletInfo::TTopicPartitionInfo* pq, ui64 tabletId) {
+        partition.SetPartitionId(pq->PqId);
+        partition.SetCreateVersion(pq->CreateVersion);
+        if (pq->KeyRange) {
+            pq->KeyRange->SerializeToProto(*partition.MutableKeyRange());
+        }
+        partition.SetStatus(pq->Status);
+        partition.MutableParentPartitionIds()->Reserve(pq->ParentPartitionIds.size());
+        for (const auto parent : pq->ParentPartitionIds) {
+            partition.MutableParentPartitionIds()->AddAlreadyReserved(parent);
+        }
+        partition.MutableChildPartitionIds()->Reserve(pq->ChildPartitionIds.size());
+        for (const auto children : pq->ChildPartitionIds) {
+            partition.MutableChildPartitionIds()->AddAlreadyReserved(children);
+        }
+        partition.SetTabletId(tabletId);
+    }
+
+    static void MakePQTabletConfig(const TOperationContext& context,
+                                   NKikimrPQ::TPQTabletConfig& config,
                                    const TTopicInfo& pqGroup,
                                    const TTopicTabletInfo& pqShard,
                                    const TString& topicName,
@@ -854,23 +876,19 @@ private:
             config.SetVersion(pqGroup.AlterData->AlterVersion);
         }
 
-        for (const auto& pq : pqShard.Partitions) {
+        for(const auto& pq : pqShard.Partitions) {
             config.AddPartitionIds(pq->PqId);
 
             auto& partition = *config.AddPartitions();
-            partition.SetPartitionId(pq->PqId);
-            partition.SetCreateVersion(pq->CreateVersion);
-            if (pq->KeyRange) {
-                pq->KeyRange->SerializeToProto(*partition.MutableKeyRange());
-            }
-            partition.SetStatus(pq->Status);
-            partition.MutableParentPartitionIds()->Reserve(pq->ParentPartitionIds.size());
-            for (const auto parent : pq->ParentPartitionIds) {
-                partition.MutableParentPartitionIds()->AddAlreadyReserved(parent);
-            }
-            partition.MutableChildPartitionIds()->Reserve(pq->ChildPartitionIds.size());
-            for (const auto children : pq->ChildPartitionIds) {
-                partition.MutableChildPartitionIds()->AddAlreadyReserved(children);
+            FillPartition(partition, pq.Get(), 0);
+        }
+
+        for(const auto& p : pqGroup.Shards) {
+            const auto& pqShard = p.second;
+            const auto& tabletId = context.SS->ShardInfos[p.first].TabletID;
+            for (const auto& pq : pqShard->Partitions) {
+                auto& partition = *config.AddAllPartitions();
+                FillPartition(partition, pq.Get(), ui64(tabletId));
             }
         }
     }

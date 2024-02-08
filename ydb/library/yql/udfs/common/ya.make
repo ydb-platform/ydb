@@ -1,5 +1,6 @@
 RECURSE(
     clickhouse/client
+    compress_base
     datetime
     datetime2
     digest

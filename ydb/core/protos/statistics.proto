@@ -4,17 +4,59 @@ package NKikimrStat;
 
 option java_package = "ru.yandex.kikimr.proto";
 
-message TEvBroadcastStatistics {
-    message TEntry {
-        optional NKikimrProto.TPathID PathId = 1;
-        optional uint64 RowCount = 2;
-        optional uint64 BytesSize = 3;
-    }
-    repeated uint32 NodeIds = 1;
-    repeated TEntry Entries = 2;
+message TEvConfigureAggregator {
+    optional string Database = 1;
 }
 
-message TEvRegisterNode {
+message TPathEntry {
+    optional NKikimrProto.TPathID PathId = 1;
+    optional uint64 RowCount = 2;
+    optional uint64 BytesSize = 3;
+}
+
+message TSchemeShardStats {
+    repeated TPathEntry Entries = 1;
+}
+
+// SS -> SA
+message TEvConnectSchemeShard {
+    optional fixed64 SchemeShardId = 1;
+}
+
+// SS -> SA
+message TEvSchemeShardStats {
+    optional fixed64 SchemeShardId = 1;
+    optional bytes Stats = 2; // serialized TSchemeShardStats
+}
+
+// nodes -> SA
+message TEvConnectNode {
     optional uint32 NodeId = 1;
-    optional bool HasStatistics = 2;
+    repeated fixed64 NeedSchemeShards = 2;
+    message THaveEntry {
+        optional fixed64 SchemeShardId = 1;
+        optional uint64 Timestamp = 2;
+    }
+    repeated THaveEntry HaveSchemeShards = 3;
+}
+
+// nodes -> SA
+message TEvRequestStats {
+    optional uint32 NodeId = 1;
+    repeated fixed64 NeedSchemeShards = 2;
+}
+
+// SA -> nodes
+message TEvPropagateStatistics {
+    repeated uint32 NodeIds = 1; // hierarchical propagation
+    message TStatsEntry {
+        optional fixed64 SchemeShardId = 1;
+        optional bytes Stats = 2; // serialized TSchemeShardStats
+        optional uint64 Timestamp = 3;
+    }
+    repeated TStatsEntry Entries = 2;
+}
+
+// SA -> nodes
+message TEvStatisticsIsDisabled {
 }

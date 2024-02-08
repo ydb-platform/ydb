@@ -1,0 +1,35 @@
+{
+    "test.test[ErfInvNoLLVM]": [
+        {
+            "checksum": "be26c6ffe8018b2afe5c6bd554d4468d",
+            "size": 6789,
+            "uri": "https://storage.yandex-team.ru/get-devtools/1937429/e098bd35e45d8b2d18b6958e5e9b0a875d6a03f1/resource.tar.gz#test.test_ErfInvNoLLVM_/results.txt"
+        }
+    ],
+    "test.test[ErfInv]": [
+        {
+            "checksum": "be26c6ffe8018b2afe5c6bd554d4468d",
+            "size": 6789,
+            "uri": "https://storage.yandex-team.ru/get-devtools/1937429/e098bd35e45d8b2d18b6958e5e9b0a875d6a03f1/resource.tar.gz#test.test_ErfInv_/results.txt"
+        }
+    ],
+    "test.test[IR]": [
+        {
+            "checksum": "83061f69c401182342478cbc8fd11b63",
+            "size": 10168,
+            "uri": "https://storage.yandex-team.ru/get-devtools/1937429/e098bd35e45d8b2d18b6958e5e9b0a875d6a03f1/resource.tar.gz#test.test_IR_/results.txt"
+        }
+    ],
+    "test.test[IR_LLVM_OFF]": [
+        {
+            "checksum": "83061f69c401182342478cbc8fd11b63",
+            "size": 10168,
+            "uri": "https://storage.yandex-team.ru/get-devtools/1937429/e098bd35e45d8b2d18b6958e5e9b0a875d6a03f1/resource.tar.gz#test.test_IR_LLVM_OFF_/results.txt"
+        }
+    ],
+    "test.test[NearbyInt]": [
+        {
+            "uri": "file://test.test_NearbyInt_/results.txt"
+        }
+    ]
+}

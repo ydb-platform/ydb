@@ -15,6 +15,7 @@
 #include <ydb/library/yql/utils/log/proto/logger_config.pb.h>
 #include <ydb/library/yql/core/url_preprocessing/url_preprocessing.h>
 #include <ydb/library/yql/utils/actor_system/manager.h>
+#include <ydb/library/yql/utils/failure_injector/failure_injector.h>
 
 #include <ydb/library/yql/parser/pg_wrapper/interface/comp_factory.h>
 #include <ydb/library/yql/providers/dq/provider/yql_dq_gateway.h>
@@ -40,6 +41,7 @@
 #include <ydb/library/yql/providers/s3/provider/yql_s3_provider.h>
 #include <ydb/library/yql/providers/solomon/gateway/yql_solomon_gateway.h>
 #include <ydb/library/yql/providers/solomon/provider/yql_solomon_provider.h>
+#include <ydb/library/yql/providers/pg/provider/yql_pg_provider.h>
 #include <ydb/library/yql/providers/common/proto/gateways_config.pb.h>
 #include <ydb/library/yql/providers/common/provider/yql_provider_names.h>
 #include <ydb/library/yql/providers/common/comp_nodes/yql_factory.h>
@@ -79,7 +81,7 @@
 #include <library/cpp/getopt/last_getopt.h>
 #include <library/cpp/logger/priority.h>
 #include <library/cpp/protobuf/util/pb_io.h>
-#include <library/cpp/actors/http/http_proxy.h>
+#include <ydb/library/actors/http/http_proxy.h>
 
 #include <util/generic/string.h>
 #include <util/generic/hash.h>
@@ -104,6 +106,9 @@ struct TRunOptions {
     TString User;
     TMaybe<TString> BindingsFile;
     NYson::EYsonFormat ResultsFormat;
+    bool ValidateOnly = false;
+    bool LineageOnly = false;
+    IOutputStream* LineageStream = nullptr;
     bool OptimizeOnly = false;
     bool PeepholeOnly = false;
     bool TraceOpt = false;
@@ -268,7 +273,7 @@ std::tuple<std::unique_ptr<TActorSystemManager>, TActorIds> RunActorSystem(
     TActorIds actorIds;
 
     // Run actor system only if necessary
-    auto needActorSystem = gatewaysConfig.HasGeneric();
+    auto needActorSystem = gatewaysConfig.HasGeneric() ||  gatewaysConfig.HasDbResolver();
     if (!needActorSystem) {
         return std::make_tuple(std::move(actorSystemManager), std::move(actorIds));
     }
@@ -279,7 +284,7 @@ std::tuple<std::unique_ptr<TActorSystemManager>, TActorIds> RunActorSystem(
     actorSystemManager->Start();
 
     // Actor system is initialized; start actor registration.
-    if (gatewaysConfig.HasGeneric()) {
+    if (needActorSystem) {
         auto httpProxy = NHttp::CreateHttpProxy();
         actorIds.HttpProxy = actorSystemManager->GetActorSystem()->Register(httpProxy);
 
@@ -332,7 +337,14 @@ int RunProgram(TProgramPtr program, const TRunOptions& options, const THashMap<T
     }
 
     TProgram::TStatus status = TProgram::TStatus::Error;
-    if (options.OptimizeOnly) {
+    if (options.ValidateOnly) {
+        Cout << "Validate program..." << Endl;
+        status = program->Validate(options.User);
+    } else if (options.LineageOnly) {
+        Cout << "Calculate lineage..." << Endl;
+        auto config = TOptPipelineConfigurator(program, options.PrintPlan, options.TracePlan);
+        status = program->LineageWithConfig(options.User, config);
+    } else if (options.OptimizeOnly) {
         Cout << "Optimize program..." << Endl;
         auto config = TOptPipelineConfigurator(program, options.PrintPlan, options.TracePlan);
         status = program->OptimizeWithConfig(options.User, config);
@@ -348,7 +360,7 @@ int RunProgram(TProgramPtr program, const TRunOptions& options, const THashMap<T
         }
         return 1;
     }
-    program->Print(options.ExprOut, options.TracePlan);
+    program->Print(options.ExprOut, (options.ValidateOnly || options.LineageOnly) ? nullptr : options.TracePlan);
 
     Cout << "Getting results..." << Endl;
     if (program->HasResults()) {
@@ -359,6 +371,13 @@ int RunProgram(TProgramPtr program, const TRunOptions& options, const THashMap<T
             yson.OnRaw(result);
         }
         yson.OnEndList();
+    }
+
+    if (options.LineageStream) {
+        if (auto st = program->GetLineage()) {
+            TStringInput in(*st);
+            NYson::ReformatYsonStream(&in, options.LineageStream, NYson::EYsonFormat::Pretty);
+        }
     }
 
     if (options.StatisticsStream) {
@@ -402,6 +421,8 @@ int RunMain(int argc, const char* argv[])
     THashSet<TString> sqlFlags;
     IMetricsRegistryPtr metricsRegistry = CreateMetricsRegistry(GetSensorsGroupFor(NSensorComponent::kDq));
     clusterMapping["plato"] = YtProviderName;
+    clusterMapping["pg_catalog"] = PgProviderName;
+    clusterMapping["information_schema"] = PgProviderName;
 
     TString mountConfig;
     TString mestricsPusherConfig;
@@ -421,6 +442,7 @@ int RunMain(int argc, const char* argv[])
         }
     }
     THashMap<TString, TString> customTokens;
+    THashMap<TString, std::pair<ui32, ui32>> failureInjections;
     TString folderId;
 
     TRunOptions runOptions;
@@ -459,6 +481,14 @@ int RunMain(int argc, const char* argv[])
     opts.AddLongOption("udfs-dir", "Load all shared libraries with UDFs found"
                                    " in given directory")
         .StoreResult(&udfsDir);
+    opts.AddLongOption("validate", "validate expression")
+        .Optional()
+        .NoArgument()
+        .SetFlag(&runOptions.ValidateOnly);
+    opts.AddLongOption("lineage", "lineage expression")
+        .Optional()
+        .NoArgument()
+        .SetFlag(&runOptions.LineageOnly);
     opts.AddLongOption('O', "optimize", "optimize expression")
         .Optional()
         .NoArgument()
@@ -542,6 +572,19 @@ int RunMain(int argc, const char* argv[])
         .StoreResult(&runOptions.BindingsFile);
     opts.AddLongOption("metrics-pusher-config", "Metrics Pusher Config")
         .StoreResult(&mestricsPusherConfig);
+    opts.AddLongOption("enable-spilling", "Enable disk spilling").NoArgument();
+    opts.AddLongOption("failure-inject", "Activate failure injection")
+        .Optional()
+        .RequiredArgument("INJECTION_NAME=FAIL_COUNT or INJECTION_NAME=SKIP_COUNT/FAIL_COUNT")
+        .KVHandler([&failureInjections](TString key, TString value) {
+            TStringBuf fail = value;
+            TStringBuf skip;
+            if (TStringBuf(value).TrySplit('/', skip, fail)) {
+                failureInjections[key] = std::make_pair(FromString<ui32>(skip), FromString<ui32>(fail));
+            } else {
+                failureInjections[key] = std::make_pair(ui32(0), FromString<ui32>(fail));
+            }
+        });
     opts.AddHelpOption('h');
 
     opts.SetFreeArgsNum(0);
@@ -619,6 +662,13 @@ int RunMain(int argc, const char* argv[])
         return 1;
     }
 
+    if (!failureInjections.empty()) {
+        TFailureInjector::Activate();
+        for (auto& [name, count]: failureInjections) {
+            TFailureInjector::Set(name, count.first, count.second);
+        }
+    }
+
     runOptions.ResultsFormat =
             (format == TStringBuf("binary")) ? NYson::EYsonFormat::Binary
           : (format == TStringBuf("text")) ? NYson::EYsonFormat::Text
@@ -642,12 +692,21 @@ int RunMain(int argc, const char* argv[])
         setting->SetValue("1");
     }
 
+    if (res.Has("enable-spilling")) {
+        auto* setting = gatewaysConfig.MutableDq()->AddDefaultSettings();
+        setting->SetName("SpillingEngine");
+        setting->SetValue("file");
+    }
+
     TString defYtServer = gatewaysConfig.HasYt() ? NYql::TConfigClusters::GetDefaultYtServer(gatewaysConfig.GetYt()) : TString();
     auto storage = CreateFS(fileStorageCfg, defYtServer);
 
-    TVector<TIntrusivePtr<TThrRefBase>> gateways;
     THashMap<TString, TString> clusters;
+    clusters["pg_catalog"] = PgProviderName;
+    clusters["information_schema"] = PgProviderName;
+
     TVector<TDataProviderInitializer> dataProvidersInit;
+    dataProvidersInit.push_back(GetPgDataProviderInitializer());
 
     const auto driverConfig = NYdb::TDriverConfig().SetLog(CreateLogBackend("cerr"));
     NYdb::TDriver driver(driverConfig);
@@ -679,7 +738,6 @@ int RunMain(int argc, const char* argv[])
         ytServices.FileStorage = storage;
         ytServices.Config = std::make_shared<TYtGatewayConfig>(gatewaysConfig.GetYt());
         auto ytNativeGateway = CreateYtNativeGateway(ytServices);
-        gateways.emplace_back(ytNativeGateway);
 
         for (auto& cluster: gatewaysConfig.GetYt().GetClusterMapping()) {
             clusters.emplace(to_lower(cluster.GetName()), TString{YtProviderName});
@@ -705,6 +763,17 @@ int RunMain(int argc, const char* argv[])
         dataProvidersInit.push_back(GetClickHouseDataProviderInitializer(httpGateway));
     }
 
+    std::shared_ptr<NFq::TDatabaseAsyncResolverImpl> dbResolver;
+    if (gatewaysConfig.HasDbResolver()) {
+        dbResolver = std::make_shared<NFq::TDatabaseAsyncResolverImpl>(
+            actorSystemManager->GetActorSystem(),
+            actorIds.DatabaseResolver,
+            gatewaysConfig.GetDbResolver().GetYdbMvpEndpoint(),
+            gatewaysConfig.HasGeneric() ? gatewaysConfig.GetGeneric().GetMdbGateway() : "",
+            NFq::MakeMdbEndpointGeneratorGeneric(false)
+        );
+    }
+
     NConnector::IClient::TPtr genericClient;
     if (gatewaysConfig.HasGeneric()) {
         for (auto& cluster : *gatewaysConfig.MutableGeneric()->MutableClusterMapping()) {
@@ -712,13 +781,6 @@ int RunMain(int argc, const char* argv[])
         }
 
         genericClient = NConnector::MakeClientGRPC(gatewaysConfig.GetGeneric().GetConnector());
-        auto dbResolver = std::make_shared<NFq::TDatabaseAsyncResolverImpl>(
-            actorSystemManager->GetActorSystem(),
-            actorIds.DatabaseResolver,
-            "",
-            gatewaysConfig.GetGeneric().GetMdbGateway(),
-            NFq::MakeMdbEndpointGeneratorGeneric(false)
-        );
         dataProvidersInit.push_back(GetGenericDataProviderInitializer(genericClient, dbResolver));
     }
 
@@ -748,18 +810,17 @@ int RunMain(int argc, const char* argv[])
             funcRegistry.Get()
         );
         auto pqGateway = CreatePqNativeGateway(pqServices);
-        gateways.emplace_back(pqGateway);
         for (auto& cluster: gatewaysConfig.GetPq().GetClusterMapping()) {
             clusters.emplace(to_lower(cluster.GetName()), TString{PqProviderName});
         }
-        dataProvidersInit.push_back(GetPqDataProviderInitializer(pqGateway));
+
+        dataProvidersInit.push_back(GetPqDataProviderInitializer(pqGateway, false, dbResolver));
     }
 
     if (gatewaysConfig.HasSolomon()) {
         auto solomonConfig = gatewaysConfig.GetSolomon();
         auto solomonGateway = CreateSolomonGateway(solomonConfig);
 
-        gateways.emplace_back(solomonGateway);
         dataProvidersInit.push_back(NYql::GetSolomonDataProviderInitializer(solomonGateway, false));
         for (const auto& cluster: gatewaysConfig.GetSolomon().GetClusterMapping()) {
             clusters.emplace(to_lower(cluster.GetName()), TString{NYql::SolomonProviderName});
@@ -786,13 +847,13 @@ int RunMain(int argc, const char* argv[])
             size_t requestTimeout = gatewaysConfig.HasHttpGateway() && gatewaysConfig.GetHttpGateway().HasRequestTimeoutSeconds() ? gatewaysConfig.GetHttpGateway().GetRequestTimeoutSeconds() : 100;
             size_t maxRetries = gatewaysConfig.HasHttpGateway() && gatewaysConfig.GetHttpGateway().HasMaxRetries() ? gatewaysConfig.GetHttpGateway().GetMaxRetries() : 2;
 
-            dqGateway = CreateLocalDqGateway(funcRegistry.Get(), dqCompFactory, dqTaskTransformFactory, dqTaskPreprocessorFactories,
-                false/*spilling*/, CreateAsyncIoFactory(driver, httpGateway, genericClient, requestTimeout, maxRetries), threads,
-                metricsRegistry,
-                metricsPusherFactory);
+
+            bool enableSpilling = res.Has("enable-spilling");
+            dqGateway = CreateLocalDqGateway(funcRegistry.Get(), dqCompFactory, dqTaskTransformFactory, dqTaskPreprocessorFactories, enableSpilling,
+                CreateAsyncIoFactory(driver, httpGateway, genericClient, requestTimeout, maxRetries), threads,
+                metricsRegistry, metricsPusherFactory);
         }
 
-        gateways.emplace_back(dqGateway);
         dataProvidersInit.push_back(GetDqDataProviderInitializer(&CreateDqExecTransformer, dqGateway, dqCompFactory, {}, storage));
     }
 
@@ -881,6 +942,10 @@ int RunMain(int argc, const char* argv[])
         } else {
             runOptions.StatisticsStream = &Cerr;
         }
+    }
+
+    if (runOptions.LineageOnly) {
+        runOptions.LineageStream = &Cout;
     }
 
     int result = RunProgram(std::move(program), runOptions, clusters);

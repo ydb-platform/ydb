@@ -67,16 +67,47 @@ void AddActions(TAutoPtr<NCms::TEvCms::TEvPermissionRequest> &event, const NKiki
     AddActions(event, actions...);
 }
 
+struct TRequestOptions {
+    TString User;
+    bool Partial;
+    bool DryRun;
+    bool Schedule;
+    bool EvictVDisks;
+
+    explicit TRequestOptions(const TString &user, bool partial, bool dry, bool schedule)
+        : User(user)
+        , Partial(partial)
+        , DryRun(dry)
+        , Schedule(schedule)
+        , EvictVDisks(false)
+    {}
+
+    explicit TRequestOptions(const TString &user)
+        : TRequestOptions(user, false, false, false)
+    {}
+
+    TRequestOptions& WithEvictVDisks() {
+        EvictVDisks = true;
+        return *this;
+    }
+};
+
 template <typename... Ts>
-TAutoPtr<NCms::TEvCms::TEvPermissionRequest> MakePermissionRequest(const TString &user, bool partial, bool dry, bool schedule, Ts... actions) {
+TAutoPtr<NCms::TEvCms::TEvPermissionRequest> MakePermissionRequest(const TRequestOptions &opts, Ts... actions) {
     TAutoPtr<NCms::TEvCms::TEvPermissionRequest> event = new NCms::TEvCms::TEvPermissionRequest;
-    event->Record.SetUser(user);
-    event->Record.SetPartialPermissionAllowed(partial);
-    event->Record.SetDryRun(dry);
-    event->Record.SetSchedule(schedule);
+    event->Record.SetUser(opts.User);
+    event->Record.SetPartialPermissionAllowed(opts.Partial);
+    event->Record.SetDryRun(opts.DryRun);
+    event->Record.SetSchedule(opts.Schedule);
+    event->Record.SetEvictVDisks(opts.EvictVDisks);
     AddActions(event, actions...);
 
     return event;
+}
+
+template <typename... Ts>
+TAutoPtr<NCms::TEvCms::TEvPermissionRequest> MakePermissionRequest(const TString &user, bool partial, bool dry, bool schedule, Ts... actions) {
+    return MakePermissionRequest(TRequestOptions(user, partial, dry, schedule), actions...);
 }
 
 inline void AddPermissions(TAutoPtr<NCms::TEvCms::TEvManagePermissionRequest> &ev, const TString &id) {

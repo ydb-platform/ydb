@@ -1,6 +1,7 @@
 #include <ydb/core/kqp/ut/common/kqp_ut_common.h>
 #include <ydb/core/kqp/counters/kqp_counters.h>
 #include <ydb/core/tx/datashard/datashard_failpoints.h>
+#include <ydb/core/tx/datashard/datashard_impl.h>
 #include <ydb/core/tx/scheme_cache/scheme_cache.h>
 
 #include <ydb/library/yql/dq/actors/compute/dq_compute_actor.h>
@@ -2474,9 +2475,9 @@ Y_UNIT_TEST_SUITE(KqpScan) {
         NJson::TJsonValue plan;
         NJson::ReadJsonTree(*res.PlanJson, &plan, true);
 
-        auto indexRead = FindPlanNodeByKv(plan, "Node Type", "Limit-TablePointLookup");
+        auto indexRead = FindPlanNodeByKv(plan, "Node Type", "Limit-TableRangeScan");
         if (!indexRead.IsDefined()) {
-            indexRead = FindPlanNodeByKv(plan, "Node Type", "Limit-Filter-TablePointLookup");
+            indexRead = FindPlanNodeByKv(plan, "Node Type", "Limit-Filter-TableRangeScan");
         }
         UNIT_ASSERT(indexRead.IsDefined());
         auto indexTable = FindPlanNodeByKv(indexRead, "Table", "SecondaryComplexKeys/Index/indexImplTable");
@@ -2514,9 +2515,9 @@ Y_UNIT_TEST_SUITE(KqpScan) {
         NJson::TJsonValue plan;
         NJson::ReadJsonTree(*res.PlanJson, &plan, true);
 
-        auto indexRead = FindPlanNodeByKv(plan, "Node Type", "Limit-TablePointLookup");
+        auto indexRead = FindPlanNodeByKv(plan, "Node Type", "Limit-TableRangeScan");
         if (!indexRead.IsDefined()) {
-            indexRead = FindPlanNodeByKv(plan, "Node Type", "Limit-Filter-TablePointLookup");
+            indexRead = FindPlanNodeByKv(plan, "Node Type", "Limit-Filter-TableRangeScan");
         }
         UNIT_ASSERT(indexRead.IsDefined());
         auto indexTable = FindPlanNodeByKv(indexRead, "Table", "SecondaryComplexKeys/Index/indexImplTable");
@@ -2583,27 +2584,39 @@ Y_UNIT_TEST_SUITE(KqpRequestContext) {
         auto settings = TKikimrSettings()
             .SetAppConfig(AppCfg())
             .SetEnableScriptExecutionOperations(true)
-            .SetNodeCount(4);
+            .SetNodeCount(4)
+            .SetUseRealThreads(false);
         TKikimrRunner kikimr{settings};
         auto db = kikimr.GetTableClient();
-        
+
         NKikimr::NKqp::TKqpPlanner::UseMockEmptyPlanner = true;
         Y_DEFER {
             NKikimr::NKqp::TKqpPlanner::UseMockEmptyPlanner = false;  // just in case if test fails
         };
 
-        auto it = db.StreamExecuteScanQuery(R"(
-            SELECT Text, SUM(Key) AS Total FROM `/Root/EightShard`
-            GROUP BY Text
-            ORDER BY Total DESC;
-        )").GetValueSync();
+        {
+            TDispatchOptions opts;
+            opts.FinalEvents.emplace_back(NKikimr::NKqp::TKqpResourceInfoExchangerEvents::EvSendResources, 4);
+            kikimr.GetTestServer().GetRuntime()->DispatchEvents(opts);
+        }
+
+        auto it = kikimr.RunCall([&db] {
+            return db.StreamExecuteScanQuery(R"(
+                SELECT Text, SUM(Key) AS Total FROM `/Root/EightShard`
+                GROUP BY Text
+                ORDER BY Total DESC;
+            )").GetValueSync();
+        });
 
         UNIT_ASSERT(it.IsSuccess());
-        try {
-            auto yson = StreamResultToYson(it, true, NYdb::EStatus::PRECONDITION_FAILED, "TraceId");
-        } catch (const std::exception& ex) {
-            UNIT_ASSERT_C(false, "Exception NYdb::EStatus::PRECONDITION_FAILED not found or IssueMessage doesn't contain 'TraceId'");
-        }
+        kikimr.RunCall([&it] {
+            try {
+                auto yson = StreamResultToYson(it, true, NYdb::EStatus::PRECONDITION_FAILED, "TraceId");
+            } catch (const std::exception& ex) {
+                UNIT_ASSERT_C(false, "Exception NYdb::EStatus::PRECONDITION_FAILED not found or IssueMessage doesn't contain 'TraceId'");
+            }
+            return true;
+        });
 
         NKikimr::NKqp::TKqpPlanner::UseMockEmptyPlanner = false;
     }

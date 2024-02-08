@@ -6,12 +6,10 @@
 #include <ydb/library/yql/minikql/computation/mkql_computation_node.h>
 #include <ydb/library/yql/providers/yt/gateway/lib/user_files.h>
 
-namespace NKikimr {
+namespace NKikimr::NMiniKQL {
 
-namespace NMiniKQL {
 class TScopedAlloc;
 class IFunctionRegistry;
-}
 
 }
 
@@ -40,7 +38,8 @@ struct TNativeYtLambdaBuilder: public TLambdaBuilder {
     TString BuildLambdaWithIO(const NCommon::IMkqlCallableCompiler& compiler, NNodes::TCoLambda lambda, TExprContext& exprCtx);
 };
 
-NKikimr::NMiniKQL::TComputationNodeFactory GetGatewayNodeFactory(TMkqlWriterImpl* writer = nullptr, TUserFiles::TPtr files = nullptr);
+NKikimr::NMiniKQL::TComputationNodeFactory GetGatewayNodeFactory(NYql::NCommon::TCodecContext* codecCtx,
+     TMkqlWriterImpl* writer, TUserFiles::TPtr files, TStringBuf filePrefix);
 
 } // NNative
 

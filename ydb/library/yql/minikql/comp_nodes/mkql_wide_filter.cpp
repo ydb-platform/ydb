@@ -1,6 +1,6 @@
 #include "mkql_wide_filter.h"
 #include <ydb/library/yql/minikql/computation/mkql_computation_node_holders.h>
-#include <ydb/library/yql/minikql/computation/mkql_computation_node_codegen.h>
+#include <ydb/library/yql/minikql/computation/mkql_computation_node_codegen.h>  // Y_IGNORE
 #include <ydb/library/yql/minikql/mkql_node_cast.h>
 #include <ydb/library/yql/utils/cast.h>
 
@@ -18,7 +18,7 @@ protected:
         : Flow(flow)
         , Items(std::move(items))
         , Predicate(predicate)
-        , FilterByField(GetPasstroughtMap({Predicate}, Items).front())
+        , FilterByField(GetPasstroughtMap(TComputationNodePtrVector{Predicate}, Items).front())
         , WideFieldsIndex(mutables.IncrementWideFieldsIndex(Items.size()))
     {}
 
@@ -283,9 +283,6 @@ public:
 
         const auto result = PHINode::Create(resultType, 4U, "result", done);
         result->addIncoming(ConstantInt::get(resultType, static_cast<i32>(EFetchResult::Finish)), block);
-
-        const auto state = new LoadInst(Type::getInt128Ty(context), statePtr, "state", block);
-        const auto finished = CmpInst::Create(Instruction::ICmp, ICmpInst::ICMP_EQ, state, GetTrue(context), "finished", block);
 
         BranchInst::Create(done, work, IsValid(statePtr, block), block);
 

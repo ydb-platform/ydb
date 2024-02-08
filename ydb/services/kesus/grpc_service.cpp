@@ -12,12 +12,12 @@
 #include <ydb/core/grpc_streaming/grpc_streaming.h>
 #include <ydb/core/base/ticket_parser.h>
 
-#include <library/cpp/grpc/server/event_callback.h>
-#include <library/cpp/grpc/server/grpc_async_ctx_base.h>
+#include <ydb/library/grpc/server/event_callback.h>
+#include <ydb/library/grpc/server/grpc_async_ctx_base.h>
 #include <ydb/public/sdk/cpp/client/resources/ydb_resources.h>
 
-#include <library/cpp/actors/core/actor_bootstrapped.h>
-#include <library/cpp/actors/core/hfunc.h>
+#include <ydb/library/actors/core/actor_bootstrapped.h>
+#include <ydb/library/actors/core/hfunc.h>
 
 namespace NKikimr {
 namespace NKesus {
@@ -27,6 +27,9 @@ namespace NKesus {
 class TGRpcSessionActor
     : public TActorBootstrapped<TGRpcSessionActor>
 {
+    static constexpr TDuration MinPingPeriod = TDuration::MilliSeconds(10);
+    static constexpr TDuration MaxPingPeriod = TDuration::Seconds(5);
+
 public:
     using TRequest = Ydb::Coordination::SessionRequest;
     using TResponse = Ydb::Coordination::SessionResponse;
@@ -130,6 +133,13 @@ private:
             Context->Finish(grpc::Status(grpc::StatusCode::INVALID_ARGUMENT,
                 "First message must be a SessionStart"));
             return PassAway();
+        }
+
+        PingPeriod = TDuration::MilliSeconds(StartRequest->Record.session_start().timeout_millis() / 3);
+        if (PingPeriod > MaxPingPeriod) {
+            PingPeriod = MaxPingPeriod;
+        } else if (PingPeriod < MinPingPeriod) {
+            PingPeriod = MinPingPeriod;
         }
 
         KesusPath = StartRequest->Record.session_start().path();
@@ -540,8 +550,7 @@ private:
         ping->set_opaque(CurrentPingData);
         Reply(std::move(response));
 
-        // TODO: configure timeout
-        Schedule(TDuration::MilliSeconds(5000), new TEvPrivate::TEvPingScheduled());
+        Schedule(PingPeriod, new TEvPrivate::TEvPingScheduled());
     }
 
     void Handle(const TEvPrivate::TEvPingScheduled::TPtr& ev) {
@@ -599,11 +608,12 @@ private:
     ui64 SessionId = 0;
     bool SessionEstablished = false;
     ui64 CurrentPingData = 0;
+    TDuration PingPeriod;
 };
 
 ////////////////////////////////////////////////////////////////////////////////
 
-void TKesusGRpcService::SetupIncomingRequests(NGrpc::TLoggerPtr logger) {
+void TKesusGRpcService::SetupIncomingRequests(NYdbGrpc::TLoggerPtr logger) {
     auto getCounterBlock = NGRpcService::CreateCounterCb(Counters_, ActorSystem_);
     using NGRpcService::TRateLimiterMode;
 
@@ -616,7 +626,7 @@ void TKesusGRpcService::SetupIncomingRequests(NGrpc::TLoggerPtr logger) {
         this, \
         &Service_, \
         CQ_, \
-        [this](NGrpc::IRequestContextBase* reqCtx) { \
+        [this](NYdbGrpc::IRequestContextBase* reqCtx) { \
             NGRpcService::ReportGrpcReqToMon(*ActorSystem_, reqCtx->GetPeer()); \
             ActorSystem_->Send(GRpcRequestProxyId_, \
                 new NGRpcService::TGrpcRequestOperationCall<Ydb::Coordination::IN, Ydb::Coordination::OUT> \

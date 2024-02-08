@@ -17,7 +17,8 @@
 #include <ydb/library/yql/minikql/computation/mkql_computation_node.h>
 #include <ydb/library/yql/providers/pq/cm_client/client.h>
 
-#include <library/cpp/actors/core/actorsystem.h>
+#include <ydb/library/actors/core/actorsystem.h>
+#include <ydb/library/actors/wilson/wilson_uploader.h>
 
 #include <functional>
 #include <unordered_map>
@@ -54,6 +55,8 @@ struct TModuleFactories {
 
     std::shared_ptr<NHttpProxy::IAuthFactory> DataStreamsAuthFactory;
     std::vector<NKikimr::NMiniKQL::TComputationNodeFactory> AdditionalComputationNodeFactories;
+
+    std::unique_ptr<NWilson::IGrpcSigner>(*WilsonGrpcSignerFactory)(const NKikimrConfig::TTracingConfig::TBackendConfig::TAuthConfig&);
 
     ~TModuleFactories();
 };

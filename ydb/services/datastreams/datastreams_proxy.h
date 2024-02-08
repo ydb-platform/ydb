@@ -7,9 +7,9 @@
 #include <ydb/core/client/server/grpc_base.h>
 #include <ydb/core/grpc_services/rpc_calls.h>
 
-#include <library/cpp/grpc/server/grpc_server.h>
-#include <library/cpp/actors/core/actor_bootstrapped.h>
-#include <library/cpp/actors/core/actorsystem.h>
+#include <ydb/library/grpc/server/grpc_server.h>
+#include <ydb/library/actors/core/actor_bootstrapped.h>
+#include <ydb/library/actors/core/actorsystem.h>
 
 
 namespace NKikimr {

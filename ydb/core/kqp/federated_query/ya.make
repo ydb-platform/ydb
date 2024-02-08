@@ -1,6 +1,7 @@
 LIBRARY()
 
 SRCS(
+    kqp_federated_query_actors.cpp
     kqp_federated_query_helpers.cpp
 )
 

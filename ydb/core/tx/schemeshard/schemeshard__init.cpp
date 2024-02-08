@@ -302,7 +302,7 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
         return true;
     }
 
-    typedef std::tuple<TPathId, ui32, ui64, TString, TString, TString, ui64, TString, bool, TString> TTableRec;
+    typedef std::tuple<TPathId, ui32, ui64, TString, TString, TString, ui64, TString, bool, TString, bool, TString> TTableRec;
     typedef TDeque<TTableRec> TTableRows;
 
     template <typename SchemaTable, typename TRowSet>
@@ -316,7 +316,9 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
             rowSet.template GetValueOrDefault<typename SchemaTable::PartitioningVersion>(0),
             rowSet.template GetValueOrDefault<typename SchemaTable::TTLSettings>(),
             rowSet.template GetValueOrDefault<typename SchemaTable::IsBackup>(false),
-            rowSet.template GetValueOrDefault<typename SchemaTable::ReplicationConfig>()
+            rowSet.template GetValueOrDefault<typename SchemaTable::ReplicationConfig>(),
+            rowSet.template GetValueOrDefault<typename SchemaTable::IsTemporary>(false),
+            rowSet.template GetValueOrDefault<typename SchemaTable::OwnerActorId>("")
         );
     }
 
@@ -1530,6 +1532,16 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                         Y_ABORT_UNLESS(ParseFromStringNoSizeLimit(value, rowset.GetValue<Schema::SubDomains::AuditSettings>()));
                         domainInfo->SetAuditSettings(value);
                     }
+
+                    if (rowset.HaveValue<Schema::SubDomains::ServerlessComputeResourcesMode>()) {
+                        domainInfo->SetServerlessComputeResourcesMode(
+                            rowset.GetValue<Schema::SubDomains::ServerlessComputeResourcesMode>()
+                        );
+                    } else if (Self->IsServerlessDomain(domainInfo) || Self->IsServerlessDomainGlobal(pathId, domainInfo)) {
+                        domainInfo->SetServerlessComputeResourcesMode(
+                            NKikimrSubDomains::EServerlessComputeResourcesModeShared
+                        );
+                    }
                 }
 
                 if (!rowset.Next())
@@ -1591,6 +1603,16 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                         Ydb::Cms::DatabaseQuotas databaseQuotas;
                         Y_ABORT_UNLESS(ParseFromStringNoSizeLimit(databaseQuotas, rowset.GetValue<Schema::SubDomainsAlterData::DatabaseQuotas>()));
                         alter->SetDatabaseQuotas(databaseQuotas);
+                    }
+
+                    if (rowset.HaveValue<Schema::SubDomainsAlterData::ServerlessComputeResourcesMode>()) {
+                        alter->SetServerlessComputeResourcesMode(
+                            rowset.GetValue<Schema::SubDomainsAlterData::ServerlessComputeResourcesMode>()
+                        );
+                    } else if (Self->IsServerlessDomain(alter) || Self->IsServerlessDomainGlobal(pathId, alter)) {
+                        alter->SetServerlessComputeResourcesMode(
+                            NKikimrSubDomains::EServerlessComputeResourcesModeShared
+                        );
                     }
 
                     subdomainInfo->SetAlter(alter);
@@ -1771,6 +1793,39 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                 }
 
                 tableInfo->IsBackup = std::get<8>(rec);
+                tableInfo->IsTemporary = std::get<10>(rec);
+
+                auto ownerActorIdStr = std::get<11>(rec);
+                tableInfo->OwnerActorId.Parse(ownerActorIdStr.c_str(), ownerActorIdStr.size());
+
+                if (tableInfo->IsTemporary) {
+                    Y_VERIFY_S(tableInfo->OwnerActorId,  "Empty OwnerActorId for temp table");
+
+                    TActorId ownerActorId = tableInfo->OwnerActorId;
+
+                    auto& tempTablesByOwner = Self->TempTablesState.TempTablesByOwner;
+                    auto& nodeStates = Self->TempTablesState.NodeStates;
+
+                    auto it = tempTablesByOwner.find(ownerActorId);
+                    auto nodeId = ownerActorId.NodeId();
+
+                    auto itNodeStates = nodeStates.find(nodeId);
+                    if (itNodeStates == nodeStates.end()) {
+                        auto& nodeState = nodeStates[nodeId];
+                        nodeState.Owners.insert(ownerActorId);
+                        nodeState.RetryState.CurrentDelay =
+                            TDuration::MilliSeconds(Self->BackgroundCleaningRetrySettings.GetStartDelayMs());
+                    } else {
+                        itNodeStates->second.Owners.insert(ownerActorId);
+                    }
+
+                    if (it == tempTablesByOwner.end()) {
+                        auto& currentTempTables = tempTablesByOwner[ownerActorId];
+                        currentTempTables.insert(pathId);
+                    } else {
+                        it->second.insert(pathId);
+                    }
+                }
 
                 Self->Tables[pathId] = tableInfo;
                 Self->IncrementPathDbRefCount(pathId);
@@ -1829,6 +1884,28 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
 
                 if (!rowset.Next())
                     return false;
+            }
+        }
+
+        // Read Views
+        {
+            auto rowset = db.Table<Schema::View>().Range().Select();
+            if (!rowset.IsReady()) {
+                return false;
+            }
+
+            while (!rowset.EndOfSet()) {
+                TLocalPathId localPathId = rowset.GetValue<Schema::View::PathId>();
+                TPathId pathId(selfId, localPathId);
+
+                auto& view = Self->Views[pathId] = new TViewInfo();
+                view->AlterVersion = rowset.GetValue<Schema::View::AlterVersion>();
+                view->QueryText = rowset.GetValue<Schema::View::QueryText>();
+                Self->IncrementPathDbRefCount(pathId);
+
+                if (!rowset.Next()) {
+                    return false;
+                }
             }
         }
 
@@ -3279,6 +3356,7 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                 txState.SourcePathId =  TPathId(txInFlightRowset.GetValueOrDefault<Schema::TxInFlightV2::SourceOwnerId>(),
                                                 txInFlightRowset.GetValueOrDefault<Schema::TxInFlightV2::SourceLocalPathId>());
                 txState.NeedUpdateObject = txInFlightRowset.GetValueOrDefault<Schema::TxInFlightV2::NeedUpdateObject>(false);
+                txState.NeedSyncHive = txInFlightRowset.GetValueOrDefault<Schema::TxInFlightV2::NeedSyncHive>(false);
 
                 if (txState.TxType == TTxState::TxCopyTable && txState.SourcePathId) {
                     Y_ABORT_UNLESS(txState.SourcePathId);
@@ -3886,12 +3964,20 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
             case ETabletType::BlobDepot:
                 Self->TabletCounters->Simple()[COUNTER_BLOB_DEPOT_COUNT].Add(1);
                 break;
+            case ETabletType::StatisticsAggregator:
+                Self->TabletCounters->Simple()[COUNTER_STATISTICS_AGGREGATOR_COUNT].Add(1);
+                break;
+            case ETabletType::GraphShard:
+                Self->TabletCounters->Simple()[COUNTER_GRAPHSHARD_COUNT].Add(1);
+                break;
             default:
-                Y_FAIL_S("dont know how to interpret tablet type"
+                LOG_WARN_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
+                         "dont know how to interpret tablet type"
                          << ", type id: " << (ui32)si.second.TabletType
                          << ", pathId: " << pathId
                          << ", shardId: " << shardIdx
                          << ", tabletId: " << tabletId);
+                break;
             }
         }
 

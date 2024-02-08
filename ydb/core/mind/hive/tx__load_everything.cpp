@@ -58,6 +58,7 @@ public:
             auto nodeRowset = db.Table<Schema::Node>().Select();
             auto configRowset = db.Table<Schema::State>().Select();
             auto categoryRowset = db.Table<Schema::TabletCategory>().Select();
+            auto availabilityRowset = db.Table<Schema::TabletAvailabilityRestrictions>().Select();
             if (!tabletRowset.IsReady()
                     || !tabletChannelRowset.IsReady()
                     || !tabletChannelGenRowset.IsReady()
@@ -72,7 +73,8 @@ public:
                     || !tabletOwnersRowset.IsReady()
                     || !nodeRowset.IsReady()
                     || !configRowset.IsReady()
-                    || !categoryRowset.IsReady())
+                    || !categoryRowset.IsReady()
+                    || !availabilityRowset.IsReady())
                 return false;
         }
 
@@ -181,7 +183,11 @@ public:
         }
 
         Self->BuildCurrentConfig();
-        Self->WarmUp = Self->CurrentConfig.GetWarmUpEnabled();
+        if (Self->CurrentConfig.HasWarmUpEnabled()) {
+            Self->WarmUp = Self->CurrentConfig.GetWarmUpEnabled();
+        } else {
+            Self->WarmUp = Self->CurrentConfig.GetWarmUpEnabled() && !Self->AreWeRootHive();
+        }
 
         Self->DefaultResourceMetricsAggregates.MaximumCPU.SetWindowSize(TDuration::MilliSeconds(Self->GetMetricsWindowSize()));
         Self->DefaultResourceMetricsAggregates.MaximumMemory.SetWindowSize(TDuration::MilliSeconds(Self->GetMetricsWindowSize()));
@@ -270,6 +276,10 @@ public:
                 if (domainRowset.GetValueOrDefault<Schema::SubDomain::Primary>()) {
                     Self->PrimaryDomainKey = key;
                 }
+                if (domainRowset.HaveValue<Schema::SubDomain::ServerlessComputeResourcesMode>()) {
+                    domain.ServerlessComputeResourcesMode = domainRowset.GetValue<Schema::SubDomain::ServerlessComputeResourcesMode>();
+                }
+                
                 if (!domainRowset.Next())
                     return false;
             }
@@ -372,7 +382,7 @@ public:
                             std::tuple<TTabletId>(tabletId),
                             std::tuple<TTabletId, THive&>(tabletId, *Self)).first->second;
                 tablet.State = tabletRowset.GetValue<Schema::Tablet::State>();
-                tablet.Type = tabletRowset.GetValue<Schema::Tablet::TabletType>();
+                tablet.SetType(tabletRowset.GetValue<Schema::Tablet::TabletType>());
 
                 TObjectId objectId = tabletRowset.GetValueOrDefault<Schema::Tablet::ObjectID>();
                 TOwnerIdxType::TValueType owner = tabletRowset.GetValue<Schema::Tablet::Owner>();
@@ -643,16 +653,52 @@ public:
                     << numMissingTablets << " for missing tablets)");
         }
 
+        {
+            size_t numRestrictions = 0;
+            size_t numMissingNodes = 0;
+            auto availabilityRestrictionsRowset = db.Table<Schema::TabletAvailabilityRestrictions>().Select();
+            if (!availabilityRestrictionsRowset.IsReady()) {
+                return false;
+            }
+            while (!availabilityRestrictionsRowset.EndOfSet()) {
+                ++numRestrictions;
+                TNodeId nodeId = availabilityRestrictionsRowset.GetValue<Schema::TabletAvailabilityRestrictions::Node>();
+                auto node = Self->FindNode(nodeId);
+                if (node) {
+                    auto tabletType = availabilityRestrictionsRowset.GetValue<Schema::TabletAvailabilityRestrictions::TabletType>();
+                    auto maxCount = availabilityRestrictionsRowset.GetValue<Schema::TabletAvailabilityRestrictions::MaxCount>();
+                    node->TabletAvailabilityRestrictions[tabletType] = maxCount;
+                } else {
+                    ++numMissingNodes;
+                }
+                if (!availabilityRestrictionsRowset.Next()) {
+                    return false;
+                }
+            }
+            BLOG_NOTICE("THive::TTxLoadEverything loaded " << numRestrictions << " tablet availability restrictions ("
+                        << numMissingNodes << " for missing nodes)");
+        }
+
         size_t numDeletedNodes = 0;
+        size_t numDeletedRestrictions = 0;
         for (auto itNode = Self->Nodes.begin(); itNode != Self->Nodes.end();) {
             if (itNode->second.CanBeDeleted()) {
+                ++numDeletedNodes;
+                auto restrictionsRowset = db.Table<Schema::TabletAvailabilityRestrictions>().Range(itNode->first).Select();
+                while (!restrictionsRowset.EndOfSet()) {
+                    ++numDeletedRestrictions;
+                    db.Table<Schema::TabletAvailabilityRestrictions>().Key(restrictionsRowset.GetKey()).Delete();
+                    if (!restrictionsRowset.Next()) {
+                        return false;
+                    }
+                }
                 db.Table<Schema::Node>().Key(itNode->first).Delete();
                 itNode = Self->Nodes.erase(itNode);
             } else {
                 ++itNode;
             }
         }
-        BLOG_NOTICE("THive::TTxLoadEverything deleted " << numDeletedNodes << " unnecessary nodes");
+        BLOG_NOTICE("THive::TTxLoadEverything deleted " << numDeletedNodes << " unnecessary nodes << (and " << numDeletedRestrictions << " restrictions for them)");
 
         TTabletId nextTabletId = Max(maxTabletId + 1, Self->NextTabletId);
 
@@ -706,7 +752,7 @@ public:
 
     void Complete(const TActorContext& ctx) override {
         BLOG_NOTICE("THive::TTxLoadEverything::Complete " << Self->DatabaseConfig.ShortDebugString());
-        i64 tabletsTotal = 0;
+        ui64 tabletsTotal = 0;
         for (auto it = Self->Tablets.begin(); it != Self->Tablets.end(); ++it) {
             ++tabletsTotal;
             for (const TTabletInfo& follower : it->second.Followers) {
@@ -723,7 +769,8 @@ public:
         Self->SetCounterTabletsTotal(tabletsTotal);
         Self->TabletCounters->Simple()[NHive::COUNTER_SEQUENCE_FREE].Set(Self->Sequencer.FreeSize());
         Self->TabletCounters->Simple()[NHive::COUNTER_SEQUENCE_ALLOCATED].Set(Self->Sequencer.AllocatedSequencesSize());
-        Self->TabletCounters->Simple()[NHive::COUNTER_NODES_TOTAL].Set(Self->Nodes.size());
+        Self->ExpectedNodes = Self->Nodes.size();
+        Self->TabletCounters->Simple()[NHive::COUNTER_NODES_TOTAL].Set(Self->ExpectedNodes);
         Self->MigrationState = NKikimrHive::EMigrationState::MIGRATION_READY;
         ctx.Send(Self->SelfId(), new TEvPrivate::TEvBootTablets());
 

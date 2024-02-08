@@ -48,7 +48,7 @@ YT_DEFINE_ERROR_ENUM(
     ((NoSuchOperation)                        (200))
     ((InvalidOperationState)                  (201))
     ((TooManyOperations)                      (202))
-    ((NoSuchJob)                              (203))
+    ((NoSuchAllocation)                       (203))
     ((AgentRevoked)                           (204))
     ((OperationFailedOnJobRestart)            (210))
     ((OperationFailedWithInconsistentLocking) (211))
@@ -74,6 +74,8 @@ DEFINE_ENUM(ESchemaInferenceMode,
     (FromOutput)
 );
 
+// NB(eshcherbin): This enum must be synchronized at schedulers ans CAs.
+// If you change it, you must bump the controller agent tracker service protocol version!
 DEFINE_ENUM(EAbortReason,
     ((None)                            (  0))
     ((Scheduler)                       (  1))
@@ -93,7 +95,7 @@ DEFINE_ENUM(EAbortReason,
     ((SpeculativeRunWon)               ( 15))
     ((SpeculativeRunLost)              ( 16))
     ((ChunkMappingInvalidated)         ( 17))
-    ((NodeWithZeroUserSlots)           ( 18))
+    ((NodeWithDisabledJobs)            ( 18))
     ((NodeSchedulingSegmentChanged)    ( 19))
     ((NodeFairShareTreeChanged)        ( 20))
     ((JobOnUnexpectedNode)             ( 21))
@@ -104,9 +106,9 @@ DEFINE_ENUM(EAbortReason,
     ((OperationFailed)                 ( 25))
     ((JobRevivalDisabled)              ( 26))
     ((BannedInTentativeTree)           ( 27))
-    ((Vanished)                        ( 28))
+    ((DisappearedFromNode)             ( 28))
     ((Unconfirmed)                     ( 29))
-    ((Suspended)                       ( 30))
+    ((OperationSuspended)              ( 30))
     ((ProbingRunWon)                   ( 31))
     ((ProbingRunLost)                  ( 32))
     ((ProbingToUnsuccessfulJob)        ( 33))
@@ -128,6 +130,9 @@ DEFINE_ENUM(EAbortReason,
     ((Abandoned)                       ( 49))
     // TODO(ignat): is it actually a scheduling type of abortion?
     ((JobSettlementTimedOut)           ( 50))
+    ((NonexistentPoolTree)             ( 51))
+    ((WrongSchedulingSegmentModule)    ( 52))
+    ((UnresolvedNodeId)                ( 53))
     ((SchedulingFirst)                 (100))
     ((SchedulingTimeout)               (101))
     ((SchedulingResourceOvercommit)    (102))

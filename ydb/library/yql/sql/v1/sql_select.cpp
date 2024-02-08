@@ -1148,20 +1148,8 @@ bool TSqlSelect::ValidateLimitOrderByWithSelectOp(TMaybe<TSelectKindPlacement> p
         // not in select_op chain
         return true;
     }
-    if (!Ctx.AnsiOrderByLimitInUnionAll.Defined()) {
-        if (!placement->IsLastInSelectOp) {
-            Ctx.Warning(Ctx.Pos(), TIssuesIds::YQL_LIMIT_ORDER_BY_WITH_UNION)
-                << what << " will not be allowed here for ANSI compliant UNION ALL.\n"
-                << "For details please consult documentation on PRAGMA AnsiOrderByLimitInUnionAll";
-        } else {
-            Ctx.Warning(Ctx.Pos(), TIssuesIds::YQL_LIMIT_ORDER_BY_WITH_UNION)
-                << what << " will be applied to last subquery in UNION ALL, not to entire UNION ALL.\n"
-                << "For ANSI compliant behavior please use PRAGMA AnsiOrderByLimitInUnionAll";
-        }
-        return true;
-    }
 
-    if (*Ctx.AnsiOrderByLimitInUnionAll && !placement->IsLastInSelectOp) {
+    if (!placement->IsLastInSelectOp) {
         Ctx.Error() << what << " within UNION ALL is only allowed after last subquery";
         return false;
     }
@@ -1169,9 +1157,6 @@ bool TSqlSelect::ValidateLimitOrderByWithSelectOp(TMaybe<TSelectKindPlacement> p
 }
 
 bool TSqlSelect::NeedPassLimitOrderByToUnderlyingSelect(TMaybe<TSelectKindPlacement> placement) {
-    if (!Ctx.AnsiOrderByLimitInUnionAll.Defined() || !*Ctx.AnsiOrderByLimitInUnionAll) {
-        return true;
-    }
     return !placement.Defined() || !placement->IsLastInSelectOp;
 }
 
@@ -1262,24 +1247,16 @@ TSqlSelect::TSelectKindResult TSqlSelect::SelectKind(const TRule_select_kind& no
             res.Settings.Discard = settings.Discard;
         } else if (settings.Discard) {
             auto discardPos = Ctx.TokenPosition(node.GetBlock1().GetToken1());
-            if (Ctx.AnsiOrderByLimitInUnionAll.Defined() && *Ctx.AnsiOrderByLimitInUnionAll) {
-                Ctx.Error(discardPos) << "DISCARD within UNION ALL is only allowed before first subquery";
-                return {};
-            }
-            Ctx.Warning(discardPos, TIssuesIds::YQL_LIMIT_ORDER_BY_WITH_UNION)
-                << "DISCARD will be ignored here. Please use DISCARD before first subquery in UNION ALL if you want to discard entire UNION ALL result";
+            Ctx.Error(discardPos) << "DISCARD within UNION ALL is only allowed before first subquery";
+            return {};
         }
 
         if (placement->IsLastInSelectOp) {
             res.Settings.Label = settings.Label;
         } else if (!settings.Label.Empty()) {
             auto labelPos = Ctx.TokenPosition(node.GetBlock3().GetToken1());
-            if (Ctx.AnsiOrderByLimitInUnionAll.Defined() && *Ctx.AnsiOrderByLimitInUnionAll) {
-                Ctx.Error(labelPos) << "INTO RESULT within UNION ALL is only allowed after last subquery";
-                return {};
-            }
-            Ctx.Warning(labelPos, TIssuesIds::YQL_LIMIT_ORDER_BY_WITH_UNION)
-                << "INTO RESULT will be ignored here. Please use INTO RESULT after last subquery in UNION ALL if you want label entire UNION ALL result";
+            Ctx.Error(labelPos) << "INTO RESULT within UNION ALL is only allowed after last subquery";
+            return {};
         }
 
         settings = {};
@@ -1316,18 +1293,25 @@ TSqlSelect::TSelectKindResult TSqlSelect::SelectKind(const TRule_select_kind_par
 
 template<typename TRule>
 TSourcePtr TSqlSelect::Build(const TRule& node, TPosition pos, TSelectKindResult&& first) {
-    TPosition unionPos = pos; // Position of first select
-    TVector<TSourcePtr> sources;
-    sources.emplace_back(std::move(first.Source));
+    if (node.GetBlock2().empty()) {
+        return std::move(first.Source);
+    }
 
-    TVector<TSortSpecificationPtr> orderBy;
-    TNodePtr skipTake;
-    TWriteSettings settings;
-    settings.Discard = first.Settings.Discard;
-    bool assumeOrderBy = false;
     auto blocks = node.GetBlock2();
+
+    TPosition unionPos = pos; // Position of first select
+    TVector<TSortSpecificationPtr> orderBy;
+    bool assumeOrderBy = false;
+    TNodePtr skipTake;
+    TWriteSettings outermostSettings;
+    outermostSettings.Discard = first.Settings.Discard;
+
+    TVector<TSourcePtr> sources{ std::move(first.Source)};
+    bool currentQuantifier = false;
+
     for (int i = 0; i < blocks.size(); ++i) {
         auto& b = blocks[i];
+        const bool second = (i == 0);
         const bool last = (i + 1 == blocks.size());
         TSelectKindPlacement placement;
         placement.IsLastInSelectOp = last;
@@ -1341,21 +1325,12 @@ TSourcePtr TSqlSelect::Build(const TRule& node, TPosition pos, TSelectKindResult
             orderBy = next.SelectOpOrderBy;
             assumeOrderBy = next.SelectOpAssumeOrderBy;
             skipTake = next.SelectOpSkipTake;
-            settings.Label = next.Settings.Label;
+            outermostSettings.Label = next.Settings.Label;
         }
 
         switch (b.GetRule_select_op1().Alt_case()) {
-            case TRule_select_op::kAltSelectOp1: {
-                const bool isUnionAll = b.GetRule_select_op1().GetAlt_select_op1().HasBlock2();
-                if (!isUnionAll) {
-                    Token(b.GetRule_select_op1().GetAlt_select_op1().GetToken1());
-                    Ctx.Error() << "UNION without quantifier ALL is not supported yet. Did you mean UNION ALL?";
-                    return nullptr;
-                } else {
-                    sources.emplace_back(std::move(next.Source));
-                }
+            case TRule_select_op::kAltSelectOp1:
                 break;
-            }
             case TRule_select_op::kAltSelectOp2:
             case TRule_select_op::kAltSelectOp3:
                 Ctx.Error() << "INTERSECT and EXCEPT are not implemented yet";
@@ -1363,16 +1338,22 @@ TSourcePtr TSqlSelect::Build(const TRule& node, TPosition pos, TSelectKindResult
             case TRule_select_op::ALT_NOT_SET:
                 Y_ABORT("You should change implementation according to grammar changes");
         }
+
+        const bool quantifier = b.GetRule_select_op1().GetAlt_select_op1().HasBlock2();
+
+        if (!second && quantifier != currentQuantifier) {
+            auto source = BuildUnion(pos, std::move(sources), currentQuantifier, {});
+            sources.clear();
+            sources.emplace_back(std::move(source));
+        }
+
+        sources.emplace_back(std::move(next.Source));
+        currentQuantifier = quantifier;
     }
 
-    if (sources.size() == 1) {
-        return std::move(sources[0]);
-    }
+    auto result = BuildUnion(pos, std::move(sources), currentQuantifier, outermostSettings);
 
-    TSourcePtr result;
     if (orderBy) {
-        result = BuildUnionAll(unionPos, std::move(sources), {});
-
         TVector<TNodePtr> groupByExpr;
         TVector<TNodePtr> groupBy;
         bool compactGroupBy = false;
@@ -1389,14 +1370,13 @@ TSourcePtr TSqlSelect::Build(const TRule& node, TPosition pos, TSelectKindResult
 
         result = BuildSelectCore(Ctx, unionPos, std::move(result), groupByExpr, groupBy, compactGroupBy, groupBySuffix,
             assumeOrderBy, orderBy, having, std::move(winSpecs), legacyHoppingWindowSpec, std::move(terms),
-            distinct, std::move(without), stream, settings, {}, {});
-    } else {
-        result = BuildUnionAll(unionPos, std::move(sources), settings);
-    }
+            distinct, std::move(without), stream, outermostSettings, {}, {});
 
-    if (skipTake || orderBy) {
+        result = BuildSelect(unionPos, std::move(result), skipTake);
+    } else if (skipTake) {
         result = BuildSelect(unionPos, std::move(result), skipTake);
     }
+
     return result;
 }
 

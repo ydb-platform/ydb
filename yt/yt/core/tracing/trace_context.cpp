@@ -20,6 +20,8 @@
 
 #include <library/cpp/yt/memory/atomic_intrusive_ptr.h>
 
+#include <library/cpp/yt/misc/tls.h>
+
 #include <atomic>
 #include <mutex>
 
@@ -100,8 +102,8 @@ TTracingConfigPtr GetTracingConfig()
 
 namespace NDetail {
 
-thread_local TTraceContext* CurrentTraceContext;
-thread_local TCpuInstant TraceContextTimingCheckpoint;
+YT_THREAD_LOCAL(TTraceContext*) CurrentTraceContext;
+YT_THREAD_LOCAL(TCpuInstant) TraceContextTimingCheckpoint;
 
 TSpanId GenerateSpanId()
 {
@@ -717,6 +719,12 @@ void FlushCurrentTraceContextElapsedTime()
         NProfiling::CpuDurationToDuration(delta));
     context->IncrementElapsedCpuTime(delta);
     NDetail::TraceContextTimingCheckpoint = now;
+}
+
+bool IsCurrentTraceContextRecorded()
+{
+    auto* context = TryGetCurrentTraceContext();
+    return context && context->IsRecorded();
 }
 
 //! Do not rename, change the signature, or drop Y_NO_INLINE.

@@ -65,6 +65,9 @@ namespace NKikimr::NDataShard {
         absl::flat_hash_set<ui64> WaitingRemovalOperations;
         TStackVec<IVolatileTxCallback::TPtr, 2> Callbacks;
 
+        TVector<THolder<IEventHandle>> DelayedAcks;
+        absl::flat_hash_set<ui64> DelayedConfirmations;
+
         template<class TTag>
         bool IsInList() const {
             using TItem = TIntrusiveListItem<TVolatileTxInfo, TTag>;
@@ -194,6 +197,14 @@ namespace NKikimr::NDataShard {
             return !VolatileTxByVersion.empty() && (*VolatileTxByVersion.begin())->Version <= snapshot;
         }
 
+        TRowVersion GetMinUncertainVersion() const {
+            if (!VolatileTxByVersion.empty()) {
+                return (*VolatileTxByVersion.begin())->Version;
+            } else {
+                return TRowVersion::Max();
+            }
+        }
+
         void PersistAddVolatileTx(
             ui64 txId, const TRowVersion& version,
             TConstArrayRef<ui64> commitTxIds,
@@ -217,8 +228,15 @@ namespace NKikimr::NDataShard {
 
         void AbortWaitingTransaction(TVolatileTxInfo* info);
 
-        void ProcessReadSet(
+        /**
+         * Process incoming readset for a known volatile transaction.
+         *
+         * Returns true when readset should be acknowledged (e.g. because it
+         * was persisted), false when ack is consumed.
+         */
+        bool ProcessReadSet(
             const TEvTxProcessing::TEvReadSet& rs,
+            THolder<IEventHandle>&& ack,
             TTransactionContext& txc);
 
         void ProcessReadSetMissing(

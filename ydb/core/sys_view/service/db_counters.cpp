@@ -4,7 +4,7 @@
 #include <ydb/core/sys_view/common/events.h>
 #include <ydb/core/tx/scheme_cache/scheme_cache.h>
 
-#include <library/cpp/actors/core/log.h>
+#include <ydb/library/actors/core/log.h>
 
 namespace NKikimr {
 namespace NSysView {

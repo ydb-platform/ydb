@@ -2,6 +2,8 @@
 
 #include "public.h"
 
+#include <yt/yt/core/misc/arithmetic_formula.h>
+
 #include <yt/yt/core/yson/consumer.h>
 
 #include <yt/yt/core/ytree/permission.h>
@@ -18,6 +20,7 @@ struct TSerializableAccessControlEntry
     std::vector<TString> Subjects;
     NYTree::EPermissionSet Permissions;
     EAceInheritanceMode InheritanceMode = EAceInheritanceMode::ObjectAndDescendants;
+    TString SubjectTagFilter;
     std::optional<std::vector<TString>> Columns;
     std::optional<bool> Vital;
 
@@ -32,10 +35,9 @@ struct TSerializableAccessControlEntry
 
     // Used only for persistence in operation controller. Does not work with Columns and Vital fields.
     void Persist(const TStreamPersistenceContext& context);
-};
 
-bool operator == (const TSerializableAccessControlEntry& lhs, const TSerializableAccessControlEntry& rhs);
-bool operator != (const TSerializableAccessControlEntry& lhs, const TSerializableAccessControlEntry& rhs);
+    bool operator==(const TSerializableAccessControlEntry& other) const = default;
+};
 
 void Serialize(const TSerializableAccessControlEntry& ace, NYson::IYsonConsumer* consumer);
 void Deserialize(TSerializableAccessControlEntry& ace, NYTree::INodePtr node);
@@ -49,7 +51,6 @@ struct TSerializableAccessControlList
 };
 
 bool operator == (const TSerializableAccessControlList& lhs, const TSerializableAccessControlList& rhs);
-bool operator != (const TSerializableAccessControlList& lhs, const TSerializableAccessControlList& rhs);
 
 void Serialize(const TSerializableAccessControlList& acl, NYson::IYsonConsumer* consumer);
 void Deserialize(TSerializableAccessControlList& acl, NYTree::INodePtr node);

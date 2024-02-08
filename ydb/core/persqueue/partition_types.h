@@ -19,6 +19,7 @@ struct TWriteMsg {
     ui64 Cookie;
     TMaybe<ui64> Offset;
     TEvPQ::TEvWrite::TMsg Msg;
+    std::optional<ui64> InitialSeqNo;
 };
 
 struct TOwnershipMsg {
@@ -120,11 +121,6 @@ struct TMessage {
     #undef DEFINE_CHECKER_GETTER
 };
 
-struct TDataKey {
-    TKey Key;
-    ui32 Size;
-    TInstant Timestamp;
-    ui64 CumulativeSize;
-};
 
-} // namespace NKikimr
+} // namespace NKikimr::NPQ
+

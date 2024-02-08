@@ -1,6 +1,6 @@
 #include "msgbus_servicereq.h"
-#include <library/cpp/actors/core/interconnect.h>
-#include <library/cpp/actors/interconnect/interconnect.h>
+#include <ydb/library/actors/core/interconnect.h>
+#include <ydb/library/actors/interconnect/interconnect.h>
 
 namespace NKikimr {
 namespace NMsgBusProxy {

@@ -7,8 +7,8 @@
 #include <ydb/core/blobstorage/groupinfo/blobstorage_groupinfo.h>
 #include <ydb/core/blobstorage/groupinfo/blobstorage_groupinfo_iter.h>
 #include <ydb/core/protos/node_whiteboard.pb.h>
-#include <library/cpp/actors/interconnect/events_local.h>
-#include <library/cpp/actors/core/interconnect.h>
+#include <ydb/library/actors/interconnect/events_local.h>
+#include <ydb/library/actors/core/interconnect.h>
 #include <ydb/core/base/tracing.h>
 
 namespace NKikimr {
@@ -379,6 +379,20 @@ struct TEvWhiteboard{
             Record.CopyFrom(systemStateInfo);
         }
     };
+
+    static TEvSystemStateUpdate *CreateSharedCacheStatsUpdateRequest(ui64 memUsedBytes, ui64 memLimitBytes) {
+        TEvSystemStateUpdate *request = new TEvSystemStateUpdate();
+        auto *pb = request->Record.MutableSharedCacheStats();
+        pb->SetUsedBytes(memUsedBytes);
+        pb->SetLimitBytes(memLimitBytes);
+        return request;
+    }
+
+    static TEvSystemStateUpdate *CreateTotalSessionsUpdateRequest(ui32 totalSessions) {
+        TEvSystemStateUpdate *request = new TEvSystemStateUpdate();
+        request->Record.SetTotalSessions(totalSessions);
+        return request;
+    }
 
     struct TEvSystemStateAddEndpoint : TEventLocal<TEvSystemStateAddEndpoint, EvSystemStateAddEndpoint> {
         TString Name;

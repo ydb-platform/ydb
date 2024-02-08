@@ -23,7 +23,7 @@ void CheckTimeSlotCorrectness(const TDuration& interval)
 {
     const auto& now = TInstant::Now();
     auto lastTick = TInstant::FromValue((now.GetValue() / interval.GetValue()) * interval.GetValue());
-    YT_VERIFY(now - lastTick <= TDuration::MilliSeconds(10));
+    EXPECT_LE(now - lastTick, TDuration::MilliSeconds(10));
 }
 
 TEST_W(TScheduledExecutorTest, Simple)

@@ -793,6 +793,12 @@ void TTcpConnection::UnsubscribeTerminated(const TCallback<void(const TError&)>&
 
 void TTcpConnection::OnEvent(EPollControl control)
 {
+    auto multiplexingBand = MultiplexingBand_.load();
+    if (multiplexingBand != ActualMultiplexingBand_) {
+        Poller_->SetExecutionPool(this, FormatEnum(multiplexingBand));
+        ActualMultiplexingBand_ = multiplexingBand;
+    }
+
     EPollControl action;
     {
         auto rawPendingControl = PendingControl_.load(std::memory_order::acquire);
@@ -879,7 +885,7 @@ void TTcpConnection::OnEvent(EPollControl control)
         YT_ASSERT(Any(previousPendingControl & EPollControl::Running));
         if (Any(previousPendingControl & ~EPollControl::Running) && None(previousPendingControl & EPollControl::Shutdown)) {
             YT_LOG_TRACE("Retrying event processing for OnEvent (PendingControl: %v)", previousPendingControl);
-            Poller_->Retry(this, false);
+            Poller_->Retry(this);
         }
     }
 }
@@ -915,7 +921,7 @@ void TTcpConnection::OnSocketRead()
                 bytesToRead = std::min(bytesToRead, RemainingSslAckPacketBytes_);
             }
 
-            YT_LOG_TRACE("Reading from socket into decoder (BytesToRead: %v)",bytesToRead);
+            YT_LOG_TRACE("Reading from socket into decoder (BytesToRead: %v)", bytesToRead);
 
             size_t bytesRead;
             if (!ReadSocket(decoderChunk.Begin(), bytesToRead, &bytesRead)) {

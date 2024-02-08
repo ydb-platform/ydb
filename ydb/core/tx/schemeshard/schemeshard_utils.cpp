@@ -549,6 +549,13 @@ bool IsCompatibleKeyTypes(
         Y_ABORT_UNLESS(baseTableColumnTypes.contains(keyName));
         auto typeInfo = baseTableColumnTypes.at(keyName);
 
+        if (typeInfo.GetTypeId() == NScheme::NTypeIds::Uuid) {
+            if (!AppData()->FeatureFlags.GetEnableUuidAsPrimaryKey()) {
+                explain += TStringBuilder() << "Uuid as primary key is forbiden by configuration: " << keyName;
+                return false;
+            }
+        }
+
         if (uniformTable) {
             switch (typeInfo.GetTypeId()) {
             case NScheme::NTypeIds::Uint32:

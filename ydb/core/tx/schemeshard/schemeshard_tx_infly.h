@@ -7,7 +7,7 @@
 
 #include <ydb/core/tx/datashard/datashard.h>
 
-#include <library/cpp/actors/core/actorid.h>
+#include <ydb/library/actors/core/actorid.h>
 #include <util/generic/hash.h>
 #include <util/generic/hash_set.h>
 
@@ -126,6 +126,9 @@ struct TTxState {
         item(TxCreateExternalDataSource, 80) \
         item(TxDropExternalDataSource, 81) \
         item(TxAlterExternalDataSource, 82) \
+        item(TxCreateView, 83) \
+        item(TxAlterView, 84) \
+        item(TxDropView, 85) \
 
     // TX_STATE_TYPE_ENUM
 
@@ -189,6 +192,7 @@ struct TTxState {
         item(DeletePrivateShards, 135, "") \
         item(WaitShadowPathPublication, 136, "") \
         item(DeletePathBarrier, 137, "") \
+        item(SyncHive, 138, "") \
         item(Done, 240, "") \
         item(Aborted, 250, "")
 
@@ -256,6 +260,7 @@ struct TTxState {
     // persist - TxShards:
     TVector<TShardOperation> Shards; // shards + operations on them
     bool NeedUpdateObject = false;
+    bool NeedSyncHive = false;
     // not persist:
     THashSet<TShardIdx> ShardsInProgress; // indexes of datashards or pqs that operation waits for
     THashMap<TShardIdx, std::pair<TActorId, ui32>> SchemeChangeNotificationReceived;
@@ -336,6 +341,7 @@ struct TTxState {
         case TxCreateBlobDepot:
         case TxCreateExternalTable:
         case TxCreateExternalDataSource:
+        case TxCreateView:
             return true;
         case TxInitializeBuildIndex: //this is more like alter
         case TxCreateCdcStreamAtTable:
@@ -368,6 +374,7 @@ struct TTxState {
         case TxUpdateMainTableOnIndexMove:
         case TxDropExternalTable:
         case TxDropExternalDataSource:
+        case TxDropView:
             return false;
         case TxAlterPQGroup:
         case TxAlterTable:
@@ -398,6 +405,7 @@ struct TTxState {
         case TxAlterBlobDepot:
         case TxAlterExternalTable:
         case TxAlterExternalDataSource:
+        case TxAlterView:
             return false;
         case TxMoveTable:
         case TxMoveTableIndex:
@@ -429,6 +437,7 @@ struct TTxState {
         case TxDropBlobDepot:
         case TxDropExternalTable:
         case TxDropExternalDataSource:
+        case TxDropView:
             return true;
         case TxMkDir:
         case TxCreateTable:
@@ -462,6 +471,7 @@ struct TTxState {
         case TxUpdateMainTableOnIndexMove:
         case TxCreateExternalTable:
         case TxCreateExternalDataSource:
+        case TxCreateView:
             return false;
         case TxAlterPQGroup:
         case TxAlterTable:
@@ -492,6 +502,7 @@ struct TTxState {
         case TxAlterBlobDepot:
         case TxAlterExternalTable:
         case TxAlterExternalDataSource:
+        case TxAlterView:
             return false;
         case TxMoveTable:
         case TxMoveTableIndex:
@@ -527,6 +538,7 @@ struct TTxState {
         case TxFinalizeBuildIndex:
         case TxDropExternalTable:
         case TxDropExternalDataSource:
+        case TxDropView:
             return false;
         case TxMkDir:
         case TxCreateTable:
@@ -558,6 +570,7 @@ struct TTxState {
         case TxUpdateMainTableOnIndexMove:
         case TxCreateExternalTable:
         case TxCreateExternalDataSource:
+        case TxCreateView:
             return false;
         case TxAlterPQGroup:
         case TxAlterTable:
@@ -589,6 +602,7 @@ struct TTxState {
         case TxAlterBlobDepot:
         case TxAlterExternalTable:
         case TxAlterExternalDataSource:
+        case TxAlterView:
             return false;
         case TxInvalid:
             Y_DEBUG_ABORT_UNLESS("UNREACHABLE");
@@ -686,6 +700,9 @@ struct TTxState {
             case NKikimrSchemeOp::ESchemeOpAlterExternalTable: return TxAlterExternalTable;
             case NKikimrSchemeOp::ESchemeOpCreateExternalDataSource: return TxCreateExternalDataSource;
             case NKikimrSchemeOp::ESchemeOpAlterExternalDataSource: return TxAlterExternalDataSource;
+            case NKikimrSchemeOp::ESchemeOpCreateView: return TxCreateView;
+            case NKikimrSchemeOp::ESchemeOpAlterView: return TxAlterView;
+            case NKikimrSchemeOp::ESchemeOpDropView: return TxDropView;
             default: return TxInvalid;
         }
     }

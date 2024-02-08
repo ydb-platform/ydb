@@ -9,7 +9,8 @@ namespace NKikimr::NArrow::NConstruction {
 
 class IArrayBuilder {
 private:
-    YDB_READONLY_DEF(TString, FieldName)
+    YDB_READONLY_DEF(TString, FieldName);
+    YDB_ACCESSOR(bool, Nullable, true);
 protected:
     virtual std::shared_ptr<arrow::Array> DoBuildArray(const ui32 recordsCount) const = 0;
 public:
@@ -19,9 +20,10 @@ public:
         return DoBuildArray(recordsCount);
     }
 
-    IArrayBuilder(const TString& fieldName)
-        : FieldName(fieldName) {
-
+    IArrayBuilder(const TString& fieldName, bool nullable = true)
+        : FieldName(fieldName)
+        , Nullable(nullable)
+    {
     }
 };
 
@@ -47,8 +49,15 @@ template <class TFiller>
 class TSimpleArrayConstructor: public IArrayBuilder {
 private:
     using TBase = IArrayBuilder;
+    using TSelf = TSimpleArrayConstructor<TFiller>;
     using TBuilder = typename arrow::TypeTraits<typename TFiller::TValue>::BuilderType;
     const TFiller Filler;
+
+    TSimpleArrayConstructor(const TString& fieldName, bool nullable, const TFiller& filler)
+        : TBase(fieldName, nullable)
+        , Filler(filler)
+    {
+    }
 protected:
     virtual std::shared_ptr<arrow::Array> DoBuildArray(const ui32 recordsCount) const override {
         TBuilder fBuilder = TFillerBuilderConstructor<typename TFiller::TValue>::Construct();
@@ -58,11 +67,17 @@ protected:
         }
         return *fBuilder.Finish();
     }
+
+    
 public:
     TSimpleArrayConstructor(const TString& fieldName, const TFiller& filler = TFiller())
         : TBase(fieldName)
-        , Filler(filler) {
+        , Filler(filler)
+    {
+    }
 
+    static IArrayBuilder::TPtr BuildNotNullable(const TString& fieldName, const TFiller& filler = TFiller()) {
+        return std::shared_ptr<TSelf>(new TSelf(fieldName, false, filler));
     }
 };
 

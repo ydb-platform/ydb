@@ -187,23 +187,6 @@ void TFakeNodeWhiteboardService::Handle(TEvWhiteboard::TEvSystemStateRequest::TP
 
 namespace {
 
-struct TFakeNodeInfo {
-    struct TVDiskIDComparator {
-        bool operator ()(const TVDiskID& a, const TVDiskID& b) const {
-            return std::make_tuple(a.GroupID, a.FailRealm, a.FailDomain, a.VDisk)
-                    < std::make_tuple(b.GroupID, b.FailRealm, b.FailDomain, b.VDisk);
-        }
-    };
-
-    TMap<TTabletId, NKikimrWhiteboard::TTabletStateInfo> TabletStateInfo;
-    TMap<TString, NKikimrWhiteboard::TNodeStateInfo> NodeStateInfo;
-    TMap<ui32, NKikimrWhiteboard::TPDiskStateInfo> PDiskStateInfo;
-    TMap<TVDiskID, NKikimrWhiteboard::TVDiskStateInfo, TVDiskIDComparator> VDiskStateInfo;
-    TMap<ui32, NKikimrWhiteboard::TBSGroupStateInfo> BSGroupStateInfo;
-    NKikimrWhiteboard::TSystemStateInfo SystemStateInfo;
-    bool Connected = true;
-};
-
 class TFakeTenantPool : public TActorBootstrapped<TFakeTenantPool> {
 public:
     TVector<TString> Tenants;
@@ -243,7 +226,6 @@ public:
 void GenerateExtendedInfo(TTestActorRuntime &runtime, NKikimrBlobStorage::TBaseConfig *config,
         ui32 pdisks, ui32 vdiskPerPdisk = 4, const TNodeTenantsMap &tenants = {}, bool useMirror3dcErasure = false)
 {
-    TGuard<TMutex> guard(TFakeNodeWhiteboardService::Mutex);
     ui32 numNodes = runtime.GetNodeCount();
     ui32 numNodeGroups = pdisks * vdiskPerPdisk;
     ui32 numGroups;
@@ -271,14 +253,16 @@ void GenerateExtendedInfo(TTestActorRuntime &runtime, NKikimrBlobStorage::TBaseC
             group.SetErasureSpecies("none");
     }
 
-    TFakeNodeWhiteboardService::Info.clear();
     for (ui32 nodeIndex = 0; nodeIndex < numNodes; ++nodeIndex) {
         ui32 nodeId = runtime.GetNodeId(nodeIndex);
 
-        auto &node = TFakeNodeWhiteboardService::Info[nodeId];
-        node.SystemStateInfo.SetVersion(ToString(GetProgramSvnRevision()));
-        node.SystemStateInfo.SetStartTime(now.GetValue());
-        node.SystemStateInfo.SetChangeTime(now.GetValue());
+        auto ret = TFakeNodeWhiteboardService::Info.emplace(nodeId, TFakeNodeInfo());
+        auto &node = ret.first->second;
+        if (ret.second) {
+            node.SystemStateInfo.SetVersion(ToString(GetProgramSvnRevision()));
+            node.SystemStateInfo.SetStartTime(now.GetValue());
+            node.SystemStateInfo.SetChangeTime(now.GetValue());
+        }
 
         if (tenants.contains(nodeIndex)) {
             node.SystemStateInfo.AddRoles("Tenant");
@@ -311,6 +295,10 @@ void GenerateExtendedInfo(TTestActorRuntime &runtime, NKikimrBlobStorage::TBaseC
             pdiskConfig.SetPath("/pdisk.data");
             pdiskConfig.SetGuid(1);
             pdiskConfig.SetDriveStatus(NKikimrBlobStorage::ACTIVE);
+
+            if (node.VDisksMoved) {
+                continue;
+            }
 
             for (ui8 vdiskIndex = 0; vdiskIndex < vdiskPerPdisk; ++vdiskIndex) {
                 ui32 vdiskId = pdiskIndex * vdiskPerPdisk + vdiskIndex;
@@ -400,9 +388,7 @@ static NKikimrConfig::TBootstrap GenerateBootstrapConfig(TTestActorRuntime &runt
     return res;
 }
 
-static void SetupServices(TTestActorRuntime &runtime,
-                          const TNodeTenantsMap &tenants)
-{
+static void SetupServices(TTestActorRuntime &runtime, const TTestEnvOpts &options) {
     const ui32 domainsNum = 1;
     const ui32 disksInDomain = 1;
 
@@ -491,14 +477,15 @@ static void SetupServices(TTestActorRuntime &runtime,
         runtime.AddLocalService(NNodeWhiteboard::MakeNodeWhiteboardServiceId(runtime.GetNodeId(nodeIndex)),
                                 TActorSetupCmd(CreateFakeNodeWhiteboardService(), TMailboxType::Simple, 0), nodeIndex);
         TVector<TString> nodeTenants;
-        if (tenants.contains(nodeIndex))
-            nodeTenants = tenants.at(nodeIndex);
+        if (options.Tenants.contains(nodeIndex))
+            nodeTenants = options.Tenants.at(nodeIndex);
         runtime.AddLocalService(MakeTenantPoolID(runtime.GetNodeId(nodeIndex)),
                                 TActorSetupCmd(new TFakeTenantPool(nodeTenants), TMailboxType::Simple, 0), nodeIndex);
     }
 
     NKikimrConfig::TAppConfig appConfig;
     appConfig.MutableBootstrapConfig()->CopyFrom(TFakeNodeWhiteboardService::BootstrapConfig);
+    appConfig.MutableFeatureFlags()->SetEnableCMSRequestPriorities(options.EnableCMSRequestPriorities);
     runtime.AddLocalService(MakeConfigsDispatcherID(runtime.GetNodeId(0)),
                             TActorSetupCmd(CreateConfigsDispatcher(appConfig, {}), TMailboxType::Simple, 0), 0);
 
@@ -510,6 +497,10 @@ static void SetupServices(TTestActorRuntime &runtime,
     runtime.GetAppData().DynamicNameserviceConfig = dnsConfig;
     runtime.GetAppData().DisableCheckingSysNodesCms = true;
     runtime.GetAppData().BootstrapConfig = TFakeNodeWhiteboardService::BootstrapConfig;
+
+    NKikimrCms::TCmsConfig cmsConfig;
+    cmsConfig.MutableSentinelConfig()->SetEnable(options.EnableSentinel);
+    runtime.GetAppData().DefaultCmsConfig = MakeHolder<NKikimrCms::TCmsConfig>(cmsConfig);
 
     if (!runtime.IsRealThreads()) {
         TDispatchOptions options;
@@ -533,7 +524,6 @@ static void SetupServices(TTestActorRuntime &runtime,
 TCmsTestEnv::TCmsTestEnv(const TTestEnvOpts &options)
         : TTestBasicRuntime(options.NodeCount, options.DataCenterCount, false)
         , CmsId(MakeCmsID(0))
-        , CmsTabletActor(TActorId())
 {
     TFakeNodeWhiteboardService::Config.MutableResponse()->SetSuccess(true);
     TFakeNodeWhiteboardService::Config.MutableResponse()->ClearStatus();
@@ -543,11 +533,13 @@ TCmsTestEnv::TCmsTestEnv(const TTestEnvOpts &options)
 
     TFakeNodeWhiteboardService::BootstrapConfig = GenerateBootstrapConfig(*this, options.NodeCount, options.Tenants);
 
+    TGuard<TMutex> guard(TFakeNodeWhiteboardService::Mutex);
+    TFakeNodeWhiteboardService::Info.clear();
     GenerateExtendedInfo(*this, config, options.VDisks, 4, options.Tenants, options.UseMirror3dcErasure);
 
-    SetObserverFunc([](
-                                    TAutoPtr<IEventHandle> &event) -> auto {
+    SetObserverFunc([](TAutoPtr<IEventHandle> &event) -> auto {
         if (event->GetTypeRewrite() == TEvBlobStorage::EvControllerConfigRequest
+            || event->Type == TEvBlobStorage::EvControllerConfigRequest
             || event->GetTypeRewrite() == TEvConfigsDispatcher::EvGetConfigRequest) {
             auto fakeId = NNodeWhiteboard::MakeNodeWhiteboardServiceId(event->Recipient.NodeId());
             if (event->Recipient != fakeId)
@@ -555,14 +547,6 @@ TCmsTestEnv::TCmsTestEnv(const TTestEnvOpts &options)
         }
 
         return TTestActorRuntime::EEventAction::PROCESS;
-    });
-
-    SetRegistrationObserverFunc([&CmsTabletActor = CmsTabletActor](TTestActorRuntimeBase& runtime, const TActorId& parentId, const TActorId& actorId) {
-        if (TypeName(*runtime.FindActor(actorId)) == "NKikimr::NCms::TCms") {
-            CmsTabletActor = actorId;
-        }
-
-        runtime.DefaultRegistrationObserver(runtime, parentId, actorId);
     });
 
     using namespace NMalloc;
@@ -577,7 +561,7 @@ TCmsTestEnv::TCmsTestEnv(const TTestEnvOpts &options)
             SetupStateStorage(*this, nodeIndex);
         }
     }
-    SetupServices(*this, options.Tenants);
+    SetupServices(*this, options);
 
     Sender = AllocateEdgeActor();
     ClientId = TActorId();
@@ -585,6 +569,7 @@ TCmsTestEnv::TCmsTestEnv(const TTestEnvOpts &options)
     NKikimrCms::TCmsConfig cmsConfig;
     cmsConfig.MutableTenantLimits()->SetDisabledNodesRatioLimit(0);
     cmsConfig.MutableClusterLimits()->SetDisabledNodesRatioLimit(0);
+    cmsConfig.MutableSentinelConfig()->SetEnable(options.EnableSentinel);
     SetCmsConfig(cmsConfig);
 
     // Need to allow restart state storage nodes
@@ -1172,6 +1157,12 @@ void TCmsTestEnv::AddBSCFailures(const NCms::TPDiskID& id, TVector<bool> &&failu
 void TCmsTestEnv::EnableNoisyBSCPipe() {
     TGuard<TMutex> guard(TFakeNodeWhiteboardService::Mutex);
     TFakeNodeWhiteboardService::NoisyBSCPipe = true;
+}
+
+void TCmsTestEnv::RegenerateBSConfig(NKikimrBlobStorage::TBaseConfig *config, const TTestEnvOpts &opts) {
+    TGuard<TMutex> guard(TFakeNodeWhiteboardService::Mutex);
+    config->Clear();
+    GenerateExtendedInfo(*this, config, opts.VDisks, 4, opts.Tenants, opts.UseMirror3dcErasure);
 }
 
 } // namespace NCmsTest

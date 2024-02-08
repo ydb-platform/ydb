@@ -10,20 +10,14 @@
 #define _LIBCPP___COMPARE_ORDERING_H
 
 #include <__config>
-#include <type_traits>
+#include <__type_traits/enable_if.h>
+#include <__type_traits/is_same.h>
 
 #if !defined(_LIBCPP_HAS_NO_PRAGMA_SYSTEM_HEADER)
 #  pragma GCC system_header
 #endif
 
-#if defined(_MSC_VER) && !defined(__clang__)
-// Omit inline namespace __y1, as MSVC2019 fails to find ordering classes
-// inside the inlined namespace when compiling the <=> operators.
-// See CROWDFUNDING-6 for the details.
-namespace std {
-#else
 _LIBCPP_BEGIN_NAMESPACE_STD
-#endif
 
 #if _LIBCPP_STD_VER > 17
 
@@ -319,12 +313,14 @@ inline constexpr strong_ordering strong_ordering::equal(_OrdResult::__equiv);
 inline constexpr strong_ordering strong_ordering::equivalent(_OrdResult::__equiv);
 inline constexpr strong_ordering strong_ordering::greater(_OrdResult::__greater);
 
+/// [cmp.categories.pre]/1
+/// The types partial_ordering, weak_ordering, and strong_ordering are
+/// collectively termed the comparison category types.
+template <class _Tp>
+concept __comparison_category = __one_of_v<_Tp, partial_ordering, weak_ordering, strong_ordering>;
+
 #endif // _LIBCPP_STD_VER > 17
 
-#if defined(_MSC_VER) && !defined(__clang__)
-}
-#else
 _LIBCPP_END_NAMESPACE_STD
-#endif
 
 #endif // _LIBCPP___COMPARE_ORDERING_H

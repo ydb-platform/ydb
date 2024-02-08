@@ -13,7 +13,7 @@ target_link_libraries(core-tx-time_cast PUBLIC
   contrib-libs-linux-headers
   contrib-libs-cxxsupp
   yutil
-  cpp-actors-core
+  library-actors-core
   ydb-core-base
   ydb-core-protos
   ydb-core-tablet

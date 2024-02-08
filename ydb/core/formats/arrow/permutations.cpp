@@ -1,46 +1,46 @@
 #include "arrow_helpers.h"
 #include "permutations.h"
 #include "replace_key.h"
+#include "size_calcer.h"
+#include "hash/calcer.h"
+
 #include <ydb/core/formats/arrow/common/validation.h>
+#include <ydb/library/services/services.pb.h>
+
+#include <ydb/library/actors/core/log.h>
+
 #include <contrib/libs/apache/arrow/cpp/src/arrow/array/builder_primitive.h>
+#include <contrib/libs/xxhash/xxhash.h>
 
 namespace NKikimr::NArrow {
 
 std::shared_ptr<arrow::UInt64Array> MakePermutation(const int size, const bool reverse) {
-    if (size < 1) {
-        return {};
-    }
-
     arrow::UInt64Builder builder;
-    if (!builder.Reserve(size).ok()) {
-        return {};
-    }
+    TStatusValidator::Validate(builder.Reserve(size));
 
-    if (reverse) {
-        ui64 value = size - 1;
-        for (i64 i = 0; i < size; ++i, --value) {
-            if (!builder.Append(value).ok()) {
-                return {};
+    if (size) {
+        if (reverse) {
+            ui64 value = size - 1;
+            for (i64 i = 0; i < size; ++i, --value) {
+                TStatusValidator::Validate(builder.Append(value));
             }
-        }
-    } else {
-        for (i64 i = 0; i < size; ++i) {
-            if (!builder.Append(i).ok()) {
-                return {};
+        } else {
+            for (i64 i = 0; i < size; ++i) {
+                TStatusValidator::Validate(builder.Append(i));
             }
         }
     }
 
     std::shared_ptr<arrow::UInt64Array> out;
-    if (!builder.Finish(&out).ok()) {
-        return {};
-    }
+    TStatusValidator::Validate(builder.Finish(&out));
     return out;
 }
 
-std::shared_ptr<arrow::UInt64Array> MakeSortPermutation(const std::shared_ptr<arrow::RecordBatch>& batch,
-                                                        const std::shared_ptr<arrow::Schema>& sortingKey, const bool andUnique) {
-    auto keyBatch = ExtractColumns(batch, sortingKey);
+std::shared_ptr<arrow::UInt64Array> MakeSortPermutation(const std::shared_ptr<arrow::RecordBatch>& batch, const std::shared_ptr<arrow::Schema>& sortingKey, const bool andUnique) {
+    auto keyBatch = ExtractColumns(batch, sortingKey, false);
+    AFL_VERIFY(batch);
+    AFL_VERIFY(sortingKey);
+    AFL_VERIFY(!!keyBatch)("problem", "cannot_find_columns")("schema", batch->schema()->ToString())("columns", sortingKey->ToString());
     auto keyColumns = std::make_shared<TArrayVec>(keyBatch->columns());
     std::vector<TRawReplaceKey> points;
     points.reserve(keyBatch->num_rows());
@@ -102,7 +102,8 @@ std::shared_ptr<arrow::UInt64Array> MakeSortPermutation(const std::shared_ptr<ar
     return out;
 }
 
-std::shared_ptr<arrow::UInt64Array> MakeFilterPermutation(const std::vector<ui64>& indexes) {
+template <class TIndex>
+std::shared_ptr<arrow::UInt64Array> MakeFilterPermutationImpl(const std::vector<TIndex>& indexes) {
     if (indexes.empty()) {
         return {};
     }
@@ -118,6 +119,14 @@ std::shared_ptr<arrow::UInt64Array> MakeFilterPermutation(const std::vector<ui64
     std::shared_ptr<arrow::UInt64Array> out;
     TStatusValidator::Validate(builder.Finish(&out));
     return out;
+}
+
+std::shared_ptr<arrow::UInt64Array> MakeFilterPermutation(const std::vector<ui32>& indexes) {
+    return MakeFilterPermutationImpl(indexes);
+}
+
+std::shared_ptr<arrow::UInt64Array> MakeFilterPermutation(const std::vector<ui64>& indexes) {
+    return MakeFilterPermutationImpl(indexes);
 }
 
 std::shared_ptr<arrow::RecordBatch> CopyRecords(const std::shared_ptr<arrow::RecordBatch>& source, const std::vector<ui64>& indexes) {
@@ -148,6 +157,7 @@ std::shared_ptr<arrow::Array> CopyRecords(const std::shared_ptr<arrow::Array>& s
         if constexpr (arrow::has_string_view<typename TWrap::T>::value) {
             ui64 sumByIndexes = 0;
             for (auto&& idx : indexes) {
+                Y_ABORT_UNLESS(idx < (ui64)column.length());
                 sumByIndexes += column.GetView(idx).size();
             }
             TStatusValidator::Validate(builderImpl.ReserveData(sumByIndexes));
@@ -168,6 +178,108 @@ std::shared_ptr<arrow::Array> CopyRecords(const std::shared_ptr<arrow::Array>& s
     });
     Y_ABORT_UNLESS(result);
     return result;
+}
+
+bool THashConstructor::BuildHashUI64(std::shared_ptr<arrow::RecordBatch>& batch, const std::vector<std::string>& fieldNames, const std::string& hashFieldName) {
+    if (fieldNames.size() == 0) {
+        return false;
+    }
+    Y_ABORT_UNLESS(!batch->GetColumnByName(hashFieldName));
+    if (fieldNames.size() == 1) {
+        auto column = batch->GetColumnByName(fieldNames.front());
+        if (!column) {
+            AFL_WARN(NKikimrServices::ARROW_HELPER)("event", "cannot_build_hash")("reason", "field_not_found")("field_name", fieldNames.front());
+            return false;
+        }
+        Y_ABORT_UNLESS(column);
+        if (column->type()->id() == arrow::Type::UINT64 || column->type()->id() == arrow::Type::UINT32 || column->type()->id() == arrow::Type::INT64 || column->type()->id() == arrow::Type::INT32) {
+            batch = TStatusValidator::GetValid(batch->AddColumn(batch->num_columns(), hashFieldName, column));
+            return true;
+        }
+    }
+    std::shared_ptr<arrow::Array> hashColumn = NArrow::NHash::TXX64(fieldNames, NArrow::NHash::TXX64::ENoColumnPolicy::Verify, 34323543).ExecuteToArray(batch, hashFieldName);
+    batch = TStatusValidator::GetValid(batch->AddColumn(batch->num_columns(), hashFieldName, hashColumn));
+    return true;
+}
+
+ui64 TShardedRecordBatch::GetMemorySize() const {
+    return NArrow::GetBatchMemorySize(RecordBatch);
+}
+
+TShardedRecordBatch::TShardedRecordBatch(const std::shared_ptr<arrow::RecordBatch>& batch)
+    : RecordBatch(batch)
+{
+    AFL_VERIFY(RecordBatch);
+}
+
+TShardedRecordBatch::TShardedRecordBatch(const std::shared_ptr<arrow::RecordBatch>& batch, std::vector<std::vector<ui32>>&& splittedByShards)
+    : RecordBatch(batch)
+    , SplittedByShards(std::move(splittedByShards))
+{
+    AFL_VERIFY(RecordBatch);
+    AFL_VERIFY(SplittedByShards.size());
+}
+
+std::vector<std::shared_ptr<arrow::RecordBatch>> TShardingSplitIndex::Apply(const std::shared_ptr<arrow::RecordBatch>& input) {
+    AFL_VERIFY(input);
+    AFL_VERIFY(input->num_rows() == RecordsCount);
+    auto permutation = BuildPermutation();
+    auto resultBatch = NArrow::TStatusValidator::GetValid(arrow::compute::Take(input, *permutation)).record_batch();
+    AFL_VERIFY(resultBatch->num_rows() == RecordsCount);
+    std::vector<std::shared_ptr<arrow::RecordBatch>> result;
+    ui64 startIndex = 0;
+    for (auto&& i : Remapping) {
+        result.emplace_back(resultBatch->Slice(startIndex, i.size()));
+        startIndex += i.size();
+    }
+    AFL_VERIFY(startIndex == RecordsCount);
+    return result;
+}
+
+NKikimr::NArrow::TShardedRecordBatch TShardingSplitIndex::Apply(const ui32 shardsCount, const std::shared_ptr<arrow::RecordBatch>& input, const std::string& hashColumnName) {
+    AFL_VERIFY(input);
+    if (shardsCount == 1) {
+        return TShardedRecordBatch(input);
+    }
+    auto hashColumn = input->GetColumnByName(hashColumnName);
+    if (!hashColumn) {
+        return TShardedRecordBatch(input);
+    }
+    std::optional<TShardingSplitIndex> splitter;
+    if (hashColumn->type()->id() == arrow::Type::UINT64) {
+        splitter = TShardingSplitIndex::Build<arrow::UInt64Array>(shardsCount, *hashColumn);
+    } else if (hashColumn->type()->id() == arrow::Type::UINT32) {
+        splitter = TShardingSplitIndex::Build<arrow::UInt32Array>(shardsCount, *hashColumn);
+    } else if (hashColumn->type()->id() == arrow::Type::INT64) {
+        splitter = TShardingSplitIndex::Build<arrow::Int64Array>(shardsCount, *hashColumn);
+    } else if (hashColumn->type()->id() == arrow::Type::INT32) {
+        splitter = TShardingSplitIndex::Build<arrow::Int32Array>(shardsCount, *hashColumn);
+    } else {
+        Y_ABORT_UNLESS(false);
+    }
+    auto resultBatch = NArrow::TStatusValidator::GetValid(input->RemoveColumn(input->schema()->GetFieldIndex(hashColumnName)));
+    return TShardedRecordBatch(resultBatch, splitter->DetachRemapping());
+}
+
+std::shared_ptr<arrow::UInt64Array> TShardingSplitIndex::BuildPermutation() const {
+    arrow::UInt64Builder builder;
+    Y_ABORT_UNLESS(builder.Reserve(RecordsCount).ok());
+
+    for (auto&& i : Remapping) {
+        for (auto&& idx : i) {
+            TStatusValidator::Validate(builder.Append(idx));
+        }
+    }
+
+    std::shared_ptr<arrow::UInt64Array> out;
+    Y_ABORT_UNLESS(builder.Finish(&out).ok());
+    return out;
+}
+
+std::shared_ptr<arrow::RecordBatch> ReverseRecords(const std::shared_ptr<arrow::RecordBatch>& batch) {
+    AFL_VERIFY(batch);
+    auto permutation = NArrow::MakePermutation(batch->num_rows(), true);
+    return NArrow::TStatusValidator::GetValid(arrow::compute::Take(batch, permutation)).record_batch();
 }
 
 }

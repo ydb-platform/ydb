@@ -39,7 +39,7 @@ protected:
     TString ExternalQueriesDir;
     TString ExternalResultsDir;
     TString ExternalVariablesString;
-    TString QueryExecutorType;
+    TString QueryExecuterType;
 
     TMap<ui32, TString> LoadExternalResults() const;
 public:

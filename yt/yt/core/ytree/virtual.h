@@ -31,7 +31,7 @@ protected:
     void GetSelf(TReqGet* request, TRspGet* response, const TCtxGetPtr& context) override;
     void ListSelf(TReqList* request, TRspList* response, const TCtxListPtr& context) override;
     void RemoveRecursive(
-        const TYPath &path,
+        const TYPath& path,
         TReqRemove* request,
         TRspRemove* response,
         const TCtxRemovePtr& context) override;

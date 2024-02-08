@@ -2,7 +2,7 @@
 #include <ydb/services/metadata/request/config.h>
 #include <ydb/services/bg_tasks/abstract/task.h>
 
-#include <library/cpp/actors/core/actor.h>
+#include <ydb/library/actors/core/actor.h>
 
 namespace NKikimr::NBackgroundTasks {
 

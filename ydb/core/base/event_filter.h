@@ -1,6 +1,6 @@
 #pragma once
 
-#include <library/cpp/actors/interconnect/interconnect_common.h>
+#include <ydb/library/actors/interconnect/interconnect_common.h>
 
 
 namespace NKikimr {

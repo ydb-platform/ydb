@@ -6,7 +6,7 @@
 
 #include <library/cpp/protobuf/json/json2proto.h>
 
-namespace NYamlConfig {
+namespace NKikimr::NYamlConfig {
 
 NKikimrConfig::TAppConfig YamlToProto(
     const NFyaml::TNodeRef& node,
@@ -114,4 +114,4 @@ void ReplaceUnmanagedKinds(const NKikimrConfig::TAppConfig& from, NKikimrConfig:
     }
 }
 
-} // namespace NYamlConfig
+} // namespace NKikimr::NYamlConfig

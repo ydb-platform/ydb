@@ -2,6 +2,7 @@
 #include "meta.h"
 #include <ydb/core/tx/columnshard/blob.h>
 #include <ydb/core/tx/columnshard/engines/defs.h>
+#include <ydb/core/tx/columnshard/common/snapshot.h>
 #include <ydb/core/protos/tx_columnshard.pb.h>
 
 namespace NKikimr::NOlap {
@@ -130,6 +131,10 @@ private:
     YDB_READONLY_DEF(std::optional<NArrow::TReplaceKey>, First);
     YDB_READONLY_DEF(std::optional<NArrow::TReplaceKey>, Last);
 public:
+    ui64 GetSize() const {
+        return BlobRange.Size;
+    }
+
     const NArrow::TReplaceKey& GetFirstVerified() const {
         Y_ABORT_UNLESS(First);
         return *First;

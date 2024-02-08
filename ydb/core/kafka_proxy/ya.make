@@ -11,8 +11,15 @@ SRCS(
     actors/kafka_list_offsets_actor.cpp
     actors/kafka_topic_offsets_actor.cpp
     actors/kafka_fetch_actor.cpp
+    actors/kafka_find_coordinator_actor.cpp
+    actors/kafka_read_session_actor.cpp
+    actors/kafka_offset_fetch_actor.cpp
+    actors/kafka_offset_commit_actor.cpp
+    actors/kafka_create_topics_actor.cpp
+    actors/kafka_create_partitions_actor.cpp
     kafka_connection.cpp
     kafka_connection.h
+    kafka_constants.h
     kafka_listener.h
     kafka.h
     kafka_log.h
@@ -23,14 +30,15 @@ SRCS(
     kafka_messages_int.h
     kafka_proxy.h
     kafka_records.cpp
+    kafka_consumer_protocol.cpp
     kafka_metrics.cpp
 )
 
 GENERATE_ENUM_SERIALIZATION(kafka.h)
 
 PEERDIR(
-    library/cpp/actors/core
-    library/cpp/actors/protos
+    ydb/library/actors/core
+    ydb/library/actors/protos
     ydb/core/base
     ydb/core/protos
     ydb/core/raw_socket

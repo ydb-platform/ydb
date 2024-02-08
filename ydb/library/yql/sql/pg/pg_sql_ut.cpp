@@ -5,10 +5,18 @@
 using namespace NSQLTranslation;
 
 Y_UNIT_TEST_SUITE(PgSqlParsingOnly) {
+    Y_UNIT_TEST(Locking) {
+        auto res = PgSqlToYql("SELECT 1 FROM plato.Input FOR UPDATE");
+        UNIT_ASSERT(res.Root);
+        UNIT_ASSERT_EQUAL(res.Issues.Size(), 1);
+
+        auto issue = *(res.Issues.begin());
+        UNIT_ASSERT(issue.GetMessage().find("locking") != TString::npos);
+    }
+
     Y_UNIT_TEST(InsertStmt) {
         auto res = PgSqlToYql("INSERT INTO plato.Input VALUES (1, 1)");
         UNIT_ASSERT(res.Root);
-        res.Root->PrintTo(Cerr);
     }
 
     Y_UNIT_TEST(InsertStmt_DefaultValues) {
@@ -94,7 +102,7 @@ Y_UNIT_TEST_SUITE(PgSqlParsingOnly) {
         TString program = R"(
         (
             (let world (Configure! world (DataSource 'config) 'OrderedColumns))
-            (let world (Write! world (DataSink '"kikimr" '"") (Key '('tablescheme (String '"t"))) (Void) '('('mode 'create) '('columns '('('a (PgType 'int4)) '('b (PgType 'text)))))))
+            (let world (Write! world (DataSink '"kikimr" '"") (Key '('tablescheme (String '"t"))) (Void) '('('mode 'create) '('columns '('('a (PgType 'int4) '('columnConstraints '())) '('b (PgType 'text) '('columnConstraints '())))))))
             (let world (CommitAll! world))
             (return world)
         )
@@ -110,7 +118,7 @@ Y_UNIT_TEST_SUITE(PgSqlParsingOnly) {
         TString program = R"(
         (
             (let world (Configure! world (DataSource 'config) 'OrderedColumns))
-            (let world (Write! world (DataSink '"kikimr" '"") (Key '('tablescheme (String '"t"))) (Void) '('('mode 'create) '('columns '('('a (PgType 'int4)) '('b (PgType 'text)))) '('notnull '('a)))))
+            (let world (Write! world (DataSink '"kikimr" '"") (Key '('tablescheme (String '"t"))) (Void) '('('mode 'create) '('columns '('('a (PgType 'int4) '('columnConstraints '('('not_null)))) '('b (PgType 'text) '('columnConstraints '())))))))
             (let world (CommitAll! world))
             (return world)
         )
@@ -126,7 +134,7 @@ Y_UNIT_TEST_SUITE(PgSqlParsingOnly) {
         TString program = R"(
         (
             (let world (Configure! world (DataSource 'config) 'OrderedColumns))
-            (let world (Write! world (DataSink '"kikimr" '"") (Key '('tablescheme (String '"t"))) (Void) '('('mode 'create) '('columns '('('a (PgType 'int4)) '('b (PgType 'text)))) '('primarykey '('a)) '('notnull '('a)))))
+            (let world (Write! world (DataSink '"kikimr" '"") (Key '('tablescheme (String '"t"))) (Void) '('('mode 'create) '('columns '('('a (PgType 'int4) '('columnConstraints '('('not_null)))) '('b (PgType 'text) '('columnConstraints '())))) '('primarykey '('a)))))
             (let world (CommitAll! world))
             (return world)
         )
@@ -135,6 +143,22 @@ Y_UNIT_TEST_SUITE(PgSqlParsingOnly) {
         UNIT_ASSERT_STRINGS_EQUAL(res.Root->ToString(), expectedAst.Root->ToString());
     }
 
+    Y_UNIT_TEST(CreateTableStmt_Default) {
+        auto res = PgSqlToYql("CREATE TABLE t (a int PRIMARY KEY, b int DEFAULT 0)");
+        UNIT_ASSERT(res.Root);
+
+        TString program = R"(
+        (
+            (let world (Configure! world (DataSource 'config) 'OrderedColumns))
+            (let world (Write! world (DataSink '"kikimr" '"") (Key '('tablescheme (String '"t"))) (Void) '('('mode 'create) '('columns '('('a (PgType 'int4) '('columnConstraints '('('not_null)))) '('b (PgType 'int4) '('columnConstraints '('('default (PgConst '0 (PgType 'int4)))))))) '('primarykey '('a)))))
+            (let world (CommitAll! world))
+            (return world)
+        )
+        )";
+        const auto expectedAst = NYql::ParseAst(program);
+        UNIT_ASSERT_STRINGS_EQUAL(res.Root->ToString(), expectedAst.Root->ToString());
+    }    
+
     Y_UNIT_TEST(CreateTableStmt_PKAndNotNull) {
         auto res = PgSqlToYql("CREATE TABLE t (a int PRIMARY KEY NOT NULL, b text)");
         UNIT_ASSERT(res.Root);
@@ -142,7 +166,7 @@ Y_UNIT_TEST_SUITE(PgSqlParsingOnly) {
         TString program = R"(
         (
             (let world (Configure! world (DataSource 'config) 'OrderedColumns))
-            (let world (Write! world (DataSink '"kikimr" '"") (Key '('tablescheme (String '"t"))) (Void) '('('mode 'create) '('columns '('('a (PgType 'int4)) '('b (PgType 'text)))) '('primarykey '('a)) '('notnull '('a)))))
+            (let world (Write! world (DataSink '"kikimr" '"") (Key '('tablescheme (String '"t"))) (Void) '('('mode 'create) '('columns '('('a (PgType 'int4) '('columnConstraints '('('not_null)))) '('b (PgType 'text) '('columnConstraints '())))) '('primarykey '('a)))))
             (let world (CommitAll! world))
             (return world)
         )
@@ -158,7 +182,7 @@ Y_UNIT_TEST_SUITE(PgSqlParsingOnly) {
         TString program = R"(
         (
             (let world (Configure! world (DataSource 'config) 'OrderedColumns))
-            (let world (Write! world (DataSink '"kikimr" '"") (Key '('tablescheme (String '"t"))) (Void) '('('mode 'create) '('columns '('('a (PgType 'int4)) '('b (PgType 'text)))) '('primarykey '('a)) '('notnull '('a 'b)))))
+            (let world (Write! world (DataSink '"kikimr" '"") (Key '('tablescheme (String '"t"))) (Void) '('('mode 'create) '('columns '('('a (PgType 'int4) '('columnConstraints '('('not_null)))) '('b (PgType 'text) '('columnConstraints '('('not_null)))))) '('primarykey '('a)))))
             (let world (CommitAll! world))
             (return world)
         )
@@ -174,7 +198,7 @@ Y_UNIT_TEST_SUITE(PgSqlParsingOnly) {
         TString program = R"(
         (
             (let world (Configure! world (DataSource 'config) 'OrderedColumns))
-            (let world (Write! world (DataSink '"kikimr" '"") (Key '('tablescheme (String '"t"))) (Void) '('('mode 'create) '('columns '('('a (PgType 'int4)) '('b (PgType 'text)))) '('primarykey '('a 'b)) '('notnull '('b 'a)))))
+            (let world (Write! world (DataSink '"kikimr" '"") (Key '('tablescheme (String '"t"))) (Void) '('('mode 'create) '('columns '('('a (PgType 'int4) '('columnConstraints '('('not_null)))) '('b (PgType 'text) '('columnConstraints '('('not_null)))))) '('primarykey '('a 'b)))))
             (let world (CommitAll! world))
             (return world)
         )
@@ -208,7 +232,7 @@ Y_UNIT_TEST_SUITE(PgSqlParsingOnly) {
         TString program = R"(
             (
                 (let world (Configure! world (DataSource 'config) 'OrderedColumns))
-                (let world (Write! world (DataSink '"kikimr" '"") (Key '('tablescheme (String '"t"))) (Void) '('('mode 'create) '('columns '('('a (PgType 'int4)))) '('serialColumns '('a)))))
+                (let world (Write! world (DataSink '"kikimr" '"") (Key '('tablescheme (String '"t"))) (Void) '('('mode 'create) '('columns '('('a (PgType 'int4) '('columnConstraints '('('serial)))))))))
                 (let world (CommitAll! world))
                 (return world))
         )";
@@ -361,17 +385,26 @@ Y_UNIT_TEST_SUITE(PgSqlParsingOnly) {
     }
 
     Y_UNIT_TEST(DropTableUnknownClusterStmt) {
-        auto res = PgSqlToYql("drop table if exists public.t");
+        auto res = PgSqlToYql("drop table if exists pub.t");
         UNIT_ASSERT(!res.IsOk());
         UNIT_ASSERT_EQUAL(res.Issues.Size(), 1);
 
         auto issue = *(res.Issues.begin());
-        UNIT_ASSERT_C(issue.GetMessage().find("Unknown cluster: public") != TString::npos, res.Issues.ToString());
+        UNIT_ASSERT_C(issue.GetMessage().find("Unknown cluster: pub") != TString::npos, res.Issues.ToString());
+    }
+
+    Y_UNIT_TEST(PublicSchemeRemove) {
+        auto res = PgSqlToYql("DROP TABLE IF EXISTS public.t; CREATE TABLE public.t(id INT PRIMARY KEY, foo INT);\
+INSERT INTO public.t VALUES(1, 2);\
+UPDATE public.t SET foo = 3 WHERE id == 1;\
+DELETE FROM public.t WHERE id == 1;\
+SELECT COUNT(*) FROM public.t;");
+        UNIT_ASSERT(res.IsOk());
+        UNIT_ASSERT(res.Root->ToString().find("public") == TString::npos);
     }
 
     Y_UNIT_TEST(UpdateStmt) {
         auto res = PgSqlToYql("UPDATE plato.Input SET kind = 'test' where kind = 'testtest'");
-        Cerr << res.Root->ToString();
         TString updateStmtProg = R"(
             (
                 (let world (Configure! world (DataSource 'config) 'OrderedColumns))
@@ -401,5 +434,143 @@ Y_UNIT_TEST_SUITE(PgSqlParsingOnly) {
         UNIT_ASSERT_C(res.Issues.Empty(), "Failed to parse statement, issues: " + res.Issues.ToString());
         UNIT_ASSERT_C(res.Root, "Failed to parse statement, root is nullptr");
         UNIT_ASSERT_STRINGS_EQUAL(res.Root->ToString(), expectedAst.Root->ToString());
+    }
+
+    Y_UNIT_TEST(BlockEngine) {
+        auto res = PgSqlToYql("set blockEngine='auto'; select 1;");
+        UNIT_ASSERT(res.Root);
+        UNIT_ASSERT_STRING_CONTAINS(res.Root->ToString(), "(let world (Configure! world (DataSource 'config) 'BlockEngine 'auto))");
+
+        res = PgSqlToYql("set Blockengine='force'; select 1;");
+        UNIT_ASSERT(res.Root);
+        UNIT_ASSERT_STRING_CONTAINS(res.Root->ToString(), "(let world (Configure! world (DataSource 'config) 'BlockEngine 'force))");
+
+        res = PgSqlToYql("set BlockEngine='disable'; select 1;");
+        UNIT_ASSERT(res.Root);
+        UNIT_ASSERT(!res.Root->ToString().Contains("BlockEngine"));
+
+        res = PgSqlToYql("set BlockEngine='foo'; select 1;");
+        UNIT_ASSERT(!res.Root);
+        UNIT_ASSERT_EQUAL(res.Issues.Size(), 1);
+
+        auto issue = *(res.Issues.begin());
+        UNIT_ASSERT(issue.GetMessage().Contains("VariableSetStmt, not supported BlockEngine option value: foo"));
+    }
+
+    Y_UNIT_TEST(SetConfig_SearchPath) {
+        TTranslationSettings settings;
+        settings.GUCSettings = std::make_shared<TGUCSettings>();
+        settings.ClusterMapping["pg_catalog"] = NYql::PgProviderName;
+        settings.DefaultCluster = "";
+
+        auto res = SqlToYqlWithMode(
+            R"(select set_config('search_path', 'pg_catalog', false);)",
+            NSQLTranslation::ESqlMode::QUERY,
+            10,
+            {},
+            EDebugOutput::ToCerr,
+            false,
+            settings);
+        UNIT_ASSERT_C(res.IsOk(), res.Issues.ToString());
+        UNIT_ASSERT(res.Root);
+        
+        res = SqlToYqlWithMode(
+            R"(select oid,
+typinput::int4 as typinput,
+typname,
+typnamespace,
+typtype
+from pg_type)",
+            NSQLTranslation::ESqlMode::QUERY,
+            10,
+            {},
+            EDebugOutput::None,
+            false,
+            settings);
+        UNIT_ASSERT(res.IsOk());
+        UNIT_ASSERT(res.Root);
+
+        res = SqlToYqlWithMode(
+            R"(select oid,
+typinput::int4 as typinput,
+typname,
+typnamespace,
+typtype
+from pg_catalog.pg_type)",
+            NSQLTranslation::ESqlMode::QUERY,
+            10,
+            {},
+            EDebugOutput::None,
+            false,
+            settings);
+        UNIT_ASSERT(res.IsOk());
+        UNIT_ASSERT(res.Root);
+        
+        res = SqlToYqlWithMode(
+            R"(select set_config('search_path', 'public', false);)",
+            NSQLTranslation::ESqlMode::QUERY,
+            10,
+            {},
+            EDebugOutput::None,
+            false,
+            settings);
+        UNIT_ASSERT(res.IsOk());
+        UNIT_ASSERT(res.Root);
+
+        res = SqlToYqlWithMode(
+            R"(select set_config('search_path', 'yql', false);)",
+            NSQLTranslation::ESqlMode::QUERY,
+            10,
+            {},
+            EDebugOutput::None,
+            false,
+            settings);
+        UNIT_ASSERT(!res.IsOk());
+        UNIT_ASSERT(!res.Root);
+
+        res = SqlToYqlWithMode(
+            R"(select set_config('search_path', 'pg_catalog', false);)",
+            NSQLTranslation::ESqlMode::QUERY,
+            10,
+            {},
+            EDebugOutput::None,
+            false,
+            settings);
+        UNIT_ASSERT(res.IsOk());
+        UNIT_ASSERT(res.Root);
+
+        res = SqlToYqlWithMode(
+            R"(rollback;)",
+            NSQLTranslation::ESqlMode::QUERY,
+            10,
+            {},
+            EDebugOutput::None,
+            false,
+            settings);
+        UNIT_ASSERT(res.IsOk());
+        UNIT_ASSERT(res.Root);
+
+        google::protobuf::Arena arena;
+        const auto service = TString(NYql::YtProviderName);
+        settings.ClusterMapping["hahn"] = NYql::YtProviderName;
+        settings.ClusterMapping["mon"] = NYql::SolomonProviderName;
+        settings.MaxErrors = 10;
+        settings.Mode = NSQLTranslation::ESqlMode::QUERY;
+        settings.Arena = &arena;
+        settings.AnsiLexer = false;
+        settings.SyntaxVersion = 1;
+        settings.PgParser = true;
+
+        res = SqlToYql(
+            R"(select oid,
+typinput::int4 as typinput,
+typname,
+typnamespace,
+typtype
+from pg_type)",
+            settings);
+        UNIT_ASSERT(res.Issues.ToString().Contains("Unknown cluster:"));
+        UNIT_ASSERT(!res.IsOk());
+        UNIT_ASSERT(!res.Root);
     }
 }

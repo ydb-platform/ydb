@@ -10,7 +10,7 @@
 #include <aws/core/utils/memory/stl/AWSString.h>
 #include <aws/core/utils/memory/stl/AWSVector.h>
 #include <aws/core/utils/memory/stl/AWSStringStream.h>
-
+#include <aws/common/byte_buf.h>
 
 
 namespace Aws
@@ -82,14 +82,14 @@ namespace Aws
             /**
              * @brief Splits a string on a delimiter (empty items are excluded).
              * @param toSplit, the original string to split
-             * @param splitOn, the delemiter you want to use.
+             * @param splitOn, the delimiter you want to use.
              */
             static Aws::Vector<Aws::String> Split(const Aws::String& toSplit, char splitOn);
 
             /**
              * @brief Splits a string on a delimiter.
              * @param toSplit, the original string to split
-             * @param splitOn, the delemiter you want to use.
+             * @param splitOn, the delimiter you want to use.
              * @param option, if INCLUDE_EMPTY_ENTRIES, includes empty entries in the result, otherwise removes empty entries.
              */
             static Aws::Vector<Aws::String> Split(const Aws::String& toSplit, char splitOn, SplitOptions option);
@@ -97,7 +97,7 @@ namespace Aws
             /**
              * @brief Splits a string on a delimiter (empty items are excluded).
              * @param toSplit, the original string to split
-             * @param splitOn, the delemiter you want to use.
+             * @param splitOn, the delimiter you want to use.
              * @param numOfTargetParts, how many target parts you want to get, if it is 0, as many as possible.
              */
             static Aws::Vector<Aws::String> Split(const Aws::String& toSplit, char splitOn, size_t numOfTargetParts);
@@ -105,7 +105,7 @@ namespace Aws
             /**
              * @brief Splits a string on a delimiter.
              * @param toSplit, the original string to split
-             * @param splitOn, the delemiter you want to use.
+             * @param splitOn, the delimiter you want to use.
              * @param numOfTargetParts, how many target parts you want to get, if it is 0, as many as possible.
              * @param option, if INCLUDE_EMPTY_ENTRIES, includes empty entries in the result, otherwise removes empty entries.
              */
@@ -211,6 +211,11 @@ namespace Aws
 
                 std::reverse(s.begin(), s.end());
                 return s;
+            }
+
+            static Aws::String FromByteCursor(aws_byte_cursor cursor)
+            {
+                return Aws::String(reinterpret_cast<char *>(cursor.ptr), cursor.len);
             }
         };
 

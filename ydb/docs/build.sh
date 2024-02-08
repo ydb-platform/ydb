@@ -1,6 +1,5 @@
 # Use this script to build YDB docs with Open Source tools and start HTTP server
 # You may specify output directory as a parameter. If omitted, docs will be generated to a TEMP subdirectory
-#
 
 echo Checking YFM installed...
 yfm --version

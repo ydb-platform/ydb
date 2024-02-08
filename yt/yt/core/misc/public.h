@@ -44,6 +44,11 @@ class TExtensionSet;
 
 } // namespace NProto
 
+struct TExponentialBackoffOptions;
+struct TConstantBackoffOptions;
+
+class TBackoffStrategy;
+
 struct TGuid;
 
 template <class T>
@@ -177,6 +182,31 @@ concept CScalable = requires (TObject object, TScalar scalar)
 {
     { object * scalar } -> std::same_as<TObject>;
 };
+
+////////////////////////////////////////////////////////////////////////////////
+
+template <class T, class Sig>
+struct TIsInvocable;
+
+template <class T, class TRet, bool NoExcept, class... TArgs>
+struct TIsInvocable<T, TRet(TArgs...) noexcept(NoExcept)>
+{
+private:
+    static constexpr bool IsInvocable_ = requires (T&& t, TArgs&&... args) {
+        { std::forward<T>(t)(std::forward<TArgs>(args)...) } -> std::same_as<TRet>;
+    };
+
+    static constexpr bool IsNoThrowInvocable_ = requires (T&& t, TArgs&&... args) {
+        { std::forward<T>(t)(std::forward<TArgs>(args)...) } noexcept;
+    };
+public:
+    static constexpr bool Value =
+        IsInvocable_ &&
+        (!NoExcept || IsNoThrowInvocable_);
+};
+
+template <class T, class Sig>
+concept CInvocable = TIsInvocable<T, Sig>::Value;
 
 ////////////////////////////////////////////////////////////////////////////////
 

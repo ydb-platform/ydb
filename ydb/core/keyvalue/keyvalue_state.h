@@ -19,6 +19,7 @@
 #include <ydb/core/tablet/tablet_counters.h>
 #include <ydb/core/tablet/tablet_metrics.h>
 #include <ydb/core/keyvalue/protos/events.pb.h>
+#include <library/cpp/time_provider/time_provider.h>
 #include <bitset>
 
 namespace NActors {
@@ -263,7 +264,7 @@ protected:
 
     ui32 PerGenerationCounter; // for garbage collection
 
-    NMetrics::TResourceMetrics* ResourceMetrics;
+    NMetrics::TResourceMetrics* ResourceMetrics = nullptr;
 
     TMaybe<NKeyValue::THelpers::TGenerationStep> PartialCollectedGenerationStep;
     TVector<TLogoBlobID> PartialCollectedDoNotKeep;
@@ -346,6 +347,10 @@ public:
         NKikimrClient::TKeyValueResponse::TWriteResult *legacyResponse,
         NKikimrKeyValue::StorageChannel *response,
         ISimpleDb &db, const TActorContext &ctx, TRequestStat &stat, ui64 unixTime, TIntermediate *intermediate);
+    void ProcessCmd(TIntermediate::TPatch &request,
+        NKikimrClient::TKeyValueResponse::TPatchResult *legacyResponse,
+        NKikimrKeyValue::StorageChannel *response,
+        ISimpleDb &db, const TActorContext &ctx, TRequestStat &stat, ui64 unixTime, TIntermediate *intermediate);
     void ProcessCmd(const TIntermediate::TDelete &request,
         NKikimrClient::TKeyValueResponse::TDeleteRangeResult *legacyResponse,
         NKikimrKeyValue::StorageChannel *response,
@@ -385,18 +390,20 @@ public:
     TCheckResult CheckCmd(const TIntermediate::TRename &cmd, TKeySet& keys, ui32 index) const;
     TCheckResult CheckCmd(const TIntermediate::TDelete &cmd, TKeySet& keys, ui32 index) const;
     TCheckResult CheckCmd(const TIntermediate::TWrite &cmd, TKeySet& keys, ui32 index) const;
+    TCheckResult CheckCmd(const TIntermediate::TPatch &cmd, TKeySet& keys, ui32 index) const;
     TCheckResult CheckCmd(const TIntermediate::TCopyRange &cmd, TKeySet& keys, ui32 index) const;
     TCheckResult CheckCmd(const TIntermediate::TConcat &cmd, TKeySet& keys, ui32 index) const;
     TCheckResult CheckCmd(const TIntermediate::TGetStatus &cmd, TKeySet& keys, ui32 index) const;
 
     template<class Cmd>
     bool CheckCmds(THolder<TIntermediate>& intermediate, const TDeque<Cmd>& cmds, const TActorContext& ctx,
-        TKeySet& keys, const TTabletStorageInfo* info);        
+        TKeySet& keys, const TTabletStorageInfo* info);
     bool CheckCmds(THolder<TIntermediate>& intermediate, const TActorContext& /*ctx*/, TKeySet& keys,
             const TTabletStorageInfo* /*info*/);
 
     void Step();
     TLogoBlobID AllocateLogoBlobId(ui32 size, ui32 storageChannelIdx, ui64 requestUid);
+    TLogoBlobID AllocatePatchedLogoBlobId(ui32 size, ui32 storageChannelIdx, TLogoBlobID originalBlobId, ui64 requestUid);
     TIntrusivePtr<TCollectOperation>& GetCollectOperation() {
         return CollectOperation;
     }
@@ -505,6 +512,8 @@ public:
     bool PrepareCmdDelete(const TActorContext &ctx, NKikimrClient::TKeyValueRequest &kvRequest,
         THolder<TIntermediate> &intermediate);
     bool PrepareCmdWrite(const TActorContext &ctx, NKikimrClient::TKeyValueRequest &kvRequest, TEvKeyValue::TEvRequest& ev,
+        THolder<TIntermediate> &intermediate, const TTabletStorageInfo *info);
+    bool PrepareCmdPatch(const TActorContext &ctx, NKikimrClient::TKeyValueRequest &kvRequest, TEvKeyValue::TEvRequest& ev,
         THolder<TIntermediate> &intermediate, const TTabletStorageInfo *info);
     bool PrepareCmdGetStatus(const TActorContext &ctx, NKikimrClient::TKeyValueRequest &kvRequest,
         THolder<TIntermediate> &intermediate, const TTabletStorageInfo *info);

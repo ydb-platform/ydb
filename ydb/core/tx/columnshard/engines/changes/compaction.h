@@ -2,7 +2,6 @@
 
 #include <ydb/core/tx/columnshard/engines/changes/abstract/compaction_info.h>
 #include <ydb/core/tx/columnshard/engines/changes/with_appended.h>
-#include <ydb/core/tx/columnshard/engines/changes/abstract/mark.h>
 
 namespace NKikimr::NOlap {
 
@@ -13,7 +12,6 @@ private:
     using TBase = TChangesWithAppend;
     bool NeedGranuleStatusProvide = false;
 protected:
-    const TCompactionLimits Limits;
     std::shared_ptr<TGranuleMeta> GranuleMeta;
 
     virtual void DoStart(NColumnShard::TColumnShard& self) override;
@@ -32,14 +30,12 @@ public:
 
     virtual THashSet<TPortionAddress> GetTouchedPortions() const override;
 
-    TCompactColumnEngineChanges(const TCompactionLimits& limits, std::shared_ptr<TGranuleMeta> granule, const std::vector<std::shared_ptr<TPortionInfo>>& portions, const TSaverContext& saverContext);
+    TCompactColumnEngineChanges(const TSplitSettings& splitSettings, std::shared_ptr<TGranuleMeta> granule, const std::vector<std::shared_ptr<TPortionInfo>>& portions, const TSaverContext& saverContext);
     ~TCompactColumnEngineChanges();
 
     static TString StaticTypeName() {
         return "CS::GENERAL";
     }
-
-    ui32 NumSplitInto(const ui32 srcRows) const;
 };
 
 }

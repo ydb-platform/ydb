@@ -224,7 +224,7 @@ Y_UNIT_TEST_SUITE(TYqlExtractPredicate) {
         UNIT_ASSERT_NO_DIFF(expectedExecuteResult, res[0]);
     }
 
-    void ExtractAndExecuteRanges(const TString& prog, const TString& expectedExecuteResult) {
+    void ExtractAndExecuteRanges(const TString& prog, const TString& expectedExecuteResult, TPredicateExtractorSettings settings = {}, TVector<TString> indexKeys = { "x", "y" }) {
         TExprContext exprCtx;
         TTypeAnnotationContextPtr typesCtx;
 
@@ -235,13 +235,12 @@ Y_UNIT_TEST_SUITE(TYqlExtractPredicate) {
         THashSet<TString> usedColumns;
         using NDetail::TPredicateRangeExtractor;
 
-        TPredicateExtractorSettings settings;
         settings.HaveNextValueCallable = true;
         auto extractor = MakePredicateRangeExtractor(settings);
 
         UNIT_ASSERT(extractor->Prepare(filterLambda, *filterLambda->Head().Head().GetTypeAnn(), usedColumns, exprCtx, *typesCtx));
 
-        auto buildResult = extractor->BuildComputeNode({ "x", "y"}, exprCtx, *typesCtx);
+        auto buildResult = extractor->BuildComputeNode(indexKeys, exprCtx, *typesCtx);
         UNIT_ASSERT(buildResult.ComputeNode);
 
         ExecuteAndCheckRanges(DumpNode(*buildResult.ComputeNode, exprCtx), expectedExecuteResult);
@@ -524,8 +523,7 @@ Y_UNIT_TEST_SUITE(TYqlExtractPredicate) {
             "(let $2 (StructType '('\"x\" $1) '('\"y\" $1)))\n"
             "(let $3 (Int32 '1))\n"
             "(let $4 (Int32 '\"2\"))\n"
-            "(return (RangeOr (RangeAnd (Range $2 (lambda '($5) (== (Member $5 '\"x\") $3))) (Range $2 (lambda '($6) (== (Member $6 '\"y\") $4)))) (Range $2 (lambda '($7) (< (Member $7 '\"x\") $3))) (RangeAnd (Range $2 (lambda '($8) (== (Memb"
-            "er $8 '\"x\") $3))) (Range $2 (lambda '($9) (< (Member $9 '\"y\") $4))))))\n"
+            "(return (RangeOr (Range $2 (lambda '($5) (< (Member $5 '\"x\") $3))) (RangeAnd (Range $2 (lambda '($6) (== (Member $6 '\"x\") $3))) (Range $2 (lambda '($7) (< (Member $7 '\"y\") $4)))) (RangeAnd (Range $2 (lambda '($8) (== (Member $8 '\"x\") $3))) (Range $2 (lambda '($9) (== (Member $9 '\"y\") $4))))))\n"
             ")\n";
 
         TExprContext exprCtx;
@@ -1065,6 +1063,34 @@ Y_UNIT_TEST_SUITE(TYqlExtractPredicate) {
         ExecuteAndCheckRanges(ranges, expectedExecuteResult);
 
         UNIT_ASSERT_EQUAL(lambda, canonicalLambda);
+    }
+
+    Y_UNIT_TEST(OverflowRanges) {
+        TString prog1 = GetOptionalSrc() +
+            "insert into Output with truncate\n"
+            "select * from as_table($src) where x = 1 and y in [1, 2, 3];";
+
+        TString prog2 = GetOptionalSrc() +
+            "insert into Output with truncate\n"
+            "select * from as_table($src) where x = 1 and y in [1, 2, 3] and (x, y) < (4, 4);";
+
+        TString prog3 = GetOptionalSrc() +
+            "insert into Output with truncate\n"
+            "select * from as_table($src) where x = 1;";
+
+        TString expectedExecuteResult = R"__({"Write"=[{"Data"=[[[[["1"]];#;"1"];[[["1"]];#;"1"]]]}]})__";
+        ExtractAndExecuteRanges(prog1, expectedExecuteResult, TPredicateExtractorSettings{.MaxRanges = 2});
+        ExtractAndExecuteRanges(prog2, expectedExecuteResult, TPredicateExtractorSettings{.MaxRanges = 2});
+        ExtractAndExecuteRanges(prog3, expectedExecuteResult, TPredicateExtractorSettings{.MaxRanges = 2});
+    }
+
+    Y_UNIT_TEST(OverflowRanges2) {
+        TString prog = GetNonOptionsSrc4() +
+            "insert into Output with truncate\n"
+            "select * from as_table($src) where x = 1 and ((y = 2 and z in [1, 2, 3]) or ((y, z) = (2, 2))) and t = 3;";
+
+        TString expectedExecuteResult = R"__({"Write"=[{"Data"=[[[["1"];["2"];#;#;"1"];[["1"];["2"];#;#;"1"]]]}]})__";
+        ExtractAndExecuteRanges(prog, expectedExecuteResult, TPredicateExtractorSettings{.MaxRanges = 2}, { "x", "y", "z", "t" });
     }
 }
 

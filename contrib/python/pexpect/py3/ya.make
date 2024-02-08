@@ -2,7 +2,7 @@
 
 PY3_LIBRARY()
 
-VERSION(4.8.0)
+VERSION(4.9.0)
 
 LICENSE(ISC)
 
@@ -12,12 +12,18 @@ PEERDIR(
 
 NO_LINT()
 
+NO_CHECK_IMPORTS(
+    pexpect._async_pre_await
+)
+
 PY_SRCS(
     TOP_LEVEL
     pexpect/ANSI.py
     pexpect/FSM.py
     pexpect/__init__.py
     pexpect/_async.py
+    pexpect/_async_pre_await.py
+    pexpect/_async_w_await.py
     pexpect/exceptions.py
     pexpect/expect.py
     pexpect/fdpexpect.py
@@ -27,6 +33,7 @@ PY_SRCS(
     pexpect/replwrap.py
     pexpect/run.py
     pexpect/screen.py
+    pexpect/socket_pexpect.py
     pexpect/spawnbase.py
     pexpect/utils.py
 )

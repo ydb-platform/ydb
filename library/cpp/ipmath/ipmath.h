@@ -19,20 +19,29 @@ public:
 
     TIpAddressRange() = default;
     TIpAddressRange(TIpv6Address start, TIpv6Address end);
-    TIpAddressRange(const TString& start, const TString& end);
+    TIpAddressRange(const TStringBuf start, const TStringBuf end);
     ~TIpAddressRange();
 
     static TIpAddressRangeBuilder From(TIpv6Address from);
-    static TIpAddressRangeBuilder From(const TString& from);
+    static TIpAddressRangeBuilder From(const TStringBuf from);
 
     /**
-     * Parses a string tormatted in Classless Iter-Domain Routing (CIDR) notation.
+     * Parses a string formatted in Classless Inter-Domain Routing (CIDR) notation.
      * @param str a CIDR-formatted string, e.g. "192.168.0.0/16"
      * @return a new TIpAddressRange
      * @throws TInvalidIpRangeException if the string cannot be parsed.
      */
-    static TIpAddressRange FromCidrString(const TString& str);
-    static TMaybe<TIpAddressRange> TryFromCidrString(const TString& str);
+    static TIpAddressRange FromCidrString(const TStringBuf str);
+    static TMaybe<TIpAddressRange> TryFromCidrString(const TStringBuf str);
+
+    /**
+     * Parses a string formatted in compact Classless Inter-Domain Routing (CIDR) notation with node address.
+     * @param str a CIDR-formatted string with node address, e.g. "192.168.1.24/16"
+     * @return a new TIpAddressRange
+     * @throws TInvalidIpRangeException if the string cannot be parsed.
+     */
+    static TIpAddressRange FromCompactString(const TStringBuf str);
+    static TMaybe<TIpAddressRange> TryFromCompactString(const TStringBuf str);
 
     /**
      * Parses a string formatted as two dash-separated addresses.
@@ -40,8 +49,8 @@ public:
      * @return a new TIpAddressRange
      * @throws TInvalidIpRangeException if the string cannot be parsed.
      */
-    static TIpAddressRange FromRangeString(const TString& str);
-    static TMaybe<TIpAddressRange> TryFromRangeString(const TString& str);
+    static TIpAddressRange FromRangeString(const TStringBuf str);
+    static TMaybe<TIpAddressRange> TryFromRangeString(const TStringBuf str);
 
     TString ToRangeString() const;
 
@@ -50,8 +59,8 @@ public:
      * @return a new TIpAddressRange
      * @throws TInvlidIpRangeException if the string doesn't match any known format or if parsing failed.
      */
-    static TIpAddressRange FromString(const TString& str);
-    static TMaybe<TIpAddressRange> TryFromString(const TString& str);
+    static TIpAddressRange FromString(const TStringBuf str);
+    static TMaybe<TIpAddressRange> TryFromString(const TStringBuf str);
 
     TIpType Type() const;
 
@@ -99,6 +108,8 @@ public:
 private:
     void Init(TIpv6Address, TIpv6Address);
 
+    static TMaybe<TIpAddressRange> TryFromCidrStringImpl(const TStringBuf str, bool compact);
+
     TIpv6Address Start_;
     TIpv6Address End_;
 };
@@ -114,7 +125,7 @@ class TIpAddressRange::TIpAddressRangeBuilder {
     friend class TIpAddressRange;
     TIpAddressRangeBuilder() = default;
     TIpAddressRangeBuilder(TIpv6Address from);
-    TIpAddressRangeBuilder(const TString& from);
+    TIpAddressRangeBuilder(const TStringBuf from);
     TIpAddressRangeBuilder(const TIpAddressRangeBuilder&) = default;
     TIpAddressRangeBuilder& operator=(const TIpAddressRangeBuilder&) = default;
 
@@ -125,12 +136,15 @@ public:
     operator TIpAddressRange();
     TIpAddressRange Build();
 
-    TIpAddressRangeBuilder& To(const TString&);
+    TIpAddressRangeBuilder& To(const TStringBuf);
     TIpAddressRangeBuilder& To(TIpv6Address);
 
     TIpAddressRangeBuilder& WithPrefix(ui8 len);
+    TIpAddressRangeBuilder& WithMaskedPrefix(ui8 len);
 
 private:
+    TIpAddressRangeBuilder& WithPrefixImpl(ui8 len, bool checkLowerBound);
+
     TIpv6Address Start_;
     TIpv6Address End_;
 };
@@ -138,6 +152,11 @@ private:
 
 class TIpAddressRange::TIterator {
 public:
+    using value_type = TIpv6Address;
+    using difference_type = std::ptrdiff_t;
+    using reference = TIpv6Address&;
+    using iterator_category = std::forward_iterator_tag;
+
     TIterator(TIpv6Address val) noexcept;
 
     bool operator==(const TIpAddressRange::TIterator& other) noexcept;

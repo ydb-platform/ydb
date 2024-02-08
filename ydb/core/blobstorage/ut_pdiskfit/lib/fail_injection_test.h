@@ -6,11 +6,11 @@
 #include <ydb/core/base/appdata.h>
 #include <ydb/core/blobstorage/pdisk/blobstorage_pdisk_tools.h>
 #include <ydb/library/pdisk_io/aio.h>
-#include <library/cpp/actors/core/actorsystem.h>
-#include <library/cpp/actors/core/executor_pool_basic.h>
-#include <library/cpp/actors/core/executor_pool_io.h>
-#include <library/cpp/actors/core/scheduler_basic.h>
-#include <library/cpp/actors/protos/services_common.pb.h>
+#include <ydb/library/actors/core/actorsystem.h>
+#include <ydb/library/actors/core/executor_pool_basic.h>
+#include <ydb/library/actors/core/executor_pool_io.h>
+#include <ydb/library/actors/core/scheduler_basic.h>
+#include <ydb/library/actors/protos/services_common.pb.h>
 
 #include <library/cpp/lwtrace/all.h>
 #include <library/cpp/monlib/dynamic_counters/counters.h>

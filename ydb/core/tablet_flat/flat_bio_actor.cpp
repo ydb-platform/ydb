@@ -125,7 +125,7 @@ void TBlockIO::Dispatch() noexcept
 
         auto *ev = new TEvGet(query, +more, TInstant::Max(), klass, false);
 
-        SendToBSProxy(ctx, group, ev, more.From /* cookie, request offset */);
+        SendToBSProxy(ctx, group, ev, more.From /* cookie, request offset */, std::move(Origin->TraceId));
     }
 
     if (auto logl = Logger->Log(ELnLev::Debug)) {
@@ -206,12 +206,12 @@ void TBlockIO::Terminate(EStatus code) noexcept
             << ", " << BlockStates.size() << " pages";
     }
 
-    auto *ev = new TEvData(std::move(Origin->PageCollection), Origin->Cookie, code);
+    auto *ev = new TEvData(Origin, code);
 
     if (code == NKikimrProto::OK) {
         size_t index = 0;
-        ev->Blocks.reserve(Origin->Pages.size());
-        for (ui32 pageId : Origin->Pages) {
+        ev->Blocks.reserve(ev->Fetch->Pages.size());
+        for (ui32 pageId : ev->Fetch->Pages) {
             auto& state = BlockStates.at(index++);
             ev->Blocks.emplace_back(pageId, std::move(state.Data));
         }

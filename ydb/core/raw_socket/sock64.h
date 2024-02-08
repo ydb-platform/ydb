@@ -2,7 +2,7 @@
 
 #include <optional>
 #include <util/network/sock.h>
-#include <library/cpp/actors/interconnect/poller_actor.h>
+#include <ydb/library/actors/interconnect/poller_actor.h>
 #include "sock_ssl.h"
 
 namespace NKikimr::NRawSocket {

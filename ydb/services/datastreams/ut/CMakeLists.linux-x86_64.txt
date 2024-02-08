@@ -22,7 +22,7 @@ target_link_libraries(ydb-services-datastreams-ut PUBLIC
   cpp-testing-unittest_main
   ydb-services-datastreams
   library-cpp-getopt
-  cpp-grpc-client
+  library-grpc-client
   library-cpp-svnversion
   core-testlib-default
   cpp-client-ydb_topic

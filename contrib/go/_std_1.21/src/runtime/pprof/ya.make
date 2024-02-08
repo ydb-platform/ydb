@@ -1,0 +1,73 @@
+GO_LIBRARY()
+IF (OS_DARWIN AND ARCH_ARM64)
+    SRCS(
+		elf.go
+		label.go
+		map.go
+		pe.go
+		pprof.go
+		pprof_rusage.go
+		proto.go
+		proto_other.go
+		protobuf.go
+		protomem.go
+		runtime.go
+    )
+ELSEIF (OS_DARWIN AND ARCH_X86_64)
+    SRCS(
+		elf.go
+		label.go
+		map.go
+		pe.go
+		pprof.go
+		pprof_rusage.go
+		proto.go
+		proto_other.go
+		protobuf.go
+		protomem.go
+		runtime.go
+    )
+ELSEIF (OS_LINUX AND ARCH_AARCH64)
+    SRCS(
+		elf.go
+		label.go
+		map.go
+		pe.go
+		pprof.go
+		pprof_rusage.go
+		proto.go
+		proto_other.go
+		protobuf.go
+		protomem.go
+		runtime.go
+    )
+ELSEIF (OS_LINUX AND ARCH_X86_64)
+    SRCS(
+		elf.go
+		label.go
+		map.go
+		pe.go
+		pprof.go
+		pprof_rusage.go
+		proto.go
+		proto_other.go
+		protobuf.go
+		protomem.go
+		runtime.go
+    )
+ELSEIF (OS_WINDOWS AND ARCH_X86_64)
+    SRCS(
+		elf.go
+		label.go
+		map.go
+		pe.go
+		pprof.go
+		pprof_windows.go
+		proto.go
+		proto_windows.go
+		protobuf.go
+		protomem.go
+		runtime.go
+    )
+ENDIF()
+END()

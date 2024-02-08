@@ -75,10 +75,19 @@ namespace NKikimr::NOlap {
 
         virtual ~INormalizerComponent() {}
 
+        bool WaitResult() const {
+            return AtomicGet(ActiveTasksCount) > 0;
+        }
+
+        void OnResultReady() {
+            AFL_VERIFY(ActiveTasksCount > 0);
+            AtomicDecrement(ActiveTasksCount);
+        }
+
         virtual const TString& GetName() const = 0;
-        virtual bool WaitResult() const = 0;
-        virtual void OnResultReady() {}
         virtual TConclusion<std::vector<INormalizerTask::TPtr>> Init(const TNormalizationController& controller, NTabletFlatExecutor::TTransactionContext& txc) = 0;
+    protected:
+        TAtomic ActiveTasksCount = 0;
     };
 
     class TNormalizationController {
@@ -92,7 +101,7 @@ namespace NKikimr::NOlap {
     public:
         TNormalizationController(std::shared_ptr<IStoragesManager> storagesManager, const std::shared_ptr<NOlap::NResourceBroker::NSubscribe::TSubscriberCounters>& counters)
             : StoragesManager(storagesManager)
-            , TaskSubscription("CS:NORMALIZER", counters) {}
+            , TaskSubscription("CS::NORMALIZER", counters) {}
 
         const NOlap::NResourceBroker::NSubscribe::TTaskContext& GetTaskSubscription() const {
             return TaskSubscription;
@@ -106,7 +115,9 @@ namespace NKikimr::NOlap {
         }
 
         TString DebugString() const {
-            return TStringBuilder() << "normalizers_count=" << Normalizers.size() << ";current_normalizer=" << CurrentNormalizerIndex;
+            return TStringBuilder() << "normalizers_count=" << Normalizers.size()
+                                    << ";current_normalizer_idx=" << CurrentNormalizerIndex
+                                    << ";current_normalizer=" << (CurrentNormalizerIndex < Normalizers.size()) ? Normalizers[CurrentNormalizerIndex]->GetName() : "";
         }
 
         const INormalizerComponent::TPtr& GetNormalizer() const;

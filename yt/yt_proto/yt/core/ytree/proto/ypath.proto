@@ -4,7 +4,7 @@ import "yt_proto/yt/core/rpc/proto/rpc.proto";
 import "yt_proto/yt/core/ytree/proto/attributes.proto";
 import "yt_proto/yt/core/ytree/proto/request_complexity_limits.proto";
 
-option go_package = "github.com/ydb-platform/ydb/yt/go/proto/core/ytree";
+option go_package = "a.yandex-team.ru/yt/go/proto/core/ytree";
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -60,6 +60,7 @@ message TReqGet
 {
     // TODO(max42): rename attributes -> attribute_filter
     optional TAttributeFilter attributes = 1;
+    // TODO(h0pless): rename limit -> max_size
     optional int64 limit = 2;
     optional bool ignore_opaque = 3;
     optional NYT.NYTree.NProto.TAttributeDictionary options = 4;

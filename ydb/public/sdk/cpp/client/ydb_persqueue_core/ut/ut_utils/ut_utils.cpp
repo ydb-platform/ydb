@@ -25,7 +25,7 @@ TSimpleWriteSessionTestAdapter::TSimpleWriteSessionTestAdapter(TSimpleBlockingWr
 
 ui64 TSimpleWriteSessionTestAdapter::GetAcquiredMessagesCount() const {
     if (Session->Writer)
-        return Session->Writer->Impl->MessagesAcquired;
+        return Session->Writer->TryGetImpl()->MessagesAcquired;
     else
         return 0;
 }

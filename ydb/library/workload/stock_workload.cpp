@@ -1,8 +1,11 @@
 #include "stock_workload.h"
+#include "workload_factory.h"
 
 #include <util/datetime/base.h>
+#include <util/generic/serialized_enum.h>
 
 #include <cmath>
+#include <format>
 #include <iomanip>
 #include <string>
 #include <thread>
@@ -19,9 +22,11 @@ uint64_t getOrderId() {
 
 namespace NYdbWorkload {
 
+TWorkloadFactory::TRegistrator<TStockWorkloadParams> StockRegistrar("stock");
+
 TStockWorkloadGenerator::TStockWorkloadGenerator(const TStockWorkloadParams* params)
-    : DbPath(params->DbPath)
-    , Params(*params)
+    : TBase(params)
+    , DbPath(params->DbPath)
     , Rd()
     , Gen(Rd())
     , RandExpDistrib(1.6)
@@ -31,41 +36,44 @@ TStockWorkloadGenerator::TStockWorkloadGenerator(const TStockWorkloadParams* par
     Gen.seed(Now().MicroSeconds());
 }
 
-TStockWorkloadParams* TStockWorkloadGenerator::GetParams() {
-    return &Params;
-}
-
 std::string TStockWorkloadGenerator::GetDDLQueries() const {
-    std::string StockPartitionsDdl = "";
-    std::string OrdersPartitionsDdl = "WITH (READ_REPLICAS_SETTINGS = \"per_az:1\")";
-    std::string OrderLinesPartitionsDdl = "";
-
+    std::string stockPartitionsDdl = "";
+    std::string ordersPartitionsDdl = "WITH (READ_REPLICAS_SETTINGS = \"per_az:1\")";
+    std::string orderLinesPartitionsDdl = "";
     if (Params.PartitionsByLoad) {
-        std::string partsNum = std::to_string(Params.MinPartitions);
-
-        StockPartitionsDdl = "WITH (AUTO_PARTITIONING_BY_LOAD = ENABLED, AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = " + partsNum + ")";
-        OrdersPartitionsDdl = "WITH (READ_REPLICAS_SETTINGS = \"per_az:1\", AUTO_PARTITIONING_BY_LOAD = ENABLED, AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = "
-            + partsNum + ", UNIFORM_PARTITIONS = " + partsNum + ", AUTO_PARTITIONING_MAX_PARTITIONS_COUNT = 1000)";
-        OrderLinesPartitionsDdl = "WITH (AUTO_PARTITIONING_BY_LOAD = ENABLED, AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = "
-            + partsNum + ", UNIFORM_PARTITIONS = " + partsNum + ", AUTO_PARTITIONING_MAX_PARTITIONS_COUNT = 1000)";
+        stockPartitionsDdl = std::format(R"(WITH (
+              AUTO_PARTITIONING_BY_LOAD = ENABLED
+            , AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = {0}
+        ))", Params.MinPartitions);
+        ordersPartitionsDdl = std::format(R"(WITH (
+              READ_REPLICAS_SETTINGS = "per_az:1"
+            , AUTO_PARTITIONING_BY_LOAD = ENABLED
+            , AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = {0}
+            , AUTO_PARTITIONING_MAX_PARTITIONS_COUNT = 1000
+            , UNIFORM_PARTITIONS = {0}
+        ))", Params.MinPartitions);
+        orderLinesPartitionsDdl = std::format(R"(WITH (
+              AUTO_PARTITIONING_BY_LOAD = ENABLED
+            , AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = {0}
+            , AUTO_PARTITIONING_MAX_PARTITIONS_COUNT = 1000
+            , UNIFORM_PARTITIONS = {0}
+        ))", Params.MinPartitions);
     }
 
-    static const char TablesDdl[] = R"(--!syntax_v1
-        CREATE TABLE `%s/stock`(product Utf8, quantity Int64, PRIMARY KEY(product)) %s;
-        CREATE TABLE `%s/orders`(id Uint64, customer Utf8, created Datetime, processed Datetime, PRIMARY KEY(id), INDEX ix_cust GLOBAL ON (customer, created) COVER (processed)) %s;
-        CREATE TABLE `%s/orderLines`(id_order Uint64, product Utf8, quantity Int64, PRIMARY KEY(id_order, product)) %s;
-        )";
-    char buf[sizeof(TablesDdl) + sizeof(OrdersPartitionsDdl) + 8192*3]; // 32*256 for DbPath
-
-    int res = std::sprintf(buf, TablesDdl,
-        DbPath.c_str(), StockPartitionsDdl.c_str(),
-        DbPath.c_str(), OrdersPartitionsDdl.c_str(),
-        DbPath.c_str(), OrderLinesPartitionsDdl.c_str()
-    );
-    if (res < 0) {
-        return "";
+    std::string changefeeds = "";
+    if (Params.EnableCdc) {
+        changefeeds = std::format(R"(ALTER TABLE `{0}/orders` ADD CHANGEFEED `updates` WITH (
+              FORMAT = 'JSON'
+            , MODE = 'UPDATES'
+        );)", DbPath);
     }
-    return buf;
+
+    return std::format(R"(--!syntax_v1
+        CREATE TABLE `{0}/stock`(product Utf8, quantity Int64, PRIMARY KEY(product)) {1};
+        CREATE TABLE `{0}/orders`(id Uint64, customer Utf8, created Datetime, processed Datetime, PRIMARY KEY(id), INDEX ix_cust GLOBAL ON (customer, created) COVER (processed)) {2};
+        CREATE TABLE `{0}/orderLines`(id_order Uint64, product Utf8, quantity Int64, PRIMARY KEY(id_order, product)) {3};
+        {4}
+    )", DbPath, stockPartitionsDdl, ordersPartitionsDdl, orderLinesPartitionsDdl, changefeeds);
 }
 
 TQueryInfoList TStockWorkloadGenerator::GetInitialData() {
@@ -78,14 +86,8 @@ TQueryInfoList TStockWorkloadGenerator::GetInitialData() {
     return res;
 }
 
-std::string TStockWorkloadGenerator::GetCleanDDLQueries() const {
-    std::string clean_query = R"(
-        DROP TABLE `stock`;
-        DROP TABLE `orders`;
-        DROP TABLE `orderLines`;
-    )";
-
-    return clean_query;
+TVector<std::string> TStockWorkloadGenerator::GetCleanPaths() const {
+    return {"stock", "orders", "orderLines"};
 }
 
 TQueryInfo TStockWorkloadGenerator::FillStockData() const {
@@ -94,11 +96,11 @@ TQueryInfo TStockWorkloadGenerator::FillStockData() const {
         INSERT INTO `stock`(product, quantity) SELECT product, quantity from AS_TABLE( $stocks );
     )";
 
-    char productName[8] = "";
     NYdb::TValueBuilder rows;
     rows.BeginList();
     for (size_t i = 0; i < Params.ProductCount; ++i) {
-        std::sprintf(productName, "p%.6zu", i);
+        char productName[8] = "";
+        std::snprintf(productName, sizeof(productName), "p%.6zu", i);
         rows.AddListItem()
                 .BeginStruct()
                 .AddMember("product").Utf8(productName)
@@ -128,6 +130,17 @@ TQueryInfoList TStockWorkloadGenerator::GetWorkload(int type) {
         default:
             return TQueryInfoList();
     }
+}
+
+
+TVector<IWorkloadQueryGenerator::TWorkloadType> TStockWorkloadGenerator::GetSupportedWorkloadTypes() const {
+    TVector<TWorkloadType> result;
+    result.emplace_back(static_cast<int>(EType::InsertRandomOrder), "add-rand-order", "Inserts orders with random ID without their processing");
+    result.emplace_back(static_cast<int>(EType::SubmitRandomOrder), "put-rand-order", "Submit random orders with processing");
+    result.emplace_back(static_cast<int>(EType::SubmitSameOrder), "put-same-order", "Submit orders with same products with processing");
+    result.emplace_back(static_cast<int>(EType::GetRandomCustomerHistory), "rand-user-hist", "Selects orders of random customer");
+    result.emplace_back(static_cast<int>(EType::GetCustomerHistory), "user-hist", "Selects orders of 10000th customer");
+    return result;
 }
 
 TQueryInfo TStockWorkloadGenerator::InsertOrder(const uint64_t orderID, const std::string& customer, const TProductsQuantity& products) {
@@ -230,10 +243,10 @@ unsigned int TStockWorkloadGenerator::GetProductCountInOrder() {
 }
 
 TStockWorkloadGenerator::TProductsQuantity TStockWorkloadGenerator::GenerateOrder(unsigned int productCountInOrder, int quantity) {
-    char productName[8] = "";
     TProductsQuantity products;
     for (unsigned i = 0; i < productCountInOrder; ++i) {
-        std::sprintf(productName, "p%.6i", ProductIdGenerator(Gen));
+        char productName[8] = "";
+        std::snprintf(productName, sizeof(productName), "p%.6i", ProductIdGenerator(Gen));
         products.emplace(productName, quantity);
     }
     return products;
@@ -269,7 +282,7 @@ TQueryInfoList TStockWorkloadGenerator::SubmitSameOrder() {
     char productName[8] = "";
     TProductsQuantity products;
     for (unsigned i = 0; i < Params.ProductCount; ++i) {
-        std::sprintf(productName, "p%.6i", i);
+        std::snprintf(productName, sizeof(productName), "p%.6i", i);
         products.emplace(productName, 1);
     }
     res.push_back(InsertOrder(orderID, customer, products));
@@ -291,6 +304,51 @@ TQueryInfoList TStockWorkloadGenerator::GetCustomerHistory() {
     auto customer = "Name" + std::to_string(MAX_CUSTOMERS);
     res.push_back(SelectCustomerHistory(customer, Params.Limit));
     return res;
+}
+
+void TStockWorkloadParams::ConfigureOpts(NLastGetopt::TOpts& opts, const ECommandType commandType, int workloadType) {
+    opts.SetFreeArgsNum(0);
+    switch (commandType) {
+    case TWorkloadParams::ECommandType::Init:
+        opts.AddLongOption('p', "products", "Product count. Value in 1..500 000.")
+            .DefaultValue(100).StoreResult(&ProductCount);
+        opts.AddLongOption('q', "quantity", "Quantity of each product in stock.")
+            .DefaultValue(1000).StoreResult(&Quantity);
+        opts.AddLongOption('o', "orders", "Initial orders count.")
+            .DefaultValue(100).StoreResult(&OrderCount);
+        opts.AddLongOption("min-partitions", "Minimum partitions for tables.")
+            .DefaultValue(40).StoreResult(&MinPartitions);
+        opts.AddLongOption("auto-partition", "Enable auto partitioning by load.")
+            .DefaultValue(true).StoreResult(&PartitionsByLoad);
+        opts.AddLongOption("enable-cdc", "Create changefeeds on tables.")
+            .DefaultValue(false).StoreTrue(&EnableCdc).Hidden();
+        break;
+    case TWorkloadParams::ECommandType::Run:
+        switch (static_cast<TStockWorkloadGenerator::EType>(workloadType)) {
+        case TStockWorkloadGenerator::EType::InsertRandomOrder:
+        case TStockWorkloadGenerator::EType::SubmitRandomOrder:
+        case TStockWorkloadGenerator::EType::SubmitSameOrder:
+            opts.AddLongOption('p', "products", "Products count to use in workload.")
+                .DefaultValue(100).StoreResult(&ProductCount);
+            break;
+        case TStockWorkloadGenerator::EType::GetRandomCustomerHistory:
+        case TStockWorkloadGenerator::EType::GetCustomerHistory:
+            opts.AddLongOption('l', "limit", "Number of last orders to select.")
+                .DefaultValue(10).StoreResult(&Limit);
+            break;
+        }
+        break;
+    case TWorkloadParams::ECommandType::Clean:
+        break;
+    }
+}
+
+THolder<IWorkloadQueryGenerator> TStockWorkloadParams::CreateGenerator() const {
+    return MakeHolder<TStockWorkloadGenerator>(this);
+}
+
+TString TStockWorkloadParams::GetWorkloadName() const {
+    return "stock";
 }
 
 }

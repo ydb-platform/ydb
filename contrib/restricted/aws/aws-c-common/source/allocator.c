@@ -37,7 +37,7 @@ bool aws_allocator_is_valid(const struct aws_allocator *alloc) {
 static void *s_default_malloc(struct aws_allocator *allocator, size_t size) {
     (void)allocator;
     /* larger allocations should be aligned so that AVX and friends can avoid
-     * the extra preable during unaligned versions of memcpy/memset on big buffers
+     * the extra preamble during unaligned versions of memcpy/memset on big buffers
      * This will also accelerate hardware CRC and SHA on ARM chips
      *
      * 64 byte alignment for > page allocations on 64 bit systems

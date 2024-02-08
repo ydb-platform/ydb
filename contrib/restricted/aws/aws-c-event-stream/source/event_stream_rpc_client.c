@@ -353,6 +353,8 @@ void aws_event_stream_rpc_client_connection_release(const struct aws_event_strea
         (void *)connection,
         ref_count - 1);
 
+    AWS_FATAL_ASSERT(ref_count != 0 && "Connection ref count has gone negative");
+
     if (ref_count == 1) {
         s_destroy_connection(connection_mut);
     }
@@ -543,7 +545,18 @@ static int s_send_protocol_message(
 
     args->flush_fn = flush_fn;
 
-    size_t headers_count = operation_name ? message_args->headers_count + 4 : message_args->headers_count + 3;
+    size_t headers_count = 0;
+
+    if (operation_name) {
+        if (aws_add_size_checked(message_args->headers_count, 4, &headers_count)) {
+            return AWS_OP_ERR;
+        }
+    } else {
+        if (aws_add_size_checked(message_args->headers_count, 3, &headers_count)) {
+            return AWS_OP_ERR;
+        }
+    }
+
     struct aws_array_list headers_list;
     AWS_ZERO_STRUCT(headers_list);
 
@@ -736,21 +749,31 @@ static void s_route_message_by_type(
         struct aws_hash_element *continuation_element = NULL;
         if (aws_hash_table_find(&connection->continuation_table, &stream_id, &continuation_element) ||
             !continuation_element) {
+            bool old_stream_id = stream_id <= connection->latest_stream_id;
             aws_mutex_unlock(&connection->stream_lock);
-            AWS_LOGF_ERROR(
-                AWS_LS_EVENT_STREAM_RPC_CLIENT,
-                "id=%p: a stream id was received that was not created by this client",
-                (void *)connection);
-            aws_raise_error(AWS_ERROR_EVENT_STREAM_RPC_PROTOCOL_ERROR);
-            s_send_connection_level_error(
-                connection, AWS_EVENT_STREAM_RPC_MESSAGE_TYPE_PROTOCOL_ERROR, 0, &s_invalid_client_stream_id_error);
+            if (!old_stream_id) {
+                AWS_LOGF_ERROR(
+                    AWS_LS_EVENT_STREAM_RPC_CLIENT,
+                    "id=%p: a stream id was received that was not created by this client",
+                    (void *)connection);
+                aws_raise_error(AWS_ERROR_EVENT_STREAM_RPC_PROTOCOL_ERROR);
+                s_send_connection_level_error(
+                    connection, AWS_EVENT_STREAM_RPC_MESSAGE_TYPE_PROTOCOL_ERROR, 0, &s_invalid_client_stream_id_error);
+            } else {
+                AWS_LOGF_WARN(
+                    AWS_LS_EVENT_STREAM_RPC_CLIENT,
+                    "id=%p: a stream id was received that corresponds to an already-closed stream",
+                    (void *)connection);
+            }
             return;
         }
 
+        continuation = continuation_element->value;
+        AWS_FATAL_ASSERT(continuation != NULL);
+        aws_event_stream_rpc_client_continuation_acquire(continuation);
+
         aws_mutex_unlock(&connection->stream_lock);
 
-        continuation = continuation_element->value;
-        aws_event_stream_rpc_client_continuation_acquire(continuation);
         continuation->continuation_fn(continuation, &message_args, continuation->user_data);
         aws_event_stream_rpc_client_continuation_release(continuation);
 
@@ -935,6 +958,8 @@ void aws_event_stream_rpc_client_continuation_release(
         (void *)continuation,
         ref_count - 1);
 
+    AWS_FATAL_ASSERT(ref_count != 0 && "Continuation ref count has gone negative");
+
     if (ref_count == 1) {
         struct aws_allocator *allocator = continuation_mut->connection->allocator;
         aws_event_stream_rpc_client_connection_release(continuation_mut->connection);
@@ -960,7 +985,8 @@ int aws_event_stream_rpc_client_continuation_activate(
     aws_mutex_lock(&continuation->connection->stream_lock);
 
     if (continuation->stream_id) {
-        AWS_LOGF_ERROR(AWS_LS_EVENT_STREAM_RPC_CLIENT, "id=%p: stream has already been activated", (void *)continuation)
+        AWS_LOGF_ERROR(
+            AWS_LS_EVENT_STREAM_RPC_CLIENT, "id=%p: stream has already been activated", (void *)continuation);
         aws_raise_error(AWS_ERROR_INVALID_STATE);
         goto clean_up;
     }
@@ -968,7 +994,7 @@ int aws_event_stream_rpc_client_continuation_activate(
     /* Even though is_open is atomic, we need to hold a lock while checking it.
      * This lets us coordinate with code that sets is_open to false. */
     if (!aws_event_stream_rpc_client_connection_is_open(continuation->connection)) {
-        AWS_LOGF_ERROR(AWS_LS_EVENT_STREAM_RPC_CLIENT, "id=%p: stream's connection is not open", (void *)continuation)
+        AWS_LOGF_ERROR(AWS_LS_EVENT_STREAM_RPC_CLIENT, "id=%p: stream's connection is not open", (void *)continuation);
         aws_raise_error(AWS_ERROR_EVENT_STREAM_RPC_CONNECTION_CLOSED);
         goto clean_up;
     }

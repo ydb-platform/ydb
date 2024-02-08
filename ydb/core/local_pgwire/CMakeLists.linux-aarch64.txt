@@ -15,7 +15,7 @@ target_link_libraries(ydb-core-local_pgwire PUBLIC
   contrib-libs-linux-headers
   contrib-libs-cxxsupp
   yutil
-  cpp-actors-core
+  library-actors-core
   parser-pg_wrapper-interface
   kqp-common-events
   kqp-common-simple

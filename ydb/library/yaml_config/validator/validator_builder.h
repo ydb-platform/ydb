@@ -14,7 +14,7 @@
 
 #include <functional>
 
-namespace NYamlConfig::NValidator {
+namespace NKikimr::NYamlConfig::NValidator {
 
 class TBuilderException : public yexception {};
 
@@ -334,4 +334,4 @@ TArrayBuilder& TArrayBuilder::Item(Builder builder) {
     return *this;
 }
 
-} // namespace NYamlConfig::NValidator
+} // namespace NKikimr::NYamlConfig::NValidator

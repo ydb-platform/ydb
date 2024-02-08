@@ -15,19 +15,21 @@ namespace NTable {
         ~TDump();
 
         void Part(const TPart&, ui32 depth = 10) noexcept;
-        void Dump(const NPage::TFrames&, const char *tag) noexcept;
-        void Dump(const NPage::TExtBlobs&) noexcept;
-        void Dump(const NPage::TBloom&) noexcept;
-        void Index(const TPart&, ui32 depth = 10) noexcept;
-        void DataPage(const TPart&, ui32 page) noexcept;
-        void TName(ui32 num) noexcept;
-        void DumpKey(const TPartScheme&) noexcept;
 
     private:
+        void Frames(const NPage::TFrames&, const char *tag) noexcept;
+        void Blobs(const NPage::TExtBlobs&) noexcept;
+        void Bloom(const NPage::TBloom&) noexcept;
+        void Index(const TPart&, ui32 depth = 10) noexcept;
+        void BTreeIndex(const TPart&) noexcept;
+        void DataPage(const TPart&, ui32 page) noexcept;
+        void TName(ui32 num) noexcept;
+        void Key(TCellsRef cells, const TPartScheme&) noexcept;
+        void BTreeIndexNode(const TPart &part, NPage::TBtreeIndexNode::TChild meta, ui32 level = 0) noexcept;
+
         IOutputStream &Out;
         IPages * const Env = nullptr;
         const TReg * const Reg = nullptr;
-        TSmallVec<TCell> Key;
     };
 
 }

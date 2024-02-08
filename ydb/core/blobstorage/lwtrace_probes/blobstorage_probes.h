@@ -105,6 +105,18 @@ struct TEventTypeField {
     PROBE(VDiskSkeletonRecordLogged, GROUPS("VDisk"), \
       TYPES(ui64), \
       NAMES("lsn")) \
+    PROBE(HugeKeeperWriteHugeBlobReceived, GROUPS("VDisk", "HullHuge"), \
+      TYPES(), \
+      NAMES()) \
+    PROBE(HugeBlobChunkAllocatorStart, GROUPS("VDisk", "HullHuge"), \
+      TYPES(), \
+      NAMES()) \
+    PROBE(HugeWriterStart, GROUPS("VDisk", "HullHuge"), \
+      TYPES(), \
+      NAMES()) \
+    PROBE(HugeWriterFinish, GROUPS("VDisk", "HullHuge"), \
+      TYPES(TString), \
+      NAMES("status")) \
     PROBE(DSProxyBlobPutTactics, GROUPS("DSProxyRequest", "DSProxy"), \
       TYPES(ui64, ui32, TString, NKikimr::TBlobPutTactics, TString), \
       NAMES("tabletId", "groupId", "blob", "tactics", "handleClass")) \

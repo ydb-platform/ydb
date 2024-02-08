@@ -5,6 +5,8 @@ RECURSE(
     public
     services
     tests
+    tools
+    docs
     docs/ru/core
     docs/en/core
 )

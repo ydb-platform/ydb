@@ -30,9 +30,34 @@ struct TNodeInfo {
 
 protected:
     EVolatileState VolatileState;
-    static const ui64 MAX_TABLET_COUNT_DEFAULT_VALUE;
 
 public:
+    static const ui64 MAX_TABLET_COUNT_DEFAULT_VALUE;
+
+    struct TTabletAvailabilityInfo {
+        NKikimrLocal::TTabletAvailability FromLocal;
+        ui64 EffectiveMaxCount;
+        bool IsSet;
+
+        TTabletAvailabilityInfo(const NKikimrLocal::TTabletAvailability& availability) : FromLocal(availability)
+                                                                                       , EffectiveMaxCount(availability.GetMaxCount())
+                                                                                       , IsSet(EffectiveMaxCount != MAX_TABLET_COUNT_DEFAULT_VALUE)
+        {
+        }
+
+        void UpdateRestriction(ui64 restriction) {
+            EffectiveMaxCount = std::min(FromLocal.GetMaxCount(), restriction);
+            IsSet = true;
+        }
+
+        void RemoveRestriction() {
+            // We set IsSet to true if we are removing a restriction that does not exist anyway
+            // This way, it takes priority over DefaultTabletCount from HiveConfig
+            IsSet = (EffectiveMaxCount == FromLocal.GetMaxCount() || FromLocal.GetMaxCount() != MAX_TABLET_COUNT_DEFAULT_VALUE);
+            EffectiveMaxCount = FromLocal.GetMaxCount();
+        }
+    };
+
     THive& Hive;
     TNodeId Id;
     TActorId Local;
@@ -53,7 +78,8 @@ public:
     TInstant StartTime;
     TNodeLocation Location;
     bool LocationAcquired;
-    std::unordered_map<TTabletTypes::EType, NKikimrLocal::TTabletAvailability> TabletAvailability;
+    std::unordered_map<TTabletTypes::EType, TTabletAvailabilityInfo> TabletAvailability;
+    std::unordered_map<TTabletTypes::EType, ui64> TabletAvailabilityRestrictions;
     TVector<TSubDomainKey> ServicedDomains;
     TVector<TSubDomainKey> LastSeenServicedDomains;
     TVector<TActorId> PipeServers;
@@ -74,28 +100,6 @@ public:
     }
 
     void ChangeVolatileState(EVolatileState state);
-
-    static bool IsResourceDrainingState(TTabletInfo::EVolatileState state) {
-        switch (state) {
-        case TTabletInfo::EVolatileState::TABLET_VOLATILE_STATE_STARTING:
-        case TTabletInfo::EVolatileState::TABLET_VOLATILE_STATE_RUNNING:
-        case TTabletInfo::EVolatileState::TABLET_VOLATILE_STATE_UNKNOWN:
-            return true;
-        default:
-            return false;
-        }
-    }
-
-    static bool IsAliveState(TTabletInfo::EVolatileState state) {
-        switch (state) {
-        case TTabletInfo::EVolatileState::TABLET_VOLATILE_STATE_STARTING:
-        case TTabletInfo::EVolatileState::TABLET_VOLATILE_STATE_RUNNING:
-            return true;
-        default:
-            return false;
-        }
-    }
-
     bool OnTabletChangeVolatileState(TTabletInfo* tablet, TTabletInfo::EVolatileState newState);
     void UpdateResourceValues(const TTabletInfo* tablet, const NKikimrTabletBase::TMetrics& before, const NKikimrTabletBase::TMetrics& after);
 
@@ -148,6 +152,7 @@ public:
     bool IsAbleToRunTablet(const TTabletInfo& tablet, TTabletDebugState* debugState = nullptr) const;
     i32 GetPriorityForTablet(const TTabletInfo& tablet) const;
     ui64 GetMaxTabletsScheduled() const;
+    ui64 GetMaxCountForTabletType(TTabletTypes::EType tabletType) const;
 
     bool IsAbleToScheduleTablet() const {
         return GetTabletsScheduled() < GetMaxTabletsScheduled();
@@ -257,6 +262,7 @@ public:
 
     void UpdateResourceTotalUsage(const NKikimrHive::TEvTabletMetrics& metrics);
     void ActualizeNodeStatistics(TInstant now);
+    ui64 GetRestartsPerPeriod(TInstant barrier) const;
 
     TDataCenterId GetDataCenter() const {
         return Location.GetDataCenterId();

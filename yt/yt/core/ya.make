@@ -32,6 +32,7 @@ SRCS(
     compression/brotli.cpp
     compression/bzip2.cpp
     compression/codec.cpp
+    compression/dictionary_codec.cpp
     compression/stream.cpp
     compression/lz.cpp
     compression/lzma.cpp
@@ -81,7 +82,7 @@ SRCS(
     concurrency/thread_pool.cpp
     concurrency/throughput_throttler.cpp
     concurrency/two_level_fair_share_thread_pool.cpp
-    concurrency/recurring_executor_base.cpp
+    concurrency/retrying_periodic_executor.cpp
     concurrency/scheduled_executor.cpp
 
     crypto/config.cpp
@@ -93,7 +94,7 @@ SRCS(
     logging/formatter.cpp
     logging/fluent_log.cpp
     GLOBAL logging/log.cpp
-    logging/log_manager.cpp
+    GLOBAL logging/log_manager.cpp
     logging/logger_owner.cpp
     logging/serializable_logger.cpp
     logging/stream_output.cpp
@@ -106,7 +107,6 @@ SRCS(
     misc/arithmetic_formula.cpp
     GLOBAL misc/assert.cpp
     misc/backoff_strategy.cpp
-    misc/backoff_strategy_config.cpp
     misc/bitmap.cpp
     misc/bit_packed_unsigned_vector.cpp
     misc/bit_packing.cpp
@@ -188,6 +188,7 @@ SRCS(
     rpc/message.cpp
     rpc/message_format.cpp
     rpc/null_channel.cpp
+    rpc/peer_discovery.cpp
     rpc/per_user_request_queue_provider.cpp
     rpc/protocol_version.cpp
     rpc/public.cpp
@@ -228,6 +229,7 @@ SRCS(
     yson/async_consumer.cpp
     yson/async_writer.cpp
     yson/attribute_consumer.cpp
+    yson/config.cpp
     yson/consumer.cpp
     yson/forwarding_consumer.cpp
     yson/lexer.cpp
@@ -250,6 +252,7 @@ SRCS(
     yson/string_merger.cpp
     yson/ypath_designated_consumer.cpp
     yson/depth_limiting_yson_consumer.cpp
+    yson/list_verb_lazy_yson_consumer.cpp
     yson/attributes_stripper.cpp
 
     ytree/attribute_consumer.cpp
@@ -324,6 +327,7 @@ PEERDIR(
     library/cpp/ytalloc/api
 
     yt/yt/build
+
     yt/yt/core/misc/isa_crc64
 
     yt/yt_proto/yt/core

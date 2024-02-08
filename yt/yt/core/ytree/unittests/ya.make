@@ -16,6 +16,7 @@ SRCS(
     service_combiner_ut.cpp
     tree_builder_ut.cpp
     lazy_ypath_service_ut.cpp
+    yson_schema_ut.cpp
     yson_serializable_ut.cpp
     yson_struct_ut.cpp
     ytree_fluent_ut.cpp
@@ -26,7 +27,7 @@ SRCS(
 
 GENERATE_ENUM_SERIALIZATION(serialize_ut.h)
 
-INCLUDE(${ARCADIA_ROOT}/yt/opensource_tests.inc)
+INCLUDE(${ARCADIA_ROOT}/yt/opensource.inc)
 
 PEERDIR(
     yt/yt/core

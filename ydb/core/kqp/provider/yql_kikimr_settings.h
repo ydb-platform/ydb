@@ -4,7 +4,11 @@
 #include <ydb/library/yql/providers/common/config/yql_dispatch.h>
 #include <ydb/library/yql/providers/common/config/yql_setting.h>
 #include <ydb/library/yql/sql/settings/translation_settings.h>
-#include <ydb/core/protos/config.pb.h>
+#include <ydb/core/protos/feature_flags.pb.h>
+
+namespace NKikimrConfig {
+    enum TTableServiceConfig_EIndexAutoChooseMode : int;
+}
 
 namespace NYql {
 
@@ -32,6 +36,7 @@ struct TKikimrSettings {
     NCommon::TConfSetting<ui32, false> _KqpMaxComputeActors;
     NCommon::TConfSetting<bool, false> _KqpEnableSpilling;
     NCommon::TConfSetting<bool, false> _KqpDisableLlvmForUdfStages;
+    NCommon::TConfSetting<ui64, false> _KqpYqlCombinerMemoryLimit;
 
     /* No op just to avoid errors in Cloud Logging until they remove this from their queries */
     NCommon::TConfSetting<bool, false> KqpPushOlapProcess;
@@ -46,17 +51,18 @@ struct TKikimrSettings {
     NCommon::TConfSetting<NDq::EHashJoinMode, false> HashJoinMode;
 
     /* Disable optimizer rules */
-    NCommon::TConfSetting<bool, false> OptDisableJoinRewrite;
-    NCommon::TConfSetting<bool, false> OptDisableJoinTableLookup;
-    NCommon::TConfSetting<bool, false> OptDisableJoinReverseTableLookup;
-    NCommon::TConfSetting<bool, false> OptDisableJoinReverseTableLookupLeftSemi;
     NCommon::TConfSetting<bool, false> OptDisableTopSort;
     NCommon::TConfSetting<bool, false> OptDisableSqlInToJoin;
     NCommon::TConfSetting<bool, false> OptEnableInplaceUpdate;
     NCommon::TConfSetting<bool, false> OptEnablePredicateExtract;
     NCommon::TConfSetting<bool, false> OptEnableOlapPushdown;
+    NCommon::TConfSetting<bool, false> OptEnableOlapProvideComputeSharding;
     NCommon::TConfSetting<bool, false> OptUseFinalizeByKey;
-    NCommon::TConfSetting<bool, false> OptEnableCostBasedOptimization;
+    NCommon::TConfSetting<ui32, false> CostBasedOptimizationLevel;
+    NCommon::TConfSetting<bool, false> OptEnableConstantFolding;
+
+    NCommon::TConfSetting<ui32, false> MaxDPccpDPTableSize;
+
 
     NCommon::TConfSetting<ui32, false> MaxTasksPerStage;
 
@@ -70,15 +76,13 @@ struct TKikimrSettings {
     bool SpillingEnabled() const;
     bool DisableLlvmForUdfStages() const;
 
-    bool HasOptDisableJoinRewrite() const;
-    bool HasOptDisableJoinTableLookup() const;
-    bool HasOptDisableJoinReverseTableLookup() const;
-    bool HasOptDisableJoinReverseTableLookupLeftSemi() const;
     bool HasOptDisableTopSort() const;
     bool HasOptDisableSqlInToJoin() const;
     bool HasOptEnableOlapPushdown() const;
+    bool HasOptEnableOlapProvideComputeSharding() const;
     bool HasOptUseFinalizeByKey() const;
-    bool HasOptEnableCostBasedOptimization() const;
+    bool HasOptEnableConstantFolding() const;
+
 
     EOptionalFlag GetOptPredicateExtract() const;
     EOptionalFlag GetUseLlvm() const;
@@ -152,8 +156,12 @@ struct TKikimrConfiguration : public TKikimrSettings, public NCommon::TSettingDi
     bool EnableSequentialReads = false;
     bool EnablePreparedDdl = false;
     bool EnableSequences = false;
+    bool EnableColumnsWithDefault = false;
     NSQLTranslation::EBindingsMode BindingsMode = NSQLTranslation::EBindingsMode::ENABLED;
-    NKikimrConfig::TTableServiceConfig::EIndexAutoChooseMode IndexAutoChooserMode = NKikimrConfig::TTableServiceConfig_EIndexAutoChooseMode_DISABLED;
+    NKikimrConfig::TTableServiceConfig_EIndexAutoChooseMode IndexAutoChooserMode;
+    bool EnableAstCache = false;
+    bool EnablePgConstsToParams = false;
+    ui64 ExtractPredicateRangesLimit = 0;
 };
 
 }

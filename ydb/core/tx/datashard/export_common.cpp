@@ -4,6 +4,7 @@
 #include <ydb/core/ydb_convert/table_description.h>
 #include <ydb/core/ydb_convert/ydb_convert.h>
 #include <ydb/library/dynumber/dynumber.h>
+#include <ydb/library/yql/parser/pg_wrapper/interface/type_desc.h>
 #include <ydb/public/lib/scheme_types/scheme_type_id.h>
 
 #include <ydb/library/yql/public/decimal/yql_decimal.h>
@@ -103,6 +104,16 @@ bool DyNumberToStream(TStringBuf data, IOutputStream& out, TString& err) {
         return false;
     }
     out << *result;
+    return true;
+}
+
+bool PgToStream(TStringBuf data, void* typeDesc, IOutputStream& out, TString& err) {
+    const NPg::TConvertResult& pgResult = NPg::PgNativeTextFromNativeBinary(data, typeDesc);
+    if (pgResult.Error) {
+        err = *pgResult.Error;
+        return false;
+    }
+    out << '"' << CGIEscapeRet(pgResult.Str) << '"';
     return true;
 }
 

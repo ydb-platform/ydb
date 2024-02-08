@@ -2,6 +2,8 @@
 
 #include "datashard_impl.h"
 
+#include <ydb/core/protos/datashard_config.pb.h>
+
 #include <util/stream/output.h>
 
 namespace NKikimr {

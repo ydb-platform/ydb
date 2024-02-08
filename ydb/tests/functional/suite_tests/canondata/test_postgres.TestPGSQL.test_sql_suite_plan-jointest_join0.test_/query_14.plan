@@ -12,6 +12,11 @@
                         "Node Type": "Limit",
                         "Operators": [
                             {
+                                "Inputs": [
+                                    {
+                                        "ExternalPlanNodeId": 12
+                                    }
+                                ],
                                 "Limit": "1001",
                                 "Name": "Limit"
                             }
@@ -27,10 +32,24 @@
                                         "Node Type": "Limit-LeftJoin (MapJoin)",
                                         "Operators": [
                                             {
+                                                "Inputs": [
+                                                    {
+                                                        "InternalOperatorId": 1
+                                                    }
+                                                ],
                                                 "Limit": "1001",
                                                 "Name": "Limit"
                                             },
                                             {
+                                                "Condition": "id = yy_1.id",
+                                                "Inputs": [
+                                                    {
+                                                        "ExternalPlanNodeId": 10
+                                                    },
+                                                    {
+                                                        "ExternalPlanNodeId": 8
+                                                    }
+                                                ],
                                                 "Name": "LeftJoin (MapJoin)"
                                             }
                                         ],
@@ -51,14 +70,18 @@
                                                                 "PlanNodeType": "Connection",
                                                                 "Plans": [
                                                                     {
-                                                                        "Node Type": "FullJoin (JoinDict)-ConstantExpr",
+                                                                        "Node Type": "FullJoin (JoinDict)",
                                                                         "Operators": [
                                                                             {
+                                                                                "Inputs": [
+                                                                                    {
+                                                                                        "ExternalPlanNodeId": 4
+                                                                                    },
+                                                                                    {
+                                                                                        "Other": "ConstantExpression"
+                                                                                    }
+                                                                                ],
                                                                                 "Name": "FullJoin (JoinDict)"
-                                                                            },
-                                                                            {
-                                                                                "Iterator": "[{id: 1}]",
-                                                                                "Name": "Iterator"
                                                                             }
                                                                         ],
                                                                         "PlanNodeId": 5,
@@ -84,6 +107,7 @@
                                                                                                         "Node Type": "TableFullScan",
                                                                                                         "Operators": [
                                                                                                             {
+                                                                                                                "Inputs": [],
                                                                                                                 "Name": "TableFullScan",
                                                                                                                 "ReadColumns": [
                                                                                                                     "even",
@@ -138,6 +162,7 @@
                                                         "Node Type": "ConstantExpr",
                                                         "Operators": [
                                                             {
+                                                                "Inputs": [],
                                                                 "Iterator": "[{id: 1}]",
                                                                 "Name": "Iterator"
                                                             }

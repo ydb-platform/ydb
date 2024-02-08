@@ -7,14 +7,16 @@
 #include "keyvalue_simple_db.h"
 #include "keyvalue_simple_db_flat.h"
 #include "keyvalue_state.h"
+
 #include <ydb/core/tablet_flat/tablet_flat_executed.h>
 #include <ydb/core/tablet_flat/flat_database.h>
 #include <ydb/core/engine/minikql/flat_local_tx_factory.h>
 #include <ydb/core/tablet/tablet_counters_aggregator.h>
 #include <ydb/core/tablet/tablet_counters_protobuf.h>
 
-#include <library/cpp/actors/core/hfunc.h>
-#include <library/cpp/actors/core/log.h>
+#include <ydb/library/actors/core/hfunc.h>
+#include <ydb/library/actors/core/log.h>
+#include <ydb/library/wilson_ids/wilson.h>
 #include <library/cpp/json/json_writer.h>
 #include <ydb/core/base/appdata.h>
 #include <ydb/core/base/blobstorage.h>
@@ -121,8 +123,9 @@ protected:
         TKeyValueFlat *Self;
         TVector<TLogoBlobID> TrashBeingCommitted;
 
-        TTxRequest(THolder<TIntermediate> intermediate, TKeyValueFlat *keyValueFlat)
-            : Intermediate(std::move(intermediate))
+        TTxRequest(THolder<TIntermediate> intermediate, TKeyValueFlat *keyValueFlat, NWilson::TTraceId &&traceId)
+            : NTabletFlatExecutor::ITransaction(std::move(traceId))
+            , Intermediate(std::move(intermediate))
             , Self(keyValueFlat)
         {
             Intermediate->Response.SetStatus(NMsgBusProxy::MSTATUS_UNKNOWN);
@@ -388,7 +391,8 @@ protected:
         CheckYellowChannels(ev->Get()->Intermediate->Stat);
 
         State.OnEvIntermediate(*(ev->Get()->Intermediate), ctx);
-        Execute(new TTxRequest(std::move(ev->Get()->Intermediate), this), ctx);
+        auto traceId = ev->Get()->Intermediate->Span.GetTraceId();
+        Execute(new TTxRequest(std::move(ev->Get()->Intermediate), this, std::move(traceId)), ctx);
     }
 
     void Handle(TEvKeyValue::TEvNotify::TPtr &ev, const TActorContext &ctx) {

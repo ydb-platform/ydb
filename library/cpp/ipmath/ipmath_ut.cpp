@@ -35,6 +35,7 @@ public:
     UNIT_TEST(IpRangeFromIpv6);
     UNIT_TEST(FullIpRange);
     UNIT_TEST(IpRangeFromCidr);
+    UNIT_TEST(IpRangeFromCompact);
     UNIT_TEST(IpRangeFromIpv4Builder);
     UNIT_TEST(IpRangeFromInvalidIpv4);
     UNIT_TEST(IpRangeFromInvalidIpv6);
@@ -143,6 +144,15 @@ public:
         ASSERT_THROW(TIpAddressRange::FromCidrString("::"), TInvalidIpRangeException);
         ASSERT_THROW(TIpAddressRange::FromCidrString("/::"), TInvalidIpRangeException);
         ASSERT_THROW(TIpAddressRange::FromCidrString("::/150"), TInvalidIpRangeException);
+    }
+
+    void IpRangeFromCompact() {
+        // FromCidrString disallows node addresses
+        EXPECT_THROW(TIpAddressRange::FromCidrString("10.10.36.12/12"), TInvalidIpRangeException);
+
+        // FromCompactString allows to use node address instead of network address (suffix of zeroes is not required)
+        ASSERT_THAT(TIpAddressRange::FromCompactString("10.10.36.12/12"), Eq(TIpAddressRange::FromCidrString("10.0.0.0/12")));
+        ASSERT_THAT(TIpAddressRange::FromCompactString("abcd:ef01:2345::/24"), Eq(TIpAddressRange::FromCidrString("abcd:ef00::/24")));
     }
 
     void RangeFromRangeString() {

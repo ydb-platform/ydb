@@ -46,7 +46,8 @@ class TGRpcRequestProxySimple
     using TBase = TActorBootstrapped<TGRpcRequestProxySimple>;
 public:
     explicit TGRpcRequestProxySimple(const NKikimrConfig::TAppConfig& appConfig)
-        : AppConfig(MakeIntrusiveConst<TAppConfig>(appConfig))
+        : AppConfig(appConfig)
+        , ChannelBufferSize(appConfig.GetTableServiceConfig().GetResourceManager().GetChannelBufferSize())
     {
     }
 
@@ -74,7 +75,7 @@ private:
 
         THolder<TEvListEndpointsRequest> request(event->Release().Release());
         auto *result = TEvListEndpointsRequest::AllocateResult<Ydb::Discovery::ListEndpointsResult>(request);
-        const auto& grpcConfig = AppConfig->GetGRpcConfig();
+        const auto& grpcConfig = AppConfig.GetGRpcConfig();
         AddEndpointsForGrpcConfig(grpcConfig, *result);
 
         for (const auto& externalEndpoint : grpcConfig.GetExtEndpoints()) {
@@ -109,12 +110,12 @@ private:
 
         auto state = requestBaseCtx->GetAuthState();
 
-        if (state.State == NGrpc::TAuthState::AS_FAIL) {
+        if (state.State == NYdbGrpc::TAuthState::AS_FAIL) {
             requestBaseCtx->ReplyUnauthenticated();
             return;
         }
 
-        if (state.State == NGrpc::TAuthState::AS_UNAVAILABLE) {
+        if (state.State == NYdbGrpc::TAuthState::AS_UNAVAILABLE) {
             Counters->IncDatabaseUnavailableCounter();
             const TString error = "Unable to resolve token";
             const auto issue = MakeIssue(NKikimrIssues::TIssuesIds::YDB_AUTH_UNAVAILABLE, error);
@@ -135,15 +136,16 @@ private:
         requestBaseCtx->ReplyWithYdbStatus(Ydb::StatusIds::BAD_REQUEST);
     }
 
-    TIntrusiveConstPtr<TAppConfig> GetAppConfig() const override {
-        return AppConfig;
+    ui64 GetChannelBufferSize() const override {
+        return ChannelBufferSize.load();
     }
 
     TActorId RegisterActor(IActor* actor) const override {
         return TActivationContext::AsActorContext().Register(actor);
     }
 
-    TIntrusiveConstPtr<TAppConfig> AppConfig;
+    const NKikimrConfig::TAppConfig AppConfig;
+    std::atomic<ui64> ChannelBufferSize;
     IGRpcProxyCounters::TPtr Counters;
 };
 
@@ -169,8 +171,8 @@ void TGRpcRequestProxySimple::HandleUndelivery(TEvents::TEvUndelivered::TPtr& ev
 
 bool TGRpcRequestProxySimple::IsAuthStateOK(const IRequestProxyCtx& ctx) {
     const auto& state = ctx.GetAuthState();
-    return state.State == NGrpc::TAuthState::AS_OK ||
-           state.State == NGrpc::TAuthState::AS_FAIL && state.NeedAuth == false ||
+    return state.State == NYdbGrpc::TAuthState::AS_OK ||
+           state.State == NYdbGrpc::TAuthState::AS_FAIL && state.NeedAuth == false ||
            state.NeedAuth == false && !ctx.GetYdbToken();
 }
 

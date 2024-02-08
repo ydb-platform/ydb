@@ -15,6 +15,8 @@
 #include <ydb/core/base/appdata.h>
 #include <ydb/core/base/counters.h>
 #include <ydb/core/util/pb.h>
+#include <ydb/library/actors/core/monotonic_provider.h>
+
 
 namespace NKikimr {
 namespace NTabletFlatExecutor {

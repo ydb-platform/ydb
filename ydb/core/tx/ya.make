@@ -10,7 +10,7 @@ SRCS(
 )
 
 PEERDIR(
-    library/cpp/actors/core
+    ydb/library/actors/core
     ydb/core/base
     ydb/core/persqueue/config
     ydb/core/protos
@@ -41,4 +41,5 @@ RECURSE(
     tx_proxy
     tiering
     sharding
+    tracing
 )

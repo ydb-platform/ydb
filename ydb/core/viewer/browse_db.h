@@ -1,6 +1,6 @@
 #pragma once
-#include <library/cpp/actors/core/actor_bootstrapped.h>
-#include <library/cpp/actors/core/mon.h>
+#include <ydb/library/actors/core/actor_bootstrapped.h>
+#include <ydb/library/actors/core/mon.h>
 #include <ydb/core/base/tablet.h>
 #include <ydb/core/base/tablet_pipe.h>
 #include <ydb/library/services/services.pb.h>
@@ -121,7 +121,7 @@ public:
         request->Record.SetUserToken(BrowseContext.UserToken);
         ctx.Send(TxProxy, request.Release());
         ++Requests;
-        Become(&TThis::StateWork);
+        UnsafeBecome(&TThis::StateWork);
     }
 
     virtual void ReplyAndDie(const TActorContext &ctx) override {

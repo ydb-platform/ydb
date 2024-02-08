@@ -14,6 +14,8 @@
 #include <ydb/library/yql/providers/s3/range_helpers/path_list_reader.h>
 #include <ydb/library/yql/utils/log/log.h>
 
+#include <library/cpp/json/writer/json_value.h>
+
 namespace NYql {
 
 using namespace NNodes;
@@ -51,6 +53,15 @@ bool GetMultipart(const TExprNode& settings) {
     return false;
 }
 
+std::optional<ui64> TryExtractLimitHint(const TS3SourceSettingsBase& settings) {
+    auto limitHint = settings.RowsLimitHint();
+    if (limitHint.Ref().Content().empty()) {
+        return std::nullopt;
+    }
+
+    return FromString<ui64>(limitHint.Ref().Content());
+}
+
 using namespace NYql::NS3Details;
 
 class TS3DqIntegration: public TDqIntegrationBase {
@@ -62,8 +73,11 @@ public:
 
     ui64 Partition(const TDqSettings&, size_t maxPartitions, const TExprNode& node, TVector<TString>& partitions, TString*, TExprContext&, bool) override {
         std::vector<std::vector<TPath>> parts;
+        std::optional<ui64> mbLimitHint;
         if (const TMaybeNode<TDqSource> source = &node) {
             const auto settings = source.Cast().Settings().Cast<TS3SourceSettingsBase>();
+            mbLimitHint = TryExtractLimitHint(settings);
+
             for (auto i = 0u; i < settings.Paths().Size(); ++i) {
                 const auto& packed = settings.Paths().Item(i);
                 TPathList paths;
@@ -76,6 +90,12 @@ public:
                     parts.emplace_back(1U, path);
                 }
             }
+        }
+
+        constexpr ui64 maxTaskRatio = 20;
+        if (!maxPartitions || (mbLimitHint && maxPartitions > *mbLimitHint / maxTaskRatio)) {
+            maxPartitions = std::max(*mbLimitHint / maxTaskRatio, ui64{1});
+            YQL_CLOG(TRACE, ProviderS3) << "limited max partitions to " << maxPartitions;
         }
 
         if (maxPartitions && parts.size() > maxPartitions) {
@@ -135,10 +155,10 @@ public:
         double size = 0;
         double cols = 0;
         double rows = 0;
-        if (const auto& maybeArrowSettings = TMaybeNode<TS3ArrowSettings>(sourceWrap->Child(0))) {
-            const auto& arrowSettings = maybeArrowSettings.Cast();
-            for (size_t i = 0; i < arrowSettings.Paths().Size(); ++i) {
-                auto batch = arrowSettings.Paths().Item(i);
+        if (const auto& maybeParseSettings = TMaybeNode<TS3ParseSettings>(sourceWrap->Child(0))) {
+            const auto& parseSettings = maybeParseSettings.Cast();
+            for (size_t i = 0; i < parseSettings.Paths().Size(); ++i) {
+                auto batch = parseSettings.Paths().Item(i);
                 TStringBuf packed = batch.Data().Literal().Value();
                 bool isTextEncoded = FromString<bool>(batch.IsText().Literal().Value());
                 TPathList paths;
@@ -149,8 +169,8 @@ public:
                 }
             }
 
-            if (arrowSettings.RowType().Maybe<TCoStructType>()) {
-                cols = arrowSettings.RowType().Ptr()->ChildrenSize();
+            if (parseSettings.RowType().Maybe<TCoStructType>()) {
+                cols = parseSettings.RowType().Ptr()->ChildrenSize();
             }
 
             rows = size / 1024; // magic estimate
@@ -213,28 +233,22 @@ public:
 
             auto format = s3ReadObject.Object().Format().Ref().Content();
             if (const auto useCoro = State_->Configuration->SourceCoroActor.Get(); (!useCoro || *useCoro) && format != "raw" && format != "json_list") {
-                bool supportedArrowTypes = false;
-                if (State_->Types->UseBlocks) {
-                    YQL_ENSURE(State_->Configuration->UseBlocksSource.Get().GetOrElse(true), "Scalar Source is not compatible with Blocks engine");
-                }
-                if (State_->Configuration->UseBlocksSource.Get().GetOrElse(State_->Types->UseBlocks) && State_->Types->ArrowResolver) {
+                if (format == "parquet") {
+                    YQL_ENSURE(State_->Types->ArrowResolver);
                     TVector<const TTypeAnnotationNode*> allTypes;
                     for (const auto& x : rowType->Cast<TStructExprType>()->GetItems()) {
                         allTypes.push_back(x->GetItemType());
                     }
-
                     auto resolveStatus = State_->Types->ArrowResolver->AreTypesSupported(ctx.GetPosition(read->Pos()), allTypes, ctx);
-                    YQL_ENSURE(resolveStatus != IArrowResolver::ERROR);
-                    supportedArrowTypes = resolveStatus == IArrowResolver::OK;
+                    YQL_ENSURE(resolveStatus == IArrowResolver::OK);
                 }
                 return Build<TDqSourceWrap>(ctx, read->Pos())
-                    .Input<TS3ParseSettingsBase>()
-                        .CallableName((supportedArrowTypes && format == "parquet") ? TS3ArrowSettings::CallableName():
-                                                                                     TS3ParseSettings::CallableName())
+                    .Input<TS3ParseSettings>()
                         .Paths(s3ReadObject.Object().Paths())
                         .Token<TCoSecureParam>()
                             .Name().Build(token)
                         .Build()
+                        .RowsLimitHint(ctx.NewAtom(read->Pos(), ""))
                         .Format(s3ReadObject.Object().Format())
                         .RowType(ExpandType(s3ReadObject.Pos(), *rowType, ctx))
                         .Settings(s3ReadObject.Object().Settings())
@@ -277,6 +291,7 @@ public:
                         .Token<TCoSecureParam>()
                             .Name().Build(token)
                             .Build()
+                        .RowsLimitHint(ctx.NewAtom(read->Pos(), ""))
                         .SizeLimit(
                             sizeLimitIndex != -1 ? readSettings->Child(sizeLimitIndex)->TailPtr()
                                                  : emptyNode)
@@ -312,10 +327,13 @@ public:
             YQL_ENSURE(paths.Size() > 0);
             const TStructExprType* extraColumnsType = paths.Item(0).ExtraColumns().Ref().GetTypeAnn()->Cast<TStructExprType>();
 
-            if (const auto mayParseSettings = settings.Maybe<TS3ParseSettingsBase>()) {
+            if (auto hintStr = settings.RowsLimitHint().Ref().Content(); !hintStr.empty()) {
+                srcDesc.SetRowsLimitHint(FromString<i64>(hintStr));
+            }
+
+            if (const auto mayParseSettings = settings.Maybe<TS3ParseSettings>()) {
                 const auto parseSettings = mayParseSettings.Cast();
                 srcDesc.SetFormat(parseSettings.Format().StringValue().c_str());
-                srcDesc.SetArrow(bool(parseSettings.Maybe<TS3ArrowSettings>()));
                 srcDesc.SetParallelRowGroupCount(State_->Configuration->ArrowParallelRowGroupCount.Get().GetOrElse(0));
                 srcDesc.SetRowGroupReordering(State_->Configuration->ArrowRowGroupReordering.Get().GetOrElse(true));
                 srcDesc.SetParallelDownloadCount(State_->Configuration->ParallelDownloadCount.Get().GetOrElse(0));
@@ -407,11 +425,79 @@ public:
                 sinkDesc.SetCompression(TString(compression));
 
             sinkDesc.SetMultipart(GetMultipart(settings.Settings().Ref()));
-            sinkDesc.SetAtomicUploadCommit(State_->Configuration->AtomicUploadCommit.Get().GetOrElse(false));
+            sinkDesc.SetAtomicUploadCommit(State_->Configuration->AllowAtomicUploadCommit && State_->Configuration->AtomicUploadCommit.Get().GetOrElse(false));
 
             protoSettings.PackFrom(sinkDesc);
             sinkType = "S3Sink";
         }
+    }
+
+    bool FillSourcePlanProperties(const NNodes::TExprBase& node, TMap<TString, NJson::TJsonValue>& properties) override {
+        if (!node.Maybe<TDqSource>()) {
+            return false;
+        }
+
+        const NJson::TJsonValue* clusterNameProp = properties.FindPtr("ExternalDataSource");
+        const TString clusterName = clusterNameProp && clusterNameProp->IsString() ? clusterNameProp->GetString() : TString();
+
+        auto source = node.Cast<TDqSource>();
+        if (auto maybeSettings = source.Settings().Maybe<TS3SourceSettings>()) {
+            const TS3SourceSettings settings = maybeSettings.Cast();
+            if (clusterName) {
+                properties["Name"] = TStringBuilder() << "Raw read " << clusterName;
+            } else {
+                properties["Name"] = "Raw read from external data source";
+            }
+            properties["Format"] = "raw";
+            if (TString limit = settings.RowsLimitHint().StringValue()) {
+                properties["RowsLimitHint"] = limit;
+            }
+            return true;
+        } else if (auto maybeSettings = source.Settings().Maybe<TS3ParseSettings>()) {
+            const TS3ParseSettings settings = maybeSettings.Cast();
+            if (clusterName) {
+                properties["Name"] = TStringBuilder() << "Parse " << clusterName;
+            } else {
+                properties["Name"] = "Parse from external data source";
+            }
+            properties["Format"] = settings.Format().StringValue();
+            if (TString limit = settings.RowsLimitHint().StringValue()) {
+                properties["RowsLimitHint"] = limit;
+            }
+
+            const TStructExprType* fullRowType = settings.RowType().Ref().GetTypeAnn()->Cast<TTypeExprType>()->GetType()->Cast<TStructExprType>();
+            auto rowTypeItems = fullRowType->GetItems();
+            auto& columns = properties["ReadColumns"];
+            for (auto& item : rowTypeItems) {
+                columns.AppendValue(item->GetName());
+            }
+            return true;
+        }
+        return false;
+    }
+
+    bool FillSinkPlanProperties(const NNodes::TExprBase& node, TMap<TString, NJson::TJsonValue>& properties) override {
+        if (!node.Maybe<TDqSink>()) {
+            return false;
+        }
+
+        auto sink = node.Cast<TDqSink>();
+        if (auto maybeS3SinkSettings = sink.Settings().Maybe<TS3SinkSettings>()) {
+            auto s3SinkSettings = maybeS3SinkSettings.Cast();
+            properties["Extension"] = s3SinkSettings.Extension().StringValue();
+            if (auto settingsList = s3SinkSettings.Settings().Maybe<TExprList>()) {
+                for (const TExprNode::TPtr& s : s3SinkSettings.Settings().Raw()->Children()) {
+                    if (s->ChildrenSize() >= 2 && s->Child(0)->Content() == "compression"sv) {
+                        auto val = s->Child(1)->Content();
+                        if (val) {
+                            properties["Compression"] = TString(val);
+                        }
+                    }
+                }
+            }
+            return true;
+        }
+        return false;
     }
 
     void RegisterMkqlCompiler(NCommon::TMkqlCallableCompilerBase& compiler) override {

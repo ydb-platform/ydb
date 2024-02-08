@@ -1,6 +1,6 @@
 #include <library/cpp/testing/unittest/registar.h>
 #include <library/cpp/testing/unittest/tests_data.h>
-#include <library/cpp/actors/helpers/selfping_actor.h>
+#include <ydb/library/actors/helpers/selfping_actor.h>
 #include <util/stream/null.h>
 #include <util/datetime/cputimer.h>
 #include "hive_impl.h"
@@ -192,5 +192,11 @@ Y_UNIT_TEST_SUITE(THiveImplTest) {
 
         Ctest << "HIVE_TABLET_BALANCE_STRATEGY_RANDOM" << Endl;
         CheckSpeedAndDistribution(allTablets, BalanceTablets<NKikimrConfig::THiveConfig::HIVE_TABLET_BALANCE_STRATEGY_RANDOM>, EResourceToBalance::Memory);
+    }
+
+    Y_UNIT_TEST(TestShortTabletTypes) {
+        // This asserts we don't have different tablet types with same short name
+        // In a world with constexpr maps this could have been a static_assert...
+        UNIT_ASSERT_VALUES_EQUAL(TABLET_TYPE_SHORT_NAMES.size(), TABLET_TYPE_BY_SHORT_NAME.size());
     }
 }

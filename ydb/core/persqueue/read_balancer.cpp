@@ -2,10 +2,11 @@
 
 #include <ydb/core/persqueue/events/internal.h>
 #include <ydb/core/protos/counters_pq.pb.h>
+#include <ydb/core/base/feature_flags.h>
 #include <ydb/core/tablet/tablet_exception.h>
 #include <library/cpp/monlib/service/pages/templates.h>
 #include <library/cpp/string_utils/base64/base64.h>
-
+#include <library/cpp/random_provider/random_provider.h>
 
 namespace NKikimr {
 namespace NPQ {

@@ -263,6 +263,7 @@ TYtConfiguration::TYtConfiguration()
     REGISTER_SETTING(*this, TableContentTmpFolder);
     REGISTER_SETTING(*this, TableContentColumnarStatistics);
     REGISTER_SETTING(*this, TableContentUseSkiff);
+    REGISTER_SETTING(*this, TableContentLocalExecution);
     REGISTER_SETTING(*this, DisableJobSplitting);
     REGISTER_SETTING(*this, UseColumnarStatistics)
         .Parser([](const TString& v) {
@@ -362,6 +363,20 @@ TYtConfiguration::TYtConfiguration()
                 throw yexception() << "Expected yson map, but got " << value.GetType();
             }
         });
+    REGISTER_SETTING(*this, Description)
+        .Parser([](const TString& v) { return NYT::NodeFromYsonString(v); })
+        .Validator([] (const TString&, const NYT::TNode& value) {
+            if (!value.IsMap()) {
+                throw yexception() << "Expected yson map, but got " << value.GetType();
+            }
+        });
+    REGISTER_SETTING(*this, StartedBy)
+        .Parser([](const TString& v) { return NYT::NodeFromYsonString(v); })
+        .Validator([] (const TString&, const NYT::TNode& value) {
+            if (!value.IsMap()) {
+                throw yexception() << "Expected yson map, but got " << value.GetType();
+            }
+        });
     REGISTER_SETTING(*this, MaxSpeculativeJobCountPerTask);
     REGISTER_SETTING(*this, LLVMMemSize);
     REGISTER_SETTING(*this, LLVMPerNodeMemSize);
@@ -426,6 +441,7 @@ TYtConfiguration::TYtConfiguration()
     REGISTER_SETTING(*this, FileCacheTtl);
     REGISTER_SETTING(*this, _ImpersonationUser);
     REGISTER_SETTING(*this, InferSchemaMode).Parser([](const TString& v) { return FromString<EInferSchemaMode>(v); });
+    REGISTER_SETTING(*this, BatchListFolderConcurrency).Lower(1); // Upper bound on concurrent batch folder list requests https://yt.yandex-team.ru/docs/api/commands#execute_batch 
     REGISTER_SETTING(*this, JoinCommonUseMapMultiOut);
     REGISTER_SETTING(*this, _EnableYtPartitioning);
     REGISTER_SETTING(*this, UseAggPhases);
@@ -452,6 +468,7 @@ TYtConfiguration::TYtConfiguration()
             return res;
         });
     REGISTER_SETTING(*this, ViewIsolation);
+    REGISTER_SETTING(*this, PartitionByConstantKeysViaMap);
 }
 
 EReleaseTempDataMode GetReleaseTempDataMode(const TYtSettings& settings) {

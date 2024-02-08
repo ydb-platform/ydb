@@ -10,11 +10,11 @@
 #include <ydb/core/kqp/rm_service/kqp_rm_service.h>
 #include <ydb/core/kqp/rm_service/kqp_resource_estimation.h>
 
-#include <library/cpp/actors/core/actor.h>
-#include <library/cpp/actors/core/actor_bootstrapped.h>
-#include <library/cpp/actors/wilson/wilson_span.h>
-#include <library/cpp/actors/core/hfunc.h>
-#include <library/cpp/actors/core/log.h>
+#include <ydb/library/actors/core/actor.h>
+#include <ydb/library/actors/core/actor_bootstrapped.h>
+#include <ydb/library/actors/wilson/wilson_span.h>
+#include <ydb/library/actors/core/hfunc.h>
+#include <ydb/library/actors/core/log.h>
 
 #include <util/string/vector.h>
 
@@ -43,10 +43,10 @@ class TKqpPlanner {
 public:
     TKqpPlanner(TKqpTasksGraph& tasksGraph, ui64 txId, const TActorId& executer, const IKqpGateway::TKqpSnapshot& snapshot,
         const TString& database, const TIntrusiveConstPtr<NACLib::TUserToken>& userToken, TInstant deadline,
-        const Ydb::Table::QueryStatsCollection::Mode& statsMode,
-        bool withSpilling, const TMaybe<NKikimrKqp::TRlPath>& rlPath, NWilson::TSpan& ExecuterSpan,
+        const Ydb::Table::QueryStatsCollection::Mode& statsMode, bool withSpilling,
+        const TMaybe<NKikimrKqp::TRlPath>& rlPath, NWilson::TSpan& ExecuterSpan,
         TVector<NKikimrKqp::TKqpNodeResources>&& resourcesSnapshot, const NKikimrConfig::TTableServiceConfig::TExecuterRetriesConfig& executerRetriesConfig,
-        bool useDataQueryPool, bool localComputeTasks, ui64 mkqlMemoryLimit, NYql::NDq::IDqAsyncIoFactory::TPtr asyncIoFactory, bool doOptimization,
+        bool useDataQueryPool, bool localComputeTasks, ui64 mkqlMemoryLimit, NYql::NDq::IDqAsyncIoFactory::TPtr asyncIoFactory, bool allowSinglePartitionOpt,
         const TIntrusivePtr<TUserRequestContext>& userRequestContext);
 
     bool SendStartKqpTasksRequest(ui32 requestId, const TActorId& target);
@@ -63,7 +63,7 @@ public:
     ui32 GetnComputeTasks();
 
 private:
-    
+
     const IKqpGateway::TKqpSnapshot& GetSnapshot() const;
     void ExecuteDataComputeTask(ui64 taskId, bool shareMailbox, bool optimizeProtoForLocalExecution);
     void PrepareToProcess();
@@ -90,7 +90,7 @@ private:
     const TVector<NKikimrKqp::TKqpNodeResources> ResourcesSnapshot;
     NWilson::TSpan& ExecuterSpan;
     const NKikimrConfig::TTableServiceConfig::TExecuterRetriesConfig& ExecuterRetriesConfig;
-    ui64 LocalRunMemoryEst;
+    ui64 LocalRunMemoryEst = 0;
     TVector<TTaskResourceEstimation> ResourceEstimations;
     TVector<TRequestData> Requests;
     TKqpTasksGraph& TasksGraph;
@@ -100,7 +100,7 @@ private:
     NYql::NDq::IDqAsyncIoFactory::TPtr AsyncIoFactory;
     ui32 nComputeTasks = 0;
     ui32 nScanTasks = 0;
-    bool DoOptimization;
+    bool AllowSinglePartitionOpt;
 
     THashMap<TActorId, TProgressStat> PendingComputeActors; // Running compute actors (pure and DS)
     THashSet<ui64> PendingComputeTasks; // Not started yet, waiting resources
@@ -114,8 +114,8 @@ public:
 std::unique_ptr<TKqpPlanner> CreateKqpPlanner(TKqpTasksGraph& tasksGraph, ui64 txId, const TActorId& executer,
     const IKqpGateway::TKqpSnapshot& snapshot,
     const TString& database, const TIntrusiveConstPtr<NACLib::TUserToken>& userToken, TInstant deadline,
-    const Ydb::Table::QueryStatsCollection::Mode& statsMode,
-    bool withSpilling, const TMaybe<NKikimrKqp::TRlPath>& rlPath, NWilson::TSpan& executerSpan,
+    const Ydb::Table::QueryStatsCollection::Mode& statsMode, bool withSpilling,
+    const TMaybe<NKikimrKqp::TRlPath>& rlPath, NWilson::TSpan& executerSpan,
     TVector<NKikimrKqp::TKqpNodeResources>&& resourcesSnapshot,
     const NKikimrConfig::TTableServiceConfig::TExecuterRetriesConfig& ExecuterRetriesConfig,
     bool useDataQueryPool, bool localComputeTasks,

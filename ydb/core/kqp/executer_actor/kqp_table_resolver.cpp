@@ -4,6 +4,8 @@
 #include <ydb/core/base/cputime.h>
 #include <ydb/core/base/path.h>
 #include <ydb/core/kqp/executer_actor/kqp_executer.h>
+#include <ydb/library/actors/core/actor_bootstrapped.h>
+
 
 
 namespace NKikimr::NKqp {
@@ -198,7 +200,7 @@ private:
     }
 
 private:
-    THolder<TKeyDesc> ExtractKey(const TTableId& table, const TIntrusiveConstPtr<TKqpTableKeys::TTableConstInfo>& tableInfo, TKeyDesc::ERowOperation operation) {
+    THolder<TKeyDesc> ExtractKey(const TTableId& table, const TIntrusiveConstPtr<TTableConstInfo>& tableInfo, TKeyDesc::ERowOperation operation) {
         auto range = GetFullRange(tableInfo->KeyColumnTypes.size());
 
         return MakeHolder<TKeyDesc>(table, range.ToTableRange(), operation, tableInfo->KeyColumnTypes,

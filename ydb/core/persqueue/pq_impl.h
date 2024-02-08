@@ -13,7 +13,7 @@
 #include <ydb/core/tx/time_cast/time_cast.h>
 #include <ydb/core/tx/tx_processing.h>
 
-#include <library/cpp/actors/interconnect/interconnect.h>
+#include <ydb/library/actors/interconnect/interconnect.h>
 
 namespace NKikimr {
 namespace NPQ {
@@ -109,6 +109,9 @@ class TPersQueue : public NKeyValue::TKeyValueFlat {
     void ReadState(const NKikimrClient::TKeyValueResponse::TReadResult& read, const TActorContext& ctx);
 
     void InitializeMeteringSink(const TActorContext& ctx);
+    void ProcessReadRequestImpl(const ui64 responseCookie, const TActorId& partActor,
+                                const NKikimrClient::TPersQueuePartitionRequest& req, bool doPrepare, ui32 readId,
+                                const TActorContext& ctx);
 
     TMaybe<TEvPQ::TEvRegisterMessageGroup::TBody> MakeRegisterMessageGroup(
         const NKikimrClient::TPersQueuePartitionRequest::TCmdRegisterMessageGroup& cmd,
@@ -129,23 +132,28 @@ class TPersQueue : public NKeyValue::TKeyValueFlat {
 #define DESCRIBE_HANDLE(A) void A(const ui64 responseCookie, const TActorId& partActor, \
                                   const NKikimrClient::TPersQueuePartitionRequest& req, const TActorContext& ctx);
     DESCRIBE_HANDLE(HandleGetMaxSeqNoRequest)
-    DESCRIBE_HANDLE(HandleDeleteSessionRequest)
-    DESCRIBE_HANDLE(HandleCreateSessionRequest)
     DESCRIBE_HANDLE(HandleSetClientOffsetRequest)
     DESCRIBE_HANDLE(HandleGetClientOffsetRequest)
     DESCRIBE_HANDLE(HandleWriteRequest)
     DESCRIBE_HANDLE(HandleUpdateWriteTimestampRequest)
-    DESCRIBE_HANDLE(HandleReadRequest)
     DESCRIBE_HANDLE(HandleRegisterMessageGroupRequest)
     DESCRIBE_HANDLE(HandleDeregisterMessageGroupRequest)
     DESCRIBE_HANDLE(HandleSplitMessageGroupRequest)
 #undef DESCRIBE_HANDLE
+
 #define DESCRIBE_HANDLE_WITH_SENDER(A) void A(const ui64 responseCookie, const TActorId& partActor, \
                                   const NKikimrClient::TPersQueuePartitionRequest& req, const TActorContext& ctx,\
                                   const TActorId& pipeClient, const TActorId& sender);
+
+    DESCRIBE_HANDLE_WITH_SENDER(HandleCreateSessionRequest)
+    DESCRIBE_HANDLE_WITH_SENDER(HandleDeleteSessionRequest)
+    DESCRIBE_HANDLE_WITH_SENDER(HandleReadRequest)
+    DESCRIBE_HANDLE_WITH_SENDER(HandlePublishReadRequest)
+    DESCRIBE_HANDLE_WITH_SENDER(HandleForgetReadRequest)
     DESCRIBE_HANDLE_WITH_SENDER(HandleGetOwnershipRequest)
     DESCRIBE_HANDLE_WITH_SENDER(HandleReserveBytesRequest)
 #undef DESCRIBE_HANDLE_WITH_SENDER
+
     bool ChangingState() const { return !TabletStateRequests.empty(); }
     void TryReturnTabletStateAll(const TActorContext& ctx, NKikimrProto::EReplyStatus status = NKikimrProto::OK);
     void ReturnTabletState(const TActorContext& ctx, const TChangeNotification& req, NKikimrProto::EReplyStatus status);
@@ -156,6 +164,11 @@ class TPersQueue : public NKeyValue::TKeyValueFlat {
                                   ui64 step);
 
     ui64 GetAllowedStep() const;
+
+    void Handle(TEvPQ::TEvCheckPartitionStatusRequest::TPtr& ev, const TActorContext& ctx);
+    void ProcessCheckPartitionStatusRequests(const TPartitionId& partitionId);
+
+    TString LogPrefix() const;
 
     static constexpr const char * KeyConfig() { return "_config"; }
     static constexpr const char * KeyState() { return "_state"; }
@@ -173,7 +186,8 @@ public:
 private:
     bool ConfigInited;
     ui32 PartitionsInited;
-    THashMap<ui32, TPartitionInfo> Partitions;
+    bool InitCompleted = false;
+    THashMap<TPartitionId, TPartitionInfo> Partitions;
     THashMap<TString, TIntrusivePtr<TEvTabletCounters::TInFlightCookie>> CounterEventsInflight;
 
     TActorId CacheActor;
@@ -206,12 +220,25 @@ private:
     TVector<TAutoPtr<TEvPersQueue::TEvHasDataInfo>> HasDataRequests;
     TVector<std::pair<TAutoPtr<TEvPersQueue::TEvUpdateConfig>, TActorId> > UpdateConfigRequests;
 
+public:
     struct TPipeInfo {
         TActorId PartActor;
         TString Owner;
-        ui32 ServerActors;
+        ui32 ServerActors = 0;
+        TString ClientId;
+        TString SessionId;
+        ui64 PartitionSessionId = 0;
+        TPipeInfo() = default;
+        static TPipeInfo ForOwner(const TActorId& partActor, const TString& owner, ui32 serverActors) {
+            TPipeInfo res;
+            res.Owner = owner;
+            res.PartActor = partActor;
+            res.ServerActors = serverActors;
+            return res;
+        }
     };
 
+private:
     THashMap<TActorId, TPipeInfo> PipesInfo;
 
     ui64 NextResponseCookie;
@@ -308,7 +335,7 @@ private:
     void SendEvProposePartitionConfig(const TActorContext& ctx,
                                       TDistributedTransaction& tx);
 
-    TPartition* CreatePartitionActor(ui32 partitionId,
+    TPartition* CreatePartitionActor(const TPartitionId& partitionId,
                                      const NPersQueue::TTopicConverterPtr topicConverter,
                                      const NKikimrPQ::TPQTabletConfig& config,
                                      bool newPartition,
@@ -373,7 +400,14 @@ private:
     bool CanProcessWriteTxs() const;
     bool CanProcessDeleteTxs() const;
 
+    ui64 GetGeneration();
+    void DestroySession(TPipeInfo& pipeInfo);
     bool UseMediatorTimeCast = true;
+
+    THashMap<ui32, TVector<TEvPQ::TEvCheckPartitionStatusRequest::TPtr>> CheckPartitionStatusRequests;
+    TMaybe<ui64> TabletGeneration;
+
+    TPartitionId MakePartitionId(ui32 originalPartitionId, TMaybe<ui64> writeId) const;
 };
 
 

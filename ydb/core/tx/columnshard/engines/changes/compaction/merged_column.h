@@ -11,9 +11,7 @@ private:
     YDB_READONLY_DEF(std::vector<TColumnPortion>, Portions);
     YDB_READONLY(ui32, RecordsCount, 0);
 
-    void NewPortion() {
-        Portions.emplace_back(TColumnPortion(Context));
-    }
+    void NewPortion();
 
 public:
     TMergedColumn(const TColumnMergeContext& context)

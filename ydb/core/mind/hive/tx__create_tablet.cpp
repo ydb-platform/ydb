@@ -362,11 +362,12 @@ public:
         // insert entry for new tablet
         TLeaderTabletInfo& tablet = Self->GetTablet(TabletId);
         tablet.NodeId = 0;
-        tablet.Type = (TTabletTypes::EType)TabletType;
+        tablet.SetType((TTabletTypes::EType)TabletType);
         tablet.KnownGeneration = 0; // because we will increase it on start
         tablet.State = ETabletState::GroupAssignment;
         tablet.ActorsToNotify.push_back(Sender);
-        tablet.NodeFilter = {.AllowedNodes = AllowedNodeIds, .AllowedDataCenters = AllowedDataCenterIds};
+        tablet.NodeFilter.AllowedNodes = AllowedNodeIds;
+        tablet.NodeFilter.AllowedDataCenters = AllowedDataCenterIds;
         tablet.Owner = ownerIdx;
         tablet.DataCentersPreference = DataCentersPreference;
         tablet.BootMode = BootMode;

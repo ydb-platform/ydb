@@ -27,7 +27,7 @@ SRCS(
 )
 
 PEERDIR(
-    library/cpp/grpc/client
+    ydb/library/grpc/client
     library/cpp/threading/task_scheduler
     library/cpp/threading/future
     library/cpp/svnversion

@@ -39,17 +39,6 @@ SRCS(
 
 PY_SRCS(
     NAMESPACE numpy.random
-    __init__.py
-    __init__.pyi
-    _generator.pyi
-    _mt19937.pyi
-    _pcg64.pyi
-    _philox.pyi
-    _pickle.py
-    _sfc64.pyi
-    bit_generator.pyi
-    mtrand.pyi
-
     CYTHON_C
     _bounded_integers.pyx
     _common.pyx

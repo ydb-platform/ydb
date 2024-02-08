@@ -6,6 +6,7 @@
 #include <ydb/library/yql/core/yql_expr_optimize.h>
 #include <ydb/library/yql/dq/opt/dq_opt.h>
 #include <ydb/library/yql/dq/opt/dq_opt_build.h>
+#include <ydb/library/yql/dq/type_ann/dq_type_ann.h>
 #include <ydb/library/yql/core/services/yql_out_transformers.h>
 #include <ydb/library/yql/core/services/yql_transform_pipeline.h>
 #include <ydb/library/yql/providers/common/provider/yql_provider.h>
@@ -124,7 +125,8 @@ private:
         Y_DEBUG_ABORT_UNLESS(!stages.empty());
 
         TKqpPhyTxSettings txSettings;
-        txSettings.Type = EPhysicalTxType::Data;
+        YQL_ENSURE(QueryType != EKikimrQueryType::Scan);
+        txSettings.Type = GetPhyTxType(false);
         txSettings.WithEffects = true;
 
         auto tx = Build<TKqpPhysicalTx>(ctx, inputExpr->Pos())
@@ -219,7 +221,7 @@ private:
                 // If results stage is marked as single_partition, no collect stage needed.
                 // Once we have partitioning constraint we should check it instead of stage setting.
                 auto settings = TDqStageSettings::Parse(resultStage);
-                if (settings.SinglePartition) {
+                if (settings.PartitionMode == TDqStageSettings::EPartitionMode::Single) {
                     needsCollectStage = false;
                 }
 
@@ -744,7 +746,9 @@ private:
         YQL_CLOG(TRACE, ProviderKqp) << "[BuildTx] " << KqpExprToPrettyString(*result, ctx)
             << ", isPrecompute: " << isPrecompute;
 
-        auto& transformer = KqpCtx->IsDataQuery() ? *DataTxTransformer : *ScanTxTransformer;
+        auto& transformer = KqpCtx->IsScanQuery() ? *ScanTxTransformer : *DataTxTransformer;
+
+
         transformer.Rewind();
         BuildTxTransformer->Init(KqpCtx->QueryCtx->Type, isPrecompute);
         auto expr = result;

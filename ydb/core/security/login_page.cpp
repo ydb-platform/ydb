@@ -1,7 +1,7 @@
 #include "login_page.h"
 #include "login_shared_func.h"
 
-#include <library/cpp/actors/http/http_proxy.h>
+#include <ydb/library/actors/http/http_proxy.h>
 #include <library/cpp/json/json_value.h>
 #include <library/cpp/json/json_reader.h>
 #include <library/cpp/json/json_writer.h>
@@ -178,6 +178,7 @@ public:
 
     void ReplyOptionsAndPassAway() {
         NHttp::THeadersBuilder headers;
+        SetCORS(headers);
         headers.Set("Allow", "OPTIONS, POST");
         Send(Sender, new NHttp::TEvHttpProxy::TEvHttpOutgoingResponse(Request->CreateResponse("204", "No Content", headers)));
         PassAway();

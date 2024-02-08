@@ -23,6 +23,7 @@ AWS_CORE_API extern const char MESSAGE_LOWER_CASE[]     = "message";
 AWS_CORE_API extern const char MESSAGE_CAMEL_CASE[]     = "Message";
 AWS_CORE_API extern const char ERROR_TYPE_HEADER[]      = "x-amzn-ErrorType";
 AWS_CORE_API extern const char REQUEST_ID_HEADER[]      = "x-amzn-RequestId";
+AWS_CORE_API extern const char QUERY_ERROR_HEADER[]     = "x-amzn-query-error";
 AWS_CORE_API extern const char TYPE[]                   = "__type";
 
 AWSError<CoreErrors> JsonErrorMarshaller::Marshall(const Aws::Http::HttpResponse& httpResponse) const
@@ -49,6 +50,24 @@ AWSError<CoreErrors> JsonErrorMarshaller::Marshall(const Aws::Http::HttpResponse
         {
             error = FindErrorByHttpResponseCode(httpResponse.GetResponseCode());
             error.SetMessage(message);
+        }
+
+        if (httpResponse.HasHeader(QUERY_ERROR_HEADER))
+        {
+            auto errorCodeString = httpResponse.GetHeader(QUERY_ERROR_HEADER);
+            auto locationOfSemicolon = errorCodeString.find_first_of(';');
+            Aws::String errorCode;
+
+            if (locationOfSemicolon != Aws::String::npos)
+            {
+                errorCode = errorCodeString.substr(0, locationOfSemicolon);
+            }
+            else
+            {
+                errorCode = errorCodeString;
+            }
+
+            error.SetExceptionName(errorCode);
         }
     }
     else

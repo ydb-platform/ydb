@@ -57,7 +57,7 @@ namespace Aws
         /**
          * Get the payload from the response and take ownership of it.
          */
-        inline PAYLOAD_TYPE TakeOwnershipOfPayload() { return std::move(m_payload); }
+        inline PAYLOAD_TYPE&& TakeOwnershipOfPayload() { return std::move(m_payload); }
         /**
         * Get the headers from the response
         */

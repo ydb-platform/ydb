@@ -32,19 +32,24 @@ private:
 
 }
 
-IExternalSourceFactory::TPtr CreateExternalSourceFactory() {
+IExternalSourceFactory::TPtr CreateExternalSourceFactory(const std::vector<TString>& hostnamePatterns) {
+    std::vector<TRegExMatch> hostnamePatternsRegEx(hostnamePatterns.begin(), hostnamePatterns.end());
     return MakeIntrusive<TExternalSourceFactory>(TMap<TString, IExternalSource::TPtr>{
         {
             ToString(NYql::EDatabaseType::ObjectStorage),
-            CreateObjectStorageExternalSource()
+            CreateObjectStorageExternalSource(hostnamePatternsRegEx)
         },
         {
             ToString(NYql::EDatabaseType::ClickHouse),
-            CreateExternalDataSource(TString{NYql::GenericProviderName}, {"MDB_BASIC", "BASIC"}, {"database_name", "protocol", "mdb_cluster_id", "use_tls"})
+            CreateExternalDataSource(TString{NYql::GenericProviderName}, {"MDB_BASIC", "BASIC"}, {"database_name", "protocol", "mdb_cluster_id", "use_tls"}, hostnamePatternsRegEx)
         },
         {
             ToString(NYql::EDatabaseType::PostgreSQL),
-            CreateExternalDataSource(TString{NYql::GenericProviderName}, {"MDB_BASIC", "BASIC"}, {"database_name", "protocol", "mdb_cluster_id", "use_tls", "schema"})
+            CreateExternalDataSource(TString{NYql::GenericProviderName}, {"MDB_BASIC", "BASIC"}, {"database_name", "protocol", "mdb_cluster_id", "use_tls", "schema"}, hostnamePatternsRegEx)
+        },
+        {
+            ToString(NYql::EDatabaseType::Ydb),
+            CreateExternalDataSource(TString{NYql::GenericProviderName}, {"BASIC", "SERVICE_ACCOUNT"}, {"database_name", "use_tls", "database_id"}, hostnamePatternsRegEx)
         }
     });
 }

@@ -38,8 +38,10 @@ public:
     TWithTagGuard(const TWithTagGuard&) = delete;
     TWithTagGuard(TWithTagGuard&&) = delete;
 
+    [[nodiscard]]
     explicit TWithTagGuard(ISensorWriter* writer);
     // NB: For convenience.
+    [[nodiscard]]
     TWithTagGuard(ISensorWriter* writer, TString tagKey, TString tagValue);
 
     ~TWithTagGuard();

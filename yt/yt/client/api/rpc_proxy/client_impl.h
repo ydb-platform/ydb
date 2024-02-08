@@ -140,7 +140,7 @@ public:
     TFuture<NQueueClient::IQueueRowsetPtr> PullConsumer(
         const NYPath::TRichYPath& consumerPath,
         const NYPath::TRichYPath& queuePath,
-        i64 offset,
+        std::optional<i64> offset,
         int partitionIndex,
         const NQueueClient::TQueueRowBatchReadOptions& rowBatchReadOptions,
         const TPullConsumerOptions& options = {}) override;
@@ -414,6 +414,7 @@ public:
 
     TFuture<TDestroyChunkLocationsResult> DestroyChunkLocations(
         const TString& nodeAddress,
+        bool recoverUnlinkedDisks,
         const std::vector<TGuid>& locationUuids,
         const TDestroyChunkLocationsOptions& options) override;
 
@@ -481,6 +482,53 @@ public:
         const TString& user,
         const TString& passwordSha256,
         const TListUserTokensOptions& options) override;
+
+    // Bundle Controller
+
+    TFuture<NBundleControllerClient::TBundleConfigDescriptorPtr> GetBundleConfig(
+        const TString& bundleName,
+        const NBundleControllerClient::TGetBundleConfigOptions& options = {}) override;
+
+    TFuture<void> SetBundleConfig(
+        const TString& bundleName,
+        const NBundleControllerClient::TBundleTargetConfigPtr& bundleConfig,
+        const NBundleControllerClient::TSetBundleConfigOptions& options = {}) override;
+
+    // Flow
+
+    TFuture<TGetPipelineSpecResult> GetPipelineSpec(
+        const NYPath::TYPath& pipelinePath,
+        const TGetPipelineSpecOptions& options = {}) override;
+
+    TFuture<TSetPipelineSpecResult> SetPipelineSpec(
+        const NYPath::TYPath& pipelinePath,
+        const NYson::TYsonString& spec,
+        const TSetPipelineSpecOptions& options = {}) override;
+
+    TFuture<TGetPipelineDynamicSpecResult> GetPipelineDynamicSpec(
+        const NYPath::TYPath& pipelinePath,
+        const TGetPipelineDynamicSpecOptions& options = {}) override;
+
+    TFuture<TSetPipelineDynamicSpecResult> SetPipelineDynamicSpec(
+        const NYPath::TYPath& pipelinePath,
+        const NYson::TYsonString& spec,
+        const TSetPipelineDynamicSpecOptions& options = {}) override;
+
+    TFuture<void> StartPipeline(
+        const NYPath::TYPath& pipelinePath,
+        const TStartPipelineOptions& options = {}) override;
+
+    TFuture<void> StopPipeline(
+        const NYPath::TYPath& pipelinePath,
+        const TStopPipelineOptions& options = {}) override;
+
+    TFuture<void> PausePipeline(
+        const NYPath::TYPath& pipelinePath,
+        const TPausePipelineOptions& options = {}) override;
+
+    TFuture<TPipelineStatus> GetPipelineStatus(
+        const NYPath::TYPath& pipelinePath,
+        const TGetPipelineStatusOptions& options) override;
 
 private:
     const TConnectionPtr Connection_;

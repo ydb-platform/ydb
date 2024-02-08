@@ -63,6 +63,8 @@ TFollowerId TLeaderTabletInfo::GetFollowerPromotableOnNode(TNodeId nodeId) const
 }
 
 void TLeaderTabletInfo::AssignDomains(const TSubDomainKey& objectDomain, const TVector<TSubDomainKey>& allowedDomains) {
+    const TSubDomainKey oldObjectDomain = ObjectDomain;
+
     if (!allowedDomains.empty()) {
         NodeFilter.AllowedDomains = allowedDomains;
         if (!objectDomain) {
@@ -77,8 +79,26 @@ void TLeaderTabletInfo::AssignDomains(const TSubDomainKey& objectDomain, const T
         NodeFilter.AllowedDomains = { Hive.GetRootDomainKey() };
         ObjectDomain = { Hive.GetRootDomainKey() };
     }
+    NodeFilter.ObjectDomain = ObjectDomain;
     for (auto& followerGroup : FollowerGroups) {
         followerGroup.NodeFilter.AllowedDomains = NodeFilter.AllowedDomains;
+        followerGroup.NodeFilter.ObjectDomain = NodeFilter.ObjectDomain;
+    }
+
+    const ui64 leaderAndFollowers = 1 + Followers.size();
+    Hive.UpdateDomainTabletsTotal(oldObjectDomain, -leaderAndFollowers);
+    Hive.UpdateDomainTabletsTotal(ObjectDomain, +leaderAndFollowers);
+
+    if (IsAlive()) {
+        Hive.UpdateDomainTabletsAlive(oldObjectDomain, -1, Node->GetServicedDomain());
+        Hive.UpdateDomainTabletsAlive(ObjectDomain, +1, Node->GetServicedDomain());
+    }
+
+    for (const auto& follower : Followers) {
+        if (follower.IsAlive()) {
+            Hive.UpdateDomainTabletsAlive(oldObjectDomain, -1, follower.Node->GetServicedDomain());
+            Hive.UpdateDomainTabletsAlive(ObjectDomain, +1, follower.Node->GetServicedDomain());
+        }
     }
 }
 
@@ -125,6 +145,7 @@ TFollowerTabletInfo& TLeaderTabletInfo::AddFollower(TFollowerGroup& followerGrou
         follower.Id = followerId;
     }
     Hive.UpdateCounterTabletsTotal(+1);
+    Hive.UpdateDomainTabletsTotal(ObjectDomain, +1);
     return follower;
 }
 
@@ -133,7 +154,7 @@ TFollowerGroupId TLeaderTabletInfo::GenerateFollowerGroupId() const {
 }
 
 TFollowerGroup& TLeaderTabletInfo::AddFollowerGroup(TFollowerGroupId followerGroupId) {
-    FollowerGroups.emplace_back();
+    FollowerGroups.emplace_back(Hive);
     TFollowerGroup& followerGroup = FollowerGroups.back();
     if (followerGroupId == 0) {
         followerGroup.Id = GenerateFollowerGroupId();
@@ -141,6 +162,8 @@ TFollowerGroup& TLeaderTabletInfo::AddFollowerGroup(TFollowerGroupId followerGro
         followerGroup.Id = followerGroupId;
     }
     followerGroup.NodeFilter.AllowedDomains = NodeFilter.AllowedDomains;
+    followerGroup.NodeFilter.ObjectDomain = NodeFilter.ObjectDomain;
+    followerGroup.NodeFilter.TabletType = Type;
     return followerGroup;
 }
 
@@ -239,6 +262,17 @@ const NKikimrBlobStorage::TEvControllerSelectGroupsResult::TGroupParameters* TLe
                 });
                 break;
             }
+            case NKikimrHive::TEvReassignTablet::HIVE_REASSIGN_REASON_BALANCE: {
+                auto channel = GetChannel(channelId);
+                auto filter = [&params](const TStorageGroupInfo& newGroup) -> bool {
+                    return newGroup.IsMatchesParameters(*params);
+                };
+                auto calculateUsageWithTablet = [&channel](const TStorageGroupInfo* newGroup) -> double {
+                    return newGroup->GetUsageForChannel(channel);
+                };
+                return storagePool->FindFreeAllocationUnit(filter, calculateUsageWithTablet);
+                break;
+            }
             case NKikimrHive::TEvReassignTablet::HIVE_REASSIGN_REASON_SPACE: {
                 NKikimrConfig::THiveConfig::EHiveStorageBalanceStrategy balanceStrategy = Hive.CurrentConfig.GetStorageBalanceStrategy();
                 Hive.CurrentConfig.SetStorageBalanceStrategy(NKikimrConfig::THiveConfig::HIVE_STORAGE_BALANCE_STRATEGY_SIZE);
@@ -333,5 +367,10 @@ void TLeaderTabletInfo::ActualizeTabletStatistics(TInstant now) {
     }
 }
 
+void TLeaderTabletInfo::SetType(TTabletTypes::EType type) {
+    Type = type;
+    NodeFilter.TabletType = type;
+    Hive.SeenTabletTypes.insert(type);
+}
 }
 }

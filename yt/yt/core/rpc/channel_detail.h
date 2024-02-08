@@ -27,6 +27,8 @@ public:
     void SubscribeTerminated(const TCallback<void(const TError&)>& callback) override;
     void UnsubscribeTerminated(const TCallback<void(const TError&)>& callback) override;
 
+    int GetInflightRequestCount() override;
+
 protected:
     const IChannelPtr UnderlyingChannel_;
 };

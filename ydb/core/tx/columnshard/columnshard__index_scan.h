@@ -15,12 +15,20 @@ public:
         : IndexInfo(indexInfo)
     {}
 
+    virtual std::optional<ui32> GetColumnIdOptional(const TString& name) const override {
+        return IndexInfo.GetColumnIdOptional(name);
+    }
+
     TString GetColumnName(ui32 id, bool required) const override {
         return IndexInfo.GetColumnName(id, required);
     }
 
     const NTable::TScheme::TTableSchema& GetSchema() const override {
         return IndexInfo;
+    }
+
+    NSsa::TColumnInfo GetDefaultColumn() const override {
+        return NSsa::TColumnInfo::Original((ui32)NOlap::TIndexInfo::ESpecialColumn::PLAN_STEP, NOlap::TIndexInfo::SPEC_COL_PLAN_STEP);
     }
 };
 
@@ -85,6 +93,10 @@ public:
 
     virtual std::optional<ui32> GetAvailableResultsCount() const override {
         return ReadyResults.size();
+    }
+
+    virtual const NOlap::TReadStats& GetStats() const override {
+        return *ReadMetadata->ReadStats;
     }
 
     virtual TString DebugString(const bool verbose) const override {

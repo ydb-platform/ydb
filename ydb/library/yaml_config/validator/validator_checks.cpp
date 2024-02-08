@@ -5,7 +5,7 @@
 
 #include <util/string/cast.h>
 
-namespace NYamlConfig::NValidator {
+namespace NKikimr::NYamlConfig::NValidator {
 
 TNodeWrapper::TNodeWrapper(
     TCheckContext& context,
@@ -565,4 +565,4 @@ TEnumNodeWrapper TEnumCheckContext::Node() {
     return TEnumNodeWrapper(*this, Node_, Validator_, CheckNodePath_);
 }
 
-}
+} // namespace NKikimr::NYamlConfig::NValidator

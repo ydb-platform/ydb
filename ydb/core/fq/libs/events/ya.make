@@ -5,7 +5,7 @@ GENERATE_ENUM_SERIALIZATION(events.h)
 GENERATE_ENUM_SERIALIZATION(event_ids.h)
 
 PEERDIR(
-    library/cpp/actors/core
+    ydb/library/actors/core
     ydb/core/fq/libs/graph_params/proto
     ydb/core/fq/libs/protos
     ydb/library/yql/core/facade

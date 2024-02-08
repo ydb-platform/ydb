@@ -191,8 +191,10 @@ Y_UNIT_TEST_SUITE(KqpNotNullColumns) {
                     NULL::int2
             ))");
             auto result = session.ExecuteDataQuery(query, TTxControl::BeginTx().CommitTx()).ExtractValueSync();
-            UNIT_ASSERT(!result.IsSuccess());
-            UNIT_ASSERT_C(HasIssue(result.GetIssues(), NYql::TIssuesIds::DEFAULT_ERROR), result.GetIssues().ToString());
+            UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::BAD_REQUEST);
+            UNIT_ASSERT_C(HasIssue(result.GetIssues(), NYql::TIssuesIds::KIKIMR_BAD_COLUMN_TYPE), result.GetIssues().ToString());
+            UNIT_ASSERT_NO_DIFF(result.GetIssues().ToString(), "<main>: Error: Execution, code: 1060\n"
+            "    <main>: Error: Tried to insert NULL value into NOT NULL column: key, code: 2031\n");
         }
 
         {   /* set NULL to not null pk column */
@@ -202,7 +204,7 @@ Y_UNIT_TEST_SUITE(KqpNotNullColumns) {
                     NULL::int2, 123::int2
             ))");
             auto result = session.ExecuteDataQuery(query, TTxControl::BeginTx().CommitTx()).ExtractValueSync();
-            UNIT_ASSERT(!result.IsSuccess());
+            UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::BAD_REQUEST);
             UNIT_ASSERT_C(HasIssue(result.GetIssues(), NYql::TIssuesIds::KIKIMR_BAD_COLUMN_TYPE), result.GetIssues().ToString());
             UNIT_ASSERT_NO_DIFF(result.GetIssues().ToString(), "<main>: Error: Execution, code: 1060\n"
             "    <main>: Error: Tried to insert NULL value into NOT NULL column: key, code: 2031\n");
@@ -1651,6 +1653,7 @@ Y_UNIT_TEST_SUITE(KqpNotNullColumns) {
         }
     }
 
+    // TODO: fix TxPlanSerializer with PG keys
     Y_UNIT_TEST(SecondaryIndexWithNotNullDataColumnPg) {
         auto settings = TKikimrSettings()
             .SetWithSampleTables(false)
@@ -1756,9 +1759,11 @@ Y_UNIT_TEST_SUITE(KqpNotNullColumns) {
         }
     }
 
-
-    Y_UNIT_TEST(JoinBothTablesWithNotNullPk) {
-        TKikimrRunner kikimr;
+    Y_UNIT_TEST_TWIN(JoinBothTablesWithNotNullPk, StreamLookup) {
+        NKikimrConfig::TAppConfig appConfig;
+        appConfig.MutableTableServiceConfig()->SetEnableKqpDataQueryStreamIdxLookupJoin(StreamLookup);
+        auto settings = TKikimrSettings().SetAppConfig(appConfig);
+        TKikimrRunner kikimr(settings);
         auto client = kikimr.GetTableClient();
         auto session = client.CreateSession().GetValueSync().GetSession();
 
@@ -1805,8 +1810,11 @@ Y_UNIT_TEST_SUITE(KqpNotNullColumns) {
         }
     }
 
-    Y_UNIT_TEST(JoinLeftTableWithNotNullPk) {
-        TKikimrRunner kikimr;
+    Y_UNIT_TEST_TWIN(JoinLeftTableWithNotNullPk, StreamLookup) {
+        NKikimrConfig::TAppConfig appConfig;
+        appConfig.MutableTableServiceConfig()->SetEnableKqpDataQueryStreamIdxLookupJoin(StreamLookup);
+        auto settings = TKikimrSettings().SetAppConfig(appConfig);
+        TKikimrRunner kikimr(settings);
         auto client = kikimr.GetTableClient();
         auto session = client.CreateSession().GetValueSync().GetSession();
 
@@ -1870,6 +1878,63 @@ Y_UNIT_TEST_SUITE(KqpNotNullColumns) {
             auto result = session.ExecuteDataQuery(query, TTxControl::BeginTx().CommitTx()).ExtractValueSync();
             UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
             CompareYson(R"([[["rValue"];#];[["rValue1"];["lValue1"]];[["rValue3"];#]])", FormatResultSetYson(result.GetResultSet(0)));
+        }
+    }
+
+    Y_UNIT_TEST_TWIN(JoinRightTableWithNotNullColumns, StreamLookup) {
+        NKikimrConfig::TAppConfig appConfig;
+        appConfig.MutableTableServiceConfig()->SetEnableKqpDataQueryStreamIdxLookupJoin(StreamLookup);
+        auto settings = TKikimrSettings().SetAppConfig(appConfig);
+        TKikimrRunner kikimr(settings);
+        auto client = kikimr.GetTableClient();
+        auto session = client.CreateSession().GetValueSync().GetSession();
+
+        {
+            auto createTableResult = session.ExecuteSchemeQuery(Q1_(R"(
+                CREATE TABLE `/Root/Left` (
+                    Key Uint64,
+                    Value String,
+                    PRIMARY KEY (Key)
+                );
+            )")).ExtractValueSync();
+            UNIT_ASSERT_C(createTableResult.IsSuccess(), createTableResult.GetIssues().ToString());
+
+            auto result = session.ExecuteDataQuery(Q1_(R"(
+                UPSERT INTO `/Root/Left` (Key, Value) VALUES (1, 'lValue1'), (2, 'lValue2');
+            )"), TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        }
+
+        {
+            auto createTableResult = session.ExecuteSchemeQuery(Q1_(R"(
+                CREATE TABLE `/Root/Right` (
+                    Key Uint64 NOT NULL,
+                    Value String NOT NULL,
+                    PRIMARY KEY (Key)
+                );
+            )")).ExtractValueSync();
+            UNIT_ASSERT_C(createTableResult.IsSuccess(), createTableResult.GetIssues().ToString());
+
+            auto result = session.ExecuteDataQuery(Q1_(R"(
+                UPSERT INTO `/Root/Right` (Key, Value) VALUES (1, 'rValue1'), (3, 'rValue3'), (4, 'rValue4');
+            )"), TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        }
+
+        {  // left join
+            const auto query = Q1_(R"(
+                SELECT l.Key, l.Value, r.Key, r.Value FROM `/Root/Left` AS l LEFT
+                    JOIN `/Root/Right` AS r
+                    ON l.Key = r.Key
+                    ORDER BY l.Key;
+            )");
+
+            auto result = session.ExecuteDataQuery(query, TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+            CompareYson(R"([
+                [[1u];["lValue1"];[1u];["rValue1"]];
+                [[2u];["lValue2"];#;#]
+            ])", FormatResultSetYson(result.GetResultSet(0)));
         }
     }
 

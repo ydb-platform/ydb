@@ -18,6 +18,9 @@ namespace NYT::NObjectClient {
 //! |#|-prefix.
 extern const TStringBuf ObjectIdPathPrefix;
 
+//! Function for temporary use: to gradually allow types supported in Sequoia.
+bool IsScalarType(NObjectClient::EObjectType type);
+
 //! Creates the YPath pointing to an object with a given #id.
 NYPath::TYPath FromObjectId(TObjectId id);
 
@@ -66,7 +69,7 @@ bool IsCollocationType(EObjectType type);
 //! Checks if the given type is a medium.
 bool IsMediumType(EObjectType type);
 
-//! Checks if the given type is a cypress (i.e. master, simple) transaction.
+//! Checks if the given type is a Cypress (i.e. master, simple) transaction.
 bool IsCypressTransactionType(EObjectType type);
 
 //! Checks if the given type is a system transaction.

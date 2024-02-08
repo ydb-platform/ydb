@@ -6,7 +6,7 @@
 #include <ydb/core/testlib/basics/appdata.h>
 
 #include <library/cpp/testing/unittest/registar.h>
-#include <library/cpp/actors/core/interconnect.h>
+#include <ydb/library/actors/core/interconnect.h>
 
 namespace NKikimr {
 

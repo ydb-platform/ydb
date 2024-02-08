@@ -1,7 +1,7 @@
 #pragma once
 
-#include <library/cpp/actors/core/events.h>
-#include <library/cpp/actors/core/event_local.h>
+#include <ydb/library/actors/core/events.h>
+#include <ydb/library/actors/core/event_local.h>
 #include <ydb/core/client/minikql_compile/yql_expr_minikql.h>
 #include <ydb/core/client/scheme_cache_lib/yql_db_scheme_resolver.h>
 

@@ -59,11 +59,11 @@ description: "Из статьи вы узнаете, как установить
   )
 
   func main() {
-    db, err := ydb.Open("ydb", os.Getenv("YDB_CONNECTION_STRING"))
+    db, err := sql.Open("ydb", os.Getenv("YDB_CONNECTION_STRING"))
     if err != nil {
       panic(err)
     }
-    defer db.Close(ctx)
+    defer db.Close()
     db.SetMaxOpenConns(100)
     db.SetMaxIdleConns(100)
     db.SetConnMaxIdleTime(time.Second) // workaround for background keep-aliving of YDB sessions

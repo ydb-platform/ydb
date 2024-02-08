@@ -18,7 +18,8 @@ bool CellsFromTuple(const NKikimrMiniKQL::TType* tupleType,
                     const TConstArrayRef<NScheme::TTypeInfo>& expectedTypes,
                     bool allowCastFromString,
                     TVector<TCell>& key,
-                    TString& errStr);
+                    TString& errStr,
+                    TVector<TString>& memoryOwner);
 
 bool CellToValue(NScheme::TTypeInfo type, const TCell& c, NKikimrMiniKQL::TValue& val, TString& errStr);
 

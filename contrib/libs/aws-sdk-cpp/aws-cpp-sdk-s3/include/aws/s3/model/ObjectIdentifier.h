@@ -28,14 +28,14 @@ namespace Model
    * href="http://docs.aws.amazon.com/goto/WebAPI/s3-2006-03-01/ObjectIdentifier">AWS
    * API Reference</a></p>
    */
-  class AWS_S3_API ObjectIdentifier
+  class ObjectIdentifier
   {
   public:
-    ObjectIdentifier();
-    ObjectIdentifier(const Aws::Utils::Xml::XmlNode& xmlNode);
-    ObjectIdentifier& operator=(const Aws::Utils::Xml::XmlNode& xmlNode);
+    AWS_S3_API ObjectIdentifier();
+    AWS_S3_API ObjectIdentifier(const Aws::Utils::Xml::XmlNode& xmlNode);
+    AWS_S3_API ObjectIdentifier& operator=(const Aws::Utils::Xml::XmlNode& xmlNode);
 
-    void AddToNode(Aws::Utils::Xml::XmlNode& parentNode) const;
+    AWS_S3_API void AddToNode(Aws::Utils::Xml::XmlNode& parentNode) const;
 
 
     /**
@@ -154,10 +154,10 @@ namespace Model
   private:
 
     Aws::String m_key;
-    bool m_keyHasBeenSet;
+    bool m_keyHasBeenSet = false;
 
     Aws::String m_versionId;
-    bool m_versionIdHasBeenSet;
+    bool m_versionIdHasBeenSet = false;
   };
 
 } // namespace Model

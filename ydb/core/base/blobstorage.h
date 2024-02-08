@@ -14,10 +14,10 @@
 #include <ydb/core/protos/blobstorage_base3.pb.h>
 #include <ydb/library/yverify_stream/yverify_stream.h>
 
-#include <library/cpp/actors/wilson/wilson_trace.h>
+#include <ydb/library/actors/wilson/wilson_trace.h>
 #include <library/cpp/lwtrace/shuttle.h>
-#include <library/cpp/actors/util/rope.h>
-#include <library/cpp/actors/util/shared_data_rope_backend.h>
+#include <ydb/library/actors/util/rope.h>
+#include <ydb/library/actors/util/shared_data_rope_backend.h>
 
 #include <util/stream/str.h>
 #include <util/generic/xrange.h>
@@ -705,6 +705,8 @@ struct TEvBlobStorage {
         EvReadMetadata,
         EvWriteMetadata,
         EvPermitGarbageCollection,
+        EvReplInvoke,
+        EvStartBalancing,
 
         EvYardInitResult = EvPut + 9 * 512,                     /// 268 636 672
         EvLogResult,
@@ -787,7 +789,7 @@ struct TEvBlobStorage {
         // EvControllerReadSchemeString = EvPut + 11 * 512,
         // EvControllerReadDataString,
         EvControllerRegisterNode = EvPut + 11 * 512 + 2,
-        EvControllerCreatePDisk, // Not used.
+        EvControllerCreatePDisk,
         EvControllerCreateVDiskSlots,
         EvControllerCreateGroup,
         EvControllerSelectGroups,
@@ -821,7 +823,7 @@ struct TEvBlobStorage {
         // EvControllerReadSchemeStringResult = EvPut + 12 * 512,
         // EvControllerReadDataStringResult,
         EvControllerNodeServiceSetUpdate = EvPut + 12 * 512 + 2,
-        EvControllerCreatePDiskResult, // Not used.
+        EvControllerCreatePDiskResult,
         EvControllerCreateVDiskSlotsResult,
         EvControllerCreateGroupResult,
         EvControllerSelectGroupsResult,
@@ -851,9 +853,9 @@ struct TEvBlobStorage {
 
         // node controller internal messages
         EvRegisterNodeRetry = EvPut + 14 * 512,
-        EvAskWardenRestartPDisk,
+        EvAskRestartPDisk,
         EvRestartPDisk,
-        EvNotifyWardenPDiskRestarted,
+        EvRestartPDiskResult,
         EvNodeWardenQueryGroupInfo,
         EvNodeWardenGroupInfo,
         EvNodeConfigPush,
@@ -1447,8 +1449,8 @@ struct TEvBlobStorage {
                 REQUEST_VALGRIND_CHECK_MEM_IS_DEFINED(diffs[idx].Buffer.Data(), diffs[idx].Buffer.size());
 
                 if (idx) {
-                    Y_VERIFY_S(diffs[idx - 1].Offset + diffs[idx].Buffer.Size() <= diffs[idx].Offset,
-                            "EvPatch invalid: Diffs mustn't be re-covered,"
+                    Y_VERIFY_S(diffs[idx - 1].Offset + diffs[idx - 1].Buffer.Size() <= diffs[idx].Offset,
+                            "EvPatch invalid: Diffs must not overlap,"
                             << " [" << idx - 1 << "].Offset# " << diffs[idx - 1].Offset
                             << " [" << idx - 1 << "].Size# " << diffs[idx - 1].Buffer.Size()
                             << " [" << idx << "].Offset# " << diffs[idx].Offset
@@ -1464,6 +1466,10 @@ struct TEvBlobStorage {
                         "EvPatch invalid: Diff size must be non-zero,"
                         << " [" << idx << "].Size# " << diffs[idx].Buffer.Size());
             }
+        }
+
+        static ui8 BlobPlacementKind(const TLogoBlobID &blob) {
+            return blob.Hash() % BaseDomainsCount;
         }
 
         static bool GetBlobIdWithSamePlacement(const TLogoBlobID &originalId, TLogoBlobID *patchedId,
@@ -2355,10 +2361,10 @@ struct TEvBlobStorage {
     struct TEvDropDonor;
     struct TEvBunchOfEvents;
 
+    struct TEvAskRestartPDisk;
     struct TEvAskRestartVDisk;
-    struct TEvAskWardenRestartPDisk;
-    struct TEvAskWardenRestartPDiskResult;
-    struct TEvNotifyWardenPDiskRestarted;
+    struct TEvRestartPDisk;
+    struct TEvRestartPDiskResult;
 };
 
 // EPutHandleClass defines BlobStorage queue to a request to
@@ -2401,6 +2407,21 @@ inline bool SendPutToGroup(const TActorContext &ctx, ui32 groupId, TTabletStorag
     };
     Y_ABORT_UNLESS(checkGroupId(), "groupId# %" PRIu32 " does not match actual one LogoBlobId# %s", groupId,
         event->Id.ToString().data());
+    return SendToBSProxy(ctx, groupId, event.Release(), cookie, std::move(traceId));
+    // TODO(alexvru): check if return status is actually needed?
+}
+
+inline bool SendPatchToGroup(const TActorContext &ctx, ui32 groupId, TTabletStorageInfo *storage,
+        THolder<TEvBlobStorage::TEvPatch> event, ui64 cookie = 0, NWilson::TTraceId traceId = {}) {
+    auto checkGroupId = [&] {
+        const TLogoBlobID &id = event->PatchedId;
+        const ui32 expectedGroupId = storage->GroupFor(id.Channel(), id.Generation());
+        const TLogoBlobID &originalId = event->OriginalId;
+        const ui32 expectedOriginalGroupId = storage->GroupFor(originalId.Channel(), originalId.Generation());
+        return id.TabletID() == storage->TabletID && expectedGroupId != Max<ui32>() && groupId == expectedGroupId && event->OriginalGroupId == expectedOriginalGroupId;
+    };
+    Y_VERIFY_S(checkGroupId(), "groupIds# (" << event->OriginalGroupId << ',' << groupId << ") does not match actual ones LogoBlobIds# (" <<
+        event->OriginalId.ToString() << ',' << event->PatchedId.ToString() << ')');
     return SendToBSProxy(ctx, groupId, event.Release(), cookie, std::move(traceId));
     // TODO(alexvru): check if return status is actually needed?
 }

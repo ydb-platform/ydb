@@ -44,6 +44,7 @@ struct TKqpPhyTxSettings {
 };
 
 constexpr TStringBuf KqpReadRangesSourceName = "KqpReadRangesSource";
+constexpr TStringBuf KqpTableSinkName = "KqpTableSinkName";
 
 static constexpr std::string_view TKqpStreamLookupStrategyName = "LookupRows"sv;
 static constexpr std::string_view TKqpStreamLookupJoinStrategyName = "LookupJoinRows"sv;
@@ -55,6 +56,7 @@ struct TKqpReadTableSettings {
     static constexpr TStringBuf SortedSettingName = "Sorted";
     static constexpr TStringBuf SequentialSettingName = "Sequential";
     static constexpr TStringBuf ForcePrimaryName = "ForcePrimary";
+    static constexpr TStringBuf GroupByFieldNames = "GroupByFieldNames";
 
     TVector<TString> SkipNullKeys;
     TExprNode::TPtr ItemsLimit;

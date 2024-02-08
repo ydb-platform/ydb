@@ -30,7 +30,7 @@
                         "Key2",
                         "Value"
                     ],
-                    "type": "Lookup"
+                    "type": "Scan"
                 }
             ]
         }

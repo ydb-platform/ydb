@@ -3,7 +3,7 @@
 #include <ydb/core/persqueue/events/internal.h>
 #include <ydb/core/protos/counters_pq.pb.h>
 
-#include <library/cpp/actors/core/log.h>
+#include <ydb/library/actors/core/log.h>
 
 #include <util/string/builder.h>
 
@@ -15,7 +15,7 @@ void ReplyPersQueueError(
     const TActorContext& ctx,
     ui64 tabletId,
     const TString& topicName,
-    TMaybe<ui32> partition,
+    TMaybe<TPartitionId> partition,
     NKikimr::TTabletCountersBase& counters,
     NKikimrServices::EServiceKikimr service,
     const ui64 responseCookie,

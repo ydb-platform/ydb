@@ -9,8 +9,9 @@ namespace NKikimr::NOlap {
 class TChangesWithAppend: public TColumnEngineChanges {
 private:
     using TBase = TColumnEngineChanges;
-    TSplitSettings SplitSettings;
+
 protected:
+    TSplitSettings SplitSettings;
     TSaverContext SaverContext;
     virtual void DoDebugString(TStringOutput& out) const override;
     virtual void DoCompile(TFinalizationContext& context) override;

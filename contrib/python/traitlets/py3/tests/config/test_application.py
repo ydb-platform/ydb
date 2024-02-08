@@ -4,6 +4,7 @@ Tests for traitlets.config.application.Application
 
 # Copyright (c) IPython Development Team.
 # Distributed under the terms of the Modified BSD License.
+from __future__ import annotations
 
 import contextlib
 import io
@@ -14,21 +15,15 @@ import sys
 import typing as t
 from io import StringIO
 from tempfile import TemporaryDirectory
-from unittest import TestCase
+from unittest import TestCase, mock
 
 import pytest
-from pytest import mark
 
 from traitlets import Bool, Bytes, Dict, HasTraits, Integer, List, Set, Tuple, Unicode
 from traitlets.config.application import Application
 from traitlets.config.configurable import Configurable
 from traitlets.config.loader import Config, KVArgParseConfigLoader
 from traitlets.tests.utils import check_help_all_output, check_help_output, get_output_error_code
-
-try:
-    from unittest import mock
-except ImportError:
-    from unittest import mock
 
 pjoin = os.path.join
 
@@ -135,7 +130,7 @@ class TestApplication(TestCase):
         self.assertEqual(app.config_file, "")
 
     def test_app_name_set_via_constructor(self):
-        app = MyApp(name='set_via_constructor')
+        app = MyApp(name="set_via_constructor")
         assert app.name == "set_via_constructor"
 
     def test_mro_discovery(self):
@@ -556,7 +551,7 @@ class TestApplication(TestCase):
                 app.init_bar()
                 self.assertEqual(app.bar.b, 1)
 
-    @mark.skipif(not hasattr(TestCase, "assertLogs"), reason="requires TestCase.assertLogs")
+    @pytest.mark.skipif(not hasattr(TestCase, "assertLogs"), reason="requires TestCase.assertLogs")
     def test_log_collisions(self):
         app = MyApp()
         app.log = logging.getLogger()
@@ -577,7 +572,7 @@ class TestApplication(TestCase):
         assert pjoin(td, name + ".py") in output
         assert pjoin(td, name + ".json") in output
 
-    @mark.skipif(not hasattr(TestCase, "assertLogs"), reason="requires TestCase.assertLogs")
+    @pytest.mark.skipif(not hasattr(TestCase, "assertLogs"), reason="requires TestCase.assertLogs")
     def test_log_bad_config(self):
         app = MyApp()
         app.log = logging.getLogger()
@@ -665,7 +660,7 @@ class TestApplication(TestCase):
             with self.assertRaises(AttributeError):
                 app.loaded_config_files = "/foo"  # type:ignore
 
-            # ensure it can't be udpated via append
+            # ensure it can't be updated via append
             app.loaded_config_files.append("/bar")
             self.assertEqual(len(app.loaded_config_files), 1)
 
@@ -675,7 +670,7 @@ class TestApplication(TestCase):
             self.assertEqual(app.running, False)
 
 
-@mark.skip
+@pytest.mark.skip
 def test_cli_multi_scalar(caplog):
     class App(Application):
         aliases = {"opt": "App.opt"}
@@ -860,7 +855,7 @@ def test_get_default_logging_config_pythonw(monkeypatch):
     assert "loggers" in config
 
 
-@pytest.fixture
+@pytest.fixture()
 def caplogconfig(monkeypatch):
     """Capture logging config events for DictConfigurator objects.
 

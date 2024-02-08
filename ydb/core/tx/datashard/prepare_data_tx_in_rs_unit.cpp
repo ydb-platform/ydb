@@ -60,7 +60,7 @@ EExecutionStatus TPrepareDataTxInRSUnit::Execute(TOperation::TPtr op,
     Y_VERIFY_S(engine, "missing engine for " << *op << " at " << DataShard.TabletID());
 
     // TODO: cancel tx in special execution unit.
-    if (tx->GetDataTx()->CheckCancelled())
+    if (tx->GetDataTx()->CheckCancelled(DataShard.TabletID()))
         engine->Cancel();
 
     try {

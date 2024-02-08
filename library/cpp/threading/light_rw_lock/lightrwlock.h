@@ -3,7 +3,9 @@
 #include <util/system/rwlock.h>
 #include <util/system/sanitizers.h>
 
-#if defined(_linux_)
+// TLightRWLock and TSAN are not friends...
+
+#if defined(_linux_) && !defined(_tsan_enabled_)
 /* TLightRWLock is optimized for read lock and very fast lock/unlock switching.
    Read lock increments counter.
    Write lock sets highest bit of counter (makes counter negative).

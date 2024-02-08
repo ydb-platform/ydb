@@ -79,7 +79,7 @@ namespace NKikimr::NTestShard {
         ////////////////////////////////////////////////////////////////////////////////////////////////////////////////
         // Generic request/response management
 
-        ui32 BytesProcessed = 0;
+        ui64 BytesProcessed = 0;
         ui32 StallCounter = 0;
         ui64 LastCookie = 0;
 
@@ -119,6 +119,7 @@ namespace NKikimr::NTestShard {
         ui64 BytesOfData = 0;
 
         std::unordered_map<ui64, TWriteInfo> WritesInFlight; // cookie -> TWriteInfo
+        std::unordered_map<ui64, TString> PatchesInFlight;
         ui32 KeysWritten = 0;
         static constexpr TDuration WriteSpeedWindow = TDuration::Seconds(10);
         static constexpr TDuration ReadSpeedWindow = TDuration::Seconds(10);
@@ -136,7 +137,9 @@ namespace NKikimr::NTestShard {
 
         void GenerateKeyValue(TString *key, TString *value, bool *isInline);
         void IssueWrite();
+        void IssuePatch();
         void ProcessWriteResult(ui64 cookie, const google::protobuf::RepeatedPtrField<NKikimrClient::TKeyValueResponse::TWriteResult>& results);
+        void ProcessPatchResult(ui64 cookie, const google::protobuf::RepeatedPtrField<NKikimrClient::TKeyValueResponse::TPatchResult>& results);
         void TrimBytesWritten(TInstant now);
         void HandleWriteOnTime();
         void HandleDoSomeAction();

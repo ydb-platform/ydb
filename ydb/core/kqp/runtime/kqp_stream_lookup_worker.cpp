@@ -4,6 +4,8 @@
 #include <ydb/core/kqp/runtime/kqp_scan_data.h>
 #include <ydb/core/tx/datashard/range_ops.h>
 
+#include <ydb/library/yql/minikql/mkql_node_serialization.h>
+
 namespace NKikimr {
 namespace NKqp {
 
@@ -49,6 +51,20 @@ std::vector<std::pair<ui64, TOwnedTableRange>> GetRangePartitioning(const TKqpSt
     }
 
     return rangePartition;
+}
+
+NScheme::TTypeInfo UnpackTypeInfo(NKikimr::NMiniKQL::TType* type) {
+    YQL_ENSURE(type);
+
+    if (type->GetKind() == NMiniKQL::TType::EKind::Pg) {
+        auto pgType = static_cast<NMiniKQL::TPgType*>(type);
+        auto pgTypeId = pgType->GetTypeId();
+        return NScheme::TTypeInfo(NScheme::NTypeIds::Pg, NPg::TypeDescFromPgTypeId(pgTypeId));
+    } else {
+        bool isOptional = false;
+        auto dataType = NMiniKQL::UnpackOptionalData(type, isOptional);
+        return NScheme::TTypeInfo(dataType->GetSchemeType());
+    }
 }
 
 struct THashableKey {
@@ -118,9 +134,11 @@ struct TKeyEq {
 }  // !namespace
 
 TKqpStreamLookupWorker::TKqpStreamLookupWorker(NKikimrKqp::TKqpStreamLookupSettings&& settings,
-    const NMiniKQL::TTypeEnvironment& typeEnv, const NMiniKQL::THolderFactory& holderFactory)
+    const NMiniKQL::TTypeEnvironment& typeEnv, const NMiniKQL::THolderFactory& holderFactory,
+    const NYql::NDqProto::TTaskInput& inputDesc)
     : TypeEnv(typeEnv)
     , HolderFactory(holderFactory)
+    , InputDesc(inputDesc)
     , TablePath(settings.GetTable().GetPath())
     , TableId(MakeTableId(settings.GetTable())) {
 
@@ -132,8 +150,13 @@ TKqpStreamLookupWorker::TKqpStreamLookupWorker(NKikimrKqp::TKqpStreamLookupSetti
             TSysTables::TTableColumnInfo{
                 keyColumn.GetName(),
                 keyColumn.GetId(),
-                NScheme::TTypeInfo{static_cast<NScheme::TTypeId>(keyColumn.GetTypeId())},
-                "",
+                NScheme::TTypeInfo{
+                    static_cast<NScheme::TTypeId>(keyColumn.GetTypeId()),
+                    keyColumn.GetTypeId() == NScheme::NTypeIds::Pg
+                        ? NPg::TypeDescFromPgTypeId(keyColumn.GetTypeInfo().GetPgTypeId())
+                        : nullptr
+                },
+                keyColumn.GetTypeInfo().GetPgTypeMod(),
                 keyOrder++
             }
         );
@@ -151,7 +174,12 @@ TKqpStreamLookupWorker::TKqpStreamLookupWorker(NKikimrKqp::TKqpStreamLookupSetti
         Columns.emplace_back(TSysTables::TTableColumnInfo{
             column.GetName(),
             column.GetId(),
-            NScheme::TTypeInfo{static_cast<NScheme::TTypeId>(column.GetTypeId())}
+            NScheme::TTypeInfo{static_cast<NScheme::TTypeId>(column.GetTypeId()),
+                column.GetTypeId() == NScheme::NTypeIds::Pg
+                    ? NPg::TypeDescFromPgTypeId(column.GetTypeInfo().GetPgTypeId())
+                    : nullptr,
+            },
+            column.GetTypeInfo().GetPgTypeMod()
         });
     }
 }
@@ -180,7 +208,8 @@ std::vector<NScheme::TTypeInfo> TKqpStreamLookupWorker::GetKeyColumnTypes() cons
 class TKqpLookupRows : public TKqpStreamLookupWorker {
 public:
     TKqpLookupRows(NKikimrKqp::TKqpStreamLookupSettings&& settings, const NMiniKQL::TTypeEnvironment& typeEnv,
-        const NMiniKQL::THolderFactory& holderFactory) : TKqpStreamLookupWorker(std::move(settings), typeEnv, holderFactory) {
+        const NMiniKQL::THolderFactory& holderFactory, const NYql::NDqProto::TTaskInput& inputDesc)
+        : TKqpStreamLookupWorker(std::move(settings), typeEnv, holderFactory, inputDesc) {
     }
 
     virtual ~TKqpLookupRows() {}
@@ -289,7 +318,7 @@ public:
                     }
                 }
 
-                if (rowSize > freeSpace - (i64)resultStats.BytesCount) {
+                if (rowSize > freeSpace - (i64)resultStats.ResultBytesCount) {
                     row.DeleteUnreferenced();
                     sizeLimitExceeded = true;
                     break;
@@ -297,8 +326,10 @@ public:
 
                 batch.push_back(std::move(row));
 
-                resultStats.RowsCount += 1;
-                resultStats.BytesCount += rowSize;
+                resultStats.ReadRowsCount += 1;
+                resultStats.ReadBytesCount += rowSize;
+                resultStats.ResultRowsCount += 1;
+                resultStats.ResultBytesCount += rowSize;
             }
 
             if (result.UnprocessedResultRow == result.ReadResult->Get()->GetRowsCount()) {
@@ -389,7 +420,8 @@ private:
 class TKqpJoinRows : public TKqpStreamLookupWorker {
 public:
     TKqpJoinRows(NKikimrKqp::TKqpStreamLookupSettings&& settings, const NMiniKQL::TTypeEnvironment& typeEnv,
-        const NMiniKQL::THolderFactory& holderFactory) : TKqpStreamLookupWorker(std::move(settings), typeEnv, holderFactory) {
+        const NMiniKQL::THolderFactory& holderFactory, const NYql::NDqProto::TTaskInput& inputDesc)
+        : TKqpStreamLookupWorker(std::move(settings), typeEnv, holderFactory, inputDesc) {
 
         // read columns should contain join key and result columns
         for (auto joinKey : LookupKeyColumns) {
@@ -574,9 +606,9 @@ public:
                 auto leftRowIt = PendingLeftRowsByKey.find(joinKeyCells);
                 YQL_ENSURE(leftRowIt != PendingLeftRowsByKey.end());
 
-                i64 resultRowSize = 0;
-                i64 availableSpace = freeSpace - (i64)resultStats.BytesCount;
-                auto resultRow = TryBuildResultRow(leftRowIt->second, row, resultRowSize, availableSpace, result.ShardId);
+                TReadResultStats rowStats;
+                i64 availableSpace = freeSpace - (i64)resultStats.ResultBytesCount;
+                auto resultRow = TryBuildResultRow(leftRowIt->second, row, rowStats, availableSpace, result.ShardId);
 
                 if (!resultRow.HasValue()) {
                     sizeLimitExceeded = true;
@@ -584,9 +616,7 @@ public:
                 }
 
                 batch.push_back(std::move(resultRow));
-
-                resultStats.RowsCount += 1;
-                resultStats.BytesCount += resultRowSize;
+                resultStats.Add(rowStats);
             }
 
             if (result.UnprocessedResultRow == result.ReadResult->Get()->GetRowsCount()) {
@@ -620,15 +650,16 @@ public:
                     && !leftRowIt->second.RightRowExist;
 
                 if (leftRowCanBeSent) {
-                    i64 resultRowSize = 0;
-                    i64 availableSpace = freeSpace - (i64) resultStats.BytesCount;
-                    auto resultRow = TryBuildResultRow(leftRowIt->second, {}, resultRowSize, availableSpace);
+                    TReadResultStats rowStats;
+                    i64 availableSpace = freeSpace - (i64)resultStats.ResultBytesCount;
+                    auto resultRow = TryBuildResultRow(leftRowIt->second, {}, rowStats, availableSpace);
 
                     if (!resultRow.HasValue()) {
                         break;
                     }
 
                     batch.push_back(std::move(resultRow));
+                    resultStats.Add(rowStats);
                     PendingLeftRowsByKey.erase(leftRowIt++);
                 } else {
                     ++leftRowIt;
@@ -697,17 +728,44 @@ private:
         return range.From.subspan(0, LookupKeyColumns.size());
     }
 
-    NUdf::TUnboxedValue TryBuildResultRow(TLeftRowInfo& leftRowInfo, TConstArrayRef<TCell> rightRow, i64& resultRowSize,
-        i64 freeSpace, TMaybe<ui64> shardId = {}) {
+    NMiniKQL::TStructType* GetLeftRowType() const {
+        YQL_ENSURE(InputDesc.HasTransform());
+
+        auto outputTypeNode = NMiniKQL::DeserializeNode(TStringBuf{InputDesc.GetTransform().GetOutputType()}, TypeEnv);
+        YQL_ENSURE(outputTypeNode, "Failed to deserialize stream lookup transform output type");
+
+        auto outputType = static_cast<NMiniKQL::TType*>(outputTypeNode);
+        YQL_ENSURE(outputType->GetKind() == NMiniKQL::TType::EKind::Tuple, "Unexpected stream lookup output type");
+
+        const auto outputTupleType = AS_TYPE(NMiniKQL::TTupleType, outputType);
+        YQL_ENSURE(outputTupleType->GetElementsCount() == 2);
+
+        const auto outputLeftRowType = outputTupleType->GetElementType(0);
+        YQL_ENSURE(outputLeftRowType->GetKind() == NMiniKQL::TType::EKind::Struct);
+
+        return AS_TYPE(NMiniKQL::TStructType, outputLeftRowType);
+    }
+
+    NUdf::TUnboxedValue TryBuildResultRow(TLeftRowInfo& leftRowInfo, TConstArrayRef<TCell> rightRow,
+         TReadResultStats& rowStats, i64 freeSpace, TMaybe<ui64> shardId = {}) {
 
         NUdf::TUnboxedValue* resultRowItems = nullptr;
         auto resultRow = HolderFactory.CreateDirectArrayHolder(2, resultRowItems);
 
+        ui64 leftRowSize = 0;
+        ui64 rightRowSize = 0;
+
         resultRowItems[0] = leftRowInfo.Row;
+        auto leftRowType = GetLeftRowType();
+        YQL_ENSURE(leftRowType);
+
+        for (size_t i = 0; i < leftRowType->GetMembersCount(); ++i) {
+            auto columnTypeInfo = UnpackTypeInfo(leftRowType->GetMemberType(i));
+            leftRowSize += NMiniKQL::GetUnboxedValueSize(leftRowInfo.Row.GetElement(i), columnTypeInfo).AllocatedBytes;
+        }
 
         if (!rightRow.empty()) {
             leftRowInfo.RightRowExist = true;
-            // TODO: get size for left row
 
             NUdf::TUnboxedValue* rightRowItems = nullptr;
             resultRowItems[1] = HolderFactory.CreateDirectArrayHolder(Columns.size(), rightRowItems);
@@ -720,19 +778,26 @@ private:
                 if (IsSystemColumn(column.Name)) {
                     YQL_ENSURE(shardId);
                     NMiniKQL::FillSystemColumn(rightRowItems[colIndex], *shardId, column.Id, column.PType);
-                    resultRowSize += sizeof(NUdf::TUnboxedValue);
+                    rightRowSize += sizeof(NUdf::TUnboxedValue);
                 } else {
                     rightRowItems[colIndex] = NMiniKQL::GetCellValue(rightRow[std::distance(ReadColumns.begin(), it)],
                         column.PType);
-                    resultRowSize += NMiniKQL::GetUnboxedValueSize(rightRowItems[colIndex], column.PType).AllocatedBytes;
+                    rightRowSize += NMiniKQL::GetUnboxedValueSize(rightRowItems[colIndex], column.PType).AllocatedBytes;
                 }
             }
         } else {
             resultRowItems[1] = NUdf::TUnboxedValuePod();
         }
 
-        if (resultRowSize > freeSpace) {
+        rowStats.ReadRowsCount += (leftRowInfo.RightRowExist ? 1 : 0);
+        // TODO: use datashard statistics KIKIMR-16924
+        rowStats.ReadBytesCount += rightRowSize;
+        rowStats.ResultRowsCount += 1;
+        rowStats.ResultBytesCount += leftRowSize + rightRowSize;
+
+        if (rowStats.ResultBytesCount > (ui64)freeSpace) {
             resultRow.DeleteUnreferenced();
+            rowStats.Clear();
         }
 
         return resultRow;
@@ -748,13 +813,14 @@ private:
 };
 
 std::unique_ptr<TKqpStreamLookupWorker> CreateStreamLookupWorker(NKikimrKqp::TKqpStreamLookupSettings&& settings,
-    const NMiniKQL::TTypeEnvironment& typeEnv, const NMiniKQL::THolderFactory& holderFactory) {
+    const NMiniKQL::TTypeEnvironment& typeEnv, const NMiniKQL::THolderFactory& holderFactory,
+    const NYql::NDqProto::TTaskInput& inputDesc) {
 
     switch (settings.GetLookupStrategy()) {
         case NKqpProto::EStreamLookupStrategy::LOOKUP:
-            return std::make_unique<TKqpLookupRows>(std::move(settings), typeEnv, holderFactory);
+            return std::make_unique<TKqpLookupRows>(std::move(settings), typeEnv, holderFactory, inputDesc);
         case NKqpProto::EStreamLookupStrategy::JOIN:
-            return std::make_unique<TKqpJoinRows>(std::move(settings), typeEnv, holderFactory);
+            return std::make_unique<TKqpJoinRows>(std::move(settings), typeEnv, holderFactory, inputDesc);
         default:
             return {};
     }

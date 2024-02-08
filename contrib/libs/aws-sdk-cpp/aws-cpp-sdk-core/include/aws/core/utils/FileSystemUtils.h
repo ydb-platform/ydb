@@ -45,7 +45,7 @@ namespace Aws
             */
             TempFile(const char* prefix, std::ios_base::openmode openFlags);
             /**
-             * Creates a temporary file with a randome string for the name.
+             * Creates a temporary file with a random string for the name.
              */
             TempFile(std::ios_base::openmode openFlags);
 

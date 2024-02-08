@@ -3,6 +3,7 @@
 #include <ydb/core/base/appdata.h>
 #include <ydb/core/base/counters.h>
 #include <ydb/core/base/hive.h>
+#include <ydb/core/base/domain.h>
 #include <ydb/core/base/tablet_pipe.h>
 #include <ydb/core/node_whiteboard/node_whiteboard.h>
 #include <ydb/library/services/services.pb.h>
@@ -10,9 +11,9 @@
 #include <ydb/core/tx/scheme_board/scheme_board.h>
 #include <ydb/core/util/tuples.h>
 
-#include <library/cpp/actors/core/actor_bootstrapped.h>
-#include <library/cpp/actors/core/hfunc.h>
-#include <library/cpp/actors/core/log.h>
+#include <ydb/library/actors/core/actor_bootstrapped.h>
+#include <ydb/library/actors/core/hfunc.h>
+#include <ydb/library/actors/core/log.h>
 
 #include <util/system/info.h>
 #include <util/string/vector.h>
@@ -230,7 +231,6 @@ class TLocalNodeRegistrar : public TActorBootstrapped<TLocalNodeRegistrar> {
             tabletType = record.GetTabletType();
         }
 
-        ui32 tabletIdx = 0;
         for (const auto &tablet: OnlineTablets) {
             if (!isFilteringNeeded || tablet.second.TabletType == tabletType) {
                 auto *info = result->Record.AddTabletInfo();
@@ -238,7 +238,6 @@ class TLocalNodeRegistrar : public TActorBootstrapped<TLocalNodeRegistrar> {
                 info->SetFollowerId(tablet.first.second);
                 info->SetTabletType(tablet.second.TabletType);
                 info->SetBootMode(tablet.second.BootMode);
-                ++tabletIdx;
             }
         }
 
@@ -1116,7 +1115,6 @@ class TDomainLocal : public TActorBootstrapped<TDomainLocal> {
             info.Attributes.emplace(std::make_pair(attr.GetKey(), attr.GetValue()));
         RunningTenants.emplace(std::make_pair(task.Info.TenantName, info));
         const TActorId whiteboardServiceId(NNodeWhiteboard::MakeNodeWhiteboardServiceId(SelfId().NodeId()));
-        Send(whiteboardServiceId, new NNodeWhiteboard::TEvWhiteboard::TEvSystemStateAddRole("Tenant"));
         Send(whiteboardServiceId, new NNodeWhiteboard::TEvWhiteboard::TEvSystemStateSetTenant(task.Info.TenantName));
         for (TTabletId hId : hiveIds) {
             LOG_DEBUG_S(ctx, NKikimrServices::LOCAL,
@@ -1223,25 +1221,29 @@ class TDomainLocal : public TActorBootstrapped<TDomainLocal> {
             return;
         }
         Y_ABORT_UNLESS(rec.GetPathDescription().HasDomainDescription());
-        Y_ABORT_UNLESS(rec.GetPathDescription().GetDomainDescription().GetDomainKey().GetSchemeShard() == SchemeRoot);
+        const auto &domainDesc = rec.GetPathDescription().GetDomainDescription();
+        Y_ABORT_UNLESS(domainDesc.GetDomainKey().GetSchemeShard() == SchemeRoot);
 
         TVector<TTabletId> hiveIds(HiveIds);
-        TString path = rec.GetPath();
-
-        TTabletId hiveId = rec.GetPathDescription().GetDomainDescription().GetProcessingParams().GetHive();
+        TTabletId hiveId = domainDesc.GetProcessingParams().GetHive();
         if (hiveId) {
             hiveIds.emplace_back(hiveId);
         }
+        TTabletId sharedHiveId = domainDesc.GetSharedHive();
+        if (sharedHiveId) {
+            hiveIds.emplace_back(sharedHiveId);
+        }
         RegisterAsSubDomain(rec, task, hiveIds, ctx);
 
+        const TString &path = rec.GetPath();
         auto itTenant = RunningTenants.find(path);
         if (itTenant != RunningTenants.end()) {
             TTenantInfo& tenant = itTenant->second;
 
             tenant.HiveIds = hiveIds;
 
-            SendStatus(rec.GetPath(), task.Senders, ctx);
-            ResolveTasks.erase(rec.GetPath());
+            SendStatus(path, task.Senders, ctx);
+            ResolveTasks.erase(path);
 
             // subscribe for schema updates
             const auto& domains = *AppData()->DomainsInfo;

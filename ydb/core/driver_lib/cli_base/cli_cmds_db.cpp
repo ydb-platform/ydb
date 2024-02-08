@@ -8,7 +8,7 @@
 #include <ydb/public/sdk/cpp/client/resources/ydb_resources.h>
 
 
-#include <library/cpp/grpc/client/grpc_client_low.h>
+#include <ydb/library/grpc/client/grpc_client_low.h>
 
 #include <ydb/public/api/grpc/ydb_table_v1.grpc.pb.h>
 #include <ydb/public/sdk/cpp/client/ydb_table/table.h>
@@ -805,7 +805,7 @@ public:
 
 class TClientCommandSchemaTableOptions : public TClientCommand {
 public:
-    NGrpc::TGRpcClientConfig ClientConfig;
+    NYdbGrpc::TGRpcClientConfig ClientConfig;
 
     TClientCommandSchemaTableOptions()
         : TClientCommand("options", {}, "Describe table options")
@@ -848,14 +848,14 @@ public:
             return -2;
         }
 
-        NGrpc::TCallMeta meta;
+        NYdbGrpc::TCallMeta meta;
         if (config.SecurityToken) {
             meta.Aux.push_back({NYdb::YDB_AUTH_TICKET_HEADER, config.SecurityToken});
         }
 
         Ydb::Operations::Operation response;
-        NGrpc::TResponseCallback<Ydb::Table::DescribeTableOptionsResponse> responseCb =
-            [&res, &response](NGrpc::TGrpcStatus &&grpcStatus, Ydb::Table::DescribeTableOptionsResponse &&resp) -> void {
+        NYdbGrpc::TResponseCallback<Ydb::Table::DescribeTableOptionsResponse> responseCb =
+            [&res, &response](NYdbGrpc::TGrpcStatus &&grpcStatus, Ydb::Table::DescribeTableOptionsResponse &&resp) -> void {
             res = (int)grpcStatus.GRpcStatusCode;
             if (!res) {
                 response.CopyFrom(resp.operation());
@@ -865,7 +865,7 @@ public:
         };
 
         {
-            NGrpc::TGRpcClientLow clientLow;
+            NYdbGrpc::TGRpcClientLow clientLow;
             Ydb::Table::DescribeTableOptionsRequest request;
             auto connection = clientLow.CreateGRpcServiceConnection<Ydb::Table::V1::TableService>(ClientConfig);
             connection->DoRequest(request, std::move(responseCb), &Ydb::Table::V1::TableService::Stub::AsyncDescribeTableOptions, meta);
@@ -918,7 +918,7 @@ public:
 
 class TClientCommandSchemaTableCopy : public TClientCommand {
 public:
-    NGrpc::TGRpcClientConfig ClientConfig;
+    NYdbGrpc::TGRpcClientConfig ClientConfig;
     TString DatabaseName;
     TVector<TString> SrcValues;
     TVector<TString> DstValues;

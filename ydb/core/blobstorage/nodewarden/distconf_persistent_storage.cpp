@@ -1,4 +1,6 @@
 #include "distconf.h"
+#include <google/protobuf/util/json_util.h>
+
 
 namespace NKikimr::NStorage {
 

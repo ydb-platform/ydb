@@ -14,12 +14,12 @@ TGRpcFqPrivateTaskService::TGRpcFqPrivateTaskService(NActors::TActorSystem *syst
     , Counters_(counters)
     , GRpcRequestProxyId_(id) {}
 
-void TGRpcFqPrivateTaskService::InitService(grpc::ServerCompletionQueue* cq, NGrpc::TLoggerPtr logger) {
+void TGRpcFqPrivateTaskService::InitService(grpc::ServerCompletionQueue* cq, NYdbGrpc::TLoggerPtr logger) {
     CQ_ = cq;
     SetupIncomingRequests(std::move(logger));
 }
 
-void TGRpcFqPrivateTaskService::SetGlobalLimiterHandle(NGrpc::TGlobalLimiter* limiter) {
+void TGRpcFqPrivateTaskService::SetGlobalLimiterHandle(NYdbGrpc::TGlobalLimiter* limiter) {
     Limiter_ = limiter;
 }
 
@@ -32,7 +32,7 @@ void TGRpcFqPrivateTaskService::DecRequest() {
     Y_ASSERT(Limiter_->GetCurrentInFlight() >= 0);
 }
 
-void TGRpcFqPrivateTaskService::SetupIncomingRequests(NGrpc::TLoggerPtr logger) {
+void TGRpcFqPrivateTaskService::SetupIncomingRequests(NYdbGrpc::TLoggerPtr logger) {
     auto getCounterBlock = CreateCounterCb(Counters_, ActorSystem_);
 
 #ifdef ADD_REQUEST
@@ -41,7 +41,7 @@ void TGRpcFqPrivateTaskService::SetupIncomingRequests(NGrpc::TLoggerPtr logger) 
 #define ADD_REQUEST(NAME, CB)                                                                                  \
 MakeIntrusive<TGRpcRequest<Fq::Private::NAME##Request, Fq::Private::NAME##Response, TGRpcFqPrivateTaskService, TSecurityTextFormatPrinter<Fq::Private::NAME##Request>, TSecurityTextFormatPrinter<Fq::Private::NAME##Response>>>(                                                                  \
     this, &Service_, CQ_,                                                                                      \
-    [this](NGrpc::IRequestContextBase *ctx) {                                                                  \
+    [this](NYdbGrpc::IRequestContextBase *ctx) {                                                                  \
         NGRpcService::ReportGrpcReqToMon(*ActorSystem_, ctx->GetPeer());                                       \
         ActorSystem_->Send(GRpcRequestProxyId_,                                                                \
             new TGrpcRequestOperationCall<Fq::Private::NAME##Request, Fq::Private::NAME##Response>             \

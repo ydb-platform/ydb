@@ -82,6 +82,13 @@ TExprNodeBuilder GetterBuilder(TExprNodeBuilder parent, ui32 index, const TTypeA
     return GetterBuilder(parent.Callable(index, ETypeAnnotationKind::Struct == parentType->GetKind() ? "Member" : "Nth"), 0U, type, path).Atom(1, name).Seal();
 }
 
+const TExprNode& GetLiteralStructMember(const TExprNode& literal, const TExprNode& member) {
+    for (const auto& child : literal.Children())
+        if (&child->Head() == &member || child->Head().Content() == member.Content())
+            return child->Tail();
+    ythrow yexception() << "Member '" << member.Content() << "' not found in literal struct.";
+}
+
 }
 
 TExprNode::TPtr MakeBoolNothing(TPositionHandle position, TExprContext& ctx) {
@@ -1563,6 +1570,7 @@ ui64 GetTypeWeight(const TTypeAnnotationNode& type) {
                 case NUdf::EDataSlot::Int32:
                 case NUdf::EDataSlot::Uint32:
                 case NUdf::EDataSlot::Float:
+                case NUdf::EDataSlot::Date32:
                 case NUdf::EDataSlot::Datetime: return 4;
 
                 case NUdf::EDataSlot::TzDatetime: return 5;
@@ -1917,6 +1925,153 @@ bool HasOnlyOneJoinType(const TExprNode& joinTree, TStringBuf joinType) {
     }
 
     return HasOnlyOneJoinType(*joinTree.Child(1), joinType) && HasOnlyOneJoinType(*joinTree.Child(2), joinType);
+}
+
+void OptimizeSubsetFieldsForNodeWithMultiUsage(const TExprNode::TPtr& node, const TParentsMap& parentsMap,
+    TNodeOnNodeOwnedMap& toOptimize, TExprContext& ctx,
+    std::function<TExprNode::TPtr(const TExprNode::TPtr&, const TExprNode::TPtr&, const TParentsMap&, TExprContext&)> handler)
+{
+
+    // Ignore stream input, because it cannot be used multiple times
+    if (node->GetTypeAnn()->GetKind() != ETypeAnnotationKind::List) {
+        return;
+    }
+    auto itemType = node->GetTypeAnn()->Cast<TListExprType>()->GetItemType();
+    if (itemType->GetKind() != ETypeAnnotationKind::Struct) {
+        return;
+    }
+    auto structType = itemType->Cast<TStructExprType>();
+
+    auto it = parentsMap.find(node.Get());
+    if (it == parentsMap.cend() || it->second.size() <= 1) {
+        return;
+    }
+
+    TSet<TStringBuf> usedFields;
+    for (auto parent: it->second) {
+        if (auto maybeFlatMap = TMaybeNode<TCoFlatMapBase>(parent)) {
+            auto flatMap = maybeFlatMap.Cast();
+            TSet<TStringBuf> lambdaSubset;
+            if (!HaveFieldsSubset(flatMap.Lambda().Body().Ptr(), flatMap.Lambda().Args().Arg(0).Ref(), lambdaSubset, parentsMap)) {
+                return;
+            }
+            usedFields.insert(lambdaSubset.cbegin(), lambdaSubset.cend());
+        }
+        else if (auto maybeExtractMembers = TMaybeNode<TCoExtractMembers>(parent)) {
+            auto extractMembers = maybeExtractMembers.Cast();
+            for (auto member: extractMembers.Members()) {
+                usedFields.insert(member.Value());
+            }
+        }
+        else {
+            return;
+        }
+        if (usedFields.size() == structType->GetSize()) {
+            return;
+        }
+    }
+
+    TExprNode::TListType members;
+    for (auto column : usedFields) {
+        members.push_back(ctx.NewAtom(node->Pos(), column));
+    }
+
+    auto newInput = handler(node, ctx.NewList(node->Pos(), std::move(members)), parentsMap, ctx);
+    if (!newInput || newInput == node) {
+        return;
+    }
+
+    for (auto parent: it->second) {
+        if (TCoExtractMembers::Match(parent)) {
+            if (parent->GetTypeAnn()->Cast<TListExprType>()->GetItemType()->Cast<TStructExprType>()->GetSize() == usedFields.size()) {
+                toOptimize[parent] = newInput;
+            } else {
+                toOptimize[parent] = ctx.ChangeChild(*parent, 0, TExprNode::TPtr(newInput));
+            }
+        } else {
+            toOptimize[parent] = ctx.Builder(parent->Pos())
+                .Callable(parent->Content())
+                    .Add(0, newInput)
+                    .Lambda(1)
+                        .Param("item")
+                        .Apply(parent->ChildPtr(1)).With(0, "item").Seal()
+                    .Seal()
+                .Seal()
+                .Build();
+        }
+    }
+}
+
+
+std::optional<std::pair<TPartOfConstraintBase::TPathType, ui32>> GetPathToKey(const TExprNode& body, const TExprNode::TChildrenType& args) {
+    if (body.IsArgument()) {
+        for (auto i = 0U; i < args.size(); ++i)
+            if (&body == args[i].Get())
+                return std::make_pair(TPartOfConstraintBase::TPathType(), i);
+    } else if (body.IsCallable({"Member","Nth"})) {
+        if (auto path = GetPathToKey(body.Head(), args)) {
+            path->first.emplace_back(body.Tail().Content());
+            return path;
+        } else if (const auto& head = SkipCallables(body.Head(), {"CastStruct","FilterMembers"}); head.IsCallable("AsStruct") && body.IsCallable("Member")) {
+            return GetPathToKey(GetLiteralStructMember(head, body.Tail()), args);
+        } else if (body.IsCallable("Nth") && body.Head().IsList()) {
+            return GetPathToKey(*body.Head().Child(FromString<ui32>(body.Tail().Content())), args);
+        } else if (body.IsCallable({"CastStruct","FilterMembers"}))  {
+            return GetPathToKey(body.Head(), args);
+        }
+    }
+
+    return std::nullopt;
+}
+
+std::optional<TPartOfConstraintBase::TPathType> GetPathToKey(const TExprNode& body, const TExprNode& arg) {
+    if (&body == &arg)
+        return TPartOfConstraintBase::TPathType();
+
+    if (body.IsCallable({"Member","Nth"})) {
+        if (auto path = GetPathToKey(body.Head(), arg)) {
+            path->emplace_back(body.Tail().Content());
+            return path;
+        }
+    }
+
+    if (body.IsCallable({"CastStruct","FilterMembers","Just","Unwrap"}))
+        return GetPathToKey(body.Head(), arg);
+    if (body.IsCallable("Member") && body.Head().IsCallable("AsStruct"))
+        return GetPathToKey(GetLiteralStructMember(body.Head(), body.Tail()), arg);
+    if (body.IsCallable("Nth") && body.Head().IsList())
+        return GetPathToKey(*body.Head().Child(FromString<ui32>(body.Tail().Content())), arg);
+    if (body.IsList() && 1U == body.ChildrenSize() && body.Head().IsCallable("Nth") && body.Head().Tail().IsAtom("0") &&
+        1U == RemoveOptionality(*body.Head().Head().GetTypeAnn()).Cast<TTupleExprType>()->GetSize())
+        // Especialy for "Extract single item tuple from Condense1" optimizer.
+        return GetPathToKey(body.Head().Head(), arg);
+    if (body.IsCallable("AsStruct") && 1U == body.ChildrenSize() && body.Head().Tail().IsCallable("Member") &&
+        body.Head().Head().Content() == body.Head().Tail().Tail().Content() &&
+        1U == RemoveOptionality(*body.Head().Tail().Head().GetTypeAnn()).Cast<TStructExprType>()->GetSize())
+        // Especialy for "Extract single item struct from Condense1" optimizer.
+        return GetPathToKey(body.Head().Tail().Head(), arg);
+    if (IsTransparentIfPresent(body) && &body.Head() == &arg)
+        return GetPathToKey(body.Child(1)->Tail().Head(), body.Child(1)->Head().Head());
+
+    return std::nullopt;
+}
+
+TPartOfConstraintBase::TSetType GetPathsToKeys(const TExprNode& body, const TExprNode& arg) {
+    TPartOfConstraintBase::TSetType keys;
+    if (body.IsList()) {
+        if (const auto size = body.ChildrenSize()) {
+            keys.reserve(size);
+            for (auto i = 0U; i < size; ++i)
+                if (auto path = GetPathToKey(*body.Child(i), arg))
+                    keys.insert_unique(std::move(*path));
+        }
+    } else if (body.IsCallable("StablePickle")) {
+        return GetPathsToKeys(body.Head(), arg);
+    } else if (auto path = GetPathToKey(body, arg)) {
+        keys.insert_unique(std::move(*path));
+    }
+
+    return keys;
 }
 
 }

@@ -25,6 +25,9 @@ links:
   - title: Working with the SDK
     description: YDB SDK reference
     href: reference/ydb-sdk/
+  - title: Working with PostgreSQL 
+    description: Compatibility with PostgreSQL
+    href: postgresql/  
   - title: Managing databases
     description: Configuring, maintaining, monitoring, and performing diagnostics of YDB databases
     href: db/

@@ -8,7 +8,7 @@
 #include <ydb/core/quoter/public/quoter.h>
 #include <ydb/core/persqueue/events/internal.h>
 
-#include <library/cpp/actors/core/hfunc.h>
+#include <ydb/library/actors/core/hfunc.h>
 
 
 namespace NKikimr {
@@ -78,7 +78,7 @@ public:
         TActorId partitionActor,
         const NPersQueue::TTopicConverterPtr& topicConverter,
         const NKikimrPQ::TPQTabletConfig& config,
-        ui32 partition,
+        const TPartitionId& partition,
         TActorId tabletActor,
         ui64 tabletId,
         const TTabletCountersBase& counters
@@ -159,7 +159,7 @@ private:
     NKikimrPQ::TPQTabletConfig PQTabletConfig;
     TQuotaTracker PartitionTotalQuotaTracker;
     NPersQueue::TTopicConverterPtr TopicConverter;
-    const ui32 Partition;
+    const TPartitionId Partition;
     ui64 TabletId;
     TTabletCountersBase Counters;
     ui32 RequestsInflight;

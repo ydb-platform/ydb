@@ -3,6 +3,8 @@
 
 #include <ydb/core/actorlib_impl/long_timer.h>
 #include <ydb/core/base/appdata.h>
+#include <ydb/core/base/feature_flags.h>
+#include <ydb/core/base/nameservice.h>
 #include <ydb/core/base/path.h>
 #include <ydb/core/cms/console/config_helpers.h>
 #include <ydb/core/protos/node_broker.pb.h>

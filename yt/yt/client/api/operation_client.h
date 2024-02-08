@@ -187,6 +187,7 @@ struct TListJobsOptions
     std::optional<bool> WithFailContext;
     std::optional<bool> WithSpec;
     std::optional<bool> WithCompetitors;
+    std::optional<bool> WithMonitoringDescriptor;
     std::optional<TString> TaskName;
 
     TDuration RunningJobsLookbehindPeriod = TDuration::Max();
@@ -291,8 +292,8 @@ struct TListOperationsResult
     std::optional<THashMap<TString, i64>> PoolTreeCounts;
     std::optional<THashMap<TString, i64>> PoolCounts;
     std::optional<THashMap<TString, i64>> UserCounts;
-    std::optional<TEnumIndexedVector<NScheduler::EOperationState, i64>> StateCounts;
-    std::optional<TEnumIndexedVector<NScheduler::EOperationType, i64>> TypeCounts;
+    std::optional<TEnumIndexedArray<NScheduler::EOperationState, i64>> StateCounts;
+    std::optional<TEnumIndexedArray<NScheduler::EOperationType, i64>> TypeCounts;
     std::optional<i64> FailedJobsCount;
     bool Incomplete = false;
 };
@@ -300,7 +301,7 @@ struct TListOperationsResult
 struct TJob
 {
     NJobTrackerClient::TJobId Id;
-    NJobTrackerClient::TJobId OperationId;
+    NJobTrackerClient::TOperationId OperationId;
     std::optional<NJobTrackerClient::EJobType> Type;
     std::optional<NJobTrackerClient::EJobState> ControllerState;
     std::optional<NJobTrackerClient::EJobState> ArchiveState;
@@ -337,8 +338,8 @@ void Serialize(const TJob& job, NYson::IYsonConsumer* consumer, TStringBuf idKey
 
 struct TListJobsStatistics
 {
-    TEnumIndexedVector<NJobTrackerClient::EJobState, i64> StateCounts;
-    TEnumIndexedVector<NJobTrackerClient::EJobType, i64> TypeCounts;
+    TEnumIndexedArray<NJobTrackerClient::EJobState, i64> StateCounts;
+    TEnumIndexedArray<NJobTrackerClient::EJobType, i64> TypeCounts;
 };
 
 struct TListJobsResult
@@ -357,6 +358,8 @@ struct TListJobsResult
 
 struct IOperationClient
 {
+    virtual ~IOperationClient() = default;
+
     virtual TFuture<NScheduler::TOperationId> StartOperation(
         NScheduler::EOperationType type,
         const NYson::TYsonString& spec,

@@ -12,8 +12,8 @@ add_library(core-mind-hive)
 target_link_libraries(core-mind-hive PUBLIC
   contrib-libs-cxxsupp
   yutil
-  cpp-actors-core
-  cpp-actors-interconnect
+  library-actors-core
+  library-actors-interconnect
   cpp-containers-ring_buffer
   library-cpp-json
   cpp-monlib-dynamic_counters
@@ -46,6 +46,7 @@ target_sources(core-mind-hive PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/core/mind/hive/storage_group_info.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/mind/hive/storage_pool_info.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/mind/hive/tablet_info.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/mind/hive/tablet_move_info.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/mind/hive/tx__adopt_tablet.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/mind/hive/tx__block_storage_result.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/mind/hive/tx__configure_subdomain.cpp

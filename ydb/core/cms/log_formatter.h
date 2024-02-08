@@ -94,7 +94,7 @@ TString TLogFormatter<NKikimrCms::TEXT_FORMAT_SHORT>::FormatData(const NKikimrCm
        << " from " << data.GetCurrentStatus()
        << " to " << data.GetRequiredStatus();
     if (data.HasReason()) {
-        ss << "(" << data.GetReason() << ")";
+        ss << " (" << data.GetReason() << ")";
     }
     return ss.Str();
 }

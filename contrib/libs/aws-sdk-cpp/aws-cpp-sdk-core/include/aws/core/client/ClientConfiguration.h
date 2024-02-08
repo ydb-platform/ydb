@@ -11,6 +11,7 @@
 #include <aws/core/utils/memory/stl/AWSString.h>
 #include <aws/core/http/HttpTypes.h>
 #include <aws/core/utils/Array.h>
+#include <aws/crt/Optional.h>
 #include <memory>
 
 namespace Aws
@@ -45,6 +46,20 @@ namespace Aws
         };
 
         /**
+         * This setting is an enumeration, not a boolean, to allow for future expansion.
+         */
+        enum class UseRequestCompression
+        {
+          DISABLE,
+          ENABLE,
+        };
+
+        struct RequestCompressionConfig {
+          UseRequestCompression useRequestCompression=UseRequestCompression::ENABLE;
+          size_t requestMinCompressionSizeBytes = 10240;
+        };
+
+        /**
          * This mutable structure is used to configure any of the AWS clients.
          * Default values can only be overwritten prior to passing to the client constructors.
          */
@@ -55,8 +70,18 @@ namespace Aws
             /**
              * Create a configuration based on settings in the aws configuration file for the given profile name.
              * The configuration file location can be set via the environment variable AWS_CONFIG_FILE
+             * @param profileName the aws profile name.
+             * @param shouldDisableIMDS whether or not to disable IMDS calls.
              */
-            ClientConfiguration(const char* profileName);
+            ClientConfiguration(const char* profileName, bool shouldDisableIMDS = false);
+
+            /**
+             * Create a configuration with a predefined smart defaults
+             * @param useSmartDefaults, required to differentiate c-tors
+             * @param defaultMode, default mode to use
+             * @param shouldDisableIMDS whether or not to disable IMDS calls.
+             */
+            explicit ClientConfiguration(bool useSmartDefaults, const char* defaultMode = "legacy", bool shouldDisableIMDS = false);
 
             /**
              * User Agent string user for http calls. This is filled in for you in the constructor. Don't override this unless you have a really good reason.
@@ -73,47 +98,53 @@ namespace Aws
             /**
              * Use dual stack endpoint in the endpoint calculation. It is your responsibility to verify that the service supports ipv6 in the region you select.
              */
-            bool useDualStack;
+            bool useDualStack = false;
+
+            /**
+             * Use FIPS endpoint in the endpoint calculation. Please check first that the service supports FIPS in a selected region.
+             */
+            bool useFIPS = false;
+
             /**
              * Max concurrent tcp connections for a single http client to use. Default 25.
              */
-            unsigned maxConnections;
+            unsigned maxConnections = 25;
             /**
              * This is currently only applicable for Curl to set the http request level timeout, including possible dns lookup time, connection establish time, ssl handshake time and actual data transmission time.
              * the corresponding Curl option is CURLOPT_TIMEOUT_MS
              * defaults to 0, no http request level timeout.
              */
-            long httpRequestTimeoutMs;
+            long httpRequestTimeoutMs = 0;
             /**
-             * Socket read timeouts for HTTP clients on Windows. Default 3000 ms. This should be more than adequate for most services. However, if you are transfering large amounts of data
+             * Socket read timeouts for HTTP clients on Windows. Default 3000 ms. This should be more than adequate for most services. However, if you are transferring large amounts of data
              * or are worried about higher latencies, you should set to something that makes more sense for your use case.
              * For Curl, it's the low speed time, which contains the time in number milliseconds that transfer speed should be below "lowSpeedLimit" for the library to consider it too slow and abort.
              * Note that for Curl this config is converted to seconds by rounding down to the nearest whole second except when the value is greater than 0 and less than 1000. In this case it is set to one second. When it's 0, low speed limit check will be disabled.
              * Note that for Windows when this config is 0, the behavior is not specified by Windows.
              */
-            long requestTimeoutMs;
+            long requestTimeoutMs = 0;
             /**
-             * Socket connect timeout. Default 1000 ms. Unless you are very far away from your the data center you are talking to. 1000ms is more than sufficient.
+             * Socket connect timeout. Default 1000 ms. Unless you are very far away from your the data center you are talking to, 1000ms is more than sufficient.
              */
-            long connectTimeoutMs;
+            long connectTimeoutMs = 1000;
             /**
              * Enable TCP keep-alive. Default true;
              * No-op for WinHTTP, WinINet and IXMLHTTPRequest2 client.
              */
-            bool enableTcpKeepAlive;
+            bool enableTcpKeepAlive = true;
             /**
              * Interval to send a keep-alive packet over the connection. Default 30 seconds. Minimum 15 seconds.
              * WinHTTP & libcurl support this option. Note that for Curl, this value will be rounded to an integer with second granularity.
              * No-op for WinINet and IXMLHTTPRequest2 client.
              */
-            unsigned long tcpKeepAliveIntervalMs;
+            unsigned long tcpKeepAliveIntervalMs = 30000;
             /**
              * Average transfer speed in bytes per second that the transfer should be below during the request timeout interval for it to be considered too slow and abort.
              * Default 1 byte/second. Only for CURL client currently.
              */
-            unsigned long lowSpeedLimit;
+            unsigned long lowSpeedLimit = 1;
             /**
-             * Strategy to use in case of failed requests. Default is DefaultRetryStrategy (e.g. exponential backoff)
+             * Strategy to use in case of failed requests. Default is DefaultRetryStrategy (i.e. exponential backoff)
              */
             std::shared_ptr<RetryStrategy> retryStrategy;
             /**
@@ -131,7 +162,7 @@ namespace Aws
             /**
              * If you have users going through a proxy, set the port here.
              */
-            unsigned proxyPort;
+            unsigned proxyPort = 0;
             /**
              * If you have users going through a proxy, set the username here.
              */
@@ -175,9 +206,9 @@ namespace Aws
             std::shared_ptr<Aws::Utils::Threading::Executor> executor;
             /**
              * If you need to test and want to get around TLS validation errors, do that here.
-             * you probably shouldn't use this flag in a production scenario.
+             * You probably shouldn't use this flag in a production scenario.
              */
-            bool verifySSL;
+            bool verifySSL = true;
             /**
              * If your Certificate Authority path is different from the default, you can tell
              * clients that aren't using the default trust store where to find your CA trust store.
@@ -226,35 +257,73 @@ namespace Aws
              * But be careful when Http request has large payload such S3 PutObject. You don't want to spend long time sending a large payload just getting a error response for server.
              * The default value will be false.
              */
-            bool disableExpectHeader;
+            bool disableExpectHeader = false;
 
             /**
              * If set to true clock skew will be adjusted after each http attempt, default to true.
              */
-            bool enableClockSkewAdjustment;
+            bool enableClockSkewAdjustment = true;
 
             /**
              * Enable host prefix injection.
              * For services whose endpoint is injectable. e.g. servicediscovery, you can modify the http host's prefix so as to add "data-" prefix for DiscoverInstances request.
              * Default to true, enabled. You can disable it for testing purpose.
+             *
+             * Deprecated in API v. 1.10. Please set in service-specific client configuration.
              */
-            bool enableHostPrefixInjection;
+            bool enableHostPrefixInjection = true;
 
             /**
              * Enable endpoint discovery
              * For some services to dynamically set up their endpoints for different requests.
-             * Defaults to false, it's an opt-in feature.
-             * If disabled, regional or overriden endpoint will be used instead.
+             * By default, service clients will decide if endpoint discovery is enabled or not.
+             * If disabled, regional or overridden endpoint will be used instead.
              * If a request requires endpoint discovery but you disabled it. The request will never succeed.
+             * A boolean value is either true of false, use Optional here to have an instance does not contain a value,
+             * such that SDK will decide the default behavior as stated before, if no value specified.
+             *
+             * Deprecated in API v. 1.10. Please set in service-specific client configuration.
              */
-            bool enableEndpointDiscovery;
+            Aws::Crt::Optional<bool> enableEndpointDiscovery;
 
             /**
-             * profileName in config file that will be used by this object to reslove more configurations.
+             * profileName in config file that will be used by this object to resolve more configurations.
              */
             Aws::String profileName;
 
+            /**
+             * Request compression configuration
+             * To use this feature, the service needs to provide the support, and the compression
+             * algorithms needs to be available at SDK build time.
+             */
+            Aws::Client::RequestCompressionConfig requestCompressionConfig;
+
+            /**
+             * Disable all internal IMDS Calls
+             */
+            bool disableIMDS = false;
+
+            /**
+             * A helper function to read config value from env variable or aws profile config
+             */
+            static Aws::String LoadConfigFromEnvOrProfile(const Aws::String& envKey,
+                                                          const Aws::String& profile,
+                                                          const Aws::String& profileProperty,
+                                                          const Aws::Vector<Aws::String>& allowedValues,
+                                                          const Aws::String& defaultValue);
         };
+
+        /**
+         * A helper function to initialize a retry strategy.
+         * Default is DefaultRetryStrategy (i.e. exponential backoff)
+         */
+        std::shared_ptr<RetryStrategy> InitRetryStrategy(Aws::String retryMode = "");
+
+        /**
+         * A helper function to compute a user agent
+         * @return Aws::String with a user-agent
+         */
+        AWS_CORE_API Aws::String ComputeUserAgentString();
 
     } // namespace Client
 } // namespace Aws

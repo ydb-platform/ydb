@@ -6,6 +6,7 @@ SRCS(
     kqp_host.cpp
     kqp_runner.cpp
     kqp_transform.cpp
+    kqp_translate.cpp
     kqp_type_ann.cpp
 )
 
@@ -13,11 +14,12 @@ PEERDIR(
     ydb/core/base
     ydb/core/kqp/common
     ydb/core/kqp/federated_query
+    ydb/core/kqp/gateway/utils
     ydb/core/kqp/opt
     ydb/core/kqp/provider
     ydb/core/tx/long_tx_service/public
     ydb/library/yql/core/services
-    ydb/library/yql/minikql/invoke_builtins/llvm
+    ydb/library/yql/minikql/invoke_builtins
     ydb/library/yql/sql
     ydb/library/yql/core
     ydb/library/yql/providers/common/codec
@@ -27,6 +29,7 @@ PEERDIR(
     ydb/library/yql/providers/generic/provider
     ydb/library/yql/providers/result/provider
     ydb/library/yql/providers/s3/provider
+    ydb/library/yql/providers/pg/provider
 )
 
 YQL_LAST_ABI_VERSION()

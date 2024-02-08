@@ -1,7 +1,7 @@
 #pragma once
 
-#include <library/cpp/yaml/fyamlcpp/fyamlcpp.h>
-#include <library/cpp/actors/core/actor.h>
+#include <ydb/library/fyamlcpp/fyamlcpp.h>
+#include <ydb/library/actors/core/actor.h>
 #include <library/cpp/protobuf/json/json2proto.h>
 
 #include <ydb/core/protos/config.pb.h>
@@ -20,7 +20,7 @@
 #include <map>
 #include <string>
 
-namespace NYamlConfig {
+namespace NKikimr::NYamlConfig {
 
 struct TBasicUnknownFieldsCollector : public NProtobufJson::IUnknownFieldsCollector {
     void OnEnterMapItem(const TString& key) override {
@@ -86,4 +86,4 @@ void ResolveAndParseYamlConfig(
  */
 void ReplaceUnmanagedKinds(const NKikimrConfig::TAppConfig& from, NKikimrConfig::TAppConfig& to);
 
-} // namespace NYamlConfig
+} // namespace NKikimr::NYamlConfig

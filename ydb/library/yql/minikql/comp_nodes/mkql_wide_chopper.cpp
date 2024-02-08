@@ -1,6 +1,6 @@
 #include "mkql_chopper.h"
 
-#include <ydb/library/yql/minikql/computation/mkql_computation_node_codegen.h>
+#include <ydb/library/yql/minikql/computation/mkql_computation_node_codegen.h>  // Y_IGNORE
 #include <ydb/library/yql/minikql/mkql_node_cast.h>
 #include <ydb/library/yql/utils/cast.h>
 
@@ -292,7 +292,6 @@ public:
 
         for (ui32 i = 0U; i < Keys.size(); ++i) {
             if (KeyArgs[i]->GetDependencesCount() > 0U) {
-                const auto map = KeysOnItems[i];
                 const auto key = GetNodeValue(Keys[i], ctx, block);
                 EnsureDynamicCast<ICodegeneratorExternalNode*>(KeyArgs[i])->CreateSetValue(ctx, block, key);
             }

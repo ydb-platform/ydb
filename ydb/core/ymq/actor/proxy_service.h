@@ -9,11 +9,11 @@
 #include <ydb/core/protos/config.pb.h>
 #include <ydb/core/ymq/actor/actor.h>
 
-#include <library/cpp/actors/core/actor_bootstrapped.h>
-#include <library/cpp/actors/core/actor.h>
-#include <library/cpp/actors/core/interconnect.h>
-#include <library/cpp/actors/core/event_pb.h>
-#include <library/cpp/actors/core/hfunc.h>
+#include <ydb/library/actors/core/actor_bootstrapped.h>
+#include <ydb/library/actors/core/actor.h>
+#include <ydb/library/actors/core/interconnect.h>
+#include <ydb/library/actors/core/event_pb.h>
+#include <ydb/library/actors/core/hfunc.h>
 
 #include <util/generic/hash.h>
 #include <util/generic/hash_set.h>

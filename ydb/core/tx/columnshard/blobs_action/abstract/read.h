@@ -16,7 +16,8 @@ private:
 
     THashMap<TUnifiedBlobId, THashSet<TBlobRange>> RangesForRead;
     THashMap<TBlobRange, TString> RangesForResult;
-    THashMap<TBlobRange, TMonotonic> WaitingRanges;
+    TMonotonic StartWaitingRanges;
+    i32 WaitingRangesCount = 0;
     THashMap<TBlobRange, TString> Replies;
     THashMap<TBlobRange, TErrorStatus> Fails;
     std::shared_ptr<NBlobOperations::TReadCounters> Counters;
@@ -86,7 +87,7 @@ public:
     }
 
     bool IsFinished() const {
-        return WaitingRanges.size() == 0;
+        return WaitingRangesCount == 0;
     }
 };
 

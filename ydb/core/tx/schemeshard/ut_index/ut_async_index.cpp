@@ -1,6 +1,8 @@
 #include <ydb/core/base/path.h>
+#include <ydb/core/change_exchange/change_exchange.h>
 #include <ydb/core/scheme/scheme_tablecell.h>
 #include <ydb/core/tx/schemeshard/ut_helpers/helpers.h>
+#include <ydb/core/tx/schemeshard/ut_helpers/test_with_reboots.h>
 #include <ydb/core/testlib/tablet_helpers.h>
 #include <ydb/public/lib/deprecated/kicli/kicli.h>
 
@@ -181,11 +183,12 @@ Y_UNIT_TEST_SUITE(TAsyncIndexTests) {
         return writtenToMainTable;
     }
 
+    template <typename T>
     void SplitWithReboots(
-            const std::function<void(TTestWithReboots&, TTestActorRuntime&)>& init,
-            const std::function<void(TTestWithReboots&, TTestActorRuntime&, const TVector<ui64>& tablets)>& split)
+            const std::function<void(T&, TTestActorRuntime&)>& init,
+            const std::function<void(T&, TTestActorRuntime&, const TVector<ui64>& tablets)>& split)
     {
-        TTestWithReboots t;
+        T t;
         t.Run([&](TTestActorRuntime& runtime, bool& activeZone) {
             TVector<ui64> mainTabletIds;
             {
@@ -215,8 +218,9 @@ Y_UNIT_TEST_SUITE(TAsyncIndexTests) {
         });
     }
 
-    void SplitWithReboots(const std::function<void(TTestWithReboots&, TTestActorRuntime&)>& init) {
-        SplitWithReboots(init, [](TTestWithReboots& t, TTestActorRuntime& runtime, const TVector<ui64>& tablets) {
+    template <typename T>
+    void SplitWithReboots(const std::function<void(T&, TTestActorRuntime&)>& init) {
+        SplitWithReboots<T>(init, [](T& t, TTestActorRuntime& runtime, const TVector<ui64>& tablets) {
             UNIT_ASSERT_VALUES_EQUAL(tablets.size(), 1);
             TestSplitTable(runtime, ++t.TxId, "/MyRoot/Table", Sprintf(R"(
                 SourceTabletId: %lu
@@ -230,8 +234,8 @@ Y_UNIT_TEST_SUITE(TAsyncIndexTests) {
         });
     }
 
-    Y_UNIT_TEST(SplitWithReboots) {
-        SplitWithReboots([](TTestWithReboots& t, TTestActorRuntime& runtime) {
+    Y_UNIT_TEST_WITH_REBOOTS(SplitWithReboots) {
+        SplitWithReboots<T>([](T& t, TTestActorRuntime& runtime) {
             TestCreateIndexedTable(runtime, ++t.TxId, "/MyRoot", R"(
                 TableDescription {
                   Name: "Table"
@@ -249,8 +253,8 @@ Y_UNIT_TEST_SUITE(TAsyncIndexTests) {
         });
     }
 
-    Y_UNIT_TEST(CdcAndSplitWithReboots) {
-        SplitWithReboots([](TTestWithReboots& t, TTestActorRuntime& runtime) {
+    Y_UNIT_TEST_WITH_REBOOTS(CdcAndSplitWithReboots) {
+        SplitWithReboots<T>([](T& t, TTestActorRuntime& runtime) {
             TestCreateIndexedTable(runtime, ++t.TxId, "/MyRoot", R"(
                 TableDescription {
                   Name: "Table"
@@ -278,8 +282,9 @@ Y_UNIT_TEST_SUITE(TAsyncIndexTests) {
         });
     }
 
-    void MergeWithReboots(const std::function<void(TTestWithReboots&, TTestActorRuntime&)>& init) {
-        SplitWithReboots(init, [](TTestWithReboots& t, TTestActorRuntime& runtime, const TVector<ui64>& tablets) {
+    template <typename T>
+    void MergeWithReboots(const std::function<void(T&, TTestActorRuntime&)>& init) {
+        SplitWithReboots<T>(init, [](T& t, TTestActorRuntime& runtime, const TVector<ui64>& tablets) {
             UNIT_ASSERT_VALUES_EQUAL(tablets.size(), 2);
             TestSplitTable(runtime, ++t.TxId, "/MyRoot/Table", Sprintf(R"(
                 SourceTabletId: %lu
@@ -289,8 +294,8 @@ Y_UNIT_TEST_SUITE(TAsyncIndexTests) {
         });
     }
 
-    Y_UNIT_TEST(MergeWithReboots) {
-        MergeWithReboots([](TTestWithReboots& t, TTestActorRuntime& runtime) {
+    Y_UNIT_TEST_WITH_REBOOTS(MergeWithReboots) {
+        MergeWithReboots<T>([](T& t, TTestActorRuntime& runtime) {
             TestCreateIndexedTable(runtime, ++t.TxId, "/MyRoot", R"(
                 TableDescription {
                   Name: "Table"
@@ -318,8 +323,8 @@ Y_UNIT_TEST_SUITE(TAsyncIndexTests) {
         });
     }
 
-    Y_UNIT_TEST(CdcAndMergeWithReboots) {
-        MergeWithReboots([](TTestWithReboots& t, TTestActorRuntime& runtime) {
+    Y_UNIT_TEST_WITH_REBOOTS(CdcAndMergeWithReboots) {
+        MergeWithReboots<T>([](T& t, TTestActorRuntime& runtime) {
             TestCreateIndexedTable(runtime, ++t.TxId, "/MyRoot", R"(
                 TableDescription {
                   Name: "Table"
@@ -354,6 +359,57 @@ Y_UNIT_TEST_SUITE(TAsyncIndexTests) {
                 }
             )");
             t.TestEnv->TestWaitNotification(runtime, t.TxId);
+        });
+    }
+
+    Y_UNIT_TEST_WITH_REBOOTS(DropTableWithInflightChanges) {
+        T t;
+        t.Run([&](TTestActorRuntime& runtime, bool& activeZone) {
+            auto origObserver = runtime.SetObserverFunc([&](TAutoPtr<IEventHandle>& ev) {
+                return TTestActorRuntime::DefaultObserverFunc(ev);
+            });
+
+            TVector<THolder<IEventHandle>> enqueued;
+            runtime.SetObserverFunc([&](TAutoPtr<IEventHandle>& ev) {
+                if (ev->GetTypeRewrite() == NChangeExchange::TEvChangeExchange::EvEnqueueRecords) {
+                    enqueued.emplace_back(ev.Release());
+                    return TTestActorRuntime::EEventAction::DROP;
+                }
+                return origObserver(ev);
+            });
+
+            {
+                TInactiveZone inactive(activeZone);
+                TestCreateIndexedTable(runtime, ++t.TxId, "/MyRoot", R"(
+                    TableDescription {
+                      Name: "Table"
+                      Columns { Name: "key" Type: "Uint32" }
+                      Columns { Name: "indexed" Type: "Uint32" }
+                      KeyColumnNames: ["key"]
+                    }
+                    IndexDescription {
+                      Name: "UserDefinedIndex"
+                      KeyColumnNames: ["indexed"]
+                      Type: EIndexTypeGlobalAsync
+                    }
+                )");
+                t.TestEnv->TestWaitNotification(runtime, t.TxId);
+
+                Prepare(runtime, "/MyRoot/Table", {1, 10, 100}, true);
+            }
+
+            TestDropTable(runtime, ++t.TxId, "/MyRoot", "Table");
+
+            runtime.SetObserverFunc(origObserver);
+            for (auto& ev : std::exchange(enqueued, {})) {
+                runtime.Send(ev.Release(), 0, true);
+            }
+
+            t.TestEnv->TestWaitNotification(runtime, t.TxId);
+            t.TestEnv->TestWaitTabletDeletion(runtime, {
+                TTestTxConfig::FakeHiveTablets,
+                TTestTxConfig::FakeHiveTablets + 1,
+            });
         });
     }
 }

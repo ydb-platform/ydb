@@ -23,6 +23,8 @@ class TYsonSerializableLite;
 class TYsonSerializable;
 
 struct IYsonStructMeta;
+class TYsonStructBase;
+class TYsonStructLite;
 
 DECLARE_REFCOUNTED_STRUCT(INode)
 using IConstNodePtr = TIntrusivePtr<const INode>;
@@ -76,7 +78,6 @@ constexpr int MaxYPathResolveIterations = 256;
 
 DECLARE_REFCOUNTED_CLASS(TYsonSerializable)
 DECLARE_REFCOUNTED_CLASS(TYsonStruct)
-DECLARE_REFCOUNTED_CLASS(TYsonStructBase)
 
 DECLARE_REFCOUNTED_CLASS(TYPathServiceContextWrapper)
 

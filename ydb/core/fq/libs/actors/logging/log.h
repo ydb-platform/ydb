@@ -1,7 +1,7 @@
 #pragma once
 #include <ydb/library/services/services.pb.h>
 
-#include <library/cpp/actors/core/log.h>
+#include <ydb/library/actors/core/log.h>
 
 #define LOG_STREAMS_IMPL(level, component, logRecordStream) \
     LOG_LOG_S(::NActors::TActivationContext::AsActorContext(), ::NActors::NLog:: Y_CAT(PRI_, level), ::NKikimrServices::component, logRecordStream);
@@ -43,6 +43,9 @@
 #define LOG_STREAMS_STORAGE_SERVICE_TRACE(logRecordStream) LOG_STREAMS_IMPL(TRACE, STREAMS_STORAGE_SERVICE, logRecordStream)
 
 #define LOG_STREAMS_STORAGE_SERVICE_AS_DEBUG(actorSystem, logRecordStream) LOG_STREAMS_IMPL_AS(actorSystem, DEBUG, STREAMS_STORAGE_SERVICE, logRecordStream)
+#define LOG_STREAMS_STORAGE_SERVICE_AS_INFO(actorSystem, logRecordStream) LOG_STREAMS_IMPL_AS(actorSystem, INFO, STREAMS_STORAGE_SERVICE, logRecordStream)
+#define LOG_STREAMS_STORAGE_SERVICE_AS_WARN(actorSystem, logRecordStream) LOG_STREAMS_IMPL_AS(actorSystem, WARN, STREAMS_STORAGE_SERVICE, logRecordStream)
+#define LOG_STREAMS_STORAGE_SERVICE_AS_ERROR(actorSystem, logRecordStream) LOG_STREAMS_IMPL_AS(actorSystem, ERROR, STREAMS_STORAGE_SERVICE, logRecordStream)
 
 // Component: STREAMS_SCHEDULER_SERVICE.
 #define LOG_STREAMS_SCHEDULER_SERVICE_EMERG(logRecordStream) LOG_STREAMS_IMPL(EMERG, STREAMS_SCHEDULER_SERVICE, logRecordStream)

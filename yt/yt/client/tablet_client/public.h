@@ -206,6 +206,10 @@ DEFINE_ENUM(ETabletServiceFeatures,
     ((WriteGenerations)         (0))
 );
 
+DEFINE_ENUM(ESecondaryIndexKind,
+    ((FullSync)  (0))
+);
+
 ////////////////////////////////////////////////////////////////////////////////
 
 DECLARE_REFCOUNTED_CLASS(TTableMountCacheConfig)

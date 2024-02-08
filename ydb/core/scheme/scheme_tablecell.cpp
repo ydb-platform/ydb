@@ -1,7 +1,7 @@
 #include <ydb/core/scheme/scheme_tablecell.h>
 #include <ydb/core/scheme/scheme_type_registry.h>
 
-#include <library/cpp/actors/core/actorid.h>
+#include <ydb/library/actors/core/actorid.h>
 #include <util/string/escape.h>
 
 namespace NKikimr {
@@ -84,37 +84,16 @@ namespace {
 
     static_assert(sizeof(TCellHeader) == sizeof(ui32));
 
-    Y_FORCE_INLINE void SerializeCellVec(TConstArrayRef<TCell> cells, TString &resultBuffer, TVector<TCell> *resultCells) {
-        resultBuffer.clear();
+    Y_FORCE_INLINE void SerializeCellVecBody(TConstArrayRef<TCell> cells, char* resultBufferData, TVector<TCell>* resultCells) {
         if (resultCells)
-            resultCells->clear();
+            resultCells->resize_uninitialized(cells.size());
 
-        if (cells.empty()) {
-            return;
-        }
-
-        size_t size = sizeof(ui16);
-        for (auto& cell : cells) {
-            size += sizeof(TCellHeader) + cell.Size();
-        }
-
-        resultBuffer.ReserveAndResize(size);
-        char* resultBufferData = resultBuffer.Detach();
-
-        ui16 cellsSize = cells.size();
-        WriteUnaligned<ui16>(resultBufferData, cellsSize);
-        resultBufferData += sizeof(cellsSize);
-
-        if (resultCells) {
-            resultCells->resize_uninitialized(cellsSize);
-        }
-
-        for (size_t i = 0; i < cellsSize; ++i) {
+        for (size_t i = 0; i < cells.size(); ++i) {
             TCellHeader header(cells[i].Size(), cells[i].IsNull());
             WriteUnaligned<ui32>(resultBufferData, header.RawValue);
             resultBufferData += sizeof(header);
 
-            const auto & cell = cells[i];
+            const auto& cell = cells[i];
             if (cell.Size() > 0) {
                 cell.CopyDataInto(resultBufferData);
             }
@@ -131,25 +110,58 @@ namespace {
         }
     }
 
-    Y_FORCE_INLINE bool TryDeserializeCellVec(const TString & data, TString & resultBuffer, TVector<TCell> & resultCells) {
+    Y_FORCE_INLINE bool SerializeCellVecInit(TConstArrayRef<TCell> cells, TString& resultBuffer, TVector<TCell>* resultCells) {
         resultBuffer.clear();
-        resultCells.clear();
+        if (resultCells)
+            resultCells->clear();
 
-        if (data.empty())
-            return true;
+        return !cells.empty();
+    }
 
-        const char* buf = data.data();
-        const char* bufEnd = data.data() + data.size();
-        if (Y_UNLIKELY(bufEnd - buf < static_cast<ptrdiff_t>(sizeof(ui16))))
-            return false;
+    Y_FORCE_INLINE void SerializeCellVec(TConstArrayRef<TCell> cells, TString& resultBuffer, TVector<TCell>* resultCells) {
+        if (!SerializeCellVecInit(cells, resultBuffer, resultCells))
+            return;
 
-        ui16 cellsSize = ReadUnaligned<ui16>(buf);
-        buf += sizeof(cellsSize);
+        size_t size = sizeof(ui16);
+        for (auto& cell : cells)
+            size += sizeof(TCellHeader) + cell.Size();
 
-        resultCells.resize_uninitialized(cellsSize);
+        resultBuffer.ReserveAndResize(size);
+        char* resultBufferData = resultBuffer.Detach();
+
+        ui16 cellCount = cells.size();
+        WriteUnaligned<ui16>(resultBufferData, cellCount);
+        resultBufferData += sizeof(cellCount);
+
+        SerializeCellVecBody(cells, resultBufferData, resultCells);
+    }
+
+    Y_FORCE_INLINE void SerializeCellMatrix(TConstArrayRef<TCell> cells, ui32 rowCount, ui16 colCount, TString& resultBuffer, TVector<TCell>* resultCells) {
+        Y_ABORT_UNLESS(cells.size() == (size_t)rowCount * (size_t)colCount);
+
+        if (!SerializeCellVecInit(cells, resultBuffer, resultCells))
+            return;
+
+        size_t size = sizeof(ui32) + sizeof(ui16);
+        for (auto& cell : cells)
+            size += sizeof(TCellHeader) + cell.Size();
+
+        resultBuffer.ReserveAndResize(size);
+        char* resultBufferData = resultBuffer.Detach();
+
+        WriteUnaligned<ui32>(resultBufferData, rowCount);
+        resultBufferData += sizeof(rowCount);
+        WriteUnaligned<ui16>(resultBufferData, colCount);
+        resultBufferData += sizeof(colCount);
+
+        SerializeCellVecBody(cells, resultBufferData, resultCells);
+    }
+
+    Y_FORCE_INLINE bool TryDeserializeCellVecBody(const char* buf, const char* bufEnd, ui64 cellCount, TVector<TCell>& resultCells) {
+        resultCells.resize_uninitialized(cellCount);
         TCell* resultCellsData = resultCells.data();
 
-        for (ui32 i = 0; i < cellsSize; ++i) {
+        for (ui64 i = 0; i < cellCount; ++i) {
             if (Y_UNLIKELY(bufEnd - buf < static_cast<ptrdiff_t>(sizeof(TCellHeader)))) {
                 resultCells.clear();
                 return false;
@@ -163,19 +175,65 @@ namespace {
                 return false;
             }
 
-            if (cellHeader.IsNull()) {
+            if (cellHeader.IsNull())
                 new (resultCellsData + i) TCell();
-            } else {
+            else
                 new (resultCellsData + i) TCell(buf, cellHeader.CellSize());
-            }
 
             buf += cellHeader.CellSize();
         }
 
-        resultBuffer = data;
         return true;
     }
 
+    Y_FORCE_INLINE bool TryDeserializeCellVec(const TString& data, TString& resultBuffer, TVector<TCell> & resultCells) {
+        resultBuffer.clear();
+        resultCells.clear();
+
+        if (data.empty())
+            return true;
+
+        const char* buf = data.data();
+        const char* bufEnd = data.data() + data.size();
+        if (Y_UNLIKELY(bufEnd - buf < static_cast<ptrdiff_t>(sizeof(ui16))))
+            return false;
+
+        ui16 cellCount = ReadUnaligned<ui16>(buf);
+        buf += sizeof(cellCount);
+
+        if (TryDeserializeCellVecBody(buf, bufEnd, cellCount, resultCells)) {
+            resultBuffer = data;
+            return true;
+        }
+
+        return false;
+    }
+
+    Y_FORCE_INLINE bool TryDeserializeCellMatrix(const TString& data, TString& resultBuffer, TVector<TCell>& resultCells, ui32& rowCount, ui16& colCount) {
+        resultBuffer.clear();
+        resultCells.clear();
+
+        if (data.empty())
+            return true;
+
+        const char* buf = data.data();
+        const char* bufEnd = data.data() + data.size();
+        if (Y_UNLIKELY(bufEnd - buf < static_cast<ptrdiff_t>(sizeof(ui16))))
+            return false;
+
+        rowCount = ReadUnaligned<ui32>(buf);
+        buf += sizeof(rowCount);
+        colCount = ReadUnaligned<ui16>(buf);
+        buf += sizeof(colCount);
+
+        ui64 cellCount = (ui64)rowCount * (ui64)colCount;
+        if (TryDeserializeCellVecBody(buf, bufEnd, cellCount, resultCells)) {
+            resultBuffer = data;
+            return true;
+        }
+
+        return false;
+    }
 }
 
 TSerializedCellVec::TSerializedCellVec(TConstArrayRef<TCell> cells)
@@ -196,6 +254,55 @@ TString TSerializedCellVec::Serialize(TConstArrayRef<TCell> cells) {
 
 bool TSerializedCellVec::DoTryParse(const TString& data) {
     return TryDeserializeCellVec(data, Buf, Cells);
+}
+
+TSerializedCellMatrix::TSerializedCellMatrix(TConstArrayRef<TCell> cells, ui32 rowCount, ui16 colCount)
+    : RowCount(rowCount), ColCount(colCount)
+{
+    SerializeCellMatrix(cells, rowCount, colCount, Buf, &Cells);
+}
+
+const TCell& TSerializedCellMatrix::GetCell(ui32 row, ui16 column) const {
+    Y_ABORT_UNLESS(row < RowCount && column < ColCount);
+    return Cells.at(CalcIndex(row, column));
+}
+
+
+void TSerializedCellMatrix::GetSubmatrix(ui32 firstRow, ui32 lastRow, ui16 firstColumn, ui16 lastColumn, TVector<TCell>& resultCells) const {
+    Y_ABORT_UNLESS(firstColumn < ColCount &&
+                   lastColumn < ColCount &&
+                   firstRow < RowCount &&
+                   lastRow < RowCount &&
+                   firstColumn <= lastColumn &&
+                   firstRow <= lastRow);
+
+    ui32 rowCount = (lastRow - firstRow + 1);
+    ui16 colCount = (lastColumn - firstColumn + 1);
+    size_t cellCount = colCount * rowCount;
+    resultCells.clear();
+    resultCells.resize_uninitialized(cellCount);
+
+    for (ui32 row = firstRow; row <= lastRow; ++row) {
+            for (ui16 col = firstColumn; col <= lastColumn; ++col) {
+                    resultCells[CalcIndex(row - firstRow, col - firstColumn, colCount)] = GetCell(row, col);
+                }
+            }
+}
+
+
+void TSerializedCellMatrix::Serialize(TString& res, TConstArrayRef<TCell> cells, ui32 rowCount, ui16 colCount) {
+    SerializeCellMatrix(cells, rowCount, colCount, res, nullptr /*resultCells*/);
+}
+
+TString TSerializedCellMatrix::Serialize(TConstArrayRef<TCell> cells, ui32 rowCount, ui16 colCount) {
+    TString result;
+    SerializeCellMatrix(cells, rowCount, colCount, result, nullptr /*resultCells*/);
+
+    return result;
+}
+
+bool TSerializedCellMatrix::DoTryParse(const TString& data) {
+    return TryDeserializeCellMatrix(data, Buf, Cells, RowCount, ColCount);
 }
 
 void TCellsStorage::Reset(TArrayRef<const TCell> cells)

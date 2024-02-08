@@ -186,6 +186,15 @@ enum ESimpleCounters {
 
     COUNTER_PQ_STATS_QUEUE_SIZE = 151                         [(CounterOpts) = {Name: "PQStatsQueueSize"}];
     COUNTER_DISK_SPACE_TOPICS_TOTAL_BYTES = 152               [(CounterOpts) = {Name: "DiskSpaceTopicsTotalBytes"}];
+
+    COUNTER_STATISTICS_AGGREGATOR_COUNT = 153                 [(CounterOpts) = {Name: "StatisticsAggregatorCount"}];
+
+    COUNTER_VIEW_COUNT = 154                                [(CounterOpts) = {Name: "ViewCount"}];
+    COUNTER_IN_FLIGHT_OPS_TxCreateView = 155                [(CounterOpts) = {Name: "InFlightOps/CreateView"}];
+    COUNTER_IN_FLIGHT_OPS_TxAlterView = 156                 [(CounterOpts) = {Name: "InFlightOps/AlterView"}];
+    COUNTER_IN_FLIGHT_OPS_TxDropView = 157                  [(CounterOpts) = {Name: "InFlightOps/DropView"}];
+
+    COUNTER_GRAPHSHARD_COUNT = 158 [(CounterOpts) = {Name: "GraphShards"}];
 }
 
 enum ECumulativeCounters {
@@ -302,6 +311,10 @@ enum ECumulativeCounters {
     COUNTER_FINISHED_OPS_TxAlterExternalDataSource = 93   [(CounterOpts) = {Name: "FinishedOps/AlterExternalDataSource"}];
 
     COUNTER_PQ_STATS_WRITTEN = 94                           [(CounterOpts) = {Name: "PQStatsWritten"}];
+
+    COUNTER_FINISHED_OPS_TxCreateView = 95              [(CounterOpts) = {Name: "FinishedOps/CreateView"}];
+    COUNTER_FINISHED_OPS_TxDropView = 96                [(CounterOpts) = {Name: "FinishedOps/DropView"}];
+    COUNTER_FINISHED_OPS_TxAlterView = 97               [(CounterOpts) = {Name: "FinishedOps/AlterView"}];
 }
 
 enum EPercentileCounters {
@@ -522,4 +535,5 @@ enum ETxTypes {
 
     TXTYPE_PERSQUEUE_PROPOSE_RESULT = 83                  [(TxTypeOpts) = {Name: "TxPersQueueProposeResult"}];
     TXTYPE_PERSQUEUE_PROPOSE_ATTACH_RESULT = 84           [(TxTypeOpts) = {Name: "TxProposeTransactionAttachResult"}];
+    TXTYPE_UPDATE_DOMAIN_REPLY = 85                       [(TxTypeOpts) = {Name: "TxUpdateDomainReply"}];
 }

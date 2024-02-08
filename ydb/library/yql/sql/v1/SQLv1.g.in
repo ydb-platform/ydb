@@ -34,6 +34,7 @@ sql_stmt_core:
   | import_stmt
   | export_stmt
   | alter_table_stmt
+  | alter_external_table_stmt
   | do_stmt
   | define_action_or_subquery_stmt
   | if_stmt
@@ -48,6 +49,7 @@ sql_stmt_core:
   | alter_object_stmt
   | drop_object_stmt
   | create_external_data_source_stmt
+  | alter_external_data_source_stmt
   | drop_external_data_source_stmt
   | create_replication_stmt
   | drop_replication_stmt
@@ -58,6 +60,8 @@ sql_stmt_core:
   | revoke_permissions_stmt
   | alter_table_store_stmt
   | upsert_object_stmt
+  | create_view_stmt
+  | drop_view_stmt
 ;
 
 expr:
@@ -76,7 +80,7 @@ cond_expr:
     NOT? match_op eq_subexpr (ESCAPE eq_subexpr)?
   | NOT? IN COMPACT? in_expr
   | (ISNULL | NOTNULL | IS NULL | (IS)? NOT NULL)
-  | NOT? BETWEEN eq_subexpr AND eq_subexpr
+  | NOT? BETWEEN (SYMMETRIC | ASYMMETRIC)? eq_subexpr AND eq_subexpr
   | ((EQUALS | EQUALS2 | NOT_EQUALS | NOT_EQUALS2 | distinct_from_op) eq_subexpr)+ /* order of the eq subexpressions is reversed! */
 ;
 
@@ -566,17 +570,34 @@ values_source_row: LPAREN expr_list RPAREN;
 
 simple_values_source: expr_list | select_stmt;
 
-create_external_data_source_stmt: CREATE EXTERNAL DATA SOURCE object_ref
+create_external_data_source_stmt: CREATE (OR REPLACE)? EXTERNAL DATA SOURCE (IF NOT EXISTS)? object_ref
     with_table_settings
 ;
 
-drop_external_data_source_stmt: DROP EXTERNAL DATA SOURCE object_ref;
+alter_external_data_source_stmt: ALTER EXTERNAL DATA SOURCE object_ref
+    alter_external_data_source_action (COMMA alter_external_data_source_action)*
+;
+alter_external_data_source_action:
+    alter_table_set_table_setting_uncompat
+  | alter_table_set_table_setting_compat
+  | alter_table_reset_table_setting
+//| alter_table_rename_to // TODO
+;
+
+drop_external_data_source_stmt: DROP EXTERNAL DATA SOURCE (IF EXISTS)? object_ref;
+
+create_view_stmt: CREATE VIEW object_ref
+    with_table_settings
+    AS select_stmt
+;
+
+drop_view_stmt: DROP VIEW object_ref;
 
 upsert_object_stmt: UPSERT OBJECT object_ref
     LPAREN TYPE object_type_ref RPAREN
     create_object_features?
 ;
-create_object_stmt: CREATE OBJECT object_ref
+create_object_stmt: CREATE OBJECT (IF NOT EXISTS)? object_ref
     LPAREN TYPE object_type_ref RPAREN
     create_object_features?
 ;
@@ -588,7 +609,7 @@ alter_object_stmt: ALTER OBJECT object_ref
 ;
 alter_object_features: SET object_features;
 
-drop_object_stmt: DROP OBJECT object_ref
+drop_object_stmt: DROP OBJECT (IF EXISTS)? object_ref
     LPAREN TYPE object_type_ref RPAREN
     drop_object_features?
 ;
@@ -602,7 +623,7 @@ object_features: object_feature | LPAREN object_feature (COMMA object_feature)* 
 
 object_type_ref: an_id_or_type;
 
-create_table_stmt: CREATE (TABLE | TABLESTORE | EXTERNAL TABLE) simple_table_ref LPAREN create_table_entry (COMMA create_table_entry)* COMMA? RPAREN
+create_table_stmt: CREATE (OR REPLACE)? (TABLE | TABLESTORE | EXTERNAL TABLE) (IF NOT EXISTS)? simple_table_ref LPAREN create_table_entry (COMMA create_table_entry)* COMMA? RPAREN
     table_inherits?
     table_partition_by?
     with_table_settings?
@@ -640,6 +661,16 @@ alter_table_action:
   | alter_table_rename_index_to
 ;
 
+alter_external_table_stmt: ALTER EXTERNAL TABLE simple_table_ref alter_external_table_action (COMMA alter_external_table_action)*;
+alter_external_table_action:
+    alter_table_add_column
+  | alter_table_drop_column
+  | alter_table_set_table_setting_uncompat
+  | alter_table_set_table_setting_compat
+  | alter_table_reset_table_setting
+//| alter_table_rename_to // TODO
+;
+
 alter_table_store_stmt: ALTER TABLESTORE object_ref alter_table_store_action (COMMA alter_table_store_action)*;
 alter_table_store_action:
     alter_table_add_column
@@ -674,7 +705,7 @@ table_constraint:
 ;
 
 table_index: INDEX an_id table_index_type
-    (WITH LPAREN an_id EQUALS an_id COMMA (an_id EQUALS an_id)* RPAREN)?
+    (WITH LPAREN an_id EQUALS an_id (COMMA an_id EQUALS an_id)* COMMA? RPAREN)?
     ON LPAREN an_id_schema (COMMA an_id_schema)* RPAREN
     (COVER LPAREN an_id_schema (COMMA an_id_schema)* RPAREN)?;
 
@@ -703,6 +734,7 @@ table_setting_value:
     | integer
     | split_boundaries
     | expr ON an_id (AS (SECONDS | MILLISECONDS | MICROSECONDS | NANOSECONDS))?
+    | bool_value
 ;
 
 family_entry: FAMILY an_id family_settings;
@@ -722,7 +754,7 @@ drop_table_stmt: DROP (TABLE | TABLESTORE | EXTERNAL TABLE) (IF EXISTS)? simple_
 create_user_stmt: CREATE USER role_name create_user_option?;
 alter_user_stmt: ALTER USER role_name (WITH? create_user_option | RENAME TO role_name);
 
-create_group_stmt: CREATE GROUP role_name;
+create_group_stmt: CREATE GROUP role_name (WITH USER role_name (COMMA role_name)* COMMA?)?;
 alter_group_stmt: ALTER GROUP role_name ((ADD|DROP) USER role_name (COMMA role_name)* COMMA? | RENAME TO role_name);
 
 drop_role_stmt: DROP (USER|GROUP) (IF EXISTS)? role_name (COMMA role_name)* COMMA?;
@@ -769,7 +801,7 @@ define_action_or_subquery_stmt: DEFINE (ACTION|SUBQUERY) bind_parameter LPAREN a
 define_action_or_subquery_body: SEMICOLON* (sql_stmt_core (SEMICOLON+ sql_stmt_core)* SEMICOLON*)?;
 
 if_stmt: EVALUATE? IF expr do_stmt (ELSE do_stmt)?;
-for_stmt: EVALUATE? FOR bind_parameter IN expr do_stmt (ELSE do_stmt)?;
+for_stmt: EVALUATE? PARALLEL? FOR bind_parameter IN expr do_stmt (ELSE do_stmt)?;
 
 table_ref: (cluster_expr DOT)? AT? (table_key | an_id_expr LPAREN (table_arg (COMMA table_arg)* COMMA?)? RPAREN | bind_parameter (LPAREN expr_list? RPAREN)? (VIEW view_name)?) table_hints?;
 
@@ -1013,7 +1045,7 @@ an_id_hint: id_hint | STRING_VALUE;
 an_id_pure: identifier | STRING_VALUE;
 an_id_as_compat: id_as_compat | STRING_VALUE;
 
-view_name: an_id | AT PRIMARY;
+view_name: an_id | PRIMARY KEY;
 
 opt_id_prefix: (an_id DOT)?;
 cluster_expr: (an_id COLON)? (pure_column_or_named | ASTERISK);
@@ -1036,7 +1068,8 @@ keyword:
 ;
 
 keyword_expr_uncompat:
-    BETWEEN
+    ASYMMETRIC
+  | BETWEEN
   | BITCAST
   | CASE
   | CAST
@@ -1060,6 +1093,7 @@ keyword_expr_uncompat:
   | RETURN
   | ROLLUP
   | SELECT
+  | SYMMETRIC
   | UNBOUNDED
   | WHEN
   | WHERE
@@ -1128,6 +1162,7 @@ keyword_as_compat:
   | OMIT
   | ONE
   | OPTION
+  | PARALLEL
   | PAST
   | PATTERN
   | PER
@@ -1281,6 +1316,7 @@ keyword_compat: (
   | OTHERS
   | OUTER
   | OVER
+  | PARALLEL
   | PARTITION
   | PASSING
   | PASSWORD
@@ -1472,6 +1508,7 @@ ARRAY: A R R A Y;
 AS: A S;
 ASC: A S C;
 ASSUME: A S S U M E;
+ASYMMETRIC: A S Y M M E T R I C;
 ASYNC: A S Y N C;
 ATTACH: A T T A C H;
 ATTRIBUTES: A T T R I B U T E S;
@@ -1628,6 +1665,7 @@ ORDER: O R D E R;
 OTHERS: O T H E R S;
 OUTER: O U T E R;
 OVER: O V E R;
+PARALLEL: P A R A L L E L;
 PARTITION: P A R T I T I O N;
 PASSING: P A S S I N G;
 PASSWORD: P A S S W O R D;
@@ -1689,6 +1727,7 @@ STRUCT: S T R U C T;
 SUBQUERY: S U B Q U E R Y;
 SUBSET: S U B S E T;
 SYMBOLS: S Y M B O L S;
+SYMMETRIC: S Y M M E T R I C;
 SYNC: S Y N C;
 SYSTEM: S Y S T E M;
 TABLE: T A B L E;
@@ -1747,7 +1786,7 @@ fragment STRING_SINGLE: (QUOTE_SINGLE STRING_CORE_SINGLE* QUOTE_SINGLE);
 fragment STRING_DOUBLE: (QUOTE_DOUBLE STRING_CORE_DOUBLE* QUOTE_DOUBLE);
 fragment STRING_MULTILINE: (DOUBLE_AT .* DOUBLE_AT)+ AT?;
 
-STRING_VALUE: ((STRING_SINGLE | STRING_DOUBLE | STRING_MULTILINE) (U | Y | J | P (T | B | V)?)?);
+STRING_VALUE: ((STRING_SINGLE | STRING_DOUBLE | STRING_MULTILINE) (S | U | Y | J | P (T | B | V)?)?);
 
 ID_PLAIN: ('a'..'z' | 'A'..'Z' | '_') ('a'..'z' | 'A'..'Z' | '_' | DIGIT)*;
 

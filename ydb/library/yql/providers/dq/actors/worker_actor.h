@@ -11,7 +11,7 @@
 
 #include <ydb/library/yql/dq/runtime/dq_transport.h>
 
-#include <library/cpp/actors/core/actor.h>
+#include <ydb/library/actors/core/actor.h>
 
 #include <ydb/library/yql/providers/dq/counters/counters.h>
 
@@ -25,7 +25,6 @@ namespace NYql::NDqs {
         TWorkerRuntimeData* runtimeData,
         const TString& traceId,
         const NDq::NTaskRunnerActor::ITaskRunnerActorFactory::TPtr& taskRunnerActorFactory,
-        const NDq::IDqAsyncIoFactory::TPtr& asyncIoFactory,
-        bool useSpilling);
+        const NDq::IDqAsyncIoFactory::TPtr& asyncIoFactory);
 
 } // namespace NYql::NDqs

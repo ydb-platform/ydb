@@ -4,7 +4,7 @@
 
 #include <util/generic/string.h>
 
-namespace NYamlConfig {
+namespace NKikimr::NYamlConfig {
 
 TString DumpConsoleConfigs(const ::google::protobuf::RepeatedPtrField<NKikimrConsole::TConfigItem> &configItems);
 
@@ -17,4 +17,4 @@ TDumpConsoleConfigItemResult DumpConsoleConfigItem(const NKikimrConsole::TConfig
 
 NKikimrConsole::TConfigureRequest DumpYamlConfigRequest(const TString &config, const TString &domain);
 
-} // namespace NYamlConfig
+} // namespace NKikimr::NYamlConfig

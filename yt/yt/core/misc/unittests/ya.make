@@ -14,6 +14,7 @@ SRCS(
     atomic_ptr_ut.cpp
     async_expiring_cache_ut.cpp
     async_slru_cache_ut.cpp
+    backoff_strategy_ut.cpp
     bit_packed_integer_vector_ut.cpp
     boolean_formula_ut.cpp
     callback_ut.cpp
@@ -68,6 +69,7 @@ SRCS(
     string_ut.cpp
     sync_expiring_cache_ut.cpp
     time_formula_ut.cpp
+    tls_destructor_ut.cpp
     tls_expiring_cache_ut.cpp
     topological_ordering_ut.cpp
     yverify_ut.cpp
@@ -77,7 +79,7 @@ SRCS(
     proto/ref_counted_tracker_ut.proto
 )
 
-INCLUDE(${ARCADIA_ROOT}/yt/opensource_tests.inc)
+INCLUDE(${ARCADIA_ROOT}/yt/opensource.inc)
 
 PEERDIR(
     yt/yt/core

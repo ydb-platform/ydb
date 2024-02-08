@@ -32,21 +32,21 @@ namespace Model
    * <p>Specifies lifecycle rules for an Amazon S3 bucket. For more information, see
    * <a
    * href="https://docs.aws.amazon.com/AmazonS3/latest/API/RESTBucketPUTlifecycle.html">Put
-   * Bucket Lifecycle Configuration</a> in the <i>Amazon Simple Storage Service API
-   * Reference</i>. For examples, see <a
+   * Bucket Lifecycle Configuration</a> in the <i>Amazon S3 API Reference</i>. For
+   * examples, see <a
    * href="https://docs.aws.amazon.com/AmazonS3/latest/API/API_PutBucketLifecycleConfiguration.html#API_PutBucketLifecycleConfiguration_Examples">Put
    * Bucket Lifecycle Configuration Examples</a>.</p><p><h3>See Also:</h3>   <a
    * href="http://docs.aws.amazon.com/goto/WebAPI/s3-2006-03-01/Rule">AWS API
    * Reference</a></p>
    */
-  class AWS_S3_API Rule
+  class Rule
   {
   public:
-    Rule();
-    Rule(const Aws::Utils::Xml::XmlNode& xmlNode);
-    Rule& operator=(const Aws::Utils::Xml::XmlNode& xmlNode);
+    AWS_S3_API Rule();
+    AWS_S3_API Rule(const Aws::Utils::Xml::XmlNode& xmlNode);
+    AWS_S3_API Rule& operator=(const Aws::Utils::Xml::XmlNode& xmlNode);
 
-    void AddToNode(Aws::Utils::Xml::XmlNode& parentNode) const;
+    AWS_S3_API void AddToNode(Aws::Utils::Xml::XmlNode& parentNode) const;
 
 
     /**
@@ -355,28 +355,28 @@ namespace Model
   private:
 
     LifecycleExpiration m_expiration;
-    bool m_expirationHasBeenSet;
+    bool m_expirationHasBeenSet = false;
 
     Aws::String m_iD;
-    bool m_iDHasBeenSet;
+    bool m_iDHasBeenSet = false;
 
     Aws::String m_prefix;
-    bool m_prefixHasBeenSet;
+    bool m_prefixHasBeenSet = false;
 
     ExpirationStatus m_status;
-    bool m_statusHasBeenSet;
+    bool m_statusHasBeenSet = false;
 
     Transition m_transition;
-    bool m_transitionHasBeenSet;
+    bool m_transitionHasBeenSet = false;
 
     NoncurrentVersionTransition m_noncurrentVersionTransition;
-    bool m_noncurrentVersionTransitionHasBeenSet;
+    bool m_noncurrentVersionTransitionHasBeenSet = false;
 
     NoncurrentVersionExpiration m_noncurrentVersionExpiration;
-    bool m_noncurrentVersionExpirationHasBeenSet;
+    bool m_noncurrentVersionExpirationHasBeenSet = false;
 
     AbortIncompleteMultipartUpload m_abortIncompleteMultipartUpload;
-    bool m_abortIncompleteMultipartUploadHasBeenSet;
+    bool m_abortIncompleteMultipartUploadHasBeenSet = false;
   };
 
 } // namespace Model

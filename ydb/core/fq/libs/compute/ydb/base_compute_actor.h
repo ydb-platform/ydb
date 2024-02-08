@@ -8,7 +8,7 @@
 
 #include <ydb/public/sdk/cpp/client/ydb_types/status_codes.h>
 
-#include <library/cpp/actors/core/actor_bootstrapped.h>
+#include <ydb/library/actors/core/actor_bootstrapped.h>
 #include <library/cpp/retry/retry_policy.h>
 
 namespace NFq {
@@ -20,13 +20,15 @@ public:
     using TBase::PassAway;
 
     TBaseComputeActor(const ::NYql::NCommon::TServiceCounters& queryCounters, const TString& stepName)
-        : BaseCounters(queryCounters.Counters)
+        : PublicCounters(queryCounters.PublicCounters)
+        , BaseCounters(queryCounters.Counters)
         , Counters(MakeIntrusive<TComputeRequestCounters>("Total", queryCounters.Counters->GetSubgroup("step", stepName)))
         , TotalStartTime(TInstant::Now())
     {}
 
     TBaseComputeActor(const ::NMonitoring::TDynamicCounterPtr& baseCounters, const TString& stepName)
-        : BaseCounters(baseCounters)
+        : PublicCounters(MakeIntrusive<::NMonitoring::TDynamicCounters>())
+        , BaseCounters(baseCounters)
         , Counters(MakeIntrusive<TComputeRequestCounters>("Total", baseCounters->GetSubgroup("step", stepName)))
         , TotalStartTime(TInstant::Now())
     {}
@@ -64,7 +66,12 @@ public:
         return BaseCounters;
     }
 
+    ::NMonitoring::TDynamicCounterPtr GetPublicCounters() const {
+        return PublicCounters;
+    }
+
 private:
+    ::NMonitoring::TDynamicCounterPtr PublicCounters;
     ::NMonitoring::TDynamicCounterPtr BaseCounters;
     TComputeRequestCountersPtr Counters;
     TInstant TotalStartTime;

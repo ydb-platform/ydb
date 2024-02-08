@@ -25,6 +25,7 @@
 
 #include <yt/cpp/mapreduce/interface/config.h>
 #include <yt/cpp/mapreduce/interface/client.h>
+#include <yt/cpp/mapreduce/interface/error_codes.h>
 #include <yt/cpp/mapreduce/interface/fluent.h>
 #include <yt/cpp/mapreduce/interface/logging/yt_log.h>
 #include <yt/cpp/mapreduce/interface/skiff_row.h>
@@ -132,7 +133,24 @@ TNodeId TClientBase::Copy(
     const TYPath& destinationPath,
     const TCopyOptions& options)
 {
-    return NRawClient::Copy(ClientRetryPolicy_->CreatePolicyForGenericRequest(), Context_, TransactionId_, sourcePath, destinationPath, options);
+    try {
+        return NRawClient::CopyInsideMasterCell(ClientRetryPolicy_->CreatePolicyForGenericRequest(), Context_, TransactionId_, sourcePath, destinationPath, options);
+    } catch (const TErrorResponse& e) {
+        if (e.GetError().ContainsErrorCode(NClusterErrorCodes::NObjectClient::CrossCellAdditionalPath)) {
+            // Do transaction for cross cell copying.
+
+            std::function<TNodeId(ITransactionPtr)> lambda = [this, &sourcePath, &destinationPath, &options](ITransactionPtr transaction) {
+                return NRawClient::CopyWithoutRetries(Context_, transaction->GetId(), sourcePath, destinationPath, options);
+            };
+            return RetryTransactionWithPolicy<TNodeId>(
+                this,
+                lambda,
+                ClientRetryPolicy_->CreatePolicyForGenericRequest()
+            );
+        } else {
+            throw;
+        }
+    }
 }
 
 TNodeId TClientBase::Move(
@@ -140,7 +158,24 @@ TNodeId TClientBase::Move(
     const TYPath& destinationPath,
     const TMoveOptions& options)
 {
-    return NRawClient::Move(ClientRetryPolicy_->CreatePolicyForGenericRequest(), Context_, TransactionId_, sourcePath, destinationPath, options);
+    try {
+        return NRawClient::MoveInsideMasterCell(ClientRetryPolicy_->CreatePolicyForGenericRequest(), Context_, TransactionId_, sourcePath, destinationPath, options);
+    } catch (const TErrorResponse& e) {
+        if (e.GetError().ContainsErrorCode(NClusterErrorCodes::NObjectClient::CrossCellAdditionalPath)) {
+            // Do transaction for cross cell moving.
+
+            std::function<TNodeId(ITransactionPtr)> lambda = [this, &sourcePath, &destinationPath, &options](ITransactionPtr transaction) {
+                return NRawClient::MoveWithoutRetries(Context_, transaction->GetId(), sourcePath, destinationPath, options);
+            };
+            return RetryTransactionWithPolicy<TNodeId>(
+                this,
+                lambda,
+                ClientRetryPolicy_->CreatePolicyForGenericRequest()
+            );
+        } else {
+            throw;
+        }
+    }
 }
 
 TNodeId TClientBase::Link(
@@ -1295,25 +1330,47 @@ TClientPtr CreateClientImpl(
     TClientContext context;
     context.Config = options.Config_ ? options.Config_ : TConfig::Get();
     context.TvmOnly = options.TvmOnly_;
-    context.UseTLS = options.UseTLS_;
     context.ProxyAddress = options.ProxyAddress_;
 
     context.ServerName = serverName;
-    if (serverName.find('.') == TString::npos &&
-        serverName.find(':') == TString::npos)
+    if (context.ServerName.find('.') == TString::npos &&
+        context.ServerName.find(':') == TString::npos)
     {
         context.ServerName += ".yt.yandex.net";
     }
 
-    if (serverName.find(':') == TString::npos) {
+    static constexpr char httpUrlSchema[] = "http://";
+    static constexpr char httpsUrlSchema[] = "https://";
+    if (options.UseTLS_) {
+        context.UseTLS = *options.UseTLS_;
+    } else {
+        context.UseTLS = context.ServerName.StartsWith(httpsUrlSchema);
+    }
+
+    if (context.ServerName.StartsWith(httpUrlSchema)) {
+        if (context.UseTLS) {
+            ythrow TApiUsageError() << "URL schema doesn't match UseTLS option";
+        }
+
+        context.ServerName.erase(0, sizeof(httpUrlSchema) - 1);
+    }
+    if (context.ServerName.StartsWith(httpsUrlSchema)) {
+        if (!context.UseTLS) {
+            ythrow TApiUsageError() << "URL schema doesn't match UseTLS option";
+        }
+
+        context.ServerName.erase(0, sizeof(httpsUrlSchema) - 1);
+    }
+
+    if (context.ServerName.find(':') == TString::npos) {
         context.ServerName = CreateHostNameWithPort(context.ServerName, context);
     }
     if (options.TvmOnly_) {
         context.ServerName = Format("tvm.%v", context.ServerName);
     }
 
-    if (options.UseTLS_ || options.UseCoreHttpClient_) {
-        context.HttpClient = NHttpClient::CreateCoreHttpClient(options.UseTLS_, context.Config);
+    if (context.UseTLS || options.UseCoreHttpClient_) {
+        context.HttpClient = NHttpClient::CreateCoreHttpClient(context.UseTLS, context.Config);
     } else {
         context.HttpClient = NHttpClient::CreateDefaultHttpClient();
     }

@@ -4,7 +4,7 @@
 #include "common/validation.h"
 #include <ydb/core/base/defs.h>
 
-#include <library/cpp/actors/core/log.h>
+#include <ydb/library/actors/core/log.h>
 
 #include <contrib/libs/apache/arrow/cpp/src/arrow/api.h>
 #include <contrib/libs/apache/arrow/cpp/src/arrow/compute/api_vector.h>
@@ -62,10 +62,6 @@ public:
         , Position(position)
     {
         Y_ABORT_UNLESS(Size() > 0 && Position < (ui64)Column(0).length());
-    }
-
-    size_t Hash() const {
-        return TypedHash(Column(0), Position, Column(0).type_id());
     }
 
     template<typename T>
@@ -223,75 +219,6 @@ private:
     TArrayVecPtr Columns = nullptr;
     ui64 Position = 0;
 
-    static size_t TypedHash(const arrow::Array& ar, int pos, arrow::Type::type typeId) {
-        switch (typeId) {
-            case arrow::Type::NA:
-            case arrow::Type::BOOL:
-                break;
-            case arrow::Type::UINT8:
-                return THash<ui8>()(static_cast<const arrow::UInt8Array&>(ar).Value(pos));
-            case arrow::Type::INT8:
-                return THash<i8>()(static_cast<const arrow::Int8Array&>(ar).Value(pos));
-            case arrow::Type::UINT16:
-                return THash<ui16>()(static_cast<const arrow::UInt16Array&>(ar).Value(pos));
-            case arrow::Type::INT16:
-                return THash<i16>()(static_cast<const arrow::Int16Array&>(ar).Value(pos));
-            case arrow::Type::UINT32:
-                return THash<ui32>()(static_cast<const arrow::UInt32Array&>(ar).Value(pos));
-            case arrow::Type::INT32:
-                return THash<i32>()(static_cast<const arrow::Int32Array&>(ar).Value(pos));
-            case arrow::Type::UINT64:
-                return THash<ui64>()(static_cast<const arrow::UInt64Array&>(ar).Value(pos));
-            case arrow::Type::INT64:
-                return THash<i64>()(static_cast<const arrow::Int64Array&>(ar).Value(pos));
-            case arrow::Type::HALF_FLOAT:
-                break;
-            case arrow::Type::FLOAT:
-                return THash<float>()(static_cast<const arrow::FloatArray&>(ar).Value(pos));
-            case arrow::Type::DOUBLE:
-                return THash<double>()(static_cast<const arrow::DoubleArray&>(ar).Value(pos));
-            case arrow::Type::STRING: {
-                const auto& str = static_cast<const arrow::StringArray&>(ar).GetView(pos);
-                return THash<std::string_view>()(std::string_view(str.data(), str.size()));
-            }
-            case arrow::Type::BINARY: {
-                const auto& str = static_cast<const arrow::BinaryArray&>(ar).GetView(pos);
-                return THash<std::string_view>()(std::string_view(str.data(), str.size()));
-            }
-            case arrow::Type::FIXED_SIZE_BINARY:
-            case arrow::Type::DATE32:
-            case arrow::Type::DATE64:
-                break;
-            case arrow::Type::TIMESTAMP:
-                return THash<i64>()(static_cast<const arrow::TimestampArray&>(ar).Value(pos));
-            case arrow::Type::TIME32:
-                return THash<i32>()(static_cast<const arrow::Time32Array&>(ar).Value(pos));
-            case arrow::Type::TIME64:
-                return THash<i64>()(static_cast<const arrow::Time64Array&>(ar).Value(pos));
-            case arrow::Type::DURATION:
-                return THash<i64>()(static_cast<const arrow::DurationArray&>(ar).Value(pos));
-            case arrow::Type::DECIMAL256:
-            case arrow::Type::DECIMAL:
-            case arrow::Type::DENSE_UNION:
-            case arrow::Type::DICTIONARY:
-            case arrow::Type::EXTENSION:
-            case arrow::Type::FIXED_SIZE_LIST:
-            case arrow::Type::INTERVAL_DAY_TIME:
-            case arrow::Type::INTERVAL_MONTHS:
-            case arrow::Type::LARGE_BINARY:
-            case arrow::Type::LARGE_LIST:
-            case arrow::Type::LARGE_STRING:
-            case arrow::Type::LIST:
-            case arrow::Type::MAP:
-            case arrow::Type::MAX_ID:
-            case arrow::Type::SPARSE_UNION:
-            case arrow::Type::STRUCT:
-                Y_ABORT("not implemented");
-                break;
-        }
-        return 0;
-    }
-
     template <bool notNull>
     static std::partial_ordering TypedCompare(const arrow::Array& lhs, int lpos, const arrow::Array& rhs, int rpos) {
         arrow::Type::type typeId = lhs.type_id();
@@ -419,18 +346,4 @@ public:
 };
 
 }
-
-template<>
-struct THash<NKikimr::NArrow::TReplaceKey> {
-    inline ui64 operator()(const NKikimr::NArrow::TReplaceKey& x) const noexcept {
-        return x.Hash();
-    }
-};
-
-template<>
-struct THash<NKikimr::NArrow::TRawReplaceKey> {
-    inline ui64 operator()(const NKikimr::NArrow::TRawReplaceKey& x) const noexcept {
-        return x.Hash();
-    }
-};
 

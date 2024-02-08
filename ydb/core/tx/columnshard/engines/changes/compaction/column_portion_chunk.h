@@ -1,5 +1,6 @@
 #pragma once
 #include "merge_context.h"
+#include <ydb/core/formats/arrow/simple_arrays_cache.h>
 #include <ydb/core/tx/columnshard/splitter/chunks.h>
 #include <ydb/core/tx/columnshard/engines/portions/column_record.h>
 #include <ydb/core/tx/columnshard/engines/scheme/abstract_scheme.h>
@@ -18,11 +19,11 @@ private:
     std::shared_ptr<arrow::Scalar> First;
     std::shared_ptr<arrow::Scalar> Last;
 protected:
-    virtual std::vector<IPortionColumnChunk::TPtr> DoInternalSplit(const TColumnSaver& saver, std::shared_ptr<NColumnShard::TSplitterCounters> counters, const std::vector<ui64>& splitSizes) const override;
+    virtual std::vector<std::shared_ptr<IPortionDataChunk>> DoInternalSplitImpl(const TColumnSaver& saver, const std::shared_ptr<NColumnShard::TSplitterCounters>& counters, const std::vector<ui64>& splitSizes) const override;
     virtual const TString& DoGetData() const override {
         return Data;
     }
-    virtual ui32 DoGetRecordsCount() const override {
+    virtual ui32 DoGetRecordsCountImpl() const override {
         return Record.GetMeta().GetNumRowsVerified();
     }
     virtual TString DoDebugString() const override {
@@ -63,29 +64,65 @@ public:
     }
 };
 
+class TNullChunkPreparation: public IPortionColumnChunk {
+private:
+    using TBase = IPortionColumnChunk;
+    const ui32 RecordsCount;
+    TString Data;
+protected:
+    virtual std::vector<std::shared_ptr<IPortionDataChunk>> DoInternalSplitImpl(const TColumnSaver& /*saver*/, const std::shared_ptr<NColumnShard::TSplitterCounters>& /*counters*/,
+                                                                                const std::vector<ui64>& /*splitSizes*/) const override {
+        AFL_VERIFY(false);
+        return {};
+    }
+    virtual const TString& DoGetData() const override {
+        return Data;
+    }
+    virtual ui32 DoGetRecordsCountImpl() const override {
+        return RecordsCount;
+    }
+    virtual TString DoDebugString() const override {
+        return TStringBuilder() << "rc=" << RecordsCount << ";data_size=" << Data.size() << ";";
+    }
+    virtual TSimpleChunkMeta DoBuildSimpleChunkMeta() const override {
+        AFL_VERIFY(false);
+        return TSimpleChunkMeta(nullptr, false, false);
+    }
+    virtual std::shared_ptr<arrow::Scalar> DoGetFirstScalar() const override {
+        return nullptr;
+    }
+    virtual std::shared_ptr<arrow::Scalar> DoGetLastScalar() const override {
+        return nullptr;
+    }
+
+public:
+    TNullChunkPreparation(const ui32 columnId, const ui32 recordsCount, const std::shared_ptr<arrow::Field>& f, const TColumnSaver& saver)
+        : TBase(columnId)
+        , RecordsCount(recordsCount)
+        , Data(saver.Apply(NArrow::TThreadSimpleArraysCache::GetNull(f->type(), recordsCount), f))
+    {
+        Y_ABORT_UNLESS(RecordsCount);
+        SetChunkIdx(0);
+    }
+};
+
 class TColumnPortionResult {
 protected:
-    std::vector<std::shared_ptr<IPortionColumnChunk>> Chunks;
+    std::vector<std::shared_ptr<IPortionDataChunk>> Chunks;
     ui64 CurrentPortionRecords = 0;
     const ui32 ColumnId;
-    std::string ColumnName;
     ui64 PackedSize = 0;
 public:
     ui64 GetPackedSize() const {
         return PackedSize;
     }
 
-    const std::string& GetColumnName() const {
-        return ColumnName;
-    }
-
-    TColumnPortionResult(const std::string& columnName, const ui32 columnId)
-        : ColumnId(columnId)
-        , ColumnName(columnName) {
+    TColumnPortionResult(const ui32 columnId)
+        : ColumnId(columnId) {
 
     }
 
-    const std::vector<std::shared_ptr<IPortionColumnChunk>>& GetChunks() const {
+    const std::vector<std::shared_ptr<IPortionDataChunk>>& GetChunks() const {
         return Chunks;
     }
 
@@ -108,7 +145,7 @@ private:
     double PredictedPackedBytes = 0;
 public:
     TColumnPortion(const TColumnMergeContext& context)
-        : TBase(context.GetField()->name(), context.GetColumnId())
+        : TBase(context.GetColumnId())
         , Context(context) {
         Builder = Context.MakeBuilder();
     }
@@ -118,7 +155,7 @@ public:
         return CurrentPortionRecords == Context.GetPortionRowsCountLimit();
     }
 
-    void FlushBuffer();
+    bool FlushBuffer();
 
     std::shared_ptr<arrow::Array> AppendBlob(const TString& data, const TColumnRecord& columnChunk, ui32& remained);
     ui32 AppendSlice(const std::shared_ptr<arrow::Array>& a, const ui32 startIndex, const ui32 length);

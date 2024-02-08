@@ -5,9 +5,9 @@
 
 #include <library/cpp/cache/cache.h>
 #include <library/cpp/monlib/service/pages/templates.h>
-#include <library/cpp/actors/core/actorsystem.h>
-#include <library/cpp/actors/core/mon.h>
-#include <library/cpp/actors/core/hfunc.h>
+#include <ydb/library/actors/core/actorsystem.h>
+#include <ydb/library/actors/core/mon.h>
+#include <ydb/library/actors/core/hfunc.h>
 
 namespace NKikimr {
 namespace NGRpcService {

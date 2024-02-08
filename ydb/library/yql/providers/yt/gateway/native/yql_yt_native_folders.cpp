@@ -2,6 +2,7 @@
 
 #include <yt/cpp/mapreduce/interface/error_codes.h>
 #include <ydb/library/yql/utils/log/log.h>
+#include <ydb/library/yql/providers/common/proto/gateways_config.pb.h>
 #include <ydb/library/yql/providers/yt/gateway/lib/yt_helpers.h>
 
 namespace NYql::NNative {
@@ -13,20 +14,26 @@ using namespace NKikimr::NMiniKQL;
 using namespace NNodes;
 using namespace NThreading;
 
-TString GetType(const NYT::TNode& attr) {
-    if (!attr.HasKey("type")) {
+TString GetTypeFromAttributes(const NYT::TNode& attributes, bool getDocumentType) {
+    if (!attributes.HasKey("type")) {
         return "unknown";
     }
-
-    return attr["type"].AsString();
+    const auto type = attributes["type"].AsString();
+    if (getDocumentType && "document" == type) {
+        if (!attributes.HasKey("_yql_type")) {
+            return "unknown";
+        }
+        return attributes["_yql_type"].AsString();
+    } else {
+        return type;
+    }
 }
 
-TString GetAttrType(const NYT::TNode& node) {
+TString GetTypeFromNode(const NYT::TNode& node, bool getDocumentType) {
     if (!node.HasAttributes()) {
         return "unknown";
     }
-
-    return GetType(node.GetAttributes());
+    return GetTypeFromAttributes(node.GetAttributes(), getDocumentType);
 }
 
 TMaybe<TVector<IYtGateway::TBatchFolderResult::TFolderItem>> MaybeGetFolderFromCache(TTransactionCache::TEntry::TPtr entry, TStringBuf cacheKey) {
@@ -82,7 +89,7 @@ IYtGateway::TBatchFolderResult::TFolderItem MakeFolderItem(const NYT::TNode& nod
         }
         item.Attributes[attr.first] = attr.second;
     }
-    item.Type = GetAttrType(node);
+    item.Type = GetTypeFromNode(node, false);
     item.Path = path.StartsWith(NYT::TConfig::Get()->Prefix)
         ? path.substr(NYT::TConfig::Get()->Prefix.size())
         : path;
@@ -170,11 +177,11 @@ IYtGateway::TBatchFolderResult ExecGetFolder(const TExecContext<IYtGateway::TBat
     folderResult.SetSuccess();
 
     for (const auto& folder : execCtx->Options_.Folders()) {
-        YQL_CLOG(INFO, ProviderYt) << "Executing list command with prefix: " << folder.Prefix;
         const auto cacheKey = std::accumulate(folder.AttrKeys.begin(), folder.AttrKeys.end(), folder.Prefix,
             [] (TString&& str, const TString& arg) {
             return str + "&" + arg;
         });
+        YQL_CLOG(INFO, ProviderYt) << "Executing list command with prefix: " << folder.Prefix << " , cacheKey = " << cacheKey;
 
         auto maybeCached = MaybeGetFolderFromCache(entry, cacheKey);
         if (maybeCached) {
@@ -217,7 +224,15 @@ IYtGateway::TBatchFolderResult ExecGetFolder(const TExecContext<IYtGateway::TBat
             })
         );
     }
-    batchList->ExecuteBatch();
+
+    TExecuteBatchOptions batchOptions;
+    if (batchRes.size() > 1) {
+        const size_t concurrency = execCtx->Options_.Config()->BatchListFolderConcurrency
+            .Get().GetOrElse(DEFAULT_BATCH_LIST_FOLDER_CONCURRENCY);
+        batchOptions.Concurrency(concurrency);
+    }
+    batchList->ExecuteBatch(batchOptions);
+
     try {
         WaitExceptionOrAll(batchRes).Wait();
         for (auto& res : batchRes) {

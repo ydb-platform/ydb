@@ -15,8 +15,8 @@ target_link_libraries(core-client-scheme_cache_lib PUBLIC
   contrib-libs-cxxsupp
   yutil
   contrib-libs-protobuf
-  cpp-actors-core
-  cpp-grpc-client
+  library-actors-core
+  library-grpc-client
   cpp-threading-future
   ydb-core-base
   core-client-minikql_compile

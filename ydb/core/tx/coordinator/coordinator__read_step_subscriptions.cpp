@@ -1,6 +1,6 @@
 #include "coordinator_impl.h"
 
-#include <library/cpp/actors/interconnect/interconnect.h>
+#include <ydb/library/actors/interconnect/interconnect.h>
 
 namespace NKikimr::NFlatTxCoordinator {
 

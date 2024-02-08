@@ -145,6 +145,45 @@ Y_UNIT_TEST_SUITE(ToOneLineStringTest) {
     }
 }
 
+Y_UNIT_TEST_SUITE(ToStreamTest) {
+    template <typename TIssueMessage>
+    void CheckSerializationToStream(const TIssues& issues, const TString& expected) {
+        google::protobuf::RepeatedPtrField<TIssueMessage> protoIssues;
+        IssuesToMessage(issues, &protoIssues);
+        TStringBuilder stream;
+        stream << protoIssues;
+        UNIT_ASSERT_STRINGS_EQUAL(stream, expected);
+        };
+
+    Y_UNIT_TEST(OneMessageTest) {
+        TIssues issues;
+        issues.AddIssue("error");
+        CheckSerializationToStream<Ydb::Issue::IssueMessage>(issues, "{ message: \"error\" severity: 1 }");
+        CheckSerializationToStream<NYql::NIssue::NProto::IssueMessage>(issues, "{ message: \"error\" issue_code: 0 severity: 1 }");
+    }
+
+    Y_UNIT_TEST(SubIssuesTest) {
+        TIssue issue(TPosition(12, 34, "file.abc"), "error");
+        TIssue subissue("suberror");
+        subissue.AddSubIssue(MakeIntrusive<TIssue>("subsuberror"));
+        issue.AddSubIssue(MakeIntrusive<TIssue>(subissue));
+        TIssues issues;
+        issues.AddIssue(issue);
+        CheckSerializationToStream<Ydb::Issue::IssueMessage>(issues, "{ position { row: 34 column: 12 file: \"file.abc\" } message: \"error\" end_position { row: 34 column: 12 } severity: 1 issues { message: \"suberror\" severity: 1 issues { message: \"subsuberror\" severity: 1 } } }");
+        CheckSerializationToStream<NYql::NIssue::NProto::IssueMessage>(issues, "{ position { row: 34 column: 12 file: \"file.abc\" } message: \"error\" end_position { row: 34 column: 12 } issue_code: 0 severity: 1 issues { message: \"suberror\" issue_code: 0 severity: 1 issues { message: \"subsuberror\" issue_code: 0 severity: 1 } } }");
+    }
+
+    Y_UNIT_TEST(ManyIssuesTest) {
+        TIssue issue(TPosition(12, 34, "file.abc"), "error");
+        issue.AddSubIssue(MakeIntrusive<TIssue>("suberror"));
+        TIssues issues;
+        issues.AddIssue(issue);
+        issues.AddIssue(TPosition(100, 2, "abc.file"), "my message");
+        CheckSerializationToStream<Ydb::Issue::IssueMessage>(issues, "{ position { row: 34 column: 12 file: \"file.abc\" } message: \"error\" end_position { row: 34 column: 12 } severity: 1 issues { message: \"suberror\" severity: 1 } }{ position { row: 2 column: 100 file: \"abc.file\" } message: \"my message\" end_position { row: 2 column: 100 } severity: 1 }");
+        CheckSerializationToStream<NYql::NIssue::NProto::IssueMessage>(issues, "{ position { row: 34 column: 12 file: \"file.abc\" } message: \"error\" end_position { row: 34 column: 12 } issue_code: 0 severity: 1 issues { message: \"suberror\" issue_code: 0 severity: 1 } }{ position { row: 2 column: 100 file: \"abc.file\" } message: \"my message\" end_position { row: 2 column: 100 } issue_code: 0 severity: 1 }");
+    }
+}
+
 Y_UNIT_TEST_SUITE(ToMessage) {
     Y_UNIT_TEST(NonUtf8) {
         const TString nonUtf8String = "\x7f\xf8\xf7\xff\xf8\x1f\xff\xf2\xaf\xbf\xfe\xfa\xf5\x7f\xfe\xfa\x27\x20\x7d\x20\x5d\x2e";

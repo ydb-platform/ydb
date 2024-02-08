@@ -14,6 +14,26 @@ namespace NKikimr {
     using TBlobIdQueue = std::deque<TLogoBlobID>;
     using TBlobIdQueuePtr = std::shared_ptr<TBlobIdQueue>;
 
+    struct TUnreplicatedBlobRecord { // for monitoring purposes
+        TIngress Ingress; // merged ingress from all the peers
+        ui32 PartsMask = 0;
+        ui32 DisksRepliedOK = 0;
+        ui32 DisksRepliedNODATA = 0;
+        ui32 DisksRepliedNOT_YET = 0;
+        ui32 DisksRepliedOther = 0;
+        bool LooksLikePhantom = false;
+    };
+
+    using TUnreplicatedBlobRecords = std::unordered_map<TLogoBlobID, TUnreplicatedBlobRecord>;
+
+    struct TEvReplInvoke : TEventLocal<TEvReplInvoke, TEvBlobStorage::EvReplInvoke> {
+        std::function<void(const TUnreplicatedBlobRecords&, TString)> Callback;
+
+        TEvReplInvoke(std::function<void(const TUnreplicatedBlobRecords&, TString)> callback)
+            : Callback(std::move(callback))
+        {}
+    };
+
     ////////////////////////////////////////////////////////////////////////////
     // Internal Repl messages
     ////////////////////////////////////////////////////////////////////////////
@@ -65,11 +85,14 @@ namespace NKikimr {
 
             std::unique_ptr<NRepl::TProxyStat> ProxyStat;
 
-            void Finish(const TLogoBlobID &keyPos, bool eof, bool dropDonor) {
+            TUnreplicatedBlobRecords UnreplicatedBlobRecords;
+
+            void Finish(const TLogoBlobID &keyPos, bool eof, bool dropDonor, TUnreplicatedBlobRecords&& ubr) {
                 End = TAppData::TimeProvider->Now();
                 KeyPos = keyPos;
                 Eof = eof;
                 DropDonor = dropDonor;
+                UnreplicatedBlobRecords = std::move(ubr);
             }
 
             TString ToString() const;
@@ -146,5 +169,8 @@ namespace NKikimr {
     // REPL ACTOR CREATOR
     ////////////////////////////////////////////////////////////////////////////
     IActor* CreateReplActor(std::shared_ptr<TReplCtx> &replCtx);
+
+    IActor *CreateReplMonRequestHandler(TActorId skeletonId, TVDiskIdShort vdiskId,
+        std::shared_ptr<TBlobStorageGroupInfo::TTopology> topology, NMon::TEvHttpInfo::TPtr ev);
 
 } // NKikimr

@@ -22,6 +22,7 @@ namespace Aws
 
         static const int BucketOwnerPreferred_HASH = HashingUtils::HashString("BucketOwnerPreferred");
         static const int ObjectWriter_HASH = HashingUtils::HashString("ObjectWriter");
+        static const int BucketOwnerEnforced_HASH = HashingUtils::HashString("BucketOwnerEnforced");
 
 
         ObjectOwnership GetObjectOwnershipForName(const Aws::String& name)
@@ -34,6 +35,10 @@ namespace Aws
           else if (hashCode == ObjectWriter_HASH)
           {
             return ObjectOwnership::ObjectWriter;
+          }
+          else if (hashCode == BucketOwnerEnforced_HASH)
+          {
+            return ObjectOwnership::BucketOwnerEnforced;
           }
           EnumParseOverflowContainer* overflowContainer = Aws::GetEnumOverflowContainer();
           if(overflowContainer)
@@ -53,6 +58,8 @@ namespace Aws
             return "BucketOwnerPreferred";
           case ObjectOwnership::ObjectWriter:
             return "ObjectWriter";
+          case ObjectOwnership::BucketOwnerEnforced:
+            return "BucketOwnerEnforced";
           default:
             EnumParseOverflowContainer* overflowContainer = Aws::GetEnumOverflowContainer();
             if(overflowContainer)

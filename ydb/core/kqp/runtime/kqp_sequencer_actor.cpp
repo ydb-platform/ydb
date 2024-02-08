@@ -1,6 +1,6 @@
 #include "kqp_sequencer_actor.h"
 
-#include <library/cpp/actors/core/actor_bootstrapped.h>
+#include <ydb/library/actors/core/actor_bootstrapped.h>
 
 #include <ydb/core/actorlib_impl/long_timer.h>
 #include <ydb/core/base/tablet_pipecache.h>
@@ -46,7 +46,7 @@ class TKqpSequencerActor : public NActors::TActorBootstrapped<TKqpSequencerActor
         std::set<i64> AllocatedSequenceValues;
         NScheme::TTypeInfo TypeInfo;
         NUdf::TUnboxedValue UvLiteral;
-        NKikimrMiniKQL::TResult Literal;
+        Ydb::TypedValue Literal;
         bool InitialiedLiteral = false;
         TCProto::EDefaultKind DefaultKind = TCProto::DEFAULT_KIND_UNSPECIFIED; 
 
@@ -86,7 +86,7 @@ class TKqpSequencerActor : public NActors::TActorBootstrapped<TKqpSequencerActor
             InitialiedLiteral = true;
             NKikimr::NMiniKQL::TType* type = nullptr;
             std::tie(type, UvLiteral) = NMiniKQL::ImportValueFromProto(
-                Literal.GetType(), Literal.GetValue(), env, factory);
+                Literal.type(), Literal.value(), env, factory);
             return UvLiteral;
         }
 
@@ -183,7 +183,7 @@ private:
         finished = (status == NUdf::EFetchStatus::Finish)
             && (UnprocessedRows == 0);
 
-        if (WaitingReplies == 0) {
+        if (PendingRows.size() > 0 && WaitingReplies == 0) {
             Send(ComputeActorId, new TEvNewAsyncInputDataArrived(InputIndex));
         } 
 
@@ -207,7 +207,6 @@ private:
     i64 ReplyResult(NKikimr::NMiniKQL::TUnboxedValueBatch& batch, i64 freeSpace) {
         auto guard = BindAllocator();
 
-        size_t rowsInReply = 0;
         bool hasSequences = true;
         i64 totalSize = 0;
 
@@ -219,7 +218,6 @@ private:
         }
 
         while(PendingRows.size() > 0 && freeSpace > 0 && hasSequences) {
-            ++rowsInReply;
             --UnprocessedRows;
             i64 rowSize = 0;
             NUdf::TUnboxedValue currentValue = std::move(PendingRows.front());

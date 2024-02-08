@@ -4,7 +4,7 @@
 #include "handoff_mon.h"
 #include <ydb/core/blobstorage/base/utility.h>
 
-#include <library/cpp/actors/core/log.h>
+#include <ydb/library/actors/core/log.h>
 
 using namespace NKikimrServices;
 using namespace NKikimr::NHandoff;
@@ -51,13 +51,13 @@ namespace NKikimr {
                               Fields->Params.MaxWaitQueueByteSize + Fields->Params.MaxInFlightByteSize);
                 auto aid = ctx.Register(CreateHandoffProxyActor(Fields->Info, Fields->ProxiesPtr,
                         &it, Fields->Params));
-                activeActors.Insert(aid);
+                activeActors.Insert(aid, __FILE__, __LINE__, ctx, NKikimrServices::BLOBSTORAGE);
                 it.Get().ProxyID = aid;
             }
         }
         Fields->MonActorID = ctx.Register(CreateHandoffMonActor(Fields->SelfVDisk, Fields->Info->PickTopology(),
                 Fields->ProxiesPtr));
-        activeActors.Insert(Fields->MonActorID);
+        activeActors.Insert(Fields->MonActorID, __FILE__, __LINE__, ctx, NKikimrServices::BLOBSTORAGE);
         Fields->ProxiesStarted = true;
         return activeActors;
     }

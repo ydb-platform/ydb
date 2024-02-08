@@ -4,6 +4,8 @@ SRCS(
     federated_read_session.h
     federated_read_session.cpp
     federated_read_session_event.cpp
+    federated_write_session.h
+    federated_write_session.cpp
     federated_topic_impl.h
     federated_topic_impl.cpp
     federated_topic.cpp
@@ -12,7 +14,7 @@ SRCS(
 )
 
 PEERDIR(
-    library/cpp/grpc/client
+    ydb/library/grpc/client
     library/cpp/monlib/dynamic_counters
     library/cpp/monlib/metrics
     library/cpp/string_utils/url

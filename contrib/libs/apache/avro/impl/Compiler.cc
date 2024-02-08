@@ -21,7 +21,7 @@
 #include <utility>
 
 #include "Compiler.hh"
-#include "CustomFields.hh"
+#include "CustomAttributes.hh"
 #include "NodeConcepts.hh"
 #include "Schema.hh"
 #include "Stream.hh"
@@ -149,8 +149,8 @@ struct Field {
     const string name;
     const NodePtr schema;
     const GenericDatum defaultValue;
-    const CustomFields customFields;
-    Field(string n, NodePtr v, GenericDatum dv, const CustomFields& cf) : name(std::move(n)), schema(std::move(v)), defaultValue(std::move(dv)), customFields(std::move(cf)) {}
+    const CustomAttributes customAttributes;
+    Field(string n, NodePtr v, GenericDatum dv, const CustomAttributes& ca) : name(std::move(n)), schema(std::move(v)), defaultValue(std::move(dv)), customAttributes(std::move(ca)) {}
 };
 
 static void assertType(const Entity &e, EntityType et) {
@@ -268,14 +268,14 @@ static const std::unordered_set<std::string>& getKnownFields() {
       return kKnownFields;
 }
 
-static void getCustomAttributes(const Object& m, CustomFields &customAttributes)
+static void getCustomAttributes(const Object& m, CustomAttributes &customAttributes)
 {
   // Don't add known fields on primitive type and fixed type into custom
   // fields.
   const std::unordered_set<std::string>& kKnownFields = getKnownFields();
   for (const auto &entry : m) {
     if (kKnownFields.find(entry.first) == kKnownFields.end()) {
-      customAttributes.addField(entry.first, entry.second);
+      customAttributes.addAttribute(entry.first, entry.second.stringValue());
     }
   }
 }
@@ -291,7 +291,7 @@ static Field makeField(const Entity &e, SymbolTable &st, const string &ns) {
     }
     GenericDatum d = (it2 == m.end()) ? GenericDatum() : makeGenericDatum(node, it2->second, st);
     // Get custom attributes
-    CustomFields customAttributes;
+    CustomAttributes customAttributes;
     getCustomAttributes(m, customAttributes);
 
     return Field(n, node, d, customAttributes);
@@ -304,7 +304,7 @@ static NodePtr makeRecordNode(const Entity &e, const Name &name,
     const Array &v = getArrayField(e, m, "fields");
     concepts::MultiAttribute<string> fieldNames;
     concepts::MultiAttribute<NodePtr> fieldValues;
-    concepts::MultiAttribute<CustomFields> customAttributes;
+    concepts::MultiAttribute<CustomAttributes> customAttributes;
     vector<GenericDatum> defaultValues;
 
     for (const auto &it : v) {
@@ -312,7 +312,7 @@ static NodePtr makeRecordNode(const Entity &e, const Name &name,
         fieldNames.add(f.name);
         fieldValues.add(f.schema);
         defaultValues.push_back(f.defaultValue);
-        customAttributes.add(f.customFields);
+        customAttributes.add(f.customAttributes);
     }
     NodeRecord *node;
     if (doc == nullptr) {

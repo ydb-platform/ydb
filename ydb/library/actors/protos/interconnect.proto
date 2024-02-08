@@ -1,0 +1,133 @@
+import "ydb/library/actors/protos/actors.proto";
+import "google/protobuf/descriptor.proto";
+
+package NActorsInterconnect;
+option java_package = "ru.yandex.kikimr.proto";
+
+message TEvResolveNode {
+    optional uint32 NodeId = 1;
+    optional uint64 Deadline = 2;
+}
+
+message TEvNodeInfo {
+    optional uint32 NodeId = 1;
+    optional string Address = 2;
+    optional uint32 Port = 3;
+}
+
+extend google.protobuf.FieldOptions {
+    optional string PrintName = 50376;
+}
+
+message TNodeLocation {
+    // compatibility section -- will be removed in future versions
+    optional uint32 DataCenterNum = 1 [deprecated=true];
+    optional uint32 RoomNum = 2 [deprecated=true];
+    optional uint32 RackNum = 3 [deprecated=true];
+    optional uint32 BodyNum = 4 [deprecated=true];
+    optional uint32 Body = 100500 [deprecated=true]; // for compatibility with WalleLocation
+
+    optional string DataCenter = 10 [(PrintName) = "DC"];
+    optional string Module = 20 [(PrintName) = "M"];
+    optional string Rack = 30 [(PrintName) = "R"];
+    optional string Unit = 40 [(PrintName) = "U"];
+}
+
+message TClusterUUIDs {
+    optional string ClusterUUID = 1;
+    repeated string AcceptUUID = 2;
+}
+
+message TScopeId {
+    optional fixed64 X1 = 1;
+    optional fixed64 X2 = 2;
+}
+
+message THandshakeRequest {
+    required uint64 Protocol = 1;
+
+    required uint64 ProgramPID = 2;
+    required uint64 ProgramStartTime = 3;
+    required uint64 Serial = 4;
+
+    required uint32 ReceiverNodeId = 5;
+    required string SenderActorId = 6;
+
+    optional string SenderHostName = 7;
+    optional string ReceiverHostName = 8;
+    optional string UUID = 9;
+    optional TClusterUUIDs ClusterUUIDs = 13;
+
+    optional bytes Ballast = 10;
+
+    optional string VersionTag = 11;
+    repeated string AcceptedVersionTags = 12;
+
+    optional bool RequireEncryption = 14;
+    optional TScopeId ClientScopeId = 15;
+
+    optional string Cookie = 16;
+    optional bool DoCheckCookie = 17;
+
+    optional bool RequestModernFrame = 18;
+    optional bool RequestAuthOnly = 19;
+    optional bool RequestExtendedTraceFmt = 20;
+    optional bool RequestExternalDataChannel = 21;
+    optional bool RequestXxhash = 24;
+    optional bool RequestXdcShuffle = 25;
+
+    optional bytes CompatibilityInfo = 22;
+
+    optional bytes HandshakeId = 23;
+}
+
+message THandshakeSuccess {
+    required uint64 Protocol = 1;
+
+    required uint64 ProgramPID = 2;
+    required uint64 ProgramStartTime = 3;
+    required uint64 Serial = 4;
+
+    required string SenderActorId = 5;
+
+    optional string VersionTag = 6;
+    repeated string AcceptedVersionTags = 7;
+
+    optional TClusterUUIDs ClusterUUIDs = 8;
+
+    optional bool StartEncryption = 9;
+    optional TScopeId ServerScopeId = 10;
+
+    optional bool UseModernFrame = 11;
+    optional bool AuthOnly = 12;
+    optional bool UseExtendedTraceFmt = 13;
+    optional bool UseExternalDataChannel = 14;
+    optional bool UseXxhash = 16;
+    optional bool UseXdcShuffle = 17;
+
+    optional bytes CompatibilityInfo = 15;
+}
+
+message THandshakeReply {
+    optional THandshakeSuccess Success = 1;
+    optional string ErrorExplaination = 2;
+    optional bool CookieCheckResult = 3;
+}
+
+message TEvLoadMessage {
+    message THop {
+        optional NActorsProto.TActorId NextHop = 1; // if zero, then the payload is trimmed out of the message
+    }
+
+    repeated THop Hops = 1; // the route for the message
+    optional string Id = 3; // message identifier
+    optional bytes Payload = 4; // data payload
+}
+
+message TContinuationParams {
+    optional bytes HandshakeId = 1;
+}
+
+message TExternalDataChannelParams {
+    optional bytes HandshakeId = 1;
+}

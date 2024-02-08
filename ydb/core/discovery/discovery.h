@@ -3,9 +3,9 @@
 #include <ydb/core/base/events.h>
 #include <ydb/core/base/statestorage.h>
 
-#include <library/cpp/actors/core/actor.h>
-#include <library/cpp/actors/core/interconnect.h>
-#include <library/cpp/actors/interconnect/interconnect.h>
+#include <ydb/library/actors/core/actor.h>
+#include <ydb/library/actors/core/interconnect.h>
+#include <ydb/library/actors/interconnect/interconnect.h>
 
 namespace NKikimr {
 

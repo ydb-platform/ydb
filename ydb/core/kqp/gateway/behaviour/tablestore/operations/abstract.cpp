@@ -1,4 +1,5 @@
 #include "abstract.h"
+#include <ydb/core/kqp/gateway/utils/scheme_helpers.h>
 #include <ydb/core/kqp/provider/yql_kikimr_gateway.h>
 
 namespace NKikimr::NKqp {
@@ -7,7 +8,7 @@ TConclusionStatus ITableStoreOperation::Deserialize(const NYql::TObjectSettingsI
     std::pair<TString, TString> pathPair;
     {
         TString error;
-        if (!NYql::IKikimrGateway::TrySplitTablePath(settings.GetObjectId(), pathPair, error)) {
+        if (!NSchemeHelpers::TrySplitTablePath(settings.GetObjectId(), pathPair, error)) {
             return TConclusionStatus::Fail(error);
         }
         WorkingDir = pathPair.first;

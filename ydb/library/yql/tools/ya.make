@@ -3,7 +3,13 @@ RECURSE(
     dqrun
     dq
     mrjob
+    mrrun
+    pgrun
+    pg-make-test
     sql2yql
     sql_formatter
+    udf_dep_stub
+    udf_probe
+    udf_resolver
     yqlrun
 )

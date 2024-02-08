@@ -7,7 +7,7 @@
 #include <ydb/core/blobstorage/vdisk/common/vdisk_hugeblobctx.h>
 #include <ydb/core/blobstorage/vdisk/skeleton/blobstorage_takedbsnap.h>
 #include <ydb/core/util/stlog.h>
-#include <library/cpp/actors/core/invoke.h>
+#include <ydb/library/actors/core/invoke.h>
 
 namespace NKikimr {
 
@@ -245,7 +245,8 @@ namespace NKikimr {
             InProgress = true;
             ActiveActors.Insert(ctx.Register(CreateDefragQuantumActor(DCtx,
                 GInfo->GetVDiskId(DCtx->VCtx->ShortSelfVDisk),
-                std::visit([](auto& r) { return GetChunksToDefrag(r); }, task.Request))));
+                std::visit([](auto& r) { return GetChunksToDefrag(r); }, task.Request))), __FILE__, __LINE__,
+                ctx, NKikimrServices::BLOBSTORAGE);
         }
 
         static std::optional<TChunksToDefrag> GetChunksToDefrag(TEvBlobStorage::TEvVDefrag::TPtr& /*ev*/) {
@@ -261,7 +262,7 @@ namespace NKikimr {
             if (DCtx->RunDefragBySchedule) {
                 auto scheduler = std::make_unique<TDefragLocalScheduler>(DCtx, ctx.SelfID);
                 auto aid = ctx.Register(scheduler.release());
-                ActiveActors.Insert(aid);
+                ActiveActors.Insert(aid, __FILE__, __LINE__, ctx, NKikimrServices::BLOBSTORAGE);
             }
             Become(&TThis::StateFunc);
         }

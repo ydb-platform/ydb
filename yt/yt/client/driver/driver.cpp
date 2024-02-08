@@ -2,6 +2,7 @@
 
 #include "authentication_commands.h"
 #include "admin_commands.h"
+#include "bundle_controller_commands.h"
 #include "chaos_commands.h"
 #include "command.h"
 #include "config.h"
@@ -16,6 +17,7 @@
 #include "internal_commands.h"
 #include "proxy_discovery_cache.h"
 #include "query_commands.h"
+#include "flow_commands.h"
 
 #include <yt/yt/client/api/client_cache.h>
 #include <yt/yt/client/api/connection.h>
@@ -355,7 +357,20 @@ public:
         REGISTER    (TListQueriesCommand,                  "list_queries",                    Null,       Structured, false, false, ApiVersion4);
         REGISTER    (TGetQueryResultCommand,               "get_query_result",                Null,       Structured, false, false, ApiVersion4);
         REGISTER    (TReadQueryResultCommand,              "read_query_result",               Null,       Tabular,    false, true, ApiVersion4);
-        REGISTER    (TAlterQueryCommand,                   "alter_query",                    Null,       Tabular,    false, false, ApiVersion4);
+        REGISTER    (TAlterQueryCommand,                   "alter_query",                     Null,       Tabular,    false, false, ApiVersion4);
+
+        REGISTER_ALL(TGetBundleConfigCommand,              "get_bundle_config",               Null,       Structured, false,  false);
+        REGISTER_ALL(TSetBundleConfigCommand,              "set_bundle_config",               Structured, Null,       false,  false);
+
+        REGISTER    (TGetPipelineSpecCommand,              "get_pipeline_spec",               Null,       Structured, true,   false, ApiVersion4);
+        REGISTER    (TSetPipelineSpecCommand,              "set_pipeline_spec",               Structured, Null,       true,   false, ApiVersion4);
+        REGISTER    (TRemovePipelineDynamicSpecCommand,    "remove_pipeline_spec",            Null,       Null,       true,   false, ApiVersion4);
+        REGISTER    (TGetPipelineDynamicSpecCommand,       "get_pipeline_dynamic_spec",       Null,       Structured, true,   false, ApiVersion4);
+        REGISTER    (TSetPipelineDynamicSpecCommand,       "set_pipeline_dynamic_spec",       Structured, Null,       true,   false, ApiVersion4);
+        REGISTER    (TRemovePipelineDynamicSpecCommand,    "remove_pipeline_dynamic_spec",    Null,       Null,       true,   false, ApiVersion4);
+        REGISTER    (TStartPipelineCommand,                "start_pipeline",                  Null,       Structured, false,  false, ApiVersion4);
+        REGISTER    (TStopPipelineCommand,                 "stop_pipeline",                   Null,       Structured, false,  false, ApiVersion4);
+        REGISTER    (TPausePipelineCommand,                "pause_pipeline",                  Null,       Structured, false,  false, ApiVersion4);
 
         if (Config_->EnableInternalCommands) {
             REGISTER_ALL(TReadHunksCommand,                "read_hunks",                      Null,       Structured, false,  true );
@@ -363,6 +378,10 @@ public:
             REGISTER_ALL(TLockHunkStoreCommand,            "lock_hunk_store",                 Null,       Structured, false,  true );
             REGISTER_ALL(TUnlockHunkStoreCommand,          "unlock_hunk_store",               Null,       Structured, false,  true );
             REGISTER_ALL(TGetConnectionConfigCommand,      "get_connection_config",           Null,       Structured, false,  false);
+            REGISTER_ALL(TIssueLeaseCommand,               "issue_lease",                     Null,       Structured, false,  false);
+            REGISTER_ALL(TRevokeLeaseCommand,              "revoke_lease",                    Null,       Structured, false,  false);
+            REGISTER_ALL(TReferenceLeaseCommand,           "reference_lease",                 Null,       Structured, false,  false);
+            REGISTER_ALL(TUnreferenceLeaseCommand,         "unreference_lease",               Null,       Structured, false,  false);
         }
 
 #undef REGISTER

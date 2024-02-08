@@ -1,5 +1,6 @@
 #include "auth_factory.h"
 #include "http_req.h"
+#include <ydb/core/base/feature_flags.h>
 #include <ydb/core/http_proxy/http_service.h>
 #include <ydb/core/http_proxy/http_req.h>
 #include <ydb/core/http_proxy/metrics_actor.h>
@@ -7,7 +8,7 @@
 
 #include <ydb/public/sdk/cpp/client/iam_private/iam.h>
 
-#include <library/cpp/actors/http/http_proxy.h>
+#include <ydb/library/actors/http/http_proxy.h>
 
 namespace NKikimr::NHttpProxy {
 

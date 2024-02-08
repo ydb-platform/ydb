@@ -44,8 +44,6 @@ namespace NKikimr::NBsController {
                         ApplyPDiskDeleted(overlay->first, *base->second);
                     } else if (!base) {
                         ApplyPDiskCreated(overlay->first, *overlay->second);
-                    } else {
-                        ApplyPDiskDiff(overlay->first, *base->second, *overlay->second);
                     }
                 }
                 for (auto&& [base, overlay] : State.VSlots.Diff()) {
@@ -84,13 +82,6 @@ namespace NKikimr::NBsController {
                 }
             }
 
-            void ApplyPDiskDiff(const TPDiskId &pdiskId, const TPDiskInfo &prev, const TPDiskInfo &cur) {
-                if (prev.Mood != cur.Mood) {
-                    // PDisk's mood has changed
-                    CreatePDiskEntry(pdiskId, cur);
-                }
-            }
-
             NKikimrBlobStorage::TNodeWardenServiceSet::TPDisk *CreatePDiskEntry(const TPDiskId &fullPDiskId,
                     const TPDiskInfo &pdiskInfo) {
                 const ui32 nodeId = fullPDiskId.NodeId;
@@ -113,14 +104,6 @@ namespace NKikimr::NBsController {
                     // TODO(alexvru): report this somehow
                 }
                 pdisk->SetSpaceColorBorder(Self->PDiskSpaceColorBorder);
-
-                switch (pdiskInfo.Mood) {
-                    case NBsController::TPDiskMood::EValue::Normal:
-                        break;
-                    case NBsController::TPDiskMood::EValue::Restarting:
-                        pdisk->SetEntityStatus(NKikimrBlobStorage::RESTART);
-                        break;
-                }
 
                 return pdisk;
             }

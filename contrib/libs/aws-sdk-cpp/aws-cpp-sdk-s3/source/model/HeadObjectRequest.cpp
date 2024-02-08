@@ -33,6 +33,8 @@ HeadObjectRequest::HeadObjectRequest() :
     m_partNumber(0),
     m_partNumberHasBeenSet(false),
     m_expectedBucketOwnerHasBeenSet(false),
+    m_checksumMode(ChecksumMode::NOT_SET),
+    m_checksumModeHasBeenSet(false),
     m_customizedAccessLogTagHasBeenSet(false)
 {
 }
@@ -91,7 +93,7 @@ Aws::Http::HeaderValueCollection HeadObjectRequest::GetRequestSpecificHeaders() 
 
   if(m_ifModifiedSinceHasBeenSet)
   {
-    headers.emplace("if-modified-since", m_ifModifiedSince.ToGmtString(DateFormat::RFC822));
+    headers.emplace("if-modified-since", m_ifModifiedSince.ToGmtString(Aws::Utils::DateFormat::RFC822));
   }
 
   if(m_ifNoneMatchHasBeenSet)
@@ -103,7 +105,7 @@ Aws::Http::HeaderValueCollection HeadObjectRequest::GetRequestSpecificHeaders() 
 
   if(m_ifUnmodifiedSinceHasBeenSet)
   {
-    headers.emplace("if-unmodified-since", m_ifUnmodifiedSince.ToGmtString(DateFormat::RFC822));
+    headers.emplace("if-unmodified-since", m_ifUnmodifiedSince.ToGmtString(Aws::Utils::DateFormat::RFC822));
   }
 
   if(m_rangeHasBeenSet)
@@ -146,5 +148,20 @@ Aws::Http::HeaderValueCollection HeadObjectRequest::GetRequestSpecificHeaders() 
     ss.str("");
   }
 
+  if(m_checksumModeHasBeenSet)
+  {
+    headers.emplace("x-amz-checksum-mode", ChecksumModeMapper::GetNameForChecksumMode(m_checksumMode));
+  }
+
   return headers;
+}
+
+HeadObjectRequest::EndpointParameters HeadObjectRequest::GetEndpointContextParams() const
+{
+    EndpointParameters parameters;
+    // Operation context parameters
+    if (BucketHasBeenSet()) {
+        parameters.emplace_back(Aws::String("Bucket"), this->GetBucket(), Aws::Endpoint::EndpointParameter::ParameterOrigin::OPERATION_CONTEXT);
+    }
+    return parameters;
 }

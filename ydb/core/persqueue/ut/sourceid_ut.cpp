@@ -64,7 +64,7 @@ Y_UNIT_TEST_SUITE(TSourceIdTests) {
         writer.RegisterSourceId(sourceId, sourceIdInfo);
         UNIT_ASSERT_VALUES_EQUAL(writer.GetSourceIdsToWrite().size(), 1);
         {
-            TKeyPrefix key(TKeyPrefix::TypeInfo, TestPartition, TKeyPrefix::MarkSourceId);
+            TKeyPrefix key(TKeyPrefix::TypeInfo, TPartitionId(TestPartition), TKeyPrefix::MarkSourceId);
             TBuffer data;
 
             TSourceIdWriter::FillKeyAndData(ESourceIdFormat::Raw, sourceId, sourceIdInfo, key, data);
@@ -73,7 +73,7 @@ Y_UNIT_TEST_SUITE(TSourceIdTests) {
             write->SetValue(data.Data(), data.Size());
             write->SetStorageChannel(NKikimrClient::TKeyValueRequest::INLINE);
 
-            writer.FillRequest(actualRequest.Get(), TestPartition);
+            writer.FillRequest(actualRequest.Get(), TPartitionId(TestPartition));
             UNIT_ASSERT_VALUES_EQUAL(actualRequest.Get()->ToString(), expectedRequest.Get()->ToString());
         }
 
@@ -82,7 +82,7 @@ Y_UNIT_TEST_SUITE(TSourceIdTests) {
         writer.RegisterSourceId(anotherSourceId, anotherSourceIdInfo);
         UNIT_ASSERT_VALUES_EQUAL(writer.GetSourceIdsToWrite().size(), 2);
         {
-            TKeyPrefix key(TKeyPrefix::TypeInfo, TestPartition + 1, TKeyPrefix::MarkSourceId);
+            TKeyPrefix key(TKeyPrefix::TypeInfo, TPartitionId(TestPartition + 1), TKeyPrefix::MarkSourceId);
             TBuffer data;
 
             for (const auto& [sourceId, sourceIdInfo] : writer.GetSourceIdsToWrite()) {
@@ -93,7 +93,7 @@ Y_UNIT_TEST_SUITE(TSourceIdTests) {
                 write->SetStorageChannel(NKikimrClient::TKeyValueRequest::INLINE);
             }
 
-            writer.FillRequest(actualRequest.Get(), TestPartition + 1);
+            writer.FillRequest(actualRequest.Get(), TPartitionId(TestPartition + 1));
             UNIT_ASSERT_VALUES_EQUAL(actualRequest.Get()->ToString(), expectedRequest.Get()->ToString());
         }
     }
@@ -132,7 +132,7 @@ Y_UNIT_TEST_SUITE(TSourceIdTests) {
         const auto sourceId = TestSourceId();
         const auto sourceIdInfo = TSourceIdInfo(1, 10, TInstant::Seconds(100));
 
-        TKeyPrefix ikey(TKeyPrefix::TypeInfo, TestPartition, mark);
+        TKeyPrefix ikey(TKeyPrefix::TypeInfo, TPartitionId(TestPartition), mark);
         TBuffer idata;
         TSourceIdWriter::FillKeyAndData(format, sourceId, sourceIdInfo, ikey, idata);
 
@@ -194,7 +194,7 @@ Y_UNIT_TEST_SUITE(TSourceIdTests) {
         // sources are dropped before startOffset = 20
         {
             auto request = MakeHolder<TEvKeyValue::TEvRequest>();
-            const auto dropped = storage.DropOldSourceIds(request.Get(), TInstant::Hours(2), 20, TestPartition, config);
+            const auto dropped = storage.DropOldSourceIds(request.Get(), TInstant::Hours(2), 20, TPartitionId(TestPartition), config);
             UNIT_ASSERT_EQUAL(dropped, true);
             UNIT_ASSERT_VALUES_EQUAL(request.Get()->Record.CmdDeleteRangeSize(), 2 * 19); // first 19 sources are dropped
         }
@@ -202,7 +202,7 @@ Y_UNIT_TEST_SUITE(TSourceIdTests) {
         // expired sources are dropped
         {
             auto request = MakeHolder<TEvKeyValue::TEvRequest>();
-            const auto dropped = storage.DropOldSourceIds(request.Get(), TInstant::Hours(2), 10000, TestPartition, config);
+            const auto dropped = storage.DropOldSourceIds(request.Get(), TInstant::Hours(2), 10000, TPartitionId(TestPartition), config);
             UNIT_ASSERT_EQUAL(dropped, true);
             UNIT_ASSERT_VALUES_EQUAL(request.Get()->Record.CmdDeleteRangeSize(), 2 * 341); // another 341 (360 - 19) sources are dropped
         }
@@ -210,14 +210,14 @@ Y_UNIT_TEST_SUITE(TSourceIdTests) {
         // move to the past
         {
             auto request = MakeHolder<TEvKeyValue::TEvRequest>();
-            const auto dropped = storage.DropOldSourceIds(request.Get(), TInstant::Hours(1), 10000, TestPartition, config);
+            const auto dropped = storage.DropOldSourceIds(request.Get(), TInstant::Hours(1), 10000, TPartitionId(TestPartition), config);
             UNIT_ASSERT_EQUAL(dropped, false); // nothing to drop (everything is dropped)
         }
 
         // move to the future
         {
             auto request = MakeHolder<TEvKeyValue::TEvRequest>();
-            const auto dropped = storage.DropOldSourceIds(request.Get(), TInstant::Hours(3), 10000, TestPartition, config);
+            const auto dropped = storage.DropOldSourceIds(request.Get(), TInstant::Hours(3), 10000, TPartitionId(TestPartition), config);
             UNIT_ASSERT_EQUAL(dropped, true);
             UNIT_ASSERT_VALUES_EQUAL(request.Get()->Record.CmdDeleteRangeSize(), 2 * 360); // more 360 sources are dropped
         }
@@ -234,14 +234,14 @@ Y_UNIT_TEST_SUITE(TSourceIdTests) {
         config.SetSourceIdMaxCounts(10000);
         {
             auto request = MakeHolder<TEvKeyValue::TEvRequest>();
-            const auto dropped = storage.DropOldSourceIds(request.Get(), TInstant::Hours(1), 10000, TestPartition, config);
+            const auto dropped = storage.DropOldSourceIds(request.Get(), TInstant::Hours(1), 10000, TPartitionId(TestPartition), config);
             UNIT_ASSERT_EQUAL(dropped, false);
         }
 
         config.SetSourceIdMaxCounts(9900); // decrease by 100
         {
             auto request = MakeHolder<TEvKeyValue::TEvRequest>();
-            const auto dropped = storage.DropOldSourceIds(request.Get(), TInstant::Hours(1), 10000, TestPartition, config);
+            const auto dropped = storage.DropOldSourceIds(request.Get(), TInstant::Hours(1), 10000, TPartitionId(TestPartition), config);
             UNIT_ASSERT_EQUAL(dropped, true);
             UNIT_ASSERT_VALUES_EQUAL(request.Get()->Record.CmdDeleteRangeSize(), 2 * 100); // 100 sources are dropped
         }
@@ -267,7 +267,7 @@ Y_UNIT_TEST_SUITE(TSourceIdTests) {
         config.SetSourceIdMaxCounts(10000); // limit to 10000
         {
             auto request = MakeHolder<TEvKeyValue::TEvRequest>();
-            const auto dropped = storage.DropOldSourceIds(request.Get(), TInstant::Hours(2), 10000, TestPartition, config);
+            const auto dropped = storage.DropOldSourceIds(request.Get(), TInstant::Hours(2), 10000, TPartitionId(TestPartition), config);
             UNIT_ASSERT_EQUAL(dropped, true);
             UNIT_ASSERT_VALUES_EQUAL(request.Get()->Record.CmdDeleteRangeSize(), 2 * 360); // first 360 sources are dropped
         }
@@ -276,7 +276,7 @@ Y_UNIT_TEST_SUITE(TSourceIdTests) {
         config.SetSourceIdMaxCounts(10000 - 360);
         {
             auto request = MakeHolder<TEvKeyValue::TEvRequest>();
-            const auto dropped = storage.DropOldSourceIds(request.Get(), TInstant::Hours(2), 10000, TestPartition, config);
+            const auto dropped = storage.DropOldSourceIds(request.Get(), TInstant::Hours(2), 10000, TPartitionId(TestPartition), config);
             UNIT_ASSERT_EQUAL(dropped, true);
             UNIT_ASSERT_VALUES_EQUAL(request.Get()->Record.CmdDeleteRangeSize(), 2 * 6); // another 6 sources are dropped by retention
         }
@@ -284,7 +284,7 @@ Y_UNIT_TEST_SUITE(TSourceIdTests) {
         config.SetSourceIdMaxCounts(10000 - 370);
         {
             auto request = MakeHolder<TEvKeyValue::TEvRequest>();
-            const auto dropped = storage.DropOldSourceIds(request.Get(), TInstant::Hours(2), 10000, TestPartition, config);
+            const auto dropped = storage.DropOldSourceIds(request.Get(), TInstant::Hours(2), 10000, TPartitionId(TestPartition), config);
             UNIT_ASSERT_EQUAL(dropped, true);
             UNIT_ASSERT_VALUES_EQUAL(request.Get()->Record.CmdDeleteRangeSize(), 2 * 5); // more 5 sources are dropped
         }
@@ -306,7 +306,7 @@ Y_UNIT_TEST_SUITE(TSourceIdTests) {
         NKikimrPQ::TPartitionConfig config;
         config.SetSourceIdMaxCounts(1); // limit to one
 
-        const auto dropped = storage.DropOldSourceIds(request.Get(), TInstant::Hours(1), 10000, TestPartition, config);
+        const auto dropped = storage.DropOldSourceIds(request.Get(), TInstant::Hours(1), 10000, TPartitionId(TestPartition), config);
         UNIT_ASSERT_EQUAL(dropped, true);
         UNIT_ASSERT_VALUES_EQUAL(request.Get()->Record.CmdDeleteRangeSize(), 2); // first source is dropped by retention
 
@@ -320,6 +320,143 @@ Y_UNIT_TEST_SUITE(TSourceIdTests) {
             auto it = owners.find(TestOwner(TestSourceId(2)));
             UNIT_ASSERT_UNEQUAL(it, owners.end());
             UNIT_ASSERT_VALUES_EQUAL(it->second.SourceIdDeleted, false);
+        }
+    }
+
+    inline static TSourceIdInfo MakeExplicitSourceIdInfo(ui64 offset, const TMaybe<THeartbeat>& heartbeat = Nothing()) {
+        auto info = TSourceIdInfo(0, offset, TInstant::Now());
+
+        info.Explicit = true;
+        if (heartbeat) {
+            info.LastHeartbeat = heartbeat;
+        }
+
+        return info;
+    }
+
+    inline static THeartbeat MakeHeartbeat(ui64 step) {
+        return THeartbeat{
+            .Version = TRowVersion(step, 0),
+            .Data = "",
+        };
+    }
+
+    Y_UNIT_TEST(HeartbeatEmitter) {
+        TSourceIdStorage storage;
+        ui64 offset = 0;
+
+        // initial info w/o heartbeats
+        for (ui64 i = 1; i <= 2; ++i) {
+            storage.RegisterSourceId(TestSourceId(i), MakeExplicitSourceIdInfo(++offset));
+        }
+        {
+            THeartbeatEmitter emitter(storage);
+            UNIT_ASSERT(!emitter.CanEmit().Defined());
+
+            emitter.Process(TestSourceId(1), MakeHeartbeat(1));
+            UNIT_ASSERT(!emitter.CanEmit().Defined());
+
+            emitter.Process(TestSourceId(1), MakeHeartbeat(2));
+            UNIT_ASSERT(!emitter.CanEmit().Defined());
+
+            emitter.Process(TestSourceId(2), MakeHeartbeat(1));
+            {
+                const auto heartbeat = emitter.CanEmit();
+                UNIT_ASSERT(heartbeat.Defined());
+                UNIT_ASSERT_VALUES_EQUAL(heartbeat->Version, MakeHeartbeat(1).Version);
+            }
+
+            emitter.Process(TestSourceId(2), MakeHeartbeat(3));
+            {
+                const auto heartbeat = emitter.CanEmit();
+                UNIT_ASSERT(heartbeat.Defined());
+                UNIT_ASSERT_VALUES_EQUAL(heartbeat->Version, MakeHeartbeat(2).Version);
+            }
+        }
+
+        // one heartbeat
+        storage.RegisterSourceId(TestSourceId(1), MakeExplicitSourceIdInfo(+offset, MakeHeartbeat(4)));
+        {
+            THeartbeatEmitter emitter(storage);
+            UNIT_ASSERT(!emitter.CanEmit().Defined());
+
+            emitter.Process(TestSourceId(2), MakeHeartbeat(3));
+            {
+                const auto heartbeat = emitter.CanEmit();
+                UNIT_ASSERT(heartbeat.Defined());
+                UNIT_ASSERT_VALUES_EQUAL(heartbeat->Version, MakeHeartbeat(3).Version);
+            }
+        }
+        {
+            THeartbeatEmitter emitter(storage);
+            UNIT_ASSERT(!emitter.CanEmit().Defined());
+
+            emitter.Process(TestSourceId(2), MakeHeartbeat(5));
+            {
+                const auto heartbeat = emitter.CanEmit();
+                UNIT_ASSERT(heartbeat.Defined());
+                UNIT_ASSERT_VALUES_EQUAL(heartbeat->Version, MakeHeartbeat(4).Version);
+            }
+        }
+
+        // two different heartbeats
+        storage.RegisterSourceId(TestSourceId(2), MakeExplicitSourceIdInfo(++offset, MakeHeartbeat(5)));
+        {
+            THeartbeatEmitter emitter(storage);
+            UNIT_ASSERT(!emitter.CanEmit().Defined());
+
+            emitter.Process(TestSourceId(2), MakeHeartbeat(6));
+            UNIT_ASSERT(!emitter.CanEmit().Defined());
+
+            emitter.Process(TestSourceId(1), MakeHeartbeat(5));
+            {
+                const auto heartbeat = emitter.CanEmit();
+                UNIT_ASSERT(heartbeat.Defined());
+                UNIT_ASSERT_VALUES_EQUAL(heartbeat->Version, MakeHeartbeat(5).Version);
+            }
+        }
+        {
+            THeartbeatEmitter emitter(storage);
+            UNIT_ASSERT(!emitter.CanEmit().Defined());
+
+            emitter.Process(TestSourceId(2), MakeHeartbeat(6));
+            UNIT_ASSERT(!emitter.CanEmit().Defined());
+
+            emitter.Process(TestSourceId(1), MakeHeartbeat(7));
+            {
+                const auto heartbeat = emitter.CanEmit();
+                UNIT_ASSERT(heartbeat.Defined());
+                UNIT_ASSERT_VALUES_EQUAL(heartbeat->Version, MakeHeartbeat(6).Version);
+            }
+        }
+
+        // two same heartbeats
+        storage.RegisterSourceId(TestSourceId(1), MakeExplicitSourceIdInfo(++offset, MakeHeartbeat(5)));
+        {
+            THeartbeatEmitter emitter(storage);
+            UNIT_ASSERT(!emitter.CanEmit().Defined());
+
+            emitter.Process(TestSourceId(1), MakeHeartbeat(6));
+            UNIT_ASSERT(!emitter.CanEmit().Defined());
+
+            emitter.Process(TestSourceId(2), MakeHeartbeat(6));
+            {
+                const auto heartbeat = emitter.CanEmit();
+                UNIT_ASSERT(heartbeat.Defined());
+                UNIT_ASSERT_VALUES_EQUAL(heartbeat->Version, MakeHeartbeat(6).Version);
+            }
+        }
+
+        // can't roll back
+        {
+            THeartbeatEmitter emitter(storage);
+            UNIT_ASSERT(!emitter.CanEmit().Defined());
+
+            emitter.Process(TestSourceId(1), MakeHeartbeat(4));
+            UNIT_ASSERT(!emitter.CanEmit().Defined());
+
+            emitter.Process(TestSourceId(2), MakeHeartbeat(4));
+            UNIT_ASSERT(!emitter.CanEmit().Defined());
         }
     }
 

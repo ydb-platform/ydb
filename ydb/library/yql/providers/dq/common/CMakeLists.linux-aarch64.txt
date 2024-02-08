@@ -27,6 +27,7 @@ target_link_libraries(providers-dq-common PUBLIC
   library-yql-utils
   yql-utils-log
   yql-dq-actors
+  yql-dq-proto
   tools-enum_parser-enum_serialization_runtime
 )
 target_sources(providers-dq-common PRIVATE

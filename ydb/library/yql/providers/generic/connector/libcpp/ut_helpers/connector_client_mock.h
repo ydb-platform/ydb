@@ -1,7 +1,7 @@
 #pragma once
 
 #include <ydb/core/kqp/ut/common/kqp_ut_common.h>
-#include <ydb/core/formats/arrow/serializer/full.h>
+#include <ydb/core/formats/arrow/serializer/abstract.h>
 #include <ydb/library/yql/providers/generic/connector/api/common/data_source.pb.h>
 #include <ydb/library/yql/providers/generic/connector/libcpp/client.h>
 #include <ydb/library/yql/providers/generic/connector/libcpp/error.h>
@@ -52,6 +52,11 @@ namespace NYql::NConnector::NTest {
     }                                                                               \
     TClickHouseDataSourceInstanceBuilder<TBuilder> ClickHouseDataSourceInstance() { \
         return TClickHouseDataSourceInstanceBuilder<TBuilder>(                      \
+            this->Result_->mutable_data_source_instance(),                          \
+            static_cast<TBuilder*>(this));                                          \
+    }                                                                               \
+    TYdbDataSourceInstanceBuilder<TBuilder> YdbDataSourceInstance() {               \
+        return TYdbDataSourceInstanceBuilder<TBuilder>(                             \
             this->Result_->mutable_data_source_instance(),                          \
             static_cast<TBuilder*>(this));                                          \
     }
@@ -200,6 +205,15 @@ namespace NYql::NConnector::NTest {
         const TString& serviceAccountIdSignature = DEFAULT_CH_SERVICE_ACCOUNT_ID_SIGNATURE,
         const TString& databaseName = DEFAULT_DATABASE);
 
+    void CreateYdbExternalDataSource(
+        const std::shared_ptr<NKikimr::NKqp::TKikimrRunner>& kikimr,
+        const TString& dataSourceName = DEFAULT_DATA_SOURCE_NAME,
+        const TString& login = DEFAULT_LOGIN,
+        const TString& password = DEFAULT_PASSWORD,
+        const TString& endpoint = DEFAULT_YDB_ENDPOINT,
+        bool useTls = DEFAULT_USE_TLS,
+        const TString& databaseName = DEFAULT_DATABASE);
+
     class TConnectorClientMock: public NYql::NConnector::IClient {
     public:
         MOCK_METHOD(TResult<NApi::TDescribeTableResponse>, DescribeTableImpl, (const NApi::TDescribeTableRequest& request));
@@ -274,6 +288,25 @@ namespace NYql::NConnector::NTest {
                 this->Port(DEFAULT_CH_PORT);
                 this->Kind(NApi::EDataSourceKind::CLICKHOUSE);
                 this->Protocol(DEFAULT_CH_PROTOCOL);
+            }
+        };
+
+        template <class TParent = void /* no parent by default */>
+        struct TYdbDataSourceInstanceBuilder: public TBaseDataSourceInstanceBuilder<TYdbDataSourceInstanceBuilder<TParent>, TParent> {
+            using TBase = TBaseDataSourceInstanceBuilder<TYdbDataSourceInstanceBuilder<TParent>, TParent>;
+
+            explicit TYdbDataSourceInstanceBuilder(NApi::TDataSourceInstance* result = nullptr, TParent* parent = nullptr)
+                : TBase(result, parent)
+            {
+                FillWithDefaults();
+            }
+
+            void FillWithDefaults() {
+                TBase::FillWithDefaults();
+                this->Host(DEFAULT_YDB_HOST);
+                this->Port(DEFAULT_YDB_PORT);
+                this->Kind(NApi::EDataSourceKind::YDB);
+                this->Protocol(DEFAULT_YDB_PROTOCOL);
             }
         };
 
@@ -355,7 +388,7 @@ namespace NYql::NConnector::NTest {
                 EXPECT_CALL(*Mock_, DescribeTableImpl(ProtobufRequestMatcher(*Result_)))
                     .WillOnce(Return(
                         TResult<NApi::TDescribeTableResponse>(
-                            {NGrpc::TGrpcStatus(),
+                            {NYdbGrpc::TGrpcStatus(),
                              *ResponseResult_})));
             }
 
@@ -621,7 +654,7 @@ namespace NYql::NConnector::NTest {
         private:
             void SetExpectation() {
                 EXPECT_CALL(*Mock_, ListSplitsImpl(ProtobufRequestMatcher(*Result_)))
-                    .WillOnce(Return(TIteratorResult<IListSplitsStreamIterator>{NGrpc::TGrpcStatus(), ResponseResult_}));
+                    .WillOnce(Return(TIteratorResult<IListSplitsStreamIterator>{NYdbGrpc::TGrpcStatus(), ResponseResult_}));
             }
 
         private:
@@ -644,10 +677,10 @@ namespace NYql::NConnector::NTest {
             TBuilder& AddResponse(
                 const std::shared_ptr<arrow::RecordBatch>& recordBatch,
                 const NApi::TError& error) {
-                NKikimr::NArrow::NSerialization::TFullDataSerializer ser(arrow::ipc::IpcWriteOptions::Defaults());
+                NKikimr::NArrow::NSerialization::TSerializerContainer ser = NKikimr::NArrow::NSerialization::TSerializerContainer::GetDefaultSerializer();
                 auto& response = this->Result_->Responses().emplace_back();
                 response.mutable_error()->CopyFrom(error);
-                response.set_arrow_ipc_streaming(ser.Serialize(recordBatch));
+                response.set_arrow_ipc_streaming(ser->SerializeFull(recordBatch));
                 return static_cast<TBuilder&>(*this);
             }
 
@@ -690,7 +723,7 @@ namespace NYql::NConnector::NTest {
         private:
             void SetExpectation() {
                 EXPECT_CALL(*Mock_, ReadSplitsImpl(ProtobufRequestMatcher(*Result_)))
-                    .WillOnce(Return(TIteratorResult<IReadSplitsStreamIterator>{NGrpc::TGrpcStatus(), ResponseResult_}));
+                    .WillOnce(Return(TIteratorResult<IReadSplitsStreamIterator>{NYdbGrpc::TGrpcStatus(), ResponseResult_}));
             }
 
         private:
@@ -743,7 +776,7 @@ namespace NYql::NConnector::NTest {
         }
 
     protected:
-        static TString StatusToDebugString(const NGrpc::TGrpcStatus& status) {
+        static TString StatusToDebugString(const NYdbGrpc::TGrpcStatus& status) {
             TStringBuilder s;
             s << "GRpcStatusCode: " << status.GRpcStatusCode << '\n';
             if (status.Msg) {

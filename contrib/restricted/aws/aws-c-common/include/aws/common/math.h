@@ -28,7 +28,7 @@ AWS_EXTERN_C_BEGIN
 
 #if defined(AWS_HAVE_GCC_OVERFLOW_MATH_EXTENSIONS) && (defined(__clang__) || !defined(__cplusplus)) ||                 \
     (defined(__x86_64__) || defined(__aarch64__)) && defined(AWS_HAVE_GCC_INLINE_ASM) ||                               \
-    defined(AWS_HAVE_MSVC_MULX) || defined(CBMC) || !defined(AWS_HAVE_GCC_OVERFLOW_MATH_EXTENSIONS)
+    defined(AWS_HAVE_MSVC_INTRINSICS_X64) || defined(CBMC) || !defined(AWS_HAVE_GCC_OVERFLOW_MATH_EXTENSIONS)
 /* In all these cases, we can use fast static inline versions of this code */
 #    define AWS_COMMON_MATH_API AWS_STATIC_IMPL
 #else
@@ -156,7 +156,7 @@ AWS_STATIC_IMPL bool aws_is_power_of_two(const size_t x);
 AWS_STATIC_IMPL int aws_round_up_to_power_of_two(size_t n, size_t *result);
 
 /**
- * Counts the number of leading 0 bits in an integer
+ * Counts the number of leading 0 bits in an integer. 0 will return the size of the integer in bits.
  */
 AWS_STATIC_IMPL size_t aws_clz_u32(uint32_t n);
 AWS_STATIC_IMPL size_t aws_clz_i32(int32_t n);
@@ -165,7 +165,7 @@ AWS_STATIC_IMPL size_t aws_clz_i64(int64_t n);
 AWS_STATIC_IMPL size_t aws_clz_size(size_t n);
 
 /**
- * Counts the number of trailing 0 bits in an integer
+ * Counts the number of trailing 0 bits in an integer. 0 will return the size of the integer in bits.
  */
 AWS_STATIC_IMPL size_t aws_ctz_u32(uint32_t n);
 AWS_STATIC_IMPL size_t aws_ctz_i32(int32_t n);

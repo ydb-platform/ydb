@@ -4,7 +4,7 @@
 
 #include <ydb/core/protos/kesus.pb.h>
 
-#include <library/cpp/actors/core/actor.h>
+#include <ydb/library/actors/core/actor.h>
 #include <library/cpp/monlib/dynamic_counters/counters.h>
 
 #include <util/datetime/base.h>
@@ -206,7 +206,7 @@ protected:
     double AmountRequested = 0.0;
     double TotalSent = 0.0; // Only for session statistics. Accuracy of this variable will degrade in time.
     double TotalConsumed = 0.0;
-    ui32 LastReportId;
+    ui32 LastReportId = 0;
     bool Active = false;
     bool NeedSendChangedProps = false;
     IResourceSink::TPtr ResourceSink;

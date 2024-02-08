@@ -62,6 +62,10 @@ namespace NPage {
         ui32 PageSize = 7 * 1024;       /* Data page target size        */
         ui32 PageRows = Max<ui32>();    /* Max rows per page, for UTs   */
         ui32 IndexMin = 32 * 1024;      /* Index initial buffer size    */
+
+        ui32 BTreeIndexNodeTargetSize = 7 * 1024; /* 1 GB of (up to) 140B keys leads to 3-level B-Tree index */
+        ui32 BTreeIndexNodeKeysMin = 6;           /* 1 GB of 7KB keys leads to 6-level B-Tree index (node size - ~42KB) */
+        ui32 BTreeIndexNodeKeysMax = Max<ui32>(); /* for UTs */
     };
 
     struct TConf {
@@ -79,6 +83,7 @@ namespace NPage {
 
         bool Final = true;
         bool CutIndexKeys = true;
+        bool WriteBTreeIndex = false;
         ui32 MaxLargeBlob = 8 * 1024 * 1024 - 8; /* Maximum large blob size */
         ui32 LargeEdge = Max<ui32>();   /* External blob edge size      */
         ui32 SmallEdge = Max<ui32>();   /* Outer blobs edge bytes limit */

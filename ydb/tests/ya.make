@@ -1,4 +1,5 @@
 RECURSE(
+    fq
     functional
     library
     library/sqs

@@ -1,5 +1,5 @@
 import "google/protobuf/descriptor.proto";
-import "library/cpp/actors/protos/interconnect.proto";
+import "ydb/library/actors/protos/interconnect.proto";
 import "ydb/core/protos/blobstorage.proto";
 import "ydb/core/protos/blobstorage_config.proto";
 import "ydb/core/protos/blobstorage_vdisk_config.proto";
@@ -7,7 +7,9 @@ import "ydb/core/protos/blobstorage_pdisk_config.proto";
 import "ydb/core/protos/cms.proto";
 import "ydb/core/protos/config_units.proto";
 import "ydb/core/protos/counters_schemeshard.proto";
+import "ydb/core/protos/datashard_config.proto";
 import "ydb/core/protos/drivemodel.proto";
+import "ydb/core/protos/feature_flags.proto";
 import "ydb/core/protos/flat_scheme_op.proto";
 import "ydb/core/protos/http_config.proto";
 import "ydb/core/protos/hive.proto";
@@ -19,6 +21,7 @@ import "ydb/core/protos/pqconfig.proto";
 import "ydb/core/protos/resource_broker.proto";
 import "ydb/core/protos/shared_cache.proto";
 import "ydb/core/protos/stream.proto";
+import "ydb/core/protos/table_service_config.proto";
 import "ydb/core/protos/tablet.proto";
 import "ydb/core/protos/tablet_database.proto";
 import "ydb/core/protos/tenant_pool.proto";
@@ -48,11 +51,16 @@ message TActorSystemConfig {
         HYBRID = 3;
     }
 
+    enum EActorSystemProfile {
+        DEFAULT = 1;
+        LOW_CPU_CONSUMPTION = 2;
+        LOW_LATENCY = 3;
+    }
+
     message TExecutor {
         enum EType {
             BASIC = 1;
             IO = 2;
-            UNITED = 3;
         };
 
         optional EType Type = 1;
@@ -65,17 +73,9 @@ message TActorSystemConfig {
         optional uint32 EventsPerMailbox = 8;
         optional uint32 RealtimePriority = 9;
 
-        // Actorsystem 2.0: cpu sharing by different pools with preemption
-        optional uint32 Concurrency = 10; // Limits simultaneously running mailboxes of UNITED pool
-        optional uint32 Weight = 11; // Weight of UNITED pool in cpu-local scheduler (default value is NActors::DefPoolWeight)
-
-        // Actorsystem 1.5: cpu balancing between pools
+        // Actorsystem 1.4
         optional uint32 MinThreads = 12; // Lower balancing bound, should be at least 1, and not greater than `Threads`
         optional uint32 MaxThreads = 13; // Higher balancing bound, should be not lower than `Threads`
-        optional uint32 BalancingPriority = 14; // Priority of pool to obtain cpu due to balancing (higher is better)
-        optional uint64 ToleratedLatencyUs = 15; // p100-latency threshold indicating that more cpus are required by pool
-
-        // Actorsystem 1.4
         optional int32 Priority = 16;
         optional int32 MaxAvgPingDeviation = 17;
     }
@@ -106,29 +106,15 @@ message TActorSystemConfig {
     optional uint32 EventsPerMailbox = 9;
     optional uint32 SelfPingInterval = 10; // in microseconds
 
-    message TUnitedWorkers {
-        optional uint32 CpuCount = 1; // Total CPUs running united workers (TExecutor.Threads analog), should be set to zero to use actorsystem 1.5, and >0 for actorsystem 2.0
-        optional uint64 SpinThresholdUs = 2; // Limit for active spinning in case all pools became idle
-        optional uint64 PoolLimitUs = 3; // Soft limit on pool execution
-        optional uint64 EventLimitUs = 4; // Hard limit on last event execution exceeding pool limit
-        optional uint64 LimitPrecisionUs = 5; // Maximum delay of timer on limit excess (delay needed to avoid settimer syscall on every pool switch)
-        optional uint64 FastWorkerPriority = 6; // Real-time priority of workers not exceeding hard limits
-        optional uint64 IdleWorkerPriority = 7; // Real-time priority of standby workers waiting for hard preemption on timers (should be greater than FastWorkerPriority)
-        optional TAffinity Affinity = 8; // Cpu set for workers (every worker has affinity for exactly one cpu)
-        optional bool NoRealtime = 9; // Do not use RT-priority for worker threads
-        optional bool NoAffinity = 10; // Do not use affinity for worker threads
-        optional uint64 BalancerPeriodUs = 11; // Time between balancer steps (see default in NActors::TBalancerConfig)
-    }
-
-    optional TUnitedWorkers UnitedWorkers = 11;
-
     optional bool UseAutoConfig = 12;
 
     // Used only with UseAutoConfig;
     optional uint32 CpuCount = 13;
     optional ENodeType NodeType = 14 [default = COMPUTE];
+    optional uint32 ForceIOPoolThreads = 17;
 
     optional bool MonitorStuckActors = 15;
+    optional EActorSystemProfile ActorSystemProfile = 16;
 }
 
 message TStaticNameserviceConfig {
@@ -727,125 +713,6 @@ message TDynamicNodeConfig {
     repeated NKikimrLocal.TTabletAvailability TabletAvailability = 7;
 }
 
-message TFeatureFlags {
-    enum Tribool {
-        UNSET = 0;
-        VALUE_TRUE = 1;
-        VALUE_FALSE = 2;
-    }
-
-    optional bool EnableSeparateSolomonShardForPDisk = 1 [default = true];
-    optional bool UseForsetiSchedulerByDefaultForPDisk = 2 [default = true];
-    optional bool EnableSeparateTrimThreadForPDisk = 3 [default = true];
-    optional bool EnableSeparateSubmitThreadForPDisk = 4 [default = true];
-    optional bool EnablePerOwnerChunkLimitForPDisk = 5 [default = false];
-    optional bool TrimEntireDeviceOnStartup = 6 [default = false];
-    optional bool EnableChunkGraceForPDisk = 7 [default = true];
-    optional bool AllowConsistentOperationsForSchemeShard = 8 [default = true];
-    optional bool EnableSchemeBoard = 9 [default = true]; // deprecated: always true
-    optional bool AllowYdbRequestsWithoutDatabase = 10 [default = true];
-    optional bool EnableExternalSubdomains = 11 [default = true];
-    optional bool AllowRecursiveMkDir = 12 [default = true]; // deprecated: always true
-    optional bool AllowHugeKeyValueDeletes = 13 [default = true]; // delete when all clients limit deletes per request
-    optional bool SendSchemaVersionToDatashard = 14 [default = true]; // deprecated: always true
-    optional bool EnableSchemeBoardCache = 15 [default = true]; // deprecated: always true
-    optional bool EnableSystemViews = 16 [default = true];
-    optional bool EnableExternalHive = 17 [default = true];
-    optional bool UseSchemeBoardCacheForSchemeRequests = 18 [default = true]; // deprecated: always true
-    optional bool CompileMinikqlWithVersion = 19 [default = true]; // deprecated: always true
-    optional bool ReadTableWithSnapshot = 20 [default = true]; // deprecated: always true
-    optional bool ImportantTabletsUseSystemPool = 21 [default = true];
-    optional bool EnableOfflineSlaves = 22 [default = true]; // deprecated: always true
-    optional bool CheckDatabaseAccessPermission = 23 [default = false];
-    optional bool AllowOnlineIndexBuild = 24 [default = true]; // deprecated: always true
-    optional bool EnablePersistentQueryStats = 25 [default = true];
-    optional bool DisableDataShardBarrier = 26 [default = false];
-    optional bool EnablePutBatchingForBlobStorage = 27 [default = true];
-    optional bool EnableKqpWideFlow = 28 [default = true]; // deprecated: always true
-    optional bool EnableKqpScanQueries = 29 [default = true]; // deprecated: always true
-    optional bool EnablePersistentPartitionStats = 30 [default = false];
-    optional bool EnableTtlOnIndexedTables = 31 [default = true]; // deprecated: always true
-    optional bool AllowUpdateChannelsBindingOfSolomonPartitions = 32 [default = false];
-    optional bool DisableLegacyYql = 33 [default = true]; // deprecated: always true
-    optional bool EnableDataColumnForIndexTable = 34 [default = true];
-    optional bool AllowServerlessStorageBillingForSchemeShard = 35 [default = false];
-    optional bool EnableGracefulShutdown = 36 [default = true];
-    optional bool EnableDrainOnShutdown = 37 [default = true];
-    optional bool EnableConfigurationCache = 38 [default = false];
-    optional bool EnableDbCounters = 39 [default = false];
-    optional bool EnableClockGettimeForUserCpuAccounting = 40 [default = false];
-    optional bool EnableAsyncIndexes = 41 [default = true]; // deprecated: always true
-    optional bool AllowStreamExecuteYqlScript = 42 [default = true];
-    optional bool EnableKqpScanOverPersistentSnapshot = 43 [default = true]; // deprecated: always true
-    optional bool EnableOlapSchemaOperations = 44 [default = true];
-    optional bool EnableVPatch = 45 [default = true];
-    optional bool EnableMvccSnapshotReads = 46 [default = true];
-    optional Tribool EnableMvcc = 47 [default = VALUE_TRUE];
-    optional bool EnableSchemeTransactionsAtSchemeShard = 48 [default = true];
-    optional bool EnableArrowFormatAtDatashard = 49 [default = false];
-    optional bool Enable3x3RequestsForMirror3DCMinLatencyPut = 50 [default = false];
-    optional bool EnableBackgroundCompaction = 51 [default = true];
-    optional bool EnableArrowFormatInChannels = 52 [default = false];
-    optional bool EnableBackgroundCompactionServerless = 53 [default = false];
-    optional bool EnableNotNullColumns = 54 [default = true];
-    optional bool EnableTtlOnAsyncIndexedTables = 55 [default = true]; // deprecated: always true
-    optional bool EnableBulkUpsertToAsyncIndexedTables = 56 [default = true];
-    optional bool EnableNodeBrokerSingleDomainMode = 57 [default = true];
-    reserved 58; // optional bool EnableKqpSessionActor = 58 [default = true];
-    // Dangerous settings we don't want in the public api unless required
-    optional bool EnablePublicApiExternalBlobs = 59 [default = false];
-    optional bool EnablePublicApiKeepInMemory = 60 [default = false];
-    optional bool EnableImplicitScanQueryInScripts = 61 [default = true];
-    reserved 62; // EnablePredicateExtractForScanQueries
-    optional bool AllowVDiskDefrag = 63 [default = true];
-    optional bool EnableAsyncHttpMon = 64 [default = true];
-    optional bool EnableChangefeeds = 65 [default = true];
-    reserved 66; // EnableKqpScanQueryStreamLookup
-    optional bool EnableKqpScanQueryMultipleOlapShardsReads = 67 [default = false];
-    reserved 68; // EnablePredicateExtractForDataQueries;
-    reserved 69; // optional bool EnableKqpPatternCacheLiteral = 69 [default = false];
-    optional bool EnableMoveIndex = 70 [default = true];
-    // enable http handle for self termination
-    optional bool EnableFailureInjectionTermination = 71 [default = false];
-    optional bool EnableChunkLocking = 72 [default = false];
-    optional bool EnableNotNullDataColumns = 73 [default = true];
-    optional bool EnableGrpcAudit = 74 [default = false];
-    reserved 75; // EnableKqpDataQueryStreamLookup
-    optional bool EnableBorrowedSplitCompaction = 76 [default = true];
-    optional bool EnableChangefeedInitialScan = 77 [default = true];
-    reserved 78; // EnableKqpScanQuerySourceRead
-    optional bool EnableDynamicNodeAuthorization = 79 [default = false];
-    reserved 80; // EnableKqpImmediateEffect
-    optional bool EnableDataShardGenericReadSets = 81 [default = false];
-    // enable alter database operation to create subdomain's system tablets
-    // directly in subdomain's hive
-    optional bool EnableAlterDatabaseCreateHiveFirst = 82 [default = false];
-    reserved 83; // EnableKqpDataQuerySourceRead
-    optional bool EnableSmallDiskOptimization = 84 [default = true];
-    optional bool EnableDataShardVolatileTransactions = 85 [default = false];
-    optional bool EnableTopicServiceTx = 86 [default = false];
-    optional bool EnableLLVMCache = 87 [default = false];
-    optional bool EnableExternalDataSources = 88 [default = false];
-    optional bool EnableTopicDiskSubDomainQuota = 89 [default = false];
-    optional bool EnableSeparationComputeActorsFromRead = 90 [default = false];
-    optional bool EnablePQConfigTransactionsAtSchemeShard = 91 [default = false];
-    optional bool EnableScriptExecutionOperations = 92 [default = false];
-    optional bool EnableImplicitQueryParameterTypes = 93 [default = true];
-    optional bool EnableForceImmediateEffectsExecution = 94 [default = false];
-    optional bool EnableTopicSplitMerge = 95 [default = false];
-    optional bool EnableChangefeedDynamoDBStreamsFormat = 96 [default = true];
-    optional bool ForceColumnTablesCompositeMarks = 97 [default = false];
-    optional bool EnableSubscriptionsInDiscovery = 98 [default = false];
-    optional bool EnableGetNodeLabels = 99 [default = false];
-    optional bool EnableTopicMessageMeta = 100 [default = false];
-    optional bool EnableIcNodeCache = 101 [default = true];
-    optional bool EnableTempTables = 102 [default = false];
-    optional bool SuppressCompatibilityCheck = 103 [default = false];
-    optional bool EnableUniqConstraint = 104 [default = false];
-    optional bool EnableChangefeedDebeziumJsonFormat = 105 [default = false];
-    optional bool EnableStatistics = 106 [default = false];
-}
-
 message THttpProxyConfig {
     optional bool Enabled = 1;
     optional uint32 Port = 2;
@@ -861,6 +728,25 @@ message THttpProxyConfig {
     optional string JwtFile = 10;
 }
 
+message TS3ProxyResolverConfig {
+    message THttpResolverConfig {
+        // resolve proxy host to connect to that endpoint using this url
+        optional string ResolveUrl = 1;
+        // use resolved proxy through these ports
+        optional uint32 HttpPort = 2;
+        optional uint32 HttpsPort = 3;
+    }
+
+    message TEndpoint {
+        // S3 endpoint
+        optional string Endpoint = 1;
+        oneof Resolver {
+            THttpResolverConfig HttpResolver = 2;
+        }
+    }
+
+    repeated TEndpoint Endpoints = 1;
+}
 
 message TSqsConfig {
     optional bool EnableSqs = 5;
@@ -1129,271 +1015,9 @@ message TTableProfilesConfig {
     repeated TCachingPolicy CachingPolicies = 7;
 }
 
-message TTableServiceConfig {
-
-    message TShardsScanningPolicy {
-        optional uint32 AggregationGroupByLimit = 1 [default = 256];
-        optional uint32 AggregationNoGroupLimit = 2 [default = 1024];
-        optional uint32 ScanLimit = 3 [default = 16];
-        optional bool ParallelScanningAvailable = 4 [default = false];
-        optional uint32 ShardSplitFactor = 5 [default = 1];
-    }
-
-    message TResourceManager {
-        message TRetrySettings {
-            optional uint32 StartDelayMs = 1;
-            optional uint32 MaxDelayMs = 2;
-        }
-        message TInfoExchangerSettings {
-            optional TRetrySettings PublisherSettings = 1;
-            optional TRetrySettings SubscriberSettings = 2;
-            optional TRetrySettings ExchangerSettings = 3;
-        }
-        optional uint32 ComputeActorsCount = 1 [default = 1000];
-        optional uint64 ChannelBufferSize = 2 [default = 8388608];              //  8 MB
-        reserved 3;
-        optional uint64 MkqlLightProgramMemoryLimit = 4 [default = 31457280];   // 30 MB
-        optional uint64 MkqlHeavyProgramMemoryLimit = 5 [default = 31457280];   // 30 MB
-        optional uint64 QueryMemoryLimit = 6 [default = 32212254720];           // 30 GB
-        optional uint32 PublishStatisticsIntervalSec = 7 [default = 2];
-        optional bool EnableInstantMkqlMemoryAlloc = 8 [default = true];
-        reserved 9;  // optional uint32 InstantMkqlMemoryAllocWaitTimeMs = 9 [default = 20];
-        reserved 10; // optional uint32 InstantMkqlMemoryAllocStepTimeMs = 10 [default = 1];
-
-        optional uint64 MaxTotalChannelBuffersSize = 11 [default = 2147483648]; // 2 GB
-        optional uint64 MinChannelBufferSize = 12 [default = 2048];          // 2 KB
-
-        reserved 13;
-        reserved 14;
-        optional TShardsScanningPolicy ShardsScanningPolicy = 16;
-        optional uint64 KqpPatternCacheCapacityBytes = 17 [default = 104857600]; // 100 MiB, 0 is for disable
-        optional bool EnablePublishResourcesByExchanger = 18 [default = true];
-        optional TInfoExchangerSettings InfoExchangerSettings = 19;
-        optional uint64 KqpPatternCachePatternAccessTimesBeforeTryToCompile = 20 [default = 5];
-        optional uint64 KqpPatternCacheCompiledCapacityBytes = 21 [default = 104857600]; // 100 MiB
-    }
-
-    message TSpillingServiceConfig {
-        message TLocalFileConfig {
-            optional bool Enable = 1 [default = false];
-            optional string Root = 2 [default = "/tmp/kikimr_spilling/"];
-            optional uint64 MaxTotalSize = 3 [default = 21474836480];  // 20 GiB
-            optional uint64 MaxFileSize = 4 [default = 5368709120];    // 5 GiB
-            optional uint64 MaxFilePartSize = 5 [default = 104857600]; // 100 MB
-
-            message TIoThreadPoolConfig {
-                optional uint32 WorkersCount = 1 [default = 2];
-                optional uint32 QueueSize = 2 [default = 1000];
-            };
-            optional TIoThreadPoolConfig IoThreadPool = 6;
-        }
-
-        optional TLocalFileConfig LocalFileConfig = 1;
-    }
-
-    message TCompileComputationPatternServiceConfig {
-        optional uint64 WakeupIntervalMs = 1 [default = 1000]; // 1 sec
-    }
-
-    message TQueryPhaseLimits {
-        optional uint32 AffectedShardsLimit = 1;
-        optional uint32 ReadsetCountLimit = 2;
-        optional uint64 ComputeNodeMemoryLimitBytes = 3;
-        optional uint64 TotalReadSizeLimitBytes = 4;
-    }
-
-    message TQueryLimits {
-        optional TQueryPhaseLimits PhaseLimits = 1;
-        optional uint32 SchemeQueryTimeoutMs = 2 [default = 600000];
-        optional uint32 DataQueryTimeoutMs = 3 [default = 300000];
-        optional uint32 ScanQueryTimeoutMs = 4 [default = 600000];
-        optional uint32 ResultRowsLimit = 5;
-    }
-
-    message TShutdownSettings {
-        optional uint32 ShutdownTimeoutMs = 1 [default = 30000];
-        optional uint32 HardTimeoutMs = 2 [default = 10000];
-        optional uint32 SoftTimeoutMs = 3 [default = 2000];
-    }
-
-    message TSessionBalancerSettings {
-        optional bool Enabled = 1 [default = false];
-
-        enum EEnableTier  {
-            TIER_DISABLED = 1;
-            TIER_ENABLED_FOR_SESSIONS_WITH_SUPPORT = 2;
-            TIER_ENABLED_FOR_ALL = 3;
-        }
-
-        enum EBalancingStrategy {
-            BALANCE_BY_CPU = 1;
-            BALANCE_BY_COUNT = 2;
-            BALANCE_BY_CPU_AND_COUNT = 3;
-        }
-
-        // MaxSessionsShutdownInFlightSize option determines the number of sessions
-        // that we can keep in shutdown state at the moment.
-        optional uint32 MaxSessionsShutdownInFlightSize = 2 [default = 1];
-        //         GREEN ZONE         YELLOW ZONE               RED ZONE
-        //                     MinCV                   MaxCV
-        //    < MinCV           |                        |     > MaxCV
-        //                      |                        |
-        //        .....................................................
-        //
-        //  GREEN ZONE  -  balancer doesn't kick sessions in GREEN ZONE
-        //  RED ZONE    -  balancer kick sessions until GREEN ZONE reached.
-        //  YELLOW ZONE -  balancer kick sessions only if node was in the RED ZONE.
-        //  If node was in the GREEN ZONE balancer doesn't kick sessions.
-        optional uint32 MinCVTreshold = 3 [default = 10];
-        optional uint32 MaxCVTreshold = 4 [default = 20];
-        // timeout (in milliseconds)
-        // After HardSessionShutdownTimeoutMs session will be terminated.
-        optional uint32 HardSessionShutdownTimeoutMs = 5 [default = 30000];
-        // timeout (in milliseconds)
-        // After SoftSessionShutdownTimeoutMs milliseconds
-        // session will not accept new query requests.
-        optional uint32 SoftSessionShutdownTimeoutMs = 6 [default = 15000];
-        // Minimum number of sessions on node to start balancing. If number of sessions on node
-        // less than MinNodeSessions, balancer will not be able to kick session from node.
-        optional uint32 MinNodeSessions = 7 [default = 10];
-        // If LocalDatacenterPolicy is true, balancer will count only local datacenter
-        // proxies in the statistics.
-        optional bool LocalDatacenterPolicy = 8 [default = true];
-
-        optional double MinCpuBalancerThreshold = 9 [default = 0.5];
-
-        optional uint32 BoardPublishIntervalMs = 10 [default = 1000];
-        optional uint32 BoardLookupIntervalMs = 11 [default = 30000];
-        optional EEnableTier EnableTier = 12 [ default = TIER_ENABLED_FOR_SESSIONS_WITH_SUPPORT ];
-        optional EBalancingStrategy Strategy = 13 [ default = BALANCE_BY_COUNT ];
-        optional bool SupportRemoteSessionCreation = 14 [ default = false ];
-    }
-
-    message TQueryReplayConfig {
-        // Flag that enables QueryReplay
-        optional bool Enabled = 1 [default = false];
-
-        // Unified Agent URI to collect messages
-        optional string UnifiedAgentUri = 2 [default = "unix:///tmp/ydb-cp-replay-log.sock"];
-        // Unified Agent Client setting: MaxMessageSizeMB
-        optional uint32 GrpcMaxMessageSizeMB = 3 [default = 8];
-        // Unified Agent Client setting: InflightLimitMB
-        optional uint32 InflightLimitMB = 4 [default = 8];
-
-        // Leaky bucket settings: size of bucket and bucket bucket duration.
-        // We allow to log LeakyBucketQuotaBucketSize queries
-        // per LeakyBucketQuotaBucketDurationSeconds.
-        optional uint32 LeakyBucketQuotaBucketSize = 5 [ default = 1000];
-        optional uint32 LeakyBucketQuotaBucketDurationSeconds = 6 [default = 60];
-    }
-
-    message TAggregationConfig {
-        optional uint32 DSScanMinimalThreads = 30 [default = 4];
-        optional uint32 DSBaseSortScanThreads = 32 [default = 16];
-        optional uint32 DSBaseJoinScanThreads = 33 [default = 16];
-
-        optional uint32 AggregationComputeThreads = 37;
-
-        optional uint32 CSScanThreadsPerNode = 38;
-
-        optional uint64 CollectLongTasksStatsTimeoutMs = 22 [default = 10000]; // 10 sec
-    }
-
-    message TExecuterRetriesConfig {
-        optional uint32 MinDelayToRetryMs = 1 [default = 10];
-        optional uint32 MaxDelayToRetryMs = 2 [default = 400];
-        optional uint32 MaxRetryNumber = 3 [default = 10];
-    }
-
-    message TIteratorReadsRetrySettings {
-        optional uint32 StartDelayMs = 1;
-        optional uint32 MaxDelayMs = 8;
-
-        optional uint32 MaxShardRetries = 2;
-        optional uint32 MaxShardResolves = 3;
-        optional double UnsertaintyRatio = 4;
-        optional double Multiplier = 5;
-        optional uint32 IteratorResponseTimeoutMs = 6;
-        optional uint32 MaxTotalRetries = 7;
-    }
-
-    message TIteratorReadQuotaSettings {
-        optional uint32 MaxRows = 1;
-        optional uint32 MaxBytes = 2;
-    }
-
-    optional uint32 QueryLimitBytes = 1;
-    optional uint32 ParametersLimitBytes = 2;
-    optional uint32 SessionsLimitPerNode = 3;
-    reserved 4; // obsolete: optional uint32 SessionQueryCacheSize = 4 [default = 1000];
-    reserved 5; // UseCompileService (always true)
-    optional uint32 CompileQueryCacheSize = 6 [default = 1000];
-    optional uint32 CompileMaxActiveRequests = 7 [default = 4];
-    optional uint32 CompileRequestQueueSize = 8 [default = 1000];
-    optional bool UseSchemeCacheMetadata = 9 [default = true];
-    optional bool UseSessionBusyStatus = 10 [default = true];
-    reserved 11; // (deprecated) AllowUnsafeCommit
-    optional uint32 CompileTimeoutMs = 12 [default = 60000];
-    optional TResourceManager ResourceManager = 13;
-    optional TQueryLimits QueryLimits = 14;
-    optional uint32 SqlVersion = 15;
-    optional TSpillingServiceConfig SpillingServiceConfig = 16;
-    optional TShutdownSettings ShutdownSettings = 17;
-    optional TSessionBalancerSettings SessionBalancerSettings = 18;
-    reserved 19; // ForceNewEnginePercent
-    optional uint32 CompileQueryCacheTTLSec = 20 [default = 0];
-    optional TQueryReplayConfig QueryReplayConfig = 21;
-    reserved 22; // ForceNewEngineLevel
-    reserved 23; // optional bool EnableKqpSessionActor = 23 [default = true];
-    reserved 24; // optional bool EnableKqpPatternCacheLiteral = 24 [default = false];
-    reserved 25; // optional bool EnableKqpPatternCacheCompute = 25 [default = false];
-
-    optional bool EnableKqpScanQuerySourceRead = 26 [default = false];
-    optional bool EnableKqpDataQuerySourceRead = 27 [default = true];
-    optional uint64 SessionIdleDurationSeconds = 28 [default = 600];
-    optional TAggregationConfig AggregationConfig = 29;
-    optional bool EnableKqpScanQueryStreamLookup = 30 [default = true];
-    optional bool EnableKqpDataQueryStreamLookup = 31 [default = false];
-    optional TExecuterRetriesConfig ExecuterRetriesConfig = 32;
-    reserved 33; // optional bool EnableKqpDataQueryStreamPointLookup = 33 [default = false];
-    optional bool EnablePublishKqpProxyByRM = 34 [default = true];
-    optional bool EnableKqpScanQueryStreamIdxLookupJoin = 35 [default = false];
-    optional bool EnableKqpDataQueryStreamIdxLookupJoin = 49 [default = false];
-    optional bool EnablePredicateExtractForScanQueries = 36 [default = true];
-    optional bool EnablePredicateExtractForDataQueries = 37 [default = true];
-    optional bool EnableKqpImmediateEffects = 38 [default = true];
-    optional bool EnableSequentialReads = 39 [default = true];
-    optional bool EnablePreparedDdl = 42 [default = false];
-    optional bool EnableSequences = 43 [default = true];
-    optional bool EnableAsyncComputationPatternCompilation = 48 [default = true];
-    optional TCompileComputationPatternServiceConfig CompileComputationPatternServiceConfig = 47;
-
-    enum EBindingsMode {
-        BM_ENABLED = 0;
-        BM_DISABLED = 1;
-        BM_DROP_WITH_WARNING = 2;
-        BM_DROP = 3;
-    }
-
-    optional EBindingsMode BindingsMode = 40 [default = BM_ENABLED];
-    optional TIteratorReadsRetrySettings IteratorReadsRetrySettings = 41;
-    optional bool PredicateExtract20 = 44 [default = true];
-    optional TIteratorReadQuotaSettings IteratorReadQuotaSettings = 45;
-
-    enum EChannelTransportVersion {
-        CTV_UV_PICKLE_1_0 = 0;
-        CTV_OOB_PICKLE_1_0 = 1;
-    }
-
-    optional EChannelTransportVersion ChannelTransportVersion = 46 [default = CTV_OOB_PICKLE_1_0];
-
-    enum EIndexAutoChooseMode {
-        DISABLED = 0;
-        ONLY_FULL_KEY = 1; // Accepts iff point prefix includes all key columns
-        ONLY_POINTS = 2; // Accepts iff point prefix len > 0
-        MAX_USED_PREFIX = 3;
-    }
-    optional EIndexAutoChooseMode IndexAutoChooseMode = 50 [default = DISABLED];
+message TFinalizeScriptServiceConfig {
+    optional uint64 ScriptFinalizationTimeoutSeconds = 1 [default = 60];
+    optional uint32 MaxInFlightFinalizationsCount = 2 [default = 10];
 };
 
 message TQueryServiceConfig {
@@ -1402,6 +1026,7 @@ message TQueryServiceConfig {
     optional uint64 ScriptResultsTtlDefaultSeconds = 3 [default = 2592000];  // default = 1 month; 0 = infinity
     optional uint64 ScriptResultSizeLimit = 4 [default = 0]; // 0 = infinity
     optional uint64 ScriptResultRowsLimit = 5 [default = 0]; // 0 = infinity
+    repeated string HostnamePatterns = 13; // List of hostname regexps for external data sources; disabled if empty
 
     optional NYql.TS3GatewayConfig S3 = 6;
     optional NYql.THttpGatewayConfig HttpGateway = 7;
@@ -1409,6 +1034,8 @@ message TQueryServiceConfig {
     optional string MdbGateway = 9 [deprecated=true];
     optional bool MdbTransformHost = 10;
     optional NYql.TGenericGatewayConfig Generic = 11;
+    optional TFinalizeScriptServiceConfig FinalizeScriptServiceConfig = 12;
+    optional uint64 ProgressStatsPeriodMs = 14 [default = 0]; // 0 = disabled
 }
 
 // Config describes immediate controls and allows
@@ -1486,13 +1113,14 @@ message TImmediateControlsConfig {
             MaxValue: 134217728,
             DefaultValue: 0 }];
 
+        // Note: these settings are deprecated (always enabled)
         optional uint64 PrioritizedMvccSnapshotReads = 8 [(ControlOptions) = {
-            Description: "Enables prioritized mvcc snapshot reads over immediate writes",
+            Description: "Enables prioritized mvcc snapshot reads over immediate writes (deprecated, always enabled)",
             MinValue: 0,
             MaxValue: 1,
             DefaultValue: 1 }];
         optional uint64 UnprotectedMvccSnapshotReads = 9 [(ControlOptions) = {
-            Description: "Enables unprotected (fully readonly) mvcc snapshot reads",
+            Description: "Enables unprotected (fully readonly) mvcc snapshot reads (deprecated, always enabled)",
             MinValue: 0,
             MaxValue: 1,
             DefaultValue: 1 }];
@@ -1623,6 +1251,7 @@ message TImmediateControlsConfig {
     optional TCoordinatorControls CoordinatorControls = 3;
     optional TSchemeShardControls SchemeShardControls = 4;
     optional TTCMallocControls TCMallocControls = 5;
+    reserved 6;
 };
 
 message TMeteringConfig {
@@ -1697,6 +1326,12 @@ message THiveConfig {
         HIVE_TABLET_BALANCE_STRATEGY_WEIGHTED_RANDOM = 3;
     }
 
+    enum EHiveChannelBalanceStrategy {
+        HIVE_CHANNEL_BALANCE_STRATEGY_HEAVIEST = 0;
+        HIVE_CHANNEL_BALANCE_STRATEGY_RANDOM = 1;
+        HIVE_CHANNEL_BALANCE_STRATEGY_WEIGHTED_RANDOM = 2;
+    }
+
     enum EHiveNodeSelectStrategy {
         HIVE_NODE_SELECT_STRATEGY_WEIGHTED_RANDOM = 0;
         HIVE_NODE_SELECT_STRATEGY_EXACT_MIN = 1;
@@ -1758,9 +1393,9 @@ message THiveConfig {
     repeated NKikimrTabletBase.TTabletTypes.EType BalancerIgnoreTabletTypes = 49;
     optional double SpaceUsagePenaltyThreshold = 53 [default  = 1.1]; // number > 1
     optional double SpaceUsagePenalty = 54 [default = 0.2]; // number <= 1
-    optional uint64 WarmUpBootWaitingPeriod = 50  [default = 5000]; // milliseconds
+    optional uint64 WarmUpBootWaitingPeriod = 50  [default = 30000]; // milliseconds, time to wait for known nodes on cluster restart
     optional uint64 NodeRestartsToIgnoreInWarmup = 51 [default = 10];
-    optional double MaxWarmUpPeriod = 52 [default = 30.0]; // seconds
+    optional double MaxWarmUpPeriod = 52 [default = 600.0]; // seconds
     optional bool WarmUpEnabled = 55 [default = true];
     optional uint64 EmergencyBalancerInflight = 56 [default = 1]; // tablets
     optional uint64 MaxMovementsOnEmergencyBalancer = 57 [default = 2];
@@ -1774,28 +1409,12 @@ message THiveConfig {
     optional double MinCounterScatterToBalance = 65 [default = 0.02];
     reserved 66;
     optional double ObjectImbalanceToBalance = 67 [default = 0.02];
-}
-
-message TDataShardConfig {
-    optional string BackupTaskName = 1 [default = "backup"];
-    optional uint32 BackupTaskPriority = 2 [default = 10];
-    optional uint64 BackupReadAheadLo = 3 [default = 524288];
-    optional uint64 BackupReadAheadHi = 4 [default = 1048576];
-    optional uint64 KeepSnapshotTimeout = 5 [default = 300000]; // milliseconds
-    optional uint64 ChangesQueueItemsLimit = 6 [default = 10000];
-    optional uint64 ChangesQueueBytesLimit = 7 [default = 131072000]; // 125 MB
-    optional string RestoreTaskName = 8 [default = "restore"];
-    optional uint32 RestoreTaskPriority = 9 [default = 10];
-    optional uint64 CleanupSnapshotPeriod = 10 [default = 15000]; // milliseconds
-    optional string TtlTaskName = 11 [default = "ttl"];
-    optional uint32 TtlTaskPriority = 12 [default = 10];
-    optional uint64 TtlReadAheadLo = 13 [default = 524288];
-    optional uint64 TtlReadAheadHi = 14 [default = 1048576];
-    optional uint64 IdleMemCompactionIntervalSeconds = 15 [default = 60];
-    optional uint64 RestoreReadBufferSizeLimit = 16 [default = 268435456]; // 256 MB
-    optional string CdcInitialScanTaskName = 17 [default = "cdc_initial_scan"];
-    optional uint32 CdcInitialScanTaskPriority = 18 [default = 10];
-    optional bool DisabledOnSchemeShard = 19 [default = false];
+    optional EHiveChannelBalanceStrategy ChannelBalanceStrategy = 68 [default = HIVE_CHANNEL_BALANCE_STRATEGY_WEIGHTED_RANDOM];
+    optional uint64 MaxChannelHistorySize = 69 [default = 200];
+    optional uint64 StorageInfoRefreshFrequency = 70 [default = 600000]; // send a query to BSC every x milliseconds
+    optional double MinStorageScatterToBalance = 71 [default = 999]; // storage balancer trigger is disabled by default
+    optional double MinGroupUsageToBalance = 72 [default = 0.1];
+    optional uint64 StorageBalancerInflight = 73 [default = 1];
 }
 
 message TColumnShardConfig {
@@ -1814,6 +1433,15 @@ message TColumnShardConfig {
     }
     optional TTablesStorageLayoutPolicy TablesStorageLayoutPolicy = 1;
     optional bool DisabledOnSchemeShard = 2 [default = true];
+    optional bool SkipOldGranules = 3 [default = true];
+    optional bool IndexationEnabled = 4 [default = true];
+    optional bool CompactionEnabled = 5 [default = true];
+    optional bool TTLEnabled = 6 [default = true];
+    optional bool WritingEnabled = 7 [default = true];
+    optional uint32 WritingBufferDurationMs = 8 [default = 0];
+    optional bool UseChunkedMergeOnCompaction = 9 [default = true];
+    optional uint64 CompactionMemoryLimit = 10 [default = 536870912];
+    optional uint64 TieringsMemoryLimit = 11 [default = 536870912];
 }
 
 message TSchemeShardConfig {
@@ -1906,11 +1534,97 @@ message TCompactionConfig {
     optional TBorrowedCompactionConfig BorrowedCompactionConfig = 2;
 }
 
+message TBackgroundCleaningConfig {
+    optional double MaxRate = 1 [default = 0]; // unlimitted
+    optional uint64 InflightLimit = 2 [default = 10]; // TODO: consider more?
+
+    // After this interval we will try to restart
+    optional uint64 TimeoutSeconds = 3 [default = 15];
+
+    // Do not wakeup earlier, than this interval
+    optional uint64 MinWakeupIntervalMs = 4 [default = 10];
+
+    message TRetrySettings {
+        optional uint32 StartDelayMs = 1 [default = 1000];
+        optional uint32 MaxDelayMs = 2 [default = 256000];
+        optional uint32 MaxRetryNumber = 3 [default = 8];
+    }
+
+    // after MaxRetryNumber retries to connect to the node, we will send the table to the BackgroundCleaningQueue,
+    // that is, after 2^(MaxRetryNumber + 1) - 1 = 511 seconds
+
+    optional TRetrySettings RetrySettings = 5;
+}
+
+message TGraphConfig {
+    message TAggregationSettings {
+        optional uint64 PeriodToStartSeconds = 1;
+        optional uint64 SampleSizeSeconds = 2;
+        optional uint64 MinimumStepSeconds = 3;
+    }
+    optional string BackendType = 1;
+    optional uint64 AggregateCheckPeriodSeconds = 5;
+    repeated TAggregationSettings AggregationSettings = 10;
+}
+
 message TTracingConfig {
-    optional string Host = 1;
-    optional uint32 Port = 2;
-    optional string RootCA = 3;
-    optional string ServiceName = 4;
+    message TBackendConfig {
+        message TAuthConfig {
+            message TTvmAuth {
+                optional string Url = 1;
+
+                optional uint32 SelfTvmId = 2;
+                optional uint32 TracingTvmId = 3;
+
+                optional string DiskCacheDir = 4;
+
+                oneof Secret {
+                    string PlainTextSecret = 5;
+                    string SecretFile = 6;
+                    string SecretEnvironmentVariable = 7;
+                }
+            }
+
+            oneof Method {
+                TTvmAuth Tvm = 1;
+            }
+        }
+
+        message TOpentelemetryBackend {
+            optional string CollectorUrl = 1;
+            optional string ServiceName = 2;
+        }
+
+
+        oneof Backend {
+            TOpentelemetryBackend Opentelemetry = 1;
+        }
+        optional TAuthConfig AuthConfig = 2;
+    }
+
+    // Only global scope for now
+    message TSelectors {
+    }
+
+    message TSamplingScope {
+        optional TSelectors Scope = 1;
+        optional float Fraction = 2;
+        optional uint32 Level = 3;
+        optional uint32 MaxRatePerMinute = 4;
+        optional uint32 MaxBurst = 5;
+    }
+
+    message TExternalThrottlingScope {
+        optional TSelectors Scope = 1;
+        optional uint32 MaxRatePerMinute = 2;
+        optional uint32 MaxBurst = 3;
+    }
+
+    reserved 1 to 5;
+
+    optional TBackendConfig Backend = 6;
+    repeated TSamplingScope Sampling = 7;
+    repeated TExternalThrottlingScope ExternalThrottling = 8;
 }
 
 message TFailureInjectionConfig {
@@ -1956,6 +1670,7 @@ message TClientCertificateAuthorization {
 message TLocalPgWireConfig {
     optional int32 ListeningPort = 1 [default = 5432];
     optional string SslCertificate = 5;
+    optional string Address = 6 [default = "::"];
 }
 
 message TKafkaProxyConfig {
@@ -2037,6 +1752,7 @@ message TAppConfig {
     optional TMeteringConfig MeteringConfig = 45;
     optional THiveConfig HiveConfig = 46;
     optional TDataShardConfig DataShardConfig = 49;
+    optional TGraphConfig GraphConfig = 50;
     optional NFq.NConfig.TConfig FederatedQueryConfig = 58;
     optional TCompactionConfig CompactionConfig = 52;
     optional THttpProxyConfig HttpProxyConfig = 53;
@@ -2058,6 +1774,9 @@ message TAppConfig {
     optional TConveyorConfig CompConveyorConfig = 72;
     optional TQueryServiceConfig QueryServiceConfig = 73;
     optional TConveyorConfig InsertConveyorConfig = 74;
+    optional bool AllowEditYamlInUi = 75;
+    optional TS3ProxyResolverConfig S3ProxyResolverConfig = 76;
+    optional TBackgroundCleaningConfig BackgroundCleaningConfig = 77;
 
     repeated TNamedConfig NamedConfigs = 100;
     optional string ClusterYamlConfig = 101;

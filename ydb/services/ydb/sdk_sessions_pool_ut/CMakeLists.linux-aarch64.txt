@@ -20,7 +20,7 @@ target_link_libraries(ydb-services-ydb-sdk_sessions_pool_ut PUBLIC
   yutil
   cpp-testing-unittest_main
   ydb-services-ydb
-  cpp-grpc-client
+  library-grpc-client
   core-testlib-default
   ydb-core-testlib
   cpp-client-ydb_table

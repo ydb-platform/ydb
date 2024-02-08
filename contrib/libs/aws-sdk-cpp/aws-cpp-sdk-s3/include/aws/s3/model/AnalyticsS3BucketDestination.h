@@ -29,14 +29,14 @@ namespace Model
    * href="http://docs.aws.amazon.com/goto/WebAPI/s3-2006-03-01/AnalyticsS3BucketDestination">AWS
    * API Reference</a></p>
    */
-  class AWS_S3_API AnalyticsS3BucketDestination
+  class AnalyticsS3BucketDestination
   {
   public:
-    AnalyticsS3BucketDestination();
-    AnalyticsS3BucketDestination(const Aws::Utils::Xml::XmlNode& xmlNode);
-    AnalyticsS3BucketDestination& operator=(const Aws::Utils::Xml::XmlNode& xmlNode);
+    AWS_S3_API AnalyticsS3BucketDestination();
+    AWS_S3_API AnalyticsS3BucketDestination(const Aws::Utils::Xml::XmlNode& xmlNode);
+    AWS_S3_API AnalyticsS3BucketDestination& operator=(const Aws::Utils::Xml::XmlNode& xmlNode);
 
-    void AddToNode(Aws::Utils::Xml::XmlNode& parentNode) const;
+    AWS_S3_API void AddToNode(Aws::Utils::Xml::XmlNode& parentNode) const;
 
 
     /**
@@ -227,16 +227,16 @@ namespace Model
   private:
 
     AnalyticsS3ExportFileFormat m_format;
-    bool m_formatHasBeenSet;
+    bool m_formatHasBeenSet = false;
 
     Aws::String m_bucketAccountId;
-    bool m_bucketAccountIdHasBeenSet;
+    bool m_bucketAccountIdHasBeenSet = false;
 
     Aws::String m_bucket;
-    bool m_bucketHasBeenSet;
+    bool m_bucketHasBeenSet = false;
 
     Aws::String m_prefix;
-    bool m_prefixHasBeenSet;
+    bool m_prefixHasBeenSet = false;
   };
 
 } // namespace Model

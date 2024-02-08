@@ -4,7 +4,7 @@
 #include <ydb/library/yql/minikql/mkql_node.h>
 #include <ydb/library/yql/minikql/computation/mkql_computation_node_holders.h>
 #include <ydb/core/scheme/scheme_tabledefs.h>
-#include <ydb/core/tx/datashard/sys_tables.h>
+#include <ydb/core/tx/locks/sys_tables.h>
 #include <ydb/core/tx/datashard/datashard.h>
 
 namespace NKikimr {
@@ -22,13 +22,29 @@ public:
     };
 
     struct TReadResultStats {
-        ui64 RowsCount = 0;
-        ui64 BytesCount = 0;
+        ui64 ReadRowsCount = 0;
+        ui64 ReadBytesCount = 0;
+        ui64 ResultRowsCount = 0;
+        ui64 ResultBytesCount = 0;
+
+        void Add(const TReadResultStats& other) {
+            ReadRowsCount += other.ReadRowsCount;
+            ReadBytesCount += other.ReadBytesCount;
+            ResultRowsCount += other.ResultRowsCount;
+            ResultBytesCount += other.ResultBytesCount;
+        }
+
+        void Clear() {
+            ReadRowsCount = 0;
+            ReadBytesCount = 0;
+            ResultRowsCount = 0;
+            ResultBytesCount = 0;
+        }
     };
 
 public:
-    TKqpStreamLookupWorker(NKikimrKqp::TKqpStreamLookupSettings&& settings,
-        const NMiniKQL::TTypeEnvironment& typeEnv, const NMiniKQL::THolderFactory& holderFactory);
+    TKqpStreamLookupWorker(NKikimrKqp::TKqpStreamLookupSettings&& settings, const NMiniKQL::TTypeEnvironment& typeEnv,
+        const NMiniKQL::THolderFactory& holderFactory, const NYql::NDqProto::TTaskInput& inputDesc);
 
     virtual ~TKqpStreamLookupWorker();
 
@@ -46,6 +62,7 @@ public:
 protected:
     const NMiniKQL::TTypeEnvironment& TypeEnv;
     const NMiniKQL::THolderFactory& HolderFactory;
+    const NYql::NDqProto::TTaskInput& InputDesc;
     const TString TablePath;
     const TTableId TableId;
     std::unordered_map<TString, TSysTables::TTableColumnInfo> KeyColumns;
@@ -54,7 +71,8 @@ protected:
 };
 
 std::unique_ptr<TKqpStreamLookupWorker> CreateStreamLookupWorker(NKikimrKqp::TKqpStreamLookupSettings&& settings,
-    const NMiniKQL::TTypeEnvironment& typeEnv, const NMiniKQL::THolderFactory& holderFactory);
+    const NMiniKQL::TTypeEnvironment& typeEnv, const NMiniKQL::THolderFactory& holderFactory,
+    const NYql::NDqProto::TTaskInput& inputDesc);
 
 } // namespace NKqp
 } // namespace NKikimr

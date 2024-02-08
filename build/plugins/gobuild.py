@@ -109,7 +109,7 @@ def on_go_process_srcs(unit):
     s_files = []
     syso_files = []
 
-    classifed_files = {
+    classified_files = {
         '.c': c_files,
         '.cc': cxx_files,
         '.cpp': cxx_files,
@@ -130,7 +130,7 @@ def on_go_process_srcs(unit):
     is_cgo_export = False
     for f in srcs_files:
         _, ext = os.path.splitext(f)
-        ext_files = classifed_files.get(ext)
+        ext_files = classified_files.get(ext)
         if ext_files is not None:
             if is_cgo_export:
                 is_cgo_export = False

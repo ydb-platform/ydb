@@ -1,15 +1,15 @@
 #pragma once
 
-#include <ydb/core/base/appdata.h>
 #include <ydb/core/base/events.h>
 #include <ydb/core/scheme/scheme_pathid.h>
 #include <ydb/core/base/tx_processing.h>
+#include <ydb/core/base/subdomain.h>
 #include <ydb/core/protos/flat_scheme_op.pb.h>
 #include <ydb/core/protos/flat_tx_scheme.pb.h>
 #include <ydb/core/protos/subdomains.pb.h>
 #include <ydb/core/scheme/scheme_tabledefs.h>
 #include <ydb/core/scheme_types/scheme_type_registry.h>
-#include <ydb/core/tx/datashard/sys_tables.h>
+#include <ydb/core/tx/locks/sys_tables.h>
 #include <ydb/library/aclib/aclib.h>
 
 #include <util/datetime/base.h>
@@ -18,6 +18,9 @@
 #include <util/generic/ptr.h>
 
 namespace NKikimr {
+
+struct TAppData;
+
 namespace NSchemeCache {
 
 struct TSchemeCacheConfig : public TThrRefBase {
@@ -59,6 +62,10 @@ struct TDomainInfo : public TAtomicRefCount<TDomainInfo> {
         } else {
             ResourcesDomainKey = DomainKey;
         }
+
+        if (descr.HasServerlessComputeResourcesMode()) {
+            ServerlessComputeResourcesMode = descr.GetServerlessComputeResourcesMode();
+        }
     }
 
     inline ui64 GetVersion() const {
@@ -81,6 +88,7 @@ struct TDomainInfo : public TAtomicRefCount<TDomainInfo> {
     TPathId ResourcesDomainKey;
     NKikimrSubDomains::TProcessingParams Params;
     TCoordinators Coordinators;
+    TMaybeServerlessComputeResourcesMode ServerlessComputeResourcesMode;
 
     TString ToString() const;
 
@@ -134,6 +142,7 @@ struct TSchemeCacheNavigate {
         KindExternalDataSource = 18,
         KindBlockStoreVolume = 19,
         KindFileStore = 20,
+        KindView = 21,
     };
 
     struct TListNodeEntry : public TAtomicRefCount<TListNodeEntry> {
@@ -236,6 +245,11 @@ struct TSchemeCacheNavigate {
         NKikimrSchemeOp::TFileStoreDescription Description;
     };
 
+    struct TViewInfo : public TAtomicRefCount<TViewInfo> {
+        EKind Kind = KindUnknown;
+        NKikimrSchemeOp::TViewDescription Description;
+    };
+
     struct TEntry {
         enum class ERequestType : ui8 {
             ByPath,
@@ -285,6 +299,7 @@ struct TSchemeCacheNavigate {
         TIntrusiveConstPtr<TExternalDataSourceInfo> ExternalDataSourceInfo;
         TIntrusiveConstPtr<TBlockStoreVolumeInfo> BlockStoreVolumeInfo;
         TIntrusiveConstPtr<TFileStoreInfo> FileStoreInfo;
+        TIntrusiveConstPtr<TViewInfo> ViewInfo;
 
         TString ToString() const;
         TString ToString(const NScheme::TTypeRegistry& typeRegistry) const;

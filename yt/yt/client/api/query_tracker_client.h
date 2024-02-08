@@ -42,6 +42,7 @@ struct TStartQueryOptions
     bool Draft = false;
     NYTree::IMapNodePtr Annotations;
     std::vector<TQueryFilePtr> Files;
+    std::optional<TString> AccessControlObject;
 };
 
 struct TAbortQueryOptions
@@ -101,6 +102,7 @@ struct TQuery
     std::optional<TInstant> FinishTime;
     NYson::TYsonString Settings;
     std::optional<TString> User;
+    std::optional<TString> AccessControlObject;
     std::optional<NQueryTrackerClient::EQueryState> State;
     std::optional<i64> ResultCount;
     NYson::TYsonString Progress;
@@ -118,6 +120,7 @@ struct TQueryResult
     TError Error;
     NTableClient::TTableSchemaPtr Schema;
     NChunkClient::NProto::TDataStatistics DataStatistics;
+    bool IsTruncated;
 };
 
 void Serialize(const TQueryResult& queryResult, NYson::IYsonConsumer* consumer);
@@ -134,12 +137,15 @@ struct TAlterQueryOptions
     , public TQueryTrackerOptions
 {
     NYTree::IMapNodePtr Annotations;
+    std::optional<TString> AccessControlObject;
 };
 
 ////////////////////////////////////////////////////////////////////////////////
 
 struct IQueryTrackerClient
 {
+    virtual ~IQueryTrackerClient() = default;
+
     virtual TFuture<NQueryTrackerClient::TQueryId> StartQuery(
         NQueryTrackerClient::EQueryEngine engine,
         const TString& query,

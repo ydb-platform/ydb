@@ -12,6 +12,8 @@
 #include <ydb/core/ymq/queues/std/schema.h>
 
 #include <util/generic/utility.h>
+#include <util/generic/guid.h>
+
 
 using NKikimr::NClient::TValue;
 

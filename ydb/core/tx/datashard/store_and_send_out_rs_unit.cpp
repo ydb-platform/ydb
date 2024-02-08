@@ -56,7 +56,7 @@ EExecutionStatus TStoreAndSendOutRSUnit::Execute(TOperation::TPtr op,
     if (!tx->IsLocksStored() && !tx->LocksAccessLog().Locks.empty()) {
         // N.B. we copy access log to locks cache, so that future lock access is repeatable
         tx->LocksCache().Locks = tx->LocksAccessLog().Locks;
-        tx->DbStoreLocksAccessLog(&DataShard, txc, ctx);
+        tx->DbStoreLocksAccessLog(DataShard.TabletID(), txc, ctx);
         // Freeze persistent locks that we have cached
         for (auto& pr : tx->LocksCache().Locks) {
             ui64 lockId = pr.first;
@@ -69,7 +69,7 @@ EExecutionStatus TStoreAndSendOutRSUnit::Execute(TOperation::TPtr op,
         newArtifact = true;
     }
     if (newArtifact)
-        tx->DbStoreArtifactFlags(&DataShard, txc, ctx);
+        tx->DbStoreArtifactFlags(DataShard.TabletID(), txc, ctx);
 
     bool hadWrites = false;
     if (tx->IsOutRSStored() || tx->IsLocksStored()) {

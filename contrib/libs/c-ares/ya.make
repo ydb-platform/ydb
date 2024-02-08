@@ -7,7 +7,6 @@ LICENSE(
     ISC AND
     LicenseRef-scancode-mit-no-advert-export-control AND
     MIT AND
-    NTP AND
     Public-Domain
 )
 
@@ -114,7 +113,3 @@ SRCS(
 )
 
 END()
-
-RECURSE(
-    test
-)

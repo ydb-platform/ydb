@@ -22,46 +22,16 @@
 #include <util/generic/size_literals.h>
 #include <util/system/types.h>
 
+namespace NActors {
+    class TActorSystem;
+};
+
 namespace NYql::NDq {
 
 enum class ERunStatus : ui32 {
     Finished,
     PendingInput,
     PendingOutput
-};
-
-class TRunStatusTimeMetrics {
-public:
-    void UpdateStatusTime(TDuration computeCpuTime = TDuration::Zero()) {
-        auto now = TInstant::Now();
-        StatusTime[ui32(CurrentStatus)] += now - StatusStartTime - computeCpuTime;
-        StatusStartTime = now;
-    }
-
-    void SetCurrentStatus(ERunStatus status, TDuration computeCpuTime) {
-        Y_ABORT_UNLESS(ui32(status) < StatusesCount);
-        UpdateStatusTime(computeCpuTime);
-        CurrentStatus = status;
-    }
-
-    TDuration operator[](ERunStatus status) const {
-        const ui32 index = ui32(status);
-        Y_ABORT_UNLESS(index < StatusesCount);
-        return StatusTime[index];
-    }
-
-    void Load(ERunStatus status, TDuration d) {
-        const ui32 index = ui32(status);
-        Y_ABORT_UNLESS(index < StatusesCount);
-        StatusTime[index] = d;
-    }
-
-    static constexpr ui32 StatusesCount = 3;
-
-private:
-    TInstant StatusStartTime = TInstant::Now();
-    ERunStatus CurrentStatus = ERunStatus::PendingInput;
-    TDuration StatusTime[StatusesCount];
 };
 
 struct TMkqlStat {
@@ -76,12 +46,10 @@ struct TTaskRunnerStatsBase {
     TInstant StartTs;
 
     TDuration ComputeCpuTime;
-    TRunStatusTimeMetrics RunStatusTimeMetrics; // ComputeCpuTime + RunStatusTimeMetrics == 100% time
-
-    // profile stats
-    TDuration WaitTime; // wall time of waiting for input, scans & output
+    TDuration WaitInputTime;
     TDuration WaitOutputTime;
 
+    // profile stats
     NMonitoring::IHistogramCollectorPtr ComputeCpuTimeByRun; // in millis
 
     THashMap<ui32, THashMap<ui64, IDqInputChannel::TPtr>> InputChannels;   // SrcStageId => {ChannelId => Channel}
@@ -153,7 +121,6 @@ struct TDqTaskRunnerContext {
     NKikimr::NMiniKQL::TComputationNodeFactory ComputationFactory;
     NUdf::IApplyContext* ApplyCtx = nullptr;
     NKikimr::NMiniKQL::TCallableVisitFuncProvider FuncProvider;
-    NKikimr::NMiniKQL::TScopedAlloc* Alloc = nullptr;
     NKikimr::NMiniKQL::TTypeEnvironment* TypeEnv = nullptr;
     std::shared_ptr<NKikimr::NMiniKQL::TComputationPatternLRUCache> PatternCache;
 };
@@ -168,7 +135,8 @@ public:
         const NKikimr::NMiniKQL::THolderFactory& holderFactory,
         TVector<IDqOutput::TPtr>&& outputs) const = 0;
 
-    virtual IDqChannelStorage::TPtr CreateChannelStorage(ui64 channelId) const = 0;
+    virtual IDqChannelStorage::TPtr CreateChannelStorage(ui64 channelId, bool withSpilling) const = 0;
+    virtual IDqChannelStorage::TPtr CreateChannelStorage(ui64 channelId, bool withSpilling, NActors::TActorSystem* actorSystem, bool isConcurrent) const = 0;
 };
 
 class TDqTaskRunnerExecutionContextBase : public IDqTaskRunnerExecutionContext {
@@ -182,9 +150,14 @@ public:
 
 class TDqTaskRunnerExecutionContextDefault : public TDqTaskRunnerExecutionContextBase {
 public:
-    IDqChannelStorage::TPtr CreateChannelStorage(ui64 /*channelId*/) const override {
+    IDqChannelStorage::TPtr CreateChannelStorage(ui64 /*channelId*/, bool /*withSpilling*/) const override {
         return {};
     };
+
+    IDqChannelStorage::TPtr CreateChannelStorage(ui64 /*channelId*/, bool /*withSpilling*/, NActors::TActorSystem* /*actorSystem*/, bool /*isConcurrent*/) const override {
+        return {};
+    };
+
 };
 
 struct TDqTaskRunnerSettings {
@@ -348,6 +321,10 @@ public:
         return Task_->HasUseLlvm();
     }
 
+    bool IsLLVMDisabled() const {
+        return HasUseLlvm() && !GetUseLlvm();
+    }
+
     const TVector<google::protobuf::Message*>& GetSourceSettings() const {
         return SourceSettings;
     }
@@ -402,13 +379,12 @@ public:
     virtual bool IsAllocatorAttached() = 0;
     virtual const NKikimr::NMiniKQL::TTypeEnvironment& GetTypeEnv() const = 0;
     virtual const NKikimr::NMiniKQL::THolderFactory& GetHolderFactory() const = 0;
-    virtual std::shared_ptr<NKikimr::NMiniKQL::TScopedAlloc> GetAllocatorPtr() const = 0;
+    virtual NKikimr::NMiniKQL::TScopedAlloc& GetAllocator() const = 0;
 
     virtual const THashMap<TString, TString>& GetSecureParams() const = 0;
     virtual const THashMap<TString, TString>& GetTaskParams() const = 0;
     virtual const TVector<TString>& GetReadRanges() const = 0;
 
-    virtual void UpdateStats() = 0;
     virtual const TDqTaskRunnerStats* GetStats() const = 0;
     virtual const TDqMeteringStats* GetMeteringStats() const = 0;
 
@@ -420,8 +396,12 @@ public:
     virtual const NKikimr::NMiniKQL::TWatermark& GetWatermark() const = 0;
 };
 
-TIntrusivePtr<IDqTaskRunner> MakeDqTaskRunner(const TDqTaskRunnerContext& ctx, const TDqTaskRunnerSettings& settings,
-    const TLogFunc& logFunc);
+TIntrusivePtr<IDqTaskRunner> MakeDqTaskRunner(
+    NKikimr::NMiniKQL::TScopedAlloc& alloc, 
+    const TDqTaskRunnerContext& ctx, 
+    const TDqTaskRunnerSettings& settings,
+    const TLogFunc& logFunc
+);
 
 } // namespace NYql::NDq
 
@@ -432,7 +412,7 @@ inline void Out<NYql::NDq::TTaskRunnerStatsBase>(IOutputStream& os, TTypeTraits<
        << "\tStartTs: " << stats.StartTs << Endl
        << "\tFinishTs: " << stats.FinishTs << Endl
        << "\tComputeCpuTime: " << stats.ComputeCpuTime << Endl
-       << "\tWaitTime: " << stats.WaitTime << Endl
+       << "\tWaitInputTime: " << stats.WaitInputTime << Endl
        << "\tWaitOutputTime: " << stats.WaitOutputTime << Endl
        << "\tsize of InputChannels: " << stats.InputChannels.size() << Endl
        << "\tsize of Sources: " << stats.Sources.size() << Endl

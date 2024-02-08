@@ -15,7 +15,7 @@
 
 #include <ydb/library/yql/dq/runtime/dq_tasks_runner.h>
 
-#include <library/cpp/actors/core/hfunc.h>
+#include <ydb/library/actors/core/hfunc.h>
 
 #include <util/generic/queue.h>
 
@@ -38,15 +38,17 @@ class TLocalTaskRunnerActor
 public:
     static constexpr char ActorName[] = "YQL_DQ_TASK_RUNNER";
 
-    TLocalTaskRunnerActor(ITaskRunnerActor::ICallbacks* parent, const TTaskRunnerFactory& factory, const TTxId& txId, ui64 taskId, THashSet<ui32>&& inputChannelsWithDisabledCheckpoints, THolder<NYql::NDq::TDqMemoryQuota>&& memoryQuota)
+    TLocalTaskRunnerActor(ITaskRunnerActor::ICallbacks* parent, const TTaskRunnerFactory& factory, std::shared_ptr<NKikimr::NMiniKQL::TScopedAlloc> alloc, const TTxId& txId, ui64 taskId, THashSet<ui32>&& inputChannelsWithDisabledCheckpoints, THolder<NYql::NDq::TDqMemoryQuota>&& memoryQuota)
         : TActor<TLocalTaskRunnerActor>(&TLocalTaskRunnerActor::Handler)
+        , Alloc(alloc)
         , Parent(parent)
         , Factory(factory)
         , TxId(txId)
         , TaskId(taskId)
         , InputChannelsWithDisabledCheckpoints(std::move(inputChannelsWithDisabledCheckpoints))
         , MemoryQuota(std::move(memoryQuota))
-    { }
+    { 
+    }
 
     ~TLocalTaskRunnerActor()
     { }
@@ -83,7 +85,6 @@ public:
 
 private:
     void OnStatisticsRequest(TEvStatistics::TPtr& ev) {
-        TaskRunner->UpdateStats();
 
         THashMap<ui32, const IDqAsyncOutputBuffer*> sinks;
         for (const auto sinkId : ev->Get()->SinkIds) {
@@ -122,6 +123,7 @@ private:
         if (MemoryQuota) {
             MemoryQuota->TryReleaseQuota();
         }
+        TaskRunner.Reset();
         TActor<TLocalTaskRunnerActor>::PassAway();
     }
 
@@ -220,7 +222,6 @@ private:
         {
             auto st = MakeHolder<TEvStatistics>(std::move(ev->Get()->SinkIds), std::move(ev->Get()->InputTransformIds));
 
-            TaskRunner->UpdateStats();
             THashMap<ui32, const IDqAsyncOutputBuffer*> sinks;
             for (const auto sinkId : st->SinkIds) {
                 sinks[sinkId] = TaskRunner->GetSink(sinkId).Get();
@@ -408,7 +409,7 @@ private:
     void OnDqTask(TEvTaskRunnerCreate::TPtr& ev) {
         ParentId = ev->Sender;
         auto settings = NDq::TDqTaskSettings(&ev->Get()->Task);
-        TaskRunner = Factory(settings, ev->Get()->StatsMode, [this](const TString& message) {
+        TaskRunner = Factory(*Alloc.get(), settings, ev->Get()->StatsMode, [this](const TString& message) {
             LOG_D(message);
         });
 
@@ -464,6 +465,7 @@ private:
     THolder<TEvDq::TEvAbortExecution> GetError(const TString& message) {
         return MakeHolder<TEvDq::TEvAbortExecution>(NYql::NDqProto::StatusIds::BAD_REQUEST, TVector<TIssue>{TIssue(message).SetCode(TIssuesIds::DQ_GATEWAY_ERROR, TSeverityIds::S_ERROR)});
     }
+    std::shared_ptr<NKikimr::NMiniKQL::TScopedAlloc> Alloc;
 
     NActors::TActorId ParentId;
     ITaskRunnerActor::ICallbacks* Parent;
@@ -484,12 +486,13 @@ struct TLocalTaskRunnerActorFactory: public ITaskRunnerActorFactory {
 
     std::tuple<ITaskRunnerActor*, NActors::IActor*> Create(
         ITaskRunnerActor::ICallbacks* parent,
+        std::shared_ptr<NKikimr::NMiniKQL::TScopedAlloc> alloc,
         const TTxId& txId,
         ui64 taskId,
         THashSet<ui32>&& inputChannelsWithDisabledCheckpoints,
         THolder<NYql::NDq::TDqMemoryQuota>&& memoryQuota) override
     {
-        auto* actor = new TLocalTaskRunnerActor(parent, Factory, txId, taskId, std::move(inputChannelsWithDisabledCheckpoints), std::move(memoryQuota));
+        auto* actor = new TLocalTaskRunnerActor(parent, Factory, alloc, txId, taskId, std::move(inputChannelsWithDisabledCheckpoints), std::move(memoryQuota));
         return std::make_tuple(
             static_cast<ITaskRunnerActor*>(actor),
             static_cast<NActors::IActor*>(actor)

@@ -14,15 +14,6 @@
 #include <stdio.h>
 #include <stdlib.h>
 
-#include <__config>
-
-#ifdef _LIBCPP_COMPILER_MSVC
-// We don't want to depend on MSVC headers but
-// we have conflicting definitions otherwise due to
-// some other dependency on eh.h.
-#include Y_MSVC_INCLUDE_NEXT(eh.h)
-
-#else
 extern "C" {
 typedef void (__cdecl* terminate_handler)();
 _LIBCPP_CRT_FUNC terminate_handler __cdecl set_terminate(
@@ -36,7 +27,6 @@ unexpected_handler __cdecl _get_unexpected();
 
 int __cdecl __uncaught_exceptions();
 }
-#endif
 
 namespace std {
 

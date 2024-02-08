@@ -1,7 +1,7 @@
 #pragma once
 
 #include "ydb/core/client/server/grpc_base.h"
-#include <library/cpp/grpc/server/grpc_server.h>
+#include <ydb/library/grpc/server/grpc_server.h>
 #include <library/cpp/string_utils/quote/quote.h>
 #include <util/generic/queue.h>
 
@@ -43,7 +43,7 @@ class ISession : public ISessionHandler<TResponse>
     using ISessionRef = TIntrusivePtr<ISession<TRequest, TResponse>>;
 
 protected:
-    class TRequestCreated : public NGrpc::IQueueEvent {
+    class TRequestCreated : public NYdbGrpc::IQueueEvent {
     public:
         TRequestCreated(ISessionRef session)
             : Session(session)
@@ -71,7 +71,7 @@ protected:
         ISessionRef Session;
     };
 
-    class TReadDone : public NGrpc::IQueueEvent {
+    class TReadDone : public NYdbGrpc::IQueueEvent {
     public:
         TReadDone(ISessionRef session)
             : Session(session)
@@ -98,7 +98,7 @@ protected:
         ISessionRef Session;
     };
 
-    class TWriteDone : public NGrpc::IQueueEvent {
+    class TWriteDone : public NYdbGrpc::IQueueEvent {
     public:
         TWriteDone(ISessionRef session, ui64 size)
             : Session(session)
@@ -138,7 +138,7 @@ protected:
         ui64 Size;
     };
 
-    class TFinishDone : public NGrpc::IQueueEvent {
+    class TFinishDone : public NYdbGrpc::IQueueEvent {
     public:
         TFinishDone(ISessionRef session)
             : Session(session)
@@ -156,7 +156,7 @@ protected:
         ISessionRef Session;
     };
 
-    class TClientDone : public NGrpc::IQueueEvent {
+    class TClientDone : public NYdbGrpc::IQueueEvent {
     public:
         TClientDone(ISessionRef session)
             : Session(session)

@@ -33,7 +33,8 @@ SSOCredentialsProvider::SSOCredentialsProvider() : m_profileToUse(GetConfigProfi
     AWS_LOGSTREAM_INFO(SSO_CREDENTIALS_PROVIDER_LOG_TAG, "Setting sso credentials provider to read config from " <<  m_profileToUse);
 }
 
-SSOCredentialsProvider::SSOCredentialsProvider(const Aws::String& profile) : m_profileToUse(profile)
+SSOCredentialsProvider::SSOCredentialsProvider(const Aws::String& profile) : m_profileToUse(profile),
+                                                                             m_bearerTokenProvider(profile)
 {
     AWS_LOGSTREAM_INFO(SSO_CREDENTIALS_PROVIDER_LOG_TAG, "Setting sso credentials provider to read config from " <<  m_profileToUse);
 }
@@ -48,15 +49,24 @@ AWSCredentials SSOCredentialsProvider::GetAWSCredentials()
 void SSOCredentialsProvider::Reload()
 {
     auto profile = Aws::Config::GetCachedConfigProfile(m_profileToUse);
-
-    Aws::String hashedStartUrl = Aws::Utils::HashingUtils::HexEncode(Aws::Utils::HashingUtils::CalculateSHA1(profile.GetSsoStartUrl()));
-    auto profileDirectory = ProfileConfigFileAWSCredentialsProvider::GetProfileDirectory();
-    Aws::StringStream ssToken;
-    ssToken << profileDirectory;
-    ssToken << PATH_DELIM << "sso"  << PATH_DELIM << "cache" << PATH_DELIM << hashedStartUrl << ".json";
-    auto ssoTokenPath = ssToken.str();
-    AWS_LOGSTREAM_DEBUG(SSO_CREDENTIALS_PROVIDER_LOG_TAG, "Loading token from: " << ssoTokenPath)
-    Aws::String accessToken = LoadAccessTokenFile(ssoTokenPath);
+    const auto accessToken = [&]() -> Aws::String {
+        // If we have an SSO Session set, use the refreshed token.
+        if (profile.IsSsoSessionSet()) {
+            m_ssoRegion = profile.GetSsoSession().GetSsoRegion();
+            auto token = m_bearerTokenProvider.GetAWSBearerToken();
+            m_expiresAt = token.GetExpiration();
+            return token.GetToken();
+        }
+        Aws::String hashedStartUrl = Aws::Utils::HashingUtils::HexEncode(Aws::Utils::HashingUtils::CalculateSHA1(profile.GetSsoStartUrl()));
+        auto profileDirectory = ProfileConfigFileAWSCredentialsProvider::GetProfileDirectory();
+        Aws::StringStream ssToken;
+        ssToken << profileDirectory;
+        ssToken << PATH_DELIM << "sso"  << PATH_DELIM << "cache" << PATH_DELIM << hashedStartUrl << ".json";
+        auto ssoTokenPath = ssToken.str();
+        AWS_LOGSTREAM_DEBUG(SSO_CREDENTIALS_PROVIDER_LOG_TAG, "Loading token from: " << ssoTokenPath)
+        m_ssoRegion = profile.GetSsoRegion();
+        return LoadAccessTokenFile(ssoTokenPath);
+    }();
     if (accessToken.empty()) {
         AWS_LOGSTREAM_TRACE(SSO_CREDENTIALS_PROVIDER_LOG_TAG, "Access token for SSO not available");
         return;
@@ -72,7 +82,7 @@ void SSOCredentialsProvider::Reload()
 
     Aws::Client::ClientConfiguration config;
     config.scheme = Aws::Http::Scheme::HTTPS;
-    config.region = profile.GetSsoRegion();
+    config.region = m_ssoRegion;
     AWS_LOGSTREAM_DEBUG(SSO_CREDENTIALS_PROVIDER_LOG_TAG, "Passing config to client for region: " << m_ssoRegion);
 
     Aws::Vector<Aws::String> retryableErrors;

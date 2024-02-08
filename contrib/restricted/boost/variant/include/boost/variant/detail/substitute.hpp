@@ -1,8 +1,3 @@
-
-#if !defined(BOOST_PP_IS_ITERATING)
-
-///// header body
-
 //-----------------------------------------------------------------------------
 // boost variant/detail/substitute.hpp header file
 // See http://www.boost.org for updates, documentation, and revision history.
@@ -21,7 +16,7 @@
 #include <boost/mpl/aux_/config/ctps.hpp>
 
 #include <boost/variant/detail/substitute_fwd.hpp>
-#include <boost/variant/variant_fwd.hpp> // for BOOST_VARIANT_DO_NOT_USE_VARIADIC_TEMPLATES
+#include <boost/variant/variant_fwd.hpp>
 #include <boost/mpl/aux_/lambda_arity_param.hpp>
 #include <boost/mpl/aux_/preprocessor/params.hpp>
 #include <boost/mpl/aux_/preprocessor/repeat.hpp>
@@ -34,8 +29,6 @@
 
 namespace boost {
 namespace detail { namespace variant {
-
-#if !defined(BOOST_VARIANT_DETAIL_NO_SUBSTITUTE)
 
 ///////////////////////////////////////////////////////////////////////////////
 // (detail) metafunction substitute
@@ -126,7 +119,6 @@ struct substitute<
 // template expression (i.e., F<...>) specializations
 //
 
-#if !defined(BOOST_VARIANT_DO_NOT_USE_VARIADIC_TEMPLATES)
 template <
       template <typename...> class F
     , typename... Ts
@@ -170,110 +162,8 @@ public:
           A, Dest, Source
         >::type...);
 };
-#else
-
-#define BOOST_VARIANT_AUX_SUBSTITUTE_TYPEDEF_IMPL(N) \
-    typedef typename substitute< \
-          BOOST_PP_CAT(U,N), Dest, Source \
-        >::type BOOST_PP_CAT(u,N); \
-    /**/
-
-#define BOOST_VARIANT_AUX_SUBSTITUTE_TYPEDEF(z, N, _) \
-    BOOST_VARIANT_AUX_SUBSTITUTE_TYPEDEF_IMPL( BOOST_PP_INC(N) ) \
-    /**/
-
-#define BOOST_PP_ITERATION_LIMITS (0,BOOST_MPL_LIMIT_METAFUNCTION_ARITY)
-#define BOOST_PP_FILENAME_1 <boost/variant/detail/substitute.hpp>
-#include BOOST_PP_ITERATE()
-
-#undef BOOST_VARIANT_AUX_SUBSTITUTE_TYPEDEF_IMPL
-#undef BOOST_VARIANT_AUX_SUBSTITUTE_TYPEDEF
-
-#endif // !defined(BOOST_VARIANT_DO_NOT_USE_VARIADIC_TEMPLATES)
-#endif // !defined(BOOST_VARIANT_DETAIL_NO_SUBSTITUTE)
 
 }} // namespace detail::variant
 } // namespace boost
 
 #endif // BOOST_VARIANT_DETAIL_SUBSTITUTE_HPP
-
-///// iteration, depth == 1
-
-#elif BOOST_PP_ITERATION_DEPTH() == 1
-#define i BOOST_PP_FRAME_ITERATION(1)
-
-#if i > 0
-
-//
-// template specializations
-//
-template <
-      template < BOOST_MPL_PP_PARAMS(i,typename P) > class T
-    , BOOST_MPL_PP_PARAMS(i,typename U)
-    , typename Dest
-    , typename Source
-    >
-struct substitute<
-      T< BOOST_MPL_PP_PARAMS(i,U) >
-    , Dest
-    , Source
-      BOOST_MPL_AUX_LAMBDA_ARITY_PARAM(mpl::int_<( i )>)
-    >
-{
-private:
-    BOOST_MPL_PP_REPEAT(i, BOOST_VARIANT_AUX_SUBSTITUTE_TYPEDEF, _)
-
-public:
-    typedef T< BOOST_MPL_PP_PARAMS(i,u) > type;
-};
-
-//
-// function specializations
-//
-template <
-      typename R
-    , BOOST_MPL_PP_PARAMS(i,typename U)
-    , typename Dest
-    , typename Source
-    >
-struct substitute<
-      R (*)( BOOST_MPL_PP_PARAMS(i,U) )
-    , Dest
-    , Source
-      BOOST_MPL_AUX_LAMBDA_ARITY_PARAM(mpl::int_<-1>)
-    >
-{
-private:
-    typedef typename substitute< R, Dest, Source >::type r;
-    BOOST_MPL_PP_REPEAT(i, BOOST_VARIANT_AUX_SUBSTITUTE_TYPEDEF, _)
-
-public:
-    typedef r (*type)( BOOST_MPL_PP_PARAMS(i,u) );
-};
-
-#elif i == 0
-
-//
-// zero-arg function specialization
-//
-template <
-      typename R, typename Dest, typename Source
-    >
-struct substitute<
-      R (*)( void )
-    , Dest
-    , Source
-      BOOST_MPL_AUX_LAMBDA_ARITY_PARAM(mpl::int_<-1>)
-    >
-{
-private:
-    typedef typename substitute< R, Dest, Source >::type r;
-
-public:
-    typedef r (*type)( void );
-};
-
-#endif // i
-
-#undef i
-#endif // BOOST_PP_IS_ITERATING

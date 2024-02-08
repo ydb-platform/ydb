@@ -1,9 +1,15 @@
 import "ydb/core/protos/pqconfig.proto";
 import "ydb/public/api/protos/draft/persqueue_error_codes.proto";
-import "library/cpp/actors/protos/actors.proto";
+import "ydb/library/actors/protos/actors.proto";
 
 package NKikimrClient;
 option java_package = "ru.yandex.kikimr.proto";
+
+
+message TReadSessionKey {
+    optional string SessionId = 1;
+    optional uint64 PartitionSessionId = 2;
+}
 
 
 message TPersQueuePartitionRequest {
@@ -26,6 +32,20 @@ message TPersQueuePartitionRequest {
         optional string ExplicitHash = 13;
 
         optional bool ExternalOperation = 14 [default = false];
+        optional uint64 DirectReadId = 15;
+        optional uint64 PartitionSessionId = 16;
+        optional int64 LastOffset = 17;
+
+    }
+
+    message TCmdPublishDirectRead {
+        optional TReadSessionKey SessionKey = 1;
+        optional uint64 DirectReadId = 2;
+    }
+
+    message TCmdForgetDirectRead {
+        optional TReadSessionKey SessionKey = 1;
+        optional uint64 DirectReadId = 2;
     }
 
     message TCmdCreateSession {
@@ -33,6 +53,7 @@ message TPersQueuePartitionRequest {
         optional string SessionId = 2;
         optional uint64 Generation = 3;
         optional uint64 Step = 4;
+        optional uint64 PartitionSessionId = 5;
     }
 
     message TCmdDeleteSession {
@@ -89,6 +110,7 @@ message TPersQueuePartitionRequest {
     message TCmdGetOwnership { // get write ownership for partition
         optional string Owner = 1 [default = "default"];
         optional bool Force = 2 [ default = true];
+        optional bool RegisterIfNotExists = 3 [default = true];
     }
 
     message TCmdReserveBytes {
@@ -129,6 +151,8 @@ message TPersQueuePartitionRequest {
     optional TCmdDeleteSession CmdDeleteSession = 6;
     optional TCmdCreateSession CmdCreateSession = 7;
     optional TCmdRead CmdRead = 8;
+    optional TCmdPublishDirectRead CmdPublishRead = 24;
+    optional TCmdForgetDirectRead CmdForgetRead = 25;
     optional TCmdSetClientOffset CmdSetClientOffset = 9;
     optional TCmdGetClientOffset CmdGetClientOffset = 10;
     optional TCmdGetOwnership CmdGetOwnership = 11;
@@ -145,6 +169,7 @@ message TPersQueuePartitionRequest {
 
     optional bool IsDirectWrite = 18 [default = false];
     optional uint64 PutUnitsSize = 19;
+    optional int64 InitialSeqNo = 26;
 }
 
 message TPersQueueMetaRequest {
@@ -387,6 +412,9 @@ message TCmdReadResult {
     optional uint64 RealReadOffset = 10;
     optional uint64 WaitQuotaTimeMs = 11;
     optional uint64 ReadFromTimestampMs = 12;
+    optional uint64 SizeEstimate = 13;
+    optional int64 LastOffset = 14;
+    optional uint64 EndOffset = 15;
 }
 
 
@@ -442,13 +470,34 @@ message TPersQueuePartitionResponse {
 
     message TCmdGetOwnershipResult {
         optional string OwnerCookie = 1;
+        optional NKikimrPQ.ETopicPartitionStatus Status = 2;
+        optional int64 SeqNo = 3;
     }
+
+    message TCmdPrepareDirectReadResult {
+        optional uint32 BytesSizeEstimate = 1;
+        optional uint64 ReadOffset = 2;
+        optional uint64 LastOffset = 3;
+
+        optional uint64 EndOffset = 4;
+        optional uint64 SizeLag = 6;
+        optional uint64 WriteTimestampMS = 7;
+
+        optional uint64 DirectReadId = 5;
+    }
+
+    message TCmdPublishDirectReadResult {
+    }
+
 
     repeated TCmdWriteResult CmdWriteResult = 1;
     optional TCmdGetMaxSeqNoResult CmdGetMaxSeqNoResult = 2;
     optional TCmdReadResult CmdReadResult = 3;
     optional TCmdGetClientOffsetResult CmdGetClientOffsetResult = 4;
     optional TCmdGetOwnershipResult CmdGetOwnershipResult = 5;
+    optional TCmdPrepareDirectReadResult CmdPrepareReadResult = 7;
+    optional TCmdPublishDirectReadResult CmdPublishReadResult = 8;
+    optional TCmdPublishDirectReadResult CmdForgetReadResult = 9;
 
     optional uint64 Cookie = 6;
 }

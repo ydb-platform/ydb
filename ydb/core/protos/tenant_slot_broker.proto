@@ -1,4 +1,4 @@
-import "library/cpp/actors/protos/actors.proto";
+import "ydb/library/actors/protos/actors.proto";
 
 package NKikimrTenantSlotBroker;
 option java_package = "ru.yandex.kikimr.proto";

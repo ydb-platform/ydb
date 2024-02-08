@@ -87,6 +87,12 @@ TDsProxyNodeMon::TDsProxyNodeMon(TIntrusivePtr<::NMonitoring::TDynamicCounters> 
         ConnectedMinus2 = group->GetCounter("ConnectedMinus2", false);
         ConnectedMinus3more = group->GetCounter("ConnectedMinus3more", false);
     }
+    // wipe monitoring counters
+    {
+        auto group = Group->GetSubgroup("subsystem", "wipemon");
+        PutStatusQueries = group->GetCounter("StatusQueries", true);
+        IncarnationChanges = group->GetCounter("IncarnationChanges", true);
+    }
 }
 
 ui32 IdxForType(NPDisk::EDeviceType type) {

@@ -61,7 +61,6 @@ target_sources(clicommands PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/public/lib/ydb_cli/commands/topic_write_scenario.cpp
   ${CMAKE_SOURCE_DIR}/ydb/public/lib/ydb_cli/commands/topic_readwrite_scenario.cpp
   ${CMAKE_SOURCE_DIR}/ydb/public/lib/ydb_cli/commands/tpch.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/public/lib/ydb_cli/commands/tpcc_workload.cpp
   ${CMAKE_SOURCE_DIR}/ydb/public/lib/ydb_cli/commands/query_workload.cpp
   ${CMAKE_SOURCE_DIR}/ydb/public/lib/ydb_cli/commands/ydb_sdk_core_access.cpp
   ${CMAKE_SOURCE_DIR}/ydb/public/lib/ydb_cli/commands/ydb_command.cpp
@@ -117,16 +116,102 @@ target_link_libraries(clicommands.global PUBLIC
   library-cpp-resource
 )
 target_sources(clicommands.global PRIVATE
-  ${CMAKE_BINARY_DIR}/ydb/public/lib/ydb_cli/commands/5be7e95ef4262fc1083e6058ef5d266e.cpp
+  ${CMAKE_BINARY_DIR}/ydb/public/lib/ydb_cli/commands/6b4a693856d7dfaada0935e4f9b61c1b.cpp
 )
 resources(clicommands.global
-  ${CMAKE_BINARY_DIR}/ydb/public/lib/ydb_cli/commands/5be7e95ef4262fc1083e6058ef5d266e.cpp
+  ${CMAKE_BINARY_DIR}/ydb/public/lib/ydb_cli/commands/6b4a693856d7dfaada0935e4f9b61c1b.cpp
   INPUTS
   ${CMAKE_SOURCE_DIR}/ydb/public/lib/ydb_cli/commands/click_bench_queries.sql
   ${CMAKE_SOURCE_DIR}/ydb/public/lib/ydb_cli/commands/click_bench_schema.sql
   ${CMAKE_SOURCE_DIR}/ydb/public/lib/ydb_cli/commands/tpch_schema.sql
+  ${CMAKE_SOURCE_DIR}/ydb/public/lib/ydb_cli/commands/click_bench_canonical/q0.result
+  ${CMAKE_SOURCE_DIR}/ydb/public/lib/ydb_cli/commands/click_bench_canonical/q1.result
+  ${CMAKE_SOURCE_DIR}/ydb/public/lib/ydb_cli/commands/click_bench_canonical/q2.result
+  ${CMAKE_SOURCE_DIR}/ydb/public/lib/ydb_cli/commands/click_bench_canonical/q3.result
+  ${CMAKE_SOURCE_DIR}/ydb/public/lib/ydb_cli/commands/click_bench_canonical/q4.result
+  ${CMAKE_SOURCE_DIR}/ydb/public/lib/ydb_cli/commands/click_bench_canonical/q5.result
+  ${CMAKE_SOURCE_DIR}/ydb/public/lib/ydb_cli/commands/click_bench_canonical/q6.result
+  ${CMAKE_SOURCE_DIR}/ydb/public/lib/ydb_cli/commands/click_bench_canonical/q7.result
+  ${CMAKE_SOURCE_DIR}/ydb/public/lib/ydb_cli/commands/click_bench_canonical/q8.result
+  ${CMAKE_SOURCE_DIR}/ydb/public/lib/ydb_cli/commands/click_bench_canonical/q9.result
+  ${CMAKE_SOURCE_DIR}/ydb/public/lib/ydb_cli/commands/click_bench_canonical/q10.result
+  ${CMAKE_SOURCE_DIR}/ydb/public/lib/ydb_cli/commands/click_bench_canonical/q11.result
+  ${CMAKE_SOURCE_DIR}/ydb/public/lib/ydb_cli/commands/click_bench_canonical/q12.result
+  ${CMAKE_SOURCE_DIR}/ydb/public/lib/ydb_cli/commands/click_bench_canonical/q13.result
+  ${CMAKE_SOURCE_DIR}/ydb/public/lib/ydb_cli/commands/click_bench_canonical/q14.result
+  ${CMAKE_SOURCE_DIR}/ydb/public/lib/ydb_cli/commands/click_bench_canonical/q15.result
+  ${CMAKE_SOURCE_DIR}/ydb/public/lib/ydb_cli/commands/click_bench_canonical/q16.result
+  ${CMAKE_SOURCE_DIR}/ydb/public/lib/ydb_cli/commands/click_bench_canonical/q17.result
+  ${CMAKE_SOURCE_DIR}/ydb/public/lib/ydb_cli/commands/click_bench_canonical/q18.result
+  ${CMAKE_SOURCE_DIR}/ydb/public/lib/ydb_cli/commands/click_bench_canonical/q19.result
+  ${CMAKE_SOURCE_DIR}/ydb/public/lib/ydb_cli/commands/click_bench_canonical/q20.result
+  ${CMAKE_SOURCE_DIR}/ydb/public/lib/ydb_cli/commands/click_bench_canonical/q21.result
+  ${CMAKE_SOURCE_DIR}/ydb/public/lib/ydb_cli/commands/click_bench_canonical/q22.result
+  ${CMAKE_SOURCE_DIR}/ydb/public/lib/ydb_cli/commands/click_bench_canonical/q23.result
+  ${CMAKE_SOURCE_DIR}/ydb/public/lib/ydb_cli/commands/click_bench_canonical/q24.result
+  ${CMAKE_SOURCE_DIR}/ydb/public/lib/ydb_cli/commands/click_bench_canonical/q25.result
+  ${CMAKE_SOURCE_DIR}/ydb/public/lib/ydb_cli/commands/click_bench_canonical/q26.result
+  ${CMAKE_SOURCE_DIR}/ydb/public/lib/ydb_cli/commands/click_bench_canonical/q27.result
+  ${CMAKE_SOURCE_DIR}/ydb/public/lib/ydb_cli/commands/click_bench_canonical/q28.result
+  ${CMAKE_SOURCE_DIR}/ydb/public/lib/ydb_cli/commands/click_bench_canonical/q29.result
+  ${CMAKE_SOURCE_DIR}/ydb/public/lib/ydb_cli/commands/click_bench_canonical/q30.result
+  ${CMAKE_SOURCE_DIR}/ydb/public/lib/ydb_cli/commands/click_bench_canonical/q31.result
+  ${CMAKE_SOURCE_DIR}/ydb/public/lib/ydb_cli/commands/click_bench_canonical/q32.result
+  ${CMAKE_SOURCE_DIR}/ydb/public/lib/ydb_cli/commands/click_bench_canonical/q33.result
+  ${CMAKE_SOURCE_DIR}/ydb/public/lib/ydb_cli/commands/click_bench_canonical/q34.result
+  ${CMAKE_SOURCE_DIR}/ydb/public/lib/ydb_cli/commands/click_bench_canonical/q35.result
+  ${CMAKE_SOURCE_DIR}/ydb/public/lib/ydb_cli/commands/click_bench_canonical/q36.result
+  ${CMAKE_SOURCE_DIR}/ydb/public/lib/ydb_cli/commands/click_bench_canonical/q37.result
+  ${CMAKE_SOURCE_DIR}/ydb/public/lib/ydb_cli/commands/click_bench_canonical/q38.result
+  ${CMAKE_SOURCE_DIR}/ydb/public/lib/ydb_cli/commands/click_bench_canonical/q39.result
+  ${CMAKE_SOURCE_DIR}/ydb/public/lib/ydb_cli/commands/click_bench_canonical/q40.result
+  ${CMAKE_SOURCE_DIR}/ydb/public/lib/ydb_cli/commands/click_bench_canonical/q41.result
+  ${CMAKE_SOURCE_DIR}/ydb/public/lib/ydb_cli/commands/click_bench_canonical/q42.result
   KEYS
   click_bench_queries.sql
   click_bench_schema.sql
   tpch_schema.sql
+  q0.result
+  q1.result
+  q2.result
+  q3.result
+  q4.result
+  q5.result
+  q6.result
+  q7.result
+  q8.result
+  q9.result
+  q10.result
+  q11.result
+  q12.result
+  q13.result
+  q14.result
+  q15.result
+  q16.result
+  q17.result
+  q18.result
+  q19.result
+  q20.result
+  q21.result
+  q22.result
+  q23.result
+  q24.result
+  q25.result
+  q26.result
+  q27.result
+  q28.result
+  q29.result
+  q30.result
+  q31.result
+  q32.result
+  q33.result
+  q34.result
+  q35.result
+  q36.result
+  q37.result
+  q38.result
+  q39.result
+  q40.result
+  q41.result
+  q42.result
 )

@@ -14,17 +14,17 @@ namespace NDataShard {
 TDataShard::TTxProposeTransactionBase::TTxProposeTransactionBase(TDataShard *self,
                                                                         TEvDataShard::TEvProposeTransaction::TPtr &&ev,
                                                                         TInstant receivedAt, ui64 tieBreakerIndex,
-                                                                        bool delayed)
-    : TBase(self)
+                                                                        bool delayed,
+                                                                        NWilson::TSpan &&datashardTransactionSpan)
+    : TBase(self, datashardTransactionSpan.GetTraceId())
     , Ev(std::move(ev))
     , ReceivedAt(receivedAt)
     , TieBreakerIndex(tieBreakerIndex)
     , Kind(static_cast<EOperationKind>(Ev->Get()->GetTxKind()))
     , TxId(Ev->Get()->GetTxId())
     , Acked(!delayed)
-    , ProposeTransactionSpan(TWilsonKqp::ProposeTransaction, std::move(Ev->TraceId), "ProposeTransaction", NWilson::EFlags::AUTO_END)
-{
-}
+    , DatashardTransactionSpan(std::move(datashardTransactionSpan))
+{ }
 
 bool TDataShard::TTxProposeTransactionBase::Execute(NTabletFlatExecutor::TTransactionContext &txc,
                                                            const TActorContext &ctx)
@@ -39,7 +39,6 @@ bool TDataShard::TTxProposeTransactionBase::Execute(NTabletFlatExecutor::TTransa
     }
 
     try {
-        TOutputOpData::TResultPtr result = nullptr;
         // If tablet is in follower mode then we should sync scheme
         // before we build and check operation.
         if (Self->IsFollower()) {
@@ -50,54 +49,38 @@ bool TDataShard::TTxProposeTransactionBase::Execute(NTabletFlatExecutor::TTransa
                 return false;
 
             if (status != NKikimrTxDataShard::TError::OK) {
-                auto kind = static_cast<NKikimrTxDataShard::ETransactionKind>(Kind);
-                result.Reset(new TEvDataShard::TEvProposeTransactionResult(kind, Self->TabletID(), TxId,
-                                                                       NKikimrTxDataShard::TEvProposeTransactionResult::ERROR));
-                result->AddError(status, errMessage);
-            }
-        }
-
-        if (result) {
-            LOG_TRACE_S(ctx, NKikimrServices::TX_DATASHARD,
-                        "Propose transaction complete txid " << TxId << " at tablet "
-                        << Self->TabletID() << " status: " << result->GetStatus());
-            TString errors = result->GetError();
-            if (errors.Size()) {
                 LOG_LOG_S_THROTTLE(Self->GetLogThrottler(TDataShard::ELogThrottlerType::TxProposeTransactionBase_Execute), ctx, NActors::NLog::PRI_ERROR, NKikimrServices::TX_DATASHARD, 
-                            "Errors while proposing transaction txid " << TxId
-                            << " at tablet " << Self->TabletID() << " status: "
-                            << result->GetStatus() << " errors: " << errors);
+                    "Errors while proposing transaction txid " << TxId << " at tablet " << Self->TabletID() << " status: " << status << " error: " << errMessage);
+
+                auto kind = static_cast<NKikimrTxDataShard::ETransactionKind>(Kind);
+                auto result = MakeHolder<TEvDataShard::TEvProposeTransactionResult>(kind, Self->TabletID(), TxId, NKikimrTxDataShard::TEvProposeTransactionResult::ERROR);
+                result->AddError(status, errMessage);
+
+                TActorId target = Op ? Op->GetTarget() : Ev->Sender;
+                ui64 cookie = Op ? Op->GetCookie() : Ev->Cookie;
+
+                DatashardTransactionSpan.EndOk();
+                ctx.Send(target, result.Release(), 0, cookie);
+
+                return true;
             }
-
-            TActorId target = Op ? Op->GetTarget() : Ev->Get()->GetSource();
-            ui64 cookie = Op ? Op->GetCookie() : Ev->Cookie;
-
-            if (ProposeTransactionSpan) {
-                ProposeTransactionSpan.EndOk();
-            }
-            ctx.Send(target, result.Release(), 0, cookie);
-
-            return true;
         }
 
         if (Ev) {
             Y_ABORT_UNLESS(!Op);
 
-            if (Self->CheckDataTxRejectAndReply(Ev->Get(), ctx)) {
+            if (Self->CheckDataTxRejectAndReply(Ev, ctx)) {
                 Ev = nullptr;
                 return true;
             }
-
-            TOperation::TPtr op = Self->Pipeline.BuildOperation(Ev, ReceivedAt, TieBreakerIndex, txc, ctx);
+            
+            TOperation::TPtr op = Self->Pipeline.BuildOperation(Ev, ReceivedAt, TieBreakerIndex, txc, ctx, std::move(DatashardTransactionSpan));
 
             // Unsuccessful operation parse.
             if (op->IsAborted()) {
                 LWTRACK(ProposeTransactionParsed, op->Orbit, false);
                 Y_ABORT_UNLESS(op->Result());
-
-                if (ProposeTransactionSpan) {
-                    ProposeTransactionSpan.EndError("Unsuccessful operation parse");
-                }
+                op->OperationSpan.EndError("Unsuccessful operation parse");
                 ctx.Send(op->GetTarget(), op->Result().Release());
                 return true;
             }
@@ -176,10 +159,6 @@ bool TDataShard::TTxProposeTransactionBase::Execute(NTabletFlatExecutor::TTransa
 void TDataShard::TTxProposeTransactionBase::Complete(const TActorContext &ctx) {
     LOG_DEBUG_S(ctx, NKikimrServices::TX_DATASHARD,
                 "TTxProposeTransactionBase::Complete at " << Self->TabletID());
-
-    if (ProposeTransactionSpan) {
-        ProposeTransactionSpan.End();
-    }
 
     if (Op) {
         Y_ABORT_UNLESS(!Op->GetExecutionPlan().empty());

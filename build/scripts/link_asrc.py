@@ -44,12 +44,12 @@ def main():
     if args.input and len(args.input) > 0:
         for x in args.input:
             if x in DELIMS:
-                assert(len(parts) == 0 or len(parts[-1]) > 1)
+                assert len(parts) == 0 or len(parts[-1]) > 1
                 parts.append([x])
             else:
-                assert(len(parts) > 0)
+                assert len(parts) > 0
                 parts[-1].append(x)
-        assert(len(parts[-1]) > 1)
+        assert len(parts[-1]) > 1
 
     if args.jsrcs and len(args.jsrcs):
         src_dir = os.path.join(args.work, DESTS[DELIM_JAVA])

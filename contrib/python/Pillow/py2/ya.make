@@ -1,0 +1,237 @@
+PY2_LIBRARY()
+
+LICENSE(PIL)
+
+LICENSE_TEXTS(.yandex_meta/licenses.list.txt)
+
+VERSION(6.2.2)
+
+ORIGINAL_SOURCE(mirror://pypi/P/Pillow/Pillow-6.2.2.tar.gz)
+
+PEERDIR(
+    contrib/libs/freetype
+    contrib/libs/lcms2
+    contrib/libs/libjpeg-turbo
+    contrib/libs/libtiff
+    contrib/libs/libwebp
+    contrib/libs/libwebp/demux
+    contrib/libs/libwebp/mux
+    contrib/libs/openjpeg
+    contrib/libs/python
+    contrib/libs/zlib
+    contrib/python/cffi
+    contrib/python/olefile
+)
+
+ADDINCL(
+    contrib/libs/freetype/include
+    contrib/libs/lcms2/include
+    contrib/libs/libjpeg-turbo
+    contrib/libs/libwebp
+    contrib/libs/openjpeg/include
+    contrib/python/Pillow/py2/libImaging
+)
+
+NO_COMPILER_WARNINGS()
+
+NO_LINT()
+
+CFLAGS(
+    -DHAVE_LIBJPEG
+    -DHAVE_LIBTIFF
+    -DHAVE_LIBZ
+    -DHAVE_OPENJPEG
+    -DHAVE_WEBPMUX
+    -DPILLOW_VERSION=\"6.2.2\"
+)
+
+SRCS(
+    _imaging.c
+    _imagingcms.c
+    _imagingft.c
+    _imagingmath.c
+    _imagingmorph.c
+    _webp.c
+    decode.c
+    display.c
+    encode.c
+    libImaging/Access.c
+    libImaging/AlphaComposite.c
+    libImaging/Bands.c
+    libImaging/BcnDecode.c
+    libImaging/BitDecode.c
+    libImaging/Blend.c
+    libImaging/BoxBlur.c
+    libImaging/Chops.c
+    libImaging/ColorLUT.c
+    libImaging/Convert.c
+    libImaging/ConvertYCbCr.c
+    libImaging/Copy.c
+    libImaging/Crop.c
+    libImaging/Dib.c
+    libImaging/Draw.c
+    libImaging/Effects.c
+    libImaging/EpsEncode.c
+    libImaging/File.c
+    libImaging/Fill.c
+    libImaging/Filter.c
+    libImaging/FliDecode.c
+    libImaging/Geometry.c
+    libImaging/GetBBox.c
+    libImaging/GifDecode.c
+    libImaging/GifEncode.c
+    libImaging/HexDecode.c
+    libImaging/Histo.c
+    libImaging/Jpeg2KDecode.c
+    libImaging/Jpeg2KEncode.c
+    libImaging/JpegDecode.c
+    libImaging/JpegEncode.c
+    libImaging/Matrix.c
+    libImaging/ModeFilter.c
+    libImaging/Negative.c
+    libImaging/Offset.c
+    libImaging/Pack.c
+    libImaging/PackDecode.c
+    libImaging/Palette.c
+    libImaging/Paste.c
+    libImaging/PcdDecode.c
+    libImaging/PcxDecode.c
+    libImaging/PcxEncode.c
+    libImaging/Point.c
+    libImaging/Quant.c
+    libImaging/QuantHash.c
+    libImaging/QuantHeap.c
+    libImaging/QuantOctree.c
+    libImaging/QuantPngQuant.c
+    libImaging/RankFilter.c
+    libImaging/RawDecode.c
+    libImaging/RawEncode.c
+    libImaging/Resample.c
+    libImaging/SgiRleDecode.c
+    libImaging/Storage.c
+    libImaging/SunRleDecode.c
+    libImaging/TgaRleDecode.c
+    libImaging/TgaRleEncode.c
+    libImaging/TiffDecode.c
+    libImaging/Unpack.c
+    libImaging/UnpackYCC.c
+    libImaging/UnsharpMask.c
+    libImaging/XbmDecode.c
+    libImaging/XbmEncode.c
+    libImaging/ZipDecode.c
+    libImaging/ZipEncode.c
+    libImaging/codec_fd.c
+    map.c
+    outline.c
+    path.c
+)
+
+PY_REGISTER(
+    PIL._imaging
+    PIL._imagingcms
+    PIL._imagingft
+    PIL._imagingmath
+    PIL._imagingmorph
+    PIL._webp
+)
+
+PY_SRCS(
+    TOP_LEVEL
+    PIL/__init__.py
+    PIL/__main__.py
+    PIL/_binary.py
+    PIL/_util.py
+    PIL/_version.py
+    PIL/BdfFontFile.py
+    PIL/BlpImagePlugin.py
+    PIL/BmpImagePlugin.py
+    PIL/BufrStubImagePlugin.py
+    PIL/ContainerIO.py
+    PIL/CurImagePlugin.py
+    PIL/DcxImagePlugin.py
+    PIL/DdsImagePlugin.py
+    PIL/EpsImagePlugin.py
+    PIL/ExifTags.py
+    PIL/features.py
+    PIL/FitsStubImagePlugin.py
+    PIL/FliImagePlugin.py
+    PIL/FontFile.py
+    PIL/FpxImagePlugin.py
+    PIL/FtexImagePlugin.py
+    PIL/GbrImagePlugin.py
+    PIL/GdImageFile.py
+    PIL/GifImagePlugin.py
+    PIL/GimpGradientFile.py
+    PIL/GimpPaletteFile.py
+    PIL/GribStubImagePlugin.py
+    PIL/Hdf5StubImagePlugin.py
+    PIL/IcnsImagePlugin.py
+    PIL/IcoImagePlugin.py
+    PIL/Image.py
+    PIL/ImageChops.py
+    PIL/ImageCms.py
+    PIL/ImageColor.py
+    PIL/ImageDraw.py
+    PIL/ImageDraw2.py
+    PIL/ImageEnhance.py
+    PIL/ImageFile.py
+    PIL/ImageFilter.py
+    PIL/ImageFont.py
+    PIL/ImageMath.py
+    PIL/ImageMode.py
+    PIL/ImageMorph.py
+    PIL/ImageOps.py
+    PIL/ImagePalette.py
+    PIL/ImagePath.py
+    PIL/ImageSequence.py
+    PIL/ImageShow.py
+    PIL/ImageStat.py
+    PIL/ImageTransform.py
+    PIL/ImageWin.py
+    PIL/ImImagePlugin.py
+    PIL/ImtImagePlugin.py
+    PIL/IptcImagePlugin.py
+    PIL/Jpeg2KImagePlugin.py
+    PIL/JpegImagePlugin.py
+    PIL/JpegPresets.py
+    PIL/McIdasImagePlugin.py
+    PIL/MicImagePlugin.py
+    PIL/MpegImagePlugin.py
+    PIL/MpoImagePlugin.py
+    PIL/MspImagePlugin.py
+    PIL/PaletteFile.py
+    PIL/PalmImagePlugin.py
+    PIL/PcdImagePlugin.py
+    PIL/PcfFontFile.py
+    PIL/PcxImagePlugin.py
+    PIL/PdfImagePlugin.py
+    PIL/PdfParser.py
+    PIL/PixarImagePlugin.py
+    PIL/PngImagePlugin.py
+    PIL/PpmImagePlugin.py
+    PIL/PsdImagePlugin.py
+    PIL/PSDraw.py
+    PIL/PyAccess.py
+    PIL/SgiImagePlugin.py
+    PIL/SpiderImagePlugin.py
+    PIL/SunImagePlugin.py
+    PIL/TarIO.py
+    PIL/TgaImagePlugin.py
+    PIL/TiffImagePlugin.py
+    PIL/TiffTags.py
+    PIL/WalImageFile.py
+    PIL/WebPImagePlugin.py
+    PIL/WmfImagePlugin.py
+    PIL/XbmImagePlugin.py
+    PIL/XpmImagePlugin.py
+    PIL/XVThumbImagePlugin.py
+)
+
+IF (OS_DARWIN OR OS_WINDOWS)
+    PY_SRCS(
+        TOP_LEVEL
+        PIL/ImageGrab.py
+    )
+ENDIF()
+
+END()

@@ -6,12 +6,14 @@
 #include <ydb/core/base/appdata.h>
 #include <ydb/core/base/compile_time_flags.h>
 #include <ydb/core/base/tx_processing.h>
+#include <ydb/core/base/channel_profiles.h>
 #include <ydb/core/engine/minikql/flat_local_tx_factory.h>
 #include <ydb/core/engine/mkql_proto.h>
 #include <ydb/core/scheme/scheme_types_proto.h>
 #include <ydb/core/tablet/tablet_counters_aggregator.h>
 #include <ydb/core/tablet/tablet_counters_protobuf.h>
 #include <ydb/core/util/pb.h>
+#include <ydb/core/protos/config.pb.h>
 
 #include <ydb/library/yql/minikql/mkql_type_ops.h>
 
@@ -49,6 +51,7 @@ TTableInfo::TAlterDataPtr TTableInfo::CreateAlterData(
     NKikimrSchemeOp::TTableDescription& op,
     const NScheme::TTypeRegistry& typeRegistry,
     const TSchemeLimits& limits, const TSubDomainInfo& subDomain,
+    bool pgTypesEnabled,
     TString& errStr, const THashSet<TString>& localSequences)
 {
     TAlterDataPtr alterData = new TTableInfo::TAlterTableInfo();
@@ -160,6 +163,10 @@ TTableInfo::TAlterDataPtr TTableInfo::CreateAlterData(
                 auto* typeDesc = NPg::TypeDescFromPgTypeName(typeName);
                 if (!typeDesc) {
                     errStr = Sprintf("Type '%s' specified for column '%s' is not supported by storage", col.GetType().data(), colName.data());
+                    return nullptr;
+                }
+                if (!pgTypesEnabled) {
+                    errStr = Sprintf("Type '%s' specified for column '%s', but support for pg types is disabled (EnableTablePgTypes feature flag is off)", col.GetType().data(), colName.data());
                     return nullptr;
                 }
                 typeInfo = NScheme::TTypeInfo(NScheme::NTypeIds::Pg, typeDesc);
@@ -1470,6 +1477,35 @@ void TAggregatedStats::UpdateShardStats(TShardIdx datashardIdx, const TPartition
     }
 }
 
+void TAggregatedStats::UpdateTableStats(const TPathId& pathId, const TPartitionStats& newStats) {
+    if (!TableStats.contains(pathId)) {
+        TableStats[pathId] = newStats;
+        return;
+    }
+
+    TPartitionStats& oldStats = TableStats[pathId];
+
+    if (newStats.SeqNo <= oldStats.SeqNo) {
+        // Ignore outdated message
+        return;
+    }
+
+    if (newStats.SeqNo.Generation > oldStats.SeqNo.Generation) {
+        // Reset incremental counter baselines if tablet has restarted
+        oldStats.ImmediateTxCompleted = 0;
+        oldStats.PlannedTxCompleted = 0;
+        oldStats.TxRejectedByOverload = 0;
+        oldStats.TxRejectedBySpace = 0;
+        oldStats.RowUpdates = 0;
+        oldStats.RowDeletes = 0;
+        oldStats.RowReads = 0;
+        oldStats.RangeReads = 0;
+        oldStats.RangeReadRows = 0;
+    }
+    TableStats[pathId].RowCount += (newStats.RowCount - oldStats.RowCount);
+    TableStats[pathId].DataSize += (newStats.DataSize - oldStats.DataSize);
+}
+
 void TTableInfo::RegisterSplitMergeOp(TOperationId opId, const TTxState& txState) {
     Y_ABORT_UNLESS(txState.TxType == TTxState::TxSplitTablePartition || txState.TxType == TTxState::TxMergeTablePartition);
     Y_ABORT_UNLESS(txState.SplitDescription);
@@ -2269,7 +2305,7 @@ TColumnTableInfo::TColumnTableInfo(
 
     if (Description.HasSchema()) {
         TOlapSchema schema;
-        schema.Parse(Description.GetSchema());
+        schema.ParseFromLocalDB(Description.GetSchema());
     }
 
     ColumnShards.reserve(Sharding.GetColumnShards().size());

@@ -1,10 +1,10 @@
 #include "mkql_todict.h"
 
 #include <ydb/library/yql/minikql/computation/mkql_computation_list_adapter.h>
-#include <ydb/library/yql/minikql/computation/mkql_computation_node_codegen.h>
+#include <ydb/library/yql/minikql/computation/mkql_computation_node_codegen.h>  // Y_IGNORE
 #include <ydb/library/yql/minikql/computation/mkql_computation_node_holders.h>
 #include <ydb/library/yql/minikql/computation/mkql_computation_node_pack.h>
-#include <ydb/library/yql/minikql/computation/mkql_llvm_base.h>
+#include <ydb/library/yql/minikql/computation/mkql_llvm_base.h>  // Y_IGNORE
 #include <ydb/library/yql/minikql/computation/presort.h>
 #include <ydb/library/yql/minikql/mkql_node_cast.h>
 #include <ydb/library/yql/minikql/mkql_string_util.h>
@@ -818,7 +818,7 @@ public:
             if (const auto size = list.GetListLength())
                 itemsCountHint = size;
             else
-                return ctx.HolderFactory.GetEmptyContainer();
+                return ctx.HolderFactory.GetEmptyContainerLazy();
         }
 
         TSetAccumulator accumulator(KeyType, KeyTypes, IsTuple, Encoded, Compare.Get(), Equate.Get(), Hash.Get(),
@@ -949,7 +949,6 @@ public:
         MKQL_ENSURE(codegenItemArg, "Item must be codegenerator node.");
 
         const auto valueType = Type::getInt128Ty(context);
-        const auto structPtrType = PointerType::getUnqual(StructType::get(context));
 
         TLLVMFieldsStructureStateWithAccum<TLLVMFieldsStructure<TComputationValue<TState>>> fieldsStruct(context);
         const auto stateType = StructType::get(context, fieldsStruct.GetFieldsArray());
@@ -1096,7 +1095,7 @@ public:
         , Items(std::move(items))
         , Key(key)
         , ItemsCountHint(itemsCountHint)
-        , PasstroughKey(GetPasstroughtMap({Key}, Items).front())
+        , PasstroughKey(GetPasstroughtMap(TComputationNodePtrVector{Key}, Items).front())
         , WideFieldsIndex(mutables.IncrementWideFieldsIndex(Items.size()))
     {
         GetDictionaryKeyTypes(KeyType, KeyTypes, IsTuple, Encoded, UseIHash);
@@ -1139,7 +1138,6 @@ public:
         auto& context = ctx.Codegen.GetContext();
 
         const auto valueType = Type::getInt128Ty(context);
-        const auto structPtrType = PointerType::getUnqual(StructType::get(context));
 
         TLLVMFieldsStructureStateWithAccum<TLLVMFieldsStructure<TComputationValue<TState>>> fieldsStruct(context);
         const auto stateType = StructType::get(context, fieldsStruct.GetFieldsArray());
@@ -1349,7 +1347,7 @@ public:
             if (const auto size = list.GetListLength())
                 itemsCountHint = size;
             else
-                return ctx.HolderFactory.GetEmptyContainer();
+                return ctx.HolderFactory.GetEmptyContainerLazy();
         }
 
         TMapAccumulator accumulator(KeyType, PayloadType, KeyTypes, IsTuple, Encoded,
@@ -1460,7 +1458,6 @@ public:
         MKQL_ENSURE(codegenItemArg, "Item must be codegenerator node.");
 
         const auto valueType = Type::getInt128Ty(context);
-        const auto structPtrType = PointerType::getUnqual(StructType::get(context));
         TLLVMFieldsStructureStateWithAccum<TLLVMFieldsStructure<TComputationValue<TState>>> fieldsStruct(context);
         const auto stateType = StructType::get(context, fieldsStruct.GetFieldsArray());
 
@@ -1614,8 +1611,8 @@ public:
         , Key(key)
         , Payload(payload)
         , ItemsCountHint(itemsCountHint)
-        , PasstroughKey(GetPasstroughtMap({Key, Payload}, Items).front())
-        , PasstroughPayload(GetPasstroughtMap({Key, Payload}, Items).back())
+        , PasstroughKey(GetPasstroughtMap(TComputationNodePtrVector{Key}, Items).front())
+        , PasstroughPayload(GetPasstroughtMap(TComputationNodePtrVector{Payload}, Items).front())
         , WideFieldsIndex(mutables.IncrementWideFieldsIndex(Items.size()))
     {
         GetDictionaryKeyTypes(KeyType, KeyTypes, IsTuple, Encoded, UseIHash);
@@ -1658,7 +1655,6 @@ public:
         auto& context = ctx.Codegen.GetContext();
 
         const auto valueType = Type::getInt128Ty(context);
-        const auto structPtrType = PointerType::getUnqual(StructType::get(context));
 
         TLLVMFieldsStructureStateWithAccum<TLLVMFieldsStructure<TComputationValue<TState>>> fieldsStruct(context);
         const auto stateType = StructType::get(context, fieldsStruct.GetFieldsArray());

@@ -6,17 +6,19 @@
 namespace NYql {
 namespace NDq {
 
-TDqTaskRunnerExecutionContext::TDqTaskRunnerExecutionContext(TTxId txId, bool withSpilling, IDqChannelStorage::TWakeUpCallback&& wakeUp, const NActors::TActorContext& ctx)
+TDqTaskRunnerExecutionContext::TDqTaskRunnerExecutionContext(TTxId txId, IDqChannelStorage::TWakeUpCallback&& wakeUp)
     : TxId_(txId)
     , WakeUp_(std::move(wakeUp))
-    , Ctx_(ctx)
-    , WithSpilling_(withSpilling)
 {
 }
 
-IDqChannelStorage::TPtr TDqTaskRunnerExecutionContext::CreateChannelStorage(ui64 channelId) const {
-    if (WithSpilling_) {
-        return CreateDqChannelStorage(TxId_, channelId, WakeUp_, Ctx_);
+IDqChannelStorage::TPtr TDqTaskRunnerExecutionContext::CreateChannelStorage(ui64 channelId, bool withSpilling) const {
+    return CreateChannelStorage(channelId, withSpilling, nullptr, false);
+}
+
+IDqChannelStorage::TPtr TDqTaskRunnerExecutionContext::CreateChannelStorage(ui64 channelId, bool withSpilling, NActors::TActorSystem* actorSystem, bool isConcurrent) const {
+    if (withSpilling) {
+        return CreateDqChannelStorage(TxId_, channelId, WakeUp_, actorSystem, isConcurrent);
     } else {
         return nullptr;
     }

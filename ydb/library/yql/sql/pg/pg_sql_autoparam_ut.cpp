@@ -13,12 +13,13 @@ Y_UNIT_TEST_SUITE(PgSqlParsingAutoparam) {
         UNIT_ASSERT_C(res.Issues.Empty(), "Failed to parse statement, issues: " + res.Issues.ToString());
         UNIT_ASSERT_C(res.PgAutoParamValues.Empty(), "Expected no auto parametrization");
     }
-    
-    Y_UNIT_TEST(AutoParamValues_DifferentTypes) {
+
+    Y_UNIT_TEST(AutoParamValues_NoParametersWithDefaults) {
         TTranslationSettings settings;
         settings.AutoParametrizeEnabled = true;
+        settings.AutoParametrizeValuesStmt = true;
         auto res = SqlToYqlWithMode(
-            R"(insert into plato.Output values (1,2,3), (1,2.0,3))",
+            R"(CREATE TABLE t (a int PRIMARY KEY, b int DEFAULT 0))",
             NSQLTranslation::ESqlMode::QUERY,
             10,
             {},
@@ -31,10 +32,10 @@ Y_UNIT_TEST_SUITE(PgSqlParsingAutoparam) {
     }
 
     using TUsedParamsGetter = std::function<void(TSet<TString>&, const NYql::TAstNode& node)>;
-    
+
     void GetUsedParamsInValues(TSet<TString>& usedParams, const NYql::TAstNode& node) {
-        const bool isPgSetItem = 
-            node.IsListOfSize(2) && node.GetChild(0)->IsAtom() 
+        const bool isPgSetItem =
+            node.IsListOfSize(2) && node.GetChild(0)->IsAtom()
             && node.GetChild(0)->GetContent() == "PgSetItem";
         if (!isPgSetItem) {
             return;
@@ -43,7 +44,7 @@ Y_UNIT_TEST_SUITE(PgSqlParsingAutoparam) {
 
         for (const auto* pgOption : pgSetItemOptions->GetChildren()) {
             const bool isQuotedList =
-                pgOption->IsListOfSize(2) && pgOption->GetChild(0)->IsAtom() 
+                pgOption->IsListOfSize(2) && pgOption->GetChild(0)->IsAtom()
                 && pgOption->GetChild(0)->GetContent() == "quote";
             if (!isQuotedList) {
                 continue;
@@ -52,7 +53,7 @@ Y_UNIT_TEST_SUITE(PgSqlParsingAutoparam) {
             const auto* option = pgOption->GetChild(1);
             const auto* optionName = option->GetChild(0);
 
-            const bool isValuesNode = 
+            const bool isValuesNode =
                 optionName->IsListOfSize(2) && optionName->GetChild(0)->IsAtom()
                 && optionName->GetChild(0)->GetContent() == "quote"
                 && optionName->GetChild(1)->GetContent() == "values";
@@ -66,10 +67,10 @@ Y_UNIT_TEST_SUITE(PgSqlParsingAutoparam) {
         }
     }
 
-    void TestAutoParam(const TString& query, const THashMap<TString, TString>& expectedParamNameToJsonYdbVal, const TMap<TString, TString>& expectedParamTypes, TUsedParamsGetter usedParamsGetter, THashSet<TString> enabledParametrizeScopes = {}) {
+    void TestAutoParam(const TString& query, const THashMap<TString, TString>& expectedParamNameToJsonYdbVal, const TMap<TString, TString>& expectedParamTypes, TUsedParamsGetter usedParamsGetter) {
         TTranslationSettings settings;
         settings.AutoParametrizeEnabled = true;
-        settings.AutoParametrizeEnabledScopes = enabledParametrizeScopes;
+        settings.AutoParametrizeValuesStmt = true;
         auto res = SqlToYqlWithMode(
             query,
             NSQLTranslation::ESqlMode::QUERY,
@@ -84,9 +85,9 @@ Y_UNIT_TEST_SUITE(PgSqlParsingAutoparam) {
         TSet<TString> declaredParams;
         TMap<TString, TString> actualParamTypes;
         VisitAstNodes(*res.Root, [&declaredParams, &actualParamTypes] (const NYql::TAstNode& node) {
-            const bool isDeclareNode = 
-                node.IsList() && node.GetChildrenCount() > 0 
-                && node.GetChild(0)->IsAtom() 
+            const bool isDeclareNode =
+                node.IsList() && node.GetChildrenCount() > 0
+                && node.GetChild(0)->IsAtom()
                 && node.GetChild(0)->GetContent() == "declare";
             if (isDeclareNode) {
                 UNIT_ASSERT_VALUES_EQUAL(node.GetChildrenCount(), 3);
@@ -111,7 +112,7 @@ Y_UNIT_TEST_SUITE(PgSqlParsingAutoparam) {
 
             auto actualParam = res.PgAutoParamValues.GetRef()[expectedParamName];
             UNIT_ASSERT_STRINGS_EQUAL(expectedParam.ShortUtf8DebugString(), actualParam.ShortUtf8DebugString());
-            UNIT_ASSERT_C(declaredParams.contains(expectedParamName), 
+            UNIT_ASSERT_C(declaredParams.contains(expectedParamName),
                 "Declared params don't contain expected param name: " << expectedParamName);
         }
 
@@ -181,7 +182,7 @@ Y_UNIT_TEST_SUITE(PgSqlParsingAutoparam) {
         TString type = "(ListType (TupleType (PgType 'unknown) (PgType 'int4)))";
         TestAutoParam(query, {{"a0", expectedParamJson}}, {{"a0", type}}, GetUsedParamsInValues);
     }
-    
+
     Y_UNIT_TEST(AutoParamConsts_Where) {
         TString query = R"(
             select * from plato.Output where key > 1
@@ -190,7 +191,6 @@ Y_UNIT_TEST_SUITE(PgSqlParsingAutoparam) {
             {"type":{"pg_type": {"oid": 23}},
             "value":{"text_value": "1"}}
         )";
-        THashSet<TString> enabledScopes {"WHERE"};
 
         // We expect: (PgOp '">" (PgColumnRef '"key") a0)
         const TUsedParamsGetter usedInWhereComp = [] (TSet<TString>& usedParams, const NYql::TAstNode& node) {
@@ -199,8 +199,8 @@ Y_UNIT_TEST_SUITE(PgSqlParsingAutoparam) {
                 return;
             }
             const auto quotedVal = maybeQuote.GetRef();
-            const bool isWhere = 
-                quotedVal->IsListOfSize(2) && quotedVal->GetChild(1)->IsListOfSize(3) 
+            const bool isWhere =
+                quotedVal->IsListOfSize(2) && quotedVal->GetChild(1)->IsListOfSize(3)
                 && quotedVal->GetChild(1)->IsListOfSize(3)
                 && quotedVal->GetChild(1)->GetChild(0)->IsAtom()
                 && quotedVal->GetChild(1)->GetChild(0)->GetContent() == "PgWhere";
@@ -220,9 +220,9 @@ Y_UNIT_TEST_SUITE(PgSqlParsingAutoparam) {
             usedParams.insert(TString(pgBinOpSecondArg->GetContent()));
         };
         TString type = "(PgType 'int4)";
-        TestAutoParam(query, {{"a0", expectedParamJson}}, {{"a0", type}}, usedInWhereComp, enabledScopes);
+        TestAutoParam(query, {{"a0", expectedParamJson}}, {{"a0", type}}, usedInWhereComp);
     }
-    
+
     Y_UNIT_TEST(AutoParamConsts_Select) {
         TString query = R"(
             select 1, 'test', B'10001'
@@ -239,7 +239,6 @@ Y_UNIT_TEST_SUITE(PgSqlParsingAutoparam) {
             {"type":{"pg_type": {"oid": 1560}},
             "value":{"text_value": "b10001"}}
         )";
-        THashSet<TString> enabledScopes {"SELECT"};
         const TUsedParamsGetter dummyGetter = [] (TSet<TString>& usedParams, const NYql::TAstNode&) {
             usedParams = {"a0", "a1", "a2"};
         };
@@ -249,10 +248,27 @@ Y_UNIT_TEST_SUITE(PgSqlParsingAutoparam) {
             {"a2", "(PgType 'bit)"},
         };
         TestAutoParam(query, {
-            {"a0", expectedParamJsonInt4}, 
+            {"a0", expectedParamJsonInt4},
             {"a1", expectedParamJsonText},
             {"a2", expectedParamJsonBit},
-            }, expectedParamTypes, dummyGetter, enabledScopes);
+            }, expectedParamTypes, dummyGetter);
+    }
+
+    Y_UNIT_TEST(AutoParamValues_FailToInferColumnType) {
+        const auto query = R"(INSERT INTO test VALUES (1), ('2');)";
+        TMap<TString, TString> paramToType = {{"a0", "(PgType 'int4)"}, {"a1", "(PgType 'unknown)"}};
+        TString expectedParamJsonInt4 = R"(
+            {"type":{"pg_type": {"oid": 23}},
+            "value":{"text_value": "1"}}
+        )";
+        TString expectedParamJsonText = R"(
+            {"type":{"pg_type": {"oid": 705}},
+            "value":{"text_value": "2"}}
+        )";
+        const TUsedParamsGetter dummyGetter = [] (TSet<TString>& usedParams, const NYql::TAstNode&) {
+            usedParams = {"a0", "a1"};
+        };
+        TestAutoParam(query, {{"a0", expectedParamJsonInt4}, {"a1", expectedParamJsonText}}, paramToType, dummyGetter);
     }
 
 }

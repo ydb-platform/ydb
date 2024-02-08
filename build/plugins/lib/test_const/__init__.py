@@ -43,10 +43,10 @@ YT_RUN_TEST_TAR_NAME = "yt_run_test.tar"
 COVERAGE_CFLAGS = ["-fprofile-instr-generate", "-fcoverage-mapping", "-DCLANG_COVERAGE"]
 COVERAGE_LDFLAGS = ["-fprofile-instr-generate", "-fcoverage-mapping"]
 
-CANON_BACKEND_KEY = "canondata_backend"
+CANON_BACKEND_KEY = "{canondata_backend}"
 DEFAULT_CANONIZATION_BACKEND = "storage.yandex-team.ru/get-devtools"
 MDS_URI_PREFIX = 'https://storage.yandex-team.ru/get-devtools/'
-BACKEND_URI_PREFIX = 'https://{' + CANON_BACKEND_KEY + '}/'
+BACKEND_URI_PREFIX = 'https://' + CANON_BACKEND_KEY + '/'
 MDS_SCHEME = 'mds'
 CANON_MDS_RESOURCE_REGEX = re.compile(re.escape(MDS_URI_PREFIX) + r'(.*?)($|#)')
 CANON_BACKEND_RESOURCE_REGEX = re.compile(re.escape(BACKEND_URI_PREFIX) + r'(.*?)($|#)')
@@ -70,7 +70,9 @@ STYLE_TEST_TYPES = [
     "govet",
     "java.style",
     "ktlint",
-    "custom_lint",
+    "py2_flake8",
+    "flake8",
+    "black",
 ]
 
 REGULAR_TEST_TYPES = [
@@ -83,7 +85,6 @@ REGULAR_TEST_TYPES = [
     "go_test",
     "gtest",
     "hermione",
-    "hermione_beta",
     "java",
     "jest",
     "py2test",
@@ -133,11 +134,14 @@ COVERAGE_ENV_VARS = (
 PYTHON_COVERAGE_PREFIX_FILTER_ENV_NAME = 'PYTHON_COVERAGE_PREFIX_FILTER'
 PYTHON_COVERAGE_EXCLUDE_REGEXP_ENV_NAME = 'PYTHON_COVERAGE_EXCLUDE_REGEXP'
 
+# TODO get rid of this list - resolve nodes should be added automatically depending on the lang of the target module and their deps
 CLANG_COVERAGE_TEST_TYPES = (
     "boost_test",
     "coverage_extractor",
     "exectest",
+    "fuzz",
     "gtest",
+    "go_test",
     # java tests might use shared libraries
     "java",
     "py2test",
@@ -145,6 +149,7 @@ CLANG_COVERAGE_TEST_TYPES = (
     "pytest",
     "unittest",
 )
+
 COVERAGE_TABLE_CHUNKS = 20
 COVERAGE_TESTS_TIMEOUT_FACTOR = 1.5
 COVERAGE_YT_PROXY = "hahn.yt.yandex.net"
@@ -195,6 +200,7 @@ GO_TOOLS_RESOURCE = 'GO_TOOLS_RESOURCE_GLOBAL'
 JSTYLE_RUNNER_LIB = 'JSTYLE_LIB_RESOURCE_GLOBAL'
 NODEJS_RESOURCE = 'NODEJS_RESOURCE_GLOBAL'
 NYC_RESOURCE = 'NYC_RESOURCE_GLOBAL'
+RUFF_RESOURCE = 'RUFF_RESOURCE_GLOBAL'
 TEST_TOOL3_HOST = 'TEST_TOOL3_HOST_RESOURCE_GLOBAL'
 TEST_TOOL3_HOST_LOCAL = 'TEST_TOOL3_HOST_LOCAL'
 TEST_TOOL_HOST = 'TEST_TOOL_HOST_RESOURCE_GLOBAL'
@@ -395,6 +401,7 @@ class YaTestTags(Enum):
     YtRunner = "ya:yt"
     CopyData = "ya:copydata"
     CopyDataRO = "ya:copydataro"
+    NoPstreeTrim = "ya:no_pstree_trim"
 
 
 class ServiceTags(Enum):
@@ -448,7 +455,6 @@ class Status(object):
 
 
 class _Colors(object):
-
     _NAMES = [
         "blue",
         "cyan",
@@ -481,7 +487,6 @@ Colors = _Colors()
 
 
 class _Highlight(object):
-
     _MARKERS = {
         # special
         "RESET": "rst",

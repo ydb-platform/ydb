@@ -1,4 +1,6 @@
 #include "update_offsets_in_transaction_actor.h"
+#include <ydb/core/base/feature_flags.h>
+
 
 namespace NKikimr::NGRpcService {
 

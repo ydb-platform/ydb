@@ -56,14 +56,15 @@ SRCS(
 )
 
 PEERDIR(
-    library/cpp/actors/core
-    library/cpp/actors/helpers
-    library/cpp/actors/protos
-    library/cpp/actors/util
+    ydb/library/actors/core
+    ydb/library/actors/helpers
+    ydb/library/actors/protos
+    ydb/library/actors/util
     library/cpp/blockcodecs
     library/cpp/deprecated/enum_codegen
     library/cpp/yson
     ydb/core/base
+    ydb/core/graph/shard/protos
     ydb/core/mon
     ydb/core/mon_alloc
     ydb/core/node_whiteboard

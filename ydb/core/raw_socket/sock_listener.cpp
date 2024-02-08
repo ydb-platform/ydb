@@ -1,7 +1,7 @@
 
-#include <library/cpp/actors/core/actor_bootstrapped.h>
-#include <library/cpp/actors/core/log.h>
-#include <library/cpp/actors/interconnect/poller_actor.h>
+#include <ydb/library/actors/core/actor_bootstrapped.h>
+#include <ydb/library/actors/core/log.h>
+#include <ydb/library/actors/interconnect/poller_actor.h>
 #include <util/network/sock.h>
 #include <ydb/library/services/services.pb.h>
 
@@ -49,7 +49,7 @@ public:
 
     void Bootstrap() {
         TSocketType socket;
-        TSocketAddressType bindAddress(socket.MakeAddress("::", Settings.Port));
+        TSocketAddressType bindAddress(socket.MakeAddress(Settings.Address, Settings.Port));
         int err = socket.Bind(bindAddress.get());
         if (err == 0) {
             std::shared_ptr<TEndpointInfo> endpoint = std::make_shared<TEndpointInfo>();

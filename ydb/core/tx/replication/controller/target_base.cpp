@@ -3,7 +3,7 @@
 #include "target_base.h"
 #include "util.h"
 
-#include <library/cpp/actors/core/events.h>
+#include <ydb/library/actors/core/events.h>
 
 namespace NKikimr::NReplication::NController {
 
@@ -105,8 +105,8 @@ void TTargetBase::Progress(ui64 schemeShardId, const TActorId& proxy, const TAct
 }
 
 void TTargetBase::Shutdown(const TActorContext& ctx) {
-    for (auto& x : TVector<TActorId>{DstCreator, DstRemover}) {
-        if (auto actorId = std::exchange(x, {})) {
+    for (auto* x : TVector<TActorId*>{&DstCreator, &DstRemover}) {
+        if (auto actorId = std::exchange(*x, {})) {
             ctx.Send(actorId, new TEvents::TEvPoison());
         }
     }

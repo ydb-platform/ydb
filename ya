@@ -8,7 +8,7 @@
 
 # Find a suitable python interpreter
 for cmd in python3 python; do
-    command -v > /dev/null $cmd && exec `command -v $cmd` $0 "$@"
+    command -v > /dev/null $cmd && exec "$(command -v $cmd)" "$0" "$@"
 done
 
 echo "Python interpreter is not found in this system, please, install python" >&2
@@ -34,33 +34,33 @@ REGISTRY_ENDPOINT = os.environ.get("YA_REGISTRY_ENDPOINT", "https://devtools-reg
 PLATFORM_MAP = {
     "data": {
         "darwin": {
-            "md5": "f0188a9d0bd7879cb50157f3ea808cce",
+            "md5": "35469cf30e4da49d46e77aafe344796c",
             "urls": [
-                f"{REGISTRY_ENDPOINT}/5311942658"
+                f"{REGISTRY_ENDPOINT}/5720350130"
             ]
         },
         "darwin-arm64": {
-            "md5": "d08e93fed7152a4f02302acca2702b06",
+            "md5": "e1b24bcbf0c53e169ebab09b8a4ce96a",
             "urls": [
-                f"{REGISTRY_ENDPOINT}/5311942146"
+                f"{REGISTRY_ENDPOINT}/5720349611"
             ]
         },
         "linux-aarch64": {
-            "md5": "31903c2024013954395d089654c90020",
+            "md5": "e4eb5f2fc68e31109760933a99125430",
             "urls": [
-                f"{REGISTRY_ENDPOINT}/5311941646"
+                f"{REGISTRY_ENDPOINT}/5720349159"
             ]
         },
         "win32-clang-cl": {
-            "md5": "5a2336b7682819dba66f49f6cefd0f13",
+            "md5": "5e78baa59b32e4c66d1da363f37a05e1",
             "urls": [
-                f"{REGISTRY_ENDPOINT}/5311943201"
+                f"{REGISTRY_ENDPOINT}/5720350841"
             ]
         },
         "linux": {
-            "md5": "298903682eb65ab9cab3f16b5f9d781b",
+            "md5": "e8c956d24922f1b713533e311a050d3e",
             "urls": [
-                f"{REGISTRY_ENDPOINT}/5311943529"
+                f"{REGISTRY_ENDPOINT}/5720351345"
             ]
         }
     }

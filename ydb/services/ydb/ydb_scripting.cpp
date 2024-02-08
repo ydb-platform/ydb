@@ -8,7 +8,7 @@
 namespace NKikimr {
 namespace NGRpcService {
 
-void TGRpcYdbScriptingService::SetupIncomingRequests(NGrpc::TLoggerPtr logger) {
+void TGRpcYdbScriptingService::SetupIncomingRequests(NYdbGrpc::TLoggerPtr logger) {
     using Ydb::Scripting::ExecuteYqlRequest;
     using Ydb::Scripting::ExecuteYqlResponse;
     using Ydb::Scripting::ExecuteYqlPartialResponse;
@@ -22,7 +22,7 @@ void TGRpcYdbScriptingService::SetupIncomingRequests(NGrpc::TLoggerPtr logger) {
 #endif
 #define ADD_REQUEST(NAME, IN, OUT, ACTION) \
     MakeIntrusive<TGRpcRequest<Ydb::Scripting::IN, Ydb::Scripting::OUT, TGRpcYdbScriptingService>>(this, &Service_, CQ_, \
-        [this](NGrpc::IRequestContextBase *ctx) { \
+        [this](NYdbGrpc::IRequestContextBase *ctx) { \
             NGRpcService::ReportGrpcReqToMon(*ActorSystem_, ctx->GetPeer()); \
             ACTION; \
         }, &Ydb::Scripting::V1::ScriptingService::AsyncService::Request ## NAME, \

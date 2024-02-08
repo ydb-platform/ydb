@@ -7,8 +7,8 @@
 #include <ydb/core/base/path.h>
 #include <ydb/core/base/tablet_pipecache.h>
 
-#include <library/cpp/actors/core/actor_bootstrapped.h>
-#include <library/cpp/actors/core/hfunc.h>
+#include <ydb/library/actors/core/actor_bootstrapped.h>
+#include <ydb/library/actors/core/hfunc.h>
 
 namespace NKikimr {
 namespace NTxProxy {
@@ -877,7 +877,7 @@ private:
     void ExtractDatashardErrors(const NKikimrTxDataShard::TEvProposeTransactionResult& record) {
         TStringBuilder builder;
         for (const auto &er : record.GetError()) {
-            builder << "[" << NKikimrTxDataShard::TError_EKind_Name(er.GetKind()) << "] " << er.GetReason() << Endl;
+            builder << "[" << er.GetKind() << "] " << er.GetReason() << Endl;
         }
 
         DatashardErrors = builder;

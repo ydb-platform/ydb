@@ -12,7 +12,7 @@ target_link_libraries(blobstorage-ut_vdisk-lib PUBLIC
   contrib-libs-linux-headers
   contrib-libs-cxxsupp
   yutil
-  cpp-actors-protos
+  library-actors-protos
   cpp-http-io
   cpp-openssl-io
   cpp-string_utils-url

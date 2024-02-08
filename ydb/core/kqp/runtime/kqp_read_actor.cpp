@@ -15,8 +15,9 @@
 #include <ydb/library/yql/dq/actors/compute/dq_compute_actor_impl.h>
 
 #include <library/cpp/threading/hot_swap/hot_swap.h>
-#include <library/cpp/actors/core/interconnect.h>
-#include <library/cpp/actors/core/actorsystem.h>
+#include <ydb/library/actors/core/interconnect.h>
+#include <ydb/library/actors/core/actorsystem.h>
+#include <ydb/library/wilson_ids/wilson.h>
 
 #include <util/generic/intrlist.h>
 
@@ -159,9 +160,10 @@ public:
             } else {
                 if (reverse) {
                     if (LastKey.empty()) {
+                        size_t last = FirstUnprocessedRequest.GetOrElse(Ranges.size() - 1);
                         return TTableRange(
                             Ranges.front().From.GetCells(), Ranges.front().FromInclusive,
-                            Ranges[FirstUnprocessedRequest.GetOrElse(Ranges.size() - 1)].To.GetCells(), Ranges.back().ToInclusive);
+                            Ranges[last].To.GetCells(), Ranges[last].ToInclusive);
                     } else {
                         return TTableRange(
                             Ranges.front().From.GetCells(), Ranges.front().FromInclusive,
@@ -169,8 +171,9 @@ public:
                     }
                 } else {
                     if (LastKey.empty()) {
+                        size_t first = FirstUnprocessedRequest.GetOrElse(0);
                         return TTableRange(
-                            Ranges[FirstUnprocessedRequest.GetOrElse(0)].From.GetCells(), Ranges.front().FromInclusive,
+                            Ranges[first].From.GetCells(), Ranges[first].FromInclusive,
                             Ranges.back().To.GetCells(), Ranges.back().ToInclusive);
                     } else {
                         return TTableRange(
@@ -397,6 +400,7 @@ public:
         , Counters(counters)
         , UseFollowers(false)
         , PipeCacheId(MainPipeCacheId)
+        , ReadActorSpan(TWilsonKqp::ReadActor,  NWilson::TTraceId(args.TraceId), "ReadActor")
     {
         Y_ABORT_UNLESS(Arena);
         Y_ABORT_UNLESS(settings->GetArena() == Arena->Get());
@@ -409,6 +413,8 @@ public:
             Settings->GetTable().GetSysViewInfo(),
             Settings->GetTable().GetTableId().GetSchemaVersion()
         );
+
+        Snapshot = IKqpGateway::TKqpSnapshot(Settings->GetSnapshot().GetStep(), Settings->GetSnapshot().GetTxId());
 
         if (Settings->GetUseFollowers() && !Snapshot.IsValid()) {
             // reading from followers is allowed only of snapshot is not specified and
@@ -431,7 +437,6 @@ public:
                         ) : nullptr));
         }
         Counters->ReadActorsCount->Inc();
-        Snapshot = IKqpGateway::TKqpSnapshot(Settings->GetSnapshot().GetStep(), Settings->GetSnapshot().GetTxId());
 
         if (Settings->HasMaxInFlightShards()) {
             MaxInFlight = Settings->GetMaxInFlightShards();
@@ -490,6 +495,8 @@ public:
                 }
             }
         }
+
+        CA_LOG_D("Shards State: " << state.ToString(KeyColumnTypes));
 
         if (!Settings->HasShardIdHint()) {
             InFlightShards.PushBack(&state);
@@ -564,6 +571,9 @@ public:
         ResolveShards[ResolveShardId] = state;
         ResolveShardId += 1;
 
+        ReadActorStateSpan = NWilson::TSpan(TWilsonKqp::ReadActorShardsResolve, ReadActorSpan.GetTraceId(),
+            "WaitForShardsResolve", NWilson::EFlags::AUTO_END);
+
         Send(MakeSchemeCacheID(), new TEvTxProxySchemeCache::TEvInvalidateTable(TableId, {}));
         Send(MakeSchemeCacheID(), new TEvTxProxySchemeCache::TEvResolveKeySet(request));
     }
@@ -612,8 +622,12 @@ public:
                 }
             }
 
+            ReadActorStateSpan.EndError(error);
+
             return RuntimeError(error, statusCode);
         }
+
+        ReadActorStateSpan.EndOk();
 
         auto keyDesc = std::move(request->ResultSet[0].KeyDescription);
 
@@ -634,8 +648,8 @@ public:
                 PendingShards.PushBack(state.Release());
                 return;
             }
-        } else if (!Snapshot.IsValid()) {
-            return RuntimeError("inconsistent reads after shards split", NDqProto::StatusIds::UNAVAILABLE);
+        } else if (!Snapshot.IsValid() && !Settings->GetAllowInconsistentReads()) {
+            return RuntimeError("Inconsistent reads after shards split", NDqProto::StatusIds::UNAVAILABLE);
         }
 
         if (keyDesc->GetPartitions().empty()) {
@@ -714,8 +728,8 @@ public:
                     if (intersection == 0) {
                         newShard->AddPoint(std::move(points[pointIndex]));
                         CA_LOG_D("Add point to new shardId: " << partition.ShardId);
-                    }
-                    if (intersection < 0) {
+                    } else {
+                        YQL_ENSURE(intersection > 0, "Missed intersection of point and partition ranges.");
                         break;
                     }
                     pointIndex += 1;
@@ -890,8 +904,9 @@ public:
 
         Counters->CreatedIterators->Inc();
         ReadIdByTabletId[state->TabletId].push_back(id);
+
         Send(PipeCacheId, new TEvPipeCache::TEvForward(ev.Release(), state->TabletId, true),
-            IEventHandle::FlagTrackDelivery);
+            IEventHandle::FlagTrackDelivery, 0, ReadActorSpan.GetTraceId());
 
         if (!FirstShardStarted) {
             state->IsFirst = true;
@@ -1095,7 +1110,7 @@ public:
         }
         YQL_ENSURE(packed == 0);
         if (Settings->ColumnsSize() == 0) {
-            batch->resize(result->Get()->GetRowsCount(), HolderFactory.GetEmptyContainer());
+            batch->resize(result->Get()->GetRowsCount(), HolderFactory.GetEmptyContainerLazy());
         } else {
             TVector<NUdf::TUnboxedValue*> editAccessors(result->Get()->GetRowsCount());
             batch->reserve(result->Get()->GetRowsCount());
@@ -1118,7 +1133,7 @@ public:
                 } else {
                     hasResultColumns = true;
                     stats.AddStatistics(
-                        NMiniKQL::WriteColumnValuesFromArrow(editAccessors, *result->Get()->GetArrowBatch(), columnIndex, resultColumnIndex, column.TypeInfo)
+                        NMiniKQL::WriteColumnValuesFromArrow(editAccessors, NMiniKQL::TBatchDataAccessor(result->Get()->GetArrowBatch()), columnIndex, resultColumnIndex, column.TypeInfo)
                     );
                     if (column.NotNull) {
                         std::shared_ptr<arrow::Array> columnSharedPtr = result->Get()->GetArrowBatch()->column(columnIndex);       
@@ -1149,7 +1164,7 @@ public:
     }
 
     TString DebugPrintCells(const TEvDataShard::TEvReadResult* result) {
-        if (result->Record.GetResultFormat() == NKikimrTxDataShard::EScanDataFormat::ARROW) {
+        if (result->Record.GetResultFormat() == NKikimrDataEvents::FORMAT_ARROW) {
             return "{ARROW}";
         }
         TStringBuilder builder;
@@ -1241,11 +1256,11 @@ public:
             if (!batch.Defined()) {
                 batch.ConstructInPlace();
                 switch (msg.Record.GetResultFormat()) {
-                    case NKikimrTxDataShard::EScanDataFormat::ARROW:
+                    case NKikimrDataEvents::FORMAT_ARROW:
                         BytesStats.AddStatistics(PackArrow(result, freeSpace));
                         break;
-                    case NKikimrTxDataShard::EScanDataFormat::UNSPECIFIED:
-                    case NKikimrTxDataShard::EScanDataFormat::CELLVEC:
+                    case NKikimrDataEvents::FORMAT_UNSPECIFIED:
+                    case NKikimrDataEvents::FORMAT_CELLVEC:
                         BytesStats.AddStatistics(PackCells(result, freeSpace));
                 }
             }
@@ -1377,6 +1392,8 @@ public:
             }
         }
         TBase::PassAway();
+
+        ReadActorSpan.End();
     }
 
     void RuntimeError(const TString& message, NYql::NDqProto::StatusIds::StatusCode statusCode, const NYql::TIssues& subIssues = {}) {
@@ -1387,6 +1404,11 @@ public:
 
         NYql::TIssues issues;
         issues.AddIssue(std::move(issue));
+
+        if (ReadActorSpan) {
+            ReadActorSpan.EndError(issues.ToOneLineString());
+        }
+
         Send(ComputeActorId, new TEvAsyncInputError(InputIndex, std::move(issues), statusCode));
     }
 
@@ -1457,8 +1479,8 @@ private:
 
     TQueue<TResult> Results;
 
-    TVector<NKikimrTxDataShard::TLock> Locks;
-    TVector<NKikimrTxDataShard::TLock> BrokenLocks;
+    TVector<NKikimrDataEvents::TLock> Locks;
+    TVector<NKikimrDataEvents::TLock> BrokenLocks;
 
     IKqpGateway::TKqpSnapshot Snapshot;
 
@@ -1483,6 +1505,9 @@ private:
     size_t TotalRetries = 0;
 
     bool FirstShardStarted = false;
+
+    NWilson::TSpan ReadActorSpan;
+    NWilson::TSpan ReadActorStateSpan;
 };
 
 

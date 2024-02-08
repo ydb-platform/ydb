@@ -51,6 +51,18 @@ const TPath::TChecker& TPath::TChecker::IsResolved(EStatus status) const {
         << ": '" << nearest.PathString() << "' (id: " << nearest.GetPathIdSafe() << ")");
 }
 
+const TPath::TChecker& TPath::TChecker::HasResolvedPrefix(EStatus status) const {
+    if (Failed) {
+        return *this;
+    }
+
+    if (!Path.Elements.empty()) {
+        return *this;
+    }
+
+    return Fail(status, TStringBuilder() << "root not found");
+}
+
 const TPath::TChecker& TPath::TChecker::NotEmpty(EStatus status) const {
     if (Failed) {
         return *this;
@@ -553,6 +565,37 @@ const TPath::TChecker& TPath::TChecker::IsTheSameDomain(const TPath& another, ES
         << ", another path: " << another.PathString());
 }
 
+const TPath::TChecker& TPath::TChecker::FailOnWrongType(const TSet<TPathElement::EPathType>& expectedTypes) const {
+    if (Failed) {
+        return *this;
+    }
+
+    if (!Path.IsResolved()) {
+        return *this;
+    }
+
+    if (Path.IsDeleted()) {
+        return *this;
+    }
+
+    if (!expectedTypes.contains(Path.Base()->PathType)) {
+        return Fail(EStatus::StatusNameConflict, TStringBuilder() << "unexpected path type"
+            << " (" << BasicPathInfo(Path.Base()) << ")"
+            << ", expected types: " << JoinSeq(", ", expectedTypes));
+    }
+
+    if (!Path.Base()->IsCreateFinished()) {
+        return Fail(EStatus::StatusMultipleModifications, TStringBuilder() << "path exists but creating right now"
+            << " (" << BasicPathInfo(Path.Base()) << ")");
+    }
+
+    return *this;
+}
+
+const TPath::TChecker& TPath::TChecker::FailOnWrongType(TPathElement::EPathType expectedType) const {
+    return FailOnWrongType(TSet<TPathElement::EPathType>{expectedType});
+}
+
 const TPath::TChecker& TPath::TChecker::FailOnExist(const TSet<TPathElement::EPathType>& expectedTypes, bool acceptAlreadyExist) const {
     if (Failed) {
         return *this;
@@ -573,7 +616,7 @@ const TPath::TChecker& TPath::TChecker::FailOnExist(const TSet<TPathElement::EPa
     }
 
     if (!Path.Base()->IsCreateFinished()) {
-        return Fail(EStatus::StatusMultipleModifications, TStringBuilder() << "path exist but creating right now"
+        return Fail(EStatus::StatusMultipleModifications, TStringBuilder() << "path exists but creating right now"
             << " (" << BasicPathInfo(Path.Base()) << ")");
     }
 
@@ -791,6 +834,21 @@ const TPath::TChecker& TPath::TChecker::IsExternalDataSource(EStatus status) con
 
     return Fail(status, TStringBuilder() << "path is not a external data source"
         << " (" << BasicPathInfo(Path.Base()) << ")");
+}
+
+const TPath::TChecker& TPath::TChecker::IsView(EStatus status) const {
+    if (Failed) {
+        return *this;
+    }
+
+    if (Path.Base()->IsView()) {
+        return *this;
+    }
+
+    return Fail(status, TStringBuilder() << "path is not a view"
+        << " (" << BasicPathInfo(Path.Base()) << ")"
+    );
+
 }
 
 const TPath::TChecker& TPath::TChecker::PathShardsLimit(ui64 delta, EStatus status) const {

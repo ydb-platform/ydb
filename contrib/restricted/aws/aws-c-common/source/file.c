@@ -13,7 +13,14 @@
 
 FILE *aws_fopen(const char *file_path, const char *mode) {
     if (!file_path || strlen(file_path) == 0) {
-        AWS_LOGF_ERROR(AWS_LS_COMMON_IO, "static: Failed to open file %s", file_path);
+        AWS_LOGF_ERROR(AWS_LS_COMMON_IO, "static: Failed to open file. path is empty");
+        aws_raise_error(AWS_ERROR_FILE_INVALID_PATH);
+        return NULL;
+    }
+
+    if (!mode || strlen(mode) == 0) {
+        AWS_LOGF_ERROR(AWS_LS_COMMON_IO, "static: Failed to open file. mode is empty");
+        aws_raise_error(AWS_ERROR_INVALID_ARGUMENT);
         return NULL;
     }
 
@@ -34,9 +41,10 @@ int aws_byte_buf_init_from_file(struct aws_byte_buf *out_buf, struct aws_allocat
 
     if (fp) {
         if (fseek(fp, 0L, SEEK_END)) {
-            AWS_LOGF_ERROR(AWS_LS_COMMON_IO, "static: Failed to seek file %s with errno %d", filename, errno);
+            int errno_value = errno; /* Always cache errno before potential side-effect */
+            AWS_LOGF_ERROR(AWS_LS_COMMON_IO, "static: Failed to seek file %s with errno %d", filename, errno_value);
             fclose(fp);
-            return aws_translate_and_raise_io_error(errno);
+            return aws_translate_and_raise_io_error(errno_value);
         }
 
         size_t allocation_size = (size_t)ftell(fp) + 1;
@@ -52,16 +60,18 @@ int aws_byte_buf_init_from_file(struct aws_byte_buf *out_buf, struct aws_allocat
         out_buf->buffer[out_buf->len] = 0;
 
         if (fseek(fp, 0L, SEEK_SET)) {
-            AWS_LOGF_ERROR(AWS_LS_COMMON_IO, "static: Failed to seek file %s with errno %d", filename, errno);
+            int errno_value = errno; /* Always cache errno before potential side-effect */
+            AWS_LOGF_ERROR(AWS_LS_COMMON_IO, "static: Failed to seek file %s with errno %d", filename, errno_value);
             aws_byte_buf_clean_up(out_buf);
             fclose(fp);
-            return aws_translate_and_raise_io_error(errno);
+            return aws_translate_and_raise_io_error(errno_value);
         }
 
         size_t read = fread(out_buf->buffer, 1, out_buf->len, fp);
+        int errno_cpy = errno; /* Always cache errno before potential side-effect */
         fclose(fp);
         if (read < out_buf->len) {
-            AWS_LOGF_ERROR(AWS_LS_COMMON_IO, "static: Failed to read file %s with errno %d", filename, errno);
+            AWS_LOGF_ERROR(AWS_LS_COMMON_IO, "static: Failed to read file %s with errno %d", filename, errno_cpy);
             aws_secure_zero(out_buf->buffer, out_buf->len);
             aws_byte_buf_clean_up(out_buf);
             return aws_raise_error(AWS_ERROR_SYS_CALL_FAILURE);
@@ -70,12 +80,7 @@ int aws_byte_buf_init_from_file(struct aws_byte_buf *out_buf, struct aws_allocat
         return AWS_OP_SUCCESS;
     }
 
-    AWS_LOGF_ERROR(AWS_LS_COMMON_IO, "static: Failed to open file %s with errno %d", filename, errno);
-
-    if (errno == 0) {
-        return aws_raise_error(AWS_ERROR_FILE_INVALID_PATH);
-    }
-    return aws_translate_and_raise_io_error(errno);
+    return AWS_OP_ERR;
 }
 
 bool aws_is_any_directory_separator(char value) {

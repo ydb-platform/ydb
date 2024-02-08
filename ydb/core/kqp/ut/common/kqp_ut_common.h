@@ -15,6 +15,8 @@
 #include <library/cpp/testing/unittest/tests_data.h>
 #include <library/cpp/testing/unittest/registar.h>
 #include <library/cpp/yson/writer.h>
+#include <library/cpp/threading/future/async.h>
+
 
 #define Y_UNIT_TEST_TWIN(N, OPT)                                                                                   \
     template <bool OPT>                                                                                            \
@@ -78,6 +80,7 @@ struct TKikimrSettings: public TTestFeatureFlagsHolder<TKikimrSettings> {
     TString DomainRoot = KikimrDefaultUtDomainRoot;
     ui32 NodeCount = 1;
     bool WithSampleTables = true;
+    bool UseRealThreads = true;
     TDuration KeepSnapshotTimeout = TDuration::Zero();
     IOutputStream* LogStream = nullptr;
     TMaybe<NFake::TStorage> Storage = Nothing();
@@ -106,6 +109,7 @@ struct TKikimrSettings: public TTestFeatureFlagsHolder<TKikimrSettings> {
     TKikimrSettings& SetLogStream(IOutputStream* follower) { LogStream = follower; return *this; };
     TKikimrSettings& SetStorage(const NFake::TStorage& storage) { Storage = storage; return *this; };
     TKikimrSettings& SetFederatedQuerySetupFactory(NKqp::IKqpFederatedQuerySetupFactory::TPtr value) { FederatedQuerySetupFactory = value; return *this; };
+    TKikimrSettings& SetUseRealThreads(bool value) { UseRealThreads = value; return *this; };
 };
 
 class TKikimrRunner {
@@ -130,7 +134,11 @@ public:
     TKikimrRunner(const NFake::TStorage& storage);
 
     ~TKikimrRunner() {
-        Driver->Stop(true);
+        RunCall([&] { Driver->Stop(true); return false; });
+        if (ThreadPoolStarted_) {
+            ThreadPool.Stop();
+        }
+
         Server.Reset();
         Client.Reset();
     }
@@ -154,19 +162,34 @@ public:
         return NYdb::NQuery::TQueryClient(*Driver, settings);
     }
 
-    bool IsUsingSnapshotReads() const {
-        return Server->GetRuntime()->GetAppData().FeatureFlags.GetEnableMvccSnapshotReads();
+    template <typename Func>
+    NThreading::TFuture<NThreading::TFutureType<TFunctionResult<Func>>> RunInThreadPool(Func&& func) {
+        if (!ThreadPoolStarted_) {
+            ThreadPool.Start();
+            ThreadPoolStarted_ = true;
+        }
+
+        return NThreading::Async(std::move(func), ThreadPool);
+    }
+
+    template <typename Func>
+    TFunctionResult<Func> RunCall(Func&& func) {
+        auto future = RunInThreadPool(std::move(func));
+        return GetTestServer().GetRuntime()->WaitFuture(future);
     }
 
 private:
     void Initialize(const TKikimrSettings& settings);
     void WaitForKqpProxyInit();
     void CreateSampleTables();
+    void SetupLogLevelFromTestParam(NKikimrServices::EServiceKikimr service);
 
 private:
     THolder<Tests::TServerSettings> ServerSettings;
     THolder<Tests::TServer> Server;
     THolder<Tests::TClient> Client;
+    TAdaptiveThreadPool ThreadPool;
+    bool ThreadPoolStarted_ = false;
     TPortManager PortManager;
     TString Endpoint;
     NYdb::TDriverConfig DriverConfig;
@@ -226,6 +249,11 @@ TString ReformatYson(const TString& yson);
 void CompareYson(const TString& expected, const TString& actual);
 void CompareYson(const TString& expected, const NKikimrMiniKQL::TResult& actual);
 
+void CreateLargeTable(TKikimrRunner& kikimr, ui32 rowsPerShard, ui32 keyTextSize,
+    ui32 dataTextSize, ui32 batchSizeRows = 100, ui32 fillShardsCount = 8, ui32 largeTableKeysPerShard = 1000000);
+
+void CreateManyShardsTable(TKikimrRunner& kikimr, ui32 totalRows = 1000, ui32 shards = 100, ui32 batchSizeRows = 1000);
+
 bool HasIssue(const NYql::TIssues& issues, ui32 code,
     std::function<bool(const NYql::TIssue& issue)> predicate = {});
 
@@ -236,6 +264,12 @@ struct TExpectedTableStats {
     TMaybe<ui64> ExpectedUpdates;
     TMaybe<ui64> ExpectedDeletes;
 };
+
+void AssertTableStats(const Ydb::TableStats::QueryStats& stats, TStringBuf table,
+    const TExpectedTableStats& expectedStats);
+
+void AssertTableStats(const NYdb::NTable::TDataQueryResult& result, TStringBuf table,
+    const TExpectedTableStats& expectedStats);
 
 void AssertTableStats(const NYdb::NTable::TDataQueryResult& result, TStringBuf table,
     const TExpectedTableStats& expectedStats);

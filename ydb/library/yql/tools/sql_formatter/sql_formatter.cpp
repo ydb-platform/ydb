@@ -15,6 +15,7 @@ int RunFormat(int argc, char* argv[]) {
     opts.AddLongOption('o', "output", "save output to file").RequiredArgument("file").StoreResult(&outFileName);
     opts.AddLongOption('i', "input", "input file").RequiredArgument("input").StoreResult(&inFileName);
     opts.AddLongOption('p', "print-query", "print given query before parsing").NoArgument();
+    opts.AddLongOption('f', "obfuscate", "obfuscate query").NoArgument();
     opts.AddLongOption("ansi-lexer", "use ansi lexer").NoArgument();
     opts.AddHelpOption();
 
@@ -46,7 +47,8 @@ int RunFormat(int argc, char* argv[]) {
     TString frm_query;
     TString error;
     NYql::TIssues issues;
-    if (!formatter->Format(queryString, frm_query, issues)) {
+    if (!formatter->Format(queryString, frm_query, issues, res.Has("obfuscate") ?
+        NSQLFormat::EFormatMode::Obfuscate : NSQLFormat::EFormatMode::Pretty)) {
         ++errors;
         Cerr << "Error formatting query: " << issues.ToString() << Endl;
     } else {

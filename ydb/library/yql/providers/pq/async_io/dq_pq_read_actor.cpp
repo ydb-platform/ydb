@@ -20,11 +20,11 @@
 #include <ydb/public/sdk/cpp/client/ydb_persqueue_core/persqueue.h>
 #include <ydb/public/sdk/cpp/client/ydb_types/credentials/credentials.h>
 
-#include <library/cpp/actors/core/actor.h>
-#include <library/cpp/actors/core/event_local.h>
-#include <library/cpp/actors/core/events.h>
-#include <library/cpp/actors/core/hfunc.h>
-#include <library/cpp/actors/core/log.h>
+#include <ydb/library/actors/core/actor.h>
+#include <ydb/library/actors/core/event_local.h>
+#include <ydb/library/actors/core/events.h>
+#include <ydb/library/actors/core/hfunc.h>
+#include <ydb/library/actors/core/log.h>
 #include <library/cpp/lwtrace/mon/mon_lwtrace.h>
 
 #include <util/generic/algorithm.h>

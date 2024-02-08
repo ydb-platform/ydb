@@ -1406,10 +1406,7 @@ StringContentInternal(TContext& ctx, TPosition pos, const TString& input, EStrin
     TString str = input;
     if (mode == EStringContentMode::TypedStringLiteral) {
         auto lower = to_lower(str);
-        if (lower.EndsWith("u")) {
-            str = str.substr(0, str.Size() - 1);
-            result.Type = NKikimr::NUdf::EDataSlot::Utf8;
-        } else if (lower.EndsWith("y")) {
+        if (lower.EndsWith("y")) {
             str = str.substr(0, str.Size() - 1);
             result.Type = NKikimr::NUdf::EDataSlot::Yson;
         } else if (lower.EndsWith("j")) {
@@ -1427,6 +1424,21 @@ StringContentInternal(TContext& ctx, TPosition pos, const TString& input, EStrin
         } else if (lower.EndsWith("pv")) {
             str = str.substr(0, str.Size() - 2);
             result.PgType = "PgVarchar";
+        } else if (lower.EndsWith("s")) {
+            str = str.substr(0, str.Size() - 1);
+            result.Type = NKikimr::NUdf::EDataSlot::String;
+        } else if (lower.EndsWith("u")) {
+            str = str.substr(0, str.Size() - 1);
+            result.Type = NKikimr::NUdf::EDataSlot::Utf8;
+        } else {
+            if (ctx.Scoped->WarnUntypedStringLiterals) {
+                ctx.Warning(pos, TIssuesIds::YQL_UNTYPED_STRING_LITERALS)
+                << "Please add suffix u for Utf8 strings or s for arbitrary binary strings";
+            }
+
+            if (ctx.Scoped->UnicodeLiterals) {
+                result.Type = NKikimr::NUdf::EDataSlot::Utf8;
+            }
         }
     }
 
@@ -2614,11 +2626,19 @@ TNodePtr BuildBinaryOp(TContext& ctx, TPosition pos, const TString& opName, TNod
         const bool bothArgNull = a->IsNull() && b->IsNull();
         const bool oneArgNull  = a->IsNull() || b->IsNull();
 
-        if (bothArgNull || (opName != "Or" && oneArgNull)) {
+        if (bothArgNull || (oneArgNull && opName != "Or" && opName != "And")) {
             ctx.Warning(pos, TIssuesIds::YQL_OPERATION_WILL_RETURN_NULL) << "Binary operation "
             << opName.substr(0, opName.Size() - 7 * opName.EndsWith("MayWarn"))
             << " will return NULL here";
         }
+    }
+
+    return new TBinaryOpNode(pos, opName, a, b);
+}
+
+TNodePtr BuildBinaryOpRaw(TPosition pos, const TString& opName, TNodePtr a, TNodePtr b) {
+    if (!a || !b) {
+        return nullptr;
     }
 
     return new TBinaryOpNode(pos, opName, a, b);

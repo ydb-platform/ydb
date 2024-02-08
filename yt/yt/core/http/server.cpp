@@ -190,7 +190,14 @@ private:
 
             NProfiling::TWallTimer timer;
 
-            YT_LOG_DEBUG("Received HTTP request (ConnectionId: %v, RequestId: %v, Method: %v, Path: %v, L7RequestId: %v, L7RealIP: %v, UserAgent: %v)",
+            YT_LOG_DEBUG("Received HTTP request ("
+                "ConnectionId: %v, "
+                "RequestId: %v, "
+                "Method: %v, "
+                "Path: %v, "
+                "L7RequestId: %v, "
+                "L7RealIP: %v, "
+                "UserAgent: %v)",
                 request->GetConnectionId(),
                 request->GetRequestId(),
                 request->GetMethod(),
@@ -262,6 +269,11 @@ private:
                 }
             }));
 
+            auto finally = Finally([&] {
+                auto count = ActiveConnections_.fetch_sub(1) - 1;
+                ConnectionsActive_.Update(count);
+            });
+
             if (Config_->NoDelay) {
                 connection->SetNoDelay();
             }
@@ -274,11 +286,6 @@ private:
 
     void DoHandleConnection(const IConnectionPtr& connection, TGuid connectionId)
     {
-        auto finally = Finally([&] {
-            auto count = ActiveConnections_.fetch_sub(1) - 1;
-            ConnectionsActive_.Update(count);
-        });
-
         auto request = New<THttpInput>(
             connection,
             connection->RemoteAddress(),

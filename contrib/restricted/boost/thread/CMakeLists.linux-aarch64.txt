@@ -23,7 +23,6 @@ target_include_directories(restricted-boost-thread PUBLIC
 target_link_libraries(restricted-boost-thread PUBLIC
   contrib-libs-linux-headers
   contrib-libs-cxxsupp
-  restricted-boost-algorithm
   restricted-boost-assert
   restricted-boost-atomic
   restricted-boost-bind
@@ -36,10 +35,7 @@ target_link_libraries(restricted-boost-thread PUBLIC
   restricted-boost-date_time
   restricted-boost-exception
   restricted-boost-function
-  restricted-boost-intrusive
   restricted-boost-io
-  restricted-boost-iterator
-  restricted-boost-lexical_cast
   restricted-boost-move
   restricted-boost-optional
   restricted-boost-predef

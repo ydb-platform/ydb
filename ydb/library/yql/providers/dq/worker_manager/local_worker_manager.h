@@ -10,7 +10,7 @@
 
 #include <ydb/library/yql/providers/dq/task_runner_actor/task_runner_actor.h>
 
-#include <library/cpp/actors/core/actorid.h>
+#include <ydb/library/actors/core/actorid.h>
 
 namespace NYql {
 
@@ -39,7 +39,6 @@ namespace NYql::NDqs {
         NActors::TActorId QuoterServiceActorId;
         bool ComputeActorOwnsCounters = false;
         bool DropTaskCountersOnFinish = true;
-        bool UseSpilling = false;
     };
 
     NActors::IActor* CreateLocalWorkerManager(const TLocalWorkerManagerOptions& options);

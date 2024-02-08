@@ -3,6 +3,8 @@
 #include <ydb/core/engine/minikql/change_collector_iface.h>
 #include <ydb/core/tablet_flat/tablet_flat_executor.h>
 
+#include <util/datetime/base.h>
+
 namespace NKikimr {
 namespace NDataShard {
 
@@ -57,6 +59,12 @@ public:
         ui64 SchemaVersion;
         ui64 LockId = 0;
         ui64 LockOffset = 0;
+
+        TInstant CreatedAt() const {
+            return Group
+                ? TInstant::MicroSeconds(Group)
+                : TInstant::MilliSeconds(Step);
+        }
     };
 
 public:

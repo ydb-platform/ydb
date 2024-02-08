@@ -8,6 +8,7 @@
 #include <aws/core/utils/memory/AWSMemory.h>
 #include <aws/core/utils/crypto/openssl/CryptoImpl.h>
 #include <aws/core/utils/Outcome.h>
+#include <openssl/crypto.h>
 #include <openssl/md5.h>
 
 #ifdef OPENSSL_IS_BORINGSSL
@@ -47,9 +48,19 @@ namespace Aws
  */
 #if defined(LIBRESSL_VERSION_NUMBER) && (OPENSSL_VERSION_NUMBER == 0x20000000L)
 #undef OPENSSL_VERSION_NUMBER
+#if LIBRESSL_VERSION_NUMBER < 0x3050000fL
 #define OPENSSL_VERSION_NUMBER 0x1000107fL
+#else
+#define OPENSSL_VERSION_NUMBER 0x1010000fL
 #endif
+#endif
+
 #define OPENSSL_VERSION_LESS_1_1 (OPENSSL_VERSION_NUMBER < 0x10100003L)
+#define OPENSSL_VERSION_LESS_3_0 (OPENSSL_VERSION_NUMBER < 0x30000000L)
+
+#if !OPENSSL_VERSION_LESS_3_0
+#error #include <openssl/core_names.h>
+#endif
 
 #if OPENSSL_VERSION_LESS_1_1
                 static const char* OPENSSL_INTERNALS_TAG = "OpenSSLCallbackState";
@@ -65,7 +76,7 @@ namespace Aws
 #else
                     OPENSSL_init_crypto(OPENSSL_INIT_LOAD_CRYPTO_STRINGS /*options*/ ,NULL /* OpenSSL init settings*/ );
 #endif
-#if !defined(OPENSSL_IS_BORINGSSL)
+#if !(defined(OPENSSL_IS_BORINGSSL) || defined(OPENSSL_IS_AWSLC))
                     OPENSSL_add_all_algorithms_noconf();
 #endif
 #if OPENSSL_VERSION_LESS_1_1
@@ -168,6 +179,22 @@ namespace Aws
                 EVP_MD_CTX *m_ctx;
             };
 
+            MD5OpenSSLImpl::MD5OpenSSLImpl()
+            {
+                m_ctx = EVP_MD_CTX_create();
+                assert(m_ctx != nullptr);
+#if !defined(OPENSSL_IS_BORINGSSL)
+                EVP_MD_CTX_set_flags(m_ctx, EVP_MD_CTX_FLAG_NON_FIPS_ALLOW);
+#endif
+                EVP_DigestInit_ex(m_ctx, EVP_md5(), nullptr);
+            }
+
+            MD5OpenSSLImpl::~MD5OpenSSLImpl()
+            {
+                EVP_MD_CTX_destroy(m_ctx);
+                m_ctx = nullptr;
+            }
+
             HashResult MD5OpenSSLImpl::Calculate(const Aws::String& str)
             {
                 OpensslCtxRAIIGuard guard;
@@ -222,6 +249,34 @@ namespace Aws
                 return HashResult(std::move(hash));
             }
 
+            void MD5OpenSSLImpl::Update(unsigned char* buffer, size_t bufferSize)
+            {
+                EVP_DigestUpdate(m_ctx, buffer, bufferSize);
+            }
+
+            HashResult MD5OpenSSLImpl::GetHash()
+            {
+                ByteBuffer hash(EVP_MD_size(EVP_md5()));
+                EVP_DigestFinal(m_ctx, hash.GetUnderlyingData(), nullptr);
+                return HashResult(std::move(hash));
+            }
+
+            Sha1OpenSSLImpl::Sha1OpenSSLImpl()
+            {
+                m_ctx = EVP_MD_CTX_create();
+                assert(m_ctx != nullptr);
+#if !defined(OPENSSL_IS_BORINGSSL)
+                EVP_MD_CTX_set_flags(m_ctx, EVP_MD_CTX_FLAG_NON_FIPS_ALLOW);
+#endif
+                EVP_DigestInit_ex(m_ctx, EVP_sha1(), nullptr);
+            }
+
+            Sha1OpenSSLImpl::~Sha1OpenSSLImpl()
+            {
+                EVP_MD_CTX_destroy(m_ctx);
+                m_ctx = nullptr;
+            }
+
             HashResult Sha1OpenSSLImpl::Calculate(const Aws::String& str)
             {
                 OpensslCtxRAIIGuard guard;
@@ -270,6 +325,34 @@ namespace Aws
                 EVP_DigestFinal(ctx, hash.GetUnderlyingData(), nullptr);
 
                 return HashResult(std::move(hash));
+            }
+
+            void Sha1OpenSSLImpl::Update(unsigned char* buffer, size_t bufferSize)
+            {
+                EVP_DigestUpdate(m_ctx, buffer, bufferSize);
+            }
+
+            HashResult Sha1OpenSSLImpl::GetHash()
+            {
+                ByteBuffer hash(EVP_MD_size(EVP_sha1()));
+                EVP_DigestFinal(m_ctx, hash.GetUnderlyingData(), nullptr);
+                return HashResult(std::move(hash));
+            }
+
+            Sha256OpenSSLImpl::Sha256OpenSSLImpl()
+            {
+                m_ctx = EVP_MD_CTX_create();
+                assert(m_ctx != nullptr);
+#if !defined(OPENSSL_IS_BORINGSSL)
+                EVP_MD_CTX_set_flags(m_ctx, EVP_MD_CTX_FLAG_NON_FIPS_ALLOW);
+#endif
+                EVP_DigestInit_ex(m_ctx, EVP_sha256(), nullptr);
+            }
+
+            Sha256OpenSSLImpl::~Sha256OpenSSLImpl()
+            {
+                EVP_MD_CTX_destroy(m_ctx);
+                m_ctx = nullptr;
             }
 
             HashResult Sha256OpenSSLImpl::Calculate(const Aws::String& str)
@@ -322,13 +405,28 @@ namespace Aws
                 return HashResult(std::move(hash));
             }
 
+            void Sha256OpenSSLImpl::Update(unsigned char* buffer, size_t bufferSize)
+            {
+                EVP_DigestUpdate(m_ctx, buffer, bufferSize);
+            }
+
+            HashResult Sha256OpenSSLImpl::GetHash()
+            {
+                ByteBuffer hash(EVP_MD_size(EVP_sha256()));
+                EVP_DigestFinal(m_ctx, hash.GetUnderlyingData(), nullptr);
+                return HashResult(std::move(hash));
+            }
+
             class HMACRAIIGuard {
             public:
                 HMACRAIIGuard() {
 #if OPENSSL_VERSION_LESS_1_1
                     m_ctx = Aws::New<HMAC_CTX>("AllocSha256HAMCOpenSSLContext");
-#else
+#elif OPENSSL_VERSION_LESS_3_0
                     m_ctx = HMAC_CTX_new();
+#else
+                    m_mac = EVP_MAC_fetch(NULL, "HMAC", NULL);
+                    m_ctx = EVP_MAC_CTX_new(m_mac);
 #endif
                     assert(m_ctx != nullptr);
                 }
@@ -336,17 +434,29 @@ namespace Aws
                 ~HMACRAIIGuard() {
 #if OPENSSL_VERSION_LESS_1_1
                     Aws::Delete<HMAC_CTX>(m_ctx);
-#else
+#elif OPENSSL_VERSION_LESS_3_0
                     HMAC_CTX_free(m_ctx);
+#else
+                    EVP_MAC_free(m_mac);
+                    EVP_MAC_CTX_free(m_ctx);
 #endif
                     m_ctx = nullptr;
                 }
 
+#if OPENSSL_VERSION_LESS_3_0
                 HMAC_CTX* getResource() {
+#else
+                EVP_MAC_CTX* getResource() {
+#endif
                     return m_ctx;
                 }
             private:
+#if OPENSSL_VERSION_LESS_3_0
                 HMAC_CTX *m_ctx;
+#else
+                EVP_MAC *m_mac;
+                EVP_MAC_CTX *m_ctx;
+#endif
             };
 
             HashResult Sha256HMACOpenSSLImpl::Calculate(const ByteBuffer& toSign, const ByteBuffer& secret)
@@ -356,20 +466,36 @@ namespace Aws
                 memset(digest.GetUnderlyingData(), 0, length);
 
                 HMACRAIIGuard guard;
+#if OPENSSL_VERSION_LESS_3_0
                 HMAC_CTX* m_ctx = guard.getResource();
+#else
+                EVP_MAC_CTX* m_ctx = guard.getResource();
+#endif
 
 #if OPENSSL_VERSION_LESS_1_1
                 HMAC_CTX_init(m_ctx);
 #endif
 
+#if OPENSSL_VERSION_LESS_3_0
                 HMAC_Init_ex(m_ctx, secret.GetUnderlyingData(), static_cast<int>(secret.GetLength()), EVP_sha256(),
                              NULL);
                 HMAC_Update(m_ctx, toSign.GetUnderlyingData(), toSign.GetLength());
                 HMAC_Final(m_ctx, digest.GetUnderlyingData(), &length);
+#else
+                char sha256[] {"SHA256"};
+                OSSL_PARAM ossl_params[2];
+                ossl_params[0] =
+                  OSSL_PARAM_construct_utf8_string(OSSL_MAC_PARAM_DIGEST, sha256, 0);
+                ossl_params[1] = OSSL_PARAM_construct_end();
+                EVP_MAC_init(m_ctx, secret.GetUnderlyingData(),
+                             static_cast<int>(secret.GetLength()), ossl_params);
+                EVP_MAC_update(m_ctx, toSign.GetUnderlyingData(), toSign.GetLength());
+                EVP_MAC_final(m_ctx, digest.GetUnderlyingData(), NULL, length);
+#endif
 
 #if OPENSSL_VERSION_LESS_1_1
                 HMAC_CTX_cleanup(m_ctx);
-#else
+#elif OPENSSL_VERSION_LESS_3_0
                 HMAC_CTX_reset(m_ctx);
 #endif
                 return HashResult(std::move(digest));
@@ -547,7 +673,7 @@ namespace Aws
                 CryptoBuffer finalBlock(GetBlockSizeBytes());
                 int writtenSize = static_cast<int>(finalBlock.GetLength());
                 int ret = EVP_DecryptFinal_ex(m_decryptor_ctx, finalBlock.GetUnderlyingData(), &writtenSize);
-#if OPENSSL_VERSION_NUMBER > 0x1010104fL //1.1.1d
+#if !defined(OPENSSL_IS_AWSLC) && OPENSSL_VERSION_NUMBER > 0x1010104fL //1.1.1d
                 if (ret <= 0)
 #else
                 if (ret <= 0 && !m_emptyPlaintext) // see details why making exception for empty string at: https://github.com/aws/aws-sdk-cpp/issues/1413

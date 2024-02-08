@@ -1,4 +1,4 @@
-import "library/cpp/actors/protos/interconnect.proto";
+import "ydb/library/actors/protos/interconnect.proto";
 import "ydb/core/protos/tablet.proto";
 import "ydb/core/protos/subdomains.proto";
 import "ydb/core/protos/blobstorage_disk.proto";
@@ -283,6 +283,11 @@ message TSystemStateInfo {
         optional uint32 Body = 4;
     }
 
+    message TNodeSharedCache {
+        optional uint64 UsedBytes = 1;
+        optional uint64 LimitBytes = 2;
+    }
+
     optional uint64 StartTime = 1;
     optional uint64 ChangeTime = 2;
     optional TLegacyNodeLocation SystemLocation = 3;
@@ -314,6 +319,8 @@ message TSystemStateInfo {
     optional int64 MaxClockSkewWithPeerUs = 32; // a positive value means the peer is ahead in time; a negative value means it's behind
     optional uint32 MaxClockSkewPeerId = 33;
     optional uint64 DisconnectTime = 34;
+    optional TNodeSharedCache SharedCacheStats = 35;
+    optional uint32 TotalSessions = 36;
 }
 
 message TEvSystemStateRequest {

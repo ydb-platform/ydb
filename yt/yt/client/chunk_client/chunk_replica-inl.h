@@ -157,16 +157,6 @@ Y_FORCE_INLINE TChunkIdWithIndex::TChunkIdWithIndex(TChunkId id, int replicaInde
     , ReplicaIndex(replicaIndex)
 { }
 
-Y_FORCE_INLINE bool operator==(const TChunkIdWithIndex& lhs, const TChunkIdWithIndex& rhs)
-{
-    return lhs.Id == rhs.Id && lhs.ReplicaIndex == rhs.ReplicaIndex;
-}
-
-Y_FORCE_INLINE bool operator!=(const TChunkIdWithIndex& lhs, const TChunkIdWithIndex& rhs)
-{
-    return !(lhs == rhs);
-}
-
 Y_FORCE_INLINE bool operator<(const TChunkIdWithIndex& lhs, const TChunkIdWithIndex& rhs)
 {
     if (lhs.Id == rhs.Id) {
@@ -191,17 +181,6 @@ Y_FORCE_INLINE TChunkIdWithIndexes::TChunkIdWithIndexes(TChunkId id, int replica
     : TChunkIdWithIndex(id, replicaIndex)
     , MediumIndex(mediumIndex)
 { }
-
-Y_FORCE_INLINE bool operator==(const TChunkIdWithIndexes& lhs, const TChunkIdWithIndexes& rhs)
-{
-    return static_cast<const TChunkIdWithIndex&>(lhs) == static_cast<const TChunkIdWithIndex&>(rhs) &&
-        lhs.MediumIndex == rhs.MediumIndex;
-}
-
-Y_FORCE_INLINE bool operator!=(const TChunkIdWithIndexes& lhs, const TChunkIdWithIndexes& rhs)
-{
-    return !(lhs == rhs);
-}
 
 Y_FORCE_INLINE bool operator<(const TChunkIdWithIndexes& lhs, const TChunkIdWithIndexes& rhs)
 {

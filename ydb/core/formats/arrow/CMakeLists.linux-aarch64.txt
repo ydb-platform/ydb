@@ -9,6 +9,7 @@
 add_subdirectory(common)
 add_subdirectory(compression)
 add_subdirectory(dictionary)
+add_subdirectory(hash)
 add_subdirectory(reader)
 add_subdirectory(serializer)
 add_subdirectory(simple_builder)
@@ -34,7 +35,8 @@ target_link_libraries(core-formats-arrow PUBLIC
   formats-arrow-dictionary
   formats-arrow-transformer
   formats-arrow-reader
-  cpp-actors-core
+  formats-arrow-hash
+  library-actors-core
   ydb-library-arrow_kernels
   ydb-library-binary_json
   ydb-library-dynumber
@@ -54,4 +56,5 @@ target_sources(core-formats-arrow PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/core/formats/arrow/size_calcer.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/formats/arrow/ssa_program_optimizer.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/formats/arrow/special_keys.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/formats/arrow/simple_arrays_cache.cpp
 )

@@ -19,6 +19,8 @@
 #include "blobstorage_pdisk_util_countedqueuemanyone.h"
 #include "blobstorage_pdisk_writer.h"
 
+#include <ydb/core/control/immediate_control_board_impl.h>
+#include <ydb/core/base/resource_profile.h>
 #include <ydb/core/node_whiteboard/node_whiteboard.h>
 #include <ydb/core/blobstorage/lwtrace_probes/blobstorage_probes.h>
 #include <ydb/core/control/immediate_control_board_wrapper.h>
@@ -185,7 +187,7 @@ public:
     TAtomic SlowDeviceMs = 0;
 
     const bool UseHugePages;
-    
+
     // Chunk locking
     TMap<TOwner, ui32> OwnerLocks;
 
@@ -286,7 +288,7 @@ public:
     void SendChunkReadError(const TIntrusivePtr<TChunkRead>& read, TStringStream& errorReason,
             NKikimrProto::EReplyStatus status);
     EChunkReadPieceResult ChunkReadPiece(TIntrusivePtr<TChunkRead> &read, ui64 pieceCurrentSector, ui64 pieceSizeLimit,
-            ui64 *reallyReadBytes);
+            ui64 *reallyReadBytes, NWilson::TTraceId traceId);
     void SplitChunkJobSize(ui32 totalSize, ui32 *outSmallJobSize, ui32 *outLargeJObSize, ui32 *outSmallJobCount);
     ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
     // Chunk locking
@@ -350,7 +352,7 @@ public:
     void ProcessChunkTrimQueue();
     void ClearQuarantineChunks();
     // Should be called to initiate TRIM (on chunk delete or prev trim done)
-    void TryTrimChunk(bool prevDone, ui64 trimmedSize);
+    void TryTrimChunk(bool prevDone, ui64 trimmedSize, const NWilson::TSpan& parentSpan);
     void ProcessFastOperationsQueue();
     ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
     // Drive info and write cache

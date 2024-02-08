@@ -10,10 +10,14 @@
 #define _LIBCPP___UTILITY_CMP_H
 
 #include <__config>
+#include <__type_traits/disjunction.h>
+#include <__type_traits/is_integral.h>
+#include <__type_traits/is_same.h>
+#include <__type_traits/is_signed.h>
+#include <__type_traits/make_unsigned.h>
 #include <__utility/forward.h>
 #include <__utility/move.h>
 #include <limits>
-#include <type_traits>
 
 #if !defined(_LIBCPP_HAS_NO_PRAGMA_SYSTEM_HEADER)
 #  pragma GCC system_header
@@ -30,12 +34,9 @@ struct _IsSameAsAny : _Or<_IsSame<_Tp, _Up>...> {};
 
 template<class _Tp>
 concept __is_safe_integral_cmp = is_integral_v<_Tp> &&
-                      !_IsSameAsAny<_Tp, bool, char
+                      !_IsSameAsAny<_Tp, bool, char, char16_t, char32_t
 #ifndef _LIBCPP_HAS_NO_CHAR8_T
                                     , char8_t
-#endif
-#ifndef _LIBCPP_HAS_NO_UNICODE_CHARS
-                                    , char16_t, char32_t
 #endif
 #ifndef _LIBCPP_HAS_NO_WIDE_CHARACTERS
                                     , wchar_t

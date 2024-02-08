@@ -5,12 +5,13 @@
 #include "monitorable_actor.h"
 #include "subscriber.h"
 
-#include <ydb/core/tx/datashard/sys_tables.h>
+#include <ydb/core/tx/locks/sys_tables.h>
 #include <ydb/core/base/appdata.h>
 #include <ydb/core/base/counters.h>
 #include <ydb/core/base/domain.h>
 #include <ydb/core/base/path.h>
 #include <ydb/core/base/tabletid.h>
+#include <ydb/core/base/feature_flags.h>
 #include <ydb/core/protos/flat_tx_scheme.pb.h>
 #include <ydb/library/services/services.pb.h>
 #include <ydb/core/scheme/scheme_tabledefs.h>
@@ -19,9 +20,9 @@
 #include <ydb/core/tx/schemeshard/schemeshard_types.h>
 #include <ydb/library/yverify_stream/yverify_stream.h>
 
-#include <library/cpp/actors/core/actor_bootstrapped.h>
-#include <library/cpp/actors/core/hfunc.h>
-#include <library/cpp/actors/core/log.h>
+#include <ydb/library/actors/core/actor_bootstrapped.h>
+#include <ydb/library/actors/core/hfunc.h>
+#include <ydb/library/actors/core/log.h>
 #include <library/cpp/json/writer/json.h>
 
 #include <util/generic/algorithm.h>
@@ -33,6 +34,8 @@
 #include <util/generic/vector.h>
 #include <util/generic/xrange.h>
 #include <util/string/builder.h>
+
+#include <google/protobuf/util/json_util.h>
 
 namespace NKikimr {
 namespace NSchemeBoard {
@@ -757,6 +760,7 @@ class TSchemeCache: public TMonitorableActor<TSchemeCache> {
             ExternalDataSourceInfo.Drop();
             BlockStoreVolumeInfo.Drop();
             FileStoreInfo.Drop();
+            ViewInfo.Drop();
         }
 
         void FillTableInfo(const NKikimrSchemeOp::TPathDescription& pathDesc) {
@@ -1197,6 +1201,7 @@ class TSchemeCache: public TMonitorableActor<TSchemeCache> {
             DESCRIPTION_PART(ExternalDataSourceInfo);
             DESCRIPTION_PART(BlockStoreVolumeInfo);
             DESCRIPTION_PART(FileStoreInfo);
+            DESCRIPTION_PART(ViewInfo);
 
             #undef DESCRIPTION_PART
 
@@ -1517,6 +1522,10 @@ class TSchemeCache: public TMonitorableActor<TSchemeCache> {
                 Kind = TNavigate::KindFileStore;
                 FillInfo(Kind, FileStoreInfo, std::move(*pathDesc.MutableFileStoreDescription()));
                 break;
+            case NKikimrSchemeOp::EPathTypeView:
+                Kind = TNavigate::KindView;
+                FillInfo(Kind, ViewInfo, std::move(*pathDesc.MutableViewDescription()));
+                break;
             case NKikimrSchemeOp::EPathTypeInvalid:
                 Y_DEBUG_ABORT_UNLESS(false, "Invalid path type");
                 break;
@@ -1583,6 +1592,9 @@ class TSchemeCache: public TMonitorableActor<TSchemeCache> {
                         break;
                     case NKikimrSchemeOp::EPathTypeFileStore:
                         ListNodeEntry->Children.emplace_back(name, pathId, TNavigate::KindFileStore);
+                        break;
+                    case NKikimrSchemeOp::EPathTypeView:
+                        ListNodeEntry->Children.emplace_back(name, pathId, TNavigate::KindView);
                         break;
                     case NKikimrSchemeOp::EPathTypeTableIndex:
                     case NKikimrSchemeOp::EPathTypeInvalid:
@@ -1734,7 +1746,8 @@ class TSchemeCache: public TMonitorableActor<TSchemeCache> {
             const bool isTable = Kind == TNavigate::KindTable
                 || Kind == TNavigate::KindColumnTable
                 || Kind == TNavigate::KindExternalTable
-                || Kind == TNavigate::KindExternalDataSource;
+                || Kind == TNavigate::KindExternalDataSource
+                || Kind == TNavigate::KindView;
             const bool isTopic = Kind == TNavigate::KindTopic
                 || Kind == TNavigate::KindCdcStream;
 
@@ -1802,6 +1815,7 @@ class TSchemeCache: public TMonitorableActor<TSchemeCache> {
             entry.ExternalDataSourceInfo = ExternalDataSourceInfo;
             entry.BlockStoreVolumeInfo = BlockStoreVolumeInfo;
             entry.FileStoreInfo = FileStoreInfo;
+            entry.ViewInfo = ViewInfo;
         }
 
         bool CheckColumns(TResolveContext* context, TResolve::TEntry& entry,
@@ -2089,6 +2103,9 @@ class TSchemeCache: public TMonitorableActor<TSchemeCache> {
         // NBS specific
         TIntrusivePtr<TNavigate::TBlockStoreVolumeInfo> BlockStoreVolumeInfo;
         TIntrusivePtr<TNavigate::TFileStoreInfo> FileStoreInfo;
+
+        // View specific
+        TIntrusivePtr<TNavigate::TViewInfo> ViewInfo;
 
     }; // TCacheItem
 

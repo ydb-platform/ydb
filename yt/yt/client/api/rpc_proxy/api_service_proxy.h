@@ -62,9 +62,12 @@ public:
     DEFINE_RPC_PROXY_METHOD(NRpcProxy::NProto, AlterTable);
     DEFINE_RPC_PROXY_METHOD(NRpcProxy::NProto, AlterTableReplica);
     DEFINE_RPC_PROXY_METHOD(NRpcProxy::NProto, GetTablePivotKeys);
+    DEFINE_RPC_PROXY_METHOD(NRpcProxy::NProto, CreateTableBackup);
+    DEFINE_RPC_PROXY_METHOD(NRpcProxy::NProto, RestoreTableBackup);
 
     DEFINE_RPC_PROXY_METHOD(NRpcProxy::NProto, LookupRows);
     DEFINE_RPC_PROXY_METHOD(NRpcProxy::NProto, VersionedLookupRows);
+    // TODO(babenko): rename to MultiLookupRows
     DEFINE_RPC_PROXY_METHOD(NRpcProxy::NProto, MultiLookup);
     DEFINE_RPC_PROXY_METHOD(NRpcProxy::NProto, SelectRows);
     DEFINE_RPC_PROXY_METHOD(NRpcProxy::NProto, ExplainQuery);
@@ -82,6 +85,7 @@ public:
     DEFINE_RPC_PROXY_METHOD(NRpcProxy::NProto, AlterReplicationCard);
 
     // Queues
+    DEFINE_RPC_PROXY_METHOD(NRpcProxy::NProto, AdvanceConsumer);
     DEFINE_RPC_PROXY_METHOD(NRpcProxy::NProto, PullQueue);
     DEFINE_RPC_PROXY_METHOD(NRpcProxy::NProto, PullConsumer);
     DEFINE_RPC_PROXY_METHOD(NRpcProxy::NProto, RegisterQueueConsumer);
@@ -133,6 +137,8 @@ public:
         .SetStreamingEnabled(true));
     DEFINE_RPC_PROXY_METHOD(NRpcProxy::NProto, WriteTable,
         .SetStreamingEnabled(true));
+    DEFINE_RPC_PROXY_METHOD(NRpcProxy::NProto, GetColumnarStatistics);
+    DEFINE_RPC_PROXY_METHOD(NRpcProxy::NProto, PartitionTables);
 
     // File caching
     DEFINE_RPC_PROXY_METHOD(NRpcProxy::NProto, GetFileFromCache);
@@ -167,9 +173,17 @@ public:
     DEFINE_RPC_PROXY_METHOD(NRpcProxy::NProto, CheckPermissionByAcl);
     DEFINE_RPC_PROXY_METHOD(NRpcProxy::NProto, TransferAccountResources);
 
-    // Metadata
-    DEFINE_RPC_PROXY_METHOD(NRpcProxy::NProto, GetColumnarStatistics);
-    DEFINE_RPC_PROXY_METHOD(NRpcProxy::NProto, PartitionTables);
+    // Flow
+    DEFINE_RPC_PROXY_METHOD(NRpcProxy::NProto, GetPipelineSpec);
+    DEFINE_RPC_PROXY_METHOD(NRpcProxy::NProto, SetPipelineSpec);
+    DEFINE_RPC_PROXY_METHOD(NRpcProxy::NProto, GetPipelineDynamicSpec);
+    DEFINE_RPC_PROXY_METHOD(NRpcProxy::NProto, SetPipelineDynamicSpec);
+    DEFINE_RPC_PROXY_METHOD(NRpcProxy::NProto, StartPipeline);
+    DEFINE_RPC_PROXY_METHOD(NRpcProxy::NProto, StopPipeline);
+    DEFINE_RPC_PROXY_METHOD(NRpcProxy::NProto, PausePipeline);
+    DEFINE_RPC_PROXY_METHOD(NRpcProxy::NProto, GetPipelineStatus);
+
+    // Misc
     DEFINE_RPC_PROXY_METHOD(NRpcProxy::NProto, CheckClusterLiveness);
 };
 

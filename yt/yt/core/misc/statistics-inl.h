@@ -39,7 +39,7 @@ void TTaggedStatistics<TTags>::AppendStatistics(const TStatistics& statistics, T
         }
     }
 }
-    
+
 template <class TTags>
 void TTaggedStatistics<TTags>::AppendTaggedSummary(const NYPath::TYPath& path, const TTaggedStatistics<TTags>::TTaggedSummaries& taggedSummaries)
 {
@@ -48,11 +48,11 @@ void TTaggedStatistics<TTags>::AppendTaggedSummary(const NYPath::TYPath& path, c
         Data_[path] = taggedSummaries;
         return;
     }
-        
+
     auto& currentTaggedSummaries = taggedSummariesIt->second;
     for (const auto& [tags, summary] : taggedSummaries) {
         if (auto summaryIt = currentTaggedSummaries.find(tags); summaryIt == currentTaggedSummaries.end()) {
-            currentTaggedSummaries.insert(std::make_pair(tags, summary));
+            currentTaggedSummaries.insert(std::pair(tags, summary));
         } else {
             summaryIt->second.Merge(summary);
         }
@@ -155,7 +155,7 @@ void SerializeYsonPathsMap(
             // previous one in order to close necessary number of maps.
             commonDepth = SkipEqualTokens(currentTokenizer, previousTokenizer);
 
-             // Close all redundant maps.
+            // Close all redundant maps.
             while (previousDepth > commonDepth) {
                 consumer->OnEndMap();
                 --previousDepth;

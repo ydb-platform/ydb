@@ -23,6 +23,15 @@ message TPartScheme {
     optional uint32 Legacy0_ = 3;
 }
 
+message TBTreeIndexMeta {
+    optional uint32 RootPageId = 1;
+    optional uint32 LevelCount = 2;
+    optional uint64 IndexSize = 3;
+    optional uint64 DataSize = 4;
+    optional uint64 RowCount = 5; // Total number of data rows
+    optional uint64 ErasedRowCount = 6; // Total number of erased data rows
+}
+
 message TLayout {
     optional uint32 Index = 1;
     optional uint32 Globs = 2;  // EPage::Globs, external blobs catalog
@@ -34,6 +43,8 @@ message TLayout {
     repeated uint32 HistoricIndexes = 8; // EPage::Index for historic data
     optional uint32 GarbageStats = 9; // EPage::GarbageStats for historic data
     optional uint32 TxIdStats = 10; // EPage::TxIdStats for uncommitted deltas
+    repeated TBTreeIndexMeta BTreeGroupIndexes = 11;
+    repeated TBTreeIndexMeta BTreeHistoricIndexes = 12;
 }
 
 message TStat {

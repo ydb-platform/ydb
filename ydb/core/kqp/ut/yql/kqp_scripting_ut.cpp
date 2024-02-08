@@ -46,6 +46,84 @@ Y_UNIT_TEST_SUITE(KqpScripting) {
         UNIT_ASSERT_VALUES_EQUAL(rs0.ColumnParser(0).GetUint64(), 2u);
     }
 
+    Y_UNIT_TEST(ScriptingCreateAndAlterTableTest) {
+        TKikimrRunner kikimr;
+        TScriptingClient client(kikimr.GetDriver());
+
+        auto result = client.ExecuteYqlScript(R"(
+            CREATE TABLE `/Root/ScriptingCreateAndAlterTableTest` (
+                Key Uint64,
+                Value String,
+                PRIMARY KEY (Key)
+            );
+            COMMIT;
+
+            REPLACE INTO `/Root/ScriptingCreateAndAlterTableTest` (Key, Value) VALUES
+                (1, "One"),
+                (2, "Two");
+        )").GetValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        UNIT_ASSERT_VALUES_EQUAL(result.GetResultSets().size(), 0);
+
+        result = client.ExecuteYqlScript(R"(
+            SELECT COUNT(*) FROM `/Root/ScriptingCreateAndAlterTableTest`;
+        )").GetValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        UNIT_ASSERT_VALUES_EQUAL(result.GetResultSets().size(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(result.GetResultSets()[0].RowsCount(), 1);
+        TResultSetParser rs0(result.GetResultSets()[0]);
+        UNIT_ASSERT(rs0.TryNextRow());
+        UNIT_ASSERT_VALUES_EQUAL(rs0.ColumnParser(0).GetUint64(), 2u);
+
+        result = client.ExecuteYqlScript(R"(
+            ALTER TABLE `/Root/ScriptingCreateAndAlterTableTest` SET (AUTO_PARTITIONING_BY_SIZE = ENABLED);
+        )").GetValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+    
+        result = client.ExecuteYqlScript(R"(
+            ALTER TABLE `/Root/ScriptingCreateAndAlterTableTest` SET (AUTO_PARTITIONING_BY_SIZE = ENABLED);
+            COMMIT;
+            ALTER TABLE `/Root/ScriptingCreateAndAlterTableTest` SET (AUTO_PARTITIONING_PARTITION_SIZE_MB = 500);
+            COMMIT;
+            ALTER TABLE `/Root/ScriptingCreateAndAlterTableTest` SET (AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = 4);
+        )").GetValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+    
+        result = client.ExecuteYqlScript(R"(
+            ALTER TABLE `/Root/ScriptingCreateAndAlterTableTest` SET (AUTO_PARTITIONING_BY_SIZE = ENABLED);
+            COMMIT;
+            CREATE TABLE `/Root/ScriptingCreateAndAlterTableTest2` (
+                Key Uint64,
+                Value String,
+                PRIMARY KEY (Key)
+            );
+            COMMIT;
+        )").GetValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+
+        result = client.ExecuteYqlScript(R"(
+            SELECT COUNT(*) FROM `/Root/ScriptingCreateAndAlterTableTest2`;
+        )").GetValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+
+        result = client.ExecuteYqlScript(R"(
+            CREATE TABLE `/Root/ScriptingCreateAndAlterTableTest3` (
+                Key Uint64,
+                Value String,
+                PRIMARY KEY (Key)
+            );
+            COMMIT;
+            ALTER TABLE `/Root/ScriptingCreateAndAlterTableTest3` SET (AUTO_PARTITIONING_BY_SIZE = ENABLED);
+            COMMIT;
+        )").GetValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+
+        result = client.ExecuteYqlScript(R"(
+            SELECT COUNT(*) FROM `/Root/ScriptingCreateAndAlterTableTest3`;
+        )").GetValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+    }
+
     Y_UNIT_TEST(UnsafeTimestampCast) {
         auto setting = NKikimrKqp::TKqpSetting();
         setting.SetName("_KqpYqlSyntaxVersion");
@@ -538,8 +616,8 @@ Y_UNIT_TEST_SUITE(KqpScripting) {
 
         NJson::TJsonValue plan;
         NJson::ReadJsonTree(planJson, &plan, true);
-        auto node = FindPlanNodeByKv(plan.GetMap().at("queries").GetArray()[2], "Node Type", "Aggregate-TableFullScan");
-        UNIT_ASSERT_EQUAL(node.GetMap().at("Stats").GetMapSafe().at("TotalTasks").GetIntegerSafe(), 1);
+        auto node = FindPlanNodeByKv(plan.GetMap().at("queries").GetArray()[2], "Node Type", "Aggregate");
+        UNIT_ASSERT_EQUAL(node.GetMap().at("Stats").GetMapSafe().at("Tasks").GetIntegerSafe(), 1);
     }
 
     Y_UNIT_TEST(StreamExecuteYqlScriptScan) {

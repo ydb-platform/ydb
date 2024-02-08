@@ -82,6 +82,9 @@ public:
 
     using TVSlotReadyTimestampQ = std::list<std::pair<TMonotonic, TVSlotInfo*>>;
 
+    // VDisk will be considered READY during this period after reporting its READY state
+    static constexpr TDuration ReadyStablePeriod = TDuration::Seconds(15);
+
     class TVSlotInfo : public TIndirectReferable<TVSlotInfo> {
     public:
         using Table = Schema::VSlot;
@@ -120,9 +123,6 @@ public:
     private:
         TVSlotReadyTimestampQ& VSlotReadyTimestampQ;
         TVSlotReadyTimestampQ::iterator VSlotReadyTimestampIter;
-
-        // VDisk will be considered READY during this period after reporting its READY state
-        static constexpr TDuration ReadyStablePeriod = TDuration::Seconds(15);
 
     public:
         NKikimrBlobStorage::EVDiskStatus Status = NKikimrBlobStorage::EVDiskStatus::INIT_PENDING;
@@ -334,7 +334,6 @@ public:
         NKikimrBlobStorage::EDriveStatus Status;
         TInstant StatusTimestamp;
         NKikimrBlobStorage::EDecommitStatus DecommitStatus;
-        Table::Mood::Type Mood;
         TString ExpectedSerial;
         TString LastSeenSerial;
         TString LastSeenPath;
@@ -352,7 +351,6 @@ public:
                     Table::PDiskConfig,
                     Table::Status,
                     Table::Timestamp,
-                    Table::Mood,
                     Table::ExpectedSerial,
                     Table::LastSeenSerial,
                     Table::LastSeenPath,
@@ -367,7 +365,6 @@ public:
                     &TPDiskInfo::PDiskConfig,
                     &TPDiskInfo::Status,
                     &TPDiskInfo::StatusTimestamp,
-                    &TPDiskInfo::Mood,
                     &TPDiskInfo::ExpectedSerial,
                     &TPDiskInfo::LastSeenSerial,
                     &TPDiskInfo::LastSeenPath,
@@ -389,7 +386,6 @@ public:
                    NKikimrBlobStorage::EDriveStatus status,
                    TInstant statusTimestamp,
                    NKikimrBlobStorage::EDecommitStatus decommitStatus,
-                   Table::Mood::Type mood,
                    const TString& expectedSerial,
                    const TString& lastSeenSerial,
                    const TString& lastSeenPath,
@@ -406,7 +402,6 @@ public:
             , Status(status)
             , StatusTimestamp(statusTimestamp)
             , DecommitStatus(decommitStatus)
-            , Mood(mood)
             , ExpectedSerial(expectedSerial)
             , LastSeenSerial(lastSeenSerial)
             , LastSeenPath(lastSeenPath)
@@ -1496,6 +1491,8 @@ private:
     TActorId StatProcessorActorId;
     TInstant LastMetricsCommit;
     bool SelfHealEnable = false;
+    bool UseSelfHealLocalPolicy = false;
+    bool TryToRelocateBrokenDisksLocallyFirst = false;
     bool DonorMode = false;
     TDuration ScrubPeriodicity;
     NKikimrBlobStorage::TStorageConfig StorageConfig;
@@ -1904,6 +1901,7 @@ private:
 
         TVDiskAvailabilityTiming() = default;
         TVDiskAvailabilityTiming(const TVDiskAvailabilityTiming&) = default;
+        TVDiskAvailabilityTiming& operator=(const TVDiskAvailabilityTiming&) = default;
 
         TVDiskAvailabilityTiming(const TVSlotInfo& vslot)
             : VSlotId(vslot.VSlotId)
@@ -2239,6 +2237,7 @@ public:
 
         std::optional<NKikimrBlobStorage::TVDiskMetrics> VDiskMetrics;
         NKikimrBlobStorage::EVDiskStatus VDiskStatus = NKikimrBlobStorage::EVDiskStatus::ERROR;
+        TMonotonic ReadySince = TMonotonic::Max(); // when IsReady becomes true for this disk; Max() in non-READY state
 
         TStaticVSlotInfo(const NKikimrBlobStorage::TNodeWardenServiceSet::TVDisk& vdisk)
             : VDiskId(VDiskIDFromVDiskID(vdisk.GetVDiskID()))
@@ -2308,6 +2307,9 @@ public:
         const TGroupInfo& group, const TVSlotFinder& finder);
     static void SerializeGroupInfo(NKikimrBlobStorage::TGroupInfo *group, const TGroupInfo& groupInfo,
         const TString& storagePoolName, const TMaybe<TKikimrScopeId>& scopeId);
+
+    static NKikimrBlobStorage::TGroupStatus::E DeriveStatus(const TBlobStorageGroupInfo::TTopology *topology,
+        const TBlobStorageGroupInfo::TGroupVDisks& failed);
 };
 
 } //NBsController

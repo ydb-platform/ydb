@@ -4,10 +4,8 @@ NO_SANITIZE()
 
 NO_RUNTIME()
 
-IF (CLANG16)
-ADDINCL(GLOBAL contrib/libs/clang16-rt/include)
-ELSE()
-ADDINCL(GLOBAL contrib/libs/clang14-rt/include)
+IF (USE_ARCADIA_COMPILER_RUNTIME)
+    ADDINCL(GLOBAL contrib/libs/clang${CLANG_VER}-rt/include)
 ENDIF()
 
 END()

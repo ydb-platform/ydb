@@ -1,7 +1,7 @@
 #include <ydb/core/grpc_services/local_rpc/local_rpc.h>
 #include <ydb/public/api/grpc/ydb_auth_v1.grpc.pb.h>
 #include <ydb/core/base/ticket_parser.h>
-#include <library/cpp/actors/core/actor.h>
+#include <ydb/library/actors/core/actor.h>
 #include <ydb/core/kafka_proxy/kafka_events.h>
 
 #include "kafka_sasl_handshake_actor.h"

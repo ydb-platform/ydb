@@ -57,6 +57,11 @@ void TChannelWrapper::UnsubscribeTerminated(const TCallback<void(const TError&)>
     UnderlyingChannel_->UnsubscribeTerminated(callback);
 }
 
+int TChannelWrapper::GetInflightRequestCount()
+{
+    return UnderlyingChannel_->GetInflightRequestCount();
+}
+
 ////////////////////////////////////////////////////////////////////////////////
 
 void TClientRequestControlThunk::SetUnderlying(IClientRequestControlPtr underlying)

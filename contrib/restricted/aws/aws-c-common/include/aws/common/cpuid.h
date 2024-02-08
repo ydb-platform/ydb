@@ -13,6 +13,7 @@ enum aws_cpu_feature_name {
     AWS_CPU_FEATURE_SSE_4_2,
     AWS_CPU_FEATURE_AVX2,
     AWS_CPU_FEATURE_ARM_CRC,
+    AWS_CPU_FEATURE_BMI2,
     AWS_CPU_FEATURE_COUNT,
 };
 

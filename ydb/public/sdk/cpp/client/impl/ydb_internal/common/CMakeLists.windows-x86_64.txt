@@ -11,7 +11,7 @@ add_library(impl-ydb_internal-common)
 target_link_libraries(impl-ydb_internal-common PUBLIC
   contrib-libs-cxxsupp
   yutil
-  cpp-grpc-client
+  library-grpc-client
   yql-public-issue
 )
 target_sources(impl-ydb_internal-common PRIVATE

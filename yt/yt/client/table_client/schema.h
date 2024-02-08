@@ -23,10 +23,14 @@ DEFINE_ENUM(ELockType,
     ((SharedWeak)   (1))
     ((SharedStrong) (2))
     ((Exclusive)    (3))
+    ((SharedWrite)  (4))
 );
 
 // COMPAT(gritukan)
 constexpr ELockType MaxOldLockType = ELockType::Exclusive;
+
+bool IsReadLock(ELockType lock);
+bool IsWriteLock(ELockType lock);
 
 ELockType GetStrongestLock(ELockType lhs, ELockType rhs);
 
@@ -75,6 +79,9 @@ public:
     // COMPAT(gritukan)
     TLegacyLockMask ToLegacyMask() const;
     bool HasNewLocks() const;
+
+    // NB: Has linear complexity.
+    bool IsNone() const;
 
     static constexpr int BitsPerType = 4;
     static_assert(static_cast<int>(TEnumTraits<ELockType>::GetMaxValue()) < (1 << BitsPerType));

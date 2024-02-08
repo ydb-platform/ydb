@@ -98,7 +98,7 @@ TSharedRef THttpParser::Feed(const TSharedRef& input)
 
 std::pair<int, int> THttpParser::GetVersion() const
 {
-    return std::make_pair<int, int>(Parser_.http_major, Parser_.http_minor);
+    return std::pair<int, int>(Parser_.http_major, Parser_.http_minor);
 }
 
 EStatusCode THttpParser::GetStatusCode() const

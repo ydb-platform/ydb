@@ -4,7 +4,7 @@
 #include "blobstorage_syncquorum.h"
 #include <ydb/core/blobstorage/vdisk/common/sublog.h>
 
-#include <library/cpp/actors/core/interconnect.h>
+#include <ydb/library/actors/core/interconnect.h>
 
 using namespace NKikimrServices;
 using namespace NKikimr::NSync;
@@ -396,14 +396,11 @@ namespace NKikimr {
                 TQuorumTracker finalQuorum(Self, Top, true); // include my faildomain
                 TMap<TVDiskEternalGuid, ui32> finalGuidMap;      // Guid -> HowManyVDisksHasThisGuid
                 TMap<TVDiskEternalGuid, ui32> inProgressGuidMap; // Guid -> HowManyVDisksHasThisGuid
-                ui32 emptyCounter = 0;
-                ui32 noAnswer = 0;
                 for (const auto &x : Neighbors) {
                     const auto &v = x.Get();
                     if (v.Obtained) {
                         switch (v.State) {
                             case TSyncVal::Empty: {
-                                emptyCounter++;
                                 break;
                             }
                             case TSyncVal::InProgress: {
@@ -417,8 +414,6 @@ namespace NKikimr {
                             }
                             default: Y_ABORT("Unexpected case");
                         }
-                    } else {
-                        noAnswer++;
                     }
                 }
 

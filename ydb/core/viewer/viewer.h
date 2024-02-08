@@ -3,9 +3,9 @@
 #include <ydb/core/viewer/json/json.h>
 
 #include <ydb/core/tablet/defs.h>
-#include <library/cpp/actors/core/defs.h>
-#include <library/cpp/actors/core/actor.h>
-#include <library/cpp/actors/core/event.h>
+#include <ydb/library/actors/core/defs.h>
+#include <ydb/library/actors/core/actor.h>
+#include <ydb/library/actors/core/event.h>
 #include <ydb/core/driver_lib/run/config.h>
 #include <ydb/core/viewer/protos/viewer.pb.h>
 #include <util/system/hostname.h>
@@ -154,6 +154,7 @@ public:
         const TContentHandler& handler) = 0;
 
     virtual TString GetCORS(const NMon::TEvHttpInfo* request) = 0;
+    virtual TString GetHTTPOK(const NMon::TEvHttpInfo* request, TString contentType = {}, TString response = {}) = 0;
     virtual TString GetHTTPOKJSON(const NMon::TEvHttpInfo* request, TString response = {}) = 0;
     virtual TString GetHTTPGATEWAYTIMEOUT(const NMon::TEvHttpInfo* request) = 0;
     virtual TString GetHTTPBADREQUEST(const NMon::TEvHttpInfo* request, TString contentType = {}, TString response = {}) = 0;

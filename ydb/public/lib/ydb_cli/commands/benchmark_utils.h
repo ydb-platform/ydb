@@ -18,6 +18,7 @@ struct TTestInfo {
     double RttMean = 0;
 
     double Mean = 0;
+    double Median = 0;
     double Std = 0;
     std::vector<TDuration> ClientTimings; // timings captured by the client application. these timings include time RTT between server and the client application.
     std::vector<TDuration> ServerTimings; // query timings measured by the server.

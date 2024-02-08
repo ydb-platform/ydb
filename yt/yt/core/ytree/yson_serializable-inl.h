@@ -21,6 +21,7 @@
 #include <yt/yt/core/actions/bind.h>
 
 #include <library/cpp/yt/misc/enum.h>
+#include <library/cpp/yt/misc/wrapper_traits.h>
 
 #include <util/datetime/base.h>
 
@@ -33,7 +34,7 @@ namespace NYT::NYTree {
 namespace NDetail {
 
 template <class T>
-concept IsYsonStructOrYsonSerializable = std::is_base_of_v<TYsonStructBase, T> || std::is_base_of_v<TYsonSerializableLite, T>;
+concept IsYsonStructOrYsonSerializable = std::derived_from<T, TYsonStructBase> || std::derived_from<T, TYsonSerializableLite>;
 
 template <class T>
 void LoadFromNode(
@@ -622,9 +623,7 @@ concept SupportsDontSerializeDefaultImpl =
 
 template <class T>
 concept SupportsDontSerializeDefault =
-    SupportsDontSerializeDefaultImpl<T> ||
-    TStdOptionalTraits<T>::IsStdOptional &&
-    SupportsDontSerializeDefaultImpl<typename TStdOptionalTraits<T>::TValueType>;
+    SupportsDontSerializeDefaultImpl<typename TWrapperTraits<T>::TRecursiveUnwrapped>;
 
 ////////////////////////////////////////////////////////////////////////////////
 

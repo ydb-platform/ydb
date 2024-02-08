@@ -12,11 +12,11 @@
 #include <ydb/public/sdk/cpp/client/ydb_query/client.h>
 #include <ydb/public/sdk/cpp/client/ydb_operation/operation.h>
 
-#include <library/cpp/actors/core/actor.h>
-#include <library/cpp/actors/core/actor_bootstrapped.h>
-#include <library/cpp/actors/core/actorsystem.h>
-#include <library/cpp/actors/core/hfunc.h>
-#include <library/cpp/actors/core/log.h>
+#include <ydb/library/actors/core/actor.h>
+#include <ydb/library/actors/core/actor_bootstrapped.h>
+#include <ydb/library/actors/core/actorsystem.h>
+#include <ydb/library/actors/core/hfunc.h>
+#include <ydb/library/actors/core/log.h>
 
 
 #define LOG_E(stream) LOG_ERROR_S(*TlsActivationContext, NKikimrServices::FQ_RUN_ACTOR, "[ydb] [Stopper] QueryId: " << Params.QueryId << " OperationId: " << ProtoToString(OperationId) << " " << stream)
@@ -81,13 +81,13 @@ public:
 
     void Handle(const TEvYdbCompute::TEvCancelOperationResponse::TPtr& ev) {
         const auto& response = *ev.Get()->Get();
-        if (response.Status != NYdb::EStatus::SUCCESS) {
+        if (response.Status != NYdb::EStatus::SUCCESS && response.Status != NYdb::EStatus::NOT_FOUND && response.Status != NYdb::EStatus::PRECONDITION_FAILED) {
             LOG_E("Can't cancel operation: " << ev->Get()->Issues.ToOneLineString());
-            Send(Parent, new TEvYdbCompute::TEvStopperResponse(ev->Get()->Issues, ev->Get()->Status));
+            Send(Parent, new TEvYdbCompute::TEvStopperResponse(response.Issues, response.Status));
             FailedAndPassAway();
             return;
         }
-        LOG_I("Operation successfully canceled");
+        LOG_I("Operation successfully canceled: " << response.Status);
         Send(Parent, new TEvYdbCompute::TEvStopperResponse({}, NYdb::EStatus::SUCCESS));
         CompleteAndPassAway();
     }

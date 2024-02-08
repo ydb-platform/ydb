@@ -4,6 +4,19 @@ namespace NYT {
 
 ////////////////////////////////////////////////////////////////////////////////
 
+TConstantBackoffOptions::operator TExponentialBackoffOptions() const
+{
+    return TExponentialBackoffOptions{
+        .InvocationCount = InvocationCount,
+        .MinBackoff = Backoff,
+        .MaxBackoff = Backoff,
+        .BackoffMultiplier = 1.0,
+        .BackoffJitter = BackoffJitter
+    };
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
 void TLogDigestConfig::Register(TRegistrar registrar)
 {
     registrar.Parameter("relative_precision", &TThis::RelativePrecision)
@@ -92,6 +105,9 @@ void THistoricUsageConfig::Register(TRegistrar registrar)
         // TODO(eshcherbin): Adjust.
         .Default(1.0 / (24.0 * 60.0 * 60.0))
         .GreaterThanOrEqual(0.0);
+
+    registrar.Parameter("reset_on_new_parameters", &TThis::ResetOnNewParameters)
+        .Default(true);
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -122,6 +138,47 @@ void TAdaptiveHedgingManagerConfig::Register(TRegistrar registrar)
         }
     });
 }
+
+////////////////////////////////////////////////////////////////////////////////
+
+namespace NDetail {
+
+void TExponentialBackoffOptionsSerializer::Register(TRegistrar registrar)
+{
+    registrar.ExternalClassParameter("invocation_count", &TThat::InvocationCount)
+        .Alias("retry_count")
+        .Default(TThat::DefaultInvocationCount);
+
+    registrar.ExternalClassParameter("min_backoff", &TThat::MinBackoff)
+        .Default(TThat::DefaultMinBackoff);
+
+    registrar.ExternalClassParameter("max_backoff", &TThat::MaxBackoff)
+        .Default(TThat::DefaultMaxBackoff);
+
+    registrar.ExternalClassParameter("backoff_multiplier", &TThat::BackoffMultiplier)
+        .Default(TThat::DefaultBackoffMultiplier)
+        .GreaterThanOrEqual(1.0);
+
+    registrar.ExternalClassParameter("backoff_jitter", &TThat::BackoffJitter)
+        .Default(TThat::DefaultBackoffJitter);
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
+void TConstantBackoffOptionsSerializer::Register(TRegistrar registrar)
+{
+    registrar.ExternalClassParameter("invocation_count", &TThat::InvocationCount)
+        .Alias("retry_count")
+        .Default(TThat::DefaultInvocationCount);
+
+    registrar.ExternalClassParameter("backoff", &TThat::Backoff)
+        .Default(TThat::DefaultBackoff);
+
+    registrar.ExternalClassParameter("backoff_jitter", &TThat::BackoffJitter)
+        .Default(TThat::DefaultBackoffJitter);
+}
+
+} // namespace NDetail
 
 ////////////////////////////////////////////////////////////////////////////////
 

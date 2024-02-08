@@ -253,6 +253,27 @@ Y_UNIT_TEST_SUITE(TYqlExprConstraints) {
         CheckConstraint<TSortedConstraintNode>(exprRoot, "OrderedMap", "Sorted(element,tuple[desc])");
     }
 
+    Y_UNIT_TEST(SortByFullTupleOnTop) {
+        const auto s = R"((
+            (let mr_sink (DataSink 'yt (quote plato)))
+            (let list (AsList
+                '((String 'x) (String 'a) (String 'u))
+                '((String 'y) (String 'b) (String 'v))
+                '((String 'z) (String 'c) (String 'w))
+            ))
+            (let sorted (Sort list (Bool 'False) (lambda '(item) item)))
+            (let map (OrderedMap sorted (lambda '(item) (AsStruct '('one (Nth item '0)) '('two (Nth item '1)) '('three (Nth item '2))))))
+            (let world (Write! world mr_sink (Key '('table (String 'Output))) map '('('mode 'renew))))
+            (let world (Commit! world mr_sink))
+            (return world)
+        ))";
+
+        TExprContext exprCtx;
+        const auto exprRoot = ParseAndAnnotate(s, exprCtx);
+        CheckConstraint<TSortedConstraintNode>(exprRoot, "Sort", "Sorted(0[desc];1[desc];2[desc])");
+        CheckConstraint<TSortedConstraintNode>(exprRoot, "OrderedMap", "Sorted(one[desc];two[desc];three[desc])");
+    }
+
     Y_UNIT_TEST(SortByColumnAndExpr) {
         const auto s = R"((
             (let mr_sink (DataSink 'yt (quote plato)))
@@ -664,6 +685,32 @@ Y_UNIT_TEST_SUITE(TYqlExprConstraints) {
         CheckConstraint<TSortedConstraintNode>(exprRoot, "OrderedMap", "Sorted(k[desc])");
         CheckConstraint<TUniqueConstraintNode>(exprRoot, "OrderedMap", "Unique((k)(s,v))");
         CheckConstraint<TDistinctConstraintNode>(exprRoot, "OrderedMap", "Distinct((v))");
+    }
+
+    Y_UNIT_TEST(NestedFlatMapByOptional) {
+        const auto s = R"((
+            (let mr_sink (DataSink 'yt (quote plato)))
+            (let list (AsList
+                (AsStruct '('key (String '4)) '('subkey (String 'c)) '('value (String 'v)))
+                (AsStruct '('key (String '1)) '('subkey (String 'd)) '('value (String 'w)))
+                (AsStruct '('key (String '3)) '('subkey (String 'b)) '('value (String 'u)))
+            ))
+            (let list (AssumeUnique list '('key 'subkey) '('value)))
+            (let list (AssumeDistinct list '('key) '('subkey 'value)))
+            (let sorted (Sort list '((Bool 'False) (Bool 'True)) (lambda '(item) '((Member item 'value) (Member item 'subkey)))))
+            (let mapped (OrderedFlatMap sorted (lambda '(item) (FlatMap (StrictCast (Member item 'key) (OptionalType (DataType 'Uint8)))
+                (lambda '(key) (Just (AsStruct '('k key) '('s (Member item 'subkey)) '('v (Member item 'value)))))
+            ))))
+            (let world (Write! world mr_sink (Key '('table (String 'Output))) mapped '('('mode 'renew))))
+            (let world (Commit! world mr_sink))
+            (return world)
+        ))";
+
+        TExprContext exprCtx;
+        const auto exprRoot = ParseAndAnnotate(s, exprCtx);
+        CheckConstraint<TSortedConstraintNode>(exprRoot, "OrderedFlatMap", "Sorted(v[desc];s[asc])");
+        CheckConstraint<TUniqueConstraintNode>(exprRoot, "OrderedFlatMap", "Unique((k,s)(v))");
+        CheckConstraint<TDistinctConstraintNode>(exprRoot, "OrderedFlatMap", "Distinct((s,v))");
     }
 
     Y_UNIT_TEST(FlattenMembers) {
@@ -2083,7 +2130,7 @@ Y_UNIT_TEST_SUITE(TYqlExprConstraints) {
 
     (let dict (ToDict list2 (lambda '(item) '((Member item 'key2) (Member item 'subkey2))) (lambda '(item) '((Member item 'subkey2) (Member item 'value2))) '('One 'Hashed)))
 
-    (let join (MapJoinCore (ToFlow list1) dict 'Inner '('key1 'subkey1) '('key1 'key 'subkey1 'subkey 'value1 'value) '('0 's '1 'v)))
+    (let join (MapJoinCore (ToFlow list1) dict 'Inner '('key1 'subkey1) '('key2 'subkey2) '('key1 'key 'subkey1 'subkey 'value1 'value) '('0 's '1 'v)))
     (let list (Collect join))
 
     (let res_sink (DataSink 'yt (quote plato)))
@@ -2125,7 +2172,7 @@ Y_UNIT_TEST_SUITE(TYqlExprConstraints) {
 
     (let dict (ToDict list2 (lambda '(item) '((Member item 'key2) (Member item 'subkey2))) (lambda '(item) '((Member item 'subkey2) (Member item 'value2))) '('Many 'Hashed)))
 
-    (let join (MapJoinCore (ToFlow list1) dict 'Inner '('key1 'subkey1) '('key1 'key 'subkey1 'subkey 'value1 'value) '('0 's '1 'v)))
+    (let join (MapJoinCore (ToFlow list1) dict 'Inner '('key1 'subkey1) '('key2 'subkey2) '('key1 'key 'subkey1 'subkey 'value1 'value) '('0 's '1 'v)))
     (let list (Collect join))
 
     (let res_sink (DataSink 'yt (quote plato)))
@@ -2167,7 +2214,7 @@ Y_UNIT_TEST_SUITE(TYqlExprConstraints) {
 
     (let dict (ToDict list2 (lambda '(item) '((Member item 'key2) (Member item 'subkey2))) (lambda '(item) '((Member item 'subkey2) (Member item 'value2))) '('One 'Hashed)))
 
-    (let join (MapJoinCore (ToFlow list1) dict 'Left '('key1 'subkey1) '('key1 'key 'subkey1 'subkey 'value1 'value) '('0 's '1 'v)))
+    (let join (MapJoinCore (ToFlow list1) dict 'Left '('key1 'subkey1) '('key2 'subkey2) '('key1 'key 'subkey1 'subkey 'value1 'value) '('0 's '1 'v)))
     (let list (Collect join))
 
     (let res_sink (DataSink 'yt (quote plato)))
@@ -2209,7 +2256,7 @@ Y_UNIT_TEST_SUITE(TYqlExprConstraints) {
 
     (let dict (ToDict list2 (lambda '(item) '((Member item 'key2) (Member item 'subkey2))) (lambda '(item) '((Member item 'subkey2) (Member item 'value2))) '('Many 'Hashed)))
 
-    (let join (MapJoinCore (ToFlow list1) dict 'Left '('key1 'subkey1) '('key1 'key 'subkey1 'subkey 'value1 'value) '('0 's '1 'v)))
+    (let join (MapJoinCore (ToFlow list1) dict 'Left '('key1 'subkey1) '('key2 'subkey2) '('key1 'key 'subkey1 'subkey 'value1 'value) '('0 's '1 'v)))
     (let list (Collect join))
 
     (let res_sink (DataSink 'yt (quote plato)))
@@ -2251,7 +2298,7 @@ Y_UNIT_TEST_SUITE(TYqlExprConstraints) {
 
     (let dict (ToDict list2 (lambda '(item) '((Member item 'key2) (Member item 'subkey2))) (lambda '(item) '()) '('One 'Hashed)))
 
-    (let join (MapJoinCore (ToFlow list1) dict 'LeftSemi '('key1 'subkey1) '('key1 'key 'subkey1 'subkey 'value1 'value) '()))
+    (let join (MapJoinCore (ToFlow list1) dict 'LeftSemi '('key1 'subkey1) '('key2 'subkey2) '('key1 'key 'subkey1 'subkey 'value1 'value) '()))
     (let list (Collect join))
 
     (let res_sink (DataSink 'yt (quote plato)))
@@ -2293,7 +2340,7 @@ Y_UNIT_TEST_SUITE(TYqlExprConstraints) {
 
     (let dict (ToDict list2 (lambda '(item) '((Member item 'key2) (Member item 'subkey2))) (lambda '(item) '()) '('One 'Hashed)))
 
-    (let join (MapJoinCore (ToFlow list1) dict 'LeftOnly '('key1 'subkey1) '('key1 'key 'value1 'value) '()))
+    (let join (MapJoinCore (ToFlow list1) dict 'LeftOnly '('key1 'subkey1) '('key2 'subkey2) '('key1 'key 'value1 'value) '()))
     (let list (Collect join))
 
     (let res_sink (DataSink 'yt (quote plato)))

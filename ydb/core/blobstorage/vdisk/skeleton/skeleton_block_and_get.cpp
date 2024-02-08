@@ -4,8 +4,8 @@
 #include <ydb/core/blobstorage/vdisk/common/vdisk_events.h>
 #include <ydb/core/blobstorage/vdisk/common/vdisk_response.h>
 
-#include <library/cpp/actors/core/actor.h>
-#include <library/cpp/actors/core/actor_bootstrapped.h>
+#include <ydb/library/actors/core/actor.h>
+#include <ydb/library/actors/core/actor_bootstrapped.h>
 
 #include <memory>
 
@@ -44,7 +44,7 @@ public:
             Request->Get()->Record.GetForceBlockTabletData().GetId(),
             Request->Get()->Record.GetForceBlockTabletData().GetGeneration(),
             VDiskIDFromVDiskID(Request->Get()->Record.GetVDiskID()),
-            Request->Get()->Record.GetMsgQoS().HasDeadlineSeconds() ? 
+            Request->Get()->Record.GetMsgQoS().HasDeadlineSeconds() ?
                 TInstant::Seconds(Request->Get()->Record.GetMsgQoS().GetDeadlineSeconds()) :
                 TInstant::Seconds(VBLOCK_DEFAULT_DEADLINE_SECONDS)
         );

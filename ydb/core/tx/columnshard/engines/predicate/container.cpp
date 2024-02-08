@@ -1,6 +1,6 @@
 #include "container.h"
 #include <ydb/core/tx/columnshard/engines/index_info.h>
-#include <library/cpp/actors/core/log.h>
+#include <ydb/library/actors/core/log.h>
 
 namespace NKikimr::NOlap {
 std::partial_ordering TPredicateContainer::ComparePredicatesSamePrefix(const NOlap::TPredicate& l, const NOlap::TPredicate& r) {

@@ -9120,14 +9120,20 @@
       },
       "payload":"Body"
     },
-    "PatchObjectOutput":{
+    "PatchAppendPartSize":{"type": "integer"},
+    "PatchedObjectInfo":{
       "type":"structure",
       "members":{
         "ETag":{"shape":"ETag"},
         "LastModified":{"shape":"LastModified"}
       }
     },
-    "PatchAppendPartSize":{"type": "integer"},
+    "PatchObjectOutput":{
+      "type":"structure",
+      "members":{
+        "Object":{"shape":"PatchedObjectInfo"}
+      }
+    },
     "PatchObjectRequest":{
       "type":"structure",
       "required":[
@@ -9165,16 +9171,6 @@
           "shape":"IfMatch",
           "location":"header",
           "locationName":"If-Match"
-        },
-        "IfModifiedSince":{
-          "shape":"IfModifiedSince",
-          "location":"header",
-          "locationName":"If-Modified-Since"
-        },
-        "IfNoneMatch":{
-          "shape":"IfNoneMatch",
-          "location":"header",
-          "locationName":"If-None-Match"
         },
         "IfUnmodifiedSince":{
           "shape":"IfUnmodifiedSince",

@@ -269,7 +269,7 @@ struct TTestHelper {
             record.AddColumns(column.GetId());
         }
 
-        record.SetResultFormat(::NKikimrTxDataShard::EScanDataFormat::CELLVEC);
+        record.SetResultFormat(::NKikimrDataEvents::FORMAT_CELLVEC);
 
         return request;
     }

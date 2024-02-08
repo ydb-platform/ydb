@@ -9,9 +9,9 @@ import argparse
 
 
 def print_code(checksum, func_name):
-    if len(func_name) == 0: # safe fallback for old ya.make files
+    if len(func_name) == 0:  # safe fallback for old ya.make files
         func_name = "DecimalMD5"
-    print 'const char* ' + func_name + '() {return "' + checksum + '";}'
+    print('const char* ' + func_name + '() {return "' + checksum + '";}')
 
 
 def ensure_paths_exist(paths):
@@ -76,4 +76,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-

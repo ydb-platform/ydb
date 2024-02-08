@@ -5,7 +5,7 @@ SRCS(
 )
 
 PEERDIR(
-    library/cpp/actors/core
+    ydb/library/actors/core
     library/cpp/json/yson
     library/cpp/monlib/dynamic_counters
     library/cpp/random_provider
@@ -23,7 +23,7 @@ PEERDIR(
     ydb/library/yql/core/facade
     ydb/library/yql/core/services/mounts
     ydb/library/yql/dq/integration/transform
-    ydb/library/yql/minikql/comp_nodes/llvm
+    ydb/library/yql/minikql/comp_nodes
     ydb/library/yql/providers/clickhouse/provider
     ydb/library/yql/providers/common/codec
     ydb/library/yql/providers/common/comp_nodes

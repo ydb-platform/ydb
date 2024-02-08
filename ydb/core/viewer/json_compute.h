@@ -1,7 +1,7 @@
 #pragma once
-#include <library/cpp/actors/core/actor_bootstrapped.h>
-#include <library/cpp/actors/core/mon.h>
-#include <library/cpp/actors/core/interconnect.h>
+#include <ydb/library/actors/core/actor_bootstrapped.h>
+#include <ydb/library/actors/core/mon.h>
+#include <ydb/library/actors/core/interconnect.h>
 #include <ydb/core/base/tablet.h>
 #include <ydb/core/base/tablet_pipe.h>
 #include <ydb/core/base/subdomain.h>
@@ -284,6 +284,11 @@ public:
         for (const NKikimrHive::THiveNodeStats& nodeStat : nodeStats) {
             auto nodeId = nodeStat.GetNodeId();
             if (IsRequiredNode(nodeId)) {
+                const auto& nodeDomain = nodeStat.GetNodeDomain();
+                const TPathId subDomain(nodeDomain.GetSchemeShard(), nodeDomain.GetPathId());
+                if (FilterSubDomain && FilterSubDomain != subDomain) {
+                    continue;
+                }
                 NodeIds.emplace_back(nodeId); // order is important
                 TActorId whiteboardServiceId = MakeNodeWhiteboardServiceId(nodeId);
                 THolder<NNodeWhiteboard::TEvWhiteboard::TEvSystemStateRequest> request = MakeHolder<NNodeWhiteboard::TEvWhiteboard::TEvSystemStateRequest>();

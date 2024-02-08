@@ -1,13 +1,13 @@
 #pragma once
 
 #include <ydb/core/base/events.h>
-#include <library/cpp/grpc/server/event_callback.h>
-#include <library/cpp/grpc/server/grpc_async_ctx_base.h>
-#include <library/cpp/grpc/server/grpc_counters.h>
-#include <library/cpp/grpc/server/grpc_request_base.h>
+#include <ydb/library/grpc/server/event_callback.h>
+#include <ydb/library/grpc/server/grpc_async_ctx_base.h>
+#include <ydb/library/grpc/server/grpc_counters.h>
+#include <ydb/library/grpc/server/grpc_request_base.h>
 
-#include <library/cpp/actors/core/actorsystem.h>
-#include <library/cpp/actors/core/log.h>
+#include <ydb/library/actors/core/actorsystem.h>
+#include <ydb/library/actors/core/log.h>
 
 #include <contrib/libs/grpc/include/grpcpp/support/async_stream.h>
 #include <contrib/libs/grpc/include/grpcpp/support/async_unary_call.h>
@@ -112,7 +112,7 @@ public:
     virtual bool WriteAndFinish(TOut&& message, const grpc::WriteOptions& options, const grpc::Status& status) = 0;
 
 public:
-    virtual NGrpc::TAuthState& GetAuthState() const = 0;
+    virtual NYdbGrpc::TAuthState& GetAuthState() const = 0;
     virtual TString GetPeerName() const = 0;
     virtual TVector<TStringBuf> GetPeerMetaValues(TStringBuf key) const = 0;
     virtual grpc_compression_level GetCompressionLevel() const = 0;
@@ -122,7 +122,7 @@ public:
 template<class TIn, class TOut, class TServer, int LoggerServiceId>
 class TGRpcStreamingRequest final
     : public TThrRefBase
-    , private NGrpc::TBaseAsyncContext<TServer>
+    , private NYdbGrpc::TBaseAsyncContext<TServer>
 {
     using TSelf = TGRpcStreamingRequest<TIn, TOut, TServer, LoggerServiceId>;
 
@@ -155,8 +155,8 @@ public:
         TAcceptCallback acceptCallback,
         NActors::TActorSystem& actorSystem,
         const char* name,
-        NGrpc::ICounterBlockPtr counters = nullptr,
-        NGrpc::IGRpcRequestLimiterPtr limiter = nullptr)
+        NYdbGrpc::ICounterBlockPtr counters = nullptr,
+        NYdbGrpc::IGRpcRequestLimiterPtr limiter = nullptr)
     {
         TIntrusivePtr<TSelf> self(new TSelf(
             server,
@@ -180,9 +180,9 @@ private:
             TAcceptCallback acceptCallback,
             NActors::TActorSystem& as,
             const char* name,
-            NGrpc::ICounterBlockPtr counters,
-            NGrpc::IGRpcRequestLimiterPtr limiter)
-        : NGrpc::TBaseAsyncContext<TServer>(service, cq)
+            NYdbGrpc::ICounterBlockPtr counters,
+            NYdbGrpc::IGRpcRequestLimiterPtr limiter)
+        : NYdbGrpc::TBaseAsyncContext<TServer>(service, cq)
         , Server(server)
         , AcceptRequest(acceptRequest)
         , AcceptCallback(acceptCallback)
@@ -210,12 +210,12 @@ private:
         return false;
     }
 
-    void OnAccepted(NGrpc::EQueueEventStatus status) {
+    void OnAccepted(NYdbGrpc::EQueueEventStatus status) {
         MaybeClone();
 
         if (!this->Context.c_call()) {
             // Request dropped before it could start
-            Y_ABORT_UNLESS(status == NGrpc::EQueueEventStatus::ERROR);
+            Y_ABORT_UNLESS(status == NYdbGrpc::EQueueEventStatus::ERROR);
             // Drop extra reference by OnDoneTag
             this->UnRef();
             // We will be freed after return
@@ -224,10 +224,10 @@ private:
 
         LOG_DEBUG(ActorSystem, LoggerServiceId, "[%p] stream accepted Name# %s ok# %s peer# %s",
             this, Name,
-            status == NGrpc::EQueueEventStatus::OK ? "true" : "false",
+            status == NYdbGrpc::EQueueEventStatus::OK ? "true" : "false",
             this->GetPeerName().c_str());
 
-        if (status == NGrpc::EQueueEventStatus::ERROR) {
+        if (status == NYdbGrpc::EQueueEventStatus::ERROR) {
             // Don't bother registering if accept failed
             if (Counters) {
                 Counters->CountNotOkRequest();
@@ -262,13 +262,13 @@ private:
         }
     }
 
-    void OnDone(NGrpc::EQueueEventStatus status) {
+    void OnDone(NYdbGrpc::EQueueEventStatus status) {
         LOG_DEBUG(ActorSystem, LoggerServiceId, "[%p] stream done notification Name# %s ok# %s peer# %s",
             this, Name,
-            status == NGrpc::EQueueEventStatus::OK ? "true" : "false",
+            status == NYdbGrpc::EQueueEventStatus::OK ? "true" : "false",
             this->GetPeerName().c_str());
 
-        bool success = status == NGrpc::EQueueEventStatus::OK;
+        bool success = status == NYdbGrpc::EQueueEventStatus::OK;
 
         auto flags = Flags.load(std::memory_order_acquire);
         auto added = FlagDoneCalled | (success ? FlagDoneSuccess : 0);
@@ -346,10 +346,10 @@ private:
         return true;
     }
 
-    void OnReadDone(NGrpc::EQueueEventStatus status) {
+    void OnReadDone(NYdbGrpc::EQueueEventStatus status) {
         auto dumpResultText = [&] {
             TString text;
-            if (status == NGrpc::EQueueEventStatus::OK) {
+            if (status == NYdbGrpc::EQueueEventStatus::OK) {
                 google::protobuf::TextFormat::Printer printer;
                 printer.SetSingleLineMode(true);
                 printer.PrintToString(ReadInProgress->Record, &text);
@@ -361,7 +361,7 @@ private:
 
         LOG_DEBUG(ActorSystem, LoggerServiceId, "[%p] read finished Name# %s ok# %s data# %s peer# %s",
             this, Name,
-            status == NGrpc::EQueueEventStatus::OK ? "true" : "false",
+            status == NYdbGrpc::EQueueEventStatus::OK ? "true" : "false",
             dumpResultText().c_str(),
             this->GetPeerName().c_str());
 
@@ -373,7 +373,7 @@ private:
         auto was = ReadQueue--;
         Y_DEBUG_ABORT_UNLESS(was > 0);
 
-        read->Success = status == NGrpc::EQueueEventStatus::OK;
+        read->Success = status == NYdbGrpc::EQueueEventStatus::OK;
         if (Counters && read->Success) {
             Counters->CountRequestBytes(read->Record.ByteSize());
         }
@@ -470,14 +470,14 @@ private:
         return true;
     }
 
-    void OnWriteDone(NGrpc::EQueueEventStatus status) {
+    void OnWriteDone(NYdbGrpc::EQueueEventStatus status) {
         LOG_DEBUG(ActorSystem, LoggerServiceId, "[%p] write finished Name# %s ok# %s peer# %s",
             this, Name,
-            status == NGrpc::EQueueEventStatus::OK ? "true" : "false",
+            status == NYdbGrpc::EQueueEventStatus::OK ? "true" : "false",
             this->GetPeerName().c_str());
 
         auto event = MakeHolder<typename IContext::TEvWriteFinished>();
-        event->Success = status == NGrpc::EQueueEventStatus::OK;
+        event->Success = status == NYdbGrpc::EQueueEventStatus::OK;
         ActorSystem.Send(Actor, event.Release());
 
         THolder<TWriteItem> next;
@@ -559,10 +559,10 @@ private:
         return true;
     }
 
-    void OnFinishDone(NGrpc::EQueueEventStatus status) {
+    void OnFinishDone(NYdbGrpc::EQueueEventStatus status) {
         LOG_DEBUG(ActorSystem, LoggerServiceId, "[%p] stream finished Name# %s ok# %s peer# %s grpc status# (%d) message# %s",
             this, Name,
-            status == NGrpc::EQueueEventStatus::OK ? "true" : "false",
+            status == NYdbGrpc::EQueueEventStatus::OK ? "true" : "false",
             this->GetPeerName().c_str(),
             static_cast<int>(Status->error_code()),
             Status->error_message().c_str());
@@ -662,7 +662,7 @@ private:
             return Self->Finish(status);
         }
 
-        NGrpc::TAuthState& GetAuthState() const override {
+        NYdbGrpc::TAuthState& GetAuthState() const override {
             return Self->AuthState;
         }
 
@@ -752,10 +752,10 @@ private:
     TAcceptCallback const AcceptCallback;
     NActors::TActorSystem& ActorSystem;
     const char* const Name;
-    NGrpc::ICounterBlockPtr const Counters;
-    NGrpc::IGRpcRequestLimiterPtr Limiter;
+    NYdbGrpc::ICounterBlockPtr const Counters;
+    NYdbGrpc::IGRpcRequestLimiterPtr Limiter;
 
-    NGrpc::TAuthState AuthState;
+    NYdbGrpc::TAuthState AuthState;
     grpc::ServerAsyncReaderWriter<TOut, TIn> Stream;
     TSingleThreaded SingleThreaded;
     THPTimer RequestTimer;
@@ -772,7 +772,7 @@ private:
 
     TMaybe<grpc::Status> Status;
 
-    using TFixedEvent = NGrpc::TQueueFixedEvent<TSelf>;
+    using TFixedEvent = NYdbGrpc::TQueueFixedEvent<TSelf>;
     TFixedEvent OnDoneTag = { this, &TSelf::OnDone };
     TFixedEvent OnAcceptedTag = { this, &TSelf::OnAccepted };
     TFixedEvent OnReadDoneTag = { this, &TSelf::OnReadDone };

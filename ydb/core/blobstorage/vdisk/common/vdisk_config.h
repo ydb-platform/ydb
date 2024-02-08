@@ -5,6 +5,7 @@
 #include <ydb/core/base/blobstorage.h>
 #include <ydb/core/protos/blobstorage.pb.h>
 #include <ydb/core/protos/blobstorage_vdisk_config.pb.h>
+#include <ydb/core/control/immediate_control_board_impl.h>
 
 namespace NKikimr {
 
@@ -208,6 +209,9 @@ namespace NKikimr {
         TDuration WhiteboardUpdateInterval;
         bool EnableVDiskCooldownTimeout;
         TControlWrapper EnableVPatch = true;
+
+        ///////////// FEATURE FLAGS ////////////////////////
+        NKikimrConfig::TFeatureFlags FeatureFlags;
 
         TVDiskConfig(const TBaseInfo &baseInfo);
         void Merge(const NKikimrBlobStorage::TVDiskConfig &update);

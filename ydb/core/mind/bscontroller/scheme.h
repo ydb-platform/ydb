@@ -1,7 +1,6 @@
 #pragma once
 
 #include "defs.h"
-#include "mood.h"
 
 namespace NKikimr {
 namespace NBsController {
@@ -41,11 +40,10 @@ struct Schema : NIceDb::Schema {
         struct LastSeenSerial : Column<15, NScheme::NTypeIds::String> {};
         struct LastSeenPath : Column<16, NScheme::NTypeIds::String> {};
         struct DecommitStatus : Column<17, NScheme::NTypeIds::Uint32> { using Type = NKikimrBlobStorage::EDecommitStatus; static constexpr Type Default = Type::DECOMMIT_NONE; };
-        struct Mood : Column<18, NScheme::NTypeIds::Uint8> { using Type = TPDiskMood::EValue; static constexpr Type Default = Type::Normal; };
 
         using TKey = TableKey<NodeID, PDiskID>; // order is important
         using TColumns = TableColumns<NodeID, PDiskID, Path, Category, Guid, SharedWithOs, ReadCentric, NextVSlotId,
-              Status, Timestamp, PDiskConfig, ExpectedSerial, LastSeenSerial, LastSeenPath, DecommitStatus, Mood>;
+              Status, Timestamp, PDiskConfig, ExpectedSerial, LastSeenSerial, LastSeenPath, DecommitStatus>;
     };
 
     struct Group : Table<4> {
@@ -105,12 +103,15 @@ struct Schema : NIceDb::Schema {
         struct NextVirtualGroupId : Column<19, Group::ID::ColumnType> { static constexpr Type Default = 0; };
         struct AllowMultipleRealmsOccupation : Column<20, NScheme::NTypeIds::Bool> { static constexpr Type Default = true; };
         struct CompatibilityInfo : Column<21, NScheme::NTypeIds::String> {};
+        struct UseSelfHealLocalPolicy : Column<22, NScheme::NTypeIds::Bool> { static constexpr Type Default = false; };
+        struct TryToRelocateBrokenDisksLocallyFirst : Column<23, NScheme::NTypeIds::Bool> { static constexpr Type Default = false; };
 
         using TKey = TableKey<FixedKey>;
         using TColumns = TableColumns<FixedKey, NextGroupID, SchemaVersion, NextOperationLogIndex, DefaultMaxSlots,
               InstanceId, SelfHealEnable, DonorModeEnable, ScrubPeriodicity, SerialManagementStage, NextStoragePoolId,
               PDiskSpaceMarginPromille, GroupReserveMin, GroupReservePart, MaxScrubbedDisksAtOnce, PDiskSpaceColorBorder,
-              GroupLayoutSanitizer, NextVirtualGroupId, AllowMultipleRealmsOccupation, CompatibilityInfo>;
+              GroupLayoutSanitizer, NextVirtualGroupId, AllowMultipleRealmsOccupation, CompatibilityInfo,
+              UseSelfHealLocalPolicy, TryToRelocateBrokenDisksLocallyFirst>;
     };
 
     struct VSlot : Table<5> {

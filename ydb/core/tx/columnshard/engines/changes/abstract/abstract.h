@@ -1,9 +1,7 @@
 #pragma once
-#include "mark.h"
 #include "settings.h"
 #include <ydb/core/tx/columnshard/blobs_action/abstract/action.h>
 #include <ydb/core/tx/columnshard/counters/indexation.h>
-#include <ydb/core/tx/columnshard/engines/columns_table.h>
 #include <ydb/core/tx/columnshard/engines/portions/portion_info.h>
 #include <ydb/core/tx/columnshard/engines/portions/with_blobs.h>
 #include <ydb/core/tx/columnshard/resource_subscriber/task.h>
@@ -175,6 +173,12 @@ protected:
     const TString TaskIdentifier = TGUID::Create().AsGuidString();
     virtual ui64 DoCalcMemoryForUsage() const = 0;
 public:
+    class IMemoryPredictor {
+    public:
+        virtual ui64 AddPortion(const TPortionInfo& portionInfo) = 0;
+        virtual ~IMemoryPredictor() = default;
+    };
+
     ui64 CalcMemoryForUsage() const {
         return DoCalcMemoryForUsage();
     }

@@ -12,6 +12,7 @@ SRCS(
     api/client_common.cpp
     api/client_cache.cpp
     api/delegating_client.cpp
+    api/delegating_transaction.cpp
     api/etc_client.cpp
     api/journal_client.cpp
     api/operation_client.cpp
@@ -25,8 +26,11 @@ SRCS(
     api/rowset.cpp
     api/skynet.cpp
     api/transaction.cpp
+    api/queue_transaction_mixin.cpp
+    api/dynamic_table_transaction_mixin.cpp
     api/persistent_queue.cpp
     api/sticky_transaction_pool.cpp
+    api/options.cpp
 
     api/rpc_proxy/address_helpers.cpp
     api/rpc_proxy/public.cpp
@@ -48,6 +52,9 @@ SRCS(
     api/rpc_proxy/transaction_impl.cpp
     api/rpc_proxy/row_stream.cpp
     api/rpc_proxy/wire_row_stream.cpp
+
+    bundle_controller_client/bundle_controller_client.cpp
+    bundle_controller_client/bundle_controller_settings.cpp
 
     election/public.cpp
 
@@ -138,6 +145,7 @@ SRCS(
     queue_client/common.cpp
     queue_client/config.cpp
     queue_client/consumer_client.cpp
+    queue_client/helpers.cpp
     queue_client/partition_reader.cpp
     queue_client/queue_rowset.cpp
 

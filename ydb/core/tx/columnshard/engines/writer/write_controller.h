@@ -3,7 +3,7 @@
 #include "put_status.h"
 #include "blob_constructor.h"
 
-#include <library/cpp/actors/core/actor.h>
+#include <ydb/library/actors/core/actor.h>
 #include <ydb/core/tx/columnshard/blob_manager.h>
 #include <ydb/core/tx/columnshard/defs.h>
 #include <ydb/core/tx/columnshard/blobs_action/abstract/write.h>
@@ -11,15 +11,13 @@
 
 namespace NKikimr::NColumnShard {
 
-class TBlobPutResult : public NColumnShard::TPutStatus {
+class TBlobPutResult: public NColumnShard::TPutStatus {
 public:
     using TPtr = std::shared_ptr<TBlobPutResult>;
 
     TBlobPutResult(NKikimrProto::EReplyStatus status,
         THashSet<ui32>&& yellowMoveChannels,
-        THashSet<ui32>&& yellowStopChannels,
-        const NColumnShard::TUsage& resourceUsage)
-        : ResourceUsage(resourceUsage)
+        THashSet<ui32>&& yellowStopChannels)
     {
         SetPutStatus(status, std::move(yellowMoveChannels), std::move(yellowStopChannels));
     }
@@ -27,17 +25,6 @@ public:
     TBlobPutResult(NKikimrProto::EReplyStatus status) {
         SetPutStatus(status);
     }
-
-    void AddResources(const NColumnShard::TUsage& usage) {
-        ResourceUsage.Add(usage);
-    }
-
-    TAutoPtr<TCpuGuard> StartCpuGuard() {
-        return new TCpuGuard(ResourceUsage);
-    }
-
-private:
-    YDB_READONLY_DEF(NColumnShard::TUsage, ResourceUsage);
 };
 
 class IWriteController {
@@ -46,7 +33,6 @@ private:
     THashMap<i64, std::shared_ptr<NOlap::IBlobsWritingAction>> WritingActions;
     std::deque<NOlap::TBlobWriteInfo> WriteTasks;
 protected:
-    TUsage ResourceUsage;
     virtual void DoOnReadyResult(const NActors::TActorContext& ctx, const TBlobPutResult::TPtr& putResult) = 0;
     virtual void DoOnBlobWriteResult(const TEvBlobStorage::TEvPutResult& /*result*/) {
 
@@ -75,7 +61,6 @@ public:
     }
 
     void OnReadyResult(const NActors::TActorContext& ctx, const TBlobPutResult::TPtr& putResult) {
-        putResult->AddResources(ResourceUsage);
         DoOnReadyResult(ctx, putResult);
     }
 

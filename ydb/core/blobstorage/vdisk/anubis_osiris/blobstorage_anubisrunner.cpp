@@ -4,8 +4,9 @@
 #include <ydb/core/blobstorage/vdisk/common/vdisk_events.h>
 #include <ydb/core/blobstorage/groupinfo/blobstorage_groupinfo_sets.h>
 
+#include <library/cpp/random_provider/random_provider.h>
 #include <library/cpp/monlib/service/pages/templates.h>
-#include <library/cpp/actors/core/mon.h>
+#include <ydb/library/actors/core/mon.h>
 
 using namespace NKikimrServices;
 
@@ -197,7 +198,7 @@ namespace NKikimr {
             QuorumTracker.Clear();
             AnubisId = ctx.Register(CreateAnubis(AnubisCtx->HullCtx, GInfo, ctx.SelfID, AnubisCtx->SkeletonId,
                 AnubisCtx->ReplInterconnectChannel, AnubisCtx->AnubisOsirisMaxInFly));
-            ActiveActors.Insert(AnubisId);
+            ActiveActors.Insert(AnubisId, __FILE__, __LINE__, ctx, NKikimrServices::BLOBSTORAGE);
         }
 
         // This handler is called when TAnubisRunnerHttpInfoActor is finished
@@ -260,7 +261,7 @@ namespace NKikimr {
             // create an actor to handle request
             auto actor = std::make_unique<TAnubisRunnerHttpInfoActor>(ev, ctx.SelfID, AnubisId, s);
             auto aid = ctx.Register(actor.release());
-            ActiveActors.Insert(aid);
+            ActiveActors.Insert(aid, __FILE__, __LINE__, ctx, NKikimrServices::BLOBSTORAGE);
         }
 
     public:

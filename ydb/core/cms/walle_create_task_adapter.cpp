@@ -2,8 +2,8 @@
 #include "info_collector.h"
 #include "walle.h"
 
-#include <library/cpp/actors/core/actor_bootstrapped.h>
-#include <library/cpp/actors/core/hfunc.h>
+#include <ydb/library/actors/core/actor_bootstrapped.h>
+#include <ydb/library/actors/core/hfunc.h>
 
 #include <optional>
 
@@ -121,8 +121,14 @@ private:
         request->Record.SetUser(WALLE_CMS_USER);
         request->Record.SetSchedule(true);
         request->Record.SetDryRun(task.GetDryRun());
-
-        auto it = Actions.find(task.GetAction());
+        const auto &action = task.GetAction();
+        if (action == "temporary-unreachable") {
+            request->Record.SetPriority(WALLE_SOFT_MAINTAINANCE_PRIORITY);
+        } else {
+            request->Record.SetPriority(WALLE_DEFAULT_PRIORITY);
+        }
+        
+        auto it = Actions.find(action);
         Y_ABORT_UNLESS(it != Actions.end());
 
         if (!it->second) {

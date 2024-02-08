@@ -32,6 +32,8 @@ public:
     void Clear();
     TSharedRef Flush();
 
+    TMutableRef RequestBuffer(size_t requiredSize);
+
     friend void swap(TBlobOutput& left, TBlobOutput& right);
 
 private:

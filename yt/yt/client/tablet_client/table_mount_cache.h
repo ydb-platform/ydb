@@ -61,6 +61,14 @@ DEFINE_REFCOUNTED_TYPE(TTableReplicaInfo)
 
 ////////////////////////////////////////////////////////////////////////////////
 
+struct TIndexInfo
+{
+    NObjectClient::TObjectId TableId;
+    ESecondaryIndexKind Kind;
+};
+
+////////////////////////////////////////////////////////////////////////////////
+
 //! Describes the primary and the auxiliary schemas derived from the table schema.
 //! Cf. TTableSchema::ToXXX methods.
 DEFINE_ENUM(ETableSchemaKind,
@@ -88,7 +96,7 @@ struct TTableMountInfo
 {
     NYPath::TYPath Path;
     NObjectClient::TObjectId TableId;
-    TEnumIndexedVector<ETableSchemaKind, NTableClient::TTableSchemaPtr> Schemas;
+    TEnumIndexedArray<ETableSchemaKind, NTableClient::TTableSchemaPtr> Schemas;
 
     // PhysicalPath points to a physical object, if current object is linked to some other object, then this field will point to the source.
     // When this field is not supported on the server-side, this path will be equal to object path.
@@ -107,6 +115,8 @@ struct TTableMountInfo
 
     std::vector<TTableReplicaInfoPtr> Replicas;
 
+    std::vector<TIndexInfo> Indices;
+
     //! For sorted tables, these are -infinity and +infinity.
     //! For ordered tablets, these are |[0]| and |[tablet_count]| resp.
     NTableClient::TLegacyOwningKey LowerCapBound;
@@ -117,6 +127,9 @@ struct TTableMountInfo
     NHydra::TRevision SecondaryRevision;
 
     bool EnableDetailedProfiling = false;
+
+    // COMPAT(ponasenko-rs)
+    bool EnableSharedWriteLocks = false;
 
     bool IsSorted() const;
     bool IsOrdered() const;

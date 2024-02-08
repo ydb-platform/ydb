@@ -1,6 +1,6 @@
 #include "read_filter_merger.h"
 #include <ydb/core/formats/arrow/permutations.h>
-#include <library/cpp/actors/core/log.h>
+#include <ydb/library/actors/core/log.h>
 #include <contrib/libs/apache/arrow/cpp/src/arrow/compute/api_vector.h>
 
 namespace NKikimr::NOlap::NIndexedReader {
@@ -56,7 +56,7 @@ void TMergePartialStream::CheckSequenceInDebug(const TSortableBatchPosition& nex
 #endif
 }
 
-bool TMergePartialStream::DrainCurrentTo(TRecordBatchBuilder& builder, const TSortableBatchPosition& readTo, const bool includeFinish) {
+bool TMergePartialStream::DrainCurrentTo(TRecordBatchBuilder& builder, const TSortableBatchPosition& readTo, const bool includeFinish, std::optional<TSortableBatchPosition>* lastResultPosition) {
     Y_ABORT_UNLESS((ui32)DataSchema->num_fields() == builder.GetBuildersCount());
     builder.ValidateDataSchema(DataSchema);
     PutControlPoint(std::make_shared<TSortableBatchPosition>(readTo));
@@ -73,12 +73,15 @@ bool TMergePartialStream::DrainCurrentTo(TRecordBatchBuilder& builder, const TSo
         if (auto currentPosition = DrainCurrentPosition()) {
             CheckSequenceInDebug(*currentPosition);
             builder.AddRecord(*currentPosition);
+            if (lastResultPosition) {
+                *lastResultPosition = *currentPosition;
+            }
         }
     }
     return false;
 }
 
-std::shared_ptr<arrow::RecordBatch> TMergePartialStream::SingleSourceDrain(const TSortableBatchPosition& readTo, const bool includeFinish) {
+std::shared_ptr<arrow::RecordBatch> TMergePartialStream::SingleSourceDrain(const TSortableBatchPosition& readTo, const bool includeFinish, std::optional<TSortableBatchPosition>* lastResultPosition) {
     std::shared_ptr<arrow::RecordBatch> result;
     if (SortHeap.Empty()) {
         return result;
@@ -105,17 +108,37 @@ std::shared_ptr<arrow::RecordBatch> TMergePartialStream::SingleSourceDrain(const
         finished = true;
         include = true;
     }
+    const ui32 resultSize = delta + (include ? 1 : 0);
     if (Reverse) {
-        result = SortHeap.Current().GetKeyColumns().Slice(pos.GetPosition() + (include ? 0 : 1), delta + (include ? 1 : 0));
+        result = SortHeap.Current().GetKeyColumns().SliceData(pos.GetPosition() + (include ? 0 : 1), resultSize);
+        if (lastResultPosition && resultSize) {
+            auto keys = SortHeap.Current().GetKeyColumns().SliceKeys(pos.GetPosition() + (include ? 0 : 1), resultSize);
+            *lastResultPosition = TSortableBatchPosition(keys, 0, SortSchema->field_names(), {}, true);
+        }
+        if (SortHeap.Current().GetFilter()) {
+            SortHeap.Current().GetFilter()->Apply(result, pos.GetPosition() + (include ? 0 : 1), resultSize);
+        }
     } else {
-        result = SortHeap.Current().GetKeyColumns().Slice(startPos, delta + (include ? 1 : 0));
+        result = SortHeap.Current().GetKeyColumns().SliceData(startPos, resultSize);
+        if (lastResultPosition && resultSize) {
+            auto keys = SortHeap.Current().GetKeyColumns().SliceKeys(startPos, resultSize);
+            *lastResultPosition = TSortableBatchPosition(keys, keys->num_rows() - 1, SortSchema->field_names(), {}, false);
+        }
+        if (SortHeap.Current().GetFilter()) {
+            SortHeap.Current().GetFilter()->Apply(result, startPos, resultSize);
+        }
+    }
+    if (!result || !result->num_rows()) {
+        if (lastResultPosition) {
+            *lastResultPosition = {};
+        }
     }
 #ifndef NDEBUG
     NArrow::TStatusValidator::Validate(result->ValidateFull());
 #endif
+
     if (Reverse) {
-        auto permutation = NArrow::MakePermutation(result->num_rows(), true);
-        result = NArrow::TStatusValidator::GetValid(arrow::compute::Take(result, permutation)).record_batch();
+        result = NArrow::ReverseRecords(result);
     }
 
     if (finished) {

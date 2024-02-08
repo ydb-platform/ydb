@@ -257,7 +257,7 @@ TAutoPtr<NYql::IGraphTransformer> CreateKqpTypeAnnotationTransformer(const TStri
 TAutoPtr<NYql::IGraphTransformer> CreateKqpCheckQueryTransformer();
 
 TIntrusivePtr<NYql::IKikimrGateway> CreateKqpGatewayProxy(const TIntrusivePtr<IKqpGateway>& gateway,
-    const TIntrusivePtr<NYql::TKikimrSessionContext>& sessionCtx);
+    const TIntrusivePtr<NYql::TKikimrSessionContext>& sessionCtx, TActorSystem* actorSystem);
 
 } // namespace NKqp
 } // namespace NKikimr

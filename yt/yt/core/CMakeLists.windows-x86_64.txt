@@ -9,6 +9,8 @@
 add_subdirectory(http)
 add_subdirectory(https)
 add_subdirectory(misc)
+add_subdirectory(rpc)
+add_subdirectory(service_discovery)
 
 add_library(yt-yt-core)
 target_compile_options(yt-yt-core PRIVATE
@@ -78,6 +80,7 @@ target_sources(yt-yt-core PRIVATE
   ${CMAKE_SOURCE_DIR}/yt/yt/core/compression/brotli.cpp
   ${CMAKE_SOURCE_DIR}/yt/yt/core/compression/bzip2.cpp
   ${CMAKE_SOURCE_DIR}/yt/yt/core/compression/codec.cpp
+  ${CMAKE_SOURCE_DIR}/yt/yt/core/compression/dictionary_codec.cpp
   ${CMAKE_SOURCE_DIR}/yt/yt/core/compression/stream.cpp
   ${CMAKE_SOURCE_DIR}/yt/yt/core/compression/lz.cpp
   ${CMAKE_SOURCE_DIR}/yt/yt/core/compression/lzma.cpp
@@ -220,6 +223,7 @@ target_sources(yt-yt-core PRIVATE
   ${CMAKE_SOURCE_DIR}/yt/yt/core/rpc/message.cpp
   ${CMAKE_SOURCE_DIR}/yt/yt/core/rpc/message_format.cpp
   ${CMAKE_SOURCE_DIR}/yt/yt/core/rpc/null_channel.cpp
+  ${CMAKE_SOURCE_DIR}/yt/yt/core/rpc/peer_discovery.cpp
   ${CMAKE_SOURCE_DIR}/yt/yt/core/rpc/per_user_request_queue_provider.cpp
   ${CMAKE_SOURCE_DIR}/yt/yt/core/rpc/protocol_version.cpp
   ${CMAKE_SOURCE_DIR}/yt/yt/core/rpc/public.cpp
@@ -251,6 +255,7 @@ target_sources(yt-yt-core PRIVATE
   ${CMAKE_SOURCE_DIR}/yt/yt/core/yson/async_consumer.cpp
   ${CMAKE_SOURCE_DIR}/yt/yt/core/yson/async_writer.cpp
   ${CMAKE_SOURCE_DIR}/yt/yt/core/yson/attribute_consumer.cpp
+  ${CMAKE_SOURCE_DIR}/yt/yt/core/yson/config.cpp
   ${CMAKE_SOURCE_DIR}/yt/yt/core/yson/consumer.cpp
   ${CMAKE_SOURCE_DIR}/yt/yt/core/yson/forwarding_consumer.cpp
   ${CMAKE_SOURCE_DIR}/yt/yt/core/yson/lexer.cpp

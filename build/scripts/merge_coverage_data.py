@@ -13,7 +13,7 @@ def main(args):
         split_i = args.index('-no-merge')
     except ValueError:
         split_i = len(args)
-    files, expendables = args[:split_i], args[split_i + 1:]
+    files, expendables = args[:split_i], args[split_i + 1 :]
 
     with tarfile.open(output_file, 'w') as outf:
         for x in files:

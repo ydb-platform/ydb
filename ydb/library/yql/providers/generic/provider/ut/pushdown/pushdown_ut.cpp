@@ -365,12 +365,12 @@ Y_UNIT_TEST_SUITE_F(PushdownTest, TPushdownFixture) {
             )proto");
     }
 
-    Y_UNIT_TEST(NotEqual) {
+    Y_UNIT_TEST(NotEqualInt32Int64) {
         AssertFilter(
             // Note that R"ast()ast" is empty string!
             R"ast(
                 (Coalesce
-                    (!= (Member $row '"col_optional_uint64") (Uint64 '42))
+                    (!= (Member $row '"col_optional_uint64") (Member $row '"col_uint32"))
                     (Bool '"true")
                 )
                 )ast",
@@ -381,14 +381,26 @@ Y_UNIT_TEST_SUITE_F(PushdownTest, TPushdownFixture) {
                         column: "col_optional_uint64"
                     }
                     right_value {
-                        typed_value {
-                            type {
-                                type_id: UINT64
-                            }
-                            value {
-                                uint64_value: 42
-                            }
-                        }
+                        column: "col_uint32"
+                    }
+                }
+            )proto");
+    }
+
+    Y_UNIT_TEST(CmpInt16AndInt32) {
+        AssertFilter(
+            // Note that R"ast()ast" is empty string!
+            R"ast(
+                (<= (Member $row '"col_int32") (Member $row '"col_int16"))
+                )ast",
+            R"proto(
+                comparison {
+                    operation: LE
+                    left_value {
+                        column: "col_int32"
+                    }
+                    right_value {
+                        column: "col_int16"
                     }
                 }
             )proto");
@@ -397,7 +409,7 @@ Y_UNIT_TEST_SUITE_F(PushdownTest, TPushdownFixture) {
     Y_UNIT_TEST(PartialAnd) {
         AssertFilter(
             // Note that R"ast()ast" is empty string!
-            // division must be excluded from pushdown, but the other parts of "And" statement - not
+            // Unwrap must be excluded from pushdown, but the other parts of "And" statement - not
             R"ast(
                 (Coalesce
                     (And
@@ -405,7 +417,7 @@ Y_UNIT_TEST_SUITE_F(PushdownTest, TPushdownFixture) {
                             (Not (Member $row '"col_bool"))
                             (== (* (Member $row '"col_int64") (Member $row '"col_int32")) (Int64 '42))
                         )
-                        (< (/ (Int64 '42) (Member $row '"col_int64")) (Int64 '10))
+                        (< (Unwrap (/ (Int64 '42) (Member $row '"col_int64"))) (Int64 '10))
                         (>= (Member $row '"col_uint32") (- (Uint32 '15) (Uint32 '1)))
                     )
                     (Bool '"true")
@@ -494,12 +506,12 @@ Y_UNIT_TEST_SUITE_F(PushdownTest, TPushdownFixture) {
     Y_UNIT_TEST(PartialAndOneBranchPushdownable) {
         AssertFilter(
             // Note that R"ast()ast" is empty string!
-            // division must be excluded from pushdown, but the other part of "And" statement - not.
+            // Unwrap must be excluded from pushdown, but the other part of "And" statement - not.
             // So we expect only one branch of "And" to be pushed down.
             R"ast(
                 (Coalesce
                     (And
-                        (< (/ (Int64 '42) (Member $row '"col_int64")) (Int64 '10))
+                        (< (Unwrap (/ (Int64 '42) (Member $row '"col_int64"))) (Int64 '10))
                         (>= (Member $row '"col_uint32") (Uint32 '15))
                     )
                     (Bool '"true")

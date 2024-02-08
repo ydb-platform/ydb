@@ -113,8 +113,8 @@ namespace NFwd {
             ui16 room = (groupId.Historic ? part->GroupsCount + 2 : 0) + groupId.Index;
             TSlot slot = GetQueueSlot(part, room);
 
-            if (part->GetPageType(ref, groupId) == EPage::Index) {
-                return TryGetIndexPage(slot, ref);
+            if (auto type = part->GetPageType(ref, groupId); IsIndexPage(type)) {
+                return TryGetIndexPage(slot, ref, type);
             }
                 
             return Handle(Queues.at(slot), ref).Page;
@@ -162,7 +162,7 @@ namespace NFwd {
             TVector<NPageCollection::TLoadedPage> queuePages(Reserve(pages.size()));
             for (auto& page : pages) {
                 const auto &meta = pageCollection->Page(page.PageId);
-                if (NTable::EPage(meta.Type) == EPage::Index) {
+                if (IsIndexPage(NTable::EPage(meta.Type))) {
                     IndexPages.at(part).Pages[page.PageId] = page;
                 } else {
                     queuePages.push_back(page);
@@ -259,8 +259,14 @@ namespace NFwd {
         }
 
     private:
-        const TSharedData* TryGetIndexPage(TSlot slot, TPageId pageId) noexcept
+        static bool IsIndexPage(EPage type) noexcept {
+            return type == EPage::Index || type == EPage::BTreeIndex;
+        }
+
+        const TSharedData* TryGetIndexPage(TSlot slot, TPageId pageId, EPage type) noexcept
         {
+            Y_DEBUG_ABORT_UNLESS(IsIndexPage(type));
+
             // TODO: count index pages in Stats later
 
             auto &env = IndexPages.at(slot);
@@ -270,7 +276,7 @@ namespace NFwd {
                 return &pageIt->second.Data;
             } else {
                 auto &queue = Queues.at(slot);
-                queue.AddToQueue(pageId, EPage::Index);
+                queue.AddToQueue(pageId, type);
                 Queue.PushBack(&queue);
                 return nullptr;
             }            

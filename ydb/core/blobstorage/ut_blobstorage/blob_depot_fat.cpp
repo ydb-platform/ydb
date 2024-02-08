@@ -21,7 +21,7 @@ Y_UNIT_TEST_SUITE(BlobDepotFat) {
         ui32 seed;
         LoadSeed(seed);
         TBlobDepotTestEnvironment tenv(seed, 1, 8, TBlobStorageGroupType::ErasureMirror3of4);
-        
+
         TestVerifiedRandom(tenv, 8, 100, tenv.BlobDepot, 1e9, 1e9, 1500);
     }
 
@@ -29,7 +29,7 @@ Y_UNIT_TEST_SUITE(BlobDepotFat) {
         ui32 seed;
         LoadSeed(seed);
         TBlobDepotTestEnvironment tenv(seed, 1, 8, TBlobStorageGroupType::ErasureMirror3of4);
-        
+
         TestVerifiedRandom(tenv, 8, 100, tenv.RegularGroups[0], 1e9, 1000, 1500);
     }
 
@@ -39,7 +39,7 @@ Y_UNIT_TEST_SUITE(BlobDepotFat) {
         Seed().LoadOrFail(&seed, sizeof(seed));
         TBlobDepotTestEnvironment tenv(seed);
         auto vdisksRegular = tenv.Env->GetGroupInfo(tenv.RegularGroups[0])->GetDynamicInfo().ServiceIdForOrderNumber;
-        
+
         TestRestoreGet(tenv, 15, tenv.RegularGroups[0], 10, &vdisksRegular);
         TestRestoreGet(tenv, 100, tenv.BlobDepot, 10, &vdisksBlobDepot);
     }
@@ -49,7 +49,7 @@ Y_UNIT_TEST_SUITE(BlobDepotFat) {
         Seed().LoadOrFail(&seed, sizeof(seed));
         TBlobDepotTestEnvironment tenv(seed);
         auto vdisksRegular = tenv.Env->GetGroupInfo(tenv.RegularGroups[0])->GetDynamicInfo().ServiceIdForOrderNumber;
-        
+
         TestRestoreDiscover(tenv, 15, tenv.RegularGroups[0], 10, &vdisksRegular);
         TestRestoreDiscover(tenv, 100, tenv.BlobDepot, 10, &vdisksBlobDepot);
     }
@@ -59,7 +59,7 @@ Y_UNIT_TEST_SUITE(BlobDepotFat) {
         Seed().LoadOrFail(&seed, sizeof(seed));
         TBlobDepotTestEnvironment tenv(seed);
         auto vdisksRegular = tenv.Env->GetGroupInfo(tenv.RegularGroups[0])->GetDynamicInfo().ServiceIdForOrderNumber;
-        
+
         TestRestoreRange(tenv, 15, tenv.RegularGroups[0], 10, &vdisksRegular);
         TestRestoreRange(tenv, 100, tenv.BlobDepot, 10, &vdisksBlobDepot);
     }

@@ -29,14 +29,13 @@ SRCS(
     cli_persqueue_stress.cpp
     cli_load.cpp
     cli_minikql_compile_and_exec.cpp
-    cli_mb_trace.cpp
     cli_scheme_cache_append.cpp
     cli_scheme_initroot.cpp
 )
 
 PEERDIR(
     library/cpp/deprecated/enum_codegen
-    library/cpp/grpc/client
+    ydb/library/grpc/client
     library/cpp/protobuf/json
     library/cpp/yson
     ydb/core/actorlib_impl

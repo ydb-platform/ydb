@@ -81,7 +81,8 @@ public:
         const TTableSchema& tableSchema,
         int schemafulColumnCount,
         const TNameTableToSchemaIdMapping& idMapping,
-        std::vector<bool>* columnPresenceBuffer);
+        std::vector<bool>* columnPresenceBuffer,
+        std::optional<TUnversionedValue> addend = std::nullopt);
 
     //! Captures the row applying #idMapping to value ids.
     //! #idMapping must be identity for key columns.

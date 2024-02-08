@@ -1736,7 +1736,16 @@ public:
             return nullptr;
         }
 
-        return Y("let", label, BuildSortSpec(OrderBy, label, false, AssumeSorted));
+        auto sorted = BuildSortSpec(OrderBy, label, false, AssumeSorted);
+        if (ExtraSortColumns.empty()) {
+            return Y("let", label, sorted);
+        }
+        auto body = Y();
+        for (const auto& [column, _] : ExtraSortColumns) {
+            body = L(body, Y("let", "row", Y("RemoveMember", "row", Q(column))));
+        }
+        body = L(body, Y("let", "res", "row"));
+        return Y("let", label, Y("OrderedMap", sorted, BuildLambda(Pos, Y("row"), body, "res")));
     }
 
     TNodePtr BuildCleanupColumns(TContext& ctx, const TString& label) override {
@@ -1801,6 +1810,31 @@ public:
             }
             return Source->AddColumn(ctx, column);
         }
+
+        if (OrderByInit && !Distinct && !GroupBy) {
+            bool reliable = column.IsReliable();
+            column.SetAsNotReliable();
+            auto maybeExist = IRealSource::AddColumn(ctx, column);
+            if (reliable) {
+                column.ResetAsReliable();
+            }
+            if (maybeExist && maybeExist.GetRef()) {
+                return true;
+            }
+
+            auto maybeSourceExist = Source->AddColumn(ctx, column);
+            if (!maybeSourceExist.Defined()) {
+                return maybeSourceExist;
+            }
+
+            // order by references column which is missing in projection, but may exists in source
+            const auto columnName = column.GetColumnName();
+            if (columnName) {
+                ExtraSortColumns.emplace(*columnName, TNodePtr(&column));
+            }
+            return true;
+        }
+
         return IRealSource::AddColumn(ctx, column);
     }
 
@@ -2139,6 +2173,17 @@ private:
                 ++column;
                 ++isNamedColumn;
             }
+
+            for (const auto& [columnName, column]: ExtraSortColumns) {
+                auto body = Y();
+                if (haveCompositeTerms) {
+                    body = L(body, Y("let", "row", Y("Apply", "addCompositTerms", "row")));
+                }
+                body = L(body, Y("let", "res", column));
+                TPosition pos = column->GetPos();
+                auto projectItem = Y("SqlProjectItem", "projectCoreType", BuildQuotedAtom(pos, columnName), BuildLambda(pos, Y("row"), body, "res"));
+                sqlProjectArgs = L(sqlProjectArgs, projectItem);
+            }
         }
 
         auto block(Y(Y("let", "projectCoreType", Y("TypeOf", "core"))));
@@ -2199,6 +2244,7 @@ private:
     const bool SelectStream;
     const TWriteSettings Settings;
     const TColumnsSets UniqueSets, DistinctSets;
+    TMap<TString, TNodePtr> ExtraSortColumns;
 };
 
 class TProcessSource: public IRealSource {
@@ -2656,11 +2702,12 @@ TSourcePtr BuildSelectCore(
         having, std::move(winSpecs), legacyHoppingWindowSpec, std::move(terms), distinct, std::move(without), selectStream, settings, std::move(uniqueSets), std::move(distinctSets));
 }
 
-class TUnionAll: public IRealSource {
+class TUnion: public IRealSource {
 public:
-    TUnionAll(TPosition pos, TVector<TSourcePtr>&& sources, const TWriteSettings& settings)
+    TUnion(TPosition pos, TVector<TSourcePtr>&& sources, bool quantifierAll, const TWriteSettings& settings)
         : IRealSource(pos)
         , Sources(std::move(sources))
+        , QuantifierAll(quantifierAll)
         , Settings(settings)
     {
     }
@@ -2695,7 +2742,13 @@ public:
     }
 
     TNodePtr Build(TContext& ctx) override {
-        auto res = ctx.PositionalUnionAll ? Y("UnionAllPositional") : Y("UnionAll");
+        TPtr res;
+        if (QuantifierAll) {
+            res = ctx.PositionalUnionAll ? Y("UnionAllPositional") : Y("UnionAll");
+        } else {
+            res = ctx.PositionalUnionAll ? Y("UnionPositional") : Y("Union");
+        }
+
         for (auto& s: Sources) {
             auto input = s->Build(ctx);
             if (!input) {
@@ -2717,7 +2770,7 @@ public:
     }
 
     TNodePtr DoClone() const final {
-        return MakeIntrusive<TUnionAll>(Pos, CloneContainer(Sources), Settings);
+        return MakeIntrusive<TUnion>(Pos, CloneContainer(Sources), QuantifierAll, Settings);
     }
 
     bool IsSelect() const override {
@@ -2734,11 +2787,17 @@ public:
 
 private:
     TVector<TSourcePtr> Sources;
+    bool QuantifierAll;
     const TWriteSettings Settings;
 };
 
-TSourcePtr BuildUnionAll(TPosition pos, TVector<TSourcePtr>&& sources, const TWriteSettings& settings) {
-    return new TUnionAll(pos, std::move(sources), settings);
+TSourcePtr BuildUnion(
+    TPosition pos, 
+    TVector<TSourcePtr>&& sources, 
+    bool quantifierAll,
+    const TWriteSettings& settings
+) {
+    return new TUnion(pos, std::move(sources), quantifierAll, settings);
 }
 
 class TOverWindowSource: public IProxySource {

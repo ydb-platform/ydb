@@ -3,6 +3,7 @@
 #include "datashard_user_table.h"
 
 #include <ydb/core/protos/flat_scheme_op.pb.h>
+#include <ydb/library/actors/core/log.h>
 
 #include <util/generic/map.h>
 #include <util/generic/maybe.h>
@@ -38,6 +39,7 @@ TString DecimalToString(const std::pair<ui64, i64>& loHi);
 TString DyNumberToString(TStringBuf data);
 bool DecimalToStream(const std::pair<ui64, i64>& loHi, IOutputStream& out, TString& err);
 bool DyNumberToStream(TStringBuf data, IOutputStream& out, TString& err);
+bool PgToStream(TStringBuf data, void* typeDesc, IOutputStream& out, TString& err);
 
 } // NDataShard
 } // NKikimr

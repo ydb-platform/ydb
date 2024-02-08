@@ -24,11 +24,23 @@ inline std::shared_ptr<NYdb::NTable::TTableClient> CreateNewTableClient(const TS
                                                         tableSettings);
 }
 
-TString GetV1StatFromV2Plan(const TString& plan);
+TString GetV1StatFromV2Plan(const TString& plan, double* cpuUsage = nullptr);
 TString GetV1StatFromV2PlanV2(const TString& plan);
 
 TString FormatDurationMs(ui64 durationMs);
 TString FormatDurationUs(ui64 durationUs);
 TString FormatInstant(TInstant instant);
+
+struct TPublicStat {
+    std::optional<int> MemoryUsageBytes = 0;
+    std::optional<int> CpuUsageUs = 0;
+    std::optional<int> InputBytes = 0;
+    std::optional<int> OutputBytes = 0;
+    std::optional<int> SourceInputRecords = 0;
+    std::optional<int> SinkOutputRecords = 0;
+    std::optional<int> RunningTasks = 0;
+};
+
+TPublicStat GetPublicStat(const TString& statistics);
 
 } // namespace NFq

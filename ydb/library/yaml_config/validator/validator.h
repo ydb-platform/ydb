@@ -4,7 +4,7 @@
 
 #include "validator_checks.h"
 
-#include <library/cpp/yaml/fyamlcpp/fyamlcpp.h>
+#include <ydb/library/fyamlcpp/fyamlcpp.h>
 
 #include <util/generic/string.h>
 #include <util/generic/vector.h>
@@ -14,7 +14,7 @@
 #include <util/system/types.h>
 #include <util/generic/ylimits.h>
 
-namespace NYamlConfig::NValidator {
+namespace NKikimr::NYamlConfig::NValidator {
 
 class TValidationResult {
     friend class TCheckContext;
@@ -286,6 +286,6 @@ private:
     THashSet<TString> Items_;
 };
 
-} // namespace NYamlConfig::NValidator
+} // namespace NKikimr::NYamlConfig::NValidator
 
-IOutputStream& operator<<(IOutputStream& out, const NYamlConfig::NValidator::TValidationResult::TIssue& issue);
+IOutputStream& operator<<(IOutputStream& out, const NKikimr::NYamlConfig::NValidator::TValidationResult::TIssue& issue);

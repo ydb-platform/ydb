@@ -5,6 +5,8 @@
 #endif
 #undef HAZARD_PTR_INL_H_
 
+#include <library/cpp/yt/misc/tls.h>
+
 #include <array>
 
 namespace NYT {
@@ -18,14 +20,14 @@ namespace NDetail {
 constexpr int MaxHazardPointersPerThread = 2;
 using THazardPointerSet = std::array<std::atomic<void*>, MaxHazardPointersPerThread>;
 
-extern thread_local THazardPointerSet HazardPointers;
+extern YT_THREAD_LOCAL(THazardPointerSet) HazardPointers;
 
 struct THazardThreadState;
-extern thread_local THazardThreadState* HazardThreadState;
+extern YT_THREAD_LOCAL(THazardThreadState*) HazardThreadState;
 
 void InitHazardThreadState();
 
-template <class T, bool = std::is_base_of_v<TRefCountedBase, T>>
+template <class T, bool = std::derived_from<T, TRefCountedBase>>
 struct THazardPtrTraits
 {
     Y_FORCE_INLINE static void* GetBasePtr(T* object)
@@ -87,8 +89,10 @@ THazardPtr<T> THazardPtr<T>::Acquire(TPtrLoader&& ptrLoader, T* ptr)
         return {};
     }
 
-    auto* hazardPtr = [] {
-        for (auto it = NYT::NDetail::HazardPointers.begin(); it !=  NYT::NDetail::HazardPointers.end(); ++it) {
+    auto& hazardPointers = GetTlsRef(NYT::NDetail::HazardPointers);
+
+    auto* hazardPtr = [&] {
+        for (auto it = hazardPointers.begin(); it !=  hazardPointers.end(); ++it) {
             auto& ptr = *it;
             if (!ptr.load(std::memory_order::relaxed)) {
                 return &ptr;
@@ -175,16 +179,10 @@ THazardPtr<T>::THazardPtr(T* ptr, std::atomic<void*>* hazardPtr)
 
 ////////////////////////////////////////////////////////////////////////////////
 
-template <class U>
-bool operator==(const THazardPtr<U>& lhs, const U* rhs)
+template <class T>
+bool operator==(const THazardPtr<T>& lhs, const T* rhs)
 {
     return lhs.Get() == rhs;
-}
-
-template <class U>
-bool operator!=(const THazardPtr<U>& lhs, const U* rhs)
-{
-    return lhs.Get() != rhs;
 }
 
 ////////////////////////////////////////////////////////////////////////////////

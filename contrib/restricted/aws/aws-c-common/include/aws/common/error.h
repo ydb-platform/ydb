@@ -129,7 +129,9 @@ AWS_COMMON_API
 void aws_unregister_error_info(const struct aws_error_info_list *error_info);
 
 /**
- * Convert a c library io error into an aws error.
+ * Convert a c library io error into an aws error, and raise it.
+ * If no conversion is found, AWS_ERROR_SYS_CALL_FAILURE is raised.
+ * Always returns AWS_OP_ERR.
  */
 AWS_COMMON_API
 int aws_translate_and_raise_io_error(int error_no);
@@ -196,6 +198,7 @@ enum aws_common_error {
     AWS_ERROR_DIRECTORY_NOT_EMPTY,
     AWS_ERROR_PLATFORM_NOT_SUPPORTED,
     AWS_ERROR_INVALID_UTF8,
+    AWS_ERROR_GET_HOME_DIRECTORY_FAILED,
     AWS_ERROR_END_COMMON_RANGE = AWS_ERROR_ENUM_END_RANGE(AWS_C_COMMON_PACKAGE_ID)
 };
 

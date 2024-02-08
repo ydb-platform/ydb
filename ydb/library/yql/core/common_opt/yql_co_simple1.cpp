@@ -70,6 +70,25 @@ TExprNode::TPtr ExpandPgNot(const TExprNode::TPtr& input, TExprContext& ctx) {
         .Build();
 }
 
+TExprNode::TPtr OptimizePgCastOverPgConst(const TExprNode::TPtr& input, TExprContext& ctx) {
+    if (input->ChildrenSize() != 2) {
+        return input;
+    }
+    auto val = input->Child(0);
+    if (!val->IsCallable("PgConst")) { 
+        return input;
+    }
+
+    auto castFromType = val->Child(1);
+    auto castToType = input->Child(1);
+    if (castFromType->Child(0)->Content() == "unknown" && castToType->Child(0)->Content() == "text") {
+        YQL_CLOG(DEBUG, Core) << "Remove PgCast unknown->text over PgConst";
+        return ctx.ChangeChild(*val, 1, castToType);
+    }
+    
+    return input;
+}
+
 template<typename TInt>
 class TMinAggregate {
 public:
@@ -2394,16 +2413,6 @@ TExprNode::TPtr DropReorder(const TExprNode::TPtr& node, TExprContext& ctx) {
     return node;
 }
 
-bool IsExpression(const TExprNode& root, const TExprNode& arg) {
-    if (&root == &arg)
-        return false;
-
-    if (root.IsCallable({"Member", "Nth"}))
-        return IsExpression(root.Head(), arg);
-
-    return true;
-}
-
 template <bool IsTop, bool IsSort>
 TExprNode::TPtr OptimizeReorder(const TExprNode::TPtr& node, TExprContext& ctx) {
     const ui32 ascIndex = node->ChildrenSize() - 2U;
@@ -2593,88 +2602,6 @@ TExprNode::TPtr OptimizeReorder(const TExprNode::TPtr& node, TExprContext& ctx) 
         if (node->Head().IsCallable(node->Content())) {
             YQL_CLOG(DEBUG, Core) << node->Content() << " over " << node->Head().Content();
             return ctx.ChangeChild(*node, 0U, node->Head().HeadPtr());
-        }
-    }
-
-    if constexpr (IsTop || IsSort) {
-        if (/*TODO: enable later*/false && ETypeAnnotationKind::Struct == GetSeqItemType(*node->Head().GetTypeAnn()).GetKind()) {
-            std::set<ui32> indexes;
-            if (node->Tail().Tail().IsList())
-                for (auto i = 0U; i < node->Tail().Tail().ChildrenSize(); ++i)
-                    if (IsExpression(*node->Tail().Tail().Child(i), node->Tail().Head().Head()))
-                        indexes.emplace(i);
-
-            if (!indexes.empty() || (!node->Tail().Tail().IsList() && IsExpression(node->Tail().Tail(), node->Tail().Head().Head()))) {
-                YQL_CLOG(DEBUG, Core) << "Make system columns for " << node->Content() << " keys.";
-
-                auto argIn = ctx.NewArgument(node->Tail().Pos(), "row");
-                auto argOut = ctx.NewArgument(node->Tail().Pos(), "row");
-                auto bodyIn = argIn;
-                auto bodyOut = argOut;
-
-                auto selector = node->TailPtr();
-                if (indexes.empty()) {
-                    auto column = ctx.NewAtom(selector->Pos(), "_yql_sys_order_by", TNodeFlags::Default);
-                    bodyIn = ctx.Builder(bodyIn->Pos())
-                        .Callable("AddMember")
-                            .Add(0, std::move(bodyIn))
-                            .Add(1, column)
-                            .Apply(2, node->Tail())
-                                .With(0, argIn)
-                            .Seal()
-                        .Seal().Build();
-                    bodyOut = ctx.Builder(bodyOut->Pos())
-                        .Callable("RemoveMember")
-                            .Add(0, std::move(bodyOut))
-                            .Add(1, column)
-                        .Seal().Build();
-                    selector = ctx.Builder(selector->Pos())
-                        .Lambda()
-                            .Param("row")
-                            .Callable("Member")
-                                .Arg(0, "row")
-                                .Add(1, std::move(column))
-                            .Seal()
-                        .Seal().Build();
-                } else {
-                    auto items = selector->Tail().ChildrenList();
-                    for (const auto index : indexes) {
-                        auto column = ctx.NewAtom(items[index]->Pos(), TString("_yql_sys_order_by_") += ToString(index), TNodeFlags::Default);
-                        bodyIn = ctx.Builder(bodyIn->Pos())
-                            .Callable("AddMember")
-                                .Add(0, std::move(bodyIn))
-                                .Add(1, column)
-                                .ApplyPartial(2, node->Tail().HeadPtr(), std::move(items[index]))
-                                    .With(0, argIn)
-                                .Seal()
-                            .Seal().Build();
-                        bodyOut = ctx.Builder(bodyOut->Pos())
-                            .Callable("RemoveMember")
-                                .Add(0, std::move(bodyOut))
-                                .Add(1, column)
-                            .Seal().Build();
-                        items[index] = ctx.Builder(selector->Pos())
-                            .Callable("Member")
-                                .Add(0, selector->Head().HeadPtr())
-                                .Add(1, std::move(column))
-                            .Seal().Build();
-                    }
-                    selector = ctx.DeepCopyLambda(*selector, ctx.NewList(selector->Tail().Pos(), std::move(items)));
-                }
-
-                auto children = node->ChildrenList();
-                children.back() = std::move(selector);
-                children.front() = ctx.Builder(node->Pos())
-                        .Callable("OrderedMap")
-                            .Add(0, std::move(children.front()))
-                            .Add(1, ctx.NewLambda(node->Tail().Pos(), ctx.NewArguments(node->Tail().Head().Pos(), {std::move(argIn)}), std::move(bodyIn)))
-                        .Seal().Build();
-                return ctx.Builder(node->Pos())
-                        .Callable("OrderedMap")
-                            .Add(0, ctx.ChangeChildren(*node, std::move(children)))
-                            .Add(1, ctx.NewLambda(node->Tail().Pos(), ctx.NewArguments(node->Tail().Head().Pos(), {std::move(argOut)}), std::move(bodyOut)))
-                        .Seal().Build();
-            }
         }
     }
 
@@ -3063,7 +2990,7 @@ TExprNode::TPtr Normalize(const TCoAggregate& node, TExprContext& ctx) {
                     .With(0, arg)
                 .Seal()
                 .Build();
-                
+
             for (auto& [name, idx] : originalIndexes) {
                 nameNodes.emplace_back(ctx.NewAtom(aggTuple.ColumnName().Pos(), name));
                 finishBody.emplace_back(ctx.Builder(traits.FinishHandler().Pos())
@@ -3160,8 +3087,8 @@ std::unordered_set<ui32> GetUselessSortedJoinInputs(const TCoEquiJoin& equiJoin)
         if (!joinTree->Head().IsAtom("Cross")) {
             std::unordered_map<std::string_view, TPartOfConstraintBase::TSetType> tableJoinKeys;
             for (const auto keys : {joinTree->Child(3), joinTree->Child(4)})
-                for (ui32 i = 0U; i < keys->ChildrenSize(); ++i)
-                    tableJoinKeys[keys->Child(i)->Content()].insert_unique(TPartOfConstraintBase::TPathType(1U, keys->Child(++i)->Content()));
+                for (ui32 i = 0U; i < keys->ChildrenSize(); i += 2)
+                    tableJoinKeys[keys->Child(i)->Content()].insert_unique(TPartOfConstraintBase::TPathType(1U, keys->Child(i + 1)->Content()));
 
             for (const auto& [label, joinKeys]: tableJoinKeys) {
                 if (const auto it = sorteds.find(label); sorteds.cend() != it) {
@@ -3741,6 +3668,11 @@ void RegisterCoSimpleCallables1(TCallableOptimizerMap& map) {
             return ctx.SwapWithHead(*node);
         }
 
+        if (node->Head().IsCallable("PgTableContent")) {
+            YQL_CLOG(DEBUG, Core) << "Pushdown ExtractMembers to " << node->Head().Content();
+            return ctx.ChangeChild(node->Head(), 2, node->TailPtr());
+        }
+
         return node;
     };
 
@@ -3759,7 +3691,7 @@ void RegisterCoSimpleCallables1(TCallableOptimizerMap& map) {
     map["Lookup"] = std::bind(&OptimizeContains<false, true>, _1, _2);
     map["Contains"] = std::bind(&OptimizeContains<false>, _1, _2);
     map["ListHas"] = std::bind(&OptimizeContains<true>, _1, _2);
-    map["ListUniq"] = [](const TExprNode::TPtr& node, TExprContext& ctx, TOptimizeContext&) {
+    map["Uniq"] = [](const TExprNode::TPtr& node, TExprContext& ctx, TOptimizeContext&) {
         return ctx.Builder(node->Pos())
             .Callable("DictKeys")
                 .Callable(0, "ToDict")
@@ -3781,7 +3713,7 @@ void RegisterCoSimpleCallables1(TCallableOptimizerMap& map) {
             .Seal()
             .Build();
     };
-    map["ListUniqStable"] = [](const TExprNode::TPtr& node, TExprContext& ctx, TOptimizeContext&) {
+    map["UniqStable"] = [](const TExprNode::TPtr& node, TExprContext& ctx, TOptimizeContext&) {
         const TTypeAnnotationNode* itemType = node->Head().GetTypeAnn()->Cast<TListExprType>()->GetItemType();
         auto expandedItemType = ExpandType(node->Pos(), *itemType, ctx);
         auto setCreate = ctx.Builder(node->Pos())
@@ -4733,6 +4665,16 @@ void RegisterCoSimpleCallables1(TCallableOptimizerMap& map) {
     map["IsDistinctFrom"] = std::bind(&OptimizeDistinctFrom<false>, _1, _2);
 
     map["StartsWith"] = map["EndsWith"] = map["StringContains"] = [](const TExprNode::TPtr& node, TExprContext& ctx, TOptimizeContext& /*optCtx*/) {
+        if (node->Head().GetTypeAnn()->GetKind() == ETypeAnnotationKind::Pg || node->Tail().GetTypeAnn()->GetKind() == ETypeAnnotationKind::Pg) {
+            TExprNodeList converted;
+            for (auto& child : node->ChildrenList()) {
+                const bool isPg = child->GetTypeAnn()->GetKind() == ETypeAnnotationKind::Pg;
+                converted.emplace_back(ctx.WrapByCallableIf(isPg, "FromPg", std::move(child)));
+            }
+            YQL_CLOG(DEBUG, Core) << "Converting Pg strings to YQL strings in " << node->Content();
+            return ctx.ChangeChildren(*node, std::move(converted));
+        }
+
         if (node->Tail().IsCallable("String") && node->Tail().Head().Content().empty()) {
             YQL_CLOG(DEBUG, Core) << node->Content() << " with empty string in second argument";
             if (node->GetTypeAnn()->GetKind() == ETypeAnnotationKind::Optional) {
@@ -4796,6 +4738,10 @@ void RegisterCoSimpleCallables1(TCallableOptimizerMap& map) {
 
     map["UnionAll"] = std::bind(&ExpandUnionAll<false>, _1, _2, _3);
     map["UnionMerge"] = std::bind(&ExpandUnionAll<true>, _1, _2, _3);
+    map["Union"] = [](const TExprNode::TPtr& node, TExprContext& ctx, TOptimizeContext& /*optCtx*/) {
+        YQL_CLOG(DEBUG, Core) << node->Content();
+        return ctx.NewCallable(node->Pos(), "SqlAggregateAll", { ctx.NewCallable(node->Pos(), "UnionAll", node->ChildrenList()) });
+    };
 
     map["Aggregate"] = [](const TExprNode::TPtr& node, TExprContext& ctx, TOptimizeContext& /*optCtx*/) {
         TCoAggregate self(node);
@@ -6120,6 +6066,11 @@ void RegisterCoSimpleCallables1(TCallableOptimizerMap& map) {
         return ExpandPositionalUnionAll(*node, columnOrders, node->ChildrenList(), ctx, optCtx);
     };
 
+    map["UnionPositional"] = [](const TExprNode::TPtr& node, TExprContext& ctx, TOptimizeContext& /*optCtx*/) {
+        YQL_CLOG(DEBUG, Core) << node->Content();
+        return ctx.NewCallable(node->Pos(), "SqlAggregateAll", { ctx.NewCallable(node->Pos(), "UnionAllPositional", node->ChildrenList()) });
+    };
+
     map["MapJoinCore"] = [](const TExprNode::TPtr& node, TExprContext& ctx, TOptimizeContext& optCtx) {
         if (const auto& inputToCheck = SkipCallables(node->Head(), SkippableCallables); IsEmptyContainer(inputToCheck) || IsEmpty(inputToCheck, *optCtx.Types)) {
             YQL_CLOG(DEBUG, Core) << "Empty " << node->Content();
@@ -6313,6 +6264,7 @@ void RegisterCoSimpleCallables1(TCallableOptimizerMap& map) {
     map["PgAnd"] = std::bind(&ExpandPgAnd, _1, _2);
     map["PgOr"] = std::bind(&ExpandPgOr, _1, _2);
     map["PgNot"] = std::bind(&ExpandPgNot, _1, _2);
+    map["PgCast"] = std::bind(&OptimizePgCastOverPgConst, _1, _2);
 
     map["Ensure"] = [](const TExprNode::TPtr& node, TExprContext& /*ctx*/, TOptimizeContext& /*optCtx*/) {
         TCoEnsure self(node);

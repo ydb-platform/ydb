@@ -1,34 +1,35 @@
 {
     "meta": {
-        "version": "0.2",
-        "type": "script"
+        "type": "script",
+        "version": "0.2"
     },
     "queries": [
         {
-            "tables": [],
             "Plan": {
+                "Node Type": "Query",
+                "PlanNodeType": "Query",
                 "Plans": [
                     {
+                        "Node Type": "ResultSet",
                         "PlanNodeId": 2,
+                        "PlanNodeType": "ResultSet",
                         "Plans": [
                             {
-                                "PlanNodeId": 1,
+                                "Node Type": "ConstantExpr",
                                 "Operators": [
                                     {
+                                        "Inputs": [],
                                         "Iterator": "[{value: $value}]",
                                         "Name": "Iterator"
                                     }
                                 ],
-                                "Node Type": "ConstantExpr"
+                                "PlanNodeId": 1
                             }
-                        ],
-                        "Node Type": "ResultSet",
-                        "PlanNodeType": "ResultSet"
+                        ]
                     }
-                ],
-                "Node Type": "Query",
-                "PlanNodeType": "Query"
-            }
+                ]
+            },
+            "tables": []
         }
     ]
 }

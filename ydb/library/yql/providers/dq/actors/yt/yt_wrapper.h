@@ -3,7 +3,7 @@
 #include <util/random/random.h>
 #include <util/memory/blob.h>
 
-#include <library/cpp/actors/core/actor.h>
+#include <ydb/library/actors/core/actor.h>
 #include <library/cpp/yson/node/node.h>
 
 #include <yt/yt/client/api/public.h>

@@ -14,7 +14,9 @@ add_subdirectory(bindings)
 add_subdirectory(failure_injector)
 add_subdirectory(fetch)
 add_subdirectory(log)
+add_subdirectory(plan)
 add_subdirectory(simd)
+add_subdirectory(sys)
 add_subdirectory(test_http_server)
 add_subdirectory(threading)
 add_subdirectory(ut)
@@ -24,7 +26,7 @@ target_link_libraries(library-yql-utils PUBLIC
   contrib-libs-linux-headers
   contrib-libs-cxxsupp
   yutil
-  cpp-actors-util
+  library-actors-util
   cpp-digest-md5
   library-cpp-messagebus
   cpp-string_utils-quote

@@ -4,13 +4,14 @@
 namespace NKikimr {
 namespace NDataShard {
 
-enum class EExecutionUnitKind : ui32 {
+enum class EExecutionUnitKind: ui32 {
     CheckDataTx,
     CheckSchemeTx,
     CheckSnapshotTx,
     CheckDistributedEraseTx,
     CheckCommitWritesTx,
     CheckRead,
+    CheckWrite,
     StoreDataTx,
     StoreSchemeTx,
     StoreSnapshotTx,
@@ -18,11 +19,13 @@ enum class EExecutionUnitKind : ui32 {
     StoreCommitWritesTx,
     BuildAndWaitDependencies,
     FinishPropose,
+    FinishProposeWrite,
     CompletedOperations,
     WaitForPlan,
     PlanQueue,
     LoadTxDetails,
     FinalizeDataTxPlan,
+    FinalizeWriteTxPlan,
     ProtectSchemeEchoes,
     BuildDataTxOutRS,
     BuildKqpDataTxOutRS,
@@ -37,6 +40,7 @@ enum class EExecutionUnitKind : ui32 {
     ExecuteDistributedEraseTx,
     ExecuteCommitWritesTx,
     ExecuteRead,
+    ExecuteWrite,
     CompleteOperation,
     ExecuteKqpScanTx,
     MakeScanSnapshot,

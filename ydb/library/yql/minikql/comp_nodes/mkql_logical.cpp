@@ -1,5 +1,5 @@
 #include "mkql_logical.h"
-#include <ydb/library/yql/minikql/computation/mkql_computation_node_codegen.h>
+#include <ydb/library/yql/minikql/computation/mkql_computation_node_codegen.h>  // Y_IGNORE
 #include <ydb/library/yql/minikql/mkql_node_cast.h>
 #include <ydb/library/yql/minikql/mkql_node_builder.h>
 #include "mkql_check_args.h"
@@ -262,6 +262,7 @@ public:
 
 #ifndef MKQL_DISABLE_CODEGEN
     Value* DoGenerateGetValue(const TCodegenContext& ctx, Value* arg, BasicBlock*& block) const {
+        Y_UNUSED(ctx);
         const auto xorr = BinaryOperator::CreateXor(arg, ConstantInt::get(arg->getType(), 1), "xor", block);
         const auto result = IsOptional ? SelectInst::Create(IsExists(arg, block), xorr, arg, "sel", block) : static_cast<Value*>(xorr);
         return result;

@@ -15,8 +15,8 @@ target_link_libraries(compute-ydb-synchronization_service PUBLIC
   contrib-libs-linux-headers
   contrib-libs-cxxsupp
   yutil
-  cpp-actors-core
-  cpp-actors-protos
+  library-actors-core
+  library-actors-protos
   libs-control_plane_storage-proto
   api-grpc
   library-db_pool-protos

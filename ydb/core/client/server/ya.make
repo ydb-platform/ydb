@@ -45,8 +45,6 @@ SRCS(
     msgbus_server_tablet_kill.cpp
     msgbus_server_tablet_state.cpp
     msgbus_server_test_shard_request.cpp
-    msgbus_server_tracer.cpp
-    msgbus_server_tracer.h
     msgbus_server_tx_request.cpp
     msgbus_server_types.cpp
     msgbus_server_whoami.cpp
@@ -60,7 +58,7 @@ SRCS(
 )
 
 PEERDIR(
-    library/cpp/actors/helpers
+    ydb/library/actors/helpers
     library/cpp/json
     library/cpp/messagebus
     library/cpp/messagebus/protobuf

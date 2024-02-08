@@ -14,11 +14,11 @@
 #include <ydb/public/sdk/cpp/client/ydb_query/client.h>
 #include <ydb/public/sdk/cpp/client/ydb_operation/operation.h>
 
-#include <library/cpp/actors/core/actor.h>
-#include <library/cpp/actors/core/actor_bootstrapped.h>
-#include <library/cpp/actors/core/actorsystem.h>
-#include <library/cpp/actors/core/hfunc.h>
-#include <library/cpp/actors/core/log.h>
+#include <ydb/library/actors/core/actor.h>
+#include <ydb/library/actors/core/actor_bootstrapped.h>
+#include <ydb/library/actors/core/actorsystem.h>
+#include <ydb/library/actors/core/hfunc.h>
+#include <ydb/library/actors/core/log.h>
 
 #define LOG_E(stream) LOG_ERROR_S(*TlsActivationContext, NKikimrServices::FQ_RUN_ACTOR, "[ydb] [ComputeDatabaseControlPlane]: " << stream)
 #define LOG_W(stream) LOG_WARN_S( *TlsActivationContext, NKikimrServices::FQ_RUN_ACTOR, "[ydb] [ComputeDatabaseControlPlane]: " << stream)
@@ -38,6 +38,7 @@ struct TDatabaseClients {
         TActorId ActorId;
         NConfig::TComputeDatabaseConfig Config;
         TActorId DatabasesCacheActorId;
+        TActorId MonitoringActorId;
     };
 
     std::optional<TClientConfig> GetClient(const TString& scope, const TString& endpoint, const TString& database) const {
@@ -306,6 +307,7 @@ public:
         switch (controlPlane.type_case()) {
             case NConfig::TYdbComputeControlPlane::TYPE_NOT_SET:
             case NConfig::TYdbComputeControlPlane::kSingle:
+                CreateSingleClientActors(controlPlane.GetSingle());
             break;
             case NConfig::TYdbComputeControlPlane::kCms:
                 CreateCmsClientActors(controlPlane.GetCms(), controlPlane.GetDatabasesCacheReloadPeriod());
@@ -315,6 +317,16 @@ public:
             break;
         }
         Become(&TComputeDatabaseControlPlaneServiceActor::StateFunc);
+    }
+
+    static NCloud::TGrpcClientSettings CreateGrpcClientSettings(const NConfig::TYdbStorageConfig& connection) {
+        NCloud::TGrpcClientSettings settings;
+        settings.Endpoint = connection.GetEndpoint();
+        settings.EnableSsl = connection.GetUseSsl();
+        if (connection.GetCertificateFile()) {
+            settings.CertificateRootCA = StripString(TFileInput(connection.GetCertificateFile()).ReadAll());
+        }
+        return settings;
     }
 
     static NCloud::TGrpcClientSettings CreateGrpcClientSettings(const NConfig::TComputeDatabaseConfig& config) {
@@ -328,20 +340,45 @@ public:
         return settings;
     }
 
+    void CreateSingleClientActors(const NConfig::TYdbComputeControlPlane::TSingle& singleConfig) {
+        auto globalLoadConfig = Config.GetYdb().GetLoadControlConfig();
+        if (globalLoadConfig.GetEnable()) {
+            auto clientActor = Register(CreateMonitoringGrpcClientActor(CreateGrpcClientSettings(singleConfig.GetConnection()), CredentialsProviderFactory(GetYdbCredentialSettings(singleConfig.GetConnection()))->CreateProvider()).release());
+            MonitoringActorId = Register(CreateDatabaseMonitoringActor(clientActor, globalLoadConfig, Counters).release());
+        }
+    }
+
     void CreateCmsClientActors(const NConfig::TYdbComputeControlPlane::TCms& cmsConfig, const TString& databasesCacheReloadPeriod) {
         const auto& mapping = cmsConfig.GetDatabaseMapping();
+        auto globalLoadConfig = Config.GetYdb().GetLoadControlConfig();
         for (const auto& config: mapping.GetCommon()) {
             const auto clientActor = Register(CreateCmsGrpcClientActor(CreateGrpcClientSettings(config), CredentialsProviderFactory(GetYdbCredentialSettings(config.GetControlPlaneConnection()))->CreateProvider()).release());
-            const auto cacheActor = Register(CreateComputeDatabasesCacheActor(clientActor, databasesCacheReloadPeriod).release());
-            Clients->CommonDatabaseClients.push_back({clientActor, config, cacheActor});
+            const auto cacheActor = Register(CreateComputeDatabasesCacheActor(clientActor, databasesCacheReloadPeriod, Counters).release());
+            TActorId databaseMonitoringActor;
+            const NConfig::TLoadControlConfig& loadConfig = config.GetLoadControlConfig().GetEnable()
+                ? Config.GetYdb().GetLoadControlConfig()
+                : globalLoadConfig;
+            if (loadConfig.GetEnable()) {
+                auto clientActor = Register(CreateMonitoringGrpcClientActor(CreateGrpcClientSettings(config), CredentialsProviderFactory(GetYdbCredentialSettings(config.GetControlPlaneConnection()))->CreateProvider()).release());
+                databaseMonitoringActor = Register(CreateDatabaseMonitoringActor(clientActor, loadConfig, Counters).release());
+            }
+            Clients->CommonDatabaseClients.push_back({clientActor, config, cacheActor, databaseMonitoringActor});
         }
 
         Y_ABORT_UNLESS(Clients->CommonDatabaseClients);
 
         for (const auto& [scope, config]: mapping.GetScopeToComputeDatabase()) {
             const auto clientActor = Register(CreateCmsGrpcClientActor(CreateGrpcClientSettings(config), CredentialsProviderFactory(GetYdbCredentialSettings(config.GetControlPlaneConnection()))->CreateProvider()).release());
-            const auto cacheActor = Register(CreateComputeDatabasesCacheActor(clientActor, databasesCacheReloadPeriod).release());
-            Clients->ScopeToDatabaseClient[scope] = {clientActor, config, cacheActor};
+            const auto cacheActor = Register(CreateComputeDatabasesCacheActor(clientActor, databasesCacheReloadPeriod, Counters).release());
+            TActorId databaseMonitoringActor;
+            const NConfig::TLoadControlConfig& loadConfig = config.GetLoadControlConfig().GetEnable()
+                ? Config.GetYdb().GetLoadControlConfig()
+                : globalLoadConfig;
+            if (loadConfig.GetEnable()) {
+                auto clientActor = Register(CreateMonitoringGrpcClientActor(CreateGrpcClientSettings(config), CredentialsProviderFactory(GetYdbCredentialSettings(config.GetControlPlaneConnection()))->CreateProvider()).release());
+                databaseMonitoringActor = Register(CreateDatabaseMonitoringActor(clientActor, loadConfig, Counters).release());
+            }
+            Clients->ScopeToDatabaseClient[scope] = {clientActor, config, cacheActor, databaseMonitoringActor};
         }
     }
 
@@ -349,21 +386,24 @@ public:
         const auto& mapping = controlPlaneConfig.GetDatabaseMapping();
         for (const auto& config: mapping.GetCommon()) {
             const auto clientActor = Register(CreateYdbcpGrpcClientActor(CreateGrpcClientSettings(config), CredentialsProviderFactory(GetYdbCredentialSettings(config.GetControlPlaneConnection()))->CreateProvider()).release());
-            const auto cacheActor = Register(CreateComputeDatabasesCacheActor(clientActor, databasesCacheReloadPeriod).release());
-            Clients->CommonDatabaseClients.push_back({clientActor, config, cacheActor});
+            const auto cacheActor = Register(CreateComputeDatabasesCacheActor(clientActor, databasesCacheReloadPeriod, Counters).release());
+            Clients->CommonDatabaseClients.push_back({clientActor, config, cacheActor, {}});
         }
 
         Y_ABORT_UNLESS(Clients->CommonDatabaseClients);
 
         for (const auto& [scope, config]: mapping.GetScopeToComputeDatabase()) {
             const auto clientActor = Register(CreateYdbcpGrpcClientActor(CreateGrpcClientSettings(config), CredentialsProviderFactory(GetYdbCredentialSettings(config.GetControlPlaneConnection()))->CreateProvider()).release());
-            const auto cacheActor = Register(CreateComputeDatabasesCacheActor(clientActor, databasesCacheReloadPeriod).release());
-            Clients->ScopeToDatabaseClient[scope] = {clientActor, config, cacheActor};
+            const auto cacheActor = Register(CreateComputeDatabasesCacheActor(clientActor, databasesCacheReloadPeriod, Counters).release());
+            Clients->ScopeToDatabaseClient[scope] = {clientActor, config, cacheActor, {}};
         }
     }
 
     STRICT_STFUNC(StateFunc,
         hFunc(TEvYdbCompute::TEvCreateDatabaseRequest, Handle);
+        hFunc(TEvYdbCompute::TEvCpuLoadRequest, Handle);
+        hFunc(TEvYdbCompute::TEvCpuQuotaRequest, Handle);
+        hFunc(TEvYdbCompute::TEvCpuQuotaAdjust, Handle);
     )
 
     void Handle(TEvYdbCompute::TEvCreateDatabaseRequest::TPtr& ev) {
@@ -374,7 +414,38 @@ public:
         Register(new TCreateDatabaseRequestActor(Clients, SynchronizationServiceActorId, Config, ev));
     }
 
+    void Handle(TEvYdbCompute::TEvCpuLoadRequest::TPtr& ev) {
+        auto actorId = GetMonitoringActorIdByScope(ev.Get()->Get()->Scope);
+        if (actorId != TActorId{}) {
+            Send(ev->Forward(actorId));
+        } else {
+            Send(ev->Sender, new TEvYdbCompute::TEvCpuLoadResponse(NYql::TIssues{NYql::TIssue{TStringBuilder{} << "Cluster load monitoring disabled"}}), 0, ev->Cookie);
+        }
+    }
+
+    void Handle(TEvYdbCompute::TEvCpuQuotaRequest::TPtr& ev) {
+        auto actorId = GetMonitoringActorIdByScope(ev.Get()->Get()->Scope);
+        if (actorId != TActorId{}) {
+            Send(ev->Forward(actorId));
+        } else {
+            Send(ev->Sender, new TEvYdbCompute::TEvCpuQuotaResponse(), 0, ev->Cookie);
+        }
+    }
+
+    void Handle(TEvYdbCompute::TEvCpuQuotaAdjust::TPtr& ev) {
+        auto actorId = GetMonitoringActorIdByScope(ev.Get()->Get()->Scope);
+        if (actorId != TActorId{}) {
+            Send(ev->Forward(actorId));
+        }
+    }
+
 private:
+    TActorId GetMonitoringActorIdByScope(const TString& scope) {
+        return Config.GetYdb().GetControlPlane().HasSingle() 
+            ? MonitoringActorId
+            : Clients->GetClient(scope).MonitoringActorId;
+    }
+
     TActorId SynchronizationServiceActorId;
     NFq::NConfig::TComputeConfig Config;
     std::shared_ptr<TDatabaseClients> Clients;
@@ -383,6 +454,8 @@ private:
     TYqSharedResources::TPtr YqSharedResources;
     NKikimr::TYdbCredentialsProviderFactory CredentialsProviderFactory;
     ::NMonitoring::TDynamicCounterPtr Counters;
+    TActorId MonitoringClientActorId;
+    TActorId MonitoringActorId;
 };
 
 std::unique_ptr<NActors::IActor> CreateComputeDatabaseControlPlaneServiceActor(const NFq::NConfig::TComputeConfig& config,

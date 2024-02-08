@@ -11,6 +11,7 @@
 #include <ydb/core/base/statestorage.h>
 #include <ydb/core/base/statestorage_impl.h>
 #include <ydb/core/base/ticket_parser.h>
+#include <ydb/core/base/domain.h>
 #include <ydb/core/cms/console/config_helpers.h>
 #include <ydb/core/erasure/erasure.h>
 #include <ydb/core/protos/cms.pb.h>
@@ -18,10 +19,11 @@
 #include <ydb/core/protos/counters_cms.pb.h>
 #include <ydb/core/tablet_flat/tablet_flat_executed.h>
 
-#include <library/cpp/actors/core/actor.h>
-#include <library/cpp/actors/core/hfunc.h>
-#include <library/cpp/actors/interconnect/interconnect.h>
+#include <ydb/library/actors/core/actor.h>
+#include <ydb/library/actors/core/hfunc.h>
+#include <ydb/library/actors/interconnect/interconnect.h>
 #include <library/cpp/monlib/service/pages/templates.h>
+#include <library/cpp/time_provider/time_provider.h>
 
 #include <util/datetime/base.h>
 #include <util/generic/serialized_enum.h>
@@ -47,6 +49,8 @@ void TCms::OnActivateExecutor(const TActorContext &ctx)
         SignalTabletActive(ctx);
         return;
     }
+
+    EnableCMSRequestPriorities = AppData(ctx)->FeatureFlags.GetEnableCMSRequestPriorities();
 
     Executor()->RegisterExternalTabletCounters(TabletCountersPtr.Release());
 
@@ -242,7 +246,8 @@ void TCms::ProcessInitQueue(const TActorContext &ctx)
 
 void TCms::SubscribeForConfig(const TActorContext &ctx)
 {
-    NConsole::SubscribeViaConfigDispatcher(ctx, {(ui32)NKikimrConsole::TConfigItem::CmsConfigItem}, ctx.SelfID);
+    NConsole::SubscribeViaConfigDispatcher(ctx, {(ui32)NKikimrConsole::TConfigItem::CmsConfigItem, 
+        (ui32)NKikimrConsole::TConfigItem::FeatureFlagsItem}, ctx.SelfID);
 }
 
 void TCms::AdjustInfo(TClusterInfoPtr &info, const TActorContext &ctx) const
@@ -253,6 +258,8 @@ void TCms::AdjustInfo(TClusterInfoPtr &info, const TActorContext &ctx) const
         info->ScheduleActions(entry.second, &ctx);
     for (const auto &entry : State->Notifications)
         info->AddExternalLocks(entry.second, &ctx);
+    for (const auto &entry : State->HostMarkers)
+        info->SetHostMarkers(entry.first, entry.second);
 }
 
 namespace {
@@ -284,18 +291,26 @@ bool TCms::CheckPermissionRequest(const TPermissionRequest &request,
         TStatus::UNKNOWN,
     });
     bool allowPartial = request.GetPartialPermissionAllowed();
-    bool schedule = request.GetSchedule() && !request.GetDryRun();
+    bool schedule = (request.GetSchedule() || request.GetEvictVDisks()) && !request.GetDryRun();
+
+    if (request.GetEvictVDisks() && request.ActionsSize() > 1) {
+        response.MutableStatus()->SetCode(TStatus::WRONG_REQUEST);
+        response.MutableStatus()->SetReason("Cannot perform several actions and evict vdisks");
+        return false;
+    }
 
     response.MutableStatus()->SetCode(TStatus::ALLOW);
     if (schedule) {
         scheduled.SetUser(request.GetUser());
         scheduled.SetPartialPermissionAllowed(allowPartial);
-        scheduled.SetSchedule(true);
+        scheduled.SetSchedule(request.GetSchedule());
+        scheduled.SetEvictVDisks(request.GetEvictVDisks());
         scheduled.SetReason(request.GetReason());
         if (request.HasDuration())
             scheduled.SetDuration(request.GetDuration());
         scheduled.SetTenantPolicy(request.GetTenantPolicy());
         scheduled.SetAvailabilityMode(request.GetAvailabilityMode());
+        scheduled.SetPriority(request.GetPriority());
     }
 
     LOG_INFO_S(ctx, NKikimrServices::CMS,
@@ -331,7 +346,12 @@ bool TCms::CheckPermissionRequest(const TPermissionRequest &request,
 
         LOG_DEBUG(ctx, NKikimrServices::CMS, "Checking action: %s", action.ShortDebugString().data());
 
-        if (CheckAction(action, opts, error, ctx)) {
+        bool prepared = !request.GetEvictVDisks();
+        if (!prepared) {
+            prepared = CheckEvictVDisks(action, error);
+        }
+
+        if (prepared && CheckAction(action, opts, error, ctx)) {
             LOG_DEBUG(ctx, NKikimrServices::CMS, "Result: ALLOW");
 
             auto *permission = response.AddPermissions();
@@ -482,11 +502,36 @@ bool TCms::CheckAccess(const TString &token,
     return false;
 }
 
-bool TCms::CheckAction(const TAction &action,
-                       const TActionOptions &opts,
-                       TErrorInfo &error,
-                       const TActorContext &ctx) const
-{
+bool TCms::CheckEvictVDisks(const TAction &action, TErrorInfo &error) const {
+    if (!State->Sentinel) {
+        error.Code = TStatus::ERROR;
+        error.Reason = "Unable to evict vdisks while Sentinel (self heal) is disabled";
+        return false;
+    }
+
+    switch (action.GetType()) {
+        case TAction::RESTART_SERVICES:
+        case TAction::SHUTDOWN_HOST:
+        case TAction::REBOOT_HOST:
+            break;
+        default:
+            error.Code = TStatus::WRONG_REQUEST;
+            error.Reason = TStringBuilder() << "Unable to evict vdisks to perform action: " << action.GetType();
+            return false;
+    }
+
+    for (const auto node : ClusterInfo->HostNodes(action.GetHost())) {
+        if (!node->VDisks.empty()) {
+            error.Code = TStatus::DISALLOW_TEMP;
+            error.Reason = TStringBuilder() << "VDisks eviction from host " << action.GetHost() << " has not yet been completed";
+            return false;
+        }
+    }
+
+    return true;
+}
+
+bool TCms::CheckAction(const TAction &action, const TActionOptions &opts, TErrorInfo &error, const TActorContext &ctx) const {
     if (!IsActionHostValid(action, error))
         return false;
 
@@ -505,12 +550,11 @@ bool TCms::CheckAction(const TAction &action,
         case TAction::ADD_DEVICES:
         case TAction::REMOVE_DEVICES:
             error.Code = TStatus::ERROR;
-            error.Reason = Sprintf("Unsupported action action '%s'",
-                                   TAction::EType_Name(action.GetType()).data());
+            error.Reason = TStringBuilder() << "Unsupported action: " << action.GetType();
             return false;
         default:
-            error.Code =  TStatus::WRONG_REQUEST;
-            error.Reason = Sprintf("Unknown action '%s'", TAction::EType_Name(action.GetType()).data());
+            error.Code = TStatus::WRONG_REQUEST;
+            error.Reason = TStringBuilder() << "Unknown action: " << static_cast<int>(action.GetType());
             return false;
     }
 }
@@ -924,7 +968,10 @@ void TCms::AcceptPermissions(TPermissionResponse &resp, const TString &requestId
         auto &permission = *resp.MutablePermissions(i);
         permission.SetId(owner + "-p-" + ToString(State->NextPermissionId++));
         State->Permissions.emplace(permission.GetId(), TPermissionInfo(permission, requestId, owner));
-        LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::CMS, "Accepting permission");
+        LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::CMS, "Accepting permission"
+            << ": id# " << permission.GetId()
+            << ", requestId# " << requestId
+            << ", owner# " << owner);
         ClusterInfo->AddLocks(permission, requestId, owner, &ctx);
 
         if (!check) {
@@ -1120,6 +1167,9 @@ void TCms::AddHostState(const TClusterInfoPtr &clusterInfo, const TNodeInfo &nod
     host->SetInterconnectPort(node.IcPort);
     host->SetTimestamp(timestamp.GetValue());
     node.Location.Serialize(host->MutableLocation(), false);
+    for (auto marker : node.Markers) {
+        host->AddMarkers(marker);
+    }
     if (node.State == UP || node.VDisks || node.PDisks) {
         for (const auto flag : GetEnumAllValues<EService>()) {
             if (!(node.Services & flag)) {
@@ -1141,6 +1191,9 @@ void TCms::AddHostState(const TClusterInfoPtr &clusterInfo, const TNodeInfo &nod
             device->SetName(vdisk.GetDeviceName());
             device->SetState(vdisk.State);
             device->SetTimestamp(timestamp.GetValue());
+            for (auto marker : vdisk.Markers) {
+                device->AddMarkers(marker);
+            }
         }
 
         for (const auto &pdId : node.PDisks) {
@@ -1149,6 +1202,9 @@ void TCms::AddHostState(const TClusterInfoPtr &clusterInfo, const TNodeInfo &nod
             device->SetName(pdisk.GetDeviceName());
             device->SetState(pdisk.State);
             device->SetTimestamp(timestamp.GetValue());
+            for (auto marker : pdisk.Markers) {
+                device->AddMarkers(marker);
+            }
         }
     }
 }
@@ -1291,9 +1347,16 @@ void TCms::RemoveRequest(TEvCms::TEvManageRequestRequest::TPtr &ev, const TActor
         resp->Record.MutableStatus()->SetReason("Unknown request " + id);
     } else {
         const auto &request = it->second;
+
         if (request.Owner != user) {
             resp->Record.MutableStatus()->SetCode(TStatus::WRONG_REQUEST);
             resp->Record.MutableStatus()->SetReason(Sprintf("Request %s doesn't belong to %s", id.data(), user.data()));
+        }
+
+        if (request.Request.GetEvictVDisks() && request.Request.ActionsSize() < 1) {
+            resp->Record.MutableStatus()->SetCode(TStatus::WRONG_REQUEST);
+            resp->Record.MutableStatus()->SetReason(
+                Sprintf("Request %s used to evict vdisks and cannot be deleted while permission is valid", id.data()));
         }
     }
 
@@ -1410,6 +1473,20 @@ void TCms::CheckAndEnqueueRequest(TEvCms::TEvPermissionRequest::TPtr &ev, const 
         }
     }
 
+    if (rec.GetPriority() && !EnableCMSRequestPriorities) {
+        if (rec.GetUser() == WALLE_CMS_USER) {
+            rec.ClearPriority();
+        } else {
+            return ReplyWithError<TEvCms::TEvPermissionResponse>(
+                ev, TStatus::WRONG_REQUEST, "Unsupported: feature flag EnableCMSRequestPriorities is off", ctx);
+        }
+    }
+
+    if (-100 > rec.GetPriority() || rec.GetPriority() > 100) {
+        return ReplyWithError<TEvCms::TEvPermissionResponse>(
+            ev, TStatus::WRONG_REQUEST, "Priority value is out of range", ctx);
+    }
+
     EnqueueRequest(ev.Release(), ctx);
 }
 
@@ -1467,6 +1544,65 @@ void TCms::PersistNodeTenants(TTransactionContext& txc, const TActorContext& ctx
         LOG_TRACE(ctx, NKikimrServices::CMS,
                   "Persist node %" PRIu32 " tenant '%s'",
                   nodeId, tenant.data());
+    }
+}
+
+TVector<TCms::THostMarkers> TCms::SetHostMarker(const TString &host, NKikimrCms::EMarker marker, TTransactionContext &txc, const TActorContext &ctx) {
+    if (State->HostMarkers.contains(host)) {
+        return {};
+    }
+
+    AuditLog(ctx, TStringBuilder() << "Add host marker"
+        << ": host# " << host
+        << ", marker# " << marker);
+
+    State->HostMarkers[host] = {marker};
+    NIceDb::TNiceDb db(txc.DB);
+    db.Table<Schema::HostMarkers>().Key(host).Update(
+        NIceDb::TUpdate<Schema::HostMarkers::Markers>(TVector<NKikimrCms::EMarker>{marker})
+    );
+
+    TVector<TCms::THostMarkers> updateMarkers;
+    if (ClusterInfo) {
+        for (const auto node : ClusterInfo->HostNodes(host)) {
+            updateMarkers.push_back({
+                .NodeId = node->NodeId,
+                .Markers = {marker},
+            });
+        }
+    }
+
+    return updateMarkers;
+}
+
+TVector<TCms::THostMarkers> TCms::ResetHostMarkers(const TString &host, TTransactionContext &txc, const TActorContext &ctx) {
+    if (!State->HostMarkers.contains(host)) {
+        return {};
+    }
+
+    AuditLog(ctx, TStringBuilder() << "Reset host markers"
+        << ": host# " << host);
+
+    State->HostMarkers.erase(host);
+    NIceDb::TNiceDb db(txc.DB);
+    db.Table<Schema::HostMarkers>().Key(host).Delete();
+
+    TVector<TCms::THostMarkers> updateMarkers;
+    if (ClusterInfo) {
+        for (const auto node : ClusterInfo->HostNodes(host)) {
+            updateMarkers.push_back({
+                .NodeId = node->NodeId,
+                .Markers = {},
+            });
+        }
+    }
+
+    return updateMarkers;
+}
+
+void TCms::SentinelUpdateHostMarkers(TVector<TCms::THostMarkers> &&updateMarkers, const TActorContext &ctx) {
+    if (updateMarkers) {
+        ctx.Send(State->Sentinel, new TEvSentinel::TEvUpdateHostMarkers(std::move(updateMarkers)));
     }
 }
 
@@ -1703,7 +1839,6 @@ void TCms::Handle(TEvCms::TEvPermissionRequest::TPtr &ev,
     TAutoPtr<TEvCms::TEvPermissionResponse> resp = new TEvCms::TEvPermissionResponse;
     TRequestInfo scheduled;
     auto &rec = ev->Get()->Record;
-    TString user = rec.GetUser();
 
     auto requestStartTime = TInstant::Now();
 
@@ -1728,25 +1863,48 @@ void TCms::Handle(TEvCms::TEvPermissionRequest::TPtr &ev,
         }
     }
 
-    ClusterInfo->LogManager.PushRollbackPoint();
-    for (const auto &scheduled_request : State->ScheduledRequests) {
-            for (auto &action : scheduled_request.second.Request.GetActions())
-                ClusterInfo->LogManager.ApplyAction(action, ClusterInfo);
+    if (rec.GetEvictVDisks()) {
+        for (const auto &action : rec.GetActions()) {
+            if (State->HostMarkers.contains(action.GetHost())) {
+                return ReplyWithError<TEvCms::TEvPermissionResponse>(
+                    ev, TStatus::WRONG_REQUEST, TStringBuilder() << "VDisks of host '" << action.GetHost() << "' are being evicted", ctx);
+            }
+            for (const auto node : ClusterInfo->HostNodes(action.GetHost())) {
+                if (State->HostMarkers.contains(ToString(node->NodeId))) {
+                    return ReplyWithError<TEvCms::TEvPermissionResponse>(
+                        ev, TStatus::WRONG_REQUEST, TStringBuilder() << "VDisks of node '" << node->NodeId << "' are being evicted", ctx);
+                }
+            }
+        }
     }
+
+    ClusterInfo->LogManager.PushRollbackPoint();
+    const i32 priority = rec.GetPriority();
+    for (const auto &[_, scheduledRequest] : State->ScheduledRequests) {
+        if (scheduledRequest.Priority < priority) {
+            for (const auto &action : scheduledRequest.Request.GetActions()) {
+                ClusterInfo->LogManager.ApplyAction(action, ClusterInfo);
+            }
+        }
+    }
+    ClusterInfo->DeactivateScheduledLocks(priority);
     bool ok = CheckPermissionRequest(rec, resp->Record, scheduled.Request, ctx);
+    ClusterInfo->ReactivateScheduledLocks();
     ClusterInfo->LogManager.RollbackOperations();
 
     // Schedule request if required.
     if (rec.GetDryRun()) {
         Reply(ev, std::move(resp), ctx);
     } else {
+        TString user = rec.GetUser();
         auto reqId = user + "-r-" + ToString(State->NextRequestId++);
         resp->Record.SetRequestId(reqId);
 
         TAutoPtr<TRequestInfo> copy;
-        if (scheduled.Request.ActionsSize()) {
+        if (scheduled.Request.ActionsSize() || scheduled.Request.GetEvictVDisks()) {
             scheduled.Owner = user;
             scheduled.Order = State->NextRequestId - 1;
+            scheduled.Priority = priority;
             scheduled.RequestId = reqId;
             ClusterInfo->ScheduleActions(scheduled, &ctx);
 
@@ -1801,14 +1959,13 @@ void TCms::Handle(TEvCms::TEvCheckRequest::TPtr &ev, const TActorContext &ctx)
 
     ClusterInfo->LogManager.PushRollbackPoint();
     for (const auto &scheduled_request : State->ScheduledRequests) {
-        if (scheduled_request.second.Order < request.Order) {
-            for (auto &action : scheduled_request.second.Request.GetActions())
+        if (scheduled_request.second.Priority < request.Priority) {
+            for (const auto &action : scheduled_request.second.Request.GetActions())
                 ClusterInfo->LogManager.ApplyAction(action, ClusterInfo);
         }
     }
-    // Deactivate locks of this and later requests to
-    // avoid false conflicts.
-    ClusterInfo->DeactivateScheduledLocks(request.Order);
+
+    ClusterInfo->DeactivateScheduledLocks(request.Priority);
     request.Request.SetAvailabilityMode(rec.GetAvailabilityMode());
     bool ok = CheckPermissionRequest(request.Request, resp->Record, scheduled.Request, ctx);
     ClusterInfo->ReactivateScheduledLocks();
@@ -1820,19 +1977,21 @@ void TCms::Handle(TEvCms::TEvCheckRequest::TPtr &ev, const TActorContext &ctx)
     } else {
         TAutoPtr<TRequestInfo> copy;
         auto order = request.Order;
+        auto priority = request.Priority;
 
         ClusterInfo->UnscheduleActions(request.RequestId);
         State->ScheduledRequests.erase(it);
-        if (scheduled.Request.ActionsSize()) {
+        if (scheduled.Request.ActionsSize() || scheduled.Request.GetEvictVDisks()) {
             scheduled.Owner = user;
             scheduled.Order = order;
+            scheduled.Priority = priority;
             scheduled.RequestId = rec.GetRequestId();
             resp->Record.SetRequestId(scheduled.RequestId);
 
             ClusterInfo->ScheduleActions(scheduled, &ctx);
-
+            
             copy = new TRequestInfo(scheduled);
-            State->ScheduledRequests.emplace(scheduled.RequestId, std::move(scheduled));
+            State->ScheduledRequests.emplace(rec.GetRequestId(), std::move(scheduled));
         } else {
             scheduled.RequestId = rec.GetRequestId();
             scheduled.Owner = user;
@@ -1840,7 +1999,7 @@ void TCms::Handle(TEvCms::TEvCheckRequest::TPtr &ev, const TActorContext &ctx)
         }
 
         if (ok)
-            AcceptPermissions(resp->Record, scheduled.RequestId, user, ctx, true);
+            AcceptPermissions(resp->Record, rec.GetRequestId(), user, ctx, true);
 
         auto handle = new IEventHandle(ev->Sender, SelfId(), resp.Release(), 0, ev->Cookie);
         Execute(CreateTxStorePermissions(std::move(ev->Release()), handle, user, std::move(copy)), ctx);
@@ -1919,6 +2078,7 @@ bool TCms::IsValidNotificationAction(const TAction &action, TInstant time,
         case TAction::RESTART_SERVICES:
             return CheckNotificationRestartServices(action, time, error, ctx);
         case TAction::SHUTDOWN_HOST:
+        case TAction::REBOOT_HOST:
             return CheckNotificationShutdownHost(action, time, error, ctx);
         case TAction::REPLACE_DEVICES:
             return CheckNotificationReplaceDevices(action, time, error, ctx);
@@ -1929,12 +2089,11 @@ bool TCms::IsValidNotificationAction(const TAction &action, TInstant time,
         case TAction::ADD_DEVICES:
         case TAction::REMOVE_DEVICES:
             error.Code = TStatus::ERROR;
-            error.Reason = Sprintf("Unsupported action action '%s'",
-                                   TAction::EType_Name(action.GetType()).data());
+            error.Reason = TStringBuilder() << "Unsupported action: " << action.GetType();
             return false;
         default:
-            error.Code =  TStatus::WRONG_REQUEST;
-            error.Reason = Sprintf("Unknown action '%s'", TAction::EType_Name(action.GetType()).data());
+            error.Code = TStatus::WRONG_REQUEST;
+            error.Reason = TStringBuilder() << "Unknown action: " << static_cast<int>(action.GetType());
             return false;
     }
 }
@@ -2101,7 +2260,7 @@ void TCms::Handle(TEvCms::TEvGetLogTailRequest::TPtr &ev, const TActorContext &c
 
 void TCms::Handle(TEvCms::TEvGetSentinelStateRequest::TPtr &ev, const TActorContext &ctx)
 {
-    if(State->Sentinel) {
+    if (State->Sentinel) {
         ctx.Send(ev->Forward(State->Sentinel));
     } else {
         auto Response = MakeHolder<TEvCms::TEvGetSentinelStateResponse>();
@@ -2113,7 +2272,12 @@ void TCms::Handle(TEvCms::TEvGetSentinelStateRequest::TPtr &ev, const TActorCont
 
 void TCms::Handle(TEvConsole::TEvConfigNotificationRequest::TPtr &ev,
                   const TActorContext &ctx)
-{
+{   
+    const auto& appConfig = ev->Get()->Record.GetConfig();
+    if (appConfig.HasFeatureFlags()) {
+        EnableCMSRequestPriorities = appConfig.GetFeatureFlags().GetEnableCMSRequestPriorities();
+    }
+
     if (ev->Get()->Record.HasLocal() && ev->Get()->Record.GetLocal()) {
         Execute(CreateTxUpdateConfig(ev), ctx);
     } else {

@@ -5,6 +5,8 @@
 
 #include <yt/yt/client/api/client.h>
 #include <yt/yt/client/api/transaction.h>
+#include <yt/yt/client/api/dynamic_table_transaction_mixin.h>
+#include <yt/yt/client/api/queue_transaction_mixin.h>
 
 #include <yt/yt/client/misc/method_helpers.h>
 
@@ -24,13 +26,13 @@
 
 namespace NYT::NClient::NFederated {
 
+using namespace NApi;
+
 ////////////////////////////////////////////////////////////////////////////////
 
-namespace {
+static const auto& Logger = FederatedClientLogger;
 
-using namespace NYT::NApi;
-
-const auto& Logger = FederatedClientLogger;
+////////////////////////////////////////////////////////////////////////////////
 
 DECLARE_REFCOUNTED_CLASS(TClient)
 
@@ -52,7 +54,9 @@ std::optional<TString> GetDataCenterByClient(const IClientPtr& client)
 }
 
 class TTransaction
-    : public ITransaction
+    : public virtual ITransaction
+    , public TDynamicTableTransactionMixin
+    , public TQueueTransactionMixin
 {
 public:
     TTransaction(TClientPtr client, int clientIndex, ITransactionPtr underlying);
@@ -77,6 +81,15 @@ public:
         TSharedRange<TRowModification> modifications,
         const TModifyRowsOptions& options) override;
 
+    using TQueueTransactionMixin::AdvanceConsumer;
+    TFuture<void> AdvanceConsumer(
+        const NYPath::TRichYPath& consumerPath,
+        const NYPath::TRichYPath& queuePath,
+        int partitionIndex,
+        std::optional<i64> oldOffset,
+        i64 newOffset,
+        const TAdvanceConsumerOptions& options) override;
+
     TFuture<TTransactionFlushResult> Flush() override;
 
     TFuture<void> Ping(const NApi::TTransactionPingOptions& options = {}) override;
@@ -90,7 +103,7 @@ public:
         const TSharedRange<NTableClient::TUnversionedRow>&,
         const TVersionedLookupRowsOptions&) override;
 
-    TFuture<std::vector<TUnversionedLookupRowsResult>> MultiLookup(
+    TFuture<std::vector<TUnversionedLookupRowsResult>> MultiLookupRows(
         const std::vector<TMultiLookupSubrequest>&,
         const TMultiLookupOptions&) override;
 
@@ -187,7 +200,6 @@ public:
     UNIMPLEMENTED_METHOD(TFuture<void>, ExternalizeNode, (const NYPath::TYPath&, NObjectClient::TCellTag, const TExternalizeNodeOptions&));
     UNIMPLEMENTED_METHOD(TFuture<void>, InternalizeNode, (const NYPath::TYPath&, const TInternalizeNodeOptions&));
     UNIMPLEMENTED_METHOD(TFuture<NObjectClient::TObjectId>, CreateObject, (NObjectClient::EObjectType, const TCreateObjectOptions&));
-
     UNIMPLEMENTED_METHOD(TFuture<ITableReaderPtr>, CreateTableReader, (const NYPath::TRichYPath&, const TTableReaderOptions&));
     UNIMPLEMENTED_METHOD(TFuture<IFileReaderPtr>, CreateFileReader, (const NYPath::TYPath&, const TFileReaderOptions&));
     UNIMPLEMENTED_METHOD(TFuture<ITableWriterPtr>, CreateTableWriter, (const NYPath::TRichYPath&, const TTableWriterOptions&));
@@ -229,7 +241,9 @@ class TClient
     : public IClient
 {
 public:
-    TClient(const std::vector<IClientPtr>& underlyingClients, TFederationConfigPtr config);
+    TClient(
+        const std::vector<IClientPtr>& underlyingClients,
+        TFederationConfigPtr config);
 
     TFuture<TUnversionedLookupRowsResult> LookupRows(
         const NYPath::TYPath& path,
@@ -239,7 +253,7 @@ public:
     TFuture<TSelectRowsResult> SelectRows(
         const TString& query,
         const TSelectRowsOptions& options = {}) override;
-    TFuture<std::vector<TUnversionedLookupRowsResult>> MultiLookup(
+    TFuture<std::vector<TUnversionedLookupRowsResult>> MultiLookupRows(
         const std::vector<TMultiLookupSubrequest>&,
         const TMultiLookupOptions&) override;
     TFuture<TVersionedLookupRowsResult> VersionedLookupRows(
@@ -254,11 +268,10 @@ public:
         int,
         const NQueueClient::TQueueRowBatchReadOptions&,
         const TPullQueueOptions&) override;
-
     TFuture<NQueueClient::IQueueRowsetPtr> PullConsumer(
         const NYPath::TRichYPath&,
         const NYPath::TRichYPath&,
-        i64,
+        std::optional<i64>,
         int,
         const NQueueClient::TQueueRowBatchReadOptions&,
         const TPullConsumerOptions&) override;
@@ -272,6 +285,8 @@ public:
     TFuture<NYson::TYsonString> GetNode(const NYPath::TYPath&, const TGetNodeOptions&) override;
     TFuture<NYson::TYsonString> ListNode(const NYPath::TYPath&, const TListNodeOptions&) override;
     TFuture<bool> NodeExists(const NYPath::TYPath&, const TNodeExistsOptions&) override;
+
+    TFuture<std::vector<TListQueueConsumerRegistrationsResult>> ListQueueConsumerRegistrations(const std::optional<NYPath::TRichYPath>&, const std::optional<NYPath::TRichYPath>&, const TListQueueConsumerRegistrationsOptions&) override;
 
     const NTabletClient::ITableMountCachePtr& GetTableMountCache() override;
     TFuture<std::vector<TTabletInfo>> GetTabletInfos(const NYPath::TYPath&, const std::vector<int>&, const TGetTabletInfosOptions&) override;
@@ -297,7 +312,7 @@ public:
     void Terminate() override
     { }
 
-    // IClientBase Unsupported methods.
+    // IClientBase unsupported methods.
     UNIMPLEMENTED_METHOD(TFuture<void>, SetNode, (const NYPath::TYPath&, const NYson::TYsonString&, const TSetNodeOptions&));
     UNIMPLEMENTED_METHOD(TFuture<void>, MultisetAttributesNode, (const NYPath::TYPath&, const NYTree::IMapNodePtr&, const TMultisetAttributesNodeOptions&));
     UNIMPLEMENTED_METHOD(TFuture<void>, RemoveNode, (const NYPath::TYPath&, const TRemoveNodeOptions&));
@@ -316,7 +331,6 @@ public:
     // IClient unsupported methods.
     UNIMPLEMENTED_METHOD(TFuture<void>, RegisterQueueConsumer, (const NYPath::TRichYPath&, const NYPath::TRichYPath&, bool, const TRegisterQueueConsumerOptions&));
     UNIMPLEMENTED_METHOD(TFuture<void>, UnregisterQueueConsumer, (const NYPath::TRichYPath&, const NYPath::TRichYPath&, const TUnregisterQueueConsumerOptions&));
-    UNIMPLEMENTED_METHOD(TFuture<std::vector<TListQueueConsumerRegistrationsResult>>, ListQueueConsumerRegistrations, (const std::optional<NYPath::TRichYPath>&, const std::optional<NYPath::TRichYPath>&, const TListQueueConsumerRegistrationsOptions&));
     UNIMPLEMENTED_METHOD(const NChaosClient::IReplicationCardCachePtr&, GetReplicationCardCache, ());
     UNIMPLEMENTED_METHOD(TFuture<void>, MountTable, (const NYPath::TYPath&, const TMountTableOptions&));
     UNIMPLEMENTED_METHOD(TFuture<void>, UnmountTable, (const NYPath::TYPath&, const TUnmountTableOptions&));
@@ -394,7 +408,7 @@ public:
     UNIMPLEMENTED_METHOD(TFuture<TMaintenanceId>, AddMaintenance, (EMaintenanceComponent, const TString&, EMaintenanceType, const TString&, const TAddMaintenanceOptions&));
     UNIMPLEMENTED_METHOD(TFuture<TMaintenanceCounts>, RemoveMaintenance, (EMaintenanceComponent, const TString&, const TMaintenanceFilter&, const TRemoveMaintenanceOptions&));
     UNIMPLEMENTED_METHOD(TFuture<TDisableChunkLocationsResult>, DisableChunkLocations, (const TString&, const std::vector<TGuid>&, const TDisableChunkLocationsOptions&));
-    UNIMPLEMENTED_METHOD(TFuture<TDestroyChunkLocationsResult>, DestroyChunkLocations, (const TString&, const std::vector<TGuid>&, const TDestroyChunkLocationsOptions&));
+    UNIMPLEMENTED_METHOD(TFuture<TDestroyChunkLocationsResult>, DestroyChunkLocations, (const TString&, bool, const std::vector<TGuid>&, const TDestroyChunkLocationsOptions&));
     UNIMPLEMENTED_METHOD(TFuture<TResurrectChunkLocationsResult>, ResurrectChunkLocations, (const TString&, const std::vector<TGuid>&, const TResurrectChunkLocationsOptions&));
     UNIMPLEMENTED_METHOD(TFuture<TRequestRestartResult>, RequestRestart, (const TString&, const TRequestRestartOptions&));
     UNIMPLEMENTED_METHOD(TFuture<void>, SetUserPassword, (const TString&, const TString&, const TString&, const TSetUserPasswordOptions&));
@@ -407,17 +421,26 @@ public:
     UNIMPLEMENTED_METHOD(TFuture<TQuery>, GetQuery, (NQueryTrackerClient::TQueryId, const TGetQueryOptions&));
     UNIMPLEMENTED_METHOD(TFuture<TListQueriesResult>, ListQueries, (const TListQueriesOptions&));
     UNIMPLEMENTED_METHOD(TFuture<void>, AlterQuery, (NQueryTrackerClient::TQueryId, const TAlterQueryOptions&));
-
+    UNIMPLEMENTED_METHOD(TFuture<NBundleControllerClient::TBundleConfigDescriptorPtr>, GetBundleConfig, (const TString&, const NBundleControllerClient::TGetBundleConfigOptions&));
+    UNIMPLEMENTED_METHOD(TFuture<void>, SetBundleConfig, (const TString&, const NBundleControllerClient::TBundleTargetConfigPtr&, const NBundleControllerClient::TSetBundleConfigOptions&));
     UNIMPLEMENTED_METHOD(TFuture<ITableReaderPtr>, CreateTableReader, (const NYPath::TRichYPath&, const TTableReaderOptions&));
     UNIMPLEMENTED_METHOD(TFuture<ITableWriterPtr>, CreateTableWriter, (const NYPath::TRichYPath&, const TTableWriterOptions&));
     UNIMPLEMENTED_METHOD(TFuture<IFileReaderPtr>, CreateFileReader, (const NYPath::TYPath&, const TFileReaderOptions&));
     UNIMPLEMENTED_METHOD(IFileWriterPtr, CreateFileWriter, (const NYPath::TRichYPath&, const TFileWriterOptions&));
     UNIMPLEMENTED_METHOD(IJournalReaderPtr, CreateJournalReader, (const NYPath::TYPath&, const TJournalReaderOptions&));
     UNIMPLEMENTED_METHOD(IJournalWriterPtr, CreateJournalWriter, (const NYPath::TYPath&, const TJournalWriterOptions&));
-
-    friend class TTransaction;
+    UNIMPLEMENTED_METHOD(TFuture<TGetPipelineSpecResult>, GetPipelineSpec, (const NYPath::TYPath&, const TGetPipelineSpecOptions&));
+    UNIMPLEMENTED_METHOD(TFuture<TSetPipelineSpecResult>, SetPipelineSpec, (const NYPath::TYPath&, const NYson::TYsonString&, const TSetPipelineSpecOptions&));
+    UNIMPLEMENTED_METHOD(TFuture<TGetPipelineDynamicSpecResult>, GetPipelineDynamicSpec, (const NYPath::TYPath&, const TGetPipelineDynamicSpecOptions&));
+    UNIMPLEMENTED_METHOD(TFuture<TSetPipelineDynamicSpecResult>, SetPipelineDynamicSpec, (const NYPath::TYPath&, const NYson::TYsonString&, const TSetPipelineDynamicSpecOptions&));
+    UNIMPLEMENTED_METHOD(TFuture<void>, StartPipeline, (const NYPath::TYPath&, const TStartPipelineOptions&));
+    UNIMPLEMENTED_METHOD(TFuture<void>, StopPipeline, (const NYPath::TYPath&, const TStopPipelineOptions&));
+    UNIMPLEMENTED_METHOD(TFuture<void>, PausePipeline, (const NYPath::TYPath&, const TPausePipelineOptions&));
+    UNIMPLEMENTED_METHOD(TFuture<TPipelineStatus>, GetPipelineStatus, (const NYPath::TYPath&, const TGetPipelineStatusOptions&));
 
 private:
+    friend class TTransaction;
+
     struct TActiveClientInfo
     {
         IClientPtr Client;
@@ -475,8 +498,9 @@ TRANSACTION_METHOD_IMPL(void, Ping, (const NApi::TTransactionPingOptions&));
 TRANSACTION_METHOD_IMPL(TTransactionCommitResult, Commit, (const TTransactionCommitOptions&));
 TRANSACTION_METHOD_IMPL(void, Abort, (const TTransactionAbortOptions&));
 TRANSACTION_METHOD_IMPL(TVersionedLookupRowsResult, VersionedLookupRows, (const NYPath::TYPath&, NTableClient::TNameTablePtr, const TSharedRange<NTableClient::TUnversionedRow>&, const TVersionedLookupRowsOptions&));
-TRANSACTION_METHOD_IMPL(std::vector<TUnversionedLookupRowsResult>, MultiLookup, (const std::vector<TMultiLookupSubrequest>&, const TMultiLookupOptions&));
+TRANSACTION_METHOD_IMPL(std::vector<TUnversionedLookupRowsResult>, MultiLookupRows, (const std::vector<TMultiLookupSubrequest>&, const TMultiLookupOptions&));
 TRANSACTION_METHOD_IMPL(TPullRowsResult, PullRows, (const NYPath::TYPath&, const TPullRowsOptions&));
+TRANSACTION_METHOD_IMPL(void, AdvanceConsumer, (const NYPath::TRichYPath&, const NYPath::TRichYPath&, int, std::optional<i64>, i64, const TAdvanceConsumerOptions&));
 TRANSACTION_METHOD_IMPL(NYson::TYsonString, ExplainQuery, (const TString&, const TExplainQueryOptions&));
 TRANSACTION_METHOD_IMPL(NYson::TYsonString, GetNode, (const NYPath::TYPath&, const TGetNodeOptions&));
 TRANSACTION_METHOD_IMPL(NYson::TYsonString, ListNode, (const NYPath::TYPath&, const TListNodeOptions&));
@@ -633,17 +657,18 @@ TFuture<ResultType> TClient::MethodName(Y_METHOD_USED_ARGS_DECLARATION(Args))   
 
 CLIENT_METHOD_IMPL(TUnversionedLookupRowsResult, LookupRows, (const NYPath::TYPath&, NTableClient::TNameTablePtr, const TSharedRange<NTableClient::TLegacyKey>&, const TLookupRowsOptions&));
 CLIENT_METHOD_IMPL(TSelectRowsResult, SelectRows, (const TString&, const TSelectRowsOptions&));
-CLIENT_METHOD_IMPL(std::vector<TUnversionedLookupRowsResult>, MultiLookup, (const std::vector<TMultiLookupSubrequest>&, const TMultiLookupOptions&));
+CLIENT_METHOD_IMPL(std::vector<TUnversionedLookupRowsResult>, MultiLookupRows, (const std::vector<TMultiLookupSubrequest>&, const TMultiLookupOptions&));
 CLIENT_METHOD_IMPL(TVersionedLookupRowsResult, VersionedLookupRows, (const NYPath::TYPath&, NTableClient::TNameTablePtr, const TSharedRange<NTableClient::TUnversionedRow>&, const TVersionedLookupRowsOptions&));
 CLIENT_METHOD_IMPL(TPullRowsResult, PullRows, (const NYPath::TYPath&, const TPullRowsOptions&));
 CLIENT_METHOD_IMPL(NQueueClient::IQueueRowsetPtr, PullQueue, (const NYPath::TRichYPath&, i64, int, const NQueueClient::TQueueRowBatchReadOptions&, const TPullQueueOptions&));
-CLIENT_METHOD_IMPL(NQueueClient::IQueueRowsetPtr, PullConsumer, (const NYPath::TRichYPath&, const NYPath::TRichYPath&, i64, int, const NQueueClient::TQueueRowBatchReadOptions&, const TPullConsumerOptions&));
+CLIENT_METHOD_IMPL(NQueueClient::IQueueRowsetPtr, PullConsumer, (const NYPath::TRichYPath&, const NYPath::TRichYPath&, std::optional<i64>, int, const NQueueClient::TQueueRowBatchReadOptions&, const TPullConsumerOptions&));
 CLIENT_METHOD_IMPL(NYson::TYsonString, ExplainQuery, (const TString&, const TExplainQueryOptions&));
 CLIENT_METHOD_IMPL(NYson::TYsonString, GetNode, (const NYPath::TYPath&, const TGetNodeOptions&));
 CLIENT_METHOD_IMPL(NYson::TYsonString, ListNode, (const NYPath::TYPath&, const TListNodeOptions&));
 CLIENT_METHOD_IMPL(bool, NodeExists, (const NYPath::TYPath&, const TNodeExistsOptions&));
 CLIENT_METHOD_IMPL(std::vector<TTabletInfo>, GetTabletInfos, (const NYPath::TYPath&, const std::vector<int>&, const TGetTabletInfosOptions&));
 CLIENT_METHOD_IMPL(NChaosClient::TReplicationCardPtr, GetReplicationCard, (NChaosClient::TReplicationCardId, const TGetReplicationCardOptions&));
+CLIENT_METHOD_IMPL(std::vector<TListQueueConsumerRegistrationsResult>, ListQueueConsumerRegistrations, (const std::optional<NYPath::TRichYPath>&, const std::optional<NYPath::TRichYPath>&, const TListQueueConsumerRegistrationsOptions&));
 
 const NTabletClient::ITableMountCachePtr& TClient::GetTableMountCache()
 {
@@ -725,11 +750,13 @@ DEFINE_REFCOUNTED_TYPE(TClient)
 
 ////////////////////////////////////////////////////////////////////////////////
 
-} // namespace
-
-NApi::IClientPtr CreateClient(const std::vector<NApi::IClientPtr>& clients, TFederationConfigPtr config)
+IClientPtr CreateClient(
+    std::vector<NApi::IClientPtr> clients,
+    TFederationConfigPtr config)
 {
-    return New<TClient>(clients, std::move(config));
+    return New<TClient>(
+        std::move(clients),
+        std::move(config));
 }
 
 ////////////////////////////////////////////////////////////////////////////////

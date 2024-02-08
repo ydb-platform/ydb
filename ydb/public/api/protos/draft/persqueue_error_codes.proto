@@ -45,5 +45,7 @@ enum EErrorCode {
 
     TABLET_PIPE_DISCONNECTED = 27;
 
+    SCHEMA_ERROR = 28;
+
     ERROR = 100;
 }

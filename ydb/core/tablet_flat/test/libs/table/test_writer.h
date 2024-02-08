@@ -74,7 +74,7 @@ namespace NTest {
             TEpoch epoch = TEpoch(root.GetEpoch());
 
             size_t indexesRawSize = 0;
-            for (auto indexPage : eggs.IndexGroupsPages) {
+            for (auto indexPage : eggs.GroupIndexes) {
                 indexesRawSize += Store->GetPageSize(0, indexPage);
             }
 
@@ -85,7 +85,7 @@ namespace NTest {
                     {
                         epoch,
                         TPartScheme::Parse(*eggs.Scheme, eggs.Rooted),
-                        { eggs.IndexGroupsPages, eggs.IndexHistoricPages },
+                        { eggs.GroupIndexes, eggs.HistoricIndexes, eggs.BTreeGroupIndexes, eggs.BTreeHistoricIndexes },
                         eggs.Blobs ? new TExtBlobs(*eggs.Blobs, { }) : nullptr,
                         eggs.ByKey ? new TBloom(*eggs.ByKey) : nullptr,
                         eggs.Large ? new TFrames(*eggs.Large) : nullptr,
@@ -124,10 +124,26 @@ namespace NTest {
                 indexHistoricPages.push_back(pageId);
             }
 
+            TVector<NPage::TBtreeIndexMeta> BTreeGroupIndexes, BTreeHistoricIndexes;
+            for (bool history : {false, true}) {
+                for (const auto &meta : history ? lay.GetBTreeHistoricIndexes() : lay.GetBTreeGroupIndexes()) {
+                    NPage::TBtreeIndexMeta converted{{
+                        meta.GetRootPageId(), 
+                        meta.GetRowCount(), 
+                        meta.GetDataSize(), 
+                        meta.GetErasedRowCount()}, 
+                        meta.GetLevelCount(), 
+                        meta.GetIndexSize()};
+                    (history ? BTreeHistoricIndexes : BTreeGroupIndexes).push_back(converted);
+                }
+            }
+
             return {
                 true /* rooted page collection */,
                 std::move(indexGroupsPages), 
                 std::move(indexHistoricPages),
+                BTreeGroupIndexes,
+                BTreeHistoricIndexes,
                 Store->GetPage(0, lay.HasScheme() ? lay.GetScheme() : undef),
                 Store->GetPage(0, lay.HasGlobs() ? lay.GetGlobs() : undef),
                 Store->GetPage(0, lay.HasByKey() ? lay.GetByKey() : undef),
@@ -373,6 +389,11 @@ namespace NTest {
             }
 
             return Pages.Flush(std::move(Scheme), Writer->Finish());
+        }
+
+        ui64 GetDataBytes(ui32 room) noexcept
+        {
+            return Pages.Back().GetDataBytes(room);
         }
 
     private:

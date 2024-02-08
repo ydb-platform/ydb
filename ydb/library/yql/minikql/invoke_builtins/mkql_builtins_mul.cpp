@@ -1,4 +1,4 @@
-#include "mkql_builtins_impl.h"
+#include "mkql_builtins_impl.h"  // Y_IGNORE
 #include "mkql_builtins_datetime.h"
 
 #include <ydb/library/yql/minikql/mkql_type_ops.h>
@@ -10,7 +10,7 @@ namespace {
 
 template<typename TLeft, typename TRight, typename TOutput>
 struct TMul : public TSimpleArithmeticBinary<TLeft, TRight, TOutput, TMul<TLeft, TRight, TOutput>> {
-    static constexpr bool DefaultNulls = true;
+    static constexpr auto NullMode = TKernel::ENullMode::Default;
 
     static TOutput Do(TOutput left, TOutput right)
     {
@@ -98,7 +98,7 @@ void RegisterMul(IBuiltinFunctionRegistry& registry) {
 }
 
 void RegisterMul(TKernelFamilyMap& kernelFamilyMap) {
-    kernelFamilyMap["Mul"] = std::make_unique<TBinaryNumericKernelFamily<TMul>>();
+    kernelFamilyMap["Mul"] = std::make_unique<TBinaryNumericKernelFamily<TMul, TMul>>();
 }
 
 } // namespace NMiniKQL

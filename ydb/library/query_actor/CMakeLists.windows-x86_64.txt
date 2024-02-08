@@ -12,7 +12,7 @@ add_library(ydb-library-query_actor)
 target_link_libraries(ydb-library-query_actor PUBLIC
   contrib-libs-cxxsupp
   yutil
-  cpp-actors-core
+  library-actors-core
   cpp-threading-future
   ydb-core-base
   core-grpc_services-local_rpc

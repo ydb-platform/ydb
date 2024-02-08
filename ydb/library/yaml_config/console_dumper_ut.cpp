@@ -2,6 +2,8 @@
 
 #include <library/cpp/testing/unittest/registar.h>
 
+using namespace NKikimr;
+
 Y_UNIT_TEST_SUITE(ConsoleDumper) {
 
     void FillDomainItems(::google::protobuf::RepeatedPtrField<NKikimrConsole::TConfigItem> &items,

@@ -3,10 +3,21 @@
 #include <ydb/core/base/appdata.h>
 #include <ydb/core/kqp/federated_query/kqp_federated_query_helpers.h>
 
-#include <library/cpp/actors/core/actorid.h>
+#include <ydb/library/actors/core/actorid.h>
 
 #include <util/datetime/base.h>
 
+namespace NKikimrConfig {
+    class TLogConfig;
+    class TTableServiceConfig;
+    class TQueryServiceConfig;
+    class TMetadataProviderConfig;
+}
+
+namespace NKikimrKqp {
+    class TKqpSetting;
+    class TKqpProxyNodeResources;
+}
 
 namespace NKikimr::NKqp {
 

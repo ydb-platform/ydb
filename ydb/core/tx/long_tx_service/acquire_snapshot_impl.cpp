@@ -4,7 +4,7 @@
 #include <ydb/core/base/tablet_pipecache.h>
 #include <ydb/core/tx/tx_proxy/proxy.h>
 
-#include <library/cpp/actors/core/actor_bootstrapped.h>
+#include <ydb/library/actors/core/actor_bootstrapped.h>
 
 #include <util/random/random.h>
 

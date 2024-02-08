@@ -14,7 +14,7 @@ namespace NYdb::NPersQueue {
 ERetryErrorClass GetRetryErrorClass(EStatus status);
 ERetryErrorClass GetRetryErrorClassV2(EStatus status);
 
-void Cancel(NGrpc::IQueueClientContextPtr& context);
+void Cancel(NYdbGrpc::IQueueClientContextPtr& context);
 
 NYql::TIssues MakeIssueWithSubIssues(const TString& description, const NYql::TIssues& subissues);
 
@@ -79,7 +79,7 @@ TString ApplyClusterEndpoint(TStringBuf driverEndpoint, const TString& clusterDi
 // without transport stuff.
 template <class TRequest, class TResponse>
 struct ISessionConnectionProcessorFactory {
-    using IProcessor = NGrpc::IStreamRequestReadWriteProcessor<TRequest, TResponse>;
+    using IProcessor = NYdbGrpc::IStreamRequestReadWriteProcessor<TRequest, TResponse>;
     using TConnectedCallback = std::function<void(TPlainStatus&&, typename IProcessor::TPtr&&)>;
     using TConnectTimeoutCallback = std::function<void(bool ok)>;
 
@@ -90,14 +90,14 @@ struct ISessionConnectionProcessorFactory {
         // Params for connect.
         TConnectedCallback callback,
         const TRpcRequestSettings& requestSettings,
-        NGrpc::IQueueClientContextPtr connectContext,
+        NYdbGrpc::IQueueClientContextPtr connectContext,
         // Params for timeout and its cancellation.
         TDuration connectTimeout,
-        NGrpc::IQueueClientContextPtr connectTimeoutContext,
+        NYdbGrpc::IQueueClientContextPtr connectTimeoutContext,
         TConnectTimeoutCallback connectTimeoutCallback,
         // Params for delay before reconnect and its cancellation.
         TDuration connectDelay = TDuration::Zero(),
-        NGrpc::IQueueClientContextPtr connectDelayOperationContext = nullptr) = 0;
+        NYdbGrpc::IQueueClientContextPtr connectDelayOperationContext = nullptr) = 0;
 };
 
 template <class TService, class TRequest, class TResponse>
@@ -108,7 +108,7 @@ public:
     using TConnectedCallback = typename ISessionConnectionProcessorFactory<TRequest, TResponse>::TConnectedCallback;
     using TConnectTimeoutCallback = typename ISessionConnectionProcessorFactory<TRequest, TResponse>::TConnectTimeoutCallback;
     TSessionConnectionProcessorFactory(
-        TGRpcConnectionsImpl::TStreamRpc<TService, TRequest, TResponse, NGrpc::TStreamRequestReadWriteProcessor> rpc,
+        TGRpcConnectionsImpl::TStreamRpc<TService, TRequest, TResponse, NYdbGrpc::TStreamRequestReadWriteProcessor> rpc,
         std::shared_ptr<TGRpcConnectionsImpl> connections,
         TDbDriverStatePtr dbState
     )
@@ -121,12 +121,12 @@ public:
     void CreateProcessor(
         TConnectedCallback callback,
         const TRpcRequestSettings& requestSettings,
-        NGrpc::IQueueClientContextPtr connectContext,
+        NYdbGrpc::IQueueClientContextPtr connectContext,
         TDuration connectTimeout,
-        NGrpc::IQueueClientContextPtr connectTimeoutContext,
+        NYdbGrpc::IQueueClientContextPtr connectTimeoutContext,
         TConnectTimeoutCallback connectTimeoutCallback,
         TDuration connectDelay,
-        NGrpc::IQueueClientContextPtr connectDelayOperationContext) override
+        NYdbGrpc::IQueueClientContextPtr connectDelayOperationContext) override
     {
         Y_ASSERT(connectContext);
         Y_ASSERT(connectTimeoutContext);
@@ -177,9 +177,9 @@ private:
     void Connect(
         TConnectedCallback callback,
         const TRpcRequestSettings& requestSettings,
-        NGrpc::IQueueClientContextPtr connectContext,
+        NYdbGrpc::IQueueClientContextPtr connectContext,
         TDuration connectTimeout,
-        NGrpc::IQueueClientContextPtr connectTimeoutContext,
+        NYdbGrpc::IQueueClientContextPtr connectTimeoutContext,
         TConnectTimeoutCallback connectTimeoutCallback)
     {
         Connections->StartBidirectionalStream<TService, TRequest, TResponse>(
@@ -198,7 +198,7 @@ private:
     }
 
 private:
-    TGRpcConnectionsImpl::TStreamRpc<TService, TRequest, TResponse, NGrpc::TStreamRequestReadWriteProcessor> Rpc;
+    TGRpcConnectionsImpl::TStreamRpc<TService, TRequest, TResponse, NYdbGrpc::TStreamRequestReadWriteProcessor> Rpc;
     std::shared_ptr<TGRpcConnectionsImpl> Connections;
     TDbDriverStatePtr DbDriverState;
 };
@@ -206,7 +206,7 @@ private:
 template <class TService, class TRequest, class TResponse>
 std::shared_ptr<ISessionConnectionProcessorFactory<TRequest, TResponse>>
     CreateConnectionProcessorFactory(
-        TGRpcConnectionsImpl::TStreamRpc<TService, TRequest, TResponse, NGrpc::TStreamRequestReadWriteProcessor> rpc,
+        TGRpcConnectionsImpl::TStreamRpc<TService, TRequest, TResponse, NYdbGrpc::TStreamRequestReadWriteProcessor> rpc,
         std::shared_ptr<TGRpcConnectionsImpl> connections,
         TDbDriverStatePtr dbState
     )

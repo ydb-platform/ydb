@@ -1,7 +1,8 @@
 #include "mkql_map_join.h"
 
-#include <ydb/library/yql/minikql/computation/mkql_computation_node_codegen.h>
+#include <ydb/library/yql/minikql/computation/mkql_computation_node_codegen.h>  // Y_IGNORE
 #include <ydb/library/yql/minikql/computation/mkql_computation_node_holders.h>
+#include <ydb/library/yql/minikql/computation/mkql_computation_node_holders_codegen.h>
 #include <ydb/library/yql/minikql/mkql_node_cast.h>
 #include <ydb/library/yql/minikql/mkql_program_builder.h>
 #include <ydb/library/yql/minikql/invoke_builtins/mkql_builtins.h>
@@ -1542,7 +1543,6 @@ private:
         const auto keysType = IsTuple ? ArrayType::get(valueType, this->LeftKeyColumns.size()) : nullptr;
         const auto containerType = codegen.GetEffectiveTarget() == NYql::NCodegen::ETarget::Windows ? static_cast<Type*>(PointerType::getUnqual(valueType)) : static_cast<Type*>(valueType);
         const auto contextType = GetCompContextType(context);
-        const auto idxType = Type::getInt32Ty(context);
         const auto statusType = Type::getInt32Ty(context);
         const auto funcType = FunctionType::get(statusType, {PointerType::getUnqual(contextType), containerType, containerType, PointerType::getUnqual(valueType)}, false);
 
@@ -1698,7 +1698,6 @@ private:
         const auto keysType = IsTuple ? ArrayType::get(valueType, this->LeftKeyColumns.size()) : nullptr;
         const auto containerType = codegen.GetEffectiveTarget() == NYql::NCodegen::ETarget::Windows ? static_cast<Type*>(PointerType::getUnqual(valueType)) : static_cast<Type*>(valueType);
         const auto contextType = GetCompContextType(context);
-        const auto idxType = Type::getInt32Ty(context);
         const auto statusType = Type::getInt32Ty(context);
         const auto funcType = FunctionType::get(statusType, {PointerType::getUnqual(contextType), containerType, containerType, PointerType::getUnqual(valueType), PointerType::getUnqual(valueType), PointerType::getUnqual(valueType)}, false);
 

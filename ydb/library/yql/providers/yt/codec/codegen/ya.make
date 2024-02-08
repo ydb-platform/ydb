@@ -8,22 +8,16 @@ SRCS(
 PEERDIR(
     library/cpp/resource
     ydb/library/binary_json
-    ydb/library/yql/minikql/computation/llvm
+    ydb/library/yql/minikql/computation/llvm14
     ydb/library/yql/parser/pg_wrapper/interface
     ydb/library/yql/utils
 )
 
 IF (NOT MKQL_DISABLE_CODEGEN)
     PEERDIR(
-        contrib/libs/llvm12/lib/IR
-        contrib/libs/llvm12/lib/ExecutionEngine/MCJIT
-        contrib/libs/llvm12/lib/Linker
-        contrib/libs/llvm12/lib/Support
-        contrib/libs/llvm12/lib/Target/X86
-        contrib/libs/llvm12/lib/Target/X86/AsmParser
-        contrib/libs/llvm12/lib/Transforms/IPO
-        ydb/library/yql/minikql/codegen
+        ydb/library/yql/minikql/codegen/llvm14
     )
+    USE_LLVM_BC14()
     LLVM_BC(
         yt_codec_bc.cpp
         NAME
@@ -79,7 +73,13 @@ ENDIF()
 
 YQL_LAST_ABI_VERSION()
 
+PROVIDES(YT_CODEC_CODEGEN)
+
 END()
+
+RECURSE(
+    no_llvm
+)
 
 RECURSE_FOR_TESTS(
     ut

@@ -14,7 +14,7 @@ void DecommitGroup(TBlobDepotTestEnvironment& tenv, ui32 groupId) {
 
     auto *cmd = request.AddCommand()->MutableDecommitGroups();
     cmd->AddGroupIds(groupId);
-    cmd->SetHiveId(tenv.Env->Runtime->GetAppData()->DomainsInfo->HivesByHiveUid.begin()->second);
+    cmd->SetHiveId(tenv.Env->Runtime->GetDomainsInfo()->HivesByHiveUid.begin()->second);
     auto *prof = cmd->AddChannelProfiles();
     prof->SetStoragePoolName(blobDepotPool);
     prof->SetCount(2);
@@ -447,7 +447,7 @@ void TestRestoreRange(TBlobDepotTestEnvironment& tenv, ui64 tabletId, ui32 group
     }
 }
 
-void TestVerifiedRandom(TBlobDepotTestEnvironment& tenv, ui32 nodeCount, ui64 tabletId0, ui32 groupId, 
+void TestVerifiedRandom(TBlobDepotTestEnvironment& tenv, ui32 nodeCount, ui64 tabletId0, ui32 groupId,
         ui32 iterationsNum, ui32 decommitStep, ui32 timeLimitSec, std::vector<ui32> probabilities) {
     enum EActions {
         ALTER = 0,
@@ -461,7 +461,7 @@ void TestVerifiedRandom(TBlobDepotTestEnvironment& tenv, ui32 nodeCount, ui64 ta
         COLLECT_GARBAGE_SOFT,
         RESTART_BLOB_DEPOT,
     };
-    
+
     std::vector<std::string> actionName = {
         "ALTER", "PUT", "GET", "MULTIGET", "RANGE", "BLOCK", "DISCOVER", "COLLECT_GARBAGE_HARD", "COLLECT_GARBAGE_SOFT", "RESTART_BLOB_DEPOT"
     };
@@ -694,7 +694,7 @@ void TestVerifiedRandom(TBlobDepotTestEnvironment& tenv, ui32 nodeCount, ui64 ta
     }
 }
 
-void TestLoadPutAndGet(TBlobDepotTestEnvironment& tenv, ui64 tabletId, ui32 groupId, ui32 blobsNum, ui32 maxBlobSize, 
+void TestLoadPutAndGet(TBlobDepotTestEnvironment& tenv, ui64 tabletId, ui32 groupId, ui32 blobsNum, ui32 maxBlobSize,
         ui32 readsNum, bool decommit, ui32 timeLimitSec, std::vector<ui32> probablities) {
     enum EActions {
         GET,

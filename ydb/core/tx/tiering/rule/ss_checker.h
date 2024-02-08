@@ -43,7 +43,7 @@ private:
     void Handle(NSchemeShard::TEvSchemeShard::TEvProcessingResponse::TPtr& ev);
 protected:
     virtual void OnBootstrap() override {
-        Become(&TSSFetchingActor::StateMain);
+        UnsafeBecome(&TSSFetchingActor::StateMain);
         TBase::OnBootstrap();
     }
     virtual void OnFail(const TString& errorMessage) override {

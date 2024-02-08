@@ -235,7 +235,6 @@ int CompareRowValues(const TUnversionedValue& lhs, const TUnversionedValue& rhs)
 //! Derived comparison operators.
 //! Note that these ignore flags.
 bool operator == (const TUnversionedValue& lhs, const TUnversionedValue& rhs);
-bool operator != (const TUnversionedValue& lhs, const TUnversionedValue& rhs);
 bool operator <= (const TUnversionedValue& lhs, const TUnversionedValue& rhs);
 bool operator <  (const TUnversionedValue& lhs, const TUnversionedValue& rhs);
 bool operator >= (const TUnversionedValue& lhs, const TUnversionedValue& rhs);
@@ -260,7 +259,6 @@ int CompareRows(
 //! Derived comparison operators.
 //! Note that these ignore aggregate flags.
 bool operator == (TUnversionedRow lhs, TUnversionedRow rhs);
-bool operator != (TUnversionedRow lhs, TUnversionedRow rhs);
 bool operator <= (TUnversionedRow lhs, TUnversionedRow rhs);
 bool operator <  (TUnversionedRow lhs, TUnversionedRow rhs);
 bool operator >= (TUnversionedRow lhs, TUnversionedRow rhs);
@@ -443,6 +441,16 @@ void ValidateDuplicateAndRequiredValueColumns(
     const TTableSchema& schema,
     const TNameTableToSchemaIdMapping& idMapping,
     std::vector<bool>* columnPresenceBuffer);
+
+//! Checks that #row contains write lock for non-key columns and returns true if any non-key columns encountered.
+bool ValidateNonKeyColumnsAgainstLock(
+    TUnversionedRow row,
+    const TLockMask& locks,
+    const TTableSchema& schema,
+    const TNameTableToSchemaIdMapping& idMapping,
+    const TNameTablePtr& nameTable,
+    const std::vector<int>& columnIndexToLockIndex,
+    bool allowSharedWriteLocks);
 
 //! Checks that #key is a valid client-side key. Throws on failure.
 /*! The components must pass #ValidateKeyValue check. */

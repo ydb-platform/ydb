@@ -16,7 +16,7 @@
 #include <ydb/library/yql/public/issue/yql_issue_message.h>
 #include <ydb/library/yql/core/issue/protos/issue_id.pb.h>
 
-#include <library/cpp/grpc/client/grpc_client_low.h>
+#include <ydb/library/grpc/client/grpc_client_low.h>
 
 #include <util/thread/factory.h>
 
@@ -587,7 +587,7 @@ Y_UNIT_TEST_SUITE(YdbYqlClient) {
                 .UseSecureConnection(NYdbSslTestData::CaCrt)
                 .SetEndpoint(location));
 
-        auto& tableSettings = server.GetServer().GetSettings().AppConfig.GetTableServiceConfig();
+        auto& tableSettings = server.GetServer().GetSettings().AppConfig->GetTableServiceConfig();
         bool useSchemeCacheMeta = tableSettings.GetUseSchemeCacheMetadata();
 
         {

@@ -1,7 +1,8 @@
 #pragma once
 
-#include "header.h"
 #include "blob.h"
+#include "header.h"
+#include "partition_id.h"
 
 #include <ydb/core/tablet/tablet_counters.h>
 #include <ydb/core/base/appdata.h>
@@ -13,7 +14,7 @@ namespace NPQ {
 struct TUserInfo;
 
 struct TReadAnswer {
-    ui64 Size;
+    ui64 Size = 0;
     THolder<IEventBase> Event;
 };
 
@@ -35,19 +36,27 @@ struct TReadInfo {
     TVector<TRequestedBlob> Blobs; //offset, count, value
     ui64 CachedOffset; //offset of head can be bigger than last databody offset
     TVector<TClientBlob> Cached; //records from head
+    TActorId PipeClient;
+
+    ui64 SizeEstimate = 0;
+    ui64 RealReadOffset = 0;
+    ui64 LastOffset = 0;
+    bool Error = false;
 
     TReadInfo() = delete;
     TReadInfo(
         const TString& user,
         const TString& clientDC,
         const ui64 offset,
+        const ui64 lastOffset,
         const ui16 partNo,
         const ui64 count,
         const ui32 size,
         const ui64 dst,
         ui64 readTimestampMs,
         TDuration waitQuotaTime,
-        const bool isExternalRead
+        const bool isExternalRead,
+        const TActorId& pipeClient
     )
         : User(user)
         , ClientDC(clientDC)
@@ -62,15 +71,17 @@ struct TReadInfo {
         , IsExternalRead(isExternalRead)
         , IsSubscription(false)
         , CachedOffset(0)
+        , PipeClient(pipeClient)
+        , LastOffset(lastOffset)
     {}
 
     TReadAnswer FormAnswer(
         const TActorContext& ctx,
         const TEvPQ::TEvBlobResponse& response,
         const ui64 endOffset,
-        const ui32 partition,
+        const TPartitionId& partition,
         TUserInfo* ui,
-        const ui64 dst,
+        const ui64 dst, 
         const ui64 sizeLag,
         const TActorId& tablet,
         const NKikimrPQ::TPQTabletConfig::EMeteringMode meteringMode
@@ -79,7 +90,7 @@ struct TReadInfo {
     TReadAnswer FormAnswer(
         const TActorContext& ctx,
         const ui64 endOffset,
-        const ui32 partition,
+        const TPartitionId& partition,
         TUserInfo* ui,
         const ui64 dst,
         const ui64 sizeLag,
@@ -117,7 +128,7 @@ private:
 
 class TSubscriber : public TNonCopyable {
 public:
-    TSubscriber(const ui32 partition, TTabletCountersBase& counters, const TActorId& tablet);
+    TSubscriber(const TPartitionId& partition, TTabletCountersBase& counters, const TActorId& tablet);
 
     //will wait for new data or timeout for this read and set timer for timeout ms
     void AddSubscription(TReadInfo&& info, const ui32 timeout, const ui64 cookie, const TActorContext& ctx);
@@ -130,7 +141,7 @@ public:
 
 private:
     TSubscriberLogic Subscriber;
-    const ui32 Partition;
+    const TPartitionId Partition;
     TTabletCountersBase& Counters;
     TActorId Tablet;
 };

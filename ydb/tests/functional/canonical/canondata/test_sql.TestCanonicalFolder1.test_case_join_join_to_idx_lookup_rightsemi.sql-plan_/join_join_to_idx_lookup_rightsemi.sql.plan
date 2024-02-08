@@ -39,7 +39,7 @@
                         "Key2",
                         "Value"
                     ],
-                    "type": "Lookup"
+                    "type": "Scan"
                 },
                 {
                     "columns": [
@@ -90,7 +90,7 @@
                         "Key1",
                         "Key2"
                     ],
-                    "type": "Lookup"
+                    "type": "Scan"
                 }
             ]
         }

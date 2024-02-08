@@ -1,9 +1,9 @@
 #include "kafka_metrics_actor.h"
 
-#include <library/cpp/actors/core/actor_bootstrapped.h>
-#include <library/cpp/actors/core/events.h>
-#include <library/cpp/actors/core/hfunc.h>
-#include <library/cpp/actors/core/log.h>
+#include <ydb/library/actors/core/actor_bootstrapped.h>
+#include <ydb/library/actors/core/events.h>
+#include <ydb/library/actors/core/hfunc.h>
+#include <ydb/library/actors/core/log.h>
 #include <library/cpp/cache/cache.h>
 
 #include <library/cpp/monlib/metrics/histogram_collector.h>
@@ -33,7 +33,6 @@ namespace NKafka {
             switch (ev->GetTypeRewrite()) {
                 HFunc(TEvKafka::TEvUpdateCounter, Handle);
                 HFunc(TEvKafka::TEvUpdateHistCounter, Handle);
-
             }
         }
 

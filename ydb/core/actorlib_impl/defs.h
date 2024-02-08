@@ -1,3 +1,3 @@
 #pragma once
 
-#include <library/cpp/actors/core/defs.h>
+#include <ydb/library/actors/core/defs.h>

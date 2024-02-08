@@ -1,13 +1,16 @@
 #pragma once
-#include <library/cpp/actors/core/actor_bootstrapped.h>
-#include <library/cpp/actors/core/interconnect.h>
-#include <library/cpp/actors/core/mon.h>
+#include <ydb/library/actors/core/actor_bootstrapped.h>
+#include <ydb/library/actors/core/interconnect.h>
+#include <ydb/library/actors/core/mon.h>
 #include <ydb/core/node_whiteboard/node_whiteboard.h>
 #include <ydb/core/tx/schemeshard/schemeshard.h>
 #include <ydb/core/tx/tx_proxy/proxy.h>
 #include <ydb/core/viewer/json/json.h>
 #include "json_pipe_req.h"
 #include "viewer.h"
+#include "viewer_probes.h"
+
+LWTRACE_USING(VIEWER_PROVIDER);
 
 namespace NKikimr {
 namespace NViewer {
@@ -34,6 +37,18 @@ class TJsonCluster : public TViewerPipeClient<TJsonCluster> {
     ui32 TenantsNumber = 0;
     bool Tablets = false;
 
+    struct TEventLog {
+        bool IsTimeout = false;
+        TInstant StartTime;
+        TInstant StartHandleListTenantsResponseTime;
+        TInstant StartHandleNodesInfoTime;
+        TInstant StartMergeBSGroupsTime;
+        TInstant StartMergeVDisksTime;
+        TInstant StartMergePDisksTime;
+        TInstant StartMergeTabletsTime;
+        TInstant StartResponseBuildingTime;
+    };
+    TEventLog EventLog;
 public:
     static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
         return NKikimrServices::TActivity::VIEWER_HANDLER;
@@ -52,6 +67,7 @@ public:
     }
 
     void Bootstrap(const TActorContext& ) {
+        EventLog.StartTime = TActivationContext::Now();
         SendRequest(GetNameserviceActorId(), new TEvInterconnect::TEvListNodes());
         RequestConsoleListTenants();
         Become(&TThis::StateRequested, TDuration::MilliSeconds(Timeout), new TEvents::TEvWakeup());
@@ -59,8 +75,11 @@ public:
 
     void PassAway() override {
         if (NodesInfo != nullptr) {
+            TIntrusivePtr<TDynamicNameserviceConfig> dynamicNameserviceConfig = AppData()->DynamicNameserviceConfig;
             for (const auto& ni : NodesInfo->Nodes) {
-                Send(TActivationContext::InterconnectProxy(ni.NodeId), new TEvents::TEvUnsubscribe);
+                if (ni.NodeId <= dynamicNameserviceConfig->MaxStaticNodeId) {
+                    Send(TActivationContext::InterconnectProxy(ni.NodeId), new TEvents::TEvUnsubscribe);
+                }
             }
         }
         TBase::PassAway();
@@ -119,7 +138,7 @@ public:
             if (ni.NodeId <= dynamicNameserviceConfig->MaxStaticNodeId) {
                 SendRequest(whiteboardServiceId, new TEvWhiteboard::TEvVDiskStateRequest(), IEventHandle::FlagTrackDelivery | IEventHandle::FlagSubscribeOnSession, ni.NodeId);
                 SendRequest(whiteboardServiceId,new TEvWhiteboard::TEvPDiskStateRequest(), IEventHandle::FlagTrackDelivery | IEventHandle::FlagSubscribeOnSession, ni.NodeId);
-                SendRequest(whiteboardServiceId, new TEvWhiteboard::TEvBSGroupStateRequest(), IEventHandle::FlagTrackDelivery | IEventHandle::FlagSubscribeOnSession, ni.NodeId); 
+                SendRequest(whiteboardServiceId, new TEvWhiteboard::TEvBSGroupStateRequest(), IEventHandle::FlagTrackDelivery | IEventHandle::FlagSubscribeOnSession, ni.NodeId);
             }
         }
         if (Tablets) {
@@ -128,6 +147,9 @@ public:
     }
 
     void Handle(TEvInterconnect::TEvNodesInfo::TPtr& ev) {
+        EventLog.StartHandleNodesInfoTime = TActivationContext::Now();
+        NodesInfo = ev->Release();
+        // before making requests to Whiteboard with the Tablets parameter, we need to review the TEvDescribeSchemeResult information
         if (Tablets) {
             THolder<TEvTxUserProxy::TEvNavigate> request = MakeHolder<TEvTxUserProxy::TEvNavigate>();
             if (!Event->Get()->UserToken.empty()) {
@@ -144,9 +166,10 @@ public:
             record->MutableOptions()->SetReturnPartitionConfig(false);
             record->MutableOptions()->SetReturnChildren(false);
             SendRequest(MakeTxProxyID(), request.Release());
+        } else {
+            SendWhiteboardRequests();
         }
 
-        NodesInfo = ev->Release();
         RequestDone();
     }
 
@@ -241,6 +264,7 @@ public:
     }
 
     void Handle(NConsole::TEvConsole::TEvListTenantsResponse::TPtr& ev) {
+        EventLog.StartHandleListTenantsResponseTime = TActivationContext::Now();
         Ydb::Cms::ListDatabasesResult listTenantsResult;
         ev->Get()->Record.GetResponse().operation().result().UnpackTo(&listTenantsResult);
         TenantsNumber = listTenantsResult.paths().size();
@@ -286,15 +310,21 @@ public:
     TMap<std::pair<ui32, ui32>, const NKikimrWhiteboard::TPDiskStateInfo&> PDisksIndex;
 
     void ReplyAndPassAway() {
-        TStringStream json;
+        EventLog.StartMergeBSGroupsTime = TActivationContext::Now();
         MergeWhiteboardResponses(MergedBSGroupInfo, BSGroupInfo);
+        EventLog.StartMergeVDisksTime = TActivationContext::Now();
         MergeWhiteboardResponses(MergedVDiskInfo, VDiskInfo);
+        EventLog.StartMergePDisksTime = TActivationContext::Now();
         MergeWhiteboardResponses(MergedPDiskInfo, PDiskInfo);
 
+        EventLog.StartMergeTabletsTime = TActivationContext::Now();
         THashSet<TTabletId> tablets;
-
         if (Tablets) {
             MergeWhiteboardResponses(MergedTabletInfo, TabletInfo);
+        }
+
+        EventLog.StartResponseBuildingTime = TActivationContext::Now();
+        if (Tablets) {
             TIntrusivePtr<TDomainsInfo> domains = AppData()->DomainsInfo;
             if (!domains->Domains.empty()) {
                 TIntrusivePtr<TDomainsInfo::TDomain> domain = domains->Domains.begin()->second;
@@ -424,12 +454,30 @@ public:
         if (itMax != names.end()) {
             pbCluster.SetName(itMax->first);
         }
+
+        TStringStream json;
         TProtoToJson::ProtoToJson(json, pbCluster, JsonSettings);
         Send(Event->Sender, new NMon::TEvHttpInfoRes(Viewer->GetHTTPOKJSON(Event->Get(), std::move(json.Str())), 0, NMon::IEvHttpInfoRes::EContentType::Custom));
+
+        const TInstant now = TActivationContext::Now();
+        LWPROBE(ViewerClusterHandler, TBase::SelfId().NodeId(), Tablets, EventLog.IsTimeout,
+            EventLog.StartTime.MilliSeconds(),
+            (now - EventLog.StartTime).MilliSeconds(),
+            (EventLog.StartHandleListTenantsResponseTime - EventLog.StartTime).MilliSeconds(),
+            (EventLog.StartHandleNodesInfoTime - EventLog.StartTime).MilliSeconds(),
+            (EventLog.StartMergeBSGroupsTime - EventLog.StartTime).MilliSeconds(),
+            (EventLog.StartMergeVDisksTime - EventLog.StartMergeBSGroupsTime).MilliSeconds(),
+            (EventLog.StartMergePDisksTime - EventLog.StartMergeVDisksTime).MilliSeconds(),
+            (EventLog.StartMergeTabletsTime - EventLog.StartMergePDisksTime).MilliSeconds(),
+            (EventLog.StartResponseBuildingTime - EventLog.StartMergeTabletsTime).MilliSeconds(),
+            (now - EventLog.StartResponseBuildingTime).MilliSeconds()
+        );
+
         PassAway();
     }
 
     void HandleTimeout() {
+        EventLog.IsTimeout = true;
         ReplyAndPassAway();
     }
 };

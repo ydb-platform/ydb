@@ -6,8 +6,8 @@
 
 #include <ydb/library/yql/utils/log/log.h>
 
-#include <library/cpp/actors/core/actor.h>
-#include <library/cpp/actors/interconnect/interconnect.h>
+#include <ydb/library/actors/core/actor.h>
+#include <ydb/library/actors/interconnect/interconnect.h>
 
 #include <util/generic/guid.h>
 

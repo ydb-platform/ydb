@@ -102,7 +102,7 @@ class TBlobStorageGroupAssimilateRequest : public TBlobStorageGroupRequestActor<
     };
 
     using TItemVariant = std::variant<TBlock, TBarrier, TBlob>;
-   
+
     struct TPerVDiskInfo {
         std::optional<TString> ErrorReason;
 

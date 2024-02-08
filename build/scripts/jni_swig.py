@@ -4,10 +4,13 @@ import re
 import os
 import tarfile
 
+
 def parse_args():
     parser = argparse.ArgumentParser(description='Wrapper script to invoke swig.')
     parser.add_argument('--swig', help='path to the swig executable')
-    parser.add_argument('--default-module', type=str, help='swig -module argument value for inputs without %module statement')
+    parser.add_argument(
+        '--default-module', type=str, help='swig -module argument value for inputs without %module statement'
+    )
     parser.add_argument('--package-by-file', help='path to file which dir must be converted to swig -package argument')
     parser.add_argument('--jsrc', help='jsrc output archive filename')
     parser.add_argument('--src', help='input .swg file path')
@@ -29,7 +32,11 @@ def main(args):
         outdir_abs = os.path.join(os.path.dirname(args.jsrc), outdir)
         if not os.path.exists(outdir_abs):
             os.makedirs(outdir_abs)
-    cmd = [args.swig, '-c++', '-java', '-package', package] + (['-outdir', outdir_abs] if outdir is not None else []) + args.args
+    cmd = (
+        [args.swig, '-c++', '-java', '-package', package]
+        + (['-outdir', outdir_abs] if outdir is not None else [])
+        + args.args
+    )
     if '-module' not in args.args and args.default_module:
         with open(args.src, 'r') as f:
             if not re.search(r'(?m)^%module\b', f.read()):

@@ -5,12 +5,15 @@ import os
 
 # very simple regexp to find go import statement in the source code
 # NOTE! only one-line comments are somehow considered
-IMPORT_DECL=re.compile(r'''
+IMPORT_DECL = re.compile(
+    r'''
     \bimport
     (
         \s+((\.|\w+)\s+)?"[^"]+" ( \s+//[^\n]* )?
         | \s* \( \s* ( ( \s+ ((\.|\w+)\s+)? "[^"]+" )? ( \s* //[^\n]* )? )* \s* \)
-    )''', re.MULTILINE | re.DOTALL | re.VERBOSE)
+    )''',
+    re.MULTILINE | re.DOTALL | re.VERBOSE,
+)
 
 
 def parse_args():
@@ -62,7 +65,11 @@ def main():
     if len(raw_import_map) != len(import_map):
         for k, v in (z.split('=', 1) for z in raw_import_map):
             if v != import_map[k]:
-                raise Exception('import map [{}] contains different values for key [{}]: [{}] and [{}].'.format(args.map, k, v, import_map[k]))
+                raise Exception(
+                    'import map [{}] contains different values for key [{}]: [{}] and [{}].'.format(
+                        args.map, k, v, import_map[k]
+                    )
+                )
 
     for root, _, files in os.walk(args.input_dir):
         for src in (f for f in files if f.endswith('.go')):

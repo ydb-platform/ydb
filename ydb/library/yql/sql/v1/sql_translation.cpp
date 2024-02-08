@@ -5,10 +5,56 @@
 #include "sql_values.h"
 #include "sql_select.h"
 #include "source.h"
+
 #include <ydb/library/yql/parser/proto_ast/gen/v1/SQLv1Lexer.h>
 #include <ydb/library/yql/sql/settings/partitioning.h>
+
 #include <util/generic/scope.h>
 #include <util/string/join.h>
+
+#include <library/cpp/protobuf/util/simple_reflection.h>
+
+namespace {
+
+using namespace NSQLTranslationV1;
+
+template <typename Callback>
+void VisitAllFields(const NProtoBuf::Message& msg, Callback& callback) {
+    const auto* descr = msg.GetDescriptor();
+    for (int i = 0; i < descr->field_count(); ++i) {
+        const auto* fd = descr->field(i);
+        NProtoBuf::TConstField field(msg, fd);
+        if (field.IsMessage()) {
+            for (size_t j = 0; j < field.Size(); ++j) {
+                const auto& message = *field.Get<NProtoBuf::Message>(j);
+                callback(message);
+                VisitAllFields(message, callback);
+            }
+        }
+    }
+}
+
+struct TTokenCollector {
+    void operator()(const NProtoBuf::Message& message) {
+        if (const auto* token = dynamic_cast<const NSQLv1Generated::TToken*>(&message)) {
+            if (!Tokens.Empty()) {
+                Tokens << ' ';
+            }
+            Tokens << token->GetValue();
+        }
+    }
+
+    TStringBuilder Tokens;
+};
+
+TString CollectTokens(const TRule_select_stmt& selectStatement) {
+    TTokenCollector tokenCollector;
+    VisitAllFields(selectStatement, tokenCollector);
+    return tokenCollector.Tokens;
+}
+
+}
+
 namespace NSQLTranslationV1 {
 
 using NALPDefault::SQLv1LexerTokens;
@@ -1523,6 +1569,16 @@ namespace {
         return true;
     }
 
+    bool StoreBool(const TRule_table_setting_value& from, TDeferredAtom& to, TContext& ctx) {
+        if (!from.HasAlt_table_setting_value6()) {
+            return false;
+        }
+        // bool_value
+        const TString value = to_lower(ctx.Token(from.GetAlt_table_setting_value6().GetRule_bool_value1().GetToken1()));
+        to = TDeferredAtom(BuildLiteralBool(ctx.Pos(), FromString<bool>(value)), ctx);
+        return true;
+    }
+
     bool StoreSplitBoundary(const TRule_literal_value_list& boundary, TVector<TVector<TNodePtr>>& to,
             TSqlExpression& expr, TContext& ctx) {
         TVector<TNodePtr> boundaryKeys;
@@ -1649,6 +1705,26 @@ namespace {
         return true;
     }
 
+    bool StoreViewOptionsEntry(const TIdentifier& id,
+                               const TRule_table_setting_value& value,
+                               std::map<TString, TDeferredAtom>& features,
+                               TContext& ctx) {
+        const auto name = to_lower(id.Name);
+        const auto publicName = to_upper(name);
+
+        if (features.find(name) != features.end()) {
+            ctx.Error(ctx.Pos()) << publicName << " is a duplicate";
+            return false;
+        }
+
+        if (!StoreBool(value, features[name], ctx)) {
+            ctx.Error(ctx.Pos()) << "Value of " << publicName << " must be a bool";
+            return false;
+        }
+
+        return true;
+    }
+
     template<typename TChar>
     struct TPatternComponent {
         TBasicString<TChar> Prefix;
@@ -1704,15 +1780,22 @@ bool TSqlTranslation::StoreTableSettingsEntry(const TIdentifier& id, const TRule
         TTableSettings& settings, ETableType tableType, bool alter, bool reset) {
     switch (tableType) {
     case ETableType::ExternalTable:
-        return StoreExternalTableSettingsEntry(id, value, settings);
+        return StoreExternalTableSettingsEntry(id, value, settings, alter, reset);
     case ETableType::Table:
     case ETableType::TableStore:
         return StoreTableSettingsEntry(id, value, settings, alter, reset);
     }
 }
 
-bool TSqlTranslation::StoreExternalTableSettingsEntry(const TIdentifier& id, const TRule_table_setting_value* value, TTableSettings& settings) {
+bool TSqlTranslation::StoreExternalTableSettingsEntry(const TIdentifier& id, const TRule_table_setting_value* value,
+        TTableSettings& settings, bool alter, bool reset) {
+    YQL_ENSURE(value || reset);
+    YQL_ENSURE(!reset || reset && alter);
     if (to_lower(id.Name) == "data_source") {
+        if (reset) {
+            Ctx.Error() << to_upper(id.Name) << " reset is not supported";
+            return false;
+        }
         TDeferredAtom dataSource;
         if (!StoreString(*value, dataSource, Ctx, to_upper(id.Name))) {
             return false;
@@ -1723,16 +1806,27 @@ bool TSqlTranslation::StoreExternalTableSettingsEntry(const TIdentifier& id, con
         root->Add("String", Ctx.GetPrefixedPath(service, cluster, dataSource));
         settings.DataSourcePath = root;
     } else if (to_lower(id.Name) == "location") {
-        if (!StoreString(*value, settings.Location, Ctx)) {
-            Ctx.Error() << to_upper(id.Name) << " value should be a string literal";
-            return false;
+        if (reset) {
+            settings.Location.Reset();
+        } else {
+            TNodePtr location;
+            if (!StoreString(*value, location, Ctx)) {
+                Ctx.Error() << to_upper(id.Name) << " value should be a string literal";
+                return false;
+            }
+            settings.Location.Set(location);
         }
     } else {
-        settings.ExternalSourceParameters.emplace_back(id, nullptr);
-        auto& parameter = settings.ExternalSourceParameters.back();
-        if (!StoreString(*value, parameter.second, Ctx)) {
-            Ctx.Error() << to_upper(id.Name) << " value should be a string literal";
-            return false;
+        auto& setting = settings.ExternalSourceParameters.emplace_back();
+        if (reset) {
+            setting.Reset(id);
+        } else {
+            TNodePtr node;
+            if (!StoreString(*value, node, Ctx)) {
+                Ctx.Error() << to_upper(id.Name) << " value should be a string literal";
+                return false;
+            }
+            setting.Set(std::pair<TIdentifier, TNodePtr>{id, std::move(node)});
         }
     }
     return true;
@@ -1741,7 +1835,7 @@ bool TSqlTranslation::StoreExternalTableSettingsEntry(const TIdentifier& id, con
 bool TSqlTranslation::StoreTableSettingsEntry(const TIdentifier& id, const TRule_table_setting_value* value,
         TTableSettings& settings, bool alter, bool reset) {
     YQL_ENSURE(value || reset);
-    YQL_ENSURE(!reset || reset & alter);
+    YQL_ENSURE(!reset || reset && alter);
     if (to_lower(id.Name) == "compaction_policy") {
         if (reset) {
             Ctx.Error() << to_upper(id.Name) << " reset is not supported";
@@ -4102,34 +4196,43 @@ TNodePtr TSqlTranslation::IfStatement(const TRule_if_stmt& stmt) {
 
 TNodePtr TSqlTranslation::ForStatement(const TRule_for_stmt& stmt) {
     bool isEvaluate = stmt.HasBlock1();
+    bool isParallel = stmt.HasBlock2();
     TSqlExpression expr(Ctx, Mode);
     TString itemArgName;
-    if (!NamedNodeImpl(stmt.GetRule_bind_parameter3(), itemArgName, *this)) {
+    if (!NamedNodeImpl(stmt.GetRule_bind_parameter4(), itemArgName, *this)) {
         return {};
     }
     TPosition itemArgNamePos = Ctx.Pos();
 
-    auto exprNode = expr.Build(stmt.GetRule_expr5());
+    auto exprNode = expr.Build(stmt.GetRule_expr6());
     if (!exprNode) {
         return{};
     }
 
     itemArgName = PushNamedAtom(itemArgNamePos, itemArgName);
-    auto bodyNode = DoStatement(stmt.GetRule_do_stmt6(), true, { itemArgName });
+    if (isParallel) {
+        ++Ctx.ParallelModeCount;
+    }
+
+    auto bodyNode = DoStatement(stmt.GetRule_do_stmt7(), true, { itemArgName });
+    if (isParallel) {
+        --Ctx.ParallelModeCount;
+    }
+    
     PopNamedNode(itemArgName);
     if (!bodyNode) {
         return{};
     }
 
     TNodePtr elseNode;
-    if (stmt.HasBlock7()) {
-        elseNode = DoStatement(stmt.GetBlock7().GetRule_do_stmt2(), true);
+    if (stmt.HasBlock8()) {
+        elseNode = DoStatement(stmt.GetBlock8().GetRule_do_stmt2(), true);
         if (!elseNode) {
             return{};
         }
     }
 
-    return BuildWorldForNode(Ctx.Pos(), exprNode, bodyNode, elseNode, isEvaluate);
+    return BuildWorldForNode(Ctx.Pos(), exprNode, bodyNode, elseNode, isEvaluate, isParallel);
 }
 
 bool TSqlTranslation::BindParameterClause(const TRule_bind_parameter& node, TDeferredAtom& result) {
@@ -4231,6 +4334,11 @@ bool TSqlTranslation::StoreDataSourceSettingsEntry(const TIdentifier& id, const 
     return true;
 }
 
+bool TSqlTranslation::StoreDataSourceSettingsEntry(const TRule_alter_table_setting_entry& entry, std::map<TString, TDeferredAtom>& result) {
+    const TIdentifier id = IdEx(entry.GetRule_an_id1(), *this);
+    return StoreDataSourceSettingsEntry(id, &entry.GetRule_table_setting_value3(), result);
+}
+
 bool TSqlTranslation::ParseExternalDataSourceSettings(std::map<TString, TDeferredAtom>& result, const TRule_with_table_settings& settingsNode) {
     const auto& firstEntry = settingsNode.GetRule_table_settings_entry3();
     if (!StoreDataSourceSettingsEntry(IdEx(firstEntry.GetRule_an_id1(), *this), &firstEntry.GetRule_table_setting_value3(),
@@ -4253,6 +4361,42 @@ bool TSqlTranslation::ParseExternalDataSourceSettings(std::map<TString, TDeferre
     return true;
 }
 
+bool TSqlTranslation::ParseExternalDataSourceSettings(std::map<TString, TDeferredAtom>& result, std::set<TString>& toReset, const TRule_alter_external_data_source_action& alterAction) {
+    switch (alterAction.Alt_case()) {
+        case TRule_alter_external_data_source_action::kAltAlterExternalDataSourceAction1: {
+            const auto& action = alterAction.GetAlt_alter_external_data_source_action1().GetRule_alter_table_set_table_setting_uncompat1();
+            if (!StoreDataSourceSettingsEntry(IdEx(action.GetRule_an_id2(), *this), &action.GetRule_table_setting_value3(), result)) {
+                return false;
+            }
+            return true;
+        }
+        case TRule_alter_external_data_source_action::kAltAlterExternalDataSourceAction2: {
+            const auto& action = alterAction.GetAlt_alter_external_data_source_action2().GetRule_alter_table_set_table_setting_compat1();
+            if (!StoreDataSourceSettingsEntry(action.GetRule_alter_table_setting_entry3(), result)) {
+                return false;
+            }
+            for (const auto& entry : action.GetBlock4()) {
+                if (!StoreDataSourceSettingsEntry(entry.GetRule_alter_table_setting_entry2(), result)) {
+                    return false;
+                }
+            }
+            return true;
+        }
+        case TRule_alter_external_data_source_action::kAltAlterExternalDataSourceAction3: {
+            const auto& action = alterAction.GetAlt_alter_external_data_source_action3().GetRule_alter_table_reset_table_setting1();
+            const TString key = to_lower(IdEx(action.GetRule_an_id3(), *this).Name);
+            toReset.insert(key);
+            for (const auto& keys : action.GetBlock4()) {
+                const TString key = to_lower(IdEx(keys.GetRule_an_id2(), *this).Name);
+                toReset.insert(key);
+            }
+            return true;
+        }
+        case TRule_alter_external_data_source_action::ALT_NOT_SET:
+            Y_ABORT("You should change implementation according to grammar changes");
+    }
+}
+
 bool TSqlTranslation::ValidateAuthMethod(const std::map<TString, TDeferredAtom>& result) {
     const static TSet<TStringBuf> allAuthFields{
         "service_account_id",
@@ -4260,13 +4404,14 @@ bool TSqlTranslation::ValidateAuthMethod(const std::map<TString, TDeferredAtom>&
         "login",
         "password_secret_name",
         "aws_access_key_id_secret_name",
-        "aws_secret_access_key_secret_name"
+        "aws_secret_access_key_secret_name",
+        "aws_region"
     };
     const static TMap<TStringBuf, TSet<TStringBuf>> authMethodFields{
         {"NONE", {}},
         {"SERVICE_ACCOUNT", {"service_account_id", "service_account_secret_name"}},
         {"BASIC", {"login", "password_secret_name"}},
-        {"AWS", {"aws_access_key_id_secret_name", "aws_secret_access_key_secret_name"}},
+        {"AWS", {"aws_access_key_id_secret_name", "aws_secret_access_key_secret_name", "aws_region"}},
         {"MDB_BASIC", {"service_account_id", "service_account_secret_name", "login", "password_secret_name"}}
     };
     auto authMethodIt = result.find("auth_method");
@@ -4312,6 +4457,54 @@ bool TSqlTranslation::ValidateExternalTable(const TCreateTableParameters& params
     if (params.PkColumns) {
         Ctx.Error() << "PRIMARY KEY is not supported for external table";
         return false;
+    }
+
+    return true;
+}
+
+bool TSqlTranslation::ParseViewOptions(std::map<TString, TDeferredAtom>& features,
+                                       const TRule_with_table_settings& options) {
+    const auto& firstEntry = options.GetRule_table_settings_entry3();
+    if (!StoreViewOptionsEntry(IdEx(firstEntry.GetRule_an_id1(), *this),
+                               firstEntry.GetRule_table_setting_value3(),
+                               features,
+                               Ctx)) {
+        return false;
+    }
+    for (const auto& block : options.GetBlock4()) {
+        const auto& entry = block.GetRule_table_settings_entry2();
+        if (!StoreViewOptionsEntry(IdEx(entry.GetRule_an_id1(), *this),
+                                   entry.GetRule_table_setting_value3(),
+                                   features,
+                                   Ctx)) {
+            return false;
+        }
+    }
+    if (const auto securityInvoker = features.find("security_invoker");
+        securityInvoker == features.end() || securityInvoker->second.Build()->GetLiteralValue() != "true") {
+        Ctx.Error(Ctx.Pos()) << "SECURITY_INVOKER option must be explicitly enabled";
+        return false;
+    }
+    return true;
+}
+
+bool TSqlTranslation::ParseViewQuery(std::map<TString, TDeferredAtom>& features,
+                                     const TRule_select_stmt& query) {
+    const TString queryText = CollectTokens(query);
+    features["query_text"] = {Ctx.Pos(), queryText};
+
+    {
+        TSqlSelect select(Ctx, Mode);
+        TPosition pos;
+        auto source = select.Build(query, pos);
+        if (!source) {
+            return false;
+        }
+        features["query_ast"] = {BuildSelectResult(pos,
+                                                   std::move(source),
+                                                   false,
+                                                   false,
+                                                   Ctx.Scoped), Ctx};
     }
 
     return true;

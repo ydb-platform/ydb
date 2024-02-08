@@ -73,7 +73,7 @@ Y_UNIT_TEST_SUITE(TKernelRegistryTest) {
             auto blockBoolType = ctx.template MakeType<TBlockExprType>(ctx.template MakeType<TDataExprType>(EDataSlot::Bool));
             return b.AddBinaryOp(TKernelRequestBuilder::EBinaryOp::Xor, blockBoolType, blockBoolType, blockBoolType);
         });
-    }    
+    }
 
     Y_UNIT_TEST(TestAdd) {
         TestOne([](auto& b,auto& ctx) {
@@ -101,6 +101,99 @@ Y_UNIT_TEST_SUITE(TKernelRegistryTest) {
             auto blockInt32Type = ctx.template MakeType<TBlockExprType>(ctx.template MakeType<TDataExprType>(EDataSlot::Int32));
             auto blockOptInt32Type = ctx.template MakeType<TBlockExprType>(ctx.template MakeType<TOptionalExprType>(ctx.template MakeType<TDataExprType>(EDataSlot::Int32)));
             return b.AddBinaryOp(TKernelRequestBuilder::EBinaryOp::Div, blockInt32Type, blockInt32Type, blockOptInt32Type);
+        });
+    }
+
+    Y_UNIT_TEST(TestMod) {
+        TestOne([](auto& b,auto& ctx) {
+            auto blockInt32Type = ctx.template MakeType<TBlockExprType>(ctx.template MakeType<TDataExprType>(EDataSlot::Int32));
+            auto blockOptInt32Type = ctx.template MakeType<TBlockExprType>(ctx.template MakeType<TOptionalExprType>(ctx.template MakeType<TDataExprType>(EDataSlot::Int32)));
+            return b.AddBinaryOp(TKernelRequestBuilder::EBinaryOp::Mod, blockInt32Type, blockInt32Type, blockOptInt32Type);
+        });
+    }
+
+    Y_UNIT_TEST(TestAddSubMulOps) {
+        for (const auto oper : {TKernelRequestBuilder::EBinaryOp::Add, TKernelRequestBuilder::EBinaryOp::Sub, TKernelRequestBuilder::EBinaryOp::Mul}) {
+            for (const auto slot : {EDataSlot::Int8, EDataSlot::Int16, EDataSlot::Int32, EDataSlot::Int64, EDataSlot::Uint8, EDataSlot::Uint16, EDataSlot::Uint32, EDataSlot::Uint64, EDataSlot::Float, EDataSlot::Double}) {
+                TestOne([slot, oper](auto& b,auto& ctx) {
+                    const auto blockUint8Type = ctx.template MakeType<TBlockExprType>(ctx.template MakeType<TDataExprType>(EDataSlot::Uint8));
+                    const auto blockType = ctx.template MakeType<TBlockExprType>(ctx.template MakeType<TDataExprType>(slot));
+                    return b.AddBinaryOp(oper, blockUint8Type, blockType, blockType);
+                });
+                TestOne([slot, oper](auto& b,auto& ctx) {
+                    const auto blockUint8Type = ctx.template MakeType<TBlockExprType>(ctx.template MakeType<TDataExprType>(EDataSlot::Uint8));
+                    const auto blockType = ctx.template MakeType<TBlockExprType>(ctx.template MakeType<TDataExprType>(slot));
+                    return b.AddBinaryOp(oper, blockType, blockUint8Type, blockType);
+                });
+                TestOne([slot, oper](auto& b,auto& ctx) {
+                    const auto blockType = ctx.template MakeType<TBlockExprType>(ctx.template MakeType<TDataExprType>(slot));
+                    return b.AddBinaryOp(oper, blockType, blockType, blockType);
+                });
+            }
+        }
+    }
+
+    Y_UNIT_TEST(TestDivModOps) {
+        for (const auto oper : {TKernelRequestBuilder::EBinaryOp::Div, TKernelRequestBuilder::EBinaryOp::Mod}) {
+            for (const auto slot : {EDataSlot::Int8, EDataSlot::Int16, EDataSlot::Int32, EDataSlot::Int64, EDataSlot::Uint8, EDataSlot::Uint16, EDataSlot::Uint32, EDataSlot::Uint64, EDataSlot::Float, EDataSlot::Double}) {
+                TestOne([slot, oper](auto& b,auto& ctx) {
+                    const auto blockUint8Type = ctx.template MakeType<TBlockExprType>(ctx.template MakeType<TDataExprType>(EDataSlot::Uint8));
+                    const auto rawType = ctx.template MakeType<TDataExprType>(slot);
+                    const auto blockType = ctx.template MakeType<TBlockExprType>(rawType);
+                    const auto returnType = EDataSlot::Float != slot && EDataSlot::Double != slot ?
+                        ctx.template MakeType<TBlockExprType>(ctx.template MakeType<TOptionalExprType>(rawType)) : blockType;
+                    return b.AddBinaryOp(oper, blockUint8Type, blockType, returnType);
+                });
+                TestOne([slot, oper](auto& b,auto& ctx) {
+                    const auto blockUint8Type = ctx.template MakeType<TBlockExprType>(ctx.template MakeType<TDataExprType>(EDataSlot::Uint8));
+                    const auto rawType = ctx.template MakeType<TDataExprType>(slot);
+                    const auto blockType = ctx.template MakeType<TBlockExprType>(rawType);
+                    const auto returnType = EDataSlot::Float != slot && EDataSlot::Double != slot ?
+                        ctx.template MakeType<TBlockExprType>(ctx.template MakeType<TOptionalExprType>(rawType)) : blockType;
+                    return b.AddBinaryOp(oper, blockType, blockUint8Type, returnType);
+                });
+                TestOne([slot, oper](auto& b,auto& ctx) {
+                    const auto rawType = ctx.template MakeType<TDataExprType>(slot);
+                    const auto blockType = ctx.template MakeType<TBlockExprType>(rawType);
+                    const auto returnType = EDataSlot::Float != slot && EDataSlot::Double != slot ?
+                        ctx.template MakeType<TBlockExprType>(ctx.template MakeType<TOptionalExprType>(rawType)) : blockType;
+                    return b.AddBinaryOp(oper, blockType, blockType, returnType);
+                });
+            }
+        }
+    }
+
+    Y_UNIT_TEST(TestSize) {
+        TestOne([](auto& b,auto& ctx) {
+            auto blockStrType = ctx.template MakeType<TBlockExprType>(ctx.template MakeType<TDataExprType>(EDataSlot::String));
+            auto blockUint32Type = ctx.template MakeType<TBlockExprType>(ctx.template MakeType<TDataExprType>(EDataSlot::Uint32));
+            return b.AddUnaryOp(TKernelRequestBuilder::EUnaryOp::Size, blockStrType, blockUint32Type);
+        });
+    }
+
+    Y_UNIT_TEST(TestMinus) {
+        for (const auto slot : {EDataSlot::Int8, EDataSlot::Int16, EDataSlot::Int32, EDataSlot::Int64, EDataSlot::Float, EDataSlot::Double}) {
+            TestOne([slot](auto& b,auto& ctx) {
+                const auto blockType = ctx.template MakeType<TBlockExprType>(ctx.template MakeType<TDataExprType>(slot));
+                return b.AddUnaryOp(TKernelRequestBuilder::EUnaryOp::Minus, blockType, blockType);
+            });
+        }
+    }
+
+    Y_UNIT_TEST(TestAbs) {
+        for (const auto slot : {EDataSlot::Int8, EDataSlot::Int16, EDataSlot::Int32, EDataSlot::Int64, EDataSlot::Float, EDataSlot::Double}) {
+            TestOne([slot](auto& b,auto& ctx) {
+                const auto blockType = ctx.template MakeType<TBlockExprType>(ctx.template MakeType<TDataExprType>(slot));
+                return b.AddUnaryOp(TKernelRequestBuilder::EUnaryOp::Abs, blockType, blockType);
+            });
+        }
+    }
+
+    Y_UNIT_TEST(TestCoalesece) {
+        TestOne([](auto& b,auto& ctx) {
+            auto blockStringType = ctx.template MakeType<TBlockExprType>(ctx.template MakeType<TDataExprType>(EDataSlot::String));
+            auto blockOptStringType = ctx.template MakeType<TBlockExprType>(ctx.template MakeType<TOptionalExprType>(ctx.template MakeType<TDataExprType>(EDataSlot::String)));
+            return b.AddBinaryOp(TKernelRequestBuilder::EBinaryOp::Coalesce, blockOptStringType, blockStringType, blockStringType);
         });
     }
 

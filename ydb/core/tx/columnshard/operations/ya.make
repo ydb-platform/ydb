@@ -8,7 +8,7 @@ SRCS(
 
 PEERDIR(
     ydb/core/protos
-    ydb/core/tx/ev_write
+    ydb/core/tx/data_events
     ydb/services/metadata
 )
 

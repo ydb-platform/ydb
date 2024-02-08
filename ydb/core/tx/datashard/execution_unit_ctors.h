@@ -6,7 +6,8 @@ namespace NKikimr {
 namespace NDataShard {
 
 THolder<TExecutionUnit> CreateCheckDataTxUnit(TDataShard &dataShard, TPipeline &pipeline);
-THolder<TExecutionUnit> CreateCheckSchemeTxUnit(TDataShard &dataShard, TPipeline &pipeline);
+THolder<TExecutionUnit> CreateCheckWriteUnit(TDataShard& dataShard, TPipeline& pipeline);
+THolder<TExecutionUnit> CreateCheckSchemeTxUnit(TDataShard& dataShard, TPipeline& pipeline);
 THolder<TExecutionUnit> CreateCheckSnapshotTxUnit(TDataShard &dataShard, TPipeline &pipeline);
 THolder<TExecutionUnit> CreateCheckDistributedEraseTxUnit(TDataShard &dataShard, TPipeline &pipeline);
 THolder<TExecutionUnit> CreateCheckCommitWritesTxUnit(TDataShard &dataShard, TPipeline &pipeline);
@@ -17,12 +18,14 @@ THolder<TExecutionUnit> CreateStoreDistributedEraseTxUnit(TDataShard &dataShard,
 THolder<TExecutionUnit> CreateStoreCommitWritesTxUnit(TDataShard &dataShard, TPipeline &pipeline);
 THolder<TExecutionUnit> CreateBuildAndWaitDependenciesUnit(TDataShard &dataShard, TPipeline &pipeline);
 THolder<TExecutionUnit> CreateFinishProposeUnit(TDataShard &dataShard, TPipeline &pipeline);
-THolder<TExecutionUnit> CreateCompletedOperationsUnit(TDataShard &dataShard, TPipeline &pipeline);
+THolder<TExecutionUnit> CreateFinishProposeWriteUnit(TDataShard& dataShard, TPipeline& pipeline);
+THolder<TExecutionUnit> CreateCompletedOperationsUnit(TDataShard& dataShard, TPipeline& pipeline);
 THolder<TExecutionUnit> CreateWaitForPlanUnit(TDataShard &dataShard, TPipeline &pipeline);
 THolder<TExecutionUnit> CreatePlanQueueUnit(TDataShard &dataShard, TPipeline &pipeline);
 THolder<TExecutionUnit> CreateLoadTxDetailsUnit(TDataShard &dataShard, TPipeline &pipeline);
 THolder<TExecutionUnit> CreateFinalizeDataTxPlanUnit(TDataShard &dataShard, TPipeline &pipeline);
-THolder<TExecutionUnit> CreateProtectSchemeEchoesUnit(TDataShard &dataShard, TPipeline &pipeline);
+THolder<TExecutionUnit> CreateFinalizeWriteTxPlanUnit(TDataShard& dataShard, TPipeline& pipeline);
+THolder<TExecutionUnit> CreateProtectSchemeEchoesUnit(TDataShard& dataShard, TPipeline& pipeline);
 THolder<TExecutionUnit> CreateBuildDataTxOutRSUnit(TDataShard &dataShard, TPipeline &pipeline);
 THolder<TExecutionUnit> CreateBuildDistributedEraseTxOutRSUnit(TDataShard &dataShard, TPipeline &pipeline);
 THolder<TExecutionUnit> CreateBuildKqpDataTxOutRSUnit(TDataShard &dataShard, TPipeline &pipeline);
@@ -66,6 +69,7 @@ THolder<TExecutionUnit> CreateAlterCdcStreamUnit(TDataShard &dataShard, TPipelin
 THolder<TExecutionUnit> CreateDropCdcStreamUnit(TDataShard &dataShard, TPipeline &pipeline);
 THolder<TExecutionUnit> CreateCheckReadUnit(TDataShard &dataShard, TPipeline &pipeline);
 THolder<TExecutionUnit> CreateReadUnit(TDataShard &dataShard, TPipeline &pipeline);
+THolder<TExecutionUnit> CreateWriteUnit(TDataShard& dataShard, TPipeline& pipeline);
 
 } // namespace NDataShard
 } // namespace NKikimr

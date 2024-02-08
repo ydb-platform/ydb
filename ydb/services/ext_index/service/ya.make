@@ -9,7 +9,7 @@ SRCS(
 )
 
 PEERDIR(
-    library/cpp/actors/core
+    ydb/library/actors/core
     ydb/services/ext_index/metadata
     ydb/services/ext_index/common
     ydb/library/yql/minikql/jsonpath

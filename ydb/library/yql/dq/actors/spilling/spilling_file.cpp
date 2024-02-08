@@ -4,10 +4,10 @@
 #include <ydb/library/services/services.pb.h>
 #include <ydb/library/yql/utils/yql_panic.h>
 
-#include <library/cpp/actors/core/actor_bootstrapped.h>
-#include <library/cpp/actors/core/hfunc.h>
-#include <library/cpp/actors/core/log.h>
-#include <library/cpp/actors/core/events.h>
+#include <ydb/library/actors/core/actor_bootstrapped.h>
+#include <ydb/library/actors/core/hfunc.h>
+#include <ydb/library/actors/core/log.h>
+#include <ydb/library/actors/core/events.h>
 #include <library/cpp/monlib/service/pages/templates.h>
 
 #include <util/folder/path.h>
@@ -77,7 +77,7 @@ public:
         YQL_ENSURE(ServiceActorId_);
 
         LOG_D("Register LocalFileSpillingActor " << SelfId() << " at service " << ServiceActorId_);
-        Send(ServiceActorId_, new TEvDqSpillingLocalFile::TEvOpenFile(TxId_, Details_, RemoveBlobsAfterRead_));
+        Send(ServiceActorId_, new TEvDqSpillingLocalFile::TEvOpenFile(TxId_, Details_, RemoveBlobsAfterRead_), NActors::IEventHandle::FlagTrackDelivery);
 
         Become(&TDqLocalFileSpillingActor::WorkState);
     }
@@ -91,13 +91,14 @@ private:
         hFunc(TEvDqSpilling::TEvRead, HandleWork)
         hFunc(TEvDqSpilling::TEvReadResult, HandleWork)
         hFunc(TEvDqSpilling::TEvError, HandleWork)
+        sFunc(NActors::TEvents::TEvUndelivered, HandleUndelivered)
         hFunc(TEvents::TEvPoison, HandleWork)
     );
 
     void HandleWork(TEvDqSpilling::TEvWrite::TPtr& ev) {
         ValidateSender(ev->Sender);
 
-        Send(ServiceActorId_, ev->Release().Release());
+        Send(ServiceActorId_, ev->Release().Release(), NActors::IEventHandle::FlagTrackDelivery);
     }
 
     void HandleWork(TEvDqSpilling::TEvWriteResult::TPtr& ev) {
@@ -109,7 +110,7 @@ private:
     void HandleWork(TEvDqSpilling::TEvRead::TPtr& ev) {
         ValidateSender(ev->Sender);
 
-        Send(ServiceActorId_, ev->Release().Release());
+        Send(ServiceActorId_, ev->Release().Release(), NActors::IEventHandle::FlagTrackDelivery);
     }
 
     void HandleWork(TEvDqSpilling::TEvReadResult::TPtr& ev) {
@@ -125,8 +126,12 @@ private:
     void HandleWork(TEvents::TEvPoison::TPtr& ev) {
         ValidateSender(ev->Sender);
 
-        Send(ServiceActorId_, new TEvDqSpillingLocalFile::TEvCloseFile);
+        Send(ServiceActorId_, new TEvDqSpillingLocalFile::TEvCloseFile, NActors::IEventHandle::FlagTrackDelivery);
         PassAway();
+    }
+
+    void HandleUndelivered() {
+        Send(ClientActorId_, new TEvDqSpilling::TEvError("Spilling Service not started"));
     }
 
 private:
@@ -135,7 +140,7 @@ private:
     }
 
     void ClientLost() {
-        Send(ServiceActorId_, new TEvDqSpillingLocalFile::TEvCloseFile("Client lost"));
+        Send(ServiceActorId_, new TEvDqSpillingLocalFile::TEvCloseFile("Client lost"), NActors::IEventHandle::FlagTrackDelivery);
         PassAway();
     }
 

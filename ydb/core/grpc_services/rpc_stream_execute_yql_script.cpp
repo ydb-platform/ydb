@@ -6,6 +6,7 @@
 
 #include <ydb/core/actorlib_impl/long_timer.h>
 #include <ydb/core/base/appdata.h>
+#include <ydb/core/base/feature_flags.h>
 #include <ydb/library/ydb_issue/issue_helpers.h>
 #include <ydb/core/kqp/executer_actor/kqp_executer.h>
 
@@ -65,9 +66,9 @@ private:
     static std::function<TEvStreamExecuteYqlScriptRequest::TFinishWrapper(std::function<void()>&&)>
     GetFinishWrapper(std::shared_ptr<std::atomic_bool> flag) {
         return [flag](std::function<void()>&& cb) {
-            return [cb = std::move(cb), flag](const NGrpc::IRequestContextBase::TAsyncFinishResult& future) mutable {
+            return [cb = std::move(cb), flag](const NYdbGrpc::IRequestContextBase::TAsyncFinishResult& future) mutable {
                 Y_ASSERT(future.HasValue());
-                if (future.GetValue() == NGrpc::IRequestContextBase::EFinishStatus::CANCEL || flag->load()) {
+                if (future.GetValue() == NYdbGrpc::IRequestContextBase::EFinishStatus::CANCEL || flag->load()) {
                     cb();
                 }
             };
@@ -487,7 +488,7 @@ private:
 } // namespace
 
 void DoStreamExecuteYqlScript(std::unique_ptr<IRequestNoOpCtx> p, const IFacilityProvider& f) {
-    ui64 rpcBufferSize = f.GetAppConfig()->GetTableServiceConfig().GetResourceManager().GetChannelBufferSize();
+    ui64 rpcBufferSize = f.GetChannelBufferSize();
     f.RegisterActor(new TStreamExecuteYqlScriptRPC(p.release(), rpcBufferSize));
 }
 

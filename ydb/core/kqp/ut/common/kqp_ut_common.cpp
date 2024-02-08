@@ -14,6 +14,8 @@
 #include <ydb/library/yql/minikql/invoke_builtins/mkql_builtins.h>
 #include <ydb/library/yql/utils/yql_panic.h>
 
+#include <library/cpp/testing/common/env.h>
+
 namespace NKikimr {
 namespace NKqp {
 
@@ -108,7 +110,9 @@ TKikimrRunner::TKikimrRunner(const TKikimrSettings& settings) {
 
     effectiveKqpSettings.insert(effectiveKqpSettings.end(), settings.KqpSettings.begin(), settings.KqpSettings.end());
 
-    ServerSettings.Reset(MakeHolder<Tests::TServerSettings>(mbusPort, NKikimrProto::TAuthConfig(), settings.PQConfig));
+    NKikimrProto::TAuthConfig authConfig;
+    authConfig.SetUseBuiltinDomain(true);
+    ServerSettings.Reset(MakeHolder<Tests::TServerSettings>(mbusPort, authConfig, settings.PQConfig));
     ServerSettings->SetDomainName(settings.DomainRoot);
     ServerSettings->SetKqpSettings(effectiveKqpSettings);
 
@@ -124,6 +128,8 @@ TKikimrRunner::TKikimrRunner(const TKikimrSettings& settings) {
     ServerSettings->SetEnableNotNullColumns(true);
     ServerSettings->SetEnableMoveIndex(true);
     ServerSettings->SetEnableUniqConstraint(true);
+    ServerSettings->SetUseRealThreads(settings.UseRealThreads);
+    ServerSettings->SetEnableTablePgTypes(true);
 
     if (settings.Storage) {
         ServerSettings->SetCustomDiskParams(*settings.Storage);
@@ -139,7 +145,11 @@ TKikimrRunner::TKikimrRunner(const TKikimrSettings& settings) {
 
     Server.Reset(MakeHolder<Tests::TServer>(*ServerSettings));
     Server->EnableGRpc(grpcPort);
-    Server->SetupDefaultProfiles();
+
+    RunCall([this, domain = settings.DomainRoot] {
+        this->Server->SetupDefaultProfiles();
+        return true;
+    });
 
     Client.Reset(MakeHolder<Tests::TClient>(*ServerSettings));
 
@@ -434,35 +444,87 @@ void TKikimrRunner::CreateSampleTables() {
 
 }
 
-void TKikimrRunner::Initialize(const TKikimrSettings& settings) {
-    // Server->GetRuntime()->SetLogPriority(NKikimrServices::FLAT_TX_SCHEMESHARD, NActors::NLog::PRI_DEBUG);
-    // Server->GetRuntime()->SetLogPriority(NKikimrServices::KQP_YQL, NActors::NLog::PRI_DEBUG);
-    // Server->GetRuntime()->SetLogPriority(NKikimrServices::KQP_YQL, NActors::NLog::PRI_INFO);
-    // Server->GetRuntime()->SetLogPriority(NKikimrServices::TX_DATASHARD, NActors::NLog::PRI_TRACE);
-    // Server->GetRuntime()->SetLogPriority(NKikimrServices::TX_COORDINATOR, NActors::NLog::PRI_DEBUG);
-    // Server->GetRuntime()->SetLogPriority(NKikimrServices::KQP_COMPUTE, NActors::NLog::PRI_DEBUG);
-    // Server->GetRuntime()->SetLogPriority(NKikimrServices::KQP_TASKS_RUNNER, NActors::NLog::PRI_DEBUG);
-    // Server->GetRuntime()->SetLogPriority(NKikimrServices::KQP_EXECUTER, NActors::NLog::PRI_TRACE);
-    // Server->GetRuntime()->SetLogPriority(NKikimrServices::TX_PROXY_SCHEME_CACHE, NActors::NLog::PRI_DEBUG);
-    // Server->GetRuntime()->SetLogPriority(NKikimrServices::SCHEME_BOARD_REPLICA, NActors::NLog::PRI_DEBUG);
-    // Server->GetRuntime()->SetLogPriority(NKikimrServices::KQP_WORKER, NActors::NLog::PRI_DEBUG);
-    // Server->GetRuntime()->SetLogPriority(NKikimrServices::KQP_SESSION, NActors::NLog::PRI_DEBUG);
-    // Server->GetRuntime()->SetLogPriority(NKikimrServices::TABLET_EXECUTOR, NActors::NLog::PRI_DEBUG);
-    // Server->GetRuntime()->SetLogPriority(NKikimrServices::KQP_SLOW_LOG, NActors::NLog::PRI_TRACE);
-    // Server->GetRuntime()->SetLogPriority(NKikimrServices::KQP_PROXY, NActors::NLog::PRI_DEBUG);
-    // Server->GetRuntime()->SetLogPriority(NKikimrServices::KQP_COMPILE_SERVICE, NActors::NLog::PRI_DEBUG);
-    // Server->GetRuntime()->SetLogPriority(NKikimrServices::KQP_COMPILE_ACTOR, NActors::NLog::PRI_DEBUG);
-    // Server->GetRuntime()->SetLogPriority(NKikimrServices::KQP_COMPILE_REQUEST, NActors::NLog::PRI_DEBUG);
-    // Server->GetRuntime()->SetLogPriority(NKikimrServices::KQP_GATEWAY, NActors::NLog::PRI_DEBUG);
-    // Server->GetRuntime()->SetLogPriority(NKikimrServices::RPC_REQUEST, NActors::NLog::PRI_DEBUG);
-    // Server->GetRuntime()->SetLogPriority(NKikimrServices::KQP_RESOURCE_MANAGER, NActors::NLog::PRI_DEBUG);
-    // Server->GetRuntime()->SetLogPriority(NKikimrServices::KQP_NODE, NActors::NLog::PRI_DEBUG);
-    // Server->GetRuntime()->SetLogPriority(NKikimrServices::KQP_BLOBS_STORAGE, NActors::NLog::PRI_DEBUG);
+static TMaybe<NActors::NLog::EPriority> ParseLogLevel(const TString& level) {
+    static const THashMap<TString, NActors::NLog::EPriority> levels = {
+        { "TRACE", NActors::NLog::PRI_TRACE },
+        { "DEBUG", NActors::NLog::PRI_DEBUG },
+        { "INFO", NActors::NLog::PRI_INFO },
+        { "NOTICE", NActors::NLog::PRI_NOTICE },
+        { "WARN", NActors::NLog::PRI_WARN },
+        { "ERROR", NActors::NLog::PRI_ERROR },
+        { "CRIT", NActors::NLog::PRI_CRIT },
+        { "ALERT", NActors::NLog::PRI_ALERT },
+        { "EMERG", NActors::NLog::PRI_EMERG },
+    };
 
-    Client->InitRootScheme(settings.DomainRoot);
+    TString l = level;
+    l.to_upper();
+    const auto levelIt = levels.find(l);
+    if (levelIt != levels.end()) {
+        return levelIt->second;
+    } else {
+        Cerr << "Failed to parse test log level [" << level << "]" << Endl;
+        return Nothing();
+    }
+}
+
+void TKikimrRunner::SetupLogLevelFromTestParam(NKikimrServices::EServiceKikimr service) {
+    if (const TString paramForService = GetTestParam(TStringBuilder() << "KQP_LOG_" << NKikimrServices::EServiceKikimr_Name(service))) {
+        if (const TMaybe<NActors::NLog::EPriority> level = ParseLogLevel(paramForService)) {
+            Server->GetRuntime()->SetLogPriority(service, *level);
+            return;
+        }
+    }
+    if (const TString commonParam = GetTestParam("KQP_LOG")) {
+        if (const TMaybe<NActors::NLog::EPriority> level = ParseLogLevel(commonParam)) {
+            Server->GetRuntime()->SetLogPriority(service, *level);
+        }
+    }
+}
+
+void TKikimrRunner::Initialize(const TKikimrSettings& settings) {
+    // You can enable logging for these services in test using test option:
+    // `--test-param KQP_LOG=<level>`
+    // or `--test-param KQP_LOG_<service>=<level>`
+    // For example:
+    // --test-param KQP_LOG=TRACE
+    // --test-param KQP_LOG_FLAT_TX_SCHEMESHARD=debug
+    SetupLogLevelFromTestParam(NKikimrServices::FLAT_TX_SCHEMESHARD);
+    SetupLogLevelFromTestParam(NKikimrServices::KQP_YQL);
+    SetupLogLevelFromTestParam(NKikimrServices::KQP_YQL);
+    SetupLogLevelFromTestParam(NKikimrServices::TX_DATASHARD);
+    SetupLogLevelFromTestParam(NKikimrServices::TX_COORDINATOR);
+    SetupLogLevelFromTestParam(NKikimrServices::KQP_COMPUTE);
+    SetupLogLevelFromTestParam(NKikimrServices::KQP_TASKS_RUNNER);
+    SetupLogLevelFromTestParam(NKikimrServices::KQP_EXECUTER);
+    SetupLogLevelFromTestParam(NKikimrServices::TX_PROXY_SCHEME_CACHE);
+    SetupLogLevelFromTestParam(NKikimrServices::SCHEME_BOARD_REPLICA);
+    SetupLogLevelFromTestParam(NKikimrServices::KQP_WORKER);
+    SetupLogLevelFromTestParam(NKikimrServices::KQP_SESSION);
+    SetupLogLevelFromTestParam(NKikimrServices::TABLET_EXECUTOR);
+    SetupLogLevelFromTestParam(NKikimrServices::KQP_SLOW_LOG);
+    SetupLogLevelFromTestParam(NKikimrServices::KQP_PROXY);
+    SetupLogLevelFromTestParam(NKikimrServices::KQP_COMPILE_SERVICE);
+    SetupLogLevelFromTestParam(NKikimrServices::KQP_COMPILE_ACTOR);
+    SetupLogLevelFromTestParam(NKikimrServices::KQP_COMPILE_REQUEST);
+    SetupLogLevelFromTestParam(NKikimrServices::KQP_GATEWAY);
+    SetupLogLevelFromTestParam(NKikimrServices::RPC_REQUEST);
+    SetupLogLevelFromTestParam(NKikimrServices::KQP_RESOURCE_MANAGER);
+    SetupLogLevelFromTestParam(NKikimrServices::KQP_NODE);
+    SetupLogLevelFromTestParam(NKikimrServices::KQP_BLOBS_STORAGE);
+    SetupLogLevelFromTestParam(NKikimrServices::TX_COLUMNSHARD);
+    SetupLogLevelFromTestParam(NKikimrServices::LOCAL_PGWIRE);
+
+    RunCall([this, domain = settings.DomainRoot]{
+        this->Client->InitRootScheme(domain);
+        return true;
+    });
 
     if (settings.WithSampleTables) {
-        CreateSampleTables();
+        RunCall([this] {
+            this->CreateSampleTables();
+            return true;
+        });
     }
 }
 
@@ -530,9 +592,9 @@ void PrintQueryStats(const TDataQueryResult& result) {
     }
 }
 
-void AssertTableStats(const TDataQueryResult& result, TStringBuf table, const TExpectedTableStats& expectedStats) {
-    auto stats = NYdb::TProtoAccessor::GetProto(*result.GetStats());
-
+void AssertTableStats(const Ydb::TableStats::QueryStats& stats, TStringBuf table,
+    const TExpectedTableStats& expectedStats)
+{
     ui64 actualReads = 0;
     ui64 actualUpdates = 0;
     ui64 actualDeletes = 0;
@@ -561,6 +623,11 @@ void AssertTableStats(const TDataQueryResult& result, TStringBuf table, const TE
         UNIT_ASSERT_EQUAL_C(*expectedStats.ExpectedDeletes, actualDeletes, "table: " << table
             << ", deletes expected " << *expectedStats.ExpectedDeletes << ", actual " << actualDeletes);
     }
+}
+
+void AssertTableStats(const TDataQueryResult& result, TStringBuf table, const TExpectedTableStats& expectedStats) {
+    auto stats = NYdb::TProtoAccessor::GetProto(*result.GetStats());
+    return AssertTableStats(stats, table, expectedStats);
 }
 
 TDataQueryResult ExecQueryAndTestResult(TSession& session, const TString& query, const NYdb::TParams& params,
@@ -597,6 +664,90 @@ void FillProfile(NYdb::NTable::TScanQueryPart& streamPart, NYson::TYsonWriter& w
     Y_UNUSED(writer);
     Y_UNUSED(profiles);
     Y_UNUSED(profileIndex);
+}
+
+void CreateLargeTable(TKikimrRunner& kikimr, ui32 rowsPerShard, ui32 keyTextSize,
+    ui32 dataTextSize, ui32 batchSizeRows, ui32 fillShardsCount, ui32 largeTableKeysPerShard)
+{
+    kikimr.GetTestClient().CreateTable("/Root", R"(
+        Name: "LargeTable"
+        Columns { Name: "Key", Type: "Uint64" }
+        Columns { Name: "KeyText", Type: "String" }
+        Columns { Name: "Data", Type: "Int64" }
+        Columns { Name: "DataText", Type: "String" }
+        KeyColumnNames: ["Key", "KeyText"],
+        SplitBoundary { KeyPrefix { Tuple { Optional { Uint64: 1000000 } } } }
+        SplitBoundary { KeyPrefix { Tuple { Optional { Uint64: 2000000 } } } }
+        SplitBoundary { KeyPrefix { Tuple { Optional { Uint64: 3000000 } } } }
+        SplitBoundary { KeyPrefix { Tuple { Optional { Uint64: 4000000 } } } }
+        SplitBoundary { KeyPrefix { Tuple { Optional { Uint64: 5000000 } } } }
+        SplitBoundary { KeyPrefix { Tuple { Optional { Uint64: 6000000 } } } }
+        SplitBoundary { KeyPrefix { Tuple { Optional { Uint64: 7000000 } } } }
+    )");
+
+    auto client = kikimr.GetTableClient();
+
+    for (ui32 shardIdx = 0; shardIdx < fillShardsCount; ++shardIdx) {
+        ui32 rowIndex = 0;
+        while (rowIndex < rowsPerShard) {
+
+            auto rowsBuilder = NYdb::TValueBuilder();
+            rowsBuilder.BeginList();
+            for (ui32 i = 0; i < batchSizeRows; ++i) {
+                rowsBuilder.AddListItem()
+                    .BeginStruct()
+                    .AddMember("Key")
+                        .OptionalUint64(shardIdx * largeTableKeysPerShard + rowIndex)
+                    .AddMember("KeyText")
+                        .OptionalString(TString(keyTextSize, '0' + (i + shardIdx) % 10))
+                    .AddMember("Data")
+                        .OptionalInt64(rowIndex)
+                    .AddMember("DataText")
+                        .OptionalString(TString(dataTextSize, '0' + (i + shardIdx + 1) % 10))
+                    .EndStruct();
+
+                ++rowIndex;
+                if (rowIndex == rowsPerShard) {
+                    break;
+                }
+            }
+            rowsBuilder.EndList();
+
+            auto result = client.BulkUpsert("/Root/LargeTable", rowsBuilder.Build()).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), NYdb::EStatus::SUCCESS, result.GetIssues().ToString());
+        }
+    }
+}
+
+void CreateManyShardsTable(TKikimrRunner& kikimr, ui32 totalRows, ui32 shards, ui32 batchSizeRows)
+{
+    kikimr.GetTestClient().CreateTable("/Root", R"(
+        Name: "ManyShardsTable"
+        Columns { Name: "Key", Type: "Uint32" }
+        Columns { Name: "Data", Type: "Int32" }
+        KeyColumnNames: ["Key"]
+        UniformPartitionsCount:
+    )" + std::to_string(shards));
+
+    auto client = kikimr.GetTableClient();
+
+    for (ui32 rows = 0; rows < totalRows; rows += batchSizeRows) {
+        auto rowsBuilder = NYdb::TValueBuilder();
+        rowsBuilder.BeginList();
+        for (ui32 i = 0; i < batchSizeRows && rows + i < totalRows; ++i) {
+            rowsBuilder.AddListItem()
+                .BeginStruct()
+                .AddMember("Key")
+                    .OptionalUint32((std::numeric_limits<ui32>::max() / totalRows) * (rows + i))
+                .AddMember("Data")
+                    .OptionalInt32(i)
+                .EndStruct();
+        }
+        rowsBuilder.EndList();
+
+        auto result = client.BulkUpsert("/Root/ManyShardsTable", rowsBuilder.Build()).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), NYdb::EStatus::SUCCESS, result.GetIssues().ToString());
+    }
 }
 
 void PrintResultSet(const NYdb::TResultSet& resultSet, NYson::TYsonWriter& writer) {
@@ -669,8 +820,6 @@ TString StreamResultToYson(NYdb::NTable::TTablePartIterator& it, bool throwOnTim
     NYson::TYsonWriter writer(&out, NYson::EYsonFormat::Text, ::NYson::EYsonType::Node, true);
     writer.OnBeginList();
 
-    ui32 profileIndex = 0;
-
     for (;;) {
         auto streamPart = it.ReadNext().GetValueSync();
         if (!streamPart.IsSuccess()) {
@@ -687,8 +836,6 @@ TString StreamResultToYson(NYdb::NTable::TTablePartIterator& it, bool throwOnTim
 
         auto resultSet = streamPart.ExtractPart();
         PrintResultSet(resultSet, writer);
-
-        profileIndex++;
     }
 
     writer.OnEndList();
@@ -762,7 +909,16 @@ static void FillPlan(const NYdb::NScripting::TYqlResultPart& streamPart, TCollec
     }
 }
 
-static void FillPlan(const NYdb::NQuery::TExecuteQueryPart& /*streamPart*/, TCollectedStreamResult& /*res*/) {}
+static void FillPlan(const NYdb::NQuery::TExecuteQueryPart& streamPart, TCollectedStreamResult& res) {
+    if (streamPart.GetStats() ) {
+        res.QueryStats = NYdb::TProtoAccessor::GetProto(*streamPart.GetStats());
+
+        auto plan = res.QueryStats->query_plan();
+        if (!plan.empty()) {
+            res.PlanJson = plan;
+        }
+    }
+}
 
 template<typename TIterator>
 TCollectedStreamResult CollectStreamResultImpl(TIterator& it) {
@@ -796,9 +952,6 @@ TCollectedStreamResult CollectStreamResultImpl(TIterator& it) {
         }
 
         if constexpr (std::is_same_v<TIterator, NYdb::NQuery::TExecuteQueryIterator>) {
-            UNIT_ASSERT_C(streamPart.HasResultSet() || streamPart.GetStats(),
-                "Unexpected empty query service  response.");
-
             if (streamPart.HasResultSet()) {
                 auto resultSet = streamPart.ExtractResultSet();
                 PrintResultSet(resultSet, resultSetWriter);
@@ -1017,7 +1170,7 @@ std::vector<NJson::TJsonValue> FindPlanNodes(const NJson::TJsonValue& plan, cons
 
 std::vector<NJson::TJsonValue> FindPlanStages(const NJson::TJsonValue& plan) {
     std::vector<NJson::TJsonValue> stages;
-    FindPlanStagesImpl(plan, stages);
+    FindPlanStagesImpl(plan.GetMapSafe().at("Plan"), stages);    
     return stages;
 }
 

@@ -7,6 +7,8 @@
 
 #include <library/cpp/yt/memory/memory_tag.h>
 
+#include <library/cpp/yt/misc/tls.h>
+
 namespace NYT::NConcurrency {
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -19,7 +21,7 @@ using TFlsSlotDtor = void(*)(TFls::TCookie cookie);
 int AllocateFlsSlot(TFlsSlotDtor dtor);
 TFls* GetPerThreadFls();
 
-extern thread_local TFls* CurrentFls;
+extern YT_THREAD_LOCAL(TFls*) CurrentFls;
 
 } // namespace NDetail
 

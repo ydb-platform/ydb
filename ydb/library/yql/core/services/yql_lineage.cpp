@@ -12,9 +12,10 @@ namespace {
 
 class TLineageScanner {
 public:
-    TLineageScanner(const TExprNode& root, const TTypeAnnotationContext& ctx)
+    TLineageScanner(const TExprNode& root, const TTypeAnnotationContext& ctx, TExprContext& exprCtx)
         : Root_(root)
         , Ctx_(ctx)
+        , ExprCtx_(exprCtx)
     {}
 
     TString Process() {
@@ -41,7 +42,8 @@ public:
         writer.OnBeginList();
         for (const auto& r : Reads_) {
             TVector<TPinInfo> inputs;
-            r.second->GetPlanFormatter().GetInputs(*r.first, inputs);
+            auto& formatter = r.second->GetPlanFormatter();
+            formatter.GetInputs(*r.first, inputs);
             for (const auto& i : inputs) {
                 auto id = ++NextReadId_;
                 ReadIds_[r.first].push_back(id);
@@ -52,7 +54,12 @@ public:
                 writer.OnKeyedItem("Name");
                 writer.OnStringScalar(i.DisplayName);
                 writer.OnKeyedItem("Schema");
-                WriteSchema(writer, *r.first->GetTypeAnn()->Cast<TTupleExprType>()->GetItems()[1]->Cast<TListExprType>()->GetItemType()->Cast<TStructExprType>());
+                const auto& itemType = *r.first->GetTypeAnn()->Cast<TTupleExprType>()->GetItems()[1]->Cast<TListExprType>()->GetItemType()->Cast<TStructExprType>();
+                WriteSchema(writer, itemType, nullptr);
+                if (formatter.WriteSchemaHeader(writer)) {
+                    WriteSchema(writer, itemType, &formatter);
+                }
+
                 writer.OnEndMap();
             }
         }
@@ -63,7 +70,8 @@ public:
         for (const auto& w : Writes_) {
             auto data = w.first->Child(3);
             TVector<TPinInfo> outputs;
-            w.second->GetPlanFormatter().GetOutputs(*w.first, outputs);
+            auto& formatter = w.second->GetPlanFormatter();
+            formatter.GetOutputs(*w.first, outputs);
             YQL_ENSURE(outputs.size() == 1);
             auto id = ++NextWriteId_;
             WriteIds_[w.first] = id;
@@ -74,7 +82,12 @@ public:
             writer.OnKeyedItem("Name");
             writer.OnStringScalar(outputs.front().DisplayName);
             writer.OnKeyedItem("Schema");
-            WriteSchema(writer, *data->GetTypeAnn()->Cast<TListExprType>()->GetItemType()->Cast<TStructExprType>());
+            const auto& itemType = *data->GetTypeAnn()->Cast<TListExprType>()->GetItemType()->Cast<TStructExprType>();
+            WriteSchema(writer, itemType, nullptr);
+            if (formatter.WriteSchemaHeader(writer)) {
+                WriteSchema(writer, itemType, &formatter);
+            }
+
             writer.OnKeyedItem("Lineage");
             auto lineage = CollectLineage(*data);
             WriteLineage(writer, *lineage);
@@ -87,7 +100,7 @@ public:
     }
 
 private:
-    void WriteSchema(NYson::TYsonWriter& writer, const TStructExprType& structType) {
+    void WriteSchema(NYson::TYsonWriter& writer, const TStructExprType& structType, IPlanFormatter* formatter) {
         writer.OnBeginMap();
         for (const auto& i : structType.GetItems()) {
             if (i->GetName().StartsWith("_yql_sys_")) {
@@ -95,7 +108,11 @@ private:
             }
 
             writer.OnKeyedItem(i->GetName());
-            writer.OnStringScalar(FormatType(i->GetItemType()));
+            if (formatter) {
+                formatter->WriteTypeDetails(writer, *i->GetItemType());
+            } else {
+                writer.OnStringScalar(FormatType(i->GetItemType()));
+            }
         }
 
         writer.OnEndMap();
@@ -193,7 +210,15 @@ private:
             return &lineage;
         }
 
-        if (node.IsCallable({"Unordered", "Right!", "Skip", "Take", "Sort", "AssumeSorted"})) {
+        if (node.IsCallable({
+            "Unordered", 
+            "UnorderedSubquery", 
+            "Right!", 
+            "Skip", 
+            "Take", 
+            "Sort", 
+            "AssumeSorted", 
+            "SkipNullMembers"})) {
             lineage = *CollectLineage(node.Head());
             return &lineage;
         } else if (node.IsCallable("ExtractMembers")) {
@@ -202,15 +227,23 @@ private:
             HandleFlatMap(lineage, node);
         } else if (node.IsCallable("Aggregate")) {
             HandleAggregate(lineage, node);
-        } else if (node.IsCallable("Extend")) {
+        } else if (node.IsCallable({"Extend","OrderedExtend","Merge"})) {
             HandleExtend(lineage, node);
         } else if (node.IsCallable({"CalcOverWindow","CalcOverSessionWindow","CalcOverWindowGroup"})) {
             HandleWindow(lineage, node);
         } else if (node.IsCallable("EquiJoin")) {
             HandleEquiJoin(lineage, node);
+        } else {
+            Warning(node, TStringBuilder() << node.Content() << " is not supported");
         }
 
         return &lineage;
+    }
+
+    void Warning(const TExprNode& node, const TString& message) {
+        auto issue = TIssue(ExprCtx_.GetPosition(node.Pos()), message);
+        SetIssueCode(EYqlIssueCode::TIssuesIds_EIssueCode_CORE_LINEAGE_INTERNAL_ERROR, issue);
+        ExprCtx_.AddWarning(issue);
     }
 
     void HandleExtractMembers(TLineage& lineage, const TExprNode& node) {
@@ -227,10 +260,6 @@ private:
     TMaybe<TFieldsLineage> ScanExprLineage(const TExprNode& node, const TExprNode& arg, const TLineage& src,
         TNodeMap<TMaybe<TFieldsLineage>>& visited) {
         if (&node == &arg) {
-            return Nothing();
-        }
-
-        if (node.IsArgument()) {
             return Nothing();
         }
 
@@ -257,13 +286,15 @@ private:
             }
 
             auto inner = ScanExprLineage(node.Head(), arg, src, visited);
-            if (!inner || !inner->StructItems) {
+            if (!inner) {
                 return Nothing();
             }
 
-            TFieldsLineage result; 
-            result.Items = *(*inner->StructItems).FindPtr(node.Tail().Content());
-            return it->second = result;
+            if (inner->StructItems) {
+                TFieldsLineage result; 
+                result.Items = *(*inner->StructItems).FindPtr(node.Tail().Content());
+                return it->second = result;
+            }
         }
 
         if (node.IsCallable("SqlIn")) {
@@ -281,10 +312,6 @@ private:
         std::vector<TFieldsLineage> results;
         TMaybe<bool> hasStructItems;
         for (ui32 index = 0; index < node.ChildrenSize(); ++index) {
-            if (index == 0 && node.IsCallable("If")) {
-                continue;
-            }
-
             if (index != 0 && node.IsCallable("SqlIn")) {
                 continue;
             }
@@ -753,6 +780,7 @@ private:
 private:
     const TExprNode& Root_;
     const TTypeAnnotationContext& Ctx_;
+    TExprContext& ExprCtx_;
     TNodeMap<IDataProvider*> Reads_, Writes_;
     ui32 NextReadId_ = 0;
     ui32 NextWriteId_ = 0;
@@ -763,8 +791,8 @@ private:
 
 }
 
-TString CalculateLineage(const TExprNode& root, const TTypeAnnotationContext& ctx) {
-    TLineageScanner scanner(root, ctx);
+TString CalculateLineage(const TExprNode& root, const TTypeAnnotationContext& ctx, TExprContext& exprCtx) {
+    TLineageScanner scanner(root, ctx, exprCtx);
     return scanner.Process();
 }
 

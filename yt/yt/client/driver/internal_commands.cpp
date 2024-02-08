@@ -14,11 +14,11 @@ using namespace NYTree;
 
 ////////////////////////////////////////////////////////////////////////////////
 
-TReadHunksCommand::TReadHunksCommand()
+void TReadHunksCommand::Register(TRegistrar registrar)
 {
-    RegisterParameter("descriptors", Descriptors);
+    registrar.Parameter("descriptors", &TThis::Descriptors);
 
-    RegisterParameter("parse_header", ParseHeader)
+    registrar.Parameter("parse_header", &TThis::ParseHeader)
         .Default(true);
 }
 
@@ -52,11 +52,11 @@ void TReadHunksCommand::DoExecute(ICommandContextPtr context)
 
 ////////////////////////////////////////////////////////////////////////////////
 
-TWriteHunksCommand::TWriteHunksCommand()
+void TWriteHunksCommand::Register(TRegistrar registrar)
 {
-    RegisterParameter("path", Path);
-    RegisterParameter("tablet_index", TabletIndex);
-    RegisterParameter("payloads", Payloads);
+    registrar.Parameter("path", &TThis::Path);
+    registrar.Parameter("tablet_index", &TThis::TabletIndex);
+    registrar.Parameter("payloads", &TThis::Payloads);
 }
 
 void TWriteHunksCommand::DoExecute(ICommandContextPtr context)
@@ -84,12 +84,12 @@ void TWriteHunksCommand::DoExecute(ICommandContextPtr context)
 
 ////////////////////////////////////////////////////////////////////////////////
 
-TLockHunkStoreCommand::TLockHunkStoreCommand()
+void TLockHunkStoreCommand::Register(TRegistrar registrar)
 {
-    RegisterParameter("path", Path);
-    RegisterParameter("tablet_index", TabletIndex);
-    RegisterParameter("store_id", StoreId);
-    RegisterParameter("locker_tablet_id", LockerTabletId);
+    registrar.Parameter("path", &TThis::Path);
+    registrar.Parameter("tablet_index", &TThis::TabletIndex);
+    registrar.Parameter("store_id", &TThis::StoreId);
+    registrar.Parameter("locker_tablet_id", &TThis::LockerTabletId);
 }
 
 void TLockHunkStoreCommand::DoExecute(ICommandContextPtr context)
@@ -108,12 +108,12 @@ void TLockHunkStoreCommand::DoExecute(ICommandContextPtr context)
 
 ////////////////////////////////////////////////////////////////////////////////
 
-TUnlockHunkStoreCommand::TUnlockHunkStoreCommand()
+void TUnlockHunkStoreCommand::Register(TRegistrar registrar)
 {
-    RegisterParameter("path", Path);
-    RegisterParameter("tablet_index", TabletIndex);
-    RegisterParameter("store_id", StoreId);
-    RegisterParameter("locker_tablet_id", LockerTabletId);
+    registrar.Parameter("path", &TThis::Path);
+    registrar.Parameter("tablet_index", &TThis::TabletIndex);
+    registrar.Parameter("store_id", &TThis::StoreId);
+    registrar.Parameter("locker_tablet_id", &TThis::LockerTabletId);
 }
 
 void TUnlockHunkStoreCommand::DoExecute(ICommandContextPtr context)
@@ -137,6 +137,87 @@ void TGetConnectionConfigCommand::DoExecute(ICommandContextPtr context)
     auto client = context->GetRootClient();
 
     context->ProduceOutputValue(client->GetConnection()->GetConfigYson());
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
+void TIssueLeaseCommand::Register(TRegistrar registrar)
+{
+    registrar.Parameter("cell_id", &TThis::CellId);
+    registrar.Parameter("lease_id", &TThis::LeaseId);
+}
+
+void TIssueLeaseCommand::DoExecute(ICommandContextPtr context)
+{
+    auto internalClient = context->GetInternalClientOrThrow();
+
+    WaitFor(internalClient->IssueLease(CellId, LeaseId))
+        .ThrowOnError();
+
+    ProduceEmptyOutput(context);
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
+void TRevokeLeaseCommand::Register(TRegistrar registrar)
+{
+    registrar.Parameter("cell_id", &TThis::CellId);
+    registrar.Parameter("lease_id", &TThis::LeaseId);
+    registrar.Parameter("force", &TThis::Force)
+        .Default(false);
+}
+
+void TRevokeLeaseCommand::DoExecute(ICommandContextPtr context)
+{
+    auto internalClient = context->GetInternalClientOrThrow();
+
+    WaitFor(internalClient->RevokeLease(CellId, LeaseId, Force))
+        .ThrowOnError();
+
+    ProduceEmptyOutput(context);
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
+void TReferenceLeaseCommand::Register(TRegistrar registrar)
+{
+    registrar.Parameter("cell_id", &TThis::CellId);
+    registrar.Parameter("lease_id", &TThis::LeaseId);
+    registrar.Parameter("persistent", &TThis::Persistent);
+    registrar.Parameter("force", &TThis::Force);
+}
+
+void TReferenceLeaseCommand::DoExecute(ICommandContextPtr context)
+{
+    auto internalClient = context->GetInternalClientOrThrow();
+
+    WaitFor(internalClient->ReferenceLease(
+        CellId,
+        LeaseId,
+        Persistent,
+        Force))
+        .ThrowOnError();
+
+    ProduceEmptyOutput(context);
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
+void TUnreferenceLeaseCommand::Register(TRegistrar registrar)
+{
+    registrar.Parameter("cell_id", &TThis::CellId);
+    registrar.Parameter("lease_id", &TThis::LeaseId);
+    registrar.Parameter("persistent", &TThis::Persistent);
+}
+
+void TUnreferenceLeaseCommand::DoExecute(ICommandContextPtr context)
+{
+    auto internalClient = context->GetInternalClientOrThrow();
+
+    WaitFor(internalClient->UnreferenceLease(CellId, LeaseId, Persistent))
+        .ThrowOnError();
+
+    ProduceEmptyOutput(context);
 }
 
 ////////////////////////////////////////////////////////////////////////////////

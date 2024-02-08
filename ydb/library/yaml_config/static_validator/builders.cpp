@@ -3,6 +3,8 @@
 #include <ydb/library/yaml_config/validator/validator_checks.h>
 #include <ydb/library/yaml_config/validator/configurators.h>
 
+namespace NKikimr {
+
 using namespace NYamlConfig::NValidator;
 using namespace NYamlConfig::NValidator::Configurators;
 
@@ -308,3 +310,5 @@ NYamlConfig::NValidator::TMapBuilder StaticConfigBuilder() {
     .Field("channel_profile_config", ChannelProfileConfigBuilder());
   });
 }
+
+} // namespace NKikimr

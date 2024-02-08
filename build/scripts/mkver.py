@@ -8,5 +8,5 @@ if __name__ == '__main__':
     end = data.find(')')
     version = data[beg:end]
 
-    print '#pragma once'
-    print '#define DEBIAN_VERSION "%s"' % version
+    print('#pragma once')
+    print('#define DEBIAN_VERSION "%s"' % version)

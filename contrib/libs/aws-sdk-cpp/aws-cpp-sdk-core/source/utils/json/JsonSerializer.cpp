@@ -9,6 +9,7 @@
 #include <algorithm>
 #include <aws/core/utils/memory/stl/AWSStringStream.h>
 #include <aws/core/utils/StringUtils.h>
+#include <aws/core/utils/Document.h>
 
 using namespace Aws::Utils;
 using namespace Aws::Utils::Json;
@@ -68,6 +69,13 @@ JsonValue::JsonValue(JsonValue&& value) :
     value.m_value = nullptr;
 }
 
+JsonValue::JsonValue(const Aws::Utils::DocumentView& value) :
+    m_value(cJSON_AS4CPP_Duplicate(value.m_json, true/*recurse*/)),
+    m_wasParseSuccessful(true),
+    m_errorMessage({})
+{
+}
+
 void JsonValue::Destroy()
 {
     cJSON_AS4CPP_Delete(m_value);
@@ -103,6 +111,15 @@ JsonValue& JsonValue::operator=(JsonValue&& other)
     swap(m_value, other.m_value);
     swap(m_errorMessage, other.m_errorMessage);
     m_wasParseSuccessful = other.m_wasParseSuccessful;
+    return *this;
+}
+
+JsonValue& JsonValue::operator=(const Aws::Utils::DocumentView& other)
+{
+    Destroy();
+    m_value = cJSON_AS4CPP_Duplicate(other.m_json, true /*recurse*/);
+    m_wasParseSuccessful = true;
+    m_errorMessage = {};
     return *this;
 }
 

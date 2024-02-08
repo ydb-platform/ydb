@@ -1,0 +1,5 @@
+/** Various utility definitions for libpqxx.
+ */
+// Actual definitions in .hxx file so editors and such recognize file type
+#include "pqxx/util.hxx"
+

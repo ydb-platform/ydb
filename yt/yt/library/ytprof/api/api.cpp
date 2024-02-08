@@ -1,5 +1,7 @@
 #include "api.h"
 
+#include <library/cpp/yt/misc/tls.h>
+
 namespace NYT::NYTProf {
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -9,7 +11,7 @@ DEFINE_REFCOUNTED_TYPE(TProfilerTag)
 struct TCpuProfilerTags;
 
 // This variable is referenced from signal handler.
-constinit thread_local std::atomic<TCpuProfilerTags*> CpuProfilerTagsPtr = nullptr;
+constinit YT_THREAD_LOCAL(std::atomic<TCpuProfilerTags*>) CpuProfilerTagsPtr = nullptr;
 
 struct TCpuProfilerTags
 {
@@ -28,7 +30,7 @@ struct TCpuProfilerTags
 
 // We can't reference CpuProfilerTags from signal handler,
 // since it may trigger lazy initialization.
-thread_local TCpuProfilerTags CpuProfilerTags;
+YT_THREAD_LOCAL(TCpuProfilerTags) CpuProfilerTags;
 
 std::array<TAtomicSignalPtr<TProfilerTag>, MaxActiveTags>* GetCpuProfilerTags()
 {
@@ -44,9 +46,11 @@ std::array<TAtomicSignalPtr<TProfilerTag>, MaxActiveTags>* GetCpuProfilerTags()
 
 TCpuProfilerTagGuard::TCpuProfilerTagGuard(TProfilerTagPtr tag)
 {
+    auto& cpuProfilerTags = GetTlsRef(CpuProfilerTags);
+
     for (int i = 0; i < MaxActiveTags; i++) {
-        if (!CpuProfilerTags.Tags[i].IsSetFromThread()) {
-            CpuProfilerTags.Tags[i].StoreFromThread(std::move(tag));
+        if (!cpuProfilerTags.Tags[i].IsSetFromThread()) {
+            cpuProfilerTags.Tags[i].StoreFromThread(std::move(tag));
             TagIndex_ = i;
             return;
         }
@@ -55,8 +59,10 @@ TCpuProfilerTagGuard::TCpuProfilerTagGuard(TProfilerTagPtr tag)
 
 TCpuProfilerTagGuard::~TCpuProfilerTagGuard()
 {
+    auto& cpuProfilerTags = GetTlsRef(CpuProfilerTags);
+
     if (TagIndex_ != -1) {
-        CpuProfilerTags.Tags[TagIndex_].StoreFromThread(nullptr);
+        cpuProfilerTags.Tags[TagIndex_].StoreFromThread(nullptr);
     }
 }
 
@@ -73,7 +79,8 @@ TCpuProfilerTagGuard& TCpuProfilerTagGuard::operator = (TCpuProfilerTagGuard&& o
     }
 
     if (TagIndex_ != -1) {
-        CpuProfilerTags.Tags[TagIndex_].StoreFromThread(nullptr);
+        auto& cpuProfilerTags = GetTlsRef(CpuProfilerTags);
+        cpuProfilerTags.Tags[TagIndex_].StoreFromThread(nullptr);
     }
 
     TagIndex_ = other.TagIndex_;

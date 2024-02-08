@@ -1,0 +1,22 @@
+{
+  "bottles": {},
+  "resources": {
+    "678806418": "https://ydb-tech-ci.storage.yandexcloud.net/ydb-platform/resources/678806418",
+    "770480022": "https://ydb-tech-ci.storage.yandexcloud.net/ydb-platform/resources/770480022",
+    "451427803": "https://ydb-tech-ci.storage.yandexcloud.net/ydb-platform/resources/451427803",
+    "4966407557": "https://ydb-tech-ci.storage.yandexcloud.net/ydb-platform/resources/4966407557"
+
+  },
+  "resources_info": {
+    "770480022": { "file_name": "docker-compose" },
+    "451427803": { "file_name": "Robots.in" },
+    "4966407557": { "file_name": "psql" }
+  },
+  "resources_descriptions": {
+    "678806418": "Pg Linux pack",
+    "770480022": "docker_compose for Linux",
+    "451427803": "Robots.in",
+    "4966407557": "psql cli"
+  },
+  "tasks": {}
+}

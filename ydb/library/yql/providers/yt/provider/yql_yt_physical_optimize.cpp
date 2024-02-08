@@ -30,6 +30,7 @@
 #include <ydb/library/yql/core/yql_data_provider.h>
 #include <ydb/library/yql/dq/expr_nodes/dq_expr_nodes.h>
 #include <ydb/library/yql/dq/opt/dq_opt_phy.h>
+#include <ydb/library/yql/dq/type_ann/dq_type_ann.h>
 #include <ydb/library/yql/ast/yql_expr.h>
 #include <ydb/library/yql/utils/log/log.h>
 #include <ydb/library/yql/core/extract_predicate/extract_predicate.h>
@@ -88,8 +89,7 @@ public:
         AddHandler(0, &TYtMapReduce::Match, HNDL(AddTrivialMapperForNativeYtTypes));
         AddHandler(0, &TYtDqWrite::Match, HNDL(YtDqWrite));
         AddHandler(0, &TYtDqProcessWrite::Match, HNDL(YtDqProcessWrite));
-        AddHandler(0, &TYtTransientOpBase::Match, HNDL(ZeroSample));
-        AddHandler(0, &TYtEquiJoin::Match, HNDL(RuntimeEquiJoin));
+        AddHandler(0, &TYtEquiJoin::Match, HNDL(EarlyMergeJoin));
 
         AddHandler(1, &TYtMap::Match, HNDL(FuseInnerMap));
         AddHandler(1, &TYtMap::Match, HNDL(FuseOuterMap));
@@ -108,7 +108,9 @@ public:
         AddHandler(1, &TYtSort::Match, HNDL(TopSort));
         AddHandler(1, &TYtWithUserJobsOpBase::Match, HNDL(EmbedLimit));
         AddHandler(1, &TYtMerge::Match, HNDL(PushMergeLimitToInput));
+        AddHandler(1, &TYtReduce::Match, HNDL(FuseReduce));
 
+        AddHandler(2, &TYtEquiJoin::Match, HNDL(RuntimeEquiJoin));
         AddHandler(2, &TStatWriteTable::Match, HNDL(ReplaceStatWriteTable));
         AddHandler(2, &TYtMap::Match, HNDL(MapToMerge));
         AddHandler(2, &TYtPublish::Match, HNDL(UnorderedPublishTarget));
@@ -1872,12 +1874,24 @@ private:
             }
         }
 
+        const bool canUseMapInsteadOfReduce = keySelectorLambda.Body().Ref().IsComplete() &&
+            partByKey.SortDirections().Maybe<TCoVoid>() &&
+            State_->Configuration->PartitionByConstantKeysViaMap.Get().GetOrElse(DEFAULT_PARTITION_BY_CONSTANT_KEYS_VIA_MAP);
+
+        if (canUseMapInsteadOfReduce) {
+            YQL_ENSURE(!canUseReduce);
+            YQL_ENSURE(sortByColumns.empty());
+            useSystemColumns = false;
+        }
+
         auto settingsBuilder = Build<TCoNameValueTupleList>(ctx, node.Pos());
-        settingsBuilder
-            .Add()
-                .Name().Value(ToString(EYtSettingType::ReduceBy)).Build()
-                .Value(TExprBase(ToColumnPairList(reduceByColumns, node.Pos(), ctx)))
-            .Build();
+        if (!canUseMapInsteadOfReduce) {
+            settingsBuilder
+                .Add()
+                    .Name().Value(ToString(EYtSettingType::ReduceBy)).Build()
+                    .Value(TExprBase(ToColumnPairList(reduceByColumns, node.Pos(), ctx)))
+                .Build();
+        }
 
         if (!sortByColumns.empty()) {
             settingsBuilder
@@ -2264,7 +2278,14 @@ private:
             TExprNode::TPtr keyExtractor;
             TExprNode::TPtr handler;
 
-            if (useSystemColumns) {
+            if (canUseMapInsteadOfReduce) {
+                groupSwitch = Build<TCoLambda>(ctx, handlerLambda.Pos())
+                    .Args({"key", "item"})
+                    .Body<TCoBool>()
+                        .Literal().Build("false")
+                    .Build()
+                    .Done().Ptr();
+            } else if (useSystemColumns) {
                 groupSwitch = Build<TCoLambda>(ctx, handlerLambda.Pos())
                     .Args({"key", "item"})
                     .Body<TCoSqlExtractKey>()
@@ -2323,17 +2344,21 @@ private:
                     .Build()
                     .Done().Ptr();
 
-                handler = Build<TCoLambda>(ctx, handlerLambda.Pos())
-                    .Args({"item"})
-                    .Body<TCoRemovePrefixMembers>()
-                        .Input("item")
-                        .Prefixes()
-                            .Add()
-                                .Value(YqlSysColumnKeySwitch)
+                if (canUseMapInsteadOfReduce) {
+                    handler = BuildIdentityLambda(handlerLambda.Pos(), ctx).Ptr();
+                } else {
+                    handler = Build<TCoLambda>(ctx, handlerLambda.Pos())
+                        .Args({"item"})
+                        .Body<TCoRemovePrefixMembers>()
+                            .Input("item")
+                            .Prefixes()
+                                .Add()
+                                    .Value(YqlSysColumnKeySwitch)
+                                .Build()
                             .Build()
                         .Build()
-                    .Build()
-                    .Done().Ptr();
+                        .Done().Ptr();
+                }
             }
 
             handlerLambda = Build<TCoLambda>(ctx, handlerLambda.Pos())
@@ -2427,12 +2452,31 @@ private:
             return WrapOp(reduce, ctx);
         }
 
-        if (needMap && (builder.NeedMap() || multiInput)) {
+        if (needMap && (builder.NeedMap() || multiInput) && !canUseMapInsteadOfReduce) {
             settingsBuilder
                 .Add()
                     .Name().Value(ToString(EYtSettingType::ReduceFilterBy)).Build()
                     .Value(TExprBase(ToAtomList(filterColumns, node.Pos(), ctx)))
                 .Build();
+        }
+
+        if (canUseMapInsteadOfReduce && !filterColumns.empty()) {
+            reducer = Build<TCoLambda>(ctx, reducer.Pos())
+                .Args({"input"})
+                .Body<TExprApplier>()
+                    .Apply(reducer)
+                    .With<TCoMap>(0)
+                        .Input("input")
+                        .Lambda()
+                            .Args({"item"})
+                            .Body<TCoSelectMembers>()
+                                .Input("item")
+                                .Members(ToAtomList(filterColumns, node.Pos(), ctx))
+                            .Build()
+                        .Build()
+                    .Build()
+                .Build()
+                .Done();
         }
 
         bool unordered = ctx.IsConstraintEnabled<TSortedConstraintNode>();
@@ -2517,6 +2561,26 @@ private:
             }
         }
 
+        if (canUseMapInsteadOfReduce) {
+            settingsBuilder
+                .Add()
+                    .Name().Value(ToString(EYtSettingType::JobCount)).Build()
+                    .Value(TExprBase(ctx.NewAtom(node.Pos(), 1u)))
+                .Build();
+
+            auto result = Build<TYtMap>(ctx, node.Pos())
+                .World(ApplySyncListToWorld(world.Ptr(), syncList, ctx))
+                .DataSink(GetDataSink(input, ctx))
+                .Input(ConvertInputTable(input, ctx, TConvertInputOpts().MakeUnordered(unordered)))
+                .Output()
+                    .Add(ConvertOutTables(node.Pos(), outItemType, ctx, State_, &partByKey.Ref().GetConstraintSet()))
+                .Build()
+                .Settings(settingsBuilder.Done())
+                .Mapper(reducer)
+                .Done();
+            return WrapOp(result, ctx);
+        }
+
         if (forceMapper && mapper.Maybe<TCoVoid>()) {
             mapper = MakeJobLambda<false>(Build<TCoLambda>(ctx, node.Pos()).Args({"stream"}).Body("stream").Done(), useMapFlow, ctx);
         }
@@ -2588,23 +2652,12 @@ private:
             outItemType, ctx, State_, flatMap.Ref().GetConstraintSet());
 
         auto settingsBuilder = Build<TCoNameValueTupleList>(ctx, flatMap.Pos());
-        if (sortedOutput) {
+        if (TCoOrderedFlatMap::Match(flatMap.Raw()) || sortedOutput) {
             settingsBuilder
                 .Add()
                     .Name()
                         .Value(ToString(EYtSettingType::Ordered))
                     .Build()
-                .Build();
-        } else if (TCoOrderedFlatMap::Match(flatMap.Raw()) && outTables.size() == 1) {
-            mapper = ctx.Builder(node.Pos())
-                .Lambda()
-                    .Param("stream")
-                    .Callable(TCoUnordered::CallableName())
-                        .Apply(0, mapper)
-                            .With(0, "stream")
-                        .Seal()
-                    .Seal()
-                .Seal()
                 .Build();
         }
         if (State_->Configuration->UseFlow.Get().GetOrElse(DEFAULT_USE_FLOW)) {
@@ -3806,7 +3859,7 @@ private:
                     .Done();
                 break;
             case EYtSettingType::Skip:
-                res = Build<TCoMinus>(ctx, node.Pos())
+                res = Build<TCoSub>(ctx, node.Pos())
                     .Left<TCoMax>()
                         .Add(res)
                         .Add(s.Value().Cast())
@@ -4350,6 +4403,187 @@ private:
         return WrapOp(map, ctx);
     }
 
+    TMaybeNode<TExprBase> FuseReduce(TExprBase node, TExprContext& ctx, const TGetParents& getParents) const {
+        auto outerReduce = node.Cast<TYtReduce>();
+
+        if (outerReduce.Input().Size() != 1 || outerReduce.Input().Item(0).Paths().Size() != 1) {
+            return node;
+        }
+        if (outerReduce.Input().Item(0).Settings().Size() != 0) {
+            return node;
+        }
+        TYtPath path = outerReduce.Input().Item(0).Paths().Item(0);
+        if (!path.Ranges().Maybe<TCoVoid>()) {
+            return node;
+        }
+        auto maybeInnerReduce = path.Table().Maybe<TYtOutput>().Operation().Maybe<TYtReduce>();
+        if (!maybeInnerReduce) {
+            return node;
+        }
+        TYtReduce innerReduce = maybeInnerReduce.Cast();
+
+        if (innerReduce.Ref().StartsExecution() || innerReduce.Ref().HasResult()) {
+            return node;
+        }
+        if (innerReduce.Output().Size() > 1) {
+            return node;
+        }
+
+        if (outerReduce.DataSink().Cluster().Value() != innerReduce.DataSink().Cluster().Value()) {
+            return node;
+        }
+
+        const TParentsMap* parentsReduce = getParents();
+        if (IsOutputUsedMultipleTimes(innerReduce.Ref(), *parentsReduce)) {
+            // Inner reduce output is used more than once
+            return node;
+        }
+        // Check world dependencies
+        auto parentsIt = parentsReduce->find(innerReduce.Raw());
+        YQL_ENSURE(parentsIt != parentsReduce->cend());
+        for (auto dep: parentsIt->second) {
+            if (!TYtOutput::Match(dep)) {
+                return node;
+            }
+        }
+
+        if (!NYql::HasSetting(innerReduce.Settings().Ref(), EYtSettingType::KeySwitch) ||
+            !NYql::HasSetting(innerReduce.Settings().Ref(), EYtSettingType::Flow) ||
+            !NYql::HasSetting(innerReduce.Settings().Ref(), EYtSettingType::ReduceBy)) {
+            return node;
+        }
+
+        if (NYql::HasSetting(outerReduce.Settings().Ref(), EYtSettingType::SortBy)) {
+            return node;
+        }
+
+        if (NYql::HasSettingsExcept(innerReduce.Settings().Ref(), EYtSettingType::ReduceBy |
+                                                                 EYtSettingType::KeySwitch |
+                                                                 EYtSettingType::Flow |
+                                                                 EYtSettingType::FirstAsPrimary |
+                                                                 EYtSettingType::SortBy |
+                                                                 EYtSettingType::NoDq)) {
+            return node;
+        }
+
+        if (!EqualSettingsExcept(innerReduce.Settings().Ref(), outerReduce.Settings().Ref(),
+                                                                EYtSettingType::ReduceBy |
+                                                                EYtSettingType::FirstAsPrimary |
+                                                                EYtSettingType::NoDq |
+                                                                EYtSettingType::SortBy)) {
+            return node;
+        }
+
+        auto innerLambda = innerReduce.Reducer();
+        auto outerLambda = outerReduce.Reducer();
+        auto fuseRes = CanFuseLambdas(innerLambda, outerLambda, ctx);
+        if (!fuseRes) {
+            // Some error
+            return {};
+        }
+        if (!*fuseRes) {
+            // Cannot fuse
+            return node;
+        }
+
+        auto [placeHolder, lambdaWithPlaceholder] = ReplaceDependsOn(outerLambda.Ptr(), ctx, State_->Types);
+        if (!placeHolder) {
+            return {};
+        }
+
+
+        if (lambdaWithPlaceholder != outerLambda.Ptr()) {
+            outerLambda = TCoLambda(lambdaWithPlaceholder);
+        }
+
+        innerLambda = FallbackLambdaOutput(innerLambda, ctx);
+        outerLambda = FallbackLambdaInput(outerLambda, ctx);
+
+
+        const auto outerReduceBy = NYql::GetSettingAsColumnList(outerReduce.Settings().Ref(), EYtSettingType::ReduceBy);
+        auto reduceByList = [&](TExprNodeBuilder& parent) -> TExprNodeBuilder& {
+            size_t index = 0;
+            for (const auto& reduceByName: outerReduceBy) {
+                parent.Callable(index++, "Member")
+                    .Arg(0, "item")
+                    .Atom(1, reduceByName)
+                .Seal();
+            }
+            return parent;
+        };
+
+        // adds _yql_sys_tablekeyswitch column which is required for outer lambda
+        // _yql_sys_tableswitch equals "true" when reduce key is changed
+        TExprNode::TPtr keySwitchLambda = ctx.Builder(node.Pos())
+            .Lambda()
+                .Param("stream")
+                .Callable(0, "Fold1Map")
+                    .Arg(0, "stream")
+                    .Lambda(1)
+                        .Param("item")
+                        .List(0)
+                            .Callable(0, "AddMember")
+                                .Arg(0, "item")
+                                .Atom(1, "_yql_sys_tablekeyswitch")
+                                .Callable(2, "Bool").Atom(0, "true").Seal()
+                            .Seal()
+                            .List(1).Do(reduceByList).Seal()
+                        .Seal()
+                    .Seal()
+                    .Lambda(2)
+                        .Param("item")
+                        .Param("state")
+                        .List(0)
+                            .Callable(0, "AddMember")
+                                .Arg(0, "item")
+                                .Atom(1, "_yql_sys_tablekeyswitch")
+                                .Callable(2, "If")
+                                    .Callable(0, "AggrEquals")
+                                        .List(0).Do(reduceByList).Seal()
+                                        .Arg(1, "state")
+                                    .Seal()
+                                    .Callable(1, "Bool").Atom(0, "false").Seal()
+                                    .Callable(2, "Bool").Atom(0, "true").Seal()
+                                .Seal()
+                            .Seal()
+                            .List(1).Do(reduceByList).Seal()
+                        .Seal()
+                    .Seal()
+                .Seal()
+            .Seal()
+        .Build();
+
+        auto newSettings = innerReduce.Settings().Ptr();
+        if (NYql::HasSetting(outerReduce.Settings().Ref(), EYtSettingType::NoDq) &&
+           !NYql::HasSetting(innerReduce.Settings().Ref(), EYtSettingType::NoDq)) {
+            newSettings = NYql::AddSetting(*newSettings, EYtSettingType::NoDq, {}, ctx);
+        }
+
+        return Build<TYtReduce>(ctx, node.Pos())
+            .InitFrom(outerReduce)
+            .World<TCoSync>()
+                .Add(innerReduce.World())
+                .Add(outerReduce.World())
+            .Build()
+            .Input(innerReduce.Input())
+            .Reducer()
+                .Args({"stream"})
+                .Body<TExprApplier>()
+                    .Apply(outerLambda)
+                    .With<TExprApplier>(0)
+                        .Apply(TCoLambda(keySwitchLambda))
+                        .With<TExprApplier>(0)
+                            .Apply(innerLambda)
+                            .With(0, "stream")
+                        .Build()
+                    .Build()
+                    .With(TExprBase(placeHolder), "stream")
+                .Build()
+            .Build()
+            .Settings(newSettings)
+            .Done();
+    }
+
     TMaybeNode<TExprBase> FuseInnerMap(TExprBase node, TExprContext& ctx, const TGetParents& getParents) const {
         auto outerMap = node.Cast<TYtMap>();
         if (outerMap.Input().Size() != 1 || outerMap.Input().Item(0).Paths().Size() != 1) {
@@ -4381,6 +4615,9 @@ private:
             return node;
         }
         if (NYql::HasSetting(innerMap.Settings().Ref(), EYtSettingType::Flow) != NYql::HasSetting(outerMap.Settings().Ref(), EYtSettingType::Flow)) {
+            return node;
+        }
+        if (NYql::HasAnySetting(outerMap.Settings().Ref(), EYtSettingType::JobCount)) {
             return node;
         }
         if (!path.Ranges().Maybe<TCoVoid>()) {
@@ -4516,6 +4753,9 @@ private:
             return node;
         }
         if (NYql::HasAnySetting(inner.Settings().Ref(), EYtSettingType::Limit | EYtSettingType::SortLimitBy | EYtSettingType::JobCount)) {
+            return node;
+        }
+        if (NYql::HasSetting(outerMap.Settings().Ref(), EYtSettingType::JobCount)) {
             return node;
         }
         if (outerMap.Input().Item(0).Settings().Size() != 0) {
@@ -4925,12 +5165,20 @@ private:
 
                 TSet<TStringBuf> memberSet;
                 if (HaveFieldsSubset(visitLambda->TailPtr(), visitLambda->Head().Head(), memberSet, *parentsMap)) {
-                    auto reduceBy = NYql::GetSettingAsColumnList(op.Settings().Ref(), EYtSettingType::ReduceBy);
-                    memberSet.insert(reduceBy.cbegin(), reduceBy.cend());
-                    auto sortBy = NYql::GetSettingAsColumnList(op.Settings().Ref(), EYtSettingType::SortBy);
-                    memberSet.insert(sortBy.cbegin(), sortBy.cend());
-
                     auto itemType = visitLambda->Head().Head().GetTypeAnn()->Cast<TStructExprType>();
+                    auto reduceBy = NYql::GetSettingAsColumnList(op.Settings().Ref(), EYtSettingType::ReduceBy);
+                    for (auto& col: reduceBy) {
+                        if (auto type = itemType->FindItemType(col)) {
+                            memberSet.insert(type->Cast<TItemExprType>()->GetName());
+                        }
+                    }
+                    auto sortBy = NYql::GetSettingAsColumnList(op.Settings().Ref(), EYtSettingType::SortBy);
+                    for (auto& col: sortBy) {
+                        if (auto type = itemType->FindItemType(col)) {
+                            memberSet.insert(type->Cast<TItemExprType>()->GetName());
+                        }
+                    }
+
                     if (memberSet.size() < itemType->GetSize()) {
                         sectionFields.emplace_back(inputNum, std::move(memberSet));
                     }
@@ -5556,6 +5804,28 @@ private:
             .Done();
     }
 
+    TMaybeNode<TExprBase> EarlyMergeJoin(TExprBase node, TExprContext& ctx) const {
+        if (State_->Configuration->JoinMergeTablesLimit.Get()) {
+            auto equiJoin = node.Cast<TYtEquiJoin>();
+            const auto tree = ImportYtEquiJoin(equiJoin, ctx);
+            if (State_->Configuration->JoinMergeForce.Get() || tree->LinkSettings.ForceSortedMerge) {
+                const auto rewriteStatus = RewriteYtEquiJoinLeaves(equiJoin, *tree, State_, ctx);
+                switch (rewriteStatus.Level) {
+                    case TStatus::Repeat:
+                        return node;
+                    case TStatus::Error:
+                        return {};
+                    case TStatus::Ok:
+                        break;
+                    default:
+                        YQL_ENSURE(false, "Unexpected rewrite status");
+                }
+                return ExportYtEquiJoin(equiJoin, *tree, ctx, State_);
+            }
+        }
+        return node;
+    }
+
     TMaybeNode<TExprBase> RuntimeEquiJoin(TExprBase node, TExprContext& ctx) const {
         auto equiJoin = node.Cast<TYtEquiJoin>();
 
@@ -5948,35 +6218,6 @@ private:
             }
         }
         return TExprBase(res);
-    }
-
-    TMaybeNode<TExprBase> ZeroSample(TExprBase node, TExprContext& ctx) const {
-        auto op = node.Cast<TYtTransientOpBase>();
-
-        if (node.Ref().HasResult() && node.Ref().GetResult().Type() == TExprNode::World) {
-            return node;
-        }
-
-        bool hasUpdates = false;
-        TVector<TExprBase> updatedSections;
-        for (auto section: op.Input()) {
-            TMaybe<TSampleParams> sampling = NYql::GetSampleParams(section.Settings().Ref());
-            if (sampling && sampling->Percentage == 0.0) {
-                hasUpdates = true;
-                updatedSections.push_back(MakeEmptySection(section, op.DataSink(), true, State_, ctx));
-            } else {
-                updatedSections.push_back(section);
-            }
-        }
-
-        if (!hasUpdates) {
-            return node;
-        }
-
-        return ctx.ChangeChild(op.Ref(), TYtTransientOpBase::idx_Input,
-            Build<TYtSectionList>(ctx, op.Input().Pos())
-                .Add(updatedSections)
-                .Done().Ptr());
     }
 
     TMaybeNode<TExprBase> ReplaceStatWriteTable(TExprBase node, TExprContext& ctx) const {
@@ -6761,10 +7002,17 @@ private:
                         continue;
                     }
 
-                    const bool unordered = IsUnorderedOutput(path.Table().Cast<TYtOutput>());
                     auto mergeOutRowSpec = TYqlRowSpecInfo(innerMerge.Output().Item(0).RowSpec());
+                    const bool sortedMerge = mergeOutRowSpec.IsSorted();
+                    if (hasTakeSkip && sortedMerge && NYql::HasSetting(innerMerge.Settings().Ref(), EYtSettingType::KeepSorted)) {
+                        continue;
+                    }
+                    if (hasTakeSkip && AnyOf(innerMergeSection.Paths(), [](const auto& path) { return !path.Ranges().template Maybe<TCoVoid>(); })) {
+                        continue;
+                    }
+
+                    const bool unordered = IsUnorderedOutput(path.Table().Cast<TYtOutput>());
                     if (innerMergeSection.Paths().Size() > 1) {
-                        const bool sortedMerge = mergeOutRowSpec.IsSorted();
                         if (hasTakeSkip && sortedMerge) {
                             continue;
                         }
@@ -7182,6 +7430,14 @@ private:
         if (!rowSpec.IsSorted()) {
             return node;
         }
+        TMaybeNode<TExprBase> columns;
+        if (rowSpec.HasAuxColumns()) {
+            TSet<TStringBuf> members;
+            for (auto item: rowSpec.GetType()->GetItems()) {
+                members.insert(item->GetName());
+            }
+            columns = TExprBase(ToAtomList(members, merge.Pos(), ctx));
+        }
 
         auto mergeSection = merge.Input().Item(0);
         if (NYql::HasSettingsExcept(mergeSection.Settings().Ref(), EYtSettingType::KeyFilter | EYtSettingType::KeyFilter2)) {
@@ -7214,7 +7470,10 @@ private:
                         .Input()
                             .Add()
                                 .Paths()
-                                    .Add(path)
+                                    .Add<TYtPath>()
+                                        .InitFrom(path)
+                                        .Columns(columns.IsValid() ? columns.Cast() : path.Columns())
+                                    .Build()
                                 .Build()
                                 .Settings(section.Settings())
                             .Build()
@@ -7287,6 +7546,12 @@ private:
         }
         if (NYql::HasNonEmptyKeyFilter(section)) {
             return node;
+        }
+        if (NYql::HasSetting(merge.Settings().Ref(), EYtSettingType::KeepSorted)) {
+            auto op = path.Table().Maybe<TYtOutput>().Operation().Cast();
+            if (!(op.Ref().HasResult() && op.Ref().GetResult().Type() == TExprNode::World || op.Maybe<TYtTouch>())) {
+                return node;
+            }
         }
         TYtOutTableInfo outTableInfo(merge.Output().Item(0));
         if (!tableInfo->RowSpec->CompareSortness(*outTableInfo.RowSpec)) {

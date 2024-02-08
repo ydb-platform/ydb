@@ -14,7 +14,7 @@ target_link_libraries(version PUBLIC
   contrib-libs-cxxsupp
   yutil
   contrib-libs-protobuf
-  cpp-actors-interconnect
+  library-actors-interconnect
   monlib-service-pages
   library-cpp-svnversion
   ydb-core-protos

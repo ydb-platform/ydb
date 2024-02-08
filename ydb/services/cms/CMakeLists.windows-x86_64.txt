@@ -12,7 +12,7 @@ add_library(ydb-services-cms)
 target_link_libraries(ydb-services-cms PUBLIC
   contrib-libs-cxxsupp
   yutil
-  cpp-grpc-server
+  library-grpc-server
   ydb-core-grpc_services
   ydb-core-mind
   ydb-library-aclib

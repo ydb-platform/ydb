@@ -1,8 +1,8 @@
 #pragma once
 #include "kqp_compute_state.h"
 
-#include <library/cpp/actors/core/actorsystem.h>
-#include <library/cpp/actors/core/log_iface.h>
+#include <ydb/library/actors/core/actorsystem.h>
+#include <ydb/library/actors/core/log_iface.h>
 
 namespace NKikimr::NKqp::NScanPrivate {
 
@@ -18,8 +18,8 @@ struct TScannedDataStats {
 
     TScannedDataStats() = default;
 
-    void AddReadStat(const ui32 scannerIdx, const ui64 rows, const ui64 bytes) {
-        auto [it, success] = ReadShardInfo.emplace(scannerIdx, std::make_pair(rows, bytes));
+    void AddReadStat(const ui64 tabletId, const ui64 rows, const ui64 bytes) {
+        auto [it, success] = ReadShardInfo.emplace(tabletId, std::make_pair(rows, bytes));
         if (!success) {
             auto& [currentRows, currentBytes] = it->second;
             currentRows += rows;
@@ -28,8 +28,8 @@ struct TScannedDataStats {
     }
 
     void CompleteShard(TShardState::TPtr state) {
-        auto it = ReadShardInfo.find(state->ScannerIdx);
-        YQL_ENSURE(it != ReadShardInfo.end());
+        auto it = ReadShardInfo.find(state->TabletId);
+        AFL_ENSURE(it != ReadShardInfo.end());
         auto& [currentRows, currentBytes] = it->second;
         TotalReadRows += currentRows;
         TotalReadBytes += currentBytes;

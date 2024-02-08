@@ -70,7 +70,7 @@ void TTable::AddTuple(  ui64 * intColumns, char ** stringColumns, ui32 * strings
     }
 
 
-    TempTuple[0] &= (0x1); // Setting only nulls in key bit, all other bits are ignored for key hash
+    TempTuple[0] &= ui64(0x1); // Setting only nulls in key bit, all other bits are ignored for key hash
     for (ui32 i = 1; i < NullsBitmapSize_; i ++) {
         TempTuple[i] = 0;
     }
@@ -82,7 +82,7 @@ void TTable::AddTuple(  ui64 * intColumns, char ** stringColumns, ui32 * strings
 
     ui64 bucket = hash & BucketsMask;
 
-
+    
 
     std::vector<ui64, TMKQLAllocator<ui64>> & keyIntVals = TableBuckets[bucket].KeyIntVals;
     std::vector<ui32, TMKQLAllocator<ui32>> & stringsOffsets = TableBuckets[bucket].StringsOffsets;
@@ -157,6 +157,7 @@ void TTable::ResetIterator() {
     CurrIterIndex = 0;
     CurrIterBucket = 0;
     CurrJoinIdsIterIndex = 0;
+    Table2Initialized_ = false;
     if (IsTableJoined) {
         JoinTable1->ResetIterator();
         JoinTable2->ResetIterator();
@@ -297,8 +298,6 @@ void TTable::Join( TTable & t1, TTable & t2, EJoinKind joinKind, bool hasMoreLef
         std::swap(JoinTable1, JoinTable2);
     }
 
-    ui64 tuplesFound = 0;
-
     std::vector<ui64, TMKQLAllocator<ui64, EMemorySubPool::Temporary>> joinSlots, spillSlots, slotToIdx;
     std::vector<ui32, TMKQLAllocator<ui32, EMemorySubPool::Temporary>> stringsOffsets1, stringsOffsets2;
     ui64 reservedSize = 6 * (DefaultTupleBytes * DefaultTuplesNum) / sizeof(ui64);
@@ -331,8 +330,7 @@ void TTable::Join( TTable & t1, TTable & t2, EJoinKind joinKind, bool hasMoreLef
 
         joinResults.reserve(3 * bucket1->TuplesNum );
 
-        ui64 headerSize = JoinTable1->HeaderSize;
-        ui64 slotSize = headerSize;
+        ui64 slotSize = headerSize2;
 
         ui64 avgStringsSize = ( 3 * (bucket2->KeyIntVals.size() - bucket2->TuplesNum * headerSize2) ) / ( 2 * bucket2->TuplesNum + 1)  + 1;
 
@@ -340,7 +338,7 @@ void TTable::Join( TTable & t1, TTable & t2, EJoinKind joinKind, bool hasMoreLef
             slotSize = slotSize + avgStringsSize;
         }
 
-
+        
         ui64 nSlots = 3 * bucket2->TuplesNum + 1;
         joinSlots.clear();
         spillSlots.clear();
@@ -418,25 +416,25 @@ void TTable::Join( TTable & t1, TTable & t2, EJoinKind joinKind, bool hasMoreLef
             auto slotIt = joinSlots.begin() + slotNum * slotSize;
             while (*slotIt != 0 && slotIt != joinSlots.end())
             {
+
                 bool matchFound = false;
-                if (keysValSize <= slotSize && !JoinTable1->NumberOfKeyIColumns ) {
+                if (((keysValSize - nullsSize1) <= (slotSize - nullsSize2)) && !JoinTable1->NumberOfKeyIColumns ) {
                     if (std::equal(it1 + keyIntOffset1, it1 + keysValSize, slotIt + keyIntOffset2)) {
-                        tuplesFound++;
                         matchFound = true;
                     }
                 }
 
-                if (keysValSize > slotSize && !JoinTable1->NumberOfKeyIColumns ) {
+                if (((keysValSize - nullsSize1) > (slotSize - nullsSize2)) && !JoinTable1->NumberOfKeyIColumns ) {
                     if (std::equal(it1 + keyIntOffset1, it1 + headerSize1, slotIt + keyIntOffset2)) {
                         ui64 stringsPos = *(slotIt + headerSize2);
                         ui64 stringsSize = *(it1 + headerSize1 - 1);
                         if (std::equal(it1 + headerSize1, it1 + headerSize1 + stringsSize, spillSlots.begin() + stringsPos)) {
-                            tuplesFound++;
                             matchFound = true;
                         }
                     }
                 }
 
+ 
                 if (JoinTable1->NumberOfKeyIColumns)
                 {
                     bool headerMatch = false;
@@ -481,33 +479,32 @@ void TTable::Join( TTable & t1, TTable & t2, EJoinKind joinKind, bool hasMoreLef
                     }
 
                     if (headerMatch && stringsMatch && iValuesMatch) {
-                        tuplesFound++;
                         matchFound = true;
                     }
 
-                 }
-
-                    if (matchFound)
-                    {
-                        JoinTuplesIds joinIds;
-                        joinIds.id1 = tuple1Idx;
-                        joinIds.id2 = slotToIdx[(slotIt - joinSlots.begin()) / slotSize];
-                        if (JoinTable2->TableBuckets[bucket].TuplesNum > JoinTable1->TableBuckets[bucket].TuplesNum)
-                        {
-                            std::swap(joinIds.id1, joinIds.id2);
-                        }
-                        joinResults.emplace_back(joinIds);
-                    }
-
-                    slotIt += slotSize;
-                    if (slotIt == joinSlots.end())
-                        slotIt = joinSlots.begin();
                 }
 
+                if (matchFound)
+                {
+                    JoinTuplesIds joinIds;
+                    joinIds.id1 = tuple1Idx;
+                    joinIds.id2 = slotToIdx[(slotIt - joinSlots.begin()) / slotSize];
+                    if (JoinTable2->TableBuckets[bucket].TuplesNum > JoinTable1->TableBuckets[bucket].TuplesNum)
+                    {
+                        std::swap(joinIds.id1, joinIds.id2);
+                    }
+                    joinResults.emplace_back(joinIds);
+                }
+
+                slotIt += slotSize;
+                if (slotIt == joinSlots.end())
+                    slotIt = joinSlots.begin();
+            }
 
             it1 += keysValSize;
             tuple1Idx ++;
         }
+
         std::sort(joinResults.begin(), joinResults.end(), [](JoinTuplesIds a, JoinTuplesIds b)
         {
             if (a.id1 < b.id1) return true;
@@ -559,7 +556,7 @@ void TTable::Join( TTable & t1, TTable & t2, EJoinKind joinKind, bool hasMoreLef
     HasMoreLeftTuples_ = hasMoreLeftTuples;
     HasMoreRightTuples_ = hasMoreRightTuples;
 
-
+    
 }
 
 inline void TTable::GetTupleData(ui32 bucketNum, ui32 tupleId, TupleData & td) {
@@ -720,7 +717,7 @@ inline bool TTable::AddKeysToHashTable(KeysHashTable& t, ui64* keys) {
             }
 
             ui64 * stringsStart;
-            if (storedKeysSize < t.SlotSize) {
+            if (storedKeysSize <= t.SlotSize) {
                 stringsStart = it + HeaderSize;
             } else {
                 ui64 spillOffset = *(it + HeaderSize);
@@ -1031,6 +1028,12 @@ bool TTable::NextJoinedData( TupleData & td1, TupleData & td2) {
             return true;
         }
         td1.AllNulls = true;
+
+        if (!Table2Initialized_) {
+            CurrIterBucket = 0;
+            CurrJoinIdsIterIndex = 0;
+            Table2Initialized_ = true;
+        }
 
         while (HasMoreTuples(JoinTable2->TableBuckets, JoinTable2->CurrIterBucket, JoinTable2->CurrIterIndex)) {
 

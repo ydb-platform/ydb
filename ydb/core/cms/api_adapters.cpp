@@ -4,8 +4,8 @@
 #include <ydb/public/api/protos/draft/ydb_maintenance.pb.h>
 #include <ydb/library/yql/public/issue/protos/issue_severity.pb.h>
 
-#include <library/cpp/actors/core/actor_bootstrapped.h>
-#include <library/cpp/actors/core/hfunc.h>
+#include <ydb/library/actors/core/actor_bootstrapped.h>
+#include <ydb/library/actors/core/hfunc.h>
 
 #include <google/protobuf/util/time_util.h>
 
@@ -378,6 +378,7 @@ class TCreateMaintenanceTask: public TPermissionResponseProcessor<
         cmsRequest.SetAvailabilityMode(ConvertAvailabilityMode(opts.availability_mode()));
         cmsRequest.SetPartialPermissionAllowed(true);
         cmsRequest.SetSchedule(true);
+        cmsRequest.SetPriority(opts.priority());
 
         for (const auto& group : request.action_groups()) {
             Y_ABORT_UNLESS(group.actions().size() == 1);
@@ -559,7 +560,8 @@ public:
             opts.set_task_uid(taskUid);
             opts.set_description(request.GetReason());
             opts.set_availability_mode(ConvertAvailabilityMode(request.GetAvailabilityMode()));
-
+            opts.set_priority(request.GetPriority());
+            
             // pending actions
             for (const auto& action : request.GetActions()) {
                 ConvertAction(action, *result.add_action_group_states()->add_action_states());

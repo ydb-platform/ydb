@@ -5,7 +5,7 @@
  *                            | (__| |_| |  _ <| |___
  *                             \___|\___/|_| \_\_____|
  *
- * Copyright (C) 1998 - 2022, Daniel Stenberg, <daniel@haxx.se>, et al.
+ * Copyright (C) Daniel Stenberg, <daniel@haxx.se>, et al.
  *
  * This software is licensed as described in the file COPYING, which
  * you should have received as part of this distribution. The terms
@@ -208,7 +208,7 @@ ALLOC_FUNC char *curl_dbg_strdup(const char *str,
   return mem;
 }
 
-#if defined(WIN32) && defined(UNICODE)
+#if defined(_WIN32) && defined(UNICODE)
 ALLOC_FUNC wchar_t *curl_dbg_wcsdup(const wchar_t *str,
                                     int line, const char *source)
 {

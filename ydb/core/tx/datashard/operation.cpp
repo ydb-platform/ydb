@@ -2,6 +2,8 @@
 #include "key_conflicts.h"
 #include "datashard_impl.h"
 
+#include <ydb/library/actors/core/monotonic_provider.h>
+
 namespace NKikimr {
 namespace NDataShard {
 

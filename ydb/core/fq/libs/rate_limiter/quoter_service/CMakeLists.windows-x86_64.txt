@@ -14,7 +14,7 @@ target_compile_options(libs-rate_limiter-quoter_service PRIVATE
 target_link_libraries(libs-rate_limiter-quoter_service PUBLIC
   contrib-libs-cxxsupp
   yutil
-  cpp-actors-core
+  library-actors-core
   ydb-core-base
   libs-config-protos
   libs-rate_limiter-events

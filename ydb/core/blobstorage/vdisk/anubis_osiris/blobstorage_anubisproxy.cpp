@@ -4,7 +4,7 @@
 #include <ydb/core/blobstorage/base/utility.h>
 
 #include <library/cpp/monlib/service/pages/templates.h>
-#include <library/cpp/actors/core/mon.h>
+#include <ydb/library/actors/core/mon.h>
 #include <ydb/core/protos/blobstorage.pb.h>
 
 using namespace NKikimrServices;
@@ -30,7 +30,7 @@ namespace NKikimr {
 
         void Bootstrap(const TActorContext &ctx) {
             CliId = ctx.Register(Actor.release());
-            ActiveActors.Insert(CliId);
+            ActiveActors.Insert(CliId, __FILE__, __LINE__, ctx, NKikimrServices::BLOBSTORAGE);
             Become(&TThis::StateFunc);
         }
 

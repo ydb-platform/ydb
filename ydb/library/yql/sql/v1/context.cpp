@@ -55,17 +55,17 @@ THashMap<TStringBuf, TPragmaField> CTX_PRAGMA_FIELDS = {
     {"FlexibleTypes", &TContext::FlexibleTypes},
     {"AnsiCurrentRow", &TContext::AnsiCurrentRow},
     {"EmitStartsWith", &TContext::EmitStartsWith},
-    {"EnforceAnsiOrderByLimitInUnionAll", &TContext::EnforceAnsiOrderByLimitInUnionAll},
     {"EmitAggApply", &TContext::EmitAggApply},
     {"AnsiLike", &TContext::AnsiLike},
     {"UseBlocks", &TContext::UseBlocks},
+    {"BlockEngineEnable", &TContext::BlockEngineEnable},
+    {"BlockEngineForce", &TContext::BlockEngineForce},
 };
 
 typedef TMaybe<bool> TContext::*TPragmaMaybeField;
 
 THashMap<TStringBuf, TPragmaMaybeField> CTX_PRAGMA_MAYBE_FIELDS = {
     {"AnsiRankForNullableKeys", &TContext::AnsiRankForNullableKeys},
-    {"AnsiOrderByLimitInUnionAll", &TContext::AnsiOrderByLimitInUnionAll},
     {"AnsiInForEmptyOrNullableItemsCollections", &TContext::AnsiInForEmptyOrNullableItemsCollections},
     {"CompactGroupBy", &TContext::CompactGroupBy},
 };
@@ -86,6 +86,7 @@ TContext::TContext(const NSQLTranslation::TTranslationSettings& settings,
     , HasPendingErrors(false)
     , DqEngineEnable(Settings.DqDefaultAuto->Allow())
     , AnsiQuotedIdentifiers(settings.AnsiLexer)
+    , BlockEngineEnable(Settings.BlockDefaultAuto->Allow())
 {
     for (auto lib : settings.Libraries) {
         Libraries.emplace(lib, TLibraryStuff());
@@ -93,6 +94,7 @@ TContext::TContext(const NSQLTranslation::TTranslationSettings& settings,
 
     Scoped = MakeIntrusive<TScopedState>();
     AllScopes.push_back(Scoped);
+    Scoped->UnicodeLiterals = settings.UnicodeLiterals;
     if (settings.DefaultCluster) {
         Scoped->CurrCluster = TDeferredAtom({}, settings.DefaultCluster);
         auto provider = GetClusterProvider(settings.DefaultCluster);

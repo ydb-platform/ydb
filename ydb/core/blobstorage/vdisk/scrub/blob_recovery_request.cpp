@@ -49,14 +49,9 @@ namespace NKikimr {
         }
         InFlight.erase(InFlight.begin(), it);
 
-        TInstant deadline = TInstant::Max(); // next deadline
-        if (it != InFlight.end()) {
-            deadline = it->first;
-        }
-
         // reschedule timer
-        if (deadline != TInstant::Max()) {
-            Schedule(deadline, new TEvents::TEvWakeup);
+        if (it != InFlight.end()) {
+            Schedule(it->first, new TEvents::TEvWakeup);
         } else {
             WakeupScheduled = false;
         }

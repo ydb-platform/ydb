@@ -9,6 +9,7 @@
 #include <aws/core/utils/memory/stl/AWSString.h>
 #include <aws/s3/model/ServerSideEncryption.h>
 #include <aws/s3/model/RequestCharged.h>
+#include <aws/s3/model/ChecksumAlgorithm.h>
 #include <utility>
 
 namespace Aws
@@ -27,12 +28,12 @@ namespace S3
 {
 namespace Model
 {
-  class AWS_S3_API CreateMultipartUploadResult
+  class CreateMultipartUploadResult
   {
   public:
-    CreateMultipartUploadResult();
-    CreateMultipartUploadResult(const Aws::AmazonWebServiceResult<Aws::Utils::Xml::XmlDocument>& result);
-    CreateMultipartUploadResult& operator=(const Aws::AmazonWebServiceResult<Aws::Utils::Xml::XmlDocument>& result);
+    AWS_S3_API CreateMultipartUploadResult();
+    AWS_S3_API CreateMultipartUploadResult(const Aws::AmazonWebServiceResult<Aws::Utils::Xml::XmlDocument>& result);
+    AWS_S3_API CreateMultipartUploadResult& operator=(const Aws::AmazonWebServiceResult<Aws::Utils::Xml::XmlDocument>& result);
 
 
     /**
@@ -157,149 +158,156 @@ namespace Model
 
 
     /**
-     * <p>The name of the bucket to which the multipart upload was initiated. </p>
-     * <p>When using this action with an access point, you must direct requests to the
-     * access point hostname. The access point hostname takes the form
+     * <p>The name of the bucket to which the multipart upload was initiated. Does not
+     * return the access point ARN or access point alias if used.</p> <p>When using
+     * this action with an access point, you must direct requests to the access point
+     * hostname. The access point hostname takes the form
      * <i>AccessPointName</i>-<i>AccountId</i>.s3-accesspoint.<i>Region</i>.amazonaws.com.
-     * When using this action with an access point through the AWS SDKs, you provide
-     * the access point ARN in place of the bucket name. For more information about
-     * access point ARNs, see <a
+     * When using this action with an access point through the Amazon Web Services
+     * SDKs, you provide the access point ARN in place of the bucket name. For more
+     * information about access point ARNs, see <a
      * href="https://docs.aws.amazon.com/AmazonS3/latest/userguide/using-access-points.html">Using
-     * Access Points</a> in the <i>Amazon S3 User Guide</i>.</p> <p>When using this
+     * access points</a> in the <i>Amazon S3 User Guide</i>.</p> <p>When using this
      * action with Amazon S3 on Outposts, you must direct requests to the S3 on
-     * Outposts hostname. The S3 on Outposts hostname takes the form
-     * <i>AccessPointName</i>-<i>AccountId</i>.<i>outpostID</i>.s3-outposts.<i>Region</i>.amazonaws.com.
-     * When using this action using S3 on Outposts through the AWS SDKs, you provide
-     * the Outposts bucket ARN in place of the bucket name. For more information about
-     * S3 on Outposts ARNs, see <a
+     * Outposts hostname. The S3 on Outposts hostname takes the form <code>
+     * <i>AccessPointName</i>-<i>AccountId</i>.<i>outpostID</i>.s3-outposts.<i>Region</i>.amazonaws.com</code>.
+     * When using this action with S3 on Outposts through the Amazon Web Services SDKs,
+     * you provide the Outposts bucket ARN in place of the bucket name. For more
+     * information about S3 on Outposts ARNs, see <a
      * href="https://docs.aws.amazon.com/AmazonS3/latest/userguide/S3onOutposts.html">Using
-     * S3 on Outposts</a> in the <i>Amazon S3 User Guide</i>.</p>
+     * Amazon S3 on Outposts</a> in the <i>Amazon S3 User Guide</i>.</p>
      */
     inline const Aws::String& GetBucket() const{ return m_bucket; }
 
     /**
-     * <p>The name of the bucket to which the multipart upload was initiated. </p>
-     * <p>When using this action with an access point, you must direct requests to the
-     * access point hostname. The access point hostname takes the form
+     * <p>The name of the bucket to which the multipart upload was initiated. Does not
+     * return the access point ARN or access point alias if used.</p> <p>When using
+     * this action with an access point, you must direct requests to the access point
+     * hostname. The access point hostname takes the form
      * <i>AccessPointName</i>-<i>AccountId</i>.s3-accesspoint.<i>Region</i>.amazonaws.com.
-     * When using this action with an access point through the AWS SDKs, you provide
-     * the access point ARN in place of the bucket name. For more information about
-     * access point ARNs, see <a
+     * When using this action with an access point through the Amazon Web Services
+     * SDKs, you provide the access point ARN in place of the bucket name. For more
+     * information about access point ARNs, see <a
      * href="https://docs.aws.amazon.com/AmazonS3/latest/userguide/using-access-points.html">Using
-     * Access Points</a> in the <i>Amazon S3 User Guide</i>.</p> <p>When using this
+     * access points</a> in the <i>Amazon S3 User Guide</i>.</p> <p>When using this
      * action with Amazon S3 on Outposts, you must direct requests to the S3 on
-     * Outposts hostname. The S3 on Outposts hostname takes the form
-     * <i>AccessPointName</i>-<i>AccountId</i>.<i>outpostID</i>.s3-outposts.<i>Region</i>.amazonaws.com.
-     * When using this action using S3 on Outposts through the AWS SDKs, you provide
-     * the Outposts bucket ARN in place of the bucket name. For more information about
-     * S3 on Outposts ARNs, see <a
+     * Outposts hostname. The S3 on Outposts hostname takes the form <code>
+     * <i>AccessPointName</i>-<i>AccountId</i>.<i>outpostID</i>.s3-outposts.<i>Region</i>.amazonaws.com</code>.
+     * When using this action with S3 on Outposts through the Amazon Web Services SDKs,
+     * you provide the Outposts bucket ARN in place of the bucket name. For more
+     * information about S3 on Outposts ARNs, see <a
      * href="https://docs.aws.amazon.com/AmazonS3/latest/userguide/S3onOutposts.html">Using
-     * S3 on Outposts</a> in the <i>Amazon S3 User Guide</i>.</p>
+     * Amazon S3 on Outposts</a> in the <i>Amazon S3 User Guide</i>.</p>
      */
     inline void SetBucket(const Aws::String& value) { m_bucket = value; }
 
     /**
-     * <p>The name of the bucket to which the multipart upload was initiated. </p>
-     * <p>When using this action with an access point, you must direct requests to the
-     * access point hostname. The access point hostname takes the form
+     * <p>The name of the bucket to which the multipart upload was initiated. Does not
+     * return the access point ARN or access point alias if used.</p> <p>When using
+     * this action with an access point, you must direct requests to the access point
+     * hostname. The access point hostname takes the form
      * <i>AccessPointName</i>-<i>AccountId</i>.s3-accesspoint.<i>Region</i>.amazonaws.com.
-     * When using this action with an access point through the AWS SDKs, you provide
-     * the access point ARN in place of the bucket name. For more information about
-     * access point ARNs, see <a
+     * When using this action with an access point through the Amazon Web Services
+     * SDKs, you provide the access point ARN in place of the bucket name. For more
+     * information about access point ARNs, see <a
      * href="https://docs.aws.amazon.com/AmazonS3/latest/userguide/using-access-points.html">Using
-     * Access Points</a> in the <i>Amazon S3 User Guide</i>.</p> <p>When using this
+     * access points</a> in the <i>Amazon S3 User Guide</i>.</p> <p>When using this
      * action with Amazon S3 on Outposts, you must direct requests to the S3 on
-     * Outposts hostname. The S3 on Outposts hostname takes the form
-     * <i>AccessPointName</i>-<i>AccountId</i>.<i>outpostID</i>.s3-outposts.<i>Region</i>.amazonaws.com.
-     * When using this action using S3 on Outposts through the AWS SDKs, you provide
-     * the Outposts bucket ARN in place of the bucket name. For more information about
-     * S3 on Outposts ARNs, see <a
+     * Outposts hostname. The S3 on Outposts hostname takes the form <code>
+     * <i>AccessPointName</i>-<i>AccountId</i>.<i>outpostID</i>.s3-outposts.<i>Region</i>.amazonaws.com</code>.
+     * When using this action with S3 on Outposts through the Amazon Web Services SDKs,
+     * you provide the Outposts bucket ARN in place of the bucket name. For more
+     * information about S3 on Outposts ARNs, see <a
      * href="https://docs.aws.amazon.com/AmazonS3/latest/userguide/S3onOutposts.html">Using
-     * S3 on Outposts</a> in the <i>Amazon S3 User Guide</i>.</p>
+     * Amazon S3 on Outposts</a> in the <i>Amazon S3 User Guide</i>.</p>
      */
     inline void SetBucket(Aws::String&& value) { m_bucket = std::move(value); }
 
     /**
-     * <p>The name of the bucket to which the multipart upload was initiated. </p>
-     * <p>When using this action with an access point, you must direct requests to the
-     * access point hostname. The access point hostname takes the form
+     * <p>The name of the bucket to which the multipart upload was initiated. Does not
+     * return the access point ARN or access point alias if used.</p> <p>When using
+     * this action with an access point, you must direct requests to the access point
+     * hostname. The access point hostname takes the form
      * <i>AccessPointName</i>-<i>AccountId</i>.s3-accesspoint.<i>Region</i>.amazonaws.com.
-     * When using this action with an access point through the AWS SDKs, you provide
-     * the access point ARN in place of the bucket name. For more information about
-     * access point ARNs, see <a
+     * When using this action with an access point through the Amazon Web Services
+     * SDKs, you provide the access point ARN in place of the bucket name. For more
+     * information about access point ARNs, see <a
      * href="https://docs.aws.amazon.com/AmazonS3/latest/userguide/using-access-points.html">Using
-     * Access Points</a> in the <i>Amazon S3 User Guide</i>.</p> <p>When using this
+     * access points</a> in the <i>Amazon S3 User Guide</i>.</p> <p>When using this
      * action with Amazon S3 on Outposts, you must direct requests to the S3 on
-     * Outposts hostname. The S3 on Outposts hostname takes the form
-     * <i>AccessPointName</i>-<i>AccountId</i>.<i>outpostID</i>.s3-outposts.<i>Region</i>.amazonaws.com.
-     * When using this action using S3 on Outposts through the AWS SDKs, you provide
-     * the Outposts bucket ARN in place of the bucket name. For more information about
-     * S3 on Outposts ARNs, see <a
+     * Outposts hostname. The S3 on Outposts hostname takes the form <code>
+     * <i>AccessPointName</i>-<i>AccountId</i>.<i>outpostID</i>.s3-outposts.<i>Region</i>.amazonaws.com</code>.
+     * When using this action with S3 on Outposts through the Amazon Web Services SDKs,
+     * you provide the Outposts bucket ARN in place of the bucket name. For more
+     * information about S3 on Outposts ARNs, see <a
      * href="https://docs.aws.amazon.com/AmazonS3/latest/userguide/S3onOutposts.html">Using
-     * S3 on Outposts</a> in the <i>Amazon S3 User Guide</i>.</p>
+     * Amazon S3 on Outposts</a> in the <i>Amazon S3 User Guide</i>.</p>
      */
     inline void SetBucket(const char* value) { m_bucket.assign(value); }
 
     /**
-     * <p>The name of the bucket to which the multipart upload was initiated. </p>
-     * <p>When using this action with an access point, you must direct requests to the
-     * access point hostname. The access point hostname takes the form
+     * <p>The name of the bucket to which the multipart upload was initiated. Does not
+     * return the access point ARN or access point alias if used.</p> <p>When using
+     * this action with an access point, you must direct requests to the access point
+     * hostname. The access point hostname takes the form
      * <i>AccessPointName</i>-<i>AccountId</i>.s3-accesspoint.<i>Region</i>.amazonaws.com.
-     * When using this action with an access point through the AWS SDKs, you provide
-     * the access point ARN in place of the bucket name. For more information about
-     * access point ARNs, see <a
+     * When using this action with an access point through the Amazon Web Services
+     * SDKs, you provide the access point ARN in place of the bucket name. For more
+     * information about access point ARNs, see <a
      * href="https://docs.aws.amazon.com/AmazonS3/latest/userguide/using-access-points.html">Using
-     * Access Points</a> in the <i>Amazon S3 User Guide</i>.</p> <p>When using this
+     * access points</a> in the <i>Amazon S3 User Guide</i>.</p> <p>When using this
      * action with Amazon S3 on Outposts, you must direct requests to the S3 on
-     * Outposts hostname. The S3 on Outposts hostname takes the form
-     * <i>AccessPointName</i>-<i>AccountId</i>.<i>outpostID</i>.s3-outposts.<i>Region</i>.amazonaws.com.
-     * When using this action using S3 on Outposts through the AWS SDKs, you provide
-     * the Outposts bucket ARN in place of the bucket name. For more information about
-     * S3 on Outposts ARNs, see <a
+     * Outposts hostname. The S3 on Outposts hostname takes the form <code>
+     * <i>AccessPointName</i>-<i>AccountId</i>.<i>outpostID</i>.s3-outposts.<i>Region</i>.amazonaws.com</code>.
+     * When using this action with S3 on Outposts through the Amazon Web Services SDKs,
+     * you provide the Outposts bucket ARN in place of the bucket name. For more
+     * information about S3 on Outposts ARNs, see <a
      * href="https://docs.aws.amazon.com/AmazonS3/latest/userguide/S3onOutposts.html">Using
-     * S3 on Outposts</a> in the <i>Amazon S3 User Guide</i>.</p>
+     * Amazon S3 on Outposts</a> in the <i>Amazon S3 User Guide</i>.</p>
      */
     inline CreateMultipartUploadResult& WithBucket(const Aws::String& value) { SetBucket(value); return *this;}
 
     /**
-     * <p>The name of the bucket to which the multipart upload was initiated. </p>
-     * <p>When using this action with an access point, you must direct requests to the
-     * access point hostname. The access point hostname takes the form
+     * <p>The name of the bucket to which the multipart upload was initiated. Does not
+     * return the access point ARN or access point alias if used.</p> <p>When using
+     * this action with an access point, you must direct requests to the access point
+     * hostname. The access point hostname takes the form
      * <i>AccessPointName</i>-<i>AccountId</i>.s3-accesspoint.<i>Region</i>.amazonaws.com.
-     * When using this action with an access point through the AWS SDKs, you provide
-     * the access point ARN in place of the bucket name. For more information about
-     * access point ARNs, see <a
+     * When using this action with an access point through the Amazon Web Services
+     * SDKs, you provide the access point ARN in place of the bucket name. For more
+     * information about access point ARNs, see <a
      * href="https://docs.aws.amazon.com/AmazonS3/latest/userguide/using-access-points.html">Using
-     * Access Points</a> in the <i>Amazon S3 User Guide</i>.</p> <p>When using this
+     * access points</a> in the <i>Amazon S3 User Guide</i>.</p> <p>When using this
      * action with Amazon S3 on Outposts, you must direct requests to the S3 on
-     * Outposts hostname. The S3 on Outposts hostname takes the form
-     * <i>AccessPointName</i>-<i>AccountId</i>.<i>outpostID</i>.s3-outposts.<i>Region</i>.amazonaws.com.
-     * When using this action using S3 on Outposts through the AWS SDKs, you provide
-     * the Outposts bucket ARN in place of the bucket name. For more information about
-     * S3 on Outposts ARNs, see <a
+     * Outposts hostname. The S3 on Outposts hostname takes the form <code>
+     * <i>AccessPointName</i>-<i>AccountId</i>.<i>outpostID</i>.s3-outposts.<i>Region</i>.amazonaws.com</code>.
+     * When using this action with S3 on Outposts through the Amazon Web Services SDKs,
+     * you provide the Outposts bucket ARN in place of the bucket name. For more
+     * information about S3 on Outposts ARNs, see <a
      * href="https://docs.aws.amazon.com/AmazonS3/latest/userguide/S3onOutposts.html">Using
-     * S3 on Outposts</a> in the <i>Amazon S3 User Guide</i>.</p>
+     * Amazon S3 on Outposts</a> in the <i>Amazon S3 User Guide</i>.</p>
      */
     inline CreateMultipartUploadResult& WithBucket(Aws::String&& value) { SetBucket(std::move(value)); return *this;}
 
     /**
-     * <p>The name of the bucket to which the multipart upload was initiated. </p>
-     * <p>When using this action with an access point, you must direct requests to the
-     * access point hostname. The access point hostname takes the form
+     * <p>The name of the bucket to which the multipart upload was initiated. Does not
+     * return the access point ARN or access point alias if used.</p> <p>When using
+     * this action with an access point, you must direct requests to the access point
+     * hostname. The access point hostname takes the form
      * <i>AccessPointName</i>-<i>AccountId</i>.s3-accesspoint.<i>Region</i>.amazonaws.com.
-     * When using this action with an access point through the AWS SDKs, you provide
-     * the access point ARN in place of the bucket name. For more information about
-     * access point ARNs, see <a
+     * When using this action with an access point through the Amazon Web Services
+     * SDKs, you provide the access point ARN in place of the bucket name. For more
+     * information about access point ARNs, see <a
      * href="https://docs.aws.amazon.com/AmazonS3/latest/userguide/using-access-points.html">Using
-     * Access Points</a> in the <i>Amazon S3 User Guide</i>.</p> <p>When using this
+     * access points</a> in the <i>Amazon S3 User Guide</i>.</p> <p>When using this
      * action with Amazon S3 on Outposts, you must direct requests to the S3 on
-     * Outposts hostname. The S3 on Outposts hostname takes the form
-     * <i>AccessPointName</i>-<i>AccountId</i>.<i>outpostID</i>.s3-outposts.<i>Region</i>.amazonaws.com.
-     * When using this action using S3 on Outposts through the AWS SDKs, you provide
-     * the Outposts bucket ARN in place of the bucket name. For more information about
-     * S3 on Outposts ARNs, see <a
+     * Outposts hostname. The S3 on Outposts hostname takes the form <code>
+     * <i>AccessPointName</i>-<i>AccountId</i>.<i>outpostID</i>.s3-outposts.<i>Region</i>.amazonaws.com</code>.
+     * When using this action with S3 on Outposts through the Amazon Web Services SDKs,
+     * you provide the Outposts bucket ARN in place of the bucket name. For more
+     * information about S3 on Outposts ARNs, see <a
      * href="https://docs.aws.amazon.com/AmazonS3/latest/userguide/S3onOutposts.html">Using
-     * S3 on Outposts</a> in the <i>Amazon S3 User Guide</i>.</p>
+     * Amazon S3 on Outposts</a> in the <i>Amazon S3 User Guide</i>.</p>
      */
     inline CreateMultipartUploadResult& WithBucket(const char* value) { SetBucket(value); return *this;}
 
@@ -508,120 +516,120 @@ namespace Model
 
 
     /**
-     * <p>If present, specifies the ID of the AWS Key Management Service (AWS KMS)
-     * symmetric customer managed customer master key (CMK) that was used for the
-     * object.</p>
+     * <p>If present, specifies the ID of the Amazon Web Services Key Management
+     * Service (Amazon Web Services KMS) symmetric customer managed key that was used
+     * for the object.</p>
      */
     inline const Aws::String& GetSSEKMSKeyId() const{ return m_sSEKMSKeyId; }
 
     /**
-     * <p>If present, specifies the ID of the AWS Key Management Service (AWS KMS)
-     * symmetric customer managed customer master key (CMK) that was used for the
-     * object.</p>
+     * <p>If present, specifies the ID of the Amazon Web Services Key Management
+     * Service (Amazon Web Services KMS) symmetric customer managed key that was used
+     * for the object.</p>
      */
     inline void SetSSEKMSKeyId(const Aws::String& value) { m_sSEKMSKeyId = value; }
 
     /**
-     * <p>If present, specifies the ID of the AWS Key Management Service (AWS KMS)
-     * symmetric customer managed customer master key (CMK) that was used for the
-     * object.</p>
+     * <p>If present, specifies the ID of the Amazon Web Services Key Management
+     * Service (Amazon Web Services KMS) symmetric customer managed key that was used
+     * for the object.</p>
      */
     inline void SetSSEKMSKeyId(Aws::String&& value) { m_sSEKMSKeyId = std::move(value); }
 
     /**
-     * <p>If present, specifies the ID of the AWS Key Management Service (AWS KMS)
-     * symmetric customer managed customer master key (CMK) that was used for the
-     * object.</p>
+     * <p>If present, specifies the ID of the Amazon Web Services Key Management
+     * Service (Amazon Web Services KMS) symmetric customer managed key that was used
+     * for the object.</p>
      */
     inline void SetSSEKMSKeyId(const char* value) { m_sSEKMSKeyId.assign(value); }
 
     /**
-     * <p>If present, specifies the ID of the AWS Key Management Service (AWS KMS)
-     * symmetric customer managed customer master key (CMK) that was used for the
-     * object.</p>
+     * <p>If present, specifies the ID of the Amazon Web Services Key Management
+     * Service (Amazon Web Services KMS) symmetric customer managed key that was used
+     * for the object.</p>
      */
     inline CreateMultipartUploadResult& WithSSEKMSKeyId(const Aws::String& value) { SetSSEKMSKeyId(value); return *this;}
 
     /**
-     * <p>If present, specifies the ID of the AWS Key Management Service (AWS KMS)
-     * symmetric customer managed customer master key (CMK) that was used for the
-     * object.</p>
+     * <p>If present, specifies the ID of the Amazon Web Services Key Management
+     * Service (Amazon Web Services KMS) symmetric customer managed key that was used
+     * for the object.</p>
      */
     inline CreateMultipartUploadResult& WithSSEKMSKeyId(Aws::String&& value) { SetSSEKMSKeyId(std::move(value)); return *this;}
 
     /**
-     * <p>If present, specifies the ID of the AWS Key Management Service (AWS KMS)
-     * symmetric customer managed customer master key (CMK) that was used for the
-     * object.</p>
+     * <p>If present, specifies the ID of the Amazon Web Services Key Management
+     * Service (Amazon Web Services KMS) symmetric customer managed key that was used
+     * for the object.</p>
      */
     inline CreateMultipartUploadResult& WithSSEKMSKeyId(const char* value) { SetSSEKMSKeyId(value); return *this;}
 
 
     /**
-     * <p>If present, specifies the AWS KMS Encryption Context to use for object
-     * encryption. The value of this header is a base64-encoded UTF-8 string holding
-     * JSON with the encryption context key-value pairs.</p>
+     * <p>If present, specifies the Amazon Web Services KMS Encryption Context to use
+     * for object encryption. The value of this header is a base64-encoded UTF-8 string
+     * holding JSON with the encryption context key-value pairs.</p>
      */
     inline const Aws::String& GetSSEKMSEncryptionContext() const{ return m_sSEKMSEncryptionContext; }
 
     /**
-     * <p>If present, specifies the AWS KMS Encryption Context to use for object
-     * encryption. The value of this header is a base64-encoded UTF-8 string holding
-     * JSON with the encryption context key-value pairs.</p>
+     * <p>If present, specifies the Amazon Web Services KMS Encryption Context to use
+     * for object encryption. The value of this header is a base64-encoded UTF-8 string
+     * holding JSON with the encryption context key-value pairs.</p>
      */
     inline void SetSSEKMSEncryptionContext(const Aws::String& value) { m_sSEKMSEncryptionContext = value; }
 
     /**
-     * <p>If present, specifies the AWS KMS Encryption Context to use for object
-     * encryption. The value of this header is a base64-encoded UTF-8 string holding
-     * JSON with the encryption context key-value pairs.</p>
+     * <p>If present, specifies the Amazon Web Services KMS Encryption Context to use
+     * for object encryption. The value of this header is a base64-encoded UTF-8 string
+     * holding JSON with the encryption context key-value pairs.</p>
      */
     inline void SetSSEKMSEncryptionContext(Aws::String&& value) { m_sSEKMSEncryptionContext = std::move(value); }
 
     /**
-     * <p>If present, specifies the AWS KMS Encryption Context to use for object
-     * encryption. The value of this header is a base64-encoded UTF-8 string holding
-     * JSON with the encryption context key-value pairs.</p>
+     * <p>If present, specifies the Amazon Web Services KMS Encryption Context to use
+     * for object encryption. The value of this header is a base64-encoded UTF-8 string
+     * holding JSON with the encryption context key-value pairs.</p>
      */
     inline void SetSSEKMSEncryptionContext(const char* value) { m_sSEKMSEncryptionContext.assign(value); }
 
     /**
-     * <p>If present, specifies the AWS KMS Encryption Context to use for object
-     * encryption. The value of this header is a base64-encoded UTF-8 string holding
-     * JSON with the encryption context key-value pairs.</p>
+     * <p>If present, specifies the Amazon Web Services KMS Encryption Context to use
+     * for object encryption. The value of this header is a base64-encoded UTF-8 string
+     * holding JSON with the encryption context key-value pairs.</p>
      */
     inline CreateMultipartUploadResult& WithSSEKMSEncryptionContext(const Aws::String& value) { SetSSEKMSEncryptionContext(value); return *this;}
 
     /**
-     * <p>If present, specifies the AWS KMS Encryption Context to use for object
-     * encryption. The value of this header is a base64-encoded UTF-8 string holding
-     * JSON with the encryption context key-value pairs.</p>
+     * <p>If present, specifies the Amazon Web Services KMS Encryption Context to use
+     * for object encryption. The value of this header is a base64-encoded UTF-8 string
+     * holding JSON with the encryption context key-value pairs.</p>
      */
     inline CreateMultipartUploadResult& WithSSEKMSEncryptionContext(Aws::String&& value) { SetSSEKMSEncryptionContext(std::move(value)); return *this;}
 
     /**
-     * <p>If present, specifies the AWS KMS Encryption Context to use for object
-     * encryption. The value of this header is a base64-encoded UTF-8 string holding
-     * JSON with the encryption context key-value pairs.</p>
+     * <p>If present, specifies the Amazon Web Services KMS Encryption Context to use
+     * for object encryption. The value of this header is a base64-encoded UTF-8 string
+     * holding JSON with the encryption context key-value pairs.</p>
      */
     inline CreateMultipartUploadResult& WithSSEKMSEncryptionContext(const char* value) { SetSSEKMSEncryptionContext(value); return *this;}
 
 
     /**
      * <p>Indicates whether the multipart upload uses an S3 Bucket Key for server-side
-     * encryption with AWS KMS (SSE-KMS).</p>
+     * encryption with Amazon Web Services KMS (SSE-KMS).</p>
      */
     inline bool GetBucketKeyEnabled() const{ return m_bucketKeyEnabled; }
 
     /**
      * <p>Indicates whether the multipart upload uses an S3 Bucket Key for server-side
-     * encryption with AWS KMS (SSE-KMS).</p>
+     * encryption with Amazon Web Services KMS (SSE-KMS).</p>
      */
     inline void SetBucketKeyEnabled(bool value) { m_bucketKeyEnabled = value; }
 
     /**
      * <p>Indicates whether the multipart upload uses an S3 Bucket Key for server-side
-     * encryption with AWS KMS (SSE-KMS).</p>
+     * encryption with Amazon Web Services KMS (SSE-KMS).</p>
      */
     inline CreateMultipartUploadResult& WithBucketKeyEnabled(bool value) { SetBucketKeyEnabled(value); return *this;}
 
@@ -640,6 +648,32 @@ namespace Model
 
     
     inline CreateMultipartUploadResult& WithRequestCharged(RequestCharged&& value) { SetRequestCharged(std::move(value)); return *this;}
+
+
+    /**
+     * <p>The algorithm that was used to create a checksum of the object.</p>
+     */
+    inline const ChecksumAlgorithm& GetChecksumAlgorithm() const{ return m_checksumAlgorithm; }
+
+    /**
+     * <p>The algorithm that was used to create a checksum of the object.</p>
+     */
+    inline void SetChecksumAlgorithm(const ChecksumAlgorithm& value) { m_checksumAlgorithm = value; }
+
+    /**
+     * <p>The algorithm that was used to create a checksum of the object.</p>
+     */
+    inline void SetChecksumAlgorithm(ChecksumAlgorithm&& value) { m_checksumAlgorithm = std::move(value); }
+
+    /**
+     * <p>The algorithm that was used to create a checksum of the object.</p>
+     */
+    inline CreateMultipartUploadResult& WithChecksumAlgorithm(const ChecksumAlgorithm& value) { SetChecksumAlgorithm(value); return *this;}
+
+    /**
+     * <p>The algorithm that was used to create a checksum of the object.</p>
+     */
+    inline CreateMultipartUploadResult& WithChecksumAlgorithm(ChecksumAlgorithm&& value) { SetChecksumAlgorithm(std::move(value)); return *this;}
 
   private:
 
@@ -666,6 +700,8 @@ namespace Model
     bool m_bucketKeyEnabled;
 
     RequestCharged m_requestCharged;
+
+    ChecksumAlgorithm m_checksumAlgorithm;
   };
 
 } // namespace Model

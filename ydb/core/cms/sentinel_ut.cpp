@@ -156,7 +156,7 @@ Y_UNIT_TEST_SUITE(TSentinelBaseTests) {
                     location.SetUnit(ToString(id));
 
                     state->ClusterInfo->AddNode(TEvInterconnect::TNodeInfo(id, name, name, name, 10000, TNodeLocation(location)), nullptr);
-                    sentinelState->Nodes[id] = NSentinel::TNodeInfo{name, NActors::TNodeLocation(location)};
+                    sentinelState->Nodes[id] = NSentinel::TNodeInfo{name, NActors::TNodeLocation(location), {}};
 
                     for (ui64 npdisk : xrange(pdisksPerNode)) {
                         NKikimrBlobStorage::TBaseConfig::TPDisk pdisk;
@@ -366,6 +366,8 @@ Y_UNIT_TEST_SUITE(TSentinelTests) {
         explicit TTestEnv(ui32 nodeCount, ui32 pdisks)
             : TCmsTestEnv(nodeCount, pdisks)
         {
+            SetLogPriority(NKikimrServices::CMS, NLog::PRI_DEBUG);
+
             SetScheduledEventFilter([this](TTestActorRuntimeBase&, TAutoPtr<IEventHandle>& ev, TDuration, TInstant&) -> bool {
                 if (ev->Recipient != Sentinel) {
                     return true;
@@ -381,25 +383,23 @@ Y_UNIT_TEST_SUITE(TSentinelTests) {
                         return true;
                 }
             });
+
             auto prevObserver = SetObserverFunc(&TTestActorRuntimeBase::DefaultObserverFunc);
-            SetObserverFunc([this, prevObserver](
-                                    TAutoPtr<IEventHandle> &event){
-                switch (event->GetTypeRewrite()) {
-                case TEvCms::TEvClusterStateRequest::EventType:
-                {
-                    TAutoPtr<TEvCms::TEvClusterStateResponse> resp = new TEvCms::TEvClusterStateResponse;
+            SetObserverFunc([this, prevObserver](TAutoPtr<IEventHandle>& ev) {
+                if (ev->GetTypeRewrite() == TEvCms::TEvClusterStateRequest::EventType) {
+                    auto response = MakeHolder<TEvCms::TEvClusterStateResponse>();
+                    auto& record = response->Record;
                     if (State) {
-                        resp->Record.MutableStatus()->SetCode(NKikimrCms::TStatus::OK);
-                        for (const auto &entry : State->ClusterInfo->AllNodes()) {
-                            NCms::TCms::AddHostState(State->ClusterInfo, *entry.second, resp->Record, State->ClusterInfo->GetTimestamp());
+                        record.MutableStatus()->SetCode(NKikimrCms::TStatus::OK);
+                        for (auto [_, nodeInfo]: State->ClusterInfo->AllNodes()) {
+                            NCms::TCms::AddHostState(State->ClusterInfo, *nodeInfo, record, State->ClusterInfo->GetTimestamp());
                         }
                     }
-                    Send(new IEventHandle(event->Sender, TActorId(), resp.Release()));
-                    return TTestActorRuntime::EEventAction::PROCESS;
+                    Send(ev->Sender, TActorId(), response.Release());
+                    return TTestActorRuntime::EEventAction::DROP;
                 }
-                default:
-                    return prevObserver(event);
-                }
+
+                return prevObserver(ev);
             });
 
             State = new TCmsState;
@@ -409,8 +409,6 @@ Y_UNIT_TEST_SUITE(TSentinelTests) {
             Sentinel = Register(CreateSentinel(State));
             EnableScheduleForActor(Sentinel, true);
             WaitForSentinelBoot();
-
-            SetLogPriority(NKikimrServices::CMS, NLog::PRI_DEBUG);
         }
 
         TPDiskID RandomPDiskID() const {

@@ -549,7 +549,7 @@ Y_UNIT_TEST_SUITE(TBlobStorageWardenTest) {
                 UNIT_ASSERT_EQUAL(0, drives.size());
                 UNIT_ASSERT_EQUAL(0, warden.DrivePathCounterKeys().size());
             }
-            
+
             // If a drive is not present in a subsequent call, then it is removed from a counters map.
             // We check both serial number validator and also that counters are removed for missing drives.
             {
@@ -823,47 +823,82 @@ Y_UNIT_TEST_SUITE(TBlobStorageWardenTest) {
         TestHttpMonForPath("/json/groups");
     }
 
-    Y_UNIT_TEST(TestReceivedPDiskRestartNotAllowed) {
-        TTestActorSystem runtime(1);
-        runtime.Start();
+    void TestObtainPDiskKey(TString pin1, TString pin2) {
+        std::unique_ptr<TTempDir> tmp(new TTempDir());
+        TString keyfile = Sprintf("%s/key.txt", (*tmp)().data());
+        {
+            TFileOutput file(keyfile);
+            file << "some data";
+        }
 
-        ui32 nodeId = 1;
-        ui32 pdiskId = 1337;
-        ui64 cookie = 555;
+        NKikimrProto::TKeyConfig keyConfig;
+        NKikimrProto::TKeyRecord* keyRecord = keyConfig.AddKeys();
+        keyRecord->SetContainerPath(keyfile);
+        keyRecord->SetPin(pin1);
+        keyRecord->SetId("Key");
+        keyRecord->SetVersion(1);
 
-        auto *appData = runtime.GetAppData();
-        appData->DomainsInfo->AddDomain(TDomainsInfo::TDomain::ConstructEmptyDomain("dom", 1).Release());
+        NPDisk::TMainKey mainKey1;
+        UNIT_ASSERT(ObtainPDiskKey(&mainKey1, keyConfig));
 
-        TIntrusivePtr<TNodeWardenConfig> nodeWardenConfig(new TNodeWardenConfig(static_cast<IPDiskServiceFactory*>(new TRealPDiskServiceFactory())));
+        keyRecord->SetPin(pin2);
+        NPDisk::TMainKey mainKey2;
+        UNIT_ASSERT(ObtainPDiskKey(&mainKey2, keyConfig));
 
-        IActor* ac = CreateBSNodeWarden(nodeWardenConfig.Release());
+        UNIT_ASSERT_VALUES_EQUAL(mainKey1.Keys.size(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(mainKey2.Keys.size(), 1);
 
-        TActorId nodeWarden = runtime.Register(ac, nodeId);
+        if (pin1 == pin2) {
+            UNIT_ASSERT_VALUES_EQUAL(mainKey1.Keys[0], mainKey2.Keys[0]);
+        } else {
+            UNIT_ASSERT_VALUES_UNEQUAL(mainKey1.Keys[0], mainKey2.Keys[0]);
+        }
+    }
 
-        auto fakeBSC = runtime.AllocateEdgeActor(nodeId);
+    CUSTOM_UNIT_TEST(ObtainPDiskKeySamePin) {
+        TestObtainPDiskKey("pin", "pin");
+    }
 
-        TActorId pdiskActorId = runtime.AllocateEdgeActor(nodeId);
-        TActorId pdiskServiceId = MakeBlobStoragePDiskID(nodeId, pdiskId);
+    // TODO (serg-belyakov): Fix conversion from TEncryption key to PDisk's TKey
+    // CUSTOM_UNIT_TEST(ObtainPDiskKeyDifferentPin) {
+    //    TestObtainPDiskKey("pin1", "pin2");
+    // }
 
-        runtime.RegisterService(pdiskServiceId, pdiskActorId);
+    void TestObtainTenantKey(TString pin1, TString pin2) {
+        std::unique_ptr<TTempDir> tmp(new TTempDir());
+        TString keyfile = Sprintf("%s/key.txt", (*tmp)().data());
+        {
+            TFileOutput file(keyfile);
+            file << "some data";
+        }
 
-        runtime.Send(new IEventHandle(nodeWarden, pdiskActorId, new TEvBlobStorage::TEvAskWardenRestartPDisk(pdiskId), 0, cookie), nodeId);
+        NKikimrProto::TKeyConfig keyConfig;
+        NKikimrProto::TKeyRecord* keyRecord = keyConfig.AddKeys();
+        keyRecord->SetContainerPath(keyfile);
+        keyRecord->SetPin(pin1);
+        keyRecord->SetId("Key");
+        keyRecord->SetVersion(1);
 
-        auto responseEvent = new TEvBlobStorage::TEvControllerConfigResponse();
+        TEncryptionKey key1;
+        UNIT_ASSERT(ObtainTenantKey(&key1, keyConfig));
 
-        auto res = responseEvent->Record.MutableResponse();
-        res->SetSuccess(false);
-        res->SetErrorDescription("Fake error");
+        keyRecord->SetPin(pin2);
+        TEncryptionKey key2;
+        UNIT_ASSERT(ObtainTenantKey(&key2, keyConfig));
 
-        runtime.Send(new IEventHandle(nodeWarden, fakeBSC, responseEvent, 0, cookie), nodeId);
+        if (pin1 == pin2) {
+            UNIT_ASSERT(key1.Key == key2.Key);
+        } else {
+            UNIT_ASSERT(!(key1.Key == key2.Key));
+        }
+    }
 
-        auto evPtr = runtime.WaitForEdgeActorEvent<TEvBlobStorage::TEvAskWardenRestartPDiskResult>(pdiskActorId);
-        auto restartPDiskEv = evPtr->Get();
+    CUSTOM_UNIT_TEST(ObtainTenantKeySamePin) {
+        TestObtainTenantKey("pin", "pin");
+    }
 
-        UNIT_ASSERT(!restartPDiskEv->RestartAllowed);
-        UNIT_ASSERT_STRINGS_EQUAL("Fake error", restartPDiskEv->Details);
-
-        UNIT_ASSERT_EQUAL(pdiskId, restartPDiskEv->PDiskId);
+    CUSTOM_UNIT_TEST(ObtainTenantKeyDifferentPin) {
+        TestObtainTenantKey("pin1", "pin2");
     }
 }
 

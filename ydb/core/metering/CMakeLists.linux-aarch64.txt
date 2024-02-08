@@ -26,7 +26,7 @@ target_link_libraries(ydb-core-metering PUBLIC
   contrib-libs-cxxsupp
   yutil
   tools-enum_parser-enum_serialization_runtime
-  cpp-actors-core
+  library-actors-core
   library-cpp-json
   library-cpp-logger
   ydb-core-base
@@ -49,7 +49,7 @@ target_link_libraries(ydb-core-metering.global PUBLIC
   contrib-libs-cxxsupp
   yutil
   tools-enum_parser-enum_serialization_runtime
-  cpp-actors-core
+  library-actors-core
   library-cpp-json
   library-cpp-logger
   ydb-core-base

@@ -12,7 +12,7 @@ add_library(ydb-services-fq)
 target_link_libraries(ydb-services-fq PUBLIC
   contrib-libs-cxxsupp
   yutil
-  cpp-grpc-server
+  library-grpc-server
   library-cpp-retry
   fq-libs-grpc
   ydb-core-grpc_services

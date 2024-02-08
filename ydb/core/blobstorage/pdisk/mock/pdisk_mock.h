@@ -2,7 +2,7 @@
 
 #include <ydb/core/blobstorage/pdisk/blobstorage_pdisk.h>
 #include <ydb/core/util/interval_set.h>
-#include <library/cpp/actors/core/actor.h>
+#include <ydb/library/actors/core/actor.h>
 #include <util/generic/ptr.h>
 
 namespace NKikimr {
@@ -21,11 +21,13 @@ namespace NKikimr {
         using TPtr = TIntrusivePtr<TPDiskMockState>;
 
     public:
-        TPDiskMockState(ui32 nodeId, ui32 pdiskId, ui64 pdiskGuid, ui64 size, ui32 chunkSize = 128 << 20);
+        TPDiskMockState(ui32 nodeId, ui32 pdiskId, ui64 pdiskGuid, ui64 size, ui32 chunkSize = 128 << 20,
+                NPDisk::EDeviceType deviceType = NPDisk::EDeviceType::DEVICE_TYPE_NVME);
         TPDiskMockState(std::unique_ptr<TImpl>&& impl);
         ~TPDiskMockState();
 
         void SetCorruptedArea(ui32 chunkIdx, ui32 begin, ui32 end, bool enabled);
+        bool HasCorruptedArea(ui32 chunkIdx, ui32 begin, ui32 end);
         std::set<ui32> GetChunks();
         TMaybe<NPDisk::TOwnerRound> GetOwnerRound(const TVDiskID& vDiskId) const;
         ui32 GetChunkSize() const;

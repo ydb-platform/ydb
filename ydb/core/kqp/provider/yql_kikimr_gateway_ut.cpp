@@ -73,9 +73,9 @@ TIntrusivePtr<IKqpGateway> GetIcGateway(Tests::TServer& server) {
     counters->Counters = new TKqpCounters(server.GetRuntime()->GetAppData(0).Counters);
     counters->TxProxyMon = new NTxProxy::TTxProxyMon(server.GetRuntime()->GetAppData(0).Counters);
 
-    std::shared_ptr<NYql::IKikimrGateway::IKqpTableMetadataLoader> loader = std::make_shared<TKqpTableMetadataLoader>(server.GetRuntime()->GetAnyNodeActorSystem(),TIntrusivePtr<NYql::TKikimrConfiguration>(nullptr), false);
-    return CreateKikimrIcGateway(TestCluster, "/Root", std::move(loader), server.GetRuntime()->GetAnyNodeActorSystem(),
-        server.GetRuntime()->GetNodeId(0), counters);
+    std::shared_ptr<NYql::IKikimrGateway::IKqpTableMetadataLoader> loader = std::make_shared<TKqpTableMetadataLoader>(TestCluster, server.GetRuntime()->GetAnyNodeActorSystem(),TIntrusivePtr<NYql::TKikimrConfiguration>(nullptr), false);
+    return CreateKikimrIcGateway(TestCluster, NKikimrKqp::QUERY_TYPE_SQL_GENERIC_QUERY, "/Root", std::move(loader), server.GetRuntime()->GetAnyNodeActorSystem(),
+        server.GetRuntime()->GetNodeId(0), counters, server.GetSettings().AppConfig->GetQueryServiceConfig());
 }
 
 void TestListPathCommon(TIntrusivePtr<IKikimrGateway> gateway) {
@@ -170,7 +170,7 @@ void TestCreateExternalTable(TTestActorRuntime& runtime, TIntrusivePtr<IKikimrGa
     settings.Columns.insert(std::make_pair("Column2", TKikimrColumnMetadata{"Column2", 0, "String", false}));
     settings.ColumnOrder.push_back("Column2");
 
-    auto responseFuture = gateway->CreateExternalTable(TestCluster, settings, true);
+    auto responseFuture = gateway->CreateExternalTable(TestCluster, settings, true, false, false);
     responseFuture.Wait();
     auto response = responseFuture.GetValue();
     response.Issues().PrintTo(Cerr);
@@ -190,7 +190,7 @@ void TestCreateExternalTable(TTestActorRuntime& runtime, TIntrusivePtr<IKikimrGa
 }
 
 void TestDropExternalTable(TTestActorRuntime& runtime, TIntrusivePtr<IKikimrGateway> gateway, const TString& path) {
-    auto responseFuture = gateway->DropExternalTable(TestCluster, TDropExternalTableSettings{.ExternalTable=path});
+    auto responseFuture = gateway->DropExternalTable(TestCluster, TDropExternalTableSettings{.ExternalTable=path}, false);
     responseFuture.Wait();
     auto response = responseFuture.GetValue();
     response.Issues().PrintTo(Cerr);
@@ -307,7 +307,7 @@ Y_UNIT_TEST_SUITE(KikimrIcGateway) {
         auto createSecretQueryResult = session.ExecuteSchemeQuery(createSecretQuery).GetValueSync();
         UNIT_ASSERT_C(createSecretQueryResult.GetStatus() == NYdb::EStatus::SUCCESS, createSecretQueryResult.GetIssues().ToString());
     }
-    
+
     Y_UNIT_TEST(TestLoadServiceAccountSecretValueFromExternalDataSourceMetadata) {
         TKikimrRunner kikimr;
         kikimr.GetTestServer().GetRuntime()->GetAppData(0).FeatureFlags.SetEnableExternalDataSources(true);
@@ -434,7 +434,8 @@ Y_UNIT_TEST_SUITE(KikimrIcGateway) {
                 LOCATION="my-bucket",
                 AUTH_METHOD="AWS",
                 AWS_ACCESS_KEY_ID_SECRET_NAME=")" << awsAccessKeyIdSecretId << R"(",
-                AWS_SECRET_ACCESS_KEY_SECRET_NAME=")" << awsSecretAccessKeySecretId << R"("
+                AWS_SECRET_ACCESS_KEY_SECRET_NAME=")" << awsSecretAccessKeySecretId << R"(",
+                AWS_REGION="ru-central-1"
             );)";
         auto result = session.ExecuteSchemeQuery(query).GetValueSync();
         UNIT_ASSERT_C(result.GetStatus() == NYdb::EStatus::SUCCESS, result.GetIssues().ToString());
@@ -446,6 +447,7 @@ Y_UNIT_TEST_SUITE(KikimrIcGateway) {
         UNIT_ASSERT_C(response.Success(), response.Issues().ToOneLineString());
         UNIT_ASSERT_VALUES_EQUAL(response.Metadata->ExternalSource.AwsAccessKeyId, awsAccessKeyIdSecretValue);
         UNIT_ASSERT_VALUES_EQUAL(response.Metadata->ExternalSource.AwsSecretAccessKey, awsSecretAccessKeySecretValue);
+        UNIT_ASSERT_VALUES_EQUAL(response.Metadata->ExternalSource.DataSourceAuth.GetAws().GetAwsRegion(), "ru-central-1");
     }
 
     Y_UNIT_TEST(TestLoadDataSourceProperties) {

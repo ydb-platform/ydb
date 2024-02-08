@@ -29,13 +29,11 @@ protected:
         return result;
     }
 public:
-    const TMark DefaultMark;
     THashMap<ui64, std::vector<NIndexedReader::TSortableBatchPosition>> PathToGranule; // pathId -> positions (sorted by pk)
 public:
-    TInsertColumnEngineChanges(const TMark& defaultMark, std::vector<NOlap::TInsertedData>&& dataToIndex, const TSplitSettings& splitSettings, const TSaverContext& saverContext)
+    TInsertColumnEngineChanges(std::vector<NOlap::TInsertedData>&& dataToIndex, const TSplitSettings& splitSettings, const TSaverContext& saverContext)
         : TBase(splitSettings, saverContext, StaticTypeName())
         , DataToIndex(std::move(dataToIndex))
-        , DefaultMark(defaultMark)
     {
     }
 

@@ -611,9 +611,8 @@ protected:
 
             auto listObj = listPacker.Unpack(TRope(serialized), HolderFactory);
             UNIT_ASSERT_VALUES_EQUAL(listObj.GetListLength(), count);
-            ui32 i = 0;
             const auto iter = listObj.GetListIterator();
-            for (NUdf::TUnboxedValue uVal; iter.Next(uVal); ++i) {
+            for (NUdf::TUnboxedValue uVal; iter.Next(uVal);) {
                 UNIT_ASSERT(uVal);
                 UNIT_ASSERT_VALUES_EQUAL(std::string_view(uVal.AsStringRef()), str);
             }
@@ -628,7 +627,7 @@ protected:
         }
     }
 
-    void DoTestBlockPacking(ui64 offset, ui64 len) {
+    void DoTestBlockPacking(ui64 offset, ui64 len, bool legacyStruct) {
         if constexpr (Transport) {
             auto strType = PgmBuilder.NewDataType(NUdf::TDataType<char*>::Id);
             auto ui32Type = PgmBuilder.NewDataType(NUdf::TDataType<ui32>::Id);
@@ -645,8 +644,18 @@ protected:
             auto blockOptTupleOptUi32StrType = PgmBuilder.NewBlockType(optTupleOptUi32StrType, TBlockType::EShape::Many);
             auto scalarUi64Type = PgmBuilder.NewBlockType(ui64Type, TBlockType::EShape::Scalar);
 
-            auto rowType = PgmBuilder.NewMultiType({ blockUi32Type, blockOptStrType, scalarOptStrType, blockOptTupleOptUi32StrType, scalarUi64Type });
-
+            auto rowType =
+                legacyStruct
+                    ? PgmBuilder.NewStructType({
+                          {"A", blockUi32Type},
+                          {"B", blockOptStrType},
+                          {"_yql_block_length", scalarUi64Type},
+                          {"a", scalarOptStrType},
+                          {"b", blockOptTupleOptUi32StrType},
+                      })
+                    : PgmBuilder.NewMultiType(
+                          {blockUi32Type, blockOptStrType, scalarOptStrType,
+                           blockOptTupleOptUi32StrType, scalarUi64Type});
 
             ui64 blockLen = 1000;
             UNIT_ASSERT_LE(offset + len, blockLen);
@@ -672,11 +681,19 @@ protected:
             auto strbuf = std::make_shared<arrow::Buffer>((const ui8*)testScalarString.data(), testScalarString.size());
 
             TVector<arrow::Datum> datums;
-            datums.emplace_back(builder1->Build(true));
-            datums.emplace_back(builder2->Build(true));
-            datums.emplace_back(arrow::Datum(std::make_shared<arrow::BinaryScalar>(strbuf)));
-            datums.emplace_back(builder3->Build(true));
-            datums.emplace_back(arrow::Datum(std::make_shared<arrow::UInt64Scalar>(blockLen)));
+            if (legacyStruct) {
+                datums.emplace_back(builder1->Build(true));
+                datums.emplace_back(builder2->Build(true));
+                datums.emplace_back(arrow::Datum(std::make_shared<arrow::UInt64Scalar>(blockLen)));
+                datums.emplace_back(arrow::Datum(std::make_shared<arrow::BinaryScalar>(strbuf)));
+                datums.emplace_back(builder3->Build(true));
+            } else {
+                datums.emplace_back(builder1->Build(true));
+                datums.emplace_back(builder2->Build(true));
+                datums.emplace_back(arrow::Datum(std::make_shared<arrow::BinaryScalar>(strbuf)));
+                datums.emplace_back(builder3->Build(true));
+                datums.emplace_back(arrow::Datum(std::make_shared<arrow::UInt64Scalar>(blockLen)));
+            }
 
             if (offset != 0 || len != blockLen) {
                 for (auto& datum : datums) {
@@ -691,7 +708,13 @@ protected:
             }
 
             TValuePackerType packer(false, rowType, ArrowPool_);
-            packer.AddWideItem(columns.data(), columns.size());
+            if (legacyStruct) {
+                TUnboxedValueVector columnsCopy = columns;
+                NUdf::TUnboxedValue row = HolderFactory.VectorAsArray(columnsCopy);
+                packer.AddItem(row);
+            } else {
+                packer.AddWideItem(columns.data(), columns.size());
+            }
             TRope packed = packer.Finish();
 
             TUnboxedValueBatch unpacked(rowType);
@@ -700,13 +723,23 @@ protected:
             UNIT_ASSERT_VALUES_EQUAL(unpacked.RowCount(), 1);
 
             TUnboxedValueVector unpackedColumns;
-            unpacked.ForEachRowWide([&](const NYql::NUdf::TUnboxedValue* values, ui32 count) {
-                unpackedColumns.insert(unpackedColumns.end(), values, values + count);
-            });
+            if (legacyStruct) {
+                auto elements = unpacked.Head()->GetElements();
+                unpackedColumns.insert(unpackedColumns.end(), elements, elements + columns.size());
+            } else {
+                unpacked.ForEachRowWide([&](const NYql::NUdf::TUnboxedValue* values, ui32 count) {
+                    unpackedColumns.insert(unpackedColumns.end(), values, values + count);
+                });
+            }
 
             UNIT_ASSERT_VALUES_EQUAL(unpackedColumns.size(), columns.size());
-            UNIT_ASSERT_VALUES_EQUAL(TArrowBlock::From(unpackedColumns.back()).GetDatum().scalar_as<arrow::UInt64Scalar>().value, blockLen);
-            UNIT_ASSERT_VALUES_EQUAL(TArrowBlock::From(unpackedColumns[2]).GetDatum().scalar_as<arrow::BinaryScalar>().value->ToString(), testScalarString);
+            if (legacyStruct) {
+                UNIT_ASSERT_VALUES_EQUAL(TArrowBlock::From(unpackedColumns[2]).GetDatum().scalar_as<arrow::UInt64Scalar>().value, blockLen);
+                UNIT_ASSERT_VALUES_EQUAL(TArrowBlock::From(unpackedColumns[3]).GetDatum().scalar_as<arrow::BinaryScalar>().value->ToString(), testScalarString);
+            } else {
+                UNIT_ASSERT_VALUES_EQUAL(TArrowBlock::From(unpackedColumns.back()).GetDatum().scalar_as<arrow::UInt64Scalar>().value, blockLen);
+                UNIT_ASSERT_VALUES_EQUAL(TArrowBlock::From(unpackedColumns[2]).GetDatum().scalar_as<arrow::BinaryScalar>().value->ToString(), testScalarString);
+            }
 
 
             auto reader1 = MakeBlockReader(TTypeInfoHelper(), ui32Type);
@@ -725,7 +758,7 @@ protected:
                     UNIT_ASSERT(!b2);
                 }
 
-                TBlockItem b3 = reader3->GetItem(*TArrowBlock::From(unpackedColumns[3]).GetDatum().array(), i - offset);
+                TBlockItem b3 = reader3->GetItem(*TArrowBlock::From(unpackedColumns[legacyStruct ? 4 : 3]).GetDatum().array(), i - offset);
                 if (i % 7) {
                     auto elements = b3.GetElements();
                     if (i % 2) {
@@ -742,11 +775,19 @@ protected:
     }
 
     void TestBlockPacking() {
-        DoTestBlockPacking(0, 1000);
+        DoTestBlockPacking(0, 1000, false);
     }
 
     void TestBlockPackingSliced() {
-        DoTestBlockPacking(19, 623);
+        DoTestBlockPacking(19, 623, false);
+    }
+
+    void TestLegacyBlockPacking() {
+        DoTestBlockPacking(0, 1000, true);
+    }
+
+    void TestLegacyBlockPackingSliced() {
+        DoTestBlockPacking(19, 623, true);
     }
 private:
     TIntrusivePtr<NMiniKQL::IFunctionRegistry> FunctionRegistry;
@@ -826,6 +867,8 @@ class TMiniKQLComputationNodeTransportPackTest: public TMiniKQLComputationNodePa
         UNIT_TEST(TestIncrementalPacking);
         UNIT_TEST(TestBlockPacking);
         UNIT_TEST(TestBlockPackingSliced);
+        UNIT_TEST(TestLegacyBlockPacking);
+        UNIT_TEST(TestLegacyBlockPackingSliced);
     UNIT_TEST_SUITE_END();
 };
 
@@ -852,6 +895,8 @@ class TMiniKQLComputationNodeTransportFastPackTest: public TMiniKQLComputationNo
         UNIT_TEST(TestIncrementalPacking);
         UNIT_TEST(TestBlockPacking);
         UNIT_TEST(TestBlockPackingSliced);
+        UNIT_TEST(TestLegacyBlockPacking);
+        UNIT_TEST(TestLegacyBlockPackingSliced);
     UNIT_TEST_SUITE_END();
 };
 

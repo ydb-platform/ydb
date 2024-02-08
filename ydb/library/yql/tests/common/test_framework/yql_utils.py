@@ -10,6 +10,7 @@ import re
 import tempfile
 import shutil
 
+from google.protobuf import text_format
 from collections import namedtuple, defaultdict, OrderedDict
 from functools import partial
 import codecs
@@ -37,11 +38,6 @@ def get_param(name, default=None):
     return yatest.common.get_param(name, os.environ.get(name) or default)
 
 
-def get_gateway_cfg_suffix():
-    default_suffix = None
-    return get_param('gateway_config_suffix', default_suffix) or ''
-
-
 def do_custom_query_check(res, sql_query):
     custom_check = re.search(r"/\* custom check:(.*)\*/", sql_query)
     if not custom_check:
@@ -54,12 +50,28 @@ def do_custom_query_check(res, sql_query):
     return True
 
 
+def get_gateway_cfg_suffix():
+    default_suffix = None
+    return get_param('gateway_config_suffix', default_suffix) or ''
+
+
 def get_gateway_cfg_filename():
     suffix = get_gateway_cfg_suffix()
     if suffix == '':
         return 'gateways.conf'
     else:
         return 'gateways-' + suffix + '.conf'
+
+
+def merge_default_gateway_cfg(cfg_dir, gateway_config):
+
+    with open(yql_source_path(os.path.join(cfg_dir, 'gateways.conf'))) as f:
+        text_format.Merge(f.read(), gateway_config)
+
+    suffix = get_gateway_cfg_suffix()
+    if suffix:
+        with open(yql_source_path(os.path.join(cfg_dir, 'gateways-' + suffix + '.conf'))) as f:
+            text_format.Merge(f.read(), gateway_config)
 
 
 def find_file(path):
@@ -434,7 +446,7 @@ def get_tables(suite, cfg, DATA_PATH, def_attr=None):
 
 
 def get_supported_providers(cfg):
-    providers = 'yt', 'kikimr', 'dq'
+    providers = 'yt', 'kikimr', 'dq', 'hybrid'
     for item in cfg:
         if item[0] == 'providers':
             providers = [i.strip() for i in ''.join(item[1:]).split(',')]
@@ -875,6 +887,33 @@ def get_syntax_version(program):
 
 def ansi_lexer_enabled(program):
     return 'ansi_lexer' in program
+
+
+def pytest_get_current_part(path):
+    folder = os.path.dirname(path)
+    folder_name = os.path.basename(folder)
+    assert folder_name.startswith('part'), "Current folder is {}".format(folder_name)
+    current = int(folder_name[len('part'):])
+
+    parent = os.path.dirname(folder)
+    maxpart = max([int(part[len('part'):]) if part.startswith('part') else -1 for part in os.listdir(parent)])
+    assert maxpart > 0, "Cannot find parts in {}".format(parent)
+    return (current, 1 + maxpart)
+
+
+def normalize_result(res, sort):
+    res = cyson.loads(res) if res else cyson.loads("[]")
+    res = replace_vals(res)
+    for r in res:
+        for data in r['Write']:
+            if sort and 'Data' in data:
+                data['Data'] = sorted(data['Data'])
+            if 'Ref' in data:
+                data['Ref'] = []
+                data['Truncated'] = True
+            if 'Data' in data and len(data['Data']) == 0:
+                del data['Data']
+    return res
 
 
 class LoggingDowngrade(object):

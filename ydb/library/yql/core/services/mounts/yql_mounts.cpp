@@ -105,6 +105,7 @@ namespace NYql {
         AddLibraryFromResource(userData, "/lib/yql/id.yql");
         AddLibraryFromResource(userData, "/lib/yql/sqr.yql");
         AddLibraryFromResource(userData, "/lib/yql/core.yql");
+        AddLibraryFromResource(userData, "/lib/yql/walk_folders.yql");
     }
 
     TUserDataTable GetYqlModuleResolverImpl(

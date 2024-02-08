@@ -6,54 +6,27 @@
 
 namespace NKikimr::NGRpcProxy::V1 {
 
-template<class TEvWrite>
-struct TPartitionWriterImpl {
-    using TWriteRequestInfoPtr = typename TWriteRequestInfoImpl<TEvWrite>::TPtr;
+struct TPartitionWriter {
+    TPartitionWriter() = default;
 
-    TPartitionWriterImpl(NKikimr::NPQ::TMultiCounter& bytesInflight,
-                         NKikimr::NPQ::TMultiCounter& bytesInflightTotal,
-                         ui64& bytesInflight_,
-                         ui64& bytesInflightTotal_);
+    void OnEvInitResult(const NPQ::TEvPartitionWriter::TEvInitResult::TPtr& ev);
+    void OnWriteRequest(THolder<NPQ::TEvPartitionWriter::TEvWriteRequest>&& ev, const TActorContext& ctx);
+    void OnWriteAccepted(const NPQ::TEvPartitionWriter::TEvWriteAccepted& ev, const TActorContext& ctx);
+    void OnWriteResponse(const NPQ::TEvPartitionWriter::TEvWriteResponse& ev);
 
-    //
-    // from client
-    //
-    void OnEvWrite(TEvPQProxy::TEvTopicWrite::TPtr& ev, const TActorContext& ctx);
+    bool HasPendingRequests() const;
 
-    //
-    // from partition writer actor
-    //
-    void OnEvInitResult(NPQ::TEvPartitionWriter::TEvInitResult::TPtr& ev);
-    ui64 OnEvWriteAccepted(NPQ::TEvPartitionWriter::TEvWriteAccepted::TPtr& ev);
-    TWriteRequestInfoPtr OnEvWriteResponse(NPQ::TEvPartitionWriter::TEvWriteResponse::TPtr& ev);
-
-    //
-    // from quoter
-    //
-    void OnEvWakeup(TEvents::TEvWakeup::TPtr& ev, const TActorContext& ctx);
-
-    bool AnyRequests() const;
-    void AddWriteRequest(TWriteRequestInfoPtr request, const TActorContext& ctx);
-    bool TrySendNextQuotedRequest(const TActorContext& ctx);
-    void SendRequest(TWriteRequestInfoPtr request, const TActorContext& ctx);
-
-    TActorId PartitionWriterActor;
+    TActorId Actor;
     TString OwnerCookie;
+    ui64 MaxSeqNo = 0;
+    TInstant LastActivity;
 
     // Quoted, but not sent requests
-    TDeque<TWriteRequestInfoPtr> QuotedRequests;
+    TDeque<THolder<NPQ::TEvPartitionWriter::TEvWriteRequest>> QuotedRequests;
     // Requests that is sent to partition actor, but not accepted
-    TDeque<TWriteRequestInfoPtr> SentRequests;
+    TDeque<ui64> SentRequests;
     // Accepted requests
-    TDeque<TWriteRequestInfoPtr> AcceptedRequests;
-
-    NKikimr::NPQ::TMultiCounter& BytesInflight;
-    NKikimr::NPQ::TMultiCounter& BytesInflightTotal;
-
-    ui64& BytesInflight_;
-    ui64& BytesInflightTotal_;
+    TDeque<ui64> AcceptedRequests;
 };
 
 }
-
-#include "partition_writer.cpp"

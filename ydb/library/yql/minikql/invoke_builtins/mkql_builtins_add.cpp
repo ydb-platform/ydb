@@ -1,6 +1,6 @@
-#include "mkql_builtins_impl.h"
+#include "mkql_builtins_impl.h"  // Y_IGNORE
 #include "mkql_builtins_datetime.h"
-#include "mkql_builtins_decimal.h"
+#include "mkql_builtins_decimal.h" // Y_IGNORE
 
 #include <ydb/library/yql/minikql/mkql_type_ops.h>
 
@@ -11,7 +11,7 @@ namespace {
 
 template<typename TLeft, typename TRight, typename TOutput>
 struct TAdd : public TSimpleArithmeticBinary<TLeft, TRight, TOutput, TAdd<TLeft, TRight, TOutput>> {
-    static constexpr bool DefaultNulls = true;
+    static constexpr auto NullMode = TKernel::ENullMode::Default;
 
     static TOutput Do(TOutput left, TOutput right)
     {
@@ -193,7 +193,7 @@ void RegisterAdd(IBuiltinFunctionRegistry& registry) {
 }
 
 void RegisterAdd(TKernelFamilyMap& kernelFamilyMap) {
-    kernelFamilyMap["Add"] = std::make_unique<TBinaryNumericKernelFamily<TAdd>>();
+    kernelFamilyMap["Add"] = std::make_unique<TBinaryNumericKernelFamily<TAdd, TAdd>>();
 }
 
 void RegisterAggrAdd(IBuiltinFunctionRegistry& registry) {

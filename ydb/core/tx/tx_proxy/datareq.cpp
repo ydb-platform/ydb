@@ -13,6 +13,7 @@
 #include <ydb/core/base/tablet_pipecache.h>
 #include <ydb/core/base/tx_processing.h>
 #include <ydb/core/base/path.h>
+#include <ydb/core/protos/stream.pb.h>
 #include <ydb/library/ydb_issue/issue_helpers.h>
 #include <ydb/core/base/tx_processing.h>
 #include <ydb/library/mkql_proto/protos/minikql.pb.h>
@@ -26,8 +27,8 @@
 #include <ydb/library/yql/public/issue/yql_issue_message.h>
 #include <ydb/library/yql/public/issue/yql_issue_manager.h>
 
-#include <library/cpp/actors/core/actor_bootstrapped.h>
-#include <library/cpp/actors/core/hfunc.h>
+#include <ydb/library/actors/core/actor_bootstrapped.h>
+#include <ydb/library/actors/core/hfunc.h>
 
 #include <util/generic/hash_set.h>
 #include <util/generic/queue.h>
@@ -992,7 +993,6 @@ void TDataReq::ProcessFlatMKQLResolve(NSchemeCache::TSchemeCacheRequest *cacheRe
             rsCount == 0 &&
             engine.GetAffectedShardCount() > 1 &&
             ((TxFlags & NTxDataShard::TTxFlags::ForceOnline) == 0) &&
-            AppData(ctx)->FeatureFlags.GetEnableMvccSnapshotReads() &&
             !DatabaseName.empty());
 
     if (forceSnapshot) {
@@ -3023,6 +3023,7 @@ bool TDataReq::ParseRangeKey(const NKikimrMiniKQL::TParams &proto,
                              EParseRangeKeyExp exp)
 {
     TVector<TCell> key;
+    TVector<TString> memoryOwner;
     if (proto.HasValue()) {
         if (!proto.HasType()) {
             UnresolvedKeys.push_back("No type was specified in the range key tuple");
@@ -3032,7 +3033,7 @@ bool TDataReq::ParseRangeKey(const NKikimrMiniKQL::TParams &proto,
         auto& value = proto.GetValue();
         auto& type = proto.GetType();
         TString errStr;
-        bool res = NMiniKQL::CellsFromTuple(&type, value, keyType, true, key, errStr);
+        bool res = NMiniKQL::CellsFromTuple(&type, value, keyType, true, key, errStr, memoryOwner);
         if (!res) {
             UnresolvedKeys.push_back("Failed to parse range key tuple: " + errStr);
             return false;

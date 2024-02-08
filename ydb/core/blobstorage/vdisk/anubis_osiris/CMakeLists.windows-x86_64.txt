@@ -12,7 +12,7 @@ add_library(blobstorage-vdisk-anubis_osiris)
 target_link_libraries(blobstorage-vdisk-anubis_osiris PUBLIC
   contrib-libs-cxxsupp
   yutil
-  cpp-actors-core
+  library-actors-core
   monlib-service-pages
   ydb-core-base
   core-blobstorage-backpressure

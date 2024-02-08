@@ -166,6 +166,7 @@ TKqpReadTableSettings ParseInternal(const TCoNameValueTupleList& node) {
         } else if (name == TKqpReadTableSettings::ForcePrimaryName) {
             YQL_ENSURE(tuple.Ref().ChildrenSize() == 1);
             settings.ForcePrimary = true;
+        } else if (name == TKqpReadTableSettings::GroupByFieldNames) {
         } else {
             YQL_ENSURE(false, "Unknown KqpReadTable setting name '" << name << "'");
         }

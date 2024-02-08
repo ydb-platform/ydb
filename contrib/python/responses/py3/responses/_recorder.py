@@ -50,8 +50,8 @@ def _dump(
                     "response": {
                         "method": rsp.method,
                         "url": rsp.url,
-                        "body": rsp.body,  # type: ignore[attr-defined]
-                        "status": rsp.status,  # type: ignore[attr-defined]
+                        "body": rsp.body,
+                        "status": rsp.status,
                         "headers": rsp.headers,
                         "content_type": rsp.content_type,
                         "auto_calculate_content_length": content_length,

@@ -2,7 +2,7 @@ PROGRAM()
 
 PEERDIR(
     library/cpp/getopt
-    library/cpp/grpc/client
+    ydb/library/grpc/client
     library/cpp/protobuf/util
     library/cpp/threading/future
     ydb/library/yql/utils

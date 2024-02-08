@@ -3,7 +3,7 @@
 #include "events.h"
 #include <ydb/core/base/tablet_pipe.h>
 #include <ydb/core/tablet_flat/tablet_flat_executed.h>
-#include <library/cpp/actors/core/actor.h>
+#include <ydb/library/actors/core/actor.h>
 #include <util/system/type_name.h>
 
 namespace NKikimr {
@@ -87,9 +87,9 @@ namespace NFake {
 
         void Enqueue(TEventHandlePtr &eh) override
         {
-            const auto *name = eh->GetTypeName().c_str();
+            const auto &name = eh->GetTypeName();
 
-            Y_ABORT("Got unexpected event %s on tablet booting", name);
+            Y_ABORT("Got unexpected event %s on tablet booting", name.c_str());
         }
 
         void DefaultSignalTabletActive(const TActorContext&) override

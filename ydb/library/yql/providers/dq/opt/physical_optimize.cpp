@@ -5,6 +5,7 @@
 #include <ydb/library/yql/dq/opt/dq_opt_phy.h>
 #include <ydb/library/yql/dq/opt/dq_opt_join.h>
 #include <ydb/library/yql/dq/opt/dq_opt.h>
+#include <ydb/library/yql/dq/type_ann/dq_type_ann.h>
 #include <ydb/library/yql/core/expr_nodes/yql_expr_nodes.h>
 #include <ydb/library/yql/core/yql_opt_utils.h>
 
@@ -34,7 +35,6 @@ public:
         AddHandler(0, &TCoPartitionsByKeys::Match, HNDL(BuildPartitionsStage<false>));
         AddHandler(0, &TCoShuffleByKeys::Match, HNDL(BuildShuffleStage<false>));
         AddHandler(0, &TCoFinalizeByKey::Match, HNDL(BuildFinalizeByKeyStage<false>));
-        AddHandler(0, &TDqCnHashShuffle::Match, HNDL(BuildHashShuffleByKeyStage));
         AddHandler(0, &TCoPartitionByKey::Match, HNDL(BuildPartitionStage<false>));
         AddHandler(0, &TCoAsList::Match, HNDL(BuildAggregationResultStage));
         AddHandler(0, &TCoTopSort::Match, HNDL(BuildTopSortStage<false>));
@@ -52,7 +52,7 @@ public:
         AddHandler(0, &TCoOrderedLMap::Match, HNDL(BuildOrderedLMapOverMuxStage));
         AddHandler(0, &TCoLMap::Match, HNDL(BuildLMapOverMuxStage));
         if (enablePrecompute) {
-            AddHandler(0, &TCoHasItems::Match, HNDL(BuildHasItems));
+            AddHandler(0, &TCoHasItems::Match, HNDL(BuildHasItems<false>));
             AddHandler(0, &TCoSqlIn::Match, HNDL(BuildSqlIn<false>));
             AddHandler(0, &TCoToOptional::Match, HNDL(BuildScalarPrecompute<false>));
             AddHandler(0, &TCoHead::Match, HNDL(BuildScalarPrecompute<false>));
@@ -80,6 +80,7 @@ public:
         AddHandler(1, &TCoOrderedLMap::Match, HNDL(PushOrderedLMapToStage<true>));
         AddHandler(1, &TCoLMap::Match, HNDL(PushLMapToStage<true>));
         if (enablePrecompute) {
+            AddHandler(1, &TCoHasItems::Match, HNDL(BuildHasItems<true>));
             AddHandler(1, &TCoSqlIn::Match, HNDL(BuildSqlIn<true>));
             AddHandler(1, &TCoToOptional::Match, HNDL(BuildScalarPrecompute<true>));
             AddHandler(1, &TCoHead::Match, HNDL(BuildScalarPrecompute<true>));
@@ -192,10 +193,6 @@ protected:
         return DqBuildShuffleStage(node, ctx, optCtx, *getParents(), IsGlobal);
     }
 
-    TMaybeNode<TExprBase> BuildHashShuffleByKeyStage(TExprBase node, TExprContext& ctx, const TGetParents& getParents) {
-        return DqBuildHashShuffleByKeyStage(node, ctx, *getParents());
-    }
-
     template<bool IsGlobal>
     TMaybeNode<TExprBase> BuildFinalizeByKeyStage(TExprBase node, TExprContext& ctx, const TGetParents& getParents) {
         return DqBuildFinalizeByKeyStage(node, ctx, *getParents(), IsGlobal);
@@ -254,8 +251,9 @@ protected:
         return DqBuildJoin(join, ctx, optCtx, *parentsMap, IsGlobal, /* pushLeftStage = */ false /* TODO */, mode);
     }
 
-    TMaybeNode<TExprBase> BuildHasItems(TExprBase node, TExprContext& ctx, IOptimizationContext& optCtx) {
-        return DqBuildHasItems(node, ctx, optCtx);
+    template <bool IsGlobal>
+    TMaybeNode<TExprBase> BuildHasItems(TExprBase node, TExprContext& ctx, IOptimizationContext& optCtx, const TGetParents& getParents) {
+        return DqBuildHasItems(node, ctx, optCtx, *getParents(), IsGlobal);
     }
 
     template <bool IsGlobal>

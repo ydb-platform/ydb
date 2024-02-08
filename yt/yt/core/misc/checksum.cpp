@@ -779,7 +779,7 @@ void TChecksumOutput::DoFinish()
 ////////////////////////////////////////////////////////////////////////////////
 
 TChecksumAsyncOutput::TChecksumAsyncOutput(IAsyncOutputStreamPtr underlyingStream)
-    : UnderlyingStream_(underlyingStream)
+    : UnderlyingStream_(std::move(underlyingStream))
 { }
 
 TFuture<void> TChecksumAsyncOutput::Close()
@@ -790,7 +790,7 @@ TFuture<void> TChecksumAsyncOutput::Close()
 TFuture<void> TChecksumAsyncOutput::Write(const TSharedRef& block)
 {
     return UnderlyingStream_->Write(block)
-        .Apply(BIND([&, this, this_ = MakeWeak(this)] {
+        .Apply(BIND([=, this, this_ = MakeStrong(this)] {
             Checksum_ = NYT::GetChecksum(block, Checksum_);
         }));
 }

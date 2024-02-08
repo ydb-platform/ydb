@@ -7,7 +7,7 @@ SRCS(
 )
 
 PEERDIR(
-    library/cpp/actors/core
+    ydb/library/actors/core
     library/cpp/retry
     ydb/core/base
     ydb/core/fq/libs/config
@@ -24,3 +24,7 @@ GENERATE_ENUM_SERIALIZATION(ydb.h)
 YQL_LAST_ABI_VERSION()
 
 END()
+
+RECURSE_FOR_TESTS(
+    ut
+)

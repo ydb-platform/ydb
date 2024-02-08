@@ -4810,6 +4810,7 @@ Y_UNIT_TEST_SUITE(TFlatTableLongTxAndBlobs) {
         policy->ReadAheadLoThreshold = 512;
         policy->ReadAheadHiThreshold = 1024;
         policy->MinDataPageSize = 1024;
+        policy->MinBTreeIndexNodeSize = 128;
 
         env.SendSync(new NFake::TEvExecute{ new TTxInitSchema(policy) });
         env.SendSync(new NFake::TEvExecute{ new TTxWriteManyDeltas(1000, valueSize) });
@@ -5409,6 +5410,212 @@ Y_UNIT_TEST_SUITE(TFlatTableExecutorStickyPages) {
         env.SendSync(new NFake::TEvExecute{ new TTxFullScan(failedAttempts) }, true);
         UNIT_ASSERT_VALUES_EQUAL(failedAttempts, 0); // if at least one family of a group is for memory load it 
     }
+}
+
+Y_UNIT_TEST_SUITE(TFlatTableExecutorBTreeIndex) {
+    using EReady = NTable::EReady;
+    using ENext = NTable::ENext;
+
+    struct TTxFullScan : public ITransaction {
+        int& ReadRows;
+        int& FailedAttempts;
+        
+        TTxFullScan(int& readRows, int& failedAttempts)
+            : ReadRows(readRows)
+            , FailedAttempts(failedAttempts)
+        {
+            ReadRows = 0;
+            FailedAttempts = 0;
+        }
+
+        bool Execute(TTransactionContext &txc, const TActorContext &) override
+        {
+            TVector<NTable::TTag> tags{ { TRowsModel::ColumnKeyId, TRowsModel::ColumnValueId } };
+
+            auto iter = txc.DB.IterateRange(TRowsModel::TableId, { }, tags, {2, 0});
+            
+            ReadRows = 0;
+            while (iter->Next(ENext::Data) == EReady::Data) {
+                ReadRows++;
+            }
+
+            if (iter->Last() != EReady::Page) {
+                return true;
+            }
+
+            FailedAttempts++;
+            return false;
+        }
+
+        void Complete(const TActorContext &ctx) override
+        {
+            ctx.Send(ctx.SelfID, new NFake::TEvReturn);
+        }
+    };
+
+    Y_UNIT_TEST(UseBtreeIndex_Default) {
+        TMyEnvBase env;
+        TRowsModel rows;
+
+        auto &appData = env->GetAppData();
+        UNIT_ASSERT_VALUES_EQUAL(appData.FeatureFlags.HasEnableLocalDBBtreeIndex(), false);
+        auto counters = MakeIntrusive<TSharedPageCacheCounters>(env->GetDynamicCounters());
+        int readRows = 0, failedAttempts = 0;
+
+        env.FireDummyTablet(ui32(NFake::TDummy::EFlg::Comp));
+
+        auto policy = MakeIntrusive<TCompactionPolicy>();
+        policy->MinBTreeIndexNodeSize = 128;
+        env.SendSync(rows.MakeScheme(std::move(policy)));
+
+        env.SendSync(rows.VersionTo(TRowVersion(1, 10)).RowTo(0).MakeRows(1000, 950));
+        env.SendSync(rows.VersionTo(TRowVersion(2, 20)).RowTo(0).MakeRows(1000, 950));
+        
+        env.SendSync(new NFake::TEvCompact(TRowsModel::TableId));
+        env.WaitFor<NFake::TEvCompacted>();
+
+        // all pages are always kept in shared cache
+        UNIT_ASSERT_VALUES_EQUAL(counters->ActivePages->Val(), 290);
+
+        env.SendSync(new NFake::TEvExecute{ new TTxFullScan(readRows, failedAttempts) });
+        UNIT_ASSERT_VALUES_EQUAL(readRows, 1000);
+        UNIT_ASSERT_VALUES_EQUAL(failedAttempts, 0);
+
+        // restart tablet
+        env.SendSync(new TEvents::TEvPoison, false, true);
+        env.FireDummyTablet(ui32(NFake::TDummy::EFlg::Comp));
+
+        // after restart we have no pages in private cache
+        env.SendSync(new NFake::TEvExecute{ new TTxFullScan(readRows, failedAttempts) }, true);
+        UNIT_ASSERT_VALUES_EQUAL(readRows, 1000);
+        UNIT_ASSERT_VALUES_EQUAL(failedAttempts, 288);
+    }
+
+    Y_UNIT_TEST(UseBtreeIndex_True) {
+        TMyEnvBase env;
+        TRowsModel rows;
+
+        auto &appData = env->GetAppData();
+        appData.FeatureFlags.SetEnableLocalDBBtreeIndex(true);
+        auto counters = MakeIntrusive<TSharedPageCacheCounters>(env->GetDynamicCounters());
+        int readRows = 0, failedAttempts = 0;
+
+        env.FireDummyTablet(ui32(NFake::TDummy::EFlg::Comp));
+
+        auto policy = MakeIntrusive<TCompactionPolicy>();
+        policy->MinBTreeIndexNodeSize = 128;
+        env.SendSync(rows.MakeScheme(std::move(policy)));
+
+        env.SendSync(rows.VersionTo(TRowVersion(1, 10)).RowTo(0).MakeRows(1000, 950));
+        env.SendSync(rows.VersionTo(TRowVersion(2, 20)).RowTo(0).MakeRows(1000, 950));
+        
+        env.SendSync(new NFake::TEvCompact(TRowsModel::TableId));
+        env.WaitFor<NFake::TEvCompacted>();
+
+        // all pages are always kept in shared cache (except flat index)
+        UNIT_ASSERT_VALUES_EQUAL(counters->ActivePages->Val(), 334);
+
+        env.SendSync(new NFake::TEvExecute{ new TTxFullScan(readRows, failedAttempts) });
+        UNIT_ASSERT_VALUES_EQUAL(readRows, 1000);
+        UNIT_ASSERT_VALUES_EQUAL(failedAttempts, 0);
+
+        // restart tablet
+        env.SendSync(new TEvents::TEvPoison, false, true);
+        env.FireDummyTablet(ui32(NFake::TDummy::EFlg::Comp));
+
+        // after restart we have no pages in private cache
+        env.SendSync(new NFake::TEvExecute{ new TTxFullScan(readRows, failedAttempts) }, true);
+        UNIT_ASSERT_VALUES_EQUAL(readRows, 1000);
+        UNIT_ASSERT_VALUES_EQUAL(failedAttempts, 332);
+    }
+
+    Y_UNIT_TEST(UseBtreeIndex_True_TurnOff) {
+        TMyEnvBase env;
+        TRowsModel rows;
+
+        auto &appData = env->GetAppData();
+        appData.FeatureFlags.SetEnableLocalDBBtreeIndex(true);
+        auto counters = MakeIntrusive<TSharedPageCacheCounters>(env->GetDynamicCounters());
+        int readRows = 0, failedAttempts = 0;
+
+        env.FireDummyTablet(ui32(NFake::TDummy::EFlg::Comp));
+
+        auto policy = MakeIntrusive<TCompactionPolicy>();
+        policy->MinBTreeIndexNodeSize = 128;
+        env.SendSync(rows.MakeScheme(std::move(policy)));
+
+        env.SendSync(rows.VersionTo(TRowVersion(1, 10)).RowTo(0).MakeRows(1000, 950));
+        env.SendSync(rows.VersionTo(TRowVersion(2, 20)).RowTo(0).MakeRows(1000, 950));
+        
+        env.SendSync(new NFake::TEvCompact(TRowsModel::TableId));
+        env.WaitFor<NFake::TEvCompacted>();
+
+        // all pages are always kept in shared cache (except flat index)
+        UNIT_ASSERT_VALUES_EQUAL(counters->ActivePages->Val(), 334);
+
+        env.SendSync(new NFake::TEvExecute{ new TTxFullScan(readRows, failedAttempts) });
+        UNIT_ASSERT_VALUES_EQUAL(readRows, 1000);
+        UNIT_ASSERT_VALUES_EQUAL(failedAttempts, 0);
+
+        // restart tablet, turn off setting
+        env.SendSync(new TEvents::TEvPoison, false, true);
+        appData.FeatureFlags.SetEnableLocalDBBtreeIndex(false);
+        env.FireDummyTablet(ui32(NFake::TDummy::EFlg::Comp));
+
+        // after restart we have no pages in private cache
+        // but use only flat index
+        env.SendSync(new NFake::TEvExecute{ new TTxFullScan(readRows, failedAttempts) }, true);
+        UNIT_ASSERT_VALUES_EQUAL(readRows, 1000);
+        UNIT_ASSERT_VALUES_EQUAL(failedAttempts, 288);
+    }
+
+    Y_UNIT_TEST(UseBtreeIndex_True_Generations) {
+        TMyEnvBase env;
+        TRowsModel rows;
+
+        auto &appData = env->GetAppData();
+        appData.FeatureFlags.SetEnableLocalDBBtreeIndex(true);
+        auto counters = MakeIntrusive<TSharedPageCacheCounters>(env->GetDynamicCounters());
+        int readRows = 0, failedAttempts = 0;
+
+        env.FireDummyTablet(ui32(NFake::TDummy::EFlg::Comp));
+
+        auto policy = MakeIntrusive<TCompactionPolicy>();
+        policy->MinBTreeIndexNodeSize = 128;
+        policy->Generations.push_back({100 * 1024, 2, 2, 200 * 1024, NLocalDb::LegacyQueueIdToTaskName(1), false});
+        for (auto& gen : policy->Generations) {
+            gen.ExtraCompactionPercent = 0;
+            gen.ExtraCompactionMinSize = 0;
+            gen.ExtraCompactionExpPercent = 0;
+            gen.ExtraCompactionExpMaxSize = 0;
+            gen.UpliftPartSize = 0;
+        }
+        env.SendSync(rows.MakeScheme(std::move(policy)));
+
+        env.SendSync(rows.VersionTo(TRowVersion(1, 10)).RowTo(0).MakeRows(1000, 950));
+        env.SendSync(rows.VersionTo(TRowVersion(2, 20)).RowTo(0).MakeRows(1000, 950));
+
+        env.SendSync(new NFake::TEvCompact(TRowsModel::TableId));
+        env.WaitFor<NFake::TEvCompacted>();
+
+        // gen 0 data pages are always kept in shared cache
+        // b-tree index pages are always kept in shared cache
+        UNIT_ASSERT_VALUES_EQUAL(counters->ActivePages->Val(), 48);
+
+        env.SendSync(new NFake::TEvExecute{ new TTxFullScan(readRows, failedAttempts) });
+        UNIT_ASSERT_VALUES_EQUAL(readRows, 1000);
+        UNIT_ASSERT_VALUES_EQUAL(failedAttempts, 286);
+
+        // restart tablet
+        env.SendSync(new TEvents::TEvPoison, false, true);
+        env.FireDummyTablet(ui32(NFake::TDummy::EFlg::Comp));
+
+        // after restart we have no pages in private cache
+        env.SendSync(new NFake::TEvExecute{ new TTxFullScan(readRows, failedAttempts) }, true);
+        UNIT_ASSERT_VALUES_EQUAL(readRows, 1000);
+        UNIT_ASSERT_VALUES_EQUAL(failedAttempts, 332);
+    }
+
 }
 
 } // namespace NTabletFlatExecutor

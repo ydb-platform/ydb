@@ -11,7 +11,7 @@ add_library(core-tx-mediator)
 target_link_libraries(core-tx-mediator PUBLIC
   contrib-libs-cxxsupp
   yutil
-  cpp-actors-core
+  library-actors-core
   ydb-core-base
   core-engine-minikql
   ydb-core-protos

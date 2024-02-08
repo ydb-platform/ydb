@@ -1,10 +1,6 @@
-#include "codegen.h"
+#include <ydb/library/yql/minikql/codegen/codegen.h>
 
-#include <llvm/IR/Constants.h>
-#include <llvm/IR/DerivedTypes.h>
-#include <llvm/IR/Instructions.h>
-#include <llvm/IR/LLVMContext.h>
-#include <llvm/IR/Module.h>
+#include <codegen_ut_llvm_deps.h> // Y_IGNORE
 
 #include <library/cpp/testing/unittest/registar.h>
 #include <library/cpp/resource/resource.h>
@@ -269,6 +265,7 @@ Y_UNIT_TEST_SUITE(TCodegenTests) {
     Y_UNIT_TEST(BadFib) {
         auto codegen = ICodegen::Make(ETarget::Native);
         auto func = CreateBadFibFunction(codegen->GetModule(), codegen->GetContext());
+        Y_UNUSED(func);
         UNIT_ASSERT_EXCEPTION(codegen->Verify(), yexception);
     }
 
@@ -302,6 +299,7 @@ Y_UNIT_TEST_SUITE(TCodegenTests) {
     Y_UNIT_TEST(LinkWithGeneratedFunction) {
         auto codegen = ICodegen::Make(ETarget::Native);
         auto mulFunc = CreateMulFunction(codegen->GetModule(), codegen->GetContext());
+        Y_UNUSED(mulFunc);
         auto bitcode = NResource::Find("/llvm_bc/Funcs");
         codegen->LoadBitCode(bitcode, "Funcs");
         auto func = codegen->GetModule().getFunction("sum_sqr");

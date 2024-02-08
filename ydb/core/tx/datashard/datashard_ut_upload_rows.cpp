@@ -177,22 +177,16 @@ Y_UNIT_TEST_SUITE(TTxDataShardUploadRows) {
 
         // Capture all upload rows requests
         TVector<THolder<IEventHandle>> uploadRequests;
-        auto observer = [&](TAutoPtr<IEventHandle>& ev) {
-            switch (ev->GetTypeRewrite()) {
-                case TEvDataShard::TEvUploadRowsRequest::EventType: {
-                    Cerr << "... captured TEvUploadRowsRequest" << Endl;
-                    uploadRequests.emplace_back(ev.Release());
-                    return TTestActorRuntime::EEventAction::DROP;
-                }
-            }
-            return TTestActorRuntime::EEventAction::PROCESS;
-        };
-        auto prevObserver = runtime.SetObserverFunc(observer);
+
+        auto observerHolder = runtime.AddObserver<TEvDataShard::TEvUploadRowsRequest>([&uploadRequests](auto& ev) {
+            Cerr << "... captured TEvUploadRowsRequest" << Endl;
+            uploadRequests.emplace_back(ev.Release());
+        });
 
         DoStartUploadTestRows(server, sender, "/Root/table-1", Ydb::Type::UINT32);
 
         waitFor([&]{ return uploadRequests.size() >= 3; }, "TEvUploadRowsRequest");
-        runtime.SetObserverFunc(prevObserver);
+        observerHolder.Remove();
 
         ui64 dropTxId = AsyncAlterDropColumn(server, "/Root", "table-1", "value");
         WaitTxNotification(server, dropTxId);
@@ -772,19 +766,21 @@ Y_UNIT_TEST_SUITE(TTxDataShardUploadRows) {
 
         TVector<ui32> observedUploadStatus;
         TVector<THolder<IEventHandle>> blockedEnqueueRecords;
+
+        auto observerRequestHandler = runtime.AddObserver<TEvDataShard::TEvUploadRowsRequest>([&overloadSubscribe](auto& ev) {
+            if (!overloadSubscribe) {
+                ev->Get()->Record.ClearOverloadSubscribe();
+            }
+        });
+
+        auto observerResponseHandler = runtime.AddObserver<TEvDataShard::TEvUploadRowsResponse>([&observedUploadStatus](auto& ev) {
+            observedUploadStatus.push_back(ev->Get()->Record.GetStatus());
+        });
+
         auto prevObserverFunc = runtime.SetObserverFunc([&](TAutoPtr<IEventHandle>& ev) {
-            switch (ev->GetTypeRewrite()) {
-                case NDataShard::TEvChangeExchange::EvEnqueueRecords:
-                    blockedEnqueueRecords.emplace_back(ev.Release());
-                    return TTestActorRuntime::EEventAction::DROP;
-                case TEvDataShard::TEvUploadRowsRequest::EventType:
-                    if (!overloadSubscribe) {
-                        ev->Get<TEvDataShard::TEvUploadRowsRequest>()->Record.ClearOverloadSubscribe();
-                    }
-                    break;
-                case TEvDataShard::TEvUploadRowsResponse::EventType:
-                    observedUploadStatus.push_back(ev->Get<TEvDataShard::TEvUploadRowsResponse>()->Record.GetStatus());
-                    break;
+            if (ev->GetTypeRewrite() == NChangeExchange::TEvChangeExchange::EvEnqueueRecords) {
+                blockedEnqueueRecords.emplace_back(ev.Release());
+                return TTestActorRuntime::EEventAction::DROP;
             }
 
             return TTestActorRuntime::EEventAction::PROCESS;
@@ -821,6 +817,8 @@ Y_UNIT_TEST_SUITE(TTxDataShardUploadRows) {
         observedUploadStatus.clear();
         UNIT_ASSERT(responses.empty());
 
+        observerRequestHandler.Remove();
+        observerResponseHandler.Remove();
         runtime.SetObserverFunc(prevObserverFunc);
         for (auto& ev : blockedEnqueueRecords) {
             runtime.Send(ev.Release(), 0, true);
@@ -852,6 +850,93 @@ Y_UNIT_TEST_SUITE(TTxDataShardUploadRows) {
         DoShouldRejectOnChangeQueueOverflow(true);
     }
 
+    Y_UNIT_TEST(BulkUpsertDuringAddIndexRaceCorruption) {
+        TPortManager pm;
+        TServerSettings serverSettings(pm.GetPort(2134));
+        serverSettings.SetDomainName("Root")
+            .SetUseRealThreads(false)
+            .SetDomainPlanResolution(1000);
+
+        Tests::TServer::TPtr server = new TServer(serverSettings);
+        auto &runtime = *server->GetRuntime();
+        auto sender = runtime.AllocateEdgeActor();
+
+        runtime.SetLogPriority(NKikimrServices::TX_DATASHARD, NLog::PRI_TRACE);
+        runtime.SetLogPriority(NKikimrServices::TX_PROXY, NLog::PRI_DEBUG);
+
+        InitRoot(server, sender);
+
+        auto opts = TShardedTableOptions()
+                        .Shards(1)
+                        .Columns({
+                            {"key", "Uint32", true, false},
+                            {"value", "Uint32", false, false}});
+        CreateShardedTable(server, sender, "/Root", "table-1", opts);
+
+        ExecSQL(server, sender, "UPSERT INTO `/Root/table-1` (key, value) VALUES (1, 2), (3, 4);");
+
+        std::vector<std::unique_ptr<IEventHandle>> bulkUpserts;
+        auto captureBulkUpserts = runtime.AddObserver<TEvDataShard::TEvUploadRowsRequest>(
+            [&](TEvDataShard::TEvUploadRowsRequest::TPtr& ev) {
+                bulkUpserts.emplace_back(ev.Release());
+            });
+
+        // Start writing to key 5 using bulk upsert
+        NThreading::TFuture<Ydb::Table::BulkUpsertResponse> bulkUpsertFuture;
+        {
+            Ydb::Table::BulkUpsertRequest request;
+            request.set_table("/Root/table-1");
+            auto* r = request.mutable_rows();
+
+            auto* reqRowType = r->mutable_type()->mutable_list_type()->mutable_item()->mutable_struct_type();
+            auto* reqKeyType = reqRowType->add_members();
+            reqKeyType->set_name("key");
+            reqKeyType->mutable_type()->set_type_id(Ydb::Type::UINT32);
+            auto* reqValueType = reqRowType->add_members();
+            reqValueType->set_name("value");
+            reqValueType->mutable_type()->set_type_id(Ydb::Type::UINT32);
+
+            auto* reqRows = r->mutable_value();
+            auto* row1 = reqRows->add_items();
+            row1->add_items()->set_uint32_value(5);
+            row1->add_items()->set_uint32_value(6);
+
+            using TEvBulkUpsertRequest = NKikimr::NGRpcService::TGrpcRequestOperationCall<
+                Ydb::Table::BulkUpsertRequest, Ydb::Table::BulkUpsertResponse>;
+            bulkUpsertFuture = NRpcService::DoLocalRpc<TEvBulkUpsertRequest>(
+                std::move(request), "/Root", "", runtime.GetActorSystem(0));
+        }
+
+        WaitFor(runtime, [&]{ return bulkUpserts.size() > 0; }, "captured bulk upsert");
+        UNIT_ASSERT_VALUES_EQUAL(bulkUpserts.size(), 1u);
+        captureBulkUpserts.Remove();
+
+        Cerr << "... creating a by_value index" << Endl;
+        WaitTxNotification(server, sender,
+            AsyncAlterAddIndex(server, "/Root", "/Root/table-1",
+                TShardedTableOptions::TIndex{"by_value", {"value"}, {}, NKikimrSchemeOp::EIndexTypeGlobal}));
+        runtime.SimulateSleep(TDuration::Seconds(1));
+
+        // Unblock the captured bulk upsert
+        for (auto& ev : bulkUpserts) {
+            runtime.Send(ev.release(), 0, true);
+        }
+        bulkUpserts.clear();
+
+        // Wait for the bulk upsert to finish
+        Cerr << "... waiting for bulk upsert to finish" << Endl;
+        auto response = AwaitResponse(runtime, std::move(bulkUpsertFuture));
+        Cerr << "... bulk upsert finished with status " << response.operation().status() << Endl;
+
+        // Whether bulk upsert succeeds or not we shouldn't get a corrupted index (bug KIKIMR-20765)
+        auto data1 = KqpSimpleExec(runtime, Q_(R"(
+            SELECT key, value FROM `/Root/table-1` ORDER BY key
+        )"));
+        auto data2 = KqpSimpleExec(runtime, Q_(R"(
+            SELECT key, value FROM `/Root/table-1` VIEW by_value ORDER BY key
+        )"));
+        UNIT_ASSERT_VALUES_EQUAL(data1, data2);
+    }
 }
 
 } // namespace NKikimr

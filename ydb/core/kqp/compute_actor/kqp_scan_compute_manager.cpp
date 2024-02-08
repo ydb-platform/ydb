@@ -4,93 +4,43 @@
 
 namespace NKikimr::NKqp::NScanPrivate {
 
-TString TInFlightShards::TraceToString() const {
-    TStringBuilder sb;
-    for (auto&& i : StatesByIndex) {
-        sb << i.first << ":" << i.second->State << ":" << NeedAckStates.contains(i.first) << ";";
-    }
-    return sb;
-}
-
-TShardState::TPtr TInFlightShards::RemoveIfExists(const ui32 scannerIdx) {
-    if (!scannerIdx) {
-        return nullptr;
-    }
-    auto itScanner = StatesByIndex.find(scannerIdx);
-    if (itScanner == StatesByIndex.end()) {
-        return nullptr;
-    }
-    TShardState::TPtr result = itScanner->second;
-    auto itTablet = Shards.find(result->TabletId);
-    if (itTablet == Shards.end()) {
-        return nullptr;
-    }
-    auto it = itTablet->second.find(result->ScannerIdx);
-    if (it == itTablet->second.end()) {
-        return nullptr;
-    }
-    MutableStatistics(result->TabletId).MutableStatistics(result->ScannerIdx).SetFinishInstant(Now());
-    NeedAckStates.erase(result->ScannerIdx);
-    TScanShardsStatistics::OnScansDiff(Shards.size(), GetScansCount());
-
-    itTablet->second.erase(it);
-    if (itTablet->second.empty()) {
-        Shards.erase(itTablet);
-    }
-    StatesByIndex.erase(itScanner);
-    return result;
-}
-
-TShardState::TPtr TInFlightShards::RemoveIfExists(TShardState::TPtr state) {
-    if (!state) {
-        return state;
-    }
-    return RemoveIfExists(state->ScannerIdx);
-}
-
 TShardState::TPtr TInFlightShards::Put(TShardState&& state) {
     TScanShardsStatistics::OnScansDiff(Shards.size(), GetScansCount());
-    MutableStatistics(state.TabletId).MutableStatistics(state.ScannerIdx).SetStartInstant(Now());
+    MutableStatistics(state.TabletId).MutableStatistics(0).SetStartInstant(Now());
 
     TShardState::TPtr result = std::make_shared<TShardState>(std::move(state));
-    StatesByIndex.emplace(result->ScannerIdx, result);
-    Shards[result->TabletId].emplace(result->ScannerIdx, result);
+    AFL_ENSURE(Shards.emplace(result->TabletId, result).second);
     return result;
 }
 
-ui32 TInFlightShards::GetIndexByGeneration(const ui32 generation) {
-    auto it = AllocatedGenerations.find(generation);
-    if (it == AllocatedGenerations.end()) {
-        return 0;
+std::vector<std::unique_ptr<TComputeTaskData>> TShardScannerInfo::OnReceiveData(TEvKqpCompute::TEvScanData& data, const std::shared_ptr<TShardScannerInfo>& selfPtr) {
+    if (!data.Finished) {
+        AFL_ENSURE(!NeedAck);
+        NeedAck = true;
+    } else {
+        Finished = true;
     }
-    return it->second;
-}
-
-ui32 TInFlightShards::AllocateGeneration(TShardState::TPtr state) {
-    {
-        auto itTablet = Shards.find(state->TabletId);
-        Y_ABORT_UNLESS(itTablet != Shards.end());
-        auto it = itTablet->second.find(state->ScannerIdx);
-        Y_ABORT_UNLESS(it != itTablet->second.end());
+    if (data.IsEmpty()) {
+        AFL_ENSURE(data.Finished);
+        return {};
     }
-
-    const ui32 nextGeneration = ++LastGeneration;
-    Y_ABORT_UNLESS(AllocatedGenerations.emplace(nextGeneration, state->ScannerIdx).second);
-    return nextGeneration;
-}
-
-ui32 TInFlightShards::GetScansCount() const {
-    ui32 result = 0;
-    for (auto&& i : Shards) {
-        result += i.second.size();
+    AFL_ENSURE(ActorId);
+    AFL_ENSURE(!DataChunksInFlightCount);
+    std::vector<std::unique_ptr<TComputeTaskData>> result;
+    if (data.SplittedBatches.size() > 1) {
+        ui32 idx = 0;
+        AFL_ENSURE(data.ArrowBatch);
+        for (auto&& i : data.SplittedBatches) {
+            result.emplace_back(std::make_unique<TComputeTaskData>(selfPtr, std::make_unique<TEvScanExchange::TEvSendData>(data.ArrowBatch, TabletId, std::move(i)), idx++));
+        }
+    } else if (data.ArrowBatch) {
+        result.emplace_back(std::make_unique<TComputeTaskData>(selfPtr, std::make_unique<TEvScanExchange::TEvSendData>(data.ArrowBatch, TabletId)));
+    } else {
+        result.emplace_back(std::make_unique<TComputeTaskData>(selfPtr, std::make_unique<TEvScanExchange::TEvSendData>(std::move(data.Rows), TabletId)));
     }
+    AFL_DEBUG(NKikimrServices::KQP_COMPUTE)("event", "receive_data")("count_chunks", result.size());
+    DataChunksInFlightCount = result.size();
     return result;
 }
 
-void TInFlightShards::ClearAll() {
-    Shards.clear();
-    AllocatedGenerations.clear();
-    StatesByIndex.clear();
-    NeedAckStates.clear();
-}
 }

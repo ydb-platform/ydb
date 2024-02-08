@@ -32,7 +32,7 @@ def fix_cmd(cmd):
     p = subprocess.Popen([java, '-version'], stdout=subprocess.PIPE, stderr=subprocess.PIPE)
     out, err = p.communicate()
     out, err = out.strip(), err.strip()
-    if ((out or '').strip().startswith('java version "1.8') or (err or '').strip().startswith('java version "1.8')):
+    if (out or '').strip().startswith('java version "1.8') or (err or '').strip().startswith('java version "1.8'):
         res = []
         i = 0
         while i < len(cmd):
@@ -71,9 +71,7 @@ def extract_jars(dest, archive):
 
 
 def make_bfg_from_cp(class_path, out):
-    class_path = ' '.join(
-        map(lambda path: ('file:/' + path.lstrip('/')) if os.path.isabs(path) else path, class_path)
-    )
+    class_path = ' '.join(map(lambda path: ('file:/' + path.lstrip('/')) if os.path.isabs(path) else path, class_path))
     with zipfile.ZipFile(out, 'w') as zf:
         lines = []
         while class_path:
@@ -127,7 +125,7 @@ def main():
             mf = os.pathsep.join([dest] + class_path)
         else:
             raise Exception("Unexpected classpath option type: " + opts.classpath_option_type)
-        args = fix_cmd(args[:cp_idx + 1]) + [mf] + args[cp_idx + 2:]
+        args = fix_cmd(args[: cp_idx + 1]) + [mf] + args[cp_idx + 2 :]
     else:
         args[cp_idx + 1] = args[cp_idx + 1].replace(opts.tests_jar_path, dest)
         args = fix_cmd(args[:cp_idx]) + args[cp_idx:]

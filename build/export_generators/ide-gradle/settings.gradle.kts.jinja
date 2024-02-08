@@ -1,5 +1,9 @@
-rootProject.name = "{{projectName}}"
+rootProject.name = "{{ projectName }}"
 
 {% for subdir in subdirs -%}
-include("{{ subdir | replace("/", ":") }}")
+{%-    set classname = subdir | replace("/", ":") -%}
+include(":{{ classname }}")
+project(":{{ classname }}").projectDir = file("{{ exportRoot }}/{{ subdir }}")
 {% endfor -%}
+
+{{ dump }}

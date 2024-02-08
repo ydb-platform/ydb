@@ -1,0 +1,258 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>SchViz</title>
+    <link type="text/css" href="css/schviz.css" rel="stylesheet" />
+</head>
+<body>
+</body>
+</html>
+
+<script type="text/javascript" src="js/d3.v4.min.js"></script>
+<script type="text/javascript" src="js/d3-tip-0.8.0-alpha.1.js"></script>
+<script type="text/javascript" src="js/schviz.js"></script>
+<script type="text/javascript">
+    var hist = [{
+        "ts": 0,
+        "keyframe": true,
+        "epochtime": 1500390747,
+        "cbs": [{
+            "idx": 0,
+            "name": "vdisk0",
+            "max_budget": 250000000,
+            "period": 1000000000,
+            "cur_budget": 250000000,
+            "deadline": 1000000000,
+            "state": "RUNNING",
+            "req": [{
+                "id": 1,
+                "cost": 125000000,
+                "state": "RUNNING",
+                "seqno": 1
+            }]
+        },{
+            "idx": 1,
+            "name": "vdisk1",
+            "max_budget": 250000000,
+            "period": 1000000000,
+            "cur_budget": 250000000,
+            "deadline": 1000000000,
+            "state": "ACTIVE",
+            "req": [{
+                "id": 2,
+                "cost": 150000000,
+                "state": "PENDING",
+                "kind": "WRITE",
+                "seqno": 1
+            },{
+                "id": 3,
+                "cost": 200000000,
+                "state": "PENDING",
+                "kind": "WRITE",
+                "seqno": 2
+            },{
+                "id": 4,
+                "cost": 300000000,
+                "state": "PENDING",
+                "kind": "WRITE",
+                "seqno": 3
+            }]
+        },{
+            "idx": 2,
+            "name": "vdisk2",
+            "max_budget": 250000000,
+            "period": 1000000000,
+            "cur_budget": 250000000,
+            "deadline": 1000000000,
+            "state": "ACTIVE",
+            "req": [{
+                "id": 5,
+                "cost": 100000000,
+                "state": "PENDING",
+                "kind": "READ",
+                "seqno": 1
+            },{
+                "id": 6,
+                "cost": 100000000,
+                "state": "PENDING",
+                "kind": "READ",
+                "seqno": 2
+            },{
+                "id": 7,
+                "cost": 80000000,
+                "state": "PENDING",
+                "kind": "READ",
+                "seqno": 3
+            }]
+        },{
+            "idx": 3,
+            "name": "vdisk3",
+            "max_budget": 250000000,
+            "period": 1000000000,
+            "cur_budget": 250000000,
+            "deadline": 1000000000,
+            "state": "ACTIVE",
+            "req": [{
+                "id": 8,
+                "cost": 20000000,
+                "state": "PENDING",
+                "kind": "READ",
+                "seqno": 1
+            },{
+                "id": 9,
+                "cost": 20000000,
+                "state": "PENDING",
+                "kind": "READ",
+                "seqno": 2
+            },{
+                "id": 10,
+                "cost": 20000000,
+                "state": "PENDING",
+                "kind": "READ",
+                "seqno": 3
+            }]
+        }],
+        "hgrub": {
+            "uact": 1.0
+        }
+    },{
+        "ts": 150000000,
+        "cbs": [{
+            "idx": 0,
+            "cur_budget": 0,
+            "state": "IDLE",
+            "req": [ { "id": 1, "state": "DONE" } ]
+        }]
+    },{
+         "ts": 250000000,
+         "cbs": [{
+             "idx": 1,
+             "state": "RUNNING",
+             "req": [ { "id": 2, "state": "RUNNING" } ]
+         }]
+    },{
+        "ts": 350000000,
+        "cbs": [{
+            "idx": 1,
+            "cur_budget": 150000000,
+            "req": [ { "id": 2, "state": "DONE"}, { "id": 3, "state": "RUNNING"} ]
+        }]
+    },{
+        "ts": 450000000,
+        "cbs": [{
+            "idx": 1,
+            "cur_budget": 50000000,
+            "req": [ { "id": 3, "state": "DONE" }, { "id": 4, "state": "RUNNING"} ]
+        }]
+    },{
+        "ts": 500000000,
+        "cbs": [{
+            "idx": 1,
+            "cur_budget": 0,
+            "state": "DEPLETED",
+            "req": [ { "id": 4, "cost": 50000000, "state": "PENDING" } ]
+        },{
+            "idx": 2,
+            "state": "RUNNING",
+            "req": [ { "id": 5, "state": "RUNNING" } ]
+        }]
+    },{
+        "ts": 600000000,
+        "cbs": [{
+            "idx": 2,
+            "cur_budget": 150000000,
+            "req": [ { "id": 5, "state": "DONE" }, { "id": 6, "state": "RUNNING"} ]
+        }]
+    },{
+        "ts": 700000000,
+        "cbs": [{
+            "idx": 2,
+            "cur_budget": 50000000,
+            "req": [ { "id": 6, "state": "DONE" }, { "id": 7, "state": "RUNNING"} ]
+        }]
+    },{
+        "ts": 750000000,
+        "cbs": [{
+            "idx": 2,
+            "cur_budget": 0,
+            "state": "DEPLETED",
+            "req": [ { "id": 7, "cost": 60000000, "state": "PENDING" } ]
+        },{
+            "idx": 3,
+            "state": "RUNNING",
+            "req": [ { "id": 8, "state": "RUNNING" } ]
+        }]
+    },{
+        "ts": 770000000,
+        "cbs": [{
+            "idx": 3,
+            "cur_budget": 230000000,
+            "req": [ { "id": 8, "state": "DONE" }, { "id": 9, "state": "RUNNING"} ]
+        }]
+    },{
+        "ts": 790000000,
+        "cbs": [{
+            "idx": 3,
+            "cur_budget": 210000000,
+            "req": [ { "id": 9, "state": "DONE" }, { "id": 10, "state": "RUNNING"} ]
+        }]
+    },{
+        "ts": 810000000,
+        "cbs": [{
+            "idx": 1,
+            "req": [ { "id": 4, "state": "RUNNING" } ]
+        },{
+            "idx": 3,
+            "cur_budget": 190000000,
+            "req": [ { "id": 10, "state": "DONE" } ]
+        }]
+    },{
+        "ts": 860000000,
+        "cbs": [{
+            "idx": 1,
+            "state": "IDLE",
+            "req": [ { "id": 4, "state": "DONE" } ]
+        },{
+            "idx": 2,
+            "req": [ { "id": 7, "state": "RUNNING" } ]
+        },{
+            "idx": 3,
+            "cur_budget": 140000000
+        }]
+    },{
+        "ts": 910000000,
+        "cbs": [{
+            "idx": 2,
+            "state": "IDLE",
+            "req": [ { "id": 7, "state": "DONE" } ]
+        },{
+            "idx": 3,
+            "cur_budget": 90000000,
+            "state": "IDLE"
+        }]
+    }];
+
+    var linesCount = 15;
+    for (var i = 4; i < linesCount; i++) {
+        hist[0].cbs.push({
+            "idx": i,
+            "name": "vdisk" + i,
+            "max_budget": 250000000,
+            "period": 1000000000,
+            "cur_budget": 250000000,
+            "deadline": Math.random()*1000000000,
+            "state": "ACTIVE",
+            "req": [{
+                "id": 1,
+                "cost": 125000000,
+                "state": "RUNNING",
+                "seqno": 1
+            }]
+        });
+    }
+
+    var schviz = d3.schviz().height(600).width(800);
+
+    schviz.timeDomain([0, 1000]);
+    schviz(hist);
+</script>

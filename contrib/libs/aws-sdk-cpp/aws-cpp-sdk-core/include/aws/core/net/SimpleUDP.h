@@ -26,7 +26,7 @@ namespace Aws
              * @brief Constructor of SimpleUDP
              * @param addressFamily, AF_INET for IPV4 or AF_INET6 for IPV6
              * @param sendBufSize, if nonzero, try set socket's send buffer size to this value.
-             * @param receieveBufSize, if nonzero, try set socket's receive buffer size to this value.
+             * @param receiveBufSize, if nonzero, try set socket's receive buffer size to this value.
              * @param nonBlocking, if it is true, implementation will try to create a non-blocking underlying UDP socket.
              * Implementation should create and set the underlying udp socket.
              */
@@ -36,7 +36,7 @@ namespace Aws
             * @brief An easy constructor of an IPV4 or IPV6 SimpleUDP
             * @param addressFamily, either AF_INET for IPV4 or AF_INET6 for IPV6
             * @param sendBufSize, if nonzero, try set socket's send buffer size to this value.
-            * @param receieveBufSize, if nonzero, try set socket's receive buffer size to this value.
+            * @param receiveBufSize, if nonzero, try set socket's receive buffer size to this value.
             * @param nonBlocking, if it is true, implementation will try to create a non-blocking underlying UDP socket.
             * Implementation should create and set the underlying udp socket.
             */
@@ -48,7 +48,7 @@ namespace Aws
             * Note that "localhost" is not necessarily bind to 127.0.0.1, it could bind to ipv6 address ::1, or other type of ip addresses. If you pass localhost here, we will go through getaddrinfo procedure on Linux and Windows.
             * @param port, the port number that the host listens on.
             * @param sendBufSize, if nonzero, try set socket's send buffer size to this value.
-            * @param receieveBufSize, if nonzero, try set socket's receive buffer size to this value.
+            * @param receiveBufSize, if nonzero, try set socket's receive buffer size to this value.
             * @param nonBlocking, if it is true, implementation will try to create a non-blocking underlying UDP socket.
             * Implementation should create and set the underlying udp socket.
             */
@@ -131,7 +131,7 @@ namespace Aws
             /**
              * @brief Receive data from network.
              * @param address, if not null and underlying implementation supply the incoming data's source address, this will be filled with source address info.
-             * @param addressLength, the size of source adddress, should not be null.
+             * @param addressLength, the size of source address, should not be null.
              * @param buffer, the memory address where you want to store received data.
              * @param bufferLen, the size of data buffer.
              * @return -1 on failure, check errno for detailed error information, on success, returns the actual bytes of data received.

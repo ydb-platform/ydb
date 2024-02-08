@@ -2,6 +2,7 @@
 #include <ydb/core/tx/columnshard/engines/portions/portion_info.h>
 #include <ydb/core/formats/arrow/reader/read_filter_merger.h>
 #include <library/cpp/object_factory/object_factory.h>
+#include <ydb/core/base/appdata.h>
 
 namespace NKikimr::NOlap {
 struct TCompactionLimits;
@@ -53,7 +54,7 @@ private:
     const ui64 PathId;
     YDB_READONLY(TInstant, ActualizationInstant, TInstant::Zero());
 protected:
-    virtual void DoModifyPortions(const std::vector<std::shared_ptr<TPortionInfo>>& add, const std::vector<std::shared_ptr<TPortionInfo>>& remove) = 0;
+    virtual void DoModifyPortions(const THashMap<ui64, std::shared_ptr<TPortionInfo>>& add, const THashMap<ui64, std::shared_ptr<TPortionInfo>>& remove) = 0;
     virtual std::shared_ptr<TColumnEngineChanges> DoGetOptimizationTask(const TCompactionLimits& limits, std::shared_ptr<TGranuleMeta> granule, const THashSet<TPortionAddress>& busyPortions) const = 0;
     virtual TOptimizationPriority DoGetUsefulMetric() const = 0;
     virtual void DoActualize(const TInstant currentInstant) = 0;
@@ -75,16 +76,24 @@ public:
     class TModificationGuard: TNonCopyable {
     private:
         IOptimizerPlanner& Owner;
-        std::vector<std::shared_ptr<TPortionInfo>> AddPortions;
-        std::vector<std::shared_ptr<TPortionInfo>> RemovePortions;
+        THashMap<ui64, std::shared_ptr<TPortionInfo>> AddPortions;
+        THashMap<ui64, std::shared_ptr<TPortionInfo>> RemovePortions;
     public:
         TModificationGuard& AddPortion(const std::shared_ptr<TPortionInfo>& portion) {
-            AddPortions.emplace_back(portion);
+            if (HasAppData() && AppDataVerified().ColumnShardConfig.GetSkipOldGranules() && portion->GetDeprecatedGranuleId() > 0) {
+                AFL_WARN(NKikimrServices::TX_COLUMNSHARD)("event", "skip_granule")("granule_id", portion->GetDeprecatedGranuleId());
+                return *this;
+            }
+            AFL_VERIFY(AddPortions.emplace(portion->GetPortionId(), portion).second);
             return*this;
         }
 
         TModificationGuard& RemovePortion(const std::shared_ptr<TPortionInfo>& portion) {
-            RemovePortions.emplace_back(portion);
+            if (HasAppData() && AppDataVerified().ColumnShardConfig.GetSkipOldGranules() && portion->GetDeprecatedGranuleId() > 0) {
+                AFL_WARN(NKikimrServices::TX_COLUMNSHARD)("event", "skip_granule")("granule_id", portion->GetDeprecatedGranuleId());
+                return *this;
+            }
+            AFL_VERIFY(RemovePortions.emplace(portion->GetPortionId(), portion).second);
             return*this;
         }
 
@@ -112,7 +121,7 @@ public:
         return DoSerializeToJsonVisual();
     }
 
-    void ModifyPortions(const std::vector<std::shared_ptr<TPortionInfo>>& add, const std::vector<std::shared_ptr<TPortionInfo>>& remove) {
+    void ModifyPortions(const THashMap<ui64, std::shared_ptr<TPortionInfo>>& add, const THashMap<ui64, std::shared_ptr<TPortionInfo>>& remove) {
         NActors::TLogContextGuard g(NActors::TLogContextBuilder::Build(NKikimrServices::TX_COLUMNSHARD)("path_id", PathId));
         DoModifyPortions(add, remove);
     }

@@ -25,17 +25,17 @@ SRCS(
 
 PEERDIR(
     contrib/libs/protobuf
-    library/cpp/actors/core
-    library/cpp/actors/dnsresolver
-    library/cpp/actors/interconnect
-    library/cpp/actors/memory_log
-    library/cpp/actors/prof
-    library/cpp/actors/protos
-    library/cpp/actors/util
+    ydb/library/actors/core
+    ydb/library/actors/dnsresolver
+    ydb/library/actors/interconnect
+    ydb/library/actors/memory_log
+    ydb/library/actors/prof
+    ydb/library/actors/protos
+    ydb/library/actors/util
     library/cpp/getopt/small
-    library/cpp/grpc/client
-    library/cpp/grpc/server
-    library/cpp/grpc/server/actors
+    ydb/library/grpc/client
+    ydb/library/grpc/server
+    ydb/library/grpc/server/actors
     library/cpp/logger
     library/cpp/malloc/api
     library/cpp/messagebus
@@ -67,17 +67,21 @@ PEERDIR(
     ydb/core/formats
     ydb/core/fq/libs/init
     ydb/core/fq/libs/logs
+    ydb/core/graph/service
+    ydb/core/graph/shard
     ydb/core/grpc_services
     ydb/core/grpc_services/base
     ydb/core/grpc_services/auth_processor
     ydb/core/health_check
     ydb/core/http_proxy
+    ydb/core/jaeger_tracing
     ydb/core/kesus/proxy
     ydb/core/kesus/tablet
     ydb/core/keyvalue
     ydb/core/kafka_proxy
     ydb/core/kqp
     ydb/core/kqp/federated_query
+    ydb/core/kqp/finalize_script_service
     ydb/core/kqp/rm_service
     ydb/core/load_test
     ydb/core/local_pgwire
@@ -98,6 +102,7 @@ PEERDIR(
     ydb/core/scheme_types
     ydb/core/security
     ydb/core/statistics
+    ydb/core/statistics/aggregator
     ydb/core/sys_view/processor
     ydb/core/sys_view/service
     ydb/core/tablet
@@ -129,7 +134,7 @@ PEERDIR(
     ydb/library/folder_service/proto
     ydb/library/pdisk_io
     ydb/library/security
-    ydb/library/yql/minikql/comp_nodes/llvm
+    ydb/library/yql/minikql/comp_nodes/llvm14
     ydb/library/yql/providers/pq/cm_client
     ydb/library/yql/public/udf/service/exception_policy
     ydb/public/lib/base

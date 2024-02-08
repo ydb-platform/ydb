@@ -1,0 +1,26 @@
+[
+  {
+    "Time": "2022-10-19T16:40:47.218Z",
+    "Fruit": "Banana",
+    "Price": 3,
+    "Weight": 100
+  },
+  {
+    "Time": "2022-10-19T16:40:47+03:00",
+    "Fruit": "Apple",
+    "Price": 2,
+    "Weight": 22
+  },
+  {
+    "Time": "2022-10-19T16:40:47Z",
+    "Fruit": "Pear",
+    "Price": 15,
+    "Weight": 33
+  },
+  {
+    "Time": "2022-10-19 16:40:47.218Z",
+    "Fruit": "Orange",
+    "Price": 1,
+    "Weight": 2
+  }
+]

@@ -346,7 +346,7 @@ public:
 
             auto size = list.GetListLength();
             if (!size) {
-                return ctx.HolderFactory.GetEmptyContainer();
+                return ctx.HolderFactory.GetEmptyContainerLazy();
             }
 
             if (Stealed) {
@@ -393,7 +393,7 @@ public:
             }
 
             if (items.empty()) {
-                return ctx.HolderFactory.GetEmptyContainer();
+                return ctx.HolderFactory.GetEmptyContainerLazy();
             }
 
             Description.Prepare(ctx, items);
@@ -478,7 +478,7 @@ public:
     NUdf::TUnboxedValuePod Perform(TComputationContext& ctx, TKeyPayloadPairVector& items, const TComparator& comparator) const {
         const auto n = std::min<ui64>(Nth->GetValue(ctx).Get<ui64>(), items.size());
         if (!n) {
-            return ctx.HolderFactory.GetEmptyContainer();
+            return ctx.HolderFactory.GetEmptyContainerLazy();
         }
 
         Algorithm(items.begin(), items.begin() + n, items.end(), comparator);
@@ -539,7 +539,7 @@ public:
     NUdf::TUnboxedValuePod DoCalculate(TComputationContext& ctx) const {
         const auto count = Count->GetValue(ctx).Get<ui64>();
         if (!count) {
-            return ctx.HolderFactory.GetEmptyContainer();
+            return ctx.HolderFactory.GetEmptyContainerLazy();
         }
 
         auto list = List->GetValue(ctx);

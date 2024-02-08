@@ -2,13 +2,14 @@
 
 #include <ydb/core/base/appdata.h>
 #include <ydb/core/base/path.h>
+#include <ydb/core/base/feature_flags.h>
 #include <ydb/core/base/statestorage.h>
 #include <ydb/core/tx/scheme_cache/scheme_cache.h>
 #include <ydb/public/api/protos/ydb_discovery.pb.h>
 
-#include <library/cpp/actors/core/actor.h>
-#include <library/cpp/actors/core/actor_bootstrapped.h>
-#include <library/cpp/actors/core/hfunc.h>
+#include <ydb/library/actors/core/actor.h>
+#include <ydb/library/actors/core/actor_bootstrapped.h>
+#include <ydb/library/actors/core/hfunc.h>
 
 #include <util/generic/xrange.h>
 #include <util/random/shuffle.h>
@@ -479,7 +480,7 @@ public:
         }
 
         auto info = entry.DomainInfo;
-        if (info->DomainKey != info->ResourcesDomainKey) {
+        if (NeedResolveResources(info)) {
             DLOG_D("Resolve resources domain"
                 << ": domain key# " << info->DomainKey
                 << ", resources domain key# " << info->ResourcesDomainKey);
@@ -491,6 +492,25 @@ public:
         }
 
         MaybeReply();
+    }
+
+    static bool NeedResolveResources(TIntrusivePtr<NSchemeCache::TDomainInfo> domainInfo) {
+        if (!domainInfo->IsServerless()) {
+            return false;
+        }
+
+        if (domainInfo->ServerlessComputeResourcesMode.Empty()) {
+            return true;
+        }
+
+        switch (*domainInfo->ServerlessComputeResourcesMode) {
+            case NKikimrSubDomains::EServerlessComputeResourcesModeExclusive:
+                return false;
+            case NKikimrSubDomains::EServerlessComputeResourcesModeShared:
+                return true;
+            default:
+                return true;
+        } 
     }
 
     void MaybeReply() {

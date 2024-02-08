@@ -1,11 +1,12 @@
 #include "datashard_kqp.h"
 #include "datashard_impl.h"
+#include "datashard_user_db.h"
 
 #include <ydb/core/kqp/common/kqp.h>
 #include <ydb/core/kqp/runtime/kqp_tasks_runner.h>
 #include <ydb/core/scheme/scheme_tablecell.h>
 #include <ydb/core/scheme/scheme_types_proto.h>
-#include <ydb/core/tx/datashard/datashard_locks.h>
+#include <ydb/core/tx/locks/locks.h>
 #include <ydb/core/tx/datashard/datashard_user_table.h>
 #include <ydb/core/tx/datashard/range_ops.h>
 
@@ -98,8 +99,7 @@ NUdf::EFetchStatus FetchOutput(NDq::IDqOutputChannel* channel, NDq::TDqSerialize
 }
 
 NDq::ERunStatus RunKqpTransactionInternal(const TActorContext& ctx, ui64 txId,
-    const TInputOpData::TInReadSets* inReadSets, const NKikimrTxDataShard::TKqpLocks&,
-    bool useGenericReadSets,
+    const TInputOpData::TInReadSets* inReadSets,  bool useGenericReadSets,
     NKqp::TKqpTasksRunner& tasksRunner, bool applyEffects)
 {
     THashMap<ui64, std::pair<ui64, ui32>> inputChannelsMap; // channelId -> (taskId, input index)
@@ -211,40 +211,40 @@ NDq::ERunStatus RunKqpTransactionInternal(const TActorContext& ctx, ui64 txId,
     return runStatus;
 }
 
-bool NeedValidateLocks(NKikimrTxDataShard::TKqpLocks_ELocksOp op) {
+bool NeedValidateLocks(NKikimrDataEvents::TKqpLocks::ELocksOp op) {
     switch (op) {
-        case NKikimrTxDataShard::TKqpLocks::Commit:
+        case NKikimrDataEvents::TKqpLocks::Commit:
             return true;
 
-        case NKikimrTxDataShard::TKqpLocks::Rollback:
-        case NKikimrTxDataShard::TKqpLocks::Unspecified:
+        case NKikimrDataEvents::TKqpLocks::Rollback:
+        case NKikimrDataEvents::TKqpLocks::Unspecified:
             return false;
     }
 }
 
-bool NeedEraseLocks(NKikimrTxDataShard::TKqpLocks_ELocksOp op) {
+bool NeedEraseLocks(NKikimrDataEvents::TKqpLocks::ELocksOp op) {
     switch (op) {
-        case NKikimrTxDataShard::TKqpLocks::Commit:
-        case NKikimrTxDataShard::TKqpLocks::Rollback:
+        case NKikimrDataEvents::TKqpLocks::Commit:
+        case NKikimrDataEvents::TKqpLocks::Rollback:
             return true;
 
-        case NKikimrTxDataShard::TKqpLocks::Unspecified:
+        case NKikimrDataEvents::TKqpLocks::Unspecified:
             return false;
     }
 }
 
-bool NeedCommitLocks(NKikimrTxDataShard::TKqpLocks_ELocksOp op) {
+bool NeedCommitLocks(NKikimrDataEvents::TKqpLocks::ELocksOp op) {
     switch (op) {
-        case NKikimrTxDataShard::TKqpLocks::Commit:
+        case NKikimrDataEvents::TKqpLocks::Commit:
             return true;
 
-        case NKikimrTxDataShard::TKqpLocks::Rollback:
-        case NKikimrTxDataShard::TKqpLocks::Unspecified:
+        case NKikimrDataEvents::TKqpLocks::Rollback:
+        case NKikimrDataEvents::TKqpLocks::Unspecified:
             return false;
     }
 }
 
-TVector<TCell> MakeLockKey(const NKikimrTxDataShard::TLock& lockProto) {
+TVector<TCell> MakeLockKey(const NKikimrDataEvents::TLock& lockProto) {
     auto lockId = lockProto.GetLockId();
     auto lockDatashard = lockProto.GetDataShard();
     auto lockSchemeShard = lockProto.GetSchemeShard();
@@ -265,10 +265,10 @@ TVector<TCell> MakeLockKey(const NKikimrTxDataShard::TLock& lockProto) {
 }
 
 // returns list of broken locks
-TVector<NKikimrTxDataShard::TLock> ValidateLocks(const NKikimrTxDataShard::TKqpLocks& txLocks, TSysLocks& sysLocks,
+TVector<NKikimrDataEvents::TLock> ValidateLocks(const NKikimrDataEvents::TKqpLocks& txLocks, TSysLocks& sysLocks,
     ui64 tabletId)
 {
-    TVector<NKikimrTxDataShard::TLock> brokenLocks;
+    TVector<NKikimrDataEvents::TLock> brokenLocks;
 
     if (!NeedValidateLocks(txLocks.GetOp())) {
         return {};
@@ -294,13 +294,13 @@ TVector<NKikimrTxDataShard::TLock> ValidateLocks(const NKikimrTxDataShard::TKqpL
     return brokenLocks;
 }
 
-bool SendLocks(const NKikimrTxDataShard::TKqpLocks& locks, ui64 shardId) {
+bool SendLocks(const NKikimrDataEvents::TKqpLocks& locks, ui64 shardId) {
     auto& sendingShards = locks.GetSendingShards();
     auto it = std::find(sendingShards.begin(), sendingShards.end(), shardId);
     return it != sendingShards.end();
 }
 
-bool ReceiveLocks(const NKikimrTxDataShard::TKqpLocks& locks, ui64 shardId) {
+bool ReceiveLocks(const NKikimrDataEvents::TKqpLocks& locks, ui64 shardId) {
     auto& receivingShards = locks.GetReceivingShards();
     auto it = std::find(receivingShards.begin(), receivingShards.end(), shardId);
     return it != receivingShards.end();
@@ -344,11 +344,11 @@ TVector<NTable::TColumn> GetColumns(const TReadOpMeta& readMeta) {
     return columns;
 }
 
-TVector<TEngineBay::TColumnWriteMeta> GetColumnWrites(const TWriteOpMeta& writeMeta) {
-    TVector<TEngineBay::TColumnWriteMeta> writeColumns;
+TVector<TKeyValidator::TColumnWriteMeta> GetColumnWrites(const TWriteOpMeta& writeMeta) {
+    TVector<TKeyValidator::TColumnWriteMeta> writeColumns;
     writeColumns.reserve(writeMeta.ColumnsSize());
     for (const auto& columnMeta : writeMeta.GetColumns()) {
-        TEngineBay::TColumnWriteMeta writeColumn;
+        TKeyValidator::TColumnWriteMeta writeColumn;
         writeColumn.Column = GetColumn(columnMeta.GetColumn());
         writeColumn.MaxValueSizeBytes = columnMeta.GetMaxValueSizeBytes();
 
@@ -362,7 +362,7 @@ template <bool Read>
 void KqpSetTxKeysImpl(ui64 tabletId, ui64 taskId, const TTableId& tableId, const TUserTable* tableInfo,
     const NKikimrTxDataShard::TKqpTransaction_TDataTaskMeta_TKeyRange& rangeKind,
     const TReadOpMeta* readMeta, const TWriteOpMeta* writeMeta, const NScheme::TTypeRegistry& typeRegistry,
-    const TActorContext& ctx, TEngineBay& engineBay)
+    const TActorContext& ctx, TKeyValidator& keyValidator)
 {
     if (Read) {
         Y_ABORT_UNLESS(readMeta);
@@ -387,10 +387,10 @@ void KqpSetTxKeysImpl(ui64 tabletId, ui64 taskId, const TTableId& tableId, const
                 Y_DEBUG_ABORT_UNLESS(!(tableRange.To.GetCells().empty() && tableRange.ToInclusive));
 
                 if constexpr (Read) {
-                    engineBay.AddReadRange(tableId, GetColumns(*readMeta), tableRange.ToTableRange(),
+                    keyValidator.AddReadRange(tableId, GetColumns(*readMeta), tableRange.ToTableRange(),
                         tableInfo->KeyColumnTypes, readMeta->GetItemsLimit(), readMeta->GetReverse());
                 } else {
-                    engineBay.AddWriteRange(tableId, tableRange.ToTableRange(), tableInfo->KeyColumnTypes,
+                    keyValidator.AddWriteRange(tableId, tableRange.ToTableRange(), tableInfo->KeyColumnTypes,
                         GetColumnWrites(*writeMeta), writeMeta->GetIsPureEraseOp());
                 }
             }
@@ -405,11 +405,9 @@ void KqpSetTxKeysImpl(ui64 tabletId, ui64 taskId, const TTableId& tableId, const
                     << DebugPrintPoint(tableInfo->KeyColumnTypes, tablePoint.From.GetCells(), typeRegistry));
 
                 if constexpr (Read) {
-                    engineBay.AddReadRange(tableId,  GetColumns(*readMeta), tablePoint.ToTableRange(),
-                        tableInfo->KeyColumnTypes, readMeta->GetItemsLimit(), readMeta->GetReverse());
+                    keyValidator.AddReadRange(tableId, GetColumns(*readMeta), tablePoint.ToTableRange(), tableInfo->KeyColumnTypes, readMeta->GetItemsLimit(), readMeta->GetReverse());
                 } else {
-                    engineBay.AddWriteRange(tableId, tablePoint.ToTableRange(), tableInfo->KeyColumnTypes,
-                        GetColumnWrites(*writeMeta), writeMeta->GetIsPureEraseOp());
+                    keyValidator.AddWriteRange(tableId, tablePoint.ToTableRange(), tableInfo->KeyColumnTypes, GetColumnWrites(*writeMeta), writeMeta->GetIsPureEraseOp());
                 }
             }
 
@@ -426,10 +424,10 @@ void KqpSetTxKeysImpl(ui64 tabletId, ui64 taskId, const TTableId& tableId, const
                 << DebugPrintRange(tableInfo->KeyColumnTypes, tableRange.ToTableRange(), typeRegistry));
 
             if constexpr (Read) {
-                engineBay.AddReadRange(tableId,  GetColumns(*readMeta), tableRange.ToTableRange(),
+                keyValidator.AddReadRange(tableId,  GetColumns(*readMeta), tableRange.ToTableRange(),
                     tableInfo->KeyColumnTypes, readMeta->GetItemsLimit(), readMeta->GetReverse());
             } else {
-                engineBay.AddWriteRange(tableId, tableRange.ToTableRange(), tableInfo->KeyColumnTypes,
+                keyValidator.AddWriteRange(tableId, tableRange.ToTableRange(), tableInfo->KeyColumnTypes,
                     GetColumnWrites(*writeMeta), writeMeta->GetIsPureEraseOp());
             }
 
@@ -442,10 +440,10 @@ void KqpSetTxKeysImpl(ui64 tabletId, ui64 taskId, const TTableId& tableId, const
                 << ", task: " << taskId << ", " << (Read ? "read range: UNSPECIFIED" : "write range: UNSPECIFIED"));
 
             if constexpr (Read) {
-                engineBay.AddReadRange(tableId,  GetColumns(*readMeta), tableInfo->Range.ToTableRange(),
+                keyValidator.AddReadRange(tableId,  GetColumns(*readMeta), tableInfo->Range.ToTableRange(),
                     tableInfo->KeyColumnTypes, readMeta->GetItemsLimit(), readMeta->GetReverse());
             } else {
-                engineBay.AddWriteRange(tableId, tableInfo->Range.ToTableRange(), tableInfo->KeyColumnTypes,
+                keyValidator.AddWriteRange(tableId, tableInfo->Range.ToTableRange(), tableInfo->KeyColumnTypes,
                     GetColumnWrites(*writeMeta), writeMeta->GetIsPureEraseOp());
             }
 
@@ -458,7 +456,7 @@ void KqpSetTxKeysImpl(ui64 tabletId, ui64 taskId, const TTableId& tableId, const
 
 void KqpSetTxKeys(ui64 tabletId, ui64 taskId, const TUserTable* tableInfo,
     const NKikimrTxDataShard::TKqpTransaction_TDataTaskMeta& meta, const NScheme::TTypeRegistry& typeRegistry,
-    const TActorContext& ctx, TEngineBay& engineBay)
+    const TActorContext& ctx, TKeyValidator& keyValidator)
 {
     auto& tableMeta = meta.GetTable();
     auto tableId = TTableId(tableMeta.GetTableId().GetOwnerId(), tableMeta.GetTableId().GetTableId(),
@@ -466,16 +464,16 @@ void KqpSetTxKeys(ui64 tabletId, ui64 taskId, const TUserTable* tableInfo,
 
     for (auto& read : meta.GetReads()) {
         KqpSetTxKeysImpl<true>(tabletId, taskId, tableId, tableInfo, read.GetRange(), &read, nullptr,
-            typeRegistry, ctx, engineBay);
+            typeRegistry, ctx, keyValidator);
     }
 
     if (meta.HasWrites()) {
         KqpSetTxKeysImpl<false>(tabletId, taskId, tableId, tableInfo, meta.GetWrites().GetRange(), nullptr,
-            &meta.GetWrites(), typeRegistry, ctx, engineBay);
+            &meta.GetWrites(), typeRegistry, ctx, keyValidator);
     }
 }
 
-void KqpSetTxLocksKeys(const NKikimrTxDataShard::TKqpLocks& locks, const TSysLocks& sysLocks, TEngineBay& engineBay) {
+void KqpSetTxLocksKeys(const NKikimrDataEvents::TKqpLocks& locks, const TSysLocks& sysLocks, TKeyValidator& keyValidator) {
     if (locks.LocksSize() == 0) {
         return;
     }
@@ -493,27 +491,25 @@ void KqpSetTxLocksKeys(const NKikimrTxDataShard::TKqpLocks& locks, const TSysLoc
         if (sysLocks.IsMyKey(lockKey)) {
             auto point = TTableRange(lockKey, true, {}, true, /* point */ true);
             if (NeedValidateLocks(locks.GetOp())) {
-                engineBay.AddReadRange(sysLocksTableId, {}, point, lockRowType);
+                keyValidator.AddReadRange(sysLocksTableId, {}, point, lockRowType);
             }
             if (NeedEraseLocks(locks.GetOp())) {
-                engineBay.AddWriteRange(sysLocksTableId, point, lockRowType, {}, /* isPureEraseOp */ true);
+                keyValidator.AddWriteRange(sysLocksTableId, point, lockRowType, {}, /* isPureEraseOp */ true);
             }
         }
     }
 }
 
-NYql::NDq::ERunStatus KqpRunTransaction(const TActorContext& ctx, ui64 txId,
-    const NKikimrTxDataShard::TKqpLocks& kqpLocks, bool useGenericReadSets, NKqp::TKqpTasksRunner& tasksRunner)
+NYql::NDq::ERunStatus KqpRunTransaction(const TActorContext& ctx, ui64 txId, bool useGenericReadSets, NKqp::TKqpTasksRunner& tasksRunner)
 {
-    return RunKqpTransactionInternal(ctx, txId, /* inReadSets */ nullptr, kqpLocks, useGenericReadSets, tasksRunner, /* applyEffects */ false);
+    return RunKqpTransactionInternal(ctx, txId, /* inReadSets */ nullptr, useGenericReadSets, tasksRunner, /* applyEffects */ false);
 }
 
 THolder<TEvDataShard::TEvProposeTransactionResult> KqpCompleteTransaction(const TActorContext& ctx,
-    ui64 origin, ui64 txId, const TInputOpData::TInReadSets* inReadSets,
-    const NKikimrTxDataShard::TKqpLocks& kqpLocks, bool useGenericReadSets, NKqp::TKqpTasksRunner& tasksRunner,
+    ui64 origin, ui64 txId, const TInputOpData::TInReadSets* inReadSets, bool useGenericReadSets, NKqp::TKqpTasksRunner& tasksRunner,
     const NMiniKQL::TKqpDatashardComputeContext& computeCtx)
 {
-    auto runStatus = RunKqpTransactionInternal(ctx, txId, inReadSets, kqpLocks, useGenericReadSets, tasksRunner, /* applyEffects */ true);
+    auto runStatus = RunKqpTransactionInternal(ctx, txId, inReadSets, useGenericReadSets, tasksRunner, /* applyEffects */ true);
 
     if (computeCtx.HadInconsistentReads()) {
         return nullptr;
@@ -592,7 +588,7 @@ THolder<TEvDataShard::TEvProposeTransactionResult> KqpCompleteTransaction(const 
     return result;
 }
 
-void KqpFillOutReadSets(TOutputOpData::TOutReadSets& outReadSets, const NKikimrTxDataShard::TKqpLocks& kqpLocks,
+void KqpFillOutReadSets(TOutputOpData::TOutReadSets& outReadSets, const NKikimrDataEvents::TKqpLocks& kqpLocks,
     bool hasKqpLocks, bool useGenericReadSets,
     NKqp::TKqpTasksRunner& tasksRunner, TSysLocks& sysLocks, ui64 tabletId)
 {
@@ -692,54 +688,35 @@ void KqpFillOutReadSets(TOutputOpData::TOutReadSets& outReadSets, const NKikimrT
     }
 }
 
-bool KqpValidateLocks(ui64 origin, TActiveTransaction* tx, TSysLocks& sysLocks) {
-    auto& kqpLocks = tx->GetDataTx()->GetKqpLocks();
-    bool hasKqpLocks = tx->GetDataTx()->HasKqpLocks();
-
-    if (!hasKqpLocks || !NeedValidateLocks(kqpLocks.GetOp())) {
-        return true;
+std::tuple<bool, TVector<NKikimrDataEvents::TLock>> KqpValidateLocks(ui64 origin, TSysLocks& sysLocks, 
+    const NKikimrDataEvents::TKqpLocks* kqpLocks, bool useGenericReadSets, const TInputOpData::TInReadSets& inReadSets) 
+{
+    if (kqpLocks == nullptr || !NeedValidateLocks(kqpLocks->GetOp())) {
+        return {true, {}};
     }
 
-    bool sendLocks = SendLocks(kqpLocks, origin);
-    YQL_ENSURE(sendLocks == !kqpLocks.GetLocks().empty());
+    bool sendLocks = SendLocks(*kqpLocks, origin);
+    YQL_ENSURE(sendLocks == !kqpLocks->GetLocks().empty());
 
     if (sendLocks) {
-        auto brokenLocks = ValidateLocks(kqpLocks, sysLocks, origin);
+        auto brokenLocks = ValidateLocks(*kqpLocks, sysLocks, origin);
 
         if (!brokenLocks.empty()) {
-            tx->Result() = MakeHolder<TEvDataShard::TEvProposeTransactionResult>(
-                NKikimrTxDataShard::TX_KIND_DATA,
-                origin,
-                tx->GetTxId(),
-                NKikimrTxDataShard::TEvProposeTransactionResult::LOCKS_BROKEN);
-
-            auto* protoLocks = tx->Result()->Record.MutableTxLocks();
-            for (auto& brokenLock : brokenLocks) {
-                protoLocks->Add()->Swap(&brokenLock);
-            }
-
-            return false;
+            return {false, std::move(brokenLocks)};
         }
     }
 
-    for (auto& readSet : tx->InReadSets()) {
-        for (auto& data : readSet.second) {
-            if (tx->GetDataTx()->GetUseGenericReadSets()) {
+    for (const auto& readSet : inReadSets) {
+        for (const auto& data : readSet.second) {
+            if (useGenericReadSets) {
                 NKikimrTx::TReadSetData genericData;
                 bool ok = genericData.ParseFromString(data.Body);
-                Y_ABORT_UNLESS(ok, "Failed to parse generic readset from %" PRIu64 " to %" PRIu64 " origin %" PRIu64,
+                Y_ABORT_UNLESS(ok, "Failed to parse generic readset from %" PRIu64 " to %" PRIu64 " tabletId %" PRIu64,
                     readSet.first.first, readSet.first.second, data.Origin);
 
                 if (genericData.GetDecision() != NKikimrTx::TReadSetData::DECISION_COMMIT) {
-                    tx->Result() = MakeHolder<TEvDataShard::TEvProposeTransactionResult>(
-                        NKikimrTxDataShard::TX_KIND_DATA,
-                        origin,
-                        tx->GetTxId(),
-                        NKikimrTxDataShard::TEvProposeTransactionResult::LOCKS_BROKEN);
-
                     // Note: we don't know details on what failed at that shard
-
-                    return false;
+                    return {false, {}};
                 }
             } else {
                 NKikimrTxDataShard::TKqpReadset kqpReadset;
@@ -748,63 +725,48 @@ bool KqpValidateLocks(ui64 origin, TActiveTransaction* tx, TSysLocks& sysLocks) 
                 if (kqpReadset.HasValidateLocksResult()) {
                     auto& validateResult = kqpReadset.GetValidateLocksResult();
                     if (!validateResult.GetSuccess()) {
-                        tx->Result() = MakeHolder<TEvDataShard::TEvProposeTransactionResult>(
-                            NKikimrTxDataShard::TX_KIND_DATA,
-                            origin,
-                            tx->GetTxId(),
-                            NKikimrTxDataShard::TEvProposeTransactionResult::LOCKS_BROKEN);
-
-                        tx->Result()->Record.MutableTxLocks()->CopyFrom(validateResult.GetBrokenLocks());
-
-                        return false;
+                        TVector<NKikimrDataEvents::TLock> brokenLocks;
+                        brokenLocks.reserve(validateResult.GetBrokenLocks().size());
+                        std::copy(validateResult.GetBrokenLocks().begin(), validateResult.GetBrokenLocks().end(), std::back_inserter(brokenLocks));
+                        return {false, std::move(brokenLocks)};
                     }
                 }
             }
         }
     }
 
-    return true;
+    return {true, {}};
 }
 
-bool KqpValidateVolatileTx(ui64 origin, TActiveTransaction* tx, TSysLocks& sysLocks) {
-    auto& kqpLocks = tx->GetDataTx()->GetKqpLocks();
-
-    if (!tx->GetDataTx()->HasKqpLocks() || !NeedValidateLocks(kqpLocks.GetOp())) {
-        return true;
+std::tuple<bool, TVector<NKikimrDataEvents::TLock>> KqpValidateVolatileTx(ui64 origin, TSysLocks& sysLocks, 
+    const NKikimrDataEvents::TKqpLocks* kqpLocks, bool useGenericReadSets, ui64 txId, const TVector<NKikimrTx::TEvReadSet>& delayedInReadSets, 
+    TInputOpData::TAwaitingDecisions& awaitingDecisions, TOutputOpData::TOutReadSets& outReadSets) 
+{
+    if (kqpLocks == nullptr || !NeedValidateLocks(kqpLocks->GetOp())) {
+        return {true, {}};
     }
 
     // Volatile transactions cannot work with non-generic readsets
-    YQL_ENSURE(tx->GetDataTx()->GetUseGenericReadSets());
+    YQL_ENSURE(useGenericReadSets);
 
     // We may have some stale data since before the restart
     // We expect all stale data to be cleared on restarts
-    Y_ABORT_UNLESS(tx->OutReadSets().empty());
-    Y_ABORT_UNLESS(tx->AwaitingDecisions().empty());
+    Y_ABORT_UNLESS(outReadSets.empty());
+    Y_ABORT_UNLESS(awaitingDecisions.empty());
 
     // Note: usually all shards send locks, since they either have side effects or need to validate locks
     // However it is technically possible to have pure-read shards, that don't contribute to the final decision
-    bool sendLocks = SendLocks(kqpLocks, origin);
+    bool sendLocks = SendLocks(*kqpLocks, origin);
     if (sendLocks) {
         // Note: it is possible to have no locks
-        auto brokenLocks = ValidateLocks(kqpLocks, sysLocks, origin);
+        auto brokenLocks = ValidateLocks(*kqpLocks, sysLocks, origin);
 
         if (!brokenLocks.empty()) {
-            tx->Result() = MakeHolder<TEvDataShard::TEvProposeTransactionResult>(
-                NKikimrTxDataShard::TX_KIND_DATA,
-                origin,
-                tx->GetTxId(),
-                NKikimrTxDataShard::TEvProposeTransactionResult::LOCKS_BROKEN);
-
-            auto* protoLocks = tx->Result()->Record.MutableTxLocks();
-            for (auto& brokenLock : brokenLocks) {
-                protoLocks->Add()->Swap(&brokenLock);
-            }
-
-            return false;
+            return {false, std::move(brokenLocks)};
         }
 
         // We need to form decision readsets for all other participants
-        for (ui64 dstTabletId : kqpLocks.GetReceivingShards()) {
+        for (ui64 dstTabletId : kqpLocks->GetReceivingShards()) {
             if (dstTabletId == origin) {
                 // Don't send readsets to ourselves
                 continue;
@@ -821,15 +783,15 @@ bool KqpValidateVolatileTx(ui64 origin, TActiveTransaction* tx, TSysLocks& sysLo
             bool ok = data.SerializeToString(&bodyStr);
             Y_ABORT_UNLESS(ok, "Failed to serialize readset from %" PRIu64 " to %" PRIu64, key.first, key.second);
 
-            tx->OutReadSets()[key] = std::move(bodyStr);
+            outReadSets[key] = std::move(bodyStr);
         }
     }
 
-    bool receiveLocks = ReceiveLocks(kqpLocks, origin);
+    bool receiveLocks = ReceiveLocks(*kqpLocks, origin);
     if (receiveLocks) {
         // Note: usually only shards with side-effects receive locks, since they
         //       need the final outcome to decide whether to commit or abort.
-        for (ui64 srcTabletId : kqpLocks.GetSendingShards()) {
+        for (ui64 srcTabletId : kqpLocks->GetSendingShards()) {
             if (srcTabletId == origin) {
                 // Don't await decision from ourselves
                 continue;
@@ -838,20 +800,20 @@ bool KqpValidateVolatileTx(ui64 origin, TActiveTransaction* tx, TSysLocks& sysLo
             LOG_TRACE_S(*TlsActivationContext, NKikimrServices::TX_DATASHARD, "Will wait for volatile decision from "
                 << srcTabletId << " to " << origin);
 
-            tx->AwaitingDecisions().insert(srcTabletId);
+            awaitingDecisions.insert(srcTabletId);
         }
 
         bool aborted = false;
 
-        for (auto& record : tx->DelayedInReadSets()) {
+        for (const auto& record : delayedInReadSets) {
             ui64 srcTabletId = record.GetTabletSource();
             ui64 dstTabletId = record.GetTabletDest();
             if (dstTabletId != origin) {
                 LOG_WARN_S(*TlsActivationContext, NKikimrServices::TX_DATASHARD, "Ignoring unexpected readset from "
-                    << srcTabletId << " to " << dstTabletId << " for txId# " << tx->GetTxId() << " at tablet " << origin);
+                    << srcTabletId << " to " << dstTabletId << " for txId# " << txId << " at tablet " << origin);
                 continue;
             }
-            if (!tx->AwaitingDecisions().contains(srcTabletId)) {
+            if (!awaitingDecisions.contains(srcTabletId)) {
                 continue;
             }
 
@@ -861,7 +823,7 @@ bool KqpValidateVolatileTx(ui64 origin, TActiveTransaction* tx, TSysLocks& sysLo
 
                 // No readset data: participant aborted the transaction
                 LOG_TRACE_S(*TlsActivationContext, NKikimrServices::TX_DATASHARD, "Processed readset without data from"
-                    << srcTabletId << " to " << dstTabletId << " will abort txId# " << tx->GetTxId());
+                    << srcTabletId << " to " << dstTabletId << " will abort txId# " << txId);
                 aborted = true;
                 break;
             }
@@ -874,38 +836,30 @@ bool KqpValidateVolatileTx(ui64 origin, TActiveTransaction* tx, TSysLocks& sysLo
                 // Explicit decision that is not a commit, need to abort
                 LOG_TRACE_S(*TlsActivationContext, NKikimrServices::TX_DATASHARD, "Processed decision "
                     << ui32(data.GetDecision()) << " from " << srcTabletId << " to " << dstTabletId
-                    << " for txId# " << tx->GetTxId());
+                    << " for txId# " << txId);
                 aborted = true;
                 break;
             }
 
             LOG_TRACE_S(*TlsActivationContext, NKikimrServices::TX_DATASHARD, "Processed commit decision from "
-                << srcTabletId << " to " << dstTabletId << " for txId# " << tx->GetTxId());
-            tx->AwaitingDecisions().erase(srcTabletId);
+                << srcTabletId << " to " << dstTabletId << " for txId# " << txId);
+            awaitingDecisions.erase(srcTabletId);
         }
 
         if (aborted) {
-            tx->Result() = MakeHolder<TEvDataShard::TEvProposeTransactionResult>(
-                NKikimrTxDataShard::TX_KIND_DATA,
-                origin,
-                tx->GetTxId(),
-                NKikimrTxDataShard::TEvProposeTransactionResult::ABORTED);
-
-            return false;
+            return {false, {}};
         }
     }
 
-    return true;
+    return {true, {}};
 }
 
-void KqpEraseLocks(ui64 origin, TActiveTransaction* tx, TSysLocks& sysLocks) {
-    auto& kqpLocks = tx->GetDataTx()->GetKqpLocks();
-
-    if (!tx->GetDataTx()->HasKqpLocks() || !NeedEraseLocks(kqpLocks.GetOp())) {
+void KqpEraseLocks(ui64 origin, const NKikimrDataEvents::TKqpLocks* kqpLocks, TSysLocks& sysLocks) {
+    if (kqpLocks == nullptr || !NeedEraseLocks(kqpLocks->GetOp())) {
         return;
     }
 
-    for (auto& lockProto : kqpLocks.GetLocks()) {
+    for (const auto& lockProto : kqpLocks->GetLocks()) {
         if (lockProto.GetDataShard() != origin) {
             continue;
         }
@@ -917,18 +871,14 @@ void KqpEraseLocks(ui64 origin, TActiveTransaction* tx, TSysLocks& sysLocks) {
     }
 }
 
-void KqpCommitLocks(ui64 origin, TActiveTransaction* tx, const TRowVersion& writeVersion, TDataShard& dataShard) {
-
-    if (!tx->GetDataTx()->HasKqpLocks()) {
+void KqpCommitLocks(ui64 origin, const NKikimrDataEvents::TKqpLocks* kqpLocks, TSysLocks& sysLocks, const TRowVersion& writeVersion, IDataShardUserDb& userDb) {
+    if (kqpLocks == nullptr) {
         return;
     }
 
-    auto& kqpLocks = tx->GetDataTx()->GetKqpLocks();
-    TSysLocks& sysLocks = dataShard.SysLocksTable();
-
-    if (NeedCommitLocks(kqpLocks.GetOp())) {
+    if (NeedCommitLocks(kqpLocks->GetOp())) {
         // We assume locks have been validated earlier
-        for (auto& lockProto : kqpLocks.GetLocks()) {
+        for (const auto& lockProto : kqpLocks->GetLocks()) {
             if (lockProto.GetDataShard() != origin) {
                 continue;
             }
@@ -941,15 +891,15 @@ void KqpCommitLocks(ui64 origin, TActiveTransaction* tx, const TRowVersion& writ
             TTableId tableId(lockProto.GetSchemeShard(), lockProto.GetPathId());
             auto txId = lockProto.GetLockId();
 
-            tx->GetDataTx()->CommitChanges(tableId, txId, writeVersion);
+            userDb.CommitChanges(tableId, txId, writeVersion);
         }
     } else {
-        KqpEraseLocks(origin, tx, sysLocks);
+        KqpEraseLocks(origin, kqpLocks, sysLocks);
     }
 }
 
 void KqpPrepareInReadsets(TInputOpData::TInReadSets& inReadSets,
-    const NKikimrTxDataShard::TKqpLocks& kqpLocks, const NKqp::TKqpTasksRunner& tasksRunner, ui64 tabletId)
+    const NKikimrDataEvents::TKqpLocks& kqpLocks, const NKqp::TKqpTasksRunner& tasksRunner, ui64 tabletId)
 {
     for (auto& [taskId, task] : tasksRunner.GetTasks()) {
         for (ui32 i = 0; i < task.InputsSize(); ++i) {
@@ -1107,7 +1057,11 @@ public:
         return NKqp::KqpBuildOutputConsumer(outputDesc, type, applyCtx, typeEnv, holderFactory, std::move(outputs));
     }
 
-    NDq::IDqChannelStorage::TPtr CreateChannelStorage(ui64 /* channelId */) const override {
+    NDq::IDqChannelStorage::TPtr CreateChannelStorage(ui64 /* channelId */, bool /* withSpilling */) const override {
+        return {};
+    }
+
+    NDq::IDqChannelStorage::TPtr CreateChannelStorage(ui64 /* channelId */, bool /* withSpilling */, TActorSystem* /* actorSystem */, bool /*isConcurrent*/) const override {
         return {};
     }
 };

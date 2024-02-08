@@ -49,7 +49,7 @@ target_link_libraries(ydb-core-grpc_services PUBLIC
   core-tx-datashard
   core-tx-sharding
   tx-long_tx_service-public
-  core-tx-ev_write
+  core-tx-data_events
   ydb-core-ydb_convert
   ydb-core-security
   ydb-library-aclib
@@ -59,6 +59,7 @@ target_link_libraries(ydb-core-grpc_services PUBLIC
   library-persqueue-topic_parser
   parser-pg_wrapper-interface
   yql-public-types
+  yql-public-issue
   ydb-library-services
   api-grpc-draft
   api-protos
@@ -144,4 +145,5 @@ target_sources(ydb-core-grpc_services PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/core/grpc_services/query/rpc_execute_script.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/grpc_services/query/rpc_fetch_script_results.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/grpc_services/query/rpc_attach_session.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/grpc_services/query/rpc_kqp_tx.cpp
 )

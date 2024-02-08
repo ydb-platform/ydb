@@ -4,6 +4,7 @@
 #include "datashard_s3_upload.h"
 
 #include <ydb/core/tx/tx.h>
+#include <ydb/core/tx/data_events/events.h>
 #include <ydb/core/tx/message_seqno.h>
 #include <ydb/core/base/domain.h>
 #include <ydb/core/base/row_version.h>
@@ -12,6 +13,7 @@
 #include <ydb/core/scheme/scheme_type_registry.h>
 #include <ydb/core/protos/tx_datashard.pb.h>
 #include <ydb/core/tablet_flat/flat_row_versions.h>
+#include <ydb/library/actors/wilson/wilson_span.h>
 
 #include <library/cpp/lwtrace/shuttle.h>
 #include <library/cpp/time_provider/time_provider.h>
@@ -437,7 +439,7 @@ struct TEvDataShard {
             const TStringBuf& txBody, ui32 flags = NDataShard::TTxFlags::Default)
         {
             Record.SetTxKind(txKind);
-            ActorIdToProto(source, Record.MutableSource());
+            ActorIdToProto(source, Record.MutableSourceDeprecated());
             Record.SetTxId(txId);
             Record.SetExecLevel(0);
             Record.SetTxBody(txBody.data(), txBody.size());
@@ -479,10 +481,6 @@ struct TEvDataShard {
 
         NKikimrTxDataShard::ETransactionKind GetTxKind() const {
             return Record.GetTxKind();
-        }
-
-        TActorId GetSource() const {
-            return ActorIdFromProto(Record.GetSource());
         }
 
         ui64 GetTxId() const {
@@ -643,12 +641,11 @@ struct TEvDataShard {
         TString GetError() const {
             if (Record.ErrorSize() > 0) {
                 TString result;
+                TStringOutput out(result);
                 for (ui32 i = 0; i < Record.ErrorSize(); ++i) {
-                    if (Record.GetError(i).HasReason()) {
-                        result += Record.GetError(i).GetReason() + "|";
-                    } else {
-                        result += "no reason|";
-                    }
+                    out << Record.GetError(i).GetKind() << " (" 
+                        << (Record.GetError(i).HasReason() ? Record.GetError(i).GetReason() : "no reason")
+                        << ") |";
                 }
                 return result;
             } else {
@@ -667,7 +664,6 @@ struct TEvDataShard {
                 error->SetKey(keyBuffer.data(), keyBuffer.size());
             }
         }
-
     private:
         bool ForceOnline = false;
         bool ForceDirty = false;
@@ -955,6 +951,9 @@ struct TEvDataShard {
 
         // Orbit used for tracking request events
         NLWTrace::TOrbit Orbit;
+
+        // Wilson span for this request.
+        NWilson::TSpan ReadSpan;
     };
 
     struct TEvReadResult : public TEventPB<TEvReadResult,

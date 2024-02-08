@@ -311,7 +311,7 @@ TEST(TTableSchemaTest, ColumnSchemaValidation)
             .SetExpression(TString("SomeExpression")));
 
     // Key columns can't be aggregated.
-     expectBad(
+    expectBad(
         TColumnSchema("Name", EValueType::String)
             .SetSortOrder(ESortOrder::Ascending)
             .SetAggregate(TString("sum")));

@@ -1,10 +1,12 @@
 #include "msgbus_servicereq.h"
 #include "grpc_server.h"
 
-#include <library/cpp/actors/core/actor_bootstrapped.h>
-#include <library/cpp/actors/core/hfunc.h>
-#include <library/cpp/actors/interconnect/interconnect.h>
+#include <ydb/library/actors/core/actor_bootstrapped.h>
+#include <ydb/library/actors/core/hfunc.h>
+#include <ydb/library/actors/interconnect/interconnect.h>
 #include <ydb/core/base/appdata.h>
+#include <ydb/core/base/nameservice.h>
+#include <ydb/core/base/feature_flags.h>
 #include <ydb/core/base/tablet_pipe.h>
 #include <ydb/core/mind/node_broker.h>
 #include <ydb/core/kqp/common/kqp.h>

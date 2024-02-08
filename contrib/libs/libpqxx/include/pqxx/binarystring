@@ -1,0 +1,4 @@
+/** BYTEA (binary string) conversions.
+ */
+// Actual definitions in .hxx file so editors and such recognize file type.
+#include "pqxx/binarystring.hxx"

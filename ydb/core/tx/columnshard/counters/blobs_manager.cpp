@@ -1,6 +1,7 @@
 #include "blobs_manager.h"
 #include <ydb/core/base/appdata.h>
 #include <ydb/core/base/counters.h>
+#include <ydb/library/services/services.pb.h>
 
 namespace NKikimr::NColumnShard {
 

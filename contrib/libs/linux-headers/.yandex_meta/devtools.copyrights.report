@@ -1532,19 +1532,6 @@ BELONGS ya.make
     Files with this license:
         linux/counter.h [4:4]
 
-KEEP     COPYRIGHT_SERVICE_LABEL 45e2d75eb13ae712fe77928934ffcf0a
-BELONGS ya.make
-    License text:
-                  Copyright (c) 1987-1999 Carnegie Mellon University
-                          Additional copyrights listed below
-    Scancode info:
-        Original SPDX id: COPYRIGHT_SERVICE_LABEL
-        Score           : 100.00
-        Match type      : COPYRIGHT
-    Files with this license:
-        linux/coda.h [11:12]
-        linux/coda.h [28:29]
-
 KEEP     COPYRIGHT_SERVICE_LABEL 48639a758e4e40c533dc66c319a34a01
 BELONGS ya.make
     License text:
@@ -2015,6 +2002,16 @@ BELONGS ya.make
         Match type      : COPYRIGHT
     Files with this license:
         asm/posix_types_arm.h [5:5]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 60532bdfaa2b41c68103d7a9323d14a0
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        linux/nl80211.h [6:14]
 
 KEEP     COPYRIGHT_SERVICE_LABEL 61375807ab2a77a803ab8d0797577f87
 BELONGS ya.make
@@ -2746,16 +2743,6 @@ BELONGS ya.make
         Match type      : COPYRIGHT
     Files with this license:
         linux/nbd.h [3:8]
-
-KEEP     COPYRIGHT_SERVICE_LABEL 868e48910e495ab3c256b805ace087a1
-BELONGS ya.make
-    Note: matched license text is too long. Read it in the source files.
-    Scancode info:
-        Original SPDX id: COPYRIGHT_SERVICE_LABEL
-        Score           : 100.00
-        Match type      : COPYRIGHT
-    Files with this license:
-        linux/nl80211.h [6:14]
 
 KEEP     COPYRIGHT_SERVICE_LABEL 86c051674d566ea96b9121ecd0bcf668
 BELONGS ya.make
@@ -3739,17 +3726,6 @@ BELONGS ya.make
     Files with this license:
         linux/nfsd/stats.h [7:7]
 
-KEEP     COPYRIGHT_SERVICE_LABEL aacb9d157d6235c30f16941d701e91cf
-BELONGS ya.make
-    License text:
-         * Copyright (c) 2014-2016, Intel Corporation.
-    Scancode info:
-        Original SPDX id: COPYRIGHT_SERVICE_LABEL
-        Score           : 100.00
-        Match type      : COPYRIGHT
-    Files with this license:
-        linux/ndctl.h [2:2]
-
 KEEP     COPYRIGHT_SERVICE_LABEL ab13f7af6e72999d8328743072658177
 BELONGS ya.make
     License text:
@@ -3917,6 +3893,17 @@ BELONGS ya.make
         Match type      : COPYRIGHT
     Files with this license:
         linux/user_events.h [3:3]
+
+KEEP     COPYRIGHT_SERVICE_LABEL b01abb53587a86c0201fc5f45514f4e0
+BELONGS ya.make
+    License text:
+         * Copyright (C) 2023 BayLibre Incorporated - https://www.baylibre.com/
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        linux/tps6594_pfsm.h [5:5]
 
 KEEP     COPYRIGHT_SERVICE_LABEL b0641d3ff2c648b2fb9cf946110ed25e
 BELONGS ya.make

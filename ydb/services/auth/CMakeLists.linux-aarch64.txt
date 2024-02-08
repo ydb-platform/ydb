@@ -12,7 +12,7 @@ target_link_libraries(ydb-services-auth PUBLIC
   contrib-libs-linux-headers
   contrib-libs-cxxsupp
   yutil
-  cpp-grpc-server
+  library-grpc-server
   library-cpp-lwtrace
   ydb-core-grpc_services
   ydb-core-protos

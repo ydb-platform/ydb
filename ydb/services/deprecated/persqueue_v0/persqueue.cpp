@@ -4,6 +4,7 @@
 
 #include <ydb/core/base/appdata.h>
 #include <ydb/core/base/counters.h>
+#include <ydb/core/grpc_services/grpc_helper.h>
 #include "move_topic_actor.h"
 
 namespace NKikimr {
@@ -12,7 +13,7 @@ namespace NGRpcService {
 static const ui32 PersQueueWriteSessionsMaxCount = 1000000;
 static const ui32 PersQueueReadSessionsMaxCount = 100000;
 
-void DoMovePersQueueTopic(TActorSystem* actorSystem, NGrpc::IRequestContextBase* ctx) {
+void DoMovePersQueueTopic(TActorSystem* actorSystem, NYdbGrpc::IRequestContextBase* ctx) {
     actorSystem->Register(new TMoveTopicActor(ctx));
 }
 
@@ -24,7 +25,7 @@ TGRpcPersQueueService::TGRpcPersQueueService(NActors::TActorSystem *system,
     , SchemeCache(schemeCache)
 { }
 
-void TGRpcPersQueueService::InitService(grpc::ServerCompletionQueue *cq, NGrpc::TLoggerPtr logger) {
+void TGRpcPersQueueService::InitService(grpc::ServerCompletionQueue *cq, NYdbGrpc::TLoggerPtr logger) {
     CQ = cq;
     if (ActorSystem->AppData<TAppData>()->PQConfig.GetEnabled()) {
         WriteService.reset(new NGRpcProxy::TPQWriteService(GetService(), CQ, ActorSystem, SchemeCache, Counters, PersQueueWriteSessionsMaxCount));
@@ -34,7 +35,7 @@ void TGRpcPersQueueService::InitService(grpc::ServerCompletionQueue *cq, NGrpc::
     }
 }
 
-void TGRpcPersQueueService::SetGlobalLimiterHandle(NGrpc::TGlobalLimiter* limiter) {
+void TGRpcPersQueueService::SetGlobalLimiterHandle(NYdbGrpc::TGlobalLimiter* limiter) {
     Limiter = limiter;
 }
 
@@ -52,14 +53,14 @@ void TGRpcPersQueueService::DecRequest() {
 #define ADD_REQUEST(NAME, CB)                                                                              \
     MakeIntrusive<TGRpcRequest<NPersQueue::NAME##Request, NPersQueue::NAME##Response, TGRpcPersQueueService>>     \
         (this, &Service_, CQ,                                                                                    \
-            [this](NGrpc::IRequestContextBase* ctx) {                                                             \
+            [this](NYdbGrpc::IRequestContextBase* ctx) {                                                             \
                 NGRpcService::ReportGrpcReqToMon(*ActorSystem, ctx->GetPeer());                            \
                 CB(this->ActorSystem, ctx);                                                                        \
             }, &NPersQueue::PersQueueService::AsyncService::Request##NAME ,                                   \
             #NAME, logger, getCounterBlock("operation", #NAME))->Run();
 
 
-void TGRpcPersQueueService::SetupIncomingRequests(NGrpc::TLoggerPtr logger) {
+void TGRpcPersQueueService::SetupIncomingRequests(NYdbGrpc::TLoggerPtr logger) {
     WriteService->SetupIncomingRequests();
     ReadService->SetupIncomingRequests();
     auto getCounterBlock = CreateCounterCb(Counters, ActorSystem);

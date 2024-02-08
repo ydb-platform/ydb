@@ -34,7 +34,7 @@ using namespace NBus;
 ////////////////////////////////////////////////////////////////////////////////
 
 class TGrpcCallTracer final
-    : public grpc_core::ServerCallTracer
+    : public grpc_core::ClientCallTracer::CallAttemptTracer
 {
 public:
     void RecordAnnotation(y_absl::string_view /*annotation*/) override
@@ -100,10 +100,12 @@ public:
     }
 
     void RecordReceivedTrailingMetadata(
-        grpc_metadata_batch* /*recv_trailing_metadata*/) override
+        y_absl::Status /*status*/,
+        grpc_metadata_batch* /*recv_trailing_metadata*/,
+        const grpc_transport_stream_stats* /*transport_stream_stats*/) override
     { }
 
-    void RecordEnd(const grpc_call_final_info* /*final_info*/) override
+    void RecordEnd(const gpr_timespec& /*latency*/) override
     { }
 
 private:
@@ -207,6 +209,11 @@ public:
     const TString& GetEndpointAddress() const
     {
         return EndpointAddress_;
+    }
+
+    int GetInflightRequestCount() override
+    {
+        YT_UNIMPLEMENTED();
     }
 
 private:

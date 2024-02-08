@@ -167,6 +167,8 @@ class TTable {
 
     bool IsAny_ = false;  // True if key duplicates need to be removed from table (any join)
 
+    bool Table2Initialized_ = false;    // True when iterator counters for second table already initialized
+
 public:
 
     // Adds new tuple to the table.  intColumns, stringColumns - data of columns, 

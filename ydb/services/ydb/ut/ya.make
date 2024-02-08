@@ -22,7 +22,6 @@ SRCS(
     ydb_scripting_ut.cpp
     ydb_table_ut.cpp
     ydb_stats_ut.cpp
-    ydb_long_tx_ut.cpp
     ydb_logstore_ut.cpp
     ydb_olapstore_ut.cpp
     ydb_monitoring_ut.cpp
@@ -34,7 +33,7 @@ SRCS(
 PEERDIR(
     contrib/libs/apache/arrow
     library/cpp/getopt
-    library/cpp/grpc/client
+    ydb/library/grpc/client
     library/cpp/regex/pcre
     library/cpp/svnversion
     ydb/core/kqp/ut/common

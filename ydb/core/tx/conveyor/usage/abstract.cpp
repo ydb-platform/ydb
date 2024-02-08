@@ -1,6 +1,6 @@
 #include "abstract.h"
-#include <library/cpp/actors/core/monotonic.h>
-#include <library/cpp/actors/core/log.h>
+#include <ydb/library/actors/core/monotonic.h>
+#include <ydb/library/actors/core/log.h>
 #include <util/generic/yexception.h>
 #include <util/string/builder.h>
 

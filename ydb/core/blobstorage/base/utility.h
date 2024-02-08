@@ -1,7 +1,7 @@
 #pragma once
 
 #include "defs.h"
-#include <library/cpp/actors/helpers/activeactors.h>
+#include <ydb/core/util/activeactors.h>
 #include <ydb/core/base/appdata.h>
 #include <ydb/core/base/blobstorage.h>
 

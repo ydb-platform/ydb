@@ -15,11 +15,11 @@ target_link_libraries(providers-dq-service PUBLIC
   contrib-libs-linux-headers
   contrib-libs-cxxsupp
   yutil
-  cpp-actors-core
-  cpp-actors-dnsresolver
-  cpp-actors-interconnect
+  library-actors-core
+  library-actors-dnsresolver
+  library-actors-interconnect
   library-cpp-build_info
-  cpp-grpc-server
+  library-grpc-server
   grpc-server-actors
   library-cpp-svnversion
   cpp-threading-future

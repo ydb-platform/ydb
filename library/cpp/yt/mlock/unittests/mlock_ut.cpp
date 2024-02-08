@@ -1,0 +1,19 @@
+#include <gtest/gtest.h>
+
+#include <library/cpp/yt/mlock/mlock.h>
+
+namespace NYT {
+namespace {
+
+////////////////////////////////////////////////////////////////////////////////
+
+TEST(TMlockTest, Call)
+{
+    ASSERT_TRUE(MlockFileMappings(false));
+    ASSERT_TRUE(MlockFileMappings(true));
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
+} // namespace
+} // namespace NYT

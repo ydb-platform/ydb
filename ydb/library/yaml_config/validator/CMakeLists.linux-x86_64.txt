@@ -19,7 +19,7 @@ target_link_libraries(library-yaml_config-validator PUBLIC
   contrib-libs-linux-headers
   contrib-libs-cxxsupp
   yutil
-  cpp-yaml-fyamlcpp
+  ydb-library-fyamlcpp
   tools-enum_parser-enum_serialization_runtime
 )
 target_sources(library-yaml_config-validator PRIVATE

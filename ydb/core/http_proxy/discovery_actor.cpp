@@ -3,10 +3,10 @@
 
 #include <ydb/public/api/grpc/ydb_discovery_v1.grpc.pb.h>
 
-#include <library/cpp/actors/core/actor_bootstrapped.h>
-#include <library/cpp/actors/core/events.h>
-#include <library/cpp/actors/core/hfunc.h>
-#include <library/cpp/actors/core/log.h>
+#include <ydb/library/actors/core/actor_bootstrapped.h>
+#include <ydb/library/actors/core/events.h>
+#include <ydb/library/actors/core/hfunc.h>
+#include <ydb/library/actors/core/log.h>
 #include <library/cpp/cache/cache.h>
 
 #include <util/stream/file.h>
@@ -24,7 +24,7 @@ namespace NKikimr::NHttpProxy {
             : Settings(std::move(settings))
             , CredentialsProvider(credentialsProvider)
         {
-            NGrpc::TGRpcClientConfig grpcConf;
+            NYdbGrpc::TGRpcClientConfig grpcConf;
             grpcConf.Locator = Settings.DiscoveryEndpoint;
             if (Settings.CaCert) {
                 grpcConf.EnableSsl = true;
@@ -60,11 +60,11 @@ namespace NKikimr::NHttpProxy {
         void MakeGRpcRequest(const TActorContext& ctx);
 
         using TProtoService = Ydb::Discovery::V1::DiscoveryService;
-        using TDatabaseServiceConnection = NGrpc::TServiceConnection<TProtoService>;
+        using TDatabaseServiceConnection = NYdbGrpc::TServiceConnection<TProtoService>;
 
         TDiscoverySettings Settings;
 
-        NGrpc::TGRpcClientLow GrpcClient;
+        NYdbGrpc::TGRpcClientLow GrpcClient;
         std::unique_ptr<TDatabaseServiceConnection> Connection;
         std::shared_ptr<NYdb::ICredentialsProvider> CredentialsProvider;
 
@@ -97,7 +97,7 @@ namespace NKikimr::NHttpProxy {
 
 
     void TDiscoveryActor::MakeGRpcRequest(const TActorContext& ctx) {
-        NGrpc::TCallMeta callMeta;
+        NYdbGrpc::TCallMeta callMeta;
         callMeta.Timeout = TDuration::Seconds(30);
         callMeta.Aux.emplace_back("x-ydb-auth-ticket", CredentialsProvider->GetAuthInfo());
         callMeta.Aux.emplace_back("x-ydb-database", Settings.Database);
@@ -106,15 +106,15 @@ namespace NKikimr::NHttpProxy {
         request.set_database(Settings.Database);
         LOG_SP_INFO_S(ctx, NKikimrServices::PERSQUEUE, "list endpoints request");
 
-        NGrpc::TResponseCallback<Ydb::Discovery::ListEndpointsResponse> responseCb =
-                [actorSystem = ctx.ActorSystem(), actorId = ctx.SelfID](NGrpc::TGrpcStatus&& status, Ydb::Discovery::ListEndpointsResponse&& response) -> void {
+        NYdbGrpc::TResponseCallback<Ydb::Discovery::ListEndpointsResponse> responseCb =
+                [actorSystem = ctx.ActorSystem(), actorId = ctx.SelfID](NYdbGrpc::TGrpcStatus&& status, Ydb::Discovery::ListEndpointsResponse&& response) -> void {
                     auto res = std::make_unique<TEvServerlessProxy::TEvListEndpointsResponse>();
                     LOG_INFO_S(*actorSystem, NKikimrServices::PERSQUEUE, "list endpoints result status: " << status.GRpcStatusCode << " " << status.Msg << " " << status.Details);
                     if (status.Ok()) {
                         res->Record = std::make_unique<Ydb::Discovery::ListEndpointsResponse>();
                         res->Record->CopyFrom(response);
                     }
-                    res->Status = std::make_shared<NGrpc::TGrpcStatus>(std::move(status));
+                    res->Status = std::make_shared<NYdbGrpc::TGrpcStatus>(std::move(status));
                     actorSystem->Send(actorId, res.release());
                 };
         Connection->DoRequest(request, std::move(responseCb), &Ydb::Discovery::V1::DiscoveryService::Stub::AsyncListEndpoints, callMeta);

@@ -37,6 +37,10 @@ public:
             AddBatch(std::move(batch), space);
         }
     }
+
+    virtual void Push(TDqSerializedBatch&&, i64) override {
+        YQL_ENSURE(!"Unimplemented");
+    }
 };
 
 IDqAsyncInputBuffer::TPtr CreateDqAsyncInputBuffer(

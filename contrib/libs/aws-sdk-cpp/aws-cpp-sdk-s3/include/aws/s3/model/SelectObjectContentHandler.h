@@ -30,7 +30,7 @@ namespace Model
         UNKNOWN
     };
 
-    class AWS_S3_API SelectObjectContentHandler : public Aws::Utils::Event::EventStreamHandler
+    class SelectObjectContentHandler : public Aws::Utils::Event::EventStreamHandler
     {
         typedef std::function<void(const RecordsEvent&)> RecordsEventCallback;
         typedef std::function<void(const StatsEvent&)> StatsEventCallback;
@@ -40,10 +40,10 @@ namespace Model
         typedef std::function<void(const Aws::Client::AWSError<S3Errors>& error)> ErrorCallback;
 
     public:
-        SelectObjectContentHandler();
-        SelectObjectContentHandler& operator=(const SelectObjectContentHandler&) = default;
+        AWS_S3_API SelectObjectContentHandler();
+        AWS_S3_API SelectObjectContentHandler& operator=(const SelectObjectContentHandler&) = default;
 
-        virtual void OnEvent() override;
+        AWS_S3_API virtual void OnEvent() override;
 
         inline void SetRecordsEventCallback(const RecordsEventCallback& callback) { m_onRecordsEvent = callback; }
         inline void SetStatsEventCallback(const StatsEventCallback& callback) { m_onStatsEvent = callback; }
@@ -53,9 +53,9 @@ namespace Model
         inline void SetOnErrorCallback(const ErrorCallback& callback) { m_onError = callback; }
 
     private:
-        void HandleEventInMessage();
-        void HandleErrorInMessage();
-        void MarshallError(const Aws::String& errorCode, const Aws::String& errorMessage);
+        AWS_S3_API void HandleEventInMessage();
+        AWS_S3_API void HandleErrorInMessage();
+        AWS_S3_API void MarshallError(const Aws::String& errorCode, const Aws::String& errorMessage);
 
         RecordsEventCallback m_onRecordsEvent;
         StatsEventCallback m_onStatsEvent;

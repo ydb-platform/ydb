@@ -132,9 +132,7 @@ void TKafkaProduceActor::HandleInit(TEvTxProxySchemeCache::TEvNavigateKeySetResu
             if (info.SecurityObject->CheckAccess(NACLib::EAccessRights::UpdateRow, *Context->UserToken)) {
                 topic.Status = OK;
                 topic.ExpirationTime = now + TOPIC_OK_EXPIRATION_INTERVAL;
-                for(auto& p : info.PQGroupInfo->Description.GetPartitions()) {
-                    topic.partitions[p.GetPartitionId()] = p.GetTabletId();
-                }
+                topic.PartitionChooser = CreatePartitionChooser(info.PQGroupInfo->Description);
             } else {
                 KAFKA_LOG_W("Produce actor: Unauthorized PRODUCE to topic '" << topicPath << "'");
                 topic.Status = UNAUTHORIZED;
@@ -178,7 +176,7 @@ void TKafkaProduceActor::Handle(TEvTxProxySchemeCache::TEvWatchNotifyDeleted::TP
     auto& topicInfo = Topics[path];
     topicInfo.Status = NOT_FOUND;
     topicInfo.ExpirationTime = ctx.Now() + TOPIC_NOT_FOUND_EXPIRATION_INTERVAL;
-    topicInfo.partitions.clear();
+    topicInfo.PartitionChooser.reset();
 }
 
 void TKafkaProduceActor::Handle(TEvTxProxySchemeCache::TEvWatchNotifyUpdated::TPtr& ev, const TActorContext& ctx) {
@@ -192,10 +190,7 @@ void TKafkaProduceActor::Handle(TEvTxProxySchemeCache::TEvWatchNotifyUpdated::TP
     }
     topic.Status = OK;
     topic.ExpirationTime = ctx.Now() + TOPIC_OK_EXPIRATION_INTERVAL;
-    topic.partitions.clear();
-    for (auto& p : e->Result->GetPathDescription().GetPersQueueGroup().GetPartitions()) {
-        topic.partitions[p.GetPartitionId()] = p.GetTabletId();
-    }
+    topic.PartitionChooser = CreatePartitionChooser(e->Result->GetPathDescription().GetPersQueueGroup());
 }
 
 void TKafkaProduceActor::Handle(TEvKafka::TEvProduceRequest::TPtr request, const TActorContext& ctx) {
@@ -293,7 +288,8 @@ THolder<TEvPartitionWriter::TEvWriteRequest> Convert(const TProduceRequestData::
         w->SetSourceId(sourceId);
         w->SetSeqNo(batch->BaseOffset + record.OffsetDelta);
         w->SetData(str);
-        w->SetCreateTimeMS(batch->BaseTimestamp + record.TimestampDelta);
+        ui64 createTime = batch->BaseTimestamp + record.TimestampDelta;
+        w->SetCreateTimeMS(createTime ? createTime : TInstant::Now().MilliSeconds());
         w->SetDisableDeduplication(true);
         w->SetUncompressedSize(record.Value ? record.Value->size() : 0);
         w->SetClientDC(clientDC);
@@ -578,17 +574,17 @@ std::pair<TKafkaProduceActor::ETopicStatus, TActorId> TKafkaProduceActor::Partit
         return { OK, writerInfo.ActorId };
     }
 
-    auto& partitions = topicInfo.partitions;
-    auto pit = partitions.find(partitionId);
-    if (pit == partitions.end()) {
+    auto* partition = topicInfo.PartitionChooser->GetPartition(partitionId);
+    if (!partition) {
         return { NOT_FOUND, TActorId{} };
     }
 
-    auto tabletId = pit->second;
     TPartitionWriterOpts opts;
     opts.WithDeduplication(false)
+        .WithSourceId(SourceId)
+        .WithTopicPath(topicPath)
         .WithCheckRequestUnits(topicInfo.MeteringMode, Context->RlContext);
-    auto* writerActor = CreatePartitionWriter(SelfId(), topicPath, tabletId, partitionId, {/*expectedGeneration*/}, SourceId, opts);
+    auto* writerActor = CreatePartitionWriter(SelfId(), partition->TabletId, partitionId, opts);
 
     auto& writerInfo = partitionWriters[partitionId];
     writerInfo.ActorId = ctx.RegisterWithSameMailbox(writerActor);

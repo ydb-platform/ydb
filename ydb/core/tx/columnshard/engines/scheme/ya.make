@@ -13,7 +13,8 @@ PEERDIR(
     ydb/core/protos
     ydb/core/formats/arrow
 
-    library/cpp/actors/core
+    ydb/library/actors/core
+    ydb/core/tx/columnshard/engines/scheme/indexes
 )
 
 YQL_LAST_ABI_VERSION()

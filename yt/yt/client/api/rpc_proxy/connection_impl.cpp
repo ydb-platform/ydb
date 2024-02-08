@@ -28,6 +28,7 @@
 #include <yt/yt/core/rpc/caching_channel_factory.h>
 #include <yt/yt/core/rpc/dynamic_channel_pool.h>
 #include <yt/yt/core/rpc/dispatcher.h>
+#include <yt/yt/core/rpc/peer_discovery.h>
 
 #include <yt/yt/core/ytree/fluent.h>
 
@@ -69,10 +70,7 @@ void ApplyProxyUrlAliasingRules(TString& url, const std::optional<THashMap<TStri
 {
     static const auto rulesFromEnv = ParseProxyUrlAliasingRules(GetEnv("YT_PROXY_URL_ALIASING_CONFIG"));
 
-    const THashMap<TString, TString>& rules =
-        proxyUrlAliasingRules
-        ? proxyUrlAliasingRules.value()
-        : rulesFromEnv;
+    const auto& rules = proxyUrlAliasingRules.value_or(rulesFromEnv);
 
     if (auto ruleIt = rules.find(url); ruleIt != rules.end()) {
         url = ruleIt->second;
@@ -81,7 +79,6 @@ void ApplyProxyUrlAliasingRules(TString& url, const std::optional<THashMap<TStri
 
 TString NormalizeHttpProxyUrl(TString url, const std::optional<THashMap<TString, TString>>& proxyUrlAliasingRules)
 {
-
     ApplyProxyUrlAliasingRules(url, proxyUrlAliasingRules);
 
     if (url.find('.') == TString::npos &&
@@ -243,7 +240,7 @@ TConnection::TConnection(TConnectionConfigPtr config, TConnectionOptions options
         MakeEndpointDescription(Config_, ConnectionId_),
         MakeEndpointAttributes(Config_, ConnectionId_),
         TApiServiceProxy::GetDescriptor().ServiceName,
-        TDiscoverRequestHook()))
+        CreateDefaultPeerDiscovery()))
 {
     if (options.ConnectionInvoker) {
         ConnectionInvoker_ = options.ConnectionInvoker;
@@ -252,12 +249,14 @@ TConnection::TConnection(TConnectionConfigPtr config, TConnectionOptions options
         ConnectionInvoker_ = ActionQueue_->GetInvoker();
     }
 
-    UpdateProxyListExecutor_ = New<TPeriodicExecutor>(
-        GetInvoker(),
-        BIND(&TConnection::OnProxyListUpdate, MakeWeak(this)),
-        TPeriodicExecutorOptions::WithJitter(Config_->ProxyListUpdatePeriod));
+    if (Config_->EnableProxyDiscovery) {
+        UpdateProxyListExecutor_ = New<TPeriodicExecutor>(
+            GetInvoker(),
+            BIND(&TConnection::OnProxyListUpdate, MakeWeak(this)),
+            TPeriodicExecutorOptions::WithJitter(Config_->ProxyListUpdatePeriod));
+    }
 
-    if (Config_->ProxyEndpoints) {
+    if (Config_->EnableProxyDiscovery && Config_->ProxyEndpoints) {
         ServiceDiscovery_ = NRpc::TDispatcher::Get()->GetServiceDiscovery();
         if (!ServiceDiscovery_) {
             ChannelPool_->SetPeerDiscoveryError(TError("No Service Discovery is configured"));
@@ -336,7 +335,7 @@ NApi::IClientPtr TConnection::CreateClient(const TClientOptions& options)
         DiscoveryToken_.Store(*options.Token);
     }
 
-    if (Config_->ClusterUrl || Config_->ProxyEndpoints) {
+    if (Config_->EnableProxyDiscovery && (Config_->ClusterUrl || Config_->ProxyEndpoints)) {
         UpdateProxyListExecutor_->Start();
     }
 
@@ -357,7 +356,9 @@ void TConnection::Terminate()
 {
     YT_LOG_DEBUG("Terminating connection");
     ChannelPool_->Terminate(TError("Connection terminated"));
-    YT_UNUSED_FUTURE(UpdateProxyListExecutor_->Stop());
+    if (Config_->EnableProxyDiscovery) {
+        YT_UNUSED_FUTURE(UpdateProxyListExecutor_->Stop());
+    }
 }
 
 const TConnectionConfigPtr& TConnection::GetConfig()
@@ -429,8 +430,10 @@ std::vector<TString> TConnection::DiscoverProxiesViaServiceDiscovery()
         THROW_ERROR_EXCEPTION("No service discovery configured");
     }
 
+    const auto& clusters = Config_->ProxyEndpoints->Clusters;
     std::vector<TFuture<TEndpointSet>> asyncEndpointSets;
-    for (const auto& cluster : Config_->ProxyEndpoints->Clusters) {
+    asyncEndpointSets.reserve(clusters.size());
+    for (const auto& cluster : clusters) {
         asyncEndpointSets.push_back(ServiceDiscovery_->ResolveEndpoints(
             cluster,
             Config_->ProxyEndpoints->EndpointSetId));
@@ -447,7 +450,7 @@ std::vector<TString> TConnection::DiscoverProxiesViaServiceDiscovery()
             YT_LOG_WARNING(
                 endpointSets[i],
                 "Could not resolve endpoints from cluster (Cluster: %v, EndpointSetId: %v)",
-                Config_->ProxyEndpoints->Clusters[i],
+                clusters[i],
                 Config_->ProxyEndpoints->EndpointSetId);
             continue;
         }

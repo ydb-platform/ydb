@@ -5,7 +5,7 @@
 #include <ydb/library/yql/utils/yql_panic.h>
 #include <ydb/library/yql/utils/log/log.h>
 
-#include <library/cpp/actors/core/hfunc.h>
+#include <ydb/library/actors/core/hfunc.h>
 
 #include <ydb/library/yql/providers/dq/worker_manager/interface/events.h>
 #include <ydb/library/yql/providers/dq/counters/counters.h>
@@ -296,7 +296,7 @@ private:
             auto delta = TInstant::Now() - maybeRequestInfo->second.StartTime;
             // catched at grpc_service
             QueryStat.AddCounter(
-                QueryStat.GetCounterName("Actor", {{"ClusterName", maybeRequestInfo->second.ClusterName}}, "CreateFailTime"),
+                QueryStat.GetCounterName("Actor", {{"ClusterName", maybeRequestInfo->second.ClusterName}}, "CreateFailTimeUs"),
                 delta);
         }
         TString message = "Disconnected from worker: `" + workerInfo + "', reason: " + reason;

@@ -8,9 +8,9 @@
 #include <ydb/library/yql/minikql/computation/mkql_computation_node_holders.h>
 #include <ydb/library/yql/minikql/comp_nodes/mkql_factories.h>
 #include <ydb/library/yql/minikql/invoke_builtins/mkql_builtins.h>
-#include <ydb/library/yql/minikql/computation/mkql_computation_node_codegen.h>
+#include <ydb/library/yql/minikql/computation/mkql_computation_node_codegen.h>  // Y_IGNORE
 #include <ydb/library/yql/minikql/computation/mkql_computation_node_pack.h>
-#include <ydb/library/yql/minikql/computation/mkql_llvm_base.h>
+#include <ydb/library/yql/minikql/computation/mkql_llvm_base.h>  // Y_IGNORE
 
 #include <ydb/library/yql/minikql/mkql_node_cast.h>
 #include <ydb/library/yql/minikql/mkql_program_builder.h>
@@ -161,8 +161,6 @@ TColumnDataPackInfo GetPackInfo(TType* type) {
             res.Bytes = sizeof(ui64); break;
         case NUdf::EDataSlot::Interval:
             res.Bytes = sizeof(i64); break;
-        case NUdf::EDataSlot::Uuid:
-            res.IsString = true; break;
         case NUdf::EDataSlot::TzDate:
             res.Bytes = 4; break;
         case NUdf::EDataSlot::TzDatetime:
@@ -171,12 +169,20 @@ TColumnDataPackInfo GetPackInfo(TType* type) {
             res.Bytes = 10; break;
         case NUdf::EDataSlot::Decimal:
             res.Bytes = 16; break;
+        case NUdf::EDataSlot::Date32:
+            res.Bytes = 4; break;
+        case NUdf::EDataSlot::Datetime64:
+            res.Bytes = 8; break;
+        case NUdf::EDataSlot::Timestamp64:
+            res.Bytes = 8; break;
+        case NUdf::EDataSlot::Interval64:
+            res.Bytes = 8; break;
+        case NUdf::EDataSlot::Uuid:
+        case NUdf::EDataSlot::DyNumber:
+        case NUdf::EDataSlot::JsonDocument:
         case NUdf::EDataSlot::String:
-            res.IsString = true; break;
         case NUdf::EDataSlot::Utf8:
-            res.IsString = true; break;
         case NUdf::EDataSlot::Yson:
-            res.IsString = true; break;
         case NUdf::EDataSlot::Json:
             res.IsString = true; break;
         default:
@@ -204,10 +210,10 @@ void TGraceJoinPacker::Pack()  {
         if (!value) { // Null value
             ui64 currNullsIdx = (i + 1) / (sizeof(ui64) * 8);
             ui64 remShift = ( (i + 1) - currNullsIdx * (sizeof(ui64) * 8) );
-            ui64 bitMask = (0x1) << remShift;
+            ui64 bitMask = ui64(0x1) << remShift;
             TupleIntVals[currNullsIdx] |= bitMask;
             if (pi.IsKeyColumn) {
-                TupleIntVals[0] |= (0x1);
+                TupleIntVals[0] |= ui64(0x1);
             }
             continue;
         }
@@ -265,6 +271,15 @@ void TGraceJoinPacker::Pack()  {
             WriteUnaligned<ui64>(buffPtr, value.Get<ui64>()); break;
         case NUdf::EDataSlot::Interval:
             WriteUnaligned<i64>(buffPtr, value.Get<i64>()); break;
+        case NUdf::EDataSlot::Date32:
+            WriteUnaligned<i64>(buffPtr, value.Get<i32>()); break;
+        case NUdf::EDataSlot::Datetime64:
+            WriteUnaligned<i64>(buffPtr, value.Get<i64>()); break;
+        case NUdf::EDataSlot::Timestamp64:
+            WriteUnaligned<i64>(buffPtr, value.Get<i64>()); break;
+        case NUdf::EDataSlot::Interval64:
+            WriteUnaligned<i64>(buffPtr, value.Get<i64>()); break;
+
         case NUdf::EDataSlot::Uuid:
         {
             auto str = TuplePtrs[i]->AsStringRef();
@@ -318,7 +333,7 @@ void TGraceJoinPacker::UnPack()  {
         }
         ui64 currNullsIdx = (i + 1) / (sizeof(ui64) * 8);
         ui64 remShift = ( (i + 1) - currNullsIdx * (sizeof(ui64) * 8) );
-        ui64 bitMask = (0x1) << remShift;
+        ui64 bitMask = ui64(0x1) << remShift;
         if ( TupleIntVals[currNullsIdx] & bitMask ) {
             value = NYql::NUdf::TUnboxedValue();
             continue;
@@ -377,6 +392,14 @@ void TGraceJoinPacker::UnPack()  {
             value = NUdf::TUnboxedValuePod(ReadUnaligned<ui64>(buffPtr)); break;
         case NUdf::EDataSlot::Interval:
             value = NUdf::TUnboxedValuePod(ReadUnaligned<i64>(buffPtr)); break;
+        case NUdf::EDataSlot::Date32:
+            value = NUdf::TUnboxedValuePod(ReadUnaligned<i32>(buffPtr)); break;
+        case NUdf::EDataSlot::Datetime64:
+            value = NUdf::TUnboxedValuePod(ReadUnaligned<i64>(buffPtr)); break;
+        case NUdf::EDataSlot::Timestamp64:
+            value = NUdf::TUnboxedValuePod(ReadUnaligned<i64>(buffPtr)); break;
+        case NUdf::EDataSlot::Interval64:
+            value = NUdf::TUnboxedValuePod(ReadUnaligned<i64>(buffPtr)); break;
         case NUdf::EDataSlot::Uuid:
         {
             value = MakeString(NUdf::TStringRef(TupleStrings[offset], TupleStrSizes[offset]));
@@ -426,7 +449,15 @@ TGraceJoinPacker::TGraceJoinPacker(const std::vector<TType *> & columnTypes, con
     ui64 nColumns = ColumnTypes.size();
     ui64 nKeyColumns = keyColumns.size();
 
-    std::vector<TColumnDataPackInfo> allColumnsPackInfo;
+    for (ui32 i = 0; i < keyColumns.size(); i++ ) {
+        auto colType = columnTypes[keyColumns[i]];
+        auto packInfo = GetPackInfo(colType);
+        packInfo.ColumnIdx = keyColumns[i];
+        packInfo.IsKeyColumn = true;
+        ColumnsPackInfo.push_back(packInfo);
+    }
+
+
 
     for ( ui32 i = 0; i < columnTypes.size(); i++  ) {
 
@@ -438,12 +469,7 @@ TGraceJoinPacker::TGraceJoinPacker(const std::vector<TType *> & columnTypes, con
         ui32 keyColNums = std::count_if(keyColumns.begin(), keyColumns.end(), [&](ui32 k) {return k == i;});
 
         Packers.push_back(std::make_shared<TValuePacker>(true,colType));
-        if (keyColNums > 0) {
-            packInfo.IsKeyColumn = true;
-            for (ui32 j = 0; j < keyColNums; j++) {
-                ColumnsPackInfo.push_back(packInfo);
-            }
-        } else {
+        if (keyColNums == 0) {
             ColumnsPackInfo.push_back(packInfo);
         }
      }
@@ -483,18 +509,6 @@ TGraceJoinPacker::TGraceJoinPacker(const std::vector<TType *> & columnTypes, con
     JoinTupleData.StrColumns = TupleStrings.data();
     JoinTupleData.StrSizes = TupleStrSizes.data();
 
-     std::sort( ColumnsPackInfo.begin(), ColumnsPackInfo.end(), [](const TColumnDataPackInfo & a, const TColumnDataPackInfo & b)
-        {
-
-            if (a.IsKeyColumn && !b.IsKeyColumn) return true;
-            if (b.IsKeyColumn && !a.IsKeyColumn) return false;
-
-            if (a.Bytes > b.Bytes) return true;
-            if (b.Bytes > a.Bytes) return false;
-            if (a.ColumnIdx < b.ColumnIdx ) return true;
-            return false;
-        });
-
 
     TupleHolder.resize(nColumns);
     TupleStringHolder.resize(nColumns);
@@ -507,7 +521,6 @@ TGraceJoinPacker::TGraceJoinPacker(const std::vector<TType *> & columnTypes, con
     ui32 currIntOffset = NullsBitmapSize * sizeof(ui64) ;
     ui32 currStrOffset = 0;
     ui32 currIOffset = 0;
-    ui32 currIdx = 0;
     std::vector<GraceJoin::TColTypeInterface> ctiv;
 
     bool prevKeyColumn = false;
@@ -536,7 +549,6 @@ TGraceJoinPacker::TGraceJoinPacker(const std::vector<TType *> & columnTypes, con
             GraceJoin::TColTypeInterface cti{ MakeHashImpl(p.MKQLType), MakeEquateImpl(p.MKQLType), std::make_shared<TValuePacker>(true, p.MKQLType) , HolderFactory  };
             ColumnInterfaces.push_back(cti);
         }
-        currIdx++;
     }
 
     PackedKeyIntColumnsNum =  (keyIntOffset + sizeof(ui64) - 1 ) / sizeof(ui64) - NullsBitmapSize;
@@ -648,11 +660,6 @@ class TGraceJoinWrapper : public TStatefulWideFlowCodegeneratorNode<TGraceJoinWr
 
         const auto valueType = Type::getInt128Ty(context);
         const auto indexType = Type::getInt32Ty(context);
-        const auto ptrValueType = PointerType::getUnqual(valueType);
-        const auto structPtrType = PointerType::getUnqual(StructType::get(context));
-        const auto contextType = GetCompContextType(context);
-        const auto statusType = Type::getInt32Ty(context);
-
 
         const auto arrayType = ArrayType::get(valueType, OutputRepresentations.size());
         const auto fieldsType = ArrayType::get(PointerType::getUnqual(valueType), OutputRepresentations.size());
@@ -674,6 +681,7 @@ class TGraceJoinWrapper : public TStatefulWideFlowCodegeneratorNode<TGraceJoinWr
             initF = InsertValueInst::Create(initF, pointers.back(), {i}, (TString("insert_") += ToString(i)).c_str(), atTop);
 
             getters[i] = [i, values, indexType, arrayType, valueType](const TCodegenContext& ctx, BasicBlock*& block) {
+                Y_UNUSED(ctx);
                 const auto pointer = GetElementPtrInst::CreateInBounds(arrayType, values, {ConstantInt::get(indexType, 0), ConstantInt::get(indexType, i)}, (TString("ptr_") += ToString(i)).c_str(), block);
                 return new LoadInst(valueType, pointer, (TString("load_") += ToString(i)).c_str(), block);
             };
@@ -769,7 +777,7 @@ EFetchResult TGraceJoinState::FetchValues(TComputationContext& ctx, NUdf::TUnbox
                         auto &valsRight = RightPacker->TupleHolder;
 
 
-                        for (ui32 i = 0; i < LeftRenames.size() / 2; i++)
+                        for (size_t i = 0; i < LeftRenames.size() / 2; i++)
                         {
                             auto & valPtr = output[LeftRenames[2 * i + 1]];
                             if ( valPtr ) {
@@ -777,12 +785,12 @@ EFetchResult TGraceJoinState::FetchValues(TComputationContext& ctx, NUdf::TUnbox
                             }
                         }
 
-                        for (ui32 i = 0; i < RightRenames.size() / 2; i++)
+                        for (size_t i = 0; i < RightRenames.size() / 2; i++)
                         {
                             auto & valPtr = output[RightRenames[2 * i + 1]];
                             if ( valPtr ) {
                                 *valPtr = valsRight[RightRenames[2 * i]];
-                                }
+                            }
                         }
 
                         return EFetchResult::One;

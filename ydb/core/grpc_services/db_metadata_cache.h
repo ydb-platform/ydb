@@ -1,9 +1,12 @@
 #pragma once
 
-#include <library/cpp/actors/core/actor.h>
-#include <library/cpp/actors/core/actor_bootstrapped.h>
-#include <library/cpp/actors/core/hfunc.h>
+#include <ydb/library/actors/core/actor.h>
+#include <ydb/library/actors/core/actor_bootstrapped.h>
+#include <ydb/library/actors/core/hfunc.h>
 #include <ydb/core/base/appdata.h>
+#include <ydb/core/base/counters.h>
+#include <ydb/core/base/feature_flags.h>
+#include <ydb/core/base/domain.h>
 #include <ydb/core/base/statestorage.h>
 #include <ydb/core/health_check/health_check.h>
 #include <ydb/core/protos/db_metadata_cache.pb.h>
@@ -42,6 +45,9 @@ private:
     TActorId PublishActor;
     TActorId SubscribeActor;
     bool RequestInProgress = false;
+    ::NMonitoring::TDynamicCounterPtr Counters;
+    static const inline TString HEALTHCHECK_REQUESTS_MADE_COUNTER = "DbMetadataCache/HealthCheckRequestsMade";
+    static const inline TString HEALTHCHECK_REQUESTS_ANSWERED_COUNTER = "DbMetadataCache/HealthCheckRequestsAnswered";
 
     void SendRequest() {
         if (RequestInProgress) {
@@ -52,12 +58,14 @@ private:
         request->Database = Path;
         request->Request.set_return_verbose_status(true);
         Send(NHealthCheck::MakeHealthCheckID(), request.release());
+        Counters->GetCounter(HEALTHCHECK_REQUESTS_MADE_COUNTER, true)->Inc();
     }
 
     void Reply(TActorId client) {
         auto response = std::make_unique<NHealthCheck::TEvSelfCheckResultProto>();
         response->Record = *Result;
         Send(client, response.release());
+        Counters->GetCounter(HEALTHCHECK_REQUESTS_ANSWERED_COUNTER, true)->Inc();
     }
 
     void RefreshCache() {
@@ -134,9 +142,11 @@ private:
     }
 
 public:
-    TDatabaseMetadataCache(const TString& path) : Path(path)
-                                                , BoardPath(MakeDatabaseMetadataCacheBoardPath(Path))
+    TDatabaseMetadataCache(const TString& path,
+                           const ::NMonitoring::TDynamicCounterPtr& counters) : Path(path)
+                                                                              , BoardPath(MakeDatabaseMetadataCacheBoardPath(Path))
     {
+        Counters = GetServiceCounters(counters, "utils");
     }
 
     static ui32 PickActiveNode(const TBoardInfoEntries& infoEntries) {
@@ -221,8 +231,8 @@ inline TActorId MakeDatabaseMetadataCacheId(ui32 nodeId) {
     return TActorId(nodeId, "METACACHE");
 }
 
-inline std::unique_ptr<IActor> CreateDatabaseMetadataCache(const TString& path) {
-    return std::unique_ptr<IActor>(new TDatabaseMetadataCache(path));
+inline std::unique_ptr<IActor> CreateDatabaseMetadataCache(const TString& path, const ::NMonitoring::TDynamicCounterPtr& counters) {
+    return std::unique_ptr<IActor>(new TDatabaseMetadataCache(path, counters));
 }
 
 inline std::optional<TActorId> ResolveActiveDatabaseMetadataCache(const TMap<TActorId, TEvStateStorage::TBoardInfoEntry>& infoEntries) {

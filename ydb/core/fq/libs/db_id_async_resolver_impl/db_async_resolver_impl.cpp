@@ -1,6 +1,6 @@
 #include "db_async_resolver_impl.h"
 
-#include <library/cpp/actors/core/actorsystem.h>
+#include <ydb/library/actors/core/actorsystem.h>
 #include <ydb/core/fq/libs/events/events.h>
 
 namespace NFq {

@@ -29,14 +29,14 @@ namespace Model
    * href="http://docs.aws.amazon.com/goto/WebAPI/s3-2006-03-01/CSVOutput">AWS API
    * Reference</a></p>
    */
-  class AWS_S3_API CSVOutput
+  class CSVOutput
   {
   public:
-    CSVOutput();
-    CSVOutput(const Aws::Utils::Xml::XmlNode& xmlNode);
-    CSVOutput& operator=(const Aws::Utils::Xml::XmlNode& xmlNode);
+    AWS_S3_API CSVOutput();
+    AWS_S3_API CSVOutput(const Aws::Utils::Xml::XmlNode& xmlNode);
+    AWS_S3_API CSVOutput& operator=(const Aws::Utils::Xml::XmlNode& xmlNode);
 
-    void AddToNode(Aws::Utils::Xml::XmlNode& parentNode) const;
+    AWS_S3_API void AddToNode(Aws::Utils::Xml::XmlNode& parentNode) const;
 
 
     /**
@@ -294,19 +294,19 @@ namespace Model
   private:
 
     QuoteFields m_quoteFields;
-    bool m_quoteFieldsHasBeenSet;
+    bool m_quoteFieldsHasBeenSet = false;
 
     Aws::String m_quoteEscapeCharacter;
-    bool m_quoteEscapeCharacterHasBeenSet;
+    bool m_quoteEscapeCharacterHasBeenSet = false;
 
     Aws::String m_recordDelimiter;
-    bool m_recordDelimiterHasBeenSet;
+    bool m_recordDelimiterHasBeenSet = false;
 
     Aws::String m_fieldDelimiter;
-    bool m_fieldDelimiterHasBeenSet;
+    bool m_fieldDelimiterHasBeenSet = false;
 
     Aws::String m_quoteCharacter;
-    bool m_quoteCharacterHasBeenSet;
+    bool m_quoteCharacterHasBeenSet = false;
   };
 
 } // namespace Model

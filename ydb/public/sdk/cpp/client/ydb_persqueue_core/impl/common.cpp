@@ -59,7 +59,7 @@ TString IssuesSingleLineString(const NYql::TIssues& issues) {
     return SubstGlobalCopy(issues.ToString(), '\n', ' ');
 }
 
-void Cancel(NGrpc::IQueueClientContextPtr& context) {
+void Cancel(NYdbGrpc::IQueueClientContextPtr& context) {
     if (context) {
         context->Cancel();
     }

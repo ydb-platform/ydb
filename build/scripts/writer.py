@@ -24,6 +24,7 @@ def smart_shell_quote(v):
         return "\"{0}\"".format(v.replace('"', '\\"'))
     return v
 
+
 if __name__ == '__main__':
     args = parse_args()
     open_type = 'a' if args.append else 'w'

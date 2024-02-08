@@ -26,6 +26,7 @@ public:
         ui64 InMemorySize = 0;
         TString RemotePath;
         double RemoteMemoryFactor = 0.;
+        bool BypassArtifactCache = false;
     };
 
 public:

@@ -2,6 +2,7 @@
 #include "defs.h"
 
 #include <ydb/core/protos/config.pb.h>
+#include <ydb/core/cms/console/config_item_info.h>
 
 #include <util/generic/vector.h>
 
@@ -115,7 +116,8 @@ IActor *CreateConfigsDispatcher(
     const NKikimrConfig::TAppConfig &config,
     const TMap<TString, TString> &labels,
     const NKikimrConfig::TAppConfig &initialCmsConfig = {},
-    const NKikimrConfig::TAppConfig &initialCmsYamlConfig = {});
+    const NKikimrConfig::TAppConfig &initialCmsYamlConfig = {},
+    const THashMap<ui32, TConfigItemInfo> &configInitInfo = {});
 
 inline TActorId MakeConfigsDispatcherID(ui32 node = 0) {
     char x[12] = { 'c', 'o', 'n', 'f', 'i', 'g', 's', 'd', 'i', 's', 'p' };

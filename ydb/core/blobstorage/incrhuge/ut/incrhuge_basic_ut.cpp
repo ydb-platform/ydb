@@ -1,11 +1,11 @@
-#include <library/cpp/actors/core/executor_pool_basic.h>
-#include <library/cpp/actors/core/executor_pool_io.h>
-#include <library/cpp/actors/core/scheduler_basic.h>
+#include <ydb/library/actors/core/executor_pool_basic.h>
+#include <ydb/library/actors/core/executor_pool_io.h>
+#include <ydb/library/actors/core/scheduler_basic.h>
 #include <ydb/core/blobstorage/incrhuge/incrhuge.h>
 #include <ydb/core/blobstorage/incrhuge/incrhuge_keeper.h>
 #include <ydb/core/blobstorage/pdisk/blobstorage_pdisk.h>
 #include <ydb/core/blobstorage/pdisk/blobstorage_pdisk_tools.h>
-#include <library/cpp/actors/protos/services_common.pb.h>
+#include <ydb/library/actors/protos/services_common.pb.h>
 #include <library/cpp/testing/unittest/registar.h>
 #include <util/random/fast.h>
 #include <util/folder/tempdir.h>

@@ -113,6 +113,24 @@ TEST(TMpscStackTest, ConcurrentTryDequeueAll)
     EXPECT_TRUE(stack.IsEmpty());
 }
 
+TEST(TMpscStackTest, DequeueFiltered)
+{
+    {
+        TMpscStack<int> stack;
+        for (int i = 0; i < 5; ++i) {
+            stack.Enqueue(i);
+        }
+
+        stack.FilterElements([] (int value) {
+            return value % 2 == 0;
+        });
+        EXPECT_FALSE(stack.IsEmpty());
+        auto values = stack.DequeueAll(/*reverse*/ false);
+
+        EXPECT_EQ(values, std::vector<int>({4, 2, 0}));
+    }
+}
+
 ////////////////////////////////////////////////////////////////////////////////
 
 } // namespace

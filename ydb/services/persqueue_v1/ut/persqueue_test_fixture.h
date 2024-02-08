@@ -101,7 +101,6 @@ static void ModifyTopicACL(NYdb::TDriver* driver, const TString& topic, const TV
                 Server->AnnoyingClient->CreateTopicNoLegacy("rt3.dc1--topic1", 1);
                 Server->AnnoyingClient->CreateTopicNoLegacy("rt3.dc1--acc--topic1", 1);
                 Server->WaitInit("topic1");
-                Sleep(TDuration::Seconds(10));
             }
 
             Cerr << "=== EnablePQLogs" << Endl;

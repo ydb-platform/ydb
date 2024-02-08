@@ -38,14 +38,16 @@ runs:
         
         folder="${{ runner.arch == 'X64' && 'x86-64' || runner.arch == 'ARM64' && 'arm64' || 'unknown' }}"
         
-        case "${{ inputs.build_preset }}" in
+        BUILD_PRESET="${{ inputs.build_preset }}"
+        
+        case "$BUILD_PRESET" in
           relwithdebinfo)
             ;;
-          release-asan)
-            folder+="-asan"
+          debug)
+            folder+="-debug"
             ;;
-          release-tsan)
-            folder+="-tsan"
+          release-*)
+            folder+="-${BUILD_PRESET/release-/}"
             ;;
           *)
             echo "Invalid preset: ${{ inputs.build_preset }}"

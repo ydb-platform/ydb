@@ -22,7 +22,7 @@ target_link_libraries(ydb-services-ydb-ut PUBLIC
   ydb-services-ydb
   libs-apache-arrow
   library-cpp-getopt
-  cpp-grpc-client
+  library-grpc-client
   cpp-regex-pcre
   library-cpp-svnversion
   kqp-ut-common
@@ -63,7 +63,6 @@ target_sources(ydb-services-ydb-ut PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/services/ydb/ydb_scripting_ut.cpp
   ${CMAKE_SOURCE_DIR}/ydb/services/ydb/ydb_table_ut.cpp
   ${CMAKE_SOURCE_DIR}/ydb/services/ydb/ydb_stats_ut.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/services/ydb/ydb_long_tx_ut.cpp
   ${CMAKE_SOURCE_DIR}/ydb/services/ydb/ydb_logstore_ut.cpp
   ${CMAKE_SOURCE_DIR}/ydb/services/ydb/ydb_olapstore_ut.cpp
   ${CMAKE_SOURCE_DIR}/ydb/services/ydb/ydb_monitoring_ut.cpp

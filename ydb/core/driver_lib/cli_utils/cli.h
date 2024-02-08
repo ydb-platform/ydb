@@ -5,7 +5,7 @@
 #include <ydb/core/driver_lib/cli_base/cli.h>
 #include <ydb/core/driver_lib/run/factories.h>
 
-#include <library/cpp/actors/interconnect/poller_tcp.h>
+#include <ydb/library/actors/interconnect/poller_tcp.h>
 #include <ydb/public/lib/deprecated/client/msgbus_client.h>
 
 #include <library/cpp/deprecated/enum_codegen/enum_codegen.h>
@@ -30,7 +30,6 @@ namespace NDriverClient {
     int BSAdmCreateVSlots(TCommandConfig &cmdConf, int argc, char **argv);
     int BSAdmCreateGroup(TCommandConfig &cmdConf, int argc, char **argv);
     int CompileAndExecMiniKQL(TCommandConfig &cmdConf, int argc, char **argv);
-    int MessageBusTrace(TCommandConfig &cmdConf, int argc, char** argv);
     int KeyValueRequest(TCommandConfig &cmdConf, int argc, char **argv);
     int PersQueueRequest(TCommandConfig &cmdConf, int argc, char **argv);
     int PersQueueStress(TCommandConfig &cmdConf, int argc, char **argv);

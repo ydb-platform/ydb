@@ -15,6 +15,8 @@
 #include <yt/yt/core/misc/ring_queue.h>
 #include <yt/yt/core/misc/shutdown.h>
 
+#include <library/cpp/yt/misc/tls.h>
+
 #include <util/thread/lfqueue.h>
 
 namespace NYT::NConcurrency {
@@ -427,7 +429,7 @@ private:
     TRingQueue<TClosure> Queue_;
     int Semaphore_ = 0;
 
-    static thread_local TBoundedConcurrencyInvoker* CurrentSchedulingInvoker_;
+    static YT_THREAD_LOCAL(TBoundedConcurrencyInvoker*) CurrentSchedulingInvoker_;
 
 private:
     class TInvocationGuard
@@ -494,7 +496,7 @@ private:
     }
 };
 
-thread_local TBoundedConcurrencyInvoker* TBoundedConcurrencyInvoker::CurrentSchedulingInvoker_;
+YT_THREAD_LOCAL(TBoundedConcurrencyInvoker*) TBoundedConcurrencyInvoker::CurrentSchedulingInvoker_;
 
 IInvokerPtr CreateBoundedConcurrencyInvoker(
     IInvokerPtr underlyingInvoker,
@@ -629,10 +631,10 @@ private:
             }
 
             UnderlyingInvoker_->Invoke(BIND_NO_PROPAGATE(
-               &TSuspendableInvoker::RunCallback,
-               MakeStrong(this),
-               Passed(std::move(callback)),
-               Passed(std::move(guard))));
+                &TSuspendableInvoker::RunCallback,
+                MakeStrong(this),
+                Passed(std::move(callback)),
+                Passed(std::move(guard))));
         }
 
         SchedulingMore_ = false;

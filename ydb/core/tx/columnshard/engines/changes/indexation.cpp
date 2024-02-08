@@ -3,6 +3,7 @@
 #include <ydb/core/protos/counters_columnshard.pb.h>
 #include <ydb/core/tx/columnshard/columnshard_impl.h>
 #include <ydb/core/tx/columnshard/blobs_action/blob_manager_db.h>
+#include <ydb/core/formats/arrow/serializer/native.h>
 
 namespace NKikimr::NOlap {
 
@@ -15,9 +16,9 @@ bool TInsertColumnEngineChanges::DoApplyChanges(TColumnEngineForLogs& self, TApp
 
 void TInsertColumnEngineChanges::DoWriteIndex(NColumnShard::TColumnShard& self, TWriteIndexContext& context) {
     TBase::DoWriteIndex(self, context);
+    auto removing = BlobsAction.GetRemoving(IStoragesManager::DefaultStorageId);
     for (const auto& insertedData : DataToIndex) {
-        self.InsertTable->EraseCommitted(context.DBWrapper, insertedData);
-        Y_ABORT_UNLESS(insertedData.GetBlobRange().IsFullBlob());
+        self.InsertTable->EraseCommitted(context.DBWrapper, insertedData, removing);
     }
     if (!DataToIndex.empty()) {
         self.UpdateInsertTableCounters();
@@ -27,13 +28,9 @@ void TInsertColumnEngineChanges::DoWriteIndex(NColumnShard::TColumnShard& self, 
 void TInsertColumnEngineChanges::DoStart(NColumnShard::TColumnShard& self) {
     TBase::DoStart(self);
     Y_ABORT_UNLESS(DataToIndex.size());
-    auto removing = BlobsAction.GetRemoving(IStoragesManager::DefaultStorageId);
     auto reading = BlobsAction.GetReading(IStoragesManager::DefaultStorageId);
-    for (size_t i = 0; i < DataToIndex.size(); ++i) {
-        const auto& insertedData = DataToIndex[i];
-        Y_ABORT_UNLESS(insertedData.GetBlobRange().IsFullBlob());
+    for (auto&& insertedData : DataToIndex) {
         reading->AddRange(insertedData.GetBlobRange(), insertedData.GetBlobData().value_or(""));
-        removing->DeclareRemove(insertedData.GetBlobRange().GetBlobId());
     }
 
     self.BackgroundController.StartIndexing(*this);
@@ -70,7 +67,7 @@ TConclusionStatus TInsertColumnEngineChanges::DoConstructBlobs(TConstructionCont
     for (auto& inserted : DataToIndex) {
         const TBlobRange& blobRange = inserted.GetBlobRange();
 
-        auto blobSchema = context.SchemaVersions.GetSchema(inserted.GetSchemaVersion());
+        auto blobSchema = context.SchemaVersions.GetSchemaVerified(inserted.GetSchemaVersion());
         auto& indexInfo = blobSchema->GetIndexInfo();
         Y_ABORT_UNLESS(indexInfo.IsSorted());
 
@@ -88,7 +85,7 @@ TConclusionStatus TInsertColumnEngineChanges::DoConstructBlobs(TConstructionCont
             ;
         }
 
-        batch = AddSpecials(batch, blobSchema->GetIndexInfo(), inserted);
+        batch = AddSpecials(batch, indexInfo, inserted);
         batch = resultSchema->NormalizeBatch(*blobSchema, batch);
         pathBatches[inserted.PathId].push_back(batch);
         Y_DEBUG_ABORT_UNLESS(NArrow::IsSorted(pathBatches[inserted.PathId].back(), resultSchema->GetIndexInfo().GetReplaceKey()));
@@ -120,9 +117,9 @@ TConclusionStatus TInsertColumnEngineChanges::DoConstructBlobs(TConstructionCont
                 continue;
             }
             if (b->num_rows() < 100) {
-                SaverContext.SetExternalCompression(NArrow::TCompression(arrow::Compression::type::UNCOMPRESSED));
+                SaverContext.SetExternalSerializer(NArrow::NSerialization::TSerializerContainer(std::make_shared<NArrow::NSerialization::TNativeSerializer>(arrow::Compression::type::UNCOMPRESSED)));
             } else {
-                SaverContext.SetExternalCompression(NArrow::TCompression(arrow::Compression::type::LZ4_FRAME));
+                SaverContext.SetExternalSerializer(NArrow::NSerialization::TSerializerContainer(std::make_shared<NArrow::NSerialization::TNativeSerializer>(arrow::Compression::type::LZ4_FRAME)));
             }
             auto portions = MakeAppendedPortions(b, pathId, maxSnapshot, nullptr, context);
             Y_ABORT_UNLESS(portions.size());

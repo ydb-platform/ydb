@@ -4,19 +4,19 @@
 
 #include <ydb/core/grpc_services/base/base.h>
 #include <ydb/core/viewer/json/json.h>
-#include <library/cpp/actors/http/http_proxy.h>
+#include <ydb/library/actors/http/http_proxy.h>
 
 namespace NKikimr::NPublicHttp {
 
 typedef std::function<void(const THttpRequestContext& requestContext, const TJsonSettings& jsonSettings, NProtoBuf::Message* resp, ui32 status)> TReplySender;
 
-class TGrpcRequestContextWrapper : public NGrpc::IRequestContextBase {
+class TGrpcRequestContextWrapper : public NYdbGrpc::IRequestContextBase {
 private:
     THttpRequestContext RequestContext;
     TString LongProject;
     std::unique_ptr<NProtoBuf::Message> Request;
     TReplySender ReplySender;
-    NGrpc::TAuthState AuthState;
+    NYdbGrpc::TAuthState AuthState;
     google::protobuf::Arena Arena;
     TJsonSettings JsonSettings;
     TInstant DeadlineAt;
@@ -25,9 +25,9 @@ public:
     TGrpcRequestContextWrapper(const THttpRequestContext& requestContext, std::unique_ptr<NProtoBuf::Message> request, TReplySender replySender);
     virtual const NProtoBuf::Message* GetRequest() const;
     virtual NProtoBuf::Message* GetRequestMut();
-    virtual NGrpc::TAuthState& GetAuthState();
+    virtual NYdbGrpc::TAuthState& GetAuthState();
     virtual void Reply(NProtoBuf::Message* resp, ui32 status = 0);
-    virtual void Reply(grpc::ByteBuffer* resp, ui32 status = 0);
+    virtual void Reply(grpc::ByteBuffer* resp, ui32 status = 0, EStreamCtrl ctrl = EStreamCtrl::CONT);
     virtual void ReplyUnauthenticated(const TString& in);
     virtual void ReplyError(grpc::StatusCode code, const TString& msg, const TString& details);
     virtual TInstant Deadline() const;

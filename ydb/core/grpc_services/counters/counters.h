@@ -2,7 +2,7 @@
 
 #include <ydb/core/sys_view/common/events.h>
 
-#include <library/cpp/grpc/server/grpc_counters.h>
+#include <ydb/library/grpc/server/grpc_counters.h>
 
 namespace NKikimr {
 namespace NGRpcService {
@@ -11,7 +11,7 @@ class TServiceCounterCB {
 public:
     TServiceCounterCB(::NMonitoring::TDynamicCounterPtr counters, TActorSystem *actorSystem);
 
-    NGrpc::ICounterBlockPtr operator()(const char* serviceName, const char* requestName,
+    NYdbGrpc::ICounterBlockPtr operator()(const char* serviceName, const char* requestName,
         bool streaming = false) const;
 
 private:

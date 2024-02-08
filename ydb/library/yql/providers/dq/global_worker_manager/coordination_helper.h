@@ -1,6 +1,6 @@
 #pragma once
 
-#include <library/cpp/actors/core/actorsystem.h>
+#include <ydb/library/actors/core/actorsystem.h>
 
 #include <ydb/library/yql/providers/common/metrics/metrics_registry.h>
 #include <ydb/library/yql/providers/dq/global_worker_manager/service_node_resolver.h>

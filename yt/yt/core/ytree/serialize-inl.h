@@ -426,11 +426,11 @@ void Serialize(const C<T...>& value, NYson::IYsonConsumer* consumer)
 }
 
 template <class E, class T, E Min, E Max>
-void Serialize(const TEnumIndexedVector<E, T, Min, Max>& vector, NYson::IYsonConsumer* consumer)
+void Serialize(const TEnumIndexedArray<E, T, Min, Max>& vector, NYson::IYsonConsumer* consumer)
 {
     consumer->OnBeginMap();
     for (auto key : TEnumTraits<E>::GetDomainValues()) {
-        if (!vector.IsDomainValue(key)) {
+        if (!vector.IsValidIndex(key)) {
             continue;
         }
         const auto& value = vector[key];
@@ -460,6 +460,15 @@ template <class T, class TTag>
 void Serialize(const TStrongTypedef<T, TTag>& value, NYson::IYsonConsumer* consumer)
 {
     Serialize(value.Underlying(), consumer);
+}
+
+template <class T>
+    requires CSerializableByTraits<T>
+void Serialize(const T& value, NYson::IYsonConsumer* consumer)
+{
+    using TSerializer = typename TSerializationTraits<T>::TSerializer;
+    auto serializer = TSerializer::template CreateReadOnly<T, TSerializer>(value);
+    Serialize(serializer, consumer);
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -605,13 +614,13 @@ void Deserialize(C<T...>& value, INodePtr node)
 }
 
 template <class E, class T, E Min, E Max>
-void Deserialize(TEnumIndexedVector<E, T, Min, Max>& vector, INodePtr node)
+void Deserialize(TEnumIndexedArray<E, T, Min, Max>& vector, INodePtr node)
 {
     vector = {};
     auto mapNode = node->AsMap();
     for (const auto& [stringKey, child] : mapNode->GetChildren()) {
         auto key = ParseEnum<E>(stringKey);
-        if (!vector.IsDomainValue(key)) {
+        if (!vector.IsValidIndex(key)) {
             THROW_ERROR_EXCEPTION("Enum value %Qlv is out of supported range",
                 key);
         }
@@ -650,6 +659,22 @@ template <class T, class TTag>
 void Deserialize(TStrongTypedef<T, TTag>& value, INodePtr node)
 {
     Deserialize(value.Underlying(), node);
+}
+
+template <class T>
+    requires CSerializableByTraits<T>
+void Deserialize(T& value, INodePtr node)
+{
+    using TSerializer = typename TSerializationTraits<T>::TSerializer;
+    auto serializer = TSerializer::template CreateWritable<T, TSerializer>(value);
+    Deserialize(serializer, node);
+}
+
+template <class T>
+    requires CSerializableByTraits<T>
+void Deserialize(T& value, NYson::TYsonPullParserCursor* cursor)
+{
+    Deserialize(value, NYson::ExtractTo<NYTree::INodePtr>(cursor));
 }
 
 ////////////////////////////////////////////////////////////////////////////////

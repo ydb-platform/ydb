@@ -38,7 +38,29 @@ void TServiceCommonConfig::Register(TRegistrar registrar)
 
 ////////////////////////////////////////////////////////////////////////////////
 
+void TServiceCommonDynamicConfig::Register(TRegistrar registrar)
+{
+    registrar.Parameter("enable_per_user_profiling", &TThis::EnablePerUserProfiling)
+        .Default();
+    registrar.Parameter("histogram_timer_profiling", &TThis::HistogramTimerProfiling)
+        .Default();
+    registrar.Parameter("code_counting", &TThis::EnableErrorCodeCounting)
+        .Default();
+    registrar.Parameter("tracing_mode", &TThis::TracingMode)
+        .Default();
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
 void TServerConfig::Register(TRegistrar registrar)
+{
+    registrar.Parameter("services", &TThis::Services)
+        .Default();
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
+void TServerDynamicConfig::Register(TRegistrar registrar)
 {
     registrar.Parameter("services", &TThis::Services)
         .Default();
@@ -143,6 +165,9 @@ void TViablePeerRegistryConfig::Register(TRegistrar registrar)
         .GreaterThanOrEqual(0)
         .Default(0);
 
+    registrar.Parameter("enable_power_of_two_choices_strategy", &TThis::EnablePowerOfTwoChoicesStrategy)
+        .Default(false);
+
     registrar.Postprocessor([] (TThis* config) {
         if (config->MinPeerCountForPriorityAwareness > config->MaxPeerCount) {
             THROW_ERROR_EXCEPTION(
@@ -205,6 +230,8 @@ void TBalancingChannelConfig::Register(TRegistrar registrar)
 {
     registrar.Parameter("addresses", &TThis::Addresses)
         .Optional();
+    registrar.Parameter("disable_balancing_on_single_address", &TThis::DisableBalancingOnSingleAddress)
+        .Default(true);
     registrar.Parameter("endpoints", &TThis::Endpoints)
         .Optional();
     registrar.Parameter("hedging_delay", &TThis::HedgingDelay)
@@ -250,8 +277,12 @@ void TResponseKeeperConfig::Register(TRegistrar registrar)
 {
     registrar.Parameter("expiration_time", &TThis::ExpirationTime)
         .Default(TDuration::Minutes(5));
-    registrar.Parameter("max_eviction_busy_time", &TThis::MaxEvictionTickTime)
+    registrar.Parameter("eviction_period", &TThis::EvictionPeriod)
+        .Default(TDuration::Seconds(1));
+    registrar.Parameter("max_eviction_tick_time", &TThis::MaxEvictionTickTime)
         .Default(TDuration::MilliSeconds(10));
+    registrar.Parameter("eviction_tick_time_check_period", &TThis::EvictionTickTimeCheckPeriod)
+        .Default(1024);
     registrar.Parameter("enable_warmup", &TThis::EnableWarmup)
         .Default(true);
     registrar.Parameter("warmup_time", &TThis::WarmupTime)

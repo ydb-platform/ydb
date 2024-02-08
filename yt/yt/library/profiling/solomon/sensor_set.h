@@ -9,10 +9,11 @@
 
 #include <yt/yt/core/profiling/public.h>
 
-#include <yt/yt/core/misc/intrusive_ptr.h>
 #include <yt/yt/core/misc/error.h>
 
 #include <yt/yt/core/ytree/fluent.h>
+
+#include <library/cpp/yt/memory/intrusive_ptr.h>
 
 namespace NYT::NProfiling {
 

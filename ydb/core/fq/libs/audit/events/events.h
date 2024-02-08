@@ -6,9 +6,9 @@
 #include <ydb/core/fq/libs/control_plane_storage/events/events.h>
 #include <ydb/core/fq/libs/checkpointing_common/defs.h>
 
-#include <library/cpp/actors/core/events.h>
-#include <library/cpp/actors/core/event_pb.h>
-#include <library/cpp/actors/interconnect/events_local.h>
+#include <ydb/library/actors/core/events.h>
+#include <ydb/library/actors/core/event_pb.h>
+#include <ydb/library/actors/interconnect/events_local.h>
 
 #include <optional>
 

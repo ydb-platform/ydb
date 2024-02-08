@@ -7,7 +7,7 @@
 namespace NKikimr::NOlap {
 
 TChunkMeta::TChunkMeta(const TColumnChunkLoadContext& context, const TIndexInfo& indexInfo) {
-    auto field = indexInfo.ArrowColumnField(context.GetAddress().GetColumnId());
+    auto field = indexInfo.ArrowColumnFieldOptional(context.GetAddress().GetColumnId());
     if (context.GetMetaProto().HasNumRows()) {
         NumRows = context.GetMetaProto().GetNumRows();
     }

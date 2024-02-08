@@ -5,9 +5,12 @@
 #endif
 
 #include "ypath_client.h"
+#include "yson_schema.h"
 #include "yson_struct.h"
 
 #include <yt/yt/core/yson/token_writer.h>
+
+#include <library/cpp/yt/misc/wrapper_traits.h>
 
 namespace NYT::NYTree {
 
@@ -16,7 +19,7 @@ namespace NYT::NYTree {
 namespace NPrivate {
 
 template <class T>
-concept IsYsonStructOrYsonSerializable = std::is_base_of_v<TYsonStructBase, T> || std::is_base_of_v<TYsonSerializableLite, T>;
+concept IsYsonStructOrYsonSerializable = std::derived_from<T, TYsonStructBase> || std::derived_from<T, TYsonSerializableLite>;
 
 // TODO(shakurov): get rid of this once concept support makes it into the standard
 // library implementation. Use equality-comparability instead.
@@ -31,9 +34,7 @@ concept SupportsDontSerializeDefaultImpl =
 
 template <class T>
 concept SupportsDontSerializeDefault =
-    SupportsDontSerializeDefaultImpl<T> ||
-    TStdOptionalTraits<T>::IsStdOptional &&
-    SupportsDontSerializeDefaultImpl<typename TStdOptionalTraits<T>::TValueType>;
+    SupportsDontSerializeDefaultImpl<typename TWrapperTraits<T>::TRecursiveUnwrapped>;
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -569,14 +570,6 @@ inline void InvokeForComposites(const Map<T...>* parameter, const F& func)
     }
 }
 
-template <class T, class = void>
-struct IsYsonStructPtr : std::false_type
-{ };
-
-template <class T>
-struct IsYsonStructPtr<TIntrusivePtr<T>, typename std::enable_if<std::is_convertible<T&, TYsonStruct&>::value>::type> : std::true_type
-{ };
-
 ////////////////////////////////////////////////////////////////////////////////
 
 } // namespace NYsonStructDetail
@@ -592,6 +585,19 @@ template <class TStruct, class TValue>
 TValue& TYsonFieldAccessor<TStruct, TValue>::GetValue(const TYsonStructBase* source)
 {
     return TYsonStructRegistry::Get()->template CachedDynamicCast<TStruct>(source)->*Field_;
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
+template <class TStruct, class TValue>
+TUniversalYsonParameterAccessor<TStruct, TValue>::TUniversalYsonParameterAccessor(std::function<TValue&(TStruct*)> accessor)
+    : Accessor_(std::move(accessor))
+{ }
+
+template <class TStruct, class TValue>
+TValue& TUniversalYsonParameterAccessor<TStruct, TValue>::GetValue(const TYsonStructBase* source)
+{
+    return Accessor_(TYsonStructRegistry::Get()->template CachedDynamicCast<TStruct>(source));
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -616,7 +622,7 @@ void TYsonStructParameter<TValue>::Load(
             options.Path,
             options.MergeStrategy.value_or(MergeStrategy_),
             options.RecursiveUnrecognizedRecursively);
-    } else if (!DefaultCtor_) {
+    } else if (!Optional_) {
         THROW_ERROR_EXCEPTION("Missing required parameter %v",
             options.Path);
     }
@@ -659,7 +665,7 @@ void TYsonStructParameter<TValue>::Load(
             options.Path,
             options.MergeStrategy.value_or(MergeStrategy_),
             options.RecursiveUnrecognizedRecursively);
-    } else if (!DefaultCtor_) {
+    } else if (!Optional_) {
         THROW_ERROR_EXCEPTION("Missing required parameter %v",
             options.Path);
     }
@@ -774,15 +780,26 @@ const std::vector<TString>& TYsonStructParameter<TValue>::GetAliases() const
 }
 
 template <class TValue>
+bool TYsonStructParameter<TValue>::IsRequired() const
+{
+    return !Optional_;
+}
+
+template <class TValue>
 const TString& TYsonStructParameter<TValue>::GetKey() const
 {
     return Key_;
 }
 
 template <class TValue>
-TYsonStructParameter<TValue>& TYsonStructParameter<TValue>::Optional()
+TYsonStructParameter<TValue>& TYsonStructParameter<TValue>::Optional(bool init)
 {
-    DefaultCtor_ = [] () { return TValue{}; };
+    Optional_ = true;
+
+    if (init) {
+        DefaultCtor_ = [] () { return TValue{}; };
+    }
+
     return *this;
 }
 
@@ -791,20 +808,21 @@ TYsonStructParameter<TValue>& TYsonStructParameter<TValue>::Default(TValue defau
 {
     static_assert(!std::is_convertible_v<TValue, TIntrusivePtr<TYsonStruct>>, "Use DefaultCtor to register TYsonStruct default.");
     DefaultCtor_ = [value = std::move(defaultValue)] () { return value; };
+    Optional_ = true;
     return *this;
 }
 
 template <class TValue>
 TYsonStructParameter<TValue>& TYsonStructParameter<TValue>::Default()
 {
-    DefaultCtor_ = [] () { return TValue{}; };
-    return *this;
+    return Optional();
 }
 
 template <class TValue>
 TYsonStructParameter<TValue>& TYsonStructParameter<TValue>::DefaultCtor(std::function<TValue()> defaultCtor)
 {
     DefaultCtor_ = std::move(defaultCtor);
+    Optional_ = true;
     return *this;
 }
 
@@ -826,6 +844,7 @@ template <class... TArgs>
 TYsonStructParameter<TValue>& TYsonStructParameter<TValue>::DefaultNew(TArgs&&... args)
 {
     TriviallyInitializedIntrusivePtr_ = true;
+    Optional_ = true;
     return DefaultCtor([=] () mutable { return New<typename TValue::TUnderlying>(std::forward<TArgs>(args)...); });
 }
 
@@ -847,6 +866,13 @@ template <class TValue>
 IMapNodePtr TYsonStructParameter<TValue>::GetRecursiveUnrecognized(const TYsonStructBase* self) const
 {
     return NPrivate::TGetRecursiveUnrecognized<TValue>::Do(FieldAccessor_->GetValue(self));
+}
+
+template <class TValue>
+void TYsonStructParameter<TValue>::WriteSchema(const TYsonStructBase* self, NYson::IYsonConsumer* consumer) const
+{
+    // TODO(bulatman) What about constraints: minimum, maximum, default and etc?
+    NPrivate::WriteSchema(FieldAccessor_->GetValue(self), consumer);
 }
 
 ////////////////////////////////////////////////////////////////////////////////

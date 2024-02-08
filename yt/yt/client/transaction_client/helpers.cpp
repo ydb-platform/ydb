@@ -68,7 +68,7 @@ std::pair<TDuration, TDuration> TimestampDiffToDuration(TTimestamp loTimestamp, 
     YT_ASSERT(loTimestamp <= hiTimestamp);
     auto loInstant = TimestampToInstant(loTimestamp);
     auto hiInstant = TimestampToInstant(hiTimestamp);
-    return std::make_pair(
+    return std::pair(
         hiInstant.first >= loInstant.second ? hiInstant.first - loInstant.second : TDuration::Zero(),
         hiInstant.second - loInstant.first);
 }

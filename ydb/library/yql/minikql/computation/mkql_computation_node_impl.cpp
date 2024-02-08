@@ -261,11 +261,12 @@ IComputationExternalNode* LocateExternalNode(const TNodeLocator& nodeLocator, TC
     return dynamic_cast<IComputationExternalNode*>(LocateNode(nodeLocator, callable, index, pop));
 }
 
-TPasstroughtMap GetPasstroughtMap(const TComputationExternalNodePtrVector& args, const TComputationNodePtrVector& roots) {
-    TPasstroughtMap map(args.size());
+template<class TContainerOne, class TContainerTwo>
+TPasstroughtMap GetPasstroughtMap(const TContainerOne& from, const TContainerTwo& to) {
+    TPasstroughtMap map(from.size());
     for (size_t i = 0U; i < map.size(); ++i) {
-        for (size_t j = 0U; j < roots.size(); ++j) {
-            if (args[i] == roots[j]) {
+        for (size_t j = 0U; j < to.size(); ++j) {
+            if (from[i] == to[j]) {
                 map[i].emplace(j);
                 break;
             }
@@ -274,18 +275,32 @@ TPasstroughtMap GetPasstroughtMap(const TComputationExternalNodePtrVector& args,
     return map;
 }
 
-TPasstroughtMap GetPasstroughtMap(const TComputationNodePtrVector& roots, const TComputationExternalNodePtrVector& args) {
-    TPasstroughtMap map(roots.size());
+template<class TContainerOne, class TContainerTwo>
+TPasstroughtMap GetPasstroughtMapOneToOne(const TContainerOne& from, const TContainerTwo& to) {
+    TPasstroughtMap map(from.size());
+    std::unordered_map<typename TContainerOne::value_type, size_t> unique(map.size());
     for (size_t i = 0U; i < map.size(); ++i) {
-        for (size_t j = 0U; j < args.size(); ++j) {
-            if (roots[i] == args[j]) {
-                map[i].emplace(j);
-                break;
+        if (const auto ins = unique.emplace(from[i], i); ins.second) {
+            for (size_t j = 0U; j < to.size(); ++j) {
+                if (from[i] == to[j]) {
+                    if (auto& item = map[i]) {
+                        item.reset();
+                        break;
+                    } else
+                        item.emplace(j);
+
+                }
             }
-        }
+        } else
+            map[ins.first->second].reset();
     }
     return map;
 }
+
+template TPasstroughtMap GetPasstroughtMap(const TComputationExternalNodePtrVector& from, const TComputationNodePtrVector& to);
+template TPasstroughtMap GetPasstroughtMap(const TComputationNodePtrVector& from, const TComputationExternalNodePtrVector& to);
+template TPasstroughtMap GetPasstroughtMapOneToOne(const TComputationExternalNodePtrVector& from, const TComputationNodePtrVector& to);
+template TPasstroughtMap GetPasstroughtMapOneToOne(const TComputationNodePtrVector& from, const TComputationExternalNodePtrVector& to);
 
 std::optional<size_t> IsPasstrought(const IComputationNode* root, const TComputationExternalNodePtrVector& args) {
     for (size_t i = 0U; i < args.size(); ++i)

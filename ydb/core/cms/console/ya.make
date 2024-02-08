@@ -56,6 +56,8 @@ SRCS(
     http.h
     immediate_controls_configurator.cpp
     immediate_controls_configurator.h
+    jaeger_tracing_configurator.cpp
+    jaeger_tracing_configurator.h
     log_settings_configurator.cpp
     log_settings_configurator.h
     logger.cpp
@@ -71,9 +73,11 @@ SRCS(
     util.h
 )
 
+GENERATE_ENUM_SERIALIZATION(config_item_info.h)
+
 PEERDIR(
-    library/cpp/actors/core
-    library/cpp/actors/http
+    ydb/library/actors/core
+    ydb/library/actors/http
     ydb/core/actorlib_impl
     ydb/core/base
     ydb/core/blobstorage

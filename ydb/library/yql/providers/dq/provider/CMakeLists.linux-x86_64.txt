@@ -17,7 +17,7 @@ target_link_libraries(providers-dq-provider PUBLIC
   contrib-libs-linux-headers
   contrib-libs-cxxsupp
   yutil
-  cpp-grpc-client
+  library-grpc-client
   cpp-threading-task_scheduler
   cpp-threading-future
   library-cpp-svnversion

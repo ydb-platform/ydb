@@ -17,6 +17,7 @@ SRCS(
 PEERDIR(
     yt/yt/core
     contrib/libs/grpc
+    library/cpp/string_utils/quote
 )
 
 ADDINCL(

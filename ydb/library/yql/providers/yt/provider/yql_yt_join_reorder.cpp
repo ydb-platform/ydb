@@ -4,6 +4,7 @@
 #include <ydb/library/yql/parser/pg_wrapper/interface/optimizer.h>
 #include <ydb/library/yql/providers/common/provider/yql_provider.h>
 #include <ydb/library/yql/utils/log/log.h>
+#include <ydb/library/yql/core/cbo/cbo_optimizer_new.h>
 
 #include <ydb/library/yql/dq/opt/dq_opt_log.h>
 
@@ -136,8 +137,6 @@ public:
         TYtJoinNodeOp::TPtr res = dynamic_cast<TYtJoinNodeOp*>(Convert(0, scope).Get());
 
         YQL_ENSURE(res);
-        DebugPrint(res, Ctx, 0);
-
         if (Debug) {
             DebugPrint(res, Ctx, 0);
         }
@@ -277,7 +276,7 @@ private:
             // relId, varId, table, column
             std::vector<std::tuple<int,int,TStringBuf,TStringBuf>> leftVars;
             std::vector<std::tuple<int,int,TStringBuf,TStringBuf>> rightVars;
- 
+
             ExtractVars(leftVars, op->LeftLabel);
             ExtractVars(rightVars, op->RightLabel);
 
@@ -336,7 +335,7 @@ private:
 
     TExprNode::TPtr MakeLabel(const std::vector<IOptimizer::TVarId>& vars) const {
         TVector<TExprNodePtr> label; label.reserve(vars.size() * 2);
- 
+
         for (auto [relId, varId] : vars) {
             auto [table, column] = Var2TableCol[relId - 1][varId - 1];
 
@@ -410,7 +409,101 @@ private:
     IOptimizer::TOutput Result;
 };
 
+class TOptimizerTreeBuilder
+{
+public:
+    TOptimizerTreeBuilder(std::shared_ptr<IBaseOptimizerNode>& tree, std::shared_ptr<IProviderContext>& ctx, TYtJoinNodeOp::TPtr inputTree)
+        : Tree(tree)
+        , Ctx(ctx)
+        , InputTree(inputTree)
+    { }
+
+    void Do() {
+        Ctx = std::make_shared<TDummyProviderContext>();
+        Tree = ProcessNode(InputTree);
+    }
+
+private:
+    std::shared_ptr<IBaseOptimizerNode> ProcessNode(TYtJoinNode::TPtr node) {
+        if (auto* op = dynamic_cast<TYtJoinNodeOp*>(node.Get())) {
+            return OnOp(op);
+        } else if (auto* leaf = dynamic_cast<TYtJoinNodeLeaf*>(node.Get())) {
+            return OnLeaf(leaf);
+        } else {
+            YQL_ENSURE("Unknown node type");
+            return nullptr;
+        }
+    }
+
+    std::shared_ptr<IBaseOptimizerNode> OnOp(TYtJoinNodeOp* op) {
+        auto joinKind = ConvertToJoinKind(TString(op->JoinKind->Content()));
+        auto left = ProcessNode(op->Left);
+        auto right = ProcessNode(op->Right);
+        YQL_ENSURE(op->LeftLabel->ChildrenSize() == op->RightLabel->ChildrenSize());
+        std::set<std::pair<NDq::TJoinColumn, NDq::TJoinColumn>> joinConditions;
+        for (ui32 i = 0; i < op->LeftLabel->ChildrenSize(); i += 2) {
+            auto ltable = op->LeftLabel->Child(i)->Content();
+            auto lcolumn = op->LeftLabel->Child(i + 1)->Content();
+            auto rtable = op->RightLabel->Child(i)->Content();
+            auto rcolumn = op->RightLabel->Child(i + 1)->Content();
+            NDq::TJoinColumn lcol{TString(ltable), TString(lcolumn)};
+            NDq::TJoinColumn rcol{TString(rtable), TString(rcolumn)};
+            joinConditions.insert({lcol, rcol});
+        }
+
+        return std::make_shared<TJoinOptimizerNode>(
+            left, right, joinConditions, joinKind, EJoinAlgoType::GraceJoin
+            );
+    }
+
+    std::shared_ptr<IBaseOptimizerNode> OnLeaf(TYtJoinNodeLeaf* leaf) {
+        TString label;
+        if (leaf->Label->ChildrenSize() == 0) {
+            label = leaf->Label->Content();
+        } else {
+            for (ui32 i = 0; i < leaf->Label->ChildrenSize(); ++i) {
+                label += leaf->Label->Child(i)->Content();
+                if (i+1 != leaf->Label->ChildrenSize()) {
+                    label += ",";
+                }
+            }
+        }
+
+        TYtSection section{leaf->Section};
+        auto stat = std::make_shared<TOptimizerStatistics>();
+        if (Y_UNLIKELY(!section.Settings().Empty()) && Y_UNLIKELY(section.Settings().Item(0).Name() == "Test")) {
+            for (const auto& setting : section.Settings()) {
+                if (setting.Name() == "Rows") {
+                    stat->Nrows += FromString<ui64>(setting.Value().Ref().Content());
+                } else if (setting.Name() == "Size") {
+                    stat->Cost += FromString<ui64>(setting.Value().Ref().Content());
+                }
+            }
+        } else {
+            for (auto path: section.Paths()) {
+                auto tableStat = TYtTableBaseInfo::GetStat(path.Table());
+                stat->Cost += tableStat->DataSize;
+                stat->Nrows += tableStat->RecordsCount;
+            }
+        }
+
+        return std::make_shared<TRelOptimizerNode>(
+            std::move(label), std::move(stat)
+            );
+    }
+
+    std::shared_ptr<IBaseOptimizerNode>& Tree;
+    std::shared_ptr<IProviderContext>& Ctx;
+
+    TYtJoinNodeOp::TPtr InputTree;
+};
+
 } // namespace
+
+void BuildOptimizerJoinTree(std::shared_ptr<IBaseOptimizerNode>& tree, std::shared_ptr<IProviderContext>& ctx, TYtJoinNodeOp::TPtr op)
+{
+    TOptimizerTreeBuilder(tree, ctx, op).Do();
+}
 
 TYtJoinNodeOp::TPtr OrderJoins(TYtJoinNodeOp::TPtr op, const TYtState::TPtr& state, TExprContext& ctx, bool debug)
 {

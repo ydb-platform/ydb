@@ -1,14 +1,15 @@
 #pragma once
 #include <ydb/core/protos/kqp.pb.h>
 #include <ydb/core/kqp/common/simple/kqp_event_ids.h>
+#include <ydb/core/kqp/common/kqp_user_request_context.h>
 #include <ydb/core/grpc_services/base/base.h>
 #include <ydb/core/grpc_services/cancelation/cancelation_event.h>
 #include <ydb/core/grpc_services/cancelation/cancelation.h>
 
 #include <ydb/public/api/protos/ydb_query.pb.h>
 #include <ydb/library/aclib/aclib.h>
-#include <library/cpp/actors/core/event_pb.h>
-#include <library/cpp/actors/core/event_local.h>
+#include <ydb/library/actors/core/event_pb.h>
+#include <ydb/library/actors/core/event_local.h>
 
 namespace NKikimr::NKqp::NPrivateEvents {
 
@@ -33,7 +34,8 @@ public:
         const ::Ydb::Operations::OperationParams* operationParams,
         bool keepSession = false,
         bool useCancelAfter = true,
-        const ::Ydb::Query::Syntax syntax = Ydb::Query::Syntax::SYNTAX_UNSPECIFIED);
+        const ::Ydb::Query::Syntax syntax = Ydb::Query::Syntax::SYNTAX_UNSPECIFIED,
+        bool supportsStreamTrailingResult = false);
 
     TEvQueryRequest() = default;
 
@@ -160,6 +162,13 @@ public:
         return Record.GetTraceId();
     }
 
+    NWilson::TTraceId GetWilsonTraceId() const {
+        if (RequestCtx) {
+            return RequestCtx->GetWilsonTraceId();
+        }
+        return {};
+    }
+
     const TString& GetRequestType() const {
         if (RequestCtx) {
             if (!RequestType) {
@@ -265,6 +274,26 @@ public:
         }
     }
 
+    void SetUserRequestContext(TIntrusivePtr<TUserRequestContext> userRequestContext) {
+        UserRequestContext = userRequestContext;
+    }
+
+    TIntrusivePtr<TUserRequestContext> GetUserRequestContext() const {
+        return UserRequestContext;
+    }
+
+    void SetProgressStatsPeriod(TDuration progressStatsPeriod) {
+        ProgressStatsPeriod = progressStatsPeriod;
+    }
+
+    bool GetSupportsStreamTrailingResult() const {
+        return SupportsStreamTrailingResult;
+    }
+
+    TDuration GetProgressStatsPeriod() const {
+        return ProgressStatsPeriod;
+    }
+
     mutable NKikimrKqp::TEvQueryRequest Record;
 
 private:
@@ -291,6 +320,9 @@ private:
     TDuration OperationTimeout;
     TDuration CancelAfter;
     const ::Ydb::Query::Syntax Syntax = Ydb::Query::Syntax::SYNTAX_UNSPECIFIED;
+    TIntrusivePtr<TUserRequestContext> UserRequestContext;
+    TDuration ProgressStatsPeriod;
+    bool SupportsStreamTrailingResult = false;
 };
 
 struct TEvDataQueryStreamPart: public TEventPB<TEvDataQueryStreamPart,

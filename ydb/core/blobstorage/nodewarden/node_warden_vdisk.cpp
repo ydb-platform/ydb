@@ -57,14 +57,16 @@ namespace NKikimr::NStorage {
     void TNodeWarden::StartLocalVDiskActor(TVDiskRecord& vdisk, TDuration yardInitDelay) {
         const TVSlotId vslotId = vdisk.GetVSlotId();
         const ui64 pdiskGuid = vdisk.Config.GetVDiskLocation().GetPDiskGuid();
+        const bool restartInFlight = InFlightRestartedPDisks.count({vslotId.NodeId, vslotId.PDiskId});
         const bool donorMode = vdisk.Config.HasDonorMode();
         const bool readOnly = vdisk.Config.GetReadOnly();
         Y_VERIFY_S(!donorMode || !readOnly, "Only one of modes should be enabled: donorMode " << donorMode << ", readOnly " << readOnly);
 
-        STLOG(PRI_DEBUG, BS_NODE, NW23, "StartLocalVDiskActor", (SlayInFlight, SlayInFlight.contains(vslotId)),
-            (VDiskId, vdisk.GetVDiskId()), (VSlotId, vslotId), (PDiskGuid, pdiskGuid), (DonorMode, donorMode));
+        STLOG(PRI_DEBUG, BS_NODE, NW23, "StartLocalVDiskActor", (RestartInFlight, restartInFlight),
+            (SlayInFlight, SlayInFlight.contains(vslotId)), (VDiskId, vdisk.GetVDiskId()), (VSlotId, vslotId),
+            (PDiskGuid, pdiskGuid), (DonorMode, donorMode));
 
-        if (SlayInFlight.contains(vslotId)) {
+        if (restartInFlight || SlayInFlight.contains(vslotId)) {
             return;
         }
 
@@ -172,6 +174,7 @@ namespace NKikimr::NStorage {
         vdiskConfig->EnableVDiskCooldownTimeout = Cfg->EnableVDiskCooldownTimeout;
         vdiskConfig->ReplPausedAtStart = Cfg->VDiskReplPausedAtStart;
         vdiskConfig->EnableVPatch = EnableVPatch;
+        vdiskConfig->FeatureFlags = Cfg->FeatureFlags;
 
         // issue initial report to whiteboard before creating actor to avoid races
         Send(WhiteboardId, new NNodeWhiteboard::TEvWhiteboard::TEvVDiskStateUpdate(vdiskId, groupInfo->GetStoragePoolName(),

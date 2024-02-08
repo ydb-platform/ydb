@@ -2,4 +2,4 @@
 use plato;
 select *
 from Input
-order by TablePath();
+order by TablePath(), key;

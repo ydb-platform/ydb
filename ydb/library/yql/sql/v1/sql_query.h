@@ -2,7 +2,7 @@
 
 #include "sql_translation.h"
 
-#include <ydb/library/yql/parser/proto_ast/gen/v1_proto/SQLv1Parser.pb.h>
+#include <ydb/library/yql/parser/proto_ast/gen/v1_proto_split/SQLv1Parser.pb.main.h>
 #include <util/string/split.h>
 
 namespace NSQLTranslationV1 {
@@ -24,6 +24,7 @@ private:
     bool DeclareStatement(const TRule_declare_stmt& stmt);
     bool ExportStatement(const TRule_export_stmt& stmt);
     bool AlterTableAction(const TRule_alter_table_action& node, TAlterTableParameters& params);
+    bool AlterExternalTableAction(const TRule_alter_external_table_action& node, TAlterTableParameters& params);
     bool AlterTableAddColumn(const TRule_alter_table_add_column& node, TAlterTableParameters& params);
     bool AlterTableDropColumn(const TRule_alter_table_drop_column& node, TAlterTableParameters& params);
     bool AlterTableAlterColumn(const TRule_alter_table_alter_column& node, TAlterTableParameters& params);

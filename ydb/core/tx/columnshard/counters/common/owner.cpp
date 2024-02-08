@@ -2,7 +2,7 @@
 #include "private.h"
 #include <ydb/core/base/appdata.h>
 #include <ydb/core/base/counters.h>
-#include <library/cpp/actors/core/log.h>
+#include <ydb/library/actors/core/log.h>
 
 namespace NKikimr::NColumnShard {
 

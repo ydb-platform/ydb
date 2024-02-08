@@ -145,7 +145,7 @@ public:
      **/
 
     size_type wroteTo(size_type size) {
-        int wrote = 0;
+        size_type wrote = 0;
         if (size) {
             if (size > freeSpace()) {
                 throw std::length_error("Impossible to write more data than free space");

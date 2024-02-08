@@ -73,7 +73,7 @@ class TCompositeNodeMixin
 {
 protected:
     void RemoveRecursive(
-        const TYPath &path,
+        const TYPath& path,
         TReqRemove* request,
         TRspRemove* response,
         const TCtxRemovePtr& context) override;
@@ -154,7 +154,7 @@ class TSupportsSetSelfMixin
     : public virtual TNodeBase
 {
 protected:
-    void SetSelf(TReqSet *request, TRspSet* /*response*/, const TCtxSetPtr &context) override;
+    void SetSelf(TReqSet* request, TRspSet* /*response*/, const TCtxSetPtr& context) override;
 
     virtual void ValidateSetSelf(bool /*force*/) const;
 };

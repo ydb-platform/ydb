@@ -7,6 +7,7 @@
 
 
 add_subdirectory(clickhouse)
+add_subdirectory(compress_base)
 add_subdirectory(datetime)
 add_subdirectory(datetime2)
 add_subdirectory(digest)

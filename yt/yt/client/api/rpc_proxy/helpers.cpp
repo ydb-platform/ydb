@@ -1,6 +1,7 @@
 #include "helpers.h"
 
 #include <yt/yt/client/api/rowset.h>
+#include <yt/yt/client/api/table_client.h>
 
 #include <yt/yt/client/table_client/columnar_statistics.h>
 #include <yt/yt/client/table_client/column_sort_schema.h>
@@ -34,6 +35,9 @@ void ThrowUnimplemented(const TString& method)
 ////////////////////////////////////////////////////////////////////////////////
 
 namespace NProto {
+
+using NYT::ToProto;
+using NYT::FromProto;
 
 ////////////////////////////////////////////////////////////////////////////////
 // OPTIONS
@@ -345,7 +349,7 @@ void FromProto(
         std::fill(result->StateCounts->begin(), result->StateCounts->end(), 0);
         for (const auto& stateCount: proto.state_counts().entries()) {
             auto state = ConvertOperationStateFromProto(stateCount.state());
-            YT_VERIFY(result->StateCounts->IsDomainValue(state));
+            YT_VERIFY(result->StateCounts->IsValidIndex(state));
             YT_VERIFY((*result->StateCounts)[state] == 0);
             (*result->StateCounts)[state] = stateCount.count();
         }
@@ -357,7 +361,7 @@ void FromProto(
         std::fill(result->TypeCounts->begin(), result->TypeCounts->end(), 0);
         for (const auto& typeCount: proto.type_counts().entries()) {
             auto type = ConvertOperationTypeFromProto(typeCount.type());
-            YT_VERIFY(result->TypeCounts->IsDomainValue(type));
+            YT_VERIFY(result->TypeCounts->IsValidIndex(type));
             YT_VERIFY((*result->TypeCounts)[type] == 0);
             (*result->TypeCounts)[type] = typeCount.count();
         }
@@ -1109,7 +1113,7 @@ void FromProto(
     std::fill(statistics->StateCounts.begin(), statistics->StateCounts.end(), 0);
     for (const auto& stateCount: protoStatistics.state_counts().entries()) {
         auto state = ConvertJobStateFromProto(stateCount.state());
-        YT_VERIFY(statistics->StateCounts.IsDomainValue(state));
+        YT_VERIFY(statistics->StateCounts.IsValidIndex(state));
         YT_VERIFY(statistics->StateCounts[state] == 0);
         statistics->StateCounts[state] = stateCount.count();
     }
@@ -1117,7 +1121,7 @@ void FromProto(
     std::fill(statistics->TypeCounts.begin(), statistics->TypeCounts.end(), 0);
     for (const auto& typeCount: protoStatistics.type_counts().entries()) {
         auto type = ConvertJobTypeFromProto(typeCount.type());
-        YT_VERIFY(statistics->TypeCounts.IsDomainValue(type));
+        YT_VERIFY(statistics->TypeCounts.IsValidIndex(type));
         YT_VERIFY(statistics->TypeCounts[type] == 0);
         statistics->TypeCounts[type] = typeCount.count();
     }
@@ -1273,6 +1277,56 @@ void FromProto(
     if (proto.has_data_weight_per_row_hint()) {
         result->DataWeightPerRowHint = proto.data_weight_per_row_hint();
     }
+}
+
+void ToProto(
+    NProto::TTableBackupManifest* protoManifest,
+    const NApi::TTableBackupManifestPtr& manifest)
+{
+    protoManifest->set_source_path(manifest->SourcePath);
+    protoManifest->set_destination_path(manifest->DestinationPath);
+    protoManifest->set_ordered_mode(ToProto<i32>(manifest->OrderedMode));
+}
+
+void FromProto(
+    NApi::TTableBackupManifestPtr* manifest,
+    const NProto::TTableBackupManifest& protoManifest)
+{
+    *manifest = New<NApi::TTableBackupManifest>();
+
+    (*manifest)->SourcePath = protoManifest.source_path();
+    (*manifest)->DestinationPath = protoManifest.destination_path();
+    (*manifest)->OrderedMode = CheckedEnumCast<EOrderedTableBackupMode>(protoManifest.ordered_mode());
+}
+
+void ToProto(
+    NProto::TBackupManifest::TClusterManifest* protoEntry,
+    const std::pair<TString, std::vector<NApi::TTableBackupManifestPtr>>& entry)
+{
+    protoEntry->set_cluster(entry.first);
+    ToProto(protoEntry->mutable_table_manifests(), entry.second);
+}
+
+void FromProto(
+    std::pair<TString, std::vector<NApi::TTableBackupManifestPtr>>* entry,
+    const NProto::TBackupManifest::TClusterManifest& protoEntry)
+{
+    entry->first = protoEntry.cluster();
+    FromProto(&entry->second, protoEntry.table_manifests());
+}
+
+void ToProto(
+    NProto::TBackupManifest* protoManifest,
+    const NApi::TBackupManifest& manifest)
+{
+    ToProto(protoManifest->mutable_clusters(), manifest.Clusters);
+}
+
+void FromProto(
+    NApi::TBackupManifest* manifest,
+    const NProto::TBackupManifest& protoManifest)
+{
+    FromProto(&manifest->Clusters, protoManifest.clusters());
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -1597,6 +1651,16 @@ NJobTrackerClient::EJobState ConvertJobStateFromProto(
 
 ////////////////////////////////////////////////////////////////////////////////
 
+bool IsDynamicTableRetriableError(const TError& error)
+{
+    // TODO(dgolear): Consider adding NoSuchTablet and TabletNotMounted errors?
+    return
+        error.FindMatching(NTabletClient::EErrorCode::RowIsBlocked) ||
+        error.FindMatching(NTabletClient::EErrorCode::BlockedRowWaitTimeout) ||
+        error.FindMatching(NTabletClient::EErrorCode::NoSuchCell) ||
+        error.FindMatching(NTabletClient::EErrorCode::ChunkIsNotPreloaded);
+}
+
 bool IsRetriableError(const TError& error, bool retryProxyBanned)
 {
     if (error.FindMatching(NRpcProxy::EErrorCode::ProxyBanned) ||
@@ -1605,13 +1669,14 @@ bool IsRetriableError(const TError& error, bool retryProxyBanned)
         return retryProxyBanned;
     }
 
-    //! Retriable error codes are based on the ones used in http client.
     return
+        NRpc::IsRetriableError(error) ||
         error.FindMatching(NRpc::EErrorCode::RequestQueueSizeLimitExceeded) ||
         error.FindMatching(NRpc::EErrorCode::TransportError) ||
         error.FindMatching(NRpc::EErrorCode::Unavailable) ||
         error.FindMatching(NRpc::EErrorCode::TransientFailure) ||
-        error.FindMatching(NSecurityClient::EErrorCode::RequestQueueSizeLimitExceeded);
+        error.FindMatching(NSecurityClient::EErrorCode::RequestQueueSizeLimitExceeded) ||
+        IsDynamicTableRetriableError(error);
 }
 
 ////////////////////////////////////////////////////////////////////////////////

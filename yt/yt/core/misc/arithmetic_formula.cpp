@@ -891,11 +891,6 @@ bool TBooleanFormulaTags::operator==(const TBooleanFormulaTags& other) const
     return Tags_ == other.Tags_;
 }
 
-bool TBooleanFormulaTags::operator!=(const TBooleanFormulaTags& other) const
-{
-    return !operator==(other);
-}
-
 void Serialize(const TBooleanFormulaTags& tags, NYson::IYsonConsumer* consumer)
 {
     BuildYsonFluently(consumer)

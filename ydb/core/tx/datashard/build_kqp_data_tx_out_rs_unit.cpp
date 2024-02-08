@@ -44,8 +44,6 @@ bool TBuildKqpDataTxOutRSUnit::IsReadyToExecute(TOperation::TPtr) const {
 EExecutionStatus TBuildKqpDataTxOutRSUnit::Execute(TOperation::TPtr op, TTransactionContext& txc,
     const TActorContext& ctx)
 {
-    TDataShardLocksDb locksDb(DataShard, txc);
-    TSetupSysLocks guardLocks(op, DataShard, &locksDb);
     TActiveTransaction* tx = dynamic_cast<TActiveTransaction*>(op.Get());
     Y_VERIFY_S(tx, "cannot cast operation of kind " << op->GetKind());
 
@@ -62,10 +60,13 @@ EExecutionStatus TBuildKqpDataTxOutRSUnit::Execute(TOperation::TPtr op, TTransac
         }
     }
 
+    TDataShardLocksDb locksDb(DataShard, txc);
+    TSetupSysLocks guardLocks(op, DataShard, &locksDb);
+
     const auto& dataTx = tx->GetDataTx();
     ui64 tabletId = DataShard.TabletID();
 
-    if (tx->GetDataTx()->CheckCancelled()) {
+    if (tx->GetDataTx()->CheckCancelled(tabletId)) {
         tx->ReleaseTxData(txc, ctx);
         BuildResult(op, NKikimrTxDataShard::TEvProposeTransactionResult::CANCELLED)
             ->AddError(NKikimrTxDataShard::TError::EXECUTION_CANCELLED, "Tx was cancelled");
@@ -99,7 +100,7 @@ EExecutionStatus TBuildKqpDataTxOutRSUnit::Execute(TOperation::TPtr op, TTransac
         dataTx->SetReadVersion(DataShard.GetReadWriteVersions(tx).ReadVersion);
 
         if (dataTx->GetKqpComputeCtx().HasPersistentChannels()) {
-            auto result = KqpRunTransaction(ctx, op->GetTxId(), kqpLocks, useGenericReadSets, tasksRunner);
+            auto result = KqpRunTransaction(ctx, op->GetTxId(), useGenericReadSets, tasksRunner);
 
             Y_VERIFY_S(!dataTx->GetKqpComputeCtx().HadInconsistentReads(),
                 "Unexpected inconsistent reads in operation " << *op << " when preparing persistent channels");

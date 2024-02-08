@@ -1,7 +1,7 @@
 LIBRARY()
 
 PEERDIR(
-    library/cpp/actors/protos
+    ydb/library/actors/protos
     library/cpp/monlib/service/pages
     ydb/core/base
     ydb/core/blobstorage/vdisk/hulldb/base
@@ -11,6 +11,7 @@ PEERDIR(
 
 SRCS(
     align.h
+    blobstorage_cost_tracker.cpp
     blobstorage_dblogcutter.cpp
     blobstorage_dblogcutter.h
     blobstorage_event_filter.cpp

@@ -2,7 +2,7 @@
 
 #include "defs.h"
 #include "datashard.h"
-#include "datashard_locks.h"
+#include <ydb/core/tx/locks/locks.h>
 #include "datashard_outreadset.h"
 #include "datashard_snapshots.h"
 #include "execution_unit_kind.h"
@@ -111,6 +111,7 @@ enum class EOperationKind : ui32 {
     // Values [100, inf) are used for internal kinds.
     DirectTx = 101,
     ReadTx = 102,
+    WriteTx = 103,
 };
 
 class TBasicOpInfo {
@@ -165,6 +166,7 @@ public:
 
     bool IsDataTx() const { return Kind == EOperationKind::DataTx; }
     bool IsReadTx() const { return Kind == EOperationKind::ReadTx; }
+    bool IsWriteTx() const { return Kind == EOperationKind::WriteTx; }
     bool IsDirectTx() const { return Kind == EOperationKind::DirectTx; }
     bool IsSchemeTx() const { return Kind == EOperationKind::SchemeTx; }
     bool IsReadTable() const { return Kind == EOperationKind::ReadTable; }
@@ -398,7 +400,7 @@ public:
         ResetFlag(TTxFlags::AcquiredSnapshotReference);
     }
 
-    bool IsMvccSnapshotRead() { return !MvccSnapshot.IsMax(); }
+    bool IsMvccSnapshotRead() const { return !MvccSnapshot.IsMax(); }
     const TRowVersion& GetMvccSnapshot() const { return MvccSnapshot; }
     bool IsMvccSnapshotRepeatable() const { return MvccSnapshotRepeatable; }
     void SetMvccSnapshot(const TRowVersion& snapshot, bool isRepeatable = true) {
@@ -806,6 +808,9 @@ public:
     void SetFinishProposeTs(TMonotonic now) noexcept { FinishProposeTs = now; }
     void SetFinishProposeTs() noexcept;
 
+    NWilson::TTraceId GetTraceId() const noexcept {
+        return OperationSpan.GetTraceId();
+    }
 
 protected:
     TOperation()
@@ -885,6 +890,8 @@ public:
 public:
     // Orbit used for tracking operation progress
     NLWTrace::TOrbit Orbit;
+    
+    NWilson::TSpan OperationSpan;
 };
 
 inline IOutputStream &operator <<(IOutputStream &out,

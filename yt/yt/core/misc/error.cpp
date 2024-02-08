@@ -5,6 +5,8 @@
 
 #include <yt/yt_proto/yt/core/misc/proto/error.pb.h>
 
+#include <yt/yt/core/actions/callback.h>
+
 #include <yt/yt/core/misc/protobuf_helpers.h>
 #include <yt/yt/core/misc/proc.h>
 
@@ -14,6 +16,7 @@
 
 #include <yt/yt/core/yson/tokenizer.h>
 
+#include <yt/yt/core/ytree/attributes.h>
 #include <yt/yt/core/ytree/convert.h>
 #include <yt/yt/core/ytree/fluent.h>
 
@@ -22,6 +25,7 @@
 #include <library/cpp/yt/exception/exception.h>
 
 #include <library/cpp/yt/misc/thread_name.h>
+#include <library/cpp/yt/misc/tls.h>
 
 #include <util/string/subst.h>
 
@@ -35,6 +39,10 @@ using namespace NYson;
 
 using NYT::FromProto;
 using NYT::ToProto;
+
+////////////////////////////////////////////////////////////////////////////////
+
+constexpr TStringBuf OriginalErrorDepthAttribute = "original_error_depth";
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -60,15 +68,18 @@ TString ToString(TErrorCode code)
 
 ////////////////////////////////////////////////////////////////////////////////
 
-thread_local bool ErrorSanitizerEnabled = false;
-thread_local TInstant ErrorSanitizerDatetimeOverride = {};
+YT_THREAD_LOCAL(bool) ErrorSanitizerEnabled = false;
+YT_THREAD_LOCAL(TInstant) ErrorSanitizerDatetimeOverride = {};
+YT_THREAD_LOCAL(TSharedRef) ErrorSanitizerLocalHostNameOverride = {};
 
-TErrorSanitizerGuard::TErrorSanitizerGuard(TInstant datetimeOverride)
+TErrorSanitizerGuard::TErrorSanitizerGuard(TInstant datetimeOverride, TSharedRef localHostNameOverride)
     : SavedEnabled_(ErrorSanitizerEnabled)
-    , SavedDatetimeOverride_(ErrorSanitizerDatetimeOverride)
+    , SavedDatetimeOverride_(GetTlsRef(ErrorSanitizerDatetimeOverride))
+    , SavedLocalHostNameOverride_(GetTlsRef(ErrorSanitizerLocalHostNameOverride))
 {
     ErrorSanitizerEnabled = true;
-    ErrorSanitizerDatetimeOverride = datetimeOverride;
+    GetTlsRef(ErrorSanitizerDatetimeOverride) = datetimeOverride;
+    GetTlsRef(ErrorSanitizerLocalHostNameOverride) = std::move(localHostNameOverride);
 }
 
 TErrorSanitizerGuard::~TErrorSanitizerGuard()
@@ -76,7 +87,8 @@ TErrorSanitizerGuard::~TErrorSanitizerGuard()
     YT_ASSERT(ErrorSanitizerEnabled);
 
     ErrorSanitizerEnabled = SavedEnabled_;
-    ErrorSanitizerDatetimeOverride = SavedDatetimeOverride_;
+    GetTlsRef(ErrorSanitizerDatetimeOverride) = SavedDatetimeOverride_;
+    GetTlsRef(ErrorSanitizerLocalHostNameOverride) = std::move(SavedLocalHostNameOverride_);
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -145,7 +157,7 @@ public:
         return &Message_;
     }
 
-    bool HasOriginAttributes() const
+    bool HasHost() const
     {
         return Host_.operator bool();
     }
@@ -153,6 +165,11 @@ public:
     TStringBuf GetHost() const
     {
         return Host_;
+    }
+
+    bool HasOriginAttributes() const
+    {
+        return ThreadName_.Length > 0;
     }
 
     bool HasDatetime() const
@@ -282,7 +299,9 @@ private:
     void CaptureOriginAttributes()
     {
         if (ErrorSanitizerEnabled) {
-            Datetime_ = ErrorSanitizerDatetimeOverride;
+            Datetime_ = GetTlsRef(ErrorSanitizerDatetimeOverride);
+            HostHolder_ = GetTlsRef(ErrorSanitizerLocalHostNameOverride);
+            Host_ = HostHolder_.empty() ? TStringBuf() : TStringBuf(HostHolder_.Begin(), HostHolder_.End());
             return;
         }
 
@@ -467,12 +486,12 @@ TError& TError::SetMessage(TString message)
     return *this;
 }
 
-bool TError::HasOriginAttributes() const
+bool TError::HasHost() const
 {
     if (!Impl_) {
         return false;
     }
-    return Impl_->HasOriginAttributes();
+    return Impl_->HasHost();
 }
 
 TStringBuf TError::GetHost() const
@@ -481,6 +500,14 @@ TStringBuf TError::GetHost() const
         return {};
     }
     return Impl_->GetHost();
+}
+
+bool TError::HasOriginAttributes() const
+{
+    if (!Impl_) {
+        return false;
+    }
+    return Impl_->HasOriginAttributes();
 }
 
 bool TError::HasDatetime() const
@@ -710,9 +737,14 @@ void TError::ThrowOnError() const
     }
 }
 
-TError TError::Wrap() const
+TError TError::Wrap() const &
 {
     return *this;
+}
+
+TError TError::Wrap() &&
+{
+    return std::move(*this);
 }
 
 Y_WEAK TString GetErrorSkeleton(const TError& /*error*/)
@@ -922,6 +954,12 @@ void AppendError(TStringBuilderBase* builder, const TError& error, int indent)
                 (!error.GetThreadName().empty() ? error.GetThreadName() : ToString(error.GetTid())),
                 error.GetFid()),
             indent);
+    } else if (ErrorSanitizerEnabled && error.HasHost()) {
+        AppendAttribute(
+            builder,
+            "host",
+            ToString(error.GetHost()),
+            indent);
     }
 
     if (error.HasDatetime()) {
@@ -984,11 +1022,6 @@ bool operator == (const TError& lhs, const TError& rhs)
         lhs.InnerErrors() == rhs.InnerErrors();
 }
 
-bool operator != (const TError& lhs, const TError& rhs)
-{
-    return !(lhs == rhs);
-}
-
 void FormatValue(TStringBuilderBase* builder, const TError& error, TStringBuf /*spec*/)
 {
     AppendError(builder, error, 0);
@@ -1038,6 +1071,9 @@ void ToProto(NYT::NProto::TError* protoError, const TError& error)
 
         static const TString FidKey("fid");
         addAttribute(FidKey, error.GetFid());
+    } else if (ErrorSanitizerEnabled && error.HasHost()) {
+        static const TString HostKey("host");
+        addAttribute(HostKey, error.GetHost());
     }
 
     if (error.HasDatetime()) {
@@ -1139,6 +1175,9 @@ void Serialize(
                         .Item("tid").Value(error.GetTid())
                         .Item("thread").Value(error.GetThreadName())
                         .Item("fid").Value(error.GetFid());
+                } else if (ErrorSanitizerEnabled && error.HasHost()) {
+                    fluent
+                        .Item("host").Value(error.GetHost());
                 }
                 if (error.HasDatetime()) {
                     fluent
@@ -1149,9 +1188,9 @@ void Serialize(
                         .Item("trace_id").Value(error.GetTraceId())
                         .Item("span_id").Value(error.GetSpanId());
                 }
-                if (depth > ErrorSerializationDepthLimit) {
+                if (depth > ErrorSerializationDepthLimit && !error.Attributes().Contains(OriginalErrorDepthAttribute)) {
                     fluent
-                        .Item("original_error_depth").Value(depth);
+                        .Item(OriginalErrorDepthAttribute).Value(depth);
                 }
                 for (const auto& [key, value] : error.Attributes().ListPairs()) {
                     fluent
@@ -1212,54 +1251,54 @@ void Deserialize(TError& error, NYson::TYsonPullParserCursor* cursor)
 
 ////////////////////////////////////////////////////////////////////////////////
 
-TError operator << (TError error, const TErrorAttribute& attribute)
+TError& TError::operator <<= (const TErrorAttribute& attribute) &
 {
-    error.MutableAttributes()->SetYson(attribute.Key, attribute.Value);
-    return error;
+    MutableAttributes()->SetYson(attribute.Key, attribute.Value);
+    return *this;
 }
 
-TError operator << (TError error, const std::vector<TErrorAttribute>& attributes)
+TError& TError::operator <<= (const std::vector<TErrorAttribute>& attributes) &
 {
     for (const auto& attribute : attributes) {
-        error.MutableAttributes()->SetYson(attribute.Key, attribute.Value);
+        MutableAttributes()->SetYson(attribute.Key, attribute.Value);
     }
-    return error;
+    return *this;
 }
 
-TError operator << (TError error, const TError& innerError)
+TError& TError::operator <<= (const TError& innerError) &
 {
-    error.MutableInnerErrors()->push_back(innerError);
-    return error;
+    MutableInnerErrors()->push_back(innerError);
+    return *this;
 }
 
-TError operator << (TError error, TError&& innerError)
+TError& TError::operator <<= (TError&& innerError) &
 {
-    error.MutableInnerErrors()->push_back(std::move(innerError));
-    return error;
+    MutableInnerErrors()->push_back(std::move(innerError));
+    return *this;
 }
 
-TError operator << (TError error, const std::vector<TError>& innerErrors)
+TError& TError::operator <<= (const std::vector<TError>& innerErrors) &
 {
-    error.MutableInnerErrors()->insert(
-        error.MutableInnerErrors()->end(),
+    MutableInnerErrors()->insert(
+        MutableInnerErrors()->end(),
         innerErrors.begin(),
         innerErrors.end());
-    return error;
+    return *this;
 }
 
-TError operator << (TError error, std::vector<TError>&& innerErrors)
+TError& TError::operator <<= (std::vector<TError>&& innerErrors) &
 {
-    error.MutableInnerErrors()->insert(
-        error.MutableInnerErrors()->end(),
+    MutableInnerErrors()->insert(
+        MutableInnerErrors()->end(),
         std::make_move_iterator(innerErrors.begin()),
         std::make_move_iterator(innerErrors.end()));
-    return error;
+    return *this;
 }
 
-TError operator << (TError error, const NYTree::IAttributeDictionary& attributes)
+TError& TError::operator <<= (const NYTree::IAttributeDictionary& attributes) &
 {
-    error.MutableAttributes()->MergeFrom(attributes);
-    return error;
+    MutableAttributes()->MergeFrom(attributes);
+    return *this;
 }
 
 ////////////////////////////////////////////////////////////////////////////////

@@ -4,8 +4,8 @@
 #include <ydb/library/aclib/aclib.h>
 #include <ydb/services/metadata/initializer/common.h>
 
-#include <library/cpp/actors/core/actor.h>
-#include <library/cpp/actors/core/actorid.h>
+#include <ydb/library/actors/core/actor.h>
+#include <ydb/library/actors/core/actorid.h>
 
 namespace NKikimr::NBackgroundTasks {
 

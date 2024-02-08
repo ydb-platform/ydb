@@ -7,7 +7,7 @@
 #include <ydb/core/protos/config.pb.h>
 #include <ydb/library/yql/dq/actors/compute/dq_compute_actor_async_io_factory.h>
 
-#include <library/cpp/actors/core/actorid.h>
+#include <ydb/library/actors/core/actorid.h>
 
 namespace NKikimr::NKqp {
 
@@ -37,9 +37,11 @@ IActor* CreateKqpSessionActor(const TActorId& owner, const TString& sessionId,
     std::optional<TKqpFederatedQuerySetup> federatedQuerySetup,
     NYql::NDq::IDqAsyncIoFactory::TPtr asyncIoFactory,
     TIntrusivePtr<TModuleResolverState> moduleResolverState, TIntrusivePtr<TKqpCounters> counters,
-    const NKikimrConfig::TMetadataProviderConfig& metadataProviderConfig
-    );
+    const NKikimrConfig::TQueryServiceConfig& queryServiceConfig,
+    const NKikimrConfig::TMetadataProviderConfig& metadataProviderConfig,
+    const TActorId& kqpTempTablesAgentActor);
 
-IActor* CreateKqpTempTablesManager(TKqpTempTablesState tempTablesState, const TActorId& target);
+IActor* CreateKqpTempTablesManager(
+    TKqpTempTablesState tempTablesState, const TActorId& target, const TString& database);
 
 }  // namespace NKikimr::NKqp

@@ -2,11 +2,13 @@ items:
 # Header
 - name: Contents
   href: index.yaml
-- name: Quick start
-  href: getting_started/quickstart.md
-# - name: Getting started
-#   hidden: true
-#   include: { mode: link, path: getting_started/toc_p.yaml }
+- name: Getting started
+  items:
+  - name: Quick start
+    href: getting_started/quickstart.md
+  - name: Kubernetes
+    href: getting_started/kubernetes.md
+
 # Main
 - { name: Concepts,                               include: { mode: link, path: concepts/toc_p.yaml } }
 - { name: Tutorials,                              include: { mode: link, path: operations/toc_p.yaml } }
@@ -20,36 +22,12 @@ items:
 - { name: Managing a cluster,                    include: { mode: link, path: cluster/toc_p.yaml } }
 # References
 - { name: YQL,                                             include: { mode: link, path: yql/toc_p.yaml } }
+- { name: Compatibility with PostgreSQL,                   include: { mode: link, path: postgresql/toc_p.yaml } }
+- { name: Integrations,                                    include: { mode: link, path: integrations/toc_p.yaml } }
 - { name: Working with the YDB CLI,                        include: { mode: link, path: reference/ydb-cli/toc_p.yaml } }
 - { name: Working with the YDB SDK,                        include: { mode: link, path: reference/ydb-sdk/toc_p.yaml } }
-- name: Development
-  # hidden: true
-  items:
-  - name: Core
-    items:
-    - name: Testing with load actors
-      items:
-      - name: Overview
-        href: development/load-actors-overview.md
-      - name: KqpLoad
-        href: development/load-actors-kqp.md
-      - name: KeyValueLoad
-        href: development/load-actors-key-value.md
-      - name: StorageLoad
-        href: development/load-actors-storage.md
-      - name: VDiskLoad
-        href: development/load-actors-vdisk.md
-      - name: PDiskWriteLoad
-        href: development/load-actors-pdisk-write.md
-      - name: PDiskReadLoad
-        href: development/load-actors-pdisk-read.md
-      - name: PDiskLogLoad
-        href: development/load-actors-pdisk-log.md
-      - name: MemoryLoad
-        href: development/load-actors-memory.md
-      - name: Stop
-        href: development/load-actors-stop.md
-
+- { name: Working with the Kafka API,                      include: { mode: link, path: reference/kafka-api/toc_p.yaml } }
+- { name: Development,                                     include: { mode: link, path: development/toc_p.yaml } }
 # Footer
 - { name: Questions and answers,                        include: { mode: link, path: faq/toc_p.yaml } }
 - include: { mode: link, path: downloads/toc_p.yaml }

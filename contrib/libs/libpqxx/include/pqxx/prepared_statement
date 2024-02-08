@@ -1,0 +1,6 @@
+/** Helper classes for defining and executing prepared statements.
+ *
+ * See the connection_base hierarchy for more about prepared statements
+ */
+// Actual definitions in .hxx file so editors and such recognize file type.
+#include "pqxx/prepared_statement.hxx"

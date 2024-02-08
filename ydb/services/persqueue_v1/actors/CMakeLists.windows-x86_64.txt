@@ -11,9 +11,10 @@ add_library(services-persqueue_v1-actors)
 target_link_libraries(services-persqueue_v1-actors PUBLIC
   contrib-libs-cxxsupp
   yutil
-  cpp-actors-core
+  library-actors-core
   cpp-containers-disjoint_interval_tree
   cpp-string_utils-base64
+  ydb-core-util
   ydb-core-base
   ydb-core-grpc_services
   ydb-core-persqueue
@@ -37,6 +38,9 @@ target_sources(services-persqueue_v1-actors PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/services/persqueue_v1/actors/partition_actor.cpp
   ${CMAKE_SOURCE_DIR}/ydb/services/persqueue_v1/actors/read_init_auth_actor.cpp
   ${CMAKE_SOURCE_DIR}/ydb/services/persqueue_v1/actors/read_info_actor.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/services/persqueue_v1/actors/direct_read_actor.cpp
   ${CMAKE_SOURCE_DIR}/ydb/services/persqueue_v1/actors/schema_actors.cpp
   ${CMAKE_SOURCE_DIR}/ydb/services/persqueue_v1/actors/update_offsets_in_transaction_actor.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/services/persqueue_v1/actors/partition_writer.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/services/persqueue_v1/actors/partition_writer_cache_actor.cpp
 )

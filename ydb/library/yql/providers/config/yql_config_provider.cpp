@@ -168,7 +168,7 @@ namespace {
                         for (auto& arg: flag.GetArgs()) {
                             args.push_back(arg);
                         }
-                        if (!ApplyFlag(pos, flag.GetName(), args, ctx)) {
+                        if (!ApplyFlag(pos, flag.GetName(), args, ctx, 0)) {
                             return false;
                         }
                     }
@@ -260,7 +260,7 @@ namespace {
                         for (size_t i = 3; i < node->ChildrenSize(); ++i) {
                             if (node->Child(i)->IsCallable("EvaluateAtom")) {
                                 hasPendingEvaluations = true;
-                                return res;
+                                break;
                             }
                             if (!EnsureAtom(*node->Child(i), ctx)) {
                                 return {};
@@ -268,7 +268,15 @@ namespace {
                             args.push_back(node->Child(i)->Content());
                         }
 
-                        if (!ApplyFlag(ctx.GetPosition(node->Child(2)->Pos()), command, args, ctx)) {
+                        if (hasPendingEvaluations) {
+                            if (!ValidateEvaluation(command, *node, ctx)) {
+                                return {};
+                            }
+
+                            return res;
+                        }
+
+                        if (!ApplyFlag(ctx.GetPosition(node->Child(2)->Pos()), command, args, ctx, node->UniqueId())) {
                             return {};
                         }
 
@@ -460,7 +468,30 @@ namespace {
             return true;
         }
 
-        bool ApplyFlag(const TPosition& pos, const TStringBuf name, const TVector<TStringBuf>& args, TExprContext& ctx) {
+        bool ValidateEvaluation(const TStringBuf name, const TExprNode& node, TExprContext& ctx) {
+            if (name == "AddFileByUrl" || name == "AddFolderByUrl") {
+                if (node.ChildrenSize() < 4) {
+                    ctx.AddError(TIssue(ctx.GetPosition(node.Pos()), TStringBuilder() << "Expected at least 4 arguments, but got " << node.ChildrenSize()));
+                    return false;
+                }
+
+                if (node.Child(3)->IsCallable("EvaluateAtom")) {
+                    return true;
+                }
+
+                if (!PendingEvaluationFiles.insert({TString(node.Child(3)->Content()), node.UniqueId()}).second) {
+                    ctx.AddError(TIssue(ctx.GetPosition(node.Pos()), TStringBuilder() << "Detected evaluation cycle for file: " << node.Child(3)->Content()));
+                    return false;
+                }
+
+                return true;
+            } else {
+                return true;
+            }
+        }
+
+        bool ApplyFlag(const TPosition& pos, const TStringBuf name, const TVector<TStringBuf>& args, TExprContext& ctx,
+            ui64 nodeUniqueId) {
             if (!IsSettingAllowed(pos, name, ctx)) {
                 return false;
             }
@@ -474,11 +505,15 @@ namespace {
                     return false;
                 }
             } else if (name == "AddFileByUrl") {
-                if (!AddFileByUrl(pos, args, ctx)) {
+                if (!AddFileByUrl(pos, args, ctx, nodeUniqueId)) {
+                    return false;
+                }
+            } else if (name == "SetFileOption") {
+                if (!SetFileOption(pos, args, ctx)) {
                     return false;
                 }
             } else if (name == "AddFolderByUrl") {
-                if (!AddFolderByUrl(pos, args, ctx)) {
+                if (!AddFolderByUrl(pos, args, ctx, nodeUniqueId)) {
                     return false;
                 }
             } else if (name == "SetPackageVersion") {
@@ -618,6 +653,16 @@ namespace {
                     return false;
                 }
                 if (!TryFromString(args[0], Types.EvaluateForLimit)) {
+                    ctx.AddError(TIssue(pos, TStringBuilder() << "Expected integer, but got: " << args[0]));
+                    return false;
+                }
+            }
+            else if (name == "EvaluateParallelForLimit") {
+                if (args.size() != 1) {
+                    ctx.AddError(TIssue(pos, TStringBuilder() << "Expected 1 argument, but got " << args.size()));
+                    return false;
+                }
+                if (!TryFromString(args[0], Types.EvaluateParallelForLimit)) {
                     ctx.AddError(TIssue(pos, TStringBuilder() << "Expected integer, but got: " << args[0]));
                     return false;
                 }
@@ -884,6 +929,27 @@ namespace {
                     return false;
                 }
             }
+            else if (name == "BlockEngine") {
+                if (args.size() != 1) {
+                    ctx.AddError(TIssue(pos, TStringBuilder() << "Expected at most 1 argument, but got " << args.size()));
+                    return false;
+                }
+
+                auto arg = TString{args[0]};
+                if (!TryFromString(arg, Types.BlockEngineMode)) {
+                    ctx.AddError(TIssue(pos, TStringBuilder() << "Expected `disable|auto|force', but got: " << args[0]));
+                    return false;
+                }
+            }
+            else if (name == "OptimizerFlags") {
+                for (auto& arg : args) {
+                    if (arg.empty()) {
+                        ctx.AddError(TIssue(pos, "Empty flags are not supported"));
+                        return false;
+                    }
+                    Types.OptimizerFlags.insert(to_lower(ToString(arg)));
+                }
+            }
             else {
                 ctx.AddError(TIssue(pos, TStringBuilder() << "Unsupported command: " << name));
                 return false;
@@ -960,12 +1026,13 @@ namespace {
             return true;
         }
 
-        bool AddFileByUrl(const TPosition& pos, const TVector<TStringBuf>& args, TExprContext& ctx) {
+        bool AddFileByUrl(const TPosition& pos, const TVector<TStringBuf>& args, TExprContext& ctx, ui64 nodeUniqueId) {
             if (args.size() < 2 || args.size() > 3) {
                 ctx.AddError(TIssue(pos, TStringBuilder() << "Expected 2 or 3 arguments, but got " << args.size()));
                 return false;
             }
 
+            PendingEvaluationFiles.erase({TString(args[0]),nodeUniqueId});
             TStringBuf token = args.size() == 3 ? args[2] : TStringBuf();
             if (token) {
                 if (auto cred = Types.Credentials->FindCredential(token)) {
@@ -977,6 +1044,25 @@ namespace {
             }
 
             return AddFileByUrlImpl(args[0], args[1], token, pos, ctx);
+        }
+
+        bool SetFileOptionImpl(const TStringBuf alias, const TString& key, const TString& value, const TPosition& pos, TExprContext& ctx) {
+            const auto dataKey = TUserDataStorage::ComposeUserDataKey(alias);
+            const auto dataBlock = Types.UserDataStorage->FindUserDataBlock(dataKey);
+            if (!dataBlock) {
+                ctx.AddError(TIssue(pos, TStringBuilder() << "No such file '" << alias << "'"));
+                return false;
+            }
+            dataBlock->Options[key] = value;
+            return true;
+        }
+
+        bool SetFileOption(const TPosition& pos, const TVector<TStringBuf>& args, TExprContext& ctx) {
+            if (args.size() != 3) {
+                ctx.AddError(TIssue(pos, TStringBuilder() << "Expected 3 arguments, but got " << args.size()));
+                return false;
+            }
+            return SetFileOptionImpl(args[0], ToString(args[1]), ToString(args[2]), pos, ctx);
         }
 
         bool SetPackageVersion(const TPosition& pos, const TVector<TStringBuf>& args, TExprContext& ctx) {
@@ -1060,12 +1146,13 @@ namespace {
             return url;
         }
 
-        bool AddFolderByUrl(const TPosition& pos, const TVector<TStringBuf>& args, TExprContext& ctx) {
+        bool AddFolderByUrl(const TPosition& pos, const TVector<TStringBuf>& args, TExprContext& ctx, ui64 nodeUniqueId) {
             if (args.size() < 2 || args.size() > 3) {
                 ctx.AddError(TIssue(pos, TStringBuilder() << "Expected 2 or 3 arguments, but got " << args.size()));
                 return false;
             }
 
+            PendingEvaluationFiles.erase({TString(args[0]),nodeUniqueId});
             TStringBuf token = args.size() == 3 ? args[2] : TStringBuf();
             if (token) {
                 if (auto cred = Types.Credentials->FindCredential(token)) {
@@ -1162,6 +1249,7 @@ namespace {
         TString Username;
         const TAllowSettingPolicy Policy;
         TOperationStatistics Statistics;
+        THashSet<std::pair<TString, ui64>> PendingEvaluationFiles;
     };
 }
 

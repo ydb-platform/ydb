@@ -70,5 +70,13 @@ inline bool CheckQuery(const TString& query, IRequestCtxBase* ctx) {
     return true;
 }
 
+template<typename TKqpResponse>
+void FillCommonKqpRespFields(const TKqpResponse& kqpResponse, IRequestCtx* ctx) {
+    if (kqpResponse.GetWorkerIsClosing()) {
+        ctx->AddServerHint(TString(NYdb::YDB_SESSION_CLOSE));
+    }
+    ctx->SetRuHeader(kqpResponse.GetConsumedRu());
+}
+
 } // namespace NGRpcService
 } // namespace NKikimr

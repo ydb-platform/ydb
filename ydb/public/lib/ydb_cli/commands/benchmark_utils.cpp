@@ -11,6 +11,7 @@
 #include <ydb/public/lib/yson_value/ydb_yson_value.h>
 
 #include <vector>
+#include <algorithm>
 
 namespace NYdb::NConsoleClient::BenchmarkUtils {
 
@@ -66,6 +67,17 @@ TTestInfo::TTestInfo(std::vector<TDuration>&& clientTimings, std::vector<TDurati
     }
 
     RttMean = totalDiff / static_cast<double>(ServerTimings.size());
+
+    auto serverTimingsCopy = ServerTimings;
+    auto centerElement = serverTimingsCopy.begin() + ServerTimings.size() / 2;
+    std::nth_element(serverTimingsCopy.begin(), centerElement, serverTimingsCopy.end());
+
+    if (ServerTimings.size() % 2 == 0) {
+        auto maxLessThanCenterElement = std::max_element(serverTimingsCopy.begin(), centerElement);
+        Median = (centerElement->MilliSeconds() + maxLessThanCenterElement->MilliSeconds()) / 2.0;
+    } else {
+        Median = centerElement->MilliSeconds();
+    }
 }
 
 TString FullTablePath(const TString& database, const TString& table) {
@@ -127,7 +139,7 @@ public:
             if constexpr (std::is_same_v<TIterator, NTable::TScanQueryPartIterator>) {
                 if (streamPart.HasQueryStats()) {
                     ServerTiming = streamPart.GetQueryStats().GetTotalDuration();
-                }  
+                }
             } else {
                 const auto& stats = streamPart.GetStats();
                 if (stats) {

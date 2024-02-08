@@ -22,6 +22,7 @@
 
 #include <aws/io/channel.h>
 #include <aws/io/channel_bootstrap.h>
+#include <aws/io/socket.h>
 
 #include <inttypes.h>
 
@@ -81,7 +82,17 @@ struct aws_event_stream_rpc_server_continuation_token {
 void s_continuation_destroy(void *value) {
     struct aws_event_stream_rpc_server_continuation_token *continuation = value;
     AWS_LOGF_DEBUG(AWS_LS_EVENT_STREAM_RPC_SERVER, "id=%p: destroying continuation", (void *)continuation);
-    continuation->closed_fn(continuation, continuation->user_data);
+
+    /*
+     * When creating a stream, we end up putting the continuation in the table before we finish initializing it.
+     * If an error occurs in the on incoming stream callback, we end up with a continuation with no user data or
+     * callbacks.  This means we have to check closed_fn for validity even though the success path does a fatal assert
+     * on validity.
+     */
+    if (continuation->closed_fn != NULL) {
+        continuation->closed_fn(continuation, continuation->user_data);
+    }
+
     aws_event_stream_rpc_server_continuation_release(continuation);
 }
 
@@ -199,7 +210,7 @@ struct aws_event_stream_rpc_server_connection *aws_event_stream_rpc_server_conne
     const struct aws_event_stream_rpc_connection_options *connection_options) {
     AWS_FATAL_ASSERT(
         connection_options->on_connection_protocol_message && "on_connection_protocol_message must be specified!");
-    AWS_FATAL_ASSERT(connection_options->on_incoming_stream && "on_connection_protocol_message must be specified");
+    AWS_FATAL_ASSERT(connection_options->on_incoming_stream && "on_incoming_stream must be specified");
 
     struct aws_event_stream_rpc_server_connection *connection = s_create_connection_on_channel(server, channel);
 
@@ -289,7 +300,7 @@ static void s_on_accept_channel_setup(
 
         AWS_FATAL_ASSERT(
             connection_options.on_connection_protocol_message && "on_connection_protocol_message must be specified!");
-        AWS_FATAL_ASSERT(connection_options.on_incoming_stream && "on_connection_protocol_message must be specified");
+        AWS_FATAL_ASSERT(connection_options.on_incoming_stream && "on_incoming_stream must be specified");
         connection->on_incoming_stream = connection_options.on_incoming_stream;
         connection->on_connection_protocol_message = connection_options.on_connection_protocol_message;
         connection->user_data = connection_options.user_data;
@@ -423,6 +434,16 @@ error:
 
     aws_mem_release(server->allocator, server);
     return NULL;
+}
+
+uint16_t aws_event_stream_rpc_server_listener_get_bound_port(
+    const struct aws_event_stream_rpc_server_listener *server) {
+
+    struct aws_socket_endpoint address;
+    AWS_ZERO_STRUCT(address);
+    /* not checking error code because it can't fail when called on a listening socket */
+    aws_socket_get_bound_address(server->listener, &address);
+    return address.port;
 }
 
 void aws_event_stream_rpc_server_listener_acquire(struct aws_event_stream_rpc_server_listener *server) {
@@ -596,7 +617,17 @@ static int s_send_protocol_message(
 
     args->flush_fn = flush_fn;
 
-    size_t headers_count = message_args->headers_count + 3;
+    size_t headers_count = 0;
+
+    if (aws_add_size_checked(message_args->headers_count, 3, &headers_count)) {
+        AWS_LOGF_ERROR(
+            AWS_LS_EVENT_STREAM_RPC_SERVER,
+            "id=%p: integer overflow detected when using headers_count %zu",
+            (void *)connection,
+            message_args->headers_count);
+        goto args_allocated_before_failure;
+    }
+
     struct aws_array_list headers_list;
     AWS_ZERO_STRUCT(headers_list);
 
@@ -869,7 +900,7 @@ static void s_route_message_by_type(
             return;
         }
 
-        /* if the stream is is in the past, look it up from the continuation table. If it's not there, that's an error.
+        /* if the stream is in the past, look it up from the continuation table. If it's not there, that's an error.
          * if it is, find it and notify the user a message arrived */
         if (stream_id <= connection->latest_stream_id) {
             AWS_LOGF_ERROR(
@@ -897,9 +928,15 @@ static void s_route_message_by_type(
                 (void *)connection,
                 (void *)continuation);
 
-            aws_event_stream_rpc_server_continuation_acquire(continuation);
-            continuation->continuation_fn(continuation, &message_args, continuation->user_data);
-            aws_event_stream_rpc_server_continuation_release(continuation);
+            /*
+             * I don't think it's possible for the continuation_fn to be NULL at this point, but given the
+             * multiple partially-initialized object crashes we've had, let's be safe.
+             */
+            if (continuation->continuation_fn != NULL) {
+                aws_event_stream_rpc_server_continuation_acquire(continuation);
+                continuation->continuation_fn(continuation, &message_args, continuation->user_data);
+                aws_event_stream_rpc_server_continuation_release(continuation);
+            }
             /* now these are potentially new streams. Make sure they're in bounds, create a new continuation
              * and notify the user the stream has been created, then send them the message. */
         } else {
@@ -981,9 +1018,21 @@ static void s_route_message_by_type(
             aws_event_stream_rpc_server_continuation_acquire(continuation);
             AWS_LOGF_TRACE(
                 AWS_LS_EVENT_STREAM_RPC_SERVER, "id=%p: invoking on_incoming_stream callback", (void *)connection);
-            if (connection->on_incoming_stream(
+            /*
+             * This callback must only keep a ref to the continuation on a success path.  On a failure, it must
+             * leave the ref count alone so that the release + removal destroys the continuation
+             */
+            if (connection->on_incoming_stream == NULL ||
+                connection->on_incoming_stream(
                     continuation->connection, continuation, operation_name, &options, connection->user_data)) {
+
+                AWS_FATAL_ASSERT(aws_atomic_load_int(&continuation->ref_count) == 2);
+
+                /* undo the continuation acquire that was done a few lines above */
                 aws_event_stream_rpc_server_continuation_release(continuation);
+
+                /* removing the continuation from the table will do the final decref on the continuation */
+                aws_hash_table_remove(&connection->continuation_table, &continuation->stream_id, NULL, NULL);
                 s_send_connection_level_error(
                     connection, AWS_EVENT_STREAM_RPC_MESSAGE_TYPE_INTERNAL_ERROR, 0, &s_internal_error);
                 return;
@@ -997,6 +1046,8 @@ static void s_route_message_by_type(
 
             connection->latest_stream_id = stream_id;
             continuation->continuation_fn(continuation, &message_args, continuation->user_data);
+
+            /* undo the acquire made before the on_incoming_stream callback invocation */
             aws_event_stream_rpc_server_continuation_release(continuation);
         }
 
@@ -1041,7 +1092,9 @@ static void s_route_message_by_type(
                 (void *)connection);
         }
 
-        connection->on_connection_protocol_message(connection, &message_args, connection->user_data);
+        if (connection->on_connection_protocol_message != NULL) {
+            connection->on_connection_protocol_message(connection, &message_args, connection->user_data);
+        }
     }
 }
 

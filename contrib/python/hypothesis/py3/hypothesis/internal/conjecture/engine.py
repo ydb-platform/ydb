@@ -15,7 +15,6 @@ from contextlib import contextmanager
 from datetime import timedelta
 from enum import Enum
 from random import Random, getrandbits
-from weakref import WeakKeyDictionary
 
 import attr
 
@@ -51,10 +50,42 @@ BUFFER_SIZE = 8 * 1024
 
 @attr.s
 class HealthCheckState:
-    valid_examples = attr.ib(default=0)
-    invalid_examples = attr.ib(default=0)
-    overrun_examples = attr.ib(default=0)
-    draw_times = attr.ib(default=attr.Factory(list))
+    valid_examples: int = attr.ib(default=0)
+    invalid_examples: int = attr.ib(default=0)
+    overrun_examples: int = attr.ib(default=0)
+    draw_times: "defaultdict[str, list[float]]" = attr.ib(
+        factory=lambda: defaultdict(list)
+    )
+
+    @property
+    def total_draw_time(self):
+        return math.fsum(sum(self.draw_times.values(), start=[]))
+
+    def timing_report(self):
+        """Return a terminal report describing what was slow."""
+        if not self.draw_times:
+            return ""
+        width = max(len(k[len("generate:") :].strip(": ")) for k in self.draw_times)
+        out = [f"\n  {'':^{width}}   count | fraction |    slowest draws (seconds)"]
+        args_in_order = sorted(self.draw_times.items(), key=lambda kv: -sum(kv[1]))
+        for i, (argname, times) in enumerate(args_in_order):  # pragma: no branch
+            # If we have very many unique keys, which can happen due to interactive
+            # draws with computed labels, we'll skip uninformative rows.
+            if (
+                5 <= i < (len(self.draw_times) - 2)
+                and math.fsum(times) * 20 < self.total_draw_time
+            ):
+                out.append(f"  (skipped {len(self.draw_times) - i} rows of fast draws)")
+                break
+            # Compute the row to report, omitting times <1ms to focus on slow draws
+            reprs = [f"{t:>6.3f}," for t in sorted(times)[-5:] if t > 5e-4]
+            desc = " ".join((["    -- "] * 5 + reprs)[-5:]).rstrip(",")
+            arg = argname[len("generate:") :].strip(": ")  # removeprefix in py3.9
+            out.append(
+                f"  {arg:^{width}} | {len(times):>4}  | "
+                f"{math.fsum(times)/self.total_draw_time:>7.0%}  |  {desc}"
+            )
+        return "\n".join(out)
 
 
 class ExitReason(Enum):
@@ -100,8 +131,6 @@ class ConjectureRunner:
         # which transfer to the global dict at the end of each phase.
         self.statistics = {}
         self.stats_per_test_case = []
-
-        self.events_to_strings = WeakKeyDictionary()
 
         self.interesting_examples = {}
         # We use call_count because there may be few possible valid_examples.
@@ -208,8 +237,10 @@ class ConjectureRunner:
                 call_stats = {
                     "status": data.status.name.lower(),
                     "runtime": data.finish_time - data.start_time,
-                    "drawtime": math.fsum(data.draw_times),
-                    "events": sorted({self.event_to_string(e) for e in data.events}),
+                    "drawtime": math.fsum(data.draw_times.values()),
+                    "events": sorted(
+                        k if v == "" else f"{k}: {v}" for k, v in data.events.items()
+                    ),
                 }
                 self.stats_per_test_case.append(call_stats)
                 self.__data_cache[data.buffer] = data.as_result()
@@ -329,7 +360,8 @@ class ConjectureRunner:
         if state is None:
             return
 
-        state.draw_times.extend(data.draw_times)
+        for k, v in data.draw_times.items():
+            state.draw_times[k].append(v)
 
         if data.status == Status.VALID:
             state.valid_examples += 1
@@ -372,7 +404,7 @@ class ConjectureRunner:
                 HealthCheck.filter_too_much,
             )
 
-        draw_time = sum(state.draw_times)
+        draw_time = state.total_draw_time
 
         # Allow at least the greater of one second or 5x the deadline.  If deadline
         # is None, allow 30s - the user can disable the healthcheck too if desired.
@@ -384,7 +416,8 @@ class ConjectureRunner:
                 f"{state.valid_examples} valid examples in {draw_time:.2f} seconds "
                 f"({state.invalid_examples} invalid ones and {state.overrun_examples} "
                 "exceeded maximum size). Try decreasing size of the data you're "
-                "generating (with e.g. max_size or max_leaves parameters).",
+                "generating (with e.g. max_size or max_leaves parameters)."
+                + state.timing_report(),
                 HealthCheck.too_slow,
             )
 
@@ -976,7 +1009,7 @@ class ConjectureRunner:
             self,
             example,
             predicate,
-            allow_transition,
+            allow_transition=allow_transition,
             explain=Phase.explain in self.settings.phases,
         )
 
@@ -1053,20 +1086,6 @@ class ConjectureRunner:
         result = check_result(data.as_result())
         if extend == 0 or (result is not Overrun and len(result.buffer) <= len(buffer)):
             self.__data_cache[buffer] = result
-        return result
-
-    def event_to_string(self, event):
-        if isinstance(event, str):
-            return event
-        try:
-            return self.events_to_strings[event]
-        except (KeyError, TypeError):
-            pass
-        result = str(event)
-        try:
-            self.events_to_strings[event] = result
-        except TypeError:
-            pass
         return result
 
     def passing_buffers(self, prefix=b""):

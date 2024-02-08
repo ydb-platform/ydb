@@ -79,6 +79,10 @@ void TStorageChanges::Apply(TSchemeShard* ss, NTabletFlatExecutor::TTransactionC
         ss->PersistSubDomainAlter(db, pId, *subdomainInfo->GetAlter());
     }
 
+    for (const auto& pId : Views) {
+        ss->PersistView(db, pId);
+    }
+
     ss->PersistUpdateNextPathId(db);
     ss->PersistUpdateNextShardIdx(db);
 }

@@ -103,7 +103,7 @@ endfunction()
 
 function(generate_enum_serilization Tgt Input)
   set(opts "")
-  set(oneval_args INCLUDE_HEADERS)
+  set(oneval_args INCLUDE_HEADERS GEN_HEADER)
   set(multival_args "")
   cmake_parse_arguments(ENUM_SERIALIZATION_ARGS
     "${opts}"
@@ -116,7 +116,7 @@ function(generate_enum_serilization Tgt Input)
 
   get_filename_component(BaseName ${Input} NAME)
   add_custom_command(
-    OUTPUT ${CMAKE_CURRENT_BINARY_DIR}/${BaseName}_serialized.cpp
+    OUTPUT ${CMAKE_CURRENT_BINARY_DIR}/${BaseName}_serialized.cpp ${ENUM_SERIALIZATION_ARGS_GEN_HEADER}
     COMMAND
       ${enum_parser_bin}
       ${Input}
@@ -124,6 +124,9 @@ function(generate_enum_serilization Tgt Input)
       --output ${CMAKE_CURRENT_BINARY_DIR}/${BaseName}_serialized.cpp
     DEPENDS ${Input} ${enum_parser_dependency}
   )
+  if (ENUM_SERIALIZATION_ARGS_GEN_HEADER)
+    set_property(SOURCE ${ENUM_SERIALIZATION_ARGS_GEN_HEADER} PROPERTY GENERATED On)
+  endif()
   target_sources(${Tgt} PRIVATE ${CMAKE_CURRENT_BINARY_DIR}/${BaseName}_serialized.cpp)
 endfunction()
 
@@ -257,16 +260,28 @@ function(add_yunittest)
     "${multival_args}"
     ${ARGN}
   )
-  get_property(SPLIT_FACTOR TARGET ${YUNITTEST_ARGS_TEST_TARGET} PROPERTY SPLIT_FACTOR)
+
+  get_property(SPLIT_FACTOR  TARGET ${YUNITTEST_ARGS_TEST_TARGET} PROPERTY SPLIT_FACTOR)
+  get_property(SPLIT_TYPE TARGET ${YUNITTEST_ARGS_TEST_TARGET} PROPERTY SPLIT_TYPE)
+
+  if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/run_testpack")
+        add_test(NAME ${YUNITTEST_ARGS_NAME} COMMAND "${CMAKE_CURRENT_SOURCE_DIR}/run_testpack" ${YUNITTEST_ARGS_TEST_ARG})
+        set_property(TEST ${YUNITTEST_ARGS_NAME} PROPERTY ENVIRONMENT "source_root=${CMAKE_SOURCE_DIR};build_root=${CMAKE_BINARY_DIR};test_split_factor=${SPLIT_FACTOR};test_split_type=${SPLIT_TYPE}")
+        return()
+  endif()
+
   if (${SPLIT_FACTOR} EQUAL 1)
   	add_test(NAME ${YUNITTEST_ARGS_NAME} COMMAND ${YUNITTEST_ARGS_TEST_TARGET} ${YUNITTEST_ARGS_TEST_ARG})
   	return()
   endif()
 
+  if ("${SPLIT_TYPE}")
+    set(FORK_MODE_ARG --fork-mode ${SPLIT_TYPE})
+  endif()
   math(EXPR LastIdx "${SPLIT_FACTOR} - 1")
   foreach(Idx RANGE ${LastIdx})
     add_test(NAME ${YUNITTEST_ARGS_NAME}_${Idx}
-      COMMAND Python3::Interpreter ${CMAKE_SOURCE_DIR}/build/scripts/split_unittest.py --split-factor ${SPLIT_FACTOR} --shard ${Idx}
+      COMMAND Python3::Interpreter ${CMAKE_SOURCE_DIR}/build/scripts/split_unittest.py --split-factor ${SPLIT_FACTOR} ${FORK_MODE_ARG} --shard ${Idx}
        $<TARGET_FILE:${YUNITTEST_ARGS_TEST_TARGET}> ${YUNITTEST_ARGS_TEST_ARG})
   endforeach()
 endfunction()
@@ -283,14 +298,14 @@ function(set_yunittest_property)
   )
   get_property(SPLIT_FACTOR TARGET ${YUNITTEST_ARGS_TEST} PROPERTY SPLIT_FACTOR)
 
-  if (${SPLIT_FACTOR} EQUAL 1)
-    set_property(TEST ${YUNITTEST_ARGS_TEST} PROPERTY ${YUNITTEST_ARGS_PROPERTY} ${YUNITTEST_ARGS_UNPARSED_ARGUMENTS})
+  if ((${SPLIT_FACTOR} EQUAL 1) OR (EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/run_testpack"))
+    set_property(TEST ${YUNITTEST_ARGS_TEST} PROPERTY ${YUNITTEST_ARGS_PROPERTY} "${YUNITTEST_ARGS_UNPARSED_ARGUMENTS}")
   	return()
   endif()
 
   math(EXPR LastIdx "${SPLIT_FACTOR} - 1")
   foreach(Idx RANGE ${LastIdx})
-    set_property(TEST ${YUNITTEST_ARGS_TEST}_${Idx} PROPERTY ${YUNITTEST_ARGS_PROPERTY} ${YUNITTEST_ARGS_UNPARSED_ARGUMENTS})
+    set_property(TEST ${YUNITTEST_ARGS_TEST}_${Idx} PROPERTY ${YUNITTEST_ARGS_PROPERTY} "${YUNITTEST_ARGS_UNPARSED_ARGUMENTS}")
   endforeach()
 endfunction()
 

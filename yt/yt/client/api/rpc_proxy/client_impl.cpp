@@ -17,6 +17,7 @@
 
 #include <yt/yt/client/scheduler/operation_id_or_alias.h>
 
+#include <yt/yt/client/table_client/columnar_statistics.h>
 #include <yt/yt/client/table_client/name_table.h>
 #include <yt/yt/client/table_client/row_base.h>
 #include <yt/yt/client/table_client/row_buffer.h>
@@ -339,6 +340,7 @@ TFuture<void> TClient::ReshardTable(
     auto writer = CreateWireProtocolWriter();
     // XXX(sandello): This is ugly and inefficient.
     std::vector<TUnversionedRow> keys;
+    keys.reserve(pivotKeys.size());
     for (const auto& pivotKey : pivotKeys) {
         keys.push_back(pivotKey);
     }
@@ -493,9 +495,9 @@ TFuture<TYsonString> TClient::GetTablePivotKeys(
     auto proxy = CreateApiServiceProxy();
 
     auto req = proxy.GetTablePivotKeys();
-    req->set_represent_key_as_list(options.RepresentKeyAsList);
     SetTimeoutOptions(*req, options);
 
+    req->set_represent_key_as_list(options.RepresentKeyAsList);
     req->set_path(path);
 
     return req->Invoke().Apply(BIND([] (const TApiServiceProxy::TRspGetTablePivotKeysPtr& rsp) {
@@ -504,17 +506,38 @@ TFuture<TYsonString> TClient::GetTablePivotKeys(
 }
 
 TFuture<void> TClient::CreateTableBackup(
-    const TBackupManifestPtr& /*manifest*/,
-    const TCreateTableBackupOptions& /*options*/)
+    const TBackupManifestPtr& manifest,
+    const TCreateTableBackupOptions& options)
 {
-    ThrowUnimplemented("CreateTableBackup");
+    auto proxy = CreateApiServiceProxy();
+
+    auto req = proxy.CreateTableBackup();
+    SetTimeoutOptions(*req, options);
+
+    ToProto(req->mutable_manifest(), *manifest);
+    req->set_checkpoint_timestamp_delay(ToProto<i64>(options.CheckpointTimestampDelay));
+    req->set_checkpoint_check_period(ToProto<i64>(options.CheckpointCheckPeriod));
+    req->set_checkpoint_check_timeout(ToProto<i64>(options.CheckpointCheckTimeout));
+    req->set_force(options.Force);
+
+    return req->Invoke().As<void>();
 }
 
 TFuture<void> TClient::RestoreTableBackup(
-    const TBackupManifestPtr& /*manifest*/,
-    const TRestoreTableBackupOptions& /*options*/)
+    const TBackupManifestPtr& manifest,
+    const TRestoreTableBackupOptions& options)
 {
-    ThrowUnimplemented("RestoreTableBackup");
+    auto proxy = CreateApiServiceProxy();
+
+    auto req = proxy.RestoreTableBackup();
+    SetTimeoutOptions(*req, options);
+
+    ToProto(req->mutable_manifest(), *manifest);
+    req->set_force(options.Force);
+    req->set_mount(options.Mount);
+    req->set_enable_replicas(options.EnableReplicas);
+
+    return req->Invoke().As<void>();
 }
 
 TFuture<std::vector<TTableReplicaId>> TClient::GetInSyncReplicas(
@@ -638,6 +661,7 @@ TFuture<TGetTabletErrorsResult> TClient::GetTabletErrors(
 
         for (i64 index = 0; index != rsp->tablet_ids_size(); ++index) {
             std::vector<TError> errors;
+            errors.reserve(rsp->tablet_errors(index).errors().size());
             for (const auto& protoError : rsp->tablet_errors(index).errors()) {
                 errors.push_back(FromProto<TError>(protoError));
             }
@@ -646,6 +670,7 @@ TFuture<TGetTabletErrorsResult> TClient::GetTabletErrors(
 
         for (i64 index = 0; index != rsp->replica_ids_size(); ++index) {
             std::vector<TError> errors;
+            errors.reserve(rsp->replication_errors(index).errors().size());
             for (const auto& protoError : rsp->replication_errors(index).errors()) {
                 errors.push_back(FromProto<TError>(protoError));
             }
@@ -745,7 +770,7 @@ TFuture<IQueueRowsetPtr> TClient::PullQueue(
 TFuture<IQueueRowsetPtr> TClient::PullConsumer(
     const TRichYPath& consumerPath,
     const TRichYPath& queuePath,
-    i64 offset,
+    std::optional<i64> offset,
     int partitionIndex,
     const TQueueRowBatchReadOptions& rowBatchReadOptions,
     const TPullConsumerOptions& options)
@@ -758,7 +783,9 @@ TFuture<IQueueRowsetPtr> TClient::PullConsumer(
 
     ToProto(req->mutable_consumer_path(), consumerPath);
     ToProto(req->mutable_queue_path(), queuePath);
-    req->set_offset(offset);
+    if (offset) {
+        req->set_offset(*offset);
+    }
     req->set_partition_index(partitionIndex);
     ToProto(req->mutable_row_batch_read_options(), rowBatchReadOptions);
 
@@ -828,6 +855,7 @@ TFuture<std::vector<TListQueueConsumerRegistrationsResult>> TClient::ListQueueCo
 
     return req->Invoke().Apply(BIND([] (const TApiServiceProxy::TRspListQueueConsumerRegistrationsPtr& rsp) {
         std::vector<TListQueueConsumerRegistrationsResult> result;
+        result.reserve(rsp->registrations().size());
         for (const auto& registration : rsp->registrations()) {
             std::optional<std::vector<int>> partitions;
             if (registration.has_partitions()) {
@@ -1324,6 +1352,9 @@ TFuture<TListJobsResult> TClient::ListJobs(
     if (options.WithCompetitors) {
         req->set_with_competitors(*options.WithCompetitors);
     }
+    if (options.WithMonitoringDescriptor) {
+        req->set_with_monitoring_descriptor(*options.WithMonitoringDescriptor);
+    }
     if (options.TaskName) {
         req->set_task_name(*options.TaskName);
     }
@@ -1458,8 +1489,8 @@ TFuture<TPutFileToCacheResult> TClient::PutFileToCache(
 
     auto req = proxy.PutFileToCache();
     SetTimeoutOptions(*req, options);
-    ToProto(req->mutable_transactional_options(), options);
 
+    ToProto(req->mutable_transactional_options(), options);
     req->set_path(path);
     req->set_md5(expectedMD5);
     req->set_cache_path(options.CachePath);
@@ -1593,7 +1624,6 @@ TFuture<void> TClient::TruncateJournal(
     return req->Invoke().As<void>();
 }
 
-
 TFuture<int> TClient::BuildSnapshot(const TBuildSnapshotOptions& options)
 {
     auto proxy = CreateApiServiceProxy();
@@ -1714,11 +1744,13 @@ TFuture<void> TClient::HealExecNode(
 
 TFuture<void> TClient::SuspendCoordinator(
     TCellId coordinatorCellId,
-    const TSuspendCoordinatorOptions& /*options*/)
+    const TSuspendCoordinatorOptions& options)
 {
     auto proxy = CreateApiServiceProxy();
 
     auto req = proxy.SuspendCoordinator();
+    SetTimeoutOptions(*req, options);
+
     ToProto(req->mutable_coordinator_cell_id(), coordinatorCellId);
 
     return req->Invoke().As<void>();
@@ -1726,11 +1758,13 @@ TFuture<void> TClient::SuspendCoordinator(
 
 TFuture<void> TClient::ResumeCoordinator(
     TCellId coordinatorCellId,
-    const TResumeCoordinatorOptions& /*options*/)
+    const TResumeCoordinatorOptions& options)
 {
     auto proxy = CreateApiServiceProxy();
 
     auto req = proxy.ResumeCoordinator();
+    SetTimeoutOptions(*req, options);
+
     ToProto(req->mutable_coordinator_cell_id(), coordinatorCellId);
 
     return req->Invoke().As<void>();
@@ -1743,6 +1777,8 @@ TFuture<void> TClient::MigrateReplicationCards(
     auto proxy = CreateApiServiceProxy();
 
     auto req = proxy.MigrateReplicationCards();
+    SetTimeoutOptions(*req, options);
+
     ToProto(req->mutable_chaos_cell_id(), chaosCellId);
     ToProto(req->mutable_replication_card_ids(), options.ReplicationCardIds);
     if (options.DestinationCellId) {
@@ -1804,11 +1840,12 @@ TFuture<TMaintenanceId> TClient::AddMaintenance(
     auto proxy = CreateApiServiceProxy();
 
     auto req = proxy.AddMaintenance();
+    SetTimeoutOptions(*req, options);
+
     req->set_component(ConvertMaintenanceComponentToProto(component));
     req->set_address(address);
     req->set_type(ConvertMaintenanceTypeToProto(type));
     req->set_comment(comment);
-    SetTimeoutOptions(*req, options);
 
     return req->Invoke().Apply(BIND([] (const TErrorOr<TApiServiceProxy::TRspAddMaintenancePtr>& rsp) {
         return FromProto<TMaintenanceId>(rsp.ValueOrThrow()->id());
@@ -1824,6 +1861,8 @@ TFuture<TMaintenanceCounts> TClient::RemoveMaintenance(
     auto proxy = CreateApiServiceProxy();
 
     auto req = proxy.RemoveMaintenance();
+    SetTimeoutOptions(*req, options);
+
     req->set_component(ConvertMaintenanceComponentToProto(component));
     req->set_address(address);
 
@@ -1843,8 +1882,6 @@ TFuture<TMaintenanceCounts> TClient::RemoveMaintenance(
             req->set_user(user);
         });
 
-    SetTimeoutOptions(*req, options);
-
     return req->Invoke().Apply(BIND([] (const TErrorOr<TApiServiceProxy::TRspRemoveMaintenancePtr>& rsp) {
         auto rspValue = rsp.ValueOrThrow();
 
@@ -1859,9 +1896,8 @@ TFuture<TMaintenanceCounts> TClient::RemoveMaintenance(
             counts[EMaintenanceType::DisableTabletCells] = rspValue->disable_tablet_cells();
             counts[EMaintenanceType::PendingRestart] = rspValue->pending_restart();
         } else {
-            for (auto type : TEnumTraits<EMaintenanceType>::GetDomainValues()) {
-                auto it = protoCounts.find(ConvertMaintenanceTypeToProto(type));
-                counts[type] = it == protoCounts.end() ? 0 : it->second;
+            for (auto [type, count] : protoCounts) {
+                counts[CheckedEnumCast<EMaintenanceType>(type)] = count;
             }
         }
 
@@ -1928,12 +1964,14 @@ TFuture<TDisableChunkLocationsResult> TClient::DisableChunkLocations(
 
 TFuture<TDestroyChunkLocationsResult> TClient::DestroyChunkLocations(
     const TString& nodeAddress,
+    bool recoverUnlinkedDisks,
     const std::vector<TGuid>& locationUuids,
     const TDestroyChunkLocationsOptions& /*options*/)
 {
     auto proxy = CreateApiServiceProxy();
 
     auto req = proxy.DestroyChunkLocations();
+    req->set_recover_unlinked_disks(recoverUnlinkedDisks);
     ToProto(req->mutable_node_address(), nodeAddress);
     ToProto(req->mutable_location_uuids(), locationUuids);
 
@@ -2029,6 +2067,21 @@ TFuture<void> TClient::AlterQuery(
     ThrowUnimplemented("AlterQuery");
 }
 
+TFuture<NBundleControllerClient::TBundleConfigDescriptorPtr> TClient::GetBundleConfig(
+    const TString& /*bundleName*/,
+    const NBundleControllerClient::TGetBundleConfigOptions& /*options*/)
+{
+    ThrowUnimplemented("GetBundleConfig");
+}
+
+TFuture<void> TClient::SetBundleConfig(
+    const TString& /*bundleName*/,
+    const NBundleControllerClient::TBundleTargetConfigPtr& /*bundleConfig*/,
+    const NBundleControllerClient::TSetBundleConfigOptions& /*options*/)
+{
+    ThrowUnimplemented("SetBundleConfig");
+}
+
 TFuture<void> TClient::SetUserPassword(
     const TString& /*user*/,
     const TString& /*currentPasswordSha256*/,
@@ -2061,6 +2114,151 @@ TFuture<TListUserTokensResult> TClient::ListUserTokens(
     const TListUserTokensOptions& /*options*/)
 {
     ThrowUnimplemented("ListUserTokens");
+}
+
+TFuture<TGetPipelineSpecResult> TClient::GetPipelineSpec(
+    const NYPath::TYPath& pipelinePath,
+    const TGetPipelineSpecOptions& options)
+{
+    auto proxy = CreateApiServiceProxy();
+
+    auto req = proxy.GetPipelineSpec();
+    SetTimeoutOptions(*req, options);
+
+    req->set_pipeline_path(pipelinePath);
+
+    return req->Invoke().Apply(BIND([] (const TApiServiceProxy::TRspGetPipelineSpecPtr& rsp) {
+        return TGetPipelineSpecResult{
+            .Version = FromProto<NFlow::TVersion>(rsp->version()),
+            .Spec = TYsonString(rsp->spec()),
+        };
+    }));
+}
+
+TFuture<TSetPipelineSpecResult> TClient::SetPipelineSpec(
+    const NYPath::TYPath& pipelinePath,
+    const NYson::TYsonString& spec,
+    const TSetPipelineSpecOptions& options)
+{
+    auto proxy = CreateApiServiceProxy();
+
+    auto req = proxy.SetPipelineSpec();
+    SetTimeoutOptions(*req, options);
+
+    req->set_pipeline_path(pipelinePath);
+    req->set_spec(spec.ToString());
+    req->set_force(options.Force);
+    if (options.ExpectedVersion) {
+        req->set_expected_version(ToProto<i64>(*options.ExpectedVersion));
+    }
+
+    return req->Invoke().Apply(BIND([] (const TApiServiceProxy::TRspSetPipelineSpecPtr& rsp) {
+        return TSetPipelineSpecResult{
+            .Version = FromProto<NFlow::TVersion>(rsp->version()),
+        };
+    }));
+}
+
+TFuture<TGetPipelineDynamicSpecResult> TClient::GetPipelineDynamicSpec(
+    const NYPath::TYPath& pipelinePath,
+    const TGetPipelineDynamicSpecOptions& options)
+{
+    auto proxy = CreateApiServiceProxy();
+
+    auto req = proxy.GetPipelineDynamicSpec();
+    SetTimeoutOptions(*req, options);
+
+    req->set_pipeline_path(pipelinePath);
+
+    return req->Invoke().Apply(BIND([] (const TApiServiceProxy::TRspGetPipelineDynamicSpecPtr& rsp) {
+        return TGetPipelineDynamicSpecResult{
+            .Version = FromProto<NFlow::TVersion>(rsp->version()),
+            .Spec = TYsonString(rsp->spec()),
+        };
+    }));
+}
+
+TFuture<TSetPipelineDynamicSpecResult> TClient::SetPipelineDynamicSpec(
+    const NYPath::TYPath& pipelinePath,
+    const NYson::TYsonString& spec,
+    const TSetPipelineDynamicSpecOptions& options)
+{
+    auto proxy = CreateApiServiceProxy();
+
+    auto req = proxy.SetPipelineDynamicSpec();
+    SetTimeoutOptions(*req, options);
+
+    req->set_pipeline_path(pipelinePath);
+    req->set_spec(spec.ToString());
+    if (options.ExpectedVersion) {
+        req->set_expected_version(ToProto<i64>(*options.ExpectedVersion));
+    }
+
+    return req->Invoke().Apply(BIND([] (const TApiServiceProxy::TRspSetPipelineDynamicSpecPtr& rsp) {
+        return TSetPipelineDynamicSpecResult{
+            .Version = FromProto<NFlow::TVersion>(rsp->version()),
+        };
+    }));
+}
+
+TFuture<void> TClient::StartPipeline(
+    const NYPath::TYPath& pipelinePath,
+    const TStartPipelineOptions& options)
+{
+    auto proxy = CreateApiServiceProxy();
+
+    auto req = proxy.StartPipeline();
+    SetTimeoutOptions(*req, options);
+
+    req->set_pipeline_path(pipelinePath);
+
+    return req->Invoke().AsVoid();
+}
+
+TFuture<void> TClient::StopPipeline(
+    const NYPath::TYPath& pipelinePath,
+    const TStopPipelineOptions& options)
+{
+    auto proxy = CreateApiServiceProxy();
+
+    auto req = proxy.StopPipeline();
+    SetTimeoutOptions(*req, options);
+
+    req->set_pipeline_path(pipelinePath);
+
+    return req->Invoke().AsVoid();
+}
+
+TFuture<void> TClient::PausePipeline(
+    const NYPath::TYPath& pipelinePath,
+    const TPausePipelineOptions& options)
+{
+    auto proxy = CreateApiServiceProxy();
+
+    auto req = proxy.PausePipeline();
+    SetTimeoutOptions(*req, options);
+
+    req->set_pipeline_path(pipelinePath);
+
+    return req->Invoke().AsVoid();
+}
+
+TFuture<TPipelineStatus> TClient::GetPipelineStatus(
+    const NYPath::TYPath& pipelinePath,
+    const TGetPipelineStatusOptions& options)
+{
+    auto proxy = CreateApiServiceProxy();
+
+    auto req = proxy.GetPipelineStatus();
+    SetTimeoutOptions(*req, options);
+
+    req->set_pipeline_path(pipelinePath);
+
+    return req->Invoke().Apply(BIND([] (const TApiServiceProxy::TRspGetPipelineStatusPtr& rsp) {
+        return TPipelineStatus{
+            .State = FromProto<NFlow::EPipelineState>(rsp->state()),
+        };
+    }));
 }
 
 ////////////////////////////////////////////////////////////////////////////////

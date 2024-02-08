@@ -49,6 +49,7 @@ struct TEvYdbProxy {
         EV_REQUEST_RESPONSE(DescribeConsumer),
         EV_REQUEST_RESPONSE(CreateTopicReader),
         EV_REQUEST_RESPONSE(ReadTopic),
+        EV_REQUEST_RESPONSE(CommitOffset),
 
         EvEnd,
     };
@@ -82,6 +83,18 @@ struct TEvYdbProxy {
         using TBase = TGenericRequest<TDerived, EventType, void>;
     };
 
+    template <typename T>
+    class THasOutFunc {
+        template <typename U>
+        static constexpr std::false_type Detect(...);
+
+        template <typename U, typename = decltype(std::declval<U>().Out(std::declval<IOutputStream&>()))>
+        static constexpr std::true_type Detect(int);
+
+    public:
+        static constexpr bool Value = decltype(Detect<T>(0))::value;
+    };
+
     template <typename TDerived, ui32 EventType, typename T>
     struct TGenericResponse: public TEventLocal<TDerived, EventType> {
         using TResult = T;
@@ -95,7 +108,68 @@ struct TEvYdbProxy {
         {
         }
 
+        TString ToString() const override {
+            auto ret = TStringBuilder() << this->ToStringHeader();
+            if constexpr (THasOutFunc<TResult>::Value) {
+                ret << " { Result: " << Result << " }";
+            }
+            return ret;
+        }
+
         using TBase = TGenericResponse<TDerived, EventType, T>;
+    };
+
+    struct TReadTopicResult {
+        class TMessage {
+            using TDataEvent = NYdb::NTopic::TReadSessionEvent::TDataReceivedEvent;
+            using ECodec = NYdb::NTopic::ECodec;
+
+            explicit TMessage(const TDataEvent::TMessageBase& msg, ECodec codec)
+                : Offset(msg.GetOffset())
+                , Data(msg.GetData())
+                , Codec(codec)
+            {
+            }
+
+        public:
+            explicit TMessage(const TDataEvent::TMessage& msg)
+                : TMessage(msg, ECodec::RAW)
+            {
+            }
+
+            explicit TMessage(const TDataEvent::TCompressedMessage& msg)
+                : TMessage(msg, msg.GetCodec())
+            {
+            }
+
+            ui64 GetOffset() const { return Offset; }
+            const TString& GetData() const { return Data; }
+            TString& GetData() { return Data; }
+            ECodec GetCodec() const { return Codec; }
+            void Out(IOutputStream& out) const;
+
+        private:
+            ui64 Offset;
+            TString Data;
+            ECodec Codec;
+        };
+
+        explicit TReadTopicResult(const NYdb::NTopic::TReadSessionEvent::TDataReceivedEvent& event) {
+            Messages.reserve(event.GetMessagesCount());
+            if (event.HasCompressedMessages()) {
+                for (const auto& msg : event.GetCompressedMessages()) {
+                    Messages.emplace_back(msg);
+                }
+            } else {
+                for (const auto& msg : event.GetMessages()) {
+                    Messages.emplace_back(msg);
+                }
+            }
+        }
+
+        void Out(IOutputStream& out) const;
+
+        TVector<TMessage> Messages;
     };
 
     #define DEFINE_GENERIC_REQUEST(name, ...) \
@@ -134,7 +208,8 @@ struct TEvYdbProxy {
     DEFINE_GENERIC_REQUEST_RESPONSE(DescribeTopic, NYdb::NTopic::TDescribeTopicResult, TString, NYdb::NTopic::TDescribeTopicSettings);
     DEFINE_GENERIC_REQUEST_RESPONSE(DescribeConsumer, NYdb::NTopic::TDescribeConsumerResult, TString, TString, NYdb::NTopic::TDescribeConsumerSettings);
     DEFINE_GENERIC_REQUEST_RESPONSE(CreateTopicReader, TActorId, NYdb::NTopic::TReadSessionSettings);
-    DEFINE_GENERIC_REQUEST_RESPONSE(ReadTopic, NYdb::NTopic::TReadSessionEvent::TEvent, void);
+    DEFINE_GENERIC_REQUEST_RESPONSE(ReadTopic, TReadTopicResult, void);
+    DEFINE_GENERIC_REQUEST_RESPONSE(CommitOffset, NYdb::TStatus, TString, ui64, TString, ui64, NYdb::NTopic::TCommitOffsetSettings);
 
     #undef DEFINE_GENERIC_REQUEST_RESPONSE
     #undef DEFINE_GENERIC_RESPONSE

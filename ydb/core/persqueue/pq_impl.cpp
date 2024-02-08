@@ -3226,7 +3226,6 @@ bool TPersQueue::CanProcessGetOwnershipQueue() const
 
 void TPersQueue::ProcessGetOwnershipQueue()
 {
-    Y_ABORT_UNLESS(!GetOwnershipRequests.empty());
     Y_ABORT_UNLESS(HandleGetOwnershipRequestParams.empty());
 
     for (auto& request : GetOwnershipRequests) {

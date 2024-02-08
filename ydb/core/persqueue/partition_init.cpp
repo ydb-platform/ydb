@@ -990,32 +990,46 @@ bool DiskIsFull(TEvKeyValue::TEvResponse::TPtr& ev) {
     return !diskIsOk;
 }
 
+static std::pair<TKeyPrefix, TKeyPrefix> MakeKeyPrefixRange(TKeyPrefix::EType type, const TPartitionId& partition)
+{
+    TKeyPrefix from(type, partition);
+    TKeyPrefix to(type, TPartitionId(partition.OriginalPartitionId, partition.WriteId, partition.InternalPartitionId + 1));
+
+    return {std::move(from), std::move(to)};
+}
+
 static void RequestRange(const TActorContext& ctx, const TActorId& dst, const TPartitionId& partition,
                          TKeyPrefix::EType c, bool includeData = false, const TString& key = "", bool dropTmp = false) {
     THolder<TEvKeyValue::TEvRequest> request(new TEvKeyValue::TEvRequest);
-    auto read = request->Record.AddCmdReadRange();
-    auto range = read->MutableRange();
-    TKeyPrefix from(c, partition);
+
+    auto keyPrefixes = MakeKeyPrefixRange(c, partition);
+    TKeyPrefix& from = keyPrefixes.first;
+    const TKeyPrefix& to = keyPrefixes.second;
+
     if (!key.empty()) {
         Y_ABORT_UNLESS(key.StartsWith(TStringBuf(from.Data(), from.Size())));
         from.Clear();
         from.Append(key.data(), key.size());
     }
-    range->SetFrom(from.Data(), from.Size());
 
-    TKeyPrefix to(c, partition.NextInternalPartitionId());
+    auto read = request->Record.AddCmdReadRange();
+    auto range = read->MutableRange();
+
+    range->SetFrom(from.Data(), from.Size());
     range->SetTo(to.Data(), to.Size());
 
-    if(includeData)
+    if (includeData)
         read->SetIncludeData(true);
 
     if (dropTmp) {
+        keyPrefixes = MakeKeyPrefixRange(TKeyPrefix::TypeTmpData, partition);
+        const TKeyPrefix& from = keyPrefixes.first;
+        const TKeyPrefix& to = keyPrefixes.second;
+
         auto del = request->Record.AddCmdDeleteRange();
         auto range = del->MutableRange();
-        TKeyPrefix from(TKeyPrefix::TypeTmpData, partition);
-        range->SetFrom(from.Data(), from.Size());
 
-        TKeyPrefix to(TKeyPrefix::TypeTmpData, partition.NextInternalPartitionId());
+        range->SetFrom(from.Data(), from.Size());
         range->SetTo(to.Data(), to.Size());
     }
 

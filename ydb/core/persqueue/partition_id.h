@@ -15,11 +15,12 @@ public:
     TPartitionId() = default;
 
     explicit TPartitionId(ui32 partition) :
-        TPartitionId(partition, Nothing(), partition)
+        OriginalPartitionId(partition),
+        InternalPartitionId(partition)
     {
     }
 
-    TPartitionId(ui32 originalPartitionId, TMaybe<ui64> writeId, ui32 internalPartitionId = 0) :
+    TPartitionId(ui32 originalPartitionId, TMaybe<ui64> writeId, ui32 internalPartitionId) :
         OriginalPartitionId(originalPartitionId),
         WriteId(writeId),
         InternalPartitionId(internalPartitionId)
@@ -45,14 +46,6 @@ public:
         } else {
             s << OriginalPartitionId;
         }
-    }
-
-    //
-    // FIXME: используется в RequestRange
-    //
-    TPartitionId NextInternalPartitionId() const
-    {
-        return {OriginalPartitionId, WriteId, InternalPartitionId + 1};
     }
 
     ui32 OriginalPartitionId = 0;

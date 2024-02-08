@@ -1,5 +1,5 @@
 /* postgres can not */
-/* syntax version 1 */
+/* ignore runonopt plan diff */
 
 use plato;
 

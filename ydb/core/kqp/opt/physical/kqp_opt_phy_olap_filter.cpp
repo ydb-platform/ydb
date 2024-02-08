@@ -33,7 +33,10 @@ struct TPushdownSettings : public NPushdown::TSettings {
         Enable(EFlag::LikeOperator, NSsa::RuntimeVersion >= 2U);
         Enable(EFlag::LikeOperatorOnlyForUtf8, NSsa::RuntimeVersion < 3U);
         Enable(EFlag::JsonQueryOperators | EFlag::JsonExistsOperator, NSsa::RuntimeVersion >= 3U);
-        Enable(EFlag::ArithmeticalExpressions | EFlag::UnaryOperators | EFlag::DoNotCheckCompareArgumentsTypes, NSsa::RuntimeVersion >= 4U);
+        Enable(EFlag::ArithmeticalExpressions
+            | EFlag::UnaryOperators
+            | EFlag::DoNotCheckCompareArgumentsTypes
+            | EFlag::TimestampCtor, NSsa::RuntimeVersion >= 4U);
         Enable(EFlag::LogicalXorOperator
             | EFlag::ParameterExpression
             | EFlag::CastExpression

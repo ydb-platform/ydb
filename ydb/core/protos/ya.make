@@ -161,7 +161,7 @@ PEERDIR(
     ydb/library/ydb_issue/proto
 )
 
-CPP_PROTO_PLUGIN0(config_proto_plugin ydb/config/tools/protobuf_plugin)
+CPP_PROTO_PLUGIN0(config_proto_plugin ydb/core/config/tools/protobuf_plugin)
 
 EXCLUDE_TAGS(GO_PROTO)
 

@@ -8,6 +8,8 @@ items:
     href: getting_started/quickstart.md
   - name: Kubernetes
     href: getting_started/kubernetes.md
+  - name: Terraform
+    href: getting_started/terraform.md  
 
 # Main
 - { name: Концепции,                               include: { mode: link, path: concepts/toc_p.yaml } }

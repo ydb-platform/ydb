@@ -425,7 +425,7 @@ Y_UNIT_TEST_SUITE(TChargeBTreeIndex) {
     }
 
     void DoChargeRowId(ICharge& charge, TTouchEnv& env, const TRowId row1, const TRowId row2, ui64 itemsLimit, ui64 bytesLimit,
-            bool reverse, const TKeyCellDefaults &keyDefaults, const TString& message, ui32 failsAllowed = 10) {
+            bool reverse, const TKeyCellDefaults &keyDefaults, const TString& message, ui32 failsAllowed = 15) {
         while (true) {
             bool ready = reverse
                 ? charge.DoReverse(row2, row1, keyDefaults, itemsLimit, bytesLimit)

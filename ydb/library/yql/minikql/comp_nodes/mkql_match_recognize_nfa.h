@@ -67,6 +67,26 @@ struct TNfaTransitionGraph {
     size_t Output;
 
     using TPtr = std::shared_ptr<TNfaTransitionGraph>;
+
+    void Save(TString& out) const {
+        std::cerr << "TNfaTransitionGraph::Save() "  << out.size()  << std::endl;
+        // WriteUi64(out, Index);
+        // WriteUi64(out, Quantifiers.size());
+        // TODO
+        std::cerr << "TNfaTransitionGraph::Save() end "  << out.size()  << std::endl;        
+    }
+
+    void Load(TStringBuf& in) {
+        std::cerr << "TNfaTransitionGraph::Load() " << in.size() << std::endl;
+        // Index = ReadUi64(in);
+        // while (!Quantifiers.empty()) {
+        //     Quantifiers.pop();
+        // }
+        // auto quantifiersSize = ReadUi64(in);
+        // // TODO
+        std::cerr << "TNfaTransitionGraph::Load() end " << in.size() << std::endl;
+    }
+    
 };
 
 class TNfaTransitionGraphOptimizer {
@@ -251,14 +271,77 @@ private:
 class TNfa {
     using TRange = TSparseList::TRange;
     using TMatchedVars = TMatchedVars<TRange>;
+
     struct TState {
+        
+        TState() {}
+
         TState(size_t index, const TMatchedVars& vars, std::stack<ui64, std::deque<ui64, TMKQLAllocator<ui64>>>&& quantifiers)
             : Index(index)
             , Vars(vars)
             , Quantifiers(quantifiers) {}
-        const size_t Index;
+        size_t Index;
         TMatchedVars Vars;
-        std::stack<ui64, std::deque<ui64, TMKQLAllocator<ui64>>> Quantifiers; //get rid of this
+        
+        using TQuantifiersStdStack = std::stack<
+            ui64,
+            std::deque<ui64, TMKQLAllocator<ui64>>>; //get rid of this
+
+        struct TQuantifiersStack: public TQuantifiersStdStack {
+            template<typename...TArgs>
+            TQuantifiersStack(TArgs... args) : TQuantifiersStdStack(args...) {}
+            
+            auto begin() const { return c.begin(); }
+            auto end() const { return c.end(); }
+            auto clear() { return c.clear(); }
+        };
+
+        TQuantifiersStack Quantifiers;
+
+        void Save(TString& out, const TSaveLoadContext& ctx) const {
+            std::cerr << "TState::Save() "  << out.size()  << std::endl;
+            WriteUi64(out, Index);
+
+            WriteUi64(out, Vars.size());
+            for (const auto& vector : Vars) {
+                WriteUi64(out, vector.size());
+                for (const auto& range : vector) {
+                    range.Save(out, ctx);
+                }
+            }
+            WriteUi64(out, Quantifiers.size());
+            for (ui64 qnt : Quantifiers) {
+                WriteUi64(out, qnt);
+            }
+            std::cerr << "TState::Save() end "  << out.size()  << std::endl;        
+        }
+
+        void Load(TStringBuf& in, const TSaveLoadContext& ctx) {
+            std::cerr << "TState::Load() " << in.size() << std::endl;
+            Index = ReadUi64(in);
+            
+            auto varsSize = ReadUi64(in);
+            Vars.clear();
+            Vars.resize(varsSize);
+            for (size_t i = 0; i < varsSize; ++i) {
+                auto& subvec  = Vars[i];
+                ui64 vectorSize = ReadUi64(in);
+                subvec.resize(vectorSize);
+                for (size_t j = 0; j < vectorSize; ++j) {
+                    subvec[i].Load(in, ctx);
+                }
+            }
+
+            while (!Quantifiers.empty()) {
+                Quantifiers.pop();
+            }
+            auto quantifiersSize = ReadUi64(in);
+            for (size_t i = 0; i < quantifiersSize; ++i) {
+                ui64 qnt = ReadUi64(in);
+                Quantifiers.push(qnt);
+            }
+            std::cerr << "TState::Load() end " << in.size() << std::endl;
+        }
 
         friend inline bool operator<(const TState& lhs, const TState& rhs) {
             return std::tie(lhs.Index, lhs.Quantifiers, lhs.Vars) < std::tie(rhs.Index, rhs.Quantifiers, rhs.Vars);
@@ -330,10 +413,30 @@ public:
         return ActiveStates.size();
     }
 
-    void Save(TString& out) {
+    void Save(TString& out, const TSaveLoadContext& ctx) const {
+        std::cerr << "TNfa::Save() "  << out.size()  << std::endl;
+        TransitionGraph->Save(out);
+        WriteUi64(out, ActiveStates.size());
+        std::cerr << "TNfa::Save() ActiveStates size "  <<  ActiveStates.size()  << std::endl;
+        for (const auto& state : ActiveStates) {
+            state.Save(out, ctx);
+        }
+        WriteUi64(out, EpsilonTransitionsLastRow);
+        std::cerr << "TNfa::Save() end "  << out.size()  << std::endl;        
     }
 
-    void Load(TStringBuf& in) {
+    void Load(TStringBuf& in, const TSaveLoadContext& ctx) {
+        std::cerr << "TNfa::Load() " << in.size() << std::endl;
+        TransitionGraph->Load(in);
+        auto stateSize = ReadUi64(in);
+        std::cerr << "TNfa::Load() ActiveStates size " << stateSize << std::endl;
+        for (size_t i = 0; i < stateSize; ++i) {
+            TState state;
+            state.Load(in, ctx);
+            ActiveStates.emplace(state);
+        }
+        EpsilonTransitionsLastRow = ReadUi64(in);
+        std::cerr << "TNfa::Load() end " << in.size() << std::endl;
     }
 
 private:

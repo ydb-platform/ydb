@@ -8,6 +8,7 @@ namespace NKikimr::NMiniKQL::NMatchRecognize {
 
 template<class R>
 using TMatchedVar = std::vector<R, TMKQLAllocator<R>>;
+
 template<class R>
 void Extend(TMatchedVar<R>& var, const R& r) {
     if (var.empty()) {

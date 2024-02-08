@@ -186,17 +186,17 @@ public:
         return false;
     }
 
-    void Save(TString& out, const TSaveLoadContext& ctx) {
-        std::cerr << "TStreamingMatchRecognize::Save()" << std::endl;
+    void Save(TString& out, const TSaveLoadContext& ctx) const {
+        std::cerr << "TStreamingMatchRecognize::Save() "  << out.size()  << std::endl;
         Rows.Save(out, ctx);
-        Nfa.Save(out);
+        Nfa.Save(out, ctx);
         WriteUi64(out, MatchNumber);
     }
 
-    void Load(TStringBuf& in) {
+    void Load(TStringBuf& in, const TSaveLoadContext& ctx) {
         std::cerr << "TStreamingMatchRecognize::Load()" << std::endl;
-        Rows.Load(in);
-        Nfa.Load(in);
+        Rows.Load(in, ctx);
+        Nfa.Load(in, ctx);
         MatchNumber = ReadUi64(in);
     }
 
@@ -237,7 +237,7 @@ public:
     {}
 
     NUdf::TUnboxedValue Save() const override {
-        std::cerr << "TStateForNonInterleavedPartitions::Save()" << std::endl;
+        std::cerr << "TStateForNonInterleavedPartitions::Save() " << std::endl;
         TString out;
 
 
@@ -348,7 +348,7 @@ public:
     }
 
     NUdf::TUnboxedValue Save() const override {
-        std::cerr << "TStateForInterleavedPartitions::Save()" << std::endl;
+        std::cerr << "TStateForInterleavedPartitions::Save() " << std::endl;
         TString out;
         WriteUi32(out, StateVersion);
         WriteUi32(out, Partitions.size());
@@ -359,22 +359,17 @@ public:
             std::cerr << "partitions.HasMatched() " << state->HasMatched() << std::endl;
         }
 
-        // WriteUi32(out, HasReadyOutput.size());
-        // for (const auto it : HasReadyOutput) {
-        //     auto& key = it->first;
-        //     WriteString(out, key);
-        // }
-
         std::cerr << "HasReadyOutput size " << HasReadyOutput.size() << std::endl;
-        
+
         auto strRef = NUdf::TStringRef(out.data(), out.size());
+        std::cerr << "TStateForInterleavedPartitions::Save() end " << out.size() << std::endl;
         return MakeString(strRef);
     }
 
     void Load(const NUdf::TStringRef& state) override {
-        std::cerr << "TStateForInterleavedPartitions::Load()" << std::endl;
 
         TStringBuf in(state.Data(), state.Size());
+        std::cerr << "TStateForInterleavedPartitions::Load() " << in.size() << std::endl;
 
         const auto stateVersion = ReadUi32(in);
         if (stateVersion == 1) {
@@ -387,7 +382,7 @@ public:
                     Parameters,
                     NfaTransitionGraph,
                     Cache));
-                (pair.first)->second->Load(in);
+                (pair.first)->second->Load(in, SaveLoadContex);
             }
 
             std::cerr << "partitionsSize " << partitionsSize << std::endl;
@@ -398,6 +393,8 @@ public:
                 }
             }
         }
+        std::cerr << "TStateForInterleavedPartitions::Load() " << in.size() << std::endl;
+        MKQL_ENSURE(!in.size(), "State is corrupted");
     }
 
     bool ProcessInputRow(NUdf::TUnboxedValue&& row, TComputationContext& ctx) {

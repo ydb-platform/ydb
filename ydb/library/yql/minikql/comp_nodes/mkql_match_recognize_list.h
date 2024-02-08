@@ -57,6 +57,20 @@ public:
             ++ToIndex;
         }
 
+        // void Save(TString& out) const {
+        //     std::cerr << "TRange::Save() "  << out.size()  << std::endl;
+        //     WriteUi64(out, FromIndex);
+        //     WriteUi64(out, ToIndex);
+        //     std::cerr << "TRange::Save() end "  << out.size()  << std::endl;        
+        // }
+
+        // void Load(TStringBuf& in) {
+        //     std::cerr << "TRange::Load() " << in.size() << std::endl;
+        //     FromIndex = ReadUi64(in);
+        //     ToIndex = ReadUi64(in);
+        //     std::cerr << "TRange::Load() end " << in.size() << std::endl;
+        // }
+
     private:
         ui64 FromIndex;
         ui64 ToIndex;
@@ -124,6 +138,8 @@ class TSparseList {
         void UnlockRange(size_t from, size_t to) {
             for (auto i = from; i <= to; ++i) {
                 const auto it = Storage.find(i);
+                std::cerr << "    TContainer::UnlockRange() i " << i << std::endl;
+
                 MKQL_ENSURE(it != Storage.cend(), "Internal logic error");
                 auto lockCount = --it->second.LockCount;
                 if (0 == lockCount) {
@@ -132,25 +148,32 @@ class TSparseList {
             }
         }
 
-        void Save(TString& out, const TSaveLoadContext& ctx) {
-            std::cerr << "TContainer::Save()" << std::endl;
+        void Save(TString& out, const TSaveLoadContext& ctx) const {
+            std::cerr << "    TContainer::Save() " << out.size() << std::endl;
             WriteUi64(out, Storage.size());
+            std::cerr << "    TContainer::Save() size" << Storage.size() << std::endl;
             for (const auto& [key, item]: Storage) {
                 WriteUi64(out, key);
-                //   WriteUi64(out, item.Value); TODO
+
+                std::cerr << "    TContainer::Save() key " << key << std::endl;
                 WriteUnboxedValue(out, ctx.Packer.RefMutableObject(ctx.Ctx, false, ctx.StateType), item.Value);
                 WriteUi64(out, item.LockCount);
             }
+            std::cerr << "    TContainer::Save() end " << out.size() << std::endl;
         }
 
-        void Load(TStringBuf& in) {
-            std::cerr << "TContainer::Load()" << std::endl;
+        void Load(TStringBuf& in, const TSaveLoadContext& ctx) {
+            std::cerr << "    TContainer::Load() " << in.size() << std::endl;
             auto size = ReadUi64(in);
-            for (size_t i =0; i < size; ++i) {
+            for (size_t i = 0; i < size; ++i) {
                 auto key = ReadUi64(in);
+                NUdf::TUnboxedValue row = ReadUnboxedValue(in, ctx.Packer.RefMutableObject(ctx.Ctx, false, ctx.StateType), ctx.Ctx);
                 auto lockCount = ReadUi64(in);
-                Storage.emplace(key, TItem{NUdf::TUnboxedValue{}, lockCount});
+                std::cerr << "    TContainer::Load() key " << key << std::endl;
+                Storage.emplace(key, TItem{row, lockCount});
             }
+            std::cerr << "    TContainer::Load() size" << Storage.size() << std::endl;
+            std::cerr << "    TContainer::Load() end " << in.size() << std::endl;
         }
 
     private:
@@ -264,6 +287,23 @@ public:
             ToIndex = -1;
         }
 
+        void Save(TString& out, const TSaveLoadContext& ctx) const {
+            std::cerr << "  TRange::Save() "  << out.size()  << std::endl;
+            ctx.SavePtr(out, Container);
+            std::cerr << "  TRange::Save() IsValid "  << IsValid()  << std::endl;
+            WriteUi64(out, FromIndex);
+            WriteUi64(out, ToIndex);
+            std::cerr << "  TRange::Save() end "  << out.size()  << std::endl;        
+        }
+
+        void Load(TStringBuf& in, const TSaveLoadContext& ctx) {
+            std::cerr << "  TRange::Load() " << in.size() << std::endl;
+            ctx.Load(in, Container);
+            FromIndex = ReadUi64(in);
+            ToIndex = ReadUi64(in);
+            std::cerr << "  TRange::Load() end " << in.size() << std::endl;
+        }
+
     private:
         TRange(TContainerPtr container, size_t index)
             : Container(container)
@@ -319,16 +359,18 @@ public:
         return Size() == 0;
     }
 
-    void Save(TString& out, const TSaveLoadContext& ctx) {
-        std::cerr << "TSparseList::Save()" << std::endl;
-        Container->Save(out, ctx);
+    void Save(TString& out, const TSaveLoadContext& ctx) const {
+        std::cerr << "TSparseList::Save() "  << out.size()  << std::endl;        
+        ctx.SavePtr(out, Container);
         WriteUi64(out, ListSize);
+        std::cerr << "TSparseList::Save() end "  << out.size()  << std::endl;
     }
 
-    void Load(TStringBuf& in) {
-        std::cerr << "TSparseList::Load()" << std::endl;
-        Container->Load(in);
+    void Load(TStringBuf& in, const TSaveLoadContext& ctx) {
+        std::cerr << "TSparseList::Load() " << in.size() << std::endl;
+        ctx.Load(in, Container);
         ListSize = ReadUi64(in);
+        std::cerr << "TSparseList::Load() end " << in.size() << std::endl;
     }
 
 private:

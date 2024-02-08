@@ -87,71 +87,35 @@ namespace NKikimr {
                     items.push_back(std::move(item));
                 }
                 
-
                 const auto list = pgmBuilder.NewList(structType, std::move(items));
-                
                 auto inputFlow = pgmBuilder.ToFlow(list);
 
                 i64 delay = -10;
                 i64 ahead = 30;
                 ui32 rowLimit = 20;
 
-
-/*
-        TRuntimeNode inputStream,
-        const TUnaryLambda& getPartitionKeySelectorNode,
-        const TArrayRef<TStringBuf>& partitionColumns,
-        const TArrayRef<std::pair<TStringBuf, TBinaryLambda>>& getMeasures,
-        const NYql::NMatchRecognize::TRowPattern& pattern,
-        const TArrayRef<std::pair<TStringBuf, TTernaryLambda>>& getDefines,
-        bool streamingMode
-*/
-
-        // MEASURES
-//            LAST(A.dt) as dt_begin
-        // ONE ROW PER MATCH
-        // PATTERN ( A{3, 3} )
-        // DEFINE A as True) 
+                // MEASURES
+                //  LAST(A.dt) as dt_begin
+                // ONE ROW PER MATCH
+                // PATTERN ( A{3, 3} )
+                // DEFINE A as True) 
 
 
-            TVector<TStringBuf> partitionColumns;// =  {TStringBuf("a")};
-            TVector<std::pair<TStringBuf, TProgramBuilder::TBinaryLambda>> getMeasures = {{
-                std::make_pair(
-                    TStringBuf("key"),
-                    [&](TRuntimeNode measureInputDataArg, TRuntimeNode matchedVarsArg) {
-                        //return pgmBuilder.Length(measureInputDataArg);
-                        auto run =  pgmBuilder.Take(measureInputDataArg, pgmBuilder.NewDataLiteral<ui64>(0));
-
-                        auto oldType = run.GetStaticType();
-                       // oldType->GetKindAsStr();
-
-                        std::cerr << "GetKindAsStr  " << oldType->GetKindAsStr() << std::endl;
-
-
-                        // MKQL_ENSURE(oldType->IsStruct(), "Expected struct");
-
-                        // const auto& oldTypeDetailed = static_cast<const TStructType&>(*oldType);
-                        // auto count = oldTypeDetailed.GetMembersCount();
-
-                        // return pgmBuilder.NewDataLiteral<ui32>(count);
-                        //return measureInputDataArg;
-                        //return pgmBuilder.NewDataLiteral<ui32>(42);
-                      //  return pgmBuilder.Size(measureInputDataArg);
-
-                    // bool isOptional;
-                    // const auto type = AS_TYPE(TStructType, UnpackOptional(matchedVarsArg.GetStaticType(), isOptional));
-                    // auto count = type->GetMembersCount();
-                    
-
-                        return pgmBuilder.NewDataLiteral<ui32>(56);
-                    }
+                TVector<TStringBuf> partitionColumns;// =  {TStringBuf("a")};
+                TVector<std::pair<TStringBuf, TProgramBuilder::TBinaryLambda>> getMeasures = {{
+                    std::make_pair(
+                        TStringBuf("key"),
+                        [&](TRuntimeNode measureInputDataArg, TRuntimeNode matchedVarsArg) {
+                         //   auto run =  pgmBuilder.Take(measureInputDataArg, pgmBuilder.NewDataLiteral<ui64>(0));
+                            return pgmBuilder.NewDataLiteral<ui32>(56);
+                        }
                 )}};
-            TVector<std::pair<TStringBuf, TProgramBuilder::TTernaryLambda>> getDefines = {{
-                std::make_pair(
-                    TStringBuf("A"),
-                    [&](TRuntimeNode inputDataArg, TRuntimeNode matchedVarsArg, TRuntimeNode currentRowIndexArg) {
-                        return pgmBuilder.NewDataLiteral<bool>(true);
-                    }
+                TVector<std::pair<TStringBuf, TProgramBuilder::TTernaryLambda>> getDefines = {{
+                    std::make_pair(
+                        TStringBuf("A"),
+                        [&](TRuntimeNode inputDataArg, TRuntimeNode matchedVarsArg, TRuntimeNode currentRowIndexArg) {
+                            return pgmBuilder.NewDataLiteral<bool>(true);
+                        }
                 )}};
 
                 auto pgmReturn = pgmBuilder.MatchRecognizeCore(
@@ -189,13 +153,6 @@ namespace NKikimr {
                 auto v = value.GetElement(0).Get<ui32>();
                 std::cerr << "GetElement " << v << std::endl;
 
-
-                // {
-                //     value = graph1->GetValue();
-                //     UNIT_ASSERT(!value.IsFinish() && value);
-                //     v = value.GetElement(0).Get<ui32>();
-                //     std::cerr << "GetElement " << v << std::endl;
-                // }
                 TString graphState = graph1->SaveGraphState();
 
                 std::cerr << "----------------------" << std::endl;

@@ -60,7 +60,7 @@ public:
             auto begin() const { return c.begin(); }
             auto end() const { return c.end(); }
             auto clear() { return c.clear(); }
-    };
+        };
 
     public:
 

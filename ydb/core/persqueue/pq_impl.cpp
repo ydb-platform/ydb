@@ -876,7 +876,7 @@ void TPersQueue::ReadTxWrites(const NKikimrClient::TKeyValueResponse::TReadResul
     }
 }
 
-void TPersQueue::AddShadowPartition(const TPartitionId& partitionId)
+void TPersQueue::AddSupportivePartition(const TPartitionId& partitionId)
 {
     Partitions.emplace(partitionId,
                        TPartitionInfo(TActorId(),
@@ -884,8 +884,8 @@ void TPersQueue::AddShadowPartition(const TPartitionId& partitionId)
                                       *Counters));
 }
 
-void TPersQueue::CreateShadowPartitionActor(const TPartitionId& partitionId,
-                                            const TActorContext& ctx)
+void TPersQueue::CreateSupportivePartitionActor(const TPartitionId& partitionId,
+                                                const TActorContext& ctx)
 {
     Y_ABORT_UNLESS(Partitions.contains(partitionId));
 
@@ -905,16 +905,16 @@ void TPersQueue::InitTxWrites(const NKikimrPQ::TTabletTxInfo& info,
     for (size_t i = 0; i != info.TxWritesSize(); ++i) {
         auto& txWrite = info.GetTxWrites(i);
         ui64 writeId = txWrite.GetWriteId();
-        ui32 partitionId = txWrite.GetPartitionId();
-        TPartitionId shadowPartitionId(partitionId, writeId, txWrite.GetShadowPartitionId());
+        ui32 partitionId = txWrite.GetOriginalPartitionId();
+        TPartitionId shadowPartitionId(partitionId, writeId, txWrite.GetInternalPartitionId());
 
         TxWrites[writeId].Partitions.emplace(partitionId, shadowPartitionId);
 
-        AddShadowPartition(shadowPartitionId);
-        CreateShadowPartitionActor(shadowPartitionId, ctx);
+        AddSupportivePartition(shadowPartitionId);
+        CreateSupportivePartitionActor(shadowPartitionId, ctx);
         SubscribeWriteId(writeId, ctx);
 
-        NextShadowPartitionId = Max(NextShadowPartitionId, shadowPartitionId.InternalPartitionId + 1);
+        NextSupportivePartitionId = Max(NextSupportivePartitionId, shadowPartitionId.InternalPartitionId + 1);
     }
 }
 
@@ -2457,10 +2457,10 @@ void TPersQueue::HandleSplitMessageGroupRequest(ui64 responseCookie, const TActo
     ctx.Send(partActor, new TEvPQ::TEvSplitMessageGroup(responseCookie, std::move(deregistrations), std::move(registrations)));
 }
 
-void TPersQueue::HandleGetOwnershipRequestForShadowPartition(const ui64 responseCookie,
-                                                             const NKikimrClient::TPersQueuePartitionRequest& req,
-                                                             const TActorId& sender,
-                                                             const TActorContext& ctx)
+void TPersQueue::HandleGetOwnershipRequestForSupportivePartition(const ui64 responseCookie,
+                                                                 const NKikimrClient::TPersQueuePartitionRequest& req,
+                                                                 const TActorId& sender,
+                                                                 const TActorContext& ctx)
 {
     Y_ABORT_UNLESS(req.HasWriteId());
 
@@ -2504,10 +2504,10 @@ const TPartitionInfo& TPersQueue::GetPartitionInfo(const NKikimrClient::TPersQue
     return partition;
 }
 
-void TPersQueue::HandleReserveBytesRequestForShadowPartition(const ui64 responseCookie,
-                                                             const NKikimrClient::TPersQueuePartitionRequest& req,
-                                                             const TActorId& sender,
-                                                             const TActorContext& ctx)
+void TPersQueue::HandleReserveBytesRequestForSupportivePartition(const ui64 responseCookie,
+                                                                 const NKikimrClient::TPersQueuePartitionRequest& req,
+                                                                 const TActorId& sender,
+                                                                 const TActorContext& ctx)
 {
     const TPartitionInfo& partition = GetPartitionInfo(req);
     const TActorId& actorId = partition.Actor;
@@ -2516,9 +2516,9 @@ void TPersQueue::HandleReserveBytesRequestForShadowPartition(const ui64 response
     HandleReserveBytesRequest(responseCookie, actorId, req, ctx, pipeClient, sender);
 }
 
-void TPersQueue::HandleWriteRequestForShadowPartition(const ui64 responseCookie,
-                                                      const NKikimrClient::TPersQueuePartitionRequest& req,
-                                                      const TActorContext& ctx)
+void TPersQueue::HandleWriteRequestForSupportivePartition(const ui64 responseCookie,
+                                                          const NKikimrClient::TPersQueuePartitionRequest& req,
+                                                          const TActorContext& ctx)
 {
     const TPartitionInfo& partition = GetPartitionInfo(req);
     const TActorId& actorId = partition.Actor;
@@ -2526,17 +2526,17 @@ void TPersQueue::HandleWriteRequestForShadowPartition(const ui64 responseCookie,
     HandleWriteRequest(responseCookie, actorId, req, ctx);
 }
 
-void TPersQueue::HandleShadowPartition(const ui64 responseCookie,
-                                       const NKikimrClient::TPersQueuePartitionRequest& req,
-                                       const TActorId& sender,
-                                       const TActorContext& ctx)
+void TPersQueue::HandleSupportivePartition(const ui64 responseCookie,
+                                           const NKikimrClient::TPersQueuePartitionRequest& req,
+                                           const TActorId& sender,
+                                           const TActorContext& ctx)
 {
     if (req.HasCmdGetOwnership()) {
-        HandleGetOwnershipRequestForShadowPartition(responseCookie, req, sender, ctx);
+        HandleGetOwnershipRequestForSupportivePartition(responseCookie, req, sender, ctx);
     } else if (req.HasCmdReserveBytes()) {
-        HandleReserveBytesRequestForShadowPartition(responseCookie, req, sender, ctx);
+        HandleReserveBytesRequestForSupportivePartition(responseCookie, req, sender, ctx);
     } else if (req.CmdWriteSize()) {
-        HandleWriteRequestForShadowPartition(responseCookie, req, ctx);
+        HandleWriteRequestForSupportivePartition(responseCookie, req, ctx);
     } else {
         ReplyError(ctx, responseCookie, NPersQueue::NErrorCode::BAD_REQUEST, "CmdGetOwnership, CmdReserveBytes or CmdWrite expected");
     }
@@ -2634,7 +2634,7 @@ void TPersQueue::Handle(TEvPersQueue::TEvRequest::TPtr& ev, const TActorContext&
     }
 
     if (req.HasWriteId()) {
-        HandleShadowPartition(responseCookie, req, ev->Sender, ctx);
+        HandleSupportivePartition(responseCookie, req, ev->Sender, ctx);
         return;
     }
 
@@ -3196,7 +3196,7 @@ void TPersQueue::SubscribeWriteId(ui64 writeId,
              new NLongTxService::TEvLongTxService::TEvSubscribeLock(writeId, ctx.SelfID.NodeId()));
 }
 
-void TPersQueue::ForwardGetOwnershipToShadowPartitions(const TActorContext& ctx)
+void TPersQueue::ForwardGetOwnershipToSupportivePartitions(const TActorContext& ctx)
 {
     for (auto& params : HandleGetOwnershipRequestParams) {
         ui64 writeId = params.Request.GetWriteId();
@@ -3206,7 +3206,7 @@ void TPersQueue::ForwardGetOwnershipToShadowPartitions(const TActorContext& ctx)
         const TPartitionId& partitionId = txWrite.Partitions.at(originalPartitionId);
         Y_ABORT_UNLESS(Partitions.contains(partitionId));
 
-        CreateShadowPartitionActor(partitionId, ctx);
+        CreateSupportivePartitionActor(partitionId, ctx);
 
         TPartitionInfo& partition = Partitions.at(partitionId);
         partition.GetOwnershipRequests.emplace_back(params.Cookie, params.Request, params.Sender);
@@ -3231,11 +3231,11 @@ void TPersQueue::ProcessGetOwnershipQueue()
     for (auto& request : GetOwnershipRequests) {
         ui64 writeId = request.Request.GetWriteId();
         ui32 partitionId = request.Request.GetPartition();
-        TPartitionId shadowPartitionId(partitionId, writeId, NextShadowPartitionId++);
+        TPartitionId shadowPartitionId(partitionId, writeId, NextSupportivePartitionId++);
 
         TxWrites[writeId].Partitions.emplace(partitionId, shadowPartitionId);
 
-        AddShadowPartition(shadowPartitionId);
+        AddSupportivePartition(shadowPartitionId);
     }
 
     HandleGetOwnershipRequestParams = std::move(GetOwnershipRequests);
@@ -3301,7 +3301,7 @@ void TPersQueue::EndWriteTxs(const NKikimrClient::TResponse& resp,
 
     SendReplies(ctx);
     CheckChangedTxStates(ctx);
-    ForwardGetOwnershipToShadowPartitions(ctx);
+    ForwardGetOwnershipToSupportivePartitions(ctx);
 
     WriteTxsInProgress = false;
 
@@ -3499,8 +3499,8 @@ void TPersQueue::SaveTxWrites(NKikimrPQ::TTabletTxInfo& info)
         for (auto [partitionId, shadowPartitionId] : write.Partitions) {
             auto* txWrite = info.MutableTxWrites()->Add();
             txWrite->SetWriteId(writeId);
-            txWrite->SetPartitionId(partitionId);
-            txWrite->SetShadowPartitionId(shadowPartitionId.InternalPartitionId);
+            txWrite->SetOriginalPartitionId(partitionId);
+            txWrite->SetInternalPartitionId(shadowPartitionId.InternalPartitionId);
         }
     }
 }

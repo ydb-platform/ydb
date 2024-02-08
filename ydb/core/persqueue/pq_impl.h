@@ -227,7 +227,7 @@ private:
     };
 
     THashMap<ui64, TTxWriteInfo> TxWrites;
-    ui32 NextShadowPartitionId = 100'000;
+    ui32 NextSupportivePartitionId = 100'000;
 
     TActorId CacheActor;
 
@@ -456,31 +456,31 @@ private:
     void InitTxWrites(const NKikimrPQ::TTabletTxInfo& info, const TActorContext& ctx);
     void SaveTxWrites(NKikimrPQ::TTabletTxInfo& info);
 
-    void HandleShadowPartition(const ui64 responseCookie,
-                               const NKikimrClient::TPersQueuePartitionRequest& req,
-                               const TActorId& sender,
-                               const TActorContext& ctx);
-    void HandleGetOwnershipRequestForShadowPartition(const ui64 responseCookie,
-                                                     const NKikimrClient::TPersQueuePartitionRequest& req,
-                                                     const TActorId& sender,
-                                                     const TActorContext& ctx);
-    void HandleReserveBytesRequestForShadowPartition(const ui64 responseCookie,
-                                                     const NKikimrClient::TPersQueuePartitionRequest& req,
-                                                     const TActorId& sender,
-                                                     const TActorContext& ctx);
-    void HandleWriteRequestForShadowPartition(const ui64 responseCookie,
-                                              const NKikimrClient::TPersQueuePartitionRequest& req,
-                                              const TActorContext& ctx);
+    void HandleSupportivePartition(const ui64 responseCookie,
+                                   const NKikimrClient::TPersQueuePartitionRequest& req,
+                                   const TActorId& sender,
+                                   const TActorContext& ctx);
+    void HandleGetOwnershipRequestForSupportivePartition(const ui64 responseCookie,
+                                                         const NKikimrClient::TPersQueuePartitionRequest& req,
+                                                         const TActorId& sender,
+                                                         const TActorContext& ctx);
+    void HandleReserveBytesRequestForSupportivePartition(const ui64 responseCookie,
+                                                         const NKikimrClient::TPersQueuePartitionRequest& req,
+                                                         const TActorId& sender,
+                                                         const TActorContext& ctx);
+    void HandleWriteRequestForSupportivePartition(const ui64 responseCookie,
+                                                  const NKikimrClient::TPersQueuePartitionRequest& req,
+                                                  const TActorContext& ctx);
 
-    void ForwardGetOwnershipToShadowPartitions(const TActorContext& ctx);
+    void ForwardGetOwnershipToSupportivePartitions(const TActorContext& ctx);
 
     TDeque<TCmdGetOwnershipRequestParams> GetOwnershipRequests;
     TDeque<TCmdGetOwnershipRequestParams> HandleGetOwnershipRequestParams;
 
     TPartitionInfo& GetPartitionInfo(const TPartitionId& partitionId);
     const TPartitionInfo& GetPartitionInfo(const NKikimrClient::TPersQueuePartitionRequest& request) const;
-    void AddShadowPartition(const TPartitionId& shadowPartitionId);
-    void CreateShadowPartitionActor(const TPartitionId& shadowPartitionId, const TActorContext& ctx);
+    void AddSupportivePartition(const TPartitionId& shadowPartitionId);
+    void CreateSupportivePartitionActor(const TPartitionId& shadowPartitionId, const TActorContext& ctx);
     void SubscribeWriteId(ui64 writeId, const TActorContext& ctx);
 
     bool AllPartitionsInited() const;

@@ -999,8 +999,8 @@ message TTransaction {
 message TTabletTxInfo {
     message TTxWriteInfo {
         optional uint64 WriteId = 1;
-        optional uint32 PartitionId = 2;
-        optional uint32 ShadowPartitionId = 3;
+        optional uint32 OriginalPartitionId = 2;
+        optional uint32 InternalPartitionId = 3;
     };
 
     optional uint64 LastStep = 2;

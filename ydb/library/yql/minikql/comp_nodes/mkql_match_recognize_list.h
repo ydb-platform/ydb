@@ -2,10 +2,10 @@
 #include <ydb/library/yql/minikql/defs.h>
 #include <ydb/library/yql/minikql/computation/mkql_computation_node_impl.h>
 #include <ydb/library/yql/minikql/computation/mkql_computation_node_holders.h>
+#include <ydb/library/yql/minikql/comp_nodes/mkql_match_recognize_parameters.h>
 #include <ydb/library/yql/minikql/comp_nodes/mkql_saveload.h>
 #include <ydb/library/yql/public/udf/udf_value.h>
 #include <unordered_map>
-
 namespace NKikimr::NMiniKQL::NMatchRecognize {
 
 class TSimpleList {
@@ -96,10 +96,6 @@ class TSparseList {
     public:
         using TPtr = TIntrusivePtr<TContainer>;
 
-        TContainer(const TMatchRecognizeProcessorParameters& parameters)
-            : Parameters(parameters) {
-        }
-
         void Add(size_t index, NUdf::TUnboxedValue&& value) {
             const auto& [iter, newOne] = Storage.emplace(index, TItem{std::move(value), 1});
             MKQL_ENSURE(newOne, "Internal logic error");
@@ -136,13 +132,13 @@ class TSparseList {
             }
         }
 
-        void Save(TString& out) {
+        void Save(TString& out, const TSaveLoadContext& ctx) {
             std::cerr << "TContainer::Save()" << std::endl;
             WriteUi64(out, Storage.size());
             for (const auto& [key, item]: Storage) {
                 WriteUi64(out, key);
                 //   WriteUi64(out, item.Value); TODO
-                WriteUnboxedValue(out, Parameters.Packer.RefMutableObject(Ctx, false, Parameters.StateType), item.Value);
+                WriteUnboxedValue(out, ctx.Packer.RefMutableObject(ctx.Ctx, false, ctx.StateType), item.Value);
                 WriteUi64(out, item.LockCount);
             }
         }
@@ -166,7 +162,6 @@ class TSparseList {
             std::hash<size_t>,
             std::equal_to<size_t>,
             TAllocator> Storage;
-        const TMatchRecognizeProcessorParameters& Parameters;
     };
     using TContainerPtr = TContainer::TPtr;
 
@@ -299,11 +294,6 @@ public:
         size_t ToIndex;
     };
 
-    TSparseList(const TMatchRecognizeProcessorParameters& parameters)
-        : Parameters(parameters)
-        , Container(MakeIntrusive<TContainer>(parameters)) {
-    }
-
 public:
     TRange Append(NUdf::TUnboxedValue&& value) {
         const auto index = ListSize++;
@@ -329,9 +319,9 @@ public:
         return Size() == 0;
     }
 
-    void Save(TString& out) {
+    void Save(TString& out, const TSaveLoadContext& ctx) {
         std::cerr << "TSparseList::Save()" << std::endl;
-        Container->Save(out);
+        Container->Save(out, ctx);
         WriteUi64(out, ListSize);
     }
 
@@ -342,9 +332,8 @@ public:
     }
 
 private:
-    TContainerPtr Container;
+    TContainerPtr Container = MakeIntrusive<TContainer>();
     size_t ListSize = 0; //impl: max index ever stored + 1
-    const TMatchRecognizeProcessorParameters& Parameters;
 };
 
 template<typename L>

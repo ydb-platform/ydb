@@ -2,6 +2,8 @@
 #include "mkql_match_recognize_matched_vars.h"
 #include "mkql_match_recognize_measure_arg.h"
 #include "mkql_match_recognize_nfa.h"
+#include "mkql_match_recognize_parameters.h"
+
 #include <ydb/library/yql/core/sql_types/match_recognize.h>
 #include <ydb/library/yql/minikql/comp_nodes/mkql_saveload.h>
 #include <ydb/library/yql/minikql/computation/mkql_computation_node_impl.h>
@@ -20,28 +22,7 @@ namespace NMatchRecognize {
 
 constexpr ui32 StateVersion = 1;
 
-enum class EOutputColumnSource {PartitionKey, Measure};
-using TOutputColumnOrder = std::vector<std::pair<EOutputColumnSource, size_t>, TMKQLAllocator<std::pair<EOutputColumnSource, size_t>>>;
-
 using namespace NYql::NMatchRecognize;
-
-struct TMatchRecognizeProcessorParameters {
-    IComputationExternalNode* InputDataArg;
-    TRowPattern               Pattern;
-    TUnboxedValueVector       VarNames;
-    THashMap<TString, size_t> VarNamesLookup;
-    IComputationExternalNode* MatchedVarsArg;
-    IComputationExternalNode* CurrentRowIndexArg;
-    TComputationNodePtrVector Defines;
-    IComputationExternalNode* MeasureInputDataArg;
-    TMeasureInputColumnOrder  MeasureInputColumnOrder;
-    TComputationNodePtrVector Measures;
-    TOutputColumnOrder        OutputColumnOrder;
-    // 
-    TType* const              StateType;
-    TMutableObjectOverBoxedValue<TValuePackerBoxed> Packer;
-
-};
 
 class TBackTrackingMatchRecognize {
     using TPartitionList = TSimpleList;
@@ -156,7 +137,6 @@ public:
         const TContainerCacheOnContext& cache
     )
     : PartitionKey(std::move(partitionKey))
-    , Rows(parameters)
     , Parameters(parameters)
     , Nfa(nfaTransitions, parameters.MatchedVarsArg, parameters.Defines)
     , Cache(cache)
@@ -206,9 +186,9 @@ public:
         return false;
     }
 
-    void Save(TString& out) {
+    void Save(TString& out, const TSaveLoadContext& ctx) {
         std::cerr << "TStreamingMatchRecognize::Save()" << std::endl;
-        Rows.Save(out);
+        Rows.Save(out, ctx);
         Nfa.Save(out);
         WriteUi64(out, MatchNumber);
     }
@@ -236,12 +216,15 @@ class TStateForNonInterleavedPartitions
     using TRowPatternConfigurationBuilder = typename Algo::TPatternConfigurationBuilder;
 public:
     TStateForNonInterleavedPartitions(
-            TMemoryUsageInfo* memInfo,
-            IComputationExternalNode* inputRowArg,
-            IComputationNode* partitionKey,
-            TType* partitionKeyType,
-            const TMatchRecognizeProcessorParameters& parameters,
-            const TContainerCacheOnContext& cache
+        TMemoryUsageInfo* memInfo,
+        IComputationExternalNode* inputRowArg,
+        IComputationNode* partitionKey,
+        TType* partitionKeyType,
+        const TMatchRecognizeProcessorParameters& parameters,
+        const TContainerCacheOnContext& cache,
+        TComputationContext &ctx,
+        TType* stateType,
+        const TMutableObjectOverBoxedValue<TValuePackerBoxed>& packer
     )
     : TComputationValue<TStateForNonInterleavedPartitions>(memInfo)
     , InputRowArg(inputRowArg)
@@ -348,7 +331,10 @@ public:
         IComputationNode* partitionKey,
         TType* partitionKeyType,
         const TMatchRecognizeProcessorParameters& parameters,
-        const TContainerCacheOnContext& cache
+        const TContainerCacheOnContext& cache,
+        TComputationContext &ctx,
+        TType* stateType,
+        const TMutableObjectOverBoxedValue<TValuePackerBoxed>& packer
     )
     : TComputationValue<TStateForInterleavedPartitions>(memInfo)
     , InputRowArg(inputRowArg)
@@ -357,6 +343,7 @@ public:
     , Parameters(parameters)
     , NfaTransitionGraph(TNfaTransitionGraphBuilder::Create(parameters.Pattern, parameters.VarNamesLookup))
     , Cache(cache)
+    , SaveLoadContex(ctx, stateType, packer)
     {
     }
 
@@ -365,9 +352,10 @@ public:
         TString out;
         WriteUi32(out, StateVersion);
         WriteUi32(out, Partitions.size());
+
         for (const auto& [key, state] : Partitions) {
             WriteString(out, key);
-            state->Save(out);
+            state->Save(out, SaveLoadContex);
             std::cerr << "partitions.HasMatched() " << state->HasMatched() << std::endl;
         }
 
@@ -476,6 +464,7 @@ private:
     const TMatchRecognizeProcessorParameters& Parameters;
     const TNfaTransitionGraph::TPtr NfaTransitionGraph;
     const TContainerCacheOnContext& Cache;
+    TSaveLoadContext SaveLoadContex;
 };
 
 template<class State>
@@ -486,7 +475,8 @@ public:
        IComputationExternalNode *inputRowArg,
        IComputationNode *partitionKey,
        TType* partitionKeyType,
-       const TMatchRecognizeProcessorParameters& parameters
+       const TMatchRecognizeProcessorParameters& parameters,
+       TType* stateType
     )
     :TBaseComputation(mutables, inputFlow, kind, EValueRepresentation::Embedded)
     , InputFlow(inputFlow)
@@ -496,6 +486,7 @@ public:
     , Parameters(parameters)
     , Cache(mutables)
     , StateType(stateType)
+    , Packer(mutables)
     {}
 
     NUdf::TUnboxedValue DoCalculate(NUdf::TUnboxedValue &stateValue, TComputationContext &ctx) const {
@@ -505,7 +496,10 @@ public:
                 PartitionKey,
                 PartitionKeyType,
                 Parameters,
-                Cache
+                Cache,
+                ctx,
+                StateType,
+                Packer
             );
         } else if (stateValue.HasValue() && !stateValue.IsBoxed()) {
             // Load from saved state.
@@ -514,7 +508,11 @@ public:
                 PartitionKey,
                 PartitionKeyType,
                 Parameters,
-                Cache);
+                Cache,
+                ctx,
+                StateType,
+                Packer
+            );
             state.Load(stateValue.AsStringRef());
             stateValue = state;
         }
@@ -564,8 +562,8 @@ private:
     const TMatchRecognizeProcessorParameters Parameters;
     TNfaTransitionGraph::TPtr NfaTransitionGraph;
     const TContainerCacheOnContext Cache;
-    
-    
+    TType* const StateType;
+    TMutableObjectOverBoxedValue<TValuePackerBoxed> Packer;
 };
 
 TOutputColumnOrder GetOutputColumnOrder(TRuntimeNode partitionKyeColumnsIndexes, TRuntimeNode measureColumnsIndexes) {
@@ -716,8 +714,6 @@ IComputationNode* WrapMatchRecognizeCore(TCallable& callable, const TComputation
         )
         , ConvertVectorOfCallables(measures, ctx)
         , GetOutputColumnOrder(partitionColumnIndexes, measureColumnIndexes)
-        , rowType
-        , ctx.Mutables
     };
     if (AS_VALUE(TDataLiteral, streamingMode)->AsValue().Get<bool>()) {
         return new TMatchRecognizeWrapper<TStateForInterleavedPartitions>(ctx.Mutables
@@ -727,6 +723,7 @@ IComputationNode* WrapMatchRecognizeCore(TCallable& callable, const TComputation
             , LocateNode(ctx.NodeLocator, *partitionKeySelector.GetNode())
             , partitionKeySelector.GetStaticType()
             , std::move(parameters)
+            , rowType
         );
     } else {
         const bool useNfaForTables = true; //TODO(YQL-16486) get this flag from an optimizer
@@ -738,6 +735,7 @@ IComputationNode* WrapMatchRecognizeCore(TCallable& callable, const TComputation
                 , LocateNode(ctx.NodeLocator, *partitionKeySelector.GetNode())
                 , partitionKeySelector.GetStaticType()
                 , std::move(parameters)
+                , rowType
             );
         } else {
             return new TMatchRecognizeWrapper<TStateForNonInterleavedPartitions<TBackTrackingMatchRecognize>>(ctx.Mutables
@@ -747,6 +745,7 @@ IComputationNode* WrapMatchRecognizeCore(TCallable& callable, const TComputation
                 , LocateNode(ctx.NodeLocator, *partitionKeySelector.GetNode())
                 , partitionKeySelector.GetStaticType()
                 , std::move(parameters)
+                , rowType
             );
         }
     }

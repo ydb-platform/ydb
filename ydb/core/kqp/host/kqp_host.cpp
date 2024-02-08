@@ -1475,6 +1475,7 @@ private:
         state->CredentialsFactory = FederatedQuerySetup->CredentialsFactory;
         state->Configuration->WriteThroughDqIntegration = true;
         state->Configuration->AllowAtomicUploadCommit = queryType == EKikimrQueryType::Script;
+        state->MaxTasksPerStage = SessionCtx->ConfigPtr()->MaxTasksPerStage.Get();
 
         state->Configuration->Init(FederatedQuerySetup->S3GatewayConfig, TypesCtx);
 

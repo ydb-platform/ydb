@@ -6,6 +6,8 @@
 #include <ydb/library/yql/providers/common/schema/expr/yql_expr_schema.h>
 #include <ydb/library/yql/providers/dq/common/yql_dq_settings.h>
 #include <ydb/library/yql/providers/dq/expr_nodes/dqs_expr_nodes.h>
+#include <ydb/library/yql/providers/s3/actors/yql_s3_read_actor.h>
+#include <ydb/library/yql/providers/s3/actors/yql_s3_source_factory.h>
 #include <ydb/library/yql/providers/s3/expr_nodes/yql_s3_expr_nodes.h>
 #include <ydb/library/yql/providers/s3/proto/range.pb.h>
 #include <ydb/library/yql/providers/s3/proto/sink.pb.h>
@@ -74,6 +76,7 @@ public:
     ui64 Partition(const TDqSettings&, size_t maxPartitions, const TExprNode& node, TVector<TString>& partitions, TString*, TExprContext&, bool) override {
         std::vector<std::vector<TPath>> parts;
         std::optional<ui64> mbLimitHint;
+        bool hasDirectories = false;
         if (const TMaybeNode<TDqSource> source = &node) {
             const auto settings = source.Cast().Settings().Cast<TS3SourceSettingsBase>();
             mbLimitHint = TryExtractLimitHint(settings);
@@ -87,6 +90,9 @@ public:
                     paths);
                 parts.reserve(parts.size() + paths.size());
                 for (const auto& path : paths) {
+                    if (path.IsDirectory) {
+                        hasDirectories = true;
+                    }
                     parts.emplace_back(1U, path);
                 }
             }
@@ -96,6 +102,22 @@ public:
         if (!maxPartitions || (mbLimitHint && maxPartitions > *mbLimitHint / maxTaskRatio)) {
             maxPartitions = std::max(*mbLimitHint / maxTaskRatio, ui64{1});
             YQL_CLOG(TRACE, ProviderS3) << "limited max partitions to " << maxPartitions;
+        }
+
+        auto useRuntimeListing = State_->Configuration->UseRuntimeListing.Get().GetOrElse(false);
+        if (useRuntimeListing) {
+            size_t partitionCount = hasDirectories ? maxPartitions : Min(parts.size(), maxPartitions);
+            partitions.reserve(partitionCount);
+            for (size_t i = 0; i < partitionCount; ++i) {
+                NS3::TRange range;
+                TFileTreeBuilder builder;
+                builder.Save(&range);
+
+                partitions.emplace_back();
+                TStringOutput out(partitions.back());
+                range.Save(&out);
+            }
+            return 0;
         }
 
         if (maxPartitions && parts.size() > maxPartitions) {
@@ -381,6 +403,107 @@ public:
 
             if (extraColumnsType->GetSize()) {
                 srcDesc.MutableSettings()->insert({"addPathIndex", "true"});
+            }
+
+            auto useRuntimeListing = State_->Configuration->UseRuntimeListing.Get().GetOrElse(false);
+            srcDesc.SetUseRuntimeListing(useRuntimeListing);
+
+            auto fileQueueBatchSizeLimit = State_->Configuration->FileQueueBatchSizeLimit.Get().GetOrElse(1000000);
+            srcDesc.MutableSettings()->insert({"fileQueueBatchSizeLimit", ToString(fileQueueBatchSizeLimit)});
+
+            auto fileQueueBatchObjectCountLimit = State_->Configuration->FileQueueBatchObjectCountLimit.Get().GetOrElse(1000);
+            srcDesc.MutableSettings()->insert({"fileQueueBatchObjectCountLimit", ToString(fileQueueBatchObjectCountLimit)});
+            
+            if (useRuntimeListing) {
+                TPathList paths;
+                for (auto i = 0u; i < settings.Paths().Size(); ++i) {
+                    const auto& packed = settings.Paths().Item(i);
+                    TPathList pathsChunk;
+                    UnpackPathsList(
+                        packed.Data().Literal().Value(),
+                        FromString<bool>(packed.IsText().Literal().Value()),
+                        paths);
+                    paths.insert(paths.end(), 
+                        std::make_move_iterator(pathsChunk.begin()), 
+                        std::make_move_iterator(pathsChunk.end()));
+                }
+
+                NS3::TRange range;
+                range.SetStartPathIndex(0);
+                TFileTreeBuilder builder;
+                std::for_each(paths.cbegin(), paths.cend(), [&builder](const TPath& f) {
+                    builder.AddPath(f.Path, f.Size, f.IsDirectory);
+                });
+                builder.Save(&range);
+                
+                TVector<TString> serialized(1);
+                TStringOutput out(serialized.front());
+                range.Save(&out);
+                
+                paths.clear();
+                ReadPathsList(srcDesc, {}, serialized, paths);
+
+                NDq::TS3ReadActorFactoryConfig readActorConfig;
+                ui64 fileSizeLimit = readActorConfig.FileSizeLimit;
+                if (srcDesc.HasFormat()) {
+                    if (auto it = readActorConfig.FormatSizeLimits.find(srcDesc.GetFormat()); it != readActorConfig.FormatSizeLimits.end()) {
+                        fileSizeLimit = it->second;
+                    }
+                }
+                if (srcDesc.HasFormat() && srcDesc.HasRowType()) {
+                    if (srcDesc.GetFormat() == "parquet") {
+                        fileSizeLimit = readActorConfig.BlockFileSizeLimit;
+                    }
+                }
+
+                TString pathPattern = "*";
+                auto pathPatternVariant = NS3Lister::ES3PatternVariant::FilePattern;
+                auto hasDirectories = std::find_if(paths.begin(), paths.end(), [](const TPath& a) {
+                                        return a.IsDirectory;
+                                    }) != paths.end();
+
+                if (hasDirectories) {
+                    auto pathPatternValue = srcDesc.GetSettings().find("pathpattern");
+                    if (pathPatternValue == srcDesc.GetSettings().cend()) {
+                        ythrow yexception() << "'pathpattern' must be configured for directory listing";
+                    }
+                    pathPattern = pathPatternValue->second;
+
+                    auto pathPatternVariantValue = srcDesc.GetSettings().find("pathpatternvariant");
+                    if (pathPatternVariantValue == srcDesc.GetSettings().cend()) {
+                        ythrow yexception()
+                            << "'pathpatternvariant' must be configured for directory listing";
+                    }
+                    if (!TryFromString(pathPatternVariantValue->second, pathPatternVariant)) {
+                        ythrow yexception()
+                            << "Unknown 'pathpatternvariant': " << pathPatternVariantValue->second;
+                    }
+                }
+
+                size_t maxTasksPerStage = State_->MaxTasksPerStage.GetOrElse(TDqSettings::TDefault::MaxTasksPerStage);
+
+                auto consumersCount = hasDirectories ? maxTasksPerStage : Min(paths.size(), maxTasksPerStage);
+
+                auto fileQueuePrefetchSize = State_->Configuration->FileQueuePrefetchSize.Get()
+                    .GetOrElse(consumersCount * srcDesc.GetParallelDownloadCount() * 3);
+
+                auto fileQueueActor = NActors::TActivationContext::ActorSystem()->Register(NDq::CreateS3FileQueueActor(
+                    0ul,
+                    std::move(paths),
+                    fileQueuePrefetchSize,
+                    fileSizeLimit,
+                    useRuntimeListing,
+                    consumersCount,
+                    fileQueueBatchSizeLimit,
+                    fileQueueBatchObjectCountLimit,
+                    State_->Gateway,
+                    connect.Url,
+                    GetAuthInfo(State_->CredentialsFactory, connect.Token),
+                    pathPattern,
+                    pathPatternVariant,
+                    NS3Lister::ES3PatternType::Wildcard
+                ));
+                srcDesc.MutableSettings()->insert({"fileQueueActor", fileQueueActor.ToString()});
             }
 
             protoSettings.PackFrom(srcDesc);

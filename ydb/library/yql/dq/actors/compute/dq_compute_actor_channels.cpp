@@ -39,7 +39,7 @@ TString InFlightMessagesStr(const TCollection& inFlight) {
 } // anonymous namespace
 
 TDqComputeActorChannels::TDqComputeActorChannels(TActorId owner, const TTxId& txId, const TDqTaskSettings& task,
-    bool retryOnUndelivery, NDqProto::EDqStatsMode statsMode, ui64 channelBufferSize, ICallbacks* cbs, ui32 actorActivityType)
+    bool retryOnUndelivery, NDqProto::EDqStatsMode statsMode, ui64 , ICallbacks* cbs, ui32 actorActivityType)
     : TActor(&TDqComputeActorChannels::WorkState, actorActivityType)
     , Owner(owner)
     , TxId(txId)
@@ -65,7 +65,7 @@ TDqComputeActorChannels::TDqComputeActorChannels(TActorId owner, const TTxId& tx
         for (auto& channel : task.GetOutputs(i).GetChannels()) {
             TOutputChannelState outputChannel;
             outputChannel.ChannelId = channel.GetId();
-            outputChannel.PeerState.ActualizeFreeSpace(channelBufferSize);
+            // outputChannel.PeerState.ActualizeFreeSpace(channelBufferSize);
 
             if (channel.GetDstEndpoint().HasActorId()) {
                 outputChannel.Peer = ActorIdFromProto(channel.GetDstEndpoint().GetActorId());
@@ -188,7 +188,7 @@ void TDqComputeActorChannels::HandleWork(TEvDqCompute::TEvChannelDataAck::TPtr& 
         it = outputChannel.InFlight.erase(it);
     }
 
-    outputChannel.PeerState.ActualizeFreeSpace(record.GetFreeSpace());
+    // outputChannel.PeerState.ActualizeFreeSpace(record.GetFreeSpace());
 
     LOG_T("PeerState, peerState:(" << outputChannel.PeerState.DebugString() << ")"
         << ", sentSeqNo: " << outputChannel.LastSentSeqNo

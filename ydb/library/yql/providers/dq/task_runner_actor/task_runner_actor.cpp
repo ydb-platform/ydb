@@ -593,7 +593,7 @@ private:
         for (auto outputId = 0; outputId < outputs.size(); outputId++) {
             auto& channels = outputs[outputId].GetChannels();
             for (auto& channel : channels) {
-                CreateSpillingStorage(channel.GetId(), actorSystem, channel.GetEnableSpilling());
+                CreateSpillingStorage(channel.GetId(), actorSystem, false);
             }
         }
 

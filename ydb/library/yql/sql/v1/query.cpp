@@ -1140,6 +1140,10 @@ public:
                 break;
         }
 
+        if (Params.Temporary) {
+            opts = L(opts, Q(Y(Q("temporary"))));
+        }
+
         Add("block", Q(Y(
             Y("let", "sink", Y("DataSink", BuildQuotedAtom(Pos, Table.Service), Scoped->WrapCluster(Table.Cluster, ctx))),
             Y("let", "world", Y(TString(WriteName), "world", "sink", keys, Y("Void"), Q(opts))),

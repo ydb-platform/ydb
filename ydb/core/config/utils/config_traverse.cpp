@@ -1,13 +1,13 @@
 #include "config_traverse.h"
 
-#include <util/system/compiler.h>
+#include <ydb/core/protos/config.pb.h>
+
 #include <util/generic/deque.h>
-#include <util/generic/vector.h>
-#include <util/generic/string.h>
 #include <util/generic/map.h>
 #include <util/generic/set.h>
-
-#include <ydb/core/protos/config.pb.h>
+#include <util/generic/string.h>
+#include <util/generic/vector.h>
+#include <util/system/compiler.h>
 
 namespace NKikimr::NConfig {
 

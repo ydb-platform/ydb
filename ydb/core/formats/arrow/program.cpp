@@ -596,6 +596,10 @@ std::shared_ptr<TDatumBatch> TDatumBatch::FromTable(const std::shared_ptr<arrow:
         });
 }
 
+TAssign TAssign::MakeTimestamp(const TColumnInfo& column, ui64 value) {
+    return TAssign(column, std::make_shared<arrow::TimestampScalar>(value, arrow::timestamp(arrow::TimeUnit::MICRO)));
+}
+
 IStepFunction<TAssign>::TPtr TAssign::GetFunction(arrow::compute::ExecContext* ctx) const {
     if (KernelFunction) {
         return std::make_shared<TKernelFunction<TAssign>>(KernelFunction, ctx);

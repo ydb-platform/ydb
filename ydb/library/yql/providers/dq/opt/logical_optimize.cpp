@@ -101,7 +101,7 @@ protected:
     TMaybeNode<TExprBase> UnorderedOverDqReadWrap(TExprBase node, TExprContext& ctx, const TGetParents& getParents) const {
         const auto unordered = node.Cast<TCoUnorderedBase>();
         if (const auto maybeRead = unordered.Input().Maybe<TDqReadWrapBase>().Input()) {
-            if (Config->EnableDqReplicate.Get().GetOrElse(TDqSettings::TDefault::EnableDqReplicate)) {
+            if (Config->IsDqReplicateEnabled(TypesCtx)) {
                 const TParentsMap* parentsMap = getParents();
                 auto parentsIt = parentsMap->find(unordered.Input().Raw());
                 YQL_ENSURE(parentsIt != parentsMap->cend());
@@ -127,7 +127,7 @@ protected:
     TMaybeNode<TExprBase> ExtractMembersOverDqReadWrap(TExprBase node, TExprContext& ctx, const TGetParents& getParents) {
         auto extract = node.Cast<TCoExtractMembers>();
         if (const auto maybeRead = extract.Input().Maybe<TDqReadWrap>().Input()) {
-            if (Config->EnableDqReplicate.Get().GetOrElse(TDqSettings::TDefault::EnableDqReplicate)) {
+            if (Config->IsDqReplicateEnabled(TypesCtx)) {
                 const TParentsMap* parentsMap = getParents();
                 auto parentsIt = parentsMap->find(extract.Input().Raw());
                 YQL_ENSURE(parentsIt != parentsMap->cend());

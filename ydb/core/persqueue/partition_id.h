@@ -48,6 +48,11 @@ public:
         }
     }
 
+    bool IsSupportivePartition() const
+    {
+        return WriteId.Defined();
+    }
+
     ui32 OriginalPartitionId = 0;
     TMaybe<ui64> WriteId;
     ui32 InternalPartitionId = 0;

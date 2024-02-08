@@ -1276,6 +1276,9 @@ void TPersQueue::AggregateAndSendLabeledCountersFor(const TString& group, const 
 void TPersQueue::Handle(TEvPQ::TEvPartitionLabeledCounters::TPtr& ev, const TActorContext& ctx)
 {
     const auto partitionId = ev->Get()->Partition;
+    if (partitionId.IsSupportivePartition()) {
+        return;
+    }
     auto& partition = GetPartitionInfo(partitionId);
     const TString& group = ev->Get()->LabeledCounters.GetGroup();
     partition.LabeledCounters[group] = ev->Get()->LabeledCounters;
@@ -1287,6 +1290,9 @@ void TPersQueue::Handle(TEvPQ::TEvPartitionLabeledCounters::TPtr& ev, const TAct
 void TPersQueue::Handle(TEvPQ::TEvPartitionLabeledCountersDrop::TPtr& ev, const TActorContext& ctx)
 {
     const auto partitionId = ev->Get()->Partition;
+    if (partitionId.IsSupportivePartition()) {
+        return;
+    }
     auto& partition = GetPartitionInfo(partitionId);
     const TString& group = ev->Get()->Group;
     auto jt = partition.LabeledCounters.find(group);

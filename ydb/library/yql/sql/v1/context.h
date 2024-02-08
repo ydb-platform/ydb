@@ -305,7 +305,7 @@ namespace NSQLTranslationV1 {
         NYql::TWarningPolicy WarningPolicy;
         TString PqReadByRtmrCluster;
         bool EmitStartsWith = true;
-        bool EmitAggApply = false;
+        TMaybe<bool> EmitAggApply;
         bool UseBlocks = false;
         bool AnsiLike = false;
         bool FeatureR010 = false; //Row pattern recognition: FROM clause

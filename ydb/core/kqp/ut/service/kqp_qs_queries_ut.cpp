@@ -1779,7 +1779,7 @@ Y_UNIT_TEST_SUITE(KqpQueryService) {
         auto db = kikimr.GetQueryClient();
 
         {
-            // Base test with ddl and adm statements
+            // Base test with ddl and dml statements
             auto result = db.ExecuteQuery(R"(
                 DECLARE $name AS Text;
                 $a = (SELECT * FROM TestDdl1);
@@ -1800,11 +1800,13 @@ Y_UNIT_TEST_SUITE(KqpQueryService) {
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
             UNIT_ASSERT_VALUES_EQUAL(result.GetResultSets().size(), 1);
             CompareYson(R"([[[1u];["One"]];[[2u];["Two"]]])", FormatResultSetYson(result.GetResultSet(0)));
+            UNIT_ASSERT_EQUAL_C(result.GetIssues().Size(), 0, result.GetIssues().ToString());
 
             result = db.ExecuteQuery(R"(
                 UPSERT INTO TestDdl1 (Key, Value) VALUES (3, "Three");
             )", TTxControl::NoTx()).ExtractValueSync();
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+            UNIT_ASSERT_EQUAL_C(result.GetIssues().Size(), 0, result.GetIssues().ToString());
 
             result = db.ExecuteQuery(R"(
                 SELECT * FROM TestDdl1;
@@ -1812,6 +1814,7 @@ Y_UNIT_TEST_SUITE(KqpQueryService) {
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
             UNIT_ASSERT_VALUES_EQUAL(result.GetResultSets().size(), 1);
             CompareYson(R"([[[1u];["One"]];[[2u];["Two"]];[[3u];["Three"]]])", FormatResultSetYson(result.GetResultSet(0)));
+            UNIT_ASSERT_EQUAL_C(result.GetIssues().Size(), 0, result.GetIssues().ToString());
 
             result = db.ExecuteQuery(R"(
                 CREATE TABLE TestDdl1 (
@@ -1832,6 +1835,13 @@ Y_UNIT_TEST_SUITE(KqpQueryService) {
             )", TTxControl::NoTx()).ExtractValueSync();
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::GENERIC_ERROR, result.GetIssues().ToString());
             UNIT_ASSERT(result.GetIssues().ToOneLineString().Contains("Check failed: path: '/Root/TestDdl2', error: path exist"));
+
+            result = db.ExecuteQuery(R"(
+                UPSERT INTO TestDdl2 SELECT * FROM TestDdl1;
+            )", TTxControl::NoTx()).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+            UNIT_ASSERT_VALUES_EQUAL(result.GetResultSets().size(), 0);
+            UNIT_ASSERT_EQUAL_C(result.GetIssues().Size(), 0, result.GetIssues().ToString());
         }
 
         {
@@ -1843,7 +1853,7 @@ Y_UNIT_TEST_SUITE(KqpQueryService) {
                     Value String,
                     PRIMARY KEY (Key)
                 );
-                UPSERT INTO TestDdl2 (Key, Value) VALUES (2, "Two");
+                UPSERT INTO TestDdl2 (Key, Value) VALUES (4, "Four");
                 CREATE TABLE TestDdl2 (
                     Key Uint64,
                     Value String,
@@ -1854,20 +1864,22 @@ Y_UNIT_TEST_SUITE(KqpQueryService) {
                     Value String,
                     PRIMARY KEY (Key)
                 );
-                UPSERT INTO TestDdl1 (Key, Value) VALUES (3, "Thee");
+                UPSERT INTO TestDdl1 (Key, Value) VALUES (3, "Three");
             )", TTxControl::NoTx()).ExtractValueSync();
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::GENERIC_ERROR, result.GetIssues().ToString());
+            UNIT_ASSERT_VALUES_EQUAL(result.GetResultSets().size(), 0);
 
             result = db.ExecuteQuery(R"(
                 SELECT * FROM TestDdl2;
             )", TTxControl::NoTx()).ExtractValueSync();
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
             UNIT_ASSERT_VALUES_EQUAL(result.GetResultSets().size(), 1);
-            CompareYson(R"([[[1u];["One"]];[[2u];["Two"]]])", FormatResultSetYson(result.GetResultSet(0)));
+            CompareYson(R"([[[1u];["One"]];[[2u];["Two"]];[[3u];["Three"]];[[4u];["Four"]]])", FormatResultSetYson(result.GetResultSet(0)));
+            UNIT_ASSERT_EQUAL_C(result.GetIssues().Size(), 0, result.GetIssues().ToString());
         }
 
         {
-            // Test with several select
+            // Check result sets
             auto result = db.ExecuteQuery(R"(
                 $a = (SELECT * FROM TestDdl1);
                 SELECT * FROM $a;
@@ -1875,18 +1887,36 @@ Y_UNIT_TEST_SUITE(KqpQueryService) {
                 SELECT * FROM $a;
                 CREATE TABLE TestDdl4 (
                     Key Uint64,
-                    Val Uint64,
+                    Value Uint64,
                     PRIMARY KEY (Key)
                 );
-                UPSERT INTO TestDdl4 (Key, Val) VALUES (1, 1);
+                UPSERT INTO TestDdl4 (Key, Value) VALUES (1, 1);
                 SELECT * FROM TestDdl4;
             )", TTxControl::NoTx()).ExtractValueSync();
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
-            // NEED TO FIX IT: RESULT MUST BE DIVIDED INTO 2 SETS
-            UNIT_ASSERT_VALUES_EQUAL(result.GetResultSets().size(), 1);
-            CompareYson(R"([[[1u];["One"]];[[2u];["Two"]];[[3u];["Three"]];[[1u];["One"]];[[2u];["Two"]];[[3u];["Three"]];[[4u];["Four"]]])", FormatResultSetYson(result.GetResultSet(0)));
-            //CompareYson(R"([[[1u];["One"]];[[2u];["Two"]];[[3u];["Three"]]])", FormatResultSetYson(result.GetResultSet(0)));
-            //CompareYson(R"([[[1u];["One"]];[[2u];["Two"]];[[3u];["Three"]][[4u];["Four"]]])", FormatResultSetYson(result.GetResultSet(1)));
+            UNIT_ASSERT_VALUES_EQUAL(result.GetResultSets().size(), 3);
+            CompareYson(R"([[[1u];["One"]];[[2u];["Two"]];[[3u];["Three"]]])", FormatResultSetYson(result.GetResultSet(0)));
+            CompareYson(R"([[[1u];["One"]];[[2u];["Two"]];[[3u];["Three"]];[[4u];["Four"]]])", FormatResultSetYson(result.GetResultSet(1)));
+            CompareYson(R"([[[1u];[1u]]])", FormatResultSetYson(result.GetResultSet(2)));
+            UNIT_ASSERT_EQUAL_C(result.GetIssues().Size(), 0, result.GetIssues().ToString());
+
+            result = db.ExecuteQuery(R"(
+                UPSERT INTO TestDdl2 SELECT * FROM TestDdl1;
+            )", TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+            UNIT_ASSERT_VALUES_EQUAL(result.GetResultSets().size(), 0);
+            UNIT_ASSERT_EQUAL_C(result.GetIssues().Size(), 0, result.GetIssues().ToString());
+        }
+
+        {
+            // Check EVALUATE FOR
+            auto result = db.ExecuteQuery(R"(
+                EVALUATE FOR $i IN AsList(1, 2, 3) DO BEGIN
+                    SELECT $i;
+                    SELECT $i;
+                END DO;
+            )", TTxControl::NoTx()).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::UNSUPPORTED, result.GetIssues().ToString());
         }
     }
 }

@@ -246,7 +246,7 @@ struct TKqpCompileSettings {
 };
 
 struct TKqpCompileRequest {
-    TKqpCompileRequest(const TActorId& sender, const TString& uid, TKqpQueryId query, bool keepInCache, bool canDivideIntoStatements,
+    TKqpCompileRequest(const TActorId& sender, const TString& uid, TKqpQueryId query, bool keepInCache, bool perStatementResult,
         const TIntrusiveConstPtr<NACLib::TUserToken>& userToken, const TInstant& deadline, TKqpDbCountersPtr dbCounters,
         ui64 cookie, std::shared_ptr<std::atomic<bool>> intrestedInResult,
         const TIntrusivePtr<TUserRequestContext>& userRequestContext,
@@ -258,7 +258,7 @@ struct TKqpCompileRequest {
         , Query(std::move(query))
         , Uid(uid)
         , KeepInCache(keepInCache)
-        , CanDivideIntoStatements(canDivideIntoStatements)
+        , PerStatementResult(perStatementResult)
         , UserToken(userToken)
         , Deadline(deadline)
         , DbCounters(dbCounters)
@@ -276,7 +276,7 @@ struct TKqpCompileRequest {
     TKqpQueryId Query;
     TString Uid;
     bool KeepInCache = false;
-    bool CanDivideIntoStatements = false;
+    bool PerStatementResult = false;
     TIntrusiveConstPtr<NACLib::TUserToken> UserToken;
     TInstant Deadline;
     TKqpDbCountersPtr DbCounters;
@@ -652,7 +652,7 @@ private:
             ev->Get()->Query ? ev->Get()->Query->UserSid : 0);
 
         TKqpCompileRequest compileRequest(ev->Sender, CreateGuidAsString(), std::move(*request.Query),
-            request.KeepInCache, request.CanDivideIntoStatements, request.UserToken, request.Deadline, dbCounters,
+            request.KeepInCache, request.PerStatementResult, request.UserToken, request.Deadline, dbCounters,
             ev->Cookie, std::move(ev->Get()->IntrestedInResult), ev->Get()->UserRequestContext,
             std::move(ev->Get()->Orbit), std::move(compileServiceSpan), std::move(ev->Get()->TempTablesState),
             TableServiceConfig.GetEnableAstCache() ? ECompileActorAction::PARSE : ECompileActorAction::COMPILE);
@@ -997,7 +997,7 @@ private:
     void StartCompilation(TKqpCompileRequest&& request, const TActorContext& ctx) {
         auto compileActor = CreateKqpCompileActor(ctx.SelfID, KqpSettings, TableServiceConfig, QueryServiceConfig, MetadataProviderConfig, ModuleResolverState, Counters,
             request.Uid, request.Query, request.UserToken, FederatedQuerySetup, request.DbCounters, request.UserRequestContext,
-            request.CompileServiceSpan.GetTraceId(), request.TempTablesState, request.Action, std::move(request.QueryAst), CollectDiagnostics, request.CanDivideIntoStatements);
+            request.CompileServiceSpan.GetTraceId(), request.TempTablesState, request.Action, std::move(request.QueryAst), CollectDiagnostics, request.PerStatementResult);
         auto compileActorId = ctx.ExecutorThread.RegisterActor(compileActor, TMailboxType::HTSwap,
             AppData(ctx)->UserPoolId);
 

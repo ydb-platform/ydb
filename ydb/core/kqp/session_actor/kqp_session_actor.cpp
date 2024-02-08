@@ -80,7 +80,7 @@ std::optional<TString> TryDecodeYdbSessionId(const TString& sessionId) {
 #define LOG_W(msg) LOG_WARN_S(*TlsActivationContext, NKikimrServices::KQP_SESSION, LogPrefix() << msg)
 #define LOG_N(msg) LOG_NOTICE_S(*TlsActivationContext, NKikimrServices::KQP_SESSION, LogPrefix() << msg)
 #define LOG_I(msg) LOG_INFO_S(*TlsActivationContext, NKikimrServices::KQP_SESSION, LogPrefix() << msg)
-#define LOG_D(msg) LOG_ERROR_S(*TlsActivationContext, NKikimrServices::KQP_SESSION, LogPrefix() << msg)
+#define LOG_D(msg) LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::KQP_SESSION, LogPrefix() << msg)
 #define LOG_T(msg) LOG_TRACE_S(*TlsActivationContext, NKikimrServices::KQP_SESSION, LogPrefix() << msg)
 
 void FillColumnsMeta(const NKqpProto::TKqpPhyQuery& phyQuery, NKikimrKqp::TQueryResponse& resp) {
@@ -1136,9 +1136,18 @@ public:
         ExecuterId = RegisterWithSameMailbox(executerActor);
     }
 
+    static ui32 GetResultsCount(const IKqpGateway::TExecPhysicalRequest& req) {
+        ui32 results = 0;
+        for (const auto& transaction : req.Transactions) {
+            results += transaction.Body->ResultsSize();
+        }
+        return results;
+    }
+
     void SendToExecuter(IKqpGateway::TExecPhysicalRequest&& request, bool isRollback = false) {
         if (QueryState) {
             request.Orbit = std::move(QueryState->Orbit);
+            QueryState->StatementResultSize = GetResultsCount(request);
         }
         request.PerRequestDataSizeLimit = RequestControls.PerRequestDataSizeLimit;
         request.MaxShardCount = RequestControls.MaxShardCount;
@@ -1150,7 +1159,7 @@ public:
             RequestCounters, Settings.TableService.GetAggregationConfig(), Settings.TableService.GetExecuterRetriesConfig(),
             AsyncIoFactory, QueryState ? QueryState->PreparedQuery : nullptr, Settings.TableService.GetChannelTransportVersion(), SelfId(), 2 * TDuration::Seconds(MetadataProviderConfig.GetRefreshPeriodSeconds()),
             QueryState ? QueryState->UserRequestContext : MakeIntrusive<TUserRequestContext>("", Settings.Database, SessionId),
-            Settings.TableService.GetEnableOlapSink());
+            Settings.TableService.GetEnableOlapSink(), QueryState ? QueryState->StatementResultIndex : 0);
 
         auto exId = RegisterWithSameMailbox(executerActor);
         LOG_D("Created new KQP executer: " << exId << " isRollback: " << isRollback);

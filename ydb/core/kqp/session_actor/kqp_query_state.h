@@ -126,7 +126,9 @@ public:
     NYql::TIssues Issues;
 
     TVector<TQueryAst> Statements;
-    size_t CurrentStatementId = 0;
+    ui32 CurrentStatementId = 0;
+    ui32 StatementResultIndex = 0;
+    ui32 StatementResultSize = 0;
 
     NKikimrKqp::EQueryAction GetAction() const {
         return RequestEv->GetAction();
@@ -393,6 +395,8 @@ public:
 
     void PrepareNextStatement() {
         CurrentStatementId++;
+        StatementResultIndex += StatementResultSize;
+        StatementResultSize = 0;
         PrepareCurrentStatement();
     }
 

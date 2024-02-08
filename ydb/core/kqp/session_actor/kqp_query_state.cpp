@@ -150,7 +150,7 @@ std::unique_ptr<TEvKqp::TEvCompileRequest> TKqpQueryState::BuildCompileRequest(s
     settings.Syntax = GetSyntax();
 
     bool keepInCache = false;
-    bool canDivideIntoStatements = !HasTxControl();
+    bool perStatementResult = !HasTxControl();
     switch (GetAction()) {
         case NKikimrKqp::QUERY_ACTION_EXECUTE:
             query = TKqpQueryId(Cluster, Database, GetQuery(), settings, GetQueryParameterTypes());
@@ -160,19 +160,19 @@ std::unique_ptr<TEvKqp::TEvCompileRequest> TKqpQueryState::BuildCompileRequest(s
         case NKikimrKqp::QUERY_ACTION_PREPARE:
             query = TKqpQueryId(Cluster, Database, GetQuery(), settings, GetQueryParameterTypes());
             keepInCache = query->IsSql();
-            canDivideIntoStatements = false;
+            perStatementResult = false;
             break;
 
         case NKikimrKqp::QUERY_ACTION_EXECUTE_PREPARED:
             uid = GetPreparedQuery();
             keepInCache = GetQueryKeepInCache();
-            canDivideIntoStatements = false;
+            perStatementResult = false;
             break;
 
         case NKikimrKqp::QUERY_ACTION_EXPLAIN:
             query = TKqpQueryId(Cluster, Database, GetQuery(), settings, GetQueryParameterTypes());
             keepInCache = false;
-            canDivideIntoStatements = false;
+            perStatementResult = false;
             break;
 
         default:
@@ -190,7 +190,7 @@ std::unique_ptr<TEvKqp::TEvCompileRequest> TKqpQueryState::BuildCompileRequest(s
     }
 
     return std::make_unique<TEvKqp::TEvCompileRequest>(UserToken, uid, std::move(query), keepInCache,
-        canDivideIntoStatements, compileDeadline, DbCounters, std::move(cookie), UserRequestContext,
+        perStatementResult, compileDeadline, DbCounters, std::move(cookie), UserRequestContext,
         std::move(Orbit), TempTablesState, GetCollectDiagnostics(), statementAst);
 }
 

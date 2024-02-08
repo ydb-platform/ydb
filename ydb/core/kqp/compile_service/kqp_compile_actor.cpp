@@ -52,7 +52,7 @@ public:
         TKqpDbCountersPtr dbCounters, std::optional<TKqpFederatedQuerySetup> federatedQuerySetup,
         const TIntrusivePtr<TUserRequestContext>& userRequestContext,
         NWilson::TTraceId traceId, TKqpTempTablesState::TConstPtr tempTablesState, bool collectFullDiagnostics,
-        bool canDivideIntoStatements, ECompileActorAction compileAction, TMaybe<TQueryAst> queryAst)
+        bool perStatementResult, ECompileActorAction compileAction, TMaybe<TQueryAst> queryAst)
         : Owner(owner)
         , ModuleResolverState(moduleResolverState)
         , Counters(counters)
@@ -70,7 +70,7 @@ public:
         , CompileActorSpan(TWilsonKqp::CompileActor, std::move(traceId), "CompileActor")
         , TempTablesState(std::move(tempTablesState))
         , CollectFullDiagnostics(collectFullDiagnostics)
-        , CanDivideIntoStatements(canDivideIntoStatements)
+        , PerStatementResult(perStatementResult)
         , CompileAction(compileAction)
         , QueryAst(std::move(queryAst))
     {
@@ -136,9 +136,9 @@ private:
         NSQLTranslation::EBindingsMode bindingsMode = Config->BindingsMode;
         bool isEnableExternalDataSources = AppData(ctx)->FeatureFlags.GetEnableExternalDataSources();
         bool isEnablePgConstsToParams = Config->EnablePgConstsToParams;
-        bool perStatementExecution = Config->EnablePerStatementQueryExecution && CanDivideIntoStatements;
+        bool perStatementExecution = Config->EnablePerStatementQueryExecution && PerStatementResult;
 
-        return SqlToAstStatements(ConvertType(QueryId.Settings.QueryType), QueryId.Settings.Syntax, QueryId.Text, QueryId.QueryParameterTypes, cluster, kqpTablePathPrefix, kqpYqlSyntaxVersion, bindingsMode, isEnableExternalDataSources, isEnablePgConstsToParams, QueryId.IsSql(), perStatementExecution);
+        return ParseStatements(ConvertType(QueryId.Settings.QueryType), QueryId.Settings.Syntax, QueryId.Text, QueryId.QueryParameterTypes, cluster, kqpTablePathPrefix, kqpYqlSyntaxVersion, bindingsMode, isEnableExternalDataSources, isEnablePgConstsToParams, QueryId.IsSql(), perStatementExecution);
     }
 
     void StartParsing(const TActorContext &ctx) {
@@ -349,12 +349,13 @@ private:
             << ", at state:" << state);
     }
 
-    void ReplyParseResult(const TActorContext &ctx, TVector<TQueryAst> astStatements) {
+    void ReplyParseResult(const TActorContext &ctx, TVector<TQueryAst>&& astStatements) {
         Y_UNUSED(ctx);
 
         if (astStatements.empty()) {
             NYql::TIssue issue(NYql::TPosition(), "Parsing result of query is empty");
-            ReplyError(Ydb::StatusIds::GENERIC_ERROR, {issue});
+            ReplyError(Ydb::StatusIds::INTERNAL_ERROR, {issue});
+            return;
         }
 
         for (size_t statementId = 0; statementId < astStatements.size(); ++statementId) {
@@ -369,7 +370,7 @@ private:
                     issue.AddSubIssue(MakeIntrusive<NYql::TIssue>(i));
                 }
 
-                ReplyError(Ydb::StatusIds::GENERIC_ERROR, {issue});
+                ReplyError(Ydb::StatusIds::INTERNAL_ERROR, {issue});
                 return;
             }
         }
@@ -379,7 +380,7 @@ private:
             << ", owner: " << Owner
             << ", statements size: " << astStatements.size());
 
-        auto responseEv = MakeHolder<TEvKqp::TEvParseResponse>(QueryId, astStatements);
+        auto responseEv = MakeHolder<TEvKqp::TEvParseResponse>(QueryId, std::move(astStatements));
         Send(Owner, responseEv.Release());
 
         Counters->ReportCompileFinish(DbCounters);
@@ -501,7 +502,7 @@ private:
     TKqpTempTablesState::TConstPtr TempTablesState;
     bool CollectFullDiagnostics;
 
-    const bool CanDivideIntoStatements;
+    const bool PerStatementResult;
     ECompileActorAction CompileAction;
     TMaybe<TQueryAst> QueryAst;
 };
@@ -549,14 +550,14 @@ IActor* CreateKqpCompileActor(const TActorId& owner, const TKqpSettings::TConstP
     TKqpDbCountersPtr dbCounters, const TIntrusivePtr<TUserRequestContext>& userRequestContext,
     NWilson::TTraceId traceId, TKqpTempTablesState::TConstPtr tempTablesState,
     ECompileActorAction compileAction, TMaybe<TQueryAst> queryAst, bool collectFullDiagnostics,
-    bool canDivideIntoStatements)
+    bool perStatementResult)
 {
     return new TKqpCompileActor(owner, kqpSettings, tableServiceConfig, queryServiceConfig, metadataProviderConfig,
                                 moduleResolverState, counters,
                                 uid, query, userToken, dbCounters,
                                 federatedQuerySetup, userRequestContext,
                                 std::move(traceId), std::move(tempTablesState), collectFullDiagnostics,
-                                canDivideIntoStatements, compileAction, std::move(queryAst));
+                                perStatementResult, compileAction, std::move(queryAst));
 }
 
 } // namespace NKqp

@@ -1534,12 +1534,23 @@ Y_UNIT_TEST_SUITE(KqpPg) {
         {
             const auto query = Q_(R"(
                 --!syntax_pg
-                UPDATE ReturningTableExtraValue SET  value2 = 3 where key = 2 RETURNING *;
+                DELETE FROM ReturningTableExtraValue WHERE key = 2 RETURNING key, value, value2;
             )");
 
             auto result = session.ExecuteDataQuery(query, TTxControl::BeginTx().CommitTx()).GetValueSync();
             UNIT_ASSERT(result.IsSuccess());
             CompareYson(R"([["2";"4";"3"]])", FormatResultSetYson(result.GetResultSet(0)));
+        }
+
+        {
+            const auto query = Q_(R"(
+                --!syntax_pg
+                DELETE FROM ReturningTable WHERE key <= 3 RETURNING key, value;
+            )");
+
+            auto result = session.ExecuteDataQuery(query, TTxControl::BeginTx().CommitTx()).GetValueSync();
+            UNIT_ASSERT(result.IsSuccess());
+            CompareYson(R"([["2";"2"];["3";"2"];["1";"3"]])", FormatResultSetYson(result.GetResultSet(0)));
         }
     }
 

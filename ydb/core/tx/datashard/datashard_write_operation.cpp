@@ -365,7 +365,9 @@ TString TWriteOperation::GetTxBody() const {
 }
 
 void TWriteOperation::SetTxBody(const TString& txBody) {
-    TIntrusivePtr<TEventSerializedData> buffer = new TEventSerializedData(txBody, {});
+    TEventSerializationInfo serializationInfo;
+    serializationInfo.IsExtendedFormat = true;
+    TIntrusivePtr<TEventSerializedData> buffer = new TEventSerializedData(txBody, std::move(serializationInfo));
     Ev.Reset(static_cast<NActors::TEventHandle<NKikimr::NEvents::TDataEvents::TEvWrite>*>(new IEventHandle(NEvents::TDataEvents::EvWrite, 0, {}, GetTarget(), buffer, GetCookie(), nullptr, GetTraceId())));
 }
 

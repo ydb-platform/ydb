@@ -7,6 +7,12 @@
 * [потоки изменений](../concepts/cdc.md) таблиц;
 * [топики](../concepts/topic.md).
 
+{% note info %}
+
+На данный момент провайдер находится на стадии разработки и его функциональность будет расширяться
+
+{% endnote %}
+
 Чтобы начать работать с Terraform для {{ ydb-short-name }}, установите и настройте [Terraform provider for {{ ydb-short-name }}](https://github.com/ydb-platform/terraform-provider-ydb/).
 
 {% note warning %}

@@ -1,0 +1,23 @@
+name: Sync cmakebuild with main
+on:
+  schedule:
+    - cron: "0 * * * *"
+  workflow_dispatch:
+    inputs:
+      test_label_regexp:
+        required: false
+        type: string
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v3
+      with:
+        ref: cmakebuild
+    - name: Sync
+      run: |
+        git checkout main -- ydb/ci/sync_cmakebuild.sh
+        cp ydb/ci/sync_cmakebuild.sh ~
+        git restore ydb/ci/sync_cmakebuild.sh
+        ~/sync_cmakebuild.sh
+        git push

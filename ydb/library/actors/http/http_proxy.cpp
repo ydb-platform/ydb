@@ -146,7 +146,7 @@ protected:
             } else {
                 // TODO(xenoxeno): move to another, possible blocking actor
                 try {
-                    const NDns::TResolvedHost* result = NDns::CachedResolve(NDns::TResolveInfo(addressPart, portPart));
+                    const NDns::TResolvedHost* result = NDns::TResolveInfo(addressPart, portPart);
                     if (result != nullptr) {
                         auto pAddr = result->Addr.Begin();
                         while (pAddr != result->Addr.End() && pAddr->ai_family != AF_INET && pAddr->ai_family != AF_INET6) {

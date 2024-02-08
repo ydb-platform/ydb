@@ -636,7 +636,7 @@ public:
         Counters->ReportBeginTransaction(Settings.DbCounters, Transactions.EvictedTx, Transactions.Size(), Transactions.ToBeAbortedSize());
     }
 
-    static const Ydb::Table::TransactionControl& GetAutoTransactionControl() {
+    static const Ydb::Table::TransactionControl& GetImpliedTxControl() {
         auto create = []() -> Ydb::Table::TransactionControl {
             Ydb::Table::TransactionControl control;
             control.mutable_begin_tx()->mutable_serializable_read_write();
@@ -648,9 +648,9 @@ public:
     }
 
     bool PrepareQueryTransaction() {
-        bool autoTransaction = false;
-        if (QueryState->HasTxControl() || (autoTransaction = QueryState->HasImpliedAutostartTransactions())) {
-            const auto& txControl = autoTransaction ? GetAutoTransactionControl() : QueryState->GetTxControl();
+        const bool hasTxControl = QueryState->HasTxControl();
+        if (hasTxControl || QueryState->HasImpliedTx()) {
+            const auto& txControl = hasTxControl ? QueryState->GetTxControl() : GetImpliedTxControl();
 
             QueryState->Commit = txControl.commit_tx();
             switch (txControl.tx_selector_case()) {

@@ -306,20 +306,41 @@ bool TKqpQueryState::HasErrors(const NSchemeCache::TSchemeCacheNavigate& respons
     return true;
 }
 
-bool TKqpQueryState::HasImpliedAutostartTransactions() const {
-    if (!HasTxControl()
-        && (RequestEv->GetAction() == NKikimrKqp::QUERY_ACTION_EXECUTE
-            || RequestEv->GetAction() == NKikimrKqp::QUERY_ACTION_EXECUTE_PREPARED)
-        && (RequestEv->GetType() == NKikimrKqp::QUERY_TYPE_SQL_GENERIC_QUERY
-            || RequestEv->GetType() == NKikimrKqp::QUERY_TYPE_SQL_GENERIC_SCRIPT
-            || RequestEv->GetType() == NKikimrKqp::QUERY_TYPE_SQL_GENERIC_CONCURRENT_QUERY))
+bool TKqpQueryState::HasImpliedTx() const {
+    if (HasTxControl()) {
+        return false;
+    }
+
+    const NKikimrKqp::EQueryAction action = RequestEv->GetAction();
+    if (action != NKikimrKqp::QUERY_ACTION_EXECUTE &&
+        action != NKikimrKqp::QUERY_ACTION_EXECUTE_PREPARED)
     {
-        for (const auto& transactionPtr : PreparedQuery->GetTransactions()) {
-            if (transactionPtr->GetType() == NKqpProto::TKqpPhyTx::TYPE_GENERIC) { // data transaction
-                return true;
-            }
+        return false;
+    }
+
+    const NKikimrKqp::EQueryType queryType = RequestEv->GetType();
+    if (queryType != NKikimrKqp::QUERY_TYPE_SQL_GENERIC_QUERY &&
+        queryType != NKikimrKqp::QUERY_TYPE_SQL_GENERIC_SCRIPT &&
+        queryType != NKikimrKqp::QUERY_TYPE_SQL_GENERIC_CONCURRENT_QUERY)
+    {
+        return false;
+    }
+
+    for (const auto& transactionPtr : PreparedQuery->GetTransactions()) {
+        switch (transactionPtr->GetType()) {
+        case NKqpProto::TKqpPhyTx::TYPE_GENERIC: // data transaction
+            return true;
+        case NKqpProto::TKqpPhyTx::TYPE_UNSPECIFIED:
+        case NKqpProto::TKqpPhyTx::TYPE_COMPUTE:
+        case NKqpProto::TKqpPhyTx::TYPE_DATA: // data transaction, but not in QueryService API
+        case NKqpProto::TKqpPhyTx::TYPE_SCAN:
+        case NKqpProto::TKqpPhyTx::TYPE_SCHEME:
+        case NKqpProto::TKqpPhyTx_EType_TKqpPhyTx_EType_INT_MIN_SENTINEL_DO_NOT_USE_:
+        case NKqpProto::TKqpPhyTx_EType_TKqpPhyTx_EType_INT_MAX_SENTINEL_DO_NOT_USE_:
+            break;
         }
     }
+
     return false;
 }
 

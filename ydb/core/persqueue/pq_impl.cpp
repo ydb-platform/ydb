@@ -882,6 +882,7 @@ void TPersQueue::AddSupportivePartition(const TPartitionId& partitionId)
                        TPartitionInfo(TActorId(),
                                       {},
                                       *Counters));
+    NewSupportivePartitions.insert(partitionId);
 }
 
 void TPersQueue::CreateSupportivePartitionActor(const TPartitionId& partitionId,
@@ -1326,6 +1327,7 @@ void TPersQueue::Handle(TEvPQ::TEvInitComplete::TPtr& ev, const TActorContext& c
 
         HandleGetOwnershipRequest(params.Cookie, actorId, params.Request, ctx, pipeClient, params.Sender);
     }
+    partition.GetOwnershipRequests.clear();
 
     ++PartitionsInited;
     Y_ABORT_UNLESS(ConfigInited);//partitions are inited only after config
@@ -2467,8 +2469,15 @@ void TPersQueue::HandleGetOwnershipRequestForSupportivePartition(const ui64 resp
     ui64 writeId = req.GetWriteId();
     ui32 originalPartitionId = req.GetPartition();
 
-    if (TxWrites.contains(writeId) && TxWrites[writeId].Partitions.contains(originalPartitionId)) {
-        TPartitionId partitionId = TxWrites[writeId].Partitions.at(originalPartitionId);
+    if (TxWrites.contains(writeId) && TxWrites.at(writeId).Partitions.contains(originalPartitionId)) {
+        //
+        // - вспомогательная партиция уже существует
+        // - если партиция инициализирована, то
+        // -     отправить ей сообщение
+        // - иначе
+        // -     добавить сообщение в очередь для партиции
+        //
+        const TPartitionId& partitionId = TxWrites.at(writeId).Partitions.at(originalPartitionId);
         Y_ABORT_UNLESS(Partitions.contains(partitionId));
         TPartitionInfo& partition = Partitions.at(partitionId);
 
@@ -2481,7 +2490,33 @@ void TPersQueue::HandleGetOwnershipRequestForSupportivePartition(const ui64 resp
             partition.GetOwnershipRequests.emplace_back(responseCookie, req, sender);
         }
     } else {
-        GetOwnershipRequests.push_back({responseCookie, req, sender});
+        //
+        // этап 1:
+        // - создать запись в TxWrites
+        // - создать вспомогательную партицию
+        // - добавить сообщение в очередь для партиции
+        // - отправить на запись
+        //
+        // этап 2:
+        // - после записи запустить актор партиции
+        //
+        // этап 3:
+        // - когда партиция будет готова отправить ей накопленные сообщения
+        //
+        TTxWriteInfo& writeInfo = TxWrites[writeId];
+        TPartitionId partitionId(originalPartitionId, writeId, NextSupportivePartitionId++);
+
+        writeInfo.Partitions.emplace(originalPartitionId, partitionId);
+        AddSupportivePartition(partitionId);
+
+        Y_ABORT_UNLESS(Partitions.contains(partitionId));
+
+        TPartitionInfo& partition = Partitions.at(partitionId);
+        partition.GetOwnershipRequests.emplace_back(responseCookie, req, sender);
+
+        if (writeInfo.LongTxSubscriptionStatus == NKikimrLongTxService::TEvLockStatus::STATUS_UNSPECIFIED) {
+            SubscribeWriteId(writeId, ctx);
+        }
 
         TryWriteTxs(ctx);
     }
@@ -2526,10 +2561,10 @@ void TPersQueue::HandleWriteRequestForSupportivePartition(const ui64 responseCoo
     HandleWriteRequest(responseCookie, actorId, req, ctx);
 }
 
-void TPersQueue::HandleSupportivePartition(const ui64 responseCookie,
-                                           const NKikimrClient::TPersQueuePartitionRequest& req,
-                                           const TActorId& sender,
-                                           const TActorContext& ctx)
+void TPersQueue::HandleEventForSupportivePartition(const ui64 responseCookie,
+                                                   const NKikimrClient::TPersQueuePartitionRequest& req,
+                                                   const TActorId& sender,
+                                                   const TActorContext& ctx)
 {
     if (req.HasCmdGetOwnership()) {
         HandleGetOwnershipRequestForSupportivePartition(responseCookie, req, sender, ctx);
@@ -2634,7 +2669,7 @@ void TPersQueue::Handle(TEvPersQueue::TEvRequest::TPtr& ev, const TActorContext&
     }
 
     if (req.HasWriteId()) {
-        HandleSupportivePartition(responseCookie, req, ev->Sender, ctx);
+        HandleEventForSupportivePartition(responseCookie, req, ev->Sender, ctx);
         return;
     }
 
@@ -3196,50 +3231,13 @@ void TPersQueue::SubscribeWriteId(ui64 writeId,
              new NLongTxService::TEvLongTxService::TEvSubscribeLock(writeId, ctx.SelfID.NodeId()));
 }
 
-void TPersQueue::ForwardGetOwnershipToSupportivePartitions(const TActorContext& ctx)
+void TPersQueue::CreateSupportivePartitionActors(const TActorContext& ctx)
 {
-    for (auto& params : HandleGetOwnershipRequestParams) {
-        ui64 writeId = params.Request.GetWriteId();
-        ui32 originalPartitionId = params.Request.GetPartition();
-        Y_ABORT_UNLESS(TxWrites.contains(writeId) && TxWrites[writeId].Partitions.contains(originalPartitionId));
-        TTxWriteInfo& txWrite = TxWrites.at(writeId);
-        const TPartitionId& partitionId = txWrite.Partitions.at(originalPartitionId);
-        Y_ABORT_UNLESS(Partitions.contains(partitionId));
-
+    for (auto& partitionId : NewSupportivePartitions) {
         CreateSupportivePartitionActor(partitionId, ctx);
-
-        TPartitionInfo& partition = Partitions.at(partitionId);
-        partition.GetOwnershipRequests.emplace_back(params.Cookie, params.Request, params.Sender);
-
-        if (txWrite.LongTxSubscriptionStatus == NKikimrLongTxService::TEvLockStatus::STATUS_UNSPECIFIED) {
-            SubscribeWriteId(writeId, ctx);
-        }
     }
 
-    HandleGetOwnershipRequestParams.clear();
-}
-
-bool TPersQueue::CanProcessGetOwnershipQueue() const
-{
-    return !GetOwnershipRequests.empty();
-}
-
-void TPersQueue::ProcessGetOwnershipQueue()
-{
-    Y_ABORT_UNLESS(HandleGetOwnershipRequestParams.empty());
-
-    for (auto& request : GetOwnershipRequests) {
-        ui64 writeId = request.Request.GetWriteId();
-        ui32 partitionId = request.Request.GetPartition();
-        TPartitionId shadowPartitionId(partitionId, writeId, NextSupportivePartitionId++);
-
-        TxWrites[writeId].Partitions.emplace(partitionId, shadowPartitionId);
-
-        AddSupportivePartition(shadowPartitionId);
-    }
-
-    HandleGetOwnershipRequestParams = std::move(GetOwnershipRequests);
-    GetOwnershipRequests.clear();
+    NewSupportivePartitions.clear();
 }
 
 void TPersQueue::BeginWriteTxs(const TActorContext& ctx)
@@ -3250,8 +3248,7 @@ void TPersQueue::BeginWriteTxs(const TActorContext& ctx)
         CanProcessProposeTransactionQueue() ||
         CanProcessPlanStepQueue() ||
         CanProcessWriteTxs() ||
-        CanProcessDeleteTxs() ||
-        CanProcessGetOwnershipQueue()
+        CanProcessDeleteTxs()
         ;
     if (!canProcess) {
         return;
@@ -3266,8 +3263,6 @@ void TPersQueue::BeginWriteTxs(const TActorContext& ctx)
     ProcessDeleteTxs(ctx, request->Record);
     AddCmdWriteTabletTxInfo(request->Record);
     ProcessConfigTx(ctx, request.Get());
-
-    ProcessGetOwnershipQueue();
 
     WriteTxsInProgress = true;
 
@@ -3301,7 +3296,7 @@ void TPersQueue::EndWriteTxs(const NKikimrClient::TResponse& resp,
 
     SendReplies(ctx);
     CheckChangedTxStates(ctx);
-    ForwardGetOwnershipToSupportivePartitions(ctx);
+    CreateSupportivePartitionActors(ctx);
 
     WriteTxsInProgress = false;
 

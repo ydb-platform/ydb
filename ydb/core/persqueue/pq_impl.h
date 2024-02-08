@@ -327,7 +327,6 @@ private:
     void ProcessConfigTx(const TActorContext& ctx,
                          TEvKeyValue::TEvRequest* request);
     void AddCmdWriteTabletTxInfo(NKikimrClient::TKeyValueRequest& request);
-    void ProcessGetOwnershipQueue();
 
     void ScheduleProposeTransactionResult(const TDistributedTransaction& tx);
 
@@ -439,7 +438,6 @@ private:
     bool CanProcessPlanStepQueue() const;
     bool CanProcessWriteTxs() const;
     bool CanProcessDeleteTxs() const;
-    bool CanProcessGetOwnershipQueue() const;
 
     ui64 GetGeneration();
     void DestroySession(TPipeInfo& pipeInfo);
@@ -456,10 +454,10 @@ private:
     void InitTxWrites(const NKikimrPQ::TTabletTxInfo& info, const TActorContext& ctx);
     void SaveTxWrites(NKikimrPQ::TTabletTxInfo& info);
 
-    void HandleSupportivePartition(const ui64 responseCookie,
-                                   const NKikimrClient::TPersQueuePartitionRequest& req,
-                                   const TActorId& sender,
-                                   const TActorContext& ctx);
+    void HandleEventForSupportivePartition(const ui64 responseCookie,
+                                           const NKikimrClient::TPersQueuePartitionRequest& req,
+                                           const TActorId& sender,
+                                           const TActorContext& ctx);
     void HandleGetOwnershipRequestForSupportivePartition(const ui64 responseCookie,
                                                          const NKikimrClient::TPersQueuePartitionRequest& req,
                                                          const TActorId& sender,
@@ -474,12 +472,12 @@ private:
 
     void ForwardGetOwnershipToSupportivePartitions(const TActorContext& ctx);
 
-    TDeque<TCmdGetOwnershipRequestParams> GetOwnershipRequests;
-    TDeque<TCmdGetOwnershipRequestParams> HandleGetOwnershipRequestParams;
+    THashSet<TPartitionId> NewSupportivePartitions;
 
     TPartitionInfo& GetPartitionInfo(const TPartitionId& partitionId);
     const TPartitionInfo& GetPartitionInfo(const NKikimrClient::TPersQueuePartitionRequest& request) const;
     void AddSupportivePartition(const TPartitionId& shadowPartitionId);
+    void CreateSupportivePartitionActors(const TActorContext& ctx);
     void CreateSupportivePartitionActor(const TPartitionId& shadowPartitionId, const TActorContext& ctx);
     void SubscribeWriteId(ui64 writeId, const TActorContext& ctx);
 

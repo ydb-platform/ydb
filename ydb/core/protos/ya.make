@@ -145,6 +145,7 @@ GENERATE_ENUM_SERIALIZATION(datashard_load.pb.h)
 
 PEERDIR(
     ydb/library/actors/protos
+    ydb/core/config/protos
     ydb/core/fq/libs/config/protos
     ydb/core/scheme/protos
     ydb/library/login/protos
@@ -159,6 +160,8 @@ PEERDIR(
     ydb/library/services
     ydb/library/ydb_issue/proto
 )
+
+CPP_PROTO_PLUGIN0(config_proto_plugin ydb/config/tools/protobuf_plugin)
 
 EXCLUDE_TAGS(GO_PROTO)
 

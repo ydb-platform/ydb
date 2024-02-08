@@ -1,0 +1,22 @@
+name: Postcommit_cmake
+on: 
+  push:
+    branches:
+      - 'cmakebuild'
+    paths-ignore:
+      - 'ydb/docs/**'
+      - '.github/**'
+concurrency:
+  group: ${{ github.workflow }}
+  cancel-in-progress: true
+jobs:
+  build_and_test:
+    if: ${{vars.CHECKS_SWITCH != '' && fromJSON(vars.CHECKS_SWITCH).postcommit_cmake == true}}
+    name: Build and test cmake
+    uses: ./.github/workflows/build_and_test_provisioned.yml
+    with:
+      runner_label: auto-provisioned
+      run_unit_tests: false
+      run_functional_tests: false
+    secrets: inherit
+

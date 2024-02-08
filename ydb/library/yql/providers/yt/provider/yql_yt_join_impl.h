@@ -70,5 +70,7 @@ struct IBaseOptimizerNode;
 struct IProviderContext;
 
 void BuildOptimizerJoinTree(std::shared_ptr<IBaseOptimizerNode>& tree, std::shared_ptr<IProviderContext>& ctx, TYtJoinNodeOp::TPtr op);
+TYtJoinNode::TPtr BuildYtJoinTree(std::shared_ptr<IBaseOptimizerNode> node, TExprContext& ctx, TPositionHandle pos);
+bool AreSimilarTrees(TYtJoinNode::TPtr node1, TYtJoinNode::TPtr node2);
 
 }

@@ -199,7 +199,7 @@ ui64 TBlobStorageGroupType::MaxPartSize(const TLogoBlobID &id) const {
     return MaxPartSize((TErasureType::ECrcMode)id.CrcMode(), id.BlobSize());
 }
 
-ui64 TBlobStorageGroupType::MaxPartSize(TErasureType::ECrcMode crcMode, ui64 blobSize) const {
+ui64 TBlobStorageGroupType::MaxPartSize(TErasureType::ECrcMode crcMode, ui32 blobSize) const {
     return TErasureType::PartSize(crcMode, blobSize);
 }
 

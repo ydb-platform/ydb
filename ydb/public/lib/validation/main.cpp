@@ -19,6 +19,7 @@ namespace NKikimr::NValidation {
 
 using namespace google::protobuf::compiler;
 using namespace google::protobuf;
+using namespace NKikimr::NProtobuf;
 
 using TVariables = std::map<TString, TString>;
 

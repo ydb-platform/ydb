@@ -11,7 +11,7 @@
 #include <util/string/builder.h>
 #include <util/string/subst.h>
 
-namespace NKikimr::NValidation {
+namespace NKikimr::NProtobuf {
 
 static TString ProtoFileNameStripped(const google::protobuf::Descriptor* message) {
     return google::protobuf::compiler::cpp::StripProto(message->file()->name());
@@ -33,10 +33,21 @@ TString NamespaceScope() {
     return "namespace_scope";
 }
 
+TString IncludesScope() {
+    return "includes";
+}
+
 TString ClassName(const google::protobuf::Descriptor* message) {
     const TString ns = message->file()->package();
     TString className = !ns.empty() ? message->full_name().substr(ns.size() + 1) : message->full_name();
     SubstGlobal(className, ".", "::");
+    return className;
+}
+
+TString FullyQualifiedClassName(const google::protobuf::Descriptor* message) {
+    TString className = message->full_name();
+    SubstGlobal(className, ".", "::");
+    className.insert(0, "::");
     return className;
 }
 
@@ -73,4 +84,4 @@ bool IsCustomMessage(const google::protobuf::Descriptor* message) {
     return true;
 }
 
-}
+} // namespace NKikimr::NProtobuf

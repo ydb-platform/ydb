@@ -227,7 +227,6 @@ private:
     };
 
     THashMap<ui64, TTxWriteInfo> TxWrites;
-    THashMap<TPartitionId, TPartitionInfo> ShadowPartitions; // TxWrites -> shadowPartitionId -> ShadowPartitions
     ui32 NextShadowPartitionId = 100'000;
 
     TActorId CacheActor;
@@ -479,6 +478,7 @@ private:
     TDeque<TCmdGetOwnershipRequestParams> HandleGetOwnershipRequestParams;
 
     TPartitionInfo& GetPartitionInfo(const TPartitionId& partitionId);
+    const TPartitionInfo& GetPartitionInfo(const NKikimrClient::TPersQueuePartitionRequest& request) const;
     void AddShadowPartition(const TPartitionId& shadowPartitionId);
     void CreateShadowPartitionActor(const TPartitionId& shadowPartitionId, const TActorContext& ctx);
     void SubscribeWriteId(ui64 writeId, const TActorContext& ctx);

@@ -17,6 +17,10 @@ target_link_libraries(ydb-library-yql-providers-s3-provider-ut PUBLIC
   library-cpp-cpuid_check
   cpp-testing-unittest_main
   providers-s3-provider
+  yql-minikql-dom
+  yql-parser-pg_wrapper
+  yql-public-udf
+  udf-service-exception_policy
 )
 target_link_options(ydb-library-yql-providers-s3-provider-ut PRIVATE
   -Wl,-platform_version,macos,11.0,11.0

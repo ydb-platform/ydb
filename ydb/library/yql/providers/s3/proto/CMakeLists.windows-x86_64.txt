@@ -66,15 +66,30 @@ get_built_tool_path(
   contrib/tools/protoc/plugins/cpp_styleguide
   cpp_styleguide
 )
+get_built_tool_path(
+  TOOL_protoc_bin
+  TOOL_protoc_dependency
+  contrib/tools/protoc/bin
+  protoc
+)
+get_built_tool_path(
+  TOOL_cpp_styleguide_bin
+  TOOL_cpp_styleguide_dependency
+  contrib/tools/protoc/plugins/cpp_styleguide
+  cpp_styleguide
+)
 
 add_library(providers-s3-proto)
 target_link_libraries(providers-s3-proto PUBLIC
   contrib-libs-cxxsupp
   yutil
+  dq-actors-protos
+  api-protos
   contrib-libs-protobuf
 )
 target_proto_messages(providers-s3-proto PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/library/yql/providers/s3/proto/credentials.proto
+  ${CMAKE_SOURCE_DIR}/ydb/library/yql/providers/s3/proto/file_queue.proto
   ${CMAKE_SOURCE_DIR}/ydb/library/yql/providers/s3/proto/range.proto
   ${CMAKE_SOURCE_DIR}/ydb/library/yql/providers/s3/proto/retry_config.proto
   ${CMAKE_SOURCE_DIR}/ydb/library/yql/providers/s3/proto/sink.proto
@@ -82,6 +97,7 @@ target_proto_messages(providers-s3-proto PRIVATE
 )
 target_sources(providers-s3-proto PRIVATE
   ${CMAKE_BINARY_DIR}/ydb/library/yql/providers/s3/proto/credentials.pb.h
+  ${CMAKE_BINARY_DIR}/ydb/library/yql/providers/s3/proto/file_queue.pb.h
   ${CMAKE_BINARY_DIR}/ydb/library/yql/providers/s3/proto/range.pb.h
   ${CMAKE_BINARY_DIR}/ydb/library/yql/providers/s3/proto/retry_config.pb.h
   ${CMAKE_BINARY_DIR}/ydb/library/yql/providers/s3/proto/sink.pb.h

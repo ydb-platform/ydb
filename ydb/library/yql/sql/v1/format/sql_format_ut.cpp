@@ -307,7 +307,9 @@ Y_UNIT_TEST_SUITE(CheckSqlFormatter) {
               ")\n"
               "PARTITION BY HASH (a, b, hash)\n"
               "WITH (tiering = 'some');\n"},
-              {"create table if not  exists user(user int32)", "CREATE TABLE IF NOT EXISTS user (\n\tuser int32\n);\n"}
+            {"create table if not  exists user(user int32)", "CREATE TABLE IF NOT EXISTS user (\n\tuser int32\n);\n"},
+            {"create temp   table    user(user int32)", "CREATE TEMP TABLE user (\n\tuser int32\n);\n"},
+            {"create   temporary   table    user(user int32)", "CREATE TEMPORARY TABLE user (\n\tuser int32\n);\n"}
         };
 
         TSetup setup;

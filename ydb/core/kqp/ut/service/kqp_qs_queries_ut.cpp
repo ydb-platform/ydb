@@ -718,6 +718,137 @@ Y_UNIT_TEST_SUITE(KqpQueryService) {
         UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
     }
 
+    Y_UNIT_TEST(CreateTempTable) {
+        NKikimrConfig::TAppConfig appConfig;
+        appConfig.MutableTableServiceConfig()->SetEnablePreparedDdl(true);
+        auto setting = NKikimrKqp::TKqpSetting();
+        auto serverSettings = TKikimrSettings()
+            .SetAppConfig(appConfig)
+            .SetKqpSettings({setting});
+        TKikimrRunner kikimr(
+            serverSettings.SetWithSampleTables(false).SetEnableTempTables(true));
+        auto clientConfig = NGRpcProxy::TGRpcClientConfig(kikimr.GetEndpoint());
+        auto client = kikimr.GetQueryClient();
+        {
+            auto session = client.GetSession().GetValueSync().GetSession();
+            auto id = session.GetId();
+
+            const auto queryCreate = Q_(R"(
+                --!syntax_v1
+                CREATE TEMP TABLE Temp (
+                    Key Uint64 NOT NULL,
+                    Value String,
+                    PRIMARY KEY (Key)
+                );)");
+
+            auto resultCreate = session.ExecuteQuery(queryCreate, NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
+            UNIT_ASSERT_C(resultCreate.IsSuccess(), resultCreate.GetIssues().ToString());
+
+            const auto querySelect = Q_(R"(
+                --!syntax_v1
+                SELECT * FROM Temp;
+            )");
+
+            auto resultSelect = session.ExecuteQuery(
+                querySelect, NYdb::NQuery::TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+            UNIT_ASSERT_C(resultSelect.IsSuccess(), resultSelect.GetIssues().ToString());
+
+            bool allDoneOk = true;
+            NTestHelpers::CheckDelete(clientConfig, id, Ydb::StatusIds::SUCCESS, allDoneOk);
+
+            UNIT_ASSERT(allDoneOk);
+        }
+
+        {
+            const auto querySelect = Q_(R"(
+                --!syntax_v1
+                SELECT * FROM Temp;
+            )");
+
+            auto resultSelect = client.ExecuteQuery(
+                querySelect, NYdb::NQuery::TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+            UNIT_ASSERT(!resultSelect.IsSuccess());
+        }
+    }
+
+    Y_UNIT_TEST(TempTablesDrop) {
+        NKikimrConfig::TAppConfig appConfig;
+        appConfig.MutableTableServiceConfig()->SetEnablePreparedDdl(true);
+        auto setting = NKikimrKqp::TKqpSetting();
+        auto serverSettings = TKikimrSettings()
+            .SetAppConfig(appConfig)
+            .SetKqpSettings({setting});
+        TKikimrRunner kikimr(
+            serverSettings.SetWithSampleTables(false).SetEnableTempTables(true));
+        auto clientConfig = NGRpcProxy::TGRpcClientConfig(kikimr.GetEndpoint());
+        auto client = kikimr.GetQueryClient();
+
+        auto session = client.GetSession().GetValueSync().GetSession();
+        auto id = session.GetId();
+
+        const auto queryCreate = Q_(R"(
+            --!syntax_v1
+            CREATE TEMPORARY TABLE Temp (
+                Key Uint64 NOT NULL,
+                Value String,
+                PRIMARY KEY (Key)
+            );)");
+
+        auto resultCreate = session.ExecuteQuery(queryCreate, NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
+        UNIT_ASSERT_C(resultCreate.IsSuccess(), resultCreate.GetIssues().ToString());
+
+        {
+            const auto querySelect = Q_(R"(
+                --!syntax_v1
+                SELECT * FROM Temp;
+            )");
+
+            auto resultSelect = session.ExecuteQuery(
+                querySelect, NYdb::NQuery::TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+            UNIT_ASSERT_C(resultSelect.IsSuccess(), resultSelect.GetIssues().ToString());
+        }
+
+        const auto queryDrop = Q_(R"(
+            --!syntax_v1
+            DROP TABLE Temp;
+        )");
+
+        auto resultDrop = session.ExecuteQuery(
+            queryDrop, NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
+        UNIT_ASSERT_C(resultDrop.IsSuccess(), resultDrop.GetIssues().ToString());
+
+        {
+            const auto querySelect = Q_(R"(
+                --!syntax_v1
+                SELECT * FROM Temp;
+            )");
+
+            auto resultSelect = session.ExecuteQuery(
+                querySelect, NYdb::NQuery::TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+            UNIT_ASSERT(!resultSelect.IsSuccess());
+        }
+
+        bool allDoneOk = true;
+        NTestHelpers::CheckDelete(clientConfig, id, Ydb::StatusIds::SUCCESS, allDoneOk);
+
+        UNIT_ASSERT(allDoneOk);
+
+        auto sessionAnother = client.GetSession().GetValueSync().GetSession();
+        auto idAnother = sessionAnother.GetId();
+        UNIT_ASSERT(id != idAnother);
+
+        {
+            const auto querySelect = Q_(R"(
+                --!syntax_v1
+                SELECT * FROM Temp;
+            )");
+
+            auto resultSelect = sessionAnother.ExecuteQuery(
+                querySelect, NYdb::NQuery::TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+            UNIT_ASSERT(!resultSelect.IsSuccess());
+        }
+    }
+
     Y_UNIT_TEST(DdlGroup) {
         NKikimrConfig::TAppConfig appConfig;
         appConfig.MutableTableServiceConfig()->SetEnablePreparedDdl(true);

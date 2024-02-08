@@ -27,7 +27,6 @@ enum class EExecutionUnitKind: ui32 {
     LoadTxDetails,
     LoadWriteDetails,
     FinalizeDataTxPlan,
-    FinalizeWriteTxPlan,
     ProtectSchemeEchoes,
     BuildDataTxOutRS,
     BuildKqpDataTxOutRS,

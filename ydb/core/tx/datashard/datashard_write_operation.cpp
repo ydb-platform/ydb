@@ -497,27 +497,6 @@ ERestoreDataStatus TWriteOperation::RestoreTxData(TDataShard* self, TTransaction
     return ERestoreDataStatus::Ok;
 }
 
-void TWriteOperation::FinalizeWriteTxPlan()
-{
-    Y_ABORT_UNLESS(IsWriteTx());
-    Y_ABORT_UNLESS(!IsImmediate());
-    Y_ABORT_UNLESS(!IsKqpScanTransaction());
-
-    TVector<EExecutionUnitKind> plan;
-
-    plan.push_back(EExecutionUnitKind::BuildAndWaitDependencies);
-
-    plan.push_back(EExecutionUnitKind::PrepareWriteTxInRS);
-    plan.push_back(EExecutionUnitKind::LoadAndWaitInRS);
-    plan.push_back(EExecutionUnitKind::ExecuteWrite);
-
-    plan.push_back(EExecutionUnitKind::CompleteOperation);
-    plan.push_back(EExecutionUnitKind::CompletedOperations);
-
-    RewriteExecutionPlan(plan);
-}
-
-
 void TWriteOperation::BuildExecutionPlan(bool loaded)
 {
     Y_ABORT_UNLESS(GetExecutionPlan().empty());
@@ -557,7 +536,15 @@ void TWriteOperation::BuildExecutionPlan(bool loaded)
             plan.push_back(EExecutionUnitKind::WaitForPlan);
         plan.push_back(EExecutionUnitKind::PlanQueue);
         plan.push_back(EExecutionUnitKind::LoadWriteDetails);
-        plan.push_back(EExecutionUnitKind::FinalizeWriteTxPlan);
+
+        plan.push_back(EExecutionUnitKind::BuildAndWaitDependencies);
+
+        plan.push_back(EExecutionUnitKind::PrepareWriteTxInRS);
+        plan.push_back(EExecutionUnitKind::LoadAndWaitInRS);
+        plan.push_back(EExecutionUnitKind::ExecuteWrite);
+
+        plan.push_back(EExecutionUnitKind::CompleteOperation);
+        plan.push_back(EExecutionUnitKind::CompletedOperations);
     }
     RewriteExecutionPlan(plan);
 }

@@ -52,8 +52,6 @@ THolder<TExecutionUnit> CreateExecutionUnit(EExecutionUnitKind kind,
         return CreateLoadWriteDetailsUnit(dataShard, pipeline);
     case EExecutionUnitKind::FinalizeDataTxPlan:
         return CreateFinalizeDataTxPlanUnit(dataShard, pipeline);
-    case EExecutionUnitKind::FinalizeWriteTxPlan:
-        return CreateFinalizeWriteTxPlanUnit(dataShard, pipeline);
     case EExecutionUnitKind::ProtectSchemeEchoes:
         return CreateProtectSchemeEchoesUnit(dataShard, pipeline);
     case EExecutionUnitKind::BuildDataTxOutRS:

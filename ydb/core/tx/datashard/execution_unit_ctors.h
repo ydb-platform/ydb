@@ -26,7 +26,6 @@ THolder<TExecutionUnit> CreatePlanQueueUnit(TDataShard &dataShard, TPipeline &pi
 THolder<TExecutionUnit> CreateLoadTxDetailsUnit(TDataShard &dataShard, TPipeline &pipeline);
 THolder<TExecutionUnit> CreateLoadWriteDetailsUnit(TDataShard& dataShard, TPipeline& pipeline);
 THolder<TExecutionUnit> CreateFinalizeDataTxPlanUnit(TDataShard& dataShard, TPipeline& pipeline);
-THolder<TExecutionUnit> CreateFinalizeWriteTxPlanUnit(TDataShard& dataShard, TPipeline& pipeline);
 THolder<TExecutionUnit> CreateProtectSchemeEchoesUnit(TDataShard& dataShard, TPipeline& pipeline);
 THolder<TExecutionUnit> CreateBuildDataTxOutRSUnit(TDataShard &dataShard, TPipeline &pipeline);
 THolder<TExecutionUnit> CreateBuildDistributedEraseTxOutRSUnit(TDataShard &dataShard, TPipeline &pipeline);

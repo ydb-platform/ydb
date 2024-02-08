@@ -24,6 +24,19 @@ public:
         return NKikimrServices::TActivity::STAT_SERVICE;
     }
 
+   struct TEvPrivate {
+        enum EEv {
+            EvRequestTimeout = EventSpaceBegin(TEvents::ES_PRIVATE),
+
+            EvEnd
+        };
+
+        struct TEvRequestTimeout : public TEventLocal<TEvRequestTimeout, EvRequestTimeout> {
+            std::unordered_set<ui64> NeedSchemeShards;
+            TActorId PipeClientId;
+        };
+    };
+
     void Bootstrap() {
         EnableStatistics = AppData()->FeatureFlags.GetEnableStatistics();
 
@@ -41,9 +54,11 @@ public:
             hFunc(TEvStatistics::TEvGetStatistics, Handle);
             hFunc(TEvTxProxySchemeCache::TEvNavigateKeySetResult, Handle);
             hFunc(TEvStatistics::TEvPropagateStatistics, Handle);
+            IgnoreFunc(TEvStatistics::TEvPropagateStatisticsResponse);
             hFunc(TEvTabletPipe::TEvClientConnected, Handle);
             hFunc(TEvTabletPipe::TEvClientDestroyed, Handle);
             hFunc(TEvStatistics::TEvStatisticsIsDisabled, Handle);
+            hFunc(TEvPrivate::TEvRequestTimeout, Handle);
             cFunc(TEvents::TEvPoison::EventType, PassAway);
             default:
                 LOG_CRIT_S(TlsActivationContext->AsActorContext(), NKikimrServices::STATISTICS,
@@ -160,6 +175,11 @@ private:
             return;
         }
 
+        bool isNewSS = (NeedSchemeShards.find(request.SchemeShardId) == NeedSchemeShards.end());
+        if (isNewSS) {
+            NeedSchemeShards.insert(request.SchemeShardId);
+        }
+
         auto navigateDomainKey = [this] (TPathId domainKey) {
             using TNavigate = NSchemeCache::TSchemeCacheNavigate;
             auto navigate = std::make_unique<TNavigate>();
@@ -202,11 +222,18 @@ private:
         if (!SAPipeClientId) {
             ConnectToSA();
             SyncNode();
-        } else {
+
+        } else if (isNewSS) {
             auto requestStats = std::make_unique<TEvStatistics::TEvRequestStats>();
             requestStats->Record.SetNodeId(SelfId().NodeId());
+            requestStats->Record.SetUrgent(false);
             requestStats->Record.AddNeedSchemeShards(request.SchemeShardId);
             NTabletPipe::SendData(SelfId(), SAPipeClientId, requestStats.release());
+
+            auto timeout = std::make_unique<TEvPrivate::TEvRequestTimeout>();
+            timeout->NeedSchemeShards.insert(request.SchemeShardId);
+            timeout->PipeClientId = SAPipeClientId;
+            Schedule(RequestTimeout, timeout.release());
         }
     }
 
@@ -214,9 +241,12 @@ private:
         LOG_DEBUG_S(TlsActivationContext->AsActorContext(), NKikimrServices::STATISTICS,
             "EvPropagateStatistics, node id = " << SelfId().NodeId());
 
+        Send(ev->Sender, new TEvStatistics::TEvPropagateStatisticsResponse);
+
         auto* record = ev->Get()->MutableRecord();
         for (const auto& entry : record->GetEntries()) {
             ui64 schemeShardId = entry.GetSchemeShardId();
+            NeedSchemeShards.erase(schemeShardId);
             auto& statisticsState = Statistics[schemeShardId];
 
             if (entry.GetStats().empty()) {
@@ -319,6 +349,32 @@ private:
         ReplyAllFailed();
     }
 
+    void Handle(TEvPrivate::TEvRequestTimeout::TPtr& ev) {
+        LOG_DEBUG_S(TlsActivationContext->AsActorContext(), NKikimrServices::STATISTICS,
+            "EvRequestTimeout"
+            << ", pipe client id = " << ev->Get()->PipeClientId
+            << ", schemeshard count = " << ev->Get()->NeedSchemeShards.size());
+
+        if (SAPipeClientId != ev->Get()->PipeClientId) {
+            return;
+        }
+        auto requestStats = std::make_unique<TEvStatistics::TEvRequestStats>();
+        bool hasNeedSchemeShards = false;
+        for (auto& ssId : ev->Get()->NeedSchemeShards) {
+            if (NeedSchemeShards.find(ssId) != NeedSchemeShards.end()) {
+                requestStats->Record.AddNeedSchemeShards(ssId);
+                hasNeedSchemeShards = true;
+            }
+        }
+        if (!hasNeedSchemeShards) {
+            return;
+        }
+        requestStats->Record.SetNodeId(SelfId().NodeId());
+        requestStats->Record.SetUrgent(true);
+
+        NTabletPipe::SendData(SelfId(), SAPipeClientId, requestStats.release());
+    }
+
     void ConnectToSA() {
         if (SAPipeClientId || !StatisticsAggregatorId) {
             return;
@@ -338,22 +394,24 @@ private:
         auto connect = std::make_unique<TEvStatistics::TEvConnectNode>();
         auto& record = connect->Record;
 
+        auto timeout = std::make_unique<TEvPrivate::TEvRequestTimeout>();
+        timeout->PipeClientId = SAPipeClientId;
+
         record.SetNodeId(SelfId().NodeId());
         for (const auto& [ssId, ssState] : Statistics) {
             auto* entry = record.AddHaveSchemeShards();
             entry->SetSchemeShardId(ssId);
             entry->SetTimestamp(ssState.Timestamp);
         }
-        std::unordered_set<ui64> ssIds;
-        for (const auto& [reqId, reqState] : InFlight) {
-            if (reqState.SchemeShardId != 0) {
-                ssIds.insert(reqState.SchemeShardId);
-            }
-        }
-        for (const auto& ssId : ssIds) {
+        for (const auto& ssId : NeedSchemeShards) {
             record.AddNeedSchemeShards(ssId);
+            timeout->NeedSchemeShards.insert(ssId);
         }
         NTabletPipe::SendData(SelfId(), SAPipeClientId, connect.release());
+
+        if (!NeedSchemeShards.empty()) {
+            Schedule(RequestTimeout, timeout.release());
+        }
 
         LOG_DEBUG_S(TlsActivationContext->AsActorContext(), NKikimrServices::STATISTICS,
             "SyncNode(), pipe client id = " << SAPipeClientId);
@@ -465,6 +523,8 @@ private:
     std::unordered_map<ui64, TRequestState> InFlight; // request id -> state
     ui64 NextRequestId = 1;
 
+    std::unordered_set<ui64> NeedSchemeShards;
+
     struct TStatEntry {
         ui64 RowCount = 0;
         ui64 BytesSize = 0;
@@ -486,6 +546,8 @@ private:
         RSA_FINISHED
     };
     EResolveSAStage ResolveSAStage = RSA_INITIAL;
+
+    static constexpr TDuration RequestTimeout = TDuration::MilliSeconds(100);
 };
 
 THolder<IActor> CreateStatService() {

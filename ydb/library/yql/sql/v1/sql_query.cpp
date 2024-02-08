@@ -171,10 +171,14 @@ bool TSqlQuery::Statement(TVector<TNodePtr>& blocks, const TRule_sql_stmt_core& 
 
             const auto& block = rule.GetBlock3();
             ETableType tableType = ETableType::Table;
+            bool temporary = false;
             if (block.HasAlt2() && block.GetAlt2().GetToken1().GetId() == SQLv1LexerTokens::TOKEN_TABLESTORE) {
                 tableType = ETableType::TableStore;
             } else if (block.HasAlt3() && block.GetAlt3().GetToken1().GetId() == SQLv1LexerTokens::TOKEN_EXTERNAL) {
                 tableType = ETableType::ExternalTable;
+            } else if (block.HasAlt4() && block.GetAlt4().GetToken1().GetId() == SQLv1LexerTokens::TOKEN_TEMP ||
+                    block.HasAlt5() && block.GetAlt5().GetToken1().GetId() == SQLv1LexerTokens::TOKEN_TEMPORARY) {
+                temporary = true;
             }
 
             bool existingOk = false;
@@ -198,7 +202,7 @@ bool TSqlQuery::Statement(TVector<TNodePtr>& blocks, const TRule_sql_stmt_core& 
                 return false;
             }
 
-            TCreateTableParameters params{.TableType=tableType};
+            TCreateTableParameters params{.TableType=tableType, .Temporary=temporary};
             if (!CreateTableEntry(rule.GetRule_create_table_entry7(), params)) {
                 return false;
             }

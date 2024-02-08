@@ -13,7 +13,10 @@
 
 {% endnote %}
 
-Для контроля количества трассируемых извне запросов, в {{ ydb-short-name }} предусмотрен rate limiting аналогичный механизму в [сэмплировании запросов](./sampling.md). Для включения rate limiting нужно добавить секцию `external_throttling` в `tracing_config`:
+Для контроля количества трассируемых извне запросов, в {{ ydb-short-name }} предусмотрен rate limiting аналогичный механизму в [сэмплировании запросов](./sampling.md). Для включения rate limiting нужно добавить секцию `external_throttling` в `tracing_config`. 
+
+Секция `external_throttling` может обновляться с помощью механизма [динамической конфигурации](../../maintenance/manual/dynamic-config.md). Пример секции:
+
 
 ```yaml
 tracing_config:

@@ -566,7 +566,12 @@ Y_UNIT_TEST_SUITE(TChargeBTreeIndex) {
                                     }
                                     if (!groupId.IsMain() && !loaded.contains(pageId)) {
                                         // only check that we loaded consecutive pages
-                                        break;
+                                        if (params.StickSomePages) {
+                                            // extra pages may appear after the bytes limit is applied on main pages
+                                            continue;
+                                        } else {
+                                            break;
+                                        }
                                     }
                                     expected.insert(pageId);
                                     if (size > bytesLimit) {

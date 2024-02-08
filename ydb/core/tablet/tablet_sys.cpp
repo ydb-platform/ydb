@@ -15,10 +15,11 @@
 #include <util/generic/set.h>
 #include <util/stream/str.h>
 
-#if defined BLOG_D || defined BLOG_I || defined BLOG_ERROR
+#if defined BLOG_D || defined BLOG_I || defined BLOG_ERROR || defined BLOG_LEVEL
 #error log macro definition clash
 #endif
 
+#define BLOG_LEVEL(level, stream, marker) LOG_LOG_S(*TlsActivationContext, level, NKikimrServices::TABLET_MAIN, "Tablet: " << TabletID() << " " << stream << " Marker# " << marker)
 #define BLOG_D(stream, marker) LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::TABLET_MAIN, "Tablet: " << TabletID() << " " << stream << " Marker# " << marker)
 #define BLOG_I(stream, marker) LOG_INFO_S(*TlsActivationContext, NKikimrServices::TABLET_MAIN, "Tablet: " << TabletID() << " " << stream << " Marker# " << marker)
 #define BLOG_ERROR(stream, marker) LOG_ERROR_S(*TlsActivationContext, NKikimrServices::TABLET_MAIN, "Tablet: " << TabletID() << " " << stream << " Marker# " << marker)
@@ -1745,7 +1746,10 @@ void TTablet::ReassignYellowChannels(TVector<ui32> &&yellowMoveChannels) {
 }
 
 void TTablet::CancelTablet(TEvTablet::TEvTabletDead::EReason reason, const TString &details) {
-    BLOG_ERROR(
+    BLOG_LEVEL(
+        reason == TEvTablet::TEvTabletDead::ReasonPill
+            ? NActors::NLog::PRI_NOTICE
+            : NActors::NLog::PRI_ERROR,
         " Type: " << TTabletTypes::TypeToStr((TTabletTypes::EType)Info->TabletType)
         << ", EReason: " << TEvTablet::TEvTabletDead::Str(reason)
         << ", SuggestedGeneration: " << SuggestedGeneration

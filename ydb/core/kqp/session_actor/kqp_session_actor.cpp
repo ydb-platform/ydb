@@ -636,9 +636,21 @@ public:
         Counters->ReportBeginTransaction(Settings.DbCounters, Transactions.EvictedTx, Transactions.Size(), Transactions.ToBeAbortedSize());
     }
 
+    static const Ydb::Table::TransactionControl& GetImpliedTxControl() {
+        auto create = []() -> Ydb::Table::TransactionControl {
+            Ydb::Table::TransactionControl control;
+            control.mutable_begin_tx()->mutable_serializable_read_write();
+            control.set_commit_tx(true);
+            return control;
+        };
+        static const Ydb::Table::TransactionControl control = create();
+        return control;
+    }
+
     bool PrepareQueryTransaction() {
-        if (QueryState->HasTxControl()) {
-            const auto& txControl = QueryState->GetTxControl();
+        const bool hasTxControl = QueryState->HasTxControl();
+        if (hasTxControl || QueryState->HasImpliedTx()) {
+            const auto& txControl = hasTxControl ? QueryState->GetTxControl() : GetImpliedTxControl();
 
             QueryState->Commit = txControl.commit_tx();
             switch (txControl.tx_selector_case()) {
@@ -941,7 +953,7 @@ public:
                 case NKqpProto::TKqpPhyTx::TYPE_SCHEME:
                     YQL_ENSURE(tx->StagesSize() == 0);
 
-                    if (QueryState->TxCtx->EffectiveIsolationLevel != NKikimrKqp::ISOLATION_LEVEL_UNDEFINED) {
+                    if (QueryState->HasTxControl() && QueryState->TxCtx->EffectiveIsolationLevel != NKikimrKqp::ISOLATION_LEVEL_UNDEFINED) {
                         ReplyQueryError(Ydb::StatusIds::PRECONDITION_FAILED,
                             "Scheme operations cannot be executed inside transaction");
                         return true;

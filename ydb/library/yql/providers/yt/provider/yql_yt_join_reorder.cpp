@@ -12,31 +12,6 @@ namespace NYql {
 
 namespace {
 
-bool AreSimilarTrees(TYtJoinNode::TPtr node1, TYtJoinNode::TPtr node2) {
-    if (node1 == node2) {
-        return true;
-    }
-    if (node1 && !node2) {
-        return false;
-    }
-    if (node2 && !node1) {
-        return false;
-    }
-    if (node1->Scope != node2->Scope) {
-        return false;
-    }
-    auto opLeft = dynamic_cast<TYtJoinNodeOp*>(node1.Get());
-    auto opRight = dynamic_cast<TYtJoinNodeOp*>(node2.Get());
-    if (opLeft && opRight) {
-        return AreSimilarTrees(opLeft->Left, opRight->Left)
-            && AreSimilarTrees(opLeft->Right, opRight->Right);
-    } else if (!opLeft && !opRight) {
-        return true;
-    } else {
-        return false;
-    }
-}
-
 void DebugPrint(TYtJoinNode::TPtr node, TExprContext& ctx, int level) {
     auto* op = dynamic_cast<TYtJoinNodeOp*>(node.Get());
     auto printScope = [](const TVector<TString>& scope) -> TString {
@@ -409,6 +384,16 @@ private:
     IOptimizer::TOutput Result;
 };
 
+class TYtRelOptimizerNode: public TRelOptimizerNode {
+public:
+    TYtRelOptimizerNode(TString label, std::shared_ptr<TOptimizerStatistics> stats, TYtJoinNodeLeaf* leaf)
+        : TRelOptimizerNode(std::move(label), std::move(stats))
+        , OriginalLeaf(leaf)
+    { }
+
+    TYtJoinNodeLeaf* OriginalLeaf;
+};
+
 class TOptimizerTreeBuilder
 {
 public:
@@ -487,8 +472,8 @@ private:
             }
         }
 
-        return std::make_shared<TRelOptimizerNode>(
-            std::move(label), std::move(stat)
+        return std::make_shared<TYtRelOptimizerNode>(
+            std::move(label), std::move(stat), leaf
             );
     }
 
@@ -498,11 +483,78 @@ private:
     TYtJoinNodeOp::TPtr InputTree;
 };
 
+TYtJoinNode::TPtr BuildYtJoinTree(std::shared_ptr<IBaseOptimizerNode> node, TVector<TString>& scope, TExprContext& ctx, TPositionHandle pos) {
+    if (node->Kind == RelNodeType) {
+        auto* leaf = static_cast<TYtRelOptimizerNode*>(node.get())->OriginalLeaf;
+        scope.insert(scope.end(), leaf->Scope.begin(), leaf->Scope.end());
+        return leaf;
+    } else if (node->Kind == JoinNodeType) {
+        auto ret = MakeIntrusive<TYtJoinNodeOp>();
+        auto* op = static_cast<TJoinOptimizerNode*>(node.get());
+        ret->JoinKind = ctx.NewAtom(pos, ConvertToJoinString(op->JoinType));
+        TVector<TExprNodePtr> leftLabel, rightLabel;
+        leftLabel.reserve(op->JoinConditions.size() * 2);
+        rightLabel.reserve(op->JoinConditions.size() * 2);
+        for (auto& [left, right] : op->JoinConditions) {
+            leftLabel.emplace_back(ctx.NewAtom(pos, left.RelName));
+            leftLabel.emplace_back(ctx.NewAtom(pos, left.AttributeName));
+
+            rightLabel.emplace_back(ctx.NewAtom(pos, right.RelName));
+            rightLabel.emplace_back(ctx.NewAtom(pos, right.AttributeName));
+        }
+        ret->LeftLabel = Build<TCoAtomList>(ctx, pos)
+            .Add(leftLabel)
+            .Done()
+            .Ptr();
+        ret->RightLabel = Build<TCoAtomList>(ctx, pos)
+            .Add(rightLabel)
+            .Done()
+            .Ptr();
+        int index = scope.size();
+        ret->Left = BuildYtJoinTree(op->LeftArg, scope, ctx, pos);
+        ret->Right = BuildYtJoinTree(op->RightArg, scope, ctx, pos);
+        ret->Scope.insert(ret->Scope.end(), scope.begin() + index, scope.end());
+        return ret;
+    } else {
+        YQL_ENSURE(false, "Unknown node type");
+    }
+}
+
 } // namespace
+
+bool AreSimilarTrees(TYtJoinNode::TPtr node1, TYtJoinNode::TPtr node2) {
+    if (node1 == node2) {
+        return true;
+    }
+    if (node1 && !node2) {
+        return false;
+    }
+    if (node2 && !node1) {
+        return false;
+    }
+    if (node1->Scope != node2->Scope) {
+        return false;
+    }
+    auto opLeft = dynamic_cast<TYtJoinNodeOp*>(node1.Get());
+    auto opRight = dynamic_cast<TYtJoinNodeOp*>(node2.Get());
+    if (opLeft && opRight) {
+        return AreSimilarTrees(opLeft->Left, opRight->Left)
+            && AreSimilarTrees(opLeft->Right, opRight->Right);
+    } else if (!opLeft && !opRight) {
+        return true;
+    } else {
+        return false;
+    }
+}
 
 void BuildOptimizerJoinTree(std::shared_ptr<IBaseOptimizerNode>& tree, std::shared_ptr<IProviderContext>& ctx, TYtJoinNodeOp::TPtr op)
 {
     TOptimizerTreeBuilder(tree, ctx, op).Do();
+}
+
+TYtJoinNode::TPtr BuildYtJoinTree(std::shared_ptr<IBaseOptimizerNode> node, TExprContext& ctx, TPositionHandle pos) {
+    TVector<TString> scope;
+    return BuildYtJoinTree(node, scope, ctx, pos);
 }
 
 TYtJoinNodeOp::TPtr OrderJoins(TYtJoinNodeOp::TPtr op, const TYtState::TPtr& state, TExprContext& ctx, bool debug)

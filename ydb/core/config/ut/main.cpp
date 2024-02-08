@@ -1,7 +1,8 @@
 #include <ydb/core/config/utils/config_traverse.h>
 
-#include <library/cpp/testing/unittest/registar.h>
+#include <library/cpp/colorizer/colors.h>
 #include <library/cpp/protobuf/json/util.h>
+#include <library/cpp/testing/unittest/registar.h>
 
 #include <contrib/libs/protobuf/src/google/protobuf/descriptor.h>
 
@@ -39,9 +40,10 @@ struct std::hash<TRequiredFieldInfo>
 class TConfigDumper {
 private:
     TString PrintLabel(const FieldDescriptor& field) const {
+        NColorizer::TColors colors = NColorizer::AutoColors(Cout);
         switch (field.label()) {
             case FieldDescriptor::LABEL_REQUIRED:
-                return UseColors ? "\033[0;31mrequired\033[0m" : "required";
+                return UseColors ? (TString(colors.Red()) + "required" + colors.Reset())  : TString("required");
             case FieldDescriptor::LABEL_OPTIONAL:
                 return "optional";
             case FieldDescriptor::LABEL_REPEATED:
@@ -52,7 +54,8 @@ private:
     }
 
     TString Loop() const {
-        return UseColors ? " \033[0;31m// <- loop\033[0m" : " <- loop";
+        NColorizer::TColors colors = NColorizer::AutoColors(Cout);
+        return UseColors ? (TString(colors.Red()) + " <- loop" + colors.Reset()) : TString(" <- loop");
     }
 
     TString FieldName(const FieldDescriptor* field) const {

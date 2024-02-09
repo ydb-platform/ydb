@@ -93,10 +93,6 @@ NSkiff::EWireType ValueTypeToSkiffType(EValueType valueType)
             return EWireType::Uint64;
 
         case VT_INTERVAL:
-        case VT_DATE32:
-        case VT_DATETIME64:
-        case VT_TIMESTAMP64:
-        case VT_INTERVAL64:
             return EWireType::Int64;
     };
     ythrow yexception() << "Cannot convert EValueType '" << valueType << "' to NSkiff::EWireType";

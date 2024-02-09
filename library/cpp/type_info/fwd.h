@@ -76,12 +76,6 @@ namespace NTi {
     class TTimestampType;
     using TTimestampTypePtr = TIntrusiveConstPtr<TTimestampType>;
 
-    class TDatetime64Type;
-    using TDatetime64TypePtr = TIntrusiveConstPtr<TDatetime64Type>;
-
-    class TTimestamp64Type;
-    using TTimestamp64TypePtr = TIntrusiveConstPtr<TTimestamp64Type>;
-
     class TTzDateType;
     using TTzDateTypePtr = TIntrusiveConstPtr<TTzDateType>;
 
@@ -93,12 +87,6 @@ namespace NTi {
 
     class TIntervalType;
     using TIntervalTypePtr = TIntrusiveConstPtr<TIntervalType>;
-
-    class TInterval64Type;
-    using TInterval64TypePtr = TIntrusiveConstPtr<TInterval64Type>;
-
-    class TDate32Type;
-    using TDate32TypePtr = TIntrusiveConstPtr<TDate32Type>;
 
     class TDecimalType;
     using TDecimalTypePtr = TIntrusiveConstPtr<TDecimalType>;

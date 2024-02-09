@@ -33,10 +33,6 @@ int ComputeTypeComplexity(const TType* type)
         case ETypeName::TzDatetime:
         case ETypeName::TzTimestamp:
         case ETypeName::Interval:
-        case ETypeName::Date32:
-        case ETypeName::Datetime64:
-        case ETypeName::Timestamp64:
-        case ETypeName::Interval64:
         case ETypeName::Decimal:
         case ETypeName::Json:
         case ETypeName::Yson:

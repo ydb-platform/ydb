@@ -405,6 +405,8 @@ public:
                 srcDesc.MutableSettings()->insert({"addPathIndex", "true"});
             }
 
+#if defined(_linux_) || defined(_darwin_)
+
             auto useRuntimeListing = State_->Configuration->UseRuntimeListing.Get().GetOrElse(false);
             srcDesc.SetUseRuntimeListing(useRuntimeListing);
 
@@ -505,7 +507,7 @@ public:
                 ));
                 srcDesc.MutableSettings()->insert({"fileQueueActor", fileQueueActor.ToString()});
             }
-
+#endif
             protoSettings.PackFrom(srcDesc);
             sourceType = "S3Source";
         }

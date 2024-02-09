@@ -28,7 +28,7 @@ jobs:
         git config --global user.name "Alexander Smirnov"
         cd ydb
         git fetch --depth `expr $(git rev-list --count HEAD) + 1`
-        git fetch origin cmakebuild:cmakebuild --depth 2
+        git fetch origin cmakebuild:cmakebuild --depth 3
         mainsha=$(git rev-parse HEAD)
         git checkout cmakebuild
         prevsha=$(git rev-parse HEAD)

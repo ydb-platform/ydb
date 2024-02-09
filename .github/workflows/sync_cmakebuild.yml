@@ -19,7 +19,7 @@ jobs:
         echo "Main sha: ${mainsha}"
         lastsha=$(curl -s https://raw.githubusercontent.com/$REPO/cmakebuild/ydb/ci/cmakegen.txt)
         echo "Last sha: ${lastsha}"
-        if [ ${mainsha} == ${lastsha} ];then
+        if [ "${mainsha}" == "${lastsha}" ];then
           echo "No new commits on the main branch to merge, exiting"
           exit 0
         fi

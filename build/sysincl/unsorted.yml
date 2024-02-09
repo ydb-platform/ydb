@@ -701,15 +701,6 @@
   - dvec.h
   - setjmpex.h
   - srv.h
-  - xhash
-  - xiosbase
-  - xlocale
-  - xlocinfo
-  - xlocnum
-  - xmemory
-  - xstring
-  - xtr1common
-  - xtree
   - yvals.h
   #endif
   #if defined(_unix_) && TODO

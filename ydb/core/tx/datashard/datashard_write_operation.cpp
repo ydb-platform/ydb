@@ -366,19 +366,34 @@ TString TWriteOperation::GetTxBody() const {
     Y_ABORT_UNLESS(Record);
 
     TAllocChunkSerializer serializer;
-    const bool success = Record->SerializeToArcadiaStream(&serializer);
+    bool success = Record->SerializeToArcadiaStream(&serializer);
     Y_ABORT_UNLESS(success);
-    
-    return serializer.Release(Record->CreateSerializationInfo())->GetString();
+    TEventSerializationInfo serializationInfo = Record->CreateSerializationInfo();
+
+    NKikimrTxDataShard::TSerializedTxBody proto;
+    proto.SetIsExtendedFormat(serializationInfo.IsExtendedFormat);
+    proto.SetTxBody(serializer.Release(std::move(serializationInfo))->GetString());
+
+    TString str;
+    success = proto.SerializeToString(&str);
+    Y_ABORT_UNLESS(success);
+    return str;
 }
 
 void TWriteOperation::SetTxBody(const TString& txBody) {
     Y_ABORT_UNLESS(!Record);
 
+    NKikimrTxDataShard::TSerializedTxBody proto;
+    const bool success = proto.ParseFromString(txBody);
+    Y_ABORT_UNLESS(success);
+
     TEventSerializationInfo serializationInfo;
-    serializationInfo.IsExtendedFormat = true;
-    TEventSerializedData buffer(txBody, std::move(serializationInfo));
+    serializationInfo.IsExtendedFormat = proto.GetIsExtendedFormat();
+
+    TEventSerializedData buffer(proto.GetTxBody(), std::move(serializationInfo));
     NKikimr::NEvents::TDataEvents::TEvWrite* record = static_cast<NKikimr::NEvents::TDataEvents::TEvWrite*>(NKikimr::NEvents::TDataEvents::TEvWrite::Load(&buffer));
+    Y_ABORT_UNLESS(record);
+
     Record.reset(record);
 }
 

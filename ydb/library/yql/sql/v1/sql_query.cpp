@@ -245,7 +245,7 @@ bool TSqlQuery::Statement(TVector<TNodePtr>& blocks, const TRule_sql_stmt_core& 
 
             TSourcePtr tableSource = nullptr;
             if (rule.HasBlock15()) {
-                tableSource = TSqlIntoValues(Ctx, Mode).Build(rule.GetBlock15().GetRule_table_as_source1().GetRule_into_values_source2(), "ReplaceInto");
+                tableSource = TSqlAsValues(Ctx, Mode).Build(rule.GetBlock15().GetRule_table_as_source1().GetRule_values_source2(), "CreateTableAs");
                 if (!tableSource) {
                     return false;
                 }

@@ -9,7 +9,7 @@
 #include <ydb/core/tx/schemeshard/olap/schema/schema.h>
 
 #include <ydb/library/yql/core/yql_expr_optimize.h>
-#include <ydb/library/yql/public/udf/arrow/block_builder.h>
+#include <ydb/library/yql/dq/runtime/dq_arrow_helpers.h>
 
 #include <ydb/library/actors/core/log.h>
 
@@ -63,14 +63,20 @@ std::pair<TString, TString> SerializeKqpTasksParametersForOlap(const TStageInfo&
             }
 
             const auto [type, value] = stageInfo.Meta.Tx.Params->GetParameterUnboxedValue(name);
-            const auto builder = NUdf::MakeArrayBuilder(NMiniKQL::TTypeInfoHelper(), type, *arrow::default_memory_pool(), 1U, nullptr);
-            builder->Add(value);
-            const auto datum = builder->Build(true);
+            YQL_ENSURE(NYql::NArrow::IsArrowCompatible(type), "Incompatible parameter type. Can't convert to arrow");
 
-            auto field = std::make_shared<arrow::Field>(name, datum.type());
+            std::unique_ptr<arrow::ArrayBuilder> builder = NYql::NArrow::MakeArrowBuilder(type);
+            NYql::NArrow::AppendElement(value, builder.get(), type);
+
+            std::shared_ptr<arrow::Array> array;
+            const auto status = builder->Finish(&array);
+
+            YQL_ENSURE(status.ok(), "Failed to build arrow array of variables.");
+
+            auto field = std::make_shared<arrow::Field>(name, array->type());
 
             columns.emplace_back(std::move(field));
-            data.emplace_back(datum.make_array());
+            data.emplace_back(std::move(array));
         }
     }
 

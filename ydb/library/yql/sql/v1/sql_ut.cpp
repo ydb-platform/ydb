@@ -893,7 +893,7 @@ Y_UNIT_TEST_SUITE(SqlParsingOnly) {
         TVerifyLineFunc verifyLine = [](const TString& word, const TString& line) {
             if (word == "Write!") {
                 UNIT_ASSERT_VALUES_UNEQUAL(TString::npos,
-                                           line.find(R"__((Write! world sink (Key '('tablescheme (String '"t"))) (Void) '('('mode 'create) '('columns '('('"a" (DataType 'Int32) '('columnConstrains '('('not_null))) '())))))))__"));
+                                           line.find(R"__((Write! world sink (Key '('tablescheme (String '"t"))) values '('('mode 'create) '('columns '('('"a" (DataType 'Int32) '('columnConstrains '('('not_null))) '())))))))__"));
             }
         };
 
@@ -910,7 +910,7 @@ Y_UNIT_TEST_SUITE(SqlParsingOnly) {
         TVerifyLineFunc verifyLine = [](const TString& word, const TString& line) {
             if (word == "Write!") {
                 UNIT_ASSERT_VALUES_UNEQUAL(TString::npos,
-                                           line.find(R"__((Write! world sink (Key '('tablescheme (String '"t"))) (Void) '('('mode 'create) '('columns '('('"a" (AsOptionalType (DataType 'Int32)) '('columnConstrains '()) '()))))))__"));
+                                           line.find(R"__((Write! world sink (Key '('tablescheme (String '"t"))) values '('('mode 'create) '('columns '('('"a" (AsOptionalType (DataType 'Int32)) '('columnConstrains '()) '()))))))__"));
             }
         };
 
@@ -927,7 +927,7 @@ Y_UNIT_TEST_SUITE(SqlParsingOnly) {
         TVerifyLineFunc verifyLine = [](const TString& word, const TString& line) {
             if (word == "Write!") {
                 UNIT_ASSERT_VALUES_UNEQUAL(TString::npos,
-                                           line.find(R"__((Write! world sink (Key '('tablescheme (String '"t"))) (Void) '('('mode 'create) '('columns '('('"a" (PgType '_int4) '('columnConstrains '('('not_null))) '())))))))__"));
+                                           line.find(R"__((Write! world sink (Key '('tablescheme (String '"t"))) values '('('mode 'create) '('columns '('('"a" (PgType '_int4) '('columnConstrains '('('not_null))) '())))))))__"));
             }
         };
 
@@ -946,7 +946,7 @@ Y_UNIT_TEST_SUITE(SqlParsingOnly) {
             TVerifyLineFunc verifyLine = [](const TString& word, const TString& line) {
                 if (word == "Write!") {
                     UNIT_ASSERT_VALUES_UNEQUAL(TString::npos,
-                                               line.find(R"__((Write! world sink (Key '('tablescheme (String '"t"))) (Void) '('('mode 'create) '('columns '('('"a" (AsOptionalType (PgType '_int4)) '('columnConstrains '()) '()))))))__"));
+                                               line.find(R"__((Write! world sink (Key '('tablescheme (String '"t"))) values '('('mode 'create) '('columns '('('"a" (AsOptionalType (PgType '_int4)) '('columnConstrains '()) '()))))))__"));
                 }
             };
 
@@ -963,7 +963,7 @@ Y_UNIT_TEST_SUITE(SqlParsingOnly) {
         TVerifyLineFunc verifyLine = [](const TString& word, const TString& line) {
             if (word == "Write!") {
                 UNIT_ASSERT_VALUES_UNEQUAL(TString::npos,
-                                           line.find(R"__((Write! world sink (Key '('tablescheme (String '"t"))) (Void) '('('mode 'create) '('columns '('('"a" (AsOptionalType (DataType 'Int32)) '('columnConstrains '()) '()))) '('primarykey '('"a")))))__"));
+                                           line.find(R"__((Write! world sink (Key '('tablescheme (String '"t"))) values '('('mode 'create) '('columns '('('"a" (AsOptionalType (DataType 'Int32)) '('columnConstrains '()) '()))) '('primarykey '('"a")))))__"));
             }
         };
 
@@ -980,7 +980,7 @@ Y_UNIT_TEST_SUITE(SqlParsingOnly) {
         TVerifyLineFunc verifyLine = [](const TString& word, const TString& line) {
             if (word == "Write!") {
                 UNIT_ASSERT_VALUES_UNEQUAL(TString::npos,
-                                           line.find(R"__((Write! world sink (Key '('tablescheme (String '"t"))) (Void) '('('mode 'create) '('columns '('('"a" (DataType 'Int32) '('columnConstrains '('('not_null))) '()))) '('primarykey '('"a"))))))__"));
+                                           line.find(R"__((Write! world sink (Key '('tablescheme (String '"t"))) values '('('mode 'create) '('columns '('('"a" (DataType 'Int32) '('columnConstrains '('('not_null))) '()))) '('primarykey '('"a"))))))__"));
             }
         };
 
@@ -997,7 +997,7 @@ Y_UNIT_TEST_SUITE(SqlParsingOnly) {
         TVerifyLineFunc verifyLine = [](const TString& word, const TString& line) {
             if (word == "Write!") {
                 UNIT_ASSERT_VALUES_UNEQUAL(TString::npos,
-                                           line.find(R"__((Write! world sink (Key '('tablescheme (String '"t"))) (Void) '('('mode 'create_if_not_exists) '('columns '('('"a" (AsOptionalType (DataType 'Int32)) '('columnConstrains '()) '()))) '('primarykey '('"a")))))__"));
+                                           line.find(R"__((Write! world sink (Key '('tablescheme (String '"t"))) values '('('mode 'create_if_not_exists) '('columns '('('"a" (AsOptionalType (DataType 'Int32)) '('columnConstrains '()) '()))) '('primarykey '('"a")))))__"));
             }
         };
 
@@ -1014,7 +1014,7 @@ Y_UNIT_TEST_SUITE(SqlParsingOnly) {
         TVerifyLineFunc verifyLine = [](const TString& word, const TString& line) {
             if (word == "Write!") {
                 UNIT_ASSERT_VALUES_UNEQUAL_C(TString::npos,
-                                           line.find(R"__((Write! world sink (Key '('tablescheme (String '"t"))) (Void) '('('mode 'create) '('columns '('('"a" (AsOptionalType (DataType 'Int32)) '('columnConstrains '()) '()))) '('primarykey '('"a")) '('temporary))))__"), line);
+                                           line.find(R"__((Write! world sink (Key '('tablescheme (String '"t"))) values '('('mode 'create) '('columns '('('"a" (AsOptionalType (DataType 'Int32)) '('columnConstrains '()) '()))) '('primarykey '('"a")) '('temporary))))__"), line);
             }
         };
 
@@ -1031,7 +1031,7 @@ Y_UNIT_TEST_SUITE(SqlParsingOnly) {
         TVerifyLineFunc verifyLine = [](const TString& word, const TString& line) {
             if (word == "Write!") {
                 UNIT_ASSERT_VALUES_UNEQUAL_C(TString::npos,
-                                           line.find(R"__((Write! world sink (Key '('tablescheme (String '"t"))) (Void) '('('mode 'create) '('columns '('('"a" (AsOptionalType (DataType 'Int32)) '('columnConstrains '()) '()))) '('primarykey '('"a")) '('temporary))))__"), line);
+                                           line.find(R"__((Write! world sink (Key '('tablescheme (String '"t"))) values '('('mode 'create) '('columns '('('"a" (AsOptionalType (DataType 'Int32)) '('columnConstrains '()) '()))) '('primarykey '('"a")) '('temporary))))__"), line);
             }
         };
 

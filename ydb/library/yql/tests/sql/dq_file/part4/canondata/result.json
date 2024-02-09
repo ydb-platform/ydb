@@ -478,28 +478,6 @@
         }
     ],
     "test.test[aggregate-percentiles_grouped_expr--Results]": [],
-    "test.test[bigdate-output_timestamp64-default.txt-Analyze]": [
-        {
-            "checksum": "b4dd508a329723c74293d80f0278c705",
-            "size": 505,
-            "uri": "https://{canondata_backend}/1942100/1a3ac34e6a22249edacf19f24601f290b692c3cb/resource.tar.gz#test.test_bigdate-output_timestamp64-default.txt-Analyze_/plan.txt"
-        }
-    ],
-    "test.test[bigdate-output_timestamp64-default.txt-Debug]": [
-        {
-            "checksum": "401e6efac55f335e541042302237e718",
-            "size": 1306,
-            "uri": "https://{canondata_backend}/1942100/1a3ac34e6a22249edacf19f24601f290b692c3cb/resource.tar.gz#test.test_bigdate-output_timestamp64-default.txt-Debug_/opt.yql_patched"
-        }
-    ],
-    "test.test[bigdate-output_timestamp64-default.txt-Plan]": [
-        {
-            "checksum": "b4dd508a329723c74293d80f0278c705",
-            "size": 505,
-            "uri": "https://{canondata_backend}/1942100/1a3ac34e6a22249edacf19f24601f290b692c3cb/resource.tar.gz#test.test_bigdate-output_timestamp64-default.txt-Plan_/plan.txt"
-        }
-    ],
-    "test.test[bigdate-output_timestamp64-default.txt-Results]": [],
     "test.test[binding-tie_bad_count_fail--Debug]": [],
     "test.test[binding-tie_bad_count_fail--Plan]": [],
     "test.test[binding-tie_bad_count_fail--Results]": [

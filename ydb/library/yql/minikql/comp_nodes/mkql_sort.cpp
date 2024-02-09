@@ -142,11 +142,11 @@ public:
         return *this;
     }
 
-    ptrdiff_t operator - const& (TGatherIterator& rhs) {
+    ptrdiff_t operator - (TGatherIterator& rhs) const& {
         return First - rhs.First;
     }
 
-    TGatherIterator operator + const& (ptrdiff_t n) {
+    TGatherIterator operator + (ptrdiff_t n) const& {
         TGatherIterator tmp(*this);
         tmp.First += n;
         tmp.Second += n;

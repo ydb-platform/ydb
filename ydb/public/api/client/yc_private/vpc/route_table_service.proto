@@ -1,0 +1,164 @@
+syntax = "proto3";
+
+package yandex.cloud.priv.vpc.v1;
+
+import "google/api/annotations.proto";
+import "google/protobuf/field_mask.proto";
+import "ydb/public/api/client/yc_common/api/operation.proto";
+import "ydb/public/api/client/yc_common/api/tools/options.proto";
+import "ydb/public/api/client/yc_private/common/validation.proto";
+import "ydb/public/api/client/yc_private/vpc/route_table.proto";
+import "ydb/public/api/client/yc_private/operation/operation.proto";
+
+option go_package = "github.com/ydb-platform/ydb/ydb/public/api/client/yc_private/vpc;vpc";
+option java_outer_classname = "PSRSS";
+
+service RouteTableService {
+
+  rpc Get (GetRouteTableRequest) returns (RouteTable) {
+    option (google.api.http) = { get: "/compute/routeTables/{route_table_id}" };
+  }
+
+  rpc List (ListRouteTablesRequest) returns (ListRouteTablesResponse) {
+    option (google.api.http) = { get: "/compute/routeTables" };
+  }
+
+  rpc Create (CreateRouteTableRequest) returns (operation.Operation) {
+    option (google.api.http) = { post: "/compute/routeTables" body: "*" };
+    option (yandex.cloud.api.operation) = {
+      metadata: "CreateRouteTableMetadata"
+      response: "RouteTable"
+    };
+  }
+
+  rpc Update (UpdateRouteTableRequest) returns (operation.Operation) {
+    option (google.api.http) = { patch: "/compute/routeTables/{route_table_id}" body: "*" };
+    option (yandex.cloud.api.operation) = {
+      metadata: "UpdateRouteTableMetadata"
+      response: "RouteTable"
+    };
+  }
+
+  rpc Delete (DeleteRouteTableRequest) returns (operation.Operation) {
+    option (google.api.http) = { delete: "/compute/routeTables/{route_table_id}" };
+    option (yandex.cloud.api.operation) = {
+      metadata: "DeleteRouteTableMetadata"
+      response: "google.protobuf.Empty"
+    };
+  }
+
+  rpc UpdateStaticRoutes (UpdateStaticRoutesRequest) returns (operation.Operation) {
+    option (google.api.http) = { post: "/compute/routeTables/{route_table_id}/updateStaticRoutes" body: "*" };
+    option (yandex.cloud.api.operation) = {
+      metadata: "UpdateStaticRoutesMetadata"
+      response: "RouteTable"
+    };
+    option (yandex.cloud.api.tools.method).lint_skip.http_verb = true;
+  }
+
+  rpc ListOperations (ListRouteTableOperationsRequest) returns (ListRouteTableOperationsResponse) {
+    option (google.api.http) = { get: "/compute/routeTables/{route_table_id}/operations" };
+  }
+
+  rpc Move (MoveRouteTableRequest) returns (operation.Operation) {
+    option (google.api.http) = { post: "/compute/routeTables/{route_table_id}/move" body: "*" };
+    option (yandex.cloud.api.operation) = {
+      metadata: "MoveRouteTableMetadata"
+      response: "RouteTable"
+    };
+  }
+
+}
+
+message GetRouteTableRequest {
+  string route_table_id = 1 [(required) = true, (length) = "<=50"];
+}
+
+message ListRouteTablesRequest {
+  string folder_id = 1 [(required) = true, (length) = "<=50"];
+  int64 page_size = 2 [(value) = "<=1000"];
+  string page_token = 3 [(length) = "<=1000"];
+  string filter = 4;
+}
+
+message ListRouteTablesResponse {
+  repeated RouteTable route_tables = 1;
+  string next_page_token = 2;
+}
+
+message CreateRouteTableRequest {
+  string folder_id = 1 [(required) = true, (length) = "<=50"];
+  string name = 2;
+  string description = 3;
+  map<string, string> labels = 4;
+
+  string network_id = 5;
+  repeated StaticRoute static_routes = 6;
+}
+
+message CreateRouteTableMetadata {
+  string route_table_id = 1;
+}
+
+message UpdateRouteTableRequest {
+  string route_table_id = 1 [(required) = true, (length) = "<=50"];
+  google.protobuf.FieldMask update_mask = 2;
+
+  string name = 3;
+  string description = 4;
+  map<string, string> labels = 5;
+
+  repeated StaticRoute static_routes = 6;
+}
+
+message UpdateRouteTableMetadata {
+ string route_table_id = 1;
+}
+
+message DeleteRouteTableRequest {
+  string route_table_id = 1 [(required) = true, (length) = "<=50"];
+}
+
+message DeleteRouteTableMetadata {
+  string route_table_id = 1;
+}
+
+message UpdateStaticRoutesRequest {
+  string route_table_id = 1 [(required) = true, (length) = "<=50"];
+  repeated StaticRouteKey delete = 2 [(yandex.cloud.api.tools.field).lint_skip.all = true];
+  repeated StaticRoute upsert = 3;
+}
+
+message UpdateStaticRoutesMetadata {
+  string route_table_id = 1;
+}
+
+message StaticRouteKey {
+  oneof destination {
+    string destination_prefix = 1;
+  }
+  oneof next_hop {
+    string next_hop_address = 2;
+    string gateway_id = 3;
+  }
+}
+
+message ListRouteTableOperationsRequest {
+  string route_table_id = 1 [(required) = true, (length) = "<=50"];
+  int64 page_size = 2 [(value) = "<=1000"];
+  string page_token = 3 [(length) = "<=1000"];
+}
+
+message ListRouteTableOperationsResponse {
+  repeated operation.Operation operations = 1;
+  string next_page_token = 2;
+}
+
+message MoveRouteTableRequest {
+  string route_table_id = 1 [(required) = true, (length) = "<=50"];
+  string destination_folder_id = 2 [(required) = true, (length) = "<=50"];
+}
+
+message MoveRouteTableMetadata {
+  string route_table_id = 1;
+}

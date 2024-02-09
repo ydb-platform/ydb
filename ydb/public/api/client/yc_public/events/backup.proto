@@ -1,0 +1,46 @@
+syntax = "proto3";
+
+package yandex.cloud.events.ydb;
+
+import "google/protobuf/timestamp.proto";
+import "ydb/public/api/client/yc_public/ydb/backup.proto";
+import "ydb/public/api/client/yc_public/events/common.proto";
+import "ydb/public/api/client/yc_public/common/validation.proto";
+import "ydb/public/api/client/yc_public/events/options.proto";
+import "google/rpc/status.proto";
+
+option go_package = "github.com/ydb-platform/ydb/ydb/public/api/client/yc_public/events/ydb;ydb";
+option java_package = "yandex.cloud.api.events.ydb";
+
+message DeleteBackup {
+  option (include) = true;
+
+  Authentication authentication = 1 [(required) = true];
+  Authorization authorization = 2 [(required) = true];
+
+  EventMetadata event_metadata = 3 [(required) = true];
+  RequestMetadata request_metadata = 4 [(required) = true];
+
+  EventStatus event_status = 5 [(required) = true];
+  EventDetails details = 6 [(required) = true];
+  google.rpc.Status error = 7;
+  Response response = 8 [(required) = true];
+  RequestParameters request_parameters = 9 [(required) = true];
+
+  message RequestParameters {
+    string backup_id = 1 [(required) = true];
+  }
+
+  message EventDetails {
+    string database_id = 1 [(required) = true];
+    string database_name = 2 [(required) = true];
+    string backup_id = 3 [(required) = true, (resource_path) = {resource_type: "ydb.backup"}];
+    google.protobuf.Timestamp created_at = 4 [(required) = true];
+    string backup_name = 5 [(resource_name) = {resource_type: "ydb.backup"}];
+    google.protobuf.Timestamp started_at = 6;
+    google.protobuf.Timestamp completed_at = 7;
+    yandex.cloud.ydb.v1.Backup.Status status = 8;
+    yandex.cloud.ydb.v1.Backup.Type type = 9;
+    int64 size = 10;
+  }
+}

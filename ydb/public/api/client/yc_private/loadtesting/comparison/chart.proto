@@ -1,0 +1,31 @@
+syntax = "proto3";
+
+package yandex.cloud.priv.loadtesting.v1.comparison;
+
+import "ydb/public/api/client/yc_private/loadtesting/comparison/chart_type.proto";
+import "ydb/public/api/client/yc_private/loadtesting/comparison/chart_variant_type.proto";
+
+option go_package = "github.com/ydb-platform/ydb/ydb/public/api/client/yc_private/loadtesting/comparison;comparison";
+option java_outer_classname = "LtV1ComparisonChart";
+
+message ComparisonChart {
+    message Variant {
+        string title = 1;
+        repeated Metric metrics = 2;
+        ChartVariantType variant_type = 5;
+    }
+
+    message Metric {
+        string title = 1;
+        string job_id = 2;
+        bool disabled = 3;
+        repeated double values = 4;
+    }
+
+    ChartType chart_type = 1;
+    repeated Variant variants = 2;
+    repeated int64 ts = 3;
+    int64 ts_denominator = 4;
+    string title = 5;
+    string description = 6;
+}

@@ -1,0 +1,18 @@
+syntax = "proto3";
+
+package yandex.cloud.priv.loadtesting.v1.job.tags;
+
+import "ydb/public/api/client/yc_private/common/validation.proto";
+import "ydb/public/api/client/yc_private/loadtesting/job/tags/tag.proto";
+
+
+option go_package = "github.com/ydb-platform/ydb/ydb/public/api/client/yc_private/loadtesting/job/tags;tags";
+option java_outer_classname = "LtV1JobTagsInterface";
+
+message GetTagsRequest{
+  string folder_id = 1 [(yandex.cloud.priv.required) = true, (yandex.cloud.priv.length) = "<=50"];
+}
+
+message GetTagsResponse {
+  repeated Tag tags = 1;
+}

@@ -1,0 +1,13 @@
+syntax = "proto3";
+
+package yandex.cloud.priv.loadtesting.v1.job.monitoring;
+
+option go_package = "github.com/ydb-platform/ydb/ydb/public/api/client/yc_private/loadtesting/job/monitoring;job_monitoring";
+option java_outer_classname = "LtV1JobMonitoringMetricData";
+
+message MetricData {
+    string case_name = 1;
+    string metric_name = 2;
+    repeated double metric_value = 3;
+    bool disabled = 4;
+}

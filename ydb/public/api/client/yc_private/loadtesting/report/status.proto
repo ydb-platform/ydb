@@ -1,0 +1,13 @@
+syntax = "proto3";
+
+package yandex.cloud.priv.loadtesting.v1.report;
+
+option go_package = "github.com/ydb-platform/ydb/ydb/public/api/client/yc_private/loadtesting/report;report";
+
+enum Status {
+    STATUS_UNSPECIFIED = 0;
+    READY = 1;
+    COLLECTING = 2;
+    CALCULATING = 3;
+    INAPPLICABLE = 4;
+}

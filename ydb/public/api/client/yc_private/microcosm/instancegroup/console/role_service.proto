@@ -1,0 +1,27 @@
+syntax = "proto3";
+
+package yandex.cloud.priv.microcosm.instancegroup.v1.console;
+
+import "ydb/public/api/client/yc_private/common/validation.proto";
+
+option go_package = "github.com/ydb-platform/ydb/ydb/public/api/client/yc_private/microcosm/instancegroup/console;console";
+option java_outer_classname = "PCIGR";
+
+service RoleService {
+  rpc List (ListRolesRequest) returns (ListRolesResponse);
+}
+
+message ListRolesRequest {
+  int64 page_size = 1 [(value) = "0-1000"];
+  string page_token = 2 [(length) = "<=100"];
+}
+
+message ListRolesResponse {
+  repeated Role roles = 1;
+  string next_page_token = 2;
+}
+
+message Role {
+  string id = 1;
+  string tanker_key = 2;
+}

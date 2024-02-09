@@ -1,0 +1,32 @@
+syntax = "proto3";
+
+package yandex.cloud.priv.vpc.v1;
+
+import "google/protobuf/timestamp.proto";
+
+option go_package = "github.com/ydb-platform/ydb/ydb/public/api/client/yc_private/vpc;vpc";
+option java_outer_classname = "PVG";
+
+message Gateway {
+  string id = 1;
+  string folder_id = 2;
+  google.protobuf.Timestamp created_at = 3;
+  string name = 4;
+  string description = 5;
+  map<string, string> labels = 6;
+
+  oneof gateway {
+    SharedEgressGateway shared_egress_gateway = 7;
+    // DedicatedEgressGateway dedicted_egress_gateway = 8;
+  }
+}
+
+message SharedEgressGateway {
+}
+
+// message DedicatedEgressGateway {
+//   oneof addresses {
+//     repeated string address_ids = 1;
+//     string address_pool_id = 2;
+//   }
+// }

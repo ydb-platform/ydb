@@ -1,0 +1,59 @@
+syntax = "proto3";
+
+package yandex.cloud.priv.vpc.v1.vrouter;
+
+option go_package = "github.com/ydb-platform/ydb/ydb/public/api/client/yc_private/vpc/vrouter;vrouter";
+option java_outer_classname = "PVRRI";
+
+message Route {
+	string prefix = 1;
+	repeated Path paths = 2;
+}
+
+message Path {
+	NextHop nexthop = 1;
+	string peer = 2;
+	repeated string destination_vn = 3;
+	int64 local_preference = 4;
+	repeated string external_communities = 5;
+	repeated string security_groups = 6;
+}
+
+message CompositeNextHop {
+	repeated NextHop mcast_list = 1;
+}
+
+message InterfaceNextHop {
+	string interface = 1;
+}
+
+message TunnelNextHop {
+	enum Protocol {
+		PROTOCOL_UNSPECIFIED = 0;
+		MPLS_O_GRE = 1;
+		MPLS_O_UDP = 2;
+		VXLAN = 3;
+	}
+
+	Protocol protocol = 1;
+	string host = 2;
+	int64 label = 3;
+}
+
+message NextHop {
+	enum Type {
+		TYPE_UNSPECIFIED = 0;
+		DISCARD = 1;
+		RECEIVE = 2;
+		INTERFACE = 3;
+		TUNNEL = 4;
+		COMPOSITE = 5;
+	}
+
+	Type type = 1;
+	oneof nexthop {
+		InterfaceNextHop interface = 2;
+		TunnelNextHop tunnel = 3;
+		CompositeNextHop composite = 4;
+	}
+}

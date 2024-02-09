@@ -1,0 +1,139 @@
+syntax = "proto3";
+
+package yandex.cloud.priv.vpc.v1.inner;
+
+import "google/api/annotations.proto";
+import "google/protobuf/field_mask.proto";
+import "ydb/public/api/client/yc_common/api/operation.proto";
+import "ydb/public/api/client/yc_private/vpc/inner/address.proto";
+import "ydb/public/api/client/yc_private/operation/operation.proto";
+import "ydb/public/api/client/yc_common/api/tools/options.proto";
+import "ydb/public/api/client/yc_private/common/validation.proto";
+
+option go_package = "github.com/ydb-platform/ydb/ydb/public/api/client/yc_private/vpc/inner;vpcinnerpb";
+option java_outer_classname = "PAS";
+
+// Only for static IPs. Ephemeral IP addresses are not managed by this service
+// Ephemeral IP addresses that are currently in use, can be promoted to static IP addresses.
+service AddressService {
+  option (cloud.api.tools.service).skip_generate = true; //todo: not implemented yet!
+
+  rpc Get (GetAddressRequest) returns (Address) {
+    option (google.api.http) = { get: "/compute/addresses/{address_id}" };
+  }
+
+  rpc List (ListAddressesRequest) returns (ListAddressesResponse) {
+    option (google.api.http) = { get: "/compute/addresses" };
+  }
+
+  rpc Create (CreateAddressRequest) returns (operation.Operation) {
+    option (google.api.http) = { post: "/compute/addresses" body: "*" };
+    option (yandex.cloud.api.operation) = {
+      metadata: "CreateAddressMetadata"
+      response: "Address"
+    };
+  }
+
+  rpc Update (UpdateAddressRequest) returns (operation.Operation) {
+    option (google.api.http) = { patch: "/compute/addresses/{address_id}" body: "*" };
+    option (yandex.cloud.api.operation) = {
+      metadata: "UpdateAddressMetadata"
+      response: "Address"
+    };
+  }
+
+  rpc Delete (DeleteAddressRequest) returns (operation.Operation) {
+    option (google.api.http) = { delete: "/compute/addresses/{address_id}" };
+    option (yandex.cloud.api.operation) = {
+      metadata: "DeleteAddressMetadata"
+      response: "google.protobuf.Empty"
+    };
+  }
+
+  rpc ListOperations (ListAddressOperationsRequest) returns (ListAddressOperationsResponse) {
+    option (google.api.http) = { get: "/compute/addresses/{address_id}/operations" };
+  }
+}
+
+message GetAddressRequest {
+  string address_id = 1;
+}
+
+message ListAddressesRequest {
+  string folder_id = 1;
+  int64 page_size = 2 [(value) = "<=1000"];
+  string page_token = 3 [(length) = "<=1000"];
+  string filter = 4;
+}
+
+message ListAddressesResponse {
+  repeated Address addresses = 1;
+  string next_page_token = 2;
+}
+
+message CreateAddressRequest {
+  string folder_id = 1;
+  string name = 2;
+  string description = 3;
+  map<string, string> labels = 4;
+  oneof address_spec {
+    ExternalAddressSpec external_address_spec = 5;
+    InternalAddressSpec internal_address_spec = 6;
+  }
+
+  // private fields
+  bool ephemeral = 100;
+}
+
+message ExternalAddressSpec {
+  string address = 1; //if unspecified, one will be automatically allocated from other params.
+  string zone_id = 2; //only if address unspecified
+  string region_id = 3; //only if address unspecified
+  Address.IpVersion ip_version = 4; //only if address unspecified
+  string ddos_protection_provider = 5; //None, "qrator"... Not making it enum, so we don't have to change API for new provider
+  string outgoing_smtp_capability = 6;
+  bool yandex_only = 7;
+}
+
+message InternalAddressSpec {
+  string address = 1; //if unspecified, one will be automatically allocated from the subnet.
+  string subnet_id = 2;
+  Address.IpVersion ip_version = 3; //only if address unspecified
+}
+
+message CreateAddressMetadata {
+  string address_id = 1;
+}
+
+message UpdateAddressRequest {
+  string address_id = 1;
+  google.protobuf.FieldMask update_mask = 2;
+
+  string name = 3;
+  string description = 4;
+  map<string, string> labels = 5;
+  bool ephemeral = 6;
+}
+
+message UpdateAddressMetadata {
+  string address_id = 1;
+}
+
+message DeleteAddressRequest {
+  string address_id = 1;
+}
+
+message DeleteAddressMetadata {
+  string address_id = 1;
+}
+
+message ListAddressOperationsRequest {
+  string address_id = 1;
+  int64 page_size = 2 [(value) = "<=1000"];
+  string page_token = 3 [(length) = "<=1000"];
+}
+
+message ListAddressOperationsResponse {
+  repeated operation.Operation operations = 1;
+  string next_page_token = 2;
+}

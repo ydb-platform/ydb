@@ -1,0 +1,25 @@
+syntax = "proto3";
+
+package yandex.cloud.priv.loadtesting.v1.regression;
+
+import "google/protobuf/timestamp.proto";
+
+import "ydb/public/api/client/yc_private/loadtesting/regression/widget.proto";
+
+option go_package = "github.com/ydb-platform/ydb/ydb/public/api/client/yc_private/loadtesting/regression;regression";
+
+message Dashboard {
+    message Content {
+        repeated Widget widgets = 1;
+    }
+
+    string id = 1;
+    string name = 2;
+    string description = 3;
+    google.protobuf.Timestamp created_at = 4;
+    google.protobuf.Timestamp updated_at = 5;
+    string created_by = 6;
+    string updated_by = 7;
+    string etag = 8;
+    Content content = 9;
+}

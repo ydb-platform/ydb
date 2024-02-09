@@ -1,0 +1,19 @@
+syntax = "proto3";
+
+package yandex.cloud.priv.loadtesting.v1.regression;
+
+option go_package = "github.com/ydb-platform/ydb/ydb/public/api/client/yc_private/loadtesting/regression;regression";
+
+
+enum ComparisonOperator {
+    COMPARISON_OPERATOR_UNSPECIFIED = 0;
+    LT = 1;
+    LTE = 2;
+    GT = 3;
+    GTE = 4;
+}
+
+message Sla {
+    double reference = 1;
+    ComparisonOperator op = 2;
+}

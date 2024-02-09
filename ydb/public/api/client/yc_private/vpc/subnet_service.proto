@@ -1,0 +1,260 @@
+syntax = "proto3";
+
+package yandex.cloud.priv.vpc.v1;
+
+import "google/api/annotations.proto";
+import "google/protobuf/field_mask.proto";
+import "ydb/public/api/client/yc_common/api/operation.proto";
+import "ydb/public/api/client/yc_private/vpc/subnet.proto";
+import "ydb/public/api/client/yc_private/operation/operation.proto";
+import "ydb/public/api/client/yc_private/common/validation.proto";
+import "ydb/public/api/client/yc_private/iam/reference.proto";
+
+option go_package = "github.com/ydb-platform/ydb/ydb/public/api/client/yc_private/vpc;vpc";
+option java_outer_classname = "PSS";
+
+service SubnetService {
+
+  rpc Get (GetSubnetRequest) returns (Subnet) {
+    option (google.api.http) = { get: "/compute/subnets/{subnet_id}" };
+  }
+
+  rpc List (ListSubnetsRequest) returns (ListSubnetsResponse) {
+    option (google.api.http) = { get: "/compute/subnets" };
+  }
+
+  rpc Create (CreateSubnetRequest) returns (operation.Operation) {
+    option (google.api.http) = { post: "/compute/subnets" body: "*" };
+    option (yandex.cloud.api.operation) = {
+      metadata: "CreateSubnetMetadata"
+      response: "Subnet"
+    };
+  }
+
+  rpc Update (UpdateSubnetRequest) returns (operation.Operation) {
+    option (google.api.http) = {patch: "/compute/subnets/{subnet_id}" body: "*"};
+    option (yandex.cloud.api.operation) = {
+      metadata: "UpdateSubnetMetadata"
+      response: "Subnet"
+    };
+  }
+
+  rpc AddCidrBlocks (AddSubnetCidrBlocksRequest) returns (operation.Operation) {
+    option (google.api.http) = {post: "/compute/subnets/{subnet_id}/add-cidr-blocks" body: "*"};
+    option (yandex.cloud.api.operation) = {
+      metadata: "UpdateSubnetMetadata"
+      response: "Subnet"
+    };
+  }
+
+  rpc RemoveCidrBlocks (RemoveSubnetCidrBlocksRequest) returns (operation.Operation) {
+    option (google.api.http) = {post: "/compute/subnets/{subnet_id}/delete-cidr-blocks" body: "*"};
+    option (yandex.cloud.api.operation) = {
+      metadata: "UpdateSubnetMetadata"
+      response: "Subnet"
+    };
+  }
+
+  rpc Relocate (RelocateSubnetRequest) returns (operation.Operation) {
+    option (yandex.cloud.api.operation) = {
+      metadata: "RelocateSubnetMetadata"
+      response: "Subnet"
+    };
+  }
+
+  rpc Delete (DeleteSubnetRequest) returns (operation.Operation) {
+    option (google.api.http) = {delete: "/compute/subnets/{subnet_id}"};
+    option (yandex.cloud.api.operation) = {
+      metadata: "DeleteSubnetMetadata"
+      response: "google.protobuf.Empty"
+    };
+  }
+
+  rpc ListOperations (ListSubnetOperationsRequest) returns (ListSubnetOperationsResponse) {
+    option (google.api.http) = { get: "/compute/subnets/{subnet_id}/operations" };
+  }
+
+  rpc Move (MoveSubnetRequest) returns (operation.Operation) {
+    option (google.api.http) = { post: "/compute/subnets/{subnet_id}/move" body: "*" };
+    option (yandex.cloud.api.operation) = {
+      metadata: "MoveSubnetMetadata"
+      response: "Subnet"
+    };
+  }
+
+  rpc ListUsedAddresses (ListUsedAddressesRequest) returns (ListUsedAddressesResponse);
+}
+
+message GetSubnetRequest {
+  string subnet_id = 1 [(required) = true, (length) = "<=50"];
+}
+
+message ListSubnetsRequest {
+  string folder_id = 1 [(required) = true, (length) = "<=50"];
+  int64 page_size = 2 [(value) = "<=1000"];
+  string page_token = 3 [(length) = "<=1000"];
+  string filter = 4;
+}
+
+message ListSubnetsResponse {
+  repeated Subnet subnets = 1;
+  string next_page_token = 2;
+}
+
+
+// should belong to subnet.proto
+message SubnetExtraParams {
+  repeated string import_rts = 1;
+  repeated string export_rts = 2;
+  string next_vdns = 3;
+  bool hbf_enabled = 4;
+  bool rpf_enabled = 5;
+  repeated string feature_flags = 6;
+}
+
+message CreateSubnetRequest {
+  string folder_id = 1 [(required) = true, (length) = "<=50"];
+  string name = 2;
+  string description = 3;
+  map<string, string> labels = 4;
+  string network_id = 5;
+  string zone_id = 6;
+  // string region_id = ; when subnet will be regional
+  repeated string v4_cidr_blocks = 7;
+
+  // can't use oneof around repeated types
+  repeated string v6_cidr_blocks = 8;
+  repeated V6CidrSpec v6_cidr_specs = 15;
+
+  string route_table_id = 10;
+  bool egress_nat_enable = 11;
+  SubnetExtraParams extra_params = 12;
+  DhcpOptions dhcp_options = 13;
+  bool serverless_functions_pluggable = 14;
+}
+
+message CreateSubnetMetadata {
+  string subnet_id = 1;
+}
+
+message V6CidrSpec {
+  oneof cidr_spec {
+    option (exactly_one) = true;
+    HbfCidrSpec hbf_cidr_spec = 1; // deprecated
+    ProjectIdCidrSpec project_id_cidr_spec = 2;
+  }
+}
+
+// deprecated
+message HbfCidrSpec {
+  // let project_id and extra bits be hexadecimal numbers
+  string project_id = 1 [(pattern) = "[0-9a-fA-F]{1,8}"];
+  string subnet_bits = 2 [(pattern) = "|[0-9a-fA-F]{1,8}"];
+  int64 prefix_length = 3 [(value) = "96-124"];
+}
+
+message ProjectIdCidrSpec {
+  // let project_id and extra bits be hexadecimal numbers
+  string project_id = 1 [(pattern) = "[0-9a-fA-F]{1,8}"];
+  string subnet_bits = 2 [(pattern) = "|[0-9a-fA-F]{1,8}"];
+  int64 prefix_length = 3 [(value) = "96-124"];
+}
+
+message UpdateSubnetRequest {
+  string subnet_id = 1 [(required) = true, (length) = "<=50"];
+  google.protobuf.FieldMask update_mask = 2;
+
+  string name = 3;
+  string description = 4;
+  map<string, string> labels = 5;
+  string route_table_id = 7;
+  bool egress_nat_enable = 8;
+
+  // update_mask should be used for updating specific options
+  // for example "dhcp_options.domain_name_servers" or "extra_params.feature_flags"
+  DhcpOptions dhcp_options = 9;
+  SubnetExtraParams extra_params = 10;
+
+  repeated string v4_cidr_blocks = 11;
+}
+
+message UpdateSubnetMetadata {
+  string subnet_id = 1;
+}
+
+message AddSubnetCidrBlocksRequest {
+  string subnet_id = 1 [(required) = true, (length) = "<=50"];
+  repeated string v4_cidr_blocks = 2;
+  repeated string v6_cidr_blocks = 3;
+  repeated V6CidrSpec v6_cidr_specs = 4;
+}
+
+message AddSubnetCidrBlocksMetadata {
+  string subnet_id = 1;
+}
+
+message RemoveSubnetCidrBlocksRequest {
+  string subnet_id = 1 [(required) = true, (length) = "<=50"];
+  repeated string v4_cidr_blocks = 2;
+  repeated string v6_cidr_blocks = 3;
+}
+
+message RemoveSubnetCidrBlocksMetadata {
+  string subnet_id = 1;
+}
+
+message DeleteSubnetRequest {
+  string subnet_id = 1 [(required) = true, (length) = "<=50"];
+}
+
+message DeleteSubnetMetadata {
+  string subnet_id = 1;
+}
+
+message ListSubnetOperationsRequest {
+  string subnet_id = 1 [(required) = true, (length) = "<=50"];
+  int64 page_size = 2 [(value) = "<=1000"];
+  string page_token = 3 [(length) = "<=1000"];
+}
+
+message ListSubnetOperationsResponse {
+  repeated operation.Operation operations = 1;
+  string next_page_token = 2;
+}
+
+message MoveSubnetRequest {
+  string subnet_id = 1 [(required) = true, (length) = "<=50"];
+  string destination_folder_id = 2 [(required) = true, (length) = "<=50"];
+}
+
+message MoveSubnetMetadata {
+  string subnet_id = 1;
+}
+
+message ListUsedAddressesRequest {
+  string subnet_id = 1 [(required) = true];
+  int64 page_size = 2 [(value) = "<=1000"];
+  string page_token = 3 [(length) = "<=1000"];
+  string filter = 4;
+}
+
+message ListUsedAddressesResponse {
+  repeated UsedAddress addresses = 1;
+  string next_page_token = 2;
+}
+
+message UsedAddress {
+  string address = 1;
+  IpVersion ip_version = 2;
+  repeated reference.Reference references = 3;
+}
+
+message RelocateSubnetRequest {
+  string subnet_id = 1 [(required) = true, (length) = "<=50"];
+  string destination_zone_id = 2 [(required) = true];
+  bool ignore_feature_flags = 100;
+}
+
+message RelocateSubnetMetadata {
+  string subnet_id = 1;
+}

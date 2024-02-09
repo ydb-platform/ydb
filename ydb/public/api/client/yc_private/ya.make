@@ -1,9 +1,18 @@
 RECURSE(
+    access
+    common
     compute
     iam
     kms
+    loadtesting
+    microcosm
+    oauth
     operation
+    team
+    quota
+    reference
     resourcemanager
     servicecontrol
+    vpc
+    ydb
 )
-

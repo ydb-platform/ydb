@@ -1,0 +1,430 @@
+syntax = "proto3";
+
+package yandex.cloud.priv.loadtesting.v1;
+
+import "google/protobuf/timestamp.proto";
+import "google/protobuf/field_mask.proto";
+import "ydb/public/api/client/yc_private/common/validation.proto";
+import "ydb/public/api/client/yc_common/api/operation.proto";
+import "ydb/public/api/client/yc_private/operation/operation.proto";
+import "ydb/public/api/client/yc_private/loadtesting/tank_job.proto";
+import "ydb/public/api/client/yc_private/loadtesting/storage.proto";
+import "ydb/public/api/client/yc_private/loadtesting/report/table/request.proto";
+import "ydb/public/api/client/yc_private/loadtesting/report/table/response.proto";
+import "ydb/public/api/client/yc_private/loadtesting/job/tags/interface.proto";
+import "ydb/public/api/client/yc_private/loadtesting/job/interface.proto";
+import "ydb/public/api/client/yc_private/loadtesting/job/tags/tag.proto";
+import "ydb/public/api/client/yc_private/loadtesting/job/monitoring/report.proto";
+import "ydb/public/api/client/yc_private/loadtesting/common/chart.proto";
+import "ydb/public/api/client/yc_private/loadtesting/common/timestamp_range.proto";
+import "ydb/public/api/client/yc_private/loadtesting/comparison/comparison.proto";
+import "ydb/public/api/client/yc_private/loadtesting/comparison/request.proto";
+import "ydb/public/api/client/yc_private/loadtesting/comparison/monitoring.proto";
+
+
+option go_package = "github.com/ydb-platform/ydb/ydb/public/api/client/yc_private/loadtesting;loadtesting";
+option java_outer_classname = "PTJS";
+
+
+service TankJobService {
+  rpc Get (GetTankJobRequest) returns (TankJob);
+  rpc List (ListTankJobsRequest) returns (ListTankJobsResponse);
+
+  rpc Create (CreateTankJobRequest) returns (operation.Operation) {
+    option (yandex.cloud.api.operation) = {
+      metadata: "CreateTankJobMetadata"
+      response: "TankJob"
+    };
+  };
+  rpc CreateMulti (CreateMultiJobRequest) returns (operation.Operation) {
+    option (yandex.cloud.api.operation) = {
+      metadata: "CreateTankJobMetadata"
+      response: "TankJob"
+    };
+  };
+  rpc Update (UpdateTankJobRequest) returns (operation.Operation) {
+    option (yandex.cloud.api.operation) = {
+      metadata: "UpdateTankJobMetadata"
+      response: "TankJob"
+    };
+  };
+  rpc Stop (StopTankJobRequest) returns (operation.Operation) {
+    option (yandex.cloud.api.operation) = {
+      metadata: "StopTankJobMetadata"
+      response: "TankJob"
+    };
+  };
+  rpc Delete (DeleteTankJobRequest) returns (operation.Operation) {
+    option (yandex.cloud.api.operation) = {
+      metadata: "DeleteTankJobMetadata"
+      response: "google.protobuf.Empty"
+    };
+  };
+
+  rpc GetConfig (GetConfigRequest) returns (GetConfigResponse);
+  rpc GetDynformPayload (job.GetDynformPayloadRequest) returns (job.GetDynformPayloadResponse);
+  rpc ValidateConfig (ValidateConfigRequest) returns (ValidateConfigResponse);
+  rpc UploadConfig (UploadConfigRequest) returns (UploadFileResponse);
+  rpc GetGenerators (GetGeneratorsRequest) returns (GetGeneratorsResponse);
+  rpc UploadAmmo (UploadAmmoRequest) returns (UploadFileResponse);
+  rpc GetFolderStats (GetFolderStatsRequest) returns (FolderStats);
+  rpc GetReport (GetReportRequest) returns (TankReport);
+  rpc GetChart (GetChartRequest) returns (TankChart);
+  rpc GetReportTables (report.table.GetReportTablesRequest) returns (report.table.GetReportTablesResponse);
+  rpc GetTags(job.tags.GetTagsRequest) returns (job.tags.GetTagsResponse);
+  rpc LinkTags(job.LinkTagsRequest) returns (job.LinkTagsResponse);
+  rpc UnlinkTags(job.UnlinkTagsRequest) returns (job.UnlinkTagsResponse);
+  rpc CompareTestsInfo(comparison.ComparisonTestsInfoRequest) returns (comparison.ComparisonInfo);
+  rpc CompareTestsCharts(comparison.ComparisonTestsChartsRequest) returns (comparison.ComparisonCharts);
+  rpc CompareTestsTables(comparison.ComparisonTestsTablesRequest) returns (comparison.ComparisonTables);
+  rpc GetMonitoringReport (job.GetMonitoringReportRequest) returns (job.monitoring.MonitoringReport);
+  rpc GetMonitoringHosts (job.GetMonitoringHostsRequest) returns (job.GetMonitoringHostsResponse);
+  rpc CompareMonitoringInfo(comparison.ComparisonMonitoringInfoRequest) returns (comparison.ComparisonMonitoringInfo);
+  rpc CompareMonitoringData(comparison.ComparisonMonitoringDataRequest) returns (comparison.ComparisonMonitoringData);
+
+  rpc ReportInfo(ReportInfoRequest) returns (ReportInfoResponse);
+  rpc ReportCharts(ReportChartsRequest) returns (ReportChartsResponse);
+  rpc MonitoringInfo(MonitoringInfoRequest) returns (MonitoringInfoResponse);
+  rpc MonitoringCharts(MonitoringChartsRequest) returns (MonitoringChartsResponse);
+  rpc CompareReportInfo(ComparisonReportInfoRequest) returns (ComparisonReportInfoResponse);
+  rpc CompareReportCharts(ComparisonReportChartsRequest) returns (ComparisonReportChartsResponse);
+
+  // Deprecated. Do not use.
+  rpc GetCreateForm(FormRequest) returns (FormResponse);
+}
+
+
+message GetTankJobRequest {
+  string id = 1 [(yandex.cloud.priv.required) = true, (yandex.cloud.priv.length) = "<=50"];
+}
+
+message ListTankJobsRequest {
+  string folder_id = 1 [(yandex.cloud.priv.required) = true, (yandex.cloud.priv.length) = "<=50"];
+  int64 page_size = 2 [(yandex.cloud.priv.value) = "0-1000"];
+  string page_token = 3 [(yandex.cloud.priv.length) = "<=100"];
+  string filter = 4 [(yandex.cloud.priv.length) = "<=1000"];
+}
+
+message ListTankJobsResponse {
+  string folder_id = 1;
+  repeated TankJob tank_jobs = 2;
+  string next_page_token = 3;
+  int64 total_count = 4;
+}
+
+message CreateTankJobRequest {
+  string folder_id = 1 [(yandex.cloud.priv.required) = true, (yandex.cloud.priv.length) = "<=50"];
+  string name = 2  [(yandex.cloud.priv.pattern) = "|[a-z][-a-z0-9]{1,61}[a-z0-9]"];
+  string description = 3 [(yandex.cloud.priv.length) = "<=256"];
+  // = 4 deprecated
+  TankJob.Generator generator = 5;
+  string tank_instance_id = 6 [(yandex.cloud.priv.length) = "<=50"];
+  // = 7 deprecated
+  // = 8 deprecated
+  string target_version = 9 [(yandex.cloud.priv.length) = "<=50"];
+  // = 10 deprecated
+  // = 11 deprecated
+  string config = 12 [(yandex.cloud.priv.required) = true];
+  // = 13 deprecated
+  // = 14 deprecated
+  // = 15 deprecated
+  // = 16 deprecated
+  // = 17 deprecated
+  // = 18 deprecated
+  // = 19 deprecated
+  string logging_log_group_id = 20;
+  // = 21 deprecated
+  // = 22 deprecated
+  // = 23 deprecated
+  repeated job.tags.Tag tags = 24;
+  string form_payload_json = 25;
+  repeated TestDataEntry data_payload = 26;
+  TestArtifactUploadSettings artifact_upload_settings = 27;
+
+  // Deprecated. Dot not use
+  map<string, string> labels = 4 [deprecated = true];
+  string target_address = 7 [deprecated = true];
+  int64 target_port = 8 [deprecated = true];
+  int64 instances = 10 [deprecated = true];
+  Schedule load_schedule = 11 [deprecated = true];
+  string ammo_id = 13 [deprecated = true];
+  repeated string ammo_urls = 14 [deprecated = true];
+  repeated string ammo_headers = 15 [deprecated = true];
+  AmmoType ammo_type = 16 [deprecated = true];
+  bool ssl = 17 [deprecated = true];
+  int64 imbalance_point = 18 [deprecated = true];
+  int64 imbalance_ts = 19 [deprecated = true];
+  repeated Autostop autostops = 21 [deprecated = true];
+  StorageObject test_data = 22 [deprecated = true];
+  bool localhost_monitoring = 23 [deprecated = true];
+}
+
+message CreateMultiJobRequest {
+  string folder_id = 1 [(yandex.cloud.priv.required) = true, (yandex.cloud.priv.length) = "<=50"];
+  string name = 2  [(yandex.cloud.priv.pattern) = "|[a-z][-a-z0-9]{1,61}[a-z0-9]"];
+  string description = 3 [(yandex.cloud.priv.length) = "<=256"];
+  // 4 = deprecated
+  string target_version = 9 [(yandex.cloud.priv.length) = "<=50"];
+  string logging_log_group_id = 10;
+
+  repeated CreateTankJobRequest parts = 11;
+
+  repeated job.tags.Tag tags = 12;
+
+  // Deprecated. Do not use.
+  map<string, string> labels = 4 [deprecated = true];
+}
+
+message CreateTankJobMetadata {
+  string id = 1;
+}
+
+message UpdateTankJobRequest {
+  string id = 1 [(yandex.cloud.priv.required) = true, (yandex.cloud.priv.length) = "<=50"];
+  google.protobuf.FieldMask update_mask = 2;
+  string name = 3 [(yandex.cloud.priv.pattern) = "|[a-z][-a-z0-9]{1,61}[a-z0-9]"];
+  string description = 4 [(yandex.cloud.priv.length) = "<=256"];
+  // 5 = deprecated
+  // 6 = deprecated
+  string target_version = 7 [(yandex.cloud.priv.length) = "<=50"];
+  int64 imbalance_point = 8;
+  int64 imbalance_ts = 9;
+  string imbalance_comment = 10;
+  google.protobuf.Timestamp imbalance_at = 11;
+  repeated job.tags.Tag tags = 12;
+  string tank_instance_id = 13 [(yandex.cloud.priv.length) = "<=50"];
+
+  // Deprecated. Do not use.
+  map<string, string> labels = 5 [deprecated = true];
+  bool favorite = 6 [deprecated = true];
+}
+
+message UpdateTankJobMetadata {
+  string id = 1;
+}
+
+message StopTankJobRequest {
+  string id = 1  [(yandex.cloud.priv.required) = true, (yandex.cloud.priv.length) = "<=50"];
+}
+
+message StopTankJobMetadata {
+  string id = 1;
+}
+
+message DeleteTankJobRequest {
+  string id = 1  [(yandex.cloud.priv.required) = true, (yandex.cloud.priv.length) = "<=50"];
+}
+
+message DeleteTankJobMetadata {
+  string id = 1;
+}
+
+message GetReportRequest {
+  string job_id = 1  [(yandex.cloud.priv.required) = true, (yandex.cloud.priv.length) = "<=50"];
+  TimestampRange time_range = 2;
+  int64 chart_width = 3;
+}
+
+message GetChartRequest {
+  string job_id = 1  [(yandex.cloud.priv.required) = true, (yandex.cloud.priv.length) = "<=50"];
+  string chart_type = 2 [(yandex.cloud.priv.required) = true, (yandex.cloud.priv.length) = "<=50"];
+}
+
+message GetConfigRequest {
+  string job_id = 1  [(yandex.cloud.priv.required) = true, (yandex.cloud.priv.length) = "<=50"];
+}
+
+message GetConfigResponse {
+  string config = 1 [(yandex.cloud.priv.required) = true];
+}
+
+message ValidateConfigRequest {
+  string config = 1  [(yandex.cloud.priv.required) = true];
+  string folder_id = 2 [(yandex.cloud.priv.required) = true, (yandex.cloud.priv.length) = "<=50"];
+}
+
+message ValidateConfigResponse {
+  enum Status {
+    STATUS_UNSPECIFIED = 0;
+    OK = 1;
+    FAILED = 2;
+  }
+
+  Status status = 1;
+  repeated string errors = 2;
+}
+
+message UploadConfigRequest {
+  string filename = 1 [(yandex.cloud.priv.length) = "<=50"];
+  string folder_id = 2 [(yandex.cloud.priv.required) = true, (yandex.cloud.priv.length) = "<=50"];
+  bytes config = 3;
+}
+
+message UploadAmmoRequest {
+  string filename = 1 [(yandex.cloud.priv.length) = "<=50"];
+  string folder_id = 2 [(yandex.cloud.priv.required) = true, (yandex.cloud.priv.length) = "<=50"];
+  bytes ammo = 3;
+}
+
+message UploadFileResponse {
+  enum Status {
+    STATUS_UNSPECIFIED = 0;
+    OK = 1;
+    FAILED = 2;
+  }
+  string id = 1;
+  string filename = 2;
+  google.protobuf.Timestamp created_at = 3;
+  Status status = 4;
+  repeated string errors = 5;
+}
+
+message GetGeneratorsRequest {
+  string folder_id = 1 [(yandex.cloud.priv.required) = true, (yandex.cloud.priv.length) = "<=50"];
+}
+
+message GetGeneratorsResponse {
+  repeated string generator_name = 1;
+}
+
+// Deprecated. Do not use.
+message FormRequest {
+  option deprecated = true;
+  TankJob.Generator generator = 1;
+  string folder_id = 2;
+}
+
+// Deprecated. Do not use.
+message FormResponse {
+  option deprecated = true;
+  enum FormItemType {
+    FORM_ITEM_TYPE_UNSPECIFIED = 0;
+    STRING = 1;
+    INT64 = 2;
+    OBJECT = 3;
+    ARRAY = 4;
+    SECRET = 5;
+    BOOL = 6;
+    ENUM = 7;
+    NUMBER = 8;
+  }
+  message ViewSpec {
+    string label = 1;
+    string help = 2;
+    string type = 3;
+    bool disabled = 4;
+    repeated string order = 5;
+  }
+  message FormItem {
+    ViewSpec view_spec = 1;
+    bool required = 2;
+    map<string,FormItem> properties = 4;
+    string value = 6;
+    FormItemType type = 7;
+    repeated string enum = 10;
+    map<string,string> description = 11;
+    FormItem items = 12;
+    double minimum = 13;
+    double maximum = 14;
+  }
+  string generator_type = 1;
+  map<string,FormItem> result_spec = 2;
+}
+
+message GetFolderStatsRequest {
+  string folder_id = 1 [(required) = true, (length) = "<=50"];
+}
+
+message FolderStats {
+  // Show the amount of resources for given folder.
+  int64 tanks_count = 1;
+  int64 jobs_count = 2;
+}
+
+message ReportInfoRequest {
+  string job_id = 1;
+}
+
+message ReportInfoResponse {
+  common.TimestampRange entire_time = 1;
+  repeated string all_cases = 2;
+}
+
+message ReportChartsRequest {
+  enum ChartType {
+    CHART_TYPE_UNSPECIFIED = 0;
+    CHART_TYPE_QUANTILES = 1;
+    CHART_TYPE_NETWORK_CODES = 2;
+    CHART_TYPE_PROTOCOL_CODES = 3;
+    CHART_TYPE_INSTANCES = 4;
+  }
+
+  string job_id = 1;
+  common.TimestampRange time_range = 2;
+  repeated string cases = 3;
+  repeated ChartType chart_types = 4;
+  int64 chart_width = 5;
+}
+
+message ReportChartsResponse {
+  repeated common.Chart charts = 1;
+}
+
+message MonitoringInfoRequest {
+  string job_id = 1;
+}
+
+message MonitoringInfoResponse {
+  message Metric {
+    string metric_type = 1;
+    string metric_name = 2;
+    repeated string hosts = 3;
+  }
+  common.TimestampRange entire_time = 1;
+  repeated Metric metrics = 2;
+}
+
+message MonitoringChartsRequest {
+  string job_id = 1;
+  common.TimestampRange time_range = 2;
+  int64 chart_width = 3;
+  string metric_type = 4;
+  string metric_name = 5;
+  repeated string hosts = 6;
+}
+
+message MonitoringChartsResponse {
+  repeated common.Chart charts = 1;
+}
+
+message ComparisonReportInfoRequest {
+  repeated string job_ids = 1;
+}
+
+message ComparisonReportInfoResponse {
+  common.TimestampRange entire_time = 1;
+  repeated string all_cases = 2;
+}
+
+message ComparisonReportChartsRequest {
+  enum ChartType {
+    CHART_TYPE_UNSPECIFIED = 0;
+    CHART_TYPE_RESPONSE_TIME_PDF = 1;
+    CHART_TYPE_RESPONSE_TIME_CDF = 2;
+    CHART_TYPE_QUANTILES_BY_TIME = 3;
+    CHART_TYPE_RESPONSE_TIME_BY_TIME = 4;
+    CHART_TYPE_PROTOCOL_CODES_BY_TIME = 5;
+    CHART_TYPE_NETWORK_CODES_BY_TIME = 6;
+    CHART_TYPE_MONITORING_BY_TIME = 7;
+  }
+
+  repeated string job_ids = 1;
+  common.TimestampRange time_range = 2;
+  repeated string cases = 3;
+  repeated ChartType chart_types = 4;
+  int64 chart_width = 5;
+}
+
+message ComparisonReportChartsResponse {
+  repeated common.Chart charts = 1;
+}

@@ -1,0 +1,115 @@
+syntax = "proto3";
+
+package yandex.cloud.priv.loadtesting.v1;
+
+import "ydb/public/api/client/yc_private/common/validation.proto";
+import "ydb/public/api/client/yc_common/api/operation.proto";
+import "ydb/public/api/client/yc_private/operation/operation.proto";
+import "ydb/public/api/client/yc_private/loadtesting/storage.proto";
+
+
+option go_package = "github.com/ydb-platform/ydb/ydb/public/api/client/yc_private/loadtesting;loadtesting";
+option java_outer_classname = "PLTSS";
+
+service StorageService {
+  // Deprecated. Do not use.
+  rpc Create (CreateStorageRequest) returns (operation.Operation) {
+    option (yandex.cloud.api.operation) = {
+      metadata: "CreateStorageMetadata"
+      response: "Storage"
+    };
+  };
+  // Deprecated. Do not use.
+  rpc Delete (DeleteStorageRequest) returns (operation.Operation) {
+    option (yandex.cloud.api.operation) = {
+      metadata: "DeleteStorageMetadata"
+      response: "google.protobuf.Empty"
+    };
+  };
+
+  // Deprecated. Dot not use.
+  rpc Get (GetStorageRequest) returns (Storage);
+
+  // Deprecated. Do not use.
+  rpc Update (UpdateStorageRequest) returns (operation.Operation) {
+    option (yandex.cloud.api.operation) = {
+      metadata: "UpdateStorageMetadata"
+      response: "Storage"
+    };
+  };
+
+  // Deprecated. Dot not use.
+  rpc List (ListStorageRequest) returns (ListStorageResponse);
+
+  // Deprecated. Do not use.
+  rpc UploadObject (UploadStorageObjectRequest) returns (StorageObject);
+}
+
+// Deprecated. Do not use.
+message CreateStorageRequest {
+  option deprecated = true;
+  string folder_id = 1 [(yandex.cloud.priv.required) = true, (yandex.cloud.priv.length) = "<=50"];
+  string object_storage_bucket_name = 2 [(yandex.cloud.priv.required) = true, (yandex.cloud.priv.length) = "<=50"];
+  string name = 3 [(yandex.cloud.priv.pattern) = "|[a-z][-a-z0-9]{1,61}[a-z0-9]"];
+  string description = 4 [(yandex.cloud.priv.length) = "<=256"];
+}
+
+// Deprecated. Do not use.
+message DeleteStorageRequest {
+  option deprecated = true;
+  string storage_id = 1 [(yandex.cloud.priv.required) = true, (yandex.cloud.priv.length) = "<=50"];
+}
+
+message GetStorageRequest {
+  option deprecated = true;
+  string storage_id = 1 [(yandex.cloud.priv.required) = true, (yandex.cloud.priv.length) = "<=50"];
+}
+
+// Deprecated. Do not use.
+message UpdateStorageRequest {
+  option deprecated = true;
+  string storage_id = 1 [(yandex.cloud.priv.required) = true, (yandex.cloud.priv.length) = "<=50"];
+  string name = 2 [(yandex.cloud.priv.pattern) = "|[a-z][-a-z0-9]{1,61}[a-z0-9]"];
+  string description = 3 [(yandex.cloud.priv.length) = "<=256"];
+}
+
+message ListStorageRequest {
+  option deprecated = true;
+  string folder_id = 1 [(yandex.cloud.priv.required) = true, (yandex.cloud.priv.length) = "<=50"];
+  int64 page_size = 2 [(yandex.cloud.priv.value) = "0-1000"];
+  string page_token = 3 [(yandex.cloud.priv.length) = "<=100"];
+  string filter = 4 [(yandex.cloud.priv.length) = "<=1000"];
+}
+
+message ListStorageResponse {
+  option deprecated = true;
+  repeated Storage storages = 1;
+  string next_page_token = 2;
+}
+
+// Deprecated. Do not use.
+message UploadStorageObjectRequest {
+  option deprecated = true;
+  string storage_id = 1 [(yandex.cloud.priv.length) = "<=50"];
+  string folder_id = 2 [(yandex.cloud.priv.required) = true, (yandex.cloud.priv.length) = "<=50"];
+  string filename = 3 [(yandex.cloud.priv.length) = "<=50"];
+  bytes test_data = 4 [(yandex.cloud.priv.required) = true];
+}
+
+// Deprecated. Do not use.
+message CreateStorageMetadata {
+  option deprecated = true;
+  string storage_id = 1;
+}
+
+// Deprecated. Do not use.
+message DeleteStorageMetadata {
+  option deprecated = true;
+  string storage_id = 1;
+}
+
+// Deprecated. Do not use.
+message UpdateStorageMetadata {
+  option deprecated = true;
+  string storage_id = 1;
+}

@@ -1,0 +1,36 @@
+syntax = "proto3";
+
+package yandex.cloud.priv.iam.v1;
+
+import "ydb/public/api/client/yc_private/common/validation.proto";
+
+option go_package = "github.com/ydb-platform/ydb/ydb/public/api/client/yc_private/iam;iam";
+option java_outer_classname = "PPS";
+
+message PermissionStage {
+  string id = 1;
+  string description = 2;
+}
+
+message SetAllPermissionStagesRequest {
+  string resource_id = 1 [(required) = true, (length) = "<=50"];
+}
+
+message SetPermissionStagesRequest {
+  string resource_id = 1 [(required) = true, (length) = "<=50"];
+  repeated string permission_stage_ids = 2;
+}
+
+message SetPermissionStagesMetadata {
+  string resource_id = 1;
+}
+
+message UpdatePermissionStagesRequest {
+  string resource_id = 1 [(required) = true, (length) = "<=50"];
+  repeated string add_permission_stage_ids = 2;
+  repeated string remove_permission_stage_ids = 3;
+}
+
+message UpdatePermissionStagesMetadata {
+  string resource_id = 1;
+}

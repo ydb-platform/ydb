@@ -13,3 +13,30 @@ extend google.protobuf.FieldOptions {
 extend google.protobuf.MessageOptions {
   bool include = 100800;
 }
+
+extend google.protobuf.MessageOptions {
+  bool system_organization = 100900;
+}
+
+extend google.protobuf.FieldOptions {
+  ResourcePathOption resource_path = 101000;
+}
+
+extend google.protobuf.FieldOptions {
+  ResourceNameOption resource_name = 101100;
+}
+
+message ResourcePathOption {
+  string resource_type = 1;
+  CustomTypes custom_type = 2;
+}
+
+message ResourceNameOption {
+  string resource_type = 1;
+}
+
+enum CustomTypes {
+  CUSTOM_TYPES_UNSPECIFIED = 0;
+  FEDERATION = 1;
+  SUBJECT = 2;
+}

@@ -1,0 +1,20 @@
+syntax = "proto3";
+
+package yandex.cloud.priv.loadtesting.agent.v1;
+
+option go_package = "github.com/ydb-platform/ydb/ydb/public/api/client/yc_private/loadtesting/agent;agent";
+
+
+service GreeterService {
+
+  rpc SayHello (SayHelloRequest) returns (SayHelloResponse);
+
+}
+
+message SayHelloRequest {
+  string tank_id = 1;
+}
+
+message SayHelloResponse {
+  int64 code = 1;
+}

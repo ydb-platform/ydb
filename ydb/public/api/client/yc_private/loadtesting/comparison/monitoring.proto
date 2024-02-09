@@ -1,0 +1,67 @@
+syntax = "proto3";
+
+package yandex.cloud.priv.loadtesting.v1.comparison;
+
+import "ydb/public/api/client/yc_private/loadtesting/common/timestamp_range.proto";
+import "ydb/public/api/client/yc_private/loadtesting/common/chart.proto";
+import "ydb/public/api/client/yc_private/loadtesting/comparison/chart_variant_type.proto";
+import "ydb/public/api/client/yc_private/loadtesting/comparison/table_variant_type.proto";
+
+option go_package = "github.com/ydb-platform/ydb/ydb/public/api/client/yc_private/loadtesting/comparison;comparison";
+option java_outer_classname = "LtV1ComparisonMonitoring";
+
+
+message ComparisonMonitoringInfo {
+    message Test {
+        string id = 1;
+        repeated string hosts = 2;
+    }
+    message Metric {
+        string metric_type = 1;
+        string metric_name = 2;
+        repeated Test tests = 3;
+    }
+    common.TimestampRange entire_time = 1;
+    repeated Metric metrics = 2;
+}
+
+message ComparisonMonitoringData {
+    string metric_type = 1;
+    string metric_name = 2;
+    ComparisonMonitoringChart chart = 3 [deprecated = true];
+    ComparisonMonitoringTable table = 4;
+    common.Chart chart_ng = 5;
+}
+
+message ComparisonMonitoringTable {
+    message Header {
+        string title = 1;
+    }
+    message Row {
+        string title = 1;
+        string job_id = 2;
+        string host_name = 3;
+        repeated Cell cells = 4;
+    }
+    message Cell {
+        double value = 1;
+    }
+
+    TableVariantType variant_type = 1;
+    repeated Header headers = 2;
+    repeated Row rows = 3;
+}
+
+message ComparisonMonitoringChart {
+    message Metric {
+        string title = 1;
+        string job_id = 2;
+        bool disabled = 3;
+        repeated double values = 4;
+    }
+
+    ChartVariantType variant_type = 1;
+    repeated int64 ts = 2;
+    int64 ts_denominator = 3;
+    repeated Metric metrics = 4;
+}

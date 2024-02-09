@@ -1,0 +1,797 @@
+syntax = "proto3";
+
+package yandex.cloud.priv.microcosm.instancegroup.v1;
+
+import "ydb/public/api/client/yc_private/common/validation.proto";
+import "ydb/public/api/client/yc_private/common/sensitive.proto";
+import "google/protobuf/timestamp.proto";
+import "google/protobuf/duration.proto";
+
+option go_package = "github.com/ydb-platform/ydb/ydb/public/api/client/yc_private/microcosm/instancegroup;instancegroup";
+option java_outer_classname = "PIG";
+
+message InstanceGroup {
+  string id = 1;
+  string folder_id = 2;
+  google.protobuf.Timestamp created_at = 3;
+  string name = 4;
+  string description = 5;
+  map<string, string> labels = 6;
+
+  InstanceTemplate instance_template = 7;
+
+  ScalePolicy scale_policy = 8;
+  DeployPolicy deploy_policy = 9;
+  AllocationPolicy allocation_policy = 10;
+
+  LoadBalancerState load_balancer_state = 11;
+  ManagedInstancesState managed_instances_state = 12;
+
+  LoadBalancerSpec load_balancer_spec = 13;
+  HealthChecksSpec health_checks_spec = 14;
+
+  string service_account_id = 16;
+
+  Status status = 20;
+  repeated Variable variables = 21;
+  bool deletion_protection = 22;
+
+  ApplicationLoadBalancerSpec application_load_balancer_spec = 23;
+  ApplicationLoadBalancerState application_load_balancer_state = 24;
+
+  // private fields
+  ConfirmationSpec confirmation_spec = 17;
+
+  // private fields, potentially public
+  AutoHealingPolicy auto_healing_policy = 25;
+
+  //Deprecated. Will be removed, use LoadBalancerState.status_message instead
+  string status_message = 15;
+  //Deprecated. Use application_load_balancer_spec instead
+  PlatformL7LoadBalancerSpec platform_l7_load_balancer_spec = 18;
+  //Deprecated. Use application_load_balancer_state instead
+  PlatformL7LoadBalancerState platform_l7_load_balancer_state = 19;
+
+  //For UI only
+  repeated Error errors = 101;
+  map<string, int64> managed_instance_statuses = 102;
+
+  enum Status {
+    STATUS_UNSPECIFIED = 0;
+
+    // Instance group is being started.
+    STARTING = 1;
+    // Instance group is active.
+    ACTIVE = 2;
+    // Instance group is being stopped.
+    STOPPING = 3;
+    // Instance group is stopped.
+    STOPPED = 4;
+    // Instance group is being deleted.
+    DELETING = 5;
+    // Instance group is paused.
+    PAUSED = 6;
+  }
+}
+
+message Error {
+  string code = 1;
+  string location = 2;
+  string message = 3;
+}
+
+message Variable {
+  string key = 1 [(length) = "1-128", (pattern) = "[a-zA-Z0-9._-]*"];
+  string value = 2 [(length) = "<=262144"];
+}
+
+message LoadBalancerState {
+  string target_group_id = 1;
+  string status_message = 2;
+}
+
+message ApplicationLoadBalancerState {
+  string target_group_id = 1;
+  string status_message = 2;
+}
+
+// Deprecated. Use ApplicationLoadBalancerState instead
+message PlatformL7LoadBalancerState {
+  string target_group_id = 1;
+  string status_message = 2;
+}
+
+message ManagedInstancesState {
+  int64 target_size = 1;
+
+  //Deprecated. Will be removed, use `outdated' instead
+  Statuses outdated_instances = 2;
+  //Deprecated. Will be removed, use `running' instead
+  Statuses latest_instances = 3;
+
+  int64 running_actual_count = 4;
+  int64 running_outdated_count = 5;
+  int64 processing_count = 6;
+
+  //Deprecated. Will be removed
+  message Statuses {
+    int64 creating = 1;
+    int64 starting = 2;
+    int64 opening = 3;
+    int64 warming = 4;
+    int64 running = 5;
+    int64 closing = 6;
+    int64 stopping = 7;
+    int64 updating = 8;
+    int64 deleting = 9;
+    int64 failed = 10;
+  }
+}
+
+message ScalePolicy {
+  oneof scale_type {
+    option (exactly_one) = true;
+    FixedScale fixed_scale = 1;
+    AutoScale auto_scale = 2;
+  }
+
+  AutoScale test_auto_scale = 3;
+
+  message FixedScale {
+    int64 size = 1 [(value) = "0-1000"];
+    repeated ZoneSize zone_sizes = 2;
+
+    message ZoneSize {
+      string zone_id = 1;
+      int64 size = 2;
+    }
+  }
+
+  message AutoScale {
+    // Lower limit for instance count in each zone.
+    int64 min_zone_size = 1 [(value) = "0-1000"];
+    // Upper limit for total instance count (across all zones).
+    // 0 means maximum limit = 100.
+    int64 max_size = 2 [(value) = "0-1000"];
+
+    google.protobuf.Duration measurement_duration = 3 [(value) = "1m-10m"];
+    google.protobuf.Duration warmup_duration = 4 [(value) = "<=10m"];
+    // deprecated, use stabilization_duration instead
+    google.protobuf.Duration cooldown_duration = 5 [(value) = "1m-30m"];
+    google.protobuf.Duration stabilization_duration = 10 [(value) = "1m-30m"];
+
+    int64 initial_size = 6 [(value) = ">=0"];
+    CpuUtilizationRule cpu_utilization_rule = 7;
+    repeated CustomRule custom_rules = 8 [(size) = "<=3"];
+
+    enum AutoScaleType {
+      AUTO_SCALE_TYPE_UNSPECIFIED = 0;
+      ZONAL = 1;
+      REGIONAL = 2;
+    }
+
+    AutoScaleType auto_scale_type = 9;
+  }
+
+  message CpuUtilizationRule {
+    double utilization_target = 1 [(value) = "10-100"];
+  }
+
+  message CustomRule {
+    enum RuleType {
+      RULE_TYPE_UNSPECIFIED = 0;
+      UTILIZATION = 1;
+      WORKLOAD = 2;
+    }
+
+    enum MetricType {
+      METRIC_TYPE_UNSPECIFIED = 0;
+      GAUGE = 1;
+      COUNTER = 2;
+    }
+
+    RuleType rule_type = 1 [(required) = true];
+    MetricType metric_type = 2 [(required) = true];
+    string metric_name = 3 [(required) = true, (pattern) = "[a-zA-Z0-9./@_][ 0-9a-zA-Z./@_,:;()\\[\\]<>-]{0,198}"];
+    map<string, string> labels = 5 [(pattern) = "[a-zA-Z0-9./@_][ 0-9a-zA-Z./@_,:;()\\[\\]<>-]{0,198}", (map_key).pattern = "^[a-zA-Z][0-9a-zA-Z_]{0,31}$"];
+    double target = 4 [(value) = ">0"];
+    string folder_id = 6 [(length) = "<=50"];
+    string service = 7 [(length) = "<=200"];
+  }
+
+}
+
+message DeployPolicy {
+  int64 max_unavailable = 1 [(value) = "0-100"];
+  int64 min_available_percent = 4 [(value) = "0-100"];
+  int64 max_deleting = 2 [(value) = "0-100"];
+  int64 max_creating = 3 [(value) = "0-100"];
+  int64 max_expansion = 6 [(value) = "0-100"];
+  google.protobuf.Duration startup_duration = 7 [(value) = "0m-1h"];
+  Strategy strategy = 8;
+  bool stable_deploy = 9;
+
+  oneof zonal_unavailable {
+    int64 zonal_max_unavailable = 10 [(value) = "0-100"];
+    int64 zonal_min_available_percent = 11 [(value) = "0-100"];
+  }
+  int64 zonal_max_deleting = 12 [(value) = "0-100"];
+  int64 zonal_max_creating = 13 [(value) = "0-100"];
+  MinimalAction minimal_action = 14;
+
+  enum Strategy {
+    STRATEGY_UNSPECIFIED = 0;
+    PROACTIVE = 1;
+    OPPORTUNISTIC = 2;
+  }
+
+  enum MinimalAction {
+    MINIMAL_ACTION_UNSPECIFIED = 0;
+    LIVE_UPDATE = 1;
+    RESTART = 2;
+    RECREATE = 3;
+  }
+}
+
+message AllocationPolicy {
+  repeated Zone zones = 1 [(unique) = true];
+
+  message Zone {
+    string zone_id = 1 [(required) = true];
+    // Each instance in a zone will be associated with exactly one of a tag from a pool below.
+    // All specified tags must be unique across the whole group not only the zone.
+    // It is guaranteed that during whole deploy only tags from prefix of the specified list will be used.
+    // It is possible to use tag associated with instance in templating via {instance.tag}.
+    repeated string instance_tags_pool = 2 [(unique) = true, (length) = "3-50"];
+  }
+}
+
+message ConfirmationSpec {
+  bool confirmation_on_instance_stop = 1;
+  bool metadata_stopping_flag = 2;
+}
+
+message InstanceTemplate {
+  string description = 1 [(length) = "<=256"];
+  map<string, string> labels = 2 [(priv.size) = "<=64", (length) = "<=128", (map_key).length = "1-63", (map_key).pattern = "[a-z][-_./\\@0-9a-z]*"];
+  string platform_id = 3 [(required) = true];
+  ResourcesSpec resources_spec = 4 [(required) = true];
+
+  // Metadata values may contain one of the supported placeholders:
+  //   {instance_group.id}
+  //   {instance.short_id}
+  //   {instance.tag}
+  //   {instance.index}
+  //   {instance.index_in_zone}
+  //   {instance.zone_id}
+  //   {instance.internal_dc}
+  // InstanceGroup and Instance labels may be copied to metadata following way:
+  //   {instance_group.labels.some_label_key}
+  //   {instance.labels.another_label_key}
+  // These placeholders will be substituted for each created instance anywhere in the value text.
+  // In the rare case the value requires to contain this placeholder explicitly,
+  // it must be escaped with double brackets, in example {{instance.index}}
+  map<string, string> metadata = 5 [(size) = "<=128", (length) = "<=262144", (map_key).length = "1-63", (map_key).pattern = "[a-z][-_0-9a-z]*", (sensitive) = true, (sensitive_type) = SENSITIVE_CRC];
+
+  AttachedDiskSpec boot_disk_spec = 6 [(required) = true];
+  repeated AttachedDiskSpec secondary_disk_specs = 7 [(size) = "<=3"];
+
+  repeated NetworkInterfaceSpec network_interface_specs = 8;
+
+  // Deprecated. Use name instead.
+  string name_template = 9 [(length) = "<=61", (pattern) = "|(([a-z]|\\{zone\\})([-a-z0-9]|\\{zone\\})*)?\\{\\}(([-a-z0-9]|\\{zone\\})*([a-z0-9]|\\{zone\\}))?"];
+  // Deprecated. Use hostname instead.
+  string hostname_template = 10 [(length) = "<=61", (pattern) = "|(([a-z]|\\{zone\\})([-a-z0-9]|\\{zone\\})*)?\\{\\}(([-a-z0-9]|\\{zone\\})*([a-z0-9]|\\{zone\\}))?"];
+
+  SchedulingPolicy scheduling_policy = 11;
+
+  string service_account_id = 12;
+
+  // In order to be unique it must contain at least on of instance unique placeholders:
+  //   {instance.short_id}
+  //   {instance.tag}
+  //   {instance.index}
+  //   combination of {instance.zone_id} and {instance.index_in_zone}
+  //   combination of {instance.internal_dc} and {instance.index_in_zone}
+  // Example: my-instance-{instance.index}
+  // If not set, default is used: {instance_group.id}-{instance.short_id}
+  // It may also contain another placeholders, see metadata doc for full list.
+  string name = 13 [(length) = "<=128"];
+
+  // In order to be unique it must contain at least on of instance unique placeholders:
+  //   {instance.short_id}
+  //   {instance.tag}
+  //   {instance.index}
+  //   combination of {instance.zone_id} and {instance.index_in_zone}
+  //   combination of {instance.internal_dc} and {instance.index_in_zone}
+  // Example: my-instance-{instance.index}
+  // If not set, `name` value will be used
+  // It may also contain another placeholders, see metadata doc for full list.
+  string hostname = 14 [(length) = "<=128"];
+
+  NetworkSettings network_settings = 15;
+
+  PlacementPolicy placement_policy = 16;
+
+  repeated AttachedFilesystemSpec filesystem_specs = 17;
+
+  GpuSettings gpu_settings = 18;
+
+  // Behaviour on maintenance events
+  MaintenancePolicy maintenance_policy = 19;
+  // Time between notification via metadata service and maintenance
+  google.protobuf.Duration maintenance_grace_period = 20[(value) = ">=1s"];
+
+  // private fields
+  bool cauth = 100;
+  repeated UnderlayNetwork underlay_networks = 101;
+  // Deprecated. Use fqdn instead.
+  string fqdn_template = 102 [(length) = "<=253", (pattern) = "|.*\\{\\}.*"];
+  string internal_data_disk_id = 103;
+
+  // In order to be unique it must contain at least on of instance unique placeholders:
+  //   {instance.short_id}
+  //   {instance.tag}
+  //   {instance.index}
+  //   combination of {instance.zone_id} and {instance.index_in_zone}
+  //   combination of {instance.internal_dc} and {instance.index_in_zone}
+  // Example: my-instance-{instance.index}.internal
+  // If not set, default is used: `hostname`.ru-central1.internal
+  // It also may contain another placeholders, see metadata doc for full list
+  string fqdn = 104 [(length) = "<=128"];
+  PciTopologyId pci_topology_id = 105;
+  MetadataOptions metadata_options = 106;
+
+  enum MaintenancePolicy {
+    MAINTENANCE_POLICY_UNSPECIFIED = 0;
+    // Restart instances during maintenance event
+    RESTART = 1;
+    // Migrate instances to another host before maintenance event
+    MIGRATE = 2;
+  }
+}
+
+message PlacementPolicy {
+  message HostAffinityRule {
+    enum Operator {
+      OPERATOR_UNSPECIFIED = 0;
+      IN = 1;
+      NOT_IN = 2;
+    }
+    string key = 1 [(required) = true];
+    Operator op = 2;
+    repeated string values = 3 [(size) = ">0", (length) = "1-1000"];
+  }
+
+  string placement_group_id = 1;
+  string host_group = 2;
+  repeated HostAffinityRule host_affinity_rules = 3 [(size) = "0-10"];
+  repeated string compute_nodes = 4 [(length) = "<=1000"];
+  string placement_group_partition = 5;
+}
+
+enum PciTopologyId {
+  PCI_TOPOLOGY_ID_UNSPECIFIED = 0;
+  V1 = 1;
+  V2 = 2;
+  // This topology will be available only for internal usage
+  K8S = 3;
+  // AKA "new topology" AKA "V2" for external users.
+  V3 = 4;
+}
+
+message ResourcesSpec {
+  int64 memory = 1 [(value) = ">=1"];
+  int64 cores = 2 [(value) = ">=1"];
+  int64 core_fraction = 3 [(value) = "0-100"];
+  int64 gpus = 4 [(value) = ">=0"];
+}
+
+message AttachedDiskSpec {
+  enum Mode {
+    MODE_UNSPECIFIED = 0;
+    READ_ONLY = 1;
+    READ_WRITE = 2;
+  }
+
+  Mode mode = 1 [(required) = true];
+  string device_name = 2 [(pattern) = "|[a-z][-_0-9a-z]{0,19}"];
+  //oneof disk_spec or disk_id
+  DiskSpec disk_spec = 3;
+  // set to use an existing disk. To set use variables.
+  string disk_id = 4 [(length) = "<=128", (pattern) = "[-a-zA-Z0-9._{}]*"];
+
+  message DiskSpec {
+    string description = 1 [(length) = "<=256"];
+    string type_id = 2 [(required) = true];
+    int64 size = 3;
+    oneof source_oneof {
+      string image_id = 4 [(length) = "<=50"];
+      string snapshot_id = 5 [(length) = "<=50"];
+    }
+    // When set to true, disk will not be deleted even after managed instance is deleted.
+    // It will be a user's responsibility to delete such disks.
+    bool preserve_after_instance_delete = 6;
+    DEKSpec dek_spec = 7;
+  }
+
+  // when set can be later used to change DiskSpec of actual disk
+  string name = 5 [(length) = "<=128"];
+}
+
+message DEKSpec {
+  string kek_id = 1 [(required) = true];
+  string kek_service_account_id = 2;
+}
+
+message AttachedFilesystemSpec {
+  enum Mode {
+    MODE_UNSPECIFIED = 0;
+    READ_ONLY = 1;
+    READ_WRITE = 2;
+  }
+
+  Mode mode = 1;
+  string device_name = 2 [(pattern) = "|[a-z][-_0-9a-z]{0,19}"];
+
+  string filesystem_id = 3 [(length) = "<=128", (pattern) = "[-a-zA-Z0-9._{}]*"];
+}
+
+message GpuSettings {
+  string gpu_cluster_id = 1;
+}
+
+message NetworkInterfaceSpec {
+  string network_id = 1;
+  repeated string subnet_ids = 2;
+
+  PrimaryAddressSpec primary_v4_address_spec = 3;
+  PrimaryAddressSpec primary_v6_address_spec = 4;
+
+  repeated string security_group_ids = 5;
+}
+
+message PrimaryAddressSpec {
+  OneToOneNatSpec one_to_one_nat_spec = 1;
+
+  // private fields
+  repeated string additional_fqdns = 2 [(unique) = true];
+  string name = 3;
+
+  // optional, manual set static internal IP. To set use variables.
+  string address = 4 [(length) = "<=128", (pattern) = "[-a-zA-Z0-9._{}:]*"];
+  repeated DnsRecordSpec dns_record_specs = 5;
+  bool disable_dns_records = 6;
+}
+
+message OneToOneNatSpec {
+  IpVersion ip_version = 1;
+
+  // optional, manual set static public IP. To set use variables.
+  string address = 2 [(length) = "<=128", (pattern) = "[-a-zA-Z0-9._{}]*"];
+  repeated DnsRecordSpec dns_record_specs = 3;
+  string ddos_protection_provider = 4;
+  string outgoing_smtp_capability = 5;
+  repeated string hints = 6 [(length) = "<=32"];
+
+}
+
+enum IpVersion {
+  IP_VERSION_UNSPECIFIED = 0;
+  IPV4 = 1;
+  IPV6 = 2;
+}
+
+message UnderlayNetwork {
+  string network_name = 1;
+
+  repeated DnsRecordSpec ipv4_dns_record_specs = 2;
+  repeated DnsRecordSpec ipv6_dns_record_specs = 3;
+}
+
+message SchedulingPolicy {
+  bool preemptible = 1;
+
+  // internal fields
+  bool deny_deallocation = 2;
+  bool start_without_compute = 3;
+
+  //private fields
+  google.protobuf.Duration termination_grace_period = 4 [(value) = "<=30m"];
+  bool service = 5;
+}
+
+message NetworkSettings {
+  enum Type {
+    TYPE_UNSPECIFIED = 0;
+    STANDARD = 1;
+    SOFTWARE_ACCELERATED = 2;
+    HARDWARE_ACCELERATED = 3;
+  }
+
+  Type type = 1 [(required) = true];
+}
+
+message LoadBalancerSpec {
+  TargetGroupSpec target_group_spec = 1 [(required) = true];
+  google.protobuf.Duration max_opening_traffic_duration = 2 [(value) = ">=1s"];
+  google.protobuf.Duration target_draining_duration = 3 [(value) = ">=1s"];
+  bool ignore_health_checks = 4;
+  bool force_add_targets = 5; // default false
+}
+
+message TargetGroupSpec {
+  string name = 1 [(pattern) = "|[a-z]([-a-z0-9]{0,61}[a-z0-9])?"];
+  string description = 2 [(length) = "<=256"];
+  map<string, string> labels = 3 [(priv.size) = "<=64", (length) = "<=63", (pattern) = "[-_./\\@0-9a-z]*", (map_key).length = "1-63", (map_key).pattern = "[a-z][-_./\\@0-9a-z]*"];
+  repeated string address_names = 4 [(size) = "<=10", (unique) = true];
+}
+
+message ApplicationLoadBalancerSpec {
+  ApplicationTargetGroupSpec target_group_spec = 1 [(required) = true];
+  google.protobuf.Duration max_opening_traffic_duration = 2 [(value) = ">=1s"];
+  bool ignore_health_checks = 3;
+}
+
+message ApplicationTargetGroupSpec {
+  string name = 1 [(pattern) = "|[a-z]([-a-z0-9]{0,61}[a-z0-9])?"];
+  string description = 2 [(length) = "<=256"];
+  map<string, string> labels = 3 [(priv.size) = "<=64", (length) = "<=63", (pattern) = "[-_./\\@0-9a-z]*", (map_key).length = "1-63", (map_key).pattern = "[a-z][-_./\\@0-9a-z]*"];
+  repeated string address_names = 4 [(size) = "<=10", (unique) = true];
+}
+
+// Deprecated. Use ApplicationLoadBalancerSpec instead
+message PlatformL7LoadBalancerSpec {
+  PlatformL7TargetGroupSpec target_group_spec = 1 [(required) = true];
+  // Deprecated. Will be removed, use target_group_spec::address_names instead
+  IpVersion preferred_ip_version = 2;
+  google.protobuf.Duration max_opening_traffic_duration = 3 [(value) = ">=1s"];
+}
+
+// Deprecated. Use ApplicationTargetGroupSpec instead
+message PlatformL7TargetGroupSpec {
+  string name = 1 [(pattern) = "|[a-z]([-a-z0-9]{0,61}[a-z0-9])?"];
+  string description = 2 [(length) = "<=256"];
+  map<string, string> labels = 3 [(priv.size) = "<=64", (length) = "<=63", (pattern) = "[-_./\\@0-9a-z]*", (map_key).length = "1-63", (map_key).pattern = "[a-z][-_./\\@0-9a-z]*"];
+  repeated string address_names = 4 [(size) = "<=10", (unique) = true];
+}
+
+message HealthChecksSpec {
+  repeated HealthCheckSpec health_check_specs = 1 [(size) = "1-10"];
+  google.protobuf.Duration max_checking_health_duration = 2 [(value) = ">=1s"];
+}
+
+message HealthCheckSpec {
+  message TcpOptions {
+    int64 port = 1 [(value) = "1-65535"];
+  }
+
+  message HttpOptions {
+    int64 port = 1 [(value) = "1-65535"];
+    string path = 2;
+    repeated int64 success_codes = 3 [(size) = "<=100"];
+    map<string, string> headers = 4 [(size) = "<=100"];
+  }
+
+  message HttpsOptions {
+    int64 port = 1 [(value) = "1-65535"];
+    string host = 2;
+    string path = 3;
+    repeated int64 success_codes = 4 [(size) = "<=100"];
+    map<string, string> headers = 5 [(size) = "<=100"];
+  }
+
+  message Http2Options {
+    int64 port = 1 [(value) = "1-65535"];
+    string host = 2;
+    string path = 3;
+    repeated int64 success_codes = 4 [(size) = "<=100"];
+    map<string, string> headers = 5 [(size) = "<=100"];
+  }
+
+  message GrpcOptions {
+    int64 port = 1 [(value) = "1-65535"];
+    string service_name = 2;
+    string authority = 3;
+  }
+
+  google.protobuf.Duration interval = 1 [(value) = "1s-300s"]; // default = 2s
+  google.protobuf.Duration timeout = 2 [(value) = "1s-60s"]; // default = 1s
+  int64 unhealthy_threshold = 3 [(value) = "0,2,3,4,5,6,7,8,9,10"]; // default (0) = 2
+  int64 healthy_threshold = 4 [(value) = "0,2,3,4,5,6,7,8,9,10"]; // default (0) = 2
+
+  oneof health_check_options {
+    option (exactly_one) = true;
+
+    TcpOptions tcp_options = 5;
+    HttpOptions http_options = 6;
+    HttpsOptions https_options = 8;
+    Http2Options http2_options = 9;
+    GrpcOptions grpc_options = 10;
+  }
+
+  // internal fields
+  repeated string address_names = 7 [(size) = "<=10", (unique) = true];
+}
+
+message ManagedInstance {
+  enum Status {
+    STATUS_UNSPECIFIED = 0;
+
+    // Deprecated. Will be removed
+    CREATING = 1;
+    // Deprecated. Will be removed
+    STARTING = 2;
+    // Deprecated. Will be removed
+    OPENING = 3;
+    // Deprecated. Will be removed
+    WARMING = 4;
+    // Deprecated. Will be removed
+    RUNNING = 5;
+    // Deprecated. Will be removed
+    CLOSING = 6;
+    // Deprecated. Will be removed
+    STOPPING = 7;
+    // Deprecated. Will be removed
+    UPDATING = 8;
+    // Deprecated. Will be removed
+    DELETING = 9;
+    // Deprecated. Will be removed
+    FAILED = 10;
+
+    CREATING_INSTANCE = 11;
+    UPDATING_INSTANCE = 12;
+    DELETING_INSTANCE = 13;
+    STARTING_INSTANCE = 14;
+    STOPPING_INSTANCE = 15;
+
+    AWAITING_STARTUP_DURATION = 16;
+    CHECKING_HEALTH = 17;
+    OPENING_TRAFFIC = 18;
+    AWAITING_WARMUP_DURATION = 19;
+    CLOSING_TRAFFIC = 20;
+
+    RUNNING_ACTUAL = 21;
+    RUNNING_OUTDATED = 22;
+
+    STOPPED = 23;
+    DELETED = 24;
+
+    PREPARING_RESOURCES = 25;
+  }
+
+  enum PendingConfirmation {
+    PENDING_CONFIRMATION_UNSPECIFIED = 0;
+    STOP = 1;
+  }
+
+  string id = 1;
+  Status status = 2;
+  string instance_id = 3;
+  string instance_tag = 14;
+  string fqdn = 4;
+  string name = 5;
+  string status_message = 6;
+  string zone_id = 7;
+  //Deprecated. Will be removed, check managed_instance_status==RUNNING_OUTDATED instead
+  bool outdated = 8;
+  //Deprecated. Will be removed, use network_interfaces instead
+  string primary_address = 9;
+  repeated NetworkInterface network_interfaces = 11;
+  google.protobuf.Timestamp status_changed_at = 13;
+
+  // private fields
+  PendingConfirmation pending_confirmation = 10;
+  repeated UnderlayNetworkInterface underlay_network_interfaces = 101;
+}
+
+message NetworkInterface {
+  string index = 1;
+  string mac_address = 2;
+  string subnet_id = 3;
+  PrimaryAddress primary_v4_address = 4;
+  PrimaryAddress primary_v6_address = 5;
+  repeated string security_group_ids = 6;
+}
+
+message PrimaryAddress {
+  string address = 1;
+  OneToOneNat one_to_one_nat = 2;
+
+  // private fields
+  repeated string additional_fqdns = 4;
+
+  string name = 5;
+
+  repeated DnsRecord dns_records = 6;
+}
+
+message OneToOneNat {
+  string address = 1;
+  IpVersion ip_version = 2;
+  repeated DnsRecord dns_records = 3;
+}
+
+// Private message
+message UnderlayNetworkInterface {
+  int64 index = 1;
+  string network_name = 2;
+
+  string mac_address = 3;
+
+  string ipv4_address = 4;
+  repeated DnsRecord ipv4_dns_records = 5;
+
+  string ipv6_address = 6;
+  repeated DnsRecord ipv6_dns_records = 7;
+}
+
+message DnsRecord {
+  string fqdn = 1;
+  string dns_zone_id = 2;
+  int64 ttl = 3;
+  bool ptr = 4;
+}
+
+message LogRecord {
+  google.protobuf.Timestamp timestamp = 1;
+
+  string message = 2;
+}
+
+message YamlError {
+  message Mark {
+    int64 line = 1;
+    int64 column = 2;
+  }
+
+  string message = 1;
+  Mark start_position = 2;
+  Mark end_position = 3;
+}
+
+message YamlErrorDetails {
+  repeated YamlError errors = 1;
+}
+
+message DnsRecordSpec {
+  string fqdn = 1; // required
+  string dns_zone_id = 2; // optional, if not set, private zone used
+  int64 ttl = 3; // optional, 0-86400
+  bool ptr = 4; // optional, set if PTR record required
+}
+
+message AutoHealingPolicy {
+  enum AutoHealingAction {
+    AUTO_HEALING_ACTION_UNSPECIFIED = 0;
+    //deprecated
+    STOP = 1;
+    //deprecated
+    DELETE = 2;
+    NONE = 3;
+
+    RESTART = 4;
+    RECREATE = 5;
+  }
+
+  AutoHealingAction auto_healing_action = 1;
+}
+
+message MetadataOptions {
+  // Enabled access to GCE flavored metadata
+  MetadataOption gce_http_endpoint = 1;
+  // Enabled access to AWS flavored metadata (IMDSv1)
+  MetadataOption aws_v1_http_endpoint = 2;
+  // Enabled access to IAM credentials with GCE flavored metadata
+  MetadataOption gce_http_token = 3;
+  // Enabled access to IAM credentials with AWS flavored metadata (IMDSv1)
+  MetadataOption aws_v1_http_token = 4;
+}
+
+enum MetadataOption {
+  METADATA_OPTION_UNSPECIFIED = 0;
+  // Option is enabled
+  ENABLED = 1;
+  // Option is disabled
+  DISABLED = 2;
+}

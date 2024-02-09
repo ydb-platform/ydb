@@ -1,0 +1,17 @@
+syntax = "proto3";
+
+package yandex.cloud.priv.loadtesting.v1.comparison;
+
+option go_package = "github.com/ydb-platform/ydb/ydb/public/api/client/yc_private/loadtesting/comparison;comparison";
+option java_outer_classname = "LtV1ComparisonChartType";
+
+enum ChartType {
+    CHART_TYPE_UNSPECIFIED = 0;
+    RESPONSE_TIME_PDF = 1;
+    RESPONSE_TIME_CDF = 2;
+    QUANTILES_BY_TIME = 3;
+    RESPONSE_TIME_BY_TIME = 4;
+    PROTOCOL_CODES_BY_TIME = 5;
+    NETWORK_CODES_BY_TIME = 6;
+    MONITORING_BY_TIME = 7;
+}

@@ -1,0 +1,25 @@
+syntax = "proto3";
+
+package yandex.cloud.priv.vpc.v1.inner;
+
+import "ydb/public/api/client/yc_private/vpc/inner/accounting.proto";
+
+option go_package = "github.com/ydb-platform/ydb/ydb/public/api/client/yc_private/vpc/inner;vpcinnerpb";
+option java_outer_classname = "PACS";
+
+service AccountingService {
+    rpc StreamResources(StreamResourcesRequest) returns (stream Resource);
+}
+
+message StreamResourcesRequest {
+    enum Type {
+        TYPE_UNSPECIFIED = 0;
+        NETWORK_LOAD_BALANCER_TARGET = 1;
+        NETWORK_LOAD_BALANCER_FLATTENED_TARGET = 2;
+        GATEWAY_SUBNET_ATTACHMENT = 3;
+    }
+
+    string zone_id = 1;
+    string region_id = 2;
+    Type resource_type = 3;
+}

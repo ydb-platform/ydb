@@ -1,0 +1,61 @@
+syntax = "proto3";
+
+package yandex.cloud.priv.vpc.v1.node;
+
+import "ydb/public/api/client/yc_private/common/validation.proto";
+import "ydb/public/api/client/yc_private/vpc/inner/node_registry.proto";
+import "ydb/public/api/client/yc_private/vpc/node/vrouter_slot.proto";
+
+option go_package = "github.com/ydb-platform/ydb/ydb/public/api/client/yc_private/vpc/node;vpcnodepb";
+option java_outer_classname = "PVNVSS";
+
+// VRouterSlotService just implements interface to allow the bootstrapper manipulate with slots,
+// but all logic to work with slots implements in SlotController.
+// NOTE: All actions with DataplaneType==HOST_VROUTER via this services are prohibited, should used SlotController.
+service VRouterSlotService {
+  // List calls SlotController.ListSlots to get info about slots
+  rpc List(VRouterSlotListRequest) returns (VRouterSlotListResponse);
+
+  // Allocate calls SlotController.Allocate  to allocate the data plane
+  rpc Allocate(VRouterSlotAllocateRequest)
+      returns (VRouterSlotAllocateResponse);
+  // Update calls SlotController.Update to update the data plane
+  rpc Update(VRouterSlotUpdateRequest) returns (VRouterSlotUpdateResponse);
+
+  // Release calls SlotController.Release to release the data plane
+  rpc Release(VRouterSlotReleaseRequest) returns (VRouterSlotReleaseResponse);
+
+  // EnsurePortConsistency ensures that all ports pluged on expected dataplanes.
+  rpc EnsurePortConsistency(VRouterSlotEnsurePortConsistencyRequest)
+      returns (VRouterSlotEnsurePortConsistencyResponse);
+}
+
+message VRouterSlotListRequest {}
+
+message VRouterSlotListResponse {
+  repeated AllocatedVrouterSlot allocated_vrouter_slots = 1;
+  repeated VRouterSlotConfig available_slots = 2;
+}
+
+message VRouterSlotAllocateRequest {
+  inner.DataplaneState dataplane_state = 1 [ (required) = true ];
+}
+message VRouterSlotAllocateResponse {
+  AllocatedVrouterSlot allocated_vrouter_slot = 1;
+}
+
+message VRouterSlotUpdateRequest {
+  inner.DataplaneState dataplane_state = 1 [ (required) = true ];
+}
+
+message VRouterSlotUpdateResponse {}
+
+message VRouterSlotReleaseRequest {
+  inner.DataplaneState dataplane_state = 1 [ (required) = true ];
+}
+message VRouterSlotReleaseResponse {
+  SlotReleaseStatus status = 1;
+}
+
+message VRouterSlotEnsurePortConsistencyRequest {}
+message VRouterSlotEnsurePortConsistencyResponse {}

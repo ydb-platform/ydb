@@ -1,0 +1,18 @@
+syntax = "proto3";
+
+package yandex.cloud.priv.microcosm.instancegroup.v1;
+
+option go_package = "github.com/ydb-platform/ydb/ydb/public/api/client/yc_private/microcosm/instancegroup;instancegroup";
+option java_outer_classname = "PIGAS";
+
+service InstanceGroupAdminService {
+  rpc GetConfig (ConfigRequest) returns (ConfigResponse) {
+  }
+}
+
+message ConfigRequest {
+}
+
+message ConfigResponse {
+  string source = 1;
+}

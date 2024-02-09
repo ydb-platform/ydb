@@ -1,0 +1,19 @@
+syntax = "proto3";
+
+package yandex.cloud.priv.loadtesting.v1.comparison;
+
+import "ydb/public/api/client/yc_private/loadtesting/comparison/chart.proto";
+import "ydb/public/api/client/yc_private/loadtesting/comparison/table.proto";
+
+option go_package = "github.com/ydb-platform/ydb/ydb/public/api/client/yc_private/loadtesting/comparison;comparison";
+option java_outer_classname = "LtV1ComparisonCase";
+
+message CaseCharts {
+    string title = 1;
+    repeated ComparisonChart charts = 2;
+}
+
+message CaseTables {
+    string title = 1;
+    repeated ComparisonTable tables = 2;
+}

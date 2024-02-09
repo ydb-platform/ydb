@@ -1,0 +1,38 @@
+syntax = "proto3";
+
+package yandex.cloud.priv.vpc.v1.inner;
+
+import "ydb/public/api/client/yc_private/common/validation.proto";
+
+option go_package = "github.com/ydb-platform/ydb/ydb/public/api/client/yc_private/vpc/inner;vpcinnerpb";
+option java_outer_classname = "PVSS";
+
+service StatisticService {
+  rpc GetFolderResourcesStats (GetFolderResourcesStatsRequest) returns (GetFolderResourcesStatsResponse);
+}
+
+message GetFolderResourcesStatsRequest {
+  string folder_id = 1 [(required) = true, (length) = "<=50"];
+}
+
+message GetFolderResourcesStatsResponse {
+  GlobalResourceStats network_load_balancers = 1;
+  GlobalResourceStats networks = 2;
+  GlobalResourceStats security_groups = 3;
+  GlobalResourceStats route_tables = 4;
+  GlobalResourceStats gateways = 5;
+  GlobalResourceStats target_groups = 6;
+
+  ZonalResourceStats subnets = 7;
+  ZonalResourceStats addresses = 8;
+
+
+  message GlobalResourceStats {
+    int64 total = 1;
+  }
+
+  message ZonalResourceStats {
+    int64 total = 1;
+    map<string, int64> zonal = 2;
+  }
+}

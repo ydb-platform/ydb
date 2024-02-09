@@ -1,0 +1,20 @@
+quotas:
+  - vpc.ipv6Addresses.count
+  - vpc.externalAddresses.count
+  - vpc.externalSmtpDirectAddresses.count
+  - vpc.externalStaticAddresses.count
+  - vpc.externalQratorAddresses.count
+  - vpc.networks.count
+  - vpc.routeTables.count
+  - vpc.securityGroups.count
+  - vpc.securityGroupPerInterface.count
+  - vpc.securityGroupRules.count
+  - vpc.securityGroupRuleCidrs.count
+  - vpc.staticRoutes.count
+  - vpc.subnets.count
+  - vpc.internalAddresses.count
+  - vpc.internalStaticAddresses.count
+  - vpc.gateways.count
+  - vpc.sharedEgressGateways.count
+  - vpc.extraDnsRecords.count
+  - vpc.operations.count

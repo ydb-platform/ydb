@@ -1,0 +1,19 @@
+syntax = "proto3";
+
+package yandex.cloud.priv.loadtesting.v1;
+
+import "ydb/public/api/client/yc_common/api/operation.proto";
+import "ydb/public/api/client/yc_private/operation/operation.proto";
+import "ydb/public/api/client/yc_private/loadtesting/moverload/interface.proto";
+
+option go_package = "github.com/ydb-platform/ydb/ydb/public/api/client/yc_private/loadtesting;loadtesting";
+option java_outer_classname = "PMOS";
+
+service MoverloadService {
+  rpc CreateMigration (moverload.CreateMigrationRequest) returns (operation.Operation) {
+    option (yandex.cloud.api.operation) = {
+      metadata: "moverload.CreateMetadata"
+      response: "moverload.Migration"
+    };
+  };
+}

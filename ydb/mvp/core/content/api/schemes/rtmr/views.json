@@ -1,0 +1,123 @@
+{
+    "get": {
+        "tags": ["RTMR"],
+        "produces": ["application/json"],
+        "summary": "Lists views",
+        "parameters": [{
+            "name": "installation",
+            "in": "path",
+            "description": "RTMR installation",
+            "required": true,
+            "type": "string"
+        },{
+            "name": "location",
+            "in": "query",
+            "description": "RTMR location",
+            "required": false,
+            "type": "string"
+        },{
+            "name": "task",
+            "in": "query",
+            "description": "list views for task only",
+            "type": "string"
+        },{
+            "name": "pool",
+            "in": "query",
+            "description": "list views for specified pool@account only (requires account parameter if set)",
+            "type": "string"
+        },{
+            "name": "account",
+            "in": "query",
+            "description": "list views for specified account only",
+            "type": "string"
+        },{
+            "name": "view",
+            "in": "query",
+            "description": "get data for specified view",
+            "type": "string"
+        }],
+        "responses": {
+            "200": {
+                "description": "OK",
+                "schema": {
+                    "type": "object",
+                    "title": "ListViewsResult",
+                    "required": ["locations"],
+                    "properties": {
+                        "locations": {
+                            "type": "array",
+                            "items": {
+                                "type": "object",
+                                "required": ["location", "views"],
+                                "properties": {
+                                    "location": {
+                                        "type": "string"
+                                    },
+                                    "views": {
+                                        "title" : "ViewsList",
+                                        "type": "array",
+                                        "items": {
+                                            "type": "object",
+                                            "title" : "View",
+                                            "required": ["account", "pool", "task", "view"],
+                                            "properties": {
+                                                "account": {
+                                                    "type": "string"
+                                                },
+                                                "pool": {
+                                                    "type": "string"
+                                                },
+                                                "task": {
+                                                    "type": "string"
+                                                },
+                                                "view": {
+                                                    "type": "string"
+                                                },
+                                                "owner": {
+                                                    "type": "string"
+                                                },
+                                                "my": {
+                                                    "type": "boolean"
+                                                },
+                                                "tables": {
+                                                    "type": "array",
+                                                    "items": {
+                                                        "type": "object",
+                                                        "title" : "ViewTable",
+                                                        "required": ["table"],
+                                                        "properties": {
+                                                            "table": {
+                                                                "type": "string",
+                                                                "description": "name of table contained in view"
+                                                            },
+                                                            "storageConsumed": {
+                                                                "type": "number",
+                                                                "format": "double"
+                                                            },
+                                                            "storageLimit": {
+                                                                "type": "number",
+                                                                "format": "double"
+                                                            },
+                                                            "keys": {
+                                                                "type": "integer",
+                                                                "format": "int64"
+                                                            },
+                                                            "rows": {
+                                                                "type": "integer",
+                                                                "format": "int64"
+                                                            }
+                                                        }
+                                                    }
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}

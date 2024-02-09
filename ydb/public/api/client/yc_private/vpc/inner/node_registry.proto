@@ -1,0 +1,34 @@
+syntax = "proto3";
+
+package yandex.cloud.priv.vpc.v1.inner;
+
+import "ydb/public/api/client/yc_private/common/validation.proto";
+
+option go_package = "github.com/ydb-platform/ydb/ydb/public/api/client/yc_private/vpc/inner;vpcinnerpb";
+option java_outer_classname = "PVNR";
+
+enum DataplaneType {
+  DATAPLANE_TYPE_UNSPECIFIED = 0;
+  // HOST_VROUTER is not fully supported data plane type:
+  //   - version always is "0000-00-00-00-00-00"
+  //   - flags always are true
+  HOST_VROUTER = 1;
+  POD_VROUTER = 2;
+}
+
+// DataplaneInfo used as key to link Slot and DataplaneState,
+// so all data plane states on the compute-node should have different DataplaneInfo.
+message DataplaneInfo {
+  DataplaneType type = 1 [ (required) = true ];
+  string version = 2 [ (required) = true ];
+}
+
+message DataplaneFlags {
+  bool mainline = 1;
+  bool experimental = 2;
+}
+
+message DataplaneState {
+  DataplaneInfo dataplane_info = 1 [ (required) = true ];
+  DataplaneFlags dataplane_flags = 2 [ (required) = true ];
+}

@@ -1,0 +1,28 @@
+syntax = "proto3";
+
+package yandex.cloud.priv.loadtesting.v1;
+
+option go_package = "github.com/ydb-platform/ydb/ydb/public/api/client/yc_private/loadtesting;loadtesting";
+option java_outer_classname = "PLTP";
+
+
+// A ResourcePreset resource for describing VM configuration presets for TankInstance.
+message ResourcePreset {
+  // ID of the ResourcePreset resource.
+  string preset_id = 1;
+
+  // Name of the ResourcePreset resource.
+  string name = 2;
+
+  // Description of the ResourcePreset resource.
+  string description = 3;
+
+  // Number of CPU cores for a Tank created with the preset.
+  int64 cores = 4;
+
+  // RAM volume for a Tank created with the preset, in bytes.
+  int64 memory = 5;
+
+  // Disk size for a tank created with the preset, in bytes.
+  int64 disk_size = 6;
+}

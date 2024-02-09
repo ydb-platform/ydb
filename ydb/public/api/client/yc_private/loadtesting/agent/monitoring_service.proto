@@ -1,0 +1,38 @@
+syntax = "proto3";
+
+package yandex.cloud.priv.loadtesting.agent.v1;
+
+import "ydb/public/api/client/yc_private/common/validation.proto";
+
+option go_package = "github.com/ydb-platform/ydb/ydb/public/api/client/yc_private/loadtesting/agent;agent";
+
+
+service MonitoringService {
+  rpc AddMetric (AddMetricRequest) returns (AddMetricResponse);
+}
+
+message AddMetricRequest {
+  reserved 2;
+  string compute_instance_id = 1  [(yandex.cloud.priv.length) = "<=50"];
+  string job_id = 3  [(yandex.cloud.priv.required) = true, (yandex.cloud.priv.length) = "<=50"];
+  repeated MetricChunk chunks = 4  [(yandex.cloud.priv.size) = ">0"];
+  string agent_instance_id = 5  [(yandex.cloud.priv.length) = "<=50"];
+}
+
+message MetricChunk {
+  repeated Metric data = 1  [(yandex.cloud.priv.size) = ">0"];
+  int64 timestamp = 2;
+  string comment = 3;
+  string instance_host = 4  [(yandex.cloud.priv.required) = true];
+}
+
+message Metric {
+  string metric_type = 1  [(yandex.cloud.priv.required) = true];
+  string metric_name = 2  [(yandex.cloud.priv.required) = true];
+  double metric_value = 3;
+}
+
+message AddMetricResponse {
+  string metric_trail_id = 1;
+  int64 code = 2;
+}

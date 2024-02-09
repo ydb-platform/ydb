@@ -1,0 +1,10 @@
+syntax = "proto3";
+
+package yandex.cloud.priv.loadtesting.v1.moverload;
+
+option go_package = "github.com/ydb-platform/ydb/ydb/public/api/client/yc_private/loadtesting/moverload;moverload";
+option java_outer_classname = "LtV1MoverloadCreateMetadata";
+
+message CreateMetadata {
+  string migration_id = 1;
+}

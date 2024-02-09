@@ -1,0 +1,225 @@
+syntax = "proto3";
+
+package yandex.cloud.priv.vpc.v1;
+
+import "google/protobuf/field_mask.proto";
+import "ydb/public/api/client/yc_common/api/operation.proto";
+import "ydb/public/api/client/yc_private/operation/operation.proto";
+import "ydb/public/api/client/yc_private/common/validation.proto";
+import "ydb/public/api/client/yc_private/iam/reference.proto";
+import "ydb/public/api/client/yc_private/vpc/address.proto";
+
+option go_package = "github.com/ydb-platform/ydb/ydb/public/api/client/yc_private/vpc;vpc";
+option java_outer_classname = "PVAS";
+
+service AddressService {
+  rpc Get (GetAddressRequest) returns (Address);
+
+  rpc GetByValue (GetAddressByValueRequest) returns (Address);
+
+  rpc List (ListAddressesRequest) returns (ListAddressesResponse);
+
+  rpc Create (CreateAddressRequest) returns (operation.Operation) {
+    option (yandex.cloud.api.operation) = {
+      metadata: "CreateAddressMetadata"
+      response: "Address"
+    };
+  }
+
+  rpc Update (UpdateAddressRequest) returns (operation.Operation) {
+    option (yandex.cloud.api.operation) = {
+      metadata: "UpdateAddressMetadata"
+      response: "Address"
+    };
+  }
+
+  rpc Delete (DeleteAddressRequest) returns (operation.Operation) {
+    option (yandex.cloud.api.operation) = {
+      metadata: "DeleteAddressMetadata"
+      response: "google.protobuf.Empty"
+    };
+  }
+
+  rpc ListOperations (ListAddressOperationsRequest) returns (ListAddressOperationsResponse);
+
+  rpc ListReferences (ListAddressReferencesRequest) returns (ListAddressReferencesResponse);
+
+  rpc UpdateReferences (UpdateAddressReferencesRequest) returns (operation.Operation) {
+    option (yandex.cloud.api.operation) = {
+      metadata: "UpdateAddressReferencesMetadata"
+      response: "google.protobuf.Empty"
+    };
+  }
+
+  rpc Move (MoveAddressRequest) returns (operation.Operation) {
+    option (yandex.cloud.api.operation) = {
+      metadata: "MoveAddressMetadata"
+      response: "Address"
+    };
+  }
+}
+
+message GetAddressRequest {
+  string address_id = 1 [(required) = true, (length) = "<=50"];
+}
+
+message GetAddressByValueRequest {
+  oneof address {
+    option (exactly_one) = true;
+
+    string external_ipv4_address = 1;
+    string internal_ipv4_address = 3;
+    string ipv6_address = 2;
+  }
+
+  oneof scope {
+    string subnet_id = 5;
+    // string pool_id = 6;
+  }
+}
+
+message ListAddressesRequest {
+  string folder_id = 1 [(required) = true, (length) = "<=50"];
+  int64 page_size = 2 [(value) = "<=1000"];
+  string page_token = 3 [(length) = "<=1000"];
+  // type="external" and ip_version="ipv4" or type="internal" and subnet_id="<subnet_id>"
+  string filter = 4;
+}
+
+message ListAddressesResponse {
+  repeated Address addresses = 1;
+  string next_page_token = 2;
+}
+
+message CreateAddressRequest {
+  string folder_id = 1 [(required) = true, (length) = "<=50"];
+  string name = 2;
+  string description = 3;
+  map<string, string> labels = 4;
+
+  oneof address_spec {
+    option (exactly_one) = true;
+
+    ExternalIpv4AddressSpec external_ipv4_address_spec = 5;
+    InternalIpv4AddressSpec internal_ipv4_address_spec = 7;
+    Ipv6AddressSpec ipv6_address_spec = 6;
+  }
+
+  bool deletion_protection = 10;
+
+  repeated DnsRecordSpec dns_record_specs = 11 [(size) = "<=32"];
+
+  repeated reference.Reference references = 100;
+
+  bool dry_run = 12;
+}
+
+message ExternalIpv4AddressSpec {
+  string address = 1; // if unspecified, one will be automatically allocated from other params
+  string zone_id = 2; // only if address unspecified
+  string region_id = 3; // only if address unspecified
+
+  AddressRequirements requirements = 4;
+  // string pool_id = 5;
+}
+
+message Ipv6AddressSpec {
+  string address = 1;
+
+  oneof scope {
+    string subnet_id = 2;
+    // string pool_id = 3;
+  }
+
+  AddressRequirements requirements = 4;
+}
+
+message InternalIpv4AddressSpec {
+  string address = 1; // if unspecified, one will be automatically allocated from the subnet
+
+  oneof scope {
+    option (exactly_one) = true;
+
+    string subnet_id = 2;
+  }
+}
+
+message DnsRecordSpec {
+  string fqdn = 1 [(required) = true]; // required: DNS record name (absolute, or relative to the DNS zone used)
+  string dns_zone_id = 2; // optional, if not set, private zone used
+  int64 ttl = 3 [(value) = "0-86400"]; // optional, 0-86400
+  bool ptr = 4; // optional, set if PTR record required
+}
+
+message CreateAddressMetadata {
+  string address_id = 1;
+}
+
+message UpdateAddressRequest {
+  string address_id = 1 [(required) = true, (length) = "<=50"];
+
+  google.protobuf.FieldMask update_mask = 2;
+
+  string name = 3;
+  string description = 4;
+  map<string, string> labels = 5;
+
+  bool reserved = 6;
+  bool deletion_protection = 7;
+
+  repeated DnsRecordSpec dns_record_specs = 8 [(size) = "<=32"];
+}
+
+message UpdateAddressMetadata {
+  string address_id = 1;
+}
+
+message DeleteAddressRequest {
+  string address_id = 1 [(required) = true, (length) = "<=50"];
+}
+
+message DeleteAddressMetadata {
+  string address_id = 1;
+}
+
+message ListAddressOperationsRequest {
+  string address_id = 1 [(required) = true, (length) = "<=50"];
+  int64 page_size = 2 [(value) = "<=1000"];
+  string page_token = 3 [(length) = "<=1000"];
+}
+
+message ListAddressOperationsResponse {
+  repeated operation.Operation operations = 1;
+  string next_page_token = 2;
+}
+
+message ListAddressReferencesRequest {
+  string address_id = 1 [(required) = true, (length) = "<=50"];
+
+  int64 page_size = 2 [(value) = "0-1000"];
+  string page_token = 3 [(length) = "<=100"];
+}
+
+message ListAddressReferencesResponse {
+  repeated reference.Reference references = 1;
+  string next_page_token = 2;
+}
+
+message UpdateAddressReferencesRequest {
+  string address_id = 1 [(required) = true, (length) = "<=50"];
+  repeated reference.Reference reference_additions = 2;
+  repeated reference.Reference reference_deletions = 3;
+}
+
+message UpdateAddressReferencesMetadata {
+  string address_id = 1;
+}
+
+message MoveAddressRequest {
+  string address_id = 1 [(required) = true, (length) = "<=50"];
+  string destination_folder_id = 2 [(required) = true, (length) = "<=50"];
+}
+
+message MoveAddressMetadata {
+  string address_id = 1;
+}

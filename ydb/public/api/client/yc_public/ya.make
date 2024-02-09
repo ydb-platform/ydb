@@ -1,7 +1,10 @@
 RECURSE(
+    access
+    common
     iam
     events
     logging
-    common
+    operation
+    ydb
 )
 

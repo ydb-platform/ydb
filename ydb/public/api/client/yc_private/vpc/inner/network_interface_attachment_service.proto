@@ -1,0 +1,318 @@
+syntax = "proto3";
+
+package yandex.cloud.priv.vpc.v1.inner;
+
+import "google/protobuf/empty.proto";
+
+import "ydb/public/api/client/yc_common/api/operation.proto";
+import "ydb/public/api/client/yc_private/vpc/inner/common.proto";
+import "ydb/public/api/client/yc_private/billing/light_metric.proto";
+import "ydb/public/api/client/yc_private/compute/instance.proto";
+import "ydb/public/api/client/yc_private/compute/instance_service.proto";
+import "ydb/public/api/client/yc_private/operation/operation.proto";
+import "ydb/public/api/client/yc_private/quota/quota.proto";
+import "ydb/public/api/client/yc_private/common/validation.proto";
+
+option go_package = "github.com/ydb-platform/ydb/ydb/public/api/client/yc_private/vpc/inner;vpcinnerpb";
+
+// Private VPC inner network interface attachments service.
+option java_outer_classname = "PVINIAS";
+
+service NetworkInterfaceAttachmentService {
+    rpc Get (GetNetworkInterfaceAttachmentsRequest) returns (GetNetworkInterfaceAttachmentsResponse);
+
+    rpc AuthorizeAndValidateCreateInstance (AuthorizeAndValidateCreateInstanceRequest) returns (AuthorizeAndValidateCreateInstanceResponse);
+
+    rpc AuthorizeAndValidateCreate (AuthorizeAndValidateCreateInstanceRequest) returns (AuthorizeAndValidateCreateResponse);
+
+    rpc SimulateBillingMetrics (SimulateBillingMetricsRequest) returns (billing.v1.ConsoleLightMetricsListResponse);
+
+    rpc Create (CreateNetworkInterfaceAttachmentsRequest) returns (operation.Operation) {
+        option (yandex.cloud.api.operation) = {
+          metadata: "NetworkInterfaceAttachmentOperationMetadata"
+          response: "google.protobuf.Empty"
+        };
+    };
+    rpc Allocate (AllocateNetworkInterfaceAttachmentsRequest) returns (operation.Operation) {
+        option (yandex.cloud.api.operation) = {
+          metadata: "NetworkInterfaceAttachmentOperationMetadata"
+          response: "google.protobuf.Empty"
+        };
+    };
+    rpc Deallocate (DeallocateNetworkInterfaceAttachmentsRequest) returns (operation.Operation) {
+        option (yandex.cloud.api.operation) = {
+          metadata: "NetworkInterfaceAttachmentOperationMetadata"
+          response: "google.protobuf.Empty"
+        };
+    };
+    rpc Delete (DeleteNetworkInterfaceAttachmentsRequest) returns (operation.Operation) {
+        option (yandex.cloud.api.operation) = {
+          metadata: "NetworkInterfaceAttachmentOperationMetadata"
+          response: "google.protobuf.Empty"
+        };
+    };
+
+    rpc AuthorizeAndValidateUpdate (UpdateNetworkInterfaceAttachmentRequest) returns (AuthorizeAndValidateResponse);
+    // will fetch request by x-request-id
+    rpc Update (google.protobuf.Empty) returns (operation.Operation) {
+        option (yandex.cloud.api.operation) = {
+            metadata: "NetworkInterfaceAttachmentOperationMetadata"
+            response: "NetworkInterfaceAttachment"
+        };
+    };
+
+    rpc AuthorizeAndValidateUpdateUnderlayDns (UpdateUnderlayDnsRequest) returns (AuthorizeAndValidateResponse);
+
+    rpc UpdateUnderlayInterfaces (UpdateUnderlayInterfacesRequest) returns (UpdateUnderlayInterfacesResponse);
+
+    rpc ReattachSpecialInterface (ReattachNetworkInterfaceAttachmentRequest) returns (operation.Operation) {
+        option (yandex.cloud.api.operation) = {
+            metadata: "NetworkInterfaceAttachmentOperationMetadata"
+            response: "NetworkInterfaceAttachment"
+        };
+    }
+
+    rpc UpdateInterfacesMetadata (UpdateInterfacesMetadataRequest) returns (UpdateInterfacesMetadataResponse);
+
+    rpc AuthorizeAndValidateRelocateInstance (AuthorizeAndValidateRelocateInstanceRequest) returns (AuthorizeAndValidateResponse);
+
+    rpc AuthorizeAndValidateAttachInterface (AuthorizeAttachNetworkInterfaceRequest) returns (AuthorizeAndValidateResponse);
+
+    rpc AttachInterface (AttachNetworkInterfaceRequest) returns (operation.Operation) {
+        option (yandex.cloud.api.operation) = {
+            metadata: "NetworkInterfaceAttachmentOperationMetadata"
+            response: "google.protobuf.Empty"
+        };
+    }
+
+    rpc DetachInterface (DetachNetworkInterfaceRequest) returns (operation.Operation) {
+        option (yandex.cloud.api.operation) = {
+            metadata: "NetworkInterfaceAttachmentOperationMetadata"
+            response: "google.protobuf.Empty"
+        };
+    }
+}
+
+
+message GetNetworkInterfaceAttachmentsRequest {
+    repeated InstanceIdRequest instance_id_requests = 1;
+}
+
+message GetNetworkInterfaceAttachmentsResponse {
+    repeated NetworkInterfaceAttachment network_interface_attachments = 1;
+}
+
+message AuthorizeAndValidateCreateInstanceRequest {
+    string folder_id = 1 [(required) = true];
+    string cloud_id = 2 [(required) = true];
+    string zone_id = 3 [(required) = true];
+    repeated compute.v1.NetworkInterfaceSpec network_interface_specs = 4;
+    bool dry_run = 5;
+    string create_instance_request_id = 6 [(required) = true];
+    string fqdn = 7;
+    string hostname = 8;
+    string instance_id = 9; // use in hostname template if defined
+    string hypervisor_type = 10;
+
+    bool read_only_check = 100; // For simulateInstanceBillingMetrics from UI
+
+    // Used by vpc-api to validate DNS Zones specified for underlay DNS records.
+    // In the future this will also be used by vpc-node
+    repeated compute.v1.CreateInstanceRequest.UnderlayNetwork underlay_network_specs = 101;
+}
+
+message AuthorizeAndValidateCreateInstanceResponse {
+    repeated ComputeAuthzRequest authz_requests = 1;
+}
+
+message AuthorizeAndValidateCreateResponse {
+    repeated RequestedPermissions permissions = 1;
+    quota.QuotaFailure quota_failure = 2;
+    string fqdn = 3;
+}
+
+message AuthorizeAndValidateResponse {
+    repeated RequestedPermissions permissions = 1;
+    quota.QuotaFailure quota_failure = 2;
+    bool require_deallocation = 3;
+}
+
+message SimulateBillingMetricsRequest {
+    string folder_id = 1 [(required) = true];
+    string cloud_id = 2 [(required) = true];
+    string zone_id = 3 [(required) = true];
+    repeated compute.v1.NetworkInterfaceSpec network_interface_specs = 4;
+}
+
+message CreateNetworkInterfaceAttachmentsRequest {
+    InstanceNetworkContext instance_network_context = 1 [(required) = true];
+    string create_instance_request_id = 2 [(required) = true];
+}
+
+message AllocateNetworkInterfaceAttachmentsRequest {
+    InstanceNetworkContext instance_network_context = 1 [(required) = true];
+
+    // for vpc-node
+    bool migrate = 2;
+}
+
+message DeallocateNetworkInterfaceAttachmentsRequest {
+    InstanceNetworkContext instance_network_context = 1 [(required) = true];
+    bool keep_dynamic_network_resources = 2;
+
+    // for vpc-node
+    bool migrate = 3;
+    bool evacuate = 4;
+
+    bool relocate = 5;
+}
+
+message DeleteNetworkInterfaceAttachmentsRequest {
+    InstanceNetworkContext instance_network_context = 1 [(required) = true];
+}
+
+message UpdateNetworkInterfaceAttachmentRequest {
+    InstanceNetworkContext instance_network_context = 1 [(required) = true];
+    compute.v1.UpdateInstanceNetworkInterfaceRequest request = 2 [(required) = true];
+    // for add/remove nat proxy
+    string internal_address = 3;
+}
+
+message UpdateUnderlayDnsRequest {
+    InstanceNetworkContext instance_network_context = 1 [(required) = true];
+    compute.v1.UpdateInstanceUnderlayInterfaceRequest request = 2 [(required) = true];
+}
+
+
+message NetworkInterfaceAttachmentOperationMetadata {
+    repeated NetworkInterfaceAttachment network_interface_attachments = 1;
+}
+
+
+message UpdateUnderlayInterfacesRequest {
+    // TODO(entropia@, raorn@): Using InstanceNetworkContext seems like a good idea.
+    // It has instance ID and cloud ID, and compute already supplies this context in other calls to
+    // NetworkInterfaceAttachmentService...
+    InstanceNetworkContext instance_network_context = 1 [(required) = true];
+}
+
+message UpdateUnderlayInterfacesResponse {
+    // Reserved for future extension
+}
+
+message ReattachNetworkInterfaceAttachmentRequest {
+    string instance_id = 1 [(required) = true];
+    int64 interface_index = 2 [(value) = ">=0"];
+    string subnet_id = 3 [(required) = true, (length) = "<=50"];
+    bool full_update = 4;
+}
+
+message InstanceIdRequest {
+    string instance_id = 1;
+    // Because authz that's why!..
+    string folder_id = 2;
+    int64 num_interfaces_hint = 3 [(value) = ">=0"];
+}
+
+message NetworkInterfaceAttachment {
+    string instance_id = 1 [(required) = true];
+    string interface_index = 2 [(required) = true];  // 0, 1, 2, etc...
+    string subnet_id = 3;
+    string network_id = 4;
+    compute.v1.PrimaryAddress primary_v4_address = 5;
+    compute.v1.PrimaryAddress primary_v6_address = 6;
+    repeated string security_group_ids = 7;
+
+    NetworkInterfaceInternalInfo internal_info = 8;
+}
+
+message NetworkInterfaceInternalInfo {
+    string vm_name = 1;
+    string subnet_cloud_id = 2;
+    string subnet_folder_id = 3;
+    repeated string feature_flags = 4;
+    bool hbf_enabled = 5;
+    string sdn_port_id = 6;
+    string sdn_vnet_id = 7;
+    string sdn_vm_id = 8;
+    string sdn_project_id = 9;
+}
+
+message ComputeAuthzRequest {
+    string service_name = 1 [(required) = true];
+    string main_action = 2 [(required) = true];
+    string cloud_id = 3;
+    string folder_id = 4;
+    string target_id = 5; // google.protobuf.Any target ?
+    bool authenticated = 6;
+}
+
+message InstanceNetworkContext {
+    string instance_id = 1 [(required) = true];
+    string folder_id = 2 [(required) = true];
+    string cloud_id = 3 [(required) = true];
+    string zone_id = 4 [(required) = true];
+
+    string fqdn = 5;
+    repeated string search_domains = 6; // unused
+
+    repeated ComputeNetworkInterface network_interfaces = 7;
+
+    string compute_node = 8; // where this instance scheduled to
+    string hypervisor_type = 9; // qemu, serverless, etc... (deprecated by CLOUD-75747)
+
+    repeated ComputeUnderlayInterface underlay_interfaces = 10;
+
+    bool managed_by_vpc_node = 11;
+}
+
+message ComputeNetworkInterface {
+    string id = 1 [(required) = true];
+    string mac_address = 2;
+}
+
+message ComputeUnderlayInterface {
+    int64 index = 1 [(value) = ">=0"];
+    string network_name = 2 [(required) = true];
+
+    string mac_address = 3;
+
+    // Theoretically, an underlay interface can be dual-stack, so we have up to 2 addresses here.
+    // If neither address is set, interface is deallocated and its DNS records must be removed.
+    string ipv4_address = 4;
+    repeated compute.v1.DnsRecordSpec ipv4_dns_record_specs = 5;
+
+    string ipv6_address = 6;
+    repeated compute.v1.DnsRecordSpec ipv6_dns_record_specs = 7;
+}
+
+message UpdateInterfacesMetadataRequest {
+    InstanceNetworkContext instance_network_context = 1 [(required) = true];
+}
+
+message UpdateInterfacesMetadataResponse {
+}
+
+message AuthorizeAndValidateRelocateInstanceRequest {
+    InstanceNetworkContext instance_network_context = 1 [(required) = true];
+    string destination_zone_id = 2 [(required) = true];
+    repeated compute.v1.NetworkInterfaceSpec network_interface_specs = 3;
+}
+
+message AuthorizeAttachNetworkInterfaceRequest {
+    InstanceNetworkContext instance_network_context = 1 [(required) = true];
+    int64 interface_index = 2 [(value) = ">=0"];
+    compute.v1.NetworkInterfaceSpec network_interface_spec = 4;
+    bool allocate_immediately = 5;
+}
+
+message AttachNetworkInterfaceRequest {
+    InstanceNetworkContext instance_network_context = 1 [(required) = true];
+    // will fetch previously authorized request by request-id header
+}
+
+// nothing to pre-authorize on network side
+message DetachNetworkInterfaceRequest {
+    InstanceNetworkContext instance_network_context = 1 [(required) = true];
+    int64 interface_index = 2 [(value) = ">=0"];
+}

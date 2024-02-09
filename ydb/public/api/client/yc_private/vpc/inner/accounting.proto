@@ -1,0 +1,49 @@
+syntax = "proto3";
+
+package yandex.cloud.priv.vpc.v1.inner;
+
+import "ydb/public/api/client/yc_private/loadbalancer/network_load_balancer.proto";
+import "ydb/public/api/client/yc_private/loadbalancer/target_group.proto";
+import "ydb/public/api/client/yc_private/loadbalancer/health_check.proto";
+
+option go_package = "github.com/ydb-platform/ydb/ydb/public/api/client/yc_private/vpc/inner;vpcinnerpb";
+option java_outer_classname = "PAC";
+
+message Resource {
+    message NetworkLoadBalancerTarget {
+        string cloud_id = 1;
+        string network_load_balancer_id = 2;
+        yandex.cloud.priv.loadbalancer.v1.Target target = 3;
+        yandex.cloud.priv.loadbalancer.v1.Listener listener = 4;
+        yandex.cloud.priv.loadbalancer.v1.NetworkLoadBalancer.Type network_load_balancer_type = 5;
+        repeated yandex.cloud.priv.loadbalancer.v1.HealthCheck health_checks = 6;
+        string folder_id = 7;
+    }
+
+    message NetworkLoadBalancerFlattenedTarget {
+        string cloud_id = 1;
+        string network_load_balancer_id = 2;
+        string src_addr = 3;
+        int64 src_port = 4;
+        string dst_addr = 5;
+        int64 dst_port = 6;
+        int64 protocol = 7;
+        string dst_subnet_id = 8;
+        yandex.cloud.priv.loadbalancer.v1.NetworkLoadBalancer.Type network_load_balancer_type = 9;
+        repeated yandex.cloud.priv.loadbalancer.v1.HealthCheck health_checks = 10;
+        string folder_id = 11;
+        map<string, string> user_labels = 12;
+    }
+
+    message GatewaySubnetAttachment {
+        string gateway_id = 1;
+        string route_table_id = 2;
+        string subnet_id = 3;
+    }
+
+    oneof resource {
+        NetworkLoadBalancerTarget network_load_balancer_target = 2;
+        NetworkLoadBalancerFlattenedTarget network_load_balancer_flattened_target = 3;
+        GatewaySubnetAttachment gateway_subnet_attachment = 4;
+    }
+}

@@ -1,0 +1,24 @@
+syntax = "proto3";
+
+package yandex.cloud.priv.vpc.v1.inner;
+
+import "google/protobuf/duration.proto";
+import "google/protobuf/timestamp.proto";
+
+option go_package = "github.com/ydb-platform/ydb/ydb/public/api/client/yc_private/vpc/inner;vpcinnerpb";
+option java_outer_classname = "PVID";
+
+message Host {
+  string service_id = 1;
+  string fqdn = 2;
+  google.protobuf.Timestamp last_heartbeat = 3;
+  map<string, string> labels = 4;
+}
+
+message Service {
+  string id = 1;
+  string cloud_id = 2;
+
+  google.protobuf.Duration heartbeat_interval = 3;
+  google.protobuf.Duration heartbeat_timeout = 4;
+}

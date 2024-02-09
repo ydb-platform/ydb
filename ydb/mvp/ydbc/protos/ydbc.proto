@@ -1,0 +1,13 @@
+syntax = "proto3";
+
+package NMvp;
+
+import "ydb/public/api/client/yc_private/ydb/resource_preset.proto";
+import "ydb/public/api/client/yc_private/ydb/storage_type.proto";
+import "ydb/public/api/client/yc_private/ydb/console_service.proto";
+
+message YdbcConfig {
+    repeated yandex.cloud.priv.ydb.v1.ResourcePreset resource_presets = 1;
+    repeated yandex.cloud.priv.ydb.v1.StorageType storage_types = 2;
+    yandex.cloud.priv.ydb.v1.GetConfigResponse config_response = 3;
+}

@@ -1,0 +1,220 @@
+syntax = "proto3";
+
+package yandex.cloud.priv.vpc.v1;
+
+import "google/protobuf/field_mask.proto";
+import "ydb/public/api/client/yc_common/api/operation.proto";
+import "ydb/public/api/client/yc_private/vpc/security_group.proto";
+import "ydb/public/api/client/yc_private/operation/operation.proto";
+import "ydb/public/api/client/yc_private/iam/reference.proto";
+import "ydb/public/api/client/yc_private/common/validation.proto";
+
+option go_package = "github.com/ydb-platform/ydb/ydb/public/api/client/yc_private/vpc;vpc";
+option java_outer_classname = "PSSG";
+
+service SecurityGroupService {
+
+  rpc Get (GetSecurityGroupRequest) returns (SecurityGroup);
+
+  rpc List (ListSecurityGroupsRequest) returns (ListSecurityGroupsResponse);
+
+  rpc ListReferences (ListSecurityGroupReferencesRequest) returns (ListSecurityGroupReferencesResponse);
+
+  rpc Create (CreateSecurityGroupRequest) returns (operation.Operation) {
+    option (yandex.cloud.api.operation) = {
+      metadata: "CreateSecurityGroupMetadata"
+      response: "SecurityGroup"
+    };
+  }
+
+  rpc Update (UpdateSecurityGroupRequest) returns (operation.Operation) {
+    option (yandex.cloud.api.operation) = {
+      metadata: "UpdateSecurityGroupMetadata"
+      response: "SecurityGroup"
+    };
+  }
+
+  rpc UpdateRules (UpdateSecurityGroupRulesRequest) returns (operation.Operation) {
+    option (yandex.cloud.api.operation) = {
+      metadata: "UpdateSecurityGroupMetadata"
+      response: "SecurityGroup"
+    };
+  }
+
+  // update rule description or labels
+  rpc UpdateRule (UpdateSecurityGroupRuleRequest) returns (operation.Operation) {
+    option (yandex.cloud.api.operation) = {
+      metadata: "UpdateSecurityGroupRuleMetadata"
+      response: "SecurityGroupRule"
+    };
+  }
+
+  rpc Delete (DeleteSecurityGroupRequest) returns (operation.Operation) {
+    option (yandex.cloud.api.operation) = {
+      metadata: "DeleteSecurityGroupMetadata"
+      response: "google.protobuf.Empty"
+    };
+  }
+
+  rpc Move (MoveSecurityGroupRequest) returns (operation.Operation) {
+    option (yandex.cloud.api.operation) = {
+      metadata: "MoveSecurityGroupMetadata"
+      response: "SecurityGroup"
+    };
+  }
+
+  rpc ListOperations (ListSecurityGroupOperationsRequest) returns (ListSecurityGroupOperationsResponse);
+
+  rpc UpdateReferences (UpdateSecurityGroupReferencesRequest) returns (operation.Operation) {
+    option (yandex.cloud.api.operation) = {
+      metadata: "UpdateSecurityGroupReferencesMetadata"
+      response: "google.protobuf.Empty"
+    };
+  }
+}
+
+message GetSecurityGroupRequest {
+  string security_group_id = 1 [(required) = true];
+}
+
+message ListSecurityGroupsRequest {
+  string folder_id = 1 [(required) = true];
+  int64 page_size = 2  [(value) = "<=1000"];
+  string page_token = 3  [(length) = "<=1000"];
+  string filter = 4; //filter by network_id is here
+}
+
+message ListSecurityGroupsResponse {
+  repeated SecurityGroup security_groups = 1;
+  string next_page_token = 2;
+}
+
+message CreateSecurityGroupRequest {
+  string folder_id = 1 [(required) = true];
+  string name = 2;
+  string description = 3;
+  map<string, string> labels = 4;
+
+  string network_id = 5 [(required) = true];
+  repeated SecurityGroupRuleSpec rule_specs = 6;
+
+  // private field
+  repeated reference.Reference references = 100;
+}
+
+message SecurityGroupRuleSpec {
+  string description = 1;
+  map<string, string> labels = 2;
+
+  SecurityGroupRule.Direction direction = 3 [(required) = true];
+  PortRange ports = 4; // null value means any port
+
+  // values from https://www.iana.org/assignments/protocol-numbers/protocol-numbers.xhtml
+  // null value means any protocol
+  oneof protocol {
+    string protocol_name = 5;
+    int64 protocol_number = 6;
+  }
+
+  oneof target {
+    option (exactly_one) = true;
+
+    CidrBlocks cidr_blocks = 7;
+    string security_group_id = 8;
+    string predefined_target = 9;
+    // string subnet_id = .. ;
+  }
+}
+
+message CreateSecurityGroupMetadata {
+  string security_group_id = 1;
+}
+
+message UpdateSecurityGroupRequest {
+  string security_group_id = 1 [(required) = true];
+
+  google.protobuf.FieldMask update_mask = 2;
+
+  string name = 3;
+  string description = 4;
+  map<string, string> labels = 5;
+
+  // all existing rules will be replaced with given list
+  repeated SecurityGroupRuleSpec rule_specs = 6;
+}
+
+message UpdateSecurityGroupMetadata {
+  string security_group_id = 1;
+  repeated string added_rule_ids = 2;
+}
+
+message UpdateSecurityGroupRulesRequest {
+  string security_group_id = 1 [(required) = true];
+
+  repeated string deletion_rule_ids = 2; //list of rules ids to delete
+  repeated SecurityGroupRuleSpec addition_rule_specs = 3;
+}
+
+message UpdateSecurityGroupRuleRequest {
+  string security_group_id = 1 [(required) = true];
+  string rule_id = 2 [(required) = true];
+
+  google.protobuf.FieldMask update_mask = 3;
+
+  string description = 4;
+  map<string, string> labels = 5;
+}
+
+message UpdateSecurityGroupRuleMetadata {
+  string security_group_id = 1;
+  string rule_id = 2;
+}
+
+message DeleteSecurityGroupRequest {
+  string security_group_id = 1 [(required) = true];
+}
+
+message DeleteSecurityGroupMetadata {
+  string security_group_id = 1;
+}
+
+message ListSecurityGroupOperationsRequest {
+  string security_group_id = 1 [(required) = true];
+  int64 page_size = 2 [(value) = "<=1000"];
+  string page_token = 3 [(length) = "<=1000"];
+}
+
+message ListSecurityGroupOperationsResponse {
+  repeated operation.Operation operations = 1;
+  string next_page_token = 2;
+}
+
+message MoveSecurityGroupRequest {
+  string security_group_id = 1 [(required) = true];
+  string destination_folder_id = 2 [(required) = true];
+}
+
+message MoveSecurityGroupMetadata {
+  string security_group_id = 1;
+}
+
+message ListSecurityGroupReferencesRequest {
+  string security_group_id = 1 [(required) = true];
+  int64 page_size = 2 [(value) = "0-1000"];
+  string page_token = 3 [(length) = "<=100"];
+}
+
+message ListSecurityGroupReferencesResponse {
+  repeated reference.Reference references = 1 [(size) = "<=1"];
+  string next_page_token = 2;
+}
+
+message UpdateSecurityGroupReferencesRequest {
+  string security_group_id = 1 [(required) = true];
+  repeated reference.Reference reference_additions = 2;
+  repeated reference.Reference reference_deletions = 3;
+}
+
+message UpdateSecurityGroupReferencesMetadata {
+  string security_group_id = 1;
+}

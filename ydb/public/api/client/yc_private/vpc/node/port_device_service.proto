@@ -1,0 +1,85 @@
+syntax = "proto3";
+
+package yandex.cloud.priv.vpc.v1.node;
+
+import "ydb/public/api/client/yc_private/common/validation.proto";
+import "ydb/public/api/client/yc_private/common/sensitive.proto";
+import "ydb/public/api/client/yc_private/vpc/node/port_device.proto";
+import "ydb/public/api/client/yc_private/vpc/inner/port_state.proto";
+
+option go_package = "github.com/ydb-platform/ydb/ydb/public/api/client/yc_private/vpc/node;vpcnodepb";
+option java_outer_classname = "PVNPDS";
+
+// PortDeviceService implements interface to manipulate with port devices.
+// Mostly the service used by compute-node to manipulate with network entities (interfaces, hbf, etc.):
+service PortDeviceService {
+  // Create port at system and attach it to dataplane (if port has primary role)
+  // Called by compute-node.
+  rpc Create(PortDeviceCreateRequest) returns (PortDeviceCreateResponse);
+
+  // Delete detaches port from dataplane (if port has primary role) and remove it from system
+  // Called by compute-node.
+  rpc Delete(PortDeviceDeleteRequest) returns (PortDeviceDeleteResponse);
+
+  // MigrateToSecondaryPort detaches primary port from dataplane and attaches secondary port.
+  // Error will be returned if secondary port doesn't exist
+  // Called by compute-node.
+  rpc MigrateToSecondaryPort(PortDeviceMigrateToSecondaryPortRequest)
+      returns (PortDeviceMigrateToSecondaryPortResponse);
+
+  // Forget removes knowledge about port from vpc-node to perform a reverse migration of interface
+  // from the vpc-node to compute-node.
+  // Called by compute-node.
+  rpc Forget(PortDeviceForgetRequest) returns (PortDeviceForgetResponse);
+
+  // Called by serverless.
+  rpc SetInterfaceMetadata(PortDeviceSetInterfaceMetadataRequest)
+      returns (PortDeviceSetInterfaceMetadataResponse);
+  rpc ResetInterfaceMetadata(PortDeviceResetInterfaceMetadataRequest)
+      returns (PortDeviceResetInterfaceMetadataResponse);
+}
+
+message PortDeviceCreateRequest {
+  inner.PortIdentifier port_identifier = 1 [ (required) = true ];
+  PortDeviceRole port_device_role = 2 [ (required) = true ];
+  PortDeviceData port_device_data = 3 [ (required) = true ];
+}
+
+message PortDeviceCreateResponse {
+  string interface_name = 1;
+}
+
+message PortDeviceDeleteRequest {
+  inner.PortIdentifier port_identifier = 1 [ (required) = true ];
+  PortDeviceRole port_device_role = 2 [ (required) = true ];
+}
+
+message PortDeviceDeleteResponse {}
+
+message PortDeviceMigrateToSecondaryPortRequest {
+  inner.PortIdentifier port_identifier = 1 [ (required) = true ];
+}
+
+message PortDeviceMigrateToSecondaryPortResponse {
+}
+
+message PortDeviceForgetRequest {
+  inner.PortIdentifier port_identifier = 1 [ (required) = true ];
+}
+message PortDeviceForgetResponse {
+}
+
+message PortDeviceSetInterfaceMetadataRequest {
+  inner.PortIdentifier port_identifier = 1 [ (required) = true ];
+  string metadata = 2 [ (sensitive) = true ];
+}
+
+message PortDeviceSetInterfaceMetadataResponse {
+}
+
+message PortDeviceResetInterfaceMetadataRequest {
+  inner.PortIdentifier port_identifier = 1 [ (required) = true ];
+}
+
+message PortDeviceResetInterfaceMetadataResponse {
+}

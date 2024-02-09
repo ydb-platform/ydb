@@ -1,0 +1,93 @@
+syntax = "proto3";
+
+package yandex.cloud.priv.vpc.v1.inner;
+
+import "ydb/public/api/client/yc_private/common/validation.proto";
+import "ydb/public/api/client/yc_private/vpc/inner/fip_bucket.proto";
+import "ydb/public/api/client/yc_private/vpc/inner/node_registry.proto";
+
+option go_package = "github.com/ydb-platform/ydb/ydb/public/api/client/yc_private/vpc/inner;vpcinnerpb";
+option java_outer_classname = "PVPS";
+
+message PortState {
+  PortIdentifier identifier = 1 [ (required) = true ];
+  DataplaneInfo dataplane_info = 2 [ (required) = true ];
+  PortConfig config = 3 [ (required) = true ];
+}
+
+message PortConfig {
+  // Needed for local yc-billing-collector calls
+  string cloud_id = 1 [ (required) = true ];
+  string folder_id = 2 [ (required) = true ];
+
+  // For now not used as we do not configure dataplane directly
+  // (may be used for consistency checks, though)
+  string subnet_id = 3 [ (required) = true ];
+  PortAddresses addresses = 4 [ (required) = true ];
+  repeated string security_group_ids = 5;
+
+  // Dataplane configuration
+  DataplaneStack dataplane = 6 [ (required) = true ];
+
+  bool hbf_enabled = 7;
+}
+
+message PortIdentifier {
+  string instance_id = 1 [ (required) = true ];
+  int64 interface_index = 2 [ (value) = ">=0" ];
+}
+
+message TapDevice { int64 tx_queue_len = 1; }
+
+message NoPolicyEngine {}
+
+message VRouterPolicyEngine {
+  string port_uuid = 1 [ (required) = true ];
+  string instance_uuid = 2 [ (required) = true ];
+  string vn_uuid = 3 [ (required) = true ];
+  string vm_project_uuid = 4 [ (required) = true ];
+  string vm_name = 5 [ (required) = true ];
+}
+
+message DropServiceHandler {}
+
+message DirectServiceHandler {}
+
+message VRouterServiceHandler {}
+
+message FloatingIpAddress {
+  IpVersion ip_version = 1 [ (required) = true ];
+  string address = 2 [ (required) = true ];
+  string fip_bucket = 3 [ (required) = true ];
+}
+
+message PortAddresses {
+  string mac_address = 1;
+  string primary_v4_address = 2;
+  string primary_v6_address = 3;
+  repeated FloatingIpAddress floating_ip_addresses = 4;
+}
+
+message DataplaneStack {
+  oneof device {
+    option (exactly_one) = true;
+
+    TapDevice dev_tap = 1;
+    // VHostDevice dev_vhost = 2;
+    // MellanoxVDPADevice dev_mlx_vdpa = 3;
+    // MellanoxSRIOVDevice dev_mlx_sriov = 4;
+  }
+
+  // NOTE: multiple policy engines may be specified (one of each type)
+  NoPolicyEngine policer_nop = 5;
+  // XDPPolicyEngine policer_xdp = 6;
+  // TCPolicyEngine policer_tc = 7;
+  VRouterPolicyEngine policer_vrouter = 12;
+
+  oneof service_handler {
+    DropServiceHandler sh_drop = 8;
+    DirectServiceHandler sh_direct = 9;
+    // YCServiceHandler sh_yc = 10;
+    VRouterServiceHandler sh_vrouter = 11;
+  }
+}

@@ -1,0 +1,54 @@
+syntax = "proto3";
+
+package yandex.cloud.priv.vpc.v1.vrouter;
+
+option go_package = "github.com/ydb-platform/ydb/ydb/public/api/client/yc_private/vpc/vrouter;vrouter";
+option java_outer_classname = "PVRFS";
+
+import "ydb/public/api/client/yc_private/common/validation.proto";
+import "ydb/public/api/client/yc_private/vpc/vrouter/flow.proto";
+
+service FlowService {
+  rpc List (ListFlowsRequest) returns (ListFlowsResponse);
+
+  rpc GetClasses (GetFlowClassesRequest) returns (GetFlowClassesResponse);
+}
+
+message ListFlowsRequest {
+  string instance_id = 1 [(required) = true];
+  string network_interface_index = 2;
+
+  // Skip obfuscating non-private IP addresses
+  bool raw = 3;
+
+  // Resolve routes in flows (unsupported)
+  bool resolve_routes = 4;
+
+  // If specified, filters only flows matching this address.
+  // Also allows showing raw flows having smaller privileges
+  string address = 5;
+}
+
+message ListFlowsResponse {
+  repeated Flow flows = 1;
+}
+
+message GetFlowClassesRequest {
+  string instance_id = 1 [(required) = true];
+  string network_interface_index = 2;
+
+  repeated string classifiers = 3;
+
+  int64 sample_size = 4;
+  bool raw = 5;
+}
+
+message FlowGroup {
+  map<string, string> flow_class = 1;
+  int64 flow_count = 2;
+  repeated Flow sample = 3;
+}
+
+message GetFlowClassesResponse {
+  repeated FlowGroup groups = 1;
+}

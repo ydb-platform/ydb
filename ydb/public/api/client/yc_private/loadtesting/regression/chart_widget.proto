@@ -1,0 +1,16 @@
+syntax = "proto3";
+
+package yandex.cloud.priv.loadtesting.v1.regression;
+
+import "ydb/public/api/client/yc_private/loadtesting/regression/kpi.proto";
+
+option go_package = "github.com/ydb-platform/ydb/ydb/public/api/client/yc_private/loadtesting/regression;regression";
+
+message ChartWidget {
+    string id = 1;
+    string name = 2;
+    string description = 3;
+    string filter_str = 4;
+    string test_case = 5;
+    repeated Kpi kpis = 6;
+}

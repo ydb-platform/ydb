@@ -1,0 +1,40 @@
+generic:
+  mlock: false
+
+  logging:
+    stderr: false
+
+  server:
+    http_port: 8788
+    https_port: 8789
+    ca_cert_file: path/to/ca.crt
+    ssl_cert_file: path/to/ssl.crt
+
+  auth:
+    token: your_ydb_token
+    token_file: path/to/ydb_token
+
+meta:
+  name: "meta"
+  environment: "meta"
+  endpoints:
+    api: grpc://lb.ydb-ui.ydb.nemax.nebiuscloud.net:2135
+    cluster-api: grpc://lb.ydb-ui.ydb.nemax.nebiuscloud.net:2135
+  root_domain: "/nemax_global/ydb-ui"
+  unit_resources:
+    &unit_resources
+    - type: compute
+      kind: slot
+      cpu: 10
+      memory: 53687091200 # 50*1024*1024*1024
+      storage: 0
+    - type: storage
+      kind: hdd
+      cpu: 10
+      memory: 536870912000 # 500*1024*1024*1024
+      storage: 0
+    - type: storage
+      kind: ssd
+      cpu: 10
+      memory: 107374182400 # 100*1024*1024*1024
+      storage: 0

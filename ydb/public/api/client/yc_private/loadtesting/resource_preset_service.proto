@@ -1,0 +1,29 @@
+syntax = "proto3";
+
+package yandex.cloud.priv.loadtesting.v1;
+
+import "ydb/public/api/client/yc_private/common/validation.proto";
+import "ydb/public/api/client/yc_private/loadtesting/resource_preset.proto";
+
+option go_package = "github.com/ydb-platform/ydb/ydb/public/api/client/yc_private/loadtesting;loadtesting";
+option java_outer_classname = "PLTPS";
+
+
+service ResourcePresetService {
+  rpc Get (GetResourcePresetRequest) returns (ResourcePreset);
+  rpc List (ListResourcePresetsRequest) returns (ListResourcePresetsResponse);
+}
+
+message GetResourcePresetRequest {
+  string preset_id = 1 [(yandex.cloud.priv.required) = true, (yandex.cloud.priv.length) = "<=50"];
+}
+
+message ListResourcePresetsRequest {
+  int64 page_size = 1 [(yandex.cloud.priv.value) = "0-1000"];
+  string page_token = 2 [(yandex.cloud.priv.length) = "<=100"];
+  string filter = 3 [(yandex.cloud.priv.length) = "<=1000"];
+}
+message ListResourcePresetsResponse {
+  repeated ResourcePreset resource_presets = 1;
+  string next_page_token = 2;
+}

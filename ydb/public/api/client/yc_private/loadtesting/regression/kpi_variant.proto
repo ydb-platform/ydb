@@ -1,0 +1,55 @@
+syntax = "proto3";
+
+package yandex.cloud.priv.loadtesting.v1.regression;
+
+import "ydb/public/api/client/yc_private/loadtesting/common/quantile_option.proto";
+
+option go_package = "github.com/ydb-platform/ydb/ydb/public/api/client/yc_private/loadtesting/regression;regression";
+
+enum AggregationFunc {
+    AGGREGATION_FUNC_UNSPECIFIED = 0;
+    MIN = 1;
+    MAX = 2;
+    AVG = 4;
+    MEDIAN = 5;
+    STD_DEV = 6;
+}
+
+message KpiQuantile {
+    common.QuantileOption quantile = 1;
+}
+
+message KpiInstances {
+    AggregationFunc agg = 1;
+}
+
+message KpiImbalanceRps {
+}
+
+message KpiProtocolCodesAbsolute {
+    repeated string codes_patterns = 1;
+}
+
+message KpiProtocolCodesRelative {
+    repeated string codes_patterns = 1;
+}
+
+message KpiNetworkCodesAbsolute {
+    repeated string codes_patterns = 1;
+}
+
+message KpiNetworkCodesRelative {
+    repeated string codes_patterns = 1;
+}
+
+message KpiVariant {
+    oneof kind {
+        KpiQuantile quantile = 1;
+        KpiInstances instances = 2;
+        KpiImbalanceRps imbalance_rps = 3;
+        KpiProtocolCodesAbsolute protocol_codes_absolute = 4;
+        KpiProtocolCodesRelative protocol_codes_relative = 5;
+        KpiNetworkCodesAbsolute network_codes_absolute = 6;
+        KpiNetworkCodesRelative network_codes_relative = 7;
+    }
+}

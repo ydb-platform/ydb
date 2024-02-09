@@ -1,0 +1,14 @@
+syntax = "proto3";
+
+package yandex.cloud.priv.loadtesting.v1.moverload;
+
+import "ydb/public/api/client/yc_private/common/validation.proto";
+
+option go_package = "github.com/ydb-platform/ydb/ydb/public/api/client/yc_private/loadtesting/moverload;moverload";
+option java_outer_classname = "LtV1MoverloadInterface";
+
+message CreateMigrationRequest {
+  string overload_token = 1 [(required) = true];
+  repeated int64 overload_job_ids = 2;
+  string folder_id = 3;
+}

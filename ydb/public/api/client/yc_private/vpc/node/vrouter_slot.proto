@@ -1,0 +1,44 @@
+syntax = "proto3";
+
+package yandex.cloud.priv.vpc.v1.node;
+
+option go_package = "github.com/ydb-platform/ydb/ydb/public/api/client/yc_private/vpc/node;vpcnodepb";
+option java_outer_classname = "PVNVS";
+
+import "ydb/public/api/client/yc_private/vpc/inner/node_registry.proto";
+
+enum SlotReleaseStatus {
+  SLOT_RELEASE_STATUS_UNSPECIFIED = 0;
+  STARTED = 1;
+  SUCCEEDED = 2;
+}
+
+message VHostInterfaceConfig {
+  // name of virtual host interface
+  string name = 1;
+  // ip is virtual host ip address with prefix in ip/prefix_len format
+  string ip = 2;
+  // gateway is ip address for virtual host
+  string gateway = 3;
+  // physical_interface is name to which virtual host interface maps to
+  string physical_interface = 4;
+}
+
+// VRouterSlotConfig is statically generated config for every available slot on compute-node
+// All specified fields of config are required to start vRouter.
+message VRouterSlotConfig {
+  // slot is used by vRouter as main identifier: flow%d in /dev, vrouter%d in sysctl, etc
+  int64 slot = 1;
+  // listen_addr is address where port ipc and http server listen
+  string listen_addr = 2;
+  string agent_base_directory = 3;
+  string agent_runtime_directory = 4;
+  VHostInterfaceConfig vhost = 5;
+  // metadata_vmi_subnet is subnet for allocating VMI's metadata addresses
+  string metadata_vmi_subnet = 6;
+}
+
+message AllocatedVrouterSlot {
+  VRouterSlotConfig vrouter_slot_config = 1;
+  inner.DataplaneState dataplane_state = 2;
+}

@@ -1,0 +1,17 @@
+syntax = "proto3";
+
+package yandex.cloud.priv.loadtesting.v1.common;
+
+option go_package = "github.com/ydb-platform/ydb/ydb/public/api/client/yc_private/loadtesting/common;common";
+
+enum Unit {
+    UNIT_UNSPECIFIED = 0;
+    UNIT_QUANTITY = 1;
+    UNIT_PERCENT = 2;
+    UNIT_PERCENT_UNIT = 3;
+    UNIT_BYTE = 4;
+    UNIT_MILLISECOND = 5;
+    UNIT_SECOND = 6;
+    UNIT_DATETIME = 7;
+    UNIT_REQUESTS_PER_SECOND = 8;
+}

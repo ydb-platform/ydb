@@ -1,0 +1,42 @@
+syntax = "proto3";
+
+package yandex.cloud.priv.loadtesting.v1.comparison;
+
+import "ydb/public/api/client/yc_private/loadtesting/common/timestamp_range.proto";
+
+option go_package = "github.com/ydb-platform/ydb/ydb/public/api/client/yc_private/loadtesting/comparison;comparison";
+option java_outer_classname = "LtV1ComparisonRequest";
+
+message ComparisonTestsInfoRequest {
+    repeated string job_ids = 1;
+}
+
+message ComparisonTestsChartsRequest {
+    repeated string job_ids = 1;
+    common.TimestampRange time_range = 2;
+    int64 chart_width = 3;
+    repeated string cases = 4;
+}
+
+message ComparisonTestsTablesRequest {
+    repeated string job_ids = 1;
+    common.TimestampRange time_range = 2;
+    repeated string cases = 3;
+}
+
+message ComparisonMonitoringInfoRequest {
+    repeated string job_ids = 1;
+}
+
+message ComparisonMonitoringDataRequest {
+    message Item {
+        string job_id = 1;
+        string host_name = 2;
+    }
+
+    common.TimestampRange time_range = 1;
+    int64 chart_width = 2;
+    string metric_type = 3;
+    string metric_name = 4;
+    repeated Item items = 5;
+}

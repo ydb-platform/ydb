@@ -1,0 +1,13 @@
+syntax = "proto3";
+
+package yandex.cloud.priv.loadtesting.v1.regression;
+
+import "ydb/public/api/client/yc_private/loadtesting/regression/kpi_variant.proto";
+import "ydb/public/api/client/yc_private/loadtesting/regression/sla.proto";
+
+option go_package = "github.com/ydb-platform/ydb/ydb/public/api/client/yc_private/loadtesting/regression;regression";
+
+message Kpi {
+    KpiVariant variant = 1;
+    Sla sla = 2;
+}

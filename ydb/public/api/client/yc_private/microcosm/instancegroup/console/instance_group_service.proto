@@ -1,0 +1,36 @@
+syntax = "proto3";
+
+package yandex.cloud.priv.microcosm.instancegroup.v1.console;
+
+import "ydb/public/api/client/yc_private/microcosm/instancegroup/console/instance_group.proto";
+import "ydb/public/api/client/yc_private/iam/reference.proto";
+import "ydb/public/api/client/yc_private/common/validation.proto";
+import "ydb/public/api/client/yc_private/iam/v1/service_account.proto";
+
+option go_package = "github.com/ydb-platform/ydb/ydb/public/api/client/yc_private/microcosm/instancegroup/console;console";
+option java_outer_classname = "PCIGS";
+
+service InstanceGroupService {
+  rpc GetMonitoringDashboardData (MonitoringDashboardDataRequest) returns (MonitoringDashboardDataResponse);
+
+  rpc ListServiceAccounts (ListServiceAccountsRequest) returns (ListServiceAccountsResponse);
+}
+
+message MonitoringDashboardDataRequest {
+  string instance_group_id = 1 [(required) = true, (length) = "<=50"];
+}
+
+message MonitoringDashboardDataResponse {
+  repeated string instance_ids = 1;
+}
+
+message ListServiceAccountsRequest {
+  string folder_id = 1 [(required) = true, (length) = "<=50"];
+  int64 page_size = 2 [(value) = "0-1000"];
+  string page_token = 3 [(length) = "<=100"];
+}
+
+message ListServiceAccountsResponse {
+  repeated yandex.cloud.priv.iam.v1.ServiceAccount service_accounts = 1;
+  string next_page_token = 2;
+}

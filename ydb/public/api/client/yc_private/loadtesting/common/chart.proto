@@ -1,0 +1,87 @@
+syntax = "proto3";
+
+package yandex.cloud.priv.loadtesting.v1.common;
+
+import "ydb/public/api/client/yc_private/loadtesting/common/unit.proto";
+import "google/protobuf/any.proto";
+
+option go_package = "github.com/ydb-platform/ydb/ydb/public/api/client/yc_private/loadtesting/common;common";
+
+message Chart {
+    enum MetricVisualType {
+        METRIC_VISUAL_TYPE_UNSPECIFIED = 0;
+        METRIC_VISUAL_TYPE_LINE = 1;
+        METRIC_VISUAL_TYPE_AREA = 2;
+        METRIC_VISUAL_TYPE_BAR = 3;
+    }
+
+    enum DashStyle {
+        DASH_STYLE_UNSPECIFIED = 0;
+        DASH_STYLE_LINE = 1;
+        DASH_STYLE_DOTTED = 2;
+    }
+
+    message Metric {
+        string title = 1;
+        repeated double values = 2;
+        bool disabled = 3;
+        int64 y_axis_index = 4;
+        string color = 5;
+        MetricVisualType visual_type = 6;
+        map<string, string> metadata = 7;
+    }
+
+    message MetricGroup {
+        string title = 1;
+        repeated Metric metrics = 2;
+    }
+
+    message GroupedData {
+        repeated MetricGroup metric_groups = 1;
+    }
+
+    message FlatData {
+        repeated Metric metrics = 1;
+    }
+
+    message ChartData {
+        oneof data {
+            FlatData flat = 1;
+            GroupedData grouped = 2;
+        }
+    }
+
+    message PlotBand {
+        string title = 1;
+        double value_from = 2;
+        double value_to = 3;
+        string color = 4;
+    }
+
+    message PlotLine {
+        string title = 1;
+        double value = 2;
+        DashStyle dash_style = 3;
+        string color = 4;
+    }
+
+    message Axis {
+        string title = 1;
+        Unit unit = 2;
+        repeated PlotLine plot_lines = 3;
+        repeated PlotBand plot_bands = 4;
+    }
+
+    message XAxisData {
+        repeated int64 values = 1;
+        int64 denominator = 2;
+        repeated google.protobuf.Any annotations = 3;
+    }
+
+    string title = 1;
+    string description = 2;
+    XAxisData x_values = 3;
+    ChartData data = 4;
+    Axis x_axis = 5;
+    repeated Axis y_axes = 6;
+}

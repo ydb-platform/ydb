@@ -1,0 +1,72 @@
+syntax = "proto3";
+
+package yandex.cloud.priv.team.integration.v1;
+
+option go_package = "github.com/ydb-platform/ydb/ydb/public/api/client/yc_private/team;integration";
+option java_outer_classname = "PTIAS";
+
+import "ydb/public/api/client/yc_common/api/operation.proto";
+import "ydb/public/api/client/yc_private/operation/operation.proto";
+import "ydb/public/api/client/yc_private/common/validation.proto";
+
+// A set of methods for mapping ABC folders to clouds and vice versa.
+// https://wiki.yandex-team.ru/intranet/abc/
+service AbcService {
+  // Creates new cloud for abc folder id.
+  // If given abc folder id does not exists, the result will be `FAILED_PRECONDITION`.
+  // If such cloud already exists for the given abc folder id, the result will be `ALREADY_EXISTS`.
+  rpc Create (CreateCloudRequest) returns (operation.Operation) {
+    option (yandex.cloud.api.operation) = {
+        metadata: "CreateCloudMetadata"
+        response: "CreateCloudResponse"
+      };
+  }
+
+  // Resolves cloud id to abc folder id or vice versa.
+  // If no cloud created for the given abc folder id, the result will be `NOT_FOUND`.
+  rpc Resolve (ResolveRequest) returns (ResolveResponse) {}
+}
+
+message CreateCloudRequest {
+  oneof abc {
+    option (exactly_one) = true;
+    // Deprecated. Creates cloud_id for default folder of ABC service.
+    string abc_slug = 1 [deprecated = true];
+    // Deprecated. Creates cloud_id for default folder of ABC service.
+    int64 abc_id = 2 [deprecated = true];
+    string abc_folder_id = 3;
+  }
+}
+
+message CreateCloudMetadata {
+  string abc_slug = 1;
+  int64 abc_id = 2;
+  string abc_folder_id = 3;
+}
+
+message CreateCloudResponse {
+  string cloud_id = 1;
+  string default_folder_id = 2;
+}
+
+message ResolveRequest {
+  oneof abc {
+    option (exactly_one) = true;
+    string cloud_id = 1;
+    // Deprecated. Resolves cloud_id for default folder of ABC service.
+    string abc_slug = 2 [deprecated = true];
+    // Deprecated. Resolves cloud_id for default folder of ABC service.
+    int64 abc_id = 3 [deprecated = true];
+    string abc_folder_id = 4;
+  }
+}
+
+message ResolveResponse {
+  string cloud_id = 1;
+  // Deprecated. Will be removed in a future release.
+  string abc_slug = 2;
+  // Deprecated. Will be removed in a future release.
+  int64 abc_id = 3;
+  string default_folder_id = 4;
+  string abc_folder_id = 5;
+}

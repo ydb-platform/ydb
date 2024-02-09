@@ -27,8 +27,10 @@ bool TLoggedMonTransaction::Prepare(NIceDb::TNiceDb& db) {
     return rowset.IsReady() && !rowset.HaveValue<Schema::OperationsLog::Operation>();
 }
 
-void TLoggedMonTransaction::WriteOperation(NIceDb::TNiceDb& db, const NKikimrHive::TOperation& op) {
-    db.Table<Schema::OperationsLog>().Key(Timestamp.MilliSeconds()).Update<Schema::OperationsLog::User, Schema::OperationsLog::Operation>(User, op);
+void TLoggedMonTransaction::WriteOperation(NIceDb::TNiceDb& db, const NJson::TJsonValue& op) {
+    TStringStream str;
+    NJson::WriteJson(&str, &op);
+    db.Table<Schema::OperationsLog>().Key(Timestamp.MilliSeconds()).Update<Schema::OperationsLog::User, Schema::OperationsLog::Operation>(User, str.Str());
 }
 
 class TTxMonEvent_DbState : public TTransactionBase<THive> {
@@ -705,18 +707,14 @@ public:
 
     TTxType GetTxType() const override { return NHive::TXTYPE_MON_SETTINGS; }
 
-    void UpdateConfig(NIceDb::TNiceDb& db, const TString& param, NKikimrHive::TConfigUpdates* protoLog, TSchemeIds::State compatibilityParam = TSchemeIds::State::DefaultState) {
+    void UpdateConfig(NIceDb::TNiceDb& db, const TString& param, NJson::TJsonValue& jsonLog, TSchemeIds::State compatibilityParam = TSchemeIds::State::DefaultState) {
         const auto& params(Event->Cgi());
         if (params.contains(param)) {
             const TString& value = params.Get(param);
             const google::protobuf::Reflection* reflection = Self->DatabaseConfig.GetReflection();
             const google::protobuf::FieldDescriptor* field = Self->DatabaseConfig.GetDescriptor()->FindFieldByName(param);
             if (reflection != nullptr && field != nullptr) {
-                auto* protoUpdate = protoLog->AddConfigUpdate();
-                protoUpdate->SetFieldNumber(field->number());
-                if (!value.empty()) {
-                    protoUpdate->SetValue(value);
-                }
+                jsonLog[param] = value;
                 if (value.empty()) {
                     reflection->ClearField(&Self->DatabaseConfig, field);
                     // compatibility
@@ -786,8 +784,8 @@ public:
         if (!Prepare(db)) {
             return false;
         }
-        NKikimrHive::TOperation protoOperation;
-        NKikimrHive::TConfigUpdates* configUpdates = protoOperation.MutableConfigUpdates();
+        NJson::TJsonValue jsonOperation;
+        auto& configUpdates = jsonOperation["ConfigUpdates"];
 
         UpdateConfig(db, "MaxTabletsScheduled", configUpdates, TSchemeIds::State::MaxTabletsScheduled);
         UpdateConfig(db, "MaxBootBatchSize", configUpdates, TSchemeIds::State::MaxBootBatchSize);
@@ -864,9 +862,7 @@ public:
                     field->Add(i);
                 }
                 ChangeRequest = true;
-                auto* protoUpdate = configUpdates->AddConfigUpdate();
-                protoUpdate->SetFieldNumber(NKikimrConfig::THiveConfig::kBalancerIgnoreTabletTypesFieldNumber);
-                protoUpdate->SetValue(value);
+                configUpdates["BalancerIgnoreTabletTypes"] = value;
                 // Self->BalancerIgnoreTabletTypes will be replaced by Self->BuildCurrentConfig()
             }
         }
@@ -887,9 +883,7 @@ public:
                 protoLimit->SetMaxCount(*maxCount);
             }
 
-            auto* protoUpdate = configUpdates->AddConfigUpdate();
-            protoUpdate->SetFieldNumber(NKikimrConfig::THiveConfig::kDefaultTabletLimitFieldNumber);
-            protoUpdate->SetValue(value);
+            configUpdates["DefaultTabletLimit"] = value;
 
             // Get rid of duplicates & default values
             google::protobuf::RepeatedPtrField<NKikimrConfig::THiveTabletLimit> cleanTabletLimits;
@@ -913,7 +907,7 @@ public:
             db.Table<Schema::State>().Key(TSchemeIds::State::DefaultState).Update<Schema::State::Config>(Self->DatabaseConfig);
         }
         if (params.contains("allowedMetrics")) {
-            auto* protoAllowedMetrics = protoOperation.MutableAllowedMetricsUpdates();
+            auto& jsonAllowedMetrics = jsonOperation["AllowedMetricsUpdate"];
             TVector<TString> allowedMetrics = SplitString(params.Get("allowedMetrics"), ";");
             for (TStringBuf tabletAllowedMetrics : allowedMetrics) {
                 TStringBuf tabletType = tabletAllowedMetrics.NextTok(':');
@@ -941,9 +935,19 @@ public:
                         }
                         if (changed) {
                             ChangeRequest = true;
-                            auto* protoUpdate = protoAllowedMetrics->AddAllowedMetricsUpdate();
-                            protoUpdate->SetType(type);
-                            protoUpdate->MutableAllowedMetrics()->Add(metrics.begin(), metrics.end());
+                            NJson::TJsonValue jsonUpdate;
+                            jsonUpdate["Type"] = tabletType;
+                            const auto* descriptor = NKikimrTabletBase::TMetrics::descriptor();
+                            auto& jsonMetrics = jsonUpdate["AllowedMetrics"];
+                            for (auto metricNum : metrics) {
+                                const auto* field = descriptor->FindFieldByNumber(metricNum);
+                                if (field) {
+                                    jsonMetrics.AppendValue(field->name());
+                                } else {
+                                    jsonMetrics.AppendValue(metricNum);
+                                }
+                            }
+                            jsonAllowedMetrics.AppendValue(std::move(jsonUpdate));
                             db.Table<Schema::TabletTypeMetrics>().Key(type).Update<Schema::TabletTypeMetrics::AllowedMetricIDs>(metrics);
                             Self->TabletTypeAllowedMetrics[type] = metrics;
                         }
@@ -953,7 +957,7 @@ public:
         }
 
         if (ChangeRequest) {
-            WriteOperation(db, protoOperation);
+            WriteOperation(db, jsonOperation);
         }
         return true;
     }
@@ -1336,9 +1340,8 @@ public:
             return false;
         }
 
-        NKikimrHive::TOperation protoOperation;
-        auto* protoNodeOperation = protoOperation.MutableNodeOperation();
-        protoNodeOperation->SetNodeId(NodeId);
+        NJson::TJsonValue jsonOperation;
+        jsonOperation["NodeId"] = NodeId;
 
         const auto& cgi = Event->Cgi();
         auto changeType = ParseTabletType(cgi.Get("changetype"));
@@ -1346,9 +1349,10 @@ public:
         auto resetType = ParseTabletType(cgi.Get("resettype"));
         if (changeType != TTabletTypes::TypeInvalid && maxCount) {
             ChangeRequest = true;
-            auto* protoTabletAvailability = protoNodeOperation->AddTabletAvailability();
-            protoTabletAvailability->SetType(changeType);
-            protoTabletAvailability->SetMaxCount(*maxCount);
+            NJson::TJsonValue jsonUpdate;
+            jsonUpdate["Type"] = GetTabletTypeShortName(changeType);
+            jsonUpdate["MaxCount"] = *maxCount;
+            jsonOperation["TabletAvailability"].AppendValue(std::move(jsonUpdate));
             db.Table<Schema::TabletAvailabilityRestrictions>().Key(NodeId, changeType).Update<Schema::TabletAvailabilityRestrictions::MaxCount>(*maxCount);
             Node->TabletAvailabilityRestrictions[changeType] = *maxCount;
             auto it = Node->TabletAvailability.find(changeType);
@@ -1358,8 +1362,10 @@ public:
         }
         if (resetType != TTabletTypes::TypeInvalid) {
             ChangeRequest = true;
-            auto* protoTabletAvailability = protoNodeOperation->AddTabletAvailability();
-            protoTabletAvailability->SetType(resetType);
+            NJson::TJsonValue jsonUpdate;
+            jsonUpdate["Type"] = GetTabletTypeShortName(resetType);
+            jsonUpdate["MaxCount"] = "[default]";
+            jsonOperation["TabletAvailability"].AppendValue(std::move(jsonUpdate));
             Node->TabletAvailabilityRestrictions.erase(resetType);
             auto it = Node->TabletAvailability.find(resetType);
             if (it != Node->TabletAvailability.end()) {
@@ -1378,7 +1384,7 @@ public:
         if (ChangeRequest) {
             Self->ObjectDistributions.RemoveNode(*Node);
             Self->ObjectDistributions.AddNode(*Node);
-            WriteOperation(db, protoOperation);
+            WriteOperation(db, jsonOperation);
         }
         return true;
     }
@@ -2503,11 +2509,10 @@ public:
         if (node != nullptr) {
             node->SetDown(Down);
             db.Table<Schema::Node>().Key(NodeId).Update(NIceDb::TUpdate<Schema::Node::Down>(Down));
-            NKikimrHive::TOperation protoOperation;
-            auto* protoNodeOperation = protoOperation.MutableNodeOperation();
-            protoNodeOperation->SetNodeId(NodeId);
-            protoNodeOperation->SetDown(Down);
-            WriteOperation(db, protoOperation);
+            NJson::TJsonValue jsonOperation;
+            jsonOperation["NodeId"] = NodeId;
+            jsonOperation["Down"] = Down;
+            WriteOperation(db, jsonOperation);
             Response = "{\"NodeId\":" + ToString(NodeId) + ',' + "\"Down\":" + (Down ? "true" : "false") + "}";
         } else {
             Response = "{\"Error\":\"Node " + ToString(NodeId) + " not found\"}";
@@ -2547,11 +2552,10 @@ public:
         if (node != nullptr) {
             node->SetFreeze(Freeze);
             db.Table<Schema::Node>().Key(NodeId).Update(NIceDb::TUpdate<Schema::Node::Freeze>(Freeze));
-            NKikimrHive::TOperation protoOperation;
-            auto* protoNodeOperation = protoOperation.MutableNodeOperation();
-            protoNodeOperation->SetNodeId(NodeId);
-            protoNodeOperation->SetFreeze(Freeze);
-            WriteOperation(db, protoOperation);
+            NJson::TJsonValue jsonOperation;
+            jsonOperation["NodeId"] = NodeId;
+            jsonOperation["Freeze"] = Freeze;
+            WriteOperation(db, jsonOperation);
             Response = "{\"NodeId\":" + ToString(NodeId) + ',' + "\"Freeze\":" + (Freeze ? "true" : "false") + "}";
         } else {
             Response = "{\"Error\":\"Node " + ToString(NodeId) + " not found\"}";
@@ -4280,7 +4284,7 @@ public:
         MaxCount = FromStringWithDefault(Event->Cgi().Get("max"), MaxCount);
     }
 
-    void WriteDescription(TStringStream& out, const NKikimrHive::TOperation& protoOperation) {
+    /*void WriteDescription(TStringStream& out, const NKikimrHive::TOperation& protoOperation) {
         bool written = false;
         if (protoOperation.HasConfigUpdates()) {
             written = true;
@@ -4357,7 +4361,7 @@ public:
         if (!written) {
             out << "???";
         }
-    }
+    }*/
 
     bool Execute(TTransactionContext& txc, const TActorContext& ctx) override {
         TStringStream out;
@@ -4391,7 +4395,7 @@ public:
             out << "<td>" << TInstant::MilliSeconds(operationsRowset.GetValue<Schema::OperationsLog::Timestamp>()) << "</td>";
             out << "<td>" << (user.empty() ? "anonymous" : user.c_str()) << "</td>";
             out << "<td>";
-            WriteDescription(out, operationsRowset.GetValue<Schema::OperationsLog::Operation>());
+            out << operationsRowset.GetValue<Schema::OperationsLog::Operation>();
             out << "</td>";
             out << "</tr>";
             if (!operationsRowset.Next()) {

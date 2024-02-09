@@ -1,7 +1,5 @@
 items:
 - name: Настройка
   href: setup.md
-- name: Сэмплирование запросов
-  href: sampling.md
 - name: Передача внешнего trace-id
   href: external-traces.md

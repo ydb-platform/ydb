@@ -189,6 +189,7 @@ public:
 private:
     bool ConfigInited;
     ui32 PartitionsInited;
+    ui32 OriginalPartitionsCount;
     bool InitCompleted = false;
     THashMap<TPartitionId, TPartitionInfo> Partitions;
     THashMap<TString, TIntrusivePtr<TEvTabletCounters::TInFlightCookie>> CounterEventsInflight;
@@ -355,6 +356,12 @@ private:
     void CreateNewPartitions(NKikimrPQ::TPQTabletConfig& config,
                              NPersQueue::TTopicConverterPtr topicConverter,
                              const TActorContext& ctx);
+    void CreateOriginalPartition(const NKikimrPQ::TPQTabletConfig& config,
+                                 const NKikimrPQ::TPQTabletConfig::TPartition& partition,
+                                 NPersQueue::TTopicConverterPtr topicConverter,
+                                 const TPartitionId& partitionId,
+                                 bool newPartition,
+                                 const TActorContext& ctx);
     void EnsurePartitionsAreNotDeleted(const NKikimrPQ::TPQTabletConfig& config) const;
 
     void BeginWriteConfig(const NKikimrPQ::TPQTabletConfig& cfg,
@@ -458,7 +465,7 @@ private:
     void CreateSupportivePartitionActor(const TPartitionId& shadowPartitionId, const TActorContext& ctx);
     void SubscribeWriteId(ui64 writeId, const TActorContext& ctx);
 
-    bool AllPartitionsInited() const;
+    bool AllOriginalPartitionsInited() const;
 
     void Handle(NLongTxService::TEvLongTxService::TEvLockStatus::TPtr& ev, const TActorContext& ctx);
 };

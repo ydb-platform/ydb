@@ -695,7 +695,7 @@ void TPersQueue::ApplyNewConfigAndReply(const TActorContext& ctx)
     }
 
     // in order to answer only after all parts are ready to work
-    Y_ABORT_UNLESS(ConfigInited && AllPartitionsInited());
+    Y_ABORT_UNLESS(ConfigInited && AllOriginalPartitionsInited());
 
     ApplyNewConfig(NewConfig, ctx);
     ClearNewConfig();
@@ -708,11 +708,12 @@ void TPersQueue::ApplyNewConfigAndReply(const TActorContext& ctx)
     for (const auto& partition : Config.GetPartitions()) {
         const TPartitionId partitionId(partition.GetPartitionId());
         if (Partitions.find(partitionId) == Partitions.end()) {
-            Partitions.emplace(partitionId,
-                TPartitionInfo(ctx.Register(CreatePartitionActor(partitionId, TopicConverter, Config, true, ctx)),
-                GetPartitionKeyRange(Config, partition),
-                *Counters
-            ));
+            CreateOriginalPartition(Config,
+                                    partition,
+                                    TopicConverter,
+                                    partitionId,
+                                    true,
+                                    ctx);
         }
     }
 
@@ -791,7 +792,7 @@ void TPersQueue::EndWriteConfig(const NKikimrClient::TResponse& resp, const TAct
 
     Y_ABORT_UNLESS(resp.WriteResultSize() >= 1);
     Y_ABORT_UNLESS(resp.GetWriteResult(0).GetStatus() == NKikimrProto::OK);
-    if (ConfigInited && AllPartitionsInited()) //all partitions are working well - can apply new config
+    if (ConfigInited && AllOriginalPartitionsInited()) //all partitions are working well - can apply new config
         ApplyNewConfigAndReply(ctx);
     else
         NewConfigShouldBeApplied = true; //when config will be inited with old value new config will be applied
@@ -893,6 +894,26 @@ void TPersQueue::ReadTxWrites(const NKikimrClient::TKeyValueResponse::TReadResul
         PQ_LOG_ERROR_AND_DIE("Unexpected tx writes info read status: " << read.GetStatus());
         return;
     }
+}
+
+void TPersQueue::CreateOriginalPartition(const NKikimrPQ::TPQTabletConfig& config,
+                                         const NKikimrPQ::TPQTabletConfig::TPartition& partition,
+                                         NPersQueue::TTopicConverterPtr topicConverter,
+                                         const TPartitionId& partitionId,
+                                         bool newPartition,
+                                         const TActorContext& ctx)
+{
+    TActorId actorId = ctx.Register(CreatePartitionActor(partitionId,
+                                                         topicConverter,
+                                                         config,
+                                                         newPartition,
+                                                         ctx));
+    Partitions.emplace(std::piecewise_construct,
+                       std::forward_as_tuple(partitionId),
+                       std::forward_as_tuple(actorId,
+                                             GetPartitionKeyRange(config, partition),
+                                             *Counters));
+    ++OriginalPartitionsCount;
 }
 
 void TPersQueue::AddSupportivePartition(const TPartitionId& partitionId)
@@ -1007,11 +1028,12 @@ void TPersQueue::ReadConfig(const NKikimrClient::TKeyValueResponse::TReadResult&
 
     for (const auto& partition : Config.GetPartitions()) { // no partitions will be created with empty config
         const TPartitionId partitionId(partition.GetPartitionId());
-        Partitions.emplace(partitionId, TPartitionInfo(
-            ctx.Register(CreatePartitionActor(partitionId, TopicConverter, Config, false, ctx)),
-            GetPartitionKeyRange(Config, partition),
-            *Counters
-        ));
+        CreateOriginalPartition(Config,
+                                partition,
+                                TopicConverter,
+                                partitionId,
+                                false,
+                                ctx);
     }
 
     ConfigInited = true;
@@ -1334,9 +1356,9 @@ void TPersQueue::Handle(TEvPQ::TEvTabletCacheCounters::TPtr& ev, const TActorCon
         << "Counters. CacheSize " << CacheCounters.CacheSizeBytes << " CachedBlobs " << CacheCounters.CacheSizeBlobs);
 }
 
-bool TPersQueue::AllPartitionsInited() const
+bool TPersQueue::AllOriginalPartitionsInited() const
 {
-    return PartitionsInited == Partitions.size();
+    return PartitionsInited == OriginalPartitionsCount;
 }
 
 void TPersQueue::Handle(TEvPQ::TEvInitComplete::TPtr& ev, const TActorContext& ctx)
@@ -1359,7 +1381,7 @@ void TPersQueue::Handle(TEvPQ::TEvInitComplete::TPtr& ev, const TActorContext& c
     ++PartitionsInited;
     Y_ABORT_UNLESS(ConfigInited);//partitions are inited only after config
 
-    auto allInitialized = AllPartitionsInited();
+    auto allInitialized = AllOriginalPartitionsInited();
     if (!InitCompleted && allInitialized) {
         OnInitComplete(ctx);
     }
@@ -2884,6 +2906,7 @@ TPersQueue::TPersQueue(const TActorId& tablet, TTabletStorageInfo *info)
     : TKeyValueFlat(tablet, info)
     , ConfigInited(false)
     , PartitionsInited(0)
+    , OriginalPartitionsCount(0)
     , NewConfigShouldBeApplied(false)
     , TabletState(NKikimrPQ::ENormal)
     , Counters(nullptr)
@@ -4085,7 +4108,7 @@ void TPersQueue::CreateNewPartitions(NKikimrPQ::TPQTabletConfig& config,
 {
     EnsurePartitionsAreNotDeleted(config);
 
-    Y_ABORT_UNLESS(ConfigInited && AllPartitionsInited());
+    Y_ABORT_UNLESS(ConfigInited && AllOriginalPartitionsInited());
 
     if (!config.PartitionsSize()) {
         for (const auto partitionId : config.GetPartitionIds()) {
@@ -4099,13 +4122,12 @@ void TPersQueue::CreateNewPartitions(NKikimrPQ::TPQTabletConfig& config,
             continue;
         }
 
-        TActorId actorId = ctx.Register(CreatePartitionActor(partitionId, topicConverter, config, true, ctx));
-
-        Partitions.emplace(std::piecewise_construct,
-                           std::forward_as_tuple(partitionId),
-                           std::forward_as_tuple(actorId,
-                                                 GetPartitionKeyRange(config, partition),
-                                                 *Counters));
+        CreateOriginalPartition(config,
+                                partition,
+                                topicConverter,
+                                partitionId,
+                                true,
+                                ctx);
     }
 }
 

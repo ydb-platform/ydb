@@ -25,7 +25,6 @@ public:
 
         TSourceIdInfo::EState State;
         ui64 SeqNo = 0;
-        ui64 MinSeqNo = 0;
         ui64 Offset = 0;
         bool Explicit = false;
         TInstant WriteTimestamp;
@@ -46,7 +45,7 @@ public:
         std::optional<ui64> CommittedSeqNo() const;
         std::optional<ui64> UpdatedSeqNo() const;
 
-        void Update(ui64 seqNo, ui64 minSeqNo, ui64 offset, TInstant timestamp);
+        void Update(ui64 seqNo, ui64 offset, TInstant timestamp);
         void Update(THeartbeat&& heartbeat);
 
     private:

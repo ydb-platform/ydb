@@ -24,7 +24,6 @@ struct TSourceIdInfo {
     };
 
     ui64 SeqNo = 0;
-    ui64 MinSeqNo = 0;
     ui64 Offset = 0;
     TInstant WriteTimestamp;
     TInstant CreateTimestamp;
@@ -34,12 +33,12 @@ struct TSourceIdInfo {
     EState State = EState::Registered;
 
     TSourceIdInfo() = default;
-    TSourceIdInfo(ui64 seqNo, ui64 minSeqNo, ui64 offset, TInstant createTs);
-    TSourceIdInfo(ui64 seqNo, ui64 minSeqNo, ui64 offset, TInstant createTs, THeartbeat&& heartbeat);
-    TSourceIdInfo(ui64 seqNo, ui64 minSeqNo, ui64 offset, TInstant createTs, TMaybe<TPartitionKeyRange>&& keyRange, bool isInSplit = false);
+    TSourceIdInfo(ui64 seqNo, ui64 offset, TInstant createTs);
+    TSourceIdInfo(ui64 seqNo, ui64 offset, TInstant createTs, THeartbeat&& heartbeat);
+    TSourceIdInfo(ui64 seqNo, ui64 offset, TInstant createTs, TMaybe<TPartitionKeyRange>&& keyRange, bool isInSplit = false);
 
-    TSourceIdInfo Updated(ui64 seqNo, ui64 minSeqNo, ui64 offset, TInstant writeTs) const;
-    TSourceIdInfo Updated(ui64 seqNo, ui64 minSeqNo, ui64 offset, TInstant writeTs, THeartbeat&& heartbeat) const;
+    TSourceIdInfo Updated(ui64 seqNo, ui64 offset, TInstant writeTs) const;
+    TSourceIdInfo Updated(ui64 seqNo, ui64 offset, TInstant writeTs, THeartbeat&& heartbeat) const;
 
     static EState ConvertState(NKikimrPQ::TMessageGroupInfo::EState value);
     static NKikimrPQ::TMessageGroupInfo::EState ConvertState(EState value);

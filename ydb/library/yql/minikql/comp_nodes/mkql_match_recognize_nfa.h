@@ -19,13 +19,28 @@ using TEpsilonTransitions = std::vector<TEpsilonTransition, TMKQLAllocator<TEpsi
 using TMatchedVarTransition = std::pair<std::pair<ui32, bool>, size_t>; //{{varIndex, saveState}, to}
 using TQuantityEnterTransition = size_t; //to
 using TQuantityExitTransition = std::pair<std::pair<ui64, ui64>, std::pair<size_t, size_t>>; //{{min, max}, {foFindMore, toMatched}}
-using TNfaTransition = std::variant<
+
+template <typename... Ts>
+struct TVariantHelper {
+    using TVariant =  std::variant<Ts...>;
+
+    static std::variant<Ts...> getVariantByIndex(size_t i)
+    {
+        MKQL_ENSURE(i < sizeof...(Ts), "Wrong variant index");
+        static std::variant<Ts...> table[] = { Ts{ }... };
+        return table[i];
+    }
+};
+
+using TNfaTransitionHelper = TVariantHelper<
     TVoidTransition,
     TMatchedVarTransition,
     TEpsilonTransitions,
     TQuantityEnterTransition,
     TQuantityExitTransition
 >;
+
+using TNfaTransition = TNfaTransitionHelper::TVariant;
 
 struct TNfaTransitionDestinationVisitor {
     std::function<size_t(size_t)> callback;
@@ -61,32 +76,112 @@ struct TNfaTransitionDestinationVisitor {
     }
 };
 
+template<class>
+inline constexpr bool always_false_v = false;
+
 struct TNfaTransitionGraph {
-    std::vector<TNfaTransition, TMKQLAllocator<TNfaTransition>> Transitions;
+    using TTransitions = std::vector<TNfaTransition, TMKQLAllocator<TNfaTransition>>;
+
+    TTransitions Transitions;
     size_t Input;
     size_t Output;
 
     using TPtr = std::shared_ptr<TNfaTransitionGraph>;
 
-    void Save(TString& out) const {
-        std::cerr << "TNfaTransitionGraph::Save() "  << out.size()  << std::endl;
-        // WriteUi64(out, Index);
-        // WriteUi64(out, Quantifiers.size());
-        // TODO
-        std::cerr << "TNfaTransitionGraph::Save() end "  << out.size()  << std::endl;        
+    void Save(TOutputSerializer& serealizer) const {
+        std::cerr << "TNfaTransitionGraph::Save() "  << serealizer.Size()  << std::endl;
+        serealizer.Write(Transitions.size());
+
+        std::cerr << "TNfaTransitionGraph::Save() size "  << Transitions.size()  << std::endl;
+
+        for (ui64 i = 0; i < Transitions.size(); ++i) {
+            serealizer.Write(Transitions[i].index());
+
+            std::cerr << "TNfaTransitionGraph::Save() index "  << Transitions[i].index()  << std::endl;
+
+            std::visit([&](auto&& arg)
+            {
+                using T = std::decay_t<decltype(arg)>;
+                if constexpr (std::is_same_v<T, TVoidTransition>) {
+                    // Nothing
+                }
+                else if constexpr (std::is_same_v<T, TMatchedVarTransition>) {
+                    serealizer.Write(arg.first.first);
+                    serealizer.Write(arg.first.second);
+                    serealizer.Write(arg.second);
+                }
+                else if constexpr (std::is_same_v<T, TEpsilonTransitions>) {
+                    serealizer.Write(arg.size());
+                    for (size_t i = 0; i < arg.size(); ++i) {
+                        serealizer.Write(arg[i]);
+                    }
+                }
+                else if constexpr (std::is_same_v<T, TQuantityEnterTransition>) {
+                    serealizer.Write(arg);
+                }
+                else if constexpr (std::is_same_v<T, TQuantityExitTransition>) {
+                    serealizer.Write(arg.first.first);
+                    serealizer.Write(arg.first.second);
+                    serealizer.Write(arg.second.first);
+                    serealizer.Write(arg.second.second);
+                }
+                else 
+                    static_assert(always_false_v<T>, "non-exhaustive visitor!");
+            }, Transitions[i]);
+        }
+        serealizer.Write(Input);
+        serealizer.Write(Output);
+        std::cerr << "TNfaTransitionGraph::Save() end "  << serealizer.Size() << std::endl;
     }
 
-    void Load(TStringBuf& in) {
-        std::cerr << "TNfaTransitionGraph::Load() " << in.size() << std::endl;
-        // Index = ReadUi64(in);
-        // while (!Quantifiers.empty()) {
-        //     Quantifiers.pop();
-        // }
-        // auto quantifiersSize = ReadUi64(in);
-        // // TODO
-        std::cerr << "TNfaTransitionGraph::Load() end " << in.size() << std::endl;
+    void Load(TInputSerializer& serializer) {
+        std::cerr << "TNfaTransitionGraph::Load() " << serializer.Size() << std::endl;
+        ui64 transitionSize = serializer.Read<TTransitions::size_type>();
+        std::cerr << "TNfaTransitionGraph::Load() transitionSize " << transitionSize << std::endl;
+
+        Transitions.resize(transitionSize);
+        for (ui64 i = 0; i < transitionSize; ++i) {
+            size_t index = serializer.Read<std::size_t>();
+
+            std::cerr << "TNfaTransitionGraph::Load() index " << index << std::endl;
+
+            Transitions[i] = TNfaTransitionHelper::getVariantByIndex(index);
+            std::visit([&](auto&& arg)
+            {
+                using T = std::decay_t<decltype(arg)>;
+                if constexpr (std::is_same_v<T, TVoidTransition>) {
+                    // Nothing
+                }
+                else if constexpr (std::is_same_v<T, TMatchedVarTransition>) {
+                    arg.first.first = serializer.Read<ui64>();
+                    arg.first.second = serializer.Read<bool>();
+                    arg.second = serializer.Read<ui64>();
+                }
+                else if constexpr (std::is_same_v<T, TEpsilonTransitions>) {
+                    ui64 size = serializer.Read<ui64>();
+                    arg.resize(size);
+                    for (size_t i = 0; i < size; ++i) {
+                        arg[i] = serializer.Read<ui64>();
+                    }
+                }
+                else if constexpr (std::is_same_v<T, TQuantityEnterTransition>) {
+                    arg = serializer.Read<ui64>();
+                }
+                else if constexpr (std::is_same_v<T, TQuantityExitTransition>) {
+                    arg.first.first = serializer.Read<ui64>();
+                    arg.first.second = serializer.Read<ui64>();
+                    arg.second.first = serializer.Read<ui64>();
+                    arg.second.second = serializer.Read<ui64>();
+                }
+                else 
+                    static_assert(always_false_v<T>, "non-exhaustive visitor!");
+            }, Transitions[i]);
+
+        }
+        Input = serializer.Read<ui64>();
+        Output = serializer.Read<ui64>();
+        std::cerr << "TNfaTransitionGraph::Load() end " << serializer.Size() << std::endl;
     }
-    
 };
 
 class TNfaTransitionGraphOptimizer {
@@ -298,49 +393,49 @@ class TNfa {
 
         TQuantifiersStack Quantifiers;
 
-        void Save(TString& out, const TSaveLoadContext& ctx) const {
-            std::cerr << "TState::Save() "  << out.size()  << std::endl;
-            WriteUi64(out, Index);
+        void Save(TOutputSerializer& serealizer) const {
+            std::cerr << "TState::Save() "  << serealizer.Size()  << std::endl;
+            serealizer.Write(Index);
 
-            WriteUi64(out, Vars.size());
+            serealizer.Write(Vars.size());
             for (const auto& vector : Vars) {
-                WriteUi64(out, vector.size());
+                serealizer.Write(vector.size());
                 for (const auto& range : vector) {
-                    range.Save(out, ctx);
+                    range.Save(serealizer);
                 }
             }
-            WriteUi64(out, Quantifiers.size());
+            serealizer.Write(Quantifiers.size());
             for (ui64 qnt : Quantifiers) {
-                WriteUi64(out, qnt);
+                serealizer.Write(qnt);
             }
-            std::cerr << "TState::Save() end "  << out.size()  << std::endl;        
+            std::cerr << "TState::Save() end "  << serealizer.Size()  << std::endl;        
         }
 
-        void Load(TStringBuf& in, const TSaveLoadContext& ctx) {
-            std::cerr << "TState::Load() " << in.size() << std::endl;
-            Index = ReadUi64(in);
+        void Load(TInputSerializer& serializer) {
+            std::cerr << "TState::Load() " << serializer.Size() << std::endl;
+            Index = serializer.Read<ui64>();
             
-            auto varsSize = ReadUi64(in);
+            auto varsSize = serializer.Read<ui64>();
             Vars.clear();
             Vars.resize(varsSize);
             for (size_t i = 0; i < varsSize; ++i) {
                 auto& subvec  = Vars[i];
-                ui64 vectorSize = ReadUi64(in);
+                ui64 vectorSize = serializer.Read<ui64>();
                 subvec.resize(vectorSize);
                 for (size_t j = 0; j < vectorSize; ++j) {
-                    subvec[i].Load(in, ctx);
+                    subvec[i].Load(serializer);
                 }
             }
 
             while (!Quantifiers.empty()) {
                 Quantifiers.pop();
             }
-            auto quantifiersSize = ReadUi64(in);
+            auto quantifiersSize = serializer.Read<ui64>();
             for (size_t i = 0; i < quantifiersSize; ++i) {
-                ui64 qnt = ReadUi64(in);
+                ui64 qnt = serializer.Read<ui64>();
                 Quantifiers.push(qnt);
             }
-            std::cerr << "TState::Load() end " << in.size() << std::endl;
+            std::cerr << "TState::Load() end " << serializer.Size() << std::endl;
         }
 
         friend inline bool operator<(const TState& lhs, const TState& rhs) {
@@ -413,30 +508,29 @@ public:
         return ActiveStates.size();
     }
 
-    void Save(TString& out, const TSaveLoadContext& ctx) const {
-        std::cerr << "TNfa::Save() "  << out.size()  << std::endl;
-        TransitionGraph->Save(out);
-        WriteUi64(out, ActiveStates.size());
-        std::cerr << "TNfa::Save() ActiveStates size "  <<  ActiveStates.size()  << std::endl;
+    void Save(TOutputSerializer& serealizer) const {
+        std::cerr << "TNfa::Save() "  << serealizer.Size() << std::endl;
+        TransitionGraph->Save(serealizer);
+        serealizer.Write(ActiveStates.size());
         for (const auto& state : ActiveStates) {
-            state.Save(out, ctx);
+            state.Save(serealizer);
         }
-        WriteUi64(out, EpsilonTransitionsLastRow);
-        std::cerr << "TNfa::Save() end "  << out.size()  << std::endl;        
+        serealizer.Write(EpsilonTransitionsLastRow);
+        std::cerr << "TNfa::Save() end "  << serealizer.Size() << std::endl;        
     }
 
-    void Load(TStringBuf& in, const TSaveLoadContext& ctx) {
-        std::cerr << "TNfa::Load() " << in.size() << std::endl;
-        TransitionGraph->Load(in);
-        auto stateSize = ReadUi64(in);
+    void Load(TInputSerializer& serializer) {
+        std::cerr << "TNfa::Load() " << serializer.Size() << std::endl;
+        TransitionGraph->Load(serializer);
+        auto stateSize = serializer.Read<ui64>();
         std::cerr << "TNfa::Load() ActiveStates size " << stateSize << std::endl;
         for (size_t i = 0; i < stateSize; ++i) {
             TState state;
-            state.Load(in, ctx);
+            state.Load(serializer);
             ActiveStates.emplace(state);
         }
-        EpsilonTransitionsLastRow = ReadUi64(in);
-        std::cerr << "TNfa::Load() end " << in.size() << std::endl;
+        EpsilonTransitionsLastRow = serializer.Read<ui64>();
+        std::cerr << "TNfa::Load() end " << serializer.Size() << std::endl;
     }
 
 private:
@@ -486,6 +580,7 @@ private:
         TStateSet& NewStates;
         TStateSet& DeletedStates;
     };
+
     bool MakeEpsilonTransitionsImpl() {
         TStateSet newStates;
         TStateSet deletedStates;

@@ -28,60 +28,142 @@ struct TMatchRecognizeProcessorParameters {
 };
 
 struct TSaveLoadContext {
+
+    TComputationContext&    Ctx;
+    TType*                  StateType;
+    const TMutableObjectOverBoxedValue<TValuePackerBoxed>& Packer;
+};
+
+template<class>
+inline constexpr bool always_false_v2 = false;
+
+struct TOutputSerializer {
+private:
     enum class TPtrStateMode {
         Saved = 0,
         FromCache = 1
     };
-    TComputationContext&    Ctx;
-    TType*                  StateType;
-    const TMutableObjectOverBoxedValue<TValuePackerBoxed>& Packer;
 
-    mutable std::map<std::uintptr_t, std::uintptr_t> WriteCache;
-    mutable std::map<std::uintptr_t, void *> ReadCache;
+public:
+    TOutputSerializer(const TSaveLoadContext& context)
+        : Context(context)
+    {} 
+
+    void Write(ui32 value) {
+        WriteUi32(Buf, value);
+    }
+
+    void Write(ui64 value) {
+        WriteUi64(Buf, value);
+    }
+
+    void Write(std::string_view value) {
+        WriteString(Buf, value);
+    }
+
+    void Write(const NUdf::TUnboxedValue& value) {
+        WriteUnboxedValue(Buf, Context.Packer.RefMutableObject(Context.Ctx, false, Context.StateType), value);
+    }
+
+    void Write(bool value) {
+        WriteBool(Buf, value);
+    }
 
     template<class TPtrType>
-    void SavePtr(TString& out, const TIntrusivePtr<TPtrType>& ptr) const {
-        std::cerr << "        SavePtr) "  << out.size() << std::endl;
+    void Write(const TIntrusivePtr<TPtrType>& ptr) {
+        std::cerr << "        SavePtr) "  << Buf.size() << std::endl;
         auto refCount = ptr.RefCount();
-
+        std::cerr << "        SavePtr) refCount "  <<refCount << std::endl;
         bool isValid =  static_cast<bool>(ptr);
-        WriteBool(out, isValid);
+        WriteBool(Buf, isValid);
 
         if (!isValid) {
             return;
         }
-        std::cerr << "        SavePtr) isValid "  << isValid << std::endl;
-
         auto addr = reinterpret_cast<std::uintptr_t>(ptr.Get());
-        WriteUi64(out, addr);
+        WriteUi64(Buf, addr);
 
         auto it = WriteCache.find(addr);
         if (it == WriteCache.end()) {
             std::cerr << "        SavePtr) new "  << std::endl;
-            WriteByte(out, static_cast<ui8>(TPtrStateMode::Saved));
-            ptr->Save(out, *this);
+            WriteByte(Buf, static_cast<ui8>(TPtrStateMode::Saved));
+            ptr->Save(*this);
             WriteCache[addr] = addr;
         } else {
-            WriteByte(out, static_cast<ui8>(TPtrStateMode::FromCache));
+            WriteByte(Buf, static_cast<ui8>(TPtrStateMode::FromCache));
             std::cerr << "        SavePtr) from cache "  << std::endl;
         }
-        std::cerr << "        SavePtr) end "  << out.size() << std::endl;
+        std::cerr << "        SavePtr) end "  << Buf.size() << std::endl;
+    }
+
+    NUdf::TUnboxedValuePod MakeString() {
+        auto strRef = NUdf::TStringRef(Buf.data(), Buf.size());
+        return NKikimr::NMiniKQL::MakeString(strRef);
+    }
+
+    size_t Size() // TODO : delete
+    {
+        return Buf.size();
+    }
+private:
+    TString Buf;
+    const TSaveLoadContext& Context;
+    mutable std::map<std::uintptr_t, std::uintptr_t> WriteCache;
+    mutable std::map<std::uintptr_t, void *> ReadCache;
+};
+
+// template<class>
+// inline constexpr bool always_false_v = false;
+#include <typeinfo>
+
+struct TInputSerializer {
+private:
+    enum class TPtrStateMode {
+        Saved = 0,
+        FromCache = 1
+    };
+
+public:
+    TInputSerializer(TSaveLoadContext& context, const NUdf::TStringRef& state)
+        : Context(context)
+        , Buf(state.Data(), state.Size())
+    {} 
+
+    template<typename Type, typename ReturnType = Type>
+    ReturnType Read() {
+        if constexpr (std::is_same_v<std::remove_cv_t<Type>, TString>) {
+            return ReadString(Buf);
+        } else if constexpr (std::is_same_v<std::remove_cv_t<Type>, ui64>) {
+            return ReadUi64(Buf);
+        } else if constexpr (std::is_same_v<std::remove_cv_t<Type>, bool>) {
+            return ReadBool(Buf);
+        } else if constexpr (std::is_same_v<std::remove_cv_t<Type>, ui8>) {
+            return ReadByte(Buf);
+        } else if constexpr (std::is_same_v<std::remove_cv_t<Type>, ui32>) {
+            return ReadUi32(Buf);
+        } else if constexpr (std::is_same_v<std::remove_cv_t<Type>, NUdf::TUnboxedValue>) {
+            return ReadUnboxedValue(Buf, Context.Packer.RefMutableObject(Context.Ctx, false, Context.StateType), Context.Ctx);
+        }
+        else 
+            static_assert(always_false_v2<Type>, "non-exhaustive visitor!");
+        std::cerr << "Not implemented " << typeid(Type).name() << std::endl;
+        MKQL_ENSURE(false, "Not implemented");
     }
 
     template<class TPtrType>
-    void Load(TStringBuf& in, TIntrusivePtr<TPtrType>& ptr) const {
-        std::cerr << "        Load) "  << in.size() << std::endl;
+    void Read(TIntrusivePtr<TPtrType>& ptr) {
+        std::cerr << "        Load) "  << Buf.size() << std::endl;
         //assert(false);
-        bool isValid = ReadBool(in);
+        bool isValid = Read<bool>();
         if (!isValid) {
             ptr.Reset();
             return;
         }
-        ui64 addr = ReadUi64(in);
-        TPtrStateMode mode = static_cast<TPtrStateMode>(ReadByte(in));
+        ui64 addr = Read<ui64>();
+        TPtrStateMode mode = static_cast<TPtrStateMode>(Read<ui8>());
         if (mode == TPtrStateMode::Saved) {
             auto newPtr = MakeIntrusive<TPtrType>();
-            newPtr->Load(in, *this);
+            newPtr->Load(*this);
             ptr = newPtr;
             ReadCache[addr] = newPtr.Get();
         } else {
@@ -89,10 +171,27 @@ struct TSaveLoadContext {
             MKQL_ENSURE(it != ReadCache.end(), "Internal error");
             auto* cachePtr = static_cast<TPtrType*>(it->second);
             ptr = TIntrusivePtr<TPtrType>(cachePtr);
+
+            auto refCount = ptr.RefCount();
+            std::cerr << "        Load) refCount "  << refCount << std::endl;
         }
-        std::cerr << "        Load) end "  << in.size() << std::endl;
+        std::cerr << "        Load) end "  << Buf.size() << std::endl;
     }
 
+    NUdf::TUnboxedValuePod MakeString() {
+        auto strRef = NUdf::TStringRef(Buf.data(), Buf.size());
+        return NKikimr::NMiniKQL::MakeString(strRef);
+    }
+
+    size_t Size() // TODO : delete
+    {
+        return Buf.size();
+    }
+private:
+    TStringBuf Buf;
+    TSaveLoadContext& Context;
+    mutable std::map<std::uintptr_t, std::uintptr_t> WriteCache;
+    mutable std::map<std::uintptr_t, void *> ReadCache;
 };
 
 } //namespace NKikimr::NMiniKQL::NMatchRecognize 

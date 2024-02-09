@@ -57,20 +57,6 @@ public:
             ++ToIndex;
         }
 
-        // void Save(TString& out) const {
-        //     std::cerr << "TRange::Save() "  << out.size()  << std::endl;
-        //     WriteUi64(out, FromIndex);
-        //     WriteUi64(out, ToIndex);
-        //     std::cerr << "TRange::Save() end "  << out.size()  << std::endl;        
-        // }
-
-        // void Load(TStringBuf& in) {
-        //     std::cerr << "TRange::Load() " << in.size() << std::endl;
-        //     FromIndex = ReadUi64(in);
-        //     ToIndex = ReadUi64(in);
-        //     std::cerr << "TRange::Load() end " << in.size() << std::endl;
-        // }
-
     private:
         ui64 FromIndex;
         ui64 ToIndex;
@@ -148,43 +134,43 @@ class TSparseList {
             }
         }
 
-        void Save(TString& out, const TSaveLoadContext& ctx) const {
-            std::cerr << "    TContainer::Save() " << out.size() << std::endl;
-            WriteUi64(out, Storage.size());
-            std::cerr << "    TContainer::Save() size" << Storage.size() << std::endl;
+        void Save(TOutputSerializer& serealizer) const {
+            std::cerr << "    TContainer::Save() " << serealizer.Size() << std::endl;
+            serealizer.Write(Storage.size());
             for (const auto& [key, item]: Storage) {
-                WriteUi64(out, key);
-
-                std::cerr << "    TContainer::Save() key " << key << std::endl;
-                WriteUnboxedValue(out, ctx.Packer.RefMutableObject(ctx.Ctx, false, ctx.StateType), item.Value);
-                WriteUi64(out, item.LockCount);
+                serealizer.Write(key);
+                serealizer.Write(item.Value);
+                serealizer.Write(item.LockCount);
             }
-            std::cerr << "    TContainer::Save() end " << out.size() << std::endl;
+            std::cerr << "    TContainer::Save() end " << serealizer.Size() << std::endl;
         }
 
-        void Load(TStringBuf& in, const TSaveLoadContext& ctx) {
-            std::cerr << "    TContainer::Load() " << in.size() << std::endl;
-            auto size = ReadUi64(in);
+        void Load(TInputSerializer& serializer) {
+            std::cerr << "    TContainer::Load() " << serializer.Size() << std::endl;
+            //auto size = serializer.Read<TStorage::size_type>();
+            auto size = serializer.Read<ui64>();
             for (size_t i = 0; i < size; ++i) {
-                auto key = ReadUi64(in);
-                NUdf::TUnboxedValue row = ReadUnboxedValue(in, ctx.Packer.RefMutableObject(ctx.Ctx, false, ctx.StateType), ctx.Ctx);
-                auto lockCount = ReadUi64(in);
-                std::cerr << "    TContainer::Load() key " << key << std::endl;
+                auto key = serializer.Read<TStorage::key_type>();
+                NUdf::TUnboxedValue row = serializer.Read<NUdf::TUnboxedValue>();
+                auto lockCount = serializer.Read<decltype(TItem::LockCount)>();
                 Storage.emplace(key, TItem{row, lockCount});
             }
             std::cerr << "    TContainer::Load() size" << Storage.size() << std::endl;
-            std::cerr << "    TContainer::Load() end " << in.size() << std::endl;
+            std::cerr << "    TContainer::Load() end " << serializer.Size() << std::endl;
         }
 
     private:
         //TODO consider to replace hash table with contiguous chunks
         using TAllocator = TMKQLAllocator<std::pair<const size_t, TItem>, EMemorySubPool::Temporary>;
-        std::unordered_map<
+
+        using TStorage = std::unordered_map<
             size_t,
             TItem,
             std::hash<size_t>,
             std::equal_to<size_t>,
-            TAllocator> Storage;
+            TAllocator>;
+
+        TStorage Storage;
     };
     using TContainerPtr = TContainer::TPtr;
 
@@ -287,21 +273,20 @@ public:
             ToIndex = -1;
         }
 
-        void Save(TString& out, const TSaveLoadContext& ctx) const {
-            std::cerr << "  TRange::Save() "  << out.size()  << std::endl;
-            ctx.SavePtr(out, Container);
-            std::cerr << "  TRange::Save() IsValid "  << IsValid()  << std::endl;
-            WriteUi64(out, FromIndex);
-            WriteUi64(out, ToIndex);
-            std::cerr << "  TRange::Save() end "  << out.size()  << std::endl;        
+        void Save(TOutputSerializer& serealizer) const {
+            std::cerr << "  TRange::Save() "  << serealizer.Size()  << std::endl;
+            serealizer.Write(Container);
+            serealizer.Write(FromIndex);
+            serealizer.Write(ToIndex);
+            std::cerr << "  TRange::Save() end "  << serealizer.Size()  << std::endl;        
         }
 
-        void Load(TStringBuf& in, const TSaveLoadContext& ctx) {
-            std::cerr << "  TRange::Load() " << in.size() << std::endl;
-            ctx.Load(in, Container);
-            FromIndex = ReadUi64(in);
-            ToIndex = ReadUi64(in);
-            std::cerr << "  TRange::Load() end " << in.size() << std::endl;
+        void Load(TInputSerializer& serializer) {
+            std::cerr << "  TRange::Load() " << serializer.Size() << std::endl;
+            serializer.Read(Container);
+            FromIndex = serializer.Read<decltype(FromIndex)>();
+            ToIndex = serializer.Read<decltype(ToIndex)>();
+            std::cerr << "  TRange::Load() end " << serializer.Size() << std::endl;
         }
 
     private:
@@ -359,18 +344,21 @@ public:
         return Size() == 0;
     }
 
-    void Save(TString& out, const TSaveLoadContext& ctx) const {
-        std::cerr << "TSparseList::Save() "  << out.size()  << std::endl;        
-        ctx.SavePtr(out, Container);
-        WriteUi64(out, ListSize);
-        std::cerr << "TSparseList::Save() end "  << out.size()  << std::endl;
+    void Save(TOutputSerializer& serealizer) const {
+        std::cerr << "TSparseList::Save() "  << serealizer.Size()  << std::endl;        
+        serealizer.Write(Container);
+        serealizer.Write(ListSize);
+
+        std::cerr << "TSparseList::Save() ListSize "  << ListSize  << std::endl; 
+        std::cerr << "TSparseList::Save() end "  << serealizer.Size() << std::endl;
     }
 
-    void Load(TStringBuf& in, const TSaveLoadContext& ctx) {
-        std::cerr << "TSparseList::Load() " << in.size() << std::endl;
-        ctx.Load(in, Container);
-        ListSize = ReadUi64(in);
-        std::cerr << "TSparseList::Load() end " << in.size() << std::endl;
+    void Load(TInputSerializer& serializer) {
+        std::cerr << "TSparseList::Load() " << serializer.Size() << std::endl;
+        serializer.Read(Container);
+        ListSize = serializer.Read<decltype(ListSize)>();
+        std::cerr << "TSparseList::Load() ListSize " << ListSize << std::endl;
+        std::cerr << "TSparseList::Load() end " << serializer.Size() << std::endl;
     }
 
 private:

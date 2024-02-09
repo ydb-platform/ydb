@@ -151,7 +151,7 @@ public:
         return HasMatched();
     }
 
-    bool HasMatched() {
+    bool HasMatched() const {
         return Nfa.HasMatched();
     }
 
@@ -186,18 +186,18 @@ public:
         return false;
     }
 
-    void Save(TString& out, const TSaveLoadContext& ctx) const {
-        std::cerr << "TStreamingMatchRecognize::Save() "  << out.size()  << std::endl;
-        Rows.Save(out, ctx);
-        Nfa.Save(out, ctx);
-        WriteUi64(out, MatchNumber);
+    void Save(TOutputSerializer& serealizer) const {
+        std::cerr << "TStreamingMatchRecognize::Save() "  << serealizer.Size() << std::endl;
+        Rows.Save(serealizer);
+        Nfa.Save(serealizer);
+        serealizer.Write(MatchNumber);
     }
 
-    void Load(TStringBuf& in, const TSaveLoadContext& ctx) {
+    void Load(TInputSerializer& serializer) {
         std::cerr << "TStreamingMatchRecognize::Load()" << std::endl;
-        Rows.Load(in, ctx);
-        Nfa.Load(in, ctx);
-        MatchNumber = ReadUi64(in);
+        Rows.Load(serializer);
+        Nfa.Load(serializer);
+        MatchNumber = serializer.Read<ui64>();
     }
 
 private:
@@ -349,40 +349,38 @@ public:
 
     NUdf::TUnboxedValue Save() const override {
         std::cerr << "TStateForInterleavedPartitions::Save() " << std::endl;
-        TString out;
-        WriteUi32(out, StateVersion);
-        WriteUi32(out, Partitions.size());
+
+        TOutputSerializer serealizer(SaveLoadContex);
+
+        serealizer.Write(StateVersion);
+        serealizer.Write(Partitions.size());
 
         for (const auto& [key, state] : Partitions) {
-            WriteString(out, key);
-            state->Save(out, SaveLoadContex);
-            std::cerr << "partitions.HasMatched() " << state->HasMatched() << std::endl;
+            serealizer.Write(key);
+            state->Save(serealizer);
         }
 
-        std::cerr << "HasReadyOutput size " << HasReadyOutput.size() << std::endl;
-
-        auto strRef = NUdf::TStringRef(out.data(), out.size());
-        std::cerr << "TStateForInterleavedPartitions::Save() end " << out.size() << std::endl;
-        return MakeString(strRef);
+        return serealizer.MakeString();
     }
 
     void Load(const NUdf::TStringRef& state) override {
 
-        TStringBuf in(state.Data(), state.Size());
-        std::cerr << "TStateForInterleavedPartitions::Load() " << in.size() << std::endl;
+        TInputSerializer serializer(SaveLoadContex, state);
+        
+        std::cerr << "TStateForInterleavedPartitions::Load() " << serializer.Size() << std::endl;
 
-        const auto stateVersion = ReadUi32(in);
+        const auto stateVersion = serializer.Read<decltype(StateVersion)>();
         if (stateVersion == 1) {
             Partitions.clear();
-            auto partitionsSize = ReadUi32(in);
+            auto partitionsSize = serializer.Read<TPartitionMap::size_type>();
             for (size_t i = 0; i < partitionsSize; ++i) {
-                auto key = ReadString(in);
+                auto key = serializer.Read<TPartitionMap::key_type, std::string_view>();
                 auto pair = Partitions.emplace(key, std::make_unique<TStreamingMatchRecognize>(
                     NYql::NUdf::TUnboxedValuePod(NYql::NUdf::TStringValue(key)),
                     Parameters,
                     NfaTransitionGraph,
                     Cache));
-                (pair.first)->second->Load(in, SaveLoadContex);
+                (pair.first)->second->Load(serializer);
             }
 
             std::cerr << "partitionsSize " << partitionsSize << std::endl;
@@ -393,8 +391,8 @@ public:
                 }
             }
         }
-        std::cerr << "TStateForInterleavedPartitions::Load() " << in.size() << std::endl;
-        MKQL_ENSURE(!in.size(), "State is corrupted");
+        std::cerr << "TStateForInterleavedPartitions::Load() " << serializer.Size() << std::endl;
+        MKQL_ENSURE(!serializer.Size(), "State is corrupted");
     }
 
     bool ProcessInputRow(NUdf::TUnboxedValue&& row, TComputationContext& ctx) {

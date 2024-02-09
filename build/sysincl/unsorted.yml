@@ -703,13 +703,6 @@
   - srv.h
   - yvals.h
   #endif
-  #if defined(_unix_) && TODO
-  - sys/feature_tests.h
-  #endif
-  #if defined(_VMS_) && TODO
-  - chfdef.h
-  - libdef.h
-  #endif
   #if defined(__sgi)
   - sigfpe.h
   #endif
@@ -728,14 +721,8 @@
   - netware.h
   - perldtrace.h
   - win32thread.h
-  - wince.h
-  - symbian/symbian_proto.h
-  - xconfig.h
   - bsd/ctypes.h
-  - objc/NXCType.h
-  - appkit/NXCType.h
   - sfio.h
-  - sys\stat.h
   - ../../VC/include/stdio.h
   - ../ucrt/stdio.h
   #if EV_USE_IOCP

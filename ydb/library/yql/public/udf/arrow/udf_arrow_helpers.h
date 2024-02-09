@@ -224,7 +224,7 @@ private:
 };
 
 inline void PrepareSimpleArrowUdf(IFunctionTypeInfoBuilder& builder, TType* signature, TType* userType, TExec exec, bool typesOnly,
-    const TString& name) {
+    const TString& name, arrow::compute::NullHandling::type nullHandling = arrow::compute::NullHandling::type::COMPUTED_NO_PREALLOCATE) {
     auto typeInfoHelper = builder.TypeInfoHelper();
     TCallableTypeInspector callableInspector(*typeInfoHelper, signature);
     Y_ENSURE(callableInspector);
@@ -284,7 +284,7 @@ inline void PrepareSimpleArrowUdf(IFunctionTypeInfoBuilder& builder, TType* sign
 
     if (!typesOnly) {
         builder.Implementation(new TSimpleArrowUdfImpl(argBlockTypes, callableInspector.GetReturnType(),
-            onlyScalars, exec, builder, name, arrow::compute::NullHandling::COMPUTED_NO_PREALLOCATE));
+            onlyScalars, exec, builder, name, nullHandling));
     }
 }
 
@@ -477,5 +477,21 @@ public:
             return false; \
     }
 
+#define END_ARROW_UDF_WITH_NULL_HANDLING(udfNameBlocks, exec, nullHandling) \
+    inline bool udfNameBlocks::DeclareSignature(\
+        const ::NYql::NUdf::TStringRef& name, \
+        ::NYql::NUdf::TType* userType, \
+        ::NYql::NUdf::IFunctionTypeInfoBuilder& builder, \
+        bool typesOnly) { \
+            if (Name() == name) { \
+                PrepareSimpleArrowUdf(builder, GetSignatureType(builder), userType, exec, typesOnly, TString(name), nullHandling); \
+                return true; \
+            } \
+            return false; \
+    }
+
 #define END_SIMPLE_ARROW_UDF(udfName, exec) \
     END_ARROW_UDF(udfName##_BlocksImpl, exec)
+
+#define END_SIMPLE_ARROW_UDF_WITH_NULL_HANDLING(udfName, exec, nullHandling) \
+    END_ARROW_UDF_WITH_NULL_HANDLING(udfName##_BlocksImpl, exec, nullHandling)

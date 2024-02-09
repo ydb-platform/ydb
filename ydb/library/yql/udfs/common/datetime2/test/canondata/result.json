@@ -1,4 +1,9 @@
 {
+    "test.test[BlockFrom]": [
+        {
+            "uri": "file://test.test_BlockFrom_/results.txt"
+        }
+    ],
     "test.test[BlockGet]": [
         {
             "uri": "file://test.test_BlockGet_/results.txt"

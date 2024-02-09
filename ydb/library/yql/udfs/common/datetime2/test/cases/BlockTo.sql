@@ -13,6 +13,9 @@ insert into @t
 
 commit;
 select
+    DateTime::ToDays(`interval`) as interval_to_days,
+    DateTime::ToHours(`interval`) as interval_to_hours,
+    DateTime::ToMinutes(`interval`) as interval_to_minutes,
     DateTime::ToSeconds(`interval`) as interval_to_seconds,
     DateTime::ToMilliseconds(`interval`) as interval_to_msec,
     DateTime::ToMicroseconds(`interval`) as interval_to_usec,

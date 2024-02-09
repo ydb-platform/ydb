@@ -4,6 +4,7 @@
 #include <ydb/library/yql/minikql/datetime/datetime.h>
 
 #include <ydb/library/yql/public/udf/arrow/udf_arrow_helpers.h>
+#include <contrib/libs/apache/arrow/cpp/src/arrow/util/bitmap_ops.h>
 
 #include <util/datetime/base.h>
 
@@ -22,6 +23,12 @@ extern const char GetMillisecondOfSecondName[] = "GetMillisecondOfSecond";
 extern const char GetMicrosecondOfSecondName[] = "GetMicrosecondOfSecond";
 
 extern const char TMResourceName[] = "DateTime2.TM";
+
+const ui64 UsecondsInDay = 86400000000ll;
+const ui64 UsecondsInHour = 3600000000ll;
+const ui64 UsecondsInMinute = 60000000ll;
+const ui64 UsecondsInSecond = 1000000ll;
+const ui64 UsecondsInMilliseconds = 1000ll;
 
 template <const char* TFuncName, typename TResult, ui32 ScaleAfterSeconds>
 class TToUnits {
@@ -862,8 +869,47 @@ NUdf::TUnboxedValuePod DoAddYears(const NUdf::TUnboxedValuePod& date, i64 years,
     };
 
     // From*
+    
+    template<typename TInput, typename TOutput, TOutput Core(TInput), bool Filter(TInput)>
+    struct TUnaryFixedSizeKernelWithFilter {
+        static arrow::Status Do(arrow::compute::KernelContext* ctx, const arrow::compute::ExecBatch& batch, arrow::Datum* res) {
+            Y_UNUSED(ctx);
+            const auto& inArray = batch.values.front().array();
+            const auto* inValues = inArray->GetValues<TInput>(1);
 
-    SIMPLE_STRICT_UDF(TFromSeconds, TOptional<TTimestamp>(TAutoMap<ui32>)) {
+            const auto length = inArray->length;
+
+            auto& outArray = res->array();
+            auto* outValues = outArray->GetMutableValues<TOutput>(1);
+
+            TTypedBufferBuilder<uint8_t> nullBuilder(arrow::default_memory_pool());
+            nullBuilder.Reserve(length);
+
+            bool isAllNull = inArray->GetNullCount() == length;
+            if (!isAllNull) {
+                for (i64 i = 0; i < length; ++i) {
+                    outValues[i] = Core(inValues[i]);
+                    nullBuilder.UnsafeAppend(Filter(inValues[i]));
+                }
+            } else {
+                nullBuilder.UnsafeAppend(length, 0);
+            }
+            auto validMask = nullBuilder.Finish();
+            validMask = MakeDenseBitmap(validMask->data(), length, arrow::default_memory_pool());
+            
+            auto inMask = inArray->buffers[0];
+            if (inMask) {
+                outArray->buffers[0] = AllocateBitmapWithReserve(length, arrow::default_memory_pool());
+                arrow::internal::BitmapAnd(validMask->data(), 0, inArray->buffers[0]->data(), inArray->offset, outArray->length, outArray->offset, outArray->buffers[0]->mutable_data());
+            } else {
+                outArray->buffers[0] = std::move(validMask);
+            }
+
+            return arrow::Status::OK();
+        }
+    };
+
+    BEGIN_SIMPLE_STRICT_ARROW_UDF(TFromSeconds, TOptional<TTimestamp>(TAutoMap<ui32>)) {
         Y_UNUSED(valueBuilder);
         auto res = args[0].Get<ui32>();
         if (!ValidateDatetime(res)) {
@@ -872,7 +918,11 @@ NUdf::TUnboxedValuePod DoAddYears(const NUdf::TUnboxedValuePod& date, i64 years,
         return TUnboxedValuePod((ui64)(res * 1000000ull));
     }
 
-    SIMPLE_STRICT_UDF(TFromMilliseconds, TOptional<TTimestamp>(TAutoMap<ui64>)) {
+    using TFromSecondsKernel = TUnaryFixedSizeKernelWithFilter<ui32, ui64, 
+        [] (ui32 seconds) { return ui64(seconds * 1000000ull); }, ValidateDatetime>;
+    END_SIMPLE_ARROW_UDF(TFromSeconds, TFromSecondsKernel::Do);
+
+    BEGIN_SIMPLE_STRICT_ARROW_UDF(TFromMilliseconds, TOptional<TTimestamp>(TAutoMap<ui64>)) {
         Y_UNUSED(valueBuilder);
         auto res = args[0].Get<ui64>();
         if (res >= MAX_TIMESTAMP / 1000u) {
@@ -881,7 +931,12 @@ NUdf::TUnboxedValuePod DoAddYears(const NUdf::TUnboxedValuePod& date, i64 years,
         return TUnboxedValuePod(res * 1000u);
     }
 
-    SIMPLE_STRICT_UDF(TFromMicroseconds, TOptional<TTimestamp>(TAutoMap<ui64>)) {
+    using TFromMillisecondsKernel = TUnaryFixedSizeKernelWithFilter<ui64, ui64, 
+        [] (ui64 milliseconds) { return ui64(milliseconds * 1000u); }, 
+        [] (ui64 milliseconds) { return milliseconds < MAX_TIMESTAMP / 1000u; }>;
+    END_SIMPLE_ARROW_UDF(TFromMilliseconds, TFromMillisecondsKernel::Do);
+
+    BEGIN_SIMPLE_STRICT_ARROW_UDF(TFromMicroseconds, TOptional<TTimestamp>(TAutoMap<ui64>)) {
         Y_UNUSED(valueBuilder);
         auto res = args[0].Get<ui64>();
         if (!ValidateTimestamp(res)) {
@@ -890,58 +945,82 @@ NUdf::TUnboxedValuePod DoAddYears(const NUdf::TUnboxedValuePod& date, i64 years,
         return TUnboxedValuePod(res);
     }
 
-    SIMPLE_STRICT_UDF(TIntervalFromDays, TOptional<TInterval>(TAutoMap<i32>)) {
+    using TFromMicrosecondsKernel = TUnaryFixedSizeKernelWithFilter<ui64, ui64, 
+        [] (ui64 timestamp) { return timestamp; }, ValidateTimestamp>;
+    END_SIMPLE_ARROW_UDF(TFromMicroseconds, TFromMicrosecondsKernel::Do);
+
+    template <typename TInput, i64 Multiplier>
+    using TIntervalFromKernel = TUnaryFixedSizeKernelWithFilter<TInput, i64, 
+        [] (TInput arg) { return i64(arg * Multiplier); }, 
+        [] (TInput arg) { return ValidateInterval(arg * Multiplier); }>;
+
+    BEGIN_SIMPLE_STRICT_ARROW_UDF(TIntervalFromDays, TOptional<TInterval>(TAutoMap<i32>)) {
         Y_UNUSED(valueBuilder);
-        const i64 res = i64(args[0].Get<i32>()) * 86400000000ll;
+        const i64 res = i64(args[0].Get<i32>()) * UsecondsInDay;
         return ValidateInterval(res) ? TUnboxedValuePod(res) : TUnboxedValuePod();
     }
+    END_SIMPLE_ARROW_UDF(TIntervalFromDays, (TIntervalFromKernel<i32, UsecondsInDay>::Do));
 
-    SIMPLE_STRICT_UDF(TIntervalFromHours, TOptional<TInterval>(TAutoMap<i32>)) {
+    BEGIN_SIMPLE_STRICT_ARROW_UDF(TIntervalFromHours, TOptional<TInterval>(TAutoMap<i32>)) {
         Y_UNUSED(valueBuilder);
-        const i64 res = i64(args[0].Get<i32>()) * 3600000000ll;
+        const i64 res = i64(args[0].Get<i32>()) * UsecondsInHour;
         return ValidateInterval(res) ? TUnboxedValuePod(res) : TUnboxedValuePod();
     }
+    END_SIMPLE_ARROW_UDF(TIntervalFromHours, (TIntervalFromKernel<i32, UsecondsInHour>::Do));
 
-    SIMPLE_STRICT_UDF(TIntervalFromMinutes, TOptional<TInterval>(TAutoMap<i32>)) {
+    BEGIN_SIMPLE_STRICT_ARROW_UDF(TIntervalFromMinutes, TOptional<TInterval>(TAutoMap<i32>)) {
         Y_UNUSED(valueBuilder);
-        const i64 res = i64(args[0].Get<i32>()) * 60000000ll;
+        const i64 res = i64(args[0].Get<i32>()) * UsecondsInMinute;
         return ValidateInterval(res) ? TUnboxedValuePod(res) : TUnboxedValuePod();
     }
+    END_SIMPLE_ARROW_UDF(TIntervalFromMinutes, (TIntervalFromKernel<i32, UsecondsInMinute>::Do));
 
-    SIMPLE_STRICT_UDF(TIntervalFromSeconds, TOptional<TInterval>(TAutoMap<i32>)) {
+    BEGIN_SIMPLE_STRICT_ARROW_UDF(TIntervalFromSeconds, TOptional<TInterval>(TAutoMap<i32>)) {
         Y_UNUSED(valueBuilder);
-        const i64 res = i64(args[0].Get<i32>()) * 1000000ll;
+        const i64 res = i64(args[0].Get<i32>()) * UsecondsInSecond;
         return ValidateInterval(res) ? TUnboxedValuePod(res) : TUnboxedValuePod();
     }
+    END_SIMPLE_ARROW_UDF(TIntervalFromSeconds, (TIntervalFromKernel<i32, UsecondsInSecond>::Do));
 
-    SIMPLE_STRICT_UDF(TIntervalFromMilliseconds, TOptional<TInterval>(TAutoMap<i64>)) {
+    BEGIN_SIMPLE_STRICT_ARROW_UDF(TIntervalFromMilliseconds, TOptional<TInterval>(TAutoMap<i64>)) {
         Y_UNUSED(valueBuilder);
-        const i64 res = i64(args[0].Get<i64>()) * 1000ll;
+        const i64 res = i64(args[0].Get<i64>()) * UsecondsInMilliseconds;
         return ValidateInterval(res) ? TUnboxedValuePod(res) : TUnboxedValuePod();
     }
+    END_SIMPLE_ARROW_UDF(TIntervalFromMilliseconds, (TIntervalFromKernel<i64, UsecondsInMilliseconds>::Do));
 
-    SIMPLE_STRICT_UDF(TIntervalFromMicroseconds, TOptional<TInterval>(TAutoMap<i64>)) {
+    BEGIN_SIMPLE_STRICT_ARROW_UDF(TIntervalFromMicroseconds, TOptional<TInterval>(TAutoMap<i64>)) {
         Y_UNUSED(valueBuilder);
         const i64 res = args[0].Get<i64>();
         return ValidateInterval(res) ? TUnboxedValuePod(res) : TUnboxedValuePod();
     }
+    END_SIMPLE_ARROW_UDF(TIntervalFromMicroseconds, (TIntervalFromKernel<i64, 1>::Do));
 
     // To*
 
-    SIMPLE_STRICT_UDF(TToDays, i32(TAutoMap<TInterval>)) {
+    BEGIN_SIMPLE_STRICT_ARROW_UDF(TToDays, i32(TAutoMap<TInterval>)) {
         Y_UNUSED(valueBuilder);
-        return TUnboxedValuePod(i32(args[0].Get<i64>() / 86400000000ll));
+        return TUnboxedValuePod(i32(args[0].Get<i64>() / UsecondsInDay));
     }
+    END_SIMPLE_ARROW_UDF_WITH_NULL_HANDLING(TToDays, 
+    (UnaryPreallocatedExecImpl<i32, i32, [] (i32 arg) { return i32(arg / UsecondsInDay); }>),
+    arrow::compute::NullHandling::INTERSECTION);
 
-    SIMPLE_STRICT_UDF(TToHours, i32(TAutoMap<TInterval>)) {
+    BEGIN_SIMPLE_STRICT_ARROW_UDF(TToHours, i32(TAutoMap<TInterval>)) {
         Y_UNUSED(valueBuilder);
-        return TUnboxedValuePod(i32(args[0].Get<i64>() / 3600000000ll));
+        return TUnboxedValuePod(i32(args[0].Get<i64>() / UsecondsInHour));
     }
+    END_SIMPLE_ARROW_UDF_WITH_NULL_HANDLING(TToHours, 
+    (UnaryPreallocatedExecImpl<i32, i32, [] (i32 arg) { return i32(arg / UsecondsInHour); }>),
+    arrow::compute::NullHandling::INTERSECTION);
 
-    SIMPLE_STRICT_UDF(TToMinutes, i32(TAutoMap<TInterval>)) {
+    BEGIN_SIMPLE_STRICT_ARROW_UDF(TToMinutes, i32(TAutoMap<TInterval>)) {
         Y_UNUSED(valueBuilder);
-        return TUnboxedValuePod(i32(args[0].Get<i64>() / 60000000ll));
+        return TUnboxedValuePod(i32(args[0].Get<i64>() / UsecondsInMinute));
     }
+    END_SIMPLE_ARROW_UDF_WITH_NULL_HANDLING(TToMinutes, 
+    (UnaryPreallocatedExecImpl<i32, i32, [] (i32 arg) { return i32(arg / UsecondsInMinute); }>),
+    arrow::compute::NullHandling::INTERSECTION);
 
     // StartOf*
 
@@ -1777,6 +1856,7 @@ NUdf::TUnboxedValuePod DoAddYears(const NUdf::TUnboxedValuePod& date, i64 years,
         TUpdate,
 
         TFromSeconds,
+        TFromSeconds_BlocksImpl,
         TFromMilliseconds,
         TFromMicroseconds,
 

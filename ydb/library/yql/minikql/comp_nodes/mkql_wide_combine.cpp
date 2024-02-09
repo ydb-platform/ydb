@@ -537,9 +537,9 @@ private:
         if (AsyncReadOperation) {
             MKQL_ENSURE(AsyncReadOperation->HasValue(), "Internal logic error");
             if (RecoverState) {
-                SpilledBuckets[0].InitialState->AsyncReadCompleted(AsyncReadOperation->ExtractValue(), ctx.HolderFactory);
+                SpilledBuckets[0].InitialState->AsyncReadCompleted(AsyncReadOperation->ExtractValue().value(), ctx.HolderFactory);
             } else {
-                SpilledBuckets[0].Data->AsyncReadCompleted(AsyncReadOperation->ExtractValue(), ctx.HolderFactory);
+                SpilledBuckets[0].Data->AsyncReadCompleted(AsyncReadOperation->ExtractValue().value(), ctx.HolderFactory);
             }
             AsyncReadOperation = std::nullopt;
         }
@@ -678,7 +678,7 @@ private:
     EFetchResult InputDataFetchResult;
     size_t CurrentAsyncOperationBucketId;
     std::optional<NThreading::TFuture<ISpiller::TKey>> AsyncWriteOperation;
-    std::optional<NThreading::TFuture<TRope>> AsyncReadOperation;
+    std::optional<NThreading::TFuture<std::optional<TRope>>> AsyncReadOperation;
     TUnboxedValueVector BufferForUsedInputItems;
     TUnboxedValueVector BufferForKeyAnsState;
 };

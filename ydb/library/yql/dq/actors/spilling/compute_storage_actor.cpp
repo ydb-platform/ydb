@@ -36,13 +36,12 @@ class TDqComputeStorageActor : public NActors::TActorBootstrapped<TDqComputeStor
     // size + promise with key
     using TWritingBlobInfo = std::pair<ui64, NThreading::TPromise<IDqComputeStorageActor::TKey>>;
     // remove after read + promise with blob
-    using TLoadingBlobInfo = std::pair<bool, NThreading::TPromise<TRope>>;
+    using TLoadingBlobInfo = std::pair<bool, NThreading::TPromise<std::optional<TRope>>>;
     // void promise that completes when block is removed
     using TDeletingBlobInfo = NThreading::TPromise<void>;
 public:
-    TDqComputeStorageActor(TTxId txId, const TString& spillerName, std::function<void()> wakeupCallback, TActorSystem* actorSystem)
+    TDqComputeStorageActor(TTxId txId, const TString& spillerName, std::function<void()> wakeupCallback)
         : TxId_(txId),
-        ActorSystem_(actorSystem),
         SpillerName_(spillerName),
         WakeupCallback_(wakeupCallback)
     {
@@ -65,11 +64,10 @@ public:
 protected:
 
     void FailOnError() {
-        InitializeIfNot();
         if (Error_) {
             assert(false);
             LOG_E("Error: " << *Error_);
-            ActorSystem_->Send(SpillingActorId_, new TEvents::TEvPoison);
+            Send(SpillingActorId_, new TEvents::TEvPoison);
         }
     }
 
@@ -81,6 +79,7 @@ private:
             hFunc(TEvDqSpilling::TEvError, HandleWork);
             hFunc(TEvGet, HandleWork);
             hFunc(TEvPut, HandleWork);
+            hFunc(TEvDelete, HandleWork);
             hFunc(TEvents::TEvPoison, HandleWork);
             default:
                 Y_ABORT("TDqComputeStorageActor::WorkState unexpected event type: %" PRIx32 " event: %s",
@@ -109,8 +108,28 @@ private:
     void HandleWork(TEvGet::TPtr& ev) {
         auto& msg = *ev->Get();
 
-        TLoadingBlobInfo loadingblobInfo = std::make_pair(true, std::move(msg.Promise_));
-        LoadingBlobs_.emplace(msg.Key_, std::move(loadingblobInfo));
+        if (!StoredBlobs_.contains(msg.Key_)) {
+            msg.Promise_.SetValue(std::nullopt);
+            return;
+        }
+
+        bool removeBlobAfterRead = msg.RemoveBlobAfterRead_;
+
+        TLoadingBlobInfo loadingBlobInfo = std::make_pair(removeBlobAfterRead, std::move(msg.Promise_));
+        LoadingBlobs_.emplace(msg.Key_, std::move(loadingBlobInfo));
+
+        Send(SpillingActorId_, new TEvDqSpilling::TEvRead(msg.Key_, removeBlobAfterRead));
+    }
+
+    void HandleWork(TEvDelete::TPtr& ev) {
+        auto& msg = *ev->Get();
+
+        if (!StoredBlobs_.contains(msg.Key_)) {
+            msg.Promise_.SetValue();
+            return;
+        }
+
+        DeletingBlobs_.emplace(msg.Key_, std::move(msg.Promise_));
 
         Send(SpillingActorId_, new TEvDqSpilling::TEvRead(msg.Key_, true));
     }
@@ -122,12 +141,11 @@ private:
 
         auto it = WritingBlobs_.find(msg.BlobId);
         if (it == WritingBlobs_.end()) {
-            assert(false);
             LOG_E("Got unexpected TEvWriteResult, blobId: " << msg.BlobId);
 
             Error_ = "Internal error";
 
-            ActorSystem_->Send(SpillingActorId_, new TEvents::TEvPoison);
+            Send(SpillingActorId_, new TEvents::TEvPoison);
             return;
         }
 
@@ -138,10 +156,10 @@ private:
         StoredBlobsCount_++;
         StoredBlobsSize_ += size;
 
-        StoredBlobs_.insert(msg.BlobId);
-
         // complete future and wake up waiting compute node
         promise.SetValue(msg.BlobId);
+
+        StoredBlobs_.emplace(msg.BlobId);
 
         WritingBlobs_.erase(it);
         WakeupCallback_();
@@ -150,8 +168,6 @@ private:
     void HandleWork(TEvDqSpilling::TEvReadResult::TPtr& ev) {
         auto& msg = *ev->Get();
         LOG_T("[TEvReadResult] blobId: " << msg.BlobId << ", size: " << msg.Blob.size());
-
-        // Use lock to prevent race when state is changed on event processing and on Put call
 
         // Deletion is read without fetching the results. So, after the deletion library sends TEvReadResult event
         // Check if the intention was to delete and complete correct future in this case.
@@ -162,18 +178,17 @@ private:
 
         auto it = LoadingBlobs_.find(msg.BlobId);
         if (it == LoadingBlobs_.end()) {
-            assert(false);
             LOG_E("Got unexpected TEvReadResult, blobId: " << msg.BlobId);
 
             Error_ = "Internal error";
 
-            ActorSystem_->Send(SpillingActorId_, new TEvents::TEvPoison);
+            Send(SpillingActorId_, new TEvents::TEvPoison);
             return;
         }
 
         bool removedAfterRead = it->second.first;
         if (removedAfterRead) {
-            UpdateStatsAfterBlobDeletion(msg.BlobId, msg.Blob.Size());
+            UpdateStatsAfterBlobDeletion(msg.Blob.Size(), msg.BlobId);
         }
 
         TRope res(TString(reinterpret_cast<const char*>(msg.Blob.Data()), msg.Blob.Size()));
@@ -193,13 +208,13 @@ private:
         Error_.ConstructInPlace(msg.Message);
     }
 
-    bool HandleDelete(IDqComputeStorageActor::TKey blobId, ui64 size) {
+    bool HandleDelete(TKey blobId, ui64 size) {
         auto it = DeletingBlobs_.find(blobId);
         if (it == DeletingBlobs_.end()) {
             return false;
         }
 
-        UpdateStatsAfterBlobDeletion(blobId, size);
+        UpdateStatsAfterBlobDeletion(size, blobId);
 
         auto& promise = it->second;
         promise.SetValue();
@@ -207,41 +222,29 @@ private:
         return true;
     }
 
-    void UpdateStatsAfterBlobDeletion(IDqComputeStorageActor::TKey blobId, ui64 size) {
+    void UpdateStatsAfterBlobDeletion(ui64 size, TKey blobId) {
         StoredBlobsCount_--;
         StoredBlobsSize_ -= size;
         StoredBlobs_.erase(blobId);
     }
 
-    // It's illegal to initialize an inner actor in the actor's ctor. Because in this case ctx will not be initialized because it's initialized afger Bootstrap event.
-    // But also it's not possible to initialize inner actor in the bootstrap function because in this case Put/Get may be called before the Bootstrap -> inner worker will be uninitialized.
-    // In current implementation it's still possible to leave inner actor uninitialized that is why it's planned to split this class into Actor part + non actor part
-    void InitializeIfNot() {
-        if (IsInitialized_) return;
-
-        IsInitialized_ = true;
-    }
-
-
     protected:
     const TTxId TxId_;
     TActorId SpillingActorId_;
-    TActorSystem* ActorSystem_;
 
-    TMap<IDqComputeStorageActor::TKey, TWritingBlobInfo> WritingBlobs_;
-    TSet<ui64> StoredBlobs_;
+    TMap<TKey, TWritingBlobInfo> WritingBlobs_;
     ui64 WritingBlobsSize_ = 0;
 
     ui32 StoredBlobsCount_ = 0;
     ui64 StoredBlobsSize_ = 0;
 
-    TMap<IDqComputeStorageActor::TKey, TLoadingBlobInfo> LoadingBlobs_;
+    TMap<TKey, TLoadingBlobInfo> LoadingBlobs_;
 
-    TMap<IDqComputeStorageActor::TKey, TDeletingBlobInfo> DeletingBlobs_;
+    TMap<TKey, TDeletingBlobInfo> DeletingBlobs_;
 
     TMaybe<TString> Error_;
 
-    IDqComputeStorageActor::TKey NextBlobId = 0;
+    TKey NextBlobId = 0;
 
     TString SpillerName_;
 
@@ -249,12 +252,14 @@ private:
 
     std::function<void()> WakeupCallback_;
 
+    TSet<TKey> StoredBlobs_;
+
 };
 
 } // anonymous namespace
 
-IDqComputeStorageActor* CreateDqComputeStorageActor(TTxId txId, const TString& spillerName, std::function<void()> wakeupCallback, TActorSystem* actorSystem) {
-    return new TDqComputeStorageActor(txId, spillerName, wakeupCallback, actorSystem);
+IDqComputeStorageActor* CreateDqComputeStorageActor(TTxId txId, const TString& spillerName, std::function<void()> wakeupCallback) {
+    return new TDqComputeStorageActor(txId, spillerName, wakeupCallback);
 }
 
 } // namespace NYql::NDq

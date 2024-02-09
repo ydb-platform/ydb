@@ -50,7 +50,7 @@ public:
     bool Empty() const {
        return StoredChunks.empty() && !CurrentBatch;
     }
-    std::optional<NThreading::TFuture<TRope>> ExtractWideItem(const TArrayRef<NUdf::TUnboxedValue>& wideItem) {
+    std::optional<NThreading::TFuture<std::optional<TRope>>> ExtractWideItem(const TArrayRef<NUdf::TUnboxedValue>& wideItem) {
         MKQL_ENSURE(!Empty(), "Internal logic error");
         if (CurrentBatch) {
             auto row = CurrentBatch->Head();

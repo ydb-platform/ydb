@@ -8,7 +8,7 @@ concurrency:
   cancel-in-progress: true
 env:
   REPO: ${{ github.repository }}
-  TOKEN: ${{ secrets.GITHUB_TOKEN }}
+  TOKEN: ${{ secrets.GH_PERSONAL_ACCESS_TOKEN }}
 jobs:
   sync:
     runs-on: ubuntu-latest

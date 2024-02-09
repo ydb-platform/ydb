@@ -1,5 +1,6 @@
 #include <ydb/core/config/tools/protobuf_plugin/ut/protos/config_root_test.pb.h>
 #include <ydb/core/config/tools/protobuf_plugin/ut/protos/copy_to_test.pb.h>
+#include <ydb/core/config/tools/protobuf_plugin/ut/protos/as_map_test.pb.h>
 
 #include <library/cpp/testing/unittest/registar.h>
 
@@ -171,5 +172,84 @@ Y_UNIT_TEST_SUITE(ValidationTests) {
         UNIT_ASSERT_VALUES_EQUAL(secondSink.GetComplexMessage8(3).ShortDebugString(), source.GetComplexMessage8(3).ShortDebugString());
         UNIT_ASSERT_VALUES_EQUAL(secondSink.GetComplexMessage8(4).ShortDebugString(), source.GetComplexMessage8(4).ShortDebugString());
         UNIT_ASSERT_VALUES_EQUAL(secondSink.GetIntField(), 3);
+    }
+
+    Y_UNIT_TEST(MapType) {
+        NKikimrConfig::MessageWithMap msg;
+        TString nameBase = "Entry";
+        for (int i = 1; i <= 10; ++i) {
+            TString name = nameBase + ToString(i);
+            UNIT_ASSERT_VALUES_EQUAL(msg.GetSomeMap(name).size(), 0);
+        }
+
+        UNIT_CHECK_GENERATED_EXCEPTION(msg.GetSomeMap("otherName"), std::out_of_range);
+        UNIT_CHECK_GENERATED_EXCEPTION(msg.GetSomeMap("Entry0"), std::out_of_range);
+
+        UNIT_ASSERT(!msg.Entry1Size());
+        UNIT_ASSERT(!msg.Entry2Size());
+        UNIT_ASSERT(!msg.Entry3Size());
+        UNIT_ASSERT(!msg.Entry4Size());
+        UNIT_ASSERT(!msg.Entry5Size());
+        UNIT_ASSERT(!msg.Entry6Size());
+        UNIT_ASSERT(!msg.Entry7Size());
+        UNIT_ASSERT(!msg.Entry8Size());
+        UNIT_ASSERT(!msg.Entry9Size());
+        UNIT_ASSERT(!msg.Entry10Size());
+
+        for (int i = 1; i <= 10; ++i) {
+            TString name = nameBase + ToString(i);
+            msg.AddSomeMap(name)->SetStr(ToString(i));
+        }
+
+        UNIT_CHECK_GENERATED_EXCEPTION(msg.AddSomeMap("otherName"), std::out_of_range);
+
+        UNIT_ASSERT_VALUES_EQUAL(msg.Entry1Size(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(msg.GetEntry1(0).GetStr(), "1");
+        UNIT_ASSERT_VALUES_EQUAL(msg.Entry2Size(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(msg.GetEntry2(0).GetStr(), "2");
+        UNIT_ASSERT_VALUES_EQUAL(msg.Entry3Size(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(msg.GetEntry3(0).GetStr(), "3");
+        UNIT_ASSERT_VALUES_EQUAL(msg.Entry4Size(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(msg.GetEntry4(0).GetStr(), "4");
+        UNIT_ASSERT_VALUES_EQUAL(msg.Entry5Size(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(msg.GetEntry5(0).GetStr(), "5");
+        UNIT_ASSERT_VALUES_EQUAL(msg.Entry6Size(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(msg.GetEntry6(0).GetStr(), "6");
+        UNIT_ASSERT_VALUES_EQUAL(msg.Entry7Size(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(msg.GetEntry7(0).GetStr(), "7");
+        UNIT_ASSERT_VALUES_EQUAL(msg.Entry8Size(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(msg.GetEntry8(0).GetStr(), "8");
+        UNIT_ASSERT_VALUES_EQUAL(msg.Entry9Size(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(msg.GetEntry9(0).GetStr(), "9");
+        UNIT_ASSERT_VALUES_EQUAL(msg.Entry10Size(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(msg.GetEntry10(0).GetStr(), "10");
+
+        for (int i = 1; i <= 10; ++i) {
+            TString name = nameBase + ToString(i);
+            msg.MutableSomeMap(name)->Add()->SetStr(ToString(i * i));
+        }
+
+        UNIT_CHECK_GENERATED_EXCEPTION(msg.MutableSomeMap("otherName"), std::out_of_range);
+
+        UNIT_ASSERT_VALUES_EQUAL(msg.Entry1Size(), 2);
+        UNIT_ASSERT_VALUES_EQUAL(msg.GetEntry1(1).GetStr(), "1");
+        UNIT_ASSERT_VALUES_EQUAL(msg.Entry2Size(), 2);
+        UNIT_ASSERT_VALUES_EQUAL(msg.GetEntry2(1).GetStr(), "4");
+        UNIT_ASSERT_VALUES_EQUAL(msg.Entry3Size(), 2);
+        UNIT_ASSERT_VALUES_EQUAL(msg.GetEntry3(1).GetStr(), "9");
+        UNIT_ASSERT_VALUES_EQUAL(msg.Entry4Size(), 2);
+        UNIT_ASSERT_VALUES_EQUAL(msg.GetEntry4(1).GetStr(), "16");
+        UNIT_ASSERT_VALUES_EQUAL(msg.Entry5Size(), 2);
+        UNIT_ASSERT_VALUES_EQUAL(msg.GetEntry5(1).GetStr(), "25");
+        UNIT_ASSERT_VALUES_EQUAL(msg.Entry6Size(), 2);
+        UNIT_ASSERT_VALUES_EQUAL(msg.GetEntry6(1).GetStr(), "36");
+        UNIT_ASSERT_VALUES_EQUAL(msg.Entry7Size(), 2);
+        UNIT_ASSERT_VALUES_EQUAL(msg.GetEntry7(1).GetStr(), "49");
+        UNIT_ASSERT_VALUES_EQUAL(msg.Entry8Size(), 2);
+        UNIT_ASSERT_VALUES_EQUAL(msg.GetEntry8(1).GetStr(), "64");
+        UNIT_ASSERT_VALUES_EQUAL(msg.Entry9Size(), 2);
+        UNIT_ASSERT_VALUES_EQUAL(msg.GetEntry9(1).GetStr(), "81");
+        UNIT_ASSERT_VALUES_EQUAL(msg.Entry10Size(), 2);
+        UNIT_ASSERT_VALUES_EQUAL(msg.GetEntry10(1).GetStr(), "100");
     }
 }

@@ -8,6 +8,7 @@
 #include <util/generic/vector.h>
 #include <util/string/builder.h>
 #include <util/string/cast.h>
+#include <util/string/printf.h>
 #include <util/string/subst.h>
 
 #include <google/protobuf/compiler/code_generator.h>
@@ -164,8 +165,7 @@ private:
             }
             Header->Print(vars, "};\n");
 
-            Header->Print(vars, "auto it = addHandlers.find(str);\n");
-            Header->Print(vars, "return it == addHandlers.end() ? nullptr : (this->*(it->second))();\n");
+            Header->Print(vars, "return (this->*addHandlers.at(str))();\n");
         }
         Header->Print(vars, "}\n");
     }
@@ -225,11 +225,18 @@ private:
         for (const auto& [output, fields] : outputs) {
             if (auto* fieldMessage = (*fields.begin())->message_type()) { // TODO implement for other classes
                 for (const auto* field : fields) {
-                    Y_ABORT_UNLESS(fieldMessage->full_name() == field->full_name(), "Messages in map MUST have the same type");
+                    if (fieldMessage->full_name() != field->message_type()->full_name()) {
+                        Cerr << "Messages in map MUST have the same type: "
+                             << fieldMessage->full_name().c_str() << " != "
+                             << field->message_type()->full_name().c_str() << Endl;
+                        Y_ABORT("Invariant failed");
+                    }
+
+                    Y_ABORT_UNLESS(field->is_repeated(), "Only repeated fields are supported");
                 }
                 vars["fqFieldClass"] = FullyQualifiedClassName(fieldMessage);
             } else {
-                Y_ABORT("Types other thans Message is not supported yet.");
+                Y_ABORT("Types other than Message is not supported yet.");
             }
 
             vars["output"] = output;

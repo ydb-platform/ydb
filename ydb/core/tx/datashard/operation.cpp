@@ -289,5 +289,12 @@ void TOperation::SetFinishProposeTs() noexcept
     SetFinishProposeTs(AppData()->MonotonicTimeProvider->Now());
 }
 
+bool TOperation::OnStopping(TDataShard&, const TActorContext&)
+{
+    // By default operations don't do anything when stopping
+    // However they may become ready so add to candidates
+    return true;
+}
+
 } // namespace NDataShard
 } // namespace NKikimr

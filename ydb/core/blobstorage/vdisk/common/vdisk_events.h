@@ -366,10 +366,12 @@ namespace NKikimr {
             : public TEventLocal<TEvVDiskRequestCompleted, TEvBlobStorage::EvVDiskRequestCompleted> {
         TVMsgContext Ctx;
         std::unique_ptr<IEventHandle> Event;
+        bool DoNotResend;
 
-        TEvVDiskRequestCompleted(const TVMsgContext &ctx, std::unique_ptr<IEventHandle> event)
+        TEvVDiskRequestCompleted(const TVMsgContext &ctx, std::unique_ptr<IEventHandle> event, bool doNotResend = false)
             : Ctx(ctx)
             , Event(std::move(event))
+            , DoNotResend(doNotResend)
         {
             Y_DEBUG_ABORT_UNLESS(Ctx.ExtQueueId != NKikimrBlobStorage::EVDiskQueueId::Unknown);
             Y_DEBUG_ABORT_UNLESS(Ctx.IntQueueId != NKikimrBlobStorage::EVDiskInternalQueueId::IntUnknown);
@@ -468,6 +470,9 @@ namespace NKikimr {
         TActorIDPtr SkeletonFrontIDPtr;
         THPTimer ExecutionTimer;
 
+    protected:
+        bool DoNotResendFromSkeletonFront = false;
+
     public:
         TEvVResultBaseWithQoSPB() = default;
 
@@ -526,7 +531,7 @@ namespace NKikimr {
                 byteSize, this->ToString().data());
 
             if (SkeletonFrontIDPtr && MsgCtx.IntQueueId != NKikimrBlobStorage::IntUnknown) {
-                ctx.Send(*SkeletonFrontIDPtr, new TEvVDiskRequestCompleted(MsgCtx, std::move(ev)));
+                ctx.Send(*SkeletonFrontIDPtr, new TEvVDiskRequestCompleted(MsgCtx, std::move(ev), DoNotResendFromSkeletonFront));
             } else {
                 TActivationContext::Send(ev.release());
             }
@@ -2180,6 +2185,10 @@ namespace NKikimr {
         void SetStatusFlagsAndFreeSpace(ui32 statusFlags, float approximateFreeSpaceShare) {
             Record.SetStatusFlags(statusFlags);
             Record.SetApproximateFreeSpaceShare(approximateFreeSpaceShare);
+        }
+
+        void SetForceEndResponse() {
+            DoNotResendFromSkeletonFront = true;
         }
 
         void MakeError(NKikimrProto::EReplyStatus status, const TString &errorReason,

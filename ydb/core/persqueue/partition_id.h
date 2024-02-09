@@ -18,8 +18,10 @@ public:
     {
     }
 
-    TPartitionId(ui32 partition, ui64 writeId) :
-        TPartitionId(partition, writeId, 0)
+    TPartitionId(ui32 originalPartitionId, TMaybe<ui64> writeId, ui32 internalPartitionId) :
+        OriginalPartitionId(originalPartitionId),
+        WriteId(writeId),
+        InternalPartitionId(internalPartitionId)
     {
     }
 
@@ -55,14 +57,6 @@ public:
     ui32 OriginalPartitionId = 0;
     TMaybe<ui64> WriteId;
     ui32 InternalPartitionId = 0;
-
-private:
-    TPartitionId(ui32 originalPartitionId, TMaybe<ui64> writeId, ui32 internalPartitionId) :
-        OriginalPartitionId(originalPartitionId),
-        WriteId(writeId),
-        InternalPartitionId(internalPartitionId)
-    {
-    }
 };
 
 inline

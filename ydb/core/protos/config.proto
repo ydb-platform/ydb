@@ -111,6 +111,7 @@ message TActorSystemConfig {
     // Used only with UseAutoConfig;
     optional uint32 CpuCount = 13;
     optional ENodeType NodeType = 14 [default = COMPUTE];
+    optional uint32 ForceIOPoolThreads = 17;
 
     optional bool MonitorStuckActors = 15;
     optional EActorSystemProfile ActorSystemProfile = 16;
@@ -1440,6 +1441,7 @@ message TColumnShardConfig {
     optional uint32 WritingBufferDurationMs = 8 [default = 0];
     optional bool UseChunkedMergeOnCompaction = 9 [default = true];
     optional uint64 CompactionMemoryLimit = 10 [default = 536870912];
+    optional uint64 TieringsMemoryLimit = 11 [default = 536870912];
 }
 
 message TSchemeShardConfig {

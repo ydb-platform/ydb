@@ -291,7 +291,7 @@ namespace NKikimr::NPrivate {
             }
         }
 
-        void SendVPatchResult(NKikimrProto::EReplyStatus status)
+        void SendVPatchResult(NKikimrProto::EReplyStatus status, bool forceEnd = false)
         {
             STLOG(PRI_INFO, BS_VDISK_PATCH, BSVSP07,
                     VDiskLogPrefix << " TEvVPatch: send patch result;",
@@ -308,6 +308,9 @@ namespace NKikimr::NPrivate {
             }
             AddMark((status == NKikimrProto::OK ? "Patch ends with OK" : "Patch ends witn NOT OK"));
             CurrentEventTrace = nullptr;
+            if (forceEnd) {
+                ResultEvent->SetForceEndResponse();
+            }
             SendVDiskResponse(TActivationContext::AsActorContext(), Sender, ResultEvent.release(), Cookie);
         }
 
@@ -501,7 +504,7 @@ namespace NKikimr::NPrivate {
             Cookie = ev->Cookie;
             CurrentEventTrace = ev->Get()->VDiskSkeletonTrace;
             AddMark("Error: HandleError TEvVPatchDiff");
-            SendVPatchResult(NKikimrProto::ERROR);
+            SendVPatchResult(NKikimrProto::ERROR, ev->Get()->IsForceEnd());
         }
 
         void HandleForceEnd(TEvBlobStorage::TEvVPatchDiff::TPtr &ev) {
@@ -509,7 +512,7 @@ namespace NKikimr::NPrivate {
             SendVPatchFoundParts(NKikimrProto::ERROR);
             if (forceEnd) {
                 AddMark("Force end");
-                SendVPatchResult(NKikimrProto::OK);
+                SendVPatchResult(NKikimrProto::OK, true);
             } else {
                 AddMark("Force end by error");
                 SendVPatchResult(NKikimrProto::ERROR);
@@ -566,7 +569,7 @@ namespace NKikimr::NPrivate {
 
             if (forceEnd) {
                 AddMark("Force end");
-                SendVPatchResult(NKikimrProto::OK);
+                SendVPatchResult(NKikimrProto::OK, true);
                 NotifySkeletonAboutDying();
                 Become(&TThis::ErrorState);
                 return;

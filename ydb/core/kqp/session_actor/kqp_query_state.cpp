@@ -306,4 +306,42 @@ bool TKqpQueryState::HasErrors(const NSchemeCache::TSchemeCacheNavigate& respons
     return true;
 }
 
+bool TKqpQueryState::HasImpliedTx() const {
+    if (HasTxControl()) {
+        return false;
+    }
+
+    const NKikimrKqp::EQueryAction action = RequestEv->GetAction();
+    if (action != NKikimrKqp::QUERY_ACTION_EXECUTE &&
+        action != NKikimrKqp::QUERY_ACTION_EXECUTE_PREPARED)
+    {
+        return false;
+    }
+
+    const NKikimrKqp::EQueryType queryType = RequestEv->GetType();
+    if (queryType != NKikimrKqp::QUERY_TYPE_SQL_GENERIC_QUERY &&
+        queryType != NKikimrKqp::QUERY_TYPE_SQL_GENERIC_SCRIPT &&
+        queryType != NKikimrKqp::QUERY_TYPE_SQL_GENERIC_CONCURRENT_QUERY)
+    {
+        return false;
+    }
+
+    for (const auto& transactionPtr : PreparedQuery->GetTransactions()) {
+        switch (transactionPtr->GetType()) {
+        case NKqpProto::TKqpPhyTx::TYPE_GENERIC: // data transaction
+            return true;
+        case NKqpProto::TKqpPhyTx::TYPE_UNSPECIFIED:
+        case NKqpProto::TKqpPhyTx::TYPE_COMPUTE:
+        case NKqpProto::TKqpPhyTx::TYPE_DATA: // data transaction, but not in QueryService API
+        case NKqpProto::TKqpPhyTx::TYPE_SCAN:
+        case NKqpProto::TKqpPhyTx::TYPE_SCHEME:
+        case NKqpProto::TKqpPhyTx_EType_TKqpPhyTx_EType_INT_MIN_SENTINEL_DO_NOT_USE_:
+        case NKqpProto::TKqpPhyTx_EType_TKqpPhyTx_EType_INT_MAX_SENTINEL_DO_NOT_USE_:
+            break;
+        }
+    }
+
+    return false;
+}
+
 }

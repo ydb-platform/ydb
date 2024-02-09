@@ -8,6 +8,7 @@ import random
 import string
 import typing  # noqa: F401
 import sys
+from urllib.parse import urlparse
 
 from ydb.library.yql.providers.common.proto.gateways_config_pb2 import TGenericConnectorConfig
 from ydb.tests.library.common import yatest_common
@@ -261,16 +262,26 @@ def generic_connector_config():
     if not endpoint:
         return None
 
-    split = endpoint.split(':')
-    if len(split) != 2:
-        raise ValueError("Invalid FQ_CONNECTOR_ENDPOINT: '{}'".format(endpoint))
+    parsed = urlparse(endpoint)
+    if not parsed.hostname:
+        raise ValueError("Invalid host '{}' in FQ_CONNECTOR_ENDPOINT".format(parsed.hostname))
+
+    if not (1024 <= parsed.port <= 65535):
+        raise ValueError("Invalid port '{}' in FQ_CONNECTOR_ENDPOINT".format(parsed.port))
+
+    valid_schemes = ['grpc', 'grpcs']
+    if parsed.scheme not in valid_schemes:
+        raise ValueError("Invalid schema '{}' in FQ_CONNECTOR_ENDPOINT (possible: {})".format(parsed.schema, valid_schemes))
 
     cfg = TGenericConnectorConfig()
-    print(dir(cfg))
-    cfg.Endpoint.host = split[0]
-    cfg.Endpoint.port = int(split[1])
-    # TODO: pass extra env variable to enable TLS
-    cfg.UseSsl = False
+    cfg.Endpoint.host = parsed.hostname
+    cfg.Endpoint.port = parsed.port
+
+    if parsed.scheme == 'grpc':
+        cfg.UseSsl = False
+    elif parsed.scheme == 'grpcs':
+        cfg.UseSsl = True
+
     return cfg
 
 

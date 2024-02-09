@@ -5,7 +5,7 @@ from ydb.library.yql.providers.common.proto.gateways_config_pb2 import TGenericC
 
 
 def test_kikimr_config_generator_generic_connector_config():
-    os.environ["FQ_CONNECTOR_ENDPOINT"] = "localhost:50051"
+    os.environ["FQ_CONNECTOR_ENDPOINT"] = "grpc://localhost:50051"
 
     expected = TGenericConnectorConfig()
     expected.Endpoint.host = "localhost"
@@ -13,5 +13,14 @@ def test_kikimr_config_generator_generic_connector_config():
     expected.UseSsl = False
 
     actual = generic_connector_config()
+    assert actual == expected
 
-    assert (actual == expected)
+    os.environ["FQ_CONNECTOR_ENDPOINT"] = "grpcs://localhost:50051"
+
+    expected = TGenericConnectorConfig()
+    expected.Endpoint.host = "localhost"
+    expected.Endpoint.port = 50051
+    expected.UseSsl = True
+
+    actual = generic_connector_config()
+    assert actual == expected

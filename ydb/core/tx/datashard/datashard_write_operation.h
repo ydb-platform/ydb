@@ -19,7 +19,7 @@ class TValidatedWriteTx: TNonCopyable, public TValidatedTx {
 public:
     using TPtr = std::shared_ptr<TValidatedWriteTx>;
 
-    TValidatedWriteTx(TDataShard* self, TTransactionContext& txc, ui64 globalTxId, TInstant receivedAt, const TRowVersion& readVersion, const TRowVersion& writeVersion, const NEvents::TDataEvents::TEvWrite::TPtr& ev);
+    TValidatedWriteTx(TDataShard* self, TTransactionContext& txc, ui64 globalTxId, TInstant receivedAt, const TRowVersion& readVersion, const TRowVersion& writeVersion, const NEvents::TDataEvents::TEvWrite& ev);
     ~TValidatedWriteTx();
 
     EType GetType() const override { 
@@ -146,7 +146,7 @@ public:
     }
 
 private:
-    bool ParseOperation(const NEvents::TDataEvents::TEvWrite::TPtr& ev, const NKikimrDataEvents::TEvWrite::TOperation& recordOperation, const TUserTable::TTableInfos& tableInfos);
+    bool ParseOperation(const NEvents::TDataEvents::TEvWrite& ev, const NKikimrDataEvents::TEvWrite::TOperation& recordOperation, const TUserTable::TTableInfos& tableInfos);
     void SetTxKeys();
     TVector<TKeyValidator::TColumnWriteMeta> GetColumnWrites() const;
 
@@ -191,12 +191,7 @@ public:
 
     TString GetTxBody() const;
     void SetTxBody(const TString& txBody);
-
-    void ClearTxBody() {
-        UntrackMemory();
-        Ev.Reset();
-        TrackMemory();
-    }
+    void ClearTxBody();
 
     void Deactivate() override {
         ClearTxBody();
@@ -301,10 +296,6 @@ public:
         WriteTx = nullptr; 
     }
 
-    const NKikimrDataEvents::TEvWrite& GetRecord() const {
-        return Ev->Get()->Record;
-    }
-
     const std::unique_ptr<NEvents::TDataEvents::TEvWriteResult>& GetWriteResult() const {
         return WriteResult;
     }
@@ -320,9 +311,10 @@ private:
     void UntrackMemory() const;
 
 private:
-    NEvents::TDataEvents::TEvWrite::TPtr Ev;
-    TValidatedWriteTx::TPtr WriteTx;
+    std::unique_ptr<NEvents::TDataEvents::TEvWrite> Record;
     std::unique_ptr<NEvents::TDataEvents::TEvWriteResult> WriteResult;
+
+    TValidatedWriteTx::TPtr WriteTx;
 
     const ui64 TabletId;
 

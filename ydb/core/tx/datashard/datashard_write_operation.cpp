@@ -35,7 +35,7 @@
 namespace NKikimr {
 namespace NDataShard {
 
-TValidatedWriteTx::TValidatedWriteTx(TDataShard* self, TTransactionContext& txc, ui64 globalTxId, TInstant receivedAt, const TRowVersion& readVersion, const TRowVersion& writeVersion, const NEvents::TDataEvents::TEvWrite::TPtr& ev)
+TValidatedWriteTx::TValidatedWriteTx(TDataShard* self, TTransactionContext& txc, ui64 globalTxId, TInstant receivedAt, const TRowVersion& readVersion, const TRowVersion& writeVersion, const NEvents::TDataEvents::TEvWrite& ev)
     : UserDb(*self, txc.DB, globalTxId, readVersion, writeVersion, EngineHostCounters, TAppData::TimeProvider->Now())
     , KeyValidator(*self, txc.DB)
     , TabletId(self->TabletID())
@@ -49,7 +49,7 @@ TValidatedWriteTx::TValidatedWriteTx(TDataShard* self, TTransactionContext& txc,
 
     UserDb.SetIsWriteTx(true);
 
-    const NKikimrDataEvents::TEvWrite& record = ev->Get()->Record;
+    const NKikimrDataEvents::TEvWrite& record = ev.Record;
 
     if (record.GetLockTxId()) {
         UserDb.SetLockTxId(record.GetLockTxId());
@@ -87,7 +87,7 @@ TValidatedWriteTx::~TValidatedWriteTx() {
     NActors::NMemory::TLabel<MemoryLabelValidatedDataTx>::Sub(TxSize);
 }
 
-bool TValidatedWriteTx::ParseOperation(const NEvents::TDataEvents::TEvWrite::TPtr& ev, const NKikimrDataEvents::TEvWrite::TOperation& recordOperation, const TUserTable::TTableInfos& tableInfos) {
+bool TValidatedWriteTx::ParseOperation(const NEvents::TDataEvents::TEvWrite& ev, const NKikimrDataEvents::TEvWrite::TOperation& recordOperation, const TUserTable::TTableInfos& tableInfos) {
     const NKikimrDataEvents::TTableId& tableIdRecord = recordOperation.GetTableId();
 
     auto tableInfoPtr = tableInfos.FindPtr(tableIdRecord.GetTableId());
@@ -300,10 +300,12 @@ TWriteOperation::TWriteOperation(const TBasicOpInfo& op, ui64 tabletId)
 TWriteOperation::TWriteOperation(const TBasicOpInfo& op, NEvents::TDataEvents::TEvWrite::TPtr ev, TDataShard* self, TTransactionContext& txc)
     : TWriteOperation(op, self->TabletID())
 {
-    Ev = ev;
-    SetTarget(Ev->Sender);
-    SetCookie(Ev->Cookie);
-    Orbit = std::move(Ev->Get()->MoveOrbit());
+    SetTarget(ev->Sender);
+    SetCookie(ev->Cookie);
+
+    TAutoPtr<NEvents::TDataEvents::TEvWrite> evPtr = ev.Release()->Release();
+    Orbit = std::move(evPtr->MoveOrbit());
+    Record.reset(evPtr.Release());
 
     BuildWriteTx(self, txc);
 
@@ -318,7 +320,7 @@ TWriteOperation::~TWriteOperation()
 void TWriteOperation::FillTxData(TValidatedWriteTx::TPtr writeTx)
 {
     Y_ABORT_UNLESS(!WriteTx);
-    Y_ABORT_UNLESS(!Ev || HasVolatilePrepareFlag());
+    Y_ABORT_UNLESS(!Record || HasVolatilePrepareFlag());
 
     Target = writeTx->GetSource();
     WriteTx = writeTx;
@@ -329,7 +331,7 @@ void TWriteOperation::FillTxData(TDataShard* self, TTransactionContext& txc, con
     UntrackMemory();
 
     Y_ABORT_UNLESS(!WriteTx);
-    Y_ABORT_UNLESS(!Ev);
+    Y_ABORT_UNLESS(!Record);
 
     Target = target;
     SetTxBody(txBody);
@@ -351,7 +353,7 @@ void TWriteOperation::FillVolatileTxData(TDataShard* self, TTransactionContext& 
     UntrackMemory();
 
     Y_ABORT_UNLESS(!WriteTx);
-    Y_ABORT_UNLESS(Ev);
+    Y_ABORT_UNLESS(Record);
 
     BuildWriteTx(self, txc);
     Y_ABORT_UNLESS(WriteTx->Ready());
@@ -361,22 +363,37 @@ void TWriteOperation::FillVolatileTxData(TDataShard* self, TTransactionContext& 
 }
 
 TString TWriteOperation::GetTxBody() const {
-    return Ev->GetChainBuffer()->GetString();
+    Y_ABORT_UNLESS(Record);
+
+    TAllocChunkSerializer serializer;
+    const bool success = Record->SerializeToArcadiaStream(&serializer);
+    Y_ABORT_UNLESS(success);
+    
+    return serializer.Release(Record->CreateSerializationInfo())->GetString();
 }
 
 void TWriteOperation::SetTxBody(const TString& txBody) {
+    Y_ABORT_UNLESS(!Record);
+
     TEventSerializationInfo serializationInfo;
     serializationInfo.IsExtendedFormat = true;
-    TIntrusivePtr<TEventSerializedData> buffer = new TEventSerializedData(txBody, std::move(serializationInfo));
-    Ev.Reset(static_cast<NActors::TEventHandle<NKikimr::NEvents::TDataEvents::TEvWrite>*>(new IEventHandle(NEvents::TDataEvents::EvWrite, 0, {}, GetTarget(), buffer, GetCookie(), nullptr, GetTraceId())));
+    TEventSerializedData buffer(txBody, std::move(serializationInfo));
+    NKikimr::NEvents::TDataEvents::TEvWrite* record = static_cast<NKikimr::NEvents::TDataEvents::TEvWrite*>(NKikimr::NEvents::TDataEvents::TEvWrite::Load(&buffer));
+    Record.reset(record);
+}
+
+void TWriteOperation::ClearTxBody() {
+    UntrackMemory();
+    Record.reset();
+    TrackMemory();
 }
 
 TValidatedWriteTx::TPtr TWriteOperation::BuildWriteTx(TDataShard* self, TTransactionContext& txc)
 {
     if (!WriteTx) {
-        Y_ABORT_UNLESS(Ev);
+        Y_ABORT_UNLESS(Record);
         auto [readVersion, writeVersion] = self->GetReadWriteVersions(this);
-        WriteTx = std::make_shared<TValidatedWriteTx>(self, txc, GetGlobalTxId(), GetReceivedAt(), readVersion, writeVersion, Ev);
+        WriteTx = std::make_shared<TValidatedWriteTx>(self, txc, GetGlobalTxId(), GetReceivedAt(), readVersion, writeVersion, *Record);
     }
     return WriteTx;
 }
@@ -438,10 +455,9 @@ ui64 TWriteOperation::GetMemoryConsumption() const {
     if (WriteTx) {
         res += WriteTx->GetTxSize();
     }
-    if (Ev) {
-        res += sizeof(NEvents::TDataEvents::TEvWrite);
+    if (Record) {
+        res += Record->CalculateSerializedSize();
     }
-
     return res;
 }
 
@@ -465,14 +481,14 @@ ERestoreDataStatus TWriteOperation::RestoreTxData(TDataShard* self, TTransaction
         TString txBody;
         bool ok = self->TransQueue.LoadTxDetails(db, GetTxId(), Target, txBody, locks, ArtifactFlags);
         if (!ok) {
-            Ev.Reset();
+            Record.reset();
             ArtifactFlags = 0;
             return ERestoreDataStatus::Restart;
         }
 
         SetTxBody(txBody);
     } else {
-        Y_ABORT_UNLESS(Ev);
+        Y_ABORT_UNLESS(Record);
     }
 
     TrackMemory();
@@ -483,7 +499,7 @@ ERestoreDataStatus TWriteOperation::RestoreTxData(TDataShard* self, TTransaction
     bool extractKeys = WriteTx->IsTxInfoLoaded();
     auto [readVersion, writeVersion] = self->GetReadWriteVersions(this);
 
-    WriteTx = std::make_shared<TValidatedWriteTx>(self, txc, GetTxId(), GetReceivedAt(), readVersion, writeVersion, Ev);
+    WriteTx = std::make_shared<TValidatedWriteTx>(self, txc, GetTxId(), GetReceivedAt(), readVersion, writeVersion, *Record);
     if (WriteTx->Ready() && extractKeys) {
         WriteTx->ExtractKeys(true);
     }
@@ -552,11 +568,11 @@ void TWriteOperation::BuildExecutionPlan(bool loaded)
 }
 
 void TWriteOperation::TrackMemory() const {
-    NActors::NMemory::TLabel<MemoryLabelActiveTransactionBody>::Add(Ev ? Ev->GetSize() : 0);
+    NActors::NMemory::TLabel<MemoryLabelActiveTransactionBody>::Add(Record ? Record->CalculateSerializedSize() : 0);
 }
 
 void TWriteOperation::UntrackMemory() const {
-    NActors::NMemory::TLabel<MemoryLabelActiveTransactionBody>::Sub(Ev ? Ev->GetSize() : 0);
+    NActors::NMemory::TLabel<MemoryLabelActiveTransactionBody>::Sub(Record ? Record->CalculateSerializedSize() : 0);
 }
 
 void TWriteOperation::SetError(const NKikimrDataEvents::TEvWriteResult::EStatus& status, const TString& errorMsg) {

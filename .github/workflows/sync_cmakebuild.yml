@@ -6,16 +6,30 @@ on:
 concurrency:
   group: ${{ github.workflow }}
   cancel-in-progress: true
+env:
+  REPO: ${{ github.repository }}
+  TOKEN: ${{ github.token }}
 jobs:
-  build:
+  sync:
     runs-on: ubuntu-latest
     steps:
-    - uses: actions/checkout@v3
-      with:
-        ref: cmakebuild
     - name: Sync
       run: |
-        curl https://raw.githubusercontent.com/ydb-platform/ydb/main/ydb/ci/sync_cmakebuild.sh > ~/sync_cmakebuild.sh
-        chmod +x ~/sync_cmakebuild.sh
-        ~/sync_cmakebuild.sh
+        git clone -b main --shallow-exclude cmakebuild https://$TOKEN@github.com/$REPO.git ydb
+        cd ydb
+        git fetch --depth `expr $(git rev-list --count HEAD) + 1`
+        git fetch origin cmakebuild:cmakebuild --depth 2
+        mainsha=$(git rev-parse HEAD)
+        git checkout cmakebuild
+        prevsha=$(git rev-parse HEAD)
+        git merge main --no-edit
+        currsha=$(git rev-parse HEAD)
+        if [ ${prevsha} == ${currsha} ];then
+          echo "Merge did not bring any changes, exiting"
+          exit
+        fi
+        ./generate_cmake -k
+        echo ${mainsha} > ydb/ci/cmakegen.txt
+        git add .
+        git commit -m "Generate cmake for ${mainsha}"
         git push

@@ -179,16 +179,10 @@ THazardPtr<T>::THazardPtr(T* ptr, std::atomic<void*>* hazardPtr)
 
 ////////////////////////////////////////////////////////////////////////////////
 
-template <class U>
-bool operator==(const THazardPtr<U>& lhs, const U* rhs)
+template <class T>
+bool operator==(const THazardPtr<T>& lhs, const T* rhs)
 {
     return lhs.Get() == rhs;
-}
-
-template <class U>
-bool operator!=(const THazardPtr<U>& lhs, const U* rhs)
-{
-    return lhs.Get() != rhs;
 }
 
 ////////////////////////////////////////////////////////////////////////////////

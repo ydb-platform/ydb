@@ -636,9 +636,21 @@ public:
         Counters->ReportBeginTransaction(Settings.DbCounters, Transactions.EvictedTx, Transactions.Size(), Transactions.ToBeAbortedSize());
     }
 
+    static const Ydb::Table::TransactionControl& GetImpliedTxControl() {
+        auto create = []() -> Ydb::Table::TransactionControl {
+            Ydb::Table::TransactionControl control;
+            control.mutable_begin_tx()->mutable_serializable_read_write();
+            control.set_commit_tx(true);
+            return control;
+        };
+        static const Ydb::Table::TransactionControl control = create();
+        return control;
+    }
+
     bool PrepareQueryTransaction() {
-        if (QueryState->HasTxControl()) {
-            const auto& txControl = QueryState->GetTxControl();
+        const bool hasTxControl = QueryState->HasTxControl();
+        if (hasTxControl || QueryState->HasImpliedTx()) {
+            const auto& txControl = hasTxControl ? QueryState->GetTxControl() : GetImpliedTxControl();
 
             QueryState->Commit = txControl.commit_tx();
             switch (txControl.tx_selector_case()) {
@@ -764,6 +776,12 @@ public:
 
             request.StatsMode = queryState->GetStatsMode();
             request.ProgressStatsPeriod = queryState->GetProgressStatsPeriod();
+            request.QueryType = queryState->GetType();
+            if (Y_LIKELY(queryState->PreparedQuery)) {
+                ui64 resultSetsCount = queryState->PreparedQuery->GetPhysicalQuery().ResultBindingsSize();
+                request.AllowTrailingResults = (resultSetsCount == 1);
+                request.AllowTrailingResults &= (QueryState->RequestEv->GetSupportsStreamTrailingResult());
+            }
         }
 
         const auto& limits = GetQueryLimits(Settings);
@@ -935,7 +953,7 @@ public:
                 case NKqpProto::TKqpPhyTx::TYPE_SCHEME:
                     YQL_ENSURE(tx->StagesSize() == 0);
 
-                    if (QueryState->TxCtx->EffectiveIsolationLevel != NKikimrKqp::ISOLATION_LEVEL_UNDEFINED) {
+                    if (QueryState->HasTxControl() && QueryState->TxCtx->EffectiveIsolationLevel != NKikimrKqp::ISOLATION_LEVEL_UNDEFINED) {
                         ReplyQueryError(Ydb::StatusIds::PRECONDITION_FAILED,
                             "Scheme operations cannot be executed inside transaction");
                         return true;
@@ -1537,10 +1555,24 @@ public:
 
         // Result for scan query is sent directly to target actor.
         Y_ABORT_UNLESS(response->GetArena());
-        if (QueryState->PreparedQuery && !QueryState->IsStreamResult()) {
+        if (QueryState->PreparedQuery) {
             bool useYdbResponseFormat = QueryState->GetUsePublicResponseDataFormat();
             auto& phyQuery = QueryState->PreparedQuery->GetPhysicalQuery();
+            size_t trailingResultsCount = 0;
             for (size_t i = 0; i < phyQuery.ResultBindingsSize(); ++i) {
+                if (QueryState->IsStreamResult()) {
+                    auto ydbResult = QueryState->QueryData->GetTrailingTxResult(
+                        phyQuery.GetResultBindings(i), response->GetArena());
+
+                    if (ydbResult) {
+                        ++trailingResultsCount;
+                        YQL_ENSURE(trailingResultsCount <= 1);
+                        response->AddYdbResults()->Swap(ydbResult);
+                    }
+
+                    continue;
+                }
+
                 if (useYdbResponseFormat) {
                     TMaybe<ui64> effectiveRowsLimit = FillSettings.RowsLimitPerWrite;
                     if (QueryState->PreparedQuery->GetResults(i).GetRowsLimit()) {

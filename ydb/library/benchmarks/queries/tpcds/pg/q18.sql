@@ -21,8 +21,8 @@ select  i_item_id,
        cd1.cd_education_status = 'Unknown' and
        c_current_cdemo_sk = cd2.cd_demo_sk and
        c_current_addr_sk = ca_address_sk and
-       c_birth_month in (9,5,12,4,1,10) and
-       d_year = 2001 and
+       c_birth_month in (5,1,4,7,8,9) and
+       d_year = 2002 and
        ca_state in ('AR','TX','NC'
                    ,'GA','MS','WV','AL')
  group by rollup (i_item_id, ca_country, ca_state, ca_county)

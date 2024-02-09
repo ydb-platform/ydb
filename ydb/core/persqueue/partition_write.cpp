@@ -966,7 +966,7 @@ TPartition::ProcessResult TPartition::ProcessRequest(TWriteMsg& p, ProcessParame
                 auto range = del->MutableRange();
                 TKeyPrefix from(TKeyPrefix::TypeTmpData, Partition);
                 range->SetFrom(from.Data(), from.Size());
-                TKeyPrefix to(TKeyPrefix::TypeTmpData, Partition + 1);
+                TKeyPrefix to(TKeyPrefix::TypeTmpData, TPartitionId(Partition.InternalPartitionId + 1));
                 range->SetTo(to.Data(), to.Size());
             }
 

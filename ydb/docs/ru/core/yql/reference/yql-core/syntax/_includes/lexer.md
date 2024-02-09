@@ -169,8 +169,9 @@ SELECT $text;
 
 ### Типизированные строковые литералы {#typed-string-literals}
 
-* Для строкового литерала, включая [многострочный](#multiline-string-literals), по умолчанию используется тип `String`.
+* Для строкового литерала, включая [многострочный](#multiline-string-literals), по умолчанию используется тип `String` (см. также [PRAGMA UnicodeLiterals](../pragma.md#UnicodeLiterals)).
 * С помощью следующих суффиксов можно явно управлять типом литерала:
+    * `s` — `String`;
     * `u` — `Utf8`;
     * `y` — `Yson`;
     * `j` — `Json`.

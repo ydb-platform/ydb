@@ -68,7 +68,7 @@ TDataStatistics& operator += (TDataStatistics& lhs, const TDataStatistics& rhs)
     return lhs;
 }
 
-TDataStatistics  operator +  (const TDataStatistics& lhs, const TDataStatistics& rhs)
+TDataStatistics operator +  (const TDataStatistics& lhs, const TDataStatistics& rhs)
 {
     auto result = lhs;
     result += rhs;
@@ -93,11 +93,6 @@ bool operator == (const TDataStatistics& lhs, const TDataStatistics& rhs)
             HasInvalidUnmergedDataWeight(lhs) ||
             HasInvalidUnmergedDataWeight(rhs) ||
             lhs.unmerged_data_weight() == rhs.unmerged_data_weight());
-}
-
-bool operator != (const TDataStatistics& lhs, const TDataStatistics& rhs)
-{
-    return !(lhs == rhs);
 }
 
 void Serialize(const TDataStatistics& statistics, NYson::IYsonConsumer* consumer)

@@ -728,8 +728,8 @@ public:
                     if (intersection == 0) {
                         newShard->AddPoint(std::move(points[pointIndex]));
                         CA_LOG_D("Add point to new shardId: " << partition.ShardId);
-                    }
-                    if (intersection < 0) {
+                    } else {
+                        YQL_ENSURE(intersection > 0, "Missed intersection of point and partition ranges.");
                         break;
                     }
                     pointIndex += 1;

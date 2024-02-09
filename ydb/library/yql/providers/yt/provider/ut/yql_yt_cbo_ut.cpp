@@ -1,6 +1,7 @@
 #include <library/cpp/testing/unittest/registar.h>
 
 #include <ydb/library/yql/providers/yt/provider/yql_yt_join_impl.h>
+#include <ydb/library/yql/core/cbo/cbo_optimizer_new.h>
 
 namespace NYql {
 
@@ -68,6 +69,98 @@ Y_UNIT_TEST(OrderJoinsDoesNothingWhenCBODisabled) {
 
     optimizedTree = OrderJoins(tree, state, ctx);
     UNIT_ASSERT_VALUES_EQUAL(tree, optimizedTree);
+}
+
+Y_UNIT_TEST(BuildOptimizerTree2Tables) {
+    TExprContext exprCtx;
+    auto tree = MakeOp({"c", "c_nationkey"}, {"n", "n_nationkey"}, {"c", "n"}, exprCtx);
+    tree->Left = MakeLeaf({"c"}, {"c"},  100000, 12333, exprCtx);
+    tree->Right = MakeLeaf({"n"}, {"n"}, 1000, 1233, exprCtx);
+
+    std::shared_ptr<IBaseOptimizerNode> resultTree;
+    std::shared_ptr<IProviderContext> resultCtx;
+    BuildOptimizerJoinTree(resultTree, resultCtx, tree);
+
+    UNIT_ASSERT(resultTree->Kind == JoinNodeType);
+    auto root = std::static_pointer_cast<TJoinOptimizerNode>(resultTree);
+    UNIT_ASSERT(root->LeftArg->Kind == RelNodeType);
+    UNIT_ASSERT(root->RightArg->Kind == RelNodeType);
+
+    auto left = std::static_pointer_cast<TRelOptimizerNode>(root->LeftArg);
+    auto right = std::static_pointer_cast<TRelOptimizerNode>(root->RightArg);
+
+    UNIT_ASSERT_VALUES_EQUAL(left->Label, "c");
+    UNIT_ASSERT_VALUES_EQUAL(right->Label, "n");
+    UNIT_ASSERT_VALUES_EQUAL(left->Stats->Nrows, 100000);
+    UNIT_ASSERT_VALUES_EQUAL(right->Stats->Nrows, 1000);
+}
+
+Y_UNIT_TEST(BuildOptimizerTree2TablesComplexLabel) {
+    TExprContext exprCtx;
+    auto tree = MakeOp({"c", "c_nationkey"}, {"n", "n_nationkey"}, {"c", "n", "e"}, exprCtx);
+    tree->Left = MakeLeaf({"c"}, {"c"}, 1000000, 1233333, exprCtx);
+    tree->Right = MakeLeaf({"n"}, {"n", "e"}, 10000, 12333, exprCtx);
+
+    std::shared_ptr<IBaseOptimizerNode> resultTree;
+    std::shared_ptr<IProviderContext> resultCtx;
+    BuildOptimizerJoinTree(resultTree, resultCtx, tree);
+
+    UNIT_ASSERT(resultTree->Kind == JoinNodeType);
+    auto root = std::static_pointer_cast<TJoinOptimizerNode>(resultTree);
+    UNIT_ASSERT(root->LeftArg->Kind == RelNodeType);
+    UNIT_ASSERT(root->RightArg->Kind == RelNodeType);
+
+    auto left = std::static_pointer_cast<TRelOptimizerNode>(root->LeftArg);
+    auto right = std::static_pointer_cast<TRelOptimizerNode>(root->RightArg);
+
+    UNIT_ASSERT_VALUES_EQUAL(left->Label, "c");
+    UNIT_ASSERT_VALUES_EQUAL(right->Label, "n");
+    UNIT_ASSERT_VALUES_EQUAL(left->Stats->Nrows, 1000000);
+    UNIT_ASSERT_VALUES_EQUAL(right->Stats->Nrows, 10000);
+}
+
+Y_UNIT_TEST(BuildYtJoinTree2Tables) {
+    TExprContext exprCtx;
+    auto tree = MakeOp({"c", "c_nationkey"}, {"n", "n_nationkey"}, {"c", "n"}, exprCtx);
+    tree->Left = MakeLeaf({"c"}, {"c"},  100000, 12333, exprCtx);
+    tree->Right = MakeLeaf({"n"}, {"n"}, 1000, 1233, exprCtx);
+
+    std::shared_ptr<IBaseOptimizerNode> resultTree;
+    std::shared_ptr<IProviderContext> resultCtx;
+    BuildOptimizerJoinTree(resultTree, resultCtx, tree);
+
+    auto joinTree = BuildYtJoinTree(resultTree, exprCtx, {});
+
+    UNIT_ASSERT(AreSimilarTrees(joinTree, tree));
+}
+
+Y_UNIT_TEST(BuildYtJoinTree2TablesComplexLabel) {
+    TExprContext exprCtx;
+    auto tree = MakeOp({"c", "c_nationkey"}, {"n", "n_nationkey"}, {"c", "n", "e"}, exprCtx);
+    tree->Left = MakeLeaf({"c"}, {"c"}, 1000000, 1233333, exprCtx);
+    tree->Right = MakeLeaf({"n"}, {"n", "e"}, 10000, 12333, exprCtx);
+
+    std::shared_ptr<IBaseOptimizerNode> resultTree;
+    std::shared_ptr<IProviderContext> resultCtx;
+    BuildOptimizerJoinTree(resultTree, resultCtx, tree);
+    auto joinTree = BuildYtJoinTree(resultTree, exprCtx, {});
+
+    UNIT_ASSERT(AreSimilarTrees(joinTree, tree));
+}
+
+Y_UNIT_TEST(BuildYtJoinTree2TablesTableIn2Rels)
+{
+    TExprContext exprCtx;
+    auto tree = MakeOp({"c", "c_nationkey"}, {"n", "n_nationkey"}, {"c", "n", "c"}, exprCtx);
+    tree->Left = MakeLeaf({"c"}, {"c"}, 1000000, 1233333, exprCtx);
+    tree->Right = MakeLeaf({"n"}, {"n", "c"}, 10000, 12333, exprCtx);
+
+    std::shared_ptr<IBaseOptimizerNode> resultTree;
+    std::shared_ptr<IProviderContext> resultCtx;
+    BuildOptimizerJoinTree(resultTree, resultCtx, tree);
+    auto joinTree = BuildYtJoinTree(resultTree, exprCtx, {});
+
+    UNIT_ASSERT(AreSimilarTrees(joinTree, tree));
 }
 
 #define ADD_TEST(Name) \

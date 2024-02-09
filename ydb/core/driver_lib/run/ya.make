@@ -74,6 +74,7 @@ PEERDIR(
     ydb/core/grpc_services/auth_processor
     ydb/core/health_check
     ydb/core/http_proxy
+    ydb/core/jaeger_tracing
     ydb/core/kesus/proxy
     ydb/core/kesus/tablet
     ydb/core/keyvalue

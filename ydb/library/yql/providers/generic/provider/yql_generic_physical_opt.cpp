@@ -3,6 +3,7 @@
 
 #include <ydb/library/yql/core/expr_nodes/yql_expr_nodes.h>
 #include <ydb/library/yql/core/yql_opt_utils.h>
+#include <ydb/library/yql/dq/expr_nodes/dq_expr_nodes.h>
 #include <ydb/library/yql/providers/common/provider/yql_data_provider_impl.h>
 #include <ydb/library/yql/providers/common/provider/yql_provider.h>
 #include <ydb/library/yql/providers/common/provider/yql_provider_names.h>

@@ -513,6 +513,7 @@ void TKikimrRunner::Initialize(const TKikimrSettings& settings) {
     SetupLogLevelFromTestParam(NKikimrServices::KQP_NODE);
     SetupLogLevelFromTestParam(NKikimrServices::KQP_BLOBS_STORAGE);
     SetupLogLevelFromTestParam(NKikimrServices::TX_COLUMNSHARD);
+    SetupLogLevelFromTestParam(NKikimrServices::LOCAL_PGWIRE);
 
     RunCall([this, domain = settings.DomainRoot]{
         this->Client->InitRootScheme(domain);
@@ -1169,7 +1170,7 @@ std::vector<NJson::TJsonValue> FindPlanNodes(const NJson::TJsonValue& plan, cons
 
 std::vector<NJson::TJsonValue> FindPlanStages(const NJson::TJsonValue& plan) {
     std::vector<NJson::TJsonValue> stages;
-    FindPlanStagesImpl(plan, stages);
+    FindPlanStagesImpl(plan.GetMapSafe().at("Plan"), stages);    
     return stages;
 }
 

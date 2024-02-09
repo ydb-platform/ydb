@@ -617,9 +617,9 @@
     "test.test[csee-closure_in_l2_and_l1-default.txt-Results]": [],
     "test.test[csee-yql-7237--Analyze]": [
         {
-            "checksum": "d787b98c3b9f7cd90dc9cf0c8f9046e7",
-            "size": 11275,
-            "uri": "https://{canondata_backend}/1936273/7c78e1e45ae282daee686c006624daa21a7c6ca6/resource.tar.gz#test.test_csee-yql-7237--Analyze_/plan.txt"
+            "checksum": "e39fc78faefd6747cccd1ebaae1dde5d",
+            "size": 11473,
+            "uri": "https://{canondata_backend}/1931696/6c4a36931a6a48d4590d231802e33da9ab40cb1e/resource.tar.gz#test.test_csee-yql-7237--Analyze_/plan.txt"
         },
         {
             "uri": "file://test.test_csee-yql-7237--Analyze_/extracted"
@@ -1123,9 +1123,9 @@
     ],
     "test.test[join-mapjoin_opt_vs_2xopt-off-Analyze]": [
         {
-            "checksum": "6ad3061321e2bddfac148ebfe24ba64c",
-            "size": 11219,
-            "uri": "https://{canondata_backend}/1936273/7c78e1e45ae282daee686c006624daa21a7c6ca6/resource.tar.gz#test.test_join-mapjoin_opt_vs_2xopt-off-Analyze_/plan.txt"
+            "checksum": "35219f3cc3d8a2ee15aef4d32c59a71b",
+            "size": 11417,
+            "uri": "https://{canondata_backend}/1931696/6c4a36931a6a48d4590d231802e33da9ab40cb1e/resource.tar.gz#test.test_join-mapjoin_opt_vs_2xopt-off-Analyze_/plan.txt"
         },
         {
             "uri": "file://test.test_join-mapjoin_opt_vs_2xopt-off-Analyze_/extracted"
@@ -2100,9 +2100,9 @@
     ],
     "test.test[pg_catalog-pg_timezone_names-default.txt-Debug]": [
         {
-            "checksum": "e2533b4d21ac0d1b5ff40de375f82edb",
-            "size": 423,
-            "uri": "https://{canondata_backend}/1880306/c56e2bb8307f2239f8acf535a621c40b5a08a363/resource.tar.gz#test.test_pg_catalog-pg_timezone_names-default.txt-Debug_/opt.yql_patched"
+            "checksum": "89970ef7c0c85bbb3cc3024996d58ac3",
+            "size": 437,
+            "uri": "https://{canondata_backend}/1942525/18e16d542ee9c79a05f084ab32f39082f6b68a6b/resource.tar.gz#test.test_pg_catalog-pg_timezone_names-default.txt-Debug_/opt.yql_patched"
         }
     ],
     "test.test[pg_catalog-pg_timezone_names-default.txt-Plan]": [

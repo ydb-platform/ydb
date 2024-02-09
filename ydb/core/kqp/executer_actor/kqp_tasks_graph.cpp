@@ -52,31 +52,32 @@ std::pair<TString, TString> SerializeKqpTasksParametersForOlap(const TStageInfo&
     const NKqpProto::TKqpPhyStage& stage = stageInfo.Meta.GetStage(stageInfo.Id);
     std::vector<std::shared_ptr<arrow::Field>> columns;
     std::vector<std::shared_ptr<arrow::Array>> data;
-    auto& parameterNames = task.Meta.ReadInfo.OlapProgram.ParameterNames;
 
-    columns.reserve(parameterNames.size());
-    data.reserve(parameterNames.size());
+    if (const auto& parameterNames = task.Meta.ReadInfo.OlapProgram.ParameterNames; !parameterNames.empty()) {
+        columns.reserve(parameterNames.size());
+        data.reserve(parameterNames.size());
 
-    for (auto& name : stage.GetProgramParameters()) {
-        if (!parameterNames.contains(name)) {
-            continue;
+        for (const auto& name : stage.GetProgramParameters()) {
+            if (!parameterNames.contains(name)) {
+                continue;
+            }
+
+            const auto [type, value] = stageInfo.Meta.Tx.Params->GetParameterUnboxedValue(name);
+            YQL_ENSURE(NYql::NArrow::IsArrowCompatible(type), "Incompatible parameter type. Can't convert to arrow");
+
+            std::unique_ptr<arrow::ArrayBuilder> builder = NYql::NArrow::MakeArrowBuilder(type);
+            NYql::NArrow::AppendElement(value, builder.get(), type);
+
+            std::shared_ptr<arrow::Array> array;
+            const auto status = builder->Finish(&array);
+
+            YQL_ENSURE(status.ok(), "Failed to build arrow array of variables.");
+
+            auto field = std::make_shared<arrow::Field>(name, array->type());
+
+            columns.emplace_back(std::move(field));
+            data.emplace_back(std::move(array));
         }
-
-        auto [type, value] = stageInfo.Meta.Tx.Params->GetParameterUnboxedValue(name);
-        YQL_ENSURE(NYql::NArrow::IsArrowCompatible(type), "Incompatible parameter type. Can't convert to arrow");
-
-        std::unique_ptr<arrow::ArrayBuilder> builder = NYql::NArrow::MakeArrowBuilder(type);
-        NYql::NArrow::AppendElement(value, builder.get(), type);
-
-        std::shared_ptr<arrow::Array> array;
-        auto status = builder->Finish(&array);
-
-        YQL_ENSURE(status.ok(), "Failed to build arrow array of variables.");
-
-        auto field = std::make_shared<arrow::Field>(name, array->type());
-
-        columns.emplace_back(std::move(field));
-        data.emplace_back(std::move(array));
     }
 
     auto schema = std::make_shared<arrow::Schema>(std::move(columns));

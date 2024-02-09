@@ -154,7 +154,7 @@ void AddCheckDiskRequest(TEvKeyValue::TEvRequest *request, ui32 numChannels) {
     }
 }
 
-TPartition::TPartition(ui64 tabletId, ui32 partition, const TActorId& tablet, ui32 tabletGeneration, const TActorId& blobCache,
+TPartition::TPartition(ui64 tabletId, const TPartitionId& partition, const TActorId& tablet, ui32 tabletGeneration, const TActorId& blobCache,
                        const NPersQueue::TTopicConverterPtr& topicConverter, TString dcId, bool isServerless,
                        const NKikimrPQ::TPQTabletConfig& tabletConfig, const TTabletCountersBase& counters, bool subDomainOutOfSpace, ui32 numChannels,
                        bool newPartition,
@@ -602,7 +602,7 @@ void TPartition::Handle(TEvPQ::TEvPipeDisconnected::TPtr& ev, const TActorContex
 
 void TPartition::Handle(TEvPQ::TEvPartitionStatus::TPtr& ev, const TActorContext& ctx) {
     NKikimrPQ::TStatusResponse::TPartResult result;
-    result.SetPartition(Partition);
+    result.SetPartition(Partition.InternalPartitionId);
 
     if (DiskIsFull || WaitingForSubDomainQuota(ctx)) {
         result.SetStatus(NKikimrPQ::TStatusResponse::STATUS_DISK_IS_FULL);
@@ -757,23 +757,23 @@ void TPartition::Handle(TEvPQ::TEvPartitionStatus::TPtr& ev, const TActorContext
             }
         }
     }
-    ctx.Send(ev->Get()->Sender, new TEvPQ::TEvPartitionStatusResponse(result));
+    ctx.Send(ev->Get()->Sender, new TEvPQ::TEvPartitionStatusResponse(result, Partition));
 }
 
 void TPartition::HandleOnInit(TEvPQ::TEvPartitionStatus::TPtr& ev, const TActorContext& ctx) {
     NKikimrPQ::TStatusResponse::TPartResult result;
-    result.SetPartition(Partition);
+    result.SetPartition(Partition.InternalPartitionId);
     result.SetStatus(NKikimrPQ::TStatusResponse::STATUS_INITIALIZING);
     result.SetLastInitDurationSeconds((ctx.Now() - CreationTime).Seconds());
     result.SetCreationTimestamp(CreationTime.Seconds());
-    ctx.Send(ev->Get()->Sender, new TEvPQ::TEvPartitionStatusResponse(result));
+    ctx.Send(ev->Get()->Sender, new TEvPQ::TEvPartitionStatusResponse(result, Partition));
 }
 
 
 void TPartition::Handle(TEvPQ::TEvGetPartitionClientInfo::TPtr& ev, const TActorContext& ctx) {
     THolder<TEvPersQueue::TEvPartitionClientInfoResponse> response = MakeHolder<TEvPersQueue::TEvPartitionClientInfoResponse>();
     NKikimrPQ::TClientInfoResponse& result(response->Record);
-    result.SetPartition(Partition);
+    result.SetPartition(Partition.InternalPartitionId);
     result.SetStartOffset(StartOffset);
     result.SetEndOffset(EndOffset);
     result.SetResponseTimestamp(ctx.Now().MilliSeconds());
@@ -1547,7 +1547,7 @@ bool TPartition::ProcessUserActionOrTransaction(TTransaction& t,
     } else if (t.ProposeConfig) {
         t.Predicate = BeginTransaction(*t.ProposeConfig);
 
-        PendingPartitionConfig = GetPartitionConfig(t.ProposeConfig->Config, Partition);
+        PendingPartitionConfig = GetPartitionConfig(t.ProposeConfig->Config);
         //Y_VERIFY_DEBUG_S(PendingPartitionConfig, "Partition " << Partition << " config not found");
 
         ctx.Send(Tablet,
@@ -1560,7 +1560,7 @@ bool TPartition::ProcessUserActionOrTransaction(TTransaction& t,
         Y_ABORT_UNLESS(!ChangeConfig);
 
         ChangeConfig = t.ChangeConfig;
-        PendingPartitionConfig = GetPartitionConfig(ChangeConfig->Config, Partition);
+        PendingPartitionConfig = GetPartitionConfig(ChangeConfig->Config);
         SendChangeConfigReply = t.SendReply;
         BeginChangePartitionConfig(ChangeConfig->Config, ctx);
 
@@ -1640,7 +1640,7 @@ bool TPartition::BeginTransaction(const TEvPQ::TEvProposePartitionConfig& event)
     ChangeConfig =
         MakeSimpleShared<TEvPQ::TEvChangePartitionConfig>(TopicConverter,
                                                           event.Config);
-    PendingPartitionConfig = GetPartitionConfig(ChangeConfig->Config, Partition);
+    PendingPartitionConfig = GetPartitionConfig(ChangeConfig->Config);
 
     SendChangeConfigReply = false;
     return true;
@@ -1846,7 +1846,7 @@ void TPartition::EndChangePartitionConfig(const NKikimrPQ::TPQTabletConfig& conf
                                           const TActorContext& ctx)
 {
     Config = config;
-    PartitionConfig = GetPartitionConfig(Config, Partition);
+    PartitionConfig = GetPartitionConfig(Config);
     PartitionGraph = MakePartitionGraph(Config);
     TopicConverter = topicConverter;
     NewPartition = false;
@@ -1880,7 +1880,7 @@ void TPartition::EndChangePartitionConfig(const NKikimrPQ::TPQTabletConfig& conf
 
 TString TPartition::GetKeyConfig() const
 {
-    return Sprintf("_config_%u", Partition);
+    return Sprintf("_config_%u", Partition.OriginalPartitionId);
 }
 
 void TPartition::ChangePlanStepAndTxId(ui64 step, ui64 txId)
@@ -2552,7 +2552,7 @@ size_t TPartition::GetQuotaRequestSize(const TEvKeyValue::TEvRequest& request) {
 
 void TPartition::CreateMirrorerActor() {
     Mirrorer = MakeHolder<TMirrorerInfo>(
-        Register(new TMirrorer(Tablet, SelfId(), TopicConverter, Partition, IsLocalDC,  EndOffset, Config.GetPartitionConfig().GetMirrorFrom(), TabletCounters)),
+        Register(new TMirrorer(Tablet, SelfId(), TopicConverter, Partition.InternalPartitionId, IsLocalDC,  EndOffset, Config.GetPartitionConfig().GetMirrorFrom(), TabletCounters)),
         TabletCounters
     );
 }
@@ -2597,7 +2597,7 @@ void TPartition::Handle(TEvPQ::TEvSubDomainStatus::TPtr& ev, const TActorContext
 void TPartition::Handle(TEvPQ::TEvCheckPartitionStatusRequest::TPtr& ev, const TActorContext& ctx) {
     auto& record = ev->Get()->Record;
 
-    if (Partition != record.GetPartition()) {
+    if (Partition.InternalPartitionId != record.GetPartition()) {
         LOG_INFO_S(
             ctx, NKikimrServices::PERSQUEUE,
             "TEvCheckPartitionStatusRequest for wrong partition " << record.GetPartition() << "." <<
@@ -2618,6 +2618,11 @@ void TPartition::Handle(TEvPQ::TEvCheckPartitionStatusRequest::TPtr& ev, const T
     }
 
     Send(ev->Sender, response.Release());
+}
+
+const NKikimrPQ::TPQTabletConfig::TPartition* TPartition::GetPartitionConfig(const NKikimrPQ::TPQTabletConfig& config)
+{
+    return NPQ::GetPartitionConfig(config, Partition.OriginalPartitionId);
 }
 
 } // namespace NKikimr::NPQ

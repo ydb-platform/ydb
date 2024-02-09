@@ -19,7 +19,6 @@ PEERDIR(
     ydb/library/actors/core
     ydb/library/yql/core/expr_nodes
     ydb/public/api/protos
-    ydb/services/metadata/request
 )
 
 END()

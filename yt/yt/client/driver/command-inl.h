@@ -426,6 +426,13 @@ void TSelectRowsCommandBase<
             return command->Options.MergeVersionedRows;
         })
         .Optional(/*init*/ false);
+
+    registrar.template ParameterWithUniversalAccessor<int>(
+        "syntax_version",
+        [] (TThis* command) -> auto& {
+            return command->Options.SyntaxVersion;
+        })
+        .Optional(/*init*/ false);
 }
 
 ////////////////////////////////////////////////////////////////////////////////

@@ -1251,9 +1251,9 @@
     "test.test[join-mapjoin_on_complex_type_optional_left_semi_single--Results]": [],
     "test.test[join-mapjoin_opt_vs_2xopt--Analyze]": [
         {
-            "checksum": "6ad3061321e2bddfac148ebfe24ba64c",
-            "size": 11219,
-            "uri": "https://{canondata_backend}/1936997/93899b3de50fae3f9677baacc98094a7a629590a/resource.tar.gz#test.test_join-mapjoin_opt_vs_2xopt--Analyze_/plan.txt"
+            "checksum": "35219f3cc3d8a2ee15aef4d32c59a71b",
+            "size": 11417,
+            "uri": "https://{canondata_backend}/1903885/020891901aa63873d865b7d859cce18f09b6b3c3/resource.tar.gz#test.test_join-mapjoin_opt_vs_2xopt--Analyze_/plan.txt"
         },
         {
             "uri": "file://test.test_join-mapjoin_opt_vs_2xopt--Analyze_/extracted"

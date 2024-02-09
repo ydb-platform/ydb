@@ -100,6 +100,11 @@ bool TSqlQuery::Statement(TVector<TNodePtr>& blocks, const TRule_sql_stmt_core& 
             break;
         }
         case TRule_sql_stmt_core::kAltSqlStmtCore2: {
+            if (Ctx.ParallelModeCount > 0) {
+                Error() << humanStatementName << " statement is not supported in parallel mode";
+                return false;
+            }
+
             Ctx.BodyPart();
             TSqlSelect select(Ctx, Mode);
             TPosition pos;
@@ -166,10 +171,14 @@ bool TSqlQuery::Statement(TVector<TNodePtr>& blocks, const TRule_sql_stmt_core& 
 
             const auto& block = rule.GetBlock3();
             ETableType tableType = ETableType::Table;
+            bool temporary = false;
             if (block.HasAlt2() && block.GetAlt2().GetToken1().GetId() == SQLv1LexerTokens::TOKEN_TABLESTORE) {
                 tableType = ETableType::TableStore;
             } else if (block.HasAlt3() && block.GetAlt3().GetToken1().GetId() == SQLv1LexerTokens::TOKEN_EXTERNAL) {
                 tableType = ETableType::ExternalTable;
+            } else if (block.HasAlt4() && block.GetAlt4().GetToken1().GetId() == SQLv1LexerTokens::TOKEN_TEMP ||
+                    block.HasAlt5() && block.GetAlt5().GetToken1().GetId() == SQLv1LexerTokens::TOKEN_TEMPORARY) {
+                temporary = true;
             }
 
             bool existingOk = false;
@@ -193,7 +202,7 @@ bool TSqlQuery::Statement(TVector<TNodePtr>& blocks, const TRule_sql_stmt_core& 
                 return false;
             }
 
-            TCreateTableParameters params{.TableType=tableType};
+            TCreateTableParameters params{.TableType=tableType, .Temporary=temporary};
             if (!CreateTableEntry(rule.GetRule_create_table_entry7(), params)) {
                 return false;
             }
@@ -425,6 +434,11 @@ bool TSqlQuery::Statement(TVector<TNodePtr>& blocks, const TRule_sql_stmt_core& 
             break;
         }
         case TRule_sql_stmt_core::kAltSqlStmtCore21: {
+            if (Ctx.ParallelModeCount > 0) {
+                Error() << humanStatementName << " statement is not supported in parallel mode";
+                return false;
+            }
+
             Ctx.BodyPart();
             TSqlValues values(Ctx, Mode);
             TPosition pos;
@@ -1620,7 +1634,16 @@ TNodePtr TSqlQuery::PragmaStatement(const TRule_pragma_stmt& stmt, bool& success
     }
 
     const bool withConfigure = prefix || normalizedPragma == "file" || normalizedPragma == "folder" || normalizedPragma == "udf";
-    static const THashSet<TStringBuf> lexicalScopePragmas = {"classicdivision", "strictjoinkeytypes", "disablestrictjoinkeytypes", "checkedops"};
+    static const THashSet<TStringBuf> lexicalScopePragmas = {
+        "classicdivision",
+        "strictjoinkeytypes",
+        "disablestrictjoinkeytypes",
+        "checkedops",
+        "unicodeliterals",
+        "disableunicodeliterals",
+        "warnuntypedstringliterals",
+        "disablewarnuntypedstringliterals",
+    };
     const bool hasLexicalScope = withConfigure || lexicalScopePragmas.contains(normalizedPragma);
     const bool withFileAlias = normalizedPragma == "file" || normalizedPragma == "folder" || normalizedPragma == "library" || normalizedPragma == "udf";
     for (auto pragmaValue : pragmaValues) {
@@ -2190,6 +2213,18 @@ TNodePtr TSqlQuery::PragmaStatement(const TRule_pragma_stmt& stmt, bool& success
         } else if (normalizedPragma == "disablestrictjoinkeytypes") {
             Ctx.Scoped->StrictJoinKeyTypes = false;
             Ctx.IncrementMonCounter("sql_pragma", "DisableStrictJoinKeyTypes");
+        } else if (normalizedPragma == "unicodeliterals") {
+            Ctx.Scoped->UnicodeLiterals = true;
+            Ctx.IncrementMonCounter("sql_pragma", "UnicodeLiterals");
+        } else if (normalizedPragma == "disableunicodeliterals") {
+            Ctx.Scoped->UnicodeLiterals = false;
+            Ctx.IncrementMonCounter("sql_pragma", "DisableUnicodeLiterals");
+        } else if (normalizedPragma == "warnuntypedstringliterals") {
+            Ctx.Scoped->WarnUntypedStringLiterals = true;
+            Ctx.IncrementMonCounter("sql_pragma", "WarnUntypedStringLiterals");
+        } else if (normalizedPragma == "disablewarnuntypedstringliterals") {
+            Ctx.Scoped->WarnUntypedStringLiterals = false;
+            Ctx.IncrementMonCounter("sql_pragma", "DisableWarnUntypedStringLiterals");
         } else if (normalizedPragma == "unorderedsubqueries") {
             Ctx.UnorderedSubqueries = true;
             Ctx.IncrementMonCounter("sql_pragma", "UnorderedSubqueries");

@@ -2,7 +2,7 @@
 #include "datashard_impl.h"
 #include "datashard_user_db.h"
 #include "datashard__engine_host.h"
-#include "sys_tables.h"
+#include <ydb/core/tx/locks/sys_tables.h>
 
 #include <ydb/core/engine/minikql/minikql_engine_host.h>
 #include <ydb/core/kqp/rm_service/kqp_rm_service.h>
@@ -276,7 +276,7 @@ public:
         return UserDb.GetChangeCollector(tableId);
     }
 
-    void CommitChanges(const TTableId& tableId, ui64 lockId, const TRowVersion& writeVersion) {
+    void CommitChanges(const TTableId& tableId, ui64 lockId, const TRowVersion& writeVersion) override {
         UserDb.CommitChanges(tableId, lockId, writeVersion);
     }
 
@@ -605,13 +605,6 @@ void TEngineBay::SetIsRepeatableSnapshot() {
 
     auto* host = static_cast<TDataShardEngineHost*>(EngineHost.Get());
     host->SetIsRepeatableSnapshot();
-}
-
-void TEngineBay::CommitChanges(const TTableId& tableId, ui64 lockId, const TRowVersion& writeVersion) {
-    Y_ABORT_UNLESS(EngineHost);
-
-    auto* host = static_cast<TDataShardEngineHost*>(EngineHost.Get());
-    host->CommitChanges(tableId, lockId, writeVersion);
 }
 
 TVector<IDataShardChangeCollector::TChange> TEngineBay::GetCollectedChanges() const {

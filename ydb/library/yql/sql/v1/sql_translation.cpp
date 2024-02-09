@@ -4196,34 +4196,43 @@ TNodePtr TSqlTranslation::IfStatement(const TRule_if_stmt& stmt) {
 
 TNodePtr TSqlTranslation::ForStatement(const TRule_for_stmt& stmt) {
     bool isEvaluate = stmt.HasBlock1();
+    bool isParallel = stmt.HasBlock2();
     TSqlExpression expr(Ctx, Mode);
     TString itemArgName;
-    if (!NamedNodeImpl(stmt.GetRule_bind_parameter3(), itemArgName, *this)) {
+    if (!NamedNodeImpl(stmt.GetRule_bind_parameter4(), itemArgName, *this)) {
         return {};
     }
     TPosition itemArgNamePos = Ctx.Pos();
 
-    auto exprNode = expr.Build(stmt.GetRule_expr5());
+    auto exprNode = expr.Build(stmt.GetRule_expr6());
     if (!exprNode) {
         return{};
     }
 
     itemArgName = PushNamedAtom(itemArgNamePos, itemArgName);
-    auto bodyNode = DoStatement(stmt.GetRule_do_stmt6(), true, { itemArgName });
+    if (isParallel) {
+        ++Ctx.ParallelModeCount;
+    }
+
+    auto bodyNode = DoStatement(stmt.GetRule_do_stmt7(), true, { itemArgName });
+    if (isParallel) {
+        --Ctx.ParallelModeCount;
+    }
+    
     PopNamedNode(itemArgName);
     if (!bodyNode) {
         return{};
     }
 
     TNodePtr elseNode;
-    if (stmt.HasBlock7()) {
-        elseNode = DoStatement(stmt.GetBlock7().GetRule_do_stmt2(), true);
+    if (stmt.HasBlock8()) {
+        elseNode = DoStatement(stmt.GetBlock8().GetRule_do_stmt2(), true);
         if (!elseNode) {
             return{};
         }
     }
 
-    return BuildWorldForNode(Ctx.Pos(), exprNode, bodyNode, elseNode, isEvaluate);
+    return BuildWorldForNode(Ctx.Pos(), exprNode, bodyNode, elseNode, isEvaluate, isParallel);
 }
 
 bool TSqlTranslation::BindParameterClause(const TRule_bind_parameter& node, TDeferredAtom& result) {

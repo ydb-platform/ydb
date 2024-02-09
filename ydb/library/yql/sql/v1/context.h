@@ -50,6 +50,8 @@ namespace NSQLTranslationV1 {
         bool PragmaClassicDivision = true;
         bool PragmaCheckedOps = false;
         bool StrictJoinKeyTypes = false;
+        bool UnicodeLiterals = false;
+        bool WarnUntypedStringLiterals = false;
         TNamedNodesMap NamedNodes;
 
         struct TLocal {
@@ -303,13 +305,14 @@ namespace NSQLTranslationV1 {
         NYql::TWarningPolicy WarningPolicy;
         TString PqReadByRtmrCluster;
         bool EmitStartsWith = true;
-        bool EmitAggApply = false;
+        TMaybe<bool> EmitAggApply;
         bool UseBlocks = false;
         bool AnsiLike = false;
         bool FeatureR010 = false; //Row pattern recognition: FROM clause
         TMaybe<bool> CompactGroupBy;
         bool BlockEngineEnable = false;
         bool BlockEngineForce = false;
+        ui64 ParallelModeCount = 0;
     };
 
     class TColumnRefScope {

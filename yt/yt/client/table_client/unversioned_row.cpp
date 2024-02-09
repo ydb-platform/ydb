@@ -439,11 +439,6 @@ bool operator == (const TUnversionedValue& lhs, const TUnversionedValue& rhs)
     return CompareRowValues(lhs, rhs) == 0;
 }
 
-bool operator != (const TUnversionedValue& lhs, const TUnversionedValue& rhs)
-{
-    return CompareRowValues(lhs, rhs) != 0;
-}
-
 bool operator <= (const TUnversionedValue& lhs, const TUnversionedValue& rhs)
 {
     return CompareRowValues(lhs, rhs) <= 0;
@@ -503,11 +498,6 @@ bool operator == (TUnversionedRow lhs, TUnversionedRow rhs)
     return CompareRows(lhs, rhs) == 0;
 }
 
-bool operator != (TUnversionedRow lhs, TUnversionedRow rhs)
-{
-    return CompareRows(lhs, rhs) != 0;
-}
-
 bool operator <= (TUnversionedRow lhs, TUnversionedRow rhs)
 {
     return CompareRows(lhs, rhs) <= 0;
@@ -533,11 +523,6 @@ bool operator > (TUnversionedRow lhs, TUnversionedRow rhs)
 bool operator == (TUnversionedRow lhs, const TUnversionedOwningRow& rhs)
 {
     return CompareRows(lhs, rhs) == 0;
-}
-
-bool operator != (TUnversionedRow lhs, const TUnversionedOwningRow& rhs)
-{
-    return CompareRows(lhs, rhs) != 0;
 }
 
 bool operator <= (TUnversionedRow lhs, const TUnversionedOwningRow& rhs)

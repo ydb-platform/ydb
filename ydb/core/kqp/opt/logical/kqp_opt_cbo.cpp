@@ -90,9 +90,12 @@ bool IsLookupJoinApplicableDetailed(const std::shared_ptr<NYql::TRelOptimizerNod
 bool IsLookupJoinApplicable(std::shared_ptr<IBaseOptimizerNode> left, 
     std::shared_ptr<IBaseOptimizerNode> right, 
     const std::set<std::pair<TJoinColumn, TJoinColumn>>& joinConditions,
+    const TVector<TString>& leftJoinKeys,
+    const TVector<TString>& rightJoinKeys,
     TKqpProviderContext& ctx) {
 
     Y_UNUSED(left);
+    Y_UNUSED(leftJoinKeys);
 
     auto rightStats = right->Stats;
 
@@ -104,20 +107,17 @@ bool IsLookupJoinApplicable(std::shared_ptr<IBaseOptimizerNode> left,
     }
 
     for (auto [leftCol, rightCol] : joinConditions) {
+        // Fix for clang14, somehow structured binding does not create a variable in clang14
+        auto r = rightCol;
         if (! find_if(rightStats->KeyColumns.begin(), rightStats->KeyColumns.end(), 
-            [rightCol] (const TString& s) {
-            return rightCol.AttributeName == s;
+            [r] (const TString& s) {
+            return r.AttributeName == s;
         } )) {
             return false;
         }
     }
 
-    TVector<TString> joinKeys;
-    for( auto [leftJc, rightJc] : joinConditions ) {
-        joinKeys.emplace_back( rightJc.AttributeName);
-    }
-
-    return IsLookupJoinApplicableDetailed(std::static_pointer_cast<TRelOptimizerNode>(right), joinKeys, ctx);
+    return IsLookupJoinApplicableDetailed(std::static_pointer_cast<TRelOptimizerNode>(right), rightJoinKeys, ctx);
 }
 
 }
@@ -125,6 +125,8 @@ bool IsLookupJoinApplicable(std::shared_ptr<IBaseOptimizerNode> left,
 bool TKqpProviderContext::IsJoinApplicable(const std::shared_ptr<IBaseOptimizerNode>& left, 
     const std::shared_ptr<IBaseOptimizerNode>& right, 
     const std::set<std::pair<NDq::TJoinColumn, NDq::TJoinColumn>>& joinConditions,
+    const TVector<TString>& leftJoinKeys,
+    const TVector<TString>& rightJoinKeys,
     EJoinAlgoType joinAlgo)  {
 
     switch( joinAlgo ) {
@@ -132,7 +134,7 @@ bool TKqpProviderContext::IsJoinApplicable(const std::shared_ptr<IBaseOptimizerN
             if (OptLevel==2 && left->Stats->Nrows > 10e3) {
                 return false;
             }
-            return IsLookupJoinApplicable(left, right, joinConditions, *this);
+            return IsLookupJoinApplicable(left, right, joinConditions, leftJoinKeys, rightJoinKeys, *this);
 
         case EJoinAlgoType::DictJoin:
             return right->Stats->Nrows < 10e5;

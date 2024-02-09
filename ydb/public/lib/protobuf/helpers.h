@@ -58,7 +58,7 @@ public:
 
 private:
     IPrinter& Printer;
-    TString PluginName;
+    const TString PluginName;
 };
 
 } // namespace NKikimr::NProtobuf

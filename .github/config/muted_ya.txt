@@ -25,7 +25,6 @@ ydb/core/kqp/ut/scheme KqpScheme.QueryWithAlter
 ydb/core/kqp/ut/scheme [44/50]*
 ydb/core/kqp/ut/service KqpQueryService.ExecuteQueryPgTableSelect
 ydb/core/kqp/ut/service KqpQueryService.QueryOnClosedSession
-ydb/core/kqp/ut/service KqpQueryServiceScripts.ForgetScriptExecutionRace
 ydb/core/kqp/ut/service KqpService.CloseSessionsWithLoad
 ydb/core/kqp/ut/service [38/50]*
 ydb/core/tx/columnshard/ut_schema TColumnShardTestSchema.ForgetAfterFail

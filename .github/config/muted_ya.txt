@@ -2,6 +2,7 @@ ydb/core/blobstorage/dsproxy/ut TBlobStorageProxySequenceTest.TestBlock42PutWith
 ydb/core/blobstorage/dsproxy/ut_fat TBlobStorageProxyTest.TestBatchedPutRequestDoesNotContainAHugeBlob
 ydb/core/blobstorage/ut_blobstorage CostMetricsGetBlock4Plus2.TestGet4Plus2BlockRequests10000Inflight1BlobSize1000
 ydb/core/blobstorage/ut_blobstorage CostMetricsPatchMirror3dc.*
+ydb/core/blobstorage/ut_blobstorage BurstDetection.*
 ydb/core/client/ut TClientTest.PromoteFollower
 ydb/core/client/ut TClientTest.ReadFromFollower
 ydb/core/client/ut TFlatTest.AutoSplitMergeQueue

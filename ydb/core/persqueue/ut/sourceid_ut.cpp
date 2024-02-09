@@ -23,7 +23,7 @@ Y_UNIT_TEST_SUITE(TSourceIdTests) {
         TSourceIdWriter writer(ESourceIdFormat::Raw);
 
         const auto sourceId = TestSourceId(1);
-        const auto sourceIdInfo = TSourceIdInfo(1, 10, TInstant::Seconds(100));
+        const auto sourceIdInfo = TSourceIdInfo(1, 0, 10, TInstant::Seconds(100));
 
         writer.RegisterSourceId(sourceId, sourceIdInfo);
         UNIT_ASSERT_VALUES_EQUAL(writer.GetSourceIdsToWrite().size(), 1);
@@ -35,7 +35,7 @@ Y_UNIT_TEST_SUITE(TSourceIdTests) {
         }
 
         const auto anotherSourceId = TestSourceId(2);
-        const auto anotherSourceIdInfo = TSourceIdInfo(2, 20, TInstant::Seconds(200));
+        const auto anotherSourceIdInfo = TSourceIdInfo(2, 0, 20, TInstant::Seconds(200));
         UNIT_ASSERT_VALUES_UNEQUAL(sourceIdInfo, anotherSourceIdInfo);
 
         {
@@ -47,7 +47,7 @@ Y_UNIT_TEST_SUITE(TSourceIdTests) {
     Y_UNIT_TEST(SourceIdWriterClean) {
         TSourceIdWriter writer(ESourceIdFormat::Raw);
 
-        writer.RegisterSourceId(TestSourceId(), 1, 10, TInstant::Seconds(100));
+        writer.RegisterSourceId(TestSourceId(), 1, 0, 10, TInstant::Seconds(100));
         UNIT_ASSERT_VALUES_EQUAL(writer.GetSourceIdsToWrite().size(), 1);
 
         writer.Clear();
@@ -60,7 +60,7 @@ Y_UNIT_TEST_SUITE(TSourceIdTests) {
         auto expectedRequest = MakeHolder<TEvKeyValue::TEvRequest>();
 
         const auto sourceId = TestSourceId(1);
-        const auto sourceIdInfo = TSourceIdInfo(1, 10, TInstant::Seconds(100));
+        const auto sourceIdInfo = TSourceIdInfo(1, 1, 10, TInstant::Seconds(100));
         writer.RegisterSourceId(sourceId, sourceIdInfo);
         UNIT_ASSERT_VALUES_EQUAL(writer.GetSourceIdsToWrite().size(), 1);
         {
@@ -78,7 +78,7 @@ Y_UNIT_TEST_SUITE(TSourceIdTests) {
         }
 
         const auto anotherSourceId = TestSourceId(2);
-        const auto anotherSourceIdInfo = TSourceIdInfo(2, 20, TInstant::Seconds(200));
+        const auto anotherSourceIdInfo = TSourceIdInfo(2, 0, 20, TInstant::Seconds(200));
         writer.RegisterSourceId(anotherSourceId, anotherSourceIdInfo);
         UNIT_ASSERT_VALUES_EQUAL(writer.GetSourceIdsToWrite().size(), 2);
         {
@@ -102,9 +102,9 @@ Y_UNIT_TEST_SUITE(TSourceIdTests) {
         TSourceIdStorage storage;
 
         const auto sourceId = TestSourceId(1);
-        const auto sourceIdInfo = TSourceIdInfo(1, 10, TInstant::Seconds(100));
+        const auto sourceIdInfo = TSourceIdInfo(1, 0, 10, TInstant::Seconds(100));
         const auto anotherSourceId = TestSourceId(2);
-        const auto anotherSourceIdInfo = TSourceIdInfo(2, 20, TInstant::Seconds(200));
+        const auto anotherSourceIdInfo = TSourceIdInfo(2, 0, 20, TInstant::Seconds(200));
 
         storage.RegisterSourceId(sourceId, sourceIdInfo);
         UNIT_ASSERT_VALUES_EQUAL(storage.GetInMemorySourceIds().size(), 1);
@@ -130,7 +130,7 @@ Y_UNIT_TEST_SUITE(TSourceIdTests) {
 
     void SourceIdStorageParseAndAdd(TKeyPrefix::EMark mark, ESourceIdFormat format) {
         const auto sourceId = TestSourceId();
-        const auto sourceIdInfo = TSourceIdInfo(1, 10, TInstant::Seconds(100));
+        const auto sourceIdInfo = TSourceIdInfo(1, 1, 10, TInstant::Seconds(100));
 
         TKeyPrefix ikey(TKeyPrefix::TypeInfo, TPartitionId(TestPartition), mark);
         TBuffer idata;
@@ -162,20 +162,20 @@ Y_UNIT_TEST_SUITE(TSourceIdTests) {
         TSourceIdStorage storage;
 
         const auto sourceId = TestSourceId(1);
-        storage.RegisterSourceId(sourceId, 1, 10, TInstant::Seconds(100));
+        storage.RegisterSourceId(sourceId, 1, 0, 10, TInstant::Seconds(100));
         {
             auto ds = storage.MinAvailableTimestamp(now);
             UNIT_ASSERT_VALUES_EQUAL(ds, TInstant::Seconds(100));
         }
 
         const auto anotherSourceId = TestSourceId(2);
-        storage.RegisterSourceId(anotherSourceId, 2, 20, TInstant::Seconds(200));
+        storage.RegisterSourceId(anotherSourceId, 2, 0, 20, TInstant::Seconds(200));
         {
             auto ds = storage.MinAvailableTimestamp(now);
             UNIT_ASSERT_VALUES_EQUAL(ds, TInstant::Seconds(100));
         }
 
-        storage.RegisterSourceId(sourceId, 3, 30, TInstant::Seconds(300));
+        storage.RegisterSourceId(sourceId, 3, 0, 30, TInstant::Seconds(300));
         {
             auto ds = storage.MinAvailableTimestamp(now);
             UNIT_ASSERT_VALUES_EQUAL(ds, TInstant::Seconds(200));
@@ -185,7 +185,7 @@ Y_UNIT_TEST_SUITE(TSourceIdTests) {
     Y_UNIT_TEST(SourceIdStorageTestClean) {
         TSourceIdStorage storage;
         for (ui64 i = 1; i <= 10000; ++i) {
-            storage.RegisterSourceId(TestSourceId(i), i, i, TInstant::Seconds(10 * i));
+            storage.RegisterSourceId(TestSourceId(i), i, 0, i, TInstant::Seconds(10 * i));
         }
 
         NKikimrPQ::TPartitionConfig config;
@@ -226,7 +226,7 @@ Y_UNIT_TEST_SUITE(TSourceIdTests) {
     Y_UNIT_TEST(SourceIdStorageDeleteByMaxCount) {
         TSourceIdStorage storage;
         for (ui64 i = 1; i <= 10000; ++i) {
-            storage.RegisterSourceId(TestSourceId(i), i, i, TInstant::Seconds(10 * i));
+            storage.RegisterSourceId(TestSourceId(i), i, 0, i, TInstant::Seconds(10 * i));
         }
 
         NKikimrPQ::TPartitionConfig config;
@@ -258,7 +258,7 @@ Y_UNIT_TEST_SUITE(TSourceIdTests) {
     Y_UNIT_TEST(SourceIdStorageComplexDelete) {
         TSourceIdStorage storage;
         for (ui64 i = 1; i <= 10000 + 1; ++i) { // add 10000 + one extra sources
-            storage.RegisterSourceId(TestSourceId(i), i, i, TInstant::Seconds(10 * i));
+            storage.RegisterSourceId(TestSourceId(i), i, 1, i , TInstant::Seconds(10 * i));
         }
 
         NKikimrPQ::TPartitionConfig config;
@@ -297,7 +297,7 @@ Y_UNIT_TEST_SUITE(TSourceIdTests) {
             const auto sourceId = TestSourceId(i);
             const auto owner = TestOwner(sourceId);
 
-            storage.RegisterSourceId(sourceId, i, i, TInstant::Hours(i));
+            storage.RegisterSourceId(sourceId, i, 0, i, TInstant::Hours(i));
             storage.RegisterSourceIdOwner(sourceId, owner);
             owners[owner];
         }
@@ -324,7 +324,7 @@ Y_UNIT_TEST_SUITE(TSourceIdTests) {
     }
 
     inline static TSourceIdInfo MakeExplicitSourceIdInfo(ui64 offset, const TMaybe<THeartbeat>& heartbeat = Nothing()) {
-        auto info = TSourceIdInfo(0, offset, TInstant::Now());
+        auto info = TSourceIdInfo(0, 0, offset, TInstant::Now());
 
         info.Explicit = true;
         if (heartbeat) {
@@ -457,6 +457,38 @@ Y_UNIT_TEST_SUITE(TSourceIdTests) {
 
             emitter.Process(TestSourceId(2), MakeHeartbeat(4));
             UNIT_ASSERT(!emitter.CanEmit().Defined());
+        }
+    }
+
+    Y_UNIT_TEST(SourceIdMinSeqNo) {
+        TSourceIdStorage storage;
+
+        const auto sourceId = TestSourceId(1);
+        const auto sourceIdInfo = TSourceIdInfo(1, 0, 10, TInstant::Seconds(100));
+        const auto anotherSourceId = TestSourceId(2);
+        const auto anotherSourceIdInfo = TSourceIdInfo(2, 1, 20, TInstant::Seconds(200));
+
+        storage.RegisterSourceId(sourceId, sourceIdInfo);
+        storage.RegisterSourceId(anotherSourceId, anotherSourceIdInfo);
+        {
+            auto it = storage.GetInMemorySourceIds().find(anotherSourceId);
+            UNIT_ASSERT_VALUES_EQUAL(it->second.MinSeqNo, 1);
+        }
+
+        storage.RegisterSourceId(sourceId, sourceIdInfo.Updated(2, 11, TInstant::Seconds(100)));
+        {
+            auto it = storage.GetInMemorySourceIds().find(sourceId);
+            UNIT_ASSERT_VALUES_EQUAL(it->second.MinSeqNo, 2);
+        }
+        storage.RegisterSourceId(sourceId, sourceIdInfo.Updated(1, 12, TInstant::Seconds(100)));
+        {
+            auto it = storage.GetInMemorySourceIds().find(sourceId);
+            UNIT_ASSERT_VALUES_EQUAL(it->second.MinSeqNo, 1);
+        }
+        storage.RegisterSourceId(anotherSourceId, anotherSourceIdInfo.Updated(3, 12, TInstant::Seconds(100)));
+        {
+            auto it = storage.GetInMemorySourceIds().find(anotherSourceId);
+            UNIT_ASSERT_VALUES_EQUAL(it->second.MinSeqNo, 1);
         }
     }
 

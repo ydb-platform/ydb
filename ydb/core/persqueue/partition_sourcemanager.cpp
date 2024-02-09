@@ -60,7 +60,7 @@ bool TPartitionSourceManager::HasParents() const {
 
 TPartitionSourceManager::TModificationBatch::TModificationBatch(TPartitionSourceManager& manager, ESourceIdFormat format)
     : Manager(manager)
-    , Node(Manager.GetPartitionNode()) 
+    , Node(Manager.GetPartitionNode())
     , SourceIdWriter(format)
     , HeartbeatEmitter(Manager.Partition.SourceIdStorage) {
 }
@@ -104,6 +104,7 @@ TPartitionSourceManager& TPartitionSourceManager::TModificationBatch::GetManager
 TPartitionSourceManager::TSourceInfo Convert(TSourceIdInfo value) {
     TPartitionSourceManager::TSourceInfo result(value.State);
     result.SeqNo = value.SeqNo;
+    result.MinSeqNo = value.MinSeqNo;
     result.Offset = value.Offset;
     result.Explicit = value.Explicit;
     result.WriteTimestamp = value.WriteTimestamp;
@@ -147,7 +148,7 @@ std::optional<ui64> TPartitionSourceManager::TSourceManager::UpdatedSeqNo() cons
 
 void TPartitionSourceManager::TSourceManager::Update(ui64 seqNo, ui64 offset, TInstant timestamp) {
     if (InMemory == MemoryStorage().end()) {
-        Batch.SourceIdWriter.RegisterSourceId(SourceId, seqNo, offset, timestamp);
+        Batch.SourceIdWriter.RegisterSourceId(SourceId, seqNo, seqNo, offset, timestamp);
     } else {
         Batch.SourceIdWriter.RegisterSourceId(SourceId, InMemory->second.Updated(seqNo, offset, timestamp));
     }

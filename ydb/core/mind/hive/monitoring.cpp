@@ -1408,7 +1408,7 @@ public:
         out << ".blinking { animation:blinkingText 0.8s infinite; }";
         out << "@keyframes blinkingText { 0% { color: #000; } 49% { color: #000; } 60% { color: transparent; } 99% { color:transparent; } 100% { color: #000; } }";
         out <<  ".box { border: 1px solid grey; border-radius: 5px; padding-left: 2px; padding-right: 2px; display: inline-block; font: 11px Arial; cursor: pointer }";
-        out << ".disabled { text-decoration: line-through; }";
+        out << ".box-disabled { text-decoration: line-through; }";
         out << "</style>";
         out << "</head>";
         out << "<body>";
@@ -2246,7 +2246,7 @@ public:
             if (MaxCount > 0) {
                 str << "<span class='box' ";
             } else {
-                str << "<span class='box disabled' ";
+                str << "<span class='box box-disabled' ";
             }
             if (totalCount > MaxCount) {
                 str << " style='color: red' ";
@@ -2267,10 +2267,23 @@ public:
 
     void RenderJSONPage(IOutputStream &out) {
         ui64 nodes = 0;
-        ui64 tablets = Self->Tablets.size();
+        ui64 tablets = 0;
         ui64 runningTablets = 0;
         ui64 aliveNodes = 0;
         THashMap<ui32, TVector<TTabletsRunningInfo>> tabletsByNodeByType;
+
+        for (const auto& pr : Self->Tablets) {
+            ++tablets;
+            if (pr.second.IsRunning()) {
+                ++runningTablets;
+            }
+            for (const auto& follower : pr.second.Followers) {
+                ++tablets;
+                if (follower.IsRunning()) {
+                    ++runningTablets;
+                }
+            }
+        }
 
         for (const auto& pr : Self->Nodes) {
             if (pr.second.IsAlive()) {
@@ -2293,7 +2306,6 @@ public:
                     if (tablet == nullptr) {
                         continue;
                     }
-                    ++runningTablets;
                     if (tablet->IsLeader()) {
                         ++current.LeaderCount;
                     } else {

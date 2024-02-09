@@ -43,6 +43,7 @@
   - npp.h
   - nppi.h
   - nvToolsExt.h
+  - nvml.h
   - surface_types.h
   - texture_types.h
   - vector_types.h

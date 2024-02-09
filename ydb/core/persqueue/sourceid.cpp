@@ -430,6 +430,19 @@ TInstant TSourceIdStorage::MinAvailableTimestamp(TInstant now) const {
     return ds;
 }
 
+void TSourceIdStorage::UpdateConfig(const NKikimrPQ::TBootstrapConfig& config, TInstant now)
+{
+    for (const auto& mg : config.GetExplicitMessageGroups()) {
+
+        TMaybe<TPartitionKeyRange> keyRange;
+        if (mg.HasKeyRange()) {
+            keyRange = TPartitionKeyRange::Parse(mg.GetKeyRange());
+        }
+
+        RegisterSourceId(mg.GetId(), 0, 0, now, std::move(keyRange));
+    }
+}
+
 /// TSourceIdWriter
 TSourceIdWriter::TSourceIdWriter(ESourceIdFormat format)
     : Format(format)

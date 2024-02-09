@@ -579,6 +579,7 @@ private:
     NKikimrPQ::TPQTabletConfig TabletConfig;
     const NKikimrPQ::TPQTabletConfig::TPartition* PartitionConfig = nullptr;
     const NKikimrPQ::TPQTabletConfig::TPartition* PendingPartitionConfig = nullptr;
+    TMaybe<NKikimrPQ::TBootstrapConfig> PendingBootstrapConfig;
 
     const TTabletCountersBase& Counters;
     NPersQueue::TTopicConverterPtr TopicConverter;

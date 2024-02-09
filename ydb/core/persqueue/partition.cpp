@@ -22,6 +22,7 @@
 #include <util/string/escape.h>
 #include <util/system/byteorder.h>
 
+
 namespace NKikimr::NPQ {
 
 static const TDuration WAKE_TIMEOUT = TDuration::Seconds(5);
@@ -1641,6 +1642,7 @@ bool TPartition::BeginTransaction(const TEvPQ::TEvProposePartitionConfig& event)
         MakeSimpleShared<TEvPQ::TEvChangePartitionConfig>(TopicConverter,
                                                           event.Config);
     PendingPartitionConfig = GetPartitionConfig(ChangeConfig->Config);
+    PendingBootstrapConfig = event.BootstrapConfig;
 
     SendChangeConfigReply = false;
     return true;
@@ -1832,6 +1834,7 @@ void TPartition::OnProcessTxsAndUserActsWriteComplete(ui64 cookie, const TActorC
         ReportCounters(ctx, true);
         ChangeConfig = nullptr;
         PendingPartitionConfig = nullptr;
+        PendingBootstrapConfig = Nothing();
     }
 
     ProcessTxsAndUserActs(ctx);
@@ -1854,6 +1857,9 @@ void TPartition::EndChangePartitionConfig(const NKikimrPQ::TPQTabletConfig& conf
     Y_ABORT_UNLESS(Config.GetPartitionConfig().GetTotalPartitions() > 0);
 
     UsersInfoStorage->UpdateConfig(Config);
+    if (PendingBootstrapConfig.Defined()) {
+        SourceIdStorage.UpdateConfig(*PendingBootstrapConfig, ctx.Now());
+    }
 
     WriteQuota->UpdateConfigIfChanged(Config.GetPartitionConfig().GetBurstSize(), Config.GetPartitionConfig().GetWriteSpeedInBytesPerSecond());
 
@@ -1893,7 +1899,7 @@ void TPartition::ChangePlanStepAndTxId(ui64 step, ui64 txId)
 void TPartition::ResendPendingEvents(const TActorContext& ctx)
 {
     while (!PendingEvents.empty()) {
-        ctx.Schedule(TDuration::Zero(), PendingEvents.front().release());
+        ctx.Send(ctx.SelfID, PendingEvents.front().release());
         PendingEvents.pop_front();
     }
 }

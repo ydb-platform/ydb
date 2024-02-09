@@ -46,6 +46,8 @@ struct TEvPersQueue {
         EvProposeTransaction,
         EvProposeTransactionResult,
         EvCancelTransactionProposal,
+        EvProposeTransactionAttach,
+        EvProposeTransactionAttachResult,
         EvPeriodicTopicStats,
         EvGetPartitionsLocation,
         EvGetPartitionsLocationResponse,
@@ -267,7 +269,21 @@ struct TEvPersQueue {
     struct TEvPeriodicTopicStats : public TEventPB<TEvPeriodicTopicStats, NKikimrPQ::TEvPeriodicTopicStats, EvPeriodicTopicStats> {
     };
 
-    using TEvProposeTransactionAttach = TEvDataShard::TEvProposeTransactionAttach;
-    using TEvProposeTransactionAttachResult = TEvDataShard::TEvProposeTransactionAttachResult;
+    struct TEvProposeTransactionAttach : public TEventPB<TEvProposeTransactionAttach, NKikimrPQ::TEvProposeTransactionAttach, EvProposeTransactionAttach> {
+        TEvProposeTransactionAttach() = default;
+        TEvProposeTransactionAttach(ui64 tabletId, ui64 txId) {
+            Record.SetTabletId(tabletId);
+            Record.SetTxId(txId);
+        }
+    };
+
+    struct TEvProposeTransactionAttachResult : public TEventPB<TEvProposeTransactionAttachResult, NKikimrPQ::TEvProposeTransactionAttachResult, EvProposeTransactionAttachResult> {
+        TEvProposeTransactionAttachResult() = default;
+        TEvProposeTransactionAttachResult(ui64 tabletId, ui64 txId, NKikimrProto::EReplyStatus status) {
+            Record.SetTabletId(tabletId);
+            Record.SetTxId(txId);
+            Record.SetStatus(status);
+        }
+    };
 };
 } //NKikimr

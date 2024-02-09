@@ -189,7 +189,7 @@ namespace NKikimr {
                 return;
             }
 
-            Cerr << "FAKE_COORDINATOR: advance: minStep" << minStep << " State->FrontStep: " << State->FrontStep << "\n";
+            Cerr << "FAKE_COORDINATOR: advance: minStep " << minStep << " State->FrontStep: " << State->FrontStep << "\n";
 
             if (State->FrontStep >= minStep) {
                 return;

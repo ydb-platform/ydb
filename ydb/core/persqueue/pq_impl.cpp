@@ -25,6 +25,7 @@
 #include <library/cpp/monlib/service/pages/templates.h>
 #include <util/string/escape.h>
 
+
 namespace NKikimr::NPQ {
 
 static constexpr TDuration TOTAL_TIMEOUT = TDuration::Seconds(120);
@@ -756,13 +757,6 @@ void TPersQueue::EndWriteConfig(const NKikimrClient::TResponse& resp, const TAct
         }
     }
 
-    if (resp.WriteResultSize() > 1) {
-        LOG_INFO_S(ctx, NKikimrServices::PERSQUEUE, "Tablet " << TabletID()
-                    << " restarting - have some registering of message groups");
-            ctx.Send(ctx.SelfID, new TEvents::TEvPoisonPill());
-        return;
-    }
-
     Y_ABORT_UNLESS(resp.WriteResultSize() >= 1);
     Y_ABORT_UNLESS(resp.GetWriteResult(0).GetStatus() == NKikimrProto::OK);
     if (ConfigInited && PartitionsInited == Partitions.size()) //all partitions are working well - can apply new config
@@ -1267,7 +1261,7 @@ void TPersQueue::FinishResponse(THashMap<ui64, TAutoPtr<TResponseBuilder>>::iter
 
 
 void TPersQueue::Handle(TEvPersQueue::TEvUpdateConfig::TPtr& ev, const TActorContext& ctx)
-{   
+{
     if (!ConfigInited) {
         UpdateConfigRequests.emplace_back(ev->Release(), ev->Sender);
         return;
@@ -3563,8 +3557,6 @@ void TPersQueue::CheckTxState(const TActorContext& ctx,
                  ", tx.HaveParticipantsDecision()=" << tx.HaveParticipantsDecision());
 
         if (tx.HaveParticipantsDecision()) {
-            SendEvProposeTransactionResult(ctx, tx);
-
             if (tx.GetDecision() == NKikimrTx::TReadSetData::DECISION_COMMIT) {
                 SendEvTxCommitToPartitions(ctx, tx);
             } else {
@@ -3587,6 +3579,8 @@ void TPersQueue::CheckTxState(const TActorContext& ctx,
         if (tx.PartitionRepliesCount == tx.PartitionRepliesExpected) {
             Y_ABORT_UNLESS(!TxQueue.empty());
             Y_ABORT_UNLESS(TxQueue.front().second == tx.TxId);
+
+            SendEvProposeTransactionResult(ctx, tx);
 
             switch (tx.Kind) {
             case NKikimrPQ::TTransaction::KIND_DATA:
@@ -3713,6 +3707,7 @@ void TPersQueue::SendEvProposePartitionConfig(const TActorContext& ctx,
 
         event->TopicConverter = tx.TopicConverter;
         event->Config = tx.TabletConfig;
+        event->BootstrapConfig = tx.BootstrapConfig;
 
         ctx.Send(partition.Actor, std::move(event));
     }

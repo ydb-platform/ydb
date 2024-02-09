@@ -336,7 +336,7 @@ void TInitMetaStep::Handle(TEvKeyValue::TEvResponse::TPtr &ev, const TActorConte
 //
 
 TInitInfoRangeStep::TInitInfoRangeStep(TInitializer* initializer)
-    : TBaseKVStep(initializer, "TInitInfoRangeStep", true) {
+    : TBaseKVStep(initializer, "TInitInfoRangeStep", false) {
 }
 
 void TInitInfoRangeStep::Execute(const TActorContext &ctx) {

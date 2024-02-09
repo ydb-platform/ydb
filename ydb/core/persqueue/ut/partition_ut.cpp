@@ -287,6 +287,9 @@ void TPartitionFixture::CreatePartition(const TCreatePartitionParams& params,
 
         WaitConfigRequest();
         SendConfigResponse(params.Config);
+
+        WaitInfoRangeRequest();
+        SendInfoRangeResponse(params.Partition, params.Config.Consumers);
     } else {
         CreatePartitionActor(params.Partition, config, false, params.Transactions);
 

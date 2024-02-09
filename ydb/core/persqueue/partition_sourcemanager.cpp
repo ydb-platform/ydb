@@ -148,7 +148,7 @@ std::optional<ui64> TPartitionSourceManager::TSourceManager::UpdatedSeqNo() cons
 
 void TPartitionSourceManager::TSourceManager::Update(ui64 seqNo, ui64 offset, TInstant timestamp) {
     if (InMemory == MemoryStorage().end()) {
-        Batch.SourceIdWriter.RegisterSourceId(SourceId, seqNo, seqNo, offset, timestamp);
+        Batch.SourceIdWriter.RegisterSourceId(SourceId, seqNo, offset, timestamp);
     } else {
         Batch.SourceIdWriter.RegisterSourceId(SourceId, InMemory->second.Updated(seqNo, offset, timestamp));
     }

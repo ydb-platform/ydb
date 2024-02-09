@@ -101,18 +101,18 @@ void THeartbeatProcessor::ForgetSourceId(const TString& sourceId) {
     SourceIdsWithHeartbeat.erase(sourceId);
 }
 
-TSourceIdInfo::TSourceIdInfo(ui64 seqNo, ui64 minSeqNo, ui64 offset, TInstant createTs)
+TSourceIdInfo::TSourceIdInfo(ui64 seqNo, ui64 offset, TInstant createTs)
     : SeqNo(seqNo)
-    , MinSeqNo(minSeqNo)
+    , MinSeqNo(seqNo)
     , Offset(offset)
     , WriteTimestamp(createTs)
     , CreateTimestamp(createTs)
 {
 }
 
-TSourceIdInfo::TSourceIdInfo(ui64 seqNo, ui64 minSeqNo, ui64 offset, TInstant createTs, THeartbeat&& heartbeat)
+TSourceIdInfo::TSourceIdInfo(ui64 seqNo, ui64 offset, TInstant createTs, THeartbeat&& heartbeat)
     : SeqNo(seqNo)
-    , MinSeqNo(minSeqNo)
+    , MinSeqNo(seqNo)
     , Offset(offset)
     , WriteTimestamp(createTs)
     , CreateTimestamp(createTs)
@@ -120,9 +120,9 @@ TSourceIdInfo::TSourceIdInfo(ui64 seqNo, ui64 minSeqNo, ui64 offset, TInstant cr
 {
 }
 
-TSourceIdInfo::TSourceIdInfo(ui64 seqNo, ui64 minSeqNo, ui64 offset, TInstant createTs, TMaybe<TPartitionKeyRange>&& keyRange, bool isInSplit)
+TSourceIdInfo::TSourceIdInfo(ui64 seqNo, ui64 offset, TInstant createTs, TMaybe<TPartitionKeyRange>&& keyRange, bool isInSplit)
     : SeqNo(seqNo)
-    , MinSeqNo(minSeqNo)
+    , MinSeqNo(seqNo)
     , Offset(offset)
     , CreateTimestamp(createTs)
     , Explicit(true)
@@ -136,7 +136,7 @@ TSourceIdInfo::TSourceIdInfo(ui64 seqNo, ui64 minSeqNo, ui64 offset, TInstant cr
 TSourceIdInfo TSourceIdInfo::Updated(ui64 seqNo, ui64 offset, TInstant writeTs) const {
     auto copy = *this;
     copy.SeqNo = seqNo;
-    if (copy.MinSeqNo == 0 || copy.MinSeqNo > seqNo) {
+    if (copy.MinSeqNo == 0) {
         copy.MinSeqNo = seqNo;
     }
     copy.Offset = offset;

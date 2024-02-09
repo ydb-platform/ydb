@@ -6,8 +6,8 @@
 #include <ydb/library/yql/providers/common/schema/expr/yql_expr_schema.h>
 #include <ydb/library/yql/providers/dq/common/yql_dq_settings.h>
 #include <ydb/library/yql/providers/dq/expr_nodes/dqs_expr_nodes.h>
-#include <ydb/library/yql/providers/s3/actors/yql_s3_read_actor.h>
-#include <ydb/library/yql/providers/s3/actors/yql_s3_source_factory.h>
+// #include <ydb/library/yql/providers/s3/actors/yql_s3_read_actor.h>     // temporary off until refactoring in next PR
+// #include <ydb/library/yql/providers/s3/actors/yql_s3_source_factory.h> // temporary off until refactoring in next PR
 #include <ydb/library/yql/providers/s3/expr_nodes/yql_s3_expr_nodes.h>
 #include <ydb/library/yql/providers/s3/proto/range.pb.h>
 #include <ydb/library/yql/providers/s3/proto/sink.pb.h>
@@ -104,9 +104,10 @@ public:
             YQL_CLOG(TRACE, ProviderS3) << "limited max partitions to " << maxPartitions;
         }
 
+#if 0 // temporary off until refactoring in next PR
         auto useRuntimeListing = State_->Configuration->UseRuntimeListing.Get().GetOrElse(false);
         if (useRuntimeListing) {
-            size_t partitionCount = hasDirectories ? maxPartitions : Min(parts.size(), maxPartitions);
+            size_t partitionCount = v ? maxPartitions : Min(parts.size(), maxPartitions);
             partitions.reserve(partitionCount);
             for (size_t i = 0; i < partitionCount; ++i) {
                 NS3::TRange range;
@@ -119,7 +120,9 @@ public:
             }
             return 0;
         }
-
+#else
+    Y_UNUSED(hasDirectories);
+#endif
         if (maxPartitions && parts.size() > maxPartitions) {
             if (const auto extraParts = parts.size() - maxPartitions; extraParts > maxPartitions) {
                 const auto partsPerTask = (parts.size() - 1ULL) / maxPartitions + 1ULL;
@@ -405,6 +408,8 @@ public:
                 srcDesc.MutableSettings()->insert({"addPathIndex", "true"});
             }
 
+#if 0 // defined(_linux_) || defined(_darwin_) // temporary off until refactoring in next PR
+
             auto useRuntimeListing = State_->Configuration->UseRuntimeListing.Get().GetOrElse(false);
             srcDesc.SetUseRuntimeListing(useRuntimeListing);
 
@@ -505,7 +510,7 @@ public:
                 ));
                 srcDesc.MutableSettings()->insert({"fileQueueActor", fileQueueActor.ToString()});
             }
-
+#endif
             protoSettings.PackFrom(srcDesc);
             sourceType = "S3Source";
         }

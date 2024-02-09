@@ -49,7 +49,6 @@ ydb/library/actors/http/ut sole*
 ydb/library/yql/providers/generic/connector/tests sole*
 ydb/library/yql/providers/generic/connector/tests test.py.*
 ydb/public/lib/ydb_cli/topic/ut TTopicReaderTests.TestRun_ReadOneMessage
-ydb/public/sdk/cpp/client/ydb_federated_topic/ut BasicUsage.SimpleHandlers
 ydb/public/sdk/cpp/client/ydb_persqueue_core/ut/with_offset_ranges_mode_ut RetryPolicy.RetryWithBatching
 ydb/public/sdk/cpp/client/ydb_persqueue_core/ut/with_offset_ranges_mode_ut RetryPolicy.TWriteSession_TestBrokenPolicy
 ydb/public/sdk/cpp/client/ydb_topic/ut BasicUsage.ConflictingWrites

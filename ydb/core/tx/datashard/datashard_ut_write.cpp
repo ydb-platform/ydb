@@ -170,7 +170,7 @@ Y_UNIT_TEST_SUITE(DataShardWrite) {
         const ui32 rowCount = 3;
 
         ui64 txId = 100;
-        ui64 stepId;
+        ui64 minStep, maxStep;
 
         Cout << "========= Send prepare =========\n";
         {
@@ -185,22 +185,24 @@ Y_UNIT_TEST_SUITE(DataShardWrite) {
             UNIT_ASSERT_VALUES_EQUAL(writeResult.GetDomainCoordinators(0), coordinator);
             UNIT_ASSERT_VALUES_EQUAL(writeResult.GetTabletInfo().GetTabletId(), shard);
 
-            stepId = writeResult.GetMinStep();
+            minStep = writeResult.GetMinStep();
+            maxStep = writeResult.GetMaxStep();
         }
 
-        Cout << "========= Send plan step =========\n";
+        Cout << "========= Send propose to coordinator =========\n";
         {
-            SendPlanStep(server, shard, stepId, txId);
+            SendProposeToCoordinator(server, shards, minStep, maxStep, txId);
         }
 
         Cout << "========= Wait for completed transaction =========\n";
         {
             auto ev = runtime.GrabEdgeEventRethrow<NEvents::TDataEvents::TEvWriteResult>(sender);
             auto writeResult = ev->Get()->Record;
-            
-            UNIT_ASSERT_C(writeResult.GetStatus() == NKikimrDataEvents::TEvWriteResult::STATUS_COMPLETED, "Status: " << writeResult.GetStatus() << " Issues: " << writeResult.GetIssues());
+
+            UNIT_ASSERT_VALUES_EQUAL_C(writeResult.GetStatus(), NKikimrDataEvents::TEvWriteResult::STATUS_COMPLETED, "Status: " << writeResult.GetStatus() << " Issues: " << writeResult.GetIssues());
             UNIT_ASSERT_VALUES_EQUAL(writeResult.GetOrigin(), shard);
-            UNIT_ASSERT_VALUES_EQUAL(writeResult.GetStep(), stepId);
+            UNIT_ASSERT_GE(writeResult.GetStep(), minStep);
+            UNIT_ASSERT_LE(writeResult.GetStep(), maxStep);
             UNIT_ASSERT_VALUES_EQUAL(writeResult.GetOrderId(), txId);
             UNIT_ASSERT_VALUES_EQUAL(writeResult.GetTxId(), txId);
 

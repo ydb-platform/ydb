@@ -943,6 +943,12 @@ void TPersQueue::InitTxWrites(const NKikimrPQ::TTabletTxInfo& info,
 {
     TxWrites.clear();
 
+    if (info.HasNextSupportivePartitionId()) {
+        NextSupportivePartitionId = info.GetNextSupportivePartitionId();
+    } else {
+        NextSupportivePartitionId = 100'000;
+    }
+
     for (size_t i = 0; i != info.TxWritesSize(); ++i) {
         auto& txWrite = info.GetTxWrites(i);
         ui64 writeId = txWrite.GetWriteId();
@@ -3574,6 +3580,8 @@ void TPersQueue::SaveTxWrites(NKikimrPQ::TTabletTxInfo& info)
             txWrite->SetInternalPartitionId(shadowPartitionId.InternalPartitionId);
         }
     }
+
+    info.SetNextSupportivePartitionId(NextSupportivePartitionId);
 }
 
 void TPersQueue::ScheduleProposeTransactionResult(const TDistributedTransaction& tx)

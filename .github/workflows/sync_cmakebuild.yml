@@ -16,6 +16,8 @@ jobs:
     - name: Sync
       run: |
         git clone -b main --shallow-exclude cmakebuild https://$TOKEN@github.com/$REPO.git ydb
+        git config --global user.email "alex@ydb.tech"
+        git config --global user.name "Alexander Smirnov"
         cd ydb
         git fetch --depth `expr $(git rev-list --count HEAD) + 1`
         git fetch origin cmakebuild:cmakebuild --depth 2

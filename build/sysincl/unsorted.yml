@@ -319,9 +319,6 @@
   - rtcapi.h
   - vadefs.h
   - varargs.h
-  - xlocinfo.h
-  - xstddef
-  - xutility
   - ymath.h
   - crtassem.h
   #endif

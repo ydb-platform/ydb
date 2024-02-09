@@ -1,0 +1,9 @@
+# This is unused sysincl list keps for information purposes only.
+# It contains a non-standard subset of Microsoft/STL specific headers as found at
+# https://github.com/microsoft/STL/tree/main/stl/inc
+- includes:
+  - xstddef
+  - xutility
+  - ymath.h
+  - yvals.h
+  - yvals_core.h

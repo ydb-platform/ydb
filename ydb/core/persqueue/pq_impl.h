@@ -27,33 +27,6 @@ class TPartition;
 
 struct TTransaction;
 
-struct TCmdGetOwnershipRequestParams {
-    TCmdGetOwnershipRequestParams(ui64 cookie,
-                                  const NKikimrClient::TPersQueuePartitionRequest& request,
-                                  const TActorId& sender) :
-        Cookie(cookie),
-        Request(request),
-        Sender(sender)
-    {
-    }
-    TCmdGetOwnershipRequestParams(const TCmdGetOwnershipRequestParams& rhs) :
-        Cookie(rhs.Cookie),
-        Request(rhs.Request),
-        Sender(rhs.Sender)
-    {
-    }
-    TCmdGetOwnershipRequestParams(TCmdGetOwnershipRequestParams&& rhs) noexcept :
-        Cookie(rhs.Cookie),
-        Request(std::move(rhs.Request)),
-        Sender(std::move(rhs.Sender))
-    {
-    }
-
-    ui64 Cookie;
-    NKikimrClient::TPersQueuePartitionRequest Request;
-    TActorId Sender;
-};
-
 //USES MAIN chanel for big blobs, INLINE or EXTRA for ZK-like load, EXTRA2 for small blob for logging (VDISK of type LOG is ok with EXTRA2)
 
 class TPersQueue : public NKeyValue::TKeyValueFlat {
@@ -454,6 +427,10 @@ private:
     void InitTxWrites(const NKikimrPQ::TTabletTxInfo& info, const TActorContext& ctx);
     void SaveTxWrites(NKikimrPQ::TTabletTxInfo& info);
 
+    void HandleEventForSupportivePartition(const ui64 responseCookie,
+                                           TEvPersQueue::TEvRequest::TPtr& event,
+                                           const TActorId& sender,
+                                           const TActorContext& ctx);
     void HandleEventForSupportivePartition(const ui64 responseCookie,
                                            const NKikimrClient::TPersQueuePartitionRequest& req,
                                            const TActorId& sender,

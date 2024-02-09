@@ -15,9 +15,9 @@ jobs:
     steps:
     - name: Sync
       run: |
-        mainsha=$(curl -H "Accept: application/vnd.github.VERSION.sha" https://api.github.com/repos/$REPO/commits/main)
+        mainsha=$(curl -s -H "Accept: application/vnd.github.VERSION.sha" https://api.github.com/repos/$REPO/commits/main)
         echo "Main sha: ${mainsha}"
-        lastsha=$(curl https://raw.githubusercontent.com/$REPO/cmakebuild/ydb/ci/cmakegen.txt)
+        lastsha=$(curl -s https://raw.githubusercontent.com/$REPO/cmakebuild/ydb/ci/cmakegen.txt)
         echo "Last sha: ${lastsha}"
         if [ ${mainsha} == ${lastsha} ];then
           echo "No new commits on the main branch to merge, exiting"

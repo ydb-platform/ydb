@@ -34,4 +34,4 @@ jobs:
         echo ${mainsha} > ydb/ci/cmakegen.txt
         git add .
         git commit -m "Generate cmake for ${mainsha}"
-        git push
+        git push --set-upstream origin cmakebuild

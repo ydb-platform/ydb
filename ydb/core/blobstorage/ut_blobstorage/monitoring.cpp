@@ -251,7 +251,7 @@ Y_UNIT_TEST(Test##requestType##distribution) {                                  
 
 Y_UNIT_TEST_SUITE(BurstDetection) {
     MAKE_BURST_TEST(Put, 10, 1, TDuration::Seconds(1), Evenly);
-    MAKE_BURST_TEST(Put, 10, 100, TDuration::Zero(), Burst);
+    MAKE_BURST_TEST(Put, 10, 100, TDuration::MilliSeconds(1), Burst);
 }
 
 #undef MAKE_BURST_TEST

@@ -357,7 +357,6 @@ public:
     }
 
     void CountRequest(ui64 cost) {
-        Cerr << TAppData::TimeProvider->Now() << " " << Bucket.GetAvail() << " " << cost << Endl;
         Bucket.Use(cost);
         BurstDetector.Set(!Bucket.IsAvail(), SeqnoBurstDetector.fetch_add(1));
     }

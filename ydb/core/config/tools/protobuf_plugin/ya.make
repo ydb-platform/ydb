@@ -1,9 +1,9 @@
-PROGRAM()
+PROGRAM(config_proto_plugin)
 
 PEERDIR(
     contrib/libs/protoc
-    ydb/public/api/protos/annotations
     ydb/public/lib/protobuf
+    ydb/core/config/protos
 )
 
 SRCS(
@@ -14,5 +14,4 @@ END()
 
 RECURSE_FOR_TESTS(
     ut
-    ut/protos
 )

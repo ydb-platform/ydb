@@ -910,8 +910,6 @@ bool ISource::InitFilters(TContext& ctx) {
 }
 
 TAstNode* ISource::Translate(TContext& ctx) const {
-    Cerr << "TRANSLATE" << Endl;
-    FormatBackTrace(&Cerr);
     Y_DEBUG_ABORT_UNLESS(false);
     Y_UNUSED(ctx);
     return nullptr;

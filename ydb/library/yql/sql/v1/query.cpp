@@ -1195,28 +1195,6 @@ private:
     TScopedStatePtr Scoped;
 };
 
-/*class TCreateTableAsNode final: public TAstListNode {
-public:
-    TCreateTableAsNode(TPosition pos, const TTableRef& tr, bool existingOk, bool replaceIfExists, const TCreateTableParameters& params, TSourcePtr values, TScopedStatePtr scoped)
-        : TAstListNode(pos)
-        , Table(tr)
-        , Params(params)
-        , ExistingOk(existingOk)
-        , ReplaceIfExists(replaceIfExists)
-        , Values(std::move(values))
-        , Scoped(scoped)
-    {
-    }
-
-private:
-    const TTableRef Table;
-    const TCreateTableParameters Params;
-    const bool ExistingOk;
-    const bool ReplaceIfExists;
-    const TSourcePtr Values;
-    TScopedStatePtr Scoped;
-}*/
-
 TNodePtr BuildCreateTable(TPosition pos, const TTableRef& tr, bool existingOk, bool replaceIfExists, const TCreateTableParameters& params, TSourcePtr values, TScopedStatePtr scoped)
 {
     return new TCreateTableNode(pos, tr, existingOk, replaceIfExists, params, std::move(values), scoped);

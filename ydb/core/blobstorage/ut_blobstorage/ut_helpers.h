@@ -46,7 +46,6 @@ protected:
                 RequestInFlight--;
                 RequestsToSend--;
                 RequestsSent++;
-                Y_ABORT_UNLESS(RequestsSent < 200);
                 SendRequest();
             } else if (!WakeupScheduled) {
                 Schedule(Settings.Delay - timePassed, new TEvents::TEvWakeup);

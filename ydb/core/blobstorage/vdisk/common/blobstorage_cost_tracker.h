@@ -362,9 +362,7 @@ public:
     }
 
     void SetTimeAvailable(ui32 diskTimeAvailableNSec) {
-        if (diskTimeAvailableNSec != AtomicGet(DiskTimeAvailableNs)) {
-            AtomicSet(DiskTimeAvailableNs, diskTimeAvailableNSec);
-        }
+        AtomicSet(DiskTimeAvailableNs, diskTimeAvailableNSec);
     }
 
 public:

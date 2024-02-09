@@ -212,7 +212,8 @@ DEFINE_ENUM(ETabletServiceFeatures,
 );
 
 DEFINE_ENUM(ESecondaryIndexKind,
-    ((FullSync)  (0))
+    ((FullSync)                 (0))
+    ((Unfolding)                (1))
 );
 
 DEFINE_ENUM(ERowMergerType,

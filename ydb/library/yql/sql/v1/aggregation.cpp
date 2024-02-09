@@ -28,6 +28,11 @@ namespace {
         }
         return false;
     }
+
+    bool ShouldEmitAggApply(const TContext& ctx) {
+        const bool blockEngineEnabled = ctx.BlockEngineEnable || ctx.BlockEngineForce;
+        return ctx.EmitAggApply.GetOrElse(blockEngineEnabled);
+    }
 }
 
 static const THashSet<TString> AggApplyFuncs = {
@@ -58,7 +63,7 @@ public:
 
 protected:
     bool InitAggr(TContext& ctx, bool isFactory, ISource* src, TAstListNode& node, const TVector<TNodePtr>& exprs) override {
-        if (!ctx.EmitAggApply) {
+        if (!ShouldEmitAggApply(ctx)) {
             AggApplyName = "";
         }
 
@@ -1349,7 +1354,7 @@ public:
         Y_UNUSED(many);
         Y_UNUSED(ctx);
         Y_UNUSED(allowAggApply);
-        if (ctx.EmitAggApply && allowAggApply && AggMode != EAggregateMode::OverWindow) {
+        if (ShouldEmitAggApply(ctx) && allowAggApply && AggMode != EAggregateMode::OverWindow) {
             return Y("AggApply",
                 Q("pg_" + to_lower(PgFunc)), Y("ListItemType", type), Lambda);
         }

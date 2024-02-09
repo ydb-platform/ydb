@@ -36,6 +36,7 @@ PEERDIR(
     ydb/library/yql/utils/log
     ydb/library/yql/utils/log/proto
     ydb/library/yql/providers/common/proto
+    ydb/library/yql/providers/common/codec
     ydb/library/yql/providers/common/udf_resolve
     ydb/library/yql/providers/solomon/gateway
     ydb/library/yql/providers/solomon/provider
@@ -50,7 +51,13 @@ PEERDIR(
     ydb/library/yql/providers/dq/stats_collector
     ydb/library/yql/providers/dq/worker_manager/interface
     ydb/library/yql/providers/yt/gateway/native
+    ydb/library/yql/providers/yt/codec
+    ydb/library/yql/providers/yt/codec/codegen
     ydb/library/yql/providers/yt/lib/log
+    ydb/library/yql/providers/yt/lib/res_pull
+    ydb/library/yql/providers/yt/lib/row_spec
+    ydb/library/yql/providers/yt/lib/schema
+    ydb/library/yql/providers/yt/lib/skiff
     ydb/library/yql/providers/yt/lib/yt_download
     ydb/library/yql/providers/yt/provider
     ydb/library/yql/providers/yt/codec/codegen

@@ -1895,10 +1895,10 @@ message TEvOverloadUnsubscribe {
     optional uint64 SeqNo = 1;
 }
 
-// Used for operation serialization/deserialization
-message TSerializedTxBody {
+// Used for events serialization/deserialization
+message TSerializedEvent {
     // Serialized TEventPBBase event
-    optional string TxBody = 1;
+    optional bytes EventData = 1;
     // TEventSerializationInfo::IsExtendedFormat flag
     optional bool IsExtendedFormat = 2;
 }

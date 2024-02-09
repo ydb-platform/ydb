@@ -370,9 +370,9 @@ TString TWriteOperation::GetTxBody() const {
     Y_ABORT_UNLESS(success);
     TEventSerializationInfo serializationInfo = Record->CreateSerializationInfo();
 
-    NKikimrTxDataShard::TSerializedTxBody proto;
+    NKikimrTxDataShard::TSerializedEvent proto;
     proto.SetIsExtendedFormat(serializationInfo.IsExtendedFormat);
-    proto.SetTxBody(serializer.Release(std::move(serializationInfo))->GetString());
+    proto.SetEventData(serializer.Release(std::move(serializationInfo))->GetString());
 
     TString str;
     success = proto.SerializeToString(&str);
@@ -383,14 +383,14 @@ TString TWriteOperation::GetTxBody() const {
 void TWriteOperation::SetTxBody(const TString& txBody) {
     Y_ABORT_UNLESS(!Record);
 
-    NKikimrTxDataShard::TSerializedTxBody proto;
+    NKikimrTxDataShard::TSerializedEvent proto;
     const bool success = proto.ParseFromString(txBody);
     Y_ABORT_UNLESS(success);
 
     TEventSerializationInfo serializationInfo;
     serializationInfo.IsExtendedFormat = proto.GetIsExtendedFormat();
 
-    TEventSerializedData buffer(proto.GetTxBody(), std::move(serializationInfo));
+    TEventSerializedData buffer(proto.GetEventData(), std::move(serializationInfo));
     NKikimr::NEvents::TDataEvents::TEvWrite* record = static_cast<NKikimr::NEvents::TDataEvents::TEvWrite*>(NKikimr::NEvents::TDataEvents::TEvWrite::Load(&buffer));
     Y_ABORT_UNLESS(record);
 

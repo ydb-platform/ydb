@@ -6,21 +6,4 @@
 # original buildsystem will not be accepted.
 
 
-add_subdirectory(ut)
-
-add_executable(validation)
-target_link_libraries(validation PUBLIC
-  contrib-libs-cxxsupp
-  yutil
-  library-cpp-cpuid_check
-  contrib-libs-protoc
-  api-protos-annotations
-  public-lib-protobuf
-)
-target_sources(validation PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/public/lib/validation/main.cpp
-)
-target_allocator(validation
-  system_allocator
-)
-vcs_info(validation)
+add_subdirectory(protobuf_plugin)

@@ -8,24 +8,29 @@
 
 add_subdirectory(ut)
 
-add_executable(validation)
-target_link_libraries(validation PUBLIC
+add_executable(config_proto_plugin)
+target_link_libraries(config_proto_plugin PUBLIC
+  contrib-libs-linux-headers
   contrib-libs-cxxsupp
   yutil
-  library-cpp-cpuid_check
   contrib-libs-protoc
-  api-protos-annotations
   public-lib-protobuf
+  core-config-protos
 )
-target_link_options(validation PRIVATE
-  -Wl,-platform_version,macos,11.0,11.0
+target_link_options(config_proto_plugin PRIVATE
+  -ldl
+  -lrt
+  -Wl,--no-as-needed
   -fPIC
   -fPIC
+  -lpthread
+  -lrt
+  -ldl
 )
-target_sources(validation PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/public/lib/validation/main.cpp
+target_sources(config_proto_plugin PRIVATE
+  ${CMAKE_SOURCE_DIR}/ydb/core/config/tools/protobuf_plugin/main.cpp
 )
-target_allocator(validation
-  system_allocator
+target_allocator(config_proto_plugin
+  cpp-malloc-jemalloc
 )
-vcs_info(validation)
+vcs_info(config_proto_plugin)

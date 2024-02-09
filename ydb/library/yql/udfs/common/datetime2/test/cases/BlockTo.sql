@@ -8,7 +8,8 @@ insert into @t
         cast(finterval as Interval) as `interval`,
         cast(ftzdate as TzDate) as `tzdate`,
         cast(ftzdatetime as TzDatetime) as `tzdatetime`,
-        cast(ftztimestamp as TzTimestamp) as `tztimestamp`
+        cast(ftztimestamp as TzTimestamp) as `tztimestamp`,
+        cast(null as Interval) as `interval_null`
     from Input;
 
 commit;
@@ -39,6 +40,8 @@ select
     DateTime::ToMicroseconds(`timestamp`) as timestamp_to_usec,
     DateTime::ToMicroseconds(`tzdate`) as tzdate_to_usec,
     DateTime::ToMicroseconds(`tzdatetime`) as tzdatetime_to_usec,
-    DateTime::ToMicroseconds(`tztimestamp`) as tztimestamp_to_usec
+    DateTime::ToMicroseconds(`tztimestamp`) as tztimestamp_to_usec,
+
+    DateTime::ToDays(`interval_null`) as interval_null
 from @t;
 

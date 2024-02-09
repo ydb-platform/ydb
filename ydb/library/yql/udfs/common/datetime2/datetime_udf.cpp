@@ -1856,7 +1856,6 @@ NUdf::TUnboxedValuePod DoAddYears(const NUdf::TUnboxedValuePod& date, i64 years,
         TUpdate,
 
         TFromSeconds,
-        TFromSeconds_BlocksImpl,
         TFromMilliseconds,
         TFromMicroseconds,
 

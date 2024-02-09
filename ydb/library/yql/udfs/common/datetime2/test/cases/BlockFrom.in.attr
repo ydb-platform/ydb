@@ -35,7 +35,7 @@
                     "fdays_overflow";
                     [
                         "DataType";
-                        "Int16"
+                        "Int32"
                     ]
                 ];
                 [

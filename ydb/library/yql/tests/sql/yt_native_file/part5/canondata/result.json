@@ -388,9 +388,9 @@
     ],
     "test.test[aggregate-percentile_interval-default.txt-Debug]": [
         {
-            "checksum": "2e7ded8794e770bf85fcbd1d32aa4159",
-            "size": 8809,
-            "uri": "https://{canondata_backend}/1600758/4dc73fd352eb8e7cdc1c8e9c1d7bbf928a55551d/resource.tar.gz#test.test_aggregate-percentile_interval-default.txt-Debug_/opt.yql"
+            "checksum": "cb7d7f27882936285867ca78f3c722cc",
+            "size": 8824,
+            "uri": "https://{canondata_backend}/1942525/85e1a294d89f4a2dd75bf364b4da5c1dfb0d7745/resource.tar.gz#test.test_aggregate-percentile_interval-default.txt-Debug_/opt.yql"
         }
     ],
     "test.test[aggregate-percentile_interval-default.txt-Plan]": [

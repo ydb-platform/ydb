@@ -50,20 +50,11 @@ namespace NTi {
     /// Create new `Date` type using the default heap factory.
     TDateTypePtr Date();
 
-    /// Create new `Date32` type using the default heap factory.
-    TDateTypePtr Date32();
-
     /// Create new `Datetime` type using the default heap factory.
     TDatetimeTypePtr Datetime();
 
     /// Create new `Timestamp` type using the default heap factory.
     TTimestampTypePtr Timestamp();
-
-    /// Create new `Datetime64` type using the default heap factory.
-    TDatetime64TypePtr Datetime64();
-
-    /// Create new `Timestamp64` type using the default heap factory.
-    TTimestamp64TypePtr Timestamp64();
 
     /// Create new `TzDate` type using the default heap factory.
     TTzDateTypePtr TzDate();
@@ -76,9 +67,6 @@ namespace NTi {
 
     /// Create new `Interval` type using the default heap factory.
     TIntervalTypePtr Interval();
-
-    /// Create new `Interval64` type using the default heap factory.
-    TInterval64TypePtr Interval64();
 
     /// Create new `Decimal` type using the default heap factory.
     TDecimalTypePtr Decimal(ui8 precision, ui8 scale);

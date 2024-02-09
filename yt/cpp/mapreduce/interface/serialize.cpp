@@ -129,8 +129,6 @@ void Deserialize(EValueType& valueType, const TNode& node)
         {"interval", VT_INTERVAL},
         {"float", VT_FLOAT},
         {"json", VT_JSON},
-
-        {"date32", VT_DATE32},
     };
 
     auto it = str2ValueType.find(nodeStr);

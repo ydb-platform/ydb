@@ -107,6 +107,7 @@ public:
 
         TVector<TString> scope;
         TYtJoinNodeOp::TPtr res = dynamic_cast<TYtJoinNodeOp*>(BuildYtJoinTree(result, Ctx, {}).Get());
+        res->CostBasedOptPassed = true;
 
         YQL_ENSURE(res);
         if (Debug) {
@@ -298,7 +299,7 @@ TYtJoinNode::TPtr BuildYtJoinTree(std::shared_ptr<IBaseOptimizerNode> node, TExp
 
 TYtJoinNodeOp::TPtr OrderJoins(TYtJoinNodeOp::TPtr op, const TYtState::TPtr& state, TExprContext& ctx, bool debug)
 {
-    if (state->Types->CostBasedOptimizer == ECostBasedOptimizerType::Disable) {
+    if (state->Types->CostBasedOptimizer == ECostBasedOptimizerType::Disable || op->CostBasedOptPassed) {
         return op;
     }
 

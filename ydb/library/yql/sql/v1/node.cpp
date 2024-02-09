@@ -1284,6 +1284,14 @@ void IAggregation::DoUpdateState() const {
     State.Set(ENodeState::OverWindow, AggMode == EAggregateMode::OverWindow);
 }
 
+const TString* IAggregation::GetGenericKey() const {
+    return nullptr;
+}
+
+void IAggregation::Join(IAggregation*) {
+    YQL_ENSURE(false, "Should not be called");
+}
+
 const TString& IAggregation::GetName() const {
     return Name;
 }

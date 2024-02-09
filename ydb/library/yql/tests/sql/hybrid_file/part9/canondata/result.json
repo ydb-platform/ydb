@@ -491,9 +491,9 @@
     ],
     "test.test[aggregate-percentiles_ungrouped--Debug]": [
         {
-            "checksum": "0aa085cef6eb4f3d679987e4bd2aeb63",
-            "size": 4425,
-            "uri": "https://{canondata_backend}/1889210/796baf28896eb5aaad8828a0b6000e7d17563447/resource.tar.gz#test.test_aggregate-percentiles_ungrouped--Debug_/opt.yql_patched"
+            "checksum": "f9aa7e9f39bbdd10b5ba1ebf74f92d1c",
+            "size": 4489,
+            "uri": "https://{canondata_backend}/1936273/97f4e8c58a6c450dfb4cd0d27ae35e3af77af991/resource.tar.gz#test.test_aggregate-percentiles_ungrouped--Debug_/opt.yql_patched"
         }
     ],
     "test.test[aggregate-percentiles_ungrouped--Plan]": [

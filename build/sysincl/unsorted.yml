@@ -450,9 +450,6 @@
   #if defined (__DECC) || defined (__DECCXX)
   - machine/builtins.h
   #endif
-  #if defined(USE_PERL) && TODO
-  - perliol.h
-  #endif
   #if defined(__NetBSD__)
   - lwp.h
   - perfuse.h
@@ -597,13 +594,10 @@
   #if CONTRIB && TODO
   - Xm/XmAll.h
   - aep.h
-  - atalla.h
   - crypto/cryptodev.h
-  - cswift.h
   - cxcore.h
   - efndef
   - exiv2/types.hpp
-  - hw_4758_cca.h
   - hw_ubsec.h
   - hwcryptohook.h
   - jpidef.h

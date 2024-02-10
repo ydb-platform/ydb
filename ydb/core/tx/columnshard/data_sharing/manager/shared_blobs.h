@@ -1,0 +1,203 @@
+#pragma once
+#include <ydb/core/tablet_flat/tablet_flat_executor.h>
+#include <ydb/core/tx/columnshard/blob.h>
+#include <ydb/core/tx/columnshard/blobs_action/abstract/common.h>
+#include <ydb/core/tx/columnshard/blobs_action/abstract/blob_set.h>
+#include <ydb/core/tx/columnshard/common/tablet_id.h>
+
+#include <ydb/library/accessor/accessor.h>
+
+namespace NKikimr::NOlap::NDataSharing {
+
+class TStorageSharedBlobsManager {
+private:
+    const TString StorageId;
+    const TTabletId SelfTabletId;
+    THashMap<TUnifiedBlobId, TTabletId> BorrowedBlobIds; // blobId -> owned by tabletId
+    TTabletsByBlob SharedBlobIds; // blobId -> shared with tabletIds
+
+    bool CheckRemoveBlobId(const TTabletId tabletId, const TUnifiedBlobId& blobId, TBlobsCategories& blobs) const {
+        const THashSet<TTabletId>* shared = SharedBlobIds.Find(blobId);
+        bool doRemove = false;
+        if (shared) {
+            auto itTablet = shared->find(tabletId);
+            AFL_VERIFY(itTablet != shared->end());
+            if (shared->size() == 1) {
+                doRemove = true;
+            }
+            blobs.AddSharing(tabletId, blobId);
+        } else {
+            doRemove = true;
+        }
+        if (doRemove) {
+            auto it = BorrowedBlobIds.find(blobId);
+            if (it != BorrowedBlobIds.end()) {
+                AFL_VERIFY(it->second == tabletId);
+                blobs.AddBorrowed(tabletId, blobId);
+            } else {
+                blobs.AddDirect(tabletId, blobId);
+            }
+        }
+        return doRemove;
+    }
+public:
+    TStorageSharedBlobsManager(const TString& storageId, const TTabletId tabletId)
+        : StorageId(storageId)
+        , SelfTabletId(tabletId)
+    {
+
+    }
+
+    TTabletId GetSelfTabletId() const {
+        return SelfTabletId;
+    }
+
+    TBlobsCategories BuildRemoveCategories(TTabletsByBlob&& blobs) const {
+        TBlobsCategories result(SelfTabletId);
+        for (auto it = blobs.GetIterator(); it.IsValid(); ++it) {
+            CheckRemoveBlobId(it.GetTabletId(), it.GetBlobId(), result);
+        }
+        return result;
+    }
+
+    TBlobsCategories BuildStoreCategories(const THashSet<TUnifiedBlobId>& blobIds) const {
+        TBlobsCategories result(SelfTabletId);
+        for (auto&& i : blobIds) {
+            auto* tabletIds = SharedBlobIds.Find(i);
+            auto it = BorrowedBlobIds.find(i);
+            if (it != BorrowedBlobIds.end()) {
+                result.AddBorrowed(it->second, i);
+            } else if (!tabletIds) {
+                result.AddDirect(SelfTabletId, i);
+            }
+            if (tabletIds) {
+                for (auto&& t : *tabletIds) {
+                    result.AddSharing(t, i);
+                }
+            }
+        }
+        return result;
+    }
+
+    void RemoveSharedBlobsDB(NTabletFlatExecutor::TTransactionContext& txc, const TTabletsByBlob& blobIds);
+
+    void RemoveSharedBlobs(const TTabletsByBlob& blobIds) {
+        for (auto i = blobIds.GetIterator(); i.IsValid(); ++i) {
+            AFL_VERIFY(SharedBlobIds.Remove(i.GetTabletId(), i.GetBlobId()));
+        }
+    }
+
+    void WriteSharedBlobsDB(NTabletFlatExecutor::TTransactionContext& txc, const TTabletsByBlob& blobIds);
+
+    void AddSharedBlobs(const TTabletsByBlob& blobIds) {
+        for (auto i = blobIds.GetIterator(); i.IsValid(); ++i) {
+            AFL_VERIFY(SharedBlobIds.Add(i.GetTabletId(), i.GetBlobId()));
+        }
+    }
+
+    void WriteBorrowedBlobsDB(NTabletFlatExecutor::TTransactionContext& txc, const TTabletByBlob& blobIds);
+
+    void AddBorrowedBlobs(const TTabletByBlob& blobIds) {
+        for (auto&& i : blobIds) {
+            AFL_VERIFY(BorrowedBlobIds.emplace(i.first, i.second).second);
+        }
+    }
+
+    void CASBorrowedBlobsDB(NTabletFlatExecutor::TTransactionContext& txc, const TTabletId tabletIdFrom, const TTabletId tabletIdTo, const THashSet<TUnifiedBlobId>& blobIds);
+
+    void CASBorrowedBlobs(const TTabletId tabletIdFrom, const TTabletId tabletIdTo, const THashSet<TUnifiedBlobId>& blobIds) {
+        for (auto&& i : blobIds) {
+            auto it = BorrowedBlobIds.find(i);
+            AFL_VERIFY(it != BorrowedBlobIds.end());
+            AFL_VERIFY(tabletIdFrom == it->second);
+            it->second = tabletIdTo;
+        }
+    }
+
+    [[nodiscard]] bool UpsertSharedBlobOnLoad(const TUnifiedBlobId& blobId, const TTabletId tabletId) {
+        return SharedBlobIds.Add(tabletId, blobId);
+    }
+
+    [[nodiscard]] bool UpsertBorrowedBlobOnLoad(const TUnifiedBlobId& blobId, const TTabletId ownerTabletId) {
+        return BorrowedBlobIds.emplace(blobId, ownerTabletId).second;
+    }
+
+    void OnTransactionExecuteAfterCleaning(const TBlobsCategories& removeTask, NTable::TDatabase& db);
+
+    void OnTransactionCompleteAfterCleaning(const TBlobsCategories& removeTask) {
+        for (auto i = removeTask.GetSharing().GetIterator(); i.IsValid(); ++i) {
+            SharedBlobIds.Remove(i.GetTabletId(), i.GetBlobId());
+        }
+        for (auto i = removeTask.GetBorrowed().GetIterator(); i.IsValid(); ++i) {
+            auto it = BorrowedBlobIds.find(i.GetBlobId());
+            AFL_VERIFY(it != BorrowedBlobIds.end());
+            BorrowedBlobIds.erase(it);
+        }
+    }
+};
+
+class TSharedBlobsManager {
+private:
+    const TTabletId SelfTabletId;
+    THashMap<TString, std::shared_ptr<TStorageSharedBlobsManager>> Storages;
+public:
+    TSharedBlobsManager(const TTabletId tabletId)
+        : SelfTabletId(tabletId)
+    {
+
+    }
+    
+    TTabletId GetSelfTabletId() const {
+        return SelfTabletId;
+    }
+
+    void WriteSharedBlobsDB(NTabletFlatExecutor::TTransactionContext& txc, const THashMap<TString, TTabletsByBlob>& blobIds) {
+        for (auto&& i : blobIds) {
+            GetStorageManagerGuarantee(i.first)->WriteSharedBlobsDB(txc, i.second);
+        }
+    }
+
+    void AddSharingBlobs(const THashMap<TString, TTabletsByBlob>& blobIds) {
+        for (auto&& i : blobIds) {
+            GetStorageManagerGuarantee(i.first)->AddSharedBlobs(i.second);
+        }
+    }
+
+    void WriteBorrowedBlobsDB(NTabletFlatExecutor::TTransactionContext& txc, const THashMap<TString, TTabletByBlob>& blobIds) {
+        for (auto&& i : blobIds) {
+            GetStorageManagerGuarantee(i.first)->WriteBorrowedBlobsDB(txc, i.second);
+        }
+    }
+
+    void AddBorrowedBlobs(const THashMap<TString, TTabletByBlob>& blobIds) {
+        for (auto&& i : blobIds) {
+            GetStorageManagerGuarantee(i.first)->AddBorrowedBlobs(i.second);
+        }
+    }
+
+    std::shared_ptr<TStorageSharedBlobsManager> GetStorageManagerOptional(const TString& storageId) const {
+        auto it = Storages.find(storageId);
+        if (it == Storages.end()) {
+            return nullptr;
+        }
+        return it->second;
+    }
+
+    std::shared_ptr<TStorageSharedBlobsManager> GetStorageManagerVerified(const TString& storageId) const {
+        auto it = Storages.find(storageId);
+        AFL_VERIFY(it != Storages.end());
+        return it->second;
+    }
+
+    std::shared_ptr<TStorageSharedBlobsManager> GetStorageManagerGuarantee(const TString& storageId) {
+        auto it = Storages.find(storageId);
+        if (it == Storages.end()) {
+            it = Storages.emplace(storageId, std::make_shared<TStorageSharedBlobsManager>(storageId, SelfTabletId)).first;
+        }
+        return it->second;
+    }
+
+    bool Load(NTable::TDatabase& database);
+};
+
+}

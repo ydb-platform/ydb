@@ -15,7 +15,7 @@ void TWriteAction::DoSendWriteBlobRequest(const TString& data, const TUnifiedBlo
     ExternalStorageOperator->Execute(evPtr);
 }
 
-void TWriteAction::DoOnExecuteTxAfterWrite(NColumnShard::TColumnShard& /*self*/, NColumnShard::TBlobManagerDb& dbBlobs, const bool blobsWroteSuccessfully) {
+void TWriteAction::DoOnExecuteTxAfterWrite(NColumnShard::TColumnShard& self, TBlobManagerDb& dbBlobs, const bool blobsWroteSuccessfully) {
     if (blobsWroteSuccessfully) {
         for (auto&& i : GetBlobsForWrite()) {
             dbBlobs.RemoveTierDraftBlobId(GetStorageId(), i.first);
@@ -23,12 +23,13 @@ void TWriteAction::DoOnExecuteTxAfterWrite(NColumnShard::TColumnShard& /*self*/,
     } else {
         for (auto&& i : GetBlobsForWrite()) {
             dbBlobs.RemoveTierDraftBlobId(GetStorageId(), i.first);
-            dbBlobs.AddTierBlobToDelete(GetStorageId(), i.first);
+            dbBlobs.AddTierBlobToDelete(GetStorageId(), i.first, (TTabletId)self.TabletID());
+            GCInfo->MutableBlobsToDelete().Add((TTabletId)self.TabletID(), i.first);
         }
     }
 }
 
-void TWriteAction::DoOnExecuteTxBeforeWrite(NColumnShard::TColumnShard& /*self*/, NColumnShard::TBlobManagerDb& dbBlobs) {
+void TWriteAction::DoOnExecuteTxBeforeWrite(NColumnShard::TColumnShard& /*self*/, TBlobManagerDb& dbBlobs) {
     for (auto&& i : GetBlobsForWrite()) {
         dbBlobs.AddTierDraftBlobId(GetStorageId(), i.first);
     }

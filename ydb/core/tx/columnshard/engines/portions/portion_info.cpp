@@ -1,6 +1,7 @@
 #include "portion_info.h"
 #include <ydb/core/tx/columnshard/engines/scheme/index_info.h>
 #include <ydb/core/tx/columnshard/engines/db_wrapper.h>
+#include <ydb/core/tx/columnshard/data_sharing/protos/data.pb.h>
 #include <ydb/core/formats/arrow/arrow_filter.h>
 #include <util/system/tls.h>
 #include <ydb/core/formats/arrow/size_calcer.h>
@@ -308,6 +309,23 @@ std::vector<NKikimr::NOlap::TPortionInfo::TPage> TPortionInfo::BuildPages() cons
 
 ui64 TPortionInfo::GetTxVolume() const {
     return 1024 + Records.size() * 256 + Indexes.size() * 256;
+}
+
+void TPortionInfo::SerializeToProto(NKikimrColumnShardDataSharingProto::TPortionInfo& /*proto*/) const {
+    AFL_VERIFY(false);
+}
+
+TConclusionStatus TPortionInfo::DeserializeFromProto(const NKikimrColumnShardDataSharingProto::TPortionInfo& /*proto*/) {
+    return TConclusionStatus::Fail("not implemented");
+}
+
+TConclusion<TPortionInfo> TPortionInfo::BuildFromProto(const NKikimrColumnShardDataSharingProto::TPortionInfo& proto) {
+    TPortionInfo result;
+    auto parse = result.DeserializeFromProto(proto);
+    if (!parse) {
+        return parse;
+    }
+    return result;
 }
 
 std::shared_ptr<arrow::ChunkedArray> TPortionInfo::TPreparedColumn::Assemble() const {

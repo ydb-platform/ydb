@@ -110,7 +110,7 @@ void TColumnEngineChanges::AbortEmergency() {
 
 TWriteIndexContext::TWriteIndexContext(NTabletFlatExecutor::TTransactionContext& txc, IDbWrapper& dbWrapper)
     : Txc(txc)
-    , BlobManagerDb(std::make_shared<NColumnShard::TBlobManagerDb>(txc.DB))
+    , BlobManagerDb(std::make_shared<TBlobManagerDb>(txc.DB))
     , DBWrapper(dbWrapper)
 {
 

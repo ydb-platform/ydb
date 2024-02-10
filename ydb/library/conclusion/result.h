@@ -82,6 +82,10 @@ public:
         return IsSuccess();
     }
 
+    operator TConclusionStatus() const {
+        return GetError();
+    }
+
     const TString& GetErrorMessage() const {
         auto* status = std::get_if<TConclusionStatus>(&Result);
         if (!status) {

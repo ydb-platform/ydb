@@ -5,33 +5,18 @@
 
 namespace NKikimr::NOlap::NBlobOperations::NTier {
 
-void TGCTask::DoOnExecuteTxAfterCleaning(NColumnShard::TColumnShard& /*self*/, NColumnShard::TBlobManagerDb& dbBlobs) {
-    size_t numBlobs = 0;
+void TGCTask::RemoveBlobIdFromDB(const TTabletId tabletId, const TUnifiedBlobId& blobId, TBlobManagerDb& dbBlobs) {
+    dbBlobs.RemoveTierBlobToDelete(GetStorageId(), blobId, tabletId);
+}
 
-    for (; DraftBlobIds.size() && numBlobs < NColumnShard::TLimits::MAX_BLOBS_TO_DELETE; ++numBlobs) {
-        dbBlobs.RemoveTierDraftBlobId(GetStorageId(), DraftBlobIds.front());
-        DraftBlobIds.pop_front();
-    }
-
-    for (; DeleteBlobIds.size() && numBlobs < NColumnShard::TLimits::MAX_BLOBS_TO_DELETE; ++numBlobs) {
-        dbBlobs.RemoveTierBlobToDelete(GetStorageId(), DeleteBlobIds.front());
-        DeleteBlobIds.pop_front();
+void TGCTask::DoOnExecuteTxAfterCleaning(NColumnShard::TColumnShard& /*self*/, TBlobManagerDb& dbBlobs) {
+    for (auto&& i : DraftBlobIds) {
+        dbBlobs.RemoveTierDraftBlobId(GetStorageId(), i);
     }
 }
 
-bool TGCTask::DoOnCompleteTxAfterCleaning(NColumnShard::TColumnShard& self, const std::shared_ptr<IBlobsGCAction>& taskAction) {
-    if (DraftBlobIds.size() || DeleteBlobIds.size()) {
-        TActorContext::AsActorContext().Send(self.SelfId(), std::make_unique<NColumnShard::TEvPrivate::TEvGarbageCollectionFinished>(taskAction));
-        return false;
-    } else {
-        for (auto&& i : DraftBlobIds) {
-            Counters->OnReply(i.BlobSize());
-        }
-        for (auto&& i : DeleteBlobIds) {
-            Counters->OnReply(i.BlobSize());
-        }
-        return true;
-    }
+bool TGCTask::DoOnCompleteTxAfterCleaning(NColumnShard::TColumnShard& /*self*/, const std::shared_ptr<IBlobsGCAction>& /*taskAction*/) {
+    return true;
 }
 
 }

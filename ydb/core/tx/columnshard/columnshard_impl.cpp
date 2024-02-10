@@ -1,5 +1,7 @@
 #include "columnshard_impl.h"
+#include "blob.h"
 #include "columnshard_schema.h"
+#include "common/tablet_id.h"
 #include "blobs_reader/task.h"
 #include "blobs_reader/events.h"
 #include "engines/changes/ttl.h"
@@ -11,9 +13,20 @@
 #include "blobs_action/tier/storage.h"
 #endif
 
+#include "blobs_reader/actor.h"
+#include "blobs_action/storages_manager/manager.h"
+#include "blobs_action/transaction/tx_remove_blobs.h"
 #include "blobs_action/transaction/tx_gc_insert_table.h"
 #include "blobs_action/transaction/tx_gc_indexed.h"
+
+#include "data_sharing/destination/session/destination.h"
+#include "data_sharing/source/session/source.h"
+#include "data_sharing/common/transactions/tx_extension.h"
+
+#include "resource_subscriber/counters.h"
+
 #include "hooks/abstract/abstract.h"
+
 #include <ydb/core/scheme/scheme_types_proto.h>
 #include <ydb/core/tablet/tablet_counters_protobuf.h>
 #include <ydb/core/tx/tiering/external_data.h>
@@ -22,8 +35,6 @@
 #include <ydb/services/metadata/service.h>
 #include <ydb/core/tx/tiering/manager.h>
 #include <ydb/core/tx/conveyor/usage/service.h>
-#include "resource_subscriber/counters.h"
-#include "blobs_reader/actor.h"
 
 
 #include <ydb/core/tx/columnshard/normalizer/granule/normalizer.h>
@@ -50,38 +61,13 @@ NTabletPipe::TClientConfig GetPipeClientConfig() {
 
 }
 
-class TColumnShard::TStoragesManager: public NOlap::IStoragesManager {
-private:
-    using TBase = NOlap::IStoragesManager;
-    TColumnShard& Shard;
-protected:
-    virtual std::shared_ptr<NOlap::IBlobsStorageOperator> DoBuildOperator(const TString& storageId) override {
-        if (storageId == TBase::DefaultStorageId) {
-            return std::make_shared<NOlap::NBlobOperations::NBlobStorage::TOperator>(storageId, Shard.SelfId(), Shard.Info(), Shard.Executor()->Generation());
-        } else if (!Shard.Tiers) {
-            return nullptr;
-        } else {
-#ifndef KIKIMR_DISABLE_S3_OPS
-            return std::make_shared<NOlap::NBlobOperations::NTier::TOperator>(storageId, Shard);
-#else
-            return nullptr;
-#endif
-        }
-    }
-public:
-    TStoragesManager(TColumnShard& shard)
-        : Shard(shard) {
-
-    }
-};
-
 TColumnShard::TColumnShard(TTabletStorageInfo* info, const TActorId& tablet)
     : TActor(&TThis::StateInit)
     , TTabletExecutedFlat(info, tablet, nullptr)
     , ProgressTxController(std::make_unique<TTxController>(*this))
+    , StoragesManager(std::make_shared<NOlap::TStoragesManager>(*this))
     , PeriodicWakeupActivationPeriod(GetControllerPeriodicWakeupActivationPeriod())
     , StatsReportInterval(GetControllerStatsReportInterval())
-    , StoragesManager(std::make_shared<TStoragesManager>(*this))
     , InFlightReadsTracker(StoragesManager)
     , TablesManager(StoragesManager, info->TabletID)
     , PipeClientCache(NTabletPipe::CreateBoundedClientCache(new NTabletPipe::TBoundedClientCacheConfig(), GetPipeClientConfig()))
@@ -603,7 +589,7 @@ protected:
             NConveyor::TCompServiceOperator::SendTaskToExecute(task);
         }
     }
-    virtual bool DoOnError(const TBlobRange& range, const NOlap::IBlobsReadingAction::TErrorStatus& status) override {
+    virtual bool DoOnError(const NOlap::TBlobRange& range, const NOlap::IBlobsReadingAction::TErrorStatus& status) override {
         AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("event", "DoOnError")("blob_id", range)("status", status.GetErrorMessage())("status_code", status.GetStatus());
         AFL_VERIFY(false)("blob_id", range)("status", status.GetStatus());
         TxEvent->SetPutStatus(NKikimrProto::ERROR);
@@ -827,6 +813,185 @@ void TColumnShard::Die(const TActorContext& ctx) {
     NTabletPipe::CloseAndForgetClient(SelfId(), StatsReportPipe);
     UnregisterMediatorTimeCast();
     return IActor::Die(ctx);
+}
+
+void TColumnShard::Handle(NActors::TEvents::TEvUndelivered::TPtr& ev, const TActorContext&) {
+    ui32 eventType = ev->Get()->SourceType;
+    switch (eventType) {
+        case NOlap::NDataSharing::NEvents::TEvSendDataFromSource::EventType:
+        case NOlap::NDataSharing::NEvents::TEvAckDataToSource::EventType:
+        case NOlap::NDataSharing::NEvents::TEvApplyLinksModification::EventType:
+        case NOlap::NDataSharing::NEvents::TEvStartToSource::EventType:
+        case NOlap::NDataSharing::NEvents::TEvAckFinishToSource::EventType:
+        case NOlap::NDataSharing::NEvents::TEvFinishedFromSource::EventType:
+            SharingSessionsManager->InitializeEventsExchange(*this, ev->Cookie);
+            break;
+    }
+}
+
+void TColumnShard::Handle(NOlap::NDataSharing::NEvents::TEvStartFromInitiator::TPtr& ev, const TActorContext& ctx) {
+    auto reqSession = std::make_shared<NOlap::NDataSharing::TDestinationSession>();
+    auto conclusion = reqSession->DeserializeDataFromProto(ev->Get()->Record.GetSession(), TablesManager.GetPrimaryIndexAsVerified<NOlap::TColumnEngineForLogs>());
+    if (!conclusion) {
+        if (!reqSession->GetInitiatorController()) {
+            AFL_ERROR(NKikimrServices::TX_COLUMNSHARD)("event", "cannot_parse_start_data_sharing_from_initiator");
+        } else {
+            reqSession->GetInitiatorController().StartError(ev->Get()->Record.GetSession().GetSessionId(), conclusion.GetErrorMessage());
+            return;
+        }
+    }
+
+    auto currentSession = SharingSessionsManager->GetDestinationSession(reqSession->GetSessionId());
+    if (currentSession) {
+        reqSession->GetInitiatorController().StartError(ev->Get()->Record.GetSession().GetSessionId(), "Session exists already");
+        return;
+    }
+
+    auto txConclusion = SharingSessionsManager->StartDestSession(this, reqSession);
+    Execute(txConclusion.release(), ctx);
+}
+
+void TColumnShard::Handle(NOlap::NDataSharing::NEvents::TEvStartToSource::TPtr& ev, const TActorContext& ctx) {
+    auto reqSession = std::make_shared<NOlap::NDataSharing::TSourceSession>((NOlap::TTabletId)TabletID());
+    AFL_VERIFY(reqSession->DeserializeFromProto(ev->Get()->Record.GetSession(), {}, TablesManager.GetPrimaryIndexAsVerified<NOlap::TColumnEngineForLogs>(), StoragesManager->GetSharedBlobsManager()));
+
+    auto currentSession = SharingSessionsManager->GetSourceSession(reqSession->GetSessionId());
+    if (currentSession) {
+        AFL_VERIFY(currentSession->IsEqualTo(*reqSession))("session_current", currentSession->DebugString())("session_new", reqSession->DebugString());
+        return;
+    }
+
+    auto txConclusion = SharingSessionsManager->StartSourceSession(this, reqSession);
+    Execute(txConclusion.release(), ctx);
+};
+
+void TColumnShard::Handle(NOlap::NDataSharing::NEvents::TEvSendDataFromSource::TPtr& ev, const TActorContext& ctx) {
+    auto currentSession = SharingSessionsManager->GetDestinationSession(ev->Get()->Record.GetSessionId());
+    if (!currentSession) {
+        AFL_WARN(NKikimrServices::TX_COLUMNSHARD)("event", "ignore_inactual_sharing_session")("sesion_id", ev->Get()->Record.GetSessionId());
+        return;
+    }
+
+    THashMap<ui64, NOlap::NDataSharing::NEvents::TPathIdData> dataByPathId;
+    for (auto&& i : ev->Get()->Record.GetPathIdData()) {
+        auto data = NOlap::NDataSharing::NEvents::TPathIdData::BuildFromProto(i);
+        AFL_VERIFY(data.IsSuccess())("error", data.GetErrorMessage());
+        AFL_VERIFY(dataByPathId.emplace(i.GetPathId(), data.DetachResult()).second);
+    }
+
+    auto txConclusion = currentSession->ReceiveData(this, dataByPathId, ev->Get()->Record.GetPackIdx(), (NOlap::TTabletId)ev->Get()->Record.GetSourceTabletId(), currentSession);
+    if (!txConclusion) {
+        AFL_WARN(NKikimrServices::TX_COLUMNSHARD)("event", "skip_received_data");
+    } else {
+        AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("event", "on_received_data");
+        Execute(txConclusion->release(), ctx);
+    }
+};
+
+void TColumnShard::Handle(NOlap::NDataSharing::NEvents::TEvAckDataToSource::TPtr& ev, const TActorContext& ctx) {
+    auto currentSession = SharingSessionsManager->GetSourceSession(ev->Get()->Record.GetSessionId());
+    if (!currentSession) {
+        AFL_WARN(NKikimrServices::TX_COLUMNSHARD)("event", "ignore_inactual_sharing_session")("sesion_id", ev->Get()->Record.GetSessionId());
+        return;
+    }
+
+    auto txConclusion = currentSession->AckData(this, ev->Get()->Record.GetPackIdx(), currentSession);
+    if (!txConclusion) {
+        AFL_WARN(NKikimrServices::TX_COLUMNSHARD)("event", "skip_ack_data");
+    } else {
+        AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("event", "on_ack_data");
+        Execute(txConclusion->release(), ctx);
+    }
+};
+
+void TColumnShard::Handle(NOlap::NDataSharing::NEvents::TEvAckFinishToSource::TPtr& ev, const TActorContext& ctx) {
+    auto currentSession = SharingSessionsManager->GetSourceSession(ev->Get()->Record.GetSessionId());
+    if (!currentSession) {
+        AFL_WARN(NKikimrServices::TX_COLUMNSHARD)("event", "ignore_inactual_sharing_session")("sesion_id", ev->Get()->Record.GetSessionId());
+        return;
+    }
+
+    auto txConclusion = currentSession->AckFinished(this, currentSession);
+    if (!txConclusion) {
+        AFL_WARN(NKikimrServices::TX_COLUMNSHARD)("event", "skip_ack_finish");
+    } else {
+        AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("event", "on_ack_finish");
+        Execute(txConclusion->release(), ctx);
+    }
+};
+
+void TColumnShard::Handle(NOlap::NDataSharing::NEvents::TEvFinishedFromSource::TPtr& ev, const TActorContext& ctx) {
+    auto currentSession = SharingSessionsManager->GetDestinationSession(ev->Get()->Record.GetSessionId());
+    if (!currentSession) {
+        AFL_WARN(NKikimrServices::TX_COLUMNSHARD)("event", "ignore_inactual_sharing_session")("sesion_id", ev->Get()->Record.GetSessionId());
+        return;
+    }
+
+    auto txConclusion = currentSession->ReceiveFinished(this, (NOlap::TTabletId)ev->Get()->Record.GetSourceTabletId(), currentSession);
+    if (!txConclusion) {
+        AFL_WARN(NKikimrServices::TX_COLUMNSHARD)("event", "skip_finished_data");
+    } else {
+        AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("event", "on_finished_data");
+        Execute(txConclusion->release(), ctx);
+    }
+};
+
+void TColumnShard::Handle(NOlap::NDataSharing::NEvents::TEvAckFinishFromInitiator::TPtr& ev, const TActorContext& ctx) {
+    auto currentSession = SharingSessionsManager->GetDestinationSession(ev->Get()->Record.GetSessionId());
+    if (!currentSession) {
+        AFL_WARN(NKikimrServices::TX_COLUMNSHARD)("event", "ignore_inactual_sharing_session")("sesion_id", ev->Get()->Record.GetSessionId());
+        return;
+    }
+
+    auto txConclusion = currentSession->AckInitiatorFinished(this, currentSession);
+    if (!txConclusion) {
+        AFL_WARN(NKikimrServices::TX_COLUMNSHARD)("event", "skip_initiator_ack_finished_data");
+    } else {
+        AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("event", "on_initiator_ack_finished_data");
+        Execute(txConclusion->release(), ctx);
+    }
+};
+
+void TColumnShard::Handle(NOlap::NDataSharing::NEvents::TEvApplyLinksModification::TPtr& ev, const TActorContext& ctx) {
+    NActors::TLogContextGuard gLogging = NActors::TLogContextBuilder::Build(NKikimrServices::TX_COLUMNSHARD)("tablet_id", TabletID())("event", "TEvChangeBlobsOwning");
+
+    auto task = std::make_shared<NOlap::NDataSharing::TTaskForTablet>((NOlap::TTabletId)TabletID());
+    auto parsed = task->DeserializeFromProto(ev->Get()->Record.GetTask());
+    AFL_VERIFY(!!parsed)("error", parsed.GetErrorMessage());
+
+    AFL_VERIFY(task->GetTabletId() == (NOlap::TTabletId)TabletID());
+    auto txConclusion = task->BuildModificationTransaction(this, (NOlap::TTabletId)ev->Get()->Record.GetInitiatorTabletId(), ev->Get()->Record.GetSessionId(), ev->Get()->Record.GetPackIdx(), task);
+    AFL_VERIFY(!!txConclusion)("error", txConclusion.GetErrorMessage());
+    Execute(txConclusion->release(), ctx);
+}
+
+void TColumnShard::Handle(NOlap::NDataSharing::NEvents::TEvApplyLinksModificationFinished::TPtr& ev, const TActorContext& ctx) {
+    auto currentSession = SharingSessionsManager->GetSourceSession(ev->Get()->Record.GetSessionId());
+    if (!currentSession) {
+        AFL_WARN(NKikimrServices::TX_COLUMNSHARD)("event", "ignore_inactual_sharing_session")("sesion_id", ev->Get()->Record.GetSessionId());
+        return;
+    }
+    const NOlap::TTabletId modifiedTabletId = (NOlap::TTabletId)ev->Get()->Record.GetModifiedTabletId();
+    auto txConclusion = currentSession->AckLinks(this, modifiedTabletId, ev->Get()->Record.GetPackIdx(), currentSession);
+
+    if (!txConclusion) {
+        AFL_WARN(NKikimrServices::TX_COLUMNSHARD)("event", "skip_change_links_finish")("error", txConclusion.GetErrorMessage())("tablet_id", modifiedTabletId);
+    } else {
+        AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("event", "on_change_links_finish")("tablet_id", modifiedTabletId);
+        Execute(txConclusion->release(), ctx);
+    }
+}
+
+void TColumnShard::Handle(NOlap::NBlobOperations::NEvents::TEvDeleteSharedBlobs::TPtr& ev, const TActorContext& ctx) {
+    NActors::TLogContextGuard gLogging = NActors::TLogContextBuilder::Build(NKikimrServices::TX_COLUMNSHARD)("tablet_id", TabletID())("event", "TEvDeleteSharedBlobs");
+    auto removeAction = StoragesManager->GetOperator(ev->Get()->Record.GetStorageId())->StartDeclareRemovingAction("DELETE_SHARED_BLOBS");
+    for (auto&& i : ev->Get()->Record.GetBlobIds()) {
+        TLogoBlobID blobId;
+        TString error;
+        AFL_VERIFY(TLogoBlobID::Parse(blobId, i, error))("problem", error);
+        removeAction->DeclareRemove((NOlap::TTabletId)ev->Get()->Record.GetSourceTabletId(), NOlap::TUnifiedBlobId(Max<ui32>(), blobId));
+    }
+    Execute(new TTxRemoveSharedBlobs(this, removeAction, NActors::ActorIdFromProto(ev->Get()->Record.GetSourceActorId())), ctx);
 }
 
 void TColumnShard::Handle(NMetadata::NProvider::TEvRefreshSubscriberData::TPtr& ev) {

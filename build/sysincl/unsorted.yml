@@ -210,9 +210,6 @@
   - ../include/sys/stat.h
   - ../include/fcntl.h
   - ../include/math.h
-  - vcruntime_exception.h
-  - vcruntime_new.h
-  - vcruntime_typeinfo.h
   #endif
 
 - source_filter: "^contrib/(libs/(apache|httpd|libuv)|python/uWSGI)"
@@ -629,8 +626,6 @@
   #endif
 
 - includes:
-  - Aclapi.h
-  - time64.h
   - extern.h
   #if defined(__FreeBSD__)
   - _ctype.h
@@ -672,10 +667,6 @@
   - asm/fpu.h
   - i386/fpu_control.h
   - zlibdefs.h
-  #endif
-  #if defined(_MSC_VER)
-  - vcruntime_new_debug.h
-  - yvals.h
   #endif
   #if defined(__sgi)
   - sigfpe.h

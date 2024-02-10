@@ -3,7 +3,6 @@
 #include "rpc_deferrable.h"
 
 #include <ydb/core/fq/libs/events/events.h>
-#include <ydb/core/fq/libs/actors/proxy_private.h>
 #include <ydb/core/fq/libs/protos/fq_private.pb.h>
 
 #include <ydb/library/actors/core/hfunc.h>

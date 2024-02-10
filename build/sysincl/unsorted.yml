@@ -523,9 +523,6 @@
   - agg_allocator.h
   - SIOUX.h
   - sys/siginfo.h
-  #if MATLAB_MEX_FILE
-  - mex.h
-  #else
   - lzmalib.h
   # ICU
   - uconfig_local.h

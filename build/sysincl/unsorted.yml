@@ -687,16 +687,7 @@
   - allocators
   - amp.h
   - collection.h
-  - ConcurrencySal.h
-  - concurrent_priority_queue.h
-  - concurrent_queue.h
-  - concurrent_unordered_map.h
-  - concurrent_unordered_set.h
-  - concurrent_vector.h
   - vcruntime_new_debug.h
-  - dvec.h
-  - setjmpex.h
-  - srv.h
   - yvals.h
   #endif
   #if defined(__sgi)

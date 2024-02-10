@@ -680,10 +680,6 @@
   - zlibdefs.h
   #endif
   #if defined(_MSC_VER)
-  - agents.h
-  - allocators
-  - amp.h
-  - collection.h
   - vcruntime_new_debug.h
   - yvals.h
   #endif

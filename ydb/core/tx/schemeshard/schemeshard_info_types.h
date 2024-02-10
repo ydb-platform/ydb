@@ -27,6 +27,14 @@
 #include <ydb/library/login/protos/login.pb.h>
 
 #include <ydb/public/api/protos/ydb_import.pb.h>
+#include <ydb/core/protos/blockstore_config.pb.h>
+#include <ydb/core/protos/filestore_config.pb.h>
+#include <ydb/core/protos/follower_group.pb.h>
+#include <ydb/public/api/protos/ydb_cms.pb.h>
+#include <ydb/public/api/protos/ydb_table.pb.h>
+#include <ydb/core/protos/index_builder.pb.h>
+#include <ydb/public/api/protos/ydb_coordination.pb.h>
+
 #include <ydb/public/lib/scheme_types/scheme_type_id.h>
 
 #include <google/protobuf/util/message_differencer.h>

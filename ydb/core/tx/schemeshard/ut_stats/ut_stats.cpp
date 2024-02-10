@@ -1,6 +1,7 @@
 #include <ydb/core/cms/console/console.h>
 #include <ydb/core/tx/schemeshard/ut_helpers/helpers.h>
 #include <ydb/core/tx/datashard/datashard.h>
+#include <ydb/core/protos/table_stats.pb.h>
 
 using namespace NKikimr;
 using namespace NSchemeShardUT_Private;

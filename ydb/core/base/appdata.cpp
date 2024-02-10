@@ -18,6 +18,9 @@
 #include <ydb/core/protos/key.pb.h>
 #include <ydb/core/protos/pqconfig.pb.h>
 #include <ydb/core/protos/stream.pb.h>
+#include <ydb/core/protos/netclassifier.pb.h>
+#include <ydb/core/protos/datashard_config.pb.h>
+#include <ydb/core/protos/shared_cache.pb.h>
 #include <ydb/library/pdisk_io/aio.h>
 
 #include <ydb/library/actors/interconnect/poller_tcp.h>

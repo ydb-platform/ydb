@@ -19,6 +19,7 @@
 #include <ydb/core/kqp/query_data/kqp_prepared_query.h>
 #include <ydb/core/protos/flat_scheme_op.pb.h>
 #include <ydb/core/protos/kqp.pb.h>
+#include <ydb/core/protos/kqp_stats.pb.h>
 #include <ydb/core/scheme/scheme_types_proto.h>
 
 #include <library/cpp/json/json_reader.h>

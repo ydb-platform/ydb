@@ -9,6 +9,10 @@
 #include <ydb/core/tx/schemeshard/schemeshard_export.h>
 #include <ydb/core/tx/schemeshard/schemeshard_identificators.h>
 #include <ydb/core/tx/schemeshard/schemeshard_import.h>
+#include <ydb/library/ydb_issue/proto/issue_id.pb.h>
+#include <ydb/public/api/protos/ydb_status_codes.pb.h>
+#include <ydb/core/protos/follower_group.pb.h>
+#include <ydb/core/protos/msgbus_kv.pb.h>
 
 #include <ydb/public/sdk/cpp/client/ydb_driver/driver.h>
 

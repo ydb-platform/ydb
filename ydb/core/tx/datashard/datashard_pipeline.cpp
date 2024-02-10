@@ -9,6 +9,7 @@
 #include <ydb/core/base/cputime.h>
 #include <ydb/core/base/feature_flags.h>
 #include <ydb/core/tx/balance_coverage/balance_coverage_builder.h>
+#include <ydb/core/protos/kqp.pb.h>
 
 namespace NKikimr {
 namespace NDataShard {

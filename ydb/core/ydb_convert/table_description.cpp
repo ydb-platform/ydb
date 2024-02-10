@@ -9,6 +9,9 @@
 #include <ydb/library/ydb_issue/proto/issue_id.pb.h>
 #include <ydb/library/yql/public/issue/yql_issue.h>
 #include <ydb/core/scheme/scheme_pathid.h>
+#include <ydb/core/protos/kqp_physical.pb.h>
+#include <ydb/core/protos/table_stats.pb.h>
+#include <ydb/core/protos/follower_group.pb.h>
 
 #include <util/generic/hash.h>
 

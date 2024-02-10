@@ -1,6 +1,7 @@
 #pragma once
 
 #include <ydb/core/protos/kqp.pb.h>
+#include <ydb/public/api/protos/ydb_query.pb.h>
 
 #include <util/str_stl.h>
 

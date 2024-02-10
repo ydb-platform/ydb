@@ -9,6 +9,7 @@
 #include <ydb/core/tablet/tablet_counters_protobuf.h>
 #include <ydb/core/tx/long_tx_service/public/events.h>
 #include <ydb/core/protos/datashard_config.pb.h>
+#include <ydb/core/protos/query_stats.pb.h>
 
 #include <ydb/library/actors/core/monotonic_provider.h>
 #include <library/cpp/monlib/service/pages/templates.h>

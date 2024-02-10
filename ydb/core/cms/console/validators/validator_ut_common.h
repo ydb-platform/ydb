@@ -6,6 +6,9 @@
 
 #include <library/cpp/testing/unittest/registar.h>
 
+#include <ydb/library/actors/protos/interconnect.pb.h>
+#include <ydb/core/protos/resource_broker.pb.h>
+
 namespace NKikimr::NConsole {
 namespace NTests {
 

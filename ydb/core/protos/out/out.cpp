@@ -9,6 +9,20 @@
 #include <ydb/core/protos/resource_broker.pb.h>
 #include <ydb/core/protos/tenant_pool.pb.h>
 #include <ydb/core/protos/tx_datashard.pb.h>
+#include <ydb/core/protos/blobstorage_base.pb.h>
+#include <ydb/core/protos/base.pb.h>
+#include <ydb/core/protos/blobstorage_config.pb.h>
+#include <ydb/core/protos/blobstorage_base3.pb.h>
+#include <ydb/core/protos/node_broker.pb.h>
+#include <ydb/core/protos/config.pb.h>
+#include <ydb/core/protos/tx_datashard.pb.h>
+#include <ydb/core/protos/blobstorage_disk.pb.h>
+#include <ydb/core/protos/blobstorage_disk_color.pb.h>
+#include <ydb/core/protos/kqp.pb.h>
+#include <ydb/core/protos/node_whiteboard.pb.h>
+#include <ydb/core/protos/flat_scheme_op.pb.h>
+#include <ydb/core/protos/subdomains.pb.h>
+#include <ydb/core/protos/data_events.pb.h>
 
 #include <util/stream/output.h>
 

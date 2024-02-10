@@ -13,6 +13,11 @@
 #include <util/system/fs.h>
 #include <util/system/hostname.h>
 #include <google/protobuf/text_format.h>
+#include <ydb/core/protos/alloc.pb.h>
+#include <ydb/core/protos/http_config.pb.h>
+#include <ydb/core/protos/tenant_pool.pb.h>
+#include <ydb/core/protos/node_broker.pb.h>
+#include <ydb/core/protos/resource_broker.pb.h>
 
 #include <ydb/public/sdk/cpp/client/ydb_discovery/discovery.h>
 #include <ydb/public/sdk/cpp/client/ydb_driver/driver.h>

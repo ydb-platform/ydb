@@ -1,6 +1,7 @@
 #pragma once
 
 #include <ydb/core/base/logoblob.h>
+#include <ydb/core/protos/blob_depot_config.pb.h>
 
 #include <util/random/entropy.h>
 #include <util/random/mersenne.h>

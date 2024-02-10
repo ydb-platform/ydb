@@ -2477,7 +2477,7 @@ Y_UNIT_TEST_SUITE(TColumnShardTestReadWrite) {
                     Cerr << " deletes blobs: " << JoinStrings(msg->DoNotKeep->begin(), msg->DoNotKeep->end(), " ");
                     for (const auto& blobId : *msg->DoNotKeep) {
                         deletedBlobs.insert(blobId.ToString());
-                        delayedBlobs.erase(TUnifiedBlobId(0, blobId).ToStringNew());
+                        delayedBlobs.erase(NOlap::TUnifiedBlobId(0, blobId).ToStringNew());
                     }
                 }
                 Cerr << Endl;

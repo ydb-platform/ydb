@@ -196,6 +196,16 @@ public:
         return PortionsByPK;
     }
 
+    std::map<ui32, std::shared_ptr<TPortionInfo>> GetPortionsOlderThenSnapshot(const TSnapshot& border) const {
+        std::map<ui32, std::shared_ptr<TPortionInfo>> result;
+        for (auto&& i : Portions) {
+            if (i.second->RecordSnapshotMin() <= border) {
+                result.emplace(i.first, i.second);
+            }
+        }
+        return result;
+    }
+
     void OnAfterPortionsLoad() {
         auto g = OptimizerPlanner->StartModificationGuard();
         for (auto&& i : Portions) {

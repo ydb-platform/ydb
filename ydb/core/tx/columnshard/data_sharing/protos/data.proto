@@ -1,0 +1,9 @@
+package NKikimrColumnShardDataSharingProto;
+
+message TPortionInfo {
+}
+
+message TPathIdData {
+    optional uint64 PathId = 1;
+    repeated TPortionInfo Portions = 2;
+}

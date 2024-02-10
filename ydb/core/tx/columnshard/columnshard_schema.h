@@ -39,6 +39,12 @@ struct Schema : NIceDb::Schema {
         CountersTableId,
         OperationsTableId,
         IndexesTableId,
+
+        SharedBlobIdsTableId,
+        BorrowedBlobIdsTableId,
+        SourceSessionsTableId,
+        DestinationSessionsTableId,
+
         LocksTableId,
         LockRangesTableId,
         LockConflictsTableId,
@@ -175,10 +181,11 @@ struct Schema : NIceDb::Schema {
     };
 
     struct BlobsToDelete : Table<8> {
-        struct BlobId : Column<1, NScheme::NTypeIds::String> {};
+        struct BlobId: Column<1, NScheme::NTypeIds::String> {};
+        struct TabletId: Column<2, NScheme::NTypeIds::Uint64> {};
 
-        using TKey = TableKey<BlobId>;
-        using TColumns = TableColumns<BlobId>;
+        using TKey = TableKey<BlobId, TabletId>;
+        using TColumns = TableColumns<BlobId, TabletId>;
     };
 
     struct SmallBlobs : Table<12> {
@@ -291,9 +298,10 @@ struct Schema : NIceDb::Schema {
     struct TierBlobsToDelete: NIceDb::Schema::Table<(ui32)ETierTables::TierBlobsToDelete> {
         struct StorageId: Column<1, NScheme::NTypeIds::String> {};
         struct BlobId: Column<2, NScheme::NTypeIds::String> {};
+        struct TabletId: Column<3, NScheme::NTypeIds::Uint64> {};
 
-        using TKey = TableKey<StorageId, BlobId>;
-        using TColumns = TableColumns<StorageId, BlobId>;
+        using TKey = TableKey<StorageId, BlobId, TabletId>;
+        using TColumns = TableColumns<StorageId, BlobId, TabletId>;
     };
 
     struct IndexIndexes: NIceDb::Schema::Table<IndexesTableId> {
@@ -309,6 +317,42 @@ struct Schema : NIceDb::Schema {
 
         using TKey = TableKey<PathId, PortionId, IndexId, ChunkIdx>;
         using TColumns = TableColumns<PathId, PortionId, IndexId, ChunkIdx, Blob, Offset, Size, RecordsCount, RawBytes>;
+    };
+
+    struct SharedBlobIds: NIceDb::Schema::Table<SharedBlobIdsTableId> {
+        struct StorageId: Column<1, NScheme::NTypeIds::String> {};
+        struct BlobId: Column<2, NScheme::NTypeIds::String> {};
+        struct TabletId: Column<3, NScheme::NTypeIds::Uint64> {};
+
+        using TKey = TableKey<StorageId, BlobId, TabletId>;
+        using TColumns = TableColumns<StorageId, BlobId, TabletId>;
+    };
+
+    struct BorrowedBlobIds: NIceDb::Schema::Table<BorrowedBlobIdsTableId> {
+        struct StorageId: Column<1, NScheme::NTypeIds::String> {};
+        struct BlobId: Column<2, NScheme::NTypeIds::String> {};
+        struct TabletId: Column<3, NScheme::NTypeIds::Uint64> {};
+
+        using TKey = TableKey<StorageId, BlobId>;
+        using TColumns = TableColumns<StorageId, BlobId, TabletId>;
+    };
+
+    struct SourceSessions: NIceDb::Schema::Table<SourceSessionsTableId> {
+        struct SessionId: Column<1, NScheme::NTypeIds::String> {};
+        struct Details: Column<2, NScheme::NTypeIds::String> {};
+        struct Cursor: Column<3, NScheme::NTypeIds::String> {};
+
+        using TKey = TableKey<SessionId>;
+        using TColumns = TableColumns<SessionId, Details, Cursor>;
+    };
+
+    struct DestinationSessions: NIceDb::Schema::Table<DestinationSessionsTableId> {
+        struct SessionId: Column<1, NScheme::NTypeIds::String> {};
+        struct Details: Column<2, NScheme::NTypeIds::String> {};
+        struct Cursor: Column<3, NScheme::NTypeIds::String> {};
+
+        using TKey = TableKey<SessionId>;
+        using TColumns = TableColumns<SessionId, Details, Cursor>;
     };
 
     struct Locks : Table<LocksTableId> {
@@ -372,7 +416,11 @@ struct Schema : NIceDb::Schema {
         Operations,
         TierBlobsDraft,
         TierBlobsToDelete,
-        IndexIndexes
+        IndexIndexes,
+        SharedBlobIds,
+        BorrowedBlobIds,
+        SourceSessions,
+        DestinationSessions
         >;
 
     //

@@ -66,6 +66,21 @@ struct TEvColumnShard {
         EvWriteResult,
         EvReadResult,
 
+        EvDeleteSharedBlobs,
+        EvDeleteSharedBlobsFinished,
+
+        EvDataSharingStartFromInitiator,
+        EvDataSharingAckFinishFromInitiator,
+        EvDataSharingStartToSource,
+        EvDataSharingSendDataFromSource,
+        EvDataSharingAckDataToSource,
+        EvDataSharingFinishedFromSource,
+        EvDataSharingAckFinishToSource,
+        EvDataSharingCheckStatusFromInitiator,
+        EvDataSharingCheckStatusResult,
+        EvApplyLinksModification,
+        EvApplyLinksModificationFinished,
+
         EvEnd
     };
 
@@ -210,8 +225,7 @@ struct TEvColumnShard {
         }
     };
 
-    struct TEvWriteResult : public TEventPB<TEvWriteResult, NKikimrTxColumnShard::TEvWriteResult,
-                            TEvColumnShard::EvWriteResult> {
+    struct TEvWriteResult : public TEventPB<TEvWriteResult, NKikimrTxColumnShard::TEvWriteResult, TEvColumnShard::EvWriteResult> {
         TEvWriteResult() = default;
 
         TEvWriteResult(ui64 origin, const NEvWrite::TWriteMeta& writeMeta, ui32 status)
@@ -235,6 +249,7 @@ struct TEvColumnShard {
     };
 
     using TEvScan = TEvDataShard::TEvKqpScan;
+
 };
 
 inline auto& Proto(TEvColumnShard::TEvProposeTransaction* ev) {

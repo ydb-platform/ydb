@@ -1,0 +1,27 @@
+import "ydb/library/actors/protos/actors.proto";
+
+package NKikimrColumnShardDataSharingProto;
+
+message TPortionInfo {
+}
+
+message TPathIdData {
+    optional uint64 PathId = 1;
+    repeated TPortionInfo Portions = 2;
+}
+
+message TEvSendDataFromSource {
+    optional NActorsProto.TActorId SourceActorId = 1;
+    optional string SharingId = 2;
+    repeated TPathIdData DataByPathId = 3;
+}
+
+message TEvAckDataToSource {
+    optional NActorsProto.TActorId DestActorId = 1;
+    optional string SharingId = 2;
+}
+
+message TEvFinishedFromSource {
+    optional NActorsProto.TActorId SourceActorId = 1;
+    optional string SharingId = 2;
+}

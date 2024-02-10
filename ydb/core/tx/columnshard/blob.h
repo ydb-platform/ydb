@@ -1,6 +1,7 @@
 #pragma once
 
 #include <ydb/core/base/logoblob.h>
+#include <ydb/library/conclusion/result.h>
 
 #include <util/generic/string.h>
 
@@ -151,6 +152,15 @@ public:
     TUnifiedBlobId& operator = (const TUnifiedBlobId& logoBlobId) = default;
     TUnifiedBlobId(TUnifiedBlobId&& other) = default;
     TUnifiedBlobId& operator = (TUnifiedBlobId&& logoBlobId) = default;
+
+    static TConclusion<TUnifiedBlobId> BuildFromString(const TString& id, const IBlobGroupSelector* dsGroupSelector) {
+        TString error;
+        TUnifiedBlobId result = ParseFromString(id, dsGroupSelector, error);
+        if (!result.IsValid()) {
+            return TConclusionStatus::Fail(error);
+        }
+        return result;
+    }
 
     TUnifiedBlobId MakeS3BlobId(ui64 pathId) const {
         Y_ABORT_UNLESS(IsDsBlob());

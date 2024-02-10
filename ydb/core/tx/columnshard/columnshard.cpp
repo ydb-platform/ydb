@@ -46,6 +46,7 @@ void TColumnShard::SwitchToWork(const TActorContext& ctx) {
         TryRegisterMediatorTimeCast();
         EnqueueProgressTx(ctx);
     }
+    SharingSessionsManager->InitializeEventsExchange(*this);
     EnqueueBackgroundActivities();
     ctx.Send(SelfId(), new TEvPrivate::TEvPeriodicWakeup());
 }

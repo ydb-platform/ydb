@@ -10,6 +10,10 @@
 
 #include <ydb/library/yverify_stream/yverify_stream.h>
 
+namespace NKikimrColumnShardDataSharingProto {
+class TPortionInfo;
+}
+
 namespace NKikimr::NOlap {
 
 struct TIndexInfo;
@@ -44,6 +48,10 @@ public:
 
         }
     };
+
+    static TConclusion<TPortionInfo> BuildFromProto(const NKikimrColumnShardDataSharingProto::TPortionInfo& proto);
+    void SerializeToProto(NKikimrColumnShardDataSharingProto::TPortionInfo& proto) const;
+    TConclusionStatus DeserializeFromProto(const NKikimrColumnShardDataSharingProto::TPortionInfo& proto);
 
     std::vector<TPage> BuildPages() const;
 
@@ -357,6 +365,22 @@ public:
     const TSnapshot& RecordSnapshotMax() const {
         Y_ABORT_UNLESS(Meta.RecordSnapshotMax);
         return *Meta.RecordSnapshotMax;
+    }
+
+
+    THashMap<TString, THashSet<TUnifiedBlobId>> GetBlobIdsByStorage() const {
+        THashMap<TString, THashSet<TUnifiedBlobId>> result;
+        FillBlobIdsByStorage(result);
+        return result;
+    }
+
+    void FillBlobIdsByStorage(THashMap<TString, THashSet<TUnifiedBlobId>>& result) const {
+        for (auto&& i : Records) {
+            result[GetMeta().GetTierName()].emplace(i.BlobRange.BlobId);
+        }
+        for (auto&& i : Indexes) {
+            result[GetMeta().GetTierName()].emplace(i.GetBlobRange().BlobId);
+        }
     }
 
     THashSet<TUnifiedBlobId> GetBlobIds() const {

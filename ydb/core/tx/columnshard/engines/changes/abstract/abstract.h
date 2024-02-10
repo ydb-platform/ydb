@@ -72,7 +72,7 @@ public:
 class TWriteIndexContext: TNonCopyable {
 public:
     NTabletFlatExecutor::TTransactionContext& Txc;
-    std::shared_ptr<NColumnShard::TBlobManagerDb> BlobManagerDb;
+    std::shared_ptr<TBlobManagerDb> BlobManagerDb;
     IDbWrapper& DBWrapper;
     TWriteIndexContext(NTabletFlatExecutor::TTransactionContext& txc, IDbWrapper& dbWrapper);
 };

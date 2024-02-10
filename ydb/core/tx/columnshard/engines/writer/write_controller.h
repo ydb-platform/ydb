@@ -4,7 +4,6 @@
 #include "blob_constructor.h"
 
 #include <ydb/library/actors/core/actor.h>
-#include <ydb/core/tx/columnshard/blob_manager.h>
 #include <ydb/core/tx/columnshard/defs.h>
 #include <ydb/core/tx/columnshard/blobs_action/abstract/write.h>
 
@@ -29,7 +28,7 @@ public:
 
 class IWriteController {
 private:
-    THashMap<TUnifiedBlobId, std::shared_ptr<NOlap::IBlobsWritingAction>> BlobActions;
+    THashMap<NOlap::TUnifiedBlobId, std::shared_ptr<NOlap::IBlobsWritingAction>> BlobActions;
     THashMap<i64, std::shared_ptr<NOlap::IBlobsWritingAction>> WritingActions;
     std::deque<NOlap::TBlobWriteInfo> WriteTasks;
 protected:
@@ -65,7 +64,7 @@ public:
     }
 
     void OnBlobWriteResult(const TEvBlobStorage::TEvPutResult& result) {
-        TUnifiedBlobId blobId(result.GroupId, result.Id);
+        NOlap::TUnifiedBlobId blobId(result.GroupId, result.Id);
         auto it = BlobActions.find(blobId);
         AFL_VERIFY(it != BlobActions.end());
         it->second->OnBlobWriteResult(blobId, result.Status);

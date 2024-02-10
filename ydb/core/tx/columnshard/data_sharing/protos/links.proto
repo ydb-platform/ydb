@@ -1,0 +1,22 @@
+import "ydb/core/tx/columnshard/blobs_action/protos/blobs.proto";
+
+package NKikimrColumnShardDataSharingProto;
+
+message TBlobOwnerRemap {
+    optional string BlobId = 1;
+    optional uint64 From = 2;
+    optional uint64 To = 3;
+}
+
+message TStorageTabletTask {
+    optional string StorageId = 1;
+    repeated TBlobOwnerRemap RemapOwner = 2;
+    optional NKikimrColumnShardBlobOperationsProto.TTabletByBlob InitOwner = 3;
+    optional NKikimrColumnShardBlobOperationsProto.TTabletsByBlob AddSharingLinks= 4;
+    optional NKikimrColumnShardBlobOperationsProto.TTabletsByBlob RemoveSharingLinks = 5;
+}
+
+message TTaskForTablet {
+    optional uint64 TabletId = 1;
+    repeated TStorageTabletTask TasksByStorage = 2;
+}

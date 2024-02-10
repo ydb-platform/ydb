@@ -491,9 +491,9 @@
     ],
     "test_sql2yql.test[action-parallel_for]": [
         {
-            "checksum": "34682c2587cd1d351c27be358498307e",
-            "size": 2103,
-            "uri": "https://{canondata_backend}/1942415/2241aee432ab474d9b77948c0a7cbceef22aba8f/resource.tar.gz#test_sql2yql.test_action-parallel_for_/sql.yql"
+            "checksum": "7b83a90e354692eed773a7409d66a963",
+            "size": 2129,
+            "uri": "https://{canondata_backend}/1924537/81ea882379cbb6d33045aa517e56bcd05fa3ec6b/resource.tar.gz#test_sql2yql.test_action-parallel_for_/sql.yql"
         }
     ],
     "test_sql2yql.test[action-pass_action_as_param]": [
@@ -17998,9 +17998,9 @@
     ],
     "test_sql_format.test[action-parallel_for]": [
         {
-            "checksum": "73070ec575e3ea3887857b7486df1ecb",
-            "size": 225,
-            "uri": "https://{canondata_backend}/1942415/2241aee432ab474d9b77948c0a7cbceef22aba8f/resource.tar.gz#test_sql_format.test_action-parallel_for_/formatted.sql"
+            "checksum": "23888f0f4542b6ff32bcdabf9eb4e4d9",
+            "size": 231,
+            "uri": "https://{canondata_backend}/1924537/81ea882379cbb6d33045aa517e56bcd05fa3ec6b/resource.tar.gz#test_sql_format.test_action-parallel_for_/formatted.sql"
         }
     ],
     "test_sql_format.test[action-pass_action_as_param]": [
@@ -32456,6 +32456,13 @@
             "checksum": "0fad6da8e4c5a2ab2c1e5a231ea430d1",
             "size": 105,
             "uri": "https://{canondata_backend}/1923547/d4a40b8dc00b9fd8e4cceadb8bcb11779bfdfafc/resource.tar.gz#test_sql_negative.test_action-no_columns_in_do-default.txt_/err_file.out"
+        }
+    ],
+    "test_sql_negative.test[action-parallel_for_commit-default.txt]": [
+        {
+            "checksum": "53afee8c11aa40b9f34e8d50d75adfd5",
+            "size": 163,
+            "uri": "https://{canondata_backend}/1924537/81ea882379cbb6d33045aa517e56bcd05fa3ec6b/resource.tar.gz#test_sql_negative.test_action-parallel_for_commit-default.txt_/err_file.out"
         }
     ],
     "test_sql_negative.test[action-parallel_for_select-default.txt]": [

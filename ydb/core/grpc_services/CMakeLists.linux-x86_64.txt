@@ -31,8 +31,7 @@ target_link_libraries(ydb-core-grpc_services PUBLIC
   ydb-core-discovery
   ydb-core-engine
   ydb-core-formats
-  fq-libs-actors
-  fq-libs-control_plane_proxy
+  fq-libs-events
   libs-control_plane_proxy-events
   core-grpc_services-base
   core-grpc_services-counters

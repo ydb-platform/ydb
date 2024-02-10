@@ -30,9 +30,6 @@
   - afxwin.h
   - alpha/builtins.h
   - apr_iconv.h
-  - atheos/atomic.h
-  - atheos/semaphore.h
-  - atheos/threads.h
   - atomic_ops.h
   - auth-client-parser/parser.h
   - bluetooth/bluetooth.h

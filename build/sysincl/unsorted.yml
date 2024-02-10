@@ -724,9 +724,6 @@
   - sfio.h
   - ../../VC/include/stdio.h
   - ../ucrt/stdio.h
-  #if EV_USE_IOCP
-  - ev_iocp.c
-  # unknown
   - GL/glx.h
   - CL/va_ext.h
   - sys/sysconf.h

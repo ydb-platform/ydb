@@ -274,17 +274,12 @@ static const char* const ReadQueueParamsQueryYandex = R"__(
 )__";
 
 void TCreateQueueSchemaActorV2::RequestQueueParams() {
-    auto folderId = FolderId_;
-    if (ValidatedAttributes_.FolderID.Defined()) {
-        folderId = *ValidatedAttributes_.FolderID;
-    }
-
     if (IsCloudMode_) {
         auto ev = MakeExecuteEvent(Sprintf(ReadQueueParamsQueryCloud, Cfg().GetRoot().c_str()));
         auto* trans = ev->Record.MutableTransaction()->MutableMiniKQLTransaction();
         TParameters(trans->MutableParams()->MutableProto())
             .Utf8("CUSTOMNAME", CustomQueueName_)
-            .Utf8("FOLDERID", folderId)
+            .Utf8("FOLDERID", FolderId_)
             .Uint64("DEFAULT_MAX_QUEUES_COUNT", Cfg().GetAccountSettingsDefaults().GetMaxQueuesCount())
             .Utf8("USER_NAME", QueuePath_.UserName);
 

@@ -77,7 +77,7 @@ TQueueAttributes TQueueAttributes::FromAttributesAndConfig(const THashMap<TStrin
             result.Error = &NErrors::INVALID_PARAMETER_VALUE;
             break;
         } else if (name == "FolderID") {
-            result.FolderID = value;
+            // NOTE: FolderID is used to override folder id from service account on queue creation
         } else {
             result.Error = &NErrors::INVALID_ATTRIBUTE_NAME;
             result.ErrorText = Sprintf("Unknown Attribute %s.", name.c_str());

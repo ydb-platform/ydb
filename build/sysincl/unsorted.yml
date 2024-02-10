@@ -319,7 +319,6 @@
   - rtcapi.h
   - vadefs.h
   - varargs.h
-  - ymath.h
   - crtassem.h
   #endif
   #if defined(_unix_) && TODO

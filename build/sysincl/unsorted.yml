@@ -705,18 +705,11 @@
   #if defined(__sgi)
   - sigfpe.h
   #endif
-  #if defined(__MWERKS__)
-  - nwfileio.h
-  - nwthread.h
-  #endif
   #if defined(_TRASH_) && TODO
   - google/profiler.h
   #endif
   - net/errno.h
   - sys/mode.h
-  - nwstdio.h
-  - nw5thread.h
-  - os2thread.h
   - netware.h
   - perldtrace.h
   - win32thread.h

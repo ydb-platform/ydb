@@ -6,7 +6,6 @@
 - source_filter: ".*contrib.*"
   includes:
   - stat.h
-  - libutf8.h
   - CrashReporterClient.h
   - Errors.h
   - ICSupport.h
@@ -113,10 +112,8 @@
   - os2def.h
   - oslib/osfscontrol.h
   - paper.h
-  - pcre_printint.src
   - pire/config.h
   - pngusr.h
-  - probes_mysql_dtrace.h
   - pth.h
   - relocatable.h
   - rtl.h
@@ -136,7 +133,6 @@
   - taskLib.h
   - tcp.h
   - thread.h
-  - thread_plan9.h
   - tickLib.h
   - ttdef.h
   - type_traits.h
@@ -158,10 +154,8 @@
   #if CONTRIB && defined(_HAVE_LIBIDSA)
   - idsa.h
   #endif
-  - ../lib/memdebug.h
   - ../../VC/include/math.h
   - ../../VC/include/cfloat
-  - ../extra/yassl/taocrypt/include/sha.hpp
   - prof.h
   - ll_alloc_hook.c
   - cpptl/config.h
@@ -171,7 +165,6 @@
   - forwards.h
   - json_valueiterator.inl
   - value.h
-  - pthread/mit/sys/timers.h
   - sljit/sljitLir.c
   - pcre_printint.c
   #ifdef defined(emacs) && CONTRIB && TRASH
@@ -582,7 +575,6 @@
   #endif
   #if CONTRIB && TRASH
   - macconfig.h
-  - amigaconfig.h
   - json_batchallocator.h
   - json_internalarray.inl
   - json_internalmap.inl
@@ -591,7 +583,6 @@
   #endif
 
 - includes:
-  - extern.h
   #if defined(__FreeBSD__)
   - _ctype.h
   - alias.h

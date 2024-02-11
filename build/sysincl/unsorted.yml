@@ -215,10 +215,6 @@
   includes:
   - port.h
 
-- source_filter: "^contrib/libs/poco"
-  includes:
-  - timers.h
-
 - includes:
   - cpu-features.h
   - cpuid.h

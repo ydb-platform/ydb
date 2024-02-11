@@ -73,8 +73,6 @@
   - ipp.h
   - ippcp.h
   - kfuncs.h
-  - l12_integer_tables.h
-  - l3_integer_tables.h
   - lcms.h
   - libavcodec/aacps_tables.h
   - libavcodec/cbrt_tables.h
@@ -93,20 +91,15 @@
   - locale/weight.h
   - locale/weightwc.h
   - lqr.h
-  - lwp/lwp.h
-  - lwp/stackdep.h
   - m68881.h
   - mach/cthreads.h
   - mathimf.h
-  - matrixos.h
   - mfx/mfxvideo.h
   - mingw.h
   - mips64/sysarch.h
   - ms/uplink.h
   - msl_utility
   - namdef.h
-  - ncurses/curses.h
-  - ncurses/term.h
   - ndir.h
   - net/netdb.h
   - net/socket.h
@@ -633,7 +626,6 @@
   - sys/timers.h
   - sys/tree.h
   - tcpd.h
-  - ypclnt.h
   #endif
   #if defined (__linux__)
   - asm/fpu.h
@@ -659,8 +651,6 @@
   - CL/va_ext.h
   - sys/sysconf.h
   - ivx.hpp
-  - clAmdBlas.h
-  - clAmdFft.h
   - va/va.h
   #if metrika then skip bad includes from metrika
   - yandex/lbs/LBSLocator.hpp

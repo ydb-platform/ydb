@@ -17,6 +17,7 @@
 #include <arrow/chunked_array.h>
 #include <arrow/compute/kernel.h>
 #include <arrow/compute/exec_internal.h>
+#include <arrow/util/bitmap_ops.h>
 
 namespace NYql {
 namespace NUdf {
@@ -421,6 +422,49 @@ arrow::Status UnaryPreallocatedExecImpl(arrow::compute::KernelContext* ctx, cons
 
     return arrow::Status::OK();
 }
+
+template<typename TInput, typename TOutput, std::pair<TOutput, bool> Core(TInput)>
+struct TUnaryUnsafeFixedSizeFilterKernel {
+    static arrow::Status Do(arrow::compute::KernelContext* ctx, const arrow::compute::ExecBatch& batch, arrow::Datum* res) {
+        static_assert(std::is_arithmetic<TInput>::value);
+
+        Y_UNUSED(ctx);
+        const auto& inArray = batch.values.front().array();
+        const auto* inValues = inArray->GetValues<TInput>(1);
+
+        const auto length = inArray->length;
+
+        auto& outArray = res->array();
+        auto* outValues = outArray->GetMutableValues<TOutput>(1);
+
+        TTypedBufferBuilder<uint8_t> nullBuilder(arrow::default_memory_pool());
+        nullBuilder.Reserve(length);
+
+        bool isAllNull = inArray->GetNullCount() == length;
+        if (!isAllNull) {
+            for (i64 i = 0; i < length; ++i) {
+                auto [output, isValid] = Core(inValues[i]);
+                outValues[i] = output;
+                nullBuilder.UnsafeAppend(isValid);
+            }
+        } else {
+            nullBuilder.UnsafeAppend(length, 0);
+        }
+        auto validMask = nullBuilder.Finish();
+        validMask = MakeDenseBitmap(validMask->data(), length, arrow::default_memory_pool());
+        
+        auto inMask = inArray->buffers[0];
+        if (inMask) {
+            outArray->buffers[0] = AllocateBitmapWithReserve(length, arrow::default_memory_pool());
+            arrow::internal::BitmapAnd(validMask->data(), 0, inArray->buffers[0]->data(), inArray->offset, outArray->length, outArray->offset, outArray->buffers[0]->mutable_data());
+        } else {
+            outArray->buffers[0] = std::move(validMask);
+        }
+
+        return arrow::Status::OK();
+    }
+};
+
 
 template <typename TInput, typename TOutput, TOutput(*Core)(TInput)>
 class TUnaryOverOptionalImpl : public TBoxedValue {

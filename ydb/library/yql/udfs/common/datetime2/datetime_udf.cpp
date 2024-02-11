@@ -4,7 +4,6 @@
 #include <ydb/library/yql/minikql/datetime/datetime.h>
 
 #include <ydb/library/yql/public/udf/arrow/udf_arrow_helpers.h>
-#include <contrib/libs/apache/arrow/cpp/src/arrow/util/bitmap_ops.h>
 
 #include <util/datetime/base.h>
 
@@ -870,45 +869,6 @@ NUdf::TUnboxedValuePod DoAddYears(const NUdf::TUnboxedValuePod& date, i64 years,
 
     // From*
     
-    template<typename TInput, typename TOutput, TOutput Core(TInput), bool Filter(TInput)>
-    struct TUnaryFixedSizeKernelWithFilter {
-        static arrow::Status Do(arrow::compute::KernelContext* ctx, const arrow::compute::ExecBatch& batch, arrow::Datum* res) {
-            Y_UNUSED(ctx);
-            const auto& inArray = batch.values.front().array();
-            const auto* inValues = inArray->GetValues<TInput>(1);
-
-            const auto length = inArray->length;
-
-            auto& outArray = res->array();
-            auto* outValues = outArray->GetMutableValues<TOutput>(1);
-
-            TTypedBufferBuilder<uint8_t> nullBuilder(arrow::default_memory_pool());
-            nullBuilder.Reserve(length);
-
-            bool isAllNull = inArray->GetNullCount() == length;
-            if (!isAllNull) {
-                for (i64 i = 0; i < length; ++i) {
-                    outValues[i] = Core(inValues[i]);
-                    nullBuilder.UnsafeAppend(Filter(inValues[i]));
-                }
-            } else {
-                nullBuilder.UnsafeAppend(length, 0);
-            }
-            auto validMask = nullBuilder.Finish();
-            validMask = MakeDenseBitmap(validMask->data(), length, arrow::default_memory_pool());
-            
-            auto inMask = inArray->buffers[0];
-            if (inMask) {
-                outArray->buffers[0] = AllocateBitmapWithReserve(length, arrow::default_memory_pool());
-                arrow::internal::BitmapAnd(validMask->data(), 0, inArray->buffers[0]->data(), inArray->offset, outArray->length, outArray->offset, outArray->buffers[0]->mutable_data());
-            } else {
-                outArray->buffers[0] = std::move(validMask);
-            }
-
-            return arrow::Status::OK();
-        }
-    };
-
     BEGIN_SIMPLE_STRICT_ARROW_UDF(TFromSeconds, TOptional<TTimestamp>(TAutoMap<ui32>)) {
         Y_UNUSED(valueBuilder);
         auto res = args[0].Get<ui32>();
@@ -918,8 +878,8 @@ NUdf::TUnboxedValuePod DoAddYears(const NUdf::TUnboxedValuePod& date, i64 years,
         return TUnboxedValuePod((ui64)(res * 1000000ull));
     }
 
-    using TFromSecondsKernel = TUnaryFixedSizeKernelWithFilter<ui32, ui64, 
-        [] (ui32 seconds) { return ui64(seconds * 1000000ull); }, ValidateDatetime>;
+    using TFromSecondsKernel = TUnaryUnsafeFixedSizeFilterKernel<ui32, ui64, 
+        [] (ui32 seconds) { return std::make_pair(ui64(seconds * 1000000ull), ValidateDatetime(seconds)); }>;
     END_SIMPLE_ARROW_UDF(TFromSeconds, TFromSecondsKernel::Do);
 
     BEGIN_SIMPLE_STRICT_ARROW_UDF(TFromMilliseconds, TOptional<TTimestamp>(TAutoMap<ui64>)) {
@@ -931,9 +891,8 @@ NUdf::TUnboxedValuePod DoAddYears(const NUdf::TUnboxedValuePod& date, i64 years,
         return TUnboxedValuePod(res * 1000u);
     }
 
-    using TFromMillisecondsKernel = TUnaryFixedSizeKernelWithFilter<ui64, ui64, 
-        [] (ui64 milliseconds) { return ui64(milliseconds * 1000u); }, 
-        [] (ui64 milliseconds) { return milliseconds < MAX_TIMESTAMP / 1000u; }>;
+    using TFromMillisecondsKernel = TUnaryUnsafeFixedSizeFilterKernel<ui64, ui64, 
+        [] (ui64 milliseconds) { return std::make_pair(ui64(milliseconds * 1000u), milliseconds < MAX_TIMESTAMP / 1000u); }>;
     END_SIMPLE_ARROW_UDF(TFromMilliseconds, TFromMillisecondsKernel::Do);
 
     BEGIN_SIMPLE_STRICT_ARROW_UDF(TFromMicroseconds, TOptional<TTimestamp>(TAutoMap<ui64>)) {
@@ -945,14 +904,13 @@ NUdf::TUnboxedValuePod DoAddYears(const NUdf::TUnboxedValuePod& date, i64 years,
         return TUnboxedValuePod(res);
     }
 
-    using TFromMicrosecondsKernel = TUnaryFixedSizeKernelWithFilter<ui64, ui64, 
-        [] (ui64 timestamp) { return timestamp; }, ValidateTimestamp>;
+    using TFromMicrosecondsKernel = TUnaryUnsafeFixedSizeFilterKernel<ui64, ui64, 
+        [] (ui64 timestamp) { return std::make_pair(timestamp, ValidateTimestamp(timestamp)); }>;
     END_SIMPLE_ARROW_UDF(TFromMicroseconds, TFromMicrosecondsKernel::Do);
 
     template <typename TInput, i64 Multiplier>
-    using TIntervalFromKernel = TUnaryFixedSizeKernelWithFilter<TInput, i64, 
-        [] (TInput arg) { return i64(arg * Multiplier); }, 
-        [] (TInput arg) { return ValidateInterval(arg * Multiplier); }>;
+    using TIntervalFromKernel = TUnaryUnsafeFixedSizeFilterKernel<TInput, i64, 
+        [] (TInput interval) { return std::make_pair(i64(interval * Multiplier), ValidateInterval(interval)); }>;
 
     BEGIN_SIMPLE_STRICT_ARROW_UDF(TIntervalFromDays, TOptional<TInterval>(TAutoMap<i32>)) {
         Y_UNUSED(valueBuilder);

@@ -20,14 +20,6 @@
   - XMPSDK.hpp
   - _mingw.h
   - abi_mutex.h
-  - afxcmn.h
-  - afxdao.h
-  - afxdb.h
-  - afxdisp.h
-  - afxext.h
-  - afxodlgs.h
-  - afxole.h
-  - afxwin.h
   - alpha/builtins.h
   - apr_iconv.h
   - atomic_ops.h
@@ -562,9 +554,6 @@
   - cor.h
   - fusion.h
   - metahost.h
-  #if defined(WINDOWS) && defined (_USE_MFC_)
-  - afx.h
-  #endif
   #if defined(WINDOWS) && CONTRIB && TRASH
   - ../include/stdint.h
   #endif

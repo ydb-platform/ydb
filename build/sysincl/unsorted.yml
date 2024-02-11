@@ -431,8 +431,6 @@
   - config_auto.h
   #endif
   #if defined(_TRASH_) && TODO
-  - bits/c++config.h
-  - bits/atomicity.h
   - gcrypt.h
   - gnutls/gnutls.h
   - gdwmfapi.h
@@ -480,12 +478,6 @@
   - ../ucrt/sys/stat.h
   - asm/page.h
   - asm/sgidefs.h
-  - bits/char_traits.h
-  - bits/stl_algobase.h
-  - bits/stl_move.h
-  - bits/stl_pair.h
-  - bits/stl_function.h
-  - bits/move.h
   - ndir.h
   - sunmedia_types.h
   - clidef.h

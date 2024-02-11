@@ -541,8 +541,8 @@ inline void InvokeForComposites(
 // all
 template <class F>
 void InvokeForComposites(
-    const void* /* parameter */,
-    const F& /* func */)
+    const void* /*parameter*/,
+    const F& /*func*/)
 { }
 
 // TYsonStruct or TYsonSerializable

@@ -125,7 +125,6 @@
   - nonblocking.h
   - note.h
   - opcdef.h
-  - openssl/applink.c
   - os2def.h
   - oslib/osfscontrol.h
   - paper.h
@@ -432,7 +431,6 @@
   - config_auto.h
   #endif
   #if defined(_TRASH_) && TODO
-  - openssl/fips.h
   - bits/c++config.h
   - bits/atomicity.h
   - gcrypt.h
@@ -601,9 +599,6 @@
   - lckdef.h
   - libdtdef.h
   - novsock2.h
-  - openssl/fips_rand.h
-  - openssl/fipssyms.h
-  - openssl/jpake.h
   - rld_interface.h
   - screen.h
   - sureware.h

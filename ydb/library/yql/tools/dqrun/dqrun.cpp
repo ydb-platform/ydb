@@ -775,13 +775,18 @@ int RunMain(int argc, const char* argv[])
     }
 
     NConnector::IClient::TPtr genericClient;
+    ISecuredServiceAccountCredentialsFactory::TPtr credentialsFactory = CreateSecuredServiceAccountCredentialsOverTokenAccessorFactory(
+        "localhost:5000",
+        false,
+        ""
+    );
     if (gatewaysConfig.HasGeneric()) {
         for (auto& cluster : *gatewaysConfig.MutableGeneric()->MutableClusterMapping()) {
             clusters.emplace(to_lower(cluster.GetName()), TString{GenericProviderName});
         }
 
         genericClient = NConnector::MakeClientGRPC(gatewaysConfig.GetGeneric().GetConnector());
-        dataProvidersInit.push_back(GetGenericDataProviderInitializer(genericClient, dbResolver));
+        dataProvidersInit.push_back(GetGenericDataProviderInitializer(genericClient, credentialsFactory, dbResolver));
     }
 
     if (gatewaysConfig.HasYdb()) {

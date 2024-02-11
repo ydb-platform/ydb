@@ -6,13 +6,19 @@
 namespace NYql {
 
     TDataProviderInitializer GetGenericDataProviderInitializer(NConnector::IClient::TPtr genericClient,
+                                                               ISecuredServiceAccountCredentialsFactory::TPtr credentialsFactory,
                                                                const std::shared_ptr<IDatabaseAsyncResolver> dbResolver)
     {
-        return [genericClient, dbResolver](const TString& userName, const TString& sessionId, const TGatewaysConfig* gatewaysConfig,
-                                           const NKikimr::NMiniKQL::IFunctionRegistry* functionRegistry,
-                                           TIntrusivePtr<IRandomProvider> randomProvider, TIntrusivePtr<TTypeAnnotationContext> typeCtx,
-                                           const TOperationProgressWriter& progressWriter, const TYqlOperationOptions& operationOptions,
-                                           THiddenQueryAborter)
+        return [genericClient, dbResolver, credentialsFactory](
+            const TString& userName,
+            const TString& sessionId,
+            const TGatewaysConfig* gatewaysConfig,
+            const NKikimr::NMiniKQL::IFunctionRegistry* functionRegistry,
+            TIntrusivePtr<IRandomProvider> randomProvider,
+            TIntrusivePtr<TTypeAnnotationContext> typeCtx,
+            const TOperationProgressWriter& progressWriter,
+            const TYqlOperationOptions& operationOptions,
+            THiddenQueryAborter)
         {
             Y_UNUSED(sessionId);
             Y_UNUSED(userName);
@@ -26,6 +32,7 @@ namespace NYql {
                 functionRegistry,
                 dbResolver,
                 genericClient,
+                credentialsFactory,
                 gatewaysConfig->GetGeneric());
 
             TDataProviderInfo info;

@@ -4,11 +4,13 @@
 
 #include <sstream>
 #include <ydb/library/yql/core/yql_data_provider.h>
+#include <ydb/library/yql/providers/common/token_accessor/client/factory.h>
 #include <ydb/library/yql/providers/common/db_id_async_resolver/db_async_resolver.h>
 
 namespace NYql {
     TDataProviderInitializer GetGenericDataProviderInitializer(
         NConnector::IClient::TPtr genericClient,                           // required
+        ISecuredServiceAccountCredentialsFactory::TPtr credentialsFactory,
         std::shared_ptr<NYql::IDatabaseAsyncResolver> dbResolver = nullptr // can be missing in on-prem installations
     );
 

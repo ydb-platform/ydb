@@ -366,7 +366,7 @@ namespace NYql {
             return ValidationError(clusterConfig, context, "empty field 'Kind'");
         }
 
-        if (!clusterConfig.GetCredentials().Getbasic().Getusername()) {
+        if (!serviceAccountId && !clusterConfig.GetCredentials().Getbasic().Getusername()) {
             return ValidationError(clusterConfig, context, "empty field 'Credentials.basic.username'");
         }
 

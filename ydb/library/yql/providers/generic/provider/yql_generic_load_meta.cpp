@@ -99,6 +99,10 @@ namespace NYql {
 
                 NConnector::NApi::TDescribeTableRequest request;
                 FillDescribeTableRequest(request, it->second, item.second);
+                auto credentialsProviderFactory = CreateCredentialsProviderFactoryForStructuredToken(State_->CredentialsFactory, State_->Configuration->Tokens[clusterName]);
+                auto token = credentialsProviderFactory->CreateProvider()->GetAuthInfo();
+                request.mutable_data_source_instance()->mutable_credentials()->mutable_token()->set_type("IAM");
+                request.mutable_data_source_instance()->mutable_credentials()->mutable_token()->set_value(token);
 
                 auto promise = NThreading::NewPromise();
                 handles.emplace_back(promise.GetFuture());

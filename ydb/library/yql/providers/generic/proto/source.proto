@@ -16,4 +16,6 @@ message TSource {
     // Description of instance to connect
     // FIXME: DataSourceInstance is already incapsulated into select, delete it:
     NYql.NConnector.NApi.TDataSourceInstance data_source_instance = 3;
+    string sa_id = 4;
+    string sa_signature = 5;
 }

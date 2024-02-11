@@ -1944,7 +1944,7 @@ private:
         }
 
         {
-           dataProvidersInit.push_back(GetGenericDataProviderInitializer(Params.ConnectorClient, dbResolver));
+           dataProvidersInit.push_back(GetGenericDataProviderInitializer(Params.ConnectorClient, Params.CredentialsFactory, dbResolver));
         }
 
         {

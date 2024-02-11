@@ -1530,6 +1530,7 @@ private:
             FuncRegistry,
             FederatedQuerySetup->DatabaseAsyncResolver,
             FederatedQuerySetup->ConnectorClient,
+            FederatedQuerySetup->CredentialsFactory,
             FederatedQuerySetup->GenericGatewayConfig
         );
 

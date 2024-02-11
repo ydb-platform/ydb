@@ -244,6 +244,7 @@ struct TPushdownFixture: public NUnitTest::TBaseFixture {
             FunctionRegistry.Get(),
             DatabaseResolver,
             GenericClient,
+            GenericState->CredentialsFactory,
             GatewaysCfg.GetGeneric());
 
         GenericDataSource = CreateGenericDataSource(GenericState);

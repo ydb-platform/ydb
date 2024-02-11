@@ -9,6 +9,7 @@
 #include <ydb/library/yql/core/yql_expr_type_annotation.h>
 #include <ydb/library/yql/minikql/computation/mkql_computation_node_holders.h>
 #include <ydb/library/yql/providers/common/provider/yql_provider_names.h>
+#include <ydb/library/yql/providers/common/structured_token/yql_token_builder.h>
 #include <ydb/library/yql/providers/generic/connector/api/service/protos/connector.pb.h>
 #include <ydb/library/yql/providers/generic/connector/libcpp/error.h>
 #include <ydb/library/yql/providers/generic/connector/libcpp/utils.h>
@@ -504,10 +505,10 @@ namespace NYql::NDq {
                            const THashMap<TString, TString>& /*secureParams*/,
                            const THashMap<TString, TString>& /*taskParams*/,
                            const NActors::TActorId& computeActorId,
-                           ISecuredServiceAccountCredentialsFactory::TPtr /*credentialsFactory*/,
+                           ISecuredServiceAccountCredentialsFactory::TPtr credentialsFactory,
                            const NKikimr::NMiniKQL::THolderFactory& holderFactory)
     {
-        const auto dsi = params.select().data_source_instance();
+        auto dsi = params.select().data_source_instance();
         YQL_CLOG(INFO, ProviderGeneric) << "Creating read actor with params:"
                                         << " kind=" << NYql::NConnector::NApi::EDataSourceKind_Name(dsi.kind())
                                         << ", endpoint=" << dsi.endpoint().ShortDebugString()
@@ -515,16 +516,11 @@ namespace NYql::NDq {
                                         << ", use_tls=" << ToString(dsi.use_tls())
                                         << ", protocol=" << NYql::NConnector::NApi::EProtocol_Name(dsi.protocol());
 
-        // FIXME: strange piece of logic - authToken is created but not used:
-        // https://a.yandex-team.ru/arcadia/ydb/library/yql/providers/clickhouse/actors/yql_ch_read_actor.cpp?rev=r11550199#L140
-        /*
-        const auto token = secureParams.Value(params.token(), TString{});
-        const auto credentialsProviderFactory =
-            CreateCredentialsProviderFactoryForStructuredToken(credentialsFactory, token);
-        const auto authToken = credentialsProviderFactory->CreateProvider()->GetAuthInfo();
-        const auto one = token.find('#'), two = token.rfind('#');
-        YQL_ENSURE(one != TString::npos && two != TString::npos && one < two, "Bad token format:" << token);
-        */
+        auto structuredToken = ComposeStructuredTokenJsonForServiceAccount(params.sa_id(), params.sa_signature(), params.token());
+        auto credentialsProviderFactory = CreateCredentialsProviderFactoryForStructuredToken(credentialsFactory, structuredToken);
+        auto token = credentialsProviderFactory->CreateProvider()->GetAuthInfo();
+        dsi.mutable_credentials()->mutable_token()->set_type("IAM");
+        dsi.mutable_credentials()->mutable_token()->set_value(token);
 
         // TODO: partitioning is not implemented now, but this code will be useful for the further research:
         /*

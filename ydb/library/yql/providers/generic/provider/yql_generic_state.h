@@ -3,6 +3,7 @@
 #include "yql_generic_settings.h"
 
 #include <ydb/library/yql/core/yql_data_provider.h>
+#include <ydb/library/yql/providers/common/token_accessor/client/factory.h>
 #include <ydb/library/yql/providers/generic/connector/libcpp/client.h>
 
 namespace NKikimr::NMiniKQL {
@@ -31,11 +32,13 @@ namespace NYql {
             const NKikimr::NMiniKQL::IFunctionRegistry* functionRegistry,
             const std::shared_ptr<NYql::IDatabaseAsyncResolver>& databaseResolver,
             const NConnector::IClient::TPtr& genericClient,
+            const ISecuredServiceAccountCredentialsFactory::TPtr credentialsFactory,
             const TGenericGatewayConfig& gatewayConfig)
             : Types(types)
             , Configuration(MakeIntrusive<TGenericConfiguration>())
             , FunctionRegistry(functionRegistry)
             , DatabaseResolver(databaseResolver)
+            , CredentialsFactory(credentialsFactory)
             , GenericClient(genericClient)
         {
             Configuration->Init(gatewayConfig, databaseResolver, DatabaseAuth, types->Credentials);
@@ -52,6 +55,7 @@ namespace NYql {
         // key - (database id, database type), value - credentials to access MDB API
         NYql::IDatabaseAsyncResolver::TDatabaseAuthMap DatabaseAuth;
         std::shared_ptr<NYql::IDatabaseAsyncResolver> DatabaseResolver;
+        ISecuredServiceAccountCredentialsFactory::TPtr CredentialsFactory;
 
         NConnector::IClient::TPtr GenericClient;
 

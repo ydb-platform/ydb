@@ -333,6 +333,10 @@ message TableProfile {
     CachingPolicy caching_policy = 7;
 }
 
+message SequenceDescription {
+    string path = 1;
+}
+
 message ColumnMeta {
     // Name of column
     string name = 1;
@@ -342,6 +346,11 @@ message ColumnMeta {
     string family = 3;
     // Column nullability
     optional bool not_null = 4;
+    // Default value policy
+    oneof default_policy {
+        SequenceDescription from_sequence = 5;
+        TypedValue from_literal = 6;
+    }
 }
 
 message DateTypeColumnModeSettings {

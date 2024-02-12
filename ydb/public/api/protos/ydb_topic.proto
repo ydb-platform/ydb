@@ -800,9 +800,9 @@ enum AutoScalingStrategy {
     // Automaticaly scaling disabled
     DISABLED = 0;
     // The automaticaly scaling may only increase the number of partitions
-    SCALING_UP = 1;
+    SCALE_UP = 1;
     // The automaticaly scaling may increase and decrease the number of partitions
-    SCALING_UP_AND_DOWN = 2;
+    SCALE_UP_AND_DOWN = 2;
 }
 
 message AutoScalingSettings {

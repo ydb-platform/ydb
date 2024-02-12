@@ -15,14 +15,25 @@ namespace NTest {
 
     template<EDirection Direction>
     struct TWrapPartImpl {
-        TWrapPartImpl(const TPartEggs &eggs, TIntrusiveConstPtr<TSlices> slices = nullptr,
-                    bool defaults = true)
+        TWrapPartImpl(const TPartEggs &eggs, TRun& run, bool defaults = true)
             : Eggs(eggs)
             , Scheme(eggs.Scheme)
             , Remap_(TRemap::Full(*Scheme))
             , Defaults(defaults)
             , State(Remap_.Size())
-            , Run(*Scheme->Keys)
+            , Run_(*Scheme->Keys) // unused
+            , Run(run)
+        {
+        }
+        
+        TWrapPartImpl(const TPartEggs &eggs, TIntrusiveConstPtr<TSlices> slices = nullptr, bool defaults = true)
+            : Eggs(eggs)
+            , Scheme(eggs.Scheme)
+            , Remap_(TRemap::Full(*Scheme))
+            , Defaults(defaults)
+            , State(Remap_.Size())
+            , Run_(*Scheme->Keys)
+            , Run(Run_)
         {
             if (slices || Eggs.Parts.size() == 1) {
                 /* Allowed to override part slice only for lone eggs */
@@ -110,15 +121,6 @@ namespace NTest {
             return Iter->GetRowVersion();
         }
 
-        EReady DoIterNext() noexcept
-        {
-            if constexpr (Direction == EDirection::Reverse) {
-                return Iter->Prev();
-            } else {
-                return Iter->Next();
-            }
-        }
-
         void StopAfter(TArrayRef<const TCell> key) {
             StopKey = TOwnedCellVec::Make(key);
         }
@@ -173,10 +175,20 @@ namespace NTest {
         const bool Defaults = true;
 
     private:
+        EReady DoIterNext() noexcept
+        {
+            if constexpr (Direction == EDirection::Reverse) {
+                return Iter->Prev();
+            } else {
+                return Iter->Next();
+            }
+        }
+
         EReady Ready = EReady::Gone;
         bool NoBlobs = false;
         TRowState State;
-        TRun Run;
+        TRun Run_;
+        TRun& Run;
         THolder<TRunIt> Iter;
         TOwnedCellVec StopKey;
     };

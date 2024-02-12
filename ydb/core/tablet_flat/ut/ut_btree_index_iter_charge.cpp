@@ -228,14 +228,25 @@ namespace {
     }
 
     EReady Retry(std::function<EReady()> action, TTouchEnv& env, const TString& message, ui32 failsAllowed = 10) {
-        while (true) {
+        for (ui32 attempt = 0; attempt <= failsAllowed; attempt++) {
+            env.LoadTouched();
             if (auto ready = action(); ready != EReady::Page) {
                 return ready;
             }
-            env.LoadTouched();
-            UNIT_ASSERT_C(failsAllowed--, "Too many fails " + message);
         }
-        Y_UNREACHABLE();
+
+        TStringBuilder error;
+        error << "Too many fails (" << failsAllowed + 1 << ") " << message << Endl << "Requests ";
+        for (const auto& [groupId, pages] : env.Touched) {
+            for (auto pageId : pages) {
+                if (!env.Loaded[groupId].contains(pageId)) {
+                    error << groupId << "#" << pageId << " ";
+                }
+            }
+        }
+
+        UNIT_ASSERT_C(false,  error);
+        return EReady::Page;
     }
 }
 
@@ -426,32 +437,25 @@ Y_UNIT_TEST_SUITE(TChargeBTreeIndex) {
 
     void DoChargeRowId(ICharge& charge, TTouchEnv& env, const TRowId row1, const TRowId row2, ui64 itemsLimit, ui64 bytesLimit,
             bool reverse, const TKeyCellDefaults &keyDefaults, const TString& message, ui32 failsAllowed = 15) {
-        while (true) {
+        Retry([&]() {
             bool ready = reverse
                 ? charge.DoReverse(row2, row1, keyDefaults, itemsLimit, bytesLimit)
                 : charge.Do(row1, row2, keyDefaults, itemsLimit, bytesLimit);
-            if (ready) {
-                return;
-            }
-            env.LoadTouched();
-            UNIT_ASSERT_C(failsAllowed--, "Too many fails " + message);
-        }
-        Y_UNREACHABLE();
+            return ready ? EReady::Data : EReady::Page;
+        }, env, message, failsAllowed);
     }
 
     bool DoChargeKeys(const TPartStore& part, ICharge& charge, TTouchEnv& env, const TCells key1, const TCells key2, ui64 itemsLimit, ui64 bytesLimit,
             bool reverse, const TKeyCellDefaults &keyDefaults, const TString& message, ui32 failsAllowed = 15) {
-        while (true) {
+        bool overshot = false;
+        Retry([&]() {
             auto result = reverse
                 ? charge.DoReverse(key1, key2, part.Stat.Rows - 1, 0, keyDefaults, itemsLimit, bytesLimit)
                 : charge.Do(key1, key2, 0, part.Stat.Rows - 1, keyDefaults, itemsLimit, bytesLimit);
-            if (result.Ready) {
-                return result.Overshot;
-            }
-            env.LoadTouched();
-            UNIT_ASSERT_C(failsAllowed--, "Too many fails " + message);
-        }
-        Y_UNREACHABLE();
+            overshot = result.Overshot;
+            return result.Ready ? EReady::Data : EReady::Page;
+        }, env, message, failsAllowed);
+        return overshot;
     }
 
     void CheckChargeRowId(TTestParams params, const TPartStore& part, TTagsRef tags, const TKeyCellDefaults *keyDefaults) {
@@ -703,36 +707,31 @@ Y_UNIT_TEST_SUITE(TPartBtreeIndexIteration) {
     template<EDirection Direction>
     EReady Next(TWrapPartImpl<Direction>& wrap, TTouchEnv& env, const TString& message, ui32 failsAllowed) {
         return Retry([&]() {
-            return wrap.DoIterNext();
+            return wrap.Next();
         }, env, message, failsAllowed);
     }
 
     void Charge(const TRun &run, const TVector<TTag> tags, TTouchEnv& env, const TCells key1, const TCells key2, ui64 itemsLimit, ui64 bytesLimit,
             bool reverse, const TKeyCellDefaults &keyDefaults, const TString& message, ui32 failsAllowed) {
-        while (true) {
-            auto result = reverse
+        Retry([&]() {
+            auto ready = reverse
                 ? ChargeRangeReverse(&env, key1, key2, run, keyDefaults, tags, itemsLimit, bytesLimit, true)
                 : ChargeRange(&env, key1, key2, run, keyDefaults, tags, itemsLimit, bytesLimit, true);
-            if (result) {
-                return;
-            }
-            env.LoadTouched();
-            UNIT_ASSERT_C(failsAllowed--, "Too many fails " + message);
-        }
-        Y_UNREACHABLE();
+            return ready ? EReady::Data : EReady::Page;
+        }, env, message, failsAllowed);
     }
 
     template<EDirection Direction>
-    void Iterate(const TPartEggs& eggs, TTouchEnv& env, const TCells key1, const TCells key2, ESeek seek, ui64 itemsLimit, const TString& message, ui32 failsAllowed) {
-        TWrapPartImpl<Direction> wrap(eggs);
+    void Iterate(const TPartEggs& eggs, TRun& run, TTouchEnv& env, const TCells key1, const TCells key2, ESeek seek, ui64 itemsLimit, const TString& message, ui32 failsAllowed) {
+        TWrapPartImpl<Direction> wrap(eggs, run);
         wrap.StopAfter(key2);
         wrap.Make(&env);
-        if (Seek(wrap, env, key1, seek, message + " Seek", failsAllowed) == EReady::Page) {
+        if (Seek(wrap, env, key1, seek, message + " Seek", failsAllowed) != EReady::Data) {
             return;
         }
 
-        for (ui32 itemIndex = 1; itemsLimit == 0 || itemIndex <= itemsLimit; itemsLimit++) {
-            if (Next(wrap, env, message + " Next " + std::to_string(itemIndex), failsAllowed) == EReady::Page) {
+        for (ui32 itemIndex = 1; itemsLimit == 0 || itemIndex < itemsLimit; itemIndex++) {
+            if (Next(wrap, env, message + " Next " + std::to_string(itemIndex), failsAllowed) != EReady::Data) {
                 return;
             }
         }
@@ -743,6 +742,9 @@ Y_UNIT_TEST_SUITE(TPartBtreeIndexIteration) {
         constexpr bool reverse = Direction == EDirection::Reverse;
         const ui32 failsAllowed = GetFailsAllowed(params);
         const auto part = *eggs.Lone();
+
+        TRun btreeRun(*eggs.Scheme->Keys), flatRun(*eggs.Scheme->Keys);
+        MakeRuns(eggs, btreeRun, flatRun);
 
         auto tags = TVector<TTag>();
         for (auto c : eggs.Scheme->Cols) {
@@ -755,8 +757,8 @@ Y_UNIT_TEST_SUITE(TPartBtreeIndexIteration) {
                     TVector<TCell> key = MakeKey(firstCell, secondCell);
 
                     TTouchEnv bTreeEnv, flatEnv;
-                    TWrapPartImpl<Direction> bTree(eggs);
-                    TWrapPartImpl<Direction> flat(eggs);
+                    TWrapPartImpl<Direction> bTree(eggs, btreeRun);
+                    TWrapPartImpl<Direction> flat(eggs, flatRun);
                     bTree.Make(&bTreeEnv);
                     flat.Make(&flatEnv);
 
@@ -830,8 +832,8 @@ Y_UNIT_TEST_SUITE(TPartBtreeIndexIteration) {
                             }
 
                             for (ESeek seek : {ESeek::Exact, ESeek::Lower, ESeek::Upper}) {
-                                Iterate<Direction>(eggs, bTreeEnv, key1, key2, seek, itemsLimit, message, 0);
-                                Iterate<Direction>(eggs, flatEnv, key1, key2, seek, itemsLimit, message, 0);
+                                Iterate<Direction>(eggs, btreeRun, bTreeEnv, key1, key2, seek, itemsLimit, message, 0);
+                                Iterate<Direction>(eggs, flatRun, flatEnv, key1, key2, seek, itemsLimit, message, 0);
                             }
                         }
                     }

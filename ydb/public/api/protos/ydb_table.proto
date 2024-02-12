@@ -333,6 +333,10 @@ message TableProfile {
     CachingPolicy caching_policy = 7;
 }
 
+message SequenceDescription {
+    string path = 1;
+}
+
 message ColumnMeta {
     // Name of column
     string name = 1;
@@ -345,6 +349,7 @@ message ColumnMeta {
     // Column default value option
     oneof default_value {
         TypedValue from_literal = 5;
+        SequenceDescription from_sequence = 6;
     }
 }
 

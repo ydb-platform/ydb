@@ -98,11 +98,11 @@ And copy-paste the shown token to complete the GitHub CLI configuration.
 
 YDB official repository is [https://github.com/ydb-platform/ydb](https://github.com/ydb-platform/ydb), located under the YDB organization account `ydb-platform`.
 
-To work on the YDB code changes, you need to create a fork repository under your GitHub account. Create a fork pressing `Fork` button on the official repository page.
+To work on the {{ ydb-short-name }} code changes, you need to create a fork repository under your GitHub account. Create a fork by pressing the `Fork` button on the [official {{ ydb-short-name }} repository page](https://github.com/ydb-platform/ydb).
 
 After your fork is set up, create a local git repository with two remotes:
-- official: official YDB repository, for main and stable branches
-- fork: your YDB repository fork, for your development branches
+- `official`: official {{ ydb-short-name }} repository, for main and stable branches
+- `fork`: your {{ ydb-short-name }} repository fork, for your development branches
 
 ```
 mkdir -p ~/ydbwork
@@ -115,11 +115,11 @@ cd ydb
 git remote add fork git@github.com:{your_github_user_name}/ydb.git
 ```
 
-Once completed, you have a YDB Git repository set up in `~/ydbwork/ydb`.
+Once completed, you have a {{ ydb-short-name }} Git repository set up in `~/ydbwork/ydb`.
 
 Forking a repository is an instant action, however cloning to the local machine takes some time to transfer about 650 MB of repository data over the network.
 
-Next setup default git push behaviour:
+Next, let's configure the default `git push` behavior:
 
 ```
 git config push.default current
@@ -130,7 +130,7 @@ This way, `git push {remote}` command will automatically set upstream for the cu
 
 ### Configure commit authorship {#author}
 
-Run the following command to set up your name and email for commits pushed using Git:
+Run the following command to set up your name and email for commits pushed using Git (replace example name and email with your real ones):
 
 ```
 git config --global user.name "Marco Polo"
@@ -143,7 +143,13 @@ To start working on a feature, ensure the steps specified in the [Setup the envi
 
 ### Refresh trunk {#fork_sync}
 
-Usually you need a fresh trunk revision to branch from. Sync your local main branch running the following command in the repository:
+Usually you need a fresh revision to branch from. Sync your local `main` branch by running the following command in the repository:
+
+If your current local branch is `main`:
+
+```
+git pull --ff-only official main
+```
 
 If your current local branch is not `main`:
 
@@ -152,17 +158,11 @@ cd ~/ydbwork/ydb
 git fetch official main:main
 ```
 
-This updates your local main branch without checking it out.
-
-If your current local branch is `main`:
-
-```
-git pull --ff-only official main
-```
+This command updates your local `main` branch without checking it out.
 
 ### Create a development branch {#create_devbranch}
 
-Create a development branch using Git (replace "feature42" with your branch name):
+Create a development branch using Git (replace "feature42" with a name for your new branch):
 
 ```
 git checkout -b feature42
@@ -209,6 +209,7 @@ When the changes are completed and locally tested (see [Ya Build and Test](build
 
 - GitHub CLI
 
+  Install and configure [GitHub CLI](https://cli.github.com/).
   ```
   cd ~/ydbwork/ydb
   ```
@@ -273,4 +274,4 @@ git cherry-pick {fixes_commit_hash}
 git push fork
 ```
 
-And then create a PR from your branch with the cherry-picked fix to the stable branch. 
+And then create a PR from your branch with the cherry-picked fix to the stable branch. It is done similarly to opening a PR to `main`, but make sure to double-check the target branch.

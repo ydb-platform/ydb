@@ -183,7 +183,7 @@ Kafka Connect instances for working with YDB should only be deployed in standalo
 
 The actual data movement is performed using connectors that run in separate threads of the executing process.
 
-For more information about Kafka Connect and its configuration, see the [Apache Kafka®] documentation (https://kafka.apache.org/documentation/#connect).
+For more information about Kafka Connect and its configuration, see the [Apache Kafka®](https://kafka.apache.org/documentation/#connect) documentation.
 
 ### Setting up Kafka Connect
 
@@ -315,7 +315,7 @@ validate.non.null=false
 ```
 
 #### From YDB to S3
-Sample S3Sink connector `/etc/kafka-connect-worker/s3-sink.properties` settings file for moving data from a topic to S3. The connector used is [Aiven's S3 Sink Connector for Apache Kafka](https://github.com/Aiven-Open/s3-connector-for-apache-kafka).
+Sample S3Sink connector `/etc/kafka-connect-worker/s3-sink.properties` settings file for moving data from a topic to S3. The [Aiven's S3 Sink Connector for Apache Kafka](https://github.com/Aiven-Open/s3-connector-for-apache-kafka) is used.
 ```ini
 name=s3-sink
 connector.class=io.aiven.kafka.connect.s3.AivenKafkaConnectS3SinkConnector

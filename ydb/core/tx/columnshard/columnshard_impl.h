@@ -72,7 +72,7 @@ struct TSettings {
     TControlWrapper CacheDataAfterCompaction;
     static constexpr ui64 OverloadTxInFlight = 1000;
     static constexpr ui64 OverloadWritesInFlight = 1000;
-    static constexpr ui64 OverloadWritesSizeInFlight = 128 * 1024 * 1024;
+    static constexpr ui64 OverloadWritesSizeInFlight = 1024 * 1024 * 1024;
 
     TSettings()
         : BlobWriteGrouppingEnabled(1, 0, 1)
@@ -211,7 +211,9 @@ class TColumnShard
     void OnTieringModified();
 public:
     enum class EOverloadStatus {
-        Shard /* "shard" */,
+        ShardTxInFly /* "shard_tx" */,
+        ShardWritesInFly /* "shard_writes" */,
+        ShardWritesSizeInFly /* "shard_writes_size" */,
         InsertTable /* "insert_table" */,
         Disk /* "disk" */,
         None /* "none" */
@@ -326,8 +328,8 @@ private:
     class TWritesMonitor {
     private:
         TColumnShard& Owner;
-        ui64 WritesInFlight = 0;
-        ui64 WritesSizeInFlight = 0;
+        YDB_READONLY(ui64, WritesInFlight, 0);
+        YDB_READONLY(ui64, WritesSizeInFlight, 0);
 
     public:
         class TGuard: public TNonCopyable {
@@ -361,15 +363,6 @@ private:
             WritesInFlight -= writesCount;
             WritesSizeInFlight -= dataSize;
             return TGuard(*this);
-        }
-
-        bool ShardOverloaded() const {
-            ui64 txLimit = Owner.Settings.OverloadTxInFlight;
-            ui64 writesLimit = Owner.Settings.OverloadWritesInFlight;
-            ui64 writesSizeLimit = Owner.Settings.OverloadWritesSizeInFlight;
-            return  (txLimit && Owner.Executor()->GetStats().TxInFly > txLimit) ||
-                    (writesLimit && WritesInFlight > writesLimit) ||
-                    (writesSizeLimit && WritesSizeInFlight > writesSizeLimit);
         }
 
         TString DebugString() const {

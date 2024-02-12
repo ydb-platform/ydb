@@ -24,8 +24,12 @@ TCSCounters::TCSCounters()
 
     OverloadInsertTableBytes = TBase::GetDeriviative("OverloadInsertTable/Bytes");
     OverloadInsertTableCount = TBase::GetDeriviative("OverloadInsertTable/Count");
-    OverloadShardBytes = TBase::GetDeriviative("OverloadShard/Bytes");
-    OverloadShardCount = TBase::GetDeriviative("OverloadShard/Count");
+    OverloadShardTxBytes = TBase::GetDeriviative("OverloadShard/Tx/Bytes");
+    OverloadShardTxCount = TBase::GetDeriviative("OverloadShard/Tx/Count");
+    OverloadShardWritesBytes = TBase::GetDeriviative("OverloadShard/Writes/Bytes");
+    OverloadShardWritesCount = TBase::GetDeriviative("OverloadShard/Writes/Count");
+    OverloadShardWritesSizeBytes = TBase::GetDeriviative("OverloadShard/WritesSize/Bytes");
+    OverloadShardWritesSizeCount = TBase::GetDeriviative("OverloadShard/WritesSize/Count");
 
     InternalCompactionGranuleBytes = TBase::GetValueAutoAggregationsClient("InternalCompaction/Bytes");
     InternalCompactionGranulePortionsCount = TBase::GetValueAutoAggregationsClient("InternalCompaction/PortionsCount");

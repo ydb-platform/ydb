@@ -21,9 +21,17 @@ void TColumnShard::OverloadWriteFail(const EOverloadStatus overloadReason, const
             IncCounter(COUNTER_WRITE_OVERLOAD);
             CSCounters.OnOverloadInsertTable(writeData.GetSize());
             break;
-        case EOverloadStatus::Shard:
+        case EOverloadStatus::ShardTxInFly:
             IncCounter(COUNTER_WRITE_OVERLOAD);
-            CSCounters.OnOverloadShard(writeData.GetSize());
+            CSCounters.OnOverloadShardTx(writeData.GetSize());
+            break;
+        case EOverloadStatus::ShardWritesInFly:
+            IncCounter(COUNTER_WRITE_OVERLOAD);
+            CSCounters.OnOverloadShardWrites(writeData.GetSize());
+            break;
+        case EOverloadStatus::ShardWritesSizeInFly:
+            IncCounter(COUNTER_WRITE_OVERLOAD);
+            CSCounters.OnOverloadShardWritesSize(writeData.GetSize());
             break;
         case EOverloadStatus::None:
             Y_ABORT("invalid function usage");
@@ -45,8 +53,20 @@ TColumnShard::EOverloadStatus TColumnShard::CheckOverloaded(const ui64 tableId) 
         return EOverloadStatus::InsertTable;
     }
 
-    if (WritesMonitor.ShardOverloaded()) {
-        return EOverloadStatus::Shard;
+    ui64 txLimit = Settings.OverloadTxInFlight;
+    ui64 writesLimit = Settings.OverloadWritesInFlight;
+    ui64 writesSizeLimit = Settings.OverloadWritesSizeInFlight;
+    if (txLimit && Executor()->GetStats().TxInFly > txLimit) {
+        AFL_WARN(NKikimrServices::TX_COLUMNSHARD)("event", "shard_overload")("reason", "tx_in_fly")("sum", Executor()->GetStats().TxInFly)("limit", txLimit);
+        return EOverloadStatus::ShardTxInFly;
+    }
+    if (writesLimit && WritesMonitor.GetWritesInFlight() > writesLimit) {
+        AFL_WARN(NKikimrServices::TX_COLUMNSHARD)("event", "shard_overload")("reason", "writes_in_fly")("sum", WritesMonitor.GetWritesInFlight())("limit", writesLimit);
+        return EOverloadStatus::ShardWritesInFly;
+    }
+    if (writesSizeLimit && WritesMonitor.GetWritesSizeInFlight() > writesSizeLimit) {
+        AFL_WARN(NKikimrServices::TX_COLUMNSHARD)("event", "shard_overload")("reason", "writes_size_in_fly")("sum", WritesMonitor.GetWritesSizeInFlight())("limit", writesSizeLimit);
+        return EOverloadStatus::ShardWritesSizeInFly;
     }
     return EOverloadStatus::None;
 }

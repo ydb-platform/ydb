@@ -139,7 +139,9 @@ public:
     TKernelFunction(const TFunctionPtr kernelsFunction, arrow::compute::ExecContext* ctx)
         : TBase(ctx)
         , Function(kernelsFunction)
-    {}
+    {
+        AFL_VERIFY(Function);
+    }
 
     arrow::Result<arrow::Datum> Call(const TAssignObject& assign, const TDatumBatch& batch) const override {
         auto arguments = TBase::BuildArgs(batch, assign.GetArguments());

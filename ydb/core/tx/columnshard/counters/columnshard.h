@@ -24,8 +24,12 @@ private:
 
     NMonitoring::TDynamicCounters::TCounterPtr OverloadInsertTableBytes;
     NMonitoring::TDynamicCounters::TCounterPtr OverloadInsertTableCount;
-    NMonitoring::TDynamicCounters::TCounterPtr OverloadShardBytes;
-    NMonitoring::TDynamicCounters::TCounterPtr OverloadShardCount;
+    NMonitoring::TDynamicCounters::TCounterPtr OverloadShardTxBytes;
+    NMonitoring::TDynamicCounters::TCounterPtr OverloadShardTxCount;
+    NMonitoring::TDynamicCounters::TCounterPtr OverloadShardWritesBytes;
+    NMonitoring::TDynamicCounters::TCounterPtr OverloadShardWritesCount;
+    NMonitoring::TDynamicCounters::TCounterPtr OverloadShardWritesSizeBytes;
+    NMonitoring::TDynamicCounters::TCounterPtr OverloadShardWritesSizeCount;
 
     std::shared_ptr<TValueAggregationClient> InternalCompactionGranuleBytes;
     std::shared_ptr<TValueAggregationClient> InternalCompactionGranulePortionsCount;
@@ -113,9 +117,19 @@ public:
         OverloadInsertTableCount->Add(1);
     }
 
-    void OnOverloadShard(const ui64 size) const {
-        OverloadShardBytes->Add(size);
-        OverloadShardCount->Add(1);
+    void OnOverloadShardTx(const ui64 size) const {
+        OverloadShardTxBytes->Add(size);
+        OverloadShardTxCount->Add(1);
+    }
+
+    void OnOverloadShardWrites(const ui64 size) const {
+        OverloadShardWritesBytes->Add(size);
+        OverloadShardWritesCount->Add(1);
+    }
+
+    void OnOverloadShardWritesSize(const ui64 size) const {
+        OverloadShardWritesSizeBytes->Add(size);
+        OverloadShardWritesSizeCount->Add(1);
     }
 
     void SkipIndexationInputDueToSplitCompaction(const ui64 size) const {

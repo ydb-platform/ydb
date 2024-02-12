@@ -219,12 +219,12 @@ void TPartition::ProcessReserveRequests(const TActorContext& ctx) {
 
         const ui64 currentSize = ReservedSize + WriteInflightSize + WriteCycleSize;
         if (currentSize != 0 && currentSize + size > maxWriteInflightSize) {
-            LOG_DEBUG_S(ctx, NKikimrServices::PERSQUEUE, "Reserve processing: maxWriteInflightSize riched. Partition: " << Partition);           
+            LOG_DEBUG_S(ctx, NKikimrServices::PERSQUEUE, "Reserve processing: maxWriteInflightSize riched. Partition: " << Partition);
             break;
         }
 
         if (WaitingForSubDomainQuota(ctx, currentSize)) {
-            LOG_DEBUG_S(ctx, NKikimrServices::PERSQUEUE, "Reserve processing: SubDomainOutOfSpace. Partition: " << Partition);         
+            LOG_DEBUG_S(ctx, NKikimrServices::PERSQUEUE, "Reserve processing: SubDomainOutOfSpace. Partition: " << Partition);
             break;
         }
 
@@ -738,7 +738,7 @@ void TPartition::HandleOnWrite(TEvPQ::TEvDeregisterMessageGroup::TPtr& ev, const
         return ReplyError(ctx, ev->Get()->Cookie, NPersQueue::NErrorCode::SOURCEID_DELETED,
             "SourceId doesn't exist");
     }
-    
+
     EmplaceRequest(TDeregisterMessageGroupMsg(*ev->Get()), ctx);
 }
 
@@ -1411,13 +1411,13 @@ void TPartition::Handle(TEvPQ::TEvQuotaDeadlineCheck::TPtr&, const TActorContext
 
 bool TPartition::ProcessWrites(TEvKeyValue::TEvRequest* request, TInstant, const TActorContext& ctx) {
     PQ_LOG_T("TPartition::ProcessWrites.");
-
     FilterDeadlinedWrites(ctx);
 
     if (WaitingForPreviousBlobQuota() || WaitingForSubDomainQuota(ctx)) { // Waiting for topic quota.
         SetDeadlinesForWrites(ctx);
         return false;
     }
+    Y_ABORT_UNLESS(!PendingWriteRequest);
     QuotaDeadline = TInstant::Zero();
 
     if (Requests.empty())
@@ -1455,7 +1455,7 @@ bool TPartition::ProcessWrites(TEvKeyValue::TEvRequest* request, TInstant, const
 
     LOG_DEBUG_S(
             ctx, NKikimrServices::PERSQUEUE,
-            "writing blob: topic '" << TopicName() << "' partition " << Partition
+            "Add new write blob: topic '" << TopicName() << "' partition " << Partition
                 << " compactOffset " << key.GetOffset() << "," << key.GetCount()
                 << " HeadOffset " << Head.Offset << " endOffset " << EndOffset << " curOffset "
                 << NewHead.GetNextOffset() << " " << key.ToString()
@@ -1511,6 +1511,9 @@ void TPartition::HandleWrites(const TActorContext& ctx) {
             return;
         }
     }
+    if (PendingWriteRequest) {
+        return;
+    }
 
     PQ_LOG_T("TPartition::HandleWrites. Requests.size()=" << Requests.size());
     Become(&TThis::StateWrite);
@@ -1518,7 +1521,7 @@ void TPartition::HandleWrites(const TActorContext& ctx) {
     THolder<TEvKeyValue::TEvRequest> request(new TEvKeyValue::TEvRequest);
 
     Y_ABORT_UNLESS(Head.PackedSize + NewHead.PackedSize <= 2 * MaxSizeCheck);
-    
+
     TInstant now = ctx.Now();
     WriteCycleStartTime = now;
 
@@ -1543,10 +1546,8 @@ void TPartition::HandleWrites(const TActorContext& ctx) {
         Y_ABORT_UNLESS(Requests.empty()
                     || WaitingForPreviousBlobQuota()
                     || WaitingForSubDomainQuota(ctx)); //in this case all writes must be processed or no quota left
-        if (!PendingWriteRequest) {
-            AnswerCurrentWrites(ctx); //in case if all writes are already done - no answer will be called on kv write, no kv write at all
-            BecomeIdle(ctx);
-        }
+        AnswerCurrentWrites(ctx); //in case if all writes are already done - no answer will be called on kv write, no kv write at all
+        BecomeIdle(ctx);
         return;
     }
 
@@ -1559,8 +1560,7 @@ void TPartition::HandleWrites(const TActorContext& ctx) {
 void TPartition::RequestQuotaForWriteBlobRequest(size_t dataSize, ui64 cookie) {
     LOG_DEBUG_S(
             TActivationContext::AsActorContext(), NKikimrServices::PERSQUEUE,
-            "Send write quota request." <<
-            " Topic: \"" << TopicName() << "\"." <<
+            "Send write quota request." <<" Topic: \"" << TopicName() << "\"." <<
             " Partition: " << Partition << "." <<
             " Amount: " << dataSize << "." <<
             " Cookie: " << cookie
@@ -1587,7 +1587,7 @@ bool TPartition::WaitingForSubDomainQuota(const TActorContext& ctx, const ui64 w
 
 void TPartition::RequestBlobQuota() {
     PQ_LOG_T("TPartition::RequestBlobQuota.");
-    
+
     // Request quota and write blob.
     // Mirrored topics are not quoted in local dc.
     const bool skip = !WriteQuotaTrackerActor;
@@ -1605,6 +1605,7 @@ void TPartition::RequestBlobQuota() {
 
 void TPartition::WritePendingBlob() {
     Y_ABORT_UNLESS(CurrentStateFunc() == &TThis::StateWrite);
+    Y_ABORT_UNLESS(PendingWriteRequest);
 
     AddMetaKey(PendingWriteRequest.Get());
     WriteStartTime = TActivationContext::Now();

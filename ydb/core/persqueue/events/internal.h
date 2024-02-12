@@ -37,7 +37,7 @@ namespace NPQ {
         TMap<ui64, std::shared_ptr<NKikimrClient::TResponse>> Reads;
         TMaybe<TCacheClientContext> Client;
         TCacheServiceData() = delete;
-        
+
         TCacheServiceData(ui32 generation)
             : Generation(generation)
         {}
@@ -996,7 +996,7 @@ struct TEvPQ {
         NPQ::TDirectReadKey ReadKey;
         std::shared_ptr<NKikimrClient::TResponse> Response;
     };
-    
+
     struct TEvPublishDirectRead : public TEventLocal<TEvPublishDirectRead, EvCacheProxyPublishRead> {
         TEvPublishDirectRead(const NPQ::TDirectReadKey& readKey, ui32 tabletGeneration)
             : ReadKey(readKey)
@@ -1005,7 +1005,7 @@ struct TEvPQ {
         NPQ::TDirectReadKey ReadKey;
         ui32 TabletGeneration;
     };
-    
+
     struct TEvForgetDirectRead : public TEventLocal<TEvForgetDirectRead, EvCacheProxyForgetRead> {
         TEvForgetDirectRead(const NPQ::TDirectReadKey& readKey, ui32 tabletGeneration)
             : TabletGeneration(tabletGeneration)
@@ -1014,7 +1014,7 @@ struct TEvPQ {
         ui32 TabletGeneration;
         NPQ::TDirectReadKey ReadKey;
     };
-    
+
     struct TEvGetFullDirectReadData : public TEventLocal<TEvGetFullDirectReadData, EvGetFullDirectReadData> {
         TEvGetFullDirectReadData() = default;
         TEvGetFullDirectReadData(const NPQ::TReadSessionKey& key, ui32 generation)

@@ -4,6 +4,7 @@
 #include <ydb/core/graph/api/service.h>
 #include <ydb/core/graph/api/events.h>
 #include <library/cpp/json/json_writer.h>
+#include "json_pipe_req.h"
 #include "viewer_request.h"
 #include "viewer.h"
 #include "log.h"
@@ -14,10 +15,13 @@ namespace NViewer {
 using namespace NActors;
 using namespace NMonitoring;
 
-class TJsonRender : public TActorBootstrapped<TJsonRender> {
+class TJsonRender : public TViewerPipeClient<TJsonRender> {
+    using TThis = TJsonRender;
+    using TBase = TViewerPipeClient<TJsonRender>;
     IViewer* Viewer;
     NMon::TEvHttpInfo::TPtr Event;
     TEvViewer::TEvViewerRequest::TPtr ViewerRequest;
+    ui32 Timeout = 0;
     std::vector<TString> Metrics;
     TString Database;
     TCgiParameters Params;
@@ -35,7 +39,9 @@ public:
         : Viewer(viewer)
         , Event(ev)
     {
-        UserToken = Event->Get()->UserToken;
+        const auto& params(Event->Get()->Request.GetParams());
+        InitConfig(params);
+        Timeout = FromStringWithDefault<ui32>(params.Get("timeout"), 30000);
     }
 
     TJsonRender(TEvViewer::TEvViewerRequest::TPtr& ev)
@@ -43,7 +49,10 @@ public:
     {
         auto& request = ViewerRequest->Get()->Record.GetRenderRequest();
 
-        UserToken = request.GetUserToken();
+        TCgiParameters params(request.GetUri());
+        InitConfig(params);
+
+        Timeout = ViewerRequest->Get()->Record.GetTimeout();
         Direct = true;
     }
 
@@ -58,7 +67,7 @@ public:
             Database = Params.Get("database");
             Direct = FromStringWithDefault<bool>(Params.Get("direct"), Direct);
             if (Database && !Direct) {
-                RequestStateStorageEndpointsLookup(Database); // to find some dynamic node and redirect query there
+                RequestStateStorageEndpointsLookup(Database); // to find some dynamic node and redirect there
             }
             if (Requests == 0) {
                 SendGraphRequest();
@@ -68,17 +77,40 @@ public:
             return PassAway();
         }
 
+        Become(&TThis::StateWork, TDuration::MilliSeconds(Timeout), new TEvents::TEvWakeup());
+    }
 
-        Schedule(TDuration::Seconds(30), new TEvents::TEvWakeup());
-        Become(&TThis::StateWork);
+    void PassAway() override {
+        if (SubscribedNodeId.has_value()) {
+            Send(TActivationContext::InterconnectProxy(SubscribedNodeId.value()), new TEvents::TEvUnsubscribe());
+        }
+        TBase::PassAway();
+        BLOG_TRACE("PassAway()");
     }
 
     STATEFN(StateWork) {
         switch (ev->GetTypeRewrite()) {
             hFunc(TEvStateStorage::TEvBoardInfo, Handle);
+            hFunc(TEvents::TEvUndelivered, Undelivered);
+            hFunc(TEvInterconnect::TEvNodeConnected, Connected);
+            hFunc(TEvInterconnect::TEvNodeDisconnected, Disconnected);
+            hFunc(TEvViewer::TEvViewerResponse, Handle);
             hFunc(NGraph::TEvGraph::TEvMetricsResult, Handle);
-            cFunc(TEvents::TSystem::Wakeup, Timeout);
+
+            cFunc(TEvents::TSystem::Wakeup, HandleTimeout);
         }
+    }
+
+    void Connected(TEvInterconnect::TEvNodeConnected::TPtr &) {}
+
+    void Undelivered(TEvents::TEvUndelivered::TPtr &ev) {
+        if (ev->Get()->SourceType == NViewer::TEvViewer::EvViewerRequest) {
+            SendGraphRequest();
+        }
+    }
+
+    void Disconnected(TEvInterconnect::TEvNodeDisconnected::TPtr &) {
+        SendGraphRequest();
     }
 
     void SendDynamicNodeRenderRequest() {
@@ -93,17 +125,13 @@ public:
 
         THolder<TEvViewer::TEvViewerRequest> request = MakeHolder<TEvViewer::TEvViewerRequest>();
         request->Record.SetTimeout(Timeout);
-        auto queryRequest = request->Record.MutableQueryRequest();
-        queryRequest->SetUri(TString(Event->Get()->Request.GetUri()));
-        if (IsPostContent()) {
-            TStringBuf content = Event->Get()->Request.GetPostContent();
-            queryRequest->SetContent(TString(content));
-        }
-        if (UserToken) {
-            queryRequest->SetUserToken(UserToken);
-        }
+        auto renderRequest = request->Record.MutableRenderRequest();
+        renderRequest->SetUri(TString(Event->Get()->Request.GetUri()));
 
-        ViewerWhiteboardCookie cookie(NKikimrViewer::TEvViewerRequest::kQueryRequest, nodeId);
+        TStringBuf content = Event->Get()->Request.GetPostContent();
+        renderRequest->SetContent(TString(content));
+
+        ViewerWhiteboardCookie cookie(NKikimrViewer::TEvViewerRequest::kRenderRequest, nodeId);
         SendRequest(viewerServiceId, request.Release(), IEventHandle::FlagTrackDelivery | IEventHandle::FlagSubscribeOnSession, cookie.ToUi64());
     }
 
@@ -125,6 +153,7 @@ public:
         if (MadeProxyRequest) {
             return;
         }
+        NKikimrGraph::TEvGetMetrics getRequest;
         if (Params.Has("target")) {
             TString metric;
             size_t num = 0;
@@ -160,28 +189,29 @@ public:
         Send(NGraph::MakeGraphServiceId(), new NGraph::TEvGraph::TEvGetMetrics(std::move(getRequest)));
     }
 
-    void HandleRenderResponse(NKikimrKqp::TEvRenderResponse& response) {
+    void HandleRenderResponse(NKikimrGraph::TEvMetricsResult& response) {
         NJson::TJsonValue json;
 
+        //const auto& response(result.Record);
         if (response.GetError()) {
             json["status"] = "error";
             json["error"] = response.GetError();
-            Send(Event->Sender, new NMon::TEvHttpInfoRes(Viewer->GetHTTPOKJSON(Event->Get()) + NJson::WriteJson(json, false), 0, NMon::IEvHttpInfoRes::EContentType::Custom));
-            return PassAway();
+            ReplyAndPassAway(Viewer->GetHTTPOKJSON(Event->Get()) + NJson::WriteJson(json, false));
+            return;
         }
         if (response.DataSize() != Metrics.size()) {
             json["status"] = "error";
             json["error"] = "Invalid data size received";
-            Send(Event->Sender, new NMon::TEvHttpInfoRes(Viewer->GetHTTPOKJSON(Event->Get()) + NJson::WriteJson(json, false), 0, NMon::IEvHttpInfoRes::EContentType::Custom));
-            return PassAway();
+            ReplyAndPassAway(Viewer->GetHTTPOKJSON(Event->Get()) + NJson::WriteJson(json, false));
+            return;
         }
         for (size_t nMetric = 0; nMetric < response.DataSize(); ++nMetric) {
             const auto& protoMetric(response.GetData(nMetric));
             if (response.TimeSize() != protoMetric.ValuesSize()) {
                 json["status"] = "error";
                 json["error"] = "Invalid value size received";
-                Send(Event->Sender, new NMon::TEvHttpInfoRes(Viewer->GetHTTPOKJSON(Event->Get()) + NJson::WriteJson(json, false), 0, NMon::IEvHttpInfoRes::EContentType::Custom));
-                return PassAway();
+                ReplyAndPassAway(Viewer->GetHTTPOKJSON(Event->Get()) + NJson::WriteJson(json, false));
+                return;
             }
         }
         { // graphite
@@ -207,33 +237,35 @@ public:
             }
         }
 
-        Send(Event->Sender, new NMon::TEvHttpInfoRes(Viewer->GetHTTPOKJSON(Event->Get()) + NJson::WriteJson(json, false), 0, NMon::IEvHttpInfoRes::EContentType::Custom));
-        PassAway();
+        ReplyAndPassAway(Viewer->GetHTTPOKJSON(Event->Get()) + NJson::WriteJson(json, false));
+
     }
 
-    void Handle(NKqp::TEvKqp::TEvQueryResponse::TPtr& ev) {
-        if (Event) {
-            HandleRenderResponse(ev->Get()->Record.GetRef());
-        } else {
-            TEvViewer::TEvViewerResponse* response = new TEvViewer::TEvViewerResponse();
-            response->Record.MutableRenderResponse()->CopyFrom(record);
-            Send(Event->Sender, response, 0, NMon::IEvHttpInfoRes::EContentType::Custom);
-            PassAway();
-        }
+    void Handle(NGraph::TEvGraph::TEvMetricsResult::TPtr& ev) {
+        HandleRenderResponse(ev->Get()->Record);
     }
 
     void Handle(TEvViewer::TEvViewerResponse::TPtr& ev) {
         HandleRenderResponse(*(ev.Get()->Get()->Record.MutableRenderResponse()));
     }
 
-    void Timeout() {
+    void HandleTimeout() {
         if (Event) {
-            Send(Event->Sender, new NMon::TEvHttpInfoRes(Viewer->GetHTTPGATEWAYTIMEOUT(Event->Get()), 0, NMon::IEvHttpInfoRes::EContentType::Custom));
+            ReplyAndPassAway(Viewer->GetHTTPGATEWAYTIMEOUT(Event->Get()));
         } else {
             auto* response = new TEvViewer::TEvViewerResponse();
-            response->Record.MutableRenderResponse()->SetYdbStatus(Ydb::StatusIds::TIMEOUT);
-            Send(Event->Sender, response, 0, NMon::IEvHttpInfoRes::EContentType::Custom);
+            response->Record.MutableRenderResponse()->SetError("Request timed out");
+            ReplyAndPassAway(response);
         }
+    }
+
+    void ReplyAndPassAway(TEvViewer::TEvViewerResponse* response) {
+        Send(ViewerRequest->Sender, response);
+        PassAway();
+    }
+
+    void ReplyAndPassAway(TString data) {
+        Send(Event->Sender, new NMon::TEvHttpInfoRes(std::move(data), 0, NMon::IEvHttpInfoRes::EContentType::Custom));
         PassAway();
     }
 };

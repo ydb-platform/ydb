@@ -389,9 +389,10 @@ public:
                 RequestDone();
                 break;
             case NKikimrViewer::TEvViewerResponse::kQueryResponse:
-            case NKikimrViewer::TEvViewerResponse::kReserved14:
+            case NKikimrViewer::TEvViewerResponse::kRenderResponse:
             case NKikimrViewer::TEvViewerResponse::kReserved15:
             case NKikimrViewer::TEvViewerResponse::kReserved16:
+            case NKikimrViewer::TEvViewerResponse::kReserved17:
             case NKikimrViewer::TEvViewerResponse::RESPONSE_NOT_SET:
                 break;
         }
@@ -425,9 +426,10 @@ public:
                     SendViewerSystemRequest(tenantId);
                     break;
                 case NKikimrViewer::TEvViewerRequest::kQueryRequest:
-                case NKikimrViewer::TEvViewerRequest::kReserved14:
+                case NKikimrViewer::TEvViewerRequest::kRenderRequest:
                 case NKikimrViewer::TEvViewerRequest::kReserved15:
                 case NKikimrViewer::TEvViewerRequest::kReserved16:
+                case NKikimrViewer::TEvViewerRequest::kReserved17:
                 case NKikimrViewer::TEvViewerRequest::REQUEST_NOT_SET:
                     break;
             }

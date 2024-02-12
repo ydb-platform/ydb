@@ -147,6 +147,7 @@ PEERDIR(
     ydb/library/actors/protos
     ydb/core/config/protos
     ydb/core/fq/libs/config/protos
+    ydb/core/graph/protos
     ydb/core/scheme/protos
     ydb/library/login/protos
     ydb/library/mkql_proto/protos

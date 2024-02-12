@@ -13,7 +13,26 @@ NKikimr::TConclusionStatus TDestinationSession::DataReceived(const THashMap<ui64
         AFL_VERIFY(it != PathIds.end())("path_id_undefined", i.first);
         auto granule = index.GetGranulePtrVerified(it->second);
         for (auto&& portion : i.second.GetPortions()) {
-            granule->UpsertPortion(portion);
+            ui32 contains = 0;
+            ui32 notContains = 0;
+            THashMap<TString, THashSet<TUnifiedBlobId>> blobIds;
+            portion.FillBlobIdsByStorage(blobIds);
+            for (auto&& s : blobIds) {
+                auto it = CurrentBlobIds.find(s.first);
+                if (it == CurrentBlobIds.end()) {
+                    notContains += s.second.size();
+                    continue;
+                }
+                for (auto&& b : s.second) {
+                    if (it->second.contains(b)) {
+                        ++contains;
+                    }
+                }
+            }
+            AFL_VERIFY(!contains || !notContains);
+            if (!contains) {
+                granule->UpsertPortion(portion);
+            }
         }
     }
     return TConclusionStatus::Success();
@@ -92,8 +111,12 @@ NKikimr::TConclusionStatus TDestinationSession::DeserializeDataFromProto(const N
         return TConclusionStatus::Fail("cannot parse initiator controller: " + proto.GetInitiatorController().DebugString());
     }
     for (auto&& i : proto.GetPathIds()) {
-        if (!index.GetGranuleOptional(i.GetDestPathId())) {
+        auto g = index.GetGranuleOptional(i.GetDestPathId());
+        if (!g) {
             return TConclusionStatus::Fail("Incorrect remapping into undefined path id: " + ::ToString(i.GetDestPathId()));
+        }
+        for (auto&& p : g->GetPortionsOlderThenSnapshot(GetSnapshotBarrier())) {
+            p.FillBlobIdsByStorage(CurrentBlobIds);
         }
         if (!i.GetSourcePathId() || !i.GetDestPathId()) {
             return TConclusionStatus::Fail("PathIds remapping contains incorrect ids: " + i.DebugString());

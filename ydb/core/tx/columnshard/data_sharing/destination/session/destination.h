@@ -73,6 +73,7 @@ private:
     using TPathIdsRemapper = THashMap<ui64, ui64>;
     YDB_READONLY_DEF(TPathIdsRemapper, PathIds);
     THashMap<TTabletId, TSourceCursorForDestination> Cursors;
+    THashMap<TString, THashSet<TUnifiedBlobId>> CurrentBlobIds;
 public:
     TSourceCursorForDestination& GetCursorVerified(const TTabletId& tabletId) {
         auto it = Cursors.find(tabletId);

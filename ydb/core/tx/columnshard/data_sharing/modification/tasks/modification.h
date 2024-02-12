@@ -39,19 +39,22 @@ public:
 
 class TStorageTabletTask {
 private:
+    TTabletId TabletId;
     TString StorageId;
     THashMap<TUnifiedBlobId, TBlobOwnerRemap> RemapOwner;
     TTabletByBlob InitOwner;
     TTabletsByBlob AddSharingLinks;
     TTabletsByBlob RemoveSharingLinks;
 public:
-    TStorageTabletTask(const TString& storageId)
-        : StorageId(storageId) {
+    TStorageTabletTask(const TString& storageId, const TTabletId tabletId)
+        : TabletId(tabletId)
+        , StorageId(storageId) {
 
     }
 
     NKikimrColumnShardDataSharingProto::TStorageTabletTask SerializeToProto() const {
         NKikimrColumnShardDataSharingProto::TStorageTabletTask result;
+        result.SetTabletId((ui64)TabletId);
         result.SetStorageId(StorageId);
         *result.MutableInitOwner() = InitOwner.SerializeToProto();
         *result.MutableAddSharingLinks() = AddSharingLinks.SerializeToProto();
@@ -71,6 +74,10 @@ public:
         StorageId = proto.GetStorageId();
         if (!StorageId) {
             return TConclusionStatus::Fail("empty storage id");
+        }
+        TabletId = (TTabletId)proto.GetTabletId();
+        if (!TabletId) {
+            return TConclusionStatus::Fail("empty tablet id for storage task");
         }
         {
             auto parse = InitOwner.DeserializeFromProto(proto.GetInitOwner());
@@ -109,14 +116,17 @@ public:
     }
 
     void AddRemapOwner(const TUnifiedBlobId& blobId, const TTabletId from, const TTabletId to) {
+        AFL_VERIFY(to != TabletId);
         AFL_VERIFY(RemapOwner.emplace(blobId, TBlobOwnerRemap(from, to)).second);
     }
 
     void AddInitOwner(const TUnifiedBlobId& blobId, const TTabletId to) {
+        AFL_VERIFY(to != TabletId);
         AFL_VERIFY(InitOwner->emplace(blobId, to).second);
     }
 
     void AddLink(const TUnifiedBlobId& blobId, const TTabletId tabletId) {
+        AFL_VERIFY(tabletId != TabletId);
         AFL_VERIFY(AddSharingLinks.Add(tabletId, blobId));
     }
 
@@ -125,6 +135,7 @@ public:
     }
 
     void Merge(const TStorageTabletTask& from) {
+        AFL_VERIFY(TabletId == from.TabletId);
         for (auto&& i : from.InitOwner) {
             AFL_VERIFY(InitOwner->emplace(i.first, i.second).second);
         }
@@ -177,7 +188,7 @@ public:
     const TStorageTabletTask& GetStorageTasksGuarantee(const TString& storageId) {
         auto it = TasksByStorage.find(storageId);
         if (it == TasksByStorage.end()) {
-            it = TasksByStorage.emplace(storageId, storageId).first;
+            it = TasksByStorage.emplace(storageId, storageId, TabletId).first;
         }
         return it->second;
     }

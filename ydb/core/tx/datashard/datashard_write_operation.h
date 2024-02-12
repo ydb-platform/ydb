@@ -309,7 +309,7 @@ private:
     void UntrackMemory() const;
 
 private:
-    std::unique_ptr<NEvents::TDataEvents::TEvWrite> Record;
+    std::unique_ptr<NEvents::TDataEvents::TEvWrite> WriteRequest;
     std::unique_ptr<NEvents::TDataEvents::TEvWriteResult> WriteResult;
 
     TValidatedWriteTx::TPtr WriteTx;

@@ -308,7 +308,7 @@ TWriteOperation::TWriteOperation(const TBasicOpInfo& op, NEvents::TDataEvents::T
     TAutoPtr<NEvents::TDataEvents::TEvWrite> evPtr = handle->Release();
 
     Orbit = std::move(evPtr->MoveOrbit());
-    Record.reset(evPtr.Release());
+    WriteRequest.reset(evPtr.Release());
 
     BuildWriteTx(self, txc);
 
@@ -323,7 +323,7 @@ TWriteOperation::~TWriteOperation()
 void TWriteOperation::FillTxData(TValidatedWriteTx::TPtr writeTx)
 {
     Y_ABORT_UNLESS(!WriteTx);
-    Y_ABORT_UNLESS(!Record || HasVolatilePrepareFlag());
+    Y_ABORT_UNLESS(!WriteRequest || HasVolatilePrepareFlag());
 
     Target = writeTx->GetSource();
     WriteTx = writeTx;
@@ -334,7 +334,7 @@ void TWriteOperation::FillTxData(TDataShard* self, TTransactionContext& txc, con
     UntrackMemory();
 
     Y_ABORT_UNLESS(!WriteTx);
-    Y_ABORT_UNLESS(!Record);
+    Y_ABORT_UNLESS(!WriteRequest);
 
     Target = target;
     SetTxBody(txBody);
@@ -356,7 +356,7 @@ void TWriteOperation::FillVolatileTxData(TDataShard* self, TTransactionContext& 
     UntrackMemory();
 
     Y_ABORT_UNLESS(!WriteTx);
-    Y_ABORT_UNLESS(Record);
+    Y_ABORT_UNLESS(WriteRequest);
 
     BuildWriteTx(self, txc);
     Y_ABORT_UNLESS(WriteTx->Ready());
@@ -366,12 +366,12 @@ void TWriteOperation::FillVolatileTxData(TDataShard* self, TTransactionContext& 
 }
 
 TString TWriteOperation::GetTxBody() const {
-    Y_ABORT_UNLESS(Record);
+    Y_ABORT_UNLESS(WriteRequest);
 
     TAllocChunkSerializer serializer;
-    bool success = Record->SerializeToArcadiaStream(&serializer);
+    bool success = WriteRequest->SerializeToArcadiaStream(&serializer);
     Y_ABORT_UNLESS(success);
-    TEventSerializationInfo serializationInfo = Record->CreateSerializationInfo();
+    TEventSerializationInfo serializationInfo = WriteRequest->CreateSerializationInfo();
 
     NKikimrTxDataShard::TSerializedEvent proto;
     proto.SetIsExtendedFormat(serializationInfo.IsExtendedFormat);
@@ -384,7 +384,7 @@ TString TWriteOperation::GetTxBody() const {
 }
 
 void TWriteOperation::SetTxBody(const TString& txBody) {
-    Y_ABORT_UNLESS(!Record);
+    Y_ABORT_UNLESS(!WriteRequest);
 
     NKikimrTxDataShard::TSerializedEvent proto;
     const bool success = proto.ParseFromString(txBody);
@@ -394,24 +394,24 @@ void TWriteOperation::SetTxBody(const TString& txBody) {
     serializationInfo.IsExtendedFormat = proto.GetIsExtendedFormat();
 
     TEventSerializedData buffer(proto.GetEventData(), std::move(serializationInfo));
-    NKikimr::NEvents::TDataEvents::TEvWrite* record = static_cast<NKikimr::NEvents::TDataEvents::TEvWrite*>(NKikimr::NEvents::TDataEvents::TEvWrite::Load(&buffer));
-    Y_ABORT_UNLESS(record);
+    NKikimr::NEvents::TDataEvents::TEvWrite* writeRequest = static_cast<NKikimr::NEvents::TDataEvents::TEvWrite*>(NKikimr::NEvents::TDataEvents::TEvWrite::Load(&buffer));
+    Y_ABORT_UNLESS(writeRequest);
 
-    Record.reset(record);
+    WriteRequest.reset(writeRequest);
 }
 
 void TWriteOperation::ClearTxBody() {
     UntrackMemory();
-    Record.reset();
+    WriteRequest.reset();
     TrackMemory();
 }
 
 TValidatedWriteTx::TPtr TWriteOperation::BuildWriteTx(TDataShard* self, TTransactionContext& txc)
 {
     if (!WriteTx) {
-        Y_ABORT_UNLESS(Record);
+        Y_ABORT_UNLESS(WriteRequest);
         auto [readVersion, writeVersion] = self->GetReadWriteVersions(this);
-        WriteTx = std::make_shared<TValidatedWriteTx>(self, txc, GetGlobalTxId(), GetReceivedAt(), readVersion, writeVersion, *Record);
+        WriteTx = std::make_shared<TValidatedWriteTx>(self, txc, GetGlobalTxId(), GetReceivedAt(), readVersion, writeVersion, *WriteRequest);
     }
     return WriteTx;
 }
@@ -473,8 +473,8 @@ ui64 TWriteOperation::GetMemoryConsumption() const {
     if (WriteTx) {
         res += WriteTx->GetTxSize();
     }
-    if (Record) {
-        res += Record->CalculateSerializedSize();
+    if (WriteRequest) {
+        res += WriteRequest->CalculateSerializedSize();
     }
     return res;
 }
@@ -499,14 +499,14 @@ ERestoreDataStatus TWriteOperation::RestoreTxData(TDataShard* self, TTransaction
         TString txBody;
         bool ok = self->TransQueue.LoadTxDetails(db, GetTxId(), Target, txBody, locks, ArtifactFlags);
         if (!ok) {
-            Record.reset();
+            WriteRequest.reset();
             ArtifactFlags = 0;
             return ERestoreDataStatus::Restart;
         }
 
         SetTxBody(txBody);
     } else {
-        Y_ABORT_UNLESS(Record);
+        Y_ABORT_UNLESS(WriteRequest);
     }
 
     TrackMemory();
@@ -517,7 +517,7 @@ ERestoreDataStatus TWriteOperation::RestoreTxData(TDataShard* self, TTransaction
     bool extractKeys = WriteTx->IsTxInfoLoaded();
     auto [readVersion, writeVersion] = self->GetReadWriteVersions(this);
 
-    WriteTx = std::make_shared<TValidatedWriteTx>(self, txc, GetTxId(), GetReceivedAt(), readVersion, writeVersion, *Record);
+    WriteTx = std::make_shared<TValidatedWriteTx>(self, txc, GetTxId(), GetReceivedAt(), readVersion, writeVersion, *WriteRequest);
     if (WriteTx->Ready() && extractKeys) {
         WriteTx->ExtractKeys(true);
     }
@@ -586,11 +586,11 @@ void TWriteOperation::BuildExecutionPlan(bool loaded)
 }
 
 void TWriteOperation::TrackMemory() const {
-    NActors::NMemory::TLabel<MemoryLabelActiveTransactionBody>::Add(Record ? Record->CalculateSerializedSize() : 0);
+    NActors::NMemory::TLabel<MemoryLabelActiveTransactionBody>::Add(WriteRequest ? WriteRequest->CalculateSerializedSize() : 0);
 }
 
 void TWriteOperation::UntrackMemory() const {
-    NActors::NMemory::TLabel<MemoryLabelActiveTransactionBody>::Sub(Record ? Record->CalculateSerializedSize() : 0);
+    NActors::NMemory::TLabel<MemoryLabelActiveTransactionBody>::Sub(WriteRequest ? WriteRequest->CalculateSerializedSize() : 0);
 }
 
 void TWriteOperation::SetError(const NKikimrDataEvents::TEvWriteResult::EStatus& status, const TString& errorMsg) {

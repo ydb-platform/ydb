@@ -3125,7 +3125,7 @@ void TPersQueue::HandleDataTransaction(TAutoPtr<TEvPersQueue::TEvProposeTransact
                     ", is_write=" << isWriteOperation);
     }
 
-    if ((TabletState != NKikimrPQ::ENormal) || txBody.HasWriteId()) {
+    if (TabletState != NKikimrPQ::ENormal) {
         SendProposeTransactionAbort(ActorIdFromProto(event.GetSourceActor()),
                                     event.GetTxId(),
                                     ctx);
@@ -3137,18 +3137,31 @@ void TPersQueue::HandleDataTransaction(TAutoPtr<TEvPersQueue::TEvProposeTransact
     //
 
     if (txBody.GetImmediate()) {
-        //
-        // FIXME(abcdef): вместо Y_ABORT_UNLESS отправлять TEvProposeTransactionResult с кодом ошибки
-        //
-        Y_ABORT_UNLESS(txBody.OperationsSize() > 0);
+        if (txBody.OperationsSize() <= 0) {
+            SendProposeTransactionAbort(ActorIdFromProto(event.GetSourceActor()),
+                                        event.GetTxId(),
+                                        ctx);
+            return;
+        }
 
-        TPartitionId partitionId =
-            MakePartitionId(txBody.GetOperations(0).GetPartitionId(),
-                            txBody.HasWriteId() ? TMaybe<ui64>(txBody.GetWriteId()) : Nothing());
-        auto i = Partitions.find(partitionId);
-        Y_ABORT_UNLESS(i != Partitions.end());
+        TMaybe<TPartitionId> partitionId = FindPartitionId(txBody);
+        if (!partitionId.Defined()) {
+            SendProposeTransactionAbort(ActorIdFromProto(event.GetSourceActor()),
+                                        event.GetTxId(),
+                                        ctx);
+            return;
+        }
 
-        ctx.Send(i->second.Actor, ev.Release());
+        if (!Partitions.contains(*partitionId)) {
+            SendProposeTransactionAbort(ActorIdFromProto(event.GetSourceActor()),
+                                        event.GetTxId(),
+                                        ctx);
+            return;
+        }
+
+        const TPartitionInfo& partition = Partitions.at(*partitionId);
+
+        ctx.Send(partition.Actor, ev.Release());
     } else {
         EvProposeTransactionQueue.emplace_back(ev.Release());
 
@@ -3679,6 +3692,27 @@ TPartitionId TPersQueue::MakePartitionId(ui32 originalPartitionId, TMaybe<ui64> 
 {
     Y_ABORT_UNLESS(!writeId.Defined());
     return TPartitionId{originalPartitionId};
+}
+
+TMaybe<TPartitionId> TPersQueue::FindPartitionId(const NKikimrPQ::TDataTransaction& txBody) const
+{
+    ui32 partitionId = txBody.GetOperations(0).GetPartitionId();
+
+    if (txBody.HasWriteId()) {
+        ui64 writeId = txBody.GetWriteId();
+        if (!TxWrites.contains(writeId)) {
+            return Nothing();
+        }
+
+        const TTxWriteInfo& writeInfo = TxWrites.at(writeId);
+        if (!writeInfo.Partitions.contains(partitionId)) {
+            return Nothing();
+        }
+
+        return writeInfo.Partitions.at(partitionId);
+    } else {
+        return TPartitionId(txBody.GetOperations(0).GetPartitionId());
+    }
 }
 
 void TPersQueue::SendEvTxCalcPredicateToPartitions(const TActorContext& ctx,

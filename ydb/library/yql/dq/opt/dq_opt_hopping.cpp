@@ -638,12 +638,12 @@ TMaybe<bool> BuildWatermarkMode(
     TExprContext& ctx,
     bool analyticsMode,
     bool defaultWatermarksMode,
-    bool asyncActor)
+    bool syncActor)
 {
     const bool enableWatermarks = !analyticsMode &&
         defaultWatermarksMode &&
         hoppingTraits.Version().Cast<TCoAtom>().StringValue() == "v2";
-    if (enableWatermarks && asyncActor) {
+    if (enableWatermarks && syncActor) {
         ctx.AddError(TIssue(ctx.GetPosition(aggregate.Pos()), "Watermarks should be used only with async compute actor"));
         return Nothing();
     }
@@ -665,7 +665,7 @@ TMaybeNode<TExprBase> RewriteAsHoppingWindow(
     bool analyticsMode,
     TDuration lateArrivalDelay,
     bool defaultWatermarksMode,
-    bool asyncActor) {
+    bool syncActor) {
     const auto aggregate = node.Cast<TCoAggregate>();
     const auto pos = aggregate.Pos();
 
@@ -703,7 +703,7 @@ TMaybeNode<TExprBase> RewriteAsHoppingWindow(
     const auto loadLambda = BuildLoadHopLambda(aggregate, ctx);
     const auto mergeLambda = BuildMergeHopLambda(aggregate, ctx);
     const auto finishLambda = BuildFinishHopLambda(aggregate, keysDescription.GetActualGroupKeys(), hopTraits.Column, ctx);
-    const auto enableWatermarks = BuildWatermarkMode(aggregate, hopTraits.Traits, ctx, analyticsMode, defaultWatermarksMode, asyncActor);
+    const auto enableWatermarks = BuildWatermarkMode(aggregate, hopTraits.Traits, ctx, analyticsMode, defaultWatermarksMode, syncActor);
     if (!enableWatermarks) {
         return nullptr;
     }

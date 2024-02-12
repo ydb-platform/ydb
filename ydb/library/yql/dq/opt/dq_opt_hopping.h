@@ -13,6 +13,6 @@ NNodes::TMaybeNode<NNodes::TExprBase> RewriteAsHoppingWindow(
     bool analyticsHopping,
     TDuration lateArrivalDelay,
     bool defaultWatermarksMode,
-    bool asyncActor);
+    bool syncActor);
 
 } // namespace NYql::NDq::NHopping

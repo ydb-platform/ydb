@@ -315,8 +315,8 @@ protected:
                     .Get()
                     .GetOrElse(TDqSettings::TDefault::WatermarksLateArrivalDelayMs));
                 bool defaultWatermarksMode = Config->WatermarksMode.Get() == "default";
-                bool asyncActor = Config->ComputeActorType.Get() != "async";
-                return NHopping::RewriteAsHoppingWindow(node, ctx, input.Cast(), analyticsHopping, lateArrivalDelay, defaultWatermarksMode, asyncActor);
+                bool syncActor = Config->ComputeActorType.Get() != "async";
+                return NHopping::RewriteAsHoppingWindow(node, ctx, input.Cast(), analyticsHopping, lateArrivalDelay, defaultWatermarksMode, syncActor);
             } else {
                 return DqRewriteAggregate(node, ctx, TypesCtx, true, Config->UseAggPhases.Get().GetOrElse(false), Config->UseFinalizeByKey.Get().GetOrElse(false));
             }

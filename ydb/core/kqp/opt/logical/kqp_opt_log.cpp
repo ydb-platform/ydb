@@ -122,10 +122,10 @@ protected:
                 node,
                 ctx,
                 input.Cast(),
-                false,
+                false,              // analyticsHopping
                 TDuration::MilliSeconds(TDqSettings::TDefault::WatermarksLateArrivalDelayMs),
-                true,
-                false);
+                true,               // defaultWatermarksMode
+                true);              // syncActor
         } else {
             output = DqRewriteAggregate(node, ctx, TypesCtx, false, KqpCtx.Config->HasOptEnableOlapPushdown() || KqpCtx.Config->HasOptUseFinalizeByKey(), KqpCtx.Config->HasOptUseFinalizeByKey());
         }

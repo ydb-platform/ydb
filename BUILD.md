@@ -10,7 +10,6 @@ From this repository you can build YDB Server and YDB CLI (Command Line Interfac
 
 ```bash
 mkdir ~/ydbwork && cd ~/ydbwork
-mkdir build
 ```
 
 ## Clone the ydb repository
@@ -19,13 +18,25 @@ mkdir build
 git clone https://github.com/ydb-platform/ydb.git
 ```
 
-By default, the `main` branch is checked out. It contains the latest development update for both YDB Server and CLI. This branch may sometimes be broken for short periods of time, so you may prefer to build the latest stable versions of YDB Server and CLI as described below. As stable versions of the YDB Server and CLI belong to different commits, it is not possible to get both server and CLI stable executables with a single checkout/build. Checkout and build server first, then CLI, or visa versa.
-
 Change directory to the cloned repository to perform further commands:
 
 ```
 cd ydb
 ```
+
+### Check out trunk
+
+By default, the `main` branch is checked out. It contains the trunk - a latest development update for both YDB Server and CLI, for __Yatool build__. To build trunk using __CMake build__, check out the `cmakebuild` branch:
+
+```bash
+git checkout cmakebuild
+```
+
+The `cmakebuild` branch is updated on hourly basis following the `main`.
+
+Trunk may sometimes be broken for short periods of time, so you may prefer to build the latest stable versions of YDB Server and CLI as described below. As stable versions of the YDB Server and CLI belong to different commits, it is not possible to get both server and CLI stable executables with a single checkout/build. Checkout and build server first, then CLI, or visa versa.
+
+Release tags support both Yatool and CMake builds.
 
 ### Check out the latest stable YDB Server version for build
 
@@ -53,15 +64,15 @@ You can use native Yatool build for x86_64 under Linux Ubuntu 18+.
 
 Run `ya make` from the repository root, followed by an optional relative path to the build target. By default, `ya make` compiles a `debug` configuration, while you can choose to have `release` or `relwithdebinfo`. The latter is recommended for faster builds, as is leverages the YDB remote build cache.
 
-To perform build, Yatool downloads relevant toolchains from the S3 storage, so you do not need to install anything on the build machine.
+To perform build, Yatool downloads and caches relevant toolchains from the YDB S3 storage, so you do not need to install anything on the build machine.
 
-To build YDB server run
+To build YDB server run:
 
 ```
 ./ya make ydb/apps/ydbd --build relwithdebinfo
 ```
 
-To build YDB CLI run
+To build YDB CLI run:
 
 ```
 ./ya make ydb/apps/ydb --build relwithdebinfo

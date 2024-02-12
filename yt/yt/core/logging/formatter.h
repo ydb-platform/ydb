@@ -67,7 +67,7 @@ public:
     TStructuredLogFormatter(
         ELogFormat format,
         THashMap<TString, NYTree::INodePtr> commonFields,
-        bool enablSystemlMessages = true,
+        bool enableSystemMessages = true,
         bool enableSourceLocation = false,
         bool enableInstant = true,
         NJson::TJsonFormatConfigPtr jsonFormat = nullptr);

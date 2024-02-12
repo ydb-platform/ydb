@@ -2067,6 +2067,12 @@ TFuture<void> TClient::AlterQuery(
     ThrowUnimplemented("AlterQuery");
 }
 
+TFuture<TGetQueryTrackerInfoResult> TClient::GetQueryTrackerInfo(
+    const TGetQueryTrackerInfoOptions& /*options*/)
+{
+    ThrowUnimplemented("GetQueryTrackerInfo");
+}
+
 TFuture<NBundleControllerClient::TBundleConfigDescriptorPtr> TClient::GetBundleConfig(
     const TString& /*bundleName*/,
     const NBundleControllerClient::TGetBundleConfigOptions& /*options*/)

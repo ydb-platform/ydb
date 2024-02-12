@@ -81,7 +81,7 @@ public:
     }
 
     TTiersManager& Start(std::shared_ptr<TTiersManager> ownerPtr);
-    TTiersManager& Stop();
+    TTiersManager& Stop(const bool needStopActor);
     const NTiers::TManager& GetManagerVerified(const TString& tierId) const;
     const NTiers::TManager* GetManagerOptional(const TString& tierId) const;
     NMetadata::NFetcher::ISnapshotsFetcher::TPtr GetExternalDataManipulation() const;

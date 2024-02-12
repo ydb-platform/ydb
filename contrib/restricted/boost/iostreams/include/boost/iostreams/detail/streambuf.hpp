@@ -16,7 +16,7 @@
 #ifndef BOOST_IOSTREAMS_NO_STREAM_TEMPLATES
 # include <streambuf>
 #else 
-# include <streambuf.h>
+# error #include <streambuf.h>
 #endif 
 
 #ifndef BOOST_IOSTREAMS_NO_STREAM_TEMPLATES

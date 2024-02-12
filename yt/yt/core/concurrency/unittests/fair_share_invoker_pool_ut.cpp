@@ -288,89 +288,6 @@ protected:
         ExpectTotalCpuTime(1, TDuration::Zero());
     }
 
-    void DoTestGetTotalWaitEstimate(int invokerCount, std::vector<int> waitingActionCounts)
-    {
-        YT_VERIFY(std::ssize(waitingActionCounts) == invokerCount);
-
-        auto invokerPool = CreateInvokerPool(Queues_[0]->GetInvoker(), invokerCount);
-        invokerPool->UpdateActionTimeAggregatorParameters(THistoricUsageAggregationParameters(
-            EHistoricUsageAggregationMode::ExponentialMovingAverage,
-            /*emaAlpha=*/ 0.5));
-
-        // Test plan:
-        // - Each invoker in the pool will have a blocker action followed by |waitingActionCounts[i]| waiting actions.
-        // - Testing is done in |invokerCount| stages:
-        //   (1) The blocker action of the i-th invoker starts and triggers the |stageStartedEvents[i]|.
-        //   (2) We check current average wait time returned by every invoker.
-        //   (3) We trigger |stageFinishedEvents[i]| to release the blocker action of the i-th invoker.
-
-        std::vector<NThreading::TEvent> stageStartedEvents(invokerCount);
-        std::vector<NThreading::TEvent> stageFinishedEvents(invokerCount);
-        std::vector<TInstant> blockingActionEnqueueTimes;
-        std::vector<TInstant> blockingActionDequeueTimes;
-        std::vector<TFuture<void>> blockingActionFutures;
-        std::vector<std::vector<TInstant>> waitingActionEnqueueTimesPerInvoker(invokerCount);
-        std::vector<std::vector<TFuture<void>>> waitingActionFuturesPerInvoker(invokerCount);
-
-        // Enqueue actions to invokers.
-        for (int invokerIndex = 0; invokerIndex < invokerCount; ++invokerIndex) {
-            blockingActionEnqueueTimes.push_back(NProfiling::GetInstant());
-            blockingActionFutures.emplace_back(
-                BIND([&stageFinishedEvents, &stageStartedEvents, invokerIndex] {
-                    stageStartedEvents[invokerIndex].NotifyOne();
-                    YT_VERIFY(stageFinishedEvents[invokerIndex].Wait(Quantum * 100));
-                })
-                .AsyncVia(invokerPool->GetInvoker(invokerIndex))
-                .Run());
-            Spin(Quantum);
-            // Invoker has zero average wait time.
-            auto waitingActionCount = waitingActionCounts[invokerIndex];
-            auto& waitingActionEnqueueTimes = waitingActionEnqueueTimesPerInvoker[invokerIndex];
-            auto& waitingActionFutures = waitingActionFuturesPerInvoker[invokerIndex];
-
-            for (int i = 0; i < waitingActionCount; ++i) {
-                waitingActionEnqueueTimes.push_back(NProfiling::GetInstant());
-                waitingActionFutures.emplace_back(BIND([] {}).AsyncVia(invokerPool->GetInvoker(invokerIndex)).Run());
-
-                Spin(Quantum);
-            }
-        }
-
-        // Test average wait time.
-        for (int stage = 0; stage < invokerCount; ++stage) {
-            YT_VERIFY(stageStartedEvents[stage].Wait(Quantum * 100));
-
-            // Collect average wait times.
-            std::vector<TDuration> averageWaitTimes(invokerCount);
-            for (int invokerIndex = 0; invokerIndex < invokerCount; ++invokerIndex) {
-                averageWaitTimes[invokerIndex] = invokerPool->GetInvokerStatistics(invokerIndex).TotalTimeEstimate;
-            }
-            // Release invoker.
-            stageFinishedEvents[stage].NotifyOne();
-            blockingActionDequeueTimes.push_back(NProfiling::GetInstant());
-
-            for (int invokerIndex = 0; invokerIndex < invokerCount; ++invokerIndex) {
-                auto actualWaitTime = averageWaitTimes[invokerIndex];
-
-                bool stillWaiting = invokerIndex > stage;
-                auto expectedWaitTime =
-                    blockingActionDequeueTimes[stillWaiting ? stage : invokerIndex] -
-                    blockingActionEnqueueTimes[invokerIndex];
-
-                EXPECT_GE(actualWaitTime, expectedWaitTime - Margin)
-                    << TError("Stage: %v, Invoker: %v", stage, invokerIndex).GetMessage();
-                EXPECT_LE(actualWaitTime, expectedWaitTime + Margin)
-                    << TError("Stage: %v, Invoker: %v", stage, invokerIndex).GetMessage();
-            }
-        }
-
-        // Wait for all actions to finish.
-        WaitFor(AllSet(blockingActionFutures)).ThrowOnError();
-        for (int invokerIndex = 0; invokerIndex < invokerCount; ++invokerIndex) {
-            WaitFor(AllSet(waitingActionFuturesPerInvoker[invokerIndex])).ThrowOnError();
-        }
-    }
-
     static void Spin(TDuration duration)
     {
         NProfiling::TFiberWallTimer timer;
@@ -521,7 +438,7 @@ TEST_F(TFairShareInvokerPoolTest, CpuTimeAccountingBetweenContextSwitchesIsNotSu
     future.Get().ThrowOnError();
 }
 
-TEST_F(TFairShareInvokerPoolTest, GetTotalWaitEstimateIsZeroForEmptyPool)
+TEST_F(TFairShareInvokerPoolTest, GetTotalWaitTimeEstimateEmptyPool)
 {
     auto invokerPool = CreateInvokerPool(Queues_[0]->GetInvoker(), 1);
 
@@ -534,32 +451,174 @@ TEST_F(TFairShareInvokerPoolTest, GetTotalWaitEstimateIsZeroForEmptyPool)
     EXPECT_LE(invokerPool->GetInvokerStatistics(0).TotalTimeEstimate, Quantum + Margin);
 }
 
-TEST_F(TFairShareInvokerPoolTest, GetTotalWaitEstimateOneBucketOneWaitingAction)
+TEST_F(TFairShareInvokerPoolTest, GetTotalWaitTimeEstimateStuckAction)
 {
-    DoTestGetTotalWaitEstimate(
-        /* invokerCount */ 1,
-        /* waitingActionCounts */ {1});
+    auto invokerPool = CreateInvokerPool(Queues_[0]->GetInvoker(), 1);
+    NThreading::TEvent event;
+
+    auto action = BIND([&event]{
+        event.Wait(TDuration::Seconds(100));
+    })
+    .AsyncVia(invokerPool->GetInvoker(0))
+    .Run();
+
+    TDelayedExecutor::WaitForDuration(Quantum);
+
+    auto totalTimeEstimate = invokerPool->GetInvokerStatistics(0).TotalTimeEstimate;
+
+    EXPECT_LE(totalTimeEstimate, Quantum + Margin);
+    EXPECT_GE(totalTimeEstimate, Quantum - Margin);
+
+    event.NotifyAll();
+    WaitFor(std::move(action)).ThrowOnError();
 }
 
-TEST_F(TFairShareInvokerPoolTest, GetTotalWaitEstimateOneBucketTenWaitingActions)
+TEST_F(TFairShareInvokerPoolTest, GetTotalWaitTimeEstimateRelevancyDecay)
 {
-    DoTestGetTotalWaitEstimate(
-        /* invokerCount */ 1,
-        /* waitingActionCounts */ {10});
+    auto invokerPool = CreateInvokerPool(Queues_[0]->GetInvoker(), 1);
+    // Make aggregator very forgetful.
+    invokerPool->UpdateActionTimeRelevancyHalflife(TDuration::Zero());
+    NThreading::TEvent event;
+
+    auto action = BIND([&event]{
+        event.Wait(100 * Quantum);
+    })
+    .AsyncVia(invokerPool->GetInvoker(0))
+    .Run();
+
+    TDelayedExecutor::WaitForDuration(Quantum);
+
+    auto totalTimeEstimate = invokerPool->GetInvokerStatistics(0).TotalTimeEstimate;
+
+    EXPECT_LE(totalTimeEstimate, Quantum + Margin);
+    EXPECT_GE(totalTimeEstimate, Quantum - Margin);
+
+    event.NotifyAll();
+    WaitFor(std::move(action)).ThrowOnError();
+
+    TDelayedExecutor::WaitForDuration(Quantum);
+
+    EXPECT_LE(invokerPool->GetInvokerStatistics(0).TotalTimeEstimate, Margin);
 }
 
-TEST_F(TFairShareInvokerPoolTest, GetTotalWaitEstimateTwoBuckets)
+TEST_F(TFairShareInvokerPoolTest, GetTotalWaitTimeEstimateSeveralActions)
 {
-    DoTestGetTotalWaitEstimate(
-        /* invokerCount */ 2,
-        /* waitingActionCounts */ {4, 8});
+    static constexpr int ActionCount = 3;
+
+    auto invokerPool = CreateInvokerPool(Queues_[0]->GetInvoker(), 1);
+    // Make aggregator never forget a sample.
+    invokerPool->UpdateActionTimeRelevancyHalflife(TDuration::Days(100000000000000000));
+
+    std::vector<NThreading::TEvent> leashes(ActionCount);
+    std::vector<TFuture<void>> actions;
+
+    for (int idx = 0; idx < ActionCount; ++idx) {
+        actions.emplace_back(BIND([&leashes, idx] {
+            leashes[idx].Wait(100 * Quantum);
+        })
+        .AsyncVia(invokerPool->GetInvoker(0))
+        .Run());
+    }
+
+    auto expectedTotalTimeEstimate = TDuration::Zero();
+    auto start = GetInstant();
+
+    for (int idx = 0; idx < ActionCount; ++idx) {
+        TDelayedExecutor::WaitForDuration(Quantum);
+
+        auto statistics = invokerPool->GetInvokerStatistics(0);
+        auto expectedTotalTime = GetInstant() - start;
+
+        if (idx == 0) {
+            expectedTotalTimeEstimate = expectedTotalTime;
+        } else {
+            expectedTotalTimeEstimate = (expectedTotalTimeEstimate * idx + expectedTotalTime) / (idx + 1.0);
+        }
+
+        EXPECT_EQ(statistics.WaitingActionCount, ActionCount - idx);
+
+        EXPECT_LE(statistics.TotalTimeEstimate, expectedTotalTimeEstimate + Margin)
+            << TError("Index: %v.", idx).GetMessage();
+        EXPECT_GE(statistics.TotalTimeEstimate, expectedTotalTimeEstimate - Margin)
+            << TError("Index: %v.", idx).GetMessage();
+
+        leashes[idx].NotifyOne();
+        WaitFor(std::move(actions[idx])).ThrowOnError();
+    }
 }
 
-TEST_F(TFairShareInvokerPoolTest, GetTotalWaitEstimateThreeBuckets)
+TEST_F(TFairShareInvokerPoolTest, GetTotalWaitEstimateUncorrelatedWithOtherInvokers)
 {
-    DoTestGetTotalWaitEstimate(
-        /* invokerCount */ 3,
-        /* waitingActionCounts */ {1, 2, 3});
+    auto executionOrderEnforcer = [] (int suggestedStep) {
+        static int realStep = 0;
+        EXPECT_EQ(realStep, suggestedStep);
+        ++realStep;
+    };
+    auto invokerPool = CreateInvokerPool(Queues_[0]->GetInvoker(), 2);
+    // Make aggregator never forget a sample.
+    invokerPool->UpdateActionTimeRelevancyHalflife(TDuration::Days(100000000000000000));
+
+    std::vector<NThreading::TEvent> leashes(2);
+    std::vector<TFuture<void>> actions;
+
+    for (int idx = 0; idx < 2; ++idx) {
+        actions.emplace_back(BIND([&executionOrderEnforcer, &leashes, idx] {
+            if (idx == 0) {
+                executionOrderEnforcer(0);
+            } else {
+                executionOrderEnforcer(2);
+            }
+            leashes[idx].Wait(100 * Quantum);
+        })
+        .AsyncVia(invokerPool->GetInvoker(0))
+        .Run());
+    }
+
+    NThreading::TEvent secondaryLeash;
+    auto secondaryAction = BIND([&executionOrderEnforcer, &secondaryLeash] {
+        executionOrderEnforcer(1);
+        secondaryLeash.Wait(100 * Quantum);
+    }).AsyncVia(invokerPool->GetInvoker(1)).Run();
+
+    auto start = GetInstant();
+
+    TDelayedExecutor::WaitForDuration(Quantum);
+
+    auto statistics = invokerPool->GetInvokerStatistics(0);
+    auto expectedTotalTimeEstimate = GetInstant() - start;
+
+    EXPECT_EQ(statistics.WaitingActionCount, 2);
+    EXPECT_LE(statistics.TotalTimeEstimate, expectedTotalTimeEstimate + Margin);
+    EXPECT_GE(statistics.TotalTimeEstimate, expectedTotalTimeEstimate - Margin);
+
+    leashes[0].NotifyOne();
+    WaitFor(std::move(actions[0])).ThrowOnError();
+
+    // Second action will not be executed until the secondary action is released.
+
+    leashes[1].NotifyOne();
+    TDelayedExecutor::WaitForDuration(10 * Quantum);
+    EXPECT_FALSE(actions[1].IsSet());
+
+    // Release Secondary action.
+
+    auto secondaryStatistics = invokerPool->GetInvokerStatistics(1);
+    auto secondaryWaitTime = GetInstant() - start;
+
+    EXPECT_EQ(secondaryStatistics.WaitingActionCount, 1);
+    EXPECT_LE(secondaryStatistics.TotalTimeEstimate, secondaryWaitTime + Margin);
+    EXPECT_GE(secondaryStatistics.TotalTimeEstimate, secondaryWaitTime - Margin);
+
+    secondaryLeash.NotifyOne();
+    WaitFor(std::move(secondaryAction)).ThrowOnError();
+    WaitFor(std::move(actions[1])).ThrowOnError();
+
+    statistics = invokerPool->GetInvokerStatistics(0);
+    expectedTotalTimeEstimate = (expectedTotalTimeEstimate + (GetInstant() - start)) / 3.0;
+
+    EXPECT_EQ(statistics.WaitingActionCount, 0);
+    EXPECT_LE(statistics.TotalTimeEstimate, expectedTotalTimeEstimate + Margin);
+    EXPECT_GE(statistics.TotalTimeEstimate, expectedTotalTimeEstimate - Margin);
 }
 
 ////////////////////////////////////////////////////////////////////////////////

@@ -1708,7 +1708,11 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
         scanSettings.Explain(true);
 
         TLocalHelper(kikimr).CreateTestOlapTable();
+#if SSA_RUNTIME_VERSION >= 4U
         WriteTestData(kikimr, "/Root/olapStore/olapTable", 10000, 3000000, 5, true);
+#else
+        WriteTestData(kikimr, "/Root/olapStore/olapTable", 10000, 3000000, 5, false);
+#endif
         Tests::NCommon::TLoggerInit(kikimr).Initialize();
 
         auto tableClient = kikimr.GetTableClient();
@@ -1750,7 +1754,6 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
             R"(`level` = 0 OR `uid` = "uid_3000003")",
             R"(`level` = 0 AND `uid` = "uid_3000003")",
             R"(`level` = 0 AND `uid` = "uid_3000000")",
-            R"(`timestamp` >= CAST(3000001u AS Timestamp) AND `level` > 3)",
             R"((`level`, `uid`) > (Int32("2"), "uid_3000004") OR (`level`, `uid`) < (Int32("1"), "uid_3000002"))",
             R"(Int32("3") > `level`)",
             R"((Int32("1"), "uid_3000001", "10001") = (`level`, `uid`, `resource_id`))",
@@ -1765,8 +1768,6 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
             R"((`level`, `uid`) != (Int32("1"), NULL))",
             R"(`level` >= CAST("2" As Int32))",
             R"(CAST("2" As Int32) >= `level`)",
-            R"(`timestamp` >= CAST(3000001u AS Timestamp))",
-            R"((`timestamp`, `level`) >= (CAST(3000001u AS Timestamp), 3))",
 #if SSA_RUNTIME_VERSION >= 2U
             R"(`uid` LIKE "%30000%")",
             R"(`uid` LIKE "uid%")",
@@ -1798,6 +1799,9 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
             R"(`level` * 3. > 4.f)",
             R"(`level` / 2.f <= 1.)",
             R"(`level` % 3. != 1.f)",
+            R"(`timestamp` >= Timestamp("1970-01-01T00:00:00.000001Z"))",
+            R"(`timestamp` >= Timestamp("1970-01-01T00:00:00.000001Z") AND `level` > 3)",
+            R"((`timestamp`, `level`) >= (Timestamp("1970-01-01T00:00:00.000001Z"), 3))",
 #endif
         };
 
@@ -1854,7 +1858,7 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
         std::vector<TString> testDataNoPush = {
             R"(`level` != NULL)",
             R"(`level` > NULL)",
-            R"(`timestamp` >= CAST(3000001 AS Timestamp))",
+            R"(`timestamp` >= CAST(3000001U AS Timestamp))",
             R"(`level` >= CAST("2" As Uint32))",
             R"(`level` = NULL)",
             R"(`level` > NULL)",
@@ -1877,6 +1881,7 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
             R"(`level` * 3 > 4)",
             R"(`level` / 2 <= 1)",
             R"(`level` % 3 != 1)",
+            R"(`timestamp` >= Timestamp("1970-01-01T00:00:00.000001Z"))",
 #endif
         };
 

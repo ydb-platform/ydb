@@ -14,9 +14,11 @@ def parse_args():
     parser.add_argument('--dest-dir', required=True)
     parser.add_argument('--docs-dir', action='append', nargs=2, dest='docs_dirs', default=None)
     parser.add_argument('--existing', choices=('skip', 'overwrite'), default='overwrite')
+    parser.add_argument('--include-srcs', nargs='*', default=[])
+    parser.add_argument('--skip-namespace', default=None)
     parser.add_argument('--source-root', required=True)
     parser.add_argument('--src-dir', action='append', nargs='*', dest='src_dirs', default=None)
-    parser.add_argument('files', nargs='*')
+    parser.add_argument('--srcs', nargs='*', default=[])
     return parser.parse_args(pcf.get_args(sys.argv[1:]))
 
 
@@ -144,22 +146,25 @@ def main():
             file_dst = os.path.join(dst, file_src[len(bin_dir) :])
             copy_file(file_src, file_dst, overwrite=is_overwrite_existing, orig_path=None)
 
-    for src in args.files:
-        file_src = os.path.normpath(src)
-        assert os.path.isfile(file_src), 'File [{}] does not exist...'.format(file_src)
-        rel_path = file_src
-        orig_path = None
-        if file_src.startswith(source_root):
-            rel_path = file_src[len(source_root) :]
-            orig_path = rel_path
-        elif file_src.startswith(build_root):
-            rel_path = file_src[len(build_root) :]
-        else:
-            raise Exception('Unexpected file path [{}].'.format(file_src))
-        assert not os.path.isabs(rel_path)
-        file_dst = os.path.join(args.dest_dir, rel_path)
-        if file_dst != file_src:
-            copy_file(file_src, file_dst, is_overwrite_existing, orig_path)
+    for skip_namespace, files in [(args.skip_namespace, args.srcs), (None, args.include_srcs)]:
+        for src in files:
+            file_src = os.path.normpath(src)
+            assert os.path.isfile(file_src), 'File [{}] does not exist...'.format(file_src)
+            rel_path = file_src
+            orig_path = None
+            if file_src.startswith(source_root):
+                rel_path = file_src[len(source_root) :]
+                if skip_namespace and rel_path.startswith(skip_namespace):
+                    rel_path = rel_path[len(skip_namespace):]
+                orig_path = rel_path
+            elif file_src.startswith(build_root):
+                rel_path = file_src[len(build_root) :]
+            else:
+                raise Exception('Unexpected file path [{}].'.format(file_src))
+            assert not os.path.isabs(rel_path)
+            file_dst = os.path.join(args.dest_dir, rel_path)
+            if file_dst != file_src:
+                copy_file(file_src, file_dst, is_overwrite_existing, orig_path)
 
 
 if __name__ == '__main__':

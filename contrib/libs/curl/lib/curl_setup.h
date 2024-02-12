@@ -274,17 +274,17 @@
 #endif
 
 #ifdef USE_LWIPSOCK
-#  include <lwip/init.h>
-#  include <lwip/sockets.h>
-#  include <lwip/netdb.h>
+#  error #include <lwip/init.h>
+#  error #include <lwip/sockets.h>
+#  error #include <lwip/netdb.h>
 #endif
 
 #ifdef HAVE_EXTRA_STRICMP_H
-#  include <extra/stricmp.h>
+#  error #include <extra/stricmp.h>
 #endif
 
 #ifdef HAVE_EXTRA_STRDUP_H
-#  include <extra/strdup.h>
+#  error #include <extra/strdup.h>
 #endif
 
 #ifdef __AMIGA__
@@ -300,10 +300,10 @@
 #      undef USE_THREADS_POSIX
 #    endif
 #  endif
-#  include <exec/types.h>
-#  include <exec/execbase.h>
-#  include <proto/exec.h>
-#  include <proto/dos.h>
+#  error #include <exec/types.h>
+#  error #include <exec/execbase.h>
+#  error #include <proto/exec.h>
+#  error #include <proto/dos.h>
 #  include <unistd.h>
 #  if defined(HAVE_PROTO_BSDSOCKET_H) && \
     (!defined(__amigaos4__) || defined(USE_AMISSL))
@@ -337,7 +337,7 @@
 
 #ifdef __TANDEM /* for ns*-tandem-nsk systems */
 # if ! defined __LP64
-#  include <floss.h> /* FLOSS is only used for 32-bit builds. */
+#  error #include <floss.h> /* FLOSS is only used for 32-bit builds. */
 # endif
 #endif
 

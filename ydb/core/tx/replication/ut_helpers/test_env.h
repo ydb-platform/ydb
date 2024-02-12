@@ -100,6 +100,16 @@ public:
         }
     }
 
+    template <typename... Args>
+    auto Describe(Args&&... args) {
+        return Client.Ls(std::forward<Args>(args)...);
+    }
+
+    template <typename... Args>
+    auto CreateTable(Args&&... args) {
+        return Client.CreateTable(std::forward<Args>(args)...);
+    }
+
     void SendAsync(const TActorId& recipient, IEventBase* ev) {
         Server.GetRuntime()->Send(new IEventHandle(recipient, Sender, ev));
     }

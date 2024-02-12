@@ -364,6 +364,9 @@ public:
         for (auto&& i : Records) {
             result.emplace(i.BlobRange.BlobId);
         }
+        for (auto&& i : Indexes) {
+            result.emplace(i.GetBlobRange().BlobId);
+        }
         return result;
     }
 

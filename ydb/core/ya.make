@@ -8,6 +8,7 @@ RECURSE(
     client
     cms
     control
+    config
     debug
     debug_tools
     discovery

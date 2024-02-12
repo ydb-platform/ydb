@@ -1858,7 +1858,8 @@ TExprNode::TPtr BuildAggregationTraits(TPositionHandle pos, bool onWindow, const
         extractor = ctx.NewLambda(pos, std::move(arguments), std::move(aggFuncArgs));
     }
 
-    if (optCtx.Types->PgEmitAggApply && !onWindow) {
+    const bool blockEngineEnabled = optCtx.Types->BlockEngineMode != EBlockEngineMode::Disable;
+    if (optCtx.Types->PgEmitAggApply.GetOrElse(blockEngineEnabled) && !onWindow) {
         return ctx.Builder(pos)
             .Callable("AggApply")
                 .Atom(0, TString("pg_") + func)

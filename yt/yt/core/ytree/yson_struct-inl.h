@@ -257,6 +257,31 @@ TYsonStructRegistrar<TStruct>::operator TYsonStructRegistrar<TBase>()
 ////////////////////////////////////////////////////////////////////////////////
 
 template <class T>
+    requires CExternallySerializable<T>
+void Serialize(const T& value, NYson::IYsonConsumer* consumer)
+{
+    using TSerializer = typename TGetExternalizedYsonStructTraits<T>::TExternalSerializer;
+    auto serializer = TSerializer::template CreateReadOnly<T, TSerializer>(value);
+    Serialize(serializer, consumer);
+}
+
+template <class T>
+    requires CExternallySerializable<T>
+void Deserialize(T& value, INodePtr node)
+{
+    using TSerializer = typename TGetExternalizedYsonStructTraits<T>::TExternalSerializer;
+    auto serializer = TSerializer::template CreateWritable<T, TSerializer>(value);
+    Deserialize(serializer, node);
+}
+
+template <class T>
+    requires CExternallySerializable<T>
+void Deserialize(T& value, NYson::TYsonPullParserCursor* cursor)
+{
+    Deserialize(value, NYson::ExtractTo<NYTree::INodePtr>(cursor));
+}
+
+template <class T>
 TIntrusivePtr<T> CloneYsonStruct(const TIntrusivePtr<const T>& obj)
 {
     if (!obj) {
@@ -381,6 +406,7 @@ void UpdateYsonStructField(TIntrusivePtr<TDst>& dst, const TIntrusivePtr<TSrc>& 
 #undef DEFINE_YSON_STRUCT_LITE
 #undef REGISTER_EXTERNALIZED_YSON_STRUCT
 #undef REGISTER_DERIVED_EXTERNALIZED_YSON_STRUCT
+#undef ASSIGN_EXTERNAL_YSON_SERIALIZER
 
 #define YSON_STRUCT_IMPL__DECLARE_ALIASES(TStruct) \
 private: \
@@ -522,6 +548,17 @@ public: \
         PP_FOR_EACH(BASE_SET_THAT_ENTRY, TBases) \
     } \
     YSON_STRUCT_EXTERNAL_SERIALIZER_IMPL__DECLARE_ALIASES(TStruct, TSerializer) \
+
+#define ASSIGN_EXTERNAL_YSON_SERIALIZER(TStruct, TSerializer) \
+    [[maybe_unused]] constexpr auto GetExternalizedYsonStructTraits(TStruct) \
+    { \
+        struct [[maybe_unused]] TTraits { \
+            using TExternalSerializer = TSerializer; \
+        }; \
+        static_assert(std::derived_from<TTraits::TExternalSerializer, ::NYT::NYTree::TExternalizedYsonStruct>, "External serializer must be derived from TExternalizedYsonStruct"); \
+        return TTraits{}; \
+    } \
+    static_assert(::NYT::NYTree::CExternallySerializable<TStruct>, "You must write this macro in the namespace containing TStruct")
 
 ////////////////////////////////////////////////////////////////////////////////
 

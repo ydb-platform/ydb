@@ -2,7 +2,7 @@
 
 #include "defs.h"
 #include "datashard.h"
-#include "datashard_locks.h"
+#include <ydb/core/tx/locks/locks.h>
 #include "datashard_outreadset.h"
 #include "datashard_snapshots.h"
 #include "execution_unit_kind.h"
@@ -811,6 +811,18 @@ public:
     NWilson::TTraceId GetTraceId() const noexcept {
         return OperationSpan.GetTraceId();
     }
+
+    /**
+     * Called when datashard is going to stop soon
+     *
+     * Operation may override this method to support sending notifications or
+     * results signalling that the operation will never complete. When result
+     * is sent operation is supposed to set its ResultSentFlag.
+     *
+     * When this method returns true the operation will be added to the
+     * pipeline as a candidate for execution.
+     */
+    virtual bool OnStopping(TDataShard& self, const TActorContext& ctx);
 
 protected:
     TOperation()

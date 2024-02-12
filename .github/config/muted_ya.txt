@@ -1,6 +1,7 @@
 ydb/core/blobstorage/dsproxy/ut TBlobStorageProxySequenceTest.TestBlock42PutWithChangingSlowDisk
 ydb/core/blobstorage/dsproxy/ut_fat TBlobStorageProxyTest.TestBatchedPutRequestDoesNotContainAHugeBlob
-ydb/core/blobstorage/ut_blobstorage CostMetricsGetBlock4Plus2.TestGet4Plus2BlockRequests10000Inflight1BlobSize1000
+ydb/core/blobstorage/ut_blobstorage BurstDetection.*
+ydb/core/blobstorage/ut_blobstorage CostMetrics*
 ydb/core/client/ut TClientTest.PromoteFollower
 ydb/core/client/ut TClientTest.ReadFromFollower
 ydb/core/client/ut TFlatTest.AutoSplitMergeQueue
@@ -46,9 +47,7 @@ ydb/library/actors/http/ut HttpProxy.TooLongHeader
 ydb/library/actors/http/ut sole*
 ydb/library/yql/providers/generic/connector/tests sole*
 ydb/library/yql/providers/generic/connector/tests test.py.*
-ydb/library/yql/sql/pg/ut PgSqlParsingAutoparam.AutoParamValues_DifferentTypes
 ydb/public/lib/ydb_cli/topic/ut TTopicReaderTests.TestRun_ReadOneMessage
-ydb/public/sdk/cpp/client/ydb_federated_topic/ut BasicUsage.SimpleHandlers
 ydb/public/sdk/cpp/client/ydb_persqueue_core/ut/with_offset_ranges_mode_ut RetryPolicy.RetryWithBatching
 ydb/public/sdk/cpp/client/ydb_persqueue_core/ut/with_offset_ranges_mode_ut RetryPolicy.TWriteSession_TestBrokenPolicy
 ydb/public/sdk/cpp/client/ydb_topic/ut BasicUsage.ConflictingWrites

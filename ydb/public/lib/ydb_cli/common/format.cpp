@@ -371,10 +371,8 @@ void TQueryPlanPrinter::PrintPrettyImpl(const NJson::TJsonValue& plan, TVector<T
 }
 
 void TQueryPlanPrinter::PrintSimplifyJson(const NJson::TJsonValue& plan) {
-    if (plan.GetMapSafe().contains("Plan")) {
-        auto queryPlan = plan.GetMapSafe().at("Plan");
-        SimplifyQueryPlan(queryPlan);
-
+    if (plan.GetMapSafe().contains("SimplifiedPlan")) {
+        auto queryPlan = plan.GetMapSafe().at("SimplifiedPlan");
         Output << NJson::PrettifyJson(JsonToString(queryPlan), false) << Endl;
     } else { /* old format plan */
         PrintJson(plan.GetStringRobust());
@@ -385,9 +383,8 @@ void TQueryPlanPrinter::PrintPrettyTable(const NJson::TJsonValue& plan) {
     static const TVector<TString> explainColumnNames = {"Operation", "E-Cost", "E-Rows"};
     static const TVector<TString> explainAnalyzeColumnNames = {"Operation", "DurationUs", "Rows", "E-Cost", "E-Rows"};
 
-    if (plan.GetMapSafe().contains("Plan")) {
-        auto queryPlan = plan.GetMapSafe().at("Plan");
-        SimplifyQueryPlan(queryPlan);
+    if (plan.GetMapSafe().contains("SimplifiedPlan")) {
+        auto queryPlan = plan.GetMapSafe().at("SimplifiedPlan");
 
         TPrettyTable table(AnalyzeMode ? explainAnalyzeColumnNames : explainColumnNames,
             TPrettyTableConfig().WithoutRowDelimiters());
@@ -506,198 +503,9 @@ void TQueryPlanPrinter::PrintPrettyTableImpl(const NJson::TJsonValue& plan, TStr
     }
 }
 
-TVector<NJson::TJsonValue> TQueryPlanPrinter::RemoveRedundantNodes(NJson::TJsonValue& plan, const THashSet<TString>& redundantNodes) {
-    auto& planMap = plan.GetMapSafe();
-
-    TVector<NJson::TJsonValue> children;
-    if (planMap.contains("Plans") && planMap.at("Plans").IsArray()) {
-        for (auto& child : planMap.at("Plans").GetArraySafe()) {
-            auto newChildren = RemoveRedundantNodes(child, redundantNodes);
-            children.insert(children.end(), newChildren.begin(), newChildren.end());
-        }
-    }
-
-    planMap.erase("Plans");
-    if (!children.empty()) {
-        auto& plans = planMap["Plans"];
-        for (auto& child :  children) {
-            plans.AppendValue(child);
-        }
-    }
-
-    const auto typeName = planMap.at("Node Type").GetStringSafe();
-    if (redundantNodes.contains(typeName) || typeName.find("Precompute") != TString::npos) {
-        return children;
-    }
-
-    return {plan};
-}
-
-void BuildPlanIndex(NJson::TJsonValue& plan, THashMap<int, NJson::TJsonValue>& planIndex, THashMap<TString, NJson::TJsonValue>& precomputes) {
-    if (plan.GetMapSafe().contains("PlanNodeId")){
-        auto id = plan.GetMapSafe().at("PlanNodeId").GetIntegerSafe();
-        planIndex[id] = plan;
-    }
-
-    if (plan.GetMapSafe().contains("Subplan Name")) {
-        const auto& precomputeName = plan.GetMapSafe().at("Subplan Name").GetStringSafe();
-
-        auto pos = precomputeName.find("precompute");
-        if (pos != TString::npos) {
-            precomputes[precomputeName.substr(pos)] = plan;
-        }
-    }
-
-    if (plan.GetMapSafe().contains("Plans")) {
-        for (auto p : plan.GetMapSafe().at("Plans").GetArraySafe()) {
-            BuildPlanIndex(p, planIndex, precomputes);
-        }
-    }
-}
-
-void TQueryPlanPrinter::SimplifyQueryPlan(NJson::TJsonValue& plan) {
-     static const THashSet<TString> redundantNodes = {
-       "UnionAll",
-        "Broadcast",
-        "Map",
-        "HashShuffle",
-        "Merge",
-        "Collect",
-        "Stage",
-        "Iterator",
-        "PartitionByKey",
-        "ToFlow"
-    };    
-
-    //auto precomputes = ExtractPrecomputes(plan);
-    //ResolvePrecomputeLinks(plan, precomputes);
-    THashMap<int, NJson::TJsonValue> planIndex;
-    THashMap<TString, NJson::TJsonValue> precomputes;
-
-
-    BuildPlanIndex(plan, planIndex, precomputes);
-
-    int nodeCounter = 0;
-    plan = ReconstructQueryPlanRec(plan, 0, planIndex, precomputes, nodeCounter);
-    RemoveRedundantNodes(plan, redundantNodes);
-
-}
-
-NJson::TJsonValue TQueryPlanPrinter::ReconstructQueryPlanRec(const NJson::TJsonValue& plan, 
-    int operatorIndex, 
-    const THashMap<int, NJson::TJsonValue>& planIndex,
-    const THashMap<TString, NJson::TJsonValue>& precomputes,
-    int& nodeCounter) {
-
-    int currentNodeId = nodeCounter++;
-
-    NJson::TJsonValue result;
-    result["PlanNodeId"] = currentNodeId;
-    if (plan.GetMapSafe().contains("PlanNodeType")) {
-        result["PlanNodeType"] = plan.GetMapSafe().at("PlanNodeType").GetStringSafe();
-    }
-
-    if (plan.GetMapSafe().contains("Stats")) {
-        result["Stats"] = plan.GetMapSafe().at("Stats");
-    }
-
-    if (!plan.GetMapSafe().contains("Operators")) {
-        NJson::TJsonValue planInputs;
-
-        result["Node Type"] = plan.GetMapSafe().at("Node Type").GetStringSafe();
-
-        if (!plan.GetMapSafe().contains("Plans")) {
-            return result;
-        }
-
-        if (plan.GetMapSafe().at("Node Type") == "TableLookup") {
-            NJson::TJsonValue newOps;
-            NJson::TJsonValue op;
-
-            op["Name"] = "TableLookup"; 
-            op["Columns"] = plan.GetMapSafe().at("Columns");
-            op["LookupKeyColumns"] = plan.GetMapSafe().at("LookupKeyColumns");
-            op["Table"] = plan.GetMapSafe().at("Table");
-
-            newOps.AppendValue(op);
-
-            result["Operators"] = newOps;
-            return result;
-        }
-
-        for (auto p : plan.GetMapSafe().at("Plans").GetArraySafe()) {
-            if (p.GetMapSafe().at("Node Type").GetStringSafe().find("Precompute") == TString::npos) {
-                planInputs.AppendValue(ReconstructQueryPlanRec(p, 0, planIndex, precomputes, nodeCounter));
-            }
-        }
-        result["Plans"] = planInputs;
-        return result;
-    }
-
-    if (plan.GetMapSafe().contains("CTE Name") && plan.GetMapSafe().at("Node Type") == "ConstantExpr") {
-        auto precompute = plan.GetMapSafe().at("CTE Name").GetStringSafe();
-        return ReconstructQueryPlanRec(precomputes.at(precompute), 0, planIndex, precomputes, nodeCounter);
-    }
-
-    auto ops = plan.GetMapSafe().at("Operators").GetArraySafe();
-    auto op = ops[operatorIndex];
-
-    TVector<NJson::TJsonValue> planInputs;
-
-    auto opName = op.GetMapSafe().at("Name").GetStringSafe();
-
-    for (auto opInput : op.GetMapSafe().at("Inputs").GetArraySafe()) {
-        if (opInput.GetMapSafe().contains("ExternalPlanNodeId")) {
-            auto inputPlanKey = opInput.GetMapSafe().at("ExternalPlanNodeId").GetIntegerSafe();
-            auto inputPlan = planIndex.at(inputPlanKey);
-            planInputs.push_back( ReconstructQueryPlanRec(inputPlan, 0, planIndex, precomputes, nodeCounter));
-        } else if (opInput.GetMapSafe().contains("InternalOperatorId")) {
-            auto inputPlanId = opInput.GetMapSafe().at("InternalOperatorId").GetIntegerSafe();
-            planInputs.push_back( ReconstructQueryPlanRec(plan, inputPlanId, planIndex, precomputes, nodeCounter));
-        }
-        // temp hack
-        if (opName == "Filter") {
-            break;
-        }
-    }
-
-    if (op.GetMapSafe().contains("Inputs")) {
-        op.GetMapSafe().erase("Inputs");
-    }
-
-    if (op.GetMapSafe().contains("Input") || op.GetMapSafe().contains("ToFlow")) {
-        TString maybePrecompute = "";
-        if (op.GetMapSafe().contains("Input")) {
-            maybePrecompute = op.GetMapSafe().at("Input").GetStringSafe();
-        } else if (op.GetMapSafe().contains("ToFlow")) {
-            maybePrecompute = op.GetMapSafe().at("ToFlow").GetStringSafe();
-        }
-
-        if (precomputes.contains(maybePrecompute)) {
-            planInputs.push_back(ReconstructQueryPlanRec(precomputes.at(maybePrecompute), 0, planIndex, precomputes, nodeCounter));
-        }
-    }
-
-    result["Node Type"] = opName;
-    NJson::TJsonValue newOps;
-    newOps.AppendValue(op);
-    result["Operators"] = newOps;
-
-    if (planInputs.size()){
-        NJson::TJsonValue plans;
-        for( auto i : planInputs) {
-            plans.AppendValue(i);
-        }
-        result["Plans"] = plans;
-    }
-
-    return result;
-}
-
 TString TQueryPlanPrinter::JsonToString(const NJson::TJsonValue& jsonValue) {
     return jsonValue.GetStringRobust();
 }
-
 
 TResultSetPrinter::TResultSetPrinter(EOutputFormat format, std::function<bool()> isInterrupted)
     : Format(format)

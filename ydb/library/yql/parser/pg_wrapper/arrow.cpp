@@ -1,5 +1,6 @@
 #include "arrow.h"
 #include "arrow_impl.h"
+#include <ydb/library/yql/minikql/defs.h>
 #include <ydb/library/yql/parser/pg_wrapper/interface/arrow.h>
 #include <ydb/library/yql/parser/pg_wrapper/interface/utils.h>
 #include <ydb/library/yql/minikql/mkql_node_cast.h>
@@ -183,6 +184,9 @@ std::shared_ptr<arrow::Array> PgDecimal128ConvertNumeric(const std::shared_ptr<a
     size_t length = data->length;
     arrow::BinaryBuilder builder;
 
+    bool error;
+    Numeric high_bits_mul = numeric_mul_opt_error(int64_to_numeric(int64_t(1) << 62), int64_to_numeric(4), &error);
+
     auto input = data->GetValues<arrow::Decimal128>(1);
     for (size_t i = 0; i < length; ++i) {
         if (value->IsNull(i)) {
@@ -190,7 +194,7 @@ std::shared_ptr<arrow::Array> PgDecimal128ConvertNumeric(const std::shared_ptr<a
             continue;
         }
 
-        Numeric v = PgDecimal128ToNumeric(input[i].high_bits(), input[i].low_bits(), precision, scale);
+        Numeric v = PgDecimal128ToNumeric(input[i], precision, scale, high_bits_mul);
        
         auto datum = NumericGetDatum(v);
         auto ptr = (char*)datum;
@@ -204,8 +208,22 @@ std::shared_ptr<arrow::Array> PgDecimal128ConvertNumeric(const std::shared_ptr<a
     return ret;
 }
 
-Numeric PgDecimal128ToNumeric(int64_t high_bits, uint64_t low_bits, int32_t precision, int32_t scale) {
-    Numeric res = int64_div_fast_to_numeric(low_bits, scale);
+Numeric PgDecimal128ToNumeric(arrow::Decimal128 value, int32_t precision, int32_t scale, Numeric high_bits_mul) {
+    uint64_t low_bits = value.low_bits();
+    int64 high_bits = value.high_bits();
+
+    if (low_bits > INT64_MAX){
+        high_bits += 1;
+    }
+
+    bool error;
+    Numeric low_bits_res  = int64_div_fast_to_numeric(low_bits, scale);
+    Numeric high_bits_res = numeric_mul_opt_error(int64_div_fast_to_numeric(high_bits, scale), high_bits_mul, &error);
+    MKQL_ENSURE(error == false, "Bad numeric multiplication.");
+    
+    Numeric res = numeric_add_opt_error(high_bits_res,  low_bits_res, &error);
+    MKQL_ENSURE(error == false, "Bad numeric addition.");
+
     return res;
 }
 

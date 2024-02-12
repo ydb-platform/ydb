@@ -1,0 +1,16 @@
+import "google/protobuf/descriptor.proto";
+
+package NKikimrConfig.NMarkers;
+option java_package = "ru.yandex.kikimr.proto.markers";
+
+extend google.protobuf.MessageOptions {
+    optional bool Root = 81001;
+    optional bool CombinedType = 81002;
+    optional bool WithMapType = 81003;
+}
+
+extend google.protobuf.FieldOptions {
+    repeated string CopyTo = 82001;
+    repeated string AsMap = 82002;
+}
+

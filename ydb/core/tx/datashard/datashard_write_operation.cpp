@@ -2,7 +2,7 @@
 
 #include "datashard_write_operation.h"
 #include "datashard_kqp.h"
-#include "datashard_locks.h"
+#include <ydb/core/tx/locks/locks.h>
 #include "datashard_impl.h"
 #include "datashard_failpoints.h"
 
@@ -93,8 +93,8 @@ bool TValidatedWriteTx::ParseOperations(const TDataShard::TTableInfos& tableInfo
         return false;
     }
 
-    NEvWrite::TPayloadHelper<NEvents::TDataEvents::TEvWrite> payloadHelper(*Ev->Get());
-    TString payload = payloadHelper.GetDataFromPayload(RecordOperation().GetPayloadIndex());
+    NEvWrite::TPayloadReader<NEvents::TDataEvents::TEvWrite> payloadReader(*Ev->Get());
+    TString payload = payloadReader.GetDataFromPayload(RecordOperation().GetPayloadIndex());
 
     if (!TSerializedCellMatrix::TryParse(payload,Matrix))
     {

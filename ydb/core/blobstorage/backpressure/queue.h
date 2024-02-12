@@ -180,6 +180,10 @@ public:
         return Queues.InFlight.size();
     }
 
+    ui64 GetInFlightCost() const {
+        return InFlightCost;
+    }
+
     void UpdateCostModel(TInstant now, const NKikimrBlobStorage::TVDiskCostSettings& settings,
             const TBlobStorageGroupType& type);
     void InvalidateCosts();

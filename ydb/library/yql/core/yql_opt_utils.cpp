@@ -1779,8 +1779,7 @@ TExprNode::TPtr FindNonYieldTransparentNodeImpl(const TExprNode::TPtr& root, con
     return {};
 }
 
-TExprNode::TPtr FindNonYieldTransparentNode(const TExprNode::TPtr& root, const TTypeAnnotationContext& typeCtx) {
-    TNodeSet flowSources;
+TExprNode::TPtr FindNonYieldTransparentNode(const TExprNode::TPtr& root, const TTypeAnnotationContext& typeCtx, TNodeSet flowSources) {
     TExprNode::TPtr from = root;
     if (root->IsLambda()) {
         if (IsIdentityLambda(*root)) {

@@ -8,7 +8,6 @@ import random
 import string
 import typing  # noqa: F401
 import sys
-from urllib.parse import urlparse
 
 from ydb.library.yql.providers.common.proto.gateways_config_pb2 import TGenericConnectorConfig
 from ydb.tests.library.common import yatest_common
@@ -258,29 +257,36 @@ def enable_tls():
 
 
 def generic_connector_config():
-    endpoint = os.getenv("FQ_CONNECTOR_ENDPOINT")
-    if not endpoint:
+    fq_connector_endpoint = os.getenv("FQ_CONNECTOR_ENDPOINT")
+    if not fq_connector_endpoint:
         return None
 
-    parsed = urlparse(endpoint)
-    if not parsed.hostname:
-        raise ValueError("Invalid host '{}' in FQ_CONNECTOR_ENDPOINT".format(parsed.hostname))
+    url = fq_connector_endpoint.split('://')
+    if len(url) != 2:
+        raise ValueError(
+            "Invalid format of FQ_CONNECTOR_ENDPOINT '{}' (valid example: 'grpc://localhost:50051')".
+            format(fq_connector_endpoint))
 
-    if not (1024 <= parsed.port <= 65535):
-        raise ValueError("Invalid port '{}' in FQ_CONNECTOR_ENDPOINT".format(parsed.port))
-
+    scheme = url[0]
     valid_schemes = ['grpc', 'grpcs']
-    if parsed.scheme not in valid_schemes:
-        raise ValueError("Invalid schema '{}' in FQ_CONNECTOR_ENDPOINT (possible: {})".format(parsed.schema, valid_schemes))
+    if scheme not in valid_schemes:
+        raise ValueError(
+            "Invalid schema '{}' in FQ_CONNECTOR_ENDPOINT (valid example: {})".
+            format(scheme, valid_schemes))
+
+    endpoint = url[1].split(':')
+    host = endpoint[0]
+    if not host:
+        raise ValueError("Invalid host '{}' in FQ_CONNECTOR_ENDPOINT".format(host))
+
+    port = int(endpoint[1])
+    if not (1024 <= port <= 65535):
+        raise ValueError("Invalid port '{}' in FQ_CONNECTOR_ENDPOINT".format(port))
 
     cfg = TGenericConnectorConfig()
-    cfg.Endpoint.host = parsed.hostname
-    cfg.Endpoint.port = parsed.port
-
-    if parsed.scheme == 'grpc':
-        cfg.UseSsl = False
-    elif parsed.scheme == 'grpcs':
-        cfg.UseSsl = True
+    cfg.Endpoint.host = host
+    cfg.Endpoint.port = port
+    cfg.UseSsl = scheme == 'grpcs'
 
     return cfg
 

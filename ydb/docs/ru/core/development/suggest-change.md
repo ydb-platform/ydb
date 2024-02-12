@@ -208,7 +208,7 @@ git push
   ```
 
 - GitHub CLI
-- 
+
   Установите и сконфигурируйте [GitHub CLI](https://cli.github.com/).
   ```
   cd ~/ydbwork/ydb

@@ -8,13 +8,20 @@
 #include <ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.h>
 #include <ydb/library/yql/providers/common/provider/yql_provider_names.h>
 #include <ydb/library/yql/providers/common/proto/gateways_config.pb.h>
+#include "ydb/library/yql/providers/yt/common/yql_names.h"
+#include <ydb/library/yql/providers/yt/expr_nodes/yql_yt_expr_nodes.h>
+#include <ydb/library/yql/providers/yt/provider/yql_yt_key.h>
 #include <ydb/library/yql/providers/yt/provider/yql_yt_provider.h>
 #include <ydb/library/yql/providers/pg/provider/yql_pg_provider.h>
 #include <ydb/library/yql/public/issue/yql_issue.h>
 #include <ydb/library/yql/parser/pg_wrapper/interface/utils.h>
+#include <ydb/library/yql/providers/yt/lib/schema/schema.h>
+#include <ydb/library/yql/providers/common/schema/expr/yql_expr_schema.h>
+#include <ydb/library/yql/ast/yql_expr.h>
 
 #include <library/cpp/getopt/last_getopt.h>
 #include <library/cpp/yson/public.h>
+#include "library/cpp/yson/node/node_io.h"
 #include <library/cpp/yt/yson_string/string.h>
 #include <fmt/format.h>
 
@@ -35,6 +42,8 @@
 
 using namespace NYql;
 using namespace NKikimr::NMiniKQL;
+using namespace NNodes;
+using NUdf::EDataSlot;
 
 namespace NMiniKQL = NKikimr::NMiniKQL;
 
@@ -939,36 +948,53 @@ std::pair<TString, TString> GetYtTableDataPaths(const TFsPath& dataDir, const TS
     return {dataFileName, attrFileName};
 }
 
-void CreateYtFileTable(const TFsPath& dataDir, const TString tableName, const TExprNode::TPtr columnsNode, THashMap<TString, TString>& tablesMapping) {
-  const auto [dataFilePath, attrFilePath] =
-      GetYtTableDataPaths(dataDir, tableName);
+void CreateYtFileTable(const TFsPath& dataDir, TYtTableInfo& tableInfo, const TExprNode::TPtr columnsNode,
+    THashMap<TString, TString>& tablesMapping, TExprContext& ctx, const TPosition& pos) {
+    const auto [dataFilePath, attrFilePath] =
+        GetYtTableDataPaths(dataDir, tableInfo.Name);
 
-  TFile dataFile{dataFilePath, CreateNew};
-  TFile attrFile{attrFilePath, CreateNew};
+    TFile dataFile{dataFilePath, CreateNew};
+    TFile attrFile{attrFilePath, CreateNew};
 
-  THolder<TFixedBufferFileOutput> fo;
-  fo.Reset(new TFixedBufferFileOutput{attrFile.GetName()});
-  IOutputStream *attrS{fo.Get()};
+    auto rowSpec = MakeIntrusive<TYqlRowSpecInfo>();
 
-  *attrS << R"__({
-    "_yql_row_spec"={
-        "Type"=["StructType";[
-)__";
+    TColumnOrder columnOrder;
+    columnOrder.reserve(columnsNode->ChildrenSize());
 
-  for (const auto &columnNode : columnsNode->Children()) {
-    const auto &colName = columnNode->Child(0)->Content();
-    const auto &colTypeNode = columnNode->Child(1);
+    TStringBuilder ysonType;
+    ysonType << "[\"StructType\";[";
 
-    *attrS << fmt::format(R"__(            ["{0}";["{1}";"{2}";];];
-)__",
+    for (const auto &columnNode : columnsNode->Children()) {
+      const auto &colName = columnNode->Child(0)->Content();
+      const auto &colTypeNode = columnNode->Child(1);
+
+      columnOrder.emplace_back(colName);
+
+      ysonType << fmt::format("[\"{0}\";[\"{1}\";\"{2}\";];];",
                           colName, colTypeNode->Content(),
                           colTypeNode->Child(0)->Content());
     }
-    *attrS << R"__(        ];];
-    };
-})__";
+    ysonType << "];]";
+    const auto *typeNode = NCommon::ParseTypeFromYson(TStringBuf(ysonType), ctx, pos);
 
-    tablesMapping[TString("yt.plato.") + tableName] = dataFile.GetName();
+    rowSpec->SetType(typeNode->Cast<TStructExprType>());
+    rowSpec->SetColumnOrder(std::move(columnOrder));
+    tableInfo.RowSpec = rowSpec;
+
+    NYT::TNode attrs = NYT::TNode::CreateMap();
+    tableInfo.RowSpec->FillAttrNode(attrs[YqlRowSpecAttribute], 0, false);
+
+    NYT::TNode spec;
+    tableInfo.RowSpec->FillCodecNode(spec[YqlRowSpecAttribute]);
+
+    attrs["schema"] = RowSpecToYTSchema(spec[YqlRowSpecAttribute], 0).ToNode();
+
+
+    TOFStream of(attrFile.GetName());
+    of.Write(NYT::NodeToYsonString(attrs, NYson::EYsonFormat::Pretty));
+
+    const TString fullTableName(TStringBuilder() << "yt." << tableInfo.Cluster << '.' << tableInfo.Name);
+    tablesMapping[fullTableName] = dataFile.GetName();
 }
 
 bool RemoveFile(const TString& fileName) {
@@ -1009,15 +1035,12 @@ int SplitStatements(int argc, char* argv[]) {
 
 void WriteToYtTableScheme(
     const NYql::TExprNode& writeNode,
+    const TYtWrite& write,
+    const TYtOutputKey& key,
     const TTempDir& tempDir,
-    const TIntrusivePtr<class NYql::NFile::TYtFileServices> yqlNativeServices) {
-    const auto* keyNode = writeNode.Child(2);
-
-    const auto* tableNameNode = keyNode->Child(0)->Child(1);
-    Y_ENSURE(tableNameNode->IsCallable("String"));
-
-    const auto& tableName = tableNameNode->Child(0)->Content();
-    Y_ENSURE(!tableName.empty());
+    const TIntrusivePtr<class NYql::NFile::TYtFileServices> yqlNativeServices,
+    TExprContext& ctx) {
+    const auto& tableName = key.GetPath();
 
     const auto* optionsNode = writeNode.Child(4);
     Y_ENSURE(optionsNode);
@@ -1030,8 +1053,10 @@ void WriteToYtTableScheme(
         const auto columnsNode = GetSetting(*optionsNode, "columns");
         Y_ENSURE(columnsNode);
 
-        CreateYtFileTable(tempDir.Path(), TString(tableName), columnsNode->ChildPtr(1),
-                          yqlNativeServices->GetTablesMapping());
+        TYtTableInfo tableInfo(key, write.DataSink().Cluster().Value());
+
+        CreateYtFileTable(tempDir.Path(), tableInfo, columnsNode->ChildPtr(1),
+                          yqlNativeServices->GetTablesMapping(), ctx, writeNode.Pos(ctx));
     }
     else if (mode == "drop") {
         DeleteYtFileTable(tempDir.Path(), TString(tableName), yqlNativeServices->GetTablesMapping());
@@ -1061,6 +1086,11 @@ void ProcessMetaCmd(const TStringBuf& cmd) {
     Cerr << "Metacommand " << cmd << " is not supported\n";
 }
 
+void ShowFinalAst(TProgramPtr& program, IOutputStream& stream) {
+    Cerr << "Final AST:\n";
+    PrintExprTo(program, stream);
+}
+
 int Main(int argc, char* argv[])
 {
     using namespace NLastGetopt;
@@ -1077,10 +1107,15 @@ int Main(int argc, char* argv[])
     clusterMapping["information_schema"] = PgProviderName;
 
     opts.AddHelpOption();
+    opts.AddLongOption("print-ast", "print initial & final ASTs to stderr").NoArgument();
+    opts.AddLongOption("print-result", "print program execution result to stderr").NoArgument();
     opts.AddLongOption("datadir", "directory for tables").StoreResult<TString>(&rawDataDir);
     opts.SetFreeArgsMax(0);
 
     TOptsParseResult res(&opts, argc, argv);
+
+    const auto needPrintAst = res.Has("print-ast");
+    const auto needPrintResult = res.Has("print-result");
 
     const bool tempDirExists = !rawDataDir.empty() && NFs::Exists(rawDataDir);
     TTempDir tempDir{rawDataDir.empty() ? TTempDir{} : TTempDir{rawDataDir}};
@@ -1187,18 +1222,37 @@ int Main(int argc, char* argv[])
         }
 #endif
 
+        if (needPrintAst) {
+            Cerr << "Initial AST:\n";
+            PrintExprTo(program, Cerr);
+        }
+
         static const THashSet<TString> ignoredNodes{"CommitAll!", "Commit!" };
         const auto opNode = NYql::FindNode(program->ExprRoot(),
                                            [] (const TExprNode::TPtr& node) { return !ignoredNodes.contains(node->Content()); });
-        if (opNode->IsCallable("Write!")) {
-            Y_ENSURE(opNode->ChildrenSize() == 5);
+        if (const auto maybeWrite = TMaybeNode<TYtWrite>(opNode)) {
+            const auto write = maybeWrite.Cast();
 
-            const auto* keyNode = opNode->Child(2);
+            TYtOutputKey key;
+            if (!key.Parse(write.Arg(2).Ref(), ctx)) {
+                WriteErrorToStream(program);
+
+                return {};
+            }
+
+            const auto* keyNode = key.GetNode();
             const bool isWriteToTableSchemeNode = keyNode->IsCallable("Key") && 0 < keyNode->ChildrenSize() &&
                 keyNode->Child(0)->Child(0)->IsAtom("tablescheme");
 
             if (isWriteToTableSchemeNode) {
-                WriteToYtTableScheme(*opNode, tempDir, yqlNativeServices);
+                WriteToYtTableScheme(*opNode, write, key, tempDir, yqlNativeServices, program->ExprCtx());
+
+                if (needPrintAst) {
+                    program->Optimize(username);
+
+                    ShowFinalAst(program, Cerr);
+                }
+
                 continue;
             }
         }
@@ -1210,10 +1264,14 @@ int Main(int argc, char* argv[])
             WriteErrorToStream(program);
             continue;
         }
+        if (needPrintAst) {
+            ShowFinalAst(program, Cerr);
+        }
 
         if (program->HasResults()) {
-            // PrintExprTo(program, Cout);
-            // Cout << program->ResultsAsString() << Endl;
+             if (needPrintResult) {
+                Cerr << program->ResultsAsString() << Endl;
+             }
 
             const auto root = ParseYson(program->ResultsAsString());
 

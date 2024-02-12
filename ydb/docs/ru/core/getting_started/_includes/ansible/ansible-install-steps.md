@@ -40,7 +40,7 @@
     + `disable ondemand.service` - отключение сервиса `ondemand.service`, если он присутствует в системе. Сервис останавливается, его автоматический запуск отключается, и он маскируется (предотвращается его запуск). После выполнения задачи отправляется уведомление для перезапуска cpufrequtils.
     + `flush handlers` - вызывает накопленные хендлеры. Будет вызван хендлер `restart cpufrequtils`, который перезапустит сервис `cpufrequtils`.
     + `start cpufrequtils` - запуск и активация службы `cpufrequtils.service`. Далее служба будет стартовать автоматически при загрузке системы.
-3. Роль `ydbd`. Задачи:
+3. [Роль](https://github.com/ydb-platform/ydb-ansible/blob/refactor-use-collections/roles/ydbd/tasks/main.yaml) `ydbd`. Задачи:
   * `check if required variables are defined` – проверка, что переменные `ydb_archive`, `ydb_config`, `ydb_tls_dir` определены. Если какая-либо из них не определена, Ansible выведет соответствующее сообщение об ошибке и остановит выполнение плейбука.
   * `set vars_for_distribution variables` – установка переменных из указанного файла в переменной `vars_for_distribution_file` во время выполнения плейбука. Задача управляет набором переменных, зависящих от конкретного дистрибутива Linux.
   * `ensure libaio is installed` – проверка, что пакет `libaio` установлен.

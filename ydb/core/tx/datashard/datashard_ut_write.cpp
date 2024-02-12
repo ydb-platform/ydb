@@ -63,7 +63,7 @@ Y_UNIT_TEST_SUITE(DataShardWrite) {
         auto [shards1, tableId1] = CreateShardedTable(server, sender, "/Root", "table-1", opts);
         auto [shards2, tableId2] = CreateShardedTable(server, sender, "/Root", "table-2", opts);
 
-        auto rows = EvWrite ? TEvWriteRows{{{0, 1}}, {{2, 3}}} : TEvWriteRows{};
+        auto rows = EvWrite ? TEvWriteRows{{tableId1, {0, 1}}, {tableId2, {2, 3}}} : TEvWriteRows{};
         auto evWriteObservers = ReplaceEvProposeTransactionWithEvWrite(runtime, rows);
 
         Cout << "========= Send distributed write =========\n";

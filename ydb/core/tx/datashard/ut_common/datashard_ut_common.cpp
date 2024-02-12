@@ -1913,7 +1913,7 @@ TTestActorRuntimeBase::TEventObserverHolderPair ReplaceEvProposeTransactionWithE
             Y_VERIFY_S(colCount == 0 || colCount == writes.GetColumns().size(), "Only equal column count is supported now.");
             colCount = writes.GetColumns().size();
 
-            const auto& row = rows.ProcessNextRow();
+            const auto& row = rows.ProcessNextRow(tableId);
             Y_VERIFY(row.Cells.size() == colCount);
             std::copy(row.Cells.begin(), row.Cells.end(), std::back_inserter(cells));
         }
@@ -1956,8 +1956,6 @@ TTestActorRuntimeBase::TEventObserverHolderPair ReplaceEvProposeTransactionWithE
     auto responseObserver = runtime.AddObserver([&rows](TAutoPtr<IEventHandle>& event) {
         if (event->GetTypeRewrite() != NEvents::TDataEvents::EvWriteResult)
             return;
-
-
 
         const auto& record = event->Get<NEvents::TDataEvents::TEvWriteResult>()->Record;
         Cerr << "EvWriteResult event is observed and will be replaced with EvProposeTransactionResult: " << record.ShortDebugString() << Endl;

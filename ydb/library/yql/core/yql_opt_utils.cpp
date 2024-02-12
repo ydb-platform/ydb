@@ -1578,6 +1578,9 @@ ui64 GetTypeWeight(const TTypeAnnotationNode& type) {
                 case NUdf::EDataSlot::Int64:
                 case NUdf::EDataSlot::Uint64:
                 case NUdf::EDataSlot::Double:
+                case NUdf::EDataSlot::Datetime64:
+                case NUdf::EDataSlot::Timestamp64:
+                case NUdf::EDataSlot::Interval64:
                 case NUdf::EDataSlot::Timestamp:
                 case NUdf::EDataSlot::Interval:  return 8;
 

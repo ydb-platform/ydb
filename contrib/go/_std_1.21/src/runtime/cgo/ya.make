@@ -18,6 +18,7 @@ IF (CGO_ENABLED)
         libcgo.h
         libcgo_unix.h
     )
+
     CGO_SRCS(
         cgo.go
     )
@@ -71,9 +72,7 @@ IF (CGO_ENABLED)
     ENDIF()
 
     IF (OS_LINUX)
-        CGO_LDFLAGS(
-            -lpthread
-        )
+        CGO_LDFLAGS(-lpthread -ldl -lresolv)
 
         SRCS(
             callbacks_traceback.go
@@ -126,7 +125,3 @@ IF (CGO_ENABLED)
 
     END()
 ENDIF()
-
-RECURSE(
-    # internal
-)

@@ -697,32 +697,13 @@ private:
             MethodPerformanceCounters_->RemoteWaitTimeCounter.Record(now - retryStart);
         }
 
-        // COMPAT(kiselyovp): legacy RPC codecs
-        if (RequestHeader_->has_request_codec()) {
-            int intRequestCodecId = RequestHeader_->request_codec();
-            if (!TryEnumCast(intRequestCodecId, &RequestCodec_)) {
-                Reply(TError(
-                    NRpc::EErrorCode::ProtocolError,
-                    "Request codec %v is not supported",
-                    intRequestCodecId));
-                return;
-            }
-        } else {
-            RequestCodec_ = NCompression::ECodec::None;
-        }
-
-        if (RequestHeader_->has_response_codec()) {
-            int intResponseCodecId = RequestHeader_->response_codec();
-            if (!TryEnumCast(intResponseCodecId, &ResponseCodec_)) {
-                Reply(TError(
-                    NRpc::EErrorCode::ProtocolError,
-                    "Response codec %v is not supported",
-                    intResponseCodecId));
-                return;
-            }
-        } else {
-            ResponseCodec_ = NCompression::ECodec::None;
-        }
+        // COMPAT(danilalexeev): legacy RPC codecs
+        RequestCodec_ = RequestHeader_->has_request_codec()
+            ? CheckedEnumCast<NCompression::ECodec>(RequestHeader_->request_codec())
+            : NCompression::ECodec::None;
+        ResponseCodec_ = RequestHeader_->has_response_codec()
+            ? CheckedEnumCast<NCompression::ECodec>(RequestHeader_->response_codec())
+            : NCompression::ECodec::None;
 
         Service_->IncrementActiveRequestCount();
         ActiveRequestCountIncremented_ = true;
@@ -786,7 +767,7 @@ private:
             GetTotalMessageAttachmentSize(RequestMessage_),
             GetMessageAttachmentCount(RequestMessage_));
 
-        // COMPAT(kiselyovp)
+        // COMPAT(danilalexeev): legacy RPC codecs
         if (RequestHeader_->has_request_codec() && RequestHeader_->has_response_codec()) {
             delimitedBuilder->AppendFormat("RequestCodec: %v, ResponseCodec: %v",
                 RequestCodec_,
@@ -1928,6 +1909,9 @@ TError TServiceBase::DoCheckRequestCompatibility(const NRpc::NProto::TRequestHea
     if (auto error = DoCheckRequestFeatures(header); !error.IsOK()) {
         return error;
     }
+    if (auto error = DoCheckRequestCodecs(header); !error.IsOK()) {
+        return error;
+    }
     return {};
 }
 
@@ -1966,6 +1950,29 @@ TError TServiceBase::DoCheckRequestFeatures(const NRpc::NProto::TRequestHeader& 
                 NRpc::EErrorCode::UnsupportedServerFeature,
                 "Server does not support the feature requested by client")
                 << TErrorAttribute("feature_id", featureId);
+        }
+    }
+    return {};
+}
+
+TError TServiceBase::DoCheckRequestCodecs(const NRpc::NProto::TRequestHeader& header)
+{
+    if (header.has_request_codec()) {
+        NCompression::ECodec requestCodec;
+        if (!TryEnumCast(header.request_codec(), &requestCodec)) {
+            return TError(
+                NRpc::EErrorCode::ProtocolError,
+                "Request codec %v is not supported",
+                header.request_codec());
+        }
+    }
+    if (header.has_response_codec()) {
+        NCompression::ECodec responseCodec;
+        if (!TryEnumCast(header.response_codec(), &responseCodec)) {
+            return TError(
+                NRpc::EErrorCode::ProtocolError,
+                "Response codec %v is not supported",
+                header.response_codec());
         }
     }
     return {};

@@ -2910,6 +2910,7 @@ message TJob
     optional uint64 fail_context_size = 9;
     optional bool has_spec = 10;
     optional bytes error = 11; // YSON
+    optional bytes interruption_info = 28; // YSON
     optional bytes brief_statistics = 12; // YSON
     optional bytes input_paths = 13; // YSON
     optional bytes core_infos = 14; // YSON

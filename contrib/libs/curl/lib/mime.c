@@ -135,7 +135,7 @@ static const char aschex[] =
 
 #else
 
-#include <fabdef.h>
+#error #include <fabdef.h>
 /*
  * get_vms_file_size does what it takes to get the real size of the file
  *

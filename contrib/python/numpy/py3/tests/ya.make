@@ -26,6 +26,11 @@ SRCDIR(
     contrib/python/numpy/py3
 )
 
+PY_SRCS(
+    TOP_LEVEL
+    numpy/conftest.py
+)
+
 TEST_SRCS(
     numpy/array_api/tests/__init__.py
     numpy/array_api/tests/test_array_object.py
@@ -39,7 +44,6 @@ TEST_SRCS(
     numpy/array_api/tests/test_validation.py
     numpy/compat/tests/__init__.py
     numpy/compat/tests/test_compat.py
-    numpy/conftest.py
     numpy/core/tests/__init__.py
     numpy/core/tests/_locales.py
     numpy/core/tests/test__exceptions.py

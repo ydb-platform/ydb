@@ -14,6 +14,8 @@ LICENSE(
     BSD-2-Clause AND
     BSD-3-Clause AND
     GPL-1.0-or-later AND
+    GPL-2.0-only AND
+    LGPL-2.0-only AND
     LGPL-2.0-or-later AND
     LicenseRef-scancode-warranty-disclaimer AND
     Public-Domain

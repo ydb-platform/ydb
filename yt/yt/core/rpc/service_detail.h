@@ -214,7 +214,7 @@ public:
             }
         }
 
-        // COMPAT(kiselyovp): legacy RPC codecs
+        // COMPAT(danilalexeev): legacy RPC codecs
         std::optional<NCompression::ECodec> bodyCodecId;
         NCompression::ECodec attachmentCodecId;
         if (requestHeader.has_request_codec()) {
@@ -325,18 +325,8 @@ protected:
         const auto& underlyingContext = this->GetUnderlyingContext();
         const auto& requestHeader = underlyingContext->GetRequestHeader();
 
-        // COMPAT(kiselyovp): legacy RPC codecs
-        NCompression::ECodec attachmentCodecId;
-        auto bodyCodecId = underlyingContext->GetResponseCodec();
-        TSharedRef serializedBody;
-        if (requestHeader.has_response_codec()) {
-            serializedBody = SerializeProtoToRefWithCompression(*Response_, bodyCodecId, false);
-            attachmentCodecId = bodyCodecId;
-            underlyingContext->SetResponseBodySerializedWithCompression();
-        } else {
-            serializedBody = SerializeProtoToRefWithEnvelope(*Response_, bodyCodecId);
-            attachmentCodecId = NCompression::ECodec::None;
-        }
+        auto codecId = underlyingContext->GetResponseCodec();
+        auto serializedBody = SerializeProtoToRefWithCompression(*Response_, codecId);
 
         if (requestHeader.has_response_format()) {
             int intFormat = requestHeader.response_format();
@@ -362,7 +352,7 @@ protected:
             }
         }
 
-        auto responseAttachments = CompressAttachments(Response_->Attachments(), attachmentCodecId);
+        auto responseAttachments = CompressAttachments(Response_->Attachments(), codecId);
 
         return TSerializedResponse{
             .Body = std::move(serializedBody),
@@ -948,6 +938,7 @@ private:
     TError DoCheckRequestCompatibility(const NRpc::NProto::TRequestHeader& header);
     TError DoCheckRequestProtocol(const NRpc::NProto::TRequestHeader& header);
     TError DoCheckRequestFeatures(const NRpc::NProto::TRequestHeader& header);
+    TError DoCheckRequestCodecs(const NRpc::NProto::TRequestHeader& header);
 
     void OnRequestTimeout(TRequestId requestId, ERequestProcessingStage stage, bool aborted);
     void OnReplyBusTerminated(const NYT::NBus::IBusPtr& bus, const TError& error);

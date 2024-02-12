@@ -18,7 +18,7 @@
 //
 
 #if __GNUC__ * 100 + __GNUC_MINOR__ >= 402
-# include <ext/atomicity.h> 
+# error #include <ext/atomicity.h> 
 #else 
 # include <bits/atomicity.h>
 #endif

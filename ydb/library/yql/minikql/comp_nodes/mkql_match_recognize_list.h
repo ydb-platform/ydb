@@ -92,8 +92,11 @@ class TSparseList {
         size_t LockCount = 0;
     };
 
+
+
     class TContainer: public TSimpleRefCount<TContainer> {
     public:
+
         using TPtr = TIntrusivePtr<TContainer>;
 
         void Add(size_t index, NUdf::TUnboxedValue&& value) {
@@ -124,8 +127,6 @@ class TSparseList {
         void UnlockRange(size_t from, size_t to) {
             for (auto i = from; i <= to; ++i) {
                 const auto it = Storage.find(i);
-                std::cerr << "    TContainer::UnlockRange() i " << i << std::endl;
-
                 MKQL_ENSURE(it != Storage.cend(), "Internal logic error");
                 auto lockCount = --it->second.LockCount;
                 if (0 == lockCount) {
@@ -135,18 +136,15 @@ class TSparseList {
         }
 
         void Save(TOutputSerializer& serealizer) const {
-            std::cerr << "    TContainer::Save() " << serealizer.Size() << std::endl;
             serealizer.Write(Storage.size());
             for (const auto& [key, item]: Storage) {
                 serealizer.Write(key);
                 serealizer.Write(item.Value);
                 serealizer.Write(item.LockCount);
             }
-            std::cerr << "    TContainer::Save() end " << serealizer.Size() << std::endl;
         }
 
         void Load(TInputSerializer& serializer) {
-            std::cerr << "    TContainer::Load() " << serializer.Size() << std::endl;
             //auto size = serializer.Read<TStorage::size_type>();
             auto size = serializer.Read<ui64>();
             for (size_t i = 0; i < size; ++i) {
@@ -155,8 +153,6 @@ class TSparseList {
                 auto lockCount = serializer.Read<decltype(TItem::LockCount)>();
                 Storage.emplace(key, TItem{row, lockCount});
             }
-            std::cerr << "    TContainer::Load() size" << Storage.size() << std::endl;
-            std::cerr << "    TContainer::Load() end " << serializer.Size() << std::endl;
         }
 
     private:
@@ -185,8 +181,7 @@ public:
             : Container()
             , FromIndex(-1)
             , ToIndex(-1)
-        {
-        }
+        {}
 
         TRange(const TRange& other)
             : Container(other.Container)
@@ -274,20 +269,16 @@ public:
         }
 
         void Save(TOutputSerializer& serealizer) const {
-            std::cerr << "  TRange::Save() "  << serealizer.Size()  << std::endl;
             serealizer.Write(Container);
             serealizer.Write(FromIndex);
             serealizer.Write(ToIndex);
-            std::cerr << "  TRange::Save() end "  << serealizer.Size()  << std::endl;        
-        }
+       }
 
         void Load(TInputSerializer& serializer) {
-            std::cerr << "  TRange::Load() " << serializer.Size() << std::endl;
             serializer.Read(Container);
             FromIndex = serializer.Read<decltype(FromIndex)>();
             ToIndex = serializer.Read<decltype(ToIndex)>();
-            std::cerr << "  TRange::Load() end " << serializer.Size() << std::endl;
-        }
+     }
 
     private:
         TRange(TContainerPtr container, size_t index)
@@ -345,20 +336,13 @@ public:
     }
 
     void Save(TOutputSerializer& serealizer) const {
-        std::cerr << "TSparseList::Save() "  << serealizer.Size()  << std::endl;        
         serealizer.Write(Container);
         serealizer.Write(ListSize);
-
-        std::cerr << "TSparseList::Save() ListSize "  << ListSize  << std::endl; 
-        std::cerr << "TSparseList::Save() end "  << serealizer.Size() << std::endl;
     }
 
     void Load(TInputSerializer& serializer) {
-        std::cerr << "TSparseList::Load() " << serializer.Size() << std::endl;
         serializer.Read(Container);
         ListSize = serializer.Read<decltype(ListSize)>();
-        std::cerr << "TSparseList::Load() ListSize " << ListSize << std::endl;
-        std::cerr << "TSparseList::Load() end " << serializer.Size() << std::endl;
     }
 
 private:

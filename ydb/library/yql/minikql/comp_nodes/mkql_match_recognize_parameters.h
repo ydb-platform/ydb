@@ -71,9 +71,12 @@ public:
 
     template<class TPtrType>
     void Write(const TIntrusivePtr<TPtrType>& ptr) {
-        std::cerr << "        SavePtr) "  << Buf.size() << std::endl;
+        // Format
+        //      bool isValid
+        //      Ui64 addr
+        //      ui8  mode
+        //      ...data
         auto refCount = ptr.RefCount();
-        std::cerr << "        SavePtr) refCount "  <<refCount << std::endl;
         bool isValid =  static_cast<bool>(ptr);
         WriteBool(Buf, isValid);
 
@@ -85,15 +88,12 @@ public:
 
         auto it = WriteCache.find(addr);
         if (it == WriteCache.end()) {
-            std::cerr << "        SavePtr) new "  << std::endl;
             WriteByte(Buf, static_cast<ui8>(TPtrStateMode::Saved));
             ptr->Save(*this);
             WriteCache[addr] = addr;
         } else {
             WriteByte(Buf, static_cast<ui8>(TPtrStateMode::FromCache));
-            std::cerr << "        SavePtr) from cache "  << std::endl;
         }
-        std::cerr << "        SavePtr) end "  << Buf.size() << std::endl;
     }
 
     NUdf::TUnboxedValuePod MakeString() {
@@ -109,7 +109,6 @@ private:
     TString Buf;
     const TSaveLoadContext& Context;
     mutable std::map<std::uintptr_t, std::uintptr_t> WriteCache;
-    mutable std::map<std::uintptr_t, void *> ReadCache;
 };
 
 // template<class>
@@ -127,7 +126,7 @@ public:
     TInputSerializer(TSaveLoadContext& context, const NUdf::TStringRef& state)
         : Context(context)
         , Buf(state.Data(), state.Size())
-    {} 
+    {}
 
     template<typename Type, typename ReturnType = Type>
     ReturnType Read() {
@@ -146,14 +145,11 @@ public:
         }
         else 
             static_assert(always_false_v2<Type>, "non-exhaustive visitor!");
-        std::cerr << "Not implemented " << typeid(Type).name() << std::endl;
         MKQL_ENSURE(false, "Not implemented");
     }
 
     template<class TPtrType>
     void Read(TIntrusivePtr<TPtrType>& ptr) {
-        std::cerr << "        Load) "  << Buf.size() << std::endl;
-        //assert(false);
         bool isValid = Read<bool>();
         if (!isValid) {
             ptr.Reset();
@@ -162,20 +158,16 @@ public:
         ui64 addr = Read<ui64>();
         TPtrStateMode mode = static_cast<TPtrStateMode>(Read<ui8>());
         if (mode == TPtrStateMode::Saved) {
-            auto newPtr = MakeIntrusive<TPtrType>();
-            newPtr->Load(*this);
-            ptr = newPtr;
-            ReadCache[addr] = newPtr.Get();
+            ptr = MakeIntrusive<TPtrType>();
+            ptr->Load(*this);
+            ReadCache[addr] = ptr.Get();
         } else {
             auto it = ReadCache.find(addr);
             MKQL_ENSURE(it != ReadCache.end(), "Internal error");
             auto* cachePtr = static_cast<TPtrType*>(it->second);
             ptr = TIntrusivePtr<TPtrType>(cachePtr);
-
             auto refCount = ptr.RefCount();
-            std::cerr << "        Load) refCount "  << refCount << std::endl;
         }
-        std::cerr << "        Load) end "  << Buf.size() << std::endl;
     }
 
     NUdf::TUnboxedValuePod MakeString() {
@@ -190,7 +182,6 @@ public:
 private:
     TStringBuf Buf;
     TSaveLoadContext& Context;
-    mutable std::map<std::uintptr_t, std::uintptr_t> WriteCache;
     mutable std::map<std::uintptr_t, void *> ReadCache;
 };
 

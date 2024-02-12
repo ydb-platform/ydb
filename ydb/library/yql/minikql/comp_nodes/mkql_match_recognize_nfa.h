@@ -24,8 +24,7 @@ template <typename... Ts>
 struct TVariantHelper {
     using TVariant =  std::variant<Ts...>;
 
-    static std::variant<Ts...> getVariantByIndex(size_t i)
-    {
+    static std::variant<Ts...> getVariantByIndex(size_t i) {
         MKQL_ENSURE(i < sizeof...(Ts), "Wrong variant index");
         static std::variant<Ts...> table[] = { Ts{ }... };
         return table[i];
@@ -89,15 +88,10 @@ struct TNfaTransitionGraph {
     using TPtr = std::shared_ptr<TNfaTransitionGraph>;
 
     void Save(TOutputSerializer& serealizer) const {
-        std::cerr << "TNfaTransitionGraph::Save() "  << serealizer.Size()  << std::endl;
         serealizer.Write(Transitions.size());
-
-        std::cerr << "TNfaTransitionGraph::Save() size "  << Transitions.size()  << std::endl;
 
         for (ui64 i = 0; i < Transitions.size(); ++i) {
             serealizer.Write(Transitions[i].index());
-
-            std::cerr << "TNfaTransitionGraph::Save() index "  << Transitions[i].index()  << std::endl;
 
             std::visit([&](auto&& arg)
             {
@@ -131,20 +125,14 @@ struct TNfaTransitionGraph {
         }
         serealizer.Write(Input);
         serealizer.Write(Output);
-        std::cerr << "TNfaTransitionGraph::Save() end "  << serealizer.Size() << std::endl;
     }
 
     void Load(TInputSerializer& serializer) {
-        std::cerr << "TNfaTransitionGraph::Load() " << serializer.Size() << std::endl;
         ui64 transitionSize = serializer.Read<TTransitions::size_type>();
-        std::cerr << "TNfaTransitionGraph::Load() transitionSize " << transitionSize << std::endl;
 
         Transitions.resize(transitionSize);
         for (ui64 i = 0; i < transitionSize; ++i) {
             size_t index = serializer.Read<std::size_t>();
-
-            std::cerr << "TNfaTransitionGraph::Load() index " << index << std::endl;
-
             Transitions[i] = TNfaTransitionHelper::getVariantByIndex(index);
             std::visit([&](auto&& arg)
             {
@@ -180,7 +168,6 @@ struct TNfaTransitionGraph {
         }
         Input = serializer.Read<ui64>();
         Output = serializer.Read<ui64>();
-        std::cerr << "TNfaTransitionGraph::Load() end " << serializer.Size() << std::endl;
     }
 };
 
@@ -194,6 +181,7 @@ public:
         EliminateSingleEpsilons();
         CollectGarbage();
     }
+
 private:
     void EliminateEpsilonChains() {
         for (size_t node = 0; node != Graph->Transitions.size(); node++) {
@@ -367,6 +355,7 @@ class TNfa {
     using TRange = TSparseList::TRange;
     using TMatchedVars = TMatchedVars<TRange>;
 
+
     struct TState {
         
         TState() {}
@@ -394,7 +383,6 @@ class TNfa {
         TQuantifiersStack Quantifiers;
 
         void Save(TOutputSerializer& serealizer) const {
-            std::cerr << "TState::Save() "  << serealizer.Size()  << std::endl;
             serealizer.Write(Index);
 
             serealizer.Write(Vars.size());
@@ -408,11 +396,9 @@ class TNfa {
             for (ui64 qnt : Quantifiers) {
                 serealizer.Write(qnt);
             }
-            std::cerr << "TState::Save() end "  << serealizer.Size()  << std::endl;        
         }
 
         void Load(TInputSerializer& serializer) {
-            std::cerr << "TState::Load() " << serializer.Size() << std::endl;
             Index = serializer.Read<ui64>();
             
             auto varsSize = serializer.Read<ui64>();
@@ -423,7 +409,7 @@ class TNfa {
                 ui64 vectorSize = serializer.Read<ui64>();
                 subvec.resize(vectorSize);
                 for (size_t j = 0; j < vectorSize; ++j) {
-                    subvec[i].Load(serializer);
+                    subvec[j].Load(serializer);
                 }
             }
 
@@ -435,7 +421,6 @@ class TNfa {
                 ui64 qnt = serializer.Read<ui64>();
                 Quantifiers.push(qnt);
             }
-            std::cerr << "TState::Load() end " << serializer.Size() << std::endl;
         }
 
         friend inline bool operator<(const TState& lhs, const TState& rhs) {
@@ -446,13 +431,14 @@ class TNfa {
         }
     };
 public:
+
     TNfa(TNfaTransitionGraph::TPtr transitionGraph, IComputationExternalNode* matchedRangesArg, const TComputationNodePtrVector& defines)
         : TransitionGraph(transitionGraph)
         , MatchedRangesArg(matchedRangesArg)
         , Defines(defines) {
     }
 
-    void ProcessRow(TSparseList::TRange&& currentRowLock, TComputationContext& ctx) {
+    void ProcessRow(TSparseList::TRange&& currentRowLock, TComputationContext& ctx) {        
         ActiveStates.emplace(TransitionGraph->Input, TMatchedVars(Defines.size()), std::stack<ui64, std::deque<ui64, TMKQLAllocator<ui64>>>{});
         MakeEpsilonTransitions();
         std::set<TState, std::less<TState>, TMKQLAllocator<TState>> newStates;
@@ -509,28 +495,23 @@ public:
     }
 
     void Save(TOutputSerializer& serealizer) const {
-        std::cerr << "TNfa::Save() "  << serealizer.Size() << std::endl;
         TransitionGraph->Save(serealizer);
         serealizer.Write(ActiveStates.size());
         for (const auto& state : ActiveStates) {
             state.Save(serealizer);
         }
         serealizer.Write(EpsilonTransitionsLastRow);
-        std::cerr << "TNfa::Save() end "  << serealizer.Size() << std::endl;        
     }
 
     void Load(TInputSerializer& serializer) {
-        std::cerr << "TNfa::Load() " << serializer.Size() << std::endl;
         TransitionGraph->Load(serializer);
         auto stateSize = serializer.Read<ui64>();
-        std::cerr << "TNfa::Load() ActiveStates size " << stateSize << std::endl;
         for (size_t i = 0; i < stateSize; ++i) {
             TState state;
             state.Load(serializer);
             ActiveStates.emplace(state);
         }
         EpsilonTransitionsLastRow = serializer.Read<ui64>();
-        std::cerr << "TNfa::Load() end " << serializer.Size() << std::endl;
     }
 
 private:

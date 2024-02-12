@@ -59,7 +59,6 @@ public:
     }
 
     bool ProcessInputRow(NUdf::TUnboxedValue&& row, TComputationContext& ctx) {
-        std::cerr << "TBackTrackingMatchRecognize::ProcessInputRow()" << std::endl;
         Y_UNUSED(ctx);
         Rows.Append(std::move(row));
         return false;
@@ -100,7 +99,6 @@ public:
             for (size_t v = 0; v != Parameters.Defines.size(); ++v) {
                 const auto &d = Parameters.Defines[v]->GetValue(ctx);
                 if (d && d.GetOptionalValue().Get<bool>()) {
-                    std::cerr << "Defines return true "<< std::endl;
                     Extend(CurMatchedVars[v], TRange{i});
                 }
             }
@@ -127,7 +125,7 @@ private:
 class TStreamingMatchRecognize {
     using TPartitionList = TSparseList;
     using TRange = TPartitionList::TRange;
-    using TMatchedVars = TMatchedVars<TRange>;
+   // using TMatchedVars = TMatchedVars<TRange>;
 public:
     using TPatternConfigurationBuilder = TNfaTransitionGraphBuilder;
     TStreamingMatchRecognize(
@@ -144,7 +142,6 @@ public:
     }
 
     bool ProcessInputRow(NUdf::TUnboxedValue&& row, TComputationContext& ctx) {
-        std::cerr << "class TStreamingMatchRecognize::ProcessInputRow()" << std::endl;
         Parameters.InputDataArg->SetValue(ctx, ctx.HolderFactory.Create<TListValue<TSparseList>>(Rows));
         Parameters.CurrentRowIndexArg->SetValue(ctx, NUdf::TUnboxedValuePod(Rows.Size()));
         Nfa.ProcessRow(Rows.Append(std::move(row)), ctx);
@@ -152,13 +149,16 @@ public:
     }
 
     bool HasMatched() const {
+        
         return Nfa.HasMatched();
     }
 
     NUdf::TUnboxedValue GetOutputIfReady(TComputationContext& ctx) {
         auto match = Nfa.GetMatched();
         if (!match.has_value())
+        {
             return NUdf::TUnboxedValue{};
+        }
         Parameters.MatchedVarsArg->SetValue(ctx, ctx.HolderFactory.Create<TMatchedVarsValue<TRange>>(ctx.HolderFactory, match.value()));
         Parameters.MeasureInputDataArg->SetValue(ctx, ctx.HolderFactory.Create<TMeasureInputDataValue>(
             ctx.HolderFactory.Create<TListValue<TSparseList>>(Rows),
@@ -187,14 +187,13 @@ public:
     }
 
     void Save(TOutputSerializer& serealizer) const {
-        std::cerr << "TStreamingMatchRecognize::Save() "  << serealizer.Size() << std::endl;
+        // TODO : PartitionKey
         Rows.Save(serealizer);
         Nfa.Save(serealizer);
         serealizer.Write(MatchNumber);
     }
 
     void Load(TInputSerializer& serializer) {
-        std::cerr << "TStreamingMatchRecognize::Load()" << std::endl;
         Rows.Load(serializer);
         Nfa.Load(serializer);
         MatchNumber = serializer.Read<ui64>();
@@ -237,20 +236,16 @@ public:
     {}
 
     NUdf::TUnboxedValue Save() const override {
-        std::cerr << "TStateForNonInterleavedPartitions::Save() " << std::endl;
         TString out;
-
 
         auto strRef = NUdf::TStringRef(out.data(), out.size());
         return MakeString(strRef);
     }
 
     void Load(const NUdf::TStringRef& state) override {
-        std::cerr << "TStateForNonInterleavedPartitions::Load()" << std::endl;
     }
 
     bool ProcessInputRow(NUdf::TUnboxedValue&& row, TComputationContext& ctx) {
-        std::cerr << "TStateForNonInterleavedPartitions::ProcessInputRow()" << std::endl;
         MKQL_ENSURE(not DelayedRow, "Internal logic error"); //we're finalizing previous partition
         InputRowArg->SetValue(ctx, NUdf::TUnboxedValue(row));
         auto partitionKey = PartitionKey->GetValue(ctx);
@@ -265,6 +260,7 @@ public:
         if (PartitionHandler) {
             return PartitionHandler->ProcessEndOfData(ctx);
         }
+        
         //be aware that the very first partition is created in the same manner as subsequent
         return false;
     }
@@ -344,14 +340,10 @@ public:
     , NfaTransitionGraph(TNfaTransitionGraphBuilder::Create(parameters.Pattern, parameters.VarNamesLookup))
     , Cache(cache)
     , SaveLoadContex(ctx, stateType, packer)
-    {
-    }
+    {}
 
     NUdf::TUnboxedValue Save() const override {
-        std::cerr << "TStateForInterleavedPartitions::Save() " << std::endl;
-
         TOutputSerializer serealizer(SaveLoadContex);
-
         serealizer.Write(StateVersion);
         serealizer.Write(Partitions.size());
 
@@ -366,8 +358,6 @@ public:
     void Load(const NUdf::TStringRef& state) override {
 
         TInputSerializer serializer(SaveLoadContex, state);
-        
-        std::cerr << "TStateForInterleavedPartitions::Load() " << serializer.Size() << std::endl;
 
         const auto stateVersion = serializer.Read<decltype(StateVersion)>();
         if (stateVersion == 1) {
@@ -383,20 +373,18 @@ public:
                 (pair.first)->second->Load(serializer);
             }
 
-            std::cerr << "partitionsSize " << partitionsSize << std::endl;
-            for (auto it = Partitions.begin(); it != Partitions.end(); ++it) {
-                std::cerr << "it->second->HasMatched() " << it->second->HasMatched() << std::endl;
-                if (it->second->HasMatched()) {
-                    HasReadyOutput.push(it);
-                }
-            }
+            // std::cerr << "partitionsSize " << partitionsSize << std::endl;
+            // for (auto it = Partitions.begin(); it != Partitions.end(); ++it) {
+            //     std::cerr << "it->second->HasMatched() " << it->second->HasMatched() << std::endl;
+            //     if (it->second->HasMatched()) {
+            //         HasReadyOutput.push(it);
+            //     }
+            // }
         }
-        std::cerr << "TStateForInterleavedPartitions::Load() " << serializer.Size() << std::endl;
         MKQL_ENSURE(!serializer.Size(), "State is corrupted");
     }
 
     bool ProcessInputRow(NUdf::TUnboxedValue&& row, TComputationContext& ctx) {
-        std::cerr << "TStateForInterleavedPartitions::ProcessInputRow()" << std::endl;
         auto partition = GetPartitionHandler(row, ctx);
         if (partition->second->ProcessInputRow(std::move(row), ctx)) {
             HasReadyOutput.push(partition);
@@ -434,7 +422,6 @@ private:
         InputRowArg->SetValue(ctx, NUdf::TUnboxedValue(row));
         auto partitionKey = PartitionKey->GetValue(ctx);
         const auto packedKey = PartitionKeyPacker.Pack(partitionKey);
-        std::cerr << "partitionKey " << TString(packedKey)<< std::endl;
         if (const auto it = Partitions.find(TString(packedKey)); it != Partitions.end()) {
             return it;
         } else {
@@ -514,19 +501,15 @@ public:
         auto state = static_cast<State*>(stateValue.AsBoxed().Get());
         while (true) {
             if (auto output = state->GetOutputIfReady(ctx); output) {
-                std::cerr << "DoCalculate: return output" << std::endl;
                 return output;
             }
             auto item = InputFlow->GetValue(ctx);
             if (item.IsFinish()) {
-                std::cerr << "call ProcessEndOfData()" << std::endl;
                 state->ProcessEndOfData(ctx);
                 continue;
             } else if (item.IsSpecial()) {
-                std::cerr << "IsSpecial" << std::endl;
                 return item;
             }
-            std::cerr << "ProcessInputRow2" << std::endl;
             state->ProcessInputRow(std::move(item), ctx);
         }
     }
@@ -663,8 +646,6 @@ std::pair<TUnboxedValueVector, THashMap<TString, size_t>> ConvertListOfStrings(c
 
 
 IComputationNode* WrapMatchRecognizeCore(TCallable& callable, const TComputationNodeFactoryContext& ctx) {
-    std::cerr << "WrapMatchRecognizeCore" << std::endl;
-
     using namespace NMatchRecognize;
     size_t inputIndex = 0;
     const auto& inputFlow = callable.GetInput(inputIndex++);

@@ -84,8 +84,7 @@ class TMatchedVarsValue : public TComputationValue<TMatchedVarsValue<R>> {
             : TComputationValue<TRangeList>(memInfo)
             , HolderFactory(holderFactory)
             , Var(v)
-        {
-        }
+        {}
 
         bool HasFastListLength() const override {
             return true;
@@ -111,8 +110,7 @@ public:
         : TComputationValue<TMatchedVarsValue>(memInfo)
         , HolderFactory(holderFactory)
         , Vars(vars)
-    {
-    }
+    {}
 
     NUdf::TUnboxedValue GetElement(ui32 index) const override {
         return HolderFactory.Create<TRangeList>(HolderFactory, Vars[index]);

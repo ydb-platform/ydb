@@ -148,15 +148,13 @@ namespace NKikimr {
 
                 auto value = graph1->GetValue();
 
-                std::cerr << "IsFinish " << value.IsFinish() << std::endl;
                 UNIT_ASSERT(!value.IsFinish() && value);
                 auto v = value.GetElement(0).Get<ui32>();
-                std::cerr << "GetElement " << v << std::endl;
 
                 TString graphState = graph1->SaveGraphState();
 
-                std::cerr << "----------------------" << std::endl;
-                std::cerr << "State size  " << graphState.size() << std::endl;
+               // graph1.Reset();
+
                 TSetup setup2(alloc);
 
                 auto graph2 = BuildGraph(setup2, TTestInputData{{1003, "D", 103, "P"}});
@@ -165,7 +163,7 @@ namespace NKikimr {
                 value = graph2->GetValue();
                 UNIT_ASSERT(!value.IsFinish() && value);
                 v = value.GetElement(0).Get<ui32>();
-                std::cerr << "GetElement " << v << std::endl;
+                UNIT_ASSERT_VALUES_EQUAL(56, v);
             }
 
             const TTestInputData input = {

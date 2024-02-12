@@ -235,7 +235,7 @@ class TestRecoveryMatchRecognize(TestYdsBase):
 
         assert client.get_query_status(query_id) == fq.QueryMeta.RUNNING
 
-        expected = ['{"a_str":"A","b_str":"B","c_str":"C",,"dt_begin":1696849942000001,"dt_end":1696849943000001}']
+        expected = ['{"a_str":"A","b_str":"B","c_str":"C","dt_begin":1696849942000001,"dt_end":1696849943000001}']
 
         read_data = self.read_stream(1)
         logging.info("Data was read: {}".format(read_data))

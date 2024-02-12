@@ -106,49 +106,15 @@ public:
         count = Count->GetValue(ctx).Get<ui64>();
     }
 
-    void DoProcess(ui64& takeCount, TComputationContext& ctx, TMaybe<EFetchResult>& result, NUdf::TUnboxedValue*const* values) const {
+    EProcessResult DoProcess(ui64& takeCount, TComputationContext& ctx, EFetchResult fetchRes, NUdf::TUnboxedValue*const* values) const {
         if (takeCount == 0) {
-            result = EFetchResult::Finish;
-        } else if (result == EFetchResult::One) {
+            return EProcessResult::Finish;
+        } else if (fetchRes == EFetchResult::One) {
             takeCount--;
         }
+        return static_cast<EProcessResult>(fetchRes);
     }
 
-#ifndef MKQL_DISABLE_CODEGEN
-    TGenerateResult DoGenGetValues(const TCodegenContext& ctx, Value* statePtr, Value* state, BasicBlock*& block) const {
-        auto& context = ctx.Codegen.GetContext();
-
-        const auto work = BasicBlock::Create(context, "work", ctx.Func);
-        const auto good = BasicBlock::Create(context, "good", ctx.Func);
-        const auto done = BasicBlock::Create(context, "done", ctx.Func);
-
-        const auto resultType = Type::getInt32Ty(context);
-        const auto result = PHINode::Create(resultType, 3U, "result", done);
-        result->addIncoming(ConstantInt::get(resultType, static_cast<i32>(EFetchResult::Finish)), block);
-
-        const auto trunc = GetterFor<ui64>(state, context, block);
-
-        const auto plus = CmpInst::Create(Instruction::ICmp, ICmpInst::ICMP_UGT, trunc, ConstantInt::get(trunc->getType(), 0ULL), "plus", block);
-
-        BranchInst::Create(work, done, plus, block);
-
-        block = work;
-        const auto getres = GetNodeValues(Flow, ctx, block);
-        const auto special = CmpInst::Create(Instruction::ICmp, ICmpInst::ICMP_SLE, getres.first, ConstantInt::get(getres.first->getType(), 0), "special", block);
-        result->addIncoming(getres.first, block);
-        BranchInst::Create(done, good, special, block);
-
-        block = good;
-
-        const auto decr = BinaryOperator::CreateSub(trunc, ConstantInt::get(trunc->getType(), 1ULL), "decr", block);
-        new StoreInst(SetterFor<ui64>(decr, context, block), statePtr, block);
-        result->addIncoming(getres.first, block);
-        BranchInst::Create(done, block);
-
-        block = done;
-        return {result, std::move(getres.second)};
-    }
-#endif
 private:
     void RegisterDependencies() const final {
         if (const auto flow = FlowDependsOn(Flow))

@@ -23,7 +23,7 @@ Thus, {{ ydb-short-name }} server major version is a combination of the first tw
 
 {{ ydb-short-name }} maintains compatibility between major versions to ensure a cluster can operate while its nodes run two adjacent major versions of the YDB server executable. You may refer the [Updating {{ ydb-short-name }}](../administration/upgrade.md) article to learn more about the cluster upgrade procedure.
 
-Given the above compatibility target, major releases go in pairs: releases with odd numbers mostly add new functionality switched off by feature flags, while releases with even numbers enable that functionality by default.
+Given the above compatibility target, major releases go in pairs: odd numbered releases add new functionality switched off by feature flags, and even numbered releases enable that functionality by default.
 
 For instance, release `23.1` comes with the new functionality switched off. It can be incrementally rolled out to a cluster running `22.4`, without downtime. As soon as the whole cluster runs `23.1` nodes, you can manually toggle feature flags to test new functionality and later further upgrade it to `23.2` to fully leverage this new functionality.
 

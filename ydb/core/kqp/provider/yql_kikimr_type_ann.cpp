@@ -418,6 +418,13 @@ private:
         THashSet<TString> generateColumnsIfInsertColumnsSet;
 
         for(const auto& [name, info] : table->Metadata->Columns) {
+            if (info.IsBuildInProgress && rowType->FindItem(name)) {
+                ctx.AddError(YqlIssue(pos, TIssuesIds::KIKIMR_BAD_REQUEST, TStringBuilder()
+                    << "Column is under build operation, write operation is not allowed to column: " << name
+                    << " for table: " << table->Metadata->Name));
+                return TStatus::Error;
+            }
+
             if (rowType->FindItem(name)) {
                 continue;
             }
@@ -431,7 +438,7 @@ private:
             }
 
             if (info.IsDefaultKindDefined()) {
-                if (op == TYdbOperation::Upsert) {
+                if (op == TYdbOperation::Upsert && !info.IsBuildInProgress) {
                     generateColumnsIfInsertColumnsSet.emplace(name);
                 }
 
@@ -625,6 +632,13 @@ private:
                     << "Column '" << item->GetName() << "' does not exist in table '" << node.Table().Value() << "'."));
                 return TStatus::Error;
             }
+
+            if (column->IsBuildInProgress) {
+                ctx.AddError(YqlIssue(ctx.GetPosition(node.Pos()), TIssuesIds::KIKIMR_BAD_REQUEST, TStringBuilder()
+                    << "Column '" << item->GetName() << "' is under the build operation '" << node.Table().Value() << "'."));
+                return TStatus::Error;
+            }
+
             if (column->NotNull && item->HasOptionalOrNull()) {
                 if (item->GetItemType()->GetKind() == ETypeAnnotationKind::Pg) {
                     //no type-level notnull check for pg types.
@@ -635,6 +649,8 @@ private:
                 return TStatus::Error;
             }
         }
+
+
 
         if (!node.ReturningColumns().Empty()) {
             ctx.AddError(TIssue(ctx.GetPosition(node.Pos()), TStringBuilder()

@@ -169,7 +169,7 @@ while (true) {
 
 ```
 
-## Using Kafka Connec
+## Using Kafka Connect
 
 The [Kafka Connect](https://kafka.apache.org/documentation/#connect) tool is designed to move data between Apache Kafka® and other data stores.
 

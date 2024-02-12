@@ -304,7 +304,9 @@ TWriteOperation::TWriteOperation(const TBasicOpInfo& op, NEvents::TDataEvents::T
     SetTarget(ev->Sender);
     SetCookie(ev->Cookie);
 
-    TAutoPtr<NEvents::TDataEvents::TEvWrite> evPtr = ev.Release()->Release();
+    TAutoPtr<TEventHandle<NEvents::TDataEvents::TEvWrite>> handle = ev.Release();
+    TAutoPtr<NEvents::TDataEvents::TEvWrite> evPtr = handle->Release();
+
     Orbit = std::move(evPtr->MoveOrbit());
     Record.reset(evPtr.Release());
 

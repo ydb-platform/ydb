@@ -128,7 +128,7 @@ TBridgeAbortResult* BridgeAbort(TBridgeYqlPlugin* plugin, const char* queryId)
     auto* nativePlugin = reinterpret_cast<IYqlPlugin*>(plugin);
     auto* bridgeResult = new TBridgeAbortResult;
 
-    auto result = nativePlugin->GetProgress(NYT::TGuid::FromString(queryId));
+    auto result = nativePlugin->Abort(NYT::TGuid::FromString(queryId));
     FillString(bridgeResult->YsonError, bridgeResult->YsonErrorLength, result.YsonError);
 
     return bridgeResult;

@@ -832,7 +832,7 @@ void TKikimrRunner::InitializeGRpc(const TKikimrRunConfig& runConfig) {
 
         if (hasQueryService) {
             server.AddService(new NGRpcService::TGRpcYdbQueryService(ActorSystem.Get(), Counters,
-                grpcRequestProxies[0], hasDataStreams.IsRlAllowed()));
+                grpcRequestProxies, hasDataStreams.IsRlAllowed(), grpcConfig.GetHandlersPerCompletionQueue()));
         }
 
         if (hasLogStore) {
@@ -1086,6 +1086,10 @@ void TKikimrRunner::InitializeAppData(const TKikimrRunConfig& runConfig)
 
     if (runConfig.AppConfig.HasS3ProxyResolverConfig()) {
         AppData->S3ProxyResolverConfig = runConfig.AppConfig.GetS3ProxyResolverConfig();
+    }
+
+    if (runConfig.AppConfig.HasGraphConfig()) {
+        AppData->GraphConfig.CopyFrom(runConfig.AppConfig.GetGraphConfig());
     }
 
     // setup resource profiles

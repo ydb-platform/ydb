@@ -112,6 +112,7 @@ enum class EYtSettingType: ui64 {
     PrimaryMedium               = 1ull << 59 /* "primary_medium", "primarymedium" */,
     KeepMeta                    = 1ull << 60 /* "keep_meta", "keepmeta" */,
     MonotonicKeys               = 1ull << 61 /* "monotonic_keys", "monotonickeys" */,
+    MutationId                  = 1ull << 62 /* "mutationid", "mutation_id" */,
 };
 
 Y_DECLARE_FLAGS(EYtSettingTypes, EYtSettingType);

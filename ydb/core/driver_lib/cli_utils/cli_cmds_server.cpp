@@ -823,6 +823,9 @@ protected:
     }
 
     inline void LoadYamlConfig(TCallContext callCtx) {
+        if (!YamlConfigFile) {
+            return;
+        }
         auto yamlConfig = TFileInput(YamlConfigFile);
         NKikimrConfig::TAppConfig parsedConfig;
         NKikimr::NYaml::Parse(yamlConfig.ReadAll(), parsedConfig);

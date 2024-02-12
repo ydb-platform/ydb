@@ -2,11 +2,11 @@
 
 #include "datashard_active_transaction.h"
 #include "datashard_kqp.h"
-#include "datashard_locks.h"
 #include "datashard_impl.h"
 #include "datashard_failpoints.h"
 #include "key_conflicts.h"
 
+#include <ydb/core/tx/locks/locks.h>
 #include <ydb/library/actors/util/memory_track.h>
 
 namespace NKikimr {
@@ -942,6 +942,47 @@ void TActiveTransaction::TrackMemory() const {
 
 void TActiveTransaction::UntrackMemory() const {
     NActors::NMemory::TLabel<MemoryLabelActiveTransactionBody>::Sub(TxBody.size());
+}
+
+bool TActiveTransaction::OnStopping(TDataShard& self, const TActorContext& ctx) {
+    if (IsImmediate()) {
+        // Send reject result immediately, because we cannot control when
+        // a new datashard tablet may start and block us from commiting
+        // anything new. The usual progress queue is too slow for that.
+        if (!HasResultSentFlag() && !Result()) {
+            auto kind = static_cast<NKikimrTxDataShard::ETransactionKind>(GetKind());
+            auto rejectStatus = NKikimrTxDataShard::TEvProposeTransactionResult::OVERLOADED;
+            TString rejectReason = TStringBuilder()
+                    << "Rejecting immediate tx "
+                    << GetTxId()
+                    << " because datashard "
+                    << self.TabletID()
+                    << " is restarting";
+            auto result = MakeHolder<TEvDataShard::TEvProposeTransactionResult>(
+                    kind, self.TabletID(), GetTxId(), rejectStatus);
+            result->AddError(NKikimrTxDataShard::TError::WRONG_SHARD_STATE, rejectReason);
+            LOG_NOTICE_S(ctx, NKikimrServices::TX_DATASHARD, rejectReason);
+
+            ctx.Send(GetTarget(), result.Release(), 0, GetCookie());
+
+            self.IncCounter(COUNTER_PREPARE_OVERLOADED);
+            self.IncCounter(COUNTER_PREPARE_COMPLETE);
+            SetResultSentFlag();
+        }
+
+        // Immediate ops become ready when stopping flag is set
+        return true;
+    } else {
+        // Distributed operations send notification when proposed
+        if (GetTarget() && !HasCompletedFlag()) {
+            auto notify = MakeHolder<TEvDataShard::TEvProposeTransactionRestart>(
+                self.TabletID(), GetTxId());
+            ctx.Send(GetTarget(), notify.Release(), 0, GetCookie());
+        }
+
+        // Distributed ops avoid doing new work when stopping
+        return false;
+    }
 }
 
 }}

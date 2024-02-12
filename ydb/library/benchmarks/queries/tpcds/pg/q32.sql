@@ -6,7 +6,7 @@ from
    ,{{item}}
    ,{{date_dim}}
 where
-i_manufact_id = 269
+i_manufact_id = 66
 and i_item_sk = cs_item_sk
 and d_date between '2002-03-29'::date and
         (cast('2002-03-29' as date) + interval '90' day)::date

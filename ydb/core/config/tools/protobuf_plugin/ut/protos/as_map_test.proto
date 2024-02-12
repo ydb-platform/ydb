@@ -1,0 +1,23 @@
+import "ydb/core/config/protos/marker.proto";
+
+package NKikimrConfig;
+option java_package = "ru.yandex.kikimr.proto";
+
+message SomeTypeForAsMap {
+    optional string Str = 1;
+}
+
+message MessageWithMap  {
+    option (NMarkers.WithMapType) = true;
+    repeated SomeTypeForAsMap Entry0 = 1;
+    repeated SomeTypeForAsMap Entry1 = 2 [(NMarkers.AsMap) = "SomeMap"];
+    repeated SomeTypeForAsMap Entry2 = 3 [(NMarkers.AsMap) = "SomeMap"];
+    repeated SomeTypeForAsMap Entry3 = 4 [(NMarkers.AsMap) = "SomeMap"];
+    repeated SomeTypeForAsMap Entry4 = 5 [(NMarkers.AsMap) = "SomeMap"];
+    repeated SomeTypeForAsMap Entry5 = 6 [(NMarkers.AsMap) = "SomeMap"];
+    repeated SomeTypeForAsMap Entry6 = 7 [(NMarkers.AsMap) = "SomeMap"];
+    repeated SomeTypeForAsMap Entry7 = 8 [(NMarkers.AsMap) = "SomeMap"];
+    repeated SomeTypeForAsMap Entry8 = 9 [(NMarkers.AsMap) = "SomeMap"];
+    repeated SomeTypeForAsMap Entry9 = 10 [(NMarkers.AsMap) = "SomeMap"];
+    repeated SomeTypeForAsMap Entry10 = 111 [(NMarkers.AsMap) = "SomeMap"];
+}

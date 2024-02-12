@@ -186,7 +186,7 @@ protected:
         Alloc = std::make_shared<NKikimr::NMiniKQL::TScopedAlloc>(
                     __LOCATION__,
                     NKikimr::TAlignedPagePoolCounters(),
-                    FunctionRegistry->SupportsSizedAllocators(),
+                    true,
                     false
         );
         InitMonCounters(taskCounters);
@@ -304,30 +304,14 @@ protected:
             ReportStats(TInstant::Now(), ESendStats::IfPossible);
         }
         if (Terminated) {
-            TaskRunner.Reset();
+            DoTerminateImpl();
             MemoryQuota.Reset();
             MemoryLimits.MemoryQuotaManager.reset();
         }
     }
 
-    virtual void DoExecuteImpl() {
-        auto sourcesState = GetSourcesState();
-
-        PollAsyncInput();
-        ERunStatus status = TaskRunner->Run();
-
-        CA_LOG_T("Resume execution, run status: " << status);
-
-        if (status != ERunStatus::Finished) {
-            PollSources(std::move(sourcesState));
-        }
-
-        if ((status == ERunStatus::PendingInput || status == ERunStatus::Finished) && Checkpoints && Checkpoints->HasPendingCheckpoint() && !Checkpoints->ComputeActorStateSaved() && ReadyToCheckpoint()) {
-            Checkpoints->DoCheckpoint();
-        }
-
-        ProcessOutputsImpl(status);
-    }
+    virtual void DoExecuteImpl() = 0;
+    virtual void DoTerminateImpl() {}
 
     virtual bool DoHandleChannelsAfterFinishImpl() {
         Y_ABORT_UNLESS(Checkpoints);
@@ -606,12 +590,11 @@ protected:
         InternalError(statusCode, TIssues({std::move(issue)}));
     }
 
+    virtual void InvalidateMeminfo() {}
+
     void InternalError(NYql::NDqProto::StatusIds::StatusCode statusCode, TIssues issues) {
         CA_LOG_E(InternalErrorLogString(statusCode, issues));
-        if (TaskRunner) {
-            TaskRunner->GetAllocator().InvalidateMemInfo();
-            TaskRunner->GetAllocator().DisableStrictAllocationCheck();
-        }
+        InvalidateMeminfo();
         State = NDqProto::COMPUTE_STATE_FAILURE;
         ReportStateAndMaybeDie(statusCode, issues);
     }
@@ -1049,13 +1032,6 @@ protected:
 protected:
     // virtual methods (TODO: replace with static_cast<TDerived*>(this)->Foo()
 
-    virtual std::any GetSourcesState() {
-        return nullptr;
-    }
-
-    virtual void PollSources(std::any /* state */) {
-    }
-
     virtual void TerminateSources(const TIssues& /* issues */, bool /* success */) {
     }
 
@@ -1070,6 +1046,8 @@ protected:
     virtual bool SayHelloOnBootstrap() {
         return true;
     }
+
+
 
 protected:
     void HandleExecuteBase(TEvDqCompute::TEvResumeExecution::TPtr&) {
@@ -1441,19 +1419,12 @@ protected:
         const NKikimr::NMiniKQL::TTypeEnvironment& typeEnv,
         const THashMap<TString, TString>& secureParams,
         const THashMap<TString, TString>& taskParams,
-        const TVector<TString>& readRanges)
+        const TVector<TString>& readRanges,
+        IRandomProvider* randomProvider
+        )
     {
-        if (TaskRunner) {
-            for (auto& [channelId, channel] : InputChannelsMap) {
-                channel.Channel = TaskRunner->GetInputChannel(channelId);
-            }
-        }
         auto collectStatsLevel = StatsModeToCollectStatsLevel(RuntimeSettings.StatsMode);
         for (auto& [inputIndex, source] : SourcesMap) {
-            if constexpr (!TDerived::HasAsyncTaskRunner) {
-                source.Buffer = TaskRunner->GetSource(inputIndex);
-                Y_ABORT_UNLESS(source.Buffer);
-            }
             Y_ABORT_UNLESS(AsyncIoFactory);
             const auto& inputDesc = Task.GetInputs(inputIndex);
             Y_ABORT_UNLESS(inputDesc.HasSource());
@@ -1487,71 +1458,59 @@ protected:
             this->RegisterWithSameMailbox(source.Actor);
         }
         for (auto& [inputIndex, transform] : InputTransformsMap) {
-            if constexpr (!TDerived::HasAsyncTaskRunner) {
-                transform.ProgramBuilder.ConstructInPlace(TaskRunner->GetTypeEnv(), *FunctionRegistry);
-                std::tie(transform.InputBuffer, transform.Buffer) = TaskRunner->GetInputTransform(inputIndex);
-                Y_ABORT_UNLESS(AsyncIoFactory);
-                const auto& inputDesc = Task.GetInputs(inputIndex);
-                CA_LOG_D("Create transform for input " << inputIndex << " " << inputDesc.ShortDebugString());
-                try {
-                    std::tie(transform.AsyncInput, transform.Actor) = AsyncIoFactory->CreateDqInputTransform(
-                        IDqAsyncIoFactory::TInputTransformArguments {
-                            .InputDesc = inputDesc,
-                            .InputIndex = inputIndex,
-                            .StatsLevel = collectStatsLevel,
-                            .TxId = TxId,
-                            .TaskId = Task.GetId(),
-                            .TransformInput = transform.InputBuffer,
-                            .SecureParams = secureParams,
-                            .TaskParams = taskParams,
-                            .ComputeActorId = this->SelfId(),
-                            .TypeEnv = typeEnv,
-                            .HolderFactory = holderFactory,
-                            .ProgramBuilder = *transform.ProgramBuilder,
-                            .Alloc = Alloc,
-                            .TraceId = ComputeActorSpan.GetTraceId()
-                        });
-                } catch (const std::exception& ex) {
-                    throw yexception() << "Failed to create input transform " << inputDesc.GetTransform().GetType() << ": " << ex.what();
-                }
-                this->RegisterWithSameMailbox(transform.Actor);
+            transform.ProgramBuilder.ConstructInPlace(typeEnv, *FunctionRegistry);
+            Y_ABORT_UNLESS(AsyncIoFactory);
+            const auto& inputDesc = Task.GetInputs(inputIndex);
+            CA_LOG_D("Create transform for input " << inputIndex << " " << inputDesc.ShortDebugString());
+            try {
+                std::tie(transform.AsyncInput, transform.Actor) = AsyncIoFactory->CreateDqInputTransform(
+                    IDqAsyncIoFactory::TInputTransformArguments {
+                        .InputDesc = inputDesc,
+                        .InputIndex = inputIndex,
+                        .StatsLevel = collectStatsLevel,
+                        .TxId = TxId,
+                        .TaskId = Task.GetId(),
+                        .TransformInput = transform.InputBuffer,
+                        .SecureParams = secureParams,
+                        .TaskParams = taskParams,
+                        .ComputeActorId = this->SelfId(),
+                        .TypeEnv = typeEnv,
+                        .HolderFactory = holderFactory,
+                        .ProgramBuilder = *transform.ProgramBuilder,
+                        .Alloc = Alloc,
+                        .TraceId = ComputeActorSpan.GetTraceId()
+                    });
+            } catch (const std::exception& ex) {
+                throw yexception() << "Failed to create input transform " << inputDesc.GetTransform().GetType() << ": " << ex.what();
             }
-        }
-        if (TaskRunner) {
-            for (auto& [channelId, channel] : OutputChannelsMap) {
-                channel.Channel = TaskRunner->GetOutputChannel(channelId);
-            }
+            this->RegisterWithSameMailbox(transform.Actor);
         }
         for (auto& [outputIndex, transform] : OutputTransformsMap) {
-            if (TaskRunner) {
-                transform.ProgramBuilder.ConstructInPlace(TaskRunner->GetTypeEnv(), *FunctionRegistry);
-                std::tie(transform.Buffer, transform.OutputBuffer) = TaskRunner->GetOutputTransform(outputIndex);
-                Y_ABORT_UNLESS(AsyncIoFactory);
-                const auto& outputDesc = Task.GetOutputs(outputIndex);
-                CA_LOG_D("Create transform for output " << outputIndex << " " << outputDesc.ShortDebugString());
-                try {
-                    std::tie(transform.AsyncOutput, transform.Actor) = AsyncIoFactory->CreateDqOutputTransform(
-                        IDqAsyncIoFactory::TOutputTransformArguments {
-                            .OutputDesc = outputDesc,
-                            .OutputIndex = outputIndex,
-                            .StatsLevel = collectStatsLevel,
-                            .TxId = TxId,
-                            .TransformOutput = transform.OutputBuffer,
-                            .Callback = static_cast<TOutputTransformCallbacks*>(this),
-                            .SecureParams = secureParams,
-                            .TaskParams = taskParams,
-                            .TypeEnv = typeEnv,
-                            .HolderFactory = holderFactory,
-                            .ProgramBuilder = *transform.ProgramBuilder
-                        });
-                } catch (const std::exception& ex) {
-                    throw yexception() << "Failed to create output transform " << outputDesc.GetTransform().GetType() << ": " << ex.what();
-                }
-                this->RegisterWithSameMailbox(transform.Actor);
+            transform.ProgramBuilder.ConstructInPlace(typeEnv, *FunctionRegistry);
+            Y_ABORT_UNLESS(AsyncIoFactory);
+            const auto& outputDesc = Task.GetOutputs(outputIndex);
+            CA_LOG_D("Create transform for output " << outputIndex << " " << outputDesc.ShortDebugString());
+            try {
+                std::tie(transform.AsyncOutput, transform.Actor) = AsyncIoFactory->CreateDqOutputTransform(
+                    IDqAsyncIoFactory::TOutputTransformArguments {
+                        .OutputDesc = outputDesc,
+                        .OutputIndex = outputIndex,
+                        .StatsLevel = collectStatsLevel,
+                        .TxId = TxId,
+                        .TransformOutput = transform.OutputBuffer,
+                        .Callback = static_cast<TOutputTransformCallbacks*>(this),
+                        .SecureParams = secureParams,
+                        .TaskParams = taskParams,
+                        .TypeEnv = typeEnv,
+                        .HolderFactory = holderFactory,
+                        .ProgramBuilder = *transform.ProgramBuilder
+                    });
+            } catch (const std::exception& ex) {
+                throw yexception() << "Failed to create output transform " << outputDesc.GetTransform().GetType() << ": " << ex.what();
             }
+            this->RegisterWithSameMailbox(transform.Actor);
         }
         for (auto& [outputIndex, sink] : SinksMap) {
-            if (TaskRunner) { sink.Buffer = TaskRunner->GetSink(outputIndex); }
             Y_ABORT_UNLESS(AsyncIoFactory);
             const auto& outputDesc = Task.GetOutputs(outputIndex);
             Y_ABORT_UNLESS(outputDesc.HasSink());
@@ -1569,7 +1528,7 @@ protected:
                         .TaskParams = taskParams,
                         .TypeEnv = typeEnv,
                         .HolderFactory = holderFactory,
-                        .RandomProvider = TaskRunner ? TaskRunner->GetRandomProvider() : nullptr
+                        .RandomProvider = randomProvider
                     });
             } catch (const std::exception& ex) {
                 throw yexception() << "Failed to create sink " << outputDesc.GetSink().GetType() << ": " << ex.what();
@@ -1776,9 +1735,8 @@ private:
         }
     }
 
-    virtual const NYql::NDq::TTaskRunnerStatsBase* GetTaskRunnerStats() {
-        return TaskRunner ? TaskRunner->GetStats() : nullptr;
-    }
+    virtual const NYql::NDq::TTaskRunnerStatsBase* GetTaskRunnerStats() = 0;
+    virtual const NYql::NDq::TDqMeteringStats* GetMeteringStats() = 0;
 
     virtual const IDqAsyncOutputBuffer* GetSink(ui64, const TAsyncOutputInfoBase& sinkInfo) const {
         return sinkInfo.Buffer.Get();
@@ -1838,8 +1796,7 @@ public:
 
             for (auto& [inputIndex, sourceInfo] : SourcesMap) {
                 if (auto* source = sourceInfo.AsyncInput) {
-                    // TODO: support async CA
-                    source->FillExtraStats(protoTask, last, TaskRunner ? TaskRunner->GetMeteringStats() : nullptr);
+                    source->FillExtraStats(protoTask, last, GetMeteringStats());
                 }
             }
             FillTaskRunnerStats(Task.GetId(), Task.GetStageId(), *taskStats, protoTask, RuntimeSettings.GetCollectStatsLevel());
@@ -1944,8 +1901,7 @@ public:
                 }
 
                 if (auto* transform = transformInfo.AsyncInput) {
-                    // TODO: support async CA
-                    transform->FillExtraStats(protoTask, last, TaskRunner ? TaskRunner->GetMeteringStats() : 0);
+                    transform->FillExtraStats(protoTask, last, GetMeteringStats());
                 }
             }
 
@@ -2074,7 +2030,6 @@ protected:
     const IDqAsyncIoFactory::TPtr AsyncIoFactory;
     const NKikimr::NMiniKQL::IFunctionRegistry* FunctionRegistry = nullptr;
     const NDqProto::ECheckpointingMode CheckpointingMode;
-    TIntrusivePtr<IDqTaskRunner> TaskRunner;
     TDqComputeActorChannels* Channels = nullptr;
     TDqComputeActorCheckpoints* Checkpoints = nullptr;
     THashMap<ui64, TInputChannelInfo> InputChannelsMap; // Channel id -> Channel info

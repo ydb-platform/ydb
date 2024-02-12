@@ -55,7 +55,6 @@ THashMap<TStringBuf, TPragmaField> CTX_PRAGMA_FIELDS = {
     {"FlexibleTypes", &TContext::FlexibleTypes},
     {"AnsiCurrentRow", &TContext::AnsiCurrentRow},
     {"EmitStartsWith", &TContext::EmitStartsWith},
-    {"EmitAggApply", &TContext::EmitAggApply},
     {"AnsiLike", &TContext::AnsiLike},
     {"UseBlocks", &TContext::UseBlocks},
     {"BlockEngineEnable", &TContext::BlockEngineEnable},
@@ -67,6 +66,7 @@ typedef TMaybe<bool> TContext::*TPragmaMaybeField;
 THashMap<TStringBuf, TPragmaMaybeField> CTX_PRAGMA_MAYBE_FIELDS = {
     {"AnsiRankForNullableKeys", &TContext::AnsiRankForNullableKeys},
     {"AnsiInForEmptyOrNullableItemsCollections", &TContext::AnsiInForEmptyOrNullableItemsCollections},
+    {"EmitAggApply", &TContext::EmitAggApply},
     {"CompactGroupBy", &TContext::CompactGroupBy},
 };
 
@@ -94,6 +94,7 @@ TContext::TContext(const NSQLTranslation::TTranslationSettings& settings,
 
     Scoped = MakeIntrusive<TScopedState>();
     AllScopes.push_back(Scoped);
+    Scoped->UnicodeLiterals = settings.UnicodeLiterals;
     if (settings.DefaultCluster) {
         Scoped->CurrCluster = TDeferredAtom({}, settings.DefaultCluster);
         auto provider = GetClusterProvider(settings.DefaultCluster);

@@ -8,6 +8,7 @@ RECURSE(
     client
     cms
     control
+    config
     debug
     debug_tools
     discovery
@@ -60,6 +61,7 @@ RECURSE(
     ymq
     driver_lib
     yql_testlib
+    jaeger_tracing
 )
 
 RECURSE_FOR_TESTS(

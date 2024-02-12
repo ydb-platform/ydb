@@ -78,8 +78,212 @@ Y_UNIT_TEST(PgConvertNumericDouble) {
     auto result = PgConvertNumeric<double>(array);
     
     const char* expected[] = {
-        "1.1", "31.37", nullptr, "-1.337", "0"
+        "1.1", "31.37", nullptr, "-1.337", "0", "1.234111"
     };
+
+    NYql::NUdf::TStringBlockReader<arrow::BinaryType, true> reader;
+    checkResult<false>(expected, result, &reader, numeric_out);
+}
+
+Y_UNIT_TEST(PgConvertNumericDecimal128Scale1) {
+    TArenaMemoryContext arena;
+
+    int32_t precision = 6;
+    int32_t scale = 1;
+    std::shared_ptr<arrow::DataType> type(new arrow::Decimal128Type(precision, scale));
+    arrow::Decimal128Builder builder(type);
+
+    const char* expected[] = {
+        "12345.0", "-12345.0", nullptr
+    };
+
+    ARROW_OK(builder.Append(arrow::Decimal128::FromString("12345.0").ValueOrDie()));
+    ARROW_OK(builder.Append(arrow::Decimal128::FromString("-12345.0").ValueOrDie()));
+    ARROW_OK(builder.AppendNull());
+
+    std::shared_ptr<arrow::Array> array;
+    ARROW_OK(builder.Finish(&array));
+
+    auto result = PgDecimal128ConvertNumeric(array, precision, scale);
+
+    NYql::NUdf::TStringBlockReader<arrow::BinaryType, true> reader;
+    checkResult<false>(expected, result, &reader, numeric_out);
+}
+
+Y_UNIT_TEST(PgConvertNumericDecimal128ScaleNegative) {
+    TArenaMemoryContext arena;
+
+    int32_t precision = 8;
+    int32_t scale = -3;
+    std::shared_ptr<arrow::DataType> type(new arrow::Decimal128Type(precision, scale));
+    arrow::Decimal128Builder builder(type);
+
+    const char* expected[] = {
+        "12345678000", "-12345678000", nullptr
+    };
+
+    ARROW_OK(builder.Append(arrow::Decimal128::FromString("12345678").ValueOrDie()));
+    ARROW_OK(builder.Append(arrow::Decimal128::FromString("-12345678").ValueOrDie()));
+    ARROW_OK(builder.AppendNull());
+
+    std::shared_ptr<arrow::Array> array;
+    ARROW_OK(builder.Finish(&array));
+
+    auto result = PgDecimal128ConvertNumeric(array, precision, scale);
+
+    NYql::NUdf::TStringBlockReader<arrow::BinaryType, true> reader;
+    checkResult<false>(expected, result, &reader, numeric_out);
+}
+
+Y_UNIT_TEST(PgConvertNumericDecimal128Scale2) {
+    TArenaMemoryContext arena;
+
+    int32_t precision = 5;
+    int32_t scale = 2;
+    std::shared_ptr<arrow::DataType> type(new arrow::Decimal128Type(precision, scale));
+    arrow::Decimal128Builder builder(type);
+
+    const char* expected[] = {
+        "123.45", "-123.45", nullptr
+    };
+
+    ARROW_OK(builder.Append(arrow::Decimal128::FromString("123.45").ValueOrDie()));
+    ARROW_OK(builder.Append(arrow::Decimal128::FromString("-123.45").ValueOrDie()));
+    ARROW_OK(builder.AppendNull());
+
+    std::shared_ptr<arrow::Array> array;
+    ARROW_OK(builder.Finish(&array));
+
+    auto result = PgDecimal128ConvertNumeric(array, precision, scale);
+
+    NYql::NUdf::TStringBlockReader<arrow::BinaryType, true> reader;
+    checkResult<false>(expected, result, &reader, numeric_out);
+}
+
+Y_UNIT_TEST(PgConvertNumericDecimal128Scale3) {
+    TArenaMemoryContext arena;
+
+    int32_t precision = 3;
+    int32_t scale = 3;
+    std::shared_ptr<arrow::DataType> type(new arrow::Decimal128Type(precision, scale));
+    arrow::Decimal128Builder builder(type);
+
+    const char* expected[] = {
+        "0.123", "-0.123", nullptr
+    };
+
+    ARROW_OK(builder.Append(arrow::Decimal128::FromString("0.123").ValueOrDie()));
+    ARROW_OK(builder.Append(arrow::Decimal128::FromString("-0.123").ValueOrDie()));
+    ARROW_OK(builder.AppendNull());
+
+    std::shared_ptr<arrow::Array> array;
+    ARROW_OK(builder.Finish(&array));
+
+    auto result = PgDecimal128ConvertNumeric(array, precision, scale);
+
+    NYql::NUdf::TStringBlockReader<arrow::BinaryType, true> reader;
+    checkResult<false>(expected, result, &reader, numeric_out);
+}
+
+Y_UNIT_TEST(PgConvertNumericDecimal128Scale4) {
+    TArenaMemoryContext arena;
+
+    int32_t precision = 7;
+    int32_t scale = 4;
+    std::shared_ptr<arrow::DataType> type(new arrow::Decimal128Type(precision, scale));
+    arrow::Decimal128Builder builder(type);
+
+    const char* expected[] = {
+        "123.4567", "-123.4567", nullptr
+    };
+
+    ARROW_OK(builder.Append(arrow::Decimal128::FromString("123.4567").ValueOrDie()));
+    ARROW_OK(builder.Append(arrow::Decimal128::FromString("-123.4567").ValueOrDie()));
+    ARROW_OK(builder.AppendNull());
+
+    std::shared_ptr<arrow::Array> array;
+    ARROW_OK(builder.Finish(&array));
+
+    auto result = PgDecimal128ConvertNumeric(array, precision, scale);
+
+    NYql::NUdf::TStringBlockReader<arrow::BinaryType, true> reader;
+    checkResult<false>(expected, result, &reader, numeric_out);
+}
+
+Y_UNIT_TEST(PgConvertNumericDecimal128Scale5) {
+    TArenaMemoryContext arena;
+
+    int32_t precision = 7;
+    int32_t scale = 5;
+    std::shared_ptr<arrow::DataType> type(new arrow::Decimal128Type(precision, scale));
+    arrow::Decimal128Builder builder(type);
+
+    const char* expected[] = {
+        "12.34567", "-12.34567", nullptr
+    };
+
+    ARROW_OK(builder.Append(arrow::Decimal128::FromReal(12.34567, precision, scale).ValueOrDie()));
+    ARROW_OK(builder.Append(arrow::Decimal128::FromReal(-12.34567, precision, scale).ValueOrDie()));
+    ARROW_OK(builder.AppendNull());
+
+    std::shared_ptr<arrow::Array> array;
+    ARROW_OK(builder.Finish(&array));
+
+    auto result = PgDecimal128ConvertNumeric(array, precision, scale);
+
+    NYql::NUdf::TStringBlockReader<arrow::BinaryType, true> reader;
+    checkResult<false>(expected, result, &reader, numeric_out);
+}
+
+Y_UNIT_TEST(PgConvertNumericDecimal128BigScale3) {
+    TArenaMemoryContext arena;
+
+    int32_t precision = 20;
+    int32_t scale = 3;
+    std::shared_ptr<arrow::DataType> type(new arrow::Decimal128Type(precision, scale));
+    arrow::Decimal128Builder builder(type);
+
+    const char* expected[] = {
+        "36893488147419103.245", "-36893488147419103.245",
+        "46116860184273879.041", "-46116860184273879.041",
+        nullptr
+    };
+
+    ARROW_OK(builder.Append(arrow::Decimal128::FromString("36893488147419103.245").ValueOrDie()));
+    ARROW_OK(builder.Append(arrow::Decimal128::FromString("-36893488147419103.245").ValueOrDie()));
+    ARROW_OK(builder.Append(arrow::Decimal128::FromString("46116860184273879.041").ValueOrDie()));
+    ARROW_OK(builder.Append(arrow::Decimal128::FromString("-46116860184273879.041").ValueOrDie()));
+    ARROW_OK(builder.AppendNull());
+
+    std::shared_ptr<arrow::Array> array;
+    ARROW_OK(builder.Finish(&array));
+
+    auto result = PgDecimal128ConvertNumeric(array, precision, scale);
+
+    NYql::NUdf::TStringBlockReader<arrow::BinaryType, true> reader;
+    checkResult<false>(expected, result, &reader, numeric_out);
+}
+
+Y_UNIT_TEST(PgConvertNumericDecimal128BigScale1) {
+    TArenaMemoryContext arena;
+
+    int32_t precision = 26;
+    int32_t scale = 1;
+    std::shared_ptr<arrow::DataType> type(new arrow::Decimal128Type(precision, scale));
+    arrow::Decimal128Builder builder(type);
+
+    const char* expected[] = {
+        "3868562622766813359059763.2", "-3868562622766813359059763.2", nullptr
+    };
+
+    ARROW_OK(builder.Append(arrow::Decimal128::FromString("3868562622766813359059763.2").ValueOrDie()));
+    ARROW_OK(builder.Append(arrow::Decimal128::FromString("-3868562622766813359059763.2").ValueOrDie()));
+    ARROW_OK(builder.AppendNull());
+
+    std::shared_ptr<arrow::Array> array;
+    ARROW_OK(builder.Finish(&array));
+
+    auto result = PgDecimal128ConvertNumeric(array, precision, scale);
 
     NYql::NUdf::TStringBlockReader<arrow::BinaryType, true> reader;
     checkResult<false>(expected, result, &reader, numeric_out);

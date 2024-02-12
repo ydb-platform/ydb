@@ -2,7 +2,7 @@
 
 #include "datashard_write_operation.h"
 #include "datashard_kqp.h"
-#include "datashard_locks.h"
+#include <ydb/core/tx/locks/locks.h>
 #include "datashard_impl.h"
 #include "datashard_failpoints.h"
 
@@ -31,6 +31,8 @@ TValidatedWriteTx::TValidatedWriteTx(TDataShard* self, TTransactionContext& txc,
     ComputeTxSize();
     NActors::NMemory::TLabel<MemoryLabelValidatedDataTx>::Add(TxSize);
 
+    UserDb.SetIsWriteTx(true);
+    
     if (LockTxId()) {
         UserDb.SetLockTxId(LockTxId());
         UserDb.SetLockNodeId(LockNodeId());
@@ -43,10 +45,12 @@ TValidatedWriteTx::TValidatedWriteTx(TDataShard* self, TTransactionContext& txc,
 
     LOG_TRACE_S(Ctx, NKikimrServices::TX_DATASHARD, "Parsing write transaction for " << globalTxId << " at " << TabletId << ", record: " << GetRecord().ShortDebugString());
 
-    if (!ParseRecord(self->TableInfos))
-        return;
+    if (HasOperations()) {
+        if (!ParseOperations(self->TableInfos))
+            return;
 
-    SetTxKeys(RecordOperation().GetColumnIds());
+        SetTxKeys(RecordOperation().GetColumnIds());
+    }
 
     KqpSetTxLocksKeys(GetKqpLocks(), self->SysLocksTable(), KeyValidator);
     KeyValidator.GetInfo().SetLoaded();
@@ -56,7 +60,7 @@ TValidatedWriteTx::~TValidatedWriteTx() {
     NActors::NMemory::TLabel<MemoryLabelValidatedDataTx>::Sub(TxSize);
 }
 
-bool TValidatedWriteTx::ParseRecord(const TDataShard::TTableInfos& tableInfos) {
+bool TValidatedWriteTx::ParseOperations(const TDataShard::TTableInfos& tableInfos) {
     if (GetRecord().GetOperations().size() != 1)
     {
         ErrCode = NKikimrTxDataShard::TError::BAD_ARGUMENT;
@@ -89,8 +93,8 @@ bool TValidatedWriteTx::ParseRecord(const TDataShard::TTableInfos& tableInfos) {
         return false;
     }
 
-    NEvWrite::TPayloadHelper<NEvents::TDataEvents::TEvWrite> payloadHelper(*Ev->Get());
-    TString payload = payloadHelper.GetDataFromPayload(RecordOperation().GetPayloadIndex());
+    NEvWrite::TPayloadReader<NEvents::TDataEvents::TEvWrite> payloadReader(*Ev->Get());
+    TString payload = payloadReader.GetDataFromPayload(RecordOperation().GetPayloadIndex());
 
     if (!TSerializedCellMatrix::TryParse(payload,Matrix))
     {
@@ -194,11 +198,20 @@ void TValidatedWriteTx::SetTxKeys(const ::google::protobuf::RepeatedField<::NPro
 
 ui32 TValidatedWriteTx::ExtractKeys(bool allowErrors)
 {
+    if (!HasOperations())
+        return 0;
+
     SetTxKeys(RecordOperation().GetColumnIds());
 
     bool isValid = ReValidateKeys();
-    Y_ABORT_UNLESS(allowErrors || isValid, "Validation errors: %s", ErrStr.data());
-
+    if (allowErrors) {
+        if (!isValid) {
+            return 0;
+        }
+    } else {
+        Y_ABORT_UNLESS(isValid, "Validation errors: %s", ErrStr.data());
+    }
+    
     return KeysCount();
 }
 

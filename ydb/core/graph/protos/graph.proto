@@ -6,11 +6,12 @@ option java_package = "ru.yandex.kikimr.proto";
 
 message TMetric {
     string Name = 1;
-    double Value = 2;
+    optional double Value = 2;
 }
 
 message TEvSendMetrics {
     repeated TMetric Metrics = 1;
+    optional uint64 Time = 2; // for testing purposes only
 }
 
 message TEvGetMetrics {

@@ -87,7 +87,7 @@ struct TDataEvents {
             return result;
         }
 
-        static std::unique_ptr<TEvWriteResult> BuildCommited(const ui64 origin, const ui64 txId) {
+        static std::unique_ptr<TEvWriteResult> BuildCompleted(const ui64 origin, const ui64 txId) {
             auto result = std::make_unique<TEvWriteResult>();
             result->Record.SetOrigin(origin);
             result->Record.SetTxId(txId);
@@ -105,6 +105,19 @@ struct TDataEvents {
             result->Record.SetMaxStep(transactionInfo.GetMaxStep());
             result->Record.MutableDomainCoordinators()->CopyFrom(transactionInfo.GetDomainCoordinators());
             return result;
+        }
+
+        void AddTxLock(ui64 lockId, ui64 shard, ui32 generation, ui64 counter, ui64 ssId, ui64 pathId, bool hasWrites) {
+            auto entry = Record.AddTxLocks();
+            entry->SetLockId(lockId);
+            entry->SetDataShard(shard);
+            entry->SetGeneration(generation);
+            entry->SetCounter(counter);
+            entry->SetSchemeShard(ssId);
+            entry->SetPathId(pathId);
+            if (hasWrites) {
+                entry->SetHasWrites(true);
+            }
         }
 
         TString GetError() const {

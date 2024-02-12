@@ -365,7 +365,11 @@ private:
                         << " msgId# " << msgId << " sequenceId# " << sequenceId
                         << " expectedMsgId# " << expectedMsgId << " expectedSequenceId# " << expectedSequenceId
                         << " status# " << NKikimrProto::EReplyStatus_Name(status)
-                        << " ws# " << NKikimrBlobStorage::TWindowFeedback_EStatus_Name(ws));
+                        << " ws# " << NKikimrBlobStorage::TWindowFeedback_EStatus_Name(ws)
+                        << " InFlightCost# " << Queue.GetInFlightCost()
+                        << " InFlightCount# " << Queue.InFlightCount()
+                        << " ItemsWaiting# " << Queue.GetItemsWaiting()
+                        << " BytesWaiting# " << Queue.GetBytesWaiting());
 
                     switch (ws) {
                         case NKikimrBlobStorage::TWindowFeedback::IncorrectMsgId:

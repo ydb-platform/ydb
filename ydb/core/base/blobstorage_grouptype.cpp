@@ -196,7 +196,11 @@ ui64 TBlobStorageGroupType::PartSize(const TLogoBlobID &id) const {
 
 ui64 TBlobStorageGroupType::MaxPartSize(const TLogoBlobID &id) const {
     Y_ABORT_UNLESS(!id.PartId());
-    return TErasureType::PartSize((TErasureType::ECrcMode)id.CrcMode(), id.BlobSize());
+    return MaxPartSize((TErasureType::ECrcMode)id.CrcMode(), id.BlobSize());
+}
+
+ui64 TBlobStorageGroupType::MaxPartSize(TErasureType::ECrcMode crcMode, ui32 blobSize) const {
+    return TErasureType::PartSize(crcMode, blobSize);
 }
 
 bool TBlobStorageGroupType::PartFits(ui32 partId, ui32 idxInSubgroup) const {

@@ -226,41 +226,18 @@ void TDataShard::OnStopGuardStarting(const TActorContext &ctx) {
     // Handle immediate ops that have completed BuildAndWaitDependencies
     for (const auto &kv : Pipeline.GetImmediateOps()) {
         const auto &op = kv.second;
-        // Send reject result immediately, because we cannot control when
-        // a new datashard tablet may start and block us from commiting
-        // anything new. The usual progress queue is too slow for that.
-        if (!op->Result() && !op->HasResultSentFlag()) {
-            auto kind = static_cast<NKikimrTxDataShard::ETransactionKind>(op->GetKind());
-            auto rejectStatus = NKikimrTxDataShard::TEvProposeTransactionResult::OVERLOADED;
-            TString rejectReason = TStringBuilder()
-                    << "Rejecting immediate tx "
-                    << op->GetTxId()
-                    << " because datashard "
-                    << TabletID()
-                    << " is restarting";
-            auto result = MakeHolder<TEvDataShard::TEvProposeTransactionResult>(
-                    kind, TabletID(), op->GetTxId(), rejectStatus);
-            result->AddError(NKikimrTxDataShard::TError::WRONG_SHARD_STATE, rejectReason);
-            LOG_NOTICE_S(ctx, NKikimrServices::TX_DATASHARD, rejectReason);
-
-            ctx.Send(op->GetTarget(), result.Release(), 0, op->GetCookie());
-
-            IncCounter(COUNTER_PREPARE_OVERLOADED);
-            IncCounter(COUNTER_PREPARE_COMPLETE);
-            op->SetResultSentFlag();
+        if (op->OnStopping(*this, ctx)) {
+            Pipeline.AddCandidateOp(op);
+            PlanQueue.Progress(ctx);
         }
-        // Add op to candidates because IsReadyToExecute just became true
-        Pipeline.AddCandidateOp(op);
-        PlanQueue.Progress(ctx);
     }
 
     // Handle prepared ops by notifying about imminent shutdown
     for (const auto &kv : TransQueue.GetTxsInFly()) {
         const auto &op = kv.second;
-        if (op->GetTarget() && !op->HasCompletedFlag()) {
-            auto notify = MakeHolder<TEvDataShard::TEvProposeTransactionRestart>(
-                TabletID(), op->GetTxId());
-            ctx.Send(op->GetTarget(), notify.Release(), 0, op->GetCookie());
+        if (op->OnStopping(*this, ctx)) {
+            Pipeline.AddCandidateOp(op);
+            PlanQueue.Progress(ctx);
         }
     }
 }

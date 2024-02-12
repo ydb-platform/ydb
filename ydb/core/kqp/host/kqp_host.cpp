@@ -20,6 +20,7 @@
 #include <ydb/library/yql/providers/s3/provider/yql_s3_provider.h>
 #include <ydb/library/yql/providers/generic/expr_nodes/yql_generic_expr_nodes.h>
 #include <ydb/library/yql/providers/generic/provider/yql_generic_provider.h>
+#include <ydb/library/yql/providers/pg/provider/yql_pg_provider_impl.h>
 #include <ydb/library/yql/providers/generic/provider/yql_generic_state.h>
 #include <ydb/library/yql/minikql/invoke_builtins/mkql_builtins.h>
 
@@ -1474,6 +1475,7 @@ private:
         state->CredentialsFactory = FederatedQuerySetup->CredentialsFactory;
         state->Configuration->WriteThroughDqIntegration = true;
         state->Configuration->AllowAtomicUploadCommit = queryType == EKikimrQueryType::Script;
+        state->MaxTasksPerStage = SessionCtx->ConfigPtr()->MaxTasksPerStage.Get();
 
         state->Configuration->Init(FederatedQuerySetup->S3GatewayConfig, TypesCtx);
 
@@ -1499,6 +1501,14 @@ private:
 
         TypesCtx->AddDataSource(NYql::GenericProviderName, NYql::CreateGenericDataSource(state));
         TypesCtx->AddDataSink(NYql::GenericProviderName, NYql::CreateGenericDataSink(state));
+    }
+
+    void InitPgProvider() {
+        auto state = MakeIntrusive<NYql::TPgState>();
+        state->Types = TypesCtx.Get();
+
+        TypesCtx->AddDataSource(NYql::PgProviderName, NYql::CreatePgDataSource(state));
+        TypesCtx->AddDataSink(NYql::PgProviderName, NYql::CreatePgDataSink(state));
     }
 
     void Init(EKikimrQueryType queryType) {
@@ -1534,6 +1544,8 @@ private:
             InitS3Provider(queryType);
             InitGenericProvider();
         }
+
+        InitPgProvider();
 
         TypesCtx->UdfResolver = CreateSimpleUdfResolver(FuncRegistry);
         TypesCtx->TimeProvider = TAppData::TimeProvider;

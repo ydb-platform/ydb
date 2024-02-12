@@ -338,7 +338,7 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvGetTaskRequ
                 << (taskInternal.ShouldAbortTask ? " ABORTED" : ""));
         }
 
-        std::shuffle(tasks.begin(), tasks.end(), std::default_random_engine());
+        std::shuffle(tasks.begin(), tasks.end(), std::default_random_engine(TInstant::Now().MicroSeconds()));
         const size_t numTasks = (std::min(tasks.size(), tasksBatchSize) + numTasksProportion - 1) / numTasksProportion;
 
         for (size_t i = 0; i < numTasks; ++i) {

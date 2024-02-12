@@ -1,7 +1,7 @@
 #pragma once
 
 #include "datashard.h"
-#include "datashard_locks.h"
+#include <ydb/core/tx/locks/locks.h>
 #include "datashard__engine_host.h"
 #include "operation.h"
 
@@ -602,6 +602,8 @@ public:
     ui64 IncrementPageFaultCount() {
         return ++PageFaultCount;
     }
+
+    bool OnStopping(TDataShard& self, const TActorContext& ctx) override;
 
 private:
     void TrackMemory() const;

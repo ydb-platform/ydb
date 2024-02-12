@@ -2,17 +2,12 @@ import codecs
 import os
 import pytest
 import re
-import json
-import yql_utils
-import cyson
 
 import yatest.common
-from yql_utils import execute_sql, get_tables, get_files, get_http_files, replace_vals, get_supported_providers, \
-    KSV_ATTR, yql_binary_path, is_xfail, is_skip_forceblocks, get_param, normalize_source_code_path, dump_table_yson, \
-    get_gateway_cfg_suffix, do_custom_query_check
-from yqlrun import YQLRun
+from yql_utils import get_supported_providers, yql_binary_path, is_xfail, is_skip_forceblocks, get_param, \
+    normalize_source_code_path, dump_table_yson, get_gateway_cfg_suffix, do_custom_query_check, normalize_result
 
-from utils import get_config, get_parameters_json, DATA_PATH
+from utils import get_config, DATA_PATH
 from file_common import run_file, run_file_no_cache
 
 ASTDIFF_PATH = yql_binary_path('ydb/library/yql/tools/astdiff/astdiff')
@@ -45,20 +40,6 @@ def run_test(suite, case, cfg, tmpdir, what, yql_http_file_server):
 
     if what == 'Results' or force_blocks:
         if not xfail:
-            def normalize_res(res, sort):
-                res = cyson.loads(res) if res else cyson.loads("[]")
-                res = replace_vals(res)
-                for r in res:
-                    for data in r['Write']:
-                        if sort and 'Data' in data:
-                            data['Data'] = sorted(data['Data'])
-                        if 'Ref' in data:
-                            data['Ref'] = []
-                            data['Truncated'] = True
-                        if 'Data' in data and len(data['Data']) == 0:
-                            del data['Data']
-                return res
-
             program_sql = os.path.join(DATA_PATH, suite, '%s.sql' % case)
             with codecs.open(program_sql, encoding='utf-8') as program_file_descr:
                 sql_query = program_file_descr.read()
@@ -68,7 +49,7 @@ def run_test(suite, case, cfg, tmpdir, what, yql_http_file_server):
 
             sort = not 'order' in sql_query.lower()
 
-            dq_res_yson = normalize_res(res.results, sort)
+            dq_res_yson = normalize_result(res.results, sort)
 
             if 'ytfile can not' in sql_query or 'yt' not in get_supported_providers(config):
                 if force_blocks:
@@ -94,7 +75,7 @@ def run_test(suite, case, cfg, tmpdir, what, yql_http_file_server):
 
                 if do_custom_query_check(yqlrun_res, sql_query):
                     return None
-                yqlrun_res_yson = normalize_res(yqlrun_res.results, sort)
+                yqlrun_res_yson = normalize_result(yqlrun_res.results, sort)
 
                 # Compare results
                 assert dq_res_yson == yqlrun_res_yson, 'RESULTS_DIFFER\n' \

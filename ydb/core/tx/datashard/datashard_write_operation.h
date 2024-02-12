@@ -1,7 +1,7 @@
 #pragma once
 
 #include "datashard_impl.h"
-#include "datashard_locks.h"
+#include <ydb/core/tx/locks/locks.h>
 #include "datashard__engine_host.h"
 #include "datashard_user_db.h"
 #include "operation.h"
@@ -38,6 +38,10 @@ public:
         Y_ABORT_UNLESS(GetRecord().operations().size() == 1, "Only one operation is supported now");
         Y_ABORT_UNLESS(GetRecord().operations(0).GetType() == NKikimrDataEvents::TEvWrite::TOperation::OPERATION_UPSERT, "Only UPSERT operation is supported now");
         return GetRecord().operations(0);
+    }
+
+    ui64 GetTxId() const {
+        return UserDb.GetGlobalTxId();
     }
 
     ui64 LockTxId() const {
@@ -127,15 +131,22 @@ public:
         return Source != TActorId();
     }
 
-    inline const ::NKikimrDataEvents::TKqpLocks& GetKqpLocks() const {
+    const ::NKikimrDataEvents::TKqpLocks& GetKqpLocks() const {
         return GetRecord().locks();
     }
+    bool HasKqpLocks() const {
+        return GetRecord().has_locks();
+    }
 
-    bool ParseRecord(const TDataShard::TTableInfos& tableInfos);
+    bool ParseOperations(const TDataShard::TTableInfos& tableInfos);
     void SetTxKeys(const ::google::protobuf::RepeatedField<::NProtoBuf::uint32>& columnIds);
 
     ui32 ExtractKeys(bool allowErrors);
     bool ReValidateKeys();
+
+    ui64 HasOperations() const {
+        return GetRecord().operations().size() != 0;
+    }
 
     ui32 KeysCount() const {
         return TxInfo().WritesCount;

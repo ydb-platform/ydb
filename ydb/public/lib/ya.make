@@ -7,6 +7,7 @@ RECURSE(
     json_value
     jwt
     operation_id
+    protobuf
     scheme_types
     stat_visualization
     validation

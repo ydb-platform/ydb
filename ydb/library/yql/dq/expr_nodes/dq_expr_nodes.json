@@ -257,6 +257,32 @@
             {"Index": 0, "Name": "Input", "Type": "TExprBase"},
             {"Index": 1, "Name": "Name", "Type": "TCoAtom"}
         ]
+    },
+    {
+      "Name": "TDqReadWrapBase",
+      "Base": "TExprBase",
+      "Match": {"Type": "CallableBase"},
+      "Builder": {"Generate": "None"},
+      "Children": [
+        {"Index": 0, "Name": "Input", "Type": "TExprBase"},
+        {"Index": 1, "Name": "Flags", "Type": "TCoAtomList"},
+        {"Index": 2, "Name": "Token", "Type": "TCoSecureParam", "Optional": true}
+      ]
+    },
+    {
+      "Name": "TDqReadWrap",
+      "Base": "TDqReadWrapBase",
+      "Match": {"Type": "Callable", "Name": "DqReadWrap"}
+    },
+    {
+      "Name": "TDqReadWideWrap",
+      "Base": "TDqReadWrapBase",
+      "Match": {"Type": "Callable", "Name": "DqReadWideWrap"}
+    },
+    {
+      "Name": "TDqReadBlockWideWrap",
+      "Base": "TDqReadWrapBase",
+      "Match": {"Type": "Callable", "Name": "DqReadBlockWideWrap"}
     }
     ]
 }

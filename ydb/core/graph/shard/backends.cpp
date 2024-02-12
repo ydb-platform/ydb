@@ -245,6 +245,7 @@ bool TLocalBackend::StoreMetrics(NTabletFlatExecutor::TTransactionContext& txc, 
         if (itId == MetricsIndex.end()) {
             itId = MetricsIndex.emplace(name, MetricsIndex.size()).first;
             db.Table<Schema::MetricsIndex>().Key(name).Update<Schema::MetricsIndex::Id>(itId->second);
+            BLOG_TRACE("Metric " << name << " has id " << itId->second);
         }
         ui64 id = itId->second;
         db.Table<Schema::MetricsValues>().Key(data.Timestamp.Seconds(), id).Update<Schema::MetricsValues::Value>(value);
@@ -367,8 +368,11 @@ bool TLocalBackend::DownsampleData(NTabletFlatExecutor::TTransactionContext& txc
                     }
                     if (!values.Timestamps.empty()) {
                         BLOG_TRACE("Result time is " << values.Timestamps.front().Seconds());
-                        for (ui64 id = 0; id < values.Values.size(); ++id) {
-                            db.Table<Schema::MetricsValues>().Key(values.Timestamps.front().Seconds(), id).Update<Schema::MetricsValues::Value>(values.Values.front()[id]);
+                        for (ui64 id : ids) {
+                            if (!values.Values[id].empty()) {
+                                BLOG_TRACE("Updating values with id " << id);
+                                db.Table<Schema::MetricsValues>().Key(values.Timestamps.front().Seconds(), id).Update<Schema::MetricsValues::Value>(values.Values[id].front());
+                            }
                         }
                     }
                     ids.clear();
@@ -400,8 +404,11 @@ bool TLocalBackend::DownsampleData(NTabletFlatExecutor::TTransactionContext& txc
     }
     if (!values.Timestamps.empty()) {
         BLOG_TRACE("Result time is " << values.Timestamps.front().Seconds());
-        for (ui64 id = 0; id < values.Values.size(); ++id) {
-            db.Table<Schema::MetricsValues>().Key(values.Timestamps.front().Seconds(), id).Update<Schema::MetricsValues::Value>(values.Values.front()[id]);
+        for (ui64 id : ids) {
+            if (!values.Values[id].empty()) {
+                BLOG_TRACE("Updating values with id " << id);
+                db.Table<Schema::MetricsValues>().Key(values.Timestamps.front().Seconds(), id).Update<Schema::MetricsValues::Value>(values.Values[id].front());
+            }
         }
     }
 

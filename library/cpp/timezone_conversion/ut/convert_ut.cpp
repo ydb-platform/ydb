@@ -202,3 +202,20 @@ TEST(TimeZoneConversion, TestBaikonur) {
         ZonedTm(+5, false, 2019, 1, 11, 23, 55, 23),
         ToCivilTime(TInstant::Seconds(1547232923), baikonur));
 }
+
+TEST(TimeZoneConversion, DEVTOOLSSUPPORT_41537) {
+    // https://mm.icann.org/pipermail/tz-announce/2024-February/000081.html:
+    //   Kazakhstan unifies on UTC+5 beginning 2024-03-01
+    //   Asia/Almaty and Asia/Qostanay [...] will transition from UTC+6
+    //   on 2024-03-01 at 00:00 to join the western portion
+
+    // > TZ=UTC date --date="2024-03-04 12:34:56" +%s
+    // 1709555696
+    const auto tmAfterTransition = TInstant::Seconds(1709555696);
+    for (const auto* tzName : {"Asia/Almaty", "Asia/Qostanay"}) {
+        const auto tz = GetTimeZone(tzName);
+        CompareCivilTimes(
+            ZonedTm(+5, false, 2024, 3, 4, 17, 34, 56),
+            ToCivilTime(tmAfterTransition, tz));
+    }
+}

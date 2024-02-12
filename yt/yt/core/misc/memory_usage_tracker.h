@@ -54,6 +54,7 @@ public:
 
     i64 GetSize() const;
     void SetSize(i64 size);
+    TError TrySetSize(i64 size);
     void IncrementSize(i64 sizeDelta);
     TMemoryUsageTrackerGuard TransferMemory(i64 size);
 
@@ -64,6 +65,7 @@ private:
     i64 Granularity_ = 0;
 
     void MoveFrom(TMemoryUsageTrackerGuard&& other);
+    TError SetSizeGeneric(i64 size, auto acquirer);
 };
 
 ////////////////////////////////////////////////////////////////////////////////

@@ -6,6 +6,8 @@
 
 #include <library/cpp/yt/memory/chunked_memory_pool.h>
 
+#include <yt/yt/core/misc/memory_usage_tracker.h>
+
 namespace NYT::NTableClient {
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -24,29 +26,35 @@ public:
     TRowBuffer(
         TRefCountedTypeCookie tagCookie,
         IMemoryChunkProviderPtr chunkProvider,
-        size_t startChunkSize = TChunkedMemoryPool::DefaultStartChunkSize)
+        size_t startChunkSize = TChunkedMemoryPool::DefaultStartChunkSize,
+        IMemoryUsageTrackerPtr tracker = nullptr)
         : Pool_(
             tagCookie,
             std::move(chunkProvider),
             startChunkSize)
+        , MemoryTracker_(std::move(tracker))
     { }
 
     template <class TTag = TDefaultRowBufferPoolTag>
     explicit TRowBuffer(
         TTag = TDefaultRowBufferPoolTag(),
-        size_t startChunkSize = TChunkedMemoryPool::DefaultStartChunkSize)
+        size_t startChunkSize = TChunkedMemoryPool::DefaultStartChunkSize,
+        IMemoryUsageTrackerPtr tracker = nullptr)
         : Pool_(
             TTag(),
             startChunkSize)
+        , MemoryTracker_(std::move(tracker))
     { }
 
     template <class TTag>
     TRowBuffer(
         TTag,
-        IMemoryChunkProviderPtr chunkProvider)
+        IMemoryChunkProviderPtr chunkProvider,
+        IMemoryUsageTrackerPtr tracker = nullptr)
         : Pool_(
             GetRefCountedTypeCookie<TTag>(),
             std::move(chunkProvider))
+        , MemoryTracker_(std::move(tracker))
     { }
 
     TChunkedMemoryPool* GetPool();
@@ -106,6 +114,10 @@ public:
 
 private:
     TChunkedMemoryPool Pool_;
+    IMemoryUsageTrackerPtr MemoryTracker_;
+    std::optional<TMemoryUsageTrackerGuard> MemoryGuard_;
+
+    void ValidateNoOverflow();
 };
 
 DEFINE_REFCOUNTED_TYPE(TRowBuffer)

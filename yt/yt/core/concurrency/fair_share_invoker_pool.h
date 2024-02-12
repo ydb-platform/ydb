@@ -6,6 +6,7 @@
 #include <yt/yt/core/actions/invoker_pool.h>
 #include <yt/yt/core/actions/public.h>
 
+#include <yt/yt/core/misc/adjusted_exponential_moving_average.h>
 #include <yt/yt/core/misc/public.h>
 
 #include <yt/yt/core/profiling/public.h>
@@ -52,11 +53,7 @@ TDiagnosableInvokerPoolPtr CreateFairShareInvokerPool(
     IInvokerPtr underlyingInvoker,
     int invokerCount,
     TFairShareCallbackQueueFactory callbackQueueFactory = CreateFairShareCallbackQueue,
-    THistoricUsageAggregationParameters aggregatorParameters =
-        THistoricUsageAggregationParameters{
-            EHistoricUsageAggregationMode::ExponentialMovingAverage,
-            /*emaAlpha*/ THistoricUsageAggregationParameters::DefaultEmaAlpha,
-        });
+    TDuration actionTimeRelevancyHalflife = TAdjustedExponentialMovingAverage::DefaultHalflife);
 
 ////////////////////////////////////////////////////////////////////////////////
 

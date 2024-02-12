@@ -416,7 +416,12 @@ public:
             case NUdf::EDataSlot::TzTimestamp:
                 value = ToString(out.Get<ui64>());
                 break;
+            case NUdf::EDataSlot::Datetime64:
+            case NUdf::EDataSlot::Timestamp64:
+                value = ToString(out.Get<i64>());
+                break;
             case NUdf::EDataSlot::Interval:
+            case NUdf::EDataSlot::Interval64:
                 value = ToString(out.Get<i64>());
                 if ('T' == atom->back()) {
                     ctx.Error(Pos) << "Time prefix 'T' at end of interval constant. The designator 'T' shall be absent if all of the time components are absent.";
@@ -1229,7 +1234,7 @@ TString NormalizeTypeString(const TString& str) {
 
 static const TSet<TString> AvailableDataTypes = {"Bool", "String", "Uint32", "Uint64", "Int32", "Int64", "Float", "Double", "Utf8", "Yson", "Json", "JsonDocument",
     "Date", "Datetime", "Timestamp", "Interval", "Uint8", "Int8", "Uint16", "Int16", "TzDate", "TzDatetime", "TzTimestamp", "Uuid", "Decimal", "DyNumber",
-    "Date32"};
+    "Date32", "Datetime64", "Timestamp64", "Interval64", };
 TNodePtr GetDataTypeStringNode(TContext& ctx, TCallNode& node, unsigned argNum, TString* outTypeStrPtr = nullptr) {
     auto errMsgFunc = [&node, argNum]() {
         static std::array<TString, 2> numToName = {{"first", "second"}};

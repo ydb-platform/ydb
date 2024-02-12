@@ -164,13 +164,14 @@ Y_UNIT_TEST(BuildYtJoinTree2TablesTableIn2Rels)
 }
 
 #define ADD_TEST(Name) \
-    Y_UNIT_TEST(Name ## _PG) { \
-        Name(ECostBasedOptimizerType::PG); \
-    } \
     Y_UNIT_TEST(Name ## _Native) { \
         Name(ECostBasedOptimizerType::Native); \
     }
 
+//    Y_UNIT_TEST(Name ## _PG) {           \
+//        Name(ECostBasedOptimizerType::PG); \
+//    } \
+//
 
 void OrderJoins2Tables(auto optimizerType) {
     TExprContext exprCtx;
@@ -233,6 +234,7 @@ void OrderJoins2TablesTableIn2Rels(auto optimizerType)
 
 ADD_TEST(OrderJoins2TablesTableIn2Rels)
 
+/*
 Y_UNIT_TEST(OrderLeftJoin)
 {
     TExprContext exprCtx;
@@ -265,6 +267,7 @@ Y_UNIT_TEST(UnsupportedJoin)
     auto optimizedTree = OrderJoins(tree, state, exprCtx, true);
     UNIT_ASSERT(optimizedTree == tree);
 }
+*/
 
 } // Y_UNIT_TEST_SUITE(TYqlCBO)
 

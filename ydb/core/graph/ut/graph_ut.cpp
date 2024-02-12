@@ -341,11 +341,29 @@ Y_UNIT_TEST_SUITE(Graph) {
         // this call is needed to wait for establishing of pipe connection
         {
             NGraph::TEvGraph::TEvGetMetrics* event = new NGraph::TEvGraph::TEvGetMetrics();
-            event->Record.AddMetrics("test.metric1");
+            event->Record.AddMetrics("test.metric9");
             runtime.Send(NGraph::MakeGraphServiceId(), sender, event);
             TAutoPtr<IEventHandle> handle;
             NGraph::TEvGraph::TEvMetricsResult* response = runtime.GrabEdgeEventRethrow<NGraph::TEvGraph::TEvMetricsResult>(handle);
             Ctest << "Received result: " << response->Record.ShortDebugString() << Endl;
+        }
+
+        Ctest << "Send old metrics..." << Endl;
+
+        {
+            NGraph::TEvGraph::TEvSendMetrics* event = new NGraph::TEvGraph::TEvSendMetrics();
+            {
+                NKikimrGraph::TMetric* metric = event->Record.AddMetrics();
+                metric->SetName("test.metric0");
+                metric->SetValue(13);
+            }
+            {
+                NKikimrGraph::TMetric* metric = event->Record.AddMetrics();
+                metric->SetName("test.metric1");
+                metric->SetValue(14);
+            }
+            event->Record.SetTime(0);
+            runtime.Send(NGraph::MakeGraphServiceId(), sender, event);
         }
 
         runtime.SimulateSleep(TDuration::Seconds(1));
@@ -356,7 +374,7 @@ Y_UNIT_TEST_SUITE(Graph) {
                 {
                     NGraph::TEvGraph::TEvSendMetrics* event = new NGraph::TEvGraph::TEvSendMetrics();
                     NKikimrGraph::TMetric* metric = event->Record.AddMetrics();
-                    metric->SetName("test.metric1");
+                    metric->SetName("test.metric9");
                     metric->SetValue(seconds);
                     event->Record.SetTime(60 * minutes + seconds);
                     runtime.Send(NGraph::MakeGraphServiceId(), sender, event);
@@ -367,7 +385,7 @@ Y_UNIT_TEST_SUITE(Graph) {
         Ctest << "Checking..." << Endl;
         {
             NGraph::TEvGraph::TEvGetMetrics* event = new NGraph::TEvGraph::TEvGetMetrics();
-            event->Record.AddMetrics("test.metric1");
+            event->Record.AddMetrics("test.metric9");
             runtime.Send(NGraph::MakeGraphServiceId(), sender, event);
             TAutoPtr<IEventHandle> handle;
             NGraph::TEvGraph::TEvMetricsResult* response = runtime.GrabEdgeEventRethrow<NGraph::TEvGraph::TEvMetricsResult>(handle);
@@ -380,7 +398,7 @@ Y_UNIT_TEST_SUITE(Graph) {
             {
                 NGraph::TEvGraph::TEvSendMetrics* event = new NGraph::TEvGraph::TEvSendMetrics();
                 NKikimrGraph::TMetric* metric = event->Record.AddMetrics();
-                metric->SetName("test.metric1");
+                metric->SetName("test.metric9");
                 metric->SetValue(seconds);
                 runtime.Send(NGraph::MakeGraphServiceId(), sender, event);
             }
@@ -390,7 +408,7 @@ Y_UNIT_TEST_SUITE(Graph) {
         Ctest << "Checking..." << Endl;
         {
             NGraph::TEvGraph::TEvGetMetrics* event = new NGraph::TEvGraph::TEvGetMetrics();
-            event->Record.AddMetrics("test.metric1");
+            event->Record.AddMetrics("test.metric9");
             runtime.Send(NGraph::MakeGraphServiceId(), sender, event);
             TAutoPtr<IEventHandle> handle;
             NGraph::TEvGraph::TEvMetricsResult* response = runtime.GrabEdgeEventRethrow<NGraph::TEvGraph::TEvMetricsResult>(handle);

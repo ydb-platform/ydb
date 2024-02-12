@@ -20,6 +20,7 @@ target_link_libraries(ydb-core-tx-replication-service-ut_table_writer PUBLIC
   cpp-testing-unittest_main
   tx-replication-service
   tx-replication-ut_helpers
+  cpp-string_utils-base64
   cpp-testing-unittest
 )
 target_link_options(ydb-core-tx-replication-service-ut_table_writer PRIVATE

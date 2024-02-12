@@ -275,3 +275,8 @@ git push fork
 ```
 
 And then create a PR from your branch with the cherry-picked fix to the stable branch. It is done similarly to opening a PR to `main`, but make sure to double-check the target branch.
+If you are using GitHub CLI, pass `-B` argument:
+
+```
+  gh pr create --title "Title" -B stable-24-1
+```

@@ -147,7 +147,7 @@ public:
 
 private:
     bool ParseOperation(const NEvents::TDataEvents::TEvWrite& ev, const NKikimrDataEvents::TEvWrite::TOperation& recordOperation, const TUserTable::TTableInfos& tableInfos);
-    void SetTxKeys();
+    void SetTxKeys(const TUserTable& tableInfo);
     TVector<TKeyValidator::TColumnWriteMeta> GetColumnWrites() const;
 
     void ComputeTxSize();
@@ -170,8 +170,6 @@ private:
     YDB_READONLY_DEF(NKikimrTxDataShard::TError::EKind, ErrCode);
     YDB_READONLY_DEF(TString, ErrStr);
     YDB_READONLY_DEF(bool, IsReleased);
-
-    const TUserTable* TableInfo;
 };
 
 class TWriteOperation : public TOperation {

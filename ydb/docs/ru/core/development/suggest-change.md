@@ -99,44 +99,40 @@ The minimum required scopes are 'repo', 'read:org', 'admin:public_key'.
 
 Официальным репозиторием YDB является [https://github.com/ydb-platform/ydb](https://github.com/ydb-platform/ydb), расположенный под учетной записью организации YDB `ydb-platform`.
 
-Создайте рабочий каталог:
+Чтобы работать над изменениями в YDB, вы должны создать форк репозитория в вашем аккаунте GitHub. Нажмите на кнопку `Fork` на странице официального репозитория.
+
+После того, как ваш форк создан, создайте локальный git репозиторий с двумя remote:
+- official: официальный репозиторий YDB, с ветками main и stable
+- fork: ваш форк YDB для разработки
+
 ```
 mkdir -p ~/ydbwork
 cd ~/ydbwork
+git clone -o official git@github.com:ydb-platform/ydb.git
 ```
 
-Чтобы работать над изменениями кода YDB, вам нужно создать форк-репозиторий под своей учетной записью GitHub, и клонировать его локально.
+```
+cd ydb
+git remote add fork git@github.com:{your_github_user_name}/ydb.git
+```
 
-{% list tabs %}
-
-- GitHub CLI
-
-  Существует команда GitHub CLI, которая выполняет все сразу:
-
-  ```
-  gh repo fork ydb-platform/ydb --default-branch-only --clone
-  ```
-
-  После завершения у вас будет форк репозитория YDB Git, клонированный в `~/ydbwork/ydb`.
-
-- git
-
-  На https://github.com/ydb-platform/ydb нажмите Fork (создайте свою собственную копию ydb-platform/ydb).
-  ```
-  git clone git@github.com:{your_name}/ydb.git
-  ```
-
-{% endlist %}
+После завершения у вас будет форк репозитория YDB Git, клонированный в `~/ydbwork/ydb`.
 
 Форк репозитория - это мгновенное действие, однако клонирование на локальный компьютер требует некоторого времени для передачи около 650 МБ данных репозитория по сети.
 
+Далее установите поведение по умолчанию для команды git push:
+
+```
+git config push.default current
+git config push.autoSetupRemote true
+```
+
+Таким образом, команда `git push {remote}`будет автоматически устанавливать upstream `{remote}` для текущей ветки и последующие команды `git push` будут отправлять только текущую ветку.
+
 ### Настройка авторства коммитов {#author}
 
-Запустите следующую команду из своего каталога репозитория, чтобы указать свое имя и адрес электронной почты для коммитов, отправляемых с помощью Git:
+Запустите следующую команду, чтобы указать свое имя и адрес электронной почты для коммитов, отправляемых с помощью Git:
 
-```
-cd ~/ydbwork/ydb
-```
 ```
 git config --global user.name "Marco Polo"
 git config --global user.email "marco@ydb.tech"
@@ -150,27 +146,27 @@ git config --global user.email "marco@ydb.tech"
 
 Обычно для начала работы над изменением требуется свежий транк. Синхронизируйте fork, чтобы получить его, выполнив следующую команду:
 
-```
-gh repo sync your_github_login/ydb -s ydb-platform/ydb
-```
-
-Эта команда выполняет удаленную синхронизацию на GitHub. Затем перенесите изменения в локальный репозиторий:
+Если ваша текущая локальная ветка не `main`:
 
 ```
 cd ~/ydbwork/ydb
+git fetch official main:main
 ```
+
+Эта команда обновляет локальную ветку main без checkout.
+
+Если ваша текущая локальная ветка `main`:
+
 ```
-git checkout main
-git pull
+git pull --ff-only official main
 ```
 
 ### Создайте ветку разработки {#create_devbranch}
 
-Создайте ветку разработки с помощью Git (замените "feature42" на название вашей ветки) и назначьте для нее upstream:
+Создайте ветку разработки с помощью Git (замените "feature42" на название вашей ветки):
 
 ```
 git checkout -b feature42
-git push --set-upstream origin feature42
 ```
 
 ### Внесите изменения и коммиты {#commit}
@@ -179,36 +175,55 @@ git push --set-upstream origin feature42
 
 ```
 git add .
-```
-
-```
 git status
 ```
 
 ```
 git commit -m "Implemented feature 42"
+git push fork
 ```
 
+Последующие push не требуют upstream или имени ветки:
 ```
 git push
 ```
 
 ### Создайте Pull Request в официальный репозиторий {#create_pr}
+Когда изменения будут завершены и протестированы локально (см. [Ya Build and Test](build-ya.md)), создайте Pull Request.
 
-Когда изменения будут завершены и протестированы локально (см. [Ya Build and Test](build-ya.md)), запустите следующую команду из корневого каталога вашего репозитория, чтобы отправить Pull Request в официальный репозиторий YDB:
+{% list tabs %}
 
-```
-cd ~/ydbwork/ydb
-```
-```
-gh pr create --title "Feature 42 implemented"
-```
+- GitHub UI
 
-После ответа на некоторые вопросы Pull Request будет создан, и вы получите ссылку на его страницу на GitHub.com.
+  Откройте страницу вашей ветки на GitHub.com (https://github.com/{your_github_user_name}/ydb/tree/{branch_name}), нажмите `Contribute` и затем `Open Pull Request`.
+  Также можно использовать ссылку в выводе команды `git push`, чтобы создать Pull Request:
+
+  ```
+  ...
+  remote: Resolving deltas: 100% (1/1), completed with 1 local object.
+  remote: 
+  remote: Create a pull request for '{branch_name}' on GitHub by visiting:
+  remote:      https://github.com/{your_github_user_name}/test/pull/new/{branch_name}
+  ... 
+  ```
+
+- GitHub CLI
+
+  ```
+  cd ~/ydbwork/ydb
+  ```
+
+  ```
+  gh pr create --title "Feature 42 implemented"
+  ```
+
+  После ответа на некоторые вопросы Pull Request будет создан, и вы получите ссылку на его страницу на GitHub.com.
+
+{% endlist %}
 
 ### Предварительные проверки {#precommit_checks}
 
-Перед мержем изменений выполняются прекоммитные проверки Pull Reqeust'а. Вы можете увидеть их статус на странице Pull Request'а.
+Перед мержем изменений выполняются прекоммитные проверки Pull Request'а. Вы можете увидеть их статус на странице Pull Request'а.
 
 В рамках прекоммитных проверок YDB CI создает артефакты и запускает все тесты, публикуя результаты в качестве комментария к Pull Request'у.
 
@@ -234,11 +249,28 @@ Pull Request может быть замержен после получения 
 
 ### Rebase changes {#rebase}
 
-При возникновении конфликтов, вы можете сделать rebase своих изменений поверх текущего транка из официального репозитория. Чтобы сделать это, [обновите транк](#fork_sync) в вашем fork, перенесите состояние ветки `main` на локальный компьютер, и запустите команду rebase:
+При возникновении конфликтов, вы можете сделать rebase своих изменений поверх текущего транка из официального репозитория. Чтобы сделать это, [обновите транк](#fork_sync) на вашей локальной машине, и запустите команду rebase:
 
 ```
 # Предполагается, что ваша активная ветка является вашей веткой разработки
-gh repo sync your_github_login/ydb -s ydb-platform/ydb
-git fetch origin main:main
+git fetch official main:main
 git rebase main
 ```
+
+### Перенос патчей в стабильную ветку {#cherry_pick_stable}
+
+Когда есть необходимость перенести патч в стабильную ветку, отведите ветку от ветки stable:
+
+```
+git fetch official
+git checkout -b "cherry-pick-fix42" official/stable-24-1
+```
+
+Затем используйте cherry-pick для переноса патча и сделайте push ветки в ваш fork:
+
+```
+git cherry-pick {fixes_commit_hash}
+git push fork
+```
+
+И создайте Pull Request из вашей ветки с патчем в стабильную ветку.

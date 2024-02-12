@@ -1,9 +1,8 @@
 # Развертывание {{ ydb-short-name }} кластера с помощью Ansible
 
-В инструкции изложен процесс развертывания {{ ydb-short-name }} кластера на группе серверов с помощью Ansible. {{ ydb-short-name }} может быть развернут на любом желаемом количестве серверов, но минимальное количество серверов в кластере не должно быть меньше восемь штук для модели избыточности `block-4-2` и девяти серверов для модели избыточности `mirror-3-dc`. О моделях избыточности можно узнать из статьи [{#T}](../../deploy/configuration/config.md#domains-blob).
+В инструкции изложен процесс развертывания {{ ydb-short-name }} кластера на группе серверов с помощью Ansible. {{ ydb-short-name }} может быть развернут на любом желаемом количестве серверов, но минимальное количество серверов в кластере не должно быть меньше восемь штук для модели избыточности `block-4-2` и девяти серверов для модели избыточности `mirror-3-dc`. О моделях избыточности можно узнать из статьи [{#T}](../../../deploy/configuration/config.md#domains-blob).
 
-В процессе эксплуатации кластер может быть [расширен](../../maintenance/manual/cluster_expansion.md) без приостановки доступа пользователей к базам данных.
-
+В процессе эксплуатации кластер может быть [расширен](../../../maintenance/manual/cluster_expansion.md) без приостановки доступа пользователей к базам данных.
 {% note info %}
 
 **Рекомендуемые требования к серверам**:
@@ -21,7 +20,7 @@
 
 {% cut "Структура репозитория" %}
 
-{% include [repo-tree](./_includes/repo-tree.md) %}
+{% include [repo-tree](./repo-tree.md) %}
 
 {% endcut %}
 
@@ -55,7 +54,7 @@
 
 Перейдите в корневую директорию скаченного репозитория и выполните команду `ansible-galaxy install -r requirements.yaml` – будут скачены Ansible коллекции `ydb_platform.ydb` и `community.general`, которые содержат роли и плагины для установки {{ ydb-short-name }}.
 
-[Скачайте](../../downloads/index.md#ydb-server) архив актуальной версию {{ ydb-short-name }} в корневую директорию проекта. Например, с помощью wget: `wget https://binaries.ydb.tech/release/23.3.17/ydbd-23.3.17-linux-amd64.tar.gz` и скопируйте сюда же приватную часть SSH-ключа для доступа к серверам кластера {{ ydb-short-name }}. На SSH-ключе должны быть установлены следующие права:
+[Скачайте](../../../downloads/index.md#ydb-server) архив актуальной версию {{ ydb-short-name }} в корневую директорию проекта. Например, с помощью wget: `wget https://binaries.ydb.tech/release/23.3.17/ydbd-23.3.17-linux-amd64.tar.gz` и скопируйте сюда же приватную часть SSH-ключа для доступа к серверам кластера {{ ydb-short-name }}. На SSH-ключе должны быть установлены следующие права:
 ```text
 -rw------- (600)  #Только владелец имеет разрешение на чтение и запись. 
 ```
@@ -132,7 +131,7 @@ static-node-9 static-node-9.ydb-cluster.com
 
 ### Подготовка конфигурационного файла {{ ydb-short-name }} { #ydb-config-prepare }
 
-Конфигурационный файл {{ ydb-short-name }} – содержит настройки нод {{ ydb-short-name }} и располагается в поддиректории `/files/config.yaml`. С подробным описанием секций настройки конфигурационного файла {{ ydb-short-name }} можно ознакомиться в стать [{#T}](../../deploy/configuration/config.md).
+Конфигурационный файл {{ ydb-short-name }} – содержит настройки нод {{ ydb-short-name }} и располагается в поддиректории `/files/config.yaml`. С подробным описанием секций настройки конфигурационного файла {{ ydb-short-name }} можно ознакомиться в стать [{#T}](../../../deploy/configuration/config.md).
 
 Дефолтный конфигурационный файл {{ ydb-short-name }} уже содержит почти все необходимые настройки для развертывания кластера. Необходимо заменить стандартные FQDN хостов на актуальные FQDN в разделе `hosts` и `blob_storage_config`:
 * Раздел `hosts`:  
@@ -189,27 +188,27 @@ static-node-9 static-node-9.ydb-cluster.com
 
 {% cut "Подробное пошаговое описание установки {{ ydb-short-name }}" %}
 
-{% include [ansible-install-steps](./_includes/ansible-install-steps.md) %}
+{% include [ansible-install-steps](./ansible-install-steps.md) %}
 
 {% endcut %}
 
 В результате выполнения плейбука будет создан кластер {{ ydb-short-name }}, на котором развернута тестовая база данных – `database`, создан `root` пользователь с максимальными правами доступа и запущен Embedded UI на порту 8765. Для подключения к Embedded UI можно настроить SSH-туннелирование. Для этого на локальной машине выполните команду `ssh -L 8765:localhost:8765 -i <ssh private key> <user>@<first ydb static node ip>`. После успешной установки соединения можно перейти по URL [localhost:8765](http://localhost:8765):
 
-![ydb-web-ui](./_assets/ydb-web-console.png)
+![ydb-web-ui](../../_assets/ydb-web-console.png)
 
 ## Мониторинг состояния кластера { #troubleshooting }
 
 После успешного создания кластера {{ ydb-short-name }} проверить его состояние с помощью Embedded UI – [http://localhost:8765/monitoring/cluster/tenants](http://localhost:8765/monitoring/cluster/tenants):
 
-![ydb-cluster-check](./_assets/ydb-cluster-check.png)
+![ydb-cluster-check](../../_assets/ydb-cluster-check.png)
 
 В разделе отражены следующие параметры кластера {{ ydb-short-name }}, которые отражают состояние кластера:
-* `Tablets` – список запущенных [таблеток](../../concepts/cluster/common_scheme_ydb.md#tablets). Все индикаторы состояния таблеток должны быть зеленого цвета;
+* `Tablets` – список запущенных [таблеток](../../../concepts/cluster/common_scheme_ydb.md#tablets). Все индикаторы состояния таблеток должны быть зеленого цвета;
 * `Nodes` – количество и состояние запущенных статических и динамических нод в кластере. Индикатор состояния нод должен быть зеленым, а пропорция созданных и запущенных нод должна быть равной. Например, 27/27 для кластера из девяти нод.
 Индикаторы показателей `Load` (количество используемой RAM) и `Storage` (количество используемого дискового пространства) должны быть зелеными. 
 
 Проверь состояние сторадж группы можно в разделе `storage` – [http://localhost:8765/monitoring/cluster/storage](http://localhost:8765/monitoring/cluster/storage):
 
-![ydb-storage-gr-check](./_assets/ydb-storage-gr-check.png)
+![ydb-storage-gr-check](../../_assets/ydb-storage-gr-check.png)
 
-Индикаторы `VDisks` должны быть зелеными, а статус `state` (находится в сплывающей подсказке при наведении на индикатор Vdisk) должен быть `Ok`. Подробнее о показателях состояния кластера и мониторинге можно прочитать в статье [{#T}](../../maintenance/embedded_monitoring/ydb_monitoring.md).
+Индикаторы `VDisks` должны быть зелеными, а статус `state` (находится в сплывающей подсказке при наведении на индикатор Vdisk) должен быть `Ok`. Подробнее о показателях состояния кластера и мониторинге можно прочитать в статье [{#T}](../../../maintenance/embedded_monitoring/ydb_monitoring.md).

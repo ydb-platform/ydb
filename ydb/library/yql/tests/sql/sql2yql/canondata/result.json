@@ -10863,6 +10863,13 @@
             "uri": "https://{canondata_backend}/1936997/00f46808be87e2ae2d4ac3ac45675b659c5ace45/resource.tar.gz#test_sql2yql.test_pg-compare_/sql.yql"
         }
     ],
+    "test_sql2yql.test[pg-current_database]": [
+        {
+            "checksum": "085bd383175d77d9c3cae4fdc479dd12",
+            "size": 444,
+            "uri": "https://{canondata_backend}/1599023/4089f30534a79f96ae4c2135d030e44eb3b05f29/resource.tar.gz#test_sql2yql.test_pg-current_database_/sql.yql"
+        }
+    ],
     "test_sql2yql.test[pg-distinct_all_projection]": [
         {
             "checksum": "f10da195f5e8b7f13bd8958f880b77a7",

@@ -4,9 +4,9 @@ ENABLE(PYBUILD_NO_PY)
 
 PY3_LIBRARY()
 
-VERSION(3.11.8)
+VERSION(3.12.2)
 
-ORIGINAL_SOURCE(https://github.com/python/cpython/archive/v3.11.8.tar.gz)
+ORIGINAL_SOURCE(https://github.com/python/cpython/archive/v3.12.2.tar.gz)
 
 LICENSE(Python-2.0)
 
@@ -24,15 +24,16 @@ PY_SRCS(
     __future__.py
     __hello__.py
     _aix_support.py
-    _bootsubprocess.py
     _collections_abc.py
     _compat_pickle.py
     _compression.py
     _markupbase.py
     _osx_support.py
     _py_abc.py
+    _pydatetime.py
     _pydecimal.py
     _pyio.py
+    _pylong.py
     _sitebuiltins.py
     _strptime.py
     _sysconfigdata_arcadia.py
@@ -43,7 +44,6 @@ PY_SRCS(
     antigravity.py
     argparse.py
     ast.py
-    asynchat.py
     asyncio/__init__.py
     asyncio/__main__.py
     asyncio/base_events.py
@@ -77,7 +77,6 @@ PY_SRCS(
     asyncio/unix_events.py
     asyncio/windows_events.py
     asyncio/windows_utils.py
-    asyncore.py
     base64.py
     bdb.py
     bisect.py
@@ -130,55 +129,6 @@ PY_SRCS(
     decimal.py
     difflib.py
     dis.py
-    distutils/__init__.py
-    distutils/_msvccompiler.py
-    distutils/archive_util.py
-    distutils/bcppcompiler.py
-    distutils/ccompiler.py
-    distutils/cmd.py
-    distutils/command/__init__.py
-    distutils/command/bdist.py
-    distutils/command/bdist_dumb.py
-    distutils/command/bdist_rpm.py
-    distutils/command/build.py
-    distutils/command/build_clib.py
-    distutils/command/build_ext.py
-    distutils/command/build_py.py
-    distutils/command/build_scripts.py
-    distutils/command/check.py
-    distutils/command/clean.py
-    distutils/command/config.py
-    distutils/command/install.py
-    distutils/command/install_data.py
-    distutils/command/install_egg_info.py
-    distutils/command/install_headers.py
-    distutils/command/install_lib.py
-    distutils/command/install_scripts.py
-    distutils/command/register.py
-    distutils/command/sdist.py
-    distutils/command/upload.py
-    distutils/config.py
-    distutils/core.py
-    distutils/cygwinccompiler.py
-    distutils/debug.py
-    distutils/dep_util.py
-    distutils/dir_util.py
-    distutils/dist.py
-    distutils/errors.py
-    distutils/extension.py
-    distutils/fancy_getopt.py
-    distutils/file_util.py
-    distutils/filelist.py
-    distutils/log.py
-    distutils/msvc9compiler.py
-    distutils/msvccompiler.py
-    distutils/spawn.py
-    distutils/sysconfig.py
-    distutils/text_file.py
-    distutils/unixccompiler.py
-    distutils/util.py
-    distutils/version.py
-    distutils/versionpredicate.py
     doctest.py
     email/__init__.py
     email/_encoded_words.py
@@ -361,7 +311,6 @@ PY_SRCS(
     http/server.py
     imaplib.py
     imghdr.py
-    imp.py
     importlib/__init__.py
     importlib/_abc.py
     importlib/_bootstrap.py
@@ -479,12 +428,12 @@ PY_SRCS(
     shutil.py
     signal.py
     site.py
-    smtpd.py
     smtplib.py
     sndhdr.py
     socket.py
     socketserver.py
     sqlite3/__init__.py
+    sqlite3/__main__.py
     sqlite3/dbapi2.py
     sqlite3/dump.py
     sre_compile.py
@@ -582,7 +531,10 @@ PY_SRCS(
     xmlrpc/client.py
     xmlrpc/server.py
     zipapp.py
-    zipfile.py
+    zipfile/__init__.py
+    zipfile/__main__.py
+    zipfile/_path/__init__.py
+    zipfile/_path/glob.py
     zipimport.py
     zoneinfo/__init__.py
     zoneinfo/_common.py

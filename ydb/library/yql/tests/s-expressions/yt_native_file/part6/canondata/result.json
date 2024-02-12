@@ -1999,6 +1999,9 @@
             "checksum": "7b19e1b62562d88ca184ae31ff236b1b",
             "size": 28772,
             "uri": "https://{canondata_backend}/1937027/882e1bb1038a298a6d6d7a04c71a00fd27609541/resource.tar.gz#test.test_EquiJoin-JoinInMemOpt1-Results_/results.txt"
+        },
+        {
+            "uri": "file://test.test_EquiJoin-JoinInMemOpt1-Results_/extracted"
         }
     ],
     "test.test[EquiJoin-TypeEquiFullTwoFieldsSelf-Debug]": [
@@ -2587,6 +2590,9 @@
             "checksum": "68c73d1f1dde6e51a97aeaacc073d795",
             "size": 26131,
             "uri": "https://{canondata_backend}/1937001/12804d3e8f61e1096f554bf8912e8ec70a5f25e4/resource.tar.gz#test.test_EquiJoinMap-JoinMapKey2-Results_/results.txt"
+        },
+        {
+            "uri": "file://test.test_EquiJoinMap-JoinMapKey2-Results_/extracted"
         }
     ],
     "test.test[EquiJoinMerge-InnerInner3key2_1o2o3o-Debug]": [

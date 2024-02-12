@@ -1,0 +1,8 @@
+<tmp_path>/program.yql:<main>: Warning: Execution
+
+    <tmp_path>/program.yql:<main>:17:22: Warning: Consider using explicit CAST or BITCAST to convert from Int32 to Uint32
+    	(let joinInnerInner (EquiJoin '(list1 '('a 'k)) '(list2 '('b 'l)) '(list3 '('c 'm)) '('Inner '('Inner 'a 'b '('a 'key1) '('b 'key2) '()) 'c '('l 'value2) '('c 'key3) '()) '()))
+	                     ^
+    <tmp_path>/program.yql:<main>:17:22: Warning: Consider using explicit CAST or BITCAST to convert from Uint32 to Int32
+    	(let joinInnerInner (EquiJoin '(list1 '('a 'k)) '(list2 '('b 'l)) '(list3 '('c 'm)) '('Inner '('Inner 'a 'b '('a 'key1) '('b 'key2) '()) 'c '('l 'value2) '('c 'key3) '()) '()))
+	                     ^

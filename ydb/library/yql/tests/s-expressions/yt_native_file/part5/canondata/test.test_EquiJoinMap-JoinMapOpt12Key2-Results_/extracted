@@ -1,0 +1,25 @@
+<tmp_path>/program.yql:<main>: Warning: Optimization
+
+    <tmp_path>/program.yql:<main>:12:17: Warning: Consider using explicit CAST or BITCAST to convert from Int32 to Uint64
+    	(let joinInner (EquiJoin '(list1 'a) '(list2 'b) '('Inner 'a 'b '('a 'key1 'a 'subkey1) '('b 'key2 'b 'subkey2) '()) '()))
+	                ^
+<tmp_path>/program.yql:<main>: Warning: Optimization
+
+    <tmp_path>/program.yql:<main>:13:16: Warning: Consider using explicit CAST or BITCAST to convert from Int32 to Uint64
+    	(let joinLeft (EquiJoin '(list1 'a) '(list2 'b) '('Left 'a 'b '('a 'key1 'a 'subkey1) '('b 'key2 'b 'subkey2) '()) '()))
+	               ^
+    <tmp_path>/program.yql:<main>:14:17: Warning: Consider using explicit CAST or BITCAST to convert from Uint64 to Int32
+    	(let joinRight (EquiJoin '(list1 'a) '(list2 'b) '('Right 'a 'b '('a 'key1 'a 'subkey1) '('b 'key2 'b 'subkey2) '()) '()))
+	                ^
+    <tmp_path>/program.yql:<main>:15:20: Warning: Consider using explicit CAST or BITCAST to convert from Int32 to Uint64
+    	(let joinLeftOnly (EquiJoin '(list1 'a) '(list2 'b) '('LeftOnly 'a 'b '('a 'key1 'a 'subkey1) '('b 'key2 'b 'subkey2) '()) '()))
+	                   ^
+    <tmp_path>/program.yql:<main>:16:21: Warning: Consider using explicit CAST or BITCAST to convert from Uint64 to Int32
+    	(let joinRightOnly (EquiJoin '(list1 'a) '(list2 'b) '('RightOnly 'a 'b '('a 'key1 'a 'subkey1) '('b 'key2 'b 'subkey2) '()) '()))
+	                    ^
+    <tmp_path>/program.yql:<main>:17:20: Warning: Consider using explicit CAST or BITCAST to convert from Int32 to Uint64
+    	(let joinLeftSemi (EquiJoin '(list1 'a) '(list2 'b) '('LeftSemi 'a 'b '('a 'key1 'a 'subkey1) '('b 'key2 'b 'subkey2) '()) '()))
+	                   ^
+    <tmp_path>/program.yql:<main>:18:21: Warning: Consider using explicit CAST or BITCAST to convert from Uint64 to Int32
+    	(let joinRightSemi (EquiJoin '(list1 'a) '(list2 'b) '('RightSemi 'a 'b '('a 'key1 'a 'subkey1) '('b 'key2 'b 'subkey2) '()) '()))
+	                    ^

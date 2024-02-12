@@ -2844,7 +2844,7 @@ struct TBuiltinFuncData {
             {"in", BuildSimpleBuiltinFactoryCallback<TYqlIn>()},
 
             // List builtins
-            {"aslist", BuildNamedArgcBuiltinFactoryCallback<TCallNodeImpl>("AsList", 0, -1)},
+            {"aslist", BuildNamedArgcBuiltinFactoryCallback<TCallNodeImpl>("AsListMayWarn", 0, -1)},
             {"asliststrict", BuildNamedArgcBuiltinFactoryCallback<TCallNodeImpl>("AsListStrict", 0, -1) },
             {"listlength", BuildNamedArgcBuiltinFactoryCallback<TCallNodeImpl>("Length", 1, 1)},
             {"listhasitems", BuildNamedArgcBuiltinFactoryCallback<TCallNodeImpl>("HasItems", 1, 1)},
@@ -2896,9 +2896,9 @@ struct TBuiltinFuncData {
             {"dicthasitems", BuildNamedArgcBuiltinFactoryCallback<TCallNodeImpl>("HasItems", 1, 1)},
             {"dictcreate", BuildSimpleBuiltinFactoryCallback<TDictCreateBuiltin>()},
             {"setcreate", BuildSimpleBuiltinFactoryCallback<TSetCreateBuiltin>()},
-            {"asdict", BuildNamedArgcBuiltinFactoryCallback<TCallNodeImpl>("AsDict", 0, -1)},
+            {"asdict", BuildNamedArgcBuiltinFactoryCallback<TCallNodeImpl>("AsDictMayWarn", 0, -1)},
             {"asdictstrict", BuildNamedArgcBuiltinFactoryCallback<TCallNodeImpl>("AsDictStrict", 0, -1)},
-            {"asset", BuildNamedArgcBuiltinFactoryCallback<TCallNodeImpl>("AsSet", 0, -1)},
+            {"asset", BuildNamedArgcBuiltinFactoryCallback<TCallNodeImpl>("AsSetMayWarn", 0, -1)},
             {"assetstrict", BuildNamedArgcBuiltinFactoryCallback<TCallNodeImpl>("AsSetStrict", 0, -1)},
             {"todict", BuildNamedBuiltinFactoryCallback<TYqlToDict<false, false>>("One")},
             {"tomultidict", BuildNamedBuiltinFactoryCallback<TYqlToDict<false, false>>("Many")},
@@ -3424,7 +3424,7 @@ TNodePtr BuildBuiltinFunc(TContext& ctx, TPosition pos, TString name, const TVec
             const auto& label = item->GetLabel();
             if (label == "Entities") {
                 auto callNode = dynamic_cast<TCallNode*>(item.Get());
-                if (!callNode || callNode->GetOpName() != "AsList") {
+                if (!callNode || callNode->GetOpName() != "AsListMayWarn") {
                     return new TInvalidBuiltin(pos, TStringBuilder() << name << " entities must be list of strings");
                 }
 

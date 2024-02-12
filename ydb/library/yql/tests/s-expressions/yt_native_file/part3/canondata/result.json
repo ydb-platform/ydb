@@ -2696,6 +2696,9 @@
             "checksum": "7b985dc1f25a554989b3461b0599f45f",
             "size": 31241,
             "uri": "https://{canondata_backend}/1937027/0e6fc13fc97b62a6bf4559e49ff24c3807bb9fef/resource.tar.gz#test.test_EquiJoinMap-JoinMap-Results_/results.txt"
+        },
+        {
+            "uri": "file://test.test_EquiJoinMap-JoinMap-Results_/extracted"
         }
     ],
     "test.test[EquiJoinMap-JoinMapOpt1-Debug]": [
@@ -2817,6 +2820,9 @@
             "checksum": "e80c8ce42aef7b19dabaee073d64e8aa",
             "size": 43299,
             "uri": "https://{canondata_backend}/1937027/0e6fc13fc97b62a6bf4559e49ff24c3807bb9fef/resource.tar.gz#test.test_EquiJoinMap-JoinMapOpt1-Results_/results.txt"
+        },
+        {
+            "uri": "file://test.test_EquiJoinMap-JoinMapOpt1-Results_/extracted"
         }
     ],
     "test.test[EquiJoinMerge-Inner2_12o-Debug]": [

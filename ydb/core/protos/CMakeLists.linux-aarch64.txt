@@ -1592,6 +1592,30 @@ get_built_tool_path(
   cpp_styleguide
 )
 get_built_tool_path(
+  TOOL_protoc_bin
+  TOOL_protoc_dependency
+  contrib/tools/protoc/bin
+  protoc
+)
+get_built_tool_path(
+  TOOL_cpp_styleguide_bin
+  TOOL_cpp_styleguide_dependency
+  contrib/tools/protoc/plugins/cpp_styleguide
+  cpp_styleguide
+)
+get_built_tool_path(
+  TOOL_protoc_bin
+  TOOL_protoc_dependency
+  contrib/tools/protoc/bin
+  protoc
+)
+get_built_tool_path(
+  TOOL_cpp_styleguide_bin
+  TOOL_cpp_styleguide_dependency
+  contrib/tools/protoc/plugins/cpp_styleguide
+  cpp_styleguide
+)
+get_built_tool_path(
   TOOL_enum_parser_bin
   TOOL_enum_parser_dependency
   tools/enum_parser/enum_parser
@@ -1633,6 +1657,7 @@ target_link_libraries(ydb-core-protos PUBLIC
 )
 target_proto_messages(ydb-core-protos PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/core/protos/alloc.proto
+  ${CMAKE_SOURCE_DIR}/ydb/core/protos/auth.proto
   ${CMAKE_SOURCE_DIR}/ydb/core/protos/base.proto
   ${CMAKE_SOURCE_DIR}/ydb/core/protos/bind_channel_storage_pool.proto
   ${CMAKE_SOURCE_DIR}/ydb/core/protos/blob_depot.proto
@@ -1640,38 +1665,37 @@ target_proto_messages(ydb-core-protos PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/core/protos/blobstorage.proto
   ${CMAKE_SOURCE_DIR}/ydb/core/protos/blobstorage_base.proto
   ${CMAKE_SOURCE_DIR}/ydb/core/protos/blobstorage_base3.proto
+  ${CMAKE_SOURCE_DIR}/ydb/core/protos/blobstorage_config.proto
   ${CMAKE_SOURCE_DIR}/ydb/core/protos/blobstorage_disk.proto
   ${CMAKE_SOURCE_DIR}/ydb/core/protos/blobstorage_disk_color.proto
   ${CMAKE_SOURCE_DIR}/ydb/core/protos/blobstorage_distributed_config.proto
   ${CMAKE_SOURCE_DIR}/ydb/core/protos/blobstorage_pdisk_config.proto
   ${CMAKE_SOURCE_DIR}/ydb/core/protos/blobstorage_vdisk_config.proto
   ${CMAKE_SOURCE_DIR}/ydb/core/protos/blobstorage_vdisk_internal.proto
-  ${CMAKE_SOURCE_DIR}/ydb/core/protos/blobstorage_config.proto
   ${CMAKE_SOURCE_DIR}/ydb/core/protos/blockstore_config.proto
-  ${CMAKE_SOURCE_DIR}/ydb/core/protos/datashard_config.proto
-  ${CMAKE_SOURCE_DIR}/ydb/core/protos/db_metadata_cache.proto
-  ${CMAKE_SOURCE_DIR}/ydb/core/protos/feature_flags.proto
-  ${CMAKE_SOURCE_DIR}/ydb/core/protos/filestore_config.proto
+  ${CMAKE_SOURCE_DIR}/ydb/core/protos/bootstrap.proto
   ${CMAKE_SOURCE_DIR}/ydb/core/protos/bootstrapper.proto
   ${CMAKE_SOURCE_DIR}/ydb/core/protos/change_exchange.proto
   ${CMAKE_SOURCE_DIR}/ydb/core/protos/channel_purpose.proto
   ${CMAKE_SOURCE_DIR}/ydb/core/protos/cms.proto
+  ${CMAKE_SOURCE_DIR}/ydb/core/protos/compile_service_config.proto
   ${CMAKE_SOURCE_DIR}/ydb/core/protos/config.proto
   ${CMAKE_SOURCE_DIR}/ydb/core/protos/config_units.proto
   ${CMAKE_SOURCE_DIR}/ydb/core/protos/console.proto
   ${CMAKE_SOURCE_DIR}/ydb/core/protos/console_base.proto
   ${CMAKE_SOURCE_DIR}/ydb/core/protos/console_config.proto
   ${CMAKE_SOURCE_DIR}/ydb/core/protos/console_tenant.proto
-  ${CMAKE_SOURCE_DIR}/ydb/core/protos/counters_tx_allocator.proto
+  ${CMAKE_SOURCE_DIR}/ydb/core/protos/counters.proto
   ${CMAKE_SOURCE_DIR}/ydb/core/protos/counters_blob_depot.proto
   ${CMAKE_SOURCE_DIR}/ydb/core/protos/counters_bs_controller.proto
   ${CMAKE_SOURCE_DIR}/ydb/core/protos/counters_cms.proto
-  ${CMAKE_SOURCE_DIR}/ydb/core/protos/counters_coordinator.proto
   ${CMAKE_SOURCE_DIR}/ydb/core/protos/counters_columnshard.proto
+  ${CMAKE_SOURCE_DIR}/ydb/core/protos/counters_coordinator.proto
   ${CMAKE_SOURCE_DIR}/ydb/core/protos/counters_datashard.proto
   ${CMAKE_SOURCE_DIR}/ydb/core/protos/counters_hive.proto
   ${CMAKE_SOURCE_DIR}/ydb/core/protos/counters_kesus.proto
   ${CMAKE_SOURCE_DIR}/ydb/core/protos/counters_keyvalue.proto
+  ${CMAKE_SOURCE_DIR}/ydb/core/protos/counters_mediator.proto
   ${CMAKE_SOURCE_DIR}/ydb/core/protos/counters_pq.proto
   ${CMAKE_SOURCE_DIR}/ydb/core/protos/counters_replication.proto
   ${CMAKE_SOURCE_DIR}/ydb/core/protos/counters_schemeshard.proto
@@ -1679,26 +1703,34 @@ target_proto_messages(ydb-core-protos PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/core/protos/counters_statistics_aggregator.proto
   ${CMAKE_SOURCE_DIR}/ydb/core/protos/counters_sysview_processor.proto
   ${CMAKE_SOURCE_DIR}/ydb/core/protos/counters_testshard.proto
+  ${CMAKE_SOURCE_DIR}/ydb/core/protos/counters_tx_allocator.proto
   ${CMAKE_SOURCE_DIR}/ydb/core/protos/counters_tx_proxy.proto
-  ${CMAKE_SOURCE_DIR}/ydb/core/protos/counters_mediator.proto
-  ${CMAKE_SOURCE_DIR}/ydb/core/protos/counters.proto
-  ${CMAKE_SOURCE_DIR}/ydb/core/protos/database_basic_sausage_metainfo.proto
   ${CMAKE_SOURCE_DIR}/ydb/core/protos/data_events.proto
+  ${CMAKE_SOURCE_DIR}/ydb/core/protos/database_basic_sausage_metainfo.proto
+  ${CMAKE_SOURCE_DIR}/ydb/core/protos/datashard_config.proto
   ${CMAKE_SOURCE_DIR}/ydb/core/protos/datashard_load.proto
+  ${CMAKE_SOURCE_DIR}/ydb/core/protos/db_metadata_cache.proto
   ${CMAKE_SOURCE_DIR}/ydb/core/protos/drivemodel.proto
   ${CMAKE_SOURCE_DIR}/ydb/core/protos/export.proto
   ${CMAKE_SOURCE_DIR}/ydb/core/protos/external_sources.proto
-  ${CMAKE_SOURCE_DIR}/ydb/core/protos/flat_tx_scheme.proto
+  ${CMAKE_SOURCE_DIR}/ydb/core/protos/feature_flags.proto
+  ${CMAKE_SOURCE_DIR}/ydb/core/protos/filestore_config.proto
   ${CMAKE_SOURCE_DIR}/ydb/core/protos/flat_scheme_op.proto
+  ${CMAKE_SOURCE_DIR}/ydb/core/protos/flat_tx_scheme.proto
+  ${CMAKE_SOURCE_DIR}/ydb/core/protos/follower_group.proto
+  ${CMAKE_SOURCE_DIR}/ydb/core/protos/grpc.proto
+  ${CMAKE_SOURCE_DIR}/ydb/core/protos/grpc_pq_old.proto
+  ${CMAKE_SOURCE_DIR}/ydb/core/protos/grpc_status_proxy.proto
   ${CMAKE_SOURCE_DIR}/ydb/core/protos/health.proto
   ${CMAKE_SOURCE_DIR}/ydb/core/protos/hive.proto
   ${CMAKE_SOURCE_DIR}/ydb/core/protos/http_config.proto
   ${CMAKE_SOURCE_DIR}/ydb/core/protos/import.proto
   ${CMAKE_SOURCE_DIR}/ydb/core/protos/index_builder.proto
   ${CMAKE_SOURCE_DIR}/ydb/core/protos/kesus.proto
+  ${CMAKE_SOURCE_DIR}/ydb/core/protos/key.proto
+  ${CMAKE_SOURCE_DIR}/ydb/core/protos/kqp.proto
   ${CMAKE_SOURCE_DIR}/ydb/core/protos/kqp_physical.proto
   ${CMAKE_SOURCE_DIR}/ydb/core/protos/kqp_stats.proto
-  ${CMAKE_SOURCE_DIR}/ydb/core/protos/kqp.proto
   ${CMAKE_SOURCE_DIR}/ydb/core/protos/labeled_counters.proto
   ${CMAKE_SOURCE_DIR}/ydb/core/protos/load_test.proto
   ${CMAKE_SOURCE_DIR}/ydb/core/protos/local.proto
@@ -1714,22 +1746,27 @@ target_proto_messages(ydb-core-protos PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/core/protos/netclassifier.proto
   ${CMAKE_SOURCE_DIR}/ydb/core/protos/node_broker.proto
   ${CMAKE_SOURCE_DIR}/ydb/core/protos/node_limits.proto
+  ${CMAKE_SOURCE_DIR}/ydb/core/protos/node_whiteboard.proto
+  ${CMAKE_SOURCE_DIR}/ydb/core/protos/pdiskfit.proto
+  ${CMAKE_SOURCE_DIR}/ydb/core/protos/pqconfig.proto
   ${CMAKE_SOURCE_DIR}/ydb/core/protos/profiler.proto
   ${CMAKE_SOURCE_DIR}/ydb/core/protos/query_stats.proto
   ${CMAKE_SOURCE_DIR}/ydb/core/protos/replication.proto
   ${CMAKE_SOURCE_DIR}/ydb/core/protos/resource_broker.proto
+  ${CMAKE_SOURCE_DIR}/ydb/core/protos/scheme_board.proto
+  ${CMAKE_SOURCE_DIR}/ydb/core/protos/scheme_board_mon.proto
   ${CMAKE_SOURCE_DIR}/ydb/core/protos/scheme_log.proto
   ${CMAKE_SOURCE_DIR}/ydb/core/protos/scheme_type_metadata.proto
   ${CMAKE_SOURCE_DIR}/ydb/core/protos/scheme_type_operation.proto
   ${CMAKE_SOURCE_DIR}/ydb/core/protos/serverless_proxy_config.proto
   ${CMAKE_SOURCE_DIR}/ydb/core/protos/shared_cache.proto
   ${CMAKE_SOURCE_DIR}/ydb/core/protos/sqs.proto
-  ${CMAKE_SOURCE_DIR}/ydb/core/protos/follower_group.proto
   ${CMAKE_SOURCE_DIR}/ydb/core/protos/ssa.proto
   ${CMAKE_SOURCE_DIR}/ydb/core/protos/statestorage.proto
   ${CMAKE_SOURCE_DIR}/ydb/core/protos/statistics.proto
   ${CMAKE_SOURCE_DIR}/ydb/core/protos/stream.proto
   ${CMAKE_SOURCE_DIR}/ydb/core/protos/subdomains.proto
+  ${CMAKE_SOURCE_DIR}/ydb/core/protos/sys_view.proto
   ${CMAKE_SOURCE_DIR}/ydb/core/protos/table_service_config.proto
   ${CMAKE_SOURCE_DIR}/ydb/core/protos/table_stats.proto
   ${CMAKE_SOURCE_DIR}/ydb/core/protos/tablet.proto
@@ -1743,7 +1780,6 @@ target_proto_messages(ydb-core-protos PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/core/protos/tenant_slot_broker.proto
   ${CMAKE_SOURCE_DIR}/ydb/core/protos/test_shard.proto
   ${CMAKE_SOURCE_DIR}/ydb/core/protos/tracing.proto
-  ${CMAKE_SOURCE_DIR}/ydb/core/protos/node_whiteboard.proto
   ${CMAKE_SOURCE_DIR}/ydb/core/protos/tx.proto
   ${CMAKE_SOURCE_DIR}/ydb/core/protos/tx_columnshard.proto
   ${CMAKE_SOURCE_DIR}/ydb/core/protos/tx_datashard.proto
@@ -1751,22 +1787,14 @@ target_proto_messages(ydb-core-protos PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/core/protos/tx_proxy.proto
   ${CMAKE_SOURCE_DIR}/ydb/core/protos/tx_scheme.proto
   ${CMAKE_SOURCE_DIR}/ydb/core/protos/tx_sequenceshard.proto
-  ${CMAKE_SOURCE_DIR}/ydb/core/protos/pdiskfit.proto
-  ${CMAKE_SOURCE_DIR}/ydb/core/protos/pqconfig.proto
-  ${CMAKE_SOURCE_DIR}/ydb/core/protos/auth.proto
-  ${CMAKE_SOURCE_DIR}/ydb/core/protos/key.proto
-  ${CMAKE_SOURCE_DIR}/ydb/core/protos/grpc.proto
-  ${CMAKE_SOURCE_DIR}/ydb/core/protos/grpc_pq_old.proto
-  ${CMAKE_SOURCE_DIR}/ydb/core/protos/grpc_status_proxy.proto
   ${CMAKE_SOURCE_DIR}/ydb/core/protos/ydb_result_set_old.proto
   ${CMAKE_SOURCE_DIR}/ydb/core/protos/ydb_table_impl.proto
-  ${CMAKE_SOURCE_DIR}/ydb/core/protos/scheme_board.proto
-  ${CMAKE_SOURCE_DIR}/ydb/core/protos/scheme_board_mon.proto
-  ${CMAKE_SOURCE_DIR}/ydb/core/protos/sys_view.proto
 )
 target_sources(ydb-core-protos PRIVATE
   ${CMAKE_BINARY_DIR}/ydb/core/protos/alloc.pb.h
   ${CMAKE_BINARY_DIR}/ydb/core/protos/alloc.grpc.pb.h
+  ${CMAKE_BINARY_DIR}/ydb/core/protos/auth.pb.h
+  ${CMAKE_BINARY_DIR}/ydb/core/protos/auth.grpc.pb.h
   ${CMAKE_BINARY_DIR}/ydb/core/protos/base.pb.h
   ${CMAKE_BINARY_DIR}/ydb/core/protos/base.grpc.pb.h
   ${CMAKE_BINARY_DIR}/ydb/core/protos/bind_channel_storage_pool.pb.h
@@ -1781,6 +1809,8 @@ target_sources(ydb-core-protos PRIVATE
   ${CMAKE_BINARY_DIR}/ydb/core/protos/blobstorage_base.grpc.pb.h
   ${CMAKE_BINARY_DIR}/ydb/core/protos/blobstorage_base3.pb.h
   ${CMAKE_BINARY_DIR}/ydb/core/protos/blobstorage_base3.grpc.pb.h
+  ${CMAKE_BINARY_DIR}/ydb/core/protos/blobstorage_config.pb.h
+  ${CMAKE_BINARY_DIR}/ydb/core/protos/blobstorage_config.grpc.pb.h
   ${CMAKE_BINARY_DIR}/ydb/core/protos/blobstorage_disk.pb.h
   ${CMAKE_BINARY_DIR}/ydb/core/protos/blobstorage_disk.grpc.pb.h
   ${CMAKE_BINARY_DIR}/ydb/core/protos/blobstorage_disk_color.pb.h
@@ -1793,18 +1823,10 @@ target_sources(ydb-core-protos PRIVATE
   ${CMAKE_BINARY_DIR}/ydb/core/protos/blobstorage_vdisk_config.grpc.pb.h
   ${CMAKE_BINARY_DIR}/ydb/core/protos/blobstorage_vdisk_internal.pb.h
   ${CMAKE_BINARY_DIR}/ydb/core/protos/blobstorage_vdisk_internal.grpc.pb.h
-  ${CMAKE_BINARY_DIR}/ydb/core/protos/blobstorage_config.pb.h
-  ${CMAKE_BINARY_DIR}/ydb/core/protos/blobstorage_config.grpc.pb.h
   ${CMAKE_BINARY_DIR}/ydb/core/protos/blockstore_config.pb.h
   ${CMAKE_BINARY_DIR}/ydb/core/protos/blockstore_config.grpc.pb.h
-  ${CMAKE_BINARY_DIR}/ydb/core/protos/datashard_config.pb.h
-  ${CMAKE_BINARY_DIR}/ydb/core/protos/datashard_config.grpc.pb.h
-  ${CMAKE_BINARY_DIR}/ydb/core/protos/db_metadata_cache.pb.h
-  ${CMAKE_BINARY_DIR}/ydb/core/protos/db_metadata_cache.grpc.pb.h
-  ${CMAKE_BINARY_DIR}/ydb/core/protos/feature_flags.pb.h
-  ${CMAKE_BINARY_DIR}/ydb/core/protos/feature_flags.grpc.pb.h
-  ${CMAKE_BINARY_DIR}/ydb/core/protos/filestore_config.pb.h
-  ${CMAKE_BINARY_DIR}/ydb/core/protos/filestore_config.grpc.pb.h
+  ${CMAKE_BINARY_DIR}/ydb/core/protos/bootstrap.pb.h
+  ${CMAKE_BINARY_DIR}/ydb/core/protos/bootstrap.grpc.pb.h
   ${CMAKE_BINARY_DIR}/ydb/core/protos/bootstrapper.pb.h
   ${CMAKE_BINARY_DIR}/ydb/core/protos/bootstrapper.grpc.pb.h
   ${CMAKE_BINARY_DIR}/ydb/core/protos/change_exchange.pb.h
@@ -1813,6 +1835,8 @@ target_sources(ydb-core-protos PRIVATE
   ${CMAKE_BINARY_DIR}/ydb/core/protos/channel_purpose.grpc.pb.h
   ${CMAKE_BINARY_DIR}/ydb/core/protos/cms.pb.h
   ${CMAKE_BINARY_DIR}/ydb/core/protos/cms.grpc.pb.h
+  ${CMAKE_BINARY_DIR}/ydb/core/protos/compile_service_config.pb.h
+  ${CMAKE_BINARY_DIR}/ydb/core/protos/compile_service_config.grpc.pb.h
   ${CMAKE_BINARY_DIR}/ydb/core/protos/config.pb.h
   ${CMAKE_BINARY_DIR}/ydb/core/protos/config.grpc.pb.h
   ${CMAKE_BINARY_DIR}/ydb/core/protos/config_units.pb.h
@@ -1825,18 +1849,18 @@ target_sources(ydb-core-protos PRIVATE
   ${CMAKE_BINARY_DIR}/ydb/core/protos/console_config.grpc.pb.h
   ${CMAKE_BINARY_DIR}/ydb/core/protos/console_tenant.pb.h
   ${CMAKE_BINARY_DIR}/ydb/core/protos/console_tenant.grpc.pb.h
-  ${CMAKE_BINARY_DIR}/ydb/core/protos/counters_tx_allocator.pb.h
-  ${CMAKE_BINARY_DIR}/ydb/core/protos/counters_tx_allocator.grpc.pb.h
+  ${CMAKE_BINARY_DIR}/ydb/core/protos/counters.pb.h
+  ${CMAKE_BINARY_DIR}/ydb/core/protos/counters.grpc.pb.h
   ${CMAKE_BINARY_DIR}/ydb/core/protos/counters_blob_depot.pb.h
   ${CMAKE_BINARY_DIR}/ydb/core/protos/counters_blob_depot.grpc.pb.h
   ${CMAKE_BINARY_DIR}/ydb/core/protos/counters_bs_controller.pb.h
   ${CMAKE_BINARY_DIR}/ydb/core/protos/counters_bs_controller.grpc.pb.h
   ${CMAKE_BINARY_DIR}/ydb/core/protos/counters_cms.pb.h
   ${CMAKE_BINARY_DIR}/ydb/core/protos/counters_cms.grpc.pb.h
-  ${CMAKE_BINARY_DIR}/ydb/core/protos/counters_coordinator.pb.h
-  ${CMAKE_BINARY_DIR}/ydb/core/protos/counters_coordinator.grpc.pb.h
   ${CMAKE_BINARY_DIR}/ydb/core/protos/counters_columnshard.pb.h
   ${CMAKE_BINARY_DIR}/ydb/core/protos/counters_columnshard.grpc.pb.h
+  ${CMAKE_BINARY_DIR}/ydb/core/protos/counters_coordinator.pb.h
+  ${CMAKE_BINARY_DIR}/ydb/core/protos/counters_coordinator.grpc.pb.h
   ${CMAKE_BINARY_DIR}/ydb/core/protos/counters_datashard.pb.h
   ${CMAKE_BINARY_DIR}/ydb/core/protos/counters_datashard.grpc.pb.h
   ${CMAKE_BINARY_DIR}/ydb/core/protos/counters_hive.pb.h
@@ -1845,6 +1869,8 @@ target_sources(ydb-core-protos PRIVATE
   ${CMAKE_BINARY_DIR}/ydb/core/protos/counters_kesus.grpc.pb.h
   ${CMAKE_BINARY_DIR}/ydb/core/protos/counters_keyvalue.pb.h
   ${CMAKE_BINARY_DIR}/ydb/core/protos/counters_keyvalue.grpc.pb.h
+  ${CMAKE_BINARY_DIR}/ydb/core/protos/counters_mediator.pb.h
+  ${CMAKE_BINARY_DIR}/ydb/core/protos/counters_mediator.grpc.pb.h
   ${CMAKE_BINARY_DIR}/ydb/core/protos/counters_pq.pb.h
   ${CMAKE_BINARY_DIR}/ydb/core/protos/counters_pq.grpc.pb.h
   ${CMAKE_BINARY_DIR}/ydb/core/protos/counters_replication.pb.h
@@ -1859,28 +1885,42 @@ target_sources(ydb-core-protos PRIVATE
   ${CMAKE_BINARY_DIR}/ydb/core/protos/counters_sysview_processor.grpc.pb.h
   ${CMAKE_BINARY_DIR}/ydb/core/protos/counters_testshard.pb.h
   ${CMAKE_BINARY_DIR}/ydb/core/protos/counters_testshard.grpc.pb.h
+  ${CMAKE_BINARY_DIR}/ydb/core/protos/counters_tx_allocator.pb.h
+  ${CMAKE_BINARY_DIR}/ydb/core/protos/counters_tx_allocator.grpc.pb.h
   ${CMAKE_BINARY_DIR}/ydb/core/protos/counters_tx_proxy.pb.h
   ${CMAKE_BINARY_DIR}/ydb/core/protos/counters_tx_proxy.grpc.pb.h
-  ${CMAKE_BINARY_DIR}/ydb/core/protos/counters_mediator.pb.h
-  ${CMAKE_BINARY_DIR}/ydb/core/protos/counters_mediator.grpc.pb.h
-  ${CMAKE_BINARY_DIR}/ydb/core/protos/counters.pb.h
-  ${CMAKE_BINARY_DIR}/ydb/core/protos/counters.grpc.pb.h
-  ${CMAKE_BINARY_DIR}/ydb/core/protos/database_basic_sausage_metainfo.pb.h
-  ${CMAKE_BINARY_DIR}/ydb/core/protos/database_basic_sausage_metainfo.grpc.pb.h
   ${CMAKE_BINARY_DIR}/ydb/core/protos/data_events.pb.h
   ${CMAKE_BINARY_DIR}/ydb/core/protos/data_events.grpc.pb.h
+  ${CMAKE_BINARY_DIR}/ydb/core/protos/database_basic_sausage_metainfo.pb.h
+  ${CMAKE_BINARY_DIR}/ydb/core/protos/database_basic_sausage_metainfo.grpc.pb.h
+  ${CMAKE_BINARY_DIR}/ydb/core/protos/datashard_config.pb.h
+  ${CMAKE_BINARY_DIR}/ydb/core/protos/datashard_config.grpc.pb.h
   ${CMAKE_BINARY_DIR}/ydb/core/protos/datashard_load.pb.h
   ${CMAKE_BINARY_DIR}/ydb/core/protos/datashard_load.grpc.pb.h
+  ${CMAKE_BINARY_DIR}/ydb/core/protos/db_metadata_cache.pb.h
+  ${CMAKE_BINARY_DIR}/ydb/core/protos/db_metadata_cache.grpc.pb.h
   ${CMAKE_BINARY_DIR}/ydb/core/protos/drivemodel.pb.h
   ${CMAKE_BINARY_DIR}/ydb/core/protos/drivemodel.grpc.pb.h
   ${CMAKE_BINARY_DIR}/ydb/core/protos/export.pb.h
   ${CMAKE_BINARY_DIR}/ydb/core/protos/export.grpc.pb.h
   ${CMAKE_BINARY_DIR}/ydb/core/protos/external_sources.pb.h
   ${CMAKE_BINARY_DIR}/ydb/core/protos/external_sources.grpc.pb.h
-  ${CMAKE_BINARY_DIR}/ydb/core/protos/flat_tx_scheme.pb.h
-  ${CMAKE_BINARY_DIR}/ydb/core/protos/flat_tx_scheme.grpc.pb.h
+  ${CMAKE_BINARY_DIR}/ydb/core/protos/feature_flags.pb.h
+  ${CMAKE_BINARY_DIR}/ydb/core/protos/feature_flags.grpc.pb.h
+  ${CMAKE_BINARY_DIR}/ydb/core/protos/filestore_config.pb.h
+  ${CMAKE_BINARY_DIR}/ydb/core/protos/filestore_config.grpc.pb.h
   ${CMAKE_BINARY_DIR}/ydb/core/protos/flat_scheme_op.pb.h
   ${CMAKE_BINARY_DIR}/ydb/core/protos/flat_scheme_op.grpc.pb.h
+  ${CMAKE_BINARY_DIR}/ydb/core/protos/flat_tx_scheme.pb.h
+  ${CMAKE_BINARY_DIR}/ydb/core/protos/flat_tx_scheme.grpc.pb.h
+  ${CMAKE_BINARY_DIR}/ydb/core/protos/follower_group.pb.h
+  ${CMAKE_BINARY_DIR}/ydb/core/protos/follower_group.grpc.pb.h
+  ${CMAKE_BINARY_DIR}/ydb/core/protos/grpc.pb.h
+  ${CMAKE_BINARY_DIR}/ydb/core/protos/grpc.grpc.pb.h
+  ${CMAKE_BINARY_DIR}/ydb/core/protos/grpc_pq_old.pb.h
+  ${CMAKE_BINARY_DIR}/ydb/core/protos/grpc_pq_old.grpc.pb.h
+  ${CMAKE_BINARY_DIR}/ydb/core/protos/grpc_status_proxy.pb.h
+  ${CMAKE_BINARY_DIR}/ydb/core/protos/grpc_status_proxy.grpc.pb.h
   ${CMAKE_BINARY_DIR}/ydb/core/protos/health.pb.h
   ${CMAKE_BINARY_DIR}/ydb/core/protos/health.grpc.pb.h
   ${CMAKE_BINARY_DIR}/ydb/core/protos/hive.pb.h
@@ -1893,12 +1933,14 @@ target_sources(ydb-core-protos PRIVATE
   ${CMAKE_BINARY_DIR}/ydb/core/protos/index_builder.grpc.pb.h
   ${CMAKE_BINARY_DIR}/ydb/core/protos/kesus.pb.h
   ${CMAKE_BINARY_DIR}/ydb/core/protos/kesus.grpc.pb.h
+  ${CMAKE_BINARY_DIR}/ydb/core/protos/key.pb.h
+  ${CMAKE_BINARY_DIR}/ydb/core/protos/key.grpc.pb.h
+  ${CMAKE_BINARY_DIR}/ydb/core/protos/kqp.pb.h
+  ${CMAKE_BINARY_DIR}/ydb/core/protos/kqp.grpc.pb.h
   ${CMAKE_BINARY_DIR}/ydb/core/protos/kqp_physical.pb.h
   ${CMAKE_BINARY_DIR}/ydb/core/protos/kqp_physical.grpc.pb.h
   ${CMAKE_BINARY_DIR}/ydb/core/protos/kqp_stats.pb.h
   ${CMAKE_BINARY_DIR}/ydb/core/protos/kqp_stats.grpc.pb.h
-  ${CMAKE_BINARY_DIR}/ydb/core/protos/kqp.pb.h
-  ${CMAKE_BINARY_DIR}/ydb/core/protos/kqp.grpc.pb.h
   ${CMAKE_BINARY_DIR}/ydb/core/protos/labeled_counters.pb.h
   ${CMAKE_BINARY_DIR}/ydb/core/protos/labeled_counters.grpc.pb.h
   ${CMAKE_BINARY_DIR}/ydb/core/protos/load_test.pb.h
@@ -1929,6 +1971,12 @@ target_sources(ydb-core-protos PRIVATE
   ${CMAKE_BINARY_DIR}/ydb/core/protos/node_broker.grpc.pb.h
   ${CMAKE_BINARY_DIR}/ydb/core/protos/node_limits.pb.h
   ${CMAKE_BINARY_DIR}/ydb/core/protos/node_limits.grpc.pb.h
+  ${CMAKE_BINARY_DIR}/ydb/core/protos/node_whiteboard.pb.h
+  ${CMAKE_BINARY_DIR}/ydb/core/protos/node_whiteboard.grpc.pb.h
+  ${CMAKE_BINARY_DIR}/ydb/core/protos/pdiskfit.pb.h
+  ${CMAKE_BINARY_DIR}/ydb/core/protos/pdiskfit.grpc.pb.h
+  ${CMAKE_BINARY_DIR}/ydb/core/protos/pqconfig.pb.h
+  ${CMAKE_BINARY_DIR}/ydb/core/protos/pqconfig.grpc.pb.h
   ${CMAKE_BINARY_DIR}/ydb/core/protos/profiler.pb.h
   ${CMAKE_BINARY_DIR}/ydb/core/protos/profiler.grpc.pb.h
   ${CMAKE_BINARY_DIR}/ydb/core/protos/query_stats.pb.h
@@ -1937,6 +1985,10 @@ target_sources(ydb-core-protos PRIVATE
   ${CMAKE_BINARY_DIR}/ydb/core/protos/replication.grpc.pb.h
   ${CMAKE_BINARY_DIR}/ydb/core/protos/resource_broker.pb.h
   ${CMAKE_BINARY_DIR}/ydb/core/protos/resource_broker.grpc.pb.h
+  ${CMAKE_BINARY_DIR}/ydb/core/protos/scheme_board.pb.h
+  ${CMAKE_BINARY_DIR}/ydb/core/protos/scheme_board.grpc.pb.h
+  ${CMAKE_BINARY_DIR}/ydb/core/protos/scheme_board_mon.pb.h
+  ${CMAKE_BINARY_DIR}/ydb/core/protos/scheme_board_mon.grpc.pb.h
   ${CMAKE_BINARY_DIR}/ydb/core/protos/scheme_log.pb.h
   ${CMAKE_BINARY_DIR}/ydb/core/protos/scheme_log.grpc.pb.h
   ${CMAKE_BINARY_DIR}/ydb/core/protos/scheme_type_metadata.pb.h
@@ -1949,8 +2001,6 @@ target_sources(ydb-core-protos PRIVATE
   ${CMAKE_BINARY_DIR}/ydb/core/protos/shared_cache.grpc.pb.h
   ${CMAKE_BINARY_DIR}/ydb/core/protos/sqs.pb.h
   ${CMAKE_BINARY_DIR}/ydb/core/protos/sqs.grpc.pb.h
-  ${CMAKE_BINARY_DIR}/ydb/core/protos/follower_group.pb.h
-  ${CMAKE_BINARY_DIR}/ydb/core/protos/follower_group.grpc.pb.h
   ${CMAKE_BINARY_DIR}/ydb/core/protos/ssa.pb.h
   ${CMAKE_BINARY_DIR}/ydb/core/protos/ssa.grpc.pb.h
   ${CMAKE_BINARY_DIR}/ydb/core/protos/statestorage.pb.h
@@ -1961,6 +2011,8 @@ target_sources(ydb-core-protos PRIVATE
   ${CMAKE_BINARY_DIR}/ydb/core/protos/stream.grpc.pb.h
   ${CMAKE_BINARY_DIR}/ydb/core/protos/subdomains.pb.h
   ${CMAKE_BINARY_DIR}/ydb/core/protos/subdomains.grpc.pb.h
+  ${CMAKE_BINARY_DIR}/ydb/core/protos/sys_view.pb.h
+  ${CMAKE_BINARY_DIR}/ydb/core/protos/sys_view.grpc.pb.h
   ${CMAKE_BINARY_DIR}/ydb/core/protos/table_service_config.pb.h
   ${CMAKE_BINARY_DIR}/ydb/core/protos/table_service_config.grpc.pb.h
   ${CMAKE_BINARY_DIR}/ydb/core/protos/table_stats.pb.h
@@ -1987,8 +2039,6 @@ target_sources(ydb-core-protos PRIVATE
   ${CMAKE_BINARY_DIR}/ydb/core/protos/test_shard.grpc.pb.h
   ${CMAKE_BINARY_DIR}/ydb/core/protos/tracing.pb.h
   ${CMAKE_BINARY_DIR}/ydb/core/protos/tracing.grpc.pb.h
-  ${CMAKE_BINARY_DIR}/ydb/core/protos/node_whiteboard.pb.h
-  ${CMAKE_BINARY_DIR}/ydb/core/protos/node_whiteboard.grpc.pb.h
   ${CMAKE_BINARY_DIR}/ydb/core/protos/tx.pb.h
   ${CMAKE_BINARY_DIR}/ydb/core/protos/tx.grpc.pb.h
   ${CMAKE_BINARY_DIR}/ydb/core/protos/tx_columnshard.pb.h
@@ -2003,30 +2053,10 @@ target_sources(ydb-core-protos PRIVATE
   ${CMAKE_BINARY_DIR}/ydb/core/protos/tx_scheme.grpc.pb.h
   ${CMAKE_BINARY_DIR}/ydb/core/protos/tx_sequenceshard.pb.h
   ${CMAKE_BINARY_DIR}/ydb/core/protos/tx_sequenceshard.grpc.pb.h
-  ${CMAKE_BINARY_DIR}/ydb/core/protos/pdiskfit.pb.h
-  ${CMAKE_BINARY_DIR}/ydb/core/protos/pdiskfit.grpc.pb.h
-  ${CMAKE_BINARY_DIR}/ydb/core/protos/pqconfig.pb.h
-  ${CMAKE_BINARY_DIR}/ydb/core/protos/pqconfig.grpc.pb.h
-  ${CMAKE_BINARY_DIR}/ydb/core/protos/auth.pb.h
-  ${CMAKE_BINARY_DIR}/ydb/core/protos/auth.grpc.pb.h
-  ${CMAKE_BINARY_DIR}/ydb/core/protos/key.pb.h
-  ${CMAKE_BINARY_DIR}/ydb/core/protos/key.grpc.pb.h
-  ${CMAKE_BINARY_DIR}/ydb/core/protos/grpc.pb.h
-  ${CMAKE_BINARY_DIR}/ydb/core/protos/grpc.grpc.pb.h
-  ${CMAKE_BINARY_DIR}/ydb/core/protos/grpc_pq_old.pb.h
-  ${CMAKE_BINARY_DIR}/ydb/core/protos/grpc_pq_old.grpc.pb.h
-  ${CMAKE_BINARY_DIR}/ydb/core/protos/grpc_status_proxy.pb.h
-  ${CMAKE_BINARY_DIR}/ydb/core/protos/grpc_status_proxy.grpc.pb.h
   ${CMAKE_BINARY_DIR}/ydb/core/protos/ydb_result_set_old.pb.h
   ${CMAKE_BINARY_DIR}/ydb/core/protos/ydb_result_set_old.grpc.pb.h
   ${CMAKE_BINARY_DIR}/ydb/core/protos/ydb_table_impl.pb.h
   ${CMAKE_BINARY_DIR}/ydb/core/protos/ydb_table_impl.grpc.pb.h
-  ${CMAKE_BINARY_DIR}/ydb/core/protos/scheme_board.pb.h
-  ${CMAKE_BINARY_DIR}/ydb/core/protos/scheme_board.grpc.pb.h
-  ${CMAKE_BINARY_DIR}/ydb/core/protos/scheme_board_mon.pb.h
-  ${CMAKE_BINARY_DIR}/ydb/core/protos/scheme_board_mon.grpc.pb.h
-  ${CMAKE_BINARY_DIR}/ydb/core/protos/sys_view.pb.h
-  ${CMAKE_BINARY_DIR}/ydb/core/protos/sys_view.grpc.pb.h
 )
 generate_enum_serilization(ydb-core-protos
   ${CMAKE_BINARY_DIR}/ydb/core/protos/blobstorage_pdisk_config.pb.h

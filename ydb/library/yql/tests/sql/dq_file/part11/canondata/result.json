@@ -1781,9 +1781,9 @@
     ],
     "test.test[pg-select_having_same_agg-default.txt-Debug]": [
         {
-            "checksum": "96d3b597d5351f5892563a1ef6c0c1a5",
+            "checksum": "7d4de68333b61f48a64bcc53c33cac6f",
             "size": 1635,
-            "uri": "https://{canondata_backend}/1936947/a99026e839b7e22714c2a9a81971a3b5e3ed1eb4/resource.tar.gz#test.test_pg-select_having_same_agg-default.txt-Debug_/opt.yql_patched"
+            "uri": "https://{canondata_backend}/1937027/840ae09a36bdc9a4737f612d0787fa5691189018/resource.tar.gz#test.test_pg-select_having_same_agg-default.txt-Debug_/opt.yql_patched"
         }
     ],
     "test.test[pg-select_having_same_agg-default.txt-Plan]": [
@@ -1891,9 +1891,9 @@
     ],
     "test.test[pg-tpcds-q08-default.txt-Debug]": [
         {
-            "checksum": "4b37536d8e9093b56337f2ae2fe5664c",
-            "size": 552,
-            "uri": "https://{canondata_backend}/1936947/a99026e839b7e22714c2a9a81971a3b5e3ed1eb4/resource.tar.gz#test.test_pg-tpcds-q08-default.txt-Debug_/opt.yql_patched"
+            "checksum": "07e5aba4f959f91f8713505cc49afc15",
+            "size": 544,
+            "uri": "https://{canondata_backend}/1937027/840ae09a36bdc9a4737f612d0787fa5691189018/resource.tar.gz#test.test_pg-tpcds-q08-default.txt-Debug_/opt.yql_patched"
         }
     ],
     "test.test[pg-tpcds-q08-default.txt-Plan]": [
@@ -2023,9 +2023,9 @@
     ],
     "test.test[pg-tpch-q02-default.txt-Debug]": [
         {
-            "checksum": "a7b0a6fe9c1dd76e47c9d64cfe9cdddb",
-            "size": 20293,
-            "uri": "https://{canondata_backend}/1936947/a99026e839b7e22714c2a9a81971a3b5e3ed1eb4/resource.tar.gz#test.test_pg-tpch-q02-default.txt-Debug_/opt.yql_patched"
+            "checksum": "c927df5d8fde88f8aa8c5571ffdaac64",
+            "size": 20281,
+            "uri": "https://{canondata_backend}/1937027/840ae09a36bdc9a4737f612d0787fa5691189018/resource.tar.gz#test.test_pg-tpch-q02-default.txt-Debug_/opt.yql_patched"
         }
     ],
     "test.test[pg-tpch-q02-default.txt-Plan]": [

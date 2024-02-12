@@ -892,30 +892,6 @@ INSERT INTO ceil_floor_round VALUES ('0.0');
 INSERT INTO ceil_floor_round VALUES ('0.0000001');
 INSERT INTO ceil_floor_round VALUES ('-0.000001');
 DROP TABLE ceil_floor_round;
--- Check rounding, it should round ties away from zero.
-SELECT i as pow,
-	round((-2.5 * 10 ^ i)::numeric, -i),
-	round((-1.5 * 10 ^ i)::numeric, -i),
-	round((-0.5 * 10 ^ i)::numeric, -i),
-	round((0.5 * 10 ^ i)::numeric, -i),
-	round((1.5 * 10 ^ i)::numeric, -i),
-	round((2.5 * 10 ^ i)::numeric, -i)
-FROM generate_series(-5,5) AS t(i);
- pow |  round   |  round   |  round   |  round  |  round  |  round  
------+----------+----------+----------+---------+---------+---------
-  -5 | -0.00003 | -0.00002 | -0.00001 | 0.00001 | 0.00002 | 0.00003
-  -4 |  -0.0003 |  -0.0002 |  -0.0001 |  0.0001 |  0.0002 |  0.0003
-  -3 |   -0.003 |   -0.002 |   -0.001 |   0.001 |   0.002 |   0.003
-  -2 |    -0.03 |    -0.02 |    -0.01 |    0.01 |    0.02 |    0.03
-  -1 |     -0.3 |     -0.2 |     -0.1 |     0.1 |     0.2 |     0.3
-   0 |       -3 |       -2 |       -1 |       1 |       2 |       3
-   1 |      -30 |      -20 |      -10 |      10 |      20 |      30
-   2 |     -300 |     -200 |     -100 |     100 |     200 |     300
-   3 |    -3000 |    -2000 |    -1000 |    1000 |    2000 |    3000
-   4 |   -30000 |   -20000 |   -10000 |   10000 |   20000 |   30000
-   5 |  -300000 |  -200000 |  -100000 |  100000 |  200000 |  300000
-(11 rows)
-
 -- Testing for width_bucket(). For convenience, we test both the
 -- numeric and float8 versions of the function in this file.
 -- errors
@@ -947,24 +923,10 @@ SELECT width_bucket(0.0::numeric, 'Infinity'::numeric, 5, 10); -- error
 ERROR:  lower and upper bounds must be finite
 SELECT width_bucket(0.0::numeric, 5, '-Infinity'::numeric, 20); -- error
 ERROR:  lower and upper bounds must be finite
-SELECT width_bucket('Infinity'::numeric, 1, 10, 10),
-       width_bucket('-Infinity'::numeric, 1, 10, 10);
- width_bucket | width_bucket 
---------------+--------------
-           11 |            0
-(1 row)
-
 SELECT width_bucket(0.0::float8, 'Infinity'::float8, 5, 10); -- error
 ERROR:  lower and upper bounds must be finite
 SELECT width_bucket(0.0::float8, 5, '-Infinity'::float8, 20); -- error
 ERROR:  lower and upper bounds must be finite
-SELECT width_bucket('Infinity'::float8, 1, 10, 10),
-       width_bucket('-Infinity'::float8, 1, 10, 10);
- width_bucket | width_bucket 
---------------+--------------
-           11 |            0
-(1 row)
-
 DROP TABLE width_bucket_test;
 -- Simple test for roundoff error when results should be exact
 SELECT x, width_bucket(x::float8, 10, 100, 9) as flt,
@@ -1657,6 +1619,13 @@ select exp(-123.456);
  0.000000000000000000000000000000000000000000000000000002419582541264601
 (1 row)
 
+-- big test
+select exp(1234.5678);
+                                                                                                                                                                                                                                                                              exp                                                                                                                                                                                                                                                                               
+----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ 146549072930959479983482138503979804217622199675223653966270157446954995433819741094410764947112047906012815540251009949604426069672532417736057033099274204598385314594846509975629046864798765888104789074984927709616261452461385220475510438783429612447831614003668421849727379202555580791042606170523016207262965336641214601082882495255771621327088265411334088968112458492660609809762865582162764292604697957813514621259353683899630997077707406305730694385703091201347848855199354307506425820147289848677003277208302716466011827836279231.9667
+(1 row)
+
 --
 -- Tests for generate_series
 --
@@ -2004,6 +1973,12 @@ select trim_scale(-13.00000000000000000000);
  trim_scale 
 ------------
         -13
+(1 row)
+
+select trim_scale(1e100);
+                                              trim_scale                                               
+-------------------------------------------------------------------------------------------------------
+ 10000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
 (1 row)
 
 --

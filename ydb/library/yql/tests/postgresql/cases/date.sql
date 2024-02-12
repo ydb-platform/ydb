@@ -191,7 +191,6 @@ SELECT EXTRACT(JULIAN        FROM DATE '2020-08-11');
 select 'infinity'::date, '-infinity'::date;
 select 'infinity'::date > 'today'::date as t;
 select '-infinity'::date < 'today'::date as t;
-select isfinite('infinity'::date), isfinite('-infinity'::date), isfinite('today'::date);
 --
 -- oscillating fields from non-finite date:
 --

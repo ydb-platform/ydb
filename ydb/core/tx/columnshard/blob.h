@@ -5,6 +5,10 @@
 
 #include <util/generic/string.h>
 
+namespace NKikimrColumnShardProto {
+class TBlobRange;
+}
+
 namespace NKikimr::NOlap {
 
 class IBlobGroupSelector;
@@ -343,6 +347,12 @@ struct TBlobRange {
         return Sprintf("{ Blob: %s Offset: %" PRIu32 " Size: %" PRIu32 " }",
                        BlobId.ToStringNew().c_str(), Offset, Size);
     }
+
+    NKikimrColumnShardProto::TBlobRange SerializeToProto() const;
+
+    TConclusionStatus DeserializeFromProto(const NKikimrColumnShardProto::TBlobRange& proto);
+
+    static TConclusion<TBlobRange> BuildFromProto(const NKikimrColumnShardProto::TBlobRange& proto);
 };
 
 class IBlobInUseTracker {

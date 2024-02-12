@@ -68,11 +68,7 @@ bool TPortionMeta::DeserializeFromProto(const NKikimrTxColumnShard::TIndexPortio
     return true;
 }
 
-std::optional<NKikimrTxColumnShard::TIndexPortionMeta> TPortionMeta::SerializeToProto(const ui32 columnId, const ui32 chunk) const {
-    if (!IsChunkWithPortionInfo(columnId, chunk)) {
-        return {};
-    }
-
+NKikimrTxColumnShard::TIndexPortionMeta TPortionMeta::SerializeToProto() const {
     NKikimrTxColumnShard::TIndexPortionMeta portionMeta;
     portionMeta.SetTierName(TierName);
 
@@ -110,6 +106,14 @@ std::optional<NKikimrTxColumnShard::TIndexPortionMeta> TPortionMeta::SerializeTo
         portionMeta.MutableRecordSnapshotMax()->SetTxId(RecordSnapshotMax->GetTxId());
     }
     return portionMeta;
+}
+
+std::optional<NKikimrTxColumnShard::TIndexPortionMeta> TPortionMeta::SerializeToProto(const ui32 columnId, const ui32 chunk) const {
+    if (columnId != FirstPkColumn || chunk != 0) {
+        return {};
+    }
+
+    return SerializeToProto();
 }
 
 TString TPortionMeta::DebugString() const {

@@ -51,9 +51,9 @@ public:
         }
     };
 
-    static TConclusion<TPortionInfo> BuildFromProto(const NKikimrColumnShardDataSharingProto::TPortionInfo& proto);
+    static TConclusion<TPortionInfo> BuildFromProto(const NKikimrColumnShardDataSharingProto::TPortionInfo& proto, const TIndexInfo& info);
     void SerializeToProto(NKikimrColumnShardDataSharingProto::TPortionInfo& proto) const;
-    TConclusionStatus DeserializeFromProto(const NKikimrColumnShardDataSharingProto::TPortionInfo& proto);
+    TConclusionStatus DeserializeFromProto(const NKikimrColumnShardDataSharingProto::TPortionInfo& proto, const TIndexInfo& info);
 
     std::vector<TPage> BuildPages() const;
 

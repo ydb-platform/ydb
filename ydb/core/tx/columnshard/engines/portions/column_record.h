@@ -38,6 +38,32 @@ public:
 //        AFL_VERIFY(!BlobRange.BlobId.GetTabletId())("original", BlobRange.BlobId.ToStringNew())("new", blobId.ToStringNew());
         BlobRange.BlobId = blobId;
     }
+
+    TConclusionStatus DeserializeFromProto(const NKikimrColumnShardDataSharingProto::TPortionInfo::TIndexChunk& proto) {
+        IndexId = proto.GetIndexId();
+        ChunkIdx = proto.GetChunkIdx();
+        RecordsCount = proto.GetRecordsCount();
+        RawBytes = proto.GetRawBytes();
+        {
+            auto parsed = TBlobRange::BuildFromProto(proto.GetBlobRange());
+            if (!parsed) {
+                return parsed;
+            }
+            BlobRange = parsed.DetachResult();
+        }
+        return TConclusionStatus::Success();
+    }
+
+    NKikimrColumnShardDataSharingProto::TPortionInfo::TIndexChunk SerializeToProto() const {
+        NKikimrColumnShardDataSharingProto::TPortionInfo::TIndexChunk result;
+        proto.SetIndexId(IndexId);
+        proto.SetChunkIdx(ChunkIdx);
+        proto.SetRecordsCount(RecordsCount);
+        proto.SetRawBytes(RawBytes);
+        *result.MutabletBlobRange() = BlobRange.SerializeToProto();
+        return result;
+    }
+
 };
 
 struct TChunkMeta: public TSimpleChunkMeta {
@@ -52,6 +78,7 @@ public:
     }
 
     NKikimrTxColumnShard::TIndexColumnMeta SerializeToProto() const;
+    TConclusionStatus DeserializeFromProto(const TChunkAddress& address, const NKikimrTxColumnShard::TIndexColumnMeta& proto, const TIndexInfo& indexInfo);
 
     class TTestInstanceBuilder {
     public:
@@ -113,6 +140,34 @@ public:
     }
     ui16 GetChunkIdx() const {
         return Chunk;
+    }
+
+    TConclusionStatus DeserializeFromProto(const NKikimrColumnShardDataSharingProto::TPortionInfo::TColumnRecord& proto, const TIndexInfo& indexInfo) {
+        ColumnId = proto.GetColumnId();
+        Chunk = proto.GetChunk();
+        {
+            auto parse = Meta.DeserializeFromProto(GetAddress(), proto.GetMeta(), indexInfo);
+            if (!parse) {
+                return parse;
+            }
+        }
+        {
+            auto parsed = TBlobRange::BuildFromProto(proto.GetBlobRange());
+            if (!parsed) {
+                return parsed;
+            }
+            BlobRange = parsed.DetachResult();
+        }
+        return TConclusionStatus::Success();
+    }
+
+    NKikimrColumnShardDataSharingProto::TPortionInfo::TColumnRecord SerializeToProto() const {
+        NKikimrColumnShardDataSharingProto::TPortionInfo::TColumnRecord result;
+        result.SetColumnId(ColumnId);
+        result.SetChunk(Chunk);
+        *result.MutabletMeta() = Meta.SerializeToProto();
+        *result.MutabletBlobRange() = BlobRange.SerializeToProto();
+        return result;
     }
 
     TColumnSerializationStat GetSerializationStat(const std::string& columnName) const {

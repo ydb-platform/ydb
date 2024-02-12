@@ -6,7 +6,7 @@
 
 namespace NKikimr::NOlap {
 
-TChunkMeta::TChunkMeta(const TColumnChunkLoadContext& context, const TIndexInfo& indexInfo) {
+TConclusionStatus TChunkMeta::DeserializeFromProto(const TChunkAddress& address, const NKikimrTxColumnShard::TIndexColumnMeta& proto, const TIndexInfo& indexInfo) {
     auto field = indexInfo.ArrowColumnFieldOptional(context.GetAddress().GetColumnId());
     if (context.GetMetaProto().HasNumRows()) {
         NumRows = context.GetMetaProto().GetNumRows();
@@ -22,6 +22,11 @@ TChunkMeta::TChunkMeta(const TColumnChunkLoadContext& context, const TIndexInfo&
         AFL_VERIFY(field)("field_id", context.GetAddress().GetColumnId())("field_name", indexInfo.GetColumnName(context.GetAddress().GetColumnId()));
         Max = ConstantToScalar(context.GetMetaProto().GetMaxValue(), field->type());
     }
+    return TConclusionStatus::Success();
+}
+
+TChunkMeta::TChunkMeta(const TColumnChunkLoadContext& context, const TIndexInfo& indexInfo) {
+    AFL_VERIFY(DeserializeFromProto(context.GetAddress(), context.GetMetaProto(), indexInfo));
 }
 
 TChunkMeta::TChunkMeta(const std::shared_ptr<arrow::Array>& column, const ui32 columnId, const TIndexInfo& indexInfo)

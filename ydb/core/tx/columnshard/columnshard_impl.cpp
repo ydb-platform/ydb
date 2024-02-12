@@ -874,7 +874,9 @@ void TColumnShard::Handle(NOlap::NDataSharing::NEvents::TEvSendDataFromSource::T
 
     THashMap<ui64, NOlap::NDataSharing::NEvents::TPathIdData> dataByPathId;
     for (auto&& i : ev->Get()->Record.GetPathIdData()) {
-        auto data = NOlap::NDataSharing::NEvents::TPathIdData::BuildFromProto(i);
+        auto schema = TablesManager.GetPrimaryIndexAsVerified<NOlap::TColumnEngineForLogs>().GetVersionedIndex().GetLastSchema();
+        AFL_VERIFY(schema);
+        auto data = NOlap::NDataSharing::NEvents::TPathIdData::BuildFromProto(i, schema->GetIndexInfo());
         AFL_VERIFY(data.IsSuccess())("error", data.GetErrorMessage());
         AFL_VERIFY(dataByPathId.emplace(i.GetPathId(), data.DetachResult()).second);
     }

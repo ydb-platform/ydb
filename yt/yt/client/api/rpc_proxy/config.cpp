@@ -100,9 +100,6 @@ void TConnectionConfig::Register(TRegistrar registrar)
         .Default(NCompression::ECodec::None);
     registrar.Parameter("response_codec", &TThis::ResponseCodec)
         .Default(NCompression::ECodec::None);
-    // COMPAT(kiselyovp): legacy RPC codecs
-    registrar.Parameter("enable_legacy_rpc_codecs", &TThis::EnableLegacyRpcCodecs)
-        .Default(true);
 
     registrar.Parameter("enable_retries", &TThis::EnableRetries)
         .Default(false);

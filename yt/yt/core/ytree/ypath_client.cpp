@@ -51,6 +51,8 @@ TYPathRequest::TYPathRequest(
 {
     ToProto(Header_.mutable_service(), std::move(service));
     ToProto(Header_.mutable_method(), std::move(method));
+    Header_.set_request_codec(ToProto<int>(NCompression::ECodec::None));
+    Header_.set_response_codec(ToProto<int>(NCompression::ECodec::None));
 
     auto* ypathExt = Header_.MutableExtension(NProto::TYPathHeaderExt::ypath_header_ext);
     ypathExt->set_mutating(mutating);
@@ -182,11 +184,6 @@ NConcurrency::IAsyncZeroCopyOutputStreamPtr TYPathRequest::GetRequestAttachments
 }
 
 NConcurrency::IAsyncZeroCopyInputStreamPtr TYPathRequest::GetResponseAttachmentsStream() const
-{
-    YT_ABORT();
-}
-
-bool TYPathRequest::IsLegacyRpcCodecsEnabled()
 {
     YT_ABORT();
 }

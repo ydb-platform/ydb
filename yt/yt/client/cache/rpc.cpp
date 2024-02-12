@@ -72,9 +72,6 @@ NApi::NRpcProxy::TConnectionConfigPtr GetConnectionConfig(const TConfig& config)
     connectionConfig->ResponseCodec = GetCompressionCodecFromProto(config.GetResponseCodec());
     connectionConfig->EnableRetries = config.GetEnableRetries();
 
-    if (config.HasEnableLegacyRpcCodecs()) {
-        connectionConfig->EnableLegacyRpcCodecs = config.GetEnableLegacyRpcCodecs();
-    }
     if (config.HasEnableSelectQueryTracingTag()) {
         connectionConfig->EnableSelectQueryTracingTag = config.GetEnableSelectQueryTracingTag();
     }
@@ -86,6 +83,18 @@ NApi::NRpcProxy::TConnectionConfigPtr GetConnectionConfig(const TConfig& config)
     }
     if (config.HasRetryTimeout()) {
         connectionConfig->RetryingChannel->RetryTimeout = TDuration::MilliSeconds(config.GetRetryTimeout());
+    }
+
+    if (config.HasClusterTag()) {
+        connectionConfig->ClusterTag = NApi::TClusterTag(config.GetClusterTag());
+    }
+
+    if (config.HasClockClusterTag()) {
+        connectionConfig->ClockClusterTag = NObjectClient::TCellTag(config.GetClockClusterTag());
+    }
+
+    if (config.HasUdfRegistryPath()) {
+        connectionConfig->UdfRegistryPath = config.GetUdfRegistryPath();
     }
 
     connectionConfig->Postprocess();

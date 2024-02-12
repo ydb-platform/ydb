@@ -31,6 +31,10 @@
 /* define if the compiler supports basic C++14 syntax */
 #define HAVE_CXX14 1
 
+/* Define to 1 if you have the declaration of `CLOCK_MONOTONIC', and to 0 if
+   you don't. */
+#define HAVE_DECL_CLOCK_MONOTONIC 1
+
 /* Define to 1 if you have the declaration of `initgroups', and to 0 if you
    don't. */
 #define HAVE_DECL_INITGROUPS 1
@@ -189,9 +193,6 @@
 /* Define to 1 if you have `struct tm.tm_gmtoff` member. */
 #define HAVE_STRUCT_TM_TM_GMTOFF 1
 
-/* Define to 1 if you have the <sysinfoapi.h> header file. */
-/* #undef HAVE_SYSINFOAPI_H */
-
 /* Define to 1 if you have the <syslog.h> header file. */
 #define HAVE_SYSLOG_H 1
 
@@ -213,9 +214,6 @@
 /* Define to 1 if you have the `timegm' function. */
 #define HAVE_TIMEGM 1
 
-/* Define to 1 if you have the <time.h> header file. */
-#define HAVE_TIME_H 1
-
 /* Define to 1 if you have the <unistd.h> header file. */
 #define HAVE_UNISTD_H 1
 
@@ -227,6 +225,9 @@
 
 /* Define to 1 if you have the <wchar.h> header file. */
 #define HAVE_WCHAR_H 1
+
+/* Define to 1 if you have the <windows.h> header file. */
+/* #undef HAVE_WINDOWS_H */
 
 /* Define to 1 if `fork' works. */
 #define HAVE_WORKING_FORK 1
@@ -259,7 +260,7 @@
 #define PACKAGE_NAME "nghttp2"
 
 /* Define to the full name and version of this package. */
-#define PACKAGE_STRING "nghttp2 1.58.0"
+#define PACKAGE_STRING "nghttp2 1.59.0"
 
 /* Define to the one symbol short name of this package. */
 #define PACKAGE_TARNAME "nghttp2"
@@ -268,13 +269,7 @@
 #define PACKAGE_URL ""
 
 /* Define to the version of this package. */
-#define PACKAGE_VERSION "1.58.0"
-
-/* The size of `int *', as computed by sizeof. */
-#define SIZEOF_INT_P 8
-
-/* The size of `time_t', as computed by sizeof. */
-#define SIZEOF_TIME_T 8
+#define PACKAGE_VERSION "1.59.0"
 
 /* Define to 1 if all of the C90 standard headers exist (not just the ones
    required in a freestanding environment). This macro is provided for
@@ -373,7 +368,7 @@
 
 
 /* Version number of package */
-#define VERSION "1.58.0"
+#define VERSION "1.59.0"
 
 /* Define WORDS_BIGENDIAN to 1 if your processor stores words with the most
    significant byte first (like Motorola and SPARC, unlike Intel). */

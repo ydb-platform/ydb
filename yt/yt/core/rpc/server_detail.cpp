@@ -88,15 +88,6 @@ void TServiceContextBase::Reply(const TSharedRefArray& responseMessage)
     TResponseHeader header;
     YT_VERIFY(TryParseResponseHeader(responseMessage, &header));
 
-    // COMPAT(danilalexeev): legacy RPC codecs
-    if (header.has_codec()) {
-        YT_VERIFY(TryEnumCast(header.codec(), &ResponseCodec_));
-        SetResponseBodySerializedWithCompression();
-    }
-    if (header.has_format()) {
-        RequestHeader_->set_response_format(header.format());
-    }
-
     if (header.has_error()) {
         Error_ = FromProto<TError>(header.error());
     }
@@ -106,6 +97,11 @@ void TServiceContextBase::Reply(const TSharedRefArray& responseMessage)
         ResponseAttachments_ = std::vector<TSharedRef>(
             responseMessage.Begin() + 2,
             responseMessage.End());
+
+        YT_VERIFY(header.has_codec() && TryEnumCast(header.codec(), &ResponseCodec_));
+        if (header.has_format()) {
+            RequestHeader_->set_response_format(header.format());
+        }
     } else {
         ResponseBody_.Reset();
         ResponseAttachments_.clear();
@@ -190,10 +186,7 @@ TSharedRefArray TServiceContextBase::BuildResponseMessage()
         header.set_format(RequestHeader_->response_format());
     }
 
-    // COMPAT(danilalexeev)
-    if (IsResponseBodySerializedWithCompression()) {
-        header.set_codec(static_cast<int>(ResponseCodec_));
-    }
+    header.set_codec(static_cast<int>(ResponseCodec_));
 
     auto message = Error_.IsOK()
         ? CreateResponseMessage(
@@ -471,16 +464,6 @@ void TServiceContextBase::SetResponseCodec(NCompression::ECodec codec)
     ResponseCodec_ = codec;
 }
 
-bool TServiceContextBase::IsResponseBodySerializedWithCompression() const
-{
-    return ResponseBodySerializedWithCompression_;
-}
-
-void TServiceContextBase::SetResponseBodySerializedWithCompression()
-{
-    ResponseBodySerializedWithCompression_ = true;
-}
-
 ////////////////////////////////////////////////////////////////////////////////
 
 TServiceContextWrapper::TServiceContextWrapper(IServiceContextPtr underlyingContext)
@@ -743,16 +726,6 @@ NCompression::ECodec TServiceContextWrapper::GetResponseCodec() const
 void TServiceContextWrapper::SetResponseCodec(NCompression::ECodec codec)
 {
     UnderlyingContext_->SetResponseCodec(codec);
-}
-
-bool TServiceContextWrapper::IsResponseBodySerializedWithCompression() const
-{
-    return UnderlyingContext_->IsResponseBodySerializedWithCompression();
-}
-
-void TServiceContextWrapper::SetResponseBodySerializedWithCompression()
-{
-    UnderlyingContext_->SetResponseBodySerializedWithCompression();
 }
 
 const IServiceContextPtr& TServiceContextWrapper::GetUnderlyingContext() const

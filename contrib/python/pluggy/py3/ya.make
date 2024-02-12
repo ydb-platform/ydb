@@ -2,7 +2,7 @@
 
 PY3_LIBRARY()
 
-VERSION(1.3.0)
+VERSION(1.4.0)
 
 LICENSE(MIT)
 
@@ -17,6 +17,7 @@ PY_SRCS(
     pluggy/_result.py
     pluggy/_tracing.py
     pluggy/_version.py
+    pluggy/_warnings.py
 )
 
 RESOURCE_FILES(

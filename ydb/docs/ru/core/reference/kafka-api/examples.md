@@ -274,7 +274,7 @@ topic=Topic-1
 ```
 
 #### Из YDB в PostgreSQL
-Пример файла настроек JDBCSink коннектора `/etc/kafka-connect-worker/jdbc-sink.properties` для переноса данных из топика в таблицу PostgreSQL:
+Пример файла настроек JDBCSink коннектора `/etc/kafka-connect-worker/jdbc-sink.properties` для переноса данных из топика в таблицу PostgreSQL. Используется коннектор [Kafka Connect JDBC Connector](https://github.com/confluentinc/kafka-connect-jdbc).
 ```ini
 name=postgresql-sink
 connector.class=io.confluent.connect.jdbc.JdbcSinkConnector
@@ -298,7 +298,7 @@ auto.evolve=true
 ```
 
 #### Из PostgreSQL в YDB
-Пример файла настроек JDBCSource коннектора `/etc/kafka-connect-worker/jdbc-source.properties` для переноса данных из PostgreSQL таблицы в топик:
+Пример файла настроек JDBCSource коннектора `/etc/kafka-connect-worker/jdbc-source.properties` для переноса данных из PostgreSQL таблицы в топик. Используется коннектор [Kafka Connect JDBC Connector](https://github.com/confluentinc/kafka-connect-jdbc).
 ```ini
 name=postgresql-source
 connector.class=io.confluent.connect.jdbc.JdbcSourceConnector
@@ -312,4 +312,18 @@ query=SELECT * FROM "Topic-1";
 topic.prefix=Topic-1
 poll.interval.ms=1000
 validate.non.null=false
+```
+
+#### Из YDB в S3
+Пример файла настроек S3Sink коннектора `/etc/kafka-connect-worker/s3-sink.properties` для переноса данных из топика в S3. Используется коннектор [Aiven's S3 Sink Connector for Apache Kafka](https://github.com/Aiven-Open/s3-connector-for-apache-kafka).
+```ini
+name=s3-sink
+connector.class=io.aiven.kafka.connect.s3.AivenKafkaConnectS3SinkConnector
+topics=Topic-1
+aws.access.key.id=<s3-access-key>
+aws.secret.access.key=<s3-secret>
+aws.s3.bucket.name=<bucket-name>
+aws.s3.endpoint=<s3-endpoint>
+format.output.type=json
+file.compression.type=none
 ```

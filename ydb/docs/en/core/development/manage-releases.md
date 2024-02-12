@@ -16,13 +16,14 @@ There are two products based on the source code from the [{{ ydb-short-name }} r
 3. Minor release ordinal number for a given major release
 
 Thus, {{ ydb-short-name }} server major version is a combination of the first two numbers (for example, `23.3`), and the full version is a combination of all three (for example, `23.3.5`).
+
 {{ ydb-short-name }} server release schedule typically includes 4 major releases per year, so the release `YY.1` is the first one, and `YY.4` is the last one for a year `YY`. The number of minor releases is not fixed, and may vary from one major release to another.
 
 ### Compatibility {#server-compatibility}
 
 {{ ydb-short-name }} maintains compatibility between major versions to ensure a cluster can operate while its nodes run two adjacent major versions of the YDB server executable. You may refer the [Updating {{ ydb-short-name }}](../administration/upgrade.md) article to learn more about the cluster upgrade procedure.
 
-Given the above compatibility target, major releases go in pairs: releases with odd numbers mostly add new functionality switched off by feature flags, while releases with even numbers enable that functionality.
+Given the above compatibility target, major releases go in pairs: releases with odd numbers mostly add new functionality switched off by feature flags, while releases with even numbers enable that functionality by default.
 
 For instance, release `23.1` comes with the new functionality switched off. It can be incrementally rolled out to a cluster running `22.4`, without downtime. As soon as the whole cluster runs `23.1` nodes, you can manually toggle feature flags to test new functionality and later further upgrade it to `23.2` to fully leverage this new functionality.
 
@@ -63,7 +64,6 @@ If testing iteration proves the quality of a minor release, the [YDB Release tea
 3. Patch number
 
 For example, `2.8.0` is the 2nd major release, 8th minor, without additional patches.
-{{ ydb-short-name }} CLI version comprise of three numbers separated by a dot character. First number is a major version (currently `2`), second is the minor, and the third is a patch number. For instance, `2.8.0` is the 2nd major, 8th minor, without patches.
 
 There's no schedule for the {{ ydb-short-name }} CLI minor releases, a new release comes as soon as there's some new valuable functionality. Initially, every new minor release has `0` as a patch number. If there are critical bugs found in that version, or some minor part of functionality did not catch it as planned, a patch can be released, incrementing only the patch number, like it was for `2.1.1`.
 

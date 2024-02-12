@@ -12,7 +12,7 @@ protected:
     virtual bool DoCheck(const THashMap<ui32, std::vector<TString>>& blobs) const override final {
         auto it = blobs.find(IndexId);
         AFL_VERIFY(it != blobs.end());
-        return DoCheckImpl(std::move(it->second));
+        return DoCheckImpl(it->second);
     }
     virtual bool DoDeserializeFromProtoImpl(const NKikimrSSA::TProgram::TOlapIndexChecker& proto) = 0;
     virtual void DoSerializeToProtoImpl(NKikimrSSA::TProgram::TOlapIndexChecker& proto) const = 0;

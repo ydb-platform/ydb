@@ -12,8 +12,8 @@ SRCS(
     schema.h
     shard_impl.cpp
     shard_impl.h
+    tx_aggregate_data.cpp
     tx_change_backend.cpp
-    tx_clear_data.cpp
     tx_get_metrics.cpp
     tx_init_schema.cpp
     tx_monitoring.cpp
@@ -24,6 +24,7 @@ SRCS(
 PEERDIR(
     ydb/library/actors/core
     ydb/core/base
+    ydb/core/cms/console
     ydb/core/tablet
     ydb/core/tablet_flat
     ydb/core/graph/api

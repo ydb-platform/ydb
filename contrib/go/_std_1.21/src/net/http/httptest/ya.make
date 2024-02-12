@@ -1,20 +1,33 @@
 GO_LIBRARY()
-
-SRCS(
-    httptest.go
-    recorder.go
-    server.go
-)
-
-GO_TEST_SRCS(
-    httptest_test.go
-    recorder_test.go
-    server_test.go
-)
-
-GO_XTEST_SRCS(example_test.go)
-
+IF (OS_DARWIN AND ARCH_ARM64)
+    SRCS(
+		httptest.go
+		recorder.go
+		server.go
+    )
+ELSEIF (OS_DARWIN AND ARCH_X86_64)
+    SRCS(
+		httptest.go
+		recorder.go
+		server.go
+    )
+ELSEIF (OS_LINUX AND ARCH_AARCH64)
+    SRCS(
+		httptest.go
+		recorder.go
+		server.go
+    )
+ELSEIF (OS_LINUX AND ARCH_X86_64)
+    SRCS(
+		httptest.go
+		recorder.go
+		server.go
+    )
+ELSEIF (OS_WINDOWS AND ARCH_X86_64)
+    SRCS(
+		httptest.go
+		recorder.go
+		server.go
+    )
+ENDIF()
 END()
-
-RECURSE(
-)

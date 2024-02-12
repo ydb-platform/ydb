@@ -5,7 +5,7 @@
 
 namespace NKikimr::NOlap::NIndexes {
 
-std::shared_ptr<NKikimr::NOlap::NIndexes::IIndexMeta> TBloomIndexConstructor::DoCreateIndexMeta(const ui32 indexId, const NSchemeShard::TOlapSchema& currentSchema, NSchemeShard::IErrorCollector& errors) const {
+std::shared_ptr<NKikimr::NOlap::NIndexes::IIndexMeta> TBloomIndexConstructor::DoCreateIndexMeta(const ui32 indexId, const TString& indexName, const NSchemeShard::TOlapSchema& currentSchema, NSchemeShard::IErrorCollector& errors) const {
     std::set<ui32> columnIds;
     for (auto&& i : ColumnNames) {
         auto* columnInfo = currentSchema.GetColumns().GetByName(i);
@@ -15,7 +15,7 @@ std::shared_ptr<NKikimr::NOlap::NIndexes::IIndexMeta> TBloomIndexConstructor::Do
         }
         AFL_VERIFY(columnIds.emplace(columnInfo->GetId()).second);
     }
-    return std::make_shared<TBloomIndexMeta>(indexId, columnIds, FalsePositiveProbability);
+    return std::make_shared<TBloomIndexMeta>(indexId, indexName, columnIds, FalsePositiveProbability);
 }
 
 NKikimr::TConclusionStatus TBloomIndexConstructor::DoDeserializeFromJson(const NJson::TJsonValue& jsonInfo) {

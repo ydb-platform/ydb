@@ -122,6 +122,11 @@ public:
             ? CreateDeterministicRandomProvider(1)
             : State->RandomProvider;
 
+        TScopedAlloc alloc(
+            __LOCATION__, 
+            NKikimr::TAlignedPagePoolCounters(), 
+            State->FunctionRegistry->SupportsSizedAllocators(),
+            false);
         NDq::TDqTaskRunnerContext executionContext;
         executionContext.FuncRegistry = State->FunctionRegistry;
 
@@ -138,7 +143,7 @@ public:
         settings.OptLLVM = "OFF"; // Don't use LLVM for local execution
         settings.SecureParams = secureParams;
         settings.StatsMode = NDqProto::DQ_STATS_MODE_BASIC;
-        auto runner = NDq::MakeDqTaskRunner(executionContext, settings, {});
+        auto runner = NDq::MakeDqTaskRunner(alloc, executionContext, settings, {});
         auto runnerSettings = NDq::TDqTaskSettings(&task);
 
         {
@@ -222,6 +227,30 @@ struct TPublicIds {
     using TPtr = std::shared_ptr<TPublicIds>;
 };
 
+NDq::EChannelMode GetConfiguredChannelMode(const TDqStatePtr& state, const TTypeAnnotationContext& typesCtx) {
+    const bool useWideChannels = state->Settings->UseWideChannels.Get().GetOrElse(typesCtx.BlockEngineMode != EBlockEngineMode::Disable);
+    const TMaybe<bool> useChannelBlocks = state->Settings->UseWideBlockChannels.Get();
+    NDq::EChannelMode mode;
+    if (!useWideChannels) {
+        mode = NDq::EChannelMode::CHANNEL_SCALAR;
+    } else if (useChannelBlocks.Defined()) {
+        mode = *useChannelBlocks ? NDq::EChannelMode::CHANNEL_WIDE_FORCE_BLOCK : NDq::EChannelMode::CHANNEL_WIDE_SCALAR;
+    } else {
+        switch (typesCtx.BlockEngineMode) {
+            case NYql::EBlockEngineMode::Auto:
+                mode = NDq::EChannelMode::CHANNEL_WIDE_AUTO_BLOCK;
+                break;
+            case NYql::EBlockEngineMode::Force:
+                mode = NDq::EChannelMode::CHANNEL_WIDE_FORCE_BLOCK;
+                break;
+            case NYql::EBlockEngineMode::Disable:
+                mode = NDq::EChannelMode::CHANNEL_WIDE_SCALAR;
+                break;
+        }
+    }
+    return mode;
+}
+
 struct TDqsPipelineConfigurator : public IPipelineConfigurator {
 public:
     TDqsPipelineConfigurator(const TDqStatePtr& state, const THashMap<TString, TString>& providerParams)
@@ -251,24 +280,13 @@ private:
             dqInt->ConfigurePeepholePipeline(true, ProviderParams_, pipeline);
         });
 
-        if (State_->Settings->UseBlockReader.Get().GetOrElse(false)) {
-            pipeline->Add(NDqs::CreateDqsRewritePhyBlockReadOnDqIntegrationTransformer(*pipeline->GetTypeAnnotationContext()), "ReplaceWideReadsWithBlock");
+        TTypeAnnotationContext& typesCtx = *pipeline->GetTypeAnnotationContext();
+        if (State_->Settings->UseBlockReader.Get().GetOrElse(typesCtx.BlockEngineMode != EBlockEngineMode::Disable)) {
+            pipeline->Add(NDqs::CreateDqsRewritePhyBlockReadOnDqIntegrationTransformer(typesCtx), "ReplaceWideReadsWithBlock");
         }
-        bool useWideChannels = State_->Settings->UseWideChannels.Get().GetOrElse(false);
-        bool useChannelBlocks = State_->Settings->UseWideBlockChannels.Get().GetOrElse(false);
-        NDq::EChannelMode mode;
-        if (!useWideChannels) {
-            mode = NDq::EChannelMode::CHANNEL_SCALAR;
-        } else if (!useChannelBlocks) {
-            mode = NDq::EChannelMode::CHANNEL_WIDE;
-        } else {
-            mode = NDq::EChannelMode::CHANNEL_WIDE_BLOCK;
-        }
+        NDq::EChannelMode mode = GetConfiguredChannelMode(State_, typesCtx);
         pipeline->Add(
-            NDq::CreateDqBuildPhyStagesTransformer(
-                !State_->Settings->SplitStageOnDqReplicate.Get().GetOrElse(true),
-                *pipeline->GetTypeAnnotationContext(), mode
-            ),
+            NDq::CreateDqBuildPhyStagesTransformer(!State_->Settings->SplitStageOnDqReplicate.Get().GetOrElse(true), typesCtx, mode),
             "BuildPhy");
         pipeline->Add(NDqs::CreateDqsRewritePhyCallablesTransformer(*pipeline->GetTypeAnnotationContext()), "RewritePhyCallables");
     }
@@ -348,7 +366,10 @@ TExprNode::TPtr DqMarkBlockStage(const TDqPhyStage& stage, TExprContext& ctx) {
 
 struct TDqsFinalPipelineConfigurator : public IPipelineConfigurator {
 public:
-    TDqsFinalPipelineConfigurator() = default;
+    explicit TDqsFinalPipelineConfigurator(const TDqStatePtr& state)
+        : State_(state)
+    {
+    }
 private:
     void AfterCreate(TTransformationPipeline*) const final {}
 
@@ -356,6 +377,10 @@ private:
 
     void AfterOptimize(TTransformationPipeline* pipeline) const final {
         auto typeCtx = pipeline->GetTypeAnnotationContext();
+        NDq::EChannelMode mode = GetConfiguredChannelMode(State_, *typeCtx);
+        pipeline->Add(NDq::CreateDqBuildWideBlockChannelsTransformer(*typeCtx, mode),
+            "DqBuildWideBlockChannels",
+            TIssuesIds::DEFAULT_ERROR);
         pipeline->Add(CreateFunctorTransformer(
             [typeCtx](const TExprNode::TPtr& input, TExprNode::TPtr& output, TExprContext& ctx) {
                 TOptimizeExprSettings optSettings{typeCtx.Get()};
@@ -369,9 +394,10 @@ private:
                 }, ctx, optSettings);
             }
         ),
-        "DqAfterPeephole",
+        "DqMarkBlockStages",
         TIssuesIds::DEFAULT_ERROR);
     }
+    TDqStatePtr State_;
 };
 
 class TDqExecTransformer: public TExecTransformerBase, TCounters
@@ -1880,7 +1906,7 @@ private:
 
     IGraphTransformer::TStatus PeepHole(TExprNode::TPtr input, TExprNode::TPtr& output, TExprContext& ctx, const THashMap<TString, TString>& providerParams) const {
         TDqsPipelineConfigurator peepholeConfig(State, providerParams);
-        TDqsFinalPipelineConfigurator finalPeepholeConfg;
+        TDqsFinalPipelineConfigurator finalPeepholeConfg(State);
         TPeepholeSettings peepholeSettings;
         peepholeSettings.CommonConfig = &peepholeConfig;
         peepholeSettings.FinalConfig = &finalPeepholeConfg;

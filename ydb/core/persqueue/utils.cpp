@@ -3,6 +3,8 @@
 #include <deque>
 #include <util/string/builder.h>
 
+//#include <ydb/core/base/appdata_fwd.h>
+//#include <ydb/core/base/feature_flags.h>
 #include <ydb/library/yverify_stream/yverify_stream.h>
 
 namespace NKikimr::NPQ {
@@ -33,7 +35,7 @@ ui64 TopicPartitionReserveThroughput(const NKikimrPQ::TPQTabletConfig& config) {
 }
 
 bool SplitMergeEnabled(const NKikimrPQ::TPQTabletConfig& config) {
-    return config.GetPartitionStrategy().GetMinPartitionCount() < config.GetPartitionStrategy().GetMaxPartitionCount(); // TODO
+    return 0 < config.GetPartitionStrategy().GetMaxPartitionCount();
 }
 
 static constexpr ui64 PUT_UNIT_SIZE = 40960u; // 40Kb

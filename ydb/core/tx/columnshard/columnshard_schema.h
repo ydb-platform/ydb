@@ -38,7 +38,11 @@ struct Schema : NIceDb::Schema {
         ColumnsTableId,
         CountersTableId,
         OperationsTableId,
-        IndexesTableId
+        IndexesTableId,
+        LocksTableId,
+        LockRangesTableId,
+        LockConflictsTableId,
+        LockVolatileDependenciesTableId
     };
 
     enum class ETierTables: ui32 {
@@ -60,6 +64,8 @@ struct Schema : NIceDb::Schema {
         LastExportNumber = 10,
         OwnerPathId = 11,
         OwnerPath = 12,
+        LastCompletedStep = 13,
+        LastCompletedTxId = 14,
     };
 
     enum class EInsertTableIds : ui8 {
@@ -298,9 +304,51 @@ struct Schema : NIceDb::Schema {
         struct Blob: Column<5, NScheme::NTypeIds::String> {};
         struct Offset: Column<6, NScheme::NTypeIds::Uint32> {};
         struct Size: Column<7, NScheme::NTypeIds::Uint32> {};
+        struct RecordsCount: Column<8, NScheme::NTypeIds::Uint32> {};
+        struct RawBytes: Column<9, NScheme::NTypeIds::Uint64> {};
 
         using TKey = TableKey<PathId, PortionId, IndexId, ChunkIdx>;
-        using TColumns = TableColumns<PathId, PortionId, IndexId, ChunkIdx, Blob, Offset, Size>;
+        using TColumns = TableColumns<PathId, PortionId, IndexId, ChunkIdx, Blob, Offset, Size, RecordsCount, RawBytes>;
+    };
+
+    struct Locks : Table<LocksTableId> {
+        struct LockId : Column<1, NScheme::NTypeIds::Uint64> {};
+        struct LockNodeId : Column<2, NScheme::NTypeIds::Uint32> {};
+        struct Generation : Column<3, NScheme::NTypeIds::Uint32> {};
+        struct Counter : Column<4, NScheme::NTypeIds::Uint64> {};
+        struct CreateTimestamp : Column<5, NScheme::NTypeIds::Uint64> {};
+        struct Flags : Column<6, NScheme::NTypeIds::Uint64> {};
+
+        using TKey = TableKey<LockId>;
+        using TColumns = TableColumns<LockId, LockNodeId, Generation, Counter, CreateTimestamp, Flags>;
+    };
+
+    struct LockRanges : Table<LockRangesTableId> {
+        struct LockId : Column<1, NScheme::NTypeIds::Uint64> {};
+        struct RangeId : Column<2, NScheme::NTypeIds::Uint64> {};
+        struct PathOwnerId : Column<3, NScheme::NTypeIds::Uint64> {};
+        struct LocalPathId : Column<4, NScheme::NTypeIds::Uint64> {};
+        struct Flags : Column<5, NScheme::NTypeIds::Uint64> {};
+        struct Data : Column<6, NScheme::NTypeIds::String> {};
+
+        using TKey = TableKey<LockId, RangeId>;
+        using TColumns = TableColumns<LockId, RangeId, PathOwnerId, LocalPathId, Flags, Data>;
+    };
+
+    struct LockConflicts : Table<LockConflictsTableId> {
+        struct LockId : Column<1, NScheme::NTypeIds::Uint64> {};
+        struct ConflictId : Column<2, NScheme::NTypeIds::Uint64> {};
+
+        using TKey = TableKey<LockId, ConflictId>;
+        using TColumns = TableColumns<LockId, ConflictId>;
+    };
+
+    struct LockVolatileDependencies : Table<LockVolatileDependenciesTableId> {
+        struct LockId : Column<1, NScheme::NTypeIds::Uint64> {};
+        struct TxId : Column<2, NScheme::NTypeIds::Uint64> {};
+
+        using TKey = TableKey<LockId, TxId>;
+        using TColumns = TableColumns<LockId, TxId>;
     };
 
     using TTables = SchemaTables<
@@ -618,14 +666,19 @@ class TIndexChunkLoadContext {
 private:
     YDB_READONLY_DEF(TBlobRange, BlobRange);
     TChunkAddress Address;
+    const ui32 RecordsCount;
+    const ui32 RawBytes;
 public:
     TIndexChunk BuildIndexChunk() const {
-        return TIndexChunk(Address.GetColumnId(), Address.GetChunkIdx(), BlobRange);
+        return TIndexChunk(Address.GetColumnId(), Address.GetChunkIdx(), RecordsCount, RawBytes, BlobRange);
     }
 
     template <class TSource>
     TIndexChunkLoadContext(const TSource& rowset, const IBlobGroupSelector* dsGroupSelector)
-        : Address(rowset.template GetValue<NColumnShard::Schema::IndexIndexes::IndexId>(), rowset.template GetValue<NColumnShard::Schema::IndexIndexes::ChunkIdx>()) {
+        : Address(rowset.template GetValue<NColumnShard::Schema::IndexIndexes::IndexId>(), rowset.template GetValue<NColumnShard::Schema::IndexIndexes::ChunkIdx>())
+        , RecordsCount(rowset.template GetValue<NColumnShard::Schema::IndexIndexes::RecordsCount>())
+        , RawBytes(rowset.template GetValue<NColumnShard::Schema::IndexIndexes::RawBytes>())
+    {
         AFL_VERIFY(Address.GetColumnId())("event", "incorrect address")("address", Address.DebugString());
         TString strBlobId = rowset.template GetValue<NColumnShard::Schema::IndexIndexes::Blob>();
         Y_ABORT_UNLESS(strBlobId.size() == sizeof(TLogoBlobID), "Size %" PRISZT "  doesn't match TLogoBlobID", strBlobId.size());

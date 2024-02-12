@@ -23,8 +23,7 @@ IActor* CreateComputeActor(
     const TString& computeActorType,
     const NDq::NTaskRunnerActor::ITaskRunnerActorFactory::TPtr& taskRunnerActorFactory,
     ::NMonitoring::TDynamicCounterPtr taskCounters,
-    NDqProto::EDqStatsMode statsMode,
-    bool enableSpilling)
+    NDqProto::EDqStatsMode statsMode)
 {
     auto memoryLimits = NDq::TComputeMemoryLimits();
     memoryLimits.ChannelBufferSize = 1000000;
@@ -41,7 +40,6 @@ IActor* CreateComputeActor(
     computeRuntimeSettings.ExtraMemoryAllocationPool = 3;
     computeRuntimeSettings.FailOnUndelivery = false;
     computeRuntimeSettings.StatsMode = (statsMode != NDqProto::DQ_STATS_MODE_UNSPECIFIED) ? statsMode : NDqProto::DQ_STATS_MODE_FULL;
-    computeRuntimeSettings.UseSpilling = enableSpilling;
     computeRuntimeSettings.AsyncInputPushLimit = 64_MB;
 
     // clear fake actorids
@@ -58,9 +56,9 @@ IActor* CreateComputeActor(
         }
     }
 
-    auto taskRunnerFactory = [factory = options.Factory](const NDq::TDqTaskSettings& task, NDqProto::EDqStatsMode statsMode, const NDq::TLogFunc& logger) {
+    auto taskRunnerFactory = [factory = options.Factory](NKikimr::NMiniKQL::TScopedAlloc& alloc, const NDq::TDqTaskSettings& task, NDqProto::EDqStatsMode statsMode, const NDq::TLogFunc& logger) {
         Y_UNUSED(logger);
-        return factory->Get(task, statsMode, {});
+        return factory->Get(alloc, task, statsMode, {});
     };
 
     if (computeActorType.empty() || computeActorType == "old" || computeActorType == "sync") {

@@ -19,6 +19,7 @@ SET(ORIG_SOURCES
 PEERDIR(
     contrib/libs/apache/arrow
     ydb/library/actors/util
+    ydb/library/yql/dq/actors/spilling
     library/cpp/enumbitset
     library/cpp/packedtypes
     library/cpp/random_provider
@@ -43,7 +44,9 @@ COPY(
     AUTO
     FROM ${ORIG_SRC_DIR}
     ${ORIG_SOURCES}
-    OUTPUT_INCLUDES ${BINDIR}/ydb/library/yql/minikql/computation/mkql_computation_node_codegen.h
+    OUTPUT_INCLUDES 
+        ${BINDIR}/ydb/library/yql/minikql/computation/mkql_llvm_base.h
+        ${BINDIR}/ydb/library/yql/minikql/computation/mkql_computation_node_codegen.h
 )
 
 PROVIDES(MINIKQL_COMPUTATION)

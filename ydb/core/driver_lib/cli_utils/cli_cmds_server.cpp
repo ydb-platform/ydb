@@ -82,7 +82,6 @@ protected:
     bool NodeBrokerUseTls;
     bool FixedNodeID;
     bool IgnoreCmsConfigs;
-    bool HierarchicalCfg;
     bool TinyMode;
     TString NodeAddress;
     TString NodeHost;
@@ -109,7 +108,7 @@ protected:
     TString PathToInterconnectPrivateKeyFile;
     TString PathToGrpcCaFile;
     TString PathToInterconnectCaFile;
-    TVector<TString> YamlConfigFiles;
+    TString YamlConfigFile;
 
     TClientCommandServerBase(const char *cmd, const char *description)
         : TClientCommand(cmd, {}, description)
@@ -259,9 +258,7 @@ protected:
                 .RequiredArgument("NAME").StoreResult(&Rack);
         config.Opts->AddLongOption("body", "body name (used to describe dynamic node location)")
                 .RequiredArgument("NUM").StoreResult(&Body);
-        config.Opts->AddLongOption("yaml-config", "Yaml config").OptionalArgument("PATH").AppendTo(&YamlConfigFiles);
-        config.Opts->AddLongOption("cms-config-cache-file", "Path to CMS cache config file").OptionalArgument("PATH")
-            .StoreResult(&RunConfig.PathToConfigCacheFile);
+        config.Opts->AddLongOption("yaml-config", "Yaml config").OptionalArgument("PATH").StoreResult(&YamlConfigFile);
         config.Opts->AddLongOption("http-proxy-file", "Http proxy config file").OptionalArgument("PATH");
         config.Opts->AddLongOption("public-http-file", "Public HTTP config file").OptionalArgument("PATH");
 
@@ -277,9 +274,6 @@ protected:
         SetMsgBusDefaults(ProxyBusSessionConfig, ProxyBusQueueConfig);
         ProxyBusSessionConfig.ConfigureLastGetopt(*config.Opts, "mbus-");
         ProxyBusQueueConfig.ConfigureLastGetopt(*config.Opts, "mbus-");
-
-        config.Opts->AddLongOption("hierarchic-cfg", "Use hierarchical approach for configuration parts overriding")
-        .NoArgument().SetFlag(&HierarchicalCfg);
 
         config.Opts->AddLongOption("label", "labels for this node")
             .Optional().RequiredArgument("KEY=VALUE")
@@ -299,7 +293,7 @@ protected:
             ui32 kind,
             TCallContext callCtx) {
         TProto *res = nullptr;
-        if (!HierarchicalCfg && (AppConfig.*hasConfig)()) {
+        if ((AppConfig.*hasConfig)()) {
             return nullptr; // this field is already provided in AppConfig, so we don't overwrite it
         }
 
@@ -374,7 +368,7 @@ protected:
             (ui32)NKikimrConsole::TConfigItem:: FIELD ## Item, TCallContext{__FILE__, __LINE__})
 
         OPTION("auth-file", AuthConfig);
-        LoadBaseConfig(config);
+        LoadBootstrapConfig(config);
         LoadYamlConfig(CALL_CTX());
         OPTION_MERGE("auth-token-file", AuthConfig);
 
@@ -453,17 +447,15 @@ protected:
             if (!NodeId) {
                 ythrow yexception() << "Either --node [NUM|'static'] or --node-broker[-port] should be specified";
             }
-
-            if (!HierarchicalCfg && RunConfig.PathToConfigCacheFile)
-                LoadCachedConfigsForStaticNode();
         } else {
             RegisterDynamicNode();
 
             RunConfig.Labels["node_id"] = ToString(RunConfig.NodeId);
             AddLabelToAppConfig("node_id", RunConfig.Labels["node_id"]);
 
-            if (!HierarchicalCfg && !IgnoreCmsConfigs)
+            if (!IgnoreCmsConfigs) {
                 LoadConfigForDynamicNode();
+            }
         }
 
         LoadYamlConfig(CALL_CTX());
@@ -830,121 +822,32 @@ protected:
         RunConfig.ClusterName = AppConfig.GetNameserviceConfig().GetClusterUUID();
     }
 
-    inline bool LoadConfigFromCMS() {
-        TVector<TString> addrs;
-        FillClusterEndpoints(addrs);
-
-        SetRandomSeed(TInstant::Now().MicroSeconds());
-
-        int minAttempts = 10;
-        int attempts = 0;
-
-        TString error;
-
-        while (attempts < minAttempts) {
-            for (const auto &addr : addrs) {
-                // Randomized backoff
-                if (attempts > 0)
-                    Sleep(TDuration::MilliSeconds(500 + RandomNumber<ui64>(1000)));
-
-                NClient::TKikimr kikimr(GetKikimr(addr));
-                auto configurator = kikimr.GetNodeConfigurator();
-
-                Cout << "Trying to get configs from " << addr << Endl;
-
-                auto result = configurator.SyncGetNodeConfig(RunConfig.NodeId,
-                                                             FQDNHostName(),
-                                                             TenantName,
-                                                             NodeType,
-                                                             DeduceNodeDomain(),
-                                                             AppConfig.GetAuthConfig().GetStaffApiUserToken(),
-                                                             true,
-                                                             1);
-
-                if (result.IsSuccess()) {
-                    auto appConfig = result.GetConfig();
-
-                    if (RunConfig.PathToConfigCacheFile) {
-                        Cout << "Saving config to cache file " << RunConfig.PathToConfigCacheFile << Endl;
-                        if (!SaveConfigForNodeToCache(appConfig)) {
-                            Cout << "Failed to save config to cache file" << Endl;
-                        }
-                    }
-
-                    NKikimrConfig::TAppConfig yamlConfig;
-
-                    if (result.HasYamlConfig() && !result.GetYamlConfig().empty()) {
-                        NYamlConfig::ResolveAndParseYamlConfig(
-                            result.GetYamlConfig(),
-                            result.GetVolatileYamlConfigs(),
-                            RunConfig.Labels,
-                            yamlConfig);
-                    }
-
-                    RunConfig.InitialCmsConfig.CopyFrom(appConfig);
-
-                    RunConfig.InitialCmsYamlConfig.CopyFrom(yamlConfig);
-                    NYamlConfig::ReplaceUnmanagedKinds(appConfig, RunConfig.InitialCmsYamlConfig);
-
-                    if (yamlConfig.HasYamlConfigEnabled() && yamlConfig.GetYamlConfigEnabled()) {
-                        BaseConfig.Swap(&yamlConfig);
-                        NYamlConfig::ReplaceUnmanagedKinds(result.GetConfig(), BaseConfig);
-                    } else {
-                        BaseConfig.Swap(&appConfig);
-                    }
-
-                    Cout << "Success." << Endl;
-
-                    return true;
-                }
-
-                error = result.GetErrorMessage();
-                Cerr << "Configuration error: " << error << Endl;
-                ++attempts;
-            }
-        }
-
-        return false;
-    }
-
-    inline bool LoadConfigFromCache() {
-        if (RunConfig.PathToConfigCacheFile) {
-            NKikimrConfig::TAppConfig config;
-            if (GetCachedConfig(config)) {
-                BaseConfig.Swap(&config);
-
-                return true;
-            }
-        }
-
-        return false;
-    }
-
     inline void LoadYamlConfig(TCallContext callCtx) {
-        for(const TString& yamlConfigFile: YamlConfigFiles) {
-            auto yamlConfig = TFileInput(yamlConfigFile);
-            NKikimrConfig::TAppConfig parsedConfig;
-            NKikimr::NYaml::Parse(yamlConfig.ReadAll(), parsedConfig);
-            const google::protobuf::Descriptor* descriptor = AppConfig.GetDescriptor();
-            const google::protobuf::Reflection* reflection = AppConfig.GetReflection();
-            for(int fieldIdx = 0; fieldIdx < descriptor->field_count(); ++fieldIdx) {
-                const google::protobuf::FieldDescriptor* fieldDescriptor = descriptor->field(fieldIdx);
-                if (!fieldDescriptor)
-                    continue;
+        if (!YamlConfigFile) {
+            return;
+        }
+        auto yamlConfig = TFileInput(YamlConfigFile);
+        NKikimrConfig::TAppConfig parsedConfig;
+        NKikimr::NYaml::Parse(yamlConfig.ReadAll(), parsedConfig);
+        const google::protobuf::Descriptor* descriptor = AppConfig.GetDescriptor();
+        const google::protobuf::Reflection* reflection = AppConfig.GetReflection();
+        for(int fieldIdx = 0; fieldIdx < descriptor->field_count(); ++fieldIdx) {
+            const google::protobuf::FieldDescriptor* fieldDescriptor = descriptor->field(fieldIdx);
+            if (!fieldDescriptor)
+                continue;
 
-                if (fieldDescriptor->is_repeated()) {
-                    continue;
-                }
+            if (fieldDescriptor->is_repeated()) {
+                continue;
+            }
 
-                if (reflection->HasField(AppConfig, fieldDescriptor)) {
-                    // field is already set in app config
-                    continue;
-                }
+            if (reflection->HasField(AppConfig, fieldDescriptor)) {
+                // field is already set in app config
+                continue;
+            }
 
-                if (reflection->HasField(parsedConfig, fieldDescriptor)) {
-                    reflection->SwapFields(&AppConfig, &parsedConfig, {fieldDescriptor});
-                    TRACE_CONFIG_CHANGE(callCtx, fieldIdx, ReplaceConfigWithConsoleProto);
-                }
+            if (reflection->HasField(parsedConfig, fieldDescriptor)) {
+                reflection->SwapFields(&AppConfig, &parsedConfig, {fieldDescriptor});
+                TRACE_CONFIG_CHANGE(callCtx, fieldIdx, ReplaceConfigWithConsoleProto);
             }
         }
     }
@@ -962,21 +865,6 @@ protected:
         return res;
     }
 
-    void LoadBaseConfig(TConfig& config) {
-        if (HierarchicalCfg) {
-            if (LoadConfigFromCMS())
-                return;
-            if (LoadConfigFromCache())
-                return;
-            if (LoadBootstrapConfig(config))
-                return;
-
-            ythrow yexception() << "cannot load configuration";
-        } else {
-            LoadBootstrapConfig(config);
-        }
-    }
-
     TString DeduceNodeDomain() {
         if (NodeDomain)
             return NodeDomain;
@@ -991,29 +879,6 @@ protected:
                 return ToString(ExtractDomain(tenantName));
         }
         return "";
-    }
-
-    bool GetCachedConfig(NKikimrConfig::TAppConfig &appConfig) {
-        Y_DEBUG_ABORT_UNLESS(RunConfig.PathToConfigCacheFile, "GetCachedConfig called with a cms config cache file set");
-
-        try {
-            auto cacheFile = TFileInput(RunConfig.PathToConfigCacheFile);
-            if (!google::protobuf::TextFormat::ParseFromString(cacheFile.ReadAll(), &appConfig))
-                ythrow yexception() << "Failed to parse config protobuf from string";
-            return true;
-        } catch (const yexception &ex) {
-            Cerr << "WARNING: an exception occurred while getting config from cache file: " << ex.what() << Endl;
-        }
-        return false;
-    }
-
-    void LoadCachedConfigsForStaticNode() {
-        NKikimrConfig::TAppConfig appConfig;
-
-        // log config
-        if (GetCachedConfig(appConfig) && appConfig.HasLogConfig()) {
-            AppConfig.MutableLogConfig()->CopyFrom(appConfig.GetLogConfig());
-        }
     }
 
     TNodeLocation CreateNodeLocation() {
@@ -1344,30 +1209,6 @@ protected:
         }
     }
 
-    bool SaveConfigForNodeToCache(const NKikimrConfig::TAppConfig &appConfig) {
-        Y_DEBUG_ABORT_UNLESS(RunConfig.PathToConfigCacheFile, "SaveConfigForNodeToCache called without a cms config cache file set");
-
-        // Ensure "atomicity" by writing to temp file and renaming it
-        const TString pathToTempFile = RunConfig.PathToConfigCacheFile + ".tmp";
-        TString proto;
-        bool status;
-        try {
-            TFileOutput tempFile(pathToTempFile);
-            status = google::protobuf::TextFormat::PrintToString(appConfig, &proto);
-            if (status) {
-                tempFile << proto;
-                if (!NFs::Rename(pathToTempFile, RunConfig.PathToConfigCacheFile)) {
-                    ythrow yexception() << "Failed to rename temporary file " << LastSystemError() << " " << LastSystemErrorText();
-                }
-            }
-        } catch (const yexception& ex) {
-            Cerr << "WARNING: an exception occured while saving config to cache file: " << ex.what() << Endl;
-            status = false;
-        }
-
-        return status;
-    }
-
     bool TryToLoadConfigForDynamicNodeFromCMS(const TString &addr, TString &error) {
         NClient::TKikimr kikimr(GetKikimr(addr));
         auto configurator = kikimr.GetNodeConfigurator();
@@ -1434,25 +1275,9 @@ protected:
             }
         }
 
-        if (RunConfig.PathToConfigCacheFile) {
-            Cout << "Saving config to cache file " << RunConfig.PathToConfigCacheFile << Endl;
-            if (!SaveConfigForNodeToCache(appConfig)) {
-                Cout << "Failed to save config to cache file" << Endl;
-            }
-        }
-
         ApplyConfigForNode(appConfig);
 
         return true;
-    }
-
-    bool LoadConfigForDynamicNodeFromCache() {
-        NKikimrConfig::TAppConfig config;
-        if (GetCachedConfig(config)) {
-            ApplyConfigForNode(config);
-            return true;
-        }
-        return false;
     }
 
     void LoadConfigForDynamicNode() {
@@ -1479,14 +1304,6 @@ protected:
 
         if (!res) {
             Cerr << "WARNING: couldn't load config from CMS: " << error << Endl;
-            if (RunConfig.PathToConfigCacheFile) {
-                Cout << "Loading config from cache file " << RunConfig.PathToConfigCacheFile << Endl;
-                if (!LoadConfigForDynamicNodeFromCache())
-                    Cerr << "WARNING: couldn't load config from cache file" << Endl;
-            } else {
-                Cerr << "WARNING: option --cms-config-cache-file was not set, ";
-                Cerr << "couldn't load config from cache file" << Endl;
-            }
         }
     }
 
@@ -1510,32 +1327,6 @@ private:
     }
 };
 
-class TClientCommandServerConfig : public TClientCommandServerBase {
-public:
-    TClientCommandServerConfig()
-        : TClientCommandServerBase("serverconfig", "Generate configs for new-style invocation of server")
-    {
-    }
-
-    virtual void Config(TConfig& config) override {
-        TClientCommandServerBase::Config(config);
-        config.Opts->AddLongOption("dump-config-to", "Dump final application config protobuf to PATH and terminate").RequiredArgument("PATH").Required();
-    }
-
-    virtual int Run(TConfig& config) override {
-        Y_ABORT_UNLESS(config.ParseResult->Has("dump-config-to"));
-
-        TString proto;
-        const bool status = google::protobuf::TextFormat::PrintToString(AppConfig, &proto);
-        Y_ABORT_UNLESS(status);
-        TString path = config.ParseResult->Get("dump-config-to");
-        TFileOutput file(path);
-        file << proto;
-
-        return 0;
-    }
-};
-
 class TClientCommandServer : public TClientCommandServerBase {
 public:
     TClientCommandServer(std::shared_ptr<TModuleFactories> factories)
@@ -1554,7 +1345,6 @@ private:
 
 void AddClientCommandServer(TClientCommandTree& parent, std::shared_ptr<TModuleFactories> factories) {
     parent.AddCommand(std::make_unique<TClientCommandServer>(factories));
-    parent.AddCommand(std::make_unique<TClientCommandServerConfig>());
 }
 
 }

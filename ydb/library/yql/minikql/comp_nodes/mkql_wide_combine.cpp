@@ -2,7 +2,7 @@
 #include "mkql_rh_hash.h"
 
 #include <ydb/library/yql/minikql/computation/mkql_computation_node_codegen.h>  // Y_IGNORE
-#include <ydb/library/yql/minikql/computation/mkql_llvm_base.h>
+#include <ydb/library/yql/minikql/computation/mkql_llvm_base.h>  // Y_IGNORE
 #include <ydb/library/yql/minikql/mkql_node_builder.h>
 #include <ydb/library/yql/minikql/mkql_node_cast.h>
 #include <ydb/library/yql/minikql/mkql_runtime_version.h>
@@ -430,8 +430,6 @@ public:
 
         const auto statePtrType = PointerType::getUnqual(stateType);
 
-        const auto keys = new AllocaInst(ArrayType::get(valueType, Nodes.KeyResultNodes.size()), 0U, "keys", &ctx.Func->getEntryBlock().back());
-
         const auto make = BasicBlock::Create(context, "make", ctx.Func);
         const auto main = BasicBlock::Create(context, "main", ctx.Func);
         const auto more = BasicBlock::Create(context, "more", ctx.Func);
@@ -828,8 +826,6 @@ public:
 
         const auto stateType = StructType::get(context, stateFields.GetFieldsArray());
         const auto statePtrType = PointerType::getUnqual(stateType);
-
-        const auto keys = new AllocaInst(ArrayType::get(valueType, Nodes.KeyResultNodes.size()), 0U, "keys", &ctx.Func->getEntryBlock().back());
 
         const auto make = BasicBlock::Create(context, "make", ctx.Func);
         const auto main = BasicBlock::Create(context, "main", ctx.Func);

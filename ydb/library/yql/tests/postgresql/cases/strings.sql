@@ -51,12 +51,17 @@ SELECT E'\\x De Ad Be Ef '::bytea;
 SELECT E'\\xDeAdBeE'::bytea;
 SELECT E'\\xDeAdBeEx'::bytea;
 SELECT E'\\xDe00BeEf'::bytea;
+SELECT E'DeAdBeEf'::bytea;
+SELECT E'De\\000dBeEf'::bytea;
+SELECT E'De\123dBeEf'::bytea;
+SELECT E'De\\123dBeEf'::bytea;
 SELECT E'De\\678dBeEf'::bytea;
 SET bytea_output TO escape;
 SELECT E'\\xDeAdBeEf'::bytea;
 SELECT E'\\x De Ad Be Ef '::bytea;
 SELECT E'\\xDe00BeEf'::bytea;
 SELECT E'DeAdBeEf'::bytea;
+SELECT E'De\\000dBeEf'::bytea;
 SELECT E'De\\123dBeEf'::bytea;
 SELECT CAST(name 'namefield' AS text) AS "text(name)";
 SELECT CAST(name 'namefield' AS char(10)) AS "char(name)";
@@ -112,3 +117,31 @@ SELECT regexp_split_to_array('123456','.');
 SELECT regexp_split_to_array('123456','');
 SELECT regexp_split_to_array('123456','(?:)');
 SELECT regexp_split_to_array('1','');
+-- errors
+SELECT foo, length(foo) FROM regexp_split_to_table('thE QUick bROWn FOx jUMPs ovEr The lazy dOG', 'e', 'zippy') AS foo;
+SELECT regexp_split_to_array('thE QUick bROWn FOx jUMPs ovEr The lazy dOG', 'e', 'iz');
+-- global option meaningless for regexp_split
+SELECT foo, length(foo) FROM regexp_split_to_table('thE QUick bROWn FOx jUMPs ovEr The lazy dOG', 'e', 'g') AS foo;
+SELECT regexp_split_to_array('thE QUick bROWn FOx jUMPs ovEr The lazy dOG', 'e', 'g');
+-- change NULL-display back
+\pset null ''
+-- E021-11 position expression
+SELECT POSITION('4' IN '1234567890') = '4' AS "4";
+SELECT POSITION('5' IN '1234567890') = '5' AS "5";
+-- T312 character overlay function
+SELECT OVERLAY('abcdef' PLACING '45' FROM 4) AS "abc45f";
+SELECT OVERLAY('yabadoo' PLACING 'daba' FROM 5) AS "yabadaba";
+SELECT OVERLAY('yabadoo' PLACING 'daba' FROM 5 FOR 0) AS "yabadabadoo";
+SELECT OVERLAY('babosa' PLACING 'ubb' FROM 2 FOR 4) AS "bubba";
+--
+-- test LIKE
+-- Be sure to form every test as a LIKE/NOT LIKE pair.
+--
+-- simplest examples
+-- E061-04 like predicate
+SELECT 'hawkeye' LIKE 'h%' AS "true";
+SELECT 'hawkeye' NOT LIKE 'h%' AS "false";
+SELECT 'hawkeye' LIKE 'H%' AS "false";
+SELECT 'hawkeye' NOT LIKE 'H%' AS "true";
+SELECT 'hawkeye' LIKE 'indio%' AS "false";
+SELECT 'hawkeye' NOT LIKE 'indio%' AS "true";

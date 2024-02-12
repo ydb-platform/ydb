@@ -394,4 +394,6 @@ struct TEvControlPlaneProxy {
     };
 };
 
+NActors::TActorId ControlPlaneProxyActorId();
+
 }

@@ -110,26 +110,28 @@ private:
         if (StorageUsedBytes->Val() != 0) {
             metrics->AddMetric("resources.storage.used_bytes", StorageUsedBytes->Val());
         }
-        double cpuUsage = 0;
-        for (size_t i = 0; i < Config.Pools.size(); ++i) {
-            if (PoolElapsedMicrosec[i]) {
-                auto elapsedMs = PoolElapsedMicrosec[i]->Val();
-                double usedCore = elapsedMs / 10000.;
-                CpuUsedCorePercents[i]->Set(usedCore);
-                if (PoolElapsedMicrosecPrevValue[i] != 0) {
-                    cpuUsage += (elapsedMs - PoolElapsedMicrosecPrevValue[i]) / 1000000.;
+        if (!Config.Pools.empty()) {
+            double cpuUsage = 0;
+            for (size_t i = 0; i < Config.Pools.size(); ++i) {
+                if (PoolElapsedMicrosec[i]) {
+                    auto elapsedMs = PoolElapsedMicrosec[i]->Val();
+                    double usedCore = elapsedMs / 10000.;
+                    CpuUsedCorePercents[i]->Set(usedCore);
+                    if (PoolElapsedMicrosecPrevValue[i] != 0) {
+                        cpuUsage += (elapsedMs - PoolElapsedMicrosecPrevValue[i]) / 1000000.;
+                    }
+                    PoolElapsedMicrosecPrevValue[i] = elapsedMs;
                 }
-                PoolElapsedMicrosecPrevValue[i] = elapsedMs;
+                if (PoolCurrentThreadCount[i] && PoolCurrentThreadCount[i]->Val()) {
+                    double limitCore = PoolCurrentThreadCount[i]->Val() * 100;
+                    CpuLimitCorePercents[i]->Set(limitCore);
+                } else {
+                    double limitCore = Config.Pools[i].ThreadCount * 100;
+                    CpuLimitCorePercents[i]->Set(limitCore);
+                }
             }
-            if (PoolCurrentThreadCount[i] && PoolCurrentThreadCount[i]->Val()) {
-                double limitCore = PoolCurrentThreadCount[i]->Val() * 100;
-                CpuLimitCorePercents[i]->Set(limitCore);
-            } else {
-                double limitCore = Config.Pools[i].ThreadCount * 100;
-                CpuLimitCorePercents[i]->Set(limitCore);
-            }
+            metrics->AddMetric("resources.cpu.usage", cpuUsage);
         }
-        metrics->AddMetric("resources.cpu.usage", cpuUsage);
         if (ExecuteLatencyMs) {
             THistogramSnapshotPtr snapshot = ExecuteLatencyMs->Snapshot();
             ui32 count = snapshot->Count();
@@ -169,7 +171,9 @@ private:
                 }
             }
         }
-        Send(NGraph::MakeGraphServiceId(), metrics.Release());
+        if (metrics->Record.MetricsSize() > 0) {
+            Send(NGraph::MakeGraphServiceId(), metrics.Release());
+        }
     }
 
     void HandleWakeup() {

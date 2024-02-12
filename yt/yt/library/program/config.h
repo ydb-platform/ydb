@@ -116,6 +116,10 @@ class THeapProfilerConfig
     : public NYTree::TYsonStruct
 {
 public:
+    // Sampling rate for tcmalloc in bytes.
+    // See https://github.com/google/tcmalloc/blob/master/docs/sampling.md
+    std::optional<i64> SamplingRate;
+
     // Period of update snapshot in heap profiler.
     std::optional<TDuration> SnapshotUpdatePeriod;
 
@@ -150,6 +154,7 @@ public:
     bool EnableResourceTracker;
     std::optional<double> ResourceTrackerVCpuFactor;
     THeapProfilerConfigPtr HeapProfiler;
+    NYson::TProtobufInteropConfigPtr ProtobufInterop;
 
     REGISTER_YSON_STRUCT(TSingletonsConfig);
 
@@ -205,17 +210,9 @@ void WarnForUnrecognizedOptions(
     const NLogging::TLogger& logger,
     const NYTree::TYsonStructPtr& config);
 
-void WarnForUnrecognizedOptions(
-    const NLogging::TLogger& logger,
-    const NYTree::TYsonSerializablePtr& config);
-
 void AbortOnUnrecognizedOptions(
     const NLogging::TLogger& logger,
     const NYTree::TYsonStructPtr& config);
-
-void AbortOnUnrecognizedOptions(
-    const NLogging::TLogger& logger,
-    const NYTree::TYsonSerializablePtr& config);
 
 ////////////////////////////////////////////////////////////////////////////////
 

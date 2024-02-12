@@ -261,7 +261,7 @@ private:
                     ? GetTableTypeFromString(settings.TableType.Cast())
                     : ETableType::Table; // v0 support
 
-                if (mode == "create" || mode == "create_if_not_exists") {
+                if (mode == "create" || mode == "create_if_not_exists" || mode == "create_or_replace") {
                     if (!settings.Columns) {
                         ctx.AddError(TIssue(ctx.GetPosition(node.Pos()), TStringBuilder()
                             << "No columns provided for create mode."));
@@ -557,6 +557,11 @@ public:
             return true;
         }
 
+        if (tableDesc.Metadata->ExternalSource.SourceType == ESourceType::ExternalDataSource && tableDesc.Metadata->TableType == NYql::ETableType::Unknown) {
+            ctx.AddError(TIssue(ctx.GetPosition(node->Pos()), TStringBuilder() << "Attempt to write to external data source \"" << key.GetTablePath() << "\" without table. Please specify table to write to"));
+            return false;
+        }
+
         if (tableDesc.Metadata->ExternalSource.SourceType != ESourceType::ExternalDataSource && tableDesc.Metadata->ExternalSource.SourceType != ESourceType::ExternalTable) {
             YQL_CVLOG(NLog::ELevel::ERROR, NLog::EComponent::ProviderKikimr) << "Skip RewriteIO for external entity: unknown entity type: " << (int)tableDesc.Metadata->ExternalSource.SourceType;
             return true;
@@ -757,7 +762,7 @@ public:
                     ? settings.TableType.Cast()
                     : Build<TCoAtom>(ctx, node->Pos()).Value("table").Done(); // v0 support
                 auto mode = settings.Mode.Cast();
-                if (mode == "create" || mode == "create_if_not_exists") {
+                if (mode == "create" || mode == "create_if_not_exists" || mode == "create_or_replace") {
                     YQL_ENSURE(settings.Columns);
                     YQL_ENSURE(!settings.Columns.Cast().Empty());
 
@@ -779,9 +784,10 @@ public:
                         ? settings.Temporary.Cast()
                         : Build<TCoAtom>(ctx, node->Pos()).Value("false").Done();
 
+                    auto replaceIfExists = (settings.Mode.Cast().Value() == "create_or_replace");
                     auto existringOk = (settings.Mode.Cast().Value() == "create_if_not_exists");
 
-                    return Build<TKiCreateTable>(ctx, node->Pos())
+                    auto createTable = Build<TKiCreateTable>(ctx, node->Pos())
                         .World(node->Child(0))
                         .DataSink(node->Child(1))
                         .Table().Build(key.GetTablePath())
@@ -795,11 +801,53 @@ public:
                         .ColumnFamilies(settings.ColumnFamilies.Cast())
                         .TableSettings(settings.TableSettings.Cast())
                         .TableType(tableType)
+                        .ReplaceIfExists<TCoAtom>()
+                            .Value(replaceIfExists)
+                            .Build()
                         .ExistingOk<TCoAtom>()
                             .Value(existringOk)
-                        .Build()
-                        .Done()
-                        .Ptr();
+                            .Build()
+                        .Done();
+
+                    bool exprEvalNeeded = false;
+
+                    for(auto item: createTable.Cast<TKiCreateTable>().Columns()) {
+                        auto columnTuple = item.Cast<TExprList>();
+                        if (columnTuple.Size() > 2) {
+                            const auto& columnConstraints = columnTuple.Item(2).Cast<TCoNameValueTuple>();
+                            for(const auto& constraint: columnConstraints.Value().Cast<TCoNameValueTupleList>()) {
+                                if (constraint.Name().Value() != "default")
+                                    continue;
+
+                                YQL_ENSURE(constraint.Value().IsValid());
+                                bool shouldEvaluate = (
+                                    constraint.Value().Cast().Ptr()->IsCallable() &&
+                                    (constraint.Value().Cast().Ptr()->Content() == "PgCast") &&
+                                    (constraint.Value().Cast().Ptr()->ChildrenSize() >= 1) &&
+                                    (constraint.Value().Cast().Ptr()->Child(0)->IsCallable()) &&
+                                    (constraint.Value().Cast().Ptr()->Child(0)->Content() == "PgConst")
+                                );
+
+                                if (shouldEvaluate) {
+                                    auto evaluatedExpr = ctx.Builder(constraint.Value().Cast().Ptr()->Pos())
+                                        .Callable("EvaluateExpr")
+                                        .Add(0, constraint.Value().Cast().Ptr())
+                                        .Seal()
+                                        .Build();
+
+                                    constraint.Ptr()->ChildRef(TCoNameValueTuple::idx_Value) = evaluatedExpr;
+                                    exprEvalNeeded = true;
+                                }
+                            }
+                        }
+                    }
+
+                    if (exprEvalNeeded) {
+                        ctx.Step.Repeat(TExprStep::ExprEval);
+                    }
+
+                    return createTable.Ptr();
+
                 } else if (mode == "alter") {
                     for (auto setting : settings.Other) {
                         if (setting.Name().Value() == "intent") {
@@ -886,16 +934,19 @@ public:
                         .Features(settings.Features)
                         .Done()
                         .Ptr();
-                } else if (mode == "createObject" || mode == "createObjectIfNotExists") {
+                } else if (mode == "createObject" || mode == "createObjectIfNotExists" || mode == "createObjectOrReplace") {
                     return Build<TKiCreateObject>(ctx, node->Pos())
                         .World(node->Child(0))
                         .DataSink(node->Child(1))
                         .ObjectId().Build(key.GetObjectId())
                         .TypeId().Build(key.GetObjectType())
                         .Features(settings.Features)
+                        .ReplaceIfExists<TCoAtom>()
+                            .Value(mode == "createObjectOrReplace")
+                            .Build()
                         .ExistingOk<TCoAtom>()
                             .Value(mode == "createObjectIfNotExists")
-                        .Build()
+                            .Build()
                         .Done()
                         .Ptr();
                 } else if (mode == "alterObject") {

@@ -1,13 +1,28 @@
 GO_LIBRARY()
-
-SRCS(
-    supported.go
-    zosarch.go
-)
-
-GO_XTEST_SRCS(zosarch_test.go)
-
+IF (OS_DARWIN AND ARCH_ARM64)
+    SRCS(
+		supported.go
+		zosarch.go
+    )
+ELSEIF (OS_DARWIN AND ARCH_X86_64)
+    SRCS(
+		supported.go
+		zosarch.go
+    )
+ELSEIF (OS_LINUX AND ARCH_AARCH64)
+    SRCS(
+		supported.go
+		zosarch.go
+    )
+ELSEIF (OS_LINUX AND ARCH_X86_64)
+    SRCS(
+		supported.go
+		zosarch.go
+    )
+ELSEIF (OS_WINDOWS AND ARCH_X86_64)
+    SRCS(
+		supported.go
+		zosarch.go
+    )
+ENDIF()
 END()
-
-RECURSE(
-)

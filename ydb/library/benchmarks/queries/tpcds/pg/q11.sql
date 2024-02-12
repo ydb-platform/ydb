@@ -19,11 +19,11 @@ with year_total as (
  group by c_customer_id
          ,c_first_name
          ,c_last_name
-         ,c_preferred_cust_flag 
+         ,c_preferred_cust_flag
          ,c_birth_country
          ,c_login
          ,c_email_address
-         ,d_year 
+         ,d_year
  union all
  select c_customer_id customer_id
        ,c_first_name customer_first_name
@@ -43,13 +43,13 @@ with year_total as (
  group by c_customer_id
          ,c_first_name
          ,c_last_name
-         ,c_preferred_cust_flag 
+         ,c_preferred_cust_flag
          ,c_birth_country
          ,c_login
          ,c_email_address
          ,d_year
          )
-  select  
+  select
                   t_s_secyear.customer_id
                  ,t_s_secyear.customer_first_name
                  ,t_s_secyear.customer_last_name
@@ -65,10 +65,10 @@ with year_total as (
          and t_w_firstyear.sale_type = 'w'
          and t_s_secyear.sale_type = 's'
          and t_w_secyear.sale_type = 'w'
-         and t_s_firstyear.dyear = 2001
-         and t_s_secyear.dyear = 2001+1
-         and t_w_firstyear.dyear = 2001
-         and t_w_secyear.dyear = 2001+1
+         and t_s_firstyear.dyear = 1999
+         and t_s_secyear.dyear = 1999+1
+         and t_w_firstyear.dyear = 1999
+         and t_w_secyear.dyear = 1999+1
          and t_s_firstyear.year_total > 0::numeric
          and t_w_firstyear.year_total > 0::numeric
          and case when t_w_firstyear.year_total > 0::numeric then t_w_secyear.year_total / t_w_firstyear.year_total else 0.0::numeric end

@@ -286,6 +286,51 @@ inline bool IsArrayType(const TTypeDesc& typeDesc) noexcept {
     return typeDesc.ArrayTypeId == typeDesc.TypeId;
 }
 
+enum class ERelKind : char {
+    Relation = 'r',
+    View = 'v'
+};
+struct TTableInfoKey {
+    TString Schema;
+    TString Name;
+
+    bool operator==(const TTableInfoKey& other) const {
+        return Schema == other.Schema && Name == other.Name;
+    }
+
+    size_t Hash() const {
+        auto stringHasher = THash<TString>();
+        return CombineHashes(stringHasher(Schema), stringHasher(Name));
+    }
+};
+
+constexpr ui32 TypeRelationOid = 1247;
+constexpr ui32 DatabaseRelationOid = 1262;
+constexpr ui32 TableSpaceRelationOid = 1213;
+constexpr ui32 SharedDescriptionRelationOid = 2396;
+constexpr ui32 TriggerRelationOid = 2620;
+constexpr ui32 InheritsRelationOid = 2611;
+constexpr ui32 DescriptionRelationOid = 2609;
+constexpr ui32 AccessMethodRelationOid = 2601;
+constexpr ui32 NamespaceRelationOid = 2615;
+constexpr ui32 AuthMemRelationOid = 1261;
+constexpr ui32 RelationRelationOid = 1259;
+
+struct TTableInfo : public TTableInfoKey {
+    ERelKind Kind;
+    ui32 Oid;
+};
+
+struct TColumnInfo {
+    TString Schema;
+    TString TableName;
+    TString Name;
+    TString UdtType;
+};
+
+const TVector<TTableInfo>& GetStaticTables();
+const THashMap<TTableInfoKey, TVector<TColumnInfo>>& GetStaticColumns();
+
 }
 
 template <>
@@ -297,3 +342,10 @@ template <>
 inline void Out<NYql::NPg::ECoercionCode>(IOutputStream& o, NYql::NPg::ECoercionCode coercionCode) {
     o.Write(static_cast<std::underlying_type<NYql::NPg::ECoercionCode>::type>(coercionCode));
 }
+
+template <>
+struct THash<NYql::NPg::TTableInfoKey> {
+    size_t operator ()(const NYql::NPg::TTableInfoKey& val) const {
+        return val.Hash();
+    }
+};

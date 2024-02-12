@@ -1,19 +1,28 @@
 GO_LIBRARY()
-
-SRCS(
-    bufio.go
-    scan.go
-)
-
-GO_TEST_SRCS(export_test.go)
-
-GO_XTEST_SRCS(
-    bufio_test.go
-    example_test.go
-    scan_test.go
-)
-
+IF (OS_DARWIN AND ARCH_ARM64)
+    SRCS(
+		bufio.go
+		scan.go
+    )
+ELSEIF (OS_DARWIN AND ARCH_X86_64)
+    SRCS(
+		bufio.go
+		scan.go
+    )
+ELSEIF (OS_LINUX AND ARCH_AARCH64)
+    SRCS(
+		bufio.go
+		scan.go
+    )
+ELSEIF (OS_LINUX AND ARCH_X86_64)
+    SRCS(
+		bufio.go
+		scan.go
+    )
+ELSEIF (OS_WINDOWS AND ARCH_X86_64)
+    SRCS(
+		bufio.go
+		scan.go
+    )
+ENDIF()
 END()
-
-RECURSE(
-)

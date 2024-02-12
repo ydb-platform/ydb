@@ -292,7 +292,6 @@ public:
 
         for (ui32 i = 0U; i < Keys.size(); ++i) {
             if (KeyArgs[i]->GetDependencesCount() > 0U) {
-                const auto map = KeysOnItems[i];
                 const auto key = GetNodeValue(Keys[i], ctx, block);
                 EnsureDynamicCast<ICodegeneratorExternalNode*>(KeyArgs[i])->CreateSetValue(ctx, block, key);
             }

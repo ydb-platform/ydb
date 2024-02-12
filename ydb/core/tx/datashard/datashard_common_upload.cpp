@@ -74,7 +74,8 @@ bool TCommonUploadOps<TEvRequest, TEvResponse>::Execute(TDataShard* self, TTrans
         self->SysLocksTable().HasWriteLocks(fullTableId) ||
         self->GetVolatileTxManager().GetTxMap());
 
-    TDataShardUserDb userDb(*self, txc.DB, readVersion);
+    NMiniKQL::TEngineHostCounters engineHostCounters;
+    TDataShardUserDb userDb(*self, txc.DB, globalTxId, readVersion, writeVersion, engineHostCounters, TAppData::TimeProvider->Now());
     TDataShardChangeGroupProvider groupProvider(*self, txc.DB);
 
     if (CollectChanges) {
@@ -253,7 +254,7 @@ bool TCommonUploadOps<TEvRequest, TEvResponse>::Execute(TDataShard* self, TTrans
             self->GetConflictsCache().GetTableCache(writeTableId).AddUncommittedWrite(keyCells.GetCells(), globalTxId, txc.DB);
             if (!commitAdded) {
                 // Make sure we see our own changes on further iterations
-                userDb.AddCommitTxId(globalTxId, writeVersion);
+                userDb.AddCommitTxId(fullTableId, globalTxId, writeVersion);
                 commitAdded = true;
             }
         } else {

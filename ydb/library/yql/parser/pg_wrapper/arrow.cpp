@@ -1,5 +1,6 @@
 #include "arrow.h"
 #include "arrow_impl.h"
+#include <ydb/library/yql/minikql/defs.h>
 #include <ydb/library/yql/parser/pg_wrapper/interface/arrow.h>
 #include <ydb/library/yql/parser/pg_wrapper/interface/utils.h>
 #include <ydb/library/yql/minikql/mkql_node_cast.h>
@@ -19,7 +20,10 @@ extern "C" {
 namespace NYql {
 
 extern "C" {
+Y_PRAGMA_DIAGNOSTIC_PUSH
+Y_PRAGMA("GCC diagnostic ignored \"-Wreturn-type-c-linkage\"")
 #include "pg_kernels_fwd.inc"
+Y_PRAGMA_DIAGNOSTIC_POP
 }
 
 struct TExecs {
@@ -114,7 +118,7 @@ std::shared_ptr<arrow::Array> PgConvertString(const std::shared_ptr<arrow::Array
     for (size_t i = 0; i < length; ++i) {
         auto item = reader.GetItem(*data, i);
         if (!item) {
-            builder.AppendNull();
+            ARROW_OK(builder.AppendNull());
             continue;
         }
 
@@ -174,6 +178,55 @@ Numeric PgFloatToNumeric(double item, ui64 scale, int digits) {
     }
 }
 
+std::shared_ptr<arrow::Array> PgDecimal128ConvertNumeric(const std::shared_ptr<arrow::Array>& value, int32_t precision, int32_t scale) {
+    TArenaMemoryContext arena;
+    const auto& data = value->data();
+    size_t length = data->length;
+    arrow::BinaryBuilder builder;
+
+    bool error;
+    Numeric high_bits_mul = numeric_mul_opt_error(int64_to_numeric(int64_t(1) << 62), int64_to_numeric(4), &error);
+
+    auto input = data->GetValues<arrow::Decimal128>(1);
+    for (size_t i = 0; i < length; ++i) {
+        if (value->IsNull(i)) {
+            ARROW_OK(builder.AppendNull());
+            continue;
+        }
+
+        Numeric v = PgDecimal128ToNumeric(input[i], precision, scale, high_bits_mul);
+       
+        auto datum = NumericGetDatum(v);
+        auto ptr = (char*)datum;
+        auto len = GetFullVarSize((const text*)datum);
+        NUdf::ZeroMemoryContext(ptr);
+        ARROW_OK(builder.Append(ptr - sizeof(void*), len + sizeof(void*)));  
+    }
+
+    std::shared_ptr<arrow::BinaryArray> ret;
+    ARROW_OK(builder.Finish(&ret));
+    return ret;
+}
+
+Numeric PgDecimal128ToNumeric(arrow::Decimal128 value, int32_t precision, int32_t scale, Numeric high_bits_mul) {
+    uint64_t low_bits = value.low_bits();
+    int64 high_bits = value.high_bits();
+
+    if (low_bits > INT64_MAX){
+        high_bits += 1;
+    }
+
+    bool error;
+    Numeric low_bits_res  = int64_div_fast_to_numeric(low_bits, scale);
+    Numeric high_bits_res = numeric_mul_opt_error(int64_div_fast_to_numeric(high_bits, scale), high_bits_mul, &error);
+    MKQL_ENSURE(error == false, "Bad numeric multiplication.");
+    
+    Numeric res = numeric_add_opt_error(high_bits_res,  low_bits_res, &error);
+    MKQL_ENSURE(error == false, "Bad numeric addition.");
+
+    return res;
+}
+
 TColumnConverter BuildPgNumericColumnConverter(const std::shared_ptr<arrow::DataType>& originalType) {
     switch (originalType->id()) {
     case arrow::Type::INT16:
@@ -196,6 +249,14 @@ TColumnConverter BuildPgNumericColumnConverter(const std::shared_ptr<arrow::Data
         return [](const std::shared_ptr<arrow::Array>& value) {
             return PgConvertNumeric<double>(value);
         };
+    case arrow::Type::DECIMAL128: {
+        auto decimal128Ptr = std::static_pointer_cast<arrow::Decimal128Type>(originalType);
+        int32_t precision = decimal128Ptr->precision();
+        int32_t scale     = decimal128Ptr->scale();
+        return [precision, scale](const std::shared_ptr<arrow::Array>& value) {
+            return PgDecimal128ConvertNumeric(value, precision, scale);
+        };
+    }
     default:
         return {};
     }

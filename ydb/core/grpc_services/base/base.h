@@ -407,8 +407,8 @@ class IRequestCtx
     , public virtual IRequestCtxBase
 {
     friend class TProtoResponseHelper;
-
 public:
+    using EStreamCtrl = NYdbGrpc::IRequestContextBase::EStreamCtrl;
     virtual google::protobuf::Message* GetRequestMut() = 0;
 
     virtual void SetRuHeader(ui64 ru) = 0;
@@ -418,7 +418,7 @@ public:
     virtual void SetStreamingNotify(NYdbGrpc::IRequestContextBase::TOnNextReply&& cb) = 0;
     virtual void FinishStream(ui32 status) = 0;
 
-    virtual void SendSerializedResult(TString&& in, Ydb::StatusIds::StatusCode status) = 0;
+    virtual void SendSerializedResult(TString&& in, Ydb::StatusIds::StatusCode status, EStreamCtrl flag = EStreamCtrl::CONT) = 0;
 
     virtual void Reply(NProtoBuf::Message* resp, ui32 status = 0) = 0;
 
@@ -1193,7 +1193,7 @@ public:
         return GetPeerMetaValues(NYdb::YDB_REQUEST_TYPE_HEADER);
     }
 
-    void SendSerializedResult(TString&& in, Ydb::StatusIds::StatusCode status) override {
+    void SendSerializedResult(TString&& in, Ydb::StatusIds::StatusCode status, IRequestCtx::EStreamCtrl flag = IRequestCtx::EStreamCtrl::CONT) override {
         // res->data() pointer is used inside grpc code.
         // So this object should be destroyed during grpc_slice destroying routine
         auto res = new TString;
@@ -1208,7 +1208,7 @@ public:
                     (void*)(res->data()), res->size(), freeResult, res);
         grpc::Slice sl = grpc::Slice(slice, grpc::Slice::STEAL_REF);
         auto data = grpc::ByteBuffer(&sl, 1);
-        Ctx_->Reply(&data, status);
+        Ctx_->Reply(&data, status, flag);
     }
 
     void SetCostInfo(float consumed_units) override {
@@ -1437,7 +1437,12 @@ public:
     void Pass(const IFacilityProvider& facility) override {
         this->Span_.End();
 
-        PassMethod(std::move(std::unique_ptr<TRequestIface>(this)), facility);
+        try {
+            PassMethod(std::move(std::unique_ptr<TRequestIface>(this)), facility);
+        } catch (const std::exception& ex) {
+            this->RaiseIssue(NYql::TIssue{TStringBuilder() << "unexpected exception: " << ex.what()});
+            this->ReplyWithYdbStatus(Ydb::StatusIds::INTERNAL_ERROR);
+        }
     }
 
     TRateLimiterMode GetRlMode() const override {

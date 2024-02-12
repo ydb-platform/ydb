@@ -13,6 +13,7 @@ namespace NYql {
 namespace NObjectOptionsParsing {
 Y_HAS_MEMBER(ExistingOk); // for create
 Y_HAS_MEMBER(MissingOk); // for drop
+Y_HAS_MEMBER(ReplaceIfExists); // for create
 } // namespace NObjectOptionsParsing
 
 class TObjectSettingsImpl {
@@ -24,6 +25,7 @@ private:
     YDB_READONLY_DEF(TString, ObjectId);
     YDB_READONLY_DEF(bool, ExistingOk); // for create
     YDB_READONLY_DEF(bool, MissingOk); // for drop
+    YDB_READONLY_DEF(bool, ReplaceIfExists); // for create
     TFeatures Features;
     std::shared_ptr<TFeaturesExtractor> FeaturesExtractor;
 public:
@@ -45,6 +47,9 @@ public:
     bool DeserializeFromKi(const TKiObject& data) {
         ObjectId = data.ObjectId();
         TypeId = data.TypeId();
+        if constexpr (NObjectOptionsParsing::THasReplaceIfExists<TKiObject>::value) {
+            ReplaceIfExists = (data.ReplaceIfExists().Value() == "1");
+        }
         if constexpr (NObjectOptionsParsing::THasExistingOk<TKiObject>::value) {
             ExistingOk = (data.ExistingOk().Value() == "1");
         }

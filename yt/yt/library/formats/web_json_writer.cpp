@@ -343,7 +343,7 @@ private:
     std::vector<TLogicalTypePtr> Types_;
     std::vector<std::vector<int>> TableIndexToColumnIdToTypeIndex_;
     THashMap<std::pair<int, TString>, int> TableIndexAndColumnNameToTypeIndex_;
-    TEnumIndexedVector<EValueType, int> ValueTypeToTypeIndex_;
+    TEnumIndexedArray<EValueType, int> ValueTypeToTypeIndex_;
 
 private:
     int GetTypeIndex(int tableIndex, ui16 columnId, TStringBuf columnName, EValueType valueType)

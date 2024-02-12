@@ -26,6 +26,8 @@ private:
     YDB_READONLY(ui32, SourceIdx, 0);
     YDB_READONLY_DEF(NIndexedReader::TSortableBatchPosition, Start);
     YDB_READONLY_DEF(NIndexedReader::TSortableBatchPosition, Finish);
+    NArrow::TReplaceKey StartReplaceKey;
+    NArrow::TReplaceKey FinishReplaceKey;
     YDB_READONLY_DEF(std::shared_ptr<TSpecialReadContext>, Context);
     YDB_READONLY(TSnapshot, RecordSnapshotMax, TSnapshot::Zero());
     std::optional<ui32> RecordsCount;
@@ -36,7 +38,8 @@ private:
 protected:
     THashMap<ui32, TFetchingInterval*> Intervals;
 
-    std::shared_ptr<TFetchedData> StageData;
+    std::unique_ptr<TFetchedData> StageData;
+    std::unique_ptr<TFetchedResult> StageResult;
 
     TAtomic FilterStageFlag = 0;
     bool IsReadyFlag = false;
@@ -51,7 +54,23 @@ protected:
     virtual void DoAbort() = 0;
     virtual void DoApplyIndex(const NIndexes::TIndexCheckerContainer& indexMeta) = 0;
 public:
+    const NArrow::TReplaceKey& GetStartReplaceKey() const {
+        return StartReplaceKey;
+    }
+    const NArrow::TReplaceKey& GetFinishReplaceKey() const {
+        return FinishReplaceKey;
+    }
+
+    const TFetchedResult& GetStageResult() const {
+        AFL_VERIFY(!!StageResult);
+        return *StageResult;
+    }
+
     void SetIsReady();
+
+    void Finalize() {
+        StageResult = std::make_unique<TFetchedResult>(std::move(StageData));
+    }
 
     bool IsEmptyData() const {
         return GetStageData().IsEmpty();
@@ -137,16 +156,19 @@ public:
     void RegisterInterval(TFetchingInterval& interval);
 
     IDataSource(const ui32 sourceIdx, const std::shared_ptr<TSpecialReadContext>& context, 
-        const NIndexedReader::TSortableBatchPosition& start, const NIndexedReader::TSortableBatchPosition& finish,
+        const NArrow::TReplaceKey& start, const NArrow::TReplaceKey& finish,
         const TSnapshot& recordSnapshotMax, const std::optional<ui32> recordsCount
     )
         : SourceIdx(sourceIdx)
-        , Start(start)
-        , Finish(finish)
+        , Start(context->GetReadMetadata()->BuildSortedPosition(start))
+        , Finish(context->GetReadMetadata()->BuildSortedPosition(finish))
+        , StartReplaceKey(start)
+        , FinishReplaceKey(finish)
         , Context(context)
         , RecordSnapshotMax(recordSnapshotMax)
         , RecordsCount(recordsCount)
     {
+        AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", "portions_for_merge")("start", Start.DebugJson())("finish", Finish.DebugJson());
         if (Start.IsReverseSort()) {
             std::swap(Start, Finish);
         }
@@ -200,10 +222,10 @@ public:
     }
 
     TPortionDataSource(const ui32 sourceIdx, const std::shared_ptr<TPortionInfo>& portion, const std::shared_ptr<TSpecialReadContext>& context,
-        const NIndexedReader::TSortableBatchPosition& start, const NIndexedReader::TSortableBatchPosition& finish)
+        const NArrow::TReplaceKey& start, const NArrow::TReplaceKey& finish)
         : TBase(sourceIdx, context, start, finish, portion->RecordSnapshotMax(), portion->GetRecordsCount())
-        , Portion(portion) {
-
+        , Portion(portion)
+    {
     }
 };
 
@@ -246,7 +268,7 @@ public:
     }
 
     TCommittedDataSource(const ui32 sourceIdx, const TCommittedBlob& committed, const std::shared_ptr<TSpecialReadContext>& context,
-        const NIndexedReader::TSortableBatchPosition& start, const NIndexedReader::TSortableBatchPosition& finish)
+        const NArrow::TReplaceKey& start, const NArrow::TReplaceKey& finish)
         : TBase(sourceIdx, context, start, finish, committed.GetSnapshot(), {})
         , CommittedBlob(committed) {
 

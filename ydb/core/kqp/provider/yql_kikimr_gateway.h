@@ -790,7 +790,7 @@ public:
     virtual NThreading::TFuture<TTableMetadataResult> LoadTableMetadata(
         const TString& cluster, const TString& table, TLoadTableMetadataSettings settings) = 0;
 
-    virtual NThreading::TFuture<TGenericResult> CreateTable(TKikimrTableMetadataPtr metadata, bool createDir, bool existingOk = false) = 0;
+    virtual NThreading::TFuture<TGenericResult> CreateTable(TKikimrTableMetadataPtr metadata, bool createDir, bool existingOk = false, bool replaceIfExists = false) = 0;
 
     virtual NThreading::TFuture<TGenericResult> SendSchemeExecuterRequest(const TString& cluster,
         const TMaybe<TString>& requestType,
@@ -833,17 +833,20 @@ public:
 
     virtual NThreading::TFuture<TGenericResult> DropGroup(const TString& cluster, const TDropGroupSettings& settings) = 0;
 
-    virtual NThreading::TFuture<TGenericResult> CreateColumnTable(TKikimrTableMetadataPtr metadata, bool createDir) = 0;
+    virtual NThreading::TFuture<TGenericResult> CreateColumnTable(
+        TKikimrTableMetadataPtr metadata, bool createDir, bool existingOk = false) = 0;
 
     virtual NThreading::TFuture<TGenericResult> AlterColumnTable(const TString& cluster, const TAlterColumnTableSettings& settings) = 0;
 
-    virtual NThreading::TFuture<TGenericResult> CreateTableStore(const TString& cluster, const TCreateTableStoreSettings& settings) = 0;
+    virtual NThreading::TFuture<TGenericResult> CreateTableStore(const TString& cluster,
+        const TCreateTableStoreSettings& settings, bool existingOk = false) = 0;
 
     virtual NThreading::TFuture<TGenericResult> AlterTableStore(const TString& cluster, const TAlterTableStoreSettings& settings) = 0;
 
-    virtual NThreading::TFuture<TGenericResult> DropTableStore(const TString& cluster, const TDropTableStoreSettings& settings) = 0;
+    virtual NThreading::TFuture<TGenericResult> DropTableStore(const TString& cluster,
+        const TDropTableStoreSettings& settings, bool missingOk) = 0;
 
-    virtual NThreading::TFuture<TGenericResult> CreateExternalTable(const TString& cluster, const TCreateExternalTableSettings& settings, bool createDir, bool existingOk) = 0;
+    virtual NThreading::TFuture<TGenericResult> CreateExternalTable(const TString& cluster, const TCreateExternalTableSettings& settings, bool createDir, bool existingOk, bool replaceIfExists) = 0;
 
     virtual NThreading::TFuture<TGenericResult> AlterExternalTable(const TString& cluster, const TAlterExternalTableSettings& settings) = 0;
 

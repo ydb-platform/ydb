@@ -155,7 +155,7 @@ struct TGreaterOrEqualOp;
 
 template<typename TLeft, typename TRight>
 struct TGreaterOrEqualOp<TLeft, TRight, bool> : public TGreaterOrEqual<TLeft, TRight, false> {
-    static constexpr bool DefaultNulls = true;
+    static constexpr auto NullMode = TKernel::ENullMode::Default;
 };
 
 template<typename TLeft, typename TRight, bool Aggr>
@@ -183,7 +183,7 @@ struct TDiffDateGreaterOrEqualOp;
 
 template<typename TLeft, typename TRight>
 struct TDiffDateGreaterOrEqualOp<TLeft, TRight, NUdf::TDataType<bool>> : public TDiffDateGreaterOrEqual<TLeft, TRight, false> {
-    static constexpr bool DefaultNulls = true;
+    static constexpr auto NullMode = TKernel::ENullMode::Default;
 };
 
 template<typename TLeft, typename TRight, bool Aggr>

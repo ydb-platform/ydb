@@ -190,3 +190,7 @@ SELECT i,
     FROM generate_series(-13, 13) i;
 -- should fail
 select make_timestamp(0, 7, 15, 12, 30, 15);
+-- errors
+select * from generate_series('2020-01-01 00:00'::timestamp,
+                              '2020-01-02 03:00'::timestamp,
+                              '0 hour'::interval);

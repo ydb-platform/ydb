@@ -223,7 +223,7 @@ inline TCollectStatsLevel StatsModeToCollectStatsLevel(NDqProto::EDqStatsMode st
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 class TDqTaskRunner : public IDqTaskRunner {
 public:
-    TDqTaskRunner(const TDqTaskRunnerContext& context, const TDqTaskRunnerSettings& settings, const TLogFunc& logFunc)
+    TDqTaskRunner(NKikimr::NMiniKQL::TScopedAlloc& alloc, const TDqTaskRunnerContext& context, const TDqTaskRunnerSettings& settings, const TLogFunc& logFunc)
         : Context(context)
         , Settings(settings)
         , LogFunc(logFunc)
@@ -237,27 +237,18 @@ public:
             }
         }
 
-        if (!Context.Alloc) {
-            SelfAlloc = std::shared_ptr<TScopedAlloc>(new TScopedAlloc(
-                    __LOCATION__,
-                    TAlignedPagePoolCounters(),
-                    Context.FuncRegistry->SupportsSizedAllocators(),
-                    false
-            ));
+        if (Context.TypeEnv) {
+            YQL_ENSURE(std::addressof(alloc) == std::addressof(TypeEnv().GetAllocator()));
+        } else {            
+            AllocatedHolder->SelfTypeEnv = std::make_unique<TTypeEnvironment>(alloc);
         }
-
-        if (!Context.TypeEnv) {
-            AllocatedHolder->SelfTypeEnv = std::make_unique<TTypeEnvironment>(Alloc());
-        }
-        YQL_ENSURE(std::addressof(Alloc()) == std::addressof(TypeEnv().GetAllocator()));
+        
     }
 
     ~TDqTaskRunner() {
-        if (SelfAlloc) {
-            auto guard = Guard(*SelfAlloc.get());
-            Stats.reset();
-            AllocatedHolder.reset();
-        }
+        auto guard = Guard(Alloc());
+        Stats.reset();
+        AllocatedHolder.reset();
     }
 
     bool CollectFull() const {
@@ -643,7 +634,7 @@ public:
                     settings.Level = StatsModeToCollectStatsLevel(Settings.StatsMode);
 
                     if (!outputChannelDesc.GetInMemory()) {
-                        settings.ChannelStorage = execCtx.CreateChannelStorage(channelId);
+                        settings.ChannelStorage = execCtx.CreateChannelStorage(channelId, outputChannelDesc.GetEnableSpilling());
                     }
 
                     auto outputChannel = CreateDqOutputChannel(channelId, outputChannelDesc.GetDstStageId(), *taskOutputType, holderFactory, settings, LogFunc);
@@ -815,10 +806,9 @@ public:
     const NKikimr::NMiniKQL::THolderFactory& GetHolderFactory() const override {
         return AllocatedHolder->ProgramParsed.CompGraph->GetHolderFactory();
     }
-
-    std::shared_ptr<NKikimr::NMiniKQL::TScopedAlloc> GetAllocatorPtr() const override {
-        YQL_ENSURE(SelfAlloc);
-        return SelfAlloc;
+    
+    NKikimr::NMiniKQL::TScopedAlloc& GetAllocator() const override {
+        return Alloc();
     }
 
     const THashMap<TString, TString>& GetSecureParams() const override {
@@ -851,14 +841,13 @@ public:
     }
 
 private:
-    NKikimr::NMiniKQL::TTypeEnvironment& TypeEnv() {
+    NKikimr::NMiniKQL::TTypeEnvironment& TypeEnv() const {
         return Context.TypeEnv ? *Context.TypeEnv : *AllocatedHolder->SelfTypeEnv;
     }
 
-    NKikimr::NMiniKQL::TScopedAlloc& Alloc() {
-        return Context.Alloc ? *Context.Alloc : *SelfAlloc;
+    NKikimr::NMiniKQL::TScopedAlloc& Alloc() const {
+        return GetTypeEnv().GetAllocator();
     }
-
     void FinishImpl() {
         LOG(TStringBuilder() << "task" << TaskId << ", execution finished, finish consumers");
         AllocatedHolder->Output->Finish();
@@ -938,9 +927,6 @@ private:
     TDqTaskRunnerSettings Settings;
     TLogFunc LogFunc;
     std::unique_ptr<NUdf::ISecureParamsProvider> SecureParamsProvider;
-
-    std::shared_ptr<NKikimr::NMiniKQL::TScopedAlloc> SelfAlloc;       // if not set -> use Context.Alloc
-
     struct TInputTransformInfo {
         NUdf::TUnboxedValue TransformInput;
         IDqAsyncInputBuffer::TPtr TransformOutput;
@@ -1019,10 +1005,10 @@ private:
     }
 };
 
-TIntrusivePtr<IDqTaskRunner> MakeDqTaskRunner(const TDqTaskRunnerContext& ctx, const TDqTaskRunnerSettings& settings,
+TIntrusivePtr<IDqTaskRunner> MakeDqTaskRunner(NKikimr::NMiniKQL::TScopedAlloc& alloc, const TDqTaskRunnerContext& ctx, const TDqTaskRunnerSettings& settings,
     const TLogFunc& logFunc)
 {
-    return new TDqTaskRunner(ctx, settings, logFunc);
+    return new TDqTaskRunner(alloc, ctx, settings, logFunc);
 }
 
 } // namespace NYql::NDq

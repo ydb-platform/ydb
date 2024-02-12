@@ -159,7 +159,9 @@ class KikimrConfigGenerator(object):
             hive_config=None,
             datashard_config=None,
             enforce_user_token_requirement=False,
-            default_user_sid=None
+            default_user_sid=None,
+            pg_compatible_expirement=False,
+            generic_connector_config=None,  # typing.Optional[TGenericConnectorConfig]
     ):
         if extra_feature_flags is None:
             extra_feature_flags = []
@@ -375,6 +377,31 @@ class KikimrConfigGenerator(object):
 
         if default_user_sid:
             self.yaml_config["domains_config"]["security_config"]["default_user_sids"] = [default_user_sid]
+
+        if pg_compatible_expirement:
+            self.yaml_config["table_service_config"]["enable_prepared_ddl"] = True
+            # self.yaml_config["table_service_config"]["enable_ast_cache"] = True
+            # self.yaml_config["table_service_config"]["enable_pg_consts_to_params"] = True
+            self.yaml_config["table_service_config"]["index_auto_choose_mode"] = 'max_used_prefix'
+            self.yaml_config["feature_flags"]['enable_temp_tables'] = True
+            self.yaml_config["feature_flags"]['enable_table_pg_types'] = True
+
+        if generic_connector_config:
+            if "query_service_config" not in self.yaml_config:
+                self.yaml_config["query_service_config"] = {}
+
+            self.yaml_config["query_service_config"]["generic"] = {
+                "connector": {
+                    "endpoint": {
+                        "host": generic_connector_config.Endpoint.host,
+                        "port": generic_connector_config.Endpoint.port,
+                    },
+                    "use_ssl": generic_connector_config.UseSsl
+                }
+            }
+
+            self.yaml_config["feature_flags"]["enable_external_data_sources"] = True
+            self.yaml_config["feature_flags"]["enable_script_execution_operations"] = True
 
     @property
     def pdisks_info(self):

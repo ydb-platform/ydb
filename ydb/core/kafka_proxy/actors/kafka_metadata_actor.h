@@ -1,8 +1,10 @@
 #include "actors.h"
 
+#include <ydb/core/kafka_proxy/kafka_events.h>
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 #include <ydb/library/aclib/aclib.h>
 #include <ydb/services/persqueue_v1/actors/events.h>
+#include <ydb/services/persqueue_v1/actors/schema_actors.h>
 
 namespace NKafka {
 
@@ -12,6 +14,7 @@ public:
         : Context(context)
         , CorrelationId(correlationId)
         , Message(message)
+        , WithProxy(context->Config.HasProxy() && !context->Config.GetProxy().GetHostname().Empty())
         , Response(new TMetadataResponseData())
     {}
 
@@ -22,14 +25,19 @@ private:
 
     TActorId SendTopicRequest(const TMetadataRequestData::TMetadataRequestTopic& topicRequest);
     void HandleResponse(TEvLocationResponse::TPtr ev, const NActors::TActorContext& ctx);
+    void HandleNodesResponse(NKikimr::NIcNodeCache::TEvICNodesInfoCache::TEvGetAllNodesInfoResponse::TPtr& ev, const NActors::TActorContext& ctx);
 
     void AddTopicResponse(TMetadataResponseData::TMetadataResponseTopic& topic, TEvLocationResponse* response);
     void AddTopicError(TMetadataResponseData::TMetadataResponseTopic& topic, EKafkaErrors errorCode);
     void RespondIfRequired(const NActors::TActorContext& ctx);
+    void AddProxyNodeToBrokers();
+    void AddCurrentNodeToBrokers();
+    void ProcessTopics();
 
     STATEFN(StateWork) {
         switch (ev->GetTypeRewrite()) {
             HFunc(TEvLocationResponse, HandleResponse);
+            HFunc(NKikimr::NIcNodeCache::TEvICNodesInfoCache::TEvGetAllNodesInfoResponse, HandleNodesResponse);
         }
     }
 
@@ -39,6 +47,7 @@ private:
     const TContext::TPtr Context;
     const ui64 CorrelationId;
     const TMessagePtr<TMetadataRequestData> Message;
+    const bool WithProxy;
 
     ui64 PendingResponses = 0;
 

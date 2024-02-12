@@ -1,13 +1,28 @@
 GO_LIBRARY()
-
-SRCS(
-    driver.go
-    types.go
-)
-
-GO_TEST_SRCS(types_test.go)
-
+IF (OS_DARWIN AND ARCH_ARM64)
+    SRCS(
+		driver.go
+		types.go
+    )
+ELSEIF (OS_DARWIN AND ARCH_X86_64)
+    SRCS(
+		driver.go
+		types.go
+    )
+ELSEIF (OS_LINUX AND ARCH_AARCH64)
+    SRCS(
+		driver.go
+		types.go
+    )
+ELSEIF (OS_LINUX AND ARCH_X86_64)
+    SRCS(
+		driver.go
+		types.go
+    )
+ELSEIF (OS_WINDOWS AND ARCH_X86_64)
+    SRCS(
+		driver.go
+		types.go
+    )
+ENDIF()
 END()
-
-RECURSE(
-)

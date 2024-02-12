@@ -284,9 +284,6 @@ public:
         const auto result = PHINode::Create(resultType, 4U, "result", done);
         result->addIncoming(ConstantInt::get(resultType, static_cast<i32>(EFetchResult::Finish)), block);
 
-        const auto state = new LoadInst(Type::getInt128Ty(context), statePtr, "state", block);
-        const auto finished = CmpInst::Create(Instruction::ICmp, ICmpInst::ICMP_EQ, state, GetTrue(context), "finished", block);
-
         BranchInst::Create(done, work, IsValid(statePtr, block), block);
 
         block = work;

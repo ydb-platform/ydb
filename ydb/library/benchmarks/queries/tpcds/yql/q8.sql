@@ -84,7 +84,7 @@ $bla1 = (      SELECT substring(cast(ca_zip as string),1,5) AS ca_zip
                           '48017','95694','32919','88217','27116',
                           '28239','58032','18884','16791','21343',
                           '97462','18569','75660','15475'));
-$bla2 = (select ca_zip
+$bla2 = (select A1.ca_zip as ca_zip
       from (SELECT substring(cast(customer_address.ca_zip as string),1,5) ca_zip,count(*) cnt
             FROM {{customer_address}} as customer_address
             cross join {{customer}} as customer
@@ -100,9 +100,9 @@ select  store.s_store_name
      cross join {{date_dim}} as date_dim
      cross join {{store}} as store
      cross join
-     (select ca_zip
+     (select A2.ca_zip as ca_zip
      from (
-     select * from $bla1 bla1 left semi join $bla2 bla2 using (ca_zip)
+     select ca_zip from $bla1 bla1 left semi join $bla2 bla2 using (ca_zip)
       )A2) V1
  where ss_store_sk = s_store_sk
   and ss_sold_date_sk = d_date_sk

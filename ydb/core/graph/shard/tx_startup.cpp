@@ -41,15 +41,6 @@ public:
                 }
             }
         }
-        {
-            auto rowset = db.Table<Schema::MetricsValues>().Select();
-            if (!rowset.IsReady()) {
-                return false;
-            }
-            if (!rowset.EndOfSet()) {
-                Self->StartTimestamp = TInstant::Seconds(rowset.GetValue<Schema::MetricsValues::Timestamp>());
-            }
-        }
         return true;
     }
 

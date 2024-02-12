@@ -2,12 +2,13 @@
 
 #include <ydb/library/yql/core/yql_graph_transformer.h>
 #include <ydb/library/yql/core/yql_type_annotation.h>
+#include <ydb/library/yql/core/cbo/cbo_optimizer_new.h>
 
 namespace NYql::NDq {
 
 class TDqStatisticsTransformerBase : public TSyncTransformerBase {
 public:
-    TDqStatisticsTransformerBase(TTypeAnnotationContext* typeCtx);
+    TDqStatisticsTransformerBase(TTypeAnnotationContext* typeCtx, const IProviderContext& ctx);
 
     IGraphTransformer::TStatus DoTransform(TExprNode::TPtr input, TExprNode::TPtr& output, TExprContext& ctx) override;
     void Rewind() override;
@@ -21,6 +22,7 @@ protected:
     bool AfterLambdas(const TExprNode::TPtr& input, TExprContext& ctx);
 
     TTypeAnnotationContext* TypeCtx;
+    const IProviderContext& Pctx;
 };
 
 } // namespace NYql::NDq

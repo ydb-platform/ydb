@@ -30,8 +30,7 @@ public:
         TSelf* btOwner = new TSelf;
         btOwner->BackTrace.Capture();
         btOwner->Info = info;
-        header->RefCount = 1;
-        header->Owner = btOwner;
+        new (header) THeader(btOwner);
         char* data = raw + OverheadSize;
         return data;
     }
@@ -59,6 +58,8 @@ public:
 
     void Deallocate(char* data) noexcept override {
         if (!RealOwner) {
+            THeader* header = reinterpret_cast<THeader*>(data - sizeof(THeader));
+            header->~THeader();
             char* raw = data - OverheadSize;
             y_deallocate(raw);
         } else {

@@ -430,6 +430,11 @@ message TKqpSchemeOperation {
         TKqpPhyMetadataOperation UpsertObject = 24;
         TKqpPhyMetadataOperation AlterObject = 25;
         TKqpPhyMetadataOperation DropObject = 26;
+        NKikimrSchemeOp.TModifyScheme CreateColumnTable = 27;
+        NKikimrSchemeOp.TModifyScheme AlterColumnTable = 28;
+        NKikimrSchemeOp.TModifyScheme CreateTableStore = 29;
+        NKikimrSchemeOp.TModifyScheme DropTableStore = 30;
+        NKikimrSchemeOp.TModifyScheme AlterTableStore = 31;
     }
 }
 

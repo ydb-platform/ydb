@@ -1,18 +1,33 @@
 GO_LIBRARY()
-
-SRCS(
-    elf.go
-    file.go
-    reader.go
-)
-
-GO_TEST_SRCS(
-    elf_test.go
-    file_test.go
-    symbols_test.go
-)
-
+IF (OS_DARWIN AND ARCH_ARM64)
+    SRCS(
+		elf.go
+		file.go
+		reader.go
+    )
+ELSEIF (OS_DARWIN AND ARCH_X86_64)
+    SRCS(
+		elf.go
+		file.go
+		reader.go
+    )
+ELSEIF (OS_LINUX AND ARCH_AARCH64)
+    SRCS(
+		elf.go
+		file.go
+		reader.go
+    )
+ELSEIF (OS_LINUX AND ARCH_X86_64)
+    SRCS(
+		elf.go
+		file.go
+		reader.go
+    )
+ELSEIF (OS_WINDOWS AND ARCH_X86_64)
+    SRCS(
+		elf.go
+		file.go
+		reader.go
+    )
+ENDIF()
 END()
-
-RECURSE(
-)

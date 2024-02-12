@@ -565,6 +565,37 @@ const TPath::TChecker& TPath::TChecker::IsTheSameDomain(const TPath& another, ES
         << ", another path: " << another.PathString());
 }
 
+const TPath::TChecker& TPath::TChecker::FailOnWrongType(const TSet<TPathElement::EPathType>& expectedTypes) const {
+    if (Failed) {
+        return *this;
+    }
+
+    if (!Path.IsResolved()) {
+        return *this;
+    }
+
+    if (Path.IsDeleted()) {
+        return *this;
+    }
+
+    if (!expectedTypes.contains(Path.Base()->PathType)) {
+        return Fail(EStatus::StatusNameConflict, TStringBuilder() << "unexpected path type"
+            << " (" << BasicPathInfo(Path.Base()) << ")"
+            << ", expected types: " << JoinSeq(", ", expectedTypes));
+    }
+
+    if (!Path.Base()->IsCreateFinished()) {
+        return Fail(EStatus::StatusMultipleModifications, TStringBuilder() << "path exists but creating right now"
+            << " (" << BasicPathInfo(Path.Base()) << ")");
+    }
+
+    return *this;
+}
+
+const TPath::TChecker& TPath::TChecker::FailOnWrongType(TPathElement::EPathType expectedType) const {
+    return FailOnWrongType(TSet<TPathElement::EPathType>{expectedType});
+}
+
 const TPath::TChecker& TPath::TChecker::FailOnExist(const TSet<TPathElement::EPathType>& expectedTypes, bool acceptAlreadyExist) const {
     if (Failed) {
         return *this;
@@ -585,7 +616,7 @@ const TPath::TChecker& TPath::TChecker::FailOnExist(const TSet<TPathElement::EPa
     }
 
     if (!Path.Base()->IsCreateFinished()) {
-        return Fail(EStatus::StatusMultipleModifications, TStringBuilder() << "path exist but creating right now"
+        return Fail(EStatus::StatusMultipleModifications, TStringBuilder() << "path exists but creating right now"
             << " (" << BasicPathInfo(Path.Base()) << ")");
     }
 

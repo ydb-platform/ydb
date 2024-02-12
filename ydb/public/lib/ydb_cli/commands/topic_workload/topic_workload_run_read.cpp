@@ -34,6 +34,9 @@ void TCommandWorkloadTopicRunRead::Config(TConfig& config)
     config.Opts->AddLongOption("topic", "Topic name.")
         .DefaultValue(TOPIC)
         .StoreResult(&Scenario.TopicName);
+    config.Opts->AddLongOption("no-consumer", "Read without consumer")
+        .Hidden()
+        .StoreTrue(&Scenario.ReadWithoutConsumer);
 
     // Specific params
     config.Opts->AddLongOption("consumer-prefix", "Use consumers with names '<consumer-prefix>-0' ... '<consumer-prefix>-<n-1>' where n is set in the '--consumers' option.")

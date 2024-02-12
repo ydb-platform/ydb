@@ -2,10 +2,9 @@
 #include "mkql_match_recognize_matched_vars.h"
 #include "mkql_match_recognize_measure_arg.h"
 #include "mkql_match_recognize_nfa.h"
-#include "mkql_match_recognize_parameters.h"
+#include "mkql_match_recognize_save_load.h"
 
 #include <ydb/library/yql/core/sql_types/match_recognize.h>
-#include <ydb/library/yql/minikql/comp_nodes/mkql_saveload.h>
 #include <ydb/library/yql/minikql/computation/mkql_computation_node_impl.h>
 #include <ydb/library/yql/minikql/computation/mkql_computation_node_holders.h>
 #include <ydb/library/yql/minikql/computation/mkql_computation_node_holders_codegen.h>
@@ -20,9 +19,26 @@ namespace NKikimr::NMiniKQL {
 
 namespace NMatchRecognize {
 
+enum class EOutputColumnSource {PartitionKey, Measure};
+using TOutputColumnOrder = std::vector<std::pair<EOutputColumnSource, size_t>, TMKQLAllocator<std::pair<EOutputColumnSource, size_t>>>;
+
 constexpr ui32 StateVersion = 1;
 
 using namespace NYql::NMatchRecognize;
+
+struct TMatchRecognizeProcessorParameters {
+    IComputationExternalNode* InputDataArg;
+    NYql::NMatchRecognize::TRowPattern Pattern;
+    TUnboxedValueVector       VarNames;
+    THashMap<TString, size_t> VarNamesLookup;
+    IComputationExternalNode* MatchedVarsArg;
+    IComputationExternalNode* CurrentRowIndexArg;
+    TComputationNodePtrVector Defines;
+    IComputationExternalNode* MeasureInputDataArg;
+    TMeasureInputColumnOrder  MeasureInputColumnOrder;
+    TComputationNodePtrVector Measures;
+    TOutputColumnOrder        OutputColumnOrder;
+};
 
 class TBackTrackingMatchRecognize {
     using TPartitionList = TSimpleList;
@@ -125,7 +141,6 @@ private:
 class TStreamingMatchRecognize {
     using TPartitionList = TSparseList;
     using TRange = TPartitionList::TRange;
-   // using TMatchedVars = TMatchedVars<TRange>;
 public:
     using TPatternConfigurationBuilder = TNfaTransitionGraphBuilder;
     TStreamingMatchRecognize(
@@ -186,11 +201,11 @@ public:
         return false;
     }
 
-    void Save(TOutputSerializer& serealizer) const {
+    void Save(TOutputSerializer& serializer) const {
         // TODO : PartitionKey
-        Rows.Save(serealizer);
-        Nfa.Save(serealizer);
-        serealizer.Write(MatchNumber);
+        Rows.Save(serializer);
+        Nfa.Save(serializer);
+        serializer.Write(MatchNumber);
     }
 
     void Load(TInputSerializer& serializer) {
@@ -343,16 +358,17 @@ public:
     {}
 
     NUdf::TUnboxedValue Save() const override {
-        TOutputSerializer serealizer(SaveLoadContex);
-        serealizer.Write(StateVersion);
-        serealizer.Write(Partitions.size());
+        TOutputSerializer serializer(SaveLoadContex);
+
+        serializer.Write(StateVersion);
+        serializer.Write(Partitions.size());
 
         for (const auto& [key, state] : Partitions) {
-            serealizer.Write(key);
-            state->Save(serealizer);
+            serializer.Write(key);
+            state->Save(serializer);
         }
 
-        return serealizer.MakeString();
+        return serializer.MakeString();
     }
 
     void Load(const NUdf::TStringRef& state) override {
@@ -381,7 +397,7 @@ public:
             //     }
             // }
         }
-        MKQL_ENSURE(!serializer.Size(), "State is corrupted");
+        MKQL_ENSURE(serializer.Empty(), "State is corrupted");
     }
 
     bool ProcessInputRow(NUdf::TUnboxedValue&& row, TComputationContext& ctx) {

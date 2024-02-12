@@ -2,7 +2,7 @@
 #include <ydb/library/yql/minikql/defs.h>
 #include <ydb/library/yql/minikql/computation/mkql_computation_node_impl.h>
 #include <ydb/library/yql/minikql/computation/mkql_computation_node_holders.h>
-#include <ydb/library/yql/minikql/comp_nodes/mkql_match_recognize_parameters.h>
+#include <ydb/library/yql/minikql/comp_nodes/mkql_match_recognize_save_load.h>
 #include <ydb/library/yql/minikql/comp_nodes/mkql_saveload.h>
 #include <ydb/library/yql/public/udf/udf_value.h>
 #include <unordered_map>
@@ -135,18 +135,17 @@ class TSparseList {
             }
         }
 
-        void Save(TOutputSerializer& serealizer) const {
-            serealizer.Write(Storage.size());
+        void Save(TOutputSerializer& serializer) const {
+            serializer.Write(Storage.size());
             for (const auto& [key, item]: Storage) {
-                serealizer.Write(key);
-                serealizer.Write(item.Value);
-                serealizer.Write(item.LockCount);
+                serializer.Write(key);
+                serializer.Write(item.Value);
+                serializer.Write(item.LockCount);
             }
         }
 
         void Load(TInputSerializer& serializer) {
-            //auto size = serializer.Read<TStorage::size_type>();
-            auto size = serializer.Read<ui64>();
+            auto size = serializer.Read<TStorage::size_type>();
             for (size_t i = 0; i < size; ++i) {
                 auto key = serializer.Read<TStorage::key_type>();
                 NUdf::TUnboxedValue row = serializer.Read<NUdf::TUnboxedValue>();
@@ -268,17 +267,17 @@ public:
             ToIndex = -1;
         }
 
-        void Save(TOutputSerializer& serealizer) const {
-            serealizer.Write(Container);
-            serealizer.Write(FromIndex);
-            serealizer.Write(ToIndex);
+        void Save(TOutputSerializer& serializer) const {
+            serializer.Write(Container);
+            serializer.Write(FromIndex);
+            serializer.Write(ToIndex);
        }
 
         void Load(TInputSerializer& serializer) {
             serializer.Read(Container);
-            FromIndex = serializer.Read<decltype(FromIndex)>();
-            ToIndex = serializer.Read<decltype(ToIndex)>();
-     }
+            serializer.Read(FromIndex);
+            serializer.Read(ToIndex);
+        }
 
     private:
         TRange(TContainerPtr container, size_t index)
@@ -335,14 +334,14 @@ public:
         return Size() == 0;
     }
 
-    void Save(TOutputSerializer& serealizer) const {
-        serealizer.Write(Container);
-        serealizer.Write(ListSize);
+    void Save(TOutputSerializer& serializer) const {
+        serializer.Write(Container);
+        serializer.Write(ListSize);
     }
 
     void Load(TInputSerializer& serializer) {
         serializer.Read(Container);
-        ListSize = serializer.Read<decltype(ListSize)>();
+        serializer.Read(ListSize);
     }
 
 private:

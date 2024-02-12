@@ -87,11 +87,11 @@ struct TNfaTransitionGraph {
 
     using TPtr = std::shared_ptr<TNfaTransitionGraph>;
 
-    void Save(TOutputSerializer& serealizer) const {
-        serealizer.Write(Transitions.size());
+    void Save(TOutputSerializer& serializer) const {
+        serializer.Write(Transitions.size());
 
         for (ui64 i = 0; i < Transitions.size(); ++i) {
-            serealizer.Write(Transitions[i].index());
+            serializer.Write(Transitions[i].index());
 
             std::visit([&](auto&& arg)
             {
@@ -100,31 +100,23 @@ struct TNfaTransitionGraph {
                     // Nothing
                 }
                 else if constexpr (std::is_same_v<T, TMatchedVarTransition>) {
-                    serealizer.Write(arg.first.first);
-                    serealizer.Write(arg.first.second);
-                    serealizer.Write(arg.second);
+                    serializer.Write(arg);
                 }
                 else if constexpr (std::is_same_v<T, TEpsilonTransitions>) {
-                    serealizer.Write(arg.size());
-                    for (size_t i = 0; i < arg.size(); ++i) {
-                        serealizer.Write(arg[i]);
-                    }
+                    serializer.Write(arg);
                 }
                 else if constexpr (std::is_same_v<T, TQuantityEnterTransition>) {
-                    serealizer.Write(arg);
+                    serializer.Write(arg);
                 }
                 else if constexpr (std::is_same_v<T, TQuantityExitTransition>) {
-                    serealizer.Write(arg.first.first);
-                    serealizer.Write(arg.first.second);
-                    serealizer.Write(arg.second.first);
-                    serealizer.Write(arg.second.second);
+                    serializer.Write(arg);
                 }
                 else 
                     static_assert(always_false_v<T>, "non-exhaustive visitor!");
             }, Transitions[i]);
         }
-        serealizer.Write(Input);
-        serealizer.Write(Output);
+        serializer.Write(Input);
+        serializer.Write(Output);
     }
 
     void Load(TInputSerializer& serializer) {
@@ -141,33 +133,24 @@ struct TNfaTransitionGraph {
                     // Nothing
                 }
                 else if constexpr (std::is_same_v<T, TMatchedVarTransition>) {
-                    arg.first.first = serializer.Read<ui64>();
-                    arg.first.second = serializer.Read<bool>();
-                    arg.second = serializer.Read<ui64>();
+                    serializer.Read(arg);
                 }
                 else if constexpr (std::is_same_v<T, TEpsilonTransitions>) {
-                    ui64 size = serializer.Read<ui64>();
-                    arg.resize(size);
-                    for (size_t i = 0; i < size; ++i) {
-                        arg[i] = serializer.Read<ui64>();
-                    }
+                    serializer.Read(arg);
                 }
                 else if constexpr (std::is_same_v<T, TQuantityEnterTransition>) {
-                    arg = serializer.Read<ui64>();
+                    serializer.Read(arg);
                 }
                 else if constexpr (std::is_same_v<T, TQuantityExitTransition>) {
-                    arg.first.first = serializer.Read<ui64>();
-                    arg.first.second = serializer.Read<ui64>();
-                    arg.second.first = serializer.Read<ui64>();
-                    arg.second.second = serializer.Read<ui64>();
+                    serializer.Read(arg);
                 }
-                else 
+                else
                     static_assert(always_false_v<T>, "non-exhaustive visitor!");
             }, Transitions[i]);
 
         }
-        Input = serializer.Read<ui64>();
-        Output = serializer.Read<ui64>();
+        serializer.Read(Input);
+        serializer.Read(Output);
     }
 };
 
@@ -382,26 +365,26 @@ class TNfa {
 
         TQuantifiersStack Quantifiers;
 
-        void Save(TOutputSerializer& serealizer) const {
-            serealizer.Write(Index);
+        void Save(TOutputSerializer& serializer) const {
+            serializer.Write(Index);
 
-            serealizer.Write(Vars.size());
+            serializer.Write(Vars.size());
             for (const auto& vector : Vars) {
-                serealizer.Write(vector.size());
+                serializer.Write(vector.size());
                 for (const auto& range : vector) {
-                    range.Save(serealizer);
+                    range.Save(serializer);
                 }
             }
-            serealizer.Write(Quantifiers.size());
+            serializer.Write(Quantifiers.size());
             for (ui64 qnt : Quantifiers) {
-                serealizer.Write(qnt);
+                serializer.Write(qnt);
             }
         }
 
         void Load(TInputSerializer& serializer) {
-            Index = serializer.Read<ui64>();
-            
-            auto varsSize = serializer.Read<ui64>();
+            serializer.Read(Index);
+
+            auto varsSize = serializer.Read<TMatchedVars::size_type>();
             Vars.clear();
             Vars.resize(varsSize);
             for (size_t i = 0; i < varsSize; ++i) {
@@ -494,13 +477,13 @@ public:
         return ActiveStates.size();
     }
 
-    void Save(TOutputSerializer& serealizer) const {
-        TransitionGraph->Save(serealizer);
-        serealizer.Write(ActiveStates.size());
+    void Save(TOutputSerializer& serializer) const {
+        TransitionGraph->Save(serializer);
+        serializer.Write(ActiveStates.size());
         for (const auto& state : ActiveStates) {
-            state.Save(serealizer);
+            state.Save(serializer);
         }
-        serealizer.Write(EpsilonTransitionsLastRow);
+        serializer.Write(EpsilonTransitionsLastRow);
     }
 
     void Load(TInputSerializer& serializer) {
@@ -511,7 +494,7 @@ public:
             state.Load(serializer);
             ActiveStates.emplace(state);
         }
-        EpsilonTransitionsLastRow = serializer.Read<ui64>();
+        serializer.Read(EpsilonTransitionsLastRow);
     }
 
 private:

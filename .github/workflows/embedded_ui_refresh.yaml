@@ -66,9 +66,9 @@ jobs:
       - name: Pull Request
         uses: peter-evans/create-pull-request@v5
         with:
-          token: ${{ secrets.GITHUB_TOKEN }}
+          token: ${{ secrets.GH_PERSONAL_ACCESS_TOKEN }}
           commit-message: "build: refresh Embedded UI (${{ env.TAG_NAME }})"
-          branch: embedded-ui-refresh-${{ env.TAG_NAME }}
+          branch: embedded-ui-${{ env.TAG_NAME }}
           delete-branch: true
           title: "build: refresh Embedded UI (${{ env.TAG_NAME }})"
           body: |

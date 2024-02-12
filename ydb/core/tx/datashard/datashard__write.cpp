@@ -72,7 +72,9 @@ bool TDataShard::TTxWrite::Execute(TTransactionContext& txc, const TActorContext
                 return true;
             }
 
-            TOperation::TPtr op = Self->Pipeline.BuildOperation(Ev, ReceivedAt, TieBreakerIndex, txc, std::move(DatashardTransactionSpan));
+            TOperation::TPtr op = Self->Pipeline.BuildOperation(std::move(Ev), ReceivedAt, TieBreakerIndex, txc, std::move(DatashardTransactionSpan));
+            Y_ABORT_UNLESS(!Ev);
+
             TWriteOperation* writeOp = TWriteOperation::CastWriteOperation(op);
 
             // Unsuccessful operation parse.
@@ -90,7 +92,6 @@ bool TDataShard::TTxWrite::Execute(TTransactionContext& txc, const TActorContext
                 Self->Pipeline.GetExecutionUnit(op->GetCurrentUnit()).AddOperation(op);
 
             Op = op;
-            Ev = nullptr;
             Op->IncrementInProgress();
         }
 

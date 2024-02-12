@@ -117,12 +117,24 @@ void TKafkaAlterConfigsActor::Bootstrap(const NActors::TActorContext& ctx) {
         std::optional<TString> retentionMs;
         std::optional<TString> retentionBytes;
 
+        std::optional<THolder<TEvKafka::TEvTopicModificationResponse>> unsupportedConfigResponse;
+
         for (auto& config : resource.Configs) {
+            unsupportedConfigResponse = ValidateTopicConfigName(config.Name.value());
+            if (unsupportedConfigResponse.has_value()) {
+                break;
+            }
+
             if (config.Name.value() == RETENTION_MS_CONFIG_NAME) {
                 retentionMs = config.Value;
             } else if (config.Name.value() == RETENTION_BYTES_CONFIG_NAME) {
                 retentionBytes = config.Value;
             }
+        }
+
+        if (unsupportedConfigResponse.has_value()) {
+            this->TopicNamesToResponses[topicName] = unsupportedConfigResponse.value();
+            continue;
         }
 
         TRetentionsConversionResult convertedRetentions = ConvertRetentions(retentionMs, retentionBytes);

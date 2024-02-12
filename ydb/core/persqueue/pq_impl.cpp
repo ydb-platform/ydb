@@ -3136,29 +3136,29 @@ void TPersQueue::HandleDataTransaction(TAutoPtr<TEvPersQueue::TEvProposeTransact
     // TODO(abcdef): сохранить пока инициализируемся. TEvPersQueue::TEvHasDataInfo::TPtr как образец. не только конфиг. Inited==true
     //
 
+    if (txBody.OperationsSize() <= 0) {
+        SendProposeTransactionAbort(ActorIdFromProto(event.GetSourceActor()),
+                                    event.GetTxId(),
+                                    ctx);
+        return;
+    }
+
+    TMaybe<TPartitionId> partitionId = FindPartitionId(txBody);
+    if (!partitionId.Defined()) {
+        SendProposeTransactionAbort(ActorIdFromProto(event.GetSourceActor()),
+                                    event.GetTxId(),
+                                    ctx);
+        return;
+    }
+
+    if (!Partitions.contains(*partitionId)) {
+        SendProposeTransactionAbort(ActorIdFromProto(event.GetSourceActor()),
+                                    event.GetTxId(),
+                                    ctx);
+        return;
+    }
+
     if (txBody.GetImmediate()) {
-        if (txBody.OperationsSize() <= 0) {
-            SendProposeTransactionAbort(ActorIdFromProto(event.GetSourceActor()),
-                                        event.GetTxId(),
-                                        ctx);
-            return;
-        }
-
-        TMaybe<TPartitionId> partitionId = FindPartitionId(txBody);
-        if (!partitionId.Defined()) {
-            SendProposeTransactionAbort(ActorIdFromProto(event.GetSourceActor()),
-                                        event.GetTxId(),
-                                        ctx);
-            return;
-        }
-
-        if (!Partitions.contains(*partitionId)) {
-            SendProposeTransactionAbort(ActorIdFromProto(event.GetSourceActor()),
-                                        event.GetTxId(),
-                                        ctx);
-            return;
-        }
-
         const TPartitionInfo& partition = Partitions.at(*partitionId);
 
         ctx.Send(partition.Actor, ev.Release());

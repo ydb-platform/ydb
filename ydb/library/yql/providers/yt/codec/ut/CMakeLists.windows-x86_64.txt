@@ -67,6 +67,12 @@ set_yunittest_property(
   PROCESSORS
   1
 )
+set_yunittest_property(
+  TEST
+  ydb-library-yql-providers-yt-codec-ut
+  PROPERTY
+  ENVIRONMENT
+)
 target_allocator(ydb-library-yql-providers-yt-codec-ut
   system_allocator
 )

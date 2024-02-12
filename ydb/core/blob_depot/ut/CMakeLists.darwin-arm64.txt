@@ -61,6 +61,12 @@ set_yunittest_property(
   PROCESSORS
   1
 )
+set_yunittest_property(
+  TEST
+  ydb-core-blob_depot-ut
+  PROPERTY
+  ENVIRONMENT
+)
 target_allocator(ydb-core-blob_depot-ut
   system_allocator
 )

@@ -58,6 +58,12 @@ set_yunittest_property(
   TEST
   ut_group_reconfiguration
   PROPERTY
+  ENVIRONMENT
+)
+set_yunittest_property(
+  TEST
+  ut_group_reconfiguration
+  PROPERTY
   TIMEOUT
   3600
 )

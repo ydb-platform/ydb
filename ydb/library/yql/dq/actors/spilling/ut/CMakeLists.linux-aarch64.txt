@@ -76,6 +76,12 @@ set_yunittest_property(
   TEST
   ydb-library-yql-dq-actors-spilling-ut
   PROPERTY
+  ENVIRONMENT
+)
+set_yunittest_property(
+  TEST
+  ydb-library-yql-dq-actors-spilling-ut
+  PROPERTY
   TIMEOUT
   180
 )

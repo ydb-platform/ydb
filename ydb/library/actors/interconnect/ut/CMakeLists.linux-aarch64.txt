@@ -80,6 +80,12 @@ set_yunittest_property(
   TEST
   ydb-library-actors-interconnect-ut
   PROPERTY
+  ENVIRONMENT
+)
+set_yunittest_property(
+  TEST
+  ydb-library-actors-interconnect-ut
+  PROPERTY
   TIMEOUT
   600
 )

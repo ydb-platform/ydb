@@ -66,6 +66,12 @@ set_yunittest_property(
   PROCESSORS
   1
 )
+set_yunittest_property(
+  TEST
+  ydb-core-blobstorage-crypto-ut
+  PROPERTY
+  ENVIRONMENT
+)
 target_allocator(ydb-core-blobstorage-crypto-ut
   system_allocator
 )

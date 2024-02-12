@@ -67,6 +67,12 @@ set_yunittest_property(
   TEST
   ydb-core-keyvalue-ut
   PROPERTY
+  ENVIRONMENT
+)
+set_yunittest_property(
+  TEST
+  ydb-core-keyvalue-ut
+  PROPERTY
   TIMEOUT
   600
 )

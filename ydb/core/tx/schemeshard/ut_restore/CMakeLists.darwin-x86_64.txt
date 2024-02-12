@@ -76,6 +76,12 @@ set_yunittest_property(
   TEST
   ydb-core-tx-schemeshard-ut_restore
   PROPERTY
+  ENVIRONMENT
+)
+set_yunittest_property(
+  TEST
+  ydb-core-tx-schemeshard-ut_restore
+  PROPERTY
   TIMEOUT
   600
 )

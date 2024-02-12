@@ -69,6 +69,12 @@ set_yunittest_property(
   PROCESSORS
   1
 )
+set_yunittest_property(
+  TEST
+  ydb-core-tx-sequenceshard-ut
+  PROPERTY
+  ENVIRONMENT
+)
 target_allocator(ydb-core-tx-sequenceshard-ut
   cpp-malloc-jemalloc
 )

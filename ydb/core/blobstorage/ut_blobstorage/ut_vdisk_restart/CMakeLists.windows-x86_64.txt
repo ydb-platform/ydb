@@ -58,6 +58,12 @@ set_yunittest_property(
   TEST
   blobstorage-ut_blobstorage-ut_vdisk_restart
   PROPERTY
+  ENVIRONMENT
+)
+set_yunittest_property(
+  TEST
+  blobstorage-ut_blobstorage-ut_vdisk_restart
+  PROPERTY
   TIMEOUT
   600
 )

@@ -58,6 +58,12 @@ set_yunittest_property(
   TEST
   ydb-core-blobstorage-ut_blobstorage-ut_scrub
   PROPERTY
+  ENVIRONMENT
+)
+set_yunittest_property(
+  TEST
+  ydb-core-blobstorage-ut_blobstorage-ut_scrub
+  PROPERTY
   TIMEOUT
   3600
 )

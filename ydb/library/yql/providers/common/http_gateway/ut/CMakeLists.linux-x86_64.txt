@@ -69,6 +69,12 @@ set_yunittest_property(
   PROCESSORS
   1
 )
+set_yunittest_property(
+  TEST
+  ydb-library-yql-providers-common-http_gateway-ut
+  PROPERTY
+  ENVIRONMENT
+)
 target_allocator(ydb-library-yql-providers-common-http_gateway-ut
   cpp-malloc-tcmalloc
   libs-tcmalloc-no_percpu_cache

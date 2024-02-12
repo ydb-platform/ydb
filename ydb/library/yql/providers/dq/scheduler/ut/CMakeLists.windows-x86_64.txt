@@ -59,6 +59,12 @@ set_yunittest_property(
   PROCESSORS
   1
 )
+set_yunittest_property(
+  TEST
+  ydb-library-yql-providers-dq-scheduler-ut
+  PROPERTY
+  ENVIRONMENT
+)
 target_allocator(ydb-library-yql-providers-dq-scheduler-ut
   system_allocator
 )

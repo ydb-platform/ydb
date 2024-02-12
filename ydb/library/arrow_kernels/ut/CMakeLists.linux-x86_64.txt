@@ -77,6 +77,12 @@ set_yunittest_property(
   TEST
   ydb-library-arrow_kernels-ut
   PROPERTY
+  ENVIRONMENT
+)
+set_yunittest_property(
+  TEST
+  ydb-library-arrow_kernels-ut
+  PROPERTY
   TIMEOUT
   600
 )

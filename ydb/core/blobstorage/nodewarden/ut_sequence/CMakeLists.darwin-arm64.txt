@@ -68,6 +68,12 @@ set_yunittest_property(
   TEST
   ydb-core-blobstorage-nodewarden-ut_sequence
   PROPERTY
+  ENVIRONMENT
+)
+set_yunittest_property(
+  TEST
+  ydb-core-blobstorage-nodewarden-ut_sequence
+  PROPERTY
   TIMEOUT
   600
 )

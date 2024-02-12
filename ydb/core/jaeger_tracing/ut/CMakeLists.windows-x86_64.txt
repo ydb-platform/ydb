@@ -59,6 +59,12 @@ set_yunittest_property(
   TEST
   ydb-core-jaeger_tracing-ut
   PROPERTY
+  ENVIRONMENT
+)
+set_yunittest_property(
+  TEST
+  ydb-core-jaeger_tracing-ut
+  PROPERTY
   TIMEOUT
   600
 )

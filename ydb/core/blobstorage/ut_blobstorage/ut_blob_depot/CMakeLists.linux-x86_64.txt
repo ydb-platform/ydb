@@ -67,6 +67,12 @@ set_yunittest_property(
   PROCESSORS
   1
 )
+set_yunittest_property(
+  TEST
+  ydb-core-blobstorage-ut_blobstorage-ut_blob_depot
+  PROPERTY
+  ENVIRONMENT
+)
 target_allocator(ydb-core-blobstorage-ut_blobstorage-ut_blob_depot
   cpp-malloc-tcmalloc
   libs-tcmalloc-no_percpu_cache

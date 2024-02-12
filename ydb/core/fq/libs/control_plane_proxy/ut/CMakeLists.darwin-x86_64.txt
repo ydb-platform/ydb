@@ -74,6 +74,12 @@ set_yunittest_property(
   PROCESSORS
   1
 )
+set_yunittest_property(
+  TEST
+  ydb-core-fq-libs-control_plane_proxy-ut
+  PROPERTY
+  ENVIRONMENT
+)
 target_allocator(ydb-core-fq-libs-control_plane_proxy-ut
   system_allocator
 )

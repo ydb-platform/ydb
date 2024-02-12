@@ -53,6 +53,12 @@ set_yunittest_property(
   PROCESSORS
   1
 )
+set_yunittest_property(
+  TEST
+  ydb-library-yaml_config-static_validator-ut
+  PROPERTY
+  ENVIRONMENT
+)
 target_allocator(ydb-library-yaml_config-static_validator-ut
   system_allocator
 )

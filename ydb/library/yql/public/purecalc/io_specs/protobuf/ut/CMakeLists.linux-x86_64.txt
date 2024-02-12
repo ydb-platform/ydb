@@ -69,6 +69,12 @@ set_yunittest_property(
   PROCESSORS
   1
 )
+set_yunittest_property(
+  TEST
+  yql-public-purecalc-io_specs-protobuf-ut
+  PROPERTY
+  ENVIRONMENT
+)
 target_allocator(yql-public-purecalc-io_specs-protobuf-ut
   cpp-malloc-tcmalloc
   libs-tcmalloc-no_percpu_cache

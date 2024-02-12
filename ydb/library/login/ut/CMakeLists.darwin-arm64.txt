@@ -58,6 +58,12 @@ set_yunittest_property(
   PROCESSORS
   1
 )
+set_yunittest_property(
+  TEST
+  ydb-library-login-ut
+  PROPERTY
+  ENVIRONMENT
+)
 target_allocator(ydb-library-login-ut
   system_allocator
 )

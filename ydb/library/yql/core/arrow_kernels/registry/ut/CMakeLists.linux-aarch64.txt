@@ -74,6 +74,12 @@ set_yunittest_property(
   PROCESSORS
   1
 )
+set_yunittest_property(
+  TEST
+  ydb-library-yql-core-arrow_kernels-registry-ut
+  PROPERTY
+  ENVIRONMENT
+)
 target_allocator(ydb-library-yql-core-arrow_kernels-registry-ut
   cpp-malloc-jemalloc
 )

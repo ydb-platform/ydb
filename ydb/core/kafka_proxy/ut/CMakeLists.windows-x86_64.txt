@@ -63,6 +63,12 @@ set_yunittest_property(
   PROCESSORS
   1
 )
+set_yunittest_property(
+  TEST
+  ydb-core-kafka_proxy-ut
+  PROPERTY
+  ENVIRONMENT
+)
 target_allocator(ydb-core-kafka_proxy-ut
   system_allocator
 )

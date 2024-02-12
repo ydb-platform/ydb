@@ -77,6 +77,12 @@ set_yunittest_property(
   PROCESSORS
   1
 )
+set_yunittest_property(
+  TEST
+  yql-providers-generic-provider-ut-pushdown
+  PROPERTY
+  ENVIRONMENT
+)
 target_allocator(yql-providers-generic-provider-ut-pushdown
   system_allocator
 )

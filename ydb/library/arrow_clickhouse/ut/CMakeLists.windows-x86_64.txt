@@ -58,6 +58,12 @@ set_yunittest_property(
   TEST
   ydb-library-arrow_clickhouse-ut
   PROPERTY
+  ENVIRONMENT
+)
+set_yunittest_property(
+  TEST
+  ydb-library-arrow_clickhouse-ut
+  PROPERTY
   TIMEOUT
   600
 )

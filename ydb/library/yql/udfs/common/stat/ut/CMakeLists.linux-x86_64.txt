@@ -75,6 +75,12 @@ set_yunittest_property(
   TEST
   ydb-library-yql-udfs-common-stat-ut
   PROPERTY
+  ENVIRONMENT
+)
+set_yunittest_property(
+  TEST
+  ydb-library-yql-udfs-common-stat-ut
+  PROPERTY
   TIMEOUT
   300
 )

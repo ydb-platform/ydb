@@ -70,6 +70,12 @@ set_yunittest_property(
   TEST
   ydb-library-yql-sql-v1-ut
   PROPERTY
+  ENVIRONMENT
+)
+set_yunittest_property(
+  TEST
+  ydb-library-yql-sql-v1-ut
+  PROPERTY
   TIMEOUT
   300
 )

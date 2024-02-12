@@ -67,6 +67,12 @@ set_yunittest_property(
   TEST
   ydb-library-yql-core-spilling-storage-ut
   PROPERTY
+  ENVIRONMENT
+)
+set_yunittest_property(
+  TEST
+  ydb-library-yql-core-spilling-storage-ut
+  PROPERTY
   TIMEOUT
   600
 )

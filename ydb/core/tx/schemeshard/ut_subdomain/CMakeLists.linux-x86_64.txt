@@ -79,6 +79,12 @@ set_yunittest_property(
   TEST
   ydb-core-tx-schemeshard-ut_subdomain
   PROPERTY
+  ENVIRONMENT
+)
+set_yunittest_property(
+  TEST
+  ydb-core-tx-schemeshard-ut_subdomain
+  PROPERTY
   TIMEOUT
   600
 )

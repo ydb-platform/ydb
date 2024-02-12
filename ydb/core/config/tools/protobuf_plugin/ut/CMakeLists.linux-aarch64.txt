@@ -66,6 +66,12 @@ set_yunittest_property(
   PROCESSORS
   1
 )
+set_yunittest_property(
+  TEST
+  ydb-core-config-tools-protobuf_plugin-ut
+  PROPERTY
+  ENVIRONMENT
+)
 target_allocator(ydb-core-config-tools-protobuf_plugin-ut
   cpp-malloc-jemalloc
 )

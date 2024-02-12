@@ -73,6 +73,12 @@ set_yunittest_property(
   TEST
   ydb-core-tx-scheme_board-ut_populator
   PROPERTY
+  ENVIRONMENT
+)
+set_yunittest_property(
+  TEST
+  ydb-core-tx-scheme_board-ut_populator
+  PROPERTY
   TIMEOUT
   600
 )

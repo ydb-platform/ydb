@@ -59,6 +59,12 @@ set_yunittest_property(
   PROCESSORS
   1
 )
+set_yunittest_property(
+  TEST
+  ydb-library-yql-public-udf-tz-ut
+  PROPERTY
+  ENVIRONMENT
+)
 target_allocator(ydb-library-yql-public-udf-tz-ut
   system_allocator
 )

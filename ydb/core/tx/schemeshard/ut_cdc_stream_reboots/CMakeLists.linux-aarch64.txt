@@ -74,6 +74,12 @@ set_yunittest_property(
   TEST
   ydb-core-tx-schemeshard-ut_cdc_stream_reboots
   PROPERTY
+  ENVIRONMENT
+)
+set_yunittest_property(
+  TEST
+  ydb-core-tx-schemeshard-ut_cdc_stream_reboots
+  PROPERTY
   TIMEOUT
   600
 )

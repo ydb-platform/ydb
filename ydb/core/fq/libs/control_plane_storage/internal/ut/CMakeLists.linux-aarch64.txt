@@ -78,6 +78,12 @@ set_yunittest_property(
   PROCESSORS
   1
 )
+set_yunittest_property(
+  TEST
+  core-fq-libs-control_plane_storage-internal-ut
+  PROPERTY
+  ENVIRONMENT
+)
 resources(core-fq-libs-control_plane_storage-internal-ut
   ${CMAKE_BINARY_DIR}/ydb/core/fq/libs/control_plane_storage/internal/ut/047a4c3f0575d8af7f0dc67f808daaba.cpp
   INPUTS

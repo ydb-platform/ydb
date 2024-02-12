@@ -66,6 +66,12 @@ set_yunittest_property(
   TEST
   ydb-core-blobstorage-ut_pdiskfit-ut
   PROPERTY
+  ENVIRONMENT
+)
+set_yunittest_property(
+  TEST
+  ydb-core-blobstorage-ut_pdiskfit-ut
+  PROPERTY
   TIMEOUT
   1200
 )

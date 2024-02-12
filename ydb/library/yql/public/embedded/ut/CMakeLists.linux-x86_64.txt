@@ -72,6 +72,12 @@ set_yunittest_property(
   TEST
   ydb-library-yql-public-embedded-ut
   PROPERTY
+  ENVIRONMENT
+)
+set_yunittest_property(
+  TEST
+  ydb-library-yql-public-embedded-ut
+  PROPERTY
   TIMEOUT
   300
 )

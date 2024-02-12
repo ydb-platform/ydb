@@ -76,6 +76,12 @@ set_yunittest_property(
   PROCESSORS
   1
 )
+set_yunittest_property(
+  TEST
+  ydb-core-formats-arrow-ut
+  PROPERTY
+  ENVIRONMENT
+)
 target_allocator(ydb-core-formats-arrow-ut
   system_allocator
 )

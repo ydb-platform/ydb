@@ -69,6 +69,12 @@ set_yunittest_property(
   TEST
   ydb-core-kqp-ut-federated_query-s3
   PROPERTY
+  ENVIRONMENT
+)
+set_yunittest_property(
+  TEST
+  ydb-core-kqp-ut-federated_query-s3
+  PROPERTY
   TIMEOUT
   600
 )

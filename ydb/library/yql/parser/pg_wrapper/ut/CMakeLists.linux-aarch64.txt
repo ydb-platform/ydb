@@ -182,6 +182,12 @@ set_yunittest_property(
   TEST
   ydb-library-yql-parser-pg_wrapper-ut
   PROPERTY
+  ENVIRONMENT
+)
+set_yunittest_property(
+  TEST
+  ydb-library-yql-parser-pg_wrapper-ut
+  PROPERTY
   TIMEOUT
   600
 )

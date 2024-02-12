@@ -80,6 +80,12 @@ set_yunittest_property(
   TEST
   ydb-core-tx-datashard-ut_change_exchange
   PROPERTY
+  ENVIRONMENT
+)
+set_yunittest_property(
+  TEST
+  ydb-core-tx-datashard-ut_change_exchange
+  PROPERTY
   TIMEOUT
   600
 )

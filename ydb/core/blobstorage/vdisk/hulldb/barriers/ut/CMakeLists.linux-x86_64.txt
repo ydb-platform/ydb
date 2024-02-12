@@ -73,6 +73,12 @@ set_yunittest_property(
   TEST
   ydb-core-blobstorage-vdisk-hulldb-barriers-ut
   PROPERTY
+  ENVIRONMENT
+)
+set_yunittest_property(
+  TEST
+  ydb-core-blobstorage-vdisk-hulldb-barriers-ut
+  PROPERTY
   TIMEOUT
   600
 )

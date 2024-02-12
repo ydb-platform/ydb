@@ -63,6 +63,12 @@ set_yunittest_property(
   PROCESSORS
   1
 )
+set_yunittest_property(
+  TEST
+  ydb-library-yql-parser-pg_catalog-ut
+  PROPERTY
+  ENVIRONMENT
+)
 target_allocator(ydb-library-yql-parser-pg_catalog-ut
   system_allocator
 )

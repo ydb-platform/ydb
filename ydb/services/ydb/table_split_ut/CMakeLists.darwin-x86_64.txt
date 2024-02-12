@@ -89,6 +89,12 @@ set_yunittest_property(
   TEST
   ydb-services-ydb-table_split_ut
   PROPERTY
+  ENVIRONMENT
+)
+set_yunittest_property(
+  TEST
+  ydb-services-ydb-table_split_ut
+  PROPERTY
   TIMEOUT
   300
 )

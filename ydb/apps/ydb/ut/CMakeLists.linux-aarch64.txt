@@ -68,6 +68,13 @@ set_yunittest_property(
   TEST
   ydb-apps-ydb-ut
   PROPERTY
+  ENVIRONMENT
+  "YDB_CLI_BINARY=ydb/apps/ydb/ydb;YDB_FEATURE_FLAGS=enable_topic_service_tx;YDB_DRIVER_BINARY=ydb/apps/ydbd/ydbd"
+)
+set_yunittest_property(
+  TEST
+  ydb-apps-ydb-ut
+  PROPERTY
   TIMEOUT
   600
 )

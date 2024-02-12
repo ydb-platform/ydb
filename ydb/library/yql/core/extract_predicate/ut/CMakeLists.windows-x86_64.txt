@@ -79,6 +79,12 @@ set_yunittest_property(
   TEST
   ydb-library-yql-core-extract_predicate-ut
   PROPERTY
+  ENVIRONMENT
+)
+set_yunittest_property(
+  TEST
+  ydb-library-yql-core-extract_predicate-ut
+  PROPERTY
   TIMEOUT
   600
 )

@@ -80,6 +80,12 @@ set_yunittest_property(
   TEST
   ydb-core-tx-tx_proxy-ut_encrypted_storage
   PROPERTY
+  ENVIRONMENT
+)
+set_yunittest_property(
+  TEST
+  ydb-core-tx-tx_proxy-ut_encrypted_storage
+  PROPERTY
   TIMEOUT
   600
 )

@@ -74,6 +74,12 @@ set_yunittest_property(
   TEST
   ydb-core-kqp-ut-spilling
   PROPERTY
+  ENVIRONMENT
+)
+set_yunittest_property(
+  TEST
+  ydb-core-kqp-ut-spilling
+  PROPERTY
   TIMEOUT
   600
 )

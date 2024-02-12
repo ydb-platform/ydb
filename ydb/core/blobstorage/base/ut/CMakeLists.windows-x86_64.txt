@@ -45,6 +45,12 @@ set_property(
   PROCESSORS
   1
 )
+set_property(
+  TEST
+  ydb-core-blobstorage-base-ut
+  PROPERTY
+  ENVIRONMENT
+)
 target_allocator(ydb-core-blobstorage-base-ut
   system_allocator
 )

@@ -69,6 +69,12 @@ set_yunittest_property(
   PROCESSORS
   1
 )
+set_yunittest_property(
+  TEST
+  ydb-core-ymq-actor-ut
+  PROPERTY
+  ENVIRONMENT
+)
 target_allocator(ydb-core-ymq-actor-ut
   system_allocator
 )

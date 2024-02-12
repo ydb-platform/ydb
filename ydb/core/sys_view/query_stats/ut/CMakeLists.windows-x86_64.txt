@@ -63,6 +63,12 @@ set_yunittest_property(
   TEST
   ydb-core-sys_view-query_stats-ut
   PROPERTY
+  ENVIRONMENT
+)
+set_yunittest_property(
+  TEST
+  ydb-core-sys_view-query_stats-ut
+  PROPERTY
   TIMEOUT
   600
 )

@@ -118,6 +118,12 @@ set_yunittest_property(
   TEST
   ydb-core-tablet_flat-ut
   PROPERTY
+  ENVIRONMENT
+)
+set_yunittest_property(
+  TEST
+  ydb-core-tablet_flat-ut
+  PROPERTY
   TIMEOUT
   600
 )

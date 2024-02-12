@@ -66,6 +66,12 @@ set_yunittest_property(
   TEST
   ydb-library-actors-interconnect-ut_huge_cluster
   PROPERTY
+  ENVIRONMENT
+)
+set_yunittest_property(
+  TEST
+  ydb-library-actors-interconnect-ut_huge_cluster
+  PROPERTY
   TIMEOUT
   600
 )

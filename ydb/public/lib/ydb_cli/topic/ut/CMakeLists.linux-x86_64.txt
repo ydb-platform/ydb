@@ -85,6 +85,12 @@ set_yunittest_property(
   TEST
   ydb-public-lib-ydb_cli-topic-ut
   PROPERTY
+  ENVIRONMENT
+)
+set_yunittest_property(
+  TEST
+  ydb-public-lib-ydb_cli-topic-ut
+  PROPERTY
   TIMEOUT
   600
 )

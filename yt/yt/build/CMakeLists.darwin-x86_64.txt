@@ -60,7 +60,7 @@ set(
 )
 set(
   YT_VERSION_MINOR
-  1
+  2
 )
 set(
   YT_VERSION_PATCH

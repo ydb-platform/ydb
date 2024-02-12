@@ -77,6 +77,12 @@ set_yunittest_property(
   TEST
   ydb-core-kqp-ut-olap
   PROPERTY
+  ENVIRONMENT
+)
+set_yunittest_property(
+  TEST
+  ydb-core-kqp-ut-olap
+  PROPERTY
   TIMEOUT
   600
 )

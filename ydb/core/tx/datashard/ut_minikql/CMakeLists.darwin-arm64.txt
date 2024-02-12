@@ -77,6 +77,12 @@ set_yunittest_property(
   TEST
   ydb-core-tx-datashard-ut_minikql
   PROPERTY
+  ENVIRONMENT
+)
+set_yunittest_property(
+  TEST
+  ydb-core-tx-datashard-ut_minikql
+  PROPERTY
   TIMEOUT
   600
 )

@@ -77,6 +77,12 @@ set_yunittest_property(
   TEST
   ydb-core-mind-ut_fat
   PROPERTY
+  ENVIRONMENT
+)
+set_yunittest_property(
+  TEST
+  ydb-core-mind-ut_fat
+  PROPERTY
   TIMEOUT
   600
 )

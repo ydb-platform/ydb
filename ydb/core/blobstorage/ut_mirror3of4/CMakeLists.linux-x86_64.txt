@@ -77,6 +77,12 @@ set_yunittest_property(
   TEST
   ydb-core-blobstorage-ut_mirror3of4
   PROPERTY
+  ENVIRONMENT
+)
+set_yunittest_property(
+  TEST
+  ydb-core-blobstorage-ut_mirror3of4
+  PROPERTY
   TIMEOUT
   600
 )

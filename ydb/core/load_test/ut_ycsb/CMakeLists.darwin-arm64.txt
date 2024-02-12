@@ -76,6 +76,12 @@ set_yunittest_property(
   TEST
   ydb-core-load_test-ut_ycsb
   PROPERTY
+  ENVIRONMENT
+)
+set_yunittest_property(
+  TEST
+  ydb-core-load_test-ut_ycsb
+  PROPERTY
   TIMEOUT
   600
 )

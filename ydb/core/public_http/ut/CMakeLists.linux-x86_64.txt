@@ -72,6 +72,12 @@ set_yunittest_property(
   PROCESSORS
   1
 )
+set_yunittest_property(
+  TEST
+  ydb-core-public_http-ut
+  PROPERTY
+  ENVIRONMENT
+)
 target_allocator(ydb-core-public_http-ut
   cpp-malloc-tcmalloc
   libs-tcmalloc-no_percpu_cache

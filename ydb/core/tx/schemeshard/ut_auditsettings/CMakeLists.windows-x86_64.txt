@@ -67,6 +67,12 @@ set_yunittest_property(
   TEST
   ydb-core-tx-schemeshard-ut_auditsettings
   PROPERTY
+  ENVIRONMENT
+)
+set_yunittest_property(
+  TEST
+  ydb-core-tx-schemeshard-ut_auditsettings
+  PROPERTY
   TIMEOUT
   60
 )

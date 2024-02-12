@@ -81,6 +81,12 @@ set_yunittest_property(
   PROCESSORS
   1
 )
+set_yunittest_property(
+  TEST
+  ydb-library-yql-minikql-protobuf_udf-ut
+  PROPERTY
+  ENVIRONMENT
+)
 target_allocator(ydb-library-yql-minikql-protobuf_udf-ut
   system_allocator
 )

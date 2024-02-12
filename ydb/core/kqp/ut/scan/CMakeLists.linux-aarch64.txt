@@ -75,6 +75,12 @@ set_yunittest_property(
   TEST
   ydb-core-kqp-ut-scan
   PROPERTY
+  ENVIRONMENT
+)
+set_yunittest_property(
+  TEST
+  ydb-core-kqp-ut-scan
+  PROPERTY
   TIMEOUT
   600
 )

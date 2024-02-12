@@ -78,6 +78,13 @@ set_yunittest_property(
   PROCESSORS
   1
 )
+set_yunittest_property(
+  TEST
+  yql-providers-dq-global_worker_manager-ut
+  PROPERTY
+  ENVIRONMENT
+  YDB_UBSAN_OPTIONS=ydb/tests/supp/ubsan_default.txt
+)
 target_allocator(yql-providers-dq-global_worker_manager-ut
   system_allocator
 )

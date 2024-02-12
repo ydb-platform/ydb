@@ -72,6 +72,12 @@ set_yunittest_property(
   PROCESSORS
   1
 )
+set_yunittest_property(
+  TEST
+  ydb-library-actors-util-ut
+  PROPERTY
+  ENVIRONMENT
+)
 target_allocator(ydb-library-actors-util-ut
   cpp-malloc-jemalloc
 )

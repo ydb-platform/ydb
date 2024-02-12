@@ -66,6 +66,12 @@ set_yunittest_property(
   TEST
   ydb-core-tx-balance_coverage-ut
   PROPERTY
+  ENVIRONMENT
+)
+set_yunittest_property(
+  TEST
+  ydb-core-tx-balance_coverage-ut
+  PROPERTY
   TIMEOUT
   60
 )

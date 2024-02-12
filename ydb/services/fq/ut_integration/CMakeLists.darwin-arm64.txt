@@ -78,6 +78,12 @@ set_yunittest_property(
   PROCESSORS
   1
 )
+set_yunittest_property(
+  TEST
+  ydb-services-fq-ut_integration
+  PROPERTY
+  ENVIRONMENT
+)
 target_allocator(ydb-services-fq-ut_integration
   system_allocator
 )

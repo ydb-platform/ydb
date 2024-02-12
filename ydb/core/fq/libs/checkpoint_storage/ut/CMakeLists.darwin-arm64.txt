@@ -73,6 +73,13 @@ set_yunittest_property(
   PROCESSORS
   1
 )
+set_yunittest_property(
+  TEST
+  ydb-core-fq-libs-checkpoint_storage-ut
+  PROPERTY
+  ENVIRONMENT
+  YDB_DRIVER_BINARY=ydb/apps/ydbd/ydbd
+)
 target_allocator(ydb-core-fq-libs-checkpoint_storage-ut
   system_allocator
 )

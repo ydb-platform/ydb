@@ -62,6 +62,12 @@ set_yunittest_property(
   PROCESSORS
   1
 )
+set_yunittest_property(
+  TEST
+  ydb-public-lib-ydb_cli-common-ut
+  PROPERTY
+  ENVIRONMENT
+)
 target_allocator(ydb-public-lib-ydb_cli-common-ut
   system_allocator
 )

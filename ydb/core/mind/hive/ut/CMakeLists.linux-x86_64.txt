@@ -82,6 +82,12 @@ set_yunittest_property(
   TEST
   ydb-core-mind-hive-ut
   PROPERTY
+  ENVIRONMENT
+)
+set_yunittest_property(
+  TEST
+  ydb-core-mind-hive-ut
+  PROPERTY
   TIMEOUT
   600
 )

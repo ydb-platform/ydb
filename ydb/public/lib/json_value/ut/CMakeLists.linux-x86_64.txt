@@ -73,6 +73,12 @@ set_yunittest_property(
   TEST
   ydb-public-lib-json_value-ut
   PROPERTY
+  ENVIRONMENT
+)
+set_yunittest_property(
+  TEST
+  ydb-public-lib-json_value-ut
+  PROPERTY
   TIMEOUT
   600
 )

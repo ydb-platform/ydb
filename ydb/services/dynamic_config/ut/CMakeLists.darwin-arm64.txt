@@ -69,6 +69,12 @@ set_yunittest_property(
   PROCESSORS
   1
 )
+set_yunittest_property(
+  TEST
+  ydb-services-dynamic_config-ut
+  PROPERTY
+  ENVIRONMENT
+)
 target_allocator(ydb-services-dynamic_config-ut
   system_allocator
 )

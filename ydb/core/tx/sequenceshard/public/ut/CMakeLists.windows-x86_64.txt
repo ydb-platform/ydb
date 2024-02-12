@@ -54,6 +54,12 @@ set_yunittest_property(
   PROCESSORS
   1
 )
+set_yunittest_property(
+  TEST
+  ydb-core-tx-sequenceshard-public-ut
+  PROPERTY
+  ENVIRONMENT
+)
 target_allocator(ydb-core-tx-sequenceshard-public-ut
   system_allocator
 )

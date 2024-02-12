@@ -64,6 +64,13 @@ set_yunittest_property(
   TEST
   ydb-tests-functional-kqp-kqp_query_session
   PROPERTY
+  ENVIRONMENT
+  "YDB_USE_IN_MEMORY_PDISKS=true;YDB_ERASURE=block_4-2;USE_YDB_TRUNK_RECIPE_TOOLS=true;YDB_DRIVER_BINARY=ydb/apps/ydbd/ydbd"
+)
+set_yunittest_property(
+  TEST
+  ydb-tests-functional-kqp-kqp_query_session
+  PROPERTY
   TIMEOUT
   60
 )

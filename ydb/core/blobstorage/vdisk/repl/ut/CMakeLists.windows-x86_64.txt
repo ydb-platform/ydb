@@ -64,6 +64,12 @@ set_yunittest_property(
   TEST
   ydb-core-blobstorage-vdisk-repl-ut
   PROPERTY
+  ENVIRONMENT
+)
+set_yunittest_property(
+  TEST
+  ydb-core-blobstorage-vdisk-repl-ut
+  PROPERTY
   TIMEOUT
   600
 )

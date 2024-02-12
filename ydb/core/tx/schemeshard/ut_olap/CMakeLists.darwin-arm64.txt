@@ -77,6 +77,12 @@ set_yunittest_property(
   TEST
   ydb-core-tx-schemeshard-ut_olap
   PROPERTY
+  ENVIRONMENT
+)
+set_yunittest_property(
+  TEST
+  ydb-core-tx-schemeshard-ut_olap
+  PROPERTY
   TIMEOUT
   600
 )

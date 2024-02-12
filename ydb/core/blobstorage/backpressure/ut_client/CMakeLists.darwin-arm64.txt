@@ -69,6 +69,12 @@ set_yunittest_property(
   PROCESSORS
   1
 )
+set_yunittest_property(
+  TEST
+  ydb-core-blobstorage-backpressure-ut_client
+  PROPERTY
+  ENVIRONMENT
+)
 target_allocator(ydb-core-blobstorage-backpressure-ut_client
   system_allocator
 )

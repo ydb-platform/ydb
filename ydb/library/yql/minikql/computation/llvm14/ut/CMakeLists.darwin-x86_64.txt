@@ -85,6 +85,12 @@ set_yunittest_property(
   TEST
   ydb-library-yql-minikql-computation-llvm14-ut
   PROPERTY
+  ENVIRONMENT
+)
+set_yunittest_property(
+  TEST
+  ydb-library-yql-minikql-computation-llvm14-ut
+  PROPERTY
   TIMEOUT
   600
 )

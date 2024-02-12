@@ -77,6 +77,12 @@ set_yunittest_property(
   TEST
   ydb-services-metadata-initializer-ut
   PROPERTY
+  ENVIRONMENT
+)
+set_yunittest_property(
+  TEST
+  ydb-services-metadata-initializer-ut
+  PROPERTY
   TIMEOUT
   600
 )

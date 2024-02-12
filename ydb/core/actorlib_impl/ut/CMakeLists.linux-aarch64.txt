@@ -82,6 +82,12 @@ set_yunittest_property(
   TEST
   ydb-core-actorlib_impl-ut
   PROPERTY
+  ENVIRONMENT
+)
+set_yunittest_property(
+  TEST
+  ydb-core-actorlib_impl-ut
+  PROPERTY
   TIMEOUT
   600
 )

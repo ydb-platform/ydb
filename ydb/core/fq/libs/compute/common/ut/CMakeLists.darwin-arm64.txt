@@ -64,6 +64,12 @@ set_yunittest_property(
   PROCESSORS
   1
 )
+set_yunittest_property(
+  TEST
+  ydb-core-fq-libs-compute-common-ut
+  PROPERTY
+  ENVIRONMENT
+)
 target_allocator(ydb-core-fq-libs-compute-common-ut
   system_allocator
 )

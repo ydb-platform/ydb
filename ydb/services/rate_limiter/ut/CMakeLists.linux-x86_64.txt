@@ -71,6 +71,12 @@ set_yunittest_property(
   PROCESSORS
   1
 )
+set_yunittest_property(
+  TEST
+  ydb-services-rate_limiter-ut
+  PROPERTY
+  ENVIRONMENT
+)
 target_allocator(ydb-services-rate_limiter-ut
   cpp-malloc-tcmalloc
   libs-tcmalloc-no_percpu_cache

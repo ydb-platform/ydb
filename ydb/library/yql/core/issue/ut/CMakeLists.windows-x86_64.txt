@@ -58,6 +58,12 @@ set_yunittest_property(
   TEST
   ydb-library-yql-core-issue-ut
   PROPERTY
+  ENVIRONMENT
+)
+set_yunittest_property(
+  TEST
+  ydb-library-yql-core-issue-ut
+  PROPERTY
   TIMEOUT
   300
 )

@@ -78,6 +78,12 @@ set_yunittest_property(
   PROCESSORS
   1
 )
+set_yunittest_property(
+  TEST
+  ydb-core-mind-bscontroller-ut_selfheal
+  PROPERTY
+  ENVIRONMENT
+)
 target_allocator(ydb-core-mind-bscontroller-ut_selfheal
   cpp-malloc-tcmalloc
   libs-tcmalloc-no_percpu_cache

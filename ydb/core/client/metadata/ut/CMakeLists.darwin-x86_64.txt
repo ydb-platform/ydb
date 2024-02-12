@@ -67,6 +67,12 @@ set_yunittest_property(
   PROCESSORS
   1
 )
+set_yunittest_property(
+  TEST
+  ydb-core-client-metadata-ut
+  PROPERTY
+  ENVIRONMENT
+)
 target_allocator(ydb-core-client-metadata-ut
   system_allocator
 )

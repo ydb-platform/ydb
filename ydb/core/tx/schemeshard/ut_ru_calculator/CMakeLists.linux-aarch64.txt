@@ -72,6 +72,12 @@ set_yunittest_property(
   PROCESSORS
   1
 )
+set_yunittest_property(
+  TEST
+  ydb-core-tx-schemeshard-ut_ru_calculator
+  PROPERTY
+  ENVIRONMENT
+)
 target_allocator(ydb-core-tx-schemeshard-ut_ru_calculator
   cpp-malloc-jemalloc
 )

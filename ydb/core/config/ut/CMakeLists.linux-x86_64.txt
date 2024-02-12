@@ -64,6 +64,12 @@ set_yunittest_property(
   PROCESSORS
   1
 )
+set_yunittest_property(
+  TEST
+  ydb-core-config-ut
+  PROPERTY
+  ENVIRONMENT
+)
 target_allocator(ydb-core-config-ut
   cpp-malloc-tcmalloc
   libs-tcmalloc-no_percpu_cache

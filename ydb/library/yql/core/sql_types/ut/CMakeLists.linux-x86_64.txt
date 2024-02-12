@@ -65,6 +65,12 @@ set_yunittest_property(
   PROCESSORS
   1
 )
+set_yunittest_property(
+  TEST
+  ydb-library-yql-core-sql_types-ut
+  PROPERTY
+  ENVIRONMENT
+)
 target_allocator(ydb-library-yql-core-sql_types-ut
   cpp-malloc-tcmalloc
   libs-tcmalloc-no_percpu_cache

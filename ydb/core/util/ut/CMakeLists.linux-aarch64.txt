@@ -102,6 +102,12 @@ set_yunittest_property(
   TEST
   ydb-core-util-ut
   PROPERTY
+  ENVIRONMENT
+)
+set_yunittest_property(
+  TEST
+  ydb-core-util-ut
+  PROPERTY
   TIMEOUT
   600
 )

@@ -68,6 +68,12 @@ set_yunittest_property(
   TEST
   ydb-public-sdk-cpp-client-draft-ut
   PROPERTY
+  ENVIRONMENT
+)
+set_yunittest_property(
+  TEST
+  ydb-public-sdk-cpp-client-draft-ut
+  PROPERTY
   TIMEOUT
   600
 )

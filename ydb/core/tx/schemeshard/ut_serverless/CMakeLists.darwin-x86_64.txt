@@ -75,6 +75,12 @@ set_yunittest_property(
   TEST
   ydb-core-tx-schemeshard-ut_serverless
   PROPERTY
+  ENVIRONMENT
+)
+set_yunittest_property(
+  TEST
+  ydb-core-tx-schemeshard-ut_serverless
+  PROPERTY
   TIMEOUT
   600
 )

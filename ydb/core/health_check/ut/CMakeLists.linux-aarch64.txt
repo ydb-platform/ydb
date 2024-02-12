@@ -68,6 +68,12 @@ set_yunittest_property(
   PROCESSORS
   1
 )
+set_yunittest_property(
+  TEST
+  ydb-core-health_check-ut
+  PROPERTY
+  ENVIRONMENT
+)
 target_allocator(ydb-core-health_check-ut
   cpp-malloc-jemalloc
 )

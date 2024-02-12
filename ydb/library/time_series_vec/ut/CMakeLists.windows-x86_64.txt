@@ -61,6 +61,12 @@ set_yunittest_property(
   TEST
   ydb-library-time_series_vec-ut
   PROPERTY
+  ENVIRONMENT
+)
+set_yunittest_property(
+  TEST
+  ydb-library-time_series_vec-ut
+  PROPERTY
   TIMEOUT
   600
 )

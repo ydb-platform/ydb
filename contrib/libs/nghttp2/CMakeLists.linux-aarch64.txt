@@ -24,6 +24,7 @@ target_link_libraries(contrib-libs-nghttp2 PUBLIC
   contrib-libs-linux-headers
 )
 target_sources(contrib-libs-nghttp2 PRIVATE
+  ${CMAKE_SOURCE_DIR}/contrib/libs/nghttp2/lib/nghttp2_alpn.c
   ${CMAKE_SOURCE_DIR}/contrib/libs/nghttp2/lib/nghttp2_buf.c
   ${CMAKE_SOURCE_DIR}/contrib/libs/nghttp2/lib/nghttp2_callbacks.c
   ${CMAKE_SOURCE_DIR}/contrib/libs/nghttp2/lib/nghttp2_debug.c
@@ -36,7 +37,6 @@ target_sources(contrib-libs-nghttp2 PRIVATE
   ${CMAKE_SOURCE_DIR}/contrib/libs/nghttp2/lib/nghttp2_http.c
   ${CMAKE_SOURCE_DIR}/contrib/libs/nghttp2/lib/nghttp2_map.c
   ${CMAKE_SOURCE_DIR}/contrib/libs/nghttp2/lib/nghttp2_mem.c
-  ${CMAKE_SOURCE_DIR}/contrib/libs/nghttp2/lib/nghttp2_npn.c
   ${CMAKE_SOURCE_DIR}/contrib/libs/nghttp2/lib/nghttp2_option.c
   ${CMAKE_SOURCE_DIR}/contrib/libs/nghttp2/lib/nghttp2_outbound_item.c
   ${CMAKE_SOURCE_DIR}/contrib/libs/nghttp2/lib/nghttp2_pq.c

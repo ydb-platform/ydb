@@ -65,6 +65,12 @@ set_yunittest_property(
   TEST
   ydb-core-erasure-ut_rope
   PROPERTY
+  ENVIRONMENT
+)
+set_yunittest_property(
+  TEST
+  ydb-core-erasure-ut_rope
+  PROPERTY
   TIMEOUT
   600
 )

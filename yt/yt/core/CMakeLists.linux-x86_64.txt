@@ -168,7 +168,7 @@ target_sources(yt-yt-core PRIVATE
   ${CMAKE_SOURCE_DIR}/yt/yt/core/misc/hazard_ptr.cpp
   ${CMAKE_SOURCE_DIR}/yt/yt/core/misc/hedging_manager.cpp
   ${CMAKE_SOURCE_DIR}/yt/yt/core/misc/histogram.cpp
-  ${CMAKE_SOURCE_DIR}/yt/yt/core/misc/historic_usage_aggregator.cpp
+  ${CMAKE_SOURCE_DIR}/yt/yt/core/misc/adjusted_exponential_moving_average.cpp
   ${CMAKE_SOURCE_DIR}/yt/yt/core/misc/hr_timer.cpp
   ${CMAKE_SOURCE_DIR}/yt/yt/core/misc/id_generator.cpp
   ${CMAKE_SOURCE_DIR}/yt/yt/core/misc/linear_probe.cpp

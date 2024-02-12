@@ -80,6 +80,12 @@ set_yunittest_property(
   TEST
   ydb-public-sdk-cpp-client-ydb_federated_topic-ut
   PROPERTY
+  ENVIRONMENT
+)
+set_yunittest_property(
+  TEST
+  ydb-public-sdk-cpp-client-ydb_federated_topic-ut
+  PROPERTY
   TIMEOUT
   600
 )

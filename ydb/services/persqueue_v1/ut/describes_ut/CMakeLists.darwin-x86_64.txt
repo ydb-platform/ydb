@@ -72,6 +72,12 @@ set_yunittest_property(
   TEST
   ydb-services-persqueue_v1-ut-describes_ut
   PROPERTY
+  ENVIRONMENT
+)
+set_yunittest_property(
+  TEST
+  ydb-services-persqueue_v1-ut-describes_ut
+  PROPERTY
   TIMEOUT
   300
 )

@@ -78,6 +78,12 @@ set_yunittest_property(
   TEST
   ydb-core-blobstorage-vdisk-skeleton-ut
   PROPERTY
+  ENVIRONMENT
+)
+set_yunittest_property(
+  TEST
+  ydb-core-blobstorage-vdisk-skeleton-ut
+  PROPERTY
   TIMEOUT
   600
 )

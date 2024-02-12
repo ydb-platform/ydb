@@ -59,6 +59,12 @@ set_yunittest_property(
   PROCESSORS
   1
 )
+set_yunittest_property(
+  TEST
+  ydb-library-yql-utils-log-ut
+  PROPERTY
+  ENVIRONMENT
+)
 target_allocator(ydb-library-yql-utils-log-ut
   system_allocator
 )

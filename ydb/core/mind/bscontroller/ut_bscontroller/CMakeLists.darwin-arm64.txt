@@ -71,6 +71,12 @@ set_yunittest_property(
   TEST
   ydb-core-mind-bscontroller-ut_bscontroller
   PROPERTY
+  ENVIRONMENT
+)
+set_yunittest_property(
+  TEST
+  ydb-core-mind-bscontroller-ut_bscontroller
+  PROPERTY
   TIMEOUT
   600
 )

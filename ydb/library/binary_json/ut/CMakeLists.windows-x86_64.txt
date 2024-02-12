@@ -70,6 +70,12 @@ set_yunittest_property(
   TEST
   ydb-library-binary_json-ut
   PROPERTY
+  ENVIRONMENT
+)
+set_yunittest_property(
+  TEST
+  ydb-library-binary_json-ut
+  PROPERTY
   TIMEOUT
   600
 )

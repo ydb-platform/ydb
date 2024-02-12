@@ -45,6 +45,12 @@ set_property(
   PROCESSORS
   1
 )
+set_property(
+  TEST
+  ydb-library-testlib-ut
+  PROPERTY
+  ENVIRONMENT
+)
 target_allocator(ydb-library-testlib-ut
   system_allocator
 )

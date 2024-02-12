@@ -61,6 +61,12 @@ set_yunittest_property(
   TEST
   public-purecalc-io_specs-mkql-ut-no_llvm
   PROPERTY
+  ENVIRONMENT
+)
+set_yunittest_property(
+  TEST
+  public-purecalc-io_specs-mkql-ut-no_llvm
+  PROPERTY
   TIMEOUT
   300
 )

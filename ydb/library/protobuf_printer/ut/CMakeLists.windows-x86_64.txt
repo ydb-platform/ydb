@@ -71,6 +71,12 @@ set_yunittest_property(
   PROCESSORS
   1
 )
+set_yunittest_property(
+  TEST
+  ydb-library-protobuf_printer-ut
+  PROPERTY
+  ENVIRONMENT
+)
 target_allocator(ydb-library-protobuf_printer-ut
   system_allocator
 )

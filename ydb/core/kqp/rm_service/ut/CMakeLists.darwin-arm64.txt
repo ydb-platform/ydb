@@ -66,6 +66,12 @@ set_yunittest_property(
   PROCESSORS
   1
 )
+set_yunittest_property(
+  TEST
+  ydb-core-kqp-rm_service-ut
+  PROPERTY
+  ENVIRONMENT
+)
 target_allocator(ydb-core-kqp-rm_service-ut
   system_allocator
 )

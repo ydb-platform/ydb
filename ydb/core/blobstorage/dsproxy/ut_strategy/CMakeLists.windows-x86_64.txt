@@ -58,6 +58,12 @@ set_yunittest_property(
   TEST
   ydb-core-blobstorage-dsproxy-ut_strategy
   PROPERTY
+  ENVIRONMENT
+)
+set_yunittest_property(
+  TEST
+  ydb-core-blobstorage-dsproxy-ut_strategy
+  PROPERTY
   TIMEOUT
   600
 )

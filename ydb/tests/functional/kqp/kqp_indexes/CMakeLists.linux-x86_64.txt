@@ -64,6 +64,13 @@ set_yunittest_property(
   PROCESSORS
   1
 )
+set_yunittest_property(
+  TEST
+  ydb-tests-functional-kqp-kqp_indexes
+  PROPERTY
+  ENVIRONMENT
+  "YDB_USE_IN_MEMORY_PDISKS=true;YDB_ERASURE=block_4-2;YDB_DRIVER_BINARY=ydb/apps/ydbd/ydbd"
+)
 target_allocator(ydb-tests-functional-kqp-kqp_indexes
   cpp-malloc-tcmalloc
   libs-tcmalloc-no_percpu_cache

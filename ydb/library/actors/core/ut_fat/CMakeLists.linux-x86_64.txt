@@ -66,6 +66,12 @@ set_yunittest_property(
   TEST
   ydb-library-actors-core-ut_fat
   PROPERTY
+  ENVIRONMENT
+)
+set_yunittest_property(
+  TEST
+  ydb-library-actors-core-ut_fat
+  PROPERTY
   TIMEOUT
   1200
 )

@@ -83,6 +83,12 @@ set_yunittest_property(
   PROCESSORS
   1
 )
+set_yunittest_property(
+  TEST
+  ydb-library-yql-minikql-codegen-llvm14-ut
+  PROPERTY
+  ENVIRONMENT
+)
 copy_file(
   ${CMAKE_SOURCE_DIR}/ydb/library/yql/minikql/codegen/codegen_ut.cpp
   ${CMAKE_BINARY_DIR}/ydb/library/yql/minikql/codegen/llvm14/ut/codegen_ut.cpp

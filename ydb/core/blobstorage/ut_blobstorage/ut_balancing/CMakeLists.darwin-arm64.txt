@@ -64,6 +64,12 @@ set_yunittest_property(
   TEST
   ydb-core-blobstorage-ut_blobstorage-ut_balancing
   PROPERTY
+  ENVIRONMENT
+)
+set_yunittest_property(
+  TEST
+  ydb-core-blobstorage-ut_blobstorage-ut_balancing
+  PROPERTY
   TIMEOUT
   600
 )

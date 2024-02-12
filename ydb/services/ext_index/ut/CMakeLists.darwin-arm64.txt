@@ -73,6 +73,12 @@ set_yunittest_property(
   TEST
   ydb-services-ext_index-ut
   PROPERTY
+  ENVIRONMENT
+)
+set_yunittest_property(
+  TEST
+  ydb-services-ext_index-ut
+  PROPERTY
   TIMEOUT
   600
 )

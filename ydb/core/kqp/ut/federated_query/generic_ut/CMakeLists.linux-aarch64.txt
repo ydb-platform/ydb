@@ -73,6 +73,12 @@ set_yunittest_property(
   PROCESSORS
   1
 )
+set_yunittest_property(
+  TEST
+  ydb-core-kqp-ut-federated_query-generic_ut
+  PROPERTY
+  ENVIRONMENT
+)
 target_allocator(ydb-core-kqp-ut-federated_query-generic_ut
   cpp-malloc-jemalloc
 )

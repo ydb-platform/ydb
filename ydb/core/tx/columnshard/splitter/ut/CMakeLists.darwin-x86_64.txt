@@ -84,6 +84,12 @@ set_yunittest_property(
   PROCESSORS
   1
 )
+set_yunittest_property(
+  TEST
+  ydb-core-tx-columnshard-splitter-ut
+  PROPERTY
+  ENVIRONMENT
+)
 target_allocator(ydb-core-tx-columnshard-splitter-ut
   system_allocator
 )

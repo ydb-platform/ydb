@@ -59,6 +59,12 @@ set_yunittest_property(
   PROCESSORS
   1
 )
+set_yunittest_property(
+  TEST
+  ydb-core-fq-libs-signer-ut
+  PROPERTY
+  ENVIRONMENT
+)
 target_allocator(ydb-core-fq-libs-signer-ut
   system_allocator
 )

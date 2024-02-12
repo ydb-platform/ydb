@@ -66,6 +66,12 @@ set_yunittest_property(
   TEST
   ydb-core-tx-tx_allocator-ut
   PROPERTY
+  ENVIRONMENT
+)
+set_yunittest_property(
+  TEST
+  ydb-core-tx-tx_allocator-ut
+  PROPERTY
   TIMEOUT
   600
 )

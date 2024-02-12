@@ -71,6 +71,12 @@ set_yunittest_property(
   TEST
   ydb-core-tx-datashard-ut_kqp_errors
   PROPERTY
+  ENVIRONMENT
+)
+set_yunittest_property(
+  TEST
+  ydb-core-tx-datashard-ut_kqp_errors
+  PROPERTY
   TIMEOUT
   600
 )

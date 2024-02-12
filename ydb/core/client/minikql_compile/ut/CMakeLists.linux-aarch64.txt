@@ -75,6 +75,12 @@ set_yunittest_property(
   PROCESSORS
   1
 )
+set_yunittest_property(
+  TEST
+  ydb-core-client-minikql_compile-ut
+  PROPERTY
+  ENVIRONMENT
+)
 target_allocator(ydb-core-client-minikql_compile-ut
   cpp-malloc-jemalloc
 )

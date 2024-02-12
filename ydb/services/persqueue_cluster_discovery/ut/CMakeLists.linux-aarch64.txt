@@ -74,6 +74,12 @@ set_yunittest_property(
   TEST
   ydb-services-persqueue_cluster_discovery-ut
   PROPERTY
+  ENVIRONMENT
+)
+set_yunittest_property(
+  TEST
+  ydb-services-persqueue_cluster_discovery-ut
+  PROPERTY
   TIMEOUT
   600
 )

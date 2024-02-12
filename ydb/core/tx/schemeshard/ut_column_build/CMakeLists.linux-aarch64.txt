@@ -78,6 +78,12 @@ set_yunittest_property(
   TEST
   ydb-core-tx-schemeshard-ut_column_build
   PROPERTY
+  ENVIRONMENT
+)
+set_yunittest_property(
+  TEST
+  ydb-core-tx-schemeshard-ut_column_build
+  PROPERTY
   TIMEOUT
   600
 )

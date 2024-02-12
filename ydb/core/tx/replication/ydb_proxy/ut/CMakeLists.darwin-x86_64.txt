@@ -71,6 +71,12 @@ set_yunittest_property(
   TEST
   ydb-core-tx-replication-ydb_proxy-ut
   PROPERTY
+  ENVIRONMENT
+)
+set_yunittest_property(
+  TEST
+  ydb-core-tx-replication-ydb_proxy-ut
+  PROPERTY
   TIMEOUT
   600
 )

@@ -61,6 +61,12 @@ set_yunittest_property(
   PROCESSORS
   1
 )
+set_yunittest_property(
+  TEST
+  yql-providers-common-structured_token-ut
+  PROPERTY
+  ENVIRONMENT
+)
 target_allocator(yql-providers-common-structured_token-ut
   system_allocator
 )

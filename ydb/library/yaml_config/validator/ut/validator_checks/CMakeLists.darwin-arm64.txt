@@ -55,6 +55,12 @@ set_yunittest_property(
   PROCESSORS
   1
 )
+set_yunittest_property(
+  TEST
+  yaml_config-validator-ut-validator_checks
+  PROPERTY
+  ENVIRONMENT
+)
 target_allocator(yaml_config-validator-ut-validator_checks
   system_allocator
 )

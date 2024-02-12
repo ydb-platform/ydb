@@ -76,6 +76,12 @@ set_yunittest_property(
   TEST
   ydb-core-tx-schemeshard-ut_topic_splitmerge
   PROPERTY
+  ENVIRONMENT
+)
+set_yunittest_property(
+  TEST
+  ydb-core-tx-schemeshard-ut_topic_splitmerge
+  PROPERTY
   TIMEOUT
   600
 )

@@ -72,6 +72,12 @@ set_yunittest_property(
   TEST
   ydb-library-yql-minikql-invoke_builtins-llvm14-ut
   PROPERTY
+  ENVIRONMENT
+)
+set_yunittest_property(
+  TEST
+  ydb-library-yql-minikql-invoke_builtins-llvm14-ut
+  PROPERTY
   TIMEOUT
   600
 )

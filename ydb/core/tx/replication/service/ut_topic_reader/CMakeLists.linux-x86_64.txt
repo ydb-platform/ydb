@@ -76,6 +76,12 @@ set_yunittest_property(
   TEST
   ydb-core-tx-replication-service-ut_topic_reader
   PROPERTY
+  ENVIRONMENT
+)
+set_yunittest_property(
+  TEST
+  ydb-core-tx-replication-service-ut_topic_reader
+  PROPERTY
   TIMEOUT
   600
 )

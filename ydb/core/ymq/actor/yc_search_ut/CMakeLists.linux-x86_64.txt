@@ -71,6 +71,12 @@ set_yunittest_property(
   TEST
   ydb-core-ymq-actor-yc_search_ut
   PROPERTY
+  ENVIRONMENT
+)
+set_yunittest_property(
+  TEST
+  ydb-core-ymq-actor-yc_search_ut
+  PROPERTY
   TIMEOUT
   300
 )

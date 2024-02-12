@@ -77,6 +77,12 @@ set_yunittest_property(
   TEST
   ydb-core-kqp-ut-yql
   PROPERTY
+  ENVIRONMENT
+)
+set_yunittest_property(
+  TEST
+  ydb-core-kqp-ut-yql
+  PROPERTY
   TIMEOUT
   600
 )

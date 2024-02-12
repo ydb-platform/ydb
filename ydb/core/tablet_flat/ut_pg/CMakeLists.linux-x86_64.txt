@@ -75,6 +75,12 @@ set_yunittest_property(
   PROCESSORS
   1
 )
+set_yunittest_property(
+  TEST
+  ydb-core-tablet_flat-ut_pg
+  PROPERTY
+  ENVIRONMENT
+)
 target_allocator(ydb-core-tablet_flat-ut_pg
   cpp-malloc-tcmalloc
   libs-tcmalloc-no_percpu_cache

@@ -72,6 +72,12 @@ set_yunittest_property(
   TEST
   ydb-services-ydb-sdk_sessions_pool_ut
   PROPERTY
+  ENVIRONMENT
+)
+set_yunittest_property(
+  TEST
+  ydb-services-ydb-sdk_sessions_pool_ut
+  PROPERTY
   TIMEOUT
   300
 )

@@ -71,6 +71,12 @@ set_yunittest_property(
   TEST
   ydb-core-tx-datashard-ut_stats
   PROPERTY
+  ENVIRONMENT
+)
+set_yunittest_property(
+  TEST
+  ydb-core-tx-datashard-ut_stats
+  PROPERTY
   TIMEOUT
   600
 )

@@ -58,6 +58,12 @@ set_yunittest_property(
   TEST
   ydb-core-driver_lib-version-ut
   PROPERTY
+  ENVIRONMENT
+)
+set_yunittest_property(
+  TEST
+  ydb-core-driver_lib-version-ut
+  PROPERTY
   TIMEOUT
   300
 )

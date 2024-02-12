@@ -71,6 +71,12 @@ set_yunittest_property(
   PROCESSORS
   1
 )
+set_yunittest_property(
+  TEST
+  ydb-library-yql-dq-opt-ut
+  PROPERTY
+  ENVIRONMENT
+)
 target_allocator(ydb-library-yql-dq-opt-ut
   cpp-malloc-tcmalloc
   libs-tcmalloc-no_percpu_cache

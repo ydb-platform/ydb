@@ -7,7 +7,6 @@ namespace NGRpcService {
 
 class TGRpcRequestProxyHandleMethods {
 protected:
-    static void Handle(TEvS3ListingRequest::TPtr& ev, const TActorContext& ctx);
     static void Handle(TEvBiStreamPingRequest::TPtr& ev, const TActorContext& ctx);
     static void Handle(TEvStreamPQWriteRequest::TPtr& ev, const TActorContext& ctx);
     static void Handle(TEvStreamPQMigrationReadRequest::TPtr& ev, const TActorContext& ctx);

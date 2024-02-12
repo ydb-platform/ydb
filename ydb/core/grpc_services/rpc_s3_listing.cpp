@@ -20,6 +20,8 @@
 namespace NKikimr {
 namespace NGRpcService {
 
+using TEvS3ListingRequest = TGrpcRequestOperationCall<Ydb::S3Internal::S3ListingRequest, Ydb::S3Internal::S3ListingResponse>;
+
 // NOTE: TCell's can reference memomry from tupleValue
 bool CellsFromTuple(const Ydb::Type* tupleType,
                     const Ydb::Value& tupleValue,
@@ -192,7 +194,7 @@ private:
     static constexpr ui32 DEFAULT_MAX_KEYS = 1001;
     static constexpr ui32 DEFAULT_TIMEOUT_SEC = 5*60;
 
-    TAutoPtr<TEvS3ListingRequest> GrpcRequest;
+    std::unique_ptr<IRequestOpCtx> GrpcRequest;
     const Ydb::S3Internal::S3ListingRequest* Request;
     THolder<const NACLib::TUserToken> UserToken;
     ui32 MaxKeys;
@@ -221,9 +223,9 @@ public:
         return NKikimrServices::TActivity::GRPC_REQ;
     }
 
-    TS3ListingRequestGrpc(TAutoPtr<TEvS3ListingRequest> request, TActorId schemeCache, THolder<const NACLib::TUserToken>&& userToken)
-        : GrpcRequest(request)
-        , Request(GrpcRequest->GetProtoRequest())
+    TS3ListingRequestGrpc(std::unique_ptr<IRequestOpCtx> request, TActorId schemeCache, THolder<const NACLib::TUserToken>&& userToken)
+        : GrpcRequest(std::move(request))
+        , Request(TEvS3ListingRequest::GetProtoRequest(GrpcRequest.get()))
         , UserToken(std::move(userToken))
         , MaxKeys(DEFAULT_MAX_KEYS)
         , SchemeCache(schemeCache)
@@ -729,14 +731,14 @@ private:
     }
 };
 
-IActor* CreateGrpcS3ListingRequest(TAutoPtr<TEvS3ListingRequest> request) {
+IActor* CreateGrpcS3ListingRequest(std::unique_ptr<IRequestOpCtx> request) {
     TActorId schemeCache = MakeSchemeCacheID();
     auto token = THolder<const NACLib::TUserToken>(request->GetInternalToken() ? new NACLib::TUserToken(request->GetSerializedToken()) : nullptr);
-    return new TS3ListingRequestGrpc(request, schemeCache, std::move(token));
+    return new TS3ListingRequestGrpc(std::move(request), schemeCache, std::move(token));
 }
 
-void TGRpcRequestProxyHandleMethods::Handle(TEvS3ListingRequest::TPtr& ev, const TActorContext& ctx) {
-    ctx.Register(CreateGrpcS3ListingRequest(ev->Release().Release()));
+void DoS3ListingRequest(std::unique_ptr<IRequestOpCtx> p, const IFacilityProvider& f) {
+    f.RegisterActor(CreateGrpcS3ListingRequest(std::move(p)));
 }
 
 } // namespace NKikimr

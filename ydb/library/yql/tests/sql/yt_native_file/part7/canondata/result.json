@@ -1522,25 +1522,25 @@
             "uri": "https://{canondata_backend}/1946324/6707647cfa387ec829af2d598f1608a04da08a21/resource.tar.gz#test.test_order_by-presort_mem-default.txt-Results_/results.txt"
         }
     ],
-    "test.test[pg-current_database-default.txt-Debug]": [
+    "test.test[pg-def_column_name_func-default.txt-Debug]": [
         {
-            "checksum": "9762b8c0ed8304819b1f5e8a5f9ba85a",
-            "size": 338,
-            "uri": "https://{canondata_backend}/1775059/cce861dbf81540c18f4372d28dec59de9071fa35/resource.tar.gz#test.test_pg-current_database-default.txt-Debug_/opt.yql"
+            "checksum": "4a4ac9c9cd2581142077da0c21499616",
+            "size": 355,
+            "uri": "https://{canondata_backend}/1871002/96825674a144d70463fcbff8c8e43e73b4243cee/resource.tar.gz#test.test_pg-def_column_name_func-default.txt-Debug_/opt.yql"
         }
     ],
-    "test.test[pg-current_database-default.txt-Plan]": [
+    "test.test[pg-def_column_name_func-default.txt-Plan]": [
         {
             "checksum": "b4dd508a329723c74293d80f0278c705",
             "size": 505,
-            "uri": "https://{canondata_backend}/1775059/cce861dbf81540c18f4372d28dec59de9071fa35/resource.tar.gz#test.test_pg-current_database-default.txt-Plan_/plan.txt"
+            "uri": "https://{canondata_backend}/1871002/96825674a144d70463fcbff8c8e43e73b4243cee/resource.tar.gz#test.test_pg-def_column_name_func-default.txt-Plan_/plan.txt"
         }
     ],
-    "test.test[pg-current_database-default.txt-Results]": [
+    "test.test[pg-def_column_name_func-default.txt-Results]": [
         {
-            "checksum": "d479d7417d5203ef7e9e11f2d1716a0d",
-            "size": 669,
-            "uri": "https://{canondata_backend}/1775059/cce861dbf81540c18f4372d28dec59de9071fa35/resource.tar.gz#test.test_pg-current_database-default.txt-Results_/results.txt"
+            "checksum": "544ca70451f2af85faa262332aed8e62",
+            "size": 660,
+            "uri": "https://{canondata_backend}/1871002/96825674a144d70463fcbff8c8e43e73b4243cee/resource.tar.gz#test.test_pg-def_column_name_func-default.txt-Results_/results.txt"
         }
     ],
     "test.test[pg-pg_array_literal-default.txt-Debug]": [

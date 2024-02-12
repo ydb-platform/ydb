@@ -1819,28 +1819,28 @@
         }
     ],
     "test.test[order_by-presort_mem-default.txt-Results]": [],
-    "test.test[pg-current_database-default.txt-Analyze]": [
+    "test.test[pg-def_column_name_func-default.txt-Analyze]": [
         {
             "checksum": "b4dd508a329723c74293d80f0278c705",
             "size": 505,
-            "uri": "https://{canondata_backend}/1903885/4c5b90aa44bdc9962b284fee28b94b10f557f2ba/resource.tar.gz#test.test_pg-current_database-default.txt-Analyze_/plan.txt"
+            "uri": "https://{canondata_backend}/1937367/9e6103f3844abd305fb3ecba5a38bd2939f032ea/resource.tar.gz#test.test_pg-def_column_name_func-default.txt-Analyze_/plan.txt"
         }
     ],
-    "test.test[pg-current_database-default.txt-Debug]": [
+    "test.test[pg-def_column_name_func-default.txt-Debug]": [
         {
-            "checksum": "953b3e5a83085d8bb75499e87669f494",
-            "size": 394,
-            "uri": "https://{canondata_backend}/1903885/4c5b90aa44bdc9962b284fee28b94b10f557f2ba/resource.tar.gz#test.test_pg-current_database-default.txt-Debug_/opt.yql_patched"
+            "checksum": "3004161207124eee1beeccee7a05d357",
+            "size": 411,
+            "uri": "https://{canondata_backend}/1937367/9e6103f3844abd305fb3ecba5a38bd2939f032ea/resource.tar.gz#test.test_pg-def_column_name_func-default.txt-Debug_/opt.yql_patched"
         }
     ],
-    "test.test[pg-current_database-default.txt-Plan]": [
+    "test.test[pg-def_column_name_func-default.txt-Plan]": [
         {
             "checksum": "b4dd508a329723c74293d80f0278c705",
             "size": 505,
-            "uri": "https://{canondata_backend}/1903885/4c5b90aa44bdc9962b284fee28b94b10f557f2ba/resource.tar.gz#test.test_pg-current_database-default.txt-Plan_/plan.txt"
+            "uri": "https://{canondata_backend}/1937367/9e6103f3844abd305fb3ecba5a38bd2939f032ea/resource.tar.gz#test.test_pg-def_column_name_func-default.txt-Plan_/plan.txt"
         }
     ],
-    "test.test[pg-current_database-default.txt-Results]": [],
+    "test.test[pg-def_column_name_func-default.txt-Results]": [],
     "test.test[pg-pg_array_literal-default.txt-Analyze]": [
         {
             "checksum": "b4dd508a329723c74293d80f0278c705",

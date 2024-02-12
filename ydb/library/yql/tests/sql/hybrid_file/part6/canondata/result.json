@@ -1581,6 +1581,20 @@
             "uri": "https://{canondata_backend}/1775059/3cb7d014d70b84dbcb84645fa987dd9d47d7fd6c/resource.tar.gz#test.test_pg-aggregate_distinct-default.txt-Plan_/plan.txt"
         }
     ],
+    "test.test[pg-def_column_name_func-default.txt-Debug]": [
+        {
+            "checksum": "b1fb7ae02f940f31a68bb3e104cda4ce",
+            "size": 410,
+            "uri": "https://{canondata_backend}/1871002/72263a808838fefc0abe1dc2ac9fac8909e4a5a1/resource.tar.gz#test.test_pg-def_column_name_func-default.txt-Debug_/opt.yql_patched"
+        }
+    ],
+    "test.test[pg-def_column_name_func-default.txt-Plan]": [
+        {
+            "checksum": "b4dd508a329723c74293d80f0278c705",
+            "size": 505,
+            "uri": "https://{canondata_backend}/1871002/72263a808838fefc0abe1dc2ac9fac8909e4a5a1/resource.tar.gz#test.test_pg-def_column_name_func-default.txt-Plan_/plan.txt"
+        }
+    ],
     "test.test[pg-equals_where_over_cross2-default.txt-Debug]": [
         {
             "checksum": "459f1cf964dc0f3e28fe64682ce5266e",

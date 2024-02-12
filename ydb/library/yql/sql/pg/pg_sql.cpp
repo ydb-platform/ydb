@@ -1308,6 +1308,14 @@ public:
                     if (NodeTag(field) == T_String) {
                         name = StrVal(field);
                     }
+                } else if (NodeTag(r->val) == T_FuncCall) {
+                    auto func = CAST_NODE(FuncCall, r->val);
+                    TVector<TString> names;
+                    if (!ExtractFuncName(func, names)) {
+                        return nullptr;
+                    }
+
+                    name = names.back();
                 }
             }
 
@@ -3377,28 +3385,7 @@ public:
         }
 
         TVector<TString> names;
-        for (int i = 0; i < ListLength(value->funcname); ++i) {
-            auto x = ListNodeNth(value->funcname, i);
-            if (NodeTag(x) != T_String) {
-                NodeNotImplemented(value, x);
-                return nullptr;
-            }
-
-            names.push_back(to_lower(TString(StrVal(x))));
-        }
-
-        if (names.empty()) {
-            AddError("FuncCall: missing function name");
-            return nullptr;
-        }
-
-        if (names.size() > 2) {
-            AddError(TStringBuilder() << "FuncCall: too many name components:: " << names.size());
-            return nullptr;
-        }
-
-        if (names.size() == 2 && names[0] != "pg_catalog") {
-            AddError(TStringBuilder() << "FuncCall: expected pg_catalog, but got: " << names[0]);
+        if (!ExtractFuncName(value, names)) {
             return nullptr;
         }
 
@@ -3483,6 +3470,35 @@ public:
         }
 
         return VL(args.data(), args.size());
+    }
+
+    bool ExtractFuncName(const FuncCall* value, TVector<TString>& names) {
+        for (int i = 0; i < ListLength(value->funcname); ++i) {
+            auto x = ListNodeNth(value->funcname, i);
+            if (NodeTag(x) != T_String) {
+                NodeNotImplemented(value, x);
+                return false;
+            }
+
+            names.push_back(to_lower(TString(StrVal(x))));
+        }
+
+        if (names.empty()) {
+            AddError("FuncCall: missing function name");
+            return false;
+        }
+
+        if (names.size() > 2) {
+            AddError(TStringBuilder() << "FuncCall: too many name components:: " << names.size());
+            return false;
+        }
+
+        if (names.size() == 2 && names[0] != "pg_catalog") {
+            AddError(TStringBuilder() << "FuncCall: expected pg_catalog, but got: " << names[0]);
+            return false;
+        }
+
+        return true;
     }
 
     TAstNode* ParseTypeCast(const TypeCast* value, const TExprSettings& settings) {

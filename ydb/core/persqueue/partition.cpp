@@ -2661,4 +2661,9 @@ const NKikimrPQ::TPQTabletConfig::TPartition* TPartition::GetPartitionConfig(con
     return NPQ::GetPartitionConfig(config, Partition.OriginalPartitionId);
 }
 
+bool TPartition::IsSupportive() const
+{
+    return Partition.IsSupportivePartition();
+}
+
 } // namespace NKikimr::NPQ

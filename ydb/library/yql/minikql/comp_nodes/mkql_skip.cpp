@@ -124,73 +124,20 @@ public:
         : TBaseComputation(mutables, flow, EValueRepresentation::Embedded)
         , Flow(flow)
         , Count(count)
-        , StubsIndex(mutables.IncrementWideFieldsIndex(size))
     {}
 
     void InitState(ui64& count, TComputationContext& ctx) const {
         count = Count->GetValue(ctx).Get<ui64>();
     }
 
-    void DoProcess(ui64& skipCount, TComputationContext& ctx, TMaybe<EFetchResult>& result, NUdf::TUnboxedValue*const* values) const {
-        if (result == EFetchResult::One && skipCount) {
-            result.Clear();
+    EProcessResult DoProcess(ui64& skipCount, TComputationContext& ctx, EFetchResult fetchRes, NUdf::TUnboxedValue*const* values) const {
+        if (fetchRes == EFetchResult::One && skipCount) {
             skipCount--;
+            return EProcessResult::Fetch;
         }
+        return static_cast<EProcessResult>(fetchRes);
     }
 
-#ifndef MKQL_DISABLE_CODEGEN
-    TGenerateResult DoGenGetValues(const TCodegenContext& ctx, Value* statePtr, Value* state, BasicBlock*& block) const {
-        auto& context = ctx.Codegen.GetContext();
-
-        const auto work = BasicBlock::Create(context, "work", ctx.Func);
-        const auto good = BasicBlock::Create(context, "good", ctx.Func);
-        const auto pass = BasicBlock::Create(context, "pass", ctx.Func);
-        const auto exit = BasicBlock::Create(context, "exit", ctx.Func);
-        const auto skip = BasicBlock::Create(context, "skip", ctx.Func);
-        const auto done = BasicBlock::Create(context, "done", ctx.Func);
-
-        const auto resultType = Type::getInt32Ty(context);
-        const auto result = PHINode::Create(resultType, 2U, "result", done);
-
-        const auto trunc = GetterFor<ui64>(state, context, block);
-
-        const auto count = PHINode::Create(trunc->getType(), 2U, "count", work);
-        count->addIncoming(trunc, block);
-
-        const auto plus = CmpInst::Create(Instruction::ICmp, ICmpInst::ICMP_UGT, trunc, ConstantInt::get(trunc->getType(), 0ULL), "plus", block);
-
-        BranchInst::Create(work, skip, plus, block);
-
-        block = work;
-        const auto status = GetNodeValues(Flow, ctx, block).first;
-        const auto special = CmpInst::Create(Instruction::ICmp, ICmpInst::ICMP_SLE, status, ConstantInt::get(status->getType(), 0), "special", block);
-        BranchInst::Create(pass, good, special, block);
-
-        block = pass;
-        new StoreInst(SetterFor<ui64>(count, context, block), statePtr, block);
-        result->addIncoming(status, block);
-        BranchInst::Create(done, block);
-
-        block = good;
-
-        const auto decr = BinaryOperator::CreateSub(count, ConstantInt::get(count->getType(), 1ULL), "decr", block);
-        const auto next = CmpInst::Create(Instruction::ICmp, ICmpInst::ICMP_UGT, decr, ConstantInt::get(decr->getType(), 0ULL), "next", block);
-        count->addIncoming(decr, block);
-        BranchInst::Create(work, exit, next, block);
-
-        block = exit;
-        new StoreInst(SetterFor<ui64>(decr, context, block), statePtr, block);
-        BranchInst::Create(skip, block);
-
-        block = skip;
-        auto getres = GetNodeValues(Flow, ctx, block);
-        result->addIncoming(getres.first, block);
-        BranchInst::Create(done, block);
-
-        block = done;
-        return {result, std::move(getres.second)};
-    }
-#endif
 private:
     void RegisterDependencies() const final {
         if (const auto flow = FlowDependsOn(Flow))
@@ -199,7 +146,6 @@ private:
 
     IComputationWideFlowNode* const Flow;
     IComputationNode* const Count;
-    const ui32 StubsIndex;
 };
 
 class TSkipStreamWrapper : public TMutableComputationNode<TSkipStreamWrapper> {

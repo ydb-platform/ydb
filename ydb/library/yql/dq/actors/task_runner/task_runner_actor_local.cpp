@@ -123,6 +123,7 @@ private:
         if (MemoryQuota) {
             MemoryQuota->TryReleaseQuota();
         }
+        TaskRunner.Reset();
         TActor<TLocalTaskRunnerActor>::PassAway();
     }
 

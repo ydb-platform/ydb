@@ -238,7 +238,11 @@ std::shared_ptr<TInsertColumnEngineChanges> TColumnEngineForLogs::StartInsert(st
 }
 
 std::shared_ptr<TColumnEngineChanges> TColumnEngineForLogs::StartCompaction(const TCompactionLimits& limits, const THashSet<TPortionAddress>& busyPortions) noexcept {
-    auto granule = GranulesStorage->GetGranuleForCompaction(Tables);
+    THashSet<ui64> busyGranuleIds;
+    for (auto&& i : busyPortions) {
+        busyGranuleIds.emplace(i.GetPathId());
+    }
+    auto granule = GranulesStorage->GetGranuleForCompaction(Tables, busyGranuleIds);
     if (!granule) {
         AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("event", "no granules for start compaction");
         return nullptr;

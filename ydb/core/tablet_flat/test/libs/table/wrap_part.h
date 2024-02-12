@@ -45,6 +45,8 @@ namespace NTest {
         }
 
     public:
+        using TCells = TArrayRef<const TCell>;
+
         explicit operator bool() const noexcept
         {
             return Iter && Iter->IsValid() && Ready == EReady::Data;
@@ -69,7 +71,11 @@ namespace NTest {
         EReady Seek(TRawVals key_, ESeek seek) noexcept
         {
             const TCelled key(key_, *Scheme->Keys, false);
+            return Seek(key, seek);
+        }
 
+        EReady Seek(const TCells key, ESeek seek) noexcept
+        {
             if constexpr (Direction == EDirection::Reverse) {
                 Ready = Iter->SeekReverse(key, seek);
             } else {

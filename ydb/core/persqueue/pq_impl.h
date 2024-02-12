@@ -418,6 +418,7 @@ private:
     bool CanProcessPlanStepQueue() const;
     bool CanProcessWriteTxs() const;
     bool CanProcessDeleteTxs() const;
+    bool CanProcessTxWrites() const;
 
     ui64 GetGeneration();
     void DestroySession(TPipeInfo& pipeInfo);
@@ -456,7 +457,14 @@ private:
 
     void ForwardGetOwnershipToSupportivePartitions(const TActorContext& ctx);
 
+    //
+    // list of supporive partitions created before writing
+    //
     THashSet<TPartitionId> NewSupportivePartitions;
+    //
+    // list of supportive partitions for which actors should be created
+    //
+    THashSet<TPartitionId> PendingSupportivePartitions;
 
     TPartitionInfo& GetPartitionInfo(const TPartitionId& partitionId);
     const TPartitionInfo& GetPartitionInfo(const NKikimrClient::TPersQueuePartitionRequest& request) const;

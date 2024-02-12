@@ -963,6 +963,8 @@ void TPersQueue::InitTxWrites(const NKikimrPQ::TTabletTxInfo& info,
 
         NextSupportivePartitionId = Max(NextSupportivePartitionId, shadowPartitionId.InternalPartitionId + 1);
     }
+
+    NewSupportivePartitions.clear();
 }
 
 void TPersQueue::ReadConfig(const NKikimrClient::TKeyValueResponse::TReadResult& read,
@@ -1396,7 +1398,9 @@ void TPersQueue::Handle(TEvPQ::TEvInitComplete::TPtr& ev, const TActorContext& c
         ApplyNewConfigAndReply(ctx);
     }
 
-    ProcessCheckPartitionStatusRequests(partitionId);
+    if (!partitionId.IsSupportivePartition()) {
+        ProcessCheckPartitionStatusRequests(partitionId);
+    }
 }
 
 void TPersQueue::Handle(TEvPQ::TEvError::TPtr& ev, const TActorContext& ctx)
@@ -3306,6 +3310,11 @@ bool TPersQueue::CanProcessDeleteTxs() const
     return !DeleteTxs.empty();
 }
 
+bool TPersQueue::CanProcessTxWrites() const
+{
+    return !NewSupportivePartitions.empty();
+}
+
 void TPersQueue::SubscribeWriteId(ui64 writeId,
                                   const TActorContext& ctx)
 {
@@ -3315,11 +3324,11 @@ void TPersQueue::SubscribeWriteId(ui64 writeId,
 
 void TPersQueue::CreateSupportivePartitionActors(const TActorContext& ctx)
 {
-    for (auto& partitionId : NewSupportivePartitions) {
+    for (auto& partitionId : PendingSupportivePartitions) {
         CreateSupportivePartitionActor(partitionId, ctx);
     }
 
-    NewSupportivePartitions.clear();
+    PendingSupportivePartitions.clear();
 }
 
 void TPersQueue::BeginWriteTxs(const TActorContext& ctx)
@@ -3330,7 +3339,8 @@ void TPersQueue::BeginWriteTxs(const TActorContext& ctx)
         CanProcessProposeTransactionQueue() ||
         CanProcessPlanStepQueue() ||
         CanProcessWriteTxs() ||
-        CanProcessDeleteTxs()
+        CanProcessDeleteTxs() ||
+        CanProcessTxWrites()
         ;
     if (!canProcess) {
         return;
@@ -3347,6 +3357,9 @@ void TPersQueue::BeginWriteTxs(const TActorContext& ctx)
     ProcessConfigTx(ctx, request.Get());
 
     WriteTxsInProgress = true;
+
+    PendingSupportivePartitions = std::move(NewSupportivePartitions);
+    NewSupportivePartitions.clear();
 
     ctx.Send(ctx.SelfID, request.Release());
 

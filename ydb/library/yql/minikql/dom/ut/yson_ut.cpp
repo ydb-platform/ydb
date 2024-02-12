@@ -2077,7 +2077,11 @@ Y_UNIT_TEST_SUITE(TYsonTests) {
         }
         )";
 
+        TString expected(R"({"Inf":"inf","Nan":"nan","NegInf":"-inf"})");
+
         const auto dom =  TryParseYsonDom(yson, &builder);
-        UNIT_ASSERT(builder.NewString(SerializeJsonDom(dom, false, true, true)));
+        TString res = SerializeJsonDom(dom, false, true, true);
+
+        UNIT_ASSERT_EQUAL(expected, res);
     }
 }

@@ -16,10 +16,9 @@ TWriteQuoter::TWriteQuoter(
 )
     : TPartitionQuoterBase(
             topicConverter, config, partition, tabletActor, parent,
-            IsQuotingEnabled(AppData()->PQConfig, isLocalDc) ? TMaybe<TQuotaTracker>{CreatePartitionTotalQuotaTracker(config, ctx)} : Nothing(),
-            tabletId, counters,
-            //ToDo: discuss - 1 inflight request for write quota - ?
-            1
+            AppData()->PQConfig.GetQuotingConfig().GetEnableQuoting() ? TMaybe<TQuotaTracker>{CreatePartitionTotalQuotaTracker(config, ctx)}
+                                                                      : Nothing(),
+            tabletId, counters, 1
     )
     , IsLocalDC(isLocalDc)
     , QuotingEnabled(AppData()->PQConfig.GetQuotingConfig().GetEnableQuoting())

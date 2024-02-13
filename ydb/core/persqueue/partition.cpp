@@ -1616,6 +1616,10 @@ bool TPartition::BeginTransaction(const TEvPQ::TEvTxCalcPredicate& tx,
     Y_UNUSED(ctx);
     bool predicate = true;
 
+    if (tx.SupportivePartitionActor != TActorId()) {
+        return false;
+    }
+
     for (auto& operation : tx.Operations) {
         const TString& consumer = operation.GetConsumer();
 

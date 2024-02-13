@@ -3734,11 +3734,11 @@ TMaybe<TPartitionId> TPersQueue::FindPartitionId(const NKikimrPQ::TDataTransacti
 void TPersQueue::SendEvTxCalcPredicateToPartitions(const TActorContext& ctx,
                                                    TDistributedTransaction& tx)
 {
-    THashMap<TPartitionId, std::unique_ptr<TEvPQ::TEvTxCalcPredicate>> events;
+    THashMap<ui32, std::unique_ptr<TEvPQ::TEvTxCalcPredicate>> events;
 
     for (auto& operation : tx.Operations) {
-        TPartitionId partitionId = MakePartitionId(operation.GetPartitionId(), tx.WriteId);
-        auto& event = events[partitionId];
+        ui32 originalPartitionId = operation.GetPartitionId();
+        auto& event = events[originalPartitionId];
         if (!event) {
             event = std::make_unique<TEvPQ::TEvTxCalcPredicate>(tx.Step, tx.TxId);
         }
@@ -3748,11 +3748,30 @@ void TPersQueue::SendEvTxCalcPredicateToPartitions(const TActorContext& ctx,
                             operation.GetEnd());
     }
 
-    for (auto& [partition, event] : events) {
-        auto p = Partitions.find(partition);
-        Y_ABORT_UNLESS(p != Partitions.end());
+    if (tx.WriteId.Defined()) {
+        ui64 writeId = *tx.WriteId;
+        Y_ABORT_UNLESS(TxWrites.contains(writeId));
+        const TTxWriteInfo& writeInfo = TxWrites.at(writeId);
 
-        ctx.Send(p->second.Actor, event.release());
+        for (auto& [originalPartitionId, partitionId] : writeInfo.Partitions) {
+            Y_ABORT_UNLESS(Partitions.contains(partitionId));
+            const TPartitionInfo& partition = Partitions.at(partitionId);
+
+            auto& event = events[originalPartitionId];
+            if (!event) {
+                event = std::make_unique<TEvPQ::TEvTxCalcPredicate>(tx.Step, tx.TxId);
+            }
+
+            event->SupportivePartitionActor = partition.Actor;
+        }
+    }
+
+    for (auto& [originalPartitionId, event] : events) {
+        TPartitionId partitionId(originalPartitionId);
+        Y_ABORT_UNLESS(Partitions.contains(partitionId));
+        const TPartitionInfo& partition = Partitions.at(partitionId);
+
+        ctx.Send(partition.Actor, event.release());
     }
 
     tx.PartitionRepliesCount = 0;

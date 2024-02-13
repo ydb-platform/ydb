@@ -33,6 +33,20 @@ host=:
                         name=topic.reserve.used_bytes: 0
                         name=topic.storage_bytes: 0
 
+                        consumer=$without_consumer:
+                            name=topic.partition.alive_count: 0
+                            name=topic.partition.committed_end_to_end_lag_milliseconds_max: 0
+                            name=topic.partition.committed_lag_messages_max: 0
+                            name=topic.partition.committed_read_lag_milliseconds_max: 0
+                            name=topic.partition.end_to_end_lag_milliseconds_max: 0
+                            name=topic.partition.read.idle_milliseconds_max: 0
+                            name=topic.partition.read.lag_messages_max: 0
+                            name=topic.partition.read.lag_milliseconds_max: 0
+                            name=topic.partition.read.speed_limit_bytes_per_second: 0
+                            name=topic.partition.read.throttled_microseconds_max: 0
+                            name=topic.partition.write.lag_milliseconds_max: 0
+                            name=topic.read.lag_messages: 0
+
                         consumer=client:
                             name=topic.partition.alive_count: 1
                             name=topic.partition.committed_end_to_end_lag_milliseconds_max: 0

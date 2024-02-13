@@ -73,10 +73,6 @@ class TestRecoveryMatchRecognize(TestYdsBase):
     def restart_node(self, kikimr, query_id):
         # restart node with CA
 
-
-        # master_node_index = self.get_graph_master_node_id(kikimr, query_id)
-        # logging.debug("Master node {}".format(master_node_index))
-
         node_to_restart = None
 
         for node_index in kikimr.compute_plane.kikimr_cluster.nodes:
@@ -92,11 +88,45 @@ class TestRecoveryMatchRecognize(TestYdsBase):
         kikimr.compute_plane.kikimr_cluster.nodes[node_to_restart].start()
         kikimr.compute_plane.wait_bootstrap(node_to_restart)
 
+
+    def recovery_impl(self, kikimr, client, yq_version, sql_template, test_name, messages_before_restart, messages_after_restart, expected):
+
+        self.init_topics(f"{test_name}_{yq_version}")
+
+        sql = sql_template.format(self.input_topic, self.output_topic);
+
+        client.create_yds_connection("myyds", os.getenv("YDB_DATABASE"), os.getenv("YDB_ENDPOINT"))
+        query_id = client.create_query("simple", sql, type=fq.QueryContent.QueryType.STREAMING).result.query_id
+        client.wait_query_status(query_id, fq.QueryMeta.RUNNING)
+        kikimr.compute_plane.wait_zero_checkpoint(query_id)
+
+        master_node_index = self.get_graph_master_node_id(kikimr, query_id)
+        logging.debug("Master node {}".format(master_node_index))
+
+        self.write_stream(messages_before_restart)
+
+        logging.debug("get_completed_checkpoints {}".format(kikimr.compute_plane.get_completed_checkpoints(query_id)))
+        kikimr.compute_plane.wait_completed_checkpoints(
+            query_id, kikimr.compute_plane.get_completed_checkpoints(query_id) + 1
+        )
+
+        self.restart_node(kikimr, query_id)
+        self.write_stream(messages_after_restart)
+
+        assert client.get_query_status(query_id) == fq.QueryMeta.RUNNING
+
+        read_data = self.read_stream(len(expected))
+        logging.info("Data was read: {}".format(read_data))
+
+        assert read_data == expected
+
+        client.abort_query(query_id)
+        client.wait_query(query_id)
+        self.dump_workers(kikimr, 0, 0)
+
     @yq_v1
     @pytest.mark.parametrize("kikimr", [(None, None, None)], indirect=["kikimr"])
-    def test_program_state_recovery(self, kikimr, client, yq_version):
-
-        self.init_topics(f"pq_kikimr_streaming_{yq_version}")
+    def test_time_order_recoverer(self, kikimr, client, yq_version, request):
 
         sql = R'''
             PRAGMA dq.MaxTasksPerStage="2";
@@ -105,9 +135,9 @@ class TestRecoveryMatchRecognize(TestYdsBase):
             pragma config.flags("TimeOrderRecoverDelay", "-1000000");
             pragma config.flags("TimeOrderRecoverAhead", "1000000");
 
-            INSERT INTO myyds.`{output_topic}`
+            INSERT INTO myyds.`{1}`
             SELECT ToBytes(Unwrap(Json::SerializeJson(Yson::From(TableRow()))))
-            FROM (SELECT * FROM myyds.`{input_topic}`
+            FROM (SELECT * FROM myyds.`{0}`
                 WITH (
                     format=json_each_row,
                     SCHEMA
@@ -121,59 +151,27 @@ class TestRecoveryMatchRecognize(TestYdsBase):
                 ONE ROW PER MATCH
                 PATTERN ( ALL_TRUE )
                 DEFINE
-                    ALL_TRUE as True)''' \
-            .format(
-            input_topic=self.input_topic,
-            output_topic=self.output_topic,
-        )
+                    ALL_TRUE as True)'''
 
-        client.create_yds_connection("myyds", os.getenv("YDB_DATABASE"), os.getenv("YDB_ENDPOINT"))
-        query_id = client.create_query("simple", sql, type=fq.QueryContent.QueryType.STREAMING).result.query_id
-        client.wait_query_status(query_id, fq.QueryMeta.RUNNING)
-        kikimr.compute_plane.wait_zero_checkpoint(query_id)
+        messages_before_restart = [
+            '{"dt":1696849942400002}',
+            '{"dt":1696849942000001}']
+        messages_after_restart = [
+            '{"dt":1696849942800000}',
+            '{"dt":1696849943200003}',
+            '{"dt":1696849943300003}',
+            '{"dt":1696849943600003}',
+            '{"dt":1696849943900003}']
+        expected = [
+            '{"dt":1696849942000001}',
+            '{"dt":1696849942400002}',
+            '{"dt":1696849942800000}']
 
-        master_node_index = self.get_graph_master_node_id(kikimr, query_id)
-        logging.debug("Master node {}".format(master_node_index))
-
-        messages1 = ['{"dt": 1696849942400002}', '{"dt": 1696849942000001}']
-        self.write_stream(messages1)
-
-        logging.debug("get_completed_checkpoints {}".format(kikimr.compute_plane.get_completed_checkpoints(query_id)))
-        kikimr.compute_plane.wait_completed_checkpoints(
-            query_id, kikimr.compute_plane.get_completed_checkpoints(query_id) + 1
-        )
-
-        self.restart_node(kikimr, query_id)
-
-        messages2 = [
-            '{"dt": 1696849942800000}',
-            '{"dt": 1696849943200003}',
-            '{"dt": 1696849943300003}',
-            '{"dt": 1696849943600003}',
-            '{"dt": 1696849943900003}'
-        ]
-        self.write_stream(messages2)
-
-        assert client.get_query_status(query_id) == fq.QueryMeta.RUNNING
-
-        expected = ['{"dt":1696849942000001}', '{"dt":1696849942400002}', '{"dt":1696849942800000}']
-
-        read_data = self.read_stream(len(expected))
-        logging.info("Data was read: {}".format(read_data))
-
-        assert read_data == expected
-
-        client.abort_query(query_id)
-        client.wait_query(query_id)
-
-        self.dump_workers(kikimr, 0, 0)
-
+        self.recovery_impl(kikimr, client, yq_version, sql, request.node.name, messages_before_restart, messages_after_restart, expected)
 
     @yq_v1
     @pytest.mark.parametrize("kikimr", [(None, None, None)], indirect=["kikimr"])
-    def test_match_recognize(self, kikimr, client, yq_version):
-
-        self.init_topics("test_match_recognize_save_load_state")
+    def test_match_recognize(self, kikimr, client, yq_version, request):
 
         sql = R'''
             PRAGMA dq.MaxTasksPerStage="2";
@@ -183,9 +181,9 @@ class TestRecoveryMatchRecognize(TestYdsBase):
             pragma config.flags("TimeOrderRecoverAhead", "1000000");
             pragma config.flags("MatchRecognizeStream", "auto");
 
-            INSERT INTO myyds.`{output_topic}`
+            INSERT INTO myyds.`{1}`
             SELECT ToBytes(Unwrap(Json::SerializeJson(Yson::From(TableRow()))))
-            FROM (SELECT * FROM myyds.`{input_topic}`
+            FROM (SELECT * FROM myyds.`{0}`
                 WITH (
                     format=json_each_row,
                     SCHEMA
@@ -206,46 +204,21 @@ class TestRecoveryMatchRecognize(TestYdsBase):
                 DEFINE
                     A as A.str='A',
                     B as B.str='B',
-                    C as C.str='C')''' \
-            .format(
-            input_topic=self.input_topic,
-            output_topic=self.output_topic,
-        )
+                    C as C.str='C')'''
 
-        client.create_yds_connection("myyds", os.getenv("YDB_DATABASE"), os.getenv("YDB_ENDPOINT"))
-        query_id = client.create_query("simple", sql, type=fq.QueryContent.QueryType.STREAMING).result.query_id
-        client.wait_query_status(query_id, fq.QueryMeta.RUNNING)
-        kikimr.compute_plane.wait_zero_checkpoint(query_id)
-
-        messages1 = [
+        messages_before_restart = [
             '{"dt": 1696849942000001, "str": "A" }',
             '{"dt": 1696849942500001, "str": "B" }',
             '{"dt": 1696849943000001, "str": "C" }',
             '{"dt": 1696849943600001, "str": "D" }']       # push A+B from TimeOrderRecoverer to MatchRecognize 
-        self.write_stream(messages1)
 
-        # A + B : in MatchRecognize
-        # C + D : in TimeOrderRecoverer
+        # Before restart:
+        #    A + B : in MatchRecognize
+        #    C + D : in TimeOrderRecoverer
 
-        logging.debug("get_completed_checkpoints {}".format(kikimr.compute_plane.get_completed_checkpoints(query_id)))
-        kikimr.compute_plane.wait_completed_checkpoints(
-            query_id, kikimr.compute_plane.get_completed_checkpoints(query_id) + 1
-        )
+        messages_after_restart = [
+            '{"dt": 1696849944100001, "str": "E" }']
+        expected = [
+            '{"a_str":"A","b_str":"B","c_str":"C","dt_begin":1696849942000001,"dt_end":1696849943000001}']
+        self.recovery_impl(kikimr, client, yq_version, sql, request.node.name, messages_before_restart, messages_after_restart, expected)
 
-        self.restart_node(kikimr, query_id)
-
-        self.write_stream(['{"dt": 1696849944100001, "str": "E" }'])
-
-        assert client.get_query_status(query_id) == fq.QueryMeta.RUNNING
-
-        expected = ['{"a_str":"A","b_str":"B","c_str":"C","dt_begin":1696849942000001,"dt_end":1696849943000001}']
-
-        read_data = self.read_stream(1)
-        logging.info("Data was read: {}".format(read_data))
-
-        assert read_data == expected
-
-        client.abort_query(query_id)
-        client.wait_query(query_id)
-
-        self.dump_workers(kikimr, 0, 0)

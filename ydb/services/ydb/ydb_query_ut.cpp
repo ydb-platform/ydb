@@ -75,7 +75,6 @@ Y_UNIT_TEST_SUITE(YdbQueryService) {
         TString location = TStringBuilder() << "localhost:" << grpc;
 
         auto clientConfig = NGRpcProxy::TGRpcClientConfig(location);
-        bool allDoneOk = true;
 
         TString sessionId = CreateQuerySession(clientConfig);
 
@@ -102,15 +101,11 @@ Y_UNIT_TEST_SUITE(YdbQueryService) {
             while (res) {
                 res = reader->Read(&response);
                 if (res) {
-                    Cerr << response.DebugString() << Endl;
                     UNIT_ASSERT_VALUES_EQUAL(response.status(), Ydb::StatusIds::BAD_REQUEST);
                 }
             }
         }
-
-        UNIT_ASSERT(allDoneOk);
     }
-
 
     Y_UNIT_TEST(TestCreateDropAttachSession) {
         TKikimrWithGrpcAndRootSchema server;

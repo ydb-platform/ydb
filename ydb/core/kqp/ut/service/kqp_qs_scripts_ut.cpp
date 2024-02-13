@@ -203,7 +203,7 @@ Y_UNIT_TEST_SUITE(KqpQueryServiceScripts) {
     }
 
 
-    void ExecuteScriptWithStatsMode (Ydb::Query::StatsMode statsMode) {
+    void ExecuteScriptWithStatsMode(Ydb::Query::StatsMode statsMode) {
         auto kikimr = DefaultKikimrRunner();
         auto db = kikimr.GetQueryClient();
 

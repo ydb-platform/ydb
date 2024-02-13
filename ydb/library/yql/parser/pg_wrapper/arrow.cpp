@@ -1,6 +1,6 @@
 #include "arrow.h"
 #include "arrow_impl.h"
-#include "ydb/library/yql/minikql/defs.h"
+#include <ydb/library/yql/minikql/defs.h>
 #include <ydb/library/yql/parser/pg_wrapper/interface/arrow.h>
 #include <ydb/library/yql/parser/pg_wrapper/interface/utils.h>
 #include <ydb/library/yql/minikql/mkql_node_cast.h>

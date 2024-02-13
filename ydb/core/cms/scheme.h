@@ -37,9 +37,10 @@ struct Schema : NIceDb::Schema {
         struct Owner : Column<2, NScheme::NTypeIds::Utf8> {};
         struct Order : Column<3, NScheme::NTypeIds::Uint64> {};
         struct Content : Column<4, NScheme::NTypeIds::Utf8> {};
+        struct Priority : Column<5, NScheme::NTypeIds::Int32> {};
 
         using TKey = TableKey<ID>;
-        using TColumns = TableColumns<ID, Owner, Order, Content>;
+        using TColumns = TableColumns<ID, Owner, Order, Content, Priority>;
     };
 
     struct WalleTask : Table<4> {

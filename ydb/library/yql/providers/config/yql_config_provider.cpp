@@ -657,6 +657,16 @@ namespace {
                     return false;
                 }
             }
+            else if (name == "EvaluateParallelForLimit") {
+                if (args.size() != 1) {
+                    ctx.AddError(TIssue(pos, TStringBuilder() << "Expected 1 argument, but got " << args.size()));
+                    return false;
+                }
+                if (!TryFromString(args[0], Types.EvaluateParallelForLimit)) {
+                    ctx.AddError(TIssue(pos, TStringBuilder() << "Expected integer, but got: " << args[0]));
+                    return false;
+                }
+            }
             else if (name == "DisablePullUpFlatMapOverJoin" || name == "PullUpFlatMapOverJoin") {
                 if (args.size() != 0) {
                     ctx.AddError(TIssue(pos, TStringBuilder() << "Expected no arguments, but got " << args.size()));

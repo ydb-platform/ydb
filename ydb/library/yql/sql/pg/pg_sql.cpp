@@ -222,6 +222,7 @@ public:
         bool AllowOver = false;
         bool AllowReturnSet = false;
         bool AllowSubLinks = false;
+        bool AutoParametrizeEnabled = true;
         TVector<TAstNode*>* WindowItems = nullptr;
         TString Scope;
     };
@@ -416,6 +417,7 @@ public:
                     "client_min_messages",                  // pg_dump
                     "row_security",                        // pg_dump
                     "escape_string_warning",               // zabbix
+                    "bytea_output",                        // zabbix
                     NULL,
                 };
 
@@ -1306,6 +1308,14 @@ public:
                     if (NodeTag(field) == T_String) {
                         name = StrVal(field);
                     }
+                } else if (NodeTag(r->val) == T_FuncCall) {
+                    auto func = CAST_NODE(FuncCall, r->val);
+                    TVector<TString> names;
+                    if (!ExtractFuncName(func, names)) {
+                        return nullptr;
+                    }
+
+                    name = names.back();
                 }
             }
 
@@ -1709,6 +1719,7 @@ private:
                         TExprSettings settings;
                         settings.AllowColumns = false;
                         settings.Scope = "DEFAULT";
+                        settings.AutoParametrizeEnabled = false;
                         cinfo.Default = ParseExpr(constraintNode->raw_expr, settings);
                         if (!cinfo.Default) {
                             return false;
@@ -2323,6 +2334,9 @@ public:
         if (varName == "server_version_num") {
             return GetPostgresServerVersionNum();
         }
+        if (varName == "standard_conforming_strings"){
+            return "on";
+        }
         return {};
     }
 
@@ -2559,7 +2573,8 @@ public:
     TAstNode* BuildTableKeyExpression(const TStringBuf relname,
         const TStringBuf cluster, bool isScheme = false
     ) {
-        TString tableName = (cluster == "pg_catalog") ? TString(relname) : TablePathPrefix + relname;
+        bool noPrefix = (cluster == "pg_catalog" || cluster == "information_schema");
+        TString tableName = noPrefix ? TString(relname) : TablePathPrefix + relname;
         return L(A("Key"), QL(QA(isScheme ? "tablescheme" : "table"),
                             L(A("String"), QAX(std::move(tableName)))));
     }
@@ -3107,7 +3122,7 @@ public:
             ? L(A("PgType"), QA(TPgConst::ToString(valueNType->type)))
             : L(A("PgType"), QA("unknown"));
 
-        if (Settings.AutoParametrizeEnabled && !Settings.AutoParametrizeExprDisabledScopes.contains(settings.Scope)) {
+        if (Settings.AutoParametrizeEnabled && settings.AutoParametrizeEnabled) {
             return AutoParametrizeConst(std::move(valueNType.GetRef()), pgTypeNode);
         }
 
@@ -3370,28 +3385,7 @@ public:
         }
 
         TVector<TString> names;
-        for (int i = 0; i < ListLength(value->funcname); ++i) {
-            auto x = ListNodeNth(value->funcname, i);
-            if (NodeTag(x) != T_String) {
-                NodeNotImplemented(value, x);
-                return nullptr;
-            }
-
-            names.push_back(to_lower(TString(StrVal(x))));
-        }
-
-        if (names.empty()) {
-            AddError("FuncCall: missing function name");
-            return nullptr;
-        }
-
-        if (names.size() > 2) {
-            AddError(TStringBuilder() << "FuncCall: too many name components:: " << names.size());
-            return nullptr;
-        }
-
-        if (names.size() == 2 && names[0] != "pg_catalog") {
-            AddError(TStringBuilder() << "FuncCall: expected pg_catalog, but got: " << names[0]);
+        if (!ExtractFuncName(value, names)) {
             return nullptr;
         }
 
@@ -3476,6 +3470,35 @@ public:
         }
 
         return VL(args.data(), args.size());
+    }
+
+    bool ExtractFuncName(const FuncCall* value, TVector<TString>& names) {
+        for (int i = 0; i < ListLength(value->funcname); ++i) {
+            auto x = ListNodeNth(value->funcname, i);
+            if (NodeTag(x) != T_String) {
+                NodeNotImplemented(value, x);
+                return false;
+            }
+
+            names.push_back(to_lower(TString(StrVal(x))));
+        }
+
+        if (names.empty()) {
+            AddError("FuncCall: missing function name");
+            return false;
+        }
+
+        if (names.size() > 2) {
+            AddError(TStringBuilder() << "FuncCall: too many name components:: " << names.size());
+            return false;
+        }
+
+        if (names.size() == 2 && names[0] != "pg_catalog") {
+            AddError(TStringBuilder() << "FuncCall: expected pg_catalog, but got: " << names[0]);
+            return false;
+        }
+
+        return true;
     }
 
     TAstNode* ParseTypeCast(const TypeCast* value, const TExprSettings& settings) {

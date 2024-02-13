@@ -104,6 +104,7 @@ SELECT regexp_split_to_array('the quick brown fox jumps over the lazy dog', $re$
 SELECT foo, length(foo) FROM regexp_split_to_table('the quick brown fox jumps over the lazy dog', $re$\s*$re$) AS foo;
 SELECT regexp_split_to_array('the quick brown fox jumps over the lazy dog', $re$\s*$re$);
 SELECT foo, length(foo) FROM regexp_split_to_table('the quick brown fox jumps over the lazy dog', '') AS foo;
+SELECT regexp_split_to_array('the quick brown fox jumps over the lazy dog', '');
 -- case insensitive
 SELECT foo, length(foo) FROM regexp_split_to_table('thE QUick bROWn FOx jUMPs ovEr The lazy dOG', 'e', 'i') AS foo;
 SELECT regexp_split_to_array('thE QUick bROWn FOx jUMPs ovEr The lazy dOG', 'e', 'i');

@@ -1,7 +1,6 @@
 #include "config.h"
 #include "control_plane_proxy.h"
 #include "probes.h"
-#include "utils.h"
 
 #include <ydb/core/fq/libs/actors/logging/log.h>
 #include <ydb/core/fq/libs/compute/ydb/control_plane/compute_database_control_plane_service.h>
@@ -23,6 +22,7 @@
 #include <ydb/core/fq/libs/control_plane_proxy/actors/utils.h>
 #include <ydb/core/fq/libs/control_plane_proxy/actors/ydb_schema_query_actor.h>
 #include <ydb/core/fq/libs/control_plane_proxy/events/events.h>
+#include <ydb/core/fq/libs/control_plane_proxy/utils/utils.h>
 #include <ydb/public/lib/fq/scope.h>
 
 #include <ydb/library/actors/core/actor.h>

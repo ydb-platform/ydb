@@ -283,6 +283,21 @@ private:
 ////////////////////////////////////////////////////////////////////////////////
 
 template <class T>
+concept CExternalizedYsonStructTraits = requires {
+    typename T::TExternalSerializer;
+};
+
+template <class T>
+concept CExternallySerializable = requires (T t) {
+    { GetExternalizedYsonStructTraits(t) } -> CExternalizedYsonStructTraits;
+};
+
+template <CExternallySerializable T>
+using TGetExternalizedYsonStructTraits = decltype(GetExternalizedYsonStructTraits(std::declval<T>()));
+
+////////////////////////////////////////////////////////////////////////////////
+
+template <class T>
 TIntrusivePtr<T> CloneYsonStruct(const TIntrusivePtr<const T>& obj);
 template <class T>
 TIntrusivePtr<T> CloneYsonStruct(const TIntrusivePtr<T>& obj);
@@ -294,6 +309,16 @@ THashMap<TString, TIntrusivePtr<T>> CloneYsonStructs(const THashMap<TString, TIn
 void Serialize(const TYsonStructBase& value, NYson::IYsonConsumer* consumer);
 void Deserialize(TYsonStructBase& value, INodePtr node);
 void Deserialize(TYsonStructBase& value, NYson::TYsonPullParserCursor* cursor);
+
+template <class T>
+    requires CExternallySerializable<T>
+void Serialize(const T& value, NYson::IYsonConsumer* consumer);
+template <class T>
+    requires CExternallySerializable<T>
+void Deserialize(T& value, INodePtr node);
+template <class T>
+    requires CExternallySerializable<T>
+void Deserialize(T& value, NYson::TYsonPullParserCursor* cursor);
 
 template <class T>
 TIntrusivePtr<T> UpdateYsonStruct(
@@ -351,6 +376,11 @@ void UpdateYsonStructField(TIntrusivePtr<TDst>& dst, const TIntrusivePtr<TSrc>& 
 #define REGISTER_EXTERNALIZED_YSON_STRUCT(TStruct, TSerializer)
 
 #define REGISTER_DERIVED_EXTERNALIZED_YSON_STRUCT(TStruct, TSerializer, TBases)
+
+//! Assign TSerializer to a TStruct so it can be found during (de-) serialization.
+//! NB(arkady-e1ppa): This macro must be used in the same namespace as the one TStruct is in.
+//! Otherwise ADL will not be able to find proper overload.
+#define ASSIGN_EXTERNAL_YSON_SERIALIZER(TStruct, TSerializer)
 
 ////////////////////////////////////////////////////////////////////////////////
 

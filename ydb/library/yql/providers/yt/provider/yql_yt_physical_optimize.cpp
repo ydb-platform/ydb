@@ -7002,22 +7002,17 @@ private:
                         continue;
                     }
 
-                    if (NYql::HasSetting(innerMerge.Settings().Ref(), EYtSettingType::KeepSorted)) {
-                        if (!AllOf(innerMergeSection.Paths(), [](const auto& path) {
-                            auto op = path.Table().template Maybe<TYtOutput>().Operation();
-                            return op && (op.template Maybe<TYtTouch>() || (op.Raw()->HasResult() && op.Raw()->GetResult().IsWorld()));
-                        })) {
-                            continue;
-                        }
+                    auto mergeOutRowSpec = TYqlRowSpecInfo(innerMerge.Output().Item(0).RowSpec());
+                    const bool sortedMerge = mergeOutRowSpec.IsSorted();
+                    if (hasTakeSkip && sortedMerge && NYql::HasSetting(innerMerge.Settings().Ref(), EYtSettingType::KeepSorted)) {
+                        continue;
                     }
                     if (hasTakeSkip && AnyOf(innerMergeSection.Paths(), [](const auto& path) { return !path.Ranges().template Maybe<TCoVoid>(); })) {
                         continue;
                     }
 
                     const bool unordered = IsUnorderedOutput(path.Table().Cast<TYtOutput>());
-                    auto mergeOutRowSpec = TYqlRowSpecInfo(innerMerge.Output().Item(0).RowSpec());
                     if (innerMergeSection.Paths().Size() > 1) {
-                        const bool sortedMerge = mergeOutRowSpec.IsSorted();
                         if (hasTakeSkip && sortedMerge) {
                             continue;
                         }

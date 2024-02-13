@@ -440,13 +440,13 @@ void TestBurst(const TBlobStorageGroupInfo::TTopology& topology, TInflightActor*
 #define MAKE_BURST_TEST(requestType, requests, inflight, delay, distribution)                       \
 Y_UNIT_TEST(Test##requestType##distribution) {                                                      \
     TBlobStorageGroupInfo::TTopology topology(TBlobStorageGroupType::ErasureNone, 1, 1, 1, true);   \
-    auto* actor = new TInflightActor##requestType({requests, inflight, delay}, 10_KB);               \
+    auto* actor = new TInflightActor##requestType({requests, inflight, delay}, 8_MB);               \
     TestBurst(topology, actor, ELoadDistribution::Distribution##distribution);                      \
 }
 
 Y_UNIT_TEST_SUITE(BurstDetection) {
-    MAKE_BURST_TEST(Put, 3000, 1, TDuration::MilliSeconds(5), Evenly);
-    MAKE_BURST_TEST(Put, 3000, 1000000, TDuration::Zero(), Burst);
+    MAKE_BURST_TEST(Put, 50, 1, TDuration::MilliSeconds(100), Evenly);
+    MAKE_BURST_TEST(Put, 50, 100, TDuration::Zero(), Burst);
 }
 
 #undef MAKE_BURST_TEST

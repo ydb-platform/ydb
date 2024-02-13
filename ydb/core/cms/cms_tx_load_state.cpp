@@ -83,12 +83,14 @@ public:
             TString id = requestRowset.GetValue<Schema::Request::ID>();
             TString owner = requestRowset.GetValue<Schema::Request::Owner>();
             ui64 order = requestRowset.GetValue<Schema::Request::Order>();
+            i32 priority = requestRowset.GetValueOrDefault<Schema::Request::Priority>();
             TString requestStr = requestRowset.GetValue<Schema::Request::Content>();
 
             TRequestInfo request;
             request.RequestId = id;
             request.Owner = owner;
             request.Order = order;
+            request.Priority = priority;
             google::protobuf::TextFormat::ParseFromString(requestStr, &request.Request);
 
             LOG_DEBUG(ctx, NKikimrServices::CMS, "Loaded request %s owned by %s: %s",

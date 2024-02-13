@@ -3,6 +3,8 @@ items:
   href: suggest-change.md
 - name: Сборка и тесты Ya
   href: build-ya.md
+- name: Релизы
+  href: manage-releases.md
 - name: Ядро
   items:
   - name: LocalDB

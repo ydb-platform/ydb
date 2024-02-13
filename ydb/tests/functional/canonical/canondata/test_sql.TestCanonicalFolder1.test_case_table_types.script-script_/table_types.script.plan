@@ -1,10 +1,94 @@
 {
     "meta": {
-        "version": "0.2",
-        "type": "script"
+        "type": "script",
+        "version": "0.2"
     },
     "queries": [
         {
+            "Plan": {
+                "Node Type": "Query",
+                "PlanNodeType": "Query",
+                "Plans": [
+                    {
+                        "Node Type": "ResultSet",
+                        "PlanNodeId": 4,
+                        "PlanNodeType": "ResultSet",
+                        "Plans": [
+                            {
+                                "Node Type": "Limit",
+                                "Operators": [
+                                    {
+                                        "Inputs": [
+                                            {
+                                                "ExternalPlanNodeId": 2
+                                            }
+                                        ],
+                                        "Limit": "1001",
+                                        "Name": "Limit"
+                                    }
+                                ],
+                                "PlanNodeId": 3,
+                                "Plans": [
+                                    {
+                                        "Node Type": "UnionAll",
+                                        "PlanNodeId": 2,
+                                        "PlanNodeType": "Connection",
+                                        "Plans": [
+                                            {
+                                                "Node Type": "Limit-TableFullScan",
+                                                "Operators": [
+                                                    {
+                                                        "Inputs": [
+                                                            {
+                                                                "InternalOperatorId": 1
+                                                            }
+                                                        ],
+                                                        "Limit": "1001",
+                                                        "Name": "Limit"
+                                                    },
+                                                    {
+                                                        "Inputs": [],
+                                                        "Name": "TableFullScan",
+                                                        "ReadColumns": [
+                                                            "Key",
+                                                            "Value01",
+                                                            "Value02",
+                                                            "Value03",
+                                                            "Value04",
+                                                            "Value05",
+                                                            "Value06",
+                                                            "Value07",
+                                                            "Value08",
+                                                            "Value09",
+                                                            "Value10",
+                                                            "Value21",
+                                                            "Value22",
+                                                            "Value23",
+                                                            "Value24",
+                                                            "Value31",
+                                                            "Value32",
+                                                            "Value33",
+                                                            "Value34"
+                                                        ],
+                                                        "ReadRanges": [
+                                                            "Key (-\u221e, +\u221e)"
+                                                        ],
+                                                        "Table": "base_table_types_script_script/TableTypes"
+                                                    }
+                                                ],
+                                                "PlanNodeId": 1,
+                                                "Tables": [
+                                                    "base_table_types_script_script/TableTypes"
+                                                ]
+                                            }
+                                        ]
+                                    }
+                                ]
+                            }
+                        ]
+                    }
+                ]
+            },
             "tables": [
                 {
                     "name": "/local/base_table_types_script_script/TableTypes",
@@ -38,93 +122,45 @@
                         }
                     ]
                 }
-            ],
+            ]
+        },
+        {
             "Plan": {
+                "Node Type": "Query",
+                "PlanNodeType": "Query",
                 "Plans": [
                     {
-                        "PlanNodeId": 4,
+                        "Node Type": "Effect",
+                        "PlanNodeId": 2,
                         "Plans": [
                             {
-                                "PlanNodeId": 3,
-                                "Plans": [
-                                    {
-                                        "PlanNodeId": 2,
-                                        "Plans": [
-                                            {
-                                                "Tables": [
-                                                    "base_table_types_script_script/TableTypes"
-                                                ],
-                                                "PlanNodeId": 1,
-                                                "Operators": [
-                                                    {
-                                                        "Inputs": [
-                                                            {
-                                                                "InternalOperatorId": 1
-                                                            }
-                                                        ],
-                                                        "Name": "Limit",
-                                                        "Limit": "1001"
-                                                    },
-                                                    {
-                                                        "Inputs": [],
-                                                        "ReadRanges": [
-                                                            "Key (-\u221e, +\u221e)"
-                                                        ],
-                                                        "ReadColumns": [
-                                                            "Key",
-                                                            "Value01",
-                                                            "Value02",
-                                                            "Value03",
-                                                            "Value04",
-                                                            "Value05",
-                                                            "Value06",
-                                                            "Value07",
-                                                            "Value08",
-                                                            "Value09",
-                                                            "Value10",
-                                                            "Value21",
-                                                            "Value22",
-                                                            "Value23",
-                                                            "Value24",
-                                                            "Value31",
-                                                            "Value32",
-                                                            "Value33",
-                                                            "Value34"
-                                                        ],
-                                                        "Name": "TableFullScan",
-                                                        "Table": "base_table_types_script_script/TableTypes"
-                                                    }
-                                                ],
-                                                "Node Type": "Limit-TableFullScan"
-                                            }
-                                        ],
-                                        "Node Type": "UnionAll",
-                                        "PlanNodeType": "Connection"
-                                    }
-                                ],
+                                "CTE Name": "precompute_0_0",
+                                "Node Type": "Upsert-ConstantExpr",
                                 "Operators": [
                                     {
                                         "Inputs": [
                                             {
-                                                "ExternalPlanNodeId": 2
+                                                "InternalOperatorId": 1
                                             }
                                         ],
-                                        "Name": "Limit",
-                                        "Limit": "1001"
+                                        "Name": "Upsert",
+                                        "Table": "base_table_types_script_script/TableTypes"
+                                    },
+                                    {
+                                        "Inputs": [],
+                                        "Iterator": "precompute_0_0",
+                                        "Name": "Iterator"
                                     }
                                 ],
-                                "Node Type": "Limit"
+                                "PlanNodeId": 1,
+                                "Tables": [
+                                    "base_table_types_script_script/TableTypes"
+                                ]
                             }
-                        ],
-                        "Node Type": "ResultSet",
-                        "PlanNodeType": "ResultSet"
+                        ]
                     }
-                ],
-                "Node Type": "Query",
-                "PlanNodeType": "Query"
-            }
-        },
-        {
+                ]
+            },
             "tables": [
                 {
                     "name": "/local/base_table_types_script_script/TableTypes",
@@ -155,43 +191,7 @@
                         }
                     ]
                 }
-            ],
-            "Plan": {
-                "Plans": [
-                    {
-                        "PlanNodeId": 2,
-                        "Plans": [
-                            {
-                                "Tables": [
-                                    "base_table_types_script_script/TableTypes"
-                                ],
-                                "PlanNodeId": 1,
-                                "Operators": [
-                                    {
-                                        "Inputs": [
-                                            {
-                                                "InternalOperatorId": 1
-                                            }
-                                        ],
-                                        "Name": "Upsert",
-                                        "Table": "base_table_types_script_script/TableTypes"
-                                    },
-                                    {
-                                        "Inputs": [],
-                                        "Iterator": "precompute_0_0",
-                                        "Name": "Iterator"
-                                    }
-                                ],
-                                "Node Type": "Upsert-ConstantExpr",
-                                "CTE Name": "precompute_0_0"
-                            }
-                        ],
-                        "Node Type": "Effect"
-                    }
-                ],
-                "Node Type": "Query",
-                "PlanNodeType": "Query"
-            }
+            ]
         }
     ]
 }

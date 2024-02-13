@@ -1140,6 +1140,10 @@ public:
                 break;
         }
 
+        if (Params.Temporary) {
+            opts = L(opts, Q(Y(Q("temporary"))));
+        }
+
         Add("block", Q(Y(
             Y("let", "sink", Y("DataSink", BuildQuotedAtom(Pos, Table.Service), Scoped->WrapCluster(Table.Cluster, ctx))),
             Y("let", "world", Y(TString(WriteName), "world", "sink", keys, Y("Void"), Q(opts))),
@@ -3010,12 +3014,13 @@ TNodePtr BuildWorldIfNode(TPosition pos, TNodePtr predicate, TNodePtr thenNode, 
 
 class TWorldFor final : public TAstListNode {
 public:
-    TWorldFor(TPosition pos, TNodePtr list, TNodePtr bodyNode, TNodePtr elseNode, bool isEvaluate)
+    TWorldFor(TPosition pos, TNodePtr list, TNodePtr bodyNode, TNodePtr elseNode, bool isEvaluate, bool isParallel)
         : TAstListNode(pos)
         , List(list)
         , BodyNode(bodyNode)
         , ElseNode(elseNode)
         , IsEvaluate(isEvaluate)
+        , IsParallel(isParallel)
     {
         FakeSource = BuildFakeSource(pos);
     }
@@ -3024,7 +3029,7 @@ public:
         if (!List->Init(ctx, FakeSource.Get())) {
             return{};
         }
-        Add(IsEvaluate ? "EvaluateFor!" : "For!");
+        Add(TStringBuilder() << (IsEvaluate ? "Evaluate": "") << (IsParallel ? "Parallel" : "") << "For!");
         Add("world");
         Add(IsEvaluate ? Y("EvaluateExpr", List) : List);
 
@@ -3052,10 +3057,11 @@ private:
     TNodePtr BodyNode;
     TNodePtr ElseNode;
     bool IsEvaluate;
+    bool IsParallel;
     TSourcePtr FakeSource;
 };
 
-TNodePtr BuildWorldForNode(TPosition pos, TNodePtr list, TNodePtr bodyNode, TNodePtr elseNode, bool isEvaluate) {
-    return new TWorldFor(pos, list, bodyNode, elseNode, isEvaluate);
+TNodePtr BuildWorldForNode(TPosition pos, TNodePtr list, TNodePtr bodyNode, TNodePtr elseNode, bool isEvaluate, bool isParallel) {
+    return new TWorldFor(pos, list, bodyNode, elseNode, isEvaluate, isParallel);
 }
 } // namespace NSQLTranslationV1

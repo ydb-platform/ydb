@@ -67,10 +67,14 @@ TJoinOptimizerNode::TJoinOptimizerNode(const std::shared_ptr<IBaseOptimizerNode>
     IBaseOptimizerNode(JoinNodeType), 
     LeftArg(left), 
     RightArg(right), 
-    JoinConditions(joinConditions), 
+    JoinConditions(joinConditions),
     JoinType(joinType),
     JoinAlgo(joinAlgo) {
         IsReorderable = (JoinType==EJoinKind::InnerJoin) && (nonReorderable==false);
+        for (auto [l,r] : joinConditions ) {
+            LeftJoinKeys.push_back(l.AttributeName);
+            RightJoinKeys.push_back(r.AttributeName);
+        }
     }
 
 TVector<TString> TJoinOptimizerNode::Labels() {
@@ -97,7 +101,9 @@ void TJoinOptimizerNode::Print(std::stringstream& stream, int ntabs) {
         stream << "\t";
     }
 
-    stream << *Stats << "\n";
+    if (Stats) {
+        stream << *Stats << "\n";
+    }
 
     LeftArg->Print(stream, ntabs+1);
     RightArg->Print(stream, ntabs+1);

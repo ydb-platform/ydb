@@ -184,6 +184,28 @@ In the classical version, the result of integer division remains integer (by def
 If disabled, the result is always Double.
 ClassicDivision is a [scoped](#pragmascope) setting.
 
+### UnicodeLiterals
+
+`UnicodeLiterals`/`DisableUnicodeLiterals`
+
+| Value type | Default |
+| --- | --- |
+| Flag | false |
+
+When this mode is enabled, string literals without suffixes like "foo"/'bar'/@@multiline@@ will be of type `Utf8`, when disabled - `String`.
+UnicodeLiterals is a [scoped](#pragmascope) setting.
+
+### WarnUntypedStringLiterals
+
+`WarnUntypedStringLiterals`/`DisableWarnUntypedStringLiterals`
+
+| Value type | Default |
+| --- | --- |
+| Flag | false |
+
+When this mode is enabled, a warning will be generated for string literals without suffixes like "foo"/'bar'/@@multiline@@. It can be suppressed by explicitly choosing the suffix `s` for the `String` type, or `u` for the `Utf8` type.
+WarnUntypedStringLiterals is a [scoped](#pragmascope) setting.
+
 ### AllowDotInAlias
 
 | Value type | Default |

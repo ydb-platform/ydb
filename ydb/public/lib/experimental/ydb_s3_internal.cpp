@@ -15,11 +15,10 @@
 namespace NYdb {
 namespace NS3Internal {
 
-TS3ListingResult::TS3ListingResult(TResultSet&& commonPrefixes, TResultSet&& contents, ui32 keySuffixSize, TStatus&& status)
+TS3ListingResult::TS3ListingResult(TResultSet&& commonPrefixes, TResultSet&& contents, TStatus&& status)
     : TStatus(std::move(status))
     , CommonPrefixes(std::move(commonPrefixes))
     , Contents(std::move(contents))
-    , KeySuffixSize(keySuffixSize)
 {}
 
 const TResultSet& TS3ListingResult::GetCommonPrefixes() const {
@@ -28,10 +27,6 @@ const TResultSet& TS3ListingResult::GetCommonPrefixes() const {
 
 const TResultSet& TS3ListingResult::GetContents() const {
     return Contents;
-}
-
-ui32 TS3ListingResult::GetKeySuffixSize() const {
-    return KeySuffixSize;
 }
 
 void SetProtoValue(Ydb::TypedValue& out, TValue&& in) {
@@ -76,8 +71,7 @@ public:
                 TResultSet commonPrefixes(result.Getcommon_prefixes());
                 TResultSet contents(result.Getcontents());
 
-                TS3ListingResult val(std::move(commonPrefixes), std::move(contents), result.Getkey_suffix_size(),
-                    TStatus(std::move(status)));
+                TS3ListingResult val(std::move(commonPrefixes), std::move(contents), TStatus(std::move(status)));
                 promise.SetValue(std::move(val));
             };
 

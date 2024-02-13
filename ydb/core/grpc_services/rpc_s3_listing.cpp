@@ -553,7 +553,7 @@ private:
             return JoinVectorIntoString(shards, ", ");
         };
 
-        LOG_DEBUG_S(ctx, NKikimrServices::MSGBUS_REQUEST, "Range shards: "
+        LOG_DEBUG_S(ctx, NKikimrServices::RPC_REQUEST, "Range shards: "
             << getShardsString(KeyRange->GetPartitions()));
 
         if (KeyRange->GetPartitions().size() > 0) {
@@ -583,7 +583,7 @@ private:
             ev->Record.AddColumnsToReturn(ci.Id);
         }
 
-        LOG_DEBUG_S(ctx, NKikimrServices::MSGBUS_REQUEST, "Sending request to shards " << shardId);
+        LOG_DEBUG_S(ctx, NKikimrServices::RPC_REQUEST, "Sending request to shards " << shardId);
 
         ctx.Send(LeaderPipeCache, new TEvPipeCache::TEvForward(ev.Release(), shardId, true), IEventHandle::FlagTrackDelivery);
 
@@ -635,7 +635,7 @@ private:
 
         for (size_t i = 0; i < shardResponse.CommonPrefixesRowsSize(); ++i) {
             if (!CommonPrefixesRows.empty() && CommonPrefixesRows.back().GetBuffer() == shardResponse.GetCommonPrefixesRows(i)) {
-                LOG_ERROR_S(ctx, NKikimrServices::MSGBUS_REQUEST, "S3 listing got duplicate common prefix from shard " << shardResponse.GetTabletID());
+                LOG_ERROR_S(ctx, NKikimrServices::RPC_REQUEST, "S3 listing got duplicate common prefix from shard " << shardResponse.GetTabletID());
             }
             CommonPrefixesRows.emplace_back(shardResponse.GetCommonPrefixesRows(i));
         }
@@ -709,7 +709,6 @@ private:
 
     void ReplySuccess(const NActors::TActorContext& ctx) {
         Ydb::S3Internal::S3ListingResult resp;
-        resp.Setkey_suffix_size(KeyColumnTypes.size() - PathColumnInfo.KeyOrder);
 
         auto &commonPrefixes = *resp.mutable_common_prefixes();
         commonPrefixes.set_truncated(false);

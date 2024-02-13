@@ -12,17 +12,15 @@ struct TS3ListingSettings : public TOperationRequestSettings<TS3ListingSettings>
 class TS3ListingResult : public TStatus {
     friend class TS3InternalClient;
 private:
-    TS3ListingResult(TResultSet&& commonPrefixes, TResultSet&& contents, ui32 keySuffixSize, TStatus&& status);
+    TS3ListingResult(TResultSet&& commonPrefixes, TResultSet&& contents, TStatus&& status);
 
 public:
     const TResultSet& GetCommonPrefixes() const;
     const TResultSet& GetContents() const;
-    ui32 GetKeySuffixSize() const;
 
 private:
     TResultSet CommonPrefixes;
     TResultSet Contents;
-    const ui32 KeySuffixSize;
 };
 
 using TAsyncS3ListingResult = NThreading::TFuture<TS3ListingResult>;

@@ -19,8 +19,7 @@ import ydb.public.api.protos.draft.fq_pb2 as fq
 
 @retry.retry(retry.RetryConf().upto(10))
 def wait_for_query_status(client, query_id, statuses):
-    status_json = client.get_query_status(query_id)
-    status = status_json["status"]
+    status = client.get_query_status(query_id)
     if status not in statuses:
         raise Exception(f"Status {status} is not in {statuses}")
     return status

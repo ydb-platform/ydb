@@ -35,7 +35,7 @@ Also, in any case, you cannot roll back more than 2 major versions relative to t
 
 * v.22.2.5	->	v.22.2.47: Update is possible.
 * v.22.2.47	->	v.22.3.21: Update is possible.
-* v.22.2.40	->	v.22.4.21: Update is impossible, first upgrade to the latest version (v.22.2.47).
+* v.22.2.40	->	v.22.3.21: Update is impossible, first upgrade to the latest version (v.22.2.47).
 * v.22.2.47	->	v.22.5.5: Update is impossible, upgrade to the next major version (v.22.4).*
 
 ## Checking update results {#upgrade_check}

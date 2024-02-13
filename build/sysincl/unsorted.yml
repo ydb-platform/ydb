@@ -356,13 +356,6 @@
   #if defined(__sgi)
   - sgidefs.h
   #endif
-  #if defined(__BEOS__)
-  - ByteOrder.h
-  - OS.h
-  - support/SupportDefs.h
-  - kernel/OS.h
-  - kernel/image.h
-  #endif
   #if defined(_sun_)
   - procfs.h
   #endif

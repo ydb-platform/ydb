@@ -41,7 +41,7 @@ namespace {
         return conf;
     }
 
-    struct TPartIndexSeekFixture : public benchmark::Fixture {
+    struct TPartEggsFixture : public benchmark::Fixture {
         using TGroupId = NPage::TGroupId;
 
         void SetUp(const ::benchmark::State& state) 
@@ -84,7 +84,7 @@ namespace {
         TGroupId GroupId;
     };
 
-    struct TPartIndexIteratorFixture : public benchmark::Fixture {
+    struct TPartSubsetFixture : public benchmark::Fixture {
         using TGroupId = NPage::TGroupId;
 
         void SetUp(const ::benchmark::State& state) 
@@ -96,6 +96,14 @@ namespace {
             Mass = new NTest::TMass(new NTest::TModelStd(groups), history ? 1000000 : 300000);
             Subset = TMake(*Mass, PageConf(Mass->Model->Scheme->Families.size(), useBTree)).Mixed(0, 1, TMixerOne{ }, history ? 0.7 : 0);
             
+            for (const auto& part : Subset->Flatten) {
+                Cerr << "DataBytes = " << part->Stat.Bytes << " DataPages = " << IndexTools::CountMainPages(*part) << Endl;
+                Cerr << "FlatIndexBytes = " << part->GetPageSize(part->IndexPages.Groups[groups ? 1 : 0], {}) << " BTreeIndexBytes = " << (useBTree ? part->IndexPages.BTreeGroups[groups ? 1 : 0].IndexSize : 0) << Endl;
+                if (useBTree) {
+                    Cerr << "Levels = " << part->IndexPages.BTreeGroups[groups ? 1 : 0].LevelCount << Endl;
+                }
+            }
+
             if (history) {
                 Checker = new TCheckIt(*Subset, {new TTestEnv()}, TRowVersion(0, 8));
                 CheckerReverse = new TCheckReverseIt(*Subset, {new TTestEnv()}, TRowVersion(0, 8));
@@ -110,10 +118,11 @@ namespace {
         TAutoPtr<TSubset> Subset;
         TAutoPtr<TCheckIt> Checker;
         TAutoPtr<TCheckReverseIt> CheckerReverse;
+        TTestEnv Env;
     };
 }
 
-BENCHMARK_DEFINE_F(TPartIndexSeekFixture, SeekRowId)(benchmark::State& state) {
+BENCHMARK_DEFINE_F(TPartEggsFixture, SeekRowId)(benchmark::State& state) {
     const bool useBTree = state.range(0);
 
     for (auto _ : state) {
@@ -129,7 +138,7 @@ BENCHMARK_DEFINE_F(TPartIndexSeekFixture, SeekRowId)(benchmark::State& state) {
     }
 }
 
-BENCHMARK_DEFINE_F(TPartIndexSeekFixture, Next)(benchmark::State& state) {
+BENCHMARK_DEFINE_F(TPartEggsFixture, Next)(benchmark::State& state) {
     const bool useBTree = state.range(0);
 
     THolder<IIndexIter> iter;
@@ -150,7 +159,7 @@ BENCHMARK_DEFINE_F(TPartIndexSeekFixture, Next)(benchmark::State& state) {
     }
 }
 
-BENCHMARK_DEFINE_F(TPartIndexSeekFixture, Prev)(benchmark::State& state) {
+BENCHMARK_DEFINE_F(TPartEggsFixture, Prev)(benchmark::State& state) {
     const bool useBTree = state.range(0);
 
     THolder<IIndexIter> iter;
@@ -171,7 +180,7 @@ BENCHMARK_DEFINE_F(TPartIndexSeekFixture, Prev)(benchmark::State& state) {
     }
 }
 
-BENCHMARK_DEFINE_F(TPartIndexSeekFixture, SeekKey)(benchmark::State& state) {
+BENCHMARK_DEFINE_F(TPartEggsFixture, SeekKey)(benchmark::State& state) {
     const bool useBTree = state.range(0);
     const ESeek seek = ESeek(state.range(2));
 
@@ -190,7 +199,7 @@ BENCHMARK_DEFINE_F(TPartIndexSeekFixture, SeekKey)(benchmark::State& state) {
     }
 }
 
-BENCHMARK_DEFINE_F(TPartIndexIteratorFixture, DoReads)(benchmark::State& state) {
+BENCHMARK_DEFINE_F(TPartSubsetFixture, DoReads)(benchmark::State& state) {
     const bool reverse = state.range(3);
     const ESeek seek = static_cast<ESeek>(state.range(4));
     const ui32 items = state.range(5);
@@ -212,39 +221,72 @@ BENCHMARK_DEFINE_F(TPartIndexIteratorFixture, DoReads)(benchmark::State& state) 
     }
 }
 
-BENCHMARK_REGISTER_F(TPartIndexSeekFixture, SeekRowId)
+BENCHMARK_DEFINE_F(TPartSubsetFixture, DoCharge)(benchmark::State& state) {
+    const bool reverse = state.range(3);
+    const ui32 items = state.range(4);
+
+    auto tags = TVector<TTag>();
+    for (auto c : Subset->Scheme->Cols) {
+        tags.push_back(c.Tag);
+    }
+    TRun run(*Subset->Scheme->Keys);
+    NTest::TRowTool tool(*Subset->Scheme);
+
+    for (auto _ : state) {
+        auto row1 = Rnd.Uniform(Mass->Saved.Size());
+        auto row2 = Min(row1 + items, Mass->Saved.Size() - 1);
+        auto key1 = tool.KeyCells(Mass->Saved[row1]);
+        auto key2 = tool.KeyCells(Mass->Saved[row2]);
+        if (reverse) {
+            ChargeRangeReverse(&Env, key1, key2, run, *Subset->Scheme->Keys, tags, items, 0);
+        } else {
+            ChargeRange(&Env, key1, key2, run, *Subset->Scheme->Keys, tags, items, 0);
+        }
+    }
+}
+
+BENCHMARK_REGISTER_F(TPartEggsFixture, SeekRowId)
     ->ArgsProduct({
         /* b-tree */ {0, 1},
         /* groups: */ {0, 1}})
     ->Unit(benchmark::kMicrosecond);
 
-BENCHMARK_REGISTER_F(TPartIndexSeekFixture, Next)
+BENCHMARK_REGISTER_F(TPartEggsFixture, Next)
     ->ArgsProduct({
         /* b-tree */ {0, 1},
         /* groups: */ {0, 1}})
     ->Unit(benchmark::kMicrosecond);
 
-BENCHMARK_REGISTER_F(TPartIndexSeekFixture, Prev)
+BENCHMARK_REGISTER_F(TPartEggsFixture, Prev)
     ->ArgsProduct({
         /* b-tree */ {0, 1},
         /* groups: */ {0, 1}})
     ->Unit(benchmark::kMicrosecond);
 
-BENCHMARK_REGISTER_F(TPartIndexSeekFixture, SeekKey)
+BENCHMARK_REGISTER_F(TPartEggsFixture, SeekKey)
     ->ArgsProduct({
         /* b-tree */ {0, 1},
         /* groups: */ {0, 1},
-        /* ESeek: */ {0, 1, 2}})
+        /* ESeek: */ {1}})
     ->Unit(benchmark::kMicrosecond);
 
-BENCHMARK_REGISTER_F(TPartIndexIteratorFixture, DoReads)
+BENCHMARK_REGISTER_F(TPartSubsetFixture, DoReads)
     ->ArgsProduct({
         /* b-tree */ {0, 1},
         /* groups: */ {1},
         /* history: */ {1},
         /* reverse: */ {0},
         /* ESeek: */ {1},
-        /* items */ {1, 10, 100}})
+        /* items */ {1, 50, 1000}})
+    ->Unit(benchmark::kMicrosecond);
+
+BENCHMARK_REGISTER_F(TPartSubsetFixture, DoCharge)
+    ->ArgsProduct({
+        /* b-tree */ {0, 1},
+        /* groups: */ {1},
+        /* history: */ {1},
+        /* reverse: */ {0},
+        /* items */ {1, 50, 1000}})
     ->Unit(benchmark::kMicrosecond);
 
 }

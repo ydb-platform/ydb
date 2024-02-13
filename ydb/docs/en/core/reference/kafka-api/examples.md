@@ -248,7 +248,7 @@ For more information about Kafka Connect and its configuration, see the [Apache 
     name=local-file-sink
     connector.class=FileStreamSink
     tasks.max=1
-    file=file_to_write.json
+    file=/etc/kafka-connect-worker/file_to_write.json
     topics=Topic-1
     ```
 

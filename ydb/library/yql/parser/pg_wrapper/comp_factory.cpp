@@ -411,12 +411,13 @@ public:
                 ApplyFillers(AllPgDatabaseStatFillers, Y_ARRAY_SIZE(AllPgDatabaseStatFillers), PgDatabaseStatFillers_);
             } else if (Table_ == "pg_class") {
                 static const std::pair<const char*, TPgClassFiller> AllPgClassFillers[] = {
-                    {"oid", [](const NPg::TTableInfo& desc, ui32) { return ScalarDatumToPod(ObjectIdGetDatum(desc.Oid)); }},
-                    {"relispartition", [](const NPg::TTableInfo&, ui32) { return ScalarDatumToPod(BoolGetDatum(false)); }},
-                    {"relkind", [](const NPg::TTableInfo& desc, ui32) { return ScalarDatumToPod(CharGetDatum(desc.Kind)); }},
-                    {"relname", [](const NPg::TTableInfo& desc, ui32) { return PointerDatumToPod((Datum)MakeFixedString(desc.Name, NAMEDATALEN)); }},
-                    {"relnamespace", [](const NPg::TTableInfo&, ui32 namespaceOid) { return ScalarDatumToPod(ObjectIdGetDatum(namespaceOid)); }},
-                    {"relowner", [](const NPg::TTableInfo&, ui32) { return ScalarDatumToPod(ObjectIdGetDatum(1)); }},
+                    {"oid", [](const NPg::TTableInfo& desc, ui32, ui32) { return ScalarDatumToPod(ObjectIdGetDatum(desc.Oid)); }},
+                    {"relispartition", [](const NPg::TTableInfo&, ui32, ui32) { return ScalarDatumToPod(BoolGetDatum(false)); }},
+                    {"relkind", [](const NPg::TTableInfo& desc, ui32, ui32) { return ScalarDatumToPod(CharGetDatum(desc.Kind)); }},
+                    {"relname", [](const NPg::TTableInfo& desc, ui32, ui32) { return PointerDatumToPod((Datum)MakeFixedString(desc.Name, NAMEDATALEN)); }},
+                    {"relnamespace", [](const NPg::TTableInfo&, ui32 namespaceOid,ui32) { return ScalarDatumToPod(ObjectIdGetDatum(namespaceOid)); }},
+                    {"relowner", [](const NPg::TTableInfo&, ui32, ui32) { return ScalarDatumToPod(ObjectIdGetDatum(1)); }},
+                    {"relam", [](const NPg::TTableInfo&, ui32, ui32 amOid) { return ScalarDatumToPod(ObjectIdGetDatum(amOid)); }},
                 };
 
                 ApplyFillers(AllPgClassFillers, Y_ARRAY_SIZE(AllPgClassFillers), PgClassFillers_);
@@ -650,11 +651,19 @@ public:
                     namespaces[desc.Name] = oid;
                 });
 
+                ui32 btreeAmOid = 0;
+                NPg::EnumAm([&](ui32 oid, const NPg::TAmDesc& desc) {
+                    if (desc.AmName == "btree") {
+                        btreeAmOid = oid;
+                    }
+                });
+
                 for (const auto& t : tables) {
                     NUdf::TUnboxedValue* items;
                     auto row = compCtx.HolderFactory.CreateDirectArrayHolder(PgClassFillers_.size(), items);
                     for (ui32 i = 0; i < PgClassFillers_.size(); ++i) {
-                        items[i] = PgClassFillers_[i](t, namespaces[t.Schema]);
+                        ui32 amOid = (t.Kind == NPg::ERelKind::Relation) ? btreeAmOid : 0;
+                        items[i] = PgClassFillers_[i](t, namespaces[t.Schema], amOid);
                     }
 
                     rows.emplace_back(row);
@@ -735,7 +744,7 @@ private:
     using TColumnsFiller = NUdf::TUnboxedValuePod(*)(const NPg::TColumnInfo&);
     TVector<TColumnsFiller> ColumnsFillers_;
 
-    using TPgClassFiller = NUdf::TUnboxedValuePod(*)(const NPg::TTableInfo&, ui32 namespaceOid);
+    using TPgClassFiller = NUdf::TUnboxedValuePod(*)(const NPg::TTableInfo&, ui32 namespaceOid, ui32 amOid);
     TVector<TPgClassFiller> PgClassFillers_;
 };
 

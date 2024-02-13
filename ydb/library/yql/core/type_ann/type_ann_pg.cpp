@@ -151,7 +151,7 @@ IGraphTransformer::TStatus InferPgCommonType(TPositionHandle pos, const TExprNod
         {
             size_t j = 0;
             for (const auto& col : *childColumnOrder) {
-                auto itemIdx = structType->FindItem(col);
+                auto itemIdx = structType->FindItemI(col);
                 YQL_ENSURE(itemIdx);
 
                 const auto* type = structType->GetItems()[*itemIdx]->GetItemType();
@@ -1577,7 +1577,7 @@ bool ScanColumns(TExprNode::TPtr root, TInputs& inputs, const THashSet<TString>&
                         }
                     }
 
-                    auto pos = x.Type->FindItem(node->Tail().Content());
+                    auto pos = x.Type->FindItemI(node->Tail().Content());
                     if (pos) {
                         foundAlias = x.Alias;
                         ++matches;
@@ -1589,7 +1589,7 @@ bool ScanColumns(TExprNode::TPtr root, TInputs& inputs, const THashSet<TString>&
                         }
 
                         if (x.Priority == TInput::External) {
-                            x.UsedExternalColumns.insert(TString(node->Tail().Content()));
+                            x.UsedExternalColumns.insert(TString(x.Type->GetItems()[*pos]->GetName()));
                         }
                     }
                 }
@@ -1780,12 +1780,12 @@ void AddColumns(const TInputs& inputs, const bool* hasStar, const THashSet<TStri
                     continue;
                 }
 
-                auto pos = x.Type->FindItem(ref);
+                auto pos = x.Type->FindItemI(ref);
                 if (pos) {
                     auto item = x.Type->GetItems()[*pos];
                     item = AddAlias(x.Alias, item, ctx);
                     items.push_back(item);
-                    usedRefs.insert(ref);
+                    usedRefs.insert(TString(item->GetName()));
                 }
             }
 
@@ -1795,7 +1795,7 @@ void AddColumns(const TInputs& inputs, const bool* hasStar, const THashSet<TStri
                 }
 
                 for (const auto& ref : qualifiedRefs->find(x.Alias)->second) {
-                    auto pos = x.Type->FindItem(ref);
+                    auto pos = x.Type->FindItemI(ref);
                     if (pos) {
                         auto item = x.Type->GetItems()[*pos];
                         item = AddAlias(x.Alias, item, ctx);
@@ -1882,12 +1882,12 @@ IGraphTransformer::TStatus RebuildLambdaColumns(const TExprNode::TPtr& root, con
                         }
                     }
 
-                    auto pos = x.Type->FindItem(node->Tail().Content());
+                    auto pos = x.Type->FindItemI(node->Tail().Content());
                     if (pos) {
                         return ctx.Expr.Builder(node->Pos())
                             .Callable("Member")
                                 .Add(0, argNode)
-                                .Atom(1, MakeAliasedColumn(x.Alias, node->Tail().Content()))
+                                .Atom(1, MakeAliasedColumn(x.Alias, x.Type->GetItems()[*pos]->GetName()))
                             .Seal()
                             .Build();
                     }
@@ -2754,7 +2754,7 @@ bool GatherExtraSortColumns(const TExprNode& data, const TInputs& inputs, TExprN
                                 continue;
                             }
 
-                            auto pos = x.Type->FindItem(column);
+                            auto pos = x.Type->FindItemI(column);
                             if (pos) {
                                 index = inputIndex;
                                 break;
@@ -3396,7 +3396,7 @@ IGraphTransformer::TStatus PgSetItemWrapper(const TExprNode::TPtr& input, TExprN
                             TVector<const TItemExprType*> newStructItems;
                             TColumnOrder newOrder;
                             for (ui32 i = 0; i < p->Child(2)->ChildrenSize(); ++i) {
-                                auto pos = inputStructType->FindItem((*columnOrder)[i]);
+                                auto pos = inputStructType->FindItemI((*columnOrder)[i]);
                                 YQL_ENSURE(pos);
                                 auto type = inputStructType->GetItems()[*pos]->GetItemType();
                                 newOrder.push_back(TString(p->Child(2)->Child(i)->Content()));
@@ -4147,7 +4147,7 @@ IGraphTransformer::TStatus PgSetItemWrapper(const TExprNode::TPtr& input, TExprN
                     const auto type = data.Child(j)->Tail().GetTypeAnn()->Cast<TTypeExprType>()->
                         GetType()->Cast<TStructExprType>();
                     for (const auto& col : x.UsedExternalColumns) {
-                        auto pos = type->FindItem(col);
+                        auto pos = type->FindItemI(col);
                         YQL_ENSURE(pos);
                         items.push_back(type->GetItems()[*pos]);
                     }

@@ -84,7 +84,7 @@ public:
         }
     }
 
-    NYql::NDqProto::TComputeActorState Get()
+    NYql::NDqProto::TComputeActorState Build()
     {
         NKikimr::NMiniKQL::TScopedAlloc alloc(__LOCATION__);
         TString result;                
@@ -328,7 +328,7 @@ private:
     std::list<TString> SerializeState(
         const NYql::NDqProto::TComputeActorState& state);
     
-    EStateType DeserealizeState(
+    std::pair<bool, EStateType> DeserealizeState(
         TContext::TaskInfo& taskInfo);
 
     TFuture<TStatus> SkipStatesInFuture(
@@ -404,7 +404,7 @@ TFuture<TIssues> TStateStorage::Init()
     return MakeFuture(std::move(issues));
 }
 
-EStateType TStateStorage::DeserealizeState(TContext::TaskInfo& taskInfo)
+std::pair<bool, EStateType> TStateStorage::DeserealizeState(TContext::TaskInfo& taskInfo)
 {
     TString blob;
     for (auto it = taskInfo.Rows.begin(); it != taskInfo.Rows.end();) {
@@ -413,11 +413,10 @@ EStateType TStateStorage::DeserealizeState(TContext::TaskInfo& taskInfo)
     }
     taskInfo.States.push_front({});
     NYql::NDqProto::TComputeActorState& state = taskInfo.States.front();
-    if (!state.ParseFromString(blob)) { // backward compatibility with YQL serialization
-        state.Clear();
-        state.MutableMiniKqlProgram()->MutableData()->MutableStateData()->SetBlob(blob);
+    if (!state.ParseFromString(blob)) {
+        return std::make_pair(false, EStateType::Snapshot);
     }
-    return TIncrementLogic::GetStateType(state);
+    return  std::make_pair(true, TIncrementLogic::GetStateType(state));
 }
 
 std::list<TString> TStateStorage::SerializeState(const NYql::NDqProto::TComputeActorState& state)
@@ -926,7 +925,12 @@ TFuture<TStatus> TStateStorage::ReadRows(const TContextPtr& context)
             ++taskInfo.CurrentProcessingRow;
 
             if (taskInfo.CurrentProcessingRow == taskInfo.ListOfStatesForReading.front().StateRowsCount) {
-                EStateType type = thisPtr->DeserealizeState(taskInfo);
+                auto [success, type] = thisPtr->DeserealizeState(taskInfo);
+                if (!success) {
+                    promise.SetValue(TStatus{EStatus::INTERNAL_ERROR, NYql::TIssues{NYql::TIssue{"Wrong state format"}}});
+                    context->Callback = nullptr;
+                    return;
+                }
                 if (type != EStateType::Snapshot) {
                     taskInfo.ListOfStatesForReading.pop_front();
                     taskInfo.CurrentProcessingRow = 0;
@@ -968,7 +972,7 @@ std::vector<NYql::NDqProto::TComputeActorState> TStateStorage::ApplyIncrements(c
         {
             logic.Apply(state);
         }
-        states.push_back(std::move(logic.Get()));
+        states.push_back(std::move(logic.Build()));
     }
     return states;
 }

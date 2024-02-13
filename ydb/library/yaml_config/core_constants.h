@@ -4,7 +4,7 @@
 
 #include <utility>
 #include <array>
-#include <unordered_map>
+#include <map>
 
 namespace NKikimr::NYaml {
 
@@ -33,7 +33,7 @@ const inline std::array<std::pair<TString, ui32>, 10> DEFAULT_TABLETS{
     std::pair{TString{"Console"}, 1},
 };
 
-const inline std::unordered_map<TString, ui64> GetTablets(ui64 idx) {
+const inline std::map<TString, ui64> GetTablets(ui64 idx) {
     return {
         {TString{"FlatHive"}, 72057594037968897},
         {TString{"FlatBsController"}, 72057594037932033},

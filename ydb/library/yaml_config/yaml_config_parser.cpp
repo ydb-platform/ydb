@@ -623,8 +623,8 @@ namespace NKikimr::NYaml {
                 Y_ENSURE_BT(ctx.GroupErasureSpecies.contains(groupID), "erasure species are not specified for group, id " << groupID);
                 group.SetErasureSpecies(ErasureStrToNum(ctx.GroupErasureSpecies[groupID]));
 
-                std::unordered_map<ui32, std::unordered_set<ui32>> UniquePdiskIds;
-                std::unordered_map<ui32, std::unordered_set<ui32>> UniquePdiskGuids;
+                std::map<ui32, std::set<ui32>> UniquePdiskIds;
+                std::map<ui32, std::set<ui32>> UniquePdiskGuids;
 
                 ui32 ringID = 0;
                 for(auto& ring : *group.MutableRings()) {
@@ -749,7 +749,7 @@ namespace NKikimr::NYaml {
             }
         }
 
-        THashMap<std::tuple<TString, ui32>, ui32> hostNodeMap; // (.nameservice_config.node[].interconnect_host, .nameservice_config.node[].port) -> .nameservice_config.node[].node_id
+        TMap<std::tuple<TString, ui32>, ui32> hostNodeMap; // (.nameservice_config.node[].interconnect_host, .nameservice_config.node[].port) -> .nameservice_config.node[].node_id
         Y_ENSURE_BT(config.HasNameserviceConfig());
         const auto& nsConfig = config.GetNameserviceConfig();
         Y_ENSURE_BT(nsConfig.NodeSize());

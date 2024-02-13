@@ -3,8 +3,8 @@ items:
   href: manual/deploy-ydb-on-premises.md
 - name: Развёртывание одноузлового кластера
   include: { mode: link, path: ../getting_started/self_hosted/toc_p.yaml }
-- name: Развёртывание системы обработки федеративных запросов
-  href: federated_query/fq.md
+- name: Развёртывание коннекторов ко внешним источникам данных
+  href: federated_query/connector.md
 - name: Конфигурация
   href: configuration/config.md
 - name: Промышленные конфигурации BlobStorage

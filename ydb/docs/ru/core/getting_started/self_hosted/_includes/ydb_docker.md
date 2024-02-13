@@ -108,6 +108,7 @@ docker run -d --rm --name ydb-local -h localhost \
 - `POSTGRES_USER` - создать пользователя с указанным логином, используется для подключения через postgres-протокол.
 - `POSTGRES_PASSWORD` - задать пароль пользователя для подключения через postgres-протокол.
 - `YDB_TABLE_ENABLE_PREPARED_DDL` - временная опция, нужна для запуска Postgres-слоя совместимости, в будущем будет удалена.
+- `FQ_CONNECTOR_ENDPOINT` - задать сетевой адрес коннектора ко внешним источникам данных для обработки [федеративных запросов](../../../concepts/federated_query/index.md). Формат строки `scheme://host:port`, где допустимыми значениями `scheme` могут быть `grpcs` (укаывает на подключение к коннектору по протоколу TLS) или `grpc` (подключение без шифрования).
 `-p`: Опубликовать порты контейнера на хост-системе. Все применяемые порты должны быть явно перечислены, даже если используются значения по умолчанию.
 
 {% include [_includes/storage-device-requirements.md](../../../_includes/storage-device-requirements.md) %}
@@ -166,3 +167,97 @@ docker run --rm -it --entrypoint cat {{ ydb_local_docker_image }} LICENSE
 ```bash
 docker run --rm -it --entrypoint cat {{ ydb_local_docker_image }} THIRD_PARTY_LICENSES
 ```
+
+## Запуск {{ ydb-short-name }} Federated Query в Docker
+
+В данном разделе мы рассмотрим пример тестовой инсталляции {{ ydb-full-name }}, сконфигурированной для выполнения [федеративных запросов](../../../concepts/federated_query/index.md) к внешним источникам данных. Подключение {{ ydb-full-name }} к некоторым из источников требует развёртывания специального микросервиса-коннектора. В приведённом ниже файле `docker-compose.yaml` запускаются контейнеры с тремя сервисами: 
+
+* {{ ydb-short-name }} в одноузловой конфигурации;
+* PostgreSQL (в качестве примера внешнего источника данных);
+* Коннектор [fq-connector-go](../../../deploy/federated_query/connector.md#fq-connector-go).
+
+
+```yaml
+version: '3'
+
+services:
+
+  ydb:
+    image: ghcr.io/ydb-platform/local-ydb:nightly
+    container_name: fq-example-ydb
+    hostname: localhost
+    ports:
+      - '2136:2136'
+      - '8765:8765'
+    environment:
+      GRPC_TLS_PORT: 2135
+      GRPC_PORT: 2136
+      MON_PORT: 8765
+      YDB_DEFAULT_LOG_LEVEL: NOTICE
+      FQ_CONNECTOR_ENDPOINT: grpc://fq-connector-go:50051 
+
+  postgresql:
+    image: postgres
+    container_name: fq-example-postgresql
+    environment:
+      POSTGRES_DB: fq
+      POSTGRES_USER: admin
+      POSTGRES_PASSWORD: password
+      PGDATA: /var/lib/postgresql/data/pgdata
+
+  fq-connector-go:
+    image: ghcr.io/ydb-platform/fq-connector-go:latest
+    container_name: fq-example-connector
+```
+
+Используя приведённый выше файл `docker-compose.yml`, разверните инсталляцию с помощью команд:
+```bash
+docker-compose pull
+docker-compose up -d
+```
+
+Инициализируйте любым доступным вам способом данные внутри внешнего источника, например, подключившись к нему через CLI:
+```bash
+docker exec -it fq-example-postgresql psql -d fq --user admin -c "
+    DROP TABLE IF EXISTS example_1;
+    CREATE TABLE example_1 (id integer, col1 text, col2 integer);
+    INSERT INTO example_1 VALUES (1, 'a', 10);
+    INSERT INTO example_1 VALUES (2, 'b', 20);
+    INSERT INTO example_1 VALUES (3, 'c', 30);
+    INSERT INTO example_1 VALUES (4, 'd', 40);
+    INSERT INTO example_1 VALUES (5, 'e', 50);
+    INSERT INTO example_1 VALUES (6, NULL, 1)"
+```
+
+Откройте в браузере [страницу](http://localhost:8765/monitoring/tenant?schema=%2Flocal&name=%2Flocal) с веб-интерфейсом базы данных `/local` локально развёрнутого инстанса YDB. В панели для запросов введите следующий код, регистрирующий в {{ ydb-short-name }} базу данных `fq` из локального инстанса PostgreSQL в качестве внешнего источника данных:
+
+```sql
+CREATE OBJECT pg_local_password (TYPE SECRET) WITH (value = password);
+
+CREATE EXTERNAL DATA SOURCE pg_local WITH (
+    SOURCE_TYPE="PostgreSQL",
+    DATABASE_NAME="fq",
+    LOCATION="fq-example-postgresql:5432",
+    AUTH_METHOD="BASIC",
+    LOGIN="admin",
+    PASSWORD_SECRET_NAME="pg_local_password",
+    USE_TLS="FALSE",
+    PROTOCOL="NATIVE"
+);
+```
+
+В селекторе типов запросов внизу страницы выберите `Query type: YQL Script` и нажмите кнопку `Run`. Запрос должен завершиться успешно.
+
+Затем введите запрос, непосредственно извлекающий данные из таблицы `example_1` внешнего источника:
+
+```sql
+SELECT * FROM pg_local.example_1;
+```
+
+В селекторе типов запросов внизу страницы выберите `Query type: YQL - QueryService` и нажмите кнопку `Run`. На экране появятся данные таблицы, созданной несколькими шагами ранее.
+
+{% note info %}
+
+О дополнительных опциях запуска коннектора можно узнать [здесь](../../../deploy/federated_query/connector.md#fq-connector-go-launch). В качестве внешнего источника данных можно использовать любое хранилище из перечня [поддерживаемых](../../../concepts/federated_query/index.md#supported-datasources)
+
+{% endnote %}

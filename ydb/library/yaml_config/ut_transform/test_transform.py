@@ -53,7 +53,7 @@ class TestYamlConfigTransformations(object):
 
     @staticmethod
     def canonical_result(output_result, filename, out_path, suffix=""):
-        result_filename = filename + suffix + ".result.prototxt"
+        result_filename = filename + suffix + ".result.json"
         result_path = os.path.join(out_path, result_filename)
         with open(result_path, "w") as f:
             f.write(output_result.decode('utf-8'))

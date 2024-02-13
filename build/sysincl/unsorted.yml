@@ -23,11 +23,6 @@
   - apr_iconv.h
   - atomic_ops.h
   - auth-client-parser/parser.h
-  - bluetooth/bluetooth.h
-  - bluetooth/hci.h
-  - bluetooth/l2cap.h
-  - bluetooth/rfcomm.h
-  - bluetooth/sco.h
   - bstring.h
   - builtins.h
   - c_asm.h
@@ -210,7 +205,6 @@
   - geobase6/timezone_getter.hpp
   # ^^^^^ ----
   #if defined(__FreeBSD__)
-  - bluetooth.h
   - bsdxml.h
   - devstat.h
   - ieeefp.h

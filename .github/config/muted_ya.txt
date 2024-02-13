@@ -35,9 +35,7 @@ ydb/core/tx/columnshard/engines/ut *
 ydb/core/tx/coordinator/ut Coordinator.RestoreTenantConfiguration
 ydb/core/tx/datashard/ut_change_exchange Cdc.InitialScanDebezium
 ydb/core/tx/replication/ydb_proxy/ut YdbProxyTests.ReadTopic
-ydb/core/tx/schemeshard/ut_export TExportToS3Tests.CorruptedDyNumber
 ydb/core/tx/schemeshard/ut_restore TImportTests.ShouldSucceedOnManyTables
-ydb/core/tx/schemeshard/ut_restore TRestoreTests.ExportImportPg
 ydb/core/tx/schemeshard/ut_split_merge TSchemeShardSplitBySizeTest.Merge1KShards
 ydb/core/tx/tx_proxy/ut_ext_tenant TExtSubDomainTest.CreateTableInsideAndAlterDomainAndTable-AlterDatabaseCreateHiveFirst*
 ydb/core/tx/tx_proxy/ut_storage_tenant TStorageTenantTest.RemoveStoragePoolBeforeDroppingTablet

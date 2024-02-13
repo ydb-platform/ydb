@@ -37,11 +37,13 @@ THolder<TExecutionUnit> CreatePrepareWriteTxInRSUnit(TDataShard& dataShard, TPip
 THolder<TExecutionUnit> CreatePrepareDistributedEraseTxInRSUnit(TDataShard& dataShard, TPipeline& pipeline);
 THolder<TExecutionUnit> CreateLoadAndWaitInRSUnit(TDataShard &dataShard, TPipeline &pipeline);
 THolder<TExecutionUnit> CreateExecuteDataTxUnit(TDataShard &dataShard, TPipeline &pipeline);
-THolder<TExecutionUnit> CreateExecuteKqpDataTxUnit(TDataShard &dataShard, TPipeline &pipeline);
+THolder<TExecutionUnit> CreateExecuteWriteUnit(TDataShard& dataShard, TPipeline& pipeline);
+THolder<TExecutionUnit> CreateExecuteKqpDataTxUnit(TDataShard& dataShard, TPipeline& pipeline);
 THolder<TExecutionUnit> CreateExecuteDistributedEraseTxUnit(TDataShard &dataShard, TPipeline &pipeline);
 THolder<TExecutionUnit> CreateExecuteCommitWritesTxUnit(TDataShard &dataShard, TPipeline &pipeline);
 THolder<TExecutionUnit> CreateCompleteOperationUnit(TDataShard &dataShard, TPipeline &pipeline);
-THolder<TExecutionUnit> CreateExecuteKqpScanTxUnit(TDataShard &dataShard, TPipeline &pipeline);
+THolder<TExecutionUnit> CreateCompleteWriteUnit(TDataShard& dataShard, TPipeline& pipeline);
+THolder<TExecutionUnit> CreateExecuteKqpScanTxUnit(TDataShard& dataShard, TPipeline& pipeline);
 THolder<TExecutionUnit> CreateMakeScanSnapshotUnit(TDataShard &dataShard, TPipeline &pipeline);
 THolder<TExecutionUnit> CreateWaitForStreamClearanceUnit(TDataShard &dataShard, TPipeline &pipeline);
 THolder<TExecutionUnit> CreateReadTableScanUnit(TDataShard &dataShard, TPipeline &pipeline);
@@ -71,7 +73,6 @@ THolder<TExecutionUnit> CreateAlterCdcStreamUnit(TDataShard &dataShard, TPipelin
 THolder<TExecutionUnit> CreateDropCdcStreamUnit(TDataShard &dataShard, TPipeline &pipeline);
 THolder<TExecutionUnit> CreateCheckReadUnit(TDataShard &dataShard, TPipeline &pipeline);
 THolder<TExecutionUnit> CreateReadUnit(TDataShard &dataShard, TPipeline &pipeline);
-THolder<TExecutionUnit> CreateWriteUnit(TDataShard& dataShard, TPipeline& pipeline);
 
 } // namespace NDataShard
 } // namespace NKikimr

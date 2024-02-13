@@ -10,19 +10,19 @@
 namespace NKikimr {
 namespace NDataShard {
 
-class TWriteUnit : public TExecutionUnit {
+class TExecuteWriteUnit : public TExecutionUnit {
 public:
-    TWriteUnit(TDataShard& self, TPipeline& pipeline)
+    TExecuteWriteUnit(TDataShard& self, TPipeline& pipeline)
         : TExecutionUnit(EExecutionUnitKind::ExecuteWrite, true, self, pipeline)
     {
     }
 
-    ~TWriteUnit()
+    ~TExecuteWriteUnit()
     {
     }
 
     bool IsReadyToExecute(TOperation::TPtr op) const override {
-        if (op->HasRuntimeConflicts() || op->HasWaitingForGlobalTxIdFlag()) {
+        if (op->HasWaitingForGlobalTxIdFlag()) {
             return false;
         }
 
@@ -367,26 +367,13 @@ public:
         return EExecutionStatus::DelayCompleteNoMoreRestarts;
     }
 
-    void Complete(TOperation::TPtr op, const TActorContext& ctx) override {
-        Pipeline.RemoveCommittingOp(op);
-        DataShard.EnqueueChangeRecords(std::move(op->ChangeRecords()));
-        DataShard.EmitHeartbeats();
-
-        TWriteOperation* writeOp = TWriteOperation::CastWriteOperation(op);
-
-        const auto& status = writeOp->GetWriteResult()->Record.status();
-        LOG_DEBUG_S(ctx, NKikimrServices::TX_DATASHARD, "Completed write operation for " << *op << " at " << DataShard.TabletID() << ", status " << status);
-
-        DataShard.IncCounter(writeOp->GetWriteResult()->Record.status() == NKikimrDataEvents::TEvWriteResult::STATUS_COMPLETED ?
-            COUNTER_WRITE_SUCCESS : COUNTER_WRITE_ERROR);
-
-        ctx.Send(op->GetTarget(), writeOp->ReleaseWriteResult().release(), 0, op->GetCookie());
+    void Complete(TOperation::TPtr, const TActorContext&) override {
     }
 
-};  // TWriteUnit
+};  // TExecuteWriteUnit
 
-THolder<TExecutionUnit> CreateWriteUnit(TDataShard& self, TPipeline& pipeline) {
-    return THolder(new TWriteUnit(self, pipeline));
+THolder<TExecutionUnit> CreateExecuteWriteUnit(TDataShard& self, TPipeline& pipeline) {
+    return THolder(new TExecuteWriteUnit(self, pipeline));
 }
 
 } // NDataShard

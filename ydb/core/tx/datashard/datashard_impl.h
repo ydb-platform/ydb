@@ -1448,11 +1448,9 @@ public:
             const TActorId& target, std::unique_ptr<IEventBase> event,
             ui64 cookie = 0);
 
-    void SendResult(const TActorContext &ctx,
-                    TOutputOpData::TResultPtr &result,
-                    const TActorId &target,
-                    ui64 step,
-                    ui64 txId);
+    void SendResult(const TActorContext &ctx, TOutputOpData::TResultPtr &result, const TActorId &target, ui64 step, ui64 txId);
+    void SendWriteResult(const TActorContext& ctx, std::unique_ptr<NEvents::TDataEvents::TEvWriteResult>& result, const TActorId& target, ui64 step, ui64 txId);
+
     void FillSplitTrajectory(ui64 origin, NKikimrTx::TBalanceTrackList& tracks);
 
     void SetCounter(NDataShard::ESimpleCounters counter, ui64 num) const {
@@ -1948,7 +1946,7 @@ public:
 
     void CheckMediatorStateRestored();
 
-    void FillExecutionStats(const TExecutionProfile& execProfile, TEvDataShard::TEvProposeTransactionResult& result) const;
+    void FillExecutionStats(const TExecutionProfile& execProfile, NKikimrQueryStats::TTxStats& txStats) const;
 
     // Executes TTxProgressTransaction without specific operation
     void ExecuteProgressTx(const TActorContext& ctx);

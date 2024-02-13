@@ -34,6 +34,7 @@ SRCS(
     check_snapshot_tx_unit.cpp
     check_write_unit.cpp
     complete_data_tx_unit.cpp
+    complete_write_unit.cpp
     completed_operations_unit.cpp
     conflicts_cache.cpp
     create_cdc_stream_unit.cpp
@@ -138,6 +139,7 @@ SRCS(
     erase_rows_condition.cpp
     execute_commit_writes_tx_unit.cpp
     execute_data_tx_unit.cpp
+    execute_write_unit.cpp
     execute_distributed_erase_tx_unit.cpp
     execute_kqp_data_tx_unit.cpp
     execute_kqp_scan_tx_unit.cpp
@@ -198,7 +200,6 @@ SRCS(
     volatile_tx.cpp
     wait_for_plan_unit.cpp
     wait_for_stream_clearance_unit.cpp
-    write_unit.cpp
     upload_stats.cpp
 )
 

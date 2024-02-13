@@ -82,6 +82,8 @@ THolder<TExecutionUnit> CreateExecutionUnit(EExecutionUnitKind kind,
         return CreateExecuteCommitWritesTxUnit(dataShard, pipeline);
     case EExecutionUnitKind::CompleteOperation:
         return CreateCompleteOperationUnit(dataShard, pipeline);
+    case EExecutionUnitKind::CompleteWrite:
+        return CreateCompleteWriteUnit(dataShard, pipeline);
     case EExecutionUnitKind::ExecuteKqpScanTx:
         return CreateExecuteKqpScanTxUnit(dataShard, pipeline);
     case EExecutionUnitKind::MakeScanSnapshot:
@@ -143,7 +145,7 @@ THolder<TExecutionUnit> CreateExecutionUnit(EExecutionUnitKind kind,
     case EExecutionUnitKind::ExecuteRead:
         return CreateReadUnit(dataShard, pipeline);
     case EExecutionUnitKind::ExecuteWrite:
-        return CreateWriteUnit(dataShard, pipeline);
+        return CreateExecuteWriteUnit(dataShard, pipeline);
     default:
         Y_FAIL_S("Unexpected execution kind " << kind << " (" << (ui32)kind << ")");
     }

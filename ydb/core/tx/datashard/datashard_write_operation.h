@@ -173,7 +173,7 @@ private:
 };
 
 class TWriteOperation : public TOperation {
-    friend class TWriteUnit;
+    friend class TExecuteWriteUnit;
 public:
     using TPtr = TIntrusivePtr<TWriteOperation>;
 

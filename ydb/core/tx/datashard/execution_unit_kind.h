@@ -44,6 +44,7 @@ enum class EExecutionUnitKind: ui32 {
     ExecuteRead,
     ExecuteWrite,
     CompleteOperation,
+    CompleteWrite,
     ExecuteKqpScanTx,
     MakeScanSnapshot,
     WaitForStreamClearance,

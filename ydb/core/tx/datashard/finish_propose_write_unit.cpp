@@ -173,6 +173,8 @@ void TFinishProposeWriteUnit::CompleteRequest(TOperation::TPtr op, const TActorC
 
     AddDiagnosticsResult(*res);
 
+    DataShard.FillExecutionStats(op->GetExecutionProfile(), *res->Record.MutableTxStats());
+
     if (!gSkipRepliesFailPoint.Check(DataShard.TabletID(), op->GetTxId())) {
         if (res->IsPrepared()) {
             LWTRACK(ProposeTransactionSendPrepared, op->Orbit);

@@ -559,7 +559,7 @@ void TWriteOperation::BuildExecutionPlan(bool loaded)
         plan.push_back(EExecutionUnitKind::LoadTxDetails);  // note: reloads from memory
         plan.push_back(EExecutionUnitKind::BuildAndWaitDependencies);
         plan.push_back(EExecutionUnitKind::ExecuteWrite);
-        plan.push_back(EExecutionUnitKind::CompleteOperation);
+        plan.push_back(EExecutionUnitKind::CompleteWrite);
         plan.push_back(EExecutionUnitKind::CompletedOperations);
     */
     else {
@@ -579,7 +579,7 @@ void TWriteOperation::BuildExecutionPlan(bool loaded)
         plan.push_back(EExecutionUnitKind::LoadAndWaitInRS);
         plan.push_back(EExecutionUnitKind::ExecuteWrite);
 
-        plan.push_back(EExecutionUnitKind::CompleteOperation);
+        plan.push_back(EExecutionUnitKind::CompleteWrite);
         plan.push_back(EExecutionUnitKind::CompletedOperations);
     }
     RewriteExecutionPlan(plan);

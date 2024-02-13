@@ -877,7 +877,10 @@ void TPersQueue::ReadTxWrites(const NKikimrClient::TKeyValueResponse::TReadResul
         LOG_INFO_S(ctx, NKikimrServices::PERSQUEUE, "Tablet " << TabletID() << " has a tx writes info");
 
         NKikimrPQ::TTabletTxInfo info;
-        Y_ABORT_UNLESS(info.ParseFromString(read.GetValue()));
+        if (!info.ParseFromString(read.GetValue())) {
+            PQ_LOG_ERROR_AND_DIE("Tablet " << TabletID() << " tx writes read error");
+            return;
+        }
 
         InitTxWrites(info, ctx);
 

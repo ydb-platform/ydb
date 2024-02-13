@@ -1357,6 +1357,7 @@ message TReqCreateTableBackup
     required uint64 checkpoint_check_period = 3;
     required uint64 checkpoint_check_timeout = 4;
     required bool force = 5;
+    required bool preserve_account = 6;
 }
 
 message TRspCreateTableBackup
@@ -1371,6 +1372,7 @@ message TReqRestoreTableBackup
     required bool force = 2;
     required bool mount = 3;
     required bool enable_replicas = 4;
+    required bool preserve_account = 5;
 }
 
 message TRspRestoreTableBackup

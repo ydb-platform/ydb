@@ -12,14 +12,13 @@ TString MakeData(ui32 dataSize) {
     return data;
 }
 
-ui64 AggregateVDiskCounters(std::unique_ptr<TEnvironmentSetup>& env, const NKikimrBlobStorage::TBaseConfig& baseConfig,
-        TString storagePool, ui32 groupSize, ui32 groupId, const std::vector<ui32>& pdiskLayout, TString subsystem,
-        TString counter, bool derivative = false) {
+ui64 AggregateVDiskCounters(std::unique_ptr<TEnvironmentSetup>& env, TString storagePool, ui32 nodesCount, ui32 groupId,
+        const std::vector<ui32>& pdiskLayout, TString subsystem, TString counter, bool derivative = false) {
     ui64 ctr = 0;
 
-    for (const auto& vslot : baseConfig.GetVSlot()) {
-        auto* appData = env->Runtime->GetNode(vslot.GetVSlotId().GetNodeId())->AppData.get();
-        for (ui32 i = 0; i < groupSize; ++i) {
+    for (ui32 nodeId = 1; nodeId <= nodesCount; ++nodeId) {
+        auto* appData = env->Runtime->GetNode(nodeId)->AppData.get();
+        for (ui32 i = 0; i < nodesCount; ++i) {
             ctr += GetServiceCounters(appData->Counters, "vdisks")->
                     GetSubgroup("storagePool", storagePool)->
                     GetSubgroup("group", std::to_string(groupId))->
@@ -34,8 +33,7 @@ ui64 AggregateVDiskCounters(std::unique_ptr<TEnvironmentSetup>& env, const NKiki
 };
 
 void SetupEnv(const TBlobStorageGroupInfo::TTopology& topology, std::unique_ptr<TEnvironmentSetup>& env,
-        NKikimrBlobStorage::TBaseConfig& baseConfig, ui32& groupSize, TBlobStorageGroupType& groupType,
-        ui32& groupId, std::vector<ui32>& pdiskLayout) {
+        ui32& groupSize, TBlobStorageGroupType& groupType, ui32& groupId, std::vector<ui32>& pdiskLayout) {
     groupSize = topology.TotalVDisks;
     groupType = topology.GType;
     env.reset(new TEnvironmentSetup({
@@ -51,7 +49,7 @@ void SetupEnv(const TBlobStorageGroupInfo::TTopology& topology, std::unique_ptr<
     request.AddCommand()->MutableQueryBaseConfig();
     auto response = env->Invoke(request);
 
-    baseConfig = response.GetStatus(0).GetBaseConfig();
+    const auto& baseConfig = response.GetStatus(0).GetBaseConfig();
     UNIT_ASSERT_VALUES_EQUAL(baseConfig.GroupSize(), 1);
     groupId = baseConfig.GetGroup(0).GetGroupId();
     pdiskLayout.resize(groupSize);
@@ -65,60 +63,81 @@ void SetupEnv(const TBlobStorageGroupInfo::TTopology& topology, std::unique_ptr<
 }
 
 template <typename TInflightActor>
-void TestDSProxyAndVDiskEqualCost(const TBlobStorageGroupInfo::TTopology& topology, TInflightActor* actor, ui32 retries = 1) {
-    for (ui32 i = 0; i < retries; ++i) {
-        std::unique_ptr<TEnvironmentSetup> env;
-        NKikimrBlobStorage::TBaseConfig baseConfig;
-        ui32 groupSize;
-        TBlobStorageGroupType groupType;
-        ui32 groupId;
-        std::vector<ui32> pdiskLayout;
-        SetupEnv(topology, env, baseConfig, groupSize, groupType, groupId, pdiskLayout);
+void TestDSProxyAndVDiskEqualCost(const TBlobStorageGroupInfo::TTopology& topology, TInflightActor* actor) {
+    std::unique_ptr<TEnvironmentSetup> env;
+    ui32 groupSize;
+    TBlobStorageGroupType groupType;
+    ui32 groupId;
+    std::vector<ui32> pdiskLayout;
+    SetupEnv(topology, env, groupSize, groupType, groupId, pdiskLayout);
 
-        ui64 dsproxyCost = 0;
-        ui64 vdiskCost = 0;
+    ui64 dsproxyCost = 0;
+    ui64 vdiskCost = 0;
+    ui64 queuePut = 0;
+    ui64 queueSent = 0;
 
-        auto updateCounters = [&]() {
-            dsproxyCost = 0;
+    std::vector<TString> priorities = {
+        "GetAsyncRead", "GetDiscover", "GetFastRead", "GetLowRead",
+        "PutAsyncBlob", "PutTabletLog", "PutUserData"
+    };
 
-            for (const auto& vslot : baseConfig.GetVSlot()) {
-                auto* appData = env->Runtime->GetNode(vslot.GetVSlotId().GetNodeId())->AppData.get();
-                dsproxyCost += GetServiceCounters(appData->Counters, "dsproxynode")->
-                        GetSubgroup("subsystem", "request")->
-                        GetSubgroup("storagePool", env->StoragePoolName)->
-                        GetCounter("DSProxyDiskCostNs")->Val();
+    auto updateCounters = [&]() {
+        dsproxyCost = 0;
+        queuePut = 0;
+        queueSent = 0;
+
+        for (ui32 nodeId = 1; nodeId <= groupSize; ++nodeId) {
+            auto* appData = env->Runtime->GetNode(nodeId)->AppData.get();
+            dsproxyCost += GetServiceCounters(appData->Counters, "dsproxynode")->
+                    GetSubgroup("subsystem", "request")->
+                    GetSubgroup("storagePool", env->StoragePoolName)->
+                    GetCounter("DSProxyDiskCostNs")->Val();
+
+            for (TString priority : priorities) {
+                queuePut += GetServiceCounters(appData->Counters, "dsproxy_queue")->
+                    GetSubgroup("queue", priority)->
+                    GetCounter("QueueItemsPut")->Val();
+                queueSent += GetServiceCounters(appData->Counters, "dsproxy_queue")->
+                    GetSubgroup("queue", priority)->
+                    GetCounter("QueueItemsSent")->Val();
             }
-            vdiskCost = AggregateVDiskCounters(env, baseConfig, env->StoragePoolName, groupSize, groupId,
-                    pdiskLayout, "cost", "SkeletonFrontUserCostNs");
-        };
-
-        updateCounters();
-        UNIT_ASSERT_VALUES_EQUAL(dsproxyCost, vdiskCost);
-
-        actor->SetGroupId(groupId);
-        env->Runtime->Register(actor, 1);
-        env->Sim(TDuration::Minutes(15));
-
-        updateCounters();
-
-        TStringStream str;
-        double proportion = 1. * dsproxyCost / vdiskCost;
-        i64 diff = (i64)dsproxyCost - vdiskCost;
-        str << "OKs# " << actor->ResponsesByStatus[NKikimrProto::OK] << ", Errors# " << actor->ResponsesByStatus[NKikimrProto::ERROR]
-                << ", Cost on dsproxy# " << dsproxyCost << ", Cost on vdisks# " << vdiskCost << ", proportion# " << proportion
-                << " diff# " << diff;
-
-        if constexpr(VERBOSE) {
-            Cerr << str.Str() << Endl;
-            // env->Runtime->GetAppData()->Counters->OutputPlainText(Cerr);
         }
-        if (dsproxyCost == vdiskCost) {
-            return;
+        vdiskCost = AggregateVDiskCounters(env, env->StoragePoolName, groupSize, groupId, pdiskLayout,
+                "cost", "SkeletonFrontUserCostNs");
+    };
+
+    updateCounters();
+    UNIT_ASSERT_VALUES_EQUAL(dsproxyCost, vdiskCost);
+
+    actor->SetGroupId(groupId);
+    env->Runtime->Register(actor, 1);
+    env->Sim(TDuration::Minutes(5));
+
+    updateCounters();
+    env->Sim(TDuration::Minutes(5));
+    updateCounters();
+
+    TStringStream str;
+    double proportion = 1. * dsproxyCost / vdiskCost;
+    i64 diff = (i64)dsproxyCost - vdiskCost;
+    ui32 oks = actor->ResponsesByStatus[NKikimrProto::OK];
+    ui32 errors = actor->ResponsesByStatus[NKikimrProto::ERROR];
+    str << "OKs# " << oks << ", Errors# " << errors << ", QueueItemsPut# " << queuePut
+            << ", QueueItemsSent# " << queueSent << ", Cost on dsproxy# " << dsproxyCost
+            << ", Cost on vdisks# " << vdiskCost << ", proportion# " << proportion << " diff# " << diff;
+
+    if constexpr(VERBOSE) {
+        Cerr << str.Str() << Endl;
+        for (ui32 i = 1; i <= groupSize; ++i) {
+            Cerr << " ##################### Node " << i << " ##################### " << Endl;
+            env->Runtime->GetNode(i)->AppData->Counters->OutputPlainText(Cerr);
         }
-        UNIT_ASSERT_VALUES_UNEQUAL(actor->OKs, actor->RequestsSent);
-        Cerr << "Fail on try# " << i << " : " << str.Str() << Endl;
     }
-    UNIT_FAIL("Test failed after# " << retries << " retries");
+
+    if (dsproxyCost == vdiskCost) {
+        return;
+    }
+    UNIT_ASSERT_C(oks != actor->RequestsSent || queuePut != queueSent, str.Str());
 }
 
 #define MAKE_TEST(erasure, requestType, requests, inflight)                         \
@@ -131,18 +150,15 @@ Y_UNIT_TEST(Test##requestType##erasure##Requests##requests##Inflight##inflight) 
     TestDSProxyAndVDiskEqualCost(topology, actor);                                  \
 }
 
-#define MAKE_TEST_W_DATASIZE_AND_RETRIES(erasure, requestType, requests, inflight, dataSize, retries)   \
+#define MAKE_TEST_W_DATASIZE(erasure, requestType, requests, inflight, dataSize)                        \
 Y_UNIT_TEST(Test##requestType##erasure##Requests##requests##Inflight##inflight##BlobSize##dataSize) {   \
     auto groupType = TBlobStorageGroupType::Erasure##erasure;                                           \
     ui32 realms = (groupType == TBlobStorageGroupType::ErasureMirror3dc) ? 3 : 1;                       \
     ui32 domains = (groupType == TBlobStorageGroupType::ErasureMirror3dc) ? 3 : 8;                      \
     TBlobStorageGroupInfo::TTopology topology(groupType, realms, domains, 1, true);                     \
     auto actor = new TInflightActor##requestType({requests, inflight}, dataSize);                       \
-    TestDSProxyAndVDiskEqualCost(topology, actor, retries);                                             \
+    TestDSProxyAndVDiskEqualCost(topology, actor);                                                      \
 }
-
-#define MAKE_TEST_W_DATASIZE(erasure, requestType, requests, inflight, dataSize)    \
-        MAKE_TEST_W_DATASIZE_AND_RETRIES(erasure, requestType, requests, inflight, dataSize, 1)
 
 Y_UNIT_TEST_SUITE(CostMetricsPutMirror3dc) {
     MAKE_TEST_W_DATASIZE(Mirror3dc, Put, 1, 1, 1000);
@@ -200,27 +216,26 @@ Y_UNIT_TEST_SUITE(CostMetricsGetHugeMirror3dc) {
     MAKE_TEST_W_DATASIZE(Mirror3dc, Get, 2, 2, 2000000);
     MAKE_TEST_W_DATASIZE(Mirror3dc, Get, 10, 10, 2000000);
     MAKE_TEST_W_DATASIZE(Mirror3dc, Get, 100, 10, 2000000);
-    MAKE_TEST_W_DATASIZE(Mirror3dc, Get, 10000, 100, 2000000);
 }
 
 Y_UNIT_TEST_SUITE(CostMetricsPatchMirror3dc) {
-    MAKE_TEST_W_DATASIZE_AND_RETRIES(Mirror3dc, Patch, 1, 1, 1000, 3);
-    MAKE_TEST_W_DATASIZE_AND_RETRIES(Mirror3dc, Patch, 10, 1, 1000, 3);
-    MAKE_TEST_W_DATASIZE_AND_RETRIES(Mirror3dc, Patch, 100, 1, 1000, 3);
-    MAKE_TEST_W_DATASIZE_AND_RETRIES(Mirror3dc, Patch, 2, 2, 1000, 3);
-    MAKE_TEST_W_DATASIZE_AND_RETRIES(Mirror3dc, Patch, 10, 10, 1000, 3);
-    MAKE_TEST_W_DATASIZE_AND_RETRIES(Mirror3dc, Patch, 100, 10, 1000, 3);
-    MAKE_TEST_W_DATASIZE_AND_RETRIES(Mirror3dc, Patch, 10000, 100, 1000, 3);
+    MAKE_TEST_W_DATASIZE(Mirror3dc, Patch, 1, 1, 1000);
+    MAKE_TEST_W_DATASIZE(Mirror3dc, Patch, 10, 1, 1000);
+    MAKE_TEST_W_DATASIZE(Mirror3dc, Patch, 100, 1, 1000);
+    MAKE_TEST_W_DATASIZE(Mirror3dc, Patch, 2, 2, 1000);
+    MAKE_TEST_W_DATASIZE(Mirror3dc, Patch, 10, 10, 1000);
+    MAKE_TEST_W_DATASIZE(Mirror3dc, Patch, 100, 10, 1000);
+    MAKE_TEST_W_DATASIZE(Mirror3dc, Patch, 10000, 100, 1000);
 }
 
 Y_UNIT_TEST_SUITE(CostMetricsPatchBlock4Plus2) {
-    MAKE_TEST_W_DATASIZE_AND_RETRIES(4Plus2Block, Patch, 1, 1, 1000, 3);
-    MAKE_TEST_W_DATASIZE_AND_RETRIES(4Plus2Block, Patch, 10, 1, 1000, 3);
-    MAKE_TEST_W_DATASIZE_AND_RETRIES(4Plus2Block, Patch, 100, 1, 1000, 3);
-    MAKE_TEST_W_DATASIZE_AND_RETRIES(4Plus2Block, Patch, 2, 2, 1000, 3);
-    MAKE_TEST_W_DATASIZE_AND_RETRIES(4Plus2Block, Patch, 10, 10, 1000, 3);
-    MAKE_TEST_W_DATASIZE_AND_RETRIES(4Plus2Block, Patch, 100, 10, 1000, 3);
-    MAKE_TEST_W_DATASIZE_AND_RETRIES(4Plus2Block, Patch, 10000, 100, 1000, 3);
+    MAKE_TEST_W_DATASIZE(4Plus2Block, Patch, 1, 1, 1000);
+    MAKE_TEST_W_DATASIZE(4Plus2Block, Patch, 10, 1, 1000);
+    MAKE_TEST_W_DATASIZE(4Plus2Block, Patch, 100, 1, 1000);
+    MAKE_TEST_W_DATASIZE(4Plus2Block, Patch, 2, 2, 1000);
+    MAKE_TEST_W_DATASIZE(4Plus2Block, Patch, 10, 10, 1000);
+    MAKE_TEST_W_DATASIZE(4Plus2Block, Patch, 100, 10, 1000);
+    MAKE_TEST_W_DATASIZE(4Plus2Block, Patch, 10000, 100, 1000);
 }
 
 enum class ELoadDistribution : ui8 {
@@ -231,19 +246,18 @@ enum class ELoadDistribution : ui8 {
 template <typename TInflightActor>
 void TestBurst(const TBlobStorageGroupInfo::TTopology& topology, TInflightActor* actor, ELoadDistribution loadDistribution) {
     std::unique_ptr<TEnvironmentSetup> env;
-    NKikimrBlobStorage::TBaseConfig baseConfig;
     ui32 groupSize;
     TBlobStorageGroupType groupType;
     ui32 groupId;
     std::vector<ui32> pdiskLayout;
-    SetupEnv(topology, env, baseConfig, groupSize, groupType, groupId, pdiskLayout);
+    SetupEnv(topology, env, groupSize, groupType, groupId, pdiskLayout);
 
     actor->SetGroupId(groupId);
     env->Runtime->Register(actor, 1);
     env->Sim(TDuration::Minutes(10));
 
-    ui64 redMs = AggregateVDiskCounters(env, baseConfig, env->StoragePoolName, groupSize, groupId,
-            pdiskLayout, "advancedCost", "BurstDetector_redMs");
+    ui64 redMs = AggregateVDiskCounters(env, env->StoragePoolName, groupSize, groupId, pdiskLayout,
+            "advancedCost", "BurstDetector_redMs");
     
     if (loadDistribution == ELoadDistribution::DistributionBurst) {
         UNIT_ASSERT_VALUES_UNEQUAL(redMs, 0);

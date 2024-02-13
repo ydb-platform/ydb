@@ -51,11 +51,9 @@ namespace NKikimr {
                 TIntrusivePtr<IFunctionRegistry> FunctionRegistry;
                 TIntrusivePtr<IRandomProvider> RandomProvider;
                 TIntrusivePtr<ITimeProvider> TimeProvider;
-
                 TScopedAlloc& Alloc;
                 THolder<TTypeEnvironment> Env;
                 THolder<TProgramBuilder> PgmBuilder;
-
                 TExploringNodeVisitor Explorer;
                 IComputationPattern::TPtr Pattern;
             };
@@ -133,7 +131,6 @@ namespace NKikimr {
                 TSetup setup1(alloc);
 
                 const TTestInputData input = {
-                    // Time; Key; Value; PartitionKey
                     {1000, "A", 101, "P"},
                     {1001, "B", 102, "P"},
                     {1002, "C", 103, "P"},      // <- match end
@@ -160,7 +157,6 @@ namespace NKikimr {
                 v = value.GetElement(0).Get<ui32>();
                 UNIT_ASSERT_VALUES_EQUAL(56, v);
             }
-
 
             Y_UNIT_TEST(StreamingMode) {
                 TestWithSaveLoadImpl(true);

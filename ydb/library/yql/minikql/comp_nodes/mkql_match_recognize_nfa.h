@@ -1,9 +1,9 @@
 #pragma once
 
 #include "mkql_match_recognize_matched_vars.h"
+#include "mkql_match_recognize_save_load.h"
 #include "../computation/mkql_computation_node_holders.h"
 #include "../computation/mkql_computation_node_impl.h"
-#include <ydb/library/yql/minikql/comp_nodes/mkql_saveload.h>
 #include <ydb/library/yql/core/sql_types/match_recognize.h>
 #include <util/generic/hash_table.h>
 #include <util/generic/string.h>
@@ -394,9 +394,7 @@ class TNfa {
                     item.Load(serializer);
                 }
             }
-            while (!Quantifiers.empty()) {      // Clearing.
-                Quantifiers.pop();
-            }
+            Quantifiers.clear();
             auto quantifiersSize = serializer.Read<ui64>();
             for (size_t i = 0; i < quantifiersSize; ++i) {
                 ui64 qnt = serializer.Read<ui64>();

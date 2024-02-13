@@ -1015,6 +1015,10 @@ private:
             operatorId = Visit(maybeExtend.Cast(), planNode);
         } else if (auto maybeToFlow = TMaybeNode<TCoToFlow>(node)) {
             operatorId = Visit(maybeToFlow.Cast(), planNode);
+        } else if (auto maybeAssumeSorted = TMaybeNode<TCoAssumeSorted>(node)) {
+            operatorId = Visit(maybeAssumeSorted.Cast(), planNode);
+        } else if (auto maybeMember = TMaybeNode<TCoMember>(node)) {
+            operatorId = Visit(maybeMember.Cast(), planNode);
         } else if (auto maybeIter = TMaybeNode<TCoIterator>(node)) {
             operatorId = Visit(maybeIter.Cast(), planNode);
         } else if (auto maybePartitionByKey = TMaybeNode<TCoPartitionByKey>(node)) {
@@ -1178,6 +1182,56 @@ private:
             } else {
                 return TMaybe<std::variant<ui32, TArgContext>> ();
             }
+        }
+
+        return AddOperator(planNode, "ConstantExpr", std::move(op));
+    }
+
+    TMaybe<std::variant<ui32, TArgContext>> Visit(const TCoAssumeSorted& assumeSorted, TQueryPlanNode& planNode) {
+        const auto precomputeValue = NPlanUtils::PrettyExprStr(assumeSorted.Input());
+
+        TOperator op;
+        op.Properties["Name"] = "AssumeSorted";
+
+        if (auto maybeResultBinding = ContainResultBinding(precomputeValue)) {
+            auto [txId, resId] = *maybeResultBinding;
+            planNode.CteRefName = TStringBuilder() << "precompute_" << txId << "_" << resId;
+            op.Properties["AssumeSorted"] = *planNode.CteRefName;
+        } else {
+            auto inputs = Visit(assumeSorted.Input().Ptr(), planNode);
+            if (inputs.size() == 1) {
+                return inputs[0];
+            } else {
+                return TMaybe<std::variant<ui32, TArgContext>> ();
+            }
+        }
+
+        return AddOperator(planNode, "ConstantExpr", std::move(op));
+    }
+
+    TMaybe<std::variant<ui32, TArgContext>> Visit(const TCoMember& member, TQueryPlanNode& planNode) {
+        const auto memberValue = NPlanUtils::PrettyExprStr(member.Struct());
+
+        TOperator op;
+        op.Properties["Name"] = "Member";
+
+        if (auto maybeResultBinding = ContainResultBinding(memberValue)) {
+            auto [txId, resId] = *maybeResultBinding;
+            planNode.CteRefName = TStringBuilder() << "precompute_" << txId << "_" << resId;
+            op.Properties["Member"] = *planNode.CteRefName;
+        } else {
+            auto inputs = Visit(member.Struct().Ptr(), planNode);
+            if (inputs.size() == 1) {
+                return inputs[0];
+            } else {
+                return TMaybe<std::variant<ui32, TArgContext>> ();
+            }
+        }
+
+        if (std::find_if(planNode.Operators.begin(), planNode.Operators.end(), [op](const auto & x) {
+            return x.Properties.at("Name")=="Member" && x.Properties.at("Member")==op.Properties.at("Member");
+        })) {
+            return TMaybe<std::variant<ui32, TArgContext>> ();
         }
 
         return AddOperator(planNode, "ConstantExpr", std::move(op));
@@ -1948,12 +2002,20 @@ NJson::TJsonValue ReconstructQueryPlanRec(const NJson::TJsonValue& plan,
         op.GetMapSafe().erase("Inputs");
     }
 
-    if (op.GetMapSafe().contains("Input") || op.GetMapSafe().contains("ToFlow")) {
+    if (op.GetMapSafe().contains("Input") 
+        || op.GetMapSafe().contains("ToFlow") 
+        || op.GetMapSafe().contains("Member")
+        || op.GetMapSafe().contains("AssumeSorted")) {
+
         TString maybePrecompute = "";
         if (op.GetMapSafe().contains("Input")) {
             maybePrecompute = op.GetMapSafe().at("Input").GetStringSafe();
         } else if (op.GetMapSafe().contains("ToFlow")) {
             maybePrecompute = op.GetMapSafe().at("ToFlow").GetStringSafe();
+        } else if (op.GetMapSafe().contains("Member")) {
+            maybePrecompute = op.GetMapSafe().at("Member").GetStringSafe();
+        } else if (op.GetMapSafe().contains("AssumeSorted")) {
+            maybePrecompute = op.GetMapSafe().at("AssumeSorted").GetStringSafe();
         }
 
         if (precomputes.contains(maybePrecompute)) {
@@ -1988,7 +2050,9 @@ NJson::TJsonValue SimplifyQueryPlan(NJson::TJsonValue& plan) {
         "Stage",
         "Iterator",
         "PartitionByKey",
-        "ToFlow"
+        "ToFlow",
+        "Member",
+        "AssumeSorted"
     };    
 
     THashMap<int, NJson::TJsonValue> planIndex;

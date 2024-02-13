@@ -52,6 +52,7 @@ PEERDIR(
     ydb/library/aclib
     ydb/library/folder_service/proto
     ydb/library/yaml_config
+    ydb/library/yaml_config/deprecated
     ydb/public/api/grpc
     ydb/public/api/grpc/draft
     ydb/public/lib/deprecated/client

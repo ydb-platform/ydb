@@ -128,7 +128,8 @@ while (true) {
 
 ### Reading data from a topic via Kafka Java SDK without a consumer group
 This example shows a code snippet for reading data from a topic via Kafka API without a consumer group (Manual Partition Assignment).
-You don't need to create a consumer for this reading.
+You don't need to create a consumer for this reading mode.
+
 
 ```java
 String HOST = "ydb:9093";

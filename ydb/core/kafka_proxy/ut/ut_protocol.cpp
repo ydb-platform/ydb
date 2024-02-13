@@ -1678,7 +1678,7 @@ Y_UNIT_TEST_SUITE(KafkaProtocol) {
         {
             // Set valid retention
             ui64 retentionMs = 168 * 60 * 60 * 1000;
-            ui64 retentionBytes = 51'200'000'000ul;
+            ui64 retentionBytes = 51'200 * 1_MB;
 
             auto msg = client.CreateTopics({ TTopicConfig("topic-993-test", 1, std::to_string(retentionMs), std::to_string(retentionBytes))});
             UNIT_ASSERT_VALUES_EQUAL(msg->Topics.size(), 1);
@@ -1687,7 +1687,7 @@ Y_UNIT_TEST_SUITE(KafkaProtocol) {
             auto result993 = pqClient.DescribeTopic("/Root/topic-993-test", describeTopicSettings).GetValueSync();
             UNIT_ASSERT(result993.IsSuccess());
             UNIT_ASSERT_VALUES_EQUAL(result993.GetTopicDescription().GetRetentionPeriod().MilliSeconds(), retentionMs);
-            UNIT_ASSERT_VALUES_EQUAL(result993.GetTopicDescription().GetRetentionStorageMb(), retentionBytes / 1'000'000);
+            UNIT_ASSERT_VALUES_EQUAL(result993.GetTopicDescription().GetRetentionStorageMb(), retentionBytes / 1_MB);
         }
 
         {
@@ -1991,7 +1991,7 @@ Y_UNIT_TEST_SUITE(KafkaProtocol) {
         {   
             // Set valid retention
             ui64 retentionMs = 168 * 60 * 60 * 1000;
-            ui64 retentionBytes = 51'200'000'000ul;
+            ui64 retentionBytes = 51'200 * 1_MB;
 
             auto msg = client.AlterConfigs({
                     TTopicConfig(shortTopic0Name, 1, std::to_string(retentionMs), std::to_string(retentionBytes)),
@@ -2071,10 +2071,10 @@ Y_UNIT_TEST_SUITE(KafkaProtocol) {
             UNIT_ASSERT_VALUES_EQUAL(msg->Responses[0].ErrorCode, INVALID_CONFIG);
         }
 
-        // Duplicate topics
         {
+            // Duplicate topics
             ui64 retentionMs = 168 * 60 * 60 * 1000;
-            ui64 retentionBytes = 51'200'000'000ul;
+            ui64 retentionBytes = 51'200 * 1_MB;
 
             auto msg = client.AlterConfigs({
                     TTopicConfig(shortTopic0Name, 1, std::to_string(retentionMs), std::to_string(retentionBytes)),

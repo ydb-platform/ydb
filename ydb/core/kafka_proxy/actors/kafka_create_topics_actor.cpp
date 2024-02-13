@@ -69,7 +69,7 @@ public:
             topicRequest.mutable_retention_period()->set_seconds(RetentionMs.value() / 1000);
         }
         if (RetentionBytes.has_value()) {
-            topicRequest.set_retention_storage_mb(RetentionBytes.value() / 1000'000);
+            topicRequest.set_retention_storage_mb(RetentionBytes.value() / 1_MB);
         }
         topicRequest.mutable_supported_codecs()->add_codecs(Ydb::Topic::CODEC_RAW);
 

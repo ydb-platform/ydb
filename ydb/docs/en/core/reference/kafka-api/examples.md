@@ -241,7 +241,8 @@ For more information about Kafka Connect and its configuration, see the [Apache 
     offset.storage.file.filename=/etc/kafka-connect-worker/worker.offset
     ```
 
-1. Create a FileSink connector settings file `/etc/kafka-connect-worker/file-sink.properties` to move data from the YDB topics to the file:
+1. Create a FileSink connector settings file `/etc/kafka-connect-worker/file-sink.properties` to move data from YDB topics to a file:
+
 
     ```ini
     name=local-file-sink

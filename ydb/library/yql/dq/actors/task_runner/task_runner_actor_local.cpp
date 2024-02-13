@@ -167,11 +167,11 @@ private:
                 TaskRunner->SetWatermarkIn(watermark);
             }
 
-            std::function<void()> wakeUpCallback = [actorSystem = NActors::TActivationContext::ActorSystem(), selfId = SelfId(), memlimit = ev->Get()->MemLimit, inputChannels = ev->Get()->InputChannels]() {
+            /*std::function<void()> wakeUpCallback = [actorSystem = NActors::TActivationContext::ActorSystem(), selfId = SelfId(), memlimit = ev->Get()->MemLimit, inputChannels = ev->Get()->InputChannels]() {
                 actorSystem->Send(selfId, new TEvContinueRun(THashSet<ui32>(inputChannels), memlimit));
-            };
+            };*/
 
-            TaskRunner->SetSpillerFactory(std::make_shared<TDqSpillerFactory>(TxId, NActors::TActivationContext::ActorSystem(), wakeUpCallback));
+            TaskRunner->SetSpillerFactory(std::make_shared<TDqSpillerFactory>(TxId, NActors::TActivationContext::ActorSystem(), WakeUpCallback));
 
             res = TaskRunner->Run();
                 
@@ -244,7 +244,7 @@ private:
             Send(ParentId, st.Release());
         }
 
-        bool wasSent = Send(
+        Send(
             ParentId,
             new TEvTaskRunFinished(
                 res,
@@ -260,7 +260,7 @@ private:
             /*flags=*/0,
             ev->Cookie);
 
-        LOG_I("Event was sent? " << wasSent);
+        LOG_E("DQ task finished");
     }
 
     void OnChannelPush(TEvPush::TPtr& ev) {
@@ -417,6 +417,7 @@ private:
     }
 
     void OnDqTask(TEvTaskRunnerCreate::TPtr& ev) {
+        LOG_E("DQ task started");
         ParentId = ev->Sender;
         auto settings = NDq::TDqTaskSettings(&ev->Get()->Task);
         TaskRunner = Factory(*Alloc.get(), settings, ev->Get()->StatsMode, [this](const TString& message) {
@@ -441,6 +442,8 @@ private:
         }
 
         TaskRunner->Prepare(settings, ev->Get()->MemoryLimits, *ev->Get()->ExecCtx);
+
+        WakeUpCallback = ev->Get()->ExecCtx->GetWakeupCallback();
 
         auto event = MakeHolder<TEvTaskRunnerCreateFinished>(
             TaskRunner->GetSecureParams(),
@@ -487,6 +490,8 @@ private:
     TIntrusivePtr<NDq::IDqTaskRunner> TaskRunner;
     THashSet<ui32> InputChannelsWithDisabledCheckpoints;
     THolder<TDqMemoryQuota> MemoryQuota;
+
+    std::function<void()> WakeUpCallback;
 };
 
 struct TLocalTaskRunnerActorFactory: public ITaskRunnerActorFactory {

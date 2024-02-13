@@ -19,7 +19,7 @@ namespace {
 #define LOG_D(s) \
     LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::KQP_COMPUTE, "TxId: " << TxId_ << ". " << s)
 #define LOG_I(s) \
-    LOG_INFO_S(*TlsActivationContext,  NKikimrServices::KQP_COMPUTE, "TxId: " << TxId << ". " << s)
+    LOG_INFO_S(*TlsActivationContext,  NKikimrServices::KQP_COMPUTE, "TxId: " << TxId_ << ". " << s)
 #define LOG_E(s) \
     LOG_ERROR_S(*TlsActivationContext, NKikimrServices::KQP_COMPUTE, "TxId: " << TxId_ << ". " << s)
 #define LOG_C(s) \
@@ -45,6 +45,11 @@ public:
         SpillerName_(spillerName),
         WakeupCallback_(wakeupCallback)
     {
+        LOG_I("Spiller " << spillerName << " created");
+    }
+
+    ~TDqComputeStorageActor() {
+        LOG_I("Spiller " << SpillerName_ << " terminated");
     }
 
     void Bootstrap() {

@@ -35,6 +35,8 @@ private:
     NActors::TActorSystem* ActorSystem_;
     IDqComputeStorageActor* ComputeStorageActor_;
     NActors::TActorId ComputeStorageActorId_;
+
+    TString SpillerName_;
 };
 
 } // namespace NYql::NDq

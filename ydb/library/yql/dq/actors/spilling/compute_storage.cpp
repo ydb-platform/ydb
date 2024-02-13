@@ -1,6 +1,7 @@
 #include "compute_storage.h"
 
 #include <util/generic/guid.h>
+#include <ydb/library/actors/core/log.h>
 
 namespace NYql::NDq {
 
@@ -9,7 +10,8 @@ using namespace NActors;
 TDqComputeStorage::TDqComputeStorage(TTxId txId, std::function<void()> wakeUpCallback, TActorSystem* actorSystem) : ActorSystem_(actorSystem) {
     TStringStream spillerName;
     spillerName << "Spiller" << "_" << CreateGuidAsString();
-    ComputeStorageActor_ = CreateDqComputeStorageActor(txId, spillerName.Str(), wakeUpCallback);
+    SpillerName_ = spillerName.Str();
+    ComputeStorageActor_ = CreateDqComputeStorageActor(txId, SpillerName_, wakeUpCallback);
     ComputeStorageActorId_ = ActorSystem_->Register(ComputeStorageActor_->GetActor());
 }
 

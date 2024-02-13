@@ -10,8 +10,6 @@
 
 namespace NKafka {
 
-static const i8 TOPIC_RESOURCE_TYPE = 2;
-
 enum EAuthSteps {
     WAIT_HANDSHAKE,
     WAIT_AUTH,

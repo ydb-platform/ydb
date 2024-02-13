@@ -1,6 +1,7 @@
 #include <library/cpp/testing/unittest/registar.h>
 
 #include "../kafka_messages.h"
+#include "../kafka_constants.h"
 #include "../actors/actors.h"
 
 #include <ydb/services/ydb/ydb_common_ut.h>

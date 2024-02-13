@@ -146,11 +146,11 @@ private:
                 PreparedResponse = std::make_shared<NKikimrClient::TResponse>();
             }
         }
-        
+
         auto& responseRecord = isDirectRead ? *PreparedResponse : Response->Record;
         responseRecord.SetStatus(NMsgBusProxy::MSTATUS_OK);
-        responseRecord.SetErrorCode(NPersQueue::NErrorCode::OK);        
-        
+        responseRecord.SetErrorCode(NPersQueue::NErrorCode::OK);
+
         Y_ABORT_UNLESS(readResult.ResultSize() > 0);
         bool isStart = false;
         if (!responseRecord.HasPartitionResponse()) {
@@ -191,7 +191,7 @@ private:
             }
 
             if (isNewMsg) {
-                if (!isStart && readResult.GetResult(i).HasTotalParts() 
+                if (!isStart && readResult.GetResult(i).HasTotalParts()
                              && readResult.GetResult(i).GetTotalParts() + i > readResult.ResultSize()) //last blob is not full
                     break;
                 partResp->AddResult()->CopyFrom(readResult.GetResult(i));
@@ -292,7 +292,7 @@ private:
 };
 
 
-TActorId CreateReadProxy(const TActorId& sender, const TActorId& tablet, ui32 tabletGeneration, 
+TActorId CreateReadProxy(const TActorId& sender, const TActorId& tablet, ui32 tabletGeneration,
                          const TDirectReadKey& directReadKey, const NKikimrClient::TPersQueueRequest& request,
                          const TActorContext& ctx)
 {
@@ -304,7 +304,7 @@ class TResponseBuilder {
 public:
 
     TResponseBuilder(const TActorId& sender, const TActorId& tablet, const TString& topicName, const ui32 partition, const ui64 messageNo,
-                     const TString& reqId, const TMaybe<ui64> cookie, NMetrics::TResourceMetrics* resourceMetrics, 
+                     const TString& reqId, const TMaybe<ui64> cookie, NMetrics::TResourceMetrics* resourceMetrics,
                      const TActorContext& ctx)
     : Sender(sender)
     , Tablet(tablet)
@@ -639,7 +639,7 @@ struct TPersQueue::TReplyToActor {
         Event(std::move(event))
     {
     }
- 
+
     TActorId ActorId;
     TEventBasePtr Event;
 };
@@ -840,7 +840,7 @@ void TPersQueue::ReadConfig(const NKikimrClient::TKeyValueResponse::TReadResult&
         ctx.Send(ctx.SelfID, new TEvents::TEvPoisonPill());
         return;
     }
- 
+
     Y_ABORT_UNLESS(readRange.HasStatus());
     if (readRange.GetStatus() != NKikimrProto::OK && readRange.GetStatus() != NKikimrProto::NODATA) {
         LOG_ERROR_S(ctx, NKikimrServices::PERSQUEUE,
@@ -1267,7 +1267,7 @@ void TPersQueue::FinishResponse(THashMap<ui64, TAutoPtr<TResponseBuilder>>::iter
 
 
 void TPersQueue::Handle(TEvPersQueue::TEvUpdateConfig::TPtr& ev, const TActorContext& ctx)
-{   
+{
     if (!ConfigInited) {
         UpdateConfigRequests.emplace_back(ev->Release(), ev->Sender);
         return;
@@ -1304,7 +1304,7 @@ void TPersQueue::TrySendUpdateConfigResponses(const TActorContext& ctx)
 
     ChangeConfigNotification.clear();
 }
- 
+
 void TPersQueue::CreateTopicConverter(const NKikimrPQ::TPQTabletConfig& config,
                                       NPersQueue::TConverterFactoryPtr& converterFactory,
                                       NPersQueue::TTopicConverterPtr& topicConverter,
@@ -2109,7 +2109,7 @@ void TPersQueue::HandleReadRequest(
                 ReplyError(ctx, responseCookie, NPersQueue::NErrorCode::READ_ERROR_NO_SESSION,
                            TStringBuilder() << "Read prepare request with unknown(old?) session id " << cmd.GetSessionId());
                 return;
-            } 
+            }
         }
 
         THolder<TEvPQ::TEvRead> event =
@@ -2375,7 +2375,7 @@ void TPersQueue::Handle(TEvPersQueue::TEvRequest::TPtr& ev, const TActorContext&
     }
     ResponseProxy[responseCookie] = ans;
     Counters->Simple()[COUNTER_PQ_TABLET_INFLIGHT].Set(ResponseProxy.size());
-  
+
     if (!ConfigInited) {
         ReplyError(ctx, responseCookie, NPersQueue::NErrorCode::INITIALIZING, "tablet is not ready");
         return;
@@ -2396,11 +2396,11 @@ void TPersQueue::Handle(TEvPersQueue::TEvRequest::TPtr& ev, const TActorContext&
         ReplyError(ctx, responseCookie, NPersQueue::NErrorCode::BAD_REQUEST, "no partition number");
         return;
     }
-  
+
     TPartitionId partition(req.GetPartition());
     auto it = Partitions.find(partition);
 
-    LOG_DEBUG_S(ctx, NKikimrServices::PERSQUEUE, "Tablet " << TabletID() << " got client message batch for topic '" 
+    LOG_DEBUG_S(ctx, NKikimrServices::PERSQUEUE, "Tablet " << TabletID() << " got client message batch for topic '"
             << (TopicConverter ? TopicConverter->GetClientsideName() : "Undefined") << "' partition " << partition);
 
     if (it == Partitions.end()) {
@@ -2859,7 +2859,7 @@ void TPersQueue::Handle(TEvTxProcessing::TEvReadSet::TPtr& ev, const TActorConte
 
     std::unique_ptr<TEvTxProcessing::TEvReadSetAck> ack;
     if (!(event.GetFlags() & NKikimrTx::TEvReadSet::FLAG_NO_ACK)) {
-        ack = std::make_unique<TEvTxProcessing::TEvReadSetAck>(*ev->Get(), TabletID()); 
+        ack = std::make_unique<TEvTxProcessing::TEvReadSetAck>(*ev->Get(), TabletID());
     }
 
     if (auto tx = GetTransaction(ctx, event.GetTxId()); tx && tx->Senders.contains(event.GetTabletProducer())) {
@@ -2927,7 +2927,7 @@ void TPersQueue::Handle(TEvPQ::TEvTxCalcPredicateResult::TPtr& ev, const TActorC
 void TPersQueue::Handle(TEvPQ::TEvProposePartitionConfigResult::TPtr& ev, const TActorContext& ctx)
 {
     const TEvPQ::TEvProposePartitionConfigResult& event = *ev->Get();
-    
+
     auto tx = GetTransaction(ctx, event.TxId);
     if (!tx) {
         return;
@@ -3582,7 +3582,7 @@ void TPersQueue::CheckTxState(const TActorContext& ctx,
         Y_ABORT_UNLESS(tx.PartitionRepliesCount <= tx.PartitionRepliesExpected);
 
         PQ_LOG_T("TxId="<< tx.TxId << ", State=EXECUTING" <<
-                 ", tx.PartitionRepliesCount=" << tx.PartitionRepliesCount << 
+                 ", tx.PartitionRepliesCount=" << tx.PartitionRepliesCount <<
                  ", tx.PartitionRepliesExpected=" << tx.PartitionRepliesExpected);
         if (tx.PartitionRepliesCount == tx.PartitionRepliesExpected) {
             Y_ABORT_UNLESS(!TxQueue.empty());
@@ -3728,7 +3728,7 @@ TPartition* TPersQueue::CreatePartitionActor(const TPartitionId& partitionId,
                                              const TActorContext& ctx)
 {
     int channels = Info()->Channels.size() - NKeyValue::BLOB_CHANNEL; // channels 0,1 are reserved in tablet
-    Y_ABORT_UNLESS(channels > 0);   
+    Y_ABORT_UNLESS(channels > 0);
 
     return new TPartition(TabletID(),
                           partitionId,
@@ -3793,7 +3793,7 @@ void TPersQueue::EnsurePartitionsAreNotDeleted(const NKikimrPQ::TPQTabletConfig&
         Y_VERIFY_S(was.contains(partition.GetPartitionId()), "New config is bad, missing partition " << partition.GetPartitionId());
     }
 }
- 
+
 void TPersQueue::InitTransactions(const NKikimrClient::TKeyValueResponse::TReadRangeResult& readRange,
                                   THashMap<ui32, TVector<TTransaction>>& partitionTxs)
 {

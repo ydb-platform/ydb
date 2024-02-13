@@ -70,12 +70,18 @@ public:
         std::shared_ptr<IProviderContext> ctx;
         BuildOptimizerJoinTree(tree, ctx, Root);
 
+        std::function<void(const TString& str)> log;
+
+        log = [](const TString& str) {
+            YQL_CLOG(INFO, ProviderYt) << str;
+        };
+
         std::unique_ptr<IOptimizerNew> opt;
 
         switch (State->Types->CostBasedOptimizer) {
-//        case ECostBasedOptimizerType::PG:
-//            opt = std::unique_ptr<IOptimizer>(MakePgOptimizer(input, log));
-//            break;
+        case ECostBasedOptimizerType::PG:
+            opt = std::unique_ptr<IOptimizerNew>(MakePgOptimizerNew(*ctx, Ctx, log));
+            break;
         case ECostBasedOptimizerType::Native:
             opt = std::unique_ptr<IOptimizerNew>(NDq::MakeNativeOptimizerNew(*ctx, 100000));
             break;
@@ -88,6 +94,7 @@ public:
 
         try {
             result = opt->JoinSearch(std::dynamic_pointer_cast<TJoinOptimizerNode>(tree));
+            if (tree == result) { return Root; }
         } catch (...) {
             YQL_CLOG(ERROR, ProviderYt) << "Cannot do join search " << CurrentExceptionMessage();
             return Root;

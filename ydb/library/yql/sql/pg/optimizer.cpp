@@ -559,6 +559,8 @@ struct TPgOptimizerImpl
             ExtractVars(leftVars, rightVars, op);
 
             CHECK(leftVars.size() == rightVars.size(), "Left and right labels must have the same size");
+
+            MakeEqClasses(EqClasses, leftVars, rightVars);
         } else if (op->JoinType == LeftJoin || op->JoinType == RightJoin) {
             CHECK(op->JoinConditions.size() == 1, "Only 1 var per join supported");
 

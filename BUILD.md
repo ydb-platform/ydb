@@ -24,21 +24,30 @@ Change the current working directory to the cloned repository root to perform fu
 cd ydb
 ```
 
-### Check out trunk
+## Checkout a branch for build
 
-By default, the `main` branch is checked out. It contains the trunk - a latest development update for both YDB Server and CLI, for __Yatool build__. To build trunk using __CMake build__, check out the `cmakebuild` branch:
+There are two branches for the latest development update in the {{ ydb-short-name }} repository:
+
+- `main` - the primary development branch for **Yatool** build
+- `cmakebuild` - the follower branch for **CMake** build, synced from `main` every hour, with generated CMakelists.txt files
+
+Build from the development mainline branches may sometimes be broken for short periods of time, and also some tests may fail. So, you may prefer to build the latest stable versions of YDB Server and CLI. As stable versions of the YDB Server and CLI belong to different commits, it is not possible to get both server and CLI stable executables with a single checkout/build. Checkout and build server first, then CLI, or vice versa.
+
+Stable versions can be built by both **Yatool** and **CMake**.
+
+### Checkout the latest development update for Yatool build
+
+By default, the `main` branch is checked out, so you can run Yatool build without executing a checkout command.
+
+### Checkout the latest development update for CMake build
+
+To checkout the latest development update for CMake build, run the following command:
 
 ```bash
 git checkout cmakebuild
 ```
 
-The `cmakebuild` branch is updated on an hourly basis following the `main`.
-
-Trunk may sometimes be broken for short periods of time, so you may prefer to build the latest stable versions of YDB Server and CLI as described below. As stable versions of the YDB Server and CLI belong to different commits, it is not possible to get both server and CLI stable executables with a single checkout/build. Checkout and build server first, then CLI, or visa versa.
-
-Release tags support both Yatool and CMake builds.
-
-### Check out the latest stable YDB Server version for build
+### Check out the latest stable YDB Server version
 
 To build the latest stable version of a YDB Server, check out the latest stable Server tag from the repository. To do so, visit the https://github.com/ydb-platform/ydb/releases/latest page and use the provided 'tag' value in the `git checkout <tag>` command.
 
@@ -48,7 +57,7 @@ For example, at the time of writing the latest stable release was [YDB Server 23
 git checkout 23.2.12
 ```
 
-### Check out the latest stable YDB CLI version for build
+### Check out the latest stable YDB CLI version
 
 To build a latest stable version of a YDB CLI, check out the latest stable CLI tag from the repository. To do so, visit the https://github.com/ydb-platform/ydb/releases page, scroll down to the top-most 'YDB CLI' release, and use the provided 'tag' value in the `git checkout <tag>` command.
 
@@ -85,7 +94,9 @@ You can read more about Yatool options in the [YDB documentation](https://ydb.te
 ## Build using CMake
 
 You can use CMake build for various arcitectures and operating systems.
-YDB server can be built for Ubuntu 18.04, 20.04 and 22.04. Other Linux distributions are likely to work, but additional effort may be needed.
+
+YDB server can be built for Ubuntu 18.04, 20.04 and 22.04. Other Linux distributions are likely to work, but additional effort may be required.
+
 YDB CLI can be built for Ubuntu 18+, Windows, and MacOS. Instructions below are provided for Ubuntu only, other options are to be described later.
 
 ### For Ubuntu versions earlier than 22.04
@@ -169,8 +180,6 @@ mkdir build
 
 ### Build
 
-#### Build YDB Server
-
 To build YDB Server run:
 ```bash
 ninja ydb/apps/ydbd/all
@@ -180,8 +189,6 @@ A YDB server binary can be found at:
 ```
 ydb/apps/ydbd/ydbd
 ```
-
-#### Build YDB CLI
 
 To build YDB CLI (Command Line Interface utility) run:
 ```bash

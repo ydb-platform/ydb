@@ -14,6 +14,7 @@ from google.protobuf import json_format
 from ydb.core.protos import (
     auth_pb2,
     blobstorage_vdisk_config_pb2,
+    bootstrap_pb2,
     cms_pb2,
     config_pb2,
     feature_flags_pb2,
@@ -592,7 +593,7 @@ class StaticConfigGenerator(object):
         return all_tablets
 
     def __generate_boot_txt(self):
-        self.__proto_configs["boot.txt"] = config_pb2.TBootstrap()
+        self.__proto_configs["boot.txt"] = bootstrap_pb2.TBootstrap()
 
         for tablet_type, tablet_count in self.__system_tablets:
             for index in range(int(tablet_count)):

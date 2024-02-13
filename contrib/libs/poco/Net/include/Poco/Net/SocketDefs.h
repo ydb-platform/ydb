@@ -74,11 +74,11 @@
 		#define ADDRESS_FAMILY USHORT
 	#endif
 #elif defined(POCO_VXWORKS)
-	#include <hostLib.h>
+	#error #include <hostLib.h>
 	#error #include <ifLib.h>
 	#error #include <inetLib.h>
-	#include <ioLib.h>
-	#include <resolvLib.h>
+	#error #include <ioLib.h>
+	#error #include <resolvLib.h>
 	#include <types.h>
 	#include <socket.h>
 	#include <netinet/tcp.h>

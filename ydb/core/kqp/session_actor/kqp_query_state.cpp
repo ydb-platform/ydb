@@ -271,11 +271,14 @@ std::unique_ptr<NSchemeCache::TSchemeCacheNavigate> TKqpQueryState::BuildSchemeC
 }
 
 bool TKqpQueryState::IsAccessDenied(const NSchemeCache::TSchemeCacheNavigate& response, TString& message) {
-    auto rights = NACLib::EAccessRights::ReadAttributes | NACLib::EAccessRights::WriteAttributes;
+    auto checkAccessDenied = [&] (const NSchemeCache::TSchemeCacheNavigate::TEntry& result) {
+        static const auto selectRowRights = NACLib::EAccessRights::SelectRow;
+        static const auto accessAttributesRights = NACLib::EAccessRights::ReadAttributes | NACLib::EAccessRights::WriteAttributes;
+        // in future check right UseConsumer
+        return result.SecurityObject && !(result.SecurityObject->CheckAccess(selectRowRights, *UserToken) || result.SecurityObject->CheckAccess(accessAttributesRights, *UserToken));
+    };
     // don't build message string on success path
-    bool denied = std::any_of(response.ResultSet.begin(), response.ResultSet.end(), [&] (auto& result) {
-        return result.SecurityObject && !result.SecurityObject->CheckAccess(rights, *UserToken);
-    });
+    bool denied = std::any_of(response.ResultSet.begin(), response.ResultSet.end(), checkAccessDenied);
 
     if (!denied) {
         return false;
@@ -288,7 +291,7 @@ bool TKqpQueryState::IsAccessDenied(const NSchemeCache::TSchemeCacheNavigate& re
             continue;
         }
 
-        if (result.SecurityObject && !result.SecurityObject->CheckAccess(rights, *UserToken)) {
+        if (checkAccessDenied(result)) {
             builder << " '" << JoinPath(result.Path) << "'";
         }
     }

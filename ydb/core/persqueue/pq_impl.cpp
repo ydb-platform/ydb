@@ -1259,7 +1259,7 @@ TPartitionInfo& TPersQueue::GetPartitionInfo(const TPartitionId& partitionId)
 
 void TPersQueue::Handle(TEvPQ::TEvPartitionCounters::TPtr& ev, const TActorContext& ctx)
 {
-    const auto partitionId = ev->Get()->Partition;
+    const auto& partitionId = ev->Get()->Partition;
     auto& partition = GetPartitionInfo(partitionId);
     auto diff = ev->Get()->Counters.MakeDiffForAggr(partition.Baseline);
     ui64 cpuUsage = diff->Cumulative()[COUNTER_PQ_TABLET_CPU_USAGE].Get();
@@ -1324,7 +1324,7 @@ void TPersQueue::AggregateAndSendLabeledCountersFor(const TString& group, const 
 
 void TPersQueue::Handle(TEvPQ::TEvPartitionLabeledCounters::TPtr& ev, const TActorContext& ctx)
 {
-    const auto partitionId = ev->Get()->Partition;
+    const auto& partitionId = ev->Get()->Partition;
     if (partitionId.IsSupportivePartition()) {
         return;
     }
@@ -1338,7 +1338,7 @@ void TPersQueue::Handle(TEvPQ::TEvPartitionLabeledCounters::TPtr& ev, const TAct
 
 void TPersQueue::Handle(TEvPQ::TEvPartitionLabeledCountersDrop::TPtr& ev, const TActorContext& ctx)
 {
-    const auto partitionId = ev->Get()->Partition;
+    const auto& partitionId = ev->Get()->Partition;
     if (partitionId.IsSupportivePartition()) {
         return;
     }
@@ -1371,7 +1371,7 @@ bool TPersQueue::AllOriginalPartitionsInited() const
 
 void TPersQueue::Handle(TEvPQ::TEvInitComplete::TPtr& ev, const TActorContext& ctx)
 {
-    const auto partitionId = ev->Get()->Partition;
+    const auto& partitionId = ev->Get()->Partition;
     auto& partition = GetPartitionInfo(partitionId);
     Y_ABORT_UNLESS(!partition.InitDone);
     partition.InitDone = true;

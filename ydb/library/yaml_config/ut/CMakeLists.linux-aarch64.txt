@@ -17,6 +17,7 @@ target_link_libraries(ydb-library-yaml_config-ut PUBLIC
   yutil
   cpp-testing-unittest_main
   ydb-library-yaml_config
+  library-yaml_config-deprecated
 )
 target_link_options(ydb-library-yaml_config-ut PRIVATE
   -ldl

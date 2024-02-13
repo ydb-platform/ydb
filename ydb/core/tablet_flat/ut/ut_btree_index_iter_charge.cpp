@@ -711,6 +711,13 @@ Y_UNIT_TEST_SUITE(TPartBtreeIndexIteration) {
         }, env, message, failsAllowed);
     }
 
+    template<EDirection Direction>
+    EReady SkipToRowVersion(TWrapPartImpl<Direction>& wrap, TTouchEnv& env, TRowVersion rowVersion, const TString& message, ui32 failsAllowed) {
+        return Retry([&]() {
+            return wrap.SkipToRowVersion(rowVersion);
+        }, env, message, failsAllowed);
+    }
+
     void Charge(const TRun &run, const TVector<TTag> tags, TTouchEnv& env, const TCells key1, const TCells key2, ui64 itemsLimit, ui64 bytesLimit,
             bool reverse, const TKeyCellDefaults &keyDefaults, const TString& message, ui32 failsAllowed) {
         Retry([&]() {
@@ -722,17 +729,24 @@ Y_UNIT_TEST_SUITE(TPartBtreeIndexIteration) {
     }
 
     template<EDirection Direction>
-    void Iterate(const TPartEggs& eggs, TRun& run, TTouchEnv& env, const TCells key1, const TCells key2, ESeek seek, ui64 itemsLimit, const TString& message, ui32 failsAllowed) {
+    void Iterate(const TPartEggs& eggs, TRun& run, TTouchEnv& env, const TCells key1, const TCells key2, ESeek seek, ui64 itemsLimit, bool history, const TString& message, ui32 failsAllowed) {
         TWrapPartImpl<Direction> wrap(eggs, run);
         wrap.StopAfter(key2);
         wrap.Make(&env);
+        
         if (Seek(wrap, env, key1, seek, message + " Seek", failsAllowed) != EReady::Data) {
             return;
+        }
+        if (history) {
+            UNIT_ASSERT_VALUES_EQUAL(SkipToRowVersion(wrap, env, {0, 1}, message + " Ver", failsAllowed), EReady::Data);
         }
 
         for (ui32 itemIndex = 1; itemsLimit == 0 || itemIndex < itemsLimit; itemIndex++) {
             if (Next(wrap, env, message + " Next " + std::to_string(itemIndex), failsAllowed) != EReady::Data) {
                 return;
+            }
+            if (history) {
+                UNIT_ASSERT_VALUES_EQUAL(SkipToRowVersion(wrap, env, {0, 1}, message + " Ver", failsAllowed), EReady::Data);
             }
         }
     }
@@ -832,8 +846,8 @@ Y_UNIT_TEST_SUITE(TPartBtreeIndexIteration) {
                             }
 
                             for (ESeek seek : {ESeek::Exact, ESeek::Lower, ESeek::Upper}) {
-                                Iterate<Direction>(eggs, btreeRun, bTreeEnv, key1, key2, seek, itemsLimit, message, 0);
-                                Iterate<Direction>(eggs, flatRun, flatEnv, key1, key2, seek, itemsLimit, message, 0);
+                                Iterate<Direction>(eggs, btreeRun, bTreeEnv, key1, key2, seek, itemsLimit, params.History, message, 0);
+                                Iterate<Direction>(eggs, flatRun, flatEnv, key1, key2, seek, itemsLimit, params.History, message, 0);
                             }
                         }
                     }

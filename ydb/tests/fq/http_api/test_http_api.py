@@ -6,9 +6,10 @@ import logging
 import os
 import pytest
 import re
-import retry
 import yaml
 from yaml.loader import SafeLoader
+
+import library.python.retry as retry
 
 from test_base import TestBase
 from ydb.core.fq.libs.http_api_client.http_client import YQHttpClientConfig, YQHttpClient, YQHttpClientException

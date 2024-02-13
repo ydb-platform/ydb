@@ -312,7 +312,6 @@ public:
                     {"datname", [](ui32 index) { return PointerDatumToPod((Datum)(MakeFixedString(
                         index == 1 ? "template1" : (index == 2 ? "template0" : "postgres"), NAMEDATALEN))); }},
                     {"encoding", [](ui32) { return ScalarDatumToPod(Int32GetDatum(PG_UTF8)); }},
-                    {"datacl", [](ui32) { return NUdf::TUnboxedValuePod(); }},
                     {"datcollate", [](ui32) { return PointerDatumToPod((Datum)(MakeFixedString("C", NAMEDATALEN))); }},
                     {"datctype", [](ui32) { return PointerDatumToPod((Datum)(MakeFixedString("C", NAMEDATALEN))); }},
                 };
@@ -456,10 +455,6 @@ public:
                 fillers[*pos] = func;
             }
         }
-
-        for (const auto& f : fillers) {
-            Y_ENSURE(f);
-        }
     }
 
     NUdf::TUnboxedValuePod DoCalculate(TComputationContext& compCtx) const {
@@ -474,7 +469,9 @@ public:
                     NUdf::TUnboxedValue* items;
                     auto row = compCtx.HolderFactory.CreateDirectArrayHolder(PgTypeFillers_.size(), items);
                     for (ui32 i = 0; i < PgTypeFillers_.size(); ++i) {
-                        items[i] = PgTypeFillers_[i](desc);
+                        if (PgTypeFillers_[i]) {
+                            items[i] = PgTypeFillers_[i](desc);
+                        }
                     }
 
                     rows.emplace_back(row);
@@ -484,7 +481,9 @@ public:
                     NUdf::TUnboxedValue* items;
                     auto row = compCtx.HolderFactory.CreateDirectArrayHolder(PgDatabaseFillers_.size(), items);
                     for (ui32 i = 0; i < PgDatabaseFillers_.size(); ++i) {
-                        items[i] = PgDatabaseFillers_[i](index);
+                        if (PgDatabaseFillers_[i]) {
+                            items[i] = PgDatabaseFillers_[i](index);
+                        }
                     }
 
                     rows.emplace_back(row);
@@ -494,7 +493,9 @@ public:
                     NUdf::TUnboxedValue* items;
                     auto row = compCtx.HolderFactory.CreateDirectArrayHolder(PgTablespaceFillers_.size(), items);
                     for (ui32 i = 0; i < PgTablespaceFillers_.size(); ++i) {
-                        items[i] = PgTablespaceFillers_[i](index);
+                        if (PgTablespaceFillers_[i]) {
+                            items[i] = PgTablespaceFillers_[i](index);
+                        }
                     }
 
                     rows.emplace_back(row);
@@ -504,7 +505,9 @@ public:
                     NUdf::TUnboxedValue* items;
                     auto row = compCtx.HolderFactory.CreateDirectArrayHolder(PgShDescriptionFillers_.size(), items);
                     for (ui32 i = 0; i < PgShDescriptionFillers_.size(); ++i) {
-                        items[i] = PgShDescriptionFillers_[i](index);
+                        if (PgShDescriptionFillers_[i]) {
+                            items[i] = PgShDescriptionFillers_[i](index);
+                        }
                     }
 
                     rows.emplace_back(row);
@@ -513,7 +516,9 @@ public:
                 NUdf::TUnboxedValue* items;
                 auto row = compCtx.HolderFactory.CreateDirectArrayHolder(PgStatGssapiFillers_.size(), items);
                 for (ui32 i = 0; i < PgStatGssapiFillers_.size(); ++i) {
-                    items[i] = PgStatGssapiFillers_[i]();
+                    if (PgStatGssapiFillers_[i]) {
+                        items[i] = PgStatGssapiFillers_[i]();
+                    }
                 }
 
                 rows.emplace_back(row);
@@ -522,7 +527,9 @@ public:
                     NUdf::TUnboxedValue* items;
                     auto row = compCtx.HolderFactory.CreateDirectArrayHolder(ItemType_->GetMembersCount(), items);
                     for (ui32 i = 0; i < PgNamespaceFillers_.size(); ++i) {
-                        items[i] = PgNamespaceFillers_[i](desc);
+                        if (PgNamespaceFillers_[i]) {
+                            items[i] = PgNamespaceFillers_[i](desc);
+                        }
                     }
 
                     rows.emplace_back(row);
@@ -531,8 +538,10 @@ public:
                 NPg::EnumAm([&](ui32 oid, const NPg::TAmDesc& desc) {
                     NUdf::TUnboxedValue* items;
                     auto row = compCtx.HolderFactory.CreateDirectArrayHolder(ItemType_->GetMembersCount(), items);
-                    for (ui32 i = 0; i < ItemType_->GetMembersCount(); ++i) {
-                        items[i] = PgAmFillers_[i](desc);
+                    for (ui32 i = 0; i < PgAmFillers_.size(); ++i) {
+                        if (PgAmFillers_[i]) {
+                            items[i] = PgAmFillers_[i](desc);
+                        }
                     }
 
                     rows.emplace_back(row);
@@ -546,7 +555,9 @@ public:
                     for (ui32 i = 0; i < PgDescriptionFillers_.size(); ++i) {
                         desc.Objoid = oid;
                         desc.Description = desc_.Descr;
-                        items[i] = PgDescriptionFillers_[i](desc);
+                        if (PgDescriptionFillers_[i]) {
+                            items[i] = PgDescriptionFillers_[i](desc);
+                        }
                     }
 
                     rows.emplace_back(row);
@@ -559,7 +570,9 @@ public:
                     for (ui32 i = 0; i < PgDescriptionFillers_.size(); ++i) {
                         desc.Objoid = oid;
                         desc.Description = desc_.Descr;
-                        items[i] = PgDescriptionFillers_[i](desc);
+                        if (PgDescriptionFillers_[i]) {
+                            items[i] = PgDescriptionFillers_[i](desc);
+                        }
                     }
 
                     rows.emplace_back(row);
@@ -572,7 +585,9 @@ public:
                     for (ui32 i = 0; i < PgDescriptionFillers_.size(); ++i) {
                         desc.Objoid = oid;
                         desc.Description = desc_.Descr;
-                        items[i] = PgDescriptionFillers_[i](desc);
+                        if (PgDescriptionFillers_[i]) {
+                            items[i] = PgDescriptionFillers_[i](desc);
+                        }
                     }
 
                     rows.emplace_back(row);
@@ -586,7 +601,9 @@ public:
                     for (ui32 i = 0; i < PgDescriptionFillers_.size(); ++i) {
                         desc.Objoid = desc_.ConversionId;
                         desc.Description = desc_.Descr;
-                        items[i] = PgDescriptionFillers_[i](desc);
+                        if (PgDescriptionFillers_[i]) {
+                            items[i] = PgDescriptionFillers_[i](desc);
+                        }
                     }
 
                     rows.emplace_back(row);
@@ -600,7 +617,9 @@ public:
                     for (ui32 i = 0; i < PgDescriptionFillers_.size(); ++i) {
                         desc.Objoid = desc_.OperId;
                         desc.Description = desc_.Descr;
-                        items[i] = PgDescriptionFillers_[i](desc);
+                        if (PgDescriptionFillers_[i]) {
+                            items[i] = PgDescriptionFillers_[i](desc);
+                        }
                     }
 
                     rows.emplace_back(row);
@@ -614,7 +633,9 @@ public:
                     for (ui32 i = 0; i < PgDescriptionFillers_.size(); ++i) {
                         desc.Objoid = desc_.ProcId;
                         desc.Description = desc_.Descr;
-                        items[i] = PgDescriptionFillers_[i](desc);
+                        if (PgDescriptionFillers_[i]) {
+                            items[i] = PgDescriptionFillers_[i](desc);
+                        }
                     }
 
                     rows.emplace_back(row);
@@ -625,7 +646,9 @@ public:
                     NUdf::TUnboxedValue* items;
                     auto row = compCtx.HolderFactory.CreateDirectArrayHolder(PgTablesFillers_.size(), items);
                     for (ui32 i = 0; i < PgTablesFillers_.size(); ++i) {
-                        items[i] = PgTablesFillers_[i](t);
+                        if (PgTablesFillers_[i]) {
+                            items[i] = PgTablesFillers_[i](t);
+                        }
                     }
 
                     rows.emplace_back(row);
@@ -634,7 +657,9 @@ public:
                 NUdf::TUnboxedValue* items;
                 auto row = compCtx.HolderFactory.CreateDirectArrayHolder(PgRolesFillers_.size(), items);
                 for (ui32 i = 0; i < PgRolesFillers_.size(); ++i) {
-                    items[i] = PgRolesFillers_[i]();
+                    if (PgRolesFillers_[i]) {
+                        items[i] = PgRolesFillers_[i]();
+                    }
                 }
 
                 rows.emplace_back(row);
@@ -643,7 +668,9 @@ public:
                     NUdf::TUnboxedValue* items;
                     auto row = compCtx.HolderFactory.CreateDirectArrayHolder(PgDatabaseStatFillers_.size(), items);
                     for (ui32 i = 0; i < PgDatabaseStatFillers_.size(); ++i) {
-                        items[i] = PgDatabaseStatFillers_[i](index);
+                        if (PgDatabaseStatFillers_[i]) {
+                            items[i] = PgDatabaseStatFillers_[i](index);
+                        }
                     }
 
                     rows.emplace_back(row);
@@ -663,11 +690,13 @@ public:
                 });
 
                 for (const auto& t : tables) {
+                    const ui32 amOid = (t.Kind == NPg::ERelKind::Relation) ? btreeAmOid : 0;                    
                     NUdf::TUnboxedValue* items;
                     auto row = compCtx.HolderFactory.CreateDirectArrayHolder(PgClassFillers_.size(), items);
                     for (ui32 i = 0; i < PgClassFillers_.size(); ++i) {
-                        ui32 amOid = (t.Kind == NPg::ERelKind::Relation) ? btreeAmOid : 0;
-                        items[i] = PgClassFillers_[i](t, namespaces[t.Schema], amOid);
+                        if (PgClassFillers_[i]) {
+                            items[i] = PgClassFillers_[i](t, namespaces[t.Schema], amOid);
+                        }
                     }
 
                     rows.emplace_back(row);
@@ -680,7 +709,9 @@ public:
                     NUdf::TUnboxedValue* items;
                     auto row = compCtx.HolderFactory.CreateDirectArrayHolder(TablesFillers_.size(), items);
                     for (ui32 i = 0; i < TablesFillers_.size(); ++i) {
-                        items[i] = TablesFillers_[i](t);
+                        if (TablesFillers_[i]) {
+                            items[i] = TablesFillers_[i](t);
+                        }
                     }
 
                     rows.emplace_back(row);
@@ -692,7 +723,9 @@ public:
                         NUdf::TUnboxedValue* items;
                         auto row = compCtx.HolderFactory.CreateDirectArrayHolder(ColumnsFillers_.size(), items);
                         for (ui32 i = 0; i < ColumnsFillers_.size(); ++i) {
-                            items[i] = ColumnsFillers_[i](c);
+                            if (ColumnsFillers_[i]) {
+                                items[i] = ColumnsFillers_[i](c);
+                            }
                         }
 
                         rows.emplace_back(row);

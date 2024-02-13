@@ -6401,6 +6401,21 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
                 prepareResult.GetIssues().ToString().Contains("AS VALUES statement is not supported for CreateTableAs."),
                 prepareResult.GetIssues().ToString());
         }
+
+        {
+            auto prepareResult = client.ExecuteQuery(R"(
+                CREATE TABLE `/Root/Destination` (
+                    PRIMARY KEY (Col1)
+                )
+                PARTITION BY HASH(Col1)
+                WITH (STORE = COLUMN, AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = 4)
+                AS SELECT * FROM `/Root/Source`;
+            )", NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
+            UNIT_ASSERT(!prepareResult.IsSuccess());
+            UNIT_ASSERT_C(
+                prepareResult.GetIssues().ToString().Contains("Creating table without columns is not supported."),
+                prepareResult.GetIssues().ToString());
+        }
     }
 
     Y_UNIT_TEST(BlockGenericWithDistinct) {

@@ -1,5 +1,6 @@
 #include "yaml_config_parser.h"
 #include "yaml_config_helpers.h"
+#include "core_constants.h"
 
 #include <ydb/library/yaml_config/protos/config.pb.h>
 
@@ -93,21 +94,21 @@ namespace NKikimr::NYaml {
         ythrow yexception() << "Unknown type of YAML node: '" << yaml.as<TString>() << "'";
     }
 
-    std::optional<bool> GetBoolByPathOrNone(const NJson::TJsonValue& json, const TString& path) {
+    std::optional<bool> GetBoolByPathOrNone(const NJson::TJsonValue& json, const TStringBuf& path) {
         if (auto* elem = Traverse(json, path); elem != nullptr && elem->IsBoolean()) {
             return elem->GetBoolean();
         }
         return {};
     }
 
-    std::optional<bool> CheckExplicitEmptyArrayByPathOrNone(const NJson::TJsonValue& json, const TString& path) {
+    std::optional<bool> CheckExplicitEmptyArrayByPathOrNone(const NJson::TJsonValue& json, const TStringBuf& path) {
         if (auto* elem = Traverse(json, path); elem != nullptr && elem->IsArray()) {
             return elem->GetArray().size();
         }
         return {};
     }
 
-    void EraseByPath(NJson::TJsonValue& json, const TString& path) {
+    void EraseByPath(NJson::TJsonValue& json, const TStringBuf& path) {
         TString lastName;
         if (auto* elem = Traverse(json, path, &lastName)) {
             if (elem->Has(lastName)) {
@@ -116,7 +117,7 @@ namespace NKikimr::NYaml {
         }
     }
 
-    void EraseMultipleByPath(NJson::TJsonValue& json, const TString& path) {
+    void EraseMultipleByPath(NJson::TJsonValue& json, const TStringBuf& path) {
         IterateMut(json, path, [](const std::vector<ui32>&, NJson::TJsonValue& node) {
             Y_ENSURE_BT(node.IsMap());
             NJson::TJsonValue value;
@@ -125,7 +126,7 @@ namespace NKikimr::NYaml {
         });
     }
 
-    void EraseMultipleByPath(NJson::TJsonValue& json, const TString& path, const TString& name) {
+    void EraseMultipleByPath(NJson::TJsonValue& json, const TStringBuf& path, const TStringBuf& name) {
         IterateMut(json, path, [&name](const std::vector<ui32>&, NJson::TJsonValue& node) {
             Y_ENSURE_BT(node.IsMap());
             node.EraseValue(name);
@@ -152,8 +153,7 @@ namespace NKikimr::NYaml {
 
     void ExtractExtraFields(NJson::TJsonValue& json, TTransformContext& ctx) {
         // for static group
-        TString combinedDiskInfoPath = "/blob_storage_config/service_set/groups/*/rings/*/fail_domains/*/vdisk_locations/*";
-        Iterate(json, combinedDiskInfoPath , [&ctx](const std::vector<ui32>& ids, const NJson::TJsonValue& node) {
+        Iterate(json, COMBINED_DISK_INFO_PATH, [&ctx](const std::vector<ui32>& ids, const NJson::TJsonValue& node) {
             Y_ENSURE_BT(ids.size() == 4);
             NKikimrConfig::TCombinedDiskInfo info;
             NProtobufJson::MergeJson2Proto(node, info, GetJsonToProtoConfig());
@@ -165,39 +165,23 @@ namespace NKikimr::NYaml {
             };
             ctx.CombinedDiskInfo[key] = info;
         });
-        EraseMultipleByPath(json, combinedDiskInfoPath);
-        TString groupPath = "/blob_storage_config/service_set/groups/*";
-        Iterate(json, groupPath, [&ctx](const std::vector<ui32>& ids, const NJson::TJsonValue& node) {
+        EraseMultipleByPath(json, COMBINED_DISK_INFO_PATH);
+
+        Iterate(json, GROUP_PATH, [&ctx](const std::vector<ui32>& ids, const NJson::TJsonValue& node) {
             Y_ENSURE_BT(ids.size() == 1);
             Y_ENSURE_BT(node.IsMap());
-            ctx.GroupErasureSpecies[ids[0]] = GetStringRobust(node, "erasure_species");
+            ctx.GroupErasureSpecies[ids[0]] = GetStringRobust(node, ERASURE_SPECIES_FIELD);
         });
-        EraseMultipleByPath(json, groupPath, "erasure_species");
+        EraseMultipleByPath(json, GROUP_PATH, ERASURE_SPECIES_FIELD);
         // for security config
-        TString disableBuiltinSecurityPath = "/domains_config/disable_builtin_security";
-        ctx.DisableBuiltinSecurity = GetBoolByPathOrNone(json, disableBuiltinSecurityPath).value_or(false);
-        EraseByPath(json, disableBuiltinSecurityPath);
-        ctx.ExplicitEmptyDefaultGroups = CheckExplicitEmptyArrayByPathOrNone(json, "/domains_config/default_groups").value_or(false);
-        ctx.ExplicitEmptyDefaultAccess = CheckExplicitEmptyArrayByPathOrNone(json, "/domains_config/default_access").value_or(false);
-    }
-
-    std::vector<std::pair<TString, ui32>> GetDefaultTablets() {
-        return {
-            {"FlatHive", 1},
-            {"FlatBsController", 1},
-            {"FlatSchemeshard", 1},
-            {"FlatTxCoordinator", 3},
-            {"TxMediator", 3},
-            {"TxAllocator", 3},
-            {"Cms", 1},
-            {"NodeBroker", 1},
-            {"TenantSlotBroker", 1},
-            {"Console", 1},
-        };
+        ctx.DisableBuiltinSecurity = GetBoolByPathOrNone(json, DISABLE_BUILTIN_SECURITY_PATH).value_or(false);
+        EraseByPath(json, DISABLE_BUILTIN_SECURITY_PATH);
+        ctx.ExplicitEmptyDefaultGroups = CheckExplicitEmptyArrayByPathOrNone(json, DEFAULT_GROUPS_PATH).value_or(false);
+        ctx.ExplicitEmptyDefaultAccess = CheckExplicitEmptyArrayByPathOrNone(json, DEFAULT_ACCESS_PATH).value_or(false);
     }
 
     ui32 GetDefaultTabletCount(TString& type) {
-        auto defaults = GetDefaultTablets();
+        const auto& defaults = DEFAULT_TABLETS;
         for(const auto& [type_, cnt] : defaults) {
             if (type == type_) {
                 return cnt;
@@ -211,28 +195,16 @@ namespace NKikimr::NYaml {
     }
 
     std::vector<TString> GetTabletTypes() {
-        auto defaults = GetDefaultTablets();
+        const auto& defaults = DEFAULT_TABLETS;
         std::vector<TString> types;
         for(const auto& [type, cnt] : defaults) {
-            types.push_back(type);
+            types.push_back(TString(type));
         }
         return types;
     }
 
     ui64 GetNextTabletID(TString& type, ui32 idx) {
-        std::unordered_map<TString, ui64> tablets = {
-            {"FlatHive", 72057594037968897},
-            {"FlatBsController", 72057594037932033},
-            {"FlatSchemeshard", 72057594046678944},
-            {"Cms", 72057594037936128},
-            {"NodeBroker", 72057594037936129},
-            {"TenantSlotBroker", 72057594037936130},
-            {"Console", 72057594037936131},
-            {"TxAllocator", TDomainsInfo::MakeTxAllocatorIDFixed(1, idx)},
-            {"FlatTxCoordinator", TDomainsInfo::MakeTxCoordinatorIDFixed(1, idx)},
-            {"TxMediator", TDomainsInfo::MakeTxMediatorIDFixed(1, idx)},
-        };
-
+        const auto& tablets = GetTablets(idx);
         auto it = tablets.find(type);
         Y_ENSURE_BT(it != tablets.end());
         return it->second;
@@ -325,13 +297,7 @@ namespace NKikimr::NYaml {
 
         auto* executors = asConfig->MutableExecutor();
 
-        const std::vector<std::pair<TString, TString>> defaultExecutors = {
-            {"IoExecutor", "IO"},
-            {"SysExecutor", "SYSTEM"},
-            {"UserExecutor", "USER"},
-            {"BatchExecutor", "BATCH"}
-        };
-
+        const auto& defaultExecutors = DEFAULT_EXECUTORS;
         const auto* descriptor = asConfig->GetDescriptor();
         const auto* reflection = asConfig->GetReflection();
         std::vector<const NProtoBuf::FieldDescriptor *> fields;
@@ -415,10 +381,10 @@ namespace NKikimr::NYaml {
             const auto& defaultUser = securityConfig->GetDefaultUsers(0);
             defaultUserName = defaultUser.GetName();
         } else if (!disabledDefaultSecurity) {
-            defaultUserName = "root";
+            defaultUserName = TString(DEFAULT_ROOT_USERNAME);
             securityConfig = domainsConfig->MutableSecurityConfig();
             auto* user = securityConfig->AddDefaultUsers();
-            user->SetName("root");
+            user->SetName(defaultUserName);
             user->SetPassword("");
         }
 
@@ -512,8 +478,7 @@ namespace NKikimr::NYaml {
             }
 
             if (!host.HasPort()) {
-                // default interconnect port
-                host.SetPort(19001);
+                host.SetPort(DEFAULT_INTERCONNECT_PORT);
             }
         }
     }
@@ -575,7 +540,7 @@ namespace NKikimr::NYaml {
 
     TString HostAndICPort(const NKikimrConfig::TStaticNameserviceConfig::TNode& host) {
         TString hostname = host.GetHost();
-        ui32 interconnectPort = 19001;
+        ui32 interconnectPort = DEFAULT_INTERCONNECT_PORT;
         if (host.HasPort()) {
             interconnectPort = host.GetPort();
         }
@@ -913,7 +878,7 @@ namespace NKikimr::NYaml {
                 domain.AddSSId(1);
             }
 
-            const std::vector<std::pair<TString, TString>> exps = {{"ExplicitCoordinators", "FlatTxCoordinator"}, {"ExplicitAllocators", "TxAllocator"}, {"ExplicitMediators", "TxMediator"}};
+            const auto& exps = EXPLICIT_TABLETS;
             const auto* descriptor = domain.GetDescriptor();
             const auto* reflection = domain.GetReflection();
             std::vector<const NProtoBuf::FieldDescriptor *> fields;
@@ -1016,7 +981,7 @@ namespace NKikimr::NYaml {
         }
 
         auto* bootConfig = config.MutableBootstrapConfig();
-        for(auto type : GetTabletTypes()) {
+        for(const auto& type : GetTabletTypes()) {
             for(const auto& tablet : GetTabletsFor(ephemeralConfig, type)) {
                 bootConfig->AddTablet()->CopyFrom(tablet);
             }

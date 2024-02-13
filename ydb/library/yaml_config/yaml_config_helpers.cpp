@@ -23,10 +23,10 @@ NJson::TJsonValue* Traverse(NJson::TJsonValue& json, const TVector<TString>& pat
     return elem;
 }
 
-NJson::TJsonValue* Traverse(NJson::TJsonValue& json, const TString& path, TString* lastName) {
+NJson::TJsonValue* Traverse(NJson::TJsonValue& json, const TStringBuf& path, TString* lastName) {
     Y_ENSURE_BT(path.StartsWith('/'));
     Y_ENSURE_BT(!path.EndsWith('/'));
-    TString pathCopy = path;
+    TString pathCopy = TString(path);
     pathCopy.erase(0, 1);
     TVector<TString> pathPieces = StringSplitter(pathCopy).Split('/');
     Y_ENSURE_BT(pathPieces.size() > 0);
@@ -58,10 +58,10 @@ const NJson::TJsonValue* Traverse(const NJson::TJsonValue& json, const TVector<T
     return elem;
 }
 
-const NJson::TJsonValue* Traverse(const NJson::TJsonValue& json, const TString& path, TString* lastName) {
+const NJson::TJsonValue* Traverse(const NJson::TJsonValue& json, const TStringBuf& path, TString* lastName) {
     Y_ENSURE_BT(path.StartsWith('/'));
     Y_ENSURE_BT(!path.EndsWith('/'));
-    TString pathCopy = path;
+    TString pathCopy = TString(path);
     pathCopy.erase(0, 1);
     TVector<TString> pathPieces = StringSplitter(pathCopy).Split('/');
     Y_ENSURE_BT(pathPieces.size() > 0);
@@ -118,10 +118,10 @@ void Iterate(
     }
 }
 
-void Iterate(const NJson::TJsonValue& json, const TString& path, std::function<void(const std::vector<ui32>&, const NJson::TJsonValue&)> onElem) {
+void Iterate(const NJson::TJsonValue& json, const TStringBuf& path, std::function<void(const std::vector<ui32>&, const NJson::TJsonValue&)> onElem) {
     Y_ENSURE_BT(path.StartsWith('/'));
     Y_ENSURE_BT(!path.EndsWith('/'));
-    TString pathCopy = path;
+    TString pathCopy = TString(path);
     pathCopy.erase(0, 1);
     TVector<TString> pathPieces = StringSplitter(pathCopy).Split('/');
     std::vector<ui32> offsets;
@@ -174,10 +174,10 @@ void IterateMut(
     }
 }
 
-void IterateMut(NJson::TJsonValue& json, const TString& path, std::function<void(const std::vector<ui32>&, NJson::TJsonValue&)> onElem) {
+void IterateMut(NJson::TJsonValue& json, const TStringBuf& path, std::function<void(const std::vector<ui32>&, NJson::TJsonValue&)> onElem) {
     Y_ENSURE_BT(path.StartsWith('/'));
     Y_ENSURE_BT(!path.EndsWith('/'));
-    TString pathCopy = path;
+    TString pathCopy = TString(path);
     pathCopy.erase(0, 1);
     TVector<TString> pathPieces = StringSplitter(pathCopy).Split('/');
     Y_ENSURE_BT(pathPieces.size() > 0);

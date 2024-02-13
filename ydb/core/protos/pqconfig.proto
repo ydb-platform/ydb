@@ -377,6 +377,7 @@ message TMessageGroupInfo {
     }
 
     optional uint64 SeqNo = 1;
+    optional uint64 MinSeqNo = 9;
     optional uint64 Offset = 2;
     optional uint64 WriteTimestamp = 3; // TInstant::TValue
     optional uint64 CreateTimestamp = 4; // TInstant::TValue

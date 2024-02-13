@@ -219,12 +219,12 @@ void TPartition::ProcessReserveRequests(const TActorContext& ctx) {
 
         const ui64 currentSize = ReservedSize + WriteInflightSize + WriteCycleSize;
         if (currentSize != 0 && currentSize + size > maxWriteInflightSize) {
-            LOG_DEBUG_S(ctx, NKikimrServices::PERSQUEUE, "Reserve processing: maxWriteInflightSize riched. Partition: " << Partition);           
+            LOG_DEBUG_S(ctx, NKikimrServices::PERSQUEUE, "Reserve processing: maxWriteInflightSize riched. Partition: " << Partition);
             break;
         }
 
         if (WaitingForSubDomainQuota(ctx, currentSize)) {
-            LOG_DEBUG_S(ctx, NKikimrServices::PERSQUEUE, "Reserve processing: SubDomainOutOfSpace. Partition: " << Partition);         
+            LOG_DEBUG_S(ctx, NKikimrServices::PERSQUEUE, "Reserve processing: SubDomainOutOfSpace. Partition: " << Partition);
             break;
         }
 
@@ -727,7 +727,7 @@ void TPartition::HandleOnWrite(TEvPQ::TEvDeregisterMessageGroup::TPtr& ev, const
         return ReplyError(ctx, ev->Get()->Cookie, NPersQueue::NErrorCode::SOURCEID_DELETED,
             "SourceId doesn't exist");
     }
-    
+
     EmplaceRequest(TDeregisterMessageGroupMsg(*ev->Get()), ctx);
 }
 
@@ -1519,7 +1519,7 @@ void TPartition::HandleWrites(const TActorContext& ctx) {
     THolder<TEvKeyValue::TEvRequest> request(new TEvKeyValue::TEvRequest);
 
     Y_ABORT_UNLESS(Head.PackedSize + NewHead.PackedSize <= 2 * MaxSizeCheck);
-    
+
     TInstant now = ctx.Now();
     WriteCycleStartTime = now;
 
@@ -1592,7 +1592,7 @@ bool TPartition::WaitingForSubDomainQuota(const TActorContext& ctx, const ui64 w
 
 void TPartition::WriteBlobWithQuota(const TActorContext& /*ctx*/, THolder<TEvKeyValue::TEvRequest>&& request) {
     PQ_LOG_T("TPartition::WriteBlobWithQuota.");
-    
+
     // Request quota and write blob.
     // Mirrored topics are not quoted in local dc.
     const bool skip = !IsQuotingEnabled() || TopicWriteQuotaResourcePath.empty();

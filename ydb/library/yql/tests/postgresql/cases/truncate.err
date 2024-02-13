@@ -661,4 +661,4 @@ CREATE SEQUENCE truncate_a_id1 START WITH 33;
 CREATE TABLE truncate_a (id serial,
                          id1 integer default nextval('truncate_a_id1'));
 </sql-statement>
-(TFileError) (File exists) util/system/file.cpp:857: can't open "/tmp/tmpmso99vtd/truncate_a" with mode CreateNew (0x00000003)
+(TFileError) (Error 17: File exists) util/system/file.cpp:918: can't open "/var/tmp/tmp5zgko71f/truncate_a" with mode CreateNew (0x00000003)

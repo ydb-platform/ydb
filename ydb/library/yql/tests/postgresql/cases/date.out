@@ -905,12 +905,6 @@ select '-infinity'::date < 'today'::date as t;
  t
 (1 row)
 
-select isfinite('infinity'::date), isfinite('-infinity'::date), isfinite('today'::date);
- isfinite | isfinite | isfinite 
-----------+----------+----------
- f        | f        | t
-(1 row)
-
 --
 -- oscillating fields from non-finite date:
 --

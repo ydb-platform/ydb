@@ -5,6 +5,7 @@
 
 extern "C" {
 #include "utils/syscache.h"
+#include "catalog/pg_database.h"
 #include "catalog/pg_proc.h"
 #include "catalog/pg_type.h"
 #include "catalog/pg_type_d.h"
@@ -61,6 +62,7 @@ struct TSysCache {
     {
         InitializeProcs();
         InitializeTypes();
+        InitializeDatabase();
         Arena.Release();
     }
 
@@ -222,6 +224,48 @@ struct TSysCache {
             map->emplace(key, h);
         });
 
+    }
+
+    void InitializeDatabase() {
+        auto& map = Maps[DATABASEOID] = std::make_unique<TSysCacheHashMap>(0, OidHasher1, OidEquals1);
+        TupleDesc tupleDesc = CreateTemplateTupleDesc(Natts_pg_database);
+        FillAttr(tupleDesc, Anum_pg_database_oid, OIDOID);
+        FillAttr(tupleDesc, Anum_pg_database_datname, NAMEOID);
+        FillAttr(tupleDesc, Anum_pg_database_datdba, OIDOID);
+        FillAttr(tupleDesc, Anum_pg_database_encoding, INT4OID);
+        FillAttr(tupleDesc, Anum_pg_database_datcollate, NAMEOID);
+        FillAttr(tupleDesc, Anum_pg_database_datctype, NAMEOID);
+        FillAttr(tupleDesc, Anum_pg_database_datistemplate, BOOLOID);
+        FillAttr(tupleDesc, Anum_pg_database_datallowconn, BOOLOID);
+        FillAttr(tupleDesc, Anum_pg_database_datconnlimit, INT4OID);
+        FillAttr(tupleDesc, Anum_pg_database_datlastsysoid, OIDOID);
+        FillAttr(tupleDesc, Anum_pg_database_datfrozenxid, XIDOID);
+        FillAttr(tupleDesc, Anum_pg_database_datminmxid, XIDOID);
+        FillAttr(tupleDesc, Anum_pg_database_dattablespace, OIDOID);
+        FillAttr(tupleDesc, Anum_pg_database_datacl, ACLITEMARRAYOID);
+
+        for (ui32 oid = 1; oid <= 3; ++oid) {
+            auto key = THeapTupleKey(oid, 0, 0, 0);
+
+            Datum values[Natts_pg_database];
+            bool nulls[Natts_pg_database];
+            Zero(values);
+            std::fill_n(nulls, Natts_pg_database, true);
+            FillDatum(Natts_pg_database, values, nulls, Anum_pg_database_oid, (Datum)oid);
+            const char* name = nullptr;
+            switch (oid) {
+            case 1: name = "template1"; break;
+            case 2: name = "template0"; break;
+            case 3: name = "postgres"; break;
+            }
+            Y_ENSURE(name);
+            FillDatum(Natts_pg_database, values, nulls, Anum_pg_database_datname, (Datum)MakeFixedString(name, NAMEDATALEN));
+            HeapTuple h = heap_form_tuple(tupleDesc, values, nulls);
+            auto row = (Form_pg_database) GETSTRUCT(h);
+            Y_ENSURE(row->oid == oid);
+            Y_ENSURE(strcmp(NameStr(row->datname), name) == 0);
+            map->emplace(key, h);
+        }
     }
 };
 

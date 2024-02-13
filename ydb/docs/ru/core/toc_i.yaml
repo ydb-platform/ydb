@@ -30,11 +30,4 @@ items:
 - include: { mode: link, path: downloads/toc_p.yaml }
 - name: Публичные материалы
   href: public-talks.md
-- name: Список изменений
-  items:
-  - name: "{{ ydb-short-name }} Server"
-    href: changelog-server.md
-  - name: "{{ ydb-short-name }} CLI"
-    href: changelog-cli.md
-  - name: Список изменений безопасности
-    href: security-changelog.md
+- { name: Список изменений,                        include: { mode: link, path: toc_changelog.yaml } }

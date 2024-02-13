@@ -82,11 +82,9 @@ bool TTransQueue::Load(NIceDb::TNiceDb& db) {
             flags |= TTxFlags::Stored;
 
             TBasicOpInfo info(txId, kind, flags, maxStep, TInstant::FromValue(received), Self->NextTieBreakerIndex++);
-            
-            TOperation::TPtr op = kind == EOperationKind::WriteTx ?
-                static_cast<TOperation::TPtr>(MakeIntrusive<TWriteOperation>(info, Self->TabletID())) : 
-                static_cast<TOperation::TPtr>(MakeIntrusive<TActiveTransaction>(info));
-             
+
+            TOperation::TPtr op = EvWrite::Convertor::MakeOperation(kind, info, Self->TabletID());
+
             if (rowset.HaveValue<Schema::TxMain::Source>()) {
                 op->SetTarget(rowset.GetValue<Schema::TxMain::Source>());
             }

@@ -293,4 +293,22 @@ NKikimrDataEvents::TEvWriteResult::EStatus EvWrite::Convertor::ConvertErrCode(NK
             return NKikimrDataEvents::TEvWriteResult::STATUS_INTERNAL_ERROR;
     }
 }
+
+TOperation::TPtr EvWrite::Convertor::MakeOperation(EOperationKind kind, const TBasicOpInfo& info, ui64 tabletId) {
+    switch (kind) {
+        case EOperationKind::DataTx:
+        case EOperationKind::SchemeTx:
+        case EOperationKind::Snapshot:
+        case EOperationKind::DistributedErase:
+        case EOperationKind::CommitWrites:
+        case EOperationKind::ReadTable:
+            return MakeIntrusive<TActiveTransaction>(info);
+        case EOperationKind::WriteTx:
+            return MakeIntrusive<TWriteOperation>(info, tabletId);
+        case EOperationKind::DirectTx:
+        case EOperationKind::ReadTx:
+        case EOperationKind::Unknown:
+            Y_ABORT("Unsupported");
+    }
+}
 }

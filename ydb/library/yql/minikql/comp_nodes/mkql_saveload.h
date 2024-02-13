@@ -115,7 +115,7 @@ public:
         TString out;
         WriteUi32(out, static_cast<ui32>(EType::SNAPSHOT));
         WriteUi32(out, static_cast<ui32>(items.size()));
-        for(const auto& [key, value] : items) {
+        for (const auto& [key, value] : items) {
             WriteString(out, key);
             WriteString(out, value);
         }
@@ -142,7 +142,7 @@ public:
 
     class Reader {
     public:
-        Reader(TStringBuf& buf)
+        explicit Reader(TStringBuf& buf)
             : Buf(buf)
         {
             MKQL_ENSURE(Buf.size(), "Serialized state is corrupted");
@@ -167,10 +167,8 @@ public:
             return ReadString(Buf);
         }
 
-        using TCallbackUpdateItem = std::function<void(std::string_view, std::string_view)>;
-        using TCallbackDeleteKey = std::function<void(std::string_view)>;
-
-        void ReadItems(TCallbackUpdateItem updateItem, TCallbackDeleteKey deleteKey) {
+        template<class TCallbackUpdate, class TCallbackDelete>
+        void ReadItems(TCallbackUpdate updateItem, TCallbackDelete deleteKey) {
             MKQL_ENSURE(Buf.size(), "Serialized state is corrupted");
             ui32 itemsCount = ReadUi32(Buf);
             ui32 deletedCount = 0;

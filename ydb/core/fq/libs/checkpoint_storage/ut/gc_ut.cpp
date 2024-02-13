@@ -34,6 +34,7 @@ namespace {
 
 NYql::NDqProto::TComputeActorState MakeStateFromBlob(size_t blobSize, bool isIncrement = false) {
     TString blob;
+    blob.reserve(blobSize);
     for (size_t i = 0; i < blobSize; ++i) {
         blob += static_cast<TString::value_type>(std::rand() % 100);
     }
@@ -43,8 +44,7 @@ NYql::NDqProto::TComputeActorState MakeStateFromBlob(size_t blobSize, bool isInc
         std::map<TString, TString> increment{{"1", blob}};
         std::set<TString> deleted;
         NKikimr::NMiniKQL::TNodeStateHelper::MakeIncrementState(increment, deleted);
-    }
-    else {
+    } else {
         value = NKikimr::NMiniKQL::TNodeStateHelper::MakeSimpleBlobState(blob);
     }
 

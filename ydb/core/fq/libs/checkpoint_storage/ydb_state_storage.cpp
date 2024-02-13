@@ -37,7 +37,7 @@ enum class EStateType {
 class TIncrementLogic {
 public:
 
-    void Apply(NYql::NDqProto::TComputeActorState& update, const NActors::TActorContext& /*actorContext*/)
+    void Apply(NYql::NDqProto::TComputeActorState& update)
     {
         *State.MutableSources() = update.GetSources();
         *State.MutableSinks() = update.GetSinks();
@@ -98,8 +98,9 @@ public:
             NKikimr::NMiniKQL::WriteUi32(result, savedBuf.Size());
             result.AppendNoAlias(savedBuf.Data(), savedBuf.Size());
         }
-        State.MutableMiniKqlProgram()->MutableData()->MutableStateData()->SetBlob(result);
-        State.MutableMiniKqlProgram()->MutableData()->MutableStateData()->SetVersion(Version);
+        const auto& stateData = State.MutableMiniKqlProgram()->MutableData()->MutableStateData();
+        stateData->SetBlob(result);
+        stateData->SetVersion(Version);
         return State;
     }
 
@@ -157,7 +158,7 @@ struct TContext : public TThrRefBase {
         std::list<NYql::NDqProto::TComputeActorState> States;
     };
 
-    const NActors::TActorContext Ctx;
+    const NActors::TActorSystem* ActorSystem;
     const TString TablePathPrefix;
     const TString GraphId;
     const TCheckpointId CheckpointId;
@@ -167,13 +168,13 @@ struct TContext : public TThrRefBase {
     std::function<void(TFuture<TStatus>)> Callback;    
 
     TContext(
-        const NActors::TActorContext& ctx,
+        const NActors::TActorSystem* actorSystem,
         const TString& tablePathPrefix,
         const std::vector<ui64>& taskIds,
         TString graphId,
         const TCheckpointId& checkpointId,
         TMaybe<TSession> session = {})
-        : Ctx(ctx)
+        : ActorSystem(actorSystem)
         , TablePathPrefix(tablePathPrefix)
         , GraphId(std::move(graphId))
         , CheckpointId(checkpointId)
@@ -185,7 +186,7 @@ struct TContext : public TThrRefBase {
     }
 
     TContext(
-        const NActors::TActorContext& ctx,
+        const NActors::TActorSystem* actorSystem,
         const TString& tablePathPrefix,
         ui64 taskId,
         TString graphId,
@@ -193,7 +194,7 @@ struct TContext : public TThrRefBase {
         TMaybe<TSession> session = {},
         const std::list<TString>& rows = {},
         EStateType type = EStateType::Snapshot)
-        : TContext(ctx, tablePathPrefix, std::vector{taskId}, std::move(graphId), checkpointId, std::move(session))
+        : TContext(actorSystem, tablePathPrefix, std::vector{taskId}, std::move(graphId), checkpointId, std::move(session))
     {
         Tasks[0].Rows = rows;
         Tasks[0].Type = type;
@@ -337,8 +338,7 @@ private:
         const TContextPtr& context);
 
     std::vector<NYql::NDqProto::TComputeActorState> ApplyIncrements(
-        const TContextPtr& context,
-        const NActors::TActorContext& actorContext);
+        const TContextPtr& context);
 
 };
 
@@ -454,7 +454,7 @@ TFuture<TIssues> TStateStorage::SaveState(
     }
 
     auto context = MakeIntrusive<TContext>(
-        NActors::TActivationContext::AsActorContext(),
+        NActors::TActivationContext::ActorSystem(),
         YdbConnection->TablePathPrefix,
         taskId,
         graphId,
@@ -509,7 +509,7 @@ TFuture<IStateStorage::TGetStateResult> TStateStorage::GetState(
 
     
     auto context = MakeIntrusive<TContext>(
-        NActors::TActivationContext::AsActorContext(),
+        NActors::TActivationContext::ActorSystem(),
         YdbConnection->TablePathPrefix,
         taskIds,
         graphId,
@@ -531,11 +531,11 @@ TFuture<IStateStorage::TGetStateResult> TStateStorage::GetState(
             context->CurrentProcessingTaskIndex = 0;
             return thisPtr->ReadRows(context);
         })
-        .Apply([context, thisPtr = TIntrusivePtr(this), actorContext = NActors::TActivationContext::AsActorContext()](const TFuture<TStatus>& result) {
+        .Apply([context, thisPtr = TIntrusivePtr(this)](const TFuture<TStatus>& result) {
             if (!result.GetValue().IsSuccess()) {
                 return IStateStorage::TGetStateResult{{}, result.GetValue().GetIssues()};
             }
-            auto states = thisPtr->ApplyIncrements(context, actorContext);
+            auto states = thisPtr->ApplyIncrements(context);
             return IStateStorage::TGetStateResult{std::move(states), result.GetValue().GetIssues()};
         });
 }
@@ -650,7 +650,7 @@ TFuture<TStatus> TStateStorage::ListStates(const TContextPtr& context)
                         return status;
                     }
 
-                    LOG_STREAMS_STORAGE_SERVICE_AS_DEBUG(context->Ctx, "ListOfStates results:");
+                    LOG_STREAMS_STORAGE_SERVICE_AS_DEBUG(*context->ActorSystem, "ListOfStates results:");
                     try {
                         const auto& selectResult = future.GetValue();
                         TResultSetParser parser(selectResult.GetResultSet(0));
@@ -671,7 +671,7 @@ TFuture<TStatus> TStateStorage::ListStates(const TContextPtr& context)
                             auto& taskInfo = *taskIt;
                             TCheckpointId checkpointId(*coordinatorGeneration, *seqNo);
                             taskInfo.ListOfStatesForReading.push_back(TContext::TStateInfo{checkpointId, cnt});
-                            LOG_STREAMS_STORAGE_SERVICE_AS_DEBUG(context->Ctx, "  checkpoint id: " << checkpointId << ", rows count: " << cnt);
+                            LOG_STREAMS_STORAGE_SERVICE_AS_DEBUG(*context->ActorSystem, "  checkpoint id: " << checkpointId << ", rows count: " << cnt);
                         }
                     }
                     catch (const std::exception& e) {
@@ -797,7 +797,7 @@ TFuture<TDataQueryResult> TStateStorage::SelectState(const TContextPtr& context)
     Y_ABORT_UNLESS(!context->Tasks.empty());
     auto& taskInfo = context->Tasks[context->CurrentProcessingTaskIndex];
 
-    LOG_STREAMS_STORAGE_SERVICE_AS_DEBUG(context->Ctx, "SelectState: task_id " << taskInfo.TaskId << ", seq_no " 
+    LOG_STREAMS_STORAGE_SERVICE_AS_DEBUG(*context->ActorSystem, "SelectState: task_id " << taskInfo.TaskId << ", seq_no " 
         << taskInfo.ListOfStatesForReading.front().CheckpointId.SeqNo << ", blob_seq_num " << taskInfo.CurrentProcessingRow);
     paramsBuilder.AddParam("$task_id").Uint64(taskInfo.TaskId).Build();
     paramsBuilder.AddParam("$graph_id").String(context->GraphId).Build();
@@ -888,7 +888,7 @@ TFuture<TStatus> TStateStorage::UpsertRow(const TContextPtr& context) {
 
 TFuture<TStatus> TStateStorage::SkipStatesInFuture(const TContextPtr& context)
 {
-    LOG_STREAMS_STORAGE_SERVICE_AS_DEBUG(context->Ctx, "SkipStatesInFuture");
+    LOG_STREAMS_STORAGE_SERVICE_AS_DEBUG(*context->ActorSystem, "SkipStatesInFuture");
 
     for (auto& taskInfo : context->Tasks) {
         auto it = taskInfo.ListOfStatesForReading.begin();
@@ -956,9 +956,9 @@ TFuture<TStatus> TStateStorage::ReadRows(const TContextPtr& context)
     return promise.GetFuture();
 }
 
-std::vector<NYql::NDqProto::TComputeActorState> TStateStorage::ApplyIncrements(const TContextPtr& context, const NActors::TActorContext& actorContext)
+std::vector<NYql::NDqProto::TComputeActorState> TStateStorage::ApplyIncrements(const TContextPtr& context)
 {
-    LOG_STREAMS_STORAGE_SERVICE_AS_DEBUG(context->Ctx, "ApplyIncrements");
+    LOG_STREAMS_STORAGE_SERVICE_AS_DEBUG(*context->ActorSystem, "ApplyIncrements");
 
     std::vector<NYql::NDqProto::TComputeActorState> states;
     for (auto& task : context->Tasks)
@@ -966,7 +966,7 @@ std::vector<NYql::NDqProto::TComputeActorState> TStateStorage::ApplyIncrements(c
         TIncrementLogic logic;
         for (auto& state : task.States)
         {
-            logic.Apply(state, actorContext);
+            logic.Apply(state);
         }
         states.push_back(std::move(logic.Get()));
     }

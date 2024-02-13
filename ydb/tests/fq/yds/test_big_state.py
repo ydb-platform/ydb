@@ -68,8 +68,6 @@ class TestBigState(TestYdsBase):
 
         self.write_stream(['{"time" = 2000000; "key" = "M";}'])
 
-        client.wait_query_status(query_id, fq.QueryMeta.RUNNING)
-
         expected_messages = [Rf'''{{"cnt" = 1u; "key" = "{c*KeyLen}"}}''' for c in symbols]
         expected_messages.sort()
 

@@ -93,7 +93,7 @@ void TActorGC::Handle(TEvCheckpointStorage::TEvNewCheckpointSucceeded::TPtr& ev)
         << " for graph '" << graphId << "'");
 
     if (event->Type != NYql::NDqProto::TCheckpoint::EType::TCheckpoint_EType_SNAPSHOT) {
-        LOG_STREAMS_STORAGE_SERVICE_DEBUG("GC skip increment checkpoint");
+        LOG_STREAMS_STORAGE_SERVICE_DEBUG("GC skip increment checkpoint for graph '" << graphId << "'");
         return;
     }
 

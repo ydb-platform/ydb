@@ -70,6 +70,7 @@ NYql::NDqProto::TComputeActorState MakeState(NYql::NUdf::TUnboxedValuePod&& valu
 
 NYql::NDqProto::TComputeActorState MakeStateFromBlob(size_t blobSize) {
     TString blob;
+    blob.reserve(blobSize);
     for (size_t i = 0; i < blobSize; ++i) {
         blob += static_cast<TString::value_type>(std::rand() % 100);
     }
@@ -80,7 +81,7 @@ NYql::NDqProto::TComputeActorState MakeIncrementState(size_t miniKqlPStateSize) 
     std::map<TString, TString> map;
     size_t itemCount = 4;
     for (size_t i = 0; i < itemCount; ++i) {
-        map[ToString((777 + i))] = TString(miniKqlPStateSize / itemCount, 'a');
+        map[ToString(777 + i)] = TString(miniKqlPStateSize / itemCount, 'a');
     }
     return MakeState(NKikimr::NMiniKQL::TNodeStateHelper::MakeSnapshotState(map));
 }

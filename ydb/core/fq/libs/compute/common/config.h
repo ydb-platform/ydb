@@ -28,6 +28,9 @@ public:
                          "Activation percentage must be either 0 or 100");
             }
         }
+        for (size_t i = 0; i < ComputeConfig.SupportedComputeYDBFeaturesSize(); ++i) {
+          SupportedSyntaxFeatures.insert(ComputeConfig.GetSupportedComputeYDBFeatures(i));
+        }
     }
 
     NFq::NConfig::EComputeType GetComputeType(const FederatedQuery::QueryContent::QueryType queryType, const TString& scope) const {
@@ -173,9 +176,14 @@ public:
         }
     }
 
+    [[nodiscard]] bool IsYDBSyntaxFeatureSupported(NConfig::ESupportedComputeYDBFeatures feature) const {
+      return SupportedSyntaxFeatures.contains(feature);
+    }
+
 private:
     NFq::NConfig::TComputeConfig ComputeConfig;
     NFq::NConfig::EComputeType DefaultCompute;
+    std::unordered_set<NConfig::ESupportedComputeYDBFeatures> SupportedSyntaxFeatures{};
 };
 
 } /* NFq */

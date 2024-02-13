@@ -1,8 +1,20 @@
 #pragma once
-#include <library/cpp/monlib/dynamic_counters/counters.h>
 #include "common/owner.h"
 
+#include <library/cpp/monlib/dynamic_counters/counters.h>
+
+#include <util/generic/hash_set.h>
+
 namespace NKikimr::NColumnShard {
+
+enum class EWriteFailReason {
+    Disabled /* "disabled" */,
+    PutBlob /* "put_blob" */,
+    LongTxDuplication /* "long_tx_duplication" */,
+    NoTable /* "no_table" */,
+    IncorrectSchema /* "incorrect_schema" */,
+    Overload /* "overload" */
+};
 
 class TCSCounters: public TCommonCountersOwner {
 private:
@@ -43,54 +55,56 @@ private:
     NMonitoring::THistogramPtr HistogramSuccessWriteMiddle3PutBlobsDurationMs;
     NMonitoring::THistogramPtr HistogramSuccessWriteMiddle4PutBlobsDurationMs;
     NMonitoring::THistogramPtr HistogramSuccessWriteMiddle5PutBlobsDurationMs;
+    NMonitoring::THistogramPtr HistogramSuccessWriteMiddle6PutBlobsDurationMs;
     NMonitoring::THistogramPtr HistogramFailedWritePutBlobsDurationMs;
     NMonitoring::THistogramPtr HistogramWriteTxCompleteDurationMs;
     NMonitoring::TDynamicCounters::TCounterPtr WritePutBlobsCount;
     NMonitoring::TDynamicCounters::TCounterPtr WriteRequests;
-    NMonitoring::TDynamicCounters::TCounterPtr FailedWriteRequests;
+    THashMap<EWriteFailReason, NMonitoring::TDynamicCounters::TCounterPtr> FailedWriteRequests;
     NMonitoring::TDynamicCounters::TCounterPtr SuccessWriteRequests;
 public:
     void OnStartWriteRequest() const {
         WriteRequests->Add(1);
     }
 
-    void OnFailedWriteResponse() const {
-        WriteRequests->Sub(1);
-        FailedWriteRequests->Add(1);
-    }
+    void OnFailedWriteResponse(const EWriteFailReason reason) const;
 
     void OnSuccessWriteResponse() const {
         WriteRequests->Sub(1);
         SuccessWriteRequests->Add(1);
     }
 
-    void OnWritePutBlobsSuccess(const ui32 milliseconds) const {
-        HistogramSuccessWritePutBlobsDurationMs->Collect(milliseconds);
+    void OnWritePutBlobsSuccess(const TDuration d) const {
+        HistogramSuccessWritePutBlobsDurationMs->Collect(d.MilliSeconds());
         WritePutBlobsCount->Sub(1);
     }
 
-    void OnWriteMiddle1PutBlobsSuccess(const ui32 milliseconds) const {
-        HistogramSuccessWriteMiddle1PutBlobsDurationMs->Collect(milliseconds);
+    void OnWriteMiddle1PutBlobsSuccess(const TDuration d) const {
+        HistogramSuccessWriteMiddle1PutBlobsDurationMs->Collect(d.MilliSeconds());
     }
 
-    void OnWriteMiddle2PutBlobsSuccess(const ui32 milliseconds) const {
-        HistogramSuccessWriteMiddle2PutBlobsDurationMs->Collect(milliseconds);
+    void OnWriteMiddle2PutBlobsSuccess(const TDuration d) const {
+        HistogramSuccessWriteMiddle2PutBlobsDurationMs->Collect(d.MilliSeconds());
     }
 
-    void OnWriteMiddle3PutBlobsSuccess(const ui32 milliseconds) const {
-        HistogramSuccessWriteMiddle3PutBlobsDurationMs->Collect(milliseconds);
+    void OnWriteMiddle3PutBlobsSuccess(const TDuration d) const {
+        HistogramSuccessWriteMiddle3PutBlobsDurationMs->Collect(d.MilliSeconds());
     }
 
-    void OnWriteMiddle4PutBlobsSuccess(const ui32 milliseconds) const {
-        HistogramSuccessWriteMiddle4PutBlobsDurationMs->Collect(milliseconds);
+    void OnWriteMiddle4PutBlobsSuccess(const TDuration d) const {
+        HistogramSuccessWriteMiddle4PutBlobsDurationMs->Collect(d.MilliSeconds());
     }
 
-    void OnWriteMiddle5PutBlobsSuccess(const ui32 milliseconds) const {
-        HistogramSuccessWriteMiddle5PutBlobsDurationMs->Collect(milliseconds);
+    void OnWriteMiddle5PutBlobsSuccess(const TDuration d) const {
+        HistogramSuccessWriteMiddle5PutBlobsDurationMs->Collect(d.MilliSeconds());
     }
 
-    void OnWritePutBlobsFail(const ui32 milliseconds) const {
-        HistogramFailedWritePutBlobsDurationMs->Collect(milliseconds);
+    void OnWriteMiddle6PutBlobsSuccess(const TDuration d) const {
+        HistogramSuccessWriteMiddle6PutBlobsDurationMs->Collect(d.MilliSeconds());
+    }
+
+    void OnWritePutBlobsFail(const TDuration d) const {
+        HistogramFailedWritePutBlobsDurationMs->Collect(d.MilliSeconds());
         WritePutBlobsCount->Sub(1);
     }
 
@@ -98,8 +112,8 @@ public:
         WritePutBlobsCount->Add(1);
     }
 
-    void OnWriteTxComplete(const ui32 milliseconds) const {
-        HistogramWriteTxCompleteDurationMs->Collect(milliseconds);
+    void OnWriteTxComplete(const TDuration d) const {
+        HistogramWriteTxCompleteDurationMs->Collect(d.MilliSeconds());
     }
 
     void OnInternalCompactionInfo(const ui64 bytes, const ui32 portionsCount) const {

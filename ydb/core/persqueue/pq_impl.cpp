@@ -3158,7 +3158,7 @@ void TPersQueue::HandleDataTransaction(TAutoPtr<TEvPersQueue::TEvProposeTransact
         return;
     }
 
-    if (txBody.GetImmediate()) {
+    if (txBody.GetImmediate() && !txBody.HasWriteId()) {
         const TPartitionInfo& partition = Partitions.at(*partitionId);
 
         ctx.Send(partition.Actor, ev.Release());
@@ -3711,7 +3711,7 @@ TMaybe<TPartitionId> TPersQueue::FindPartitionId(const NKikimrPQ::TDataTransacti
 
         return writeInfo.Partitions.at(partitionId);
     } else {
-        return TPartitionId(txBody.GetOperations(0).GetPartitionId());
+        return TPartitionId(partitionId);
     }
 }
 

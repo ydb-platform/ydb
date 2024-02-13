@@ -84,7 +84,8 @@ class TMatchedVarsValue : public TComputationValue<TMatchedVarsValue<R>> {
             : TComputationValue<TRangeList>(memInfo)
             , HolderFactory(holderFactory)
             , Var(v)
-        {}
+        {
+        }
 
         bool HasFastListLength() const override {
             return true;

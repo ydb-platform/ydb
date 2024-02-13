@@ -10,12 +10,12 @@ namespace NKikimr::NMiniKQL::NMatchRecognize {
 struct TSerializerContext {
 
     TComputationContext&    Ctx;
-    TType*                  StateType;
-    const TMutableObjectOverBoxedValue<TValuePackerBoxed>& Packer;
+    TType*                  RowType;
+    const TMutableObjectOverBoxedValue<TValuePackerBoxed>& RowPacker;
 };
 
 template<class>
-inline constexpr bool always_false_v2 = false;
+inline constexpr bool always_false_v = false;
 
 struct TOutputSerializer {
 private:
@@ -41,13 +41,11 @@ public:
             WriteByte(Buf, value);
         } else if constexpr (std::is_same_v<std::remove_cv_t<Type>, ui32>) {
             WriteUi32(Buf, value);
-        } else if constexpr (std::is_same_v<std::remove_cv_t<Type>, NUdf::TUnboxedValue>) {
-            WriteUnboxedValue(Buf, Context.Packer.RefMutableObject(Context.Ctx, false, Context.StateType), value);
-        } else if constexpr (std::is_same_v<std::remove_cv_t<Type>, NUdf::TUnboxedValue>) {
-            WriteUnboxedValue(Buf, Context.Packer.RefMutableObject(Context.Ctx, false, Context.StateType), value);
+        } else if constexpr (std::is_same_v<std::remove_cv_t<Type>, NUdf::TUnboxedValue>) {     // Only Row type (StateType) supported !
+            WriteUnboxedValue(Buf, Context.RowPacker.RefMutableObject(Context.Ctx, false, Context.RowType), value);
         }
         else {
-            static_assert(always_false_v2<Type>, "Not supported type / not implemented");
+            static_assert(always_false_v<Type>, "Not supported type / not implemented");
         }
     }
 
@@ -122,10 +120,10 @@ public:
         } else if constexpr (std::is_same_v<std::remove_cv_t<Type>, ui32>) {
             return ReadUi32(Buf);
         } else if constexpr (std::is_same_v<std::remove_cv_t<Type>, NUdf::TUnboxedValue>) {
-            return ReadUnboxedValue(Buf, Context.Packer.RefMutableObject(Context.Ctx, false, Context.StateType), Context.Ctx);
+            return ReadUnboxedValue(Buf, Context.RowPacker.RefMutableObject(Context.Ctx, false, Context.RowType), Context.Ctx);
         }
         else {
-            static_assert(always_false_v2<Type>, "Not supported type / not implemented");
+            static_assert(always_false_v<Type>, "Not supported type / not implemented");
         }
     }
 
@@ -142,10 +140,10 @@ public:
         } else if constexpr (std::is_same_v<std::remove_cv_t<Type>, ui32>) {
             value = ReadUi32(Buf);
         } else if constexpr (std::is_same_v<std::remove_cv_t<Type>, NUdf::TUnboxedValue>) {
-            value = ReadUnboxedValue(Buf, Context.Packer.RefMutableObject(Context.Ctx, false, Context.StateType), Context.Ctx);
+            value = ReadUnboxedValue(Buf, Context.RowPacker.RefMutableObject(Context.Ctx, false, Context.RowType), Context.Ctx);
         }
         else {
-            static_assert(always_false_v2<Type>, "Not supported type / not implemented");
+            static_assert(always_false_v<Type>, "Not supported type / not implemented");
         }
     }
 

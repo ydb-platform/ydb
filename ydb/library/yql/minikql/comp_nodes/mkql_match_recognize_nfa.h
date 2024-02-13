@@ -75,9 +75,6 @@ struct TNfaTransitionDestinationVisitor {
     }
 };
 
-template<class>
-inline constexpr bool always_false_v = false;
-
 struct TNfaTransitionGraph {
     using TTransitions = std::vector<TNfaTransition, TMKQLAllocator<TNfaTransition>>;
 
@@ -86,6 +83,9 @@ struct TNfaTransitionGraph {
     size_t Output;
 
     using TPtr = std::shared_ptr<TNfaTransitionGraph>;
+
+    template<class>
+    inline constexpr static bool always_false_v = false;
 
     void Save(TOutputSerializer& serializer) const {
         serializer.Write(Transitions.size());
@@ -387,16 +387,14 @@ class TNfa {
             auto varsSize = serializer.Read<TMatchedVars::size_type>();
             Vars.clear();
             Vars.resize(varsSize);
-            for (size_t i = 0; i < varsSize; ++i) {
-                auto& subvec  = Vars[i];
+            for (auto& subvec: Vars) {
                 ui64 vectorSize = serializer.Read<ui64>();
                 subvec.resize(vectorSize);
-                for (size_t j = 0; j < vectorSize; ++j) {
-                    subvec[j].Load(serializer);
+                for (auto& item : subvec) {
+                    item.Load(serializer);
                 }
             }
-
-            while (!Quantifiers.empty()) {
+            while (!Quantifiers.empty()) {      // Clearing.
                 Quantifiers.pop();
             }
             auto quantifiersSize = serializer.Read<ui64>();

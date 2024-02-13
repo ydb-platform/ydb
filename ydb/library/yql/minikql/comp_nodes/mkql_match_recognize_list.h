@@ -94,7 +94,6 @@ class TSparseList {
 
     class TContainer: public TSimpleRefCount<TContainer> {
     public:
-
         using TPtr = TIntrusivePtr<TContainer>;
 
         void Add(size_t index, NUdf::TUnboxedValue&& value) {
@@ -178,7 +177,8 @@ public:
             : Container()
             , FromIndex(-1)
             , ToIndex(-1)
-        {}
+        {
+        }
 
         TRange(const TRange& other)
             : Container(other.Container)

@@ -181,6 +181,7 @@ class TestRecoveryMatchRecognize(TestYdsBase):
             pragma FeatureR010="prototype";
             pragma config.flags("TimeOrderRecoverDelay", "-1000000");
             pragma config.flags("TimeOrderRecoverAhead", "1000000");
+            pragma config.flags("MatchRecognizeStream", "auto");
 
             INSERT INTO myyds.`{output_topic}`
             SELECT ToBytes(Unwrap(Json::SerializeJson(Yson::From(TableRow()))))

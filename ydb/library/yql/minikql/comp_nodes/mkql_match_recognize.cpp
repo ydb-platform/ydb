@@ -28,7 +28,7 @@ using namespace NYql::NMatchRecognize;
 
 struct TMatchRecognizeProcessorParameters {
     IComputationExternalNode* InputDataArg;
-    NYql::NMatchRecognize::TRowPattern Pattern;
+    TRowPattern               Pattern;
     TUnboxedValueVector       VarNames;
     THashMap<TString, size_t> VarNamesLookup;
     IComputationExternalNode* MatchedVarsArg;
@@ -130,16 +130,11 @@ public:
     }
 
     void Save(TOutputSerializer& /*serializer*/) const {
-        // // TODO : PartitionKey
-        // Rows.Save(serializer);
-        // Nfa.Save(serializer);
-        // serializer.Write(MatchNumber);
+        // Not used in not streaming mode.
     }
 
     void Load(TInputSerializer& /*serializer*/) {
-        // Rows.Load(serializer);
-        // Nfa.Load(serializer);
-        // MatchNumber = serializer.Read<ui64>();
+        // Not used in not streaming mode.
     }
 
 private:
@@ -178,7 +173,6 @@ public:
     }
 
     bool HasMatched() const {
-        
         return Nfa.HasMatched();
     }
 
@@ -216,13 +210,14 @@ public:
     }
 
     void Save(TOutputSerializer& serializer) const {
-        // TODO : PartitionKey
+        // PartitionKey saved in TStateForInterleavedPartitions as key.
         Rows.Save(serializer);
         Nfa.Save(serializer);
         serializer.Write(MatchNumber);
     }
 
     void Load(TInputSerializer& serializer) {
+        // PartitionKey passed in contructor.
         Rows.Load(serializer);
         Nfa.Load(serializer);
         MatchNumber = serializer.Read<ui64>();
@@ -251,8 +246,8 @@ public:
         const TMatchRecognizeProcessorParameters& parameters,
         const TContainerCacheOnContext& cache,
         TComputationContext &ctx,
-        TType* stateType,
-        const TMutableObjectOverBoxedValue<TValuePackerBoxed>& packer
+        TType* rowType,
+        const TMutableObjectOverBoxedValue<TValuePackerBoxed>& rowPacker
     )
     : TComputationValue<TStateForNonInterleavedPartitions>(memInfo)
     , InputRowArg(inputRowArg)
@@ -262,11 +257,11 @@ public:
     , RowPatternConfiguration(TRowPatternConfigurationBuilder::Create(parameters.Pattern, parameters.VarNamesLookup))
     , Cache(cache)
     , Terminating(false)
-    , SaveLoadContex(ctx, stateType, packer)
+    , SerializerContext(ctx, rowType, rowPacker)
     {}
 
     NUdf::TUnboxedValue Save() const override {
-        TOutputSerializer serializer(SaveLoadContex);
+        TOutputSerializer serializer(SerializerContext);
         serializer.Write(StateVersion);
         serializer.Write(CurPartitionPackedKey);
         bool isValid = static_cast<bool>(PartitionHandler);
@@ -284,14 +279,15 @@ public:
 
     void Load(const NUdf::TStringRef& state) override {
 
-        TInputSerializer serializer(SaveLoadContex, state);
+        TInputSerializer serializer(SerializerContext, state);
         const auto stateVersion = serializer.Read<decltype(StateVersion)>();
         if (stateVersion == 1) {
             serializer.Read(CurPartitionPackedKey);
             bool validPartitionHandler = serializer.Read<bool>();
             if (validPartitionHandler) {
+                NUdf::TUnboxedValue key = PartitionKeyPacker.Unpack(CurPartitionPackedKey, SerializerContext.Ctx.HolderFactory);
                 PartitionHandler.reset(new Algo(
-                    NYql::NUdf::TUnboxedValuePod(NYql::NUdf::TStringValue("asd")),// TODO
+                    std::move(key),
                     Parameters,
                     RowPatternConfiguration,
                     Cache
@@ -321,7 +317,6 @@ public:
         if (PartitionHandler) {
             return PartitionHandler->ProcessEndOfData(ctx);
         }
-        
         //be aware that the very first partition is created in the same manner as subsequent
         return false;
     }
@@ -374,7 +369,7 @@ private:
     const TContainerCacheOnContext& Cache;
     NUdf::TUnboxedValue DelayedRow;
     bool Terminating;
-    TSerializerContext SaveLoadContex;
+    TSerializerContext SerializerContext;
 };
 
 class TStateForInterleavedPartitions
@@ -391,8 +386,8 @@ public:
         const TMatchRecognizeProcessorParameters& parameters,
         const TContainerCacheOnContext& cache,
         TComputationContext &ctx,
-        TType* stateType,
-        const TMutableObjectOverBoxedValue<TValuePackerBoxed>& packer
+        TType* rowType,
+        const TMutableObjectOverBoxedValue<TValuePackerBoxed>& rowPacker
     )
     : TComputationValue<TStateForInterleavedPartitions>(memInfo)
     , InputRowArg(inputRowArg)
@@ -401,11 +396,11 @@ public:
     , Parameters(parameters)
     , NfaTransitionGraph(TNfaTransitionGraphBuilder::Create(parameters.Pattern, parameters.VarNamesLookup))
     , Cache(cache)
-    , SaveLoadContex(ctx, stateType, packer)
+    , SerializerContext(ctx, rowType, rowPacker)
     {}
 
     NUdf::TUnboxedValue Save() const override {
-        TOutputSerializer serializer(SaveLoadContex);
+        TOutputSerializer serializer(SerializerContext);
         serializer.Write(StateVersion);
         serializer.Write(Partitions.size());
 
@@ -419,29 +414,30 @@ public:
 
     void Load(const NUdf::TStringRef& state) override {
 
-        TInputSerializer serializer(SaveLoadContex, state);
+        TInputSerializer serializer(SerializerContext, state);
 
         const auto stateVersion = serializer.Read<decltype(StateVersion)>();
         if (stateVersion == 1) {
             Partitions.clear();
             auto partitionsSize = serializer.Read<TPartitionMap::size_type>();
             for (size_t i = 0; i < partitionsSize; ++i) {
-                auto key = serializer.Read<TPartitionMap::key_type, std::string_view>();
-                auto pair = Partitions.emplace(key, std::make_unique<TStreamingMatchRecognize>(
-                    NYql::NUdf::TUnboxedValuePod(NYql::NUdf::TStringValue(key)),
-                    Parameters,
-                    NfaTransitionGraph,
-                    Cache));
+                auto packedKey = serializer.Read<TPartitionMap::key_type, std::string_view>();
+                NUdf::TUnboxedValue key = PartitionKeyPacker.Unpack(packedKey, SerializerContext.Ctx.HolderFactory);
+                auto pair = Partitions.emplace(
+                    packedKey,
+                    std::make_unique<TStreamingMatchRecognize>(
+                        std::move(key),
+                        Parameters,
+                        NfaTransitionGraph,
+                        Cache));
                 (pair.first)->second->Load(serializer);
             }
 
-            // std::cerr << "partitionsSize " << partitionsSize << std::endl;
-            // for (auto it = Partitions.begin(); it != Partitions.end(); ++it) {
-            //     std::cerr << "it->second->HasMatched() " << it->second->HasMatched() << std::endl;
-            //     if (it->second->HasMatched()) {
-            //         HasReadyOutput.push(it);
-            //     }
-            // }
+            for (auto it = Partitions.begin(); it != Partitions.end(); ++it) {
+                if (it->second->HasMatched()) {
+                    HasReadyOutput.push(it);
+                }
+            }
             serializer.Read(Terminating);
         }
         MKQL_ENSURE(serializer.Empty(), "State is corrupted");
@@ -509,7 +505,7 @@ private:
     const TMatchRecognizeProcessorParameters& Parameters;
     const TNfaTransitionGraph::TPtr NfaTransitionGraph;
     const TContainerCacheOnContext& Cache;
-    TSerializerContext SaveLoadContex;
+    TSerializerContext SerializerContext;
 };
 
 template<class State>
@@ -521,7 +517,7 @@ public:
        IComputationNode *partitionKey,
        TType* partitionKeyType,
        const TMatchRecognizeProcessorParameters& parameters,
-       TType* stateType
+       TType* rowType
     )
     :TBaseComputation(mutables, inputFlow, kind, EValueRepresentation::Embedded)
     , InputFlow(inputFlow)
@@ -530,8 +526,8 @@ public:
     , PartitionKeyType(partitionKeyType)
     , Parameters(parameters)
     , Cache(mutables)
-    , StateType(stateType)
-    , Packer(mutables)
+    , RowType(rowType)
+    , RowPacker(mutables)
     {}
 
     NUdf::TUnboxedValue DoCalculate(NUdf::TUnboxedValue &stateValue, TComputationContext &ctx) const {
@@ -543,8 +539,8 @@ public:
                 Parameters,
                 Cache,
                 ctx,
-                StateType,
-                Packer
+                RowType,
+                RowPacker
             );
         } else if (stateValue.HasValue() && !stateValue.IsBoxed()) {
             // Load from saved state.
@@ -555,8 +551,8 @@ public:
                 Parameters,
                 Cache,
                 ctx,
-                StateType,
-                Packer
+                RowType,
+                RowPacker
             );
             state.Load(stateValue.AsStringRef());
             stateValue = state;
@@ -603,8 +599,8 @@ private:
     const TMatchRecognizeProcessorParameters Parameters;
     TNfaTransitionGraph::TPtr NfaTransitionGraph;
     const TContainerCacheOnContext Cache;
-    TType* const StateType;
-    TMutableObjectOverBoxedValue<TValuePackerBoxed> Packer;
+    TType* const RowType;
+    TMutableObjectOverBoxedValue<TValuePackerBoxed> RowPacker;
 };
 
 TOutputColumnOrder GetOutputColumnOrder(TRuntimeNode partitionKyeColumnsIndexes, TRuntimeNode measureColumnsIndexes) {

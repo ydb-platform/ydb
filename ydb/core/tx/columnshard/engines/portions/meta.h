@@ -27,7 +27,7 @@ public:
     ui32 FirstPkColumn = 0;
 
     bool IsChunkWithPortionInfo(const ui32 columnId, const ui32 chunkIdx) const {
-        return columnId == FirstPkColumn && chunk == 0;
+        return columnId == FirstPkColumn && chunkIdx == 0;
     }
 
     bool DeserializeFromProto(const NKikimrTxColumnShard::TIndexPortionMeta& portionMeta, const TIndexInfo& indexInfo);

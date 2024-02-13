@@ -244,7 +244,7 @@ while (true) {
     name=local-file-sink
     connector.class=FileStreamSink
     tasks.max=1
-    file=file_to_write.json
+    file=/etc/kafka-connect-worker/file_to_write.json
     topics=Topic-1
     ```
 
@@ -269,7 +269,7 @@ while (true) {
 name=local-file-source
 connector.class=FileStreamSource
 tasks.max=1
-file=file_to_read.json
+file=/etc/kafka-connect-worker/file_to_read.json
 topic=Topic-1
 ```
 

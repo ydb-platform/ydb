@@ -199,7 +199,8 @@ For more information about Kafka Connect and its configuration, see the [Apache 
     This example uses Apache Kafka® version 3.6.1.
 
 
-1. Create a directory with the executable process settings:
+1. Create a directory with the executor process settings:
+
 
     ```bash
     sudo mkdir --parents /etc/kafka-connect-worker

@@ -6,13 +6,12 @@ import logging
 import os
 import pytest
 import re
-import time
+import retry
 import yaml
 from yaml.loader import SafeLoader
 
 from test_base import TestBase
 from ydb.core.fq.libs.http_api_client.http_client import YQHttpClientConfig, YQHttpClient, YQHttpClientException
-from ydb.core.fq.libs.http_api_client.query_results import YQResults
 from ydb.tests.tools.fq_runner.fq_client import FederatedQueryClient
 import ydb.public.api.protos.draft.fq_pb2 as fq
 
@@ -73,7 +72,7 @@ class TestHttpApi(TestBase):
         config.token_prefix = ""
         return YQHttpClient(config)
 
-    def test_simple_analitycs_query(self):
+    def test_simple_analytics_query(self):
         with self.create_client() as client:
             query_id = client.create_query(
                 "select 1",
@@ -313,7 +312,7 @@ class TestHttpApi(TestBase):
             query_id = client.create_query(sql)
 
             wait_for_query_status(client, query_id, ["COMPLETED"])
-            results = client.get_query_result_set(query_id, result_set_index=0)
+            raw_results = client.get_query_result_set(query_id, result_set_index=0, raw_format=True)
             expected_columns = [
                 {"name": "column0", "type": "Int32"}, {"name": "column1", "type": "Int32"},
                 {"name": "column2", "type": "Int64"}, {"name": "column3", "type": "Uint64"},
@@ -328,7 +327,7 @@ class TestHttpApi(TestBase):
                 {"name": "column20", "type": "Uint8"}, {"name": "column21", "type": "Uint16"},
             ]
 
-            assert results == {
+            assert raw_results == {
                 "columns": expected_columns,
                 "rows": [
                     [
@@ -346,10 +345,8 @@ class TestHttpApi(TestBase):
                 ]
             }
 
-            r = YQResults(results)
-            typed_result = r.results[0]
-
-            assert typed_result == {
+            results = client.get_query_result_set(query_id, result_set_index=0)
+            assert results == {
                 "columns": expected_columns,
                 "rows": [
                     [
@@ -380,7 +377,7 @@ class TestHttpApi(TestBase):
             query_id = client.create_query(sql)
 
             wait_for_query_status(client, query_id, ["COMPLETED"])
-            results = client.get_query_all_result_sets(query_id, 1)
+            raw_results = client.get_query_all_result_sets(query_id, 1, raw_format=True)
 
             expected_columns = [
                 {'name': 'column0', 'type': 'Optional<Int32>'},
@@ -391,7 +388,7 @@ class TestHttpApi(TestBase):
                 {'name': 'column5', 'type': 'Optional<Int32??>'}
             ]
 
-            assert results == {
+            assert raw_results == {
                 'columns': expected_columns,
                 'rows': [
                     [
@@ -405,10 +402,9 @@ class TestHttpApi(TestBase):
                 ]
             }
 
-            r = YQResults(results)
-            typed_result = r.results[0]
+            results = client.get_query_all_result_sets(query_id, 1)
 
-            assert typed_result == {
+            assert results == {
                 "columns": expected_columns,
                 "rows": [
                     [
@@ -432,7 +428,7 @@ class TestHttpApi(TestBase):
             query_id = client.create_query(sql)
 
             wait_for_query_status(client, query_id, ["COMPLETED"])
-            results = client.get_query_all_result_sets(query_id, 1)
+            raw_results = client.get_query_all_result_sets(query_id, 1, raw_format=True)
 
             expected_columns = [
                 {'name': 'column0', 'type': 'pgtext'},
@@ -451,7 +447,7 @@ class TestHttpApi(TestBase):
                 {'name': 'column13', 'type': 'pgpoint'}
             ]
 
-            assert results == {
+            assert raw_results == {
                 'columns': expected_columns,
                 'rows': [
                     [
@@ -473,10 +469,9 @@ class TestHttpApi(TestBase):
                 ]
             }
 
-            r = YQResults(results)
-            typed_result = r.results[0]
+            results = client.get_query_all_result_sets(query_id, 1)
 
-            assert typed_result == {
+            assert results == {
                 "columns": expected_columns,
                 "rows": [
                     [
@@ -506,18 +501,17 @@ class TestHttpApi(TestBase):
             """
             query_id = client.create_query(sql)
             wait_for_query_status(client, query_id, ["COMPLETED"])
-            results = client.get_query_all_result_sets(query_id, 1)
-            assert results["columns"] == [
+            raw_results = client.get_query_all_result_sets(query_id, 1, raw_format=True)
+            assert raw_results["columns"] == [
                 {"name": "column0", "type": "Set<Int32>"}
             ]
 
-            assert set(results["rows"][0][0]) == {1, 2, 3}
+            assert set(raw_results["rows"][0][0]) == {1, 2, 3}
 
-            r = YQResults(results)
-            typed_result = r.results[0]
+            results = client.get_query_all_result_sets(query_id, 1)
 
-            assert typed_result["rows"][0][0] == {1, 2, 3}
-            assert isinstance(typed_result["rows"][0][0], set)
+            assert results["rows"][0][0] == {1, 2, 3}
+            assert isinstance(results["rows"][0][0], set)
 
     def test_complex_results(self):
         with self.create_client() as client:
@@ -548,7 +542,7 @@ class TestHttpApi(TestBase):
             query_id = client.create_query(sql)
 
             wait_for_query_status(client, query_id, ["COMPLETED"])
-            results = client.get_query_result_set(query_id, 0)
+            raw_results = client.get_query_result_set(query_id, 0, raw_format=True)
             # uuid, tz* types are not implemented yet
             expected_columns = [
                 {"name": "column0", "type": "EmptyList"},
@@ -582,7 +576,7 @@ class TestHttpApi(TestBase):
                 {"name": "column28", "type": "Tuple<Int32,String,Date>"},
             ]
 
-            assert results == {
+            assert raw_results == {
                 "columns": expected_columns,
                 "rows": [
                     [
@@ -619,10 +613,9 @@ class TestHttpApi(TestBase):
                 ]
             }
 
-            r = YQResults(results)
-            typed_result = r.results[0]
+            results = client.get_query_result_set(query_id, 0)
 
-            assert typed_result == {
+            assert results == {
                 "columns": expected_columns,
                 "rows": [
                     [

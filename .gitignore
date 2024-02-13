@@ -6,7 +6,9 @@
 # Unignore all dirs
 !*/
 # Unignore all files inside canondata dir
-!*/canondata/*
+!**/canondata/**
+
+/canonization_show_res.log
 
 # C libraries
 *.so

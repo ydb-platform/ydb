@@ -208,7 +208,7 @@ namespace NTable {
                 ui64 items = 0;
                 ui64 bytes = 0;
 
-                TRowId prechargedFirstRowId, prechargedLastRowId;
+                std::optional<std::pair<TRowId, TRowId>> prechargedRowsRange;
                 bool needExactBounds = Groups || HistoryIndex;
 
                 for (auto current = first; 
@@ -235,6 +235,15 @@ namespace NTable {
                             prechargeCurrentFirstRowId = Max<TRowId>(); // no precharge
                         }
                     }
+                    if (itemsLimit && prechargeCurrentFirstRowId <= prechargeCurrentLastRowId) {
+                        ui64 left = itemsLimit - items; // we count only foolproof taken rows, so here we may precharge some extra rows
+                        if (prechargeCurrentLastRowId - prechargeCurrentFirstRowId > left) {
+                            prechargeCurrentLastRowId = prechargeCurrentFirstRowId + left;
+                        }
+                    }
+                    if (prechargeCurrentFirstRowId <= prechargeCurrentLastRowId) {
+                        items += prechargeCurrentLastRowId - prechargeCurrentFirstRowId + 1;
+                    }
                     if (key2Page && key2Page <= current) {
                         if (key2Page == current) {
                             if (needExactBounds && page) {
@@ -251,29 +260,22 @@ namespace NTable {
                             prechargeCurrentFirstRowId = Max<TRowId>(); // no precharge
                         }
                     }
-                    if (itemsLimit && prechargeCurrentFirstRowId <= prechargeCurrentLastRowId) {
-                        ui64 left = itemsLimit - items; // we count only foolproof taken rows, so here we may precharge some extra rows
-                        if (prechargeCurrentLastRowId - prechargeCurrentFirstRowId > left) {
-                            prechargeCurrentLastRowId = prechargeCurrentFirstRowId + left;
-                        }
-                    }
-
                     if (prechargeCurrentFirstRowId <= prechargeCurrentLastRowId) {
-                        if (!items) {
-                            prechargedFirstRowId = prechargeCurrentFirstRowId;
+                        if (prechargedRowsRange) {
+                            prechargedRowsRange->second = prechargeCurrentLastRowId;
+                        } else {
+                            prechargedRowsRange.emplace(prechargeCurrentFirstRowId, prechargeCurrentLastRowId);
                         }
-                        prechargedLastRowId = prechargeCurrentLastRowId;
                         if (Groups) {
                             for (auto& g : Groups) {
                                 ready &= DoPrechargeGroup(g, prechargeCurrentFirstRowId, prechargeCurrentLastRowId, bytes);
                             }
                         }
-                        items += prechargeCurrentLastRowId - prechargeCurrentFirstRowId + 1;
                     }
                 }
 
-                if (items && HistoryIndex) {
-                    ready &= DoPrechargeHistory(prechargedFirstRowId, prechargedLastRowId);
+                if (prechargedRowsRange && HistoryIndex) {
+                    ready &= DoPrechargeHistory(prechargedRowsRange->first, prechargedRowsRange->second);
                 }
             }
 
@@ -304,7 +306,7 @@ namespace NTable {
                 ui64 items = 0;
                 ui64 bytes = 0;
 
-                TRowId prechargedFirstRowId, prechargedLastRowId;
+                std::optional<std::pair<TRowId, TRowId>> prechargedRowsRange;
                 bool needExactBounds = Groups || HistoryIndex;
 
                 for (auto current = first;
@@ -335,6 +337,15 @@ namespace NTable {
                             prechargeCurrentLastRowId = Max<TRowId>(); // no precharge
                         }
                     }
+                    if (itemsLimit && prechargeCurrentFirstRowId >= prechargeCurrentLastRowId) {
+                        ui64 left = itemsLimit - items; // we count only foolproof taken rows, so here we may precharge some extra rows
+                        if (prechargeCurrentFirstRowId - prechargeCurrentLastRowId > left) {
+                            prechargeCurrentLastRowId = prechargeCurrentFirstRowId - left;
+                        }
+                    }
+                    if (prechargeCurrentFirstRowId >= prechargeCurrentLastRowId) {
+                        items += prechargeCurrentFirstRowId - prechargeCurrentLastRowId + 1;
+                    }
                     if (key2Page && key2Page >= current) {
                         if (key2Page == current) {
                             if (needExactBounds && page) {
@@ -349,25 +360,17 @@ namespace NTable {
                             prechargeCurrentLastRowId = Max<TRowId>(); // no precharge
                         }
                     }
-
-                    if (itemsLimit && prechargeCurrentFirstRowId >= prechargeCurrentLastRowId) {
-                        ui64 left = itemsLimit - items; // we count only foolproof taken rows, so here we may precharge some extra rows
-                        if (prechargeCurrentFirstRowId - prechargeCurrentLastRowId > left) {
-                            prechargeCurrentLastRowId = prechargeCurrentFirstRowId - left;
-                        }
-                    }
-
                     if (prechargeCurrentFirstRowId >= prechargeCurrentLastRowId) {
-                        if (!items) {
-                            prechargedFirstRowId = prechargeCurrentFirstRowId;
+                        if (prechargedRowsRange) {
+                            prechargedRowsRange->second = prechargeCurrentLastRowId;
+                        } else {
+                            prechargedRowsRange.emplace(prechargeCurrentFirstRowId, prechargeCurrentLastRowId);
                         }
-                        prechargedLastRowId = prechargeCurrentLastRowId;
                         if (Groups) {
                             for (auto& g : Groups) {
                                 ready &= DoPrechargeGroupReverse(g, prechargeCurrentFirstRowId, prechargeCurrentLastRowId, bytes);
                             }
                         }
-                        items += prechargeCurrentFirstRowId - prechargeCurrentLastRowId + 1;
                     }
 
                     if (current.Off() == 0) {
@@ -375,8 +378,8 @@ namespace NTable {
                     }
                 }
 
-                if (items && HistoryIndex) {
-                    ready &= DoPrechargeHistory(prechargedFirstRowId, prechargedLastRowId);
+                if (prechargedRowsRange && HistoryIndex) {
+                    ready &= DoPrechargeHistory(prechargedRowsRange->first, prechargedRowsRange->second);
                 }
             }
 
@@ -419,7 +422,7 @@ namespace NTable {
             const auto& scheme = Part->Scheme->HistoryGroup;
             Y_DEBUG_ABORT_UNLESS(scheme.ColsKeyIdx.size() == 3);
 
-            // Directly use the histroy key defaults with correct sort order
+            // Directly use the history key defaults with correct sort order
             const TKeyCellDefaults* keyDefaults = Part->Scheme->HistoryKeys.Get();
 
             auto first = index->LookupKey(startKey, scheme, ESeek::Lower, keyDefaults);
@@ -438,7 +441,7 @@ namespace NTable {
                 ready &= bool(page);
 
                 if (!HistoryGroups) {
-                    // don't need to caclulate prechargedFirstRowId/prechargedLastRowId
+                    // don't need to calculate prechargedFirstRowId/prechargedLastRowId
                     continue;
                 }
 

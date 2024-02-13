@@ -1282,7 +1282,9 @@ Y_UNIT_TEST_SUITE(TFlatTest) {
     Y_UNIT_TEST(CheckACL) {
         TPortManager pm;
         ui16 port = pm.GetPort(2134);
-        TServer cleverServer = TServer(TServerSettings(port));
+        NKikimrProto::TAuthConfig authConfig;
+        authConfig.SetUseBuiltinDomain(true);
+        TServer cleverServer = TServer(TServerSettings(port, authConfig));
         if (!true) {
             cleverServer.GetRuntime()->SetLogPriority(NKikimrServices::FLAT_TX_SCHEMESHARD, NActors::NLog::PRI_DEBUG);
             cleverServer.GetRuntime()->SetLogPriority(NKikimrServices::TX_DATASHARD, NActors::NLog::PRI_DEBUG);

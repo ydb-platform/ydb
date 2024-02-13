@@ -822,6 +822,84 @@ Y_UNIT_TEST_SUITE(TBlobStorageWardenTest) {
         TestHttpMonForPath("");
         TestHttpMonForPath("/json/groups");
     }
+
+    void TestObtainPDiskKey(TString pin1, TString pin2) {
+        std::unique_ptr<TTempDir> tmp(new TTempDir());
+        TString keyfile = Sprintf("%s/key.txt", (*tmp)().data());
+        {
+            TFileOutput file(keyfile);
+            file << "some data";
+        }
+
+        NKikimrProto::TKeyConfig keyConfig;
+        NKikimrProto::TKeyRecord* keyRecord = keyConfig.AddKeys();
+        keyRecord->SetContainerPath(keyfile);
+        keyRecord->SetPin(pin1);
+        keyRecord->SetId("Key");
+        keyRecord->SetVersion(1);
+
+        NPDisk::TMainKey mainKey1;
+        UNIT_ASSERT(ObtainPDiskKey(&mainKey1, keyConfig));
+
+        keyRecord->SetPin(pin2);
+        NPDisk::TMainKey mainKey2;
+        UNIT_ASSERT(ObtainPDiskKey(&mainKey2, keyConfig));
+
+        UNIT_ASSERT_VALUES_EQUAL(mainKey1.Keys.size(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(mainKey2.Keys.size(), 1);
+
+        if (pin1 == pin2) {
+            UNIT_ASSERT_VALUES_EQUAL(mainKey1.Keys[0], mainKey2.Keys[0]);
+        } else {
+            UNIT_ASSERT_VALUES_UNEQUAL(mainKey1.Keys[0], mainKey2.Keys[0]);
+        }
+    }
+
+    CUSTOM_UNIT_TEST(ObtainPDiskKeySamePin) {
+        TestObtainPDiskKey("pin", "pin");
+    }
+
+    // TODO (serg-belyakov): Fix conversion from TEncryption key to PDisk's TKey
+    // CUSTOM_UNIT_TEST(ObtainPDiskKeyDifferentPin) {
+    //    TestObtainPDiskKey("pin1", "pin2");
+    // }
+
+    void TestObtainTenantKey(TString pin1, TString pin2) {
+        std::unique_ptr<TTempDir> tmp(new TTempDir());
+        TString keyfile = Sprintf("%s/key.txt", (*tmp)().data());
+        {
+            TFileOutput file(keyfile);
+            file << "some data";
+        }
+
+        NKikimrProto::TKeyConfig keyConfig;
+        NKikimrProto::TKeyRecord* keyRecord = keyConfig.AddKeys();
+        keyRecord->SetContainerPath(keyfile);
+        keyRecord->SetPin(pin1);
+        keyRecord->SetId("Key");
+        keyRecord->SetVersion(1);
+
+        TEncryptionKey key1;
+        UNIT_ASSERT(ObtainTenantKey(&key1, keyConfig));
+
+        keyRecord->SetPin(pin2);
+        TEncryptionKey key2;
+        UNIT_ASSERT(ObtainTenantKey(&key2, keyConfig));
+
+        if (pin1 == pin2) {
+            UNIT_ASSERT(key1.Key == key2.Key);
+        } else {
+            UNIT_ASSERT(!(key1.Key == key2.Key));
+        }
+    }
+
+    CUSTOM_UNIT_TEST(ObtainTenantKeySamePin) {
+        TestObtainTenantKey("pin", "pin");
+    }
+
+    CUSTOM_UNIT_TEST(ObtainTenantKeyDifferentPin) {
+        TestObtainTenantKey("pin1", "pin2");
+    }
 }
 
 } // namespace NBlobStorageNodeWardenTest

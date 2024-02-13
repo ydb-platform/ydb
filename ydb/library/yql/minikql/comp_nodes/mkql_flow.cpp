@@ -348,7 +348,7 @@ public:
 
         TGettersList getters(Width);
         for (auto i = 0U; i < getters.size(); ++i) {
-            getters[i] = [idx = TempStateIndex + i, values, valueType, indexType](const TCodegenContext& ctx, BasicBlock*& block) {
+            getters[i] = [idx = TempStateIndex + i, valueType, indexType](const TCodegenContext& ctx, BasicBlock*& block) {
                 const auto valuePtr = GetElementPtrInst::CreateInBounds(valueType, ctx.GetMutables(), {ConstantInt::get(indexType, idx)}, (TString("ptr_") += ToString(idx)).c_str(), block);
                 return new LoadInst(valueType, valuePtr, (TString("val_") += ToString(idx)).c_str(), block);
             };

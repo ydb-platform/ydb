@@ -1,13 +1,8 @@
 GO_LIBRARY()
-
-SRCS(
-    driver.go
-    types.go
-)
-
-GO_TEST_SRCS(types_test.go)
-
+IF (TRUE)
+    SRCS(
+		driver.go
+		types.go
+    )
+ENDIF()
 END()
-
-RECURSE(
-)

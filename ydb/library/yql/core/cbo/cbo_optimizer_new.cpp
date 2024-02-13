@@ -63,13 +63,18 @@ void TRelOptimizerNode::Print(std::stringstream& stream, int ntabs) {
 }
 
 TJoinOptimizerNode::TJoinOptimizerNode(const std::shared_ptr<IBaseOptimizerNode>& left, const std::shared_ptr<IBaseOptimizerNode>& right, 
-        const std::set<std::pair<TJoinColumn, TJoinColumn>>& joinConditions, const EJoinKind joinType, bool nonReorderable) :
+        const std::set<std::pair<TJoinColumn, TJoinColumn>>& joinConditions, const EJoinKind joinType, const EJoinAlgoType joinAlgo, bool nonReorderable) :
     IBaseOptimizerNode(JoinNodeType), 
     LeftArg(left), 
     RightArg(right), 
-    JoinConditions(joinConditions), 
-    JoinType(joinType) {
+    JoinConditions(joinConditions),
+    JoinType(joinType),
+    JoinAlgo(joinAlgo) {
         IsReorderable = (JoinType==EJoinKind::InnerJoin) && (nonReorderable==false);
+        for (auto [l,r] : joinConditions ) {
+            LeftJoinKeys.push_back(l.AttributeName);
+            RightJoinKeys.push_back(r.AttributeName);
+        }
     }
 
 TVector<TString> TJoinOptimizerNode::Labels() {
@@ -96,7 +101,9 @@ void TJoinOptimizerNode::Print(std::stringstream& stream, int ntabs) {
         stream << "\t";
     }
 
-    stream << *Stats << "\n";
+    if (Stats) {
+        stream << *Stats << "\n";
+    }
 
     LeftArg->Print(stream, ntabs+1);
     RightArg->Print(stream, ntabs+1);

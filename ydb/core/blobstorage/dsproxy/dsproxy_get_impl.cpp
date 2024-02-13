@@ -293,12 +293,13 @@ void TGetImpl::PrepareRequests(TLogContext &logCtx, TDeque<std::unique_ptr<TEvBl
             msg->SetId(ReaderTabletData->Id);
             msg->SetGeneration(ReaderTabletData->Generation);
         }
-        R_LOG_DEBUG_SX(logCtx, "BPG14", "Send get to orderNumber# " << get.OrderNumber
-            << " vget# " << vget->ToString());
     }
 
     for (auto& vget : gets) {
         if (vget) {
+            R_LOG_DEBUG_SX(logCtx, "BPG14", "Send get to orderNumber# "
+                << Info->GetTopology().GetOrderNumber(VDiskIDFromVDiskID(vget->Record.GetVDiskID()))
+                << " vget# " << vget->ToString());
             outVGets.push_back(std::move(vget));
             ++RequestIndex;
         }

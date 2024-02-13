@@ -22,6 +22,8 @@ TMaybe<TKqpMatchReadResult> MatchRead(NYql::NNodes::TExprBase node) {
     return MatchRead(node, [] (NYql::NNodes::TExprBase node) { return node.Maybe<TRead>().IsValid(); });
 }
 
+NYql::NNodes::TMaybeNode<NYql::NNodes::TKqlKeyInc> GetRightTableKeyPrefix(const NYql::NNodes::TKqlKeyRange& range);
+
 } // NKikimr::NKqp::NOpt
 
 

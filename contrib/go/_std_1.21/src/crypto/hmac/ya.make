@@ -1,12 +1,7 @@
 GO_LIBRARY()
-
-SRCS(
-    hmac.go
-)
-
-GO_TEST_SRCS(hmac_test.go)
-
+IF (TRUE)
+    SRCS(
+		hmac.go
+    )
+ENDIF()
 END()
-
-RECURSE(
-)

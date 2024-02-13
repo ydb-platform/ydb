@@ -59,7 +59,7 @@ namespace {
             .Done();
 
         astNode.Ptr()->SetTypeAnn(ctx.MakeType<TUnitExprType>());
-
+        astNode.Ptr()->SetState(TExprNode::EState::ConstrComplete);
         exec.Ptr()->ChildRef(TKiExecDataQuery::idx_Ast) = astNode.Ptr();
     }
 
@@ -563,6 +563,8 @@ private:
         TStringStream ysonStream;
         NYson::TYsonWriter writer(&ysonStream, NYson::EYsonFormat::Binary);
         NYql::IDataProvider::TFillSettings fillSettings;
+        fillSettings.AllResultsBytesLimit = Nothing();
+        fillSettings.RowsLimitPerWrite = Nothing();
         KikimrResultToYson(ysonStream, writer, result, {}, fillSettings, truncated);
 
         TStringStream out;
@@ -603,6 +605,15 @@ public:
 
         if (input->Content() == "Result") {
             auto result = TMaybeNode<TResult>(input).Cast();
+
+            if (auto maybeNth = result.Input().Maybe<TCoNth>()) {
+                if (auto maybeExecQuery = maybeNth.Tuple().Maybe<TCoRight>().Input().Maybe<TKiExecDataQuery>()) {
+                    input->SetState(TExprNode::EState::ExecutionComplete);
+                    input->SetResult(ctx.NewWorld(input->Pos()));
+                    return SyncOk();
+                }
+            }
+
             NKikimrMiniKQL::TType resultType;
             TString program;
             TStatus status = GetLambdaBody(result.Input().Ptr(), resultType, ctx, program);
@@ -923,7 +934,7 @@ public:
             auto tableTypeItem = table.Metadata->TableType;
             if (tableTypeItem == ETableType::ExternalTable && !SessionCtx->Config().FeatureFlags.GetEnableExternalDataSources()) {
                 ctx.AddError(TIssue(ctx.GetPosition(input->Pos()),
-                    TStringBuilder() << "External table are disabled. Please contact your system administrator to enable it"));
+                    TStringBuilder() << "External tables are disabled. Please contact your system administrator to enable it"));
                 return SyncError();
             }
 
@@ -934,10 +945,11 @@ public:
             NThreading::TFuture<IKikimrGateway::TGenericResult> future;
             bool isColumn = (table.Metadata->StoreType == EStoreType::Column);
             bool existingOk = (maybeCreate.ExistingOk().Cast().Value() == "1");
+            bool replaceIfExists = (maybeCreate.ReplaceIfExists().Cast().Value() == "1");
             switch (tableTypeItem) {
                 case ETableType::ExternalTable: {
                     future = Gateway->CreateExternalTable(cluster,
-                        ParseCreateExternalTableSettings(maybeCreate.Cast(), table.Metadata->TableSettings), true, existingOk);
+                        ParseCreateExternalTableSettings(maybeCreate.Cast(), table.Metadata->TableSettings), true, existingOk, replaceIfExists);
                     break;
                 }
                 case ETableType::TableStore: {
@@ -947,12 +959,13 @@ public:
                         return SyncError();
                     }
                     future = Gateway->CreateTableStore(cluster,
-                        ParseCreateTableStoreSettings(maybeCreate.Cast(), table.Metadata->TableSettings));
+                        ParseCreateTableStoreSettings(maybeCreate.Cast(), table.Metadata->TableSettings), existingOk);
                     break;
                 }
                 case ETableType::Table:
                 case ETableType::Unknown: {
-                    future = isColumn ? Gateway->CreateColumnTable(table.Metadata, true) : Gateway->CreateTable(table.Metadata, true, existingOk);
+                    future = isColumn ? Gateway->CreateColumnTable(table.Metadata, true, existingOk)
+                        : Gateway->CreateTable(table.Metadata, true, existingOk);
                     break;
                 }
             }
@@ -1016,7 +1029,7 @@ public:
                     }
                     break;
                 case ETableType::TableStore:
-                    future = Gateway->DropTableStore(cluster, ParseDropTableStoreSettings(maybeDrop.Cast()));
+                    future = Gateway->DropTableStore(cluster, ParseDropTableStoreSettings(maybeDrop.Cast()), missingOk);
                     break;
                 case ETableType::ExternalTable:
                     future = Gateway->DropExternalTable(cluster, ParseDropExternalTableSettings(maybeDrop.Cast()), missingOk);

@@ -1,14 +1,7 @@
 GO_LIBRARY()
-
-SRCS(
-    utf16.go
-)
-
-GO_TEST_SRCS(export_test.go)
-
-GO_XTEST_SRCS(utf16_test.go)
-
+IF (TRUE)
+    SRCS(
+		utf16.go
+    )
+ENDIF()
 END()
-
-RECURSE(
-)

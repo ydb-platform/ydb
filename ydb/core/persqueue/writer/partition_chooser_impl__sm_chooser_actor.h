@@ -35,18 +35,19 @@ public:
                            std::optional<ui32> preferedPartition)
         : TAbstractPartitionChooserActor<TSMPartitionChooserActor<TPipeCreator>, TPipeCreator>(parentId, chooser, fullConverter, sourceId, preferedPartition)
         , Graph(MakePartitionGraph(config)) {
-
     }
 
     void Bootstrap(const TActorContext& ctx) {
+        if (!TThis::Initialize(ctx)) {
+            return;
+        }
         BoundaryPartition = ChoosePartitionSync();
 
         if (TThis::SourceId) {
-            TThis::Initialize(ctx);
             GetOwnershipFast(ctx);
         } else {
             TThis::Partition = BoundaryPartition;
-            TThis::StartGetOwnership(ctx);
+            TThis::StartCheckPartitionRequest(ctx);
         }
     }
 
@@ -104,11 +105,6 @@ public:
         GetOldSeqNo(ctx);
     }
 
-    void OnOwnership(const TActorContext &ctx) override {
-        DEBUG("OnOwnership");
-        TThis::ReplyResult(ctx);
-    }
-
 private:
     void GetOwnershipFast(const TActorContext &ctx) {
         TThis::Become(&TThis::StateOwnershipFast);
@@ -119,31 +115,18 @@ private:
         DEBUG("GetOwnershipFast Partition=" << BoundaryPartition->PartitionId << " TabletId=" << BoundaryPartition->TabletId);
 
         TThis::PartitionHelper.Open(BoundaryPartition->TabletId, ctx);
-        TThis::PartitionHelper.SendGetOwnershipRequest(BoundaryPartition->PartitionId, TThis::SourceId, false, ctx);
+        TThis::PartitionHelper.SendCheckPartitionStatusRequest(BoundaryPartition->PartitionId, TThis::SourceId, ctx);
     }
 
-    void HandleOwnershipFast(TEvPersQueue::TEvResponse::TPtr& ev, const NActors::TActorContext& ctx) {
-        DEBUG("HandleOwnershipFast");
-        auto& record = ev->Get()->Record;
-
-        TString error;
-        if (!BasicCheck(record, error)) {
-            return TThis::InitTable(ctx);
-        }
-
-        const auto& response = record.GetPartitionResponse();
-        if (!response.HasCmdGetOwnershipResult()) {
-            return TThis::ReplyError(ErrorCode::INITIALIZING, "Absent Ownership result", ctx);
-        }
-
-        if (NKikimrPQ::ETopicPartitionStatus::Active != response.GetCmdGetOwnershipResult().GetStatus()) {
-            return TThis::ReplyError(ErrorCode::INITIALIZING, "Configuration changed", ctx);
-        }
-
-        TThis::OwnerCookie = response.GetCmdGetOwnershipResult().GetOwnerCookie();
-
-        if (response.GetCmdGetOwnershipResult().GetSeqNo() > 0) {
+    void HandleFast(NKikimr::TEvPQ::TEvCheckPartitionStatusResponse::TPtr& ev, const NActors::TActorContext& ctx) {
+        TThis::PartitionHelper.Close(ctx);
+        if (NKikimrPQ::ETopicPartitionStatus::Active == ev->Get()->Record.GetStatus() 
+                && ev->Get()->Record.HasSeqNo()
+                && ev->Get()->Record.GetSeqNo() > 0) {
             // Fast path: the partition ative and already written
+            TThis::Partition = BoundaryPartition;
+            TThis::SeqNo = ev->Get()->Record.GetSeqNo();
+
             TThis::SendUpdateRequests(ctx);
             return TThis::ReplyResult(ctx);
         }
@@ -154,7 +137,7 @@ private:
     STATEFN(StateOwnershipFast) {
         TRACE_EVENT(NKikimrServices::PQ_PARTITION_CHOOSER);
         switch (ev->GetTypeRewrite()) {
-            HFunc(TEvPersQueue::TEvResponse, HandleOwnershipFast);
+            HFunc(NKikimr::TEvPQ::TEvCheckPartitionStatusResponse, HandleFast);
             HFunc(TEvTabletPipe::TEvClientConnected, TThis::HandleOwnership);
             HFunc(TEvTabletPipe::TEvClientDestroyed, TThis::HandleOwnership);
             SFunc(TEvents::TEvPoison, TThis::Die);
@@ -207,7 +190,7 @@ private:
         }
 
         TThis::PartitionHelper.Close(ctx);
-        TThis::StartCheckPartitionRequest(ctx);
+        OnPartitionChosen(ctx);
     }
 
     STATEFN(StateGetMaxSeqNo) {

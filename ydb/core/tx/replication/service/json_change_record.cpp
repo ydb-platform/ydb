@@ -33,6 +33,40 @@ NChangeExchange::IChangeRecord::EKind TChangeRecord::GetKind() const {
         : EKind::CdcDataChange;
 }
 
+static bool ParseKey(TVector<TCell>& cells,
+        const NJson::TJsonValue::TArray& key, TLightweightSchema::TCPtr schema, TMemoryPool& pool, TString& error)
+{
+    cells.resize(key.size());
+
+    Y_ABORT_UNLESS(key.size() == schema->KeyColumns.size());
+    for (ui32 i = 0; i < key.size(); ++i) {
+        if (!NFormats::MakeCell(cells[i], key[i], schema->KeyColumns[i], pool, error)) {
+            return false;
+        }
+    }
+
+    return true;
+}
+
+static bool ParseValue(TVector<NTable::TTag>& tags, TVector<TCell>& cells,
+        const NJson::TJsonValue::TMapType& value, TLightweightSchema::TCPtr schema, TMemoryPool& pool, TString& error)
+{
+    tags.reserve(value.size());
+    cells.reserve(value.size());
+
+    for (const auto& [column, value] : value) {
+        auto it = schema->ValueColumns.find(column);
+        Y_ABORT_UNLESS(it != schema->ValueColumns.end());
+
+        tags.push_back(it->second.Tag);
+        if (!NFormats::MakeCell(cells.emplace_back(), value, it->second.Type, pool, error)) {
+            return false;
+        }
+    }
+
+    return true;
+}
+
 void TChangeRecord::Serialize(NKikimrTxDataShard::TEvApplyReplicationChanges::TChange& record) const {
     record.SetSourceOffset(GetOrder());
     // TODO: fill WriteTxId
@@ -42,13 +76,10 @@ void TChangeRecord::Serialize(NKikimrTxDataShard::TEvApplyReplicationChanges::TC
 
     if (JsonBody.Has("key") && JsonBody["key"].IsArray()) {
         const auto& key = JsonBody["key"].GetArray();
-        Y_ABORT_UNLESS(key.size() == Schema->KeyColumns.size());
+        TVector<TCell> cells;
 
-        TVector<TCell> cells(key.size());
-        for (ui32 i = 0; i < key.size(); ++i) {
-            auto res = NFormats::MakeCell(cells[i], key[i], Schema->KeyColumns[i], pool, error);
-            Y_ABORT_UNLESS(res);
-        }
+        auto res = ParseKey(cells, key, Schema, pool, error);
+        Y_ABORT_UNLESS(res);
 
         record.SetKey(TSerializedCellVec::Serialize(cells));
     } else {
@@ -57,24 +88,42 @@ void TChangeRecord::Serialize(NKikimrTxDataShard::TEvApplyReplicationChanges::TC
 
     if (JsonBody.Has("update") && JsonBody["update"].IsMap()) {
         const auto& update = JsonBody["update"].GetMap();
+        TVector<NTable::TTag> tags;
+        TVector<TCell> cells;
+
+        auto res = ParseValue(tags, cells, update, Schema, pool, error);
+        Y_ABORT_UNLESS(res);
+
         auto& upsert = *record.MutableUpsert();
-
-        TVector<TCell> cells(::Reserve(update.size()));
-        for (const auto& [column, value] : update) {
-            auto it = Schema->ValueColumns.find(column);
-            Y_ABORT_UNLESS(it != Schema->ValueColumns.end());
-
-            upsert.AddTags(it->second.Tag);
-            auto res = NFormats::MakeCell(cells.emplace_back(), value, it->second.Type, pool, error);
-            Y_ABORT_UNLESS(res);
-        }
-
+        *upsert.MutableTags() = {tags.begin(), tags.end()};
         upsert.SetData(TSerializedCellVec::Serialize(cells));
     } else if (JsonBody.Has("erase")) {
         record.MutableErase();
     } else {
         Y_ABORT("Malformed json record");
     }
+}
+
+TConstArrayRef<TCell> TChangeRecord::GetKey() const {
+    if (!Key) {
+        TMemoryPool pool(256);
+        TString error;
+
+        if (JsonBody.Has("key") && JsonBody["key"].IsArray()) {
+            const auto& key = JsonBody["key"].GetArray();
+            TVector<TCell> cells;
+
+            auto res = ParseKey(cells, key, Schema, pool, error);
+            Y_ABORT_UNLESS(res);
+
+            Key.ConstructInPlace(cells);
+        } else {
+            Y_ABORT("Malformed json record");
+        }
+    }
+
+    Y_ABORT_UNLESS(Key);
+    return *Key;
 }
 
 }

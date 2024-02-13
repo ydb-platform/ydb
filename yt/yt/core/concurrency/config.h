@@ -2,8 +2,7 @@
 
 #include "public.h"
 
-// TODO(arkady-e1ppa): Move backoff config+serialization into core/misc/config.h.
-#include <yt/yt/core/misc/backoff_strategy_config.h>
+#include <yt/yt/core/misc/config.h>
 
 #include <yt/yt/core/ytree/yson_struct.h>
 
@@ -28,10 +27,9 @@ struct TPeriodicExecutorOptions
 ////////////////////////////////////////////////////////////////////////////////
 
 struct TRetryingPeriodicExecutorOptions
-{
-    TPeriodicExecutorOptions Periodic;
-    TExponentialBackoffOptions BackoffStrategy;
-};
+    : public TPeriodicExecutorOptions
+    , public TExponentialBackoffOptions
+{ };
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -40,7 +38,7 @@ namespace NDetail {
 ////////////////////////////////////////////////////////////////////////////////
 
 class TPeriodicExecutorOptionsSerializer
-    : public NYTree::TExternalizedYsonStruct<TPeriodicExecutorOptions>
+    : public virtual NYTree::TExternalizedYsonStruct
 {
 public:
     REGISTER_EXTERNALIZED_YSON_STRUCT(TPeriodicExecutorOptions, TPeriodicExecutorOptionsSerializer);
@@ -51,10 +49,15 @@ public:
 ////////////////////////////////////////////////////////////////////////////////
 
 class TRetryingPeriodicExecutorOptionsSerializer
-    : public NYTree::TExternalizedYsonStruct<TRetryingPeriodicExecutorOptions>
+    : public TPeriodicExecutorOptionsSerializer
+    , public ::NYT::NDetail::TExponentialBackoffOptionsSerializer
 {
 public:
-    REGISTER_EXTERNALIZED_YSON_STRUCT(TRetryingPeriodicExecutorOptions, TRetryingPeriodicExecutorOptionsSerializer);
+    REGISTER_DERIVED_EXTERNALIZED_YSON_STRUCT(
+        TRetryingPeriodicExecutorOptions,
+        TRetryingPeriodicExecutorOptionsSerializer,
+        (TPeriodicExecutorOptionsSerializer)
+        (::NYT::NDetail::TExponentialBackoffOptionsSerializer));
 
     static void Register(TRegistrar registrar);
 };
@@ -62,6 +65,9 @@ public:
 ////////////////////////////////////////////////////////////////////////////////
 
 } // namespace NDetail
+
+ASSIGN_EXTERNAL_YSON_SERIALIZER(TPeriodicExecutorOptions, NDetail::TPeriodicExecutorOptionsSerializer);
+ASSIGN_EXTERNAL_YSON_SERIALIZER(TRetryingPeriodicExecutorOptions, NDetail::TRetryingPeriodicExecutorOptionsSerializer);
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -144,6 +150,3 @@ DEFINE_REFCOUNTED_TYPE(TPrefetchingThrottlerConfig)
 ////////////////////////////////////////////////////////////////////////////////
 
 } // namespace NYT::NConcurrency
-
-ASSIGN_EXTERNAL_YSON_SERIALIZER(NYT::NConcurrency::TPeriodicExecutorOptions, NYT::NConcurrency::NDetail::TPeriodicExecutorOptionsSerializer);
-ASSIGN_EXTERNAL_YSON_SERIALIZER(NYT::NConcurrency::TRetryingPeriodicExecutorOptions, NYT::NConcurrency::NDetail::TRetryingPeriodicExecutorOptionsSerializer);

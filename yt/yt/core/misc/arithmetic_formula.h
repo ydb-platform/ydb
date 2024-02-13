@@ -86,7 +86,6 @@ public:
     void Load(TStreamLoadContext& context);
 
     bool operator==(const TBooleanFormulaTags& other) const;
-    bool operator!=(const TBooleanFormulaTags& other) const;
 
 private:
     THashSet<TString> Tags_;

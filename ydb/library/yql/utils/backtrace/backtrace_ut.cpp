@@ -13,7 +13,7 @@ namespace {
             output << symbolizer->SymbolizeFrame(array[i]);
         }
 #if !defined(_hardening_enabled_) && !defined(_win_)
-        UNIT_ASSERT_STRING_CONTAINS(NYql::NBacktrace::Symbolize(output, {}), "(anonymous namespace)::TestTrace()");
+        UNIT_ASSERT_STRING_CONTAINS(NYql::NBacktrace::Symbolize(output, {}), "(anonymous namespace)::TestTrace");
 #endif
     }
 }

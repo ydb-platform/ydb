@@ -22,8 +22,6 @@ namespace NKikimr  {
 
 namespace NFq {
 
-NActors::TActorId MakeYqPrivateProxyId();
-
 NActors::IActor* CreateYqlAnalyticsPrivateProxy(
     const NConfig::TPrivateProxyConfig& privateProxyConfig,
     TIntrusivePtr<ITimeProvider> timeProvider,

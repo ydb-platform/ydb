@@ -13,6 +13,11 @@
 //   limitations under the License.
 
 // Package wellknown contains common names for filters, listeners, etc.
+//
+// Deprecated. Envoy no longer requires specific names when configuring
+// filters or other properties, since it inspects the Protobuf type URL
+// to decide how to the decode a message. Because of this, no new names
+// are being added to this package.
 package wellknown
 
 // HTTP filter names

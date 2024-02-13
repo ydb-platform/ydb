@@ -58,6 +58,12 @@ struct TEvYdbCompute {
         EvInvalidateSynchronizationRequest,
         EvInvalidateSynchronizationResponse,
 
+        EvCpuLoadRequest,
+        EvCpuLoadResponse,
+        EvCpuQuotaRequest,
+        EvCpuQuotaResponse,
+        EvCpuQuotaAdjust,
+
         EvEnd
     };
 
@@ -437,6 +443,58 @@ struct TEvYdbCompute {
         {}
 
         NYql::TIssues Issues;
+    };
+
+    struct TEvCpuLoadRequest : public NActors::TEventLocal<TEvCpuLoadRequest, EvCpuLoadRequest> {
+        TEvCpuLoadRequest(const TString& scope)
+            : Scope(scope)
+        {}
+
+        TString Scope;
+    };
+
+    struct TEvCpuLoadResponse : public NActors::TEventLocal<TEvCpuLoadResponse, EvCpuLoadResponse> {
+        TEvCpuLoadResponse(double instantLoad = 0.0, double averageLoad = 0.0)
+            : InstantLoad(instantLoad), AverageLoad(averageLoad)
+        {}
+
+        TEvCpuLoadResponse(NYql::TIssues issues)
+            : InstantLoad(0.0), AverageLoad(0.0), Issues(std::move(issues))
+        {}
+
+        double InstantLoad;
+        double AverageLoad;
+        NYql::TIssues Issues;
+    };
+
+    struct TEvCpuQuotaRequest : public NActors::TEventLocal<TEvCpuQuotaRequest, EvCpuQuotaRequest> {
+        TEvCpuQuotaRequest(const TString& scope, TInstant deadline = TInstant::Zero(), double quota = 0.0)
+            : Scope(scope), Deadline(deadline), Quota(quota)
+        {}
+
+        TString Scope;
+        TInstant Deadline;
+        double Quota; // if zero, default quota is used
+    };
+
+    struct TEvCpuQuotaResponse : public NActors::TEventLocal<TEvCpuQuotaResponse, EvCpuQuotaResponse> {
+        TEvCpuQuotaResponse(NYdb::EStatus status = NYdb::EStatus::SUCCESS, NYql::TIssues issues = {})
+            : Status(status), Issues(std::move(issues))
+        {}
+
+        NYdb::EStatus Status;
+        NYql::TIssues Issues;
+    };
+
+    struct TEvCpuQuotaAdjust : public NActors::TEventLocal<TEvCpuQuotaAdjust, EvCpuQuotaAdjust> {
+        TEvCpuQuotaAdjust(const TString& scope, TDuration duration, double cpuSecondsConsumed, double quota = 0.0)
+            : Scope(scope), Duration(duration), CpuSecondsConsumed(cpuSecondsConsumed), Quota(quota)
+        {}
+
+        TString Scope;
+        TDuration Duration;
+        double CpuSecondsConsumed;
+        double Quota; // if zero, default quota is used
     };
 };
 

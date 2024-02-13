@@ -882,6 +882,15 @@ void RegisterWideToBigDateCasts(IBuiltinFunctionRegistry& registry) {
     RegisterWideToBigDateCastsImpl<NUdf::TDataType<i64>, NUdf::TDataType<NUdf::TDate32>, NUdf::MAX_DATE32, NUdf::MIN_DATE32>(registry);
     RegisterWideToDateCastsImpl<NUdf::TDataType<ui32>, NUdf::TDataType<NUdf::TDate32>, NUdf::MAX_DATE32>(registry);
     RegisterWideToDateCastsImpl<NUdf::TDataType<ui64>, NUdf::TDataType<NUdf::TDate32>, NUdf::MAX_DATE32>(registry);
+
+    RegisterWideToBigDateCastsImpl<NUdf::TDataType<i64>, NUdf::TDataType<NUdf::TDatetime64>, NUdf::MAX_DATETIME64, NUdf::MIN_DATETIME64>(registry);
+    RegisterWideToDateCastsImpl<NUdf::TDataType<ui64>, NUdf::TDataType<NUdf::TDatetime64>, NUdf::MAX_DATETIME64>(registry);
+
+    RegisterWideToBigDateCastsImpl<NUdf::TDataType<i64>, NUdf::TDataType<NUdf::TTimestamp64>, NUdf::MAX_TIMESTAMP64, NUdf::MIN_TIMESTAMP64>(registry);
+    RegisterWideToDateCastsImpl<NUdf::TDataType<ui64>, NUdf::TDataType<NUdf::TTimestamp64>, NUdf::MAX_TIMESTAMP64>(registry);
+
+    RegisterWideToBigDateCastsImpl<NUdf::TDataType<i64>, NUdf::TDataType<NUdf::TInterval64>, NUdf::MAX_INTERVAL64, -NUdf::MAX_INTERVAL64>(registry);
+    RegisterWideToDateCastsImpl<NUdf::TDataType<ui64>, NUdf::TDataType<NUdf::TInterval64>, NUdf::MAX_INTERVAL64>(registry);
 }
 
 void RegisterWideToTimestampCasts(IBuiltinFunctionRegistry& registry) {
@@ -937,11 +946,6 @@ void RegisterWideToShortIntegralCasts(IBuiltinFunctionRegistry& registry) {
     RegisterWideToShortCastsImpl<NUdf::TDataType<NUdf::TDate>, NUdf::TDataType<ui8>>(registry);
     RegisterWideToShortCastsImpl<NUdf::TDataType<NUdf::TDate>, NUdf::TDataType<i16>>(registry);
 
-    RegisterWideToShortCastsImpl<NUdf::TDataType<NUdf::TDate32>, NUdf::TDataType<i8>>(registry);
-    RegisterWideToShortCastsImpl<NUdf::TDataType<NUdf::TDate32>, NUdf::TDataType<ui8>>(registry);
-    RegisterWideToShortCastsImpl<NUdf::TDataType<NUdf::TDate32>, NUdf::TDataType<i16>>(registry);
-    RegisterWideToShortCastsImpl<NUdf::TDataType<NUdf::TDate32>, NUdf::TDataType<ui16>>(registry);
-
     RegisterWideToShortCastsImpl<NUdf::TDataType<NUdf::TTzDate>, NUdf::TDataType<i8>>(registry);
     RegisterWideToShortCastsImpl<NUdf::TDataType<NUdf::TTzDate>, NUdf::TDataType<ui8>>(registry);
     RegisterWideToShortCastsImpl<NUdf::TDataType<NUdf::TTzDate>, NUdf::TDataType<i16>>(registry);
@@ -976,6 +980,29 @@ void RegisterWideToShortIntegralCasts(IBuiltinFunctionRegistry& registry) {
     RegisterWideToShortCastsImpl<NUdf::TDataType<NUdf::TInterval>, NUdf::TDataType<i16>>(registry);
     RegisterWideToShortCastsImpl<NUdf::TDataType<NUdf::TInterval>, NUdf::TDataType<i32>>(registry);
     RegisterWideToUnsignedCasts<NUdf::TDataType<NUdf::TInterval>>(registry);
+
+    RegisterWideToShortCastsImpl<NUdf::TDataType<NUdf::TDate32>, NUdf::TDataType<i8>>(registry);
+    RegisterWideToShortCastsImpl<NUdf::TDataType<NUdf::TDate32>, NUdf::TDataType<i16>>(registry);
+    RegisterWideToShortCastsImpl<NUdf::TDataType<NUdf::TDate32>, NUdf::TDataType<i32>>(registry);
+    RegisterWideToUnsignedCasts<NUdf::TDataType<NUdf::TDate32>>(registry);
+
+    RegisterWideToShortCastsImpl<NUdf::TDataType<NUdf::TDatetime64>, NUdf::TDataType<i8>>(registry);
+    RegisterWideToShortCastsImpl<NUdf::TDataType<NUdf::TDatetime64>, NUdf::TDataType<i16>>(registry);
+    RegisterWideToShortCastsImpl<NUdf::TDataType<NUdf::TDatetime64>, NUdf::TDataType<i32>>(registry);
+    RegisterWideToShortCastsImpl<NUdf::TDataType<NUdf::TDatetime64>, NUdf::TDataType<i64>>(registry);
+    RegisterWideToUnsignedCasts<NUdf::TDataType<NUdf::TDatetime64>>(registry);
+
+    RegisterWideToShortCastsImpl<NUdf::TDataType<NUdf::TTimestamp64>, NUdf::TDataType<i8>>(registry);
+    RegisterWideToShortCastsImpl<NUdf::TDataType<NUdf::TTimestamp64>, NUdf::TDataType<i16>>(registry);
+    RegisterWideToShortCastsImpl<NUdf::TDataType<NUdf::TTimestamp64>, NUdf::TDataType<i32>>(registry);
+    RegisterWideToShortCastsImpl<NUdf::TDataType<NUdf::TTimestamp64>, NUdf::TDataType<i64>>(registry);
+    RegisterWideToUnsignedCasts<NUdf::TDataType<NUdf::TTimestamp64>>(registry);
+
+    RegisterWideToShortCastsImpl<NUdf::TDataType<NUdf::TInterval64>, NUdf::TDataType<i8>>(registry);
+    RegisterWideToShortCastsImpl<NUdf::TDataType<NUdf::TInterval64>, NUdf::TDataType<i16>>(registry);
+    RegisterWideToShortCastsImpl<NUdf::TDataType<NUdf::TInterval64>, NUdf::TDataType<i32>>(registry);
+    RegisterWideToShortCastsImpl<NUdf::TDataType<NUdf::TInterval64>, NUdf::TDataType<i64>>(registry);
+    RegisterWideToUnsignedCasts<NUdf::TDataType<NUdf::TInterval64>>(registry);
 
     RegisterWideToDateCasts(registry);
     RegisterWideToBigDateCasts(registry);
@@ -1034,6 +1061,27 @@ void RegisterToBigDateConvert(IBuiltinFunctionRegistry& registry) {
     RegisterConvert<NUdf::TDataType<ui8>, NUdf::TDataType<NUdf::TDate32>>(registry);
     RegisterConvert<NUdf::TDataType<i16>, NUdf::TDataType<NUdf::TDate32>>(registry);
     RegisterConvert<NUdf::TDataType<ui16>, NUdf::TDataType<NUdf::TDate32>>(registry);
+
+    RegisterConvert<NUdf::TDataType<i8>, NUdf::TDataType<NUdf::TDatetime64>>(registry);
+    RegisterConvert<NUdf::TDataType<ui8>, NUdf::TDataType<NUdf::TDatetime64>>(registry);
+    RegisterConvert<NUdf::TDataType<i16>, NUdf::TDataType<NUdf::TDatetime64>>(registry);
+    RegisterConvert<NUdf::TDataType<ui16>, NUdf::TDataType<NUdf::TDatetime64>>(registry);
+    RegisterConvert<NUdf::TDataType<i32>, NUdf::TDataType<NUdf::TDatetime64>>(registry);
+    RegisterConvert<NUdf::TDataType<ui32>, NUdf::TDataType<NUdf::TDatetime64>>(registry);
+
+    RegisterConvert<NUdf::TDataType<i8>, NUdf::TDataType<NUdf::TTimestamp64>>(registry);
+    RegisterConvert<NUdf::TDataType<ui8>, NUdf::TDataType<NUdf::TTimestamp64>>(registry);
+    RegisterConvert<NUdf::TDataType<i16>, NUdf::TDataType<NUdf::TTimestamp64>>(registry);
+    RegisterConvert<NUdf::TDataType<ui16>, NUdf::TDataType<NUdf::TTimestamp64>>(registry);
+    RegisterConvert<NUdf::TDataType<i32>, NUdf::TDataType<NUdf::TTimestamp64>>(registry);
+    RegisterConvert<NUdf::TDataType<ui32>, NUdf::TDataType<NUdf::TTimestamp64>>(registry);
+
+    RegisterConvert<NUdf::TDataType<i8>, NUdf::TDataType<NUdf::TInterval64>>(registry);
+    RegisterConvert<NUdf::TDataType<ui8>, NUdf::TDataType<NUdf::TInterval64>>(registry);
+    RegisterConvert<NUdf::TDataType<i16>, NUdf::TDataType<NUdf::TInterval64>>(registry);
+    RegisterConvert<NUdf::TDataType<ui16>, NUdf::TDataType<NUdf::TInterval64>>(registry);
+    RegisterConvert<NUdf::TDataType<i32>, NUdf::TDataType<NUdf::TInterval64>>(registry);
+    RegisterConvert<NUdf::TDataType<ui32>, NUdf::TDataType<NUdf::TInterval64>>(registry);
 }
 
 template <typename TInput, typename TOutput, bool Tz = false>
@@ -1143,13 +1191,17 @@ void RegisterConvert(IBuiltinFunctionRegistry& registry) {
     RegisterStringConvert<NUdf::TDataType<NUdf::TJson>, NUdf::TDataType<NUdf::TUtf8>>(registry);
 
     RegisterFromDateConvert<NUdf::TDataType<NUdf::TDate>>(registry);
-    RegisterFromDateConvert<NUdf::TDataType<NUdf::TDate32>>(registry);
     RegisterFromDateConvert<NUdf::TDataType<NUdf::TDatetime>>(registry);
     RegisterFromDateConvert<NUdf::TDataType<NUdf::TTimestamp>>(registry);
     RegisterFromDateConvert<NUdf::TDataType<NUdf::TInterval>>(registry);
     RegisterFromDateConvert<NUdf::TDataType<NUdf::TTzDate>>(registry);
     RegisterFromDateConvert<NUdf::TDataType<NUdf::TTzDatetime>>(registry);
     RegisterFromDateConvert<NUdf::TDataType<NUdf::TTzTimestamp>>(registry);
+
+    RegisterFromDateConvert<NUdf::TDataType<NUdf::TDate32>>(registry);
+    RegisterFromDateConvert<NUdf::TDataType<NUdf::TDatetime64>>(registry);
+    RegisterFromDateConvert<NUdf::TDataType<NUdf::TTimestamp64>>(registry);
+    RegisterFromDateConvert<NUdf::TDataType<NUdf::TInterval64>>(registry);
 
     RegisterTzDateimeConvert(registry);
     RegisterDatetimeRescale(registry);

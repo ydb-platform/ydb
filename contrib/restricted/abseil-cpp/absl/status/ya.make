@@ -26,6 +26,7 @@ NO_COMPILER_WARNINGS()
 NO_UTIL()
 
 SRCS(
+    internal/status_internal.cc
     status.cc
     status_payload_printer.cc
 )

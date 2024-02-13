@@ -682,11 +682,15 @@ SIMPLE_UDF_WITH_OPTIONAL_ARGS(TSerializeJson, TOptional<TJson>(TAutoMap<TNodeRes
 
 SIMPLE_STRICT_UDF(TWithAttributes, TOptional<TNodeResource>(TAutoMap<TNodeResource>, TAutoMap<TNodeResource>)) {
     Y_UNUSED(valueBuilder);
-    auto x = args[0];
+    TUnboxedValue x = args[0];
     auto y = args[1];
 
     if (!IsNodeType<ENodeType::Dict>(y)) {
         return {};
+    }
+
+    if (IsNodeType<ENodeType::Attr>(x)) {
+        x = x.GetVariantItem();
     }
 
     if (y.IsEmbedded()) {

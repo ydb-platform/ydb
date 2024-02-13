@@ -1,14 +1,9 @@
 GO_LIBRARY()
-
-SRCS(
-    cfg.go
-    exp.go
-    zbootstrap.go
-)
-
-GO_TEST_SRCS(cfg_test.go)
-
+IF (TRUE)
+    SRCS(
+		cfg.go
+		exp.go
+		zbootstrap.go
+    )
+ENDIF()
 END()
-
-RECURSE(
-)

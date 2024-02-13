@@ -10,6 +10,13 @@
 #include <ydb/library/yql/providers/dq/common/attrs.h>
 #include <ydb/library/yql/providers/dq/actors/dynamic_nameserver.h>
 #include <ydb/library/yql/providers/dq/actors/resource_allocator.h>
+#include <ydb/library/yql/minikql/invoke_builtins/mkql_builtins.h>
+#include <ydb/library/yql/dq/integration/transform/yql_dq_task_transform.h>
+#include <ydb/library/yql/dq/comp_nodes/yql_common_dq_factory.h>
+#include <ydb/library/yql/providers/common/comp_nodes/yql_factory.h>
+#include <ydb/library/yql/minikql/comp_nodes/mkql_factories.h>
+#include <ydb/library/yql/dq/transform/yql_common_dq_transform.h>
+#include <ydb/library/yql/providers/dq/task_runner/tasks_runner_local.h>
 
 using namespace NYql;
 using namespace NActors;
@@ -178,11 +185,26 @@ public:
             TActorSetupCmd{gwmActor, TMailboxType::Simple, 0});
 
         // Local WM.
+        FunctionRegistry_ = CreateFunctionRegistry(NKikimr::NMiniKQL::CreateBuiltinRegistry());
+        auto dqCompFactory = NKikimr::NMiniKQL::GetCompositeWithBuiltinFactory({
+            NYql::GetCommonDqFactory(), 
+            NKikimr::NMiniKQL::GetYqlFactory()
+        });
+    
+        auto dqTaskTransformFactory = NYql::CreateCompositeTaskTransformFactory({
+            NYql::CreateCommonDqTaskTransformFactory()
+        });
+
+        auto patternCache = std::make_shared<NKikimr::NMiniKQL::TComputationPatternLRUCache>(NKikimr::NMiniKQL::TComputationPatternLRUCache::Config(200_MB, 200_MB));
+
+        auto factory = NTaskRunnerProxy::CreateFactory(FunctionRegistry_.Get(), dqCompFactory, dqTaskTransformFactory, patternCache, true);
         for (ui32 i = 1; i < nodesNumber; i++) {
             NYql::NDqs::TLocalWorkerManagerOptions lwmOptions;
             lwmOptions.TaskRunnerInvokerFactory = new NDqs::TTaskRunnerInvokerFactory();
             lwmOptions.TaskRunnerActorFactory = NYql::NDq::NTaskRunnerActor::CreateTaskRunnerActorFactory(
                 lwmOptions.Factory, lwmOptions.TaskRunnerInvokerFactory);
+            lwmOptions.FunctionRegistry = FunctionRegistry_.Get();
+            lwmOptions.Factory = factory;
             auto localWM = CreateLocalWorkerManager(lwmOptions);
             ActorRuntime_->AddLocalService(MakeWorkerManagerActorID(NodeId(i)),
                 TActorSetupCmd{localWM, TMailboxType::Simple, 0}, i);
@@ -191,6 +213,17 @@ public:
         }
 
         ActorRuntime_->Initialize();
+
+        for (ui32 i = 1; i < nodesNumber; i++) {
+            ActorRuntime_->GetLogSettings(i)->Append(
+                NKikimrServices::EServiceKikimr_MIN,
+                NKikimrServices::EServiceKikimr_MAX,
+                NKikimrServices::EServiceKikimr_Name
+            );
+            TString explanation;
+            auto err = ActorRuntime_->GetLogSettings(i)->SetLevel(NActors::NLog::PRI_EMERG, NKikimrServices::KQP_COMPUTE, explanation); //do not care about CA errors in this test"
+            Y_ABORT_IF(err);
+        }
 
         NActors::TDispatchOptions options;
         options.FinalEvents.emplace_back(NActors::TEvents::TSystem::Bootstrap, nodesNumber);
@@ -360,7 +393,8 @@ public:
     TActorId RegisterResourceAllocator(const ui32 workersCount, const TActorId& execActor) const {
         TIntrusivePtr<NMonitoring::TDynamicCounters> counters = MakeIntrusive<NMonitoring::TDynamicCounters>();
         auto gwmActor = MakeWorkerManagerActorID(NodeId());
-        auto allocator = CreateResourceAllocator(gwmActor, execActor, execActor, workersCount, "TraceId", new TDqConfiguration(), counters);
+        TVector<NYql::NDqProto::TDqTask> tasks(workersCount);
+        auto allocator = CreateResourceAllocator(gwmActor, execActor, execActor, workersCount, "TraceId", new TDqConfiguration(), counters, tasks);
         const auto allocatorId = ActorRuntime_->Register(allocator);
         return allocatorId;
     }
@@ -375,10 +409,11 @@ public:
     THolder<TEvAllocateWorkersRequest> MakeAllocationRequest(TVector<TVector<TString>>& filesPerTask) const {
         auto allocateRequest = MakeHolder<TEvAllocateWorkersRequest>(filesPerTask.size(), "Username");
         allocateRequest->Record.SetTraceId("TraceId");
-
+        allocateRequest->Record.SetCreateComputeActor(true);
         THashSet<TString> allFiles;
 
         for (const auto& tf : filesPerTask) {
+            *allocateRequest->Record.AddTask() = NYql::NDqProto::TDqTask{};
             Yql::DqsProto::TWorkerFilter taskFiles;
             for (const auto& f : tf) {
                 Yql::DqsProto::TFile file;
@@ -434,6 +469,7 @@ public:
     }
 
     THolder<NActors::TTestActorRuntimeBase> ActorRuntime_;
+    TIntrusivePtr<NKikimr::NMiniKQL::IFunctionRegistry> FunctionRegistry_;
 };
 
 UNIT_TEST_SUITE_REGISTRATION(TGlobalWorkerManagerTest)

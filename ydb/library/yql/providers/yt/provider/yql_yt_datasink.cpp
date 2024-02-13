@@ -243,6 +243,11 @@ public:
                     ctx);
                 res = ctx.ChangeChild(*res, TYtWriteTable::idx_Settings, std::move(settings));
             }
+            auto mutationId = ++NextMutationId_;
+            res = ctx.ChangeChild(*res, TYtWriteTable::idx_Settings, 
+                NYql::AddSetting(*res->Child(TYtWriteTable::idx_Settings),
+                    EYtSettingType::MutationId,
+                    ctx.NewAtom(res->Child(TYtWriteTable::idx_Settings)->Pos(), ToString(mutationId)), ctx));
             if (State_->Configuration->UseSystemColumns.Get().GetOrElse(DEFAULT_USE_SYS_COLUMNS)) {
                 res = ctx.ChangeChild(*res, TYtWriteTable::idx_Content,
                     ctx.Builder(node->Pos())
@@ -268,6 +273,7 @@ public:
     void Reset() final {
         TDataProviderBase::Reset();
         State_->Reset();
+        NextMutationId_ = 0;
     }
 
     bool CanExecute(const TExprNode& node) override {
@@ -331,6 +337,23 @@ public:
             }
             else {
                 WriteColumns(writer, op.Input().Item(0).Paths().Item(0).Columns());
+            }
+
+            if (op.Input().Size() > 1) {
+                writer.OnKeyedItem("InputSections");
+                auto op = maybeOp.Cast();
+                writer.OnBeginList();
+                ui64 ndx = 0;
+                for (auto section: op.Input()) {
+                    writer.OnListItem();
+                    writer.OnBeginList();
+                    for (ui64 i = 0; i < section.Paths().Size(); ++i) {
+                        writer.OnListItem();
+                        writer.OnUint64Scalar(ndx++);
+                    }
+                    writer.OnEndList();
+                }
+                writer.OnEndList();
             }
 
             if (op.Maybe<TYtMap>() || op.Maybe<TYtMapReduce>() || op.Maybe<TYtMerge>() ||
@@ -550,6 +573,7 @@ private:
     }
 
 private:
+    ui32 NextMutationId_ = 0;
     TYtState::TPtr State_;
     TLazyInitHolder<IGraphTransformer> IntentDeterminationTransformer_;
     TLazyInitHolder<TVisitorTransformerBase> TypeAnnotationTransformer_;

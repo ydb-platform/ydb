@@ -286,6 +286,7 @@ TFuture<IStateStorage::TGetStateResult> TStateStorage::GetState(
         return MakeFuture<IStateStorage::TGetStateResult>(result);
     }
 
+    
     auto context = MakeIntrusive<TContext>(
         YdbConnection->TablePathPrefix,
         taskIds,
@@ -362,15 +363,9 @@ TFuture<IStateStorage::TCountStatesResult> TStateStorage::CountStates(
             });
         });
 
-    return future.Apply(
-        [context] (const TFuture<TStatus>& future) {
-            TCountStatesResult countResult;
-            countResult.first = context->Count;
-            const auto& status = future.GetValue();
-            if (!status.IsSuccess()) {
-                countResult.second = status.GetIssues();
-            }
-            return countResult;
+    return StatusToIssues(future).Apply(
+        [context] (const TFuture<TIssues>& future) {
+            return TCountStatesResult{context->Count, future.GetValue()};
         });
 }
 TExecDataQuerySettings TStateStorage::DefaultExecDataQuerySettings() {

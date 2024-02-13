@@ -73,7 +73,11 @@ public:
     }
 
     virtual std::optional<TColumnSerializationStat> GetColumnSerializationStats(const ui32 columnId) const override {
-        return Stats->GetColumnInfo(columnId);
+        auto stats = Stats->GetColumnInfo(columnId);
+        if (stats && stats->GetRecordsCount() != 0) {
+            return stats;
+        }
+        return std::nullopt;
     }
     virtual std::optional<TBatchSerializationStat> GetBatchSerializationStats(const std::shared_ptr<arrow::RecordBatch>& rb) const override {
         return Stats->GetStatsForRecordBatch(rb);
@@ -108,6 +112,15 @@ protected:
     }
 
 public:
+
+    std::map<ui32, std::vector<std::shared_ptr<IPortionDataChunk>>> GetPortionChunks() const {
+        std::map<ui32, std::vector<std::shared_ptr<IPortionDataChunk>>> result;
+        for (auto&& i : Data) {
+            AFL_VERIFY(result.emplace(i.GetEntityId(), i.GetChunks()).second);
+        }
+        return result;
+    }
+
     std::shared_ptr<arrow::RecordBatch> GetFirstLastPKBatch(const std::shared_ptr<arrow::Schema>& pkSchema) const {
         std::vector<std::shared_ptr<arrow::Array>> pkColumns;
         for (auto&& i : pkSchema->fields()) {

@@ -98,6 +98,8 @@ message TEvWriteResult {
         STATUS_OVERLOADED = 5;
         STATUS_CANCELLED = 6;        
         STATUS_BAD_REQUEST = 7;
+        STATUS_SCHEME_CHANGED = 8;
+        STATUS_LOCKS_BROKEN = 9;
     }
 
     // Status

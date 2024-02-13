@@ -23,6 +23,7 @@ PEERDIR(
     library/cpp/string_utils/base64
     library/cpp/string_utils/quote
     library/cpp/xml/document
+    ydb/core/base
     ydb/core/fq/libs/events
     ydb/library/yql/dq/actors/compute
     ydb/library/yql/minikql/computation
@@ -36,6 +37,8 @@ PEERDIR(
     ydb/library/yql/providers/s3/credentials
     ydb/library/yql/providers/s3/object_listers
     ydb/library/yql/providers/s3/proto
+    ydb/library/yql/providers/s3/range_helpers
+    ydb/library/yql/public/issue
     ydb/library/yql/public/types
     ydb/library/yql/udfs/common/clickhouse/client
 )
@@ -43,6 +46,7 @@ PEERDIR(
 IF (CLANG AND NOT WITH_VALGRIND)
 
     SRCS(
+        yql_arrow_column_converters.cpp
         yql_s3_read_actor.cpp
     )
 

@@ -19,7 +19,8 @@ import re
 import sys
 import textwrap
 import types
-from functools import wraps
+import warnings
+from functools import partial, wraps
 from io import StringIO
 from keyword import iskeyword
 from tokenize import COMMENT, detect_encoding, generate_tokens, untokenize
@@ -27,6 +28,7 @@ from types import ModuleType
 from typing import TYPE_CHECKING, Any, Callable
 from unittest.mock import _patch as PatchType
 
+from hypothesis.errors import HypothesisWarning
 from hypothesis.internal.compat import PYPY, is_typed_named_tuple
 from hypothesis.utils.conventions import not_set
 from hypothesis.vendor.pretty import pretty
@@ -432,6 +434,8 @@ def extract_lambda_source(f):
 
 
 def get_pretty_function_description(f):
+    if isinstance(f, partial):
+        return pretty(f)
     if not hasattr(f, "__name__"):
         return repr(f)
     name = f.__name__
@@ -476,6 +480,15 @@ def repr_call(f, args, kwargs, *, reorder=True):
     rep = nicerepr(f)
     if rep.startswith("lambda") and ":" in rep:
         rep = f"({rep})"
+    repr_len = len(rep) + sum(len(b) for b in bits)  # approx
+    if repr_len > 30000:
+        warnings.warn(
+            "Generating overly large repr. This is an expensive operation, and with "
+            f"a length of {repr_len//1000} kB is is unlikely to be useful. Use -Wignore "
+            "to ignore the warning, or -Werror to get a traceback.",
+            HypothesisWarning,
+            stacklevel=2,
+        )
     return rep + "(" + ", ".join(bits) + ")"
 
 

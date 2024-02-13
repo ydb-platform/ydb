@@ -1,12 +1,7 @@
 GO_LIBRARY()
-
-SRCS(
-    alias.go
-)
-
-GO_TEST_SRCS(alias_test.go)
-
+IF (TRUE)
+    SRCS(
+		alias.go
+    )
+ENDIF()
 END()
-
-RECURSE(
-)

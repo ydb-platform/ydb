@@ -976,7 +976,7 @@ void GenInvalidate(const TCodegenContext& ctx, const std::vector<std::pair<ui32,
     const auto valueType = Type::getInt128Ty(context);
     const auto values = ctx.GetMutables();
 
-    for (const auto index : invalidationSet) {
+    for (const auto& index : invalidationSet) {
         const auto invPtr = GetElementPtrInst::CreateInBounds(valueType, values, {ConstantInt::get(indexType, index.first)}, "inv_ptr", block);
         ValueUnRef(index.second, invPtr, ctx, block);
         new StoreInst(GetInvalid(context), invPtr, block);
@@ -1726,7 +1726,7 @@ void SafeUnRefUnboxed(Value* pointer, const TCodegenContext& ctx, BasicBlock*& b
     if (const auto itemType = pointer->getType()->getPointerElementType(); itemType->isArrayTy()) {
         const auto indexType = Type::getInt64Ty(ctx.Codegen.GetContext());
         Value* zeros = UndefValue::get(itemType);
-        for (size_t idx = 0U; idx < itemType->getArrayNumElements(); ++idx) {
+        for (ui32 idx = 0U; idx < itemType->getArrayNumElements(); ++idx) {
             const auto item = GetElementPtrInst::CreateInBounds(itemType, pointer, {  ConstantInt::get(indexType, 0), ConstantInt::get(indexType, idx) }, (TString("item_") += ToString(idx)).c_str(), block);
             UnRefUnboxed(item, ctx, block);
             zeros = InsertValueInst::Create(zeros, ConstantInt::get(itemType->getArrayElementType(), 0), {idx}, (TString("zero_") += ToString(idx)).c_str(), block);
@@ -2004,7 +2004,6 @@ Value* CheckAdjustedMemLimit(ui64 limit, Value* init, const TCodegenContext& ctx
         BranchInst::Create(call, skip, now, block);
 
         block = call;
-        const auto fact = ctx.Ctx;
         const auto func = ConstantInt::get(Type::getInt64Ty(context), GetMethodPtr(&TComputationContext::UpdateUsageAdjustor));
         const auto funType = FunctionType::get(Type::getVoidTy(context), {ctx.Ctx->getType(), Type::getInt64Ty(context)}, false);
         const auto funcPtr = CastInst::Create(Instruction::IntToPtr, func, PointerType::getUnqual(funType), "update", block);

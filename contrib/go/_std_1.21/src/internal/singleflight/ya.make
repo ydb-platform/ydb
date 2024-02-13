@@ -1,12 +1,7 @@
 GO_LIBRARY()
-
-SRCS(
-    singleflight.go
-)
-
-GO_TEST_SRCS(singleflight_test.go)
-
+IF (TRUE)
+    SRCS(
+		singleflight.go
+    )
+ENDIF()
 END()
-
-RECURSE(
-)

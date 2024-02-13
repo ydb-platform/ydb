@@ -443,11 +443,8 @@ void TClientRequest::PrepareHeader()
         return;
     }
 
-    // COMPAT(kiselyovp): legacy RPC codecs
-    if (!EnableLegacyRpcCodecs_) {
-        Header_.set_request_codec(ToProto<int>(RequestCodec_));
-        Header_.set_response_codec(ToProto<int>(ResponseCodec_));
-    }
+    Header_.set_request_codec(ToProto<int>(RequestCodec_));
+    Header_.set_response_codec(ToProto<int>(ResponseCodec_));
 
     if (StreamingEnabled_) {
         ToProto(Header_.mutable_server_attachments_streaming_parameters(), ServerAttachmentsStreamingParameters_);
@@ -462,11 +459,6 @@ void TClientRequest::PrepareHeader()
     }
 
     HeaderPrepared_.store(true);
-}
-
-bool TClientRequest::IsLegacyRpcCodecsEnabled()
-{
-    return EnableLegacyRpcCodecs_;
 }
 
 TSharedRefArray TClientRequest::GetHeaderlessMessage() const
@@ -608,7 +600,7 @@ void TClientResponse::Deserialize(TSharedRefArray responseMessage)
         THROW_ERROR_EXCEPTION(NRpc::EErrorCode::ProtocolError, "Error deserializing response header");
     }
 
-    // COMPAT(kiselyovp): legacy RPC codecs
+    // COMPAT(danilalexeev): legacy RPC codecs
     std::optional<NCompression::ECodec> bodyCodecId;
     NCompression::ECodec attachmentCodecId;
     if (Header_.has_codec()) {

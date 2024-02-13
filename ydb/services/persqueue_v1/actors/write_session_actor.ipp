@@ -631,6 +631,7 @@ template<bool UseMigrationProtocol>
 void TWriteSessionActor<UseMigrationProtocol>::Handle(NPQ::TEvPartitionChooser::TEvChooseResult::TPtr& ev, const NActors::TActorContext& ctx) {
     auto* r = ev->Get();
     PartitionTabletId = r->TabletId;
+    InitialSeqNo = r->SeqNo;
     LastSourceIdUpdate = ctx.Now();
 
     ProceedPartition(r->PartitionId, ctx);
@@ -680,6 +681,7 @@ void TWriteSessionActor<UseMigrationProtocol>::CreatePartitionWriterCache(const 
 
     opts.WithDeduplication(UseDeduplication);
     opts.WithSourceId(SourceId);
+    opts.WithInitialSeqNo(InitialSeqNo);
     opts.WithExpectedGeneration(ExpectedGeneration);
 
     if constexpr (UseMigrationProtocol) {

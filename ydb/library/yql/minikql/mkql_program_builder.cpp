@@ -228,6 +228,24 @@ bool ReduceOptionalElements(const TType* type, const TArrayRef<const ui32>& test
     return multiOptional;
 }
 
+std::vector<TType*> ValidateBlockStreamType(const TType* streamType) {
+    const auto wideComponents = GetWideComponents(AS_TYPE(TStreamType, streamType));
+    MKQL_ENSURE(wideComponents.size() > 0, "Expected at least one column");
+    std::vector<TType*> streamItems;
+    streamItems.reserve(wideComponents.size());
+    bool isScalar;
+    for (size_t i = 0; i < wideComponents.size(); ++i) {
+        auto blockType = AS_TYPE(TBlockType, wideComponents[i]);
+        isScalar = blockType->GetShape() == TBlockType::EShape::Scalar;
+        auto withoutBlock = blockType->GetItemType();
+        streamItems.push_back(withoutBlock);
+    }
+
+    MKQL_ENSURE(isScalar, "Last column should be scalar");
+    MKQL_ENSURE(AS_TYPE(TDataType, streamItems.back())->GetSchemeType() == NUdf::TDataType<ui64>::Id, "Expected Uint64");
+    return streamItems;
+}
+
 std::vector<TType*> ValidateBlockFlowType(const TType* flowType) {
     const auto wideComponents = GetWideComponents(AS_TYPE(TFlowType, flowType));
     MKQL_ENSURE(wideComponents.size() > 0, "Expected at least one column");
@@ -1550,10 +1568,14 @@ TRuntimeNode TProgramBuilder::BlockCompress(TRuntimeNode flow, ui32 bitmapIndex)
     return TRuntimeNode(callableBuilder.Build(), false);
 }
 
-TRuntimeNode TProgramBuilder::BlockExpandChunked(TRuntimeNode flow) {
-    ValidateBlockFlowType(flow.GetStaticType());
-    TCallableBuilder callableBuilder(Env, __func__, flow.GetStaticType());
-    callableBuilder.Add(flow);
+TRuntimeNode TProgramBuilder::BlockExpandChunked(TRuntimeNode comp) {
+    if (comp.GetStaticType()->IsStream()) {
+        ValidateBlockStreamType(comp.GetStaticType());
+    } else {
+        ValidateBlockFlowType(comp.GetStaticType());
+    }
+    TCallableBuilder callableBuilder(Env, __func__, comp.GetStaticType());
+    callableBuilder.Add(comp);
     return TRuntimeNode(callableBuilder.Build(), false);
 }
 

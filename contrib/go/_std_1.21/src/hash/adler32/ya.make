@@ -1,12 +1,7 @@
 GO_LIBRARY()
-
-SRCS(
-    adler32.go
-)
-
-GO_TEST_SRCS(adler32_test.go)
-
+IF (TRUE)
+    SRCS(
+		adler32.go
+    )
+ENDIF()
 END()
-
-RECURSE(
-)

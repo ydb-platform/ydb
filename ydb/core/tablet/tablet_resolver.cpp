@@ -649,8 +649,9 @@ class TTabletResolver : public TActorBootstrapped<TTabletResolver> {
                     if (!(entry.KnownLeaderTablet == msg->CurrentLeaderTablet || !entry.KnownLeaderTablet)) {
                         DropEntry(tabletId, entry, ctx); // got info but not full, occurs on transitional cluster states
                     } else {
-                        entry.KnownLeaderTablet = msg->CurrentLeaderTablet;
                         entry.State = TEntry::StProblemPing;
+                        entry.KnownLeaderTablet = msg->CurrentLeaderTablet;
+                        entry.KnownFollowers = std::move(msg->Followers);
                         SendPing(tabletId, entry, ctx);
                     }
                 } else {

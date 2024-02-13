@@ -96,8 +96,11 @@ TErrorOr<TMemoryUsageTrackerGuard> TMemoryUsageTrackerGuard::TryAcquire(
     i64 size,
     i64 granularity)
 {
+    if (!tracker) {
+        return {};
+    }
+
     YT_VERIFY(size >= 0);
-    YT_VERIFY(tracker);
 
     auto error = tracker->TryAcquire(size);
     if (!error.IsOK()) {
@@ -142,20 +145,41 @@ i64 TMemoryUsageTrackerGuard::GetSize() const
 
 void TMemoryUsageTrackerGuard::SetSize(i64 size)
 {
+    auto ignoredError = SetSizeGeneric(size, [&] (i64 delta) {
+        Tracker_->Acquire(delta);
+        return TError{};
+    });
+
+    Y_UNUSED(ignoredError);
+}
+
+TError TMemoryUsageTrackerGuard::TrySetSize(i64 size)
+{
+    return SetSizeGeneric(size, [&] (i64 delta) {
+        return Tracker_->TryAcquire(delta);
+    });
+}
+
+TError TMemoryUsageTrackerGuard::SetSizeGeneric(i64 size, auto acquirer)
+{
     if (!Tracker_) {
-        return;
+        return {};
     }
 
     YT_VERIFY(size >= 0);
     Size_ = size;
     if (std::abs(Size_ - AcquiredSize_) >= Granularity_) {
         if (Size_ > AcquiredSize_) {
-            Tracker_->Acquire(Size_ - AcquiredSize_);
+            if (auto result = acquirer(Size_ - AcquiredSize_); !result.IsOK()) {
+                return result;
+            }
         } else {
             Tracker_->Release(AcquiredSize_ - Size_);
         }
         AcquiredSize_ = Size_;
     }
+
+    return {};
 }
 
 void TMemoryUsageTrackerGuard::IncrementSize(i64 sizeDelta)

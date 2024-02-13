@@ -7,11 +7,7 @@
   includes:
   - stat.h
   - libutf8.h
-  #if defined(_OS_QNX) && CONTRIB
-  - devctl.h
-  #endif
   - CrashReporterClient.h
-  - Eigen/Array
   - Errors.h
   - ICSupport.h
   - LPdir.h
@@ -59,12 +55,6 @@
   - dir.h
   - dither.h
   - dl.h
-  - doc/doc_dynamic.h
-  - doc/doc_nan.h
-  - doc/doc_printf.h
-  - doc/doc_register.h
-  - doc/doc_scanf.h
-  - doc/doc_static.h
   - dvidef.h
   - fastmath.h
   - fcntl--.h
@@ -79,13 +69,6 @@
   - gdbm.h
   - ghostscript/iapi.h
   - ghostscript/ierrors.h
-  - glibtop.h
-  - glibtop/close.h
-  - glibtop/open.h
-  - glibtop/parameter.h
-  - glibtop/sysdeps.h
-  - glibtop/union.h
-  - glibtop/xmalloc.h
   - gmp.h
   - gnutls/x509.h
   - hp-timing.h
@@ -171,7 +154,6 @@
   - sysLib.h
   - taskLib.h
   - tcp.h
-  - tdep-ia64/dwarf-config.h
   - thread.h
   - thread_plan9.h
   - tickLib.h
@@ -186,19 +168,12 @@
   - vasnwprintf.h
   - vld.h
   - win32lib.h
-  - wincecompat.h
   - wprintf-parse.h
   - wsockcompat.h
-  - xdelta3-python.h
   - xml/xmlparse.h
   - xmlparse/xmlparse.h
   - xmltok/xmlparse.h
   - yca/yca.h
-  - zzip-1.h
-  - zzip-2.h
-  - zzip-3.h
-  - zzip-4.h
-  - zzip-5.h
   #if CONTRIB && defined(_HAVE_LIBIDSA)
   - idsa.h
   #endif
@@ -242,9 +217,6 @@
   - vcruntime_new.h
   - vcruntime_typeinfo.h
   #endif
-  - PowrProf.h
-  - BaseTsd.h
-  - iphlpapi.h
 
 - source_filter: "^contrib/(libs/(apache|httpd|libuv)|python/uWSGI)"
   includes:
@@ -254,25 +226,8 @@
   includes:
   - timers.h
 
-- source_filter: "^contrib/libs/curl"
-  includes:
-  - lwip/init.h
-  - lwip/netdb.h
-  - lwip/sockets.h
-
-- source_filter: "^(contrib/libs/curl/lib/vtls)"
-  includes:
-  - bearssl.h: contrib/libs/curl/lib/vtls/bearssl.h
-  - rustls.h: contrib/libs/curl/lib/vtls/rustls.h
-
 - includes:
   - cpu-features.h
-  - cuda/include/cuComplex.h
-  - cuda/include/cublas_v2.h
-  - cuda/include/cuda.h
-  - cuda/include/cudnn.h
-  - cuda/include/cufft.h
-  - cuda/include/curand.h
   - cpuid.h
   - nan.h
   - omp.h
@@ -282,8 +237,6 @@
   - zircon/types.h
   - zircon/process.h
   - sys/linux-syscalls.h
-  - tr1/memory
-  - android/log.h
   - ompt.h
   # vvvvv ____ because in [geobase/perl/dynamic] does not work ignoring via "// Y_IGNORE"
   - geobase6/service_getter.hpp
@@ -404,23 +357,6 @@
   - perl.h
   - XSUB.h
   #endif
-  #if defined(_darwin_)
-  - AEObjects.h
-  - AEPackObject.h
-  - AERegistry.h
-  - AppleEvents.h
-  - Files.h
-  - Gestalt.h
-  - ImageCompression.h
-  - Palettes.h
-  - PictUtils.h
-  - Processes.h
-  - QDOffscreen.h
-  - QuickDraw.h
-  - TextUtils.h
-  - Types.h
-  - sys/_types/_mbstate_t.h
-  #endif
   #if defined(_OS2_)
   - os2.h
   #endif
@@ -479,21 +415,6 @@
   #if defined(__sun__)
   - sys/isa_defs.h
   #endif
-  #if defined(__X11__)
-  - X11/XKBlib.h
-  - X11/keysym.h
-  - X11/extensions/shape.h
-  - X11/extensions/XShm.h
-  - X11/cursorfont.h
-  - X11/Xutil.h
-  - X11/Xresource.h
-  - X11/Xproto.h
-  - X11/Xos.h
-  - X11/Xlocale.h
-  - X11/Xlib.h
-  - X11/Xatom.h
-  - X11/Intrinsic.h
-  #endif
   #if defined(HAVE_DMALLOC)
   - dmalloc.h
   #endif
@@ -517,19 +438,11 @@
   - ../locale/elem-hash.h
   - ../locale/coll-lookup.h
   #endif
-  #if defined(_LINUX_ANDROID)
-  - android/api-level.h
-  - android/ndk-version.h
-  #endif
   #if defined(HAVE_CONFIG_H) && TODO
   - config_auto.h
   #endif
   #if defined(_TRASH_) && TODO
   - openssl/fips.h
-  - tr1/unordered_map
-  - tr1/unordered_set
-  - tr1/type_traits
-  - ext/atomicity.h
   - bits/c++config.h
   - bits/atomicity.h
   - gcrypt.h
@@ -551,9 +464,6 @@
   - lwp.h
   - perfuse.h
   #endif
-  #if V8_OS_QNX
-  - sys/syspage.h
-  #endif
   #if V8_OS_AIX
   - sys/systemcfg.h
   - sys/thread.h
@@ -563,7 +473,6 @@
   - ostream.h
   - nacl/nacl_random.h
   - jemalloc/jemalloc.h
-  - tr1/tuple
   - sys/inttypes.h
   - lockdep.h
   - memfault.h
@@ -584,40 +493,8 @@
   - ../ucrt/math.h
   - ../ucrt/signal.h
   - ../ucrt/sys/stat.h
-  #if defined (CUDA)
-  - math_constants.h
-  #endif
-  #if defined(BUILDING_LIBCURL)
-  - amitcp/socketbasetags.h
-  - clib.h
-  - exec/execbase.h
-  - exec/types.h
-  - extra/strdup.h
-  - extra/stricmp.h
-  - fabdef.h
-  - floss.h
-  - gnutls/crypto.h
-  - gskssl.h
-  - gss.h
-  - hasht.h
-  - ldap_ssl.h
-  - librtmp/rtmp.h
-  - nettle/des.h
-  - nettle/md4.h
-  - nettle/md5.h
-  - pk11pub.h
-  - proto/dos.h
-  - proto/exec.h
-  - qsoasync.h
-  - stabs.h
-  - tpf/sysapi.h
-  #endif
   - asm/page.h
   - asm/sgidefs.h
-  - wrl\client.h
-  - wrl\event.h
-  - wrl\wrappers\corewrappers.h
-  - wrl\ftm.h
   - bits/char_traits.h
   - bits/stl_algobase.h
   - bits/stl_move.h
@@ -625,7 +502,6 @@
   - bits/stl_function.h
   - bits/move.h
   - ndir.h
-  - ext/rope
   - sunmedia_types.h
   - clidef.h
   - credef.h
@@ -651,9 +527,6 @@
   - agg_allocator.h
   - SIOUX.h
   - sys/siginfo.h
-  #ifdef HAVE_LIBGIMLI_H
-  - libgimli.h
-  #endif
   #if MATLAB_MEX_FILE
   - mex.h
   #else
@@ -671,8 +544,6 @@
   - mih/testptr.h
   - sys/neutrino.h
   - cics.h
-  - tr1/cmath
-  - tr1/complex
   - tbb/scalable_allocator.h
   - libmemcached/dtrace_probes.h
   # unknown
@@ -685,10 +556,6 @@
   - boost/thread/detail/lock.hpp
   #endif metrika
   - xti.h
-  # libgit2 unused includes
-  - proto/timer.h
-  - mbsupport.h
-  # end of libgit2 unused includes
   - attr/xattr.h
   - fshelp.h
   - mlib_image.h
@@ -722,10 +589,8 @@
 
 - case_sensitive: false
   includes:
-  - bemapiset.h
   - cor.h
   - fusion.h
-  - IPHlpApi.h
   - metahost.h
   #if defined(WINDOWS) && defined (_USE_MFC_)
   - afx.h
@@ -740,11 +605,6 @@
   - spinlock.h
   #endif
   #if CONTRIB && TODO
-  - MSTcpIP.h
-  - MacSocket.h
-  - WinIoCtl.h
-  - WinPDFCore.h
-  - Winsock2.h
   - Xm/XmAll.h
   - aep.h
   - atalla.h
@@ -767,7 +627,6 @@
   - screen.h
   - sureware.h
   - t_ctype.h
-  - tr1/unordered_map.hpp
   - typedefs.h
   - winmain.h
   - wintext.h
@@ -787,7 +646,6 @@
 
 - includes:
   - Aclapi.h
-  - tr1/functional
   - time64.h
   - extern.h
   #if defined(__FreeBSD__)
@@ -865,10 +723,6 @@
   #if defined(_unix_) && TODO
   - sys/feature_tests.h
   #endif
-  #if defined(_darwin_)
-  - libkern/version.h
-  - System/pthread_machdep.h
-  #endif
   #if defined(_VMS_) && TODO
   - chfdef.h
   - libdef.h
@@ -883,20 +737,9 @@
   #if defined(_TRASH_) && TODO
   - google/profiler.h
   #endif
-  #if defined(__QNXNTO__)
-  - sys/cpuinline.h
-  #endif
-  - yabs_mx_calc_table.h
   - net/errno.h
   - sys/mode.h
   - nwstdio.h
-  - os2ish.h
-  - vmsish.h
-  - ./plan9/plan9ish.h
-  - ./vos/vosish.h
-  - vos/vosish.h
-  - symbian/symbianish.h
-  - haiku/haikuish.h
   - nw5thread.h
   - os2thread.h
   - netware.h
@@ -909,26 +752,11 @@
   - objc/NXCType.h
   - appkit/NXCType.h
   - sfio.h
-  - vmesa/vmesaish.h
   - sys\stat.h
-  - mpeix/mpeixish.h
-  - epocish.h
-  - beos/beosish.h
-  - WinNT.h
   - ../../VC/include/stdio.h
   - ../ucrt/stdio.h
-  - Activation.h
-  - android/native_window.h
-  - Windows.System.Threading.h
-  #if defined(__MINGW32__) || defined(_MSC_VER)
-  - inet_net_pton.h
-  - inet_ntop.h
-  #endif
   #if EV_USE_IOCP
   - ev_iocp.c
-  #endif
-  - zend_exceptions.h
-  #if MATLAB_MEX_FILE
   # unknown
   - GL/glx.h
   - CL/va_ext.h

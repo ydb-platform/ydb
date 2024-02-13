@@ -34,6 +34,7 @@ public:
     virtual void AddNode(ui32 nodeId) = 0;
     virtual void UpdateNode(ui32 nodeId, NKikimrCms::EState) = 0;
 
+    virtual bool IsNodeLocked(ui32 nodeId) const = 0;
     virtual void LockNode(ui32 nodeId) = 0;
     virtual void UnlockNode(ui32 nodeId) = 0;
 
@@ -59,6 +60,7 @@ public:
     void AddNode(ui32 nodeId) override;
     void UpdateNode(ui32 nodeId, NKikimrCms::EState) override;
 
+    bool IsNodeLocked(ui32 nodeId) const override;
     void LockNode(ui32 nodeId) override;
     void UnlockNode(ui32 nodeId) override;
 

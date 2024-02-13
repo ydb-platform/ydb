@@ -1,12 +1,7 @@
 GO_LIBRARY()
-
-SRCS(
-    dsa.go
-)
-
-GO_TEST_SRCS(dsa_test.go)
-
+IF (TRUE)
+    SRCS(
+		dsa.go
+    )
+ENDIF()
 END()
-
-RECURSE(
-)

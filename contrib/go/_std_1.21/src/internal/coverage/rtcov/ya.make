@@ -1,7 +1,7 @@
 GO_LIBRARY()
-
-SRCS(
-    rtcov.go
-)
-
+IF (TRUE)
+    SRCS(
+		rtcov.go
+    )
+ENDIF()
 END()

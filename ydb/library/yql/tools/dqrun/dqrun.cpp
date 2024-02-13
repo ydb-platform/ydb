@@ -422,6 +422,7 @@ int RunMain(int argc, const char* argv[])
     IMetricsRegistryPtr metricsRegistry = CreateMetricsRegistry(GetSensorsGroupFor(NSensorComponent::kDq));
     clusterMapping["plato"] = YtProviderName;
     clusterMapping["pg_catalog"] = PgProviderName;
+    clusterMapping["information_schema"] = PgProviderName;
 
     TString mountConfig;
     TString mestricsPusherConfig;
@@ -691,11 +692,18 @@ int RunMain(int argc, const char* argv[])
         setting->SetValue("1");
     }
 
+    if (res.Has("enable-spilling")) {
+        auto* setting = gatewaysConfig.MutableDq()->AddDefaultSettings();
+        setting->SetName("SpillingEngine");
+        setting->SetValue("file");
+    }
+
     TString defYtServer = gatewaysConfig.HasYt() ? NYql::TConfigClusters::GetDefaultYtServer(gatewaysConfig.GetYt()) : TString();
     auto storage = CreateFS(fileStorageCfg, defYtServer);
 
     THashMap<TString, TString> clusters;
     clusters["pg_catalog"] = PgProviderName;
+    clusters["information_schema"] = PgProviderName;
 
     TVector<TDataProviderInitializer> dataProvidersInit;
     dataProvidersInit.push_back(GetPgDataProviderInitializer());
@@ -839,11 +847,11 @@ int RunMain(int argc, const char* argv[])
             size_t requestTimeout = gatewaysConfig.HasHttpGateway() && gatewaysConfig.GetHttpGateway().HasRequestTimeoutSeconds() ? gatewaysConfig.GetHttpGateway().GetRequestTimeoutSeconds() : 100;
             size_t maxRetries = gatewaysConfig.HasHttpGateway() && gatewaysConfig.GetHttpGateway().HasMaxRetries() ? gatewaysConfig.GetHttpGateway().GetMaxRetries() : 2;
 
-            const bool enableSpilling = res.Has("enable-spilling");
-            dqGateway = CreateLocalDqGateway(funcRegistry.Get(), dqCompFactory, dqTaskTransformFactory, dqTaskPreprocessorFactories,
-                enableSpilling, CreateAsyncIoFactory(driver, httpGateway, genericClient, requestTimeout, maxRetries), threads,
-                metricsRegistry,
-                metricsPusherFactory);
+
+            bool enableSpilling = res.Has("enable-spilling");
+            dqGateway = CreateLocalDqGateway(funcRegistry.Get(), dqCompFactory, dqTaskTransformFactory, dqTaskPreprocessorFactories, enableSpilling,
+                CreateAsyncIoFactory(driver, httpGateway, genericClient, requestTimeout, maxRetries), threads,
+                metricsRegistry, metricsPusherFactory);
         }
 
         dataProvidersInit.push_back(GetDqDataProviderInitializer(&CreateDqExecTransformer, dqGateway, dqCompFactory, {}, storage));

@@ -1,7 +1,7 @@
 GO_LIBRARY()
-
-SRCS(
-    bisect.go
-)
-
+IF (TRUE)
+    SRCS(
+		bisect.go
+    )
+ENDIF()
 END()

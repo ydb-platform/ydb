@@ -427,6 +427,17 @@ struct TSimd8 {
 };
 
 template<>
+inline TSimd8<ui64> TSimd8<ui64>::operator+(const TSimd8<ui64>& other) const {
+    return _mm256_add_epi64(Value, other.Value);
+}
+
+template<>
+inline TSimd8<ui64>& TSimd8<ui64>::operator+=(const TSimd8<ui64>& other) {
+    *this = *this + other.Value;
+    return *this;
+}
+
+template<>
 inline TSimd8<bool> TSimd8<bool>::Set(bool value) {
     return _mm256_set1_epi8(ui8(-value));
 }

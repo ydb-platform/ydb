@@ -5,8 +5,11 @@
 #include "vdisk_events.h"
 #include "vdisk_handle_class.h"
 
+#include <library/cpp/bucket_quoter/bucket_quoter.h>
 #include <util/system/compiler.h>
+#include <ydb/core/base/blobstorage.h>
 #include <ydb/core/blobstorage/base/blobstorage_events.h>
+#include <ydb/core/util/light.h>
 
 namespace NKikimr {
 
@@ -48,6 +51,8 @@ public:
 
     virtual ~TBsCostModelBase() = default;
 
+    friend class TBsCostTracker;
+
 protected:
     NPDisk::EDeviceType DeviceType = NPDisk::DEVICE_TYPE_UNKNOWN;
 
@@ -63,6 +68,8 @@ protected:
     ui64 PDiskWriteBlockSize = 4ull * 1'000'000; // 4MB
 
     static const TDiskOperationCostEstimator HDDEstimator;
+    static const TDiskOperationCostEstimator SSDEstimator;
+    static const TDiskOperationCostEstimator NVMEEstimator;
 
 private:
     enum class EMemoryOperationType {
@@ -99,6 +106,12 @@ protected:
             case NPDisk::DEVICE_TYPE_ROT: {
                 return HDDEstimator.Write(chunkSize);
             }
+            case NPDisk::DEVICE_TYPE_SSD: {
+                return SSDEstimator.Write(chunkSize);
+            }
+            case NPDisk::DEVICE_TYPE_NVME: {
+                return NVMEEstimator.Write(chunkSize);
+            }
             default: {
                 ui64 seekTime = DeviceSeekTimeNs / 100u;  // assume we do one seek per 100 log records
                 ui64 writeTime = chunkSize * 1'000'000'000ull / DeviceWriteSpeedBps;
@@ -111,6 +124,12 @@ protected:
         switch (DeviceType) {
             case NPDisk::DEVICE_TYPE_ROT: {
                 return HDDEstimator.HugeWrite(chunkSize);
+            }
+            case NPDisk::DEVICE_TYPE_SSD: {
+                return SSDEstimator.HugeWrite(chunkSize);
+            }
+            case NPDisk::DEVICE_TYPE_NVME: {
+                return NVMEEstimator.HugeWrite(chunkSize);
             }
             default: {
                 ui64 blocksNumber = (chunkSize + DeviceWriteBlockSize - 1) / DeviceWriteBlockSize;
@@ -125,6 +144,12 @@ protected:
         switch (DeviceType) {
             case NPDisk::DEVICE_TYPE_ROT: {
                 return HDDEstimator.Read(chunkSize);
+            }
+            case NPDisk::DEVICE_TYPE_SSD: {
+                return SSDEstimator.Read(chunkSize);
+            }
+            case NPDisk::DEVICE_TYPE_NVME: {
+                return NVMEEstimator.Read(chunkSize);
             }
             default: {
                 ui64 blocksNumber = (chunkSize + DeviceReadBlockSize - 1) / DeviceReadBlockSize;
@@ -262,14 +287,20 @@ class TBsCostTracker {
 private:
     TBlobStorageGroupType GroupType;
     std::unique_ptr<TBsCostModelBase> CostModel;
-
-    const TIntrusivePtr<::NMonitoring::TDynamicCounters> CostCounters;
+    TIntrusivePtr<::NMonitoring::TDynamicCounters> CostCounters;
 
     ::NMonitoring::TDynamicCounters::TCounterPtr UserDiskCost;
     ::NMonitoring::TDynamicCounters::TCounterPtr CompactionDiskCost;
     ::NMonitoring::TDynamicCounters::TCounterPtr ScrubDiskCost;
     ::NMonitoring::TDynamicCounters::TCounterPtr DefragDiskCost;
     ::NMonitoring::TDynamicCounters::TCounterPtr InternalDiskCost;
+
+    TAtomic BucketCapacity = 1'000'000'000;  // 10^9 nsec
+    TAtomic BucketInflow = 1'000'000'000;  // 10^9 nsec
+    TBucketQuoter<i64, TSpinLock, THPTimerUs> Bucket;
+    TLight BurstDetector;
+    std::atomic<ui64> SeqnoBurstDetector = 0;
+    static constexpr ui32 ConcurrentHugeRequestsAllowed = 3;
 
 public:
     TBsCostTracker(const TBlobStorageGroupType& groupType, NPDisk::EDeviceType diskType,
@@ -286,48 +317,86 @@ public:
         return cost;
     }
 
-    /// SETTINGS
-    void UpdateFromVDiskSettings(NKikimrBlobStorage::TVDiskCostSettings &settings) const;
+private:
+    void UpdateBucketCapacity() {
+        if (!CostModel) {
+            return;
+        }
+        ui64 maxPartSize = GroupType.MaxPartSize(TBlobStorageGroupType::ECrcMode::CrcModeWholePart, MaxVDiskBlobSize);
+        ui64 maxHugePartSize = GroupType.MaxPartSize(TBlobStorageGroupType::ECrcMode::CrcModeWholePart,
+                CostModel->HugeBlobSize);
+        ui64 capacity = std::max({
+            CostModel->ReadCost(maxHugePartSize),
+            CostModel->WriteCost(maxPartSize),
+            CostModel->HugeWriteCost(maxHugePartSize)
+        }) * ConcurrentHugeRequestsAllowed;
+
+        if (capacity != (ui64)AtomicGet(BucketCapacity)) {
+            AtomicSet(BucketCapacity, capacity);
+        }
+    }
 
 public:
     void UpdateCostModel(const TCostModel& costModel) {
         if (CostModel) {
             CostModel->Update(costModel);
         }
+        UpdateBucketCapacity();
+    }
+
+    void CountRequest(ui64 cost) {
+        Bucket.Use(cost);
+        BurstDetector.Set(!Bucket.IsAvail(), SeqnoBurstDetector.fetch_add(1));
     }
 
 public:
     template<class TEvent>
     void CountUserRequest(const TEvent& ev) {
-        *UserDiskCost += GetCost(ev);
+        ui64 cost = GetCost(ev);
+        *UserDiskCost += cost;
+        CountRequest(cost);
     }
 
     void CountUserCost(ui64 cost) {
         *UserDiskCost += cost;
+        CountRequest(cost);
     }
 
     template<class TEvent>
     void CountCompactionRequest(const TEvent& ev) {
-        *CompactionDiskCost += GetCost(ev);
+        ui64 cost = GetCost(ev);
+        *CompactionDiskCost += cost;
+        CountRequest(cost);
     }
 
     template<class TEvent>
     void CountScrubRequest(const TEvent& ev) {
-        *UserDiskCost += GetCost(ev);
+        ui64 cost = GetCost(ev);
+        *UserDiskCost += cost;
+        CountRequest(cost);
     }
 
     template<class TEvent>
     void CountDefragRequest(const TEvent& ev) {
-        *DefragDiskCost += GetCost(ev);
+        ui64 cost = GetCost(ev);
+        *DefragDiskCost += cost;
+        CountRequest(cost);
     }
 
     template<class TEvent>
     void CountInternalRequest(const TEvent& ev) {
-        *InternalDiskCost += GetCost(ev);
+        ui64 cost = GetCost(ev);
+        *InternalDiskCost += cost;
+        CountRequest(cost);
     }
 
     void CountInternalCost(ui64 cost) {
         *InternalDiskCost += cost;
+        CountRequest(cost);
+    }
+
+    void CountPDiskResponse() {
+        BurstDetector.Set(!Bucket.IsAvail(), SeqnoBurstDetector.fetch_add(1));
     }
 };
 

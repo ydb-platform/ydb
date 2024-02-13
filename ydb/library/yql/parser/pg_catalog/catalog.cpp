@@ -1400,8 +1400,30 @@ struct TCatalog {
             "lo_truncate64",
             "lo_close",
             "lo_unlink"
+        }),
+        StaticTables({
+#include "pg_class.generated.h"
+        }),
+        AllStaticColumns({
+#include "columns.generated.h"
         })
     {
+        THashSet<ui32> usedTableOids;
+        for (const auto& t : StaticTables) {
+            StaticColumns.insert(std::make_pair(t, TVector<TColumnInfo>()));
+            Y_ENSURE(usedTableOids.insert(t.Oid).first);
+        }
+
+        for (const auto& c: AllStaticColumns) {
+            auto tablePtr = StaticColumns.FindPtr(TTableInfoKey{c.Schema, c.TableName});
+            Y_ENSURE(tablePtr);
+            tablePtr->push_back(c);
+        }
+
+        for (const auto& t : StaticColumns) {
+            Y_ENSURE(!t.second.empty());
+        }
+
         TString typeData;
         Y_ENSURE(NResource::FindExact("pg_type.dat", &typeData));
         TString opData;
@@ -1602,6 +1624,10 @@ struct TCatalog {
     THashMap<TString, TVector<ui32>> OperatorsByName;
     THashMap<TString, TVector<ui32>> AggregationsByName;
     THashSet<TString> ProhibitedProcs;
+
+    TVector<TTableInfo> StaticTables;
+    TVector<TColumnInfo> AllStaticColumns;
+    THashMap<TTableInfoKey, TVector<TColumnInfo>> StaticColumns;
 };
 
 bool ValidateArgs(const TVector<ui32>& descArgTypeIds, const TVector<ui32>& argTypeIds) {
@@ -2758,6 +2784,16 @@ const TConversionDesc& LookupConversion(const TString& from, const TString& to) 
 bool IsCompatibleTo(ui32 actualType, ui32 expectedType) {
     const auto& catalog = TCatalog::Instance();
     return IsCompatibleTo(actualType, expectedType, catalog.Types);
+}
+
+const TVector<TTableInfo>& GetStaticTables() {
+    const auto& catalog = TCatalog::Instance();
+    return catalog.StaticTables;
+}
+
+const THashMap<TTableInfoKey, TVector<TColumnInfo>>& GetStaticColumns() {
+    const auto& catalog = TCatalog::Instance();
+    return catalog.StaticColumns;
 }
 
 }

@@ -252,8 +252,8 @@ Y_UNIT_TEST(ProposeRequestUndelivered) {
     UNIT_ASSERT_C(HasIssue(issues, NYql::TIssuesIds::KIKIMR_TEMPORARILY_UNAVAILABLE,
         "Kikimr cluster or one of its subsystems was unavailable."), record.GetResponse().DebugString());
 
-    UNIT_ASSERT_C(HasIssue(issues, NYql::TIssuesIds::DEFAULT_ERROR, "", [] (const TIssue& issue) {
-            return issue.GetMessage().StartsWith("Could not deliver program to shard ");
+    UNIT_ASSERT_C(HasIssue(issues, NKikimrIssues::TIssuesIds::TX_STATE_UNKNOWN, "", [] (const TIssue& issue) {
+            return issue.GetMessage().StartsWith("Tx state unknown for shard");
         }), record.GetResponse().DebugString());
 }
 

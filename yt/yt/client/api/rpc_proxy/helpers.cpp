@@ -349,7 +349,7 @@ void FromProto(
         std::fill(result->StateCounts->begin(), result->StateCounts->end(), 0);
         for (const auto& stateCount: proto.state_counts().entries()) {
             auto state = ConvertOperationStateFromProto(stateCount.state());
-            YT_VERIFY(result->StateCounts->IsDomainValue(state));
+            YT_VERIFY(result->StateCounts->IsValidIndex(state));
             YT_VERIFY((*result->StateCounts)[state] == 0);
             (*result->StateCounts)[state] = stateCount.count();
         }
@@ -361,7 +361,7 @@ void FromProto(
         std::fill(result->TypeCounts->begin(), result->TypeCounts->end(), 0);
         for (const auto& typeCount: proto.type_counts().entries()) {
             auto type = ConvertOperationTypeFromProto(typeCount.type());
-            YT_VERIFY(result->TypeCounts->IsDomainValue(type));
+            YT_VERIFY(result->TypeCounts->IsValidIndex(type));
             YT_VERIFY((*result->TypeCounts)[type] == 0);
             (*result->TypeCounts)[type] = typeCount.count();
         }
@@ -908,6 +908,10 @@ void ToProto(NProto::TJob* protoJob, const NApi::TJob& job)
     if (job.Error) {
         protoJob->set_error(job.Error.ToString());
     }
+    if (job.InterruptionInfo) {
+        protoJob->set_interruption_info(job.InterruptionInfo.ToString());
+    }
+
     if (job.BriefStatistics) {
         protoJob->set_brief_statistics(job.BriefStatistics.ToString());
     }
@@ -1016,6 +1020,11 @@ void FromProto(NApi::TJob* job, const NProto::TJob& protoJob)
     } else {
         job->Error = TYsonString();
     }
+    if (protoJob.has_interruption_info()) {
+        job->InterruptionInfo = TYsonString(protoJob.interruption_info());
+    } else {
+        job->InterruptionInfo = TYsonString();
+    }
     if (protoJob.has_brief_statistics()) {
         job->BriefStatistics = TYsonString(protoJob.brief_statistics());
     } else {
@@ -1113,7 +1122,7 @@ void FromProto(
     std::fill(statistics->StateCounts.begin(), statistics->StateCounts.end(), 0);
     for (const auto& stateCount: protoStatistics.state_counts().entries()) {
         auto state = ConvertJobStateFromProto(stateCount.state());
-        YT_VERIFY(statistics->StateCounts.IsDomainValue(state));
+        YT_VERIFY(statistics->StateCounts.IsValidIndex(state));
         YT_VERIFY(statistics->StateCounts[state] == 0);
         statistics->StateCounts[state] = stateCount.count();
     }
@@ -1121,7 +1130,7 @@ void FromProto(
     std::fill(statistics->TypeCounts.begin(), statistics->TypeCounts.end(), 0);
     for (const auto& typeCount: protoStatistics.type_counts().entries()) {
         auto type = ConvertJobTypeFromProto(typeCount.type());
-        YT_VERIFY(statistics->TypeCounts.IsDomainValue(type));
+        YT_VERIFY(statistics->TypeCounts.IsValidIndex(type));
         YT_VERIFY(statistics->TypeCounts[type] == 0);
         statistics->TypeCounts[type] = typeCount.count();
     }
@@ -1842,7 +1851,8 @@ auto ReadRows<TVersionedRow>(IWireProtocolReader* reader, const TTableSchema& sc
 template <class TRow>
 TIntrusivePtr<NApi::IRowset<TRow>> DeserializeRowset(
     const NProto::TRowsetDescriptor& descriptor,
-    const TSharedRef& data)
+    const TSharedRef& data,
+    NTableClient::TRowBufferPtr rowBuffer)
 {
     if (descriptor.rowset_format() != NApi::NRpcProxy::NProto::RF_YT_WIRE) {
         THROW_ERROR_EXCEPTION("Unsupported rowset format %Qv",
@@ -1855,8 +1865,12 @@ TIntrusivePtr<NApi::IRowset<TRow>> DeserializeRowset(
         TRowsetTraits<TRow>::Kind,
         NApi::NRpcProxy::NProto::RF_YT_WIRE);
 
-    struct TDeserializedRowsetTag { };
-    auto reader = CreateWireProtocolReader(data, New<TRowBuffer>(TDeserializedRowsetTag()));
+    if (!rowBuffer) {
+        struct TDeserializedRowsetTag { };
+        rowBuffer = New<TRowBuffer>(TDeserializedRowsetTag());
+    }
+
+    auto reader = CreateWireProtocolReader(data, std::move(rowBuffer));
 
     auto schema = DeserializeRowsetSchema(descriptor);
     auto rows = ReadRows<TRow>(reader.get(), *schema);
@@ -1866,10 +1880,13 @@ TIntrusivePtr<NApi::IRowset<TRow>> DeserializeRowset(
 // Instantiate templates.
 template NApi::IUnversionedRowsetPtr DeserializeRowset(
     const NProto::TRowsetDescriptor& descriptor,
-    const TSharedRef& data);
+    const TSharedRef& data,
+    NTableClient::TRowBufferPtr buffer = nullptr);
+
 template NApi::IVersionedRowsetPtr DeserializeRowset(
     const NProto::TRowsetDescriptor& descriptor,
-    const TSharedRef& data);
+    const TSharedRef& data,
+    NTableClient::TRowBufferPtr buffer = nullptr);
 
 ////////////////////////////////////////////////////////////////////////////////
 

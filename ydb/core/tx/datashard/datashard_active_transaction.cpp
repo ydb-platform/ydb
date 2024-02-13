@@ -2,11 +2,11 @@
 
 #include "datashard_active_transaction.h"
 #include "datashard_kqp.h"
-#include "datashard_locks.h"
 #include "datashard_impl.h"
 #include "datashard_failpoints.h"
 #include "key_conflicts.h"
 
+#include <ydb/core/tx/locks/locks.h>
 #include <ydb/library/actors/util/memory_track.h>
 
 namespace NKikimr {
@@ -21,7 +21,7 @@ TValidatedDataTx::TValidatedDataTx(TDataShard *self,
                                    bool usesMvccSnapshot)
     : StepTxId_(stepTxId)
     , TxBody(txBody)
-    , EngineBay(self, txc, ctx, stepTxId.ToPair())
+    , EngineBay(self, txc, ctx, stepTxId)
     , ErrCode(NKikimrTxDataShard::TError::OK)
     , TxSize(0)
     , TxCacheUsage(0)
@@ -40,6 +40,8 @@ TValidatedDataTx::TValidatedDataTx(TDataShard *self,
         ErrStr = "Failed to parse TxBody";
         return;
     }
+
+    auto& typeRegistry = *AppData()->TypeRegistry;
 
     ComputeTxSize();
     NActors::NMemory::TLabel<MemoryLabelValidatedDataTx>::Add(TxSize);
@@ -79,7 +81,6 @@ TValidatedDataTx::TValidatedDataTx(TDataShard *self,
             return;
         }
 
-        auto& typeRegistry = *AppData()->TypeRegistry;
         auto& computeCtx = EngineBay.GetKqpComputeCtx();
 
         try {
@@ -140,7 +141,7 @@ TValidatedDataTx::TValidatedDataTx(TDataShard *self,
                     }
                 }
 
-                KqpSetTxKeys(tabletId, task.GetId(), tableInfo, meta, typeRegistry, ctx, EngineBay);
+                KqpSetTxKeys(tabletId, task.GetId(), tableInfo, meta, typeRegistry, ctx, EngineBay.GetKeyValidator());
 
                 for (auto& output : task.GetOutputs()) {
                     for (auto& channel : output.GetChannels()) {
@@ -156,7 +157,7 @@ TValidatedDataTx::TValidatedDataTx(TDataShard *self,
 
             IsReadOnly = IsReadOnly && Tx.GetReadOnly();
 
-            KqpSetTxLocksKeys(GetKqpLocks(), self->SysLocksTable(), EngineBay);
+            KqpSetTxLocksKeys(GetKqpLocks(), self->SysLocksTable(), EngineBay.GetKeyValidator());
             EngineBay.MarkTxLoaded();
 
             auto& tasksRunner = GetKqpTasksRunner(); // create tasks runner, can throw TMemoryLimitExceededException
@@ -205,6 +206,13 @@ TValidatedDataTx::~TValidatedDataTx() {
     NActors::NMemory::TLabel<MemoryLabelValidatedDataTx>::Sub(TxSize);
 }
 
+TDataShardUserDb& TValidatedDataTx::GetUserDb() {
+    return EngineBay.GetUserDb();
+}
+const TDataShardUserDb& TValidatedDataTx::GetUserDb() const {
+    return EngineBay.GetUserDb();
+}
+
 ui32 TValidatedDataTx::ExtractKeys(bool allowErrors)
 {
     using EResult = NMiniKQL::IEngineFlat::EResult;
@@ -227,7 +235,8 @@ bool TValidatedDataTx::ReValidateKeys()
     using EResult = NMiniKQL::IEngineFlat::EResult;
 
     if (IsKqpTx()) {
-        auto [result, error] = EngineBay.GetKqpComputeCtx().ValidateKeys(EngineBay.TxInfo());
+        TKeyValidator::TValidateOptions options(EngineBay.GetUserDb());
+        auto [result, error] = EngineBay.GetKeyValidator().ValidateKeys(options);
         if (result != EResult::Ok) {
             ErrStr = std::move(error);
             ErrCode = ConvertErrCode(result);
@@ -933,6 +942,47 @@ void TActiveTransaction::TrackMemory() const {
 
 void TActiveTransaction::UntrackMemory() const {
     NActors::NMemory::TLabel<MemoryLabelActiveTransactionBody>::Sub(TxBody.size());
+}
+
+bool TActiveTransaction::OnStopping(TDataShard& self, const TActorContext& ctx) {
+    if (IsImmediate()) {
+        // Send reject result immediately, because we cannot control when
+        // a new datashard tablet may start and block us from commiting
+        // anything new. The usual progress queue is too slow for that.
+        if (!HasResultSentFlag() && !Result()) {
+            auto kind = static_cast<NKikimrTxDataShard::ETransactionKind>(GetKind());
+            auto rejectStatus = NKikimrTxDataShard::TEvProposeTransactionResult::OVERLOADED;
+            TString rejectReason = TStringBuilder()
+                    << "Rejecting immediate tx "
+                    << GetTxId()
+                    << " because datashard "
+                    << self.TabletID()
+                    << " is restarting";
+            auto result = MakeHolder<TEvDataShard::TEvProposeTransactionResult>(
+                    kind, self.TabletID(), GetTxId(), rejectStatus);
+            result->AddError(NKikimrTxDataShard::TError::WRONG_SHARD_STATE, rejectReason);
+            LOG_NOTICE_S(ctx, NKikimrServices::TX_DATASHARD, rejectReason);
+
+            ctx.Send(GetTarget(), result.Release(), 0, GetCookie());
+
+            self.IncCounter(COUNTER_PREPARE_OVERLOADED);
+            self.IncCounter(COUNTER_PREPARE_COMPLETE);
+            SetResultSentFlag();
+        }
+
+        // Immediate ops become ready when stopping flag is set
+        return true;
+    } else {
+        // Distributed operations send notification when proposed
+        if (GetTarget() && !HasCompletedFlag()) {
+            auto notify = MakeHolder<TEvDataShard::TEvProposeTransactionRestart>(
+                self.TabletID(), GetTxId());
+            ctx.Send(GetTarget(), notify.Release(), 0, GetCookie());
+        }
+
+        // Distributed ops avoid doing new work when stopping
+        return false;
+    }
 }
 
 }}

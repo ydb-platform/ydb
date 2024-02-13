@@ -20,12 +20,16 @@ class TIndexChunk {
 private:
     YDB_READONLY(ui32, IndexId, 0);
     YDB_READONLY(ui32, ChunkIdx, 0);
+    YDB_READONLY(ui32, RecordsCount, 0);
+    YDB_READONLY(ui32, RawBytes, 0);
     YDB_READONLY_DEF(TBlobRange, BlobRange);
 
 public:
-    TIndexChunk(const ui32 indexId, const ui32 chunkIdx, const TBlobRange& blobRange)
+    TIndexChunk(const ui32 indexId, const ui32 chunkIdx, const ui32 recordsCount, const ui64 rawBytes, const TBlobRange& blobRange)
         : IndexId(indexId)
         , ChunkIdx(chunkIdx)
+        , RecordsCount(recordsCount)
+        , RawBytes(rawBytes)
         , BlobRange(blobRange) {
 
     }

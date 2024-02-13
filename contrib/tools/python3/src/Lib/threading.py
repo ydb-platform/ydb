@@ -1651,6 +1651,16 @@ def _after_fork():
                 # its new value since it can have changed.
                 thread._reset_internal_locks(True)
                 ident = get_ident()
+                if (
+                    isinstance(thread, _DummyThread)
+                    # Ensure _DummyThread is not monkey-patched to avoid
+                    # <https://github.com/gevent/gevent/issues/2020>
+                    and _DummyThread.__bases__[0] == Thread
+                ):
+                    thread.__class__ = _MainThread
+                    thread._name = 'MainThread'
+                    thread._daemonic = False
+                    thread._set_tstate_lock()
                 thread._ident = ident
                 new_active[ident] = thread
             else:

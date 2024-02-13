@@ -459,6 +459,9 @@ public:
         NQueryTrackerClient::TQueryId queryId,
         const TAlterQueryOptions& options = {}) override;
 
+    TFuture<TGetQueryTrackerInfoResult> GetQueryTrackerInfo(
+        const TGetQueryTrackerInfoOptions& options = {}) override;
+
     // Authentication
 
     virtual TFuture<void> SetUserPassword(
@@ -495,6 +498,24 @@ public:
         const NBundleControllerClient::TSetBundleConfigOptions& options = {}) override;
 
     // Flow
+
+    TFuture<TGetPipelineSpecResult> GetPipelineSpec(
+        const NYPath::TYPath& pipelinePath,
+        const TGetPipelineSpecOptions& options = {}) override;
+
+    TFuture<TSetPipelineSpecResult> SetPipelineSpec(
+        const NYPath::TYPath& pipelinePath,
+        const NYson::TYsonString& spec,
+        const TSetPipelineSpecOptions& options = {}) override;
+
+    TFuture<TGetPipelineDynamicSpecResult> GetPipelineDynamicSpec(
+        const NYPath::TYPath& pipelinePath,
+        const TGetPipelineDynamicSpecOptions& options = {}) override;
+
+    TFuture<TSetPipelineDynamicSpecResult> SetPipelineDynamicSpec(
+        const NYPath::TYPath& pipelinePath,
+        const NYson::TYsonString& spec,
+        const TSetPipelineDynamicSpecOptions& options = {}) override;
 
     TFuture<void> StartPipeline(
         const NYPath::TYPath& pipelinePath,

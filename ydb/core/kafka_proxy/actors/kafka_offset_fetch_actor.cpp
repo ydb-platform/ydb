@@ -204,6 +204,7 @@ TOffsetFetchResponseData::TPtr TKafkaOffsetFetchActor::GetOffsetFetchResponse() 
                 partition.CommittedOffset = sourcePartition.CommittedOffset;
                 partition.PartitionIndex = sourcePartition.PartitionIndex;
                 partition.ErrorCode = sourcePartition.ErrorCode;
+                topic.Partitions.push_back(partition);
             }
             response->Topics.push_back(topic);
         }

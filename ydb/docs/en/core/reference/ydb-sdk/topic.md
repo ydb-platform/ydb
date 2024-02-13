@@ -1,4 +1,3 @@
-<!-- This file is not tracked by the automatic translation system. Edits to the RU-version must be made yourself. -->
 # Working with topics
 
 This article provides examples of how to use the {{ ydb-short-name }} SDK to work with [topics](../../concepts/topic.md).

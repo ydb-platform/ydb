@@ -53,12 +53,19 @@ struct TSchemeShard::TImport::TTxCreate: public TSchemeShard::TXxport::TTxBase {
         }
 
         const TString& uid = GetUid(request.GetRequest().GetOperationParams().labels());
-        if (uid && Self->ImportsByUid.contains(uid)) {
-            return Reply(
-                std::move(response),
-                Ydb::StatusIds::ALREADY_EXISTS,
-                TStringBuilder() << "Import with uid '" << uid << "' already exists"
-            );
+        if (uid) {
+            if (auto it = Self->ImportsByUid.find(uid); it != Self->ImportsByUid.end()) {
+                if (IsSameDomain(it->second, request.GetDatabaseName())) {
+                    Self->FromXxportInfo(*response->Record.MutableResponse()->MutableEntry(), it->second);
+                    return Reply(std::move(response));
+                } else {
+                    return Reply(
+                        std::move(response),
+                        Ydb::StatusIds::ALREADY_EXISTS,
+                        TStringBuilder() << "Import with uid '" << uid << "' already exists"
+                    );
+                }
+            }
         }
 
         const TPath domainPath = TPath::Resolve(request.GetDatabaseName(), Self);

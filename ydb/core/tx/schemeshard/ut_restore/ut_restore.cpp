@@ -2451,6 +2451,59 @@ Y_UNIT_TEST_SUITE(TImportTests) {
         Run(runtime, env, ConvertTestData(data), request, Ydb::StatusIds::PRECONDITION_FAILED);
         Run(runtime, env, ConvertTestData(data), request, Ydb::StatusIds::SUCCESS, "/MyRoot", false, userSID);
     }
+
+    Y_UNIT_TEST(UidAsIdempotencyKey) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime, TTestEnvOptions());
+        ui64 txId = 100;
+
+        const auto data = GenerateTestData(R"(
+            columns {
+              name: "key"
+              type { optional_type { item { type_id: UTF8 } } }
+            }
+            columns {
+              name: "value"
+              type { optional_type { item { type_id: UTF8 } } }
+            }
+            primary_key: "key"
+        )", {{"a", 1}});
+
+        TPortManager portManager;
+        const ui16 port = portManager.GetPort();
+
+        TS3Mock s3Mock(ConvertTestData(data), TS3Mock::TSettings(port));
+        UNIT_ASSERT(s3Mock.Start());
+
+        const auto request = Sprintf(R"(
+            OperationParams {
+              labels {
+                key: "uid"
+                value: "foo"
+              }
+            }
+            ImportFromS3Settings {
+              endpoint: "localhost:%d"
+              scheme: HTTP
+              items {
+                source_prefix: ""
+                destination_path: "/MyRoot/Table"
+              }
+            }
+        )", port);
+
+        // create operation
+        TestImport(runtime, ++txId, "/MyRoot", request);
+        const ui64 importId = txId;
+        // create operation again with same uid
+        TestImport(runtime, ++txId, "/MyRoot", request);
+        // new operation was not created
+        TestGetImport(runtime, txId, "/MyRoot", Ydb::StatusIds::NOT_FOUND);
+        // check previous operation
+        TestGetImport(runtime, importId, "/MyRoot");
+        env.TestWaitNotification(runtime, importId);
+    }
+
 }
 
 Y_UNIT_TEST_SUITE(TImportWithRebootsTests) {

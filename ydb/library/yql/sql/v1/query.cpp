@@ -837,9 +837,11 @@ public:
                 columnsSet.insert(col.Name);
             }
 
+            const bool allowUndefinedColumns = (Values != nullptr) && columnsSet.empty();
+
             THashSet<TString> pkColumns;
             for (auto& keyColumn : Params.PkColumns) {
-                if (!columnsSet.empty() && !columnsSet.contains(keyColumn.Name)) {
+                if (!allowUndefinedColumns && !columnsSet.contains(keyColumn.Name)) {
                     ctx.Error(keyColumn.Pos) << "Undefined column: " << keyColumn.Name;
                     return false;
                 }
@@ -849,13 +851,13 @@ public:
                 }
             }
             for (auto& keyColumn : Params.PartitionByColumns) {
-                if (!columnsSet.empty() && !columnsSet.contains(keyColumn.Name)) {
+                if (!allowUndefinedColumns && !columnsSet.contains(keyColumn.Name)) {
                     ctx.Error(keyColumn.Pos) << "Undefined column: " << keyColumn.Name;
                     return false;
                 }
             }
             for (auto& keyColumn : Params.OrderByColumns) {
-                if (!columnsSet.empty() && !columnsSet.contains(keyColumn.first.Name)) {
+                if (!allowUndefinedColumns && !columnsSet.contains(keyColumn.first.Name)) {
                     ctx.Error(keyColumn.first.Pos) << "Undefined column: " << keyColumn.first.Name;
                     return false;
                 }
@@ -869,14 +871,14 @@ public:
                 }
 
                 for (const auto& indexColumn : index.IndexColumns) {
-                    if (!columnsSet.empty() && !columnsSet.contains(indexColumn.Name)) {
+                    if (!allowUndefinedColumns && !columnsSet.contains(indexColumn.Name)) {
                         ctx.Error(indexColumn.Pos) << "Undefined column: " << indexColumn.Name;
                         return false;
                     }
                 }
 
                 for (const auto& dataColumn : index.DataColumns) {
-                    if (!columnsSet.empty() && !columnsSet.contains(dataColumn.Name)) {
+                    if (!allowUndefinedColumns && !columnsSet.contains(dataColumn.Name)) {
                         ctx.Error(dataColumn.Pos) << "Undefined column: " << dataColumn.Name;
                         return false;
                     }

@@ -764,7 +764,10 @@ public:
                 auto mode = settings.Mode.Cast();
                 if (mode == "create" || mode == "create_if_not_exists" || mode == "create_or_replace") {
                     YQL_ENSURE(settings.Columns);
-                    YQL_ENSURE(!settings.Columns.Cast().Empty());
+                    if (settings.Columns.Cast().Empty()) {
+                        ctx.AddError(TIssue(ctx.GetPosition(node->Pos()), "Creating table without columns is not supported."));
+                            return nullptr;
+                    }
 
                     const bool isExternalTable = settings.TableType && settings.TableType.Cast() == "externalTable";
                     if (!isExternalTable && !settings.PrimaryKey) {

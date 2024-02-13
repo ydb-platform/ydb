@@ -603,6 +603,8 @@ public:
         return ++PageFaultCount;
     }
 
+    bool OnStopping(TDataShard& self, const TActorContext& ctx) override;
+
 private:
     void TrackMemory() const;
     void UntrackMemory() const;

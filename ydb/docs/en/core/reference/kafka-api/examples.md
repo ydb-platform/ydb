@@ -196,7 +196,8 @@ For more information about Kafka Connect and its configuration, see the [Apache 
     wget https://downloads.apache.org/kafka/3.6.1/kafka_2.13-3.6.1.tgz && tar -xvf kafka_2.13-3.6.1.tgz --strip 1 --directory /opt/kafka/
     ```
 
-    This example uses Apache Kafka® version ``3.6.1``.
+    This example uses Apache Kafka® version 3.6.1.
+
 
 1. Create a directory with the executable process settings:
 

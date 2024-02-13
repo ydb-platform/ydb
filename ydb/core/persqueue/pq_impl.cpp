@@ -1215,7 +1215,6 @@ void TPersQueue::EndWriteTabletState(const NKikimrClient::TResponse& resp, const
 
 void TPersQueue::Handle(TEvKeyValue::TEvResponse::TPtr& ev, const TActorContext& ctx)
 {
-
     auto& resp = ev->Get()->Record;
 
     switch (resp.GetCookie()) {
@@ -2621,7 +2620,16 @@ void TPersQueue::HandleEventForSupportivePartition(const ui64 responseCookie,
         // - иначе
         // -     добавить сообщение в очередь для партиции
         //
-        const TPartitionId& partitionId = TxWrites.at(writeId).Partitions.at(originalPartitionId);
+        const TTxWriteInfo& writeInfo = TxWrites.at(writeId);
+        if (writeInfo.TxId.Defined()) {
+            ReplyError(ctx,
+                       responseCookie,
+                       NPersQueue::NErrorCode::BAD_REQUEST,
+                       "tx state");
+            return;
+        }
+
+        const TPartitionId& partitionId = writeInfo.Partitions.at(originalPartitionId);
         Y_ABORT_UNLESS(Partitions.contains(partitionId));
         TPartitionInfo& partition = Partitions.at(partitionId);
 
@@ -3442,6 +3450,14 @@ void TPersQueue::ProcessProposeTransactionQueue(const TActorContext& ctx)
         case NKikimrPQ::TTransaction::UNKNOWN:
             tx.OnProposeTransaction(event, GetAllowedStep(),
                                     TabletID());
+
+            if (tx.WriteId.Defined()) {
+                ui64 writeId = *tx.WriteId;
+                Y_ABORT_UNLESS(TxWrites.contains(writeId));
+                TTxWriteInfo& writeInfo = TxWrites.at(writeId);
+                writeInfo.TxId = tx.TxId;
+            }
+
             CheckTxState(ctx, tx);
             break;
         case NKikimrPQ::TTransaction::PREPARING:

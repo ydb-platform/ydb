@@ -145,6 +145,7 @@ bool EnsureDryType(TPositionHandle position, const TTypeAnnotationNode& type, TE
 bool EnsureDryType(const TExprNode& node, TExprContext& ctx);
 bool EnsureDictType(const TExprNode& node, TExprContext& ctx);
 bool EnsureDictType(TPositionHandle position, const TTypeAnnotationNode& type, TExprContext& ctx);
+bool EnsureValidJsonPath(const TExprNode& node, TExprContext& ctx);
 
 bool IsVoidType(const TExprNode& node, TExprContext& ctx);
 bool EnsureVoidType(const TExprNode& node, TExprContext& ctx);

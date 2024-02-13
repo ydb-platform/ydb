@@ -249,6 +249,11 @@ bool TSqlQuery::Statement(TVector<TNodePtr>& blocks, const TRule_sql_stmt_core& 
                 if (!tableSource) {
                     return false;
                 }
+                if (tableType != ETableType::Table) {
+                    Context().Error(GetPos(rule.GetBlock14().GetRule_table_tablestore1().GetToken1()))
+                        << "CREATE TABLE AS is not supported for TABLESTORE and EXTERNAL TABLE";
+                    return false;
+                }
             }
 
             if (!ValidateExternalTable(params)) {

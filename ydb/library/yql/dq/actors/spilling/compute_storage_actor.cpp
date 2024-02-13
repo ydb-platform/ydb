@@ -65,7 +65,6 @@ protected:
 
     void FailOnError() {
         if (Error_) {
-            assert(false);
             LOG_E("Error: " << *Error_);
             Send(SpillingActorId_, new TEvents::TEvPoison);
         }

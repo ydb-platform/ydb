@@ -60,45 +60,45 @@ class TestYamlConfigTransformations(object):
         return yatest_common.canonical_file(str(result_path), diff_tool=json_diff_bin(), local=True, universal_lines=True)
 
     def test_basic(self):
-        results = []
+        results = {}
         configs = yatest.common.source_path("ydb/library/yaml_config/ut_transform/configs")
         with os.scandir(configs) as it:
             for entry in it:
                 if entry.name.endswith(".yaml") and entry.is_file():
                     with open(entry, "r") as f:
                         result = self.execute_dump(stdin=f)
-                        results.append(self.canonical_result(result, entry.name, yatest_common.output_path()))
-        return results
+                        results[entry.name] = self.canonical_result(result, entry.name, yatest_common.output_path())
+        return [results[key] for key in sorted(results.keys(), reverse=True)]
 
     def test_deprecated(self):
-        results = []
+        results = {}
         configs = yatest.common.source_path("ydb/library/yaml_config/ut_transform/configs")
         with os.scandir(configs) as it:
             for entry in it:
                 if entry.name.endswith(".yaml") and entry.is_file():
                     with open(entry, "r") as f:
                         result = self.execute_dump(stdin=f, args=["--deprecated"])
-                        results.append(self.canonical_result(result, entry.name, yatest_common.output_path()))
-        return results
+                        results[entry.name] = self.canonical_result(result, entry.name, yatest_common.output_path())
+        return [results[key] for key in sorted(results.keys(), reverse=True)]
 
     def test_ds_init_basic(self):
-        results = []
+        results = {}
         configs = yatest.common.source_path("ydb/library/yaml_config/ut_transform/configs")
         with os.scandir(configs) as it:
             for entry in it:
                 if entry.name.endswith(".yaml") and entry.is_file():
                     with open(entry, "r") as f:
                         result = self.execute_dump(stdin=f)
-                        results.append(self.canonical_result(result, entry.name, yatest_common.output_path(), suffix=".ds_init"))
-        return results
+                        results[entry.name] = self.canonical_result(result, entry.name, yatest_common.output_path(), suffix=".ds_init")
+        return [results[key] for key in sorted(results.keys(), reverse=True)]
 
     def test_ds_init_deprecated(self):
-        results = []
+        results = {}
         configs = yatest.common.source_path("ydb/library/yaml_config/ut_transform/configs")
         with os.scandir(configs) as it:
             for entry in it:
                 if entry.name.endswith(".yaml") and entry.is_file():
                     with open(entry, "r") as f:
                         result = self.execute_dump(stdin=f, args=["--deprecated"])
-                        results.append(self.canonical_result(result, entry.name, yatest_common.output_path(), suffix=".ds_init"))
-        return results
+                        results[entry.name] = self.canonical_result(result, entry.name, yatest_common.output_path(), suffix=".ds_init")
+        return [results[key] for key in sorted(results.keys(), reverse=True)]

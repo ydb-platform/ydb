@@ -13322,9 +13322,9 @@
     ],
     "test_sql2yql.test[pg_catalog-pg_database]": [
         {
-            "checksum": "3c66358cd738a51ccd0766e18e21fc45",
-            "size": 1077,
-            "uri": "https://{canondata_backend}/1942525/b1770d18f4fe73123c8ba7b8888beae32aa4e70b/resource.tar.gz#test_sql2yql.test_pg_catalog-pg_database_/sql.yql"
+            "checksum": "5016020047c31d0a12c29d7b6fdd4b1a",
+            "size": 1319,
+            "uri": "https://{canondata_backend}/1936842/abd9f49421ab39ca2bf1b40d9a65f1c24f457928/resource.tar.gz#test_sql2yql.test_pg_catalog-pg_database_/sql.yql"
         }
     ],
     "test_sql2yql.test[pg_catalog-pg_description_pg_syntax]": [
@@ -13350,9 +13350,9 @@
     ],
     "test_sql2yql.test[pg_catalog-pg_namespace_pg_syntax]": [
         {
-            "checksum": "e7ca24866a5066576dfab540799aef83",
-            "size": 773,
-            "uri": "https://{canondata_backend}/1871002/9140ba5c900f07690dd3e7f43001e6ff24bdb036/resource.tar.gz#test_sql2yql.test_pg_catalog-pg_namespace_pg_syntax_/sql.yql"
+            "checksum": "9e4c757133b4a0784952c6c967d504bb",
+            "size": 846,
+            "uri": "https://{canondata_backend}/1600758/c8681bdb1ea76420d75d8e7d6d355f3e5abf1d95/resource.tar.gz#test_sql2yql.test_pg_catalog-pg_namespace_pg_syntax_/sql.yql"
         }
     ],
     "test_sql2yql.test[pg_catalog-pg_roles]": [

@@ -92,8 +92,6 @@ class TSparseList {
         size_t LockCount = 0;
     };
 
-
-
     class TContainer: public TSimpleRefCount<TContainer> {
     public:
 

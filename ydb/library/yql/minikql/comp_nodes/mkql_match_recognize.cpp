@@ -128,6 +128,20 @@ public:
         }
         return not Matches.empty();
     }
+
+    void Save(TOutputSerializer& /*serializer*/) const {
+        // // TODO : PartitionKey
+        // Rows.Save(serializer);
+        // Nfa.Save(serializer);
+        // serializer.Write(MatchNumber);
+    }
+
+    void Load(TInputSerializer& /*serializer*/) {
+        // Rows.Load(serializer);
+        // Nfa.Load(serializer);
+        // MatchNumber = serializer.Read<ui64>();
+    }
+
 private:
     const NUdf::TUnboxedValue PartitionKey;
     const TMatchRecognizeProcessorParameters& Parameters;
@@ -248,16 +262,48 @@ public:
     , RowPatternConfiguration(TRowPatternConfigurationBuilder::Create(parameters.Pattern, parameters.VarNamesLookup))
     , Cache(cache)
     , Terminating(false)
+    , SaveLoadContex(ctx, stateType, packer)
     {}
 
     NUdf::TUnboxedValue Save() const override {
-        TString out;
-
-        auto strRef = NUdf::TStringRef(out.data(), out.size());
-        return MakeString(strRef);
+        TOutputSerializer serializer(SaveLoadContex);
+        serializer.Write(StateVersion);
+        serializer.Write(CurPartitionPackedKey);
+        bool isValid = static_cast<bool>(PartitionHandler);
+        serializer.Write(isValid);
+        if (isValid) {
+            PartitionHandler->Save(serializer);
+        }
+        isValid = static_cast<bool>(DelayedRow);
+        serializer.Write(isValid);
+        if (isValid) {
+            serializer.Write(DelayedRow);
+        }
+        return serializer.MakeString();
     }
 
     void Load(const NUdf::TStringRef& state) override {
+
+        TInputSerializer serializer(SaveLoadContex, state);
+        const auto stateVersion = serializer.Read<decltype(StateVersion)>();
+        if (stateVersion == 1) {
+            serializer.Read(CurPartitionPackedKey);
+            bool validPartitionHandler = serializer.Read<bool>();
+            if (validPartitionHandler) {
+                PartitionHandler.reset(new Algo(
+                    NYql::NUdf::TUnboxedValuePod(NYql::NUdf::TStringValue("asd")),// TODO
+                    Parameters,
+                    RowPatternConfiguration,
+                    Cache
+                ));
+                PartitionHandler->Load(serializer);
+            }
+            bool validDelayedRow = serializer.Read<bool>();
+            if (validDelayedRow) {
+                DelayedRow = serializer.Read<NUdf::TUnboxedValue>();
+            }
+        }
+        MKQL_ENSURE(serializer.Empty(), "State is corrupted");
     }
 
     bool ProcessInputRow(NUdf::TUnboxedValue&& row, TComputationContext& ctx) {
@@ -328,6 +374,7 @@ private:
     const TContainerCacheOnContext& Cache;
     NUdf::TUnboxedValue DelayedRow;
     bool Terminating;
+    TSerializerContext SaveLoadContex;
 };
 
 class TStateForInterleavedPartitions
@@ -359,7 +406,6 @@ public:
 
     NUdf::TUnboxedValue Save() const override {
         TOutputSerializer serializer(SaveLoadContex);
-
         serializer.Write(StateVersion);
         serializer.Write(Partitions.size());
 
@@ -367,7 +413,7 @@ public:
             serializer.Write(key);
             state->Save(serializer);
         }
-
+        serializer.Write(Terminating);
         return serializer.MakeString();
     }
 
@@ -396,6 +442,7 @@ public:
             //         HasReadyOutput.push(it);
             //     }
             // }
+            serializer.Read(Terminating);
         }
         MKQL_ENSURE(serializer.Empty(), "State is corrupted");
     }
@@ -462,7 +509,7 @@ private:
     const TMatchRecognizeProcessorParameters& Parameters;
     const TNfaTransitionGraph::TPtr NfaTransitionGraph;
     const TContainerCacheOnContext& Cache;
-    TSaveLoadContext SaveLoadContex;
+    TSerializerContext SaveLoadContex;
 };
 
 template<class State>
@@ -658,7 +705,6 @@ std::pair<TUnboxedValueVector, THashMap<TString, size_t>> ConvertListOfStrings(c
 }
 
 } //namespace NMatchRecognize
-
 
 
 IComputationNode* WrapMatchRecognizeCore(TCallable& callable, const TComputationNodeFactoryContext& ctx) {

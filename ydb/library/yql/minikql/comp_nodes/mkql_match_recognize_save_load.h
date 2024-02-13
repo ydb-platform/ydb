@@ -7,7 +7,7 @@
 
 namespace NKikimr::NMiniKQL::NMatchRecognize {
 
-struct TSaveLoadContext {
+struct TSerializerContext {
 
     TComputationContext&    Ctx;
     TType*                  StateType;
@@ -25,7 +25,7 @@ private:
     };
 
 public:
-    TOutputSerializer(const TSaveLoadContext& context)
+    TOutputSerializer(const TSerializerContext& context)
         : Context(context)
     {} 
 
@@ -91,8 +91,8 @@ public:
     }
 
 private:
+    const TSerializerContext& Context;
     TString Buf;
-    const TSaveLoadContext& Context;
     mutable std::map<std::uintptr_t, std::uintptr_t> Cache;
 };
 
@@ -104,7 +104,7 @@ private:
     };
 
 public:
-    TInputSerializer(TSaveLoadContext& context, const NUdf::TStringRef& state)
+    TInputSerializer(TSerializerContext& context, const NUdf::TStringRef& state)
         : Context(context)
         , Buf(state.Data(), state.Size())
     {}
@@ -168,7 +168,6 @@ public:
         MKQL_ENSURE(it != Cache.end(), "Internal error");
         auto* cachePtr = static_cast<Type*>(it->second);
         ptr = TIntrusivePtr<Type>(cachePtr);
-        auto refCount = ptr.RefCount();
     }
 
     template<class Type1, class Type2>
@@ -180,8 +179,8 @@ public:
     template<class Type, class Allocator>
     void Read(std::vector<Type, Allocator>& value) {
         using TVector = std::vector<Type, Allocator>;
+        auto size = Read<typename TVector::size_type>();
         //auto size = Read<TVector::size_type>();
-        auto size = Read<size_t>();
         value.clear();
         value.resize(size);
         for (size_t i = 0; i < size; ++i) {
@@ -196,11 +195,12 @@ public:
 
     bool Empty()
     {
-        return Buf.size() == 0;
+        return Buf.empty();
     }
+
 private:
+    TSerializerContext& Context;
     TStringBuf Buf;
-    TSaveLoadContext& Context;
     mutable std::map<std::uintptr_t, void *> Cache;
 };
 

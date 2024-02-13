@@ -12,7 +12,6 @@ import ydb.tests.library.common.yatest_common as yatest_common
 from ydb.tests.tools.fq_runner.kikimr_runner import StreamingOverKikimr
 from ydb.tests.tools.fq_runner.kikimr_runner import StreamingOverKikimrConfig
 from ydb.tests.tools.fq_runner.kikimr_runner import TenantConfig
-from ydb.tests.tools.fq_runner.fq_client import FederatedQueryClient
 from ydb.tests.tools.fq_runner.kikimr_utils import yq_v1
 from ydb.tests.tools.datastreams_helpers.test_yds_base import TestYdsBase
 
@@ -86,6 +85,7 @@ class TestRecovery(TestYdsBase):
                 for [s, w, c] in list:
                     logging.debug("Node {}, workers {}, ca {}".format(s, w, c))
                 assert False, "Workers={} and CAs={}, but {} and {} expected".format(wcs, ccs, worker_count, ca_count)
+
     @yq_v1
     def test_recovery(self, kikimr, client, yq_version):
         self.init_topics(f"pq_kikimr_streaming_{yq_version}", partitions_count=2)
@@ -108,7 +108,6 @@ class TestRecovery(TestYdsBase):
             output_topic=self.output_topic,
         )
         client.create_yds_connection("myyds", os.getenv("YDB_DATABASE"), os.getenv("YDB_ENDPOINT"))
-        # client = FederatedQueryClient("my_folder", streaming_over_kikimr=kikimr)
         query_id = client.create_query("simple", sql, type=fq.QueryContent.QueryType.STREAMING).result.query_id
         client.wait_query_status(query_id, fq.QueryMeta.RUNNING)
         self.kikimr.compute_plane.wait_zero_checkpoint(query_id)

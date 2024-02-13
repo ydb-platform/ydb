@@ -61,9 +61,11 @@ namespace NKikimr {
             };
 
             using TTestInputData = std::vector<std::tuple<i64, std::string, ui32, std::string>>;
-            using TTestData = std::vector<std::tuple<ui32, i64, ui32>>;
 
-            THolder<IComputationGraph> BuildGraph(TSetup& setup, const TTestInputData& input) {
+            THolder<IComputationGraph> BuildGraph(
+                TSetup& setup,
+                bool streamingMode,
+                const TTestInputData& input) {
                 TProgramBuilder& pgmBuilder = *setup.PgmBuilder;
 
                 auto structType = pgmBuilder.NewStructType({
@@ -73,8 +75,6 @@ namespace NKikimr {
                     {"part", pgmBuilder.NewDataType(NUdf::TDataType<char*>::Id)}});
 
                 TVector<TRuntimeNode> items;
-                // constexpr ui64 g_Yield = std::numeric_limits<ui64>::max();
-                // items.push_back(pgmBuilder.NewDataLiteral<ui64>(g_Yield));
                 for (size_t i = 0; i < input.size(); ++i)
                 {
                     auto time = pgmBuilder.NewDataLiteral<i64>(std::get<0>(input[i]));
@@ -90,30 +90,18 @@ namespace NKikimr {
                 const auto list = pgmBuilder.NewList(structType, std::move(items));
                 auto inputFlow = pgmBuilder.ToFlow(list);
 
-                i64 delay = -10;
-                i64 ahead = 30;
-                ui32 rowLimit = 20;
-
-                // MEASURES
-                //  LAST(A.dt) as dt_begin
-                // ONE ROW PER MATCH
-                // PATTERN ( A{3, 3} )
-                // DEFINE A as True) 
-
-
-                TVector<TStringBuf> partitionColumns;// =  {TStringBuf("a")};
+                TVector<TStringBuf> partitionColumns;
                 TVector<std::pair<TStringBuf, TProgramBuilder::TBinaryLambda>> getMeasures = {{
                     std::make_pair(
                         TStringBuf("key"),
-                        [&](TRuntimeNode measureInputDataArg, TRuntimeNode matchedVarsArg) {
-                         //   auto run =  pgmBuilder.Take(measureInputDataArg, pgmBuilder.NewDataLiteral<ui64>(0));
+                        [&](TRuntimeNode /*measureInputDataArg*/, TRuntimeNode /*matchedVarsArg*/) {
                             return pgmBuilder.NewDataLiteral<ui32>(56);
                         }
                 )}};
                 TVector<std::pair<TStringBuf, TProgramBuilder::TTernaryLambda>> getDefines = {{
                     std::make_pair(
                         TStringBuf("A"),
-                        [&](TRuntimeNode inputDataArg, TRuntimeNode matchedVarsArg, TRuntimeNode currentRowIndexArg) {
+                        [&](TRuntimeNode /*inputDataArg*/, TRuntimeNode /*matchedVarsArg*/, TRuntimeNode /*currentRowIndexArg*/) {
                             return pgmBuilder.NewDataLiteral<bool>(true);
                         }
                 )}};
@@ -123,13 +111,13 @@ namespace NKikimr {
                     [&](TRuntimeNode item) {
                         return pgmBuilder.Member(item, "part");
                     },
-                    partitionColumns,              // partitionColumns
+                    partitionColumns,
                     getMeasures,
                     {
                         {NYql::NMatchRecognize::TRowPatternFactor{"A", 3, 3, false, false, false}}
                     },
                     getDefines,
-                    true);
+                    streamingMode);
 
                 auto graph = setup.BuildGraph(pgmReturn);
                 return graph;
@@ -138,13 +126,20 @@ namespace NKikimr {
 
         Y_UNIT_TEST_SUITE(TMiniKQLMatchRecognizeSaveLoadTest) {
             void TestWithSaveLoadImpl(
-                const TTestInputData& input,
-                const TTestData& expected)
+                bool streamingMode)
             {
                 TScopedAlloc alloc(__LOCATION__);
                 std::vector<std::tuple<ui32, i64, ui32>> result;
                 TSetup setup1(alloc);
-                auto graph1 = BuildGraph(setup1, input);
+
+                const TTestInputData input = {
+                    // Time; Key; Value; PartitionKey
+                    {1000, "A", 101, "P"},
+                    {1001, "B", 102, "P"},
+                    {1002, "C", 103, "P"},      // <- match end
+                    {1003, "D", 103, "P"}};     // <- not processed
+                    
+                auto graph1 = BuildGraph(setup1,streamingMode, input);
 
                 auto value = graph1->GetValue();
 
@@ -153,11 +148,11 @@ namespace NKikimr {
 
                 TString graphState = graph1->SaveGraphState();
 
-               // graph1.Reset();
+                graph1.Reset();
 
                 TSetup setup2(alloc);
 
-                auto graph2 = BuildGraph(setup2, TTestInputData{{1003, "D", 103, "P"}});
+                auto graph2 = BuildGraph(setup2, streamingMode, TTestInputData{{1003, "D", 103, "P"}});
                 graph2->LoadGraphState(graphState);
 
                 value = graph2->GetValue();
@@ -166,27 +161,14 @@ namespace NKikimr {
                 UNIT_ASSERT_VALUES_EQUAL(56, v);
             }
 
-            const TTestInputData input = {
-                // Time; Key; Value; PartitionKey
-                {1000, "A", 101, "P"},
-                {1001, "B", 102, "P"},
-                {1002, "C", 103, "P"},      // <- match end
-                {1003, "D", 103, "P"}};     // <- not processed
 
-            const std::vector<std::tuple<ui32, i64, ui32>> expected = {
-                // Group; Time; Value
-                {1000, 800, 101},
-                {1000, 800, 102},
-                {1000, 800, 103},
-                {1000, 800, 104},
-                {1000, 800, 105},
-                {3000, 801, 200},
-                {2000, 802, 300}};
-
-            Y_UNIT_TEST(Test1) {
-                TestWithSaveLoadImpl(input, expected);
+            Y_UNIT_TEST(StreamingMode) {
+                TestWithSaveLoadImpl(true);
             }
 
+            Y_UNIT_TEST(NotStreamingMode) {
+                TestWithSaveLoadImpl(false);
+            }
         }
 
     } // namespace NMiniKQL

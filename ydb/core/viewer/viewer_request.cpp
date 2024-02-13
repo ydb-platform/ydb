@@ -6,6 +6,7 @@
 #include "json_tabletinfo.h"
 #include "json_sysinfo.h"
 #include "json_query.h"
+#include "json_render.h"
 
 namespace NKikimr {
 namespace NViewer {
@@ -74,9 +75,11 @@ IActor* CreateViewerRequestHandler(TEvViewer::TEvViewerRequest::TPtr& request) {
             return new TViewerWhiteboardRequest<TEvWhiteboard::TEvSystemStateRequest, TEvWhiteboard::TEvSystemStateResponse>(request);
         case NKikimrViewer::TEvViewerRequest::kQueryRequest:
             return new TJsonQuery(request);
-        case NKikimrViewer::TEvViewerRequest::kReserved14:
+        case NKikimrViewer::TEvViewerRequest::kRenderRequest:
+            return new TJsonRender(request);
         case NKikimrViewer::TEvViewerRequest::kReserved15:
         case NKikimrViewer::TEvViewerRequest::kReserved16:
+        case NKikimrViewer::TEvViewerRequest::kReserved17:
         case NKikimrViewer::TEvViewerRequest::REQUEST_NOT_SET:
             return nullptr;
     }

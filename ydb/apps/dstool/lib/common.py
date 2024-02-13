@@ -111,6 +111,7 @@ class ConnectionParams:
 
         if args.token_file:
             self.token = args.token_file.readline().rstrip('\r\n')
+            args.token_file.close()
         if self.token is None:
             self.token = os.getenv('YDB_TOKEN')
             if self.token is not None:

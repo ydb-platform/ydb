@@ -1,12 +1,7 @@
 GO_LIBRARY()
-
-SRCS(
-    godebug.go
-)
-
-GO_XTEST_SRCS(godebug_test.go)
-
+IF (TRUE)
+    SRCS(
+		godebug.go
+    )
+ENDIF()
 END()
-
-RECURSE(
-)

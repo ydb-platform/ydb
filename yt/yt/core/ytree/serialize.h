@@ -1,7 +1,6 @@
 #pragma once
 
 #include "public.h"
-#include "serialization_traits.h"
 
 #include <yt/yt/core/yson/producer.h>
 
@@ -11,6 +10,8 @@
 #include <yt/yt/core/yson/writer.h>
 
 #include <library/cpp/yt/small_containers/compact_vector.h>
+
+#include <library/cpp/yt/containers/enum_indexed_array.h>
 
 #include <optional>
 
@@ -138,9 +139,9 @@ void Serialize(const std::tuple<T...>& value, NYson::IYsonConsumer* consumer);
 template <template<typename...> class C, class... T, class K = typename C<T...>::key_type>
 void Serialize(const C<T...>& value, NYson::IYsonConsumer* consumer);
 
-// TEnumIndexedVector
+// TEnumIndexedArray
 template <class E, class T, E Min, E Max>
-void Serialize(const TEnumIndexedVector<E, T, Min, Max>& value, NYson::IYsonConsumer* consumer);
+void Serialize(const TEnumIndexedArray<E, T, Min, Max>& value, NYson::IYsonConsumer* consumer);
 
 // Subtypes of google::protobuf::Message
 template <class T>
@@ -151,10 +152,6 @@ void Serialize(
 
 template <class T, class TTag>
 void Serialize(const TStrongTypedef<T, TTag>& value, NYson::IYsonConsumer* consumer);
-
-template <class T>
-    requires CSerializableByTraits<T>
-void Serialize(const T& value, NYson::IYsonConsumer* consumer);
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -241,9 +238,9 @@ void Deserialize(std::tuple<T...>& value, INodePtr node);
 template <template<typename...> class C, class... T, class K = typename C<T...>::key_type>
 void Deserialize(C<T...>& value, INodePtr node);
 
-// TEnumIndexedVector
+// TEnumIndexedArray
 template <class E, class T, E Min, E Max>
-void Deserialize(TEnumIndexedVector<E, T, Min, Max>& vector, INodePtr node);
+void Deserialize(TEnumIndexedArray<E, T, Min, Max>& vector, INodePtr node);
 
 // Subtypes of google::protobuf::Message
 template <class T>
@@ -260,14 +257,6 @@ void Deserialize(
 
 template <class T, class TTag>
 void Deserialize(TStrongTypedef<T, TTag>& value, INodePtr node);
-
-template <class T>
-    requires CSerializableByTraits<T>
-void Deserialize(T& value, INodePtr node);
-
-template <class T>
-    requires CSerializableByTraits<T>
-void Deserialize(T& value, NYson::TYsonPullParserCursor* cursor);
 
 ////////////////////////////////////////////////////////////////////////////////
 

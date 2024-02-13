@@ -803,7 +803,10 @@ private:
             case NUdf::TDataType<NUdf::TJson>::Id:
             case NUdf::TDataType<NUdf::TYson>::Id:
             case NUdf::TDataType<NUdf::TUuid>::Id:
-            case NUdf::TDataType<NUdf::TJsonDocument>::Id: {
+            case NUdf::TDataType<NUdf::TJsonDocument>::Id:
+            case NUdf::TDataType<NUdf::TTzDate>::Id:
+            case NUdf::TDataType<NUdf::TTzDatetime>::Id:
+            case NUdf::TDataType<NUdf::TTzTimestamp>::Id: {
                 CallInst::Create(module.getFunction("SkipVarData"), { buf }, "", Block_);
                 break;
             }

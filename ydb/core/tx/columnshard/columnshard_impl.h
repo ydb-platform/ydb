@@ -8,7 +8,7 @@
 #include "columnshard_private_events.h"
 #include "blob_manager.h"
 #include "tables_manager.h"
-#include "tx_controller.h"
+#include "transactions/tx_controller.h"
 #include "inflight_request_tracker.h"
 #include "counters/columnshard.h"
 #include "resource_subscriber/counters.h"
@@ -25,6 +25,7 @@
 #include <ydb/core/tx/tiering/manager.h>
 #include <ydb/core/tx/time_cast/time_cast.h>
 #include <ydb/core/tx/tx_processing.h>
+#include <ydb/core/tx/locks/locks.h>
 #include <ydb/services/metadata/service.h>
 
 namespace NKikimr::NOlap {
@@ -131,6 +132,10 @@ class TColumnShard
     friend class TOperationsManager;
     friend class TWriteOperation;
 
+    friend class TSchemaTransactionOperator;
+    friend class TLongTxTransactionOperator;
+    friend class TEvWriteTransactionOperator;
+
     class TTxProgressTx;
     class TTxProposeCancel;
     // proto
@@ -202,10 +207,6 @@ class TColumnShard
         TabletCounters->Cumulative()[counter].Increment(num);
     }
 
-    void IncCounter(NColumnShard::EPercentileCounters counter, const TDuration& latency) const {
-        TabletCounters->Percentile()[counter].IncrementFor(latency.MicroSeconds());
-    }
-
     void ActivateTiering(const ui64 pathId, const TString& useTiering, const bool onTabletInit = false);
     void OnTieringModified();
 public:
@@ -215,6 +216,37 @@ public:
         Disk /* "disk" */,
         None /* "none" */
     };
+
+    void IncCounter(NColumnShard::EPercentileCounters counter, const TDuration& latency) const {
+        TabletCounters->Percentile()[counter].IncrementFor(latency.MicroSeconds());
+    }
+
+    void IncCounter(NDataShard::ESimpleCounters counter, ui64 num = 1) const {
+        TabletCounters->Simple()[counter].Add(num);
+    }
+
+    // For syslocks
+    void IncCounter(NDataShard::ECumulativeCounters counter, ui64 num = 1) const {
+        TabletCounters->Cumulative()[counter].Increment(num);
+    }
+
+    void IncCounter(NDataShard::EPercentileCounters counter, ui64 num) const {
+        TabletCounters->Percentile()[counter].IncrementFor(num);
+    }
+
+    void IncCounter(NDataShard::EPercentileCounters counter, const TDuration& latency) const {
+        TabletCounters->Percentile()[counter].IncrementFor(latency.MilliSeconds());
+    }
+
+    inline TRowVersion LastCompleteTxVersion() const {
+        return TRowVersion(LastCompletedTx.GetPlanStep(), LastCompletedTx.GetTxId());
+    }
+
+    ui32 Generation() const { return Executor()->Generation(); }
+
+    bool IsUserTable(const TTableId&) const {
+        return true;
+    }
 
 private:
     void OverloadWriteFail(const EOverloadStatus overloadReason, const NEvWrite::TWriteData& writeData, std::unique_ptr<NActors::IEventBase>&& event, const TActorContext& ctx);
@@ -280,21 +312,6 @@ protected:
 private:
     std::unique_ptr<TTxController> ProgressTxController;
     std::unique_ptr<TOperationsManager> OperationsManager;
-
-    struct TAlterMeta {
-        NKikimrTxColumnShard::TSchemaTxBody Body;
-        THashSet<TActorId> NotifySubscribers;
-
-        bool Validate(const NOlap::ISnapshotSchema::TPtr& schema) const;
-    };
-
-    struct TCommitMeta {
-        THashSet<TWriteId> WriteIds;
-
-        void AddWriteId(TWriteId id) {
-            WriteIds.insert(id);
-        }
-    };
 
     using TSchemaPreset = TSchemaPreset;
     using TTableInfo = TTableInfo;
@@ -371,6 +388,7 @@ private:
     TWriteId LastWriteId = TWriteId{0};
     ui64 LastPlannedStep = 0;
     ui64 LastPlannedTxId = 0;
+    NOlap::TSnapshot LastCompletedTx = NOlap::TSnapshot::Zero();
     ui64 LastExportNo = 0;
 
     ui64 OwnerPathId = 0;
@@ -403,6 +421,7 @@ private:
     std::shared_ptr<NOlap::NResourceBroker::NSubscribe::TSubscriberCounters> SubscribeCounters;
     NOlap::NResourceBroker::NSubscribe::TTaskContext InsertTaskSubscription;
     NOlap::NResourceBroker::NSubscribe::TTaskContext CompactTaskSubscription;
+    NOlap::NResourceBroker::NSubscribe::TTaskContext TTLTaskSubscription;
     const TScanCounters ReadCounters;
     const TScanCounters ScanCounters;
     const TIndexationCounters CompactionCounters = TIndexationCounters("GeneralCompaction");
@@ -414,8 +433,6 @@ private:
 
     bool ProgressTxInFlight = false;
     THashMap<ui64, TInstant> ScanTxInFlight;
-    THashMap<ui64, TAlterMeta> AltersInFlight;
-    THashMap<ui64, TCommitMeta> CommitsInFlight; // key is TxId from propose
     THashMap<TWriteId, TLongTxWriteInfo> LongTxWrites;
     using TPartsForLTXShard = THashMap<ui32, TLongTxWriteInfo*>;
     THashMap<TULID, TPartsForLTXShard> LongTxWritesByUniqueId;
@@ -425,6 +442,7 @@ private:
     TLimits Limits;
     TCompactionLimits CompactionLimits;
     NOlap::TNormalizationController NormalizerController;
+    NDataShard::TSysLocks SysLocks;
 
     void TryRegisterMediatorTimeCast();
     void UnregisterMediatorTimeCast();
@@ -441,8 +459,6 @@ private:
     void AddLongTxWrite(TWriteId writeId, ui64 txId);
     void LoadLongTxWrite(TWriteId writeId, const ui32 writePartId, const NLongTxService::TLongTxId& longTxId);
     bool RemoveLongTxWrite(NIceDb::TNiceDb& db, TWriteId writeId, ui64 txId = 0);
-    bool AbortTx(const ui64 txId, const NKikimrTxColumnShard::ETransactionKind& txKind, NTabletFlatExecutor::TTransactionContext& txc);
-    bool LoadTx(const ui64 txId, const NKikimrTxColumnShard::ETransactionKind& txKind, const TString& txBody);
     void TryAbortWrites(NIceDb::TNiceDb& db, NOlap::TDbWrapper& dbTable, THashSet<TWriteId>&& writesToAbort);
 
     TWriteId BuildNextWriteId(NTabletFlatExecutor::TTransactionContext& txc);

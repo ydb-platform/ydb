@@ -123,10 +123,10 @@ public:
 
         AddHandler(2, &TDqStage::Match, HNDL(RewriteKqpReadTable));
         AddHandler(2, &TDqStage::Match, HNDL(RewriteKqpLookupTable));
+        AddHandler(2, &TKqlUpsertRows::Match, HNDL(RewriteReturningUpsert));
+        AddHandler(2, &TKqlDeleteRows::Match, HNDL(RewriteReturningDelete));
 
-        AddHandler(3, &TKqlUpsertRows::Match, HNDL(RewriteReturningUpsert));
-
-        AddHandler(4, &TKqlReturningList::Match, HNDL(BuildReturning));
+        AddHandler(3, &TKqlReturningList::Match, HNDL(BuildReturning));
 #undef HNDL
 
         SetGlobal(1u);
@@ -142,6 +142,12 @@ protected:
     TMaybeNode<TExprBase> RewriteReturningUpsert(TExprBase node, TExprContext& ctx) {
         TExprBase output = KqpRewriteReturningUpsert(node, ctx, KqpCtx);
         DumpAppliedRule("RewriteReturningUpsert", node.Ptr(), output.Ptr(), ctx);
+        return output;
+    }
+
+    TMaybeNode<TExprBase> RewriteReturningDelete(TExprBase node, TExprContext& ctx) {
+        TExprBase output = KqpRewriteReturningDelete(node, ctx, KqpCtx);
+        DumpAppliedRule("RewriteReturningDelete", node.Ptr(), output.Ptr(), ctx);
         return output;
     }
 

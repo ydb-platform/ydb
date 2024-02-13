@@ -3,7 +3,7 @@
 #include <ydb/library/actors/core/actor.h>
 #include <ydb/library/actors/core/event_local.h>
 #include <ydb/library/actors/core/events.h>
-#include <opentelemetry/proto/trace/v1/trace.pb.h>
+#include <contrib/libs/opentelemetry-proto/opentelemetry/proto/trace/v1/trace.pb.h>
 #include <grpc++/grpc++.h>
 
 namespace NWilson {
@@ -26,9 +26,7 @@ namespace NWilson {
     }
 
     struct WilsonUploaderParams {
-        TString Host;
-        ui16 Port;
-        TString RootCA;
+        TString CollectorUrl;
         TString ServiceName;
         std::unique_ptr<IGrpcSigner> GrpcSigner;
 

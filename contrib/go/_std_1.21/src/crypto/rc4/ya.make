@@ -1,12 +1,7 @@
 GO_LIBRARY()
-
-SRCS(
-    rc4.go
-)
-
-GO_TEST_SRCS(rc4_test.go)
-
+IF (TRUE)
+    SRCS(
+		rc4.go
+    )
+ENDIF()
 END()
-
-RECURSE(
-)

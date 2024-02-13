@@ -319,7 +319,14 @@ protected:
         KAFKA_LOG_D("process message: ApiKey=" << Request->Header.RequestApiKey << ", ExpectedSize=" << Request->ExpectedSize
                                                << ", Size=" << Request->Size);
 
-        Request->Method = EApiKeyNames.find(static_cast<EApiKey>(Request->Header.RequestApiKey))->second;
+        auto apiKeyNameIt = EApiKeyNames.find(static_cast<EApiKey>(Request->Header.RequestApiKey));
+        if (apiKeyNameIt == EApiKeyNames.end()) {
+            KAFKA_LOG_ERROR("Unsupported message: ApiKey=" << Request->Header.RequestApiKey);
+            PassAway();
+            return false;
+        }
+
+        Request->Method = apiKeyNameIt->second;
 
         PendingRequestsQueue.push_back(Request);
         PendingRequests[Request->Header.CorrelationId] = Request;
@@ -606,6 +613,8 @@ protected:
 
                         Step = INFLIGTH_CHECK;
 
+                        [[fallthrough]];
+
                     case INFLIGTH_CHECK:
                         if (!Context->Authenticated() && !PendingRequestsQueue.empty()) {
                             // Allow only one message to be processed at a time for non-authenticated users
@@ -617,6 +626,8 @@ protected:
                         }
                         InflightSize += Request->ExpectedSize;
                         Step = MESSAGE_READ;
+
+                        [[fallthrough]];
 
                     case HEADER_READ:
                         KAFKA_LOG_T("start read header. ExpectedSize=" << Request->ExpectedSize);
@@ -648,6 +659,8 @@ protected:
                         }
 
                         Step = MESSAGE_READ;
+
+                        [[fallthrough]];
 
                     case MESSAGE_READ:
                         KAFKA_LOG_T("start read new message. ExpectedSize=" << Request->ExpectedSize);

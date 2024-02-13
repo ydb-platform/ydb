@@ -1,24 +1,10 @@
 GO_LIBRARY()
-
-BUILD_ONLY_IF(
-    WARNING
-    OS_WINDOWS
-)
-
-IF (OS_WINDOWS)
+IF (OS_WINDOWS AND ARCH_X86_64 AND RACE AND CGO_ENABLED OR OS_WINDOWS AND ARCH_X86_64 AND RACE AND NOT CGO_ENABLED OR OS_WINDOWS AND ARCH_X86_64 AND NOT RACE AND CGO_ENABLED OR OS_WINDOWS AND ARCH_X86_64 AND NOT RACE AND NOT CGO_ENABLED)
     SRCS(
-        key.go
-        syscall.go
-        value.go
-        zsyscall_windows.go
+		key.go
+		syscall.go
+		value.go
+		zsyscall_windows.go
     )
-
-    GO_TEST_SRCS(export_test.go)
-
-    GO_XTEST_SRCS(registry_test.go)
 ENDIF()
-
 END()
-
-RECURSE(
-)

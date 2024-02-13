@@ -59,7 +59,8 @@ namespace NKikimr::NTestShard {
             return;
         }
         if (StallCounter > 500) {
-            if (WritesInFlight.empty() && DeletesInFlight.empty() && ReadsInFlight.empty() && TransitionInFlight.empty()) {
+            if (WritesInFlight.empty() && PatchesInFlight.empty() && DeletesInFlight.empty() && ReadsInFlight.empty() &&
+                    TransitionInFlight.empty()) {
                 StallCounter = 0;
             } else {
                 return;
@@ -70,17 +71,23 @@ namespace NKikimr::NTestShard {
             barrier = Settings.GetValidateAfterBytes();
         }
         if (BytesProcessed > barrier) { // time to perform validation
-            if (WritesInFlight.empty() && DeletesInFlight.empty() && ReadsInFlight.empty() && TransitionInFlight.empty()) {
+            if (WritesInFlight.empty() && PatchesInFlight.empty() && DeletesInFlight.empty() && ReadsInFlight.empty() &&
+                    TransitionInFlight.empty()) {
                 RunValidation(false);
             }
         } else { // resume load
             const TMonotonic now = TActivationContext::Monotonic();
 
             bool canWriteMore = false;
-            if (WritesInFlight.size() < Settings.GetMaxInFlight()) {
+            if (WritesInFlight.size() + PatchesInFlight.size() < Settings.GetMaxInFlight()) {
                 if (NextWriteTimestamp <= now) {
-                    IssueWrite();
-                    if (WritesInFlight.size() < Settings.GetMaxInFlight() || !Settings.GetResetWritePeriodOnFull()) {
+                    if (Settings.HasPatchRequestsFractionPPM() && !ConfirmedKeys.empty() &&
+                            RandomNumber(1'000'000u) < Settings.GetPatchRequestsFractionPPM()) {
+                        IssuePatch();
+                    } else {
+                        IssueWrite();
+                    }
+                    if (WritesInFlight.size() + PatchesInFlight.size() < Settings.GetMaxInFlight() || !Settings.GetResetWritePeriodOnFull()) {
                         NextWriteTimestamp += GenerateRandomInterval(Settings.GetWritePeriods());
                         canWriteMore = NextWriteTimestamp <= now;
                     } else {
@@ -177,6 +184,13 @@ namespace NKikimr::NTestShard {
                 }
                 WritesInFlight.erase(it);
             }
+            if (auto nh = PatchesInFlight.extract(record.GetCookie())) {
+                const TString& key = nh.mapped();
+                const auto it = Keys.find(key);
+                Y_VERIFY_S(it != Keys.end(), "Key# " << key << " not found in Keys dict");
+                STLOG(PRI_WARN, TEST_SHARD, TS27, "patch failed", (TabletId, TabletId), (Key, key));
+                RegisterTransition(*it, ::NTestShard::TStateServer::WRITE_PENDING, ::NTestShard::TStateServer::DELETED);
+            }
             if (const auto it = DeletesInFlight.find(record.GetCookie()); it != DeletesInFlight.end()) {
                 for (const TString& key : it->second.KeysInQuery) {
                     const auto it = Keys.find(key);
@@ -209,10 +223,11 @@ namespace NKikimr::NTestShard {
             };
             STLOG(PRI_INFO, TEST_SHARD, TS04, "TEvKeyValue::TEvResponse", (TabletId, TabletId), (Msg, makeResponse()));
             ProcessWriteResult(record.GetCookie(), record.GetWriteResult());
+            ProcessPatchResult(record.GetCookie(), record.GetPatchResult());
             ProcessDeleteResult(record.GetCookie(), record.GetDeleteRangeResult());
             ProcessReadResult(record.GetCookie(), record.GetReadResult(), *ev->Get());
         }
-        if (WritesInFlight.size() != Settings.GetMaxInFlight() && NextWriteTimestamp == TMonotonic::Max()) {
+        if (WritesInFlight.size() + PatchesInFlight.size() != Settings.GetMaxInFlight() && NextWriteTimestamp == TMonotonic::Max()) {
             NextWriteTimestamp = TMonotonic::Now() + GenerateRandomInterval(Settings.GetWritePeriods());
         }
         Action();

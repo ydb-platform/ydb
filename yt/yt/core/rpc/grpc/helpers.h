@@ -277,8 +277,6 @@ TMessageWithAttachments ByteBufferToMessageWithAttachments(
 TGrpcByteBufferPtr MessageWithAttachmentsToByteBuffer(
     const TMessageWithAttachments& messageWithAttachments);
 
-TSharedRef ExtractMessageFromEnvelopedMessage(const TSharedRef& data);
-
 ////////////////////////////////////////////////////////////////////////////////
 
 TErrorCode StatusCodeToErrorCode(grpc_status_code statusCode);

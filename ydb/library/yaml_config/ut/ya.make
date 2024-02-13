@@ -5,4 +5,8 @@ SRCS(
     yaml_config_ut.cpp
 )
 
+PEERDIR(
+    ydb/library/yaml_config/deprecated
+)
+
 END()

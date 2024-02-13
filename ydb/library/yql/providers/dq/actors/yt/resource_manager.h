@@ -19,6 +19,7 @@ namespace NYql {
         extern const TString OPERATION_SIZE;
         extern const TString YT_COORDINATOR;
         extern const TString YT_BACKEND;
+        extern const TString YT_FORCE_IPV4;
     }
 
     class ICoordinationHelper;
@@ -67,6 +68,8 @@ namespace NYql {
 
         int Capabilities = 0;
         int MaxRetries = -1;
+
+        bool ForceIPv4 = false;
 
         // Pinger
         TString DieOnFileAbsence; // see YQL-14099

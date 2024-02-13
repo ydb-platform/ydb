@@ -1,5 +1,5 @@
 /* Look at first character in UTF-8 string, returning an error code.
-   Copyright (C) 1999-2002, 2006-2007, 2009-2022 Free Software Foundation, Inc.
+   Copyright (C) 1999-2002, 2006-2007, 2009-2024 Free Software Foundation, Inc.
    Written by Bruno Haible <bruno@clisp.org>, 2001.
 
    This file is free software: you can redistribute it and/or modify
@@ -86,13 +86,13 @@ u8_mbtoucr (ucs4_t *puc, const uint8_t *s, size_t n)
               return -2;
             }
         }
-      else if (c < 0xf8)
+      else if (c <= 0xf4)
         {
           if (n >= 2)
             {
               if ((s[1] ^ 0x80) < 0x40
                   && (c >= 0xf1 || s[1] >= 0x90)
-                  && (c < 0xf4 || (c == 0xf4 && s[1] < 0x90)))
+                  && (c < 0xf4 || (/* c == 0xf4 && */ s[1] < 0x90)))
                 {
                   if (n >= 3)
                     {

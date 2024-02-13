@@ -1435,6 +1435,7 @@ private:
             | EYtSettingType::PrimaryMedium
             | EYtSettingType::Expiration
             | EYtSettingType::MonotonicKeys
+            | EYtSettingType::MutationId
             , ctx))
         {
             return TStatus::Error;
@@ -1712,6 +1713,7 @@ private:
             | EYtSettingType::PrimaryMedium
             | EYtSettingType::Expiration
             | EYtSettingType::MonotonicKeys
+            | EYtSettingType::MutationId
             , ctx))
         {
             return TStatus::Error;

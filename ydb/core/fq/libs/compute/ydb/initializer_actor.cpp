@@ -3,6 +3,7 @@
 #include <ydb/core/fq/libs/common/util.h>
 #include <ydb/core/fq/libs/compute/common/metrics.h>
 #include <ydb/core/fq/libs/compute/common/run_actor_params.h>
+#include <ydb/core/fq/libs/compute/ydb/control_plane/compute_database_control_plane_service.h>
 #include <ydb/core/fq/libs/compute/ydb/events/events.h>
 #include <ydb/core/fq/libs/ydb/ydb.h>
 #include <ydb/library/services/services.pb.h>
@@ -73,12 +74,8 @@ public:
     void Start() {
         LOG_I("Start initializer actor. Compute state: " << FederatedQuery::QueryMeta::ComputeStatus_Name(Params.Status));
         if (!Params.RequestStartedAt) {
-            auto pingCounters = Counters.GetCounters(ERequestType::RT_PING);
-            pingCounters->InFly->Inc();
             Become(&TInitializerActor::StateFunc);
-            Fq::Private::PingTaskRequest pingTaskRequest;
-            *pingTaskRequest.mutable_started_at() = google::protobuf::util::TimeUtil::MillisecondsToTimestamp(TInstant::Now().MilliSeconds());
-            Send(Pinger, new TEvents::TEvForwardPingRequest(pingTaskRequest));
+            Send(NFq::ComputeDatabaseControlPlaneServiceActorId(), new TEvYdbCompute::TEvCpuQuotaRequest(Params.Scope.ToString(), Params.Deadline));
         } else {
             LOG_I("Query has been initialized (did nothing)");
             Send(Parent, new TEvYdbCompute::TEvInitializerResponse({}, NYdb::EStatus::SUCCESS));
@@ -87,8 +84,23 @@ public:
     }
 
     STRICT_STFUNC(StateFunc,
+        hFunc(TEvYdbCompute::TEvCpuQuotaResponse, Handle);
         hFunc(TEvents::TEvForwardPingResponse, Handle);
     )
+
+    void Handle(TEvYdbCompute::TEvCpuQuotaResponse::TPtr& ev) {
+        const auto& response = *ev.Get()->Get();
+        if (response.Status == NYdb::EStatus::SUCCESS) {
+            auto pingCounters = Counters.GetCounters(ERequestType::RT_PING);
+            pingCounters->InFly->Inc();
+            Fq::Private::PingTaskRequest pingTaskRequest;
+            *pingTaskRequest.mutable_started_at() = google::protobuf::util::TimeUtil::MillisecondsToTimestamp(TInstant::Now().MilliSeconds());
+            Send(Pinger, new TEvents::TEvForwardPingRequest(pingTaskRequest));
+        } else {
+            Send(Parent, new TEvYdbCompute::TEvInitializerResponse(response.Issues, response.Status));
+            FailedAndPassAway();
+        }
+    }
 
     void Handle(const TEvents::TEvForwardPingResponse::TPtr& ev) {
         auto pingCounters = Counters.GetCounters(ERequestType::RT_PING);

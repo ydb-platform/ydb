@@ -432,6 +432,26 @@ TString TValue::GetDataText() const {
     return TStringBuilder() << "\"<unknown type "  << Type.GetData().GetScheme() << ">\"";
 }
 
+TString TValue::GetPgText() const {
+    Y_ASSERT(Type.GetKind() == NKikimrMiniKQL::ETypeKind::Pg);
+    if (Value.HasNullFlagValue()) {
+        return TString("null");
+    }
+    Y_ENSURE(Value.HasText());
+    return Value.GetText();
+}
+
+TString TValue::GetSimpleValueText() const {
+    if (Type.GetKind() == NKikimrMiniKQL::ETypeKind::Pg) {
+        return GetPgText();
+    }
+    if (Type.GetKind() == NKikimrMiniKQL::ETypeKind::Data) {
+        return GetDataText();
+    }
+    Y_ENSURE(false, TStringBuilder() << "unexpected NKikimrMiniKQL::ETypeKind: " << ETypeKind_Name(GetType().GetKind()));
+}
+
+
 template <> TString TValue::GetTypeText<TFormatCxx>(const TFormatCxx& format) const {
     switch(Type.GetKind()) {
     case NKikimrMiniKQL::ETypeKind::Void:

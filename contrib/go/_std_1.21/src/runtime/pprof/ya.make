@@ -1,52 +1,31 @@
 GO_LIBRARY()
-
-SRCS(
-    elf.go
-    label.go
-    map.go
-    pe.go
-    pprof.go
-    proto.go
-    protobuf.go
-    protomem.go
-    runtime.go
-)
-
-GO_TEST_SRCS(
-    label_test.go
-    mprof_test.go
-    pprof_test.go
-    proto_test.go
-    protomem_test.go
-    runtime_test.go
-)
-
-IF (OS_LINUX)
+IF (OS_DARWIN AND ARCH_ARM64 AND RACE AND CGO_ENABLED OR OS_DARWIN AND ARCH_ARM64 AND RACE AND NOT CGO_ENABLED OR OS_DARWIN AND ARCH_ARM64 AND NOT RACE AND CGO_ENABLED OR OS_DARWIN AND ARCH_ARM64 AND NOT RACE AND NOT CGO_ENABLED OR OS_DARWIN AND ARCH_X86_64 AND RACE AND CGO_ENABLED OR OS_DARWIN AND ARCH_X86_64 AND RACE AND NOT CGO_ENABLED OR OS_DARWIN AND ARCH_X86_64 AND NOT RACE AND CGO_ENABLED OR OS_DARWIN AND ARCH_X86_64 AND NOT RACE AND NOT CGO_ENABLED OR OS_LINUX AND ARCH_AARCH64 AND RACE AND CGO_ENABLED OR OS_LINUX AND ARCH_AARCH64 AND RACE AND NOT CGO_ENABLED OR OS_LINUX AND ARCH_AARCH64 AND NOT RACE AND CGO_ENABLED OR OS_LINUX AND ARCH_AARCH64 AND NOT RACE AND NOT CGO_ENABLED OR OS_LINUX AND ARCH_X86_64 AND RACE AND CGO_ENABLED OR OS_LINUX AND ARCH_X86_64 AND RACE AND NOT CGO_ENABLED OR OS_LINUX AND ARCH_X86_64 AND NOT RACE AND CGO_ENABLED OR OS_LINUX AND ARCH_X86_64 AND NOT RACE AND NOT CGO_ENABLED)
     SRCS(
-        pprof_rusage.go
-        proto_other.go
+		elf.go
+		label.go
+		map.go
+		pe.go
+		pprof.go
+		pprof_rusage.go
+		proto.go
+		proto_other.go
+		protobuf.go
+		protomem.go
+		runtime.go
     )
-
-    GO_TEST_SRCS(rusage_test.go)
-ENDIF()
-
-IF (OS_DARWIN)
+ELSEIF (OS_WINDOWS AND ARCH_X86_64 AND RACE AND CGO_ENABLED OR OS_WINDOWS AND ARCH_X86_64 AND RACE AND NOT CGO_ENABLED OR OS_WINDOWS AND ARCH_X86_64 AND NOT RACE AND CGO_ENABLED OR OS_WINDOWS AND ARCH_X86_64 AND NOT RACE AND NOT CGO_ENABLED)
     SRCS(
-        pprof_rusage.go
-        proto_other.go
-    )
-
-    GO_TEST_SRCS(rusage_test.go)
-ENDIF()
-
-IF (OS_WINDOWS)
-    SRCS(
-        pprof_windows.go
-        proto_windows.go
+		elf.go
+		label.go
+		map.go
+		pe.go
+		pprof.go
+		pprof_windows.go
+		proto.go
+		proto_windows.go
+		protobuf.go
+		protomem.go
+		runtime.go
     )
 ENDIF()
-
 END()
-
-RECURSE(
-)

@@ -1,14 +1,7 @@
 GO_LIBRARY()
-
-SRCS(
-    message.go
-)
-
-GO_TEST_SRCS(message_test.go)
-
-GO_XTEST_SRCS(example_test.go)
-
+IF (TRUE)
+    SRCS(
+		message.go
+    )
+ENDIF()
 END()
-
-RECURSE(
-)

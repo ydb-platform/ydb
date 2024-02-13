@@ -40,6 +40,7 @@ class TJsonNodes : public TViewerPipeClient<TJsonNodes> {
     TJsonSettings JsonSettings;
     ui32 Timeout = 0;
     TString FilterTenant;
+    TSubDomainKey FilterSubDomainKey;
     TString FilterPath;
     TString FilterStoragePool;
     std::unordered_set<TNodeId> FilterNodeIds;
@@ -405,6 +406,11 @@ public:
                 if (HiveId == 0) {
                     HiveId = entry.DomainInfo->Params.GetHive();
                 }
+                if (!FilterSubDomainKey) {
+                    const auto ownerId = entry.DomainInfo->DomainKey.OwnerId;
+                    const auto localPathId = entry.DomainInfo->DomainKey.LocalPathId;
+                    FilterSubDomainKey = TSubDomainKey(ownerId, localPathId);
+                }
                 if (entry.DomainInfo->ResourcesDomainKey && entry.DomainInfo->DomainKey != entry.DomainInfo->ResourcesDomainKey) {
                     TPathId resourceDomainKey(entry.DomainInfo->ResourcesDomainKey);
                     BLOG_TRACE("Requesting navigate for resource domain " << resourceDomainKey);
@@ -461,6 +467,10 @@ public:
     void Handle(TEvHive::TEvResponseHiveNodeStats::TPtr& ev) {
         BLOG_TRACE("ResponseHiveNodeStats()");
         for (const NKikimrHive::THiveNodeStats& nodeStats : ev->Get()->Record.GetNodeStats()) {
+            const TSubDomainKey nodeSubDomainKey = TSubDomainKey(nodeStats.GetNodeDomain());
+            if (FilterSubDomainKey && FilterSubDomainKey != nodeSubDomainKey) {
+                continue;
+            }
             ui32 nodeId = nodeStats.GetNodeId();
             auto& tabletInfo(TabletInfo[nodeId]);
             for (const NKikimrHive::THiveDomainStatsStateCount& stateStats : nodeStats.GetStateStats()) {
@@ -514,14 +524,18 @@ public:
     }
 
     void Handle(TEvStateStorage::TEvBoardInfo::TPtr& ev) {
-        BLOG_TRACE("Received TEvBoardInfo");
         if (ev->Get()->Status == TEvStateStorage::TEvBoardInfo::EStatus::Ok) {
+            BLOG_TRACE("Received TEvBoardInfo");
             for (const auto& [actorId, infoEntry] : ev->Get()->InfoEntries) {
                 auto nodeId(actorId.NodeId());
                 BLOG_TRACE("BoardInfo filter node by " << nodeId);
                 FilterNodeIds.insert(nodeId);
             }
+        } else {
+            BLOG_TRACE("Error receiving TEvBoardInfo response");
+            FilterNodeIds = { 0 };
         }
+
         if (--RequestsBeforeNodeList == 0) {
             ProcessNodeIds();
         }

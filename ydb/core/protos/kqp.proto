@@ -420,12 +420,16 @@ message TEvExecuterStreamData {
     optional Ydb.ResultSet ResultSet = 1;
     optional uint64 SeqNo = 2;
     optional uint32 QueryResultIndex = 3;
+    optional uint32 ChannelId = 4;
+    optional NActorsProto.TActorId ChannelActorId = 5;
 };
 
 message TEvExecuterStreamDataAck {
     optional uint64 SeqNo = 1;
     optional int64 FreeSpace = 2;
     optional bool Enough = 3 [default = false];
+    optional uint32 ChannelId = 4;
+    optional NActorsProto.TActorId ChannelActorId = 5;
 };
 
 message TEvExecuterStreamProfile {
@@ -434,7 +438,7 @@ message TEvExecuterStreamProfile {
 };
 
 // 1. Executer fills progress stats from it's own execution
-// 2. Session adds stats from early finished executions and builds complete plan 
+// 2. Session adds stats from early finished executions and builds complete plan
 message TEvExecuterProgress {
     optional NActorsProto.TActorId ExecuterActorId = 1;
     optional string QueryPlan = 2;
@@ -642,6 +646,14 @@ message TEvRemoteCostData {
 }
 
 message TEvKillScanTablet {
+}
+
+message TKqpTableSinkSettings {
+    optional NKqpProto.TKqpPhyTableId Table = 3;
+    repeated TKqpColumnMetadataProto KeyColumns = 4;
+    repeated TKqpColumnMetadataProto Columns = 5;
+    optional uint64 LockTxId = 6;
+    optional uint64 LockNodeId = 7;
 }
 
 message TKqpStreamLookupSettings {

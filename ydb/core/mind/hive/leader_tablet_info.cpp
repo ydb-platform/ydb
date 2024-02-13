@@ -163,6 +163,7 @@ TFollowerGroup& TLeaderTabletInfo::AddFollowerGroup(TFollowerGroupId followerGro
     }
     followerGroup.NodeFilter.AllowedDomains = NodeFilter.AllowedDomains;
     followerGroup.NodeFilter.ObjectDomain = NodeFilter.ObjectDomain;
+    followerGroup.NodeFilter.TabletType = Type;
     return followerGroup;
 }
 
@@ -366,5 +367,10 @@ void TLeaderTabletInfo::ActualizeTabletStatistics(TInstant now) {
     }
 }
 
+void TLeaderTabletInfo::SetType(TTabletTypes::EType type) {
+    Type = type;
+    NodeFilter.TabletType = type;
+    Hive.SeenTabletTypes.insert(type);
+}
 }
 }

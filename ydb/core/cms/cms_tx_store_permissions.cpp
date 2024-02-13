@@ -82,18 +82,21 @@ public:
 
             if (Scheduled->Request.ActionsSize() || Scheduled->Request.GetEvictVDisks()) {
                 ui64 order = Scheduled->Order;
+                i32 priority = Scheduled->Priority;
                 TString requestStr;
                 google::protobuf::TextFormat::PrintToString(Scheduled->Request, &requestStr);
 
                 auto row = db.Table<Schema::Request>().Key(id);
                 row.Update(NIceDb::TUpdate<Schema::Request::Owner>(owner),
                            NIceDb::TUpdate<Schema::Request::Order>(order),
+                           NIceDb::TUpdate<Schema::Request::Priority>(priority),
                            NIceDb::TUpdate<Schema::Request::Content>(requestStr));
 
                 Self->AuditLog(ctx, TStringBuilder() << "Store request"
                     << ": id# " << id
                     << ", owner# " << owner
                     << ", order# " << order
+                    << ", priority# " << priority
                     << ", body# " << requestStr);
 
                 if (Scheduled->Request.GetEvictVDisks()) {

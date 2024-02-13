@@ -70,13 +70,13 @@ void FillDelete(const TKeyPrefix& key, NKikimrClient::TKeyValueRequest::TCmdDele
     range.SetIncludeTo(true);
 }
 
-void FillDelete(ui32 partition, const TString& sourceId, TKeyPrefix::EMark mark, NKikimrClient::TKeyValueRequest::TCmdDeleteRange& cmd) {
+void FillDelete(const TPartitionId& partition, const TString& sourceId, TKeyPrefix::EMark mark, NKikimrClient::TKeyValueRequest::TCmdDeleteRange& cmd) {
     TKeyPrefix key(TKeyPrefix::TypeInfo, partition, mark);
     key.Append(sourceId.c_str(), sourceId.size());
     FillDelete(key, cmd);
 }
 
-void FillDelete(ui32 partition, const TString& sourceId, NKikimrClient::TKeyValueRequest::TCmdDeleteRange& cmd) {
+void FillDelete(const TPartitionId& partition, const TString& sourceId, NKikimrClient::TKeyValueRequest::TCmdDeleteRange& cmd) {
     FillDelete(partition, sourceId, TKeyPrefix::MarkProtoSourceId, cmd);
 }
 
@@ -103,6 +103,7 @@ void THeartbeatProcessor::ForgetSourceId(const TString& sourceId) {
 
 TSourceIdInfo::TSourceIdInfo(ui64 seqNo, ui64 offset, TInstant createTs)
     : SeqNo(seqNo)
+    , MinSeqNo(seqNo)
     , Offset(offset)
     , WriteTimestamp(createTs)
     , CreateTimestamp(createTs)
@@ -111,6 +112,7 @@ TSourceIdInfo::TSourceIdInfo(ui64 seqNo, ui64 offset, TInstant createTs)
 
 TSourceIdInfo::TSourceIdInfo(ui64 seqNo, ui64 offset, TInstant createTs, THeartbeat&& heartbeat)
     : SeqNo(seqNo)
+    , MinSeqNo(seqNo)
     , Offset(offset)
     , WriteTimestamp(createTs)
     , CreateTimestamp(createTs)
@@ -120,6 +122,7 @@ TSourceIdInfo::TSourceIdInfo(ui64 seqNo, ui64 offset, TInstant createTs, THeartb
 
 TSourceIdInfo::TSourceIdInfo(ui64 seqNo, ui64 offset, TInstant createTs, TMaybe<TPartitionKeyRange>&& keyRange, bool isInSplit)
     : SeqNo(seqNo)
+    , MinSeqNo(seqNo)
     , Offset(offset)
     , CreateTimestamp(createTs)
     , Explicit(true)
@@ -133,6 +136,9 @@ TSourceIdInfo::TSourceIdInfo(ui64 seqNo, ui64 offset, TInstant createTs, TMaybe<
 TSourceIdInfo TSourceIdInfo::Updated(ui64 seqNo, ui64 offset, TInstant writeTs) const {
     auto copy = *this;
     copy.SeqNo = seqNo;
+    if (copy.MinSeqNo == 0) {
+        copy.MinSeqNo = seqNo;
+    }
     copy.Offset = offset;
     copy.WriteTimestamp = writeTs;
 
@@ -178,6 +184,7 @@ void TSourceIdInfo::Serialize(TBuffer& data) const {
 TSourceIdInfo TSourceIdInfo::Parse(const NKikimrPQ::TMessageGroupInfo& proto) {
     TSourceIdInfo result;
     result.SeqNo = proto.GetSeqNo();
+    result.MinSeqNo = proto.GetMinSeqNo();
     result.Offset = proto.GetOffset();
     result.WriteTimestamp = TInstant::FromValue(proto.GetWriteTimestamp());
     result.CreateTimestamp = TInstant::FromValue(proto.GetCreateTimestamp());
@@ -197,6 +204,7 @@ TSourceIdInfo TSourceIdInfo::Parse(const NKikimrPQ::TMessageGroupInfo& proto) {
 
 void TSourceIdInfo::Serialize(NKikimrPQ::TMessageGroupInfo& proto) const {
     proto.SetSeqNo(SeqNo);
+    proto.SetMinSeqNo(MinSeqNo);
     proto.SetOffset(Offset);
     proto.SetWriteTimestamp(WriteTimestamp.GetValue());
     proto.SetCreateTimestamp(CreateTimestamp.GetValue());
@@ -263,7 +271,7 @@ void TSourceIdStorage::DeregisterSourceId(const TString& sourceId) {
     }
 }
 
-bool TSourceIdStorage::DropOldSourceIds(TEvKeyValue::TEvRequest* request, TInstant now, ui64 startOffset, ui32 partition, const NKikimrPQ::TPartitionConfig& config) {
+bool TSourceIdStorage::DropOldSourceIds(TEvKeyValue::TEvRequest* request, TInstant now, ui64 startOffset, const TPartitionId& partition, const NKikimrPQ::TPartitionConfig& config) {
     TVector<std::pair<ui64, TString>> toDelOffsets;
 
     ui64 maxDeleteSourceIds = 0;
@@ -478,7 +486,7 @@ TKeyPrefix::EMark TSourceIdWriter::FormatToMark(ESourceIdFormat format) {
     }
 }
 
-void TSourceIdWriter::FillRequest(TEvKeyValue::TEvRequest* request, ui32 partition) {
+void TSourceIdWriter::FillRequest(TEvKeyValue::TEvRequest* request, const TPartitionId& partition) {
     TKeyPrefix key(TKeyPrefix::TypeInfo, partition, FormatToMark(Format));
     TBuffer data;
 

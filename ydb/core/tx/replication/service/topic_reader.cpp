@@ -1,3 +1,4 @@
+#include "logging.h"
 #include "topic_reader.h"
 #include "worker.h"
 
@@ -10,8 +11,22 @@ namespace NKikimr::NReplication::NService {
 class TRemoteTopicReader: public TActor<TRemoteTopicReader> {
     using TReadSessionSettings = NYdb::NTopic::TReadSessionSettings;
 
+    TStringBuf GetLogPrefix() const {
+        if (!LogPrefix) {
+            LogPrefix = TStringBuilder()
+                << "[RemoteTopicReader]"
+                << "[" << Settings.Topics_[0].Path_ << "]"
+                << "[" << Settings.Topics_[0].PartitionIds_[0] << "]"
+                << SelfId() << " ";
+        }
+
+        return LogPrefix.GetRef();
+    }
+
     void Handle(TEvWorker::TEvHandshake::TPtr& ev) {
         Worker = ev->Sender;
+        LOG_D("Handshake"
+            << ": worker# " << Worker);
 
         Y_ABORT_UNLESS(!ReadSession);
         Send(YdbProxy, new TEvYdbProxy::TEvCreateTopicReaderRequest(Settings));
@@ -19,16 +34,23 @@ class TRemoteTopicReader: public TActor<TRemoteTopicReader> {
 
     void Handle(TEvYdbProxy::TEvCreateTopicReaderResponse::TPtr& ev) {
         ReadSession = ev->Get()->Result;
+        LOG_D("Create read session"
+            << ": session# " << ReadSession);
 
-        Y_ABORT_UNLESS(!Worker);
+        Y_ABORT_UNLESS(Worker);
         Send(Worker, new TEvWorker::TEvHandshake());
     }
 
-    void Handle(TEvWorker::TEvPoll::TPtr&) {
+    void Handle(TEvWorker::TEvPoll::TPtr& ev) {
+        LOG_D("Handle " << ev->Get()->ToString());
+
         Y_ABORT_UNLESS(ReadSession);
         Send(ReadSession, new TEvYdbProxy::TEvReadTopicRequest());
 
         if (CommitOffset) {
+            LOG_D("Commit offset"
+                << ": offset# " << CommitOffset);
+
             Send(YdbProxy, new TEvYdbProxy::TEvCommitOffsetRequest(
                 Settings.Topics_[0].Path_,
                 Settings.Topics_[0].PartitionIds_[0],
@@ -39,6 +61,8 @@ class TRemoteTopicReader: public TActor<TRemoteTopicReader> {
     }
 
     void Handle(TEvYdbProxy::TEvReadTopicResponse::TPtr& ev) {
+        LOG_D("Handle " << ev->Get()->ToString());
+
         auto& result = ev->Get()->Result;
         TVector<TEvWorker::TEvData::TRecord> records(Reserve(result.Messages.size()));
 
@@ -53,12 +77,16 @@ class TRemoteTopicReader: public TActor<TRemoteTopicReader> {
     }
 
     void Handle(TEvYdbProxy::TEvCommitOffsetResponse::TPtr& ev) {
+        LOG_D("Handle " << ev->Get()->ToString());
+
         if (!ev->Get()->Result.IsSuccess()) {
+            LOG_N("Unsuccessful commit offset");
             Leave();
         }
     }
 
     void Leave() {
+        LOG_I("Leave");
         Send(Worker, new TEvents::TEvGone());
         PassAway();
     }
@@ -96,6 +124,7 @@ public:
 private:
     const TActorId YdbProxy;
     const TReadSessionSettings Settings;
+    mutable TMaybe<TString> LogPrefix;
 
     TActorId Worker;
     TActorId ReadSession;

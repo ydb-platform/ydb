@@ -70,7 +70,7 @@
                                                                 "PlanNodeType": "Connection",
                                                                 "Plans": [
                                                                     {
-                                                                        "Node Type": "FullJoin (JoinDict)-ConstantExpr",
+                                                                        "Node Type": "FullJoin (JoinDict)",
                                                                         "Operators": [
                                                                             {
                                                                                 "Inputs": [
@@ -78,15 +78,10 @@
                                                                                         "ExternalPlanNodeId": 4
                                                                                     },
                                                                                     {
-                                                                                        "InternalOperatorId": 1
+                                                                                        "Other": "ConstantExpression"
                                                                                     }
                                                                                 ],
                                                                                 "Name": "FullJoin (JoinDict)"
-                                                                            },
-                                                                            {
-                                                                                "Inputs": [],
-                                                                                "Iterator": "[{id: 1}]",
-                                                                                "Name": "Iterator"
                                                                             }
                                                                         ],
                                                                         "PlanNodeId": 5,

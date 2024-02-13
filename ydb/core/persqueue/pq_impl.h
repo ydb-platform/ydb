@@ -165,8 +165,8 @@ class TPersQueue : public NKeyValue::TKeyValueFlat {
 
     ui64 GetAllowedStep() const;
 
-    void Handle(TEvPQ::TEvSourceIdRequest::TPtr& ev, const TActorContext& ctx);
-    void ProcessSourceIdRequests(ui32 partitionId);
+    void Handle(TEvPQ::TEvCheckPartitionStatusRequest::TPtr& ev, const TActorContext& ctx);
+    void ProcessCheckPartitionStatusRequests(const TPartitionId& partitionId);
 
     TString LogPrefix() const;
 
@@ -187,7 +187,7 @@ private:
     bool ConfigInited;
     ui32 PartitionsInited;
     bool InitCompleted = false;
-    THashMap<ui32, TPartitionInfo> Partitions;
+    THashMap<TPartitionId, TPartitionInfo> Partitions;
     THashMap<TString, TIntrusivePtr<TEvTabletCounters::TInFlightCookie>> CounterEventsInflight;
 
     TActorId CacheActor;
@@ -335,7 +335,7 @@ private:
     void SendEvProposePartitionConfig(const TActorContext& ctx,
                                       TDistributedTransaction& tx);
 
-    TPartition* CreatePartitionActor(ui32 partitionId,
+    TPartition* CreatePartitionActor(const TPartitionId& partitionId,
                                      const NPersQueue::TTopicConverterPtr topicConverter,
                                      const NKikimrPQ::TPQTabletConfig& config,
                                      bool newPartition,
@@ -404,8 +404,10 @@ private:
     void DestroySession(TPipeInfo& pipeInfo);
     bool UseMediatorTimeCast = true;
 
-    THashMap<ui32, TVector<TEvPQ::TEvSourceIdRequest::TPtr>> SourceIdRequests;
+    THashMap<ui32, TVector<TEvPQ::TEvCheckPartitionStatusRequest::TPtr>> CheckPartitionStatusRequests;
     TMaybe<ui64> TabletGeneration;
+
+    TPartitionId MakePartitionId(ui32 originalPartitionId, TMaybe<ui64> writeId) const;
 };
 
 

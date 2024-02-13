@@ -68,9 +68,9 @@ namespace NYql::NDqs {
         bool BuildReadStage(const NNodes::TDqPhyStage& stage, bool dqSource, bool canFallback);
         void BuildConnections(const NNodes::TDqPhyStage& stage);
         void BuildAllPrograms();
-        void FillChannelDesc(NDqProto::TChannel& channelDesc, const NDq::TChannel& channel);
+        void FillChannelDesc(NDqProto::TChannel& channelDesc, const NDq::TChannel& channel, bool enableSpilling);
         void FillInputDesc(NDqProto::TTaskInput& inputDesc, const TTaskInput& input);
-        void FillOutputDesc(NDqProto::TTaskOutput& outputDesc, const TTaskOutput& output);
+        void FillOutputDesc(NDqProto::TTaskOutput& outputDesc, const TTaskOutput& output, bool enableSpilling);
 
         void GatherPhyMapping(THashMap<std::tuple<TString, TString>, TString>& clusters, THashMap<std::tuple<TString, TString, TString>, TString>& tables);
         void BuildCheckpointingAndWatermarksMode(bool enableCheckpoints, bool enableWatermarks);

@@ -536,6 +536,8 @@ NSchemeShardUT_Private::TTestEnv::TTestEnv(TTestActorRuntime& runtime, const TTe
     app.SetEnableChangefeedDebeziumJsonFormat(opts.EnableChangefeedDebeziumJsonFormat_);
     app.SetEnableTablePgTypes(opts.EnableTablePgTypes_);
     app.SetEnableServerlessExclusiveDynamicNodes(opts.EnableServerlessExclusiveDynamicNodes_);
+    app.SetEnableAddColumsWithDefaults(opts.EnableAddColumsWithDefaults_);
+    app.SetEnableReplaceIfExistsForExternalEntities(opts.EnableReplaceIfExistsForExternalEntities_);
 
     app.ColumnShardConfig.SetDisabledOnSchemeShard(false);
 
@@ -544,6 +546,30 @@ NSchemeShardUT_Private::TTestEnv::TTestEnv(TTestActorRuntime& runtime, const TTe
         app.SchemeShardConfig.SetStatsBatchTimeoutMs(0);
     }
 
+    // graph settings
+    if (opts.GraphBackendType_) {
+        app.GraphConfig.SetBackendType(opts.GraphBackendType_.value());
+    }
+    app.GraphConfig.SetAggregateCheckPeriodSeconds(5); // 5 seconds
+    {
+        auto& set = *app.GraphConfig.AddAggregationSettings();
+        set.SetPeriodToStartSeconds(60); // 1 minute to clear
+        set.SetMinimumStepSeconds(10); // 10 seconds
+    }
+    {
+        auto& set = *app.GraphConfig.AddAggregationSettings();
+        set.SetPeriodToStartSeconds(40); // 40 seconds
+        set.SetSampleSizeSeconds(10); // 10 seconds
+        set.SetMinimumStepSeconds(10); // 10 seconds
+    }
+    {
+        auto& set = *app.GraphConfig.AddAggregationSettings();
+        set.SetPeriodToStartSeconds(5); // 4 seconds
+        set.SetSampleSizeSeconds(5); // 5 seconds
+        set.SetMinimumStepSeconds(5); // 5 seconds
+    }
+    //
+                                                        
     for (const auto& sid : opts.SystemBackupSIDs_) {
         app.AddSystemBackupSID(sid);
     }
@@ -825,8 +851,8 @@ std::function<NActors::IActor *(const NActors::TActorId &, NKikimr::TTabletStora
 }
 
 void NSchemeShardUT_Private::TTestEnv::TestServerlessComputeResourcesModeInHive(TTestActorRuntime& runtime,
-    const TString& path, NKikimrSubDomains::EServerlessComputeResourcesMode serverlessComputeResourcesMode, ui64 hive) 
-{   
+    const TString& path, NKikimrSubDomains::EServerlessComputeResourcesMode serverlessComputeResourcesMode, ui64 hive)
+{
     auto record = DescribePath(runtime, path);
     const auto& pathDescr = record.GetPathDescription();
     const TSubDomainKey subdomainKey(pathDescr.GetDomainDescription().GetDomainKey());

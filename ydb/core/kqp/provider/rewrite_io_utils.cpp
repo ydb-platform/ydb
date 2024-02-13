@@ -125,6 +125,8 @@ TExprNode::TPtr RewriteReadFromView(
     const TString& query,
     const TString& cluster
 ) {
+    YQL_PROFILE_FUNC(DEBUG);
+
     const TCoRead readNode(node->ChildPtr(0));
     const auto worldBeforeThisRead = readNode.World().Ptr();
 

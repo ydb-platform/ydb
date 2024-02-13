@@ -4,6 +4,9 @@
 #include <ydb/library/actors/core/hfunc.h>
 #include <ydb/library/services/services.pb.h>
 
+#include <util/string/builder.h>
+#include <util/string/join.h>
+
 namespace NKikimr::NReplication::NService {
 
 TEvWorker::TEvData::TRecord::TRecord(ui64 offset, const TString& data)
@@ -21,6 +24,19 @@ TEvWorker::TEvData::TRecord::TRecord(ui64 offset, TString&& data)
 TEvWorker::TEvData::TEvData(TVector<TRecord>&& records)
     : Records(std::move(records))
 {
+}
+
+void TEvWorker::TEvData::TRecord::Out(IOutputStream& out) const {
+    out << "{"
+        << " Offset: " << Offset
+        << " Data: " << Data
+    << " }";
+}
+
+TString TEvWorker::TEvData::ToString() const {
+    return TStringBuilder() << ToStringHeader() << " {"
+        << " Records [" << JoinSeq(",", Records) << "]"
+    << " }";
 }
 
 class TWorker: public TActorBootstrapped<TWorker> {

@@ -4,6 +4,7 @@
 #include <ydb/library/dynumber/dynumber.h>
 #include <ydb/library/uuid/uuid.h>
 
+#include <ydb/library/yql/parser/pg_wrapper/interface/type_desc.h>
 #include <ydb/library/yql/providers/common/codec/yql_codec_results.h>
 #include <ydb/library/yql/public/decimal/yql_decimal.h>
 
@@ -112,6 +113,24 @@ void WriteValueToYson(const TStringStream& stream, NCommon::TYsonResultWriter& w
                 writer.OnStringScalar(value.GetText());
             }
 
+            return;
+        }
+
+        case NKikimrMiniKQL::ETypeKind::Pg:
+        {
+            if (value.GetValueValueCase() == NKikimrMiniKQL::TValue::kNullFlagValue) {
+                writer.OnEntity();
+            } else if (value.HasBytes()) {
+                auto convert = NKikimr::NPg::PgNativeTextFromNativeBinary(
+                    value.GetBytes(), NKikimr::NPg::TypeDescFromPgTypeId(type.GetPg().Getoid())
+                );
+                YQL_ENSURE(!convert.Error, "Failed to convert pg value to text: " << *convert.Error);
+                writer.OnStringScalar(convert.Str);
+            } else if (value.HasText()) {
+                writer.OnStringScalar(value.GetText());
+            } else {
+                YQL_ENSURE(false, "malformed pg value");
+            }
             return;
         }
 
@@ -857,7 +876,6 @@ const TTypeAnnotationNode* ParseTypeFromYdbType(const Ydb::Type& type, TExprCont
             if (!type.pg_type().type_name().empty()) {
                 const auto& typeName = type.pg_type().type_name();
                 auto* typeDesc = NKikimr::NPg::TypeDescFromPgTypeName(typeName);
-                NKikimr::NPg::PgTypeIdFromTypeDesc(typeDesc);
                 return ctx.MakeType<TPgExprType>(NKikimr::NPg::PgTypeIdFromTypeDesc(typeDesc));
             }
             return ctx.MakeType<TPgExprType>(type.pg_type().Getoid());

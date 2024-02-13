@@ -1,16 +1,16 @@
 #include "change_exchange.h"
 #include "change_exchange_impl.h"
 #include "change_record.h"
-#include "change_sender_common_ops.h"
-#include "change_sender_monitoring.h"
 #include "datashard_impl.h"
 
 #include <ydb/core/base/tablet_pipecache.h>
-#include <ydb/library/services/services.pb.h>
+#include <ydb/core/change_exchange/change_sender_common_ops.h>
+#include <ydb/core/change_exchange/change_sender_monitoring.h>
 #include <ydb/core/tablet_flat/flat_row_eggs.h>
 #include <ydb/core/tx/scheme_cache/helpers.h>
 #include <ydb/core/tx/scheme_cache/scheme_cache.h>
 #include <ydb/core/tx/tx_proxy/proxy.h>
+#include <ydb/library/services/services.pb.h>
 #include <ydb/library/yql/public/udf/udf_data_type.h>
 
 #include <ydb/library/actors/core/actor_bootstrapped.h>
@@ -107,7 +107,7 @@ class TAsyncIndexChangeSenderShard: public TActorBootstrapped<TAsyncIndexChangeS
     }
 
     void Ready() {
-        Send(Parent, new TEvChangeExchangePrivate::TEvReady(ShardId));
+        Send(Parent, new NChangeExchange::TEvChangeExchangePrivate::TEvReady(ShardId));
         Become(&TThis::StateWaitingRecords);
     }
 
@@ -240,6 +240,8 @@ class TAsyncIndexChangeSenderShard: public TActorBootstrapped<TAsyncIndexChangeS
     }
 
     void Handle(NMon::TEvRemoteHttpInfo::TPtr& ev) {
+        using namespace NChangeExchange;
+
         TStringStream html;
 
         HTML(html) {
@@ -261,7 +263,7 @@ class TAsyncIndexChangeSenderShard: public TActorBootstrapped<TAsyncIndexChangeS
     }
 
     void Leave() {
-        Send(Parent, new TEvChangeExchangePrivate::TEvGone(ShardId));
+        Send(Parent, new NChangeExchange::TEvChangeExchangePrivate::TEvGone(ShardId));
         PassAway();
     }
 
@@ -328,8 +330,8 @@ private:
 
 class TAsyncIndexChangeSenderMain
     : public TActorBootstrapped<TAsyncIndexChangeSenderMain>
-    , public TBaseChangeSender
-    , public IChangeSenderResolver
+    , public NChangeExchange::TBaseChangeSender
+    , public NChangeExchange::IChangeSenderResolver
     , private NSchemeCache::TSchemeCacheHelpers
 {
     TStringBuf GetLogPrefix() const {
@@ -702,6 +704,10 @@ class TAsyncIndexChangeSenderMain
         return StateBase(ev);
     }
 
+    TActorId GetChangeServer() const override {
+        return DataShard.ActorId;
+    }
+
     void Resolve() override {
         ResolveIndex();
     }
@@ -753,12 +759,12 @@ class TAsyncIndexChangeSenderMain
         ForgetRecords(std::move(ev->Get()->Records));
     }
 
-    void Handle(TEvChangeExchangePrivate::TEvReady::TPtr& ev) {
+    void Handle(NChangeExchange::TEvChangeExchangePrivate::TEvReady::TPtr& ev) {
         LOG_D("Handle " << ev->Get()->ToString());
         OnReady(ev->Get()->PartitionId);
     }
 
-    void Handle(TEvChangeExchangePrivate::TEvGone::TPtr& ev) {
+    void Handle(NChangeExchange::TEvChangeExchangePrivate::TEvGone::TPtr& ev) {
         LOG_D("Handle " << ev->Get()->ToString());
         OnGone(ev->Get()->PartitionId);
     }
@@ -777,7 +783,7 @@ class TAsyncIndexChangeSenderMain
     }
 
     void Handle(NMon::TEvRemoteHttpInfo::TPtr& ev, const TActorContext& ctx) {
-        RenderHtmlPage(ESenderType::AsyncIndex, ev, ctx);
+        RenderHtmlPage(DataShard.TabletId, ev, ctx);
     }
 
     void PassAway() override {
@@ -792,7 +798,8 @@ public:
 
     explicit TAsyncIndexChangeSenderMain(const TDataShardId& dataShard, const TTableId& userTableId, const TPathId& indexPathId)
         : TActorBootstrapped()
-        , TBaseChangeSender(this, this, dataShard, indexPathId)
+        , TBaseChangeSender(this, this, indexPathId)
+        , DataShard(dataShard)
         , UserTableId(userTableId)
         , IndexTableVersion(0)
     {
@@ -808,8 +815,8 @@ public:
             hFunc(NChangeExchange::TEvChangeExchange::TEvRecords, Handle);
             hFunc(NChangeExchange::TEvChangeExchange::TEvForgetRecords, Handle);
             hFunc(TEvChangeExchange::TEvRemoveSender, Handle);
-            hFunc(TEvChangeExchangePrivate::TEvReady, Handle);
-            hFunc(TEvChangeExchangePrivate::TEvGone, Handle);
+            hFunc(NChangeExchange::TEvChangeExchangePrivate::TEvReady, Handle);
+            hFunc(NChangeExchange::TEvChangeExchangePrivate::TEvGone, Handle);
             HFunc(NMon::TEvRemoteHttpInfo, Handle);
             sFunc(TEvents::TEvPoison, PassAway);
         }
@@ -825,6 +832,7 @@ public:
     }
 
 private:
+    const TDataShardId DataShard;
     const TTableId UserTableId;
     mutable TMaybe<TString> LogPrefix;
 

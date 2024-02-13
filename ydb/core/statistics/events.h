@@ -54,6 +54,8 @@ struct TEvStatistics {
         EvConnectNode,
         EvRequestStats,
         EvPropagateStatistics,
+        EvStatisticsIsDisabled,
+        EvPropagateStatisticsResponse,
 
         EvEnd
     };
@@ -107,6 +109,18 @@ struct TEvStatistics {
         TEvPropagateStatistics,
         NKikimrStat::TEvPropagateStatistics,
         EvPropagateStatistics>
+    {};
+
+    struct TEvStatisticsIsDisabled : public TEventPB<
+        TEvStatisticsIsDisabled,
+        NKikimrStat::TEvStatisticsIsDisabled,
+        EvStatisticsIsDisabled>
+    {};
+
+    struct TEvPropagateStatisticsResponse : public TEventPB<
+        TEvPropagateStatisticsResponse,
+        NKikimrStat::TEvPropagateStatisticsResponse,
+        EvPropagateStatisticsResponse>
     {};
 };
 

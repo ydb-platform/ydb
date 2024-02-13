@@ -2,8 +2,9 @@
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 #include <ydb/library/actors/core/hfunc.h>
 #include <ydb/library/actors/core/log.h>
-#include <opentelemetry/proto/collector/trace/v1/trace_service.pb.h>
-#include <opentelemetry/proto/collector/trace/v1/trace_service.grpc.pb.h>
+#include <contrib/libs/opentelemetry-proto/opentelemetry/proto/collector/trace/v1/trace_service.pb.h>
+#include <contrib/libs/opentelemetry-proto/opentelemetry/proto/collector/trace/v1/trace_service.grpc.pb.h>
+#include <library/cpp/string_utils/url/url.h>
 #include <util/stream/file.h>
 #include <util/string/hex.h>
 #include <chrono>
@@ -22,9 +23,7 @@ namespace NWilson {
         {
             static constexpr size_t WILSON_SERVICE_ID = 430;
 
-            TString Host;
-            ui16 Port;
-            TString RootCA;
+            TString CollectorUrl;
             TString ServiceName;
 
             std::shared_ptr<grpc::Channel> Channel;
@@ -54,9 +53,7 @@ namespace NWilson {
 
         public:
             TWilsonUploader(WilsonUploaderParams params)
-                : Host(std::move(params.Host))
-                , Port(std::move(params.Port))
-                , RootCA(std::move(params.RootCA))
+                : CollectorUrl(std::move(params.CollectorUrl))
                 , ServiceName(std::move(params.ServiceName))
                 , GrpcSigner(std::move(params.GrpcSigner))
             {}
@@ -68,11 +65,22 @@ namespace NWilson {
             static constexpr char ActorName[] = "WILSON_UPLOADER_ACTOR";
 
             void Bootstrap() {
-                Become(&TThis::StateFunc);
+                Become(&TThis::StateWork);
 
-                Channel = grpc::CreateChannel(TStringBuilder() << Host << ":" << Port, RootCA ? grpc::SslCredentials({
-                    .pem_root_certs = TFileInput(RootCA).ReadAll(),
-                }) : grpc::InsecureChannelCredentials());
+                TStringBuf scheme;
+                TStringBuf host;
+                ui16 port;
+                if (!TryGetSchemeHostAndPort(CollectorUrl, scheme, host, port)) {
+                    LOG_ERROR_S(*TlsActivationContext, WILSON_SERVICE_ID, "Failed to parse collector url (" << CollectorUrl << " was provided). Wilson wouldn't work");
+                    Become(&TThis::StateBroken);
+                    return;
+                } else if (scheme != "grpc://" && scheme != "grpcs://") {
+                    LOG_ERROR_S(*TlsActivationContext, WILSON_SERVICE_ID, "Wrong scheme provided: " << scheme << " (only grpc:// and grpcs:// are supported). Wilson wouldn't work");
+                    Become(&TThis::StateBroken);
+                    return;
+                }
+                Channel = grpc::CreateChannel(TStringBuilder() << host << ":" << port,
+                                              scheme == "grpcs://" ? grpc::SslCredentials({}) : grpc::InsecureChannelCredentials());
                 Stub = NServiceProto::TraceService::NewStub(Channel);
 
                 LOG_INFO_S(*TlsActivationContext, WILSON_SERVICE_ID, "TWilsonUploader::Bootstrap");
@@ -188,9 +196,13 @@ namespace NWilson {
                 TryToSend();
             }
 
-            STRICT_STFUNC(StateFunc,
+            STRICT_STFUNC(StateWork,
                 hFunc(TEvWilson, Handle);
                 cFunc(TEvents::TSystem::Wakeup, HandleWakeup);
+            );
+
+            STRICT_STFUNC(StateBroken,
+                IgnoreFunc(TEvWilson);
             );
         };
 

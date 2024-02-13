@@ -59,7 +59,12 @@ public:
         }
         node.TabletAvailability.clear();
         for (const NKikimrLocal::TTabletAvailability& tabletAvailability : Record.GetTabletAvailability()) {
-            node.TabletAvailability.emplace(tabletAvailability.GetType(), tabletAvailability);
+            auto tabletType = tabletAvailability.GetType();
+            auto [itAvail, _] = node.TabletAvailability.emplace(tabletType, tabletAvailability);
+            auto itRestr = node.TabletAvailabilityRestrictions.find(tabletType);
+            if (itRestr != node.TabletAvailabilityRestrictions.end()) {
+                itAvail->second.UpdateRestriction(itRestr->second);
+            }
         }
         node.BecomeConnecting();
         return true;

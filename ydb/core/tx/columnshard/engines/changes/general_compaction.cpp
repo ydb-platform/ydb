@@ -181,6 +181,7 @@ void TGeneralCompactColumnEngineChanges::BuildAppendedPortionsByChunks(TConstruc
             for (auto&& p : columnChunks) {
                 portionColumns.emplace(p.first, p.second[i].GetChunks());
             }
+            resultSchema->GetIndexInfo().AppendIndexes(portionColumns);
             batchSlices.emplace_back(portionColumns, schemaDetails, context.Counters.SplitterCounters, GetSplitSettings());
         }
         TSimilarSlicer slicer(GetSplitSettings().GetExpectedPortionSize());
@@ -272,6 +273,32 @@ std::shared_ptr<TGeneralCompactColumnEngineChanges::IMemoryPredictor> TGeneralCo
     } else {
         return std::make_shared<TMemoryPredictorSimplePolicy>();
     }
+}
+
+ui64 TGeneralCompactColumnEngineChanges::TMemoryPredictorChunkedPolicy::AddPortion(const TPortionInfo& portionInfo) {
+    SumMemoryFix += portionInfo.GetRecordsCount() * (2 * sizeof(ui64) + sizeof(ui32) + sizeof(ui16));
+    ++PortionsCount;
+    THashMap<ui32, ui64> maxChunkSizeByColumn;
+    for (auto&& i : portionInfo.GetRecords()) {
+        SumMemoryFix += i.BlobRange.Size;
+        auto it = maxChunkSizeByColumn.find(i.GetColumnId());
+        if (it == maxChunkSizeByColumn.end()) {
+            maxChunkSizeByColumn.emplace(i.GetColumnId(), i.GetMeta().GetRawBytesVerified());
+        } else {
+            if (it->second < i.GetMeta().GetRawBytesVerified()) {
+                it->second = i.GetMeta().GetRawBytesVerified();
+            }
+        }
+    }
+
+    SumMemoryDelta = 0;
+    for (auto&& i : maxChunkSizeByColumn) {
+        MaxMemoryByColumnChunk[i.first] += i.second;
+        SumMemoryDelta = std::max(SumMemoryDelta, MaxMemoryByColumnChunk[i.first]);
+    }
+
+    AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("memory_prediction_after", SumMemoryFix + SumMemoryDelta)("portion_info", portionInfo.DebugString());
+    return SumMemoryFix + SumMemoryDelta;
 }
 
 }

@@ -13,7 +13,7 @@
 #include <util/digest/city.h>
 
 #ifndef MKQL_DISABLE_CODEGEN
-#include <llvm/Support/raw_ostream.h>
+#include <llvm/Support/raw_ostream.h>  // Y_IGNORE
 #endif
 
 namespace NKikimr {

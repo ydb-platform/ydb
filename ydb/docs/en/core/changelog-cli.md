@@ -1,5 +1,3 @@
-<!-- This file is not tracked by the automatic translation system. Edits to the RU-version must be made yourself. -->
-
 # {{ ydb-short-name }} CLI changelog
 
 ## Version 2.8.0 {#2-8-0}
@@ -10,9 +8,9 @@ Released on January 12, 2024. To update to version **2.8.0**, select the [Downlo
 
 * Added configuration management commands for the cluster `ydb admin config` and `ydb admin volatile-config`.
 
-* Added support for loading PostgreSQL-compatible data types by [ydb import file csv|tsv|json](reference/ydb-cli/export_import/import-file.md) command. Only for row-oriented tables.
+* Added support for loading PostgreSQL-compatible data types by [ydb import file csv|tsv|json](reference/ydb-cli/export-import/import-file.md) command. Only for row-oriented tables.
 
-* Added support for directory load from an S3-compatible storage in the [ydb import s3](reference/ydb-cli/export_import/s3_import.md) command. Currently only available on Linux and Mac OS.
+* Added support for directory load from an S3-compatible storage in the [ydb import s3](reference/ydb-cli/export-import/import-s3.md) command. Currently only available on Linux and Mac OS.
 
 * Added support for outputting the results of [ydb table query execute](reference/ydb-cli/table-query-execute.md), [ydb yql](reference/ydb-cli/yql.md) and [ydb scripting yql](reference/ydb-cli/scripting-yql.md) commands in the [Apache Parquet](https://parquet.apache.org/docs/) format.
 
@@ -90,17 +88,17 @@ Released on September 7, 2023. To update to version **2.6.0**, select the [Downl
 
 **Bug fixes:**
 
-* Fixed string loss when loading with the [ydb import file json](reference/ydb-cli/export_import/import-file.md) command.
+* Fixed string loss when loading with the [ydb import file json](reference/ydb-cli/export-import/import-file.md) command.
 
 * Fixed ignored statistics during the warm-up of commands [ydb workload topic run write|read|full](reference/ydb-cli/workload-topic.md#run-write).
 
 * Fixed incomplete statistics output in the [ydb scripting yql](reference/ydb-cli/scripting-yql.md) and [ydb yql](reference/ydb-cli/yql.md) commands.
 
-* Fixed incorrect output of progress bar in [ydb tools dump](reference/ydb-cli/export_import/tools_dump.md) and [ydb tools restore](reference/ydb-cli/export_import/tools_restore.md) commands.
+* Fixed incorrect output of progress bar in [ydb tools dump](reference/ydb-cli/export-import/tools-dump.md) and [ydb tools restore](reference/ydb-cli/export-import/tools-restore.md) commands.
 
-* Fixed loading large files with the header in the [ydb import file csv|tsv](reference/ydb-cli/export_import/import-file.md) command.
+* Fixed loading large files with the header in the [ydb import file csv|tsv](reference/ydb-cli/export-import/import-file.md) command.
 
-* Fixed hanging of the [ydb tools restore --import-data](reference/ydb-cli/export_import/tools_restore.md#optional) command.
+* Fixed hanging of the [ydb tools restore --import-data](reference/ydb-cli/export-import/tools-restore.md#optional) command.
 
 * Fixed error `Unknown value Rejected` when executing the [ydb operation list build index](reference/ydb-cli/operation-list.md) command.
 
@@ -110,17 +108,17 @@ Released on June 20, 2023. To update to version **2.5.0**, select the [Downloads
 
 **Features:**
 
-* For the `ydb import file` command, a parameter [--timeout](reference/ydb-cli/export_import/import-file.md#optional) has been added that specifies the time within which the operation should be performed on the server.
-* Added a progress bar in commands [ydb scheme rmdir --recursive](reference/ydb-cli/commands/dir.md#rmdir) and [ydb import file](reference/ydb-cli/export_import/import-file.md).
+* For the `ydb import file` command, a parameter [--timeout](reference/ydb-cli/export-import/import-file.md#optional) has been added that specifies the time within which the operation should be performed on the server.
+* Added a progress bar in commands [ydb scheme rmdir --recursive](reference/ydb-cli/commands/dir.md#rmdir) and [ydb import file](reference/ydb-cli/export-import/import-file.md).
 * Added the command [ydb workload kv run read-rows](reference/ydb-cli/workload-kv.md#read-rows-kv), which loads the database with requests to read rows using a new experimental API call ReadRows (implemented only in the [main](https://github.com/ydb-platform/ydb) branch), which performs faster key reading than [select](reference/ydb-cli/workload-kv.md#select-kv).
 * New parameters `--warmup-time`, `--percentile`, `--topic` have been added to the [ydb workload topic](reference/ydb-cli/workload-topic.md), setting the test warm-up time, the percentile in the statistics output and the topic name, respectively.
 * Added the [ydb workload tpch](reference/ydb-cli/workload-tpch.md) command to run the TPC-H benchmark.
-* Added the `--ordered` flag in the command [ydb tools dump](reference/ydb-cli/export_import/tools_dump.md), which preserves the order by primary key in tables.
+* Added the `--ordered` flag in the command [ydb tools dump](reference/ydb-cli/export-import/tools-dump.md), which preserves the order by primary key in tables.
 
 **Performance:**
 
-* The data loading speed in the `ydb import file` command has been increased by adding parallel loading. The number of threads is set by the new parameter [--threads](reference/ydb-cli/export_import/import-file.md#optional).
-* A performance of the [ydb import file json](reference/ydb-cli/export_import/import-file.md) command has been increased by reducing the number of data copies.
+* The data loading speed in the `ydb import file` command has been increased by adding parallel loading. The number of threads is set by the new parameter [--threads](reference/ydb-cli/export-import/import-file.md#optional).
+* A performance of the [ydb import file json](reference/ydb-cli/export-import/import-file.md) command has been increased by reducing the number of data copies.
 
 ## Version 2.4.0 {#2-4-0}
 
@@ -128,7 +126,7 @@ Released on May 24, 2023. To update to version **2.4.0**, select the [Downloads]
 
 **Features:**
 
-* Added the ability to upload multiple files in parallel with the command [ydb import file](reference/ydb-cli/export_import/import-file.md#multiple-files).
+* Added the ability to upload multiple files in parallel with the command [ydb import file](reference/ydb-cli/export-import/import-file.md#multiple-files).
 * Added support for deleting column tables for the command [ydb scheme rmdir --recursive](reference/ydb-cli/commands/dir.md#rmdir).
 * Improved stability of the command [ydb workload topic](reference/ydb-cli/workload-topic.md).
 
@@ -144,8 +142,8 @@ Release date: May 1, 2023. To update to version **2.3.0**, select the [Downloads
 * Added the [--recursive](reference/ydb-cli/commands/dir.md#rmdir-options) option for the `ydb scheme rmdir` command. Use it to delete a directory recursively, with all its content.
 * Added support for the `topic` and `coordination node` types in the [ydb scheme describe](reference/ydb-cli/commands/scheme-describe.md) command.
 * Added the [--commit](reference/ydb-cli/topic-read.md#osnovnye-opcionalnye-parametry) option for the `ydb topic consumer` command. Use it to commit messages you have read.
-* Added the [--columns](reference/ydb-cli/export_import/import-file.md#optional) option for the `ydb import file csv|tsv` command. Use it as an alternative to the file header when specifying a column list.
-* Added the [--newline-delimited](reference/ydb-cli/export_import/import-file.md#optional) option for the `ydb import file csv|tsv` command. Use it to make sure that your data is newline-free. This option streamlines import by reading data from several file sections in parallel.
+* Added the [--columns](reference/ydb-cli/export-import/import-file.md#optional) option for the `ydb import file csv|tsv` command. Use it as an alternative to the file header when specifying a column list.
+* Added the [--newline-delimited](reference/ydb-cli/export-import/import-file.md#optional) option for the `ydb import file csv|tsv` command. Use it to make sure that your data is newline-free. This option streamlines import by reading data from several file sections in parallel.
 
 **Bug fixes:**
 
@@ -172,8 +170,8 @@ Release date: December 30, 2022. To update to version **2.1.1**, select the [Dow
 **Improvements:**
 
 * Added support for the `--stats` option of the [ydb scheme describe](reference/ydb-cli/commands/scheme-describe.md) command for column-oriented tables.
-* Added support for Parquet files to enable their import with the [ydb import](reference/ydb-cli/export_import/import-file.md) command.
-* Added support for additional logging and retries for the [ydb import](reference/ydb-cli/export_import/import-file.md) command.
+* Added support for Parquet files to enable their import with the [ydb import](reference/ydb-cli/export-import/import-file.md) command.
+* Added support for additional logging and retries for the [ydb import](reference/ydb-cli/export-import/import-file.md) command.
 
 ## Version 2.1.0 {#2-1-0}
 
@@ -186,7 +184,7 @@ Release date: November 18, 2022. To update to version **2.1.0**, select the [Dow
 * Added the `-1` option for the [ydb scheme ls](reference/ydb-cli/commands/scheme-ls.md) command to enable output of a single object per row.
 * You can now save the IAM service URL in a profile.
 * Added support for username and password-based authentication without specifying the password.
-* Added support for AWS profiles in the [ydb export s3](reference/ydb-cli/export_import/s3_conn.md#auth) command.
+* Added support for AWS profiles in the [ydb export s3](reference/ydb-cli/export-import/auth-s3.md#auth) command.
 * You can now create profiles using `stdin`. For example, you can pass the [YC CLI](https://cloud.yandex.ru/docs/cli/) `yc ydb database get information` command output to the `ydb config profile create` command input.
 
 **Bug fixes:**
@@ -230,5 +228,5 @@ Release date: June 25, 2022. To update to version **1.9.1**, select the [Downloa
 
 **Features:**
 
-* Added the ability to compress data when exporting it to S3-compatible storage (see the `--compression` option of the [ydb export s3](reference/ydb-cli/export_import/s3_export.md) command).
+* Added the ability to compress data when exporting it to S3-compatible storage (see the `--compression` option of the [ydb export s3](reference/ydb-cli/export-import/export-s3.md) command).
 * Added the ability to manage new {{ ydb-short-name }} CLI version availability auto checks (see the `--disable-checks` and `--enable-checks` options of the [ydb version](reference/ydb-cli/version.md) command).

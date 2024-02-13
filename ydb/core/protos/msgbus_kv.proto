@@ -85,6 +85,20 @@ message TKeyValueRequest {
     message TCmdSetExecutorFastLogPolicy {
         optional bool IsAllowed = 1 [default = false]; // mandatory
     }
+    message TCmdPatch {
+        message TDiff {
+            optional uint32 Offset = 1 [default = 0];
+            oneof Data { // mandatory
+                bytes Value = 2;
+                uint32 PayloadId = 3;
+            }
+        }
+
+        optional bytes OriginalKey = 1;
+        optional bytes PatchedKey = 2;
+        repeated TDiff Diffs = 3;
+        optional EStorageChannel StorageChannel = 4; // (default = MAIN)
+    }
 
     optional uint64 TabletId = 1; // mandatory
     optional uint64 Generation = 2; // optional, no generation check is done if missing
@@ -101,6 +115,7 @@ message TKeyValueRequest {
     repeated TCmdGetStatus CmdGetStatus = 13;
     optional TCmdTrimLeakedBlobs CmdTrimLeakedBlobs = 14;
     optional TCmdSetExecutorFastLogPolicy CmdSetExecutorFastLogPolicy = 15;
+    repeated TCmdPatch CmdPatch = 17;
 
     optional uint64 DeadlineInstantMs = 10;
 }
@@ -146,6 +161,10 @@ message TKeyValueResponse {
         optional uint32 Status = 1; // EReplyStatus from ydb/core/protos/base.proto
         optional uint32 StatusFlags = 2;  // A set of flags from EStatusFlags ydb/core/protos/blobstorage.proto
     }
+    message TPatchResult {
+        optional uint32 Status = 1; // EReplyStatus from ydb/core/protos/base.proto
+        optional uint32 StatusFlags = 2;  // A set of flags from EStatusFlags ydb/core/protos/blobstorage.proto
+    }
     message TRenameResult {
         optional uint32 Status = 1; // EReplyStatus from ydb/core/protos/base.proto
     }
@@ -181,6 +200,7 @@ message TKeyValueResponse {
     repeated TGetStatusResult GetStatusResult = 12;
     optional TTrimLeakedBlobsResult TrimLeakedBlobsResult = 13;
     optional TSetExecutorFastLogPolicyResult SetExecutorFastLogPolicyResult = 14;
+    repeated TPatchResult PatchResult = 15;
     optional string ErrorReason = 9; // When present contains human-readable error description
 }
 

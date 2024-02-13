@@ -110,6 +110,7 @@ message TPersQueuePartitionRequest {
     message TCmdGetOwnership { // get write ownership for partition
         optional string Owner = 1 [default = "default"];
         optional bool Force = 2 [ default = true];
+        optional bool RegisterIfNotExists = 3 [default = true];
     }
 
     message TCmdReserveBytes {
@@ -168,6 +169,7 @@ message TPersQueuePartitionRequest {
 
     optional bool IsDirectWrite = 18 [default = false];
     optional uint64 PutUnitsSize = 19;
+    optional int64 InitialSeqNo = 26;
 }
 
 message TPersQueueMetaRequest {
@@ -468,6 +470,8 @@ message TPersQueuePartitionResponse {
 
     message TCmdGetOwnershipResult {
         optional string OwnerCookie = 1;
+        optional NKikimrPQ.ETopicPartitionStatus Status = 2;
+        optional int64 SeqNo = 3;
     }
 
     message TCmdPrepareDirectReadResult {

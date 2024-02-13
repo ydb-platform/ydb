@@ -45,6 +45,7 @@
 #include <ydb/core/cms/console/configs_dispatcher.h>
 #include <ydb/core/cms/console/console.h>
 #include <ydb/core/cms/console/immediate_controls_configurator.h>
+#include <ydb/core/cms/console/jaeger_tracing_configurator.h>
 #include <ydb/core/formats/clickhouse_block.h>
 #include <ydb/core/security/ticket_parser.h>
 #include <ydb/core/security/ldap_auth_provider.h>
@@ -245,8 +246,7 @@ namespace Tests {
             appData.DataStreamsAuthFactory = Settings->DataStreamsAuthFactory.get();
             appData.PersQueueMirrorReaderFactory = Settings->PersQueueMirrorReaderFactory.get();
             appData.HiveConfig.MergeFrom(Settings->AppConfig->GetHiveConfig());
-            const auto& hostnamePatterns = Settings->AppConfig->GetQueryServiceConfig().GetHostnamePatterns();
-            appData.ExternalSourceFactory = NExternalSource::CreateExternalSourceFactory(std::vector<TString>(hostnamePatterns.begin(), hostnamePatterns.end()));
+            appData.GraphConfig.MergeFrom(Settings->AppConfig->GetGraphConfig());
 
             appData.DynamicNameserviceConfig = new TDynamicNameserviceConfig;
             auto dnConfig = appData.DynamicNameserviceConfig;
@@ -309,20 +309,26 @@ namespace Tests {
         const size_t proxyCount = Max(ui32{1}, Settings->AppConfig->GetGRpcConfig().GetGRpcProxyCount());
         TVector<TActorId> grpcRequestProxies;
         grpcRequestProxies.reserve(proxyCount);
+
+        auto& appData = Runtime->GetAppData();
+        NJaegerTracing::TSamplingThrottlingConfigurator tracingConfigurator(appData.TimeProvider, appData.RandomProvider);
+
         for (size_t i = 0; i < proxyCount; ++i) {
-            auto grpcRequestProxy = NGRpcService::CreateGRpcRequestProxy(*Settings->AppConfig);
+            auto grpcRequestProxy = NGRpcService::CreateGRpcRequestProxy(*Settings->AppConfig, tracingConfigurator.GetControl());
             auto grpcRequestProxyId = system->Register(grpcRequestProxy, TMailboxType::ReadAsFilled);
             system->RegisterLocalService(NGRpcService::CreateGRpcRequestProxyId(), grpcRequestProxyId);
             grpcRequestProxies.push_back(grpcRequestProxyId);
         }
+
+        system->Register(
+            NConsole::CreateJaegerTracingConfigurator(std::move(tracingConfigurator), Settings->AppConfig->GetTracingConfig())
+        );
 
         auto grpcMon = system->Register(NGRpcService::CreateGrpcMonService(), TMailboxType::ReadAsFilled);
         system->RegisterLocalService(NGRpcService::GrpcMonServiceId(), grpcMon);
 
         GRpcServerRootCounters = MakeIntrusive<::NMonitoring::TDynamicCounters>();
         auto& counters = GRpcServerRootCounters;
-
-        auto& appData = Runtime->GetAppData();
 
         // Setup discovery for typically used services on the node
         {
@@ -388,7 +394,7 @@ namespace Tests {
         GRpcServer->AddService(new NQuoter::TRateLimiterGRpcService(system, counters, grpcRequestProxies[0]));
         GRpcServer->AddService(new NGRpcService::TGRpcDataStreamsService(system, counters, grpcRequestProxies[0], true));
         GRpcServer->AddService(new NGRpcService::TGRpcMonitoringService(system, counters, grpcRequestProxies[0], true));
-        GRpcServer->AddService(new NGRpcService::TGRpcYdbQueryService(system, counters, grpcRequestProxies[0], true));
+        GRpcServer->AddService(new NGRpcService::TGRpcYdbQueryService(system, counters, grpcRequestProxies, true, 1));
         if (Settings->EnableYq) {
             GRpcServer->AddService(new NGRpcService::TGRpcFederatedQueryService(system, counters, grpcRequestProxies[0]));
             GRpcServer->AddService(new NGRpcService::TGRpcFqPrivateTaskService(system, counters, grpcRequestProxies[0]));

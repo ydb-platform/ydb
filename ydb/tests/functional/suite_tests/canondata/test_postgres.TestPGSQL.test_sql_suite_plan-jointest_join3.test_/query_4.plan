@@ -175,26 +175,20 @@
                                 "PlanNodeType": "Connection",
                                 "Plans": [
                                     {
-                                        "CTE Name": "precompute_0_0",
-                                        "Node Type": "TablePointLookup-ConstantExpr",
+                                        "Node Type": "TableRangeScan",
                                         "Operators": [
                                             {
-                                                "Inputs": [
-                                                    {
-                                                        "InternalOperatorId": 1
-                                                    }
-                                                ],
-                                                "Name": "TablePointLookup",
+                                                "Inputs": [],
+                                                "Name": "TableRangeScan",
                                                 "ReadColumns": [
                                                     "k",
                                                     "pd"
                                                 ],
+                                                "ReadRangesExpectedSize": 1,
+                                                "ReadRangesKeys": [
+                                                    "k"
+                                                ],
                                                 "Table": "postgres_jointest/join3.test_plan/parent"
-                                            },
-                                            {
-                                                "Inputs": [],
-                                                "Iterator": "precompute_0_0",
-                                                "Name": "Iterator"
                                             }
                                         ],
                                         "PlanNodeId": 1,
@@ -235,7 +229,7 @@
                         "k",
                         "pd"
                     ],
-                    "type": "Lookup"
+                    "type": "Scan"
                 }
             ]
         }

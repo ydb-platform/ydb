@@ -288,7 +288,8 @@ THolder<TEvPartitionWriter::TEvWriteRequest> Convert(const TProduceRequestData::
         w->SetSourceId(sourceId);
         w->SetSeqNo(batch->BaseOffset + record.OffsetDelta);
         w->SetData(str);
-        w->SetCreateTimeMS(batch->BaseTimestamp + record.TimestampDelta);
+        ui64 createTime = batch->BaseTimestamp + record.TimestampDelta;
+        w->SetCreateTimeMS(createTime ? createTime : TInstant::Now().MilliSeconds());
         w->SetDisableDeduplication(true);
         w->SetUncompressedSize(record.Value ? record.Value->size() : 0);
         w->SetClientDC(clientDC);

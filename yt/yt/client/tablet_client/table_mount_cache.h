@@ -96,7 +96,7 @@ struct TTableMountInfo
 {
     NYPath::TYPath Path;
     NObjectClient::TObjectId TableId;
-    TEnumIndexedVector<ETableSchemaKind, NTableClient::TTableSchemaPtr> Schemas;
+    TEnumIndexedArray<ETableSchemaKind, NTableClient::TTableSchemaPtr> Schemas;
 
     // PhysicalPath points to a physical object, if current object is linked to some other object, then this field will point to the source.
     // When this field is not supported on the server-side, this path will be equal to object path.

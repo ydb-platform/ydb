@@ -115,7 +115,7 @@ void TDataShard::TTxInit::Complete(const TActorContext &ctx) {
     Self->CreateChangeSender(ctx);
     Self->EnqueueChangeRecords(std::move(ChangeRecords));
     Self->MaybeActivateChangeSender(ctx);
-    Self->EmitHeartbeats(ctx);
+    Self->EmitHeartbeats();
 
     if (!Self->ChangesQueue) {
         if (!Self->ChangeExchangeSplitter.Done()) {

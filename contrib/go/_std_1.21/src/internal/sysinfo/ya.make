@@ -1,7 +1,7 @@
 GO_LIBRARY()
-
-SRCS(
-    sysinfo.go
-)
-
+IF (TRUE)
+    SRCS(
+		sysinfo.go
+    )
+ENDIF()
 END()

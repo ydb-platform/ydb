@@ -93,7 +93,7 @@ constexpr i64 MaxAnyValueLength = 16_MB;
 constexpr i64 MaxCompositeValueLength = 16_MB;
 constexpr i64 MaxServerVersionedRowDataWeight = 512_MB;
 constexpr i64 MaxClientVersionedRowDataWeight = 128_MB;
-constexpr int MaxKeyColumnCountInDynamicTable = 32;
+constexpr int MaxKeyColumnCountInDynamicTable = 64;
 constexpr int MaxTimestampCountPerRow = std::numeric_limits<ui16>::max();
 
 static_assert(
@@ -130,9 +130,10 @@ constexpr int TypicalHunkColumnCount = 8;
 ////////////////////////////////////////////////////////////////////////////////
 
 DEFINE_ENUM_WITH_UNDERLYING_TYPE(EHunkValueTag, ui8,
-    ((Inline)   (0))
-    ((LocalRef) (1))
-    ((GlobalRef)(2))
+    ((Inline)            (0))
+    ((LocalRef)          (1))
+    ((GlobalRef)         (2))
+    ((CompressedInline)  (3))
 );
 
 // Do not change these values since they are stored in the master snapshot.
@@ -419,6 +420,10 @@ DEFINE_ENUM(ESchemaCompatibility,
 );
 
 static constexpr TMasterTableSchemaId NullTableSchemaId = TMasterTableSchemaId();
+
+using TDynamicTableKeyMask = ui64;
+
+static_assert(sizeof(TDynamicTableKeyMask) * 8 == MaxKeyColumnCountInDynamicTable);
 
 ////////////////////////////////////////////////////////////////////////////////
 

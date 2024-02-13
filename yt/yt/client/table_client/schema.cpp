@@ -248,6 +248,7 @@ TColumnSchema& TColumnSchema::SetMaxInlineHunkSize(std::optional<i64> value)
 TColumnSchema& TColumnSchema::SetLogicalType(TLogicalTypePtr type)
 {
     LogicalType_ = std::move(type);
+    WireType_ = NTableClient::GetWireType(LogicalType_);
     IsOfV1Type_ = IsV1Type(LogicalType_);
     std::tie(V1Type_, Required_) = NTableClient::CastToV1Type(LogicalType_);
     return *this;
@@ -261,7 +262,7 @@ TColumnSchema& TColumnSchema::SetSimpleLogicalType(ESimpleLogicalValueType type)
 
 EValueType TColumnSchema::GetWireType() const
 {
-    return NTableClient::GetWireType(LogicalType_);
+    return WireType_;
 }
 
 i64 TColumnSchema::GetMemoryUsage() const
@@ -1513,7 +1514,8 @@ void ValidateColumnSchema(
         "max",
         "first",
         "xdelta",
-        "_yt_replica_set",
+        "_yt_stored_replica_set",
+        "_yt_last_seen_replica_set",
     };
 
     const auto& stableName = columnSchema.StableName();

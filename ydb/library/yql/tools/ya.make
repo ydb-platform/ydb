@@ -3,6 +3,7 @@ RECURSE(
     dqrun
     dq
     mrjob
+    mrrun
     pgrun
     pg-make-test
     sql2yql

@@ -11,6 +11,7 @@
 #include <ydb/library/yql/providers/yt/provider/yql_yt_provider.h>
 #include <ydb/library/yql/providers/pg/provider/yql_pg_provider.h>
 #include <ydb/library/yql/public/issue/yql_issue.h>
+#include <ydb/library/yql/parser/pg_wrapper/interface/utils.h>
 
 #include <library/cpp/getopt/last_getopt.h>
 #include <library/cpp/yson/public.h>
@@ -30,6 +31,7 @@
 #include <library/cpp/yson/parser.h>
 #include <library/cpp/yson/node/node.h>
 #include <library/cpp/yson/node/node_builder.h>
+#include <library/cpp/string_utils/base64/base64.h>
 
 using namespace NYql;
 using namespace NKikimr::NMiniKQL;
@@ -39,7 +41,13 @@ namespace NMiniKQL = NKikimr::NMiniKQL;
 const ui32 PRETTY_FLAGS = NYql::TAstPrintFlags::PerLine | NYql::TAstPrintFlags::ShortQuote |
                           NYql::TAstPrintFlags::AdaptArbitraryContent;
 
+enum class EByteaOutput{
+    hex,
+    escape,
+};
+
 TString nullRepr("");
+EByteaOutput byteaOutput = EByteaOutput::hex;
 
 bool IsEscapedChar(const TString& s, size_t pos) {
     bool escaped = false;
@@ -734,6 +742,35 @@ inline const TString FormatNumeric(const TString& value)
     return (value == "0") ? Zero : value;
 }
 
+const TString FormatFloat(const TString& value, std::function<TString(const TString&)> formatter) {
+    static const TString nan = "NaN";
+    static const TString inf = "Infinity";
+    static const TString minf = "-Infinity";
+
+    try {
+        return (value == "") ? ""
+             : (value == "nan") ? nan
+             : (value == "inf") ? inf
+             : (value == "-inf") ? minf
+             : formatter(value);
+    } catch (const std::exception& e) {
+        Cerr << "Unexpected float value '" << value << "'\n";
+        return "";
+    }
+}
+
+inline const TString FormatFloat4(const TString& value)
+{
+    return FormatFloat(value,
+        [] (const TString& val) { return TString(fmt::format("{:.8g}", std::stof(val))); });
+}
+
+inline const TString FormatFloat8(const TString& value)
+{
+    return FormatFloat(value,
+        [] (const TString& val) { return TString(fmt::format("{:.15g}", std::stod(val))); });
+}
+
 inline const TString FormatTransparent(const TString& value)
 {
     return value;
@@ -742,6 +779,8 @@ inline const TString FormatTransparent(const TString& value)
 static const THashMap<TColumnType, CellFormatter> ColumnFormatters {
     { "bool", FormatBool },
     { "numeric", FormatNumeric },
+    { "float4", FormatFloat4 },
+    { "float8", FormatFloat8 },
 };
 
 static const THashSet<TColumnType> RightAlignedTypes {
@@ -751,10 +790,12 @@ static const THashSet<TColumnType> RightAlignedTypes {
     "float4",
     "float8",
     "numeric",
+    "oid",
 };
 
 struct TColumn {
     TString Name;
+    TString Type;
     size_t Width;
     CellFormatter Formatter;
     bool RightAligned;
@@ -772,6 +813,64 @@ std::string FormatCell(const TString& data, const TColumn& column, size_t index,
     return fmt::format("{0}{1:<{2}}", delim, data, column.Width);
 }
 
+TString GetCellData(const NYT::TNode& cell, const TColumn& column) {
+    if (column.Type == "bytea") {
+        const auto rawValue = (cell.IsList())
+            ? Base64Decode(cell.AsList()[0].AsString())
+            : cell.AsString();
+
+        switch (byteaOutput) {
+            case EByteaOutput::hex: {
+                TString result;
+
+                const auto expectedSize = rawValue.size() * 2 + 2;
+                result.resize(expectedSize);
+                result[0] = '\\';
+                result[1] = 'x';
+                const auto cnt = HexEncode(rawValue.data(), rawValue.size(), result.begin() + 2);
+
+                Y_ASSERT(cnt + 2 == expectedSize);
+
+                return result;
+            }
+            case EByteaOutput::escape: {
+                TString result;
+
+                ui64 expectedSize = std::accumulate(rawValue.cbegin(), rawValue.cend(), 0U,
+                    [] (ui64 acc, char c) {
+                        return acc + ((c == '\\')
+                                        ? 2
+                                        : ((ui8)c < 0x20 || 0x7e < (ui8)c)
+                                        ? 4
+                                        : 1);
+                    });
+                result.resize(expectedSize);
+                auto p = result.begin();
+                for (const auto c : rawValue) {
+                    if (c == '\\') {
+                        *p++ = '\\';
+                        *p++ = '\\';
+                    } else if ((ui8)c < 0x20 || 0x7e < (ui8)c) {
+                        auto val = (ui8)c;
+
+                        *p++ = '\\';
+                        *p++ = ((val >> 6) & 03) + '0';
+                        *p++ = ((val >> 3) & 07) + '0';
+                        *p++ =  (val & 07) + '0';
+                    } else {
+                        *p++ = c;
+                    }
+                }
+
+                return result;
+            }
+            default:
+                throw yexception() << "Unhandled EByteaOutput value";
+        }
+    }
+    return cell.AsString();
+}
+
 void WriteTableToStream(IOutputStream& stream, const NYT::TNode::TListType& cols, const NYT::TNode::TListType& rows)
 {
     TVector<TColumn> columns;
@@ -784,6 +883,7 @@ void WriteTableToStream(IOutputStream& stream, const NYT::TNode::TListType& cols
         auto& c = columns.emplace_back();
 
         c.Name = colName;
+        c.Type = colType;
         c.Width = colName.length();
         c.Formatter = ColumnFormatters.Value(colType, FormatTransparent);
         c.RightAligned = RightAlignedTypes.contains(colType);
@@ -793,9 +893,10 @@ void WriteTableToStream(IOutputStream& stream, const NYT::TNode::TListType& cols
         auto& rowData = formattedData.emplace_back();
 
         { int i = 0;
-        for (const auto& col : row.AsList()) {
-            const auto& cellData = col.HasValue() ? col.AsString() : nullRepr;
+        for (const auto& cell : row.AsList()) {
             auto& c = columns[i];
+
+            const auto cellData = cell.HasValue() ? GetCellData(cell, c) : nullRepr;
 
             rowData.emplace_back(c.Formatter(cellData));
             c.Width = std::max(c.Width, rowData.back().length());
@@ -973,6 +1074,7 @@ int Main(int argc, char* argv[])
     static const TString DefaultCluster{"plato"};
     clusterMapping[DefaultCluster] = YtProviderName;
     clusterMapping["pg_catalog"] = PgProviderName;
+    clusterMapping["information_schema"] = PgProviderName;
 
     opts.AddHelpOption();
     opts.AddLongOption("datadir", "directory for tables").StoreResult<TString>(&rawDataDir);
@@ -1044,6 +1146,16 @@ int Main(int argc, char* argv[])
             }
         }
 
+        if (TString::npos != stmt.find("SET bytea_output TO hex")) {
+            byteaOutput = EByteaOutput::hex;
+            continue;
+        }
+
+        if (TString::npos != stmt.find("SET bytea_output TO escape")) {
+            byteaOutput = EByteaOutput::escape;
+            continue;
+        }
+
         google::protobuf::Arena arena;
         settings.Arena = &arena;
 
@@ -1100,6 +1212,7 @@ int Main(int argc, char* argv[])
         }
 
         if (program->HasResults()) {
+            // PrintExprTo(program, Cout);
             // Cout << program->ResultsAsString() << Endl;
 
             const auto root = ParseYson(program->ResultsAsString());

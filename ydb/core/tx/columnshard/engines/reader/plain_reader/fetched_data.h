@@ -48,10 +48,6 @@ public:
         }
     }
 
-    std::shared_ptr<arrow::RecordBatch> GetBatch() const {
-        return NArrow::ToBatch(Table, true);
-    }
-
     void AddNulls(THashMap<TBlobRange, ui32>&& blobs) {
         for (auto&& i : blobs) {
             AFL_VERIFY(Blobs.emplace(i.first, i.second).second);
@@ -67,14 +63,10 @@ public:
     }
 
     void AddFilter(const std::shared_ptr<NArrow::TColumnFilter>& filter) {
-        if (UseFilter && Table && filter) {
-            AFL_VERIFY(filter->Apply(Table));
+        if (!filter) {
+            return;
         }
-        if (!Filter) {
-            Filter = filter;
-        } else if (filter) {
-            *Filter = Filter->CombineSequentialAnd(*filter);
-        }
+        return AddFilter(*filter);
     }
 
     void AddFilter(const NArrow::TColumnFilter& filter) {
@@ -83,8 +75,10 @@ public:
         }
         if (!Filter) {
             Filter = std::make_shared<NArrow::TColumnFilter>(filter);
-        } else {
+        } else if (UseFilter) {
             *Filter = Filter->CombineSequentialAnd(filter);
+        } else {
+            *Filter = Filter->And(filter);
         }
     }
 
@@ -104,6 +98,19 @@ public:
         }
     }
 
+};
+
+class TFetchedResult {
+private:
+    YDB_READONLY_DEF(std::shared_ptr<arrow::RecordBatch>, Batch);
+    YDB_READONLY_DEF(std::shared_ptr<NArrow::TColumnFilter>, NotAppliedFilter);
+public:
+    TFetchedResult(std::unique_ptr<TFetchedData>&& data)
+        : NotAppliedFilter(data->GetNotAppliedFilter()) {
+        if (data->GetTable()) {
+            Batch = NArrow::ToBatch(data->GetTable(), true);
+        }
+    }
 };
 
 }

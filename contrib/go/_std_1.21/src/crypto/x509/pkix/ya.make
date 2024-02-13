@@ -1,7 +1,7 @@
 GO_LIBRARY()
-
-SRCS(
-    pkix.go
-)
-
+IF (TRUE)
+    SRCS(
+		pkix.go
+    )
+ENDIF()
 END()

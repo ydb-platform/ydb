@@ -34,7 +34,7 @@ namespace NBoot {
                 Env->Finish(this);
         }
 
-        const TVector<TLogoBlobID> Blobs() const
+        const TVector<TLogoBlobID>& Blobs() const
         {
             return State.GetBlobs();
         }

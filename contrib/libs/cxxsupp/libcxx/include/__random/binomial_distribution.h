@@ -113,10 +113,6 @@ public:
         {return !(__x == __y);}
 };
 
-#ifndef _LIBCPP_MSVCRT_LIKE
-extern "C" double lgamma_r(double, int *);
-#endif
-
 inline _LIBCPP_INLINE_VISIBILITY double __libcpp_lgamma(double __d) {
 #if defined(_LIBCPP_MSVCRT_LIKE)
   return lgamma(__d);
@@ -133,9 +129,9 @@ binomial_distribution<_IntType>::param_type::param_type(result_type __t, double 
     if (0 < __p_ && __p_ < 1)
     {
         __r0_ = static_cast<result_type>((__t_ + 1) * __p_);
-        __pr_ = _VSTD::exp(__libcpp_lgamma(__t_ + 1.) -
-                           __libcpp_lgamma(__r0_ + 1.) -
-                           __libcpp_lgamma(__t_ - __r0_ + 1.) + __r0_ * _VSTD::log(__p_) +
+        __pr_ = _VSTD::exp(std::__libcpp_lgamma(__t_ + 1.) -
+                           std::__libcpp_lgamma(__r0_ + 1.) -
+                           std::__libcpp_lgamma(__t_ - __r0_ + 1.) + __r0_ * _VSTD::log(__p_) +
                            (__t_ - __r0_) * _VSTD::log(1 - __p_));
         __odds_ratio_ = __p_ / (1 - __p_);
     }

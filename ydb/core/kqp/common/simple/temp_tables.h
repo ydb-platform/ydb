@@ -3,6 +3,7 @@
 #include <ydb/library/aclib/aclib.h>
 
 #include <optional>
+#include <string_view>
 
 #include <util/generic/fwd.h>
 #include <util/generic/hash.h>
@@ -14,14 +15,15 @@ struct TKqpTempTablesState {
     struct TTempTableInfo {
         TString Name;
         TString WorkingDir;
-        TString Database;
         TIntrusiveConstPtr<NACLib::TUserToken> UserToken;
-        TString Cluster;
     };
-    std::optional<TString> SessionId;
-    THashMap<std::pair<TString, TString>, TTempTableInfo> TempTables;
+    TString SessionId;
+    THashMap<TString, TTempTableInfo> TempTables;
 
     using TConstPtr = std::shared_ptr<const TKqpTempTablesState>;
+
+    THashMap<TString, TTempTableInfo>::const_iterator
+    FindInfo(const std::string_view& path, bool withSessionId = false) const;
 };
 
 } // namespace NKikimr::NKqp

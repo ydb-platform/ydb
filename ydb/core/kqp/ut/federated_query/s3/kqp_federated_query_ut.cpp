@@ -723,7 +723,7 @@ Y_UNIT_TEST_SUITE(KqpFederatedQuery) {
         UNIT_ASSERT_EQUAL_C(stats.compilation().from_cache(), expectCached, "expected: "  << expectCached);
     }
 
-     Y_UNIT_TEST(InsertIntoBucketCaching) {
+    Y_UNIT_TEST(InsertIntoBucketCaching) {
         const TString writeDataSourceName = "/Root/write_data_source";
         const TString writeTableName = "/Root/write_binding";
         const TString writeBucket = "test_bucket_cache";
@@ -1342,6 +1342,326 @@ Y_UNIT_TEST_SUITE(KqpFederatedQuery) {
         auto scriptResult = yqlScriptClient.ExplainYqlScript(sql, settings).GetValueSync();
         UNIT_ASSERT_C(scriptResult.IsSuccess(), scriptResult.GetIssues().ToString());
         UNIT_ASSERT(scriptResult.GetPlan());
+    }
+
+    Y_UNIT_TEST(ReadFromDataSourceWithoutTable) {
+        const TString externalDataSourceName = "/Root/external_data_source";
+        const TString bucket = "test_bucket_inline_desc";
+        const TString object = "test_object_inline_desc";
+
+        CreateBucketWithObject(bucket, object, TEST_CONTENT);
+
+        auto kikimr = MakeKikimrRunner(NYql::IHTTPGateway::Make());
+
+        auto tc = kikimr->GetTableClient();
+        auto session = tc.CreateSession().GetValueSync().GetSession();
+        const TString query = fmt::format(R"sql(
+            CREATE EXTERNAL DATA SOURCE `{external_source}` WITH (
+                SOURCE_TYPE="ObjectStorage",
+                LOCATION="{location}",
+                AUTH_METHOD="NONE"
+            );)sql",
+            "external_source"_a = externalDataSourceName,
+            "location"_a = GetBucketLocation(bucket),
+            "object"_a = object
+            );
+        auto result = session.ExecuteSchemeQuery(query).GetValueSync();
+        UNIT_ASSERT_C(result.GetStatus() == NYdb::EStatus::SUCCESS, result.GetIssues().ToString());
+
+        {
+            const TString sql = fmt::format(R"sql(
+                    SELECT * FROM `{external_data_source}`;
+                )sql",
+                "external_data_source"_a=externalDataSourceName);
+
+            auto db = kikimr->GetQueryClient();
+            auto scriptExecutionOperation = db.ExecuteScript(sql).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(scriptExecutionOperation.Status().GetStatus(), EStatus::SUCCESS, scriptExecutionOperation.Status().GetIssues().ToString());
+            UNIT_ASSERT(scriptExecutionOperation.Metadata().ExecutionId);
+
+            NYdb::NQuery::TScriptExecutionOperation readyOp = WaitScriptExecutionOperation(scriptExecutionOperation.Id(), kikimr->GetDriver());
+            UNIT_ASSERT_EQUAL(readyOp.Metadata().ExecStatus, EExecStatus::Failed);
+            UNIT_ASSERT_STRING_CONTAINS(readyOp.Status().GetIssues().ToString(), "Attempt to read from external data source");
+        }
+
+        // select using inline syntax is well
+        {
+            const TString sql = fmt::format(R"sql(
+                    SELECT * FROM `{external_data_source}`.`{obj_path}`
+                    WITH (
+                        SCHEMA = (
+                            key Utf8 NOT NULL,
+                            value Utf8 NOT NULL
+                        ),
+                        FORMAT = "json_each_row"
+                    )
+                )sql",
+                "external_data_source"_a=externalDataSourceName,
+                "obj_path"_a = object);
+
+            auto db = kikimr->GetQueryClient();
+            auto scriptExecutionOperation = db.ExecuteScript(sql).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(scriptExecutionOperation.Status().GetStatus(), EStatus::SUCCESS, scriptExecutionOperation.Status().GetIssues().ToString());
+            UNIT_ASSERT(scriptExecutionOperation.Metadata().ExecutionId);
+
+            NYdb::NQuery::TScriptExecutionOperation readyOp = WaitScriptExecutionOperation(scriptExecutionOperation.Id(), kikimr->GetDriver());
+            UNIT_ASSERT_EQUAL(readyOp.Metadata().ExecStatus, EExecStatus::Completed);
+            TFetchScriptResultsResult results = db.FetchScriptResults(scriptExecutionOperation.Id(), 0).ExtractValueSync();
+            UNIT_ASSERT_C(results.IsSuccess(), results.GetIssues().ToString());
+
+            TResultSetParser resultSet(results.ExtractResultSet());
+            UNIT_ASSERT_VALUES_EQUAL(resultSet.ColumnsCount(), 2);
+            UNIT_ASSERT_VALUES_EQUAL(resultSet.RowsCount(), 2);
+
+            UNIT_ASSERT(resultSet.TryNextRow());
+            UNIT_ASSERT_VALUES_EQUAL(resultSet.ColumnParser(0).GetUtf8(), "1");
+            UNIT_ASSERT_VALUES_EQUAL(resultSet.ColumnParser(1).GetUtf8(), "trololo");
+
+            UNIT_ASSERT(resultSet.TryNextRow());
+            UNIT_ASSERT_VALUES_EQUAL(resultSet.ColumnParser(0).GetUtf8(), "2");
+            UNIT_ASSERT_VALUES_EQUAL(resultSet.ColumnParser(1).GetUtf8(), "hello world");
+        }
+    }
+
+    Y_UNIT_TEST(InsertIntoDataSourceWithoutTable) {
+        const TString readDataSourceName = "/Root/read_data_source";
+        const TString readTableName = "/Root/read_binding";
+        const TString readBucket = "test_bucket_read_insert_into_data_source";
+        const TString readObject = "test_object_read";
+        const TString writeDataSourceName = "/Root/write_data_source";
+        const TString writeTableName = "/Root/write_binding";
+        const TString writeBucket = "test_bucket_write_insert_into_data_source";
+        const TString writeObject = "test_object_write/";
+
+        {
+            Aws::S3::S3Client s3Client = MakeS3Client();
+            CreateBucketWithObject(readBucket, readObject, TEST_CONTENT, s3Client);
+            CreateBucket(writeBucket, s3Client);
+        }
+
+        auto kikimr = MakeKikimrRunner(NYql::IHTTPGateway::Make());
+
+        auto tc = kikimr->GetTableClient();
+        auto session = tc.CreateSession().GetValueSync().GetSession();
+        const TString query = fmt::format(R"sql(
+            CREATE EXTERNAL DATA SOURCE `{read_source}` WITH (
+                SOURCE_TYPE="ObjectStorage",
+                LOCATION="{read_location}",
+                AUTH_METHOD="NONE"
+            );
+            CREATE EXTERNAL TABLE `{read_table}` (
+                key Utf8 NOT NULL,
+                value Utf8 NOT NULL
+            ) WITH (
+                DATA_SOURCE="{read_source}",
+                LOCATION="{read_object}",
+                FORMAT="json_each_row"
+            );
+
+            CREATE EXTERNAL DATA SOURCE `{write_source}` WITH (
+                SOURCE_TYPE="ObjectStorage",
+                LOCATION="{write_location}",
+                AUTH_METHOD="NONE"
+            );
+            )sql",
+            "read_source"_a = readDataSourceName,
+            "read_table"_a = readTableName,
+            "read_location"_a = GetBucketLocation(readBucket),
+            "read_object"_a = readObject,
+            "write_source"_a = writeDataSourceName,
+            "write_table"_a = writeTableName,
+            "write_location"_a = GetBucketLocation(writeBucket)
+            );
+        auto schemeResult = session.ExecuteSchemeQuery(query).GetValueSync();
+        UNIT_ASSERT_C(schemeResult.GetStatus() == NYdb::EStatus::SUCCESS, schemeResult.GetIssues().ToString());
+
+        {
+            const TString sql = fmt::format(R"sql(
+                    INSERT INTO `{write_source}`
+                    SELECT * FROM `{read_table}`
+                )sql",
+                "read_table"_a=readTableName,
+                "write_source"_a = writeDataSourceName);
+
+            auto db = kikimr->GetQueryClient();
+            auto result = db.ExecuteQuery(sql, NYdb::NQuery::TTxControl::BeginTx().CommitTx()).GetValueSync();
+            UNIT_ASSERT_C(!result.IsSuccess(), result.GetIssues().ToString());
+            UNIT_ASSERT_EQUAL_C(result.GetStatus(), NYdb::EStatus::GENERIC_ERROR, static_cast<int>(result.GetStatus()) << ", " << result.GetIssues().ToString());
+            UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "Attempt to write to external data source");
+        }
+
+        // insert with inline syntax is well
+        {
+            Cerr << "Run inplace insert" << Endl;
+            const TString sql = fmt::format(R"sql(
+                    INSERT INTO `{write_source}`.`{write_object}`
+                    WITH (
+                        SCHEMA = (
+                            key Utf8 NOT NULL,
+                            value Utf8 NOT NULL
+                        ),
+                        FORMAT = "json_each_row"
+                    )
+                    SELECT * FROM `{read_table}`
+                )sql",
+                "read_table"_a=readTableName,
+                "write_source"_a = writeDataSourceName,
+                "write_object"_a = writeObject);
+
+            auto db = kikimr->GetQueryClient();
+            auto result = db.ExecuteQuery(sql, NYdb::NQuery::TTxControl::BeginTx().CommitTx()).GetValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        }
+    }
+
+    Y_UNIT_TEST(SpecifyExternalTableInsteadOfExternalDataSource) {
+        const TString externalDataSourceName = "external_data_source";
+        const TString externalTableName = "external_table";
+        const TString bucket = "test_bucket_specify_external_table";
+        const TString object = "test_object_specify_external_table";
+
+        CreateBucketWithObject(bucket, object, TEST_CONTENT);
+
+        auto kikimr = MakeKikimrRunner(NYql::IHTTPGateway::Make());
+
+        auto tc = kikimr->GetTableClient();
+        auto session = tc.CreateSession().GetValueSync().GetSession();
+        const TString query = fmt::format(R"sql(
+            CREATE EXTERNAL DATA SOURCE `{external_source}` WITH (
+                SOURCE_TYPE="ObjectStorage",
+                LOCATION="{location}",
+                AUTH_METHOD="NONE"
+            );
+
+            CREATE EXTERNAL TABLE `{external_table}` (
+                key Utf8 NOT NULL,
+                value Utf8 NOT NULL
+            ) WITH (
+                DATA_SOURCE="{external_source}",
+                LOCATION="{object}",
+                FORMAT="json_each_row"
+            );
+            )sql",
+            "external_source"_a = externalDataSourceName,
+            "external_table"_a = externalTableName,
+            "location"_a = GetBucketLocation(bucket),
+            "object"_a = object
+            );
+        auto result = session.ExecuteSchemeQuery(query).GetValueSync();
+        UNIT_ASSERT_C(result.GetStatus() == NYdb::EStatus::SUCCESS, result.GetIssues().ToString());
+
+        {
+            const TString sql = fmt::format(R"sql(
+                    SELECT * FROM `{external_table}`.`{object}`
+                    WITH (
+                        SCHEMA = (
+                            key Utf8 NOT NULL,
+                            value Utf8 NOT NULL
+                        ),
+                        FORMAT = "json_each_row"
+                    );
+                )sql",
+                "external_table"_a=externalTableName,
+                "object"_a = object);
+
+            auto db = kikimr->GetQueryClient();
+            auto queryExecutionOperation = db.ExecuteQuery(sql, NYdb::NQuery::TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+            UNIT_ASSERT_VALUES_UNEQUAL_C(queryExecutionOperation.GetStatus(), EStatus::SUCCESS, queryExecutionOperation.GetIssues().ToString());
+            UNIT_ASSERT_STRING_CONTAINS(queryExecutionOperation.GetIssues().ToString(), "\"/Root/external_table\" is expected to be external data source");
+        }
+
+        {
+            const TString sql = fmt::format(R"sql(
+                    INSERT INTO `{external_table}`.`{object}`
+                    WITH (
+                        SCHEMA = (
+                            key Utf8 NOT NULL,
+                            value Utf8 NOT NULL
+                        ),
+                        FORMAT = "json_each_row"
+                    )
+                    SELECT * FROM `{external_table}` WHERE key = '42';
+                )sql",
+                "external_table"_a=externalTableName,
+                "object"_a = object);
+
+            auto db = kikimr->GetQueryClient();
+            auto queryExecutionOperation = db.ExecuteQuery(sql, NYdb::NQuery::TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+            UNIT_ASSERT_VALUES_UNEQUAL_C(queryExecutionOperation.GetStatus(), EStatus::SUCCESS, queryExecutionOperation.GetIssues().ToString());
+            UNIT_ASSERT_STRING_CONTAINS(queryExecutionOperation.GetIssues().ToString(), "\"/Root/external_table\" is expected to be external data source");
+        }
+    }
+
+    Y_UNIT_TEST(QueryWithNoDataInS3) {
+        const TString externalDataSourceName = "tpc_h_s3_storage_connection";
+        const TString bucket = "test_bucket_no_data";
+
+        Aws::S3::S3Client s3Client = MakeS3Client();
+        CreateBucket(bucket, s3Client);
+        // Uncomment if you want to compare with query with data
+        //UploadObject(bucket, "l/l", R"json({"l_extendedprice": 0.0, "l_discount": 1.0, "l_partkey": 1})json", s3Client);
+        //UploadObject(bucket, "p/p", R"json({"p_partkey": 1, "p_type": "t"})json", s3Client);
+
+        auto kikimr = MakeKikimrRunner(NYql::IHTTPGateway::Make());
+        auto client = kikimr->GetQueryClient();
+
+        {
+            const TString query = fmt::format(R"sql(
+                CREATE EXTERNAL DATA SOURCE `{external_source}` WITH (
+                    SOURCE_TYPE="ObjectStorage",
+                    LOCATION="{location}",
+                    AUTH_METHOD="NONE"
+                );
+                )sql",
+                "external_source"_a = externalDataSourceName,
+                "location"_a = GetBucketLocation(bucket)
+                );
+            auto result = client.ExecuteQuery(query, TTxControl::NoTx()).GetValueSync();
+            UNIT_ASSERT_C(result.GetStatus() == NYdb::EStatus::SUCCESS, result.GetIssues().ToString());
+        }
+
+        {
+            // YQ-2750
+            const TString query = fmt::format(R"sql(
+                $border = Date("1994-08-01");
+                select
+                    100.00 * sum(case
+                        when StartsWith(p.p_type, 'PROMO')
+                            then l.l_extendedprice * (1 - l.l_discount)
+                        else 0
+                    end) / sum(l.l_extendedprice * (1 - l.l_discount)) as promo_revenue
+                from
+                    {external_source}.`l/` with ( schema (
+                        l_extendedprice double,
+                        l_discount double,
+                        l_partkey int64,
+                        l_shipdate date
+                    ),
+                    format = "json_each_row"
+                    ) as l
+                join
+                    {external_source}.`p/` with ( schema (
+                        p_partkey int64,
+                        p_type string
+                    ),
+                    format = "json_each_row"
+                    ) as p
+                on
+                    l.l_partkey = p.p_partkey
+                where
+                    cast(l.l_shipdate as timestamp) >= $border
+                    and cast(l.l_shipdate as timestamp) < ($border + Interval("P31D"));
+                )sql",
+                "external_source"_a = externalDataSourceName
+                );
+            auto result = client.ExecuteQuery(query, TTxControl::BeginTx().CommitTx()).GetValueSync();
+            UNIT_ASSERT_C(result.GetStatus() == NYdb::EStatus::SUCCESS, result.GetIssues().ToString());
+            auto rs = result.GetResultSetParser(0);
+            UNIT_ASSERT_VALUES_EQUAL(rs.RowsCount(), 1);
+            rs.TryNextRow();
+            TMaybe<double> sum = rs.ColumnParser(0).GetOptionalDouble();
+            UNIT_ASSERT(!sum);
+        }
     }
 }
 

@@ -33,3 +33,13 @@ items:
   href: balancing_load.md
 - name: Freeing up space on physical devices
   href: disk_end_space.md
+- name: Replacing a node's FQDN
+  href: replacing_nodes.md
+- name: Config overview
+  href: config-overview.md
+- name: Dynamic cluster configuration
+  href: dynamic-config.md
+- name: Cluster configuration DSL    
+  href: dynamic-config-selectors.md
+- name: Temporary configurations
+  href: dynamic-config-volatile-config.md  

@@ -231,11 +231,6 @@ struct IServiceContext
     //! Changes the response codec.
     virtual void SetResponseCodec(NCompression::ECodec codec) = 0;
 
-    // COPMAT(danilalexeev)
-    //! Returnes true if response body has been serialized with compression.
-    virtual bool IsResponseBodySerializedWithCompression() const = 0;
-    virtual void SetResponseBodySerializedWithCompression() = 0;
-
     // Extension methods.
 
     void SetRequestInfo();
@@ -277,12 +272,11 @@ struct TServiceId
     TServiceId() = default;
     TServiceId(std::string serviceName, TRealmId realmId = NullRealmId);
 
+    bool operator==(const TServiceId& other) const = default;
+
     std::string ServiceName;
     TRealmId RealmId;
 };
-
-bool operator == (const TServiceId& lhs, const TServiceId& rhs);
-bool operator != (const TServiceId& lhs, const TServiceId& rhs);
 
 TString ToString(const TServiceId& serviceId);
 

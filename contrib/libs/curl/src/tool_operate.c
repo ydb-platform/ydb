@@ -38,11 +38,11 @@
 #endif
 
 #ifdef __VMS
-#  include <fabdef.h>
+#  error #include <fabdef.h>
 #endif
 
 #ifdef __AMIGA__
-#  include <proto/dos.h>
+#  error #include <proto/dos.h>
 #endif
 
 #define ENABLE_CURLX_PRINTF

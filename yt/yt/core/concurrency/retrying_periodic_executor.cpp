@@ -21,9 +21,13 @@ namespace NDetail {
 
 TRetryingInvocationTimePolicy::TRetryingInvocationTimePolicy(
     const TOptions& options)
-    : TDefaultInvocationTimePolicy(options.Periodic)
-    , Backoff_(options.BackoffStrategy)
-{ }
+    : TDefaultInvocationTimePolicy(options)
+    , Backoff_(options)
+{
+    CachedBackoffDuration_.store(options.MinBackoff, std::memory_order::relaxed);
+    CachedBackoffMultiplier_.store(options.BackoffJitter, std::memory_order::relaxed);
+    CachedBackoffJitter_.store(options.BackoffJitter,std::memory_order::relaxed);
+}
 
 void TRetryingInvocationTimePolicy::ProcessResult(TError result)
 {
@@ -40,7 +44,7 @@ void TRetryingInvocationTimePolicy::ProcessResult(TError result)
 
 bool TRetryingInvocationTimePolicy::ShouldKickstart(const TOptions& newOptions)
 {
-    return ShouldKickstart(newOptions.Periodic, std::nullopt);
+    return ShouldKickstart(newOptions, std::nullopt);
 }
 
 bool TRetryingInvocationTimePolicy::ShouldKickstart(
@@ -54,7 +58,7 @@ bool TRetryingInvocationTimePolicy::ShouldKickstart(
 
 void TRetryingInvocationTimePolicy::SetOptions(TOptions newOptions)
 {
-    SetOptions(newOptions.Periodic, newOptions.BackoffStrategy);
+    SetOptions(newOptions, newOptions);
 }
 
 void TRetryingInvocationTimePolicy::SetOptions(
@@ -66,11 +70,21 @@ void TRetryingInvocationTimePolicy::SetOptions(
     }
 
     if (backoffOptions) {
+        Backoff_.UpdateOptions(*backoffOptions);
+
+        if (!IsInBackoffMode()) {
+            Backoff_.Restart();
+        }
+
+        CachedBackoffDuration_.store(
+            Backoff_.GetBackoff(),
+            std::memory_order::relaxed);
         CachedBackoffMultiplier_.store(
             backoffOptions->BackoffMultiplier,
             std::memory_order::relaxed);
-
-        Backoff_.UpdateOptions(*backoffOptions);
+        CachedBackoffJitter_.store(
+            backoffOptions->BackoffJitter,
+            std::memory_order::relaxed);
     }
 }
 
@@ -93,11 +107,15 @@ void TRetryingInvocationTimePolicy::Reset()
     Backoff_.Restart();
 }
 
-TDuration TRetryingInvocationTimePolicy::GetBackoffTimeEstimate() const
+std::tuple<TDuration, TDuration> TRetryingInvocationTimePolicy::GetBackoffInterval() const
 {
-    return
+    auto backoffMedian =
         CachedBackoffDuration_.load(std::memory_order::relaxed) *
         CachedBackoffMultiplier_.load(std::memory_order::relaxed);
+
+    auto backoffJitter = CachedBackoffJitter_.load(std::memory_order::relaxed);
+
+    return std::tuple(backoffMedian * (1 - backoffJitter), backoffMedian * (1 + backoffJitter));
 }
 
 bool TRetryingInvocationTimePolicy::IsInBackoffMode() const
@@ -149,9 +167,9 @@ TRetryingPeriodicExecutor::TRetryingPeriodicExecutor(
         backoffOptions)
 { }
 
-TDuration TRetryingPeriodicExecutor::GetBackoffTimeEstimate() const
+std::tuple<TDuration, TDuration> TRetryingPeriodicExecutor::GetBackoffInterval() const
 {
-    return TBase::GetBackoffTimeEstimate();
+    return TBase::GetBackoffInterval();
 }
 
 ////////////////////////////////////////////////////////////////////////////////

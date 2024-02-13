@@ -1,5 +1,5 @@
 /* toutf8.c --- Convert strings from system locale into UTF-8.
-   Copyright (C) 2002-2022 Simon Josefsson
+   Copyright (C) 2002-2024 Simon Josefsson
 
    This file is part of GNU Libidn.
 
@@ -120,6 +120,8 @@ stringprep_convert (const char *str,
   return str_iconv (str, from_codeset, to_codeset);
 #else
   char *p;
+  (void) to_codeset;
+  (void) from_codeset;
   fprintf (stderr, "libidn: warning: libiconv not installed, cannot "
 	   "convert data to UTF-8\n");
   p = malloc (strlen (str) + 1);

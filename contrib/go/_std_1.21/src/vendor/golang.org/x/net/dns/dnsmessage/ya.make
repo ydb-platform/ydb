@@ -1,7 +1,7 @@
 GO_LIBRARY()
-
-SRCS(
-    message.go
-)
-
+IF (TRUE)
+    SRCS(
+		message.go
+    )
+ENDIF()
 END()

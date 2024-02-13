@@ -115,13 +115,24 @@ IGraphTransformer::TStatus BlockExpandChunkedWrapper(const TExprNode::TPtr& inpu
         return IGraphTransformer::TStatus::Error;
     }
 
+    TTypeAnnotationNode::TListType itemTypes;
     TTypeAnnotationNode::TListType blockItemTypes;
-    if (!EnsureWideFlowBlockType(input->Head(), blockItemTypes, ctx.Expr)) {
-        return IGraphTransformer::TStatus::Error;
-    }
 
-    auto flowItemTypes = input->Head().GetTypeAnn()->Cast<TFlowExprType>()->GetItemType()->Cast<TMultiExprType>()->GetItems();
-    bool allScalars = AllOf(flowItemTypes, [](const TTypeAnnotationNode* item) { return item->GetKind() == ETypeAnnotationKind::Scalar; });
+    if (input->Head().GetTypeAnn()->GetKind() == ETypeAnnotationKind::Stream) {
+        if (!EnsureWideStreamBlockType(input->Head(), blockItemTypes, ctx.Expr)) {
+            return IGraphTransformer::TStatus::Error;
+        }
+
+        itemTypes = input->Head().GetTypeAnn()->Cast<TStreamExprType>()->GetItemType()->Cast<TMultiExprType>()->GetItems();
+    } else {
+        if (!EnsureWideFlowBlockType(input->Head(), blockItemTypes, ctx.Expr)) {
+            return IGraphTransformer::TStatus::Error;
+        }
+
+        itemTypes = input->Head().GetTypeAnn()->Cast<TFlowExprType>()->GetItemType()->Cast<TMultiExprType>()->GetItems();
+    }
+    
+    bool allScalars = AllOf(itemTypes, [](const TTypeAnnotationNode* item) { return item->GetKind() == ETypeAnnotationKind::Scalar; });
     if (allScalars) {
         output = input->HeadPtr();
         return IGraphTransformer::TStatus::Repeat;

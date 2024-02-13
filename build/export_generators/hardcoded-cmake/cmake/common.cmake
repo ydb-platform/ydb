@@ -103,7 +103,7 @@ endfunction()
 
 function(generate_enum_serilization Tgt Input)
   set(opts "")
-  set(oneval_args INCLUDE_HEADERS)
+  set(oneval_args INCLUDE_HEADERS GEN_HEADER)
   set(multival_args "")
   cmake_parse_arguments(ENUM_SERIALIZATION_ARGS
     "${opts}"
@@ -115,15 +115,29 @@ function(generate_enum_serilization Tgt Input)
   get_built_tool_path(enum_parser_bin enum_parser_dependency tools/enum_parser/enum_parser enum_parser)
 
   get_filename_component(BaseName ${Input} NAME)
-  add_custom_command(
-    OUTPUT ${CMAKE_CURRENT_BINARY_DIR}/${BaseName}_serialized.cpp
-    COMMAND
-      ${enum_parser_bin}
-      ${Input}
-      --include-path ${ENUM_SERIALIZATION_ARGS_INCLUDE_HEADERS}
-      --output ${CMAKE_CURRENT_BINARY_DIR}/${BaseName}_serialized.cpp
-    DEPENDS ${Input} ${enum_parser_dependency}
-  )
+  if (ENUM_SERIALIZATION_ARGS_GEN_HEADER)
+    set_property(SOURCE ${ENUM_SERIALIZATION_ARGS_GEN_HEADER} PROPERTY GENERATED On)
+    add_custom_command(
+      OUTPUT ${CMAKE_CURRENT_BINARY_DIR}/${BaseName}_serialized.cpp ${ENUM_SERIALIZATION_ARGS_GEN_HEADER}
+      COMMAND
+        ${enum_parser_bin}
+        ${Input}
+        --include-path ${ENUM_SERIALIZATION_ARGS_INCLUDE_HEADERS}
+        --output ${CMAKE_CURRENT_BINARY_DIR}/${BaseName}_serialized.cpp
+        --header ${ENUM_SERIALIZATION_ARGS_GEN_HEADER}
+      DEPENDS ${Input} ${enum_parser_dependency}
+    )
+  else()
+    add_custom_command(
+      OUTPUT ${CMAKE_CURRENT_BINARY_DIR}/${BaseName}_serialized.cpp
+      COMMAND
+        ${enum_parser_bin}
+        ${Input}
+        --include-path ${ENUM_SERIALIZATION_ARGS_INCLUDE_HEADERS}
+        --output ${CMAKE_CURRENT_BINARY_DIR}/${BaseName}_serialized.cpp
+      DEPENDS ${Input} ${enum_parser_dependency}
+    )
+  endif()
   target_sources(${Tgt} PRIVATE ${CMAKE_CURRENT_BINARY_DIR}/${BaseName}_serialized.cpp)
 endfunction()
 
@@ -296,13 +310,13 @@ function(set_yunittest_property)
   get_property(SPLIT_FACTOR TARGET ${YUNITTEST_ARGS_TEST} PROPERTY SPLIT_FACTOR)
 
   if ((${SPLIT_FACTOR} EQUAL 1) OR (EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/run_testpack"))
-    set_property(TEST ${YUNITTEST_ARGS_TEST} PROPERTY ${YUNITTEST_ARGS_PROPERTY} ${YUNITTEST_ARGS_UNPARSED_ARGUMENTS})
+    set_property(TEST ${YUNITTEST_ARGS_TEST} PROPERTY ${YUNITTEST_ARGS_PROPERTY} "${YUNITTEST_ARGS_UNPARSED_ARGUMENTS}")
   	return()
   endif()
 
   math(EXPR LastIdx "${SPLIT_FACTOR} - 1")
   foreach(Idx RANGE ${LastIdx})
-    set_property(TEST ${YUNITTEST_ARGS_TEST}_${Idx} PROPERTY ${YUNITTEST_ARGS_PROPERTY} ${YUNITTEST_ARGS_UNPARSED_ARGUMENTS})
+    set_property(TEST ${YUNITTEST_ARGS_TEST}_${Idx} PROPERTY ${YUNITTEST_ARGS_PROPERTY} "${YUNITTEST_ARGS_UNPARSED_ARGUMENTS}")
   endforeach()
 endfunction()
 

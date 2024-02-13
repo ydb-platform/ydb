@@ -5,8 +5,9 @@
 #include "schemeshard_tx_infly.h"
 #include "schemeshard_path_element.h"
 #include "schemeshard_identificators.h"
-#include "schemeshard_olap_types.h"
 #include "schemeshard_schema.h"
+#include "olap/schema/schema.h"
+#include "olap/schema/update.h"
 
 #include <ydb/core/tx/message_seqno.h>
 #include <ydb/core/tx/datashard/datashard.h>
@@ -402,6 +403,8 @@ struct TTableInfo : public TSimpleRefCount<TTableInfo> {
     THashMap<ui32, TColumn> Columns;
     TVector<ui32> KeyColumnIds;
     bool IsBackup = false;
+    bool IsTemporary = false;
+    TActorId OwnerActorId;
 
     TAlterTableInfo::TPtr AlterData;
 
@@ -2193,7 +2196,7 @@ private:
     TPathId ResourcesDomainId;
     TTabletId SharedHive = InvalidTabletId;
     TMaybeServerlessComputeResourcesMode ServerlessComputeResourcesMode;
-    
+
     NLoginProto::TSecurityState SecurityState;
     ui64 SecurityStateVersion = 0;
 
@@ -3006,22 +3009,30 @@ struct TIndexBuildInfo: public TSimpleRefCount<TIndexBuildInfo> {
     struct TColumnBuildInfo {
         TString ColumnName;
         Ydb::TypedValue DefaultFromLiteral;
+        bool NotNull = false;
+        TString FamilyName;
 
-        TColumnBuildInfo(const TString& name, const TString& serializedLiteral)
+        TColumnBuildInfo(const TString& name, const TString& serializedLiteral, bool notNull, const TString& familyName)
             : ColumnName(name)
+            , NotNull(notNull)
+            , FamilyName(familyName)
         {
             Y_ABORT_UNLESS(DefaultFromLiteral.ParseFromString(serializedLiteral));
         }
 
-        TColumnBuildInfo(const TString& name, const Ydb::TypedValue& defaultFromLiteral)
+        TColumnBuildInfo(const TString& name, const Ydb::TypedValue& defaultFromLiteral, bool notNull, const TString& familyName)
             : ColumnName(name)
             , DefaultFromLiteral(defaultFromLiteral)
+            , NotNull(notNull)
+            , FamilyName(familyName)
         {
         }
 
         void SerializeToProto(NKikimrIndexBuilder::TColumnBuildSetting* setting) const {
             setting->SetColumnName(ColumnName);
             setting->mutable_default_from_literal()->CopyFrom(DefaultFromLiteral);
+            setting->SetNotNull(NotNull);
+            setting->SetFamily(FamilyName);
         }
     };
 
@@ -3139,7 +3150,9 @@ struct TIndexBuildInfo: public TSimpleRefCount<TIndexBuildInfo> {
     void AddBuildColumnInfo(const TRow& row){
         TString columnName = row.template GetValue<Schema::BuildColumnOperationSettings::ColumnName>();
         TString defaultFromLiteral = row.template GetValue<Schema::BuildColumnOperationSettings::DefaultFromLiteral>();
-        BuildColumns.push_back(TColumnBuildInfo(columnName, defaultFromLiteral));
+        bool notNull = row.template GetValue<Schema::BuildColumnOperationSettings::NotNull>();
+        TString familyName = row.template GetValue<Schema::BuildColumnOperationSettings::FamilyName>();
+        BuildColumns.push_back(TColumnBuildInfo(columnName, defaultFromLiteral, notNull, familyName));
     }
 
     template<class TRowSetType>

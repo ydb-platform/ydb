@@ -1,5 +1,6 @@
 package NYT.NChunkClient.NProto;
 
+import "yt_proto/yt/core/misc/proto/guid.proto";
 import "yt_proto/yt/core/misc/proto/protobuf_helpers.proto";
 
 option go_package = "a.yandex-team.ru/yt/go/proto/client/chunk_client";
@@ -90,6 +91,9 @@ message TMiscExt
 
     // If present, chunk is a compression dictionary of respective policy.
     optional int32 dictionary_compression_policy = 24; // EDictionaryCompressionPolicy
+
+    // If present, chunk values are comressed with dictionary of respective id.
+    optional NYT.NProto.TGuid compression_dictionary_id = 25;
 
     reserved 20;
 }

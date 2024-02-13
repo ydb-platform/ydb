@@ -8,8 +8,125 @@ namespace NYT::NDriver {
 
 ////////////////////////////////////////////////////////////////////////////////
 
+class TPipelineCommandBase
+    : public virtual NYTree::TYsonStructLite
+{
+public:
+    REGISTER_YSON_STRUCT_LITE(TPipelineCommandBase);
+
+    static void Register(TRegistrar registrar);
+
+protected:
+    NYPath::TYPath PipelinePath;
+};
+
+////////////////////////////////////////////////////////////////////////////////
+
+class TGetPipelineSpecCommand
+    : public TTypedCommand<NApi::TGetPipelineSpecOptions>
+    , public TPipelineCommandBase
+{
+public:
+    REGISTER_YSON_STRUCT_LITE(TGetPipelineSpecCommand);
+
+    static void Register(TRegistrar registrar);
+
+private:
+    NYPath::TYPath SpecPath;
+
+    void DoExecute(ICommandContextPtr context) override;
+};
+
+////////////////////////////////////////////////////////////////////////////////
+
+class TSetPipelineSpecCommand
+    : public TTypedCommand<NApi::TSetPipelineSpecOptions>
+    , public TPipelineCommandBase
+{
+public:
+    REGISTER_YSON_STRUCT_LITE(TSetPipelineSpecCommand);
+
+    static void Register(TRegistrar registrar);
+
+private:
+    NYPath::TYPath SpecPath;
+
+    void DoExecute(ICommandContextPtr context) override;
+};
+
+////////////////////////////////////////////////////////////////////////////////
+
+class TRemovePipelineSpecCommand
+    : public TTypedCommand<NApi::TSetPipelineSpecOptions>
+    , public TPipelineCommandBase
+{
+public:
+    REGISTER_YSON_STRUCT_LITE(TRemovePipelineSpecCommand);
+
+    static void Register(TRegistrar registrar);
+
+private:
+    NYPath::TYPath SpecPath;
+
+    void DoExecute(ICommandContextPtr context) override;
+};
+
+////////////////////////////////////////////////////////////////////////////////
+
+class TGetPipelineDynamicSpecCommand
+    : public TTypedCommand<NApi::TGetPipelineDynamicSpecOptions>
+    , public TPipelineCommandBase
+{
+public:
+    REGISTER_YSON_STRUCT_LITE(TGetPipelineDynamicSpecCommand);
+
+    static void Register(TRegistrar registrar);
+
+private:
+    NYPath::TYPath SpecPath;
+
+    void DoExecute(ICommandContextPtr context) override;
+};
+
+////////////////////////////////////////////////////////////////////////////////
+
+class TSetPipelineDynamicSpecCommand
+    : public TTypedCommand<NApi::TSetPipelineDynamicSpecOptions>
+    , public TPipelineCommandBase
+{
+public:
+    REGISTER_YSON_STRUCT_LITE(TSetPipelineDynamicSpecCommand);
+
+    static void Register(TRegistrar registrar);
+
+private:
+    NYPath::TYPath SpecPath;
+
+    void DoExecute(ICommandContextPtr context) override;
+};
+
+////////////////////////////////////////////////////////////////////////////////
+
+class TRemovePipelineDynamicSpecCommand
+    : public TTypedCommand<NApi::TSetPipelineDynamicSpecOptions>
+    , public TPipelineCommandBase
+{
+public:
+    REGISTER_YSON_STRUCT_LITE(TRemovePipelineDynamicSpecCommand);
+
+    static void Register(TRegistrar registrar);
+
+private:
+    NYPath::TYPath SpecPath;
+
+    void DoExecute(ICommandContextPtr context) override;
+};
+
+////////////////////////////////////////////////////////////////////////////////
+
 class TStartPipelineCommand
     : public TTypedCommand<NApi::TStartPipelineOptions>
+    , public TPipelineCommandBase
 {
 public:
     REGISTER_YSON_STRUCT_LITE(TStartPipelineCommand);
@@ -17,8 +134,6 @@ public:
     static void Register(TRegistrar registrar);
 
 private:
-    NYPath::TYPath PipelinePath;
-
     void DoExecute(ICommandContextPtr context) override;
 };
 
@@ -26,6 +141,7 @@ private:
 
 class TStopPipelineCommand
     : public TTypedCommand<NApi::TStopPipelineOptions>
+    , public TPipelineCommandBase
 {
 public:
     REGISTER_YSON_STRUCT_LITE(TStopPipelineCommand);
@@ -33,15 +149,14 @@ public:
     static void Register(TRegistrar registrar);
 
 private:
-    NYPath::TYPath PipelinePath;
-
     void DoExecute(ICommandContextPtr context) override;
 };
 
 ////////////////////////////////////////////////////////////////////////////////
 
 class TPausePipelineCommand
-    : public TTypedCommand<NApi::TStopPipelineOptions>
+    : public TTypedCommand<NApi::TPausePipelineOptions>
+    , public TPipelineCommandBase
 {
 public:
     REGISTER_YSON_STRUCT_LITE(TPausePipelineCommand);
@@ -49,8 +164,6 @@ public:
     static void Register(TRegistrar registrar);
 
 private:
-    NYPath::TYPath PipelinePath;
-
     void DoExecute(ICommandContextPtr context) override;
 };
 
@@ -58,6 +171,7 @@ private:
 
 class TGetPipelineStatusCommand
     : public TTypedCommand<NApi::TGetPipelineStatusOptions>
+    , public TPipelineCommandBase
 {
 public:
     REGISTER_YSON_STRUCT_LITE(TGetPipelineStatusCommand);
@@ -65,8 +179,6 @@ public:
     static void Register(TRegistrar registrar);
 
 private:
-    NYPath::TYPath PipelinePath;
-
     void DoExecute(ICommandContextPtr context) override;
 };
 

@@ -5112,12 +5112,14 @@ TMaybe<ui32> GetDataFixedSize(const TTypeAnnotationNode* typeAnnotation) {
             return 2;
         }
 
-        if (EDataSlot::Datetime == dataSlot || EDataSlot::Uint32 == dataSlot || EDataSlot::Int32 == dataSlot
+        if (EDataSlot::Datetime == dataSlot || EDataSlot::Date32 == dataSlot
+            || EDataSlot::Uint32 == dataSlot || EDataSlot::Int32 == dataSlot
             || EDataSlot::Float == dataSlot) {
             return 4;
         }
 
         if (EDataSlot::Timestamp == dataSlot || EDataSlot::Uint64 == dataSlot || EDataSlot::Int64 == dataSlot
+            || EDataSlot::Datetime64 == dataSlot || EDataSlot::Timestamp64 == dataSlot || EDataSlot::Interval64 == dataSlot
             || EDataSlot::Double == dataSlot || EDataSlot::Interval == dataSlot) {
             return 8;
         }

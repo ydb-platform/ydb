@@ -312,4 +312,178 @@ Y_UNIT_TEST_SUITE(TExternalTableTest) {
                 Columns { Name: "Value" Type: "Utf8"}
             )", {{NKikimrScheme::StatusPathDoesNotExist, "Check failed: path: '/MyRoot/ExternalDataSource1'"}});
     }
+
+    Y_UNIT_TEST(ReplaceExternalTableIfNotExists) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime, TTestEnvOptions().EnableReplaceIfExistsForExternalEntities(true));
+        ui64 txId = 100;
+
+        CreateExternalDataSource(runtime, env, ++txId);
+        TestCreateExternalTable(runtime, ++txId, "/MyRoot", R"(
+                Name: "ExternalTable"
+                SourceType: "General"
+                DataSourcePath: "/MyRoot/ExternalDataSource"
+                Location: "/"
+                Columns { Name: "key" Type: "Uint64" }
+                ReplaceIfExists: true
+            )", {NKikimrScheme::StatusAccepted});
+
+        env.TestWaitNotification(runtime, txId);
+
+        {
+            auto describeResult = DescribePath(runtime, "/MyRoot/ExternalTable");
+            TestDescribeResult(describeResult, {NLs::PathExist});
+            UNIT_ASSERT(describeResult.GetPathDescription().HasExternalTableDescription());
+            const auto& externalTableDescription = describeResult.GetPathDescription().GetExternalTableDescription();
+            UNIT_ASSERT_VALUES_EQUAL(externalTableDescription.GetName(), "ExternalTable");
+            UNIT_ASSERT_VALUES_EQUAL(externalTableDescription.GetDataSourcePath(), "/MyRoot/ExternalDataSource");
+            UNIT_ASSERT_VALUES_EQUAL(externalTableDescription.GetLocation(), "/");
+            UNIT_ASSERT_VALUES_EQUAL(externalTableDescription.GetSourceType(), "ObjectStorage");
+            UNIT_ASSERT_VALUES_EQUAL(externalTableDescription.GetVersion(), 1);
+            auto& columns = externalTableDescription.GetColumns();
+            UNIT_ASSERT_VALUES_EQUAL(columns.size(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(columns.Get(0).GetName(), "key");
+            UNIT_ASSERT_VALUES_EQUAL(columns.Get(0).GetType(), "Uint64");
+            UNIT_ASSERT_VALUES_EQUAL(columns.Get(0).GetNotNull(), false);
+        }
+
+        TestCreateExternalTable(runtime, ++txId, "/MyRoot", R"(
+                Name: "ExternalTable"
+                SourceType: "General"
+                DataSourcePath: "/MyRoot/ExternalDataSource"
+                Location: "/new_location"
+                Columns { Name: "key" Type: "Uint64" }
+                Columns { Name: "value" Type: "Uint64" }
+                ReplaceIfExists: true
+            )", {NKikimrScheme::StatusAccepted});
+        env.TestWaitNotification(runtime, txId);
+
+        {
+            auto describeResult = DescribePath(runtime, "/MyRoot/ExternalTable");
+            TestDescribeResult(describeResult, {NLs::PathExist});
+            UNIT_ASSERT(describeResult.GetPathDescription().HasExternalTableDescription());
+            const auto& externalTableDescription = describeResult.GetPathDescription().GetExternalTableDescription();
+            UNIT_ASSERT_VALUES_EQUAL(externalTableDescription.GetName(), "ExternalTable");
+            UNIT_ASSERT_VALUES_EQUAL(externalTableDescription.GetDataSourcePath(), "/MyRoot/ExternalDataSource");
+            UNIT_ASSERT_VALUES_EQUAL(externalTableDescription.GetLocation(), "/new_location");
+            UNIT_ASSERT_VALUES_EQUAL(externalTableDescription.GetSourceType(), "ObjectStorage");
+            UNIT_ASSERT_VALUES_EQUAL(externalTableDescription.GetVersion(), 2);
+            auto& columns = externalTableDescription.GetColumns();
+            UNIT_ASSERT_VALUES_EQUAL(columns.size(), 2);
+            UNIT_ASSERT_VALUES_EQUAL(columns.Get(0).GetName(), "key");
+            UNIT_ASSERT_VALUES_EQUAL(columns.Get(0).GetType(), "Uint64");
+            UNIT_ASSERT_VALUES_EQUAL(columns.Get(0).GetNotNull(), false);
+            UNIT_ASSERT_VALUES_EQUAL(columns.Get(1).GetName(), "value");
+            UNIT_ASSERT_VALUES_EQUAL(columns.Get(1).GetType(), "Uint64");
+            UNIT_ASSERT_VALUES_EQUAL(columns.Get(1).GetNotNull(), false);
+        }
+    }
+
+    Y_UNIT_TEST(CreateExternalTableShouldFailIfSuchEntityAlreadyExists) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime, TTestEnvOptions().EnableReplaceIfExistsForExternalEntities(true));
+        ui64 txId = 100;
+
+        CreateExternalDataSource(runtime, env, ++txId);
+        TestCreateExternalTable(runtime, ++txId, "/MyRoot", R"(
+                Name: "ExternalTable"
+                SourceType: "General"
+                DataSourcePath: "/MyRoot/ExternalDataSource"
+                Location: "/"
+                Columns { Name: "key" Type: "Uint64" }
+            )", {NKikimrScheme::StatusAccepted});
+
+        env.TestWaitNotification(runtime, txId);
+
+        {
+            auto describeResult = DescribePath(runtime, "/MyRoot/ExternalTable");
+            TestDescribeResult(describeResult, {NLs::PathExist});
+            UNIT_ASSERT(describeResult.GetPathDescription().HasExternalTableDescription());
+            const auto& externalTableDescription = describeResult.GetPathDescription().GetExternalTableDescription();
+            UNIT_ASSERT_VALUES_EQUAL(externalTableDescription.GetName(), "ExternalTable");
+            UNIT_ASSERT_VALUES_EQUAL(externalTableDescription.GetDataSourcePath(), "/MyRoot/ExternalDataSource");
+            UNIT_ASSERT_VALUES_EQUAL(externalTableDescription.GetLocation(), "/");
+            UNIT_ASSERT_VALUES_EQUAL(externalTableDescription.GetSourceType(), "ObjectStorage");
+            UNIT_ASSERT_VALUES_EQUAL(externalTableDescription.GetVersion(), 1);
+            auto& columns = externalTableDescription.GetColumns();
+            UNIT_ASSERT_VALUES_EQUAL(columns.size(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(columns.Get(0).GetName(), "key");
+            UNIT_ASSERT_VALUES_EQUAL(columns.Get(0).GetType(), "Uint64");
+            UNIT_ASSERT_VALUES_EQUAL(columns.Get(0).GetNotNull(), false);
+        }
+
+        TestCreateExternalTable(runtime, ++txId, "/MyRoot", R"(
+                Name: "ExternalTable"
+                SourceType: "General"
+                DataSourcePath: "/MyRoot/ExternalDataSource"
+                Location: "/new_location"
+                Columns { Name: "key" Type: "Uint64" }
+                Columns { Name: "value" Type: "Uint64" }
+            )", {NKikimrScheme::StatusAlreadyExists});
+        env.TestWaitNotification(runtime, txId);
+
+        {
+            auto describeResult = DescribePath(runtime, "/MyRoot/ExternalTable");
+            TestDescribeResult(describeResult, {NLs::PathExist});
+            UNIT_ASSERT(describeResult.GetPathDescription().HasExternalTableDescription());
+            const auto& externalTableDescription = describeResult.GetPathDescription().GetExternalTableDescription();
+            UNIT_ASSERT_VALUES_EQUAL(externalTableDescription.GetName(), "ExternalTable");
+            UNIT_ASSERT_VALUES_EQUAL(externalTableDescription.GetDataSourcePath(), "/MyRoot/ExternalDataSource");
+            UNIT_ASSERT_VALUES_EQUAL(externalTableDescription.GetLocation(), "/");
+            UNIT_ASSERT_VALUES_EQUAL(externalTableDescription.GetSourceType(), "ObjectStorage");
+            UNIT_ASSERT_VALUES_EQUAL(externalTableDescription.GetVersion(), 1);
+            auto& columns = externalTableDescription.GetColumns();
+            UNIT_ASSERT_VALUES_EQUAL(columns.size(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(columns.Get(0).GetName(), "key");
+            UNIT_ASSERT_VALUES_EQUAL(columns.Get(0).GetType(), "Uint64");
+            UNIT_ASSERT_VALUES_EQUAL(columns.Get(0).GetNotNull(), false);
+        }
+    }
+
+    Y_UNIT_TEST(ReplaceExternalTableShouldFailIfEntityOfAnotherTypeWithSameNameExists) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime, TTestEnvOptions().EnableReplaceIfExistsForExternalEntities(true));
+        ui64 txId = 100;
+
+        TestCreateView(runtime, ++txId, "/MyRoot", R"(
+                Name: "UniqueName"
+                QueryText: "Some query"
+            )", {NKikimrScheme::StatusAccepted}
+        );
+        env.TestWaitNotification(runtime, txId);
+
+        TestLs(runtime, "/MyRoot/UniqueName", false, NLs::PathExist);
+
+        CreateExternalDataSource(runtime, env, ++txId);
+        TestCreateExternalTable(runtime, ++txId, "/MyRoot", R"(
+                Name: "UniqueName"
+                SourceType: "General"
+                DataSourcePath: "/MyRoot/ExternalDataSource"
+                Location: "/"
+                Columns { Name: "key" Type: "Uint64" }
+                ReplaceIfExists: true
+            )", {{NKikimrScheme::StatusNameConflict, "error: unexpected path type"}});
+
+        env.TestWaitNotification(runtime, txId);
+    }
+
+    Y_UNIT_TEST(ReplaceExternalTableIfNotExistsShouldFailIfFeatureFlagIsNotSet) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime, TTestEnvOptions().EnableReplaceIfExistsForExternalEntities(false));
+        ui64 txId = 100;
+
+        CreateExternalDataSource(runtime, env, ++txId);
+        TestCreateExternalTable(runtime, ++txId, "/MyRoot", R"(
+                Name: "ExternalTable"
+                SourceType: "General"
+                DataSourcePath: "/MyRoot/ExternalDataSource"
+                Location: "/"
+                Columns { Name: "key" Type: "Uint64" }
+                ReplaceIfExists: true
+            )", {{NKikimrScheme::StatusPreconditionFailed, "Unsupported: feature flag EnableReplaceIfExistsForExternalEntities is off"}});
+
+        env.TestWaitNotification(runtime, txId);
+
+        TestLs(runtime, "/MyRoot/ExternalTable", false, NLs::PathNotExist);
+    }
 }

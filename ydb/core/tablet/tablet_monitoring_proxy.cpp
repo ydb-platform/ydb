@@ -35,15 +35,15 @@ public:
         return NKikimrServices::TActivity::TABLET_FORWARDING_ACTOR;
     }
 
-    TForwardingActor(const TTabletMonitoringProxyConfig& config, ui64 targetTablet, bool forceFollower, const TActorId& sender, const NMonitoring::IMonHttpRequest& request)
+    TForwardingActor(const TTabletMonitoringProxyConfig& config, ui64 targetTablet, bool forceFollower, const TActorId& sender, const NMonitoring::IMonHttpRequest& request, const TString& userToken)
         : Config(config)
         , TargetTablet(targetTablet)
         , ForceFollower(forceFollower)
         , Sender(sender)
-        , Request(ConvertRequestToProtobuf(request))
+        , Request(ConvertRequestToProtobuf(request, userToken))
     {}
 
-    static NActorsProto::TRemoteHttpInfo ConvertRequestToProtobuf(const NMonitoring::IMonHttpRequest& request) {
+    static NActorsProto::TRemoteHttpInfo ConvertRequestToProtobuf(const NMonitoring::IMonHttpRequest& request, const TString& userToken) {
         NActorsProto::TRemoteHttpInfo pb;
         pb.SetMethod(request.GetMethod());
         pb.SetPath(TString(request.GetPathInfo()));
@@ -70,6 +70,7 @@ public:
         if (const auto& addr = request.GetRemoteAddr()) {
             pb.SetRemoteAddr(addr.data(), addr.size());
         }
+        pb.SetUserToken(userToken);
         return pb;
     }
 
@@ -279,7 +280,7 @@ TTabletMonitoringProxyActor::Handle(NMon::TEvHttpInfo::TPtr &ev, const TActorCon
         const TString &tabletIdParam = cgi->Get("FollowerID");
         const ui64 tabletId = TryParseTabletId(tabletIdParam);
         if (tabletId) {
-            ctx.ExecutorThread.RegisterActor(new TForwardingActor(Config, tabletId, true, ev->Sender, msg->Request));
+            ctx.ExecutorThread.RegisterActor(new TForwardingActor(Config, tabletId, true, ev->Sender, msg->Request, msg->UserToken));
             return;
         }
     }
@@ -289,7 +290,7 @@ TTabletMonitoringProxyActor::Handle(NMon::TEvHttpInfo::TPtr &ev, const TActorCon
         const TString &tabletIdParam = cgi->Get("TabletID");
         const ui64 tabletId = TryParseTabletId(tabletIdParam);
         if (tabletId) {
-            ctx.ExecutorThread.RegisterActor(new TForwardingActor(Config, tabletId, false, ev->Sender, msg->Request));
+            ctx.ExecutorThread.RegisterActor(new TForwardingActor(Config, tabletId, false, ev->Sender, msg->Request, msg->UserToken));
             return;
         }
     }

@@ -4,9 +4,9 @@ ENABLE(PYBUILD_NO_PY)
 
 PY3_LIBRARY()
 
-VERSION(3.11.7)
+VERSION(3.11.8)
 
-ORIGINAL_SOURCE(https://github.com/python/cpython/archive/v3.11.7.tar.gz)
+ORIGINAL_SOURCE(https://github.com/python/cpython/archive/v3.11.8.tar.gz)
 
 LICENSE(Python-2.0)
 

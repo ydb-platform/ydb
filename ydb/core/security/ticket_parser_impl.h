@@ -450,7 +450,7 @@ private:
     }
 
     template <typename TSubjectType>
-    TPermissionRecord::TTypeCase ConvertSubjectType(const TSubjectType& type) {
+    typename TPermissionRecord::TTypeCase ConvertSubjectType(const TSubjectType& type) {
         switch (type) {
         case TSubjectType::kUserAccount:
             return TPermissionRecord::TTypeCase::USER_ACCOUNT_TYPE;
@@ -465,7 +465,7 @@ private:
 
     template <typename TTokenRecord>
     bool CanInitBuiltinToken(const TString& key, TTokenRecord& record) {
-        if (record.TokenType == TDerived::ETokenType::Unknown || record.TokenType == TDerived::ETokenType::Builtin) {
+        if (Config.GetUseBuiltinDomain() && (record.TokenType == TDerived::ETokenType::Unknown || record.TokenType == TDerived::ETokenType::Builtin)) {
             if(record.Ticket.EndsWith("@" BUILTIN_ACL_DOMAIN)) {
                 record.TokenType = TDerived::ETokenType::Builtin;
                 SetToken(key, record, new NACLib::TUserToken({

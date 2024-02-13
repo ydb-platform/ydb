@@ -14,6 +14,8 @@ namespace NKikimr::NBlobDepot {
             std::unique_ptr<IEventHandle> Response;
             std::vector<TBlobSeqId> BlobSeqIds;
             std::set<TBlobSeqId> FailedBlobSeqIds;
+            std::set<TBlobSeqId> CanBeCollectedBlobSeqIds;
+            std::set<TBlobSeqId> AllowedBlobSeqIds;
 
         public:
             TTxType GetTxType() const override { return NKikimrBlobDepot::TXTYPE_COMMIT_BLOB_SEQ; }
@@ -35,8 +37,11 @@ namespace NKikimr::NBlobDepot {
                             Y_VERIFY_S(blobSeqId.Generation < generation, "committing trimmed BlobSeqId"
                                 << " BlobSeqId# " << blobSeqId.ToString()
                                 << " Id# " << Self->GetLogId());
+                            CanBeCollectedBlobSeqIds.insert(blobSeqId);
                         } else if (!Self->Data->BeginCommittingBlobSeqId(agent, blobSeqId)) {
                             FailedBlobSeqIds.insert(blobSeqId);
+                        } else {
+                            AllowedBlobSeqIds.insert(blobSeqId);
                         }
                         BlobSeqIds.push_back(blobSeqId);
                     }
@@ -102,6 +107,8 @@ namespace NKikimr::NBlobDepot {
                         continue;
                     }
 
+                    Y_VERIFY_DEBUG_S(!CanBeCollectedBlobSeqIds.contains(blobSeqId), "BlobSeqId# " << blobSeqId);
+
                     TString error;
                     if (!CheckKeyAgainstBarrier(key, &error)) {
                         responseItem->SetStatus(NKikimrProto::ERROR);
@@ -121,6 +128,15 @@ namespace NKikimr::NBlobDepot {
                             responseItem->SetStatus(NKikimrProto::RACE);
                         }
                     } else {
+                        Y_VERIFY_DEBUG_S(AllowedBlobSeqIds.contains(blobSeqId), "BlobSeqId# " << blobSeqId);
+                        Y_VERIFY_DEBUG_S(
+                            Self->Channels[blobSeqId.Channel].GetLeastExpectedBlobId(generation) <= blobSeqId,
+                            "BlobSeqId# " << blobSeqId
+                            << " LeastExpectedBlobId# " << Self->Channels[blobSeqId.Channel].GetLeastExpectedBlobId(generation)
+                            << " Generation# " << generation);
+                        Y_VERIFY_DEBUG_S(blobSeqId.Generation == generation, "BlobSeqId# " << blobSeqId << " Generation# " << generation);
+                        Y_VERIFY_DEBUG_S(Self->Channels[blobSeqId.Channel].SequenceNumbersInFlight.contains(blobSeqId.ToSequentialNumber()),
+                            "BlobSeqId# " << blobSeqId);
                         Self->Data->UpdateKey(key, item, txc, this);
                     }
                 }

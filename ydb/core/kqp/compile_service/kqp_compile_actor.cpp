@@ -176,7 +176,7 @@ private:
         counters->TxProxyMon = new NTxProxy::TTxProxyMon(AppData(ctx)->Counters);
         std::shared_ptr<NYql::IKikimrGateway::IKqpTableMetadataLoader> loader =
             std::make_shared<TKqpTableMetadataLoader>(
-                TlsActivationContext->ActorSystem(), Config, true, TempTablesState, 2 * TDuration::Seconds(MetadataProviderConfig.GetRefreshPeriodSeconds()));
+                QueryId.Cluster, TlsActivationContext->ActorSystem(), Config, true, TempTablesState, 2 * TDuration::Seconds(MetadataProviderConfig.GetRefreshPeriodSeconds()));
         Gateway = CreateKikimrIcGateway(QueryId.Cluster, QueryId.Settings.QueryType, QueryId.Database, std::move(loader),
             ctx.ExecutorThread.ActorSystem, ctx.SelfID.NodeId(), counters, QueryServiceConfig);
         Gateway->SetToken(QueryId.Cluster, UserToken);
@@ -317,9 +317,9 @@ private:
         ReplayMessage = std::nullopt;
         ReplayMessageUserView = std::nullopt;
         auto& stats = responseEv->Stats;
-        stats.SetFromCache(false);
-        stats.SetDurationUs((TInstant::Now() - StartTime).MicroSeconds());
-        stats.SetCpuTimeUs(CompileCpuTime.MicroSeconds());
+        stats.FromCache = false;
+        stats.DurationUs = (TInstant::Now() - StartTime).MicroSeconds();
+        stats.CpuTimeUs = CompileCpuTime.MicroSeconds();
         Send(Owner, responseEv.Release());
 
         Counters->ReportCompileFinish(DbCounters);
@@ -372,6 +372,18 @@ private:
         PassAway();
     }
 
+    void FillCompileResult(std::unique_ptr<NKikimrKqp::TPreparedQuery> preparingQuery, NKikimrKqp::EQueryType queryType) {
+        auto preparedQueryHolder = std::make_shared<TPreparedQueryHolder>(
+            preparingQuery.release(), AppData()->FunctionRegistry);
+        preparedQueryHolder->MutableLlvmSettings().Fill(Config, queryType);
+        KqpCompileResult->PreparedQuery = preparedQueryHolder;
+        KqpCompileResult->AllowCache = CanCacheQuery(KqpCompileResult->PreparedQuery->GetPhysicalQuery());
+
+        if (AstResult) {
+            KqpCompileResult->Ast = AstResult->Ast;
+        }
+    }
+
     void Handle(TEvKqp::TEvContinueProcess::TPtr &ev, const TActorContext &ctx) {
         Y_ENSURE(!ev->Get()->QueryId);
 
@@ -403,17 +415,7 @@ private:
 
         if (status == Ydb::StatusIds::SUCCESS) {
             YQL_ENSURE(kqpResult.PreparingQuery);
-            {
-                auto preparedQueryHolder = std::make_shared<TPreparedQueryHolder>(
-                    kqpResult.PreparingQuery.release(), AppData()->FunctionRegistry);
-                preparedQueryHolder->MutableLlvmSettings().Fill(Config, queryType);
-                KqpCompileResult->PreparedQuery = preparedQueryHolder;
-                KqpCompileResult->AllowCache = CanCacheQuery(KqpCompileResult->PreparedQuery->GetPhysicalQuery());
-
-                if (AstResult) {
-                    KqpCompileResult->Ast = AstResult->Ast;
-                }
-            }
+            FillCompileResult(std::move(kqpResult.PreparingQuery), queryType);
 
             auto now = TInstant::Now();
             auto duration = now - StartTime;
@@ -423,6 +425,10 @@ private:
                 << ", self: " << ctx.SelfID
                 << ", duration: " << duration);
         } else {
+            if (kqpResult.PreparingQuery) {
+                FillCompileResult(std::move(kqpResult.PreparingQuery), queryType);
+            }
+
             LOG_ERROR_S(ctx, NKikimrServices::KQP_COMPILE_ACTOR, "Compilation failed"
                 << ", self: " << ctx.SelfID
                 << ", status: " << Ydb::StatusIds_StatusCode_Name(status)

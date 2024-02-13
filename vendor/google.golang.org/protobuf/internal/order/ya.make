@@ -7,8 +7,4 @@ SRCS(
     range.go
 )
 
-GO_TEST_SRCS(order_test.go)
-
 END()
-
-RECURSE(gotest)

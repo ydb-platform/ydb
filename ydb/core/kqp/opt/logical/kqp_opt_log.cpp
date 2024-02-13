@@ -1,4 +1,5 @@
 #include "kqp_opt_log_rules.h"
+#include "kqp_opt_cbo.h"
 
 #include <ydb/core/kqp/common/kqp_yql.h>
 #include <ydb/core/kqp/opt/kqp_opt_impl.h>
@@ -21,15 +22,16 @@ using namespace NYql::NNodes;
 class TKqpLogicalOptTransformer : public TOptimizeTransformerBase {
 public:
     TKqpLogicalOptTransformer(TTypeAnnotationContext& typesCtx, const TIntrusivePtr<TKqpOptimizeContext>& kqpCtx,
-        const TKikimrConfiguration::TPtr& config)
+        const TKikimrConfiguration::TPtr& config, TKqpProviderContext& pctx)
         : TOptimizeTransformerBase(nullptr, NYql::NLog::EComponent::ProviderKqp, {})
         , TypesCtx(typesCtx)
         , KqpCtx(*kqpCtx)
         , Config(config)
+        , Pctx(pctx)
     {
 #define HNDL(name) "KqpLogical-"#name, Hndl(&TKqpLogicalOptTransformer::name)
-        AddHandler(0, &TCoFlatMap::Match, HNDL(PushPredicateToReadTable));
-        AddHandler(0, &TCoFlatMap::Match, HNDL(PushExtractedPredicateToReadTable));
+        AddHandler(0, &TCoFlatMapBase::Match, HNDL(PushPredicateToReadTable));
+        AddHandler(0, &TCoFlatMapBase::Match, HNDL(PushExtractedPredicateToReadTable));
         AddHandler(0, &TCoAggregate::Match, HNDL(RewriteAggregate));
         AddHandler(0, &TCoAggregateCombine::Match, HNDL(PushdownOlapGroupByKeys));
         AddHandler(0, &TCoTake::Match, HNDL(RewriteTakeSortToTopSort));
@@ -134,7 +136,10 @@ protected:
 
     TMaybeNode<TExprBase> OptimizeEquiJoinWithCosts(TExprBase node, TExprContext& ctx) {
         auto maxDPccpDPTableSize = Config->MaxDPccpDPTableSize.Get().GetOrElse(TDqSettings::TDefault::MaxDPccpDPTableSize);
-        TExprBase output = DqOptimizeEquiJoinWithCosts(node, ctx, TypesCtx, Config->HasOptEnableCostBasedOptimization(), maxDPccpDPTableSize);
+        TExprBase output = DqOptimizeEquiJoinWithCosts(node, ctx, TypesCtx, Config->CostBasedOptimizationLevel.Get().GetOrElse(TDqSettings::TDefault::CostBasedOptimizationLevel), 
+            maxDPccpDPTableSize, Pctx, [](auto& rels, auto label, auto node, auto stat) {
+                rels.emplace_back(std::make_shared<TKqpRelOptimizerNode>(TString(label), stat, node));
+            });
         DumpAppliedRule("OptimizeEquiJoinWithCosts", node.Ptr(), output.Ptr(), ctx);
         return output;
     }
@@ -205,8 +210,8 @@ protected:
         return output;
     }
 
-    TMaybeNode<TExprBase> DeleteOverLookup(TExprBase node, TExprContext& ctx) {
-        TExprBase output = KqpDeleteOverLookup(node, ctx, KqpCtx);
+    TMaybeNode<TExprBase> DeleteOverLookup(TExprBase node, TExprContext& ctx, const TGetParents& getParents) {
+        TExprBase output = KqpDeleteOverLookup(node, ctx, KqpCtx, *getParents());
         DumpAppliedRule("DeleteOverLookup", node.Ptr(), output.Ptr(), ctx);
         return output;
     }
@@ -269,12 +274,14 @@ private:
     TTypeAnnotationContext& TypesCtx;
     const TKqpOptimizeContext& KqpCtx;
     const TKikimrConfiguration::TPtr& Config;
+    TKqpProviderContext& Pctx;
 };
 
 TAutoPtr<IGraphTransformer> CreateKqpLogOptTransformer(const TIntrusivePtr<TKqpOptimizeContext>& kqpCtx,
-    TTypeAnnotationContext& typesCtx, const TKikimrConfiguration::TPtr& config)
+    TTypeAnnotationContext& typesCtx, const TKikimrConfiguration::TPtr& config,
+    TKqpProviderContext& pctx)
 {
-    return THolder<IGraphTransformer>(new TKqpLogicalOptTransformer(typesCtx, kqpCtx, config));
+    return THolder<IGraphTransformer>(new TKqpLogicalOptTransformer(typesCtx, kqpCtx, config, pctx));
 }
 
 } // namespace NKikimr::NKqp::NOpt

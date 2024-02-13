@@ -26,8 +26,6 @@ SRCS(
     change_sender.cpp
     change_sender_async_index.cpp
     change_sender_cdc_stream.cpp
-    change_sender_common_ops.cpp
-    change_sender_monitoring.cpp
     check_commit_writes_tx_unit.cpp
     check_data_tx_unit.cpp
     check_distributed_erase_tx_unit.cpp
@@ -76,12 +74,9 @@ SRCS(
     datashard_change_receiving.cpp
     datashard_change_sender_activation.cpp
     datashard_change_sending.cpp
-    datashard_counters.cpp
     datashard_loans.cpp
     datashard_locks_db.cpp
     datashard_locks_db.h
-    datashard_locks.h
-    datashard_locks.cpp
     datashard_split_dst.cpp
     datashard_split_src.cpp
     datashard_switch_mvcc_state.cpp
@@ -129,7 +124,7 @@ SRCS(
     datashard_repl_offsets_client.cpp
     datashard_repl_offsets_server.cpp
     datashard_subdomain_path_id.cpp
-    datashard_write_operation.cpp    
+    datashard_write_operation.cpp
     datashard_txs.h
     datashard.cpp
     datashard.h
@@ -161,6 +156,7 @@ SRCS(
     initiate_build_index_unit.cpp
     key_conflicts.cpp
     key_conflicts.h
+    key_validator.cpp
     load_and_wait_in_rs_unit.cpp
     load_tx_details_unit.cpp
     make_scan_snapshot_unit.cpp
@@ -185,9 +181,7 @@ SRCS(
     receive_snapshot_unit.cpp
     remove_lock_change_records.cpp
     remove_locks.cpp
-    range_avl_tree.cpp
     range_ops.cpp
-    range_treap.cpp
     read_iterator.h
     restore_unit.cpp
     setup_sys_locks.h
@@ -238,7 +232,7 @@ PEERDIR(
     ydb/core/engine
     ydb/core/engine/minikql
     ydb/core/formats
-    ydb/core/io_formats
+    ydb/core/io_formats/ydb_dump
     ydb/core/kqp/runtime
     ydb/core/persqueue/partition_key_range
     ydb/core/persqueue/writer
@@ -246,6 +240,7 @@ PEERDIR(
     ydb/core/tablet
     ydb/core/tablet_flat
     ydb/core/tx/long_tx_service/public
+    ydb/core/tx/locks
     ydb/core/util
     ydb/core/wrappers
     ydb/core/ydb_convert
@@ -296,9 +291,7 @@ RECURSE_FOR_TESTS(
     ut_minikql
     ut_minstep
     ut_order
-    ut_range_avl_tree
     ut_range_ops
-    ut_range_treap
     ut_read_iterator
     ut_read_table
     ut_reassign

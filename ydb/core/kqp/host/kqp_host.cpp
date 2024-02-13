@@ -1,4 +1,5 @@
 #include "kqp_host_impl.h"
+#include "kqp_statement_rewrite.h"
 
 #include <ydb/core/base/appdata.h>
 #include <ydb/core/external_sources/external_source_factory.h>
@@ -1158,9 +1159,14 @@ private:
             return nullptr;
         }
 
-        YQL_CLOG(INFO, ProviderKqp) << "Compiled query:\n" << KqpExprToPrettyString(*result, ctx);
+        const auto results = RewriteExpression(result, ctx);
 
-        return result;
+        for (const auto& resultElem : results) {
+            Cerr << "TEST:: COMPILED:: " << KqpExprToPrettyString(*resultElem, ctx) << Endl;
+        }
+        YQL_CLOG(INFO, ProviderKqp) << "Compiled query:\n" << KqpExprToPrettyString(*results.front(), ctx);
+
+        return results.front();
     }
 
     TExprNode::TPtr CompileYqlQuery(const TKqpQueryRef& query, bool isSql, TExprContext& ctx,

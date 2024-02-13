@@ -1,0 +1,94 @@
+{
+    "test_transform.TestYamlConfigTransformations.test_basic": [
+        {
+            "uri": "file://test_transform.TestYamlConfigTransformations.test_basic/block-4-2.yaml.result.prototxt"
+        },
+        {
+            "uri": "file://test_transform.TestYamlConfigTransformations.test_basic/single-node-in-memory.yaml.result.prototxt"
+        },
+        {
+            "uri": "file://test_transform.TestYamlConfigTransformations.test_basic/mirror-3dc-3-nodes-in-memory.yaml.result.prototxt"
+        },
+        {
+            "uri": "file://test_transform.TestYamlConfigTransformations.test_basic/mirror-3dc-9-nodes.yaml.result.prototxt"
+        },
+        {
+            "uri": "file://test_transform.TestYamlConfigTransformations.test_basic/single-node-with-file.yaml.result.prototxt"
+        },
+        {
+            "uri": "file://test_transform.TestYamlConfigTransformations.test_basic/mirror-3dc-3-nodes.yaml.result.prototxt"
+        },
+        {
+            "uri": "file://test_transform.TestYamlConfigTransformations.test_basic/simple.yaml.result.prototxt"
+        }
+    ],
+    "test_transform.TestYamlConfigTransformations.test_deprecated": [
+        {
+            "uri": "file://test_transform.TestYamlConfigTransformations.test_deprecated/block-4-2.yaml.result.prototxt"
+        },
+        {
+            "uri": "file://test_transform.TestYamlConfigTransformations.test_deprecated/single-node-in-memory.yaml.result.prototxt"
+        },
+        {
+            "uri": "file://test_transform.TestYamlConfigTransformations.test_deprecated/mirror-3dc-3-nodes-in-memory.yaml.result.prototxt"
+        },
+        {
+            "uri": "file://test_transform.TestYamlConfigTransformations.test_deprecated/mirror-3dc-9-nodes.yaml.result.prototxt"
+        },
+        {
+            "uri": "file://test_transform.TestYamlConfigTransformations.test_deprecated/single-node-with-file.yaml.result.prototxt"
+        },
+        {
+            "uri": "file://test_transform.TestYamlConfigTransformations.test_deprecated/mirror-3dc-3-nodes.yaml.result.prototxt"
+        },
+        {
+            "uri": "file://test_transform.TestYamlConfigTransformations.test_deprecated/simple.yaml.result.prototxt"
+        }
+    ],
+    "test_transform.TestYamlConfigTransformations.test_ds_init_basic": [
+        {
+            "uri": "file://test_transform.TestYamlConfigTransformations.test_ds_init_basic/block-4-2.yaml.ds_init.result.prototxt"
+        },
+        {
+            "uri": "file://test_transform.TestYamlConfigTransformations.test_ds_init_basic/single-node-in-memory.yaml.ds_init.result.prototxt"
+        },
+        {
+            "uri": "file://test_transform.TestYamlConfigTransformations.test_ds_init_basic/mirror-3dc-3-nodes-in-memory.yaml.ds_init.result.prototxt"
+        },
+        {
+            "uri": "file://test_transform.TestYamlConfigTransformations.test_ds_init_basic/mirror-3dc-9-nodes.yaml.ds_init.result.prototxt"
+        },
+        {
+            "uri": "file://test_transform.TestYamlConfigTransformations.test_ds_init_basic/single-node-with-file.yaml.ds_init.result.prototxt"
+        },
+        {
+            "uri": "file://test_transform.TestYamlConfigTransformations.test_ds_init_basic/mirror-3dc-3-nodes.yaml.ds_init.result.prototxt"
+        },
+        {
+            "uri": "file://test_transform.TestYamlConfigTransformations.test_ds_init_basic/simple.yaml.ds_init.result.prototxt"
+        }
+    ],
+    "test_transform.TestYamlConfigTransformations.test_ds_init_deprecated": [
+        {
+            "uri": "file://test_transform.TestYamlConfigTransformations.test_ds_init_deprecated/block-4-2.yaml.ds_init.result.prototxt"
+        },
+        {
+            "uri": "file://test_transform.TestYamlConfigTransformations.test_ds_init_deprecated/single-node-in-memory.yaml.ds_init.result.prototxt"
+        },
+        {
+            "uri": "file://test_transform.TestYamlConfigTransformations.test_ds_init_deprecated/mirror-3dc-3-nodes-in-memory.yaml.ds_init.result.prototxt"
+        },
+        {
+            "uri": "file://test_transform.TestYamlConfigTransformations.test_ds_init_deprecated/mirror-3dc-9-nodes.yaml.ds_init.result.prototxt"
+        },
+        {
+            "uri": "file://test_transform.TestYamlConfigTransformations.test_ds_init_deprecated/single-node-with-file.yaml.ds_init.result.prototxt"
+        },
+        {
+            "uri": "file://test_transform.TestYamlConfigTransformations.test_ds_init_deprecated/mirror-3dc-3-nodes.yaml.ds_init.result.prototxt"
+        },
+        {
+            "uri": "file://test_transform.TestYamlConfigTransformations.test_ds_init_deprecated/simple.yaml.ds_init.result.prototxt"
+        }
+    ]
+}

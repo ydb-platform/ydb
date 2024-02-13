@@ -549,4 +549,4 @@ CREATE TABLE attmp (regtable int);
 <sql-statement>
 CREATE TEMP TABLE attmp (attmptable int);
 </sql-statement>
-(TFileError) (File exists) util/system/file.cpp:857: can't open "/tmp/tmpuixf4gua/attmp" with mode CreateNew (0x00000003)
+(TFileError) (Error 17: File exists) util/system/file.cpp:918: can't open "/var/tmp/tmpasfe8kov/attmp" with mode CreateNew (0x00000003)

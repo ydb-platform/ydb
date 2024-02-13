@@ -156,3 +156,7 @@ begin;
 create temp table tidv (idv mycomptype);
 create index on tidv (idv);
 rollback;
+--
+-- test incorrect failure to NULL pulled-up subexpressions
+--
+begin;

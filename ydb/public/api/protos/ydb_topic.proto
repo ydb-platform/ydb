@@ -813,11 +813,11 @@ message AlterConsumer {
 }
 
 enum AutoScalingStrategy {
-    // Automaticaly scaling disabled
+    // Auto scaling disabled
     DISABLED = 0;
-    // The automaticaly scaling may only increase the number of partitions
+    // The auto scaling may only increase the number of partitions
     SCALE_UP = 1;
-    // The automaticaly scaling may increase and decrease the number of partitions
+    // The auto scaling may increase and decrease the number of partitions
     SCALE_UP_AND_DOWN = 2;
 }
 
@@ -829,7 +829,7 @@ message AutoScalingSettings {
     // Zero value means default - 300.
     int32 threshold_time_seconds = 2;
     // The threshold value of the write speed to the partition as a percentage, when exceeded,
-    // the partition will be automatically splitted.
+    // the partition will be automatically split.
     // Zero value means default - 90.
     int32 scale_up_partition_write_speed_threshold_percent = 3 [(Ydb.value) = ">= 0"];
     // The threshold value of the write speed to the partition as a percentage, if it is not reached,
@@ -847,7 +847,7 @@ message AlterAutoScalingSettings {
     // Zero value means default - 300.
     optional int32 set_threshold_time_seconds = 2;
     // The threshold value of the write speed to the partition as a percentage, when exceeded,
-    // the partition will be automatically splitted.
+    // the partition will be automatically split.
     // Zero value means default - 90.
     optional int32 set_scale_up_partition_write_speed_threshold_percent = 3 [(Ydb.value) = ">= 0"];
     // The threshold value of the write speed to the partition as a percentage, if it is not reached,

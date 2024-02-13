@@ -1999,9 +1999,6 @@
             "checksum": "7b19e1b62562d88ca184ae31ff236b1b",
             "size": 28772,
             "uri": "https://{canondata_backend}/1937027/882e1bb1038a298a6d6d7a04c71a00fd27609541/resource.tar.gz#test.test_EquiJoin-JoinInMemOpt1-Results_/results.txt"
-        },
-        {
-            "uri": "file://test.test_EquiJoin-JoinInMemOpt1-Results_/extracted"
         }
     ],
     "test.test[EquiJoin-TypeEquiFullTwoFieldsSelf-Debug]": [

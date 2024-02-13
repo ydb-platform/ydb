@@ -709,6 +709,9 @@
             "checksum": "f269af05b284c09ca95443696c27063d",
             "size": 1254,
             "uri": "https://{canondata_backend}/1871182/250608c52d287add59fe1b9e093f0d10967d8d55/resource.tar.gz#test.test_expr-as_set-default.txt-Results_/results.txt"
+        },
+        {
+            "uri": "file://test.test_expr-as_set-default.txt-Results_/extracted"
         }
     ],
     "test.test[expr-as_table_bad_columns_fail--Debug]": [],

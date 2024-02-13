@@ -1492,9 +1492,6 @@
             "checksum": "1ad5108bcb70a7174c2f441ecbf5c511",
             "size": 20776,
             "uri": "https://{canondata_backend}/1925821/474a86e82c4cb2349b95fd756d39d7d9ac446f65/resource.tar.gz#test.test_EquiJoin-JoinInMem-Results_/results.txt"
-        },
-        {
-            "uri": "file://test.test_EquiJoin-JoinInMem-Results_/extracted"
         }
     ],
     "test.test[EquiJoin-JoinInMemRename-Debug]": [

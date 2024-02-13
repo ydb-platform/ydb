@@ -709,6 +709,9 @@
             "checksum": "b4dd508a329723c74293d80f0278c705",
             "size": 505,
             "uri": "https://{canondata_backend}/1847551/3a392ffe35b72cb523557617b3ab1c0abb94bee4/resource.tar.gz#test.test_expr-as_set-default.txt-Analyze_/plan.txt"
+        },
+        {
+            "uri": "file://test.test_expr-as_set-default.txt-Analyze_/extracted"
         }
     ],
     "test.test[expr-as_set-default.txt-Debug]": [
@@ -725,7 +728,11 @@
             "uri": "https://{canondata_backend}/1847551/3a392ffe35b72cb523557617b3ab1c0abb94bee4/resource.tar.gz#test.test_expr-as_set-default.txt-Plan_/plan.txt"
         }
     ],
-    "test.test[expr-as_set-default.txt-Results]": [],
+    "test.test[expr-as_set-default.txt-Results]": [
+        {
+            "uri": "file://test.test_expr-as_set-default.txt-Results_/extracted"
+        }
+    ],
     "test.test[expr-as_table_bad_columns_fail--Results]": [
         {
             "uri": "file://test.test_expr-as_table_bad_columns_fail--Results_/extracted"

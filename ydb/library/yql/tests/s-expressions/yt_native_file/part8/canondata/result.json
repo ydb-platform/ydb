@@ -542,9 +542,6 @@
             "checksum": "793ccfff52334acf16037be6364f9a39",
             "size": 2682,
             "uri": "https://{canondata_backend}/1923547/21d8af2ae6a9d5212015d9b2000b58d6d66c1e58/resource.tar.gz#test.test_EquiJoin-EquiConvertToCommonTypeAlias-Results_/results.txt"
-        },
-        {
-            "uri": "file://test.test_EquiJoin-EquiConvertToCommonTypeAlias-Results_/extracted"
         }
     ],
     "test.test[EquiJoin-EquiInnerSelfStrRename-Debug]": [

@@ -2796,9 +2796,6 @@
             "checksum": "10188f222e755d58abdb36af3f69fdbe",
             "size": 61319,
             "uri": "https://{canondata_backend}/1936273/ebde87967a84279aa7c0f0db5fa25da68139d01d/resource.tar.gz#test.test_EquiJoinCommon-JoinCommonOpt2-Results_/results.txt"
-        },
-        {
-            "uri": "file://test.test_EquiJoinCommon-JoinCommonOpt2-Results_/extracted"
         }
     ],
     "test.test[EquiJoinMerge-Full2key12_12-Debug]": [

@@ -1,14 +1,15 @@
 #include "yaml_config_parser.h"
 #include "yaml_config_helpers.h"
 
-#include <util/generic/string.h>
+#include <ydb/library/yaml_config/protos/config.pb.h>
+
 #include <ydb/core/base/domain.h>
 #include <ydb/core/erasure/erasure.h>
 
 #include <library/cpp/json/writer/json.h>
-
-#include <ydb/library/yaml_config/protos/config.pb.h>
 #include <library/cpp/protobuf/json/util.h>
+
+#include <util/generic/string.h>
 
 namespace NKikimr::NYaml {
 

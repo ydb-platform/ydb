@@ -1,18 +1,17 @@
 #pragma once
 
-#include <string>
-#include <optional>
-#include <map>
-#include <google/protobuf/message.h>
-
-#include <util/generic/algorithm.h>
-#include <library/cpp/yaml/as/tstring.h>
-
-#include <contrib/libs/yaml-cpp/include/yaml-cpp/yaml.h>
-#include <library/cpp/json/writer/json_value.h>
-#include <library/cpp/protobuf/json/json2proto.h>
 #include <ydb/core/protos/config.pb.h>
 #include <ydb/library/yaml_config/protos/config.pb.h>
+
+#include <library/cpp/json/writer/json_value.h>
+#include <library/cpp/protobuf/json/json2proto.h>
+#include <library/cpp/yaml/as/tstring.h>
+
+#include <google/protobuf/message.h>
+
+#include <util/generic/string.h>
+
+#include <map>
 
 namespace NKikimr::NYaml {
 

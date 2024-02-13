@@ -22,8 +22,6 @@ namespace {
         }
         auto write = maybeWrite.Cast();
 
-        Cerr << ">>> TEST: START <<<" << Endl;
-
         if (write.DataSink().FreeArgs().Count() < 2
             || write.DataSink().Category() != "kikimr"
             || write.DataSink().FreeArgs().Get(1).Cast<NYql::NNodes::TCoAtom>() != "db") {
@@ -61,13 +59,6 @@ namespace {
         if (mode != "create" && mode != "create_if_not_exists" && mode != "create_or_replace") {
             return std::nullopt;
         }
-
-        //auto maybeArg = writeArgs.Get(3).Maybe<NYql::NNodes::TCoWrite>();
-        //if (!maybeArg) {
-        //    return std::nullopt;
-        //}
-
-        Cerr << "TEST: " << write.Ptr()->Dump()<< Endl;
 
         const auto& insertData = writeArgs.Get(3);
         const auto pos = insertData.Ref().Pos();
@@ -111,10 +102,6 @@ namespace {
                 }),
             }),
         });
-
-        Y_UNUSED(ctx, result);
-
-        Cerr << ">>> TEST: OK <<<" << Endl;
 
         return result;
     }

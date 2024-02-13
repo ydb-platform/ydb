@@ -1128,7 +1128,7 @@ public:
     }
 
 private:
-    TExprNode::TPtr CompileQuery(const TKqpQueryRef& query, bool isSql, TExprContext& ctx, TMaybe<TSqlVersion>& sqlVersion, TKqpTranslationSettingsBuilder& settingsBuilder)
+    TVector<TExprNode::TPtr> CompileQuery(const TKqpQueryRef& query, bool isSql, TExprContext& ctx, TMaybe<TSqlVersion>& sqlVersion, TKqpTranslationSettingsBuilder& settingsBuilder)
     {
         std::shared_ptr<NYql::TAstParseResult> queryAst;
         if (!query.AstResult) {
@@ -1150,13 +1150,13 @@ private:
         YQL_ENSURE(queryAst);
         ctx.IssueManager.AddIssues(queryAst->Issues);
         if (!queryAst->IsOk()) {
-            return nullptr;
+            return {};
         }
 
         YQL_ENSURE(queryAst->Root);
         TExprNode::TPtr result;
         if (!CompileExpr(*queryAst->Root, result, ctx, ModuleResolver.get(), nullptr)) {
-            return nullptr;
+            return {};
         }
 
         const auto results = RewriteExpression(result, ctx);
@@ -1164,12 +1164,14 @@ private:
         for (const auto& resultElem : results) {
             Cerr << "TEST:: COMPILED:: " << KqpExprToPrettyString(*resultElem, ctx) << Endl;
         }
-        YQL_CLOG(INFO, ProviderKqp) << "Compiled query:\n" << KqpExprToPrettyString(*results.front(), ctx);
+        for (const auto& resultPart : results) {
+            YQL_CLOG(INFO, ProviderKqp) << "Compiled query:\n" << KqpExprToPrettyString(*resultPart, ctx);
+        }
 
-        return results.front();
+        return results;
     }
 
-    TExprNode::TPtr CompileYqlQuery(const TKqpQueryRef& query, bool isSql, TExprContext& ctx,
+    TVector<TExprNode::TPtr> CompileYqlQuery(const TKqpQueryRef& query, bool isSql, TExprContext& ctx,
         TMaybe<TSqlVersion>& sqlVersion, TKqpTranslationSettingsBuilder& settingsBuilder)
     {
         auto queryExpr = CompileQuery(query, isSql, ctx, sqlVersion, settingsBuilder);
@@ -1178,15 +1180,20 @@ private:
         }
 
         if (!isSql) {
-            return queryExpr;
+            return queryExprs;
         }
 
-        if (TMaybeNode<TCoCommit>(queryExpr) && TCoCommit(queryExpr).DataSink().Maybe<TKiDataSink>()) {
-            return queryExpr;
+        // Currently used only for create table as
+        if (queryExprs.size() > 1) {
+            return queryExprs;
         }
 
-        return Build<TCoCommit>(ctx, queryExpr->Pos())
-            .World(queryExpr)
+        if (TMaybeNode<TCoCommit>(queryExprs.front()) && TCoCommit(queryExprs.front()).DataSink().Maybe<TKiDataSink>()) {
+            return queryExprs;
+        }
+
+        return {Build<TCoCommit>(ctx, queryExprs.front()->Pos())
+            .World(queryExprs.front())
             .DataSink<TKiDataSink>()
                 .Category().Build(KikimrProviderName)
                 .Cluster().Build(Cluster)
@@ -1198,7 +1205,7 @@ private:
                     .Build()
                 .Build()
             .Done()
-            .Ptr();
+            .Ptr()};
     }
 
     static bool ParseParameters(NKikimrMiniKQL::TParams&& parameters, TQueryData& map,
@@ -1248,11 +1255,12 @@ private:
         settingsBuilder.SetSqlAutoCommit(false)
             .SetUsePgParser(settings.UsePgParser);
         auto queryExpr = CompileYqlQuery(query, isSql, ctx, sqlVersion, settingsBuilder);
-        if (!queryExpr) {
+        if (queryExpr.empty()) {
             return nullptr;
         }
+        YQL_ENSURE(queryExprs.size() == 1);
 
-        return MakeIntrusive<TAsyncExecuteYqlResult>(queryExpr.Get(), ctx, *YqlTransformer, Cluster, SessionCtx,
+        return MakeIntrusive<TAsyncExecuteYqlResult>(queryExprs.front().Get(), ctx, *YqlTransformer, Cluster, SessionCtx,
             *ResultProviderConfig, *PlanBuilder, sqlVersion);
     }
 
@@ -1307,11 +1315,12 @@ private:
         TKqpTranslationSettingsBuilder settingsBuilder(SessionCtx->Query().Type, SessionCtx->Config()._KqpYqlSyntaxVersion.Get().GetRef(), Cluster, query.Text, SessionCtx->Config().BindingsMode);
         settingsBuilder.SetSqlAutoCommit(false);
         auto queryExpr = CompileYqlQuery(query, /* isSql */ true, ctx, sqlVersion, settingsBuilder);
-        if (!queryExpr) {
+        if (queryExpr.empty()) {
             return nullptr;
         }
+        YQL_ENSURE(queryExprs.size() == 1);
 
-        return MakeIntrusive<TAsyncPrepareYqlResult>(queryExpr.Get(), ctx, *YqlTransformer, SessionCtx->QueryPtr(),
+        return MakeIntrusive<TAsyncPrepareYqlResult>(queryExprs.front().Get(), ctx, *YqlTransformer, SessionCtx->QueryPtr(),
             query.Text, sqlVersion, TransformCtx);
     }
 
@@ -1334,13 +1343,14 @@ private:
         TKqpTranslationSettingsBuilder settingsBuilder(SessionCtx->Query().Type, SessionCtx->Config()._KqpYqlSyntaxVersion.Get().GetRef(), Cluster, queryAst.Text, SessionCtx->Config().BindingsMode);
         settingsBuilder.SetSqlAutoCommit(false);
         auto queryExpr = CompileYqlQuery(queryAst, false, ctx, sqlVersion, settingsBuilder);
-        if (!queryExpr) {
+        if (queryExpr.empty()) {
             return nullptr;
         }
 
+        YQL_ENSURE(queryExprs.size() == 1);
         YQL_ENSURE(!sqlVersion);
 
-        return MakeIntrusive<TAsyncExecuteKqlResult>(queryExpr.Get(), ctx, *DataQueryAstTransformer,
+        return MakeIntrusive<TAsyncExecuteKqlResult>(queryExprs.front().Get(), ctx, *DataQueryAstTransformer,
             SessionCtx, *ExecuteCtx);
     }
 
@@ -1373,11 +1383,12 @@ private:
         settingsBuilder.SetSqlAutoCommit(false)
             .SetUsePgParser(settings.UsePgParser);
         auto queryExpr = CompileYqlQuery(query, /* isSql */ true, ctx, sqlVersion, settingsBuilder);
-        if (!queryExpr) {
+        if (queryExpr.empty()) {
             return nullptr;
         }
+        YQL_ENSURE(queryExprs.size() == 1); // TODO: TEST
 
-        return MakeIntrusive<TAsyncPrepareYqlResult>(queryExpr.Get(), ctx, *YqlTransformer, SessionCtx->QueryPtr(),
+        return MakeIntrusive<TAsyncPrepareYqlResult>(queryExprs.front().Get(), ctx, *YqlTransformer, SessionCtx->QueryPtr(),
             query.Text, sqlVersion, TransformCtx);
     }
 
@@ -1402,11 +1413,12 @@ private:
         TKqpTranslationSettingsBuilder settingsBuilder(SessionCtx->Query().Type, SessionCtx->Config()._KqpYqlSyntaxVersion.Get().GetRef(), Cluster, query.Text, SessionCtx->Config().BindingsMode);
         settingsBuilder.SetSqlAutoCommit(false);
         auto queryExpr = CompileYqlQuery(query, true, ctx, sqlVersion, settingsBuilder);
-        if (!queryExpr) {
+        if (queryExpr.empty()) {
             return nullptr;
         }
+        YQL_ENSURE(queryExprs.size() == 1);
 
-        return MakeIntrusive<TAsyncPrepareYqlResult>(queryExpr.Get(), ctx, *YqlTransformer, SessionCtx->QueryPtr(),
+        return MakeIntrusive<TAsyncPrepareYqlResult>(queryExprs.front().Get(), ctx, *YqlTransformer, SessionCtx->QueryPtr(),
             query.Text, sqlVersion, TransformCtx);
     }
 
@@ -1421,13 +1433,14 @@ private:
         TKqpTranslationSettingsBuilder settingsBuilder(SessionCtx->Query().Type, SessionCtx->Config()._KqpYqlSyntaxVersion.Get().GetRef(), Cluster, queryAst.Text, SessionCtx->Config().BindingsMode);
         settingsBuilder.SetSqlAutoCommit(false);
         auto queryExpr = CompileYqlQuery(queryAst, false, ctx, sqlVersion, settingsBuilder);
-        if (!queryExpr) {
+        if (queryExpr.empty()) {
             return nullptr;
         }
 
         YQL_ENSURE(!sqlVersion);
+        YQL_ENSURE(queryExprs.size() == 1);
 
-        return MakeIntrusive<TAsyncExecuteKqlResult>(queryExpr.Get(), ctx, *DataQueryAstTransformer,
+        return MakeIntrusive<TAsyncExecuteKqlResult>(queryExprs.front().Get(), ctx, *DataQueryAstTransformer,
             SessionCtx, *ExecuteCtx);
     }
 
@@ -1447,13 +1460,14 @@ private:
         settingsBuilder.SetSqlAutoCommit(true)
             .SetUsePgParser(settings.UsePgParser);
         auto scriptExpr = CompileYqlQuery(script, true, ctx, sqlVersion, settingsBuilder);
-        if (!scriptExpr) {
+        if (scriptExpr.empty()) {
             return nullptr;
         }
+        YQL_ENSURE(scriptExprs.size() == 1);
 
         (SessionCtx->Query().QueryData)->ParseParameters(parameters);
 
-        return MakeIntrusive<TAsyncExecuteYqlResult>(scriptExpr.Get(), ctx, *YqlTransformer, Cluster, SessionCtx,
+        return MakeIntrusive<TAsyncExecuteYqlResult>(scriptExprs.front().Get(), ctx, *YqlTransformer, Cluster, SessionCtx,
             *ResultProviderConfig, *PlanBuilder, sqlVersion);
     }
 
@@ -1474,13 +1488,14 @@ private:
         settingsBuilder.SetSqlAutoCommit(true)
             .SetUsePgParser(settings.UsePgParser);
         auto scriptExpr = CompileYqlQuery(script, true, ctx, sqlVersion, settingsBuilder);
-        if (!scriptExpr) {
+        if (scriptExpr.empty()) {
             return nullptr;
         }
+        YQL_ENSURE(scriptExprs.size() == 1);
 
         (SessionCtx->Query().QueryData)->ParseParameters(parameters);
 
-        return MakeIntrusive<TAsyncExecuteYqlResult>(scriptExpr.Get(), ctx, *YqlTransformer, Cluster, SessionCtx,
+        return MakeIntrusive<TAsyncExecuteYqlResult>(scriptExprs.front().Get(), ctx, *YqlTransformer, Cluster, SessionCtx,
             *ResultProviderConfig, *PlanBuilder, sqlVersion);
     }
 
@@ -1497,9 +1512,10 @@ private:
         TKqpTranslationSettingsBuilder settingsBuilder(SessionCtx->Query().Type, SessionCtx->Config()._KqpYqlSyntaxVersion.Get().GetRef(), Cluster, script.Text, SessionCtx->Config().BindingsMode);
         settingsBuilder.SetSqlAutoCommit(true);
         auto scriptExpr = CompileYqlQuery(script, true, ctx, sqlVersion, settingsBuilder);
-        if (!scriptExpr) {
+        if (scriptExpr.empty()) {
             return nullptr;
         }
+        YQL_ENSURE(scriptExprs.size() == 1);
 
         auto transformer = TTransformationPipeline(TypesCtx)
             .AddServiceTransformers()
@@ -1509,7 +1525,7 @@ private:
             .Add(TCollectParametersTransformer::Sync(SessionCtx->QueryPtr()), "CollectParameters")
             .Build(false);
 
-        return MakeIntrusive<TAsyncValidateYqlResult>(scriptExpr.Get(), SessionCtx, ctx, transformer, sqlVersion);
+        return MakeIntrusive<TAsyncValidateYqlResult>(scriptExprs.front().Get(), SessionCtx, ctx, transformer, sqlVersion);
     }
 
     IAsyncQueryResultPtr ExplainYqlScriptInternal(const TKqpQueryRef& script, TExprContext& ctx) {
@@ -1524,11 +1540,12 @@ private:
         TKqpTranslationSettingsBuilder settingsBuilder(SessionCtx->Query().Type, SessionCtx->Config()._KqpYqlSyntaxVersion.Get().GetRef(), Cluster, script.Text, SessionCtx->Config().BindingsMode);
         settingsBuilder.SetSqlAutoCommit(true);
         auto scriptExpr = CompileYqlQuery(script, true, ctx, sqlVersion, settingsBuilder);
-        if (!scriptExpr) {
+        if (!scriptExpr.empty()) {
             return nullptr;
         }
+        YQL_ENSURE(scriptExprs.size() == 1);
 
-        return MakeIntrusive<TAsyncExplainYqlResult>(scriptExpr.Get(), SessionCtx, ctx, YqlTransformer,
+        return MakeIntrusive<TAsyncExplainYqlResult>(scriptExprs.front().Get(), SessionCtx, ctx, YqlTransformer,
             *PlanBuilder, sqlVersion, true /* UseDqExplain */);
     }
 

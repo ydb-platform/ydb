@@ -6,10 +6,12 @@ TEST_SRCS(
 
 ENV(DUMP_BINARY="ydb/library/yaml_config/tools/dump/yaml-to-proto-dump")
 ENV(DUMP_DS_INIT_BINARY="ydb/library/yaml_config/tools/dump/yaml-to-proto-dump-ds-init")
+ENV(JSON_DIFF_BINARY="ydb/library/yaml_config/tools/simple_json_diff/simple_json_diff")
 
 DEPENDS(
     ydb/library/yaml_config/tools/dump
     ydb/library/yaml_config/tools/dump_ds_init
+    ydb/library/yaml_config/tools/simple_json_diff
 )
 
 DATA(
@@ -17,9 +19,9 @@ DATA(
 )
 
 PEERDIR(
+    ydb/public/sdk/python/enable_v3_new_behavior
     ydb/tests/library
     ydb/tests/oss/canonical
-    ydb/public/sdk/python/enable_v3_new_behavior
 )
 
 TIMEOUT(600)

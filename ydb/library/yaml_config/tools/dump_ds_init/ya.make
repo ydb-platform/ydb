@@ -7,6 +7,7 @@ SRCS(
 PEERDIR(
     ydb/library/yaml_config
     ydb/library/yaml_config/deprecated
+    ydb/library/yaml_config/tools/util
 )
 
 END()

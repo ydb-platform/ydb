@@ -22,6 +22,12 @@ def dump_ds_init_bin():
     raise RuntimeError("DUMP_DS_INIT_BINARY enviroment variable is not specified")
 
 
+def json_diff_bin():
+    if os.getenv("JSON_DIFF_BINARY"):
+        return yatest_common.binary_path(os.getenv("JSON_DIFF_BINARY"))
+    raise RuntimeError("JSON_DIFF_BINARY enviroment variable is not specified")
+
+
 class TestYamlConfigTransformations(object):
     @classmethod
     def execute_dump(cls, stdin=None, args=[]):
@@ -51,7 +57,7 @@ class TestYamlConfigTransformations(object):
         result_path = os.path.join(out_path, result_filename)
         with open(result_path, "w") as f:
             f.write(output_result.decode('utf-8'))
-        return yatest_common.canonical_file(str(result_path), local=True, universal_lines=True)
+        return yatest_common.canonical_file(str(result_path), diff_tool=json_diff_bin(), local=True, universal_lines=True)
 
     def test_basic(self):
         results = []

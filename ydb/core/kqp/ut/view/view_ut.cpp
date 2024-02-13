@@ -60,15 +60,23 @@ void ExecuteDataDefinitionQuery(TSession& session, const TString& script) {
                                           << script << "\nThe issues:\n" << result.GetIssues().ToString());
 }
 
-TDataQueryResult ExecuteDataModificationQuery(TSession& session, const TString& script) {
+TDataQueryResult ExecuteDataModificationQuery(TSession& session,
+                                              const TString& script,
+                                              const TExecDataQuerySettings& settings = {}
+) {
     const auto result = session.ExecuteDataQuery(
             script,
-            TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx()
+            TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx(),
+            settings
         ).ExtractValueSync();
     UNIT_ASSERT_C(result.IsSuccess(), "Failed to execute the following DML script:\n"
                                           << script << "\nThe issues:\n" << result.GetIssues().ToString());
 
     return result;
+}
+
+TString GetYsonResults(TSession& session, const TString& query, const TExecDataQuerySettings& settings = {}) {
+    return FormatResultSetYson(ExecuteDataModificationQuery(session, query, settings).GetResultSet(0));
 }
 
 void CompareResults(const TDataQueryResult& first, const TDataQueryResult& second) {
@@ -89,7 +97,7 @@ void InitializeTablesAndSecondaryViews(TSession& session) {
 
 }
 
-Y_UNIT_TEST_SUITE(TKQPViewTest) {
+Y_UNIT_TEST_SUITE(TCreateAndDropViewTest) {
 
     Y_UNIT_TEST(CheckCreatedView) {
         TKikimrRunner kikimr(TKikimrSettings().SetWithSampleTables(false));
@@ -375,5 +383,84 @@ Y_UNIT_TEST_SUITE(TSelectFromViewTest) {
 
             ExecuteDataDefinitionQuery(session, ReadWholeFile(pathPrefix + "drop_view.sql"));
         }
+    }
+}
+
+Y_UNIT_TEST_SUITE(TEvaluateExprInViewTest) {
+
+    Y_UNIT_TEST(EvaluateExpr) {
+        TKikimrRunner kikimr;
+        EnableViewsFeatureFlag(kikimr);
+        auto session = kikimr.GetTableClient().CreateSession().GetValueSync().GetSession();
+
+        constexpr const char* viewName = "TheView";
+        constexpr const char* timeQuery = R"(
+            SELECT EvaluateExpr(CurrentUtcTimestamp())
+        )";
+
+        const TString creationQuery = std::format(R"(
+                CREATE VIEW {} WITH (security_invoker = TRUE) AS {};
+            )",
+            viewName,
+            timeQuery
+        );
+        ExecuteDataDefinitionQuery(session, creationQuery);
+
+        const TString selectFromViewQuery = std::format(R"(
+                SELECT * FROM {};
+            )",
+            viewName
+        );
+        TExecDataQuerySettings queryExecutionSettings;
+        queryExecutionSettings.KeepInQueryCache(true);
+        const auto executeTwice = [&](const TString& query) {
+            return TVector<TString>{
+                GetYsonResults(session, query, queryExecutionSettings),
+                GetYsonResults(session, query, queryExecutionSettings)
+            };
+        };
+        const auto viewResults = executeTwice(selectFromViewQuery);
+        const auto etalonResults = executeTwice(timeQuery);
+        UNIT_ASSERT_EQUAL_C(viewResults[0] < viewResults[1], etalonResults[0] < etalonResults[1],
+                            TStringBuilder()
+                                << "\nQuery cache works differently for EvaluateExpr written (1) in a view versus (2) in a plain SELECT statement.\n"
+                                << "(1) SELECT from view results: (first call) " << viewResults[0] << ", (second call) " << viewResults[1]
+                                << "(2) SELECT EvaluateExpr(...) results: (first call) " << etalonResults[0] << ", (second call) " << etalonResults[1] << "\n"
+        );
+    }
+
+    Y_UNIT_TEST(NakedCallToCurrentTimeFunction) {
+        TKikimrRunner kikimr;
+        EnableViewsFeatureFlag(kikimr);
+        auto session = kikimr.GetTableClient().CreateSession().GetValueSync().GetSession();
+
+        constexpr const char* viewName = "TheView";
+        constexpr const char* timeQuery = R"(
+            SELECT CurrentUtcTimestamp()
+        )";
+
+        const TString creationQuery = std::format(R"(
+                CREATE VIEW {} WITH (security_invoker = TRUE) AS {};
+            )",
+            viewName,
+            timeQuery
+        );
+        ExecuteDataDefinitionQuery(session, creationQuery);
+
+        const TString selectFromViewQuery = std::format(R"(
+                SELECT * FROM {};
+            )",
+            viewName
+        );
+        TExecDataQuerySettings queryExecutionSettings;
+        queryExecutionSettings.KeepInQueryCache(true);
+        const auto executeTwice = [&](const TString& query) {
+            return TVector<TString>{
+                GetYsonResults(session, query, queryExecutionSettings),
+                GetYsonResults(session, query, queryExecutionSettings)
+            };
+        };
+        const auto viewResults = executeTwice(selectFromViewQuery);
+        UNIT_ASSERT_LT(viewResults[0], viewResults[1]);
     }
 }

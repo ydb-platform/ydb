@@ -222,6 +222,7 @@ public:
         bool AllowOver = false;
         bool AllowReturnSet = false;
         bool AllowSubLinks = false;
+        bool AutoParametrizeEnabled = true;
         TVector<TAstNode*>* WindowItems = nullptr;
         TString Scope;
     };
@@ -294,9 +295,15 @@ public:
         }
 
         for (const auto& [cluster, provider] : Settings.ClusterMapping) {
-            Provider = provider;
-            break;
+            if (provider != PgProviderName) {
+                Provider = provider;
+                break;
+            }
         }
+        if (!Provider) {
+            Provider = PgProviderName;
+        }
+        Y_ENSURE(!Provider.Empty());
 
         for (size_t i = 0; i < Settings.PgParameterTypeOids.size(); ++i) {
             const auto paramName = PREPARED_PARAM_PREFIX + ToString(i + 1);
@@ -410,6 +417,7 @@ public:
                     "client_min_messages",                  // pg_dump
                     "row_security",                        // pg_dump
                     "escape_string_warning",               // zabbix
+                    "bytea_output",                        // zabbix
                     NULL,
                 };
 
@@ -1703,6 +1711,7 @@ private:
                         TExprSettings settings;
                         settings.AllowColumns = false;
                         settings.Scope = "DEFAULT";
+                        settings.AutoParametrizeEnabled = false;
                         cinfo.Default = ParseExpr(constraintNode->raw_expr, settings);
                         if (!cinfo.Default) {
                             return false;
@@ -2317,6 +2326,9 @@ public:
         if (varName == "server_version_num") {
             return GetPostgresServerVersionNum();
         }
+        if (varName == "standard_conforming_strings"){
+            return "on";
+        }
         return {};
     }
 
@@ -2551,9 +2563,12 @@ public:
     }
 
     TAstNode* BuildTableKeyExpression(const TStringBuf relname,
-                                      bool isScheme = false) {
+        const TStringBuf cluster, bool isScheme = false
+    ) {
+        bool noPrefix = (cluster == "pg_catalog" || cluster == "information_schema");
+        TString tableName = noPrefix ? TString(relname) : TablePathPrefix + relname;
         return L(A("Key"), QL(QA(isScheme ? "tablescheme" : "table"),
-                            L(A("String"), QAX(TablePathPrefix + relname))));
+                            L(A("String"), QAX(std::move(tableName)))));
     }
 
     TReadWriteKeyExprs ParseQualifiedRelationName(const TStringBuf catalogname,
@@ -2571,7 +2586,7 @@ public:
 
       const auto cluster = ResolveCluster(schemaname);
       const auto sinkOrSource = BuildClusterSinkOrSourceExpression(isSink, cluster);
-      const auto key = BuildTableKeyExpression(relname, isScheme);
+      const auto key = BuildTableKeyExpression(relname, cluster, isScheme);
       return {sinkOrSource, key};
     }
 
@@ -3099,7 +3114,7 @@ public:
             ? L(A("PgType"), QA(TPgConst::ToString(valueNType->type)))
             : L(A("PgType"), QA("unknown"));
 
-        if (Settings.AutoParametrizeEnabled && !Settings.AutoParametrizeExprDisabledScopes.contains(settings.Scope)) {
+        if (Settings.AutoParametrizeEnabled && settings.AutoParametrizeEnabled) {
             return AutoParametrizeConst(std::move(valueNType.GetRef()), pgTypeNode);
         }
 

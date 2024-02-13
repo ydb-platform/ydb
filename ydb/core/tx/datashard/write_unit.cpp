@@ -258,7 +258,7 @@ public:
 
             DoUpdateToUserDb(writeOp, txc, ctx);
 
-            writeOp->SetWriteResult(NEvents::TDataEvents::TEvWriteResult::BuildCommited(DataShard.TabletID(), writeOp->GetTxId()));
+            writeOp->SetWriteResult(NEvents::TDataEvents::TEvWriteResult::BuildCompleted(DataShard.TabletID(), writeOp->GetTxId()));
 
             if (Pipeline.AddLockDependencies(op, guardLocks)) {
                 writeTx->ResetCollectedChanges();

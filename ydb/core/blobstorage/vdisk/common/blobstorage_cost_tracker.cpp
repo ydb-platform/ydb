@@ -50,7 +50,7 @@ TBsCostTracker::TBsCostTracker(const TBlobStorageGroupType& groupType, NPDisk::E
     , ScrubDiskCost(CostCounters->GetCounter("ScrubDiskCost", true))
     , DefragDiskCost(CostCounters->GetCounter("DefragDiskCost", true))
     , InternalDiskCost(CostCounters->GetCounter("InternalDiskCost", true))
-    , Bucket(1'000'000'000, BucketCapacity)
+    , Bucket(&BucketInflow, &BucketCapacity, nullptr, nullptr, nullptr, nullptr, true)
 {
     BurstDetector.Initialize(CostCounters, "BurstDetector");
     switch (GroupType.GetErasure()) {
@@ -67,6 +67,7 @@ TBsCostTracker::TBsCostTracker(const TBlobStorageGroupType& groupType, NPDisk::E
         CostModel = std::make_unique<TBsCostModelErasureNone>(diskType);
         break;
     }
+    UpdateBucketCapacity();
 }
 
 } // NKikimr

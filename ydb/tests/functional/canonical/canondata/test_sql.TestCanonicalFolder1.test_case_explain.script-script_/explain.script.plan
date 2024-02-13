@@ -1,26 +1,29 @@
 {
     "meta": {
-        "version": "0.2",
-        "type": "script"
+        "type": "script",
+        "version": "0.2"
     },
     "queries": [
         {
-            "tables": [],
             "Plan": {
-                "Plans": [],
                 "Node Type": "Query",
-                "PlanNodeType": "Query"
-            }
+                "PlanNodeType": "Query",
+                "Plans": []
+            },
+            "tables": []
         },
         {
-            "tables": [],
             "Plan": {
+                "Node Type": "Query",
+                "PlanNodeType": "Query",
                 "Plans": [
                     {
+                        "Node Type": "ResultSet",
                         "PlanNodeId": 2,
+                        "PlanNodeType": "ResultSet",
                         "Plans": [
                             {
-                                "PlanNodeId": 1,
+                                "Node Type": "ConstantExpr",
                                 "Operators": [
                                     {
                                         "Inputs": [],
@@ -28,73 +31,26 @@
                                         "Name": "Iterator"
                                     }
                                 ],
-                                "Node Type": "ConstantExpr"
+                                "PlanNodeId": 1
                             }
-                        ],
-                        "Node Type": "ResultSet",
-                        "PlanNodeType": "ResultSet"
+                        ]
                     }
-                ],
-                "Node Type": "Query",
-                "PlanNodeType": "Query"
-            }
+                ]
+            },
+            "tables": []
         },
         {
-            "tables": [
-                {
-                    "name": "/local/base_explain_script_script/ScriptingTest",
-                    "reads": [
-                        {
-                            "scan_by": [
-                                "Key (-\u221e, +\u221e)"
-                            ],
-                            "type": "FullScan"
-                        }
-                    ]
-                }
-            ],
             "Plan": {
+                "Node Type": "Query",
+                "PlanNodeType": "Query",
                 "Plans": [
                     {
+                        "Node Type": "ResultSet",
                         "PlanNodeId": 4,
+                        "PlanNodeType": "ResultSet",
                         "Plans": [
                             {
-                                "PlanNodeId": 3,
-                                "Plans": [
-                                    {
-                                        "PlanNodeId": 2,
-                                        "Plans": [
-                                            {
-                                                "Tables": [
-                                                    "base_explain_script_script/ScriptingTest"
-                                                ],
-                                                "PlanNodeId": 1,
-                                                "Operators": [
-                                                    {
-                                                        "Inputs": [
-                                                            {
-                                                                "InternalOperatorId": 1
-                                                            }
-                                                        ],
-                                                        "Name": "Aggregate"
-                                                    },
-                                                    {
-                                                        "Inputs": [],
-                                                        "ReadRanges": [
-                                                            "Key (-\u221e, +\u221e)"
-                                                        ],
-                                                        "ReadColumns": null,
-                                                        "Name": "TableFullScan",
-                                                        "Table": "base_explain_script_script/ScriptingTest"
-                                                    }
-                                                ],
-                                                "Node Type": "Aggregate-TableFullScan"
-                                            }
-                                        ],
-                                        "Node Type": "UnionAll",
-                                        "PlanNodeType": "Connection"
-                                    }
-                                ],
+                                "Node Type": "Aggregate-Limit",
                                 "Operators": [
                                     {
                                         "Inputs": [
@@ -110,22 +66,51 @@
                                                 "ExternalPlanNodeId": 2
                                             }
                                         ],
-                                        "Name": "Limit",
-                                        "Limit": "1"
+                                        "Limit": "1",
+                                        "Name": "Limit"
                                     }
                                 ],
-                                "Node Type": "Aggregate-Limit"
+                                "PlanNodeId": 3,
+                                "Plans": [
+                                    {
+                                        "Node Type": "UnionAll",
+                                        "PlanNodeId": 2,
+                                        "PlanNodeType": "Connection",
+                                        "Plans": [
+                                            {
+                                                "Node Type": "Aggregate-TableFullScan",
+                                                "Operators": [
+                                                    {
+                                                        "Inputs": [
+                                                            {
+                                                                "InternalOperatorId": 1
+                                                            }
+                                                        ],
+                                                        "Name": "Aggregate"
+                                                    },
+                                                    {
+                                                        "Inputs": [],
+                                                        "Name": "TableFullScan",
+                                                        "ReadColumns": null,
+                                                        "ReadRanges": [
+                                                            "Key (-\u221e, +\u221e)"
+                                                        ],
+                                                        "Table": "base_explain_script_script/ScriptingTest"
+                                                    }
+                                                ],
+                                                "PlanNodeId": 1,
+                                                "Tables": [
+                                                    "base_explain_script_script/ScriptingTest"
+                                                ]
+                                            }
+                                        ]
+                                    }
+                                ]
                             }
-                        ],
-                        "Node Type": "ResultSet",
-                        "PlanNodeType": "ResultSet"
+                        ]
                     }
-                ],
-                "Node Type": "Query",
-                "PlanNodeType": "Query"
-            }
-        },
-        {
+                ]
+            },
             "tables": [
                 {
                     "name": "/local/base_explain_script_script/ScriptingTest",
@@ -138,14 +123,21 @@
                         }
                     ]
                 }
-            ],
+            ]
+        },
+        {
             "Plan": {
+                "Node Type": "Query",
+                "PlanNodeType": "Query",
                 "Plans": [
                     {
+                        "Node Type": "ResultSet_1",
                         "PlanNodeId": 7,
+                        "PlanNodeType": "ResultSet",
                         "Plans": [
                             {
-                                "PlanNodeId": 6,
+                                "CTE Name": "precompute_0_0",
+                                "Node Type": "ConstantExpr",
                                 "Operators": [
                                     {
                                         "Inputs": [],
@@ -153,141 +145,18 @@
                                         "Name": "Iterator"
                                     }
                                 ],
-                                "Node Type": "ConstantExpr",
-                                "CTE Name": "precompute_0_0"
+                                "PlanNodeId": 6
                             }
-                        ],
-                        "Node Type": "ResultSet_1",
-                        "PlanNodeType": "ResultSet"
+                        ]
                     },
                     {
-                        "PlanNodeId": 4,
-                        "Subplan Name": "CTE precompute_0_0",
-                        "Plans": [
-                            {
-                                "PlanNodeId": 3,
-                                "Plans": [
-                                    {
-                                        "PlanNodeId": 2,
-                                        "Plans": [
-                                            {
-                                                "Tables": [
-                                                    "base_explain_script_script/ScriptingTest"
-                                                ],
-                                                "PlanNodeId": 1,
-                                                "Operators": [
-                                                    {
-                                                        "Inputs": [
-                                                            {
-                                                                "InternalOperatorId": 1
-                                                            }
-                                                        ],
-                                                        "Name": "Aggregate"
-                                                    },
-                                                    {
-                                                        "Inputs": [],
-                                                        "ReadRanges": [
-                                                            "Key (-\u221e, +\u221e)"
-                                                        ],
-                                                        "ReadColumns": null,
-                                                        "Name": "TableFullScan",
-                                                        "Table": "base_explain_script_script/ScriptingTest"
-                                                    }
-                                                ],
-                                                "Node Type": "Aggregate-TableFullScan"
-                                            }
-                                        ],
-                                        "Node Type": "UnionAll",
-                                        "PlanNodeType": "Connection"
-                                    }
-                                ],
-                                "Operators": [
-                                    {
-                                        "Inputs": [
-                                            {
-                                                "InternalOperatorId": 1
-                                            }
-                                        ],
-                                        "Name": "Aggregate"
-                                    },
-                                    {
-                                        "Inputs": [
-                                            {
-                                                "ExternalPlanNodeId": 2
-                                            }
-                                        ],
-                                        "Name": "Limit",
-                                        "Limit": "1"
-                                    }
-                                ],
-                                "Node Type": "Aggregate-Limit"
-                            }
-                        ],
                         "Node Type": "Precompute_0",
                         "Parent Relationship": "InitPlan",
-                        "PlanNodeType": "Materialize"
-                    }
-                ],
-                "Node Type": "Query",
-                "PlanNodeType": "Query"
-            }
-        },
-        {
-            "tables": [
-                {
-                    "name": "/local/base_explain_script_script/ScriptingTest",
-                    "reads": [
-                        {
-                            "scan_by": [
-                                "Key (-\u221e, +\u221e)"
-                            ],
-                            "type": "FullScan"
-                        }
-                    ]
-                }
-            ],
-            "Plan": {
-                "Plans": [
-                    {
                         "PlanNodeId": 4,
+                        "PlanNodeType": "Materialize",
                         "Plans": [
                             {
-                                "PlanNodeId": 3,
-                                "Plans": [
-                                    {
-                                        "PlanNodeId": 2,
-                                        "Plans": [
-                                            {
-                                                "Tables": [
-                                                    "base_explain_script_script/ScriptingTest"
-                                                ],
-                                                "PlanNodeId": 1,
-                                                "Operators": [
-                                                    {
-                                                        "Inputs": [
-                                                            {
-                                                                "InternalOperatorId": 1
-                                                            }
-                                                        ],
-                                                        "Name": "Aggregate"
-                                                    },
-                                                    {
-                                                        "Inputs": [],
-                                                        "ReadRanges": [
-                                                            "Key (-\u221e, +\u221e)"
-                                                        ],
-                                                        "ReadColumns": null,
-                                                        "Name": "TableFullScan",
-                                                        "Table": "base_explain_script_script/ScriptingTest"
-                                                    }
-                                                ],
-                                                "Node Type": "Aggregate-TableFullScan"
-                                            }
-                                        ],
-                                        "Node Type": "UnionAll",
-                                        "PlanNodeType": "Connection"
-                                    }
-                                ],
+                                "Node Type": "Aggregate-Limit",
                                 "Operators": [
                                     {
                                         "Inputs": [
@@ -303,22 +172,52 @@
                                                 "ExternalPlanNodeId": 2
                                             }
                                         ],
-                                        "Name": "Limit",
-                                        "Limit": "1"
+                                        "Limit": "1",
+                                        "Name": "Limit"
                                     }
                                 ],
-                                "Node Type": "Aggregate-Limit"
+                                "PlanNodeId": 3,
+                                "Plans": [
+                                    {
+                                        "Node Type": "UnionAll",
+                                        "PlanNodeId": 2,
+                                        "PlanNodeType": "Connection",
+                                        "Plans": [
+                                            {
+                                                "Node Type": "Aggregate-TableFullScan",
+                                                "Operators": [
+                                                    {
+                                                        "Inputs": [
+                                                            {
+                                                                "InternalOperatorId": 1
+                                                            }
+                                                        ],
+                                                        "Name": "Aggregate"
+                                                    },
+                                                    {
+                                                        "Inputs": [],
+                                                        "Name": "TableFullScan",
+                                                        "ReadColumns": null,
+                                                        "ReadRanges": [
+                                                            "Key (-\u221e, +\u221e)"
+                                                        ],
+                                                        "Table": "base_explain_script_script/ScriptingTest"
+                                                    }
+                                                ],
+                                                "PlanNodeId": 1,
+                                                "Tables": [
+                                                    "base_explain_script_script/ScriptingTest"
+                                                ]
+                                            }
+                                        ]
+                                    }
+                                ]
                             }
                         ],
-                        "Node Type": "ResultSet",
-                        "PlanNodeType": "ResultSet"
+                        "Subplan Name": "CTE precompute_0_0"
                     }
-                ],
-                "Node Type": "Query",
-                "PlanNodeType": "Query"
-            }
-        },
-        {
+                ]
+            },
             "tables": [
                 {
                     "name": "/local/base_explain_script_script/ScriptingTest",
@@ -331,14 +230,107 @@
                         }
                     ]
                 }
-            ],
+            ]
+        },
+        {
             "Plan": {
+                "Node Type": "Query",
+                "PlanNodeType": "Query",
                 "Plans": [
                     {
-                        "PlanNodeId": 7,
+                        "Node Type": "ResultSet",
+                        "PlanNodeId": 4,
+                        "PlanNodeType": "ResultSet",
                         "Plans": [
                             {
-                                "PlanNodeId": 6,
+                                "Node Type": "Aggregate-Limit",
+                                "Operators": [
+                                    {
+                                        "Inputs": [
+                                            {
+                                                "InternalOperatorId": 1
+                                            }
+                                        ],
+                                        "Name": "Aggregate"
+                                    },
+                                    {
+                                        "Inputs": [
+                                            {
+                                                "ExternalPlanNodeId": 2
+                                            }
+                                        ],
+                                        "Limit": "1",
+                                        "Name": "Limit"
+                                    }
+                                ],
+                                "PlanNodeId": 3,
+                                "Plans": [
+                                    {
+                                        "Node Type": "UnionAll",
+                                        "PlanNodeId": 2,
+                                        "PlanNodeType": "Connection",
+                                        "Plans": [
+                                            {
+                                                "Node Type": "Aggregate-TableFullScan",
+                                                "Operators": [
+                                                    {
+                                                        "Inputs": [
+                                                            {
+                                                                "InternalOperatorId": 1
+                                                            }
+                                                        ],
+                                                        "Name": "Aggregate"
+                                                    },
+                                                    {
+                                                        "Inputs": [],
+                                                        "Name": "TableFullScan",
+                                                        "ReadColumns": null,
+                                                        "ReadRanges": [
+                                                            "Key (-\u221e, +\u221e)"
+                                                        ],
+                                                        "Table": "base_explain_script_script/ScriptingTest"
+                                                    }
+                                                ],
+                                                "PlanNodeId": 1,
+                                                "Tables": [
+                                                    "base_explain_script_script/ScriptingTest"
+                                                ]
+                                            }
+                                        ]
+                                    }
+                                ]
+                            }
+                        ]
+                    }
+                ]
+            },
+            "tables": [
+                {
+                    "name": "/local/base_explain_script_script/ScriptingTest",
+                    "reads": [
+                        {
+                            "scan_by": [
+                                "Key (-\u221e, +\u221e)"
+                            ],
+                            "type": "FullScan"
+                        }
+                    ]
+                }
+            ]
+        },
+        {
+            "Plan": {
+                "Node Type": "Query",
+                "PlanNodeType": "Query",
+                "Plans": [
+                    {
+                        "Node Type": "ResultSet_1",
+                        "PlanNodeId": 7,
+                        "PlanNodeType": "ResultSet",
+                        "Plans": [
+                            {
+                                "CTE Name": "precompute_0_0",
+                                "Node Type": "ConstantExpr",
                                 "Operators": [
                                     {
                                         "Inputs": [],
@@ -346,54 +338,18 @@
                                         "Name": "Iterator"
                                     }
                                 ],
-                                "Node Type": "ConstantExpr",
-                                "CTE Name": "precompute_0_0"
+                                "PlanNodeId": 6
                             }
-                        ],
-                        "Node Type": "ResultSet_1",
-                        "PlanNodeType": "ResultSet"
+                        ]
                     },
                     {
+                        "Node Type": "Precompute_0",
+                        "Parent Relationship": "InitPlan",
                         "PlanNodeId": 4,
-                        "Subplan Name": "CTE precompute_0_0",
+                        "PlanNodeType": "Materialize",
                         "Plans": [
                             {
-                                "PlanNodeId": 3,
-                                "Plans": [
-                                    {
-                                        "PlanNodeId": 2,
-                                        "Plans": [
-                                            {
-                                                "Tables": [
-                                                    "base_explain_script_script/ScriptingTest"
-                                                ],
-                                                "PlanNodeId": 1,
-                                                "Operators": [
-                                                    {
-                                                        "Inputs": [
-                                                            {
-                                                                "InternalOperatorId": 1
-                                                            }
-                                                        ],
-                                                        "Name": "Aggregate"
-                                                    },
-                                                    {
-                                                        "Inputs": [],
-                                                        "ReadRanges": [
-                                                            "Key (-\u221e, +\u221e)"
-                                                        ],
-                                                        "ReadColumns": null,
-                                                        "Name": "TableFullScan",
-                                                        "Table": "base_explain_script_script/ScriptingTest"
-                                                    }
-                                                ],
-                                                "Node Type": "Aggregate-TableFullScan"
-                                            }
-                                        ],
-                                        "Node Type": "UnionAll",
-                                        "PlanNodeType": "Connection"
-                                    }
-                                ],
+                                "Node Type": "Aggregate-Limit",
                                 "Operators": [
                                     {
                                         "Inputs": [
@@ -409,47 +365,78 @@
                                                 "ExternalPlanNodeId": 2
                                             }
                                         ],
-                                        "Name": "Limit",
-                                        "Limit": "1"
+                                        "Limit": "1",
+                                        "Name": "Limit"
                                     }
                                 ],
-                                "Node Type": "Aggregate-Limit"
+                                "PlanNodeId": 3,
+                                "Plans": [
+                                    {
+                                        "Node Type": "UnionAll",
+                                        "PlanNodeId": 2,
+                                        "PlanNodeType": "Connection",
+                                        "Plans": [
+                                            {
+                                                "Node Type": "Aggregate-TableFullScan",
+                                                "Operators": [
+                                                    {
+                                                        "Inputs": [
+                                                            {
+                                                                "InternalOperatorId": 1
+                                                            }
+                                                        ],
+                                                        "Name": "Aggregate"
+                                                    },
+                                                    {
+                                                        "Inputs": [],
+                                                        "Name": "TableFullScan",
+                                                        "ReadColumns": null,
+                                                        "ReadRanges": [
+                                                            "Key (-\u221e, +\u221e)"
+                                                        ],
+                                                        "Table": "base_explain_script_script/ScriptingTest"
+                                                    }
+                                                ],
+                                                "PlanNodeId": 1,
+                                                "Tables": [
+                                                    "base_explain_script_script/ScriptingTest"
+                                                ]
+                                            }
+                                        ]
+                                    }
+                                ]
                             }
                         ],
-                        "Node Type": "Precompute_0",
-                        "Parent Relationship": "InitPlan",
-                        "PlanNodeType": "Materialize"
+                        "Subplan Name": "CTE precompute_0_0"
                     }
-                ],
-                "Node Type": "Query",
-                "PlanNodeType": "Query"
-            }
-        },
-        {
+                ]
+            },
             "tables": [
                 {
                     "name": "/local/base_explain_script_script/ScriptingTest",
-                    "writes": [
+                    "reads": [
                         {
-                            "columns": [
-                                "Key",
-                                "Value"
+                            "scan_by": [
+                                "Key (-\u221e, +\u221e)"
                             ],
-                            "type": "MultiUpsert"
+                            "type": "FullScan"
                         }
                     ]
                 }
-            ],
+            ]
+        },
+        {
             "Plan": {
+                "Node Type": "Query",
+                "PlanNodeType": "Query",
                 "Plans": [
                     {
+                        "Node Type": "Effect",
                         "PlanNodeId": 2,
                         "Plans": [
                             {
-                                "Tables": [
-                                    "base_explain_script_script/ScriptingTest"
-                                ],
-                                "PlanNodeId": 1,
+                                "CTE Name": "precompute_0_0",
+                                "Node Type": "Upsert-ConstantExpr",
                                 "Operators": [
                                     {
                                         "Inputs": [
@@ -466,18 +453,15 @@
                                         "Name": "Iterator"
                                     }
                                 ],
-                                "Node Type": "Upsert-ConstantExpr",
-                                "CTE Name": "precompute_0_0"
+                                "PlanNodeId": 1,
+                                "Tables": [
+                                    "base_explain_script_script/ScriptingTest"
+                                ]
                             }
-                        ],
-                        "Node Type": "Effect"
+                        ]
                     }
-                ],
-                "Node Type": "Query",
-                "PlanNodeType": "Query"
-            }
-        },
-        {
+                ]
+            },
             "tables": [
                 {
                     "name": "/local/base_explain_script_script/ScriptingTest",
@@ -491,17 +475,20 @@
                         }
                     ]
                 }
-            ],
+            ]
+        },
+        {
             "Plan": {
+                "Node Type": "Query",
+                "PlanNodeType": "Query",
                 "Plans": [
                     {
+                        "Node Type": "Effect",
                         "PlanNodeId": 2,
                         "Plans": [
                             {
-                                "Tables": [
-                                    "base_explain_script_script/ScriptingTest"
-                                ],
-                                "PlanNodeId": 1,
+                                "CTE Name": "precompute_0_0",
+                                "Node Type": "Upsert-ConstantExpr",
                                 "Operators": [
                                     {
                                         "Inputs": [
@@ -518,16 +505,29 @@
                                         "Name": "Iterator"
                                     }
                                 ],
-                                "Node Type": "Upsert-ConstantExpr",
-                                "CTE Name": "precompute_0_0"
+                                "PlanNodeId": 1,
+                                "Tables": [
+                                    "base_explain_script_script/ScriptingTest"
+                                ]
                             }
-                        ],
-                        "Node Type": "Effect"
+                        ]
                     }
-                ],
-                "Node Type": "Query",
-                "PlanNodeType": "Query"
-            }
+                ]
+            },
+            "tables": [
+                {
+                    "name": "/local/base_explain_script_script/ScriptingTest",
+                    "writes": [
+                        {
+                            "columns": [
+                                "Key",
+                                "Value"
+                            ],
+                            "type": "MultiUpsert"
+                        }
+                    ]
+                }
+            ]
         }
     ]
 }

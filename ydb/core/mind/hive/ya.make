@@ -25,6 +25,7 @@ SRCS(
     leader_tablet_info.h
     metrics.h
     monitoring.cpp
+    monitoring.h
     node_info.cpp
     node_info.h
     object_distribution.h
@@ -82,6 +83,7 @@ SRCS(
 )
 
 PEERDIR(
+    ydb/library/aclib
     ydb/library/actors/core
     ydb/library/actors/interconnect
     library/cpp/containers/ring_buffer

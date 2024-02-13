@@ -30,6 +30,8 @@ void TMemoryLimits::Register(TRegistrar registrar)
         .Optional();
     registrar.Parameter("lookup_row_cache", &TThis::LookupRowCache)
         .Optional();
+    registrar.Parameter("reserved", &TThis::Reserved)
+        .Optional();
 }
 
 void TInstanceResources::Register(TRegistrar registrar)
@@ -57,6 +59,22 @@ bool TInstanceResources::operator==(const TInstanceResources& other) const
     return std::tie(Vcpu, Memory, Net) == std::tie(other.Vcpu, other.Memory, other.Net);
 }
 
+void TDefaultInstanceConfig::Register(TRegistrar registrar)
+{
+    registrar.Parameter("cpu_limits", &TThis::CpuLimits)
+        .DefaultNew();
+    registrar.Parameter("memory_limits", &TThis::MemoryLimits)
+        .DefaultNew();
+}
+
+void TInstanceSize::Register(TRegistrar registrar)
+{
+    registrar.Parameter("resource_guarantee", &TThis::ResourceGuarantee)
+        .DefaultNew();
+    registrar.Parameter("default_config", &TThis::DefaultConfig)
+        .DefaultNew();
+}
+
 void TBundleTargetConfig::Register(TRegistrar registrar)
 {
     registrar.Parameter("cpu_limits", &TThis::CpuLimits)
@@ -73,6 +91,13 @@ void TBundleTargetConfig::Register(TRegistrar registrar)
         .Default();
 }
 
+void TBundleConfigConstraints::Register(TRegistrar registrar)
+{
+    registrar.Parameter("rpc_proxy_sizes", &TThis::RpcProxySizes)
+        .Default();
+    registrar.Parameter("tablet_node_sizes", &TThis::TabletNodeSizes)
+        .Default();
+}
 ////////////////////////////////////////////////////////////////////////////////
 
 namespace NProto {
@@ -112,6 +137,8 @@ void ToProto(NBundleController::NProto::TMemoryLimits* protoMemoryLimits, const 
     YT_TOPROTO_OPTIONAL_PTR(protoMemoryLimits, uncompressed_block_cache, memoryLimits, UncompressedBlockCache);
 
     YT_TOPROTO_OPTIONAL_PTR(protoMemoryLimits, versioned_chunk_meta, memoryLimits, VersionedChunkMeta);
+
+    YT_TOPROTO_OPTIONAL_PTR(protoMemoryLimits, reserved, memoryLimits, Reserved);
 }
 
 void FromProto(NBundleControllerClient::TMemoryLimitsPtr memoryLimits, const NBundleController::NProto::TMemoryLimits* protoMemoryLimits)
@@ -126,6 +153,8 @@ void FromProto(NBundleControllerClient::TMemoryLimitsPtr memoryLimits, const NBu
     YT_FROMPROTO_OPTIONAL_PTR(protoMemoryLimits, uncompressed_block_cache, memoryLimits, UncompressedBlockCache);
 
     YT_FROMPROTO_OPTIONAL_PTR(protoMemoryLimits, versioned_chunk_meta, memoryLimits, VersionedChunkMeta);
+
+    YT_FROMPROTO_OPTIONAL_PTR(protoMemoryLimits, reserved, memoryLimits, Reserved);
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -145,6 +174,38 @@ void FromProto(NBundleControllerClient::TInstanceResourcesPtr instanceResources,
     YT_FROMPROTO_OPTIONAL_PTR(protoInstanceResources, net, instanceResources, Net);
     YT_FROMPROTO_OPTIONAL_PTR(protoInstanceResources, type, instanceResources, Type);
     YT_FROMPROTO_OPTIONAL_PTR(protoInstanceResources, vcpu, instanceResources, Vcpu);
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
+void ToProto(NBundleController::NProto::TDefaultInstanceConfig* protoDefaultInstanceConfig, const TDefaultInstanceConfigPtr defaultInstanceConfig)
+{
+    ToProto(protoDefaultInstanceConfig->mutable_cpu_limits(), defaultInstanceConfig->CpuLimits);
+    ToProto(protoDefaultInstanceConfig->mutable_memory_limits(), defaultInstanceConfig->MemoryLimits);
+}
+
+void FromProto(TDefaultInstanceConfigPtr defaultInstanceConfig, const NBundleController::NProto::TDefaultInstanceConfig* protoDefaultInstanceConfig)
+{
+    if (protoDefaultInstanceConfig->has_cpu_limits())
+        FromProto(defaultInstanceConfig->CpuLimits, &protoDefaultInstanceConfig->cpu_limits());
+    if (protoDefaultInstanceConfig->has_memory_limits())
+        FromProto(defaultInstanceConfig->MemoryLimits, &protoDefaultInstanceConfig->memory_limits());
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
+void ToProto(NBundleController::NProto::TInstanceSize* protoInstanceSize, const TInstanceSizePtr instanceSize)
+{
+    ToProto(protoInstanceSize->mutable_resource_guarantee(), instanceSize->ResourceGuarantee);
+    ToProto(protoInstanceSize->mutable_default_config(), instanceSize->DefaultConfig);
+}
+
+void FromProto(TInstanceSizePtr instanceSize, const NBundleController::NProto::TInstanceSize* protoInstanceSize)
+{
+    if (protoInstanceSize->has_resource_guarantee())
+        FromProto(instanceSize->ResourceGuarantee, &protoInstanceSize->resource_guarantee());
+    if (protoInstanceSize->has_default_config())
+        FromProto(instanceSize->DefaultConfig, &protoInstanceSize->default_config());
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -171,6 +232,37 @@ void FromProto(NBundleControllerClient::TBundleTargetConfigPtr bundleConfig, con
         FromProto(bundleConfig->RpcProxyResourceGuarantee, &protoBundleConfig->rpc_proxy_resource_guarantee());
     if (protoBundleConfig->has_tablet_node_resource_guarantee())
         FromProto(bundleConfig->TabletNodeResourceGuarantee, &protoBundleConfig->tablet_node_resource_guarantee());
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
+void ToProto(NBundleController::NProto::TBundleConfigConstraints* protoBundleConfigConstraints, const TBundleConfigConstraintsPtr bundleConfigConstraints)
+{
+    for (auto instance : bundleConfigConstraints->RpcProxySizes) {
+        ToProto(protoBundleConfigConstraints->add_rpc_proxy_sizes(), instance);
+    }
+    for (auto instance : bundleConfigConstraints->TabletNodeSizes) {
+        ToProto(protoBundleConfigConstraints->add_tablet_node_sizes(), instance);
+    }
+}
+
+void FromProto(TBundleConfigConstraintsPtr bundleConfigConstraints, const NBundleController::NProto::TBundleConfigConstraints* protoBundleConfigConstraints)
+{
+    auto rpcProxySizes = protoBundleConfigConstraints->get_arr_rpc_proxy_sizes();
+
+    for (auto instance : rpcProxySizes) {
+        auto newInstance = New<TInstanceSize>();
+        FromProto(newInstance, &instance);
+        bundleConfigConstraints->RpcProxySizes.push_back(newInstance);
+    }
+
+    auto tabletNodeSizes = protoBundleConfigConstraints->get_arr_tablet_node_sizes();
+
+    for (auto instance : tabletNodeSizes) {
+        auto newInstance = New<TInstanceSize>();
+        FromProto(newInstance, &instance);
+        bundleConfigConstraints->TabletNodeSizes.push_back(newInstance);
+    }
 }
 
 ////////////////////////////////////////////////////////////////////////////////

@@ -1736,7 +1736,16 @@ public:
             return nullptr;
         }
 
-        return Y("let", label, BuildSortSpec(OrderBy, label, false, AssumeSorted));
+        auto sorted = BuildSortSpec(OrderBy, label, false, AssumeSorted);
+        if (ExtraSortColumns.empty()) {
+            return Y("let", label, sorted);
+        }
+        auto body = Y();
+        for (const auto& [column, _] : ExtraSortColumns) {
+            body = L(body, Y("let", "row", Y("RemoveMember", "row", Q(column))));
+        }
+        body = L(body, Y("let", "res", "row"));
+        return Y("let", label, Y("OrderedMap", sorted, BuildLambda(Pos, Y("row"), body, "res")));
     }
 
     TNodePtr BuildCleanupColumns(TContext& ctx, const TString& label) override {
@@ -1801,6 +1810,31 @@ public:
             }
             return Source->AddColumn(ctx, column);
         }
+
+        if (OrderByInit && !Distinct && !GroupBy) {
+            bool reliable = column.IsReliable();
+            column.SetAsNotReliable();
+            auto maybeExist = IRealSource::AddColumn(ctx, column);
+            if (reliable) {
+                column.ResetAsReliable();
+            }
+            if (maybeExist && maybeExist.GetRef()) {
+                return true;
+            }
+
+            auto maybeSourceExist = Source->AddColumn(ctx, column);
+            if (!maybeSourceExist.Defined()) {
+                return maybeSourceExist;
+            }
+
+            // order by references column which is missing in projection, but may exists in source
+            const auto columnName = column.GetColumnName();
+            if (columnName) {
+                ExtraSortColumns.emplace(*columnName, TNodePtr(&column));
+            }
+            return true;
+        }
+
         return IRealSource::AddColumn(ctx, column);
     }
 
@@ -2139,6 +2173,17 @@ private:
                 ++column;
                 ++isNamedColumn;
             }
+
+            for (const auto& [columnName, column]: ExtraSortColumns) {
+                auto body = Y();
+                if (haveCompositeTerms) {
+                    body = L(body, Y("let", "row", Y("Apply", "addCompositTerms", "row")));
+                }
+                body = L(body, Y("let", "res", column));
+                TPosition pos = column->GetPos();
+                auto projectItem = Y("SqlProjectItem", "projectCoreType", BuildQuotedAtom(pos, columnName), BuildLambda(pos, Y("row"), body, "res"));
+                sqlProjectArgs = L(sqlProjectArgs, projectItem);
+            }
         }
 
         auto block(Y(Y("let", "projectCoreType", Y("TypeOf", "core"))));
@@ -2199,6 +2244,7 @@ private:
     const bool SelectStream;
     const TWriteSettings Settings;
     const TColumnsSets UniqueSets, DistinctSets;
+    TMap<TString, TNodePtr> ExtraSortColumns;
 };
 
 class TProcessSource: public IRealSource {

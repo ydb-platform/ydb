@@ -18,4 +18,4 @@ w1 AS (
     PARTITION BY SessionWindow(ts, 10), user
     ORDER BY ts
 )
-ORDER BY user, ts;
+ORDER BY user, ts, session_len;

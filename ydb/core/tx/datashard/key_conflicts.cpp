@@ -1,5 +1,5 @@
 #include "key_conflicts.h"
-#include "sys_tables.h"
+#include <ydb/core/tx/locks/sys_tables.h>
 
 namespace NKikimr {
 namespace NDataShard {

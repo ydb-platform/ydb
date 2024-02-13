@@ -60,7 +60,7 @@ bool TPartitionSourceManager::HasParents() const {
 
 TPartitionSourceManager::TModificationBatch::TModificationBatch(TPartitionSourceManager& manager, ESourceIdFormat format)
     : Manager(manager)
-    , Node(Manager.GetPartitionNode()) 
+    , Node(Manager.GetPartitionNode())
     , SourceIdWriter(format)
     , HeartbeatEmitter(Manager.Partition.SourceIdStorage) {
 }
@@ -104,6 +104,7 @@ TPartitionSourceManager& TPartitionSourceManager::TModificationBatch::GetManager
 TPartitionSourceManager::TSourceInfo Convert(TSourceIdInfo value) {
     TPartitionSourceManager::TSourceInfo result(value.State);
     result.SeqNo = value.SeqNo;
+    result.MinSeqNo = value.MinSeqNo;
     result.Offset = value.Offset;
     result.Explicit = value.Explicit;
     result.WriteTimestamp = value.WriteTimestamp;

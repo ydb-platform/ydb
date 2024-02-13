@@ -82,14 +82,14 @@ public:
             : 0ul;
     }
 
-    std::any GetSourcesState() override {
+    ui64 GetSourcesState() {
         if (!ScanData) {
             return 0;
         }
         return CalculateFreeSpace();
     }
 
-    void PollSources(std::any prev) override;
+    void PollSources(ui64 prevFreeSpace);
 
     void PassAway() override {
         if (TaskRunner) {

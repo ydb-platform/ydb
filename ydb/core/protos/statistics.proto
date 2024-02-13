@@ -44,9 +44,10 @@ message TEvConnectNode {
 message TEvRequestStats {
     optional uint32 NodeId = 1;
     repeated fixed64 NeedSchemeShards = 2;
+    optional bool Urgent = 3;
 }
 
-// SA -> nodes
+// SA -> nodes, node -> nodes
 message TEvPropagateStatistics {
     repeated uint32 NodeIds = 1; // hierarchical propagation
     message TStatsEntry {
@@ -55,6 +56,10 @@ message TEvPropagateStatistics {
         optional uint64 Timestamp = 3;
     }
     repeated TStatsEntry Entries = 2;
+}
+
+// node -> SA, node -> node
+message TEvPropagateStatisticsResponse {
 }
 
 // SA -> nodes

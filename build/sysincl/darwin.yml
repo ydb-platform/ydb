@@ -44,6 +44,7 @@
   - curses.h
   - dispatch/dispatch.h
   - editline/readline.h
+  - Files.h
   - ffi/ffi.h
   - form.h
   - gssapi.h
@@ -56,6 +57,7 @@
   - libkern/OSAtomic.h
   - libkern/OSByteOrder.h
   - libkern/OSCacheControl.h
+  - libkern/version.h
   - libproc.h
   - mach-o/dyld.h
   - mach-o/fixup-chains.h
@@ -133,6 +135,7 @@
   - simd/simd.h
   - strhash.h
   - sys/_types.h
+  - sys/_types/_mbstate_t.h
   - sys/acl.h
   - sys/aio.h
   - sys/attr.h
@@ -173,12 +176,17 @@
   - xpc/xpc.h
 
   # OSX frameworks
+  - AEObjects.h
+  - AEPackObject.h
+  - AERegistry.h
   - Accelerate/Accelerate.h
+  - AppleEvents.h
   - AppKit/AppKit.h
   - AppKit/NSView.h
   - ApplicationServices/ApplicationServices.h
   - AudioToolbox/AudioToolbox.h
   - AVFoundation/AVFoundation.h
+  - Carbon/Carbon.h
   - CFNetwork/CFNetwork.h
   - Cocoa/Cocoa.h
   - CoreFoundation/CFArray.h
@@ -204,14 +212,21 @@
   - CoreText/CoreText.h
   - CoreVideo/CoreVideo.h
   - DeviceCheck/DCAppAttestService.h
+  - Files.h
   - Foundation/Foundation.h
   - Foundation/NSException.h
   - Foundation/NSString.h
   - Foundation/NSKeyValueObserving.h
   - Foundation/NSObject.h
+  - Gestalt.h
   - GLKit/GLKit.h
+  - ImageCompression.h
   - IOKit/IOBSD.h
+  - IOKit/IOCFPlugIn.h
   - IOKit/IOKitLib.h
+  - IOKit/graphics/IOGraphicsLib.h
+  - IOKit/hid/IOHIDKeys.h
+  - IOKit/hid/IOHIDLib.h
   - IOKit/kext/KextManager.h
   - IOKit/ps/IOPSKeys.h
   - IOKit/ps/IOPSKeys.h
@@ -221,6 +236,7 @@
   - IOKit/storage/IOBlockStorageDriver.h
   - IOKit/storage/IOMedia.h
   - IOSurface/IOSurfaceRef.h
+  - Kernel/IOKit/hidsystem/IOHIDUsageTables.h
   - Metal/Metal.h
   - metal_stdlib
   - OpenCL/cl.h
@@ -230,10 +246,15 @@
   - OpenGLES/ES2/glext.h
   - OpenGLES/ES3/gl.h
   - OpenGLES/ES3/glext.h
+  - Palettes.h
+  - PictUtils.h
+  - Processes.h
   - Speech/Speech.h
+  - QDOffscreen.h
   - QuartzCore/QuartzCore.h
   - QuartzCore/CAEAGLLayer.h
   - QuartzCore/CAMetalLayer.h
+  - QuickDraw.h
   - Security/SecCertificate.h
   - Security/SecItem.h
   - Security/SecImportExport.h
@@ -244,6 +265,8 @@
   - Security/Security.h
   - SystemConfiguration/SystemConfiguration.h
   - SystemConfiguration/SCDynamicStoreCopySpecific.h
+  - TextUtils.h
+  - Types.h
   - UIKit/UIImage.h
   - UIKit/UIKit.h
   - UIKit/UIScreen.h

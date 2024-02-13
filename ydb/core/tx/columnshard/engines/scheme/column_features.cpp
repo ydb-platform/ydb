@@ -33,8 +33,6 @@ std::optional<NKikimr::NOlap::TColumnFeatures> TColumnFeatures::BuildFromProto(c
         AFL_VERIFY(result.Serializer.DeserializeFromProto(columnInfo.GetSerializer()));
     } else if (columnInfo.HasCompression()) {
         AFL_VERIFY(result.Serializer.DeserializeFromProto(columnInfo.GetCompression()));
-    } else {
-        result.Serializer = NArrow::NSerialization::TSerializerContainer::GetDefaultSerializer();
     }
     if (columnInfo.HasDictionaryEncoding()) {
         auto settings = NArrow::NDictionary::TEncodingSettings::BuildFromProto(columnInfo.GetDictionaryEncoding());

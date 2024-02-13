@@ -1,0 +1,9 @@
+PROTO_LIBRARY()
+
+SRCS(
+    marker.proto
+)
+
+EXCLUDE_TAGS(GO_PROTO)
+
+END()

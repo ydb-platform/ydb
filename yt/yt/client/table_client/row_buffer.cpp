@@ -15,7 +15,9 @@ TChunkedMemoryPool* TRowBuffer::GetPool()
 
 TMutableUnversionedRow TRowBuffer::AllocateUnversioned(int valueCount)
 {
-    return TMutableUnversionedRow::Allocate(&Pool_, valueCount);
+    auto result = TMutableUnversionedRow::Allocate(&Pool_, valueCount);
+    ValidateNoOverflow();
+    return result;
 }
 
 TMutableVersionedRow TRowBuffer::AllocateVersioned(
@@ -24,12 +26,14 @@ TMutableVersionedRow TRowBuffer::AllocateVersioned(
     int writeTimestampCount,
     int deleteTimestampCount)
 {
-    return TMutableVersionedRow::Allocate(
+    auto result = TMutableVersionedRow::Allocate(
         &Pool_,
         keyCount,
         valueCount,
         writeTimestampCount,
         deleteTimestampCount);
+    ValidateNoOverflow();
+    return result;
 }
 
 void TRowBuffer::CaptureValue(TUnversionedValue* value)
@@ -39,6 +43,8 @@ void TRowBuffer::CaptureValue(TUnversionedValue* value)
         memcpy(dst, value->Data.String, value->Length);
         value->Data.String = dst;
     }
+
+    ValidateNoOverflow();
 }
 
 TVersionedValue TRowBuffer::CaptureValue(const TVersionedValue& value)
@@ -88,6 +94,8 @@ TMutableUnversionedRow TRowBuffer::CaptureRow(TUnversionedValueRange values, boo
             CaptureValue(&capturedBegin[index]);
         }
     }
+
+    ValidateNoOverflow();
 
     return capturedRow;
 }
@@ -152,6 +160,8 @@ TMutableUnversionedRow TRowBuffer::CaptureAndPermuteRow(
         capturedRow[valueCount++] = *addend;
     }
 
+    ValidateNoOverflow();
+
     return capturedRow;
 }
 
@@ -175,6 +185,8 @@ TMutableVersionedRow TRowBuffer::CaptureRow(TVersionedRow row, bool captureValue
     if (captureValues) {
         CaptureValues(capturedRow);
     }
+
+    ValidateNoOverflow();
 
     return capturedRow;
 }
@@ -284,12 +296,15 @@ TMutableVersionedRow TRowBuffer::CaptureAndPermuteRow(
         }
     }
 
+    ValidateNoOverflow();
+
     return capturedRow;
 }
 
 void TRowBuffer::Absorb(TRowBuffer&& other)
 {
     Pool_.Absorb(std::move(other.Pool_));
+    ValidateNoOverflow();
 }
 
 i64 TRowBuffer::GetSize() const
@@ -304,12 +319,31 @@ i64 TRowBuffer::GetCapacity() const
 
 void TRowBuffer::Clear()
 {
+    MemoryGuard_.reset();
     Pool_.Clear();
 }
 
 void TRowBuffer::Purge()
 {
+    MemoryGuard_.reset();
     Pool_.Purge();
+}
+
+void TRowBuffer::ValidateNoOverflow()
+{
+    if (!MemoryTracker_) {
+        return;
+    }
+
+    auto capacity = Pool_.GetCapacity();
+
+    if (!MemoryGuard_) {
+        MemoryGuard_ = TMemoryUsageTrackerGuard::TryAcquire(MemoryTracker_, capacity)
+            .ValueOrThrow();
+    } else {
+        MemoryGuard_->TrySetSize(capacity)
+            .ThrowOnError();
+    }
 }
 
 ////////////////////////////////////////////////////////////////////////////////

@@ -11,7 +11,7 @@ extern "C" {
 namespace NYql {
 
 Numeric PgFloatToNumeric(double item, ui64 scale, int digits);
-Numeric PgDecimal128ToNumeric(int64_t high_bits, uint64_t low_bits, int32_t precision, int32_t scale);
+Numeric PgDecimal128ToNumeric(arrow::Decimal128 val, int32_t precision, int32_t scale, Numeric high_bits_mul);
 TColumnConverter BuildPgColumnConverter(const std::shared_ptr<arrow::DataType>& originalType, NKikimr::NMiniKQL::TPgType* targetType);
 
 template<typename T>

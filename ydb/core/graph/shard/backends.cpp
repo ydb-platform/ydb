@@ -245,6 +245,7 @@ bool TLocalBackend::StoreMetrics(NTabletFlatExecutor::TTransactionContext& txc, 
         if (itId == MetricsIndex.end()) {
             itId = MetricsIndex.emplace(name, MetricsIndex.size()).first;
             db.Table<Schema::MetricsIndex>().Key(name).Update<Schema::MetricsIndex::Id>(itId->second);
+            BLOG_TRACE("Metric " << name << " has id " << itId->second);
         }
         ui64 id = itId->second;
         db.Table<Schema::MetricsValues>().Key(data.Timestamp.Seconds(), id).Update<Schema::MetricsValues::Value>(value);
@@ -362,13 +363,16 @@ bool TLocalBackend::DownsampleData(NTabletFlatExecutor::TTransactionContext& txc
                             }
                         }
                         BLOG_TRACE("Normalizing " << values.Timestamps.size() << " values from " << values.Timestamps.front().Seconds()
-                            << " to " << values.Timestamps.back().Seconds() << " values " << values.Values[0].front() << " .. " << values.Values[0].back());
+                            << " to " << values.Timestamps.back().Seconds());
                         NormalizeAndDownsample(values, 1);
                     }
                     if (!values.Timestamps.empty()) {
-                        BLOG_TRACE("Result time is " << values.Timestamps.front().Seconds() << " value is " << values.Values.front()[0]);
-                        for (ui64 id = 0; id < values.Values.size(); ++id) {
-                            db.Table<Schema::MetricsValues>().Key(values.Timestamps.front().Seconds(), id).Update<Schema::MetricsValues::Value>(values.Values.front()[id]);
+                        BLOG_TRACE("Result time is " << values.Timestamps.front().Seconds());
+                        for (ui64 id : ids) {
+                            if (!values.Values[id].empty()) {
+                                BLOG_TRACE("Updating values with id " << id);
+                                db.Table<Schema::MetricsValues>().Key(values.Timestamps.front().Seconds(), id).Update<Schema::MetricsValues::Value>(values.Values[id].front());
+                            }
                         }
                     }
                     ids.clear();
@@ -395,13 +399,16 @@ bool TLocalBackend::DownsampleData(NTabletFlatExecutor::TTransactionContext& txc
 
     if (values.Timestamps.size() > 1) {
         BLOG_TRACE("Normalizing " << values.Timestamps.size() << " values from " << values.Timestamps.front().Seconds()
-            << " to " << values.Timestamps.back().Seconds() << " values " << values.Values[0].front() << " .. " << values.Values[0].back());
+            << " to " << values.Timestamps.back().Seconds());
         NormalizeAndDownsample(values, 1);
     }
     if (!values.Timestamps.empty()) {
-        BLOG_TRACE("Result time is " << values.Timestamps.front().Seconds() << " value is " << values.Values.front()[0]);
-        for (ui64 id = 0; id < values.Values.size(); ++id) {
-            db.Table<Schema::MetricsValues>().Key(values.Timestamps.front().Seconds(), id).Update<Schema::MetricsValues::Value>(values.Values.front()[id]);
+        BLOG_TRACE("Result time is " << values.Timestamps.front().Seconds());
+        for (ui64 id : ids) {
+            if (!values.Values[id].empty()) {
+                BLOG_TRACE("Updating values with id " << id);
+                db.Table<Schema::MetricsValues>().Key(values.Timestamps.front().Seconds(), id).Update<Schema::MetricsValues::Value>(values.Values[id].front());
+            }
         }
     }
 

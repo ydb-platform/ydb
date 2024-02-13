@@ -796,6 +796,8 @@ namespace NSQLTranslationV1 {
 
         void DoUpdateState() const override;
 
+        virtual const TString* GetGenericKey() const;
+
         virtual bool InitAggr(TContext& ctx, bool isFactory, ISource* src, TAstListNode& node, const TVector<TNodePtr>& exprs) = 0;
 
         virtual std::pair<TNodePtr, bool> AggregationTraits(const TNodePtr& type, bool overState, bool many, bool allowAggApply, TContext& ctx) const;
@@ -812,6 +814,9 @@ namespace NSQLTranslationV1 {
 
         EAggregateMode GetAggregationMode() const;
         void MarkKeyColumnAsGenerated();
+
+        virtual void Join(IAggregation* aggr);
+
     private:
         virtual TNodePtr GetApply(const TNodePtr& type, bool many, bool allowAggApply, TContext& ctx) const = 0;
 
@@ -1046,6 +1051,7 @@ namespace NSQLTranslationV1 {
         TVector<TChangefeedDescription> Changefeeds;
         TTableSettings TableSettings;
         ETableType TableType = ETableType::Table;
+        bool Temporary = false;
     };
 
     struct TAlterTableParameters {
@@ -1248,7 +1254,7 @@ namespace NSQLTranslationV1 {
     TNodePtr BuildPragma(TPosition pos, const TString& prefix, const TString& name, const TVector<TDeferredAtom>& values, bool valueDefault);
     TNodePtr BuildSqlLambda(TPosition pos, TVector<TString>&& args, TVector<TNodePtr>&& exprSeq);
     TNodePtr BuildWorldIfNode(TPosition pos, TNodePtr predicate, TNodePtr thenNode, TNodePtr elseNode, bool isEvaluate);
-    TNodePtr BuildWorldForNode(TPosition pos, TNodePtr list, TNodePtr bodyNode, TNodePtr elseNode, bool isEvaluate);
+    TNodePtr BuildWorldForNode(TPosition pos, TNodePtr list, TNodePtr bodyNode, TNodePtr elseNode, bool isEvaluate, bool isParallel);
 
     TNodePtr BuildCreateTopic(TPosition pos, const TTopicRef& tr, const TCreateTopicParameters& params,
                               TScopedStatePtr scoped);

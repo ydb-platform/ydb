@@ -73,10 +73,11 @@ public:
         TStringOutput out(output);
 
         auto error = NDwarf::ResolveBacktraceLocked(addrs, [&](const NDwarf::TLineInfo& info) {
-            if (!info.FileName.Empty())
-                out << info.FileName << ":" << info.Line << ":" << info.Col << " ";
             if (!info.FunctionName.Empty())
-                out << "in " << info.FunctionName << " ";
+                out << info.FunctionName << " ";
+            if (!info.FileName.Empty())
+                out << "at " << info.FileName << ":" << info.Line << ":" << info.Col << " ";
+            out << "\n";
             return NDwarf::EResolving::Continue;
         });
 

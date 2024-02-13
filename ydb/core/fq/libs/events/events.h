@@ -250,6 +250,8 @@ struct TEvents {
     };
 };
 
+NActors::TActorId MakeYqPrivateProxyId();
+
 } // namespace NFq
 
 template<>

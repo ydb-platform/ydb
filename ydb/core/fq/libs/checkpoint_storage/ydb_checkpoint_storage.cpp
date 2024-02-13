@@ -754,7 +754,7 @@ TFuture<ICheckpointStorage::TGetCoordinatorsResult> TCheckpointStorage::GetCoord
         [getContext] (const TFuture<TIssues>& future) {
             auto result = TGetCoordinatorsResult(
                 std::move(getContext->Coordinators),
-                std::move(future.GetValue()));
+                future.GetValue());
             return MakeFuture(result);
         });
 }
@@ -803,13 +803,11 @@ TFuture<ICheckpointStorage::TCreateCheckpointResult> TCheckpointStorage::CreateC
             return CreateCheckpointWrapper(future, checkpointContext);
         });
 
-    return future.Apply(
-        [checkpointContext](const TFuture<NYdb::TStatus>& future) {
-            if (NYql::TIssues issues = StatusToIssues(future.GetValue())) {
-                return TCreateCheckpointResult(TString(), std::move(issues));
-            } else {
-                return TCreateCheckpointResult(checkpointContext->CheckpointGraphDescriptionContext->GraphDescId, NYql::TIssues());
-            }
+    return StatusToIssues(future).Apply(
+        [checkpointContext] (const TFuture<TIssues>& future) {
+            NYql::TIssues issues = future.GetValue();
+            TString descId  = !issues ? checkpointContext->CheckpointGraphDescriptionContext->GraphDescId : TString();
+            return TCreateCheckpointResult(descId, issues);
         });
 }
 
@@ -898,7 +896,7 @@ TFuture<ICheckpointStorage::TGetCheckpointsResult> TCheckpointStorage::GetCheckp
 
     return StatusToIssues(future).Apply(
         [getContext] (const TFuture<TIssues>& future) {
-            auto result = TGetCheckpointsResult(std::move(getContext->Checkpoints), std::move(future.GetValue()));
+            auto result = TGetCheckpointsResult(std::move(getContext->Checkpoints), future.GetValue());
             return MakeFuture(result);
         });
 }
@@ -1097,9 +1095,10 @@ TFuture<ICheckpointStorage::TGetTotalCheckpointsStateSizeResult> TCheckpointStor
                         return status;
                     });
         });
-    return future.Apply(
-        [result](const TFuture<TStatus>& status) {
-          return std::make_pair(std::move(result->Size), std::move(status.GetValue().GetIssues()));
+
+    return StatusToIssues(future).Apply(
+        [result] (const TFuture<TIssues>& future) {
+            return std::make_pair(result->Size, future.GetValue());
         });
 }
 

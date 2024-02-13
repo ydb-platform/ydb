@@ -33,7 +33,10 @@ struct TPushdownSettings : public NPushdown::TSettings {
         Enable(EFlag::LikeOperator, NSsa::RuntimeVersion >= 2U);
         Enable(EFlag::LikeOperatorOnlyForUtf8, NSsa::RuntimeVersion < 3U);
         Enable(EFlag::JsonQueryOperators | EFlag::JsonExistsOperator, NSsa::RuntimeVersion >= 3U);
-        Enable(EFlag::ArithmeticalExpressions | EFlag::UnaryOperators | EFlag::DoNotCheckCompareArgumentsTypes, NSsa::RuntimeVersion >= 4U);
+        Enable(EFlag::ArithmeticalExpressions
+            | EFlag::UnaryOperators
+            | EFlag::DoNotCheckCompareArgumentsTypes
+            | EFlag::TimestampCtor, NSsa::RuntimeVersion >= 4U);
         Enable(EFlag::LogicalXorOperator
             | EFlag::ParameterExpression
             | EFlag::CastExpression
@@ -140,6 +143,7 @@ std::vector<std::pair<TExprBase, TExprBase>> ExtractComparisonParameters(const T
 
 TMaybeNode<TExprBase> ComparisonPushdown(const std::vector<std::pair<TExprBase, TExprBase>>& parameters, const TCoCompare& predicate, TExprContext& ctx, TPositionHandle pos);
 
+[[maybe_unused]]
 TMaybeNode<TExprBase> YqlCoalescePushdown(const TCoCoalesce& coalesce, TExprContext& ctx) {
     if (const auto params = ExtractBinaryFunctionParameters(coalesce, ctx, coalesce.Pos())) {
         return Build<TKqpOlapFilterBinaryOp>(ctx, coalesce.Pos())

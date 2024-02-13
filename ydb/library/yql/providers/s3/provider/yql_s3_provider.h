@@ -27,6 +27,8 @@ struct TS3State : public TThrRefBase
     TS3Configuration::TPtr Configuration = MakeIntrusive<TS3Configuration>();
     const NKikimr::NMiniKQL::IFunctionRegistry* FunctionRegistry = nullptr;
     ISecuredServiceAccountCredentialsFactory::TPtr CredentialsFactory;
+    IHTTPGateway::TPtr Gateway;
+    TMaybe<ui64> MaxTasksPerStage;
 };
 
 TDataProviderInitializer GetS3DataProviderInitializer(IHTTPGateway::TPtr gateway, ISecuredServiceAccountCredentialsFactory::TPtr credentialsFactory = nullptr, bool allowLocalFiles = false);

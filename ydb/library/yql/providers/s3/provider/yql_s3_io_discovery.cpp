@@ -92,6 +92,7 @@ public:
               State_->Configuration->MinDesiredDirectoriesOfFilesPerQuery,
               State_->Configuration->MaxInflightListsPerQuery,
               State_->Configuration->AllowLocalFiles)) {
+        State_->Gateway = gateway;
     }
 
     void Rewind() final {

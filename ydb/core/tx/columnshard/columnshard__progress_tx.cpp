@@ -31,6 +31,12 @@ public:
         if (!!plannedItem) {
             ui64 step = plannedItem->PlanStep;
             ui64 txId = plannedItem->TxId;
+            LastCompletedTx = NOlap::TSnapshot(step, txId);
+            if (LastCompletedTx > Self->LastCompletedTx) {
+                NIceDb::TNiceDb db(txc.DB);
+                Schema::SaveSpecialValue(db, Schema::EValueIds::LastCompletedStep, LastCompletedTx->GetPlanStep());
+                Schema::SaveSpecialValue(db, Schema::EValueIds::LastCompletedTxId, LastCompletedTx->GetTxId());
+            }
 
             TxOperator = Self->ProgressTxController->GetVerifiedTxOperator(txId);
             AFL_VERIFY(TxOperator->Progress(*Self, NOlap::TSnapshot(step, txId), txc));
@@ -50,12 +56,16 @@ public:
         if (TxOperator) {
             TxOperator->Complete(*Self, ctx);
         }
+        if (LastCompletedTx) {
+            Self->LastCompletedTx = std::max(*LastCompletedTx, Self->LastCompletedTx);
+        }
         Self->SetupIndexation();
     }
 
 private:
     TTxController::ITransactionOperatior::TPtr TxOperator;
     const ui32 TabletTxNo;
+    std::optional<NOlap::TSnapshot> LastCompletedTx;
 };
 
 void TColumnShard::EnqueueProgressTx(const TActorContext& ctx) {

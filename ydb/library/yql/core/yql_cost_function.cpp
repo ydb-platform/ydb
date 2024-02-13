@@ -43,11 +43,13 @@ TOptimizerStatistics NYql::ComputeJoinStats(const TOptimizerStatistics& leftStat
 
     double newCard;
     EStatisticsType outputType;
-    TVector<TString> joinedTableKeys;
+    bool leftKeyColumns = false;
+    bool rightKeyColumns = false;
+
 
     if (IsPKJoin(rightStats,rightJoinKeys)) {
         newCard = leftStats.Nrows;
-        joinedTableKeys = leftStats.KeyColumns;
+        leftKeyColumns = true;
         if (leftStats.Type == EStatisticsType::BaseTable){
             outputType = EStatisticsType::FilteredFactTable;
         } else {
@@ -56,7 +58,7 @@ TOptimizerStatistics NYql::ComputeJoinStats(const TOptimizerStatistics& leftStat
     }
     else if (IsPKJoin(leftStats,leftJoinKeys)) {
         newCard = rightStats.Nrows;
-        joinedTableKeys = rightStats.KeyColumns;
+        rightKeyColumns = true;
         if (rightStats.Type == EStatisticsType::BaseTable){
             outputType = EStatisticsType::FilteredFactTable;
         } else {
@@ -74,8 +76,10 @@ TOptimizerStatistics NYql::ComputeJoinStats(const TOptimizerStatistics& leftStat
         + newCard 
         + leftStats.Cost + rightStats.Cost;
 
-    return TOptimizerStatistics(outputType, newCard, newNCols, cost, joinedTableKeys);
+    return TOptimizerStatistics(outputType, newCard, newNCols, cost, 
+        leftKeyColumns ? leftStats.KeyColumns : ( rightKeyColumns ? rightStats.KeyColumns : TOptimizerStatistics::EmptyColumns));
 }
+
 
 TOptimizerStatistics NYql::ComputeJoinStats(const TOptimizerStatistics& leftStats, const TOptimizerStatistics& rightStats, 
     const std::set<std::pair<NDq::TJoinColumn, NDq::TJoinColumn>>& joinConditions, EJoinAlgoType joinAlgo, const IProviderContext& ctx) {
@@ -90,3 +94,4 @@ TOptimizerStatistics NYql::ComputeJoinStats(const TOptimizerStatistics& leftStat
 
     return ComputeJoinStats(leftStats, rightStats, leftJoinKeys, rightJoinKeys, joinAlgo, ctx);
 }
+

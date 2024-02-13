@@ -17,7 +17,7 @@ You must update {{ ydb-short-name }} nodes one by one and monitor the cluster st
 
 ## Version compatibility {#version-compatability}
 
-All minor versions within a major version are compatible for updates. Major versions are consistently compatible. To update to the next major version, you must first update to the latest minor release of the current major version. For example:
+All minor versions within a major version are compatible for updates. Major versions are consecutively compatible. To update to the next major version, you must first update to the latest minor release of the current major version. For example:
 
 * X.Y.* → X.Y.*: Update is possible, all minor versions within a single major version are compatible.
 * X.Y.Z (the latest available version in X.Y.*) → X.Y+1.* : Update is possible, major versions are consistent.
@@ -36,6 +36,8 @@ v.22.2.40	->	v.22.4.21: Update is impossible, first upgrade to the latest versio
 v.22.2.47	->	v.22.5.5: Update is impossible, upgrade to the next major version (v.22.4).*
 
 {% endnote %}
+
+The YDB release policy is decribed in more details in the [Release management](../development/manage-releases.md) article of the YDB development documentation.
 
 ## Checking update results {#upgrade_check}
 

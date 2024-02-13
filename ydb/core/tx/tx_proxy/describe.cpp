@@ -84,7 +84,7 @@ class TDescribeReq : public TActor<TDescribeReq> {
         auto schemeShardId = entry.DomainInfo->DomainKey.OwnerId;
 
         auto result = MakeHolder<NSchemeShard::TEvSchemeShard::TEvDescribeSchemeResultBuilder>(
-            path, schemeShardId, TPathId());
+            path, TPathId());
 
         auto* pathDescription = result->Record.MutablePathDescription();
         auto* self = pathDescription->MutableSelf();
@@ -152,7 +152,7 @@ class TDescribeReq : public TActor<TDescribeReq> {
         auto schemeShardId = entry.DomainInfo->DomainKey.OwnerId;
 
         auto result = MakeHolder<NSchemeShard::TEvSchemeShard::TEvDescribeSchemeResultBuilder>(
-            path, schemeShardId, TPathId());
+            path, TPathId());
 
         auto* pathDescription = result->Record.MutablePathDescription();
         auto* self = pathDescription->MutableSelf();
@@ -238,7 +238,7 @@ void TDescribeReq::Handle(TEvTxProxyReq::TEvNavigateScheme::TPtr &ev, const TAct
         if (record.GetDescribePath().GetPath() == "/") {
             // Special handling for enumerating roots
             TAutoPtr<NSchemeShard::TEvSchemeShard::TEvDescribeSchemeResultBuilder> result =
-                new NSchemeShard::TEvSchemeShard::TEvDescribeSchemeResultBuilder("/", NSchemeShard::RootSchemeShardId, TPathId(NSchemeShard::RootSchemeShardId, NSchemeShard::RootPathId));
+                new NSchemeShard::TEvSchemeShard::TEvDescribeSchemeResultBuilder("/", TPathId(NSchemeShard::RootSchemeShardId, NSchemeShard::RootPathId));
             auto descr = result->Record.MutablePathDescription();
             FillRootDescr(descr->MutableSelf(), "/", NSchemeShard::RootSchemeShardId);
             for (const auto& domain : domainsInfo->Domains) {

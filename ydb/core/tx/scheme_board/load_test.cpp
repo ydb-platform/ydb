@@ -57,14 +57,14 @@ class TLoadProducer: public TActorBootstrapped<TLoadProducer> {
             TDescription& dirDesc = dirDescTwoPart.Record;
 
             dirDesc.SetStatus(NKikimrScheme::StatusSuccess);
-            dirDesc.SetPathOwner(owner);
+            dirDesc.SetPathOwnerId(owner);
             dirDesc.SetPathId(nextPathId++);
             dirDesc.SetPath(dirPath);
 
             auto& dirSelf = *dirDesc.MutablePathDescription()->MutableSelf();
             dirSelf.SetName(dirName);
             dirSelf.SetPathId(dirDesc.GetPathId());
-            dirSelf.SetSchemeshardId(dirDesc.GetPathOwner());
+            dirSelf.SetSchemeshardId(dirDesc.GetPathOwnerId());
             dirSelf.SetPathType(NKikimrSchemeOp::EPathTypeDir);
             dirSelf.SetCreateFinished(true);
             dirSelf.SetCreateTxId(1);
@@ -84,7 +84,7 @@ class TLoadProducer: public TActorBootstrapped<TLoadProducer> {
                 TDescription& objDesc = objDescTwoPart.Record;
 
                 objDesc.SetStatus(NKikimrScheme::StatusSuccess);
-                objDesc.SetPathOwner(owner);
+                objDesc.SetPathOwnerId(owner);
                 objDesc.SetPathId(nextPathId++);
                 objDesc.SetPath(objPath);
 
@@ -94,7 +94,7 @@ class TLoadProducer: public TActorBootstrapped<TLoadProducer> {
                 dirChildren.Add()->CopyFrom(objSelf);
 
                 objSelf.SetPathId(objDesc.GetPathId());
-                objSelf.SetSchemeshardId(objDesc.GetPathOwner());
+                objSelf.SetSchemeshardId(objDesc.GetPathOwnerId());
                 objSelf.SetCreateFinished(true);
                 objSelf.SetCreateTxId(1);
                 objSelf.SetCreateStep(1);

@@ -9,6 +9,7 @@ import time
 import ydb.tests.library.common.yatest_common as yatest_common
 from ydb.tests.tools.fq_runner.kikimr_runner import StreamingOverKikimr
 from ydb.tests.tools.fq_runner.kikimr_runner import StreamingOverKikimrConfig
+from ydb.tests.tools.fq_runner.kikimr_runner import TenantConfig
 import library.python.retry as retry
 from ydb.tests.tools.fq_runner.kikimr_utils import yq_v1
 from ydb.tests.tools.datastreams_helpers.test_yds_base import TestYdsBase
@@ -17,7 +18,7 @@ import ydb.public.api.protos.draft.fq_pb2 as fq
 
 @pytest.fixture
 def kikimr(request):
-    kikimr_conf = StreamingOverKikimrConfig(cloud_mode=True, node_count=2)
+    kikimr_conf = StreamingOverKikimrConfig(cloud_mode=True, node_count={"/cp": TenantConfig(1), "/compute": TenantConfig(1)})
     kikimr = StreamingOverKikimr(kikimr_conf)
     kikimr.start_mvp_mock_server()
     kikimr.start()
@@ -32,13 +33,6 @@ class TestRecoveryMatchRecognize(TestYdsBase):
     def setup_class(cls):
         # for retry
         cls.retry_conf = retry.RetryConf().upto(seconds=30).waiting(0.1)
-
-    @retry.retry_intrusive
-    def get_graph_master_node_id(self, kikimr, query_id):
-        for node_index in kikimr.control_plane.kikimr_cluster.nodes:
-            if kikimr.control_plane.get_task_count(node_index, query_id) > 0:
-                return node_index
-        assert False, "No active graphs found"
 
     def get_ca_count(self, kikimr, node_index):
         result = kikimr.control_plane.get_sensors(node_index, "utils").find_sensor(
@@ -88,7 +82,6 @@ class TestRecoveryMatchRecognize(TestYdsBase):
         kikimr.compute_plane.kikimr_cluster.nodes[node_to_restart].start()
         kikimr.compute_plane.wait_bootstrap(node_to_restart)
 
-
     def recovery_impl(self, kikimr, client, yq_version, sql_template, test_name, messages_before_restart, messages_after_restart, expected):
 
         self.init_topics(f"{test_name}_{yq_version}")
@@ -99,9 +92,6 @@ class TestRecoveryMatchRecognize(TestYdsBase):
         query_id = client.create_query("simple", sql, type=fq.QueryContent.QueryType.STREAMING).result.query_id
         client.wait_query_status(query_id, fq.QueryMeta.RUNNING)
         kikimr.compute_plane.wait_zero_checkpoint(query_id)
-
-        master_node_index = self.get_graph_master_node_id(kikimr, query_id)
-        logging.debug("Master node {}".format(master_node_index))
 
         self.write_stream(messages_before_restart)
 

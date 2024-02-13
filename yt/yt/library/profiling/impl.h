@@ -55,7 +55,7 @@ public:
         const TTagSet& tags,
         TSensorOptions options) = 0;
 
-    virtual ITimerImplPtr RegisterTimeHistogram(
+    virtual IHistogramImplPtr RegisterTimeHistogram(
         const TString& name,
         const TTagSet& tags,
         TSensorOptions options) = 0;

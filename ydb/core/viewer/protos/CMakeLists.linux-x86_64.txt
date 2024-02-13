@@ -25,6 +25,7 @@ target_link_libraries(core-viewer-protos PUBLIC
   contrib-libs-cxxsupp
   yutil
   ydb-core-protos
+  core-graph-protos
   contrib-libs-protobuf
 )
 target_proto_messages(core-viewer-protos PRIVATE

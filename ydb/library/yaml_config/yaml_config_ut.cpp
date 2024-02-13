@@ -1,5 +1,6 @@
 #include "yaml_config.h"
-#include "yaml_config_parser.h"
+
+#include <ydb/library/yaml_config/deprecated/yaml_config_parser.h>
 
 #include <library/cpp/testing/unittest/registar.h>
 

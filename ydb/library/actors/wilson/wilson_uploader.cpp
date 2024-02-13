@@ -106,10 +106,6 @@ namespace NWilson {
             grpc::CompletionQueue CQ;
 
             std::unique_ptr<IGrpcSigner> GrpcSigner;
-            std::unique_ptr<grpc::ClientContext> Context;
-            std::unique_ptr<grpc::ClientAsyncResponseReader<NServiceProto::ExportTraceServiceResponse>> Reader;
-            NServiceProto::ExportTraceServiceResponse Response;
-            grpc::Status Status;
 
             TBatch CurrentBatch;
             std::queue<TBatch::TData> BatchQueue;
@@ -118,6 +114,15 @@ namespace NWilson {
 
             bool BatchCompletionScheduled = false;
             TMonotonic NextBatchCompletion;
+
+            struct TUploadData : TIntrusiveListItem<TUploadData> {
+                std::unique_ptr<grpc::ClientContext> Context;
+                std::unique_ptr<grpc::ClientAsyncResponseReader<NServiceProto::ExportTraceServiceResponse>> Reader;
+                grpc::Status Status;
+                NServiceProto::ExportTraceServiceResponse Response;
+            };
+
+            TIntrusiveListWithAutoDelete<TUploadData, TDelete> UploadRequests;
 
         public:
             TWilsonUploader(WilsonUploaderParams params)
@@ -243,7 +248,7 @@ namespace NWilson {
                         "dropped " << numSpansDropped << " span(s) due to expiration");
                 }
 
-                if (Context || BatchQueue.empty()) {
+                if (BatchQueue.empty()) {
                     return;
                 } else if (now < NextSendTimestamp) {
                     ScheduleWakeup(NextSendTimestamp);
@@ -267,29 +272,39 @@ namespace NWilson {
                 SpansSizeBytes -= batch.SizeBytes;
 
                 ScheduleWakeup(NextSendTimestamp);
-                Context = std::make_unique<grpc::ClientContext>();
+
+                auto context = std::make_unique<grpc::ClientContext>();
                 if (GrpcSigner) {
-                    GrpcSigner->SignClientContext(*Context);
+                    GrpcSigner->SignClientContext(*context);
                 }
-                Reader = Stub->AsyncExport(Context.get(), std::move(batch.Request), &CQ);
-                Reader->Finish(&Response, &Status, nullptr);
+                auto reader = Stub->AsyncExport(context.get(), std::move(batch.Request), &CQ);
+                auto uploadData = new TUploadData {
+                    .Context = std::move(context),
+                    .Reader = std::move(reader),
+                };
+                uploadData->Reader->Finish(&uploadData->Response, &uploadData->Status, uploadData);
+                UploadRequests.PushBack(uploadData);
             }
 
-            void CheckIfDone() {
-                if (Context) {
-                    void *tag;
-                    bool ok;
-                    if (CQ.AsyncNext(&tag, &ok, std::chrono::system_clock::now()) == grpc::CompletionQueue::GOT_EVENT) {
-                        if (!Status.ok()) {
-                            ALOG_ERROR(WILSON_SERVICE_ID,
-                                "failed to commit traces: " << Status.error_message());
-                        }
-
-                        Reader.reset();
-                        Context.reset();
-                    } else {
-                        ScheduleWakeup(TDuration::MilliSeconds(100));
+            void ReapCompletedRequests() {
+                if (UploadRequests.Empty()) {
+                    return;
+                }
+                void* tag;
+                bool ok;
+                while (CQ.AsyncNext(&tag, &ok, std::chrono::system_clock::now()) == grpc::CompletionQueue::GOT_EVENT) {
+                    auto node = static_cast<TUploadData*>(tag);
+                    if (!node->Status.ok()) {
+                        ALOG_ERROR(WILSON_SERVICE_ID,
+                            "failed to commit traces: " << node->Status.error_message());
                     }
+                    
+                    node->Unlink();
+                    delete node;
+                }
+
+                if (!UploadRequests.Empty()) {
+                    ScheduleWakeup(TDuration::MilliSeconds(100));
                 }
             }
 
@@ -322,7 +337,7 @@ namespace NWilson {
             }
 
             void TryMakeProgress() {
-                CheckIfDone();
+                ReapCompletedRequests();
                 TryToSend();
             }
 

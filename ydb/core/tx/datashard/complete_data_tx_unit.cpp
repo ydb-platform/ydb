@@ -77,10 +77,6 @@ EExecutionStatus TCompleteOperationUnit::Execute(TOperation::TPtr op,
 void TCompleteOperationUnit::CompleteOperation(TOperation::TPtr op,
                                                const TActorContext &ctx)
 {
-    TActiveTransaction* tx = dynamic_cast<TActiveTransaction*>(op.Get());
-    TWriteOperation* writeOp = dynamic_cast<TWriteOperation*>(op.Get());
-    Y_VERIFY_S(tx || writeOp, "cannot cast operation of kind " << op->GetKind());
-
     auto duration = TAppData::TimeProvider->Now() - op->GetStartExecutionAt();
 
     if (DataShard.GetDataTxProfileLogThresholdMs()
@@ -94,15 +90,17 @@ void TCompleteOperationUnit::CompleteOperation(TOperation::TPtr op,
         Pipeline.HoldExecutionProfile(op);
     }
 
-    TOutputOpData::TResultPtr result = std::move(op->Result());
-    if (result) {
-        result->Record.SetProposeLatency(duration.MilliSeconds());
+    if (dynamic_cast<TActiveTransaction*>(op.Get()) != nullptr) {
+        TOutputOpData::TResultPtr result = std::move(op->Result());
+        if (result) {
+            result->Record.SetProposeLatency(duration.MilliSeconds());
 
-        DataShard.FillExecutionStats(op->GetExecutionProfile(), *result);
+            DataShard.FillExecutionStats(op->GetExecutionProfile(), *result);
 
-        if (!gSkipRepliesFailPoint.Check(DataShard.TabletID(), op->GetTxId())) {
-            result->Orbit = std::move(op->Orbit);
-            DataShard.SendResult(ctx, result, op->GetTarget(), op->GetStep(), op->GetTxId());
+            if (!gSkipRepliesFailPoint.Check(DataShard.TabletID(), op->GetTxId())) {
+                result->Orbit = std::move(op->Orbit);
+                DataShard.SendResult(ctx, result, op->GetTarget(), op->GetStep(), op->GetTxId());
+            }
         }
     }
 

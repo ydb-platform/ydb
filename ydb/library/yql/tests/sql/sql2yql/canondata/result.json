@@ -15989,9 +15989,9 @@
     ],
     "test_sql2yql.test[type_literal-create_table]": [
         {
-            "checksum": "42da6a3eb3fa3d8a24962f77023683f2",
-            "size": 6575,
-            "uri": "https://{canondata_backend}/1931696/1c084b10016df186f181e07ee6cc0b2258c075e9/resource.tar.gz#test_sql2yql.test_type_literal-create_table_/sql.yql"
+            "checksum": "234f3fa3e94e372211db7c2faffbbe5f",
+            "size": 6649,
+            "uri": "https://{canondata_backend}/937458/7b837cadbe63d41679c064a8decd8c8267d712e8/resource.tar.gz#test_sql2yql.test_type_literal-create_table_/sql.yql"
         }
     ],
     "test_sql2yql.test[type_literal-declare]": [

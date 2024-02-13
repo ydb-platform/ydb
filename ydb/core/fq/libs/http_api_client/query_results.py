@@ -1,3 +1,4 @@
+from __future__ import annotations
 from typing import Any, Optional
 import base64
 import pprint
@@ -9,7 +10,7 @@ from decimal import Decimal
 class YQResults:
     """Holds and formats query execution results"""
 
-    def __init__(self, results: list[dict[str:Any]] | dict[str:Any]):
+    def __init__(self, results: list[dict[str, Any]] | dict[str, Any]):
         self._raw_results = results if results is list else [results]
         self._results = None
 
@@ -17,7 +18,7 @@ class YQResults:
         return [YQResults._convert_single(result) for result in self._raw_results]
 
     @staticmethod
-    def _convert_from_float(value: float|str) -> float:
+    def _convert_from_float(value: float | str) -> float:
         # special values, e.g inf encoded as str, normal values are in float
         return float(value)
 

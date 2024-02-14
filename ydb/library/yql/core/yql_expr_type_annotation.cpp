@@ -6677,4 +6677,31 @@ TStringBuf NormalizeCallableName(TStringBuf name) {
     return name;
 }
 
+void CheckExpectedTypeAndColumnOrder(const TExprNode& node, TExprContext& ctx, TTypeAnnotationContext& typesCtx) {
+    auto it = typesCtx.ExpectedTypes.find(node.UniqueId());
+    if (it != typesCtx.ExpectedTypes.end()) {
+        YQL_ENSURE(IsSameAnnotation(*node.GetTypeAnn(), *it->second),
+            "Rewrite error, type should be : " <<
+            *it->second << ", but it is: " << *node.GetTypeAnn() << " for node " << node.Content());
+    }
+
+    auto coIt = typesCtx.ExpectedColumnOrders.find(node.UniqueId());
+    if (coIt != typesCtx.ExpectedColumnOrders.end()) {
+        TColumnOrder oldColumnOrder = coIt->second;
+        TMaybe<TColumnOrder> newColumnOrder = typesCtx.LookupColumnOrder(node);
+        if (!newColumnOrder) {
+            // keep column order after rewrite
+            // TODO: check if needed
+            auto status = typesCtx.SetColumnOrder(node, oldColumnOrder, ctx);
+            YQL_ENSURE(status == IGraphTransformer::TStatus::Ok);
+        } else {
+            YQL_ENSURE(newColumnOrder == oldColumnOrder,
+                "Rewrite error, column order should be: "
+                << FormatColumnOrder(oldColumnOrder) << ", but it is: "
+                << FormatColumnOrder(newColumnOrder) << " for node "
+                << node.Content());
+        }
+    }
+}
+
 } // NYql

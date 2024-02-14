@@ -27,6 +27,7 @@ target_link_libraries(tx-columnshard-common PUBLIC
   tools-enum_parser-enum_serialization_runtime
 )
 target_sources(tx-columnshard-common PRIVATE
+  ${CMAKE_SOURCE_DIR}/ydb/core/tx/columnshard/common/limits.h
   ${CMAKE_SOURCE_DIR}/ydb/core/tx/columnshard/common/reverse_accessor.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/tx/columnshard/common/scalars.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/tx/columnshard/common/snapshot.cpp

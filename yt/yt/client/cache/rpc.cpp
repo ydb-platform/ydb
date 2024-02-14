@@ -72,6 +72,9 @@ NApi::NRpcProxy::TConnectionConfigPtr GetConnectionConfig(const TConfig& config)
     connectionConfig->ResponseCodec = GetCompressionCodecFromProto(config.GetResponseCodec());
     connectionConfig->EnableRetries = config.GetEnableRetries();
 
+    if (config.HasEnableLegacyRpcCodecs()) {
+        connectionConfig->EnableLegacyRpcCodecs = config.GetEnableLegacyRpcCodecs();
+    }
     if (config.HasEnableSelectQueryTracingTag()) {
         connectionConfig->EnableSelectQueryTracingTag = config.GetEnableSelectQueryTracingTag();
     }

@@ -149,13 +149,19 @@ TSharedRef ConvertMessageToFormat(
     return GetMessageFormatOrThrow(format)->ConvertTo(message, messageType, formatOptionsYson);
 }
 
+// COMPAT(danilalexeev): legacy RPC codecs
 TSharedRef ConvertMessageFromFormat(
     const TSharedRef& message,
     EMessageFormat format,
     const TProtobufMessageType* messageType,
-    const TYsonString& formatOptionsYson)
+    const TYsonString& formatOptionsYson,
+    bool enveloped)
 {
-    return GetMessageFormatOrThrow(format)->ConvertFrom(message, messageType, formatOptionsYson);
+    auto result = GetMessageFormatOrThrow(format)->ConvertFrom(
+        enveloped ? PopEnvelope(message) : message,
+        messageType,
+        formatOptionsYson);
+    return enveloped ? PushEnvelope(result) : result;
 }
 
 ////////////////////////////////////////////////////////////////////////////////

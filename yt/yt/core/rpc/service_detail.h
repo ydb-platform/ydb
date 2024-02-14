@@ -197,23 +197,6 @@ public:
         Request_->Context_ = underlyingContext.Get();
 
         const auto& requestHeader = this->GetRequestHeader();
-        auto body = underlyingContext->GetRequestBody();
-        if (requestHeader.has_request_format()) {
-            auto format = static_cast<EMessageFormat>(requestHeader.request_format());
-
-            NYson::TYsonString formatOptionsYson;
-            if (requestHeader.has_request_format_options()) {
-                formatOptionsYson = NYson::TYsonString(requestHeader.request_format_options());
-            }
-            if (format != EMessageFormat::Protobuf) {
-                body = ConvertMessageFromFormat(
-                    body,
-                    format,
-                    NYson::ReflectProtobufMessageType<TRequestMessage>(),
-                    formatOptionsYson);
-            }
-        }
-
         // COMPAT(danilalexeev): legacy RPC codecs
         std::optional<NCompression::ECodec> bodyCodecId;
         NCompression::ECodec attachmentCodecId;
@@ -232,6 +215,24 @@ public:
         } else {
             bodyCodecId = std::nullopt;
             attachmentCodecId = NCompression::ECodec::None;
+        }
+
+        auto body = underlyingContext->GetRequestBody();
+        if (requestHeader.has_request_format()) {
+            auto format = static_cast<EMessageFormat>(requestHeader.request_format());
+
+            NYson::TYsonString formatOptionsYson;
+            if (requestHeader.has_request_format_options()) {
+                formatOptionsYson = NYson::TYsonString(requestHeader.request_format_options());
+            }
+            if (format != EMessageFormat::Protobuf) {
+                body = ConvertMessageFromFormat(
+                    body,
+                    format,
+                    NYson::ReflectProtobufMessageType<TRequestMessage>(),
+                    formatOptionsYson,
+                    !bodyCodecId.has_value());
+            }
         }
 
         bool deserializationSucceeded = bodyCodecId
@@ -327,6 +328,7 @@ protected:
 
         auto codecId = underlyingContext->GetResponseCodec();
         auto serializedBody = SerializeProtoToRefWithCompression(*Response_, codecId);
+        underlyingContext->SetResponseBodySerializedWithCompression();
 
         if (requestHeader.has_response_format()) {
             int intFormat = requestHeader.response_format();

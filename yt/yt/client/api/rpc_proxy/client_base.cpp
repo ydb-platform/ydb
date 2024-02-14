@@ -80,6 +80,7 @@ TApiServiceProxy TClientBase::CreateApiServiceProxy(NRpc::IChannelPtr channel)
     proxy.SetDefaultTimeout(config->RpcTimeout);
     proxy.SetDefaultRequestCodec(config->RequestCodec);
     proxy.SetDefaultResponseCodec(config->ResponseCodec);
+    proxy.SetDefaultEnableLegacyRpcCodecs(config->EnableLegacyRpcCodecs);
 
     NRpc::TStreamingParameters streamingParameters;
     streamingParameters.ReadTimeout = config->DefaultStreamingStallTimeout;

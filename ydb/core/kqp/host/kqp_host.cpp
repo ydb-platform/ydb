@@ -1097,11 +1097,12 @@ private:
     {
         std::shared_ptr<NYql::TAstParseResult> queryAst;
         if (!query.AstResult) {
+            bool isEnablePgConstsToParams = SessionCtx->Config().EnablePgConstsToParams && SessionCtx->Config().EnableAstCache;
             auto astRes = ParseQuery(SessionCtx->Query().Type, usePgParser,
                 query.Text, query.ParameterTypes, isSql, sqlAutoCommit, sqlVersion, TypesCtx->DeprecatedSQL,
                 Cluster, SessionCtx->Config()._KqpTablePathPrefix.Get().GetRef(),
                 SessionCtx->Config()._KqpYqlSyntaxVersion.Get().GetRef(), SessionCtx->Config().BindingsMode,
-                SessionCtx->Config().FeatureFlags.GetEnableExternalDataSources(), ctx, SessionCtx->Config().EnablePgConstsToParams);
+                SessionCtx->Config().FeatureFlags.GetEnableExternalDataSources(), ctx, isEnablePgConstsToParams);
             queryAst = std::make_shared<NYql::TAstParseResult>(std::move(astRes));
         } else {
             queryAst = query.AstResult->Ast;

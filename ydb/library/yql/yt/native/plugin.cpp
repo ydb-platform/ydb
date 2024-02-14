@@ -400,6 +400,9 @@ public:
         }
         sqlSettings.SyntaxVersion = 1;
         sqlSettings.V0Behavior = NSQLTranslation::EV0Behavior::Disable;
+        if (DqManager_) {
+            sqlSettings.DqDefaultAuto = NSQLTranslation::ISqlFeaturePolicy::MakeAlwaysAllow();
+        }
 
         if (!program->ParseSql(sqlSettings)) {
             return TQueryResult{

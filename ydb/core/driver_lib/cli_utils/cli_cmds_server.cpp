@@ -4,7 +4,7 @@
 #include <ydb/core/base/path.h>
 #include <ydb/library/yaml_config/yaml_config.h>
 #include <ydb/core/driver_lib/run/run.h>
-#include <ydb/library/yaml_config/deprecated/yaml_config_parser.h>
+#include <ydb/library/yaml_config/yaml_config_parser.h>
 #include <ydb/public/lib/deprecated/kicli/kicli.h>
 #include <util/digest/city.h>
 #include <util/random/random.h>
@@ -827,8 +827,7 @@ protected:
             return;
         }
         auto yamlConfig = TFileInput(YamlConfigFile);
-        NKikimrConfig::TAppConfig parsedConfig;
-        NKikimr::NYaml::Parse(yamlConfig.ReadAll(), parsedConfig);
+        NKikimrConfig::TAppConfig parsedConfig = NKikimr::NYaml::Parse(yamlConfig.ReadAll());
         const google::protobuf::Descriptor* descriptor = AppConfig.GetDescriptor();
         const google::protobuf::Reflection* reflection = AppConfig.GetReflection();
         for(int fieldIdx = 0; fieldIdx < descriptor->field_count(); ++fieldIdx) {

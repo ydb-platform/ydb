@@ -26,7 +26,7 @@ cd ydb
 
 ## Checkout a branch for build
 
-There are two branches for the latest development update in the {{ ydb-short-name }} repository:
+There are two branches for the latest development update in the YDB repository:
 
 - `main` - the primary development branch for **Yatool** build
 - `cmakebuild` - the follower branch for **CMake** build, synced from `main` every hour, with generated CMakelists.txt files

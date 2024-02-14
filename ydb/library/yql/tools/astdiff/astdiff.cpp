@@ -1,19 +1,36 @@
 
-#include <ydb/library/yql/utils/backtrace/backtrace.h>
+#include <contrib/ydb/library/yql/utils/backtrace/backtrace.h>
 
-#include <ydb/library/yql/ast/yql_expr.h>
+#include <contrib/ydb/library/yql/ast/yql_expr.h>
 
 #include <library/cpp/svnversion/svnversion.h>
+#include <library/cpp/testing/unittest/registar.h>
 
 #include <util/stream/file.h>
-#include <util/folder/path.h>
 #include <util/system/shellcommand.h>
+#include <util/folder/tempdir.h>
+#include <util/folder/path.h>
 #include <util/generic/yexception.h>
 
 using namespace NYql;
 
-TString CalculateDiff(const TFsPath& oldPath, const TFsPath& newPath) {
-    TShellCommand cmd("diff", {"-u", oldPath, newPath});
+
+/*
+ * We use self-contained python binary as differ tool. 
+ * We build it with astdiff and embed it into the astdiff binary to avoid dependence on system differ tool.
+ */
+TString GetPythonDiffToolPath(const TFsPath& tempDir) {
+    const auto differBinary = NResource::Find("/differ");
+    const auto path = tempDir / "differ";
+    TFileOutput differ(path);
+    differ.Write(differBinary);
+
+    Chmod(path.c_str(), MODE0777);
+    return path;
+}
+
+TString CalculateDiff(const TFsPath& oldPath, const TFsPath& newPath, const TFsPath& tempDir) {
+    TShellCommand cmd(GetPythonDiffToolPath(tempDir), {oldPath, newPath});
     cmd.Run().Wait();
 
     TStringBuilder sb;
@@ -27,12 +44,9 @@ TString CalculateDiff(const TFsPath& oldPath, const TFsPath& newPath) {
     return sb;
 }
 
-std::pair<TFsPath, TFsPath> CopyFilesToTemp(const TFsPath& oldAstPath, const TFsPath& newAstPath) {
-    const auto tempPath = TFsPath("/tmp") / "astdiff";
-    tempPath.MkDir();
-
-    const auto oldAstTempPath = tempPath / "old.yql";
-    const auto newAstTempPath = tempPath / "new.yql";
+std::pair<TFsPath, TFsPath> CopyFilesToTemp(const TFsPath& oldAstPath, const TFsPath& newAstPath, const TFsPath& tempDir) {
+    const auto oldAstTempPath = tempDir / "old.yql";
+    const auto newAstTempPath = tempDir / "new.yql";
     oldAstPath.CopyTo(oldAstTempPath, /* force */ true);
     newAstPath.CopyTo(newAstTempPath, /* force */ true);
     return {oldAstTempPath, newAstTempPath};
@@ -85,8 +99,9 @@ int Main(int argc, const char *argv[])
     auto rootOnePos = ctxOne.GetPosition(rootOne->Pos());
     auto rootTwoPos = ctxTwo.GetPosition(rootTwo->Pos());
     if (!CompareExprTrees(rootOne, rootTwo)) {
-        const auto [oldAstTempPath, newAstTempPath] = CopyFilesToTemp(fileOne, fileTwo);
-        const auto diff = CalculateDiff(oldAstTempPath, newAstTempPath);
+        TTempDir tempDir("astdiff");
+        const auto [oldAstTempPath, newAstTempPath] = CopyFilesToTemp(fileOne, fileTwo, tempDir.Path());
+        const auto diff = CalculateDiff(oldAstTempPath, newAstTempPath, tempDir.Path());
 
         Cerr << "Programs are not equal!" << Endl;
         if (rootOne->Type() != rootTwo->Type()) {

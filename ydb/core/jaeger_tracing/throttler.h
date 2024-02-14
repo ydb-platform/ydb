@@ -8,10 +8,10 @@ class TThrottler: public TThrRefBase {
 public:
     TThrottler(ui64 maxRatePerMinute, ui64 maxBurst, TIntrusivePtr<ITimeProvider> timeProvider)
         : MaxRatePerMinute(maxRatePerMinute)
-        , MaxBurst(maxBurst)
+        , MaxBurst(maxBurst + 1)
         , BetweenSends(TDuration::Minutes(1).MicroSeconds() / MaxRatePerMinute)
         , TimeProvider(std::move(timeProvider))
-        , EffectiveTs(timeProvider->Now().MicroSeconds())
+        , EffectiveTs(TimeProvider->Now().MicroSeconds())
     {}
 
     bool Throttle() {
@@ -23,6 +23,7 @@ public:
                 if (EffectiveTs.compare_exchange_weak(ts, now + BetweenSends, std::memory_order_relaxed)) {
                     return false;
                 }
+                // TODO(pumpurum): Add spining here
             } else if (ts + BetweenSends > maxFinalTs) {
                 return true;
             } else if (EffectiveTs.fetch_add(BetweenSends, std::memory_order_relaxed) + BetweenSends > maxFinalTs) {

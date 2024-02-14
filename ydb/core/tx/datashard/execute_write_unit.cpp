@@ -10,19 +10,19 @@
 namespace NKikimr {
 namespace NDataShard {
 
-class TWriteUnit : public TExecutionUnit {
+class TExecuteWriteUnit : public TExecutionUnit {
 public:
-    TWriteUnit(TDataShard& self, TPipeline& pipeline)
+    TExecuteWriteUnit(TDataShard& self, TPipeline& pipeline)
         : TExecutionUnit(EExecutionUnitKind::ExecuteWrite, true, self, pipeline)
     {
     }
 
-    ~TWriteUnit()
+    ~TExecuteWriteUnit()
     {
     }
 
     bool IsReadyToExecute(TOperation::TPtr op) const override {
-        if (op->HasRuntimeConflicts() || op->HasWaitingForGlobalTxIdFlag()) {
+        if (op->HasWaitingForGlobalTxIdFlag()) {
             return false;
         }
 
@@ -107,7 +107,7 @@ public:
             ops.reserve(matrix.GetColCount() - TableInfo_.KeyColumnIds.size());
 
             for (ui16 valueColIdx = TableInfo_.KeyColumnIds.size(); valueColIdx < matrix.GetColCount(); ++valueColIdx) {
-                ui32 columnTag = writeTx->RecordOperation().GetColumnIds(valueColIdx);
+                ui32 columnTag = writeTx->GetColumnIds()[valueColIdx];
                 const TCell& cell = matrix.GetCell(rowIdx, valueColIdx);
 
                 NScheme::TTypeInfo vtypeInfo = scheme.GetColumnInfo(tableInfo, columnTag)->PType;
@@ -140,18 +140,37 @@ public:
             // Every time we execute immediate transaction we may choose a new mvcc version
             op->MvccReadWriteVersion.reset();
         }
-        else {
-            //TODO: Prepared
-            writeOp->SetWriteResult(NEvents::TDataEvents::TEvWriteResult::BuildPrepared(DataShard.TabletID(), op->GetTxId(), {0, 0, {}}));
-            return EExecutionStatus::DelayCompleteNoMoreRestarts;
+
+        const TValidatedWriteTx::TPtr& writeTx = writeOp->GetWriteTx();
+
+        DataShard.ReleaseCache(*writeOp);
+        writeTx->GetUserDb().ResetCounters();
+
+        if (writeOp->IsTxDataReleased()) {
+            switch (Pipeline.RestoreDataTx(writeOp, txc)) {
+                case ERestoreDataStatus::Ok:
+                    break;
+
+                case ERestoreDataStatus::Restart:
+                    return EExecutionStatus::Restart;
+
+                case ERestoreDataStatus::Error:
+                    // For immediate transactions we want to translate this into a propose failure
+                    if (op->IsImmediate()) {
+                        Y_ABORT_UNLESS(!writeTx->Ready());
+                        writeOp->SetError(NKikimrDataEvents::TEvWriteResult::STATUS_INTERNAL_ERROR, writeTx->GetErrStr());
+                        return EExecutionStatus::Executed;
+                    }
+
+                    // For planned transactions errors are not expected
+                    Y_ABORT("Failed to restore tx data: %s", writeTx->GetErrStr().c_str());
+            }
         }
 
         TDataShardLocksDb locksDb(DataShard, txc);
         TSetupSysLocks guardLocks(op, DataShard, &locksDb);
 
         ui64 tabletId = DataShard.TabletID();
-
-        const TValidatedWriteTx::TPtr& writeTx = writeOp->GetWriteTx();
 
         if (op->IsImmediate() && !writeOp->ReValidateKeys()) {
             // Immediate transactions may be reordered with schema changes and become invalid
@@ -161,7 +180,7 @@ public:
         }
 
         if (writeTx->CheckCancelled()) {
-            writeOp->ReleaseTxData(txc, ctx);
+            writeOp->ReleaseTxData(txc);
             writeOp->SetError(NKikimrDataEvents::TEvWriteResult::STATUS_CANCELLED, "Tx was cancelled");
             DataShard.IncCounter(COUNTER_WRITE_CANCELLED);
             return EExecutionStatus::Executed;
@@ -169,7 +188,7 @@ public:
 
         try {
             const ui64 txId = writeTx->GetTxId();
-            const auto* kqpLocks = writeTx->HasKqpLocks() ? &writeTx->GetKqpLocks() : nullptr;
+            const auto* kqpLocks = writeTx->GetKqpLocks() ? &writeTx->GetKqpLocks().value() : nullptr;
             const auto& inReadSets = op->InReadSets();
             auto& awaitingDecisions = op->AwaitingDecisions();
             auto& outReadSets = op->OutReadSets();
@@ -260,9 +279,14 @@ public:
 
             writeOp->SetWriteResult(NEvents::TDataEvents::TEvWriteResult::BuildCompleted(DataShard.TabletID(), writeOp->GetTxId()));
 
+            auto& writeResult = writeOp->GetWriteResult();
+            writeResult->Record.SetOrderId(op->GetTxId());
+            if (!op->IsImmediate())
+                writeResult->Record.SetStep(op->GetStep());
+
             if (Pipeline.AddLockDependencies(op, guardLocks)) {
                 writeTx->ResetCollectedChanges();
-                writeOp->ReleaseTxData(txc, ctx);
+                writeOp->ReleaseTxData(txc);
                 if (txc.DB.HasChanges()) {
                     txc.DB.RollbackChanges();
                 }
@@ -306,6 +330,10 @@ public:
                 op->ChangeRecords() = std::move(changes);
             }
 
+            auto& counters = writeTx->GetUserDb().GetCounters();
+            KqpUpdateDataShardStatCounters(DataShard, counters);
+            KqpFillTxStats(DataShard, counters, *writeResult->Record.MutableTxStats());
+
         } catch (const TNeedGlobalTxId&) {
             Y_VERIFY_S(op->GetGlobalTxId() == 0,
                 "Unexpected TNeedGlobalTxId exception for write operation with TxId# " << op->GetGlobalTxId());
@@ -339,26 +367,13 @@ public:
         return EExecutionStatus::DelayCompleteNoMoreRestarts;
     }
 
-    void Complete(TOperation::TPtr op, const TActorContext& ctx) override {
-        Pipeline.RemoveCommittingOp(op);
-        DataShard.EnqueueChangeRecords(std::move(op->ChangeRecords()));
-        DataShard.EmitHeartbeats();
-
-        TWriteOperation* writeOp = TWriteOperation::CastWriteOperation(op);
-
-        const auto& status = writeOp->GetWriteResult()->Record.status();
-        LOG_DEBUG_S(ctx, NKikimrServices::TX_DATASHARD, "Completed write operation for " << *op << " at " << DataShard.TabletID() << ", status " << status);
-
-        DataShard.IncCounter(writeOp->GetWriteResult()->Record.status() == NKikimrDataEvents::TEvWriteResult::STATUS_COMPLETED ?
-            COUNTER_WRITE_SUCCESS : COUNTER_WRITE_ERROR);
-
-        ctx.Send(writeOp->GetEv()->Sender, writeOp->ReleaseWriteResult().release(), 0, writeOp->GetEv()->Cookie);
+    void Complete(TOperation::TPtr, const TActorContext&) override {
     }
 
-};  // TWriteUnit
+};  // TExecuteWriteUnit
 
-THolder<TExecutionUnit> CreateWriteUnit(TDataShard& self, TPipeline& pipeline) {
-    return THolder(new TWriteUnit(self, pipeline));
+THolder<TExecutionUnit> CreateExecuteWriteUnit(TDataShard& self, TPipeline& pipeline) {
+    return THolder(new TExecuteWriteUnit(self, pipeline));
 }
 
 } // NDataShard

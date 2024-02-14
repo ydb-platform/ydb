@@ -22,7 +22,7 @@ bool IsCastRequired(ui32 fromTypeId, ui32 toTypeId) {
     if (toTypeId == fromTypeId) {
         return false;
     }
-    if (toTypeId == NPg::AnyOid || toTypeId == NPg::AnyArrayOid) {
+    if (toTypeId == NPg::AnyOid || toTypeId == NPg::AnyArrayOid || toTypeId == NPg::AnyNonArrayOid) {
         return false;
     }
     return true;

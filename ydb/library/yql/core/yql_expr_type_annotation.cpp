@@ -6331,6 +6331,7 @@ TExprNode::TPtr ExpandPgAggregationTraits(TPositionHandle pos, const NPg::TAggre
     auto saveLambda = idLambda;
     auto loadLambda = idLambda;
     auto finishLambda = idLambda;
+    auto nullValue = ctx.NewCallable(pos, "Null", {});
     if (aggDesc.FinalFuncId) {
         finishLambda = ctx.Builder(pos)
             .Lambda()
@@ -6341,12 +6342,18 @@ TExprNode::TPtr ExpandPgAggregationTraits(TPositionHandle pos, const NPg::TAggre
                 .List(2)
                 .Seal()
                 .Arg(3, "state")
+                .Do([&aggDesc, nullValue](TExprNodeBuilder& builder) -> TExprNodeBuilder& {
+                    if (aggDesc.FinalExtra) {
+                        builder.Add(4, nullValue);
+                    }
+
+                    return builder;
+                })
             .Seal()
             .Seal()
             .Build();
     }
 
-    auto nullValue = ctx.NewCallable(pos, "Null", {});
     auto initValue = nullValue;
     if (aggDesc.InitValue) {
         initValue = ctx.Builder(pos)

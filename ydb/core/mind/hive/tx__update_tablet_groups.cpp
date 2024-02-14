@@ -158,37 +158,51 @@ public:
             db.Table<Schema::TabletChannel>().Key(tablet->Id, channelId).Update<Schema::TabletChannel::NeedNewGroup>(false);
 
             ui32 fromGeneration;
+            bool skip = false;
+            if (tablet->ChannelProfileReassignReason == NKikimrHive::TEvReassignTablet::HIVE_REASSIGN_REASON_BALANCE) {
+                // A reassign for balancing may be skipped
+                auto tabletChannel = tablet->GetChannel(channelId);
+                auto oldGroupId = channel->History.back().GroupID;
+                auto& pool = tablet->GetStoragePool(channelId);
+                auto& oldGroup = pool.GetStorageGroup(oldGroupId);
+                auto& newGroup = pool.GetStorageGroup(group->GetGroupID());
+                auto usageBefore = oldGroup.GetUsageForChannel(tabletChannel);
+                auto usageAfter = newGroup.GetUsageForChannel(tabletChannel);
+                skip = usageAfter > usageBefore;
+            }
             if (channel->History.empty()) {
                 fromGeneration = 0;
             } else if (channel->History.back().GroupID == group->GetGroupID()) {
                 // We decided to keep the group the same
-                continue;
+                skip = true;
             } else {
                 needToIncreaseGeneration = true;
                 fromGeneration = tablet->KnownGeneration + 1;
             }
 
-            if (!changed) {
+            if (!changed && !skip) {
                 ++tabletStorageInfo->Version;
                 db.Table<Schema::Tablet>().Key(tablet->Id).Update<Schema::Tablet::TabletStorageVersion>(tabletStorageInfo->Version);
             }
 
-            TInstant timestamp = ctx.Now();
-            db.Table<Schema::TabletChannelGen>().Key(tablet->Id, channelId, fromGeneration).Update(
-                        NIceDb::TUpdate<Schema::TabletChannelGen::Group>(group->GetGroupID()),
-                        NIceDb::TUpdate<Schema::TabletChannelGen::Version>(tabletStorageInfo->Version),
-                        NIceDb::TUpdate<Schema::TabletChannelGen::Timestamp>(timestamp.MilliSeconds()));
-            if (!channel->History.empty() && fromGeneration == channel->History.back().FromGeneration) {
-                channel->History.back().GroupID = group->GetGroupID(); // we overwrite history item when generation is the same as previous one (so the tablet didn't run yet)
-                channel->History.back().Timestamp = timestamp;
-            } else {
-                channel->History.emplace_back(fromGeneration, group->GetGroupID(), timestamp);
+            if (!skip) {
+                TInstant timestamp = ctx.Now();
+                db.Table<Schema::TabletChannelGen>().Key(tablet->Id, channelId, fromGeneration).Update(
+                            NIceDb::TUpdate<Schema::TabletChannelGen::Group>(group->GetGroupID()),
+                            NIceDb::TUpdate<Schema::TabletChannelGen::Version>(tabletStorageInfo->Version),
+                            NIceDb::TUpdate<Schema::TabletChannelGen::Timestamp>(timestamp.MilliSeconds()));
+                if (!channel->History.empty() && fromGeneration == channel->History.back().FromGeneration) {
+                    channel->History.back().GroupID = group->GetGroupID(); // we overwrite history item when generation is the same as previous one (so the tablet didn't run yet)
+                    channel->History.back().Timestamp = timestamp;
+                } else {
+                    channel->History.emplace_back(fromGeneration, group->GetGroupID(), timestamp);
+                }
+                if (channel->History.size() > 1) {
+                    // now we block storage for every change of a group's history
+                    needToBlockStorage = true;
+                }
+                changed = true;
             }
-            if (channel->History.size() > 1) {
-                // now we block storage for every change of a group's history
-                needToBlockStorage = true;
-            }
-            changed = true;
 
             if (!tablet->AcquireAllocationUnit(channelId)) {
                 BLOG_ERROR("Failed to aquire AU for tablet " << tablet->Id << " channel " << channelId);

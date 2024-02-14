@@ -72,6 +72,7 @@ target_link_libraries(library-yql-core PUBLIC
   core-url_lister-interface
   core-url_preprocessing-interface
   library-yql-minikql
+  yql-minikql-jsonpath
   library-yql-protos
   yql-public-udf
   public-udf-tz

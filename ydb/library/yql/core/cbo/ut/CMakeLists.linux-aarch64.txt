@@ -17,6 +17,8 @@ target_link_libraries(ydb-library-yql-core-cbo-ut PUBLIC
   yutil
   cpp-testing-unittest_main
   yql-core-cbo
+  parser-pg_wrapper-interface
+  udf-service-stub
 )
 target_link_options(ydb-library-yql-core-cbo-ut PRIVATE
   -ldl

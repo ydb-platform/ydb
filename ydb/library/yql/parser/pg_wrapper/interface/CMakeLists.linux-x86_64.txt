@@ -19,6 +19,7 @@ target_link_libraries(parser-pg_wrapper-interface PUBLIC
   yql-public-udf
   public-udf-arrow
   yql-core-cbo
+  library-cpp-disjoint_sets
 )
 target_sources(parser-pg_wrapper-interface PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/library/yql/parser/pg_wrapper/interface/codec.h

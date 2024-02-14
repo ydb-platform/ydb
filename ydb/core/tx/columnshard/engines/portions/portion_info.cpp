@@ -306,6 +306,10 @@ std::vector<NKikimr::NOlap::TPortionInfo::TPage> TPortionInfo::BuildPages() cons
     return pages;
 }
 
+ui64 TPortionInfo::GetTxVolume() const {
+    return 1024 + Records.size() * 256 + Indexes.size() * 256;
+}
+
 std::shared_ptr<arrow::ChunkedArray> TPortionInfo::TPreparedColumn::Assemble() const {
     Y_ABORT_UNLESS(!Blobs.empty());
 

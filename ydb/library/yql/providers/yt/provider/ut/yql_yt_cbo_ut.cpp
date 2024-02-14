@@ -171,7 +171,6 @@ Y_UNIT_TEST(BuildYtJoinTree2TablesTableIn2Rels)
         Name(ECostBasedOptimizerType::Native); \
     }
 
-
 void OrderJoins2Tables(auto optimizerType) {
     TExprContext exprCtx;
     auto tree = MakeOp({"c", "c_nationkey"}, {"n", "n_nationkey"}, {"c", "n"}, exprCtx);
@@ -256,7 +255,7 @@ Y_UNIT_TEST(UnsupportedJoin)
     auto tree = MakeOp({"c", "c_nationkey"}, {"n", "n_nationkey"}, {"c", "n"}, exprCtx);
     tree->Left = MakeLeaf({"c"}, {"c"}, 1000000, 1233333, exprCtx);
     tree->Right = MakeLeaf({"n"}, {"n"}, 10000, 12333, exprCtx);
-    tree->JoinKind = exprCtx.NewAtom(exprCtx.AppendPosition({}), "Full");
+    tree->JoinKind = exprCtx.NewAtom(exprCtx.AppendPosition({}), "RightSemi");
 
     TTypeAnnotationContext typeCtx;
     TYtState::TPtr state = MakeIntrusive<TYtState>();

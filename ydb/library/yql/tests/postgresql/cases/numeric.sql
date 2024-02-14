@@ -636,15 +636,6 @@ INSERT INTO ceil_floor_round VALUES ('0.0');
 INSERT INTO ceil_floor_round VALUES ('0.0000001');
 INSERT INTO ceil_floor_round VALUES ('-0.000001');
 DROP TABLE ceil_floor_round;
--- Check rounding, it should round ties away from zero.
-SELECT i as pow,
-	round((-2.5 * 10 ^ i)::numeric, -i),
-	round((-1.5 * 10 ^ i)::numeric, -i),
-	round((-0.5 * 10 ^ i)::numeric, -i),
-	round((0.5 * 10 ^ i)::numeric, -i),
-	round((1.5 * 10 ^ i)::numeric, -i),
-	round((2.5 * 10 ^ i)::numeric, -i)
-FROM generate_series(-5,5) AS t(i);
 -- Testing for width_bucket(). For convenience, we test both the
 -- numeric and float8 versions of the function in this file.
 -- errors
@@ -664,12 +655,8 @@ CREATE TABLE width_bucket_test (operand_num numeric, operand_f8 float8);
 -- finite bucket bounds, but allow an infinite operand
 SELECT width_bucket(0.0::numeric, 'Infinity'::numeric, 5, 10); -- error
 SELECT width_bucket(0.0::numeric, 5, '-Infinity'::numeric, 20); -- error
-SELECT width_bucket('Infinity'::numeric, 1, 10, 10),
-       width_bucket('-Infinity'::numeric, 1, 10, 10);
 SELECT width_bucket(0.0::float8, 'Infinity'::float8, 5, 10); -- error
 SELECT width_bucket(0.0::float8, 5, '-Infinity'::float8, 20); -- error
-SELECT width_bucket('Infinity'::float8, 1, 10, 10),
-       width_bucket('-Infinity'::float8, 1, 10, 10);
 DROP TABLE width_bucket_test;
 -- Simple test for roundoff error when results should be exact
 SELECT x, width_bucket(x::float8, 10, 100, 9) as flt,
@@ -827,6 +814,8 @@ select exp(32.999);
 select exp(-32.999);
 select exp(123.456);
 select exp(-123.456);
+-- big test
+select exp(1234.5678);
 --
 -- Tests for generate_series
 --
@@ -920,6 +909,7 @@ select trim_scale(1.1234500);
 select trim_scale(110123.12475871856128000);
 select trim_scale(-1123.124718561280000000);
 select trim_scale(-13.00000000000000000000);
+select trim_scale(1e100);
 --
 -- Tests for SUM()
 --

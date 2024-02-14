@@ -1,5 +1,7 @@
 #include "datashard_user_db.h"
 
+#include "datashard_impl.h"
+
 namespace NKikimr::NDataShard {
 
 TDataShardUserDb::TDataShardUserDb(TDataShard& self, NTable::TDatabase& db, ui64 globalTxId, const TRowVersion& readVersion, const TRowVersion& writeVersion, NMiniKQL::TEngineHostCounters& counters, TInstant now)

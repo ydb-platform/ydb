@@ -238,10 +238,13 @@ void TReadInitAndAuthActor::HandleClientSchemeCacheResponse(
         return;
     }
 
-    NACLib::EAccessRights rights = (NACLib::EAccessRights)(NACLib::EAccessRights::ReadAttributes + NACLib::EAccessRights::WriteAttributes);
-    if (
-            !CheckACLPermissionsForNavigate(entry.SecurityObject, path, rights, "No ReadAsConsumer permissions", ctx)
-    ) {
+    // in future use right UseConsumer
+    auto selectRowRights = NACLib::EAccessRights::SelectRow;
+    auto accessAttributesRights = NACLib::EAccessRights::ReadAttributes | NACLib::EAccessRights::WriteAttributes;
+    if (DoCheckACL && !(entry.SecurityObject->CheckAccess(selectRowRights, *Token) || entry.SecurityObject->CheckAccess(accessAttributesRights, *Token))) {
+        CloseSession(TStringBuilder() << "No ReadAsConsumer permissions" << " for '" << path
+                    << "' for subject '" << Token->GetUserSID() << "'",
+                    PersQueue::ErrorCode::ACCESS_DENIED, ctx);
         return;
     }
     FinishInitialization(ctx);

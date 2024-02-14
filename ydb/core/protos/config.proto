@@ -7,6 +7,7 @@ import "ydb/core/protos/blobstorage.proto";
 import "ydb/core/protos/blobstorage_config.proto";
 import "ydb/core/protos/blobstorage_pdisk_config.proto";
 import "ydb/core/protos/blobstorage_vdisk_config.proto";
+import "ydb/core/protos/bootstrap.proto";
 import "ydb/core/protos/cms.proto";
 import "ydb/core/protos/config_units.proto";
 import "ydb/core/protos/counters_schemeshard.proto";
@@ -21,14 +22,12 @@ import "ydb/core/protos/kqp.proto";
 import "ydb/core/protos/local.proto";
 import "ydb/core/protos/netclassifier.proto";
 import "ydb/core/protos/node_broker.proto";
-import "ydb/core/protos/node_limits.proto";
 import "ydb/core/protos/pqconfig.proto";
 import "ydb/core/protos/resource_broker.proto";
 import "ydb/core/protos/shared_cache.proto";
 import "ydb/core/protos/stream.proto";
 import "ydb/core/protos/table_service_config.proto";
 import "ydb/core/protos/tablet.proto";
-import "ydb/core/protos/tablet_database.proto";
 import "ydb/core/protos/tenant_pool.proto";
 import "ydb/core/protos/tenant_slot_broker.proto";
 import "ydb/library/actors/protos/interconnect.proto";
@@ -336,67 +335,6 @@ message TLogConfig {
     optional TUAClientConfig UAClientConfig = 13;
     optional uint64 TimeThresholdMs = 14 [default = 1000];
     optional bool IgnoreUnknownComponents = 15 [default = true];
-}
-
-message TCompileServiceConfig {
-    optional uint32 InflightLimit = 1 [default = 100000];
-}
-
-message TBootstrap {
-    enum ETabletType {
-        TX_DUMMY = 0;
-
-        HIVE = 1;
-
-        TX_COORDINATOR = 10;
-        TX_MEDIATOR = 11;
-        TX_PROXY = 12;
-        FLAT_TX_COORDINATOR = 13;
-        FLAT_HIVE = 14;
-        FLAT_BS_CONTROLLER = 15;
-        FLAT_TX_PROXY = 17;
-        TX_ALLOCATOR = 18;
-
-        BS_DOMAINCONTROLLER = 20;
-
-        SCHEMESHARD = 30;
-        DATASHARD = 31;
-        FLAT_SCHEMESHARD = 32;
-        KEYVALUEFLAT = 33;
-
-        JOBRUNNER_POOL_MANAGER = 40;
-        FLAT_JOBRUNNER_POOL_MANAGER = 41;
-
-        CMS = 51;
-        NODE_BROKER = 52;
-
-        TENANT_SLOT_BROKER = 53;
-        CONSOLE = 54;
-
-        FAKE_DATASHARD = 700;
-    }
-
-    message TTablet {
-        optional ETabletType Type = 1;
-        repeated uint32 Node = 2;
-        optional NKikimrTabletBase.TTabletStorageInfo Info = 3;
-        optional bool StandBy = 4;
-        optional uint64 WatchThreshold = 5;
-        optional bool StartFollowers = 6;
-        optional bool AllowDynamicConfiguration = 7 [default = false];
-    }
-
-    repeated TTablet Tablet = 1;
-
-    optional uint64 ProxySchemeCacheNodes = 2;
-    optional uint64 ProxySchemeCacheDistNodes = 3;
-    optional NKikimrTablet.TCompactionBroker CompactionBroker = 4;
-    optional NKikimrNodeLimits.TNodeLimitsConfig NodeLimits = 5;
-    optional NKikimrResourceBroker.TResourceBrokerConfig ResourceBroker = 6;
-    optional NKikimrSharedCache.TSharedCacheConfig SharedCacheConfig = 7;
-    repeated NKikimrSchemeOp.TResourceProfile ResourceProfiles = 8;
-    optional TCompileServiceConfig CompileServiceConfig = 9; //may be need special file with resource limits?
-    optional bool EnableIntrospection = 10;
 }
 
 message TInterconnectConfig {

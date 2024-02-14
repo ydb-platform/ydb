@@ -377,6 +377,7 @@ message TMessageGroupInfo {
     }
 
     optional uint64 SeqNo = 1;
+    optional uint64 MinSeqNo = 9;
     optional uint64 Offset = 2;
     optional uint64 WriteTimestamp = 3; // TInstant::TValue
     optional uint64 CreateTimestamp = 4; // TInstant::TValue
@@ -992,9 +993,19 @@ message TTransaction {
     // получатель результата
     //
     optional NActorsProto.TActorId SourceActor = 14;
+
+    optional uint64 WriteId = 15;
 };
 
 message TTabletTxInfo {
+    message TTxWriteInfo {
+        optional uint64 WriteId = 1;
+        optional uint32 OriginalPartitionId = 2;
+        optional uint32 InternalPartitionId = 3;
+    };
+
     optional uint64 LastStep = 2;
     optional uint64 LastTxId = 3;
+    repeated TTxWriteInfo TxWrites = 4;
+    optional uint64 NextSupportivePartitionId = 5;
 }

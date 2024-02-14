@@ -493,9 +493,7 @@ namespace NTypeAnnImpl {
             return false;
         }
 
-        // second argument must be "Utf8" type
-        const auto& jsonPathArg = function.JsonPath().Ref();
-        if (!EnsureSpecificDataType(jsonPathArg, EDataSlot::Utf8, ctx.Expr)) {
+        if (!EnsureValidJsonPath(function.JsonPath().Ref(), ctx.Expr)) {
             return false;
         }
 
@@ -12202,6 +12200,7 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
         Functions["WideSortBlocks"] = &WideSortBlocksWrapper;
         Functions["BlockExtend"] = &BlockExtendWrapper;
         Functions["BlockOrderedExtend"] = &BlockExtendWrapper;
+        Functions["ReplicateScalars"] = &ReplicateScalarsWrapper;
 
         Functions["BlockCoalesce"] = &BlockCoalesceWrapper;
         Functions["BlockAnd"] = &BlockLogicalWrapper;

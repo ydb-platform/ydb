@@ -8,7 +8,7 @@ import random
 import string
 import typing  # noqa: F401
 import sys
-from urllib.parse import urlparse
+from six.moves.urllib.parse import urlparse
 
 from ydb.library.yql.providers.common.proto.gateways_config_pb2 import TGenericConnectorConfig
 from ydb.tests.library.common import yatest_common

@@ -3,6 +3,7 @@
 #include "defs.h"
 #include "column_engine.h"
 #include <ydb/core/tx/columnshard/common/scalars.h>
+#include <ydb/core/tx/columnshard/common/limits.h>
 #include <ydb/core/tx/columnshard/counters/engine_logs.h>
 #include <ydb/core/tx/columnshard/columnshard_ttl.h>
 #include "scheme/tier_info.h"
@@ -87,21 +88,29 @@ private:
     private:
         const ui64 MemoryUsageLimit;
         ui64 MemoryUsage = 0;
+        ui64 TxWriteVolume = 0;
         std::shared_ptr<TColumnEngineChanges::IMemoryPredictor> MemoryPredictor;
     public:
-        bool AllowEviction = true;
-        bool AllowDrop = true;
         const TInstant Now;
         std::shared_ptr<TTTLColumnEngineChanges> Changes;
         std::map<ui64, TDuration> DurationsForced;
         const THashSet<TPortionAddress>& BusyPortions;
 
-        void AppPortionForCheckMemoryUsage(const TPortionInfo& info) {
+        void AppPortionForEvictionChecker(const TPortionInfo& info) {
             MemoryUsage = MemoryPredictor->AddPortion(info);
+            TxWriteVolume += info.GetTxVolume();
         }
 
-        bool HasMemoryForEviction() const {
-            return MemoryUsage < MemoryUsageLimit;
+        void AppPortionForTtlChecker(const TPortionInfo& info) {
+            TxWriteVolume += info.GetTxVolume();
+        }
+
+        bool HasLimitsForEviction() const {
+            return MemoryUsage < MemoryUsageLimit && TxWriteVolume < TGlobalLimits::TxWriteLimitBytes;
+        }
+
+        bool HasLimitsForTtl() const {
+            return TxWriteVolume < TGlobalLimits::TxWriteLimitBytes;
         }
 
         TTieringProcessContext(const ui64 memoryUsageLimit, std::shared_ptr<TTTLColumnEngineChanges> changes,

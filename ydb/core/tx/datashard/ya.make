@@ -34,6 +34,7 @@ SRCS(
     check_snapshot_tx_unit.cpp
     check_write_unit.cpp
     complete_data_tx_unit.cpp
+    complete_write_unit.cpp
     completed_operations_unit.cpp
     conflicts_cache.cpp
     create_cdc_stream_unit.cpp
@@ -138,6 +139,7 @@ SRCS(
     erase_rows_condition.cpp
     execute_commit_writes_tx_unit.cpp
     execute_data_tx_unit.cpp
+    execute_write_unit.cpp
     execute_distributed_erase_tx_unit.cpp
     execute_kqp_data_tx_unit.cpp
     execute_kqp_scan_tx_unit.cpp
@@ -150,6 +152,7 @@ SRCS(
     export_iface.h
     export_scan.cpp
     finalize_build_index_unit.cpp
+    finalize_plan_tx_unit.cpp
     finish_propose_unit.cpp
     finish_propose_write_unit.cpp
     follower_edge.cpp
@@ -159,6 +162,7 @@ SRCS(
     key_validator.cpp
     load_and_wait_in_rs_unit.cpp
     load_tx_details_unit.cpp
+    load_write_details_unit.cpp
     make_scan_snapshot_unit.cpp
     make_snapshot_unit.cpp
     move_index_unit.cpp
@@ -167,6 +171,7 @@ SRCS(
     operation.h
     plan_queue_unit.cpp
     prepare_data_tx_in_rs_unit.cpp
+    prepare_write_tx_in_rs_unit.cpp
     prepare_distributed_erase_tx_in_rs_unit.cpp
     prepare_kqp_data_tx_in_rs_unit.cpp
     prepare_scheme_tx_in_rs_unit.cpp
@@ -188,13 +193,13 @@ SRCS(
     store_and_send_out_rs_unit.cpp
     store_commit_writes_tx_unit.cpp
     store_data_tx_unit.cpp
+    store_write_unit.cpp
     store_distributed_erase_tx_unit.cpp
     store_scheme_tx_unit.cpp
     store_snapshot_tx_unit.cpp
     volatile_tx.cpp
     wait_for_plan_unit.cpp
     wait_for_stream_clearance_unit.cpp
-    write_unit.cpp
     upload_stats.cpp
 )
 

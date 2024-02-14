@@ -68,6 +68,45 @@ Y_UNIT_TEST_SUITE(YdbQueryService) {
         UNIT_ASSERT(allDoneOk);
     }
 
+    Y_UNIT_TEST(TestForbidExecuteWithoutAttach) {
+        TKikimrWithGrpcAndRootSchema server;
+
+        ui16 grpc = server.GetPort();
+        TString location = TStringBuilder() << "localhost:" << grpc;
+
+        auto clientConfig = NGRpcProxy::TGRpcClientConfig(location);
+
+        TString sessionId = CreateQuerySession(clientConfig);
+
+        UNIT_ASSERT(sessionId);
+
+        NYdbGrpc::TGRpcClientLow clientLow;
+
+        std::shared_ptr<grpc::Channel> channel;
+        channel = grpc::CreateChannel("localhost:" + ToString(grpc), grpc::InsecureChannelCredentials());
+
+        {
+            std::unique_ptr<Ydb::Query::V1::QueryService::Stub> stub;
+            stub = Ydb::Query::V1::QueryService::NewStub(channel);
+            grpc::ClientContext context;
+            Ydb::Query::ExecuteQueryRequest request;
+            request.set_session_id(sessionId);
+            request.set_exec_mode(Ydb::Query::EXEC_MODE_EXECUTE);
+            request.mutable_tx_control()->mutable_begin_tx()->mutable_serializable_read_write();
+            request.mutable_tx_control()->set_commit_tx(true);
+            request.mutable_query_content()->set_text("SELECT 42");
+            Ydb::Query::ExecuteQueryResponsePart response;
+            auto reader = stub->ExecuteQuery(&context, request);
+            bool res = true;
+            while (res) {
+                res = reader->Read(&response);
+                if (res) {
+                    UNIT_ASSERT_VALUES_EQUAL(response.status(), Ydb::StatusIds::BAD_REQUEST);
+                }
+            }
+        }
+    }
+
     Y_UNIT_TEST(TestCreateDropAttachSession) {
         TKikimrWithGrpcAndRootSchema server;
 

@@ -258,7 +258,7 @@ Y_UNIT_TEST_SUITE(TSourceIdTests) {
     Y_UNIT_TEST(SourceIdStorageComplexDelete) {
         TSourceIdStorage storage;
         for (ui64 i = 1; i <= 10000 + 1; ++i) { // add 10000 + one extra sources
-            storage.RegisterSourceId(TestSourceId(i), i, i, TInstant::Seconds(10 * i));
+            storage.RegisterSourceId(TestSourceId(i), i, i , TInstant::Seconds(10 * i));
         }
 
         NKikimrPQ::TPartitionConfig config;
@@ -457,6 +457,38 @@ Y_UNIT_TEST_SUITE(TSourceIdTests) {
 
             emitter.Process(TestSourceId(2), MakeHeartbeat(4));
             UNIT_ASSERT(!emitter.CanEmit().Defined());
+        }
+    }
+
+    Y_UNIT_TEST(SourceIdMinSeqNo) {
+        TSourceIdStorage storage;
+
+        const auto sourceId = TestSourceId(1);
+        const auto sourceIdInfo = TSourceIdInfo(2, 10, TInstant::Seconds(100));
+        const auto anotherSourceId = TestSourceId(2);
+        const auto anotherSourceIdInfo = TSourceIdInfo(0, 20, TInstant::Seconds(200));
+
+        storage.RegisterSourceId(sourceId, sourceIdInfo);
+        storage.RegisterSourceId(anotherSourceId, anotherSourceIdInfo);
+        {
+            auto it = storage.GetInMemorySourceIds().find(anotherSourceId);
+            UNIT_ASSERT_VALUES_EQUAL(it->second.MinSeqNo, 0);
+        }
+
+        storage.RegisterSourceId(sourceId, sourceIdInfo.Updated(3, 11, TInstant::Seconds(100)));
+        {
+            auto it = storage.GetInMemorySourceIds().find(sourceId);
+            UNIT_ASSERT_VALUES_EQUAL(it->second.MinSeqNo, 2);
+        }
+        storage.RegisterSourceId(sourceId, sourceIdInfo.Updated(1, 12, TInstant::Seconds(100)));
+        {
+            auto it = storage.GetInMemorySourceIds().find(sourceId);
+            UNIT_ASSERT_VALUES_EQUAL(it->second.MinSeqNo, 2);
+        }
+        storage.RegisterSourceId(anotherSourceId, anotherSourceIdInfo.Updated(3, 12, TInstant::Seconds(100)));
+        {
+            auto it = storage.GetInMemorySourceIds().find(anotherSourceId);
+            UNIT_ASSERT_VALUES_EQUAL(it->second.MinSeqNo, 3);
         }
     }
 

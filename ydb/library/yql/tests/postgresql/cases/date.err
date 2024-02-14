@@ -1165,6 +1165,14 @@ select '-infinity'::date < 'today'::date as t;
 <sql-statement>
 select isfinite('infinity'::date), isfinite('-infinity'::date), isfinite('today'::date);
 </sql-statement>
+-stdin-:<main>: Error: Type annotation
+
+    -stdin-:<main>:1:1: Error: At function: RemovePrefixMembers, At function: PgSelect, At function: PgSetItem
+    	select isfinite('infinity'::date), isfinite('-infinity'::date), isfinite('today'::date);
+	^
+        -stdin-:<main>:1:1: Error: Duplicated member: isfinite
+        	select isfinite('infinity'::date), isfinite('-infinity'::date), isfinite('today'::date);
+	^
 <sql-statement>
 --
 -- oscillating fields from non-finite date:

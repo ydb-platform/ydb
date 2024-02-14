@@ -5,6 +5,10 @@
 #include <ydb/core/tx/replication/ydb_proxy/ydb_proxy.h>
 #include <ydb/library/actors/core/actor.h>
 #include <ydb/library/actors/core/hfunc.h>
+#include <ydb/library/services/services.pb.h>
+
+#include <util/generic/maybe.h>
+#include <util/string/builder.h>
 
 namespace NKikimr::NReplication::NService {
 
@@ -64,7 +68,7 @@ class TRemoteTopicReader: public TActor<TRemoteTopicReader> {
         LOG_D("Handle " << ev->Get()->ToString());
 
         auto& result = ev->Get()->Result;
-        TVector<TEvWorker::TEvData::TRecord> records(Reserve(result.Messages.size()));
+        TVector<TEvWorker::TEvData::TRecord> records(::Reserve(result.Messages.size()));
 
         for (auto& msg : result.Messages) {
             Y_ABORT_UNLESS(msg.GetCodec() == NYdb::NTopic::ECodec::RAW);
@@ -100,6 +104,10 @@ class TRemoteTopicReader: public TActor<TRemoteTopicReader> {
     }
 
 public:
+    static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
+        return NKikimrServices::TActivity::REPLICATION_REMOTE_TOPIC_READER;
+    }
+
     explicit TRemoteTopicReader(const TActorId& ydbProxy, const TReadSessionSettings& opts)
         : TActor(&TThis::StateWork)
         , YdbProxy(ydbProxy)

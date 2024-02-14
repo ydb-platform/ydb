@@ -172,9 +172,8 @@ Y_UNIT_TEST(RelCollectorBrokenEquiJoin) {
     UNIT_ASSERT(DqCollectJoinRelationsWithStats(rels, typeCtx, equiJoin, [&](auto, auto, auto, auto) {}) == false);
 }
 
-void _DqOptimizeEquiJoinWithCosts(const std::function<IOptimizer*(IOptimizer::TInput&&)>& optFactory) {
+void _DqOptimizeEquiJoinWithCosts(const std::function<IOptimizerNew*()>& optFactory, TExprContext& ctx) {
     TTypeAnnotationContext typeCtx;
-    TExprContext ctx;
     auto pos = ctx.AppendPosition({});
     TVector<TExprBase> joinArgs;
     TVector<TExprBase> tables;
@@ -203,7 +202,13 @@ void _DqOptimizeEquiJoinWithCosts(const std::function<IOptimizer*(IOptimizer::TI
         .Add(joinArgs)
         .Done();
 
-    auto res = DqOptimizeEquiJoinWithCosts(equiJoin, ctx, typeCtx, optFactory, true);
+    auto opt = std::unique_ptr<IOptimizerNew>(optFactory());
+    std::function<void(TVector<std::shared_ptr<TRelOptimizerNode>>&, TStringBuf, const TExprNode::TPtr, const std::shared_ptr<TOptimizerStatistics>&)> providerCollect = [](auto& rels, auto label, auto node, auto stats) {
+        Y_UNUSED(node);
+        auto rel = std::make_shared<TRelOptimizerNode>(TString(label), stats);
+        rels.push_back(rel);
+    };
+    auto res = DqOptimizeEquiJoinWithCosts(equiJoin, ctx, typeCtx, 1, *opt, providerCollect);
     UNIT_ASSERT(equiJoin.Ptr() != res.Ptr());
     UNIT_ASSERT(equiJoin.Ptr()->ChildrenSize() == res.Ptr()->ChildrenSize());
     UNIT_ASSERT(equiJoin.Maybe<TCoEquiJoin>());
@@ -217,24 +222,24 @@ void _DqOptimizeEquiJoinWithCosts(const std::function<IOptimizer*(IOptimizer::TI
 }
 
 Y_UNIT_TEST(DqOptimizeEquiJoinWithCostsNative) {
-    std::function<void(const TString&)> log = [&](auto str) {
-        Cerr << str;
+    TExprContext ctx;
+    TDummyProviderContext pctx;
+    std::function<IOptimizerNew*()> optFactory = [&]() {
+        return MakeNativeOptimizerNew(pctx, 100000);
     };
-    std::function<IOptimizer*(IOptimizer::TInput&&)> optFactory = [&](auto input) {
-        return MakeNativeOptimizer(input, log);
-    };
-    _DqOptimizeEquiJoinWithCosts(optFactory);
+    _DqOptimizeEquiJoinWithCosts(optFactory, ctx);
 }
 
 Y_UNIT_TEST(DqOptimizeEquiJoinWithCostsPG) {
+    TExprContext ctx;
+    TDummyProviderContext pctx;
     std::function<void(const TString&)> log = [&](auto str) {
         Cerr << str;
     };
-    std::function<IOptimizer*(IOptimizer::TInput&&)> optFactory = [&](auto input) {
-        return MakePgOptimizer(input, log);
+    std::function<IOptimizerNew*()> optFactory = [&]() {
+        return MakePgOptimizerNew(pctx, ctx, log);
     };
-    _DqOptimizeEquiJoinWithCosts(optFactory);
+    _DqOptimizeEquiJoinWithCosts(optFactory, ctx);
 }
 
 } // DQCBO
-

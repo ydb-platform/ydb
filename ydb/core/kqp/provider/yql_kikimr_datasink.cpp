@@ -766,7 +766,13 @@ public:
                     YQL_ENSURE(settings.Columns);
                     if (settings.Columns.Cast().Empty()) {
                         ctx.AddError(TIssue(ctx.GetPosition(node->Pos()), "Creating table without columns is not supported."));
+                        return nullptr;
+                    }
+                    for (const auto& column : settings.Columns.Cast()) {
+                        if (column.Ptr()->ChildrenSize() < 2) {
+                            ctx.AddError(TIssue(ctx.GetPosition(node->Pos()), "Creating table with columns without type is not supported."));
                             return nullptr;
+                        }
                     }
 
                     const bool isExternalTable = settings.TableType && settings.TableType.Cast() == "externalTable";

@@ -169,13 +169,24 @@ bool TSqlQuery::Statement(TVector<TNodePtr>& blocks, const TRule_sql_stmt_core& 
                 );
             }
 
+            const bool isCreateTableAs = rule.HasBlock15();
             const auto& block = rule.GetBlock3();
             ETableType tableType = ETableType::Table;
             bool temporary = false;
             if (block.HasAlt2() && block.GetAlt2().GetToken1().GetId() == SQLv1LexerTokens::TOKEN_TABLESTORE) {
                 tableType = ETableType::TableStore;
+                if (isCreateTableAs) {
+                    Context().Error(GetPos(block.GetAlt2().GetToken1()))
+                        << "CREATE TABLE AS is not supported for TABLESTORE";
+                    return false;
+                }
             } else if (block.HasAlt3() && block.GetAlt3().GetToken1().GetId() == SQLv1LexerTokens::TOKEN_EXTERNAL) {
                 tableType = ETableType::ExternalTable;
+                if (isCreateTableAs) {
+                    Context().Error(GetPos(block.GetAlt3().GetToken1()))
+                        << "CREATE TABLE AS is not supported for EXTERNAL TABLE";
+                    return false;
+                }
             } else if (block.HasAlt4() && block.GetAlt4().GetToken1().GetId() == SQLv1LexerTokens::TOKEN_TEMP ||
                     block.HasAlt5() && block.GetAlt5().GetToken1().GetId() == SQLv1LexerTokens::TOKEN_TEMPORARY) {
                 temporary = true;
@@ -203,11 +214,11 @@ bool TSqlQuery::Statement(TVector<TNodePtr>& blocks, const TRule_sql_stmt_core& 
             }
 
             TCreateTableParameters params{.TableType=tableType, .Temporary=temporary};
-            if (!CreateTableEntry(rule.GetRule_create_table_entry7(), params)) {
+            if (!CreateTableEntry(rule.GetRule_create_table_entry7(), params, isCreateTableAs)) {
                 return false;
             }
             for (auto& block: rule.GetBlock8()) {
-                if (!CreateTableEntry(block.GetRule_create_table_entry2(), params)) {
+                if (!CreateTableEntry(block.GetRule_create_table_entry2(), params, isCreateTableAs)) {
                     return false;
                 }
             }
@@ -244,14 +255,9 @@ bool TSqlQuery::Statement(TVector<TNodePtr>& blocks, const TRule_sql_stmt_core& 
             }
 
             TSourcePtr tableSource = nullptr;
-            if (rule.HasBlock15()) {
+            if (isCreateTableAs) {
                 tableSource = TSqlAsValues(Ctx, Mode).Build(rule.GetBlock15().GetRule_table_as_source1().GetRule_values_source2(), "CreateTableAs");
                 if (!tableSource) {
-                    return false;
-                }
-                if (tableType != ETableType::Table) {
-                    Context().Error(GetPos(rule.GetBlock14().GetRule_table_tablestore1().GetToken1()))
-                        << "CREATE TABLE AS is not supported for TABLESTORE and EXTERNAL TABLE";
                     return false;
                 }
             }

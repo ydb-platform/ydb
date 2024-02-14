@@ -6381,15 +6381,32 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
             )", NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
             UNIT_ASSERT(!prepareResult.IsSuccess());
             UNIT_ASSERT_C(
-                prepareResult.GetIssues().ToString().Contains("Queries with mixed data and scheme operations are not supported."),
+                prepareResult.GetIssues().ToString().Contains("Column types are not supported for CREATE TABLE AS"),
+                prepareResult.GetIssues().ToString());
+        }
+        
+        {
+            auto prepareResult = client.ExecuteQuery(R"(
+                CREATE TABLE `/Root/Destination` (
+                    Col1,
+                    Col2,
+                    PRIMARY KEY (Col1)
+                )
+                PARTITION BY HASH(Col1)
+                WITH (STORE = COLUMN, AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = 4)
+                AS SELECT * FROM `/Root/Source`;
+            )", NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
+            UNIT_ASSERT(!prepareResult.IsSuccess());
+            UNIT_ASSERT_C(
+                prepareResult.GetIssues().ToString().Contains("Creating table with columns without type is not supported."),
                 prepareResult.GetIssues().ToString());
         }
 
         {
             auto prepareResult = client.ExecuteQuery(R"(
                 CREATE TABLE `/Root/Destination` (
-                    Col1 Uint64 NOT NULL,
-                    Col2 Int32,
+                    Col1,
+                    Col2,
                     PRIMARY KEY (Col1)
                 )
                 PARTITION BY HASH(Col1)

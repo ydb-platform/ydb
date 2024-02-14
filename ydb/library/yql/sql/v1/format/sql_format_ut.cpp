@@ -291,8 +291,8 @@ Y_UNIT_TEST_SUITE(CheckSqlFormatter) {
              "CREATE TABLE user (\n\tCHANGEFEED user WITH (user = 'foo')\n);\n"},
             {"create table user(changefeed user with (user='foo',user='bar'))",
              "CREATE TABLE user (\n\tCHANGEFEED user WITH (user = 'foo', user = 'bar')\n);\n"},
-            {"create table user(user int32) AS SELECT 1","CREATE TABLE user (\n\tuser int32\n)\nAS\nSELECT\n    1;\n"},
-            {"create table user(user int32) AS VALUES (1), (2)","CREATE TABLE user (\n\tuser int32\n)\nAS\nVALUES\n    (1),\n    (2);\n"},
+            {"create table user(user) AS SELECT 1","CREATE TABLE user (\n\tuser\n)\nAS\nSELECT\n    1;\n"},
+            {"create table user(user) AS VALUES (1), (2)","CREATE TABLE user (\n\tuser\n)\nAS\nVALUES\n    (1),\n    (2);\n"},
             {"create table user(foo int32, bar bool ?) inherits (s3:$cluster.xxx) partition by hash(a,b,hash) with (inherits=interval('PT1D') ON logical_time) tablestore tablestore",
               "CREATE TABLE user (\n"
               "\tfoo int32,\n"

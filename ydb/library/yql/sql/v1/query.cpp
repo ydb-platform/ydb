@@ -941,45 +941,47 @@ public:
             columnDesc = L(columnDesc, BuildQuotedAtom(Pos, col.Name));
             auto type = col.Type;
 
-            if (col.Nullable) {
-                type = Y("AsOptionalType", type);
-            }
-
-            columnDesc = L(columnDesc, type);
-
-            auto columnConstraints = Y();
-
-            if (!col.Nullable) {
-                columnConstraints = L(columnConstraints, Q(Y(Q("not_null"))));
-            }
-
-            if (col.Serial) {
-                columnConstraints = L(columnConstraints, Q(Y(Q("serial"))));
-            }
-
-            if (col.DefaultExpr) {
-                if (!col.DefaultExpr->Init(ctx, src)) {
-                    return false;
+            if (type) {
+                if (col.Nullable) {
+                    type = Y("AsOptionalType", type);
                 }
 
-                columnConstraints = L(columnConstraints, Q(Y(Q("default"), col.DefaultExpr)));
-            }
+                columnDesc = L(columnDesc, type);
 
-            columnDesc = L(columnDesc, Q(Y(Q("columnConstrains"), Q(columnConstraints))));
+                auto columnConstraints = Y();
 
-            auto familiesDesc = Y();
+                if (!col.Nullable) {
+                    columnConstraints = L(columnConstraints, Q(Y(Q("not_null"))));
+                }
 
-            if (col.Families) {
-                for (const auto& family : col.Families) {
-                    if (columnFamilyNames.find(family.Name) == columnFamilyNames.end()) {
-                        ctx.Error(family.Pos) << "Unknown family " << family.Name;
+                if (col.Serial) {
+                    columnConstraints = L(columnConstraints, Q(Y(Q("serial"))));
+                }
+
+                if (col.DefaultExpr) {
+                    if (!col.DefaultExpr->Init(ctx, src)) {
                         return false;
                     }
-                    familiesDesc = L(familiesDesc, BuildQuotedAtom(family.Pos, family.Name));
-                }
-            }
 
-            columnDesc = L(columnDesc, Q(familiesDesc));
+                    columnConstraints = L(columnConstraints, Q(Y(Q("default"), col.DefaultExpr)));
+                }
+
+                columnDesc = L(columnDesc, Q(Y(Q("columnConstrains"), Q(columnConstraints))));
+
+                auto familiesDesc = Y();
+
+                if (col.Families) {
+                    for (const auto& family : col.Families) {
+                        if (columnFamilyNames.find(family.Name) == columnFamilyNames.end()) {
+                            ctx.Error(family.Pos) << "Unknown family " << family.Name;
+                            return false;
+                        }
+                        familiesDesc = L(familiesDesc, BuildQuotedAtom(family.Pos, family.Name));
+                    }
+                }
+
+                columnDesc = L(columnDesc, Q(familiesDesc));
+            }
 
             columns = L(columns, Q(columnDesc));
         }

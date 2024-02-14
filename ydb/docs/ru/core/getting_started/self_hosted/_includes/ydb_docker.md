@@ -170,7 +170,7 @@ docker run --rm -it --entrypoint cat {{ ydb_local_docker_image }} THIRD_PARTY_LI
 
 ## Запуск {{ ydb-short-name }} Federated Query в Docker
 
-В данном разделе мы рассмотрим пример тестовой инсталляции {{ ydb-full-name }}, сконфигурированной для выполнения [федеративных запросов](../../../concepts/federated_query/index.md) к внешним источникам данных. Подключение {{ ydb-full-name }} к некоторым из источников требует развёртывания специального микросервиса-коннектора. В приведённом ниже файле `docker-compose.yaml` запускаются контейнеры с тремя сервисами: 
+В данном разделе мы рассмотрим пример тестовой инсталляции {{ ydb-full-name }}, сконфигурированной для выполнения [федеративных запросов](../../../concepts/federated_query/index.md) к внешним источникам данных. Подключение {{ ydb-full-name }} к некоторым из источников требует развёртывания специального микросервиса - [коннектора](../../../concepts/federated_query/architecture.md#connectors). Приведённый ниже файл `docker-compose.yaml` описывает запуск контейнеров с тремя сервисами: 
 
 * {{ ydb-short-name }} в одноузловой конфигурации;
 * PostgreSQL (в качестве примера внешнего источника данных);
@@ -229,20 +229,21 @@ docker exec -it fq-example-postgresql psql -d fq --user admin -c "
     INSERT INTO example_1 VALUES (6, NULL, 1)"
 ```
 
-Откройте в браузере [страницу](http://localhost:8765/monitoring/tenant?schema=%2Flocal&name=%2Flocal) с веб-интерфейсом базы данных `/local` локально развёрнутого инстанса YDB. В панели для запросов введите следующий код, регистрирующий в {{ ydb-short-name }} базу данных `fq` из локального инстанса PostgreSQL в качестве внешнего источника данных:
+Откройте в браузере [страницу](http://localhost:8765/monitoring/tenant?schema=%2Flocal&name=%2Flocal) с веб-интерфейсом базы данных `/local` локально развёрнутого инстанса {{ ydb-short-name }}. В панели для запросов введите следующий код, регистрирующий базу данных `fq` из локального инстанса PostgreSQL в качестве внешнего источника данных в качестве внешнего источника данных для {{ ydb-short-name }}:
 
 ```sql
+# Создаётся секрет, содержащий пароль пользователя admin базы данных PostgreSQL
 CREATE OBJECT pg_local_password (TYPE SECRET) WITH (value = password);
 
 CREATE EXTERNAL DATA SOURCE pg_local WITH (
-    SOURCE_TYPE="PostgreSQL",
-    DATABASE_NAME="fq",
-    LOCATION="fq-example-postgresql:5432",
-    AUTH_METHOD="BASIC",
-    LOGIN="admin",
-    PASSWORD_SECRET_NAME="pg_local_password",
-    USE_TLS="FALSE",
-    PROTOCOL="NATIVE"
+    SOURCE_TYPE="PostgreSQL",                   # тип источника данных
+    DATABASE_NAME="fq",                         # имя базы данных
+    LOCATION="fq-example-postgresql:5432",      # сетевой адрес инстанса базы данных
+    AUTH_METHOD="BASIC",                        # режим аутентификации по логину и паролю                 
+    LOGIN="admin",                              # логин для доступа к внешнему источнику
+    PASSWORD_SECRET_NAME="pg_local_password",   # имя секрета, содержащего пароль пользователя
+    USE_TLS="FALSE",                            # признак, указывающий на то, использует ли внешний источник TLS-шифрование
+    PROTOCOL="NATIVE"                           # протокол доступа к внешнему источнику данных
 );
 ```
 
@@ -254,10 +255,10 @@ CREATE EXTERNAL DATA SOURCE pg_local WITH (
 SELECT * FROM pg_local.example_1;
 ```
 
-В селекторе типов запросов внизу страницы выберите `Query type: YQL - QueryService` и нажмите кнопку `Run`. На экране появятся данные таблицы, созданной несколькими шагами ранее.
+В селекторе типов запросов внизу страницы выберите `Query type: YQL - QueryService` и нажмите кнопку `Run`. На экране появятся данные таблицы, созданной во внешнем источнике несколькими шагами ранее.
 
 {% note info %}
 
-О дополнительных опциях запуска коннектора можно узнать [здесь](../../../deploy/federated_query/connector.md#fq-connector-go-launch). В качестве внешнего источника данных можно использовать любое хранилище из перечня [поддерживаемых](../../../concepts/federated_query/index.md#supported-datasources)
+О дополнительных опциях запуска коннектора можно узнать в [руководстве по развёртыванию](../../../deploy/federated_query/connector.md#fq-connector-go-launch). В качестве внешнего источника данных можно использовать любое хранилище из перечня [поддерживаемых](../../../concepts/federated_query/architecture.md#supported-datasources).
 
 {% endnote %}

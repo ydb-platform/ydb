@@ -130,7 +130,7 @@ pqconfig:
 * `attributes` — (необязательный) атрибуты таблицы.
 * `partitioning_settings` — (необязательный) настройки партицирования (см. аргумент [partitioning_settings](#partitioning-settings)).
 * `key_bloom_filter` — (необязательный) (true|false) использовать [фильтра Блума для первичного ключа](../concepts/datamodel/table.md#bloom-filter).
-* `read_replicas_settings` — (необязательный) настройки [репликации](../concepts/datamodel/table.md#read_only_replicas).
+* `read_replicas_settings` — (необязательный) настройки [реплик для чтения](../concepts/datamodel/table.md#read_only_replicas).
 
 #### column {#column}
 

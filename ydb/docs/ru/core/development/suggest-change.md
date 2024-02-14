@@ -214,6 +214,11 @@ git push
   cd ~/ydbwork/ydb
   ```
 
+  Установите `ydb-platform/ydb` репозиторием по умолчанию для GitHub CLI:
+  ```
+  gh repo set-default ydb-platform/ydb
+  ```
+
   ```
   gh pr create --title "Feature 42 implemented"
   ```

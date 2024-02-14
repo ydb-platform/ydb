@@ -214,6 +214,11 @@ When the changes are completed and locally tested (see [Ya Build and Test](build
   cd ~/ydbwork/ydb
   ```
   
+  Set `ydb-platform/ydb` as a default repository for GitHub CLI:
+  ```
+  gh repo set-default ydb-platform/ydb
+  ```
+  
   ```
   gh pr create --title "Feature 42 implemented"
   ```

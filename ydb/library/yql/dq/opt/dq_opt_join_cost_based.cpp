@@ -1294,7 +1294,7 @@ public:
  * and finally optimizes the root of the tree
 */
 TExprBase DqOptimizeEquiJoinWithCosts(const TExprBase& node, TExprContext& ctx, TTypeAnnotationContext& typesCtx,
-    ui32 optLevel, ui32 maxDPccpDPTableSize, IProviderContext& providerCtx,
+    ui32 optLevel, IOptimizerNew& opt,
     const std::function<void(TVector<std::shared_ptr<TRelOptimizerNode>>&, TStringBuf, const TExprNode::TPtr, const std::shared_ptr<TOptimizerStatistics>&)>& providerCollect) {
 
     if (optLevel==0) {
@@ -1338,7 +1338,6 @@ TExprBase DqOptimizeEquiJoinWithCosts(const TExprBase& node, TExprContext& ctx, 
         YQL_CLOG(TRACE, CoreDq) << str.str();
     }
 
-    auto opt = TOptimizerNativeNew(providerCtx, maxDPccpDPTableSize);
     joinTree = opt.JoinSearch(joinTree);
 
     // rewrite the join tree and record the output statistics

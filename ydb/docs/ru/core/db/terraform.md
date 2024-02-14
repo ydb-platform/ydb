@@ -443,7 +443,7 @@ resource "ydb_table_index" "ydb_table_index" {
 
 ## Управление конфигурацией топиков {{ydb-short-name}} через Terraform
 
-Описание [топиков](../concepts/topic.md)
+Для работы с [топиками](../concepts/topic.md) используется ресурс `ydb_topic`
 
 {% note info %}
 

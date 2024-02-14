@@ -541,7 +541,7 @@ namespace NYql::NDqs {
             TString sourceType;
             if (dqSource) {
                 sourceSettings.ConstructInPlace();
-                dqIntegration->FillSourceSettings(*read, *sourceSettings, sourceType);
+                dqIntegration->FillSourceSettings(*read, *sourceSettings, sourceType, maxPartitions);
                 YQL_ENSURE(!sourceSettings->type_url().empty(), "Data source provider \"" << dataSourceName << "\" did't fill dq source settings for its dq source node");
                 YQL_ENSURE(sourceType, "Data source provider \"" << dataSourceName << "\" did't fill dq source settings type for its dq source node");
             }

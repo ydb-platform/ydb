@@ -163,11 +163,7 @@ struct TEvS3FileQueue {
     struct TEvUpdateConsumersCount :
         public TEventPB<TEvUpdateConsumersCount, NS3::FileQueue::TEvUpdateConsumersCount, EvUpdateConsumersCount> {
         
-        TEvUpdateConsumersCount() {
-            Record.SetConsumersCountDelta(0);
-        }
-
-        explicit TEvUpdateConsumersCount(ui64 consumersCountDelta) {
+        explicit TEvUpdateConsumersCount(ui64 consumersCountDelta = 0) {
             Record.SetConsumersCountDelta(consumersCountDelta);
         }
     };
@@ -175,7 +171,7 @@ struct TEvS3FileQueue {
     struct TEvAck :
         public TEventPB<TEvAck, NS3::FileQueue::TEvAck, EvAck> {
         
-        TEvAck() {}
+        TEvAck() = default;
 
         explicit TEvAck(const TMessageTransportMeta& transportMeta) {
             Record.MutableTransportMeta()->CopyFrom(transportMeta);
@@ -205,7 +201,7 @@ struct TEvS3FileQueue {
     struct TEvObjectPathReadError :
         public NActors::TEventPB<TEvObjectPathReadError, NS3::FileQueue::TEvObjectPathReadError, EvObjectPathReadError> {
 
-        TEvObjectPathReadError() {}
+        TEvObjectPathReadError() = default;
 
         TEvObjectPathReadError(TIssues issues, const TMessageTransportMeta& transportMeta) {
             IssuesToMessage(issues, Record.MutableIssues());
@@ -441,7 +437,7 @@ public:
                 hFunc(TEvS3FileQueue::TEvGetNextBatch, HandleGetNextBatch);
                 hFunc(TEvPrivatePrivate::TEvNextListingChunkReceived, HandleNextListingChunkReceived);
                 cFunc(TEvPrivatePrivate::EvRoundRobinStageTimeout, HandleRoundRobinStageTimeout);
-                cFunc(TEvents::TSystem::Poison, PassAway);
+                cFunc(TEvents::TSystem::Poison, HandlePoison);
                 default:
                     MaybeIssues = TIssues{TIssue{TStringBuilder() << "An event with unknown type has been received: '" << etype << "'"}};
                     TransitToErrorState();
@@ -541,7 +537,7 @@ public:
                 hFunc(TEvS3FileQueue::TEvUpdateConsumersCount, HandleUpdateConsumersCount);
                 hFunc(TEvS3FileQueue::TEvGetNextBatch, HandleGetNextBatchForEmptyState);
                 cFunc(TEvPrivatePrivate::EvRoundRobinStageTimeout, HandleRoundRobinStageTimeout);
-                cFunc(TEvents::TSystem::Poison, PassAway);
+                cFunc(TEvents::TSystem::Poison, HandlePoison);
                 default:
                     MaybeIssues = TIssues{TIssue{TStringBuilder() << "An event with unknown type has been received: '" << etype << "'"}};
                     TransitToErrorState();
@@ -566,7 +562,7 @@ public:
                 hFunc(TEvS3FileQueue::TEvUpdateConsumersCount, HandleUpdateConsumersCount);
                 hFunc(TEvS3FileQueue::TEvGetNextBatch, HandleGetNextBatchForErrorState);
                 cFunc(TEvPrivatePrivate::EvRoundRobinStageTimeout, HandleRoundRobinStageTimeout);
-                cFunc(TEvents::TSystem::Poison, PassAway);
+                cFunc(TEvents::TSystem::Poison, HandlePoison);
                 default:
                     MaybeIssues = TIssues{TIssue{TStringBuilder() << "An event with unknown type has been received: '" << etype << "'"}};
                     break;
@@ -603,12 +599,14 @@ public:
         }
     }
 
-    void PassAway() override {
-        LOG_D("TS3FileQueueActor", "PassAway");
-        
+    void HandlePoison() {
         AnswerPendingRequests();
-        Objects.clear();
-        Directories.clear();
+        PassAway();
+    }
+
+    void PassAway() override {
+        PrintBackTrace();
+        LOG_D("TS3FileQueueActor", "PassAway");
         TBase::PassAway();
     }
 
@@ -1004,7 +1002,7 @@ private:
         return FilesRemained && (*FilesRemained == 0);
     }
 
-    STRICT_STFUNC(StateFunc,
+    STRICT_STFUNC_EXC(StateFunc,
         hFunc(TEvPrivate::TEvReadResult, Handle);
         hFunc(TEvPrivate::TEvReadError, Handle);
         hFunc(TEvS3FileQueue::TEvObjectPathBatch, HandleObjectPathBatch);
@@ -1013,11 +1011,19 @@ private:
         hFunc(NYql::NDq::TEvRetryQueuePrivate::TEvRetry, Handle);
         hFunc(NActors::TEvInterconnect::TEvNodeDisconnected, Handle);
         hFunc(NActors::TEvInterconnect::TEvNodeConnected, Handle);
+        hFunc(NActors::TEvents::TEvUndelivered, Handle);
+        , catch (const std::exception& e) {
+            TIssues issues{TIssue{TStringBuilder() << "An unknown exception has occurred: '" << e.what() << "'"}};
+            Send(ComputeActorId, new TEvAsyncInputError(InputIndex, issues, NYql::NDqProto::StatusIds::INTERNAL_ERROR));
+        }
     )
 
     void HandleObjectPathBatch(TEvS3FileQueue::TEvObjectPathBatch::TPtr& objectPathBatch) {
+        if (!FileQueueEvents.OnEventReceived(objectPathBatch)) {
+            return;
+        }
+
         Y_ENSURE(IsWaitingFileQueueResponse);
-        FileQueueEvents.OnEventReceived(objectPathBatch);
         IsWaitingFileQueueResponse = false;
         auto& objectBatch = objectPathBatch->Get()->Record;
         ListedFiles += objectBatch.GetObjectPaths().size();
@@ -1038,7 +1044,10 @@ private:
         }
     }
     void HandleObjectPathReadError(TEvS3FileQueue::TEvObjectPathReadError::TPtr& result) {
-        FileQueueEvents.OnEventReceived(result);
+        if (!FileQueueEvents.OnEventReceived(result)) {
+            return;
+        }
+
         IsFileQueueEmpty = true;
         if (!IsConfirmedFileQueueFinish) {
             SendPathBatchRequest();
@@ -1177,8 +1186,16 @@ private:
     }
 
     void Handle(NActors::TEvInterconnect::TEvNodeConnected::TPtr& ev) {
-        LOG_T("TS3ReadActor","Handle connected FileQueue " << ev->Get()->NodeId);
+        LOG_T("TS3ReadActor", "Handle connected FileQueue " << ev->Get()->NodeId);
         FileQueueEvents.HandleNodeConnected(ev->Get()->NodeId);
+    }
+
+    void Handle(NActors::TEvents::TEvUndelivered::TPtr& ev) {
+        LOG_T("TS3ReadActor", "Handle undelivered FileQueue ");
+        if (!FileQueueEvents.HandleUndelivered(ev)) {
+            TIssues issues{TIssue{TStringBuilder() << "FileQueue was lost"}};
+            Send(ComputeActorId, new TEvAsyncInputError(InputIndex, issues, NYql::NDqProto::StatusIds::INTERNAL_ERROR));
+        }
     }
 
     // IActor & IDqComputeActorAsyncInput
@@ -2117,13 +2134,17 @@ public:
         LOG_CORO_D("RunCoroBlockArrowParserOverFile - FINISHED");
     }
 
-    STRICT_STFUNC(StateFunc,
+    STRICT_STFUNC_EXC(StateFunc,
         hFunc(TEvPrivate::TEvReadStarted, Handle);
         hFunc(TEvPrivate::TEvDataPart, Handle);
         hFunc(TEvPrivate::TEvReadFinished, Handle);
         hFunc(TEvPrivate::TEvContinue, Handle);
         hFunc(TEvPrivate::TEvReadResult2, Handle);
         hFunc(NActors::TEvents::TEvPoison, Handle);
+        , catch (const std::exception& e) {
+            TIssues issues{TIssue{TStringBuilder() << "An unknown exception has occurred: '" << e.what() << "'"}};
+            Send(ComputeActorId, new IDqComputeActorAsyncInput::TEvAsyncInputError(InputIndex, issues, NYql::NDqProto::StatusIds::INTERNAL_ERROR));
+        }
     )
 
     void ProcessOneEvent() {
@@ -2836,7 +2857,7 @@ private:
         TActorBootstrapped<TS3StreamReadActor>::PassAway();
     }
 
-    STRICT_STFUNC(StateFunc,
+    STRICT_STFUNC_EXC(StateFunc,
         hFunc(TEvPrivate::TEvRetryEventFunc, HandleRetry);
         hFunc(TEvPrivate::TEvNextBlock, HandleNextBlock);
         hFunc(TEvPrivate::TEvNextRecordBatch, HandleNextRecordBatch);
@@ -2847,11 +2868,19 @@ private:
         hFunc(NYql::NDq::TEvRetryQueuePrivate::TEvRetry, Handle);
         hFunc(NActors::TEvInterconnect::TEvNodeDisconnected, Handle);
         hFunc(NActors::TEvInterconnect::TEvNodeConnected, Handle);
+        hFunc(NActors::TEvents::TEvUndelivered, Handle);
+        , catch (const std::exception& e) {
+            TIssues issues{TIssue{TStringBuilder() << "An unknown exception has occurred: '" << e.what() << "'"}};
+            Send(ComputeActorId, new TEvAsyncInputError(InputIndex, issues, NYql::NDqProto::StatusIds::INTERNAL_ERROR));
+        }
     )
 
     void HandleObjectPathBatch(TEvS3FileQueue::TEvObjectPathBatch::TPtr& objectPathBatch) {
+        if (!FileQueueEvents.OnEventReceived(objectPathBatch)) {
+            return;
+        }
+
         Y_ENSURE(IsWaitingFileQueueResponse);
-        FileQueueEvents.OnEventReceived(objectPathBatch);
         IsWaitingFileQueueResponse = false;
         auto& objectBatch = objectPathBatch->Get()->Record;
         ListedFiles += objectBatch.GetObjectPaths().size();
@@ -2877,7 +2906,10 @@ private:
     }
 
     void HandleObjectPathReadError(TEvS3FileQueue::TEvObjectPathReadError::TPtr& result) {
-        FileQueueEvents.OnEventReceived(result);
+        if (!FileQueueEvents.OnEventReceived(result)) {
+            return;
+        }
+
         IsFileQueueEmpty = true;
         if (!IsConfirmedFileQueueFinish) {
             LOG_T("TS3StreamReadActor", "Sending finish confirmation to FileQueue");
@@ -2981,8 +3013,7 @@ private:
         FileQueueEvents.OnEventReceived(ev);
     }
 
-    void Handle(const NYql::NDq::TEvRetryQueuePrivate::TEvRetry::TPtr& ev) {
-        Y_UNUSED(ev);
+    void Handle(const NYql::NDq::TEvRetryQueuePrivate::TEvRetry::TPtr&) {
         FileQueueEvents.Retry();
     }
 
@@ -2992,10 +3023,17 @@ private:
     }
 
     void Handle(NActors::TEvInterconnect::TEvNodeConnected::TPtr& ev) {
-        LOG_T("TS3StreamReadActor","Handle connected FileQueue " << ev->Get()->NodeId);
+        LOG_T("TS3StreamReadActor", "Handle connected FileQueue " << ev->Get()->NodeId);
         FileQueueEvents.HandleNodeConnected(ev->Get()->NodeId);
     }
 
+    void Handle(NActors::TEvents::TEvUndelivered::TPtr& ev) {
+        LOG_T("TS3StreamReadActor", "Handle undelivered FileQueue ");
+        if (!FileQueueEvents.HandleUndelivered(ev)) {
+            TIssues issues{TIssue{TStringBuilder() << "FileQueue was lost"}};
+            Send(ComputeActorId, new TEvAsyncInputError(InputIndex, issues, NYql::NDqProto::StatusIds::INTERNAL_ERROR));
+        }
+    }
     bool LastFileWasProcessed() const {
         return Blocks.empty() && (ListedFiles == CompletedFiles) && IsFileQueueEmpty;
     }

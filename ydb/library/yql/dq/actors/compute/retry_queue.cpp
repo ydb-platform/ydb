@@ -47,6 +47,16 @@ void TRetryEventsQueue::HandleNodeConnected(ui32 nodeId) {
     }
 }
 
+bool TRetryEventsQueue::HandleUndelivered(NActors::TEvents::TEvUndelivered::TPtr& ev) {
+    if (ev->Sender == RecipientId && ev->Get()->Reason == NActors::TEvents::TEvUndelivered::Disconnected) {
+        Connected = false;
+        ScheduleRetry();
+        return true;
+    }
+
+    return false;
+}
+
 void TRetryEventsQueue::Retry() {
     RetryScheduled = false;
     if (!Connected) {

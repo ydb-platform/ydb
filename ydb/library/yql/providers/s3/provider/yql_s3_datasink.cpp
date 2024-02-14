@@ -29,7 +29,7 @@ void ScanPlanDependencies(const TExprNode::TPtr& input, TExprNode::TListType& ch
 
 class TS3DataSinkProvider : public TDataProviderBase {
 public:
-    TS3DataSinkProvider(TS3State::TPtr state, IHTTPGateway::TPtr)
+    TS3DataSinkProvider(TS3State::TPtr state)
         : State_(state)
         , TypeAnnotationTransformer_(CreateS3DataSinkTypeAnnotationTransformer(State_))
         , ExecutionTransformer_(CreateS3DataSinkExecTransformer(State_))
@@ -137,8 +137,8 @@ private:
 
 }
 
-TIntrusivePtr<IDataProvider> CreateS3DataSink(TS3State::TPtr state, IHTTPGateway::TPtr gateway) {
-    return new TS3DataSinkProvider(std::move(state), std::move(gateway));
+TIntrusivePtr<IDataProvider> CreateS3DataSink(TS3State::TPtr state) {
+    return new TS3DataSinkProvider(std::move(state));
 }
 
 } // namespace NYql

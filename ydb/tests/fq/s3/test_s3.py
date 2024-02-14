@@ -17,8 +17,6 @@ class TestS3(TestYdsBase):
     @pytest.mark.parametrize("client", [{"folder_id": "my_folder"}], indirect=True)
     @pytest.mark.parametrize("runtime_listing", [False, True])
     def test_csv(self, kikimr, s3, client, runtime_listing, yq_version):
-        if yq_version == "v1" and runtime_listing:
-            pytest.skip("Runtime listing is v2 only")
 
         resource = boto3.resource(
             "s3",
@@ -137,8 +135,6 @@ Pear,15,33'''
     @pytest.mark.parametrize("client", [{"folder_id": "my_folder"}], indirect=True)
     @pytest.mark.parametrize("runtime_listing", [False, True])
     def test_raw(self, kikimr, s3, client, runtime_listing, yq_version):
-        if yq_version == "v1" and runtime_listing:
-            pytest.skip("Runtime listing is v2 only")
 
         resource = boto3.resource(
             "s3",
@@ -196,8 +192,6 @@ Pear,15,33'''
     @pytest.mark.parametrize("kikimr", [{"raw": 3, "": 4}], indirect=True)
     @pytest.mark.parametrize("runtime_listing", [False, True])
     def test_limit(self, kikimr, s3, client, runtime_listing, yq_version):
-        if yq_version == "v1" and runtime_listing:
-            pytest.skip("Runtime listing is v2 only")
 
         resource = boto3.resource(
             "s3",
@@ -255,8 +249,6 @@ Pear,15,33'''
     @pytest.mark.parametrize("client", [{"folder_id": "my_folder"}], indirect=True)
     @pytest.mark.parametrize("runtime_listing", [False, True])
     def test_bad_format(self, kikimr, s3, client, runtime_listing, yq_version):
-        if yq_version == "v1" and runtime_listing:
-            pytest.skip("Runtime listing is v2 only")
 
         resource = boto3.resource(
             "s3",
@@ -493,8 +485,6 @@ Pear,15,33'''
     @pytest.mark.parametrize("client", [{"folder_id": "my_folder"}], indirect=True)
     @pytest.mark.parametrize("runtime_listing", [False, True])
     def test_precompute(self, kikimr, s3, client, runtime_listing, yq_version):
-        if yq_version == "v1" and runtime_listing:
-            pytest.skip("Runtime listing is v2 only")
 
         resource = boto3.resource(
             "s3",
@@ -556,8 +546,6 @@ Pear,15,33'''
     @pytest.mark.parametrize("client", [{"folder_id": "my_folder"}], indirect=True)
     @pytest.mark.parametrize("runtime_listing", [False, True])
     def test_failed_precompute(self, kikimr, s3, client, runtime_listing, yq_version):
-        if yq_version == "v1" and runtime_listing:
-            pytest.skip("Runtime listing is v2 only")
 
         resource = boto3.resource(
             "s3",
@@ -608,8 +596,6 @@ Pear,15,33'''
     @pytest.mark.parametrize("client", [{"folder_id": "my_folder"}], indirect=True)
     @pytest.mark.parametrize("runtime_listing", [False, True])
     def test_missed(self, kikimr, s3, client, runtime_listing, yq_version):
-        if yq_version == "v1" and runtime_listing:
-            pytest.skip("Runtime listing is v2 only")
 
         resource = boto3.resource(
             "s3",
@@ -658,8 +644,6 @@ Pear,15,33'''
     @pytest.mark.parametrize("client", [{"folder_id": "my_folder"}], indirect=True)
     @pytest.mark.parametrize("runtime_listing", [False, True])
     def test_simple_hits_47(self, kikimr, s3, client, runtime_listing, yq_version):
-        if yq_version == "v1" and runtime_listing:
-            pytest.skip("Runtime listing is v2 only")
 
         resource = boto3.resource(
             "s3",
@@ -724,8 +708,6 @@ Pear,15,33'''
     @pytest.mark.parametrize("path_pattern", ["exact_file", "directory_scan"])
     @pytest.mark.parametrize("runtime_listing", [False, True])
     def test_i18n_unpartitioned(self, kikimr, s3, client, raw, path_pattern, runtime_listing, yq_version):
-        if yq_version == "v1" and runtime_listing:
-            pytest.skip("Runtime listing is v2 only")
 
         resource = boto3.resource(
             "s3",
@@ -763,6 +745,7 @@ Pear,15,33'''
         else:
             raise ValueError(f"Unknown path_pattern {path_pattern}")
 
+        format = "raw" if raw else "csv_with_names"
         sql = f'''
             pragma s3.UseRuntimeListing="{str(runtime_listing).lower()}";
 
@@ -771,7 +754,7 @@ Pear,15,33'''
             WITH (format={format}, SCHEMA (
                 Data String
             ));
-            '''.format(path=path, format="raw" if raw else "csv_with_names")
+            '''
 
         query_id = client.create_query("simple", sql, type=fq.QueryContent.QueryType.ANALYTICS).result.query_id
         client.wait_query_status(query_id, fq.QueryMeta.COMPLETED)
@@ -792,8 +775,6 @@ Pear,15,33'''
     @pytest.mark.parametrize("partitioning", ["hive", "projection"])
     @pytest.mark.parametrize("runtime_listing", [False, True])
     def test_i18n_partitioning(self, kikimr, s3, client, raw, partitioning, yq_version, runtime_listing):
-        if yq_version == "v1" and runtime_listing:
-            pytest.skip("Runtime listing is v2 only")
 
         resource = boto3.resource(
             "s3",
@@ -884,8 +865,6 @@ Pear,15,33'''
     @pytest.mark.parametrize("client", [{"folder_id": "my_folder"}], indirect=True)
     @pytest.mark.parametrize("runtime_listing", [False, True])
     def test_huge_source(self, kikimr, s3, client, runtime_listing, yq_version):
-        if yq_version == "v1" and runtime_listing:
-            pytest.skip("Runtime listing is v2 only")
 
         resource = boto3.resource(
             "s3",

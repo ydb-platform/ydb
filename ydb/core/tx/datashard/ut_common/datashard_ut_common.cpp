@@ -1931,7 +1931,7 @@ TTestActorRuntimeBase::TEventObserverHolderPair ReplaceEvProposeTransactionWithE
         UNIT_ASSERT(blobData.size() < 8_MB);
 
         ui64 txId = record.GetTxId();
-        auto txMode = NKikimr::NDataShard::EvWrite::Convertor::GetTxMode(record.GetFlags());
+        auto txMode = NKikimr::NDataShard::NEvWrite::TConvertor::GetTxMode(record.GetFlags());
         std::vector<ui32> columnIds(colCount);
         std::iota(columnIds.begin(), columnIds.end(), 1);
 
@@ -1963,7 +1963,7 @@ TTestActorRuntimeBase::TEventObserverHolderPair ReplaceEvProposeTransactionWithE
         // Construct new EvProposeTransactionResult
         ui64 txId = record.GetTxId();
         ui64 origin = record.GetOrigin();
-        auto status = NKikimr::NDataShard::EvWrite::Convertor::GetStatus(record.GetStatus());
+        auto status = NKikimr::NDataShard::NEvWrite::TConvertor::GetStatus(record.GetStatus());
 
         auto evResult = std::make_unique<TEvDataShard::TEvProposeTransactionResult>(NKikimrTxDataShard::TX_KIND_DATA, origin, txId, status);
         

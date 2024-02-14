@@ -232,7 +232,7 @@ void TDataShard::Handle(NEvents::TDataEvents::TEvWrite::TPtr& ev, const TActorCo
     ProposeTransaction(std::move(ev), ctx);
 }
 
-ui64 EvWrite::Convertor::GetTxId(const TAutoPtr<IEventHandle>& ev) {
+ui64 NEvWrite::TConvertor::GetTxId(const TAutoPtr<IEventHandle>& ev) {
     switch (ev->GetTypeRewrite()) {
         case TEvDataShard::TEvProposeTransaction::EventType:
             return ev->Get<TEvDataShard::TEvProposeTransaction>()->GetTxId();
@@ -243,7 +243,7 @@ ui64 EvWrite::Convertor::GetTxId(const TAutoPtr<IEventHandle>& ev) {
     }
 }
 
-ui64 EvWrite::Convertor::GetProposeFlags(NKikimrDataEvents::TEvWrite::ETxMode txMode) {
+ui64 NEvWrite::TConvertor::GetProposeFlags(NKikimrDataEvents::TEvWrite::ETxMode txMode) {
     switch (txMode) {
         case NKikimrDataEvents::TEvWrite::MODE_PREPARE:
             return TTxFlags::Default;
@@ -256,7 +256,7 @@ ui64 EvWrite::Convertor::GetProposeFlags(NKikimrDataEvents::TEvWrite::ETxMode tx
     }
 }
 
-NKikimrDataEvents::TEvWrite::ETxMode EvWrite::Convertor::GetTxMode(ui64 flags) {
+NKikimrDataEvents::TEvWrite::ETxMode NEvWrite::TConvertor::GetTxMode(ui64 flags) {
     if ((flags & TTxFlags::Immediate) && !(flags & TTxFlags::ForceOnline)) {
         return NKikimrDataEvents::TEvWrite::ETxMode::TEvWrite_ETxMode_MODE_IMMEDIATE;
     }
@@ -268,7 +268,7 @@ NKikimrDataEvents::TEvWrite::ETxMode EvWrite::Convertor::GetTxMode(ui64 flags) {
     }
 }
 
-NKikimrTxDataShard::TEvProposeTransactionResult::EStatus EvWrite::Convertor::GetStatus(NKikimrDataEvents::TEvWriteResult::EStatus status) {
+NKikimrTxDataShard::TEvProposeTransactionResult::EStatus NEvWrite::TConvertor::GetStatus(NKikimrDataEvents::TEvWriteResult::EStatus status) {
     switch (status) {
         case NKikimrDataEvents::TEvWriteResult::STATUS_COMPLETED:
             return NKikimrTxDataShard::TEvProposeTransactionResult::COMPLETE;
@@ -279,7 +279,7 @@ NKikimrTxDataShard::TEvProposeTransactionResult::EStatus EvWrite::Convertor::Get
     }
 }
 
-NKikimrDataEvents::TEvWriteResult::EStatus EvWrite::Convertor::ConvertErrCode(NKikimrTxDataShard::TError::EKind code) {
+NKikimrDataEvents::TEvWriteResult::EStatus NEvWrite::TConvertor::ConvertErrCode(NKikimrTxDataShard::TError::EKind code) {
     switch (code) {
         case NKikimrTxDataShard::TError_EKind_OK:
             return NKikimrDataEvents::TEvWriteResult::STATUS_COMPLETED;
@@ -294,7 +294,7 @@ NKikimrDataEvents::TEvWriteResult::EStatus EvWrite::Convertor::ConvertErrCode(NK
     }
 }
 
-TOperation::TPtr EvWrite::Convertor::MakeOperation(EOperationKind kind, const TBasicOpInfo& info, ui64 tabletId) {
+TOperation::TPtr NEvWrite::TConvertor::MakeOperation(EOperationKind kind, const TBasicOpInfo& info, ui64 tabletId) {
     switch (kind) {
         case EOperationKind::DataTx:
         case EOperationKind::SchemeTx:

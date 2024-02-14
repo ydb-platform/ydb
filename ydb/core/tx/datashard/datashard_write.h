@@ -7,11 +7,11 @@
 
 #include <util/generic/ptr.h>
 
-namespace NKikimr::NDataShard::EvWrite {
+namespace NKikimr::NDataShard::NEvWrite {
 
 using namespace NActors;
 
-class Convertor {
+class TConvertor {
 public:
     static ui64 GetTxId(const TAutoPtr<IEventHandle>& ev);
     static ui64 GetProposeFlags(NKikimrDataEvents::TEvWrite::ETxMode txMode);

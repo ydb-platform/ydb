@@ -83,7 +83,7 @@ bool TTransQueue::Load(NIceDb::TNiceDb& db) {
 
             TBasicOpInfo info(txId, kind, flags, maxStep, TInstant::FromValue(received), Self->NextTieBreakerIndex++);
 
-            TOperation::TPtr op = EvWrite::Convertor::MakeOperation(kind, info, Self->TabletID());
+            TOperation::TPtr op = NEvWrite::TConvertor::MakeOperation(kind, info, Self->TabletID());
 
             if (rowset.HaveValue<Schema::TxMain::Source>()) {
                 op->SetTarget(rowset.GetValue<Schema::TxMain::Source>());

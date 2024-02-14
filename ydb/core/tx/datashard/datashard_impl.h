@@ -2423,7 +2423,7 @@ private:
         void Enqueue(TAutoPtr<IEventHandle> event, TInstant receivedAt, ui64 tieBreakerIndex, const TActorContext& ctx) {
             TItem* item = &Items.emplace_back(std::move(event), receivedAt, tieBreakerIndex);
 
-            const ui64 txId = EvWrite::Convertor::GetTxId(item->Event);
+            const ui64 txId = NEvWrite::TConvertor::GetTxId(item->Event);
 
             auto& links = TxIds[txId];
             if (Y_UNLIKELY(links.Last)) {
@@ -2438,7 +2438,7 @@ private:
 
         TItem Dequeue() {
             TItem* first = &Items.front();
-            const ui64 txId = EvWrite::Convertor::GetTxId(first->Event);
+            const ui64 txId = NEvWrite::TConvertor::GetTxId(first->Event);
 
             auto it = TxIds.find(txId);
             Y_ABORT_UNLESS(it != TxIds.end() && it->second.First == first,

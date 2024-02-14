@@ -111,7 +111,7 @@ bool TValidatedWriteTx::ParseOperation(const NEvents::TDataEvents::TEvWrite& ev,
         return false;
     }
 
-    NEvWrite::TPayloadReader<NEvents::TDataEvents::TEvWrite> payloadReader(ev);
+    ::NKikimr::NEvWrite::TPayloadReader<NEvents::TDataEvents::TEvWrite> payloadReader(ev);
     TString payload = payloadReader.GetDataFromPayload(recordOperation.GetPayloadIndex());
 
     if (!TSerializedCellMatrix::TryParse(payload, Matrix))

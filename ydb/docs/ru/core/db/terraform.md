@@ -258,7 +258,7 @@ resource "ydb_table_index" "ydb_table_index" {
 
 * `name` — (обязательный) имя индекса.
 * `type` — (обязательный) тип индекса [global_sync | global_async](../yql/reference/syntax/create_table.md#secondary_index).
-* `columns` — (обязательный) колонки в индексе.
+* `columns` — (обязательный) упорядоченный список имён колонок, участвующий в индексе.
 * `cover` — (обязательный) колонки для покрывающего индекса.
 
 ### Поток изменений таблицы {#ydb-table-changefeed}

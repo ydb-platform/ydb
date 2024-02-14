@@ -635,6 +635,7 @@ create_table_entry:
   | table_index
   | family_entry
   | changefeed
+  | an_id_schema
 ;
 
 table_inherits: INHERITS LPAREN simple_table_ref_core (COMMA simple_table_ref_core)* RPAREN;

@@ -1041,14 +1041,24 @@ Y_UNIT_TEST_SUITE(SqlParsingOnly) {
         UNIT_ASSERT_VALUES_EQUAL(1, elementStat["Write!"]);
     }
 
-    Y_UNIT_TEST(CreateTableAsSelect) {
+    Y_UNIT_TEST(CreateTableWithoutTypes) {
+        NYql::TAstParseResult res = SqlToYql("USE plato; CREATE TABLE t (a, primary key(a));");
+        UNIT_ASSERT(!res.Root);
+    }
+
+    Y_UNIT_TEST(CreateTableAsSelectWithTypes) {
         NYql::TAstParseResult res = SqlToYql("USE plato; CREATE TABLE t (a int32, primary key(a)) AS SELECT * FROM ts;");
+        UNIT_ASSERT(!res.Root);
+    }
+
+    Y_UNIT_TEST(CreateTableAsSelect) {
+        NYql::TAstParseResult res = SqlToYql("USE plato; CREATE TABLE t (a, b, primary key(a)) AS SELECT * FROM ts;");
         UNIT_ASSERT_C(res.Root, res.Issues.ToString());
 
         TVerifyLineFunc verifyLine = [](const TString& word, const TString& line) {
             if (word == "Write!") {
                 UNIT_ASSERT_VALUES_UNEQUAL(TString::npos,
-                                           line.find(R"__((Write! world sink (Key '('tablescheme (String '"t"))) values '('('mode 'create) '('columns '('('"a" (AsOptionalType (DataType 'Int32)) '('columnConstrains '()) '()))) '('primarykey '('"a")))))__"));
+                                           line.find(R"__((let world (Write! world sink (Key '('tablescheme (String '"t"))) values '('('mode 'create) '('columns '('('"a") '('"b"))) '('primarykey '('"a"))))))__"));
             }
             if (word == "Read!") {
                 UNIT_ASSERT_VALUES_UNEQUAL(TString::npos,
@@ -1086,7 +1096,7 @@ Y_UNIT_TEST_SUITE(SqlParsingOnly) {
     }
 
     Y_UNIT_TEST(CreateTableAsValuesFail) {
-        NYql::TAstParseResult res = SqlToYql("USE plato; CREATE TABLE t (a int32, primary key(a)) AS VALUES (1), (2);");
+        NYql::TAstParseResult res = SqlToYql("USE plato; CREATE TABLE t (a, primary key(a)) AS VALUES (1), (2);");
         UNIT_ASSERT(!res.Root);
     }
 

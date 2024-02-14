@@ -161,7 +161,7 @@ protected:
     bool ApplyTableBinding(const TString& binding, TTableRef& tr, TTableHints& hints);
 
     TMaybe<TColumnSchema> ColumnSchemaImpl(const TRule_column_schema& node);
-    bool CreateTableEntry(const TRule_create_table_entry& node, TCreateTableParameters& params);
+    bool CreateTableEntry(const TRule_create_table_entry& node, TCreateTableParameters& params, const bool isCreateTableAs);
 
     bool FillFamilySettingsEntry(const TRule_family_settings_entry& settingNode, TFamilyEntry& family);
     bool FillFamilySettings(const TRule_family_settings& settingsNode, TFamilyEntry& family);

@@ -69,6 +69,9 @@ message TKqpPhyColumn {
         Ydb.TypedValue DefaultFromLiteral = 5;
     }
     bool NotNull = 6;
+    // flag that indicates that column is currently under the build
+    // operation.
+    optional bool IsBuildInProgress = 7;
 }
 
 enum EKqpPhyTableKind {

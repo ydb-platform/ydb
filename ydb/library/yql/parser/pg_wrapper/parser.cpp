@@ -216,35 +216,6 @@ void PGParse(const TString& input, IPGParseEvents& events) {
     }
 }
 
-List* PGGetStatements(const TString& input) {
-    pg_thread_init();
-
-    PgQueryInternalParsetreeAndError parsetree_and_error;
-
-    TArenaMemoryContext arena;
-    auto prevErrorContext = ErrorContext;
-    ErrorContext = CurrentMemoryContext;
-
-    Y_DEFER {
-        ErrorContext = prevErrorContext;
-    };
-
-    parsetree_and_error = pg_query_raw_parse(input.c_str());
-    Y_DEFER {
-        if (parsetree_and_error.error) {
-            pg_query_free_error(parsetree_and_error.error);
-        }
-
-        free(parsetree_and_error.stderr_buffer);
-    };
-
-    if (parsetree_and_error.error) {
-        return nullptr;
-    } else {
-        return parsetree_and_error.tree;
-    }
-}
-
 TString PrintPGTree(const List* raw) {
     auto str = nodeToString(raw);
     Y_DEFER {

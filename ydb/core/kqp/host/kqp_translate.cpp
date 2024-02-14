@@ -227,6 +227,9 @@ TVector<TQueryAst> ParseStatements(NYql::EKikimrQueryType queryType, const TMayb
 TVector<TQueryAst> ParseStatements(NYql::EKikimrQueryType queryType, const TMaybe<Ydb::Query::Syntax>& syntax, const TString& queryText, std::shared_ptr<std::map<TString, Ydb::Type>> queryParameters,
         TString cluster, TString kqpTablePathPrefix, ui16 kqpYqlSyntaxVersion, NSQLTranslation::EBindingsMode bindingsMode, bool isEnableExternalDataSources, bool isEnablePgConstsToParams, bool isSql,
         bool perStatementExecution) {
+    if (!perStatementExecution) {
+        return {ParseQuery(queryType, syntax, queryText, queryParameters, isSql, cluster, kqpTablePathPrefix, kqpYqlSyntaxVersion, bindingsMode, isEnableExternalDataSources, isEnablePgConstsToParams)};
+    }
     TMaybe<ui16> sqlVersion;
     TMaybe<bool> usePgParser;
     if (syntax)

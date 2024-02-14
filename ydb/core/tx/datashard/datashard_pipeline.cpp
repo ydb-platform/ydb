@@ -59,7 +59,6 @@ bool TPipeline::Load(NIceDb::TNiceDb& db) {
         return false;
     }
 
-    Config.Validate();
     UtmostCompleteTx = LastCompleteTx;
 
     return true;
@@ -1335,14 +1334,17 @@ ui64 TPipeline::GetInactiveTxSize() const {
 
 bool TPipeline::SaveForPropose(TValidatedTx::TPtr tx) {
     Y_ABORT_UNLESS(tx && tx->GetTxId());
-    if (DataTxCache.size() <= Config.LimitDataTxCache) {
-        ui64 quota = tx->GetMemoryConsumption();
-        if (Self->TryCaptureTxCache(quota)) {
-            tx->SetTxCacheUsage(quota);
-            DataTxCache[tx->GetTxId()] = tx;
-            return true;
-        }
+
+    if (DataTxCache.size() >= Config.LimitDataTxCache)
+        return false;
+
+    ui64 quota = tx->GetMemoryConsumption();
+    if (Self->TryCaptureTxCache(quota)) {
+        tx->SetTxCacheUsage(quota);
+        DataTxCache[tx->GetTxId()] = tx;
+        return true;
     }
+
     return false;
 }
 

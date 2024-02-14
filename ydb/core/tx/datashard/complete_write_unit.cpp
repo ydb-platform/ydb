@@ -44,15 +44,11 @@ EExecutionStatus TCompleteWriteUnit::Execute(TOperation::TPtr op,
                                                  TTransactionContext &txc,
                                                  const TActorContext &ctx)
 {
+    TWriteOperation* writeOp = TWriteOperation::CastWriteOperation(op);
+
     Pipeline.DeactivateOp(op, txc, ctx);
 
-    TOutputOpData::TResultPtr &result = op->Result();
-    if (result) {
-        auto execLatency = op->GetCompletedAt() - op->GetStartExecutionAt();
-        result->Record.SetExecLatency(execLatency.MilliSeconds());
-    }
-
-    if (result) {
+    if (writeOp->GetWriteResult()) {
         Pipeline.AddCompletingOp(op);
     }
 

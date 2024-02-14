@@ -278,12 +278,23 @@ public:
     }
 };
 
+struct TFailTimer {
+    using TTime = TInstant;
+    static TTime Now() {
+        Y_FAIL();
+    }
+};
+
+template<class TBackupTimer = TFailTimer>
 struct TAppDataTimerMs {
     using TTime = TInstant;
     static constexpr ui64 Resolution = 1000ull; // milliseconds
     static TTime Now() {
-        Y_ABORT_UNLESS(NKikimr::TAppData::TimeProvider);
-        return NKikimr::TAppData::TimeProvider->Now();
+        if (NKikimr::TAppData::TimeProvider) {
+            return NKikimr::TAppData::TimeProvider->Now();
+        } else {
+            return TBackupTimer::Now();
+        }
     }
     static ui64 Duration(TTime from, TTime to) {
         return (to - from).MilliSeconds();
@@ -309,7 +320,7 @@ private:
 
     TAtomic BucketCapacity = 1'000'000'000;  // 10^9 nsec
     TAtomic DiskTimeAvailableNs = 1'000'000'000;
-    TBucketQuoter<i64, TSpinLock, TAppDataTimerMs> Bucket;
+    TBucketQuoter<i64, TSpinLock, TAppDataTimerMs<TInstantTimerMs>> Bucket;
     TLight BurstDetector;
     std::atomic<ui64> SeqnoBurstDetector = 0;
     static constexpr ui32 ConcurrentHugeRequestsAllowed = 3;

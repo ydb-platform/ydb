@@ -39,7 +39,7 @@ static const std::map<TString, TAttributeInfo> AttributesInfo = {
     { "FifoQueue",                             { false,  true, false,  true } },
     { "ContentBasedDeduplication",             { false,  true, false,  true } },
     { "QueueArn",                              { false, false,  true, false } },
-    { "FolderID",                              {false, false, false, false} },
+    { "FolderID",                              { false, false, false, false } },
 };
 
 class TGetQueueAttributesActor

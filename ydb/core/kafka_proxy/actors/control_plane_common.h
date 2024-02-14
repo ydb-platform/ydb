@@ -20,20 +20,21 @@ struct TRetentionsConversionResult {
     std::vector<TString> ErrorMessages;
 
     TAutoPtr<TEvKafka::TEvTopicModificationResponse> GetKafkaErrorResponse(TString topicName) {
-        Y_ABORT_IF(IsValid);
-        Y_ABORT_UNLESS(ErrorMessages.size() > 0);
-
         auto response = MakeHolder<TEvKafka::TEvTopicModificationResponse>();
-
         response->TopicPath = topicName;
-        response->Status = INVALID_CONFIG;
 
-        TStringBuilder resultErrorMessage;
-        resultErrorMessage << ErrorMessages[0];
-        for (ulong i = 1; i < ErrorMessages.size(); i++) {
-            resultErrorMessage << ' ' << ErrorMessages[i];
+        if (ErrorMessages.size() == 0) {
+            response->Status = NONE_ERROR;
+        } else {
+            response->Status = INVALID_CONFIG;
+
+            TStringBuilder resultErrorMessage;
+            resultErrorMessage << ErrorMessages[0];
+            for (ulong i = 1; i < ErrorMessages.size(); i++) {
+                resultErrorMessage << ' ' << ErrorMessages[i];
+            }
+            response->Message = resultErrorMessage;
         }
-        response->Message = resultErrorMessage;
 
         return TAutoPtr<TEvKafka::TEvTopicModificationResponse>(response.Release());
     }

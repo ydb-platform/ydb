@@ -1,7 +1,9 @@
 #pragma once
+#include <ydb/library/conclusion/status.h>
+
 #include <util/stream/output.h>
 #include <util/string/cast.h>
-#include <ydb/library/conclusion/status.h>
+#include <util/datetime/base.h>
 
 namespace NKikimrColumnShardProto {
 class TSnapshot;
@@ -18,6 +20,10 @@ public:
     constexpr TSnapshot(const ui64 planStep, const ui64 txId) noexcept
         : PlanStep(planStep)
         , TxId(txId) {
+    }
+
+    constexpr TInstant GetPlanInstant() const noexcept {
+        return TInstant::MilliSeconds(PlanStep);
     }
 
     constexpr ui64 GetPlanStep() const noexcept {

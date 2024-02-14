@@ -2,6 +2,8 @@
 #include <ydb/core/base/appdata.h>
 #include <ydb/core/base/counters.h>
 
+#include <ydb/library/actors/core/log.h>
+
 namespace NKikimr::NColumnShard {
 
 TCSCounters::TCSCounters()
@@ -24,8 +26,12 @@ TCSCounters::TCSCounters()
 
     OverloadInsertTableBytes = TBase::GetDeriviative("OverloadInsertTable/Bytes");
     OverloadInsertTableCount = TBase::GetDeriviative("OverloadInsertTable/Count");
-    OverloadShardBytes = TBase::GetDeriviative("OverloadShard/Bytes");
-    OverloadShardCount = TBase::GetDeriviative("OverloadShard/Count");
+    OverloadShardTxBytes = TBase::GetDeriviative("OverloadShard/Tx/Bytes");
+    OverloadShardTxCount = TBase::GetDeriviative("OverloadShard/Tx/Count");
+    OverloadShardWritesBytes = TBase::GetDeriviative("OverloadShard/Writes/Bytes");
+    OverloadShardWritesCount = TBase::GetDeriviative("OverloadShard/Writes/Count");
+    OverloadShardWritesSizeBytes = TBase::GetDeriviative("OverloadShard/WritesSize/Bytes");
+    OverloadShardWritesSizeCount = TBase::GetDeriviative("OverloadShard/WritesSize/Count");
 
     InternalCompactionGranuleBytes = TBase::GetValueAutoAggregationsClient("InternalCompaction/Bytes");
     InternalCompactionGranulePortionsCount = TBase::GetValueAutoAggregationsClient("InternalCompaction/PortionsCount");
@@ -39,12 +45,25 @@ TCSCounters::TCSCounters()
     HistogramSuccessWriteMiddle3PutBlobsDurationMs = TBase::GetHistogram("SuccessWriteMiddle3PutBlobsDurationMs", NMonitoring::ExponentialHistogram(18, 2, 5));
     HistogramSuccessWriteMiddle4PutBlobsDurationMs = TBase::GetHistogram("SuccessWriteMiddle4PutBlobsDurationMs", NMonitoring::ExponentialHistogram(18, 2, 5));
     HistogramSuccessWriteMiddle5PutBlobsDurationMs = TBase::GetHistogram("SuccessWriteMiddle5PutBlobsDurationMs", NMonitoring::ExponentialHistogram(18, 2, 5));
+    HistogramSuccessWriteMiddle6PutBlobsDurationMs = TBase::GetHistogram("SuccessWriteMiddle6PutBlobsDurationMs", NMonitoring::ExponentialHistogram(18, 2, 5));
     HistogramFailedWritePutBlobsDurationMs = TBase::GetHistogram("FailedWritePutBlobsDurationMs", NMonitoring::ExponentialHistogram(18, 2, 5));
     HistogramWriteTxCompleteDurationMs = TBase::GetHistogram("WriteTxCompleteDurationMs", NMonitoring::ExponentialHistogram(18, 2, 5));
     WritePutBlobsCount = TBase::GetValue("WritePutBlobs");
     WriteRequests = TBase::GetValue("WriteRequests");
-    FailedWriteRequests = TBase::GetDeriviative("FailedWriteRequests");
+
+    for (auto&& i : GetEnumAllValues<EWriteFailReason>()) {
+        auto sub = CreateSubGroup("reason", ::ToString(i));
+        FailedWriteRequests.emplace(i, sub.GetDeriviative("FailedWriteRequests"));
+    }
+
     SuccessWriteRequests = TBase::GetDeriviative("SuccessWriteRequests");
+}
+
+void TCSCounters::OnFailedWriteResponse(const EWriteFailReason reason) const {
+    WriteRequests->Sub(1);
+    auto it = FailedWriteRequests.find(reason);
+    AFL_VERIFY(it != FailedWriteRequests.end());
+    it->second->Add(1);
 }
 
 }

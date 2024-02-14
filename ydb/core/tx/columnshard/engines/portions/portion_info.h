@@ -30,6 +30,8 @@ private:
     YDB_READONLY_DEF(std::vector<TIndexChunk>, Indexes);
 
 public:
+    ui64 GetTxVolume() const; // fake-correct method for determ volume on rewrite this portion in transaction progress
+
     class TPage {
     private:
         YDB_READONLY_DEF(std::vector<const TColumnRecord*>, Records);

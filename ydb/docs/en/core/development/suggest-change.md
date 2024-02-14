@@ -126,7 +126,12 @@ git config push.default current
 git config push.autoSetupRemote true
 ```
 
-This way, `git push {remote}` command will automatically set upstream for the current branch to the `{remote}` and consecutive `git push` commands will only push current branch.  
+This way, `git push {remote}` command will automatically set upstream for the current branch to the `{remote}` and consecutive `git push` commands will only push current branch.
+
+If you intend to use GitHub CLI, then set `ydb-platform/ydb` as a default repository for GitHub CLI:
+```
+gh repo set-default ydb-platform/ydb
+```
 
 ### Configure commit authorship {#author}
 
@@ -212,11 +217,6 @@ When the changes are completed and locally tested (see [Ya Build and Test](build
   Install and configure [GitHub CLI](https://cli.github.com/).
   ```
   cd ~/ydbwork/ydb
-  ```
-  
-  Set `ydb-platform/ydb` as a default repository for GitHub CLI:
-  ```
-  gh repo set-default ydb-platform/ydb
   ```
   
   ```

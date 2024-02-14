@@ -129,6 +129,11 @@ git config push.autoSetupRemote true
 
 Таким образом, команда `git push {remote}`будет автоматически устанавливать upstream `{remote}` для текущей ветки и последующие команды `git push` будут отправлять только текущую ветку.
 
+Если вы собираетесь использовать GitHub CLI, установите `ydb-platform/ydb` репозиторием по умолчанию для GitHub CLI:
+```
+gh repo set-default ydb-platform/ydb
+```
+
 ### Настройка авторства коммитов {#author}
 
 Запустите следующую команду, чтобы указать свое имя и адрес электронной почты для коммитов, отправляемых с помощью Git (замените имя пользователя и email на ваши):
@@ -212,11 +217,6 @@ git push
   Установите и сконфигурируйте [GitHub CLI](https://cli.github.com/).
   ```
   cd ~/ydbwork/ydb
-  ```
-
-  Установите `ydb-platform/ydb` репозиторием по умолчанию для GitHub CLI:
-  ```
-  gh repo set-default ydb-platform/ydb
   ```
 
   ```

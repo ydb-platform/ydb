@@ -96,6 +96,11 @@ ELSEIF (ARCH_ARM7EM AND OS_NONE)
         contrib/restricted/libffi/configs/x86_64-pc-linux-gnu
         GLOBAL contrib/restricted/libffi/configs/x86_64-pc-linux-gnu/include
     )
+ELSEIF (ARCH_ARM8M AND OS_NONE)
+    ADDINCL(
+        contrib/restricted/libffi/configs/x86_64-pc-linux-gnu
+        GLOBAL contrib/restricted/libffi/configs/x86_64-pc-linux-gnu/include
+    )
 ELSEIF (ARCH_I386 AND OS_ANDROID)
     ADDINCL(
         contrib/restricted/libffi/configs/i686-pc-linux-android16

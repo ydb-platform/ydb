@@ -12,7 +12,6 @@
 #include <ydb/library/yql/dq/expr_nodes/dq_expr_nodes.h>
 #include <ydb/library/yql/core/yql_opt_utils.h>
 #include <ydb/library/yql/utils/log/log.h>
-#include <ydb/library/yql/core/cbo/cbo_optimizer.h>
 #include <ydb/library/yql/parser/pg_wrapper/interface/optimizer.h>
 
 #include <util/generic/bitmap.h>

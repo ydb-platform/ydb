@@ -437,7 +437,7 @@ struct TPgOptimizerImpl
         input.Normalize();
         Log("Input: " + input.ToString());
 
-        std::unique_ptr<IOptimizer> opt = std::unique_ptr<IOptimizer>(MakePgOptimizer(input, Log));
+        std::unique_ptr<IOptimizer> opt = std::unique_ptr<IOptimizer>(MakePgOptimizerInternal(input, Log));
         Result = opt->JoinSearch();
 
         Log("Result: " + Result.ToString());
@@ -700,7 +700,7 @@ private:
     std::function<void(const TString&)> Log;
 };
 
-IOptimizer* MakePgOptimizer(const IOptimizer::TInput& input, const std::function<void(const TString&)>& log)
+IOptimizer* MakePgOptimizerInternal(const IOptimizer::TInput& input, const std::function<void(const TString&)>& log)
 {
     return new TPgOptimizer(input, log);
 }

@@ -148,11 +148,11 @@ public:
         if (!arguments) {
             return arrow::Status::Invalid("Error parsing args.");
         }
-        try {
+//        try {
             return Function->Execute(*arguments, assign.GetOptions(), TBase::Ctx);
-        } catch (const std::exception& ex) {
-            return arrow::Status::ExecutionError(ex.what());
-        }
+//        } catch (const std::exception& ex) {
+//            return arrow::Status::ExecutionError(ex.what());
+//        }
     }
 };
 

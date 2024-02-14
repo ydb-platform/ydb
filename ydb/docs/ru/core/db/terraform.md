@@ -257,7 +257,7 @@ resource "ydb_table_index" "ydb_table_index" {
 * `table_id` - terraform-идентификатор таблицы. Указывается, если не задан `table_path` или `connection_string`.
 
 * `name` — (обязательный) имя индекса.
-* `type` — (обязательный) тип индекса [global_sync | global_async](../yql/reference/syntax/create_table#secondary_index).
+* `type` — (обязательный) тип индекса [global_sync | global_async](../yql/reference/syntax/create_table.md#secondary_index).
 * `columns` — (обязательный) колонки в индексе.
 * `cover` — (обязательный) колонки для покрывающего индекса.
 

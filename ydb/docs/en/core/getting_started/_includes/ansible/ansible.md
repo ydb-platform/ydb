@@ -216,3 +216,39 @@ You can check the state of the storage group in the `storage` section – [http:
 ![ydb-storage-gr-check](../../_assets/ydb-storage-gr-check.png)
 
 The `VDisks` indicators should be green, and the `state` status (found in the tooltip when hovering over the Vdisk indicator) should be `Ok`. More about the cluster state indicators and monitoring can be read in the article [{#T}](../../../maintenance/embedded_monitoring/ydb_monitoring.md).
+
+## Cluster Testing { #testing }
+
+You can test the cluster using the built-in load tests in YDB CLI. To do this, download YDB CLI version [2.5.0](https://storage.yandexcloud.net/yandexcloud-ydb/release/2.5.0/linux/amd64/ydb) to the machine where Ansible is installed. For example, using wget: `wget https://storage.yandexcloud.net/yandexcloud-ydb/release/2.5.0/linux/amd64/ydb`.
+
+Make the downloaded binary file executable – `chmod +x ydb` and execute the connection check command:
+```shell
+ydb -d /Root/database \
+-e grpcs://static-node-1.ydb-cluster.com:2135 \
+--ca-file <path to generated certs>/ca.crt \
+--user root \
+--password-file <path to template folder>/ansible_vault_password_file \
+yql -s 'select 1;'
+```
+Command parameters and their values:
+* `-e` – endpoint - a string in the format `protocol://host:port`. You can specify the FQDN of any node in the cluster without specifying a port. By default, port 2135 will be used.
+* `--ca-file` – path to the root certificate for connecting to the database via `grpcs`. The certificate is created by the `ydb-ca-update.sh` script in the `TLS` directory and is located at `TLS/CA/certs/`.
+* `--user` – the user for connecting to the database. By default, when executing the `setup_playbook.yaml` playbook, the user root is created.
+* `--password-file` – path to the password file. In every folder with a YDB cluster deployment template, there is an ansible_vault_password_file that contains the root user's password.
+* `yql -s` – YQL command that will be executed after connecting to the database.
+
+The command will execute the YQL query `select 1;` and return the result in a table format to the terminal. After verifying the connection, you can create a test table with the command:
+`... database connection launch parameters ... workload kv init --init-upserts 1000 --cols 4`. This will create a test table `kv_test`, consisting of 4 columns and 1000 rows. You can check that the `kv_test` table has been created and filled with test data with the command `... database connection launch parameters ... yql -s 'select * from kv_test limit 10;'`.
+
+A table of 10 rows will be displayed in the terminal. Now, you can perform cluster performance testing. The article [{#T}](../../../reference/ydb-cli/workload-kv.md) describes 5 types of loads (`upsert`, `insert`, `select`, `read-rows`, `mixed`) and their execution parameters. An example of executing a test load `upsert` with the parameter to output the execution time `--print-timestamp` and standard execution parameters: `... database connection launch parameters ... workload kv run upsert --print-timestamp`.
+
+A report of the following type will be displayed in the terminal:
+```
+Window	Txs/Sec	Retries	Errors	p50(ms)	p95(ms)	p99(ms)	pMax(ms)	Timestamp
+1	    727	0	0	11	27	71	116	2024-02-14T12:56:39Z
+2	    882	0	0	10	21	29	38	2024-02-14T12:56:40Z
+3	    848	0	0	10	22	30	105	2024-02-14T12:56:41Z
+...
+```
+
+After completing the tests, the `kv_test` table can be deleted with the command: `... database connection launch parameters ... workload kv clean`. More details on the options for creating a test table and tests can be read in the article [{#T}](../../../reference/ydb-cli/workload-kv.md).

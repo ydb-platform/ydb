@@ -35,12 +35,26 @@ namespace {
         conf.SmallEdge = 19;  /* Packed to page collection large cell values */
         conf.LargeEdge = 29;  /* Large values placed to single blobs */
         conf.SliceSize = conf.Group(0).PageSize * 4;
+        conf.CutIndexKeys = false;
 
         return conf;
     }
 
     const NTest::TMass Mass0(new NTest::TModelStd(false), 24000);
     const NTest::TMass Mass1(new NTest::TModelStd(true), 24000);
+
+    void Dump(const TSubset& subset, THistogram histogram) {
+        for (const auto& bucket : histogram) {
+            Cerr << bucket.Value << " (";
+            TSerializedCellVec key(bucket.EndKey);
+            for (auto off : xrange(key.GetCells().size())) {
+                TString str;
+                DbgPrintValue(str, key.GetCells()[off], subset.Scheme->Cols[off].TypeInfo);
+                Cerr << (off ? ", " : "") << str;
+            }
+            Cerr << ")" << Endl;
+        }
+    }
 
     template<typename TEnv>
     void Check(const TSubset& subset, ui64 expectedRows, ui64 expectedData, ui64 expectedIndex) {
@@ -49,7 +63,7 @@ namespace {
 
         const ui32 attempts = 10;
         for (ui32 attempt : xrange(attempts)) {
-            if (NTable::BuildStats(subset, stats, 310, 3105, &env)) {
+            if (NTable::BuildStats(subset, stats, 531, 53105, &env)) {
                 break;
             }
             UNIT_ASSERT_C(attempt + 1 < attempts, "Too many attempts");
@@ -59,6 +73,11 @@ namespace {
         UNIT_ASSERT_VALUES_EQUAL(stats.RowCount, expectedRows);
         UNIT_ASSERT_VALUES_EQUAL(stats.DataSize.Size, expectedData);
         UNIT_ASSERT_VALUES_EQUAL(stats.IndexSize.Size, expectedIndex);
+
+        Cerr << "RowCountHistogram:" << Endl;
+        Dump(subset, stats.RowCountHistogram);
+        Cerr << "DataSizeHistogram:" << Endl;
+        Dump(subset, stats.DataSizeHistogram);
     }
     
     

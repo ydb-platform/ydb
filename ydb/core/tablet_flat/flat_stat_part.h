@@ -4,7 +4,6 @@
 #include "flat_part_index_iter.h"
 #include "flat_part_laid.h"
 #include "flat_page_frames.h"
-#include "util_basics.h"
 
 #include <library/cpp/containers/stack_vector/stack_vec.h>
 #include <util/draft/holder_vector.h>
@@ -31,9 +30,7 @@ struct TPartDataStats {
 };
 
 // Iterates over part index and calculates total row count and data size
-// NOTE: we don't know row count for the last page so we also ignore its size
-// This shouldn't be a problem for big parts with many pages
-// This iterator skipps pages that are screened. Currently the logic is simple:
+// This iterator skips pages that are screened. Currently the logic is simple:
 // if page start key is screened then we assume that the whole previous page is screened
 // if page start key is not screened then the whole previous page is added to stats
 class TScreenedPartIndexIterator {
@@ -93,12 +90,16 @@ public:
         ui64 rowCount = IncludedRows(GetLastRowId(), GetCurrentRowId());
         stats.RowCount += rowCount;
 
-        if (rowCount) AddPageSize(stats.DataSize, curPageId);
+        if (rowCount) {
+            AddPageSize(stats.DataSize, curPageId);
+        }
         TRowId nextRowId = ready == EReady::Data ? Pos.GetRowId() : Max<TRowId>();
         for (auto& g : AltGroups) {
             while (g.Pos.IsValid() && g.Pos.GetRowId() < nextRowId) {
                 // eagerly include all data up to the next row id
-                if (rowCount) AddPageSize(stats.DataSize, g.Pos.GetPageId(), g.GroupId);
+                if (rowCount) {
+                    AddPageSize(stats.DataSize, g.Pos.GetPageId(), g.GroupId);
+                }
                 if (g.Pos.Next() == EReady::Page) {
                     ready = EReady::Page;
                     break;
@@ -113,7 +114,9 @@ public:
             Y_DEBUG_ABORT_UNLESS(hscheme.ColsKeyIdx.size() == 3);
             while (h.Pos.IsValid() && h.Pos.GetRecord()->Cell(hscheme.ColsKeyIdx[0]).AsValue<TRowId>() < nextRowId) {
                 // eagerly include all history up to the next row id
-                if (rowCount) AddPageSize(stats.DataSize, h.Pos.GetPageId(), h.GroupId);
+                if (rowCount) {
+                    AddPageSize(stats.DataSize, h.Pos.GetPageId(), h.GroupId);
+                }
                 if (h.Pos.Next() == EReady::Page) {
                     ready = EReady::Page;
                     break;
@@ -124,7 +127,9 @@ public:
                 auto& g = HistoryGroups[index];
                 while (g.Pos.IsValid() && g.Pos.GetRowId() < nextHistoryRowId) {
                     // eagerly include all data up to the next row id
-                    if (rowCount) AddPageSize(stats.DataSize, g.Pos.GetPageId(), g.GroupId);
+                    if (rowCount) {
+                        AddPageSize(stats.DataSize, g.Pos.GetPageId(), g.GroupId);
+                    }
                     if (g.Pos.Next() == EReady::Page) {
                         ready = EReady::Page;
                         break;

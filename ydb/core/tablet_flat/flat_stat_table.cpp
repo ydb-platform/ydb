@@ -14,9 +14,9 @@ bool BuildStats(const TSubset& subset, TStats& stats, ui64 rowCountResolution, u
 
     // Make index iterators for all parts
     bool started = true;
-    for (auto& pi : subset.Flatten) {
-        stats.IndexSize.Add(pi->IndexesRawSize, pi->Label.Channel());
-        TAutoPtr<TScreenedPartIndexIterator> iter = new TScreenedPartIndexIterator(pi, env, subset.Scheme->Keys, pi->Small, pi->Large);
+    for (auto& part : subset.Flatten) {
+        stats.IndexSize.Add(part->IndexesRawSize, part->Label.Channel());
+        TAutoPtr<TScreenedPartIndexIterator> iter = new TScreenedPartIndexIterator(part, env, subset.Scheme->Keys, part->Small, part->Large);
         auto ready = iter->Start();
         if (ready == EReady::Page) {
             started = false;

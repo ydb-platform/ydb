@@ -29,6 +29,10 @@ namespace NKikimr::NPQ {
 
 static const ui32 MAX_USER_ACTS = 1000;
 
+void TPartition::SendReadingFinished(const TString& consumer) {
+    Send(Tablet, new TEvPQ::TEvReadingPartitionFinishedRequest(consumer, Partition.OriginalPartitionId));
+}
+
 void TPartition::FillReadFromTimestamps(const NKikimrPQ::TPQTabletConfig& config, const TActorContext& ctx) {
     TSet<TString> hasReadRule;
 
@@ -84,9 +88,17 @@ void TPartition::FillReadFromTimestamps(const NKikimrPQ::TPQTabletConfig& config
     }
 }
 
+bool LastOffsetHasBeenCommited(const TUserInfo& userInfo, ui64 EndOffset) {
+    return static_cast<ui64>(std::max<i64>(userInfo.Offset, 0)) == EndOffset;
+}
+
 void TPartition::ProcessHasDataRequests(const TActorContext& ctx) {
     if (!InitDone)
         return;
+
+    auto now = ctx.Now();
+    bool partitionInactive = !IsActive();
+
     for (auto it = HasDataRequests.begin(); it != HasDataRequests.end();) {
         if (it->Offset < EndOffset) {
             TAutoPtr<TEvPersQueue::TEvHasDataInfoResponse> res(new TEvPersQueue::TEvHasDataInfoResponse());
@@ -98,15 +110,24 @@ void TPartition::ProcessHasDataRequests(const TActorContext& ctx) {
             ctx.Send(it->Sender, res.Release());
             if (!it->ClientId.empty()) {
                 auto& userInfo = UsersInfoStorage->GetOrCreate(it->ClientId, ctx);
-                userInfo.ForgetSubscription(ctx.Now());
+                userInfo.ForgetSubscription(now);
             }
             it = HasDataRequests.erase(it);
+        } else if (partitionInactive) {
+            if (!it->ClientId.empty()) {
+                auto& userInfo = UsersInfoStorage->GetOrCreate(it->ClientId, ctx);
+                if (LastOffsetHasBeenCommited(userInfo, EndOffset)) {
+                    SendReadingFinished(it->ClientId);
+                }
+            }
+            ++it;
         } else {
             break;
         }
     }
+
     for (auto it = HasDataDeadlines.begin(); it != HasDataDeadlines.end();) {
-        if (it->Deadline <= ctx.Now()) {
+        if (it->Deadline <= now) {
             auto jt = HasDataRequests.find(it->Request);
             if (jt != HasDataRequests.end()) {
                 TAutoPtr<TEvPersQueue::TEvHasDataInfoResponse> res(new TEvPersQueue::TEvHasDataInfoResponse());
@@ -118,7 +139,7 @@ void TPartition::ProcessHasDataRequests(const TActorContext& ctx) {
                 ctx.Send(it->Request.Sender, res.Release());
                 if (!it->Request.ClientId.empty()) {
                     auto& userInfo = UsersInfoStorage->GetOrCreate(it->Request.ClientId, ctx);
-                    userInfo.ForgetSubscription(ctx.Now());
+                    userInfo.ForgetSubscription(now);
                 }
                 HasDataRequests.erase(jt);
             }
@@ -164,6 +185,10 @@ void TPartition::Handle(TEvPersQueue::TEvHasDataInfo::TPtr& ev, const TActorCont
             ++userInfo.Subscriptions;
             userInfo.UpdateReadOffset((i64)EndOffset - 1, ctx.Now(), ctx.Now(), ctx.Now());
             userInfo.UpdateReadingTimeAndState(ctx.Now());
+
+            if (!IsActive() && LastOffsetHasBeenCommited(userInfo, EndOffset)) {
+                SendReadingFinished(record.GetClientId());
+            }
         }
     }
 }

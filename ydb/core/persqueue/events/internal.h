@@ -185,6 +185,8 @@ struct TEvPQ {
         EvGetWriteInfoRequest,
         EvGetWriteInfoResponse,
         EvGetWriteInfoError,
+        EvReadingPartitionFinishedRequest,
+        EvReadingPartitionFinishedResponse,
         EvEnd
     };
 
@@ -1059,6 +1061,19 @@ struct TEvPQ {
             Message(std::move(message))
         {
         }
+    };
+
+    struct TEvReadingPartitionFinishedRequest : public TEventPB<TEvReadingPartitionFinishedRequest, NKikimrPQ::TEvReadingPartitionFinishedRequest, EvReadingPartitionFinishedRequest> {
+        TEvReadingPartitionFinishedRequest() = default;
+
+        TEvReadingPartitionFinishedRequest(const TString& consumer, ui32 partitionId) {
+            Record.SetConsumer(consumer);
+            Record.SetPartitionId(partitionId);
+        }
+    };
+
+    struct TEvReadingPartitionFinishedResponse : public TEventPB<TEvReadingPartitionFinishedResponse, NKikimrPQ::TEvReadingPartitionFinishedResponse, EvReadingPartitionFinishedResponse> {
+        TEvReadingPartitionFinishedResponse() = default;
     };
 };
 

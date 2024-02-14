@@ -954,6 +954,15 @@ message TEvCheckPartitionStatusResponse {
     optional uint64 SeqNo = 2;
 };
 
+// The consumer's reading of the partition is finished
+message TEvReadingPartitionFinishedRequest {
+    optional string Consumer = 1;
+    optional uint32 PartitionId = 2;
+};
+
+message TEvReadingPartitionFinishedResponse {
+};
+
 message TTransaction {
     enum EKind {
         KIND_UNKNOWN = 0;

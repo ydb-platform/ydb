@@ -85,6 +85,10 @@ TString TPartition::LogPrefix() const {
     return TStringBuilder() << "" << SelfId() << " " << state << " Partition: " << Partition << " ";
 }
 
+bool TPartition::IsActive() const {
+    return PartitionConfig == nullptr || PartitionConfig->GetStatus() == NKikimrPQ::ETopicPartitionStatus::Active;
+}
+
 bool TPartition::CanWrite() const {
     if (PartitionConfig == nullptr) {
         // Old format without AllPartitions configuration field. 
@@ -99,11 +103,11 @@ bool TPartition::CanWrite() const {
         // Pending configuration tx inactivate this partition.
         return false;
     }
-    return PartitionConfig->GetStatus() == NKikimrPQ::ETopicPartitionStatus::Active;
+    return IsActive();
 }
 
 bool TPartition::CanEnqueue() const {
-    return PartitionConfig == nullptr || PartitionConfig->GetStatus() == NKikimrPQ::ETopicPartitionStatus::Active;
+    return IsActive();
 }
 
 ui64 GetOffsetEstimate(const std::deque<TDataKey>& container, TInstant timestamp, ui64 offset) {
@@ -1804,6 +1808,10 @@ void TPartition::OnProcessTxsAndUserActsWriteComplete(ui64 cookie, const TActorC
                 ReadTimestampForOffset(user, userInfo, ctx);
             } else {
                 TabletCounters.Cumulative()[COUNTER_PQ_WRITE_TIMESTAMP_CACHE_HIT].Increment(1);
+            }
+
+            if (!IsActive() && LastOffsetHasBeenCommited(userInfo, EndOffset)) {
+                SendReadingFinished(user);
             }
         } else {
             auto ui = UsersInfoStorage->GetIfExists(user);

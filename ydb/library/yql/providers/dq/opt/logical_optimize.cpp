@@ -160,16 +160,28 @@ protected:
             std::function<void(const TString&)> log = [&](auto str) {
                 YQL_CLOG(INFO, ProviderDq) << str;
             };
-            std::function<IOptimizer*(IOptimizer::TInput&&)> factory = [&](auto input) {
-                if (TypesCtx.CostBasedOptimizer == ECostBasedOptimizerType::Native) {
-                    return MakeNativeOptimizer(input, log);
-                } else if (TypesCtx.CostBasedOptimizer == ECostBasedOptimizerType::PG) {
-                    return MakePgOptimizer(input, log);
-                } else {
-                    YQL_ENSURE(false, "Unknown CBO type");
-                }
+
+            std::unique_ptr<IOptimizerNew> opt;
+            TDummyProviderContext pctx;
+
+            switch (TypesCtx.CostBasedOptimizer) {
+            case ECostBasedOptimizerType::Native:
+                opt = std::unique_ptr<IOptimizerNew>(NDq::MakeNativeOptimizerNew(pctx, 100000));
+                break;
+            case ECostBasedOptimizerType::PG:
+                opt = std::unique_ptr<IOptimizerNew>(MakePgOptimizerNew(pctx, ctx, log));
+                break;
+            default:
+                YQL_ENSURE(false, "Unknown CBO type");
+                break;
+            }
+            std::function<void(TVector<std::shared_ptr<TRelOptimizerNode>>&, TStringBuf, const TExprNode::TPtr, const std::shared_ptr<TOptimizerStatistics>&)> providerCollect = [](auto& rels, auto label, auto node, auto stats) {
+                Y_UNUSED(node);
+                auto rel = std::make_shared<TRelOptimizerNode>(TString(label), stats);
+                rels.push_back(rel);
             };
-            return DqOptimizeEquiJoinWithCosts(node, ctx, TypesCtx, factory, true);
+
+            return DqOptimizeEquiJoinWithCosts(node, ctx, TypesCtx, 1, *opt, providerCollect);
         } else {
             return node;
         }

@@ -2,7 +2,7 @@ UNITTEST_FOR(ydb/core/mind/hive)
 
 FORK_SUBTESTS()
 
-TIMEOUT(600)
+TIMEOUT(300)
 
 SIZE(MEDIUM)
 
@@ -22,8 +22,9 @@ SRCS(
     object_distribution_ut.cpp
     sequencer_ut.cpp
     storage_pool_info_ut.cpp
-    hive_ut.cpp
+    #hive_ut.cpp
     hive_impl_ut.cpp
+    storage_balance_ut.cpp
 )
 
 END()

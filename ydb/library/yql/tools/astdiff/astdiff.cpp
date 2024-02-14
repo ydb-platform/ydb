@@ -1,7 +1,7 @@
 
-#include <contrib/ydb/library/yql/utils/backtrace/backtrace.h>
+#include <ydb/library/yql/utils/backtrace/backtrace.h>
 
-#include <contrib/ydb/library/yql/ast/yql_expr.h>
+#include <ydb/library/yql/ast/yql_expr.h>
 
 #include <library/cpp/svnversion/svnversion.h>
 #include <library/cpp/testing/unittest/registar.h>

@@ -1,9 +1,9 @@
 #pragma once
 
 #include "flat_part_iface.h"
-#include "flat_part_index_iter.h"
 #include "flat_part_laid.h"
 #include "flat_page_frames.h"
+#include "flat_stat_part_group_iter_iface.h"
 
 #include <library/cpp/containers/stack_vector/stack_vec.h>
 #include <util/draft/holder_vector.h>
@@ -33,104 +33,106 @@ struct TPartDataStats {
 // This iterator skips pages that are screened. Currently the logic is simple:
 // if page start key is screened then we assume that the whole previous page is screened
 // if page start key is not screened then the whole previous page is added to stats
-class TScreenedPartIndexIterator {
+class TStatsScreenedPartIterator {
+    using TGroupId = NPage::TGroupId;
+    using TFrames = NPage::TFrames;
+
 public:
-    TScreenedPartIndexIterator(TPartView partView, IPages* env, TIntrusiveConstPtr<TKeyCellDefaults> keyColumns, 
-            TIntrusiveConstPtr<NPage::TFrames> small, TIntrusiveConstPtr<NPage::TFrames> large)
+    TStatsScreenedPartIterator(TPartView partView, IPages* env, TIntrusiveConstPtr<TKeyCellDefaults> keyDefaults, 
+            TIntrusiveConstPtr<TFrames> small, TIntrusiveConstPtr<TFrames> large)
         : Part(std::move(partView.Part))
-        , Pos(Part.Get(), env, {})
-        , KeyColumns(std::move(keyColumns))
+        , KeyDefaults(std::move(keyDefaults))
+        , Groups(::Reserve(Part->GroupsCount))
+        , HistoricGroups(::Reserve(Part->HistoricGroupsCount))
         , Screen(std::move(partView.Screen))
         , Small(std::move(small))
         , Large(std::move(large))
         , CurrentHole(TScreen::Iter(Screen, CurrentHoleIdx, 0, 1))
     {
-        AltGroups.reserve(Part->GroupsCount - 1);
-        for (ui32 group : xrange(size_t(1), Part->GroupsCount)) {
-            AltGroups.emplace_back(Part.Get(), env, NPage::TGroupId(group));
+        for (ui32 groupIndex : xrange(Part->GroupsCount)) {
+            Groups.push_back(CreateStatsPartGroupIterator(Part.Get(), env, TGroupId(groupIndex)));
         }
-        for (ui32 group : xrange(Part->HistoricGroupsCount)) {
-            HistoryGroups.emplace_back(Part.Get(), env, NPage::TGroupId(group, true));
+        for (ui32 groupIndex : xrange(Part->HistoricGroupsCount)) {
+            HistoricGroups.push_back(CreateStatsPartGroupIterator(Part.Get(), env, TGroupId(groupIndex, true)));
         }
     }
 
     EReady Start() {
-        auto ready = Pos.Seek(0);
-        if (ready != EReady::Page) {
-            FillKey();
+        auto ready = EReady::Data;
+
+        for (auto& iter : Groups) {
+            if (iter->Start() == EReady::Page) {
+                ready = EReady::Page;
+            }
+        }
+        for (auto& iter : HistoricGroups) {
+            if (iter->Start() == EReady::Page) {
+                ready = EReady::Page;
+            }
         }
 
-        for (auto& g : AltGroups) {
-            if (g.Pos.Seek(0) == EReady::Page) {
-                ready = EReady::Page;
-            }
-        }
-        for (auto& g : HistoryGroups) {
-            if (g.Pos.Seek(0) == EReady::Page) {
-                ready = EReady::Page;
-            }
+        if (ready != EReady::Page) {
+            FillKey();
         }
 
         return ready;
     }
 
     bool IsValid() const {
-        return Pos.IsValid();
+        return Groups[0]->IsValid();
     }
 
     EReady Next(TPartDataStats& stats) {
         Y_ABORT_UNLESS(IsValid());
 
-        auto curPageId = Pos.GetPageId();
-        LastRowId = Pos.GetRowId();
-        auto ready = Pos.Next();
+        auto curPageId = Groups[0]->GetPageId();
+        LastRowId = Groups[0]->GetRowId();
+        auto ready = Groups[0]->Next();
         if (ready == EReady::Page) {
             return ready;
         }
-        ui64 rowCount = IncludedRows(GetLastRowId(), GetCurrentRowId());
-        stats.RowCount += rowCount;
 
+        ui64 rowCount = CountUnscreenedRows(GetLastRowId(), GetCurrentRowId());
+        stats.RowCount += rowCount;
         if (rowCount) {
-            AddPageSize(stats.DataSize, curPageId);
+            AddPageSize(stats.DataSize, curPageId, TGroupId(0));
         }
-        TRowId nextRowId = ready == EReady::Data ? Pos.GetRowId() : Max<TRowId>();
-        for (auto& g : AltGroups) {
-            while (g.Pos.IsValid() && g.Pos.GetRowId() < nextRowId) {
+        
+        TRowId nextRowId = ready == EReady::Data ? Groups[0]->GetRowId() : Max<TRowId>();
+        for (auto groupIndex : xrange<ui32>(1, Groups.size())) {
+            while (Groups[groupIndex]->IsValid() && Groups[groupIndex]->GetRowId() < nextRowId) {
                 // eagerly include all data up to the next row id
                 if (rowCount) {
-                    AddPageSize(stats.DataSize, g.Pos.GetPageId(), g.GroupId);
+                    AddPageSize(stats.DataSize, Groups[groupIndex]->GetPageId(), TGroupId(groupIndex));
                 }
-                if (g.Pos.Next() == EReady::Page) {
+                if (Groups[groupIndex]->Next() == EReady::Page) {
                     ready = EReady::Page;
                     break;
                 }
             }
         }
 
-        // Include mvcc data
-        if (!HistoryGroups.empty()) {
-            auto& h = HistoryGroups[0];
-            const auto& hscheme = Part->Scheme->HistoryGroup;
-            Y_DEBUG_ABORT_UNLESS(hscheme.ColsKeyIdx.size() == 3);
-            while (h.Pos.IsValid() && h.Pos.GetRecord()->Cell(hscheme.ColsKeyIdx[0]).AsValue<TRowId>() < nextRowId) {
+        if (HistoricGroups) {
+            const auto& historyScheme = Part->Scheme->HistoryGroup;
+            Y_DEBUG_ABORT_UNLESS(historyScheme.ColsKeyIdx.size() == 3);
+            while (HistoricGroups[0]->IsValid() && (!HistoricGroups[0]->HasKeyCells() || HistoricGroups[0]->GetKeyCell(0).AsValue<TRowId>() < nextRowId)) {
                 // eagerly include all history up to the next row id
                 if (rowCount) {
-                    AddPageSize(stats.DataSize, h.Pos.GetPageId(), h.GroupId);
+                    AddPageSize(stats.DataSize, HistoricGroups[0]->GetPageId(), TGroupId(0, true));
                 }
-                if (h.Pos.Next() == EReady::Page) {
+                if (HistoricGroups[0]->Next() == EReady::Page) {
                     ready = EReady::Page;
                     break;
                 }
             }
-            TRowId nextHistoryRowId = h.Pos.IsValid() ? h.Pos.GetRowId() : Max<TRowId>();
-            for (size_t index = 1; index < HistoryGroups.size(); ++index) {
-                auto& g = HistoryGroups[index];
-                while (g.Pos.IsValid() && g.Pos.GetRowId() < nextHistoryRowId) {
+            TRowId nextHistoryRowId = HistoricGroups[0]->IsValid() ? HistoricGroups[0]->GetRowId() : Max<TRowId>();
+            for (auto groupIndex : xrange<ui32>(1, Groups.size())) {
+                while (HistoricGroups[groupIndex]->IsValid() && HistoricGroups[groupIndex]->GetRowId() < nextHistoryRowId) {
                     // eagerly include all data up to the next row id
                     if (rowCount) {
-                        AddPageSize(stats.DataSize, g.Pos.GetPageId(), g.GroupId);
+                        AddPageSize(stats.DataSize, HistoricGroups[groupIndex]->GetPageId(), TGroupId(groupIndex, true));
                     }
-                    if (g.Pos.Next() == EReady::Page) {
+                    if (HistoricGroups[groupIndex]->Next() == EReady::Page) {
                         ready = EReady::Page;
                         break;
                     }
@@ -148,12 +150,13 @@ public:
         }
 
         FillKey();
+
         return ready;
     }
 
     TDbTupleRef GetCurrentKey() const {
-        Y_ABORT_UNLESS(KeyColumns->BasicTypes().size() == CurrentKey.size());
-        return TDbTupleRef(KeyColumns->BasicTypes().data(), CurrentKey.data(), CurrentKey.size());
+        Y_ABORT_UNLESS(KeyDefaults->BasicTypes().size() == CurrentKey.size());
+        return TDbTupleRef(KeyDefaults->BasicTypes().data(), CurrentKey.data(), CurrentKey.size());
     }
 
 private:
@@ -163,23 +166,22 @@ private:
 
     ui64 GetCurrentRowId() const {
         if (IsValid()) {
-            return Pos.GetRowId();
+            return Groups[0]->GetRowId();
         }
-        if (TRowId endRowId = Pos.GetEndRowId(); endRowId != Max<TRowId>()) {
+        if (TRowId endRowId = Groups[0]->GetEndRowId(); endRowId != Max<TRowId>()) {
             // This would include the last page rows when known
             return endRowId;
         }
         return LastRowId;
     }
 
-private:
-    void AddPageSize(TPartDataSize& stats, TPageId pageId, NPage::TGroupId groupId = { }) const {
+    void AddPageSize(TPartDataSize& stats, TPageId pageId, TGroupId groupId) const {
+        // TODO: move to IStatsPartGroupIterator
         ui64 size = Part->GetPageSize(pageId, groupId);
         ui8 channel = Part->GetPageChannel(pageId, groupId);
         stats.Add(size, channel);
     }
 
-private:
     void FillKey() {
         CurrentKey.clear();
 
@@ -188,18 +190,19 @@ private:
 
         ui32 keyIdx = 0;
         // Add columns that are present in the part
-        for (;keyIdx < Part->Scheme->Groups[0].KeyTypes.size(); ++keyIdx) {
-            CurrentKey.push_back(Pos.GetRecord()->Cell(Part->Scheme->Groups[0].ColsKeyIdx[keyIdx]));
+        if (ui32 keyCellsCount = Groups[0]->HasKeyCells()) {
+            for (;keyIdx < keyCellsCount; ++keyIdx) {
+                CurrentKey.push_back(Groups[0]->GetKeyCell(keyIdx));
+            }
         }
 
         // Extend with default values if needed
-        for (;keyIdx < KeyColumns->Defs.size(); ++keyIdx) {
-            CurrentKey.push_back(KeyColumns->Defs[keyIdx]);
+        for (;keyIdx < KeyDefaults->Defs.size(); ++keyIdx) {
+            CurrentKey.push_back(KeyDefaults->Defs[keyIdx]);
         }
     }
 
-private:
-    ui64 IncludedRows(TRowId beginRowId, TRowId endRowId) noexcept {
+    ui64 CountUnscreenedRows(TRowId beginRowId, TRowId endRowId) noexcept {
         if (!Screen) {
             // Include all rows
             return endRowId - beginRowId;
@@ -227,8 +230,7 @@ private:
         return rowCount;
     }
 
-private:
-    void AddBlobsSize(TPartDataSize& stats, const NPage::TFrames* frames, ELargeObj lob, ui32 &prevPage) noexcept {
+    void AddBlobsSize(TPartDataSize& stats, const TFrames* frames, ELargeObj lob, ui32 &prevPage) noexcept {
         const auto row = GetLastRowId();
         const auto end = GetCurrentRowId();
 
@@ -240,7 +242,7 @@ private:
                 stats.Add(rel.Size, channel);
                 ++prevPage;
             } else if (!rel.IsHead()) {
-                Y_ABORT("Got unaligned NPage::TFrames head record");
+                Y_ABORT("Got unaligned TFrames head record");
             } else {
                 break;
             }
@@ -248,27 +250,16 @@ private:
     }
 
 private:
-    struct TGroupState {
-        TPartIndexIt Pos;
-        const NPage::TGroupId GroupId;
-
-        TGroupState(const TPart* part, IPages* env, NPage::TGroupId groupId)
-            : Pos(part, env, groupId)
-            , GroupId(groupId)
-        { }
-    };
-
-private:
     TIntrusiveConstPtr<TPart> Part;
-    TPartIndexIt Pos;
-    TIntrusiveConstPtr<TKeyCellDefaults> KeyColumns;
+    TIntrusiveConstPtr<TKeyCellDefaults> KeyDefaults;
     TSmallVec<TCell> CurrentKey;
     ui64 LastRowId = 0;
-    TSmallVec<TGroupState> AltGroups;
-    TSmallVec<TGroupState> HistoryGroups;
+    
+    TVector<THolder<IStatsPartGroupIterator>> Groups;
+    TVector<THolder<IStatsPartGroupIterator>> HistoricGroups;
     TIntrusiveConstPtr<TScreen> Screen;
-    TIntrusiveConstPtr<NPage::TFrames> Small;    /* Inverted index for small blobs   */
-    TIntrusiveConstPtr<NPage::TFrames> Large;    /* Inverted index for large blobs   */
+    TIntrusiveConstPtr<TFrames> Small;    /* Inverted index for small blobs   */
+    TIntrusiveConstPtr<TFrames> Large;    /* Inverted index for large blobs   */
     size_t CurrentHoleIdx = 0;
     TScreen::THole CurrentHole;
     ui32 PrevSmallPage = 0;

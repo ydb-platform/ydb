@@ -1,12 +1,12 @@
 #pragma once
 
-#include "flat_part_iface.h"
+#include "flat_stat_part_group_iter_iface.h"
+#include "flat_page_btree_index.h"
 #include "flat_table_part.h"
-#include "flat_part_index_iter_iface.h"
 
 namespace NKikimr::NTable {
 
-class TPartBtreeIndexIt : public IIndexIter {
+class TStatsPartGroupBtreeIndexIterator : public IStatsPartGroupIterator {
     using TCells = NPage::TCells;
     using TBtreeIndexNode = NPage::TBtreeIndexNode;
     using TGroupId = NPage::TGroupId;
@@ -64,52 +64,8 @@ class TPartBtreeIndexIt : public IIndexIter {
         const TRowId RowId;
     };
 
-    struct TSeekKey {
-        TSeekKey(ESeek seek, TCells key, TColumns columns, const TKeyCellDefaults *keyDefaults)
-            : Seek(seek)
-            , Key(key)
-            , Columns(columns)
-            , KeyDefaults(keyDefaults)
-        {}
-
-        bool BelongsTo(const TNodeState& state) const noexcept {
-            return TBtreeIndexNode::Has(Seek, Key, state.BeginKey, state.EndKey, KeyDefaults);
-        }
-
-        TRecIdx Do(const TNodeState& state) const noexcept {
-            return state.Node->Seek(Seek, Key, Columns, KeyDefaults);
-        }
-
-        const ESeek Seek;
-        const TCells Key;
-        const TColumns Columns;
-        const TKeyCellDefaults* const KeyDefaults;
-    };
-
-    struct TSeekKeyReverse {
-        TSeekKeyReverse(ESeek seek, TCells key, TColumns columns, const TKeyCellDefaults *keyDefaults)
-            : Seek(seek)
-            , Key(key)
-            , Columns(columns)
-            , KeyDefaults(keyDefaults)
-        {}
-
-        bool BelongsTo(const TNodeState& state) const noexcept {
-            return TBtreeIndexNode::HasReverse(Seek, Key, state.BeginKey, state.EndKey, KeyDefaults);
-        }
-
-        TRecIdx Do(const TNodeState& state) const noexcept {
-            return state.Node->SeekReverse(Seek, Key, Columns, KeyDefaults);
-        }
-
-        const ESeek Seek;
-        const TCells Key;
-        const TColumns Columns;
-        const TKeyCellDefaults* const KeyDefaults;
-    };
-
 public:
-    TPartBtreeIndexIt(const TPart* part, IPages* env, TGroupId groupId)
+    TStatsPartGroupBtreeIndexIterator(const TPart* part, IPages* env, TGroupId groupId)
         : Part(part)
         , Env(env)
         , GroupId(groupId)
@@ -121,60 +77,8 @@ public:
         State.emplace_back(Meta.PageId, 0, GetEndRowId(), EmptyKey, EmptyKey);
     }
     
-    EReady Seek(TRowId rowId) override {
-        if (rowId >= GetEndRowId()) {
-            return Exhaust();
-        }
-
-        return DoSeek<TSeekRowId>({rowId});
-    }
-
-    EReady SeekLast() override {
-        if (Y_UNLIKELY(GetEndRowId() == 0)) {
-            Y_DEBUG_ABORT_UNLESS(false, "TPart can't be empty");
-            return Exhaust();
-        }
-        return Seek(GetEndRowId() - 1);
-    }
-
-    /**
-     * Searches for the first page that may contain given key with specified seek mode
-     *
-     * Result is approximate and may be off by one page
-     */
-    EReady Seek(ESeek seek, TCells key, const TKeyCellDefaults *keyDefaults) override {
-        if (!key) {
-            // Special treatment for an empty key
-            switch (seek) {
-                case ESeek::Lower:
-                    return Seek(0);
-                case ESeek::Exact:
-                case ESeek::Upper:
-                    return Seek(GetEndRowId());
-            }
-        }
-
-        return DoSeek<TSeekKey>({seek, key, GroupInfo.ColsKeyIdx, keyDefaults});
-    }
-
-    /**
-     * Searches for the first page (in reverse) that may contain given key with specified seek mode
-     *
-     * Result is approximate and may be off by one page
-     */
-    EReady SeekReverse(ESeek seek, TCells key, const TKeyCellDefaults *keyDefaults) override {
-        if (!key) {
-            // Special treatment for an empty key
-            switch (seek) {
-                case ESeek::Lower:
-                    return Seek(GetEndRowId() - 1);
-                case ESeek::Exact:
-                case ESeek::Upper:
-                    return Seek(GetEndRowId());
-            }
-        }
-
-        return DoSeek<TSeekKeyReverse>({seek, key, GroupInfo.ColsKeyIdx, keyDefaults});
+    EReady Start() override {
+        return DoSeek<TSeekRowId>({0});
     }
 
     EReady Next() override {
@@ -208,37 +112,6 @@ public:
         return EReady::Data;
     }
 
-    EReady Prev() override {
-        Y_ABORT_UNLESS(!IsExhausted());
-
-        if (Meta.LevelCount == 0) {
-            return Exhaust();
-        }
-
-        if (IsLeaf()) {
-            do {
-                State.pop_back();
-            } while (State.size() > 1 && State.back().IsFirstPos());
-            if (State.back().IsFirstPos()) {
-                return Exhaust();
-            }
-            PushNextState(*State.back().Pos - 1);
-        }
-
-        for (ui32 level : xrange<ui32>(State.size() - 1, Meta.LevelCount)) {
-            if (!TryLoad(State[level])) {
-                // exiting with an intermediate state
-                Y_DEBUG_ABORT_UNLESS(!IsLeaf() && !IsExhausted());
-                return EReady::Page;
-            }
-            PushNextState(State[level].Node->GetKeysCount());
-        }
-
-        // State.back() points to the target data page
-        Y_ABORT_UNLESS(IsLeaf());
-        return EReady::Data;
-    }
-
 public:
     bool IsValid() const override {
         Y_DEBUG_ABORT_UNLESS(IsLeaf() || IsExhausted());
@@ -257,11 +130,6 @@ public:
     TRowId GetRowId() const override {
         Y_ABORT_UNLESS(IsLeaf());
         return State.back().BeginRowId;
-    }
-
-    TRowId GetNextRowId() const override {
-        Y_ABORT_UNLESS(IsLeaf());
-        return State.back().EndRowId;
     }
 
     TPos HasKeyCells() const override {

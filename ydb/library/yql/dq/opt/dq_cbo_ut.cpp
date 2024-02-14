@@ -32,91 +32,95 @@ TExprNode::TPtr MakeLabel(TExprContext& ctx, const std::vector<TStringBuf>& vars
 Y_UNIT_TEST_SUITE(DQCBO) {
 
 Y_UNIT_TEST(Empty) {
-	IOptimizer::TInput input;
-    std::unique_ptr<IOptimizer> optimizer = std::unique_ptr<IOptimizer>(NDq::MakeNativeOptimizer(input, {}));
+    TDummyProviderContext pctx;
+    std::unique_ptr<IOptimizerNew> optimizer = std::unique_ptr<IOptimizerNew>(MakeNativeOptimizerNew(pctx, 100000));
 }
 
 Y_UNIT_TEST(JoinSearch2Rels) {
-    IOptimizer::TRel rel1 = {100000, 1000000, {{'a'}}};
-    IOptimizer::TRel rel2 = {1000000, 9000009, {{'b'}}};
-    IOptimizer::TInput input = {{rel1, rel2}, {}, {}, {}};
+    TDummyProviderContext pctx;
+    std::unique_ptr<IOptimizerNew> optimizer = std::unique_ptr<IOptimizerNew>(MakeNativeOptimizerNew(pctx, 100000));
 
-    input.EqClasses.emplace_back(IOptimizer::TEq {
-        {{1, 1}, {2, 1}}
+    auto rel1 = std::make_shared<TRelOptimizerNode>("a", std::make_shared<TOptimizerStatistics>(100000, 1, 1000000));
+    auto rel2 = std::make_shared<TRelOptimizerNode>("b", std::make_shared<TOptimizerStatistics>(1000000, 1, 9000009));
+
+    std::set<std::pair<NDq::TJoinColumn, NDq::TJoinColumn>> joinConditions;
+    joinConditions.insert({
+        NDq::TJoinColumn("a", "1"),
+        NDq::TJoinColumn("b", "1")
     });
+    auto op = std::make_shared<TJoinOptimizerNode>(
+        std::static_pointer_cast<IBaseOptimizerNode>(rel1),
+        std::static_pointer_cast<IBaseOptimizerNode>(rel2),
+        joinConditions,
+        InnerJoin,
+        GraceJoin
+        );
 
-    auto log = [](const TString& str) {
-        Cerr << str << "\n";
-    };
-
-    auto optimizer = std::unique_ptr<IOptimizer>(MakeNativeOptimizer(input, log));
-
-    auto res = optimizer->JoinSearch();
-    UNIT_ASSERT(res.Rows > 0);
-    UNIT_ASSERT(res.TotalCost > 0);
-    auto resStr = res.ToString(false);
-    Cerr << resStr;
-    TString expected = R"__({
- Inner Join
- Rels: [2,1]
- Op: b = a
- {
-  Node
-  Rels: [2]
- }
- {
-  Node
-  Rels: [1]
- }
-}
+    auto res = optimizer->JoinSearch(op);
+    std::stringstream ss;
+    res->Print(ss);
+    TString expected = R"__(Join: (0) b.1=a.1,
+Type: 2, Nrows: 2e+10, Ncols: 2, Cost: 2.00112e+10
+    Rel: b
+    Type: 0, Nrows: 1e+06, Ncols: 1, Cost: 9.00001e+06
+    Rel: a
+    Type: 0, Nrows: 100000, Ncols: 1, Cost: 1e+06
 )__";
-    UNIT_ASSERT_STRINGS_EQUAL(expected, resStr);
+
+    UNIT_ASSERT_STRINGS_EQUAL(expected, ss.str());
 }
 
 Y_UNIT_TEST(JoinSearch3Rels) {
-    IOptimizer::TRel rel1 = {100000, 1000000, {{'a'}}};
-    IOptimizer::TRel rel2 = {1000000, 9000009, {{'b'}}};
-    IOptimizer::TRel rel3 = {10000, 9009, {{'c'}}};
-    IOptimizer::TInput input = {{rel1, rel2, rel3}, {}, {}, {}};
+    TDummyProviderContext pctx;
+    std::unique_ptr<IOptimizerNew> optimizer = std::unique_ptr<IOptimizerNew>(MakeNativeOptimizerNew(pctx, 100000));
 
-    input.EqClasses.emplace_back(IOptimizer::TEq {
-        {{1, 1}, {2, 1}, {3, 1}}
+    auto rel1 = std::make_shared<TRelOptimizerNode>("a", std::make_shared<TOptimizerStatistics>(100000, 1, 1000000));
+    auto rel2 = std::make_shared<TRelOptimizerNode>("b", std::make_shared<TOptimizerStatistics>(1000000, 1, 9000009));
+    auto rel3 = std::make_shared<TRelOptimizerNode>("c", std::make_shared<TOptimizerStatistics>(10000, 1, 9009));
+
+    std::set<std::pair<NDq::TJoinColumn, NDq::TJoinColumn>> joinConditions;
+    joinConditions.insert({
+        NDq::TJoinColumn("a", "1"),
+        NDq::TJoinColumn("b", "1")
+    });
+    auto op1 = std::make_shared<TJoinOptimizerNode>(
+        std::static_pointer_cast<IBaseOptimizerNode>(rel1),
+        std::static_pointer_cast<IBaseOptimizerNode>(rel2),
+        joinConditions,
+        InnerJoin,
+        GraceJoin
+        );
+
+    joinConditions.insert({
+        NDq::TJoinColumn("a", "1"),
+        NDq::TJoinColumn("c", "1")
     });
 
-    auto log = [](const TString& str) {
-        Cerr << str << "\n";
-    };
+    auto op2 = std::make_shared<TJoinOptimizerNode>(
+        std::static_pointer_cast<IBaseOptimizerNode>(op1),
+        std::static_pointer_cast<IBaseOptimizerNode>(rel3),
+        joinConditions,
+        InnerJoin,
+        GraceJoin
+        );
 
-    auto optimizer = std::unique_ptr<IOptimizer>(MakeNativeOptimizer(input, log));
-    auto res = optimizer->JoinSearch();
-    UNIT_ASSERT(res.Rows > 0);
-    UNIT_ASSERT(res.TotalCost > 0);
-    auto resStr = res.ToString(false);
-    Cerr << resStr;
-    TString expected = R"__({
- Inner Join
- Rels: [1,3,2]
- Op: a = b
- {
-  Inner Join
-  Rels: [1,3]
-  Op: a = c
-  {
-   Node
-   Rels: [1]
-  }
-  {
-   Node
-   Rels: [3]
-  }
- }
- {
-  Node
-  Rels: [2]
- }
-}
+    auto res = optimizer->JoinSearch(op2);
+    std::stringstream ss;
+    res->Print(ss);
+
+    TString expected = R"__(Join: (0) a.1=b.1,
+Type: 2, Nrows: 4e+13, Ncols: 3, Cost: 4.00004e+13
+    Join: (0) a.1=c.1,
+    Type: 2, Nrows: 2e+08, Ncols: 2, Cost: 2.01129e+08
+        Rel: a
+        Type: 0, Nrows: 100000, Ncols: 1, Cost: 1e+06
+        Rel: c
+        Type: 0, Nrows: 10000, Ncols: 1, Cost: 9009
+    Rel: b
+    Type: 0, Nrows: 1e+06, Ncols: 1, Cost: 9.00001e+06
 )__";
-	UNIT_ASSERT_STRINGS_EQUAL(expected, resStr);
+
+    UNIT_ASSERT_STRINGS_EQUAL(expected, ss.str());
 }
 
 Y_UNIT_TEST(RelCollector) {

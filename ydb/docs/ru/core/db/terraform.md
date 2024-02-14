@@ -446,7 +446,11 @@ resource "ydb_table_index" "ydb_table_index" {
 
 Описание [топиков](../concepts/topic.md)
 
+{% note info %}
+
 Топик не может быть создан в корне БД, нужно указать хотя бы один каталог в имени топика.
+
+{% endnote %}
 
 ### Описание ресурса `ydb_topic`
 

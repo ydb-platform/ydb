@@ -31,13 +31,6 @@ NNodes::TExprBase DqOptimizeEquiJoinWithCosts(
     IOptimizerNew& optimizer,
     const std::function<void(TVector<std::shared_ptr<TRelOptimizerNode>>&, TStringBuf, const TExprNode::TPtr, const std::shared_ptr<TOptimizerStatistics>&)>& providerCollect);
 
-NNodes::TExprBase DqOptimizeEquiJoinWithCosts(
-    const NNodes::TExprBase& node,
-    TExprContext& ctx,
-    TTypeAnnotationContext& typesCtx,
-    const std::function<IOptimizer*(IOptimizer::TInput&&)>& optFactory,
-    ui32 optLevel);
-
 NNodes::TExprBase DqRewriteEquiJoin(const NNodes::TExprBase& node, TExprContext& ctx);
 
 NNodes::TExprBase DqEnforceCompactPartition(NNodes::TExprBase node, NNodes::TExprList frames, TExprContext& ctx);

@@ -1,4 +1,5 @@
 #include "wilson_uploader.h"
+
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 #include <ydb/library/actors/core/hfunc.h>
 #include <ydb/library/actors/core/log.h>
@@ -7,7 +8,9 @@
 #include <library/cpp/string_utils/url/url.h>
 #include <util/stream/file.h>
 #include <util/string/hex.h>
+
 #include <chrono>
+#include <queue>
 
 namespace NWilson {
 
@@ -18,10 +21,77 @@ namespace NWilson {
 
     namespace {
 
+        struct TSpanQueueItem {
+            TMonotonic ExpirationTimestamp;
+            NTraceProto::Span Span;
+            size_t Size;
+        };
+
+        class TBatch {
+        private:
+            ui64 MaxSpansInBatch;
+            ui64 MaxBytesInBatch;
+
+            NServiceProto::ExportTraceServiceRequest Request;
+            NTraceProto::ScopeSpans* ScopeSpans;
+            ui64 SizeBytes = 0;
+            TMonotonic ExpirationTimestamp = TMonotonic::Zero();
+
+        public:
+            struct TData {
+                NServiceProto::ExportTraceServiceRequest Request;
+                ui64 SizeBytes;
+                ui64 SizeSpans;
+                TMonotonic ExpirationTimestamp;
+            };
+
+            TBatch(ui64 maxSpansInBatch, ui64 maxBytesInBatch, TString serviceName)
+                : MaxSpansInBatch(maxSpansInBatch)
+                , MaxBytesInBatch(maxBytesInBatch)
+            {
+                auto *rspan = Request.add_resource_spans();
+                auto *serviceNameAttr = rspan->mutable_resource()->add_attributes();
+                serviceNameAttr->set_key("service.name");
+                serviceNameAttr->mutable_value()->set_string_value(std::move(serviceName));
+                ScopeSpans = rspan->add_scope_spans();
+            }
+
+            bool IsEmpty() const {
+                return ScopeSpans->spansSize() == 0;
+            }
+
+            bool Add(TSpanQueueItem& span) {
+                if (SizeBytes + span.Size > MaxBytesInBatch || ScopeSpans->spansSize() == MaxSpansInBatch) {
+                    return false;
+                }
+                SizeBytes += span.Size;
+                span.Span.Swap(ScopeSpans->Addspans());
+                ExpirationTimestamp = span.ExpirationTimestamp;
+                return true;
+            }
+
+            TData Complete() && {
+                return TData {
+                    .Request = std::move(Request),
+                    .SizeBytes = SizeBytes,
+                    .SizeSpans = ScopeSpans->spansSize(),
+                    .ExpirationTimestamp = ExpirationTimestamp,
+                };
+            }
+        };
+
         class TWilsonUploader
             : public TActorBootstrapped<TWilsonUploader>
         {
             static constexpr size_t WILSON_SERVICE_ID = 430;
+
+            ui64 MaxSpansInBatch = 150;
+            ui64 MaxBytesInBatch = 20'000'000;
+            ui64 MaxBatchAccumulationMilliseconds = 1'000;
+            ui32 MaxSpansPerSecond = 10;
+            TDuration MaxSpanTimeInQueue = TDuration::Seconds(60);
+
+            bool WakeupScheduled = false;
 
             TString CollectorUrl;
             TString ServiceName;
@@ -36,26 +106,19 @@ namespace NWilson {
             NServiceProto::ExportTraceServiceResponse Response;
             grpc::Status Status;
 
-            struct TSpanQueueItem {
-                TMonotonic ExpirationTimestamp;
-                NTraceProto::Span Span;
-                ui32 Size;
-            };
-
+            TBatch CurrentBatch;
+            std::queue<TBatch::TData> BatchQueue;
             std::deque<TSpanQueueItem> Spans;
             ui64 SpansSize = 0;
             TMonotonic NextSendTimestamp;
-            ui32 MaxSpansAtOnce = 25;
-            ui32 MaxSpansPerSecond = 10;
-            TDuration MaxSpanTimeInQueue = TDuration::Seconds(60);
-
-            bool WakeupScheduled = false;
+            ui64 SendBatchId = 1;
 
         public:
             TWilsonUploader(WilsonUploaderParams params)
                 : CollectorUrl(std::move(params.CollectorUrl))
                 , ServiceName(std::move(params.ServiceName))
                 , GrpcSigner(std::move(params.GrpcSigner))
+                , CurrentBatch(MaxSpansInBatch, MaxBytesInBatch, ServiceName)
             {}
 
             ~TWilsonUploader() {
@@ -90,25 +153,51 @@ namespace NWilson {
                 if (SpansSize >= 100'000'000) {
                     LOG_ERROR_S(*TlsActivationContext, WILSON_SERVICE_ID, "dropped span due to overflow");
                 } else {
-                    const TMonotonic expirationTimestamp = TActivationContext::Monotonic() + MaxSpanTimeInQueue;
+                    const TMonotonic now = TActivationContext::Monotonic();
+                    const TMonotonic expirationTimestamp = now + MaxSpanTimeInQueue;
                     auto& span = ev->Get()->Span;
                     const ui32 size = span.ByteSizeLong();
-                    Spans.push_back(TSpanQueueItem{expirationTimestamp, std::move(span), size});
+                    if (size > MaxBytesInBatch) {
+                        ALOG_ERROR(WILSON_SERVICE_ID, "dropped span of size " << size << ", which exceeds max batch size " << MaxBytesInBatch);
+                        return;
+                    }
+                    TSpanQueueItem spanItem{expirationTimestamp, std::move(span), size};
                     SpansSize += size;
+                    if (CurrentBatch.IsEmpty()) {
+                        ScheduleBatchCompletion(now);
+                    }
+                    if (CurrentBatch.Add(spanItem)) {
+                        return;
+                    }
+                    CompleteCurrentBatch();
                     TryMakeProgress();
+                    Y_ABORT_UNLESS(CurrentBatch.Add(spanItem), "failed to add span to empty batch");
+                    ScheduleBatchCompletion(now);
                 }
+            }
+
+            void ScheduleBatchCompletion(TMonotonic now) {
+                TActivationContext::Schedule(now + TDuration::MilliSeconds(MaxBatchAccumulationMilliseconds),
+                                             new IEventHandle(SelfId(), {}, new TEvents::TEvWakeup(SendBatchId)));
+
+            }
+
+            void CompleteCurrentBatch() {
+                BatchQueue.push(std::move(CurrentBatch).Complete());
+                CurrentBatch = TBatch(MaxSpansInBatch, MaxBytesInBatch, ServiceName);
+                ++SendBatchId;
             }
 
             void TryToSend() {
                 const TMonotonic now = TActivationContext::Monotonic();
 
                 ui32 numSpansDropped = 0;
-                while (!Spans.empty()) {
-                    const TSpanQueueItem& item = Spans.front();
+                while (!BatchQueue.empty()) {
+                    const TBatch::TData& item = BatchQueue.front();
                     if (item.ExpirationTimestamp <= now) {
-                        SpansSize -= item.Size;
-                        Spans.pop_front();
-                        ++numSpansDropped;
+                        SpansSize -= item.SizeBytes;
+                        numSpansDropped += item.SizeSpans;
+                        BatchQueue.pop();
                     } else {
                         break;
                     }
@@ -119,42 +208,32 @@ namespace NWilson {
                         "dropped " << numSpansDropped << " span(s) due to expiration");
                 }
 
-                if (Context || Spans.empty()) {
+                if (Context || BatchQueue.empty()) {
                     return;
                 } else if (now < NextSendTimestamp) {
                     ScheduleWakeup(NextSendTimestamp);
                     return;
                 }
 
-                NServiceProto::ExportTraceServiceRequest request;
-                auto *rspan = request.add_resource_spans();
-                auto *serviceNameAttr = rspan->mutable_resource()->add_attributes();
-                serviceNameAttr->set_key("service.name");
-                serviceNameAttr->mutable_value()->set_string_value(ServiceName);
-                auto *sspan = rspan->add_scope_spans();
 
-                NextSendTimestamp = now;
-                for (ui32 i = 0; i < MaxSpansAtOnce && !Spans.empty(); ++i, Spans.pop_front()) {
-                    auto& item = Spans.front();
-                    auto& s = item.Span;
+                    // LOG_DEBUG_S(*TlsActivationContext, WILSON_SERVICE_ID, "exporting span"
+                    //     << " TraceId# " << HexEncode(s.trace_id())
+                    //     << " SpanId# " << HexEncode(s.span_id())
+                    //     << " ParentSpanId# " << HexEncode(s.parent_span_id())
+                    //     << " Name# " << s.name());
 
-                    LOG_DEBUG_S(*TlsActivationContext, WILSON_SERVICE_ID, "exporting span"
-                        << " TraceId# " << HexEncode(s.trace_id())
-                        << " SpanId# " << HexEncode(s.span_id())
-                        << " ParentSpanId# " << HexEncode(s.parent_span_id())
-                        << " Name# " << s.name());
+                TBatch::TData batch = std::move(BatchQueue.front());
+                BatchQueue.pop();
 
-                    SpansSize -= item.Size;
-                    s.Swap(sspan->add_spans());
-                    NextSendTimestamp += TDuration::MicroSeconds(1'000'000 / MaxSpansPerSecond);
-                }
+                NextSendTimestamp = now + TDuration::MicroSeconds((batch.SizeSpans * 1'000'000) / MaxSpansPerSecond);
+                SpansSize -= batch.SizeBytes;
 
                 ScheduleWakeup(NextSendTimestamp);
                 Context = std::make_unique<grpc::ClientContext>();
                 if (GrpcSigner) {
                     GrpcSigner->SignClientContext(*Context);
                 }
-                Reader = Stub->AsyncExport(Context.get(), std::move(request), &CQ);
+                Reader = Stub->AsyncExport(Context.get(), std::move(batch.Request), &CQ);
                 Reader->Finish(&Response, &Status, nullptr);
             }
 
@@ -185,9 +264,12 @@ namespace NWilson {
                 }
             }
 
-            void HandleWakeup() {
+            void HandleWakeup(TEvents::TEvWakeup::TPtr ev) {
                 Y_ABORT_UNLESS(WakeupScheduled);
                 WakeupScheduled = false;
+                if (ev->Get()->Tag == SendBatchId) {
+                    CompleteCurrentBatch();
+                }
                 TryMakeProgress();
             }
 
@@ -198,7 +280,7 @@ namespace NWilson {
 
             STRICT_STFUNC(StateWork,
                 hFunc(TEvWilson, Handle);
-                cFunc(TEvents::TSystem::Wakeup, HandleWakeup);
+                hFunc(TEvents::TEvWakeup, HandleWakeup);
             );
 
             STRICT_STFUNC(StateBroken,

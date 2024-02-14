@@ -574,9 +574,8 @@ void TCheckpointCoordinator::Handle(NActors::TEvInterconnect::TEvNodeConnected::
 void TCheckpointCoordinator::Handle(NActors::TEvents::TEvUndelivered::TPtr& ev) {
     CC_LOG_D("Handle undelivered");
 
-    const auto actorIt = AllActors.find(ev->Sender);
-    if (actorIt != AllActors.end() && actorIt->second->EventsQueue.HandleUndelivered(ev)) {
-        return;
+    if (const auto actorIt = AllActors.find(ev->Sender); actorIt != AllActors.end()) {
+        actorIt->second->EventsQueue.HandleUndelivered(ev);
     }
 
     NYql::TTaskControllerImpl<TCheckpointCoordinator>::OnUndelivered(ev);

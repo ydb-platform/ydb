@@ -291,6 +291,7 @@ Y_UNIT_TEST_SUITE(KqpConstraints) {
     Y_UNIT_TEST(AlterTableAddColumnWithDefaultValue) {
         NKikimrConfig::TAppConfig appConfig;
         appConfig.MutableTableServiceConfig()->SetEnableSequences(false);
+        appConfig.MutableTableServiceConfig()->SetEnableColumnsWithDefault(true);
         appConfig.MutableFeatureFlags()->SetEnableAddColumsWithDefaults(true);
         auto serverSettings = TKikimrSettings().SetAppConfig(appConfig);
         TKikimrRunner kikimr(serverSettings);
@@ -345,7 +346,7 @@ Y_UNIT_TEST_SUITE(KqpConstraints) {
             auto result = session.ExecuteSchemeQuery(query).GetValueSync();
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS,
                                        result.GetIssues().ToString());
-        }        
+        }
 
         {
             TString query = R"(
@@ -412,7 +413,7 @@ Y_UNIT_TEST_SUITE(KqpConstraints) {
             auto result = session.ExecuteSchemeQuery(query).GetValueSync();
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS,
                                        result.GetIssues().ToString());
-        }        
+        }
     }
 
     Y_UNIT_TEST(DefaultValuesForTableNegative3) {
@@ -437,7 +438,7 @@ Y_UNIT_TEST_SUITE(KqpConstraints) {
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::GENERIC_ERROR, result.GetIssues().ToString());
             UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(),
                                         "Default expr Key is nullable or optional, but column has not null constraint");
-        }        
+        }
     }
 
     Y_UNIT_TEST(DefaultValuesForTableNegative4) {
@@ -463,7 +464,7 @@ Y_UNIT_TEST_SUITE(KqpConstraints) {
             auto result = session.ExecuteSchemeQuery(query).GetValueSync();
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::GENERIC_ERROR,
                                        result.GetIssues().ToString());
-        }        
+        }
     }
 
     Y_UNIT_TEST(IndexedTableAndNotNullColumn) {
@@ -506,7 +507,7 @@ Y_UNIT_TEST_SUITE(KqpConstraints) {
 
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS,
                                        result.GetIssues().ToString());
-            if (result.GetResultSets().size() > 0)  
+            if (result.GetResultSets().size() > 0)
                 return NYdb::FormatResultSetYson(result.GetResultSet(0));
             return "";
         };
@@ -538,7 +539,7 @@ Y_UNIT_TEST_SUITE(KqpConstraints) {
             ]
         )");
 
-        
+
         fQuery(R"(
             UPSERT INTO `/Root/AlterTableAddNotNullColumn` (Key, Value, Value2) VALUES (2, "New", 2);
         )");
@@ -551,7 +552,7 @@ Y_UNIT_TEST_SUITE(KqpConstraints) {
 
         fQuery(R"(
             UPSERT INTO `/Root/AlterTableAddNotNullColumn` (Key, Value) VALUES (2, "OldNew");
-        )");        
+        )");
 
         fQuery(R"(
             UPSERT INTO `/Root/AlterTableAddNotNullColumn` (Key, Value) VALUES (3, "BrandNew");
@@ -715,7 +716,7 @@ Y_UNIT_TEST_SUITE(KqpConstraints) {
 
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS,
                                        result.GetIssues().ToString());
-            if (result.GetResultSets().size() > 0)  
+            if (result.GetResultSets().size() > 0)
                 return NYdb::FormatResultSetYson(result.GetResultSet(0));
             return "";
         };
@@ -760,7 +761,7 @@ Y_UNIT_TEST_SUITE(KqpConstraints) {
             ]
         )");
 
-        
+
         fQuery(R"(
             UPSERT INTO `/Root/AlterTableAddNotNullColumn` (Key, Value, Value2) VALUES (2, "New", 2);
         )");
@@ -773,7 +774,7 @@ Y_UNIT_TEST_SUITE(KqpConstraints) {
 
         fQuery(R"(
             UPSERT INTO `/Root/AlterTableAddNotNullColumn` (Key, Value) VALUES (2, "OldNew");
-        )");        
+        )");
 
         fQuery(R"(
             UPSERT INTO `/Root/AlterTableAddNotNullColumn` (Key, Value) VALUES (3, "BrandNew");

@@ -4,7 +4,6 @@
 #include <ydb/library/yql/ast/yql_expr.h>
 
 #include <library/cpp/svnversion/svnversion.h>
-#include <library/cpp/testing/unittest/registar.h>
 
 #include <util/stream/file.h>
 #include <util/system/shellcommand.h>

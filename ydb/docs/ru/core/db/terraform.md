@@ -13,7 +13,7 @@
 
 {% endnote %}
 
-Чтобы начать работать с Terraform для {{ ydb-short-name }}, установите и настройте [Terraform provider for {{ ydb-short-name }}](https://github.com/ydb-platform/terraform-provider-ydb/).
+Чтобы начать работать с Terraform для {{ ydb-short-name }}, установите и настройте [Terraform](https://developer.hashicorp.com/terraform/install) и [Terraform provider for {{ ydb-short-name }}](https://github.com/ydb-platform/terraform-provider-ydb/).
 
 {% note warning %}
 

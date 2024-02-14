@@ -229,7 +229,7 @@ ttl {
 
 ### Вторичный индекс таблицы {#ydb-table-index}
 
-Для работы с индексом таблицы используется ресурс `ydb_table_index`.
+Для работы с индексом таблицы используется ресурс [ydb_table_index](../concepts/secondary_indexes.md).
 
 {% note info %}
 

@@ -69,11 +69,6 @@ class PnpmPackageManager(BasePackageManager):
             virtual_store_dir,
         ]
 
-        lockfile_version = self.load_lockfile_from_dir(self.sources_path).data["lockfileVersion"]
-        if lockfile_version == '6.0':
-            install_cmd.append("--use-lockfile-v6")
-            os.environ['npm_config_auto_install_peers'] = 'true'
-
         self._exec_command(install_cmd)
 
         self._run_apply_addons_if_need(yatool_prebuilder_path, virtual_store_dir)

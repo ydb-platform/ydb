@@ -83,8 +83,8 @@ message TComputeMapping {
     TActivationPercentage Activation = 3;
 }
 
-enum ESupportedComputeYDBFeatures {
-    REPLACE_IF_EXISTS = 0;
+message TSupportedComputeYDBFeatures {
+    bool ReplaceIfExists = 1;
 }
 
 message TComputeConfig {
@@ -92,5 +92,5 @@ message TComputeConfig {
     TYdbCompute Ydb = 2;
     EComputeType DefaultCompute = 3;
     repeated TComputeMapping ComputeMapping = 4;
-    repeated ESupportedComputeYDBFeatures SupportedComputeYDBFeatures = 5;
+    TSupportedComputeYDBFeatures SupportedComputeYDBFeatures = 5;
 }

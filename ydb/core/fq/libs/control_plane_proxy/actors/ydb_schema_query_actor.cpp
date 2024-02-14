@@ -575,7 +575,7 @@ IActor* MakeCreateConnectionActor(
         statements.push_back(TSchemaQueryTask{
             .SQL = MakeCreateExternalDataSourceQuery(
                 connectionContent, signer, commonConfig,
-                computeConfig.IsYDBSyntaxFeatureSupported(REPLACE_IF_EXISTS)),
+                computeConfig.IsReplaceIfExistsSyntaxSupported()),
             .ScheduleErrorRecoverySQLGeneration =
                 withoutRollback ? NoRecoverySQLGeneration()
                                 : alreadyExistRecoveryActorFactoryMethod,
@@ -636,7 +636,7 @@ NActors::IActor* MakeModifyConnectionActor(
                                     newConnectionContent.name(),
                                     signer);
 
-        bool replaceSupported = computeConfig.IsYDBSyntaxFeatureSupported(REPLACE_IF_EXISTS);
+        bool replaceSupported = computeConfig.IsReplaceIfExistsSyntaxSupported();
         if (replaceSupported &&
             oldConnectionContent.name() == newConnectionContent.name()) {
             // CREATE OR REPLACE
@@ -833,7 +833,7 @@ NActors::IActor* MakeCreateBindingActor(
         statements.push_back(TSchemaQueryTask{
             .SQL = TString{MakeCreateExternalDataTableQuery(
                 bindingContent, externalSourceName,
-                computeConfig.IsYDBSyntaxFeatureSupported(REPLACE_IF_EXISTS))},
+                computeConfig.IsReplaceIfExistsSyntaxSupported())},
             .ScheduleErrorRecoverySQLGeneration =
                 withoutRollback ? NoRecoverySQLGeneration()
                                 : alreadyExistRecoveryActorFactoryMethod,
@@ -881,7 +881,7 @@ NActors::IActor* MakeModifyBindingActor(
         auto sourceName   = request->Get()->ConnectionContent->name();
         auto oldTableName = request->Get()->OldBindingContent->name();
 
-        bool replaceSupported = computeConfig.IsYDBSyntaxFeatureSupported(REPLACE_IF_EXISTS);
+        bool replaceSupported = computeConfig.IsReplaceIfExistsSyntaxSupported();
         if (replaceSupported &&
             oldTableName == request->Get()->Request.content().name()) {
           // CREATE OR REPLACE

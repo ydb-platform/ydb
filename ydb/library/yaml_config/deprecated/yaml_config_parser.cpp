@@ -6,7 +6,7 @@
 
 #include <library/cpp/json/writer/json.h>
 
-namespace NKikimr::NYaml {
+namespace NKikimr::NYaml::NDeprecated {
 
     template<typename T>
     static bool SetScalarFromYaml(const YAML::Node& yaml, NJson::TJsonValue& json, NJson::EJsonValueType jsonType) {

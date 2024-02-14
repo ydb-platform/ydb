@@ -12,7 +12,7 @@
 #include <ydb/core/protos/config.pb.h>
 
 
-namespace NKikimr::NYaml {
+namespace NKikimr::NYaml::NDeprecated {
     NJson::TJsonValue Yaml2Json(const YAML::Node& yaml, bool isRoot);
 
     NKikimrBlobStorage::TConfigRequest BuildInitDistributedStorageCommand(const TString& data);

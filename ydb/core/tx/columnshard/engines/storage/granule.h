@@ -188,8 +188,8 @@ public:
         LastCompactionInstant = TMonotonic::Now();
     }
 
-    std::shared_ptr<TColumnEngineChanges> GetOptimizationTask(const TCompactionLimits& limits, std::shared_ptr<TGranuleMeta> self, const THashSet<TPortionAddress>& busyPortions) const {
-        return OptimizerPlanner->GetOptimizationTask(limits, self, busyPortions);
+    std::shared_ptr<TColumnEngineChanges> GetOptimizationTask(const TCompactionLimits& limits, std::shared_ptr<TGranuleMeta> self, const std::shared_ptr<NDataLocks::TManager>& locksManager) const {
+        return OptimizerPlanner->GetOptimizationTask(limits, self, locksManager);
     }
 
     const std::map<NArrow::TReplaceKey, THashMap<ui64, std::shared_ptr<TPortionInfo>>>& GroupOrderedPortionsByPK() const {

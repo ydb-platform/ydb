@@ -27,6 +27,14 @@ protected:
         out << "remove=" << PortionsToRemove.size() << ";append=" << AppendedPortions.size() << ";";
     }
 
+    virtual std::shared_ptr<NDataLocks::ILock> DoBuildDataLockImpl() const = 0;
+
+    virtual std::shared_ptr<NDataLocks::ILock> DoBuildDataLock() const override final {
+        auto actLock = DoBuildDataLockImpl();
+        auto selfLock = std::make_shared<NDataLocks::TListPortionsLock>(PortionsToRemove);
+        return std::make_shared<NDataLocks::TCompositeLock>({actLock, selfLock});
+    }
+
 public:
     const TSplitSettings& GetSplitSettings() const {
         return SplitSettings;
@@ -38,14 +46,6 @@ public:
         , SaverContext(saverContext)
     {
 
-    }
-
-    virtual THashSet<TPortionAddress> GetTouchedPortions() const override {
-        THashSet<TPortionAddress> result;
-        for (auto&& i : PortionsToRemove) {
-            result.emplace(i.first);
-        }
-        return result;
     }
 
     THashMap<TPortionAddress, TPortionInfo> PortionsToRemove;

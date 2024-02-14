@@ -4,6 +4,7 @@
 #include <ydb/core/tx/columnshard/data_sharing/destination/transactions/tx_finish_ack_from_initiator.h>
 #include <ydb/core/tx/columnshard/data_sharing/destination/transactions/tx_finish_from_source.h>
 #include <ydb/core/tx/columnshard/data_sharing/destination/transactions/tx_data_from_source.h>
+#include <ydb/core/tx/columnshard/data_locks/locks/list.h>
 
 namespace NKikimr::NOlap::NDataSharing {
 
@@ -39,6 +40,7 @@ NKikimr::TConclusionStatus TDestinationSession::DataReceived(const THashMap<ui64
 }
 
 void TDestinationSession::SendCurrentCursorAck(const NColumnShard::TColumnShard& shard, const std::optional<TTabletId> tabletId) {
+    AFL_VERIFY(IsStarted());
     bool found = false;
     bool allTransfersFinished = true;
     for (auto&& [_, cursor] : Cursors) {
@@ -70,6 +72,7 @@ void TDestinationSession::SendCurrentCursorAck(const NColumnShard::TColumnShard&
         }
     }
     if (allTransfersFinished) {
+        Finish(shard.GetDataLocksManager());
         InitiatorController.Finished(GetSessionId());
     }
     AFL_VERIFY(found);
@@ -114,9 +117,6 @@ NKikimr::TConclusionStatus TDestinationSession::DeserializeDataFromProto(const N
         auto g = index.GetGranuleOptional(i.GetDestPathId());
         if (!g) {
             return TConclusionStatus::Fail("Incorrect remapping into undefined path id: " + ::ToString(i.GetDestPathId()));
-        }
-        for (auto&& p : g->GetPortionsOlderThenSnapshot(GetSnapshotBarrier())) {
-            p.second->FillBlobIdsByStorage(CurrentBlobIds);
         }
         if (!i.GetSourcePathId() || !i.GetDestPathId()) {
             return TConclusionStatus::Fail("PathIds remapping contains incorrect ids: " + i.DebugString());
@@ -163,6 +163,18 @@ NKikimr::TConclusionStatus TDestinationSession::DeserializeCursorFromProto(const
         it->second = cursor;
     }
     return TConclusionStatus::Success();
+}
+
+bool TDestinationSession::DoStart(const NColumnShard::TColumnShard& shard, const THashMap<ui64, std::vector<std::shared_ptr<TPortionInfo>>>& portions) {
+    THashMap<TString, THashSet<TUnifiedBlobId>> local;
+    for (auto&& i : portions) {
+        for (auto&& p : i.second) {
+            p->FillBlobIdsByStorage(local);
+        }
+    }
+    std::swap(CurrentBlobIds, local);
+    SendCurrentCursorAck(shard, {});
+    return true;
 }
 
 }

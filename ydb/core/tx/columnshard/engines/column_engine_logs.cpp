@@ -1,18 +1,22 @@
 #include "column_engine_logs.h"
 #include "filter.h"
 
-#include <ydb/core/tx/columnshard/common/limits.h>
-#include <ydb/core/tx/columnshard/hooks/abstract/abstract.h>
-#include <ydb/core/formats/arrow/one_batch_input_stream.h>
-#include <ydb/core/formats/arrow/merging_sorted_input_stream.h>
-#include <ydb/core/tx/tiering/manager.h>
-#include <ydb/core/tx/columnshard/columnshard_ttl.h>
-#include <ydb/core/tx/columnshard/columnshard_schema.h>
-#include <ydb/library/conclusion/status.h>
 #include "changes/indexation.h"
 #include "changes/general_compaction.h"
 #include "changes/cleanup.h"
 #include "changes/ttl.h"
+
+#include <ydb/core/tx/columnshard/common/limits.h>
+#include <ydb/core/tx/columnshard/hooks/abstract/abstract.h>
+#include <ydb/core/tx/columnshard/columnshard_ttl.h>
+#include <ydb/core/tx/columnshard/columnshard_schema.h>
+#include <ydb/core/tx/columnshard/data_locks/manager/manager.h>
+#include <ydb/core/tx/tiering/manager.h>
+
+#include <ydb/core/formats/arrow/one_batch_input_stream.h>
+#include <ydb/core/formats/arrow/merging_sorted_input_stream.h>
+
+#include <ydb/library/conclusion/status.h>
 
 #include <library/cpp/time_provider/time_provider.h>
 #include <ydb/library/actors/core/monotonic_provider.h>
@@ -238,18 +242,14 @@ std::shared_ptr<TInsertColumnEngineChanges> TColumnEngineForLogs::StartInsert(st
     return changes;
 }
 
-std::shared_ptr<TColumnEngineChanges> TColumnEngineForLogs::StartCompaction(const TCompactionLimits& limits, const THashSet<TPortionAddress>& busyPortions) noexcept {
-    THashSet<ui64> busyGranuleIds;
-    for (auto&& i : busyPortions) {
-        busyGranuleIds.emplace(i.GetPathId());
-    }
-    auto granule = GranulesStorage->GetGranuleForCompaction(Tables, busyGranuleIds);
+std::shared_ptr<TColumnEngineChanges> TColumnEngineForLogs::StartCompaction(const TCompactionLimits& limits, const std::shared_ptr<NDataLocks::TManager>& locksManager) noexcept {
+    auto granule = GranulesStorage->GetGranuleForCompaction(Tables, locksManager);
     if (!granule) {
         AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("event", "no granules for start compaction");
         return nullptr;
     }
     granule->OnStartCompaction();
-    auto changes = granule->GetOptimizationTask(limits, granule, busyPortions);
+    auto changes = granule->GetOptimizationTask(limits, granule, locksManager);
     NYDBTest::TControllers::GetColumnShardController()->OnStartCompaction(changes);
     if (!changes) {
         AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("event", "cannot build optimization task for granule that need compaction")("weight", granule->GetCompactionPriority().DebugString());
@@ -258,7 +258,7 @@ std::shared_ptr<TColumnEngineChanges> TColumnEngineForLogs::StartCompaction(cons
 }
 
 std::shared_ptr<TCleanupColumnEngineChanges> TColumnEngineForLogs::StartCleanup(const TSnapshot& snapshot,
-                                                                         THashSet<ui64>& pathsToDrop, ui32 /*maxRecords*/) noexcept {
+                                                                         THashSet<ui64>& pathsToDrop, const std::shared_ptr<NDataLocks::TManager>& dataLocksManager) noexcept {
     AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("event", "StartCleanup")("portions_count", CleanupPortions.size());
     auto changes = std::make_shared<TCleanupColumnEngineChanges>(StoragesManager);
 
@@ -276,6 +276,9 @@ std::shared_ptr<TCleanupColumnEngineChanges> TColumnEngineForLogs::StartCleanup(
         }
 
         for (auto& [portion, info] : itTable->second->GetPortions()) {
+            if (dataLocksManager->IsLocked(*info)) {
+                continue;
+            }
             if (txSize + info->GetTxVolume() < txSizeLimit || changes->PortionsToDrop.empty()) {
                 txSize += info->GetTxVolume();
             } else {
@@ -297,6 +300,9 @@ std::shared_ptr<TCleanupColumnEngineChanges> TColumnEngineForLogs::StartCleanup(
             break;
         }
         for (auto&& i : it->second) {
+            if (dataLocksManager->IsLocked(i)) {
+                continue;
+            }
             Y_ABORT_UNLESS(i.CheckForCleanup(snapshot));
             if (txSize + i.GetTxVolume() < txSizeLimit || changes->PortionsToDrop.empty()) {
                 txSize += i.GetTxVolume();
@@ -341,7 +347,7 @@ TDuration TColumnEngineForLogs::ProcessTiering(const ui64 pathId, const TTiering
         if (info->HasRemoveSnapshot()) {
             continue;
         }
-        if (context.BusyPortions.contains(info->GetAddress())) {
+        if (context.DataLocksManager->IsLocked(*info)) {
             AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("event", "skip ttl through busy portion")("portion_id", info->GetAddress().DebugString());
             continue;
         }
@@ -456,7 +462,7 @@ bool TColumnEngineForLogs::DrainEvictionQueue(std::map<TMonotonic, std::vector<T
     return hasChanges;
 }
 
-std::shared_ptr<TTTLColumnEngineChanges> TColumnEngineForLogs::StartTtl(const THashMap<ui64, TTiering>& pathEviction, const THashSet<TPortionAddress>& busyPortions, const ui64 memoryUsageLimit) noexcept {
+std::shared_ptr<TTTLColumnEngineChanges> TColumnEngineForLogs::StartTtl(const THashMap<ui64, TTiering>& pathEviction, const std::shared_ptr<NDataLocks::TManager>& locksManager, const ui64 memoryUsageLimit) noexcept {
     AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("event", "StartTtl")("external", pathEviction.size())
         ("internal", EvictionsController.MutableNextCheckInstantForTierings().size())
         ;
@@ -465,7 +471,7 @@ std::shared_ptr<TTTLColumnEngineChanges> TColumnEngineForLogs::StartTtl(const TH
 
     auto changes = std::make_shared<TTTLColumnEngineChanges>(TSplitSettings(), saverContext);
 
-    TTieringProcessContext context(memoryUsageLimit, changes, busyPortions, TTTLColumnEngineChanges::BuildMemoryPredictor());
+    TTieringProcessContext context(memoryUsageLimit, changes, locksManager, TTTLColumnEngineChanges::BuildMemoryPredictor());
     bool hasExternalChanges = false;
     for (auto&& i : pathEviction) {
         context.DurationsForced[i.first] = ProcessTiering(i.first, i.second, context);
@@ -585,12 +591,12 @@ void TColumnEngineForLogs::DoRegisterTable(const ui64 pathId) {
 }
 
 TColumnEngineForLogs::TTieringProcessContext::TTieringProcessContext(const ui64 memoryUsageLimit,
-    std::shared_ptr<TTTLColumnEngineChanges> changes, const THashSet<TPortionAddress>& busyPortions, const std::shared_ptr<TColumnEngineChanges::IMemoryPredictor>& memoryPredictor)
+    std::shared_ptr<TTTLColumnEngineChanges> changes, const std::shared_ptr<NDataLocks::TManager>& dataLocksManager, const std::shared_ptr<TColumnEngineChanges::IMemoryPredictor>& memoryPredictor)
     : MemoryUsageLimit(memoryUsageLimit)
     , MemoryPredictor(memoryPredictor)
     , Now(TlsActivationContext ? AppData()->TimeProvider->Now() : TInstant::Now())
     , Changes(changes)
-    , BusyPortions(busyPortions)
+    , DataLocksManager(dataLocksManager)
 {
 
 }

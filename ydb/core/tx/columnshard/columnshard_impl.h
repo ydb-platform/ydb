@@ -15,6 +15,9 @@
 #include "resource_subscriber/counters.h"
 #include "resource_subscriber/task.h"
 #include "normalizer/abstract/abstract.h"
+
+#include "data_locks/manager/manager.h"
+
 #include "data_sharing/destination/events/control.h"
 #include "data_sharing/source/events/control.h"
 #include "data_sharing/destination/events/transfer.h"
@@ -375,6 +378,7 @@ private:
     std::unique_ptr<TOperationsManager> OperationsManager;
     std::shared_ptr<NOlap::NDataSharing::TSessionsManager> SharingSessionsManager;
     std::shared_ptr<NOlap::IStoragesManager> StoragesManager;
+    std::shared_ptr<NOlap::NDataLocks::TManager> DataLocksManager;
 
     using TSchemaPreset = TSchemaPreset;
     using TTableInfo = TTableInfo;
@@ -555,9 +559,28 @@ private:
 public:
     ui64 TabletTxCounter = 0;
 
+    template <class T>
+    const T& GetIndexAs() const {
+        return TablesManager.GetPrimaryIndexAsVerified<T>();
+    }
+
+    NOlap::TSnapshot GetLastCompletedTx() const {
+        return LastCompletedTx;
+    }
+
     const std::shared_ptr<NOlap::IStoragesManager>& GetStoragesManager() const {
         AFL_VERIFY(StoragesManager);
         return StoragesManager;
+    }
+
+    const std::shared_ptr<NOlap::NDataLocks::TManager>& GetDataLocksManager() const {
+        AFL_VERIFY(DataLocksManager);
+        return DataLocksManager;
+    }
+
+    const NOlap::TInsertTable& GetInsertTable() const {
+        AFL_VERIFY(!!InsertTable);
+        return *InsertTable;
     }
 
     static constexpr NKikimrServices::TActivity::EType ActorActivityType() {

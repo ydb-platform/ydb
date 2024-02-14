@@ -87,12 +87,4 @@ TCompactColumnEngineChanges::~TCompactColumnEngineChanges() {
     Y_DEBUG_ABORT_UNLESS(!NActors::TlsActivationContext || !NeedGranuleStatusProvide);
 }
 
-THashSet<TPortionAddress> TCompactColumnEngineChanges::GetTouchedPortions() const {
-    THashSet<TPortionAddress> result = TBase::GetTouchedPortions();
-    for (auto&& i : SwitchedPortions) {
-        result.emplace(i.GetAddress());
-    }
-    return result;
-}
-
 }

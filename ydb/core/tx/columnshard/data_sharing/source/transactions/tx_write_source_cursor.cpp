@@ -7,7 +7,7 @@ bool TTxWriteSourceCursor::DoExecute(NTabletFlatExecutor::TTransactionContext& t
     using namespace NColumnShard;
     NIceDb::TNiceDb db(txc.DB);
     db.Table<Schema::SourceSessions>().Key(Session->GetSessionId())
-        .Update(NIceDb::TUpdate<Schema::SourceSessions::Cursor>(Session->GetCursorVerified()->SerializeToProto().SerializeAsString()));
+        .Update(NIceDb::TUpdate<Schema::SourceSessions::CursorDynamic>(Session->GetCursorVerified()->SerializeDynamicToProto().SerializeAsString()));
     return true;
 }
 

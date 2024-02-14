@@ -6,6 +6,17 @@
 #include <ydb/library/accessor/accessor.h>
 #include <ydb/library/conclusion/status.h>
 
+namespace NKikimr::NColumnShard {
+class TColumnShard;
+}
+
+namespace NKikimr::NOlap {
+class TPortionInfo;
+namespace NDataLocks {
+class TManager;
+}
+}
+
 namespace NKikimr::NOlap::NDataSharing {
 
 class TCommonSession {
@@ -18,9 +29,15 @@ private:
     YDB_READONLY_DEF(TString, SessionId);
     YDB_READONLY(ui64, RuntimeId, GetNextRuntimeId());
     TSnapshot SnapshotBarrier = TSnapshot::Zero();
+    bool IsStartedFlag = false;
+    bool IsFinishedFlag = false;
 protected:
     TTransferContext TransferContext;
+    virtual bool DoStart(const NColumnShard::TColumnShard& shard, const THashMap<ui64, std::vector<std::shared_ptr<TPortionInfo>>>& portions) = 0;
+    virtual THashSet<ui64> GetPathIdsForStart() const = 0;
 public:
+    virtual ~TCommonSession() = default;
+
     TCommonSession() = default;
 
     TCommonSession(const TString& sessionId, const TTransferContext& transferContext)
@@ -28,9 +45,16 @@ public:
         , TransferContext(transferContext) {
     }
 
+    bool IsStarted() const {
+        return IsStartedFlag;
+    }
+
     bool IsEqualTo(const TCommonSession& item) const {
         return SessionId == item.SessionId && SnapshotBarrier == item.SnapshotBarrier;
     }
+
+    bool Start(const NColumnShard::TColumnShard& shard);
+    void Finish(const std::shared_ptr<NDataLocks::TManager>& dataLocksManager);
 
     const TSnapshot& GetSnapshotBarrier() const {
         return SnapshotBarrier;

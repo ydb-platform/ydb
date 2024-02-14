@@ -58,7 +58,7 @@ void TColumnEngineChanges::WriteIndexComplete(NColumnShard::TColumnShard& self, 
     Stage = EStage::Finished;
     AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("event", "WriteIndexComplete")("type", TypeString())("success", context.FinishedSuccessfully);
     DoWriteIndexComplete(self, context);
-    DoOnFinish(self, context);
+    OnFinish(self, context);
     self.IncCounter(GetCounterIndex(context.FinishedSuccessfully));
 
 }
@@ -82,10 +82,11 @@ TColumnEngineChanges::~TColumnEngineChanges() {
 void TColumnEngineChanges::Abort(NColumnShard::TColumnShard& self, TChangesFinishContext& context) {
     Y_ABORT_UNLESS(Stage != EStage::Finished && Stage != EStage::Created && Stage != EStage::Aborted);
     Stage = EStage::Aborted;
-    DoOnFinish(self, context);
+    OnFinish(self, context);
 }
 
 void TColumnEngineChanges::Start(NColumnShard::TColumnShard& self) {
+    self.DataLocksManager->RegisterLock(TypeString(), BuildDataLock());
     Y_ABORT_UNLESS(Stage == EStage::Created);
     DoStart(self);
     Stage = EStage::Started;
@@ -95,6 +96,7 @@ void TColumnEngineChanges::Start(NColumnShard::TColumnShard& self) {
 }
 
 void TColumnEngineChanges::StartEmergency() {
+    self.DataLocksManager->RegisterLock(BuildDataLock());
     Y_ABORT_UNLESS(Stage == EStage::Created);
     Stage = EStage::Started;
     if (!NeedConstruction()) {

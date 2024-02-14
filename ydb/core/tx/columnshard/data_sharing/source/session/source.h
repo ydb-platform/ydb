@@ -14,6 +14,15 @@ private:
     std::shared_ptr<TSourceCursor> Cursor;
     YDB_READONLY_DEF(std::set<ui64>, PathIds);
     TTabletId DestinationTabletId = TTabletId(0);
+protected:
+    virtual bool DoStart(const NColumnShard::TColumnShard& shard, const THashMap<ui64, std::vector<std::shared_ptr<TPortionInfo>>>& portions) override;
+    virtual THashSet<ui64> GetPathIdsForStart() const override {
+        THashSet<ui64> result;
+        for (auto&& i : PathIds) {
+            result.emplace(i);
+        }
+        return result;
+    }
 public:
     TSourceSession(const TTabletId selfTabletId)
         : SelfTabletId(selfTabletId)
@@ -62,7 +71,7 @@ public:
     [[nodiscard]] TConclusion<std::unique_ptr<NTabletFlatExecutor::ITransaction>> AckData(NColumnShard::TColumnShard* self, const ui32 receivedPackIdx, const std::shared_ptr<TSourceSession>& selfPtr);
     [[nodiscard]] TConclusion<std::unique_ptr<NTabletFlatExecutor::ITransaction>> AckLinks(NColumnShard::TColumnShard* self, const TTabletId tabletId, const ui32 packIdx, const std::shared_ptr<TSourceSession>& selfPtr);
 
-    void ActualizeDestination();
+    void ActualizeDestination(const std::shared_ptr<NDataLocks::TManager>& dataLocksManager);
 
     NKikimrColumnShardDataSharingProto::TSourceSession SerializeDataToProto() const {
         NKikimrColumnShardDataSharingProto::TSourceSession result;
@@ -75,7 +84,7 @@ public:
     }
 
     [[nodiscard]] TConclusionStatus DeserializeFromProto(const NKikimrColumnShardDataSharingProto::TSourceSession& proto,
-        const std::optional<NKikimrColumnShardDataSharingProto::TSourceSession::TCursor>& protoCursor, const TColumnEngineForLogs& index,
-        const std::shared_ptr<TSharedBlobsManager>& sharedBlobsManager);
+        const std::optional<NKikimrColumnShardDataSharingProto::TSourceSession::TCursorDynamic>& protoCursor, 
+        const std::optional<NKikimrColumnShardDataSharingProto::TSourceSession::TCursorStatic>& protoCursorStatic);
 };
 }

@@ -1,6 +1,7 @@
 #include "source.h"
 #include <ydb/core/tx/columnshard/engines/column_engine_logs.h>
 #include <ydb/core/tx/columnshard/data_sharing/destination/events/transfer.h>
+#include <ydb/core/formats/arrow/hash/xx_hash.h>
 
 namespace NKikimr::NOlap::NDataSharing {
 
@@ -75,8 +76,8 @@ bool TSourceCursor::Next(const std::shared_ptr<TSharedBlobsManager>& sharedBlobs
     return true;
 }
 
-NKikimrColumnShardDataSharingProto::TSourceSession::TCursor TSourceCursor::SerializeToProto() const {
-    NKikimrColumnShardDataSharingProto::TSourceSession::TCursor result;
+NKikimrColumnShardDataSharingProto::TSourceSession::TCursorDynamic TSourceCursor::SerializeDynamicToProto() const {
+    NKikimrColumnShardDataSharingProto::TSourceSession::TCursorDynamic result;
     result.SetStartPathId(StartPathId);
     result.SetStartPortionId(StartPortionId);
     if (NextPathId) {
@@ -93,14 +94,24 @@ NKikimrColumnShardDataSharingProto::TSourceSession::TCursor TSourceCursor::Seria
     return result;
 }
 
-NKikimr::TConclusionStatus TSourceCursor::DeserializeFromProto(const NKikimrColumnShardDataSharingProto::TSourceSession::TCursor& proto, const std::shared_ptr<TSharedBlobsManager>& sharedBlobsManager) {
+NKikimrColumnShardDataSharingProto::TSourceSession::TCursorStatic TSourceCursor::SerializeStaticToProto() const {
+    NKikimrColumnShardDataSharingProto::TSourceSession::TCursorStatic result;
+    for (auto&& i : PathPortionHashes) {
+        auto* pathHash = result.AddPathHashes();
+        pathHash->SetPathId(i.first);
+        pathHash->SetHash(i.second);
+    }
+    return result;
+}
+
+NKikimr::TConclusionStatus TSourceCursor::DeserializeFromProto(const NKikimrColumnShardDataSharingProto::TSourceSession::TCursorDynamic& proto,
+    const NKikimrColumnShardDataSharingProto::TSourceSession::TCursorStatic& protoStatic) {
     StartPathId = proto.GetStartPathId();
     StartPortionId = proto.GetStartPortionId();
     PackIdx = proto.GetPackIdx();
     if (!PackIdx) {
         return TConclusionStatus::Fail("Incorrect proto cursor PackIdx value: " + proto.DebugString());
     }
-    BuildSelection(sharedBlobsManager);
     if (proto.HasNextPathId()) {
         AFL_VERIFY(proto.GetNextPathId() == *NextPathId)("next_local", *NextPathId)("proto", proto.GetNextPathId());
     }
@@ -115,28 +126,56 @@ NKikimr::TConclusionStatus TSourceCursor::DeserializeFromProto(const NKikimrColu
     for (auto&& i : proto.GetLinksModifiedTablets()) {
         LinksModifiedTablets.emplace((TTabletId)i);
     }
+    for (auto&& i : protoStatic.GetPathHashes()) {
+        PathPortionHashes.emplace(i.GetPathId(), i.GetHash());
+    }
+    AFL_VERIFY(PathPortionHashes.size());
+    StaticSaved = true;
     return TConclusionStatus::Success();
 }
 
-TSourceCursor::TSourceCursor(const TColumnEngineForLogs& index, const TTabletId selfTabletId, const std::set<ui64>& pathIds, const TTransferContext transferContext, const TSnapshot& snapshotBorder)
+TSourceCursor::TSourceCursor(const TTabletId selfTabletId, const std::set<ui64>& pathIds, const TTransferContext transferContext)
     : SelfTabletId(selfTabletId)
     , TransferContext(transferContext)
+    , PathIds(pathIds)
 {
-    for (auto&& i : pathIds) {
-        auto granule = index.GetGranuleOptional(i);
-        if (!granule) {
-            continue;
-        }
-        PortionsForSend.emplace(i, granule->GetPortionsOlderThenSnapshot(snapshotBorder));
-    }
-    AFL_VERIFY(PortionsForSend.size());
-    AFL_VERIFY(PortionsForSend.begin()->second.size());
 }
 
-void TSourceCursor::Start(const std::shared_ptr<TSharedBlobsManager>& sharedBlobsManager) {
-    NextPathId = PortionsForSend.begin()->first;
-    NextPortionId = PortionsForSend.begin()->second.begin()->first;
-    AFL_VERIFY(Next(sharedBlobsManager));
+bool TSourceCursor::Start(const std::shared_ptr<TSharedBlobsManager>& sharedBlobsManager, const THashMap<ui64, std::vector<std::shared_ptr<TPortionInfo>>>& portions) {
+    AFL_VERIFY(!IsStartedFlag);
+    std::map<ui64, std::map<ui32, std::shared_ptr<TPortionInfo>>> local;
+    std::vector<std::shared_ptr<TPortionInfo>> portionsLock;
+    NArrow::NHash::NXX64::TStreamStringHashCalcer hashCalcer(0);
+    for (auto&& i : portions) {
+        hashCalcer.Start();
+        std::map<ui32, std::shared_ptr<TPortionInfo>> portionsMap;
+        for (auto&& p : i.second) {
+            const ui64 portionId = p->GetPortionId();
+            hashCalcer.Update((ui8*)&portionId, sizeof(portionId));
+            AFL_VERIFY(portionsMap.emplace(portionId, p).second);
+        }
+        auto it = PathPortionHashes.find(i.first);
+        const ui64 hash = hashCalcer.Finish();
+        if (it == PathPortionHashes.end()) {
+            PathPortionHashes.emplace(i.first, ::ToString(hash));
+        } else {
+            AFL_VERIFY(::ToString(hash) == it->second);
+        }
+        local.emplace(i.first, std::move(portionsMap));
+    }
+    std::swap(PortionsForSend, local);
+    if (!StartPathId) {
+        AFL_VERIFY(PortionsForSend.size());
+        AFL_VERIFY(PortionsForSend.begin()->second.size());
+
+        NextPathId = PortionsForSend.begin()->first;
+        NextPortionId = PortionsForSend.begin()->second.begin()->first;
+        AFL_VERIFY(Next(sharedBlobsManager));
+    } else {
+        BuildSelection(sharedBlobsManager);
+    }
+    IsStartedFlag = true;
+    return true;
 }
 
 }

@@ -66,6 +66,7 @@ TColumnShard::TColumnShard(TTabletStorageInfo* info, const TActorId& tablet)
     , TTabletExecutedFlat(info, tablet, nullptr)
     , ProgressTxController(std::make_unique<TTxController>(*this))
     , StoragesManager(std::make_shared<NOlap::TStoragesManager>(*this))
+    , DataLocksManager(std::make_shared<NOlap::NDataLocks::TManager>())
     , PeriodicWakeupActivationPeriod(GetControllerPeriodicWakeupActivationPeriod())
     , StatsReportInterval(GetControllerStatsReportInterval())
     , InFlightReadsTracker(StoragesManager)
@@ -504,13 +505,14 @@ void TColumnShard::EnqueueBackgroundActivities(bool periodic, TBackgroundActivit
     TLogContextGuard gLogging(NActors::TLogContextBuilder::Build(NKikimrServices::TX_COLUMNSHARD)("tablet_id", TabletID()));
     ACFL_DEBUG("event", "EnqueueBackgroundActivities")("periodic", periodic)("activity", activity.DebugString());
     CSCounters.OnStartBackground();
-
     SendPeriodicStats();
 
     if (!TablesManager.HasPrimaryIndex()) {
         LOG_S_NOTICE("Background activities cannot be started: no index at tablet " << TabletID());
         return;
     }
+//  !!!!!! MUST BE FIRST THROUGH DATA HAVE TO BE SAME IN SESSIONS AFTER TABLET RESTART
+    SharingSessionsManager->Start(*this);
 
     if (activity.HasIndexation()) {
         SetupIndexation();
@@ -694,7 +696,7 @@ void TColumnShard::SetupCompaction() {
     BackgroundController.CheckDeadlines();
     while (BackgroundController.GetCompactionsCount() < TSettings::MAX_ACTIVE_COMPACTIONS) {
         auto limits = CompactionLimits.Get();
-        auto indexChanges = TablesManager.MutablePrimaryIndex().StartCompaction(limits, BackgroundController.GetConflictCompactionPortions());
+        auto indexChanges = TablesManager.MutablePrimaryIndex().StartCompaction(limits, DataLocksManager);
         if (!indexChanges) {
             LOG_S_DEBUG("Compaction not started: cannot prepare compaction at tablet " << TabletID());
             break;
@@ -735,8 +737,7 @@ bool TColumnShard::SetupTtl(const THashMap<ui64, NOlap::TTiering>& pathTtls, con
 
     auto actualIndexInfo = TablesManager.GetPrimaryIndex()->GetVersionedIndex();
     const ui64 memoryUsageLimit = HasAppData() ? AppDataVerified().ColumnShardConfig.GetTieringsMemoryLimit() : ((ui64)512 * 1024 * 1024);
-    std::shared_ptr<NOlap::TTTLColumnEngineChanges> indexChanges = TablesManager.MutablePrimaryIndex().StartTtl(
-        eviction, BackgroundController.GetConflictTTLPortions(), memoryUsageLimit);
+    std::shared_ptr<NOlap::TTTLColumnEngineChanges> indexChanges = TablesManager.MutablePrimaryIndex().StartTtl(eviction, DataLocksManager, memoryUsageLimit);
 
     if (!indexChanges) {
         ACFL_DEBUG("background", "ttl")("skip_reason", "no_changes");
@@ -769,8 +770,7 @@ void TColumnShard::SetupCleanup() {
 
     NOlap::TSnapshot cleanupSnapshot{GetMinReadStep(), 0};
 
-    auto changes =
-        TablesManager.MutablePrimaryIndex().StartCleanup(cleanupSnapshot, TablesManager.MutablePathsToDrop(), TLimits::MAX_TX_RECORDS);
+    auto changes = TablesManager.MutablePrimaryIndex().StartCleanup(cleanupSnapshot, TablesManager.MutablePathsToDrop(), DataLocksManager);
     if (!changes) {
         ACFL_DEBUG("background", "cleanup")("skip_reason", "no_changes");
         return;
@@ -847,13 +847,13 @@ void TColumnShard::Handle(NOlap::NDataSharing::NEvents::TEvStartFromInitiator::T
         return;
     }
 
-    auto txConclusion = SharingSessionsManager->StartDestSession(this, reqSession);
+    auto txConclusion = SharingSessionsManager->InitializeDestSession(this, reqSession);
     Execute(txConclusion.release(), ctx);
 }
 
 void TColumnShard::Handle(NOlap::NDataSharing::NEvents::TEvStartToSource::TPtr& ev, const TActorContext& ctx) {
     auto reqSession = std::make_shared<NOlap::NDataSharing::TSourceSession>((NOlap::TTabletId)TabletID());
-    AFL_VERIFY(reqSession->DeserializeFromProto(ev->Get()->Record.GetSession(), {}, TablesManager.GetPrimaryIndexAsVerified<NOlap::TColumnEngineForLogs>(), StoragesManager->GetSharedBlobsManager()));
+    AFL_VERIFY(reqSession->DeserializeFromProto(ev->Get()->Record.GetSession(), {}, {}));
 
     auto currentSession = SharingSessionsManager->GetSourceSession(reqSession->GetSessionId());
     if (currentSession) {
@@ -861,7 +861,7 @@ void TColumnShard::Handle(NOlap::NDataSharing::NEvents::TEvStartToSource::TPtr& 
         return;
     }
 
-    auto txConclusion = SharingSessionsManager->StartSourceSession(this, reqSession);
+    auto txConclusion = SharingSessionsManager->InitializeSourceSession(this, reqSession);
     Execute(txConclusion.release(), ctx);
 };
 

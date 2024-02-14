@@ -12,7 +12,7 @@ bool TTxStartToSource::DoExecute(NTabletFlatExecutor::TTransactionContext& txc, 
 }
 
 void TTxStartToSource::DoComplete(const TActorContext& /*ctx*/) {
-    Session->ActualizeDestination();
+    Session->ActualizeDestination(Self->GetDataLocksManager());
 }
 
 }

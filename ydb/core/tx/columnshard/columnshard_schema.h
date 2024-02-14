@@ -340,10 +340,11 @@ struct Schema : NIceDb::Schema {
     struct SourceSessions: NIceDb::Schema::Table<SourceSessionsTableId> {
         struct SessionId: Column<1, NScheme::NTypeIds::String> {};
         struct Details: Column<2, NScheme::NTypeIds::String> {};
-        struct Cursor: Column<3, NScheme::NTypeIds::String> {};
+        struct CursorDynamic: Column<3, NScheme::NTypeIds::String> {};
+        struct CursorStatic: Column<4, NScheme::NTypeIds::String> {};
 
         using TKey = TableKey<SessionId>;
-        using TColumns = TableColumns<SessionId, Details, Cursor>;
+        using TColumns = TableColumns<SessionId, Details, CursorDynamic, CursorStatic>;
     };
 
     struct DestinationSessions: NIceDb::Schema::Table<DestinationSessionsTableId> {

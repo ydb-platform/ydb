@@ -6,13 +6,26 @@
 
 namespace NKikimr::NOlap::NDataSharing {
 
+void TSessionsManager::Start(const NColumnShard::TColumnShard& shard) const {
+    for (auto&& i : SourceSessions) {
+        if (!i.second->IsStarted()) {
+            i.second->Start(shard);
+        }
+    }
+    for (auto&& i : DestSessions) {
+        if (!i.second->IsStarted()) {
+            i.second->Start(shard);
+        }
+    }
+}
+
 void TSessionsManager::InitializeEventsExchange(const NColumnShard::TColumnShard& shard, const std::optional<ui64> sessionCookie) {
     AFL_VERIFY(!sessionCookie || *sessionCookie);
     for (auto&& i : SourceSessions) {
         if (sessionCookie && *sessionCookie != i.second->GetRuntimeId()) {
             continue;
         }
-        i.second->ActualizeDestination();
+        i.second->ActualizeDestination(shard.GetDataLocksManager());
     }
     for (auto&& i : DestSessions) {
         if (sessionCookie && *sessionCookie != i.second->GetRuntimeId()) {
@@ -22,7 +35,7 @@ void TSessionsManager::InitializeEventsExchange(const NColumnShard::TColumnShard
     }
 }
 
-bool TSessionsManager::Load(NTable::TDatabase& database, const TColumnEngineForLogs* index, const std::shared_ptr<TSharedBlobsManager>& sharedBlobsManager) {
+bool TSessionsManager::Load(NTable::TDatabase& database, const TColumnEngineForLogs* index) {
     NIceDb::TNiceDb db(database);
     using namespace NColumnShard;
     {
@@ -38,11 +51,14 @@ bool TSessionsManager::Load(NTable::TDatabase& database, const TColumnEngineForL
             NKikimrColumnShardDataSharingProto::TSourceSession protoSession;
             AFL_VERIFY(protoSession.ParseFromString(rowset.GetValue<Schema::SourceSessions::Details>()));
 
-            NKikimrColumnShardDataSharingProto::TSourceSession::TCursor protoSessionCursor;
-            AFL_VERIFY(protoSessionCursor.ParseFromString(rowset.GetValue<Schema::SourceSessions::Cursor>()));
+            NKikimrColumnShardDataSharingProto::TSourceSession::TCursorDynamic protoSessionCursorDynamic;
+            AFL_VERIFY(protoSessionCursorDynamic.ParseFromString(rowset.GetValue<Schema::SourceSessions::CursorDynamic>()));
+
+            NKikimrColumnShardDataSharingProto::TSourceSession::TCursorStatic protoSessionCursorStatic;
+            AFL_VERIFY(protoSessionCursorStatic.ParseFromString(rowset.GetValue<Schema::SourceSessions::CursorStatic>()));
 
             AFL_VERIFY(index);
-            AFL_VERIFY(session->DeserializeFromProto(protoSession, protoSessionCursor, *index, sharedBlobsManager));
+            AFL_VERIFY(session->DeserializeFromProto(protoSession, protoSessionCursorDynamic, protoSessionCursorStatic));
             AFL_VERIFY(SourceSessions.emplace(session->GetSessionId(), session).second);
             if (!rowset.Next()) {
                 return false;
@@ -79,13 +95,13 @@ bool TSessionsManager::Load(NTable::TDatabase& database, const TColumnEngineForL
     return true;
 }
 
-std::unique_ptr<NTabletFlatExecutor::ITransaction> TSessionsManager::StartDestSession(NColumnShard::TColumnShard* self, const std::shared_ptr<TDestinationSession>& session) {
+std::unique_ptr<NTabletFlatExecutor::ITransaction> TSessionsManager::InitializeDestSession(NColumnShard::TColumnShard* self, const std::shared_ptr<TDestinationSession>& session) {
     AFL_VERIFY(session);
     AFL_VERIFY(DestSessions.emplace(session->GetSessionId(), session).second);
     return std::make_unique<TTxStartFromInitiator>(self, session);
 }
 
-std::unique_ptr<NTabletFlatExecutor::ITransaction> TSessionsManager::StartSourceSession(NColumnShard::TColumnShard* self, const std::shared_ptr<TSourceSession>& session) {
+std::unique_ptr<NTabletFlatExecutor::ITransaction> TSessionsManager::InitializeSourceSession(NColumnShard::TColumnShard* self, const std::shared_ptr<TSourceSession>& session) {
     AFL_VERIFY(session);
     AFL_VERIFY(SourceSessions.emplace(session->GetSessionId(), session).second);
     return std::make_unique<TTxStartToSource>(self, session);

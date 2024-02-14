@@ -1,6 +1,7 @@
 #pragma once
 #include <ydb/core/tx/columnshard/data_sharing/destination/events/transfer.h>
 #include <ydb/core/tx/columnshard/data_sharing/modification/tasks/modification.h>
+#include <ydb/core/tx/columnshard/data_locks/manager/manager.h>
 
 namespace NKikimr::NOlap {
 class TColumnEngineForLogs;
@@ -25,8 +26,16 @@ private:
     std::optional<ui64> NextPortionId = 0;
     THashSet<TTabletId> LinksModifiedTablets;
     ui64 AckReceivedForPackIdx = 0;
+    std::set<ui64> PathIds;
+    THashMap<ui64, TString> PathPortionHashes;
+    bool IsStartedFlag = false;
+    YDB_ACCESSOR(bool, StaticSaved, false);
     void BuildSelection(const std::shared_ptr<TSharedBlobsManager>& sharedBlobsManager);
 public:
+    bool IsStarted() const {
+        return IsStartedFlag;
+    }
+
     TConclusionStatus AckData(const ui64 packIdxReceived) {
         AFL_VERIFY(packIdxReceived <= PackIdx);
         if (packIdxReceived == PackIdx) {
@@ -89,13 +98,15 @@ public:
         return Selected.size();
     }
 
-    TSourceCursor(const TColumnEngineForLogs& index, const TTabletId selfTabletId, const std::set<ui64>& pathIds, const TTransferContext transferContext, const TSnapshot& snapshotBorder);
+    TSourceCursor(const TTabletId selfTabletId, const std::set<ui64>& pathIds, const TTransferContext transferContext);
 
-    void Start(const std::shared_ptr<TSharedBlobsManager>& sharedBlobsManager);
+    bool Start(const std::shared_ptr<TSharedBlobsManager>& sharedBlobsManager, const THashMap<ui64, std::vector<std::shared_ptr<TPortionInfo>>>& portions);
 
-    NKikimrColumnShardDataSharingProto::TSourceSession::TCursor SerializeToProto() const;
+    NKikimrColumnShardDataSharingProto::TSourceSession::TCursorDynamic SerializeDynamicToProto() const;
+    NKikimrColumnShardDataSharingProto::TSourceSession::TCursorStatic SerializeStaticToProto() const;
 
-    [[nodiscard]] TConclusionStatus DeserializeFromProto(const NKikimrColumnShardDataSharingProto::TSourceSession::TCursor& proto, const std::shared_ptr<TSharedBlobsManager>& sharedBlobsManager);
+    [[nodiscard]] TConclusionStatus DeserializeFromProto(const NKikimrColumnShardDataSharingProto::TSourceSession::TCursorDynamic& proto,
+        const NKikimrColumnShardDataSharingProto::TSourceSession::TCursorStatic& protoStatic);
 };
 
 }

@@ -2,13 +2,14 @@
 #include <ydb/core/tx/columnshard/data_sharing/source/transactions/tx_finish_ack_to_source.h>
 #include <ydb/core/tx/columnshard/data_sharing/source/transactions/tx_data_ack_to_source.h>
 #include <ydb/core/tx/columnshard/data_sharing/source/transactions/tx_write_source_cursor.h>
+#include <ydb/core/tx/columnshard/data_locks/locks/list.h>
 #include <ydb/core/tx/columnshard/engines/column_engine_logs.h>
 
 namespace NKikimr::NOlap::NDataSharing {
 
 NKikimr::TConclusionStatus TSourceSession::DeserializeFromProto(const NKikimrColumnShardDataSharingProto::TSourceSession& proto, 
-    const std::optional<NKikimrColumnShardDataSharingProto::TSourceSession::TCursor>& protoCursor,
-    const TColumnEngineForLogs& index, const std::shared_ptr<TSharedBlobsManager>& sharedBlobsManager) {
+    const std::optional<NKikimrColumnShardDataSharingProto::TSourceSession::TCursorDynamic>& protoCursor,
+    const std::optional<NKikimrColumnShardDataSharingProto::TSourceSession::TCursorStatic>& protoCursorStatic) {
     auto parseBase = TBase::DeserializeFromProto(proto);
     if (!parseBase) {
         return parseBase;
@@ -26,13 +27,15 @@ NKikimr::TConclusionStatus TSourceSession::DeserializeFromProto(const NKikimrCol
         return TConclusionStatus::Fail("PathIds empty.");
     }
     AFL_VERIFY(PathIds.size());
-    Cursor = std::make_shared<TSourceCursor>(index, SelfTabletId, PathIds, TransferContext, GetSnapshotBarrier());
+    Cursor = std::make_shared<TSourceCursor>(SelfTabletId, PathIds, TransferContext);
+    AFL_VERIFY(!!protoCursor == !!protoCursorStatic);
     if (protoCursor) {
-        return Cursor->DeserializeFromProto(*protoCursor, sharedBlobsManager);
-    } else {
-        Cursor->Start(sharedBlobsManager);
-        return TConclusionStatus::Success();
+        auto parsed = Cursor->DeserializeFromProto(*protoCursor, *protoCursorStatic);
+        if (!parsed) {
+            return parsed;
+        }
     }
+    return TConclusionStatus::Success();
 }
 
 TConclusion<std::unique_ptr<NTabletFlatExecutor::ITransaction>> TSourceSession::AckFinished(NColumnShard::TColumnShard* self, const std::shared_ptr<TSourceSession>& selfPtr) {
@@ -63,7 +66,9 @@ TConclusion<std::unique_ptr<NTabletFlatExecutor::ITransaction>> TSourceSession::
     }
 }
 
-void TSourceSession::ActualizeDestination() {
+void TSourceSession::ActualizeDestination(const std::shared_ptr<NDataLocks::TManager>& dataLocksManager) {
+    AFL_VERIFY(IsStarted());
+    AFL_VERIFY(Cursor);
     if (Cursor->IsValid()) {
         if (Cursor->GetAckReceivedForPackIdx() < Cursor->GetPackIdx()) {
             const THashMap<ui64, NEvents::TPathIdData>& packPortions = Cursor->GetSelected();
@@ -86,6 +91,17 @@ void TSourceSession::ActualizeDestination() {
         auto ev = std::make_unique<NEvents::TEvFinishedFromSource>(GetSessionId(), SelfTabletId);
         NActors::TActivationContext::AsActorContext().Send(MakePipePeNodeCacheID(false),
             new TEvPipeCache::TEvForward(ev.release(), (ui64)DestinationTabletId, true), IEventHandle::FlagTrackDelivery, GetRuntimeId());
+        Finish(dataLocksManager);
+    }
+}
+
+bool TSourceSession::DoStart(const NColumnShard::TColumnShard& shard, const THashMap<ui64, std::vector<std::shared_ptr<TPortionInfo>>>& portions) {
+    AFL_VERIFY(Cursor);
+    if (Cursor->Start(shard.GetStoragesManager()->GetSharedBlobsManager(), portions)) {
+        ActualizeDestination(shard.GetDataLocksManager());
+        return true;
+    } else {
+        return false;
     }
 }
 

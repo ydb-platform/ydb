@@ -75,6 +75,15 @@ private:
     YDB_READONLY_DEF(TPathIdsRemapper, PathIds);
     THashMap<TTabletId, TSourceCursorForDestination> Cursors;
     THashMap<TString, THashSet<TUnifiedBlobId>> CurrentBlobIds;
+protected:
+    virtual bool DoStart(const NColumnShard::TColumnShard& shard, const THashMap<ui64, std::vector<std::shared_ptr<TPortionInfo>>>& portions) override;
+    virtual THashSet<ui64> GetPathIdsForStart() const override {
+        THashSet<ui64> result;
+        for (auto&& i : PathIds) {
+            result.emplace(i.first);
+        }
+        return result;
+    }
 public:
     TSourceCursorForDestination& GetCursorVerified(const TTabletId& tabletId) {
         auto it = Cursors.find(tabletId);

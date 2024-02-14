@@ -15,6 +15,8 @@ private:
 public:
     TSessionsManager() = default;
 
+    void Start(const NColumnShard::TColumnShard& shard) const;
+
     std::shared_ptr<TSourceSession> GetSourceSession(const TString& sessionId) const {
         auto it = SourceSessions.find(sessionId);
         if (it == SourceSessions.end()) {
@@ -39,12 +41,12 @@ public:
         DestSessions.erase(sessionId);
     }
 
-    [[nodiscard]] bool Load(NTable::TDatabase& database, const TColumnEngineForLogs* index, const std::shared_ptr<TSharedBlobsManager>& sharedBlobsManager);
+    [[nodiscard]] bool Load(NTable::TDatabase& database, const TColumnEngineForLogs* index);
 
     void InitializeEventsExchange(const NColumnShard::TColumnShard& shard, const std::optional<ui64> sessionCookie = {});
 
-    std::unique_ptr<NTabletFlatExecutor::ITransaction> StartSourceSession(NColumnShard::TColumnShard* self, const std::shared_ptr<TSourceSession>& session);
-    std::unique_ptr<NTabletFlatExecutor::ITransaction> StartDestSession(NColumnShard::TColumnShard* self, const std::shared_ptr<TDestinationSession>& session);
+    std::unique_ptr<NTabletFlatExecutor::ITransaction> InitializeSourceSession(NColumnShard::TColumnShard* self, const std::shared_ptr<TSourceSession>& session);
+    std::unique_ptr<NTabletFlatExecutor::ITransaction> InitializeDestSession(NColumnShard::TColumnShard* self, const std::shared_ptr<TDestinationSession>& session);
 
 };
 

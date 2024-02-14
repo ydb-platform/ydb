@@ -200,7 +200,7 @@ bool TTxInit::ReadEverything(TTransactionContext& txc, const TActorContext& ctx)
     {
         TMemoryProfileGuard g("TTxInit/NDataSharing::TSessionsManager");
         auto local = std::make_shared<NOlap::NDataSharing::TSessionsManager>();
-        if (!local->Load(txc.DB, Self->TablesManager.GetPrimaryIndexAsOptional<NOlap::TColumnEngineForLogs>(), Self->StoragesManager->GetSharedBlobsManager())) {
+        if (!local->Load(txc.DB, Self->TablesManager.GetPrimaryIndexAsOptional<NOlap::TColumnEngineForLogs>())) {
             return false;
         }
         Self->SharingSessionsManager = local;

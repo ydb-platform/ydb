@@ -74,11 +74,6 @@ namespace NPQ {
         ui64 CumulativeSize;
     };
 
-    struct TSeqNoRange {
-        ui64 Min;
-        ui64 Max;
-    };
-
     struct TErrorInfo {
         NPersQueue::NErrorCode::EErrorCode ErrorCode;
         TString ErrorStr;

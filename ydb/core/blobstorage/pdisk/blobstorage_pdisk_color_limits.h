@@ -105,6 +105,24 @@ struct TColorLimits {
                 Y_ABORT();
         }
     }
+
+    i64 GetQuotaForColor(NKikimrBlobStorage::TPDiskSpaceColor::E color, i64 total) {
+        switch (color) {
+            case NKikimrBlobStorage::TPDiskSpaceColor::CYAN:           return Cyan.CalculateQuota(total);
+            case NKikimrBlobStorage::TPDiskSpaceColor::LIGHT_YELLOW:   return LightYellow.CalculateQuota(total);
+            case NKikimrBlobStorage::TPDiskSpaceColor::YELLOW:         return Yellow.CalculateQuota(total);
+            case NKikimrBlobStorage::TPDiskSpaceColor::LIGHT_ORANGE:   return LightOrange.CalculateQuota(total);
+            case NKikimrBlobStorage::TPDiskSpaceColor::PRE_ORANGE:     return PreOrange.CalculateQuota(total);
+            case NKikimrBlobStorage::TPDiskSpaceColor::ORANGE:         return Orange.CalculateQuota(total);
+            case NKikimrBlobStorage::TPDiskSpaceColor::RED:            return Red.CalculateQuota(total);
+            case NKikimrBlobStorage::TPDiskSpaceColor::BLACK:          return Black.CalculateQuota(total);
+
+            case NKikimrBlobStorage::TPDiskSpaceColor_E_TPDiskSpaceColor_E_INT_MIN_SENTINEL_DO_NOT_USE_:
+            case NKikimrBlobStorage::TPDiskSpaceColor_E_TPDiskSpaceColor_E_INT_MAX_SENTINEL_DO_NOT_USE_:
+            default:
+                Y_ABORT();
+        }
+    }
 };
 
 } // NPDisk

@@ -465,6 +465,7 @@ message TEvVGetResult {
     optional NKikimrProto.EReplyStatus Status = 1;
     repeated TQueryResult Result = 2;
     optional NKikimrBlobStorage.TVDiskID VDiskID = 3;
+    optional string ErrorReason = 4;
 
     optional uint64 Cookie = 5;
     optional TMsgQoS MsgQoS = 10;

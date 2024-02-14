@@ -1056,7 +1056,7 @@ TFuture<ICheckpointStorage::TGetTotalCheckpointsStateSizeResult> TCheckpointStor
     auto result = MakeIntrusive<TGetTotalCheckpointsStateSizeContext>();
     auto future = YdbConnection->TableClient.RetryOperation(
         [prefix = YdbConnection->TablePathPrefix, graphId, thisPtr = TIntrusivePtr(this), result,
-         context = NActors::TActivationContext::AsActorContext()](TSession session) {
+         actorSystem = NActors::TActivationContext::ActorSystem()](TSession session) {
           NYdb::TParamsBuilder paramsBuilder;
           paramsBuilder.AddParam("$graph_id").String(graphId).Build();
           auto params = paramsBuilder.Build();
@@ -1078,12 +1078,12 @@ TFuture<ICheckpointStorage::TGetTotalCheckpointsStateSizeResult> TCheckpointStor
                   params,
                   thisPtr->DefaultExecDataQuerySettings())
               .Apply(
-                  [graphId, result, context](const TFuture<TDataQueryResult>& future) {
+                  [graphId, result, actorSystem](const TFuture<TDataQueryResult>& future) {
                         const auto& queryResult = future.GetValue();
                         auto status = TStatus(queryResult);
 
                         if (!queryResult.IsSuccess()) {
-                            LOG_STREAMS_STORAGE_SERVICE_AS_ERROR(context, TStringBuilder() << "GetTotalCheckpointsStateSize: can't get total graph's checkpoints size [" << graphId << "] " << queryResult.GetIssues().ToString());                            return status;
+                            LOG_STREAMS_STORAGE_SERVICE_AS_ERROR(*actorSystem, TStringBuilder() << "GetTotalCheckpointsStateSize: can't get total graph's checkpoints size [" << graphId << "] " << queryResult.GetIssues().ToString());                            return status;
                         }
 
                         TResultSetParser parser = queryResult.GetResultSetParser(0);

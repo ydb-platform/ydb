@@ -142,6 +142,10 @@ int StrCompare(const char* s1, const char* s2) {
     return strcmp(s1 ? s1 : "", s2 ? s2 : "");
 }
 
+int StrICompare(const char* s1, const char* s2) {
+    return stricmp(s1 ? s1 : "", s2 ? s2 : "");
+}
+
 std::shared_ptr<List> ListMake1(void* cell) {
     return std::shared_ptr<List>(list_make1(cell), list_free);
 }
@@ -1308,6 +1312,14 @@ public:
                     if (NodeTag(field) == T_String) {
                         name = StrVal(field);
                     }
+                } else if (NodeTag(r->val) == T_FuncCall) {
+                    auto func = CAST_NODE(FuncCall, r->val);
+                    TVector<TString> names;
+                    if (!ExtractFuncName(func, names)) {
+                        return nullptr;
+                    }
+
+                    name = names.back();
                 }
             }
 
@@ -2096,7 +2108,7 @@ public:
                 AddError(TStringBuilder() << "VariableSetStmt, expected string literal for " << value->name << " option");
                 return nullptr;
             }
-            TString rawStr = TString(StrVal(val));
+            TString rawStr = to_lower(TString(StrVal(val)));
             if (name != "search_path") {
                 AddError(TStringBuilder() << "VariableSetStmt, set_config doesn't support that option:" << name);
                 return nullptr;
@@ -2553,20 +2565,27 @@ public:
 
     TAstNode* BuildClusterSinkOrSourceExpression(
         bool isSink, const TStringBuf schemaname) {
-      const auto p = Settings.ClusterMapping.FindPtr(schemaname);
+      TString usedCluster(schemaname);
+      auto p = Settings.ClusterMapping.FindPtr(usedCluster);
+      if (!p) {
+        usedCluster = to_lower(usedCluster);
+        p = Settings.ClusterMapping.FindPtr(usedCluster);
+      }
+
       if (!p) {
         AddError(TStringBuilder() << "Unknown cluster: " << schemaname);
         return nullptr;
       }
 
-      return L(isSink ? A("DataSink") : A("DataSource"), QAX(*p), QAX(schemaname.Data()));
+      return L(isSink ? A("DataSink") : A("DataSource"), QAX(*p), QAX(usedCluster));
     }
 
     TAstNode* BuildTableKeyExpression(const TStringBuf relname,
         const TStringBuf cluster, bool isScheme = false
     ) {
-        bool noPrefix = (cluster == "pg_catalog" || cluster == "information_schema");
-        TString tableName = noPrefix ? TString(relname) : TablePathPrefix + relname;
+        auto lowerCluster = to_lower(TString(cluster));
+        bool noPrefix = (lowerCluster == "pg_catalog" || lowerCluster == "information_schema");
+        TString tableName = noPrefix ? to_lower(TString(relname)) : TablePathPrefix + relname;
         return L(A("Key"), QL(QA(isScheme ? "tablescheme" : "table"),
                             L(A("String"), QAX(std::move(tableName)))));
     }
@@ -3377,28 +3396,7 @@ public:
         }
 
         TVector<TString> names;
-        for (int i = 0; i < ListLength(value->funcname); ++i) {
-            auto x = ListNodeNth(value->funcname, i);
-            if (NodeTag(x) != T_String) {
-                NodeNotImplemented(value, x);
-                return nullptr;
-            }
-
-            names.push_back(to_lower(TString(StrVal(x))));
-        }
-
-        if (names.empty()) {
-            AddError("FuncCall: missing function name");
-            return nullptr;
-        }
-
-        if (names.size() > 2) {
-            AddError(TStringBuilder() << "FuncCall: too many name components:: " << names.size());
-            return nullptr;
-        }
-
-        if (names.size() == 2 && names[0] != "pg_catalog") {
-            AddError(TStringBuilder() << "FuncCall: expected pg_catalog, but got: " << names[0]);
+        if (!ExtractFuncName(value, names)) {
             return nullptr;
         }
 
@@ -3485,6 +3483,35 @@ public:
         return VL(args.data(), args.size());
     }
 
+    bool ExtractFuncName(const FuncCall* value, TVector<TString>& names) {
+        for (int i = 0; i < ListLength(value->funcname); ++i) {
+            auto x = ListNodeNth(value->funcname, i);
+            if (NodeTag(x) != T_String) {
+                NodeNotImplemented(value, x);
+                return false;
+            }
+
+            names.push_back(to_lower(TString(StrVal(x))));
+        }
+
+        if (names.empty()) {
+            AddError("FuncCall: missing function name");
+            return false;
+        }
+
+        if (names.size() > 2) {
+            AddError(TStringBuilder() << "FuncCall: too many name components:: " << names.size());
+            return false;
+        }
+
+        if (names.size() == 2 && names[0] != "pg_catalog") {
+            AddError(TStringBuilder() << "FuncCall: expected pg_catalog, but got: " << names[0]);
+            return false;
+        }
+
+        return true;
+    }
+
     TAstNode* ParseTypeCast(const TypeCast* value, const TExprSettings& settings) {
         AT_LOCATION(value);
         if (!value->arg) {
@@ -3504,7 +3531,7 @@ public:
             !typeName->pct_type &&
             (ListLength(typeName->names) == 2 &&
                 NodeTag(ListNodeNth(typeName->names, 0)) == T_String &&
-                !StrCompare(StrVal(ListNodeNth(typeName->names, 0)), "pg_catalog") || ListLength(typeName->names) == 1) &&
+                !StrICompare(StrVal(ListNodeNth(typeName->names, 0)), "pg_catalog") || ListLength(typeName->names) == 1) &&
             NodeTag(ListNodeNth(typeName->names, ListLength(typeName->names) - 1)) == T_String;
 
         if (NodeTag(arg) == T_A_Const &&

@@ -33,6 +33,7 @@ SRCS(
     snapshots.cpp
     space_check.cpp
     sync.cpp
+    ut_helpers.cpp
 )
 
 IF (BUILD_TYPE != "DEBUG")

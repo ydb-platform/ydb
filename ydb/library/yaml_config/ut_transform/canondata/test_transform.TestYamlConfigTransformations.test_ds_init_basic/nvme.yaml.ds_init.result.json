@@ -272,56 +272,56 @@
                 "PDiskID":1,
                 "Path":"/dev/disk/by-partlabel/kikimr_nvme_01",
                 "PDiskGuid":16592301274203927769,
-                "PDiskCategory":1
+                "PDiskCategory":144115188075855873
               },
               {
                 "NodeID":2,
                 "PDiskID":1,
                 "Path":"/dev/disk/by-partlabel/kikimr_nvme_01",
                 "PDiskGuid":4066024495825696064,
-                "PDiskCategory":1
+                "PDiskCategory":144115188075855873
               },
               {
                 "NodeID":3,
                 "PDiskID":1,
                 "Path":"/dev/disk/by-partlabel/kikimr_nvme_01",
                 "PDiskGuid":11217585798395406445,
-                "PDiskCategory":1
+                "PDiskCategory":144115188075855873
               },
               {
                 "NodeID":4,
                 "PDiskID":1,
                 "Path":"/dev/disk/by-partlabel/kikimr_nvme_01",
                 "PDiskGuid":7548336563826238532,
-                "PDiskCategory":1
+                "PDiskCategory":144115188075855873
               },
               {
                 "NodeID":5,
                 "PDiskID":1,
                 "Path":"/dev/disk/by-partlabel/kikimr_nvme_01",
                 "PDiskGuid":12492930695751522617,
-                "PDiskCategory":1
+                "PDiskCategory":144115188075855873
               },
               {
                 "NodeID":6,
                 "PDiskID":1,
                 "Path":"/dev/disk/by-partlabel/kikimr_nvme_01",
                 "PDiskGuid":17947853722703397685,
-                "PDiskCategory":1
+                "PDiskCategory":144115188075855873
               },
               {
                 "NodeID":7,
                 "PDiskID":1,
                 "Path":"/dev/disk/by-partlabel/kikimr_nvme_01",
                 "PDiskGuid":13632005992896647536,
-                "PDiskCategory":1
+                "PDiskCategory":144115188075855873
               },
               {
                 "NodeID":8,
                 "PDiskID":1,
                 "Path":"/dev/disk/by-partlabel/kikimr_nvme_01",
                 "PDiskGuid":3668985736129884660,
-                "PDiskCategory":1
+                "PDiskCategory":144115188075855873
               }
             ],
           "VDisks":

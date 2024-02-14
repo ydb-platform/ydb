@@ -9,6 +9,7 @@ PEERDIR(
     library/cpp/svnversion
     ydb/library/yql/ast
     ydb/library/yql/utils/backtrace
+    util
 )
 
 END()

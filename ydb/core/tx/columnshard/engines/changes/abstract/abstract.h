@@ -2,6 +2,9 @@
 #include "settings.h"
 #include <ydb/core/tx/columnshard/blobs_action/abstract/action.h>
 #include <ydb/core/tx/columnshard/counters/indexation.h>
+#include <ydb/core/tx/columnshard/data_locks/locks/abstract.h>
+#include <ydb/core/tx/columnshard/data_locks/locks/composite.h>
+#include <ydb/core/tx/columnshard/data_locks/locks/list.h>
 #include <ydb/core/tx/columnshard/engines/portions/portion_info.h>
 #include <ydb/core/tx/columnshard/engines/portions/with_blobs.h>
 #include <ydb/core/tx/columnshard/resource_subscriber/task.h>
@@ -184,10 +187,7 @@ public:
         virtual ~IMemoryPredictor() = default;
     };
 
-    void OnFinish(NColumnShard::TColumnShard& self, TChangesFinishContext& context) {
-        self.DataLocksManager->UnregisterLock(TypeString());
-        DoOnFinish(self, context);
-    }
+    void OnFinish(NColumnShard::TColumnShard& self, TChangesFinishContext& context);
 
     ui64 CalcMemoryForUsage() const {
         return DoCalcMemoryForUsage();

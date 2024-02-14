@@ -110,6 +110,11 @@ void TColumnEngineChanges::AbortEmergency() {
     OnAbortEmergency();
 }
 
+void TColumnEngineChanges::OnFinish(NColumnShard::TColumnShard& self, TChangesFinishContext& context) {
+    self.DataLocksManager->UnregisterLock(TypeString());
+    DoOnFinish(self, context);
+}
+
 TWriteIndexContext::TWriteIndexContext(NTabletFlatExecutor::TTransactionContext& txc, IDbWrapper& dbWrapper)
     : Txc(txc)
     , BlobManagerDb(std::make_shared<TBlobManagerDb>(txc.DB))

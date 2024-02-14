@@ -4,7 +4,6 @@
 #include <ydb/library/yql/core/expr_nodes/yql_expr_nodes.h>
 #include <ydb/library/yql/core/expr_nodes_gen/yql_expr_nodes_gen.h>
 #include <ydb/library/yql/core/yql_graph_transformer.h>
-#include <ydb/library/yql/core/cbo/cbo_optimizer.h>
 #include <ydb/library/yql/core/cbo/cbo_optimizer_new.h>
 
 #include <functional>

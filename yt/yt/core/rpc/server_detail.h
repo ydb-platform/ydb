@@ -102,6 +102,9 @@ public:
     NCompression::ECodec GetResponseCodec() const override;
     void SetResponseCodec(NCompression::ECodec codec) override;
 
+    bool IsResponseBodySerializedWithCompression() const override;
+    void SetResponseBodySerializedWithCompression() override;
+
 protected:
     std::unique_ptr<NProto::TRequestHeader> RequestHeader_;
     TSharedRefArray RequestMessage_;
@@ -129,6 +132,8 @@ protected:
     TCompactVector<TString, 4> ResponseInfos_;
 
     NCompression::ECodec ResponseCodec_ = NCompression::ECodec::None;
+    // COMPAT(danilalexeev)
+    bool ResponseBodySerializedWithCompression_ = false;
 
     TSingleShotCallbackList<void()> RepliedList_;
 
@@ -243,6 +248,9 @@ public:
 
     NCompression::ECodec GetResponseCodec() const override;
     void SetResponseCodec(NCompression::ECodec codec) override;
+
+    bool IsResponseBodySerializedWithCompression() const override;
+    void SetResponseBodySerializedWithCompression() override;
 
     const IServiceContextPtr& GetUnderlyingContext() const;
 

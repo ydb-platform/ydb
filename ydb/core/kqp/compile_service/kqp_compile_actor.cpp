@@ -133,7 +133,7 @@ private:
         ui16 kqpYqlSyntaxVersion = Config->_KqpYqlSyntaxVersion.Get().GetRef();
         NSQLTranslation::EBindingsMode bindingsMode = Config->BindingsMode;
         bool isEnableExternalDataSources = AppData(ctx)->FeatureFlags.GetEnableExternalDataSources();
-        bool isEnablePgConstsToParams = Config->EnablePgConstsToParams && Config->EnableAstCache;
+        bool isEnablePgConstsToParams = Config->EnablePgConstsToParams;
 
         auto astResult = ParseQuery(ConvertType(QueryId.Settings.QueryType), QueryId.Settings.Syntax, QueryId.Text, QueryId.QueryParameterTypes, QueryId.IsSql(), cluster, kqpTablePathPrefix, kqpYqlSyntaxVersion, bindingsMode, isEnableExternalDataSources, isEnablePgConstsToParams);
         YQL_ENSURE(astResult.Ast);
@@ -505,7 +505,7 @@ void ApplyServiceConfig(TKikimrConfiguration& kqpConfig, const TTableServiceConf
     kqpConfig.PredicateExtract20 = serviceConfig.GetPredicateExtract20();
     kqpConfig.IndexAutoChooserMode = serviceConfig.GetIndexAutoChooseMode();
     kqpConfig.EnableAstCache = serviceConfig.GetEnableAstCache();
-    kqpConfig.EnablePgConstsToParams = serviceConfig.GetEnablePgConstsToParams();
+    kqpConfig.EnablePgConstsToParams = serviceConfig.GetEnablePgConstsToParams() && serviceConfig.GetEnableAstCache();
     kqpConfig.ExtractPredicateRangesLimit = serviceConfig.GetExtractPredicateRangesLimit();
 
     if (const auto limit = serviceConfig.GetResourceManager().GetMkqlHeavyProgramMemoryLimit()) {

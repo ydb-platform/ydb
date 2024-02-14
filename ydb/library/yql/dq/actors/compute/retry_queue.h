@@ -121,7 +121,7 @@ public:
         return false;
     }
     
-    bool HasPendingEvents() {
+    bool RemoveConfirmedEvents() {
         RemoveConfirmedEvents(MyConfirmedSeqNo);
         return !Events.empty();
     }

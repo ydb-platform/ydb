@@ -1100,7 +1100,7 @@ private:
             } while (!Blocks.empty() && freeSpace > 0LL);
         }
 
-        if ((LastFileWasProcessed() || ConsumedEnoughFiles()) && !FileQueueEvents.HasPendingEvents()) {
+        if ((LastFileWasProcessed() || ConsumedEnoughFiles()) && !FileQueueEvents.RemoveConfirmedEvents()) {
             finished = true;
             ContainerCache.Clear();
         }
@@ -2809,7 +2809,7 @@ private:
             TryRegisterCoro();
         } while (!Blocks.empty() && free > 0LL && GetBlockSize(Blocks.front()) <= size_t(free));
 
-        finished = (ConsumedEnoughRows() || LastFileWasProcessed()) && !FileQueueEvents.HasPendingEvents();
+        finished = (ConsumedEnoughRows() || LastFileWasProcessed()) && !FileQueueEvents.RemoveConfirmedEvents();
         if (finished) {
             ContainerCache.Clear();
             ArrowTupleContainerCache.Clear();
@@ -2841,7 +2841,7 @@ private:
             for (const auto actorId : CoroActors) {
                 Send(actorId, new NActors::TEvents::TEvPoison());
             }
-            LOG_T("TS3StreamReadActor", "PassAway FileQueue HasPendingEvents=" << FileQueueEvents.HasPendingEvents());
+            LOG_T("TS3StreamReadActor", "PassAway FileQueue RemoveConfirmedEvents=" << FileQueueEvents.RemoveConfirmedEvents());
             FileQueueEvents.Unsubscribe();
 
             ContainerCache.Clear();

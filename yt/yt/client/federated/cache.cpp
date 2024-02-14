@@ -37,13 +37,14 @@ protected:
         StringSplitter(clusterUrl).SplitByString(ClusterSeparator_).SkipEmpty().Collect(&clusters);
         switch (clusters.size()) {
             case 0:
-                THROW_ERROR_EXCEPTION("Can't create client without cluster");
+                THROW_ERROR_EXCEPTION("Cannot create client without cluster");
             case 1:
                 return NCache::CreateClient(NCache::MakeClusterConfig(ClustersConfig_, clusterUrl), Options_);
             default:
                 return CreateFederatedClient(clusters);
         }
     }
+
 private:
     NApi::IClientPtr CreateFederatedClient(const std::vector<TString>& clusters)
     {
@@ -51,24 +52,25 @@ private:
         for (const auto& connectionConfig : FederationConfig_->RpcProxyConnections) {
             THROW_ERROR_EXCEPTION_UNLESS(
                 connectionConfig->ClusterUrl,
-                "Cluster url is mandatory for federated client connection config");
+                "Cluster URL is mandatory for federated client connection config");
             seenClusters.insert(connectionConfig->ClusterUrl.value());
         }
 
         THROW_ERROR_EXCEPTION_UNLESS(
             clusters.size() == seenClusters.size(),
-            "Desired (%v) and configured (%v) clusters count mismatch",
+            "Numbers of desired (%Qv) and configured (%Qv) clusters do not match",
             clusters,
             seenClusters);
 
         for (const auto& cluster : clusters) {
             THROW_ERROR_EXCEPTION_UNLESS(
                 seenClusters.contains(cluster),
-                "No federated client configuration for cluster %v", cluster);
+                "No federated client configuration for cluster %Qv", cluster);
         }
 
         if (!FederatedConnection_) {
-            NYT::NApi::NRpcProxy::TConnectionOptions options; // TODO(ashishkin): use proper invoker here?
+            // TODO(ashishkin): use proper invoker here?
+            NYT::NApi::NRpcProxy::TConnectionOptions options;
             FederatedConnection_ = CreateConnection(FederationConfig_, std::move(options));
         }
         return FederatedConnection_->CreateClient(Options_);

@@ -10,6 +10,9 @@
             "uri": "file://test_transform.TestYamlConfigTransformations.test_basic/simple.yaml.result.json"
         },
         {
+            "uri": "file://test_transform.TestYamlConfigTransformations.test_basic/nvme.yaml.result.json"
+        },
+        {
             "uri": "file://test_transform.TestYamlConfigTransformations.test_basic/mirror-3dc-9-nodes.yaml.result.json"
         },
         {
@@ -31,6 +34,9 @@
         },
         {
             "uri": "file://test_transform.TestYamlConfigTransformations.test_deprecated/simple.yaml.result.json"
+        },
+        {
+            "uri": "file://test_transform.TestYamlConfigTransformations.test_deprecated/nvme.yaml.result.json"
         },
         {
             "uri": "file://test_transform.TestYamlConfigTransformations.test_deprecated/mirror-3dc-9-nodes.yaml.result.json"
@@ -56,6 +62,9 @@
             "uri": "file://test_transform.TestYamlConfigTransformations.test_ds_init_basic/simple.yaml.ds_init.result.json"
         },
         {
+            "uri": "file://test_transform.TestYamlConfigTransformations.test_ds_init_basic/nvme.yaml.ds_init.result.json"
+        },
+        {
             "uri": "file://test_transform.TestYamlConfigTransformations.test_ds_init_basic/mirror-3dc-9-nodes.yaml.ds_init.result.json"
         },
         {
@@ -77,6 +86,9 @@
         },
         {
             "uri": "file://test_transform.TestYamlConfigTransformations.test_ds_init_deprecated/simple.yaml.ds_init.result.json"
+        },
+        {
+            "uri": "file://test_transform.TestYamlConfigTransformations.test_ds_init_deprecated/nvme.yaml.ds_init.result.json"
         },
         {
             "uri": "file://test_transform.TestYamlConfigTransformations.test_ds_init_deprecated/mirror-3dc-9-nodes.yaml.ds_init.result.json"

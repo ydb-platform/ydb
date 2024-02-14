@@ -6,6 +6,7 @@
 #include <ydb/core/protos/pqconfig.pb.h>
 #include <ydb/core/persqueue/blob.h>
 #include <ydb/core/persqueue/key.h>
+#include <ydb/core/persqueue/sourceid_info.h>
 #include <ydb/core/persqueue/metering_sink.h>
 #include <ydb/core/tablet/tablet_counters.h>
 #include <ydb/library/persqueue/topic_parser/topic_parser.h>
@@ -1033,21 +1034,22 @@ struct TEvPQ {
     };
 
     struct TEvGetWriteInfoResponse : public TEventLocal<TEvGetWriteInfoResponse, EvGetWriteInfoResponse> {
+        TEvGetWriteInfoResponse() = default;
         TEvGetWriteInfoResponse(ui32 cookie,
-                                THashMap<TString, NPQ::TSeqNoRange>&& seqNo,
+                                NPQ::TSourceIdMap&& srcIdInfo,
                                 std::deque<NPQ::TDataKey>&& bodyKeys,
-                                TVector<NPQ::TClientBlob>&& head) :
+                                TVector<NPQ::TClientBlob>&& blobsFromHead) :
             Cookie(cookie),
-            SeqNo(std::move(seqNo)),
+            SrcIdInfo(std::move(srcIdInfo)),
             BodyKeys(std::move(bodyKeys)),
-            Head(std::move(head))
+            BlobsFromHead(std::move(blobsFromHead))
         {
         }
 
         ui32 Cookie; // InternalPartitionId
-        THashMap<TString, NPQ::TSeqNoRange> SeqNo; // SourceId -> (MinSeqNo, MaxSeqNo)
+        NPQ::TSourceIdMap SrcIdInfo;
         std::deque<NPQ::TDataKey> BodyKeys;
-        TVector<NPQ::TClientBlob> Head;
+        TVector<NPQ::TClientBlob> BlobsFromHead;
     };
 
     struct TEvGetWriteInfoError : public TEventLocal<TEvGetWriteInfoError, EvGetWriteInfoError> {

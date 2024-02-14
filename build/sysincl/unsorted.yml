@@ -199,7 +199,6 @@
   - zircon/types.h
   - zircon/process.h
   - sys/linux-syscalls.h
-  - ompt.h
   # vvvvv ____ because in [geobase/perl/dynamic] does not work ignoring via "// Y_IGNORE"
   - geobase6/service_getter.hpp
   - geobase6/timezone_getter.hpp
@@ -344,7 +343,6 @@
   - syidef.h
   - times.h
   - unixio.h
-  - tcpSocketVaxRoutines.h
   #endif
   #if defined(_SOLARIS_) && TODO
   - synch.h
@@ -524,9 +522,6 @@
 
 - case_sensitive: false
   includes:
-  - cor.h
-  - fusion.h
-  - metahost.h
   #if defined(WINDOWS) && CONTRIB && TRASH
   - ../include/stdint.h
   #endif
@@ -544,7 +539,6 @@
   - efndef
   - exiv2/types.hpp
   - hw_ubsec.h
-  - hwcryptohook.h
   - jpidef.h
   - lckdef.h
   - libdtdef.h

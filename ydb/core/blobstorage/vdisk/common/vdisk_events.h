@@ -1524,7 +1524,7 @@ namespace NKikimr {
         , TEventWithRelevanceTracker
     {
         mutable NLWTrace::TOrbit Orbit;
-        TVDiskSkeletonTrace *VDiskSkeletonTrace = nullptr;
+        std::shared_ptr<TVDiskSkeletonTrace> VDiskSkeletonTrace;
 
         TEvVSpecialPatchBase() = default;
 
@@ -1918,7 +1918,7 @@ namespace NKikimr {
         , TEventWithRelevanceTracker
     {
         mutable NLWTrace::TOrbit Orbit;
-        TVDiskSkeletonTrace *VDiskSkeletonTrace = nullptr;
+        std::shared_ptr<TVDiskSkeletonTrace> VDiskSkeletonTrace;
 
         TEvVPatchStart() = default;
 
@@ -2004,7 +2004,7 @@ namespace NKikimr {
         , TEventWithRelevanceTracker
     {
         mutable NLWTrace::TOrbit Orbit;
-        TVDiskSkeletonTrace *VDiskSkeletonTrace = nullptr;
+        std::shared_ptr<TVDiskSkeletonTrace> VDiskSkeletonTrace;
 
         TEvVPatchDiff() = default;
 
@@ -2079,7 +2079,7 @@ namespace NKikimr {
         , TEventWithRelevanceTracker
     {
         mutable NLWTrace::TOrbit Orbit;
-        TVDiskSkeletonTrace *VDiskSkeletonTrace = nullptr;
+        std::shared_ptr<TVDiskSkeletonTrace> VDiskSkeletonTrace;
 
         TEvVPatchXorDiff() = default;
 

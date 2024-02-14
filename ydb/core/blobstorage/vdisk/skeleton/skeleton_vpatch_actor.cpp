@@ -116,7 +116,7 @@ namespace NKikimr::NPrivate {
         ui64 WaitedXorDiffCount = 0;
 
         std::shared_ptr<TVDiskSkeletonTrace> PatchActorTrace;
-        TVDiskSkeletonTrace *CurrentEventTrace;
+        std::shared_ptr<TVDiskSkeletonTrace> CurrentEventTrace;
 
 
         void AddMark(const char * const mark) {
@@ -147,7 +147,7 @@ namespace NKikimr::NPrivate {
             , IncarnationGuid(incarnationGuid)
             , GType(gType)
             , PatchActorTrace(std::make_shared<TVDiskSkeletonTrace>())
-            , CurrentEventTrace(ev->Get()->VDiskSkeletonTrace)
+            , CurrentEventTrace(std::move(ev->Get()->VDiskSkeletonTrace))
         {
             NKikimrBlobStorage::TEvVPatchStart &record = ev->Get()->Record;
             if (record.HasMsgQoS() && record.GetMsgQoS().HasDeadlineSeconds()) {
@@ -502,7 +502,7 @@ namespace NKikimr::NPrivate {
                     &record, SkeletonFrontIDPtr, VPatchResMsgsPtr, PutHistogram, IncarnationGuid);
             Sender = ev->Sender;
             Cookie = ev->Cookie;
-            CurrentEventTrace = ev->Get()->VDiskSkeletonTrace;
+            CurrentEventTrace = std::move(ev->Get()->VDiskSkeletonTrace);
             AddMark("Error: HandleError TEvVPatchDiff");
             SendVPatchResult(NKikimrProto::ERROR, ev->Get()->IsForceEnd());
         }
@@ -523,7 +523,7 @@ namespace NKikimr::NPrivate {
 
         void Handle(TEvBlobStorage::TEvVPatchDiff::TPtr &ev) {
             NKikimrBlobStorage::TEvVPatchDiff &record = ev->Get()->Record;
-            CurrentEventTrace = ev->Get()->VDiskSkeletonTrace;
+            CurrentEventTrace = std::move(ev->Get()->VDiskSkeletonTrace);
             if (CurrentEventTrace) {
                 CurrentEventTrace->AdditionalTrace = PatchActorTrace;
             }
@@ -762,6 +762,8 @@ namespace NKikimr::NPrivate {
                 IgnoreFunc(TEvBlobStorage::TEvVPatchXorDiffResult)
                 hFunc(TKikimrEvents::TEvWakeup, HandleInWaitState)
                 sFunc(TEvVPatchDyingConfirm, PassAway)
+                IgnoreFunc(TEvBlobStorage::TEvVGetResult)
+                IgnoreFunc(TEvBlobStorage::TEvVPutResult)
                 default: Y_FAIL_S(VDiskLogPrefix << " unexpected event " << ev->GetTypeName());
             }
         }

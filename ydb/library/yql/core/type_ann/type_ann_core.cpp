@@ -12200,6 +12200,7 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
         Functions["WideSortBlocks"] = &WideSortBlocksWrapper;
         Functions["BlockExtend"] = &BlockExtendWrapper;
         Functions["BlockOrderedExtend"] = &BlockExtendWrapper;
+        Functions["ReplicateScalars"] = &ReplicateScalarsWrapper;
 
         Functions["BlockCoalesce"] = &BlockCoalesceWrapper;
         Functions["BlockAnd"] = &BlockLogicalWrapper;

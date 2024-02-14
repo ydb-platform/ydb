@@ -21,3 +21,14 @@ bool TryFromStringImpl<::NKikimrConfig::TBootstrap_ETabletType, char>(const char
     }
     return false;
 }
+
+template <>
+bool TryFromStringImpl<::NKikimrBlobStorage::EPDiskType, char>(const char* value, unsigned long size, NKikimrBlobStorage::EPDiskType& res) {
+    const google::protobuf::EnumDescriptor *descriptor = ::NKikimrBlobStorage::EPDiskType_descriptor();
+    const auto* valueDescriptor = descriptor->FindValueByName(TString(value, size));
+    if (valueDescriptor) {
+        res = static_cast<NKikimrBlobStorage::EPDiskType>(valueDescriptor->number());
+        return true;
+    }
+    return false;
+}

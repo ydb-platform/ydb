@@ -1,7 +1,7 @@
 hosts:
 - host: localhost
   drive:
-    - path: /tmp/ydb.data
+    - type: RAM
 grpc_config:
   port: 2136
 monitoring_config:

@@ -682,7 +682,7 @@ namespace NKikimr::NYaml {
 
                             std::optional<ui32> pDiskCategoryId;
                             if (info.HasPDiskCategory()) {
-                                ui32 pDiskCategory = 0;
+                                ui64 pDiskCategory = 0;
                                 if (!TryFromString(info.GetPDiskCategory(), pDiskCategory)) {
                                     pDiskCategory = PdiskCategoryFromString(info.GetPDiskCategory());
                                 }

@@ -205,17 +205,18 @@ class TTopicReader: public TBaseProxyActor<TTopicReader> {
             return WaitEvent(ev->Get()->Sender, ev->Get()->Cookie);
         } else if (std::get_if<TReadSessionEvent::TPartitionSessionStatusEvent>(&*event)) {
             return WaitEvent(ev->Get()->Sender, ev->Get()->Cookie);
-        } else if (std::get_if<TReadSessionEvent::TPartitionSessionClosedEvent>(&*event)) {
-            return Leave(ev->Get()->Sender);
-        } else if (std::get_if<TSessionClosedEvent>(&*event)) {
-            return Leave(ev->Get()->Sender);
+        } else if (auto* x = std::get_if<TReadSessionEvent::TPartitionSessionClosedEvent>(&*event)) {
+            auto status = TStatus(EStatus::UNAVAILABLE, NYql::TIssues{NYql::TIssue(x->DebugString())});
+            return Leave(ev->Get()->Sender, std::move(status));
+        } else if (auto* x = std::get_if<TSessionClosedEvent>(&*event)) {
+            return Leave(ev->Get()->Sender, std::move(*x));
         } else {
             Y_ABORT("Unexpected event");
         }
     }
 
-    void Leave(const TActorId& client) {
-        Send(client, new TEvents::TEvGone());
+    void Leave(const TActorId& client, TStatus&& status) {
+        Send(client, new TEvYdbProxy::TEvTopicReaderGone(std::move(status)));
         PassAway();
     }
 

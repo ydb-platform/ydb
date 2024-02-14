@@ -3,6 +3,7 @@
 #include "sampler.h"
 #include "throttler.h"
 #include "sampling_throttling_control.h"
+#include "settings.h"
 
 #include <util/generic/maybe.h>
 #include <util/generic/vector.h>
@@ -11,21 +12,8 @@
 
 namespace NKikimr::NJaegerTracing {
 
-struct TExternalThrottlingRule {
-    TIntrusivePtr<TThrottler> Throttler;
-};
-
-struct TSamplingRule {
-    TSampler Sampler;
-    TIntrusivePtr<TThrottler> Throttler;
-    ui8 Level;
-};
-
 struct TSamplingThrottlingControl::TSamplingThrottlingImpl {
-    std::array<TMaybe<TExternalThrottlingRule>,
-        static_cast<size_t>(ERequestType::REQUEST_TYPES_CNT)> ExternalThrottlingRules;
-    std::array<TStackVec<TSamplingRule, 4>,
-        static_cast<size_t>(ERequestType::REQUEST_TYPES_CNT)> SamplingRules;
+    TSettings<TSampler, TIntrusivePtr<TThrottler>> Setup;
 
     void HandleTracing(NWilson::TTraceId& traceId, TRequestDiscriminator discriminator);
 

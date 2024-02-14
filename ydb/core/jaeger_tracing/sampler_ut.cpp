@@ -16,7 +16,7 @@ Y_UNIT_TEST_SUITE(SamplingControlTests) {
     }
 
     Y_UNIT_TEST(Simple) {
-        TSampler sampler(500'000'000, 42);
+        TSampler sampler(0.5, 42);
 
         auto samples = RunTrials(sampler, 100'000);
         UNIT_ASSERT_GE(samples, 48'000);
@@ -31,7 +31,7 @@ Y_UNIT_TEST_SUITE(SamplingControlTests) {
     }
 
     Y_UNIT_TEST(EdgeCaseUpper) {
-        TSampler sampler(1'000'000'000, 42);
+        TSampler sampler(1, 42);
 
         auto samples = RunTrials(sampler, 100'000);
         UNIT_ASSERT_EQUAL(samples, 100'000);

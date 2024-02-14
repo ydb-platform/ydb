@@ -38,9 +38,9 @@ void TSamplingThrottlingControl::TSamplingThrottlingImpl::HandleTracing(
 }
 
 bool TSamplingThrottlingControl::TSamplingThrottlingImpl::Throttle(size_t requestType) {
-    auto& rule = ExternalThrottlingRules[requestType];
-    if (rule) {
-        return rule->Throttler->Throttle();
+    auto& throttlingRule = Setup.ExternalThrottlingRules[requestType];
+    if (throttlingRule) {
+        return throttlingRule->Throttler->Throttle();
     } else {
         return false;
     }
@@ -48,10 +48,10 @@ bool TSamplingThrottlingControl::TSamplingThrottlingImpl::Throttle(size_t reques
 
 TMaybe<ui8> TSamplingThrottlingControl::TSamplingThrottlingImpl::Sample(size_t requestType) {
     TMaybe<ui8> level;
-    for (auto& rule : SamplingRules[requestType]) {
-        if (rule.Sampler.Sample() && !rule.Throttler->Throttle()) {
-            if (!level || *level < rule.Level) {
-                level = rule.Level;
+    for (auto& samplingRule : Setup.SamplingRules[requestType]) {
+        if (samplingRule.Sampler.Sample() && !samplingRule.Throttler->Throttle()) {
+            if (!level || *level < samplingRule.Level) {
+                level = samplingRule.Level;
             }
         }
     }

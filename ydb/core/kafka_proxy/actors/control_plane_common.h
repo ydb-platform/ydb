@@ -23,14 +23,19 @@ struct TRetentionsConversionResult {
         Y_ABORT_IF(IsValid);
         Y_ABORT_UNLESS(ErrorMessages.size() > 0);
 
-        auto reponse = MakeHolder<TEvKafka::TEvTopicModificationResponse>();
-        reponse->TopicPath = topicName;
-        reponse->Status = INVALID_CONFIG;
-        TString resultErrorMessage = ErrorMessages.size() == 1
-            ? ErrorMessages[0]
-            : TStringBuilder() << ErrorMessages[0] << " " << ErrorMessages[1];
+        auto response = MakeHolder<TEvKafka::TEvTopicModificationResponse>();
 
-        return TAutoPtr<TEvKafka::TEvTopicModificationResponse>(reponse.Release());
+        response->TopicPath = topicName;
+        response->Status = INVALID_CONFIG;
+
+        TStringBuilder resultErrorMessage;
+        resultErrorMessage << ErrorMessages[0];
+        for (ulong i = 1; i < ErrorMessages.size(); i++) {
+            resultErrorMessage << ' ' << ErrorMessages[i];
+        }
+        response->Message = resultErrorMessage;
+
+        return TAutoPtr<TEvKafka::TEvTopicModificationResponse>(response.Release());
     }
 };
 

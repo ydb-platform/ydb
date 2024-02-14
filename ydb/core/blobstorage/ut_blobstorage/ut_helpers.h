@@ -47,11 +47,12 @@ protected:
                 RequestsToSend--;
                 RequestsSent++;
                 SendRequest();
+                continue;
             } else if (!WakeupScheduled) {
                 Schedule(Settings.Delay - timePassed, new TEvents::TEvWakeup);
                 WakeupScheduled = true;
-                break;
             }
+            break;
         }
     }
 

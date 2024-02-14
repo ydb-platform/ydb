@@ -766,7 +766,7 @@ Y_UNIT_TEST_SUITE(KafkaProtocol) {
             auto msg = client.ApiVersions();
 
             UNIT_ASSERT_VALUES_EQUAL(msg->ErrorCode, static_cast<TKafkaInt16>(EKafkaErrors::NONE_ERROR));
-            UNIT_ASSERT_VALUES_EQUAL(msg->ApiKeys.size(), 15u);
+            UNIT_ASSERT_VALUES_EQUAL(msg->ApiKeys.size(), 18u);
         }
 
         {
@@ -990,7 +990,7 @@ Y_UNIT_TEST_SUITE(KafkaProtocol) {
             auto msg = client.ApiVersions();
 
             UNIT_ASSERT_VALUES_EQUAL(msg->ErrorCode, static_cast<TKafkaInt16>(EKafkaErrors::NONE_ERROR));
-            UNIT_ASSERT_VALUES_EQUAL(msg->ApiKeys.size(), 15u);
+            UNIT_ASSERT_VALUES_EQUAL(msg->ApiKeys.size(), 18u);
         }
 
         {
@@ -1223,7 +1223,7 @@ Y_UNIT_TEST_SUITE(KafkaProtocol) {
             auto msg = clientA.ApiVersions();
 
             UNIT_ASSERT_VALUES_EQUAL(msg->ErrorCode, static_cast<TKafkaInt16>(EKafkaErrors::NONE_ERROR));
-            UNIT_ASSERT_VALUES_EQUAL(msg->ApiKeys.size(), 15u);
+            UNIT_ASSERT_VALUES_EQUAL(msg->ApiKeys.size(), 18u);
         }
 
         {
@@ -1378,7 +1378,7 @@ Y_UNIT_TEST_SUITE(KafkaProtocol) {
             auto msg = client.ApiVersions();
 
             UNIT_ASSERT_VALUES_EQUAL(msg->ErrorCode, static_cast<TKafkaInt16>(EKafkaErrors::NONE_ERROR));
-            UNIT_ASSERT_VALUES_EQUAL(msg->ApiKeys.size(), 15u);
+            UNIT_ASSERT_VALUES_EQUAL(msg->ApiKeys.size(), 18u);
         }
 
         {
@@ -1592,7 +1592,7 @@ Y_UNIT_TEST_SUITE(KafkaProtocol) {
             auto msg = client.ApiVersions();
 
             UNIT_ASSERT_VALUES_EQUAL(msg->ErrorCode, static_cast<TKafkaInt16>(EKafkaErrors::NONE_ERROR));
-            UNIT_ASSERT_VALUES_EQUAL(msg->ApiKeys.size(), 15u);
+            UNIT_ASSERT_VALUES_EQUAL(msg->ApiKeys.size(), 18u);
         }
 
         {
@@ -1824,7 +1824,7 @@ Y_UNIT_TEST_SUITE(KafkaProtocol) {
             auto msg = client.ApiVersions();
 
             UNIT_ASSERT_VALUES_EQUAL(msg->ErrorCode, static_cast<TKafkaInt16>(EKafkaErrors::NONE_ERROR));
-            UNIT_ASSERT_VALUES_EQUAL(msg->ApiKeys.size(), 15u);
+            UNIT_ASSERT_VALUES_EQUAL(msg->ApiKeys.size(), 18u);
         }
 
         {
@@ -1960,7 +1960,7 @@ Y_UNIT_TEST_SUITE(KafkaProtocol) {
             auto msg = client.ApiVersions();
 
             UNIT_ASSERT_VALUES_EQUAL(msg->ErrorCode, static_cast<TKafkaInt16>(EKafkaErrors::NONE_ERROR));
-            UNIT_ASSERT_VALUES_EQUAL(msg->ApiKeys.size(), 15u);
+            UNIT_ASSERT_VALUES_EQUAL(msg->ApiKeys.size(), 18u);
         }
 
         {
@@ -2117,7 +2117,7 @@ Y_UNIT_TEST_SUITE(KafkaProtocol) {
             auto msg = client.ApiVersions();
 
             UNIT_ASSERT_VALUES_EQUAL(msg->ErrorCode, static_cast<TKafkaInt16>(EKafkaErrors::NONE_ERROR));
-            UNIT_ASSERT_VALUES_EQUAL(msg->ApiKeys.size(), 15u);
+            UNIT_ASSERT_VALUES_EQUAL(msg->ApiKeys.size(), 18u);
         }
 
         {

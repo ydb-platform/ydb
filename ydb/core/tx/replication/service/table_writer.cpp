@@ -189,7 +189,7 @@ class TLocalTableWriter
 
     void LogCritAndLeave(const TString& error) {
         LOG_C(error);
-        Leave();
+        Leave(TEvWorker::TEvGone::SCHEME_ERROR);
     }
 
     void LogWarnAndRetry(const TString& error) {
@@ -458,8 +458,8 @@ class TLocalTableWriter
         Schedule(TDuration::Seconds(1), new TEvents::TEvWakeup());
     }
 
-    void Leave() {
-        Send(Worker, new TEvents::TEvGone());
+    void Leave(TEvWorker::TEvGone::EStatus status) {
+        Send(Worker, new TEvWorker::TEvGone(status));
         PassAway();
     }
 

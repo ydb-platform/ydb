@@ -71,6 +71,7 @@ namespace NKqp {
         TTestActorRuntime& GetRuntime();
         NYdb::NTable::TSession& GetSession();
         void CreateTable(const TColumnTableBase& table);
+        void DropTable(const TString& tableName);
         void BulkUpsert(const TColumnTable& table, TTestHelper::TUpdatesBuilder& updates, const Ydb::StatusIds_StatusCode& opStatus = Ydb::StatusIds::SUCCESS);
         void BulkUpsert(const TColumnTable& table, std::shared_ptr<arrow::RecordBatch> batch, const Ydb::StatusIds_StatusCode& opStatus = Ydb::StatusIds::SUCCESS);
         void ReadData(const TString& query, const TString& expected, const NYdb::EStatus opStatus = NYdb::EStatus::SUCCESS);

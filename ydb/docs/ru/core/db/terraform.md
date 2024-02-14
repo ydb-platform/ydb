@@ -1,6 +1,6 @@
 # Управление {{ ydb-short-name }} с помощью Terraform
 
-С помощью Terraform можно создавать, удалять и изменять следующие объекты {{ ydb-short-name }}:
+С помощью [Terraform](https://www.terraform.io/) можно создавать, удалять и изменять следующие объекты внутри кластера {{ ydb-short-name }}:
 
 * [таблицы](../concepts/datamodel/table.md);
 * [индексы](../concepts/secondary_indexes.md) таблиц;

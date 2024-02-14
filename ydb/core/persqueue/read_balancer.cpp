@@ -28,6 +28,36 @@ void TPersQueueReadBalancer::TTxPreInit::Complete(const TActorContext& ctx) {
     Self->Execute(new TTxInit(Self), ctx);
 }
 
+struct TPartitionGraphInfo {
+    ui32 PartitionId;
+    ui64 TabletId;
+    std::vector<ui32> ParentsIds;
+    std::vector<ui32> ChildrenIds;
+
+    ui32 GetPartitionId() const {
+        return PartitionId;
+    }
+
+    ui64 GetTabletId() const {
+        return TabletId;
+    }
+
+    size_t ChildPartitionIdsSize() const {
+        return ChildrenIds.size();
+    }
+
+    const std::vector<ui32>& GetChildPartitionIds() const {
+        return ChildrenIds;
+    }
+
+    size_t ParentPartitionIdsSize() const {
+        return ParentsIds.size();
+    }
+
+    const std::vector<ui32>& GetParentPartitionIds() const {
+        return ParentsIds;
+    }
+};
 
 bool TPersQueueReadBalancer::TTxInit::Execute(TTransactionContext& txc, const TActorContext& ctx) {
     try {
@@ -71,17 +101,50 @@ bool TPersQueueReadBalancer::TTxInit::Execute(TTransactionContext& txc, const TA
                 return false;
         }
 
+        std::unordered_map<ui32, TPartitionGraphInfo> partitions;
+
         while (!partsRowset.EndOfSet()) { //found out tablets for partitions
             ++Self->NumActiveParts;
             ui32 part = partsRowset.GetValue<Schema::Partitions::Partition>();
             ui64 tabletId = partsRowset.GetValue<Schema::Partitions::TabletId>();
+            ui32 parent = partsRowset.GetValue<Schema::Partitions::Parent>();
+            ui32 adjacentParent = partsRowset.GetValue<Schema::Partitions::AdjacentParent>();
+
             Self->PartitionsInfo[part] = {tabletId, EPartitionState::EPS_FREE, TActorId(), part + 1};
             Self->AggregatedStats.AggrStats(part, partsRowset.GetValue<Schema::Partitions::DataSize>(), 
                                             partsRowset.GetValue<Schema::Partitions::UsedReserveSize>());
 
+            auto& p = partitions[part];
+            p.PartitionId = part;
+            p.TabletId = tabletId;
+            auto& parents = p.ParentsIds;
+            if (parent != Max<ui32>()) {
+                parents.push_back(parent);
+            }
+            if (adjacentParent != Max<ui32>()) {
+                parents.push_back(adjacentParent);
+            }
+
             if (!partsRowset.Next())
                 return false;
         }
+
+        for(auto& [id, p] : partitions) {
+            auto parents = std::move(p.ParentsIds);
+            for(auto parent : parents) {
+                if (partitions.contains(parent)) {
+                    p.ParentsIds.push_back(parent);
+                    partitions[parent].ChildrenIds.push_back(id);
+                }
+            }
+        }
+
+        std::vector<TPartitionGraphInfo> partitionList;
+        for(auto& [_, p] : partitions) {
+            partitionList.push_back(std::move(p));
+        }
+
+        Self->PartitionGraph = BuildGraph<TPartitionGraphInfo, std::vector<TPartitionGraphInfo>>(partitionList);
 
         while (!groupsRowset.EndOfSet()) { //found out tablets for partitions
             ui32 groupId = groupsRowset.GetValue<Schema::Groups::GroupId>();
@@ -153,8 +216,11 @@ bool TPersQueueReadBalancer::TTxWrite::Execute(TTransactionContext& txc, const T
         db.Table<Schema::Partitions>().Key(p).Delete();
     }
     for (auto& p : NewPartitions) {
-        db.Table<Schema::Partitions>().Key(p.first).Update(
-            NIceDb::TUpdate<Schema::Partitions::TabletId>(p.second.TabletId));
+        db.Table<Schema::Partitions>().Key(p.PartitionId).Update(
+            NIceDb::TUpdate<Schema::Partitions::TabletId>(p.TabletId),
+            NIceDb::TUpdate<Schema::Partitions::Parent>(p.Parent),
+            NIceDb::TUpdate<Schema::Partitions::AdjacentParent>(p.AdjacentParent)
+        );
     }
     for (auto & p : NewGroups) {
         db.Table<Schema::Groups>().Key(p.first, p.second).Update();
@@ -537,7 +603,9 @@ void TPersQueueReadBalancer::Handle(TEvPersQueue::TEvUpdateBalancerConfig::TPtr 
         }
     }
 
-    TVector<std::pair<ui32, TPartInfo>> newPartitions;
+    PartitionGraph = MakePartitionGraph(record);
+
+    TVector<TPartInfo> newPartitions;
     TVector<ui32> deletedPartitions;
     TVector<std::pair<ui64, TTabletInfo>> newTablets;
     TVector<std::pair<ui32, ui32>> newGroups;
@@ -574,7 +642,12 @@ void TPersQueueReadBalancer::Handle(TEvPersQueue::TEvUpdateBalancerConfig::TPtr 
             Y_ABORT_UNLESS(group <= TotalGroups && group > prevGroups || TotalGroups == 0);
             Y_ABORT_UNLESS(p.GetPartition() >= prevNextPartitionId && p.GetPartition() < NextPartitionId || NextPartitionId == 0);
             partitionsInfo[p.GetPartition()] = {p.GetTabletId(), EPS_FREE, TActorId(), group};
-            newPartitions.push_back(std::make_pair(p.GetPartition(), TPartInfo{p.GetTabletId(), group}));
+
+            auto it = p.GetParentPartitionIds().begin();
+            const auto parent = it != p.GetParentPartitionIds().end() ? *(it++) : Max<ui32>();
+            const auto adjacentParent = it != p.GetParentPartitionIds().end() ? *(it++) : Max<ui32>();
+            newPartitions.push_back(TPartInfo{p.GetPartition(), p.GetTabletId(), group, parent, adjacentParent});
+
             if (!NoGroupsInBase)
                 newGroups.push_back(std::make_pair(group, p.GetPartition()));
             GroupsInfo[group].push_back(p.GetPartition());
@@ -602,15 +675,15 @@ void TPersQueueReadBalancer::Handle(TEvPersQueue::TEvUpdateBalancerConfig::TPtr 
     for (auto& p : ClientsInfo) {
         auto mainGroup = p.second.ClientGroupsInfo.find(TClientInfo::MAIN_GROUP);
         for (auto& part : newPartitions) {
-            ui32 group = part.second.Group;
+            ui32 group = part.Group;
             auto it = p.second.SessionsWithGroup ? p.second.ClientGroupsInfo.find(group) : mainGroup;
             if (it == p.second.ClientGroupsInfo.end()) {
                 Y_ABORT_UNLESS(p.second.SessionsWithGroup);
                 p.second.AddGroup(group);
                 it = p.second.ClientGroupsInfo.find(group);
             }
-            it->second.FreePartitions.push_back(part.first);
-            it->second.PartitionsInfo[part.first] = {part.second.TabletId, EPS_FREE, TActorId(), group};
+            it->second.FreePartitions.push_back(part.PartitionId);
+            it->second.PartitionsInfo[part.PartitionId] = {part.TabletId, EPS_FREE, TActorId(), group};
             it->second.ScheduleBalance(ctx);
         }
     }

@@ -77,8 +77,11 @@ class TPersQueueReadBalancer : public TActor<TPersQueueReadBalancer>, public TTa
             struct DataSize : Column<35, NScheme::NTypeIds::Uint64> {};
             struct UsedReserveSize : Column<36, NScheme::NTypeIds::Uint64> {};
 
+            struct Parent : Column<37, NScheme::NTypeIds::Uint32> {};
+            struct AdjacentParent : Column<38, NScheme::NTypeIds::Uint32> {};
+
             using TKey = TableKey<Partition>;
-            using TColumns = TableColumns<Partition, TabletId, State, DataSize, UsedReserveSize>;
+            using TColumns = TableColumns<Partition, TabletId, State, DataSize, UsedReserveSize, Parent, AdjacentParent>;
         };
 
         struct Groups : Table<34> {
@@ -140,11 +143,18 @@ class TPersQueueReadBalancer : public TActor<TPersQueueReadBalancer>, public TTa
     friend struct TTxInit;
 
     struct TPartInfo {
+        ui32 PartitionId;
         ui64 TabletId;
         ui32 Group;
-        TPartInfo(const ui64 tabletId, const ui32 group)
-            : TabletId(tabletId)
+        ui32 Parent;
+        ui32 AdjacentParent;
+
+        TPartInfo(const ui32 partitionId, const ui64 tabletId, const ui32 group, const ui32 parent, const ui32 adjacentParent)
+            : PartitionId(partitionId)
+            , TabletId(tabletId)
             , Group(group)
+            , Parent(parent)
+            , AdjacentParent(adjacentParent)
         {}
     };
 
@@ -156,12 +166,12 @@ class TPersQueueReadBalancer : public TActor<TPersQueueReadBalancer>, public TTa
     struct TTxWrite : public ITransaction {
         TPersQueueReadBalancer * const Self;
         TVector<ui32> DeletedPartitions;
-        TVector<std::pair<ui32, TPartInfo>> NewPartitions;
+        TVector<TPartInfo> NewPartitions;
         TVector<std::pair<ui64, TTabletInfo>> NewTablets;
         TVector<std::pair<ui32, ui32>> NewGroups;
         TVector<std::pair<ui64, TTabletInfo>> ReallocatedTablets;
 
-        TTxWrite(TPersQueueReadBalancer *self, TVector<ui32>&& deletedPartitions, TVector<std::pair<ui32, TPartInfo>>&& newPartitions,
+        TTxWrite(TPersQueueReadBalancer *self, TVector<ui32>&& deletedPartitions, TVector<TPartInfo>&& newPartitions,
                  TVector<std::pair<ui64, TTabletInfo>>&& newTablets, TVector<std::pair<ui32, ui32>>&& newGroups,
                  TVector<std::pair<ui64, TTabletInfo>>&& reallocatedTablets)
             : Self(self)
@@ -533,6 +543,8 @@ class TPersQueueReadBalancer : public TActor<TPersQueueReadBalancer>, public TTa
 
     friend struct TTxWriteSubDomainPathId;
     bool SubDomainOutOfSpace = false;
+
+    TPartitionGraph PartitionGraph;
 
 public:
     static constexpr NKikimrServices::TActivity::EType ActorActivityType() {

@@ -283,6 +283,12 @@ enum ETopicPartitionStatus {
     Deleted = 3; // the partition can't be written and read
 }
 
+enum EConsumerAutoscalingSupport {
+    AutoscalingNotSupported = 1;
+    AutoscalingFullSupported = 2;
+    AutoscalingPartialSupported = 3;
+}
+
 message TPQTabletConfig {
     optional uint64 CacheSize = 1 [default = 104857600]; //100Mb, per tablet
     optional TPartitionConfig PartitionConfig = 2; //mandatory
@@ -297,7 +303,7 @@ message TPQTabletConfig {
     optional string Topic = 11;
     optional string DC = 12;
 
-    // ReadRules, ReadTopicTimestampMs, ReadRuleVersions, ConsumerFormatVersions and ConsumersCodecs form a consumer data array stored by columns
+    // ReadRules, ReadTopicTimestampMs, ReadRuleVersions, ConsumerFormatVersions, ConsumersCodecs and AutoscalingSupport form a consumer data array stored by columns
     repeated string ReadRules = 13;
     repeated uint64 ReadFromTimestampsMs = 14;
     repeated uint64 ConsumerFormatVersions = 15;
@@ -306,6 +312,7 @@ message TPQTabletConfig {
         repeated string Codecs = 2;
     }
     repeated TCodecs ConsumerCodecs = 16;
+    repeated EConsumerAutoscalingSupport AutoscalingSupport = 37;
     repeated string ReadRuleServiceTypes = 17;
 
     optional uint64 FormatVersion = 20;

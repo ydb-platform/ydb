@@ -29,8 +29,7 @@ NNodes::TExprBase DqOptimizeEquiJoinWithCosts(
     TExprContext& ctx,
     TTypeAnnotationContext& typesCtx,
     ui32 optLevel,
-    ui32 maxDPccpDPTableSize,
-    IProviderContext& providerCtx,
+    IOptimizerNew& optimizer,
     const std::function<void(TVector<std::shared_ptr<TRelOptimizerNode>>&, TStringBuf, const TExprNode::TPtr, const std::shared_ptr<TOptimizerStatistics>&)>& providerCollect);
 
 NNodes::TExprBase DqOptimizeEquiJoinWithCosts(

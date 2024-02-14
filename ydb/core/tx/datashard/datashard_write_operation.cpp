@@ -585,6 +585,38 @@ void TWriteOperation::BuildExecutionPlan(bool loaded)
     RewriteExecutionPlan(plan);
 }
 
+bool TWriteOperation::OnStopping(TDataShard& self, const TActorContext& ctx) {
+    if (IsImmediate()) {
+        // Send reject result immediately, because we cannot control when
+        // a new datashard tablet may start and block us from commiting
+        // anything new. The usual progress queue is too slow for that.
+        if (!HasResultSentFlag() && !GetWriteResult()) {
+            auto rejectStatus = NKikimrDataEvents::TEvWriteResult::STATUS_OVERLOADED;
+            TString rejectReason = TStringBuilder()
+                                   << "Rejecting immediate write tx "
+                                   << GetTxId()
+                                   << " because datashard "
+                                   << TabletId
+                                   << " is restarting";
+
+            auto result = NEvents::TDataEvents::TEvWriteResult::BuildError(TabletId, GetTxId(), rejectStatus, rejectReason);
+            LOG_N(rejectReason);
+
+            ctx.Send(GetTarget(), result.release(), 0, GetCookie());
+
+            self.IncCounter(COUNTER_WRITE_OVERLOADED);
+            self.IncCounter(COUNTER_WRITE_COMPLETE);
+            SetResultSentFlag();
+        }
+
+        // Immediate ops become ready when stopping flag is set
+        return true;
+    } else {
+        // Distributed ops avoid doing new work when stopping
+        return false;
+    }
+}
+
 void TWriteOperation::TrackMemory() const {
     NActors::NMemory::TLabel<MemoryLabelActiveTransactionBody>::Add(WriteRequest ? WriteRequest->CalculateSerializedSize() : 0);
 }

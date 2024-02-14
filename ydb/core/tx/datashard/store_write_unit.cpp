@@ -2,14 +2,16 @@
 #include "datashard_pipeline.h"
 #include "execution_unit_ctors.h"
 
+#include "datashard_write_operation.h"
+
 namespace NKikimr {
 namespace NDataShard {
 
-class TStoreDataTxUnit : public TExecutionUnit {
+class TStoreWriteUnit : public TExecutionUnit {
 public:
-    TStoreDataTxUnit(TDataShard &dataShard,
+    TStoreWriteUnit(TDataShard &dataShard,
                      TPipeline &pipeline);
-    ~TStoreDataTxUnit() override;
+    ~TStoreWriteUnit() override;
 
     bool IsReadyToExecute(TOperation::TPtr op) const override;
     EExecutionStatus Execute(TOperation::TPtr op,
@@ -21,58 +23,57 @@ public:
 private:
 };
 
-TStoreDataTxUnit::TStoreDataTxUnit(TDataShard &dataShard,
+TStoreWriteUnit::TStoreWriteUnit(TDataShard &dataShard,
                                    TPipeline &pipeline)
     : TExecutionUnit(EExecutionUnitKind::StoreDataTx, false, dataShard, pipeline)
 {
 }
 
-TStoreDataTxUnit::~TStoreDataTxUnit()
+TStoreWriteUnit::~TStoreWriteUnit()
 {
 }
 
-bool TStoreDataTxUnit::IsReadyToExecute(TOperation::TPtr) const
+bool TStoreWriteUnit::IsReadyToExecute(TOperation::TPtr) const
 {
     return true;
 }
 
-EExecutionStatus TStoreDataTxUnit::Execute(TOperation::TPtr op,
+EExecutionStatus TStoreWriteUnit::Execute(TOperation::TPtr op,
                                            TTransactionContext &txc,
                                            const TActorContext &ctx)
 {
-    Y_ABORT_UNLESS(op->IsDataTx() || op->IsReadTable());
     Y_ABORT_UNLESS(!op->IsAborted() && !op->IsInterrupted());
 
-    TActiveTransaction *tx = dynamic_cast<TActiveTransaction*>(op.Get());
-    Y_VERIFY_S(tx, "cannot cast operation of kind " << op->GetKind());
-    auto dataTx = tx->GetDataTx();
-    Y_ABORT_UNLESS(dataTx);
+    TWriteOperation* writeOp = TWriteOperation::CastWriteOperation(op);
+    auto writeTx = writeOp->GetWriteTx();
+    Y_ABORT_UNLESS(writeTx);
 
-    bool cached = Pipeline.SaveForPropose(dataTx);
+    bool cached = Pipeline.SaveForPropose(writeTx);
     if (cached) {
         Pipeline.RegisterDistributedWrites(op, txc.DB);
     }
-    Pipeline.ProposeTx(op, tx->GetTxBody(), txc, ctx);
+
+    Pipeline.ProposeTx(op, writeOp->GetTxBody(), txc, ctx);
 
     if (!op->HasVolatilePrepareFlag()) {
-        tx->ClearTxBody();
+        writeOp->ClearTxBody();
     }
 
-    tx->ClearDataTx();
+    writeOp->ClearWriteTx();
 
     return EExecutionStatus::DelayCompleteNoMoreRestarts;
 }
 
-void TStoreDataTxUnit::Complete(TOperation::TPtr op,
+void TStoreWriteUnit::Complete(TOperation::TPtr op,
                                 const TActorContext &ctx)
 {
     Pipeline.ProposeComplete(op, ctx);
 }
 
-THolder<TExecutionUnit> CreateStoreDataTxUnit(TDataShard &dataShard,
+THolder<TExecutionUnit> CreateStoreWriteUnit(TDataShard &dataShard,
                                               TPipeline &pipeline)
 {
-    return MakeHolder<TStoreDataTxUnit>(dataShard, pipeline);
+    return MakeHolder<TStoreWriteUnit>(dataShard, pipeline);
 }
 
 } // namespace NDataShard

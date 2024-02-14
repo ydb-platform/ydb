@@ -113,7 +113,15 @@ EExecutionStatus TCheckWriteUnit::Execute(TOperation::TPtr op,
             return EExecutionStatus::Executed;
         }
 
-        writeOp->SetWriteResult(NEvents::TDataEvents::TEvWriteResult::BuildPrepared(DataShard.TabletID(), op->GetTxId(), {op->GetMinStep(), op->GetMaxStep(), {}}));
+        writeOp->SetWriteResult(NEvents::TDataEvents::TEvWriteResult::BuildPrepared(
+            DataShard.TabletID(),
+            op->GetTxId(),
+            {
+                op->GetMinStep(),
+                op->GetMaxStep(),
+                DataShard.GetProcessingParams() ? DataShard.GetProcessingParams()->GetCoordinators() : google::protobuf::RepeatedField<ui64>{}
+            }
+            ));
         LOG_DEBUG_S(ctx, NKikimrServices::TX_DATASHARD, "Prepared " << *op << " at " << DataShard.TabletID());
     }
 

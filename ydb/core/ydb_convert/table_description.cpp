@@ -432,13 +432,13 @@ Ydb::Type* AddColumn<NKikimrSchemeOp::TColumnDescription>(Ydb::Table::ColumnMeta
     newColumn->set_not_null(column.GetNotNull());
     switch (column.GetDefaultValueCase()) {
         case NKikimrSchemeOp::TColumnDescription::kDefaultFromSequence: {
-            auto from_sequence = newColumn->mutable_from_sequence();
-            from_sequence->set_path(column.GetDefaultFromSequence());
+            auto fromSequence = newColumn->mutable_from_sequence();
+            fromSequence->set_path(column.GetDefaultFromSequence());
             break;
         }
         case NKikimrSchemeOp::TColumnDescription::kDefaultFromLiteral: {
-            auto from_literal = newColumn->mutable_from_literal();
-            *from_literal = column.GetDefaultFromLiteral();
+            auto fromLiteral = newColumn->mutable_from_literal();
+            *fromLiteral = column.GetDefaultFromLiteral();
             break;
         }
         default: break;
@@ -659,6 +659,20 @@ bool FillColumnDescription(NKikimrSchemeOp::TTableDescription& out,
 
         if (!column.family().empty()) {
             cd->SetFamilyName(column.family());
+        }
+
+        switch (column.default_policy_case()) {
+            case Ydb::Table::ColumnMeta::kFromSequence: {
+                auto fromSequence = cd->MutableDefaultFromSequence();
+                *fromSequence = column.from_sequence().path();
+                break;
+            }
+            case Ydb::Table::ColumnMeta::kFromLiteral: {
+                auto fromLiteral = cd->MutableDefaultFromLiteral();
+                *fromLiteral = column.from_literal();
+                break;
+            }
+            default: break;
         }
     }
 

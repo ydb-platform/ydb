@@ -125,7 +125,7 @@ pqconfig:
 
 * `column` — (обязательный) свойства колонки (см. аргумент [column](#column)).
 * `family` — (необязательный) группа колонок (см. аргумент [family](#family)).
-* `primary_key` — (обязательный) [первичный ключ](../yql/reference/syntax/create_table.md#columns) таблицы, содержит список колонок первичного ключа.
+* `primary_key` — (обязательный) [первичный ключ](../yql/reference/syntax/create_table.md#columns) таблицы, содержит упорядоченный список имён колонок первичного ключа.
 * `ttl` — (необязательный) TTL (см. аргумент [ttl](#ttl)).
 * `attributes` — (необязательный) атрибуты таблицы.
 * `partitioning_settings` — (необязательный) настройки партицирования (см. аргумент [partitioning_settings](#partitioning-settings)).

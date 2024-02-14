@@ -15,6 +15,14 @@
 #include "resource_subscriber/counters.h"
 #include "resource_subscriber/task.h"
 #include "normalizer/abstract/abstract.h"
+#include "data_sharing/destination/events/control.h"
+#include "data_sharing/source/events/control.h"
+#include "data_sharing/destination/events/transfer.h"
+#include "data_sharing/source/events/transfer.h"
+#include "data_sharing/manager/sessions.h"
+#include "data_sharing/manager/shared_blobs.h"
+#include "data_sharing/common/transactions/tx_extension.h"
+#include "data_sharing/modification/events/change_owning.h"
 
 #include "data_locks/manager/manager.h"
 

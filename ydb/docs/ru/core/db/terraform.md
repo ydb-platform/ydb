@@ -13,13 +13,12 @@
 
 {% endnote %}
 
-Чтобы начать работать с Terraform для {{ ydb-short-name }}, установите и настройте [Terraform](https://developer.hashicorp.com/terraform/install) и [Terraform provider for {{ ydb-short-name }}](https://github.com/ydb-platform/terraform-provider-ydb/).
+Для начала работы необходимо:
 
-{% note warning %}
-
-Для работы с ресурсами Terraform, БД должна быть создана заранее.
-
-{% endnote %}
+1. Развернуть кластер [YDB](../deploy/index.md)
+2. Создать БД (описано в п.1 для соответствующего типа развертывания кластера)
+3. Установить [Terraform](https://developer.hashicorp.com/terraform/install)
+4. Установить и настроить [Terraform provider for {{ ydb-short-name }}](https://github.com/ydb-platform/terraform-provider-ydb/)
 
 ## Настройка Terraform провайдера для работы с {{ ydb-short-name }} {#setup}
 

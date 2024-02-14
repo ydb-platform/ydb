@@ -31,10 +31,6 @@ public:
         GroupId = groupId;
     }
 
-    void SetCallback(std::function<void(ui32)> callback) {
-        Callback = callback;
-    }
-
     void Bootstrap(const TActorContext &ctx) {
         LastTs = TAppData::TimeProvider->Now();
         BootstrapImpl(ctx);
@@ -88,8 +84,6 @@ public:
 
 protected:
     static ui64 Cookie;
-
-    std::function<void(ui32)> Callback = {};
 };
 
 /////////////////////////////////// TInflightActorPut ///////////////////////////////////

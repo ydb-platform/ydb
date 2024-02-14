@@ -1,5 +1,6 @@
 #pragma once
 #include "column_record.h"
+#include "index_chunk.h"
 #include "meta.h"
 
 #include <ydb/core/formats/arrow/special_keys.h>
@@ -33,6 +34,7 @@ private:
     ui64 DeprecatedGranuleId = 0;
     YDB_READONLY_DEF(std::vector<TIndexChunk>, Indexes);
 
+    TConclusionStatus DeserializeFromProto(const NKikimrColumnShardDataSharingProto::TPortionInfo& proto, const TIndexInfo& info);
 public:
     ui64 GetTxVolume() const; // fake-correct method for determ volume on rewrite this portion in transaction progress
 
@@ -53,7 +55,6 @@ public:
 
     static TConclusion<TPortionInfo> BuildFromProto(const NKikimrColumnShardDataSharingProto::TPortionInfo& proto, const TIndexInfo& info);
     void SerializeToProto(NKikimrColumnShardDataSharingProto::TPortionInfo& proto) const;
-    TConclusionStatus DeserializeFromProto(const NKikimrColumnShardDataSharingProto::TPortionInfo& proto, const TIndexInfo& info);
 
     std::vector<TPage> BuildPages() const;
 

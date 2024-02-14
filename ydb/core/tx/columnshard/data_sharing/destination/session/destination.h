@@ -1,6 +1,7 @@
 #pragma once
 #include <ydb/core/tx/columnshard/common/tablet_id.h>
 
+#include <ydb/core/tx/columnshard/blob.h>
 #include <ydb/core/tx/columnshard/data_sharing/common/session/common.h>
 #include <ydb/core/tx/columnshard/data_sharing/initiator/controller/abstract.h>
 #include <ydb/core/tx/columnshard/data_sharing/protos/sessions.pb.h>

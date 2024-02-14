@@ -1,5 +1,8 @@
 #include "column_record.h"
+
 #include <ydb/core/formats/arrow/arrow_helpers.h>
+
+#include <ydb/core/tx/columnshard/data_sharing/protos/data.pb.h>
 #include <ydb/core/tx/columnshard/common/scalars.h>
 #include <ydb/core/tx/columnshard/engines/scheme/index_info.h>
 #include <ydb/core/tx/columnshard/columnshard_schema.h>
@@ -7,20 +10,20 @@
 namespace NKikimr::NOlap {
 
 TConclusionStatus TChunkMeta::DeserializeFromProto(const TChunkAddress& address, const NKikimrTxColumnShard::TIndexColumnMeta& proto, const TIndexInfo& indexInfo) {
-    auto field = indexInfo.ArrowColumnFieldOptional(context.GetAddress().GetColumnId());
-    if (context.GetMetaProto().HasNumRows()) {
-        NumRows = context.GetMetaProto().GetNumRows();
+    auto field = indexInfo.ArrowColumnFieldOptional(address.GetColumnId());
+    if (proto.HasNumRows()) {
+        NumRows = proto.GetNumRows();
     }
-    if (context.GetMetaProto().HasRawBytes()) {
-        RawBytes = context.GetMetaProto().GetRawBytes();
+    if (proto.HasRawBytes()) {
+        RawBytes = proto.GetRawBytes();
     }
-    if (context.GetMetaProto().HasMinValue()) {
-        AFL_VERIFY(field)("field_id", context.GetAddress().GetColumnId())("field_name", indexInfo.GetColumnName(context.GetAddress().GetColumnId()));
-        Min = ConstantToScalar(context.GetMetaProto().GetMinValue(), field->type());
+    if (proto.HasMinValue()) {
+        AFL_VERIFY(field)("field_id", address.GetColumnId())("field_name", indexInfo.GetColumnName(address.GetColumnId()));
+        Min = ConstantToScalar(proto.GetMinValue(), field->type());
     }
-    if (context.GetMetaProto().HasMaxValue()) {
-        AFL_VERIFY(field)("field_id", context.GetAddress().GetColumnId())("field_name", indexInfo.GetColumnName(context.GetAddress().GetColumnId()));
-        Max = ConstantToScalar(context.GetMetaProto().GetMaxValue(), field->type());
+    if (proto.HasMaxValue()) {
+        AFL_VERIFY(field)("field_id", address.GetColumnId())("field_name", indexInfo.GetColumnName(address.GetColumnId()));
+        Max = ConstantToScalar(proto.GetMaxValue(), field->type());
     }
     return TConclusionStatus::Success();
 }
@@ -62,6 +65,34 @@ TColumnRecord::TColumnRecord(const TChunkAddress& address, const std::shared_ptr
     , ColumnId(address.GetColumnId())
     , Chunk(address.GetChunk())
 {
+}
+
+NKikimrColumnShardDataSharingProto::TColumnRecord TColumnRecord::SerializeToProto() const {
+    NKikimrColumnShardDataSharingProto::TColumnRecord result;
+    result.SetColumnId(ColumnId);
+    result.SetChunkIdx(Chunk);
+    *result.MutableMeta() = Meta.SerializeToProto();
+    *result.MutableBlobRange() = BlobRange.SerializeToProto();
+    return result;
+}
+
+NKikimr::TConclusionStatus TColumnRecord::DeserializeFromProto(const NKikimrColumnShardDataSharingProto::TColumnRecord& proto, const TIndexInfo& indexInfo) {
+    ColumnId = proto.GetColumnId();
+    Chunk = proto.GetChunkIdx();
+    {
+        auto parse = Meta.DeserializeFromProto(GetAddress(), proto.GetMeta(), indexInfo);
+        if (!parse) {
+            return parse;
+        }
+    }
+    {
+        auto parsed = TBlobRange::BuildFromProto(proto.GetBlobRange());
+        if (!parsed) {
+            return parsed;
+        }
+        BlobRange = parsed.DetachResult();
+    }
+    return TConclusionStatus::Success();
 }
 
 }

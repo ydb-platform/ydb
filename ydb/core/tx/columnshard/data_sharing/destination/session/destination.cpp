@@ -116,7 +116,7 @@ NKikimr::TConclusionStatus TDestinationSession::DeserializeDataFromProto(const N
             return TConclusionStatus::Fail("Incorrect remapping into undefined path id: " + ::ToString(i.GetDestPathId()));
         }
         for (auto&& p : g->GetPortionsOlderThenSnapshot(GetSnapshotBarrier())) {
-            p.FillBlobIdsByStorage(CurrentBlobIds);
+            p.second->FillBlobIdsByStorage(CurrentBlobIds);
         }
         if (!i.GetSourcePathId() || !i.GetDestPathId()) {
             return TConclusionStatus::Fail("PathIds remapping contains incorrect ids: " + i.DebugString());

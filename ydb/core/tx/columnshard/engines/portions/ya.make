@@ -6,6 +6,7 @@ SRCS(
     with_blobs.cpp
     meta.cpp
     common.cpp
+    index_chunk.cpp
 )
 
 PEERDIR(

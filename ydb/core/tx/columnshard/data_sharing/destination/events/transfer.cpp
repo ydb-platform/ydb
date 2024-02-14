@@ -40,7 +40,7 @@ THashMap<NKikimr::NOlap::TTabletId, NKikimr::NOlap::NDataSharing::TTaskForTablet
             for (auto&& [tId, tInfo] : blobTabletTasks) {
                 auto itTablet = storageTabletTasks.find(tId);
                 if (itTablet == storageTabletTasks.end()) {
-                    itTablet = storageTabletTasks.emplace(tId, TStorageTabletTask(storageId)).first;
+                    itTablet = storageTabletTasks.emplace(tId, TStorageTabletTask(storageId, tId)).first;
                 }
                 itTablet->second.Merge(tInfo);
             }

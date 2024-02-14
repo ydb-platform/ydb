@@ -9,11 +9,12 @@ message TBlobOwnerRemap {
 }
 
 message TStorageTabletTask {
-    optional string StorageId = 1;
-    repeated TBlobOwnerRemap RemapOwner = 2;
-    optional NKikimrColumnShardBlobOperationsProto.TTabletByBlob InitOwner = 3;
-    optional NKikimrColumnShardBlobOperationsProto.TTabletsByBlob AddSharingLinks= 4;
-    optional NKikimrColumnShardBlobOperationsProto.TTabletsByBlob RemoveSharingLinks = 5;
+    optional uint64 TabletId = 1;
+    optional string StorageId = 2;
+    repeated TBlobOwnerRemap RemapOwner = 3;
+    optional NKikimrColumnShardBlobOperationsProto.TTabletByBlob InitOwner = 4;
+    optional NKikimrColumnShardBlobOperationsProto.TTabletsByBlob AddSharingLinks= 5;
+    optional NKikimrColumnShardBlobOperationsProto.TTabletsByBlob RemoveSharingLinks = 6;
 }
 
 message TTaskForTablet {

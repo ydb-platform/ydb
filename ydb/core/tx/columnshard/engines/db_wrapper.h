@@ -11,7 +11,7 @@ class TColumnChunkLoadContext;
 class TIndexChunkLoadContext;
 struct TInsertedData;
 class TInsertTableAccessor;
-struct TColumnRecord;
+class TColumnRecord;
 class TIndexChunk;
 struct TGranuleRecord;
 class IColumnEngine;

@@ -307,14 +307,10 @@ std::vector<NKikimr::NOlap::TPortionInfo::TPage> TPortionInfo::BuildPages() cons
     return pages;
 }
 
-<<<<<<< main
 ui64 TPortionInfo::GetTxVolume() const {
     return 1024 + Records.size() * 256 + Indexes.size() * 256;
 }
 
-void TPortionInfo::SerializeToProto(NKikimrColumnShardDataSharingProto::TPortionInfo& /*proto*/) const {
-    AFL_VERIFY(false);
-=======
 void TPortionInfo::SerializeToProto(NKikimrColumnShardDataSharingProto::TPortionInfo& proto) const {
     proto.SetPathId(PathId);
     proto.SetPortionId(Portion);
@@ -329,7 +325,6 @@ void TPortionInfo::SerializeToProto(NKikimrColumnShardDataSharingProto::TPortion
     for (auto&& r : Indexes) {
         *proto.AddIndexes() = r.SerializeToProto();
     }
->>>>>>> portions serialization
 }
 
 TConclusionStatus TPortionInfo::DeserializeFromProto(const NKikimrColumnShardDataSharingProto::TPortionInfo& proto, const TIndexInfo& info) {
@@ -353,27 +348,25 @@ TConclusionStatus TPortionInfo::DeserializeFromProto(const NKikimrColumnShardDat
         }
     }
     for (auto&& i : proto.GetRecords()) {
-        TColumnRecord record;
-        auto parse = record.DeserializeFromProto(i, info);
+        auto parse = TColumnRecord::BuildFromProto(i, info);
         if (!parse) {
             return parse;
         }
-        Records.emplace_back(std::move(record));
+        Records.emplace_back(std::move(parse.DetachResult()));
     }
     for (auto&& i : proto.GetIndexes()) {
-        TIndexChunk record;
-        auto parse = record.DeserializeFromProto(i);
+        auto parse = TIndexChunk::BuildFromProto(i);
         if (!parse) {
             return parse;
         }
-        Indexes.emplace_back(std::move(record));
+        Indexes.emplace_back(std::move(parse.DetachResult()));
     }
     return TConclusionStatus::Success();
 }
 
-TConclusion<TPortionInfo> TPortionInfo::BuildFromProto(const NKikimrColumnShardDataSharingProto::TPortionInfo& proto) {
+TConclusion<TPortionInfo> TPortionInfo::BuildFromProto(const NKikimrColumnShardDataSharingProto::TPortionInfo& proto, const TIndexInfo& info) {
     TPortionInfo result;
-    auto parse = result.DeserializeFromProto(proto);
+    auto parse = result.DeserializeFromProto(proto, info);
     if (!parse) {
         return parse;
     }

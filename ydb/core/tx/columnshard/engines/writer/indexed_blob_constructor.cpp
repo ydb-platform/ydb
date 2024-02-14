@@ -35,14 +35,45 @@ void TWideSerializedBatch::InitBlobId(const TUnifiedBlobId& id) {
 
 void TWritingBuffer::InitReadyInstant(const TMonotonic instant) {
     for (auto&& aggr : Aggregations) {
-        aggr->GetWriteData()->MutableWriteMeta().SetWriteMiddle4StartInstant(instant);
+        aggr->GetWriteData()->MutableWriteMeta().SetWriteMiddle5StartInstant(instant);
     }
 }
 
 void TWritingBuffer::InitStartSending(const TMonotonic instant) {
     for (auto&& aggr : Aggregations) {
-        aggr->GetWriteData()->MutableWriteMeta().SetWriteMiddle5StartInstant(instant);
+        aggr->GetWriteData()->MutableWriteMeta().SetWriteMiddle4StartInstant(instant);
     }
+}
+
+void TWritingBuffer::InitReplyReceived(const TMonotonic instant) {
+    for (auto&& aggr : Aggregations) {
+        aggr->GetWriteData()->MutableWriteMeta().SetWriteMiddle6StartInstant(instant);
+    }
+}
+
+std::vector<NKikimr::NOlap::TWritingBlob> TWritingBuffer::GroupIntoBlobs() {
+    std::vector<TWritingBlob> result;
+    TWritingBlob currentBlob;
+    ui64 sumSize = 0;
+    for (auto&& aggr : Aggregations) {
+        for (auto&& bInfo : aggr->MutableSplittedBlobs()) {
+            if (!currentBlob.AddData(bInfo)) {
+                result.emplace_back(std::move(currentBlob));
+                currentBlob = TWritingBlob();
+                AFL_VERIFY(currentBlob.AddData(bInfo));
+            }
+            sumSize += bInfo.GetSplittedBlobs().GetSize();
+        }
+    }
+    if (currentBlob.GetSize()) {
+        result.emplace_back(std::move(currentBlob));
+    }
+    if (result.size()) {
+        if (sumSize / result.size() < 4 * 1024 * 1024 && result.size() != 1) {
+            AFL_ERROR(NKikimrServices::TX_COLUMNSHARD)("event", "error_splitting")("size", sumSize)("count", result.size());
+        }
+    }
+    return result;
 }
 
 }

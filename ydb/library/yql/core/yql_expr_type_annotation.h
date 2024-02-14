@@ -349,4 +349,7 @@ TExprNode::TPtr ConvertToMultiLambda(const TExprNode::TPtr& lambda, TExprContext
 const TStringBuf BlockLengthColumnName = "_yql_block_length";
 
 TStringBuf NormalizeCallableName(TStringBuf name);
+
+void CheckExpectedTypeAndColumnOrder(const TExprNode& node, TExprContext& ctx, TTypeAnnotationContext& typesCtx);
+
 }

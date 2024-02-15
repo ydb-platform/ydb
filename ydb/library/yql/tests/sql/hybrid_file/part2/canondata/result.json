@@ -2577,9 +2577,9 @@
     ],
     "test.test[udf-sqlproject_grounds-default.txt-Debug]": [
         {
-            "checksum": "b6b92d4ecb9498d266d5e01470e20233",
-            "size": 814,
-            "uri": "https://{canondata_backend}/1936842/51593b2a750dbb036388d012a30fa937edaab5f0/resource.tar.gz#test.test_udf-sqlproject_grounds-default.txt-Debug_/opt.yql_patched"
+            "checksum": "ce2a09305d641ac3b4415e9c7b5078e5",
+            "size": 830,
+            "uri": "https://{canondata_backend}/1942525/cf910a114ca1956d5c24c54b8c7e697c0f6d5ff4/resource.tar.gz#test.test_udf-sqlproject_grounds-default.txt-Debug_/opt.yql_patched"
         }
     ],
     "test.test[udf-sqlproject_grounds-default.txt-Plan]": [

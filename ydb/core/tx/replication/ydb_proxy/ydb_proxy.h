@@ -32,7 +32,7 @@ struct TEvYdbProxy {
         EV_REQUEST_RESPONSE(ModifyPermissions),
 
         EvTable = EvBegin + 1 * 100,
-        EV_REQUEST_RESPONSE(CreateSession),
+        EvCreateSessionResponse,
         EV_REQUEST_RESPONSE(CreateTable),
         EV_REQUEST_RESPONSE(DropTable),
         EV_REQUEST_RESPONSE(AlterTable),
@@ -48,6 +48,7 @@ struct TEvYdbProxy {
         EV_REQUEST_RESPONSE(DescribeTopic),
         EV_REQUEST_RESPONSE(DescribeConsumer),
         EV_REQUEST_RESPONSE(CreateTopicReader),
+        EvTopicReaderGone,
         EV_REQUEST_RESPONSE(ReadTopic),
         EV_REQUEST_RESPONSE(CommitOffset),
 
@@ -117,6 +118,10 @@ struct TEvYdbProxy {
         }
 
         using TBase = TGenericResponse<TDerived, EventType, T>;
+    };
+
+    struct TEvTopicReaderGone: public TGenericResponse<TEvTopicReaderGone, EvTopicReaderGone, NYdb::TStatus> {
+        using TBase::TBase;
     };
 
     struct TReadTopicResult {

@@ -196,8 +196,7 @@ Y_UNIT_TEST_SUITE(DataShardWrite) {
 
         Cout << "========= Wait for completed transaction =========\n";
         {
-            auto ev = runtime.GrabEdgeEventRethrow<NEvents::TDataEvents::TEvWriteResult>(sender);
-            auto writeResult = ev->Get()->Record;
+            auto writeResult = WaitForWriteCompleted(runtime, sender);
 
             UNIT_ASSERT_VALUES_EQUAL_C(writeResult.GetStatus(), NKikimrDataEvents::TEvWriteResult::STATUS_COMPLETED, "Status: " << writeResult.GetStatus() << " Issues: " << writeResult.GetIssues());
             UNIT_ASSERT_VALUES_EQUAL(writeResult.GetOrigin(), shard);
@@ -209,6 +208,43 @@ Y_UNIT_TEST_SUITE(DataShardWrite) {
             const auto& tableAccessStats = writeResult.GetTxStats().GetTableAccessStats(0);
             UNIT_ASSERT_VALUES_EQUAL(tableAccessStats.GetTableInfo().GetName(), "/Root/table-1");
             UNIT_ASSERT_VALUES_EQUAL(tableAccessStats.GetUpdateRow().GetCount(), rowCount);
+        }
+
+        Cout << "========= Read table =========\n";
+        {
+            auto tableState = TReadTableState(server, MakeReadTableSettings("/Root/table-1")).All();
+            UNIT_ASSERT_VALUES_EQUAL(tableState, expectedTableState);
+        }
+
+    }
+    
+    Y_UNIT_TEST(WritePreparedNoTxCache) {
+        auto [runtime, server, sender] = TestCreateServer();
+
+        TShardedTableOptions opts;
+        opts.DataTxCacheSize(0);  //disabling the tx cache for forced serialization/deserialization of txs
+        const auto [shards, tableId] = CreateShardedTable(server, sender, "/Root", "table-1", opts);
+        const ui64 shard = shards[0];
+        const ui32 rowCount = 3;
+
+        ui64 txId = 100;
+        ui64 minStep, maxStep;
+
+        Cout << "========= Send prepare =========\n";
+        {
+            const auto writeResult = Write(runtime, sender, shard, tableId, opts.Columns_, rowCount, txId, NKikimrDataEvents::TEvWrite::MODE_PREPARE);
+            minStep = writeResult.GetMinStep();
+            maxStep = writeResult.GetMaxStep();
+        }
+
+        Cout << "========= Send propose to coordinator =========\n";
+        {
+            SendProposeToCoordinator(server, shards, minStep, maxStep, txId);
+        }
+
+        Cout << "========= Wait for completed transaction =========\n";
+        {
+            WaitForWriteCompleted(runtime, sender);
         }
 
         Cout << "========= Read table =========\n";

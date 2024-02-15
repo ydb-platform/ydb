@@ -304,6 +304,7 @@ public:
     void SetError(const NKikimrDataEvents::TEvWriteResult::EStatus& status, const TString& errorMsg);
     void SetWriteResult(std::unique_ptr<NEvents::TDataEvents::TEvWriteResult>&& writeResult);
 
+    bool OnStopping(TDataShard& self, const TActorContext& ctx) override;
 private:
     void TrackMemory() const;
     void UntrackMemory() const;

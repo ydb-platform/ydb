@@ -680,9 +680,9 @@ namespace NKikimr::NYaml {
                                 Y_ENSURE_BT(success, "pdisk ids should be unique, non unique pdisk_id : " << pdiskId);
                             }
 
-                            std::optional<ui32> pDiskCategoryId;
+                            std::optional<ui64> pDiskCategoryId;
                             if (info.HasPDiskCategory()) {
-                                ui32 pDiskCategory = 0;
+                                ui64 pDiskCategory = 0;
                                 if (!TryFromString(info.GetPDiskCategory(), pDiskCategory)) {
                                     pDiskCategory = PdiskCategoryFromString(info.GetPDiskCategory());
                                 }

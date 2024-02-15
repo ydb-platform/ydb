@@ -1184,6 +1184,9 @@ std::tuple<TVector<ui64>, TTableId> CreateShardedTable(
     if (!opts.EnableOutOfOrder_)
         desc->MutablePartitionConfig()->MutablePipelineConfig()->SetEnableOutOfOrder(false);
 
+    if (opts.DataTxCacheSize_)
+        desc->MutablePartitionConfig()->MutablePipelineConfig()->SetDataTxCacheSize(*opts.DataTxCacheSize_);
+
     if (opts.Policy_) {
         opts.Policy_->Serialize(*desc->MutablePartitionConfig()->MutableCompactionPolicy());
     }
@@ -1984,6 +1987,14 @@ TTestActorRuntimeBase::TEventObserverHolderPair ReplaceEvProposeTransactionWithE
     });
 
     return {std::move(requestObserver), std::move(responseObserver)};
+}
+
+NKikimrDataEvents::TEvWriteResult WaitForWriteCompleted(TTestActorRuntime& runtime, TActorId sender)
+{
+    auto ev = runtime.GrabEdgeEventRethrow<NEvents::TDataEvents::TEvWriteResult>(sender);
+    auto resultRecord = ev->Get()->Record;
+    UNIT_ASSERT_C(resultRecord.GetStatus() == NKikimrDataEvents::TEvWriteResult::STATUS_COMPLETED, "Status: " << resultRecord.GetStatus() << " Issues: " << resultRecord.GetIssues());
+    return resultRecord;
 }
 
 void UploadRows(TTestActorRuntime& runtime, const TString& tablePath, const TVector<std::pair<TString, Ydb::Type_PrimitiveTypeId>>& types, const TVector<TCell>& keys, const TVector<TCell>& values)

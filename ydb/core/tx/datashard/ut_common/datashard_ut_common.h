@@ -475,6 +475,7 @@ struct TShardedTableOptions {
     TABLE_OPTION(bool, FollowerPromotion, false);
     TABLE_OPTION(bool, ExternalStorage, false);
     TABLE_OPTION(std::optional<ui64>, ExecutorCacheSize, std::nullopt);
+    TABLE_OPTION(std::optional<ui32>, DataTxCacheSize, std::nullopt);
     TABLE_OPTION(bool, Replicated, false);
     TABLE_OPTION(std::optional<EReplicationConsistency>, ReplicationConsistency, std::nullopt);
     TABLE_OPTION(TAttributes, Attributes, {});
@@ -710,6 +711,7 @@ void ExecSQL(Tests::TServer::TPtr server,
 
 NKikimrDataEvents::TEvWriteResult Write(TTestActorRuntime& runtime, TActorId sender, ui64 shardId, std::unique_ptr<NEvents::TDataEvents::TEvWrite>&& request, NKikimrDataEvents::TEvWriteResult::EStatus expectedStatus = NKikimrDataEvents::TEvWriteResult::STATUS_UNSPECIFIED, NWilson::TTraceId traceId = {});
 NKikimrDataEvents::TEvWriteResult Write(TTestActorRuntime& runtime, TActorId sender, ui64 shardId, const TTableId& tableId, const TVector<TShardedTableOptions::TColumn>& columns, ui32 rowCount, ui64 txId, NKikimrDataEvents::TEvWrite::ETxMode txMode, NKikimrDataEvents::TEvWriteResult::EStatus expectedStatus = NKikimrDataEvents::TEvWriteResult::STATUS_UNSPECIFIED, NWilson::TTraceId traceId = {});
+NKikimrDataEvents::TEvWriteResult WaitForWriteCompleted(TTestActorRuntime& runtime, TActorId sender); 
 
 struct TEvWriteRow {
     TEvWriteRow(const TTableId& tableId, std::initializer_list<ui32> init)

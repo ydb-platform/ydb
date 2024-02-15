@@ -95,7 +95,7 @@ public:
         , Action_(data.Action)
         , IamToken_(data.IAMToken)
         , InfraToken_(infraToken)
-        , FolderId_(data.FolderID)
+        , FolderId_(data.FolderId)
         , CloudId_(data.CloudID)
         , ResourceId_(data.ResourceID)
         , Counters_(*data.Counters)
@@ -270,9 +270,9 @@ public:
         }
 
         // NOTE(shmel1k@): There are 2 types of requests:
-        // 1. From service account without 'FolderID' YMQ attribute set, so we have to set FolderId field, because
+        // 1. From service account without 'FolderId' YMQ attribute set, so we have to set FolderId field, because
         // at this point we do not have FolderId where queue can be created.
-        // 2. From service account with 'FolderID' YMQ attribute set, so we don't have to override it, because
+        // 2. From service account with 'FolderId' YMQ attribute set, so we don't have to override it, because
         // we have already checked that service account can do anything in a given folder.
         if (!FolderId_) {
             FolderId_ = ev->Get()->Response.Getsubject().Getservice_account().Getfolder_id();

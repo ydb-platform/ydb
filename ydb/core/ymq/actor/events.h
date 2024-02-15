@@ -152,7 +152,7 @@ struct TSqsEvents {
         TDuration MessageRetentionPeriod = TDuration::Zero();
         TDuration ReceiveMessageWaitTime = TDuration::Zero();
         TDuration VisibilityTimeout = TDuration::Zero();
-        TString FolderID = "";
+        TString FolderId = "";
 
         // has operator<<
     };

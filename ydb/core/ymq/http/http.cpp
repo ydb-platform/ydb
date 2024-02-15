@@ -455,12 +455,12 @@ void THttpRequest::ParseRequest(THttpInput& input) {
         FolderId_ = *QueryParams_.FolderId;
     }
 
-    // NOTE(shmel1k@): setting FolderId_ to FolderID from request.
+    // NOTE(shmel1k@): setting FolderId_ to FolderId from request.
     // This situation occurs when somebody wants to override folder_id from service account to some
     // custom folder_id
     if (Action_) {
         for (const auto& [_, v]: QueryParams_.Attributes) {
-            if (v.GetName() == "FolderID") {
+            if (v.GetName() == "FolderId") {
                 FolderId_ = v.GetValue();
                 break;
             }
@@ -586,7 +586,7 @@ bool THttpRequest::SetupRequest() {
         .Counters = Parent_->CloudAuthCounters_.Get(),
         .AWSSignature = std::move(AwsSignature_),
         .IAMToken = IamToken_,
-        .FolderID = FolderId_
+        .FolderId = FolderId_
     };
 
     AppData(Parent_->ActorSystem_)->SqsAuthFactory->RegisterAuthActor(

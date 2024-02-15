@@ -152,6 +152,12 @@ void WriteQueueAttributesToXml(const TGetQueueAttributesResponse& rec, TXmlStrin
             XML_ELEM_CONT("Value", ToString(rec.GetQueueArn()));
         }
     }
+    if (rec.HasFolderId()) {
+        XML_ELEM("Attribute") {
+            XML_ELEM_CONT("Name", "FolderId");
+            XML_ELEM_CONT("Value", ToString(rec.GetFolderId()));
+        }
+    }
 }
 
 TSqsHttpResponse ResponseToAmazonXmlFormat(const TSqsResponse& resp) {

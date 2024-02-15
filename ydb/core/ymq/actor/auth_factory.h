@@ -34,7 +34,7 @@ struct TAuthActorData {
     // Used only by private API for which AWSSignature is empty.
 
     TStringBuf IAMToken;
-    TStringBuf FolderID;
+    TStringBuf FolderId;
 };
 
 /**

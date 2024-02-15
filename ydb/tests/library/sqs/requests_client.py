@@ -221,7 +221,7 @@ class SqsHttpApi(object):
         if custom_name is not None:
             params['CustomQueueName'] = custom_name
         if folder_id is not None:
-            params['FolderID'] = folder_id
+            params['FolderId'] = folder_id
 
         for i, (k, v) in enumerate(attributes.items()):
             params['Attribute.{id}.Name'.format(id=i+1)] = k

@@ -39,7 +39,7 @@ static const std::map<TString, TAttributeInfo> AttributesInfo = {
     { "FifoQueue",                             { false,  true, false,  true } },
     { "ContentBasedDeduplication",             { false,  true, false,  true } },
     { "QueueArn",                              { false, false,  true, false } },
-    { "FolderID",                              { false, false, false, false } },
+    { "FolderId",                              { false, false, false, false } },
 };
 
 class TGetQueueAttributesActor
@@ -222,9 +222,6 @@ private:
                         result->SetRedrivePolicy(redrivePolicy.ToJson());
                     }
                 }
-                if (HasAttributeName("FolderID")) {
-                    result->SetFolderId(attrs["FolderID"]);
-                }
 
                 --WaitCount_;
                 ReplyIfReady();
@@ -284,6 +281,8 @@ private:
         if (NeedArn_) {
             result->SetQueueArn(MakeQueueArn(cloudArnPrefix, Cfg().GetYandexCloudServiceRegion(), ev->Get()->QueueFolderId, ev->Get()->QueueCustomName));
         }
+
+        result->SetFolderId(ev->Get()->QueueFolderId);
 
         --WaitCount_;
         ReplyIfReady();

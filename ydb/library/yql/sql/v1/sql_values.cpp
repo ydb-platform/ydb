@@ -47,7 +47,7 @@ TSourcePtr TSqlValues::Build(const TRule_values_stmt& node, TPosition& valuesPos
         YQL_ENSURE(row.size() == columnsCount);
         items.push_back(BuildOrderedStructure(row.front()->GetPos(), row, labels));
     }
-    auto list = new TCallNodeImpl(valuesPos, "AsList", items);
+    auto list = new TCallNodeImpl(valuesPos, "AsListMayWarn", items);
     list = new TCallNodeImpl(valuesPos, "PersistableRepr", { list });
     list = new TCallNodeImpl(valuesPos, "AssumeColumnOrder", { list, BuildTuple(valuesPos, labels) });
     auto result = BuildNodeSource(valuesPos, list, false);

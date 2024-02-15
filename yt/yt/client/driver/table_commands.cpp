@@ -783,6 +783,13 @@ void TSelectRowsCommand::Register(TRegistrar registrar)
 
     registrar.Parameter("placeholder_values", &TThis::PlaceholderValues)
         .Optional();
+
+    registrar.ParameterWithUniversalAccessor<std::optional<bool>>(
+        "use_web_assembly",
+        [] (TThis* command) -> auto& {
+            return command->Options.UseWebAssembly;
+        })
+        .Optional(/*init*/ false);
 }
 
 bool TSelectRowsCommand::HasResponseParameters() const

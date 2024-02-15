@@ -333,10 +333,6 @@ message TableProfile {
     CachingPolicy caching_policy = 7;
 }
 
-message SequenceDescription {
-    string path = 1;
-}
-
 message ColumnMeta {
     // Name of column
     string name = 1;

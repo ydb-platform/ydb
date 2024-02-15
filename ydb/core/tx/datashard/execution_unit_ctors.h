@@ -30,8 +30,10 @@ THolder<TExecutionUnit> CreateProtectSchemeEchoesUnit(TDataShard& dataShard, TPi
 THolder<TExecutionUnit> CreateBuildDataTxOutRSUnit(TDataShard &dataShard, TPipeline &pipeline);
 THolder<TExecutionUnit> CreateBuildDistributedEraseTxOutRSUnit(TDataShard &dataShard, TPipeline &pipeline);
 THolder<TExecutionUnit> CreateBuildKqpDataTxOutRSUnit(TDataShard &dataShard, TPipeline &pipeline);
-THolder<TExecutionUnit> CreateStoreAndSendOutRSUnit(TDataShard &dataShard, TPipeline &pipeline);
-THolder<TExecutionUnit> CreatePrepareDataTxInRSUnit(TDataShard &dataShard, TPipeline &pipeline);
+THolder<TExecutionUnit> CreateBuildWriteOutRSUnit(TDataShard& dataShard, TPipeline& pipeline);
+THolder<TExecutionUnit> CreateStoreAndSendOutRSUnit(TDataShard& dataShard, TPipeline& pipeline);
+THolder<TExecutionUnit> CreateStoreAndSendWriteOutRSUnit(TDataShard& dataShard, TPipeline& pipeline);
+THolder<TExecutionUnit> CreatePrepareDataTxInRSUnit(TDataShard& dataShard, TPipeline& pipeline);
 THolder<TExecutionUnit> CreatePrepareKqpDataTxInRSUnit(TDataShard &dataShard, TPipeline &pipeline);
 THolder<TExecutionUnit> CreatePrepareWriteTxInRSUnit(TDataShard& dataShard, TPipeline& pipeline);
 THolder<TExecutionUnit> CreatePrepareDistributedEraseTxInRSUnit(TDataShard& dataShard, TPipeline& pipeline);

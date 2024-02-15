@@ -50,11 +50,8 @@ EExecutionStatus TPrepareWriteTxInRSUnit::Execute(TOperation::TPtr op, TTransact
 
     if (writeTx->CheckCancelled()) {
         writeOp->ReleaseTxData(txc);
-        BuildResult(op, NKikimrTxDataShard::TEvProposeTransactionResult::CANCELLED)
-            ->AddError(NKikimrTxDataShard::TError::EXECUTION_CANCELLED, "Tx was cancelled");
-
-        DataShard.IncCounter(op->IsImmediate() ? COUNTER_IMMEDIATE_TX_CANCELLED : COUNTER_PLANNED_TX_CANCELLED);
-
+        writeOp->SetError(NKikimrDataEvents::TEvWriteResult::STATUS_CANCELLED, "Tx was cancelled");
+        DataShard.IncCounter(COUNTER_WRITE_CANCELLED);
         return EExecutionStatus::Executed;
     }
 

@@ -1,10 +1,8 @@
 items:
-- name: VM / Baremetal
-  href: manual/deploy-ydb-on-premises.md
-- name: Развёртывание одноузлового кластера
+- name: Развертывание многоузлового кластера
+  include: { mode: link, path: manual/toc_p.yaml }
+- name: Развертывание одноузлового кластера
   include: { mode: link, path: ../getting_started/self_hosted/toc_p.yaml }
-- name: Развёртывание коннекторов ко внешним источникам данных
-  href: federated_query/connector.md
 - name: Конфигурация
   href: configuration/config.md
 - name: Промышленные конфигурации BlobStorage

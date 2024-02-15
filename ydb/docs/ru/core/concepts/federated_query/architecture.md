@@ -14,12 +14,12 @@
 
 Таким образом, благодаря коннекторам формируется слой абстракции, скрывающий от {{ ydb-short-name }} специфику внешних источников данных. Лаконичность интерфейса коннектора позволяет легко расширять перечень поддерживаемых источников, внося минимальные изменения в код {{ ydb-short-name }}.
 
-В настоящее время пользователи могут развернуть [один из готовых коннекторов](../../deploy/federated_query/connector.md) или написать свою реализацию на любом языке программирования по [спецификации](https://github.com/ydb-platform/ydb/tree/main/ydb/library/yql/providers/generic/connector/api) GRPC.
+В настоящее время пользователи могут развернуть [один из готовых коннекторов](../../deploy/manual/connector.md) или написать свою реализацию на любом языке программирования по [спецификации](https://github.com/ydb-platform/ydb/tree/main/ydb/library/yql/providers/generic/connector/api) GRPC.
 
 ## Перечень поддерживаемых внешних источников данных {#supported-datasources}
 
 | Источник | Поддержка |
 | -------- | --------- |
 | S3 ({{objstorage-full-name}}) | Нативная |
-| ClickHouse | Через коннектор [fq-connector-go](../../deploy/federated_query/connector.md#fq-connector-go) |
-| PostgreSQL | Через коннектор [fq-connector-go](../../deploy/federated_query/connector.md#fq-connector-go) |
+| ClickHouse | Через коннектор [fq-connector-go](../../deploy/manual/connector.md#fq-connector-go) |
+| PostgreSQL | Через коннектор [fq-connector-go](../../deploy/manual/connector.md#fq-connector-go) |

@@ -2714,20 +2714,6 @@ Y_UNIT_TEST_SUITE(TImportWithRebootsTests) {
             columns {
               name: "key"
               type { optional_type { item { type_id: UTF8 } } }
-              from_literal {
-                type {
-                    optional_type {
-                        item {
-                            type_id: UTF8
-                        }
-                    }
-                }
-                value {
-                    items {
-                        text_value: "b"
-                    }
-                }
-              }
             }
             columns {
               name: "value"

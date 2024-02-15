@@ -56,12 +56,16 @@ namespace NWilson {
                 ScopeSpans = rspan->add_scope_spans();
             }
 
+            size_t SizeSpans() const {
+                return ScopeSpans->spansSize();
+            }
+
             bool IsEmpty() const {
-                return ScopeSpans->spansSize() == 0;
+                return SizeSpans() == 0;
             }
 
             bool Add(TSpanQueueItem& span) {
-                if (SizeBytes + span.Size > MaxBytesInBatch || ScopeSpans->spansSize() == MaxSpansInBatch) {
+                if (SizeBytes + span.Size > MaxBytesInBatch || SizeSpans() == MaxSpansInBatch) {
                     return false;
                 }
                 SizeBytes += span.Size;
@@ -74,7 +78,7 @@ namespace NWilson {
                 return TData {
                     .Request = std::move(Request),
                     .SizeBytes = SizeBytes,
-                    .SizeSpans = ScopeSpans->spansSize(),
+                    .SizeSpans = SizeSpans(),
                     .ExpirationTimestamp = ExpirationTimestamp,
                 };
             }
@@ -108,7 +112,6 @@ namespace NWilson {
 
             TBatch CurrentBatch;
             std::queue<TBatch::TData> BatchQueue;
-            std::deque<TSpanQueueItem> Spans;
             ui64 SpansSize = 0;
             TMonotonic NextSendTimestamp;
             ui64 SendBatchId = 1;
@@ -177,7 +180,8 @@ namespace NWilson {
             }
 
             void ScheduleBatchCompletion(TMonotonic now) {
-                TActivationContext::Schedule(now + TDuration::MilliSeconds(MaxBatchAccumulationMilliseconds),
+                TMonotonic completionTime = now + TDuration::MilliSeconds(MaxBatchAccumulationMilliseconds);
+                TActivationContext::Schedule(completionTime,
                                              new IEventHandle(SelfId(), {}, new TEvents::TEvWakeup(SendBatchId)));
 
             }
@@ -216,14 +220,18 @@ namespace NWilson {
                 }
 
 
-                    // LOG_DEBUG_S(*TlsActivationContext, WILSON_SERVICE_ID, "exporting span"
-                    //     << " TraceId# " << HexEncode(s.trace_id())
-                    //     << " SpanId# " << HexEncode(s.span_id())
-                    //     << " ParentSpanId# " << HexEncode(s.parent_span_id())
-                    //     << " Name# " << s.name());
-
                 TBatch::TData batch = std::move(BatchQueue.front());
                 BatchQueue.pop();
+
+                ALOG_DEBUG(WILSON_SERVICE_ID, "exporting batch of " << batch.SizeSpans << " spans, total spans size: " << batch.SizeBytes);
+                Y_ABORT_UNLESS(batch.Request.resource_spansSize() == 1 && batch.Request.resource_spans(0).scope_spansSize() == 1);
+                for (const auto& span : batch.Request.resource_spans(0).scope_spans(0).spans()) {
+                    ALOG_DEBUG(WILSON_SERVICE_ID, "exporting span"
+                        << " TraceId# " << HexEncode(span.trace_id())
+                        << " SpanId# " << HexEncode(span.span_id())
+                        << " ParentSpanId# " << HexEncode(span.parent_span_id())
+                        << " Name# " << span.name());
+                }
 
                 NextSendTimestamp = now + TDuration::MicroSeconds((batch.SizeSpans * 1'000'000) / MaxSpansPerSecond);
                 SpansSize -= batch.SizeBytes;
@@ -258,17 +266,19 @@ namespace NWilson {
             template<typename T>
             void ScheduleWakeup(T&& deadline) {
                 if (!WakeupScheduled) {
-                    TActivationContext::Schedule(deadline, new IEventHandle(TEvents::TSystem::Wakeup, 0, SelfId(), {},
-                        nullptr, 0));
+                    TActivationContext::Schedule(deadline,
+                                                 new IEventHandle(SelfId(), {}, new TEvents::TEvWakeup));
                     WakeupScheduled = true;
                 }
             }
 
-            void HandleWakeup(TEvents::TEvWakeup::TPtr ev) {
-                Y_ABORT_UNLESS(WakeupScheduled);
-                WakeupScheduled = false;
-                if (ev->Get()->Tag == SendBatchId) {
+            void HandleWakeup(TEvents::TEvWakeup::TPtr& ev) {
+                const auto tag = ev->Get()->Tag;
+                if (tag == SendBatchId) {
                     CompleteCurrentBatch();
+                } else if (tag == 0) {
+                    Y_ABORT_UNLESS(WakeupScheduled);
+                    WakeupScheduled = false;
                 }
                 TryMakeProgress();
             }

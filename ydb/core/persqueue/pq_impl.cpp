@@ -2625,7 +2625,7 @@ void TPersQueue::HandleEventForSupportivePartition(const ui64 responseCookie,
             ReplyError(ctx,
                        responseCookie,
                        NPersQueue::NErrorCode::BAD_REQUEST,
-                       "tx state");
+                       "it is forbidden to write after a commit");
             return;
         }
 

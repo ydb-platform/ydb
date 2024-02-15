@@ -1174,11 +1174,10 @@ void TPipeline::ProposeTx(TOperation::TPtr op, const TStringBuf &txBody, TTransa
         PreserveSchema(db, op->GetMaxStep());
     }
     Self->TransQueue.ProposeTx(db, op, op->GetTarget(), txBody);
+
     if (Self->IsStopping() && op->GetTarget()) {
         // Send notification if we prepared a tx while shard was stopping
-        auto notify = MakeHolder<TEvDataShard::TEvProposeTransactionRestart>(
-            Self->TabletID(), op->GetTxId());
-        ctx.Send(op->GetTarget(), notify.Release(), 0, op->GetCookie());
+        op->OnStopping(*Self, ctx);
     }
 }
 

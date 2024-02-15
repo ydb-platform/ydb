@@ -39,15 +39,17 @@ public:
 
     void Apply(NYql::NDqProto::TComputeActorState& update)
     {
-        *State.MutableSources() = update.GetSources();
-        *State.MutableSinks() = update.GetSinks();
+        Sources = update.GetSources();      // Always snapshot - copy it;
+        Sinks = update.GetSinks();
         ui64 nodeNum = 0;
         
         if (update.HasMiniKqlProgram()) {
             const TString& blob = update.MutableMiniKqlProgram()->MutableData()->MutableStateData()->GetBlob();
             ui64 version = update.MutableMiniKqlProgram()->MutableData()->MutableStateData()->GetVersion();
-            Version = version;
-            // TODO: check version is same
+            if (LastVersion) {
+                Y_ABORT_UNLESS(*LastVersion == version);
+            }
+            LastVersion = version;
             TStringBuf buf(blob);
 
             while (!buf.empty()) {
@@ -87,6 +89,9 @@ public:
     NYql::NDqProto::TComputeActorState Build()
     {
         NKikimr::NMiniKQL::TScopedAlloc alloc(__LOCATION__);
+        NYql::NDqProto::TComputeActorState state;
+        *state.MutableSources() = Sources;
+        *state.MutableSinks() = Sinks;
         TString result;                
         for (const auto& [nodeNum, nodeState] : NodeStates) {
             
@@ -98,10 +103,11 @@ public:
             NKikimr::NMiniKQL::WriteUi32(result, savedBuf.Size());
             result.AppendNoAlias(savedBuf.Data(), savedBuf.Size());
         }
-        const auto& stateData = State.MutableMiniKqlProgram()->MutableData()->MutableStateData();
+        const auto& stateData = state.MutableMiniKqlProgram()->MutableData()->MutableStateData();
         stateData->SetBlob(result);
-        stateData->SetVersion(Version);
-        return State;
+        Y_ABORT_UNLESS(LastVersion);
+        stateData->SetVersion(*LastVersion);
+        return state;
     }
 
     static EStateType GetStateType(const NYql::NDqProto::TComputeActorState& state)
@@ -134,8 +140,9 @@ private:
         TString SimpleBlob;
     };
     std::map<ui64, NodeState> NodeStates;
-    NYql::NDqProto::TComputeActorState State;
-    ui64 Version = 0;
+    google::protobuf::RepeatedPtrField< ::NYql::NDqProto::TSourceState> Sources;
+    google::protobuf::RepeatedPtrField<NYql::NDqProto::TSinkState> Sinks;
+    TMaybe<ui64> LastVersion;
 };
 
 ////////////////////////////////////////////////////////////////////////////////

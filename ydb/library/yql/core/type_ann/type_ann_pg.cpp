@@ -224,6 +224,7 @@ IGraphTransformer::TStatus PgCallWrapper(const TExprNode::TPtr& input, TExprNode
     }
 
     bool rangeFunction = false;
+    ui32 refinedType = 0;
     for (const auto& setting : input->Child(isResolved ? 2 : 1)->Children()) {
         if (!EnsureTupleMinSize(*setting, 1, ctx.Expr)) {
             return IGraphTransformer::TStatus::Error;
@@ -236,6 +237,16 @@ IGraphTransformer::TStatus PgCallWrapper(const TExprNode::TPtr& input, TExprNode
         auto content = setting->Head().Content();
         if (content == "range") {
             rangeFunction = true;
+        } else if (content == "type") {
+            if (!EnsureTupleSize(*setting, 2, ctx.Expr)) {
+                return IGraphTransformer::TStatus::Error;
+            }
+
+            if (!EnsureAtom(setting->Tail(), ctx.Expr)) {
+                return IGraphTransformer::TStatus::Error;
+            }
+
+            refinedType = NPg::LookupType(TString(setting->Tail().Content())).TypeId;
         } else {
             ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(input->Pos()),
                 TStringBuilder() << "Unexpected setting " << content << " in function " << name));
@@ -286,9 +297,17 @@ IGraphTransformer::TStatus PgCallWrapper(const TExprNode::TPtr& input, TExprNode
             return IGraphTransformer::TStatus::Error;
         }
 
-        const TTypeAnnotationNode* result = ctx.Expr.MakeType<TPgExprType>(proc.ResultType);
+        auto resultType = proc.ResultType;
+        AdjustReturnType(resultType, proc.ArgTypes, argTypes);
+        if (resultType == NPg::AnyArrayOid && refinedType) {
+            const auto& refinedDesc = NPg::LookupType(refinedType);
+            YQL_ENSURE(refinedDesc.ArrayTypeId == refinedDesc.TypeId);
+            resultType = refinedDesc.TypeId;
+        }
+
+        const TTypeAnnotationNode* result = ctx.Expr.MakeType<TPgExprType>(resultType);
         TMaybe<TColumnOrder> resultColumnOrder;
-        if (proc.ResultType == NPg::RecordOid && rangeFunction) {
+        if (resultType == NPg::RecordOid && rangeFunction) {
             if (proc.OutputArgNames.empty()) {
                 ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(input->Pos()),
                     TStringBuilder() << "Aggregate function " << name << " cannot be used in FROM"));
@@ -780,6 +799,7 @@ IGraphTransformer::TStatus PgAggWrapper(const TExprNode::TPtr& input, TExprNode:
         resultType = NPg::LookupProc(aggDesc.FinalFuncId).ResultType;
     }
 
+    AdjustReturnType(resultType, aggDesc.ArgTypes, argTypes);
     auto result = ctx.Expr.MakeType<TPgExprType>(resultType);
     input->SetTypeAnn(result);
 

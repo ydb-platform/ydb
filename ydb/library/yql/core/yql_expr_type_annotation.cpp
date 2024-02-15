@@ -6333,6 +6333,9 @@ TExprNode::TPtr ExpandPgAggregationTraits(TPositionHandle pos, const NPg::TAggre
     auto finishLambda = idLambda;
     auto nullValue = ctx.NewCallable(pos, "Null", {});
     if (aggDesc.FinalFuncId) {
+        const ui32 originalAggResultType = NPg::LookupProc(aggDesc.FinalFuncId).ResultType;
+        ui32 aggResultType = originalAggResultType;
+        AdjustReturnType(aggResultType, aggDesc.ArgTypes, argTypes);
         finishLambda = ctx.Builder(pos)
             .Lambda()
             .Param("state")
@@ -6340,6 +6343,16 @@ TExprNode::TPtr ExpandPgAggregationTraits(TPositionHandle pos, const NPg::TAggre
                 .Atom(0, NPg::LookupProc(aggDesc.FinalFuncId).Name)
                 .Atom(1, ToString(aggDesc.FinalFuncId))
                 .List(2)
+                    .Do([aggResultType, originalAggResultType](TExprNodeBuilder& builder) -> TExprNodeBuilder& {
+                        if (aggResultType != originalAggResultType) { 
+                            builder.List(0)
+                                .Atom(0, "type")
+                                .Atom(1, NPg::LookupType(aggResultType).Name)
+                            .Seal();
+                        }
+
+                        return builder;
+                    })
                 .Seal()
                 .Arg(3, "state")
                 .Do([&aggDesc, nullValue](TExprNodeBuilder& builder) -> TExprNodeBuilder& {
@@ -6622,6 +6635,45 @@ TExprNode::TPtr ExpandPgAggregationTraits(TPositionHandle pos, const NPg::TAggre
                 .Add(7, defaultValue)
             .Seal()
             .Build();
+    }
+}
+
+void AdjustReturnType(ui32& returnType, const TVector<ui32>& procArgTypes, const TVector<ui32>& argTypes) {
+    YQL_ENSURE(procArgTypes.size() >= argTypes.size());
+    if (returnType == NPg::AnyArrayOid) {
+        TMaybe<ui32> inputElementType;
+        TMaybe<ui32> inputArrayType;
+        for (ui32 i = 0; i < argTypes.size(); ++i) {
+            if (!argTypes[i]) {
+                continue;
+            }
+
+            if (procArgTypes[i] == NPg::AnyNonArrayOid) {
+                if (!inputElementType) {
+                   inputElementType = argTypes[i];
+                } else {
+                    if (*inputElementType != argTypes[i]) {
+                        return;
+                    }
+                }
+            }
+
+            if (procArgTypes[i] == NPg::AnyArrayOid) {
+                if (!inputArrayType) {
+                   inputArrayType = argTypes[i];
+                } else {
+                    if (*inputArrayType != argTypes[i]) {
+                        return;
+                    }
+                }
+            }
+        }
+
+        if (inputElementType) {
+            returnType = NPg::LookupType(*inputElementType).ArrayTypeId;
+        } else if (inputArrayType) {
+            returnType = *inputArrayType;
+        }
     }
 }
 

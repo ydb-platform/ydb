@@ -5,6 +5,7 @@ namespace NKikimr::NOlap::NDataLocks {
 
 class TCompositeLock: public ILock {
 private:
+    using TBase = ILock;
     std::vector<std::shared_ptr<ILock>> Locks;
 protected:
     virtual bool DoIsLocked(const TPortionInfo& portion) const override {
@@ -27,7 +28,9 @@ protected:
         return Locks.empty();
     }
 public:
-    TCompositeLock(const std::vector<std::shared_ptr<ILock>>& locks) {
+    TCompositeLock(const std::vector<std::shared_ptr<ILock>>& locks, const bool readOnly = false)
+        : TBase(readOnly)
+    {
         for (auto&& l : locks) {
             if (!l || l->IsEmpty()) {
                 continue;
@@ -36,7 +39,9 @@ public:
         }
     }
 
-    TCompositeLock(std::initializer_list<std::shared_ptr<ILock>> locks) {
+    TCompositeLock(std::initializer_list<std::shared_ptr<ILock>> locks, const bool readOnly = false)
+        : TBase(readOnly)
+    {
         for (auto&& l : locks) {
             if (!l || l->IsEmpty()) {
                 continue;

@@ -14,7 +14,7 @@ public:
 
     void RegisterLock(const TString& processId, const std::shared_ptr<ILock>& lock);
     template <class TLock, class ...Args>
-    void RegisterLock(const TString& processId, Args&... args) {
+    void RegisterLock(const TString& processId, Args&&... args) {
         RegisterLock(processId, std::make_shared<TLock>(args...));
     }
     void UnregisterLock(const TString& processId);

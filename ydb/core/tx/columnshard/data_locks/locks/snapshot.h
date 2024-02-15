@@ -7,6 +7,7 @@ namespace NKikimr::NOlap::NDataLocks {
 
 class TSnapshotLock: public ILock {
 private:
+    using TBase = ILock;
     const TSnapshot SnapshotBarrier;
     const THashSet<TTabletId> PathIds;
 protected:
@@ -17,8 +18,9 @@ protected:
         return PathIds.contains((TTabletId)granule.GetPathId());
     }
 public:
-    TSnapshotLock(const TSnapshot& snapshotBarrier, const THashSet<TTabletId>& pathIds)
-        : SnapshotBarrier(snapshotBarrier)
+    TSnapshotLock(const TSnapshot& snapshotBarrier, const THashSet<TTabletId>& pathIds, const bool readOnly = false)
+        : TBase(readOnly)
+        , SnapshotBarrier(snapshotBarrier)
         , PathIds(pathIds)
     {
 

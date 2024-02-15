@@ -35,7 +35,7 @@ bool TCommonSession::Start(const NColumnShard::TColumnShard& shard) {
 
     IsStartedFlag = DoStart(shard, portionsByPath);
     if (IsStartedFlag) {
-        shard.GetDataLocksManager()->RegisterLock<NDataLocks::TListPortionsLock>(GetSessionId(), portionsLock);
+        shard.GetDataLocksManager()->RegisterLock<NDataLocks::TListPortionsLock>(GetSessionId(), portionsLock, true);
     }
     return IsStartedFlag;
 }

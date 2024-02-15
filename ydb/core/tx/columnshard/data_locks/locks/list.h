@@ -7,6 +7,7 @@ namespace NKikimr::NOlap::NDataLocks {
 
 class TListPortionsLock: public ILock {
 private:
+    using TBase = ILock;
     THashSet<TPortionAddress> Portions;
     THashSet<TTabletId> Granules;
 protected:
@@ -20,14 +21,17 @@ protected:
         return Portions.empty();
     }
 public:
-    TListPortionsLock(const std::vector<std::shared_ptr<TPortionInfo>>& portions) {
+    TListPortionsLock(const std::vector<std::shared_ptr<TPortionInfo>>& portions, const bool readOnly = false)
+        : TBase(readOnly)
+    {
         for (auto&& p : portions) {
             Portions.emplace(p->GetAddress());
             Granules.emplace((TTabletId)p->GetPathId());
         }
     }
 
-    TListPortionsLock(const std::vector<TPortionInfo>& portions) {
+    TListPortionsLock(const std::vector<TPortionInfo>& portions, const bool readOnly = false)
+        : TBase(readOnly) {
         for (auto&& p : portions) {
             Portions.emplace(p.GetAddress());
             Granules.emplace((TTabletId)p.GetPathId());
@@ -35,7 +39,8 @@ public:
     }
 
     template <class T, class TGetter>
-    TListPortionsLock(const std::vector<T>& portions, const TGetter& g) {
+    TListPortionsLock(const std::vector<T>& portions, const TGetter& g, const bool readOnly = false)
+        : TBase(readOnly) {
         for (auto&& p : portions) {
             const auto address = g(p);
             Portions.emplace(address);
@@ -44,7 +49,8 @@ public:
     }
 
     template <class T>
-    TListPortionsLock(const THashMap<TPortionAddress, T>& portions) {
+    TListPortionsLock(const THashMap<TPortionAddress, T>& portions, const bool readOnly = false)
+        : TBase(readOnly) {
         for (auto&& p : portions) {
             const auto address = p.first;
             Portions.emplace(address);

@@ -521,20 +521,25 @@ bool IsPathExistsIssue(const TStatus& status) {
 }
 
 /// Connection actors
-NActors::IActor* MakeCreateConnectionActor(
+IActor* MakeCreateConnectionActor(
     const TActorId& proxyActorId,
     TEvControlPlaneProxy::TEvCreateConnectionRequest::TPtr request,
     TDuration requestTimeout,
     TCounters& counters,
     TPermissions permissions,
-    const NConfig::TCommonConfig& commonConfig,
+    const TCommonConfig& commonConfig,
+    const NFq::TComputeConfig& computeConfig,
     TSigner::TPtr signer,
     bool withoutRollback,
     TMaybe<TString> connectionId) {
     auto queryFactoryMethod =
         [signer = std::move(signer),
          requestTimeout,
-         &counters, permissions, withoutRollback, commonConfig](const TEvControlPlaneProxy::TEvCreateConnectionRequest::TPtr& request)
+         &counters,
+         permissions,
+         withoutRollback,
+         commonConfig,
+         computeConfig](const TEvControlPlaneProxy::TEvCreateConnectionRequest::TPtr& request)
         -> std::vector<TSchemaQueryTask> {
         auto& connectionContent = request->Get()->Request.content();
 
@@ -551,7 +556,7 @@ NActors::IActor* MakeCreateConnectionActor(
         }
 
         TScheduleErrorRecoverySQLGeneration alreadyExistRecoveryActorFactoryMethod =
-            [&request, requestTimeout, &counters, permissions](NActors::TActorId sender,
+            [&request, requestTimeout, &counters, permissions](TActorId sender,
                                                 const TStatus& status) {
                 if (status.GetStatus() == NYdb::EStatus::ALREADY_EXISTS ||
                     status.GetIssues().ToOneLineString().Contains("error: path exist")) {
@@ -567,14 +572,15 @@ NActors::IActor* MakeCreateConnectionActor(
                 }
                 return false;
             };
-        statements.push_back(
-            TSchemaQueryTask{.SQL = TString{MakeCreateExternalDataSourceQuery(
-                                 connectionContent, signer, commonConfig)},
-                             .ScheduleErrorRecoverySQLGeneration =
-                                 withoutRollback ? NoRecoverySQLGeneration()
-                                                 : alreadyExistRecoveryActorFactoryMethod,
-                             .ShouldSkipStepOnError =
-                                 withoutRollback ? IsPathExistsIssue : NoSkipOnError()});
+        statements.push_back(TSchemaQueryTask{
+            .SQL = MakeCreateExternalDataSourceQuery(
+                connectionContent, signer, commonConfig,
+                computeConfig.IsReplaceIfExistsSyntaxSupported()),
+            .ScheduleErrorRecoverySQLGeneration =
+                withoutRollback ? NoRecoverySQLGeneration()
+                                : alreadyExistRecoveryActorFactoryMethod,
+            .ShouldSkipStepOnError =
+                withoutRollback ? IsPathExistsIssue : NoSkipOnError()});
         return statements;
     };
 
@@ -610,10 +616,11 @@ NActors::IActor* MakeModifyConnectionActor(
     TDuration requestTimeout,
     TCounters& counters,
     const NConfig::TCommonConfig& commonConfig,
+    const NFq::TComputeConfig& computeConfig,
     TSigner::TPtr signer) {
     auto queryFactoryMethod =
         [signer = std::move(signer),
-         commonConfig](
+         commonConfig, computeConfig](
             const TEvControlPlaneProxy::TEvModifyConnectionRequest::TPtr& request)
         -> std::vector<TSchemaQueryTask> {
         using namespace fmt::literals;
@@ -628,8 +635,29 @@ NActors::IActor* MakeModifyConnectionActor(
             CreateSecretObjectQuery(newConnectionContent.setting(),
                                     newConnectionContent.name(),
                                     signer);
-        std::vector<TSchemaQueryTask> statements;
 
+        bool replaceSupported = computeConfig.IsReplaceIfExistsSyntaxSupported();
+        if (replaceSupported &&
+            oldConnectionContent.name() == newConnectionContent.name()) {
+            // CREATE OR REPLACE
+            auto createSecretStatement =
+                CreateSecretObjectQuery(newConnectionContent.setting(),
+                                        newConnectionContent.name(), signer);
+
+            std::vector<TSchemaQueryTask> statements;
+            if (createSecretStatement) {
+              statements.push_back(
+                  TSchemaQueryTask{.SQL = *createSecretStatement});
+            }
+
+            statements.push_back(TSchemaQueryTask{
+                .SQL = MakeCreateExternalDataSourceQuery(
+                    newConnectionContent, signer, commonConfig, replaceSupported)});
+            return statements;
+        }
+
+        std::vector<TSchemaQueryTask> statements;
+        // remove and create new version
         if (!oldBindings.empty()) {
             statements.push_back(TSchemaQueryTask{
                 .SQL         = JoinMapRange("\n",
@@ -644,16 +672,16 @@ NActors::IActor* MakeModifyConnectionActor(
                     oldBindings.begin(),
                     oldBindings.end(),
                     [&oldConnectionContent](const FederatedQuery::BindingContent& binding) {
-                        return MakeCreateExternalDataTableQuery(binding,
-                                                                oldConnectionContent.name());
+                    return MakeCreateExternalDataTableQuery(
+                        binding, oldConnectionContent.name(), false);
                     }),
                 .ShouldSkipStepOnError = IsPathDoesNotExistIssue});
-        };
+        }
 
         statements.push_back(TSchemaQueryTask{
             .SQL = TString{MakeDeleteExternalDataSourceQuery(oldConnectionContent.name())},
             .RollbackSQL           = TString{MakeCreateExternalDataSourceQuery(
-                oldConnectionContent, signer, commonConfig)},
+                oldConnectionContent, signer, commonConfig, false)},
             .ShouldSkipStepOnError = IsPathDoesNotExistIssue});
 
         if (dropOldSecret) {
@@ -672,7 +700,7 @@ NActors::IActor* MakeModifyConnectionActor(
 
         statements.push_back(
             TSchemaQueryTask{.SQL         = TString{MakeCreateExternalDataSourceQuery(
-                                 newConnectionContent, signer, commonConfig)},
+                                 newConnectionContent, signer, commonConfig, false)},
                              .RollbackSQL = TString{MakeDeleteExternalDataSourceQuery(
                                  newConnectionContent.name())}});
 
@@ -684,7 +712,7 @@ NActors::IActor* MakeModifyConnectionActor(
                                     [&newConnectionContent](
                                         const FederatedQuery::BindingContent& binding) {
                                         return MakeCreateExternalDataTableQuery(
-                                            binding, newConnectionContent.name());
+                                            binding, newConnectionContent.name(), false);
                                     }),
                 .RollbackSQL =
                     JoinMapRange("\n",
@@ -732,12 +760,12 @@ NActors::IActor* MakeDeleteConnectionActor(
         auto dropSecret =
             DropSecretObjectQuery(connectionContent.name());
 
-        std::vector<TSchemaQueryTask> statements = {TSchemaQueryTask{
-            .SQL = TString{MakeDeleteExternalDataSourceQuery(connectionContent.name())},
-            .RollbackSQL           = MakeCreateExternalDataSourceQuery(connectionContent,
-                                                             signer,
-                                                             commonConfig),
-            .ShouldSkipStepOnError = IsPathDoesNotExistIssue}};
+        std::vector<TSchemaQueryTask> statements = {
+            TSchemaQueryTask{.SQL = TString{MakeDeleteExternalDataSourceQuery(
+                                 connectionContent.name())},
+                             .RollbackSQL = MakeCreateExternalDataSourceQuery(
+                                 connectionContent, signer, commonConfig, false),
+                             .ShouldSkipStepOnError = IsPathDoesNotExistIssue}};
         if (dropSecret) {
             statements.push_back(
                 TSchemaQueryTask{.SQL = *dropSecret,
@@ -774,11 +802,12 @@ NActors::IActor* MakeCreateBindingActor(
     TDuration requestTimeout,
     TCounters& counters,
     TPermissions permissions,
+    const NFq::TComputeConfig& computeConfig,
     bool withoutRollback,
     TMaybe<TString> bindingId) {
     auto queryFactoryMethod =
         [requestTimeout,
-         &counters, permissions, withoutRollback](const TEvControlPlaneProxy::TEvCreateBindingRequest::TPtr& request)
+         &counters, permissions, withoutRollback, computeConfig](const TEvControlPlaneProxy::TEvCreateBindingRequest::TPtr& request)
         -> std::vector<TSchemaQueryTask> {
         auto& bindingContent     = request->Get()->Request.content();
         auto& externalSourceName = request->Get()->ConnectionContent->name();
@@ -787,7 +816,7 @@ NActors::IActor* MakeCreateBindingActor(
         TScheduleErrorRecoverySQLGeneration alreadyExistRecoveryActorFactoryMethod =
             [&request, requestTimeout, &counters, permissions](NActors::TActorId sender,
                                                   const TStatus& status) {
-                if (status.GetStatus() == NYdb::EStatus::ALREADY_EXISTS ||
+                if (status.GetStatus() == EStatus::ALREADY_EXISTS ||
                     status.GetIssues().ToOneLineString().Contains("error: path exist")) {
                     TActivationContext::ActorSystem()->Register(
                         new TGenerateRecoverySQLIfExternalDataTableAlreadyExistsActor(
@@ -802,12 +831,14 @@ NActors::IActor* MakeCreateBindingActor(
                 return false;
             };
         statements.push_back(TSchemaQueryTask{
-            .SQL = TString{MakeCreateExternalDataTableQuery(bindingContent,
-                                                            externalSourceName)},
+            .SQL = TString{MakeCreateExternalDataTableQuery(
+                bindingContent, externalSourceName,
+                computeConfig.IsReplaceIfExistsSyntaxSupported())},
             .ScheduleErrorRecoverySQLGeneration =
                 withoutRollback ? NoRecoverySQLGeneration()
                                 : alreadyExistRecoveryActorFactoryMethod,
-            .ShouldSkipStepOnError = withoutRollback ? IsPathExistsIssue : NoSkipOnError()});
+            .ShouldSkipStepOnError =
+                withoutRollback ? IsPathExistsIssue : NoSkipOnError()});
         return statements;
     };
 
@@ -842,24 +873,35 @@ NActors::IActor* MakeModifyBindingActor(
     const TActorId& proxyActorId,
     TEvControlPlaneProxy::TEvModifyBindingRequest::TPtr request,
     TDuration requestTimeout,
-    TCounters& counters) {
+    TCounters& counters,
+    const NFq::TComputeConfig& computeConfig) {
     auto queryFactoryMethod =
-        [](const TEvControlPlaneProxy::TEvModifyBindingRequest::TPtr& request)
+        [computeConfig](const TEvControlPlaneProxy::TEvModifyBindingRequest::TPtr& request)
         -> std::vector<TSchemaQueryTask> {
         auto sourceName   = request->Get()->ConnectionContent->name();
         auto oldTableName = request->Get()->OldBindingContent->name();
 
-        auto deleteOldEntities = MakeDeleteExternalDataTableQuery(oldTableName);
-        auto createOldEntities =
-            MakeCreateExternalDataTableQuery(*request->Get()->OldBindingContent,
-                                             sourceName);
-        auto createNewEntities =
-            MakeCreateExternalDataTableQuery(request->Get()->Request.content(), sourceName);
+        bool replaceSupported = computeConfig.IsReplaceIfExistsSyntaxSupported();
+        if (replaceSupported &&
+            oldTableName == request->Get()->Request.content().name()) {
+          // CREATE OR REPLACE
+          return {TSchemaQueryTask{.SQL = MakeCreateExternalDataTableQuery(
+                                       request->Get()->Request.content(),
+                                       sourceName, replaceSupported)}};
+        }
 
-        return {TSchemaQueryTask{.SQL                   = deleteOldEntities,
-                                 .RollbackSQL           = createOldEntities,
-                                 .ShouldSkipStepOnError = IsPathDoesNotExistIssue},
-                TSchemaQueryTask{.SQL = createNewEntities}};
+        // remove and create new version
+        auto deleteOldEntities = MakeDeleteExternalDataTableQuery(oldTableName);
+        auto createOldEntities = MakeCreateExternalDataTableQuery(
+            *request->Get()->OldBindingContent, sourceName, false);
+        auto createNewEntities = MakeCreateExternalDataTableQuery(
+            request->Get()->Request.content(), sourceName, false);
+
+        return {
+            TSchemaQueryTask{.SQL = deleteOldEntities,
+                             .RollbackSQL = createOldEntities,
+                             .ShouldSkipStepOnError = IsPathDoesNotExistIssue},
+            TSchemaQueryTask{.SQL = createNewEntities}};
     };
 
     auto errorMessageFactoryMethod = [](const EStatus status,

@@ -1306,7 +1306,7 @@ const TTaggedExprType* DryType(const TTaggedExprType* type, bool& hasOptional, T
 }
 
 template<bool Silent>
-const TDataExprType* CommonType(TPositionHandle pos, const TDataExprType* one, const TDataExprType* two, TExprContext& ctx) {
+const TDataExprType* CommonType(TPositionHandle pos, const TDataExprType* one, const TDataExprType* two, TExprContext& ctx, bool warn) {
     const auto slot1 = one->GetSlot();
     const auto slot2 = two->GetSlot();
     if (IsDataTypeDecimal(slot1) && IsDataTypeDecimal(slot2)) {
@@ -1316,7 +1316,7 @@ const TDataExprType* CommonType(TPositionHandle pos, const TDataExprType* one, c
         const auto scale = std::min<ui8>(NDecimal::MaxPrecision - whole, std::max<ui8>(parts1.second, parts2.second));
         return ctx.MakeType<TDataExprParamsType>(EDataSlot::Decimal, ToString(whole + scale), ToString(scale));
     } else if (!(IsDataTypeDecimal(slot1) || IsDataTypeDecimal(slot2))) {
-        if (const auto super = GetSuperType(slot1, slot2))
+        if (const auto super = GetSuperType(slot1, slot2, warn, &ctx, &pos))
             return ctx.MakeType<TDataExprType>(*super);
     }
 
@@ -1705,7 +1705,7 @@ const TTypeAnnotationNode* JoinCommonDryKeyType(TPositionHandle position, bool o
 }
 
 template<bool Strict, bool Silent>
-const TTypeAnnotationNode* CommonType(TPositionHandle pos, const TTypeAnnotationNode* one, const TTypeAnnotationNode* two, TExprContext& ctx) {
+const TTypeAnnotationNode* CommonType(TPositionHandle pos, const TTypeAnnotationNode* one, const TTypeAnnotationNode* two, TExprContext& ctx, bool warn) {
     if (!(one && two))
         return nullptr;
 
@@ -1719,7 +1719,7 @@ const TTypeAnnotationNode* CommonType(TPositionHandle pos, const TTypeAnnotation
     if (const auto kindOne = one->GetKind(), kindTwo = two->GetKind(); kindOne == kindTwo) {
         switch (kindOne) {
             case ETypeAnnotationKind::Data:
-                return CommonType<Silent>(pos, one->Cast<TDataExprType>(), two->Cast<TDataExprType>(), ctx);
+                return CommonType<Silent>(pos, one->Cast<TDataExprType>(), two->Cast<TDataExprType>(), ctx, warn);
             case ETypeAnnotationKind::Optional:
                 return CommonItemType<Strict, Silent>(pos, one->Cast<TOptionalExprType>(), two->Cast<TOptionalExprType>(), ctx);
             case ETypeAnnotationKind::List:
@@ -1790,23 +1790,23 @@ const TTypeAnnotationNode* CommonType(TPositionHandle pos, const TTypeAnnotation
     return nullptr;
 }
 
-template const TTypeAnnotationNode* CommonType<true, false>(TPositionHandle pos, const TTypeAnnotationNode* one, const TTypeAnnotationNode* two, TExprContext& ctx);
-template const TTypeAnnotationNode* CommonType<false, false>(TPositionHandle pos, const TTypeAnnotationNode* one, const TTypeAnnotationNode* two, TExprContext& ctx);
-template const TTypeAnnotationNode* CommonType<false, true>(TPositionHandle pos, const TTypeAnnotationNode* one, const TTypeAnnotationNode* two, TExprContext& ctx);
+template const TTypeAnnotationNode* CommonType<true, false>(TPositionHandle pos, const TTypeAnnotationNode* one, const TTypeAnnotationNode* two, TExprContext& ctx, bool warn);
+template const TTypeAnnotationNode* CommonType<false, false>(TPositionHandle pos, const TTypeAnnotationNode* one, const TTypeAnnotationNode* two, TExprContext& ctx, bool warn);
+template const TTypeAnnotationNode* CommonType<false, true>(TPositionHandle pos, const TTypeAnnotationNode* one, const TTypeAnnotationNode* two, TExprContext& ctx, bool warn);
 
-const TTypeAnnotationNode* CommonType(TPositionHandle position, const TTypeAnnotationNode::TSpanType& types, TExprContext& ctx) {
+const TTypeAnnotationNode* CommonType(TPositionHandle position, const TTypeAnnotationNode::TSpanType& types, TExprContext& ctx, bool warn) {
     switch (types.size()) {
         case 0U: return nullptr;
         case 1U: return types.front();
-        case 2U: return CommonType<false, false>(position, types.front(), types.back(), ctx);
+        case 2U: return CommonType<false, false>(position, types.front(), types.back(), ctx, warn);
         default: break;
     }
 
     const auto left = types.size() >> 1U, right = types.size() - left;
-    return CommonType<false, false>(position, CommonType(position, types.first(left), ctx), CommonType(position, types.last(right), ctx), ctx);
+    return CommonType<false, false>(position, CommonType(position, types.first(left), ctx, warn), CommonType(position, types.last(right), ctx, warn), ctx, warn);
 }
 
-const TTypeAnnotationNode* CommonTypeForChildren(const TExprNode& node, TExprContext& ctx) {
+const TTypeAnnotationNode* CommonTypeForChildren(const TExprNode& node, TExprContext& ctx, bool warn) {
     TTypeAnnotationNode::TListType types(node.ChildrenSize());
     for (auto i = 0U; i < types.size(); ++i) {
         if (const auto item = node.Child(i); EnsureComputable(*item, ctx))
@@ -1814,7 +1814,7 @@ const TTypeAnnotationNode* CommonTypeForChildren(const TExprNode& node, TExprCon
         else
             return nullptr;
     }
-    return CommonType(node.Pos(), types, ctx);
+    return CommonType(node.Pos(), types, ctx, warn);
 }
 
 size_t GetOptionalLevel(const TTypeAnnotationNode* type) {
@@ -4249,13 +4249,29 @@ ui8 GetDecimalWidthOfIntegral(EDataSlot dataSlot) {
     return NUdf::GetDataTypeInfo(dataSlot).DecimalDigits;
 }
 
-TMaybe<EDataSlot> GetSuperType(EDataSlot dataSlot1, EDataSlot dataSlot2) {
+TMaybe<EDataSlot> GetSuperType(EDataSlot dataSlot1, EDataSlot dataSlot2, bool warn, TExprContext* ctx, TPositionHandle* pos) {
     if (dataSlot1 == dataSlot2) {
         return dataSlot1;
     }
 
     if (IsDataTypeNumeric(dataSlot1) && IsDataTypeNumeric(dataSlot2)) {
-        return GetNumericDataTypeByLevel(Max(GetNumericDataTypeLevel(dataSlot1), GetNumericDataTypeLevel(dataSlot2)));
+        auto lvl1 = GetNumericDataTypeLevel(dataSlot1);
+        auto lvl2 = GetNumericDataTypeLevel(dataSlot2);
+        if (lvl1 > lvl2) {
+            std::swap(lvl1, lvl2);
+        }
+        bool isFromSignedToUnsigned = (lvl1 & 1) && !(lvl2 & 1);
+        bool isFromUnsignedToSignedSameWidth = ((lvl1 == (lvl2 & ~1u)) && ((lvl1 ^ lvl2) & 1));
+        if (warn && lvl2 < 8 && (isFromSignedToUnsigned || isFromUnsignedToSignedSameWidth)) {
+            auto issue = TIssue(ctx->GetPosition(*pos), TStringBuilder() <<
+                "Consider using explicit CAST or BITCAST to convert from " <<
+                NKikimr::NUdf::GetDataTypeInfo(dataSlot1).Name << " to " << NKikimr::NUdf::GetDataTypeInfo(dataSlot2).Name);
+            SetIssueCode(EYqlIssueCode::TIssuesIds_EIssueCode_CORE_IMPLICIT_BITCAST, issue);
+            if (!ctx->AddWarning(issue)) {
+                return {};
+            }
+        }
+        return GetNumericDataTypeByLevel(lvl2);
     }
 
     if (IsDataTypeString(dataSlot1) && IsDataTypeString(dataSlot2)) {

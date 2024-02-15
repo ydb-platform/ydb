@@ -286,7 +286,7 @@
         {
             "checksum": "384a2c88796f8b557407863831de0937",
             "size": 3330,
-            "uri": "https://{canondata_backend}/1871182/38e83161c71e20aa87dea7ac9eb8db8984f00c03/resource.tar.gz#test.test_aggregate-group_by_hop_list_key--Debug_/opt.yql_patched"
+            "uri": "https://{canondata_backend}/1924537/38e83161c71e20aa87dea7ac9eb8db8984f00c03/resource.tar.gz#test.test_aggregate-group_by_hop_list_key--Debug_/opt.yql_patched"
         }
     ],
     "test.test[aggregate-group_by_hop_list_key--Plan]": [

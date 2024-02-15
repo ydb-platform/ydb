@@ -171,7 +171,7 @@ docker run --rm -it --entrypoint cat {{ ydb_local_docker_image }} THIRD_PARTY_LI
 
 ## Запуск {{ ydb-short-name }} Federated Query в Docker
 
-В данном разделе мы рассмотрим пример тестовой инсталляции {{ ydb-full-name }}, сконфигурированной для выполнения [федеративных запросов](../../../concepts/federated_query/index.md) к внешним источникам данных. Подключение {{ ydb-full-name }} к некоторым из источников требует развёртывания специального микросервиса - [коннектора](../../../concepts/federated_query/architecture.md#connectors). Ниже мы воспользуемся инструментом оркестрации `docker-compose` для локального запуска Docker-контейнеров с тремя сервисами: 
+В данном разделе мы рассмотрим пример тестовой инсталляции {{ ydb-full-name }}, сконфигурированной для выполнения [федеративных запросов](../../../concepts/federated_query/index.md) к внешним источникам данных. Подключение {{ ydb-full-name }} к некоторым из источников требует развертывания специального микросервиса - [коннектора](../../../concepts/federated_query/architecture.md#connectors). Ниже мы воспользуемся инструментом оркестрации `docker-compose` для локального запуска Docker-контейнеров с тремя сервисами: 
 
 * {{ ydb-short-name }} в одноузловой конфигурации;
 * PostgreSQL (в качестве примера источника данных);
@@ -229,8 +229,6 @@ docker run --rm -it --entrypoint cat {{ ydb_local_docker_image }} THIRD_PARTY_LI
 
 {% note info %}
 
-О дополнительных опциях запуска коннектора можно узнать в [руководстве по развёртыванию](../../../deploy/manual/connector.md#fq-connector-go-launch). В качестве внешнего источника данных можно использовать любое хранилище из перечня [поддерживаемых](../../../concepts/federated_query/architecture.md#supported-datasources).
-
-Помимо этого вы можете обратиться к источнику, развёрнутому не только в локальном Docker-контейнере, но и в любой другой локации, доступной для коннектора по сети. Для этого передайте в параметре `LOCATION` команды `CREATE EXTERNAL DATA SOURCE` сетевой адрес источника, а также укажите `USE_TLS="TRUE"`, если источник использует шифрованные соединения. 
+О дополнительных опциях запуска коннектора можно узнать в [руководстве по развертыванию](../../../deploy/manual/connector.md#fq-connector-go-launch). В качестве внешнего источника данных можно использовать любое хранилище из перечня [поддерживаемых](../../../concepts/federated_query/architecture.md#supported-datasources).
 
 {% endnote %}

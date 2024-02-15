@@ -73,7 +73,7 @@ TVector<TMaybe<NYT::TNode>> InferSchemaFromTablesContents(const TString& cluster
     inferers.reserve(requests.size());
 
     std::function<void(size_t)> runRead = [&](size_t i) {
-        YT_UNUSED_FUTURE(inputs[i]->Read().ApplyUnique(BIND([&queue, &inferers, &promises, &runRead, i = i](NYT::TErrorOr<NYT::TSharedRef>&& res){
+        YT_UNUSED_FUTURE(inputs[i]->Read().ApplyUnique(BIND([queue, &inferers, &promises, &runRead, i = i](NYT::TErrorOr<NYT::TSharedRef>&& res){
             if (res.IsOK() && !res.Value()) {
                 // EOS
                 promises[i].Set();

@@ -1446,6 +1446,7 @@ private:
                                                              Counters,
                                                              availablePermissions,
                                                              Config.CommonConfig,
+                                                             Config.ComputeConfig,
                                                              Signer));
                 return;
             }
@@ -1742,6 +1743,7 @@ private:
                     Config.RequestTimeout,
                     Counters,
                     Config.CommonConfig,
+                    Config.ComputeConfig,
                     Signer));
                 return;
             }
@@ -2069,7 +2071,8 @@ private:
                                             std::move(ev),
                                             Config.RequestTimeout,
                                             Counters,
-                                            availablePermissions));
+                                            availablePermissions,
+                                            Config.ComputeConfig));
             return;
         }
 
@@ -2356,7 +2359,8 @@ private:
                 Register(MakeModifyBindingActor(ControlPlaneProxyActorId(),
                                                 std::move(ev),
                                                 Config.RequestTimeout,
-                                                Counters));
+                                                Counters,
+                                                Config.ComputeConfig));
                 return;
             }
             Send(sender, ev->Get()->Response.release());

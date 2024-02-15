@@ -67,42 +67,7 @@ RUN update-ca-certificates
 
 ### Конфигурация {#fq-connector-go-config}
 
-Пример конфигурационного файла сервиса `fq-connector-go`:
-
-```proto
-connector_server {
-  endpoint {
-      host: "0.0.0.0"
-      port: 50051
-  }
-
-  tls {
-    cert: "/usr/local/etc/tls/tls.crt"
-    key: "/usr/local/etc/tls/tls.key"
-  }
-}
-
-logger {
-  log_level: INFO
-  enable_sql_query_logging: false
-}
-
-metrics_server {
-  endpoint {
-      host: "0.0.0.0"
-      port: 8766
-  }
-}
-
-paging {
-  bytes_per_page: 4194304
-  prefetch_queue_capacity: 2
-}
-
-conversion {
-  use_unsafe_converters: true
-}
-```
+Актуальный пример конфигурационного файла сервиса `fq-connector-go` можно найти в [репозитории](https://github.com/ydb-platform/fq-connector-go/blob/main/examples/config.prod.txt). 
 
 | Параметр | Назначение |
 |----------|------------|

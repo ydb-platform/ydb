@@ -712,9 +712,6 @@ public:
                 AppData()->TimeProvider, AppData()->RandomProvider, Config->EnableKqpImmediateEffects);
             QueryState->QueryData = std::make_shared<TQueryData>(QueryState->TxCtx->TxAlloc);
             QueryState->TxCtx->EffectiveIsolationLevel = NKikimrKqp::ISOLATION_LEVEL_UNDEFINED;
-            Ydb::Table::TransactionSettings settings;
-            settings.mutable_serializable_read_write();
-            BeginTx(settings);
         }
 
         return true;

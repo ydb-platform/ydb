@@ -55,13 +55,6 @@ public:
         bool DirtyImmediate() const { return Flags & EFlagsDirtyImmediate; }
         bool SoftUpdates() const { return Flags & (EFlagsForceOnlineRW|EFlagsDirtyOnline|EFlagsDirtyImmediate); }
 
-        void Validate() {
-            if (!LimitActiveTx)
-                LimitActiveTx = DefaultLimitActiveTx() ;
-            if (!LimitDataTxCache)
-                LimitDataTxCache = DefaultLimitDataTxCache();
-        }
-
         void Update(const NKikimrSchemeOp::TPipelineConfig& cfg) {
             if (cfg.GetEnableOutOfOrder()) {
                 Flags |= EFlagsOutOfOrder;
@@ -78,14 +71,14 @@ public:
             } else {
                 Flags &= ~(EFlagsForceOnlineRW | EFlagsDirtyOnline | EFlagsDirtyImmediate);
             }
-            if (cfg.GetNumActiveTx()) {
-                LimitActiveTx = cfg.GetNumActiveTx();
-            }
-            if (cfg.GetDataTxCacheSize()) {
+
+            // has [default = 8] in TPipelineConfig proto
+            LimitActiveTx = cfg.GetNumActiveTx();
+
+            // does not have default in TPipelineConfig proto
+            if (cfg.HasDataTxCacheSize()) {
                 LimitDataTxCache = cfg.GetDataTxCacheSize();
             }
-
-            Validate();
         }
     };
 

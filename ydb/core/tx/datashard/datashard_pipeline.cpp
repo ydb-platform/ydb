@@ -59,7 +59,6 @@ bool TPipeline::Load(NIceDb::TNiceDb& db) {
         return false;
     }
 
-    Config.Validate();
     UtmostCompleteTx = LastCompleteTx;
 
     return true;
@@ -1175,11 +1174,10 @@ void TPipeline::ProposeTx(TOperation::TPtr op, const TStringBuf &txBody, TTransa
         PreserveSchema(db, op->GetMaxStep());
     }
     Self->TransQueue.ProposeTx(db, op, op->GetTarget(), txBody);
+
     if (Self->IsStopping() && op->GetTarget()) {
         // Send notification if we prepared a tx while shard was stopping
-        auto notify = MakeHolder<TEvDataShard::TEvProposeTransactionRestart>(
-            Self->TabletID(), op->GetTxId());
-        ctx.Send(op->GetTarget(), notify.Release(), 0, op->GetCookie());
+        op->OnStopping(*Self, ctx);
     }
 }
 
@@ -1335,14 +1333,17 @@ ui64 TPipeline::GetInactiveTxSize() const {
 
 bool TPipeline::SaveForPropose(TValidatedTx::TPtr tx) {
     Y_ABORT_UNLESS(tx && tx->GetTxId());
-    if (DataTxCache.size() <= Config.LimitDataTxCache) {
-        ui64 quota = tx->GetMemoryConsumption();
-        if (Self->TryCaptureTxCache(quota)) {
-            tx->SetTxCacheUsage(quota);
-            DataTxCache[tx->GetTxId()] = tx;
-            return true;
-        }
+
+    if (DataTxCache.size() >= Config.LimitDataTxCache)
+        return false;
+
+    ui64 quota = tx->GetMemoryConsumption();
+    if (Self->TryCaptureTxCache(quota)) {
+        tx->SetTxCacheUsage(quota);
+        DataTxCache[tx->GetTxId()] = tx;
+        return true;
     }
+
     return false;
 }
 

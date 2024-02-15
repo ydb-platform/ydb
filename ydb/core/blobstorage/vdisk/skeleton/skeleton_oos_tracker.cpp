@@ -92,7 +92,9 @@ namespace NKikimr {
             MonGroup.DskTotalBytes() = msg->TotalChunks * PDiskCtx->Dsk->ChunkSize;
             MonGroup.DskFreeBytes() = msg->FreeChunks * PDiskCtx->Dsk->ChunkSize;
             if (msg->NumSlots > 0) {
-                CostGroup.DiskTimeAvailableNs() = 1'000'000'000ull / msg->NumSlots;
+                ui32 timeAvailable = 1'000'000'000 / msg->NumSlots;
+                CostGroup.DiskTimeAvailableNs() = timeAvailable;
+                VCtx->CostTracker->SetTimeAvailable(timeAvailable);
             }
 
             Become(&TThis::WaitFunc);

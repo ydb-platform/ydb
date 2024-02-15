@@ -50,7 +50,7 @@ TBsCostTracker::TBsCostTracker(const TBlobStorageGroupType& groupType, NPDisk::E
     , ScrubDiskCost(CostCounters->GetCounter("ScrubDiskCost", true))
     , DefragDiskCost(CostCounters->GetCounter("DefragDiskCost", true))
     , InternalDiskCost(CostCounters->GetCounter("InternalDiskCost", true))
-    , Bucket(&BucketInflow, &BucketCapacity, nullptr, nullptr, nullptr, nullptr, true)
+    , Bucket(&DiskTimeAvailableNs, &BucketCapacity, nullptr, nullptr, nullptr, nullptr, true)
 {
     BurstDetector.Initialize(CostCounters, "BurstDetector");
     switch (GroupType.GetErasure()) {

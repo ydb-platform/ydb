@@ -373,6 +373,56 @@ Y_UNIT_TEST_SUITE(TRestoreTests) {
         NKqp::CompareYson(data.YsonStr, content);
     }
 
+    Y_UNIT_TEST_WITH_COMPRESSION(ShouldSucceedWithDefaultFromLiteral) {
+        TTestBasicRuntime runtime;
+
+        const auto data = GenerateTestData(Codec, "a", 1);
+
+        Restore(runtime, R"(
+            Name: "Table"
+            Columns { Name: "key" Type: "Utf8" }
+            Columns {
+                Name: "value"
+                Type: "Utf8"
+                DefaultFromLiteral {
+                    type {
+                        optional_type {
+                            item {
+                                type_id: UTF8
+                            }
+                        }
+                    }
+                    value {
+                        items {
+                            text_value: "value1"
+                        }
+                    }
+                }
+            }
+            KeyColumnNames: ["key"]
+        )", {});
+
+        auto writeRow = [&](TString key) {
+            NKikimrMiniKQL::TResult result;
+            TString error;
+            NKikimrProto::EReplyStatus status = LocalMiniKQL(runtime, TTestTxConfig::FakeHiveTablets, Sprintf(R"(
+                (
+                    (let key '( '('key (Utf8 '%s) ) ) )
+                    (let row '( ) )
+                    (return (AsList (UpdateRow '__user__Table key row) ))
+                )
+            )", key.c_str()), result, error);
+
+            UNIT_ASSERT_VALUES_EQUAL_C(status, NKikimrProto::EReplyStatus::OK, error);
+            UNIT_ASSERT_VALUES_EQUAL(error, "");
+        };
+
+        writeRow("a1");
+
+        auto content = ReadTable(runtime, TTestTxConfig::FakeHiveTablets);
+        NKqp::CompareYson(data.YsonStr, content);
+    }
+
     Y_UNIT_TEST_WITH_COMPRESSION(ShouldSucceedOnMultiShardTable) {
         TTestBasicRuntime runtime;
 
@@ -2513,20 +2563,6 @@ Y_UNIT_TEST_SUITE(TImportWithRebootsTests) {
             columns {
               name: "key"
               type { optional_type { item { type_id: UTF8 } } }
-              from_literal {
-                type {
-                    optional_type {
-                        item {
-                            type_id: UTF8
-                        }
-                    }
-                }
-                value {
-                    items {
-                        text_value: "b"
-                    }
-                }
-              }
             }
             columns {
               name: "value"

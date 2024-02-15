@@ -3900,6 +3900,9 @@ Y_UNIT_TEST_SUITE(KqpPg) {
             auto fullScan = FindPlanNodeByKv(plan, "Node Type", "Filter-TableFullScan");
             UNIT_ASSERT_C(!fullScan.IsDefined(), "got fullscan, expected lookup");
             auto lookup = FindPlanNodeByKv(plan, "Node Type", "TableLookup");
+            if (!lookup.IsDefined()) {
+                lookup = FindPlanNodeByKv(plan, "Node Type", "TableRangeScan");
+            }
             UNIT_ASSERT_C(lookup.IsDefined(), "no Table Lookup in plan");
         }
         {

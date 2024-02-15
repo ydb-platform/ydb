@@ -3840,6 +3840,38 @@ Y_UNIT_TEST_SUITE(KqpPg) {
                 UNIT_ASSERT(result.GetIssues().ToString().Contains("invalid input syntax for type integer: \"a\""));
             }
         }
+
+        {
+            // Check recompile
+            {
+                auto result = db.ExecuteQuery(R"(
+                    CREATE TABLE RecompileTable (id int primary key);
+                )", NYdb::NQuery::TTxControl::NoTx(), settings).ExtractValueSync();
+                UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+
+                result = db.ExecuteQuery(R"(
+                    INSERT INTO RecompileTable (id) VALUES (1);
+                )", NYdb::NQuery::TTxControl::BeginTx().CommitTx(), settings).ExtractValueSync();
+                UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+            
+                result = db.ExecuteQuery(R"(
+                    DROP TABLE RecompileTable;
+                )", NYdb::NQuery::TTxControl::NoTx(), settings).ExtractValueSync();
+                UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+
+                result = db.ExecuteQuery(R"(
+                    CREATE TABLE RecompileTable (id int primary key);
+                )", NYdb::NQuery::TTxControl::NoTx(), settings).ExtractValueSync();
+                UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+
+                result = db.ExecuteQuery(R"(
+                    INSERT INTO RecompileTable (id) VALUES (1);
+                )", NYdb::NQuery::TTxControl::BeginTx().CommitTx(), settings).ExtractValueSync();
+                UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+                auto stats = NYdb::TProtoAccessor::GetProto(*result.GetStats());
+                UNIT_ASSERT_VALUES_EQUAL(stats.compilation().from_cache(), false);
+            }
+        }
     }
 
     Y_UNIT_TEST(MkqlTerminate) {

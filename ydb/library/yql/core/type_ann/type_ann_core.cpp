@@ -493,9 +493,7 @@ namespace NTypeAnnImpl {
             return false;
         }
 
-        // second argument must be "Utf8" type
-        const auto& jsonPathArg = function.JsonPath().Ref();
-        if (!EnsureSpecificDataType(jsonPathArg, EDataSlot::Utf8, ctx.Expr)) {
+        if (!EnsureValidJsonPath(function.JsonPath().Ref(), ctx.Expr)) {
             return false;
         }
 
@@ -3331,6 +3329,12 @@ namespace NTypeAnnImpl {
             return IGraphTransformer::TStatus::Repeat;
         }
 
+        auto name = input->Content();
+        bool warn = name.ChopSuffix("MayWarn");
+        if (warn) {
+            output = ctx.Expr.RenameNode(*input, name);
+        }
+
         if constexpr (IsStrict) {
             std::set<const TTypeAnnotationNode*> set;
             input->ForEachChild([&](const TExprNode& item) { set.emplace(item.GetTypeAnn()); });
@@ -3342,11 +3346,16 @@ namespace NTypeAnnImpl {
 
             output = ctx.Expr.RenameNode(*input, "AsList");
             return IGraphTransformer::TStatus::Repeat;
-        } else if (const auto commonItemType = CommonTypeForChildren(*input, ctx.Expr)) {
+        } else if (const auto commonItemType = CommonTypeForChildren(*input, ctx.Expr, warn)) {
             if (const auto status = ConvertChildrenToType(input, commonItemType, ctx.Expr); status != IGraphTransformer::TStatus::Ok)
                 return status;
-        } else
+        } else {
             return IGraphTransformer::TStatus::Error;
+        }
+
+        if (warn) {
+            return IGraphTransformer::TStatus::Repeat;
+        }
 
         input->SetTypeAnn(ctx.Expr.MakeType<TListExprType>(input->Head().GetTypeAnn()));
         return IGraphTransformer::TStatus::Ok;
@@ -5733,6 +5742,12 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
             }
         }
 
+        auto name = input->Content();
+        bool warn = name.ChopSuffix("MayWarn");
+        if (warn) {
+            output = ctx.Expr.RenameNode(*input, name);
+        }
+
         if constexpr (IsStrict) {
             std::set<const TTypeAnnotationNode*> set;
             input->ForEachChild([&](const TExprNode& item) { set.emplace(item.GetTypeAnn()); });
@@ -5744,7 +5759,7 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
 
             output = ctx.Expr.RenameNode(*input, IsSet ? "AsSet" : "AsDict");
             return IGraphTransformer::TStatus::Repeat;
-        } else if (const auto commonType = CommonTypeForChildren(*input, ctx.Expr)) {
+        } else if (const auto commonType = CommonTypeForChildren(*input, ctx.Expr, warn)) {
             if (const auto status = ConvertChildrenToType(input, commonType, ctx.Expr); status != IGraphTransformer::TStatus::Ok)
                 return status;
 
@@ -5757,10 +5772,11 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
             }
 
             input->SetTypeAnn(dictType);
-        } else
+        } else {
             return IGraphTransformer::TStatus::Error;
+        }
 
-        return IGraphTransformer::TStatus::Ok;
+        return warn ? IGraphTransformer::TStatus::Repeat : IGraphTransformer::TStatus::Ok;
     }
 
     IGraphTransformer::TStatus DictFromKeysWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TContext& ctx) {
@@ -11745,6 +11761,7 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
         Functions["ByteAt"] = &ByteAtWrapper;
         Functions["ListIf"] = &ListIfWrapper;
         Functions["AsList"] = &AsListWrapper<false>;
+        Functions["AsListMayWarn"] = &AsListWrapper<false>;
         Functions["AsListStrict"] = &AsListWrapper<true>;
         Functions["ToList"] = &ToListWrapper;
         Functions["ToOptional"] = &ToOptionalWrapper;
@@ -11903,8 +11920,10 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
         Functions["AsStruct"] = &AsStructWrapper;
         Functions["AsStructUnordered"] = &AsStructWrapper;
         Functions["AsDict"] = &AsDictWrapper<false, false>;
+        Functions["AsDictMayWarn"] = &AsDictWrapper<false, false>;
         Functions["AsDictStrict"] = &AsDictWrapper<true, false>;
         Functions["AsSet"] = &AsDictWrapper<false, true>;
+        Functions["AsSetMayWarn"] = &AsDictWrapper<false, true>;
         Functions["AsSetStrict"] = &AsDictWrapper<true, true>;
         Functions["DictFromKeys"] = &DictFromKeysWrapper;
         Functions["Uniq"] = &UniqWrapper;
@@ -12202,6 +12221,7 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
         Functions["WideSortBlocks"] = &WideSortBlocksWrapper;
         Functions["BlockExtend"] = &BlockExtendWrapper;
         Functions["BlockOrderedExtend"] = &BlockExtendWrapper;
+        Functions["ReplicateScalars"] = &ReplicateScalarsWrapper;
 
         Functions["BlockCoalesce"] = &BlockCoalesceWrapper;
         Functions["BlockAnd"] = &BlockLogicalWrapper;

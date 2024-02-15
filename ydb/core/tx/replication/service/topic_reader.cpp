@@ -85,13 +85,23 @@ class TRemoteTopicReader: public TActor<TRemoteTopicReader> {
 
         if (!ev->Get()->Result.IsSuccess()) {
             LOG_N("Unsuccessful commit offset");
-            Leave();
+            Leave(TEvWorker::TEvGone::UNAVAILABLE);
         }
     }
 
-    void Leave() {
+    void Handle(TEvYdbProxy::TEvTopicReaderGone::TPtr& ev) {
+        LOG_D("Handle " << ev->Get()->ToString());
+        switch (ev->Get()->Result.GetStatus()) {
+            case NYdb::EStatus::SCHEME_ERROR:
+                return Leave(TEvWorker::TEvGone::SCHEME_ERROR);
+            default:
+                return Leave(TEvWorker::TEvGone::UNAVAILABLE);
+        }
+    }
+
+    void Leave(TEvWorker::TEvGone::EStatus status) {
         LOG_I("Leave");
-        Send(Worker, new TEvents::TEvGone());
+        Send(Worker, new TEvWorker::TEvGone(status));
         PassAway();
     }
 
@@ -124,7 +134,7 @@ public:
             hFunc(TEvYdbProxy::TEvCreateTopicReaderResponse, Handle);
             hFunc(TEvYdbProxy::TEvReadTopicResponse, Handle);
             hFunc(TEvYdbProxy::TEvCommitOffsetResponse, Handle);
-            sFunc(TEvents::TEvGone, Leave);
+            hFunc(TEvYdbProxy::TEvTopicReaderGone, Handle);
             sFunc(TEvents::TEvPoison, PassAway);
         }
     }

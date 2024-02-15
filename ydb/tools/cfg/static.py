@@ -14,6 +14,7 @@ from google.protobuf import json_format
 from ydb.core.protos import (
     auth_pb2,
     blobstorage_vdisk_config_pb2,
+    bootstrap_pb2,
     cms_pb2,
     config_pb2,
     feature_flags_pb2,
@@ -113,8 +114,8 @@ class StaticConfigGenerator(object):
             )
         )
         self._enable_cms_config_cache = template.get("enable_cms_config_cache", enable_cms_config_cache)
-        if "tracing_config" in template:
-            tracing = template["tracing_config"]
+        tracing = template.get("tracing_config")
+        if tracing is not None:
             self.__tracing = (
                 tracing["backend"],
                 tracing.get("sampling", []),
@@ -592,7 +593,7 @@ class StaticConfigGenerator(object):
         return all_tablets
 
     def __generate_boot_txt(self):
-        self.__proto_configs["boot.txt"] = config_pb2.TBootstrap()
+        self.__proto_configs["boot.txt"] = bootstrap_pb2.TBootstrap()
 
         for tablet_type, tablet_count in self.__system_tablets:
             for index in range(int(tablet_count)):
@@ -1130,7 +1131,7 @@ class StaticConfigGenerator(object):
             sampling_scope_pb.Fraction = sampling['fraction']
             sampling_scope_pb.Level = sampling['level']
             sampling_scope_pb.MaxRatePerMinute = sampling['max_rate_per_minute']
-            sampling_scope_pb.MaxBurst = sampling['max_burst']
+            sampling_scope_pb.MaxBurst = sampling.get('max_burst', 0)
             return sampling_scope_pb
 
         def get_external_throttling(throttling):
@@ -1138,8 +1139,8 @@ class StaticConfigGenerator(object):
             selectors = throttling.get("scope")
             if selectors is not None:
                 throttling_scope_pb.Scope.CopyFrom(get_selectors(selectors))
-            throttling_scope_pb.MaxRatePerMinute = throttling_scope_pb['max_rate_per_minute']
-            throttling_scope_pb.MaxBurst = throttling_scope_pb['max_burst']
+            throttling_scope_pb.MaxRatePerMinute = throttling['max_rate_per_minute']
+            throttling_scope_pb.MaxBurst = throttling.get('max_burst', 0)
             return throttling_scope_pb
 
         def get_auth_config(auth):
@@ -1200,10 +1201,10 @@ class StaticConfigGenerator(object):
             tracing_pb.Backend.CopyFrom(get_backend(backend))
 
             for sampling_scope in sampling:
-                tracing_pb.Sampling.Add().CopyFrom(get_sampling_scope(sampling))
+                tracing_pb.Sampling.append(get_sampling_scope(sampling_scope))
 
             for throttling_scope in external_throttling:
-                tracing_pb.ExternalThrottling.Add().CopyFrom(get_external_throttling(throttling_scope))
+                tracing_pb.ExternalThrottling.append(get_external_throttling(throttling_scope))
 
         self.__proto_configs["tracing.txt"] = pb
 

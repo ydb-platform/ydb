@@ -587,14 +587,14 @@ Y_UNIT_TEST_SUITE(YdbProxyTests) {
 
         while (true) {
             TAutoPtr<IEventHandle> handle;
-            auto result = env.GetRuntime().template GrabEdgeEventsRethrow<TEvYdbProxy::TEvReadTopicResponse, TEvents::TEvGone>(handle);
+            auto result = env.GetRuntime().template GrabEdgeEventsRethrow<TEvYdbProxy::TEvReadTopicResponse, TEvYdbProxy::TEvTopicReaderGone>(handle);
             if (handle->Recipient != env.GetSender()) {
                 continue;
             }
 
             if (auto* ev = std::get<TEvYdbProxy::TEvReadTopicResponse*>(result)) {
                 return ev->Result;
-            } else if (std::get<TEvents::TEvGone*>(result)) {
+            } else if (std::get<TEvYdbProxy::TEvTopicReaderGone*>(result)) {
                 reader = CreateTopicReader(env, topicPath);
                 env.SendAsync(reader, new TEvYdbProxy::TEvReadTopicRequest());
             } else {
@@ -645,7 +645,7 @@ Y_UNIT_TEST_SUITE(YdbProxyTests) {
 
         // wait event from previous session
         try {
-            auto ev = env.GetRuntime().GrabEdgeEventRethrow<TEvents::TEvGone>(env.GetSender());
+            auto ev = env.GetRuntime().GrabEdgeEventRethrow<TEvYdbProxy::TEvTopicReaderGone>(env.GetSender());
             if (ev->Sender != reader) {
                 ythrow yexception();
             }
@@ -668,6 +668,16 @@ Y_UNIT_TEST_SUITE(YdbProxyTests) {
             UNIT_ASSERT(ev);
             UNIT_ASSERT(ev->Get()->Result.IsSuccess());
         }
+    }
+
+    Y_UNIT_TEST(ReadNonExistentTopic) {
+        TEnv env;
+
+        auto reader = CreateTopicReader(env, "/Root/topic");
+        auto ev = env.template Send<TEvYdbProxy::TEvTopicReaderGone>(reader, new TEvYdbProxy::TEvReadTopicRequest());
+
+        UNIT_ASSERT(ev);
+        UNIT_ASSERT_VALUES_EQUAL(ev->Get()->Result.GetStatus(), NYdb::EStatus::SCHEME_ERROR);
     }
 
 } // YdbProxyTests

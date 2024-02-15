@@ -12,7 +12,9 @@ max(relispartition::text) max_isrel,
 max(relkind) max_relkind,
 max(relname) max_relname,
 max(relnamespace) max_relns,
-max(relowner) max_relowner
+max(relowner) max_relowner,
+min(relam) min_am,
+max(relam) max_am
 from
 pg_catalog.pg_class;
 

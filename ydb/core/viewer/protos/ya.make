@@ -6,6 +6,7 @@ SRCS(
 
 PEERDIR(
     ydb/core/protos
+    ydb/core/graph/protos
 )
 
 EXCLUDE_TAGS(GO_PROTO)

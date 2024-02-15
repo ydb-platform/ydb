@@ -83,7 +83,7 @@ message TComputeMapping {
     TActivationPercentage Activation = 3;
 }
 
-message TSupportedComputeYDBFeatures {
+message TSupportedComputeYdbFeatures {
     bool ReplaceIfExists = 1;
 }
 
@@ -92,5 +92,5 @@ message TComputeConfig {
     TYdbCompute Ydb = 2;
     EComputeType DefaultCompute = 3;
     repeated TComputeMapping ComputeMapping = 4;
-    TSupportedComputeYDBFeatures SupportedComputeYDBFeatures = 5;
+    TSupportedComputeYdbFeatures SupportedComputeYdbFeatures = 5;
 }

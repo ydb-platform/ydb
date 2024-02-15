@@ -174,7 +174,7 @@ public:
     }
 
     [[nodiscard]] bool IsReplaceIfExistsSyntaxSupported() const {
-      return ComputeConfig.GetSupportedComputeYDBFeatures().GetReplaceIfExists();
+      return ComputeConfig.GetSupportedComputeYdbFeatures().GetReplaceIfExists();
     }
 
 private:

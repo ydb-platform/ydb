@@ -75,7 +75,7 @@ TString MakeCreateExternalDataTableQuery(const FederatedQuery::BindingContent& c
                 ) WITH (
                     {withOptions}
                 );)",
-        "replaceIfSupported"_a = replaceIfExists ? "OR REPALCE" : "",
+        "replaceIfSupported"_a = replaceIfExists ? "OR REPLACE" : "",
         "externalTableName"_a = EncloseAndEscapeString(bindingName, '`'),
         "columns"_a = JoinMapRange(",\n", subset.schema().column().begin(),
                                    subset.schema().column().end(),
@@ -233,7 +233,7 @@ TString MakeCreateExternalDataSourceQuery(
                     {auth_params}
                 );
             )",
-        "replaceIfSupported"_a = replaceIfExists ? "OR REPALCE" : "",
+        "replaceIfSupported"_a = replaceIfExists ? "OR REPLACE" : "",
         "external_source"_a = EncloseAndEscapeString(sourceName, '`'),
         "properties"_a = properties,
         "auth_params"_a =

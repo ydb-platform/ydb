@@ -23,14 +23,14 @@ public:
     virtual void SaveLastGcBarrier(const TGenStep& lastCollectedGenStep) = 0;
 
     [[nodiscard]] virtual bool LoadLists(std::vector<TUnifiedBlobId>& blobsToKeep, TTabletsByBlob& blobsToDelete,
-        const IBlobGroupSelector* dsGroupSelector) = 0;
+        const IBlobGroupSelector* dsGroupSelector, const TTabletId selfTabletId) = 0;
     virtual void AddBlobToKeep(const TUnifiedBlobId& blobId) = 0;
     virtual void EraseBlobToKeep(const TUnifiedBlobId& blobId) = 0;
 
     virtual void AddBlobToDelete(const TUnifiedBlobId& blobId, const TTabletId tabletId) = 0;
     virtual void EraseBlobToDelete(const TUnifiedBlobId& blobId, const TTabletId tabletId) = 0;
 
-    [[nodiscard]] virtual bool LoadTierLists(const TString& storageId, TTabletsByBlob& blobsToDelete, std::deque<TUnifiedBlobId>& draftBlobsToDelete) = 0;
+    [[nodiscard]] virtual bool LoadTierLists(const TString& storageId, TTabletsByBlob& blobsToDelete, std::deque<TUnifiedBlobId>& draftBlobsToDelete, const TTabletId selfTabletId) = 0;
 
     virtual void AddTierBlobToDelete(const TString& storageId, const TUnifiedBlobId& blobId, const TTabletId tabletId) = 0;
     virtual void RemoveTierBlobToDelete(const TString& storageId, const TUnifiedBlobId& blobId, const TTabletId tabletId) = 0;
@@ -55,14 +55,14 @@ public:
     void SaveLastGcBarrier(const TGenStep& lastCollectedGenStep) override;
 
     [[nodiscard]] bool LoadLists(std::vector<TUnifiedBlobId>& blobsToKeep, TTabletsByBlob& blobsToDelete,
-        const IBlobGroupSelector* dsGroupSelector) override;
+        const IBlobGroupSelector* dsGroupSelector, const TTabletId selfTabletId) override;
 
     void AddBlobToKeep(const TUnifiedBlobId& blobId) override;
     void EraseBlobToKeep(const TUnifiedBlobId& blobId) override;
     void AddBlobToDelete(const TUnifiedBlobId& blobId, const TTabletId tabletId) override;
     void EraseBlobToDelete(const TUnifiedBlobId& blobId, const TTabletId tabletId) override;
 
-    [[nodiscard]] bool LoadTierLists(const TString& storageId, TTabletsByBlob& blobsToDelete, std::deque<TUnifiedBlobId>& draftBlobsToDelete) override;
+    [[nodiscard]] bool LoadTierLists(const TString& storageId, TTabletsByBlob& blobsToDelete, std::deque<TUnifiedBlobId>& draftBlobsToDelete, const TTabletId selfTabletId) override;
 
     void AddTierBlobToDelete(const TString& storageId, const TUnifiedBlobId& blobId, const TTabletId tabletId) override;
     void RemoveTierBlobToDelete(const TString& storageId, const TUnifiedBlobId& blobId, const TTabletId tabletId) override;

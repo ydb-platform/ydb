@@ -136,7 +136,7 @@ void TBlobManager::RegisterControls(NKikimr::TControlBoard& icb) {
     icb.RegisterSharedControl(GCIntervalSeconds, "ColumnShardControls.GCIntervalSeconds");
 }
 
-bool TBlobManager::LoadState(IBlobManagerDb& db) {
+bool TBlobManager::LoadState(IBlobManagerDb& db, const TTabletId selfTabletId) {
     // Load last collected Generation
     if (!db.LoadLastGcBarrier(LastCollectedGenStep)) {
         return false;
@@ -145,7 +145,7 @@ bool TBlobManager::LoadState(IBlobManagerDb& db) {
     // Load the keep and delete queues
     std::vector<TUnifiedBlobId> blobsToKeep;
     NColumnShard::TBlobGroupSelector dsGroupSelector(TabletInfo);
-    if (!db.LoadLists(blobsToKeep, BlobsToDelete, &dsGroupSelector)) {
+    if (!db.LoadLists(blobsToKeep, BlobsToDelete, &dsGroupSelector, selfTabletId)) {
         return false;
     }
 

@@ -26,7 +26,7 @@ void TBlobManagerDb::SaveLastGcBarrier(const TGenStep& lastCollectedGenStep) {
 }
 
 bool TBlobManagerDb::LoadLists(std::vector<TUnifiedBlobId>& blobsToKeep, TTabletsByBlob& blobsToDelete,
-    const IBlobGroupSelector* dsGroupSelector)
+    const IBlobGroupSelector* dsGroupSelector, const TTabletId selfTabletId)
 {
     blobsToKeep.clear();
     TTabletsByBlob blobsToDeleteLocal;
@@ -63,7 +63,25 @@ bool TBlobManagerDb::LoadLists(std::vector<TUnifiedBlobId>& blobsToKeep, TTablet
             const TString blobIdStr = rowset.GetValue<Schema::BlobsToDelete::BlobId>();
             TUnifiedBlobId unifiedBlobId = TUnifiedBlobId::ParseFromString(blobIdStr, dsGroupSelector, error);
             AFL_VERIFY(unifiedBlobId.IsValid())("event", "cannot_parse_blob")("error", error)("original_string", blobIdStr);
-            blobsToDeleteLocal.Add((TTabletId)rowset.GetValue<Schema::BlobsToDelete::TabletId>(), unifiedBlobId);
+            blobsToDeleteLocal.Add(selfTabletId, unifiedBlobId);
+            if (!rowset.Next()) {
+                return false;
+            }
+        }
+    }
+
+    {
+        auto rowset = db.Table<Schema::BlobsToDeleteWT>().Select();
+        if (!rowset.IsReady())
+            return false;
+
+        TString error;
+
+        while (!rowset.EndOfSet()) {
+            const TString blobIdStr = rowset.GetValue<Schema::BlobsToDeleteWT::BlobId>();
+            TUnifiedBlobId unifiedBlobId = TUnifiedBlobId::ParseFromString(blobIdStr, dsGroupSelector, error);
+            AFL_VERIFY(unifiedBlobId.IsValid())("event", "cannot_parse_blob")("error", error)("original_string", blobIdStr);
+            blobsToDeleteLocal.Add((TTabletId)rowset.GetValue<Schema::BlobsToDeleteWT::TabletId>(), unifiedBlobId);
             if (!rowset.Next()) {
                 return false;
             }
@@ -87,16 +105,19 @@ void TBlobManagerDb::EraseBlobToKeep(const TUnifiedBlobId& blobId) {
 
 void TBlobManagerDb::AddBlobToDelete(const TUnifiedBlobId& blobId, const TTabletId tabletId) {
     NIceDb::TNiceDb db(Database);
-    db.Table<Schema::BlobsToDelete>().Key(blobId.ToStringLegacy(), (ui64)tabletId).Update();
+    db.Table<Schema::BlobsToDeleteWT>().Key(blobId.ToStringLegacy(), (ui64)tabletId).Update();
+    db.Table<Schema::BlobsToDelete>().Key(blobId.ToStringLegacy()).Update();
 }
 
 void TBlobManagerDb::EraseBlobToDelete(const TUnifiedBlobId& blobId, const TTabletId tabletId) {
     NIceDb::TNiceDb db(Database);
-    db.Table<Schema::BlobsToDelete>().Key(blobId.ToStringLegacy(), (ui64)tabletId).Delete();
-    db.Table<Schema::BlobsToDelete>().Key(blobId.ToStringNew(), (ui64)tabletId).Delete();
+    db.Table<Schema::BlobsToDelete>().Key(blobId.ToStringLegacy()).Delete();
+    db.Table<Schema::BlobsToDelete>().Key(blobId.ToStringNew()).Delete();
+    db.Table<Schema::BlobsToDeleteWT>().Key(blobId.ToStringLegacy(), (ui64)tabletId).Delete();
+    db.Table<Schema::BlobsToDeleteWT>().Key(blobId.ToStringNew(), (ui64)tabletId).Delete();
 }
 
-bool TBlobManagerDb::LoadTierLists(const TString& storageId, TTabletsByBlob& blobsToDelete, std::deque<TUnifiedBlobId>& draftBlobsToDelete) {
+bool TBlobManagerDb::LoadTierLists(const TString& storageId, TTabletsByBlob& blobsToDelete, std::deque<TUnifiedBlobId>& draftBlobsToDelete, const TTabletId selfTabletId) {
     draftBlobsToDelete.clear();
     TTabletsByBlob localBlobsToDelete;
 
@@ -115,7 +136,27 @@ bool TBlobManagerDb::LoadTierLists(const TString& storageId, TTabletsByBlob& blo
             TUnifiedBlobId unifiedBlobId = TUnifiedBlobId::ParseFromString(blobIdStr, nullptr, error);
             AFL_VERIFY(unifiedBlobId.IsValid())("event", "cannot_parse_blob")("error", error)("original_string", blobIdStr);
 
-            localBlobsToDelete.Add((TTabletId)rowset.GetValue<Schema::TierBlobsToDelete::TabletId>(), unifiedBlobId);
+            localBlobsToDelete.Add(selfTabletId, unifiedBlobId);
+            if (!rowset.Next()) {
+                return false;
+            }
+        }
+    }
+
+    {
+        auto rowset = db.Table<Schema::TierBlobsToDeleteWT>().Prefix(storageId).Select();
+        if (!rowset.IsReady()) {
+            return false;
+        }
+
+        TString error;
+
+        while (!rowset.EndOfSet()) {
+            const TString blobIdStr = rowset.GetValue<Schema::TierBlobsToDeleteWT::BlobId>();
+            TUnifiedBlobId unifiedBlobId = TUnifiedBlobId::ParseFromString(blobIdStr, nullptr, error);
+            AFL_VERIFY(unifiedBlobId.IsValid())("event", "cannot_parse_blob")("error", error)("original_string", blobIdStr);
+
+            localBlobsToDelete.Add((TTabletId)rowset.GetValue<Schema::TierBlobsToDeleteWT::TabletId>(), unifiedBlobId);
             if (!rowset.Next()) {
                 return false;
             }
@@ -149,12 +190,14 @@ bool TBlobManagerDb::LoadTierLists(const TString& storageId, TTabletsByBlob& blo
 
 void TBlobManagerDb::AddTierBlobToDelete(const TString& storageId, const TUnifiedBlobId& blobId, const TTabletId tabletId) {
     NIceDb::TNiceDb db(Database);
-    db.Table<Schema::TierBlobsToDelete>().Key(storageId, blobId.ToStringNew(), (ui64)tabletId).Update();
+    db.Table<Schema::TierBlobsToDeleteWT>().Key(storageId, blobId.ToStringNew(), (ui64)tabletId).Update();
+    db.Table<Schema::TierBlobsToDelete>().Key(storageId, blobId.ToStringNew()).Update();
 }
 
 void TBlobManagerDb::RemoveTierBlobToDelete(const TString& storageId, const TUnifiedBlobId& blobId, const TTabletId tabletId) {
     NIceDb::TNiceDb db(Database);
-    db.Table<Schema::TierBlobsToDelete>().Key(storageId, blobId.ToStringNew(), (ui64)tabletId).Delete();
+    db.Table<Schema::TierBlobsToDeleteWT>().Key(storageId, blobId.ToStringNew(), (ui64)tabletId).Delete();
+    db.Table<Schema::TierBlobsToDelete>().Key(storageId, blobId.ToStringNew()).Delete();
 }
 
 void TBlobManagerDb::AddTierDraftBlobId(const TString& storageId, const TUnifiedBlobId& blobId) {

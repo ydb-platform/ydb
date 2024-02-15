@@ -78,7 +78,7 @@ void TOperator::DoOnTieringModified(const std::shared_ptr<NColumnShard::TTiersMa
 bool TOperator::DoLoad(IBlobManagerDb& dbBlobs) {
     TTabletsByBlob blobsToDelete;
     std::deque<TUnifiedBlobId> draftBlobIdsToRemove;
-    if (!dbBlobs.LoadTierLists(GetStorageId(), blobsToDelete, draftBlobIdsToRemove)) {
+    if (!dbBlobs.LoadTierLists(GetStorageId(), blobsToDelete, draftBlobIdsToRemove, GetSelfTabletId())) {
         return false;
     }
     GCInfo->MutableBlobsToDelete() = std::move(blobsToDelete);

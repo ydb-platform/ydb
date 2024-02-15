@@ -8,7 +8,7 @@ void TBackgroundController::StartTtl() {
     TtlStarted = true;
 }
 
-bool TBackgroundController::StartCompaction(const NOlap::TPlanCompactionInfo& info, const NOlap::TColumnEngineChanges& changes) {
+bool TBackgroundController::StartCompaction(const NOlap::TPlanCompactionInfo& info) {
     Y_ABORT_UNLESS(ActiveCompactionInfo.emplace(info.GetPathId(), info).second);
     return true;
 }

@@ -184,7 +184,7 @@ public:
     void RegisterControls(NKikimr::TControlBoard& icb);
 
     // Loads the state at startup
-    bool LoadState(IBlobManagerDb& db);
+    bool LoadState(IBlobManagerDb& db, const TTabletId selfTabletId);
 
     // Prepares Keep/DontKeep lists and GC barrier
     std::shared_ptr<NBlobOperations::NBlobStorage::TGCTask> BuildGCTask(const TString& storageId,

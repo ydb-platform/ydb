@@ -19,8 +19,10 @@ target_link_libraries(yql-yt-native PUBLIC
   library-cpp-resource
   library-cpp-yson
   cpp-yson-node
+  system_allocator
   cpp-mapreduce-client
   cpp-mapreduce-common
+  yt-yt-client
   yt-library-program
   library-yql-ast
   yql-sql-pg
@@ -39,23 +41,41 @@ target_link_libraries(yql-yt-native PUBLIC
   udf-service-exception_policy
   yql-utils-backtrace
   yql-utils-log
+  utils-log-proto
   providers-common-proto
+  providers-common-codec
   providers-common-udf_resolve
   providers-solomon-gateway
   providers-solomon-provider
   library-yql-core
   yql-core-url_preprocessing
+  yql-dq-comp_nodes
+  dq-actors-yt
+  providers-dq-global_worker_manager
+  providers-dq-provider
+  dq-provider-exec
+  providers-dq-service
+  providers-dq-stats_collector
+  dq-worker_manager-interface
   yt-gateway-native
+  providers-yt-codec
+  yt-codec-codegen
   yt-lib-log
+  yt-lib-res_pull
+  yt-lib-row_spec
+  yt-lib-schema
+  yt-lib-skiff
   yt-lib-yt_download
   providers-yt-provider
-  yt-codec-codegen
+  yt-comp_nodes-dq
   yt-comp_nodes-llvm14
+  providers-yt-dq_task_preprocessor
   library-yql-yt
 )
 target_sources(yql-yt-native PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/library/yql/yt/native/error_helpers.cpp
   ${CMAKE_SOURCE_DIR}/ydb/library/yql/yt/native/progress_merger.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/library/yql/yt/native/dq_manager.cpp
 )
 
 add_global_library_for(yql-yt-native.global yql-yt-native)
@@ -70,8 +90,10 @@ target_link_libraries(yql-yt-native.global PUBLIC
   library-cpp-resource
   library-cpp-yson
   cpp-yson-node
+  system_allocator
   cpp-mapreduce-client
   cpp-mapreduce-common
+  yt-yt-client
   yt-library-program
   library-yql-ast
   yql-sql-pg
@@ -90,18 +112,35 @@ target_link_libraries(yql-yt-native.global PUBLIC
   udf-service-exception_policy
   yql-utils-backtrace
   yql-utils-log
+  utils-log-proto
   providers-common-proto
+  providers-common-codec
   providers-common-udf_resolve
   providers-solomon-gateway
   providers-solomon-provider
   library-yql-core
   yql-core-url_preprocessing
+  yql-dq-comp_nodes
+  dq-actors-yt
+  providers-dq-global_worker_manager
+  providers-dq-provider
+  dq-provider-exec
+  providers-dq-service
+  providers-dq-stats_collector
+  dq-worker_manager-interface
   yt-gateway-native
+  providers-yt-codec
+  yt-codec-codegen
   yt-lib-log
+  yt-lib-res_pull
+  yt-lib-row_spec
+  yt-lib-schema
+  yt-lib-skiff
   yt-lib-yt_download
   providers-yt-provider
-  yt-codec-codegen
+  yt-comp_nodes-dq
   yt-comp_nodes-llvm14
+  providers-yt-dq_task_preprocessor
   library-yql-yt
 )
 target_sources(yql-yt-native.global PRIVATE

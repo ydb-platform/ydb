@@ -28,6 +28,7 @@ void FindDqConnections(const NNodes::TExprBase& node, TVector<NNodes::TDqConnect
 bool IsDqPureExpr(const NNodes::TExprBase& node, bool isPrecomputePure = true);
 bool IsDqSelfContainedExpr(const NNodes::TExprBase& node);
 bool IsDqDependsOnStage(const NNodes::TExprBase& node, const NNodes::TDqStageBase& stage);
+bool IsDqDependsOnStageOutput(const NNodes::TExprBase& node, const NNodes::TDqStageBase& stage, ui32 outputIndex);
 
 bool CanPushDqExpr(const NNodes::TExprBase& expr, const NNodes::TDqStageBase& stage);
 bool CanPushDqExpr(const NNodes::TExprBase& expr, const NNodes::TDqConnection& connection);

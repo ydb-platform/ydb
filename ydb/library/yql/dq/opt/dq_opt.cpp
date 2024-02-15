@@ -171,6 +171,19 @@ bool IsDqDependsOnStage(const TExprBase& node, const TDqStageBase& stage) {
     });
 }
 
+bool IsDqDependsOnStageOutput(const TExprBase& node, const TDqStageBase& stage, ui32 outputIndex) {
+    return !!FindNode(node.Ptr(), [ptr = stage.Raw(), outputIndex](const TExprNode::TPtr& exprNode) {
+        if (TDqOutput::Match(exprNode.Get())) {
+            TDqOutput output(exprNode);
+            if (output.Stage().Ptr().Get() == ptr) {
+                return FromString<ui32>(output.Index().Value()) == outputIndex;
+            }
+        }
+
+        return false;
+    });
+}
+
 bool CanPushDqExpr(const TExprBase& expr, const TDqStageBase& stage) {
     return IsDqPureExpr(expr, true) && !IsDqDependsOnStage(expr, stage);
 }

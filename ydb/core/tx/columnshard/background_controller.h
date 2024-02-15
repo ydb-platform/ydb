@@ -64,7 +64,6 @@ public:
     bool StartCompaction(const NOlap::TPlanCompactionInfo& info, const NOlap::TColumnEngineChanges& changes);
     void FinishCompaction(const NOlap::TPlanCompactionInfo& info) {
         Y_ABORT_UNLESS(ActiveCompactionInfo.erase(info.GetPathId()));
-        Y_ABORT_UNLESS(CompactionInfoPortions.erase(info.GetPathId()));
     }
     const TCurrentCompaction& GetActiveCompaction() const {
         return ActiveCompactionInfo;
@@ -92,7 +91,7 @@ public:
         return ActiveCleanup;
     }
 
-    void StartTtl(const NOlap::TColumnEngineChanges& changes);
+    void StartTtl();
     void FinishTtl() {
         Y_ABORT_UNLESS(TtlStarted);
         TtlStarted = false;

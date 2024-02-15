@@ -22,6 +22,7 @@ void TTTLColumnEngineChanges::DoStart(NColumnShard::TColumnShard& self) {
             agent->AddRange(rec.BlobRange);
         }
     }
+    self.BackgroundController.StartTtl();
 }
 
 void TTTLColumnEngineChanges::DoOnFinish(NColumnShard::TColumnShard& self, TChangesFinishContext& /*context*/) {

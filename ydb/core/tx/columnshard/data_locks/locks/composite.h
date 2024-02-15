@@ -36,7 +36,7 @@ public:
         }
     }
 
-    TCompositeLock(const std::initializer_list<std::shared_ptr<ILock>> locks) {
+    TCompositeLock(std::initializer_list<std::shared_ptr<ILock>> locks) {
         for (auto&& l : locks) {
             if (!l || l->IsEmpty()) {
                 continue;

@@ -3,7 +3,7 @@
 
 namespace NKikimr::NColumnShard {
 
-void TBackgroundController::StartTtl(const NOlap::TColumnEngineChanges& changes) {
+void TBackgroundController::StartTtl() {
     Y_ABORT_UNLESS(!TtlStarted);
     TtlStarted = true;
 }

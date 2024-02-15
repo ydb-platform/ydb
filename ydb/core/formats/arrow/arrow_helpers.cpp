@@ -977,7 +977,7 @@ std::shared_ptr<arrow::RecordBatch> MergeColumns(const std::vector<std::shared_p
     return arrow::RecordBatch::Make(schema, *recordsCount, columns);
 }
 
-std::vector<std::shared_ptr<arrow::RecordBatch>> Dechunk(const std::shared_ptr<arrow::Table>& t) {
+std::vector<std::shared_ptr<arrow::RecordBatch>> SliceToRecordBatches(const std::shared_ptr<arrow::Table>& t) {
     std::set<ui32> splitPositions;
     const ui32 numRows = t->num_rows();
     for (auto&& i : t->columns()) {

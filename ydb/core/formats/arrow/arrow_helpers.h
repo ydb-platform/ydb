@@ -128,7 +128,7 @@ inline bool HasNulls(const std::shared_ptr<arrow::Array>& column) {
     return column->null_bitmap_data();
 }
 
-std::vector<std::shared_ptr<arrow::RecordBatch>> Dechunk(const std::shared_ptr<arrow::Table>& t);
+std::vector<std::shared_ptr<arrow::RecordBatch>> SliceToRecordBatches(const std::shared_ptr<arrow::Table>& t);
 
 bool ArrayScalarsEqual(const std::shared_ptr<arrow::Array>& lhs, const std::shared_ptr<arrow::Array>& rhs);
 std::shared_ptr<arrow::Array> BoolVecToArray(const std::vector<bool>& vec);

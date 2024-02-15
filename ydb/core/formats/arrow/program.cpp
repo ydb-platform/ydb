@@ -871,7 +871,7 @@ std::shared_ptr<NArrow::TColumnFilter> TProgramStep::BuildFilter(const std::shar
     if (Filters.empty()) {
         return nullptr;
     }
-    std::vector<std::shared_ptr<arrow::RecordBatch>> batches = NArrow::Dechunk(t);
+    std::vector<std::shared_ptr<arrow::RecordBatch>> batches = NArrow::SliceToRecordBatches(t);
     NArrow::TColumnFilter fullLocal = NArrow::TColumnFilter::BuildAllowFilter();
     for (auto&& rb : batches) {
         auto datumBatch = TDatumBatch::FromRecordBatch(rb);

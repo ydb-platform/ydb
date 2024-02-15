@@ -4666,6 +4666,7 @@ TYtJoinNodeOp::TPtr ImportYtEquiJoin(TYtEquiJoin equiJoin, TExprContext& ctx) {
         root->Constraints = set;
     }
 
+    root->CostBasedOptPassed = HasSetting(equiJoin.JoinOptions().Ref(), "cbo_passed");
     return root;
 }
 
@@ -4743,6 +4744,10 @@ TMaybeNode<TExprBase> ExportYtEquiJoin(TYtEquiJoin equiJoin, const TYtJoinNodeOp
 
         AppendEquiJoinRenameMap(joinSettings->Pos(), renameMap, joinSettingsNodes, ctx);
         joinSettings = ctx.ChangeChildren(*joinSettings, std::move(joinSettingsNodes));
+    }
+
+    if (!HasSetting(*joinSettings, "cbo_passed") && op.CostBasedOptPassed) {
+        joinSettings = AddSetting(*joinSettings, joinSettings->Pos(), "cbo_passed", {}, ctx);
     }
 
     auto outItemType = GetSequenceItemType(equiJoin.Pos(),

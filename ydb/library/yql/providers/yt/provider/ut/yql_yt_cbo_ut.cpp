@@ -265,6 +265,38 @@ Y_UNIT_TEST(UnsupportedJoin)
     UNIT_ASSERT(optimizedTree == tree);
 }
 
+Y_UNIT_TEST(OrderJoinSinglePass) {
+    TExprContext exprCtx;
+    auto tree = MakeOp({"c", "c_nationkey"}, {"n", "n_nationkey"}, {"c", "n"}, exprCtx);
+    tree->Left = MakeLeaf({"c"}, {"c"}, 1000000, 1233333, exprCtx);
+    tree->Right = MakeLeaf({"n"}, {"n"}, 10000, 12333, exprCtx);
+    tree->JoinKind = exprCtx.NewAtom(exprCtx.AppendPosition({}), "Left");
+
+    TTypeAnnotationContext typeCtx;
+    TYtState::TPtr state = MakeIntrusive<TYtState>();
+    typeCtx.CostBasedOptimizer = ECostBasedOptimizerType::PG;
+    state->Types = &typeCtx;
+    auto optimizedTree = OrderJoins(tree, state, exprCtx, true);
+    UNIT_ASSERT(optimizedTree != tree);
+    UNIT_ASSERT(optimizedTree->CostBasedOptPassed);
+}
+
+Y_UNIT_TEST(OrderJoinsDoesNothingWhenCBOAlreadyPassed) {
+    TExprContext exprCtx;
+    auto tree = MakeOp({"c", "c_nationkey"}, {"n", "n_nationkey"}, {"c", "n"}, exprCtx);
+    tree->Left = MakeLeaf({"c"}, {"c"}, 1000000, 1233333, exprCtx);
+    tree->Right = MakeLeaf({"n"}, {"n"}, 10000, 12333, exprCtx);
+    tree->JoinKind = exprCtx.NewAtom(exprCtx.AppendPosition({}), "Left");
+    tree->CostBasedOptPassed = true;
+
+    TTypeAnnotationContext typeCtx;
+    TYtState::TPtr state = MakeIntrusive<TYtState>();
+    typeCtx.CostBasedOptimizer = ECostBasedOptimizerType::PG;
+    state->Types = &typeCtx;
+    auto optimizedTree = OrderJoins(tree, state, exprCtx, true);
+    UNIT_ASSERT(optimizedTree == tree);
+}
+
 } // Y_UNIT_TEST_SUITE(TYqlCBO)
 
 } // namespace NYql

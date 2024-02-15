@@ -136,7 +136,7 @@ public:
         TVector<IDqOutput::TPtr>&& outputs) const = 0;
 
     virtual IDqChannelStorage::TPtr CreateChannelStorage(ui64 channelId, bool withSpilling) const = 0;
-    virtual IDqChannelStorage::TPtr CreateChannelStorage(ui64 channelId, bool withSpilling, NActors::TActorSystem* actorSystem, bool isConcurrent) const = 0;
+    virtual IDqChannelStorage::TPtr CreateChannelStorage(ui64 channelId, bool withSpilling, NActors::TActorSystem* actorSystem) const = 0;
 
     virtual std::function<void()> GetWakeupCallback() const = 0;
 };
@@ -156,7 +156,7 @@ public:
         return {};
     };
 
-    IDqChannelStorage::TPtr CreateChannelStorage(ui64 /*channelId*/, bool /*withSpilling*/, NActors::TActorSystem* /*actorSystem*/, bool /*isConcurrent*/) const override {
+    IDqChannelStorage::TPtr CreateChannelStorage(ui64 /*channelId*/, bool /*withSpilling*/, NActors::TActorSystem* /*actorSystem*/) const override {
         return {};
     };
 

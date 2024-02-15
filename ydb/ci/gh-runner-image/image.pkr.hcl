@@ -3,7 +3,7 @@ source "yandex" "this" {
   zone      = var.zone_id
   subnet_id = var.subnet_id
 
-  disk_size_gb = 8
+  disk_size_gb = 10
   disk_type    = "network-ssd"
 
   image_name        = "gh-runner-ubuntu-2204-v${formatdate("YYYYMMDhhmmss", timestamp())}"
@@ -11,7 +11,7 @@ source "yandex" "this" {
   image_description = "ydb github actions runner image"
   image_pooled      = false
 
-  source_image_family = "ubuntu-2204-lts"
+  source_image_family = "ubuntu-2204-lts-oslogin"
   instance_cores      = 4
   instance_mem_gb     = 16
 

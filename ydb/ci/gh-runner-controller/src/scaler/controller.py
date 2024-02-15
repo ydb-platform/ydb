@@ -204,12 +204,10 @@ class ScaleController:
 
     def loop(self):
         self.logger.info(
-            "start main loop, gh_repo=%s, ch_url=%s, folder_id=%s, zone=%s, subnet=%s",
+            "start main loop, gh_repo=%s, ch_url=%s, folder_id=%s",
             self.gh.repo,
             self.ch.url,
             self.cfg.yc_folder_id,
-            self.cfg.yc_zone_id,
-            self.cfg.yc_subnet_id,
         )
         sleep_seconds = 15
         while not self.exit_event.is_set():

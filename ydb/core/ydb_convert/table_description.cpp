@@ -431,11 +431,6 @@ Ydb::Type* AddColumn<NKikimrSchemeOp::TColumnDescription>(Ydb::Table::ColumnMeta
     }
     newColumn->set_not_null(column.GetNotNull());
     switch (column.GetDefaultValueCase()) {
-        case NKikimrSchemeOp::TColumnDescription::kDefaultFromSequence: {
-            auto fromSequence = newColumn->mutable_from_sequence();
-            fromSequence->set_path(column.GetDefaultFromSequence());
-            break;
-        }
         case NKikimrSchemeOp::TColumnDescription::kDefaultFromLiteral: {
             auto fromLiteral = newColumn->mutable_from_literal();
             *fromLiteral = column.GetDefaultFromLiteral();
@@ -662,11 +657,6 @@ bool FillColumnDescription(NKikimrSchemeOp::TTableDescription& out,
         }
 
         switch (column.default_policy_case()) {
-            case Ydb::Table::ColumnMeta::kFromSequence: {
-                auto fromSequence = cd->MutableDefaultFromSequence();
-                *fromSequence = column.from_sequence().path();
-                break;
-            }
             case Ydb::Table::ColumnMeta::kFromLiteral: {
                 auto fromLiteral = cd->MutableDefaultFromLiteral();
                 *fromLiteral = column.from_literal();

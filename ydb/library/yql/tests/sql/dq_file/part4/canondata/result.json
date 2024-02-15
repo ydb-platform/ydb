@@ -373,11 +373,7 @@
         {
             "checksum": "147897664bb3877fb3134f89d06b085a",
             "size": 2492,
-<<<<<<< HEAD
-            "uri": "https://{canondata_backend}/1781765/519a7d2e7fba9841e98dbed8bedc6603123561ef/resource.tar.gz#test.test_aggregate-group_by_hop_star--Debug_/opt.yql_patched"
-=======
             "uri": "https://{canondata_backend}/1871182/519a7d2e7fba9841e98dbed8bedc6603123561ef/resource.tar.gz#test.test_aggregate-group_by_hop_star--Debug_/opt.yql_patched"
->>>>>>> canonize
         }
     ],
     "test.test[aggregate-group_by_hop_star--Plan]": [

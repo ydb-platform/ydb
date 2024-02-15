@@ -35,6 +35,15 @@ public:
             Locks.emplace_back(l);
         }
     }
+
+    TCompositeLock(const std::initializer_list<std::shared_ptr<ILock>> locks) {
+        for (auto&& l : locks) {
+            if (!l || l->IsEmpty()) {
+                continue;
+            }
+            Locks.emplace_back(l);
+        }
+    }
 };
 
 }

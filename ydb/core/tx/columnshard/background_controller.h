@@ -50,10 +50,9 @@ private:
 
     using TCurrentCompaction = THashMap<ui64, NOlap::TPlanCompactionInfo>;
     TCurrentCompaction ActiveCompactionInfo;
-    THashMap<ui64, THashSet<NOlap::TPortionAddress>> CompactionInfoPortions;
 
     bool ActiveCleanup = false;
-    THashSet<NOlap::TPortionAddress> TtlPortions;
+    bool TtlStarted = false;
     YDB_READONLY(TMonotonic, LastIndexationInstant, TMonotonic::Zero());
 public:
     THashSet<NOlap::TPortionAddress> GetConflictTTLPortions() const;
@@ -95,11 +94,11 @@ public:
 
     void StartTtl(const NOlap::TColumnEngineChanges& changes);
     void FinishTtl() {
-        Y_ABORT_UNLESS(!TtlPortions.empty());
-        TtlPortions.clear();
+        Y_ABORT_UNLESS(TtlStarted);
+        TtlStarted = false;
     }
     bool IsTtlActive() const {
-        return !TtlPortions.empty();
+        return TtlStarted;
     }
 };
 

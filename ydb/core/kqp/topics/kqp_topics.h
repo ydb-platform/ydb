@@ -93,7 +93,7 @@ public:
     ui64 GetWriteId() const;
     void SetWriteId(NLongTxService::TLockHandle handle);
 
-    bool TabletHasReadOperations(ui64 tabletId) const;
+    bool TabletHasOperations(ui64 tabletId) const;
 
     void AddOperation(const TString& topic, ui32 partition,
                       const TString& consumer,

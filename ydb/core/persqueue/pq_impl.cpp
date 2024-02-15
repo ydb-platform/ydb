@@ -3704,12 +3704,6 @@ void TPersQueue::SendEvReadSetAckToSenders(const TActorContext& ctx,
     }
 }
 
-TPartitionId TPersQueue::MakePartitionId(ui32 originalPartitionId, TMaybe<ui64> writeId) const
-{
-    Y_ABORT_UNLESS(!writeId.Defined());
-    return TPartitionId{originalPartitionId};
-}
-
 TMaybe<TPartitionId> TPersQueue::FindPartitionId(const NKikimrPQ::TDataTransaction& txBody) const
 {
     ui32 partitionId = txBody.GetOperations(0).GetPartitionId();
@@ -3786,7 +3780,7 @@ void TPersQueue::SendEvTxCommitToPartitions(const TActorContext& ctx,
     for (ui32 partitionId : tx.Partitions) {
         auto event = std::make_unique<TEvPQ::TEvTxCommit>(tx.Step, tx.TxId);
 
-        auto p = Partitions.find(MakePartitionId(partitionId, tx.WriteId));
+        auto p = Partitions.find(TPartitionId(partitionId));
         Y_ABORT_UNLESS(p != Partitions.end());
 
         ctx.Send(p->second.Actor, event.release());
@@ -3804,7 +3798,7 @@ void TPersQueue::SendEvTxRollbackToPartitions(const TActorContext& ctx,
     for (ui32 partitionId : tx.Partitions) {
         auto event = std::make_unique<TEvPQ::TEvTxRollback>(tx.Step, tx.TxId);
 
-        auto p = Partitions.find(MakePartitionId(partitionId, tx.WriteId));
+        auto p = Partitions.find(TPartitionId(partitionId));
         Y_ABORT_UNLESS(p != Partitions.end());
 
         ctx.Send(p->second.Actor, event.release());

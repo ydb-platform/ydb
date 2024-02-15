@@ -429,7 +429,6 @@ private:
     THashMap<ui32, TVector<TEvPQ::TEvCheckPartitionStatusRequest::TPtr>> CheckPartitionStatusRequests;
     TMaybe<ui64> TabletGeneration;
 
-    TPartitionId MakePartitionId(ui32 originalPartitionId, TMaybe<ui64> writeId) const;
     TMaybe<TPartitionId> FindPartitionId(const NKikimrPQ::TDataTransaction& txBody) const;
 
     void InitPlanStep(const NKikimrPQ::TTabletTxInfo& info = {});

@@ -217,11 +217,11 @@ void TTopicOperations::SetWriteId(NLongTxService::TLockHandle handle)
     WriteId_ = std::move(handle);
 }
 
-bool TTopicOperations::TabletHasReadOperations(ui64 tabletId) const
+bool TTopicOperations::TabletHasOperations(ui64 tabletId) const
 {
     for (auto& [_, value] : Operations_) {
         if (value.GetTabletId() == tabletId) {
-            return value.HasReadOperations();
+            return value.HasReadOperations() || value.HasWriteOperations();
         }
     }
     return false;

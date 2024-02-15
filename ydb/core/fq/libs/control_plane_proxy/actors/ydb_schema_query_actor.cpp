@@ -410,8 +410,7 @@ public:
 
     void CheckConnectionExistenceInCPS() {
         FederatedQuery::ListConnectionsRequest result;
-        auto connectionName = ConnectionName;
-        result.mutable_filter()->set_name(connectionName);
+        result.mutable_filter()->set_name(ConnectionName);
         result.set_limit(2);
 
         auto event = new TEvControlPlaneStorage::TEvListConnectionsRequest(

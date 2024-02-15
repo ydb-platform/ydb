@@ -222,6 +222,9 @@ private:
                         result->SetRedrivePolicy(redrivePolicy.ToJson());
                     }
                 }
+                if (HasAttributeName("FolderID")) {
+                    result->SetFolderId(attrs["FolderID"]);
+                }
 
                 --WaitCount_;
                 ReplyIfReady();

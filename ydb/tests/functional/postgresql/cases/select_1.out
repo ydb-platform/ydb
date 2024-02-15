@@ -1,0 +1,11 @@
+--
+-- BOOLEAN
+--
+--
+-- sanity check - if this fails go insane!
+--
+SELECT 1 AS one;
+ one 
+-----
+   1
+(1 row)

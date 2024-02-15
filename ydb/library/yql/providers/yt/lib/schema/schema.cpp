@@ -80,22 +80,6 @@ static TString ConvertYtDataType(const TString& ytType, ui64& nativeYtTypeFlags)
         nativeYtTypeFlags |= NTCF_DATE;
         yqlType = "Interval";
     }
-    else if (ytType == "date32") {
-        nativeYtTypeFlags |= NTCF_DATE;
-        yqlType = "Date32";
-    }
-    else if (ytType == "datetime64") {
-        nativeYtTypeFlags |= NTCF_DATE;
-        yqlType = "Datetime64";
-    }
-    else if (ytType == "timestamp64") {
-        nativeYtTypeFlags |= NTCF_DATE;
-        yqlType = "Timestamp64";
-    }
-    else if (ytType == "interval64") {
-        nativeYtTypeFlags |= NTCF_DATE;
-        yqlType = "Interval64";
-    }
     else if (ytType == "yson") { // V3
         yqlType = "Yson";
     }
@@ -780,13 +764,13 @@ NYT::TNode RowSpecYqlTypeToYtNativeType(const NYT::TNode& rowSpecType, ui64 nati
         } else if (yqlType == TStringBuf("Interval")) {
             ytType = (nativeYtTypeFlags & NTCF_DATE) ? "interval" : "int64";
         } else if (yqlType == TStringBuf("Date32")) {
-            ytType = (nativeYtTypeFlags & NTCF_DATE) ? "date32" : "int32";
+            ytType = "int32"; // TODO support nativeYtTypeFlags later
         } else if (yqlType == TStringBuf("Datetime64")) {
-            ytType = (nativeYtTypeFlags & NTCF_DATE) ? "datetime64" : "int64";
+            ytType = "int64";  // TODO support nativeYtTypeFlags later
         } else if (yqlType == TStringBuf("Timestamp64")) {
-            ytType = (nativeYtTypeFlags & NTCF_DATE) ? "timestamp64" : "int64";
+            ytType = "int64"; // TODO support nativeYtTypeFlags later
         } else if (yqlType == TStringBuf("Interval64")) {
-            ytType = (nativeYtTypeFlags & NTCF_DATE) ? "interval64" : "int64";
+            ytType = "int64"; // TODO support nativeYtTypeFlags later
         } else if (yqlType == TStringBuf("Decimal")) {
             if (nativeYtTypeFlags & NTCF_DECIMAL) {
                 try {

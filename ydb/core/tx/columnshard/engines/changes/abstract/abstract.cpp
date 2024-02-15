@@ -96,7 +96,6 @@ void TColumnEngineChanges::Start(NColumnShard::TColumnShard& self) {
 }
 
 void TColumnEngineChanges::StartEmergency() {
-    self.DataLocksManager->RegisterLock(BuildDataLock());
     Y_ABORT_UNLESS(Stage == EStage::Created);
     Stage = EStage::Started;
     if (!NeedConstruction()) {

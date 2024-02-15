@@ -32,7 +32,7 @@ protected:
     virtual std::shared_ptr<NDataLocks::ILock> DoBuildDataLock() const override final {
         auto actLock = DoBuildDataLockImpl();
         auto selfLock = std::make_shared<NDataLocks::TListPortionsLock>(PortionsToRemove);
-        return std::make_shared<NDataLocks::TCompositeLock>({actLock, selfLock});
+        return std::make_shared<NDataLocks::TCompositeLock>(std::vector<std::shared_ptr<NDataLocks::ILock>>({actLock, selfLock}));
     }
 
 public:

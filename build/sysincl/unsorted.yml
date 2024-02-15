@@ -369,18 +369,6 @@
   #if defined(HAVE_ALTIVEC)
   - altivec.h
   #endif
-  #if defined(__vxWorks__)
-  - vxCpuLib.h
-  - vxWorks.h
-  - sockLib.h
-  - hostLib.h
-  - ioLib.h
-  - iosLib.h
-  - resolvLib.h
-  - rtpLib.h
-  - pipeDrv.h
-  - selectLib.h
-  #endif
   #if defined(_LIBC) && TRASH
   - ../locale/localeinfo.h
   - ../locale/elem-hash.h

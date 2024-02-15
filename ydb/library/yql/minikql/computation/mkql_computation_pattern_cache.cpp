@@ -33,7 +33,7 @@ public:
         return CurrentPatternsCompiledCodeSizeInBytes;
     }
 
-    std::shared_ptr<TPatternCacheEntry>* Find(const TString& serializedProgram) {
+    std::shared_ptr<TPatternCacheEntry>* Find(const TSerializedProgram& serializedProgram) {
         auto it = SerializedProgramToPatternCacheHolder.find(serializedProgram);
         if (it == SerializedProgramToPatternCacheHolder.end()) {
             return nullptr;
@@ -44,7 +44,7 @@ public:
         return &it->second.Entry;
     }
 
-    void Insert(const TString& serializedProgram, std::shared_ptr<TPatternCacheEntry>& entry) {
+    void Insert(const TSerializedProgram& serializedProgram, std::shared_ptr<TPatternCacheEntry>& entry) {
         auto [it, inserted] = SerializedProgramToPatternCacheHolder.emplace(std::piecewise_construct,
             std::forward_as_tuple(serializedProgram),
             std::forward_as_tuple(serializedProgram, entry));
@@ -69,7 +69,7 @@ public:
         ClearIfNeeded();
     }
 
-    void NotifyPatternCompiled(const TString & serializedProgram, std::shared_ptr<TPatternCacheEntry>& entry) {
+    void NotifyPatternCompiled(const TSerializedProgram& serializedProgram, std::shared_ptr<TPatternCacheEntry>& entry) {
         auto it = SerializedProgramToPatternCacheHolder.find(serializedProgram);
         if (it == SerializedProgramToPatternCacheHolder.end()) {
             return;
@@ -108,7 +108,7 @@ private:
       * Most recently accessed items are in back of the lists, least recently accessed items are in front of the lists.
       */
     struct TPatternCacheHolder : public TIntrusiveListItem<TPatternCacheHolder, TPatternLRUListTag>, TIntrusiveListItem<TPatternCacheHolder, TCompiledPatternLRUListTag> {
-        TPatternCacheHolder(TString serializedProgram, std::shared_ptr<TPatternCacheEntry> entry)
+        TPatternCacheHolder(TSerializedProgram serializedProgram, std::shared_ptr<TPatternCacheEntry> entry)
             : SerializedProgram(std::move(serializedProgram))
             , Entry(std::move(entry))
         {}
@@ -121,7 +121,7 @@ private:
             return !TIntrusiveListItem<TPatternCacheHolder, TCompiledPatternLRUListTag>::Empty();
         }
 
-        TString SerializedProgram;
+        TSerializedProgram SerializedProgram;
         std::shared_ptr<TPatternCacheEntry> Entry;
     };
 
@@ -195,7 +195,7 @@ private:
     size_t CurrentCompiledPatternsSize = 0;
     size_t CurrentPatternsCompiledCodeSizeInBytes = 0;
 
-    THashMap<TString, TPatternCacheHolder> SerializedProgramToPatternCacheHolder;
+    THashMap<TSerializedProgram, TPatternCacheHolder> SerializedProgramToPatternCacheHolder;
     TIntrusiveList<TPatternCacheHolder, TPatternLRUListTag> LRUPatternList;
     TIntrusiveList<TPatternCacheHolder, TCompiledPatternLRUListTag> LRUCompiledPatternList;
 };
@@ -223,7 +223,7 @@ TComputationPatternLRUCache::~TComputationPatternLRUCache() {
     CleanCache();
 }
 
-std::shared_ptr<TPatternCacheEntry> TComputationPatternLRUCache::Find(const TString& serializedProgram) {
+std::shared_ptr<TPatternCacheEntry> TComputationPatternLRUCache::Find(const TSerializedProgram& serializedProgram) {
     std::lock_guard<std::mutex> lock(Mutex);
     if (auto it = Cache->Find(serializedProgram)) {
         ++*Hits;
@@ -238,7 +238,7 @@ std::shared_ptr<TPatternCacheEntry> TComputationPatternLRUCache::Find(const TStr
     return {};
 }
 
-TComputationPatternLRUCache::TTicket TComputationPatternLRUCache::FindOrSubscribe(const TString& serializedProgram) {
+TComputationPatternLRUCache::TTicket TComputationPatternLRUCache::FindOrSubscribe(const TSerializedProgram& serializedProgram) {
     std::lock_guard lock(Mutex);
     if (auto it = Cache->Find(serializedProgram)) {
         ++*Hits;
@@ -263,7 +263,7 @@ TComputationPatternLRUCache::TTicket TComputationPatternLRUCache::FindOrSubscrib
     return TTicket(serializedProgram, false, promise, nullptr);
 }
 
-void TComputationPatternLRUCache::EmplacePattern(const TString& serializedProgram, std::shared_ptr<TPatternCacheEntry> patternWithEnv) {
+void TComputationPatternLRUCache::EmplacePattern(const TSerializedProgram& serializedProgram, std::shared_ptr<TPatternCacheEntry> patternWithEnv) {
     Y_DEBUG_ABORT_UNLESS(patternWithEnv && patternWithEnv->Pattern);
     TMaybe<TVector<NThreading::TPromise<std::shared_ptr<TPatternCacheEntry>>>> subscribers;
 
@@ -290,7 +290,7 @@ void TComputationPatternLRUCache::EmplacePattern(const TString& serializedProgra
     }
 }
 
-void TComputationPatternLRUCache::NotifyPatternCompiled(const TString& serializedProgram, std::shared_ptr<TPatternCacheEntry> patternWithEnv) {
+void TComputationPatternLRUCache::NotifyPatternCompiled(const TSerializedProgram& serializedProgram, std::shared_ptr<TPatternCacheEntry> patternWithEnv) {
     std::lock_guard lock(Mutex);
     Cache->NotifyPatternCompiled(serializedProgram, patternWithEnv);
 }
@@ -309,7 +309,7 @@ void TComputationPatternLRUCache::CleanCache() {
     Cache->Clear();
 }
 
-void TComputationPatternLRUCache::AccessPattern(const TString & serializedProgram, std::shared_ptr<TPatternCacheEntry> & entry) {
+void TComputationPatternLRUCache::AccessPattern(const TSerializedProgram & serializedProgram, std::shared_ptr<TPatternCacheEntry> & entry) {
     if (!Configuration.PatternAccessTimesBeforeTryToCompile || entry->Pattern->IsCompiled()) {
         return;
     }
@@ -321,11 +321,11 @@ void TComputationPatternLRUCache::AccessPattern(const TString & serializedProgra
     }
 }
 
-void TComputationPatternLRUCache::NotifyMissing(const TString& serialized) {
+void TComputationPatternLRUCache::NotifyMissing(const TSerializedProgram& serializedProgram) {
     TMaybe<TVector<NThreading::TPromise<std::shared_ptr<TPatternCacheEntry>>>> subscribers;
     {
         std::lock_guard<std::mutex> lock(Mutex);
-        auto notifyIt = Notify.find(serialized);
+        auto notifyIt = Notify.find(serializedProgram);
         if (notifyIt != Notify.end()) {
             subscribers.swap(notifyIt->second);
             Notify.erase(notifyIt);

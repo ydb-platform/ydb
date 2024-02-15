@@ -535,7 +535,8 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
         TLocalHelper lHelper(kikimr);
         if (withSomeNulls) {
             lHelper.WithSomeNulls();
-        }        auto batch = lHelper.TestArrowBatch(pathIdBegin, tsBegin, rowCount);
+        }
+        auto batch = lHelper.TestArrowBatch(pathIdBegin, tsBegin, rowCount);
         lHelper.SendDataViaActorSystem(testTable, batch);
     }
 
@@ -1786,7 +1787,8 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
             R"((LENGTH(`uid`) > 2 AND `resource_id` = "10001") OR `resource_id` = "10002")",
             R"((LENGTH(`uid`) > 3 OR `resource_id` = "10002") AND (LENGTH(`uid`) < 15 OR `resource_id` = "10001"))",
             R"(NOT(LENGTH(`uid`) > 0 AND `resource_id` = "10001"))",
-            R"(NOT(LENGTH(`uid`) > 0 OR `resource_id` = "10001"))",            R"(`level` IS NULL OR `message` IS NULL)",
+            R"(NOT(LENGTH(`uid`) > 0 OR `resource_id` = "10001"))",
+            R"(`level` IS NULL OR `message` IS NULL)",
             R"(`level` IS NOT NULL AND `message` IS NULL)",
             R"(`level` IS NULL AND `message` IS NOT NULL)",
             R"(`level` IS NOT NULL AND `message` IS NOT NULL)",
@@ -4956,6 +4958,7 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
             {"Utf8", {"String", "Json", "Yson"}},
         };
 #endif
+
         std::vector<std::string> allTypes = {
             //"Bool",
             "Int8",
@@ -6115,7 +6118,7 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
 
         TestTableWithNulls({ testCase }, /* generic */ true);
     }
-
+}
 
 } // namespace NKqp
 } // namespace NKikimr

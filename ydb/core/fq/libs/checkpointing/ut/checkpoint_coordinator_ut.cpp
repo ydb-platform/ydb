@@ -4,6 +4,7 @@
 #include <ydb/core/testlib/basics/helpers.h>
 
 #include <library/cpp/testing/unittest/registar.h>
+#include <library/cpp/testing/unittest/gtest.h>
 #include <ydb/library/actors/core/executor_pool_basic.h>
 #include <ydb/library/actors/core/scheduler_basic.h>
 
@@ -405,13 +406,9 @@ Y_UNIT_TEST_SUITE(TCheckpointCoordinatorTests) {
     Y_UNIT_TEST(ShouldDoNothingIfNoIngressTasks) {
         CheckpointsTestHelper test(ETestGraphFlags::InputWithSource, "S3Source");
         test.ExpectRun();
-        bool empty = false;   
-        try {
-            test.GrabEdgeEvent<TEvCheckpointStorage::TEvRegisterCoordinatorRequest>(test.StorageProxy, TDuration::Seconds(10));
-        } catch (TEmptyEventQueueException&) {
-            empty = true;
-        }
-        UNIT_ASSERT(empty);
+        ASSERT_THROW(
+            test.GrabEdgeEvent<TEvCheckpointStorage::TEvRegisterCoordinatorRequest>(test.StorageProxy, TDuration::Seconds(10)),
+            NActors::TEmptyEventQueueException);
     }
 }
 

@@ -107,7 +107,7 @@ void TCheckpointCoordinator::Handle(NYql::NDqs::TEvReadyState::TPtr& ev) {
 
     if (ActorsToTrigger.empty()) {
         CC_LOG_D("No ingress tasks, coordinator was disabled");
-        GraphRun();
+        StartAllTasks();
         return;
     }
 
@@ -414,10 +414,10 @@ void TCheckpointCoordinator::InjectCheckpoint(const TCheckpointId& checkpointId)
         transport->EventsQueue.Send(new NYql::NDq::TEvDqCompute::TEvInjectCheckpoint(checkpointId.SeqNo, checkpointId.CoordinatorGeneration));
     }
 
-    GraphRun();
+    StartAllTasks();
 }
 
-void TCheckpointCoordinator::GraphRun() {
+void TCheckpointCoordinator::StartAllTasks() {
     if (!GraphIsRunning) {
         CC_LOG_I("Send TEvRun to all actors");
         for (const auto& [actor, transport] : AllActors) {

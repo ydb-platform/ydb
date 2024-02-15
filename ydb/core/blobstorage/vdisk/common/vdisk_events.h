@@ -35,6 +35,10 @@
 #define BS_EVVGET_SIZE_VERIFY 0
 #endif
 
+#ifndef VDISK_SKELETON_TRACE
+#define VDISK_SKELETON_TRACE 0
+#endif
+
 namespace NKikimr {
 
     namespace NBackpressure {
@@ -1528,7 +1532,9 @@ namespace NKikimr {
         , TEventWithRelevanceTracker
     {
         mutable NLWTrace::TOrbit Orbit;
+#if VDISK_SKELETON_TRACE
         std::shared_ptr<TVDiskSkeletonTrace> VDiskSkeletonTrace;
+#endif
 
         TEvVSpecialPatchBase() = default;
 
@@ -1922,7 +1928,9 @@ namespace NKikimr {
         , TEventWithRelevanceTracker
     {
         mutable NLWTrace::TOrbit Orbit;
+#if VDISK_SKELETON_TRACE
         std::shared_ptr<TVDiskSkeletonTrace> VDiskSkeletonTrace;
+#endif
 
         TEvVPatchStart() = default;
 
@@ -2008,7 +2016,9 @@ namespace NKikimr {
         , TEventWithRelevanceTracker
     {
         mutable NLWTrace::TOrbit Orbit;
+#if VDISK_SKELETON_TRACE
         std::shared_ptr<TVDiskSkeletonTrace> VDiskSkeletonTrace;
+#endif
 
         TEvVPatchDiff() = default;
 
@@ -2083,7 +2093,9 @@ namespace NKikimr {
         , TEventWithRelevanceTracker
     {
         mutable NLWTrace::TOrbit Orbit;
+#if VDISK_SKELETON_TRACE
         std::shared_ptr<TVDiskSkeletonTrace> VDiskSkeletonTrace;
+#endif
 
         TEvVPatchXorDiff() = default;
 

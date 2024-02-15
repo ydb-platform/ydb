@@ -335,10 +335,11 @@ namespace NKikimr {
                         hasError = true;
                         STLOG(PRI_ERROR, NKikimrServices::BS_SKELETON, BSVSF04,
                                 vDiskLogPrefix << " passed more than 5 munites for message in the internal queue",
-                                (MsgId, msgInfo.MsgId),,
+                                (MsgId, msgInfo.MsgId),
                                 (QueueName, Name),
                                 (PassedTimeSeconds, passedTime.Seconds()),
-                                (Trace, (msgInfo.VDiskSkeletonTrace ? msgInfo.VDiskSkeletonTrace->ToString() : "None")));
+                                (Trace, (msgInfo.VDiskSkeletonTrace ? msgInfo.VDiskSkeletonTrace->ToString() : "None"))
+                                );
                     }
                 }
                 return hasError;
@@ -1230,9 +1231,11 @@ namespace NKikimr {
                 ev->Forward(SkeletonId).Release()), msgId, cost, *this, clientId);
             if (event) {
                 std::shared_ptr<TVDiskSkeletonTrace> trace;
+#if VDISK_SKELETON_TRACE
                 if constexpr (IsPatchEvent<TEvent>) {
-                    event->Get<TEvent>()->VDiskSkeletonTrace = std::make_shared<TVDiskSkeletonTrace>();
+                    event->Get<TEvent>()->VDiskSkeletonTrace = trace = std::make_shared<TVDiskSkeletonTrace>();
                 }
+#endif
                 // good, enqueue it in intQueue
                 intQueue.Enqueue(ctx, recByteSize, std::move(event), msgId, cost, deadline, extQueueId, *this, clientId,
                     std::move(trace), internalMessageId);

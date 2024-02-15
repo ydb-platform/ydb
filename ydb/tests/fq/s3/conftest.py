@@ -73,12 +73,17 @@ def bindings_mode():
 
 
 @pytest.fixture
-def kikimr(request: pytest.FixtureRequest, s3: S3, yq_version: str, stats_mode: str, bindings_mode: str):
+def is_replace_if_exists():
+    return False
+
+
+@pytest.fixture
+def kikimr(request: pytest.FixtureRequest, s3: S3, yq_version: str, stats_mode: str, bindings_mode: str, is_replace_if_exists: bool):
     kikimr_extensions = [AddInflightExtension(),
                          AddDataInflightExtension(),
                          AddFormatSizeLimitExtension(),
                          DefaultConfigExtension(s3.s3_url),
-                         YQv2Extension(yq_version),
+                         YQv2Extension(yq_version, is_replace_if_exists),
                          ComputeExtension(),
                          StatsModeExtension(stats_mode),
                          BindingsModeExtension(bindings_mode, yq_version)]

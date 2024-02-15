@@ -80,7 +80,7 @@ public:
         const TTagSet& tags,
         TSensorOptions options) override;
 
-    IHistogramImplPtr RegisterTimeHistogram(
+    ITimerImplPtr RegisterTimeHistogram(
         const TString& name,
         const TTagSet& tags,
         TSensorOptions options) override;

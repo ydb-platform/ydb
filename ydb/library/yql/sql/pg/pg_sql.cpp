@@ -350,23 +350,11 @@ public:
         }
     }
 
-    void OnResult(const List* raw, int StatementId) {
-        if (!Settings.PerStatementExecution) {
-            return OnResult(raw);
-        }
-
-        AstParseResults[StatementId].Pool = std::make_unique<TMemoryPool>(4096);
-        AstParseResults[StatementId].Root = ParseResult(raw, StatementId);
-        if (!State.AutoParamValues.empty()) {
-            AstParseResults[StatementId].PgAutoParamValues = std::move(State.AutoParamValues);
-        }
-    }
-
     void OnError(const TIssue& issue) {
         AstParseResults[StatementId].Issues.AddIssue(issue);
     }
 
-    TAstNode* ParseResult(const List* raw, int statementId) {
+    TAstNode* ParseResult(const List* raw, const TMaybe<ui32> statementId = Nothing()) {
         auto configSource = L(A("DataSource"), QA(TString(NYql::ConfigProviderName)));
         State.Statements.push_back(L(A("let"), A("world"), L(A(TString(NYql::ConfigureName)), A("world"), configSource,
             QA("OrderedColumns"))));
@@ -378,63 +366,15 @@ public:
         ui32 dqEnginePgmPos = State.Statements.size();
         State.Statements.push_back(configSource);
 
-        if (!ParseRawStmt(LIST_CAST_NTH(RawStmt, raw, statementId))) {
-            return nullptr;
-        }
-
-        if (!State.Views.empty()) {
-            AddError("Not all views have been dropped");
-            return nullptr;
-        }
-
-        if (Settings.EndOfQueryCommit) {
-            State.Statements.push_back(L(A("let"), A("world"), L(A("CommitAll!"),
-                A("world"))));
-        }
-
-        AddVariableDeclarations();
-
-        State.Statements.push_back(L(A("return"), A("world")));
-
-        if (DqEngineEnabled) {
-            State.Statements[dqEnginePgmPos] = L(A("let"), A("world"), L(A(TString(NYql::ConfigureName)), A("world"), configSource,
-                QA("DqEngine"), QA(DqEngineForce ? "force" : "auto")));
-        } else {
-            State.Statements.erase(State.Statements.begin() + dqEnginePgmPos);
-        }
-
-        if (State.CostBasedOptimizer) {
-            State.Statements[costBasedOptimizerPos] = L(A("let"), A("world"), L(A(TString(NYql::ConfigureName)), A("world"), configSource,
-                QA("CostBasedOptimizer"), QA(State.CostBasedOptimizer)));
-        } else {
-            State.Statements.erase(State.Statements.begin() + costBasedOptimizerPos);
-        }
-
-        if (BlockEngineEnabled) {
-            State.Statements[blockEnginePgmPos] = L(A("let"), A("world"), L(A(TString(NYql::ConfigureName)), A("world"), configSource,
-                QA("BlockEngine"), QA(BlockEngineForce ? "force" : "auto")));
-        } else {
-            State.Statements.erase(State.Statements.begin() + blockEnginePgmPos);
-        }
-
-        return VL(State.Statements.data(), State.Statements.size());
-    }
-
-    TAstNode* ParseResult(const List* raw) {
-        auto configSource = L(A("DataSource"), QA(TString(NYql::ConfigProviderName)));
-        State.Statements.push_back(L(A("let"), A("world"), L(A(TString(NYql::ConfigureName)), A("world"), configSource,
-            QA("OrderedColumns"))));
-
-        ui32 blockEnginePgmPos = State.Statements.size();
-        State.Statements.push_back(configSource);
-        ui32 costBasedOptimizerPos = State.Statements.size();
-        State.Statements.push_back(configSource);
-        ui32 dqEnginePgmPos = State.Statements.size();
-        State.Statements.push_back(configSource);
-
-        for (int i = 0; i < ListLength(raw); ++i) {
-            if (!ParseRawStmt(LIST_CAST_NTH(RawStmt, raw, i))) {
+        if (statementId) {
+            if (!ParseRawStmt(LIST_CAST_NTH(RawStmt, raw, *statementId))) {
                 return nullptr;
+            }
+        } else {
+            for (int i = 0; i < ListLength(raw); ++i) {
+                if (!ParseRawStmt(LIST_CAST_NTH(RawStmt, raw, i))) {
+                    return nullptr;
+                }
             }
         }
 
@@ -4560,7 +4500,7 @@ TVector<NYql::TAstParseResult> PGToYqlStatements(const TString& query, const NSQ
     TVector<NYql::TAstParseResult> results;
     TConverter converter(results, settings, query);
     NYql::PGParse(query, converter);
-    return std::move(results);
+    return results;
 }
 
 }  // NSQLTranslationPG

@@ -12,13 +12,10 @@
 #include <yt/yt/client/api/rpc_proxy/row_stream.h>
 
 #include <ydb/library/yql/utils/yql_panic.h>
+#include <ydb/library/yql/utils/log/log.h>
 
 #include <ydb/library/yql/providers/yt/lib/yt_rpc_helpers/yt_convert_helpers.h>
 
-#include <util/string/builder.h>
-#include <chrono>
-#include <ydb/library/yql/utils/log/log.h>
-#include <thread>
 #include <library/cpp/yson/parser.h>
 
 namespace NYql {
@@ -33,7 +30,6 @@ void OnPayload(const NYT::TSharedRef& block, size_t i, std::vector<TStreamSchema
         return;
     }
     try {
-        auto beg = std::chrono::steady_clock::now();
         NYT::TNode res;
         NYT::TNodeBuilder builder(&res);
         TMemoryInput mem(currentPayload.begin(), currentPayload.Size());

@@ -251,7 +251,15 @@ public:
     }
 };
 
-class IRequestCtxBase : public virtual IRequestCtxBaseMtSafe {
+class IAuditCtx : public virtual IRequestCtxBaseMtSafe {
+public:
+    virtual void AddAuditLogPart(const TStringBuf& name, const TString& value) = 0;
+    virtual const TAuditLogParts& GetAuditLogParts() const = 0;
+};
+
+class IRequestCtxBase
+    : public virtual IAuditCtx
+{
 public:
     virtual ~IRequestCtxBase() = default;
     // Returns true if client has the specified capability
@@ -260,25 +268,13 @@ public:
     virtual void ReplyWithYdbStatus(Ydb::StatusIds::StatusCode status) = 0;
     // Reply using "transport error code"
     virtual void ReplyWithRpcStatus(grpc::StatusCode code, const TString& msg = "", const TString& details = "") = 0;
-    // Return address of the peer
-    virtual TString GetPeerName() const = 0;
-    // Return deadile of request execution, calculated from client timeout by grpc
-    virtual TInstant GetDeadline() const = 0;
-    // Meta value from request
-    virtual const TMaybe<TString> GetPeerMetaValues(const TString&) const = 0;
     // Auth property from connection
     virtual TVector<TStringBuf> FindClientCert() const = 0;
-    // Returns path and resource for rate limiter
-    virtual TMaybe<NRpcService::TRlPath> GetRlPath() const = 0;
     // Raise issue on the context
     virtual void RaiseIssue(const NYql::TIssue& issue) = 0;
     virtual void RaiseIssues(const NYql::TIssues& issues) = 0;
-    virtual const TString& GetRequestName() const = 0;
-    virtual void SetDiskQuotaExceeded(bool disk) = 0;
     virtual bool GetDiskQuotaExceeded() const = 0;
 
-    virtual void AddAuditLogPart(const TStringBuf& name, const TString& value) = 0;
-    virtual const TAuditLogParts& GetAuditLogParts() const = 0;
 };
 
 class TRespHookCtx : public TThrRefBase {
@@ -349,9 +345,20 @@ struct TRequestAuxSettings {
     TAuditMode AuditMode = TAuditMode::Off;
 };
 
+class TGRpcRequestProxySimple;
 // grpc_request_proxy part
 // The interface is used to perform authentication and check database access right
-class IRequestProxyCtx : public virtual IRequestCtxBase {
+class IRequestProxyCtx
+    : public virtual IAuditCtx
+{
+    friend class TGRpcRequestProxyImpl; 
+    template <typename TEvent>
+    friend class TGrpcRequestCheckActor;
+    friend class TGRpcRequestProxySimple;
+    friend class TGRpcRequestProxyHandleMethods;
+private:
+    virtual void ReplyUnavaliable() = 0;
+    virtual void ReplyWithYdbStatus(Ydb::StatusIds::StatusCode status) = 0;
 public:
     virtual ~IRequestProxyCtx() = default;
 
@@ -361,7 +368,8 @@ public:
     virtual void SetInternalToken(const TIntrusiveConstPtr<NACLib::TUserToken>& token) = 0;
     virtual const NYdbGrpc::TAuthState& GetAuthState() const = 0;
     virtual void ReplyUnauthenticated(const TString& msg = "") = 0;
-    virtual void ReplyUnavaliable() = 0;
+    virtual void RaiseIssue(const NYql::TIssue& issue) = 0;
+    virtual void RaiseIssues(const NYql::TIssues& issues) = 0;
 
     //tracing
     virtual void StartTracing(NWilson::TSpan&& span) = 0;
@@ -398,6 +406,7 @@ public:
         return false;
     }
     virtual void SetAuditLogHook(TAuditLogHook&& hook) = 0;
+    virtual void SetDiskQuotaExceeded(bool disk) = 0;
 };
 
 // Request context
@@ -471,7 +480,8 @@ struct TCommonResponseFiller<TResp, false> : private TCommonResponseFillerImpl {
 
 template <ui32 TRpcId>
 class TRefreshTokenImpl
-    : public IRequestProxyCtx
+    : public virtual IRequestProxyCtx
+    , public virtual IRequestCtxBase
     , public TEventLocal<TRefreshTokenImpl<TRpcId>, TRpcId>
 {
 public:
@@ -705,6 +715,20 @@ class TGRpcRequestBiStreamWrapper
     : public IRequestProxyCtx
     , public TEventLocal<TGRpcRequestBiStreamWrapper<TRpcId, TReq, TResp, RlMode>, TRpcId>
 {
+private:
+    void ReplyUnavaliable() override {
+        Ctx_->Attach(TActorId());
+        TResponse resp;
+        FillYdbStatus(resp, IssueManager_.GetIssues(), Ydb::StatusIds::UNAVAILABLE);
+        Ctx_->WriteAndFinish(std::move(resp), grpc::Status::OK);
+    }
+
+    void ReplyWithYdbStatus(Ydb::StatusIds::StatusCode status) override {
+        Ctx_->Attach(TActorId());
+        TResponse resp;
+        FillYdbStatus(resp, IssueManager_.GetIssues(), status);
+        Ctx_->WriteAndFinish(std::move(resp), grpc::Status::OK);
+    }
 public:
     using TRequest = TReq;
     using TResponse = TResp;
@@ -733,10 +757,6 @@ public:
         return ExtractYdbToken(Ctx_->GetPeerMetaValues(NYdb::YDB_AUTH_TICKET_HEADER));
     }
 
-    bool HasClientCapability(const TString& capability) const override {
-        return FindPtr(Ctx_->GetPeerMetaValues(NYdb::YDB_CLIENT_CAPABILITIES), capability);
-    }
-
     const TMaybe<TString> GetDatabaseName() const override {
         return ExtractDatabaseName(Ctx_->GetPeerMetaValues(NYdb::YDB_DATABASE_HEADER));
     }
@@ -750,26 +770,8 @@ public:
         return Ctx_->GetAuthState();
     }
 
-    void ReplyWithRpcStatus(grpc::StatusCode, const TString&, const TString&) override {
-        Y_ABORT("Unimplemented");
-    }
-
     void ReplyUnauthenticated(const TString& in) override {
         Ctx_->Finish(grpc::Status(grpc::StatusCode::UNAUTHENTICATED, MakeAuthError(in, IssueManager_)));
-    }
-
-    void ReplyUnavaliable() override {
-        Ctx_->Attach(TActorId());
-        TResponse resp;
-        FillYdbStatus(resp, IssueManager_.GetIssues(), Ydb::StatusIds::UNAVAILABLE);
-        Ctx_->WriteAndFinish(std::move(resp), grpc::Status::OK);
-    }
-
-    void ReplyWithYdbStatus(Ydb::StatusIds::StatusCode status) override {
-        Ctx_->Attach(TActorId());
-        TResponse resp;
-        FillYdbStatus(resp, IssueManager_.GetIssues(), status);
-        Ctx_->WriteAndFinish(std::move(resp), grpc::Status::OK);
     }
 
     void RaiseIssue(const NYql::TIssue& issue) override {
@@ -860,16 +862,7 @@ public:
         return ToMaybe(Ctx_->GetPeerMetaValues(key));
     }
 
-    TVector<TStringBuf> FindClientCert() const override {
-        Y_ABORT("Unimplemented");
-        return {};
-    }
-
     void SetDiskQuotaExceeded(bool) override {
-    }
-
-    bool GetDiskQuotaExceeded() const override {
-        return false;
     }
 
     void RefreshToken(const TString& token, const TActorContext& ctx, TActorId id);

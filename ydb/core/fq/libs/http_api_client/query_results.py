@@ -86,7 +86,7 @@ class YQResults:
     @staticmethod
     def _split_type_list(type_list: str) -> list[str]:
         # naive implementation
-        # fixme: fix it
+        # todo: fix it
         return type_list.split(",")
 
     @staticmethod

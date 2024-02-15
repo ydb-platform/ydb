@@ -65,7 +65,7 @@ class YQHttpClient(object):
         return self
 
     def __exit__(self, *args):
-        self.session.close()
+        self.close()
 
     def close(self):
         self.session.close()

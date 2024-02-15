@@ -342,7 +342,7 @@ def patch_cases(cases, patches, patchdir):
             continue
 
         cases[i] = patched_sql_full_name
-        LOGGER.info("Patched", sql_full_name, "->", cases[i])
+        LOGGER.info("Patched %s -> %s", sql_full_name, cases[i])
 
 
 @click.command()

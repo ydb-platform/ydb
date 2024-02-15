@@ -30,7 +30,7 @@ struct TRetentionsConversionResult {
 
             TStringBuilder resultErrorMessage;
             resultErrorMessage << ErrorMessages[0];
-            for (ulong i = 1; i < ErrorMessages.size(); i++) {
+            for (ui64 i = 1; i < ErrorMessages.size(); i++) {
                 resultErrorMessage << ' ' << ErrorMessages[i];
             }
             response->Message = resultErrorMessage;

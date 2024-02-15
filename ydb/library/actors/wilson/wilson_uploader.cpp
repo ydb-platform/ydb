@@ -21,7 +21,7 @@ namespace NWilson {
 
     namespace {
 
-        struct TSpanQueueItem {
+        struct TSpan {
             TMonotonic ExpirationTimestamp;
             NTraceProto::Span Span;
             size_t Size;
@@ -64,7 +64,7 @@ namespace NWilson {
                 return SizeSpans() == 0;
             }
 
-            bool Add(TSpanQueueItem& span) {
+            bool Add(TSpan& span) {
                 if (SizeBytes + span.Size > MaxBytesInBatch || SizeSpans() == MaxSpansInBatch) {
                     return false;
                 }
@@ -114,7 +114,7 @@ namespace NWilson {
             std::queue<TBatch::TData> BatchQueue;
             ui64 SpansSize = 0;
             TMonotonic NextSendTimestamp;
-            ui64 SendBatchId = 1;
+            ui64 BatchCompleteId = 1;
 
         public:
             TWilsonUploader(WilsonUploaderParams params)
@@ -164,7 +164,11 @@ namespace NWilson {
                         ALOG_ERROR(WILSON_SERVICE_ID, "dropped span of size " << size << ", which exceeds max batch size " << MaxBytesInBatch);
                         return;
                     }
-                    TSpanQueueItem spanItem{expirationTimestamp, std::move(span), size};
+                    TSpan spanItem {
+                        .ExpirationTimestamp = expirationTimestamp,
+                        .Span = std::move(span),
+                        .Size = size,
+                    };
                     SpansSize += size;
                     if (CurrentBatch.IsEmpty()) {
                         ScheduleBatchCompletion(now);
@@ -182,14 +186,14 @@ namespace NWilson {
             void ScheduleBatchCompletion(TMonotonic now) {
                 TMonotonic completionTime = now + TDuration::MilliSeconds(MaxBatchAccumulationMilliseconds);
                 TActivationContext::Schedule(completionTime,
-                                             new IEventHandle(SelfId(), {}, new TEvents::TEvWakeup(SendBatchId)));
+                                             new IEventHandle(SelfId(), {}, new TEvents::TEvWakeup(BatchCompleteId)));
 
             }
 
             void CompleteCurrentBatch() {
                 BatchQueue.push(std::move(CurrentBatch).Complete());
                 CurrentBatch = TBatch(MaxSpansInBatch, MaxBytesInBatch, ServiceName);
-                ++SendBatchId;
+                ++BatchCompleteId;
             }
 
             void TryToSend() {
@@ -274,7 +278,7 @@ namespace NWilson {
 
             void HandleWakeup(TEvents::TEvWakeup::TPtr& ev) {
                 const auto tag = ev->Get()->Tag;
-                if (tag == SendBatchId) {
+                if (tag == BatchCompleteId) {
                     CompleteCurrentBatch();
                 } else if (tag == 0) {
                     Y_ABORT_UNLESS(WakeupScheduled);

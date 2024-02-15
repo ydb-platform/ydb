@@ -276,7 +276,7 @@ std::shared_ptr<TCleanupColumnEngineChanges> TColumnEngineForLogs::StartCleanup(
         }
 
         for (auto& [portion, info] : itTable->second->GetPortions()) {
-            if (dataLocksManager->IsLocked(*info)) {
+            if (dataLocksManager && dataLocksManager->IsLocked(*info)) {
                 continue;
             }
             if (txSize + info->GetTxVolume() < txSizeLimit || changes->PortionsToDrop.empty()) {
@@ -300,7 +300,7 @@ std::shared_ptr<TCleanupColumnEngineChanges> TColumnEngineForLogs::StartCleanup(
             break;
         }
         for (auto&& i : it->second) {
-            if (dataLocksManager->IsLocked(i)) {
+            if (dataLocksManager && dataLocksManager->IsLocked(i)) {
                 continue;
             }
             Y_ABORT_UNLESS(i.CheckForCleanup(snapshot));

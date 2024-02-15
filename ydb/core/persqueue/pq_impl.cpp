@@ -937,7 +937,7 @@ NKikimrPQ::TPQTabletConfig TPersQueue::MakeSupportivePartitionConfig() const
     //partitionConfig.MutableConsumerFormatVersions()->Clear();
     //partitionConfig.MutableConsumerCodecs()->Clear();
     partitionConfig.MutableReadRuleServiceTypes()->Clear();
-    partitionConfig.MutableCodecs()->Clear();
+    //partitionConfig.MutableCodecs()->Clear();
     partitionConfig.MutableReadRuleVersions()->Clear();
     partitionConfig.MutableReadRuleGenerations()->Clear();
 

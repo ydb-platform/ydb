@@ -77,7 +77,7 @@ inline std::shared_ptr<grpc::ChannelInterface> CreateChannelInterface(const TGRp
     if (config.EnableSsl) {
         auto options = grpc::experimental::TlsChannelCredentialsOptions();
         options.set_check_call_host(config.CheckCallHost);
-        options.set_certificate_provider(config.CertProvider);
+        options.set_certificate_provider(config.СertProvider);
         auto tlsCreds = TlsCredentials(options);
         return grpc::CreateCustomChannel(config.Locator, TlsCredentials(options), args);
     } else {

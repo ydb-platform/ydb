@@ -2549,7 +2549,11 @@ public:
         return true;
     }
 
-    TString ResolveCluster(const TStringBuf schemaname) {
+    TString ResolveCluster(const TStringBuf schemaname, TString name) {
+        if (NYql::NPg::GetStaticColumns().contains(NPg::TTableInfoKey{"pg_catalog", name})) {
+            return "pg_catalog";
+        }
+
         if (schemaname == "public") {
             return "";
         }
@@ -2603,7 +2607,7 @@ public:
         return {};
       }
 
-      const auto cluster = ResolveCluster(schemaname);
+      const auto cluster = ResolveCluster(schemaname, TString(relname));
       const auto sinkOrSource = BuildClusterSinkOrSourceExpression(isSink, cluster);
       const auto key = BuildTableKeyExpression(relname, cluster, isScheme);
       return {sinkOrSource, key};
@@ -2630,7 +2634,7 @@ public:
             return {};
         }
 
-        const auto cluster = ResolveCluster(schemaname);
+        const auto cluster = ResolveCluster(schemaname, TString(objectName));
         const auto sinkOrSource = BuildClusterSinkOrSourceExpression(true, cluster);
         const auto key = BuildPgObjectExpression(objectName, pgObjectType);
         return {sinkOrSource, key};

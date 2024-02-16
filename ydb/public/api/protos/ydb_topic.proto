@@ -739,13 +739,13 @@ message MultipleWindowsStat {
     int64 per_day = 3;
 }
 
-enum ScalingSupport {
-    // The consumer can work with scaling.
-    NOT_SUPPORTED = 1;
-    // The consumer fully supports scaling: during the reading process, offsets are regularly committed.
-    FULL_SUPPORT = 2;
+enum ConsumerScalingSupport {
+    // The consumer can't work with scaling.
+    NOT_SUPPORT = 1;
     // The consumer does not commit offsets. The order of messages may be disrupted at the time of scaling.
-    PARTIAL_SUPPORT = 3;
+    PARTIAL_SUPPORT = 2;
+    // The consumer fully supports scaling: during the reading process, offsets are regularly committed.
+    FULL_SUPPORT = 3;
 }
 
 // Consumer description.
@@ -773,7 +773,7 @@ message Consumer {
 
     // Parameter for the consumer's support for topic scaling.
     // Default NOT_SUPPORTED
-    ScalingSupport scaling_support = 8;
+    ConsumerScalingSupport scaling_support = 8;
 
     message ConsumerStats {
         // Minimal timestamp of last read from partitions.
@@ -809,7 +809,7 @@ message AlterConsumer {
     map<string, string> alter_attributes = 6;
 
     // Parameter for the consumer's support for topic scaling.
-    optional ScalingSupport set_scaling_support = 7;
+    optional ConsumerScalingSupport set_scaling_support = 7;
 }
 
 enum AutoScalingStrategy {
@@ -825,15 +825,15 @@ message AutoScalingSettings {
     // Strategy of auto scaling
     AutoScalingStrategy strategy = 1;
     // The time of exceeding the threshold value in seconds, after which the partition will be
-    // automatically scalling.
+    // auto scaling.
     // Zero value means default - 300.
     int32 threshold_time_seconds = 2;
     // The threshold value of the write speed to the partition as a percentage, when exceeded,
-    // the partition will be automatically split.
+    // the partition will be auto split.
     // Zero value means default - 90.
     int32 scale_up_partition_write_speed_threshold_percent = 3 [(Ydb.value) = ">= 0"];
     // The threshold value of the write speed to the partition as a percentage, if it is not reached,
-    // the partition will be automatically merged.
+    // the partition will be auto merged.
     // Zero value means default - 30.
     int32 scale_down_partition_write_speed_threshold_percent = 4 [(Ydb.value) = ">= 0"];
 
@@ -843,15 +843,15 @@ message AlterAutoScalingSettings {
     // Strategy of auto scaling
     optional AutoScalingStrategy strategy = 1;
     // The time of exceeding the threshold value in seconds, after which the partition will be
-    // automatically scaling.
+    // auto scaling.
     // Zero value means default - 300.
     optional int32 set_threshold_time_seconds = 2;
     // The threshold value of the write speed to the partition as a percentage, when exceeded,
-    // the partition will be automatically split.
+    // the partition will be auto split.
     // Zero value means default - 90.
     optional int32 set_scale_up_partition_write_speed_threshold_percent = 3 [(Ydb.value) = ">= 0"];
     // The threshold value of the write speed to the partition as a percentage, if it is not reached,
-    // the partition will be automatically merged.
+    // the partition will be auto merged.
     // Zero value means default - 30.
     optional int32 set_scale_down_partition_write_speed_threshold_percent = 4 [(Ydb.value) = ">= 0"];
 }
@@ -867,7 +867,7 @@ message PartitioningSettings {
     // Limit for total partition count, including active (open for write) and read-only partitions.
     // Zero value means default - 100.
     int64 partition_count_limit = 2 [(Ydb.value) = ">= 0"];
-    // Settings for auto sacling the partition number
+    // Settings for auto scaling the partition number
     AutoScalingSettings auto_scaling_settings = 4;
 }
 
@@ -882,7 +882,7 @@ message AlterPartitioningSettings {
     // Limit for total partition count, including active (open for write) and read-only partitions.
     // Zero value means default - 100.
     optional int64 set_partition_count_limit = 2 [(Ydb.value) = ">= 0"];
-    // Settings for auto sacling the partition number
+    // Settings for auto scaling the partition number
     optional AlterAutoScalingSettings alter_auto_scaling_settings = 4;
 }
 

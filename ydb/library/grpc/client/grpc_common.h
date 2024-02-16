@@ -2,8 +2,6 @@
 
 #include <grpc++/grpc++.h>
 #include <grpc++/resource_quota.h>
-#include <grpcpp/security/credentials.h>
-#include "contrib/libs/grpc/include/grpcpp/create_channel.h"
 
 #include <ydb/library/grpc/common/constants.h>
 #include <util/datetime/base.h>

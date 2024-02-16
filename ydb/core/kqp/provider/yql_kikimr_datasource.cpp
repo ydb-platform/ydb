@@ -352,10 +352,11 @@ public:
                     return TStatus::Error;
                 }
 
-                if (res.Metadata->Kind == EKikimrTableKind::View) {
+                if (const auto& preparingQuery = SessionCtx->Query().PreparingQuery;
+                        preparingQuery
+                        && res.Metadata->Kind == EKikimrTableKind::View
+                ) {
                     const auto& viewMetadata = *res.Metadata;
-                    const auto& preparingQuery = SessionCtx->Query().PreparingQuery;
-                    YQL_ENSURE(preparingQuery);
                     auto* viewInfo = preparingQuery->MutablePhysicalQuery()->MutableViewsInfo()->Add();
                     auto* pathId = viewInfo->MutableTableId();
                     pathId->SetOwnerId(viewMetadata.PathId.OwnerId());

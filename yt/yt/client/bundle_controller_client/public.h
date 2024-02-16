@@ -18,7 +18,7 @@ DECLARE_REFCOUNTED_STRUCT(TInstanceSize)
 DECLARE_REFCOUNTED_STRUCT(TBundleTargetConfig)
 DECLARE_REFCOUNTED_STRUCT(TBundleConfigDescriptor)
 DECLARE_REFCOUNTED_STRUCT(TBundleConfigConstraints)
-DECLARE_REFCOUNTED_STRUCT(TResourceQuota)
+DECLARE_REFCOUNTED_STRUCT(TBundleResourceQuota)
 
 struct TBundleConfigDescriptor;
 
@@ -29,7 +29,7 @@ struct TDefaultInstanceConfig;
 struct TInstanceSize;
 struct TBundleTargetConfig;
 struct TBundleConfigConstraints;
-struct TResourceQuota;
+struct TBundleResourceQuota;
 
 ////////////////////////////////////////////////////////////////////////////////
 

@@ -75,8 +75,7 @@ public:
 
     private:
         size_t ColumnWidth(size_t columnIndex) const;
-        size_t ExtraBytes(TStringBuf data) const;
-        bool PrintColumns(IOutputStream& o, const TVector<size_t>& widths, size_t lineNumber) const;
+        size_t PrintColumns(IOutputStream& o, const TVector<size_t>& widths, size_t offset) const;
         bool HasFreeText() const;
         void PrintFreeText(IOutputStream& o, size_t width) const;
 

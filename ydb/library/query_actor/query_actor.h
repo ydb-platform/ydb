@@ -178,8 +178,9 @@ public:
     explicit TQueryRetryActor(const NActors::TActorId& replyActorId, const TArgs&... args)
         : ReplyActorId(replyActorId)
         , RetryPolicy(IRetryPolicy::GetExponentialBackoffPolicy(
-            Retryable, TDuration::MilliSeconds(10),
-            TDuration::MilliSeconds(200), TDuration::Seconds(30), 5
+            Retryable, TDuration::MilliSeconds(10), 
+            TDuration::MilliSeconds(200), TDuration::Seconds(1),
+            std::numeric_limits<size_t>::max(), TDuration::Seconds(1)
         ))
         , CreateQueryActor([=]() {
             return new TQueryActor(args...);

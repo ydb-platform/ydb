@@ -87,7 +87,7 @@ public:
 
     void Handle(const TEvYdbCompute::TEvForgetOperationResponse::TPtr& ev) {
         const auto& response = *ev.Get()->Get();
-        if (response.Status == NYdb::EStatus::TIMEOUT) {
+        if (response.Status == NYdb::EStatus::TIMEOUT || response.Status == NYdb::EStatus::CLIENT_DEADLINE_EXCEEDED) {
             SendForgetOperation(TDuration::MilliSeconds(BackoffTimer.NextBackoffMs()));
             return;
         }

@@ -182,6 +182,7 @@ target_sources(core-tx-datashard PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/core/tx/datashard/build_distributed_erase_tx_out_rs_unit.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/tx/datashard/build_index.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/tx/datashard/build_kqp_data_tx_out_rs_unit.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/tx/datashard/build_write_out_rs_unit.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/tx/datashard/build_scheme_tx_out_rs_unit.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/tx/datashard/cdc_stream_heartbeat.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/tx/datashard/cdc_stream_scan.cpp
@@ -334,6 +335,7 @@ target_sources(core-tx-datashard PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/core/tx/datashard/range_ops.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/tx/datashard/restore_unit.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/tx/datashard/store_and_send_out_rs_unit.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/tx/datashard/store_and_send_write_out_rs_unit.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/tx/datashard/store_commit_writes_tx_unit.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/tx/datashard/store_data_tx_unit.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/tx/datashard/store_write_unit.cpp

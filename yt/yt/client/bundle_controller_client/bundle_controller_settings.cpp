@@ -98,6 +98,24 @@ void TBundleConfigConstraints::Register(TRegistrar registrar)
     registrar.Parameter("tablet_node_sizes", &TThis::TabletNodeSizes)
         .Default();
 }
+
+void TResourceQuota::Register(TRegistrar registrar)
+{
+    registrar.Parameter("cpu", &TThis::Cpu)
+        .GreaterThanOrEqual(0)
+        .Default(0);
+
+    registrar.Parameter("memory", &TThis::Memory)
+        .GreaterThanOrEqual(0)
+        .Default(0);
+}
+
+int TResourceQuota::Vcpu() const
+{
+    const int VFactor = 1000;
+    return static_cast<int>(Cpu * VFactor);
+}
+
 ////////////////////////////////////////////////////////////////////////////////
 
 namespace NProto {
@@ -262,6 +280,23 @@ void FromProto(TBundleConfigConstraintsPtr bundleConfigConstraints, const NBundl
         auto newInstance = New<TInstanceSize>();
         FromProto(newInstance, &instance);
         bundleConfigConstraints->TabletNodeSizes.push_back(newInstance);
+    }
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
+void ToProto(NBundleController::NProto::TResourceQuota* protoResourceQuota, const TResourceQuotaPtr resourceQuota)
+{
+    protoResourceQuota->set_vcpu(resourceQuota->Vcpu());
+    protoResourceQuota->set_memory(resourceQuota->Memory);
+}
+
+void FromProto(TResourceQuotaPtr resourceQuota, const NBundleController::NProto::TResourceQuota* protoResourceQuota)
+{
+    YT_FROMPROTO_OPTIONAL_PTR(protoResourceQuota, memory, resourceQuota, Memory);
+    if (protoResourceQuota->has_vcpu()) {
+        int VFactor = 1000;
+        resourceQuota->Cpu = static_cast<double>(protoResourceQuota->vcpu()) / VFactor;
     }
 }
 

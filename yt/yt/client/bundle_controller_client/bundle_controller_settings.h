@@ -137,6 +137,23 @@ DEFINE_REFCOUNTED_TYPE(TBundleConfigConstraints)
 
 ////////////////////////////////////////////////////////////////////////////////
 
+struct TResourceQuota
+    : public NYTree::TYsonStruct
+{
+    double Cpu;
+    i64 Memory;
+
+    int Vcpu() const;
+
+    REGISTER_YSON_STRUCT(TResourceQuota);
+
+    static void Register(TRegistrar registrar);
+};
+
+DEFINE_REFCOUNTED_TYPE(TResourceQuota)
+
+////////////////////////////////////////////////////////////////////////////////
+
 namespace NProto {
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -161,6 +178,9 @@ void FromProto(TBundleTargetConfigPtr bundleConfig, const NBundleController::NPr
 
 void ToProto(NBundleController::NProto::TBundleConfigConstraints* protoBundleConfigConstraints, const TBundleConfigConstraintsPtr bundleConfigConstraints);
 void FromProto(TBundleConfigConstraintsPtr bundleConfigConstraints, const NBundleController::NProto::TBundleConfigConstraints* protoBundleConfigConstraints);
+
+void ToProto(NBundleController::NProto::TResourceQuota* protoResourceQuota, const TResourceQuotaPtr resourceQuota);
+void FromProto(TResourceQuotaPtr resourceQuota, const NBundleController::NProto::TResourceQuota* protoResourceQuota);
 
 ////////////////////////////////////////////////////////////////////////////////
 

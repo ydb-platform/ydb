@@ -11,6 +11,7 @@ SRCS(
     build_distributed_erase_tx_out_rs_unit.cpp
     build_index.cpp
     build_kqp_data_tx_out_rs_unit.cpp
+    build_write_out_rs_unit.cpp    
     build_scheme_tx_out_rs_unit.cpp
     cdc_stream_heartbeat.cpp
     cdc_stream_scan.cpp
@@ -191,6 +192,7 @@ SRCS(
     restore_unit.cpp
     setup_sys_locks.h
     store_and_send_out_rs_unit.cpp
+    store_and_send_write_out_rs_unit.cpp    
     store_commit_writes_tx_unit.cpp
     store_data_tx_unit.cpp
     store_write_unit.cpp

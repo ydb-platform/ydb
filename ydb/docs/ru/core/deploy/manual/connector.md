@@ -6,12 +6,12 @@
 
 Коннектор `fq-connector-go` реализован на языке Go; его исходный код размещён на [Github](https://github.com/ydb-platform/fq-connector-go). Он обеспечивает доступ к следующим источникам данных:
 
-* ClickHouse
-* PostgreSQL
+* [ClickHouse](https://clickhouse.com/)
+* [PostgreSQL](https://www.postgresql.org/)
 
 ### Запуск {#fq-connector-go-launch}
 
-Для запуска коннектора используйте официальный [Docker-образ](https://github.com/ydb-platform/fq-connector-go/pkgs/container/fq-connector-go). Он уже содержит [конфигурационный файл](https://github.com/ydb-platform/fq-connector-go/blob/main/example.conf) сервиса. Запустить сервис с настройками по умолчанию можно следующей командой: 
+Для запуска коннектора используйте официальный [Docker-образ](https://github.com/ydb-platform/fq-connector-go/pkgs/container/fq-connector-go). Он уже содержит [конфигурационный файл](https://github.com/ydb-platform/fq-connector-go/blob/main/examples/config.debug.txt) сервиса. Запустить сервис с настройками по умолчанию можно следующей командой: 
 
 ```bash
 docker run -d \
@@ -20,7 +20,7 @@ docker run -d \
     ghcr.io/ydb-platform/fq-connector-go:latest
 ```
 
-На порту 50051 публичного сетевого интерфейса вашего хоста запустится слушающий сокет GRPC-сервиса коннектора. В дальнейшем {{ ydb-short-name }} должно будет установить соединение именно с этим сетевым адресом.
+На порту 50051 публичного сетевого интерфейса вашего хоста запустится слушающий сокет GRPC-сервиса коннектора. В дальнейшем сервер {{ ydb-short-name }} должен будет установить соединение именно с этим сетевым адресом.
 
 При необходимости изменения конфигурации подготовьте конфигурационный файл [по образцу](#fq-connector-go-config) и примонтируйте его к контейнеру:
 

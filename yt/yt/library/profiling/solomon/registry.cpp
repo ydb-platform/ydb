@@ -162,7 +162,7 @@ ITimerImplPtr TSolomonRegistry::RegisterTimerSummary(
         });
 }
 
-ITimerImplPtr TSolomonRegistry::RegisterTimeHistogram(
+IHistogramImplPtr TSolomonRegistry::RegisterTimeHistogram(
     const TString& name,
     const TTagSet& tags,
     TSensorOptions options)

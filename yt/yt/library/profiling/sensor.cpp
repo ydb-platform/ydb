@@ -116,13 +116,16 @@ TSummary::operator bool() const
 
 ////////////////////////////////////////////////////////////////////////////////
 
-void TEventTimer::Record(TDuration value) const
+void TEventTimer::Record(TDuration value, int count) const
 {
-    if (!Timer_) {
-        return;
+    if (Histogram_) {
+        Histogram_->Add(value.SecondsFloat(), count);
+    } else if (Timer_) {
+        while (count > 0) {
+            Timer_->Record(value);
+            --count;
+        }
     }
-
-    Timer_->Record(value);
 }
 
 TEventTimer::operator bool() const
@@ -604,7 +607,7 @@ TEventTimer TProfiler::TimeHistogram(const TString& name, TDuration min, TDurati
     options.HistogramMax = max;
 
     TEventTimer timer;
-    timer.Timer_ = Impl_->RegisterTimeHistogram(Namespace_ + Prefix_ + name, Tags_, options);
+    timer.Histogram_ = Impl_->RegisterTimeHistogram(Namespace_ + Prefix_ + name, Tags_, options);
     return timer;
 }
 
@@ -617,7 +620,7 @@ TEventTimer TProfiler::TimeHistogram(const TString& name, std::vector<TDuration>
     TEventTimer timer;
     auto options = Options_;
     options.TimeHistogramBounds = std::move(bounds);
-    timer.Timer_ = Impl_->RegisterTimeHistogram(Namespace_ + Prefix_ + name, Tags_, options);
+    timer.Histogram_ = Impl_->RegisterTimeHistogram(Namespace_ + Prefix_ + name, Tags_, options);
     return timer;
 }
 

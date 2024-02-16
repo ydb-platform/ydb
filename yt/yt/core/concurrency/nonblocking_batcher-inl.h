@@ -79,8 +79,8 @@ TFuture<typename TNonblockingBatcher<T, TBatchLimiter>::TBatch> TNonblockingBatc
     auto guard = Guard(SpinLock_);
     auto promise = NewPromise<TBatch>();
     Promises_.push_back(promise);
-    StartTimer(guard);
     CheckReturn(guard);
+    StartTimer(guard);
     return promise.ToFuture();
 }
 

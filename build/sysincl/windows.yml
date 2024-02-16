@@ -320,6 +320,15 @@
   - xinput.h
   - xmllite.h
 
+# These headers are Microsoft Visual C specific.
+- case_sensitive: false
+  includes:
+    - vcruntime_exception.h
+    - vcruntime_new.h
+    - vcruntime_typeinfo.h
+    - vcruntime_new_debug.h
+    - yvals.h
+
 # These headers belong to UWP application development.
 - case_sensitive: false
   includes:

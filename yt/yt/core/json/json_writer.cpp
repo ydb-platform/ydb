@@ -660,7 +660,7 @@ std::unique_ptr<IJsonConsumer> CreateJsonConsumer(
 {
     auto jsonWriter = CreateJsonWriter(
         output,
-        /* pretty */ config->Format == EJsonFormat::Pretty);
+        /*pretty*/ config->Format == EJsonFormat::Pretty);
     return std::make_unique<TJsonConsumer>(std::move(jsonWriter), type, std::move(config));
 }
 

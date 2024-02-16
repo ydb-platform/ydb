@@ -1135,7 +1135,7 @@ void SerializeInnerErrors(TFluentMap fluent, const TError& error, int depth)
     auto visit = [&] (auto fluent, const TError& error, int depth) {
         fluent
             .Item().Do([&] (auto fluent) {
-                Serialize(error, fluent.GetConsumer(), /* valueProduce */ nullptr, depth);
+                Serialize(error, fluent.GetConsumer(), /*valueProduce*/ nullptr, depth);
             });
     };
 

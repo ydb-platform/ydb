@@ -25,6 +25,7 @@ DECLARE_REFCOUNTED_STRUCT(IHistogramImpl)
 DECLARE_REFCOUNTED_STRUCT(IRegistryImpl)
 DECLARE_REFCOUNTED_STRUCT(ISensorProducer)
 DECLARE_REFCOUNTED_CLASS(TBufferedProducer)
+DECLARE_REFCOUNTED_CLASS(THistogram)
 
 ////////////////////////////////////////////////////////////////////////////////
 

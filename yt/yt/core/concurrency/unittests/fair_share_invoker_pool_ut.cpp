@@ -456,11 +456,11 @@ TEST_F(TFairShareInvokerPoolTest, GetTotalWaitTimeEstimateStuckAction)
     auto invokerPool = CreateInvokerPool(Queues_[0]->GetInvoker(), 1);
     NThreading::TEvent event;
 
-    auto action = BIND([&event]{
+    auto action = BIND([&event] {
         event.Wait(TDuration::Seconds(100));
     })
-    .AsyncVia(invokerPool->GetInvoker(0))
-    .Run();
+        .AsyncVia(invokerPool->GetInvoker(0))
+        .Run();
 
     TDelayedExecutor::WaitForDuration(Quantum);
 
@@ -480,11 +480,11 @@ TEST_F(TFairShareInvokerPoolTest, GetTotalWaitTimeEstimateRelevancyDecay)
     invokerPool->UpdateActionTimeRelevancyHalflife(TDuration::Zero());
     NThreading::TEvent event;
 
-    auto action = BIND([&event]{
+    auto action = BIND([&event] {
         event.Wait(100 * Quantum);
     })
-    .AsyncVia(invokerPool->GetInvoker(0))
-    .Run();
+        .AsyncVia(invokerPool->GetInvoker(0))
+        .Run();
 
     TDelayedExecutor::WaitForDuration(Quantum);
 
@@ -513,11 +513,11 @@ TEST_F(TFairShareInvokerPoolTest, GetTotalWaitTimeEstimateSeveralActions)
     std::vector<TFuture<void>> actions;
 
     for (int idx = 0; idx < ActionCount; ++idx) {
-        actions.emplace_back(BIND([&leashes, idx] {
+        actions.push_back(BIND([&leashes, idx] {
             leashes[idx].Wait(100 * Quantum);
         })
-        .AsyncVia(invokerPool->GetInvoker(0))
-        .Run());
+            .AsyncVia(invokerPool->GetInvoker(0))
+            .Run());
     }
 
     auto expectedTotalTimeEstimate = TDuration::Zero();
@@ -562,7 +562,7 @@ TEST_F(TFairShareInvokerPoolTest, GetTotalWaitEstimateUncorrelatedWithOtherInvok
     std::vector<TFuture<void>> actions;
 
     for (int idx = 0; idx < 2; ++idx) {
-        actions.emplace_back(BIND([&executionOrderEnforcer, &leashes, idx] {
+        actions.push_back(BIND([&executionOrderEnforcer, &leashes, idx] {
             if (idx == 0) {
                 executionOrderEnforcer(0);
             } else {
@@ -570,15 +570,17 @@ TEST_F(TFairShareInvokerPoolTest, GetTotalWaitEstimateUncorrelatedWithOtherInvok
             }
             leashes[idx].Wait(100 * Quantum);
         })
-        .AsyncVia(invokerPool->GetInvoker(0))
-        .Run());
+            .AsyncVia(invokerPool->GetInvoker(0))
+            .Run());
     }
 
     NThreading::TEvent secondaryLeash;
     auto secondaryAction = BIND([&executionOrderEnforcer, &secondaryLeash] {
         executionOrderEnforcer(1);
         secondaryLeash.Wait(100 * Quantum);
-    }).AsyncVia(invokerPool->GetInvoker(1)).Run();
+    })
+        .AsyncVia(invokerPool->GetInvoker(1))
+        .Run();
 
     auto start = GetInstant();
 

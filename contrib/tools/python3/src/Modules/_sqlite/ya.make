@@ -2,9 +2,9 @@
 
 LIBRARY()
 
-VERSION(3.11.8)
+VERSION(3.12.2)
 
-ORIGINAL_SOURCE(https://github.com/python/cpython/archive/v3.11.8.tar.gz)
+ORIGINAL_SOURCE(https://github.com/python/cpython/archive/v3.12.2.tar.gz)
 
 LICENSE(Python-2.0)
 
@@ -14,6 +14,7 @@ PEERDIR(
 
 ADDINCL(
     contrib/libs/sqlite3
+    contrib/tools/python3/src/Include/internal
 )
 
 IF (USE_SYSTEM_PYTHON)

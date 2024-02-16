@@ -882,12 +882,12 @@ NActors::IActor* MakeModifyBindingActor(
         auto oldTableName = request->Get()->OldBindingContent->name();
 
         bool replaceSupported = computeConfig.IsReplaceIfExistsSyntaxSupported();
-        if (replaceSupported &&
-            oldTableName == request->Get()->Request.content().name()) {
-          // CREATE OR REPLACE
-          return {TSchemaQueryTask{.SQL = MakeCreateExternalDataTableQuery(
-                                       request->Get()->Request.content(),
-                                       sourceName, replaceSupported)}};
+        if (replaceSupported && oldTableName == request->Get()->Request.content().name()) {
+            // CREATE OR REPLACE
+            return {TSchemaQueryTask{
+                .SQL = MakeCreateExternalDataTableQuery(request->Get()->Request.content(),
+                                                        sourceName,
+                                                        replaceSupported)}};
         }
 
         // remove and create new version

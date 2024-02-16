@@ -146,6 +146,7 @@ class TSparseList {
 
         void Load(TInputSerializer& serializer) {
             auto size = serializer.Read<TStorage::size_type>();
+            Storage.reserve(size);
             for (size_t i = 0; i < size; ++i) {
                 auto key = serializer.Read<TStorage::key_type>();
                 NUdf::TUnboxedValue row = serializer.Read<NUdf::TUnboxedValue>();

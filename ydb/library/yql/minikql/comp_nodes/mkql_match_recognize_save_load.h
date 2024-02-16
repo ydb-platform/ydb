@@ -29,6 +29,11 @@ public:
         : Context(context)
     {} 
 
+    template <typename... Ts>
+    void operator()(Ts... args) {
+        (Write(args), ...);
+    }
+
     template<typename Type>
     void Write(const Type& value ) {
         if constexpr (std::is_same_v<std::remove_cv_t<Type>, TString>) {
@@ -43,8 +48,9 @@ public:
             WriteUi32(Buf, value);
         } else if constexpr (std::is_same_v<std::remove_cv_t<Type>, NUdf::TUnboxedValue>) {     // Only Row type (StateType) supported !
             WriteUnboxedValue(Buf, Context.RowPacker.RefMutableObject(Context.Ctx, false, Context.RowType), value);
-        }
-        else {
+        } else if constexpr (std::is_empty_v<Type>){
+            // Empty struct is not saved/loaded.
+        } else {
             static_assert(always_false_v<Type>, "Not supported type / not implemented");
         }
     }
@@ -107,6 +113,11 @@ public:
         , Buf(state.Data(), state.Size())
     {}
 
+    template <typename... Ts>
+    void operator()(Ts&... args) {
+        (Read(args), ...);
+    }
+
     template<typename Type, typename ReturnType = Type>
     ReturnType Read() {
         if constexpr (std::is_same_v<std::remove_cv_t<Type>, TString>) {
@@ -121,8 +132,9 @@ public:
             return ReadUi32(Buf);
         } else if constexpr (std::is_same_v<std::remove_cv_t<Type>, NUdf::TUnboxedValue>) {
             return ReadUnboxedValue(Buf, Context.RowPacker.RefMutableObject(Context.Ctx, false, Context.RowType), Context.Ctx);
-        }
-        else {
+        } else if constexpr (std::is_empty_v<Type>){
+            // Empty struct is not saved/loaded.
+        } else {
             static_assert(always_false_v<Type>, "Not supported type / not implemented");
         }
     }
@@ -141,8 +153,9 @@ public:
             value = ReadUi32(Buf);
         } else if constexpr (std::is_same_v<std::remove_cv_t<Type>, NUdf::TUnboxedValue>) {
             value = ReadUnboxedValue(Buf, Context.RowPacker.RefMutableObject(Context.Ctx, false, Context.RowType), Context.Ctx);
-        }
-        else {
+        } else if constexpr (std::is_empty_v<Type>){
+            // Empty struct is not saved/loaded.
+        } else {
             static_assert(always_false_v<Type>, "Not supported type / not implemented");
         }
     }
@@ -191,8 +204,7 @@ public:
         return NKikimr::NMiniKQL::MakeString(strRef);
     }
 
-    bool Empty()
-    {
+    bool Empty() const {
         return Buf.empty();
     }
 

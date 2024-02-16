@@ -23,6 +23,7 @@ using TQuantityExitTransition = std::pair<std::pair<ui64, ui64>, std::pair<size_
 template <typename... Ts>
 struct TVariantHelper {
     using TVariant =  std::variant<Ts...>;
+    using TTuple =  std::tuple<Ts...>;
 
     static std::variant<Ts...> getVariantByIndex(size_t i) {
         MKQL_ENSURE(i < sizeof...(Ts), "Wrong variant index");
@@ -89,68 +90,22 @@ struct TNfaTransitionGraph {
 
     void Save(TOutputSerializer& serializer) const {
         serializer.Write(Transitions.size());
-
         for (ui64 i = 0; i < Transitions.size(); ++i) {
             serializer.Write(Transitions[i].index());
-
-            std::visit([&](auto&& arg)
-            {
-                using T = std::decay_t<decltype(arg)>;
-                if constexpr (std::is_same_v<T, TVoidTransition>) {
-                    // Nothing
-                }
-                else if constexpr (std::is_same_v<T, TMatchedVarTransition>) {
-                    serializer.Write(arg);
-                }
-                else if constexpr (std::is_same_v<T, TEpsilonTransitions>) {
-                    serializer.Write(arg);
-                }
-                else if constexpr (std::is_same_v<T, TQuantityEnterTransition>) {
-                    serializer.Write(arg);
-                }
-                else if constexpr (std::is_same_v<T, TQuantityExitTransition>) {
-                    serializer.Write(arg);
-                }
-                else 
-                    static_assert(always_false_v<T>, "non-exhaustive visitor!");
-            }, Transitions[i]);
+            std::visit(serializer, Transitions[i]);
         }
-        serializer.Write(Input);
-        serializer.Write(Output);
+        serializer(Input, Output);
     }
 
     void Load(TInputSerializer& serializer) {
         ui64 transitionSize = serializer.Read<TTransitions::size_type>();
-
         Transitions.resize(transitionSize);
         for (ui64 i = 0; i < transitionSize; ++i) {
             size_t index = serializer.Read<std::size_t>();
             Transitions[i] = TNfaTransitionHelper::getVariantByIndex(index);
-            std::visit([&](auto&& arg)
-            {
-                using T = std::decay_t<decltype(arg)>;
-                if constexpr (std::is_same_v<T, TVoidTransition>) {
-                    // Nothing
-                }
-                else if constexpr (std::is_same_v<T, TMatchedVarTransition>) {
-                    serializer.Read(arg);
-                }
-                else if constexpr (std::is_same_v<T, TEpsilonTransitions>) {
-                    serializer.Read(arg);
-                }
-                else if constexpr (std::is_same_v<T, TQuantityEnterTransition>) {
-                    serializer.Read(arg);
-                }
-                else if constexpr (std::is_same_v<T, TQuantityExitTransition>) {
-                    serializer.Read(arg);
-                }
-                else
-                    static_assert(always_false_v<T>, "non-exhaustive visitor!");
-            }, Transitions[i]);
-
+            std::visit(serializer, Transitions[i]);
         }
-        serializer.Read(Input);
-        serializer.Read(Output);
+        serializer(Input, Output);
     }
 };
 

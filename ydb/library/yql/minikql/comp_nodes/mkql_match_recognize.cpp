@@ -178,8 +178,7 @@ public:
 
     NUdf::TUnboxedValue GetOutputIfReady(TComputationContext& ctx) {
         auto match = Nfa.GetMatched();
-        if (!match.has_value())
-        {
+        if (!match.has_value()) {
             return NUdf::TUnboxedValue{};
         }
         Parameters.MatchedVarsArg->SetValue(ctx, ctx.HolderFactory.Create<TMatchedVarsValue<TRange>>(ctx.HolderFactory, match.value()));
@@ -278,7 +277,6 @@ public:
     }
 
     void Load(const NUdf::TStringRef& state) override {
-
         TInputSerializer serializer(SerializerContext, state);
         const auto stateVersion = serializer.Read<decltype(StateVersion)>();
         if (stateVersion == 1) {
@@ -408,19 +406,19 @@ public:
             serializer.Write(key);
             state->Save(serializer);
         }
+        // HasReadyOutput is not packed because when loading we can recalculate HasReadyOutput from Partitions.
         serializer.Write(Terminating);
         return serializer.MakeString();
     }
 
     void Load(const NUdf::TStringRef& state) override {
-
         TInputSerializer serializer(SerializerContext, state);
-
         const auto stateVersion = serializer.Read<decltype(StateVersion)>();
         if (stateVersion == 1) {
             Partitions.clear();
-            auto partitionsSize = serializer.Read<TPartitionMap::size_type>();
-            for (size_t i = 0; i < partitionsSize; ++i) {
+            auto partitionsCount = serializer.Read<TPartitionMap::size_type>();
+            Partitions.reserve(partitionsCount);
+            for (size_t i = 0; i < partitionsCount; ++i) {
                 auto packedKey = serializer.Read<TPartitionMap::key_type, std::string_view>();
                 NUdf::TUnboxedValue key = PartitionKeyPacker.Unpack(packedKey, SerializerContext.Ctx.HolderFactory);
                 auto pair = Partitions.emplace(
@@ -430,7 +428,7 @@ public:
                         Parameters,
                         NfaTransitionGraph,
                         Cache));
-                (pair.first)->second->Load(serializer);
+                pair.first->second->Load(serializer);
             }
 
             for (auto it = Partitions.begin(); it != Partitions.end(); ++it) {

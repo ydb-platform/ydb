@@ -114,7 +114,7 @@ public:
                          TErrorMessageFactoryMethod errorMessageFactoryMethod)
         : TBaseActor<TSchemaQueryYDBActor>(
               proxyActorId, std::move(request), requestTimeout, counters)
-        , Tasks{TSchemaQueryTask{.SQL = std::move(queryFactoryMethod(Request))}}
+        , Tasks{TSchemaQueryTask{.SQL = queryFactoryMethod(Request)}}
         , CompletionStatuses(Tasks.size(), ETaskCompletionStatus::NONE)
         , ErrorMessageFactoryMethod(std::move(errorMessageFactoryMethod))
         , DBPath(Request->Get()->ComputeDatabase->connection().database()) { }

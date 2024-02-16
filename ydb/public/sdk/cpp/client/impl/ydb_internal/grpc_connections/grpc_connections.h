@@ -83,7 +83,7 @@ public:
         auto clientConfig = NYdbGrpc::TGRpcClientConfig(dbState->DiscoveryEndpoint);
         const auto& sslCredentials = dbState->SslCredentials;
 
-        clientConfig.СertProvider = { std::make_shared<grpc::experimental::StaticDataCertificateProvider>(sslCredentials.CaCert, std::vector<grpc::experimental::IdentityKeyCertPair>{ {sslCredentials.PrivateKey, sslCredentials.Cert} }) };
+        clientConfig.SslCredentials = {.pem_root_certs = sslCredentials.CaCert, .pem_private_key = sslCredentials.PrivateKey, .pem_cert_chain = sslCredentials.Cert};
         clientConfig.EnableSsl = sslCredentials.IsEnabled;
 
         clientConfig.MemQuota = MemoryQuota_;

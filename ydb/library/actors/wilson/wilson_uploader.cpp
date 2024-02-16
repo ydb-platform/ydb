@@ -69,10 +69,14 @@ namespace NWilson {
 
             void Bootstrap() {
                 Become(&TThis::StateFunc);
-
-                Channel = grpc::CreateChannel(TStringBuilder() << Host << ":" << Port, RootCA ? grpc::SslCredentials({
-                    .pem_root_certs = TFileInput(RootCA).ReadAll(),
-                }) : grpc::InsecureChannelCredentials());
+                if (RootCA) {
+                    auto certProvide = std::make_shared<grpc::experimental::StaticDataCertificateProvider>(RootCA);
+                    auto options = grpc::experimental::TlsChannelCredentialsOptions();
+                    options.set_certificate_provider(certProvide);
+                    Channel = grpc::CreateChannel(TStringBuilder() << Host << ":" << Port, TlsCredentials(options));
+                } else {
+                    Channel = grpc::CreateChannel(TStringBuilder() << Host << ":" << Port, grpc::InsecureChannelCredentials());
+                }
                 Stub = NServiceProto::TraceService::NewStub(Channel);
 
                 LOG_INFO_S(*TlsActivationContext, WILSON_SERVICE_ID, "TWilsonUploader::Bootstrap");

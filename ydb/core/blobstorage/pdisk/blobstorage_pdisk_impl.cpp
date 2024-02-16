@@ -1523,8 +1523,8 @@ void TPDisk::WhiteboardReport(TWhiteboardReport &whiteboardReport) {
             *Mon.FreeSpaceBytes = availableSize;
             *Mon.UsedSpaceBytes = totalSize - availableSize;
         } else {
-            // If disk is in Error State, show its space as 32KiB (format size)
-            *Mon.FreeSpaceBytes = 32_KB;
+            // If disk is in Error State, show its total and used space as 32KiB (format size)
+            *Mon.FreeSpaceBytes = 0;
             *Mon.UsedSpaceBytes = 32_KB;
             *Mon.TotalSpaceBytes = 32_KB;
         }

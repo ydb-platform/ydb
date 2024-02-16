@@ -12,7 +12,7 @@ namespace NKikimr::NReplication::NService {
 
 Y_UNIT_TEST_SUITE(RemoteTopicReader) {
     template <typename Env>
-    TActorId CreateReader(Env& env, const NYdb::NTopic::TReadSessionSettings& settings) {
+    TActorId CreateReader(Env& env, const TEvYdbProxy::TTopicReaderSettings& settings) {
         auto reader = env.GetRuntime().Register(CreateRemoteTopicReader(env.GetYdbProxy(), settings));
         env.SendAsync(reader, new TEvWorker::TEvHandshake());
 
@@ -36,7 +36,7 @@ Y_UNIT_TEST_SUITE(RemoteTopicReader) {
     }
 
     template <typename Env>
-    auto ReadData(Env& env, TActorId& reader, const NYdb::NTopic::TReadSessionSettings& settings) {
+    auto ReadData(Env& env, TActorId& reader, const TEvYdbProxy::TTopicReaderSettings& settings) {
         reader = CreateReader(env, settings);
         env.SendAsync(reader, new TEvWorker::TEvPoll());
 
@@ -74,7 +74,7 @@ Y_UNIT_TEST_SUITE(RemoteTopicReader) {
             UNIT_ASSERT(ev->Get()->Result.IsSuccess());
         }
 
-        auto settings = NYdb::NTopic::TReadSessionSettings()
+        auto settings = TEvYdbProxy::TTopicReaderSettings()
             .ConsumerName("consumer")
             .AppendTopics(NYdb::NTopic::TTopicReadSettings()
                 .Path("/Root/topic")

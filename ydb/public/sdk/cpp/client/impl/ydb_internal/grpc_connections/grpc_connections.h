@@ -82,7 +82,6 @@ public:
     {
         auto clientConfig = NYdbGrpc::TGRpcClientConfig(dbState->DiscoveryEndpoint);
         const auto& sslCredentials = dbState->SslCredentials;
-
         clientConfig.SslCredentials = {.pem_root_certs = sslCredentials.CaCert, .pem_private_key = sslCredentials.PrivateKey, .pem_cert_chain = sslCredentials.Cert};
         clientConfig.EnableSsl = sslCredentials.IsEnabled;
 

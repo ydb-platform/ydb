@@ -585,15 +585,15 @@ IActor* MakeCreateConnectionActor(
                     status.GetIssues().ToOneLineString().Contains("error: path exist")) {
                     TActivationContext::ActorSystem()->Register(
                         new TGenerateRecoverySQLIfExternalDataSourceAlreadyExistsActor(
-                            std::move(sender),
-                            std::move(scope),
-                            std::move(user),
-                            std::move(token),
-                            std::move(cloudId),
-                            std::move(quotas),
-                            std::move(tenantInfo),
-                            std::move(connectionName),
-                            std::move(permissions),
+                            sender,
+                            scope,
+                            user,
+                            token,
+                            cloudId,
+                            quotas,
+                            tenantInfo,
+                            connectionName,
+                            permissions,
                             requestTimeout,
                             counters.GetCommonCounters(RTC_CREATE_CONNECTION_IN_YDB)));
                     return true;
@@ -857,15 +857,15 @@ IActor* MakeCreateBindingActor(const TActorId& proxyActorId,
                     status.GetIssues().ToOneLineString().Contains("error: path exist")) {
                     TActivationContext::ActorSystem()->Register(
                         new TGenerateRecoverySQLIfExternalDataTableAlreadyExistsActor(
-                            std::move(sender),
-                            std::move(scope),
-                            std::move(user),
-                            std::move(token),
-                            std::move(cloudId),
-                            std::move(quotas),
-                            std::move(tenantInfo),
-                            std::move(bindingName),
-                            std::move(permissions),
+                            sender,
+                            scope,
+                            user,
+                            token,
+                            cloudId,
+                            quotas,
+                            tenantInfo,
+                            bindingName,
+                            permissions,
                             requestTimeout,
                             counters.GetCommonCounters(RTC_CREATE_BINDING_IN_YDB)));
                     return true;

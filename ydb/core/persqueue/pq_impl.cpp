@@ -701,7 +701,11 @@ void TPersQueue::ApplyNewConfigAndReply(const TActorContext& ctx)
     ClearNewConfig();
 
     for (auto& p : Partitions) { //change config for already created partitions
-        ctx.Send(p.second.Actor, new TEvPQ::TEvChangePartitionConfig(TopicConverter, Config));
+        NKikimrPQ::TPQTabletConfig partitionConfig =
+            p.first.IsSupportivePartition() ? MakeSupportivePartitionConfig(Config) : Config;
+        ctx.Send(p.second.Actor,
+                 new TEvPQ::TEvChangePartitionConfig(TopicConverter,
+                                                     partitionConfig));
     }
     ChangePartitionConfigInflight += Partitions.size();
 
@@ -928,9 +932,9 @@ void TPersQueue::AddSupportivePartition(const TPartitionId& partitionId)
     NewSupportivePartitions.insert(partitionId);
 }
 
-NKikimrPQ::TPQTabletConfig TPersQueue::MakeSupportivePartitionConfig() const
+NKikimrPQ::TPQTabletConfig TPersQueue::MakeSupportivePartitionConfig(const NKikimrPQ::TPQTabletConfig& config)
 {
-    NKikimrPQ::TPQTabletConfig partitionConfig = Config;
+    NKikimrPQ::TPQTabletConfig partitionConfig = config;
 
     partitionConfig.MutableReadRules()->Clear();
     partitionConfig.MutableReadFromTimestampsMs()->Clear();
@@ -952,7 +956,7 @@ void TPersQueue::CreateSupportivePartitionActor(const TPartitionId& partitionId,
     TPartitionInfo& partition = Partitions.at(partitionId);
     partition.Actor = ctx.Register(CreatePartitionActor(partitionId,
                                                         TopicConverter,
-                                                        MakeSupportivePartitionConfig(),
+                                                        MakeSupportivePartitionConfig(Config),
                                                         true,
                                                         ctx));
 }
@@ -4111,11 +4115,12 @@ void TPersQueue::SendProposeTransactionAbort(const TActorId& target,
 void TPersQueue::SendEvProposePartitionConfig(const TActorContext& ctx,
                                               TDistributedTransaction& tx)
 {
-    for (auto& [_, partition] : Partitions) {
+    for (auto& [partitionId, partition] : Partitions) {
         auto event = std::make_unique<TEvPQ::TEvProposePartitionConfig>(tx.Step, tx.TxId);
 
         event->TopicConverter = tx.TopicConverter;
-        event->Config = tx.TabletConfig;
+        event->Config =
+            partitionId.IsSupportivePartition() ? MakeSupportivePartitionConfig(tx.TabletConfig) : tx.TabletConfig;
 
         ctx.Send(partition.Actor, std::move(event));
     }

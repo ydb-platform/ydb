@@ -381,25 +381,25 @@ public:
 
     TGenerateRecoverySQLIfExternalDataSourceAlreadyExistsActor(
         const TActorId sender,
-        TString scope,
-        TString user,
-        TString token,
-        TString cloudId,
-        TMaybe<TQuotaMap> quotas,
-        TTenantInfo::TPtr tenantInfo,
-        TString connectionName,
-        TPermissions permissions,
-        TDuration requestTimeout,
+        const TString& scope,
+        const TString& user,
+        const TString& token,
+        const TString& cloudId,
+        const TMaybe<TQuotaMap>& quotas,
+        const TTenantInfo::TPtr& tenantInfo,
+        const TString& connectionName,
+        const TPermissions& permissions,
+        const TDuration& requestTimeout,
         const TRequestCommonCountersPtr& counters)
         : TPlainBaseActor(sender, sender, std::move(requestTimeout), counters)
-        , Scope(std::move(scope))
-        , User(std::move(user))
-        , Token(std::move(token))
-        , CloudId(std::move(cloudId))
-        , Quotas(std::move(quotas))
-        , TenantInfo(std::move(tenantInfo))
-        , ConnectionName(std::move(connectionName))
-        , Permissions(std::move(permissions)) { }
+        , Scope(scope)
+        , User(user)
+        , Token(token)
+        , CloudId(cloudId)
+        , Quotas(quotas)
+        , TenantInfo(tenantInfo)
+        , ConnectionName(connectionName)
+        , Permissions(permissions) { }
 
     void BootstrapImpl() override { CheckConnectionExistenceInCPS(); }
 
@@ -455,26 +455,26 @@ public:
     using TBase = TPlainBaseActor;
 
     TGenerateRecoverySQLIfExternalDataTableAlreadyExistsActor(
-        TActorId sender,
-        TString scope,
-        TString user,
-        TString token,
-        TString cloudId,
-        TMaybe<TQuotaMap> quotas,
-        TTenantInfo::TPtr tenantInfo,
-        TString bindingName,
-        TPermissions permissions,
-        TDuration requestTimeout,
+        const TActorId& sender,
+        const TString& scope,
+        const TString& user,
+        const TString& token,
+        const TString& cloudId,
+        const TMaybe<TQuotaMap>& quotas,
+        const TTenantInfo::TPtr& tenantInfo,
+        const TString& bindingName,
+        const TPermissions& permissions,
+        const TDuration& requestTimeout,
         const TRequestCommonCountersPtr& counters)
-        : TPlainBaseActor(std::move(sender), sender, std::move(requestTimeout), counters)
-        , Scope(std::move(scope))
-        , User(std::move(user))
-        , Token(std::move(token))
-        , CloudId(std::move(cloudId))
-        , Quotas(std::move(quotas))
-        , TenantInfo(std::move(tenantInfo))
-        , BindingName(std::move(bindingName))
-        , Permissions(std::move(permissions)) { }
+        : TPlainBaseActor(sender, sender, std::move(requestTimeout), counters)
+        , Scope(scope)
+        , User(user)
+        , Token(token)
+        , CloudId(cloudId)
+        , Quotas(quotas)
+        , TenantInfo(tenantInfo)
+        , BindingName(bindingName)
+        , Permissions(permissions) { }
 
     void BootstrapImpl() override { CheckBindingExistenceInCPS(); }
 

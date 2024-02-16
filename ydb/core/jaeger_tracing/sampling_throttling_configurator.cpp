@@ -9,6 +9,13 @@
 
 namespace NKikimr::NJaegerTracing {
 
+TSamplingThrottlingConfigurator::TSamplingThrottlingConfigurator(TIntrusivePtr<ITimeProvider> timeProvider,
+                                                                 TIntrusivePtr<IRandomProvider>& randomProvider)
+    : TimeProvider(std::move(timeProvider))
+    , Rng(randomProvider->GenRand64())
+    , CurrentSettings(GenerateThrottlers({}))
+{}
+
 TIntrusivePtr<TSamplingThrottlingControl> TSamplingThrottlingConfigurator::GetControl() {
     auto control = TIntrusivePtr(new TSamplingThrottlingControl(GenerateSetup()));
     IssuedControls.push_back(control);

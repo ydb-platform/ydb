@@ -1881,9 +1881,13 @@ void BuildPlanIndex(NJson::TJsonValue& plan, THashMap<int, NJson::TJsonValue>& p
 
         auto pos = precomputeName.find("precompute");
         if (pos != TString::npos) {
-            precomputes[precomputeName.substr(pos)] = plan;
+            if (!precomputes.contains(precomputeName.substr(pos))) {
+                precomputes[precomputeName.substr(pos)] = plan;
+            }
         } else if (precomputeName.size()>=4 && precomputeName.find("CTE ") != TString::npos) {
-            precomputes[precomputeName.substr(4)] = plan;
+            if (!precomputes.contains(precomputeName.substr(4))) {
+                precomputes[precomputeName.substr(4)] = plan;
+            }
         }
     }
 

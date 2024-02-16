@@ -1894,6 +1894,7 @@ TTestActorRuntimeBase::TEventObserverHolderPair ReplaceEvProposeTransactionWithE
             return;
 
         // Parse original TEvProposeTransaction
+        const ui64 txId = record.GetTxId();
         const TString& txBody = record.GetTxBody();
         NKikimrTxDataShard::TDataTransaction tx;
         Y_VERIFY(tx.ParseFromArray(txBody.data(), txBody.size()));
@@ -1916,31 +1917,29 @@ TTestActorRuntimeBase::TEventObserverHolderPair ReplaceEvProposeTransactionWithE
             Y_VERIFY_S(colCount == 0 || colCount == writes.GetColumns().size(), "Only equal column count is supported now.");
             colCount = writes.GetColumns().size();
 
-            const auto& row = rows.ProcessNextRow(tableId);
+            const auto& row = rows.ProcessRow(tableId, txId);
             Y_VERIFY(row.Cells.size() == colCount);
             std::copy(row.Cells.begin(), row.Cells.end(), std::back_inserter(cells));
         }
-        
-        if (cells.empty()) {
-            Cerr << "TEvProposeTransaction TX_KIND_DATA has no writes.\n";
-            return;
-        }
 
-        Cerr << "TEvProposeTransaction TX_KIND_DATA event is observed and will be replaced with EvWrite: " << record.ShortDebugString() << Endl;
+        Cerr << "TEvProposeTransaction " << txId << " is observed and will be replaced with EvWrite: " << record.ShortDebugString() << Endl;
 
-        TSerializedCellMatrix matrix(cells, cells.size() / colCount, colCount);
-        TString blobData = matrix.ReleaseBuffer();
-
-        UNIT_ASSERT(blobData.size() < 8_MB);
-
-        ui64 txId = record.GetTxId();
         auto txMode = NKikimr::NDataShard::NEvWrite::TConvertor::GetTxMode(record.GetFlags());
-        std::vector<ui32> columnIds(colCount);
-        std::iota(columnIds.begin(), columnIds.end(), 1);
 
         auto evWrite = std::make_unique<NKikimr::NEvents::TDataEvents::TEvWrite>(txId, txMode);
-        ui64 payloadIndex = NKikimr::NEvWrite::TPayloadWriter<NKikimr::NEvents::TDataEvents::TEvWrite>(*evWrite).AddDataToPayload(std::move(blobData));
-        evWrite->AddOperation(NKikimrDataEvents::TEvWrite::TOperation::OPERATION_UPSERT, tableId, columnIds, payloadIndex, NKikimrDataEvents::FORMAT_CELLVEC);
+
+        if (!cells.empty()) {
+            TSerializedCellMatrix matrix(cells, cells.size() / colCount, colCount);
+            TString blobData = matrix.ReleaseBuffer();
+
+            UNIT_ASSERT(blobData.size() < 8_MB);
+
+            std::vector<ui32> columnIds(colCount);
+            std::iota(columnIds.begin(), columnIds.end(), 1);
+
+            ui64 payloadIndex = NKikimr::NEvWrite::TPayloadWriter<NKikimr::NEvents::TDataEvents::TEvWrite>(*evWrite).AddDataToPayload(std::move(blobData));
+            evWrite->AddOperation(NKikimrDataEvents::TEvWrite::TOperation::OPERATION_UPSERT, tableId, columnIds, payloadIndex, NKikimrDataEvents::FORMAT_CELLVEC);
+        }
 
         // Copy locks
         if (tx.HasLockTxId())
@@ -1956,15 +1955,16 @@ TTestActorRuntimeBase::TEventObserverHolderPair ReplaceEvProposeTransactionWithE
         event.Reset(handle);
     });
 
-    auto responseObserver = runtime.AddObserver([&rows](TAutoPtr<IEventHandle>& event) {
+    auto responseObserver = runtime.AddObserver([](TAutoPtr<IEventHandle>& event) {
         if (event->GetTypeRewrite() != NEvents::TDataEvents::EvWriteResult)
             return;
 
         const auto& record = event->Get<NEvents::TDataEvents::TEvWriteResult>()->Record;
-        Cerr << "EvWriteResult event is observed and will be replaced with EvProposeTransactionResult: " << record.ShortDebugString() << Endl;
+        ui64 txId = record.GetTxId();
+
+        Cerr << "EvWriteResult " << txId << " is observed and will be replaced with EvProposeTransactionResult: " << record.ShortDebugString() << Endl;
 
         // Construct new EvProposeTransactionResult
-        ui64 txId = record.GetTxId();
         ui64 origin = record.GetOrigin();
         auto status = NKikimr::NDataShard::NEvWrite::TConvertor::GetStatus(record.GetStatus());
 
@@ -1973,11 +1973,6 @@ TTestActorRuntimeBase::TEventObserverHolderPair ReplaceEvProposeTransactionWithE
         if (status == NKikimrTxDataShard::TEvProposeTransactionResult::PREPARED) {
             evResult->SetPrepared(record.GetMinStep(), record.GetMaxStep(), {});
             evResult->Record.MutableDomainCoordinators()->CopyFrom(record.GetDomainCoordinators());
-            
-            rows.PrepareNextRow();
-        }
-        else {
-            rows.CompleteNextRow();
         }
 
         // Replace event

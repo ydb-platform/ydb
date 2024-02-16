@@ -11,6 +11,7 @@ extern "C" {
 #include "catalog/pg_type_d.h"
 #include "catalog/pg_authid.h"
 #include "access/htup_details.h"
+#include "utils/fmgroids.h"
 }
 
 #undef TypeName
@@ -183,7 +184,7 @@ struct TSysCache {
             std::fill_n(nulls, Natts_pg_type, true);
             std::fill_n(nulls, Anum_pg_type_typcollation, false); // fixed part of Form_pg_type
             FillDatum(Natts_pg_type, values, nulls, Anum_pg_type_oid, oid);
-            auto name = MakeFixedString(desc.Name, NPg::LookupType(NAMEOID).TypeLen);
+            auto name = MakeFixedString(desc.Name, NAMEDATALEN);
             FillDatum(Natts_pg_type, values, nulls, Anum_pg_type_typname, (Datum)name);
             FillDatum(Natts_pg_type, values, nulls, Anum_pg_type_typbyval, desc.PassByValue);
             FillDatum(Natts_pg_type, values, nulls, Anum_pg_type_typlen, desc.TypeLen);
@@ -193,6 +194,8 @@ struct TSysCache {
             FillDatum(Natts_pg_type, values, nulls, Anum_pg_type_typisdefined, true);
             FillDatum(Natts_pg_type, values, nulls, Anum_pg_type_typdelim, desc.TypeDelim);
             FillDatum(Natts_pg_type, values, nulls, Anum_pg_type_typarray, desc.ArrayTypeId);
+            FillDatum(Natts_pg_type, values, nulls, Anum_pg_type_typsubscript,
+                (desc.ArrayTypeId == desc.TypeId) ? F_ARRAY_SUBSCRIPT_HANDLER : desc.TypeSubscriptFuncId);
             FillDatum(Natts_pg_type, values, nulls, Anum_pg_type_typelem, desc.ElementTypeId);
             FillDatum(Natts_pg_type, values, nulls, Anum_pg_type_typinput, desc.InFuncId);
             FillDatum(Natts_pg_type, values, nulls, Anum_pg_type_typoutput, desc.OutFuncId);

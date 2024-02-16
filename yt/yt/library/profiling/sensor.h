@@ -107,7 +107,7 @@ private:
 class TEventTimer
 {
 public:
-    void Record(TDuration value) const;
+    void Record(TDuration value, int count = 1) const;
 
     explicit operator bool() const;
 
@@ -115,6 +115,7 @@ private:
     friend class TProfiler;
 
     ITimerImplPtr Timer_;
+    IHistogramImplPtr Histogram_;
 };
 
 ////////////////////////////////////////////////////////////////////////////////

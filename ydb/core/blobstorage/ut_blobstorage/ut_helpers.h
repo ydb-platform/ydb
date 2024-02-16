@@ -135,22 +135,26 @@ public:
     {}
 
     STRICT_STFUNC(StateWork,
-        cFunc(TEvBlobStorage::TEvPutResult::EventType, ScheduleRequests);
+        cFunc(TEvBlobStorage::TEvPutResult::EventType, HandlePut);
         cFunc(TEvents::TEvWakeup::EventType, WakeupAndSchedule);
         hFunc(TEvBlobStorage::TEvGetResult, Handle);
     )
 
     virtual void BootstrapImpl(const TActorContext&/* ctx*/) override {
-        TString data = MakeData(DataSize);
-        BlobId = TLogoBlobID(1, 1, 1, 10, DataSize, Cookie++);
-        auto ev = new TEvBlobStorage::TEvPut(BlobId, data, TInstant::Max());
-        SendToBSProxy(SelfId(), GroupId, ev, 0);
+        for (ui32 i = 0; i < Settings.Requests; ++i) {
+            TString data = MakeData(DataSize);
+            TLogoBlobID blobId = TLogoBlobID(1, 1, 1, 10, DataSize, Cookie++);
+            BlobIds.push_back(blobId);
+            auto ev = new TEvBlobStorage::TEvPut(blobId, data, TInstant::Max());
+            SendToBSProxy(SelfId(), GroupId, ev, 0);
+        }
         Become(&TInflightActorGet::StateWork);
     }
 
 protected:
     virtual void SendRequest() override {
-        auto ev = new TEvBlobStorage::TEvGet(BlobId, 0, 10, TInstant::Max(), NKikimrBlobStorage::EGetHandleClass::FastRead);
+        auto ev = new TEvBlobStorage::TEvGet(BlobIds[RequestsSent - 1], 0, DataSize, TInstant::Max(),
+                NKikimrBlobStorage::EGetHandleClass::FastRead);
         SendToBSProxy(SelfId(), GroupId, ev, 0);
     }
 
@@ -158,10 +162,17 @@ protected:
         HandleReply(res->Get()->Status);
     }
 
+    void HandlePut() {
+        if (++BlobsWritten == Settings.Requests) {
+            ScheduleRequests();
+        }
+    }
+
 private:
-    TLogoBlobID BlobId;
     std::string Data;
     ui32 DataSize;
+    std::vector<TLogoBlobID> BlobIds;
+    ui32 BlobsWritten = 0;
 };
 
 /////////////////////////////////// TInflightActorPatch ///////////////////////////////////

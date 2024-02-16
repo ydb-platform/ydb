@@ -60,8 +60,12 @@ THolder<TExecutionUnit> CreateExecutionUnit(EExecutionUnitKind kind,
         return CreateBuildDistributedEraseTxOutRSUnit(dataShard, pipeline);
     case EExecutionUnitKind::BuildKqpDataTxOutRS:
         return CreateBuildKqpDataTxOutRSUnit(dataShard, pipeline);
+    case EExecutionUnitKind::BuildWriteOutRS:
+        return CreateBuildWriteOutRSUnit(dataShard, pipeline);
     case EExecutionUnitKind::StoreAndSendOutRS:
         return CreateStoreAndSendOutRSUnit(dataShard, pipeline);
+    case EExecutionUnitKind::StoreAndSendWriteOutRS:
+        return CreateStoreAndSendWriteOutRSUnit(dataShard, pipeline);
     case EExecutionUnitKind::PrepareDataTxInRS:
         return CreatePrepareDataTxInRSUnit(dataShard, pipeline);
     case EExecutionUnitKind::PrepareKqpDataTxInRS:

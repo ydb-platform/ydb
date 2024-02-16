@@ -173,6 +173,10 @@ public:
         }
     }
 
+    [[nodiscard]] bool IsReplaceIfExistsSyntaxSupported() const {
+      return ComputeConfig.GetSupportedComputeYdbFeatures().GetReplaceIfExists();
+    }
+
 private:
     NFq::NConfig::TComputeConfig ComputeConfig;
     NFq::NConfig::EComputeType DefaultCompute;

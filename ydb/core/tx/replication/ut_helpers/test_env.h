@@ -1,3 +1,5 @@
+#pragma once
+
 #include <ydb/core/base/ticket_parser.h>
 #include <ydb/core/protos/replication.pb.h>
 #include <ydb/core/testlib/test_client.h>
@@ -103,6 +105,20 @@ public:
     template <typename... Args>
     auto Describe(Args&&... args) {
         return Client.Ls(std::forward<Args>(args)...);
+    }
+
+    auto GetDescription(const TString& path) {
+        auto resp = Describe(path);
+        return resp->Record;
+    }
+
+    TPathId GetPathId(const TString& path) {
+        const auto& desc = GetDescription(path);
+        UNIT_ASSERT(desc.HasPathDescription());
+        UNIT_ASSERT(desc.GetPathDescription().HasSelf());
+
+        const auto& self = desc.GetPathDescription().GetSelf();
+        return TPathId(self.GetSchemeshardId(), self.GetPathId());
     }
 
     template <typename... Args>

@@ -866,7 +866,7 @@ bool TCachedYPathService::DoInvoke(const IYPathServiceContextPtr& context)
 void TCachedYPathService::RebuildCache()
 {
     try {
-        auto asyncYson = AsyncYPathGet(UnderlyingService_, /* path */ TYPath(), TAttributeFilter());
+        auto asyncYson = AsyncYPathGet(UnderlyingService_, /*path*/ TYPath(), TAttributeFilter());
 
         auto yson = WaitFor(asyncYson)
             .ValueOrThrow();
@@ -928,7 +928,7 @@ private:
     TCachingPermissionValidator PermissionValidator_;
 
     void ValidatePermission(
-        EPermissionCheckScope /* scope */,
+        EPermissionCheckScope /*scope*/,
         EPermission permission,
         const TString& user) override
     {

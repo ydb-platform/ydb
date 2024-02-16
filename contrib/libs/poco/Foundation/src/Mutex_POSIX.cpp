@@ -19,7 +19,7 @@
 #endif
 #include <unistd.h>
 #if defined(POCO_VXWORKS)
-#include <timers.h>
+#error #include <timers.h>
 #include <cstring>
 #else
 #include <sys/time.h>

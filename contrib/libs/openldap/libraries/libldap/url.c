@@ -867,6 +867,10 @@ ldap_url_parse_ext( LDAP_CONST char *url_in, LDAPURLDesc **ludpp, unsigned flags
 	}
 
 	if ( enclosed ) {
+		if ( ! *url ) {
+			LDAP_FREE( url );
+			return LDAP_URL_ERR_BADENCLOSURE;
+		}
 		p = &url[strlen(url)-1];
 
 		if( *p != '>' ) {

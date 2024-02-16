@@ -30,8 +30,8 @@ public:
     {} 
 
     template <typename... Ts>
-    void operator()(Ts... args) {
-        (Write(args), ...);
+    void operator()(Ts&&... args) {
+        (Write(std::forward<Ts>(args)), ...);
     }
 
     template<typename Type>

@@ -136,11 +136,9 @@ class TSparseList {
         }
 
         void Save(TOutputSerializer& serializer) const {
-            serializer.Write(Storage.size());
+            serializer(Storage.size());
             for (const auto& [key, item]: Storage) {
-                serializer.Write(key);
-                serializer.Write(item.Value);
-                serializer.Write(item.LockCount);
+                serializer(key, item.Value, item.LockCount);
             }
         }
 
@@ -148,9 +146,10 @@ class TSparseList {
             auto size = serializer.Read<TStorage::size_type>();
             Storage.reserve(size);
             for (size_t i = 0; i < size; ++i) {
-                auto key = serializer.Read<TStorage::key_type>();
-                NUdf::TUnboxedValue row = serializer.Read<NUdf::TUnboxedValue>();
-                auto lockCount = serializer.Read<decltype(TItem::LockCount)>();
+                TStorage::key_type key;
+                NUdf::TUnboxedValue row;
+                decltype(TItem::LockCount) lockCount;
+                serializer(key, row, lockCount);
                 Storage.emplace(key, TItem{row, lockCount});
             }
         }
@@ -270,15 +269,11 @@ public:
         }
 
         void Save(TOutputSerializer& serializer) const {
-            serializer.Write(Container);
-            serializer.Write(FromIndex);
-            serializer.Write(ToIndex);
+            serializer(Container, FromIndex, ToIndex);
        }
 
         void Load(TInputSerializer& serializer) {
-            serializer.Read(Container);
-            serializer.Read(FromIndex);
-            serializer.Read(ToIndex);
+            serializer(Container, FromIndex, ToIndex);
         }
 
     private:
@@ -337,13 +332,11 @@ public:
     }
 
     void Save(TOutputSerializer& serializer) const {
-        serializer.Write(Container);
-        serializer.Write(ListSize);
+        serializer(Container, ListSize);
     }
 
     void Load(TInputSerializer& serializer) {
-        serializer.Read(Container);
-        serializer.Read(ListSize);
+        serializer(Container, ListSize);
     }
 
 private:

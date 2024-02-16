@@ -89,7 +89,7 @@ struct TNfaTransitionGraph {
     inline constexpr static bool always_false_v = false;
 
     void Save(TOutputSerializer& serializer) const {
-        serializer.Write(Transitions.size());
+        serializer(Transitions.size());
         for (ui64 i = 0; i < Transitions.size(); ++i) {
             serializer.Write(Transitions[i].index());
             std::visit(serializer, Transitions[i]);
@@ -322,7 +322,6 @@ class TNfa {
 
         void Save(TOutputSerializer& serializer) const {
             serializer.Write(Index);
-
             serializer.Write(Vars.size());
             for (const auto& vector : Vars) {
                 serializer.Write(vector.size());

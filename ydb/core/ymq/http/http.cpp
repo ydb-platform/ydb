@@ -586,7 +586,7 @@ bool THttpRequest::SetupRequest() {
         .Counters = Parent_->CloudAuthCounters_.Get(),
         .AWSSignature = std::move(AwsSignature_),
         .IAMToken = IamToken_,
-        .FolderId = FolderId_
+        .FolderID = FolderId_
     };
 
     AppData(Parent_->ActorSystem_)->SqsAuthFactory->RegisterAuthActor(

@@ -847,9 +847,33 @@ class TestSqsYandexCloudMode(get_test_with_sqs_tenant_installation(KikimrSqsTest
         assert self.folder_id != folder_id, f'{self.folder_id} vs {folder_id}'
 
         self._sqs_api = self._create_api_for_user(
-            'ignored', raise_on_error=True, force_private=False, iam_token=self.iam_token, folder_id=self.folder_id
+            'ignored', raise_on_error=True, force_private=False, iam_token=self.iam_token, folder_id=folder_id
         )
 
         queue_url = self._sqs_api.create_queue(self.queue_name, folder_id=self.folder_id)
         attributes_folder_id = self._sqs_api.get_queue_attributes(queue_url, ['All'])['FolderId']
         assert folder_id == attributes_folder_id, f'{attributes_folder_id} vs {folder_id}'
+
+    @pytest.mark.parametrize(**TABLES_FORMAT_PARAMS)
+    def test_cloud_get_queue_attributes_only_folder_id(self, tables_format):
+        self._init_with_params(tables_format=tables_format)
+
+        self._sqs_api = self._create_api_for_user(
+            'ignored', raise_on_error=True, force_private=False, iam_token=self.iam_token, folder_id=self.folder_id
+        )
+
+        queue_url = self._sqs_api.create_queue(self.queue_name, folder_id=self.folder_id)
+        attributes_folder_id = self._sqs_api.get_queue_attributes(queue_url, ['FolderId'])['FolderId']
+        assert self.folder_id == attributes_folder_id, f'{attributes_folder_id} vs {self.folder_id}'
+
+    @pytest.mark.parametrize(**TABLES_FORMAT_PARAMS)
+    def test_cloud_get_queue_attributes_all_attributes_with_folder_id(self, tables_format):
+        self._init_with_params(tables_format=tables_format)
+
+        self._sqs_api = self._create_api_for_user(
+            'ignored', raise_on_error=True, force_private=False, iam_token=self.iam_token, folder_id=self.folder_id
+        )
+
+        queue_url = self._sqs_api.create_queue(self.queue_name, folder_id=self.folder_id)
+        attributes_folder_id = self._sqs_api.get_queue_attributes(queue_url, ['All'])['FolderId']
+        assert self.folder_id == attributes_folder_id, f'{attributes_folder_id} vs {self.folder_id}'

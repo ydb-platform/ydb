@@ -23,23 +23,24 @@ struct TAttributeInfo {
     bool NeedAttributesTable = false;
     bool NeedArn = false;
     bool FifoOnly = false;
+    bool NeedFolderId = false;
 };
 
 static const std::map<TString, TAttributeInfo> AttributesInfo = {
-    { "ApproximateNumberOfMessages",           {  true, false, false, false } },
-    { "ApproximateNumberOfMessagesDelayed",    {  true, false, false, false } },
-    { "ApproximateNumberOfMessagesNotVisible", {  true, false, false, false } },
-    { "CreatedTimestamp",                      {  true, false, false, false } },
-    { "DelaySeconds",                          { false,  true, false, false } },
-    { "MaximumMessageSize",                    { false,  true, false, false } },
-    { "MessageRetentionPeriod",                { false,  true, false, false } },
-    { "ReceiveMessageWaitTimeSeconds",         { false,  true, false, false } },
-    { "RedrivePolicy",                         { false,  true, false, false } },
-    { "VisibilityTimeout",                     { false,  true, false, false } },
-    { "FifoQueue",                             { false,  true, false,  true } },
-    { "ContentBasedDeduplication",             { false,  true, false,  true } },
-    { "QueueArn",                              { false, false,  true, false } },
-    { "FolderId",                              { false, false, false, false } },
+    { "ApproximateNumberOfMessages",           {  true, false, false, false, false } },
+    { "ApproximateNumberOfMessagesDelayed",    {  true, false, false, false, false } },
+    { "ApproximateNumberOfMessagesNotVisible", {  true, false, false, false, false } },
+    { "CreatedTimestamp",                      {  true, false, false, false, false } },
+    { "DelaySeconds",                          { false,  true, false, false, false } },
+    { "MaximumMessageSize",                    { false,  true, false, false, false } },
+    { "MessageRetentionPeriod",                { false,  true, false, false, false } },
+    { "ReceiveMessageWaitTimeSeconds",         { false,  true, false, false, false } },
+    { "RedrivePolicy",                         { false,  true, false, false, false } },
+    { "VisibilityTimeout",                     { false,  true, false, false, false } },
+    { "FifoQueue",                             { false,  true, false,  true, false } },
+    { "ContentBasedDeduplication",             { false,  true, false,  true, false } },
+    { "QueueArn",                              { false, false,  true, false, false } },
+    { "FolderId",                              { false, false, false, false, true  } },
 };
 
 class TGetQueueAttributesActor
@@ -76,6 +77,9 @@ private:
                 if (info->second.NeedArn) {
                     NeedArn_ = true;
                 }
+                if (info->second.NeedFolderId) {
+                    NeedFolderId_ = true;
+                }
 
                 AttributesSet_.insert(name);
             }
@@ -91,6 +95,7 @@ private:
             NeedRuntimeAttributes_ = true;
             NeedAttributesTable_ = true;
             NeedArn_ = true;
+            NeedFolderId_ = true;
         }
         return true;
     }
@@ -153,7 +158,7 @@ private:
             ++WaitCount_;
         }
 
-        if (NeedArn_) {
+        if (NeedArn_ || NeedFolderId_) {
             if (IsCloud()) {
                 Send(MakeSqsServiceID(SelfId().NodeId()), new TSqsEvents::TEvGetQueueFolderIdAndCustomName(RequestId_, UserName_, GetQueueName()));
                 ++WaitCount_;
@@ -282,7 +287,9 @@ private:
             result->SetQueueArn(MakeQueueArn(cloudArnPrefix, Cfg().GetYandexCloudServiceRegion(), ev->Get()->QueueFolderId, ev->Get()->QueueCustomName));
         }
 
-        result->SetFolderId(ev->Get()->QueueFolderId);
+        if (NeedFolderId_) {
+            result->SetFolderId(ev->Get()->QueueFolderId);
+        }
 
         --WaitCount_;
         ReplyIfReady();
@@ -297,6 +304,7 @@ private:
     bool NeedRuntimeAttributes_ = false;
     bool NeedAttributesTable_ = false;
     bool NeedArn_ = false;
+    bool NeedFolderId_ = false;
     size_t WaitCount_ = 0;
 };
 

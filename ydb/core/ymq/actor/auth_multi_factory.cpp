@@ -95,7 +95,7 @@ public:
         , Action_(data.Action)
         , IamToken_(data.IAMToken)
         , InfraToken_(infraToken)
-        , FolderId_(data.FolderId)
+        , FolderId_(data.FolderID)
         , CloudId_(data.CloudID)
         , ResourceId_(data.ResourceID)
         , Counters_(*data.Counters)

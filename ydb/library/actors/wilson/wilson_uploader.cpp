@@ -187,9 +187,10 @@ namespace NWilson {
             }
 
             void ScheduleBatchCompletionEvent() {
-                TActivationContext::Schedule(NextBatchCompletion,
-                                             new IEventHandle(TEvents::TSystem::Wakeup, 0, SelfId(),
-                                                              {}, nullptr, NextBatchCompletion.GetValue()));
+                Y_ABORT_UNLESS(!BatchCompletionScheduled);
+                auto cookie = NextBatchCompletion.GetValue();
+                TActivationContext::Schedule(NextBatchCompletion, new IEventHandle(TEvents::TSystem::Wakeup, 0, SelfId(), {}, nullptr, cookie));
+                ALOG_TRACE(WILSON_SERVICE_ID, "scheduling batch completion w/ cookie=" << cookie);
                 BatchCompletionScheduled = true;
             }
 
@@ -283,19 +284,21 @@ namespace NWilson {
             void ScheduleWakeup(T&& deadline) {
                 if (!WakeupScheduled) {
                     TActivationContext::Schedule(deadline,
-                                                 new IEventHandle(TEvents::TSystem::Wakeup, 0, SelfId(),
-                                                                  {}, nullptr, NextBatchCompletion.GetValue()));
+                                                 new IEventHandle(TEvents::TSystem::Wakeup, 0,
+                                                                  SelfId(), {}, nullptr, 0));
                     WakeupScheduled = true;
                 }
             }
 
             void HandleWakeup(TEvents::TEvWakeup::TPtr& ev) {
                 const auto cookie = ev->Cookie;
+                ALOG_TRACE(WILSON_SERVICE_ID, "wakeup received w/ cookie=" << cookie);
                 if (cookie == 0) {
                     Y_ABORT_UNLESS(WakeupScheduled);
                     WakeupScheduled = false;
                 } else {
-                    Y_ABORT_UNLESS(std::exchange(BatchCompletionScheduled, false));
+                    Y_ABORT_UNLESS(BatchCompletionScheduled);
+                    BatchCompletionScheduled = false;
                     if (cookie == NextBatchCompletion.GetValue()) {
                         CompleteCurrentBatch();
                     } else {

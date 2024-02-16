@@ -516,5 +516,16 @@ from pg_catalog.pg_type)",
             settings);
         UNIT_ASSERT(res.IsOk());
         UNIT_ASSERT(res.Root);
+
+        res = SqlToYqlWithMode(
+            R"(select * from pg_type;)",
+            NSQLTranslation::ESqlMode::QUERY,
+            10,
+            {},
+            EDebugOutput::None,
+            false,
+            settings);
+        UNIT_ASSERT(res.IsOk());
+        UNIT_ASSERT(res.Root);
     }
 }

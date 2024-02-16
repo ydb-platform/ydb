@@ -397,7 +397,17 @@ class KikimrConfigGenerator(object):
                         "port": generic_connector_config.Endpoint.port,
                     },
                     "use_ssl": generic_connector_config.UseSsl
-                }
+                },
+                "default_settings": [
+                    {
+                        "name": "DateTimeFormat",
+                        "value": "string"
+                    },
+                    {
+                        "name": "UsePredicatePushdown",
+                        "value": "true"
+                    }
+                ]
             }
 
             self.yaml_config["feature_flags"]["enable_external_data_sources"] = True

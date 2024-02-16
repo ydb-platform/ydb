@@ -25,7 +25,7 @@ void TKafkaFindCoordinatorActor::Bootstrap(const NActors::TActorContext& ctx) {
 
     bool withProxy = Context->Config.HasProxy() && !Context->Config.GetProxy().GetHostname().Empty();
     if (withProxy) {
-        SendResponseOkAndDie(Context->Config.GetProxy().GetHostname(), Context->Config.GetProxy().GetPort(), -1, ctx);
+        SendResponseOkAndDie(Context->Config.GetProxy().GetHostname(), Context->Config.GetProxy().GetPort(), NKafka::ProxyNodeId, ctx);
         return;
     }
 
@@ -54,6 +54,8 @@ void TKafkaFindCoordinatorActor::SendResponseOkAndDie(const TString& host, i32 p
     response->Port = port;
     response->NodeId = nodeId;
 
+    KAFKA_LOG_D("FIND_COORDINATOR response. Host#: " << host << ", Port#: " << port << ", NodeId# " << nodeId);
+
     Send(Context->ConnectionId, new TEvKafka::TEvResponse(CorrelationId, response, static_cast<EKafkaErrors>(response->ErrorCode)));
     Die(ctx);
 }
@@ -71,7 +73,9 @@ void TKafkaFindCoordinatorActor::SendResponseFailAndDie(EKafkaErrors error, cons
 
         response->Coordinators.push_back(coordinator);
     }
-    
+
+    response->ErrorCode = error;
+ 
     Send(Context->ConnectionId, new TEvKafka::TEvResponse(CorrelationId, response, static_cast<EKafkaErrors>(response->ErrorCode)));
     Die(ctx);
 }
@@ -79,7 +83,11 @@ void TKafkaFindCoordinatorActor::SendResponseFailAndDie(EKafkaErrors error, cons
 void TKafkaFindCoordinatorActor::Handle(NKikimr::NIcNodeCache::TEvICNodesInfoCache::TEvGetAllNodesInfoResponse::TPtr& ev, const NActors::TActorContext& ctx) {
     auto iter = ev->Get()->NodeIdsMapping->find(ctx.SelfID.NodeId());
     Y_ABORT_UNLESS(!iter.IsEnd());
+    
 	auto host = (*ev->Get()->Nodes)[iter->second].Host;
+    if (host.StartsWith(UnderlayPrefix)) {
+        host = host.substr(sizeof(UnderlayPrefix) - 1);
+    }
     KAFKA_LOG_D("FIND_COORDINATOR incoming TEvGetAllNodesInfoResponse. Host#: " << host);
     SendResponseOkAndDie(host, Context->Config.GetListeningPort(), ctx.SelfID.NodeId(), ctx);
 }

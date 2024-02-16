@@ -37,13 +37,14 @@ protected:
     NTable::TDescribeTableResult DescribeTable(const TString& relativePath);
 
 private:
-    void PrintDirectoryRecursive(const TString& fullPath, const TString& relativePath);
+    NThreading::TFuture<void> PrintDirectoryRecursive(const TString& fullPath, const TString& relativePath);
     static bool IsDirectoryLike(const NScheme::TSchemeEntry& entry);
 
 protected:
     NTable::TTableClient TableClient;
     NScheme::TSchemeClient SchemeClient;
     const TSettings Settings;
+    TAdaptiveLock Lock;
 };
 
 class TDefaultSchemePrinter : public TSchemePrinterBase {

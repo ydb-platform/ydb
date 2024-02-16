@@ -391,7 +391,7 @@ public:
         const TPermissions& permissions,
         const TDuration& requestTimeout,
         const TRequestCommonCountersPtr& counters)
-        : TPlainBaseActor(sender, sender, std::move(requestTimeout), counters)
+        : TPlainBaseActor(sender, sender, requestTimeout, counters)
         , Scope(scope)
         , User(user)
         , Token(token)
@@ -466,7 +466,7 @@ public:
         const TPermissions& permissions,
         const TDuration& requestTimeout,
         const TRequestCommonCountersPtr& counters)
-        : TPlainBaseActor(sender, sender, std::move(requestTimeout), counters)
+        : TPlainBaseActor(sender, sender, requestTimeout, counters)
         , Scope(scope)
         , User(user)
         , Token(token)

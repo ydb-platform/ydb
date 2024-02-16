@@ -107,7 +107,7 @@ public:
 
 NDq::IDqAsyncIoFactory::TPtr CreateAsyncIoFactory(const NYdb::TDriver& driver, IHTTPGateway::TPtr httpGateway) {
     auto factory = MakeIntrusive<NYql::NDq::TDqAsyncIoFactory>();
-    RegisterDqPqReadActorFactory(*factory, driver, nullptr);
+    RegisterDqPqReadActorFactory(*factory, driver, nullptr, true, ELogPriority::TLOG_INFO);
     RegisterYdbReadActorFactory(*factory, driver, nullptr);
     RegisterS3ReadActorFactory(*factory, nullptr, httpGateway);
     RegisterClickHouseReadActorFactory(*factory, nullptr, httpGateway);

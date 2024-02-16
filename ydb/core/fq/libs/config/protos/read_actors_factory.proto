@@ -18,6 +18,7 @@ message TS3ReadActorFactoryConfig {
 
 message TPqReadActorFactoryConfig {
     bool CookieCommitMode = 1; // Turn off RangesMode setting in PQ read session.
+    uint64 ReadSessionLogLevel = 2;
 }
 
 message TReadActorsFactoryConfig {

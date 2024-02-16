@@ -104,7 +104,8 @@ public:
         std::shared_ptr<NYdb::ICredentialsProviderFactory> credentialsProviderFactory,
         const NActors::TActorId& computeActorId,
         i64 bufferSize,
-        bool rangesMode)
+        bool rangesMode,
+        ELogPriority readSessionLogLevel)
         : TActor<TDqPqReadActor>(&TDqPqReadActor::StateFunc)
         , InputIndex(inputIndex)
         , TxId(txId)
@@ -118,6 +119,7 @@ public:
         , ReadParams(std::move(readParams))
         , StartingMessageTimestamp(TInstant::MilliSeconds(TInstant::Now().MilliSeconds())) // this field is serialized as milliseconds, so drop microseconds part to be consistent with storage
         , ComputeActorId(computeActorId)
+        , ReadSessionLogLevel(readSessionLogLevel)
     {
         MetadataFields.reserve(SourceParams.MetadataFieldsSize());
         TPqMetaExtractor fieldsExtractor;
@@ -374,7 +376,8 @@ private:
             .ConsumerName(SourceParams.GetConsumerName())
             .MaxMemoryUsageBytes(BufferSize)
             .StartingMessageTimestamp(StartingMessageTimestamp)
-            .RangesMode(RangesMode);
+            .RangesMode(RangesMode)
+            .Log(CreateLogBackend("cerr", ReadSessionLogLevel));
     }
 
     static TPartitionKey MakePartitionKey(const NYdb::NPersQueue::TPartitionStream::TPtr& partitionStreamPtr) {
@@ -581,6 +584,7 @@ private:
     std::queue<TReadyBatch> ReadyBuffer;
     TMaybe<TDqSourceWatermarkTracker<TPartitionKey>> WatermarkTracker;
     TMaybe<TInstant> NextIdlenesCheckAt;
+    ELogPriority ReadSessionLogLevel;
 };
 
 std::pair<IDqComputeActorAsyncInput*, NActors::IActor*> CreateDqPqReadActor(
@@ -596,7 +600,8 @@ std::pair<IDqComputeActorAsyncInput*, NActors::IActor*> CreateDqPqReadActor(
     const NActors::TActorId& computeActorId,
     const NKikimr::NMiniKQL::THolderFactory& holderFactory,
     i64 bufferSize,
-    bool rangesMode
+    bool rangesMode,
+    ELogPriority readSessionLogLevel
     )
 {
     auto taskParamsIt = taskParams.find("pq");
@@ -621,15 +626,21 @@ std::pair<IDqComputeActorAsyncInput*, NActors::IActor*> CreateDqPqReadActor(
         CreateCredentialsProviderFactoryForStructuredToken(credentialsFactory, token, addBearerToToken),
         computeActorId,
         bufferSize,
-        rangesMode
+        rangesMode,
+        readSessionLogLevel
     );
 
     return {actor, actor};
 }
 
-void RegisterDqPqReadActorFactory(TDqAsyncIoFactory& factory, NYdb::TDriver driver, ISecuredServiceAccountCredentialsFactory::TPtr credentialsFactory, bool rangesMode) {
+void RegisterDqPqReadActorFactory(
+    TDqAsyncIoFactory& factory,
+    NYdb::TDriver driver,
+    ISecuredServiceAccountCredentialsFactory::TPtr credentialsFactory,
+    bool rangesMode,
+    ELogPriority readSessionLogLevel) {
     factory.RegisterSource<NPq::NProto::TDqPqTopicSource>("PqSource",
-        [driver = std::move(driver), credentialsFactory = std::move(credentialsFactory), rangesMode](
+        [driver = std::move(driver), credentialsFactory = std::move(credentialsFactory), rangesMode, readSessionLogLevel](
             NPq::NProto::TDqPqTopicSource&& settings,
             IDqAsyncIoFactory::TSourceArguments&& args)
     {
@@ -647,7 +658,8 @@ void RegisterDqPqReadActorFactory(TDqAsyncIoFactory& factory, NYdb::TDriver driv
             args.ComputeActorId,
             args.HolderFactory,
             PQReadDefaultFreeSpace,
-            rangesMode);
+            rangesMode,
+            readSessionLogLevel);
     });
 
 }

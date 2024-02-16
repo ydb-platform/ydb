@@ -38,6 +38,11 @@ std::pair<IDqComputeActorAsyncInput*, NActors::IActor*> CreateDqPqReadActor(
     bool rangesMode = true
     );
 
-void RegisterDqPqReadActorFactory(TDqAsyncIoFactory& factory, NYdb::TDriver driver, ISecuredServiceAccountCredentialsFactory::TPtr credentialsFactory, bool rangesMode = true);
+void RegisterDqPqReadActorFactory(
+    TDqAsyncIoFactory& factory,
+    NYdb::TDriver driver,
+    ISecuredServiceAccountCredentialsFactory::TPtr credentialsFactory,
+    bool rangesMode,
+    ELogPriority readSessionLogLevel);
 
 } // namespace NYql::NDq

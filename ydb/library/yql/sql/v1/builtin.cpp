@@ -2097,6 +2097,11 @@ private:
             }
         }
 
+        if (sessionWindow->HasState(ENodeState::Failed)) {
+            return false;
+        }
+
+        YQL_ENSURE(sessionWindow->HasState(ENodeState::Initialized));
         YQL_ENSURE(sessionWindow->GetLabel());
         Node = Y("Member", "row", BuildQuotedAtom(Pos, sessionWindow->GetLabel()));
         if (OverWindow) {

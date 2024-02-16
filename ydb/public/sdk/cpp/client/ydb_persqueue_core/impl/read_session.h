@@ -518,6 +518,11 @@ public:
         (NotReady.empty() ? Ready : NotReady).pop_back();
     }
 
+    void clear() noexcept {
+        NotReady.clear();
+        Ready.clear();
+    }
+
     void SignalReadyEvents(TIntrusivePtr<TPartitionStreamImpl<UseMigrationProtocol>> stream,
                            TReadSessionEventsQueue<UseMigrationProtocol>& queue,
                            TDeferredActions<UseMigrationProtocol>& deferred);
@@ -718,6 +723,10 @@ public:
     }
 
     void DeleteNotReadyTail(TDeferredActions<UseMigrationProtocol>& deferred);
+
+    void ClearQueue() noexcept {
+        EventsQueue.clear();
+    }
 
     static void GetDataEventImpl(TIntrusivePtr<TPartitionStreamImpl<UseMigrationProtocol>> partitionStream,
                                  size_t& maxEventsCount,
@@ -959,6 +968,8 @@ public:
     {
     }
 
+    ~TSingleClusterReadSessionImpl();
+
     void Start();
     void ConfirmPartitionStreamCreate(const TPartitionStreamImpl<UseMigrationProtocol>* partitionStream, TMaybe<ui64> readOffset, TMaybe<ui64> commitOffset);
     void ConfirmPartitionStreamDestroy(TPartitionStreamImpl<UseMigrationProtocol>* partitionStream);
@@ -1190,6 +1201,8 @@ private:
     std::atomic<int> DecompressionTasksInflight = 0;
     i64 ReadSizeBudget;
     i64 ReadSizeServerDelta = 0;
+
+    TString Dummy = TString(1000000, 'x');
 };
 
 // High level class that manages several read session impls.

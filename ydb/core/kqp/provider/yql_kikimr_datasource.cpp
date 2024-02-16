@@ -357,7 +357,7 @@ public:
                         && res.Metadata->Kind == EKikimrTableKind::View
                 ) {
                     const auto& viewMetadata = *res.Metadata;
-                    auto* viewInfo = preparingQuery->MutablePhysicalQuery()->MutableViewsInfo()->Add();
+                    auto* viewInfo = preparingQuery->MutablePhysicalQuery()->MutableViewInfos()->Add();
                     auto* pathId = viewInfo->MutableTableId();
                     pathId->SetOwnerId(viewMetadata.PathId.OwnerId());
                     pathId->SetTableId(viewMetadata.PathId.TableId());

@@ -1918,6 +1918,57 @@ Y_UNIT_TEST_SUITE(KqpQueryService) {
             )", TTxControl::NoTx()).ExtractValueSync();
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::UNSUPPORTED, result.GetIssues().ToString());
         }
+
+        {
+            // Check parser errors
+            auto result = db.ExecuteQuery(R"(
+                UPSERT INTO TestDdl4 (Key, Value) VALUES (2, 2);
+                SELECT * FROM $a;
+                UPSERT INTO TestDdl4 (Key, Value) VALUES (3, 3);
+            )", TTxControl::NoTx()).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::INTERNAL_ERROR, result.GetIssues().ToString());
+            UNIT_ASSERT(result.GetIssues().ToOneLineString().Contains("Unknown name: $a"));
+
+            result = db.ExecuteQuery(R"(
+                SELECT * FROM TestDdl4;
+            )", TTxControl::NoTx()).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+            UNIT_ASSERT_VALUES_EQUAL(result.GetResultSets().size(), 1);
+            CompareYson(R"([[[1u];[1u]]])", FormatResultSetYson(result.GetResultSet(0)));
+
+            result = db.ExecuteQuery(R"(
+                UPSERT INTO TestDdl4 (Key, Value) VALUES (2, 2);
+                UPSERT INTO TestDdl4 (Key, Value) VALUES (3, "3");
+            )", TTxControl::NoTx()).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::GENERIC_ERROR, result.GetIssues().ToString());
+            UNIT_ASSERT(result.GetIssues().ToOneLineString().Contains("Error: Failed to convert 'Value': String to Optional<Uint64>"));
+
+            result = db.ExecuteQuery(R"(
+                SELECT * FROM TestDdl4;
+            )", TTxControl::NoTx()).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+            UNIT_ASSERT_VALUES_EQUAL(result.GetResultSets().size(), 1);
+            CompareYson(R"([[[1u];[1u]];[[2u];[2u]]])", FormatResultSetYson(result.GetResultSet(0)));
+
+            result = db.ExecuteQuery(R"(
+                CREATE TABLE TestDdl5 (
+                    Key Uint64,
+                    Value Uint64,
+                    PRIMARY KEY (Key)
+                );
+                UPSERT INTO TestDdl5 (Key, Value) VALUES (1, 1);
+                UPSERT INTO TestDdl5 (Key, Value) VALUES (3, "3");
+            )", TTxControl::NoTx()).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::GENERIC_ERROR, result.GetIssues().ToString());
+            UNIT_ASSERT(result.GetIssues().ToOneLineString().Contains("Error: Failed to convert 'Value': String to Optional<Uint64>"));
+
+            result = db.ExecuteQuery(R"(
+                SELECT * FROM TestDdl5;
+            )", TTxControl::NoTx()).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+            UNIT_ASSERT_VALUES_EQUAL(result.GetResultSets().size(), 1);
+            CompareYson(R"([[[1u];[1u]]])", FormatResultSetYson(result.GetResultSet(0)));
+        }
     }
 }
 

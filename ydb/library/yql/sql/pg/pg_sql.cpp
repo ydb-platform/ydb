@@ -4493,6 +4493,7 @@ NYql::TAstParseResult PGToYql(const TString& query, const NSQLTranslation::TTran
     TVector<NYql::TAstParseResult> results;
     TConverter converter(results, settings, query);
     NYql::PGParse(query, converter);
+    Y_ENSURE(!results.empty());
     return std::move(results.back());
 }
 

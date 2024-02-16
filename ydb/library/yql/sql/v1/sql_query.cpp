@@ -2727,7 +2727,6 @@ TNodePtr TSqlQuery::Build(const std::vector<::NSQLv1Generated::TRule_sql_stmt_co
     }
 
     auto result = BuildQuery(Ctx.Pos(), blocks, true, Ctx.Scoped);
-    WarnUnusedNodes();
     return result;
 }
 namespace {

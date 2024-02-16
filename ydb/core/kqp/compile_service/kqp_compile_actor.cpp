@@ -365,7 +365,7 @@ private:
                     << ", owner: " << Owner
                     << ", statement id: " << statementId);
 
-                NYql::TIssue issue(NYql::TPosition(), "Internal error while parsing query.");
+                NYql::TIssue issue(NYql::TPosition(), "Error while parsing query.");
                 for (const auto& i : astStatements[statementId].Ast->Issues) {
                     issue.AddSubIssue(MakeIntrusive<NYql::TIssue>(i));
                 }

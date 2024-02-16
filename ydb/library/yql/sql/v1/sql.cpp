@@ -115,13 +115,54 @@ NYql::TAstParseResult SqlToYql(const TString& query, const NSQLTranslation::TTra
 }
 
 bool NeedUseForAllStatements(const TRule_sql_stmt_core::AltCase& subquery) {
-    return subquery == TRule_sql_stmt_core::kAltSqlStmtCore1 || // pragma
-        subquery == TRule_sql_stmt_core::kAltSqlStmtCore3 ||    // named nodes
-        subquery == TRule_sql_stmt_core::kAltSqlStmtCore6 ||    // use
-        subquery == TRule_sql_stmt_core::kAltSqlStmtCore12 ||   // declare
-        subquery == TRule_sql_stmt_core::kAltSqlStmtCore13 ||   // import
-        subquery == TRule_sql_stmt_core::kAltSqlStmtCore14 ||   // export
-        subquery == TRule_sql_stmt_core::kAltSqlStmtCore17;     // define action or subquery
+    switch (subquery) {
+        case TRule_sql_stmt_core::kAltSqlStmtCore1:  // pragma
+        case TRule_sql_stmt_core::kAltSqlStmtCore3:  // named nodes
+        case TRule_sql_stmt_core::kAltSqlStmtCore6:  // use
+        case TRule_sql_stmt_core::kAltSqlStmtCore12: // declare
+        case TRule_sql_stmt_core::kAltSqlStmtCore13: // import
+        case TRule_sql_stmt_core::kAltSqlStmtCore14: // export
+        case TRule_sql_stmt_core::kAltSqlStmtCore18: // define action or subquery
+            return true;
+        case TRule_sql_stmt_core::ALT_NOT_SET:
+        case TRule_sql_stmt_core::kAltSqlStmtCore2:  // select
+        case TRule_sql_stmt_core::kAltSqlStmtCore4:  // create table
+        case TRule_sql_stmt_core::kAltSqlStmtCore5:  // drop table
+        case TRule_sql_stmt_core::kAltSqlStmtCore7:  // into table
+        case TRule_sql_stmt_core::kAltSqlStmtCore8:  // commit
+        case TRule_sql_stmt_core::kAltSqlStmtCore9:  // update
+        case TRule_sql_stmt_core::kAltSqlStmtCore10: // delete
+        case TRule_sql_stmt_core::kAltSqlStmtCore11: // rollback
+        case TRule_sql_stmt_core::kAltSqlStmtCore15: // alter table
+        case TRule_sql_stmt_core::kAltSqlStmtCore16: // alter external table
+        case TRule_sql_stmt_core::kAltSqlStmtCore17: // do
+        case TRule_sql_stmt_core::kAltSqlStmtCore19: // if
+        case TRule_sql_stmt_core::kAltSqlStmtCore20: // for
+        case TRule_sql_stmt_core::kAltSqlStmtCore21: // values 
+        case TRule_sql_stmt_core::kAltSqlStmtCore22: // create user
+        case TRule_sql_stmt_core::kAltSqlStmtCore23: // alter user
+        case TRule_sql_stmt_core::kAltSqlStmtCore24: // create group
+        case TRule_sql_stmt_core::kAltSqlStmtCore25: // alter group 
+        case TRule_sql_stmt_core::kAltSqlStmtCore26: // drop role 
+        case TRule_sql_stmt_core::kAltSqlStmtCore27: // create object 
+        case TRule_sql_stmt_core::kAltSqlStmtCore28: // alter object 
+        case TRule_sql_stmt_core::kAltSqlStmtCore29: // drop object 
+        case TRule_sql_stmt_core::kAltSqlStmtCore30: // create external data source 
+        case TRule_sql_stmt_core::kAltSqlStmtCore31: // alter external data source 
+        case TRule_sql_stmt_core::kAltSqlStmtCore32: // drop external data source 
+        case TRule_sql_stmt_core::kAltSqlStmtCore33: // create replication 
+        case TRule_sql_stmt_core::kAltSqlStmtCore34: // drop replication 
+        case TRule_sql_stmt_core::kAltSqlStmtCore35: // create topic 
+        case TRule_sql_stmt_core::kAltSqlStmtCore36: // alter topic 
+        case TRule_sql_stmt_core::kAltSqlStmtCore37: // drop topic
+        case TRule_sql_stmt_core::kAltSqlStmtCore38: // grant permissions
+        case TRule_sql_stmt_core::kAltSqlStmtCore39: // revoke permissions
+        case TRule_sql_stmt_core::kAltSqlStmtCore40: // alter table store
+        case TRule_sql_stmt_core::kAltSqlStmtCore41: // upsert object
+        case TRule_sql_stmt_core::kAltSqlStmtCore42: // create view
+        case TRule_sql_stmt_core::kAltSqlStmtCore43: // drop view
+            return false;
+    }
 }
 
 TVector<NYql::TAstParseResult> SqlToAstStatements(const TString& query, const NSQLTranslation::TTranslationSettings& settings, NYql::TWarningRules* warningRules)
@@ -144,11 +185,6 @@ TVector<NYql::TAstParseResult> SqlToAstStatements(const TString& query, const NS
     if (astProto) {
         auto ast = static_cast<const TSQLv1ParserAST&>(*astProto);
         const auto& query = ast.GetRule_sql_query();
-        if (!settings.PerStatementExecution) {
-            res.emplace_back();
-            SqlASTToYqlImpl(res.back(), *astProto, ctx);
-            return res;
-        }
         if (query.Alt_case() == NSQLv1Generated::TRule_sql_query::kAltSqlQuery1) {
             std::vector<::NSQLv1Generated::TRule_sql_stmt_core> commonStates;
             std::vector<::NSQLv1Generated::TRule_sql_stmt_core> result;
@@ -159,6 +195,8 @@ TVector<NYql::TAstParseResult> SqlToAstStatements(const TString& query, const NS
                 TContext ctx(settings, hints, issues);
                 res.emplace_back();
                 SqlASTsToYqlsImpl(res.back(), {statements.GetRule_sql_stmt2().GetRule_sql_stmt_core2()}, ctx);
+                res.back().Issues = std::move(issues);
+                issues.Clear();
             }
             for (auto block: statements.GetBlock3()) {
                 if (NeedUseForAllStatements(block.GetRule_sql_stmt2().GetRule_sql_stmt_core2().Alt_case())) {
@@ -170,6 +208,8 @@ TVector<NYql::TAstParseResult> SqlToAstStatements(const TString& query, const NS
                 result = commonStates;
                 result.push_back(block.GetRule_sql_stmt2().GetRule_sql_stmt_core2());
                 SqlASTsToYqlsImpl(res.back(), result, ctx);
+                res.back().Issues = std::move(issues);
+                issues.Clear();
             }
         }
     } else {

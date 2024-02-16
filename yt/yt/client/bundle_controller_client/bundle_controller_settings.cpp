@@ -99,21 +99,16 @@ void TBundleConfigConstraints::Register(TRegistrar registrar)
         .Default();
 }
 
-void TResourceQuota::Register(TRegistrar registrar)
+
+void TBundleResourceQuota::Register(TRegistrar registrar)
 {
-    registrar.Parameter("cpu", &TThis::Cpu)
+    registrar.Parameter("vcpu", &TThis::Vcpu)
         .GreaterThanOrEqual(0)
         .Default(0);
 
     registrar.Parameter("memory", &TThis::Memory)
         .GreaterThanOrEqual(0)
         .Default(0);
-}
-
-int TResourceQuota::Vcpu() const
-{
-    const int VFactor = 1000;
-    return static_cast<int>(Cpu * VFactor);
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -285,19 +280,16 @@ void FromProto(TBundleConfigConstraintsPtr bundleConfigConstraints, const NBundl
 
 ////////////////////////////////////////////////////////////////////////////////
 
-void ToProto(NBundleController::NProto::TResourceQuota* protoResourceQuota, const TResourceQuotaPtr resourceQuota)
+void ToProto(NBundleController::NProto::TResourceQuota* protoResourceQuota, const TBundleResourceQuotaPtr resourceQuota)
 {
-    protoResourceQuota->set_vcpu(resourceQuota->Vcpu());
+    protoResourceQuota->set_vcpu(resourceQuota->Vcpu);
     protoResourceQuota->set_memory(resourceQuota->Memory);
 }
 
-void FromProto(TResourceQuotaPtr resourceQuota, const NBundleController::NProto::TResourceQuota* protoResourceQuota)
+void FromProto(TBundleResourceQuotaPtr resourceQuota, const NBundleController::NProto::TResourceQuota* protoResourceQuota)
 {
     YT_FROMPROTO_OPTIONAL_PTR(protoResourceQuota, memory, resourceQuota, Memory);
-    if (protoResourceQuota->has_vcpu()) {
-        int VFactor = 1000;
-        resourceQuota->Cpu = static_cast<double>(protoResourceQuota->vcpu()) / VFactor;
-    }
+    YT_FROMPROTO_OPTIONAL_PTR(protoResourceQuota, vcpu, resourceQuota, Vcpu);
 }
 
 ////////////////////////////////////////////////////////////////////////////////

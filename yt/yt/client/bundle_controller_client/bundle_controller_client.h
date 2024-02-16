@@ -26,7 +26,7 @@ struct TBundleConfigDescriptor
 
     TBundleTargetConfigPtr Config;
     TBundleConfigConstraintsPtr ConfigConstraints;
-    TResourceQuotaPtr ResourceQuota;
+    TBundleResourceQuotaPtr ResourceQuota;
 
     REGISTER_YSON_STRUCT(TBundleConfigDescriptor);
 

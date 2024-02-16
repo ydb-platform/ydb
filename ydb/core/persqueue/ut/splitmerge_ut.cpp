@@ -154,6 +154,8 @@ struct TTestReadSession {
                                             message.GetSeqNo(),
                                             message.GetOffset(),
                                             message.GetData()});
+
+                message.Commit();
             }
 
             if (ReceivedMessages.size() == expectedMessagesCount) {

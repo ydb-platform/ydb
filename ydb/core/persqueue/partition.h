@@ -770,7 +770,5 @@ private:
     const NKikimrPQ::TPQTabletConfig::TPartition* GetPartitionConfig(const NKikimrPQ::TPQTabletConfig& config);
 };
 
-bool LastOffsetHasBeenCommited(const TUserInfo& userInfo, ui64 EndOffset);
-
 } // namespace NKikimr::NPQ
 

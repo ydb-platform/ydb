@@ -366,8 +366,7 @@ message TPQTabletConfig {
     }
     optional TPartitionStrategy PartitionStrategy = 35;
 
-    repeated TPartition AllPartitions = 36;
-
+    repeated TPartition AllPartitions = 36; // filled by schemeshard
 }
 
 message THeartbeat {
@@ -772,7 +771,10 @@ message TStatusResponse {
         optional uint64 LastReadTimestampMs = 7;
         optional NPersQueue.NErrorCode.EErrorCode ErrorCode = 8;
         optional uint64 CommitedOffset = 9;
+
+        optional bool ReadingFinished = 10;
     }
+
 
     optional uint64 TabletId = 1;
     repeated TPartResult PartResult = 2;

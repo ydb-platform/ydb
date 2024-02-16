@@ -43,9 +43,11 @@ public:
 
     const Node* GetPartition(ui32 id) const;
     std::set<ui32> GetActiveChildren(ui32 id) const;
+    const std::vector<const Node*>& GetRoots() const;
 
 private:
     std::unordered_map<ui32, Node> Partitions;
+    std::vector<const Node*> Roots;
 };
 
 TPartitionGraph MakePartitionGraph(const NKikimrPQ::TPQTabletConfig& config);

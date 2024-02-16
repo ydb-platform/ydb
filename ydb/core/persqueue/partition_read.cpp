@@ -88,16 +88,11 @@ void TPartition::FillReadFromTimestamps(const NKikimrPQ::TPQTabletConfig& config
     }
 }
 
-bool LastOffsetHasBeenCommited(const TUserInfo& userInfo, ui64 EndOffset) {
-    return static_cast<ui64>(std::max<i64>(userInfo.Offset, 0)) == EndOffset;
-}
-
 void TPartition::ProcessHasDataRequests(const TActorContext& ctx) {
     if (!InitDone)
         return;
 
     auto now = ctx.Now();
-    bool partitionInactive = !IsActive();
 
     for (auto it = HasDataRequests.begin(); it != HasDataRequests.end();) {
         if (it->Offset < EndOffset) {
@@ -113,14 +108,6 @@ void TPartition::ProcessHasDataRequests(const TActorContext& ctx) {
                 userInfo.ForgetSubscription(now);
             }
             it = HasDataRequests.erase(it);
-        } else if (partitionInactive) {
-            if (!it->ClientId.empty()) {
-                auto& userInfo = UsersInfoStorage->GetOrCreate(it->ClientId, ctx);
-                if (LastOffsetHasBeenCommited(userInfo, EndOffset)) {
-                    SendReadingFinished(it->ClientId);
-                }
-            }
-            ++it;
         } else {
             break;
         }
@@ -185,10 +172,6 @@ void TPartition::Handle(TEvPersQueue::TEvHasDataInfo::TPtr& ev, const TActorCont
             ++userInfo.Subscriptions;
             userInfo.UpdateReadOffset((i64)EndOffset - 1, ctx.Now(), ctx.Now(), ctx.Now());
             userInfo.UpdateReadingTimeAndState(ctx.Now());
-
-            if (!IsActive() && LastOffsetHasBeenCommited(userInfo, EndOffset)) {
-                SendReadingFinished(record.GetClientId());
-            }
         }
     }
 }

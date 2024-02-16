@@ -473,7 +473,7 @@ private:
     void AddSupportivePartition(const TPartitionId& shadowPartitionId);
     void CreateSupportivePartitionActors(const TActorContext& ctx);
     void CreateSupportivePartitionActor(const TPartitionId& shadowPartitionId, const TActorContext& ctx);
-    static NKikimrPQ::TPQTabletConfig MakeSupportivePartitionConfig(const NKikimrPQ::TPQTabletConfig& config);
+    NKikimrPQ::TPQTabletConfig MakeSupportivePartitionConfig() const;
     void SubscribeWriteId(ui64 writeId, const TActorContext& ctx);
 
     bool AllOriginalPartitionsInited() const;

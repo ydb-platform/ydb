@@ -34,7 +34,7 @@ def requests_retry_session(
     return session
 
 
-class YQHttpClientConfig(object):
+class YQHttpClientConfig:
     def __init__(
         self,
         token: str | None = None,
@@ -127,7 +127,7 @@ class YQHttpClient(object):
         request_id=None,
         expected_code=200,
     ):
-        body = dict()
+        body = {}
         if query_text is not None:
             body["text"] = query_text
 

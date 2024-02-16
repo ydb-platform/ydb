@@ -575,6 +575,8 @@ void TWriteOperation::BuildExecutionPlan(bool loaded)
 
         plan.push_back(EExecutionUnitKind::BuildAndWaitDependencies);
 
+        plan.push_back(EExecutionUnitKind::BuildWriteOutRS);
+        plan.push_back(EExecutionUnitKind::StoreAndSendWriteOutRS);
         plan.push_back(EExecutionUnitKind::PrepareWriteTxInRS);
         plan.push_back(EExecutionUnitKind::LoadAndWaitInRS);
         plan.push_back(EExecutionUnitKind::ExecuteWrite);
@@ -612,6 +614,12 @@ bool TWriteOperation::OnStopping(TDataShard& self, const TActorContext& ctx) {
         // Immediate ops become ready when stopping flag is set
         return true;
     } else {
+        // Distributed operations send notification when proposed
+        if (GetTarget() && !HasCompletedFlag()) {
+            auto notify = MakeHolder<TEvDataShard::TEvProposeTransactionRestart>(self.TabletID(), GetTxId());
+            ctx.Send(GetTarget(), notify.Release(), 0, GetCookie());
+        }
+
         // Distributed ops avoid doing new work when stopping
         return false;
     }

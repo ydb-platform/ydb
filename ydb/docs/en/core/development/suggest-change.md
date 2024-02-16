@@ -226,7 +226,7 @@ When the changes are completed and locally tested (see [Ya Build and Test](build
 
 Prior to merging, the precommit checks are run for the Pull Request.
 
-For changes in the YDB code, precommit checks build YDB artifacts, and run tests as decribed in the `ya.make` files. Build/test runs on a specific commit which merges your changes to the current `main` branch. If there are merge conflicts, build/test checks cannot be run, and you need to rebase your changes as described [below](#rebase).
+For changes in the {{ ydb-short-name }} code, precommit checks build {{ ydb-short-name }} artifacts, and run tests as described in `ya.make` files. Build and test run on a specific commit which merges your changes to the current `main` branch. If there are merge conflicts, build/test checks cannot be run, and you need to rebase your changes as described [below](#rebase).
 
 You can see the checks status on the Pull Request page. Also, key information for {{ ydb-short-name }} build/test checks progress and status is published to the comments of the Pull Ruquest.
 

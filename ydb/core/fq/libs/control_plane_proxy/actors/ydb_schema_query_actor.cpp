@@ -50,8 +50,8 @@ TShouldSkipStepOnError NoSkipOnError() {
 }
 
 struct TSchemaQueryTask {
-    TString SQL{};
-    TMaybe<TString> RollbackSQL{};
+    TString SQL;
+    TMaybe<TString> RollbackSQL;
     TScheduleErrorRecoverySQLGeneration ScheduleErrorRecoverySQLGeneration;
     TShouldSkipStepOnError ShouldSkipStepOnError;
 };
@@ -83,7 +83,7 @@ struct TEvPrivate {
             : RecoverySQL(std::move(recoverySQL))
             , Result(std::move(result)) { }
 
-        TMaybe<TString> RecoverySQL{};
+        TMaybe<TString> RecoverySQL;
         TStatus Result;
     };
 };
@@ -127,7 +127,7 @@ public:
                          TErrorMessageFactoryMethod errorMessageFactoryMethod)
         : TBaseActor<TSchemaQueryYDBActor>(
               proxyActorId, std::move(request), requestTimeout, counters)
-        , Tasks{std::move(tasksFactoryMethod(Request))}
+        , Tasks{tasksFactoryMethod(Request)}
         , CompletionStatuses(Tasks.size(), ETaskCompletionStatus::NONE)
         , ErrorMessageFactoryMethod(std::move(errorMessageFactoryMethod))
         , DBPath(Request->Get()->ComputeDatabase->connection().database()) { }
@@ -365,13 +365,13 @@ public:
     }
 
 private:
-    TTasks Tasks{};
-    std::vector<ETaskCompletionStatus> CompletionStatuses{};
-    TErrorMessageFactoryMethod ErrorMessageFactoryMethod{};
+    TTasks Tasks;
+    std::vector<ETaskCompletionStatus> CompletionStatuses;
+    TErrorMessageFactoryMethod ErrorMessageFactoryMethod;
     i32 CurrentTaskIndex = 0;
-    TMaybe<EStatus> FirstStatus{};
+    TMaybe<EStatus> FirstStatus;
     NYql::TIssues Issues;
-    TString DBPath{};
+    TString DBPath;
 };
 
 class TGenerateRecoverySQLIfExternalDataSourceAlreadyExistsActor :
@@ -439,13 +439,13 @@ public:
     }
 
 private:
-    const TString Scope{};
-    const TString User{};
-    const TString Token{};
-    const TString CloudId{};
-    const TMaybe<TQuotaMap> Quotas{};
-    const TTenantInfo::TPtr TenantInfo{};
-    const TString ConnectionName{};
+    const TString Scope;
+    const TString User;
+    const TString Token;
+    const TString CloudId;
+    const TMaybe<TQuotaMap> Quotas;
+    const TTenantInfo::TPtr TenantInfo;
+    const TString ConnectionName;
     const TPermissions Permissions;
 };
 
@@ -514,13 +514,13 @@ public:
     }
 
 private:
-    const TString Scope{};
-    const TString User{};
-    const TString Token{};
-    const TString CloudId{};
-    const TMaybe<TQuotaMap> Quotas{};
-    const TTenantInfo::TPtr TenantInfo{};
-    const TString BindingName{};
+    const TString Scope;
+    const TString User;
+    const TString Token;
+    const TString CloudId;
+    const TMaybe<TQuotaMap> Quotas;
+    const TTenantInfo::TPtr TenantInfo;
+    const TString BindingName;
     const TPermissions Permissions;
 };
 

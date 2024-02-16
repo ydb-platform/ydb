@@ -2,8 +2,8 @@
 
 #include "sampling_throttling_control.h"
 
+#include "throttler.h"
 #include "settings.h"
-#include "sampler.h"
 
 #include <ydb/core/protos/config.pb.h>
 
@@ -15,15 +15,10 @@
 
 namespace NKikimr::NJaegerTracing {
 
-class TThrottler;
-
 class TSamplingThrottlingConfigurator {
 public:
-    TSamplingThrottlingConfigurator(TIntrusivePtr<ITimeProvider> timeProvider, TIntrusivePtr<IRandomProvider>& randomProvider)
-        : TimeProvider(std::move(timeProvider))
-        , Rng(randomProvider->GenRand64())
-        , CurrentSettings(GenerateThrottlers({}))
-    {}
+    TSamplingThrottlingConfigurator(TIntrusivePtr<ITimeProvider> timeProvider,
+                                    TIntrusivePtr<IRandomProvider>& randomProvider);
 
     TIntrusivePtr<TSamplingThrottlingControl> GetControl();
 

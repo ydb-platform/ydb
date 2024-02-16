@@ -9,6 +9,7 @@
 #include <ydb/core/tx/schemeshard/schemeshard_private.h>
 #include <ydb/core/tx/schemeshard/schemeshard_billing_helpers.h>
 #include <ydb/core/tx/datashard/datashard.h>
+#include <ydb/core/tx/datashard/datashard_ut_common_kqp.h>
 #include <ydb/core/wrappers/ut_helpers/s3_mock.h>
 #include <ydb/core/metering/metering.h>
 #include <ydb/core/ydb_convert/table_description.h>
@@ -400,27 +401,18 @@ Y_UNIT_TEST_SUITE(TRestoreTests) {
                 }
             }
             KeyColumnNames: ["key"]
-        )", {});
+        )", {data});
 
-        auto writeRow = [&](TString key) {
-            NKikimrMiniKQL::TResult result;
-            TString error;
-            NKikimrProto::EReplyStatus status = LocalMiniKQL(runtime, TTestTxConfig::FakeHiveTablets, Sprintf(R"(
-                (
-                    (let key '( '('key (Utf8 '%s) ) ) )
-                    (let row '( ) )
-                    (return (AsList (UpdateRow '__user__Table key row) ))
-                )
-            )", key.c_str()), result, error);
+        {
+            TString result = NKikimr::NDataShard::NKqpHelpers::KqpSimpleExec(
+                runtime, Q_(R"("UPSERT INTO `/MyRoot/Table` (key) VALUES ("a"))"));
+            UNIT_ASSERT_VALUES_EQUAL(result, "<empty>");
+        }
 
-            UNIT_ASSERT_VALUES_EQUAL_C(status, NKikimrProto::EReplyStatus::OK, error);
-            UNIT_ASSERT_VALUES_EQUAL(error, "");
-        };
-
-        writeRow("a1");
-
-        auto content = ReadTable(runtime, TTestTxConfig::FakeHiveTablets);
-        NKqp::CompareYson(data.YsonStr, content);
+        {
+            TString result = NKikimr::NDataShard::NKqpHelpers::KqpSimpleExec(runtime, "SELECT * FROM `/MyRoot/Table`;");
+            UNIT_ASSERT_C(false, result);
+        }
     }
 
     Y_UNIT_TEST_WITH_COMPRESSION(ShouldSucceedOnMultiShardTable) {

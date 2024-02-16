@@ -69,7 +69,7 @@ namespace NWilson {
                     return false;
                 }
                 SizeBytes += span.Size;
-                span.Span.Swap(ScopeSpans->Addspans());
+                span.Span.Swap(ScopeSpans->add_spans());
                 ExpirationTimestamp = span.ExpirationTimestamp;
                 return true;
             }
@@ -89,9 +89,10 @@ namespace NWilson {
         {
             static constexpr size_t WILSON_SERVICE_ID = 430;
 
+            ui64 MaxPendingSpanBytes = 100'000'000;
             ui64 MaxSpansInBatch = 150;
             ui64 MaxBytesInBatch = 20'000'000;
-            ui64 MaxBatchAccumulationMilliseconds = 1'000;
+            TDuration MaxBatchAccumulation = TDuration::Seconds(1);
             ui32 MaxSpansPerSecond = 10;
             TDuration MaxSpanTimeInQueue = TDuration::Seconds(60);
 
@@ -112,9 +113,11 @@ namespace NWilson {
 
             TBatch CurrentBatch;
             std::queue<TBatch::TData> BatchQueue;
-            ui64 SpansSize = 0;
+            ui64 SpansSizeBytes = 0;
             TMonotonic NextSendTimestamp;
-            ui64 BatchCompleteId = 1;
+
+            bool BatchCompletionScheduled = false;
+            TMonotonic NextBatchCompletion;
 
         public:
             TWilsonUploader(WilsonUploaderParams params)
@@ -153,7 +156,7 @@ namespace NWilson {
             }
 
             void Handle(TEvWilson::TPtr ev) {
-                if (SpansSize >= 100'000'000) {
+                if (SpansSizeBytes >= MaxPendingSpanBytes) {
                     LOG_ERROR_S(*TlsActivationContext, WILSON_SERVICE_ID, "dropped span due to overflow");
                 } else {
                     const TMonotonic now = TActivationContext::Monotonic();
@@ -169,7 +172,7 @@ namespace NWilson {
                         .Span = std::move(span),
                         .Size = size,
                     };
-                    SpansSize += size;
+                    SpansSizeBytes += size;
                     if (CurrentBatch.IsEmpty()) {
                         ScheduleBatchCompletion(now);
                     }
@@ -183,17 +186,26 @@ namespace NWilson {
                 }
             }
 
-            void ScheduleBatchCompletion(TMonotonic now) {
-                TMonotonic completionTime = now + TDuration::MilliSeconds(MaxBatchAccumulationMilliseconds);
-                TActivationContext::Schedule(completionTime,
-                                             new IEventHandle(SelfId(), {}, new TEvents::TEvWakeup(BatchCompleteId)));
+            void ScheduleBatchCompletionEvent() {
+                TActivationContext::Schedule(NextBatchCompletion,
+                                             new IEventHandle(TEvents::TSystem::Wakeup, 0, SelfId(),
+                                                              {}, nullptr, NextBatchCompletion.GetValue()));
+                BatchCompletionScheduled = true;
+            }
 
+            void ScheduleBatchCompletion(TMonotonic now) {
+                NextBatchCompletion = now + MaxBatchAccumulation;
+                if (!BatchCompletionScheduled) {
+                    ScheduleBatchCompletionEvent();
+                }
             }
 
             void CompleteCurrentBatch() {
+                if (CurrentBatch.IsEmpty()) {
+                    return;
+                }
                 BatchQueue.push(std::move(CurrentBatch).Complete());
                 CurrentBatch = TBatch(MaxSpansInBatch, MaxBytesInBatch, ServiceName);
-                ++BatchCompleteId;
             }
 
             void TryToSend() {
@@ -203,7 +215,7 @@ namespace NWilson {
                 while (!BatchQueue.empty()) {
                     const TBatch::TData& item = BatchQueue.front();
                     if (item.ExpirationTimestamp <= now) {
-                        SpansSize -= item.SizeBytes;
+                        SpansSizeBytes -= item.SizeBytes;
                         numSpansDropped += item.SizeSpans;
                         BatchQueue.pop();
                     } else {
@@ -238,7 +250,7 @@ namespace NWilson {
                 }
 
                 NextSendTimestamp = now + TDuration::MicroSeconds((batch.SizeSpans * 1'000'000) / MaxSpansPerSecond);
-                SpansSize -= batch.SizeBytes;
+                SpansSizeBytes -= batch.SizeBytes;
 
                 ScheduleWakeup(NextSendTimestamp);
                 Context = std::make_unique<grpc::ClientContext>();
@@ -271,18 +283,24 @@ namespace NWilson {
             void ScheduleWakeup(T&& deadline) {
                 if (!WakeupScheduled) {
                     TActivationContext::Schedule(deadline,
-                                                 new IEventHandle(SelfId(), {}, new TEvents::TEvWakeup));
+                                                 new IEventHandle(TEvents::TSystem::Wakeup, 0, SelfId(),
+                                                                  {}, nullptr, NextBatchCompletion.GetValue()));
                     WakeupScheduled = true;
                 }
             }
 
             void HandleWakeup(TEvents::TEvWakeup::TPtr& ev) {
-                const auto tag = ev->Get()->Tag;
-                if (tag == BatchCompleteId) {
-                    CompleteCurrentBatch();
-                } else if (tag == 0) {
+                const auto cookie = ev->Cookie;
+                if (cookie == 0) {
                     Y_ABORT_UNLESS(WakeupScheduled);
                     WakeupScheduled = false;
+                } else {
+                    Y_ABORT_UNLESS(std::exchange(BatchCompletionScheduled, false));
+                    if (cookie == NextBatchCompletion.GetValue()) {
+                        CompleteCurrentBatch();
+                    } else {
+                        ScheduleBatchCompletionEvent();
+                    }
                 }
                 TryMakeProgress();
             }

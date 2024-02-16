@@ -403,16 +403,44 @@ Y_UNIT_TEST_SUITE(TRestoreTests) {
             KeyColumnNames: ["key"]
         )", {data});
 
-        {
-            TString result = NKikimr::NDataShard::NKqpHelpers::KqpSimpleExec(
-                runtime, Q_(R"("UPSERT INTO `/MyRoot/Table` (key) VALUES ("a"))"));
-            UNIT_ASSERT_VALUES_EQUAL(result, "<empty>");
-        }
+        auto content = ReadTable(runtime, TTestTxConfig::FakeHiveTablets);
+        NKqp::CompareYson(data.YsonStr, content);
 
-        {
-            TString result = NKikimr::NDataShard::NKqpHelpers::KqpSimpleExec(runtime, "SELECT * FROM `/MyRoot/Table`;");
-            UNIT_ASSERT_C(false, result);
+        const auto desc = DescribePath(runtime, "/MyRoot/Table", true, true);
+        UNIT_ASSERT_VALUES_EQUAL(desc.GetStatus(), NKikimrScheme::StatusSuccess);
+
+        const auto& table = desc.GetPathDescription().GetTable();
+
+        for (const auto& column: table.GetColumns()) {
+            if (column.GetName() == "value") {
+                switch (column.GetDefaultValueCase()) {
+                    case NKikimrSchemeOp::TColumnDescription::kDefaultFromLiteral: {
+                        const auto& fromLiteral = column.GetDefaultFromLiteral();
+
+                        TString str;
+                        google::protobuf::TextFormat::PrintToString(fromLiteral, &str);
+
+                        TString result = R"(type {
+  optional_type {
+    item {
+      type_id: UTF8
+    }
+  }
+}
+value {
+  items {
+    text_value: "value1"
+  }
+}
+)";
+                        UNIT_ASSERT_VALUES_EQUAL_C(str, result, "Invalid default value");
+                        return;
+                    }
+                    default: break;
+                }
+            }
         }
+        UNIT_ASSERT_C(false, "Invalid default value");
     }
 
     Y_UNIT_TEST_WITH_COMPRESSION(ShouldSucceedOnMultiShardTable) {

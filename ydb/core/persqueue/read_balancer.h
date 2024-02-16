@@ -264,8 +264,7 @@ class TPersQueueReadBalancer : public TActor<TPersQueueReadBalancer>, public TTa
         }
         RegisterEvents.clear();
 
-        Y_ABORT_UNLESS(0 < AppData(ctx)->PQConfig.GetBalancerWakeupIntervalSec());
-        ctx.Schedule(TDuration::Seconds(AppData(ctx)->PQConfig.GetBalancerWakeupIntervalSec()), new TEvents::TEvWakeup()); //TODO: remove it
+        ctx.Send(ctx.SelfID, new TEvents::TEvWakeup());
         ctx.Send(ctx.SelfID, new TEvPersQueue::TEvUpdateACL());
     }
 

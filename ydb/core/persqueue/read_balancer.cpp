@@ -1555,11 +1555,13 @@ void TPersQueueReadBalancer::TClientGroupInfo::ScheduleBalance(const TActorConte
 }
 
 void TPersQueueReadBalancer::TClientGroupInfo::Balance(const TPersQueueReadBalancer& balancer, const TActorContext& ctx) {
+    Y_UNUSED(balancer);
+
     if (SessionsInfo.empty()) {
         return; //no sessions, no problems
     }
-    BalanceWithScaling(balancer, ctx);
-    // BalanceSimple(ctx);
+    // BalanceWithScaling(balancer, ctx);
+    BalanceSimple(ctx);
 }
 
 void TPersQueueReadBalancer::TClientGroupInfo::BalanceSimple(const TActorContext& ctx) {
@@ -1611,7 +1613,9 @@ void TPersQueueReadBalancer::TClientGroupInfo::BalanceSimple(const TActorContext
     Y_ABORT_UNLESS(FreePartitions.empty());
 }
 
-std::set<ui32> GetPartitionsForReading(const TPartitionGraph& partitionGraph, const std::unordered_map<TString, std::set<ui32>>& readingFinished, const TString& clientId) {
+std::set<ui32> GetPartitionsForReading(const TPartitionGraph& partitionGraph,
+                                       const std::unordered_map<TString, std::set<ui32>>& readingFinished,
+                                       const TString& clientId) {
     auto& roots = partitionGraph.GetRoots();
     std::set<ui32> partitionsForRead;
 

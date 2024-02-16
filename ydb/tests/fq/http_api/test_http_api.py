@@ -250,7 +250,7 @@ class TestHttpApi(TestBase):
         sql = f"select * from yds1.`{self.input_topic}`"
 
         with self.create_client() as client:
-            query_id = client.create_query(sql, type="STREAMING", name="my first query",
+            query_id = client.create_query(sql, query_type="STREAMING", name="my first query",
                                            description="some description")
             assert query_id is not None
             assert len(query_id) == 20

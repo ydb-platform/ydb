@@ -142,8 +142,12 @@ namespace NWilson {
                 Become(&TThis::StateWork);
 
                 if (MaxSpansPerSecond == 0) {
-                    ALOG_WARN(WILSON_SERVICE_ID, "max_spans_per_second should never be to 0, changing to 1");
+                    ALOG_WARN(WILSON_SERVICE_ID, "max_spans_per_second should be greater than 0, changing to 1");
                     MaxSpansPerSecond = 1;
+                }
+                if (MaxSpansInBatch == 0) {
+                    ALOG_WARN(WILSON_SERVICE_ID, "max_spans_in_batch shold be greater than 0, changing to 1");
+                    MaxSpansInBatch = 1;
                 }
 
                 TStringBuf scheme;

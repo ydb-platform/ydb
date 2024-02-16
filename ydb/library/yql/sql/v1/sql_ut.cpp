@@ -4375,6 +4375,22 @@ select FormatType($f());
         UNIT_ASSERT_NO_DIFF(Err2Str(res),
             "<main>:1:15: Error: Selecting data from monitoring source is not supported\n");
     }
+
+    Y_UNIT_TEST(SessionStartAndSessionStateShouldSurviveSessionWindowArgsError){
+        TString query = R"(
+            $init = ($_row) -> (min(1, 2)); -- error: aggregation func min() can not be used here
+            $calculate = ($_row, $_state) -> (1);
+            $update = ($_row, $_state) -> (2);
+            SELECT
+                SessionStart() over w as session_start,
+                SessionState() over w as session_state,
+            FROM plato.Input as t
+            WINDOW w AS (
+                PARTITION BY user, SessionWindow(ts + 1, $init, $update, $calculate)
+            )
+        )";
+        ExpectFailWithError(query, "<main>:2:33: Error: Aggregation function Min requires exactly 1 argument(s), given: 2\n");
+    }
 }
 
 void CheckUnused(const TString& req, const TString& symbol, unsigned row, unsigned col) {

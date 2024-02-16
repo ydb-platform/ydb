@@ -296,6 +296,7 @@ UpdateQueue.prototype.flushUpdateQueue = function() {
 };
 
 (function() {
+    // Workaround for Safari. Always attach tooltip to <body>
     var originalTooltipFn = $.fn.tooltip;
     $.fn.tooltip = function() {
         var arg0 = arguments[0];

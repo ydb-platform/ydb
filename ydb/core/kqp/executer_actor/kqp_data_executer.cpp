@@ -2332,7 +2332,7 @@ private:
             state.DatashardState.ConstructInPlace();
             state.DatashardState->Follower = false;
 
-            state.DatashardState->ShardReadLocks = Request.TopicOperations.TabletHasOperations(tabletId);
+            state.DatashardState->ShardReadLocks = Request.TopicOperations.TabletHasReadOperations(tabletId);
 
             auto result = ShardStates.emplace(tabletId, std::move(state));
             YQL_ENSURE(result.second);

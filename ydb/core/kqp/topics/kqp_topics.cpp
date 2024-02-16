@@ -217,10 +217,11 @@ void TTopicOperations::SetWriteId(NLongTxService::TLockHandle handle)
     WriteId_ = std::move(handle);
 }
 
-bool TTopicOperations::TabletHasOperations(ui64 tabletId) const
+bool TTopicOperations::TabletHasReadOperations(ui64 tabletId) const
 {
     for (auto& [_, value] : Operations_) {
         if (value.GetTabletId() == tabletId) {
+            // reading from a topic and writing to a topic contain read operations
             return value.HasReadOperations() || value.HasWriteOperations();
         }
     }

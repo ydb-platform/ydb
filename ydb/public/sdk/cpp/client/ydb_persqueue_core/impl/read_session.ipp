@@ -226,6 +226,18 @@ void TRawPartitionStreamEventQueue<UseMigrationProtocol>::DeleteNotReadyTail(TDe
 // TSingleClusterReadSessionImpl
 
 template<bool UseMigrationProtocol>
+TSingleClusterReadSessionImpl<UseMigrationProtocol>::~TSingleClusterReadSessionImpl() {
+    for (auto&& [_, partitionStream] : PartitionStreams) {
+        partitionStream->ClearQueue();
+    }
+
+    DecompressionQueue.clear();
+
+    Cerr << Dummy.size() << Endl;
+}
+
+
+template<bool UseMigrationProtocol>
 TStringBuilder TSingleClusterReadSessionImpl<UseMigrationProtocol>::GetLogPrefix() const {
     return TStringBuilder() << GetDatabaseLogPrefix(Database) << "[" << SessionId << "] [" << ClusterName << "] ";
 }
@@ -652,6 +664,9 @@ void TSingleClusterReadSessionImpl<UseMigrationProtocol>::ConfirmPartitionStream
         >;
 
         CookieMapping.RemoveMapping(GetPartitionStreamId(partitionStream));
+
+        partitionStream->ClearQueue();
+
         PartitionStreams.erase(partitionStream->GetAssignId());
 
         bool pushRes = true;
@@ -1057,6 +1072,8 @@ inline void TSingleClusterReadSessionImpl<true>::OnReadDoneImpl(
         PartitionStreams[partitionStream->GetAssignId()];
     if (currentPartitionStream) {
         CookieMapping.RemoveMapping(currentPartitionStream->GetPartitionStreamId());
+        currentPartitionStream->ClearQueue();
+
         bool pushRes = EventsQueue->PushEvent(
             currentPartitionStream,
              TReadSessionEvent::TPartitionStreamClosedEvent(
@@ -1096,6 +1113,7 @@ inline void TSingleClusterReadSessionImpl<true>::OnReadDoneImpl(
     if (msg.forceful_release()) {
         PartitionStreams.erase(msg.assign_id());
         CookieMapping.RemoveMapping(partitionStream->GetPartitionStreamId());
+        partitionStream->ClearQueue();
         pushRes = EventsQueue->PushEvent(partitionStream,
                                 TReadSessionEvent::TPartitionStreamClosedEvent(
                                     partitionStream, TReadSessionEvent::TPartitionStreamClosedEvent::EReason::Lost),
@@ -1301,6 +1319,7 @@ inline void TSingleClusterReadSessionImpl<false>::OnReadDoneImpl(
     // Renew partition stream.
     TIntrusivePtr<TPartitionStreamImpl<false>>& currentPartitionStream = PartitionStreams[partitionStream->GetAssignId()];
     if (currentPartitionStream) {
+        currentPartitionStream->ClearQueue();
         bool pushRes = EventsQueue->PushEvent(
             currentPartitionStream,
              NTopic::TReadSessionEvent::TPartitionSessionClosedEvent(
@@ -1354,6 +1373,7 @@ inline void TSingleClusterReadSessionImpl<false>::OnReadDoneImpl(
     bool pushRes = true;
     if (!msg.graceful()) {
         PartitionStreams.erase(msg.partition_session_id());
+        partitionStream->ClearQueue();
         pushRes = EventsQueue->PushEvent(partitionStream,
                                 NTopic::TReadSessionEvent::TPartitionSessionClosedEvent(
                                     partitionStream, NTopic::TReadSessionEvent::TPartitionSessionClosedEvent::EReason::Lost),
@@ -1479,6 +1499,8 @@ void TSingleClusterReadSessionImpl<UseMigrationProtocol>::DestroyAllPartitionStr
             AbortImpl();
             return;
         }
+
+        // partitionStream->ClearQueue();
     }
     PartitionStreams.clear();
     CookieMapping.ClearMapping();

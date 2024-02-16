@@ -154,8 +154,8 @@ Y_UNIT_TEST_SUITE(TPersQueueMirrorer) {
 
         }
 
-        srcReader->Close(TDuration::Zero());
-        dstReader->Close(TDuration::Zero());
+        // srcReader->Close(TDuration::Zero());
+        // dstReader->Close(TDuration::Zero());
 
         // write to source topic
         TVector<ui32> messagesPerPartition(partitionsCount, 0);
@@ -254,7 +254,6 @@ Y_UNIT_TEST_SUITE(TPersQueueMirrorer) {
                 }
             }
         }
-
     }
 
     Y_UNIT_TEST(ValidStartStream) {

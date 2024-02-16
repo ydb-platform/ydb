@@ -35,7 +35,7 @@ namespace NWilson {
         ui64 MaxBytesInBatch = 20'000'000;
         ui64 MaxBatchAccumulationMilliseconds = 1'000;
         TDuration MaxBatchAccumulation = TDuration::Seconds(1);
-        ui32 SpanTtlSeconds = 60 * 60 * 24 * 365;
+        ui32 SpanExportTimeoutSeconds = 60 * 60 * 24 * 365;
 
         NActors::IActor* CreateUploader() &&;
     };

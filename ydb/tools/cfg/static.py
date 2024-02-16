@@ -1206,9 +1206,9 @@ class StaticConfigGenerator(object):
             if max_batch_accumulation_milliseconds is not None:
                 uploader_pb.MaxBatchAccumulationMilliseconds = max_batch_accumulation_milliseconds
 
-            span_ttl_seconds = uploader.get("span_ttl_seconds")
-            if span_ttl_seconds is not None:
-                uploader_pb.SpanTtlSeconds = span_ttl_seconds
+            span_export_timeout_seconds = uploader.get("span_export_timeout_seconds")
+            if span_export_timeout_seconds is not None:
+                uploader_pb.SpanTtlSeconds = span_export_timeout_seconds
 
             return uploader_pb
 

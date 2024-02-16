@@ -125,7 +125,7 @@ namespace NWilson {
                 , MaxSpansInBatch(params.MaxSpansInBatch)
                 , MaxBytesInBatch(params.MaxBytesInBatch)
                 , MaxBatchAccumulation(params.MaxBatchAccumulation)
-                , MaxSpanTimeInQueue(TDuration::Seconds(params.SpanTtlSeconds))
+                , MaxSpanTimeInQueue(TDuration::Seconds(params.SpanExportTimeoutSeconds))
                 , CollectorUrl(std::move(params.CollectorUrl))
                 , ServiceName(std::move(params.ServiceName))
                 , GrpcSigner(std::move(params.GrpcSigner))

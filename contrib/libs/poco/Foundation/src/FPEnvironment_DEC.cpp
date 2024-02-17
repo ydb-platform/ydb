@@ -23,7 +23,7 @@
 #include <fp.h>
 #include <fp_class.h>
 #if defined(__VMS)
-#include <starlet.h>
+#error #include <starlet.h>
 #endif
 #include "Poco/FPEnvironment_DEC.h"
 

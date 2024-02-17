@@ -3319,6 +3319,9 @@ public:
         case EXPR_SUBLINK:
             linkType = "expr";
             break;
+        case ARRAY_SUBLINK:
+            linkType = "array";
+            break;
         default:
             AddError(TStringBuilder() << "SublinkExpr: unsupported link type: " << (int)value->subLinkType);
             return nullptr;

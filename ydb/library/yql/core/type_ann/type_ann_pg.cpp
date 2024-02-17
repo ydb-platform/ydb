@@ -4924,7 +4924,7 @@ IGraphTransformer::TStatus PgSubLinkWrapper(const TExprNode::TPtr& input, TExprN
     }
 
     auto linkType = input->Child(0)->Content();
-    if (linkType != "exists" && linkType != "any" && linkType != "all" && linkType != "expr") {
+    if (linkType != "exists" && linkType != "any" && linkType != "all" && linkType != "expr" && linkType != "array") {
         ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(input->Pos()),
             TStringBuilder() << "Unknown link type: " << linkType));
         return IGraphTransformer::TStatus::Error;
@@ -5068,6 +5068,16 @@ IGraphTransformer::TStatus PgSubLinkWrapper(const TExprNode::TPtr& input, TExprN
     }
 
     if (linkType == "expr") {
+        input->SetTypeAnn(valueType);
+    } else if (linkType == "array") {
+        if (valueType->GetKind() == ETypeAnnotationKind::Pg) {
+            auto typeId = valueType->Cast<TPgExprType>()->GetId();
+            const auto& desc = NPg::LookupType(typeId);
+            if (desc.TypeId != desc.ArrayTypeId) {
+                valueType = ctx.Expr.MakeType<TPgExprType>(desc.ArrayTypeId);
+            }
+        }
+
         input->SetTypeAnn(valueType);
     } else {
         auto result = ctx.Expr.MakeType<TPgExprType>(NPg::LookupType("bool").TypeId);

@@ -253,7 +253,7 @@ private:
     }
 
     NYdb::NTopic::TWriteSessionSettings GetWriteSessionSettings() {
-        return NYdb::NTopic::TWriteSessionSettings(SinkParams.GetTopicPath(), GetSourceId(), "")
+        return NYdb::NTopic::TWriteSessionSettings(SinkParams.GetTopicPath(), GetSourceId(), GetSourceId())
             .MaxMemoryUsage(FreeSpace)
             //.ClusterDiscoveryMode(NYdb::NTopic::EClusterDiscoveryMode::Auto)
             .Codec(SinkParams.GetClusterType() == NPq::NProto::DataStreams

@@ -352,7 +352,8 @@ private:
 
         ui64 currentPartition = ReadParams.GetPartitioningParams().GetEachTopicPartitionGroupId();
         do {
-            res.emplace_back(currentPartition + 1); // 1-based.
+            // res.emplace_back(currentPartition + 1); // 1-based in pqv1
+            res.emplace_back(currentPartition); // 0-based in topic API
             currentPartition += ReadParams.GetPartitioningParams().GetDqPartitionsCount();
         } while (currentPartition < ReadParams.GetPartitioningParams().GetTopicPartitionsCount());
 

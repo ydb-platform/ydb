@@ -61,6 +61,7 @@ Y_ABSL_NAMESPACE_END
 #include <utility>
 
 #include "y_absl/base/attributes.h"
+#include "y_absl/base/nullability.h"
 #include "y_absl/base/internal/inline_variable.h"
 #include "y_absl/meta/type_traits.h"
 #include "y_absl/types/bad_optional_access.h"
@@ -415,11 +416,11 @@ class optional : private optional_internal::optional_data<T>,
   // `optional` is empty, behavior is undefined.
   //
   // If you need myOpt->foo in constexpr, use (*myOpt).foo instead.
-  const T* operator->() const Y_ABSL_ATTRIBUTE_LIFETIME_BOUND {
+  y_absl::Nonnull<const T*> operator->() const Y_ABSL_ATTRIBUTE_LIFETIME_BOUND {
     Y_ABSL_HARDENING_ASSERT(this->engaged_);
     return std::addressof(this->data_);
   }
-  T* operator->() Y_ABSL_ATTRIBUTE_LIFETIME_BOUND {
+  y_absl::Nonnull<T*> operator->() Y_ABSL_ATTRIBUTE_LIFETIME_BOUND {
     Y_ABSL_HARDENING_ASSERT(this->engaged_);
     return std::addressof(this->data_);
   }

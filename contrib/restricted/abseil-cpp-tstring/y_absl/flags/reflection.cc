@@ -21,6 +21,7 @@
 #include <util/generic/string.h>
 
 #include "y_absl/base/config.h"
+#include "y_absl/base/no_destructor.h"
 #include "y_absl/base/thread_annotations.h"
 #include "y_absl/container/flat_hash_map.h"
 #include "y_absl/flags/commandlineflag.h"
@@ -169,7 +170,7 @@ void FlagRegistry::RegisterFlag(CommandLineFlag& flag, const char* filename) {
 }
 
 FlagRegistry& FlagRegistry::GlobalRegistry() {
-  static FlagRegistry* global_registry = new FlagRegistry;
+  static y_absl::NoDestructor<FlagRegistry> global_registry;
   return *global_registry;
 }
 

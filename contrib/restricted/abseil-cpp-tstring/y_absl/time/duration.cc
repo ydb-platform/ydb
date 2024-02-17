@@ -55,8 +55,7 @@
 
 #include <algorithm>
 #include <cassert>
-#include <cctype>
-#include <cerrno>
+#include <chrono>  // NOLINT(build/c++11)
 #include <cmath>
 #include <cstdint>
 #include <cstdlib>
@@ -66,8 +65,9 @@
 #include <limits>
 #include <util/generic/string.h>
 
+#include "y_absl/base/attributes.h"
 #include "y_absl/base/casts.h"
-#include "y_absl/base/macros.h"
+#include "y_absl/base/config.h"
 #include "y_absl/numeric/int128.h"
 #include "y_absl/strings/string_view.h"
 #include "y_absl/strings/strip.h"

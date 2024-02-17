@@ -25,6 +25,7 @@
 #include <util/generic/string.h>
 
 #include "y_absl/base/macros.h"
+#include "y_absl/base/nullability.h"
 #include "y_absl/strings/ascii.h"
 #include "y_absl/strings/match.h"
 #include "y_absl/strings/string_view.h"
@@ -43,7 +44,8 @@ Y_ABSL_NAMESPACE_BEGIN
 //   y_absl::string_view input("abc");
 //   EXPECT_TRUE(y_absl::ConsumePrefix(&input, "a"));
 //   EXPECT_EQ(input, "bc");
-inline bool ConsumePrefix(y_absl::string_view* str, y_absl::string_view expected) {
+inline bool ConsumePrefix(y_absl::Nonnull<y_absl::string_view*> str,
+                          y_absl::string_view expected) {
   if (!y_absl::StartsWith(*str, expected)) return false;
   str->remove_prefix(expected.size());
   return true;
@@ -59,7 +61,8 @@ inline bool ConsumePrefix(y_absl::string_view* str, y_absl::string_view expected
 //   y_absl::string_view input("abcdef");
 //   EXPECT_TRUE(y_absl::ConsumeSuffix(&input, "def"));
 //   EXPECT_EQ(input, "abc");
-inline bool ConsumeSuffix(y_absl::string_view* str, y_absl::string_view expected) {
+inline bool ConsumeSuffix(y_absl::Nonnull<y_absl::string_view*> str,
+                          y_absl::string_view expected) {
   if (!y_absl::EndsWith(*str, expected)) return false;
   str->remove_suffix(expected.size());
   return true;

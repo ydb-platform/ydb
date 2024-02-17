@@ -129,7 +129,7 @@ message QueryContent {
     // By default it is "yql", but additional syntax "pg" (PostgreSQL SQL frontend) is supported as well
     QuerySyntax syntax = 11;
     // Map of query parameters
-    map<string, TypedValue> parameters = 12; [(map_key).length.range = {min: 1, max: 100}, (length).range = {min: 1, max: 100}];
+    map<string, TypedValue> parameters = 12; [(Ydb.map_key).length.range = {min: 1, max: 100}, (Ydb.length).range = {min: 1, max: 100}];
 }
 
 message CommonMeta {

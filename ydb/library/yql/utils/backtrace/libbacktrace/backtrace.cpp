@@ -36,7 +36,7 @@ namespace NYql {
         TCollectedFrame::TCollectedFrame(uintptr_t addr) {
             File = GetPersistentExecPath();
             Address = addr;
-#ifdef _linux_
+#if defined(_linux_) && defined(_x86_64_)
             Dl_info dlInfo;
             memset(&dlInfo, 0, sizeof(dlInfo));
             auto ret = dladdr(reinterpret_cast<void*>(addr), &dlInfo);

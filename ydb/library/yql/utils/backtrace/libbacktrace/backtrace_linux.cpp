@@ -3,6 +3,8 @@
 #include <libunwind.h>
 #include <signal.h>
 
+#include <util/system/backtrace.h>
+
 namespace {
     size_t BackTrace(void** p, size_t len, ucontext_t* con) {
         unw_context_t context;
@@ -35,6 +37,7 @@ namespace {
         unw_set_reg(&cursor, UNW_REG_IP, signal_mcontext->rip);
 
         size_t pos = 0;
+        p[pos++] = (void*)signal_mcontext->rip;
         while (pos < len && unw_step(&cursor) > 0) {
             unw_word_t ip = 0;
             unw_get_reg(&cursor, UNW_REG_IP, &ip);
@@ -50,6 +53,9 @@ namespace {
 namespace NYql {
     namespace NBacktrace {
         size_t CollectBacktrace(void** addresses, size_t limit, void* data) {
+            if (!data) {
+                return BackTrace(addresses, limit);
+            }
             return BackTrace(addresses, limit, reinterpret_cast<ucontext_t*>(data));
         }
     }

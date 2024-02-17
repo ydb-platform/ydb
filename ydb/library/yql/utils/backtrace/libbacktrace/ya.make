@@ -6,6 +6,7 @@ SRCS(
 )
 
 PEERDIR(
+    contrib/libs/backtrace
     library/cpp/deprecated/atomic
 )
 

@@ -200,6 +200,10 @@ namespace {
         }
         outp << "StackFrames: " << frames.size() << "\n";
         for (auto &frame: frames) {
+            auto fileName = frame.File;
+            if (fileName == "/proc/self/exe") {
+                fileName = "EXE";
+            }
             auto it = NYql::NBacktrace::Mapping.find(frame.File);
             Cerr << "StackFrame: " << (it == NYql::NBacktrace::Mapping.end() ? frame.File : it->second) << " " << frame.Address << "\n";
         }

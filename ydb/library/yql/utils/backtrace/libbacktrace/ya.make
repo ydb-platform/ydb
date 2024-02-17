@@ -6,8 +6,6 @@ SRCS(
 )
 
 PEERDIR(
-    contrib/libs/libunwind
-    library/cpp/dwarf_backtrace
     library/cpp/deprecated/atomic
 )
 

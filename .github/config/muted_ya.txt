@@ -77,7 +77,14 @@ ydb/tests/fq/generic *
 ydb/tests/fq/mem_alloc *
 ydb/tests/fq/multi_plane *
 ydb/tests/fq/plans test_stats_mode.py.TestStatsMode.test_mode[v1-STATS_MODE_FULL-client0]
-ydb/tests/fq/s3 *
+ydb/tests/fq/s3 test_c*
+ydb/tests/fq/s3 test_e*
+ydb/tests/fq/s3 test_f*
+ydb/tests/fq/s3 test_i*
+ydb/tests/fq/s3 test_p*
+ydb/tests/fq/s3 test_s*
+ydb/tests/fq/s3 test_t*
+ydb/tests/fq/s3 test_y*
 ydb/tests/fq/yds *
 ydb/tests/functional/audit *
 ydb/tests/functional/blobstorage test_replication.py.TestReplicationAfterNodesRestart.test_replication*

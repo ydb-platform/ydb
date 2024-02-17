@@ -77,6 +77,7 @@ ydb/tests/fq/generic *
 ydb/tests/fq/mem_alloc *
 ydb/tests/fq/multi_plane *
 ydb/tests/fq/plans test_stats_mode.py.TestStatsMode.test_mode[v1-STATS_MODE_FULL-client0]
+ydb/tests/fq/s3 test_bindings.py.TestBindings.test_modify_connection_with_a_lot_of_bindings*
 ydb/tests/fq/s3 test_c*
 ydb/tests/fq/s3 test_e*
 ydb/tests/fq/s3 test_f*

@@ -13,6 +13,7 @@
 #include <vector>
 #include <numeric>
 #include <algorithm>
+#include <filesystem>
 
 namespace {
 void HandleLibBacktraceError(void* data, const char* msg, int) {
@@ -56,15 +57,22 @@ namespace NYql {
             std::iota(order.begin(), order.end(), 0u);
             std::sort(order.begin(), order.end(), [&frames](auto a, auto b) { return frames[a].File < frames[b].File; });
 
-            auto state = CreateState(frames[order[0]].File);
-            if (!state) {
-                return {};
-            }
+            struct backtrace_state* state = nullptr;
 
             for (size_t i = 0; i < order.size(); ++i) {
-                if (i && frames[order[i - 1]].File != frames[order[i]].File) {
-                    state = CreateState(frames[order[i]].File);
+                if (!i || frames[order[i - 1]].File != frames[order[i]].File) {
+                    if (!std::filesystem::exists(frames[order[i]].File.c_str())) {
+                        state = nullptr;
+                    } else {
+                        state = CreateState(frames[order[i]].File);
+                    }
                 }
+
+                if (!state) {
+                    result[order[i]] = TStringBuilder() << "File not found: " << frames[order[i]].File;
+                    continue;
+                }
+
                 int status = backtrace_pcinfo(
                     state,
                     reinterpret_cast<uintptr_t>(frames[order[i]].Address) - 1, // last byte of the call instruction

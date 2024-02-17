@@ -31,6 +31,9 @@ namespace NYql {
                     if (parts.size() > 2) {
                         modulePath = parts[1];
                         TryFromString<ui64>(parts[2], address);
+                        if (modulePath == "/proc/self/exe") {
+                            modulePath = "EXE";
+                        }
                         auto it = mapping.find(modulePath);
                         if (it != mapping.end()) {
                             modulePath = it->second;

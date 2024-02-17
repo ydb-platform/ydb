@@ -591,6 +591,7 @@ message TReqSelectRows
     optional bool use_canonical_null_relations = 20;
     optional bool merge_versioned_rows = 21;
     optional int32 syntax_version = 22 [default = 1];
+    optional bool use_web_assembly = 23;
 
     optional TSuppressableAccessTrackingOptions suppressable_access_tracking_options = 104;
 }

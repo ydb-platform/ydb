@@ -184,6 +184,8 @@ struct TSelectRowsOptions
     TDetailedProfilingInfoPtr DetailedProfilingInfo;
     //! YSON map with placeholder values for parameterized queries.
     NYson::TYsonString PlaceholderValues;
+    //! If |true| then WebAssembly execution backend is used.
+    std::optional<bool> UseWebAssembly;
     //! Expected schemas for tables in a query (used for replica fallback in replicated tables).
     using TExpectedTableSchemas = THashMap<NYPath::TYPath, NTableClient::TTableSchemaPtr>;
     TExpectedTableSchemas ExpectedTableSchemas;

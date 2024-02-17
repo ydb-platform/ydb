@@ -197,23 +197,6 @@ public:
         Request_->Context_ = underlyingContext.Get();
 
         const auto& requestHeader = this->GetRequestHeader();
-        auto body = underlyingContext->GetRequestBody();
-        if (requestHeader.has_request_format()) {
-            auto format = static_cast<EMessageFormat>(requestHeader.request_format());
-
-            NYson::TYsonString formatOptionsYson;
-            if (requestHeader.has_request_format_options()) {
-                formatOptionsYson = NYson::TYsonString(requestHeader.request_format_options());
-            }
-            if (format != EMessageFormat::Protobuf) {
-                body = ConvertMessageFromFormat(
-                    body,
-                    format,
-                    NYson::ReflectProtobufMessageType<TRequestMessage>(),
-                    formatOptionsYson);
-            }
-        }
-
         // COMPAT(danilalexeev): legacy RPC codecs
         std::optional<NCompression::ECodec> bodyCodecId;
         NCompression::ECodec attachmentCodecId;
@@ -232,6 +215,24 @@ public:
         } else {
             bodyCodecId = std::nullopt;
             attachmentCodecId = NCompression::ECodec::None;
+        }
+
+        auto body = underlyingContext->GetRequestBody();
+        if (requestHeader.has_request_format()) {
+            auto format = static_cast<EMessageFormat>(requestHeader.request_format());
+
+            NYson::TYsonString formatOptionsYson;
+            if (requestHeader.has_request_format_options()) {
+                formatOptionsYson = NYson::TYsonString(requestHeader.request_format_options());
+            }
+            if (format != EMessageFormat::Protobuf) {
+                body = ConvertMessageFromFormat(
+                    body,
+                    format,
+                    NYson::ReflectProtobufMessageType<TRequestMessage>(),
+                    formatOptionsYson,
+                    !bodyCodecId.has_value());
+            }
         }
 
         bool deserializationSucceeded = bodyCodecId
@@ -327,6 +328,7 @@ protected:
 
         auto codecId = underlyingContext->GetResponseCodec();
         auto serializedBody = SerializeProtoToRefWithCompression(*Response_, codecId);
+        underlyingContext->SetResponseBodySerializedWithCompression();
 
         if (requestHeader.has_response_format()) {
             int intFormat = requestHeader.response_format();
@@ -558,6 +560,9 @@ protected:
         //! Maximum number of requests in queue (both waiting and executing).
         int QueueSizeLimit = 10'000;
 
+        //! Maximum total size of requests in queue (both waiting and executing).
+        i64 QueueBytesSizeLimit = 2_GB;
+
         //! Maximum number of requests executing concurrently.
         int ConcurrencyLimit = 10'000;
 
@@ -595,6 +600,7 @@ protected:
         TMethodDescriptor SetHeavy(bool value) const;
         TMethodDescriptor SetResponseCodec(NCompression::ECodec value) const;
         TMethodDescriptor SetQueueSizeLimit(int value) const;
+        TMethodDescriptor SetQueueBytesSizeLimit(i64 value) const;
         TMethodDescriptor SetConcurrencyLimit(int value) const;
         TMethodDescriptor SetSystem(bool value) const;
         TMethodDescriptor SetLogLevel(NLogging::ELogLevel value) const;
@@ -698,11 +704,13 @@ protected:
         std::atomic<bool> Pooled = true;
 
         std::atomic<int> QueueSizeLimit = 0;
+        std::atomic<i64> QueueBytesSizeLimit = 0;
 
         TDynamicConcurrencyLimit ConcurrencyLimit;
         std::atomic<double> WaitingTimeoutFraction = 0;
 
         NProfiling::TCounter RequestQueueSizeLimitErrorCounter;
+        NProfiling::TCounter RequestQueueBytesSizeLimitErrorCounter;
         NProfiling::TCounter UnauthenticatedRequestsCounter;
 
         std::atomic<NLogging::ELogLevel> LogLevel = {};
@@ -1017,7 +1025,8 @@ public:
     bool Register(TServiceBase* service, TServiceBase::TRuntimeMethodInfo* runtimeInfo);
     void Configure(const TMethodConfigPtr& config);
 
-    bool IsQueueLimitSizeExceeded() const;
+    bool IsQueueSizeLimitExceeded() const;
+    bool IsQueueBytesSizeLimitExceeded() const;
 
     int GetQueueSize() const;
     int GetConcurrency() const;
@@ -1052,14 +1061,15 @@ private:
     std::atomic<bool> Throttled_ = false;
 
     std::atomic<int> QueueSize_ = 0;
+    std::atomic<i64> QueueBytesSize_ = 0;
     moodycamel::ConcurrentQueue<TServiceBase::TServiceContextPtr> Queue_;
 
 
     void ScheduleRequestsFromQueue();
     void RunRequest(TServiceBase::TServiceContextPtr context);
 
-    int IncrementQueueSize();
-    void DecrementQueueSize();
+    void IncrementQueueSize(const TServiceBase::TServiceContextPtr& context);
+    void DecrementQueueSize(const TServiceBase::TServiceContextPtr& context);
 
     int IncrementConcurrency();
     void DecrementConcurrency();

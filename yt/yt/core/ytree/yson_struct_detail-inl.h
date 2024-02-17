@@ -38,19 +38,24 @@ concept SupportsDontSerializeDefault =
 
 ////////////////////////////////////////////////////////////////////////////////
 
+// Primitive type
 template <class T>
 void LoadFromNode(
     T& parameter,
     NYTree::INodePtr node,
     const NYPath::TYPath& path,
-    EMergeStrategy /*mergeStrategy*/,
+    EMergeStrategy mergeStrategy,
     std::optional<EUnrecognizedStrategy> /*recursiveUnrecognizedStrategy*/)
 {
+    if (mergeStrategy == EMergeStrategy::Overwrite) {
+        parameter = T();
+    }
+
     try {
         Deserialize(parameter, node);
     } catch (const std::exception& ex) {
         THROW_ERROR_EXCEPTION("Error reading parameter %v", path)
-                << ex;
+            << ex;
     }
 }
 
@@ -114,6 +119,52 @@ void LoadFromNode(
     }
 }
 
+// YsonStructLite or ExternalizedYsonStruct serializer
+template <std::derived_from<TYsonStructLite> T>
+void LoadFromNode(
+    T& parameter,
+    NYTree::INodePtr node,
+    const NYPath::TYPath& path,
+    EMergeStrategy mergeStrategy,
+    std::optional<EUnrecognizedStrategy> /*recursiveUnrecognizedStrategy*/)
+{
+    if (mergeStrategy == EMergeStrategy::Overwrite) {
+        // NB: We call SetDefaults here instead of plain T()
+        // because ExternalizedYsonStruct serializer doesn't
+        // own its data therefore defaulting it would drop the
+        // reference to the actual object instead of overwriting it.
+        parameter.SetDefaults();
+    }
+
+    try {
+        parameter.Load(node, /*postprocess*/ true, /*setDefaults*/ false);
+    } catch (const std::exception& ex) {
+        THROW_ERROR_EXCEPTION("Error reading parameter %v", path)
+            << ex;
+    }
+}
+
+// ExternalizedYsonStruct
+template <CExternallySerializable T>
+void LoadFromNode(
+    T& parameter,
+    NYTree::INodePtr node,
+    const NYPath::TYPath& path,
+    EMergeStrategy mergeStrategy,
+    std::optional<EUnrecognizedStrategy> /*recursiveUnrecognizedStrategy*/)
+{
+    if (mergeStrategy == EMergeStrategy::Overwrite) {
+        parameter = T();
+    }
+
+    try {
+        DeserializeExternalized(parameter, node, /*postprocess*/ true, /*setDefaults*/ false);
+    } catch (const std::exception& ex) {
+        THROW_ERROR_EXCEPTION("Error reading parameter %v", path)
+            << ex;
+    }
+}
+
 // std::optional
 template <class T>
 void LoadFromNode(
@@ -132,6 +183,19 @@ void LoadFromNode(
                 T value;
                 LoadFromNode(value, node, path, EMergeStrategy::Overwrite, recursiveUnrecognizedStrategy);
                 parameter = std::move(value);
+            }
+            break;
+        }
+
+        case EMergeStrategy::Combine: {
+            if (node->GetType() != NYTree::ENodeType::Entity) {
+                if (parameter.has_value()) {
+                    LoadFromNode(*parameter, node, path, EMergeStrategy::Combine, recursiveUnrecognizedStrategy);
+                } else {
+                    T value;
+                    LoadFromNode(value, node, path, EMergeStrategy::Overwrite, recursiveUnrecognizedStrategy);
+                    parameter = std::move(value);
+                }
             }
             break;
         }
@@ -234,20 +298,17 @@ void LoadFromNode(
 
 ////////////////////////////////////////////////////////////////////////////////
 
+// Primitive type or YsonStructLite or ExternalizedYsonStruct
+// See LoadFromNode for further specialization.
 template <class T>
 void LoadFromCursor(
     T& parameter,
     NYson::TYsonPullParserCursor* cursor,
     const NYPath::TYPath& path,
-    EMergeStrategy /*mergeStrategy*/,
-    std::optional<EUnrecognizedStrategy> /*recursiveUnrecognizedStrategy*/)
+    EMergeStrategy mergeStrategy,
+    std::optional<EUnrecognizedStrategy> recursiveUnrecognizedStrategy)
 {
-    try {
-        Deserialize(parameter, cursor);
-    } catch (const std::exception& ex) {
-        THROW_ERROR_EXCEPTION("Error reading parameter %v", path)
-            << ex;
-    }
+    LoadFromNode(parameter, NYson::ExtractTo<NYTree::INodePtr>(cursor), path, mergeStrategy, recursiveUnrecognizedStrategy);
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -355,6 +416,21 @@ void LoadFromCursor(
                     T value;
                     LoadFromCursor(value, cursor, path, EMergeStrategy::Overwrite, recursiveUnrecognizedStrategy);
                     parameter = std::move(value);
+                }
+                break;
+            }
+
+            case EMergeStrategy::Combine: {
+                if ((*cursor)->GetType() == NYson::EYsonItemType::EntityValue) {
+                    cursor->Next();
+                } else {
+                    if (parameter.has_value()) {
+                        LoadFromCursor(*parameter, cursor, path, EMergeStrategy::Combine, recursiveUnrecognizedStrategy);
+                    } else {
+                        T value;
+                        LoadFromCursor(value, cursor, path, EMergeStrategy::Overwrite, recursiveUnrecognizedStrategy);
+                        parameter = std::move(value);
+                    }
                 }
                 break;
             }
@@ -727,14 +803,6 @@ void TYsonStructParameter<TValue>::SetDefaultsInitialized(TYsonStructBase* self)
     if (DefaultCtor_) {
         value = (*DefaultCtor_)();
     }
-
-    NPrivate::InvokeForComposites(
-        &value,
-        [] <NPrivate::IsYsonStructOrYsonSerializable T> (TIntrusivePtr<T> obj) {
-            if (obj) {
-                obj->SetDefaults();
-            }
-        });
 }
 
 template <class TValue>

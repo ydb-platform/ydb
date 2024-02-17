@@ -72,5 +72,7 @@ test=[
     "/ut",
     "/src/test",
     "/src/test/java",
-    "/src/test-integration"
+    "/src/test-integration",
+    "/src/testFixtures",
+    "/src/intTest",
 ]

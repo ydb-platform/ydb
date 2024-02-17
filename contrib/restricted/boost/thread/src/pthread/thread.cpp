@@ -32,7 +32,7 @@
 #endif
 
 #if defined(__VXWORKS__)
-#include <vxCpuLib.h>
+#error #include <vxCpuLib.h>
 #endif
 
 #include <fstream>

@@ -14,15 +14,9 @@ PEERDIR(
 
 ADDINCL(
     contrib/libs/sqlite3
+    contrib/tools/python3/src/Include
     contrib/tools/python3/src/Include/internal
 )
-
-IF (USE_SYSTEM_PYTHON)
-    # Prevent configure error when arcadia python is a tool in a system python graph.
-    ADDINCL(
-        contrib/tools/python3/src/Include
-    )
-ENDIF()
 
 PYTHON3_ADDINCL()
 

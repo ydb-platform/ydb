@@ -204,8 +204,8 @@ namespace {
             if (fileName == "/proc/self/exe") {
                 fileName = "EXE";
             }
-            auto it = NYql::NBacktrace::Mapping.find(frame.File);
-            Cerr << "StackFrame: " << (it == NYql::NBacktrace::Mapping.end() ? frame.File : it->second) << " " << frame.Address << "\n";
+            auto it = NYql::NBacktrace::Mapping.find(fileName);
+            outp << "StackFrame: " << (it == NYql::NBacktrace::Mapping.end() ? fileName : it->second) << " " << frame.Address << "\n";
         }
     }
 }

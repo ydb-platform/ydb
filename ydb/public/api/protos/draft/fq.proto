@@ -129,7 +129,7 @@ message QueryContent {
     // By default it is "yql", but additional syntax "pg" (PostgreSQL SQL frontend) is supported as well
     QuerySyntax syntax = 11;
     // Map of query parameters
-    map<string, TypedValue> parameters = 12; [(Ydb.map_key).length.range = {min: 1, max: 100}, (Ydb.length).range = {min: 1, max: 100}];
+    map<string, Ydb.TypedValue> parameters = 12 [(Ydb.map_key).length.range = {min: 1, max: 100}];
 }
 
 message CommonMeta {
@@ -374,7 +374,7 @@ message Job {
     bool automatic = 11;
     google.protobuf.Timestamp expire_at = 12;
     QueryContent.QuerySyntax syntax = 13;
-    map<string, TypedValue> parameters = 14;
+    map<string, Ydb.TypedValue> parameters = 14;
 }
 
 // Information about recent query runs

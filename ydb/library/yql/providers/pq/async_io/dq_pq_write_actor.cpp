@@ -253,9 +253,9 @@ private:
     }
 
     NYdb::NTopic::TWriteSessionSettings GetWriteSessionSettings() {
-        return NYdb::NTopic::TWriteSessionSettings(SinkParams.GetTopicPath(), GetSourceId())
+        return NYdb::NTopic::TWriteSessionSettings(SinkParams.GetTopicPath(), GetSourceId(), "")
             .MaxMemoryUsage(FreeSpace)
-            .ClusterDiscoveryMode(NYdb::NTopic::EClusterDiscoveryMode::Auto)
+            //.ClusterDiscoveryMode(NYdb::NTopic::EClusterDiscoveryMode::Auto)
             .Codec(SinkParams.GetClusterType() == NPq::NProto::DataStreams
                 ? NYdb::NTopic::ECodec::RAW
                 : NYdb::NTopic::ECodec::GZIP);

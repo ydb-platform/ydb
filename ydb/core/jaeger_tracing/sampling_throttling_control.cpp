@@ -8,7 +8,7 @@ TSamplingThrottlingControl::TSamplingThrottlingControl(std::unique_ptr<TSampling
     : Impl(std::move(initialImpl))
 {}
 
-void TSamplingThrottlingControl::HandleTracing(NWilson::TTraceId& traceId, TRequestDiscriminator discriminator) {
+void TSamplingThrottlingControl::HandleTracing(NWilson::TTraceId& traceId, const TRequestDiscriminator& discriminator) {
     if (ImplUpdate.load(std::memory_order_relaxed)) {
         auto newImpl = ImplUpdate.exchange(nullptr, std::memory_order_relaxed);
         Y_ABORT_UNLESS(newImpl);

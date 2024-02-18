@@ -1056,7 +1056,7 @@ void WriteToYtTableScheme(
         TYtTableInfo tableInfo(key, write.DataSink().Cluster().Value());
 
         CreateYtFileTable(tempDir.Path(), tableInfo, columnsNode->ChildPtr(1),
-                          yqlNativeServices->GetTablesMapping(), ctx, writeNode.Pos(ctx));
+                        yqlNativeServices->GetTablesMapping(), ctx, writeNode.Pos(ctx));
     }
     else if (mode == "drop") {
         DeleteYtFileTable(tempDir.Path(), TString(tableName), yqlNativeServices->GetTablesMapping());
@@ -1233,27 +1233,37 @@ int Main(int argc, char* argv[])
         if (const auto maybeWrite = TMaybeNode<TYtWrite>(opNode)) {
             const auto write = maybeWrite.Cast();
 
-            TYtOutputKey key;
-            if (!key.Parse(write.Arg(2).Ref(), ctx)) {
-                WriteErrorToStream(program);
+            if (0 < write.Arg(2).Ref().ChildrenSize()) {
+                TYtOutputKey key;
+                if (!key.Parse(write.Arg(2).Ref(), ctx)) {
+                    WriteErrorToStream(program);
 
-                return {};
-            }
-
-            const auto* keyNode = key.GetNode();
-            const bool isWriteToTableSchemeNode = keyNode->IsCallable("Key") && 0 < keyNode->ChildrenSize() &&
-                keyNode->Child(0)->Child(0)->IsAtom("tablescheme");
-
-            if (isWriteToTableSchemeNode) {
-                WriteToYtTableScheme(*opNode, write, key, tempDir, yqlNativeServices, program->ExprCtx());
-
-                if (needPrintAst) {
-                    program->Optimize(username);
-
-                    ShowFinalAst(program, Cerr);
+                    return {};
                 }
 
-                continue;
+                const auto* keyNode = key.GetNode();
+                const bool isWriteToTableSchemeNode = keyNode->IsCallable("Key") && 0 < keyNode->ChildrenSize() &&
+                    keyNode->Child(0)->Child(0)->IsAtom("tablescheme");
+
+                if (isWriteToTableSchemeNode) {
+                    try {
+                        WriteToYtTableScheme(*opNode, write, key, tempDir, yqlNativeServices, program->ExprCtx());
+                    } catch (const yexception& e) {
+                        program->Issues().AddIssue(e.what());
+
+                        WriteErrorToStream(program);
+
+                        continue;
+                    }
+
+                    if (needPrintAst) {
+                        program->Optimize(username);
+
+                        ShowFinalAst(program, Cerr);
+                    }
+
+                    continue;
+                }
             }
         }
 

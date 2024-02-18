@@ -9,7 +9,6 @@
 #include <ydb/core/tx/schemeshard/schemeshard_private.h>
 #include <ydb/core/tx/schemeshard/schemeshard_billing_helpers.h>
 #include <ydb/core/tx/datashard/datashard.h>
-#include <ydb/core/tx/datashard/datashard_ut_common_kqp.h>
 #include <ydb/core/wrappers/ut_helpers/s3_mock.h>
 #include <ydb/core/metering/metering.h>
 #include <ydb/core/ydb_convert/table_description.h>

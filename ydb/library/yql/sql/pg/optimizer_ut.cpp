@@ -28,7 +28,7 @@ Y_UNIT_TEST(PgJoinSearch2Rels) {
         Cerr << str << "\n";
     };
 
-    auto optimizer = std::unique_ptr<IOptimizer>(MakePgOptimizer(input, log));
+    auto optimizer = std::unique_ptr<IOptimizer>(MakePgOptimizerInternal(input, log));
 
     auto res = optimizer->JoinSearch();
     auto resStr = res.ToString(false);
@@ -74,7 +74,7 @@ Y_UNIT_TEST(PgJoinSearch2RelsLeft) {
         Cerr << str << "\n";
     };
 
-    auto optimizer = std::unique_ptr<IOptimizer>(MakePgOptimizer(input, log));
+    auto optimizer = std::unique_ptr<IOptimizer>(MakePgOptimizerInternal(input, log));
 
     auto res = optimizer->JoinSearch();
     auto resStr = res.ToString(false);
@@ -120,7 +120,7 @@ Y_UNIT_TEST(PgJoinSearch2RelsRight) {
         Cerr << str << "\n";
     };
 
-    auto optimizer = std::unique_ptr<IOptimizer>(MakePgOptimizer(input, log));
+    auto optimizer = std::unique_ptr<IOptimizer>(MakePgOptimizerInternal(input, log));
 
     auto res = optimizer->JoinSearch();
     auto resStr = res.ToString(false);
@@ -159,7 +159,7 @@ Y_UNIT_TEST(PgJoinSearch3Rels) {
         Cerr << str << "\n";
     };
 
-    auto optimizer = std::unique_ptr<IOptimizer>(MakePgOptimizer(input, log));
+    auto optimizer = std::unique_ptr<IOptimizer>(MakePgOptimizerInternal(input, log));
     auto res = optimizer->JoinSearch();
     auto resStr = res.ToString(false);
     Cerr << resStr;

@@ -9,12 +9,15 @@ void TGranulesStorage::UpdateGranuleInfo(const TGranuleMeta& granule) {
     }
 }
 
-std::shared_ptr<NKikimr::NOlap::TGranuleMeta> TGranulesStorage::GetGranuleForCompaction(const THashMap<ui64, std::shared_ptr<TGranuleMeta>>& granules) const {
+std::shared_ptr<NKikimr::NOlap::TGranuleMeta> TGranulesStorage::GetGranuleForCompaction(const THashMap<ui64, std::shared_ptr<TGranuleMeta>>& granules, const THashSet<ui64>& busyGranuleIds) const {
     const TInstant now = TInstant::Now();
     std::optional<NStorageOptimizer::TOptimizationPriority> priority;
     std::shared_ptr<TGranuleMeta> granule;
     for (auto&& i : granules) {
         i.second->ActualizeOptimizer(now);
+        if (busyGranuleIds.contains(i.first)) {
+            continue;
+        }
         if (!priority || *priority < i.second->GetCompactionPriority()) {
             priority = i.second->GetCompactionPriority();
             granule = i.second;

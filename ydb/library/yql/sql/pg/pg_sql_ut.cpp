@@ -518,18 +518,7 @@ from pg_catalog.pg_type)",
         UNIT_ASSERT(res.Root);
 
         res = SqlToYqlWithMode(
-            R"(select set_config('search_path', 'yql', false);)",
-            NSQLTranslation::ESqlMode::QUERY,
-            10,
-            {},
-            EDebugOutput::None,
-            false,
-            settings);
-        UNIT_ASSERT(!res.IsOk());
-        UNIT_ASSERT(!res.Root);
-
-        res = SqlToYqlWithMode(
-            R"(select set_config('search_path', 'pg_catalog', false);)",
+            R"(select * from pg_type;)",
             NSQLTranslation::ESqlMode::QUERY,
             10,
             {},
@@ -538,39 +527,5 @@ from pg_catalog.pg_type)",
             settings);
         UNIT_ASSERT(res.IsOk());
         UNIT_ASSERT(res.Root);
-
-        res = SqlToYqlWithMode(
-            R"(rollback;)",
-            NSQLTranslation::ESqlMode::QUERY,
-            10,
-            {},
-            EDebugOutput::None,
-            false,
-            settings);
-        UNIT_ASSERT(res.IsOk());
-        UNIT_ASSERT(res.Root);
-
-        google::protobuf::Arena arena;
-        const auto service = TString(NYql::YtProviderName);
-        settings.ClusterMapping["hahn"] = NYql::YtProviderName;
-        settings.ClusterMapping["mon"] = NYql::SolomonProviderName;
-        settings.MaxErrors = 10;
-        settings.Mode = NSQLTranslation::ESqlMode::QUERY;
-        settings.Arena = &arena;
-        settings.AnsiLexer = false;
-        settings.SyntaxVersion = 1;
-        settings.PgParser = true;
-
-        res = SqlToYql(
-            R"(select oid,
-typinput::int4 as typinput,
-typname,
-typnamespace,
-typtype
-from pg_type)",
-            settings);
-        UNIT_ASSERT(res.Issues.ToString().Contains("Unknown cluster:"));
-        UNIT_ASSERT(!res.IsOk());
-        UNIT_ASSERT(!res.Root);
     }
 }

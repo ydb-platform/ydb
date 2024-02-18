@@ -389,6 +389,14 @@ FROM regr_test WHERE x IN (10,20,30,80);
 SELECT count(*), sum(x), regr_sxx(y,x), sum(y),regr_syy(y,x), regr_sxy(y,x)
 FROM regr_test;
 </sql-statement>
+-stdin-:<main>: Error: Type annotation
+
+    -stdin-:<main>:1:1: Error: At function: RemovePrefixMembers, At function: PgSelect, At function: PgSetItem
+    	SELECT count(*), sum(x), regr_sxx(y,x), sum(y),regr_syy(y,x), regr_sxy(y,x)
+	^
+        -stdin-:<main>:1:1: Error: Duplicated member: sum
+        	SELECT count(*), sum(x), regr_sxx(y,x), sum(y),regr_syy(y,x), regr_sxy(y,x)
+	^
 <sql-statement>
 SELECT float8_accum('{4,140,2900}'::float8[], 100);
 </sql-statement>
@@ -1344,4 +1352,4 @@ drop table p_t1;
 --
 create temp table t1(f1 int, f2 bigint);
 </sql-statement>
-(TFileError) (File exists) util/system/file.cpp:918: can't open "/tmp/tmpjl487dvf/t1" with mode CreateNew (0x00000003)
+(TFileError) (Error 17: File exists) util/system/file.cpp:918: can't open "/var/tmp/tmpdyumpf7m/t1" with mode CreateNew (0x00000003)

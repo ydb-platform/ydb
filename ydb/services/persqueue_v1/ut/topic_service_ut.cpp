@@ -156,8 +156,8 @@ protected:
 
         NACLib::TDiffACL acl;
         acl.AddAccess(NACLib::EAccessType::Allow, NACLib::DescribeSchema, AUTH_TOKEN);
-        acl.AddAccess(NACLib::EAccessType::Allow, NACLib::ReadAttributes, AUTH_TOKEN);
-        acl.AddAccess(NACLib::EAccessType::Allow, NACLib::WriteAttributes, AUTH_TOKEN);
+        // in future use right UseConsumer
+        acl.AddAccess(NACLib::EAccessType::Allow, NACLib::SelectRow, AUTH_TOKEN);
         server->AnnoyingClient->ModifyACL(TOPIC_PARENT, VALID_TOPIC_NAME, acl.SerializeAsString());
 
         auto driverCfg = NYdb::TDriverConfig()
@@ -328,7 +328,8 @@ Y_UNIT_TEST_F(AccessRights, TUpdateOffsetsInTransactionFixture) {
     UNIT_ASSERT_VALUES_EQUAL(response.operation().status(), Ydb::StatusIds::SUCCESS);
 
     NACLib::TDiffACL acl;
-    acl.RemoveAccess(NACLib::EAccessType::Allow, NACLib::ReadAttributes, AUTH_TOKEN);
+    // in future use right UseConsumer
+    acl.RemoveAccess(NACLib::EAccessType::Allow, NACLib::SelectRow, AUTH_TOKEN);
     server->AnnoyingClient->ModifyACL(TOPIC_PARENT, VALID_TOPIC_NAME, acl.SerializeAsString());
 
     response = Call_UpdateOffsetsInTransaction({

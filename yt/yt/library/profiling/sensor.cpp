@@ -216,7 +216,7 @@ TGaugeHistogram::operator bool() const
 
 ////////////////////////////////////////////////////////////////////////////////
 
-void TRateHistogram::Add(double value, int count) noexcept
+void TRateHistogram::Add(double value, int count) const noexcept
 {
     if (!Histogram_) {
         return;
@@ -225,7 +225,7 @@ void TRateHistogram::Add(double value, int count) noexcept
     Histogram_->Add(value, count);
 }
 
-void TRateHistogram::Remove(double value, int count) noexcept
+void TRateHistogram::Remove(double value, int count) const noexcept
 {
     if (!Histogram_) {
         return;

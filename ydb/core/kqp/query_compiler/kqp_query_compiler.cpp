@@ -174,6 +174,7 @@ void FillTable(const TKikimrTableMetadata& tableMeta, THashSet<TStringBuf>&& col
         phyColumn.MutableId()->SetId(column->Id);
         phyColumn.MutableId()->SetName(column->Name);
         phyColumn.SetTypeId(column->TypeInfo.GetTypeId());
+        phyColumn.SetIsBuildInProgress(column->IsBuildInProgress);
         if (column->IsDefaultFromSequence()) {
             phyColumn.SetDefaultFromSequence(column->DefaultFromSequence);
         } else if (column->IsDefaultFromLiteral()) {

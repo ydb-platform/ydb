@@ -879,8 +879,8 @@ public:
 
     void GrantConsumerAccess(const TString& oldName, const TString& subj) {
         NACLib::TDiffACL acl;
-        acl.AddAccess(NACLib::EAccessType::Allow, NACLib::ReadAttributes, subj);
-        acl.AddAccess(NACLib::EAccessType::Allow, NACLib::WriteAttributes, subj);
+        // in future use right UseConsumer
+        acl.AddAccess(NACLib::EAccessType::Allow, NACLib::SelectRow, subj);
         auto name = NPersQueue::ConvertOldConsumerName(oldName);
         auto pos = name.rfind("/");
         Y_ABORT_UNLESS(pos != TString::npos);

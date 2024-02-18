@@ -161,15 +161,35 @@ private:
 
 IDqControlFactoryPtr CreateDqControlFactory(const NProto::TDqConfig& config, const TMap<TString, TString>& udfs, const TFileStoragePtr& fileStorage) {
     THashSet<TString> indexedUdfFilter(config.GetControl().GetIndexedUdfsToWarmup().begin(), config.GetControl().GetIndexedUdfsToWarmup().end());
-    return new TDqControlFactory(
-        "localhost",
+    return CreateDqControlFactory(
         config.GetPort(),
-        2,
-        udfs,
         config.GetYtBackends()[0].GetVanillaJobLite(),
         config.GetYtBackends()[0].GetVanillaJobLiteMd5(),
-        indexedUdfFilter,
         config.GetControl().GetEnableStrip(),
+        indexedUdfFilter,
+        udfs,
+        fileStorage
+    );
+}
+
+IDqControlFactoryPtr CreateDqControlFactory(
+    const uint32_t port,
+    const TString& vanillaJobLite,
+    const TString& vanillaJobLiteMd5,
+    const bool enableStrip,
+    const THashSet<TString> indexedUdfFilter,
+    const TMap<TString, TString>& udfs,
+    const TFileStoragePtr& fileStorage)
+{
+    return new TDqControlFactory(
+        "localhost",
+        port,
+        2,
+        udfs,
+        vanillaJobLite,
+        vanillaJobLiteMd5,
+        indexedUdfFilter,
+        enableStrip,
         fileStorage
     );
 }

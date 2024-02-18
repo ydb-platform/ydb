@@ -285,14 +285,15 @@ protected:
         config.Opts->SetFreeArgDefaultTitle("PATH", "path to protobuf file; files are merged in order in which they are enlisted");
     }
 
-    template<typename TProto>
-    TProto *MutableConfigPart(TConfig& config, const char *optname,
-            bool (NKikimrConfig::TAppConfig::*hasConfig)() const,
-            const TProto& (NKikimrConfig::TAppConfig::*getConfig)() const,
-            TProto* (NKikimrConfig::TAppConfig::*mutableConfig)(),
-            ui32 kind,
-            TCallContext callCtx) {
-        TProto *res = nullptr;
+    template<typename TFieldTag>
+    auto MutableConfigPart(TConfig& config, const char *optname,
+            TFieldTag tag,
+            TCallContext callCtx) -> decltype((AppConfig.*std::get<2>(NKikimrConfig::TAppConfig::GetFieldAccessorsByFieldTag(tag)))())
+    {
+        auto [hasConfig, getConfig, mutableConfig] = NKikimrConfig::TAppConfig::GetFieldAccessorsByFieldTag(tag);
+        ui32 kind = NKikimrConfig::TAppConfig::GetFieldIdByFieldTag(tag);
+
+        typename std::remove_reference<decltype(*(AppConfig.*mutableConfig)())>::type *res = nullptr;
         if ((AppConfig.*hasConfig)()) {
             return nullptr; // this field is already provided in AppConfig, so we don't overwrite it
         }
@@ -310,15 +311,18 @@ protected:
         return res;
     }
 
-    template<typename TProto>
-    TProto *MutableConfigPartMerge(TConfig& config, const char *optname,
-            TProto* (NKikimrConfig::TAppConfig::*mutableConfig)(),
-            ui32 kind,
-            TCallContext callCtx) {
-        TProto *res = nullptr;
+    template<typename TFieldTag>
+    auto MutableConfigPartMerge(TConfig& config, const char *optname,
+            TFieldTag tag,
+            TCallContext callCtx) -> decltype((AppConfig.*std::get<2>(NKikimrConfig::TAppConfig::GetFieldAccessorsByFieldTag(tag)))())
+    {
+        auto mutableConfig = std::get<2>(NKikimrConfig::TAppConfig::GetFieldAccessorsByFieldTag(tag));
+        ui32 kind = NKikimrConfig::TAppConfig::GetFieldIdByFieldTag(tag);
+
+        typename std::remove_reference<decltype(*(AppConfig.*mutableConfig)())>::type *res = nullptr;
 
         if (config.ParseResult->Has(optname)) {
-            TProto cfg;
+            typename std::remove_reference<decltype(*(AppConfig.*mutableConfig)())>::type cfg;
             bool success = ParsePBFromFile(config.ParseResult->Get(optname), &cfg);
             Y_ABORT_UNLESS(success);
             res = (AppConfig.*mutableConfig)();
@@ -361,19 +365,15 @@ protected:
     virtual void Parse(TConfig& config) override {
         TClientCommand::Parse(config);
 
-#define OPTION(NAME, FIELD) MutableConfigPart(config, NAME, &NKikimrConfig::TAppConfig::Has##FIELD, \
-            &NKikimrConfig::TAppConfig::Get##FIELD, &NKikimrConfig::TAppConfig::Mutable##FIELD, \
-            (ui32)NKikimrConsole::TConfigItem:: FIELD ## Item, TCallContext{__FILE__, __LINE__})
-#define OPTION_MERGE(NAME, FIELD) MutableConfigPartMerge(config, NAME, &NKikimrConfig::TAppConfig::Mutable##FIELD, \
-            (ui32)NKikimrConsole::TConfigItem:: FIELD ## Item, TCallContext{__FILE__, __LINE__})
+        using TCfg = NKikimrConfig::TAppConfig;
 
-        OPTION("auth-file", AuthConfig);
+        MutableConfigPart(config, "auth-file", TCfg::TAuthConfigFieldTag{}, CALL_CTX());
         LoadBootstrapConfig(config);
         LoadYamlConfig(CALL_CTX());
-        OPTION_MERGE("auth-token-file", AuthConfig);
+        MutableConfigPartMerge(config, "auth-token-file", TCfg::TAuthConfigFieldTag{}, CALL_CTX());
 
         // start memorylog as soon as possible
-        if (auto mem = OPTION("memorylog-file", MemoryLogConfig)) {
+        if (auto mem = MutableConfigPart(config, "memorylog-file", TCfg::TMemoryLogConfigFieldTag{}, CALL_CTX())) {
             if (mem->HasLogBufferSize() && mem->GetLogBufferSize() > 0) {
                 if (mem->HasLogGrainSize() && mem->GetLogGrainSize() > 0) {
                     TMemoryLog::CreateMemoryLogBuffer(mem->GetLogBufferSize(), mem->GetLogGrainSize());
@@ -384,7 +384,7 @@ protected:
             }
         }
 
-        OPTION("naming-file", NameserviceConfig);
+        MutableConfigPart(config, "naming-file", TCfg::TNameserviceConfigFieldTag{}, CALL_CTX());
 
         if (config.ParseResult->Has("node")) {
             if (NodeIdValue == "static") {
@@ -460,16 +460,16 @@ protected:
 
         LoadYamlConfig(CALL_CTX());
 
-        OPTION("sys-file", ActorSystemConfig);
+        MutableConfigPart(config, "sys-file", TCfg::TActorSystemConfigFieldTag{}, CALL_CTX());
         if (!AppConfig.HasActorSystemConfig()) {
             AppConfig.MutableActorSystemConfig()->CopyFrom(*DummyActorSystemConfig());
             TRACE_CONFIG_CHANGE_INPLACE_T(ActorSystemConfig, SetExplicitly);
         }
 
-        OPTION("domains-file", DomainsConfig);
-        OPTION("bs-file", BlobStorageConfig);
+        MutableConfigPart(config, "domains-file", TCfg::TDomainsConfigFieldTag{}, CALL_CTX());
+        MutableConfigPart(config, "bs-file", TCfg::TBlobStorageConfigFieldTag{}, CALL_CTX());
 
-        if (auto logConfig = OPTION("log-file", LogConfig)) {
+        if (auto logConfig = MutableConfigPart(config, "log-file", TCfg::TLogConfigFieldTag{}, CALL_CTX())) {
             if (config.ParseResult->Has("syslog"))
                 logConfig->SetSysLog(true);
             if (config.ParseResult->Has("log-level"))
@@ -495,45 +495,45 @@ protected:
             TRACE_CONFIG_CHANGE_INPLACE_T(LogConfig, UpdateExplicitly);
         }
 
-        if (auto interconnectConfig = OPTION("ic-file", InterconnectConfig)) {
+        if (auto interconnectConfig = MutableConfigPart(config, "ic-file", TCfg::TInterconnectConfigFieldTag{}, CALL_CTX())) {
             if (config.ParseResult->Has("tcp")) {
                 interconnectConfig->SetStartTcp(true);
                 TRACE_CONFIG_CHANGE_INPLACE_T(InterconnectConfig, UpdateExplicitly);
             }
         }
 
-        OPTION("channels-file", ChannelProfileConfig);
+        MutableConfigPart(config, "channels-file", TCfg::TChannelProfileConfigFieldTag{}, CALL_CTX());
 
-        if (auto bootstrapConfig = OPTION("bootstrap-file", BootstrapConfig)) {
+        if (auto bootstrapConfig = MutableConfigPart(config, "bootstrap-file", TCfg::TBootstrapConfigFieldTag{}, CALL_CTX())) {
             bootstrapConfig->MutableCompileServiceConfig()->SetInflightLimit(CompileInflightLimit);
             TRACE_CONFIG_CHANGE_INPLACE_T(BootstrapConfig, UpdateExplicitly);
         }
 
-        OPTION("vdisk-file", VDiskConfig);
-        OPTION("drivemodel-file", DriveModelConfig);
-        OPTION("grpc-file", GRpcConfig);
-        OPTION("dyn-nodes-file", DynamicNameserviceConfig);
-        OPTION("cms-file", CmsConfig);
-        OPTION("pq-file", PQConfig);
-        OPTION("pqcd-file", PQClusterDiscoveryConfig);
-        OPTION("netclassifier-file", NetClassifierConfig);
-        OPTION("auth-file", AuthConfig);
-        OPTION_MERGE("auth-token-file", AuthConfig);
-        OPTION("key-file", KeyConfig);
-        OPTION("pdisk-key-file", PDiskKeyConfig);
-        OPTION("sqs-file", SqsConfig);
-        OPTION("http-proxy-file", HttpProxyConfig);
-        OPTION("public-http-file", PublicHttpConfig);
-        OPTION("feature-flags-file", FeatureFlags);
-        OPTION("rb-file", ResourceBrokerConfig);
-        OPTION("metering-file", MeteringConfig);
-        OPTION("audit-file", AuditConfig);
-        OPTION("kqp-file", KQPConfig);
-        OPTION("incrhuge-file", IncrHugeConfig);
-        OPTION("alloc-file", AllocatorConfig);
-        OPTION("fq-file", FederatedQueryConfig);
-        OPTION(nullptr, TracingConfig);
-        OPTION(nullptr, FailureInjectionConfig);
+        MutableConfigPart(config, "vdisk-file", TCfg::TVDiskConfigFieldTag{}, CALL_CTX());
+        MutableConfigPart(config, "drivemodel-file", TCfg::TDriveModelConfigFieldTag{}, CALL_CTX());
+        MutableConfigPart(config, "grpc-file", TCfg::TGRpcConfigFieldTag{}, CALL_CTX());
+        MutableConfigPart(config, "dyn-nodes-file", TCfg::TDynamicNameserviceConfigFieldTag{}, CALL_CTX());
+        MutableConfigPart(config, "cms-file", TCfg::TCmsConfigFieldTag{}, CALL_CTX());
+        MutableConfigPart(config, "pq-file", TCfg::TPQConfigFieldTag{}, CALL_CTX());
+        MutableConfigPart(config, "pqcd-file", TCfg::TPQClusterDiscoveryConfigFieldTag{}, CALL_CTX());
+        MutableConfigPart(config, "netclassifier-file", TCfg::TNetClassifierConfigFieldTag{}, CALL_CTX());
+        MutableConfigPart(config, "auth-file", TCfg::TAuthConfigFieldTag{}, CALL_CTX());
+        MutableConfigPartMerge(config, "auth-token-file", TCfg::TAuthConfigFieldTag{}, CALL_CTX());
+        MutableConfigPart(config, "key-file", TCfg::TKeyConfigFieldTag{}, CALL_CTX());
+        MutableConfigPart(config, "pdisk-key-file", TCfg::TPDiskKeyConfigFieldTag{}, CALL_CTX());
+        MutableConfigPart(config, "sqs-file", TCfg::TSqsConfigFieldTag{}, CALL_CTX());
+        MutableConfigPart(config, "http-proxy-file", TCfg::THttpProxyConfigFieldTag{}, CALL_CTX());
+        MutableConfigPart(config, "public-http-file", TCfg::TPublicHttpConfigFieldTag{}, CALL_CTX());
+        MutableConfigPart(config, "feature-flags-file", TCfg::TFeatureFlagsFieldTag{}, CALL_CTX());
+        MutableConfigPart(config, "rb-file", TCfg::TResourceBrokerConfigFieldTag{}, CALL_CTX());
+        MutableConfigPart(config, "metering-file", TCfg::TMeteringConfigFieldTag{}, CALL_CTX());
+        MutableConfigPart(config, "audit-file", TCfg::TAuditConfigFieldTag{}, CALL_CTX());
+        MutableConfigPart(config, "kqp-file", TCfg::TKQPConfigFieldTag{}, CALL_CTX());
+        MutableConfigPart(config, "incrhuge-file", TCfg::TIncrHugeConfigFieldTag{}, CALL_CTX());
+        MutableConfigPart(config, "alloc-file", TCfg::TAllocatorConfigFieldTag{}, CALL_CTX());
+        MutableConfigPart(config, "fq-file", TCfg::TFederatedQueryConfigFieldTag{}, CALL_CTX());
+        MutableConfigPart(config, nullptr, TCfg::TTracingConfigFieldTag{}, CALL_CTX());
+        MutableConfigPart(config, nullptr, TCfg::TFailureInjectionConfigFieldTag{}, CALL_CTX());
 
         if (!AppConfig.HasAllocatorConfig()) {
             AppConfig.MutableAllocatorConfig()->CopyFrom(*DummyAllocatorConfig());
@@ -827,8 +827,7 @@ protected:
             return;
         }
         auto yamlConfig = TFileInput(YamlConfigFile);
-        NKikimrConfig::TAppConfig parsedConfig;
-        NKikimr::NYaml::Parse(yamlConfig.ReadAll(), parsedConfig);
+        NKikimrConfig::TAppConfig parsedConfig = NKikimr::NYaml::Parse(yamlConfig.ReadAll());
         const google::protobuf::Descriptor* descriptor = AppConfig.GetDescriptor();
         const google::protobuf::Reflection* reflection = AppConfig.GetReflection();
         for(int fieldIdx = 0; fieldIdx < descriptor->field_count(); ++fieldIdx) {

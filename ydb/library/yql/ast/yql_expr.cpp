@@ -3206,7 +3206,7 @@ ui32 TPgExprType::GetFlags(ui32 typeId) {
 
     const auto& desc = *descPtr;
     ui32 ret = TypeHasManyValues | TypeHasOptional;
-    if (!desc.SendFuncId || !desc.ReceiveFuncId) {
+    if ((!desc.SendFuncId || !desc.ReceiveFuncId) && (!desc.OutFuncId || !desc.InFuncId)) {
         ret |= TypeNonPersistable;
     }
 

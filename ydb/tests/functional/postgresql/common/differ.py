@@ -6,7 +6,8 @@ class Differ:
     @classmethod
     def diff(cls, left, right):
         left = cls.__remove_pg_errors(left).splitlines(keepends=True)
-        right = cls.__remove_ydb_errors(right).splitlines(keepends=True)
+        right = cls.__remove_ydb_errors(right)
+        right = cls.__remove_ydb_extraoks(right).splitlines(keepends=True)
         left = list(filter(lambda str: str != b'\n', left))
         right = list(filter(lambda str: str != b'\n', right))
 
@@ -15,6 +16,8 @@ class Differ:
 
     __reErr = re.compile(b'(^ERROR: [^\n]+)(?:\nLINE \\d+: [^\n]+(?:\n\\s*\\^\\s*)?)?(?:\n(?:HINT|DETAIL|CONTEXT): [^\n]+)*(?:\n|$)',
                          re.MULTILINE)
+
+    __reYdbOk = re.compile(b'(?:OK\n|CREATE TABLE\n)', re.MULTILINE)
 
     __reYdbErr = re.compile(
         b'(^psql:[^\n]+\nIssues: \n)(?: *<main>:[^\n]+\n)*( *<main>:(\\d+:\\d+:)? Error: ([^\n]+)\n)(?:(?:HINT|DETAIL|CONTEXT): [^\n]+\n?)*\n?(?:\n|$)(, code: [0-9]+)?',
@@ -36,6 +39,10 @@ class Differ:
     @classmethod
     def __remove_ydb_errors(cls, s):
         return cls.__reYdbErr.sub(rb"QUERY ERROR\n", s)
+
+    @classmethod
+    def __remove_ydb_extraoks(cls, s):
+        return cls.__reYdbOk.sub(rb"", s)
 
     __reUniversalTableMarker = re.compile(rb'^-{3,100}(?:\+-{3,100})*$')
     __reTableEndMarker = re.compile(rb'^\(\d+ rows?\)$')

@@ -180,7 +180,7 @@ void TFinishProposeUnit::CompleteRequest(TOperation::TPtr op,
     if (op->HasNeedDiagnosticsFlag())
         AddDiagnosticsResult(res);
 
-    DataShard.FillExecutionStats(op->GetExecutionProfile(), *res);
+    DataShard.FillExecutionStats(op->GetExecutionProfile(), *res->Record.MutableTxStats());
 
     DataShard.IncCounter(COUNTER_TX_RESULT_SIZE, res->Record.GetTxResult().size());
 

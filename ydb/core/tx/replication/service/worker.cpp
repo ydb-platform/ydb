@@ -1,9 +1,11 @@
+#include "logging.h"
 #include "worker.h"
 
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 #include <ydb/library/actors/core/hfunc.h>
 #include <ydb/library/services/services.pb.h>
 
+#include <util/generic/maybe.h>
 #include <util/string/builder.h>
 #include <util/string/join.h>
 
@@ -39,6 +41,17 @@ TString TEvWorker::TEvData::ToString() const {
     << " }";
 }
 
+TEvWorker::TEvGone::TEvGone(EStatus status)
+    : Status(status)
+{
+}
+
+TString TEvWorker::TEvGone::ToString() const {
+    return TStringBuilder() << ToStringHeader() << " {"
+        << " Status: " << Status
+    << " }";
+}
+
 class TWorker: public TActorBootstrapped<TWorker> {
     struct TActorInfo {
         THolder<IActor> Actor;
@@ -60,6 +73,16 @@ class TWorker: public TActorBootstrapped<TWorker> {
         }
     };
 
+    TStringBuf GetLogPrefix() const {
+        if (!LogPrefix) {
+            LogPrefix = TStringBuilder()
+                << "[Worker]"
+                << SelfId() << " ";
+        }
+
+        return LogPrefix.GetRef();
+    }
+
     TActorId RegisterActor(TActorInfo& info) {
         Y_ABORT_UNLESS(info.Actor);
         info.ActorId = RegisterWithSameMailbox(info.Actor.Release());
@@ -73,22 +96,34 @@ class TWorker: public TActorBootstrapped<TWorker> {
     }
 
     void Handle(TEvWorker::TEvHandshake::TPtr& ev) {
+        LOG_D("Handle " << ev->Get()->ToString());
+
         if (ev->Sender == Reader) {
+            LOG_I("Handshake with reader"
+                << ": sender# " << ev->Sender);
             Reader.InitDone = true;
         } else if (ev->Sender == Writer) {
+            LOG_I("Handshake with writer"
+                << ": sender# " << ev->Sender);
             Writer.InitDone = true;
         } else {
-            // TODO: log warn
+            LOG_W("Handshake from unknown actor"
+                << ": sender# " << ev->Sender);
+            return;
         }
 
         if (Reader && Writer) {
+            LOG_N("Start working");
             Send(Reader, new TEvWorker::TEvPoll());
         }
     }
 
     void Handle(TEvWorker::TEvPoll::TPtr& ev) {
+        LOG_D("Handle " << ev->Get()->ToString());
+
         if (ev->Sender != Writer) {
-            // TODO: log warn
+            LOG_W("Poll from unknown actor"
+                << ": sender# " << ev->Sender);
             return;
         }
 
@@ -96,21 +131,28 @@ class TWorker: public TActorBootstrapped<TWorker> {
     }
 
     void Handle(TEvWorker::TEvData::TPtr& ev) {
+        LOG_D("Handle " << ev->Get()->ToString());
+
         if (ev->Sender != Reader) {
-            // TODO: log warn
+            LOG_W("Data from unknown actor"
+                << ": sender# " << ev->Sender);
             return;
         }
 
         Send(ev->Forward(Writer));
     }
 
-    void Handle(TEvents::TEvGone::TPtr& ev) {
+    void Handle(TEvWorker::TEvGone::TPtr& ev) {
+        // TODO: handle status
         if (ev->Sender == Reader) {
-            // TODO
+            LOG_I("Reader has gone"
+                << ": sender# " << ev->Sender);
         } else if (ev->Sender == Writer) {
-            // TODO
+            LOG_I("Writer has gone"
+                << ": sender# " << ev->Sender);
         } else {
-            // TODO: log warn
+            LOG_W("Unknown actor has gone"
+                << ": sender# " << ev->Sender);
         }
     }
 
@@ -147,12 +189,13 @@ public:
             hFunc(TEvWorker::TEvHandshake, Handle);
             hFunc(TEvWorker::TEvPoll, Handle);
             hFunc(TEvWorker::TEvData, Handle);
-            hFunc(TEvents::TEvGone, Handle);
+            hFunc(TEvWorker::TEvGone, Handle);
             sFunc(TEvents::TEvPoison, PassAway);
         }
     }
 
 private:
+    mutable TMaybe<TString> LogPrefix;
     TActorInfo Reader;
     TActorInfo Writer;
 };

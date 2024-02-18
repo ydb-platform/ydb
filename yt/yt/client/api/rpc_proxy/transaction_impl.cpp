@@ -62,6 +62,7 @@ TTransaction::TTransaction(
     Proxy_.SetDefaultTimeout(config->RpcTimeout);
     Proxy_.SetDefaultRequestCodec(config->RequestCodec);
     Proxy_.SetDefaultResponseCodec(config->ResponseCodec);
+    Proxy_.SetDefaultEnableLegacyRpcCodecs(config->EnableLegacyRpcCodecs);
 
     YT_LOG_DEBUG("%v (Type: %v, StartTimestamp: %v, Atomicity: %v, "
         "Durability: %v, Timeout: %v, PingAncestors: %v, PingPeriod: %v, Sticky: %v, StickyProxyAddress: %v)",

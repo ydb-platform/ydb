@@ -5,10 +5,13 @@
 
 extern "C" {
 #include "utils/syscache.h"
+#include "catalog/pg_database.h"
 #include "catalog/pg_proc.h"
 #include "catalog/pg_type.h"
 #include "catalog/pg_type_d.h"
+#include "catalog/pg_authid.h"
 #include "access/htup_details.h"
+#include "utils/fmgroids.h"
 }
 
 #undef TypeName
@@ -61,6 +64,8 @@ struct TSysCache {
     {
         InitializeProcs();
         InitializeTypes();
+        InitializeDatabase();
+        InitializeAuthId();
         Arena.Release();
     }
 
@@ -179,7 +184,7 @@ struct TSysCache {
             std::fill_n(nulls, Natts_pg_type, true);
             std::fill_n(nulls, Anum_pg_type_typcollation, false); // fixed part of Form_pg_type
             FillDatum(Natts_pg_type, values, nulls, Anum_pg_type_oid, oid);
-            auto name = MakeFixedString(desc.Name, NPg::LookupType(NAMEOID).TypeLen);
+            auto name = MakeFixedString(desc.Name, NAMEDATALEN);
             FillDatum(Natts_pg_type, values, nulls, Anum_pg_type_typname, (Datum)name);
             FillDatum(Natts_pg_type, values, nulls, Anum_pg_type_typbyval, desc.PassByValue);
             FillDatum(Natts_pg_type, values, nulls, Anum_pg_type_typlen, desc.TypeLen);
@@ -189,6 +194,8 @@ struct TSysCache {
             FillDatum(Natts_pg_type, values, nulls, Anum_pg_type_typisdefined, true);
             FillDatum(Natts_pg_type, values, nulls, Anum_pg_type_typdelim, desc.TypeDelim);
             FillDatum(Natts_pg_type, values, nulls, Anum_pg_type_typarray, desc.ArrayTypeId);
+            FillDatum(Natts_pg_type, values, nulls, Anum_pg_type_typsubscript,
+                (desc.ArrayTypeId == desc.TypeId) ? F_ARRAY_SUBSCRIPT_HANDLER : desc.TypeSubscriptFuncId);
             FillDatum(Natts_pg_type, values, nulls, Anum_pg_type_typelem, desc.ElementTypeId);
             FillDatum(Natts_pg_type, values, nulls, Anum_pg_type_typinput, desc.InFuncId);
             FillDatum(Natts_pg_type, values, nulls, Anum_pg_type_typoutput, desc.OutFuncId);
@@ -222,6 +229,96 @@ struct TSysCache {
             map->emplace(key, h);
         });
 
+    }
+
+    void InitializeDatabase() {
+        auto& map = Maps[DATABASEOID] = std::make_unique<TSysCacheHashMap>(0, OidHasher1, OidEquals1);
+        TupleDesc tupleDesc = CreateTemplateTupleDesc(Natts_pg_database);
+        FillAttr(tupleDesc, Anum_pg_database_oid, OIDOID);
+        FillAttr(tupleDesc, Anum_pg_database_datname, NAMEOID);
+        FillAttr(tupleDesc, Anum_pg_database_datdba, OIDOID);
+        FillAttr(tupleDesc, Anum_pg_database_encoding, INT4OID);
+        FillAttr(tupleDesc, Anum_pg_database_datcollate, NAMEOID);
+        FillAttr(tupleDesc, Anum_pg_database_datctype, NAMEOID);
+        FillAttr(tupleDesc, Anum_pg_database_datistemplate, BOOLOID);
+        FillAttr(tupleDesc, Anum_pg_database_datallowconn, BOOLOID);
+        FillAttr(tupleDesc, Anum_pg_database_datconnlimit, INT4OID);
+        FillAttr(tupleDesc, Anum_pg_database_datlastsysoid, OIDOID);
+        FillAttr(tupleDesc, Anum_pg_database_datfrozenxid, XIDOID);
+        FillAttr(tupleDesc, Anum_pg_database_datminmxid, XIDOID);
+        FillAttr(tupleDesc, Anum_pg_database_dattablespace, OIDOID);
+        FillAttr(tupleDesc, Anum_pg_database_datacl, ACLITEMARRAYOID);
+
+        for (ui32 oid = 1; oid <= 3; ++oid) {
+            auto key = THeapTupleKey(oid, 0, 0, 0);
+
+            Datum values[Natts_pg_database];
+            bool nulls[Natts_pg_database];
+            Zero(values);
+            std::fill_n(nulls, Natts_pg_database, true);
+            FillDatum(Natts_pg_database, values, nulls, Anum_pg_database_oid, (Datum)oid);
+            const char* name = nullptr;
+            switch (oid) {
+            case 1: name = "template1"; break;
+            case 2: name = "template0"; break;
+            case 3: name = "postgres"; break;
+            }
+            Y_ENSURE(name);
+            FillDatum(Natts_pg_database, values, nulls, Anum_pg_database_datname, (Datum)MakeFixedString(name, NAMEDATALEN));
+            HeapTuple h = heap_form_tuple(tupleDesc, values, nulls);
+            auto row = (Form_pg_database) GETSTRUCT(h);
+            Y_ENSURE(row->oid == oid);
+            Y_ENSURE(strcmp(NameStr(row->datname), name) == 0);
+            map->emplace(key, h);
+        }
+    }
+
+    void InitializeAuthId() {
+        auto& map = Maps[AUTHOID] = std::make_unique<TSysCacheHashMap>(0, OidHasher1, OidEquals1);
+        TupleDesc tupleDesc = CreateTemplateTupleDesc(Natts_pg_authid);
+        FillAttr(tupleDesc, Anum_pg_authid_oid, OIDOID);
+        FillAttr(tupleDesc, Anum_pg_authid_rolname, NAMEOID);
+        FillAttr(tupleDesc, Anum_pg_authid_rolsuper, BOOLOID);
+        FillAttr(tupleDesc, Anum_pg_authid_rolinherit, BOOLOID);
+        FillAttr(tupleDesc, Anum_pg_authid_rolcreaterole, BOOLOID);
+        FillAttr(tupleDesc, Anum_pg_authid_rolcreatedb, BOOLOID);
+        FillAttr(tupleDesc, Anum_pg_authid_rolcanlogin, BOOLOID);
+        FillAttr(tupleDesc, Anum_pg_authid_rolreplication, BOOLOID);
+        FillAttr(tupleDesc, Anum_pg_authid_rolbypassrls, BOOLOID);
+        FillAttr(tupleDesc, Anum_pg_authid_rolconnlimit, INT4OID);
+        FillAttr(tupleDesc, Anum_pg_authid_rolpassword, TEXTOID);
+        FillAttr(tupleDesc, Anum_pg_authid_rolvaliduntil, TIMESTAMPTZOID);
+        auto key = THeapTupleKey(1, 0, 0, 0);
+
+        const char* rolname = "postgres";
+        const ui32 oid = 1;
+        Datum values[Natts_pg_authid];
+        bool nulls[Natts_pg_authid];
+        Zero(values);
+        std::fill_n(nulls, Natts_pg_authid, true);
+        FillDatum(Natts_pg_authid, values, nulls, Anum_pg_authid_oid, (Datum)oid);
+        FillDatum(Natts_pg_authid, values, nulls, Anum_pg_authid_rolname, (Datum)MakeFixedString(rolname, NAMEDATALEN));
+        FillDatum(Natts_pg_authid, values, nulls, Anum_pg_authid_rolsuper, BoolGetDatum(true));
+        FillDatum(Natts_pg_authid, values, nulls, Anum_pg_authid_rolinherit, BoolGetDatum(true));
+        FillDatum(Natts_pg_authid, values, nulls, Anum_pg_authid_rolcreaterole, BoolGetDatum(true));
+        FillDatum(Natts_pg_authid, values, nulls, Anum_pg_authid_rolcreatedb, BoolGetDatum(true));
+        FillDatum(Natts_pg_authid, values, nulls, Anum_pg_authid_rolcanlogin, BoolGetDatum(true));
+        FillDatum(Natts_pg_authid, values, nulls, Anum_pg_authid_rolreplication, BoolGetDatum(true));
+        FillDatum(Natts_pg_authid, values, nulls, Anum_pg_authid_rolbypassrls, BoolGetDatum(true));
+        FillDatum(Natts_pg_authid, values, nulls, Anum_pg_authid_rolconnlimit, Int32GetDatum(-1));
+        HeapTuple h = heap_form_tuple(tupleDesc, values, nulls);
+        auto row = (Form_pg_authid) GETSTRUCT(h);
+        Y_ENSURE(row->oid == oid);
+        Y_ENSURE(strcmp(NameStr(row->rolname), rolname) == 0);
+        Y_ENSURE(row->rolsuper);
+        Y_ENSURE(row->rolinherit);
+        Y_ENSURE(row->rolcreaterole);
+        Y_ENSURE(row->rolcreatedb);
+        Y_ENSURE(row->rolcanlogin);
+        Y_ENSURE(row->rolreplication);
+        Y_ENSURE(row->rolbypassrls);
+        Y_ENSURE(row->rolconnlimit == -1);
+        map->emplace(key, h);
     }
 };
 

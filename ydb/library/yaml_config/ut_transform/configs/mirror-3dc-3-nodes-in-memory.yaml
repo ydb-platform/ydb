@@ -1,0 +1,141 @@
+static_erasure: mirror-3-dc
+host_configs:
+- drive:
+  - path: SectorMap:1:64
+    type: SSD
+  - path: SectorMap:2:64
+    type: SSD
+  - path: SectorMap:3:64
+    type: SSD
+  host_config_id: 1
+hosts:
+- host: localhost
+  host_config_id: 1
+  port: 19001
+  walle_location:
+    body: 1
+    data_center: '1'
+    rack: '1'
+- host: localhost
+  host_config_id: 1
+  port: 19002
+  walle_location:
+    body: 2
+    data_center: '2'
+    rack: '2'
+- host: localhost
+  host_config_id: 1
+  port: 19003
+  walle_location:
+    body: 3
+    data_center: '3'
+    rack: '3'
+domains_config:
+  domain:
+  - name: Root
+    storage_pool_types:
+    - kind: ssd
+      pool_config:
+        box_id: 1
+        erasure_species: mirror-3-dc
+        kind: ssd
+        geometry:
+          realm_level_begin: 10
+          realm_level_end: 20
+          domain_level_begin: 10
+          domain_level_end: 256
+        pdisk_filter:
+        - property:
+          - type: SSD
+        vdisk_kind: Default
+  state_storage:
+  - ring:
+      node: [1, 2, 3]
+      nto_select: 3
+    ssid: 1
+table_service_config:
+  sql_version: 1
+actor_system_config:
+  executor:
+  - name: System
+    spin_threshold: 0
+    threads: 2
+    type: BASIC
+  - name: User
+    spin_threshold: 0
+    threads: 3
+    type: BASIC
+  - name: Batch
+    spin_threshold: 0
+    threads: 2
+    type: BASIC
+  - name: IO
+    threads: 1
+    time_per_mailbox_micro_secs: 100
+    type: IO
+  - name: IC
+    spin_threshold: 10
+    threads: 1
+    time_per_mailbox_micro_secs: 100
+    type: BASIC
+  scheduler:
+    progress_threshold: 10000
+    resolution: 256
+    spin_threshold: 0
+blob_storage_config:
+  service_set:
+    groups:
+    - erasure_species: mirror-3-dc
+      rings:
+      - fail_domains:
+        - vdisk_locations:
+          - node_id: "localhost:19001"
+            pdisk_category: SSD
+            path: SectorMap:1:64
+        - vdisk_locations:
+          - node_id: "localhost:19001"
+            pdisk_category: SSD
+            path: SectorMap:2:64
+        - vdisk_locations:
+          - node_id: "localhost:19001"
+            pdisk_category: SSD
+            path: SectorMap:3:64
+      - fail_domains:
+        - vdisk_locations:
+          - node_id: "localhost:19002"
+            pdisk_category: SSD
+            path: SectorMap:1:64
+        - vdisk_locations:
+          - node_id: "localhost:19002"
+            pdisk_category: SSD
+            path: SectorMap:2:64
+        - vdisk_locations:
+          - node_id: "localhost:19002"
+            pdisk_category: SSD
+            path: SectorMap:3:64
+      - fail_domains:
+        - vdisk_locations:
+          - node_id: "localhost:19003"
+            pdisk_category: SSD
+            path: SectorMap:1:64
+        - vdisk_locations:
+          - node_id: "localhost:19003"
+            pdisk_category: SSD
+            path: SectorMap:2:64
+        - vdisk_locations:
+          - node_id: "localhost:19003"
+            pdisk_category: SSD
+            path: SectorMap:3:64
+channel_profile_config:
+  profile:
+  - channel:
+    - erasure_species: mirror-3-dc
+      pdisk_category: 1
+      storage_pool_kind: ssd
+    - erasure_species: mirror-3-dc
+      pdisk_category: 1
+      storage_pool_kind: ssd
+    - erasure_species: mirror-3-dc
+      pdisk_category: 1
+      storage_pool_kind: ssd
+    profile_id: 0

@@ -1,5 +1,9 @@
 items:
-  - name: Примеры использования
-    href: examples.md
+  - name: Аутентификация
+    href: auth.md
+  - name: Чтение и запись
+    href: read-write.md
+  - name: Kafka Connect
+    href: connect.md
   - name: Ограничения
     href: constraints.md

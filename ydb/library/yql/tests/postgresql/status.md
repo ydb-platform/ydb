@@ -24,16 +24,16 @@
 || 20 | timestamp | 145 | 86 | 59.31 | 18.02.2024 | YQL-17692 ||
 || 21 | timestamptz | 315 | 97 | 30.79 | 30.01.2024 | YQL-17693 ||
 || 22 | interval | 168 | 115 | 68.45 | 25.10.2023 | YQL-17786 ||
-|| 23 | horology | 306 | 79 | 25.82 | 10.08.2023 | SET, DateStyle, TimeZone, автоматически назначаемые имена колонкам-выражениям, SET TIME ZOME, RESET TIME ZONE, интервальный тип ПГ, ||
+|| 23 | horology | 306 | 79 | 25.82 | 10.08.2023 | YQL-17856 ||
 || 24 | comments | 7 | 7 | 100.0 | 25.05.2023 |  ||
 || 25 | expressions | 63 | 14 | 22.22 | 25.10.2023 | YQL-17784 ||
 || 26 | unicode | 13 | 4 | 30.77 | 10.08.2023 | ||
 || 27 | create_table | 368 | 43 | 11.68 | 12.12.2023 | YQL-17664 ||
 || 28 | insert | 357 | 15 | 4.2 | 12.12.2023 | YQL-17785 ||
-|| 29 | create_misc | 76 | 3 | 3.95 | 29.09.2023 | ||
-|| 30 | select | 88 | 9 | 10.23 | 12.12.2023 | порядок сортировки в виде  ORDER BY поле using > или <, а также NULLS FIRST/LAST; ANALYZE, переменные enable_seqscan, enable_bitmapscan, enable_sort,  whole-row Var referencing a subquery, подзапросы внутри values, INSERT INTO ... DEFAULT VALUES, Range sub select unsupported lateral, CREATE INDEX, DROP INDEX, explain (опции costs, analyze, timing, summary), SELECT 1 AS x ORDER BY x; CREATE FUNCTION, DROP FUNCTION, table inheritance, PARTITION BY ||
+|| 29 | create_misc | 76 | 3 | 3.95 | 29.09.2023 | YQL-17855 ||
+|| 30 | select | 88 | 9 | 10.23 | 12.12.2023 | YQL-17858 ||
 || 31 | select_into | 67 | 3 | 4.48 | 27.07.2023 | YQL-17787 ||
-|| 32 | select_distinct | 46 | 1 | 2.17 | 27.07.2023 | ||
+|| 32 | select_distinct | 46 | 1 | 2.17 | 27.07.2023 | YQL-17857 ||
 || 33 | select_distinct_on | 4 | 0 | 0.0 | 25.05.2023 | ||
 || 34 | select_implicit | 44 | 28 (+15) | 63.64 | 30.01.2024 | YQL-17737 ||
 || 35 | select_having | 23 | 19 (+3) | 82.61 | 30.01.2024 | YQL-17736 ||

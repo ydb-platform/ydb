@@ -948,10 +948,10 @@ std::pair<TString, TString> GetYtTableDataPaths(const TFsPath& dataDir, const TS
     return {dataFileName, attrFileName};
 }
 
-void CreateYtFileTable(const TFsPath& dataDir, TYtTableInfo& tableInfo, const TExprNode::TPtr columnsNode,
+void CreateYtFileTable(const TFsPath& dataDir, const TString tableName, const TExprNode::TPtr columnsNode,
     THashMap<TString, TString>& tablesMapping, TExprContext& ctx, const TPosition& pos) {
-    const auto [dataFilePath, attrFilePath] =
-        GetYtTableDataPaths(dataDir, tableInfo.Name);
+  const auto [dataFilePath, attrFilePath] =
+      GetYtTableDataPaths(dataDir, tableName);
 
     TFile dataFile{dataFilePath, CreateNew};
     TFile attrFile{attrFilePath, CreateNew};
@@ -979,22 +979,19 @@ void CreateYtFileTable(const TFsPath& dataDir, TYtTableInfo& tableInfo, const TE
 
     rowSpec->SetType(typeNode->Cast<TStructExprType>());
     rowSpec->SetColumnOrder(std::move(columnOrder));
-    tableInfo.RowSpec = rowSpec;
 
     NYT::TNode attrs = NYT::TNode::CreateMap();
-    tableInfo.RowSpec->FillAttrNode(attrs[YqlRowSpecAttribute], 0, false);
+    rowSpec->FillAttrNode(attrs[YqlRowSpecAttribute], 0, false);
 
     NYT::TNode spec;
-    tableInfo.RowSpec->FillCodecNode(spec[YqlRowSpecAttribute]);
+    rowSpec->FillCodecNode(spec[YqlRowSpecAttribute]);
 
     attrs["schema"] = RowSpecToYTSchema(spec[YqlRowSpecAttribute], 0).ToNode();
-
 
     TOFStream of(attrFile.GetName());
     of.Write(NYT::NodeToYsonString(attrs, NYson::EYsonFormat::Pretty));
 
-    const TString fullTableName(TStringBuilder() << "yt." << tableInfo.Cluster << '.' << tableInfo.Name);
-    tablesMapping[fullTableName] = dataFile.GetName();
+    tablesMapping[TString("yt.plato.") + tableName] = dataFile.GetName();
 }
 
 bool RemoveFile(const TString& fileName) {
@@ -1035,12 +1032,16 @@ int SplitStatements(int argc, char* argv[]) {
 
 void WriteToYtTableScheme(
     const NYql::TExprNode& writeNode,
-    const TYtWrite& write,
-    const TYtOutputKey& key,
     const TTempDir& tempDir,
     const TIntrusivePtr<class NYql::NFile::TYtFileServices> yqlNativeServices,
     TExprContext& ctx) {
-    const auto& tableName = key.GetPath();
+    const auto* keyNode = writeNode.Child(2);
+
+    const auto* tableNameNode = keyNode->Child(0)->Child(1);
+    Y_ENSURE(tableNameNode->IsCallable("String"));
+
+    const auto& tableName = tableNameNode->Child(0)->Content();
+    Y_ENSURE(!tableName.empty());
 
     const auto* optionsNode = writeNode.Child(4);
     Y_ENSURE(optionsNode);
@@ -1053,9 +1054,7 @@ void WriteToYtTableScheme(
         const auto columnsNode = GetSetting(*optionsNode, "columns");
         Y_ENSURE(columnsNode);
 
-        TYtTableInfo tableInfo(key, write.DataSink().Cluster().Value());
-
-        CreateYtFileTable(tempDir.Path(), tableInfo, columnsNode->ChildPtr(1),
+        CreateYtFileTable(tempDir.Path(), TString(tableName), columnsNode->ChildPtr(1),
                         yqlNativeServices->GetTablesMapping(), ctx, writeNode.Pos(ctx));
     }
     else if (mode == "drop") {
@@ -1230,40 +1229,31 @@ int Main(int argc, char* argv[])
         static const THashSet<TString> ignoredNodes{"CommitAll!", "Commit!" };
         const auto opNode = NYql::FindNode(program->ExprRoot(),
                                            [] (const TExprNode::TPtr& node) { return !ignoredNodes.contains(node->Content()); });
-        if (const auto maybeWrite = TMaybeNode<TYtWrite>(opNode)) {
-            const auto write = maybeWrite.Cast();
+        if (opNode->IsCallable("Write!")) {
+            Y_ENSURE(opNode->ChildrenSize() == 5);
 
-            if (0 < write.Arg(2).Ref().ChildrenSize()) {
-                TYtOutputKey key;
-                if (!key.Parse(write.Arg(2).Ref(), ctx)) {
+            const auto* keyNode = opNode->Child(2);
+            const bool isWriteToTableSchemeNode = keyNode->IsCallable("Key") && 0 < keyNode->ChildrenSize() &&
+                keyNode->Child(0)->Child(0)->IsAtom("tablescheme");
+
+            if (isWriteToTableSchemeNode) {
+                try {
+                    WriteToYtTableScheme(*opNode, tempDir, yqlNativeServices, program->ExprCtx());
+                } catch (const yexception& e) {
+                    program->Issues().AddIssue(e.what());
+
                     WriteErrorToStream(program);
-
-                    return {};
-                }
-
-                const auto* keyNode = key.GetNode();
-                const bool isWriteToTableSchemeNode = keyNode->IsCallable("Key") && 0 < keyNode->ChildrenSize() &&
-                    keyNode->Child(0)->Child(0)->IsAtom("tablescheme");
-
-                if (isWriteToTableSchemeNode) {
-                    try {
-                        WriteToYtTableScheme(*opNode, write, key, tempDir, yqlNativeServices, program->ExprCtx());
-                    } catch (const yexception& e) {
-                        program->Issues().AddIssue(e.what());
-
-                        WriteErrorToStream(program);
-
-                        continue;
-                    }
-
-                    if (needPrintAst) {
-                        program->Optimize(username);
-
-                        ShowFinalAst(program, Cerr);
-                    }
 
                     continue;
                 }
+
+                if (needPrintAst) {
+                    program->Optimize(username);
+
+                    ShowFinalAst(program, Cerr);
+                }
+
+                continue;
             }
         }
 

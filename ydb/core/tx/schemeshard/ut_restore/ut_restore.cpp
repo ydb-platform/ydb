@@ -9,7 +9,6 @@
 #include <ydb/core/tx/schemeshard/schemeshard_private.h>
 #include <ydb/core/tx/schemeshard/schemeshard_billing_helpers.h>
 #include <ydb/core/tx/datashard/datashard.h>
-#include <ydb/core/tx/datashard/datashard_ut_common_kqp.h>
 #include <ydb/core/wrappers/ut_helpers/s3_mock.h>
 #include <ydb/core/metering/metering.h>
 #include <ydb/core/ydb_convert/table_description.h>
@@ -374,6 +373,39 @@ Y_UNIT_TEST_SUITE(TRestoreTests) {
         NKqp::CompareYson(data.YsonStr, content);
     }
 
+    bool CheckDefaultFromLiteral(const NKikimrSchemeOp::TTableDescription& desc) {
+        for (const auto& column: desc.GetColumns()) {
+            if (column.GetName() == "value") {
+                switch (column.GetDefaultValueCase()) {
+                    case NKikimrSchemeOp::TColumnDescription::kDefaultFromLiteral: {
+                        const auto& fromLiteral = column.GetDefaultFromLiteral();
+
+                        TString str;
+                        google::protobuf::TextFormat::PrintToString(fromLiteral, &str);
+
+                        TString result = R"(type {
+  optional_type {
+    item {
+      type_id: UTF8
+    }
+  }
+}
+value {
+  items {
+    text_value: "value1"
+  }
+}
+)";
+                        return str == result;
+                    }
+                    default: break;
+                }
+                break;
+            }
+        }
+        return false;
+    }
+
     Y_UNIT_TEST_WITH_COMPRESSION(ShouldSucceedWithDefaultFromLiteral) {
         TTestBasicRuntime runtime;
 
@@ -411,36 +443,7 @@ Y_UNIT_TEST_SUITE(TRestoreTests) {
 
         const auto& table = desc.GetPathDescription().GetTable();
 
-        for (const auto& column: table.GetColumns()) {
-            if (column.GetName() == "value") {
-                switch (column.GetDefaultValueCase()) {
-                    case NKikimrSchemeOp::TColumnDescription::kDefaultFromLiteral: {
-                        const auto& fromLiteral = column.GetDefaultFromLiteral();
-
-                        TString str;
-                        google::protobuf::TextFormat::PrintToString(fromLiteral, &str);
-
-                        TString result = R"(type {
-  optional_type {
-    item {
-      type_id: UTF8
-    }
-  }
-}
-value {
-  items {
-    text_value: "value1"
-  }
-}
-)";
-                        UNIT_ASSERT_VALUES_EQUAL_C(str, result, "Invalid default value");
-                        return;
-                    }
-                    default: break;
-                }
-            }
-        }
-        UNIT_ASSERT_C(false, "Invalid default value");
+        UNIT_ASSERT_C(CheckDefaultFromLiteral(table), "Invalid default value");
     }
 
     Y_UNIT_TEST_WITH_COMPRESSION(ShouldSucceedOnMultiShardTable) {
@@ -797,6 +800,81 @@ value {
         )", port));
         env.TestWaitNotification(runtime, txId);
         TestGetImport(runtime, txId, "/MyRoot");
+    }
+
+    Y_UNIT_TEST(ShouldRestoreDefaultValuesFromLiteral) {
+        TPortManager portManager;
+        const ui16 port = portManager.GetPort();
+
+        TS3Mock s3Mock({}, TS3Mock::TSettings(port));
+        UNIT_ASSERT(s3Mock.Start());
+
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+        ui64 txId = 100;
+
+        runtime.SetLogPriority(NKikimrServices::DATASHARD_BACKUP, NActors::NLog::PRI_TRACE);
+        runtime.SetLogPriority(NKikimrServices::DATASHARD_RESTORE, NActors::NLog::PRI_TRACE);
+        runtime.SetLogPriority(NKikimrServices::EXPORT, NActors::NLog::PRI_TRACE);
+        runtime.SetLogPriority(NKikimrServices::IMPORT, NActors::NLog::PRI_TRACE);
+
+        TestCreateTable(runtime, ++txId, "/MyRoot", R"(
+            Name: "Original"
+            Columns { Name: "key" Type: "Utf8" }
+            Columns {
+                Name: "value"
+                Type: "Utf8"
+                DefaultFromLiteral {
+                    type {
+                        optional_type {
+                            item {
+                                type_id: UTF8
+                            }
+                        }
+                    }
+                    value {
+                        items {
+                            text_value: "value1"
+                        }
+                    }
+                }
+            }
+            KeyColumnNames: ["key"]
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        TestExport(runtime, ++txId, "/MyRoot", Sprintf(R"(
+            ExportToS3Settings {
+              endpoint: "localhost:%d"
+              scheme: HTTP
+              items {
+                source_path: "/MyRoot/Original"
+                destination_prefix: ""
+              }
+            }
+        )", port));
+        env.TestWaitNotification(runtime, txId);
+        TestGetExport(runtime, txId, "/MyRoot");
+
+        TestImport(runtime, ++txId, "/MyRoot", Sprintf(R"(
+            ImportFromS3Settings {
+              endpoint: "localhost:%d"
+              scheme: HTTP
+              items {
+                source_prefix: ""
+                destination_path: "/MyRoot/Restored"
+              }
+            }
+        )", port));
+        env.TestWaitNotification(runtime, txId);
+        TestGetImport(runtime, txId, "/MyRoot");
+
+        const auto desc = DescribePath(runtime, "/MyRoot/Restored", true, true);
+        UNIT_ASSERT_VALUES_EQUAL(desc.GetStatus(), NKikimrScheme::StatusSuccess);
+
+        const auto& table = desc.GetPathDescription().GetTable();
+
+        UNIT_ASSERT_C(CheckDefaultFromLiteral(table), "Invalid default value");
     }
 
     Y_UNIT_TEST(ExportImportPg) {

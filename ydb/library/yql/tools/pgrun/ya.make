@@ -24,18 +24,14 @@ PEERDIR(
     ydb/library/yql/public/udf/service/exception_policy
     ydb/library/yql/utils/backtrace
     ydb/library/yql/core
-    ydb/library/yql/ast
     ydb/library/yql/sql/v1/format
-    ydb/library/yql/providers/common/schema/expr
     ydb/library/yql/providers/common/codec
     ydb/library/yql/providers/common/comp_nodes
     ydb/library/yql/providers/common/proto
     ydb/library/yql/providers/common/provider
     ydb/library/yql/providers/common/udf_resolve
     ydb/library/yql/providers/dq/provider
-    ydb/library/yql/providers/yt/provider
     ydb/library/yql/providers/yt/common
-    ydb/library/yql/providers/yt/expr_nodes
     ydb/library/yql/providers/yt/lib/schema
     ydb/library/yql/providers/yt/gateway/file
     ydb/library/yql/providers/yt/comp_nodes/llvm14

@@ -328,7 +328,7 @@ TString SerializeJsonDom(const NUdf::TUnboxedValuePod dom, bool skipMapEntity, b
     TJsonWriterConfig config;
 
     config.SetFormatOutput(false);
-    config.SetNanAsString(writeNanAsString);
+    config.WriteNanAsString = writeNanAsString;
     
     config.FloatToStringMode = EFloatToStringMode::PREC_AUTO;
     TJsonWriter writer(&output, config);

@@ -29,12 +29,6 @@ namespace NJson {
             return *this;
         }
 
-        inline TJsonWriterConfig& SetNanAsString(bool v) noexcept {
-            WriteNanAsString = v;
-
-            return *this;
-        }
-
         inline TJsonWriterConfig& SetFormatOutput(bool v) noexcept {
             FormatOutput = v;
 

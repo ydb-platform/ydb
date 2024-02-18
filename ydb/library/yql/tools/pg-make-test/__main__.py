@@ -11,6 +11,7 @@ import re
 import csv
 import click
 import patch
+from collections import Counter
 from library.python.svn_version import svn_version
 from ydb.library.yql.tests.postgresql.common import get_out_files, Differ
 
@@ -106,11 +107,17 @@ class TestCaseBuilder:
             with open(outfile, 'rb') as fout:
                 outdata = fout.readlines()
 
+            only_out_stmts = Counter()
+            only_pgrun_stmts = Counter()
+
             statements = list(self.split_out_file(splitted_stmts, outdata, logger))
+            logger.debug("Matching sql statements to .out file lines")
             for (s_sql, s_out) in statements:
+                stmt = '\n'.join(str(sql_line) for sql_line in s_sql)
+                only_out_stmts[stmt] += 1
                 logger.debug(
                     "<<<<<<<<<<<<<<<<<<<<<<<<<<<<\n%s\n>>>>>>>>>>>>>>>>>>>>>>>>>>>>\n%s\n============================",
-                    '\n'.join(str(sql_line) for sql_line in s_sql),
+                    stmt,
                     '\n'.join(str(out_line) for out_line in s_out),
                 )
 
@@ -130,14 +137,30 @@ class TestCaseBuilder:
                     logger.debug("Run result:\n%s", str(b'\n'.join(out)))
 
                     real_statements = list(self.split_out_file(splitted_stmts, out, logger))
+                    logger.debug("Matching sql statements to pgrun's output")
                     for (s_sql, s_out) in real_statements:
+                        stmt = '\n'.join(str(sql_line) for sql_line in s_sql)
                         logger.debug(
                             "<<<<<<<<<<<<<<<<<<<<<<<<<<<<\n%s\n>>>>>>>>>>>>>>>>>>>>>>>>>>>>\n%s\n============================",
-                            '\n'.join(str(sql_line) for sql_line in s_sql),
+                            stmt,
                             '\n'.join(str(out_line) for out_line in s_out),
                         )
+
+                        if 0 < only_out_stmts[stmt]:
+                            only_out_stmts[stmt] -= 1
+                            if 0 == only_out_stmts[stmt]:
+                                del only_out_stmts[stmt]
+                        else:
+                            only_pgrun_stmts[stmt] += 1
                 reserrfile = reserrfile_base if outfile_idx == 0 else reserrfile_base.with_suffix(reserrfile_base.suffix + ".{0}".format(outfile_idx))
                 shutil.move(test_err_name, reserrfile)
+
+            if only_pgrun_stmts:
+                logger.info("Statements in pgrun output, but not in out file:\n%s",
+                    '\n--------------------------------\n'.join(stmt for stmt in only_pgrun_stmts))
+            if only_out_stmts:
+                logger.info("Statements in out file, but not in pgrun output:\n%s",
+                    '\n--------------------------------\n'.join(stmt for stmt in only_out_stmts))
 
             stmts_run = 0
             stmts = []
@@ -437,7 +460,7 @@ def cli(cases, srcdir, dstdir, patchdir, skip, runner, splitter, report, paralle
     with open(config.report_path, "w", newline='') as f:
         writer = csv.writer(f, dialect="excel")
         writer.writerow(["testcase", "statements", "successful", "ratio"])
-        writer.writerows(results)
+        writer.writerows(sorted(results))
 
 
 if __name__ == "__main__":

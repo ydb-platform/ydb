@@ -190,6 +190,12 @@ ELSE()
     )
 ENDIF()
 
+IF (OS_LINUX)
+    SRCS(
+        Python/asm_trampoline.S
+    )
+ENDIF()
+
 SUPPRESSIONS(
     tsan.supp
 )

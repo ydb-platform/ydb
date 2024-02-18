@@ -11,7 +11,7 @@ LICENSE(Python-2.0)
 USE_PYTHON3()
 
 PEERDIR(
-    contrib/tools/python3/src/Modules/_sqlite
+    contrib/tools/python3/Modules/_sqlite
 )
 
 CFLAGS(
@@ -19,7 +19,7 @@ CFLAGS(
 )
 
 SRCS(
-    ../src/Programs/python.c
+    ../Programs/python.c
 )
 
 END()

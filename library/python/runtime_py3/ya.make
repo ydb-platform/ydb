@@ -3,8 +3,8 @@ PY3_LIBRARY()
 STYLE_PYTHON()
 
 PEERDIR(
-    contrib/tools/python3/src
-    contrib/tools/python3/lib/py
+    contrib/tools/python3
+    contrib/tools/python3/lib2/py
     library/cpp/resource
 )
 

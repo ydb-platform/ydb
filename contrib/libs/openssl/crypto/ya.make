@@ -151,17 +151,10 @@ IF (OS_LINUX AND ARCH_AARCH64 OR OS_LINUX AND ARCH_X86_64)
     )
 ENDIF()
 
-IF (OS_DARWIN AND ARCH_X86_64)
-    CFLAGS(
-        -D_REENTRANT
-    )
-ENDIF()
-
 IF (OS_DARWIN AND ARCH_ARM64)
     CFLAGS(
         -DL_ENDIAN
         -DOPENSSL_PIC
-        -D_REENTRANT
     )
 ENDIF()
 
@@ -179,11 +172,6 @@ IF (OS_WINDOWS)
     ENDIF()
     CFLAGS(
         -DOPENSSL_SYS_WIN32
-        -DUNICODE
-        -DWIN32_LEAN_AND_MEAN
-        -D_CRT_SECURE_NO_DEPRECATE
-        -D_UNICODE
-        -D_WINSOCK_DEPRECATED_NO_WARNINGS
         /GF
     )
 ENDIF()
@@ -937,14 +925,6 @@ IF (OS_DARWIN AND ARCH_ARM64)
 ENDIF()
 
 IF (OS_LINUX AND ARCH_ARM7)
-    IF (CLANG)
-        # XXX: This is a workarond for 'out of range immediate fixup value'
-        # error with clang integrated assembler:
-        # https://github.com/openssl/openssl/issues/7878
-        CFLAGS(
-            -mno-thumb
-        )
-    ENDIF()
     CFLAGS(
         -DOPENSSL_PIC
         -DOPENSSL_BN_ASM_GF2m

@@ -157,10 +157,10 @@ class TestCaseBuilder:
 
             if only_pgrun_stmts:
                 logger.info("Statements in pgrun output, but not in out file:\n%s",
-                    '\n--------------------------------\n'.join(stmt for stmt in only_pgrun_stmts))
+                            "\n--------------------------------\n".join(stmt for stmt in only_pgrun_stmts))
             if only_out_stmts:
                 logger.info("Statements in out file, but not in pgrun output:\n%s",
-                    '\n--------------------------------\n'.join(stmt for stmt in only_out_stmts))
+                            "\n--------------------------------\n".join(stmt for stmt in only_out_stmts))
 
             stmts_run = 0
             stmts = []

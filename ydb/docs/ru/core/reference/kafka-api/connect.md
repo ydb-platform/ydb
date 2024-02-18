@@ -43,17 +43,17 @@
     # AdminAPI properties
     sasl.mechanism=PLAIN
     security.protocol=SASL_SSL
-    sasl.jaas.config=org.apache.kafka.common.security.plain.PlainLoginModule required username="<user>@<db>" password="<user-pass>";
+    sasl.jaas.config=org.apache.kafka.common.security.plain.PlainLoginModule required username="<user>@<db-path>" password="<user-pass>";
 
     # Producer properties
     producer.sasl.mechanism=PLAIN
     producer.security.protocol=SASL_SSL
-    producer.sasl.jaas.config=org.apache.kafka.common.security.plain.PlainLoginModule required username="<user>@<db>" password="<user-pass>";
+    producer.sasl.jaas.config=org.apache.kafka.common.security.plain.PlainLoginModule required username="<user>@<db-path>" password="<user-pass>";
 
     # Consumer properties
     consumer.sasl.mechanism=PLAIN
     consumer.security.protocol=SASL_SSL
-    consumer.sasl.jaas.config=org.apache.kafka.common.security.plain.PlainLoginModule required username="<user>@<db>" password="<user-pass>";
+    consumer.sasl.jaas.config=org.apache.kafka.common.security.plain.PlainLoginModule required username="<user>@<db-path>" password="<user-pass>";
 
     consumer.partition.assignment.strategy=org.apache.kafka.clients.consumer.RoundRobinAssignor
     consumer.check.crcs=false

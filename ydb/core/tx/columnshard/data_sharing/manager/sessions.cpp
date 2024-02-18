@@ -3,6 +3,7 @@
 #include <ydb/core/tx/columnshard/data_sharing/destination/transactions/tx_start_from_initiator.h>
 #include <ydb/core/tx/columnshard/data_sharing/source/transactions/tx_start_to_source.h>
 #include <ydb/core/tx/columnshard/engines/column_engine_logs.h>
+#include <ydb/core/tx/columnshard/hooks/abstract/abstract.h>
 
 namespace NKikimr::NOlap::NDataSharing {
 
@@ -17,6 +18,7 @@ void TSessionsManager::Start(const NColumnShard::TColumnShard& shard) const {
             i.second->Start(shard);
         }
     }
+    NYDBTest::TControllers::GetColumnShardController()->OnAfterSharingSessionsManagerStart(shard);
 }
 
 void TSessionsManager::InitializeEventsExchange(const NColumnShard::TColumnShard& shard, const std::optional<ui64> sessionCookie) {

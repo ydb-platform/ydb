@@ -378,11 +378,17 @@ public:
     }
 
     void FillBlobIdsByStorage(THashMap<TString, THashSet<TUnifiedBlobId>>& result) const {
+        const TString& storageId = GetMeta().GetTierName() ? GetMeta().GetTierName() : IStoragesManager::DefaultStorageId;
+        THashMap<TString, THashSet<TUnifiedBlobId>> local;
         for (auto&& i : Records) {
-            result[GetMeta().GetTierName()].emplace(i.BlobRange.BlobId);
+            if (local[storageId].emplace(i.BlobRange.BlobId).second) {
+                AFL_VERIFY(result[storageId].emplace(i.BlobRange.BlobId).second);
+            }
         }
         for (auto&& i : Indexes) {
-            result[GetMeta().GetTierName()].emplace(i.GetBlobRange().BlobId);
+            if (local[storageId].emplace(i.GetBlobRange().BlobId).second) {
+                AFL_VERIFY(result[storageId].emplace(i.GetBlobRange().BlobId).second);
+            }
         }
     }
 

@@ -48,6 +48,7 @@ TConclusion<std::unique_ptr<NTabletFlatExecutor::ITransaction>> TSourceSession::
         return ackResult;
     }
     if (Cursor->IsReadyForNext()) {
+        Cursor->Next(self->GetStoragesManager()->GetSharedBlobsManager());
         return std::unique_ptr<NTabletFlatExecutor::ITransaction>(new TTxDataAckToSource(self, selfPtr));
     } else {
         return std::unique_ptr<NTabletFlatExecutor::ITransaction>(new TTxWriteSourceCursor(self, selfPtr));
@@ -60,6 +61,7 @@ TConclusion<std::unique_ptr<NTabletFlatExecutor::ITransaction>> TSourceSession::
         return ackResult;
     }
     if (Cursor->IsReadyForNext()) {
+        Cursor->Next(self->GetStoragesManager()->GetSharedBlobsManager());
         return std::unique_ptr<NTabletFlatExecutor::ITransaction>(new TTxDataAckToSource(self, selfPtr));
     } else {
         return std::unique_ptr<NTabletFlatExecutor::ITransaction>(new TTxWriteSourceCursor(self, selfPtr));
@@ -67,10 +69,10 @@ TConclusion<std::unique_ptr<NTabletFlatExecutor::ITransaction>> TSourceSession::
 }
 
 void TSourceSession::ActualizeDestination(const std::shared_ptr<NDataLocks::TManager>& dataLocksManager) {
-    AFL_VERIFY(IsStarted());
+    AFL_VERIFY(IsStarted() || IsStarting());
     AFL_VERIFY(Cursor);
     if (Cursor->IsValid()) {
-        if (Cursor->GetAckReceivedForPackIdx() < Cursor->GetPackIdx()) {
+        if (!Cursor->IsAckDataReceived()) {
             const THashMap<ui64, NEvents::TPathIdData>& packPortions = Cursor->GetSelected();
             auto ev = std::make_unique<NEvents::TEvSendDataFromSource>(GetSessionId(), Cursor->GetPackIdx(), SelfTabletId, packPortions);
             NActors::TActivationContext::AsActorContext().Send(MakePipePeNodeCacheID(false),

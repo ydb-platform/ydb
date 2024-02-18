@@ -32,28 +32,31 @@ private:
     YDB_ACCESSOR(bool, StaticSaved, false);
     void BuildSelection(const std::shared_ptr<TSharedBlobsManager>& sharedBlobsManager);
 public:
+    bool IsAckDataReceived() const {
+        return AckReceivedForPackIdx == PackIdx;
+    }
+
     bool IsStarted() const {
         return IsStartedFlag;
     }
 
     TConclusionStatus AckData(const ui64 packIdxReceived) {
         AFL_VERIFY(packIdxReceived <= PackIdx);
-        if (packIdxReceived == PackIdx) {
-            AckReceivedForPackIdx = PackIdx;
-        } else {
+        if (packIdxReceived != PackIdx) {
             return TConclusionStatus::Fail("incorrect packIdx received for AckData: " + ::ToString(packIdxReceived) + " but expected: " + ::ToString(PackIdx));
         }
+        AckReceivedForPackIdx = packIdxReceived;
+        AFL_NOTICE(NKikimrServices::TX_COLUMNSHARD)("event", "SourceAckData")("pack", PackIdx)("pack_ack", AckReceivedForPackIdx)("links_ready", LinksModifiedTablets.size())("links_waiting", Links.size());
         return TConclusionStatus::Success();
     }
 
     TConclusionStatus AckLinks(const TTabletId tabletId, const ui64 packIdxReceived) {
-        if (packIdxReceived == PackIdx) {
-            AckReceivedForPackIdx = PackIdx;
-        } else {
+        if (packIdxReceived != PackIdx) {
             return TConclusionStatus::Fail("incorrect packIdx received for AckLinks: " + ::ToString(packIdxReceived) + " but expected: " + ::ToString(PackIdx));
         }
         AFL_VERIFY(Links.contains(tabletId));
         if (LinksModifiedTablets.emplace(tabletId).second) {
+            AFL_NOTICE(NKikimrServices::TX_COLUMNSHARD)("event", "SourceAckData")("pack", PackIdx)("pack_ack", AckReceivedForPackIdx)("links_ready", LinksModifiedTablets.size())("links_waiting", Links.size());
             return TConclusionStatus::Success();
         } else {
             return TConclusionStatus::Fail("AckLinks repeated table");
@@ -70,14 +73,6 @@ public:
 
     void AddLinksModifiedTablet(const TTabletId tabletId) {
         LinksModifiedTablets.emplace(tabletId);
-    }
-
-    void SetAckReceivedForPackIdx(const ui32 idx) {
-        AckReceivedForPackIdx = idx;
-    }
-
-    ui64 GetAckReceivedForPackIdx() const {
-        return AckReceivedForPackIdx;
     }
 
     const THashMap<ui64, NEvents::TPathIdData> GetPreviousSelected() const {

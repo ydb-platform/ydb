@@ -28,8 +28,8 @@ private:
 
     YDB_READONLY_DEF(TString, SessionId);
     YDB_READONLY(ui64, RuntimeId, GetNextRuntimeId());
-    TSnapshot SnapshotBarrier = TSnapshot::Zero();
     bool IsStartedFlag = false;
+    bool IsStartingFlag = false;
     bool IsFinishedFlag = false;
 protected:
     TTransferContext TransferContext;
@@ -45,19 +45,27 @@ public:
         , TransferContext(transferContext) {
     }
 
+    bool IsFinished() const {
+        return IsFinishedFlag;
+    }
+
     bool IsStarted() const {
         return IsStartedFlag;
     }
 
+    bool IsStarting() const {
+        return IsStartingFlag;
+    }
+
     bool IsEqualTo(const TCommonSession& item) const {
-        return SessionId == item.SessionId && SnapshotBarrier == item.SnapshotBarrier;
+        return SessionId == item.SessionId && TransferContext.IsEqualTo(item.TransferContext);
     }
 
     bool Start(const NColumnShard::TColumnShard& shard);
     void Finish(const std::shared_ptr<NDataLocks::TManager>& dataLocksManager);
 
     const TSnapshot& GetSnapshotBarrier() const {
-        return SnapshotBarrier;
+        return TransferContext.GetSnapshotBarrier();
     }
 
     TString DebugString() const;
@@ -66,7 +74,6 @@ public:
     void SerializeToProto(TProto& proto) const {
         AFL_VERIFY(SessionId);
         *proto.MutableSessionId() = SessionId;
-        SnapshotBarrier.SerializeToProto(*proto.MutableSnapshotBarrier());
         *proto.MutableTransferContext() = TransferContext.SerializeToProto();
     }
 
@@ -85,18 +92,6 @@ public:
             auto parsing = TransferContext.DeserializeFromProto(proto.GetTransferContext());
             if (!parsing) {
                 return parsing;
-            }
-        }
-        {
-            if (!proto.HasSnapshotBarrier()) {
-                return TConclusionStatus::Fail("SnapshotBarrier not initialized in proto.");
-            }
-            auto snapshotParse = SnapshotBarrier.DeserializeFromProto(proto.GetSnapshotBarrier());
-            if (!snapshotParse) {
-                return snapshotParse;
-            }
-            if (!SnapshotBarrier.Valid()) {
-                return TConclusionStatus::Fail("SnapshotBarrier must be valid in proto.");
             }
         }
         return TConclusionStatus::Success();

@@ -315,7 +315,9 @@ void TPortionInfo::SerializeToProto(NKikimrColumnShardDataSharingProto::TPortion
     proto.SetPathId(PathId);
     proto.SetPortionId(Portion);
     *proto.MutableMinSnapshot() = MinSnapshot.SerializeToProto();
-    *proto.MutableRemoveSnapshot() = RemoveSnapshot.SerializeToProto();
+    if (!RemoveSnapshot.IsZero()) {
+        *proto.MutableRemoveSnapshot() = RemoveSnapshot.SerializeToProto();
+    }
     *proto.MutableMeta() = Meta.SerializeToProto();
 
     for (auto&& r : Records) {
@@ -336,16 +338,14 @@ TConclusionStatus TPortionInfo::DeserializeFromProto(const NKikimrColumnShardDat
             return parse;
         }
     }
-    {
+    if (proto.HasRemoveSnapshot()) {
         auto parse = RemoveSnapshot.DeserializeFromProto(proto.GetRemoveSnapshot());
         if (!parse) {
             return parse;
         }
     }
-    {
-        if (!Meta.DeserializeFromProto(proto.GetMeta(), info)) {
-            return TConclusionStatus::Fail("cannot parse meta");
-        }
+    if (!Meta.DeserializeFromProto(proto.GetMeta(), info)) {
+        return TConclusionStatus::Fail("cannot parse meta");
     }
     for (auto&& i : proto.GetRecords()) {
         auto parse = TColumnRecord::BuildFromProto(i, info);

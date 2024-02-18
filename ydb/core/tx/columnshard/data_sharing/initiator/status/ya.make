@@ -9,4 +9,6 @@ PEERDIR(
     ydb/services/bg_tasks/abstract
 )
 
+GENERATE_ENUM_SERIALIZATION(abstract.h)
+
 END()

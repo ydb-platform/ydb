@@ -16,6 +16,12 @@ THashMap<NKikimr::NOlap::TTabletId, NKikimr::NOlap::NDataSharing::TTaskForTablet
         auto storageManager = sharedBlobs->GetStorageManagerVerified(i.first);
         auto storeCategories = storageManager->BuildStoreCategories(i.second);
         auto& blobs = blobsInfo[i.first];
+        for (auto it = storeCategories.GetDirect().GetIterator(); it.IsValid(); ++it) {
+            auto itSharing = blobs.find(it.GetBlobId());
+            if (itSharing == blobs.end()) {
+                itSharing = blobs.emplace(it.GetBlobId(), TBlobSharing(i.first, it.GetBlobId())).first;
+            }
+        }
         for (auto it = storeCategories.GetSharing().GetIterator(); it.IsValid(); ++it) {
             auto itSharing = blobs.find(it.GetBlobId());
             if (itSharing == blobs.end()) {

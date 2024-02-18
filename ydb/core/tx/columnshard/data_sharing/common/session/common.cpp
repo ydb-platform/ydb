@@ -9,23 +9,30 @@
 namespace NKikimr::NOlap::NDataSharing {
 
 TString TCommonSession::DebugString() const {
-    return TStringBuilder() << "{id=" << SessionId << ";snapshot=" << SnapshotBarrier.DebugString() << ";}";
+    return TStringBuilder() << "{id=" << SessionId << ";context=" << TransferContext.DebugString() << ";}";
 }
 
 bool TCommonSession::Start(const NColumnShard::TColumnShard& shard) {
+    AFL_VERIFY(!IsStartingFlag);
+    IsStartingFlag = true;
     AFL_VERIFY(!IsStartedFlag);
     const auto& index = shard.GetIndexAs<TColumnEngineForLogs>();
     THashMap<ui64, std::vector<std::shared_ptr<TPortionInfo>>> portionsByPath;
     std::vector<std::shared_ptr<TPortionInfo>> portionsLock;
     THashMap<TString, THashSet<TUnifiedBlobId>> local;
     for (auto&& i : GetPathIdsForStart()) {
-        if (shard.GetInsertTable().GetMinCommittedSnapshot(i).value_or(shard.GetLastCompletedTx()) <= GetSnapshotBarrier()) {
-            return false;
-        }
+//        const auto insertTableSnapshot = shard.GetInsertTable().GetMinCommittedSnapshot(i);
+//        const auto shardSnapshot = shard.GetLastCompletedTx();
+//        if (shard.GetInsertTable().GetMinCommittedSnapshot(i).value_or(shard.GetLastPlannedSnapshot()) <= GetSnapshotBarrier()) {
+//            AFL_WARN(NKikimrServices::TX_COLUMNSHARD)("insert_table_snapshot", insertTableSnapshot)("last_completed_tx", shardSnapshot)("barrier", GetSnapshotBarrier());
+//            IsStartingFlag = false;
+//            return false;
+//        }
         auto& portionsVector = portionsByPath[i];
         const auto& g = index.GetGranuleVerified(i);
-        for (auto&& p : g.GetPortionsOlderThenSnapshot(SnapshotBarrier)) {
+        for (auto&& p : g.GetPortionsOlderThenSnapshot(GetSnapshotBarrier())) {
             if (shard.GetDataLocksManager()->IsLocked(*p.second)) {
+                IsStartingFlag = false;
                 return false;
             }
             portionsVector.emplace_back(p.second);
@@ -34,6 +41,9 @@ bool TCommonSession::Start(const NColumnShard::TColumnShard& shard) {
     }
 
     IsStartedFlag = DoStart(shard, portionsByPath);
+    if (IsFinishedFlag) {
+        IsStartedFlag = false;
+    }
     if (IsStartedFlag) {
         shard.GetDataLocksManager()->RegisterLock<NDataLocks::TListPortionsLock>(GetSessionId(), portionsLock, true);
     }
@@ -43,7 +53,9 @@ bool TCommonSession::Start(const NColumnShard::TColumnShard& shard) {
 void TCommonSession::Finish(const std::shared_ptr<NDataLocks::TManager>& dataLocksManager) {
     AFL_VERIFY(!IsFinishedFlag);
     IsFinishedFlag = true;
-    dataLocksManager->UnregisterLock(GetSessionId());
+    if (IsStartedFlag) {
+        dataLocksManager->UnregisterLock(GetSessionId());
+    }
 }
 
 }

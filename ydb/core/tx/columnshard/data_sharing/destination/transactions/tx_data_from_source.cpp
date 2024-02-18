@@ -10,7 +10,9 @@ bool TTxDataFromSource::DoExecute(NTabletFlatExecutor::TTransactionContext& txc,
     {
         ui64* lastPortionPtr = Self->TablesManager.MutablePrimaryIndexAsVerified<NOlap::TColumnEngineForLogs>().GetLastPortionPointer();
         for (auto&& i : PortionsByPathId) {
-            i.second.InitPortionIds(lastPortionPtr);
+            auto it = Session->GetPathIds().find(i.first);
+            AFL_VERIFY(it != Session->GetPathIds().end());
+            i.second.InitPortionIds(lastPortionPtr, it->second);
         }
         dbWrapper.WriteCounter(TColumnEngineForLogs::LAST_PORTION, *lastPortionPtr);
     }
@@ -27,7 +29,7 @@ bool TTxDataFromSource::DoExecute(NTabletFlatExecutor::TTransactionContext& txc,
 }
 
 void TTxDataFromSource::DoComplete(const TActorContext& /*ctx*/) {
-    AFL_VERIFY(Session->DataReceived(PortionsByPathId, Self->TablesManager.MutablePrimaryIndexAsVerified<NOlap::TColumnEngineForLogs>()));
+    AFL_VERIFY(Session->DataReceived(std::move(PortionsByPathId), Self->TablesManager.MutablePrimaryIndexAsVerified<NOlap::TColumnEngineForLogs>(), Self->GetStoragesManager()));
     Session->SendCurrentCursorAck(*Self, SourceTabletId);
 }
 

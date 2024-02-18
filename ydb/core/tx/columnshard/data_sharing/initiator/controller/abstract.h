@@ -49,6 +49,8 @@ class TInitiatorControllerContainer: public NBackgroundTasks::TInterfaceProtoCon
 private:
     using TBase = NBackgroundTasks::TInterfaceProtoContainer<IInitiatorController>;
 public:
+    using TBase::TBase;
+
     void Status(const TStatusContainer& status) const {
         TBase::GetObjectPtrVerified()->Status(status);
     }

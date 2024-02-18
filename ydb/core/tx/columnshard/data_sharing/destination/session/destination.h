@@ -13,6 +13,7 @@ class TColumnShard;
 
 namespace NKikimr::NOlap {
 class TColumnEngineForLogs;
+class IStoragesManager;
 }
 
 namespace NKikimr::NOlap::NDataSharing {
@@ -43,7 +44,7 @@ public:
     }
 
     TConclusionStatus ReceiveFinished() {
-        if (!DataFinished) {
+        if (DataFinished) {
             return TConclusionStatus::Fail("inconsistency DataFinished");
         }
         DataFinished = true;
@@ -91,9 +92,17 @@ public:
         return it->second;
     }
 
+    TDestinationSession(const TInitiatorControllerContainer& controller, const TPathIdsRemapper& remapper, const TString& sessionId, const TTransferContext& context)
+        : TBase(sessionId, context)
+        , InitiatorController(controller)
+        , PathIds(remapper)
+    {
+
+    }
+
     TDestinationSession() = default;
 
-    [[nodiscard]] TConclusionStatus DataReceived(const THashMap<ui64, NEvents::TPathIdData>& data, TColumnEngineForLogs& index);
+    [[nodiscard]] TConclusionStatus DataReceived(THashMap<ui64, NEvents::TPathIdData>&& data, TColumnEngineForLogs& index, const std::shared_ptr<IStoragesManager>& manager);
 
     void SendCurrentCursorAck(const NColumnShard::TColumnShard& shard, const std::optional<TTabletId> tabletId);
 

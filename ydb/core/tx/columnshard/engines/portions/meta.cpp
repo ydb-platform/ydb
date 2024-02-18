@@ -35,6 +35,7 @@ bool TPortionMeta::DeserializeFromProto(const NKikimrTxColumnShard::TIndexPortio
         AFL_ERROR(NKikimrServices::TX_COLUMNSHARD)("event", "DeserializeFromProto")("error", "parsing duplication");
         return true;
     }
+    FirstPkColumn = indexInfo.GetPKFirstColumnId();
     TierName = portionMeta.GetTierName();
     if (portionMeta.GetIsInserted()) {
         Produced = TPortionMeta::EProduced::INSERTED;

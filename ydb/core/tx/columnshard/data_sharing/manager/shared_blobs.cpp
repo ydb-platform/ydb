@@ -74,8 +74,12 @@ void TStorageSharedBlobsManager::CASBorrowedBlobsDB(NTabletFlatExecutor::TTransa
     for (auto&& i : blobIds) {
         auto it = BorrowedBlobIds.find(i);
         AFL_VERIFY(it != BorrowedBlobIds.end());
-        AFL_VERIFY(it->second == tabletIdFrom);
-        db.Table<NColumnShard::Schema::BorrowedBlobIds>().Key(StorageId, i.ToStringNew()).Update(NIceDb::TUpdate<NColumnShard::Schema::BorrowedBlobIds::TabletId>((ui64)tabletIdTo));
+        AFL_VERIFY(it->second == tabletIdFrom || it->second == tabletIdTo);
+        if (tabletIdTo == SelfTabletId) {
+            db.Table<NColumnShard::Schema::BorrowedBlobIds>().Key(StorageId, i.ToStringNew()).Delete();
+        } else {
+            db.Table<NColumnShard::Schema::BorrowedBlobIds>().Key(StorageId, i.ToStringNew()).Update(NIceDb::TUpdate<NColumnShard::Schema::BorrowedBlobIds::TabletId>((ui64)tabletIdTo));
+        }
     }
 }
 

@@ -11,7 +11,8 @@ bool TTxStartFromInitiator::DoExecute(NTabletFlatExecutor::TTransactionContext& 
 }
 
 void TTxStartFromInitiator::DoComplete(const TActorContext& /*ctx*/) {
-    Session->SendCurrentCursorAck(*Self, {});
+    Session->Start(*Self);
+    Session->GetInitiatorController().StartSuccess(Session->GetSessionId());
 }
 
 }

@@ -36,7 +36,7 @@ void TStorageTabletTask::ApplyForRuntime(const std::shared_ptr<TStorageSharedBlo
         manager->CASBorrowedBlobs(i.second.GetFrom(), i.second.GetTo(), {i.first});
     }
     manager->AddBorrowedBlobs(InitOwner);
-    manager->AddSharedBlobs(AddSharingLinks);
+    Y_UNUSED(manager->AddSharedBlobs(AddSharingLinks));
     manager->RemoveSharedBlobs(RemoveSharingLinks);
 }
 

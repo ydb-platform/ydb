@@ -4,11 +4,11 @@
 namespace NKikimr::NOlap::NDataLocks {
 
 void TManager::RegisterLock(const TString& processId, const std::shared_ptr<ILock>& lock) {
-    AFL_VERIFY(ProcessLocks.emplace(processId, lock).second);
+    AFL_VERIFY(ProcessLocks.emplace(processId, lock).second)("process_id", processId);
 }
 
 void TManager::UnregisterLock(const TString& processId) {
-    AFL_VERIFY(ProcessLocks.erase(processId));
+    AFL_VERIFY(ProcessLocks.erase(processId))("process_id", processId);
 }
 
 std::optional<TString> TManager::IsLocked(const TPortionInfo& portion) const {

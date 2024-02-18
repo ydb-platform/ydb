@@ -32,7 +32,6 @@ bool TTxDataAckToSource::DoExecute(NTabletFlatExecutor::TTransactionContext& txc
 }
 
 void TTxDataAckToSource::DoComplete(const TActorContext& /*ctx*/) {
-    Self->GetStoragesManager()->GetSharedBlobsManager()->AddSharingBlobs(SharedBlobIds);
     Session->ActualizeDestination(Self->GetDataLocksManager());
 }
 

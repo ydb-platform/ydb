@@ -42,12 +42,18 @@ public:
 
     }
 
+    std::vector<TPortionInfo> DetachPortions() {
+        return std::move(Portions);
+    }
     THashMap<TTabletId, TTaskForTablet> BuildLinkTabletTasks(const std::shared_ptr<TSharedBlobsManager>& sharedBlobs, const TTabletId selfTabletId, const TTransferContext& context);
 
-    void InitPortionIds(ui64* lastPortionId) {
+    void InitPortionIds(ui64* lastPortionId, const std::optional<ui64> pathId = {}) {
         AFL_VERIFY(lastPortionId);
         for (auto&& i : Portions) {
             i.SetPortion(++*lastPortionId);
+            if (pathId) {
+                i.SetPathId(*pathId);
+            }
         }
     }
 

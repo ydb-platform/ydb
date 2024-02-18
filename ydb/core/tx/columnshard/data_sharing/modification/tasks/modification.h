@@ -292,6 +292,10 @@ public:
                     task.RemoveLink(BlobId, selfTabletId);
                     AFL_VERIFY(result.emplace(*Borrowed, std::move(task)).second);
                 }
+            } else if (toTabletId == *Borrowed) {
+                TStorageTabletTask task(storageId, *Borrowed);
+                task.RemoveLink(BlobId, selfTabletId);
+                AFL_VERIFY(result.emplace(*Borrowed, std::move(task)).second);
             } else {
                 {
                     TStorageTabletTask task(storageId, *Borrowed);
@@ -317,7 +321,10 @@ public:
                 {
                     TStorageTabletTask task(StorageId, selfTabletId);
                     task.RemoveLink(BlobId, i);
-                    AFL_VERIFY(result.emplace(selfTabletId, std::move(task)).second);
+                    auto info = result.emplace(selfTabletId, task);
+                    if (!info.second) {
+                        info.first->second.Merge(task);
+                    }
                 }
             }
             {
@@ -328,7 +335,10 @@ public:
             {
                 TStorageTabletTask task(storageId, selfTabletId);
                 task.AddInitOwner(BlobId, toTabletId);
-                AFL_VERIFY(result.emplace(selfTabletId, std::move(task)).second);
+                auto info = result.emplace(selfTabletId, task);
+                if (!info.second) {
+                    info.first->second.Merge(task);
+                }
             }
         }
         return result;

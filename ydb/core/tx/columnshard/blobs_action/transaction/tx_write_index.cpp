@@ -66,7 +66,7 @@ void TTxWriteIndex::Complete(const TActorContext& ctx) {
     }
 
     changes->MutableBlobsAction().OnCompleteTxAfterAction(*Self, Ev->Get()->GetPutStatus() == NKikimrProto::OK);
-    NYDBTest::TControllers::GetColumnShardController()->OnWriteIndexComplete(Self->TabletID(), changes->TypeString());
+    NYDBTest::TControllers::GetColumnShardController()->OnWriteIndexComplete(*changes, *Self);
 }
 
 TTxWriteIndex::~TTxWriteIndex() {

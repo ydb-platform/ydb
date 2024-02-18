@@ -2322,7 +2322,7 @@ Y_UNIT_TEST_SUITE(TColumnShardTestReadWrite) {
         SetupSchema(runtime, sender, tableId);
         TAutoPtr<IEventHandle> handle;
 
-        // Write some test data to adavnce the time
+        // Write some test data to advance the time
         {
             std::pair<ui64, ui64> triggerPortion = {1, 1000};
             TString triggerData = MakeTestBlob(triggerPortion, ydbSchema);

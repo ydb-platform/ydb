@@ -1,19 +1,21 @@
 #include "destination.h"
+#include <ydb/core/tx/columnshard/blobs_action/abstract/storages_manager.h>
+#include <ydb/core/tx/columnshard/data_locks/locks/list.h>
 #include <ydb/core/tx/columnshard/data_sharing/destination/events/transfer.h>
-#include <ydb/core/tx/columnshard/engines/column_engine_logs.h>
 #include <ydb/core/tx/columnshard/data_sharing/destination/transactions/tx_finish_ack_from_initiator.h>
 #include <ydb/core/tx/columnshard/data_sharing/destination/transactions/tx_finish_from_source.h>
 #include <ydb/core/tx/columnshard/data_sharing/destination/transactions/tx_data_from_source.h>
-#include <ydb/core/tx/columnshard/data_locks/locks/list.h>
+#include <ydb/core/tx/columnshard/engines/column_engine_logs.h>
+#include <ydb/core/tx/columnshard/hooks/abstract/abstract.h>
 
 namespace NKikimr::NOlap::NDataSharing {
 
-NKikimr::TConclusionStatus TDestinationSession::DataReceived(const THashMap<ui64, NEvents::TPathIdData>& data, TColumnEngineForLogs& index) {
+NKikimr::TConclusionStatus TDestinationSession::DataReceived(THashMap<ui64, NEvents::TPathIdData>&& data, TColumnEngineForLogs& index, const std::shared_ptr<IStoragesManager>& manager) {
+    auto guard = index.GranulesStorage->StartPackModification();
     for (auto&& i : data) {
         auto it = PathIds.find(i.first);
         AFL_VERIFY(it != PathIds.end())("path_id_undefined", i.first);
-        auto granule = index.GetGranulePtrVerified(it->second);
-        for (auto&& portion : i.second.GetPortions()) {
+        for (auto&& portion : i.second.DetachPortions()) {
             ui32 contains = 0;
             ui32 notContains = 0;
             THashMap<TString, THashSet<TUnifiedBlobId>> blobIds;
@@ -32,7 +34,10 @@ NKikimr::TConclusionStatus TDestinationSession::DataReceived(const THashMap<ui64
             }
             AFL_VERIFY(!contains || !notContains);
             if (!contains) {
-                granule->UpsertPortion(portion);
+                auto storage = manager->GetOperatorVerified(portion.GetMeta().GetTierName() ? portion.GetMeta().GetTierName() : IStoragesManager::DefaultStorageId);
+                portion.InitOperator(storage, false);
+                portion.SetPathId(it->second);
+                index.UpsertPortion(std::move(portion));
             }
         }
     }
@@ -40,7 +45,7 @@ NKikimr::TConclusionStatus TDestinationSession::DataReceived(const THashMap<ui64
 }
 
 void TDestinationSession::SendCurrentCursorAck(const NColumnShard::TColumnShard& shard, const std::optional<TTabletId> tabletId) {
-    AFL_VERIFY(IsStarted());
+    AFL_VERIFY(IsStarted() || IsStarting());
     bool found = false;
     bool allTransfersFinished = true;
     for (auto&& [_, cursor] : Cursors) {
@@ -71,7 +76,8 @@ void TDestinationSession::SendCurrentCursorAck(const NColumnShard::TColumnShard&
             InitiatorController.StartSuccess(GetSessionId());
         }
     }
-    if (allTransfersFinished) {
+    if (allTransfersFinished && !IsFinished()) {
+        NYDBTest::TControllers::GetColumnShardController()->OnDataSharingFinished(shard.TabletID(), GetSessionId());
         Finish(shard.GetDataLocksManager());
         InitiatorController.Finished(GetSessionId());
     }
@@ -101,6 +107,9 @@ NKikimr::TConclusion<std::unique_ptr<NTabletFlatExecutor::ITransaction>> TDestin
 }
 
 NKikimr::TConclusionStatus TDestinationSession::DeserializeDataFromProto(const NKikimrColumnShardDataSharingProto::TDestinationSession& proto, const TColumnEngineForLogs& index) {
+    if (!InitiatorController.DeserializeFromProto(proto.GetInitiatorController())) {
+        return TConclusionStatus::Fail("cannot parse initiator controller: " + proto.GetInitiatorController().DebugString());
+    }
     auto parseBase = TBase::DeserializeFromProto(proto);
     if (!parseBase) {
         return parseBase;
@@ -110,9 +119,6 @@ NKikimr::TConclusionStatus TDestinationSession::DeserializeDataFromProto(const N
         Cursors.emplace(i, TSourceCursorForDestination(i));
     }
 
-    if (!InitiatorController.DeserializeFromProto(proto.GetInitiatorController())) {
-        return TConclusionStatus::Fail("cannot parse initiator controller: " + proto.GetInitiatorController().DebugString());
-    }
     for (auto&& i : proto.GetPathIds()) {
         auto g = index.GetGranuleOptional(i.GetDestPathId());
         if (!g) {
@@ -166,6 +172,7 @@ NKikimr::TConclusionStatus TDestinationSession::DeserializeCursorFromProto(const
 }
 
 bool TDestinationSession::DoStart(const NColumnShard::TColumnShard& shard, const THashMap<ui64, std::vector<std::shared_ptr<TPortionInfo>>>& portions) {
+    NYDBTest::TControllers::GetColumnShardController()->OnDataSharingStarted(shard.TabletID(), GetSessionId());
     THashMap<TString, THashSet<TUnifiedBlobId>> local;
     for (auto&& i : portions) {
         for (auto&& p : i.second) {

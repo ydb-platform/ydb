@@ -65,16 +65,23 @@ public:
         for (auto&& i : blobIds) {
             auto* tabletIds = SharedBlobIds.Find(i);
             auto it = BorrowedBlobIds.find(i);
+            bool borrowed = false;
+            bool direct = false;
+            bool shared = false;
             if (it != BorrowedBlobIds.end()) {
                 result.AddBorrowed(it->second, i);
+                borrowed = true;
             } else if (!tabletIds) {
                 result.AddDirect(SelfTabletId, i);
+                direct = true;
             }
             if (tabletIds) {
                 for (auto&& t : *tabletIds) {
                     result.AddSharing(t, i);
+                    shared = true;
                 }
             }
+            AFL_VERIFY((borrowed ? 1 : 0) + (direct ? 1 : 0) + (shared ? 1 : 0) == 1)("b", borrowed)("d", direct)("s", shared);
         }
         return result;
     }
@@ -89,17 +96,24 @@ public:
 
     void WriteSharedBlobsDB(NTabletFlatExecutor::TTransactionContext& txc, const TTabletsByBlob& blobIds);
 
-    void AddSharedBlobs(const TTabletsByBlob& blobIds) {
+    [[nodiscard]] bool AddSharedBlobs(const TTabletsByBlob& blobIds) {
+        bool result = true;
         for (auto i = blobIds.GetIterator(); i.IsValid(); ++i) {
-            AFL_VERIFY(SharedBlobIds.Add(i.GetTabletId(), i.GetBlobId()));
+            if (!SharedBlobIds.Add(i.GetTabletId(), i.GetBlobId())) {
+                result = false;
+            }
         }
+        return result;
     }
 
     void WriteBorrowedBlobsDB(NTabletFlatExecutor::TTransactionContext& txc, const TTabletByBlob& blobIds);
 
     void AddBorrowedBlobs(const TTabletByBlob& blobIds) {
         for (auto&& i : blobIds) {
-            AFL_VERIFY(BorrowedBlobIds.emplace(i.first, i.second).second);
+            auto infoInsert = BorrowedBlobIds.emplace(i.first, i.second);
+            if (!infoInsert.second) {
+                AFL_VERIFY(infoInsert.first->second == i.second)("before", infoInsert.first->second)("after", i.second);
+            }
         }
     }
 
@@ -109,8 +123,12 @@ public:
         for (auto&& i : blobIds) {
             auto it = BorrowedBlobIds.find(i);
             AFL_VERIFY(it != BorrowedBlobIds.end());
-            AFL_VERIFY(tabletIdFrom == it->second);
-            it->second = tabletIdTo;
+            AFL_VERIFY(it->second == tabletIdFrom || it->second == tabletIdTo);
+            if (it->second == SelfTabletId) {
+                BorrowedBlobIds.erase(it);
+            } else {
+                it->second = tabletIdTo;
+            }
         }
     }
 
@@ -159,7 +177,7 @@ public:
 
     void AddSharingBlobs(const THashMap<TString, TTabletsByBlob>& blobIds) {
         for (auto&& i : blobIds) {
-            GetStorageManagerGuarantee(i.first)->AddSharedBlobs(i.second);
+            Y_UNUSED(GetStorageManagerGuarantee(i.first)->AddSharedBlobs(i.second));
         }
     }
 

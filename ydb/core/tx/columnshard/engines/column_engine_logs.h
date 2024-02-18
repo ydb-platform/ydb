@@ -19,6 +19,10 @@ struct TSortDescription;
 
 namespace NKikimr::NOlap {
 
+namespace NDataSharing {
+class TDestinationSession;
+}
+
 struct TReadMetadata;
 class TGranulesTable;
 class TColumnsTable;
@@ -79,6 +83,7 @@ class TColumnEngineForLogs : public IColumnEngine {
     friend class TChangesWithAppend;
     friend class TCompactColumnEngineChanges;
     friend class TCleanupColumnEngineChanges;
+    friend class NDataSharing::TDestinationSession;
 private:
     const NColumnShard::TEngineLogsCounters SignalCounters;
     std::shared_ptr<TGranulesStorage> GranulesStorage;
@@ -207,10 +212,13 @@ public:
         return it->second;
     }
 
-    std::vector<std::shared_ptr<TGranuleMeta>> GetTables(const ui64 pathIdFrom, const ui64 pathIdTo) const {
+    std::vector<std::shared_ptr<TGranuleMeta>> GetTables(const std::optional<ui64> pathIdFrom, const std::optional<ui64> pathIdTo) const {
         std::vector<std::shared_ptr<TGranuleMeta>> result;
         for (auto&& i : Tables) {
-            if (i.first < pathIdFrom || i.first > pathIdTo) {
+            if (pathIdFrom && i.first < *pathIdFrom) {
+                continue;
+            }
+            if (pathIdTo && i.first > *pathIdTo) {
                 continue;
             }
             result.emplace_back(i.second);

@@ -1,6 +1,8 @@
 #pragma once
 
 #include <ydb/library/yql/dq/actors/dq.h>
+#include <ydb/library/yql/ast/yql_expr.h>
+#include <ydb/library/yql/minikql/mkql_function_registry.h>
 
 #include <util/generic/string.h>
 #include <map>
@@ -10,6 +12,7 @@ namespace NCommon {
 
 TMaybe<TString> SqlToSExpr(const TString& query);
 
+TString GetSerializedTypeAnnotation(const NYql::TTypeAnnotationNode* typeAnn, const NKikimr::NMiniKQL::IFunctionRegistry* functionRegistry);
 TString GetSerializedResultType(const TString& program);
 
 bool ParseCounterName(TString* prefix, std::map<TString, TString>* labels, TString* name, const TString& counterName);

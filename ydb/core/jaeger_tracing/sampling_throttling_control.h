@@ -6,13 +6,11 @@
 
 namespace NKikimr::NJaegerTracing {
 
-class TSamplingThrottlingControl
-    : public TThrRefBase
-    , private TMoveOnly {
+class TSamplingThrottlingControl: public TThrRefBase {
     friend class TSamplingThrottlingConfigurator;
     
 public:
-    void HandleTracing(NWilson::TTraceId& traceId, TRequestDiscriminator discriminator);
+    void HandleTracing(NWilson::TTraceId& traceId, const TRequestDiscriminator& discriminator);
     
 private:
     struct TSamplingThrottlingImpl;

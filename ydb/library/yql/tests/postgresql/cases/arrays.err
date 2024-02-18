@@ -2299,12 +2299,10 @@ create type _comptype as enum('fooey');
 <sql-statement>
 select * from comptable;
 </sql-statement>
--stdin-:<main>: Error: Table metadata loading
+-stdin-:<main>: Fatal: Table metadata loading
 
-    -stdin-:<main>: Error: Table comptable
+    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.comptable
     
-        -stdin-:<main>: Error: Failed to parse row spec: No such type: comptype
-        
 <sql-statement>
 select c2[2].f2 from comptable;
 </sql-statement>
@@ -2881,15 +2879,13 @@ select unnest(array[1,2,3]);
 <sql-statement>
 select * from unnest(array[1,2,3]);
 </sql-statement>
--stdin-:<main>: Error: Type annotation
+-stdin-:<main>: Fatal: Execution
 
-    -stdin-:<main>:1:1: Error: At function: ResWrite!
+    -stdin-:<main>:1:1: Fatal: Execution of node: Result
     	select * from unnest(array[1,2,3]);
 	^
-        -stdin-:<main>:1:1: Error: Expected persistable data, but got: List<Struct<'unnest':pganyelement>>
-        	select * from unnest(array[1,2,3]);
-	^
-        -stdin-:<main>:1:1: Error: Persistable required. Atom, type, key, world, datasink, datasource, callable, resource, stream and lambda are not persistable
+        -stdin-:<main>:1:1: Fatal: ERROR:  cannot display a value of type anyelement
+
         	select * from unnest(array[1,2,3]);
 	^
 <sql-statement>
@@ -3141,21 +3137,17 @@ create temp table t1 (f1 int8_tbl[]);
 <sql-statement>
 insert into t1 (f1[5].q1) values(42);
 </sql-statement>
--stdin-:<main>: Error: Table metadata loading
+-stdin-:<main>: Fatal: Table metadata loading
 
-    -stdin-:<main>: Error: Table t1
+    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.t1
     
-        -stdin-:<main>: Error: Failed to parse row spec: No such type: int8_tbl
-        
 <sql-statement>
 select * from t1;
 </sql-statement>
--stdin-:<main>: Error: Table metadata loading
+-stdin-:<main>: Fatal: Table metadata loading
 
-    -stdin-:<main>: Error: Table t1
+    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.t1
     
-        -stdin-:<main>: Error: Failed to parse row spec: No such type: int8_tbl
-        
 <sql-statement>
 update t1 set f1[5].q2 = 43;
 </sql-statement>
@@ -3166,12 +3158,10 @@ update t1 set f1[5].q2 = 43;
 <sql-statement>
 select * from t1;
 </sql-statement>
--stdin-:<main>: Error: Table metadata loading
+-stdin-:<main>: Fatal: Table metadata loading
 
-    -stdin-:<main>: Error: Table t1
+    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.t1
     
-        -stdin-:<main>: Error: Failed to parse row spec: No such type: int8_tbl
-        
 <sql-statement>
 -- Check that arrays of composites are safely detoasted when needed
 create temp table src (f1 text);

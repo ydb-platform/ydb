@@ -43,3 +43,11 @@ INSERT INTO trunc_trigger_test VALUES(1, 'foo', 'bar'), (2, 'baz', 'quux');
 SELECT * FROM trunc_trigger_log;
 DROP TABLE trunc_trigger_test;
 DROP TABLE trunc_trigger_log;
+CREATE TABLE truncate_a (id serial,
+                         id1 integer default nextval('truncate_a_id1'));
+-- check rollback of a RESTART IDENTITY operation
+BEGIN;
+ROLLBACK;
+DROP TABLE truncate_a;
+SELECT nextval('truncate_a_id1'); -- fail, seq should have been dropped
+CREATE TABLE truncprim (a int PRIMARY KEY);

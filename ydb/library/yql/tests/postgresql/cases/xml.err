@@ -10,35 +10,19 @@ INSERT INTO xmltest VALUES (1, '<value>one</value>');
 <sql-statement>
 INSERT INTO xmltest VALUES (2, '<value>two</value>');
 </sql-statement>
--stdin-:<main>: Error: Type annotation
-
-    -stdin-:<main>:1:1: Error: At function: YtWriteTable!
-    	INSERT INTO xmltest VALUES (2, '<value>two</value>');
-	^
-        -stdin-:<main>:1:1: Error: Failed to convert type: List<Struct<'data':pgint4,'id':pgunknown>> to List<Struct<'data':pgxml,'id':pgint4>>
-        	INSERT INTO xmltest VALUES (2, '<value>two</value>');
-	^
-            -stdin-:<main>:1:1: Error: Failed to convert 'data': pgint4 to pgxml
-            	INSERT INTO xmltest VALUES (2, '<value>two</value>');
-	^
-        -stdin-:<main>:1:1: Error: Table "xmltest" row type differs from the written row type: Struct<data:pgxml!=pgint4,id:pgint4!=pgunknown>
-        	INSERT INTO xmltest VALUES (2, '<value>two</value>');
-	^
 <sql-statement>
 INSERT INTO xmltest VALUES (3, '<wrong');
 </sql-statement>
--stdin-:<main>: Error: Type annotation
+-stdin-:<main>: Fatal: Execution
 
-    -stdin-:<main>:1:1: Error: At function: YtWriteTable!
+    -stdin-:<main>:1:1: Fatal: Execution of node: YtFill!
     	INSERT INTO xmltest VALUES (3, '<wrong');
 	^
-        -stdin-:<main>:1:1: Error: Failed to convert type: List<Struct<'data':pgint4,'id':pgunknown>> to List<Struct<'data':pgxml,'id':pgint4>>
-        	INSERT INTO xmltest VALUES (3, '<wrong');
-	^
-            -stdin-:<main>:1:1: Error: Failed to convert 'data': pgint4 to pgxml
-            	INSERT INTO xmltest VALUES (3, '<wrong');
-	^
-        -stdin-:<main>:1:1: Error: Table "xmltest" row type differs from the written row type: Struct<data:pgxml!=pgint4,id:pgint4!=pgunknown>
+        -stdin-:<main>:1:1: Fatal: ERROR:  invalid XML document
+DETAIL:  line 1: Couldn't find end of Start Tag wrong line 1
+	<wrong
+	      ^
+
         	INSERT INTO xmltest VALUES (3, '<wrong');
 	^
 <sql-statement>
@@ -683,6 +667,18 @@ SELECT '<>' IS NOT DOCUMENT;
 <sql-statement>
 SELECT xmlagg(data) FROM xmltest;
 </sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: Result
+    	SELECT xmlagg(data) FROM xmltest;
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  invalid XML document
+DETAIL:  line 1: Extra content at the end of the document
+	<value>one</value><value>two</value>
+	                  ^
+
+        	SELECT xmlagg(data) FROM xmltest;
+	^
 <sql-statement>
 SELECT xmlagg(data) FROM xmltest WHERE id > 10;
 </sql-statement>
@@ -1224,71 +1220,15 @@ SELECT xpath_exists('count(/nosuchtag)', '<root/>'::xml);
 <sql-statement>
 INSERT INTO xmltest VALUES (4, '<menu><beers><name>Budvar</name><cost>free</cost><name>Carling</name><cost>lots</cost></beers></menu>'::xml);
 </sql-statement>
--stdin-:<main>: Error: Type annotation
-
-    -stdin-:<main>:1:1: Error: At function: YtWriteTable!
-    	INSERT INTO xmltest VALUES (4, '<menu><beers><name>Budvar</name><cost>free</cost><name>Carling</name><cost>lots</cost></beers></menu>'::xml);
-	^
-        -stdin-:<main>:1:1: Error: Failed to convert type: List<Struct<'data':pgint4,'id':pgxml>> to List<Struct<'data':pgxml,'id':pgint4>>
-        	INSERT INTO xmltest VALUES (4, '<menu><beers><name>Budvar</name><cost>free</cost><name>Carling</name><cost>lots</cost></beers></menu>'::xml);
-	^
-            -stdin-:<main>:1:1: Error: Failed to convert 'data': pgint4 to pgxml
-            	INSERT INTO xmltest VALUES (4, '<menu><beers><name>Budvar</name><cost>free</cost><name>Carling</name><cost>lots</cost></beers></menu>'::xml);
-	^
-        -stdin-:<main>:1:1: Error: Table "xmltest" row type differs from the written row type: Struct<data:pgxml!=pgint4,id:pgint4!=pgxml>
-        	INSERT INTO xmltest VALUES (4, '<menu><beers><name>Budvar</name><cost>free</cost><name>Carling</name><cost>lots</cost></beers></menu>'::xml);
-	^
 <sql-statement>
 INSERT INTO xmltest VALUES (5, '<menu><beers><name>Molson</name><cost>free</cost><name>Carling</name><cost>lots</cost></beers></menu>'::xml);
 </sql-statement>
--stdin-:<main>: Error: Type annotation
-
-    -stdin-:<main>:1:1: Error: At function: YtWriteTable!
-    	INSERT INTO xmltest VALUES (5, '<menu><beers><name>Molson</name><cost>free</cost><name>Carling</name><cost>lots</cost></beers></menu>'::xml);
-	^
-        -stdin-:<main>:1:1: Error: Failed to convert type: List<Struct<'data':pgint4,'id':pgxml>> to List<Struct<'data':pgxml,'id':pgint4>>
-        	INSERT INTO xmltest VALUES (5, '<menu><beers><name>Molson</name><cost>free</cost><name>Carling</name><cost>lots</cost></beers></menu>'::xml);
-	^
-            -stdin-:<main>:1:1: Error: Failed to convert 'data': pgint4 to pgxml
-            	INSERT INTO xmltest VALUES (5, '<menu><beers><name>Molson</name><cost>free</cost><name>Carling</name><cost>lots</cost></beers></menu>'::xml);
-	^
-        -stdin-:<main>:1:1: Error: Table "xmltest" row type differs from the written row type: Struct<data:pgxml!=pgint4,id:pgint4!=pgxml>
-        	INSERT INTO xmltest VALUES (5, '<menu><beers><name>Molson</name><cost>free</cost><name>Carling</name><cost>lots</cost></beers></menu>'::xml);
-	^
 <sql-statement>
 INSERT INTO xmltest VALUES (6, '<myns:menu xmlns:myns="http://myns.com"><myns:beers><myns:name>Budvar</myns:name><myns:cost>free</myns:cost><myns:name>Carling</myns:name><myns:cost>lots</myns:cost></myns:beers></myns:menu>'::xml);
 </sql-statement>
--stdin-:<main>: Error: Type annotation
-
-    -stdin-:<main>:1:1: Error: At function: YtWriteTable!
-    	INSERT INTO xmltest VALUES (6, '<myns:menu xmlns:myns="http://myns.com"><myns:beers><myns:name>Budvar</myns:name><myns:cost>free</myns:cost><myns:name>Carling</myns:name><myns:cost>lots</myns:cost></myns:beers></myns:menu>'::xml);
-	^
-        -stdin-:<main>:1:1: Error: Failed to convert type: List<Struct<'data':pgint4,'id':pgxml>> to List<Struct<'data':pgxml,'id':pgint4>>
-        	INSERT INTO xmltest VALUES (6, '<myns:menu xmlns:myns="http://myns.com"><myns:beers><myns:name>Budvar</myns:name><myns:cost>free</myns:cost><myns:name>Carling</myns:name><myns:cost>lots</myns:cost></myns:beers></myns:menu>'::xml);
-	^
-            -stdin-:<main>:1:1: Error: Failed to convert 'data': pgint4 to pgxml
-            	INSERT INTO xmltest VALUES (6, '<myns:menu xmlns:myns="http://myns.com"><myns:beers><myns:name>Budvar</myns:name><myns:cost>free</myns:cost><myns:name>Carling</myns:name><myns:cost>lots</myns:cost></myns:beers></myns:menu>'::xml);
-	^
-        -stdin-:<main>:1:1: Error: Table "xmltest" row type differs from the written row type: Struct<data:pgxml!=pgint4,id:pgint4!=pgxml>
-        	INSERT INTO xmltest VALUES (6, '<myns:menu xmlns:myns="http://myns.com"><myns:beers><myns:name>Budvar</myns:name><myns:cost>free</myns:cost><myns:name>Carling</myns:name><myns:cost>lots</myns:cost></myns:beers></myns:menu>'::xml);
-	^
 <sql-statement>
 INSERT INTO xmltest VALUES (7, '<myns:menu xmlns:myns="http://myns.com"><myns:beers><myns:name>Molson</myns:name><myns:cost>free</myns:cost><myns:name>Carling</myns:name><myns:cost>lots</myns:cost></myns:beers></myns:menu>'::xml);
 </sql-statement>
--stdin-:<main>: Error: Type annotation
-
-    -stdin-:<main>:1:1: Error: At function: YtWriteTable!
-    	INSERT INTO xmltest VALUES (7, '<myns:menu xmlns:myns="http://myns.com"><myns:beers><myns:name>Molson</myns:name><myns:cost>free</myns:cost><myns:name>Carling</myns:name><myns:cost>lots</myns:cost></myns:beers></myns:menu>'::xml);
-	^
-        -stdin-:<main>:1:1: Error: Failed to convert type: List<Struct<'data':pgint4,'id':pgxml>> to List<Struct<'data':pgxml,'id':pgint4>>
-        	INSERT INTO xmltest VALUES (7, '<myns:menu xmlns:myns="http://myns.com"><myns:beers><myns:name>Molson</myns:name><myns:cost>free</myns:cost><myns:name>Carling</myns:name><myns:cost>lots</myns:cost></myns:beers></myns:menu>'::xml);
-	^
-            -stdin-:<main>:1:1: Error: Failed to convert 'data': pgint4 to pgxml
-            	INSERT INTO xmltest VALUES (7, '<myns:menu xmlns:myns="http://myns.com"><myns:beers><myns:name>Molson</myns:name><myns:cost>free</myns:cost><myns:name>Carling</myns:name><myns:cost>lots</myns:cost></myns:beers></myns:menu>'::xml);
-	^
-        -stdin-:<main>:1:1: Error: Table "xmltest" row type differs from the written row type: Struct<data:pgxml!=pgint4,id:pgint4!=pgxml>
-        	INSERT INTO xmltest VALUES (7, '<myns:menu xmlns:myns="http://myns.com"><myns:beers><myns:name>Molson</myns:name><myns:cost>free</myns:cost><myns:name>Carling</myns:name><myns:cost>lots</myns:cost></myns:beers></myns:menu>'::xml);
-	^
 <sql-statement>
 SELECT COUNT(id) FROM xmltest WHERE xmlexists('/menu/beer' PASSING data);
 </sql-statement>
@@ -2057,48 +1997,12 @@ INSERT INTO xmltest2 VALUES('<d><r><ac>1</ac></r></d>', 'A');
 <sql-statement>
 INSERT INTO xmltest2 VALUES('<d><r><bc>2</bc></r></d>', 'B');
 </sql-statement>
--stdin-:<main>: Fatal: Execution
-
-    -stdin-:<main>:1:1: Fatal: Execution of node: YtFill!
-    	INSERT INTO xmltest2 VALUES('<d><r><bc>2</bc></r></d>', 'B');
-	^
-        -stdin-:<main>:1:1: Fatal: ERROR:  invalid XML document
-DETAIL:  line 1: Start tag expected, '<' not found
-	B
-	^
-
-        	INSERT INTO xmltest2 VALUES('<d><r><bc>2</bc></r></d>', 'B');
-	^
 <sql-statement>
 INSERT INTO xmltest2 VALUES('<d><r><cc>3</cc></r></d>', 'C');
 </sql-statement>
--stdin-:<main>: Fatal: Execution
-
-    -stdin-:<main>:1:1: Fatal: Execution of node: YtFill!
-    	INSERT INTO xmltest2 VALUES('<d><r><cc>3</cc></r></d>', 'C');
-	^
-        -stdin-:<main>:1:1: Fatal: ERROR:  invalid XML document
-DETAIL:  line 1: Start tag expected, '<' not found
-	C
-	^
-
-        	INSERT INTO xmltest2 VALUES('<d><r><cc>3</cc></r></d>', 'C');
-	^
 <sql-statement>
 INSERT INTO xmltest2 VALUES('<d><r><dc>2</dc></r></d>', 'D');
 </sql-statement>
--stdin-:<main>: Fatal: Execution
-
-    -stdin-:<main>:1:1: Fatal: Execution of node: YtFill!
-    	INSERT INTO xmltest2 VALUES('<d><r><dc>2</dc></r></d>', 'D');
-	^
-        -stdin-:<main>:1:1: Fatal: ERROR:  invalid XML document
-DETAIL:  line 1: Start tag expected, '<' not found
-	D
-	^
-
-        	INSERT INTO xmltest2 VALUES('<d><r><dc>2</dc></r></d>', 'D');
-	^
 <sql-statement>
 SELECT xmltable.* FROM xmltest2, LATERAL xmltable('/d/r' PASSING x COLUMNS a int PATH '' || lower(_path) || 'c');
 </sql-statement>

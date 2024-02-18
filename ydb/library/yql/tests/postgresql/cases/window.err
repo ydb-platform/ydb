@@ -3083,9 +3083,42 @@ ORDER BY p, i;
     -stdin-:<main>:1:1: Error: At function: RemovePrefixMembers, At function: PgSelect, At function: PgSetItem
     	-- test strict and non-strict cases
 	^
-        -stdin-:<main>:19:29: Error: No such column: P
-        	WINDOW wnd AS (PARTITION BY P ORDER BY i ROWS BETWEEN 1 PRECEDING AND CURRENT ROW)
-	                            ^
+        -stdin-:<main>:1:1: Error: At function: PgResultItem
+        	-- test strict and non-strict cases
+	^
+            -stdin-:<main>:4:2: Error: At function: PgWindowCall
+            		logging_agg_nonstrict(v) over wnd as nstrict,
+	 ^
+                -stdin-:<main>:4:2: Error: Unsupported function: logging_agg_nonstrict
+                		logging_agg_nonstrict(v) over wnd as nstrict,
+	 ^
+        -stdin-:<main>:1:1: Error: At function: PgResultItem
+        	-- test strict and non-strict cases
+	^
+            -stdin-:<main>:5:2: Error: At function: PgWindowCall
+            		logging_agg_nonstrict_initcond(v) over wnd as nstrict_init,
+	 ^
+                -stdin-:<main>:5:2: Error: Unsupported function: logging_agg_nonstrict_initcond
+                		logging_agg_nonstrict_initcond(v) over wnd as nstrict_init,
+	 ^
+        -stdin-:<main>:1:1: Error: At function: PgResultItem
+        	-- test strict and non-strict cases
+	^
+            -stdin-:<main>:6:2: Error: At function: PgWindowCall
+            		logging_agg_strict(v::text) over wnd as strict,
+	 ^
+                -stdin-:<main>:6:2: Error: Unsupported function: logging_agg_strict
+                		logging_agg_strict(v::text) over wnd as strict,
+	 ^
+        -stdin-:<main>:1:1: Error: At function: PgResultItem
+        	-- test strict and non-strict cases
+	^
+            -stdin-:<main>:7:2: Error: At function: PgWindowCall
+            		logging_agg_strict_initcond(v) over wnd as strict_init
+	 ^
+                -stdin-:<main>:7:2: Error: Unsupported function: logging_agg_strict_initcond
+                		logging_agg_strict_initcond(v) over wnd as strict_init
+	 ^
 <sql-statement>
 -- and again, but with filter
 SELECT
@@ -3426,14 +3459,6 @@ SELECT a, b,
        SUM(b) OVER(ORDER BY A ROWS BETWEEN 1 PRECEDING AND CURRENT ROW)
 FROM (VALUES(1,1::numeric),(2,2),(3,'NaN'),(4,3),(5,4)) t(a,b);
 </sql-statement>
--stdin-:<main>: Error: Type annotation
-
-    -stdin-:<main>:1:1: Error: At function: RemovePrefixMembers, At function: PgSelect, At function: PgSetItem
-    	-- ensure aggregate over numeric properly recovers from NaN values
-	^
-        -stdin-:<main>:3:29: Error: No such column: A
-        	       SUM(b) OVER(ORDER BY A ROWS BETWEEN 1 PRECEDING AND CURRENT ROW)
-	                            ^
 <sql-statement>
 -- It might be tempting for someone to add an inverse trans function for
 -- float and double precision. This should not be done as it can give incorrect

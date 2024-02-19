@@ -171,6 +171,12 @@ docker run --rm -it --entrypoint cat {{ ydb_local_docker_image }} THIRD_PARTY_LI
 
 ## Запуск {{ ydb-short-name }} Federated Query в Docker
 
+{% note warning %}
+
+Данная функциональность находится в режиме "Preview".
+
+{% endnote %}
+
 В данном разделе мы рассмотрим пример тестовой инсталляции {{ ydb-full-name }}, сконфигурированной для выполнения [федеративных запросов](../../../concepts/federated_query/index.md) к внешним источникам данных. Подключение {{ ydb-full-name }} к некоторым из источников требует развертывания специального микросервиса - [коннектора](../../../concepts/federated_query/architecture.md#connectors). Ниже мы воспользуемся инструментом оркестрации `docker-compose` для локального запуска Docker-контейнеров с тремя сервисами: 
 
 * {{ ydb-short-name }} в одноузловой конфигурации;

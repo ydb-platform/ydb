@@ -6,7 +6,6 @@ SRCS(
 )
 
 PEERDIR(
-    contrib/libs/backtrace
     library/cpp/deprecated/atomic
 )
 
@@ -16,7 +15,10 @@ IF (OS_LINUX AND ARCH_X86_64)
         backtrace_linux.cpp
     )
 
-    PEERDIR(contrib/libs/libunwind)
+    PEERDIR(
+        contrib/libs/backtrace
+        contrib/libs/libunwind
+    )
     ADDINCL(contrib/libs/libunwind/include)
     
 ELSE()

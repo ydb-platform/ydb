@@ -120,7 +120,7 @@ public:
         DataShard.IncCounter(COUNTER_WRITE_ROWS, matrix.GetRowCount());
         DataShard.IncCounter(COUNTER_WRITE_BYTES, matrix.GetBuffer().size());
 
-        LOG_DEBUG_S(ctx, NKikimrServices::TX_DATASHARD, "Executed write operation for " << *writeOp << " at " << DataShard.TabletID());
+        LOG_DEBUG_S(ctx, NKikimrServices::TX_DATASHARD, "Executed write operation for " << *writeOp << " at " << DataShard.TabletID() << ", row count=" << matrix.GetRowCount());
     }
 
     EExecutionStatus Execute(TOperation::TPtr op, TTransactionContext& txc, const TActorContext& ctx) override {

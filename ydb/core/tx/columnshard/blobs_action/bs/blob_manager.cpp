@@ -1,13 +1,10 @@
-#include "defs.h"
-#include "columnshard_impl.h"
 #include "blob_manager.h"
-#include "blob_cache.h"
 #include <ydb/core/tx/columnshard/blobs_action/blob_manager_db.h>
 
 #include <ydb/core/base/blobstorage.h>
-#include "blobs_action/bs/gc.h"
+#include "gc.h"
 
-namespace NKikimr::NColumnShard {
+namespace NKikimr::NOlap {
 
 TLogoBlobID ParseLogoBlobId(TString blobId) {
     TLogoBlobID logoBlobId;
@@ -28,7 +25,7 @@ public:
 
     TIntrusivePtr<TTabletStorageInfo> TabletInfo;
     TAllocatedGenStepConstPtr GenStepRef;
-    const TBlobsManagerCounters Counters;
+    const NColumnShard::TBlobsManagerCounters Counters;
     const ui32 Gen;
     const ui32 Step;
     const ui32 Channel;
@@ -37,7 +34,7 @@ public:
     i32 InFlightCount;
     ui64 TotalSizeBytes;
 
-    TBatchInfo(TIntrusivePtr<TTabletStorageInfo> tabletInfo, TAllocatedGenStepConstPtr genStep, ui32 channel, const TBlobsManagerCounters& counters)
+    TBatchInfo(TIntrusivePtr<TTabletStorageInfo> tabletInfo, TAllocatedGenStepConstPtr genStep, ui32 channel, const NColumnShard::TBlobsManagerCounters& counters)
         : TabletInfo(tabletInfo)
         , GenStepRef(genStep)
         , Counters(counters)
@@ -83,7 +80,7 @@ void TBlobBatch::SendWriteRequest(const TActorContext& ctx, ui32 groupId, const 
 }
 
 void TBlobBatch::SendWriteBlobRequest(const TString& blobData, const TUnifiedBlobId& blobId, TInstant deadline, const TActorContext& ctx) {
-    Y_ABORT_UNLESS(blobData.size() <= TLimits::GetBlobSizeLimit(), "Blob %" PRISZT" size exceeds the limit %" PRIu64, blobData.size(), TLimits::GetBlobSizeLimit());
+    Y_ABORT_UNLESS(blobData.size() <= NColumnShard::TLimits::GetBlobSizeLimit(), "Blob %" PRISZT" size exceeds the limit %" PRIu64, blobData.size(), NColumnShard::TLimits::GetBlobSizeLimit());
 
     const ui32 groupId = blobId.GetDsGroup();
     SendWriteRequest(ctx, groupId, blobId.GetLogoBlobId(), blobData, 0, deadline);
@@ -125,8 +122,9 @@ TUnifiedBlobId TBlobBatch::AllocateNextBlobId(const TString& blobData) {
     return BatchInfo->NextBlobId(blobData.size());
 }
 
-TBlobManager::TBlobManager(TIntrusivePtr<TTabletStorageInfo> tabletInfo, ui32 gen)
-    : TabletInfo(tabletInfo)
+TBlobManager::TBlobManager(TIntrusivePtr<TTabletStorageInfo> tabletInfo, ui32 gen, const TTabletId selfTabletId)
+    : SelfTabletId(selfTabletId)
+    , TabletInfo(tabletInfo)
     , CurrentGen(gen)
     , CurrentStep(0)
     , BlobCountToTriggerGC(BLOB_COUNT_TO_TRIGGER_GC_DEFAULT, 0, Max<i64>())
@@ -138,7 +136,7 @@ void TBlobManager::RegisterControls(NKikimr::TControlBoard& icb) {
     icb.RegisterSharedControl(GCIntervalSeconds, "ColumnShardControls.GCIntervalSeconds");
 }
 
-bool TBlobManager::LoadState(IBlobManagerDb& db) {
+bool TBlobManager::LoadState(IBlobManagerDb& db, const TTabletId selfTabletId) {
     // Load last collected Generation
     if (!db.LoadLastGcBarrier(LastCollectedGenStep)) {
         return false;
@@ -146,19 +144,14 @@ bool TBlobManager::LoadState(IBlobManagerDb& db) {
 
     // Load the keep and delete queues
     std::vector<TUnifiedBlobId> blobsToKeep;
-    std::vector<TUnifiedBlobId> blobsToDelete;
-    TBlobGroupSelector dsGroupSelector(TabletInfo);
-    if (!db.LoadLists(blobsToKeep, blobsToDelete, &dsGroupSelector)) {
+    NColumnShard::TBlobGroupSelector dsGroupSelector(TabletInfo);
+    if (!db.LoadLists(blobsToKeep, BlobsToDelete, &dsGroupSelector, selfTabletId)) {
         return false;
     }
 
-    for (const auto& unifiedBlobId : blobsToDelete) {
-        if (unifiedBlobId.IsDsBlob()) {
-            BlobsToDelete.insert(unifiedBlobId.GetLogoBlobId());
-            BlobsManagerCounters.OnDeleteBlobMarker(unifiedBlobId.BlobSize());
-        } else {
-            Y_ABORT("Unexpected blob id: %s", unifiedBlobId.ToStringNew().c_str());
-        }
+    for (auto it = BlobsToDelete.GetIterator(); it.IsValid(); ++it) {
+        AFL_VERIFY(it.GetBlobId().IsDsBlob());
+        BlobsManagerCounters.OnDeleteBlobMarker(it.GetBlobId().BlobSize());
     }
     BlobsManagerCounters.OnBlobsDelete(BlobsToDelete);
 
@@ -173,10 +166,10 @@ bool TBlobManager::LoadState(IBlobManagerDb& db) {
 
         BlobsToKeep.insert(blobId);
         BlobsManagerCounters.OnKeepMarker(blobId.BlobSize());
-
+        const ui64 groupId = dsGroupSelector.GetGroup(blobId);
         // Keep + DontKeep (probably in different gen:steps)
         // GC could go through it to a greater LastCollectedGenStep
-        if (BlobsToDelete.contains(blobId)) {
+        if (BlobsToDelete.Contains(SelfTabletId, TUnifiedBlobId(groupId, blobId))) {
             continue;
         }
 
@@ -219,8 +212,10 @@ TGenStep TBlobManager::FindNewGCBarrier() {
     return newCollectGenStep;
 }
 
-std::shared_ptr<NOlap::NBlobOperations::NBlobStorage::TGCTask> TBlobManager::BuildGCTask(const TString& storageId, const std::shared_ptr<TBlobManager>& manager) {
-    if (BlobsToKeep.empty() && BlobsToDelete.empty() && LastCollectedGenStep == TGenStep{CurrentGen, CurrentStep}) {
+std::shared_ptr<NBlobOperations::NBlobStorage::TGCTask> TBlobManager::BuildGCTask(const TString& storageId, 
+    const std::shared_ptr<TBlobManager>& manager, const std::shared_ptr<NDataSharing::TStorageSharedBlobsManager>& sharedBlobsInfo,
+    const std::shared_ptr<NBlobOperations::TRemoveGCCounters>& counters) {
+    if (BlobsToKeep.empty() && BlobsToDelete.IsEmpty() && LastCollectedGenStep == TGenStep{CurrentGen, CurrentStep}) {
         ACFL_DEBUG("event", "TBlobManager::BuildGCTask skip")("current_gen", CurrentGen)("current_step", CurrentStep);
         return nullptr;
     }
@@ -233,7 +228,7 @@ std::shared_ptr<NOlap::NBlobOperations::NBlobStorage::TGCTask> TBlobManager::Bui
     BlobsManagerCounters.OnNewCollectStep(std::get<0>(newCollectGenStep), std::get<1>(newCollectGenStep));
     const ui32 channelIdx = BLOB_CHANNEL;
 
-    NOlap::NBlobOperations::NBlobStorage::TGCTask::TGCListsByGroup perGroupGCListsInFlight;
+    NBlobOperations::NBlobStorage::TGCTask::TGCListsByGroup perGroupGCListsInFlight;
 
     // Clear all possibly not kept trash in channel's groups: create an event for each group
     if (FirstGC) {
@@ -249,7 +244,12 @@ std::shared_ptr<NOlap::NBlobOperations::NBlobStorage::TGCTask> TBlobManager::Bui
 
     // Make per-group Keep/DontKeep lists
     std::deque<TUnifiedBlobId> keepsToErase;
-    std::deque<TUnifiedBlobId> deletesToErase;
+    // Add all blobs to delete
+    const auto predShared = [&](const TUnifiedBlobId& id, const THashSet<TTabletId>& /*tabletIds*/) {
+        return id.GetLogoBlobId().TabletID() != (ui64)SelfTabletId;
+    };
+    TTabletsByBlob extractedToRemoveFromDB = BlobsToDelete.ExtractBlobs(predShared);
+
     {
         // Add all blobs to keep
         auto keepBlobIt = BlobsToKeep.begin();
@@ -260,51 +260,54 @@ std::shared_ptr<NOlap::NBlobOperations::NBlobStorage::TGCTask> TBlobManager::Bui
             }
             ui32 blobGroup = TabletInfo->GroupFor(keepBlobIt->Channel(), keepBlobIt->Generation());
             perGroupGCListsInFlight[blobGroup].KeepList.insert(*keepBlobIt);
+            keepsToErase.emplace_back(TUnifiedBlobId(blobGroup, *keepBlobIt));
             AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("to_keep_gc", *keepBlobIt);
         }
         BlobsToKeep.erase(BlobsToKeep.begin(), keepBlobIt);
         BlobsManagerCounters.OnBlobsKeep(BlobsToKeep);
 
-        // Add all blobs to delete
-        auto blobIt = BlobsToDelete.begin();
-        for (; blobIt != BlobsToDelete.end(); ++blobIt) {
-            TGenStep genStep{blobIt->Generation(), blobIt->Step()};
-            if (genStep > newCollectGenStep) {
-                break;
-            }
-            AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("to_delete_gc", *blobIt);
-            ui32 blobGroup = TabletInfo->GroupFor(blobIt->Channel(), blobIt->Generation());
-            NOlap::NBlobOperations::NBlobStorage::TGCTask::TGCLists& gl = perGroupGCListsInFlight[blobGroup];
+        const auto predSelf = [&](const TUnifiedBlobId& id, const THashSet<TTabletId>& /*tabletIds*/) {
+            auto logoBlobId = id.GetLogoBlobId();
+            TGenStep genStep{logoBlobId.Generation(), logoBlobId.Step()};
+            return genStep <= newCollectGenStep && id.GetLogoBlobId().TabletID() == (ui64)SelfTabletId;
+        };
+        TTabletsByBlob extractedSelf = BlobsToDelete.ExtractBlobs(predSelf);
+        extractedToRemoveFromDB.Add(extractedSelf);
+        TTabletId tabletId;
+        TUnifiedBlobId unifiedBlobId;
+        while (extractedSelf.ExtractFront(tabletId, unifiedBlobId)) {
+            auto logoBlobId = unifiedBlobId.GetLogoBlobId();
+            AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("to_delete_gc", logoBlobId);
+            NBlobOperations::NBlobStorage::TGCTask::TGCLists& gl = perGroupGCListsInFlight[unifiedBlobId.GetDsGroup()];
             bool skipDontKeep = false;
-            if (gl.KeepList.erase(*blobIt)) {
-                AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("to_keep_gc_remove", *blobIt);
+            if (gl.KeepList.erase(logoBlobId)) {
+                AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("to_keep_gc_remove", logoBlobId);
                 // Skipped blobs still need to be deleted from BlobsToKeep table
-                keepsToErase.emplace_back(TUnifiedBlobId(blobGroup, *blobIt));
-
-                if (CurrentGen == blobIt->Generation()) {
+                if (CurrentGen == logoBlobId.Generation()) {
                     // If this blob was created and deleted in the current generation then
                     // we can skip sending both Keep and DontKeep flags.
                     // NOTE: its not safe to do this for older generations because there is
                     // a scenario when Keep flag was sent in the old generation and then tablet restarted
                     // before getting the result and removing the blob from the Keep list.
                     skipDontKeep = true;
-                    deletesToErase.emplace_back(TUnifiedBlobId(blobGroup, *blobIt));
                     ++CountersUpdate.BlobSkippedEntries;
                 }
             }
             if (!skipDontKeep) {
-                BlobsManagerCounters.OnCollectDropExplicit(blobIt->BlobSize());
-                gl.DontKeepList.insert(*blobIt);
+                BlobsManagerCounters.OnCollectDropExplicit(logoBlobId.BlobSize());
+                gl.DontKeepList.insert(logoBlobId);
             } else {
-                BlobsManagerCounters.OnCollectDropImplicit(blobIt->BlobSize());
+                BlobsManagerCounters.OnCollectDropImplicit(logoBlobId.BlobSize());
             }
         }
-        BlobsToDelete.erase(BlobsToDelete.begin(), blobIt);
         BlobsManagerCounters.OnBlobsDelete(BlobsToDelete);
     }
 
+    auto removeCategories = sharedBlobsInfo->BuildRemoveCategories(std::move(extractedToRemoveFromDB));
+
     CollectGenStepInFlight = newCollectGenStep;
-    return std::make_shared<NOlap::NBlobOperations::NBlobStorage::TGCTask>(storageId, std::move(perGroupGCListsInFlight), newCollectGenStep, std::move(keepsToErase), std::move(deletesToErase), manager);
+    return std::make_shared<NBlobOperations::NBlobStorage::TGCTask>(storageId, std::move(perGroupGCListsInFlight), newCollectGenStep,
+        std::move(keepsToErase), manager, std::move(removeCategories), counters);
 }
 
 TBlobBatch TBlobManager::StartBlobBatch(ui32 channel) {
@@ -346,13 +349,13 @@ void TBlobManager::DoSaveBlobBatch(TBlobBatch&& blobBatch, IBlobManagerDb& db) {
     blobBatch.BatchInfo->GenStepRef.Reset();
 }
 
-void TBlobManager::DeleteBlobOnExecute(const TUnifiedBlobId& blobId, IBlobManagerDb& db) {
+void TBlobManager::DeleteBlobOnExecute(const TTabletId tabletId, const TUnifiedBlobId& blobId, IBlobManagerDb& db) {
     // Persist deletion intent
-    db.AddBlobToDelete(blobId);
+    db.AddBlobToDelete(blobId, tabletId);
     AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("to_delete_on_execute", blobId);
 }
 
-void TBlobManager::DeleteBlobOnComplete(const TUnifiedBlobId& blobId) {
+void TBlobManager::DeleteBlobOnComplete(const TTabletId tabletId, const TUnifiedBlobId& blobId) {
     AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("to_delete_on_complete", blobId);
     ++CountersUpdate.BlobsDeleted;
 
@@ -360,15 +363,13 @@ void TBlobManager::DeleteBlobOnComplete(const TUnifiedBlobId& blobId) {
     // used by in-flight requests
     if (!IsBlobInUsage(blobId)) {
         LOG_S_DEBUG("BlobManager at tablet " << TabletInfo->TabletID << " Delete Blob " << blobId);
-        TLogoBlobID logoBlobId = blobId.GetLogoBlobId();
-        if (BlobsToDelete.emplace(logoBlobId).second) {
-            BlobsManagerCounters.OnDeleteBlobMarker(blobId.BlobSize());
-            BlobsManagerCounters.OnBlobsDelete(BlobsToDelete);
-        }
+        AFL_VERIFY(BlobsToDelete.Add(tabletId, blobId));
+        BlobsManagerCounters.OnDeleteBlobMarker(blobId.BlobSize());
+        BlobsManagerCounters.OnBlobsDelete(BlobsToDelete);
     } else {
         BlobsManagerCounters.OnDeleteBlobDelayedMarker(blobId.BlobSize());
         LOG_S_DEBUG("BlobManager at tablet " << TabletInfo->TabletID << " Delay Delete Blob " << blobId);
-        BlobsToDeleteDelayed.insert(blobId.GetLogoBlobId());
+        BlobsToDeleteDelayed.Add(tabletId, blobId);
     }
 }
 
@@ -381,12 +382,10 @@ void TBlobManager::OnGCFinished(const TGenStep& genStep, IBlobManagerDb& db) {
 void TBlobManager::OnBlobFree(const TUnifiedBlobId& blobId) {
     AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("event", "blob_free")("blob_id", blobId);
     // Check if the blob is marked for delayed deletion
-    const TLogoBlobID logoBlobId = blobId.GetLogoBlobId();
-    if (BlobsToDeleteDelayed.erase(logoBlobId)) {
+    if (BlobsToDeleteDelayed.ExtractBlobTo(blobId, BlobsToDelete)) {
         AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("blob_id", blobId)("event", "blob_delayed_deleted");
-        BlobsToDelete.insert(logoBlobId);
         BlobsManagerCounters.OnBlobsDelete(BlobsToDelete);
-        BlobsManagerCounters.OnDeleteBlobMarker(logoBlobId.BlobSize());
+        BlobsManagerCounters.OnDeleteBlobMarker(blobId.GetLogoBlobId().BlobSize());
     }
 }
 

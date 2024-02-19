@@ -28,6 +28,11 @@ protected:
         }
         return result;
     }
+
+    virtual std::shared_ptr<NDataLocks::ILock> DoBuildDataLockImpl() const override {
+        return nullptr;
+    }
+
 public:
     THashMap<ui64, std::vector<NIndexedReader::TSortableBatchPosition>> PathToGranule; // pathId -> positions (sorted by pk)
 public:
@@ -39,10 +44,6 @@ public:
 
     const std::vector<NOlap::TInsertedData>& GetDataToIndex() const {
         return DataToIndex;
-    }
-
-    virtual THashSet<TPortionAddress> GetTouchedPortions() const override {
-        return TBase::GetTouchedPortions();
     }
 
     static TString StaticTypeName() {

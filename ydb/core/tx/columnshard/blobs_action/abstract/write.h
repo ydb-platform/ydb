@@ -4,6 +4,7 @@
 #include <ydb/core/protos/base.pb.h>
 #include <ydb/core/tx/columnshard/blob.h>
 #include <ydb/core/tx/columnshard/blobs_action/counters/write.h>
+#include <ydb/core/tx/columnshard/blobs_action/blob_manager_db.h>
 
 namespace NKikimr::NColumnShard {
 class TColumnShard;
@@ -24,13 +25,13 @@ private:
     bool Aborted = false;
     std::shared_ptr<NBlobOperations::TWriteCounters> Counters;
 protected:
-    virtual void DoOnExecuteTxBeforeWrite(NColumnShard::TColumnShard& self, NColumnShard::TBlobManagerDb& dbBlobs) = 0;
+    virtual void DoOnExecuteTxBeforeWrite(NColumnShard::TColumnShard& self, TBlobManagerDb& dbBlobs) = 0;
     virtual void DoOnCompleteTxBeforeWrite(NColumnShard::TColumnShard& self) = 0;
 
     virtual void DoSendWriteBlobRequest(const TString& data, const TUnifiedBlobId& blobId) = 0;
     virtual void DoOnBlobWriteResult(const TUnifiedBlobId& blobId, const NKikimrProto::EReplyStatus status) = 0;
 
-    virtual void DoOnExecuteTxAfterWrite(NColumnShard::TColumnShard& self, NColumnShard::TBlobManagerDb& dbBlobs, const bool blobsWroteSuccessfully) = 0;
+    virtual void DoOnExecuteTxAfterWrite(NColumnShard::TColumnShard& self, TBlobManagerDb& dbBlobs, const bool blobsWroteSuccessfully) = 0;
     virtual void DoOnCompleteTxAfterWrite(NColumnShard::TColumnShard& self, const bool blobsWroteSuccessfully) = 0;
 
     virtual TUnifiedBlobId AllocateNextBlobId(const TString& data) = 0;
@@ -58,7 +59,7 @@ public:
 
     void OnBlobWriteResult(const TUnifiedBlobId& blobId, const NKikimrProto::EReplyStatus status);
 
-    void OnExecuteTxBeforeWrite(NColumnShard::TColumnShard& self, NColumnShard::TBlobManagerDb& dbBlobs) {
+    void OnExecuteTxBeforeWrite(NColumnShard::TColumnShard& self, TBlobManagerDb& dbBlobs) {
         return DoOnExecuteTxBeforeWrite(self, dbBlobs);
     }
 
@@ -75,7 +76,7 @@ public:
         return DoOnCompleteTxBeforeWrite(self);
     }
 
-    void OnExecuteTxAfterWrite(NColumnShard::TColumnShard& self, NColumnShard::TBlobManagerDb& dbBlobs, const bool blobsWroteSuccessfully) {
+    void OnExecuteTxAfterWrite(NColumnShard::TColumnShard& self, TBlobManagerDb& dbBlobs, const bool blobsWroteSuccessfully) {
         return DoOnExecuteTxAfterWrite(self, dbBlobs, blobsWroteSuccessfully);
     }
 

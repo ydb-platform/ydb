@@ -4,17 +4,12 @@
 namespace NKikimr::NJaegerTracing {
 
 void TSamplingThrottlingControl::TSamplingThrottlingImpl::HandleTracing(
-    NWilson::TTraceId& traceId, TRequestDiscriminator discriminator) {
-    auto requestType = static_cast<size_t>(discriminator.RequestType);
+    NWilson::TTraceId& traceId, const TRequestDiscriminator& discriminator) {
+    auto requestType = discriminator.RequestType;
 
     if (traceId) {
-        bool throttle = true;
-        if (!Throttle(requestType)) {
-            throttle = false;
-        }
-        if (throttle && !Throttle(static_cast<size_t>(ERequestType::UNSPECIFIED))) {
-            throttle = false;
-        }
+        bool throttle = Throttle(requestType);
+        throttle = Throttle(ERequestType::UNSPECIFIED) && throttle;
         if (throttle) {
             traceId = {};
         }
@@ -25,7 +20,7 @@ void TSamplingThrottlingControl::TSamplingThrottlingImpl::HandleTracing(
         if (auto sampled_level = Sample(requestType)) {
             level = sampled_level;
         }
-        if (auto sampled_level = Sample(requestType)) {
+        if (auto sampled_level = Sample(ERequestType::UNSPECIFIED)) {
             if (!level || *sampled_level > *level) {
                 level = sampled_level;
             }
@@ -37,18 +32,18 @@ void TSamplingThrottlingControl::TSamplingThrottlingImpl::HandleTracing(
     }
 }
 
-bool TSamplingThrottlingControl::TSamplingThrottlingImpl::Throttle(size_t requestType) {
-    auto& throttlingRule = Setup.ExternalThrottlingRules[requestType];
+bool TSamplingThrottlingControl::TSamplingThrottlingImpl::Throttle(ERequestType requestType) {
+    auto& throttlingRule = Setup.ExternalThrottlingRules[static_cast<size_t>(requestType)];
     if (throttlingRule) {
         return throttlingRule->Throttler->Throttle();
     } else {
-        return false;
+        return true;
     }
 }
 
-TMaybe<ui8> TSamplingThrottlingControl::TSamplingThrottlingImpl::Sample(size_t requestType) {
+TMaybe<ui8> TSamplingThrottlingControl::TSamplingThrottlingImpl::Sample(ERequestType requestType) {
     TMaybe<ui8> level;
-    for (auto& samplingRule : Setup.SamplingRules[requestType]) {
+    for (auto& samplingRule : Setup.SamplingRules[static_cast<size_t>(requestType)]) {
         if (samplingRule.Sampler.Sample() && !samplingRule.Throttler->Throttle()) {
             if (!level || *level < samplingRule.Level) {
                 level = samplingRule.Level;

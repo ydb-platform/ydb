@@ -6,19 +6,17 @@ namespace NKikimr::NJaegerTracing {
 
 class TSampler {
 public:
-    static constexpr ui64 kParts = 1'000'000'000;
-
     TSampler(double fraction, ui64 seed)
-        : SamplingPPB(fraction * kParts)
+        : SamplingFraction(fraction)
         , Rng(seed)
     {}
 
     bool Sample() {
-        return Rng() % kParts < SamplingPPB;
+        return Rng.GenRandReal1() < SamplingFraction;
     }
 
 private:
-    const ui64 SamplingPPB;
+    const double SamplingFraction;
     TFastRng64 Rng;
 };
 

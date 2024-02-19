@@ -49,7 +49,7 @@ void TJaegerTracingConfigurator::Bootstrap(const TActorContext& ctx) {
 
     ApplyConfigs(initialConfig);
 
-    LOG_DEBUG_S(ctx, NKikimrServices::CMS_CONFIGS, "TJaegerTracingConfigurator: subscribe to config updates");
+    LOG_DEBUG_S(ctx, NKikimrServices::CMS_CONFIGS, "TJaegerTracingConfigurator: subscribing to config updates");
     ui32 item = static_cast<ui32>(NKikimrConsole::TConfigItem::TracingConfigItem);
     ctx.Send(MakeConfigsDispatcherID(SelfId().NodeId()),
              new TEvConfigsDispatcher::TEvSetConfigSubscriptionRequest(item));
@@ -58,9 +58,7 @@ void TJaegerTracingConfigurator::Bootstrap(const TActorContext& ctx) {
 void TJaegerTracingConfigurator::Handle(TEvConsole::TEvConfigNotificationRequest::TPtr& ev, const TActorContext& ctx) {
     auto& rec = ev->Get()->Record;
 
-    LOG_INFO_S(ctx, NKikimrServices::CMS_CONFIGS,
-               "TJaegerTracingConfigurator: got new config: "
-               << rec.GetConfig().ShortDebugString());
+    LOG_INFO_S(ctx, NKikimrServices::CMS_CONFIGS, "TJaegerTracingConfigurator: got new config: " << rec.GetConfig().ShortDebugString());
 
     ApplyConfigs(rec.GetConfig().GetTracingConfig());
 
@@ -93,15 +91,21 @@ NJaegerTracing::TSettings<double, NJaegerTracing::TThrottlingSettings> TJaegerTr
         if (auto parsedRequestType = GetRequestType(samplingRule.GetScope())) {
             requestType = *parsedRequestType;
         } else {
-            ALOG_ERROR(NKikimrServices::CMS_CONFIGS, "failed to parse request type in rule "
-                       << samplingRule.DebugString() << ". Skipping the rule");
+            ALOG_ERROR(NKikimrServices::CMS_CONFIGS, "failed to parse request type in the rule "
+                       << samplingRule.ShortDebugString() << ". Skipping the rule");
             continue;
         }
-        if (!samplingRule.HasLevel() || !samplingRule.HasFraction() || samplingRule.HasMaxRatePerMinute()) {
-            ALOG_ERROR(NKikimrServices::CMS_CONFIGS, "missing required fields in rule " << samplingRule.DebugString()
+        if (!samplingRule.HasLevel() || !samplingRule.HasFraction() || !samplingRule.HasMaxRatePerMinute()) {
+            ALOG_ERROR(NKikimrServices::CMS_CONFIGS, "missing required fields in rule " << samplingRule.ShortDebugString()
                        << " (required fields are: level, fraction, max_rate_per_minute). Skipping the rule");
             continue;
         }
+        if (samplingRule.GetMaxRatePerMinute() == 0) {
+            ALOG_ERROR(NKikimrServices::CMS_CONFIGS, "max_rate_per_minute should never be zero. Found in rule " << samplingRule.GetMaxRatePerMinute()
+                       << ". Skipping the rule");
+            continue;
+        }
+
         ui64 level = samplingRule.GetLevel();
         double fraction = samplingRule.GetFraction();
         if (level > 15) {
@@ -132,13 +136,18 @@ NJaegerTracing::TSettings<double, NJaegerTracing::TThrottlingSettings> TJaegerTr
             requestType = *parsedRequestType;
         } else {
             ALOG_ERROR(NKikimrServices::CMS_CONFIGS, "failed to parse request type in rule "
-                       << throttlingRule.DebugString() << ". Skipping the rule");
+                       << throttlingRule.ShortDebugString() << ". Skipping the rule");
             continue;
         }
 
         if (!throttlingRule.HasMaxRatePerMinute()) {
             ALOG_ERROR(NKikimrServices::CMS_CONFIGS, "missing required field max_rate_per_minute in rule "
-                       << throttlingRule.DebugString() << ". Skipping the rule");
+                       << throttlingRule.ShortDebugString() << ". Skipping the rule");
+            continue;
+        }
+        if (throttlingRule.GetMaxRatePerMinute() == 0) {
+            ALOG_ERROR(NKikimrServices::CMS_CONFIGS, "max_rate_per_minute should never be zero. Found in rule " << throttlingRule.GetMaxRatePerMinute()
+                       << ". Skipping the rule");
             continue;
         }
 

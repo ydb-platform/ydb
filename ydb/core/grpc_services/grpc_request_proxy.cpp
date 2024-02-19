@@ -413,15 +413,11 @@ bool TGRpcRequestProxyImpl::IsAuthStateOK(const IRequestProxyCtx& ctx) {
 }
 
 void TGRpcRequestProxyImpl::MaybeStartTracing(IRequestProxyCtx& ctx) {
-    auto requestType = ctx.GetInternalRequestType();
-    if (requestType.empty()) {
-        return;
-    }
     NWilson::TTraceId traceId;
     if (const auto otelHeader = ctx.GetPeerMetaValues(NYdb::OTEL_TRACE_HEADER)) {
         traceId = NWilson::TTraceId::FromTraceparentHeader(otelHeader.GetRef());
     }
-    TracingControl->HandleTracing(traceId, NJaegerTracing::TRequestDiscriminator{});
+    TracingControl->HandleTracing(traceId, ctx.GetRequestDiscriminator());
     if (traceId) {
         NWilson::TSpan grpcRequestProxySpan(TWilsonGrpc::RequestProxy, std::move(traceId), "GrpcRequestProxy");
         ctx.StartTracing(std::move(grpcRequestProxySpan));

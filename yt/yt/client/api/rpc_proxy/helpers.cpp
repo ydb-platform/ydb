@@ -1662,12 +1662,14 @@ NJobTrackerClient::EJobState ConvertJobStateFromProto(
 
 bool IsDynamicTableRetriableError(const TError& error)
 {
-    // TODO(dgolear): Consider adding NoSuchTablet and TabletNotMounted errors?
     return
         error.FindMatching(NTabletClient::EErrorCode::RowIsBlocked) ||
         error.FindMatching(NTabletClient::EErrorCode::BlockedRowWaitTimeout) ||
         error.FindMatching(NTabletClient::EErrorCode::NoSuchCell) ||
-        error.FindMatching(NTabletClient::EErrorCode::ChunkIsNotPreloaded);
+        error.FindMatching(NTabletClient::EErrorCode::ChunkIsNotPreloaded) ||
+        error.FindMatching(NTabletClient::EErrorCode::NoInSyncReplicas) ||
+        error.FindMatching(NTabletClient::EErrorCode::TabletNotMounted) ||
+        error.FindMatching(NTabletClient::EErrorCode::NoSuchTablet);
 }
 
 bool IsRetriableError(const TError& error, bool retryProxyBanned)

@@ -254,7 +254,7 @@ namespace NWilson {
                         "dropped " << numSpansDropped << " span(s) due to expiration");
                 }
 
-                if (ExportRequests.Size() >= MaxExportInflight && BatchQueue.empty()) {
+                if (ExportRequests.Size() >= MaxExportInflight || BatchQueue.empty()) {
                     return;
                 } else if (now < NextSendTimestamp) {
                     ScheduleWakeup(NextSendTimestamp);

@@ -69,7 +69,8 @@ namespace NWilson {
 
             void Bootstrap() {
                 Become(&TThis::StateFunc);
-                 Channel = grpc::CreateChannel(TStringBuilder() << Host << ":" << Port, RootCA ? grpc::SslCredentials({
+
+                Channel = grpc::CreateChannel(TStringBuilder() << Host << ":" << Port, RootCA ? grpc::SslCredentials({
                     .pem_root_certs = TFileInput(RootCA).ReadAll(),
                 }) : grpc::InsecureChannelCredentials());
                 Stub = NServiceProto::TraceService::NewStub(Channel);

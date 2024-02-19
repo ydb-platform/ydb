@@ -15,12 +15,12 @@ namespace NKikimr::NJaegerTracing {
 struct TSamplingThrottlingControl::TSamplingThrottlingImpl {
     TSettings<TSampler, TIntrusivePtr<TThrottler>> Setup;
 
-    void HandleTracing(NWilson::TTraceId& traceId, TRequestDiscriminator discriminator);
+    void HandleTracing(NWilson::TTraceId& traceId, const TRequestDiscriminator& discriminator);
 
 private:
-    bool Throttle(size_t requestType);
+    bool Throttle(ERequestType requestType);
 
-    TMaybe<ui8> Sample(size_t requestType);
+    TMaybe<ui8> Sample(ERequestType requestType);
 };
 
 } // namespace NKikimr::NJaegerTracing

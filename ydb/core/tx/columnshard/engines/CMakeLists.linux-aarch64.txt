@@ -38,6 +38,7 @@ target_link_libraries(tx-columnshard-engines PUBLIC
   columnshard-engines-changes
   columnshard-engines-portions
   core-tx-program
+  tx-columnshard-common
   udf-service-exception_policy
 )
 target_sources(tx-columnshard-engines PRIVATE

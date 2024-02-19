@@ -13,6 +13,7 @@ target_link_libraries(columnshard-transactions-operators INTERFACE
   contrib-libs-cxxsupp
   yutil
   tx-columnshard-transactions
+  data_sharing-destination-events
 )
 
 add_global_library_for(columnshard-transactions-operators.global columnshard-transactions-operators)
@@ -21,6 +22,7 @@ target_link_libraries(columnshard-transactions-operators.global PUBLIC
   contrib-libs-cxxsupp
   yutil
   tx-columnshard-transactions
+  data_sharing-destination-events
 )
 target_sources(columnshard-transactions-operators.global PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/core/tx/columnshard/transactions/operators/schema.cpp

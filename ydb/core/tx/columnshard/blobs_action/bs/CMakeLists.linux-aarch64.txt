@@ -16,6 +16,8 @@ target_link_libraries(columnshard-blobs_action-bs PUBLIC
   libs-apache-arrow
   ydb-core-tablet_flat
   core-tx-tiering
+  columnshard-data_sharing-protos
+  columnshard-blobs_action-abstract
 )
 target_sources(columnshard-blobs_action-bs PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/core/tx/columnshard/blobs_action/bs/gc.cpp
@@ -24,4 +26,5 @@ target_sources(columnshard-blobs_action-bs PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/core/tx/columnshard/blobs_action/bs/read.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/tx/columnshard/blobs_action/bs/storage.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/tx/columnshard/blobs_action/bs/remove.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/tx/columnshard/blobs_action/bs/blob_manager.cpp
 )

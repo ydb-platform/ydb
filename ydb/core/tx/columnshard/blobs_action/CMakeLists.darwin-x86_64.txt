@@ -9,6 +9,9 @@
 add_subdirectory(abstract)
 add_subdirectory(bs)
 add_subdirectory(counters)
+add_subdirectory(events)
+add_subdirectory(protos)
+add_subdirectory(storages_manager)
 add_subdirectory(tier)
 add_subdirectory(transaction)
 
@@ -24,6 +27,8 @@ target_link_libraries(tx-columnshard-blobs_action PUBLIC
   columnshard-blobs_action-bs
   columnshard-blobs_action-counters
   columnshard-blobs_action-transaction
+  columnshard-blobs_action-events
+  columnshard-blobs_action-protos
   columnshard-blobs_action-tier
 )
 target_sources(tx-columnshard-blobs_action PRIVATE

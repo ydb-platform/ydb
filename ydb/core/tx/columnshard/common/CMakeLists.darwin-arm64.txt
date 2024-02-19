@@ -31,6 +31,7 @@ target_sources(tx-columnshard-common PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/core/tx/columnshard/common/scalars.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/tx/columnshard/common/snapshot.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/tx/columnshard/common/portion.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/tx/columnshard/common/tablet_id.cpp
 )
 generate_enum_serilization(tx-columnshard-common
   ${CMAKE_SOURCE_DIR}/ydb/core/tx/columnshard/common/portion.h

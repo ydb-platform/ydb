@@ -16,10 +16,15 @@ target_link_libraries(columnshard-blobs_action-abstract PUBLIC
   libs-apache-arrow
   ydb-core-tablet_flat
   core-tx-tiering
+  columnshard-data_sharing-protos
+  columnshard-blobs_action-events
+  columnshard-blobs_action-protos
 )
 target_sources(columnshard-blobs_action-abstract PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/core/tx/columnshard/blobs_action/abstract/gc.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/tx/columnshard/blobs_action/abstract/gc_actor.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/tx/columnshard/blobs_action/abstract/common.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/tx/columnshard/blobs_action/abstract/blob_set.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/tx/columnshard/blobs_action/abstract/read.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/tx/columnshard/blobs_action/abstract/write.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/tx/columnshard/blobs_action/abstract/remove.cpp

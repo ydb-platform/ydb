@@ -14,6 +14,7 @@ target_link_libraries(tx-columnshard-operations PUBLIC
   ydb-core-protos
   core-tx-data_events
   ydb-services-metadata
+  data_sharing-destination-events
 )
 target_sources(tx-columnshard-operations PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/core/tx/columnshard/operations/write.cpp

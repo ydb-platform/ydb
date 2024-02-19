@@ -10,8 +10,6 @@
 #include <util/generic/ptr.h>
 #include <util/system/thread.h>
 
-#include <atomic>
-
 namespace NYT {
 
 ////////////////////////////////////////////////////////////////////////////////

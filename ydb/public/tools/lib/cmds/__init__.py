@@ -8,7 +8,7 @@ import random
 import string
 import typing  # noqa: F401
 import sys
-from urllib.parse import urlparse
+from six.moves.urllib.parse import urlparse
 
 from ydb.library.yql.providers.common.proto.gateways_config_pb2 import TGenericConnectorConfig
 from ydb.tests.library.common import yatest_common
@@ -271,7 +271,7 @@ def generic_connector_config():
 
     valid_schemes = ['grpc', 'grpcs']
     if parsed.scheme not in valid_schemes:
-        raise ValueError("Invalid schema '{}' in FQ_CONNECTOR_ENDPOINT (possible: {})".format(parsed.schema, valid_schemes))
+        raise ValueError("Invalid schema '{}' in FQ_CONNECTOR_ENDPOINT (possible: {})".format(parsed.scheme, valid_schemes))
 
     cfg = TGenericConnectorConfig()
     cfg.Endpoint.host = parsed.hostname

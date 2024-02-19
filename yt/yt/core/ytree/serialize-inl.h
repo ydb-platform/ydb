@@ -280,7 +280,7 @@ void WriteYson(
     NYson::EYsonFormat format,
     int indent)
 {
-    NYson::TYsonWriter writer(output, format, type, /* enableRaw */ false, indent);
+    NYson::TYsonWriter writer(output, format, type, /*enableRaw*/ false, indent);
     Serialize(value, &writer);
 }
 
@@ -460,15 +460,6 @@ template <class T, class TTag>
 void Serialize(const TStrongTypedef<T, TTag>& value, NYson::IYsonConsumer* consumer)
 {
     Serialize(value.Underlying(), consumer);
-}
-
-template <class T>
-    requires CSerializableByTraits<T>
-void Serialize(const T& value, NYson::IYsonConsumer* consumer)
-{
-    using TSerializer = typename TSerializationTraits<T>::TSerializer;
-    auto serializer = TSerializer::template CreateReadOnly<T, TSerializer>(value);
-    Serialize(serializer, consumer);
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -659,22 +650,6 @@ template <class T, class TTag>
 void Deserialize(TStrongTypedef<T, TTag>& value, INodePtr node)
 {
     Deserialize(value.Underlying(), node);
-}
-
-template <class T>
-    requires CSerializableByTraits<T>
-void Deserialize(T& value, INodePtr node)
-{
-    using TSerializer = typename TSerializationTraits<T>::TSerializer;
-    auto serializer = TSerializer::template CreateWritable<T, TSerializer>(value);
-    Deserialize(serializer, node);
-}
-
-template <class T>
-    requires CSerializableByTraits<T>
-void Deserialize(T& value, NYson::TYsonPullParserCursor* cursor)
-{
-    Deserialize(value, NYson::ExtractTo<NYTree::INodePtr>(cursor));
 }
 
 ////////////////////////////////////////////////////////////////////////////////

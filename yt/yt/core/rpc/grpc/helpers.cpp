@@ -267,7 +267,8 @@ struct TMessageTag
 
 TMessageWithAttachments ByteBufferToMessageWithAttachments(
     grpc_byte_buffer* buffer,
-    std::optional<ui32> messageBodySize)
+    std::optional<ui32> messageBodySize,
+    bool enveloped)
 {
     TMessageWithAttachments result;
 
@@ -279,28 +280,39 @@ TMessageWithAttachments ByteBufferToMessageWithAttachments(
         messageBodySize = bufferSize;
     }
 
-    NYT::NProto::TSerializedMessageEnvelope envelope;
-    // Codec remains "none".
+    TSharedMutableRef data;
+    char* targetMessage;
 
-    TEnvelopeFixedHeader fixedHeader;
-    fixedHeader.EnvelopeSize = envelope.ByteSize();
-    fixedHeader.MessageSize = *messageBodySize;
+    if (enveloped) {
+        NYT::NProto::TSerializedMessageEnvelope envelope;
+        // Codec remains "none".
 
-    size_t totalMessageSize =
-        sizeof (TEnvelopeFixedHeader) +
-        fixedHeader.EnvelopeSize +
-        fixedHeader.MessageSize;
+        TEnvelopeFixedHeader fixedHeader;
+        fixedHeader.EnvelopeSize = envelope.ByteSize();
+        fixedHeader.MessageSize = *messageBodySize;
 
-    auto data = TSharedMutableRef::Allocate<TMessageTag>(
-        totalMessageSize,
-        {.InitializeStorage = false});
+        size_t totalMessageSize =
+            sizeof (TEnvelopeFixedHeader) +
+            fixedHeader.EnvelopeSize +
+            fixedHeader.MessageSize;
 
-    char* targetFixedHeader = data.Begin();
-    char* targetHeader = targetFixedHeader + sizeof (TEnvelopeFixedHeader);
-    char* targetMessage = targetHeader + fixedHeader.EnvelopeSize;
+        data = TSharedMutableRef::Allocate<TMessageTag>(
+            totalMessageSize,
+            {.InitializeStorage = false});
 
-    memcpy(targetFixedHeader, &fixedHeader, sizeof (fixedHeader));
-    YT_VERIFY(envelope.SerializeToArray(targetHeader, fixedHeader.EnvelopeSize));
+        char* targetFixedHeader = data.Begin();
+        char* targetHeader = targetFixedHeader + sizeof (TEnvelopeFixedHeader);
+        targetMessage = targetHeader + fixedHeader.EnvelopeSize;
+
+        memcpy(targetFixedHeader, &fixedHeader, sizeof (fixedHeader));
+        YT_VERIFY(envelope.SerializeToArray(targetHeader, fixedHeader.EnvelopeSize));
+    } else {
+        data = TSharedMutableRef::Allocate<TMessageTag>(
+            *messageBodySize,
+            {.InitializeStorage = false});
+
+        targetMessage = data.begin();
+    }
 
     TGrpcByteBufferStream stream(buffer);
 

@@ -280,9 +280,6 @@ def validate_test(unit, kw):
                     tags.add(consts.YaTestTags.External)
                     tags.add("ya:yt_research_pool")
 
-    if valid_kw.get("USE_ARCADIA_PYTHON") == "yes" and valid_kw.get("SCRIPT-REL-PATH") == "py.test":
-        errors.append("PYTEST_SCRIPT is deprecated")
-
     partition = valid_kw.get('TEST_PARTITION', 'SEQUENTIAL')
     if partition not in PARTITION_MODS:
         raise ValueError('partition mode should be one of {}, detected: {}'.format(PARTITION_MODS, partition))
@@ -658,7 +655,12 @@ def onadd_check(unit, *args):
             extra_test_dart_data['KTLINT_BINARY'] = '$(KTLINT_OLD)/run.bat'
             extra_test_dart_data['USE_KTLINT_OLD'] = 'yes'
         else:
-            extra_test_data = serialize_list([KTLINT_CURRENT_EDITOR_CONFIG])
+            data_list = [KTLINT_CURRENT_EDITOR_CONFIG]
+            baseline_path = unit.get('_KTLINT_BASELINE_FILE')
+            if baseline_path:
+                data_list += [baseline_path]
+                extra_test_dart_data['KTLINT_BASELINE_FILE'] = baseline_path
+            extra_test_data = serialize_list(data_list)
             extra_test_dart_data['KTLINT_BINARY'] = '$(KTLINT)/run.bat'
     elif check_type == "JAVA_STYLE":
         if ymake_java_test and not unit.get('ALL_SRCDIRS'):

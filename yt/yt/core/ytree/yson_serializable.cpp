@@ -208,7 +208,7 @@ void TYsonSerializableLite::Load(
 
     for (auto parameter : pendingParameters) {
         auto childPath = path + "/" + parameter->GetKey();
-        parameter->Load(/* cursor */ nullptr, childPath);
+        parameter->Load(/*cursor*/ nullptr, childPath);
     }
 
     if (postprocess) {
@@ -299,7 +299,7 @@ void TYsonSerializableLite::LoadParameter(const TString& key, const NYTree::INod
                 << ex;
         }
     };
-    parameter->SafeLoad(node, /* path */ "", validate, mergeStrategy);
+    parameter->SafeLoad(node, /*path*/ "", validate, mergeStrategy);
 }
 
 void TYsonSerializableLite::ResetParameter(const TString& key) const

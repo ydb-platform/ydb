@@ -1,33 +1,31 @@
 /* The audioop module uses the code base in g777.c file of the Sox project.
- * Source: https://web.archive.org/web/19970716121258/http://www.spies.com/Sox/Archive/soxgamma.tar.gz
- *                 Programming the AdLib/Sound Blaster
- *                              FM Music Chips
- *                          Version 2.0 (24 Feb 1992)
+  Source: https://sourceforge.net/projects/sox/files/sox/12.17.7/sox-12.17.7.tar.gz
+
+ Copyright of g771.c:
+
+ * This source code is a product of Sun Microsystems, Inc. and is provided
+ * for unrestricted use.  Users may copy or modify this source code without
+ * charge.
  *
- *                 Copyright (c) 1991, 1992 by Jeffrey S. Lee
+ * SUN SOURCE CODE IS PROVIDED AS IS WITH NO WARRANTIES OF ANY KIND INCLUDING
+ * THE WARRANTIES OF DESIGN, MERCHANTIBILITY AND FITNESS FOR A PARTICULAR
+ * PURPOSE, OR ARISING FROM A COURSE OF DEALING, USAGE OR TRADE PRACTICE.
  *
- *                               jlee@smylex.uucp
+ * Sun source code is provided with no support and without any obligation on
+ * the part of Sun Microsystems, Inc. to assist in its use, correction,
+ * modification or enhancement.
  *
+ * SUN MICROSYSTEMS, INC. SHALL HAVE NO LIABILITY WITH RESPECT TO THE
+ * INFRINGEMENT OF COPYRIGHTS, TRADE SECRETS OR ANY PATENTS BY THIS SOFTWARE
+ * OR ANY PART THEREOF.
  *
+ * In no event will Sun Microsystems, Inc. be liable for any lost revenue
+ * or profits or other special, indirect and consequential damages, even if
+ * Sun has been advised of the possibility of such damages.
  *
- *                       Warranty and Copyright Policy
- *
- *     This document is provided on an "as-is" basis, and its author makes
- *     no warranty or representation, express or implied, with respect to
- *    its quality performance or fitness for a particular purpose.  In no
- *    event will the author of this document be liable for direct, indirect,
- *    special, incidental, or consequential damages arising out of the use
- *    or inability to use the information contained within.  Use of this
- *    document is at your own risk.
- *
- *    This file may be used and copied freely so long as the applicable
- *    copyright notices are retained, and no modifications are made to the
- *    text of the document.  No money shall be charged for its distribution
- *    beyond reasonable shipping, handling and duplication costs, nor shall
- *    proprietary changes be made to this document so that it cannot be
- *    distributed freely.  This document may not be included in published
- *    material or commercial packages without the written consent of its
- *    author. */
+ * Sun Microsystems, Inc.
+ * 2550 Garcia Avenue
+ * Mountain View, California  94043  */
 
 /* audioopmodule - Module to detect peak values in arrays */
 
@@ -75,6 +73,8 @@ static const int16_t seg_uend[8] = {
 static int16_t
 search(int16_t val, const int16_t *table, int size)
 {
+    assert(0 <= size);
+    assert(size < INT16_MAX);
     int i;
 
     for (i = 0; i < size; i++) {
@@ -186,6 +186,7 @@ st_14linear2ulaw(int16_t pcm_val)       /* 2's complement (14-bit range) */
     if (seg >= 8)           /* out of range, return maximum value. */
         return (unsigned char) (0x7F ^ mask);
     else {
+        assert(seg >= 0);
         uval = (unsigned char) (seg << 4) | ((pcm_val >> (seg + 1)) & 0xF);
         return (uval ^ mask);
     }
@@ -316,13 +317,13 @@ static const int stepsizeTable[89] = {
 #ifdef WORDS_BIGENDIAN
 #define GETINT24(cp, i)  (                              \
         ((unsigned char *)(cp) + (i))[2] +              \
-        (((unsigned char *)(cp) + (i))[1] << 8) +       \
-        (((signed char *)(cp) + (i))[0] << 16) )
+        (((unsigned char *)(cp) + (i))[1] * (1 << 8)) + \
+        (((signed char *)(cp) + (i))[0] * (1 << 16)) )
 #else
 #define GETINT24(cp, i)  (                              \
         ((unsigned char *)(cp) + (i))[0] +              \
-        (((unsigned char *)(cp) + (i))[1] << 8) +       \
-        (((signed char *)(cp) + (i))[2] << 16) )
+        (((unsigned char *)(cp) + (i))[1] * (1 << 8)) + \
+        (((signed char *)(cp) + (i))[2] * (1 << 16)) )
 #endif
 
 
@@ -363,10 +364,10 @@ static const int stepsizeTable[89] = {
     } while(0)
 
 
-#define GETSAMPLE32(size, cp, i)  (                     \
-        (size == 1) ? (int)GETINT8((cp), (i)) << 24 :   \
-        (size == 2) ? (int)GETINT16((cp), (i)) << 16 :  \
-        (size == 3) ? (int)GETINT24((cp), (i)) << 8 :   \
+#define GETSAMPLE32(size, cp, i)  (                           \
+        (size == 1) ? (int)GETINT8((cp), (i)) * (1 << 24) :   \
+        (size == 2) ? (int)GETINT16((cp), (i)) * (1 << 16) :  \
+        (size == 3) ? (int)GETINT24((cp), (i)) * (1 << 8) :   \
                       (int)GETINT32((cp), (i)))
 
 #define SETSAMPLE32(size, cp, i, val)  do {     \
@@ -1468,8 +1469,7 @@ audioop_ratecv_impl(PyObject *module, Py_buffer *fragment, int width,
                 len = (Py_ssize_t)(ncp - PyBytes_AsString(str));
                 rv = PyBytes_FromStringAndSize
                     (PyBytes_AsString(str), len);
-                Py_DECREF(str);
-                str = rv;
+                Py_SETREF(str, rv);
                 if (str == NULL)
                     goto exit;
                 rv = Py_BuildValue("(O(iO))", str, d, samps);
@@ -1574,7 +1574,7 @@ audioop_ulaw2lin_impl(PyObject *module, Py_buffer *fragment, int width)
 
     cp = fragment->buf;
     for (i = 0; i < fragment->len*width; i += width) {
-        int val = st_ulaw2linear16(*cp++) << 16;
+        int val = st_ulaw2linear16(*cp++) * (1 << 16);
         SETSAMPLE32(width, ncp, i, val);
     }
     return rv;
@@ -1648,7 +1648,7 @@ audioop_alaw2lin_impl(PyObject *module, Py_buffer *fragment, int width)
     cp = fragment->buf;
 
     for (i = 0; i < fragment->len*width; i += width) {
-        val = st_alaw2linear16(*cp++) << 16;
+        val = st_alaw2linear16(*cp++) * (1 << 16);
         SETSAMPLE32(width, ncp, i, val);
     }
     return rv;
@@ -1773,7 +1773,7 @@ audioop_lin2adpcm_impl(PyObject *module, Py_buffer *fragment, int width,
 
         /* Step 6 - Output value */
         if ( bufferstep ) {
-            outputbuffer = (delta << 4) & 0xf0;
+            outputbuffer = (delta * (1 << 4)) & 0xf0;
         } else {
             *ncp++ = (delta & 0x0f) | outputbuffer;
         }
@@ -1891,7 +1891,7 @@ audioop_adpcm2lin_impl(PyObject *module, Py_buffer *fragment, int width,
         step = stepsizeTable[index];
 
         /* Step 6 - Output value */
-        SETSAMPLE32(width, ncp, i, valpred << 16);
+        SETSAMPLE32(width, ncp, i, valpred * (1 << 16));
     }
 
     rv = Py_BuildValue("(O(ii))", str, valpred, index);
@@ -1973,6 +1973,7 @@ audioop_exec(PyObject* module)
 
 static PyModuleDef_Slot audioop_slots[] = {
     {Py_mod_exec, audioop_exec},
+    {Py_mod_multiple_interpreters, Py_MOD_PER_INTERPRETER_GIL_SUPPORTED},
     {0, NULL}
 };
 

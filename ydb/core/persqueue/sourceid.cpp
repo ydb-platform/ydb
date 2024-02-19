@@ -103,6 +103,7 @@ void THeartbeatProcessor::ForgetSourceId(const TString& sourceId) {
 
 TSourceIdInfo::TSourceIdInfo(ui64 seqNo, ui64 offset, TInstant createTs)
     : SeqNo(seqNo)
+    , MinSeqNo(seqNo)
     , Offset(offset)
     , WriteTimestamp(createTs)
     , CreateTimestamp(createTs)
@@ -111,6 +112,7 @@ TSourceIdInfo::TSourceIdInfo(ui64 seqNo, ui64 offset, TInstant createTs)
 
 TSourceIdInfo::TSourceIdInfo(ui64 seqNo, ui64 offset, TInstant createTs, THeartbeat&& heartbeat)
     : SeqNo(seqNo)
+    , MinSeqNo(seqNo)
     , Offset(offset)
     , WriteTimestamp(createTs)
     , CreateTimestamp(createTs)
@@ -120,6 +122,7 @@ TSourceIdInfo::TSourceIdInfo(ui64 seqNo, ui64 offset, TInstant createTs, THeartb
 
 TSourceIdInfo::TSourceIdInfo(ui64 seqNo, ui64 offset, TInstant createTs, TMaybe<TPartitionKeyRange>&& keyRange, bool isInSplit)
     : SeqNo(seqNo)
+    , MinSeqNo(seqNo)
     , Offset(offset)
     , CreateTimestamp(createTs)
     , Explicit(true)
@@ -133,6 +136,9 @@ TSourceIdInfo::TSourceIdInfo(ui64 seqNo, ui64 offset, TInstant createTs, TMaybe<
 TSourceIdInfo TSourceIdInfo::Updated(ui64 seqNo, ui64 offset, TInstant writeTs) const {
     auto copy = *this;
     copy.SeqNo = seqNo;
+    if (copy.MinSeqNo == 0) {
+        copy.MinSeqNo = seqNo;
+    }
     copy.Offset = offset;
     copy.WriteTimestamp = writeTs;
 
@@ -178,6 +184,7 @@ void TSourceIdInfo::Serialize(TBuffer& data) const {
 TSourceIdInfo TSourceIdInfo::Parse(const NKikimrPQ::TMessageGroupInfo& proto) {
     TSourceIdInfo result;
     result.SeqNo = proto.GetSeqNo();
+    result.MinSeqNo = proto.GetMinSeqNo();
     result.Offset = proto.GetOffset();
     result.WriteTimestamp = TInstant::FromValue(proto.GetWriteTimestamp());
     result.CreateTimestamp = TInstant::FromValue(proto.GetCreateTimestamp());
@@ -197,6 +204,7 @@ TSourceIdInfo TSourceIdInfo::Parse(const NKikimrPQ::TMessageGroupInfo& proto) {
 
 void TSourceIdInfo::Serialize(NKikimrPQ::TMessageGroupInfo& proto) const {
     proto.SetSeqNo(SeqNo);
+    proto.SetMinSeqNo(MinSeqNo);
     proto.SetOffset(Offset);
     proto.SetWriteTimestamp(WriteTimestamp.GetValue());
     proto.SetCreateTimestamp(CreateTimestamp.GetValue());

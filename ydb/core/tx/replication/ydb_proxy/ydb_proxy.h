@@ -32,7 +32,7 @@ struct TEvYdbProxy {
         EV_REQUEST_RESPONSE(ModifyPermissions),
 
         EvTable = EvBegin + 1 * 100,
-        EV_REQUEST_RESPONSE(CreateSession),
+        EvCreateSessionResponse,
         EV_REQUEST_RESPONSE(CreateTable),
         EV_REQUEST_RESPONSE(DropTable),
         EV_REQUEST_RESPONSE(AlterTable),
@@ -48,6 +48,7 @@ struct TEvYdbProxy {
         EV_REQUEST_RESPONSE(DescribeTopic),
         EV_REQUEST_RESPONSE(DescribeConsumer),
         EV_REQUEST_RESPONSE(CreateTopicReader),
+        EvTopicReaderGone,
         EV_REQUEST_RESPONSE(ReadTopic),
         EV_REQUEST_RESPONSE(CommitOffset),
 
@@ -117,6 +118,31 @@ struct TEvYdbProxy {
         }
 
         using TBase = TGenericResponse<TDerived, EventType, T>;
+    };
+
+    struct TEvTopicReaderGone: public TGenericResponse<TEvTopicReaderGone, EvTopicReaderGone, NYdb::TStatus> {
+        using TBase::TBase;
+    };
+
+    struct TTopicReaderSettings: private NYdb::NTopic::TReadSessionSettings {
+        using TSelf = TTopicReaderSettings;
+        using TBase = NYdb::NTopic::TReadSessionSettings;
+
+        FLUENT_SETTING_DEFAULT(bool, AutoCommit, true);
+
+        template <typename... Args>
+        TSelf& ConsumerName(Args&&... args) {
+            return static_cast<TSelf&>(TBase::ConsumerName(std::forward<Args>(args)...));
+        }
+
+        template <typename... Args>
+        TSelf& AppendTopics(Args&&... args) {
+            return static_cast<TSelf&>(TBase::AppendTopics(std::forward<Args>(args)...));
+        }
+
+        const TBase& GetBase() const {
+            return *this;
+        }
     };
 
     struct TReadTopicResult {
@@ -207,7 +233,7 @@ struct TEvYdbProxy {
     DEFINE_GENERIC_REQUEST_RESPONSE(DropTopic, NYdb::TStatus, TString, NYdb::NTopic::TDropTopicSettings);
     DEFINE_GENERIC_REQUEST_RESPONSE(DescribeTopic, NYdb::NTopic::TDescribeTopicResult, TString, NYdb::NTopic::TDescribeTopicSettings);
     DEFINE_GENERIC_REQUEST_RESPONSE(DescribeConsumer, NYdb::NTopic::TDescribeConsumerResult, TString, TString, NYdb::NTopic::TDescribeConsumerSettings);
-    DEFINE_GENERIC_REQUEST_RESPONSE(CreateTopicReader, TActorId, NYdb::NTopic::TReadSessionSettings);
+    DEFINE_GENERIC_REQUEST_RESPONSE(CreateTopicReader, TActorId, TTopicReaderSettings);
     DEFINE_GENERIC_REQUEST_RESPONSE(ReadTopic, TReadTopicResult, void);
     DEFINE_GENERIC_REQUEST_RESPONSE(CommitOffset, NYdb::TStatus, TString, ui64, TString, ui64, NYdb::NTopic::TCommitOffsetSettings);
 

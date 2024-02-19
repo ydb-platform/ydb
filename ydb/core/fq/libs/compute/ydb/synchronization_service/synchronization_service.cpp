@@ -403,6 +403,7 @@ private:
                 Counters,
                 TPermissions{},
                 CommonConfig,
+                ComputeConfig,
                 Signer,
                 true,
                 connection.first
@@ -424,7 +425,7 @@ private:
             request.Get()->Get()->YDBClient = Client;
             auto it = Connections.find(binding.second.content().connection_id());
             if (it == Connections.end()) {
-                NYql::TIssue issue {TStringBuilder {} 
+                NYql::TIssue issue {TStringBuilder {}
                     << "While synchronizing tables for binding with id '" << binding.first << "'"};
                 issue.AddSubIssue(MakeIntrusive<NYql::TIssue>(TStringBuilder{}
                     << "Can't find connection with id '" << binding.second.content().connection_id() << "'"));
@@ -439,6 +440,7 @@ private:
                 TDuration::Seconds(30),
                 Counters,
                 TPermissions{},
+                ComputeConfig,
                 true,
                 binding.first
             ));

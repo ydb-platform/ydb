@@ -17,10 +17,10 @@
 #include "Poco/Buffer.h"
 #error #include <VxWorks.h>
 #error #include <envLib.h>
-#include <hostLib.h>
+#error #include <hostLib.h>
 #error #include <ifLib.h>
-#include <sockLib.h>
-#include <ioLib.h>
+#error #include <sockLib.h>
+#error #include <ioLib.h>
 #error #include <version.h>
 #include <cstring>
 #include <unistd.h>

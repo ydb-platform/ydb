@@ -531,9 +531,9 @@ struct TGetUnrecognizedRecursively<TIntrusivePtr<T>>
 // all
 template <class F>
 void InvokeForComposites(
-    const void* /* parameter */,
-    const NYPath::TYPath& /* path */,
-    const F& /* func */)
+    const void* /*parameter*/,
+    const NYPath::TYPath& /*path*/,
+    const F& /*func*/)
 { }
 
 // TYsonSerializable or TYsonStruct
@@ -581,8 +581,8 @@ inline void InvokeForComposites(
 // all
 template <class F>
 void InvokeForComposites(
-    const void* /* parameter */,
-    const F& /* func */)
+    const void* /*parameter*/,
+    const F& /*func*/)
 { }
 
 // TYsonStruct or TYsonSerializable

@@ -357,7 +357,7 @@ XML_POP_WARNINGS
 
 #ifdef HAVE_BEOS
 
-#include <kernel/image.h>
+#error #include <kernel/image.h>
 
 /*
  * xmlModulePlatformOpen:

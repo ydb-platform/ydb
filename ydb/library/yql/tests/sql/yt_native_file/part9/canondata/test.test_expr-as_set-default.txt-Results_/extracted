@@ -1,0 +1,14 @@
+<tmp_path>/program.sql:<main>: Warning: Type annotation
+
+    <tmp_path>/program.sql:<main>:3:1: Warning: At function: RemovePrefixMembers, At function: Unordered, At function: PersistableRepr, At function: OrderedSqlProject, At function: SqlProjectItem
+    	select DictLength(AsSetStrict(1,2,3)),DictLength(AsSet(1,2,3u)),DictLength(SetCreate(Int32))
+	^
+        <tmp_path>/program.sql:<main>:3:39: Warning: At function: Length
+        	select DictLength(AsSetStrict(1,2,3)),DictLength(AsSet(1,2,3u)),DictLength(SetCreate(Int32))
+	                                      ^
+            <tmp_path>/program.sql:<main>:3:50: Warning: At function: AsSet
+            	select DictLength(AsSetStrict(1,2,3)),DictLength(AsSet(1,2,3u)),DictLength(SetCreate(Int32))
+	                                                 ^
+                <tmp_path>/program.sql:<main>:3:50: Warning: Consider using explicit CAST or BITCAST to convert from Int32 to Uint32
+                	select DictLength(AsSetStrict(1,2,3)),DictLength(AsSet(1,2,3u)),DictLength(SetCreate(Int32))
+	                                                 ^

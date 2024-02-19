@@ -33,6 +33,7 @@ struct TTableConstInfo : public TAtomicRefCount<TTableConstInfo> {
     ETableKind TableKind = ETableKind::Unknown;
     THashMap<TString, TString> Sequences;
     THashMap<TString, Ydb::TypedValue> DefaultFromLiteral;
+    bool IsBuildInProgress = false;
 
     TTableConstInfo() {}
     TTableConstInfo(const TString& path) : Path(path) {}
@@ -52,6 +53,7 @@ struct TTableConstInfo : public TAtomicRefCount<TTableConstInfo> {
                 NPg::TypeDescFromPgTypeName(phyColumn.GetPgTypeName()));
         }
         column.NotNull = phyColumn.GetNotNull();
+        column.IsBuildInProgress = phyColumn.GetIsBuildInProgress();
 
         Columns.emplace(phyColumn.GetId().GetName(), std::move(column));
         if (!phyColumn.GetDefaultFromSequence().empty()) {
@@ -144,19 +146,19 @@ public:
         const TMap<TString, NSharding::TShardingBase::TColumn>& GetColumns() const {
             return TableConstInfo->Columns;
         }
-        
+
         const TVector<TString>& GetKeyColumns() const {
             return TableConstInfo->KeyColumns;
         }
-        
+
         const TVector<NScheme::TTypeInfo>& GetKeyColumnTypes() const {
             return TableConstInfo->KeyColumnTypes;
         }
-        
+
         const ETableKind& GetTableKind() const {
             return TableConstInfo->TableKind;
         }
-        
+
         const THashMap<TString, TString>& GetSequences() const {
             return TableConstInfo->Sequences;
         }

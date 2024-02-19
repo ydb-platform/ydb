@@ -372,6 +372,18 @@ private:
         PassAway();
     }
 
+    void FillCompileResult(std::unique_ptr<NKikimrKqp::TPreparedQuery> preparingQuery, NKikimrKqp::EQueryType queryType) {
+        auto preparedQueryHolder = std::make_shared<TPreparedQueryHolder>(
+            preparingQuery.release(), AppData()->FunctionRegistry);
+        preparedQueryHolder->MutableLlvmSettings().Fill(Config, queryType);
+        KqpCompileResult->PreparedQuery = preparedQueryHolder;
+        KqpCompileResult->AllowCache = CanCacheQuery(KqpCompileResult->PreparedQuery->GetPhysicalQuery());
+
+        if (AstResult) {
+            KqpCompileResult->Ast = AstResult->Ast;
+        }
+    }
+
     void Handle(TEvKqp::TEvContinueProcess::TPtr &ev, const TActorContext &ctx) {
         Y_ENSURE(!ev->Get()->QueryId);
 
@@ -403,17 +415,7 @@ private:
 
         if (status == Ydb::StatusIds::SUCCESS) {
             YQL_ENSURE(kqpResult.PreparingQuery);
-            {
-                auto preparedQueryHolder = std::make_shared<TPreparedQueryHolder>(
-                    kqpResult.PreparingQuery.release(), AppData()->FunctionRegistry);
-                preparedQueryHolder->MutableLlvmSettings().Fill(Config, queryType);
-                KqpCompileResult->PreparedQuery = preparedQueryHolder;
-                KqpCompileResult->AllowCache = CanCacheQuery(KqpCompileResult->PreparedQuery->GetPhysicalQuery());
-
-                if (AstResult) {
-                    KqpCompileResult->Ast = AstResult->Ast;
-                }
-            }
+            FillCompileResult(std::move(kqpResult.PreparingQuery), queryType);
 
             auto now = TInstant::Now();
             auto duration = now - StartTime;
@@ -423,6 +425,10 @@ private:
                 << ", self: " << ctx.SelfID
                 << ", duration: " << duration);
         } else {
+            if (kqpResult.PreparingQuery) {
+                FillCompileResult(std::move(kqpResult.PreparingQuery), queryType);
+            }
+
             LOG_ERROR_S(ctx, NKikimrServices::KQP_COMPILE_ACTOR, "Compilation failed"
                 << ", self: " << ctx.SelfID
                 << ", status: " << Ydb::StatusIds_StatusCode_Name(status)
@@ -504,7 +510,7 @@ void ApplyServiceConfig(TKikimrConfiguration& kqpConfig, const TTableServiceConf
     kqpConfig.BindingsMode = RemapBindingsMode(serviceConfig.GetBindingsMode());
     kqpConfig.PredicateExtract20 = serviceConfig.GetPredicateExtract20();
     kqpConfig.IndexAutoChooserMode = serviceConfig.GetIndexAutoChooseMode();
-    kqpConfig.EnablePgConstsToParams = serviceConfig.GetEnablePgConstsToParams();
+    kqpConfig.EnablePgConstsToParams = serviceConfig.GetEnablePgConstsToParams() && serviceConfig.GetEnableAstCache();
     kqpConfig.ExtractPredicateRangesLimit = serviceConfig.GetExtractPredicateRangesLimit();
 
     if (const auto limit = serviceConfig.GetResourceManager().GetMkqlHeavyProgramMemoryLimit()) {

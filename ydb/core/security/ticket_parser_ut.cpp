@@ -77,6 +77,26 @@ void InitLdapSettingsWithUnavailableHost(NKikimrProto::TLdapAuthentication* ldap
     ldapSettings->SetHost("unavailablehost");
 }
 
+void InitLdapSettingsWithEmptyHost(NKikimrProto::TLdapAuthentication* ldapSettings, ui16 ldapPort, TTempFileHandle& certificateFile) {
+    InitLdapSettings(ldapSettings, ldapPort, certificateFile);
+    ldapSettings->SetHost("");
+}
+
+void InitLdapSettingsWithEmptyBaseDn(NKikimrProto::TLdapAuthentication* ldapSettings, ui16 ldapPort, TTempFileHandle& certificateFile) {
+    InitLdapSettings(ldapSettings, ldapPort, certificateFile);
+    ldapSettings->SetBaseDn("");
+}
+
+void InitLdapSettingsWithEmptyBindDn(NKikimrProto::TLdapAuthentication* ldapSettings, ui16 ldapPort, TTempFileHandle& certificateFile) {
+    InitLdapSettings(ldapSettings, ldapPort, certificateFile);
+    ldapSettings->SetBindDn("");
+}
+
+void InitLdapSettingsWithEmptyBindPassword(NKikimrProto::TLdapAuthentication* ldapSettings, ui16 ldapPort, TTempFileHandle& certificateFile) {
+    InitLdapSettings(ldapSettings, ldapPort, certificateFile);
+    ldapSettings->SetBindPassword("");
+}
+
 void InitLdapSettingsWithCustomGroupAttribute(NKikimrProto::TLdapAuthentication* ldapSettings, ui16 ldapPort, TTempFileHandle& certificateFile) {
     InitLdapSettings(ldapSettings, ldapPort, certificateFile);
     ldapSettings->SetRequestedGroupAttribute("groupDN");
@@ -190,6 +210,24 @@ LdapMock::TLdapMockResponses TCorrectLdapResponse::GetResponses(const TString& l
     responses.SearchResponses.push_back({fetchGroupsSearchRequestInfo, fetchGroupsSearchResponseInfo});
     return responses;
 }
+
+void CheckRequiredLdapSettings(std::function<void(NKikimrProto::TLdapAuthentication*, ui16, TTempFileHandle&)> initLdapSettings, const TString& expectedErrorMessage) {
+    TLdapKikimrServer server(initLdapSettings);
+
+    LdapMock::TLdapMockResponses responses;
+    LdapMock::TLdapSimpleServer ldapServer(server.GetLdapPort(), responses);
+
+    TString login = "ldapuser";
+    TString password = "ldapUserPassword";
+
+    TAutoPtr<IEventHandle> handle = LdapAuthenticate(server, login, password);
+    TEvTicketParser::TEvAuthorizeTicketResult* ticketParserResult = handle->Get<TEvTicketParser::TEvAuthorizeTicketResult>();
+    UNIT_ASSERT_C(!ticketParserResult->Error.empty(), "Expected return error message");
+    UNIT_ASSERT_STRINGS_EQUAL(ticketParserResult->Error.Message, expectedErrorMessage);
+
+    ldapServer.Stop();
+}
+
 } // namespace
 
 Y_UNIT_TEST_SUITE(TTicketParserTest) {
@@ -711,20 +749,23 @@ Y_UNIT_TEST_SUITE(TTicketParserTest) {
     }
 
     Y_UNIT_TEST(LdapServerIsUnavailable) {
-        TLdapKikimrServer server(InitLdapSettingsWithUnavailableHost);
+        CheckRequiredLdapSettings(InitLdapSettingsWithUnavailableHost, "Could not start TLS\nCan't contact LDAP server");
+    }
 
-        LdapMock::TLdapMockResponses responses;
-        LdapMock::TLdapSimpleServer ldapServer(server.GetLdapPort(), responses);
+    Y_UNIT_TEST(LdapRequestWithEmptyHost) {
+        CheckRequiredLdapSettings(InitLdapSettingsWithEmptyHost, "Ldap server host is empty");
+    }
 
-        TString login = "ldapuser";
-        TString password = "ldapUserPassword";
+    Y_UNIT_TEST(LdapRequestWithEmptyBaseDn) {
+        CheckRequiredLdapSettings(InitLdapSettingsWithEmptyBaseDn, "Parameter BaseDn is empty");
+    }
 
-        TAutoPtr<IEventHandle> handle = LdapAuthenticate(server, login, password);
-        TEvTicketParser::TEvAuthorizeTicketResult* ticketParserResult = handle->Get<TEvTicketParser::TEvAuthorizeTicketResult>();
-        UNIT_ASSERT_C(!ticketParserResult->Error.empty(), "Expected return error message");
-        UNIT_ASSERT_STRINGS_EQUAL(ticketParserResult->Error.Message, "Could not start TLS\nCan't contact LDAP server");
+    Y_UNIT_TEST(LdapRequestWithEmptyBindDn) {
+        CheckRequiredLdapSettings(InitLdapSettingsWithEmptyBindDn, "Parameter BindDn is empty");
+    }
 
-        ldapServer.Stop();
+    Y_UNIT_TEST(LdapRequestWithEmptyBindPassword) {
+        CheckRequiredLdapSettings(InitLdapSettingsWithEmptyBindPassword, "Parameter BindPassword is empty");
     }
 
     Y_UNIT_TEST(LdapRefreshGroupsInfoGood) {

@@ -1,5 +1,5 @@
 --!syntax_pg
-select count(*),min(encrypted::text),min(gss_authenticated::text) from (
+select count(*) n,min(encrypted::text) min_enc,min(gss_authenticated::text) min_auth from (
 select 
 encrypted,
 gss_authenticated,

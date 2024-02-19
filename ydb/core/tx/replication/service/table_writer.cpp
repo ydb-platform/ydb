@@ -9,10 +9,14 @@
 #include <ydb/core/tx/datashard/datashard.h>
 #include <ydb/core/tx/scheme_cache/helpers.h>
 #include <ydb/core/tx/tx_proxy/proxy.h>
+#include <ydb/library/actors/core/actor_bootstrapped.h>
 #include <ydb/library/actors/core/actor.h>
 #include <ydb/library/actors/core/hfunc.h>
+#include <ydb/library/services/services.pb.h>
 
 #include <util/generic/map.h>
+#include <util/generic/maybe.h>
+#include <util/string/builder.h>
 
 namespace NKikimr::NReplication::NService {
 
@@ -128,6 +132,10 @@ class TTablePartitionWriter: public TActorBootstrapped<TTablePartitionWriter> {
     }
 
 public:
+    static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
+        return NKikimrServices::TActivity::REPLICATION_TABLE_PARTITION_WRITER;
+    }
+
     explicit TTablePartitionWriter(const TActorId& parent, ui64 tabletId, const TPathId& tablePathId)
         : Parent(parent)
         , TabletId(tabletId)
@@ -181,7 +189,7 @@ class TLocalTableWriter
 
     void LogCritAndLeave(const TString& error) {
         LOG_C(error);
-        Leave();
+        Leave(TEvWorker::TEvGone::SCHEME_ERROR);
     }
 
     void LogWarnAndRetry(const TString& error) {
@@ -450,8 +458,8 @@ class TLocalTableWriter
         Schedule(TDuration::Seconds(1), new TEvents::TEvWakeup());
     }
 
-    void Leave() {
-        Send(Worker, new TEvents::TEvGone());
+    void Leave(TEvWorker::TEvGone::EStatus status) {
+        Send(Worker, new TEvWorker::TEvGone(status));
         PassAway();
     }
 
@@ -461,6 +469,10 @@ class TLocalTableWriter
     }
 
 public:
+    static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
+        return NKikimrServices::TActivity::REPLICATION_LOCAL_TABLE_WRITER;
+    }
+
     explicit TLocalTableWriter(const TPathId& tablePathId)
         : TActor(&TThis::StateWork)
         , TBaseChangeSender(this, this, tablePathId)

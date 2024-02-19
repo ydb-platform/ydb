@@ -22,6 +22,8 @@ SRCS(
     worker.cpp
 )
 
+GENERATE_ENUM_SERIALIZATION(worker.h)
+
 YQL_LAST_ABI_VERSION()
 
 END()

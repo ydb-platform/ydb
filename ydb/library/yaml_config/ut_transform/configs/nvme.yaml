@@ -1,0 +1,179 @@
+actor_system_config:
+  batch_executor: 2
+  executor:
+  - {name: System, spin_threshold: '1', threads: 56, type: BASIC}
+  - {name: User, spin_threshold: '1', threads: 24, type: BASIC}
+  - {name: Batch, spin_threshold: '1', threads: 24, type: BASIC}
+  - {name: IO, threads: 1, type: IO}
+  - {name: IC, spin_threshold: '10', threads: 16, time_per_mailbox_micro_secs: 100,
+    type: BASIC}
+  io_executor: 3
+  scheduler: {progress_threshold: '10000', resolution: '64', spin_threshold: '0'}
+  service_executor:
+  - {executor_id: 4, service_name: Interconnect}
+  sys_executor: 0
+  user_executor: 1
+blob_storage_config:
+  service_set:
+    availability_domains: ['1']
+    groups:
+    - erasure_species: 4
+      group_generation: 1
+      group_id: 0
+      rings:
+      - fail_domains:
+        - vdisk_locations:
+          - {node_id: 1, path: /dev/disk/by-partlabel/kikimr_nvme_01, pdisk_category: '144115188075855873',
+            pdisk_guid: '16592301274203927769', pdisk_id: 1}
+        - vdisk_locations:
+          - {node_id: 2, path: /dev/disk/by-partlabel/kikimr_nvme_01, pdisk_category: '144115188075855873',
+            pdisk_guid: '4066024495825696064', pdisk_id: 1}
+        - vdisk_locations:
+          - {node_id: 3, path: /dev/disk/by-partlabel/kikimr_nvme_01, pdisk_category: '144115188075855873',
+            pdisk_guid: '11217585798395406445', pdisk_id: 1}
+        - vdisk_locations:
+          - {node_id: 4, path: /dev/disk/by-partlabel/kikimr_nvme_01, pdisk_category: '144115188075855873',
+            pdisk_guid: '7548336563826238532', pdisk_id: 1}
+        - vdisk_locations:
+          - {node_id: 5, path: /dev/disk/by-partlabel/kikimr_nvme_01, pdisk_category: '144115188075855873',
+            pdisk_guid: '12492930695751522617', pdisk_id: 1}
+        - vdisk_locations:
+          - {node_id: 6, path: /dev/disk/by-partlabel/kikimr_nvme_01, pdisk_category: '144115188075855873',
+            pdisk_guid: '17947853722703397685', pdisk_id: 1}
+        - vdisk_locations:
+          - {node_id: 7, path: /dev/disk/by-partlabel/kikimr_nvme_01, pdisk_category: '144115188075855873',
+            pdisk_guid: '13632005992896647536', pdisk_id: 1}
+        - vdisk_locations:
+          - {node_id: 8, path: /dev/disk/by-partlabel/kikimr_nvme_01, pdisk_category: '144115188075855873',
+            pdisk_guid: '3668985736129884660', pdisk_id: 1}
+bootstrap_config: {}
+channel_profile_config:
+  profile:
+  - channel:
+    - {erasure_species: block-4-2, pdisk_category: '2', vdisk_category: Default}
+    - {erasure_species: block-4-2, pdisk_category: '2', vdisk_category: Default}
+    - {erasure_species: block-4-2, pdisk_category: '2', vdisk_category: Default}
+    profile_id: 0
+domains_config:
+  disable_builtin_security: true
+  domain:
+  - domain_id: 1
+    name: Root
+    plan_resolution: '10'
+    scheme_root: '72075186232723360'
+    ssid: [1]
+    storage_pool_types:
+    - kind: nvme
+      pool_config:
+        box_id: '1'
+        erasure_species: block-4-2
+        kind: nvme
+        pdisk_filter:
+        - property:
+          - {type: NVME}
+        vdisk_kind: Default
+  state_storage:
+  - ring:
+      node: [1, 2, 3, 4, 5, 6, 7, 8]
+      nto_select: 5
+    ssid: 1
+dynamic_nameservice_config: {max_static_node_id: 50000}
+grpc_config:
+  grpc_memory_quota_bytes: '1073741824'
+  host: '[::]'
+  keep_alive_enable: true
+  keep_alive_idle_timeout_trigger_sec: 90
+  keep_alive_max_probe_count: 3
+  keep_alive_probe_interval_sec: 10
+  port: 2135
+  start_grpc_proxy: true
+  streaming_config: {enable_output_streams: true}
+hive_config: {balancer_inflight: 0, continue_auto_balancer: false, continue_emergency_balancer: false,
+  emergency_balancer_inflight: 0, max_node_usage_to_kick: 10000, min_node_usage_to_balance: 10000,
+  min_period_between_balance: 86400, min_scatter_to_balance: 10000, node_select_strategy: HIVE_NODE_SELECT_STRATEGY_EXACT_MIN,
+  resource_overcommitment: 10000, storage_select_strategy: HIVE_STORAGE_SELECT_STRATEGY_EXACT_MIN}
+hosts:
+- host: ydb-vla-dev01-000.example.com
+  node_id: 1
+  walle_location: {body: 3939173309, data_center: VLA, rack: fake-1}
+- host: ydb-vla-dev01-001.example.com
+  node_id: 2
+  walle_location: {body: 1026130917, data_center: VLA, rack: fake-2}
+- host: ydb-vla-dev01-002.example.com
+  node_id: 3
+  walle_location: {body: 2659124556, data_center: VLA, rack: fake-3}
+- host: ydb-vla-dev01-003.example.com
+  node_id: 4
+  walle_location: {body: 1235059988, data_center: VLA, rack: fake-4}
+- host: ydb-vla-dev01-004.example.com
+  node_id: 5
+  walle_location: {body: 61017695, data_center: VLA, rack: fake-5}
+- host: ydb-vla-dev01-005.example.com
+  node_id: 6
+  walle_location: {body: 3561065991, data_center: VLA, rack: fake-6}
+- host: ydb-vla-dev01-006.example.com
+  node_id: 7
+  walle_location: {body: 1997998254, data_center: VLA, rack: fake-7}
+- host: ydb-vla-dev01-007.example.com
+  node_id: 8
+  walle_location: {body: 2700445942, data_center: VLA, rack: fake-8}
+interconnect_config: {send_buffer_die_limit_in_mb: 0, start_tcp: true}
+kqpconfig: {enable: true}
+log_config: {allow_drop_entries: false, backend_file_name: /place/kikimr-logs/kikimr.txt,
+  default_level: 3, sys_log: false}
+nameservice_config:
+  accept_uuid: [alexvru-test]
+  cluster_uuid: alexvru-test
+pqconfig: {enabled: false}
+static_erasure: block-4-2
+system_tablets:
+  cms:
+  - info: {tablet_id: '72057594037936128'}
+    node: [1, 2, 3, 4, 5, 6, 7, 8]
+  console:
+  - info: {tablet_id: '72057594037936131'}
+    node: [1, 2, 3, 4, 5, 6, 7, 8]
+  flat_bs_controller:
+  - info: {tablet_id: '72057594037932033'}
+    node: [1, 2, 3, 4, 5, 6, 7, 8]
+  flat_hive:
+  - info: {tablet_id: '72057594037968897'}
+    node: [1, 2, 3, 4, 5, 6, 7, 8]
+  flat_schemeshard:
+  - info: {tablet_id: '72075186232723360'}
+    node: [1, 2, 3, 4, 5, 6, 7, 8]
+  flat_tx_coordinator:
+  - info: {tablet_id: '72075186232360961'}
+    node: [1, 2, 3, 4, 5, 6, 7, 8]
+  - info: {tablet_id: '72075186232360962'}
+    node: [1, 2, 3, 4, 5, 6, 7, 8]
+  - info: {tablet_id: '72075186232360963'}
+    node: [1, 2, 3, 4, 5, 6, 7, 8]
+  node_broker:
+  - info: {tablet_id: '72057594037936129'}
+    node: [1, 2, 3, 4, 5, 6, 7, 8]
+  tenant_slot_broker:
+  - info: {tablet_id: '72057594037936130'}
+    node: [1, 2, 3, 4, 5, 6, 7, 8]
+  tx_allocator:
+  - info: {tablet_id: '72075186232492033'}
+    node: [1, 2, 3, 4, 5, 6, 7, 8]
+  - info: {tablet_id: '72075186232492034'}
+    node: [1, 2, 3, 4, 5, 6, 7, 8]
+  - info: {tablet_id: '72075186232492035'}
+    node: [1, 2, 3, 4, 5, 6, 7, 8]
+  tx_mediator:
+  - info: {tablet_id: '72075186232426497'}
+    node: [1, 2, 3, 4, 5, 6, 7, 8]
+  - info: {tablet_id: '72075186232426498'}
+    node: [1, 2, 3, 4, 5, 6, 7, 8]
+  - info: {tablet_id: '72075186232426499'}
+    node: [1, 2, 3, 4, 5, 6, 7, 8]
+vdisk_config:
+  vdisk_kinds:
+  - base_kind: Default
+    config: {allow_keep_flags: false, fresh_use_dreg: true}
+    kind: Log
+  - base_kind: Default
+    config: {hull_comp_level0_max_ssts_at_once: 2, hull_comp_sorted_parts_num: 1}
+    kind: LocalMode

@@ -30,6 +30,7 @@
 #include <util/generic/algorithm.h>
 #include <util/generic/hash.h>
 #include <util/generic/utility.h>
+#include <util/string/join.h>
 
 #include <queue>
 #include <variant>
@@ -91,6 +92,7 @@ struct TEvPrivate {
 class TDqPqReadActor : public NActors::TActor<TDqPqReadActor>, public IDqComputeActorAsyncInput {
 public:
     using TPartitionKey = std::pair<TString, ui64>; // Cluster, partition id.
+    using TDebugOffsets = TMaybe<std::pair<ui64, ui64>>;
 
     TDqPqReadActor(
         ui64 inputIndex,
@@ -170,8 +172,9 @@ public:
         data->SetVersion(StateVersion);
         data->SetBlob(stateBlob);
 
-        DeferredCommits.emplace(checkpoint.GetId(), std::move(CurrentDeferredCommit));
+        DeferredCommits.emplace(checkpoint.GetId(), std::make_pair(std::move(CurrentDeferredCommit), CurrentDeferredCommitOffset));
         CurrentDeferredCommit = NYdb::NPersQueue::TDeferredCommit();
+        CurrentDeferredCommitOffset.Clear();
     }
 
     void LoadState(const NDqProto::TSourceState& state) override {
@@ -198,6 +201,9 @@ public:
                 ythrow yexception() << "Invalid state version " << data.GetVersion();
             }
         }
+        for (const auto& [key, value] : PartitionToOffset) {
+            SRC_LOG_D("Restoring offset: cluster " << key.first << ", partition id " << key.second << ", offset: " << value);
+        }
         StartingMessageTimestamp = minStartingMessageTs;
         IngressStats.Bytes += ingressBytes;
         IngressStats.Chunks++;
@@ -212,7 +218,14 @@ public:
     void CommitState(const NDqProto::TCheckpoint& checkpoint) override {
         const auto checkpointId = checkpoint.GetId();
         while (!DeferredCommits.empty() && DeferredCommits.front().first <= checkpointId) {
-            DeferredCommits.front().second.Commit();
+            auto& valuePair = DeferredCommits.front().second;
+            const auto& offsets = valuePair.second;
+            if (offsets.Empty()) {
+                SRC_LOG_D("Commit offset: [ empty ]");
+            } else {
+                SRC_LOG_D("Commit offset: [" << offsets->first << ", " << offsets->second << "]");
+            }
+            valuePair.first.Commit();
             DeferredCommits.pop();
         }
     }
@@ -364,7 +377,9 @@ private:
     NYdb::NPersQueue::TReadSessionSettings GetReadSessionSettings() const {
         NYdb::NPersQueue::TTopicReadSettings topicReadSettings;
         topicReadSettings.Path(SourceParams.GetTopicPath());
-        for (const auto partitionId : GetPartitionsToRead()) {
+        auto partitionsToRead = GetPartitionsToRead();
+        SRC_LOG_D("PartitionsToRead: " << JoinSeq(", ", partitionsToRead));
+        for (const auto partitionId : partitionsToRead) {
             topicReadSettings.AppendPartitionGroupIds(partitionId);
         }
 
@@ -419,6 +434,12 @@ private:
         for (const auto& [partitionStream, ranges] : readyBatch.OffsetRanges) {
             for (const auto& [start, end] : ranges) {
                 CurrentDeferredCommit.Add(partitionStream, start, end);
+                if (!CurrentDeferredCommitOffset) {
+                    CurrentDeferredCommitOffset = std::make_pair(start, end);
+                } else {
+                    CurrentDeferredCommitOffset->first = std::min(CurrentDeferredCommitOffset->first, start);
+                    CurrentDeferredCommitOffset->second = std::max(CurrentDeferredCommitOffset->second, end);
+                }
             }
             PartitionToOffset[MakePartitionKey(partitionStream)] = ranges.back().second;
         }
@@ -574,8 +595,9 @@ private:
     THashMap<TPartitionKey, ui64> PartitionToOffset; // {cluster, partition} -> offset of next event.
     TInstant StartingMessageTimestamp;
     const NActors::TActorId ComputeActorId;
-    std::queue<std::pair<ui64, NYdb::NPersQueue::TDeferredCommit>> DeferredCommits;
+    std::queue<std::pair<ui64, std::pair<NYdb::NPersQueue::TDeferredCommit, TDebugOffsets>>> DeferredCommits;
     NYdb::NPersQueue::TDeferredCommit CurrentDeferredCommit;
+    TDebugOffsets CurrentDeferredCommitOffset;
     bool SubscribedOnEvent = false;
     std::vector<std::tuple<TString, TPqMetaExtractor::TPqMetaExtractorLambda>> MetadataFields;
     std::queue<TReadyBatch> ReadyBuffer;

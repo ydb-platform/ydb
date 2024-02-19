@@ -294,6 +294,7 @@ message THunkChunkRef
     optional int64 hunk_count = 2;
     optional int64 total_hunk_length = 3;
     optional int32 erasure_codec = 4; // NErasure::ECodec
+    optional NYT.NProto.TGuid compression_dictionary_id = 5;
 }
 
 message THunkChunkRefsExt

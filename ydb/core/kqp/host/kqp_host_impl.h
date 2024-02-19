@@ -34,7 +34,9 @@ public:
         YQL_ENSURE(HasResult());
 
         if (Status.GetValue() == NYql::IGraphTransformer::TStatus::Error) {
-            return NYql::NCommon::ResultFromErrors<TResult>(ExprCtx.IssueManager.GetIssues());
+            TResult result = NYql::NCommon::ResultFromErrors<TResult>(ExprCtx.IssueManager.GetIssues());
+            FillResult(result);
+            return result;
         }
 
         YQL_ENSURE(Status.GetValue() == NYql::IGraphTransformer::TStatus::Ok);
@@ -244,7 +246,7 @@ public:
 
 TIntrusivePtr<IKqpRunner> CreateKqpRunner(TIntrusivePtr<IKqpGateway> gateway, const TString& cluster,
     const TIntrusivePtr<NYql::TTypeAnnotationContext>& typesCtx, const TIntrusivePtr<NYql::TKikimrSessionContext>& sessionCtx,
-    const NMiniKQL::IFunctionRegistry& funcRegistry);
+    const TIntrusivePtr<TKqlTransformContext>& transformCtx, const NMiniKQL::IFunctionRegistry& funcRegistry);
 
 TAutoPtr<NYql::IGraphTransformer> CreateKqpExplainPreparedTransformer(TIntrusivePtr<IKqpGateway> gateway,
     const TString& cluster, TIntrusivePtr<TKqlTransformContext> transformCtx, const NMiniKQL::IFunctionRegistry* funcRegistry,

@@ -52,6 +52,7 @@ private:
         FilteredCount.reset();
     }
 public:
+    void Append(const TColumnFilter& filter);
     void Add(const bool value, const ui32 count = 1);
     std::optional<ui32> GetFilteredCount() const;
     const std::vector<bool>& BuildSimpleFilter() const;

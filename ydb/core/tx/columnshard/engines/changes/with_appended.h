@@ -13,7 +13,6 @@ private:
 protected:
     TSplitSettings SplitSettings;
     TSaverContext SaverContext;
-    virtual void DoDebugString(TStringOutput& out) const override;
     virtual void DoCompile(TFinalizationContext& context) override;
     virtual bool DoApplyChanges(TColumnEngineForLogs& self, TApplyChangesContext& context) override;
     virtual void DoWriteIndex(NColumnShard::TColumnShard& self, TWriteIndexContext& context) override;
@@ -23,6 +22,10 @@ protected:
     virtual void DoStart(NColumnShard::TColumnShard& self) override;
     std::vector<TPortionInfoWithBlobs> MakeAppendedPortions(const std::shared_ptr<arrow::RecordBatch> batch, const ui64 granule,
         const TSnapshot& snapshot, const TGranuleMeta* granuleMeta, TConstructionContext& context) const;
+
+    virtual void DoDebugString(TStringOutput& out) const override {
+        out << "remove=" << PortionsToRemove.size() << ";append=" << AppendedPortions.size() << ";";
+    }
 
 public:
     const TSplitSettings& GetSplitSettings() const {

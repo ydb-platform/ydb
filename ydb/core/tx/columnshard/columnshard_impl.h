@@ -203,7 +203,8 @@ class TColumnShard
     void Handle(NOlap::NDataSharing::NEvents::TEvApplyLinksModification::TPtr& ev, const TActorContext& ctx);
     void Handle(NOlap::NDataSharing::NEvents::TEvApplyLinksModificationFinished::TPtr& ev, const TActorContext& ctx);
 
-    void Handle(NOlap::NDataSharing::NEvents::TEvStartFromInitiator::TPtr& ev, const TActorContext& ctx);
+    void Handle(NOlap::NDataSharing::NEvents::TEvProposeFromInitiator::TPtr& ev, const TActorContext& ctx);
+    void Handle(NOlap::NDataSharing::NEvents::TEvConfirmFromInitiator::TPtr& ev, const TActorContext& ctx);
     void Handle(NOlap::NDataSharing::NEvents::TEvStartToSource::TPtr& ev, const TActorContext& ctx);
     void Handle(NOlap::NDataSharing::NEvents::TEvSendDataFromSource::TPtr& ev, const TActorContext& ctx);
     void Handle(NOlap::NDataSharing::NEvents::TEvAckDataToSource::TPtr& ev, const TActorContext& ctx);
@@ -355,7 +356,8 @@ protected:
             HFunc(NOlap::NDataSharing::NEvents::TEvApplyLinksModification, Handle);
             HFunc(NOlap::NDataSharing::NEvents::TEvApplyLinksModificationFinished, Handle);
 
-            HFunc(NOlap::NDataSharing::NEvents::TEvStartFromInitiator, Handle);
+            HFunc(NOlap::NDataSharing::NEvents::TEvProposeFromInitiator, Handle);
+            HFunc(NOlap::NDataSharing::NEvents::TEvConfirmFromInitiator, Handle);
             HFunc(NOlap::NDataSharing::NEvents::TEvStartToSource, Handle);
             HFunc(NOlap::NDataSharing::NEvents::TEvSendDataFromSource, Handle);
             HFunc(NOlap::NDataSharing::NEvents::TEvAckDataToSource, Handle);

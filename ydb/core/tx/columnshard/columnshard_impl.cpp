@@ -828,7 +828,7 @@ void TColumnShard::Handle(NActors::TEvents::TEvUndelivered::TPtr& ev, const TAct
     }
 }
 
-void TColumnShard::Handle(NOlap::NDataSharing::NEvents::TEvStartFromInitiator::TPtr& ev, const TActorContext& ctx) {
+void TColumnShard::Handle(NOlap::NDataSharing::NEvents::TEvProposeFromInitiator::TPtr& ev, const TActorContext& ctx) {
     AFL_NOTICE(NKikimrServices::TX_COLUMNSHARD)("process", "BlobsSharing")("event", "TEvStartFromInitiator");
     auto reqSession = std::make_shared<NOlap::NDataSharing::TDestinationSession>();
     auto conclusion = reqSession->DeserializeDataFromProto(ev->Get()->Record.GetSession(), TablesManager.GetPrimaryIndexAsVerified<NOlap::TColumnEngineForLogs>());
@@ -836,19 +836,35 @@ void TColumnShard::Handle(NOlap::NDataSharing::NEvents::TEvStartFromInitiator::T
         if (!reqSession->GetInitiatorController()) {
             AFL_ERROR(NKikimrServices::TX_COLUMNSHARD)("event", "cannot_parse_start_data_sharing_from_initiator");
         } else {
-            reqSession->GetInitiatorController().StartError(ev->Get()->Record.GetSession().GetSessionId(), conclusion.GetErrorMessage());
+            reqSession->GetInitiatorController().ProposeError(ev->Get()->Record.GetSession().GetSessionId(), conclusion.GetErrorMessage());
         }
         return;
     }
 
     auto currentSession = SharingSessionsManager->GetDestinationSession(reqSession->GetSessionId());
     if (currentSession) {
-        reqSession->GetInitiatorController().StartError(ev->Get()->Record.GetSession().GetSessionId(), "Session exists already");
+        reqSession->GetInitiatorController().ProposeError(ev->Get()->Record.GetSession().GetSessionId(), "Session exists already");
         return;
     }
 
-    auto txConclusion = SharingSessionsManager->InitializeDestSession(this, reqSession);
+    auto txConclusion = SharingSessionsManager->ProposeDestSession(this, reqSession);
     Execute(txConclusion.release(), ctx);
+}
+
+void TColumnShard::Handle(NOlap::NDataSharing::NEvents::TEvConfirmFromInitiator::TPtr& ev, const TActorContext& ctx) {
+    AFL_NOTICE(NKikimrServices::TX_COLUMNSHARD)("process", "BlobsSharing")("event", "TEvStartFromInitiator");
+    auto currentSession = SharingSessionsManager->GetDestinationSession(ev->Get()->Record.GetSessionId());
+    if (!currentSession) {
+        AFL_NOTICE(NKikimrServices::TX_COLUMNSHARD)("process", "BlobsSharing")("event", "TEvStartFromInitiator")("problem", "not_exists_session")("session_id", ev->Get()->Record.GetSessionId());
+        return;
+    }
+    if (currentSession->IsConfirmed()) {
+        currentSession->GetInitiatorController().ConfirmSuccess(ev->Get()->Record.GetSessionId());
+    } else {
+
+        auto txConclusion = SharingSessionsManager->ConfirmDestSession(this, currentSession);
+        Execute(txConclusion.release(), ctx);
+    }
 }
 
 void TColumnShard::Handle(NOlap::NDataSharing::NEvents::TEvStartToSource::TPtr& ev, const TActorContext& ctx) {
@@ -961,7 +977,7 @@ void TColumnShard::Handle(NOlap::NDataSharing::NEvents::TEvAckFinishFromInitiato
 };
 
 void TColumnShard::Handle(NOlap::NDataSharing::NEvents::TEvApplyLinksModification::TPtr& ev, const TActorContext& ctx) {
-    AFL_NOTICE(NKikimrServices::TX_COLUMNSHARD)("process", "BlobsSharing")("event", "TEvApplyLinksModification");
+    AFL_NOTICE(NKikimrServices::TX_COLUMNSHARD)("process", "BlobsSharing")("event", "TEvApplyLinksModification")("info", ev->Get()->Record.DebugString());
     NActors::TLogContextGuard gLogging = NActors::TLogContextBuilder::Build(NKikimrServices::TX_COLUMNSHARD)("tablet_id", TabletID())("event", "TEvChangeBlobsOwning");
 
     auto task = std::make_shared<NOlap::NDataSharing::TTaskForTablet>((NOlap::TTabletId)TabletID());

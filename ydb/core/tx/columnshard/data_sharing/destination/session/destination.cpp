@@ -73,7 +73,6 @@ void TDestinationSession::SendCurrentCursorAck(const NColumnShard::TColumnShard&
             auto ev = std::make_unique<NEvents::TEvStartToSource>(source);
             NActors::TActivationContext::AsActorContext().Send(MakePipePeNodeCacheID(false),
                 new TEvPipeCache::TEvForward(ev.release(), (ui64)cursor.GetTabletId(), true), IEventHandle::FlagTrackDelivery, GetRuntimeId());
-            InitiatorController.StartSuccess(GetSessionId());
         }
     }
     if (allTransfersFinished && !IsFinished()) {
@@ -151,6 +150,7 @@ NKikimrColumnShardDataSharingProto::TDestinationSession TDestinationSession::Ser
 
 NKikimrColumnShardDataSharingProto::TDestinationSession::TFullCursor TDestinationSession::SerializeCursorToProto() const {
     NKikimrColumnShardDataSharingProto::TDestinationSession::TFullCursor result;
+    result.SetConfirmedFlag(ConfirmedFlag);
     for (auto&& i : Cursors) {
         *result.AddSourceCursors() = i.second.SerializeToProto();
     }
@@ -158,6 +158,7 @@ NKikimrColumnShardDataSharingProto::TDestinationSession::TFullCursor TDestinatio
 }
 
 NKikimr::TConclusionStatus TDestinationSession::DeserializeCursorFromProto(const NKikimrColumnShardDataSharingProto::TDestinationSession::TFullCursor& proto) {
+    ConfirmedFlag = proto.GetConfirmedFlag();
     for (auto&& i : proto.GetSourceCursors()) {
         TSourceCursorForDestination cursor;
         auto parsed = cursor.DeserializeFromProto(i);
@@ -172,6 +173,7 @@ NKikimr::TConclusionStatus TDestinationSession::DeserializeCursorFromProto(const
 }
 
 bool TDestinationSession::DoStart(const NColumnShard::TColumnShard& shard, const THashMap<ui64, std::vector<std::shared_ptr<TPortionInfo>>>& portions) {
+    AFL_VERIFY(IsConfirmed());
     NYDBTest::TControllers::GetColumnShardController()->OnDataSharingStarted(shard.TabletID(), GetSessionId());
     THashMap<TString, THashSet<TUnifiedBlobId>> local;
     for (auto&& i : portions) {

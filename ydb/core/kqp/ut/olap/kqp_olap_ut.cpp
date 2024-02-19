@@ -3822,11 +3822,13 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
     namespace {
     class TTransferStatus {
     private:
-        YDB_ACCESSOR(bool, Started, false);
+        YDB_ACCESSOR(bool, Proposed, false);
+        YDB_ACCESSOR(bool, Confirmed, false);
         YDB_ACCESSOR(bool, Finished, false);
     public:
         void Reset() {
-            Started = false;
+            Confirmed = false;
+            Proposed = false;
             Finished = false;
         }
     };
@@ -3839,12 +3841,16 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
     private:
         static const inline auto Registrator = TFactory::TRegistrator<TTestController>("test");
     protected:
-        virtual void DoStartError(const TString& sessionId, const TString& message) const override {
+        virtual void DoProposeError(const TString& sessionId, const TString& message) const override {
             AFL_VERIFY(false)("session_id", sessionId)("message", message);
         }
-        virtual void DoStartSuccess(const TString& sessionId) const override {
-            CSTransferStatus->SetStarted(true);
-            AFL_NOTICE(NKikimrServices::TX_COLUMNSHARD)("event", "sharing_started")("session_id", sessionId);
+        virtual void DoProposeSuccess(const TString& sessionId) const override {
+            CSTransferStatus->SetProposed(true);
+            AFL_NOTICE(NKikimrServices::TX_COLUMNSHARD)("event", "sharing_proposed")("session_id", sessionId);
+        }
+        virtual void DoConfirmSuccess(const TString& sessionId) const override {
+            CSTransferStatus->SetConfirmed(true);
+            AFL_NOTICE(NKikimrServices::TX_COLUMNSHARD)("event", "sharing_confirmed")("session_id", sessionId);
         }
         virtual void DoFinished(const TString& sessionId) const override {
             CSTransferStatus->SetFinished(true);
@@ -3888,10 +3894,16 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
             NOlap::NDataSharing::TTransferContext transferContext((NOlap::TTabletId)destination, sourceTablets, snapshot, move);
             NOlap::NDataSharing::TDestinationSession session(std::make_shared<TTestController>(), pathIdsRemap, sessionId, transferContext);
             Runner.GetTestServer().GetRuntime()->Send(MakePipePeNodeCacheID(false), NActors::TActorId(), new TEvPipeCache::TEvForward(
-                new NOlap::NDataSharing::NEvents::TEvStartFromInitiator(session), destination, false));
-            while (!CSTransferStatus->GetStarted()) {
+                new NOlap::NDataSharing::NEvents::TEvProposeFromInitiator(session), destination, false));
+            while (!CSTransferStatus->GetProposed()) {
                 Sleep(TDuration::Seconds(1));
-                Cerr << "WAIT_STARTING..." << Endl;
+                Cerr << "WAIT_PROPOSING..." << Endl;
+            }
+            Runner.GetTestServer().GetRuntime()->Send(MakePipePeNodeCacheID(false), NActors::TActorId(), new TEvPipeCache::TEvForward(
+                new NOlap::NDataSharing::NEvents::TEvConfirmFromInitiator(sessionId), destination, false));
+            while (!CSTransferStatus->GetConfirmed()) {
+                Sleep(TDuration::Seconds(1));
+                Cerr << "WAIT_CONFIRMED..." << Endl;
             }
             while (!CSTransferStatus->GetFinished()) {
                 Sleep(TDuration::Seconds(1));

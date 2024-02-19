@@ -10,8 +10,9 @@ namespace NKikimr::NOlap::NDataSharing {
 
 class IInitiatorController {
 protected:
-    virtual void DoStartError(const TString& sessionId, const TString& message) const = 0;
-    virtual void DoStartSuccess(const TString& sessionId) const = 0;
+    virtual void DoProposeError(const TString& sessionId, const TString& message) const = 0;
+    virtual void DoProposeSuccess(const TString& sessionId) const = 0;
+    virtual void DoConfirmSuccess(const TString& sessionId) const = 0;
     virtual void DoFinished(const TString& sessionId) const = 0;
     virtual void DoStatus(const TStatusContainer& status) const = 0;
     virtual TConclusionStatus DoDeserializeFromProto(const NKikimrColumnShardDataSharingProto::TInitiator::TController& proto) = 0;
@@ -33,11 +34,14 @@ public:
     void Status(const TStatusContainer& status) const {
         DoStatus(status);
     }
-    void StartError(const TString& sessionId, const TString& message) const {
-        DoStartError(sessionId, message);
+    void ProposeError(const TString& sessionId, const TString& message) const {
+        DoProposeError(sessionId, message);
     }
-    void StartSuccess(const TString& sessionId) const {
-        DoStartSuccess(sessionId);
+    void ConfirmSuccess(const TString& sessionId) const {
+        DoConfirmSuccess(sessionId);
+    }
+    void ProposeSuccess(const TString& sessionId) const {
+        DoProposeSuccess(sessionId);
     }
     void Finished(const TString& sessionId) const {
         DoFinished(sessionId);
@@ -54,11 +58,14 @@ public:
     void Status(const TStatusContainer& status) const {
         TBase::GetObjectPtrVerified()->Status(status);
     }
-    void StartSuccess(const TString& sessionId) const {
-        TBase::GetObjectPtrVerified()->StartSuccess(sessionId);
+    void ProposeSuccess(const TString& sessionId) const {
+        TBase::GetObjectPtrVerified()->ProposeSuccess(sessionId);
     }
-    void StartError(const TString& sessionId, const TString& message) const {
-        TBase::GetObjectPtrVerified()->StartError(sessionId, message);
+    void ConfirmSuccess(const TString& sessionId) const {
+        TBase::GetObjectPtrVerified()->ConfirmSuccess(sessionId);
+    }
+    void ProposeError(const TString& sessionId, const TString& message) const {
+        TBase::GetObjectPtrVerified()->ProposeError(sessionId, message);
     }
     void Finished(const TString& sessionId) const {
         TBase::GetObjectPtrVerified()->Finished(sessionId);

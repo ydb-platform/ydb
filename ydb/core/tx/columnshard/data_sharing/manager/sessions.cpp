@@ -15,7 +15,7 @@ void TSessionsManager::Start(const NColumnShard::TColumnShard& shard) const {
         }
     }
     for (auto&& i : DestSessions) {
-        if (!i.second->IsStarted()) {
+        if (!i.second->IsStarted() && i.second->IsConfirmed()) {
             i.second->Start(shard);
         }
     }
@@ -98,9 +98,14 @@ bool TSessionsManager::Load(NTable::TDatabase& database, const TColumnEngineForL
     return true;
 }
 
-std::unique_ptr<NTabletFlatExecutor::ITransaction> TSessionsManager::InitializeDestSession(NColumnShard::TColumnShard* self, const std::shared_ptr<TDestinationSession>& session) {
+std::unique_ptr<NTabletFlatExecutor::ITransaction> TSessionsManager::ProposeDestSession(NColumnShard::TColumnShard* self, const std::shared_ptr<TDestinationSession>& session) {
     AFL_VERIFY(session);
-    return std::make_unique<TTxStartFromInitiator>(self, session, DestSessions, "tx_start_from_initiator");
+    return std::make_unique<TTxProposeFromInitiator>(self, session, DestSessions, "tx_propose_from_initiator");
+}
+
+std::unique_ptr<NTabletFlatExecutor::ITransaction> TSessionsManager::ConfirmDestSession(NColumnShard::TColumnShard* self, const std::shared_ptr<TDestinationSession>& session) {
+    AFL_VERIFY(session);
+    return std::make_unique<TTxConfirmFromInitiator>(self, session, "tx_confirm_from_initiator");
 }
 
 std::unique_ptr<NTabletFlatExecutor::ITransaction> TSessionsManager::InitializeSourceSession(NColumnShard::TColumnShard* self, const std::shared_ptr<TSourceSession>& session) {

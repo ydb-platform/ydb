@@ -184,7 +184,8 @@ enum ETxTypes {
     TXTYPE_DATA_SHARING_DATA_FROM_SOURCE = 22               [(TxTypeOpts) = {Name: "TxDataSharingDataFromSource"}];
     TXTYPE_DATA_SHARING_FINISH_ACK_FROM_INITIATOR = 23      [(TxTypeOpts) = {Name: "TxDataSharingFinishAckFromInitiator"}];
     TXTYPE_DATA_SHARING_FINISH_FROM_SOURCE = 24             [(TxTypeOpts) = {Name: "TxDataSharingFinishFromSource"}];
-    TXTYPE_DATA_SHARING_START_FROM_INITIATOR = 25           [(TxTypeOpts) = {Name: "TxDataSharingStartFromInitiator"}];
-    TXTYPE_DATA_SHARING_APPLY_LINKS_MODIFICATION = 26       [(TxTypeOpts) = {Name: "TxDataSharingApplyLinksModification"}];
-    TXTYPE_DATA_SHARING_WRITE_SOURCE_CURSOR = 27            [(TxTypeOpts) = {Name: "TxDataSharingWriteSourceCursor"}];
+    TXTYPE_DATA_SHARING_PROPOSE_FROM_INITIATOR = 25         [(TxTypeOpts) = {Name: "TxDataSharingProposeFromInitiator"}];
+    TXTYPE_DATA_SHARING_CONFIRM_FROM_INITIATOR = 26         [(TxTypeOpts) = {Name: "TxDataSharingConfirmFromInitiator"}];
+    TXTYPE_DATA_SHARING_APPLY_LINKS_MODIFICATION = 27       [(TxTypeOpts) = {Name: "TxDataSharingApplyLinksModification"}];
+    TXTYPE_DATA_SHARING_WRITE_SOURCE_CURSOR = 28            [(TxTypeOpts) = {Name: "TxDataSharingWriteSourceCursor"}];
 }

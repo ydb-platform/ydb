@@ -5,7 +5,7 @@
 
 namespace NKikimr::NOlap::NDataSharing {
 
-class TTxStartFromInitiator: public TExtendedTransactionBase<NColumnShard::TColumnShard> {
+class TTxProposeFromInitiator: public TExtendedTransactionBase<NColumnShard::TColumnShard> {
 private:
     using TBase = TExtendedTransactionBase<NColumnShard::TColumnShard>;
     std::shared_ptr<TDestinationSession> Session;
@@ -14,14 +14,30 @@ protected:
     virtual bool DoExecute(NTabletFlatExecutor::TTransactionContext& txc, const TActorContext& ctx) override;
     virtual void DoComplete(const TActorContext& ctx) override;
 public:
-    TTxStartFromInitiator(NColumnShard::TColumnShard* self, const std::shared_ptr<TDestinationSession>& session, THashMap<TString, std::shared_ptr<TDestinationSession>>& sessions, const TString& info)
+    TTxProposeFromInitiator(NColumnShard::TColumnShard* self, const std::shared_ptr<TDestinationSession>& session, THashMap<TString, std::shared_ptr<TDestinationSession>>& sessions, const TString& info)
         : TBase(self, info)
         , Session(session)
-        , Sessions(&sessions)
+        , Sessions(&sessions) {
+    }
+
+    TTxType GetTxType() const override { return NColumnShard::TXTYPE_DATA_SHARING_PROPOSE_FROM_INITIATOR; }
+};
+
+class TTxConfirmFromInitiator: public TExtendedTransactionBase<NColumnShard::TColumnShard> {
+private:
+    using TBase = TExtendedTransactionBase<NColumnShard::TColumnShard>;
+    std::shared_ptr<TDestinationSession> Session;
+protected:
+    virtual bool DoExecute(NTabletFlatExecutor::TTransactionContext& txc, const TActorContext& ctx) override;
+    virtual void DoComplete(const TActorContext& ctx) override;
+public:
+    TTxConfirmFromInitiator(NColumnShard::TColumnShard* self, const std::shared_ptr<TDestinationSession>& session, const TString& info)
+        : TBase(self, info)
+        , Session(session)
     {
     }
 
-    TTxType GetTxType() const override { return NColumnShard::TXTYPE_DATA_SHARING_START_FROM_INITIATOR; }
+    TTxType GetTxType() const override { return NColumnShard::TXTYPE_DATA_SHARING_CONFIRM_FROM_INITIATOR; }
 };
 
 

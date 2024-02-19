@@ -10,10 +10,16 @@ class TDestinationSession;
 
 namespace NKikimr::NOlap::NDataSharing::NEvents {
 
-struct TEvStartFromInitiator: public NActors::TEventPB<TEvStartFromInitiator, NKikimrColumnShardDataSharingProto::TEvStartFromInitiator, TEvColumnShard::EvDataSharingStartFromInitiator> {
-    TEvStartFromInitiator() = default;
+struct TEvProposeFromInitiator: public NActors::TEventPB<TEvProposeFromInitiator, NKikimrColumnShardDataSharingProto::TEvProposeFromInitiator, TEvColumnShard::EvDataSharingProposeFromInitiator> {
+    TEvProposeFromInitiator() = default;
 
-    TEvStartFromInitiator(const TDestinationSession& session);
+    TEvProposeFromInitiator(const TDestinationSession& session);
+};
+
+struct TEvConfirmFromInitiator: public NActors::TEventPB<TEvConfirmFromInitiator, NKikimrColumnShardDataSharingProto::TEvConfirmFromInitiator, TEvColumnShard::EvDataSharingConfirmFromInitiator> {
+    TEvConfirmFromInitiator() = default;
+
+    TEvConfirmFromInitiator(const TString& sessionId);
 };
 
 struct TEvAckFinishFromInitiator: public NActors::TEventPB<TEvAckFinishFromInitiator, NKikimrColumnShardDataSharingProto::TEvAckFinishFromInitiator, TEvColumnShard::EvDataSharingAckFinishFromInitiator> {

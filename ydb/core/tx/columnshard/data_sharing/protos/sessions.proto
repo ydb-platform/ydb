@@ -28,6 +28,7 @@ message TDestinationSession {
     }
     message TFullCursor {
         repeated TSourceCursor SourceCursors = 1;
+        optional bool ConfirmedFlag = 2 [default = false];
     }
 }
 

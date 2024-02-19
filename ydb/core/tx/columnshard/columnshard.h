@@ -69,7 +69,8 @@ struct TEvColumnShard {
         EvDeleteSharedBlobs,
         EvDeleteSharedBlobsFinished,
 
-        EvDataSharingStartFromInitiator,
+        EvDataSharingProposeFromInitiator,
+        EvDataSharingConfirmFromInitiator,
         EvDataSharingAckFinishFromInitiator,
         EvDataSharingStartToSource,
         EvDataSharingSendDataFromSource,

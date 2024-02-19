@@ -21,9 +21,11 @@ protected:
     virtual void DoStatus(const TStatusContainer& /*status*/) const override {
 
     }
-    virtual void DoStartError(const TString& /*sessionId*/, const TString& /*message*/) const override {
+    virtual void DoProposeError(const TString& /*sessionId*/, const TString& /*message*/) const override {
     }
-    virtual void DoStartSuccess(const TString& /*sessionId*/) const override {
+    virtual void DoProposeSuccess(const TString& /*sessionId*/) const override {
+    }
+    virtual void DoConfirmSuccess(const TString& /*sessionId*/) const override {
     }
     virtual void DoFinished(const TString& /*sessionId*/) const override {
     }

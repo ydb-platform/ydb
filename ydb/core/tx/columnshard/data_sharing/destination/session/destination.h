@@ -74,6 +74,7 @@ private:
     YDB_READONLY_DEF(TInitiatorControllerContainer, InitiatorController);
     using TPathIdsRemapper = THashMap<ui64, ui64>;
     YDB_READONLY_DEF(TPathIdsRemapper, PathIds);
+    YDB_READONLY_FLAG(Confirmed, false);
     THashMap<TTabletId, TSourceCursorForDestination> Cursors;
     THashMap<TString, THashSet<TUnifiedBlobId>> CurrentBlobIds;
 protected:
@@ -104,6 +105,11 @@ public:
         : TBase("dest_proto")
     {
 
+    }
+
+    void Confirm(const bool allowRepeat = false) {
+        AFL_VERIFY(!ConfirmedFlag || allowRepeat);
+        ConfirmedFlag = true;
     }
 
     [[nodiscard]] TConclusionStatus DataReceived(THashMap<ui64, NEvents::TPathIdData>&& data, TColumnEngineForLogs& index, const std::shared_ptr<IStoragesManager>& manager);

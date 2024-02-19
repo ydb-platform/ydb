@@ -3,8 +3,12 @@
 
 namespace NKikimr::NOlap::NDataSharing::NEvents {
 
-TEvStartFromInitiator::TEvStartFromInitiator(const TDestinationSession& session) {
+TEvProposeFromInitiator::TEvProposeFromInitiator(const TDestinationSession& session) {
     *Record.MutableSession() = session.SerializeDataToProto();
+}
+
+TEvConfirmFromInitiator::TEvConfirmFromInitiator(const TString& sessionId) {
+    *Record.MutableSessionId() = sessionId;
 }
 
 }

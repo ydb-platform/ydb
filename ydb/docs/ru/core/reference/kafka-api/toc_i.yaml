@@ -8,4 +8,4 @@ items:
   - name: Ограничения
     href: constraints.md
   - name: Kafka Connect
-    include: { mode: link, path: ./connect/toc_m.yaml }
+    include: { mode: link, path: ./connect/toc_p.yaml }

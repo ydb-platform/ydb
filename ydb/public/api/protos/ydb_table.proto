@@ -342,8 +342,9 @@ message ColumnMeta {
     string family = 3;
     // Column nullability
     optional bool not_null = 4;
-    oneof default_value_policy {
-        TypedValue from_literal = 6;
+    // Column default value option
+    oneof default_value {
+        TypedValue from_literal = 5;
     }
 }
 

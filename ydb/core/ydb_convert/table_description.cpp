@@ -656,7 +656,7 @@ bool FillColumnDescription(NKikimrSchemeOp::TTableDescription& out,
             cd->SetFamilyName(column.family());
         }
 
-        switch (column.default_value_policy_case()) {
+        switch (column.default_value_case()) {
             case Ydb::Table::ColumnMeta::kFromLiteral: {
                 auto fromLiteral = cd->MutableDefaultFromLiteral();
                 *fromLiteral = column.from_literal();

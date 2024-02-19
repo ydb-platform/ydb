@@ -8,7 +8,7 @@ name=local-file-source
 connector.class=FileStreamSource
 tasks.max=1
 file=/etc/kafka-connect-worker/file_to_read.json
-topic=Topic-1
+topic=<topic-name>
 ```
 
 ## Из YDB в PostgreSQL
@@ -21,7 +21,7 @@ connection.url=jdbc:postgresql://<postgresql-host>:<postgresql-port>/<db>
 connection.user=<pg-user>
 connection.password=<pg-user-pass>
 
-topics=Topic-1
+topics=<topic-name>
 batch.size=2000
 auto.commit.interval.ms=1000
 
@@ -46,8 +46,8 @@ connection.user=<pg-user>
 connection.password=<pg-user-pass>
 
 mode=bulk
-query=SELECT * FROM "Topic-1";
-topic.prefix=Topic-1
+query=SELECT * FROM "<topic-name>";
+topic.prefix=<topic-name>
 poll.interval.ms=1000
 validate.non.null=false
 ```

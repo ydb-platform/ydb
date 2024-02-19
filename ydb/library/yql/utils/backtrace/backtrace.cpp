@@ -191,6 +191,7 @@ void EnableKikimrBacktraceFormat() {
 namespace {
     void PrintFrames(IOutputStream* out, const NYql::NBacktrace::TCollectedFrame* frames, size_t count) {
         auto& outp = *out;
+#if defined(_linux_) && defined(_x86_64_)
         if (KikimrSymbolize) {
             TVector<NYql::NBacktrace::TStackFrame> sFrames(count);
             for (size_t i = 0; i < count; ++i) {
@@ -202,6 +203,7 @@ namespace {
             }
             return;
         }
+#endif
         outp << "StackFrames: " << count << "\n";
         for (size_t i = 0; i < count; ++i) {
             auto& frame = frames[i];

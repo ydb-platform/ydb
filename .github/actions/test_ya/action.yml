@@ -260,6 +260,7 @@ runs:
           -m .github/config/muted_ya.txt \
           --ya-out "$OUT_DIR" \
           --log-url-prefix "$S3_URL_PREFIX/logs/" \
+          --log-out-dir "$ARTIFACTS_DIR/logs/" \
           --test-stuff-out "$TEST_ARTIFACTS_DIR/" \
           --test-stuff-prefix "$S3_TEST_ARTIFACTS_URL_PREFIX/" \
           "$JUNIT_REPORT_XML"

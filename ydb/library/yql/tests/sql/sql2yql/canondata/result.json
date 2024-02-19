@@ -11122,6 +11122,20 @@
             "uri": "https://{canondata_backend}/1599023/af9c2f81df0601cf266a0926b5ce73b6101b9115/resource.tar.gz#test_sql2yql.test_pg-order_by_agg_no_extra_for_aggs_/sql.yql"
         }
     ],
+    "test_sql2yql.test[pg-order_by_distinct_same_expr]": [
+        {
+            "checksum": "90ff11d3ea24565554ca875062effe44",
+            "size": 977,
+            "uri": "https://{canondata_backend}/1871182/be7e0db544f9cfa977e36aa7ea0951073e129335/resource.tar.gz#test_sql2yql.test_pg-order_by_distinct_same_expr_/sql.yql"
+        }
+    ],
+    "test_sql2yql.test[pg-order_by_distinct_same_expr_agg]": [
+        {
+            "checksum": "d9fa181c807070e8f4b1e98f2a046170",
+            "size": 1546,
+            "uri": "https://{canondata_backend}/1871182/be7e0db544f9cfa977e36aa7ea0951073e129335/resource.tar.gz#test_sql2yql.test_pg-order_by_distinct_same_expr_agg_/sql.yql"
+        }
+    ],
     "test_sql2yql.test[pg-order_by_input_columns]": [
         {
             "checksum": "3704d16abf0dcaab370628415ac6b165",

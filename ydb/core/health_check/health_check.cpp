@@ -2307,6 +2307,7 @@ public:
                 } else if (endpoint.GetName() == "grpcs") {
                     config.Locator = "localhost" + endpoint.GetAddress();
                     config.EnableSsl = true;
+                    config.SslTargetNameOverride = systemStateInfo.GetHost();
                     break;
                 }
             }

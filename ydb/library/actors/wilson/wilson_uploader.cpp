@@ -95,6 +95,7 @@ namespace NWilson {
             ui64 MaxBytesInBatch;
             TDuration MaxBatchAccumulation = TDuration::Seconds(1);
             TDuration MaxSpanTimeInQueue;
+            ui64 MaxExportInflight;
 
             bool WakeupScheduled = false;
 
@@ -122,7 +123,7 @@ namespace NWilson {
                 NServiceProto::ExportTraceServiceResponse Response;
             };
 
-            TIntrusiveListWithAutoDelete<TUploadData, TDelete> UploadRequests;
+            TIntrusiveListWithAutoDelete<TUploadData, TDelete> ExportRequests;
 
         public:
             TWilsonUploader(WilsonUploaderParams params)
@@ -131,6 +132,7 @@ namespace NWilson {
                 , MaxBytesInBatch(params.MaxBytesInBatch)
                 , MaxBatchAccumulation(params.MaxBatchAccumulation)
                 , MaxSpanTimeInQueue(TDuration::Seconds(params.SpanExportTimeoutSeconds))
+                , MaxExportInflight(params.MaxSpanExportInflight)
                 , CollectorUrl(std::move(params.CollectorUrl))
                 , ServiceName(std::move(params.ServiceName))
                 , GrpcSigner(std::move(params.GrpcSigner))
@@ -153,6 +155,10 @@ namespace NWilson {
                 if (MaxSpansInBatch == 0) {
                     ALOG_WARN(WILSON_SERVICE_ID, "max_spans_in_batch shold be greater than 0, changing to 1");
                     MaxSpansInBatch = 1;
+                }
+                if (MaxExportInflight == 0) {
+                    ALOG_WARN(WILSON_SERVICE_ID, "max_span_export_inflight should be greater than 0, channing to 1");
+                    MaxExportInflight = 1;
                 }
 
                 TStringBuf scheme;
@@ -248,7 +254,7 @@ namespace NWilson {
                         "dropped " << numSpansDropped << " span(s) due to expiration");
                 }
 
-                if (BatchQueue.empty()) {
+                if (ExportRequests.Size() >= MaxExportInflight && BatchQueue.empty()) {
                     return;
                 } else if (now < NextSendTimestamp) {
                     ScheduleWakeup(NextSendTimestamp);
@@ -283,17 +289,19 @@ namespace NWilson {
                     .Reader = std::move(reader),
                 };
                 uploadData->Reader->Finish(&uploadData->Response, &uploadData->Status, uploadData);
-                UploadRequests.PushBack(uploadData);
+                ALOG_TRACE(WILSON_SERVICE_ID, "starting upload request " << (void*)uploadData);
+                ExportRequests.PushBack(uploadData);
             }
 
             void ReapCompletedRequests() {
-                if (UploadRequests.Empty()) {
+                if (ExportRequests.Empty()) {
                     return;
                 }
                 void* tag;
                 bool ok;
                 while (CQ.AsyncNext(&tag, &ok, std::chrono::system_clock::now()) == grpc::CompletionQueue::GOT_EVENT) {
                     auto node = static_cast<TUploadData*>(tag);
+                    ALOG_TRACE(WILSON_SERVICE_ID, "finished export request " << (void*)node);
                     if (!node->Status.ok()) {
                         ALOG_ERROR(WILSON_SERVICE_ID,
                             "failed to commit traces: " << node->Status.error_message());
@@ -303,7 +311,7 @@ namespace NWilson {
                     delete node;
                 }
 
-                if (!UploadRequests.Empty()) {
+                if (!ExportRequests.Empty()) {
                     ScheduleWakeup(TDuration::MilliSeconds(100));
                 }
             }

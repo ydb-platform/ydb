@@ -280,6 +280,8 @@ Y_UNIT_TEST_SUITE(TopicSplitMerge) {
 
         ReadSession.WaitAllMessages();
 
+        Cerr << ">>>>> All messages received" << Endl;
+
         for(const auto& info : ReadSession.ReceivedMessages) {
             if (info.Data == "message_1.1") {
                 UNIT_ASSERT_EQUAL(0, info.PartitionId);

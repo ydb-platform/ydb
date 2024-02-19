@@ -248,9 +248,9 @@ class TPersQueueReadBalancer : public TActor<TPersQueueReadBalancer>, public TTa
             s << "(" << p.first << ", " << p.second.TabletId << ") ";
         }
         LOG_DEBUG_S(ctx, NKikimrServices::PERSQUEUE_READ_BALANCER, s);
-        for (auto& p : ClientsInfo) {
-            for (auto& c : p.second.ClientGroupsInfo) {
-                c.second.Balance(*this, ctx);
+        for (auto& [_, clientInfo] : ClientsInfo) {
+            for (auto& [_, groupInfo] : clientInfo.ClientGroupsInfo) {
+                groupInfo.Balance(ctx);
             }
         }
 
@@ -338,6 +338,7 @@ class TPersQueueReadBalancer : public TActor<TPersQueueReadBalancer>, public TTa
     void StopWatchingSubDomainPathId();
     void StartWatchingSubDomainPathId();
 
+
     bool Inited;
     ui64 PathId;
     TString Topic;
@@ -422,6 +423,7 @@ class TPersQueueReadBalancer : public TActor<TPersQueueReadBalancer>, public TTa
 
         THashMap<ui32, TPartitionInfo> PartitionsInfo; // partitionId -> info
         std::deque<ui32> FreePartitions;
+        std::set<ui32> InactivePartitions;
         THashMap<std::pair<TActorId, ui64>, TSessionInfo> SessionsInfo; //map from ActorID and random value - need for reordering sessions in different topics
 
         std::pair<TActorId, ui64> SessionKey(const TActorId pipe) const;
@@ -429,9 +431,7 @@ class TPersQueueReadBalancer : public TActor<TPersQueueReadBalancer>, public TTa
         TSessionInfo* FindSession(const TActorId pipe);
 
         void ScheduleBalance(const TActorContext& ctx);
-        void Balance(const TPersQueueReadBalancer& balancer, const TActorContext& ctx);
-        void BalanceSimple(const TActorContext& ctx);
-        void BalanceWithScaling(const TPersQueueReadBalancer& balancer, const TActorContext& ctx);
+        void Balance(const TActorContext& ctx);
         
         void LockPartition(const TActorId pipe, TSessionInfo& sessionInfo, ui32 partition, const TActorContext& ctx);
         void ReleasePartition(const TActorId pipe, TSessionInfo& sessionInfo, const ui32 group, const ui32 count, const TActorContext& ctx);
@@ -456,6 +456,12 @@ class TPersQueueReadBalancer : public TActor<TPersQueueReadBalancer>, public TTa
     struct TClientInfo {
         constexpr static ui32 MAIN_GROUP = 0;
 
+        TClientInfo(const TPersQueueReadBalancer& balancer)
+            : Balancer(balancer) {
+        }
+
+        const TPersQueueReadBalancer& Balancer;
+
         THashMap<ui32, TClientGroupInfo> ClientGroupsInfo; //map from group to info
         ui32 SessionsWithGroup = 0;
 
@@ -475,7 +481,11 @@ class TPersQueueReadBalancer : public TActor<TPersQueueReadBalancer>, public TTa
         void AddSession(const ui32 group, const THashMap<ui32, TPartitionInfo>& partitionsInfo,
                         const TActorId& sender, const NKikimrPQ::TRegisterReadSession& record);
 
+        bool ProccessReadingFinished(ui32 partitionId);
+
         TStringBuilder GetPrefix() const;
+
+        bool IsReadeable(ui32 partitionId);
     };
 
     THashMap<TString, TClientInfo> ClientsInfo; //map from userId -> to info

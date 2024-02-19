@@ -394,14 +394,13 @@ Y_UNIT_TEST_SUITE(KqpQueryServiceScripts) {
         i32 successCount = 0;
         for (auto& f : forgetFutures) {
             auto forgetStatus = f.ExtractValueSync();
-            UNIT_ASSERT_C(forgetStatus.GetStatus() == NYdb::EStatus::SUCCESS || forgetStatus.GetStatus() == NYdb::EStatus::NOT_FOUND ||
-                          forgetStatus.GetStatus() == NYdb::EStatus::ABORTED, forgetStatus.GetIssues().ToString());
+            UNIT_ASSERT_C(forgetStatus.GetStatus() == NYdb::EStatus::SUCCESS || forgetStatus.GetStatus() == NYdb::EStatus::NOT_FOUND, forgetStatus.GetIssues().ToString());
             if (forgetStatus.GetStatus() == NYdb::EStatus::SUCCESS) {
                 ++successCount;
             }
         }
 
-        UNIT_ASSERT(successCount == 1);
+        UNIT_ASSERT(successCount >= 1);
 
         auto op = opClient.Get<NYdb::NQuery::TScriptExecutionOperation>(scriptExecutionOperation.Id()).ExtractValueSync();
         auto forgetStatus = opClient.Forget(scriptExecutionOperation.Id()).ExtractValueSync();

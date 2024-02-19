@@ -97,7 +97,6 @@
   ```ini
   kcat -C \
       -b <ydb-endpoint> \
-      -k key \
       -X security.protocol=SASL_SSL \
       -X sasl.mechanism=PLAIN \
       -X sasl.username="<sasl.username>" \

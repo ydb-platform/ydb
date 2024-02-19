@@ -19,6 +19,7 @@ target_link_libraries(pgrun PUBLIC
   cpp-string_utils-base64
   contrib-libs-fmt
   library-cpp-yson
+  cpp-yson-node
   yql-sql-pg
   yql-core-facade
   yql-core-file_storage
@@ -37,6 +38,8 @@ target_link_libraries(pgrun PUBLIC
   providers-common-provider
   providers-common-udf_resolve
   providers-dq-provider
+  providers-yt-common
+  yt-lib-schema
   yt-gateway-file
   yt-comp_nodes-llvm14
   yt-codec-codegen

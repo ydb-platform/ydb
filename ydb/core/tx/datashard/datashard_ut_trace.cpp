@@ -44,7 +44,7 @@ Y_UNIT_TEST_SUITE(TDataShardTrace) {
                     return Nothing();
                 }
 
-                TMaybe<TString> GetPeerMetaValues(const TString&) const override {
+                const TMaybe<TString> GetPeerMetaValues(const TString&) const override {
                     return Nothing();
                 }
  
@@ -57,7 +57,7 @@ Y_UNIT_TEST_SUITE(TDataShardTrace) {
                     return empty;
                 }
 
-                TMaybe<NRpcService::TRlPath> GetRlPath const override {
+                TMaybe<NRpcService::TRlPath> GetRlPath() const override {
                     return Nothing();
                 }
 

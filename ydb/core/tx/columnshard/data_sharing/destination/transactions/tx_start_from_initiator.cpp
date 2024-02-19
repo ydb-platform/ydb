@@ -11,8 +11,10 @@ bool TTxStartFromInitiator::DoExecute(NTabletFlatExecutor::TTransactionContext& 
 }
 
 void TTxStartFromInitiator::DoComplete(const TActorContext& /*ctx*/) {
-    Session->Start(*Self);
-    Session->GetInitiatorController().StartSuccess(Session->GetSessionId());
+    AFL_VERIFY(Sessions->emplace(Session->GetSessionId(), Session).second);
+    if (Session->Start(*Self)) {
+        Session->GetInitiatorController().StartSuccess(Session->GetSessionId());
+    }
 }
 
 }

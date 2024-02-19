@@ -14,8 +14,8 @@ protected:
     virtual bool DoExecute(NTabletFlatExecutor::TTransactionContext& txc, const TActorContext& ctx) override;
     virtual void DoComplete(const TActorContext& ctx) override;
 public:
-    TTxWriteSourceCursor(NColumnShard::TColumnShard* self, const std::shared_ptr<TSourceSession>& session)
-        : TBase(self)
+    TTxWriteSourceCursor(NColumnShard::TColumnShard* self, const std::shared_ptr<TSourceSession>& session, const TString& info)
+        : TBase(self, info)
         , Session(session)
     {
     }

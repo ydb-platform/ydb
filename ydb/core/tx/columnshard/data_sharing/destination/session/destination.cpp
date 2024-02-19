@@ -69,7 +69,7 @@ void TDestinationSession::SendCurrentCursorAck(const NColumnShard::TColumnShard&
             for (auto&& i : PathIds) {
                 pathIdsBase.emplace(i.first);
             }
-            TSourceSession source(*this, cursor.GetTabletId(), pathIdsBase, (TTabletId)shard.TabletID());
+            TSourceSession source(GetSessionId(), TransferContext, cursor.GetTabletId(), pathIdsBase, (TTabletId)shard.TabletID());
             auto ev = std::make_unique<NEvents::TEvStartToSource>(source);
             NActors::TActivationContext::AsActorContext().Send(MakePipePeNodeCacheID(false),
                 new TEvPipeCache::TEvForward(ev.release(), (ui64)cursor.GetTabletId(), true), IEventHandle::FlagTrackDelivery, GetRuntimeId());

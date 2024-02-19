@@ -27,6 +27,7 @@ private:
     }
 
     YDB_READONLY_DEF(TString, SessionId);
+    const TString Info;
     YDB_READONLY(ui64, RuntimeId, GetNextRuntimeId());
     bool IsStartedFlag = false;
     bool IsStartingFlag = false;
@@ -38,10 +39,15 @@ protected:
 public:
     virtual ~TCommonSession() = default;
 
-    TCommonSession() = default;
+    TCommonSession(const TString& info)
+        : Info(info)
+    {
 
-    TCommonSession(const TString& sessionId, const TTransferContext& transferContext)
+    }
+
+    TCommonSession(const TString& sessionId, const TString& info, const TTransferContext& transferContext)
         : SessionId(sessionId)
+        , Info(info)
         , TransferContext(transferContext) {
     }
 

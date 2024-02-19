@@ -25,13 +25,14 @@ protected:
     }
 public:
     TSourceSession(const TTabletId selfTabletId)
-        : SelfTabletId(selfTabletId)
+        : TBase("source_proto")
+        , SelfTabletId(selfTabletId)
     {
 
     }
 
-    TSourceSession(const TCommonSession& baseSession, const TTabletId selfTabletId, const std::set<ui64>& pathIds, const TTabletId destTabletId)
-        : TBase(baseSession)
+    TSourceSession(const TString& sessionId, const TTransferContext& transfer, const TTabletId selfTabletId, const std::set<ui64>& pathIds, const TTabletId destTabletId)
+        : TBase(sessionId, "source_base", transfer)
         , SelfTabletId(selfTabletId)
         , PathIds(pathIds)
         , DestinationTabletId(destTabletId)

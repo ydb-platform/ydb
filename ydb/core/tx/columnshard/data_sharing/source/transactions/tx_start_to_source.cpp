@@ -12,6 +12,8 @@ bool TTxStartToSource::DoExecute(NTabletFlatExecutor::TTransactionContext& txc, 
 }
 
 void TTxStartToSource::DoComplete(const TActorContext& /*ctx*/) {
+    AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("info", "TTxStartToSource::Complete");
+    AFL_VERIFY(Sessions->emplace(Session->GetSessionId(), Session).second);
     Session->Start(*Self);
 }
 

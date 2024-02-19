@@ -93,14 +93,18 @@ public:
     }
 
     TDestinationSession(const TInitiatorControllerContainer& controller, const TPathIdsRemapper& remapper, const TString& sessionId, const TTransferContext& context)
-        : TBase(sessionId, context)
+        : TBase(sessionId, "destination_base", context)
         , InitiatorController(controller)
         , PathIds(remapper)
     {
 
     }
 
-    TDestinationSession() = default;
+    TDestinationSession()
+        : TBase("dest_proto")
+    {
+
+    }
 
     [[nodiscard]] TConclusionStatus DataReceived(THashMap<ui64, NEvents::TPathIdData>&& data, TColumnEngineForLogs& index, const std::shared_ptr<IStoragesManager>& manager);
 

@@ -9,13 +9,15 @@ class TTxStartToSource: public TExtendedTransactionBase<NColumnShard::TColumnSha
 private:
     using TBase = TExtendedTransactionBase<NColumnShard::TColumnShard>;
     std::shared_ptr<TSourceSession> Session;
+    THashMap<TString, std::shared_ptr<TSourceSession>>* Sessions;
 protected:
     virtual bool DoExecute(NTabletFlatExecutor::TTransactionContext& txc, const TActorContext& ctx) override;
     virtual void DoComplete(const TActorContext& ctx) override;
 public:
-    TTxStartToSource(NColumnShard::TColumnShard* self, const std::shared_ptr<TSourceSession>& session)
-        : TBase(self)
+    TTxStartToSource(NColumnShard::TColumnShard* self, const std::shared_ptr<TSourceSession>& session, THashMap<TString, std::shared_ptr<TSourceSession>>& sessions, const TString& info)
+        : TBase(self, info)
         , Session(session)
+        , Sessions(&sessions)
     {
     }
 

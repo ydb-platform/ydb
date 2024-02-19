@@ -13,6 +13,8 @@ TString TCommonSession::DebugString() const {
 }
 
 bool TCommonSession::Start(const NColumnShard::TColumnShard& shard) {
+    const NActors::TLogContextGuard lGuard = NActors::TLogContextBuilder::Build()("info", Info);
+    AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("info", "Start");
     AFL_VERIFY(!IsStartingFlag);
     IsStartingFlag = true;
     AFL_VERIFY(!IsStartedFlag);

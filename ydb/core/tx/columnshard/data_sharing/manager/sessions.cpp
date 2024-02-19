@@ -99,14 +99,12 @@ bool TSessionsManager::Load(NTable::TDatabase& database, const TColumnEngineForL
 
 std::unique_ptr<NTabletFlatExecutor::ITransaction> TSessionsManager::InitializeDestSession(NColumnShard::TColumnShard* self, const std::shared_ptr<TDestinationSession>& session) {
     AFL_VERIFY(session);
-    AFL_VERIFY(DestSessions.emplace(session->GetSessionId(), session).second);
-    return std::make_unique<TTxStartFromInitiator>(self, session);
+    return std::make_unique<TTxStartFromInitiator>(self, session, DestSessions, "tx_start_from_initiator");
 }
 
 std::unique_ptr<NTabletFlatExecutor::ITransaction> TSessionsManager::InitializeSourceSession(NColumnShard::TColumnShard* self, const std::shared_ptr<TSourceSession>& session) {
     AFL_VERIFY(session);
-    AFL_VERIFY(SourceSessions.emplace(session->GetSessionId(), session).second);
-    return std::make_unique<TTxStartToSource>(self, session);
+    return std::make_unique<TTxStartToSource>(self, session, SourceSessions, "tx_start_to_source");
 }
 
 }

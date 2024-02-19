@@ -289,7 +289,7 @@ namespace NWilson {
                     .Reader = std::move(reader),
                 };
                 uploadData->Reader->Finish(&uploadData->Response, &uploadData->Status, uploadData);
-                ALOG_TRACE(WILSON_SERVICE_ID, "starting upload request " << (void*)uploadData);
+                ALOG_TRACE(WILSON_SERVICE_ID, "started export request " << (void*)uploadData);
                 ExportRequests.PushBack(uploadData);
             }
 

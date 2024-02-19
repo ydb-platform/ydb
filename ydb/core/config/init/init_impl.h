@@ -207,13 +207,13 @@ struct TConfigFields {
     ui32 NodeBrokerPort = 0;
     bool NodeBrokerUseTls = false;
     bool FixedNodeID = false;
+    ui32 InterconnectPort = 0;
     bool IgnoreCmsConfigs = false;
     bool TinyMode = false;
     TString NodeAddress;
     TString NodeHost;
     TString NodeResolveHost;
     TString NodeDomain;
-    ui32 InterconnectPort = 0;
     ui32 SqsHttpPort = 0;
     TString NodeKind = TString(NODE_KIND_YDB);
     TMaybe<TString> NodeType;
@@ -804,7 +804,13 @@ struct TMbusConfigFields {
 
 // =====
 
-NClient::TKikimr GetKikimr(const NConfig::TConfigFields& cf, const TString& addr, IEnv& env) {
+struct TNodeRegistrationGrpcSettings {
+    TString PathToGrpcCertFile;
+    TString PathToGrpcCaFile;
+    TString PathToGrpcPrivateKeyFile;
+};
+
+NClient::TKikimr GetKikimr(const TNodeRegistrationGrpcSettings& cf, const TString& addr, const IEnv& env) {
     TCommandConfig::TServerEndpoint endpoint = TCommandConfig::ParseServerAddress(addr);
     NYdbGrpc::TGRpcClientConfig grpcConfig(endpoint.Address, TDuration::Seconds(5));
     grpcConfig.LoadBalancingPolicy = "round_robin";
@@ -823,27 +829,22 @@ NClient::TKikimr GetKikimr(const NConfig::TConfigFields& cf, const TString& addr
 }
 
 struct TNodeRegistrationSettings {
-    const TString &addr;
     const TString &domainName;
     const TString &nodeHost;
     const TString &nodeAddress;
     const TString &nodeResolveHost;
     const TMaybe<TString>& path;
-};
-
-struct TNodeRegistrationGrpcSettings {
-    TString PathToGrpcCertFile;
-    TString PathToGrpcCaFile;
-    TString PathToGrpcPrivateKeyFile;
+    bool FixedNodeID = false;
+    ui32 InterconnectPort = 0;
 };
 
 NYdb::NDiscovery::TNodeRegistrationResult TryToRegisterDynamicNodeViaDiscoveryService(
         const TNodeRegistrationGrpcSettings& gs,
-        const TNodeRegistrationSettings& rs,
+        const TString addr,
         const NYdb::NDiscovery::TNodeRegistrationSettings& nrs,
         const IEnv& env)
 {
-    TCommandConfig::TServerEndpoint endpoint = TCommandConfig::ParseServerAddress(rs.addr);
+    TCommandConfig::TServerEndpoint endpoint = TCommandConfig::ParseServerAddress(addr);
     NYdb::TDriverConfig config;
     if (endpoint.EnableSsl.Defined()) {
         if (gs.PathToGrpcCaFile) {
@@ -862,6 +863,65 @@ NYdb::NDiscovery::TNodeRegistrationResult TryToRegisterDynamicNodeViaDiscoverySe
     auto client = NYdb::NDiscovery::TDiscoveryClient(connection);
     NYdb::NDiscovery::TNodeRegistrationResult result = client.NodeRegistration(nrs).GetValueSync();
     connection.Stop(true);
+    return result;
+}
+
+THolder<NClient::TRegistrationResult> TryToRegisterDynamicNodeViaLegacyService(
+        const TNodeRegistrationGrpcSettings& rgs,
+        NActors::TNodeLocation loc,
+        const TString& addr,
+        const TNodeRegistrationSettings& rs,
+        const IEnv& env)
+{
+    NClient::TKikimr kikimr(GetKikimr(rgs, addr, env));
+    auto registrant = kikimr.GetNodeRegistrant();
+
+    return MakeHolder<NClient::TRegistrationResult>(
+        registrant.SyncRegisterNode(
+            ToString(rs.domainName),
+            rs.nodeHost,
+            rs.InterconnectPort,
+            rs.nodeAddress,
+            rs.nodeResolveHost,
+            loc,
+            rs.FixedNodeID,
+            rs.path));
+}
+
+THolder<NClient::TRegistrationResult> RegisterDynamicNodeViaLegacyService(
+    const TNodeRegistrationGrpcSettings& gs,
+    NActors::TNodeLocation loc,
+    const TVector<TString>& addrs,
+    const TNodeRegistrationSettings& rs,
+    const IEnv& env)
+{
+    THolder<NClient::TRegistrationResult> result;
+    while (!result || !result->IsSuccess()) {
+        for (const auto& addr : addrs) {
+            result = TryToRegisterDynamicNodeViaLegacyService(
+                gs,
+                loc,
+                addr,
+                rs,
+                env);
+            if (result->IsSuccess()) {
+                Cout << "Success. Registered via legacy service as " << result->GetNodeId() << Endl;
+                break;
+            }
+            Cerr << "Registration error: " << result->GetErrorMessage() << Endl;
+        }
+        if (!result || !result->IsSuccess()) {
+            env.Sleep(TDuration::Seconds(1));
+        }
+    }
+    if (!result) {
+        ythrow yexception() << "Invalid result";
+    }
+
+    if (!result->IsSuccess()) {
+        ythrow yexception() << "Cannot register dynamic node: " << result->GetErrorMessage();
+    }
+
     return result;
 }
 
@@ -1124,35 +1184,11 @@ public:
         return "";
     }
 
-    THolder<NClient::TRegistrationResult> TryToRegisterDynamicNodeViaLegacyService(
-            const NConfig::TConfigFields& cf,
-            const TString &addr,
-            const TString &domainName,
-            const TString &nodeHost,
-            const TString &nodeAddress,
-            const TString &nodeResolveHost,
-            const TMaybe<TString>& path)
-    {
-        NClient::TKikimr kikimr(GetKikimr(cf, addr, Env));
-        auto registrant = kikimr.GetNodeRegistrant();
-
-        auto loc = cf.CreateNodeLocation();
-
-        return MakeHolder<NClient::TRegistrationResult>
-            (registrant.SyncRegisterNode(ToString(domainName),
-                                         nodeHost,
-                                         cf.InterconnectPort,
-                                         nodeAddress,
-                                         nodeResolveHost,
-                                         std::move(loc),
-                                         cf.FixedNodeID,
-                                         path));
-    }
-
     NYdb::NDiscovery::TNodeRegistrationResult RegisterDynamicNodeViaDiscoveryService(
         const NConfig::TConfigFields& cf,
         const TVector<TString>& addrs,
-        const TString& domainName)
+        const TString& domainName,
+        const IEnv& env) const
     {
         NYdb::NDiscovery::TNodeRegistrationResult result;
         const size_t maxNumberReceivedCallUnimplemented = 5;
@@ -1166,16 +1202,9 @@ public:
                         cf.PathToGrpcCaFile,
                         cf.PathToGrpcPrivateKeyFile,
                     },
-                    {
-                        addr,
-                        domainName,
-                        cf.NodeHost,
-                        cf.NodeAddress,
-                        cf.NodeResolveHost,
-                        cf.GetSchemePath(),
-                    },
+                    addr,
                     nrs,
-                    Env);
+                    env);
                 if (result.IsSuccess()) {
                     Cout << "Success. Registered via discovery service as " << result.GetNodeId() << Endl;
                     break;
@@ -1183,7 +1212,7 @@ public:
                 Cerr << "Registration error: " << static_cast<NYdb::TStatus>(result) << Endl;
             }
             if (!result.IsSuccess()) {
-                Env.Sleep(TDuration::Seconds(1));
+                env.Sleep(TDuration::Seconds(1));
                 if (result.GetStatus() == NYdb::EStatus::CLIENT_CALL_UNIMPLEMENTED) {
                     currentNumberReceivedCallUnimplemented++;
                 }
@@ -1254,43 +1283,6 @@ public:
         std::visit([this](const auto& res){ ProcessRegistrationDynamicNodeResult(res); }, result);
     }
 
-    THolder<NClient::TRegistrationResult> RegisterDynamicNodeViaLegacyService(
-        const NConfig::TConfigFields& cf,
-        const TVector<TString>& addrs,
-        const TString& domainName)
-    {
-        THolder<NClient::TRegistrationResult> result;
-        while (!result || !result->IsSuccess()) {
-            for (const auto& addr : addrs) {
-                result = TryToRegisterDynamicNodeViaLegacyService(
-                    cf,
-                    addr,
-                    domainName,
-                    cf.NodeHost,
-                    cf.NodeAddress,
-                    cf.NodeResolveHost,
-                    cf.GetSchemePath());
-                if (result->IsSuccess()) {
-                    Cout << "Success. Registered via legacy service as " << result->GetNodeId() << Endl;
-                    break;
-                }
-                Cerr << "Registration error: " << result->GetErrorMessage() << Endl;
-            }
-            if (!result || !result->IsSuccess()) {
-                Env.Sleep(TDuration::Seconds(1));
-            }
-        }
-        if (!result) {
-            ythrow yexception() << "Invalid result";
-        }
-
-        if (!result->IsSuccess()) {
-            ythrow yexception() << "Cannot register dynamic node: " << result->GetErrorMessage();
-        }
-
-        return result;
-    }
-
     void RegisterDynamicNode(NConfig::TConfigFields& cf) {
         TVector<TString> addrs;
 
@@ -1314,9 +1306,32 @@ public:
             cf.NodeResolveHost = cf.NodeHost;
         }
 
-        std::variant<NYdb::NDiscovery::TNodeRegistrationResult, THolder<NClient::TRegistrationResult>> result = RegisterDynamicNodeViaDiscoveryService(cf, addrs, domainName);
+        const TNodeRegistrationSettings rs {
+            domainName,
+            cf.NodeHost,
+            cf.NodeAddress,
+            cf.NodeResolveHost,
+            cf.GetSchemePath(),
+            cf.FixedNodeID,
+            cf.InterconnectPort,
+        };
+
+        const TNodeRegistrationGrpcSettings rgs {
+            cf.PathToGrpcCertFile,
+            cf.PathToGrpcCaFile,
+            cf.PathToGrpcPrivateKeyFile,
+        };
+
+        std::variant<
+            NYdb::NDiscovery::TNodeRegistrationResult,
+            THolder<NClient::TRegistrationResult>> result = RegisterDynamicNodeViaDiscoveryService(
+                cf,
+                addrs,
+                domainName,
+                Env);
+
         if (!std::get<NYdb::NDiscovery::TNodeRegistrationResult>(result).IsSuccess()) {
-            result = RegisterDynamicNodeViaLegacyService(cf, addrs, domainName);
+            result = RegisterDynamicNodeViaLegacyService(rgs, cf.CreateNodeLocation(), addrs, rs, Env);
         }
 
         return ProcessRegistrationDynamicNodeResult(result);
@@ -1336,8 +1351,20 @@ public:
         }
     }
 
-    bool TryToLoadConfigForDynamicNodeFromCMS(const NConfig::TConfigFields& cf, const TString &addr, TMaybe<NKikimr::NClient::TConfigurationResult>& res, TString &error) const {
-        NClient::TKikimr kikimr(GetKikimr(cf, addr, Env));
+    bool TryToLoadConfigForDynamicNodeFromCMS(
+        const NConfig::TConfigFields& cf,
+        const TString &addr,
+        TMaybe<NKikimr::NClient::TConfigurationResult>& res,
+        TString &error) const
+    {
+        NClient::TKikimr kikimr(GetKikimr(
+                    {
+                        cf.PathToGrpcCertFile,
+                        cf.PathToGrpcCaFile,
+                        cf.PathToGrpcPrivateKeyFile,
+                    },
+                    addr,
+                    Env));
         auto configurator = kikimr.GetNodeConfigurator();
 
         Cout << "Trying to get configs from " << addr << Endl;
@@ -1364,7 +1391,8 @@ public:
         return true;
     }
 
-    void LoadConfigForDynamicNode(const NConfig::TConfigFields& cf, TMaybe<NKikimr::NClient::TConfigurationResult>& res) const {
+     TMaybe<NKikimr::NClient::TConfigurationResult> LoadConfigForDynamicNode(const NConfig::TConfigFields& cf) const {
+        TMaybe<NKikimr::NClient::TConfigurationResult> res;
         bool success = false;
         TString error;
         TVector<TString> addrs;
@@ -1391,6 +1419,8 @@ public:
         if (!success) {
             Cerr << "WARNING: couldn't load config from CMS: " << error << Endl;
         }
+
+        return res;
     }
 
     void InitStaticNode() {
@@ -1458,8 +1488,7 @@ public:
             return;
         }
 
-        TMaybe<NKikimr::NClient::TConfigurationResult> result;
-        LoadConfigForDynamicNode(ConfigFields, result);
+        TMaybe<NKikimr::NClient::TConfigurationResult> result = LoadConfigForDynamicNode(ConfigFields);
 
         if (!result) {
             return;

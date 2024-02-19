@@ -302,50 +302,6 @@ CONTEXT:  JSON data, line 1: {"abc":1,3...
         	SELECT '{"abc":1,3}'::json;		-- ERROR, no value
 	^
 <sql-statement>
--- Recursion.
-SET max_stack_depth = '100kB';
-</sql-statement>
--stdin-:<main>: Error: Parse Sql
-
-    -stdin-:<main>:1:1: Error: VariableSetStmt, not supported name: max_stack_depth
-    	-- Recursion.
-	^
-<sql-statement>
-SELECT repeat('[', 10000)::json;
-</sql-statement>
--stdin-:<main>: Fatal: Execution
-
-    -stdin-:<main>:1:1: Fatal: Execution of node: Result
-    	SELECT repeat('[', 10000)::json;
-	^
-        -stdin-:<main>:1:1: Fatal: ERROR:  invalid input syntax for type json
-DETAIL:  The input string ended unexpectedly.
-CONTEXT:  JSON data, line 1: ...[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[
-
-        	SELECT repeat('[', 10000)::json;
-	^
-<sql-statement>
-SELECT repeat('{"a":', 10000)::json;
-</sql-statement>
--stdin-:<main>: Fatal: Execution
-
-    -stdin-:<main>:1:1: Fatal: Execution of node: Result
-    	SELECT repeat('{"a":', 10000)::json;
-	^
-        -stdin-:<main>:1:1: Fatal: ERROR:  stack depth limit exceeded
-HINT:  Increase the configuration parameter "max_stack_depth" (currently 100kB), after ensuring the platform's stack depth limit is adequate.
-
-        	SELECT repeat('{"a":', 10000)::json;
-	^
-<sql-statement>
-RESET max_stack_depth;
-</sql-statement>
--stdin-:<main>: Error: Parse Sql
-
-    -stdin-:<main>:1:1: Error: VariableSetStmt, not supported kind: 4
-    	RESET max_stack_depth;
-	^
-<sql-statement>
 -- Miscellaneous stuff.
 SELECT 'true'::json;			-- OK
 </sql-statement>
@@ -3480,15 +3436,6 @@ FROM foo;
 <sql-statement>
 SELECT json_object_agg(name, type) FROM foo;
 </sql-statement>
--stdin-:<main>: Fatal: Execution
-
-    -stdin-:<main>:1:1: Fatal: Execution of node: YtMapReduce!
-    	SELECT json_object_agg(name, type) FROM foo;
-	^
-        -stdin-:<main>:1:1: Fatal: ERROR:  field name must not be null
-
-        	SELECT json_object_agg(name, type) FROM foo;
-	^
 <sql-statement>
 INSERT INTO foo VALUES (999999, NULL, 'bar');
 </sql-statement>

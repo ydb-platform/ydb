@@ -9,7 +9,7 @@
 
 В примерах используются:
 
- * `<endpoint>` — эндпоинт.
+ * `<ydb-endpoint>` — эндпоинт.
  * `<db-path>` — [путь базы данных](../../concepts/connect#database).
  * `<topic-name>` — имя топика. Допускается указывать как полное имя (вместе с путем базы данных), так и только имя топика.
  * `<user>` — имя пользователя. Об управлении ролями и пользователями читайте в [Управление доступом](../../cluster/access.md).
@@ -22,7 +22,7 @@
 - kcat
   ```bash
   echo "test message" | kcat -P \
-    -b <ydb-kafka-endpoint> \
+    -b <ydb-endpoint> \
     -t <topic-name> \
     -k key \
     -X security.protocol=SASL_SSL \
@@ -33,7 +33,7 @@
 
 - Java
   ```java
-  String HOST = "<ydb-kafka-endpoint>";
+  String HOST = "<ydb-endpoint>";
   String TOPIC = "<topic-name>";
   String USER = "<user>@<db-path";
   String PASS = "<user-pass>";
@@ -65,7 +65,7 @@
     kafka {
       codec => json
       topic_id => "<topic-name>"
-      bootstrap_servers => "<ydb-kafka-endpoint>"
+      bootstrap_servers => "<ydb-endpoint>"
       compression_type => none
       security_protocol => SASL_SSL
       sasl_mechanism => PLAIN
@@ -80,7 +80,7 @@
   [OUTPUT]
     name                          kafka
     match                         *
-    Brokers                       <ydb-kafka-endpoint>
+    Brokers                       <ydb-endpoint>
     Topics                        <topic-name>
     rdkafka.client.id             Fluent-bit
     rdkafka.request.required.acks 1
@@ -97,7 +97,7 @@
 - kcat
   ```bash
   kcat -C \
-      -b <ydb-kafka-endpoint> \
+      -b <ydb-endpoint> \
       -k key \
       -X security.protocol=SASL_SSL \
       -X sasl.mechanism=PLAIN \
@@ -109,7 +109,7 @@
 
 - Java
   ```java
-  String HOST = "<ydb-kafka-endpoint>";
+  String HOST = "<ydb-endpoint>";
   String TOPIC = "<topic-name>";
   String USER = "<user>@<db-path>";
   String PASS = "<user-pass>";

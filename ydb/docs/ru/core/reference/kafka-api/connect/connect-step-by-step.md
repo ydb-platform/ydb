@@ -27,7 +27,7 @@
 
     ```ini
     # Main properties
-    bootstrap.servers=ydb:9093
+    bootstrap.servers=<ydb-endpoint>
 
     # AdminAPI properties
     sasl.mechanism=PLAIN

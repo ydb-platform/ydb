@@ -1,4 +1,4 @@
-# Примеры файлов настройки коннекторов
+# Примеры настройки коннекторов
 В разделе приведены примеры файлов настройки коннекторов Kafka Connect для работы с YDB по протоколу Kafka.
 
 ## Из файла в YDB
@@ -57,7 +57,7 @@ validate.non.null=false
 ```ini
 name=s3-sink
 connector.class=io.aiven.kafka.connect.s3.AivenKafkaConnectS3SinkConnector
-topics=Topic-1
+topics=<topic-name>
 aws.access.key.id=<s3-access-key>
 aws.secret.access.key=<s3-secret>
 aws.s3.bucket.name=<bucket-name>

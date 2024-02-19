@@ -1,7 +1,6 @@
 #pragma once
 
 #include <ydb/core/tx/columnshard/blobs_action/abstract/storage.h>
-#include <ydb/core/tx/columnshard/blob_manager.h>
 #include <ydb/core/tx/columnshard/blob_cache.h>
 
 namespace NKikimr::NOlap {
@@ -23,7 +22,7 @@ public:
         }
     }
 
-    void DeclareDataForRemove(const TUnifiedBlobId& id) {
+    void DeclareDataForRemove(const TTabletId /*tabletId*/, const TUnifiedBlobId& id) {
         TGuard<TMutex> g(Mutex);
         DataForRemove.emplace(id);
     }
@@ -60,7 +59,7 @@ protected:
         Storage->CommitWriting(blobId);
     }
 
-    virtual void DoOnExecuteTxBeforeWrite(NColumnShard::TColumnShard& /*self*/, NColumnShard::TBlobManagerDb& /*dbBlobs*/) override {
+    virtual void DoOnExecuteTxBeforeWrite(NColumnShard::TColumnShard& /*self*/, TBlobManagerDb& /*dbBlobs*/) override {
         return;
     }
 
@@ -68,7 +67,7 @@ protected:
         return;
     }
 
-    virtual void DoOnExecuteTxAfterWrite(NColumnShard::TColumnShard& /*self*/, NColumnShard::TBlobManagerDb& /*dbBlobs*/, const bool /*blobsWroteSuccessfully*/) override {
+    virtual void DoOnExecuteTxAfterWrite(NColumnShard::TColumnShard& /*self*/, TBlobManagerDb& /*dbBlobs*/, const bool /*blobsWroteSuccessfully*/) override {
 
     }
     virtual void DoOnCompleteTxAfterWrite(NColumnShard::TColumnShard& /*self*/, const bool /*blobsWroteSuccessfully*/) override {
@@ -97,13 +96,13 @@ private:
     using TBase = IBlobsDeclareRemovingAction;
     const std::shared_ptr<TMemoryStorage> Storage;
 protected:
-    virtual void DoDeclareRemove(const TUnifiedBlobId& /*blobId*/) {
+    virtual void DoDeclareRemove(const TTabletId /*tabletId*/, const TUnifiedBlobId& /*blobId*/) {
 
     }
 
-    virtual void DoOnExecuteTxAfterRemoving(NColumnShard::TColumnShard& /*self*/, NColumnShard::TBlobManagerDb& /*dbBlobs*/, const bool /*blobsWroteSuccessfully*/) {
-        for (auto&& i : GetDeclaredBlobs()) {
-            Storage->DeclareDataForRemove(i);
+    virtual void DoOnExecuteTxAfterRemoving(NColumnShard::TColumnShard& /*self*/, TBlobManagerDb& /*dbBlobs*/, const bool /*blobsWroteSuccessfully*/) {
+        for (auto i = GetDeclaredBlobs().GetIterator(); i.IsValid(); ++i) {
+            Storage->DeclareDataForRemove(i.GetTabletId(), i.GetBlobId());
         }
     }
     virtual void DoOnCompleteTxAfterRemoving(NColumnShard::TColumnShard& /*self*/, const bool /*blobsWroteSuccessfully*/) {
@@ -111,8 +110,8 @@ protected:
     }
 public:
 
-    TMemoryDeclareRemovingAction(const TString& storageId, const std::shared_ptr<TMemoryStorage>& storage)
-        : TBase(storageId)
+    TMemoryDeclareRemovingAction(const TString& storageId, const TTabletId tabletId, const std::shared_ptr<NBlobOperations::TRemoveDeclareCounters>& counters, const std::shared_ptr<TMemoryStorage>& storage)
+        : TBase(storageId, tabletId, counters)
         , Storage(storage) {
 
     }
@@ -153,8 +152,8 @@ private:
     using TBase = IBlobsStorageOperator;
     std::shared_ptr<TMemoryStorage> Storage;
 protected:
-    virtual std::shared_ptr<IBlobsDeclareRemovingAction> DoStartDeclareRemovingAction() override {
-        return std::make_shared<TMemoryDeclareRemovingAction>(GetStorageId(), Storage);
+    virtual std::shared_ptr<IBlobsDeclareRemovingAction> DoStartDeclareRemovingAction(const std::shared_ptr<NBlobOperations::TRemoveDeclareCounters>& counters) override {
+        return std::make_shared<TMemoryDeclareRemovingAction>(GetStorageId(), GetSelfTabletId(), counters, Storage);
     }
     virtual std::shared_ptr<IBlobsWritingAction> DoStartWritingAction() override {
         return std::make_shared<TMemoryWriteAction>(GetStorageId(), Storage);
@@ -163,8 +162,8 @@ protected:
         return std::make_shared<TMemoryReadingAction>(GetStorageId(), Storage);
     }
 public:
-    TMemoryOperator(const TString& storageId)
-        : TBase(storageId)
+    TMemoryOperator(const TString& storageId, const std::shared_ptr<NDataSharing::TStorageSharedBlobsManager>& sharedBlobs)
+        : TBase(storageId, sharedBlobs)
     {
         Storage = std::make_shared<TMemoryStorage>();
     }

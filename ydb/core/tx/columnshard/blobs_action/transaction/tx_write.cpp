@@ -66,7 +66,7 @@ bool TTxWrite::Execute(TTransactionContext& txc, const TActorContext&) {
         }
     }
 
-    TBlobManagerDb blobManagerDb(txc.DB);
+    NOlap::TBlobManagerDb blobManagerDb(txc.DB);
     AFL_VERIFY(buffer.GetAddActions().size() == 1);
     for (auto&& i : buffer.GetAddActions()) {
         i->OnExecuteTxAfterWrite(*Self, blobManagerDb, true);

@@ -177,5 +177,15 @@ enum ETxTypes {
     TXTYPE_WRITE_DRAFT = 15                                 [(TxTypeOpts) = {Name: "TxWriteDraft"}];
     TXTYPE_CLEANUP_INSERT_TABLE = 16                        [(TxTypeOpts) = {Name: "TxInsertTableCleanup"}];
     TXTYPE_GC_FINISHED = 17                                 [(TxTypeOpts) = {Name: "TxGarbageCollectionFinished"}];
-	
+    TXTYPE_DELETE_SHARED_BLOBS = 18                         [(TxTypeOpts) = {Name: "TxDeleteSharedBlobs"}];
+    TXTYPE_DATA_SHARING_FINISH_ACK_TO_SOURCE = 19           [(TxTypeOpts) = {Name: "TxDataSharingFinishAckToSource"}];
+    TXTYPE_DATA_SHARING_START_TO_SOURCE = 20                [(TxTypeOpts) = {Name: "TxDataSharingStartToSource"}];
+    TXTYPE_DATA_SHARING_DATA_ACK_TO_SOURCE = 21             [(TxTypeOpts) = {Name: "TxDataSharingDataAckToSource"}];
+    TXTYPE_DATA_SHARING_DATA_FROM_SOURCE = 22               [(TxTypeOpts) = {Name: "TxDataSharingDataFromSource"}];
+    TXTYPE_DATA_SHARING_FINISH_ACK_FROM_INITIATOR = 23      [(TxTypeOpts) = {Name: "TxDataSharingFinishAckFromInitiator"}];
+    TXTYPE_DATA_SHARING_FINISH_FROM_SOURCE = 24             [(TxTypeOpts) = {Name: "TxDataSharingFinishFromSource"}];
+    TXTYPE_DATA_SHARING_PROPOSE_FROM_INITIATOR = 25         [(TxTypeOpts) = {Name: "TxDataSharingProposeFromInitiator"}];
+    TXTYPE_DATA_SHARING_CONFIRM_FROM_INITIATOR = 26         [(TxTypeOpts) = {Name: "TxDataSharingConfirmFromInitiator"}];
+    TXTYPE_DATA_SHARING_APPLY_LINKS_MODIFICATION = 27       [(TxTypeOpts) = {Name: "TxDataSharingApplyLinksModification"}];
+    TXTYPE_DATA_SHARING_WRITE_SOURCE_CURSOR = 28            [(TxTypeOpts) = {Name: "TxDataSharingWriteSourceCursor"}];
 }

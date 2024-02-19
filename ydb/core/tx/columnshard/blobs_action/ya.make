@@ -14,6 +14,8 @@ PEERDIR(
     ydb/core/tx/columnshard/blobs_action/bs
     ydb/core/tx/columnshard/blobs_action/counters
     ydb/core/tx/columnshard/blobs_action/transaction
+    ydb/core/tx/columnshard/blobs_action/events
+    ydb/core/tx/columnshard/blobs_action/protos
 )
 
 IF (OS_WINDOWS)

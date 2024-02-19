@@ -39,16 +39,23 @@ struct Schema : NIceDb::Schema {
         CountersTableId,
         OperationsTableId,
         IndexesTableId,
+
         LocksTableId,
         LockRangesTableId,
         LockConflictsTableId,
-        LockVolatileDependenciesTableId
+        LockVolatileDependenciesTableId,
+
+        SharedBlobIdsTableId,
+        BorrowedBlobIdsTableId,
+        SourceSessionsTableId,
+        DestinationSessionsTableId
     };
 
     enum class ETierTables: ui32 {
         TierBlobsDraft = 1024,
         TierBlobsToKeep,
-        TierBlobsToDelete
+        TierBlobsToDelete,
+        TierBlobsToDeleteWT
     };
 
     enum class EValueIds : ui32 {
@@ -74,9 +81,26 @@ struct Schema : NIceDb::Schema {
         Aborted = 2,
     };
 
+    enum class ECommonTables {
+        Value = 1,
+        TxInfo = 2,
+        SchemaPresetInfo = 3,
+        TtlSettingsPresetInfo = 4,
+        TableInfo = 5,
+        LongTxWrites = 6,
+        BlobsToKeep = 7,
+        BlobsToDelete = 8,
+        SchemaPresetVersionInfo = 9,
+        TtlSettingsPresetVersionInfo = 10,
+        TableVersionInfo = 11,
+        SmallBlobs = 12,
+        OneToOneEvictedBlobs = 13,
+        BlobsToDeleteWT = 14
+    };
+
     // Tablet tables
 
-    struct Value : Table<1> {
+    struct Value : Table<(ui32)ECommonTables::Value> {
         struct Id : Column<1, NScheme::NTypeIds::Uint32> {}; // one of EValueIds
         struct Digit : Column<2, NScheme::NTypeIds::Uint64> {};
         struct Bytes : Column<3, NScheme::NTypeIds::String> {};
@@ -85,7 +109,7 @@ struct Schema : NIceDb::Schema {
         using TColumns = TableColumns<Id, Digit, Bytes>;
     };
 
-    struct TxInfo : Table<2> {
+    struct TxInfo : Table<(ui32)ECommonTables::TxInfo> {
         struct TxId : Column<1, NScheme::NTypeIds::Uint64> {};
         struct TxKind : Column<2, NScheme::NTypeIds::Uint32> { using Type = NKikimrTxColumnShard::ETransactionKind; };
         struct TxBody : Column<3, NScheme::NTypeIds::String> {};
@@ -98,7 +122,7 @@ struct Schema : NIceDb::Schema {
         using TColumns = TableColumns<TxId, TxKind, TxBody, MaxStep, PlanStep, Source, Cookie>;
     };
 
-    struct SchemaPresetInfo : Table<3> {
+    struct SchemaPresetInfo : Table<(ui32)ECommonTables::SchemaPresetInfo> {
         struct Id : Column<1, NScheme::NTypeIds::Uint32> {};
         struct Name : Column<2, NScheme::NTypeIds::Utf8> {};
         struct DropStep : Column<3, NScheme::NTypeIds::Uint64> {};
@@ -108,7 +132,7 @@ struct Schema : NIceDb::Schema {
         using TColumns = TableColumns<Id, Name, DropStep, DropTxId>;
     };
 
-    struct SchemaPresetVersionInfo : Table<9> {
+    struct SchemaPresetVersionInfo : Table<(ui32)ECommonTables::SchemaPresetVersionInfo> {
         struct Id : Column<1, NScheme::NTypeIds::Uint32> {};
         struct SinceStep : Column<2, NScheme::NTypeIds::Uint64> {};
         struct SinceTxId : Column<3, NScheme::NTypeIds::Uint64> {};
@@ -118,7 +142,7 @@ struct Schema : NIceDb::Schema {
         using TColumns = TableColumns<Id, SinceStep, SinceTxId, InfoProto>;
     };
 
-    struct TtlSettingsPresetInfo : Table<4> {
+    struct TtlSettingsPresetInfo : Table<(ui32)ECommonTables::TtlSettingsPresetInfo> {
         struct Id : Column<1, NScheme::NTypeIds::Uint32> {};
         struct Name : Column<2, NScheme::NTypeIds::Utf8> {};
         struct DropStep : Column<3, NScheme::NTypeIds::Uint64> {};
@@ -128,7 +152,7 @@ struct Schema : NIceDb::Schema {
         using TColumns = TableColumns<Id, Name, DropStep, DropTxId>;
     };
 
-    struct TtlSettingsPresetVersionInfo : Table<10> {
+    struct TtlSettingsPresetVersionInfo : Table<(ui32)ECommonTables::TtlSettingsPresetVersionInfo> {
         struct Id : Column<1, NScheme::NTypeIds::Uint32> {};
         struct SinceStep : Column<2, NScheme::NTypeIds::Uint64> {};
         struct SinceTxId : Column<3, NScheme::NTypeIds::Uint64> {};
@@ -138,7 +162,7 @@ struct Schema : NIceDb::Schema {
         using TColumns = TableColumns<Id, SinceStep, SinceTxId, InfoProto>;
     };
 
-    struct TableInfo : Table<5> {
+    struct TableInfo : Table<(ui32)ECommonTables::TableInfo> {
         struct PathId : Column<1, NScheme::NTypeIds::Uint64> {};
         struct DropStep : Column<2, NScheme::NTypeIds::Uint64> {};
         struct DropTxId : Column<3, NScheme::NTypeIds::Uint64> {};
@@ -148,7 +172,7 @@ struct Schema : NIceDb::Schema {
         using TColumns = TableColumns<PathId, DropStep, DropTxId, TieringUsage>;
     };
 
-    struct TableVersionInfo : Table<11> {
+    struct TableVersionInfo : Table<(ui32)ECommonTables::TableVersionInfo> {
         struct PathId : Column<1, NScheme::NTypeIds::Uint64> {};
         struct SinceStep : Column<2, NScheme::NTypeIds::Uint64> {};
         struct SinceTxId : Column<3, NScheme::NTypeIds::Uint64> {};
@@ -158,7 +182,7 @@ struct Schema : NIceDb::Schema {
         using TColumns = TableColumns<PathId, SinceStep, SinceTxId, InfoProto>;
     };
 
-    struct LongTxWrites : Table<6> {
+    struct LongTxWrites : Table<(ui32)ECommonTables::LongTxWrites> {
         struct WriteId: Column<1, NScheme::NTypeIds::Uint64> {};
         struct LongTxId : Column<2, NScheme::NTypeIds::String> {};
         struct WritePartId: Column<3, NScheme::NTypeIds::Uint32> {};
@@ -167,21 +191,21 @@ struct Schema : NIceDb::Schema {
         using TColumns = TableColumns<WriteId, LongTxId, WritePartId>;
     };
 
-    struct BlobsToKeep : Table<7> {
+    struct BlobsToKeep : Table<(ui32)ECommonTables::BlobsToKeep> {
         struct BlobId : Column<1, NScheme::NTypeIds::String> {};
 
         using TKey = TableKey<BlobId>;
         using TColumns = TableColumns<BlobId>;
     };
 
-    struct BlobsToDelete : Table<8> {
-        struct BlobId : Column<1, NScheme::NTypeIds::String> {};
+    struct BlobsToDelete: Table<(ui32)ECommonTables::BlobsToDelete> {
+        struct BlobId: Column<1, NScheme::NTypeIds::String> {};
 
         using TKey = TableKey<BlobId>;
         using TColumns = TableColumns<BlobId>;
     };
 
-    struct SmallBlobs : Table<12> {
+    struct SmallBlobs : Table<(ui32)ECommonTables::SmallBlobs> {
         struct BlobId : Column<1, NScheme::NTypeIds::String> {};
         struct Data : Column<2, NScheme::NTypeIds::String> {};
 
@@ -189,7 +213,7 @@ struct Schema : NIceDb::Schema {
         using TColumns = TableColumns<BlobId, Data>;
     };
 
-    struct OneToOneEvictedBlobs : Table<13> {
+    struct OneToOneEvictedBlobs : Table<(ui32)ECommonTables::OneToOneEvictedBlobs> {
         struct BlobId : Column<1, NScheme::NTypeIds::String> {};
         struct Size : Column<2, NScheme::NTypeIds::Uint32> {}; // extracted from BlobId for better introspection
         struct State : Column<3, NScheme::NTypeIds::Byte> {}; // evicting -> (self) cached <-> exported
@@ -201,6 +225,14 @@ struct Schema : NIceDb::Schema {
 
         using TKey = TableKey<BlobId>;
         using TColumns = TableColumns<BlobId, Size, State, Dropped, Metadata, ExternBlobId>;
+    };
+
+    struct BlobsToDeleteWT: Table<(ui32)ECommonTables::BlobsToDeleteWT> {
+        struct BlobId: Column<1, NScheme::NTypeIds::String> {};
+        struct TabletId: Column<2, NScheme::NTypeIds::Uint64> {};
+
+        using TKey = TableKey<BlobId, TabletId>;
+        using TColumns = TableColumns<BlobId, TabletId>;
     };
 
     // Index tables
@@ -296,6 +328,15 @@ struct Schema : NIceDb::Schema {
         using TColumns = TableColumns<StorageId, BlobId>;
     };
 
+    struct TierBlobsToDeleteWT: NIceDb::Schema::Table<(ui32)ETierTables::TierBlobsToDeleteWT> {
+        struct StorageId: Column<1, NScheme::NTypeIds::String> {};
+        struct BlobId: Column<2, NScheme::NTypeIds::String> {};
+        struct TabletId: Column<3, NScheme::NTypeIds::Uint64> {};
+
+        using TKey = TableKey<StorageId, BlobId, TabletId>;
+        using TColumns = TableColumns<StorageId, BlobId, TabletId>;
+    };
+
     struct IndexIndexes: NIceDb::Schema::Table<IndexesTableId> {
         struct PathId: Column<1, NScheme::NTypeIds::Uint64> {};
         struct PortionId: Column<2, NScheme::NTypeIds::Uint64> {};
@@ -309,6 +350,43 @@ struct Schema : NIceDb::Schema {
 
         using TKey = TableKey<PathId, PortionId, IndexId, ChunkIdx>;
         using TColumns = TableColumns<PathId, PortionId, IndexId, ChunkIdx, Blob, Offset, Size, RecordsCount, RawBytes>;
+    };
+
+    struct SharedBlobIds: NIceDb::Schema::Table<SharedBlobIdsTableId> {
+        struct StorageId: Column<1, NScheme::NTypeIds::String> {};
+        struct BlobId: Column<2, NScheme::NTypeIds::String> {};
+        struct TabletId: Column<3, NScheme::NTypeIds::Uint64> {};
+
+        using TKey = TableKey<StorageId, BlobId, TabletId>;
+        using TColumns = TableColumns<StorageId, BlobId, TabletId>;
+    };
+
+    struct BorrowedBlobIds: NIceDb::Schema::Table<BorrowedBlobIdsTableId> {
+        struct StorageId: Column<1, NScheme::NTypeIds::String> {};
+        struct BlobId: Column<2, NScheme::NTypeIds::String> {};
+        struct TabletId: Column<3, NScheme::NTypeIds::Uint64> {};
+
+        using TKey = TableKey<StorageId, BlobId>;
+        using TColumns = TableColumns<StorageId, BlobId, TabletId>;
+    };
+
+    struct SourceSessions: NIceDb::Schema::Table<SourceSessionsTableId> {
+        struct SessionId: Column<1, NScheme::NTypeIds::String> {};
+        struct Details: Column<2, NScheme::NTypeIds::String> {};
+        struct CursorDynamic: Column<3, NScheme::NTypeIds::String> {};
+        struct CursorStatic: Column<4, NScheme::NTypeIds::String> {};
+
+        using TKey = TableKey<SessionId>;
+        using TColumns = TableColumns<SessionId, Details, CursorDynamic, CursorStatic>;
+    };
+
+    struct DestinationSessions: NIceDb::Schema::Table<DestinationSessionsTableId> {
+        struct SessionId: Column<1, NScheme::NTypeIds::String> {};
+        struct Details: Column<2, NScheme::NTypeIds::String> {};
+        struct Cursor: Column<3, NScheme::NTypeIds::String> {};
+
+        using TKey = TableKey<SessionId>;
+        using TColumns = TableColumns<SessionId, Details, Cursor>;
     };
 
     struct Locks : Table<LocksTableId> {
@@ -363,6 +441,7 @@ struct Schema : NIceDb::Schema {
         LongTxWrites,
         BlobsToKeep,
         BlobsToDelete,
+        BlobsToDeleteWT,
         InsertTable,
         IndexGranules,
         IndexColumns,
@@ -372,7 +451,12 @@ struct Schema : NIceDb::Schema {
         Operations,
         TierBlobsDraft,
         TierBlobsToDelete,
-        IndexIndexes
+        TierBlobsToDeleteWT,
+        IndexIndexes,
+        SharedBlobIds,
+        BorrowedBlobIds,
+        SourceSessions,
+        DestinationSessions
         >;
 
     //

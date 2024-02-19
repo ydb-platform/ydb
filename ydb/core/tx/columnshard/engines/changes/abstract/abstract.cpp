@@ -58,7 +58,7 @@ void TColumnEngineChanges::WriteIndexComplete(NColumnShard::TColumnShard& self, 
     Stage = EStage::Finished;
     AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("event", "WriteIndexComplete")("type", TypeString())("success", context.FinishedSuccessfully);
     DoWriteIndexComplete(self, context);
-    DoOnFinish(self, context);
+    OnFinish(self, context);
     self.IncCounter(GetCounterIndex(context.FinishedSuccessfully));
 
 }
@@ -82,10 +82,11 @@ TColumnEngineChanges::~TColumnEngineChanges() {
 void TColumnEngineChanges::Abort(NColumnShard::TColumnShard& self, TChangesFinishContext& context) {
     Y_ABORT_UNLESS(Stage != EStage::Finished && Stage != EStage::Created && Stage != EStage::Aborted);
     Stage = EStage::Aborted;
-    DoOnFinish(self, context);
+    OnFinish(self, context);
 }
 
 void TColumnEngineChanges::Start(NColumnShard::TColumnShard& self) {
+    self.DataLocksManager->RegisterLock(TypeString() + "::" + GetTaskIdentifier(), BuildDataLock());
     Y_ABORT_UNLESS(Stage == EStage::Created);
     DoStart(self);
     Stage = EStage::Started;
@@ -108,9 +109,14 @@ void TColumnEngineChanges::AbortEmergency() {
     OnAbortEmergency();
 }
 
+void TColumnEngineChanges::OnFinish(NColumnShard::TColumnShard& self, TChangesFinishContext& context) {
+    self.DataLocksManager->UnregisterLock(TypeString() + "::" + GetTaskIdentifier());
+    DoOnFinish(self, context);
+}
+
 TWriteIndexContext::TWriteIndexContext(NTabletFlatExecutor::TTransactionContext& txc, IDbWrapper& dbWrapper)
     : Txc(txc)
-    , BlobManagerDb(std::make_shared<NColumnShard::TBlobManagerDb>(txc.DB))
+    , BlobManagerDb(std::make_shared<TBlobManagerDb>(txc.DB))
     , DBWrapper(dbWrapper)
 {
 

@@ -1,4 +1,5 @@
 #include "init.h"
+#include "init_impl.h"
 
 namespace NKikimr::NConfig {
 

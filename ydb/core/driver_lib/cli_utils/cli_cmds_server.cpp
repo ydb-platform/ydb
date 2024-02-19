@@ -51,7 +51,7 @@ protected:
     void Parse(TConfig& config) override {
         TClientCommand::Parse(config);
         InitCfg.ValidateOptions(*config.Opts, *config.ParseResult);
-        InitCfg.ParseImpl(config.ParseResult->GetFreeArgs());
+        InitCfg.Parse(config.ParseResult->GetFreeArgs());
     }
 };
 

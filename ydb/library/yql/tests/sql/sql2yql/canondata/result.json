@@ -12305,6 +12305,20 @@
             "uri": "https://{canondata_backend}/1599023/af9c2f81df0601cf266a0926b5ce73b6101b9115/resource.tar.gz#test_sql2yql.test_pg-sublink_projection_any_corr_/sql.yql"
         }
     ],
+    "test_sql2yql.test[pg-sublink_projection_array]": [
+        {
+            "checksum": "ebead075c75499a4e450b27fde04644e",
+            "size": 1596,
+            "uri": "https://{canondata_backend}/1880306/fba36789e4743551e5b5168cd9ea1f6dcbfc6a9b/resource.tar.gz#test_sql2yql.test_pg-sublink_projection_array_/sql.yql"
+        }
+    ],
+    "test_sql2yql.test[pg-sublink_projection_array_corr]": [
+        {
+            "checksum": "7b5b52d304637fd42c41b06bf4306444",
+            "size": 2516,
+            "uri": "https://{canondata_backend}/1936947/fba4a8aeb243783f27d57f7d9d3fa25582d6472b/resource.tar.gz#test_sql2yql.test_pg-sublink_projection_array_corr_/sql.yql"
+        }
+    ],
     "test_sql2yql.test[pg-sublink_projection_exists_corr]": [
         {
             "checksum": "b371d5b2adf9a0572940b0d5f7d7aaef",

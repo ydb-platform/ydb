@@ -122,7 +122,7 @@ class PnpmPackageManager(BasePackageManager):
         src_lf_paths = [build_lockfile_path(self.sources_path)]
 
         for [dep_src_path, (_, depth)] in iteritems(pj.get_workspace_map(ignore_self=True)):
-            dep_mod_path = dep_src_path[len(self.sources_root) + 1:]
+            dep_mod_path = dep_src_path[len(self.sources_root) + 1 :]
             # pnpm requires all package.jsons.
             ins.append(b_rooted(build_pj_path(dep_mod_path)))
 

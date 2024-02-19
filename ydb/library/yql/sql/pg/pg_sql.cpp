@@ -2401,8 +2401,11 @@ public:
     [[nodiscard]]
     bool ParseTransactionStmt(const TransactionStmt* value) {
         switch (value->kind) {
-        case TRANS_STMT_BEGIN: [[fallthrough]] ;
+        case TRANS_STMT_BEGIN:
         case TRANS_STMT_START:
+        case TRANS_STMT_SAVEPOINT:
+        case TRANS_STMT_RELEASE:
+        case TRANS_STMT_ROLLBACK_TO:
             return true;
         case TRANS_STMT_COMMIT:
             Statements.push_back(L(A("let"), A("world"), L(A("CommitAll!"),
@@ -3315,6 +3318,9 @@ public:
             break;
         case EXPR_SUBLINK:
             linkType = "expr";
+            break;
+        case ARRAY_SUBLINK:
+            linkType = "array";
             break;
         default:
             AddError(TStringBuilder() << "SublinkExpr: unsupported link type: " << (int)value->subLinkType);

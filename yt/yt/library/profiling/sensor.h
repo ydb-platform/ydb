@@ -107,7 +107,7 @@ private:
 class TEventTimer
 {
 public:
-    void Record(TDuration value, int count = 1) const;
+    void Record(TDuration value) const;
 
     explicit operator bool() const;
 
@@ -115,7 +115,6 @@ private:
     friend class TProfiler;
 
     ITimerImplPtr Timer_;
-    IHistogramImplPtr Histogram_;
 };
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -161,8 +160,8 @@ private:
 class TRateHistogram
 {
 public:
-    void Add(double value, int count = 1) noexcept;
-    void Remove(double value, int count = 1) noexcept;
+    void Add(double value, int count = 1) const noexcept;
+    void Remove(double value, int count = 1) const noexcept;
     void Reset() noexcept;
 
     THistogramSnapshot GetSnapshot() const;

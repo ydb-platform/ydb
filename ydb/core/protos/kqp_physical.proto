@@ -507,4 +507,6 @@ message TKqpPhyQuery {
     bool HasUncommittedChangesRead = 9;
 
     string QueryDiagnostics = 10;
+
+    repeated TKqpTableInfo ViewInfos = 11;
 }

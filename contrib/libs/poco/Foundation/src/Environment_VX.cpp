@@ -19,7 +19,7 @@
 #error #include <envLib.h>
 #error #include <hostLib.h>
 #error #include <ifLib.h>
-#include <sockLib.h>
+#error #include <sockLib.h>
 #error #include <ioLib.h>
 #error #include <version.h>
 #include <cstring>

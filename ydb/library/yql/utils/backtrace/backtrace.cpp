@@ -210,7 +210,7 @@ namespace {
                 fileName = "EXE";
             }
             auto it = NYql::NBacktrace::Mapping.find(fileName);
-            outp << "StackFrame: " << (it == NYql::NBacktrace::Mapping.end() ? fileName : it->second) << " " << frame.Address << "\n";
+            outp << "StackFrame: " << (it == NYql::NBacktrace::Mapping.end() ? fileName : it->second) << " " << frame.Address << " 0\n";
         }
     }
 }

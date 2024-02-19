@@ -53,6 +53,7 @@ namespace NYql {
             }
             return output;
 #else
+            Y_UNUSED(mapping);
             return input;
 #endif
         }

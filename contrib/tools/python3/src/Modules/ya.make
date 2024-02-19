@@ -2,9 +2,9 @@
 
 LIBRARY()
 
-VERSION(3.11.8)
+VERSION(3.12.2)
 
-ORIGINAL_SOURCE(https://github.com/python/cpython/archive/v3.11.8.tar.gz)
+ORIGINAL_SOURCE(https://github.com/python/cpython/archive/v3.12.2.tar.gz)
 
 LICENSE(Python-2.0)
 
@@ -27,6 +27,7 @@ ADDINCL(
     contrib/tools/python3/src/Include/internal
     contrib/tools/python3/src/Modules
     contrib/tools/python3/src/Modules/_decimal/libmpdec
+    contrib/tools/python3/src/Modules/_hacl/include
 )
 
 NO_COMPILER_WARNINGS()
@@ -74,6 +75,10 @@ SRCS(
     _decimal/libmpdec/transpose.c
     _elementtree.c
     _functoolsmodule.c
+    _hacl/Hacl_Hash_MD5.c
+    _hacl/Hacl_Hash_SHA1.c
+    _hacl/Hacl_Hash_SHA2.c
+    _hacl/Hacl_Hash_SHA3.c
     _hashopenssl.c
     _heapqmodule.c
     _io/_iomodule.c
@@ -96,8 +101,6 @@ SRCS(
     _pickle.c
     _queuemodule.c
     _randommodule.c
-    _sha3/sha3.c
-    _sha3/sha3module.c
     _sre/sre.c
     _ssl.c
     _stat.c
@@ -107,6 +110,7 @@ SRCS(
     _tracemalloc.c
     _typingmodule.c
     _weakref.c
+    _xxinterpchannelsmodule.c
     _xxsubinterpretersmodule.c
     _xxtestfuzz/_xxtestfuzz.c
     _xxtestfuzz/fuzzer.c
@@ -139,8 +143,8 @@ SRCS(
     rotatingtree.c
     selectmodule.c
     sha1module.c
-    sha256module.c
-    sha512module.c
+    sha2module.c
+    sha3module.c
     signalmodule.c
     socketmodule.c
     symtablemodule.c
@@ -168,7 +172,6 @@ ELSE()
 
     IF (OS_DARWIN)
         SRCS(
-            _ctypes/darwin/dlfcn_simple.c
             _scproxy.c
         )
     ELSEIF (OS_LINUX)

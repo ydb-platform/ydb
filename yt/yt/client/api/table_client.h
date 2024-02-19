@@ -251,6 +251,7 @@ struct TCreateTableBackupOptions
     TDuration CheckpointCheckTimeout = TDuration::Zero();
 
     bool Force = false;
+    bool PreserveAccount = false;
 };
 
 struct TRestoreTableBackupOptions
@@ -259,6 +260,7 @@ struct TRestoreTableBackupOptions
     bool Force = false;
     bool Mount = false;
     bool EnableReplicas = false;
+    bool PreserveAccount = false;
 };
 
 struct TUpdateChaosTableReplicaProgressOptions

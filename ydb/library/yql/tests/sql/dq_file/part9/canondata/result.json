@@ -709,6 +709,9 @@
             "checksum": "b4dd508a329723c74293d80f0278c705",
             "size": 505,
             "uri": "https://{canondata_backend}/1847551/3a392ffe35b72cb523557617b3ab1c0abb94bee4/resource.tar.gz#test.test_expr-as_set-default.txt-Analyze_/plan.txt"
+        },
+        {
+            "uri": "file://test.test_expr-as_set-default.txt-Analyze_/extracted"
         }
     ],
     "test.test[expr-as_set-default.txt-Debug]": [
@@ -725,7 +728,11 @@
             "uri": "https://{canondata_backend}/1847551/3a392ffe35b72cb523557617b3ab1c0abb94bee4/resource.tar.gz#test.test_expr-as_set-default.txt-Plan_/plan.txt"
         }
     ],
-    "test.test[expr-as_set-default.txt-Results]": [],
+    "test.test[expr-as_set-default.txt-Results]": [
+        {
+            "uri": "file://test.test_expr-as_set-default.txt-Results_/extracted"
+        }
+    ],
     "test.test[expr-as_table_bad_columns_fail--Results]": [
         {
             "uri": "file://test.test_expr-as_table_bad_columns_fail--Results_/extracted"
@@ -2336,9 +2343,9 @@
     ],
     "test.test[udf-sqlproject_grounds-default.txt-Debug]": [
         {
-            "checksum": "bca47ac0d40cbd07b0ee335b458cd75f",
-            "size": 815,
-            "uri": "https://{canondata_backend}/1599023/43260bb80928f1d73f25e84eaa62db7f19dc1b66/resource.tar.gz#test.test_udf-sqlproject_grounds-default.txt-Debug_/opt.yql_patched"
+            "checksum": "4a32cc68f5adaf581c487d4eb04d506c",
+            "size": 831,
+            "uri": "https://{canondata_backend}/1031349/61966912119a9a41b6f91846f1ac02eca4e3704e/resource.tar.gz#test.test_udf-sqlproject_grounds-default.txt-Debug_/opt.yql_patched"
         }
     ],
     "test.test[udf-sqlproject_grounds-default.txt-Plan]": [

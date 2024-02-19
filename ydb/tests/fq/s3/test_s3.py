@@ -409,7 +409,7 @@ Pear,15,33'''
         kikimr.compute_plane.wait_bootstrap()
         client.create_storage_connection("fruitbucket", "wbucket")
 
-        time.sleep(10) # 2 x node info update period 
+        time.sleep(10)  # 2 x node info update period
 
         sql = R'''
             SELECT Fruit, sum(Price) as Price, sum(Weight) as Weight

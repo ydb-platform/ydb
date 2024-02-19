@@ -41,6 +41,17 @@ TString TEvWorker::TEvData::ToString() const {
     << " }";
 }
 
+TEvWorker::TEvGone::TEvGone(EStatus status)
+    : Status(status)
+{
+}
+
+TString TEvWorker::TEvGone::ToString() const {
+    return TStringBuilder() << ToStringHeader() << " {"
+        << " Status: " << Status
+    << " }";
+}
+
 class TWorker: public TActorBootstrapped<TWorker> {
     struct TActorInfo {
         THolder<IActor> Actor;
@@ -131,15 +142,14 @@ class TWorker: public TActorBootstrapped<TWorker> {
         Send(ev->Forward(Writer));
     }
 
-    void Handle(TEvents::TEvGone::TPtr& ev) {
+    void Handle(TEvWorker::TEvGone::TPtr& ev) {
+        // TODO: handle status
         if (ev->Sender == Reader) {
             LOG_I("Reader has gone"
                 << ": sender# " << ev->Sender);
-            // TODO: handle
         } else if (ev->Sender == Writer) {
             LOG_I("Writer has gone"
                 << ": sender# " << ev->Sender);
-            // TODO: handle
         } else {
             LOG_W("Unknown actor has gone"
                 << ": sender# " << ev->Sender);
@@ -179,7 +189,7 @@ public:
             hFunc(TEvWorker::TEvHandshake, Handle);
             hFunc(TEvWorker::TEvPoll, Handle);
             hFunc(TEvWorker::TEvData, Handle);
-            hFunc(TEvents::TEvGone, Handle);
+            hFunc(TEvWorker::TEvGone, Handle);
             sFunc(TEvents::TEvPoison, PassAway);
         }
     }

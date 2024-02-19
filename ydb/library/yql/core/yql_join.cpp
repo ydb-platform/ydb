@@ -767,6 +767,8 @@ IGraphTransformer::TStatus ValidateEquiJoinOptions(TPositionHandle positionHandl
                 ctx.AddError(TIssue(ctx.GetPosition(child->Child(1)->Pos()), TStringBuilder() <<
                     "Duplicated preferred_sort set: " << JoinSeq(", ", sortBy)));
             }
+        } else if (optionName == "cbo_passed") {
+            // do nothing
         } else {
             ctx.AddError(TIssue(position, TStringBuilder() <<
                 "Unknown option name: " << optionName));

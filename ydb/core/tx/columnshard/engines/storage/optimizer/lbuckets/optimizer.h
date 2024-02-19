@@ -1,11 +1,12 @@
 #pragma once
 #include "counters.h"
 
-#include <ydb/core/tx/columnshard/engines/storage/optimizer/abstract/optimizer.h>
+#include <ydb/core/tx/columnshard/blobs_action/abstract/storages_manager.h>
+#include <ydb/core/tx/columnshard/common/limits.h>
+#include <ydb/core/tx/columnshard/engines/changes/general_compaction.h>
 #include <ydb/core/tx/columnshard/engines/changes/abstract/abstract.h>
 #include <ydb/core/tx/columnshard/engines/portions/portion_info.h>
-#include <ydb/core/tx/columnshard/blobs_action/abstract/storages_manager.h>
-#include <ydb/core/tx/columnshard/engines/changes/general_compaction.h>
+#include <ydb/core/tx/columnshard/engines/storage/optimizer/abstract/optimizer.h>
 #include <ydb/core/tx/columnshard/hooks/abstract/abstract.h>
 #include <ydb/library/accessor/accessor.h>
 
@@ -361,8 +362,12 @@ public:
 
         std::vector<std::shared_ptr<TPortionInfo>> result;
         std::shared_ptr<NCompaction::TGeneralCompactColumnEngineChanges::IMemoryPredictor> predictor = NCompaction::TGeneralCompactColumnEngineChanges::BuildMemoryPredictor();
+        ui64 txSizeLimit = 0;
         for (auto&& i : sorted) {
             result.emplace_back(i);
+            if (txSizeLimit + i->GetTxVolume() > TGlobalLimits::TxWriteLimitBytes / 2) {
+                break;
+            }
             if (predictor->AddPortion(*i) > sizeLimit && result.size() > 1) {
                 break;
             }

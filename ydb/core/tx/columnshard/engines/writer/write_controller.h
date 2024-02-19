@@ -47,6 +47,19 @@ protected:
         return WriteTasks.back();
     }
 public:
+    TString DebugString() const {
+        TStringBuilder sb;
+        for (auto&& i : WritingActions) {
+            sb << i.second->GetStorageId() << ",";
+        }
+        ui64 size = 0;
+        for (auto&& i : WriteTasks) {
+            size += i.GetBlobId().BlobSize();
+        }
+
+        return TStringBuilder() << "size=" << size << ";count=" << WriteTasks.size() << ";actions=" << sb << ";";
+    }
+
     void Abort() {
         for (auto&& i : WritingActions) {
             i.second->Abort();

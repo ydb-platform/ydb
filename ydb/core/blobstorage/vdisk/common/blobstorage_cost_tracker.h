@@ -278,6 +278,29 @@ public:
     }
 };
 
+struct TFailTimer {
+    using TTime = TInstant;
+    static TTime Now() {
+        Y_FAIL();
+    }
+};
+
+template<class TBackupTimer = TFailTimer>
+struct TAppDataTimerMs {
+    using TTime = TInstant;
+    static constexpr ui64 Resolution = 1000ull; // milliseconds
+    static TTime Now() {
+        if (NKikimr::TAppData::TimeProvider) {
+            return NKikimr::TAppData::TimeProvider->Now();
+        } else {
+            return TBackupTimer::Now();
+        }
+    }
+    static ui64 Duration(TTime from, TTime to) {
+        return (to - from).MilliSeconds();
+    }
+};
+
 using TBsCostModelErasureNone = TBsCostModelBase;
 class TBsCostModelMirror3dc;
 class TBsCostModel4Plus2Block;
@@ -296,8 +319,8 @@ private:
     ::NMonitoring::TDynamicCounters::TCounterPtr InternalDiskCost;
 
     TAtomic BucketCapacity = 1'000'000'000;  // 10^9 nsec
-    TAtomic BucketInflow = 1'000'000'000;  // 10^9 nsec
-    TBucketQuoter<i64, TSpinLock, THPTimerUs> Bucket;
+    TAtomic DiskTimeAvailableNs = 1'000'000'000;
+    TBucketQuoter<i64, TSpinLock, TAppDataTimerMs<TInstantTimerMs>> Bucket;
     TLight BurstDetector;
     std::atomic<ui64> SeqnoBurstDetector = 0;
     static constexpr ui32 ConcurrentHugeRequestsAllowed = 3;
@@ -347,6 +370,10 @@ public:
     void CountRequest(ui64 cost) {
         Bucket.Use(cost);
         BurstDetector.Set(!Bucket.IsAvail(), SeqnoBurstDetector.fetch_add(1));
+    }
+
+    void SetTimeAvailable(ui32 diskTimeAvailableNSec) {
+        AtomicSet(DiskTimeAvailableNs, diskTimeAvailableNSec);
     }
 
 public:

@@ -175,6 +175,9 @@ private:
 
 class TTopicReader: public TBaseProxyActor<TTopicReader> {
     void Handle(TEvYdbProxy::TEvReadTopicRequest::TPtr& ev) {
+        if (AutoCommit) {
+            DeferredCommit.Commit();
+        }
         WaitEvent(ev->Sender, ev->Cookie);
     }
 
@@ -200,22 +203,26 @@ class TTopicReader: public TBaseProxyActor<TTopicReader> {
             x->Confirm();
             return WaitEvent(ev->Get()->Sender, ev->Get()->Cookie);
         } else if (auto* x = std::get_if<TReadSessionEvent::TDataReceivedEvent>(&*event)) {
+            if (AutoCommit) {
+                DeferredCommit.Add(*x);
+            }
             return (void)Send(ev->Get()->Sender, new TEvYdbProxy::TEvReadTopicResponse(*x), 0, ev->Get()->Cookie);
         } else if (std::get_if<TReadSessionEvent::TCommitOffsetAcknowledgementEvent>(&*event)) {
             return WaitEvent(ev->Get()->Sender, ev->Get()->Cookie);
         } else if (std::get_if<TReadSessionEvent::TPartitionSessionStatusEvent>(&*event)) {
             return WaitEvent(ev->Get()->Sender, ev->Get()->Cookie);
-        } else if (std::get_if<TReadSessionEvent::TPartitionSessionClosedEvent>(&*event)) {
-            return Leave(ev->Get()->Sender);
-        } else if (std::get_if<TSessionClosedEvent>(&*event)) {
-            return Leave(ev->Get()->Sender);
+        } else if (auto* x = std::get_if<TReadSessionEvent::TPartitionSessionClosedEvent>(&*event)) {
+            auto status = TStatus(EStatus::UNAVAILABLE, NYql::TIssues{NYql::TIssue(x->DebugString())});
+            return Leave(ev->Get()->Sender, std::move(status));
+        } else if (auto* x = std::get_if<TSessionClosedEvent>(&*event)) {
+            return Leave(ev->Get()->Sender, std::move(*x));
         } else {
             Y_ABORT("Unexpected event");
         }
     }
 
-    void Leave(const TActorId& client) {
-        Send(client, new TEvents::TEvGone());
+    void Leave(const TActorId& client, TStatus&& status) {
+        Send(client, new TEvYdbProxy::TEvTopicReaderGone(std::move(status)));
         PassAway();
     }
 
@@ -225,9 +232,10 @@ class TTopicReader: public TBaseProxyActor<TTopicReader> {
     }
 
 public:
-    explicit TTopicReader(const std::shared_ptr<IReadSession>& session)
+    explicit TTopicReader(const std::shared_ptr<IReadSession>& session, bool autoCommit)
         : TBaseProxyActor(&TThis::StateWork)
         , Session(session)
+        , AutoCommit(autoCommit)
     {
     }
 
@@ -243,6 +251,8 @@ public:
 
 private:
     std::shared_ptr<IReadSession> Session;
+    const bool AutoCommit;
+    TDeferredCommit DeferredCommit;
 
 }; // TTopicReader
 
@@ -393,8 +403,10 @@ class TYdbProxy: public TBaseProxyActor<TYdbProxy> {
     void Handle(TEvYdbProxy::TEvCreateTopicReaderRequest::TPtr& ev) {
         auto* client = EnsureClient<TTopicClient>();
         auto args = std::move(ev->Get()->GetArgs());
-        auto session = std::apply(&TTopicClient::CreateReadSession, std::tuple_cat(std::tie(client), std::move(args)));
-        Send(ev->Sender, new TEvYdbProxy::TEvCreateTopicReaderResponse(RegisterWithSameMailbox(new TTopicReader(session))));
+        const auto& settings = std::get<TEvYdbProxy::TTopicReaderSettings>(args);
+        auto session = std::invoke(&TTopicClient::CreateReadSession, client, settings.GetBase());
+        auto reader = RegisterWithSameMailbox(new TTopicReader(session, settings.AutoCommit_));
+        Send(ev->Sender, new TEvYdbProxy::TEvCreateTopicReaderResponse(reader));
     }
 
     void Handle(TEvYdbProxy::TEvCommitOffsetRequest::TPtr& ev) {

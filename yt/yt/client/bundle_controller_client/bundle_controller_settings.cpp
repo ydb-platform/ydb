@@ -98,6 +98,19 @@ void TBundleConfigConstraints::Register(TRegistrar registrar)
     registrar.Parameter("tablet_node_sizes", &TThis::TabletNodeSizes)
         .Default();
 }
+
+
+void TBundleResourceQuota::Register(TRegistrar registrar)
+{
+    registrar.Parameter("vcpu", &TThis::Vcpu)
+        .GreaterThanOrEqual(0)
+        .Default(0);
+
+    registrar.Parameter("memory", &TThis::Memory)
+        .GreaterThanOrEqual(0)
+        .Default(0);
+}
+
 ////////////////////////////////////////////////////////////////////////////////
 
 namespace NProto {
@@ -263,6 +276,20 @@ void FromProto(TBundleConfigConstraintsPtr bundleConfigConstraints, const NBundl
         FromProto(newInstance, &instance);
         bundleConfigConstraints->TabletNodeSizes.push_back(newInstance);
     }
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
+void ToProto(NBundleController::NProto::TResourceQuota* protoResourceQuota, const TBundleResourceQuotaPtr resourceQuota)
+{
+    protoResourceQuota->set_vcpu(resourceQuota->Vcpu);
+    protoResourceQuota->set_memory(resourceQuota->Memory);
+}
+
+void FromProto(TBundleResourceQuotaPtr resourceQuota, const NBundleController::NProto::TResourceQuota* protoResourceQuota)
+{
+    YT_FROMPROTO_OPTIONAL_PTR(protoResourceQuota, memory, resourceQuota, Memory);
+    YT_FROMPROTO_OPTIONAL_PTR(protoResourceQuota, vcpu, resourceQuota, Vcpu);
 }
 
 ////////////////////////////////////////////////////////////////////////////////

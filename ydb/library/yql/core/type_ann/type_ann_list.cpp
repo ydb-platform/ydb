@@ -5391,7 +5391,9 @@ namespace {
             } else {
                 const NPg::TAggregateDesc& aggDesc = *aggDescPtr;
                 const auto& finalDesc = NPg::LookupProc(aggDesc.FinalFuncId ? aggDesc.FinalFuncId : aggDesc.TransFuncId);
-                input->SetTypeAnn(ctx.Expr.MakeType<TPgExprType>(finalDesc.ResultType));
+                auto resultType = finalDesc.ResultType;
+                AdjustReturnType(resultType, aggDesc.ArgTypes, argTypes);
+                input->SetTypeAnn(ctx.Expr.MakeType<TPgExprType>(resultType));
             }
         } else {
             ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(input->Pos()),

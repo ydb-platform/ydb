@@ -76,6 +76,6 @@ FederatedQuery::IamAuth GetAuth(const FederatedQuery::Connection& connection);
 
 TString RemoveDatabaseFromStr(TString str, const TString& substr);
 
-NYql::TIssues RemoveDatabaseFromIssues(const NYql::TIssues& issues, const TString& str);
+NYql::TIssues RemoveDatabaseFromIssues(const NYql::TIssues& issues, const TString& databasePath);
 
 }  // namespace NFq

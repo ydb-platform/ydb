@@ -117,7 +117,6 @@ Pear,15,33'''
         if yq_version == "v1" and runtime_listing:
             pytest.skip("Runtime listing is v2 only")
 
-
         resource = boto3.resource(
             "s3",
             endpoint_url=s3.s3_url,

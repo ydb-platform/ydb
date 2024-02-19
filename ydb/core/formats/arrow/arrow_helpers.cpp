@@ -977,4 +977,35 @@ std::shared_ptr<arrow::RecordBatch> MergeColumns(const std::vector<std::shared_p
     return arrow::RecordBatch::Make(schema, *recordsCount, columns);
 }
 
+std::vector<std::shared_ptr<arrow::RecordBatch>> SliceToRecordBatches(const std::shared_ptr<arrow::Table>& t) {
+    std::set<ui32> splitPositions;
+    const ui32 numRows = t->num_rows();
+    for (auto&& i : t->columns()) {
+        ui32 pos = 0;
+        for (auto&& arr : i->chunks()) {
+            splitPositions.emplace(pos);
+            pos += arr->length();
+        }
+        AFL_VERIFY(pos == t->num_rows());
+    }
+    std::vector<std::vector<std::shared_ptr<arrow::Array>>> slicedData;
+    slicedData.resize(splitPositions.size());
+    std::vector<ui32> positions(splitPositions.begin(), splitPositions.end());
+    for (auto&& i : t->columns()) {
+        for (ui32 idx = 0; idx < positions.size(); ++idx) {
+            auto slice = i->Slice(positions[idx], ((idx + 1 == positions.size()) ? numRows : positions[idx + 1]) - positions[idx]);
+            AFL_VERIFY(slice->num_chunks() == 1);
+            slicedData[idx].emplace_back(slice->chunks().front());
+        }
+    }
+    std::vector<std::shared_ptr<arrow::RecordBatch>> result;
+    ui32 count = 0;
+    for (auto&& i : slicedData) {
+        result.emplace_back(arrow::RecordBatch::Make(t->schema(), i.front()->length(), i));
+        count += result.back()->num_rows();
+    }
+    AFL_VERIFY(count == t->num_rows())("count", count)("t", t->num_rows());
+    return result;
+}
+
 }

@@ -98,6 +98,9 @@ void TMethodConfig::Register(TRegistrar registrar)
     registrar.Parameter("queue_size_limit", &TThis::QueueSizeLimit)
         .Alias("max_queue_size")
         .Optional();
+    registrar.Parameter("queue_bytes_size_limit", &TThis::QueueBytesSizeLimit)
+        .Alias("max_queue_bytes_size")
+        .Optional();
     registrar.Parameter("concurrency_limit", &TThis::ConcurrencyLimit)
         .Alias("max_concurrency")
         .Optional();

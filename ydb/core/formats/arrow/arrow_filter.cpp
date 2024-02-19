@@ -611,4 +611,12 @@ std::optional<ui32> TColumnFilter::GetFilteredCount() const {
     return *FilteredCount;
 }
 
+void TColumnFilter::Append(const TColumnFilter& filter) {
+    bool currentVal = filter.GetStartValue();
+    for (auto&& i : filter.Filter) {
+        Add(currentVal, i);
+        currentVal = !currentVal;
+    }
+}
+
 }

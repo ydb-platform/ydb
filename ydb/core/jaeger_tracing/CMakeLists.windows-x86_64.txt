@@ -22,5 +22,6 @@ target_sources(ydb-core-jaeger_tracing PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/core/jaeger_tracing/sampling_throttling_configurator.h
   ${CMAKE_SOURCE_DIR}/ydb/core/jaeger_tracing/sampling_throttling_control.h
   ${CMAKE_SOURCE_DIR}/ydb/core/jaeger_tracing/throttler.h
+  ${CMAKE_SOURCE_DIR}/ydb/core/jaeger_tracing/request_discriminator.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/jaeger_tracing/sampling_throttling_configurator.cpp
 )

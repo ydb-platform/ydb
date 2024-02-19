@@ -85,9 +85,15 @@ TSharedRefArray TTypedClientRequest<TRequestMessage, TResponse>::SerializeHeader
 {
     TSharedRefArrayBuilder builder(Attachments().size() + 1);
 
-    builder.Add(SerializeProtoToRefWithCompression(*this, RequestCodec_, false));
+    // COMPAT(danilalexeev): legacy RPC codecs
+    builder.Add(EnableLegacyRpcCodecs_
+        ? SerializeProtoToRefWithEnvelope(*this, RequestCodec_, false)
+        : SerializeProtoToRefWithCompression(*this, RequestCodec_, false));
 
-    auto compressedAttachments = CompressAttachments(Attachments(), RequestCodec_);
+    auto attachmentCodecId = EnableLegacyRpcCodecs_
+        ? NCompression::ECodec::None
+        : RequestCodec_;
+    auto compressedAttachments = CompressAttachments(Attachments(), attachmentCodecId);
     for (auto&& attachment : compressedAttachments) {
         builder.Add(std::move(attachment));
     }
@@ -143,6 +149,7 @@ TIntrusivePtr<T> TProxyBase::CreateRequest(const TMethodDescriptor& methodDescri
     request->SetAcknowledgementTimeout(DefaultAcknowledgementTimeout_);
     request->SetRequestCodec(DefaultRequestCodec_);
     request->SetResponseCodec(DefaultResponseCodec_);
+    request->SetEnableLegacyRpcCodecs(DefaultEnableLegacyRpcCodecs_);
     request->SetMultiplexingBand(methodDescriptor.MultiplexingBand);
 
     if (methodDescriptor.StreamingEnabled) {

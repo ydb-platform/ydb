@@ -51,8 +51,6 @@ TYPathRequest::TYPathRequest(
 {
     ToProto(Header_.mutable_service(), std::move(service));
     ToProto(Header_.mutable_method(), std::move(method));
-    Header_.set_request_codec(ToProto<int>(NCompression::ECodec::None));
-    Header_.set_response_codec(ToProto<int>(NCompression::ECodec::None));
 
     auto* ypathExt = Header_.MutableExtension(NProto::TYPathHeaderExt::ypath_header_ext);
     ypathExt->set_mutating(mutating);
@@ -184,6 +182,11 @@ NConcurrency::IAsyncZeroCopyOutputStreamPtr TYPathRequest::GetRequestAttachments
 }
 
 NConcurrency::IAsyncZeroCopyInputStreamPtr TYPathRequest::GetResponseAttachmentsStream() const
+{
+    YT_ABORT();
+}
+
+bool TYPathRequest::IsLegacyRpcCodecsEnabled()
 {
     YT_ABORT();
 }
@@ -909,29 +912,29 @@ TNodeWalkOptions GetNodeByYPathOptions {
 };
 
 TNodeWalkOptions FindNodeByYPathOptions {
-    .MissingAttributeHandler = [] (const TString& /* key */) {
+    .MissingAttributeHandler = [] (const TString& /*key*/) {
         return nullptr;
     },
-    .MissingChildKeyHandler = [] (const IMapNodePtr& /* node */, const TString& /* key */) {
+    .MissingChildKeyHandler = [] (const IMapNodePtr& /*node*/, const TString& /*key*/) {
         return nullptr;
     },
-    .MissingChildIndexHandler = [] (const IListNodePtr& /* node */, int /* index */) {
+    .MissingChildIndexHandler = [] (const IListNodePtr& /*node*/, int /*index*/) {
         return nullptr;
     },
     .NodeCannotHaveChildrenHandler = GetNodeByYPathOptions.NodeCannotHaveChildrenHandler
 };
 
 TNodeWalkOptions FindNodeByYPathNoThrowOptions {
-    .MissingAttributeHandler = [] (const TString& /* key */) {
+    .MissingAttributeHandler = [] (const TString& /*key*/) {
         return nullptr;
     },
-    .MissingChildKeyHandler = [] (const IMapNodePtr& /* node */, const TString& /* key */) {
+    .MissingChildKeyHandler = [] (const IMapNodePtr& /*node*/, const TString& /*key*/) {
         return nullptr;
     },
-    .MissingChildIndexHandler = [] (const IListNodePtr& /* node */, int /* index */) {
+    .MissingChildIndexHandler = [] (const IListNodePtr& /*node*/, int /*index*/) {
         return nullptr;
     },
-    .NodeCannotHaveChildrenHandler = [] (const INodePtr& /* node */) {
+    .NodeCannotHaveChildrenHandler = [] (const INodePtr& /*node*/) {
         return nullptr;
     },
 };

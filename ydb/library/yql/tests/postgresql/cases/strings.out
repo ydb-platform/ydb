@@ -490,6 +490,12 @@ SELECT foo, length(foo) FROM regexp_split_to_table('the quick brown fox jumps ov
  g   |      1
 (43 rows)
 
+SELECT regexp_split_to_array('the quick brown fox jumps over the lazy dog', '');
+                                          regexp_split_to_array                                          
+---------------------------------------------------------------------------------------------------------
+ {t,h,e," ",q,u,i,c,k," ",b,r,o,w,n," ",f,o,x," ",j,u,m,p,s," ",o,v,e,r," ",t,h,e," ",l,a,z,y," ",d,o,g}
+(1 row)
+
 -- case insensitive
 SELECT foo, length(foo) FROM regexp_split_to_table('thE QUick bROWn FOx jUMPs ovEr The lazy dOG', 'e', 'i') AS foo;
             foo            | length 

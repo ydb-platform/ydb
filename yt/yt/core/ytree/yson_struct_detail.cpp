@@ -275,7 +275,7 @@ void TYsonStructMeta::LoadStruct(
     });
 
     for (const auto parameter : pendingParameters) {
-        parameter->Load(target, /* cursor */ nullptr, createLoadOptions(parameter->GetKey()));
+        parameter->Load(target, /*cursor*/ nullptr, createLoadOptions(parameter->GetKey()));
     }
 
     if (postprocess) {

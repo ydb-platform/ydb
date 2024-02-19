@@ -222,7 +222,7 @@ static PyTypeObject multidict_keys_iter_type = {
 };
 
 static inline int
-multidict_iter_init()
+multidict_iter_init(void)
 {
     if (PyType_Ready(&multidict_items_iter_type) < 0 ||
         PyType_Ready(&multidict_values_iter_type) < 0 ||

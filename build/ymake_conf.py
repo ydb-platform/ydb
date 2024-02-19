@@ -1052,6 +1052,9 @@ class GnuToolchainOptions(ToolchainOptions):
         if build.host.is_apple and build.target.is_apple and to_bool(preset('APPLE_SDK_LOCAL'), default=False):
             self.os_sdk_local = True
 
+        if build.host.is_apple and build.target.is_ios and to_bool(preset('MAPSMOBI_BUILD_TARGET'), default=False):
+            self.os_sdk_local = True
+
         if self.os_sdk == 'local':
             self.os_sdk_local = True
 
@@ -1841,8 +1844,9 @@ class MSVC(object):
         A complete list of the values supported by the Windows SDK can be found at
         https://docs.microsoft.com/en-us/cpp/porting/modifying-winver-and-win32-winnt
         """
-        Windows7 = '0x0601'
-        Windows8 = '0x0602'
+        Windows07 = '0x0601'
+        Windows08 = '0x0602'
+        Windows10 = '0x0A00'
 
     def __init__(self, tc, build):
         """
@@ -2046,7 +2050,7 @@ class MSVCCompiler(MSVC, Compiler):
                     '-Wno-unused-command-line-argument',
                 ]
 
-        win_version_min = self.WindowsVersion.Windows7
+        win_version_min = self.WindowsVersion.Windows07
         defines.append('/D_WIN32_WINNT={0}'.format(win_version_min))
 
         if winapi_unicode:

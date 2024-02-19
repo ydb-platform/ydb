@@ -306,9 +306,9 @@
     ],
     "test.test[Aggregation-Bug3-Debug]": [
         {
-            "checksum": "7164d22b3979a7afc33506ebbd6c9354",
-            "size": 4366,
-            "uri": "https://{canondata_backend}/1937424/aad027a243105d927f319ffcc1200534aec26e19/resource.tar.gz#test.test_Aggregation-Bug3-Debug_/opt.yql"
+            "checksum": "a79caf988d3bf9a3c4cae9810f8c2ce3",
+            "size": 4363,
+            "uri": "https://{canondata_backend}/1936842/a8dea0fa97dd1731716f61c30d5e3273d75e7035/resource.tar.gz#test.test_Aggregation-Bug3-Debug_/opt.yql"
         },
         {
             "checksum": "d5d8db9f1d683cdde3f0386d8c9d6b33",
@@ -368,9 +368,9 @@
     ],
     "test.test[Aggregation-InMemAggregateUsingTuple-Debug]": [
         {
-            "checksum": "0f9cb53d8ca19b02204776d6bd11d4bc",
-            "size": 1332,
-            "uri": "https://{canondata_backend}/1784826/0849c794203f65bcd05b06caeba586d8d6e47754/resource.tar.gz#test.test_Aggregation-InMemAggregateUsingTuple-Debug_/opt.yql"
+            "checksum": "8825bc8ea606570688da229f3f8f8e96",
+            "size": 1482,
+            "uri": "https://{canondata_backend}/1899731/ea91d358b559f3e45aef733130a0e7ec3242fdb4/resource.tar.gz#test.test_Aggregation-InMemAggregateUsingTuple-Debug_/opt.yql"
         }
     ],
     "test.test[Aggregation-InMemAggregateUsingTuple-Plan]": [
@@ -382,9 +382,9 @@
     ],
     "test.test[Aggregation-InMemAggregateUsingTuple-Results]": [
         {
-            "checksum": "386e61f0358d18730ab54280c57c41b0",
+            "checksum": "672e78736cead17171b0e10c4e5b9695",
             "size": 7251,
-            "uri": "https://{canondata_backend}/1937027/a334f99367cca842933718ac48cd2a8f09f7423a/resource.tar.gz#test.test_Aggregation-InMemAggregateUsingTuple-Results_/results.txt"
+            "uri": "https://{canondata_backend}/1899731/ea91d358b559f3e45aef733130a0e7ec3242fdb4/resource.tar.gz#test.test_Aggregation-InMemAggregateUsingTuple-Results_/results.txt"
         }
     ],
     "test.test[Aggregation-InMemAggregateWithParents-Debug]": [

@@ -591,6 +591,7 @@ message TReqSelectRows
     optional bool use_canonical_null_relations = 20;
     optional bool merge_versioned_rows = 21;
     optional int32 syntax_version = 22 [default = 1];
+    optional bool use_web_assembly = 23;
 
     optional TSuppressableAccessTrackingOptions suppressable_access_tracking_options = 104;
 }
@@ -1357,6 +1358,7 @@ message TReqCreateTableBackup
     required uint64 checkpoint_check_period = 3;
     required uint64 checkpoint_check_timeout = 4;
     required bool force = 5;
+    required bool preserve_account = 6;
 }
 
 message TRspCreateTableBackup
@@ -1371,6 +1373,7 @@ message TReqRestoreTableBackup
     required bool force = 2;
     required bool mount = 3;
     required bool enable_replicas = 4;
+    required bool preserve_account = 5;
 }
 
 message TRspRestoreTableBackup

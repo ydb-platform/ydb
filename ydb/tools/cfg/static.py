@@ -14,6 +14,7 @@ from google.protobuf import json_format
 from ydb.core.protos import (
     auth_pb2,
     blobstorage_vdisk_config_pb2,
+    bootstrap_pb2,
     cms_pb2,
     config_pb2,
     feature_flags_pb2,
@@ -113,10 +114,11 @@ class StaticConfigGenerator(object):
             )
         )
         self._enable_cms_config_cache = template.get("enable_cms_config_cache", enable_cms_config_cache)
-        if "tracing_config" in template:
-            tracing = template["tracing_config"]
+        tracing = template.get("tracing_config")
+        if tracing is not None:
             self.__tracing = (
                 tracing["backend"],
+                tracing.get("uploader"),
                 tracing.get("sampling", []),
                 tracing.get("external_throttling", []),
             )
@@ -592,7 +594,7 @@ class StaticConfigGenerator(object):
         return all_tablets
 
     def __generate_boot_txt(self):
-        self.__proto_configs["boot.txt"] = config_pb2.TBootstrap()
+        self.__proto_configs["boot.txt"] = bootstrap_pb2.TBootstrap()
 
         for tablet_type, tablet_count in self.__system_tablets:
             for index in range(int(tablet_count)):
@@ -1130,7 +1132,7 @@ class StaticConfigGenerator(object):
             sampling_scope_pb.Fraction = sampling['fraction']
             sampling_scope_pb.Level = sampling['level']
             sampling_scope_pb.MaxRatePerMinute = sampling['max_rate_per_minute']
-            sampling_scope_pb.MaxBurst = sampling['max_burst']
+            sampling_scope_pb.MaxBurst = sampling.get('max_burst', 0)
             return sampling_scope_pb
 
         def get_external_throttling(throttling):
@@ -1138,8 +1140,8 @@ class StaticConfigGenerator(object):
             selectors = throttling.get("scope")
             if selectors is not None:
                 throttling_scope_pb.Scope.CopyFrom(get_selectors(selectors))
-            throttling_scope_pb.MaxRatePerMinute = throttling_scope_pb['max_rate_per_minute']
-            throttling_scope_pb.MaxBurst = throttling_scope_pb['max_burst']
+            throttling_scope_pb.MaxRatePerMinute = throttling['max_rate_per_minute']
+            throttling_scope_pb.MaxBurst = throttling.get('max_burst', 0)
             return throttling_scope_pb
 
         def get_auth_config(auth):
@@ -1185,11 +1187,37 @@ class StaticConfigGenerator(object):
 
             return backend_pb
 
+        def get_uploader(uploader):
+            uploader_pb = config_pb2.TTracingConfig.TUploaderConfig()
+
+            max_spans_per_second = uploader.get("max_spans_per_second")
+            if max_spans_per_second is not None:
+                uploader_pb.MaxSpansPerSecond = max_spans_per_second
+
+            max_spans_in_batch = uploader.get("max_spans_in_batch")
+            if max_spans_in_batch is not None:
+                uploader_pb.MaxSpansInBatch = max_spans_in_batch
+
+            max_bytes_in_batch = uploader.get("max_bytes_in_batch")
+            if max_bytes_in_batch is not None:
+                uploader_pb.MaxBytesInBatch = max_bytes_in_batch
+
+            max_batch_accumulation_milliseconds = uploader.get("max_batch_accumulation_milliseconds")
+            if max_batch_accumulation_milliseconds is not None:
+                uploader_pb.MaxBatchAccumulationMilliseconds = max_batch_accumulation_milliseconds
+
+            span_export_timeout_seconds = uploader.get("span_export_timeout_seconds")
+            if span_export_timeout_seconds is not None:
+                uploader_pb.SpanTtlSeconds = span_export_timeout_seconds
+
+            return uploader_pb
+
         pb = config_pb2.TAppConfig()
         if self.__tracing:
             tracing_pb = pb.TracingConfig
             (
                 backend,
+                uploader,
                 sampling,
                 external_throttling
             ) = self.__tracing
@@ -1199,11 +1227,14 @@ class StaticConfigGenerator(object):
 
             tracing_pb.Backend.CopyFrom(get_backend(backend))
 
+            if uploader is not None:
+                tracing_pb.Uploader.CopyFrom(get_uploader(uploader))
+
             for sampling_scope in sampling:
-                tracing_pb.Sampling.Add().CopyFrom(get_sampling_scope(sampling))
+                tracing_pb.Sampling.append(get_sampling_scope(sampling_scope))
 
             for throttling_scope in external_throttling:
-                tracing_pb.ExternalThrottling.Add().CopyFrom(get_external_throttling(throttling_scope))
+                tracing_pb.ExternalThrottling.append(get_external_throttling(throttling_scope))
 
         self.__proto_configs["tracing.txt"] = pb
 

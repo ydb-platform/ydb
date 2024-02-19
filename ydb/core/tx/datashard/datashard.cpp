@@ -637,14 +637,33 @@ void TDataShard::SendResult(const TActorContext &ctx,
     ctx.Send(target, res.Release(), flags);
 }
 
-void TDataShard::FillExecutionStats(const TExecutionProfile& execProfile, TEvDataShard::TEvProposeTransactionResult& result) const {
+void TDataShard::SendWriteResult(const TActorContext& ctx, std::unique_ptr<NEvents::TDataEvents::TEvWriteResult>& result, const TActorId& target, ui64 step, ui64 txId) {
+    Y_ABORT_UNLESS(txId == result->Record.GetTxId(), "%" PRIu64 " vs %" PRIu64, txId, result->Record.GetTxId());
+
+    // TODO: Volatile
+    /*
+    if (VolatileTxManager.FindByTxId(txId)) {
+        // This is a volatile transaction, and we need to wait until it is resolved
+        bool ok = VolatileTxManager.AttachVolatileTxCallback(txId, new TSendVolatileResult(this, std::move(result), target, step, txId));
+        Y_ABORT_UNLESS(ok);
+        return;
+    }
+    */
+
+    LOG_DEBUG_S(ctx, NKikimrServices::TX_DATASHARD, "Complete write [" << step << " : " << txId << "] from " << TabletID() << " at tablet " << TabletID() << " send result to client " << target);
+
+    LWTRACK(ProposeTransactionSendResult, result->GetOrbit());
+    ctx.Send(target, result.release(), 0);
+}
+
+void TDataShard::FillExecutionStats(const TExecutionProfile& execProfile, NKikimrQueryStats::TTxStats& txStats) const {
     TDuration totalCpuTime;
     for (const auto& unit : execProfile.UnitProfiles) {
         totalCpuTime += unit.second.ExecuteTime;
         totalCpuTime += unit.second.CompleteTime;
     }
-    result.Record.MutableTxStats()->MutablePerShardStats()->Clear();
-    auto& stats = *result.Record.MutableTxStats()->AddPerShardStats();
+    txStats.MutablePerShardStats()->Clear();
+    auto& stats = *txStats.AddPerShardStats();
     stats.SetShardId(TabletID());
     stats.SetCpuTimeUsec(totalCpuTime.MicroSeconds());
 }

@@ -283,6 +283,25 @@ TSharedRef PushEnvelope(const TSharedRef& data)
     return MergeRefsToRef<TDefaultSharedBlobTag>(std::vector<TSharedRef>{headerRef, data});
 }
 
+TSharedRef PushEnvelope(const TSharedRef& data, NCompression::ECodec codec)
+{
+    NYT::NProto::TSerializedMessageEnvelope envelope;
+    envelope.set_codec(static_cast<int>(codec));
+
+    TEnvelopeFixedHeader header;
+    header.EnvelopeSize = CheckedCastToI32(envelope.ByteSizeLong());
+    header.MessageSize = static_cast<ui32>(data.Size());
+
+    auto headerRef = TSharedMutableRef::Allocate(
+        sizeof (header) +
+        header.EnvelopeSize);
+
+    memcpy(headerRef.Begin(), &header, sizeof(header));
+    YT_VERIFY(envelope.SerializeToArray(headerRef.Begin() + sizeof(header), header.EnvelopeSize));
+
+    return MergeRefsToRef<TDefaultSharedBlobTag>(std::vector<TSharedRef>{headerRef, data});
+}
+
 ////////////////////////////////////////////////////////////////////////////////
 
 class TProtobufExtensionRegistry

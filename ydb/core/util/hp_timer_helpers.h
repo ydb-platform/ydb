@@ -1,3 +1,5 @@
+#pragma once
+
 #include <util/system/hp_timer.h>
 #include <ydb/library/actors/util/datetime.h>
 

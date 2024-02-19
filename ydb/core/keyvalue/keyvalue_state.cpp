@@ -634,6 +634,9 @@ void TKeyValueState::InitExecute(ui64 tabletId, TActorId keyValueActorId, ui32 e
     }
 
     THelpers::DbEraseCollect(db, ctx);
+    if (IsEmptyDbStart) {
+        THelpers::DbUpdateState(StoredState, db, ctx);
+    }
 
     // corner case, if no CollectGarbage events were sent
     if (InitialCollectsSent == 0) {

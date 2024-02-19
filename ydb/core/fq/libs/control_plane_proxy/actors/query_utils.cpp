@@ -12,7 +12,8 @@ namespace NFq {
 namespace NPrivate {
 
 TString MakeCreateExternalDataTableQuery(const FederatedQuery::BindingContent& content,
-                                         const TString& connectionName) {
+                                         const TString& connectionName,
+                                         bool replaceIfExists) {
     using namespace fmt::literals;
 
     auto bindingName         = content.name();
@@ -69,23 +70,22 @@ TString MakeCreateExternalDataTableQuery(const FederatedQuery::BindingContent& c
 
     return fmt::format(
         R"(
-                CREATE EXTERNAL TABLE {externalTableName} (
+                CREATE {replaceIfSupported} EXTERNAL TABLE {externalTableName} (
                     {columns}
                 ) WITH (
                     {withOptions}
                 );)",
+        "replaceIfSupported"_a = replaceIfExists ? "OR REPLACE" : "",
         "externalTableName"_a = EncloseAndEscapeString(bindingName, '`'),
-        "columns"_a           = JoinMapRange(",\n",
-                                   subset.schema().column().begin(),
+        "columns"_a = JoinMapRange(",\n", subset.schema().column().begin(),
                                    subset.schema().column().end(),
                                    columnsTransformFunction),
-        "withOptions"_a       = JoinMapRange(",\n",
-                                       withOptions.begin(),
-                                       withOptions.end(),
-                                       [](const std::pair<TString, TString>& kv) -> TString {
-                                           return TStringBuilder{} << "   " << kv.first
-                                                                   << " = " << kv.second;
-                                       }));
+        "withOptions"_a =
+            JoinMapRange(",\n", withOptions.begin(), withOptions.end(),
+                         [](const std::pair<TString, TString> &kv) -> TString {
+                           return TStringBuilder{} << "   " << kv.first << " = "
+                                                   << kv.second;
+                         }));
 }
 
 TString SignAccountId(const TString& id, const TSigner::TPtr& signer) {
@@ -170,7 +170,8 @@ TString CreateAuthParamsQuery(const FederatedQuery::ConnectionSetting& setting,
 TString MakeCreateExternalDataSourceQuery(
     const FederatedQuery::ConnectionContent& connectionContent,
     const TSigner::TPtr& signer,
-    const NConfig::TCommonConfig& common) {
+    const NConfig::TCommonConfig& common,
+    bool replaceIfExists) {
     using namespace fmt::literals;
 
     TString properties;
@@ -227,11 +228,12 @@ TString MakeCreateExternalDataSourceQuery(
     auto sourceName = connectionContent.name();
     return fmt::format(
         R"(
-                CREATE EXTERNAL DATA SOURCE {external_source} WITH (
+                CREATE {replaceIfSupported} EXTERNAL DATA SOURCE {external_source} WITH (
                     {properties}
                     {auth_params}
                 );
             )",
+        "replaceIfSupported"_a = replaceIfExists ? "OR REPLACE" : "",
         "external_source"_a = EncloseAndEscapeString(sourceName, '`'),
         "properties"_a = properties,
         "auth_params"_a =

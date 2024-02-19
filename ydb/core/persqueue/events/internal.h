@@ -1048,7 +1048,7 @@ struct TEvPQ {
         {
         }
 
-        ui32 Cookie; // ShadowPartitionId
+        ui32 Cookie; // InternalPartitionId
     };
 
     struct TEvGetWriteInfoResponse : public TEventLocal<TEvGetWriteInfoResponse, EvGetWriteInfoResponse> {
@@ -1063,14 +1063,14 @@ struct TEvPQ {
         {
         }
 
-        ui32 Cookie; // ShadowPartitionId
+        ui32 Cookie; // InternalPartitionId
         THashMap<TString, NPQ::TSeqNoRange> SeqNo; // SourceId -> (MinSeqNo, MaxSeqNo)
         std::deque<NPQ::TDataKey> BodyKeys;
         TVector<NPQ::TClientBlob> Head;
     };
 
     struct TEvGetWriteInfoError : public TEventLocal<TEvGetWriteInfoError, EvGetWriteInfoError> {
-        ui32 Cookie; // ShadowPartitionId
+        ui32 Cookie; // InternalPartitionId
         TString Message;
 
         TEvGetWriteInfoError(ui32 cookie, TString message) :

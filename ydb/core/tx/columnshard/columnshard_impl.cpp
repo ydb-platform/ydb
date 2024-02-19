@@ -297,6 +297,9 @@ void TColumnShard::TryAbortWrites(NIceDb::TNiceDb& db, NOlap::TDbWrapper& dbTabl
             failedAborts.push_back(writeId);
         }
     }
+    if (failedAborts.size()) {
+        AFL_ERROR(NKikimrServices::TX_COLUMNSHARD)("event", "failed_aborts")("count", failedAborts.size())("writes_count", writesToAbort.size());
+    }
     for (auto& writeId : failedAborts) {
         writesToAbort.erase(writeId);
     }
@@ -813,6 +816,7 @@ void TColumnShard::SetupCleanupInsertTable() {
     if (!InsertTable->GetAborted().size() && !writeIdsToCleanup.size()) {
         return;
     }
+    AFL_INFO(NKikimrServices::TX_COLUMNSHARD)("event", "cleanup_started")("aborted", InsertTable->GetAborted().size())("to_cleanup", writeIdsToCleanup.size());
 
     Execute(new TTxInsertTableCleanup(this, std::move(writeIdsToCleanup)), TActorContext::AsActorContext());
 }

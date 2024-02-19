@@ -3,6 +3,7 @@
 #include "datashard.h"
 #include "datashard_trans_queue.h"
 #include "datashard_active_transaction.h"
+#include "datashard_write_operation.h"
 #include "datashard_dep_tracker.h"
 #include "datashard_user_table.h"
 #include "execution_unit.h"
@@ -54,13 +55,6 @@ public:
         bool DirtyImmediate() const { return Flags & EFlagsDirtyImmediate; }
         bool SoftUpdates() const { return Flags & (EFlagsForceOnlineRW|EFlagsDirtyOnline|EFlagsDirtyImmediate); }
 
-        void Validate() {
-            if (!LimitActiveTx)
-                LimitActiveTx = DefaultLimitActiveTx() ;
-            if (!LimitDataTxCache)
-                LimitDataTxCache = DefaultLimitDataTxCache();
-        }
-
         void Update(const NKikimrSchemeOp::TPipelineConfig& cfg) {
             if (cfg.GetEnableOutOfOrder()) {
                 Flags |= EFlagsOutOfOrder;
@@ -77,14 +71,14 @@ public:
             } else {
                 Flags &= ~(EFlagsForceOnlineRW | EFlagsDirtyOnline | EFlagsDirtyImmediate);
             }
-            if (cfg.GetNumActiveTx()) {
-                LimitActiveTx = cfg.GetNumActiveTx();
-            }
-            if (cfg.GetDataTxCacheSize()) {
+
+            // has [default = 8] in TPipelineConfig proto
+            LimitActiveTx = cfg.GetNumActiveTx();
+
+            // does not have default in TPipelineConfig proto
+            if (cfg.HasDataTxCacheSize()) {
                 LimitDataTxCache = cfg.GetDataTxCacheSize();
             }
-
-            Validate();
         }
     };
 
@@ -108,7 +102,7 @@ public:
 
     // tx propose
 
-    bool SaveForPropose(TValidatedDataTx::TPtr tx);
+    bool SaveForPropose(TValidatedTx::TPtr tx);
     void SetProposed(ui64 txId, const TActorId& actorId);
 
     void ForgetUnproposedTx(ui64 txId);
@@ -121,6 +115,7 @@ public:
     bool IsReadyOp(TOperation::TPtr op);
 
     bool LoadTxDetails(TTransactionContext &txc, const TActorContext &ctx, TActiveTransaction::TPtr tx);
+    bool LoadWriteDetails(TTransactionContext& txc, const TActorContext& ctx, TWriteOperation::TPtr tx);
 
     void DeactivateOp(TOperation::TPtr op, TTransactionContext& txc, const TActorContext &ctx);
     void RemoveTx(TStepOrder stepTxId);
@@ -267,10 +262,10 @@ public:
                                     TInstant receivedAt, ui64 tieBreakerIndex,
                                     NTabletFlatExecutor::TTransactionContext &txc,
                                     const TActorContext &ctx, NWilson::TSpan &&operationSpan);
-    TOperation::TPtr BuildOperation(NEvents::TDataEvents::TEvWrite::TPtr &ev,
+    TOperation::TPtr BuildOperation(NEvents::TDataEvents::TEvWrite::TPtr&& ev,
                                     TInstant receivedAt, ui64 tieBreakerIndex,
                                     NTabletFlatExecutor::TTransactionContext &txc,
-                                    const TActorContext &ctx, NWilson::TSpan &&operationSpan);
+                                    NWilson::TSpan &&operationSpan);
     void BuildDataTx(TActiveTransaction *tx,
                      TTransactionContext &txc,
                      const TActorContext &ctx);
@@ -280,6 +275,14 @@ public:
             const TActorContext &ctx)
     {
         return tx->RestoreTxData(Self, txc, ctx);
+    }
+
+    ERestoreDataStatus RestoreDataTx(
+        TWriteOperation* tx,
+        TTransactionContext& txc
+    )
+    {
+        return tx->RestoreTxData(Self, txc);
     }
 
     void RegisterDistributedWrites(const TOperation::TPtr& op, NTable::TDatabase& db);
@@ -487,7 +490,7 @@ private:
     TSortedOps ActivePlannedOps;
     TSortedOps::iterator ActivePlannedOpsLogicallyCompleteEnd;
     TSortedOps::iterator ActivePlannedOpsLogicallyIncompleteEnd;
-    THashMap<ui64, TValidatedDataTx::TPtr> DataTxCache;
+    THashMap<ui64, TValidatedTx::TPtr> DataTxCache;
     TMap<TStepOrder, TStackVec<THolder<IEventHandle>, 1>> DelayedAcks;
     TStepOrder LastPlannedTx;
     TStepOrder LastCompleteTx;

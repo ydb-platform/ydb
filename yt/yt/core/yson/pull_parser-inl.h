@@ -252,7 +252,7 @@ auto TYsonPullParser::ParseItem() -> std::conditional_t<IsOptional, bool, void>
             }
         }
 
-        ThrowUnexpectedTokenException("item", *this, item, ItemType, /* isOptional */ true);
+        ThrowUnexpectedTokenException("item", *this, item, ItemType, /*isOptional*/ true);
     };
 
     auto result = parse();

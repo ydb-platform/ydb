@@ -230,6 +230,9 @@ public:
             return false;
         }
         it->second.erase(itTablet);
+        if (it->second.empty()) {
+            Data.erase(it);
+        }
         return true;
     }
 };

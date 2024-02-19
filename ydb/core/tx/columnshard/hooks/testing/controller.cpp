@@ -33,7 +33,6 @@ void TController::DoOnAfterGCAction(const ::NKikimr::NColumnShard::TColumnShard&
         AFL_VERIFY((ui64)d.GetTabletId() == shard.TabletID());
         AFL_VERIFY(RemovedBlobIds[action.GetStorageId()].emplace(d.GetBlobId()).second);
     }
-    CheckInvariants();
 }
 
 void TController::CheckInvariants(const ::NKikimr::NColumnShard::TColumnShard& shard, TCheckContext& context) const {
@@ -54,6 +53,13 @@ void TController::CheckInvariants(const ::NKikimr::NColumnShard::TColumnShard& s
             AFL_VERIFY(!it->second.contains(b));
         }
     }
+    THashMap<TString, NOlap::TBlobsCategories> categories = shard.GetStoragesManager()->GetSharedBlobsManager()->GetBlobCategories();
+    for (auto&& i : categories) {
+        auto it = ids.find(i.first);
+        for (auto cat = i.second.GetIterator(); cat.IsValid(); ++cat) {
+            AFL_VERIFY(it->second.contains(cat.GetBlobId()));
+        }
+    }
     THashMap<TString, NOlap::TBlobsCategories> shardBlobsCategories;
     for (auto&& i : ids) {
         auto storageSharingManager = shard.GetStoragesManager()->GetSharedBlobsManager()->GetStorageManagerVerified(i.first);
@@ -62,12 +68,15 @@ void TController::CheckInvariants(const ::NKikimr::NColumnShard::TColumnShard& s
     context.AddCategories(shard.TabletID(), std::move(shardBlobsCategories));
 }
 
-void TController::CheckInvariants() const {
+TController::TCheckContext TController::CheckInvariants() const {
     TGuard<TMutex> g(Mutex);
     TCheckContext context;
     for (auto&& i : ShardActuals) {
         CheckInvariants(*i.second, context);
     }
+    Cerr << context.DebugString() << Endl;
+    context.Check();
+    return context;
 }
 
 void TController::DoOnTabletInitCompleted(const ::NKikimr::NColumnShard::TColumnShard& shard) {

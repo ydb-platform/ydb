@@ -1,7 +1,9 @@
 #pragma once
-#include <ydb/core/tx/columnshard/hooks/abstract/abstract.h>
 #include <ydb/core/tx/columnshard/blobs_action/abstract/blob_set.h>
 #include <ydb/core/tx/columnshard/blob.h>
+#include <ydb/core/tx/columnshard/common/tablet_id.h>
+#include <ydb/core/tx/columnshard/hooks/abstract/abstract.h>
+#include <util/string/join.h>
 
 namespace NKikimr::NYDBTest::NColumnShard {
 
@@ -26,10 +28,16 @@ private:
 
     class TBlobInfo {
     private:
+        const NOlap::TUnifiedBlobId BlobId;
         std::optional<ui64> OwnerTabletId;
         THashSet<ui64> SharedTabletIdsFromShared;
         THashSet<ui64> SharedTabletIdsFromOwner;
     public:
+        TBlobInfo(const NOlap::TUnifiedBlobId& blobId)
+            : BlobId(blobId)
+        {
+
+        }
         void AddOwner(const ui64 tabletId) {
             if (!OwnerTabletId) {
                 OwnerTabletId = tabletId;
@@ -46,7 +54,16 @@ private:
         }
         void Check() const {
             AFL_VERIFY(OwnerTabletId);
-            AFL_VERIFY(SharedTabletIdsFromShared == SharedTabletIdsFromOwner);
+            AFL_VERIFY(SharedTabletIdsFromShared == SharedTabletIdsFromOwner)("blob_id", BlobId.ToStringNew())("shared", JoinSeq(",", SharedTabletIdsFromShared))("owned", JoinSeq(",", SharedTabletIdsFromOwner));
+        }
+
+        void DebugString(const TString& delta, TStringBuilder& sb) const {
+            if (OwnerTabletId) {
+                sb << delta << "O: " << *OwnerTabletId << Endl;
+            }
+            if (SharedTabletIdsFromShared.size()) {
+                sb << delta << "S: " << JoinSeq(",", SharedTabletIdsFromShared) << Endl;
+            }
         }
     };
 
@@ -54,18 +71,41 @@ private:
     private:
         THashMap<TString, THashMap<NOlap::TUnifiedBlobId, TBlobInfo>> Infos;
     public:
+        void Check() const {
+            for (auto&& i : Infos) {
+                for (auto&& b : i.second) {
+                    b.second.Check();
+                }
+            }
+        }
+
+        TString DebugString() const {
+            TStringBuilder sb;
+            for (auto&& i : Infos) {
+                sb << i.first << Endl;
+                for (auto&& b : i.second) {
+                    sb << "    " << b.first << Endl;
+                    b.second.DebugString("        ", sb);
+                }
+            }
+            return sb;
+        }
+
         void AddCategories(const ui64 tabletId, THashMap<TString, NOlap::TBlobsCategories>&& categories) {
             for (auto&& s : categories) {
                 for (auto it = s.second.GetDirect().GetIterator(); it.IsValid(); ++it) {
-                    Infos[s.first][it.GetBlobId()].AddOwner((ui64)it.GetTabletId());
+                    Infos[s.first].emplace(it.GetBlobId(), it.GetBlobId()).first->second.AddOwner((ui64)it.GetTabletId());
                 }
                 for (auto it = s.second.GetBorrowed().GetIterator(); it.IsValid(); ++it) {
-                    Infos[s.first][it.GetBlobId()].AddOwner((ui64)it.GetTabletId());
-                    Infos[s.first][it.GetBlobId()].AddSharingFromShared((ui64)it.GetTabletId());
+                    Infos[s.first].emplace(it.GetBlobId(), it.GetBlobId()).first->second.AddOwner((ui64)it.GetTabletId());
+                    Infos[s.first].emplace(it.GetBlobId(), it.GetBlobId()).first->second.AddSharingFromShared((ui64)tabletId);
                 }
                 for (auto it = s.second.GetSharing().GetIterator(); it.IsValid(); ++it) {
-                    Infos[s.first][it.GetBlobId()].AddOwner(tabletId);
-                    Infos[s.first][it.GetBlobId()].AddSharingFromOwner((ui64)it.GetTabletId());
+                    Infos[s.first].emplace(it.GetBlobId(), it.GetBlobId()).first->second.AddOwner(tabletId);
+                    Infos[s.first].emplace(it.GetBlobId(), it.GetBlobId()).first->second.AddSharingFromOwner((ui64)it.GetTabletId());
+                    if (it.GetTabletId() == (NOlap::TTabletId)tabletId) {
+                        Infos[s.first].emplace(it.GetBlobId(), it.GetBlobId()).first->second.AddSharingFromShared((ui64)tabletId);
+                    }
                 }
             }
         }
@@ -73,7 +113,7 @@ private:
 
     void CheckInvariants(const ::NKikimr::NColumnShard::TColumnShard& shard, TCheckContext& context) const;
 
-    void CheckInvariants() const;
+    TCheckContext CheckInvariants() const;
     THashSet<TString> SharingIds;
 protected:
     virtual void DoOnTabletInitCompleted(const ::NKikimr::NColumnShard::TColumnShard& shard) override;

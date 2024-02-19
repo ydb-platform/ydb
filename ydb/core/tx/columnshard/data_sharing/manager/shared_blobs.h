@@ -52,6 +52,17 @@ public:
         return SelfTabletId;
     }
 
+    TBlobsCategories GetBlobCategories() const {
+        TBlobsCategories result(SelfTabletId);
+        for (auto&& i : BorrowedBlobIds) {
+            result.AddBorrowed(i.second, i.first);
+        }
+        for (auto i = SharedBlobIds.GetIterator(); i.IsValid(); ++i) {
+            result.AddSharing(i.GetTabletId(), i.GetBlobId());
+        }
+        return result;
+    }
+
     TBlobsCategories BuildRemoveCategories(TTabletsByBlob&& blobs) const {
         TBlobsCategories result(SelfTabletId);
         for (auto it = blobs.GetIterator(); it.IsValid(); ++it) {
@@ -164,7 +175,15 @@ public:
     {
 
     }
-    
+
+    THashMap<TString, TBlobsCategories> GetBlobCategories() const {
+        THashMap<TString, TBlobsCategories> result;
+        for (auto&& i : Storages) {
+            result.emplace(i.first, i.second->GetBlobCategories());
+        }
+        return result;
+    }
+
     TTabletId GetSelfTabletId() const {
         return SelfTabletId;
     }

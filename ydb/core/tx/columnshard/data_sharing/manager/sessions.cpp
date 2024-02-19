@@ -8,6 +8,7 @@
 namespace NKikimr::NOlap::NDataSharing {
 
 void TSessionsManager::Start(const NColumnShard::TColumnShard& shard) const {
+    NActors::TLogContextGuard logGuard = NActors::TLogContextBuilder::Build()("sessions", "start")("tablet_id", shard.TabletID());
     for (auto&& i : SourceSessions) {
         if (!i.second->IsStarted()) {
             i.second->Start(shard);

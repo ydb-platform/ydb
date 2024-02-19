@@ -21,7 +21,15 @@
 
 #include <cstdint>
 #include <cstdio>
+#include <cstdlib>
 #include <limits>
+#include <util/generic/string.h>
+
+#include "y_absl/base/config.h"
+
+#if Y_ABSL_INTERNAL_HAS_CXA_DEMANGLE
+#include <cxxabi.h>
+#endif
 
 namespace y_absl {
 Y_ABSL_NAMESPACE_BEGIN
@@ -1981,6 +1989,22 @@ bool Demangle(const char* mangled, char* out, size_t out_size) {
   InitState(&state, mangled, out, out_size);
   return ParseTopLevelMangledName(&state) && !Overflowed(&state) &&
          state.parse_state.out_cur_idx > 0;
+}
+
+TString DemangleString(const char* mangled) {
+  TString out;
+  int status = 0;
+  char* demangled = nullptr;
+#if Y_ABSL_INTERNAL_HAS_CXA_DEMANGLE
+  demangled = abi::__cxa_demangle(mangled, nullptr, nullptr, &status);
+#endif
+  if (status == 0 && demangled != nullptr) {
+    out.append(demangled);
+    free(demangled);
+  } else {
+    out.append(mangled);
+  }
+  return out;
 }
 
 }  // namespace debugging_internal

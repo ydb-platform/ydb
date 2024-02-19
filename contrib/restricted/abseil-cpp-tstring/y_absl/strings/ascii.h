@@ -53,10 +53,12 @@
 #define Y_ABSL_STRINGS_ASCII_H_
 
 #include <algorithm>
+#include <cstddef>
 #include <util/generic/string.h>
 
 #include "y_absl/base/attributes.h"
 #include "y_absl/base/config.h"
+#include "y_absl/base/nullability.h"
 #include "y_absl/strings/string_view.h"
 
 namespace y_absl {
@@ -165,7 +167,7 @@ inline char ascii_tolower(unsigned char c) {
 }
 
 // Converts the characters in `s` to lowercase, changing the contents of `s`.
-void AsciiStrToLower(TString* s);
+void AsciiStrToLower(y_absl::Nonnull<TString*> s);
 
 // Creates a lowercase string from a given y_absl::string_view.
 Y_ABSL_MUST_USE_RESULT inline TString AsciiStrToLower(y_absl::string_view s) {
@@ -183,7 +185,7 @@ inline char ascii_toupper(unsigned char c) {
 }
 
 // Converts the characters in `s` to uppercase, changing the contents of `s`.
-void AsciiStrToUpper(TString* s);
+void AsciiStrToUpper(y_absl::Nonnull<TString*> s);
 
 // Creates an uppercase string from a given y_absl::string_view.
 Y_ABSL_MUST_USE_RESULT inline TString AsciiStrToUpper(y_absl::string_view s) {
@@ -201,7 +203,7 @@ Y_ABSL_MUST_USE_RESULT inline y_absl::string_view StripLeadingAsciiWhitespace(
 }
 
 // Strips in place whitespace from the beginning of the given string.
-inline void StripLeadingAsciiWhitespace(TString* str) {
+inline void StripLeadingAsciiWhitespace(y_absl::Nonnull<TString*> str) {
   auto it = std::find_if_not(str->cbegin(), str->cend(), y_absl::ascii_isspace);
   str->erase(str->begin(), it);
 }
@@ -215,7 +217,7 @@ Y_ABSL_MUST_USE_RESULT inline y_absl::string_view StripTrailingAsciiWhitespace(
 }
 
 // Strips in place whitespace from the end of the given string
-inline void StripTrailingAsciiWhitespace(TString* str) {
+inline void StripTrailingAsciiWhitespace(y_absl::Nonnull<TString*> str) {
   auto it = std::find_if_not(str->rbegin(), str->rend(), y_absl::ascii_isspace);
   str->erase(static_cast<size_t>(str->rend() - it));
 }
@@ -228,13 +230,13 @@ Y_ABSL_MUST_USE_RESULT inline y_absl::string_view StripAsciiWhitespace(
 }
 
 // Strips in place whitespace from both ends of the given string
-inline void StripAsciiWhitespace(TString* str) {
+inline void StripAsciiWhitespace(y_absl::Nonnull<TString*> str) {
   StripTrailingAsciiWhitespace(str);
   StripLeadingAsciiWhitespace(str);
 }
 
 // Removes leading, trailing, and consecutive internal whitespace.
-void RemoveExtraAsciiWhitespace(TString*);
+void RemoveExtraAsciiWhitespace(y_absl::Nonnull<TString*> str);
 
 Y_ABSL_NAMESPACE_END
 }  // namespace y_absl

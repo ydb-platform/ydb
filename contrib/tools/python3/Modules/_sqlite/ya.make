@@ -14,8 +14,8 @@ PEERDIR(
 
 ADDINCL(
     contrib/libs/sqlite3
-    contrib/tools/python3/src/Include
-    contrib/tools/python3/src/Include/internal
+    contrib/tools/python3/Include
+    contrib/tools/python3/Include/internal
 )
 
 PYTHON3_ADDINCL()

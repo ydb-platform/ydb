@@ -247,6 +247,14 @@ bool AbslParseFlag(y_absl::string_view text, y_absl::LogSeverity* dst,
     *err = "no value provided";
     return false;
   }
+  if (y_absl::EqualsIgnoreCase(text, "dfatal")) {
+    *dst = y_absl::kLogDebugFatal;
+    return true;
+  }
+  if (y_absl::EqualsIgnoreCase(text, "klogdebugfatal")) {
+    *dst = y_absl::kLogDebugFatal;
+    return true;
+  }
   if (text.front() == 'k' || text.front() == 'K') text.remove_prefix(1);
   if (y_absl::EqualsIgnoreCase(text, "info")) {
     *dst = y_absl::LogSeverity::kInfo;
@@ -269,7 +277,8 @@ bool AbslParseFlag(y_absl::string_view text, y_absl::LogSeverity* dst,
     *dst = static_cast<y_absl::LogSeverity>(numeric_value);
     return true;
   }
-  *err = "only integers and y_absl::LogSeverity enumerators are accepted";
+  *err =
+      "only integers, y_absl::LogSeverity enumerators, and DFATAL are accepted";
   return false;
 }
 

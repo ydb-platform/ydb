@@ -882,6 +882,7 @@ void TServerBase::ApplyConfig()
     newAppliedConfig->EnableErrorCodeCounting = DynamicConfig_->EnableErrorCodeCounting.value_or(StaticConfig_->EnableErrorCodeCounting);
     newAppliedConfig->EnablePerUserProfiling = DynamicConfig_->EnablePerUserProfiling.value_or(StaticConfig_->EnablePerUserProfiling);
     newAppliedConfig->HistogramTimerProfiling = DynamicConfig_->HistogramTimerProfiling.value_or(StaticConfig_->HistogramTimerProfiling);
+    newAppliedConfig->TracingMode = DynamicConfig_->TracingMode.value_or(StaticConfig_->TracingMode);
     newAppliedConfig->Services = StaticConfig_->Services;
 
     for (const auto& [name, node] : DynamicConfig_->Services) {

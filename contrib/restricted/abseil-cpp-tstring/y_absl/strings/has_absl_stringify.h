@@ -12,9 +12,9 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#ifndef Y_ABSL_STRINGS_INTERNAL_HAS_ABSL_STRINGIFY_H_
-#define Y_ABSL_STRINGS_INTERNAL_HAS_ABSL_STRINGIFY_H_
-#include <util/generic/string.h>
+#ifndef Y_ABSL_STRINGS_HAS_ABSL_STRINGIFY_H_
+#define Y_ABSL_STRINGS_HAS_ABSL_STRINGIFY_H_
+
 #include <type_traits>
 #include <utility>
 
@@ -38,6 +38,16 @@ class UnimplementedSink {
   friend void AbslFormatFlush(UnimplementedSink* sink, y_absl::string_view v);
 };
 
+}  // namespace strings_internal
+
+// `HasAbslStringify<T>` detects if type `T` supports the `AbslStringify()`
+// customization point (see
+// https://abseil.io/docs/cpp/guides/format#abslstringify for the
+// documentation).
+//
+// Note that there are types that can be `StrCat`-ed that do not use the
+// `AbslStringify` customization point (for example, `int`).
+
 template <typename T, typename = void>
 struct HasAbslStringify : std::false_type {};
 
@@ -47,9 +57,7 @@ struct HasAbslStringify<
            std::declval<strings_internal::UnimplementedSink&>(),
            std::declval<const T&>()))>::value>> : std::true_type {};
 
-}  // namespace strings_internal
-
 Y_ABSL_NAMESPACE_END
 }  // namespace y_absl
 
-#endif  // Y_ABSL_STRINGS_INTERNAL_HAS_ABSL_STRINGIFY_H_
+#endif  // Y_ABSL_STRINGS_HAS_ABSL_STRINGIFY_H_

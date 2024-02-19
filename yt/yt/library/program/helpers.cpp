@@ -177,8 +177,7 @@ void ConfigureTCMalloc(const TTCMallocConfigPtr& config)
     }
 }
 
-template <class TConfig>
-void ConfigureSingletonsImpl(const TConfig& config)
+void ConfigureSingletons(const TSingletonsConfigPtr& config)
 {
     SetSpinWaitSlowPathLoggingThreshold(config->SpinWaitSlowPathLoggingThreshold);
 
@@ -235,13 +234,7 @@ void ConfigureSingletonsImpl(const TConfig& config)
     NYson::SetProtobufInteropConfig(config->ProtobufInterop);
 }
 
-void ConfigureSingletons(const TSingletonsConfigPtr& config)
-{
-    ConfigureSingletonsImpl(config);
-}
-
-template <class TStaticConfig, class TDynamicConfig>
-void ReconfigureSingletonsImpl(const TStaticConfig& config, const TDynamicConfig& dynamicConfig)
+void ReconfigureSingletons(const TSingletonsConfigPtr& config, const TSingletonsDynamicConfigPtr& dynamicConfig)
 {
     SetSpinWaitSlowPathLoggingThreshold(dynamicConfig->SpinWaitSlowPathLoggingThreshold.value_or(config->SpinWaitSlowPathLoggingThreshold));
 
@@ -277,11 +270,6 @@ void ReconfigureSingletonsImpl(const TStaticConfig& config, const TDynamicConfig
     }
 
     NYson::SetProtobufInteropConfig(config->ProtobufInterop->ApplyDynamic(dynamicConfig->ProtobufInterop));
-}
-
-void ReconfigureSingletons(const TSingletonsConfigPtr& config, const TSingletonsDynamicConfigPtr& dynamicConfig)
-{
-    ReconfigureSingletonsImpl(config, dynamicConfig);
 }
 
 template <class TConfig>

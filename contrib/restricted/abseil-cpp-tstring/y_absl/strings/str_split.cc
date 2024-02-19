@@ -15,16 +15,13 @@
 #include "y_absl/strings/str_split.h"
 
 #include <algorithm>
-#include <cassert>
-#include <cstdint>
+#include <cstddef>
 #include <cstdlib>
 #include <cstring>
-#include <iterator>
-#include <limits>
-#include <memory>
 
+#include "y_absl/base/config.h"
 #include "y_absl/base/internal/raw_logging.h"
-#include "y_absl/strings/ascii.h"
+#include "y_absl/strings/string_view.h"
 
 namespace y_absl {
 Y_ABSL_NAMESPACE_BEGIN
@@ -97,6 +94,11 @@ y_absl::string_view ByString::Find(y_absl::string_view text, size_t pos) const {
     return text.substr(found_pos, 1);
   }
   return GenericFind(text, delimiter_, pos, LiteralPolicy());
+}
+
+y_absl::string_view ByAsciiWhitespace::Find(y_absl::string_view text,
+                                          size_t pos) const {
+  return GenericFind(text, " \t\v\f\r\n", pos, AnyOfPolicy());
 }
 
 //

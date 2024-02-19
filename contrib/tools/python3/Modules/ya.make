@@ -23,11 +23,11 @@ ADDINCL(
     contrib/libs/expat
     contrib/libs/libbz2
     contrib/restricted/libffi/include
-    contrib/tools/python3/src/Include
-    contrib/tools/python3/src/Include/internal
-    contrib/tools/python3/src/Modules
-    contrib/tools/python3/src/Modules/_decimal/libmpdec
-    contrib/tools/python3/src/Modules/_hacl/include
+    contrib/tools/python3/Include
+    contrib/tools/python3/Include/internal
+    contrib/tools/python3/Modules
+    contrib/tools/python3/Modules/_decimal/libmpdec
+    contrib/tools/python3/Modules/_hacl/include
 )
 
 NO_COMPILER_WARNINGS()

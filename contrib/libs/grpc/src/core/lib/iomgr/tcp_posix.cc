@@ -18,6 +18,8 @@
 
 #include <grpc/support/port_platform.h>
 
+#include "y_absl/strings/str_cat.h"
+
 #include <grpc/impl/grpc_types.h>
 
 #include "src/core/lib/iomgr/exec_ctx.h"

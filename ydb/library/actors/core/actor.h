@@ -445,6 +445,11 @@ namespace NActors {
             ActivityType = activityType;
         }
 
+        template <typename EEnum = EActivityType, typename std::enable_if<std::is_enum<EEnum>::value, bool>::type v = true>
+        void SetActivityType(const EEnum activityEnumType) {
+            ActivityType = TEnumProcessKey<TActorActivityTag, EEnum>::GetIndex(activityEnumType);
+        }
+
     public:
         class TPassAwayGuard: TMoveOnly {
         private:

@@ -177,7 +177,7 @@ private:
     void AddPageSize(TPartDataSize& stats, TPageId pageId, TGroupId groupId) const {
         // TODO: move to IStatsPartGroupIterator
         ui64 size = Part->GetPageSize(pageId, groupId);
-        ui8 channel = Part->GetPageChannel(pageId, groupId);
+        ui8 channel = Part->GetPageChannel(groupId);
         stats.Add(size, channel);
     }
 

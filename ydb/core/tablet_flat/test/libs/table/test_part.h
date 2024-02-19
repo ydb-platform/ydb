@@ -56,9 +56,8 @@ namespace NTest {
             return Store->GetPageType(groupId.Index, id);
         }
 
-        ui8 GetPageChannel(NPage::TPageId id, NPage::TGroupId groupId) const override
+        ui8 GetPageChannel(NPage::TGroupId groupId) const override
         {
-            Y_UNUSED(id);
             Y_UNUSED(groupId);
             return 0;
         }

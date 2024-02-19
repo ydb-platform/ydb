@@ -334,9 +334,8 @@ message TableProfile {
 }
 
 message SequenceDescription {
-    string path = 1;
-
     //copied fields from NKikimrSchemeOp::TSequenceDescription
+    optional string name = 1; // mandatorys
     optional sint64 min_value = 2; // minimum value, defaults to 1 or Min<i64>
     optional sint64 max_value = 3; // maximum value, defaults to Max<i64> or -1
     optional sint64 start_value = 4; // start value, defaults to min_value

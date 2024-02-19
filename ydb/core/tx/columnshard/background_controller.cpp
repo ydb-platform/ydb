@@ -3,35 +3,14 @@
 
 namespace NKikimr::NColumnShard {
 
-void TBackgroundController::StartTtl(const NOlap::TColumnEngineChanges& changes) {
-    Y_ABORT_UNLESS(TtlPortions.empty());
-    TtlPortions = changes.GetTouchedPortions();
+void TBackgroundController::StartTtl() {
+    Y_ABORT_UNLESS(!TtlStarted);
+    TtlStarted = true;
 }
 
-bool TBackgroundController::StartCompaction(const NOlap::TPlanCompactionInfo& info, const NOlap::TColumnEngineChanges& changes) {
+bool TBackgroundController::StartCompaction(const NOlap::TPlanCompactionInfo& info) {
     Y_ABORT_UNLESS(ActiveCompactionInfo.emplace(info.GetPathId(), info).second);
-    Y_ABORT_UNLESS(CompactionInfoPortions.emplace(info.GetPathId(), changes.GetTouchedPortions()).second);
     return true;
-}
-
-THashSet<NOlap::TPortionAddress> TBackgroundController::GetConflictTTLPortions() const {
-    THashSet<NOlap::TPortionAddress> result = TtlPortions;
-    for (auto&& i : CompactionInfoPortions) {
-        for (auto&& g : i.second) {
-            Y_ABORT_UNLESS(result.emplace(g).second);
-        }
-    }
-    return result;
-}
-
-THashSet<NOlap::TPortionAddress> TBackgroundController::GetConflictCompactionPortions() const {
-    THashSet<NOlap::TPortionAddress> result = TtlPortions;
-    for (auto&& i : CompactionInfoPortions) {
-        for (auto&& g : i.second) {
-            Y_ABORT_UNLESS(result.emplace(g).second);
-        }
-    }
-    return result;
 }
 
 void TBackgroundController::CheckDeadlines() {

@@ -47,7 +47,7 @@ void TCompactColumnEngineChanges::DoStart(NColumnShard::TColumnShard& self) {
         }
     }
 
-    self.BackgroundController.StartCompaction(NKikimr::NOlap::TPlanCompactionInfo(GranuleMeta->GetPathId()), *this);
+    self.BackgroundController.StartCompaction(NKikimr::NOlap::TPlanCompactionInfo(GranuleMeta->GetPathId()));
     NeedGranuleStatusProvide = true;
     GranuleMeta->OnCompactionStarted();
 }
@@ -85,14 +85,6 @@ TCompactColumnEngineChanges::TCompactColumnEngineChanges(const TSplitSettings& s
 
 TCompactColumnEngineChanges::~TCompactColumnEngineChanges() {
     Y_DEBUG_ABORT_UNLESS(!NActors::TlsActivationContext || !NeedGranuleStatusProvide);
-}
-
-THashSet<TPortionAddress> TCompactColumnEngineChanges::GetTouchedPortions() const {
-    THashSet<TPortionAddress> result = TBase::GetTouchedPortions();
-    for (auto&& i : SwitchedPortions) {
-        result.emplace(i.GetAddress());
-    }
-    return result;
 }
 
 }

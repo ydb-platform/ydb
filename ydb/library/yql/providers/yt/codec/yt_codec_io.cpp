@@ -972,6 +972,10 @@ protected:
             case NUdf::TDataType<i32>::Id:
             case NUdf::TDataType<i64>::Id:
             case NUdf::TDataType<NUdf::TInterval>::Id:
+            case NUdf::TDataType<NUdf::TDate32>::Id:
+            case NUdf::TDataType<NUdf::TDatetime64>::Id:
+            case NUdf::TDataType<NUdf::TTimestamp64>::Id:
+            case NUdf::TDataType<NUdf::TInterval64>::Id:
                 CHECK_EXPECTED(cmd, Int64Marker);
                 Buf_.ReadVarI64();
                 break;

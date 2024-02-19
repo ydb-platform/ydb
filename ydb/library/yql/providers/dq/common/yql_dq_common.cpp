@@ -7,6 +7,8 @@
 #include <ydb/library/yql/minikql/mkql_alloc.h>
 #include <ydb/library/yql/minikql/mkql_node.h>
 #include <ydb/library/yql/minikql/mkql_node_serialization.h>
+#include <ydb/library/yql/minikql/mkql_program_builder.h>
+#include <ydb/library/yql/providers/common/mkql/yql_type_mkql.h>
 
 #include <ydb/library/yql/sql/sql.h>
 #include <ydb/library/yql/sql/settings/translation_settings.h>
@@ -17,6 +19,20 @@ namespace NYql {
 namespace NCommon {
 
 using namespace NKikimr::NMiniKQL;
+
+TString GetSerializedTypeAnnotation(const NYql::TTypeAnnotationNode* typeAnn, const NKikimr::NMiniKQL::IFunctionRegistry* functionRegistry) {
+    Y_ABORT_UNLESS(typeAnn);
+    Y_ABORT_UNLESS(functionRegistry);
+
+    TScopedAlloc alloc(__LOCATION__);
+    TTypeEnvironment typeEnv(alloc);
+
+    NKikimr::NMiniKQL::TProgramBuilder pgmBuilder(typeEnv, *functionRegistry);
+    TStringStream errorStream;
+    auto type = NCommon::BuildType(*typeAnn, pgmBuilder, errorStream);
+    Y_ENSURE(type, "Failed to compile type: " << errorStream.Str());
+    return SerializeNode(type, typeEnv);
+}
 
 TString GetSerializedResultType(const TString& program) {
     TScopedAlloc alloc(__LOCATION__);

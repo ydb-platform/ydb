@@ -10,8 +10,17 @@ public:
     TString HostName() const override {
         return ::HostName();
     }
+
     TString FQDNHostName() const override {
         return ::FQDNHostName();
+    }
+
+    TString ReadFromFile(const TString& filePath, const TString& fileName, bool allowEmpty) const override {
+        return ::ReadFromFile(filePath, fileName, allowEmpty);
+    }
+
+    void Sleep(const TDuration& dur) const override {
+        ::Sleep(dur);
     }
 };
 

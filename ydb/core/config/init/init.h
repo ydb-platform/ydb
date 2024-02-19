@@ -1,45 +1,15 @@
 #pragma once
 
-#include <ydb/public/sdk/cpp/client/ydb_discovery/discovery.h>
-#include <ydb/public/sdk/cpp/client/ydb_driver/driver.h>
-
-#include <ydb/core/base/location.h>
-#include <ydb/core/driver_lib/run/config.h>
 #include <ydb/core/cms/console/config_item_info.h>
-#include <ydb/core/protos/config.pb.h>
-#include <ydb/core/base/path.h>
-#include <ydb/library/actors/core/log_iface.h>
-#include <ydb/library/yaml_config/yaml_config.h>
-#include <ydb/library/yaml_config/yaml_config_parser.h>
-
-#include <google/protobuf/text_format.h>
 
 #include <library/cpp/getopt/small/last_getopt_opts.h>
 
-#include <util/system/hostname.h>
-#include <util/stream/file.h>
-#include <util/system/file.h>
-#include <util/generic/maybe.h>
-#include <util/generic/map.h>
+#include <util/generic/hash.h>
+#include <util/generic/vector.h>
 #include <util/generic/string.h>
-#include <util/generic/strbuf.h>
-#include <util/generic/ptr.h>
+#include <util/datetime/base.h>
 
-#include <filesystem>
-
-namespace fs = std::filesystem;
-
-// ====
-#include <ydb/public/sdk/cpp/client/ydb_discovery/discovery.h>
-#include <ydb/public/sdk/cpp/client/ydb_driver/driver.h>
-#include <ydb/public/lib/deprecated/kicli/kicli.h>
-#include <ydb/public/lib/ydb_cli/common/common.h>
-#include <ydb/library/aclib/aclib.h>
-using namespace NYdb::NConsoleClient;
-// ===
-
-extern TAutoPtr<NKikimrConfig::TActorSystemConfig> DummyActorSystemConfig();
-extern TAutoPtr<NKikimrConfig::TAllocatorConfig> DummyAllocatorConfig();
+#include <memory>
 
 namespace NKikimr::NConfig {
 
@@ -48,6 +18,8 @@ public:
     virtual ~IEnv() {}
     virtual TString HostName() const = 0;
     virtual TString FQDNHostName() const = 0;
+    virtual TString ReadFromFile(const TString& filePath, const TString& fileName, bool allowEmpty = true) const = 0;
+    virtual void Sleep(const TDuration& dur) const = 0;
 };
 
 class IErrorCollector {

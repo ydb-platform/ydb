@@ -178,7 +178,9 @@ TRACING_SCHEMA = dict(
                 max_bytes_in_batch=dict(type="integer"),
                 max_bytes_accumulation_milliseconds=dict(type="integer"),
                 span_export_timeout_seconds=dict(type="integer", minimum=1),
+                max_span_export_inflight=dict(type="integer", minimum=1),
             ),
+            additionalProperties=False,
         ),
         sampling=dict(
             type="array",

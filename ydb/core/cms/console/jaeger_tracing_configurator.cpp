@@ -9,13 +9,15 @@
 
 namespace NKikimr::NConsole {
 
+using namespace NJaegerTracing;
+
 class TJaegerTracingConfigurator : public TActorBootstrapped<TJaegerTracingConfigurator> {
 public:
     static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
         return NKikimrServices::TActivity::JAEGER_TRACING_CONFIGURATOR;
     }
 
-    TJaegerTracingConfigurator(NJaegerTracing::TSamplingThrottlingConfigurator tracingConfigurator,
+    TJaegerTracingConfigurator(TSamplingThrottlingConfigurator tracingConfigurator,
                                NKikimrConfig::TTracingConfig cfg);
 
     void Bootstrap(const TActorContext& ctx);
@@ -29,15 +31,15 @@ private:
     )
 
     void ApplyConfigs(const NKikimrConfig::TTracingConfig& cfg);
-    static TMaybe<NJaegerTracing::ERequestType> GetRequestType(const NKikimrConfig::TTracingConfig::TSelectors& selectors);
-    static NJaegerTracing::TSettings<double, NJaegerTracing::TThrottlingSettings> GetSettings(const NKikimrConfig::TTracingConfig& cfg);
+    static TMaybe<ERequestType> GetRequestType(const NKikimrConfig::TTracingConfig::TSelectors& selectors);
+    static TSettings<double, TThrottlingSettings> GetSettings(const NKikimrConfig::TTracingConfig& cfg);
 
-    NJaegerTracing::TSamplingThrottlingConfigurator TracingConfigurator;
+    TSamplingThrottlingConfigurator TracingConfigurator;
     NKikimrConfig::TTracingConfig initialConfig;
 };
 
 TJaegerTracingConfigurator::TJaegerTracingConfigurator(
-    NJaegerTracing::TSamplingThrottlingConfigurator tracingConfigurator,
+    TSamplingThrottlingConfigurator tracingConfigurator,
     NKikimrConfig::TTracingConfig cfg)
     : TracingConfigurator(std::move(tracingConfigurator))
     , initialConfig(std::move(cfg))
@@ -73,21 +75,21 @@ void TJaegerTracingConfigurator::ApplyConfigs(const NKikimrConfig::TTracingConfi
     return TracingConfigurator.UpdateSettings(std::move(settings));
 }
 
-TMaybe<NJaegerTracing::ERequestType> TJaegerTracingConfigurator::GetRequestType(const NKikimrConfig::TTracingConfig::TSelectors& selectors) {
+TMaybe<ERequestType> TJaegerTracingConfigurator::GetRequestType(const NKikimrConfig::TTracingConfig::TSelectors& selectors) {
     if (!selectors.HasRequestType()) {
-        return NJaegerTracing::ERequestType::UNSPECIFIED;
+        return ERequestType::UNSPECIFIED;
     }
-    if (auto it = NJaegerTracing::NameToRequestType.FindPtr(selectors.GetRequestType())) {
+    if (auto it = NameToRequestType.FindPtr(selectors.GetRequestType())) {
         return *it;
     }
     return {};
 }
 
-NJaegerTracing::TSettings<double, NJaegerTracing::TThrottlingSettings> TJaegerTracingConfigurator::GetSettings(const NKikimrConfig::TTracingConfig& cfg) {
-    NJaegerTracing::TSettings<double, NJaegerTracing::TThrottlingSettings> settings;
+TSettings<double, TThrottlingSettings> TJaegerTracingConfigurator::GetSettings(const NKikimrConfig::TTracingConfig& cfg) {
+    TSettings<double, TThrottlingSettings> settings;
 
     for (const auto& samplingRule : cfg.GetSampling()) {
-        NJaegerTracing::ERequestType requestType;
+        ERequestType requestType;
         if (auto parsedRequestType = GetRequestType(samplingRule.GetScope())) {
             requestType = *parsedRequestType;
         } else {
@@ -119,10 +121,10 @@ NJaegerTracing::TSettings<double, NJaegerTracing::TThrottlingSettings> TJaegerTr
             fraction = std::min(1.0, std::max(0.0, fraction));
         }
 
-        NJaegerTracing::TSamplingRule<double, NJaegerTracing::TThrottlingSettings> rule {
+        TSamplingRule<double, TThrottlingSettings> rule {
             .Level = static_cast<ui8>(level),
             .Sampler = fraction,
-            .Throttler = NJaegerTracing::TThrottlingSettings {
+            .Throttler = TThrottlingSettings {
                 .MaxRatePerMinute = samplingRule.GetMaxRatePerMinute(),
                 .MaxBurst = samplingRule.GetMaxBurst(),
             },
@@ -131,7 +133,7 @@ NJaegerTracing::TSettings<double, NJaegerTracing::TThrottlingSettings> TJaegerTr
     }
 
     for (const auto& throttlingRule : cfg.GetExternalThrottling()) {
-        NJaegerTracing::ERequestType requestType;
+        ERequestType requestType;
         if (auto parsedRequestType = GetRequestType(throttlingRule.GetScope())) {
             requestType = *parsedRequestType;
         } else {
@@ -153,8 +155,8 @@ NJaegerTracing::TSettings<double, NJaegerTracing::TThrottlingSettings> TJaegerTr
 
         ui64 maxRatePerMinute = throttlingRule.GetMaxRatePerMinute();
         ui64 maxBurst = throttlingRule.GetMaxBurst();
-        NJaegerTracing::TExternalThrottlingRule<NJaegerTracing::TThrottlingSettings> rule {
-            .Throttler = NJaegerTracing::TThrottlingSettings {
+        TExternalThrottlingRule<TThrottlingSettings> rule {
+            .Throttler = TThrottlingSettings {
                 .MaxRatePerMinute = maxRatePerMinute,
                 .MaxBurst = maxBurst,
             },
@@ -170,10 +172,22 @@ NJaegerTracing::TSettings<double, NJaegerTracing::TThrottlingSettings> TJaegerTr
         }
     }
 
+    // If external_throttling section is absent we want to allow all requests to be traced
+    if (cfg.GetExternalThrottling().empty()){
+        TExternalThrottlingRule<TThrottlingSettings> rule {
+            .Throttler = TThrottlingSettings {
+                .MaxRatePerMinute = Max<ui64>(),
+                .MaxBurst = 0,
+            },
+        };
+
+        settings.ExternalThrottlingRules[static_cast<size_t>(ERequestType::UNSPECIFIED)] = rule;
+    }
+
     return settings;
 }
 
-IActor* CreateJaegerTracingConfigurator(NJaegerTracing::TSamplingThrottlingConfigurator tracingConfigurator,
+IActor* CreateJaegerTracingConfigurator(TSamplingThrottlingConfigurator tracingConfigurator,
                                         NKikimrConfig::TTracingConfig cfg) {
     return new TJaegerTracingConfigurator(std::move(tracingConfigurator), std::move(cfg));
 }

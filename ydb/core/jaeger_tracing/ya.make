@@ -8,6 +8,7 @@ SRCS(
     control.h
     control_wrapper.h
     request_discriminator.h
+    request_discriminator.cpp
     sampler.h
     sampling_throttling_configurator.h
     sampling_throttling_configurator.cpp

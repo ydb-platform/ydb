@@ -20,6 +20,7 @@
 #include <ydb/library/yql/public/issue/yql_issue_manager.h>
 #include <ydb/library/aclib/aclib.h>
 
+#include <ydb/core/jaeger_tracing/request_discriminator.h>
 #include <ydb/core/grpc_services/counters/proxy_counters.h>
 #include <ydb/core/grpc_streaming/grpc_streaming.h>
 #include <ydb/core/tx/scheme_board/events.h>
@@ -343,6 +344,7 @@ struct TRequestAuxSettings {
     TRateLimiterMode RlMode = TRateLimiterMode::Off;
     void (*CustomAttributeProcessor)(const TSchemeBoardEvents::TDescribeSchemeResult& schemeData, ICheckerIface*) = nullptr;
     TAuditMode AuditMode = TAuditMode::Off;
+    NJaegerTracing::TRequestDiscriminator RequestDiscriminator = NJaegerTracing::TRequestDiscriminator::EMPTY;
 };
 
 class TGRpcRequestProxySimple;
@@ -376,6 +378,10 @@ public:
     virtual void LegacyFinishSpan() = 0;
 
     // Used for per-type sampling
+    virtual const NJaegerTracing::TRequestDiscriminator& GetRequestDiscriminator() const {
+        return NJaegerTracing::TRequestDiscriminator::EMPTY;
+    };
+
     virtual const TString& GetInternalRequestType() const = 0;
 
     // validation
@@ -1451,6 +1457,10 @@ public:
             AuxSettings.CustomAttributeProcessor(schemeData, iface);
             return true;
         }
+    }
+
+    const NJaegerTracing::TRequestDiscriminator& GetRequestDiscriminator() const override {
+        return AuxSettings.RequestDiscriminator;
     }
 
     // IRequestCtxBaseMtSafe

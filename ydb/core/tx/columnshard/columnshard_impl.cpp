@@ -97,13 +97,11 @@ TColumnShard::TColumnShard(TTabletStorageInfo* info, const TActorId& tablet)
 }
 
 void TColumnShard::OnDetach(const TActorContext& ctx) {
-    CleanupActors(ctx);
     Die(ctx);
 }
 
 void TColumnShard::OnTabletDead(TEvTablet::TEvTabletDead::TPtr& ev, const TActorContext& ctx) {
     Y_UNUSED(ev);
-    CleanupActors(ctx);
     Die(ctx);
 }
 
@@ -812,6 +810,7 @@ void TColumnShard::Die(const TActorContext& ctx) {
     CleanupActors(ctx);
     NTabletPipe::CloseAndForgetClient(SelfId(), StatsReportPipe);
     UnregisterMediatorTimeCast();
+    NYDBTest::TControllers::GetColumnShardController()->OnTabletStopped(*this);
     return IActor::Die(ctx);
 }
 

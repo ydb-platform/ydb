@@ -22,7 +22,6 @@ void TColumnShard::CleanupActors(const TActorContext& ctx) {
     if (Tiers) {
         Tiers->Stop(true);
     }
-    NYDBTest::TControllers::GetColumnShardController()->OnTabletStopped(*this);
 }
 
 void TColumnShard::BecomeBroken(const TActorContext& ctx) {

@@ -515,7 +515,7 @@ public:
     }
 
     void Handle(TEvKqp::TEvParseResponse::TPtr& ev) {
-        QueryState->SaveAndCheckParseResult(ev->Get());
+        QueryState->SaveAndCheckParseResult(std::move(*ev->Get()));
         CompileStatement();
     }
 
@@ -1651,7 +1651,7 @@ public:
     }
 
     void ProcessNextStatement() {
-        if (QueryState->FinishedStatements()) {
+        if (QueryState->ProcessingLastStatement()) {
             Cleanup();
             return;
         }

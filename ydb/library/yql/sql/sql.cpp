@@ -78,11 +78,6 @@ namespace NSQLTranslation {
             *actualSyntaxVersion = parsedSettings.SyntaxVersion;
         }
 
-        google::protobuf::Arena arena;
-        if (!parsedSettings.Arena) {
-            parsedSettings.Arena = &arena;
-        }
-
         switch (parsedSettings.SyntaxVersion) {
             case 0:
                 if (settings.V0ForceDisable || settings.V0Behavior == EV0Behavior::Disable) {
@@ -97,9 +92,9 @@ namespace NSQLTranslation {
                     return nullptr;
                 }
 
-                return NSQLTranslationV0::SqlAST(query, queryName, issues, maxErrors, parsedSettings.Arena);
+                return NSQLTranslationV0::SqlAST(query, queryName, issues, maxErrors, settings.Arena);
             case 1:
-                return NSQLTranslationV1::SqlAST(query, queryName, issues, maxErrors, parsedSettings.AnsiLexer, parsedSettings.Arena);
+                return NSQLTranslationV1::SqlAST(query, queryName, issues, maxErrors, parsedSettings.AnsiLexer, settings.Arena);
             default:
                 issues.AddIssue(NYql::YqlIssue(NYql::TPosition(), NYql::TIssuesIds::DEFAULT_ERROR,
                     TStringBuilder() << "Unknown SQL syntax version: " << parsedSettings.SyntaxVersion));

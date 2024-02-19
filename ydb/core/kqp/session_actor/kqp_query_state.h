@@ -375,7 +375,7 @@ public:
         return RequestEv->GetTxControl();
     }
 
-    bool FinishedStatements() {
+    bool ProcessingLastStatement() const {
         return CurrentStatementId + 1 >= Statements.size();
     }
 
@@ -421,7 +421,7 @@ public:
     std::unique_ptr<TEvTxProxySchemeCache::TEvNavigateKeySet> BuildNavigateKeySet();
     // same the context of the compiled query to the query state.
     bool SaveAndCheckCompileResult(TEvKqp::TEvCompileResponse* ev);
-    bool SaveAndCheckParseResult(TEvKqp::TEvParseResponse* ev);
+    bool SaveAndCheckParseResult(TEvKqp::TEvParseResponse&& ev);
     // build the compilation request.
     std::unique_ptr<TEvKqp::TEvCompileRequest> BuildCompileRequest(std::shared_ptr<std::atomic<bool>> cookie);
     // TODO(gvit): get rid of code duplication in these requests,

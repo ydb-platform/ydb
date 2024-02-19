@@ -134,9 +134,10 @@ bool TKqpQueryState::SaveAndCheckCompileResult(TEvKqp::TEvCompileResponse* ev) {
     return true;
 }
 
-bool TKqpQueryState::SaveAndCheckParseResult(TEvKqp::TEvParseResponse* ev) {
-    Statements = std::move(ev->AstStatements);
-    Orbit = std::move(ev->Orbit);
+bool TKqpQueryState::SaveAndCheckParseResult(TEvKqp::TEvParseResponse&& ev) {
+    Statements = std::move(ev.AstStatements);
+    CurrentStatementId = 0;
+    Orbit = std::move(ev.Orbit);
     return true;
 }
 
@@ -150,7 +151,7 @@ std::unique_ptr<TEvKqp::TEvCompileRequest> TKqpQueryState::BuildCompileRequest(s
     settings.Syntax = GetSyntax();
 
     bool keepInCache = false;
-    bool perStatementResult = !HasTxControl();
+    const bool perStatementResult = !HasTxControl() && GetAction() == NKikimrKqp::QUERY_ACTION_EXECUTE;
     switch (GetAction()) {
         case NKikimrKqp::QUERY_ACTION_EXECUTE:
             query = TKqpQueryId(Cluster, Database, GetQuery(), settings, GetQueryParameterTypes());
@@ -160,19 +161,16 @@ std::unique_ptr<TEvKqp::TEvCompileRequest> TKqpQueryState::BuildCompileRequest(s
         case NKikimrKqp::QUERY_ACTION_PREPARE:
             query = TKqpQueryId(Cluster, Database, GetQuery(), settings, GetQueryParameterTypes());
             keepInCache = query->IsSql();
-            perStatementResult = false;
             break;
 
         case NKikimrKqp::QUERY_ACTION_EXECUTE_PREPARED:
             uid = GetPreparedQuery();
             keepInCache = GetQueryKeepInCache();
-            perStatementResult = false;
             break;
 
         case NKikimrKqp::QUERY_ACTION_EXPLAIN:
             query = TKqpQueryId(Cluster, Database, GetQuery(), settings, GetQueryParameterTypes());
             keepInCache = false;
-            perStatementResult = false;
             break;
 
         default:
@@ -186,6 +184,7 @@ std::unique_ptr<TEvKqp::TEvCompileRequest> TKqpQueryState::BuildCompileRequest(s
 
     TMaybe<TQueryAst> statementAst;
     if (!Statements.empty()) {
+        YQL_ENSURE(CurrentStatementId < Statements.size());
         statementAst = Statements[CurrentStatementId];
     }
 

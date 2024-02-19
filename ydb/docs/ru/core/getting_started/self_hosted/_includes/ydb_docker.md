@@ -190,7 +190,7 @@ docker run --rm -it --entrypoint cat {{ ydb_local_docker_image }} THIRD_PARTY_LI
     docker-compose up -d
     ```
 
-1. Инициализируйте любым удобным вам способом данные внутри развёрнутого в контейнере источника, например, подключившись к нему через CLI:
+1. Инициализируйте любым удобным вам способом данные внутри развернутого в контейнере источника, например, подключившись к нему через CLI:
     ```bash
     docker exec -it fq-example-postgresql psql -d fq --user admin -c "
         DROP TABLE IF EXISTS example;
@@ -199,7 +199,7 @@ docker run --rm -it --entrypoint cat {{ ydb_local_docker_image }} THIRD_PARTY_LI
                                    (4, 'd', 40), (5, 'e', 50), (6, NULL, 1);"
     ```
 
-1. Откройте в браузере [страницу](http://localhost:8765/monitoring/tenant?schema=%2Flocal&name=%2Flocal) с веб-интерфейсом базы данных `/local` локально развёрнутого инстанса {{ ydb-short-name }}. В панели для запросов введите код, регистрирующий базу данных `fq` из локального инстанса PostgreSQL в качестве внешнего источника данных для {{ ydb-short-name }}:
+1. Откройте в браузере [страницу](http://localhost:8765/monitoring/tenant?schema=%2Flocal&name=%2Flocal) с веб-интерфейсом базы данных `/local` локально развернутого инстанса {{ ydb-short-name }}. В панели для запросов введите код, регистрирующий базу данных `fq` из локального инстанса PostgreSQL в качестве внешнего источника данных для {{ ydb-short-name }}:
 
     ```sql
     # Создаётся секрет, содержащий пароль "password" пользователя admin базы данных PostgreSQL

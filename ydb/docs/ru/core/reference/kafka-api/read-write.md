@@ -19,7 +19,7 @@
 ## Запись данных в топик
 {% list tabs %}
 - kcat
-  ```bash
+  ```ini
   echo "test message" | kcat -P \
     -b <ydb-endpoint> \
     -t <topic-name> \
@@ -94,7 +94,7 @@
 {% list tabs %}
 
 - kcat
-  ```bash
+  ```ini
   kcat -C \
       -b <ydb-endpoint> \
       -k key \

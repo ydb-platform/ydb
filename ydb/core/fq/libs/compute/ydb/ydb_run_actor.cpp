@@ -105,7 +105,7 @@ public:
         auto& response = *ev->Get();
         if (response.Status == NYdb::EStatus::NOT_FOUND) { // FAILING / ABORTING_BY_USER / ABORTING_BY_SYSTEM
             LOG_I("StatusTrackerResponse (not found). Status: " << response.Status << " Issues: " << response.Issues.ToOneLineString());
-            CreateFinalizer();
+            CreateFinalizer(Params.Status);
             return;
         }
 
@@ -147,7 +147,7 @@ public:
             return;
         }
         LOG_I("ResourcesCleanerResponse (success) " << response.Status << " Issues: " << response.Issues.ToOneLineString());
-        CreateFinalizer();
+        CreateFinalizer(IsAborted ? FederatedQuery::QueryMeta::ABORTING_BY_USER : Params.Status);
     }
 
     void Handle(const TEvYdbCompute::TEvFinalizerResponse::TPtr ev) {
@@ -194,7 +194,7 @@ public:
             if (Params.OperationId.GetKind() != Ydb::TOperationId::UNUSED) {
                 Register(ActorFactory->CreateResultWriter(SelfId(), Connector, Pinger, Params.OperationId).release());
             } else {
-                CreateFinalizer();
+                CreateFinalizer(Params.Status);
             }
             break;
         case FederatedQuery::QueryMeta::FAILING:
@@ -203,7 +203,7 @@ public:
             if (Params.OperationId.GetKind() != Ydb::TOperationId::UNUSED) {
                 Register(ActorFactory->CreateStatusTracker(SelfId(), Connector, Pinger, Params.OperationId).release());
             } else {
-                CreateFinalizer();
+                CreateFinalizer(Params.Status);
             }
             break;
         default:
@@ -234,9 +234,9 @@ public:
         Register(ActorFactory->CreateResourcesCleaner(SelfId(), Connector, Params.OperationId).release());
     }
 
-    void CreateFinalizer() {
+    void CreateFinalizer(FederatedQuery::QueryMeta::ComputeStatus status) {
         FinalizationStarted = true;
-        Register(ActorFactory->CreateFinalizer(Params, SelfId(), Pinger, ExecStatus, Params.Status).release());
+        Register(ActorFactory->CreateFinalizer(Params, SelfId(), Pinger, ExecStatus, status).release());
     }
 
     bool CancelOperationIsRunning(const TString& stage) const {

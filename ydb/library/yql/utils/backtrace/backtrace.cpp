@@ -1,7 +1,7 @@
 #include "backtrace.h"
 
-#include <ydb/library/yql/utils/backtrace/libbacktrace/backtrace.h>
-#include <ydb/library/yql/utils/backtrace/libbacktrace/symbolizer.h>
+#include "backtrace_lib.h"
+#include "symbolizer.h"
 
 #include <library/cpp/deprecated/atomic/atomic.h>
 #include <library/cpp/malloc/api/malloc.h>
@@ -78,6 +78,8 @@ void SetFatalSignalAction(void (*sigaction)(int, siginfo_t*, void*))
 namespace {
     std::vector<std::function<void(int)>> Before, After;
     bool KikimrSymbolize = false;
+    const int Limit = 400;
+    NYql::NBacktrace::TCollectedFrame Frames[Limit];
 
     void CallCallbacks(decltype(Before)& where, int signum) {
         for (const auto &fn: where) {
@@ -87,14 +89,16 @@ namespace {
         }
     }
 
-    void PrintFrames(IOutputStream* out, const TVector<NYql::NBacktrace::TCollectedFrame>& frames);
+    void PrintFrames(IOutputStream* out, const NYql::NBacktrace::TCollectedFrame* frames, size_t cnt);
 
     void DoBacktrace(IOutputStream* out, void* data) {
-        PrintFrames(out, NYql::NBacktrace::CollectFrames(data));
+        auto cnt = NYql::NBacktrace::CollectFrames(Frames, data);
+        PrintFrames(out, Frames, cnt);
     }
 
     void DoBacktrace(IOutputStream* out, void** stack, size_t cnt) {
-        PrintFrames(out, NYql::NBacktrace::CollectFrames(stack, cnt));
+        Y_UNUSED(NYql::NBacktrace::CollectFrames(Frames, stack, cnt));
+        PrintFrames(out, Frames, cnt);
     }
     
 
@@ -185,11 +189,11 @@ void EnableKikimrBacktraceFormat() {
 }
 
 namespace {
-    void PrintFrames(IOutputStream* out, const TVector<NYql::NBacktrace::TCollectedFrame>& frames) {
+    void PrintFrames(IOutputStream* out, const NYql::NBacktrace::TCollectedFrame* frames, size_t count) {
         auto& outp = *out;
         if (KikimrSymbolize) {
-            TVector<NYql::NBacktrace::TStackFrame> sFrames(frames.size());
-            for (size_t i = 0; i < frames.size(); ++i) {
+            TVector<NYql::NBacktrace::TStackFrame> sFrames(count);
+            for (size_t i = 0; i < count; ++i) {
                 sFrames[i] = NYql::NBacktrace::TStackFrame{frames[i].File, frames[i].Address};
             }
             auto symbolized = NYql::NBacktrace::Symbolize(sFrames);
@@ -198,10 +202,11 @@ namespace {
             }
             return;
         }
-        outp << "StackFrames: " << frames.size() << "\n";
-        for (auto &frame: frames) {
+        outp << "StackFrames: " << count << "\n";
+        for (size_t i = 0; i < count; ++i) {
+            auto& frame = frames[i];
             auto fileName = frame.File;
-            if (fileName == "/proc/self/exe") {
+            if (!strcmp(fileName, "/proc/self/exe")) {
                 fileName = "EXE";
             }
             auto it = NYql::NBacktrace::Mapping.find(fileName);

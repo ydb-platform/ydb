@@ -1,6 +1,6 @@
 #include "backtrace.h"
 
-#include <ydb/library/yql/utils/backtrace/libbacktrace/symbolizer.h>
+#include "symbolizer.h"
 
 #include <util/string/split.h>
 #include <util/stream/str.h>
@@ -10,6 +10,7 @@ namespace NYql {
     namespace NBacktrace {
 
         TString Symbolize(const TString& input, const THashMap<TString, TString>& mapping) {
+#if defined(__linux__) && defined(__x86_64__)
             TString output;
             TStringOutput out(output);
 
@@ -28,14 +29,16 @@ namespace NYql {
                     Split(TString(line), " ", parts);
                     TString modulePath;
                     ui64 address;
-                    if (parts.size() > 2) {
+                    ui64 offset;
+                    if (parts.size() > 3) {
                         modulePath = parts[1];
                         TryFromString<ui64>(parts[2], address);
+                        TryFromString<ui64>(parts[3], offset);
                         auto it = mapping.find(modulePath);
                         if (it != mapping.end()) {
                             modulePath = it->second;
                         }
-                        frames.emplace_back(TStackFrame{modulePath, address});
+                        frames.emplace_back(TStackFrame{modulePath, address - offset});
                     }
                 } else {
                     out << line << "\n";
@@ -49,6 +52,9 @@ namespace NYql {
                 out << e << "\n";
             }
             return output;
+#else
+            return input;
+#endif
         }
 
     } /* namespace NBacktrace */

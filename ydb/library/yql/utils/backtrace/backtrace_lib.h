@@ -8,10 +8,11 @@ namespace NYql {
         size_t CollectBacktrace(void** addresses, size_t limit, void* data);
         struct TCollectedFrame {
             TCollectedFrame(uintptr_t addr);
-            TString File;
+            TCollectedFrame() = default;
+            const char* File;
             size_t Address;
         };
-        TVector<TCollectedFrame> CollectFrames(void* data);
-        TVector<TCollectedFrame> CollectFrames(void** stack, size_t cnt);
+        size_t CollectFrames(TCollectedFrame* frames, void* data);
+        size_t CollectFrames(TCollectedFrame* frames, void** stack, size_t cnt);
     }
 }

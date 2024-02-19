@@ -1,4 +1,4 @@
-#include "backtrace.h"
+#include "backtrace_lib.h"
 
 #include <util/generic/hash.h>
 #include <util/system/execpath.h>
@@ -34,7 +34,7 @@ namespace {
 namespace NYql {
     namespace NBacktrace {
         TCollectedFrame::TCollectedFrame(uintptr_t addr) {
-            File = GetPersistentExecPath();
+            File = GetPersistentExecPath().c_str();
             Address = addr;
 #if defined(_linux_) && defined(_x86_64_)
             Dl_info dlInfo;
@@ -51,22 +51,20 @@ namespace NYql {
 #endif
         }
 
-        TVector<TCollectedFrame> CollectFrames(void* data) {
+        size_t CollectFrames(TCollectedFrame* frames, void* data) {
 #if defined(_linux_) && defined(_x86_64_)
             DLLs.clear();
             dl_iterate_phdr(DlIterCallback, &DLLs);
 #endif
             size_t cnt = CollectBacktrace(Stack, Limit, data);
-            return CollectFrames(Stack, cnt);
+            return CollectFrames(frames, Stack, cnt);
         }
 
-        TVector<TCollectedFrame> CollectFrames(void** stack, size_t cnt) {
-            TVector<TCollectedFrame> result;
-            result.reserve(cnt);
+        size_t CollectFrames(TCollectedFrame* frames, void** stack, size_t cnt) {
             for (size_t i = 0; i < cnt; ++i) {
-                result.emplace_back(reinterpret_cast<uintptr_t>(stack[i]));
+                new (frames + i)TCollectedFrame(reinterpret_cast<uintptr_t>(stack[i]));
             }
-            return result;
+            return cnt;
         }
     }
 }

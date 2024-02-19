@@ -98,16 +98,37 @@ Y_UNIT_TEST_SUITE(BuildStats) {
         Check(*subset, 24000, 2106439, 25272);
     }
 
+    Y_UNIT_TEST(Single_Slices)
+    {
+        auto subset = TMake(Mass0, PageConf(Mass0.Model->Scheme->Families.size(), false)).Mixed(0, 1, TMixerOne{ }, 0, 13);   
+        subset->Flatten.begin()->Slices->Describe(Cerr); Cerr << Endl;
+        Check(*subset, 12816, 1121048, 25272);
+    }
+
     Y_UNIT_TEST(Single_Groups)
     {
         auto subset = TMake(Mass1, PageConf(Mass1.Model->Scheme->Families.size(), false)).Mixed(0, 1, TMixerOne{ });   
         Check(*subset, 24000, 2460139, 13170);
     }
 
+    Y_UNIT_TEST(Single_Groups_Slices)
+    {
+        auto subset = TMake(Mass1, PageConf(Mass1.Model->Scheme->Families.size(), false)).Mixed(0, 1, TMixerOne{ }, 0, 13);   
+        subset->Flatten.begin()->Slices->Describe(Cerr); Cerr << Endl;
+        Check(*subset, 10440, 1060798, 13170);
+    }
+
     Y_UNIT_TEST(Single_Groups_History)
     {
         auto subset = TMake(Mass1, PageConf(Mass1.Model->Scheme->Families.size(), false)).Mixed(0, 1, TMixerOne{ }, 0.3);   
         Check(*subset, 24000, 4054050, 18810);
+    }
+
+    Y_UNIT_TEST(Single_Groups_History_Slices)
+    {
+        auto subset = TMake(Mass1, PageConf(Mass1.Model->Scheme->Families.size(), false)).Mixed(0, 1, TMixerOne{ }, 0.3, 13);   
+        subset->Flatten.begin()->Slices->Describe(Cerr); Cerr << Endl;
+        Check(*subset, 13570, 2277890, 18810);
     }
 
     Y_UNIT_TEST(Mixed)

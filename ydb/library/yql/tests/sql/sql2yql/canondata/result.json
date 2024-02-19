@@ -18040,9 +18040,9 @@
     ],
     "test_sql_format.test[action-parallel_for]": [
         {
-            "checksum": "23888f0f4542b6ff32bcdabf9eb4e4d9",
-            "size": 231,
-            "uri": "https://{canondata_backend}/1924537/81ea882379cbb6d33045aa517e56bcd05fa3ec6b/resource.tar.gz#test_sql_format.test_action-parallel_for_/formatted.sql"
+            "checksum": "d7f5684a1d58cdfdefa9c8706efe6b0d",
+            "size": 248,
+            "uri": "https://{canondata_backend}/1777230/29e6546cefd22432f185891c6cd51b4feab1b172/resource.tar.gz#test_sql_format.test_action-parallel_for_/formatted.sql"
         }
     ],
     "test_sql_format.test[action-pass_action_as_param]": [

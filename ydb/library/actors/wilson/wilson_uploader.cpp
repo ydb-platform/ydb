@@ -84,6 +84,13 @@ namespace NWilson {
             }
         };
 
+        struct TExportRequestData : TIntrusiveListItem<TExportRequestData> {
+            std::unique_ptr<grpc::ClientContext> Context;
+            std::unique_ptr<grpc::ClientAsyncResponseReader<NServiceProto::ExportTraceServiceResponse>> Reader;
+            grpc::Status Status;
+            NServiceProto::ExportTraceServiceResponse Response;
+        };
+
         class TWilsonUploader
             : public TActorBootstrapped<TWilsonUploader>
         {
@@ -116,14 +123,7 @@ namespace NWilson {
             bool BatchCompletionScheduled = false;
             TMonotonic NextBatchCompletion;
 
-            struct TUploadData : TIntrusiveListItem<TUploadData> {
-                std::unique_ptr<grpc::ClientContext> Context;
-                std::unique_ptr<grpc::ClientAsyncResponseReader<NServiceProto::ExportTraceServiceResponse>> Reader;
-                grpc::Status Status;
-                NServiceProto::ExportTraceServiceResponse Response;
-            };
-
-            TIntrusiveListWithAutoDelete<TUploadData, TDelete> ExportRequests;
+            TIntrusiveListWithAutoDelete<TExportRequestData, TDelete> ExportRequests;
 
         public:
             TWilsonUploader(WilsonUploaderParams params)
@@ -284,7 +284,7 @@ namespace NWilson {
                     GrpcSigner->SignClientContext(*context);
                 }
                 auto reader = Stub->AsyncExport(context.get(), std::move(batch.Request), &CQ);
-                auto uploadData = new TUploadData {
+                auto uploadData = new TExportRequestData {
                     .Context = std::move(context),
                     .Reader = std::move(reader),
                 };
@@ -300,7 +300,7 @@ namespace NWilson {
                 void* tag;
                 bool ok;
                 while (CQ.AsyncNext(&tag, &ok, std::chrono::system_clock::now()) == grpc::CompletionQueue::GOT_EVENT) {
-                    auto node = static_cast<TUploadData*>(tag);
+                    auto node = static_cast<TExportRequestData*>(tag);
                     ALOG_TRACE(WILSON_SERVICE_ID, "finished export request " << (void*)node);
                     if (!node->Status.ok()) {
                         ALOG_ERROR(WILSON_SERVICE_ID,

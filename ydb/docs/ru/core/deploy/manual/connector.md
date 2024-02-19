@@ -11,7 +11,7 @@
 
 ### Запуск {#fq-connector-go-launch}
 
-Для запуска коннектора используйте официальный [Docker-образ](https://github.com/ydb-platform/fq-connector-go/pkgs/container/fq-connector-go). Он уже содержит [конфигурационный файл](https://github.com/ydb-platform/fq-connector-go/blob/main/examples/config.debug.txt) сервиса. Запустить сервис с настройками по умолчанию можно следующей командой: 
+Для запуска коннектора используйте официальный [Docker-образ](https://github.com/ydb-platform/fq-connector-go/pkgs/container/fq-connector-go). Он уже содержит [конфигурационный файл](https://github.com/ydb-platform/fq-connector-go/blob/main/app/server/config/config.prod.yaml) сервиса. Запустить сервис с настройками по умолчанию можно следующей командой: 
 
 ```bash
 docker run -d \
@@ -28,7 +28,7 @@ docker run -d \
 docker run -d \
     --name=fq-connector-go \
     -p 50051:50051 \
-    -v /path/to/config.txt:/usr/local/etc/fq-connector-go.conf
+    -v /path/to/config.yaml:/usr/local/etc/fq-connector-go.yaml
     ghcr.io/ydb-platform/fq-connector-go:latest
 ```
 
@@ -38,7 +38,7 @@ docker run -d \
 docker run -d \
     --name=fq-connector-go \
     -p 50051:50051 \
-    -v /path/to/config.txt:/usr/local/etc/fq-connector-go.conf
+    -v /path/to/config.yaml:/usr/local/etc/fq-connector-go.yaml
     -v /path/to/tls/:/usr/local/etc/tls/
     ghcr.io/ydb-platform/fq-connector-go:latest
 ```
@@ -67,22 +67,19 @@ RUN update-ca-certificates
 
 ### Конфигурация {#fq-connector-go-config}
 
-Актуальный пример конфигурационного файла сервиса `fq-connector-go` можно найти в [репозитории](https://github.com/ydb-platform/fq-connector-go/blob/main/examples/config.prod.txt). 
+Актуальный пример конфигурационного файла сервиса `fq-connector-go` можно найти в [репозитории](https://github.com/ydb-platform/fq-connector-go/blob/main/app/server/config/config.prod.yaml). 
 
 | Параметр | Назначение |
 |----------|------------|
-| `connector_server` | Обязательная секция. Содержит настройки основного GPRC-сервиса. |
+| `connector_server` | Обязательная секция. Содержит настройки основного GPRC-сервера, выполняющего доступ к данным. |
 | `connector_server.endpoint.host` | Сетевой интерфейс, на котором запускается слушающий сокет сервиса. |
 | `connector_server.endpoint.port` | Номер порта, на котором запускается слушающий сокет сервиса. |
-| `connector_server.tls` | Опциональная секция. Заполняется, если требуется включение TLS-соединений для основного GRPC-сервиса `fq-connector-go`. |
+| `connector_server.tls` | Опциональная секция. Заполняется, если требуется включение TLS-соединений для основного GRPC-сервиса `fq-connector-go`. По умолчанию сервис запускается без TLS. |
 | `connector_server.tls.key` | Полный путь до закрытого ключа шифрования. |
 | `connector_server.tls.cert` | Полный путь до открытого ключа шифрования. |
 | `logger` | Опциональная секция. Содержит настройки логирования. |
-| `logger.log_level` | Уровень логгирования. Допустимые значения: `TRACE`, `DEBUG`, `INFO`, `WARN`, `ERROR`, `FATAL`. |
-| `logger.enable_sql_query_logging` | Для реляционных источников данных включает логирование транслированных запросов. Допустимые значения: `true`, `false`. **ВАЖНО**: включение этой опции может привести к печати конфиденциальных пользовательских данных в логи. |
-| `metrics_server` | Опциональная секция. Заполняется, если требуется выгрузка статистики сервиса через отдельный сервис. |
-| `metrics_server.endpoint.host` | Сетевой интерфейс, на котором запускается слушающий сокет сервера статистики. |
-| `metrics_server.endpoint.port` | Номер порта, на котором запускается слушающий сокет сервера статистики. |
+| `logger.log_level` | Уровень логгирования. Допустимые значения: `TRACE`, `DEBUG`, `INFO`, `WARN`, `ERROR`, `FATAL`. Значение по умолчанию: `INFO`. |
+| `logger.enable_sql_query_logging` | Для реляционных источников данных включает логирование транслированных запросов. Допустимые значения: `true`, `false`. **ВАЖНО**: включение этой опции может привести к печати конфиденциальных пользовательских данных в логи. Значение по умолчанию: `false`. |
 | `paging` | Опциональная секция. Содержит настройки алгоритма разбиения извлекаемого из источника потока данных на Arrow-блоки. |
-| `paging.bytes_per_page` | Количество байт в одном блоке. Рекомендуемые значения - от 4 до 8 МиБ, максимальное значение - 48 МиБ. |
-| `paging.prefetch_queue_capacity` | Количество заранее вычитываемых блоков данных, которые хранятся в адресном пространстве коннектора до обращения YDB за очередным блоком данных. В некоторых сценариях бóльшие значения данной настройки могут увеличить пропускную способность, но одновременно приведут и к большему потреблению оперативной памяти процессом. Рекомендуемые значения - не менее 2. | 
+| `paging.bytes_per_page` | Количество байт в одном блоке. Рекомендуемые значения - от 4 до 8 МиБ, максимальное значение - 48 МиБ. Значение по умолчанию: 4 МиБ. |
+| `paging.prefetch_queue_capacity` | Количество заранее вычитываемых блоков данных, которые хранятся в адресном пространстве коннектора до обращения YDB за очередным блоком данных. В некоторых сценариях бóльшие значения данной настройки могут увеличить пропускную способность, но одновременно приведут и к большему потреблению оперативной памяти процессом. Рекомендуемые значения - не менее 2. Значение по умолчанию: 2. | 

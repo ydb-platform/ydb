@@ -495,7 +495,7 @@ class YqTenant(BaseTenant):
                     'max_retry_time_ms': 3000
                 }
             },
-            'pq_read_actor_factory_config': { 'ReadSessionLogLevel': 3 }
+            'pq_read_actor_factory_config': { 'read_session_log_level': 3 }
         }
 
 

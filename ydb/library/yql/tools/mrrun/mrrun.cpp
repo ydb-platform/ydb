@@ -235,7 +235,7 @@ bool FillUsedUrls(
 
 NDq::IDqAsyncIoFactory::TPtr CreateAsyncIoFactory(const NYdb::TDriver& driver, IHTTPGateway::TPtr httpGateway) {
     auto factory = MakeIntrusive<NYql::NDq::TDqAsyncIoFactory>();
-    RegisterDqPqReadActorFactory(*factory, driver, nullptr, true, ELogPriority::TLOG_INFO);
+    RegisterDqPqReadActorFactory(*factory, driver, nullptr);
     RegisterYdbReadActorFactory(*factory, driver, nullptr);
     RegisterS3ReadActorFactory(*factory, nullptr, httpGateway);
     RegisterS3WriteActorFactory(*factory, nullptr, httpGateway);

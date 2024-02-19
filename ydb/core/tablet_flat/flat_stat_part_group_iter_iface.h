@@ -15,7 +15,7 @@ namespace NKikimr::NTable {
         virtual TPageId GetPageId() const = 0;
         virtual TRowId GetRowId() const = 0;
 
-        virtual TPos HasKeyCells() const = 0;
+        virtual TPos GetKeyCellsCount() const = 0;
         virtual TCell GetKeyCell(TPos index) const = 0;
 
         virtual ~IStatsPartGroupIterator() = default;

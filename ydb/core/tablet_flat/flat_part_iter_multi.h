@@ -544,8 +544,8 @@ namespace NTable {
                                 return Exhausted();
                             };
                             case EReady::Data: {
-                                Y_DEBUG_ABORT_UNLESS(Index.HasKeyCells(), "Non-first page is expected to have key cells");
-                                if (Index.HasKeyCells()) {
+                                Y_DEBUG_ABORT_UNLESS(Index.GetKeyCellsCount(), "Non-first page is expected to have key cells");
+                                if (Index.GetKeyCellsCount()) {
                                     if (!checkIndex()) {
                                         // First row for the next RowId
                                         MaxVersion = TRowVersion::Max();
@@ -632,8 +632,8 @@ namespace NTable {
             }
 
             // We need exact match on rowId, bail on larger values
-            Y_DEBUG_ABORT_UNLESS(Index.GetRowId() == 0 || Index.HasKeyCells(), "Non-first page is expected to have key cells");
-            if (Index.HasKeyCells()) {
+            Y_DEBUG_ABORT_UNLESS(Index.GetRowId() == 0 || Index.GetKeyCellsCount(), "Non-first page is expected to have key cells");
+            if (Index.GetKeyCellsCount()) {
                 TRowId indexRowId = Index.GetKeyCell(0).AsValue<TRowId>();
                 if (rowId < indexRowId) {
                     // We cannot compute MaxVersion anyway as indexRowId row may be presented on the previous page
@@ -675,8 +675,8 @@ namespace NTable {
                 return Terminate(ready);
             }
 
-            Y_DEBUG_ABORT_UNLESS(Index.HasKeyCells(), "Non-first page is expected to have key cells");
-            if (Y_LIKELY(Index.HasKeyCells())) {
+            Y_DEBUG_ABORT_UNLESS(Index.GetKeyCellsCount(), "Non-first page is expected to have key cells");
+            if (Y_LIKELY(Index.GetKeyCellsCount())) {
                 if (!checkIndex()) {
                     // First row for the nextRowId
                     MaxVersion = TRowVersion::Max();
@@ -706,7 +706,7 @@ namespace NTable {
             Data = Page->Begin();
             Y_ABORT_UNLESS(Data);
 
-            if (Index.HasKeyCells()) {
+            if (Index.GetKeyCellsCount()) {
                 // Must have rowId as we have checked index
                 Y_ABORT_UNLESS(checkData() && RowVersion <= rowVersion, "Index and Data are out of sync");
 

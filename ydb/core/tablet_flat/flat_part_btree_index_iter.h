@@ -264,7 +264,7 @@ public:
         return State.back().EndRowId;
     }
 
-    TPos HasKeyCells() const override {
+    TPos GetKeyCellsCount() const override {
         Y_ABORT_UNLESS(IsLeaf());
         return State.back().BeginKey.Count();
     }

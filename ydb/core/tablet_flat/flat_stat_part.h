@@ -113,9 +113,8 @@ public:
         }
 
         if (HistoricGroups) {
-            const auto& historyScheme = Part->Scheme->HistoryGroup;
-            Y_DEBUG_ABORT_UNLESS(historyScheme.ColsKeyIdx.size() == 3);
-            while (HistoricGroups[0]->IsValid() && (!HistoricGroups[0]->HasKeyCells() || HistoricGroups[0]->GetKeyCell(0).AsValue<TRowId>() < nextRowId)) {
+            Y_DEBUG_ABORT_UNLESS(Part->Scheme->HistoryGroup.ColsKeyIdx.size() == 3);
+            while (HistoricGroups[0]->IsValid() && (!HistoricGroups[0]->GetKeyCellsCount() || HistoricGroups[0]->GetKeyCell(0).AsValue<TRowId>() < nextRowId)) {
                 // eagerly include all history up to the next row id
                 if (rowCount) {
                     AddPageSize(stats.DataSize, HistoricGroups[0]->GetPageId(), TGroupId(0, true));
@@ -190,7 +189,7 @@ private:
 
         ui32 keyIdx = 0;
         // Add columns that are present in the part
-        if (ui32 keyCellsCount = Groups[0]->HasKeyCells()) {
+        if (ui32 keyCellsCount = Groups[0]->GetKeyCellsCount()) {
             for (;keyIdx < keyCellsCount; ++keyIdx) {
                 CurrentKey.push_back(Groups[0]->GetKeyCell(keyIdx));
             }

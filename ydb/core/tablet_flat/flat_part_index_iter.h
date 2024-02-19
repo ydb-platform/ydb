@@ -128,7 +128,7 @@ public:
             : EndRowId;
     }
 
-    TPos HasKeyCells() const override {
+    TPos GetKeyCellsCount() const override {
         Y_ABORT_UNLESS(Index);
         Y_ABORT_UNLESS(Iter);
         return GroupInfo.KeyTypes.size();

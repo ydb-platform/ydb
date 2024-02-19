@@ -124,9 +124,9 @@ namespace NProfiling {
 TMemoryProfileGuard::TMemoryProfileGuard(const TString& id)
     : Id(id)
 {
-    NProfiling::TMemoryTagScope::Reset(TLocalProcessKeyState<NActors::TActorActivityTag>::GetInstance().Register(Id + "-Start"));
+    NProfiling::TMemoryTagScope::Reset(NActors::TLocalProcessKeyState<NActors::TActorActivityTag>::GetInstance().Register(Id + "-Start"));
 }
 
 TMemoryProfileGuard::~TMemoryProfileGuard() {
-    NProfiling::TMemoryTagScope::Reset(TLocalProcessKeyState<NActors::TActorActivityTag>::GetInstance().Register(Id + "-Finish"));
+    NProfiling::TMemoryTagScope::Reset(NActors::TLocalProcessKeyState<NActors::TActorActivityTag>::GetInstance().Register(Id + "-Finish"));
 }

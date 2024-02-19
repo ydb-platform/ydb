@@ -1,5 +1,7 @@
 #pragma once
 
+#include <ydb/library/actors/actor_type/common.h>
+
 #include <util/string/builder.h>
 #include <util/system/mutex.h>
 #include <util/generic/strbuf.h>
@@ -7,6 +9,24 @@
 #include <util/generic/hash.h>
 #include <util/generic/singleton.h>
 #include <util/generic/serialized_enum.h>
+
+namespace NActors {
+
+struct TActivityIndex {
+    ui32 Value;
+
+    explicit TActivityIndex(ui32 value)
+        : Value(value)
+    {}
+
+    template <typename EEnum, typename std::enable_if<std::is_enum<EEnum>::value, bool>::type v = true>
+    TActivityIndex(EEnum activityType);
+
+    operator ui32() const {
+        return Value;
+    }
+};
+
 
 class TLocalProcessKeyStateIndexLimiter {
 public:
@@ -155,3 +175,10 @@ private:
 
     inline static TVector<size_t> Enum2Index = RegisterAll();
 };
+
+template <typename EEnum, typename std::enable_if<std::is_enum<EEnum>::value, bool>::type v>
+TActivityIndex::TActivityIndex(EEnum activityEnumType)
+    : Value(TEnumProcessKey<TActorActivityTag, EEnum>::GetIndex(activityEnumType))
+{}
+
+} // namespace NActors

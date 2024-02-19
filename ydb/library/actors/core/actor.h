@@ -352,13 +352,6 @@ namespace NActors {
         friend class TExecutorPoolBaseMailboxed;
         friend class TGenericExecutorThread;
 
-        IActor(const ui32 activityType)
-            : SelfActorId(TActorId())
-            , ElapsedTicks(0)
-            , ActivityType(activityType)
-            , HandledEvents(0) {
-        }
-
     protected:
         TActorCallbackBehaviour CImpl;
     public:
@@ -367,29 +360,25 @@ namespace NActors {
         /// @sa services.proto NKikimrServices::TActivity::EType
         using EActorActivity = EInternalActorType;
         using EActivityType = EActorActivity;
-        ui32 ActivityType;
+        TActivityIndex ActivityType;
 
     protected:
         ui64 HandledEvents;
 
-        template <typename EEnum = EActivityType, typename std::enable_if<std::is_enum<EEnum>::value, bool>::type v = true>
-        IActor(const EEnum activityEnumType = EActivityType::OTHER)
-            : IActor(TEnumProcessKey<TActorActivityTag, EEnum>::GetIndex(activityEnumType)) {
-        }
+        IActor(TActivityIndex activity = EActivityType::OTHER)
+            : SelfActorId(TActorId())
+            , ElapsedTicks(0)
+            , ActivityType(activity)
+            , HandledEvents(0)
+        {}
 
-        IActor(TActorCallbackBehaviour&& cImpl, const ui32 activityType)
+        IActor(TActorCallbackBehaviour&& cImpl, TActivityIndex activity)
             : SelfActorId(TActorId())
             , ElapsedTicks(0)
             , CImpl(std::move(cImpl))
-            , ActivityType(activityType)
+            , ActivityType(activity)
             , HandledEvents(0)
-        {
-        }
-
-        template <typename EEnum = EActivityType, typename std::enable_if<std::is_enum<EEnum>::value, bool>::type v = true>
-        IActor(TActorCallbackBehaviour&& cImpl, const EEnum activityEnumType = EActivityType::OTHER)
-            : IActor(std::move(cImpl), TEnumProcessKey<TActorActivityTag, EEnum>::GetIndex(activityEnumType)) {
-        }
+        {}
 
     public:
         template <class TEventBase>
@@ -441,13 +430,9 @@ namespace NActors {
         virtual void PassAway();
 
     protected:
-        void SetActivityType(ui32 activityType) {
-            ActivityType = activityType;
-        }
-
         template <typename EEnum = EActivityType, typename std::enable_if<std::is_enum<EEnum>::value, bool>::type v = true>
-        void SetActivityType(const EEnum activityEnumType) {
-            ActivityType = TEnumProcessKey<TActorActivityTag, EEnum>::GetIndex(activityEnumType);
+        void SetActivityType(TActivityIndex activity) {
+            ActivityType = activity;
         }
 
     public:
@@ -622,13 +607,7 @@ namespace NActors {
     protected:
         template <class TEnum = IActor::EActivityType>
         IActorCallback(TReceiveFunc stateFunc, const TEnum activityType = IActor::EActivityType::OTHER)
-            : IActor(TActorCallbackBehaviour(stateFunc), activityType) {
-
-        }
-
-        IActorCallback(TReceiveFunc stateFunc, const ui32 activityType)
-            : IActor(TActorCallbackBehaviour(stateFunc), activityType) {
-
+            : IActor(TActorCallbackBehaviour(stateFunc), TActivityIndex{activityType}) {
         }
 
     public:
@@ -683,7 +662,7 @@ namespace NActors {
 
         static ui32 GetActivityTypeIndex() {
             static const ui32 result = GetActivityTypeIndexImpl();
-            return result;
+            return static_cast<TActivityIndex>(result);
         }
 
     protected:
@@ -699,7 +678,7 @@ namespace NActors {
         }
 
         TActor(TDerivedReceiveFunc func, const TString& actorName)
-            : IActorCallback(static_cast<TReceiveFunc>(func), TLocalProcessKeyState<TActorActivityTag>::GetInstance().Register(actorName)) {
+            : IActorCallback(static_cast<TReceiveFunc>(func), static_cast<TActivityIndex>(TLocalProcessKeyState<TActorActivityTag>::GetInstance().Register(actorName))) {
         }
 
     public:
@@ -787,7 +766,7 @@ namespace NActors {
 
     public:
         TDecorator(THolder<IActor>&& actor)
-            : IActorCallback(static_cast<TReceiveFunc>(&TDecorator::State), actor->GetActivityType())
+            : IActorCallback(static_cast<TReceiveFunc>(&TDecorator::State))
             , Actor(std::move(actor))
         {
         }

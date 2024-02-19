@@ -9,6 +9,7 @@
 #include <ydb/core/kqp/common/simple/query_ast.h>
 #include <ydb/core/kqp/common/kqp_user_request_context.h>
 #include <ydb/core/kqp/counters/kqp_counters.h>
+#include <ydb/library/yql/ast/yql_expr.h>
 
 namespace NKikimr::NKqp::NPrivateEvents {
 
@@ -58,6 +59,10 @@ struct TEvCompileRequest: public TEventLocal<TEvCompileRequest, TKqpEvents::EvCo
     bool CollectDiagnostics = false;
 
     TMaybe<TQueryAst> QueryAst;
+    bool Split = false;
+
+    NYql::TExprContext* Ctx = nullptr;
+    NYql::TExprNode::TPtr Expr = nullptr;
 };
 
 struct TEvRecompileRequest: public TEventLocal<TEvRecompileRequest, TKqpEvents::EvRecompileRequest> {
@@ -120,6 +125,17 @@ struct TEvParseResponse: public TEventLocal<TEvParseResponse, TKqpEvents::EvPars
     TVector<TQueryAst> AstStatements;
     TKqpQueryId Query;
     NLWTrace::TOrbit Orbit;
+};
+
+struct TEvSplitResponse: public TEventLocal<TEvSplitResponse, TKqpEvents::EvSplitResponse> {
+    TEvSplitResponse(const TKqpQueryId& query, TVector<NYql::TExprNode::TPtr> exprs, THolder<NYql::TExprContext> ctx)
+        : Query(query)
+        , Ctx(std::move(ctx))
+        , Exprs(std::move(exprs)) {}
+
+    TKqpQueryId Query;
+    THolder<NYql::TExprContext> Ctx;
+    TVector<NYql::TExprNode::TPtr> Exprs;
 };
 
 struct TEvCompileInvalidateRequest: public TEventLocal<TEvCompileInvalidateRequest,

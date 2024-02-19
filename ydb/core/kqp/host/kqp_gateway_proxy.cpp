@@ -433,6 +433,9 @@ static TFuture<TResult> PrepareUnsupported(const char* name) {
     TResult result;
     result.AddIssue(TIssue({}, TStringBuilder()
         <<"Operation is not supported in current execution mode, check query type. Operation: " << name));
+    Cerr << "FAILED" << Endl;
+    FormatBackTrace(&Cerr);
+    Y_ABORT();
     return MakeFuture(result);
 }
 

@@ -61,6 +61,10 @@ namespace {
         }
 
         const auto& insertData = writeArgs.Get(3);
+        if (insertData.Ptr()->Content() == "Void") {
+            return std::nullopt;
+        }
+
         const auto pos = insertData.Ref().Pos();
 
         TCreateTableAsResult result;

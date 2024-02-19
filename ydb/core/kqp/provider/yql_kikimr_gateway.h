@@ -744,6 +744,8 @@ public:
         std::shared_ptr<google::protobuf::Arena> ProtobufArenaPtr;
         TMaybe<ui16> SqlVersion;
         google::protobuf::RepeatedPtrField<NKqpProto::TResultSetMeta> ResultSetsMeta;
+        //THolder<TExprContext> ExprCtx;
+        //TVector<TExprNode::TPtr> SplittedExprs;
     };
 
     struct TExecuteLiteralResult : public TGenericResult {

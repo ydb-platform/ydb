@@ -10,7 +10,8 @@ namespace NKqp {
 
 enum class ECompileActorAction {
     COMPILE,
-    PARSE
+    PARSE,
+    SPLIT,
 };
 
 IActor* CreateKqpCompileService(const NKikimrConfig::TTableServiceConfig& tableServiceConfig,
@@ -36,9 +37,11 @@ IActor* CreateKqpCompileActor(const TActorId& owner, const TKqpSettings::TConstP
     const TIntrusivePtr<TUserRequestContext>& userRequestContext, NWilson::TTraceId traceId = {},
     TKqpTempTablesState::TConstPtr tempTablesState = nullptr,
     ECompileActorAction compileAction = ECompileActorAction::COMPILE,
-    TMaybe<TQueryAst> queryAst = {},
-    bool collectFullDiagnostics = false,
     bool PerStatementResult = false);
+    TMaybe<TQueryAst> astResult = {},
+    bool collectFullDiagnostics = false,
+    NYql::TExprContext* ctx = nullptr,
+    NYql::TExprNode::TPtr expr = nullptr);
 
 IActor* CreateKqpCompileRequestActor(const TActorId& owner, const TIntrusiveConstPtr<NACLib::TUserToken>& userToken, const TMaybe<TString>& uid,
     TMaybe<TKqpQueryId>&& query, bool keepInCache, const TInstant& deadline, TKqpDbCountersPtr dbCounters,

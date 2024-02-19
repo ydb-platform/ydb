@@ -86,7 +86,7 @@ public:
     virtual IAsyncQueryResultPtr ExplainScanQuery(const TKqpQueryRef& query, bool isSql) = 0;
 
     /* Generic queries */
-    virtual IAsyncQueryResultPtr PrepareGenericQuery(const TKqpQueryRef& query, const TPrepareSettings& settings) = 0;
+    virtual IAsyncQueryResultPtr PrepareGenericQuery(const TKqpQueryRef& query, const TPrepareSettings& settings, NYql::TExprNode::TPtr expr = nullptr) = 0;
 
     /* Federated queries */
     virtual IAsyncQueryResultPtr PrepareGenericScript(const TKqpQueryRef& query, const TPrepareSettings& settings) = 0;
@@ -106,8 +106,18 @@ public:
     virtual IAsyncQueryResultPtr StreamExecuteYqlScript(const TKqpQueryRef& script, const ::google::protobuf::Map<TProtoStringType, ::Ydb::TypedValue>& parameters,
         const NActors::TActorId& target, const TExecScriptSettings& settings) = 0;
 
-    /* Splitting */
-    //virtual 
+    /* Compilation */
+    //virtual TVector<NYql::TExprNode::TPtr> CompileYqlQuery(const TKqpQueryRef& query, bool isSql, bool sqlAutoCommit, NYql::TExprContext& ctx,
+    //    TMaybe<TSqlVersion>& sqlVersion, const TMaybe<bool>& usePgParser) const = 0;
+
+    virtual TVector<NYql::TExprNode::TPtr> CompileQuery(const TKqpQueryRef& query, bool isSql, bool sqlAutoCommit, NYql::TExprContext& ctx,
+        TMaybe<TSqlVersion>& sqlVersion, const TMaybe<bool>& usePgParser) const = 0;
+
+    virtual std::pair<TVector<NYql::TExprNode::TPtr>, THolder<NYql::TExprContext>> CompileQuery(const TKqpQueryRef& query, const TPrepareSettings& settings) = 0;
+
+    //virtual IAsyncQueryResultPtr SplitGenericQuery(const TKqpQueryRef& query, const TPrepareSettings& settings) = 0;
+
+    //virtual IAsyncQueryResultPtr SplitGenericScript(const TKqpQueryRef& query, const TPrepareSettings& settings) = 0;
 };
 
 TIntrusivePtr<IKqpHost> CreateKqpHost(TIntrusivePtr<IKqpGateway> gateway,
@@ -115,7 +125,8 @@ TIntrusivePtr<IKqpHost> CreateKqpHost(TIntrusivePtr<IKqpGateway> gateway,
     std::optional<TKqpFederatedQuerySetup> federatedQuerySetup, const TIntrusiveConstPtr<NACLib::TUserToken>& userToken,
     const TMaybe<TString>& applicationName = Nothing(), const NKikimr::NMiniKQL::IFunctionRegistry* funcRegistry = nullptr,
     bool keepConfigChanges = false, bool isInternalCall = false, TKqpTempTablesState::TConstPtr tempTablesState = nullptr,
-    NActors::TActorSystem* actorSystem = nullptr /*take from TLS by default*/);
+    NActors::TActorSystem* actorSystem = nullptr /*take from TLS by default*/,
+    NYql::TExprContext* ctx = nullptr);
 
 } // namespace NKqp
 } // namespace NKikimr

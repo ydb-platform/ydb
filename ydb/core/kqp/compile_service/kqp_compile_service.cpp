@@ -289,6 +289,9 @@ struct TKqpCompileRequest {
     std::shared_ptr<std::atomic<bool>> IntrestedInResult;
     TMaybe<TQueryAst> QueryAst;
 
+    NYql::TExprContext* Ctx = nullptr;
+    NYql::TExprNode::TPtr Expr = nullptr;
+
     bool IsIntrestedInResult() const {
         return IntrestedInResult->load();
     }
@@ -448,6 +451,7 @@ private:
             HFunc(TEvKqp::TEvCompileInvalidateRequest, Handle);
             HFunc(TEvKqp::TEvRecompileRequest, Handle);
             HFunc(TEvKqp::TEvParseResponse, Handle);
+            HFunc(TEvKqp::TEvSplitResponse, Handle);
 
             hFunc(NConsole::TEvConfigsDispatcher::TEvSetConfigSubscriptionResponse, HandleConfig);
             hFunc(NConsole::TEvConsole::TEvConfigNotificationRequest, HandleConfig);
@@ -656,6 +660,12 @@ private:
             ev->Get()->UserRequestContext, std::move(ev->Get()->Orbit), std::move(compileServiceSpan),
             std::move(ev->Get()->TempTablesState));
 
+        if (ev->Get()->Split) {
+            compileRequest.Action = ECompileActorAction::SPLIT;
+        }
+        compileRequest.Ctx = request.Ctx;
+        compileRequest.Expr = request.Expr;
+
         if (TableServiceConfig.GetEnableAstCache() && request.QueryAst) {
             return CompileByAst(*request.QueryAst, compileRequest, ctx);
         }
@@ -797,6 +807,8 @@ private:
                 }
             }
 
+            Cerr << "TEST >> FAIL HERE" << Endl;
+
             LWTRACK(KqpCompileServiceGetCompilation, compileRequest.Orbit, compileRequest.Query.UserSid, compileActorId.ToString());
             Reply(compileRequest.Sender, compileResult, compileStats, ctx,
                 compileRequest.Cookie, std::move(compileRequest.Orbit), std::move(compileRequest.CompileServiceSpan), (CollectDiagnostics ? ev->Get()->ReplayMessageUserView : std::nullopt));
@@ -937,6 +949,15 @@ private:
         CompileByAst(astStatements.front(), compileRequest, ctx);
     }
 
+    void Handle(TEvKqp::TEvSplitResponse::TPtr& ev, const TActorContext& ctx) {
+        auto& query = ev->Get()->Query;
+        auto compileRequest = RequestsQueue.FinishActiveRequest(query);
+
+        Cerr << "CHECK2:: " << ev->Get()->Exprs.front()->Dead() << Endl;
+
+        ctx.Send(compileRequest.Sender, ev->Release(), 0, compileRequest.Cookie);
+    }
+
 private:
     bool InsertPreparingQuery(const TKqpCompileResult::TConstPtr& compileResult, bool keepInCache, bool isPerStatementExecution) {
         YQL_ENSURE(compileResult->Query);
@@ -996,7 +1017,8 @@ private:
     void StartCompilation(TKqpCompileRequest&& request, const TActorContext& ctx) {
         auto compileActor = CreateKqpCompileActor(ctx.SelfID, KqpSettings, TableServiceConfig, QueryServiceConfig, MetadataProviderConfig, ModuleResolverState, Counters,
             request.Uid, request.Query, request.UserToken, FederatedQuerySetup, request.DbCounters, request.ApplicationName, request.UserRequestContext,
-            request.CompileServiceSpan.GetTraceId(), request.TempTablesState, request.CompileSettings.Action, std::move(request.QueryAst), CollectDiagnostics, request.CompileSettings.PerStatementResult);
+            request.CompileServiceSpan.GetTraceId(), request.TempTablesState, request.CompileSettings.Action, std::move(request.QueryAst), CollectDiagnostics,
+            request.CompileSettings.PerStatementResult, request.Ctx, request.Expr);
         auto compileActorId = ctx.ExecutorThread.RegisterActor(compileActor, TMailboxType::HTSwap,
             AppData(ctx)->UserPoolId);
 

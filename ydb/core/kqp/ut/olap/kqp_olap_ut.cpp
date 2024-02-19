@@ -6356,10 +6356,13 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
             WITH (STORE = COLUMN, AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = 10);
         )";
 
-        auto result = session.ExecuteSchemeQuery(query).GetValueSync();
-        UNIT_ASSERT_C(result.GetStatus() == NYdb::EStatus::SUCCESS, result.GetIssues().ToString());
-
         auto client = kikimr.GetQueryClient();
+        auto result = client.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
+        //auto result = session.ExecuteSchemeQuery(query).GetValueSync();
+        UNIT_ASSERT_C(result.GetStatus() == NYdb::EStatus::SUCCESS, result.GetIssues().ToString());
+        
+        Cerr << ">>>> PASSED 1 " << Endl;
+
         { 
             auto prepareResult = client.ExecuteQuery(R"(
                 REPLACE INTO `/Root/Source` (Col1, Col2) VALUES

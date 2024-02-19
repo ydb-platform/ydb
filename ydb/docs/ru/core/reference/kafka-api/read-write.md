@@ -9,11 +9,10 @@
 
 В примерах используются:
 
- * `<ydb-endpoint>` — эндпоинт.
- * `<db-path>` — [путь базы данных](../../concepts/connect#database).
+ * `<ydb-endpoint>` — эндпоинт YDB.
  * `<topic-name>` — имя топика. Допускается указывать как полное имя (вместе с путем базы данных), так и только имя топика.
- * `<user>` — имя пользователя. Об управлении ролями и пользователями читайте в [Управление доступом](../../cluster/access.md).
- * `<user-pass>` — пароль пользователя.
+ * `<sasl.username>` — имя пользователя SASL. Подробности читайте в разделе [Аутентификация](./auth.md).
+ * `<sasl.password>` — пароль пользователя SASL. Подробности читайте в разделе [Аутентификация](./auth.md).
  * `<consumer-name>` — [имя читателя](../../concepts/topic#consumer).
 
 
@@ -27,16 +26,16 @@
     -k key \
     -X security.protocol=SASL_SSL \
     -X sasl.mechanism=PLAIN \
-    -X sasl.username="<user>@<db-path>" \
-    -X sasl.password="<user-pass>" \
+    -X sasl.username="<sasl.username>" \
+    -X sasl.password="<sasl.password>" \
   ```
 
 - Java
   ```java
   String HOST = "<ydb-endpoint>";
   String TOPIC = "<topic-name>";
-  String USER = "<user>@<db-path";
-  String PASS = "<user-pass>";
+  String USER = "<sasl.username>";
+  String PASS = "<sasl.password>";
 
   Properties props = new Properties();
   props.put("bootstrap.servers", HOST);
@@ -69,7 +68,7 @@
       compression_type => none
       security_protocol => SASL_SSL
       sasl_mechanism => PLAIN
-      sasl_jaas_config => "org.apache.kafka.common.security.plain.PlainLoginModule required username='<user>@<db-path>' password='<user-pass>';"
+      sasl_jaas_config => "org.apache.kafka.common.security.plain.PlainLoginModule required username='<sasl.username>' password='<sasl.password>';"
     }
   }
   ```
@@ -87,8 +86,8 @@
     rdkafka.log_level             7
     rdkafka.security.protocol     SASL_SSL
     rdkafka.sasl.mechanism        PLAIN
-    rdkafka.sasl.username         <user>@<db-path>
-    rdkafka.sasl.password         <user-pass>
+    rdkafka.sasl.username         <sasl.username>
+    rdkafka.sasl.password         <sasl.password>
   ```
 {% endlist %}
 ## Чтение данных из топика
@@ -101,8 +100,8 @@
       -k key \
       -X security.protocol=SASL_SSL \
       -X sasl.mechanism=PLAIN \
-      -X sasl.username="<user>@<db-path>" \
-      -X sasl.password="<user-pass>" \
+      -X sasl.username="<sasl.username>" \
+      -X sasl.password="<sasl.password>" \
       -X partition.assignment.strategy=roundrobin \
       -G <consumer-name> <topic-name>
   ```
@@ -111,8 +110,8 @@
   ```java
   String HOST = "<ydb-endpoint>";
   String TOPIC = "<topic-name>";
-  String USER = "<user>@<db-path>";
-  String PASS = "<user-pass>";
+  String USER = "<sasl.username>";
+  String PASS = "<sasl.password>";
   String CONSUMER = "<consumer-name>";
 
   Properties props = new Properties();

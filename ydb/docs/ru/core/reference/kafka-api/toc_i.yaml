@@ -4,6 +4,8 @@ items:
   - name: Чтение и запись
     href: read-write.md
   - name: Kafka Connect
-    href: connect.md
+    href: ./connect.md
   - name: Ограничения
     href: constraints.md
+  - name: Kafka Connect
+    include: { mode: link, path: ./connect/toc_m.yaml }

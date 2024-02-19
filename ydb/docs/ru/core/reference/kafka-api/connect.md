@@ -16,6 +16,13 @@
 Подробную информацию о Kafka Connect и его настройке см. в документации [Apache Kafka®](https://kafka.apache.org/documentation/#connect).
 
 ### Настройка Kafka Connect
+В примере используются:
+
+ * `<ydb-endpoint>` — эндпоинт YDB.
+ * `<topic-name>` — имя топика. Допускается указывать как полное имя (вместе с путем базы данных), так и только имя топика.
+ * `<sasl.username>` — имя пользователя SASL. Подробности читайте в разделе [Аутентификация](./auth.md).
+ * `<sasl.password>` — пароль пользователя SASL. Подробности читайте в разделе [Аутентификация](./auth.md).
+
 Пример настройки и запуска коннектора Kafka Connect для переноса данных из топика YDB в файл.
 
 1. [Создайте читателя](../ydb-cli/topic-consumer-add.md) с именем `connect-<connector-name>`. Имя коннектора указывается в конфигурационном файле при его настройке в поле `name`.
@@ -43,17 +50,17 @@
     # AdminAPI properties
     sasl.mechanism=PLAIN
     security.protocol=SASL_SSL
-    sasl.jaas.config=org.apache.kafka.common.security.plain.PlainLoginModule required username="<user>@<db-path>" password="<user-pass>";
+    sasl.jaas.config=org.apache.kafka.common.security.plain.PlainLoginModule required username="<sasl.username>" password="<sasl.password>";
 
     # Producer properties
     producer.sasl.mechanism=PLAIN
     producer.security.protocol=SASL_SSL
-    producer.sasl.jaas.config=org.apache.kafka.common.security.plain.PlainLoginModule required username="<user>@<db-path>" password="<user-pass>";
+    producer.sasl.jaas.config=org.apache.kafka.common.security.plain.PlainLoginModule required username="<sasl.username>" password="<sasl.password>";
 
     # Consumer properties
     consumer.sasl.mechanism=PLAIN
     consumer.security.protocol=SASL_SSL
-    consumer.sasl.jaas.config=org.apache.kafka.common.security.plain.PlainLoginModule required username="<user>@<db-path>" password="<user-pass>";
+    consumer.sasl.jaas.config=org.apache.kafka.common.security.plain.PlainLoginModule required username="<sasl.username>" password="<sasl.password>";
 
     consumer.partition.assignment.strategy=org.apache.kafka.clients.consumer.RoundRobinAssignor
     consumer.check.crcs=false

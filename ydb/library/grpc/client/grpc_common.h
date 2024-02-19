@@ -19,7 +19,6 @@ struct TGRpcClientConfig {
     ui32 MaxInFlight = 0;
     bool EnableSsl = false;
     grpc::SslCredentialsOptions SslCredentials;
-    bool CheckCallHost = true; // enables hostname verification for SSL connections
     grpc_compression_algorithm CompressionAlgoritm = GRPC_COMPRESS_NONE;
     ui64 MemQuota = 0;
     std::unordered_map<TString, TString> StringChannelParams;
@@ -75,13 +74,7 @@ inline std::shared_ptr<grpc::ChannelInterface> CreateChannelInterface(const TGRp
         args.SetSslTargetNameOverride(config.SslTargetNameOverride);
     }
     if (config.EnableSsl || config.SslCredentials.pem_root_certs) {
-        auto certProvide = std::make_shared<grpc::experimental::StaticDataCertificateProvider>(
-                    config.SslCredentials.pem_root_certs,
-                    std::vector<grpc::experimental::IdentityKeyCertPair>{{config.SslCredentials.pem_private_key, config.SslCredentials.pem_cert_chain }});
-        auto options = grpc::experimental::TlsChannelCredentialsOptions();
-        options.set_check_call_host(config.CheckCallHost);
-        options.set_certificate_provider(certProvide);
-        return CreateCustomChannel(config.Locator, TlsCredentials(options), args);
+        return grpc::CreateCustomChannel(config.Locator, grpc::SslCredentials(config.SslCredentials), args);
     } else {
         return grpc::CreateCustomChannel(config.Locator, grpc::InsecureChannelCredentials(), args);
     }

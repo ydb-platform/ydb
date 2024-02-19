@@ -218,26 +218,30 @@ static-node-9 static-node-9.ydb-cluster.com
 
 Протестировать кластер можно с помощью встроенных в YDB CLI нагрузочных тестов. Для этого скачайте на машину, на которой установлен Ansible, YDB CLI версии [2.5.0](https://storage.yandexcloud.net/yandexcloud-ydb/release/2.5.0/linux/amd64/ydb). Например, с помощью wget: `wget https://storage.yandexcloud.net/yandexcloud-ydb/release/2.5.0/linux/amd64/ydb`. 
 
-Сделайте скаченный бинарный файл исполняемым – `chmod +x ydb` и выполните команду проверки соединения:
+Сделайте скаченный бинарный файл исполняемым – `chmod +x ydb` и создайте [профиль](../../../reference/ydb-cli/profile/index.md) подключения к YDB:
 ```shell
-ydb -d /Root/database \
+./ydb \
+config profile create <profile name> \
+-d /Root/database \
 -e grpcs://static-node-1.ydb-cluster.com:2135 \
---ca-file <path to generated certs>/ca.crt \
+--ca-file /home/ubuntu/home/ydb_cluster/TLS/CA/certs/ca.crt \
 --user root \
---password-file <path to template folder>/ansible_vault_password_file \
-yql -s 'select 1;'
+--password-file /home/ubuntu/home/ydb_cluster/ansible_vault_password_file
 ```
+
 Параметры команды и их значения:
+* `config profile create` – команда создания профиля подключения. Задаётся имя профиля.
 * `-e` – эндпоинт (endpoint) - строка в формате `protocol://host:port`. Можно указать FQDN любой ноды кластера и не указывать порт. По умолчанию будет использован 2135 порт.
 * `--ca-file` – путь к корневому сертификату для подключения к базе по `grpcs`. Сертификат создаётся скриптом `ydb-ca-update.sh` в директории `TLS` и располагается по пути `TLS/CA/certs/`.
 * `--user` – пользователь для подключения к БД. По умолчанию при выполнении `setup_playbook.yaml` плейбука создаётся пользователь root. 
 * `--password-file` – путь к файлу с паролем. В каждой папке с шаблоном развертывания YDB кластера находится файл ansible_vault_password_file, который содержит пароль пользователя root.
-* `yql -s` – команда YQL, которая будет выполнены после подключения к БД.
 
-Команда выполнит YQL запрос `select 1;` и вернет в терминал результат в табличной форме. После проверки соединения можно создать тестовую таблицу командой:
-`... параметры запуска подключения к БД ... workload kv init --init-upserts 1000 --cols 4`. Будет создана тестовая таблица `kv_test`, состоящая из 4 столбцов и 1000 строк. Проверь, что таблица `kv_test` создалась и заполнилась тестовыми данными, можно командой `... параметры запуска подключения к БД ... yql -s 'select * from kv_test limit 10;'`.
+Проверить создался ли профиль можно командой `./ydb config profile list` – будет выведен список профилей. После создания профиля, его нужно активировать командой `ydb config profile activate <profile name>`. Проверить, что профиль был активирован можно повторным выполнением команды `./ydb config profile list` – активный профиль будет иметь отметку (active). 
 
-В терминал будет выведена таблица из 10 строк. Теперь можно выполнять тестирование производительности кластера. В статье [{#T}](../../../reference/ydb-cli/workload-kv.md) описаны 5 видов нагрузок (`upsert`, `insert`, `select`, `read-rows`, `mixed`) и параметры их выполнения. Пример выполнения тестовой нагрузки `upsert` с параметром вывода времени выполнения запроса `--print-timestamp` и стандартными параметрами исполнения: `... параметры запуска подключения к БД ... workload kv run upsert --print-timestamp`.
+Теперь можно выполнить YQL запрос `./ydb yql -s 'select 1;'`, который вернет в терминал результат выполнения команды `select 1` в табличной форме. После проверки соединения можно создать тестовую таблицу командой:
+`./ydb workload kv init --init-upserts 1000 --cols 4`. Будет создана тестовая таблица `kv_test`, состоящая из 4 столбцов и 1000 строк. Проверь, что таблица `kv_test` создалась и заполнилась тестовыми данными, можно командой `./ydb yql -s 'select * from kv_test limit 10;'`.
+
+В терминал будет выведена таблица из 10 строк. Теперь можно выполнять тестирование производительности кластера. В статье [{#T}](../../../reference/ydb-cli/workload-kv.md) описаны 5 видов нагрузок (`upsert`, `insert`, `select`, `read-rows`, `mixed`) и параметры их выполнения. Пример выполнения тестовой нагрузки `upsert` с параметром вывода времени выполнения запроса `--print-timestamp` и стандартными параметрами исполнения: `./ydb workload kv run upsert --print-timestamp`.
 
 В терминал будет выведен отчёт следующего вида:
 ```
@@ -248,4 +252,4 @@ Window	Txs/Sec	Retries	Errors	p50(ms)	p95(ms)	p99(ms)	pMax(ms)	Timestamp
 ...
 ```
 
-После завершения тестов удалить таблицу `kv_test` можно командой: `... параметры запуска подключения к БД ... workload kv clean`. Подробнее об опциях создания тестовой таблицы и тестах можно прочесть в статье [{#T}](../../../reference/ydb-cli/workload-kv.md).
+После завершения тестов удалить таблицу `kv_test` можно командой: `./ydb workload kv clean`. Подробнее об опциях создания тестовой таблицы и тестах можно прочесть в статье [{#T}](../../../reference/ydb-cli/workload-kv.md).

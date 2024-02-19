@@ -90,11 +90,11 @@ namespace NWilson {
             static constexpr size_t WILSON_SERVICE_ID = 430;
 
             ui64 MaxPendingSpanBytes = 100'000'000;
-            ui64 MaxSpansInBatch = 150;
-            ui64 MaxBytesInBatch = 20'000'000;
+            ui64 MaxSpansPerSecond;
+            ui64 MaxSpansInBatch;
+            ui64 MaxBytesInBatch;
             TDuration MaxBatchAccumulation = TDuration::Seconds(1);
-            ui32 MaxSpansPerSecond = 10;
-            TDuration MaxSpanTimeInQueue = TDuration::Seconds(60);
+            TDuration MaxSpanTimeInQueue;
 
             bool WakeupScheduled = false;
 
@@ -121,7 +121,12 @@ namespace NWilson {
 
         public:
             TWilsonUploader(WilsonUploaderParams params)
-                : CollectorUrl(std::move(params.CollectorUrl))
+                : MaxSpansPerSecond(params.MaxSpansPerSecond)
+                , MaxSpansInBatch(params.MaxSpansInBatch)
+                , MaxBytesInBatch(params.MaxBytesInBatch)
+                , MaxBatchAccumulation(params.MaxBatchAccumulation)
+                , MaxSpanTimeInQueue(TDuration::Seconds(params.SpanExportTimeoutSeconds))
+                , CollectorUrl(std::move(params.CollectorUrl))
                 , ServiceName(std::move(params.ServiceName))
                 , GrpcSigner(std::move(params.GrpcSigner))
                 , CurrentBatch(MaxSpansInBatch, MaxBytesInBatch, ServiceName)
@@ -136,15 +141,24 @@ namespace NWilson {
             void Bootstrap() {
                 Become(&TThis::StateWork);
 
+                if (MaxSpansPerSecond == 0) {
+                    ALOG_WARN(WILSON_SERVICE_ID, "max_spans_per_second should be greater than 0, changing to 1");
+                    MaxSpansPerSecond = 1;
+                }
+                if (MaxSpansInBatch == 0) {
+                    ALOG_WARN(WILSON_SERVICE_ID, "max_spans_in_batch shold be greater than 0, changing to 1");
+                    MaxSpansInBatch = 1;
+                }
+
                 TStringBuf scheme;
                 TStringBuf host;
                 ui16 port;
                 if (!TryGetSchemeHostAndPort(CollectorUrl, scheme, host, port)) {
-                    LOG_ERROR_S(*TlsActivationContext, WILSON_SERVICE_ID, "Failed to parse collector url (" << CollectorUrl << " was provided). Wilson wouldn't work");
+                    ALOG_ERROR(WILSON_SERVICE_ID, "Failed to parse collector url (" << CollectorUrl << " was provided). Wilson wouldn't work");
                     Become(&TThis::StateBroken);
                     return;
                 } else if (scheme != "grpc://" && scheme != "grpcs://") {
-                    LOG_ERROR_S(*TlsActivationContext, WILSON_SERVICE_ID, "Wrong scheme provided: " << scheme << " (only grpc:// and grpcs:// are supported). Wilson wouldn't work");
+                    ALOG_ERROR(WILSON_SERVICE_ID, "Wrong scheme provided: " << scheme << " (only grpc:// and grpcs:// are supported). Wilson wouldn't work");
                     Become(&TThis::StateBroken);
                     return;
                 }
@@ -152,12 +166,12 @@ namespace NWilson {
                                               scheme == "grpcs://" ? grpc::SslCredentials({}) : grpc::InsecureChannelCredentials());
                 Stub = NServiceProto::TraceService::NewStub(Channel);
 
-                LOG_INFO_S(*TlsActivationContext, WILSON_SERVICE_ID, "TWilsonUploader::Bootstrap");
+                ALOG_INFO(WILSON_SERVICE_ID, "TWilsonUploader::Bootstrap");
             }
 
             void Handle(TEvWilson::TPtr ev) {
                 if (SpansSizeBytes >= MaxPendingSpanBytes) {
-                    LOG_ERROR_S(*TlsActivationContext, WILSON_SERVICE_ID, "dropped span due to overflow");
+                    ALOG_ERROR(WILSON_SERVICE_ID, "dropped span due to overflow");
                 } else {
                     const TMonotonic now = TActivationContext::Monotonic();
                     const TMonotonic expirationTimestamp = now + MaxSpanTimeInQueue;
@@ -225,7 +239,7 @@ namespace NWilson {
                 }
 
                 if (numSpansDropped) {
-                    LOG_ERROR_S(*TlsActivationContext, WILSON_SERVICE_ID,
+                    ALOG_ERROR(WILSON_SERVICE_ID,
                         "dropped " << numSpansDropped << " span(s) due to expiration");
                 }
 
@@ -235,7 +249,6 @@ namespace NWilson {
                     ScheduleWakeup(NextSendTimestamp);
                     return;
                 }
-
 
                 TBatch::TData batch = std::move(BatchQueue.front());
                 BatchQueue.pop();
@@ -268,7 +281,7 @@ namespace NWilson {
                     bool ok;
                     if (CQ.AsyncNext(&tag, &ok, std::chrono::system_clock::now()) == grpc::CompletionQueue::GOT_EVENT) {
                         if (!Status.ok()) {
-                            LOG_ERROR_S(*TlsActivationContext, WILSON_SERVICE_ID,
+                            ALOG_ERROR(WILSON_SERVICE_ID,
                                 "failed to commit traces: " << Status.error_message());
                         }
 

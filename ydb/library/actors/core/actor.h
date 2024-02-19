@@ -610,6 +610,10 @@ namespace NActors {
             : IActor(TActorCallbackBehaviour(stateFunc), TActivityIndex{activityType}) {
         }
 
+        IActorCallback(TReceiveFunc stateFunc, TActivityIndex activityType)
+            : IActor(TActorCallbackBehaviour(stateFunc), activityType) {
+        }
+
     public:
         template <typename T>
         void Become(T stateFunc) {
@@ -660,7 +664,7 @@ namespace NActors {
             }
         }
 
-        static ui32 GetActivityTypeIndex() {
+        static TActivityIndex GetActivityTypeIndex() {
             static const ui32 result = GetActivityTypeIndexImpl();
             return static_cast<TActivityIndex>(result);
         }
@@ -674,11 +678,11 @@ namespace NActors {
 
         template <class TEnum = EActivityType>
         TActor(TDerivedReceiveFunc func, const TEnum activityEnumType = EActivityType::OTHER)
-            : IActorCallback(static_cast<TReceiveFunc>(func), activityEnumType) {
+            : IActorCallback(static_cast<TReceiveFunc>(func), TActivityIndex{activityEnumType}) {
         }
 
         TActor(TDerivedReceiveFunc func, const TString& actorName)
-            : IActorCallback(static_cast<TReceiveFunc>(func), static_cast<TActivityIndex>(TLocalProcessKeyState<TActorActivityTag>::GetInstance().Register(actorName))) {
+            : IActorCallback(static_cast<TReceiveFunc>(func), TActivityIndex{TLocalProcessKeyState<TActorActivityTag>::GetInstance().Register(actorName)}) {
         }
 
     public:

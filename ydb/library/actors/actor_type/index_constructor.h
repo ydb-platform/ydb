@@ -4,7 +4,7 @@
 #include <ydb/library/actors/prof/tag.h>
 
 template <>
-class NActors::TLocalProcessKeyStateIndexConstructor<NActors::TActorActivityTag> {
+class TLocalProcessKeyStateIndexConstructor<NActors::TActorActivityTag> {
 public:
     static ui32 BuildCurrentIndex(const TStringBuf name, const ui32 /*currentNamesCount*/) {
         return NProfiling::MakeTag(name.data());

@@ -10,7 +10,6 @@
 #include <util/generic/singleton.h>
 #include <util/generic/serialized_enum.h>
 
-namespace NActors {
 
 struct TActivityIndex {
     ui32 Value;
@@ -178,7 +177,5 @@ private:
 
 template <typename EEnum, typename std::enable_if<std::is_enum<EEnum>::value, bool>::type v>
 TActivityIndex::TActivityIndex(EEnum activityEnumType)
-    : Value(TEnumProcessKey<TActorActivityTag, EEnum>::GetIndex(activityEnumType))
+    : Value(TEnumProcessKey<NActors::TActorActivityTag, EEnum>::GetIndex(activityEnumType))
 {}
-
-} // namespace NActors

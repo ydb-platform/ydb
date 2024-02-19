@@ -8,7 +8,6 @@
 
 add_subdirectory(alloc_profiler)
 add_subdirectory(dbg_info)
-add_subdirectory(yt)
 
 add_library(library-cpp-lfalloc)
 target_compile_options(library-cpp-lfalloc PRIVATE

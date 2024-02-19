@@ -142,6 +142,7 @@ private:
     void Handle(TEvPQ::TEvUpdateWriteTimestamp::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvPersQueue::TEvHasDataInfo::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvPersQueue::TEvProposeTransaction::TPtr& ev, const TActorContext& ctx);
+    void Handle(TEvPQ::TEvGetWriteInfoRequest::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvPQ::TEvTxCalcPredicate::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvPQ::TEvTxCommit::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvPQ::TEvTxRollback::TPtr& ev, const TActorContext& ctx);
@@ -347,7 +348,7 @@ private:
     void Handle(TEvPQ::TEvCheckPartitionStatusRequest::TPtr& ev, const TActorContext& ctx);
 
     TString LogPrefix() const;
-    
+
 public:
     static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
         return NKikimrServices::TActivity::PERSQUEUE_PARTITION_ACTOR;
@@ -428,6 +429,7 @@ private:
             HFuncTraced(NReadQuoterEvents::TEvQuotaUpdated, Handle);
             HFuncTraced(NReadQuoterEvents::TEvAccountQuotaCountersUpdated, Handle);
             HFuncTraced(NReadQuoterEvents::TEvQuotaCountersUpdated, Handle);
+            HFuncTraced(TEvPQ::TEvGetWriteInfoRequest, Handle);
         default:
             if (!Initializer.Handle(ev)) {
                 ALOG_ERROR(NKikimrServices::PERSQUEUE, "Unexpected " << EventStr("StateInit", ev));
@@ -477,6 +479,7 @@ private:
             HFuncTraced(TEvPQ::TEvSplitMessageGroup, HandleOnIdle);
             HFuncTraced(TEvPersQueue::TEvProposeTransaction, Handle);
             HFuncTraced(TEvPQ::TEvTxCalcPredicate, Handle);
+            HFuncTraced(TEvPQ::TEvGetWriteInfoRequest, Handle);
             HFuncTraced(TEvPQ::TEvProposePartitionConfig, Handle);
             HFuncTraced(TEvPQ::TEvTxCommit, Handle);
             HFuncTraced(TEvPQ::TEvTxRollback, Handle);
@@ -533,6 +536,7 @@ private:
             HFuncTraced(TEvPQ::TEvSplitMessageGroup, HandleOnWrite);
             HFuncTraced(TEvPersQueue::TEvProposeTransaction, Handle);
             HFuncTraced(TEvPQ::TEvTxCalcPredicate, Handle);
+            HFuncTraced(TEvPQ::TEvGetWriteInfoRequest, Handle);
             HFuncTraced(TEvPQ::TEvProposePartitionConfig, Handle);
             HFuncTraced(TEvPQ::TEvTxCommit, Handle);
             HFuncTraced(TEvPQ::TEvTxRollback, Handle);
@@ -646,7 +650,7 @@ private:
     using TUserActionAndTransactionEvent =
         std::variant<TSimpleSharedPtr<TEvPQ::TEvSetClientInfo>,             // user actions
                      TSimpleSharedPtr<TEvPersQueue::TEvProposeTransaction>, // immediate transaction
-                     TSimpleSharedPtr<TTransaction>>;                       // distributed transaction or update config 
+                     TSimpleSharedPtr<TTransaction>>;                       // distributed transaction or update config
     std::deque<TUserActionAndTransactionEvent> UserActionAndTransactionEvents;
     size_t ImmediateTxCount = 0;
     THashMap<TString, size_t> UserActCount;
@@ -766,6 +770,8 @@ private:
     TRowVersion LastEmittedHeartbeat;
 
     const NKikimrPQ::TPQTabletConfig::TPartition* GetPartitionConfig(const NKikimrPQ::TPQTabletConfig& config);
+
+    bool ClosedInternalPartition = false;
 };
 
 } // namespace NKikimr::NPQ

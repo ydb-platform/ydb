@@ -26,7 +26,7 @@ Y_UNIT_TEST_SUITE(TUserActionProcessorTests) {
 namespace NHelpers {
 
 struct TCreatePartitionParams {
-    ui32 Partition = 1;
+    TPartitionId Partition = TPartitionId{1};
     ui64 Begin = 0;
     ui64 End = 0;
     TMaybe<ui64> PlanStep;
@@ -141,7 +141,7 @@ protected:
     void SetUp(NUnitTest::TTestContext&) override;
     void TearDown(NUnitTest::TTestContext&) override;
 
-    void CreatePartitionActor(ui32 partition,
+    void CreatePartitionActor(const TPartitionId& partition,
                               const TVector<TCreateConsumerParams>& consumers,
                               bool newPartition,
                               TVector<TTransaction> txs);
@@ -238,7 +238,7 @@ void TUserActionProcessorFixture::TearDown(NUnitTest::TTestContext&)
 {
 }
 
-void TUserActionProcessorFixture::CreatePartitionActor(ui32 id,
+void TUserActionProcessorFixture::CreatePartitionActor(const TPartitionId& id,
                                                        const TVector<TCreateConsumerParams>& consumers,
                                                        bool newPartition,
                                                        TVector<TTransaction> txs)
@@ -306,7 +306,7 @@ void TUserActionProcessorFixture::CreatePartition(const TCreatePartitionParams& 
         SendMetaReadResponse(params.PlanStep, params.TxId);
 
         WaitInfoRangeRequest();
-        SendInfoRangeResponse(params.Partition, consumers);
+        SendInfoRangeResponse(params.Partition.InternalPartitionId, consumers);
 
         WaitDataRangeRequest();
         SendDataRangeResponse(params.Begin, params.End);

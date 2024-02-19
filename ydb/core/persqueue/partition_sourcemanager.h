@@ -49,8 +49,8 @@ public:
         void Update(ui64 seqNo, ui64 offset, TInstant timestamp);
         void Update(THeartbeat&& heartbeat);
 
-    private:
         const TSourceIdMap& MemoryStorage() const;
+    private:
         const TSourceIdMap& WriteStorage() const;
 
 

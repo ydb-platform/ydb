@@ -87,7 +87,7 @@ TString TPartition::LogPrefix() const {
 
 bool TPartition::CanWrite() const {
     if (PartitionConfig == nullptr) {
-        // Old format without AllPartitions configuration field. 
+        // Old format without AllPartitions configuration field.
         // It is not split/merge partition.
         return true;
     }
@@ -273,7 +273,7 @@ ui64 TPartition::ImportantClientsMinOffset() const {
         minOffset = Min<ui64>(minOffset, curOffset);
     }
 
-    return minOffset;    
+    return minOffset;
 }
 
 void TPartition::HandleWakeup(const TActorContext& ctx) {
@@ -933,6 +933,25 @@ void TPartition::Handle(TEvPQ::TEvTxRollback::TPtr& ev, const TActorContext& ctx
     ContinueProcessTxsAndUserActs(ctx);
 }
 
+void TPartition::Handle(TEvPQ::TEvGetWriteInfoRequest::TPtr& ev, const TActorContext& ctx) {
+    if (CurrentStateFunc() != &TThis::StateIdle || !Requests.empty()) {
+        auto* response = new TEvPQ::TEvGetWriteInfoError(Partition.InternalPartitionId,
+                                                       "Write info requested while writes are not complete");
+        ctx.Send(ev->Sender, response);
+        return;
+    }
+    ClosedInternalPartition = true;
+    auto response = new TEvPQ::TEvGetWriteInfoResponse();
+    response->Cookie = Partition.InternalPartitionId;
+    response->BodyKeys = std::move(DataKeysBody);
+    response->SrcIdInfo = std::move(SourceIdStorage.GetInMemorySourceIds());
+    ui32 rcount = 0, rsize = 0;
+    ui64 insideHeadOffset = 0;
+
+    response->BlobsFromHead = std::move(GetReadRequestFromHead(0, 0, std::numeric_limits<ui32>::max(), std::numeric_limits<ui32>::max(), 0, &rcount, &rsize, &insideHeadOffset, 0));
+    ctx.Send(ev->Sender, response);
+}
+
 void TPartition::Handle(TEvPQ::TEvGetMaxSeqNoRequest::TPtr& ev, const TActorContext& ctx) {
     auto response = MakeHolder<TEvPQ::TEvProxyResponse>(ev->Get()->Cookie);
     NKikimrClient::TResponse& resp = *response->Response;
@@ -969,7 +988,7 @@ void TPartition::Handle(TEvPQ::TEvBlobResponse::TPtr& ev, const TActorContext& c
 
     auto it = ReadInfo.find(cookie);
     Y_ABORT_UNLESS(it != ReadInfo.end());
-    
+
     TReadInfo info = std::move(it->second);
     ReadInfo.erase(it);
 
@@ -980,7 +999,7 @@ void TPartition::Handle(TEvPQ::TEvBlobResponse::TPtr& ev, const TActorContext& c
         info.Destination, GetSizeLag(info.Offset), Tablet, Config.GetMeteringMode()
     ));
     const auto& resp = dynamic_cast<TEvPQ::TEvProxyResponse*>(answer.Event.Get())->Response;
-    
+
     if (HasError(*ev->Get())) {
         if (info.IsSubscription) {
             TabletCounters.Cumulative()[COUNTER_PQ_READ_SUBSCRIPTION_ERROR].Increment(1);

@@ -2,6 +2,7 @@
 
 #include <ydb/core/persqueue/partition_key_range/partition_key_range.h>
 #include <ydb/core/persqueue/heartbeat.h>
+#include <ydb/core/protos/pqconfig.pb.h>
 
 namespace NKikimr::NPQ {
 

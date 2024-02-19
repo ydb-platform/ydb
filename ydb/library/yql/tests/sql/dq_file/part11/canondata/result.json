@@ -278,9 +278,9 @@
     ],
     "test.test[aggregate-aggregate_with_default_yson_options-default.txt-Debug]": [
         {
-            "checksum": "b604fe0f668ff4ed294e1410ea4e2b98",
-            "size": 3442,
-            "uri": "https://{canondata_backend}/1936947/a99026e839b7e22714c2a9a81971a3b5e3ed1eb4/resource.tar.gz#test.test_aggregate-aggregate_with_default_yson_options-default.txt-Debug_/opt.yql_patched"
+            "checksum": "4b82b560b3f99b7ccd11288c9ece324c",
+            "size": 3469,
+            "uri": "https://{canondata_backend}/1871002/31d5df73f869f6fcf8bde774aab16576da3e6aa0/resource.tar.gz#test.test_aggregate-aggregate_with_default_yson_options-default.txt-Debug_/opt.yql_patched"
         }
     ],
     "test.test[aggregate-aggregate_with_default_yson_options-default.txt-Plan]": [

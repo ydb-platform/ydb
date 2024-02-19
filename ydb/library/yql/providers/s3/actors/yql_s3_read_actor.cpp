@@ -605,7 +605,6 @@ public:
     }
 
     void PassAway() override {
-        PrintBackTrace();
         LOG_D("TS3FileQueueActor", "PassAway");
         TBase::PassAway();
     }
@@ -883,8 +882,6 @@ public:
     }
 
     void Bootstrap() {
-        LOG_D("TS3ReadActor", "Bootstrap" << ", InputIndex: " << InputIndex);
-
         if (!UseRuntimeListing) {
             FileQueueActor = RegisterWithSameMailbox(new TS3FileQueueActor{
                 TxId,
@@ -902,6 +899,9 @@ public:
                 PatternVariant,
                 ES3PatternType::Wildcard});
         }
+
+        LOG_D("TS3ReadActor", "Bootstrap" << ", InputIndex: " << InputIndex << ", FileQueue: " << FileQueueActor << (UseRuntimeListing ? " (remote)" : " (local"));
+
         FileQueueEvents.Init(TxId, SelfId(), SelfId());
         FileQueueEvents.OnNewRecipientId(FileQueueActor);
         if (UseRuntimeListing && FileQueueConsumersCountDelta > 0) {
@@ -1007,7 +1007,7 @@ private:
         hFunc(TEvPrivate::TEvReadError, Handle);
         hFunc(TEvS3FileQueue::TEvObjectPathBatch, HandleObjectPathBatch);
         hFunc(TEvS3FileQueue::TEvObjectPathReadError, HandleObjectPathReadError);
-        hFunc(TEvS3FileQueue::TEvAck, Handle);
+        hFunc(TEvS3FileQueue::TEvAck, HandleAck);
         hFunc(NYql::NDq::TEvRetryQueuePrivate::TEvRetry, Handle);
         hFunc(NActors::TEvInterconnect::TEvNodeDisconnected, Handle);
         hFunc(NActors::TEvInterconnect::TEvNodeConnected, Handle);
@@ -1020,6 +1020,7 @@ private:
 
     void HandleObjectPathBatch(TEvS3FileQueue::TEvObjectPathBatch::TPtr& objectPathBatch) {
         if (!FileQueueEvents.OnEventReceived(objectPathBatch)) {
+            LOG_W("TS3ReadActor", "Duplicated TEvObjectPathBatch (likely resent) from " << FileQueueActor);
             return;
         }
 
@@ -1029,6 +1030,7 @@ private:
         ListedFiles += objectBatch.GetObjectPaths().size();
         IsFileQueueEmpty = objectBatch.GetNoMoreFiles();
         if (IsFileQueueEmpty && !IsConfirmedFileQueueFinish) {
+            LOG_D("TS3ReadActor", "Confirm finish to " << FileQueueActor);
             SendPathBatchRequest();
             IsConfirmedFileQueueFinish = true;
         }
@@ -1045,11 +1047,13 @@ private:
     }
     void HandleObjectPathReadError(TEvS3FileQueue::TEvObjectPathReadError::TPtr& result) {
         if (!FileQueueEvents.OnEventReceived(result)) {
+            LOG_W("TS3ReadActor", "Duplicated TEvObjectPathReadError (likely resent) from " << FileQueueActor);
             return;
         }
 
         IsFileQueueEmpty = true;
         if (!IsConfirmedFileQueueFinish) {
+            LOG_D("TS3ReadActor", "Confirm finish (with errors) to " << FileQueueActor);
             SendPathBatchRequest();
             IsConfirmedFileQueueFinish = true;
         }
@@ -1060,6 +1064,10 @@ private:
         Send(ComputeActorId, new TEvAsyncInputError(InputIndex, issues, NYql::NDqProto::StatusIds::EXTERNAL_ERROR));
     }
 
+    void HandleAck(TEvS3FileQueue::TEvAck::TPtr& ev) {
+        FileQueueEvents.OnEventReceived(ev);
+    }
+    
     static void OnDownloadFinished(TActorSystem* actorSystem, TActorId selfId, const TString& requestId, IHTTPGateway::TResult&& result, size_t pathInd, const TString path) {
         if (!result.Issues) {
             actorSystem->Send(new IEventHandle(selfId, TActorId(), new TEvPrivate::TEvReadResult(std::move(result.Content), requestId, pathInd, path)));
@@ -1170,10 +1178,6 @@ private:
         LOG_W("TS3ReadActor", "Error while reading file " << path << ", details: ID: " << id << ", TEvReadError: " << result->Get()->Error.ToOneLineString() << ", request id: [" << requestId << "]");
         auto issues = NS3Util::AddParentIssue(TStringBuilder{} << "Error while reading file " << path << " with request id [" << requestId << "]", TIssues{result->Get()->Error});
         Send(ComputeActorId, new TEvAsyncInputError(InputIndex, std::move(issues), NYql::NDqProto::StatusIds::EXTERNAL_ERROR));
-    }
-    
-    void Handle(TEvS3FileQueue::TEvAck::TPtr& ev) {
-        FileQueueEvents.OnEventReceived(ev);
     }
     
     void Handle(const NYql::NDq::TEvRetryQueuePrivate::TEvRetry::TPtr&) {

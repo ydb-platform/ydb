@@ -49,6 +49,11 @@ public:
             return true;
         }
     }
+
+    const NJaegerTracing::TRequestDiscriminator& GetRequestDiscriminator() const override {
+        return AuxSettings.RequestDiscriminator;
+    }
+
 private:
     TFuncCallback PassMethod;
     const TRequestAuxSettings AuxSettings;

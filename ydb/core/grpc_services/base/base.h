@@ -344,7 +344,7 @@ struct TRequestAuxSettings {
     TRateLimiterMode RlMode = TRateLimiterMode::Off;
     void (*CustomAttributeProcessor)(const TSchemeBoardEvents::TDescribeSchemeResult& schemeData, ICheckerIface*) = nullptr;
     TAuditMode AuditMode = TAuditMode::Off;
-    NJaegerTracing::TRequestDiscriminator RequestDiscriminator = {};
+    NJaegerTracing::TRequestDiscriminator RequestDiscriminator = NJaegerTracing::TRequestDiscriminator::EMPTY;
 };
 
 class TGRpcRequestProxySimple;

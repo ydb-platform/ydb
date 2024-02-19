@@ -29,17 +29,19 @@
 
 namespace fs = std::filesystem;
 
+// ====
+#include <ydb/public/sdk/cpp/client/ydb_discovery/discovery.h>
+#include <ydb/public/sdk/cpp/client/ydb_driver/driver.h>
+#include <ydb/public/lib/deprecated/kicli/kicli.h>
+#include <ydb/public/lib/ydb_cli/common/common.h>
+#include <ydb/library/aclib/aclib.h>
+using namespace NYdb::NConsoleClient;
+// ===
+
 extern TAutoPtr<NKikimrConfig::TActorSystemConfig> DummyActorSystemConfig();
 extern TAutoPtr<NKikimrConfig::TAllocatorConfig> DummyAllocatorConfig();
 
 namespace NKikimr::NConfig {
-
-constexpr TStringBuf NODE_KIND_YDB = "ydb";
-constexpr TStringBuf NODE_KIND_YQ = "yq";
-
-constexpr static ui32 DefaultLogLevel = NActors::NLog::PRI_WARN; // log settings
-constexpr static ui32 DefaultLogSamplingLevel = NActors::NLog::PRI_DEBUG; // log settings
-constexpr static ui32 DefaultLogSamplingRate = 0; // log settings
 
 struct TCallContext {
     const char* File;
@@ -47,15 +49,23 @@ struct TCallContext {
 };
 
 #define TRACE_CONFIG_CHANGE(CHANGE_CONTEXT, KIND, CHANGE_KIND) \
-    ConfigUpdateTracer->Add(KIND, TConfigItemInfo::TUpdate{CHANGE_CONTEXT.File, static_cast<ui32>(CHANGE_CONTEXT.Line), TConfigItemInfo::EUpdateKind:: CHANGE_KIND})
+    ConfigUpdateTracer.Add(KIND, TConfigItemInfo::TUpdate{CHANGE_CONTEXT.File, static_cast<ui32>(CHANGE_CONTEXT.Line), TConfigItemInfo::EUpdateKind:: CHANGE_KIND})
 
 #define TRACE_CONFIG_CHANGE_INPLACE(KIND, CHANGE_KIND) \
-    ConfigUpdateTracer->Add(KIND, TConfigItemInfo::TUpdate{__FILE__, static_cast<ui32>(__LINE__), TConfigItemInfo::EUpdateKind:: CHANGE_KIND})
+    ConfigUpdateTracer.Add(KIND, TConfigItemInfo::TUpdate{__FILE__, static_cast<ui32>(__LINE__), TConfigItemInfo::EUpdateKind:: CHANGE_KIND})
 
 #define TRACE_CONFIG_CHANGE_INPLACE_T(KIND, CHANGE_KIND) \
-    ConfigUpdateTracer->Add(NKikimrConsole::TConfigItem:: KIND ## Item, TConfigItemInfo::TUpdate{__FILE__, static_cast<ui32>(__LINE__), TConfigItemInfo::EUpdateKind:: CHANGE_KIND})
+    ConfigUpdateTracer.Add(NKikimrConsole::TConfigItem:: KIND ## Item, TConfigItemInfo::TUpdate{__FILE__, static_cast<ui32>(__LINE__), TConfigItemInfo::EUpdateKind:: CHANGE_KIND})
 
 #define CALL_CTX() ::NKikimr::NConfig::TCallContext{__FILE__, __LINE__}
+
+
+constexpr TStringBuf NODE_KIND_YDB = "ydb";
+constexpr TStringBuf NODE_KIND_YQ = "yq";
+
+constexpr static ui32 DefaultLogLevel = NActors::NLog::PRI_WARN; // log settings
+constexpr static ui32 DefaultLogSamplingLevel = NActors::NLog::PRI_DEBUG; // log settings
+constexpr static ui32 DefaultLogSamplingRate = 0; // log settings
 
 template<typename T>
 bool ParsePBFromString(const TString &content, T *pb, bool allowUnknown = false) {
@@ -75,17 +85,7 @@ public:
     virtual TString FQDNHostName() const = 0;
 };
 
-class TDefaultEnv
-    : public IEnv
-{
-public:
-    TString HostName() const override {
-        return ::HostName();
-    }
-    TString FQDNHostName() const override {
-        return ::FQDNHostName();
-    }
-};
+std::unique_ptr<IEnv> MakeDefaultEnv();
 
 class IErrorCollector {
 public:
@@ -93,14 +93,7 @@ public:
     virtual void Fatal(TString error) = 0;
 };
 
-class TDefaultErrorCollector
-    : public IErrorCollector
-{
-public:
-    void Fatal(TString error) override {
-        Cerr << error << Endl;
-    }
-};
+std::unique_ptr<IErrorCollector> MakeDefaultErrorCollector();
 
 class IProtoConfigFileProvider {
 public:
@@ -112,174 +105,7 @@ public:
     virtual TString Get(TString optName) = 0;
 };
 
-struct TFileConfigOptions {
-    TString Description;
-    TMaybe<TString> ParsedOption;
-};
-
-class TDefaultProtoConfigFileProvider
-    : public IProtoConfigFileProvider
-{
-private:
-    TMap<TString, TSimpleSharedPtr<TFileConfigOptions>> Opts;
-
-    static bool IsFileExists(const fs::path& p) {
-        std::error_code ec;
-        return fs::exists(p, ec) && !ec;
-    }
-
-    static bool IsFileReadable(const fs::path& p) {
-        std::error_code ec; // For noexcept overload usage.
-        auto perms = fs::status(p, ec).permissions();
-        if ((perms & fs::perms::owner_read) != fs::perms::none &&
-            (perms & fs::perms::group_read) != fs::perms::none &&
-            (perms & fs::perms::others_read) != fs::perms::none
-            )
-        {
-            return true;
-        }
-        return false;
-    }
-public:
-    void AddConfigFile(TString optName, TString description) override {
-        Opts.emplace(optName, MakeSimpleShared<TFileConfigOptions>(TFileConfigOptions{.Description = description}));
-    }
-
-    void RegisterCliOptions(NLastGetopt::TOpts& opts) const override {
-        for (const auto& [name, opt] : Opts) {
-            opts.AddLongOption(name, opt->Description).OptionalArgument("PATH").StoreResult(&opt->ParsedOption);
-        }
-    }
-
-    TString GetProtoFromFile(const TString& path, IErrorCollector& errorCollector) const override {
-        fs::path filePath(path.c_str());
-        if (!IsFileExists(filePath)) {
-            errorCollector.Fatal(Sprintf("File %s doesn't exists", path.c_str()));
-            return {};
-        }
-        if (!IsFileReadable(filePath)) {
-            errorCollector.Fatal(Sprintf("File %s isn't readable", path.c_str()));
-            return {};
-        }
-        TAutoPtr<TMappedFileInput> fileInput(new TMappedFileInput(path));
-        return fileInput->ReadAll();
-    }
-
-    bool Has(TString optName) override {
-        if (auto* opt = Opts.FindPtr(optName)) {
-            return !!((*opt)->ParsedOption);
-        }
-        return false;
-    }
-
-    TString Get(TString optName) override {
-        if (auto* opt = Opts.FindPtr(optName); opt && (*opt)->ParsedOption) {
-            return (*opt)->ParsedOption.GetRef();
-        }
-        return ""; // FIXME: throw
-    }
-};
-
-void CopyNodeLocation(NActorsInterconnect::TNodeLocation* dst, const NYdb::NDiscovery::TNodeLocation& src) {
-    if (src.DataCenterNum) {
-        dst->SetDataCenterNum(src.DataCenterNum.value());
-    }
-    if (src.RoomNum) {
-        dst->SetRoomNum(src.RoomNum.value());
-    }
-    if (src.RackNum) {
-        dst->SetRackNum(src.RackNum.value());
-    }
-    if (src.BodyNum) {
-        dst->SetBodyNum(src.BodyNum.value());
-    }
-    if (src.Body) {
-        dst->SetBody(src.Body.value());
-    }
-    if (src.DataCenter) {
-        dst->SetDataCenter(src.DataCenter.value());
-    }
-    if (src.Module) {
-        dst->SetModule(src.Module.value());
-    }
-    if (src.Rack) {
-        dst->SetRack(src.Rack.value());
-    }
-    if (src.Unit) {
-        dst->SetUnit(src.Unit.value());
-    }
-}
-
-void CopyNodeLocation(NYdb::NDiscovery::TNodeLocation* dst, const NActorsInterconnect::TNodeLocation& src) {
-    if (src.HasDataCenterNum()) {
-        dst->DataCenterNum = src.GetDataCenterNum();
-    }
-    if (src.HasRoomNum()) {
-        dst->RoomNum = src.GetRoomNum();
-    }
-    if (src.HasRackNum()) {
-        dst->RackNum = src.GetRackNum();
-    }
-    if (src.HasBodyNum()) {
-        dst->BodyNum = src.GetBodyNum();
-    }
-    if (src.HasBody()) {
-        dst->Body = src.GetBody();
-    }
-    if (src.HasDataCenter()) {
-        dst->DataCenter = src.GetDataCenter();
-    }
-    if (src.HasModule()) {
-        dst->Module = src.GetModule();
-    }
-    if (src.HasRack()) {
-        dst->Rack = src.GetRack();
-    }
-    if (src.HasUnit()) {
-        dst->Unit = src.GetUnit();
-    }
-}
-
-void AddProtoConfigOptions(IProtoConfigFileProvider& out) {
-    const TMap<TString, TString> opts = {
-        {"alloc-file", "Allocator config file"},
-        {"audit-file", "File with audit config"},
-        {"auth-file", "authorization configuration"},
-        {"auth-token-file", "authorization token configuration"},
-        {"bootstrap-file", "Bootstrap config file"},
-        {"bs-file", "blobstorage config file"},
-        {"channels-file", "tablet channel profile config file"},
-        {"cms-file", "CMS config file"},
-        {"domains-file", "domain config file"},
-        {"drivemodel-file", "drive model config file"},
-        {"dyn-nodes-file", "Dynamic nodes config file"},
-        {"feature-flags-file", "File with feature flags to turn new features on/off"},
-        {"fq-file", "Federated Query config file"},
-        {"grpc-file", "gRPC config file"},
-        {"http-proxy-file", "Http proxy config file"},
-        {"ic-file", "interconnect config file"},
-        {"incrhuge-file", "incremental huge blob keeper config file"},
-        {"key-file", "tenant encryption key configuration"},
-        {"kqp-file", "Kikimr Query Processor config file"},
-        {"log-file", "log config file"},
-        {"memorylog-file", "set buffer size for memory log"},
-        {"metering-file", "File with metering config"},
-        {"naming-file", "static nameservice config file"},
-        {"netclassifier-file", "NetClassifier config file"},
-        {"pdisk-key-file", "pdisk encryption key configuration"},
-        {"pq-file", "PersQueue config file"},
-        {"pqcd-file", "PersQueue cluster discovery config file"},
-        {"public-http-file", "Public HTTP config file"},
-        {"rb-file", "File with resource broker customizations"},
-        {"sqs-file", "SQS config file"},
-        {"sys-file", "actor system config file (use dummy config by default)"},
-        {"vdisk-file", "vdisk kind config file"},
-    };
-
-    for (const auto& [opt, desc] : opts) {
-        out.AddConfigFile(opt, desc);
-    }
-}
+std::unique_ptr<IProtoConfigFileProvider> MakeDefaultProtoConfigFileProvider();
 
 class IConfigUpdateTracer {
 public:
@@ -288,27 +114,14 @@ public:
     virtual THashMap<ui32, TConfigItemInfo> Dump() const = 0;
 };
 
-class TDefaultConfigUpdateTracer
-    : public IConfigUpdateTracer
-{
-private:
-    THashMap<ui32, TConfigItemInfo> ConfigInitInfo;
-
-public:
-    void Add(ui32 kind, TConfigItemInfo::TUpdate update) override {
-        ConfigInitInfo[kind].Updates.emplace_back(update);
-    }
-
-    THashMap<ui32, TConfigItemInfo> Dump() const override {
-        return ConfigInitInfo;
-    }
-};
+std::unique_ptr<IConfigUpdateTracer> MakeDefaultConfigUpdateTracer();
 
 struct TConfigRefs {
     IConfigUpdateTracer& Tracer;
     IErrorCollector& ErrorCollector;
     IProtoConfigFileProvider& ProtoConfigFileProvider;
 };
+
 
 template <class TProto>
 using TAccessors = std::tuple<
@@ -329,7 +142,7 @@ auto MutableConfigPart(
     auto [hasConfig, getConfig, mutableConfig] = NKikimrConfig::TAppConfig::GetFieldAccessorsByFieldTag(tag);
     ui32 kind = NKikimrConfig::TAppConfig::GetFieldIdByFieldTag(tag);
 
-    IConfigUpdateTracer* ConfigUpdateTracer = &refs.Tracer;
+    auto& ConfigUpdateTracer = refs.Tracer;
     auto& errorCollector = refs.ErrorCollector;
     auto& protoConfigFileProvider = refs.ProtoConfigFileProvider;
 
@@ -375,7 +188,7 @@ auto MutableConfigPartMerge(
     auto mutableConfig = std::get<2>(NKikimrConfig::TAppConfig::GetFieldAccessorsByFieldTag(tag));
     ui32 kind = NKikimrConfig::TAppConfig::GetFieldIdByFieldTag(tag);
 
-    IConfigUpdateTracer* ConfigUpdateTracer = &refs.Tracer;
+    auto& ConfigUpdateTracer = refs.Tracer;
     auto& errorCollector = refs.ErrorCollector;
     auto& protoConfigFileProvider = refs.ProtoConfigFileProvider;
 
@@ -402,62 +215,15 @@ auto MutableConfigPartMerge(
     return nullptr;
 }
 
-void LoadBootstrapConfig(IProtoConfigFileProvider& protoConfigFileProvider, IErrorCollector& errorCollector, TVector<TString> configFiles, NKikimrConfig::TAppConfig& out) {
-    for (const TString& path : configFiles) {
-        NKikimrConfig::TAppConfig parsedConfig;
-        const TString protoString = protoConfigFileProvider.GetProtoFromFile(path, errorCollector);
-        /*
-         * FIXME: if (ErrorCollector.HasFatal()) { return; }
-         */
-        const bool result = ParsePBFromString(protoString, &parsedConfig);
-        if (!result) {
-            errorCollector.Fatal(Sprintf("Can't parse protobuf: %s", path.c_str()));
-            return;
-        }
-        out.MergeFrom(parsedConfig);
-    }
-}
+void AddProtoConfigOptions(IProtoConfigFileProvider& out);
 
-void LoadYamlConfig(TConfigRefs refs, const TString& yamlConfigFile, NKikimrConfig::TAppConfig& appConfig, TCallContext callCtx) {
-    if (!yamlConfigFile) {
-        return;
-    }
+void LoadBootstrapConfig(IProtoConfigFileProvider& protoConfigFileProvider, IErrorCollector& errorCollector, TVector<TString> configFiles, NKikimrConfig::TAppConfig& out);
 
-    IConfigUpdateTracer* ConfigUpdateTracer = &refs.Tracer;
-    IErrorCollector& errorCollector = refs.ErrorCollector;
-    IProtoConfigFileProvider& protoConfigFileProvider = refs.ProtoConfigFileProvider;
+void LoadYamlConfig(TConfigRefs refs, const TString& yamlConfigFile, NKikimrConfig::TAppConfig& appConfig, TCallContext callCtx);
 
-    const TString yamlConfigString = protoConfigFileProvider.GetProtoFromFile(yamlConfigFile, errorCollector);
-    /*
-     * FIXME: if (ErrorCollector.HasFatal()) { return; }
-     */
-    NKikimrConfig::TAppConfig parsedConfig = NKikimr::NYaml::Parse(yamlConfigString); // FIXME
-    /*
-     * FIXME: if (ErrorCollector.HasFatal()) { return; }
-     */
-    const google::protobuf::Descriptor* descriptor = appConfig.GetDescriptor();
-    const google::protobuf::Reflection* reflection = appConfig.GetReflection();
-    for(int fieldIdx = 0; fieldIdx < descriptor->field_count(); ++fieldIdx) {
-        const google::protobuf::FieldDescriptor* fieldDescriptor = descriptor->field(fieldIdx);
-        if (!fieldDescriptor) {
-            continue;
-        }
+void CopyNodeLocation(NActorsInterconnect::TNodeLocation* dst, const NYdb::NDiscovery::TNodeLocation& src);
 
-        if (fieldDescriptor->is_repeated()) {
-            continue;
-        }
-
-        if (reflection->HasField(appConfig, fieldDescriptor)) {
-            // field is already set in app config
-            continue;
-        }
-
-        if (reflection->HasField(parsedConfig, fieldDescriptor)) {
-            reflection->SwapFields(&appConfig, &parsedConfig, {fieldDescriptor});
-            TRACE_CONFIG_CHANGE(callCtx, fieldIdx, ReplaceConfigWithConsoleProto);
-        }
-    }
-}
+void CopyNodeLocation(NYdb::NDiscovery::TNodeLocation* dst, const NActorsInterconnect::TNodeLocation& src);
 
 struct TConfigFields {
     TMaybe<ui32> LogLevel; // log settings
@@ -603,7 +369,7 @@ struct TConfigFields {
 
     }
 
-    void ApplyFields(NKikimrConfig::TAppConfig& appConfig, IEnv& env, IConfigUpdateTracer* ConfigUpdateTracer) const {
+    void ApplyFields(NKikimrConfig::TAppConfig& appConfig, IEnv& env, IConfigUpdateTracer& ConfigUpdateTracer) const {
         if (!appConfig.HasAllocatorConfig()) {
             appConfig.MutableAllocatorConfig()->CopyFrom(*DummyAllocatorConfig());
             TRACE_CONFIG_CHANGE_INPLACE_T(AllocatorConfig, UpdateExplicitly);
@@ -842,7 +608,7 @@ struct TConfigFields {
         return loc;
     }
 
-    void ApplyLogSettings(NKikimrConfig::TAppConfig& appConfig, IConfigUpdateTracer* ConfigUpdateTracer) {
+    void ApplyLogSettings(NKikimrConfig::TAppConfig& appConfig, IConfigUpdateTracer& ConfigUpdateTracer) {
         if (SysLogServiceTag && !appConfig.GetLogConfig().GetSysLogService()) {
             appConfig.MutableLogConfig()->SetSysLogService(SysLogServiceTag.GetRef());
             TRACE_CONFIG_CHANGE_INPLACE_T(LogConfig, UpdateExplicitly);
@@ -880,7 +646,7 @@ struct TConfigFields {
         }
     }
 
-    void SetupLogConfigDefaults(NKikimrConfig::TLogConfig& logConfig, IConfigUpdateTracer* ConfigUpdateTracer) const {
+    void SetupLogConfigDefaults(NKikimrConfig::TLogConfig& logConfig, IConfigUpdateTracer& ConfigUpdateTracer) const {
         if (SysLogEnabled) {
             logConfig.SetSysLog(true);
         }
@@ -902,12 +668,12 @@ struct TConfigFields {
         TRACE_CONFIG_CHANGE_INPLACE_T(LogConfig, UpdateExplicitly);
     }
 
-    void SetupBootstrapConfigDefaults(NKikimrConfig::TBootstrap& bootstrapConfig, IConfigUpdateTracer* ConfigUpdateTracer) const {
+    void SetupBootstrapConfigDefaults(NKikimrConfig::TBootstrap& bootstrapConfig, IConfigUpdateTracer& ConfigUpdateTracer) const {
         bootstrapConfig.MutableCompileServiceConfig()->SetInflightLimit(CompileInflightLimit);
         TRACE_CONFIG_CHANGE_INPLACE_T(BootstrapConfig, UpdateExplicitly);
     };
 
-    void SetupInterconnectConfigDefaults(NKikimrConfig::TInterconnectConfig& icConfig, IConfigUpdateTracer* ConfigUpdateTracer) const {
+    void SetupInterconnectConfigDefaults(NKikimrConfig::TInterconnectConfig& icConfig, IConfigUpdateTracer& ConfigUpdateTracer) const {
         if (TcpEnabled) {
             icConfig.SetStartTcp(true);
             TRACE_CONFIG_CHANGE_INPLACE_T(InterconnectConfig, UpdateExplicitly);
@@ -1071,6 +837,658 @@ struct TMbusConfigFields {
         }
         messageBusConfig->SetStartTracingBusProxy(!!TracePath);
         messageBusConfig->SetTracePath(TracePath);
+    }
+};
+
+struct TAppInitDebugInfo {
+    NKikimrConfig::TAppConfig OldConfig;
+    NKikimrConfig::TAppConfig YamlConfig;
+    THashMap<ui32, TConfigItemInfo> ConfigTransformInfo;
+};
+
+class TInitialConfigurator {
+    ui32 NodeId = 0;
+    TBasicKikimrServicesMask ServicesMask;
+    TKikimrScopeId ScopeId;
+    TString TenantName;
+    TString ClusterName;
+
+    TMap<TString, TString> Labels;
+
+    NKikimrConfig::TAppConfig BaseConfig;
+    NKikimrConfig::TAppConfig AppConfig;
+
+    NConfig::TConfigFields ConfigFields;
+    NConfig::TMbusConfigFields MbusConfigFields;
+
+    TAppInitDebugInfo InitDebug;
+
+    NConfig::IErrorCollector& ErrorCollector;
+    NConfig::IProtoConfigFileProvider& ProtoConfigFileProvider;
+    NConfig::IConfigUpdateTracer& ConfigUpdateTracer;
+    NConfig::IEnv& Env;
+
+public:
+    TInitialConfigurator(
+        NConfig::IErrorCollector& errorCollector,
+        NConfig::IProtoConfigFileProvider& protoConfigFileProvider,
+        NConfig::IConfigUpdateTracer& configUpdateTracer,
+        NConfig::IEnv& env)
+            : ErrorCollector(errorCollector)
+            , ProtoConfigFileProvider(protoConfigFileProvider)
+            , ConfigUpdateTracer(configUpdateTracer)
+            , Env(env)
+    {}
+
+    void ValidateOptions(const NLastGetopt::TOpts& opts, const NLastGetopt::TOptsParseResult& parseResult) {
+        MbusConfigFields.ValidateCliOptions(opts, parseResult);
+    }
+
+    void ParseImpl(const TVector<TString>& freeArgs) {
+        using TCfg = NKikimrConfig::TAppConfig;
+
+        NConfig::TConfigRefs refs{ConfigUpdateTracer, ErrorCollector, ProtoConfigFileProvider};
+
+        Option("auth-file", TCfg::TAuthConfigFieldTag{}, CALL_CTX());
+        LoadBootstrapConfig(ProtoConfigFileProvider, ErrorCollector, freeArgs, BaseConfig);
+        LoadYamlConfig(refs, ConfigFields.YamlConfigFile, AppConfig, CALL_CTX());
+        OptionMerge("auth-token-file", TCfg::TAuthConfigFieldTag{}, CALL_CTX());
+
+        // start memorylog as soon as possible
+        Option("memorylog-file", TCfg::TMemoryLogConfigFieldTag{}, &TInitialConfigurator::InitMemLog, CALL_CTX());
+        Option("naming-file", TCfg::TNameserviceConfigFieldTag{}, CALL_CTX());
+
+        ConfigFields.NodeId = ConfigFields.DeduceNodeId(AppConfig, Env);
+        Cout << "Determined node ID: " << ConfigFields.NodeId << Endl;
+
+        ConfigFields.ValidateTenant();
+
+        ConfigFields.ApplyServicesMask(ServicesMask);
+
+        PreFillLabels(ConfigFields);
+
+        if (ConfigFields.IsStaticNode()) {
+            InitStaticNode();
+        } else {
+            InitDynamicNode();
+        }
+
+        LoadYamlConfig(refs, ConfigFields.YamlConfigFile, AppConfig, CALL_CTX());
+
+        Option("sys-file", TCfg::TActorSystemConfigFieldTag{}, CALL_CTX());
+
+        if (!AppConfig.HasActorSystemConfig()) {
+            AppConfig.MutableActorSystemConfig()->CopyFrom(*DummyActorSystemConfig());
+            TRACE_CONFIG_CHANGE_INPLACE_T(ActorSystemConfig, SetExplicitly);
+        }
+
+        Option("domains-file", TCfg::TDomainsConfigFieldTag{}, CALL_CTX());
+        Option("bs-file", TCfg::TBlobStorageConfigFieldTag{}, CALL_CTX());
+        Option("log-file", TCfg::TLogConfigFieldTag{}, &TInitialConfigurator::SetupLogConfigDefaults, CALL_CTX());
+
+        // This flag is set per node and we prefer flag over CMS.
+        ConfigFields.ApplyLogSettings(AppConfig, ConfigUpdateTracer);
+
+        Option("ic-file", TCfg::TInterconnectConfigFieldTag{}, &TInitialConfigurator::SetupInterconnectConfigDefaults, CALL_CTX());
+        Option("channels-file", TCfg::TChannelProfileConfigFieldTag{}, CALL_CTX());
+        Option("bootstrap-file", TCfg::TBootstrapConfigFieldTag{}, &TInitialConfigurator::SetupBootstrapConfigDefaults, CALL_CTX());
+        Option("vdisk-file", TCfg::TVDiskConfigFieldTag{}, CALL_CTX());
+        Option("drivemodel-file", TCfg::TDriveModelConfigFieldTag{}, CALL_CTX());
+        Option("grpc-file", TCfg::TGRpcConfigFieldTag{}, CALL_CTX());
+        Option("dyn-nodes-file", TCfg::TDynamicNameserviceConfigFieldTag{}, CALL_CTX());
+        Option("cms-file", TCfg::TCmsConfigFieldTag{}, CALL_CTX());
+        Option("pq-file", TCfg::TPQConfigFieldTag{}, CALL_CTX());
+        Option("pqcd-file", TCfg::TPQClusterDiscoveryConfigFieldTag{}, CALL_CTX());
+        Option("netclassifier-file", TCfg::TNetClassifierConfigFieldTag{}, CALL_CTX());
+        Option("auth-file", TCfg::TAuthConfigFieldTag{}, CALL_CTX());
+        OptionMerge("auth-token-file", TCfg::TAuthConfigFieldTag{}, CALL_CTX());
+        Option("key-file", TCfg::TKeyConfigFieldTag{}, CALL_CTX());
+        Option("pdisk-key-file", TCfg::TPDiskKeyConfigFieldTag{}, CALL_CTX());
+        Option("sqs-file", TCfg::TSqsConfigFieldTag{}, CALL_CTX());
+        Option("http-proxy-file", TCfg::THttpProxyConfigFieldTag{}, CALL_CTX());
+        Option("public-http-file", TCfg::TPublicHttpConfigFieldTag{}, CALL_CTX());
+        Option("feature-flags-file", TCfg::TFeatureFlagsFieldTag{}, CALL_CTX());
+        Option("rb-file", TCfg::TResourceBrokerConfigFieldTag{}, CALL_CTX());
+        Option("metering-file", TCfg::TMeteringConfigFieldTag{}, CALL_CTX());
+        Option("audit-file", TCfg::TAuditConfigFieldTag{}, CALL_CTX());
+        Option("kqp-file", TCfg::TKQPConfigFieldTag{}, CALL_CTX());
+        Option("incrhuge-file", TCfg::TIncrHugeConfigFieldTag{}, CALL_CTX());
+        Option("alloc-file", TCfg::TAllocatorConfigFieldTag{}, CALL_CTX());
+        Option("fq-file", TCfg::TFederatedQueryConfigFieldTag{}, CALL_CTX());
+        Option(nullptr, TCfg::TTracingConfigFieldTag{}, CALL_CTX());
+        Option(nullptr, TCfg::TFailureInjectionConfigFieldTag{}, CALL_CTX());
+
+        ConfigFields.ApplyFields(AppConfig, Env, ConfigUpdateTracer);
+
+       // MessageBus options.
+        if (!AppConfig.HasMessageBusConfig()) {
+            MbusConfigFields.InitMessageBusConfig(AppConfig);
+            TRACE_CONFIG_CHANGE_INPLACE_T(MessageBusConfig, UpdateExplicitly);
+        }
+
+        TenantName = FillTenantPoolConfig(ConfigFields);
+
+        FillData(ConfigFields);
+    }
+
+    void FillData(const NConfig::TConfigFields& cf) {
+        if (cf.TenantName && ScopeId.IsEmpty()) {
+            const TString myDomain = DeduceNodeDomain(cf);
+            for (const auto& domain : AppConfig.GetDomainsConfig().GetDomain()) {
+                if (domain.GetName() == myDomain) {
+                    ScopeId = TKikimrScopeId(0, domain.GetDomainId());
+                    break;
+                }
+            }
+        }
+
+        if (cf.NodeId) { // FIXME: do we really need it ???
+            NodeId = cf.NodeId;
+
+            Labels["node_id"] = ToString(NodeId);
+            AddLabelToAppConfig("node_id", Labels["node_id"]);
+        }
+
+        InitDebug.ConfigTransformInfo = ConfigUpdateTracer.Dump();
+        ClusterName = AppConfig.GetNameserviceConfig().GetClusterUUID();
+    }
+
+    TString FillTenantPoolConfig(const NConfig::TConfigFields& cf) {
+        auto &slot = *AppConfig.MutableTenantPoolConfig()->AddSlots();
+        slot.SetId("static-slot");
+        slot.SetIsDynamic(false);
+        TString tenantName = cf.TenantName ? cf.TenantName.GetRef() : CanonizePath(DeduceNodeDomain(cf));
+        slot.SetTenantName(tenantName);
+        return tenantName;
+    }
+
+    void SetupLogConfigDefaults(NKikimrConfig::TLogConfig& logConfig) {
+        ConfigFields.SetupLogConfigDefaults(logConfig, ConfigUpdateTracer);
+    }
+
+    void AddLabelToAppConfig(const TString& name, const TString& value) {
+        for (auto &label : *AppConfig.MutableLabels()) {
+            if (label.GetName() == name) {
+                label.SetValue(value);
+                return;
+            }
+        }
+
+        auto *label = AppConfig.AddLabels();
+        label->SetName(name);
+        label->SetValue(value);
+    }
+
+    void InitMemLog(const NKikimrConfig::TMemoryLogConfig& mem) const {
+        if (mem.HasLogBufferSize() && mem.GetLogBufferSize() > 0) {
+            if (mem.HasLogGrainSize() && mem.GetLogGrainSize() > 0) {
+                TMemoryLog::CreateMemoryLogBuffer(mem.GetLogBufferSize(), mem.GetLogGrainSize());
+            } else {
+                TMemoryLog::CreateMemoryLogBuffer(mem.GetLogBufferSize());
+            }
+            MemLogWriteNullTerm("Memory_log_has_been_started_YAHOO_");
+        }
+    }
+
+    template <class TTag>
+    void Option(const char* optname, TTag tag, NConfig::TCallContext ctx) {
+        NConfig::TConfigRefs refs{ConfigUpdateTracer, ErrorCollector, ProtoConfigFileProvider};
+        MutableConfigPart(refs, optname, tag, BaseConfig, AppConfig, ctx);
+    }
+
+    template <class TTag, class TContinuation>
+    void Option(const char* optname, TTag tag, TContinuation continuation, NConfig::TCallContext ctx) {
+        NConfig::TConfigRefs refs{ConfigUpdateTracer, ErrorCollector, ProtoConfigFileProvider};
+        if (auto* res = MutableConfigPart(refs, optname, tag, BaseConfig, AppConfig, ctx)) {
+            (this->*continuation)(*res);
+        }
+    }
+
+    template <class TTag>
+    void OptionMerge(const char* optname, TTag tag, NConfig::TCallContext ctx) {
+        NConfig::TConfigRefs refs{ConfigUpdateTracer, ErrorCollector, ProtoConfigFileProvider};
+        MutableConfigPartMerge(refs, optname, tag, AppConfig, ctx);
+    }
+
+    void PreFillLabels(const NConfig::TConfigFields& cf) {
+        Labels["node_id"] = ToString(cf.NodeId);
+        Labels["node_host"] = Env.FQDNHostName();
+        Labels["tenant"] = (cf.TenantName ? cf.TenantName.GetRef() : TString(""));
+        Labels["node_type"] = cf.NodeType.GetRef();
+        // will be replaced with proper version info
+        Labels["branch"] = GetBranch();
+        Labels["rev"] = GetProgramCommitId();
+        Labels["dynamic"] = ToString(cf.NodeBrokerAddresses.empty() ? "false" : "true");
+
+        for (const auto& [name, value] : Labels) {
+            auto *label = AppConfig.AddLabels();
+            label->SetName(name);
+            label->SetValue(value);
+        }
+    }
+
+    void SetupBootstrapConfigDefaults(NKikimrConfig::TBootstrap& bootstrapConfig) {
+        ConfigFields.SetupBootstrapConfigDefaults(bootstrapConfig, ConfigUpdateTracer);
+    };
+
+    void SetupInterconnectConfigDefaults(NKikimrConfig::TInterconnectConfig& icConfig) {
+        ConfigFields.SetupInterconnectConfigDefaults(icConfig, ConfigUpdateTracer);
+    };
+
+    TString DeduceNodeDomain(const NConfig::TConfigFields& cf) const {
+        if (cf.NodeDomain) {
+            return cf.NodeDomain;
+        }
+        if (AppConfig.GetDomainsConfig().DomainSize() == 1) {
+            return AppConfig.GetDomainsConfig().GetDomain(0).GetName();
+        }
+        if (AppConfig.GetTenantPoolConfig().SlotsSize() == 1) {
+            auto &slot = AppConfig.GetTenantPoolConfig().GetSlots(0);
+            if (slot.GetDomainName()) {
+                return slot.GetDomainName();
+            }
+            auto &tenantName = slot.GetTenantName();
+            if (IsStartWithSlash(tenantName)) {
+                return ToString(ExtractDomain(tenantName));
+            }
+        }
+        return "";
+    }
+
+    NYdb::NDiscovery::TNodeRegistrationResult TryToRegisterDynamicNodeViaDiscoveryService(
+            const NConfig::TConfigFields& cf,
+            const TString &addr,
+            const TString &domainName,
+            const TString &nodeHost,
+            const TString &nodeAddress,
+            const TString &nodeResolveHost,
+            const TMaybe<TString>& path)
+    {
+        TCommandConfig::TServerEndpoint endpoint = TCommandConfig::ParseServerAddress(addr);
+        NYdb::TDriverConfig config;
+        if (endpoint.EnableSsl.Defined()) {
+            if (cf.PathToGrpcCaFile) {
+                config.UseSecureConnection(ReadFromFile(cf.PathToGrpcCaFile, "CA certificates").c_str());
+            }
+            if (cf.PathToGrpcCertFile && cf.PathToGrpcPrivateKeyFile) {
+                auto certificate = ReadFromFile(cf.PathToGrpcCertFile, "Client certificates");
+                auto privateKey = ReadFromFile(cf.PathToGrpcPrivateKeyFile, "Client certificates key");
+                config.UseClientCertificate(certificate.c_str(), privateKey.c_str());
+            }
+        }
+        config.SetAuthToken(BUILTIN_ACL_ROOT);
+        config.SetEndpoint(endpoint.Address);
+        auto connection = NYdb::TDriver(config);
+
+        auto client = NYdb::NDiscovery::TDiscoveryClient(connection);
+        NYdb::NDiscovery::TNodeRegistrationResult result = client.NodeRegistration(cf.GetNodeRegistrationSettings(domainName, nodeHost, nodeAddress, nodeResolveHost, path)).GetValueSync();
+        connection.Stop(true);
+        return result;
+    }
+
+    THolder<NClient::TRegistrationResult> TryToRegisterDynamicNodeViaLegacyService(
+            const NConfig::TConfigFields& cf,
+            const TString &addr,
+            const TString &domainName,
+            const TString &nodeHost,
+            const TString &nodeAddress,
+            const TString &nodeResolveHost,
+            const TMaybe<TString>& path)
+    {
+        NClient::TKikimr kikimr(GetKikimr(cf, addr));
+        auto registrant = kikimr.GetNodeRegistrant();
+
+        auto loc = cf.CreateNodeLocation();
+
+        return MakeHolder<NClient::TRegistrationResult>
+            (registrant.SyncRegisterNode(ToString(domainName),
+                                         nodeHost,
+                                         cf.InterconnectPort,
+                                         nodeAddress,
+                                         nodeResolveHost,
+                                         std::move(loc),
+                                         cf.FixedNodeID,
+                                         path));
+    }
+
+    NYdb::NDiscovery::TNodeRegistrationResult RegisterDynamicNodeViaDiscoveryService(
+        const NConfig::TConfigFields& cf,
+        const TVector<TString>& addrs,
+        const TString& domainName)
+    {
+        NYdb::NDiscovery::TNodeRegistrationResult result;
+        const size_t maxNumberReceivedCallUnimplemented = 5;
+        size_t currentNumberReceivedCallUnimplemented = 0;
+        while (!result.IsSuccess() && currentNumberReceivedCallUnimplemented < maxNumberReceivedCallUnimplemented) {
+            for (const auto& addr : addrs) {
+                result = TryToRegisterDynamicNodeViaDiscoveryService(
+                    cf,
+                    addr,
+                    domainName,
+                    cf.NodeHost,
+                    cf.NodeAddress,
+                    cf.NodeResolveHost,
+                    cf.GetSchemePath());
+                if (result.IsSuccess()) {
+                    Cout << "Success. Registered via discovery service as " << result.GetNodeId() << Endl;
+                    break;
+                }
+                Cerr << "Registration error: " << static_cast<NYdb::TStatus>(result) << Endl;
+            }
+            if (!result.IsSuccess()) {
+                Sleep(TDuration::Seconds(1));
+                if (result.GetStatus() == NYdb::EStatus::CLIENT_CALL_UNIMPLEMENTED) {
+                    currentNumberReceivedCallUnimplemented++;
+                }
+            }
+        }
+        return result;
+    }
+
+    void ProcessRegistrationDynamicNodeResult(const NYdb::NDiscovery::TNodeRegistrationResult& result) {
+        NodeId = result.GetNodeId();
+        NActors::TScopeId scopeId;
+        if (result.HasScopeTabletId() && result.HasScopePathId()) {
+            scopeId.first = result.GetScopeTabletId();
+            scopeId.second = result.GetScopePathId();
+        }
+        ScopeId = TKikimrScopeId(scopeId);
+
+        auto &nsConfig = *AppConfig.MutableNameserviceConfig();
+        nsConfig.ClearNode();
+
+        auto &dnConfig = *AppConfig.MutableDynamicNodeConfig();
+        for (auto &node : result.GetNodes()) {
+            if (node.NodeId == result.GetNodeId()) {
+                auto &nodeInfo = *dnConfig.MutableNodeInfo();
+                nodeInfo.SetNodeId(node.NodeId);
+                nodeInfo.SetHost(node.Host);
+                nodeInfo.SetPort(node.Port);
+                nodeInfo.SetResolveHost(node.ResolveHost);
+                nodeInfo.SetAddress(node.Address);
+                nodeInfo.SetExpire(node.Expire);
+                NConfig::CopyNodeLocation(nodeInfo.MutableLocation(), node.Location);
+            } else {
+                auto &info = *nsConfig.AddNode();
+                info.SetNodeId(node.NodeId);
+                info.SetAddress(node.Address);
+                info.SetPort(node.Port);
+                info.SetHost(node.Host);
+                info.SetInterconnectHost(node.ResolveHost);
+                NConfig::CopyNodeLocation(info.MutableLocation(), node.Location);
+            }
+        }
+    }
+
+    THolder<NClient::TRegistrationResult> RegisterDynamicNodeViaLegacyService(
+        const NConfig::TConfigFields& cf,
+        const TVector<TString>& addrs,
+        const TString& domainName)
+    {
+        THolder<NClient::TRegistrationResult> result;
+        while (!result || !result->IsSuccess()) {
+            for (const auto& addr : addrs) {
+                result = TryToRegisterDynamicNodeViaLegacyService(
+                    cf,
+                    addr,
+                    domainName,
+                    cf.NodeHost,
+                    cf.NodeAddress,
+                    cf.NodeResolveHost,
+                    cf.GetSchemePath());
+                if (result->IsSuccess()) {
+                    Cout << "Success. Registered via legacy service as " << result->GetNodeId() << Endl;
+                    break;
+                }
+                Cerr << "Registration error: " << result->GetErrorMessage() << Endl;
+            }
+            if (!result || !result->IsSuccess())
+                Sleep(TDuration::Seconds(1));
+        }
+        Y_ABORT_UNLESS(result);
+
+        if (!result->IsSuccess()) {
+            ythrow yexception() << "Cannot register dynamic node: " << result->GetErrorMessage();
+        }
+
+        return result;
+    }
+
+    void ProcessRegistrationDynamicNodeResult(const THolder<NClient::TRegistrationResult>& result) {
+        NodeId = result->GetNodeId();
+        ScopeId = TKikimrScopeId(result->GetScopeId());
+
+        auto &nsConfig = *AppConfig.MutableNameserviceConfig();
+        nsConfig.ClearNode();
+
+        auto &dnConfig = *AppConfig.MutableDynamicNodeConfig();
+        for (auto &node : result->Record().GetNodes()) {
+            if (node.GetNodeId() == result->GetNodeId()) {
+                dnConfig.MutableNodeInfo()->CopyFrom(node);
+            } else {
+                auto &info = *nsConfig.AddNode();
+                info.SetNodeId(node.GetNodeId());
+                info.SetAddress(node.GetAddress());
+                info.SetPort(node.GetPort());
+                info.SetHost(node.GetHost());
+                info.SetInterconnectHost(node.GetResolveHost());
+                info.MutableLocation()->CopyFrom(node.GetLocation());
+            }
+        }
+    }
+
+    void RegisterDynamicNode(NConfig::TConfigFields& cf) {
+        TVector<TString> addrs;
+
+        cf.FillClusterEndpoints(AppConfig, addrs);
+
+        if (!cf.InterconnectPort) {
+            ythrow yexception() << "Either --node or --ic-port must be specified";
+        }
+
+        if (addrs.empty()) {
+            ythrow yexception() << "List of Node Broker end-points is empty";
+        }
+
+        TString domainName = DeduceNodeDomain(cf);
+        if (!cf.NodeHost) {
+            cf.NodeHost = Env.FQDNHostName();
+        }
+        if (!cf.NodeResolveHost) {
+            cf.NodeResolveHost = cf.NodeHost;
+        }
+
+        NYdb::NDiscovery::TNodeRegistrationResult result = RegisterDynamicNodeViaDiscoveryService(cf, addrs, domainName);
+        if (result.IsSuccess()) {
+            ProcessRegistrationDynamicNodeResult(result);
+        } else {
+            THolder<NClient::TRegistrationResult> result = RegisterDynamicNodeViaLegacyService(cf, addrs, domainName);
+            ProcessRegistrationDynamicNodeResult(result);
+        }
+    }
+
+    void ApplyConfigForNode(NKikimrConfig::TAppConfig &appConfig) {
+        AppConfig.Swap(&appConfig);
+        // Dynamic node config is defined by options and Node Broker response.
+        AppConfig.MutableDynamicNodeConfig()->Swap(appConfig.MutableDynamicNodeConfig());
+        // By now naming config should be loaded and probably replaced with
+        // info from registration response. Don't lose it in case CMS has no
+        // config for naming service.
+        if (!AppConfig.HasNameserviceConfig()) {
+            AppConfig.MutableNameserviceConfig()->Swap(appConfig.MutableNameserviceConfig());
+            // FIXME(innokentii)
+            // RunConfig.ConfigInitInfo[NKikimrConsole::TConfigItem::NameserviceConfigItem].Updates.pop_back();
+        }
+    }
+
+    bool TryToLoadConfigForDynamicNodeFromCMS(const NConfig::TConfigFields& cf, const TString &addr, TMaybe<NKikimr::NClient::TConfigurationResult>& res, TString &error) const {
+        NClient::TKikimr kikimr(GetKikimr(cf, addr));
+        auto configurator = kikimr.GetNodeConfigurator();
+
+        Cout << "Trying to get configs from " << addr << Endl;
+
+        auto result = configurator.SyncGetNodeConfig(NodeId,
+                                                     Env.FQDNHostName(),
+                                                     cf.TenantName.GetRef(),
+                                                     cf.NodeType.GetRef(),
+                                                     DeduceNodeDomain(cf),
+                                                     AppConfig.GetAuthConfig().GetStaffApiUserToken(),
+                                                     true,
+                                                     1);
+
+        if (!result.IsSuccess()) {
+            error = result.GetErrorMessage();
+            Cerr << "Configuration error: " << error << Endl;
+            return false;
+        }
+
+        Cout << "Success." << Endl;
+
+        res = result;
+
+        return true;
+    }
+
+    void LoadConfigForDynamicNode(const NConfig::TConfigFields& cf, TMaybe<NKikimr::NClient::TConfigurationResult>& res) const {
+        bool success = false;
+        TString error;
+        TVector<TString> addrs;
+
+        cf.FillClusterEndpoints(AppConfig, addrs);
+
+        SetRandomSeed(TInstant::Now().MicroSeconds());
+        int minAttempts = 10;
+        int attempts = 0;
+        while (!success && attempts < minAttempts) {
+            for (auto addr : addrs) {
+                success = TryToLoadConfigForDynamicNodeFromCMS(cf, addr, res, error);
+                ++attempts;
+                if (success) {
+                    break;
+                }
+            }
+            // Randomized backoff
+            if (!success) {
+                Sleep(TDuration::MilliSeconds(500 + RandomNumber<ui64>(1000)));
+            }
+        }
+
+        if (!success) {
+            Cerr << "WARNING: couldn't load config from CMS: " << error << Endl;
+        }
+    }
+
+    NClient::TKikimr GetKikimr(const NConfig::TConfigFields& cf, const TString& addr) const {
+        TCommandConfig::TServerEndpoint endpoint = TCommandConfig::ParseServerAddress(addr);
+        NYdbGrpc::TGRpcClientConfig grpcConfig(endpoint.Address, TDuration::Seconds(5));
+        grpcConfig.LoadBalancingPolicy = "round_robin";
+        if (endpoint.EnableSsl.Defined()) {
+            grpcConfig.EnableSsl = endpoint.EnableSsl.GetRef();
+            auto& sslCredentials = grpcConfig.SslCredentials;
+            if (cf.PathToGrpcCaFile) {
+                sslCredentials.pem_root_certs = ReadFromFile(cf.PathToGrpcCaFile, "CA certificates");
+            }
+            if (cf.PathToGrpcCertFile && cf.PathToGrpcPrivateKeyFile) {
+                sslCredentials.pem_cert_chain = ReadFromFile(cf.PathToGrpcCertFile, "Client certificates");
+                sslCredentials.pem_private_key = ReadFromFile(cf.PathToGrpcPrivateKeyFile, "Client certificates key");
+            }
+        }
+        return NClient::TKikimr(grpcConfig);
+    }
+
+    void InitStaticNode() {
+        ConfigFields.ValidateStaticNodeConfig();
+
+        Labels["dynamic"] = "false";
+    }
+
+    static ui32 NextValidKind(ui32 kind) {
+        do {
+            ++kind;
+            if (kind != NKikimrConsole::TConfigItem::Auto && NKikimrConsole::TConfigItem::EKind_IsValid(kind)) {
+                break;
+            }
+        } while (kind <= NKikimrConsole::TConfigItem::EKind_MAX);
+        return kind;
+    }
+
+    static bool HasCorrespondingManagedKind(ui32 kind, const NKikimrConfig::TAppConfig& appConfig) {
+        return (kind == NKikimrConsole::TConfigItem::NameserviceConfigItem && appConfig.HasNameserviceConfig()) ||
+               (kind == NKikimrConsole::TConfigItem::NetClassifierDistributableConfigItem && appConfig.HasNetClassifierDistributableConfig()) ||
+               (kind == NKikimrConsole::TConfigItem::NamedConfigsItem && appConfig.NamedConfigsSize());
+    }
+
+    NKikimrConfig::TAppConfig GetYamlConfigFromResult(const NKikimr::NClient::TConfigurationResult& result, const TMap<TString, TString>& labels) const {
+        NKikimrConfig::TAppConfig yamlConfig;
+        if (result.HasYamlConfig() && !result.GetYamlConfig().empty()) {
+            NYamlConfig::ResolveAndParseYamlConfig(
+                result.GetYamlConfig(),
+                result.GetVolatileYamlConfigs(),
+                labels,
+                yamlConfig);
+        }
+        return yamlConfig;
+    }
+
+    NKikimrConfig::TAppConfig GetActualDynConfig(const NKikimrConfig::TAppConfig& yamlConfig, const NKikimrConfig::TAppConfig& regularConfig) const {
+        if (yamlConfig.GetYamlConfigEnabled()) {
+            for (ui32 kind = NKikimrConsole::TConfigItem::EKind_MIN; kind <= NKikimrConsole::TConfigItem::EKind_MAX; NextValidKind(kind)) {
+                if (HasCorrespondingManagedKind(kind, yamlConfig)) {
+                    TRACE_CONFIG_CHANGE_INPLACE(kind, ReplaceConfigWithConsoleProto);
+                } else {
+                    TRACE_CONFIG_CHANGE_INPLACE(kind, ReplaceConfigWithConsoleYaml);
+                }
+            }
+
+            return yamlConfig;
+        }
+
+        for (ui32 kind = NKikimrConsole::TConfigItem::EKind_MIN; kind <= NKikimrConsole::TConfigItem::EKind_MAX; NextValidKind(kind)) {
+            TRACE_CONFIG_CHANGE_INPLACE(kind, ReplaceConfigWithConsoleProto);
+        }
+
+        return regularConfig;
+    }
+
+    void InitDynamicNode() {
+        Labels["dynamic"] = "true";
+        RegisterDynamicNode(ConfigFields);
+
+        Labels["node_id"] = ToString(NodeId);
+        AddLabelToAppConfig("node_id", Labels["node_id"]);
+
+        if (ConfigFields.IgnoreCmsConfigs) {
+            return;
+        }
+
+        TMaybe<NKikimr::NClient::TConfigurationResult> result;
+        LoadConfigForDynamicNode(ConfigFields, result);
+
+        if (!result) {
+            return;
+        }
+
+        NKikimrConfig::TAppConfig yamlConfig = GetYamlConfigFromResult(*result, Labels);
+        NYamlConfig::ReplaceUnmanagedKinds(result->GetConfig(), yamlConfig);
+
+        InitDebug.OldConfig.CopyFrom(result->GetConfig());
+        InitDebug.YamlConfig.CopyFrom(yamlConfig);
+
+        NKikimrConfig::TAppConfig appConfig = GetActualDynConfig(yamlConfig, result->GetConfig());
+
+        ApplyConfigForNode(appConfig);
+    }
+
+    void RegisterCliOptions(NLastGetopt::TOpts& opts) {
+        ConfigFields.RegisterCliOptions(opts);
+        MbusConfigFields.RegisterCliOptions(opts);
+        opts.AddLongOption("label", "labels for this node")
+            .Optional().RequiredArgument("KEY=VALUE")
+            .KVHandler([&](TString key, TString val) {
+                Labels[key] = val;
+            });
+
+        opts.SetFreeArgDefaultTitle("PATH", "path to protobuf file; files are merged in order in which they are enlisted");
     }
 };
 

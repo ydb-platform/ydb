@@ -14,6 +14,7 @@ enum KvWorkloadConstants : ui64 {
     PARTITION_SIZE_MB = 2000,
     INIT_ROW_COUNT = 1000,
     MAX_FIRST_KEY = Max<ui64>(),
+    START_FIRST_KEY = 0,
     STRING_LEN = 8,
     COLUMNS_CNT = 2,
     INT_COLUMNS_CNT = 1,
@@ -38,11 +39,13 @@ public:
     ui64 PartitionSizeMb = KvWorkloadConstants::PARTITION_SIZE_MB;
     ui64 InitRowCount = KvWorkloadConstants::INIT_ROW_COUNT;
     ui64 MaxFirstKey = KvWorkloadConstants::MAX_FIRST_KEY;
+    ui64 StartFirstKey = KvWorkloadConstants::START_FIRST_KEY;
     ui64 StringLen = KvWorkloadConstants::STRING_LEN;
     ui64 ColumnsCnt = KvWorkloadConstants::COLUMNS_CNT;
     ui64 IntColumnsCnt = KvWorkloadConstants::INT_COLUMNS_CNT;
     ui64 KeyColumnsCnt = KvWorkloadConstants::KEY_COLUMNS_CNT;
     ui64 RowsCnt = KvWorkloadConstants::ROWS_CNT;
+
     bool PartitionsByLoad = KvWorkloadConstants::PARTITIONS_BY_LOAD;
 
     ui64 MixedChangePartitionsSize = KvWorkloadConstants::MIXED_CHANGE_PARTITIONS_SIZE;
@@ -91,6 +94,7 @@ public:
 
     enum class EType {
         UpsertRandom,
+        UpsertSequential,
         InsertRandom,
         SelectRandom,
         ReadRowsRandom,
@@ -107,10 +111,13 @@ private:
 
     TQueryInfo FillKvData() const;
     TVector<TRow> GenerateRandomRows(bool randomValues = false);
+    TVector<TRow> GenerateSequentialRows();
 
     TString BigString;
 
     std::atomic<TInstant> MixedNextChangePartitionsSize;
+
+    std::atomic<ui64> UpsertSequentialNextFirstKey;
 };
 
 } // namespace NYdbWorkload

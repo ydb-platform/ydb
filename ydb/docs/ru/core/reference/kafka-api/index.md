@@ -7,5 +7,5 @@ YDB поддерживает работу с [топиками](../../concepts/t
 
 - [Аутентификация](auth.md)
 - [Чтение и запись](read-write.md)
-- [Kafka Connect](connect.md)
+- [Kafka Connect](./connect/index.md)
 - [Ограничения](constraints.md)

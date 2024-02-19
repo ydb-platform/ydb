@@ -442,6 +442,7 @@ value {
         UNIT_ASSERT_VALUES_EQUAL(desc.GetStatus(), NKikimrScheme::StatusSuccess);
 
         const auto& table = desc.GetPathDescription().GetTable();
+
         UNIT_ASSERT_C(CheckDefaultFromLiteral(table), "Invalid default value");
     }
 
@@ -872,6 +873,7 @@ value {
         UNIT_ASSERT_VALUES_EQUAL(desc.GetStatus(), NKikimrScheme::StatusSuccess);
 
         const auto& table = desc.GetPathDescription().GetTable();
+
         UNIT_ASSERT_C(CheckDefaultFromLiteral(table), "Invalid default value");
     }
 

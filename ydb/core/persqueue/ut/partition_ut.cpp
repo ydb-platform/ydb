@@ -1681,23 +1681,21 @@ Y_UNIT_TEST_F(GetPartitionWriteInfoError, TPartitionFixture) {
 
     TString data = "data for write";
 
-    for (auto i = 0; i < 3; i++) {
-        SendWrite(++cookie, i, ownerCookie, i + 100, data, false, (i+1)*2);
-        {
-            SendGetWriteInfo(100'001);
-            auto event = Ctx->Runtime->GrabEdgeEvent<TEvPQ::TEvGetWriteInfoError>(TDuration::Seconds(1));
-            UNIT_ASSERT(event != nullptr);
-        }
-        SendDiskStatusResponse();
-        {
-            auto event = Ctx->Runtime->GrabEdgeEvent<TEvPQ::TEvProxyResponse>(handle, TDuration::Seconds(1));
-            UNIT_ASSERT(event != nullptr);
-        }
-        {
-            SendGetWriteInfo(100'001);
-            auto event = Ctx->Runtime->GrabEdgeEvent<TEvPQ::TEvGetWriteInfoResponse>(TDuration::Seconds(1));
-            UNIT_ASSERT(event != nullptr);
-        }
+    SendWrite(++cookie, 0, ownerCookie, 100, data, false, 1);
+    {
+        SendGetWriteInfo(100'001);
+        auto event = Ctx->Runtime->GrabEdgeEvent<TEvPQ::TEvGetWriteInfoError>(TDuration::Seconds(1));
+        UNIT_ASSERT(event != nullptr);
+    }
+    SendDiskStatusResponse();
+    {
+        auto event = Ctx->Runtime->GrabEdgeEvent<TEvPQ::TEvProxyResponse>(handle, TDuration::Seconds(1));
+        UNIT_ASSERT(event != nullptr);
+    }
+    {
+        SendGetWriteInfo(100'001);
+        auto event = Ctx->Runtime->GrabEdgeEvent<TEvPQ::TEvGetWriteInfoError>(TDuration::Seconds(1));
+        UNIT_ASSERT(event != nullptr);
     }
 } // GetPartitionWriteInfoErrors
 

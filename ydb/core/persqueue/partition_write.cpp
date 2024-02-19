@@ -211,6 +211,11 @@ void TPartition::ProcessReserveRequests(const TActorContext& ctx) {
         const bool& lastRequest = ReserveRequests.front()->LastRequest;
 
         auto it = Owners.find(owner);
+        if (ClosedInternalPartition) {
+            ReplyError(ctx, cookie, NPersQueue::NErrorCode::BAD_REQUEST, "ReserveRequest to closed supportive partition");
+            ReserveRequests.pop_front();
+            continue;
+        }
         if (it == Owners.end() || it->second.OwnerCookie != ownerCookie) {
             ReplyError(ctx, cookie, NPersQueue::NErrorCode::BAD_REQUEST, "ReserveRequest from dead ownership session");
             ReserveRequests.pop_front();

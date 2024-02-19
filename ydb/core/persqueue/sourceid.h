@@ -41,6 +41,11 @@ public:
     const TSourceIdMap& GetInMemorySourceIds() const {
         return InMemorySourceIds;
     }
+    TSourceIdMap ExtractInMemorySourceIds() {
+        auto ret = std::move(InMemorySourceIds);
+        InMemorySourceIds = {};
+        return ret;
+    }
 
     template <typename... Args>
     void RegisterSourceId(const TString& sourceId, Args&&... args) {

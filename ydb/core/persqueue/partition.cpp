@@ -99,10 +99,15 @@ bool TPartition::CanWrite() const {
         // Pending configuration tx inactivate this partition.
         return false;
     }
+    if (ClosedInternalPartition)
+        return false;
+
     return PartitionConfig->GetStatus() == NKikimrPQ::ETopicPartitionStatus::Active;
 }
 
 bool TPartition::CanEnqueue() const {
+    if (ClosedInternalPartition)
+        return false;
     return PartitionConfig == nullptr || PartitionConfig->GetStatus() == NKikimrPQ::ETopicPartitionStatus::Active;
 }
 
@@ -934,17 +939,18 @@ void TPartition::Handle(TEvPQ::TEvTxRollback::TPtr& ev, const TActorContext& ctx
 }
 
 void TPartition::Handle(TEvPQ::TEvGetWriteInfoRequest::TPtr& ev, const TActorContext& ctx) {
-    if (CurrentStateFunc() != &TThis::StateIdle || !Requests.empty()) {
+    if (ClosedInternalPartition || CurrentStateFunc() != &TThis::StateIdle || !Requests.empty()) {
         auto* response = new TEvPQ::TEvGetWriteInfoError(Partition.InternalPartitionId,
                                                        "Write info requested while writes are not complete");
         ctx.Send(ev->Sender, response);
+        ClosedInternalPartition = true;
         return;
     }
     ClosedInternalPartition = true;
     auto response = new TEvPQ::TEvGetWriteInfoResponse();
     response->Cookie = Partition.InternalPartitionId;
     response->BodyKeys = std::move(DataKeysBody);
-    response->SrcIdInfo = std::move(SourceIdStorage.GetInMemorySourceIds());
+    response->SrcIdInfo = std::move(SourceIdStorage.ExtractInMemorySourceIds());
     ui32 rcount = 0, rsize = 0;
     ui64 insideHeadOffset = 0;
 

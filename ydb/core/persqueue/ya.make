@@ -39,7 +39,7 @@ SRCS(
     dread_cache_service/caching_service.cpp
 )
 
-GENERATE_ENUM_SERIALIZATION(sourceid.h)
+GENERATE_ENUM_SERIALIZATION(sourceid_info.h)
 
 PEERDIR(
     ydb/library/actors/core

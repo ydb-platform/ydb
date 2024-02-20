@@ -8,6 +8,7 @@
 
 add_subdirectory(ut_table_writer)
 add_subdirectory(ut_topic_reader)
+add_subdirectory(ut_worker)
 get_built_tool_path(
   TOOL_enum_parser_bin
   TOOL_enum_parser_dependency

@@ -124,6 +124,7 @@ namespace NWilson {
             TMonotonic NextBatchCompletion;
 
             TIntrusiveListWithAutoDelete<TExportRequestData, TDelete> ExportRequests;
+            size_t ExportRequestsCount = 0;
 
         public:
             TWilsonUploader(WilsonUploaderParams params)
@@ -254,7 +255,7 @@ namespace NWilson {
                         "dropped " << numSpansDropped << " span(s) due to expiration");
                 }
 
-                if (ExportRequests.Size() >= MaxExportInflight || BatchQueue.empty()) {
+                if (ExportRequestsCount >= MaxExportInflight || BatchQueue.empty()) {
                     return;
                 } else if (now < NextSendTimestamp) {
                     ScheduleWakeup(NextSendTimestamp);
@@ -291,6 +292,7 @@ namespace NWilson {
                 uploadData->Reader->Finish(&uploadData->Response, &uploadData->Status, uploadData);
                 ALOG_TRACE(WILSON_SERVICE_ID, "started export request " << (void*)uploadData);
                 ExportRequests.PushBack(uploadData);
+                ++ExportRequestsCount;
             }
 
             void ReapCompletedRequests() {
@@ -307,6 +309,7 @@ namespace NWilson {
                             "failed to commit traces: " << node->Status.error_message());
                     }
                     
+                    --ExportRequestsCount;
                     node->Unlink();
                     delete node;
                 }

@@ -1,4 +1,5 @@
 import collections
+import json
 import os
 import six
 from hashlib import md5
@@ -11,6 +12,7 @@ YA_IDE_VENV_VAR = 'YA_IDE_VENV'
 PY_NAMESPACE_PREFIX = 'py/namespace'
 BUILTIN_PROTO = 'builtin_proto'
 DEFAULT_FLAKE8_FILE_PROCESSING_TIME = "1.5"  # in seconds
+RUFF_CONFIG_PATHS_FILE = 'build/config/tests/ruff/ruff_config_paths.json'
 
 
 def _split_macro_call(macro_call, data, item_size, chunk_size=1024):
@@ -135,6 +137,14 @@ def get_srcdir(path, unit):
     return rootrel_arc_src(path, unit)[: -len(path)].rstrip('/')
 
 
+@lazy
+def get_ruff_configs(unit):
+    arc_config_path = unit.resolve_arc_path(RUFF_CONFIG_PATHS_FILE)
+    abs_config_path = unit.resolve(arc_config_path)
+    with open(abs_config_path, 'r') as fd:
+        return list(json.load(fd).values())
+
+
 def add_python_lint_checks(unit, py_ver, files):
     @lazy
     def get_resolved_files():
@@ -210,8 +220,8 @@ def add_python_lint_checks(unit, py_ver, files):
             params = ["ruff", "tools/ruff_linter/bin/ruff_linter"]
             params += ["FILES"] + resolved_files
             params += ["GLOBAL_RESOURCES", resource]
-            ruff_cfg = unit.get('STYLE_RUFF_PYPROJECT_VALUE') or 'build/config/tests/ruff/ruff.toml'
-            params += ['CONFIGS', ruff_cfg]
+            configs = [RUFF_CONFIG_PATHS_FILE, 'build/config/tests/ruff/ruff.toml'] + get_ruff_configs(unit)
+            params += ['CONFIGS'] + configs
             unit.on_add_linter_check(params)
 
     if files and unit.get('STYLE_PYTHON_VALUE') == 'yes' and is_py3(unit):

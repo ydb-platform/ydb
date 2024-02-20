@@ -50,8 +50,6 @@
   - fsio.h
   - fwriteerror.h
   - gdbm.h
-  - ghostscript/iapi.h
-  - ghostscript/ierrors.h
   - gmp.h
   - gnutls/x509.h
   - hp-timing.h

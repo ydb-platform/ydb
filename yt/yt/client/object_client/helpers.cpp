@@ -6,8 +6,6 @@ namespace NYT::NObjectClient {
 
 ////////////////////////////////////////////////////////////////////////////////
 
-const TStringBuf ObjectIdPathPrefix("#");
-
 NYPath::TYPath FromObjectId(TObjectId id)
 {
     return TString(ObjectIdPathPrefix) + ToString(id);

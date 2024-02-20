@@ -229,6 +229,13 @@ auto TServiceBase::TMethodDescriptor::SetPooled(bool value) const -> TMethodDesc
     return result;
 }
 
+auto TServiceBase::TMethodDescriptor::SetHandleMethodError(bool value) const -> TMethodDescriptor
+{
+    auto result = *this;
+    result.HandleMethodError = value;
+    return result;
+}
+
 ////////////////////////////////////////////////////////////////////////////////
 
 TServiceBase::TMethodPerformanceCounters::TMethodPerformanceCounters(
@@ -844,6 +851,11 @@ private:
             TCurrentTraceContextGuard guard(TraceContext_);
             DoGuardedRun(handler);
         } catch (const std::exception& ex) {
+            const auto& descriptor = RuntimeInfo_->Descriptor;
+            if (descriptor.HandleMethodError) {
+                Service_->OnMethodError(ex, descriptor.Method);
+            }
+
             Reply(ex);
         }
     }
@@ -1734,6 +1746,9 @@ void TServiceBase::ReplyError(
     auto errorMessage = CreateErrorResponseMessage(requestId, richError);
     YT_UNUSED_FUTURE(replyBus->Send(errorMessage));
 }
+
+void TServiceBase::OnMethodError(const TError& /*error*/, const TString& /*method*/)
+{ }
 
 void TServiceBase::OnRequestAuthenticated(
     const NProfiling::TWallTimer& timer,

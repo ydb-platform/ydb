@@ -594,6 +594,9 @@ protected:
         //! If |true| then requests and responses are pooled.
         bool Pooled = true;
 
+        // If |true| then method exception will be handled by |OnMethodError|.
+        bool HandleMethodError = false;
+
         TMethodDescriptor SetRequestQueueProvider(IRequestQueueProviderPtr value) const;
         TMethodDescriptor SetInvoker(IInvokerPtr value) const;
         TMethodDescriptor SetInvokerProvider(TInvokerProvider value) const;
@@ -609,6 +612,7 @@ protected:
         TMethodDescriptor SetGenerateAttachmentChecksums(bool value) const;
         TMethodDescriptor SetStreamingEnabled(bool value) const;
         TMethodDescriptor SetPooled(bool value) const;
+        TMethodDescriptor SetHandleMethodError(bool value) const;
     };
 
     struct TErrorCodesCounter
@@ -849,6 +853,8 @@ protected:
         TError error,
         const NProto::TRequestHeader& header,
         const NYT::NBus::IBusPtr& replyBus);
+
+    virtual void OnMethodError(const TError& error, const TString& method);
 
 private:
     friend class TRequestQueue;

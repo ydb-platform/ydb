@@ -347,6 +347,10 @@ class YtError(Exception):
         """Chunk data is not preloaded yet"""
         return self.contains_code(1735)
 
+    def is_no_in_sync_replicas(self):
+        """No in-sync replicas found"""
+        return self.contains_code(1736)
+
     def is_already_present_in_group(self):
         """Member is already present in group"""
         return self.contains_code(908)

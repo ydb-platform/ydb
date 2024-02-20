@@ -8,6 +8,8 @@ namespace NYT::NObjectClient {
 
 ////////////////////////////////////////////////////////////////////////////////
 
+const TStringBuf ObjectIdPathPrefix("#");
+
 TVersionedObjectId::TVersionedObjectId(TObjectId objectId)
     : ObjectId(objectId)
 { }

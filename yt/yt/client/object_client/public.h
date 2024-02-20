@@ -47,6 +47,9 @@ using TObjectId = TGuid;
 //! The all-zero id used to denote a non-existing object.
 constexpr TObjectId NullObjectId = {};
 
+//! |#|-prefix.
+extern const TStringBuf ObjectIdPathPrefix;
+
 //! Used to mark counters for well-known ids.
 constexpr ui64 WellKnownCounterMask = 0x8000000000000000;
 

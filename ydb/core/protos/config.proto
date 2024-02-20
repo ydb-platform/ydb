@@ -1675,6 +1675,8 @@ message TTracingConfig {
         // time after which generated span will be discarded and will
         // not be sent to the collector
         optional uint32 SpanExportTimeoutSeconds = 5;
+        // maximum batch export requests being run simultaneously
+        optional uint64 MaxExportRequestsInflight = 6;
     }
 
     reserved 1 to 5;

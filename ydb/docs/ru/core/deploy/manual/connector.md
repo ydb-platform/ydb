@@ -10,7 +10,7 @@
 
 ## fq-connector-go {#fq-connector-go}
 
-Коннектор `fq-connector-go` реализован на языке Go; его исходный код размещён на [Github](https://github.com/ydb-platform/fq-connector-go). Он обеспечивает доступ к следующим источникам данных:
+Коннектор `fq-connector-go` реализован на языке Go; его исходный код размещён на [GitHub](https://github.com/ydb-platform/fq-connector-go). Он обеспечивает доступ к следующим источникам данных:
 
 * [ClickHouse](https://clickhouse.com/)
 * [PostgreSQL](https://www.postgresql.org/)

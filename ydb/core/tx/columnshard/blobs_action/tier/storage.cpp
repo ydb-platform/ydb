@@ -20,7 +20,7 @@ std::shared_ptr<IBlobsDeclareRemovingAction> TOperator::DoStartDeclareRemovingAc
 }
 
 std::shared_ptr<IBlobsWritingAction> TOperator::DoStartWritingAction() {
-    return std::make_shared<TWriteAction>(GetStorageId(), GetCurrentOperator(), TabletId, GCInfo);
+    return std::make_shared<TWriteAction>(GetStorageId(), GetCurrentOperator(), (ui64)GetSelfTabletId(), GCInfo);
 }
 
 std::shared_ptr<IBlobsReadingAction> TOperator::DoStartReadingAction() {
@@ -38,7 +38,7 @@ std::shared_ptr<IBlobsGCAction> TOperator::DoStartGCAction(const std::shared_ptr
         categories = GetSharedBlobs()->BuildRemoveCategories(std::move(deleteBlobIds));
     }
     auto gcTask = std::make_shared<TGCTask>(GetStorageId(), std::move(draftBlobIds), GetCurrentOperator(), std::move(categories), counters);
-    TActorContext::AsActorContext().Register(new TGarbageCollectionActor(gcTask, TabletActorId));
+    TActorContext::AsActorContext().Register(new TGarbageCollectionActor(gcTask, TabletActorId, GetSelfTabletId()));
     return gcTask;
 }
 
@@ -59,7 +59,6 @@ void TOperator::InitNewExternalOperator(const NColumnShard::NTiers::TManager* ti
 
 TOperator::TOperator(const TString& storageId, const NColumnShard::TColumnShard& shard, const std::shared_ptr<NDataSharing::TStorageSharedBlobsManager>& storageSharedBlobsManager)
     : TBase(storageId, storageSharedBlobsManager)
-    , TabletId(shard.TabletID())
     , TabletActorId(shard.SelfId())
 {
     InitNewExternalOperator(shard.GetTierManagerPointer(storageId));

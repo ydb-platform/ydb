@@ -29,6 +29,11 @@ protected:
 public:
     TOperator(const TString& storageId, const NActors::TActorId& tabletActorId,
         const TIntrusivePtr<TTabletStorageInfo>& tabletInfo, const ui64 generation, const std::shared_ptr<NDataSharing::TStorageSharedBlobsManager>& sharedBlobs);
+
+    virtual TTabletsByBlob GetBlobsToDelete() const override {
+        return Manager->GetBlobsToDeleteAll();
+    }
+
     virtual std::shared_ptr<IBlobInUseTracker> GetBlobsTracker() const override {
         return Manager;
     }

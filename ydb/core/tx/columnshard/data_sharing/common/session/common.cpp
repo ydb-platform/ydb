@@ -47,7 +47,7 @@ bool TCommonSession::Start(const NColumnShard::TColumnShard& shard) {
         IsStartedFlag = false;
     }
     if (IsStartedFlag) {
-        shard.GetDataLocksManager()->RegisterLock<NDataLocks::TListPortionsLock>(GetSessionId(), portionsLock, true);
+        shard.GetDataLocksManager()->RegisterLock<NDataLocks::TListPortionsLock>("sharing_session:" + GetSessionId(), portionsLock, true);
     }
     return IsStartedFlag;
 }
@@ -56,7 +56,7 @@ void TCommonSession::Finish(const std::shared_ptr<NDataLocks::TManager>& dataLoc
     AFL_VERIFY(!IsFinishedFlag);
     IsFinishedFlag = true;
     if (IsStartedFlag) {
-        dataLocksManager->UnregisterLock(GetSessionId());
+        dataLocksManager->UnregisterLock("sharing_session:" + GetSessionId());
     }
 }
 

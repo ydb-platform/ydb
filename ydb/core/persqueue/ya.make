@@ -1,5 +1,11 @@
 LIBRARY()
 
+OWNER(
+    alexnick
+    g:kikimr
+    g:logbroker
+)
+
 SRCS(
     actor_persqueue_client_iface.h
     blob.cpp
@@ -35,6 +41,7 @@ SRCS(
     user_info.cpp
     utils.cpp
     write_meta.cpp
+    write_quoter.cpp
     microseconds_sliding_window.cpp
     dread_cache_service/caching_service.cpp
 )

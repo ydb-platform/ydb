@@ -90,6 +90,29 @@ Y_UNIT_TEST_SUITE(KqpAgg) {
         ])", FormatResultSetYson(result.GetResultSet(0)));
     }
 
+    Y_UNIT_TEST(AggWithHop) {
+        TKikimrRunner kikimr;
+        auto db = kikimr.GetTableClient();
+        auto session = db.CreateSession().GetValueSync().GetSession();
+        auto result = session.ExecuteDataQuery(R"(
+            --!syntax_v1
+
+            SELECT
+                Text, 
+                CAST(COUNT(*) as Int32) as Count,
+                SUM(Data)
+            FROM EightShard
+            GROUP BY HOP(CAST(Key AS Timestamp?), "PT1M", "PT1M", "PT1M"), Text
+            ORDER BY Text;
+        )", TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        CompareYson(R"([
+            [["Value1"];[8];[15]];
+            [["Value2"];[8];[16]];
+            [["Value3"];[8];[17]]
+        ])", FormatResultSetYson(result.GetResultSet(0)));
+    }
+
     Y_UNIT_TEST(GroupByLimit) {
         TKikimrRunner kikimr;
         auto db = kikimr.GetTableClient();

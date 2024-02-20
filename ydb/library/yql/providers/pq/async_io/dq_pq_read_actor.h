@@ -42,7 +42,6 @@ void RegisterDqPqReadActorFactory(
     TDqAsyncIoFactory& factory,
     NYdb::TDriver driver,
     ISecuredServiceAccountCredentialsFactory::TPtr credentialsFactory,
-    bool rangesMode = true,
-    ELogPriority readSessionLogLevel = ELogPriority::TLOG_INFO);
+    bool rangesMode = true);
 
 } // namespace NYql::NDq

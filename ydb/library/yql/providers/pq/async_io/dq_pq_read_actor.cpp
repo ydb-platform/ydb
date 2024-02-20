@@ -25,6 +25,7 @@
 #include <ydb/library/actors/core/events.h>
 #include <ydb/library/actors/core/hfunc.h>
 #include <ydb/library/actors/core/log.h>
+#include <ydb/library/actors/log_backend/actor_log_backend.h>
 #include <library/cpp/lwtrace/mon/mon_lwtrace.h>
 
 #include <util/generic/algorithm.h>
@@ -38,6 +39,7 @@ namespace NKikimrServices {
     // using constant value from ydb/core/protos/services.proto
     // but to avoid peerdir on ydb/core/protos we introduce this constant
     constexpr ui32 KQP_COMPUTE = 535;
+    constexpr ui32 YDB_SDK = 1101;
 };
 
 #define SRC_LOG_T(s) \
@@ -104,8 +106,7 @@ public:
         std::shared_ptr<NYdb::ICredentialsProviderFactory> credentialsProviderFactory,
         const NActors::TActorId& computeActorId,
         i64 bufferSize,
-        bool rangesMode,
-        ELogPriority readSessionLogLevel)
+        bool rangesMode)
         : TActor<TDqPqReadActor>(&TDqPqReadActor::StateFunc)
         , InputIndex(inputIndex)
         , TxId(txId)
@@ -119,7 +120,6 @@ public:
         , ReadParams(std::move(readParams))
         , StartingMessageTimestamp(TInstant::MilliSeconds(TInstant::Now().MilliSeconds())) // this field is serialized as milliseconds, so drop microseconds part to be consistent with storage
         , ComputeActorId(computeActorId)
-        , ReadSessionLogLevel(readSessionLogLevel)
     {
         MetadataFields.reserve(SourceParams.MetadataFieldsSize());
         TPqMetaExtractor fieldsExtractor;
@@ -370,6 +370,7 @@ private:
             topicReadSettings.AppendPartitionGroupIds(partitionId);
         }
 
+        TLog log(MakeHolder<TActorLogBackend>(NActors::TActivationContext::ActorSystem(), NKikimrServices::YDB_SDK));
         return NYdb::NPersQueue::TReadSessionSettings()
             .DisableClusterDiscovery(SourceParams.GetClusterType() == NPq::NProto::DataStreams)
             .AppendTopics(topicReadSettings)
@@ -377,7 +378,7 @@ private:
             .MaxMemoryUsageBytes(BufferSize)
             .StartingMessageTimestamp(StartingMessageTimestamp)
             .RangesMode(RangesMode)
-            .Log(CreateLogBackend("cerr", ReadSessionLogLevel));
+            .Log(log);
     }
 
     static TPartitionKey MakePartitionKey(const NYdb::NPersQueue::TPartitionStream::TPtr& partitionStreamPtr) {
@@ -584,7 +585,6 @@ private:
     std::queue<TReadyBatch> ReadyBuffer;
     TMaybe<TDqSourceWatermarkTracker<TPartitionKey>> WatermarkTracker;
     TMaybe<TInstant> NextIdlenesCheckAt;
-    ELogPriority ReadSessionLogLevel;
 };
 
 std::pair<IDqComputeActorAsyncInput*, NActors::IActor*> CreateDqPqReadActor(
@@ -600,8 +600,7 @@ std::pair<IDqComputeActorAsyncInput*, NActors::IActor*> CreateDqPqReadActor(
     const NActors::TActorId& computeActorId,
     const NKikimr::NMiniKQL::THolderFactory& holderFactory,
     i64 bufferSize,
-    bool rangesMode,
-    ELogPriority readSessionLogLevel
+    bool rangesMode
     )
 {
     auto taskParamsIt = taskParams.find("pq");
@@ -626,8 +625,7 @@ std::pair<IDqComputeActorAsyncInput*, NActors::IActor*> CreateDqPqReadActor(
         CreateCredentialsProviderFactoryForStructuredToken(credentialsFactory, token, addBearerToToken),
         computeActorId,
         bufferSize,
-        rangesMode,
-        readSessionLogLevel
+        rangesMode
     );
 
     return {actor, actor};
@@ -637,10 +635,9 @@ void RegisterDqPqReadActorFactory(
     TDqAsyncIoFactory& factory,
     NYdb::TDriver driver,
     ISecuredServiceAccountCredentialsFactory::TPtr credentialsFactory,
-    bool rangesMode,
-    ELogPriority readSessionLogLevel) {
+    bool rangesMode) {
     factory.RegisterSource<NPq::NProto::TDqPqTopicSource>("PqSource",
-        [driver = std::move(driver), credentialsFactory = std::move(credentialsFactory), rangesMode, readSessionLogLevel](
+        [driver = std::move(driver), credentialsFactory = std::move(credentialsFactory), rangesMode](
             NPq::NProto::TDqPqTopicSource&& settings,
             IDqAsyncIoFactory::TSourceArguments&& args)
     {
@@ -658,8 +655,7 @@ void RegisterDqPqReadActorFactory(
             args.ComputeActorId,
             args.HolderFactory,
             PQReadDefaultFreeSpace,
-            rangesMode,
-            readSessionLogLevel);
+            rangesMode);
     });
 
 }

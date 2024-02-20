@@ -217,17 +217,11 @@ void Init(
             readActorFactoryCfg.BlockFileSizeLimit =
                 protoConfig.GetGateways().GetS3().GetBlockFileSizeLimit();
         }
-        ELogPriority readSessionLogLevel = ELogPriority::TLOG_INFO;
-        if (const ui64 logLevel = protoConfig.GetReadActorsFactoryConfig().GetPqReadActorFactoryConfig().GetReadSessionLogLevel()) {
-            readSessionLogLevel = static_cast<ELogPriority>(logLevel);
-        }
-
         RegisterDqPqReadActorFactory(
             *asyncIoFactory,
             yqSharedResources->UserSpaceYdbDriver,
             credentialsFactory,
-            !protoConfig.GetReadActorsFactoryConfig().GetPqReadActorFactoryConfig().GetCookieCommitMode(),
-            readSessionLogLevel);
+            !protoConfig.GetReadActorsFactoryConfig().GetPqReadActorFactoryConfig().GetCookieCommitMode());
         RegisterYdbReadActorFactory(*asyncIoFactory, yqSharedResources->UserSpaceYdbDriver, credentialsFactory);
         RegisterS3ReadActorFactory(*asyncIoFactory, credentialsFactory, httpGateway, s3HttpRetryPolicy, readActorFactoryCfg,
             yqCounters->GetSubgroup("subsystem", "S3ReadActor"));

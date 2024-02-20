@@ -6,6 +6,7 @@
 #include <ydb/library/yql/minikql/mkql_type_builder.h>
 #include <ydb/library/yql/minikql/mkql_string_util.h>
 
+#include <queue>
 #include <algorithm>
 
 namespace NKikimr {
@@ -345,32 +346,27 @@ public:
     NUdf::TUnboxedValuePod DoCalculate(TComputationContext& ctx) const {
         TUnboxedValueVector mergedLists;
         auto expandedLists = ExpandLists(ctx);
-        while (!expandedLists.empty()) {
-            TMaybe<size_t> argMin;
-            bool haveEmpty = false;
-            for (size_t i = 0; i < expandedLists.size(); ++i) {
-                if (expandedLists[i].empty()) {
-                    haveEmpty = true;
-                    continue;
-                }
-                auto& current = expandedLists[i].front();
-                if (!argMin || TypeInfos.front().RangeCompare->Less(current, expandedLists[*argMin].front())) {
-                    argMin = i;
-                }
-            }
-            if (argMin) {
-                auto& from = expandedLists[*argMin];
-                if (!RangeIsEmpty(ExpandRange(from.front()), TypeInfos.front())) {
-                    mergedLists.emplace_back(std::move(from.front()));
-                }
-                from.pop_front();
-                haveEmpty = haveEmpty || from.empty();
-            }
 
-            if (haveEmpty) {
-                expandedLists.erase(
-                    std::remove_if(expandedLists.begin(), expandedLists.end(), [](const auto& list) { return list.empty(); }),
-                    expandedLists.end());
+        auto comparator = [&](size_t l, size_t r) { return TypeInfos.front().RangeCompare->Less(expandedLists[r].front(), expandedLists[l].front()); };
+        std::priority_queue<size_t, std::vector<size_t>, decltype(comparator)> queue{comparator};
+        for (size_t i = 0; i < expandedLists.size(); ++i) {
+            if (!expandedLists[i].empty()) {
+                queue.push(i);
+            }
+        }
+
+        while (!queue.empty()) {
+            auto argMin = queue.top();
+            queue.pop();
+
+            auto& from = expandedLists[argMin];
+            if (!RangeIsEmpty(ExpandRange(from.front()), TypeInfos.front())) {
+                mergedLists.emplace_back(std::move(from.front()));
+            }
+            from.pop_front();
+
+            if (!from.empty()) {
+                queue.push(argMin);
             }
         }
 

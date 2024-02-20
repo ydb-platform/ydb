@@ -381,9 +381,9 @@ TExprNode::TPtr DqMarkBlockStage(const TDqStatePtr& state, const TPublicIds::TPt
 
 struct TDqsFinalPipelineConfigurator : public IPipelineConfigurator {
 public:
-    explicit TDqsFinalPipelineConfigurator(const TDqStatePtr& state, const TPublicIds::TPtr& pulicIds)
+    explicit TDqsFinalPipelineConfigurator(const TDqStatePtr& state, const TPublicIds::TPtr& publicIds)
         : State_(state)
-        , PublicIds_(pulicIds)
+        , PublicIds_(publicIds)
     {
     }
 private:

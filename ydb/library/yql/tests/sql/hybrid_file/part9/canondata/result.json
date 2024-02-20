@@ -2073,9 +2073,9 @@
     ],
     "test.test[pg-tpcds-q71-default.txt-Debug]": [
         {
-            "checksum": "ad7349122106589e6654e515f90ac939",
-            "size": 836,
-            "uri": "https://{canondata_backend}/1889210/796baf28896eb5aaad8828a0b6000e7d17563447/resource.tar.gz#test.test_pg-tpcds-q71-default.txt-Debug_/opt.yql_patched"
+            "checksum": "12c3cfd5c9809917a4279ff9926e5759",
+            "size": 709,
+            "uri": "https://{canondata_backend}/1773845/9450e6a9e418f128c33ccd34fc163a655ef7efb6/resource.tar.gz#test.test_pg-tpcds-q71-default.txt-Debug_/opt.yql_patched"
         }
     ],
     "test.test[pg-tpcds-q71-default.txt-Plan]": [
@@ -2101,9 +2101,9 @@
     ],
     "test.test[pg-tpcds-q79-default.txt-Debug]": [
         {
-            "checksum": "2c3797a2708d161b85d5af3c08a9baa4",
-            "size": 1339,
-            "uri": "https://{canondata_backend}/1600758/945d8bd5a89c655f23736d13a6248011860cd506/resource.tar.gz#test.test_pg-tpcds-q79-default.txt-Debug_/opt.yql_patched"
+            "checksum": "a3c50395bf4d1a6f3a21bca6d80e6b95",
+            "size": 846,
+            "uri": "https://{canondata_backend}/1773845/9450e6a9e418f128c33ccd34fc163a655ef7efb6/resource.tar.gz#test.test_pg-tpcds-q79-default.txt-Debug_/opt.yql_patched"
         }
     ],
     "test.test[pg-tpcds-q79-default.txt-Plan]": [
@@ -2129,9 +2129,9 @@
     ],
     "test.test[pg-tpcds-q92-default.txt-Debug]": [
         {
-            "checksum": "2cc8e0919bd4729d929e17d1807e1e36",
-            "size": 1717,
-            "uri": "https://{canondata_backend}/1889210/796baf28896eb5aaad8828a0b6000e7d17563447/resource.tar.gz#test.test_pg-tpcds-q92-default.txt-Debug_/opt.yql_patched"
+            "checksum": "6be6567e78f01793829008a7960076d1",
+            "size": 1618,
+            "uri": "https://{canondata_backend}/1773845/9450e6a9e418f128c33ccd34fc163a655ef7efb6/resource.tar.gz#test.test_pg-tpcds-q92-default.txt-Debug_/opt.yql_patched"
         }
     ],
     "test.test[pg-tpcds-q92-default.txt-Plan]": [

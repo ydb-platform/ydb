@@ -386,6 +386,7 @@ class TPersQueueReadBalancer : public TActor<TPersQueueReadBalancer>, public TTa
         ui32 GroupId;
     };
 
+    struct TClientInfo;
     struct TClientGroupInfo {
         struct TSessionInfo {
             TSessionInfo(const TString& session, const TActorId sender, const TString& clientNode, ui32 proxyNodeId, TInstant ts)
@@ -411,6 +412,11 @@ class TPersQueueReadBalancer : public TActor<TPersQueueReadBalancer>, public TTa
             TInstant Timestamp;
         };
 
+        TClientGroupInfo(const TClientInfo& clientInfo)
+            : ClientInfo(clientInfo) {}
+
+        const TClientInfo& ClientInfo;
+
         TString ClientId;
         TString Topic;
         ui64 TabletId;
@@ -435,6 +441,8 @@ class TPersQueueReadBalancer : public TActor<TPersQueueReadBalancer>, public TTa
         
         void LockPartition(const TActorId pipe, TSessionInfo& sessionInfo, ui32 partition, const TActorContext& ctx);
         void ReleasePartition(const TActorId pipe, TSessionInfo& sessionInfo, const ui32 group, const ui32 count, const TActorContext& ctx);
+        void FreePartition(ui32 partitionId);
+
         TStringBuilder GetPrefix() const;
 
         bool WakeupScheduled = false;
@@ -485,7 +493,7 @@ class TPersQueueReadBalancer : public TActor<TPersQueueReadBalancer>, public TTa
 
         TStringBuilder GetPrefix() const;
 
-        bool IsReadeable(ui32 partitionId);
+        bool IsReadeable(ui32 partitionId) const;
     };
 
     THashMap<TString, TClientInfo> ClientsInfo; //map from userId -> to info

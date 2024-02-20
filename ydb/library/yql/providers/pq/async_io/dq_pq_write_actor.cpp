@@ -13,7 +13,7 @@
 #include <ydb/library/yql/providers/pq/proto/dq_io_state.pb.h>
 #include <ydb/library/yql/utils/yql_panic.h>
 
-#include <ydb/public/sdk/cpp/client/ydb_topic/topic.h>
+#include <ydb/public/sdk/cpp/client/ydb_federated_topic/federated_topic.h>
 #include <ydb/public/sdk/cpp/client/ydb_types/credentials/credentials.h>
 
 #include <ydb/library/actors/core/actor.h>
@@ -252,17 +252,16 @@ private:
         return SourceId;
     }
 
-    NYdb::NTopic::TWriteSessionSettings GetWriteSessionSettings() {
-        return NYdb::NTopic::TWriteSessionSettings(SinkParams.GetTopicPath(), GetSourceId(), GetSourceId())
+    NYdb::NFederatedTopic::TFederatedWriteSessionSettings GetWriteSessionSettings() {
+        return NYdb::NFederatedTopic::TFederatedWriteSessionSettings(SinkParams.GetTopicPath(), GetSourceId(), GetSourceId())
             .MaxMemoryUsage(FreeSpace)
-            //.ClusterDiscoveryMode(NYdb::NTopic::EClusterDiscoveryMode::Auto)
             .Codec(SinkParams.GetClusterType() == NPq::NProto::DataStreams
                 ? NYdb::NTopic::ECodec::RAW
                 : NYdb::NTopic::ECodec::GZIP);
     }
 
-    NYdb::NTopic::TTopicClientSettings GetTopicClientSettings() {
-        return NYdb::NTopic::TTopicClientSettings()
+    NYdb::NFederatedTopic::TFederatedTopicClientSettings GetTopicClientSettings() {
+        return NYdb::NFederatedTopic::TFederatedTopicClientSettings()
             .Database(SinkParams.GetDatabase())
             .DiscoveryEndpoint(SinkParams.GetEndpoint())
             .SslCredentials(NYdb::TSslCredentials(SinkParams.GetUseSsl()))
@@ -417,7 +416,7 @@ private:
     i64 FreeSpace = 0;
     bool Finished = false;
 
-    NYdb::NTopic::TTopicClient TopicClient;
+    NYdb::NFederatedTopic::TFederatedTopicClient TopicClient;
     std::shared_ptr<NYdb::NTopic::IWriteSession> WriteSession;
     TString SourceId;
     ui64 NextSeqNo = 1;

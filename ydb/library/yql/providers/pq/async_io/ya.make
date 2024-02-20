@@ -17,7 +17,7 @@ PEERDIR(
     ydb/library/yql/public/types
     ydb/library/yql/utils/log
     ydb/public/sdk/cpp/client/ydb_driver
-    ydb/public/sdk/cpp/client/ydb_topic
+    ydb/public/sdk/cpp/client/ydb_federated_topic
     ydb/public/sdk/cpp/client/ydb_types/credentials
 )
 

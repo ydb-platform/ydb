@@ -11,7 +11,7 @@
 
 * Обслуживание:
 
-  * [{#T}](node_restarting.md).
+  * [{#T}](replace_hardware.md).
   * [{#T}](scrubbing.md).
   * [{#T}](selfheal.md).
   * [{#T}](../../administration/decommissioning.md).

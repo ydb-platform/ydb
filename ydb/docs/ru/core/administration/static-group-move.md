@@ -34,7 +34,7 @@ blob_storage_config:
 
 Чтобы переместить часть статической группы с хоста `node_id:1` на `node_id:10`:
 
-1. Остановите статический узел кластера на хосте с `node_id:1`.
+1. [Остановите статический узел](../maintenance/maintenance_without_outages.md#restart-or-stop-node) кластера на хосте с `node_id:1`.
 
     {% include [fault-tolerance](../_includes/fault-tolerance.md) %}
 1. В конфигурационном файле `config.yaml` измените значение `node_id`, заменив идентификатор удаляемого хоста на идентификатор добавляемого:
@@ -64,6 +64,6 @@ blob_storage_config:
     Измените путь `path` и категорию `pdisk_category` диска, если на хосте с `node_id: 10` они отличаются.
 
 1. Обновите конфигурационные файлы `config.yaml` для всех узлов кластера, в том числе и динамических.
-1. С помощью процедуры [rolling-restart](../maintenance/manual/node_restarting.md) перезапустите все статические узлы кластера.
+1. [Последовательно перезапустите все статические узлы](../maintenance/maintenance_without_outages.md#restart-or-stop-node) кластера.
 1. Перейдите на страницу мониторинга Embedded UI и убедитесь, что VDisk статической группы появился на целевом физическом диске и реплицируется. Подробнее см. [{#T}](../maintenance/embedded_monitoring/ydb_monitoring.md#static-group).
-1. С помощью процедуры [rolling-restart](../maintenance/manual/node_restarting.md) перезапустите все динамические узлы кластера.
+1. [Последовательно перезапустите все динамические узлы](../maintenance/maintenance_without_outages.md#restart-or-stop-node) кластера.

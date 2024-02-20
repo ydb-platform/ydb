@@ -7,8 +7,8 @@ items:
   href: ../../administration/state-storage-move.md
 - name: Перемещение статической группы
   href: ../../administration/static-group-move.md
-- name: Безопасный рестарт и выключение узлов
-  href: node_restarting.md
+- name: Замена оборудования
+  href: replace_hardware.md
 - name: Включение и выключение Scrubbing
   href: scrubbing.md
 - name: Работа с SelfHeal

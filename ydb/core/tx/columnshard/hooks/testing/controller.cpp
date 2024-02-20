@@ -43,6 +43,9 @@ void TController::DoOnAfterGCAction(const ::NKikimr::NColumnShard::TColumnShard&
 }
 
 void TController::CheckInvariants(const ::NKikimr::NColumnShard::TColumnShard& shard, TCheckContext& context) const {
+    if (!shard.HasIndex()) {
+        return;
+    }
     const auto& index = shard.GetIndexAs<NOlap::TColumnEngineForLogs>();
     std::vector<std::shared_ptr<NOlap::TGranuleMeta>> granules = index.GetTables({}, {});
     THashMap<TString, THashSet<NOlap::TUnifiedBlobId>> ids;

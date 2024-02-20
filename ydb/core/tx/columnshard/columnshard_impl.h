@@ -565,6 +565,10 @@ public:
         return TablesManager.GetPrimaryIndexAsVerified<T>();
     }
 
+    bool HasIndex() const {
+        return !!TablesManager.GetPrimaryIndex();
+    }
+
     NOlap::TSnapshot GetLastPlannedSnapshot() const {
         return NOlap::TSnapshot(LastPlannedStep, LastPlannedTxId);
     }

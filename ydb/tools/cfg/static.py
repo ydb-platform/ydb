@@ -1207,7 +1207,11 @@ class StaticConfigGenerator(object):
 
             span_export_timeout_seconds = uploader.get("span_export_timeout_seconds")
             if span_export_timeout_seconds is not None:
-                uploader_pb.SpanTtlSeconds = span_export_timeout_seconds
+                uploader_pb.SpanExportTimeoutSeconds = span_export_timeout_seconds
+
+            max_export_requests_inflight = uploader.get("max_export_requests_inflight")
+            if max_export_requests_inflight is not None:
+                uploader_pb.MaxExportRequestsInflight = max_export_requests_inflight
 
             return uploader_pb
 

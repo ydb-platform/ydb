@@ -84,6 +84,13 @@ namespace NWilson {
             }
         };
 
+        struct TExportRequestData : TIntrusiveListItem<TExportRequestData> {
+            std::unique_ptr<grpc::ClientContext> Context;
+            std::unique_ptr<grpc::ClientAsyncResponseReader<NServiceProto::ExportTraceServiceResponse>> Reader;
+            grpc::Status Status;
+            NServiceProto::ExportTraceServiceResponse Response;
+        };
+
         class TWilsonUploader
             : public TActorBootstrapped<TWilsonUploader>
         {
@@ -95,6 +102,7 @@ namespace NWilson {
             ui64 MaxBytesInBatch;
             TDuration MaxBatchAccumulation = TDuration::Seconds(1);
             TDuration MaxSpanTimeInQueue;
+            ui64 MaxExportInflight;
 
             bool WakeupScheduled = false;
 
@@ -106,10 +114,6 @@ namespace NWilson {
             grpc::CompletionQueue CQ;
 
             std::unique_ptr<IGrpcSigner> GrpcSigner;
-            std::unique_ptr<grpc::ClientContext> Context;
-            std::unique_ptr<grpc::ClientAsyncResponseReader<NServiceProto::ExportTraceServiceResponse>> Reader;
-            NServiceProto::ExportTraceServiceResponse Response;
-            grpc::Status Status;
 
             TBatch CurrentBatch;
             std::queue<TBatch::TData> BatchQueue;
@@ -119,6 +123,9 @@ namespace NWilson {
             bool BatchCompletionScheduled = false;
             TMonotonic NextBatchCompletion;
 
+            TIntrusiveListWithAutoDelete<TExportRequestData, TDelete> ExportRequests;
+            size_t ExportRequestsCount = 0;
+
         public:
             TWilsonUploader(WilsonUploaderParams params)
                 : MaxSpansPerSecond(params.MaxSpansPerSecond)
@@ -126,6 +133,7 @@ namespace NWilson {
                 , MaxBytesInBatch(params.MaxBytesInBatch)
                 , MaxBatchAccumulation(params.MaxBatchAccumulation)
                 , MaxSpanTimeInQueue(TDuration::Seconds(params.SpanExportTimeoutSeconds))
+                , MaxExportInflight(params.MaxExportRequestsInflight)
                 , CollectorUrl(std::move(params.CollectorUrl))
                 , ServiceName(std::move(params.ServiceName))
                 , GrpcSigner(std::move(params.GrpcSigner))
@@ -148,6 +156,10 @@ namespace NWilson {
                 if (MaxSpansInBatch == 0) {
                     ALOG_WARN(WILSON_SERVICE_ID, "max_spans_in_batch shold be greater than 0, changing to 1");
                     MaxSpansInBatch = 1;
+                }
+                if (MaxExportInflight == 0) {
+                    ALOG_WARN(WILSON_SERVICE_ID, "max_span_export_inflight should be greater than 0, changing to 1");
+                    MaxExportInflight = 1;
                 }
 
                 TStringBuf scheme;
@@ -243,7 +255,7 @@ namespace NWilson {
                         "dropped " << numSpansDropped << " span(s) due to expiration");
                 }
 
-                if (Context || BatchQueue.empty()) {
+                if (ExportRequestsCount >= MaxExportInflight || BatchQueue.empty()) {
                     return;
                 } else if (now < NextSendTimestamp) {
                     ScheduleWakeup(NextSendTimestamp);
@@ -267,29 +279,42 @@ namespace NWilson {
                 SpansSizeBytes -= batch.SizeBytes;
 
                 ScheduleWakeup(NextSendTimestamp);
-                Context = std::make_unique<grpc::ClientContext>();
+
+                auto context = std::make_unique<grpc::ClientContext>();
                 if (GrpcSigner) {
-                    GrpcSigner->SignClientContext(*Context);
+                    GrpcSigner->SignClientContext(*context);
                 }
-                Reader = Stub->AsyncExport(Context.get(), std::move(batch.Request), &CQ);
-                Reader->Finish(&Response, &Status, nullptr);
+                auto reader = Stub->AsyncExport(context.get(), std::move(batch.Request), &CQ);
+                auto uploadData =  std::unique_ptr<TExportRequestData>(new TExportRequestData {
+                    .Context = std::move(context),
+                    .Reader = std::move(reader),
+                });
+                uploadData->Reader->Finish(&uploadData->Response, &uploadData->Status, uploadData.get());
+                ALOG_TRACE(WILSON_SERVICE_ID, "started export request " << (void*)uploadData.get());
+                ExportRequests.PushBack(uploadData.release());
+                ++ExportRequestsCount;
             }
 
-            void CheckIfDone() {
-                if (Context) {
-                    void *tag;
-                    bool ok;
-                    if (CQ.AsyncNext(&tag, &ok, std::chrono::system_clock::now()) == grpc::CompletionQueue::GOT_EVENT) {
-                        if (!Status.ok()) {
-                            ALOG_ERROR(WILSON_SERVICE_ID,
-                                "failed to commit traces: " << Status.error_message());
-                        }
-
-                        Reader.reset();
-                        Context.reset();
-                    } else {
-                        ScheduleWakeup(TDuration::MilliSeconds(100));
+            void ReapCompletedRequests() {
+                if (ExportRequests.Empty()) {
+                    return;
+                }
+                void* tag;
+                bool ok;
+                while (CQ.AsyncNext(&tag, &ok, std::chrono::system_clock::now()) == grpc::CompletionQueue::GOT_EVENT) {
+                    auto node = std::unique_ptr<TExportRequestData>(static_cast<TExportRequestData*>(tag));
+                    ALOG_TRACE(WILSON_SERVICE_ID, "finished export request " << (void*)node.get());
+                    if (!node->Status.ok()) {
+                        ALOG_ERROR(WILSON_SERVICE_ID,
+                            "failed to commit traces: " << node->Status.error_message());
                     }
+                    
+                    --ExportRequestsCount;
+                    node->Unlink();
+                }
+
+                if (!ExportRequests.Empty()) {
+                    ScheduleWakeup(TDuration::MilliSeconds(100));
                 }
             }
 
@@ -322,7 +347,7 @@ namespace NWilson {
             }
 
             void TryMakeProgress() {
-                CheckIfDone();
+                ReapCompletedRequests();
                 TryToSend();
             }
 

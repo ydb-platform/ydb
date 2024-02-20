@@ -9,6 +9,7 @@
 #include <ydb/library/yql/core/yql_expr_type_annotation.h>
 #include <ydb/library/yql/minikql/computation/mkql_computation_node_holders.h>
 #include <ydb/library/yql/providers/common/provider/yql_provider_names.h>
+#include <ydb/library/yql/providers/common/structured_token/yql_token_builder.h>
 #include <ydb/library/yql/providers/generic/connector/api/service/protos/connector.pb.h>
 #include <ydb/library/yql/providers/generic/connector/libcpp/error.h>
 #include <ydb/library/yql/providers/generic/connector/libcpp/utils.h>
@@ -102,16 +103,16 @@ namespace NYql::NDq {
             ui64 inputIndex,
             TCollectStatsLevel statsLevel,
             NConnector::IClient::TPtr client,
-            const NConnector::NApi::TSelect& select,
-            const NConnector::NApi::TDataSourceInstance& dataSourceInstance,
+            ISecuredServiceAccountCredentialsFactory::TPtr credentialsFactory,
+            NConnector::TSource&& source,
             const NActors::TActorId& computeActorId,
             const NKikimr::NMiniKQL::THolderFactory& holderFactory)
             : InputIndex_(inputIndex)
             , ComputeActorId_(computeActorId)
             , Client_(std::move(client))
+            , CredentialsFactory_(std::move(credentialsFactory))
             , HolderFactory_(holderFactory)
-            , Select_(select)
-            , DataSourceInstance_(dataSourceInstance)
+            , Source_(source)
         {
             IngressStats_.Level = statsLevel;
         }
@@ -143,7 +144,9 @@ namespace NYql::NDq {
 
             // Prepare request
             NConnector::NApi::TListSplitsRequest request;
-            *request.mutable_selects()->Add() = Select_;
+            NConnector::NApi::TSelect select = Source_.select(); // copy TSelect from source
+            MaybeRefreshToken(select.mutable_data_source_instance());
+            *request.mutable_selects()->Add() = std::move(select);
 
             // Initialize stream
             Client_->ListSplits(request).Subscribe(
@@ -236,8 +239,11 @@ namespace NYql::NDq {
 
             std::for_each(
                 Splits_.cbegin(), Splits_.cend(),
-                [&](const NConnector::NApi::TSplit& split) { request.mutable_splits()->Add()->CopyFrom(split); });
-            request.mutable_data_source_instance()->CopyFrom(DataSourceInstance_);
+                [&](const NConnector::NApi::TSplit& split) {
+                    NConnector::NApi::TSplit splitCopy = split;
+                    MaybeRefreshToken(splitCopy.mutable_select()->mutable_data_source_instance());
+                    *request.mutable_splits()->Add() = std::move(split);
+                });
 
             // Start streaming
             Client_->ReadSplits(request).Subscribe(
@@ -403,8 +409,8 @@ namespace NYql::NDq {
             // It's very important to fill UV columns in the alphabet order,
             // paying attention to the scalar field containing block length.
             TVector<TString> fieldNames;
-            std::transform(Select_.what().items().cbegin(),
-                           Select_.what().items().cend(),
+            std::transform(Source_.select().what().items().cbegin(),
+                           Source_.select().what().items().cend(),
                            std::back_inserter(fieldNames),
                            [](const auto& item) { return item.column().name(); });
 
@@ -452,6 +458,33 @@ namespace NYql::NDq {
             return total;
         }
 
+        void MaybeRefreshToken(NConnector::NApi::TDataSourceInstance* dsi) const {
+            if (!dsi->credentials().has_token()) {
+                return;
+            }
+
+            // Token may have expired. Refresh it.
+            Y_ENSURE(CredentialsFactory_, "CredentialsFactory is not initialized");
+
+            auto structuredTokenJSON = TStructuredTokenBuilder().SetServiceAccountIdAuth(
+                                                                    Source_.GetServiceAccountId(),
+                                                                    Source_.GetServiceAccountIdSignature())
+                                           .ToJson();
+
+            // If service account is provided, obtain IAM-token
+            Y_ENSURE(structuredTokenJSON, "empty structured token");
+
+            auto credentialsProviderFactory = CreateCredentialsProviderFactoryForStructuredToken(
+                CredentialsFactory_,
+                structuredTokenJSON,
+                false);
+            auto iamToken = credentialsProviderFactory->CreateProvider()->GetAuthInfo();
+            Y_ENSURE(iamToken, "empty IAM token");
+
+            *dsi->mutable_credentials()->mutable_token()->mutable_value() = iamToken;
+            *dsi->mutable_credentials()->mutable_token()->mutable_type() = "IAM";
+        }
+
         // IActor & IDqComputeActorAsyncInput
         void PassAway() override { // Is called from Compute Actor
             YQL_CLOG(INFO, ProviderGeneric) << "PassAway :: final ingress stats"
@@ -484,6 +517,7 @@ namespace NYql::NDq {
         const NActors::TActorId ComputeActorId_;
 
         NConnector::IClient::TPtr Client_;
+        ISecuredServiceAccountCredentialsFactory::TPtr CredentialsFactory_;
         NConnector::IListSplitsStreamIterator::TPtr ListSplitsIterator_;
         TVector<NConnector::NApi::TSplit> Splits_; // accumulated list of table splits
         NConnector::IReadSplitsStreamIterator::TPtr ReadSplitsIterator_;
@@ -492,39 +526,27 @@ namespace NYql::NDq {
 
         NKikimr::NMiniKQL::TPlainContainerCache ArrowRowContainerCache_;
         const NKikimr::NMiniKQL::THolderFactory& HolderFactory_;
-        const NYql::NConnector::NApi::TSelect Select_;
-        const NYql::NConnector::NApi::TDataSourceInstance DataSourceInstance_;
+        NConnector::TSource Source_;
     };
 
     std::pair<NYql::NDq::IDqComputeActorAsyncInput*, IActor*>
     CreateGenericReadActor(NConnector::IClient::TPtr genericClient,
-                           Generic::TSource&& params,
+                           NConnector::TSource&& source,
                            ui64 inputIndex,
                            TCollectStatsLevel statsLevel,
                            const THashMap<TString, TString>& /*secureParams*/,
                            const THashMap<TString, TString>& /*taskParams*/,
                            const NActors::TActorId& computeActorId,
-                           ISecuredServiceAccountCredentialsFactory::TPtr /*credentialsFactory*/,
+                           ISecuredServiceAccountCredentialsFactory::TPtr credentialsFactory,
                            const NKikimr::NMiniKQL::THolderFactory& holderFactory)
     {
-        const auto dsi = params.select().data_source_instance();
+        const auto dsi = source.select().data_source_instance();
         YQL_CLOG(INFO, ProviderGeneric) << "Creating read actor with params:"
                                         << " kind=" << NYql::NConnector::NApi::EDataSourceKind_Name(dsi.kind())
                                         << ", endpoint=" << dsi.endpoint().ShortDebugString()
                                         << ", database=" << dsi.database()
                                         << ", use_tls=" << ToString(dsi.use_tls())
                                         << ", protocol=" << NYql::NConnector::NApi::EProtocol_Name(dsi.protocol());
-
-        // FIXME: strange piece of logic - authToken is created but not used:
-        // https://a.yandex-team.ru/arcadia/ydb/library/yql/providers/clickhouse/actors/yql_ch_read_actor.cpp?rev=r11550199#L140
-        /*
-        const auto token = secureParams.Value(params.token(), TString{});
-        const auto credentialsProviderFactory =
-            CreateCredentialsProviderFactoryForStructuredToken(credentialsFactory, token);
-        const auto authToken = credentialsProviderFactory->CreateProvider()->GetAuthInfo();
-        const auto one = token.find('#'), two = token.rfind('#');
-        YQL_ENSURE(one != TString::npos && two != TString::npos && one < two, "Bad token format:" << token);
-        */
 
         // TODO: partitioning is not implemented now, but this code will be useful for the further research:
         /*
@@ -543,8 +565,8 @@ namespace NYql::NDq {
             inputIndex,
             statsLevel,
             genericClient,
-            params.select(),
-            dsi,
+            credentialsFactory,
+            std::move(source),
             computeActorId,
             holderFactory);
 

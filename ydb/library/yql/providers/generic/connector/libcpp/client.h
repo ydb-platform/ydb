@@ -17,8 +17,6 @@ namespace NYql::NConnector {
     using TAsyncResult = NThreading::TFuture<TResult<TResponse>>;
 
     using TDescribeTableAsyncResult = TAsyncResult<NApi::TDescribeTableResponse>;
-    // using TListSplitsAsyncResult = TAsyncResult<NApi::TListSplitsResponse>;
-    // using TReadSplitsAsyncResult = TAsyncResult<NApi::TReadSplitsResponse>;
 
     template <class TResponse>
     class TStreamer {

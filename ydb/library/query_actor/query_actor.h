@@ -175,12 +175,12 @@ public:
     using TBase = NActors::TActorBootstrapped<TQueryRetryActor<TQueryActor, TResponse, TArgs...>>;
     using IRetryPolicy = IRetryPolicy<Ydb::StatusIds::StatusCode>;
 
-    explicit TQueryRetryActor(const NActors::TActorId& replyActorId, const TArgs&... args, TDuration maxRetryTime = TDuration::Seconds(1))
+    explicit TQueryRetryActor(const NActors::TActorId& replyActorId, const TArgs&... args)
         : ReplyActorId(replyActorId)
         , RetryPolicy(IRetryPolicy::GetExponentialBackoffPolicy(
             Retryable, TDuration::MilliSeconds(10), 
             TDuration::MilliSeconds(200), TDuration::Seconds(1),
-            std::numeric_limits<size_t>::max(), maxRetryTime
+            std::numeric_limits<size_t>::max(), TDuration::Seconds(1)
         ))
         , CreateQueryActor([=]() {
             return new TQueryActor(args...);
@@ -193,6 +193,7 @@ public:
         , CreateQueryActor([=]() {
             return new TQueryActor(args...);
         })
+        , RetryState(RetryPolicy->CreateRetryState())
     {}
 
     void StartQueryActor() const {

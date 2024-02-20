@@ -5,8 +5,7 @@ SIZE(LARGE)
 TIMEOUT(1200)
 
 SRCS(
-    b_charge.cpp
-    b_part_index.cpp
+    b_part.cpp
 )
 
 PEERDIR(

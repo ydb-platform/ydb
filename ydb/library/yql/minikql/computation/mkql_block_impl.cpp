@@ -79,12 +79,16 @@ arrow::Datum DoConvertScalar(TType* type, const T& value, arrow::MemoryPool& poo
         case NUdf::EDataSlot::Date:
             return arrow::Datum(static_cast<uint16_t>(value.template Get<ui16>()));
         case NUdf::EDataSlot::Int32:
+        case NUdf::EDataSlot::Date32:
             return arrow::Datum(static_cast<int32_t>(value.template Get<i32>()));
         case NUdf::EDataSlot::Uint32:
         case NUdf::EDataSlot::Datetime:
             return arrow::Datum(static_cast<uint32_t>(value.template Get<ui32>()));
         case NUdf::EDataSlot::Int64:
         case NUdf::EDataSlot::Interval:
+        case NUdf::EDataSlot::Interval64:
+        case NUdf::EDataSlot::Datetime64:
+        case NUdf::EDataSlot::Timestamp64:
             return arrow::Datum(static_cast<int64_t>(value.template Get<i64>()));
         case NUdf::EDataSlot::Uint64:
         case NUdf::EDataSlot::Timestamp:

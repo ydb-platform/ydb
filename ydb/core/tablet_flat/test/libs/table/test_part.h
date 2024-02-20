@@ -148,7 +148,7 @@ namespace NTest {
     namespace IndexTools {
         using TGroupId = NPage::TGroupId;
 
-        inline size_t CountMainPages(const TPartStore& part) {
+        inline size_t CountMainPages(const TPart& part) {
             size_t result = 0;
 
             TTestEnv env;
@@ -165,20 +165,20 @@ namespace NTest {
             return result;
         }
 
-        inline TRowId GetEndRowId(const TPartStore& part) {
+        inline TRowId GetEndRowId(const TPart& part) {
             TTestEnv env;
             TPartIndexIt index(&part, &env, { });
             return index.GetEndRowId();
         }
 
-        inline const TPartIndexIt::TRecord * GetLastRecord(const TPartStore& part) {
+        inline const TPartIndexIt::TRecord * GetLastRecord(const TPart& part) {
             TTestEnv env;
             TPartIndexIt index(&part, &env, { });
             Y_ABORT_UNLESS(index.SeekLast() == EReady::Data);
             return index.GetLastRecord();
         }
 
-        inline const TPartIndexIt::TRecord * GetRecord(const TPartStore& part, ui32 pageIndex) {
+        inline const TPartIndexIt::TRecord * GetRecord(const TPart& part, ui32 pageIndex) {
             TTestEnv env;
             TPartIndexIt index(&part, &env, { });
 
@@ -190,14 +190,14 @@ namespace NTest {
             return index.GetRecord();
         }
 
-        inline TPageId GetFirstPageId(const TPartStore& part, TGroupId groupId) {
+        inline TPageId GetFirstPageId(const TPart& part, TGroupId groupId) {
             TTestEnv env;
             TPartIndexIt index(&part, &env, groupId);
             index.Seek(0);
             return index.GetPageId();
         }
 
-        inline TPageId GetLastPageId(const TPartStore& part, TGroupId groupId) {
+        inline TPageId GetLastPageId(const TPart& part, TGroupId groupId) {
             TTestEnv env;
             TPartIndexIt index(&part, &env, groupId);
             index.Seek(index.GetEndRowId() - 1);

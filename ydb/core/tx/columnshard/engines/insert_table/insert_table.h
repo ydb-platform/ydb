@@ -27,6 +27,17 @@ public:
         return Summary.GetPathPriorities();
     }
 
+    std::optional<TSnapshot> GetMinCommittedSnapshot(const ui64 pathId) const {
+        auto* info = Summary.GetPathInfoOptional(pathId);
+        if (!info) {
+            return {};
+        } else if (info->GetCommitted().empty()) {
+            return {};
+        } else {
+            return info->GetCommitted().begin()->GetSnapshot();
+        }
+    }
+
     bool AddInserted(TInsertedData&& data, const bool load) {
         if (load) {
             AddBlobLink(data.GetBlobRange().BlobId);

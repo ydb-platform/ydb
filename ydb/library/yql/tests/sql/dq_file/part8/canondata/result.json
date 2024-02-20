@@ -505,6 +505,28 @@
         }
     ],
     "test.test[ansi_idents-basic_columns-default.txt-Results]": [],
+    "test.test[bigdate-input_interval64-default.txt-Analyze]": [
+        {
+            "checksum": "c65d165d3bad7ce31fda44ee48dd215f",
+            "size": 15015,
+            "uri": "https://{canondata_backend}/1784826/2a831b2d73099cc758734ddc249903ecf064810d/resource.tar.gz#test.test_bigdate-input_interval64-default.txt-Analyze_/plan.txt"
+        }
+    ],
+    "test.test[bigdate-input_interval64-default.txt-Debug]": [
+        {
+            "checksum": "cb33deb86a5dbc3ee776a0be9a89f2c3",
+            "size": 6382,
+            "uri": "https://{canondata_backend}/1784826/2a831b2d73099cc758734ddc249903ecf064810d/resource.tar.gz#test.test_bigdate-input_interval64-default.txt-Debug_/opt.yql_patched"
+        }
+    ],
+    "test.test[bigdate-input_interval64-default.txt-Plan]": [
+        {
+            "checksum": "c65d165d3bad7ce31fda44ee48dd215f",
+            "size": 15015,
+            "uri": "https://{canondata_backend}/1784826/2a831b2d73099cc758734ddc249903ecf064810d/resource.tar.gz#test.test_bigdate-input_interval64-default.txt-Plan_/plan.txt"
+        }
+    ],
+    "test.test[bigdate-input_interval64-default.txt-Results]": [],
     "test.test[bigdate-int_literals-default.txt-Analyze]": [
         {
             "checksum": "b4dd508a329723c74293d80f0278c705",
@@ -514,9 +536,9 @@
     ],
     "test.test[bigdate-int_literals-default.txt-Debug]": [
         {
-            "checksum": "35da6f8af0f9461d5c091dad66a36cd4",
-            "size": 944,
-            "uri": "https://{canondata_backend}/1775059/52446ae3339a73cb6ab2601c56ea1cd705cc4671/resource.tar.gz#test.test_bigdate-int_literals-default.txt-Debug_/opt.yql_patched"
+            "checksum": "f75a9edd97af47f1ad504d444a2a4ce5",
+            "size": 1429,
+            "uri": "https://{canondata_backend}/1781765/cbb813bb2d0d32de54c2e1769d885bafe5cf39f2/resource.tar.gz#test.test_bigdate-int_literals-default.txt-Debug_/opt.yql_patched"
         }
     ],
     "test.test[bigdate-int_literals-default.txt-Plan]": [

@@ -90,10 +90,6 @@ public:
         const NTable::TScheme& scheme = txc.DB.GetScheme();
         const NTable::TScheme::TTableInfo* tableInfo = scheme.GetTableInfo(localTableId);
 
-        auto [readVersion, writeVersion] = DataShard.GetReadWriteVersions(writeOp);
-        writeTx->SetReadVersion(readVersion);
-        writeTx->SetWriteVersion(writeVersion);
-
         TSmallVec<TRawTypeValue> key;
         TSmallVec<NTable::TUpdateOp> ops;
 

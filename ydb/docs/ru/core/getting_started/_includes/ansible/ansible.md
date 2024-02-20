@@ -223,20 +223,20 @@ static-node-9 static-node-9.ydb-cluster.com
 ./ydb \
 config profile create <profile name> \
 -d /Root/database \
--e grpcs://static-node-1.ydb-cluster.com:2135 \
---ca-file /home/ubuntu/home/ydb_cluster/TLS/CA/certs/ca.crt \
+-e grpcs://< FQDN node >:2135 \
+--ca-file <path to generated certs>/CA/certs/ca.crt \
 --user root \
---password-file /home/ubuntu/home/ydb_cluster/ansible_vault_password_file
+--password-file <path to vault password file>/ansible_vault_password_file
 ```
 
 Параметры команды и их значения:
-* `config profile create` – команда создания профиля подключения. Задаётся имя профиля.
+* `config profile create` – команда создания профиля подключения. Задаётся имя профиля. Более детальную информацию, о том как создавать и изменять профили можно найти в статье [{#T}](../../../reference/ydb-cli/profile/create.md).
 * `-e` – эндпоинт (endpoint) - строка в формате `protocol://host:port`. Можно указать FQDN любой ноды кластера и не указывать порт. По умолчанию будет использован 2135 порт.
-* `--ca-file` – путь к корневому сертификату для подключения к базе по `grpcs`. Сертификат создаётся скриптом `ydb-ca-update.sh` в директории `TLS` и располагается по пути `TLS/CA/certs/`.
+* `--ca-file` – путь к корневому сертификату для подключения к базе по `grpcs`. Сертификат создаётся скриптом `ydb-ca-update.sh` в директории `TLS` и располагается по пути `TLS/CA/certs/` относительно корня репозитория ydb-ansible-examples.
 * `--user` – пользователь для подключения к БД. По умолчанию при выполнении `setup_playbook.yaml` плейбука создаётся пользователь root. 
 * `--password-file` – путь к файлу с паролем. В каждой папке с шаблоном развертывания YDB кластера находится файл ansible_vault_password_file, который содержит пароль пользователя root.
 
-Проверить создался ли профиль можно командой `./ydb config profile list` – будет выведен список профилей. После создания профиля, его нужно активировать командой `ydb config profile activate <profile name>`. Проверить, что профиль был активирован можно повторным выполнением команды `./ydb config profile list` – активный профиль будет иметь отметку (active). 
+Проверить создался ли профиль можно командой `./ydb config profile list` – будет выведен список профилей. После создания профиля, его нужно активировать командой `./ydb config profile activate <profile name>`. Проверить, что профиль был активирован можно повторным выполнением команды `./ydb config profile list` – активный профиль будет иметь отметку (active). 
 
 Теперь можно выполнить YQL запрос `./ydb yql -s 'select 1;'`, который вернет в терминал результат выполнения команды `select 1` в табличной форме. После проверки соединения можно создать тестовую таблицу командой:
 `./ydb workload kv init --init-upserts 1000 --cols 4`. Будет создана тестовая таблица `kv_test`, состоящая из 4 столбцов и 1000 строк. Проверь, что таблица `kv_test` создалась и заполнилась тестовыми данными, можно командой `./ydb yql -s 'select * from kv_test limit 10;'`.

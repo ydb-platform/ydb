@@ -1239,7 +1239,8 @@ void TPersQueueReadBalancer::Handle(TEvPersQueue::TEvRegisterReadSession::TPtr& 
         }
     }
 
-    jt->second = {record.GetClientId(), record.GetSession(), ev->Sender, !groups.empty(), jt->second.ServerActors};
+    auto& pipeInfo = jt->second;
+    pipeInfo = {record.GetClientId(), record.GetSession(), ev->Sender, !groups.empty(), pipeInfo.ServerActors};
 
     auto it = ClientsInfo.find(record.GetClientId());
     if (it == ClientsInfo.end()) {
@@ -1253,11 +1254,13 @@ void TPersQueueReadBalancer::Handle(TEvPersQueue::TEvRegisterReadSession::TPtr& 
         it->second.Generation = Generation;
         it->second.Step = 0;
     }
+
+    auto& clientInfo = it->second;
     if (!groups.empty()) {
-        ++it->second.SessionsWithGroup;
+        ++clientInfo.SessionsWithGroup;
     }
 
-    if (it->second.SessionsWithGroup > 0 && groups.empty()) {
+    if (clientInfo.SessionsWithGroup > 0 && groups.empty()) {
         groups.reserve(TotalGroups);
         for (ui32 i = 1; i <= TotalGroups; ++i) {
             groups.push_back(i);
@@ -1265,22 +1268,23 @@ void TPersQueueReadBalancer::Handle(TEvPersQueue::TEvRegisterReadSession::TPtr& 
     }
 
     if (!groups.empty()) {
-        auto jt = it->second.ClientGroupsInfo.find(0);
-        if (jt != it->second.ClientGroupsInfo.end()) {
-            it->second.KillSessionsWithoutGroup(ctx);
+        auto jt = clientInfo.ClientGroupsInfo.find(0);
+        if (jt != clientInfo.ClientGroupsInfo.end()) {
+            clientInfo.KillSessionsWithoutGroup(ctx);
         }
         for (auto g : groups) {
-            it->second.AddSession(g, PartitionsInfo, ev->Sender, record);
+            clientInfo.AddSession(g, PartitionsInfo, ev->Sender, record);
         }
         for (ui32 group = 1; group <= TotalGroups; ++group) {
-            if (it->second.ClientGroupsInfo.find(group) == it->second.ClientGroupsInfo.end()) {
-                it->second.FillEmptyGroup(group, PartitionsInfo);
+            if (clientInfo.ClientGroupsInfo.find(group) == clientInfo.ClientGroupsInfo.end()) {
+                clientInfo.FillEmptyGroup(group, PartitionsInfo);
             }
         }
     } else {
-        it->second.AddSession(0, PartitionsInfo, ev->Sender, record);
-        Y_ABORT_UNLESS(it->second.ClientGroupsInfo.size() == 1);
+        clientInfo.AddSession(0, PartitionsInfo, ev->Sender, record);
+        Y_ABORT_UNLESS(clientInfo.ClientGroupsInfo.size() == 1);
     }
+
     RegisterSession(pipe, ctx);
 }
 
@@ -1788,6 +1792,10 @@ bool TPersQueueReadBalancer::TClientInfo::IsReadeable(ui32 partitionId) {
         return true;
     }
 
+    Y_UNUSED(partitionId);
+    return true;
+
+/*
     auto* node = Balancer.PartitionGraph.GetPartition(partitionId);
     if (!node) {
         return false;
@@ -1810,20 +1818,29 @@ bool TPersQueueReadBalancer::TClientInfo::IsReadeable(ui32 partitionId) {
     }
 
     return true;
+    */
 }
 
 bool TPersQueueReadBalancer::TClientInfo::ProccessReadingFinished(ui32 partitionId) {
     auto& freePartitions = ClientGroupsInfo[0].FreePartitions;
     auto& inactivePartitions = ClientGroupsInfo[0].InactivePartitions;
-    
+
     bool hasChanges = false;
 
-    const auto* node = Balancer.PartitionGraph.GetPartition(partitionId);
-    for(const auto* c : node->Children) {
-        if (IsReadeable(c->Id)) {
-            freePartitions.push_back(c->Id);
-            inactivePartitions.erase(c->Id);
-            hasChanges = true;
+    std::deque<const TPartitionGraph::Node*> queue;
+    queue.push_back(Balancer.PartitionGraph.GetPartition(partitionId));
+    while (!queue.empty()) {
+        const auto* node = queue.front();
+        queue.pop_front();
+        
+        for (const auto* c : node->Children) {
+            if (IsReadeable(c->Id)) {
+                freePartitions.push_back(c->Id);
+                inactivePartitions.erase(c->Id);
+                hasChanges = true;
+            } else {
+                queue.push_back(c);
+            }
         }
     }
 

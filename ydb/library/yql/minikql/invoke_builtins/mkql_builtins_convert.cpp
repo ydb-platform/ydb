@@ -250,29 +250,71 @@ struct TScaleUp : public TArithmeticConstraintsUnary<TInput, TOutput> {
 };
 
 template <typename TInput, typename TOutput>
-struct TScale;
+struct TDatetimeScale;
 
 template <>
-struct TScale<ui16, ui32> {
+struct TDatetimeScale<ui16, ui32> {
     static constexpr ui32 Modifier = 86400U;
 };
 
 template <>
-struct TScale<ui32, ui64> {
+struct TDatetimeScale<ui32, ui64> {
     static constexpr ui64 Modifier = 1000000ULL;
 };
 
 template <>
-struct TScale<ui16, ui64> {
+struct TDatetimeScale<ui16, ui64> {
     static constexpr ui64 Modifier = 86400000000ULL;
 };
+
+template <typename TInput, typename TOutput>
+struct TBigDateScale;
+
+template <>
+struct TBigDateScale<NUdf::TDataType<NUdf::TDate32>, NUdf::TDataType<NUdf::TDatetime64>> {
+    static constexpr ui32 Modifier = 86400U;
+};
+
+template <>
+struct TBigDateScale<NUdf::TDataType<NUdf::TDatetime64>, NUdf::TDataType<NUdf::TTimestamp64>> {
+    static constexpr ui64 Modifier = 1000000ULL;
+};
+
+template <>
+struct TBigDateScale<NUdf::TDataType<NUdf::TDate32>, NUdf::TDataType<NUdf::TTimestamp64>> {
+    static constexpr ui64 Modifier = 86400000000ULL;
+};
+
+template <typename TInput, typename TOutput>
+struct TBigDateScaleUp : public TArithmeticConstraintsUnary<typename TInput::TLayout, typename TOutput::TLayout> {
+    static_assert(
+            sizeof(typename TInput::TLayout) <= sizeof(typename TOutput::TLayout),
+            "Output size should be greater or equal than input size.");
+    static NUdf::TUnboxedValuePod Execute(const NUdf::TUnboxedValuePod& arg) {
+        return NUdf::TUnboxedValuePod(
+                TBigDateScale<TInput, TOutput>::Modifier * 
+                static_cast<typename TOutput::TLayout>(arg.template Get<typename TInput::TLayout>()));
+    }
+
+#ifndef MKQL_DISABLE_CODEGEN
+    static Value* Generate(Value* arg, const TCodegenContext& ctx, BasicBlock*& block)
+    {
+        auto& context = ctx.Codegen.GetContext();
+        const auto val = GetterFor<typename TInput::TLayout>(arg, context, block);
+        const auto cast = StaticCast<typename TInput::TLayout, typename TOutput::TLayout>(val, context, block);
+        const auto mul = BinaryOperator::CreateMul(ConstantInt::get(cast->getType(), TBigDateScale<TInput, TOutput>::Modifier), cast, "mul", block);
+        return SetterFor<typename TOutput::TLayout>(mul, context, block);
+    }
+#endif
+};
+
 
 template <typename TInput, typename TOutput, bool Tz = false>
 struct TDatetimeScaleUp : public TArithmeticConstraintsUnary<TInput, TOutput> {
     static_assert(sizeof(TInput) < sizeof(TOutput), "Output size should be wider than input size.");
 
     static NUdf::TUnboxedValuePod Execute(const NUdf::TUnboxedValuePod& arg) {
-        auto result = NUdf::TUnboxedValuePod(TScale<TInput, TOutput>::Modifier * static_cast<TOutput>(arg.template Get<TInput>()));
+        auto result = NUdf::TUnboxedValuePod(TDatetimeScale<TInput, TOutput>::Modifier * static_cast<TOutput>(arg.template Get<TInput>()));
         if constexpr (Tz) {
             result.SetTimezoneId(arg.GetTimezoneId());
         }
@@ -285,7 +327,7 @@ struct TDatetimeScaleUp : public TArithmeticConstraintsUnary<TInput, TOutput> {
         auto& context = ctx.Codegen.GetContext();
         const auto val = GetterFor<TInput>(arg, context, block);
         const auto cast = StaticCast<TInput, TOutput>(val, context, block);
-        const auto mul = BinaryOperator::CreateMul(ConstantInt::get(cast->getType(), TScale<TInput, TOutput>::Modifier), cast, "mul", block);
+        const auto mul = BinaryOperator::CreateMul(ConstantInt::get(cast->getType(), TDatetimeScale<TInput, TOutput>::Modifier), cast, "mul", block);
         const auto wide = SetterFor<TOutput>(mul, context, block);
         if constexpr (Tz) {
             const uint64_t init[] = {0ULL, 0xFFFFULL};
@@ -306,7 +348,7 @@ struct TDatetimeScaleDown : public TArithmeticConstraintsUnary<TInput, TOutput> 
     static_assert(std::is_unsigned_v<TInput> && std::is_unsigned_v<TOutput>, "Only for unsigned.");
 
     static NUdf::TUnboxedValuePod Execute(const NUdf::TUnboxedValuePod& arg) {
-        auto result = NUdf::TUnboxedValuePod(static_cast<TOutput>(arg.template Get<TInput>() / TScale<TOutput, TInput>::Modifier));
+        auto result = NUdf::TUnboxedValuePod(static_cast<TOutput>(arg.template Get<TInput>() / TDatetimeScale<TOutput, TInput>::Modifier));
         if constexpr (Tz) {
             result.SetTimezoneId(arg.GetTimezoneId());
         }
@@ -318,7 +360,7 @@ struct TDatetimeScaleDown : public TArithmeticConstraintsUnary<TInput, TOutput> 
     {
         auto& context = ctx.Codegen.GetContext();
         const auto val = GetterFor<TInput>(arg, context, block);
-        const auto div = BinaryOperator::CreateUDiv(val, ConstantInt::get(val->getType(), TScale<TOutput, TInput>::Modifier), "div", block);
+        const auto div = BinaryOperator::CreateUDiv(val, ConstantInt::get(val->getType(), TDatetimeScale<TOutput, TInput>::Modifier), "div", block);
         const auto cast = StaticCast<TInput, TOutput>(div, context, block);
         const auto wide = SetterFor<TOutput>(cast, context, block);
         if constexpr (Tz) {
@@ -339,6 +381,9 @@ using TDatetimeRescale = std::conditional_t<sizeof(TInput) < sizeof(TOutput),
     TDatetimeScaleUp<TInput, TOutput, Tz>,
     TDatetimeScaleDown<TInput, TOutput, Tz>
 >;
+
+template <typename TInput, typename TOutput>
+using TBigDateRescale = TBigDateScaleUp<TInput, TOutput>; // TODO impl for scale down
 
 template <bool Cleanup = false>
 struct TDatetimeTzStub {
@@ -1084,6 +1129,18 @@ void RegisterToBigDateConvert(IBuiltinFunctionRegistry& registry) {
     RegisterConvert<NUdf::TDataType<ui32>, NUdf::TDataType<NUdf::TInterval64>>(registry);
 }
 
+template <typename TInput, typename TOutput>
+void RegisterBigDateRescaleOpt(IBuiltinFunctionRegistry& registry) {
+    RegisterFunctionImpl<TBigDateRescale<TInput, TOutput>, TUnaryArgsOpt<TInput, TOutput, false>, TUnaryStub>(registry, convert);
+    RegisterFunctionImpl<TBigDateRescale<TInput, TOutput>, TUnaryArgsOpt<TInput, TOutput, true>, TUnaryWrap>(registry, convert);
+}
+
+void RegisterBigDateRescale(IBuiltinFunctionRegistry& registry) {
+    RegisterBigDateRescaleOpt<NUdf::TDataType<NUdf::TDate32>, NUdf::TDataType<NUdf::TDatetime64>>(registry);
+    RegisterBigDateRescaleOpt<NUdf::TDataType<NUdf::TDate32>, NUdf::TDataType<NUdf::TTimestamp64>>(registry);
+    RegisterBigDateRescaleOpt<NUdf::TDataType<NUdf::TDatetime64>, NUdf::TDataType<NUdf::TTimestamp64>>(registry);
+}
+
 template <typename TInput, typename TOutput, bool Tz = false>
 void RegisterRescaleOpt(IBuiltinFunctionRegistry& registry) {
     RegisterFunctionImpl<TDatetimeRescale<typename TInput::TLayout, typename TOutput::TLayout, Tz>, TUnaryArgsOpt<TInput, TOutput, false>, TUnaryStub>(registry, convert);
@@ -1207,6 +1264,7 @@ void RegisterConvert(IBuiltinFunctionRegistry& registry) {
     RegisterDatetimeRescale(registry);
     RegisterToDateConvert(registry);
     RegisterToBigDateConvert(registry);
+    RegisterBigDateRescale(registry);
 
     RegisterDecimalConvert(registry);
 

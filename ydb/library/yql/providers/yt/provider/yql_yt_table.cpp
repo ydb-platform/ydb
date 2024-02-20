@@ -1787,6 +1787,7 @@ bool AdjustLowerValue(TString& lowerValue, bool& lowerInclude, EDataSlot lowerDa
             && lowerDataSlot != targetDataSlot) {
 
             val = FromString<ui64>(lowerValue);
+            // TODO adapt for bigdates, make val i64
             ScaleDate<false>(val, lowerInclude, lowerDataSlot, targetDataSlot);
         }
         else {
@@ -1957,8 +1958,8 @@ bool AdjustUpperValue(TString& upperValue, bool& upperInclude, EDataSlot upperDa
                 valMax = static_cast<i64>(std::numeric_limits<i64>::max());
                 break;
             case EDataSlot::Date32:
-                valMin = static_cast<i64>(MIN_DATE32);
-                valMax = static_cast<i64>(MAX_DATE32);
+                valMin = MIN_DATE32;
+                valMax = MAX_DATE32;
                 break;
             case EDataSlot::Datetime64:
                 valMin = MIN_DATETIME64;
@@ -2026,6 +2027,7 @@ bool AdjustUpperValue(TString& upperValue, bool& upperInclude, EDataSlot upperDa
             && upperDataSlot != targetDataSlot) {
 
             val = FromString<ui64>(upperValue);
+            // TODO adapt for bigdates, make val i64
             ScaleDate<true>(val, upperInclude, upperDataSlot, targetDataSlot);
         }
         else {

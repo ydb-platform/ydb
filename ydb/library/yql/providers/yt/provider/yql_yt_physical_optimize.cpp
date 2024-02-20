@@ -3400,6 +3400,13 @@ private:
             return {};
         }
         TYtOutTableInfo outTable(outItemType, State_->Configuration->UseNativeYtTypes.Get().GetOrElse(DEFAULT_USE_NATIVE_YT_TYPES) ? NTCF_ALL : NTCF_NONE);
+
+        {
+            auto path = write.Table().Name().StringValue();
+            auto commitEpoch = TEpochInfo::Parse(write.Table().CommitEpoch().Ref()).GetOrElse(0);
+            auto dstRowSpec = State_->TablesData->GetTable(cluster, path, commitEpoch).RowSpec;
+            outTable.RowSpec->SetColumnOrder(dstRowSpec->GetColumnOrder());
+        }
         auto content = write.Content();
         if (auto sorted = content.Ref().GetConstraint<TSortedConstraintNode>()) {
             const bool useNativeDescSort = State_->Configuration->UseNativeDescSort.Get().GetOrElse(DEFAULT_USE_NATIVE_DESC_SORT);

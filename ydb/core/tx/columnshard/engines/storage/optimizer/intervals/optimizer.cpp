@@ -2,6 +2,7 @@
 #include <ydb/core/tx/columnshard/blobs_action/abstract/storages_manager.h>
 #include <ydb/core/tx/columnshard/counters/common/owner.h>
 #include <ydb/core/tx/columnshard/counters/engine_logs.h>
+#include <ydb/core/tx/columnshard/data_locks/manager/manager.h>
 #include <ydb/core/tx/columnshard/engines/changes/general_compaction.h>
 
 namespace NKikimr::NOlap::NStorageOptimizer {
@@ -32,8 +33,8 @@ std::vector<std::shared_ptr<TPortionInfo>> TIntervalsOptimizerPlanner::GetPortio
     return result;
 }
 
-std::shared_ptr<TColumnEngineChanges> TIntervalsOptimizerPlanner::DoGetOptimizationTask(const TCompactionLimits& limits, std::shared_ptr<TGranuleMeta> granule, const THashSet<TPortionAddress>& busyPortions) const {
-    if (auto result = SizeProblemBlobs.BuildMergeTask(limits, granule, busyPortions)) {
+std::shared_ptr<TColumnEngineChanges> TIntervalsOptimizerPlanner::DoGetOptimizationTask(const TCompactionLimits& limits, std::shared_ptr<TGranuleMeta> granule, const std::shared_ptr<NDataLocks::TManager>& locksManager) const {
+    if (auto result = SizeProblemBlobs.BuildMergeTask(limits, granule, locksManager)) {
         return result;
     }
     AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("skip", "no_small_portion_tasks");
@@ -56,7 +57,7 @@ std::shared_ptr<TColumnEngineChanges> TIntervalsOptimizerPlanner::DoGetOptimizat
         if (i->GetMeta().GetTierName() && (!tierName || *tierName < i->GetMeta().GetTierName())) {
             tierName = i->GetMeta().GetTierName();
         }
-        if (busyPortions.contains(i->GetAddress())) {
+        if (locksManager->IsLocked(*i)) {
             AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("event", "take_granule_skip")("features", features.DebugJson().GetStringRobust())
                 ("count", features.GetPortionsCount())("reason", "busy_portion")("portion_address", i->GetAddress().DebugString());
             return nullptr;

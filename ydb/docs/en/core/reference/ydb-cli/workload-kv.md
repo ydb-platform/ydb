@@ -117,6 +117,7 @@ Parameter name | Short name | Parameter description
 ---|---|---
 `--seconds <value>` | `-s <value>` | Duration of the test, in seconds. Default: 10.
 `--threads <value>` | `-t <value>` | The number of parallel threads creating the load. Default: 10.
+`--rate <value>` | - | Total rate for all threads, in requests per second. Default: 0 (no rate limit).
 `--quiet` | - | Outputs only the total result.
 `--print-timestamp` | - | Print the time together with the statistics of each time window.
 `--client-timeout` | - | [Transport timeout in milliseconds](../../best_practices/timeouts.md).

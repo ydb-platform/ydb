@@ -12,7 +12,7 @@ Y_DECLARE_OUT_SPEC(, NKikimr::NYaml::TCombinedDiskInfoKey, stream, value) {
 }
 
 template <>
-bool TryFromStringImpl<::NKikimrConfig::TBootstrap_ETabletType, char>(const char* value, unsigned long size, NKikimrConfig::TBootstrap_ETabletType& res) {
+bool TryFromStringImpl<::NKikimrConfig::TBootstrap_ETabletType, char>(const char* value, size_t size, NKikimrConfig::TBootstrap_ETabletType& res) {
     const google::protobuf::EnumDescriptor *descriptor = ::NKikimrConfig::TBootstrap_ETabletType_descriptor();
     const auto* valueDescriptor = descriptor->FindValueByName(TString(value, size));
     if (valueDescriptor) {

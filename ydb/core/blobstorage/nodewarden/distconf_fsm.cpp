@@ -5,17 +5,38 @@ namespace NKikimr::NStorage {
     struct TExConfigError : yexception {};
 
     void TDistributedConfigKeeper::CheckRootNodeStatus() {
-        if (RootState == ERootState::INITIAL && !Binding && HasQuorum()) {
+        if (Binding) {
+            Y_ABORT_UNLESS(!Scepter);
+            Y_ABORT_UNLESS(RootState == ERootState::INITIAL); // we can't pretend to be root while we are bound to someone
+            return;
+        }
+
+        const bool hasQuorum = HasQuorum();
+
+        if (RootState == ERootState::INITIAL && hasQuorum) { // becoming root node
+            Y_ABORT_UNLESS(!Scepter);
+            Scepter = std::make_shared<TScepter>();
+
             STLOG(PRI_DEBUG, BS_NODE, NWDC19, "Starting config collection");
             RootState = ERootState::COLLECT_CONFIG;
             TEvScatter task;
             task.MutableCollectConfigs();
-            IssueScatterTask(true, std::move(task));
+            IssueScatterTask(TActorId(), std::move(task));
+        } else if (Scepter && !hasQuorum) { // unbecoming root node -- lost quorum
+            SwitchToError("quorum lost");
         }
+    }
+
+    void TDistributedConfigKeeper::SwitchToError(const TString& reason) {
+        STLOG(PRI_ERROR, BS_NODE, NWDC38, "SwitchToError", (RootState, RootState), (Reason, reason));
+        Scepter.reset();
+        RootState = ERootState::ERROR_TIMEOUT;
+        TActivationContext::Schedule(ErrorTimeout, new IEventHandle(TEvPrivate::EvErrorTimeout, 0, SelfId(), {}, nullptr, 0));
     }
 
     void TDistributedConfigKeeper::HandleErrorTimeout() {
         STLOG(PRI_DEBUG, BS_NODE, NWDC20, "Error timeout hit");
+        Y_ABORT_UNLESS(!Scepter);
         RootState = ERootState::INITIAL;
         IssueNextBindRequest();
     }
@@ -23,26 +44,26 @@ namespace NKikimr::NStorage {
     void TDistributedConfigKeeper::ProcessGather(TEvGather *res) {
         STLOG(PRI_DEBUG, BS_NODE, NWDC27, "ProcessGather", (RootState, RootState), (Res, *res));
 
-        switch (RootState) {
-            case ERootState::COLLECT_CONFIG:
-                if (res->HasCollectConfigs()) {
-                    ProcessCollectConfigs(res->MutableCollectConfigs());
-                } else {
-                    // unexpected reply?
-                }
-                break;
-
-            case ERootState::PROPOSE_NEW_STORAGE_CONFIG:
-                if (res->HasProposeStorageConfig()) {
-                    ProcessProposeStorageConfig(res->MutableProposeStorageConfig());
-                } else {
-                    // ?
-                }
-                break;
-
-            default:
-                break;
+        if (!res) {
+            return SwitchToError("leadership lost while executing query");
         }
+
+        switch (res->GetResponseCase()) {
+            case TEvGather::kCollectConfigs:
+                return RootState == ERootState::COLLECT_CONFIG
+                    ? ProcessCollectConfigs(res->MutableCollectConfigs())
+                    : SwitchToError("unexpected CollectConfigs response");
+
+            case TEvGather::kProposeStorageConfig:
+                return RootState == ERootState::PROPOSE_NEW_STORAGE_CONFIG
+                    ? ProcessProposeStorageConfig(res->MutableProposeStorageConfig())
+                    : SwitchToError("unexpected ProposeStorageConfig response");
+
+            case TEvGather::RESPONSE_NOT_SET:
+                return SwitchToError("response not set");
+        }
+
+        SwitchToError("incorrect response from peer");
     }
 
     bool TDistributedConfigKeeper::HasQuorum() const {
@@ -65,9 +86,7 @@ namespace NKikimr::NStorage {
         const bool nodeQuorum = HasNodeQuorum(*StorageConfig, generateSuccessful);
         STLOG(PRI_DEBUG, BS_NODE, NWDC31, "ProcessCollectConfigs", (RootState, RootState), (NodeQuorum, nodeQuorum), (Res, *res));
         if (!nodeQuorum) {
-            RootState = ERootState::ERROR_TIMEOUT;
-            TActivationContext::Schedule(ErrorTimeout, new IEventHandle(TEvPrivate::EvErrorTimeout, 0, SelfId(), {}, nullptr, 0));
-            return;
+            return SwitchToError("no node quorum for CollectConfigs");
         }
 
         // TODO: validate self-assembly UUID
@@ -188,6 +207,9 @@ namespace NKikimr::NStorage {
             }
         }
 
+        STLOG(PRI_DEBUG, BS_NODE, NWDC37, "ProcessCollectConfigs", (BaseConfig, baseConfig), (CommittedConfig, committedConfig),
+            (ProposedConfig, proposedConfig), (ConfigToPropose, configToPropose), (PropositionBase, propositionBase));
+
         if (configToPropose) {
             if (propositionBase) {
                 configToPropose->SetGeneration(configToPropose->GetGeneration() + 1);
@@ -199,10 +221,10 @@ namespace NKikimr::NStorage {
             auto *propose = task.MutableProposeStorageConfig();
             CurrentProposedStorageConfig.CopyFrom(*configToPropose);
             propose->MutableConfig()->Swap(configToPropose);
-            IssueScatterTask(true, std::move(task));
+            IssueScatterTask(TActorId(), std::move(task));
             RootState = ERootState::PROPOSE_NEW_STORAGE_CONFIG;
         } else {
-            // TODO: nothing to do?
+            RootState = ERootState::RELAX; // nothing to do right now, just relax
         }
     }
 
@@ -226,9 +248,7 @@ namespace NKikimr::NStorage {
             CurrentProposedStorageConfig.Clear();
         } else {
             CurrentProposedStorageConfig.Clear();
-            STLOG(PRI_DEBUG, BS_NODE, NWDC04, "No quorum for ProposedStorageConfig, restarting");
-            RootState = ERootState::ERROR_TIMEOUT;
-            TActivationContext::Schedule(ErrorTimeout, new IEventHandle(TEvPrivate::EvErrorTimeout, 0, SelfId(), {}, nullptr, 0));
+            SwitchToError("no quorum for ProposedStorageConfig");
         }
     }
 
@@ -242,6 +262,7 @@ namespace NKikimr::NStorage {
                 try {
                     AllocateStaticGroup(config);
                     changes = true;
+                    STLOG(PRI_DEBUG, BS_NODE, NWDC33, "Allocated static group", (Group, bsConfig.GetServiceSet().GetGroups(0)));
                 } catch (const TExConfigError& ex) {
                     STLOG(PRI_ERROR, BS_NODE, NWDC10, "Failed to allocate static group", (Reason, ex.what()));
                 }

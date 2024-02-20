@@ -133,7 +133,7 @@ bool TInsertTableAccessor::RemoveBlobLink(const TUnifiedBlobId& blobId, const st
     AFL_VERIFY(itBlob != BlobLinks.end());
     AFL_VERIFY(itBlob->second >= 1);
     if (itBlob->second == 1) {
-        blobsAction->DeclareRemove(itBlob->first);
+        blobsAction->DeclareSelfRemove(itBlob->first);
         BlobLinks.erase(itBlob);
         return true;
     } else {

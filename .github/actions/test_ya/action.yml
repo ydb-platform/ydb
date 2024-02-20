@@ -60,6 +60,7 @@ runs:
         echo "LOG_DIR=$TMP_DIR/logs" >> $GITHUB_ENV
         echo "OUT_DIR=$TMP_DIR/out" >> $GITHUB_ENV
         echo "ARTIFACTS_DIR=$TMP_DIR/artifacts" >> $GITHUB_ENV
+        echo "TEST_ARTIFACTS_DIR=$TMP_DIR/test_artifacts" >> $GITHUB_ENV
         echo "REPORTS_ARTIFACTS_DIR=$TMP_DIR/artifacts/test_reports" >> $GITHUB_ENV
         echo "JUNIT_REPORT_XML=$TMP_DIR/junit.xml" >> $GITHUB_ENV
         echo "JUNIT_REPORT_PARTS=$TMP_DIR/junit-split" >> $GITHUB_ENV
@@ -73,7 +74,7 @@ runs:
       shell: bash
       run: |
         rm -rf $TMP_DIR $JUNIT_REPORT_XML $JUNIT_REPORT_PARTS $REPORTS_ARTIFACTS_DIR
-        mkdir -p $TMP_DIR $OUT_DIR $ARTIFACTS_DIR $LOG_DIR $JUNIT_REPORT_PARTS $REPORTS_ARTIFACTS_DIR
+        mkdir -p $TMP_DIR $OUT_DIR $ARTIFACTS_DIR $TEST_ARTIFACTS_DIR $LOG_DIR $JUNIT_REPORT_PARTS $REPORTS_ARTIFACTS_DIR
     
     - name: Install Node required for Testmo CLI
       uses: actions/setup-node@v3
@@ -222,7 +223,7 @@ runs:
           ./ya test "${params[@]}" \
             --bazel-remote-put --bazel-remote-username "${{ inputs.bazel_remote_username }}" --bazel-remote-password "${{ inputs.bazel_remote_password }}" -DCONSISTENT_DEBUG \
             --log-file "$LOG_DIR/ya_log_prewarm.txt" --evlog-file "$LOG_DIR/ya_evlog_prewarm.jsonl" \
-            --dist-cache-evict-bins --cache-tests --no-dir-outputs --test-node-output-limit 100000 --drop-graph-result-before-tests || (
+            --dist-cache-evict-bins --cache-tests --no-dir-outputs --test-node-output-limit 1000000 --drop-graph-result-before-tests || (
               RC=$?
               echo "::debug::ya test RC=$RC"
             )
@@ -231,7 +232,7 @@ runs:
         echo "::debug::save tests reports"
         ./ya test "${params[@]}" \
           --stat --log-file "$LOG_DIR/ya_log.txt" --evlog-file "$LOG_DIR/ya_evlog.jsonl" -DCONSISTENT_DEBUG \
-          --cache-tests --dist-cache-evict-bins --no-dir-outputs --test-node-output-limit 100000 --drop-graph-result-before-tests \
+          --cache-tests --dist-cache-evict-bins --no-dir-outputs --test-node-output-limit 1000000 --drop-graph-result-before-tests \
           --junit "$JUNIT_REPORT_XML" --output "$OUT_DIR" || (
             RC=$?
             if [ $RC -ne 0 ]; then
@@ -260,6 +261,8 @@ runs:
           --ya-out "$OUT_DIR" \
           --log-url-prefix "$S3_URL_PREFIX/logs/" \
           --log-out-dir "$ARTIFACTS_DIR/logs/" \
+          --test-stuff-out "$TEST_ARTIFACTS_DIR/" \
+          --test-stuff-prefix "$S3_TEST_ARTIFACTS_URL_PREFIX/" \
           "$JUNIT_REPORT_XML"
     
         .github/scripts/tests/split-junit.py -o "$JUNIT_REPORT_PARTS" "$JUNIT_REPORT_XML"
@@ -321,6 +324,7 @@ runs:
       run: |
         echo "::group::s3-sync"
         s3cmd sync -r --follow-symlinks --acl-public --no-progress --stats --no-check-md5 "$ARTIFACTS_DIR/" "$S3_BUCKET_PATH/"
+        s3cmd sync -r --follow-symlinks --acl-public --no-progress --stats --no-check-md5 "$TEST_ARTIFACTS_DIR/" "$S3_TEST_ARTIFACTS_BUCKET_PATH/"
         echo "::endgroup::"
     
     - name: sync logs results to s3

@@ -333,6 +333,12 @@ IGraphTransformer::TStatus TryConvertToImpl(TExprContext& ctx, TExprNode::TPtr& 
         } else if (from == EDataSlot::Timestamp && to == EDataSlot::TzTimestamp) {
             allow = true;
             useCast = true;
+        } else if (from == EDataSlot::Date32 && (to == EDataSlot::Datetime64 || to == EDataSlot::Timestamp64)) {
+            allow = true;
+            useCast = true;
+        } else if (from == EDataSlot::Datetime64 && (to == EDataSlot::Timestamp64)) {
+            allow = true;
+            useCast = true;
         } else if (from == EDataSlot::Json && to == EDataSlot::Utf8) {
             allow = true;
             useCast = true;

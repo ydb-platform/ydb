@@ -265,10 +265,6 @@ public:
         return DummyString;
     };
 
-    void SetDiskQuotaExceeded(bool disk) override {
-        Y_UNUSED(disk);
-    };
-
     bool GetDiskQuotaExceeded() const override {
         return false;
     };

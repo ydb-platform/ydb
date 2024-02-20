@@ -866,6 +866,8 @@ struct TEvBlobStorage {
         EvNodeWardenQueryStorageConfig,
         EvNodeWardenStorageConfig,
         EvAskRestartVDisk,
+        EvNodeConfigInvokeOnRoot,
+        EvNodeConfigInvokeOnRootResult,
 
         // Other
         EvRunActor = EvPut + 15 * 512,

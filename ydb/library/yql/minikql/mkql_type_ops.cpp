@@ -2063,6 +2063,18 @@ NUdf::TUnboxedValuePod ValueFromString(NUdf::EDataSlot type, NUdf::TStringRef bu
     case NUdf::EDataSlot::TzTimestamp:
         return ParseTzTimestamp(buf);
 
+    case NUdf::EDataSlot::Date32:
+        return ParseDate32(buf);
+
+    case NUdf::EDataSlot::Datetime64:
+        return ParseDatetime64(buf);
+
+    case NUdf::EDataSlot::Timestamp64:
+        return ParseTimestamp64(buf);
+
+    case NUdf::EDataSlot::Interval64:
+        return ParseInterval<NUdf::MAX_INTERVAL64, NUdf::MAX_DATE32 - NUdf::MIN_DATE32>(buf);
+
     case NUdf::EDataSlot::DyNumber: {
         auto dyNumber = NDyNumber::ParseDyNumberString(buf);
         if (!dyNumber.Defined()) {
@@ -2080,18 +2092,6 @@ NUdf::TUnboxedValuePod ValueFromString(NUdf::EDataSlot type, NUdf::TStringRef bu
         }
         return MakeString(TStringBuf(binaryJson->Data(), binaryJson->Size()));
     }
-
-    case NUdf::EDataSlot::Date32:
-        return ParseDate32(buf);
-
-    case NUdf::EDataSlot::Datetime64:
-        return ParseDatetime64(buf);
-
-    case NUdf::EDataSlot::Timestamp64:
-        return ParseTimestamp64(buf);
-
-    case NUdf::EDataSlot::Interval64:
-        return ParseInterval<NUdf::MAX_INTERVAL64, NUdf::MAX_DATE32 - NUdf::MIN_DATE32>(buf);
 
     case NUdf::EDataSlot::Decimal:
     default:
@@ -2167,10 +2167,6 @@ NUdf::TUnboxedValuePod SimpleValueFromYson(NUdf::EDataSlot type, NUdf::TStringRe
         case NUdf::EDataSlot::TzTimestamp:
         case NUdf::EDataSlot::Decimal:
         case NUdf::EDataSlot::Uuid:
-        case NUdf::EDataSlot::Date32:
-        case NUdf::EDataSlot::Datetime64:
-        case NUdf::EDataSlot::Timestamp64:
-        case NUdf::EDataSlot::Interval64:
             Y_ABORT("TODO");
 
         default:
@@ -2220,6 +2216,10 @@ NUdf::TUnboxedValuePod SimpleValueFromYson(NUdf::EDataSlot type, NUdf::TStringRe
     case NUdf::EDataSlot::Int16:
     case NUdf::EDataSlot::Int32:
     case NUdf::EDataSlot::Int64:
+    case NUdf::EDataSlot::Date32:
+    case NUdf::EDataSlot::Datetime64:
+    case NUdf::EDataSlot::Timestamp64:
+    case NUdf::EDataSlot::Interval64:
     case NUdf::EDataSlot::Interval: {
         if (ytBinType != NYson::NDetail::Int64Marker) {
             return NUdf::TUnboxedValuePod();
@@ -2282,10 +2282,6 @@ NUdf::TUnboxedValuePod SimpleValueFromYson(NUdf::EDataSlot type, NUdf::TStringRe
     case NUdf::EDataSlot::Uuid:
     case NUdf::EDataSlot::DyNumber:
     case NUdf::EDataSlot::JsonDocument:
-    case NUdf::EDataSlot::Date32:
-    case NUdf::EDataSlot::Datetime64:
-    case NUdf::EDataSlot::Timestamp64:
-    case NUdf::EDataSlot::Interval64:
         Y_ABORT("TODO");
     }
 

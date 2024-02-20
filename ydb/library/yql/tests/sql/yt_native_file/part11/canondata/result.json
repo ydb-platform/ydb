@@ -253,9 +253,9 @@
     ],
     "test.test[aggregate-aggregate_with_default_yson_options-default.txt-Debug]": [
         {
-            "checksum": "f5138457134b5040e11bbca1f2bbb88b",
-            "size": 4189,
-            "uri": "https://{canondata_backend}/1937027/642fd2ff53bdb0fed32ca89598d70c9c5848ac20/resource.tar.gz#test.test_aggregate-aggregate_with_default_yson_options-default.txt-Debug_/opt.yql"
+            "checksum": "67278609b39fbf0901e4ff59c25427c4",
+            "size": 4216,
+            "uri": "https://{canondata_backend}/1773845/4636e0047aaceabd6a5c673aa06e0249544e1d90/resource.tar.gz#test.test_aggregate-aggregate_with_default_yson_options-default.txt-Debug_/opt.yql"
         }
     ],
     "test.test[aggregate-aggregate_with_default_yson_options-default.txt-Plan]": [
@@ -378,6 +378,27 @@
             "checksum": "aa195e36484ee732895e4c152d9f5b03",
             "size": 662,
             "uri": "https://{canondata_backend}/1937027/642fd2ff53bdb0fed32ca89598d70c9c5848ac20/resource.tar.gz#test.test_aggregate-having_distinct_expr--Results_/results.txt"
+        }
+    ],
+    "test.test[bigdate-const_interval64-default.txt-Debug]": [
+        {
+            "checksum": "72888a7ccc53df9810804646674ec068",
+            "size": 4020,
+            "uri": "https://{canondata_backend}/1937367/964cd20e08010a5ddb82cda78f52ccdcffedf989/resource.tar.gz#test.test_bigdate-const_interval64-default.txt-Debug_/opt.yql"
+        }
+    ],
+    "test.test[bigdate-const_interval64-default.txt-Plan]": [
+        {
+            "checksum": "66a326f654956d864726e28039beacec",
+            "size": 11695,
+            "uri": "https://{canondata_backend}/1937367/964cd20e08010a5ddb82cda78f52ccdcffedf989/resource.tar.gz#test.test_bigdate-const_interval64-default.txt-Plan_/plan.txt"
+        }
+    ],
+    "test.test[bigdate-const_interval64-default.txt-Results]": [
+        {
+            "checksum": "93d1c5b24d5462b74ea0d5a6dc219702",
+            "size": 27372,
+            "uri": "https://{canondata_backend}/1937367/964cd20e08010a5ddb82cda78f52ccdcffedf989/resource.tar.gz#test.test_bigdate-const_interval64-default.txt-Results_/results.txt"
         }
     ],
     "test.test[blocks-combine_all_some_filter--Debug]": [

@@ -10,7 +10,7 @@
 
 ## fq-connector-go {#fq-connector-go}
 
-Коннектор `fq-connector-go` реализован на языке Go; его исходный код размещён на [Github](https://github.com/ydb-platform/fq-connector-go). Он обеспечивает доступ к следующим источникам данных:
+Коннектор `fq-connector-go` реализован на языке Go; его исходный код размещён на [GitHub](https://github.com/ydb-platform/fq-connector-go). Он обеспечивает доступ к следующим источникам данных:
 
 * [ClickHouse](https://clickhouse.com/)
 * [PostgreSQL](https://www.postgresql.org/)
@@ -38,7 +38,7 @@ docker run -d \
     ghcr.io/ydb-platform/fq-connector-go:latest
 ```
 
-Для организации шифрованных соединений между YDB и коннектором [подготовьте пару TLS-ключей](../manual/deploy-ydb-on-premises.md#tls-certificates) и примонтируйте папку с ключами в контейнер, а также пропишите пути до публичного и приватного ключа в секции конфигурационного файла `connector_server.tls.cert` и `connector_server.tls.key` соответственно:
+Для организации шифрованных соединений между {{ ydb-short-name }} и коннектором [подготовьте пару TLS-ключей](../manual/deploy-ydb-on-premises.md#tls-certificates) и примонтируйте папку с ключами в контейнер, а также пропишите пути до публичного и приватного ключа в секции конфигурационного файла `connector_server.tls.cert` и `connector_server.tls.key` соответственно:
 
 ```bash
 docker run -d \

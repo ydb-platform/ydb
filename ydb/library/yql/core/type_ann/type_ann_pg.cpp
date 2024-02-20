@@ -2112,6 +2112,19 @@ ui64 CalculateExprHash(const TExprNode& root, TNodeMap<ui64>& visited) {
         hash = CseeHash(root.Content().Data(), root.Content().Size(), hash);
         hash = CseeHash(root.GetFlagsToCompare(), hash);
         break;
+    case TExprNode::EType::World:
+        break;
+    case TExprNode::EType::Lambda:
+        hash = CseeHash(root.ChildrenSize(), hash);
+        hash = CseeHash(root.Head().ChildrenSize(), hash);
+        for (ui32 argIndex = 0; argIndex < root.Head().ChildrenSize(); ++argIndex) {
+            visited.emplace(root.Head().Child(argIndex), argIndex);
+        }
+
+        for (ui32 bodyIndex = 1; bodyIndex < root.ChildrenSize(); ++bodyIndex) {
+            hash = CombineHashes(CalculateExprHash(*root.Child(bodyIndex), visited), hash);
+        }
+        break;
     default:
         YQL_ENSURE(false, "Unexpected node type");
     }
@@ -2152,6 +2165,24 @@ bool ExprNodesEquals(const TExprNode& left, const TExprNode& right, TNodeSet& vi
         return left.Content() == right.Content() && left.GetFlagsToCompare() == right.GetFlagsToCompare();
     case TExprNode::EType::Argument:
         return left.GetArgIndex() == right.GetArgIndex();
+    case TExprNode::EType::World:
+        return true;
+    case TExprNode::EType::Lambda:
+        if (left.ChildrenSize() != right.ChildrenSize()) {
+            return false;
+        }
+
+        if (left.Head().ChildrenSize() != right.Head().ChildrenSize()) {
+            return false;
+        }
+
+        for (ui32 i = 1; i < left.ChildrenSize(); ++i) {
+            if (!ExprNodesEquals(*left.Child(i), *right.Child(i), visited)) {
+                return false;
+            }
+        }
+
+        return true;
     default:
         YQL_ENSURE(false, "Unexpected node type");
     }
@@ -2628,31 +2659,6 @@ bool ValidateSort(TInputs& inputs, TInputs& subLinkInputs, const THashSet<TStrin
     const TExprNode::TPtr& groupExprs, const TStringBuf& scope, const TProjectionOrders* projectionOrders,
     const TExprNode::TPtr& projection) {
     newSorts.clear();
-    bool canReplaceProjectionExpr = false;
-    THashMap<ui64, TVector<ui32>> projectionHashes;
-    if (projectionOrders && projection) {
-        canReplaceProjectionExpr = true;
-        for (const auto& x : *projectionOrders) {
-            if (!x->second) { // skip stars
-                canReplaceProjectionExpr = false;
-                break;
-            }
-        }
-
-        if (canReplaceProjectionExpr) {
-            auto projectionItems = projection->Tail().ChildrenSize();
-            for (ui32 i = 0; i < projectionItems; ++i) {
-                TNodeMap<ui64> hashVisited;
-                const auto& lambda = projection->Tail().Child(i)->Tail();
-                if (lambda.Head().ChildrenSize() == 1) {
-                    hashVisited[&lambda.Head().Head()] = 0;
-                    ui64 hash = CalculateExprHash(lambda.Tail(), hashVisited);
-                    projectionHashes[hash].push_back(i);
-                }
-            }
-        }
-    }
-
     for (ui32 index = 0; index < data.ChildrenSize(); ++index) {
         auto oneSort = data.Child(index);
 
@@ -2751,6 +2757,31 @@ bool ValidateSort(TInputs& inputs, TInputs& subLinkInputs, const THashSet<TStrin
                 newSorts.push_back(ctx.Expr.ChangeChild(*oneSort, 1, std::move(ret)));
                 hasNewSort = true;
                 continue;
+            }
+        }
+
+        bool canReplaceProjectionExpr = false;
+        THashMap<ui64, TVector<ui32>> projectionHashes;
+        if (projectionOrders && projection) {
+            canReplaceProjectionExpr = true;
+            for (const auto& x : *projectionOrders) {
+                if (!x->second) { // skip stars
+                    canReplaceProjectionExpr = false;
+                    break;
+                }
+            }
+
+            if (canReplaceProjectionExpr) {
+                auto projectionItems = projection->Tail().ChildrenSize();
+                for (ui32 i = 0; i < projectionItems; ++i) {
+                    TNodeMap<ui64> hashVisited;
+                    const auto& lambda = projection->Tail().Child(i)->Tail();
+                    if (lambda.Head().ChildrenSize() == 1) {
+                        hashVisited[&lambda.Head().Head()] = 0;
+                        ui64 hash = CalculateExprHash(lambda.Tail(), hashVisited);
+                        projectionHashes[hash].push_back(i);
+                    }
+                }
             }
         }
 

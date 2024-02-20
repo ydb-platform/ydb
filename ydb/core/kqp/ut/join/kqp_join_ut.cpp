@@ -1303,6 +1303,65 @@ Y_UNIT_TEST_SUITE(KqpJoin) {
         UNIT_ASSERT(explain.GetAst().Contains("GraceJoinCore"));
     }
 
+    Y_UNIT_TEST(FullOuterJoinNotNullJoinKey) {
+        TKikimrRunner kikimr;
+        auto db = kikimr.GetTableClient();
+        auto session = db.CreateSession().GetValueSync().GetSession();
+
+        {  // init tables
+            AssertSuccessResult(session.ExecuteSchemeQuery(R"(
+                --!syntax_v1
+
+                CREATE TABLE left
+                (
+                    Key Int64 NOT NULL,
+                    Value Int64,
+                    PRIMARY KEY (Key)
+                );
+
+                CREATE TABLE right
+                (
+                    Key Int64 NOT NULL,
+                    Value Int64,
+                    PRIMARY KEY (Key)
+                );
+            )").GetValueSync());
+
+            auto result = session.ExecuteDataQuery(R"(
+                --!syntax_v1
+
+                REPLACE INTO left (Key, Value) VALUES 
+                    (1, 10),
+                    (2, 20),
+                    (3, 30);
+
+                REPLACE INTO right (Key, Value) VALUES 
+                    (1, 10),
+                    (2, 200),
+                    (3, 300),
+                    (4, 40);
+            )", TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SUCCESS);
+        }
+        
+        {
+            auto result = session.ExecuteDataQuery(R"(
+                --!syntax_v1
+
+                SELECT l.Key, l.Value, r.Key, r.Value FROM left as l FULL JOIN right as r
+                    ON (l.Value = r.Value AND l.Key = r.Key);
+            )", TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+            CompareYson(R"([
+                [[1];[10];[1];[10]];
+                [[2];[20];#;#];
+                [[3];[30];#;#];
+                [#;#;[3];[300]];
+                [#;#;[4];[40]];
+                [#;#;[2];[200]]
+            ])", FormatResultSetYson(result.GetResultSet(0)));
+        }
+    }
 }
 
 } // namespace NKqp

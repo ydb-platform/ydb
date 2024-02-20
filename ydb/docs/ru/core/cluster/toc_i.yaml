@@ -40,4 +40,4 @@ items:
   - name: Изменение конфигураций через CMS
     href: ../maintenance/manual/cms.md
 - name: Обслуживание кластера без потери доступности
-  href: ../maintenance/maintenance_without_outages.md
+  href: ../maintenance/maintenance-without-outages.md

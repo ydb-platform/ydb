@@ -9,4 +9,4 @@
 * [{#T}](../administration/monitoring.md).
 * [{#T}](../administration/upgrade.md).
 <!-- * [{#T}](../administration/rolling-restart.md). -->
-* [{#T}](../maintenance/maintenance_without_outages.md).
+* [{#T}](../maintenance/maintenance-without-outages.md).

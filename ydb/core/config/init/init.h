@@ -1,9 +1,10 @@
 #pragma once
 
+#include <ydb/core/base/event_filter.h>
 #include <ydb/core/cms/console/config_item_info.h>
 #include <ydb/core/protos/config.pb.h>
 #include <ydb/library/actors/core/interconnect.h>
-#include <ydb/core/base/event_filter.h>
+#include <ydb/public/lib/deprecated/kicli/kicli.h>
 
 #include <library/cpp/getopt/small/last_getopt_opts.h>
 
@@ -88,6 +89,27 @@ public:
         const TGrpcSslSettings& grpcSettings,
         const TVector<TString>& addrs,
         const TNodeRegistrationSettings& regSettings,
+        const IEnv& env) const = 0;
+};
+
+// ===
+
+struct TDynConfigSettings {
+    ui32 NodeId;
+    TString DomainName;
+    TString TenantName;
+    TString FQDNHostName;
+    TString NodeType;
+    TString StaffApiUserToken;
+};
+
+class IDynConfigClient {
+public:
+    virtual ~IDynConfigClient() {}
+    virtual TMaybe<NKikimr::NClient::TConfigurationResult> GetConfig(
+        const TGrpcSslSettings& gs,
+        const TVector<TString>& addrs,
+        const TDynConfigSettings& settings,
         const IEnv& env) const = 0;
 };
 

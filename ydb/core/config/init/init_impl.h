@@ -549,7 +549,7 @@ struct TConfigFields {
         return nodeId;
     }
 
-    NActors::TNodeLocation CreateNodeLocation() const { // FIXME
+    NActors::TNodeLocation CreateNodeLocation() const {
         NActorsInterconnect::TNodeLocation location;
         location.SetDataCenter(DataCenter ? DataCenter.GetRef() : TString(""));
         location.SetRack(Rack);
@@ -565,7 +565,7 @@ struct TConfigFields {
         return loc;
     }
 
-    void ApplyLogSettings(NKikimrConfig::TAppConfig& appConfig, IConfigUpdateTracer& ConfigUpdateTracer) {
+    void ApplyLogSettings(NKikimrConfig::TAppConfig& appConfig, IConfigUpdateTracer& ConfigUpdateTracer) const {
         if (SysLogServiceTag && !appConfig.GetLogConfig().GetSysLogService()) {
             appConfig.MutableLogConfig()->SetSysLogService(SysLogServiceTag.GetRef());
             TRACE_CONFIG_CHANGE_INPLACE_T(LogConfig, UpdateExplicitly);
@@ -727,7 +727,7 @@ struct TMbusConfigFields {
         }
     }
 
-    void InitMessageBusConfig(NKikimrConfig::TAppConfig& appConfig) {
+    void InitMessageBusConfig(NKikimrConfig::TAppConfig& appConfig) const {
         auto messageBusConfig = appConfig.MutableMessageBusConfig();
         messageBusConfig->SetStartBusProxy(Start);
         messageBusConfig->SetBusProxyPort(BusProxyPort);
@@ -738,7 +738,6 @@ struct TMbusConfigFields {
 
         auto sessionConfig = messageBusConfig->MutableProxyBusSessionConfig();
 
-        // TODO use macro from messagebus header file
         sessionConfig->SetName(ProxyBusSessionConfig.Name);
         sessionConfig->SetNumRetries(ProxyBusSessionConfig.NumRetries);
         sessionConfig->SetRetryInterval(ProxyBusSessionConfig.RetryInterval);
@@ -774,7 +773,31 @@ struct TMbusConfigFields {
 
 // =====
 
-static ui32 NextValidKind(ui32 kind) {
+TString DeduceNodeDomain(const NConfig::TConfigFields& cf, const NKikimrConfig::TAppConfig& appConfig) {
+    if (cf.NodeDomain) {
+        return cf.NodeDomain;
+    }
+
+    if (appConfig.GetDomainsConfig().DomainSize() == 1) {
+        return appConfig.GetDomainsConfig().GetDomain(0).GetName();
+    }
+
+    if (appConfig.GetTenantPoolConfig().SlotsSize() == 1) {
+        auto &slot = appConfig.GetTenantPoolConfig().GetSlots(0);
+        if (slot.GetDomainName()) {
+            return slot.GetDomainName();
+        }
+
+        auto &tenantName = slot.GetTenantName();
+        if (IsStartWithSlash(tenantName)) {
+            return ToString(ExtractDomain(tenantName));
+        }
+    }
+
+    return "";
+}
+
+ui32 NextValidKind(ui32 kind) {
     do {
         ++kind;
         if (kind != NKikimrConsole::TConfigItem::Auto && NKikimrConsole::TConfigItem::EKind_IsValid(kind)) {
@@ -784,7 +807,7 @@ static ui32 NextValidKind(ui32 kind) {
     return kind;
 }
 
-static bool HasCorrespondingManagedKind(ui32 kind, const NKikimrConfig::TAppConfig& appConfig) {
+bool HasCorrespondingManagedKind(ui32 kind, const NKikimrConfig::TAppConfig& appConfig) {
     return (kind == NKikimrConsole::TConfigItem::NameserviceConfigItem && appConfig.HasNameserviceConfig()) ||
             (kind == NKikimrConsole::TConfigItem::NetClassifierDistributableConfigItem && appConfig.HasNetClassifierDistributableConfig()) ||
             (kind == NKikimrConsole::TConfigItem::NamedConfigsItem && appConfig.NamedConfigsSize());
@@ -987,7 +1010,7 @@ public:
 
     void FillData(const NConfig::TConfigFields& cf) {
         if (cf.TenantName && ScopeId.IsEmpty()) {
-            const TString myDomain = DeduceNodeDomain(cf);
+            const TString myDomain = DeduceNodeDomain(cf, AppConfig);
             for (const auto& domain : AppConfig.GetDomainsConfig().GetDomain()) {
                 if (domain.GetName() == myDomain) {
                     ScopeId = TKikimrScopeId(0, domain.GetDomainId());
@@ -1011,7 +1034,7 @@ public:
         auto &slot = *AppConfig.MutableTenantPoolConfig()->AddSlots();
         slot.SetId("static-slot");
         slot.SetIsDynamic(false);
-        TString tenantName = cf.TenantName ? cf.TenantName.GetRef() : CanonizePath(DeduceNodeDomain(cf));
+        TString tenantName = cf.TenantName ? cf.TenantName.GetRef() : CanonizePath(DeduceNodeDomain(cf, AppConfig));
         slot.SetTenantName(tenantName);
         return tenantName;
     }
@@ -1082,26 +1105,6 @@ public:
         ConfigFields.SetupInterconnectConfigDefaults(icConfig, ConfigUpdateTracer);
     };
 
-    TString DeduceNodeDomain(const NConfig::TConfigFields& cf) const {
-        if (cf.NodeDomain) {
-            return cf.NodeDomain;
-        }
-        if (AppConfig.GetDomainsConfig().DomainSize() == 1) {
-            return AppConfig.GetDomainsConfig().GetDomain(0).GetName();
-        }
-        if (AppConfig.GetTenantPoolConfig().SlotsSize() == 1) {
-            auto &slot = AppConfig.GetTenantPoolConfig().GetSlots(0);
-            if (slot.GetDomainName()) {
-                return slot.GetDomainName();
-            }
-            auto &tenantName = slot.GetTenantName();
-            if (IsStartWithSlash(tenantName)) {
-                return ToString(ExtractDomain(tenantName));
-            }
-        }
-        return "";
-    }
-
     void RegisterDynamicNode(NConfig::TConfigFields& cf) {
         TVector<TString> addrs;
 
@@ -1115,7 +1118,7 @@ public:
             ythrow yexception() << "List of Node Broker end-points is empty";
         }
 
-        TString domainName = DeduceNodeDomain(cf);
+        TString domainName = DeduceNodeDomain(cf, AppConfig);
 
         if (!cf.NodeHost) {
             cf.NodeHost = Env.FQDNHostName();
@@ -1155,11 +1158,19 @@ public:
         }
     }
 
+    struct TDynConfigSettings {
+        ui32 NodeId;
+        TString DomainName;
+        TString TenantName;
+        TString FQDNHostName;
+        TString NodeType;
+        TString StaffApiUserToken;
+    };
+
     bool TryToLoadConfigForDynamicNodeFromCMS(
-        const NConfig::TConfigFields& cf,
-        const TString &addr,
-        const TString &domainName,
         const TGrpcSslSettings& gs,
+        const TString &addr,
+        const TDynConfigSettings& settings,
         const IEnv& env,
         TMaybe<NKikimr::NClient::TConfigurationResult>& res,
         TString &error) const
@@ -1172,12 +1183,12 @@ public:
 
         Cout << "Trying to get configs from " << addr << Endl;
 
-        auto result = configurator.SyncGetNodeConfig(NodeId,
-                                                     env.FQDNHostName(),
-                                                     cf.TenantName.GetRef(),
-                                                     cf.NodeType.GetRef(),
-                                                     domainName,
-                                                     AppConfig.GetAuthConfig().GetStaffApiUserToken(),
+        auto result = configurator.SyncGetNodeConfig(settings.NodeId,
+                                                     settings.FQDNHostName,
+                                                     settings.TenantName,
+                                                     settings.NodeType,
+                                                     settings.DomainName,
+                                                     settings.StaffApiUserToken,
                                                      true,
                                                      1);
 
@@ -1194,22 +1205,22 @@ public:
         return true;
     }
 
-     TMaybe<NKikimr::NClient::TConfigurationResult> LoadConfigForDynamicNode(const NConfig::TConfigFields& cf) const {
+    TMaybe<NKikimr::NClient::TConfigurationResult> LoadConfigForDynamicNode(
+        const TGrpcSslSettings& gs,
+        const TVector<TString>& addrs,
+        const TDynConfigSettings& settings,
+        const IEnv& env) const
+    {
         TMaybe<NKikimr::NClient::TConfigurationResult> res;
         bool success = false;
         TString error;
-
-        TVector<TString> addrs;
-        cf.FillClusterEndpoints(AppConfig, addrs);
-
-        const TString domainName = DeduceNodeDomain(cf);
 
         SetRandomSeed(TInstant::Now().MicroSeconds());
         int minAttempts = 10;
         int attempts = 0;
         while (!success && attempts < minAttempts) {
             for (auto addr : addrs) {
-                success = TryToLoadConfigForDynamicNodeFromCMS(cf, addr, domainName, cf.GrpcSslSettings, Env, res, error);
+                success = TryToLoadConfigForDynamicNodeFromCMS(gs, addr, settings, env, res, error);
                 ++attempts;
                 if (success) {
                     break;
@@ -1217,7 +1228,7 @@ public:
             }
             // Randomized backoff
             if (!success) {
-                Env.Sleep(TDuration::MilliSeconds(500 + RandomNumber<ui64>(1000)));
+                env.Sleep(TDuration::MilliSeconds(500 + RandomNumber<ui64>(1000)));
             }
         }
 
@@ -1245,7 +1256,19 @@ public:
             return;
         }
 
-        TMaybe<NKikimr::NClient::TConfigurationResult> result = LoadConfigForDynamicNode(ConfigFields);
+        TVector<TString> addrs;
+        ConfigFields.FillClusterEndpoints(AppConfig, addrs);
+
+        TDynConfigSettings settings {
+            NodeId,
+            DeduceNodeDomain(ConfigFields, AppConfig),
+            ConfigFields.TenantName.GetRef(),
+            Env.FQDNHostName(),
+            ConfigFields.NodeType.GetRef(),
+            AppConfig.GetAuthConfig().GetStaffApiUserToken(),
+        };
+
+        TMaybe<NKikimr::NClient::TConfigurationResult> result = LoadConfigForDynamicNode(ConfigFields.GrpcSslSettings, addrs, settings, Env);
 
         if (!result) {
             return;

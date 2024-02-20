@@ -122,9 +122,11 @@ public:
             return;
         }
 
-        LOG_I("Operation successfully fetched, Status: " << response.Status << ", StatusCode: " << NYql::NDqProto::StatusIds::StatusCode_Name(response.StatusCode) << " Issues: " << response.Issues.ToOneLineString());
+        auto statusCode = NYql::NDq::YdbStatusToDqStatus(response.StatusCode);
+        LOG_I("Operation successfully fetched, Status: " << response.Status << ", StatusCode: " << NYql::NDqProto::StatusIds::StatusCode_Name(statusCode) << " Issues: " << response.Issues.ToOneLineString());
+
         OnPingRequestStart();
-        Fq::Private::PingTaskRequest pingTaskRequest = GetPingTaskRequest(FederatedQuery::QueryMeta::ABORTING_BY_USER, NYql::NDq::YdbStatusToDqStatus(response.StatusCode), response.Issues, response.QueryStats);
+        Fq::Private::PingTaskRequest pingTaskRequest = GetPingTaskRequest(FederatedQuery::QueryMeta::ABORTING_BY_USER, statusCode, response.Issues, response.QueryStats);
         Send(Pinger, new TEvents::TEvForwardPingRequest(pingTaskRequest));
     }
 

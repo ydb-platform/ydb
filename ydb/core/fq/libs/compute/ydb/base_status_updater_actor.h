@@ -12,7 +12,7 @@ namespace NFq {
 template<typename TDerived>
 class TBaseStatusUpdaterActor : public TBaseComputeActor<TDerived> {
 public:
-    using TBase = NActors::TActorBootstrapped<TDerived>;
+    using TBase = TBaseComputeActor<TDerived>;
 
     TBaseStatusUpdaterActor(const NConfig::TCommonConfig& commonConfig, const ::NYql::NCommon::TServiceCounters& queryCounters, const TString& stepName)
         : TBase(queryCounters, stepName)

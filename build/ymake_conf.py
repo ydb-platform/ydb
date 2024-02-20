@@ -2302,6 +2302,8 @@ class Cuda(object):
             "--expt-extended-lambda",
             # Allow host code to invoke __device__ constexpr functions and vice versa
             "--expt-relaxed-constexpr",
+            # Allow to use newer compilers than CUDA Toolkit officially supports
+            "--allow-unsupported-compiler",
         ]
 
         if not self.have_cuda.value:
@@ -2374,10 +2376,10 @@ class Cuda(object):
             if not self.cuda_version.from_user:
                 return False
 
-        if self.cuda_version.value in ('8.0', '9.0', '9.1', '9.2', '10.0'):
-            raise ConfigureError('CUDA versions 8.x, 9.x and 10.0 are no longer supported.\nSee DEVTOOLS-7108.')
+        if self.cuda_version.value in ('8.0', '9.0', '9.1', '9.2', '10.0', '10.1'):
+            raise ConfigureError('CUDA versions 8.x, 9.x and 10.x are no longer supported.\nSee DEVTOOLS-7108 and DTCC-2118.')
 
-        if self.cuda_version.value in ('10.1', '11.0', '11.1', '11.3', '11.4', '11.8', '12.1'):
+        if self.cuda_version.value in ('11.0', '11.1', '11.3', '11.4', '11.8', '12.1'):
             return True
 
         return False

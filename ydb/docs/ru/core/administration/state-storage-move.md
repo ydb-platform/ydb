@@ -25,7 +25,7 @@ domains_config:
 
 Чтобы переместить State Storage с хоста `node_id:1` на `node_id:10`:
 
-1. Остановите статические узлы кластера на хостах с `node_id:1` и `node_id:10`.
+1. [Остановите статические узлы](../maintenance/maintenance_without_outages.md#restart-or-stop-node) кластера на хостах с `node_id:1` и `node_id:10`.
 
     {% include [fault-tolerance](../_includes/fault-tolerance.md) %}
 1. В конфигурационном файле `config.yaml` измените список хостов `node`, заменив идентификатор удаляемого хоста на идентификатор добавляемого:
@@ -42,5 +42,5 @@ domains_config:
     ```
 
 1. Обновите конфигурационные файлы `config.yaml` для всех узлов кластера, в том числе и динамических.
-1. С помощью процедуры [rolling-restart](../maintenance/manual/node_restarting.md) перезапустите все узлы кластера, включая динамические, кроме статических узлов на хостах с `node_id:1` и `node_id:10`.
+1. С помощью процедуры [rolling-restart](../maintenance/maintenance_without_outages.md#rolling-restart) перезапустите все узлы кластера, включая динамические, кроме статических узлов на хостах с `node_id:1` и `node_id:10`.
 1. Запустите статические узлы кластера на хостах `node_id:1` и `node_id:10`.

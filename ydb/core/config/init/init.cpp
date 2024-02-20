@@ -227,20 +227,20 @@ class TDefaultNodeBrokerClient
     };
 
     static NYdb::NDiscovery::TNodeRegistrationResult TryToRegisterDynamicNodeViaDiscoveryService(
-            const TGrpcSslSettings& gs,
+            const TGrpcSslSettings& grpcSettings,
             const TString addr,
-            const NYdb::NDiscovery::TNodeRegistrationSettings& nrs,
+            const NYdb::NDiscovery::TNodeRegistrationSettings& settings,
             const IEnv& env)
     {
         TCommandConfig::TServerEndpoint endpoint = TCommandConfig::ParseServerAddress(addr);
         NYdb::TDriverConfig config;
         if (endpoint.EnableSsl.Defined()) {
-            if (gs.PathToGrpcCaFile) {
-                config.UseSecureConnection(env.ReadFromFile(gs.PathToGrpcCaFile, "CA certificates").c_str());
+            if (grpcSettings.PathToGrpcCaFile) {
+                config.UseSecureConnection(env.ReadFromFile(grpcSettings.PathToGrpcCaFile, "CA certificates").c_str());
             }
-            if (gs.PathToGrpcCertFile && gs.PathToGrpcPrivateKeyFile) {
-                auto certificate = env.ReadFromFile(gs.PathToGrpcCertFile, "Client certificates");
-                auto privateKey = env.ReadFromFile(gs.PathToGrpcPrivateKeyFile, "Client certificates key");
+            if (grpcSettings.PathToGrpcCertFile && grpcSettings.PathToGrpcPrivateKeyFile) {
+                auto certificate = env.ReadFromFile(grpcSettings.PathToGrpcCertFile, "Client certificates");
+                auto privateKey = env.ReadFromFile(grpcSettings.PathToGrpcPrivateKeyFile, "Client certificates key");
                 config.UseClientCertificate(certificate.c_str(), privateKey.c_str());
             }
         }
@@ -249,45 +249,45 @@ class TDefaultNodeBrokerClient
         auto connection = NYdb::TDriver(config);
 
         auto client = NYdb::NDiscovery::TDiscoveryClient(connection);
-        NYdb::NDiscovery::TNodeRegistrationResult result = client.NodeRegistration(nrs).GetValueSync();
+        NYdb::NDiscovery::TNodeRegistrationResult result = client.NodeRegistration(settings).GetValueSync();
         connection.Stop(true);
         return result;
     }
 
     static THolder<NClient::TRegistrationResult> TryToRegisterDynamicNodeViaLegacyService(
-            const TGrpcSslSettings& rgs,
+            const TGrpcSslSettings& grpcSettings,
             const TString& addr,
-            const TNodeRegistrationSettings& rs,
+            const TNodeRegistrationSettings& settings,
             const IEnv& env)
     {
-        NClient::TKikimr kikimr(GetKikimr(rgs, addr, env));
+        NClient::TKikimr kikimr(GetKikimr(grpcSettings, addr, env));
         auto registrant = kikimr.GetNodeRegistrant();
 
         return MakeHolder<NClient::TRegistrationResult>(
             registrant.SyncRegisterNode(
-                ToString(rs.DomainName),
-                rs.NodeHost,
-                rs.InterconnectPort,
-                rs.NodeAddress,
-                rs.NodeResolveHost,
-                rs.Location,
-                rs.FixedNodeID,
-                rs.Path));
+                ToString(settings.DomainName),
+                settings.NodeHost,
+                settings.InterconnectPort,
+                settings.NodeAddress,
+                settings.NodeResolveHost,
+                settings.Location,
+                settings.FixedNodeID,
+                settings.Path));
     }
 
     static THolder<NClient::TRegistrationResult> RegisterDynamicNodeViaLegacyService(
-        const TGrpcSslSettings& gs,
+        const TGrpcSslSettings& grpcSettings,
         const TVector<TString>& addrs,
-        const TNodeRegistrationSettings& rs,
+        const TNodeRegistrationSettings& settings,
         const IEnv& env)
     {
         THolder<NClient::TRegistrationResult> result;
         while (!result || !result->IsSuccess()) {
             for (const auto& addr : addrs) {
                 result = TryToRegisterDynamicNodeViaLegacyService(
-                    gs,
+                    grpcSettings,
                     addr,
-                    rs,
+                    settings,
                     env);
                 if (result->IsSuccess()) {
                     Cout << "Success. Registered via legacy service as " << result->GetNodeId() << Endl;
@@ -311,9 +311,9 @@ class TDefaultNodeBrokerClient
     }
 
    static  NYdb::NDiscovery::TNodeRegistrationResult RegisterDynamicNodeViaDiscoveryService(
-        const TGrpcSslSettings& gs,
+        const TGrpcSslSettings& grpcSettings,
         const TVector<TString>& addrs,
-        const NYdb::NDiscovery::TNodeRegistrationSettings& nrs,
+        const NYdb::NDiscovery::TNodeRegistrationSettings& settings,
         const IEnv& env)
     {
         NYdb::NDiscovery::TNodeRegistrationResult result;
@@ -322,9 +322,9 @@ class TDefaultNodeBrokerClient
         while (!result.IsSuccess() && currentNumberReceivedCallUnimplemented < maxNumberReceivedCallUnimplemented) {
             for (const auto& addr : addrs) {
                 result = TryToRegisterDynamicNodeViaDiscoveryService(
-                    gs,
+                    grpcSettings,
                     addr,
-                    nrs,
+                    settings,
                     env);
                 if (result.IsSuccess()) {
                     Cout << "Success. Registered via discovery service as " << result.GetNodeId() << Endl;
@@ -342,27 +342,27 @@ class TDefaultNodeBrokerClient
         return result;
     }
 
-    static NYdb::NDiscovery::TNodeRegistrationSettings GetNodeRegistrationSettings(const TNodeRegistrationSettings& rs)
+    static NYdb::NDiscovery::TNodeRegistrationSettings GetNodeRegistrationSettings(const TNodeRegistrationSettings& settings)
     {
-        NYdb::NDiscovery::TNodeRegistrationSettings settings;
-        settings.Host(rs.NodeHost);
-        settings.Port(rs.InterconnectPort);
-        settings.ResolveHost(rs.NodeResolveHost);
-        settings.Address(rs.NodeAddress);
-        settings.DomainPath(rs.DomainName);
-        settings.FixedNodeId(rs.FixedNodeID);
-        if (rs.Path) {
-            settings.Path(*rs.Path);
+        NYdb::NDiscovery::TNodeRegistrationSettings result;
+        result.Host(settings.NodeHost);
+        result.Port(settings.InterconnectPort);
+        result.ResolveHost(settings.NodeResolveHost);
+        result.Address(settings.NodeAddress);
+        result.DomainPath(settings.DomainName);
+        result.FixedNodeId(settings.FixedNodeID);
+        if (settings.Path) {
+            result.Path(*settings.Path);
         }
 
-        auto loc = rs.Location;
+        auto loc = settings.Location;
         NActorsInterconnect::TNodeLocation tmpLocation;
         loc.Serialize(&tmpLocation, false);
 
         NYdb::NDiscovery::TNodeLocation settingLocation;
         CopyNodeLocation(&settingLocation, tmpLocation);
-        settings.Location(settingLocation);
-        return settings;
+        result.Location(settingLocation);
+        return result;
     }
 
 public:
@@ -398,7 +398,7 @@ class TDefaultDynConfigClient
     : public IDynConfigClient
 {
     static bool TryToLoadConfigForDynamicNodeFromCMS(
-        const TGrpcSslSettings& gs,
+        const TGrpcSslSettings& grpcSettings,
         const TString &addr,
         const TDynConfigSettings& settings,
         const IEnv& env,
@@ -406,7 +406,7 @@ class TDefaultDynConfigClient
         TString &error)
     {
         NClient::TKikimr kikimr(GetKikimr(
-                    gs,
+                    grpcSettings,
                     addr,
                     env));
         auto configurator = kikimr.GetNodeConfigurator();
@@ -436,7 +436,7 @@ class TDefaultDynConfigClient
     }
 public:
     TMaybe<NKikimr::NClient::TConfigurationResult> GetConfig(
-        const TGrpcSslSettings& gs,
+        const TGrpcSslSettings& grpcSettings,
         const TVector<TString>& addrs,
         const TDynConfigSettings& settings,
         const IEnv& env) const override
@@ -450,7 +450,7 @@ public:
         int attempts = 0;
         while (!success && attempts < minAttempts) {
             for (auto addr : addrs) {
-                success = TryToLoadConfigForDynamicNodeFromCMS(gs, addr, settings, env, res, error);
+                success = TryToLoadConfigForDynamicNodeFromCMS(grpcSettings, addr, settings, env, res, error);
                 ++attempts;
                 if (success) {
                     break;

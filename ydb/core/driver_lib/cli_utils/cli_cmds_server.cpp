@@ -34,7 +34,19 @@ public:
         NKikimrConfig::TAppConfig appConfig;
 
         TKikimrRunConfig RunConfig(appConfig);
-        // FIXME: fill from InitCfg
+
+        InitCfg.Apply(
+            appConfig,
+            RunConfig.NodeId,
+            RunConfig.ScopeId,
+            RunConfig.TenantName,
+            RunConfig.ServicesMask,
+            RunConfig.Labels,
+            RunConfig.ClusterName,
+            RunConfig.InitialCmsConfig,
+            RunConfig.InitialCmsYamlConfig,
+            RunConfig.ConfigInitInfo);
+
         Y_ABORT_UNLESS(RunConfig.NodeId);
         return MainRun(RunConfig, Factories);
     }

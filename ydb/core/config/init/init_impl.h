@@ -57,7 +57,6 @@ struct TCallContext {
 
 #define CALL_CTX() ::NKikimr::NConfig::TCallContext{__FILE__, __LINE__}
 
-
 constexpr TStringBuf NODE_KIND_YDB = "ydb";
 constexpr TStringBuf NODE_KIND_YQ = "yq";
 
@@ -1130,7 +1129,7 @@ public:
             cf.NodeResolveHost = cf.NodeHost;
         }
 
-        const TNodeRegistrationSettings rs {
+        const TNodeRegistrationSettings settings {
             domainName,
             cf.NodeHost,
             cf.NodeAddress,
@@ -1141,7 +1140,7 @@ public:
             cf.CreateNodeLocation(),
         };
 
-        auto result = NodeBrokerClient.RegisterDynamicNode(cf.GrpcSslSettings, addrs, rs, Env);
+        auto result = NodeBrokerClient.RegisterDynamicNode(cf.GrpcSslSettings, addrs, settings, Env);
 
         result->Apply(AppConfig, NodeId, ScopeId);
     }
@@ -1216,6 +1215,30 @@ public:
             });
 
         opts.SetFreeArgDefaultTitle("PATH", "path to protobuf file; files are merged in order in which they are enlisted");
+    }
+
+    void Apply(
+        NKikimrConfig::TAppConfig& appConfig,
+        ui32& nodeId,
+        TKikimrScopeId& scopeId,
+        TString& tenantName,
+        TBasicKikimrServicesMask& servicesMask,
+        TMap<TString, TString>& labels,
+        TString& clusterName,
+        NKikimrConfig::TAppConfig& initialCmsConfig,
+        NKikimrConfig::TAppConfig& initialCmsYamlConfig,
+        THashMap<ui32, TConfigItemInfo>& configInitInfo) const override
+    {
+        appConfig = AppConfig;
+        nodeId = NodeId;
+        scopeId = ScopeId;
+        tenantName = TenantName;
+        servicesMask = ServicesMask;
+        labels = Labels;
+        clusterName = ClusterName;
+        initialCmsConfig.CopyFrom(InitDebug.OldConfig);
+        initialCmsYamlConfig.CopyFrom(InitDebug.YamlConfig);
+        configInitInfo = InitDebug.ConfigTransformInfo;
     }
 };
 

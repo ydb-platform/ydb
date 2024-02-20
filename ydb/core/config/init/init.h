@@ -5,6 +5,7 @@
 #include <ydb/core/protos/config.pb.h>
 #include <ydb/library/actors/core/interconnect.h>
 #include <ydb/public/lib/deprecated/kicli/kicli.h>
+#include <ydb/core/driver_lib/run/config.h>
 
 #include <library/cpp/getopt/small/last_getopt_opts.h>
 
@@ -121,6 +122,17 @@ public:
     virtual void RegisterCliOptions(NLastGetopt::TOpts& opts) = 0;
     virtual void ValidateOptions(const NLastGetopt::TOpts& opts, const NLastGetopt::TOptsParseResult& parseResult) = 0;
     virtual void Parse(const TVector<TString>& freeArgs) = 0;
+    virtual void Apply(
+        NKikimrConfig::TAppConfig& appConfig,
+        ui32& nodeId,
+        TKikimrScopeId& scopeId,
+        TString& tenantName,
+        TBasicKikimrServicesMask& servicesMask,
+        TMap<TString, TString>& labels,
+        TString& clusterName,
+        NKikimrConfig::TAppConfig& initialCmsConfig,
+        NKikimrConfig::TAppConfig& initialCmsYamlConfig,
+        THashMap<ui32, TConfigItemInfo>& configInitInfo) const = 0;
 };
 
 std::unique_ptr<IConfigUpdateTracer> MakeDefaultConfigUpdateTracer();
@@ -170,6 +182,31 @@ public:
 
     void Parse(const TVector<TString>& freeArgs) {
         Impl->Parse(freeArgs);
+    }
+
+    void Apply(
+        NKikimrConfig::TAppConfig& appConfig,
+        ui32& nodeId,
+        TKikimrScopeId& scopeId,
+        TString& tenantName,
+        TBasicKikimrServicesMask& servicesMask,
+        TMap<TString, TString>& labels,
+        TString& clusterName,
+        NKikimrConfig::TAppConfig& initialCmsConfig,
+        NKikimrConfig::TAppConfig& initialCmsYamlConfig,
+        THashMap<ui32, TConfigItemInfo>& configInitInfo) const
+    {
+        Impl->Apply(
+            appConfig,
+            nodeId,
+            scopeId,
+            tenantName,
+            servicesMask,
+            labels,
+            clusterName,
+            initialCmsConfig,
+            initialCmsYamlConfig,
+            configInitInfo);
     }
 
 private:

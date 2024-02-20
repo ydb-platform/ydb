@@ -150,7 +150,9 @@ public:
                                     if (data == nullptr) {
                                         str << "<i>&lt;null&gt;</i>";
                                     } else {
-                                        switch(tuple.Types[i].GetTypeId()) {
+                                        if (tuple.Types[i].GetTypeId() > NScheme::NTypeIds::PgFamily) {
+                                            str << "(Pg) " << NPg::PgTypeNameFromTypeDesc(tuple.Types[i].GetTypeDesc());
+                                        } else switch(tuple.Types[i].GetTypeId()) {
                                         case NScheme::NTypeIds::Int8:
                                             str << *(i8*)data;
                                             break;
@@ -219,10 +221,6 @@ public:
                                         case NScheme::NTypeIds::DyNumber: {
                                             const auto number = NDyNumber::DyNumberToString(TStringBuf((const char*)data, size));
                                             str << "(DyNumber) " << number;
-                                            break;
-                                        }
-                                        case NScheme::NTypeIds::Pg: {
-                                            str << "(Pg) " << NPg::PgTypeNameFromTypeDesc(tuple.Types[i].GetTypeDesc());
                                             break;
                                         }
                                         default:

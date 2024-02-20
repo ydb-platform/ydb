@@ -1747,7 +1747,7 @@ private:
                     auto* meta = res.add_columns();
                     meta->set_name(col.Name);
 
-                    if (col.PType.GetTypeId() == NScheme::NTypeIds::Pg) {
+                    if (col.PType.GetTypeId() > NScheme::NTypeIds::PgFamily) {
                         auto* typeDesc = col.PType.GetTypeDesc();
                         auto* pg = meta->mutable_type()->mutable_pg_type();
                         pg->set_type_name(NPg::PgTypeNameFromTypeDesc(typeDesc));

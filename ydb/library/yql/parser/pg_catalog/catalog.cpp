@@ -1745,6 +1745,7 @@ const TTypeDesc& LookupType(ui32 typeId) {
     const auto& catalog = TCatalog::Instance();
     const auto typePtr = catalog.Types.FindPtr(typeId);
     if (!typePtr) {
+        PrintBackTrace();
         throw yexception() << "No such type: " << typeId;
     }
 

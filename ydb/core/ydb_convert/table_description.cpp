@@ -481,7 +481,7 @@ void FillColumnDescription(Ydb::Table::DescribeTableResult& out, const NKikimrSc
 
     for (const auto& column : schema.GetColumns()) {
         Y_ENSURE(
-            column.GetTypeId() != NScheme::NTypeIds::Pg || !column.GetNotNull(),
+            column.GetTypeId() < NScheme::NTypeIds::PgFamily || !column.GetNotNull(),
             "It is not allowed to create NOT NULL column with pg type"
         );
         auto newColumn = out.add_columns();
@@ -544,13 +544,13 @@ bool ExtractColumnTypeInfo(NScheme::TTypeInfo& outTypeInfo, TString& outTypeMod,
         case Ydb::Type::kPgType: {
             const auto& pgType = itemType.pg_type();
             const auto& typeName = pgType.type_name();
-            auto* desc = NPg::TypeDescFromPgTypeName(typeName);
+            const auto desc = NPg::TypeDescFromPgTypeName(typeName);
             if (!desc) {
                 status = Ydb::StatusIds::BAD_REQUEST;
                 error = TStringBuilder() << "Invalid PG type name: " << typeName;
                 return false;
             }
-            outTypeInfo = NScheme::TTypeInfo(NScheme::NTypeIds::Pg, desc);
+            outTypeInfo = NScheme::TTypeInfo(NScheme::NTypeIds::PgFamily + NPg::PgTypeIdFromTypeDesc(desc), desc);
             outTypeMod = pgType.type_modifier();
             return true;
         }

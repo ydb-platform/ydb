@@ -13,9 +13,7 @@ public:
         : TypeId(typeId)
         , TypeDesc(typeDesc)
     {
-        if (TypeId != NTypeIds::Pg) {
-            Y_ABORT_UNLESS(!TypeDesc);
-        }
+        Y_ABORT_UNLESS(!TypeDesc);
     }
 
     bool operator==(const TTypeInfo& other) const {

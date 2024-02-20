@@ -753,7 +753,7 @@ virtual TStatus HandleCreateTable(TKiCreateTable create, TExprContext& ctx) over
             if (actualType->GetKind() == ETypeAnnotationKind::Pg) {
                 auto pgTypeId = actualType->Cast<TPgExprType>()->GetId();
                 columnMeta.TypeInfo = NKikimr::NScheme::TTypeInfo(
-                    NKikimr::NScheme::NTypeIds::Pg,
+                    NKikimr::NScheme::NTypeIds::PgFamily + pgTypeId,
                     NKikimr::NPg::TypeDescFromPgTypeId(pgTypeId)
                 );
             }

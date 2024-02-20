@@ -1038,6 +1038,10 @@ TACLAttrs::TACLAttrs(ui32 access)
 
 bool CheckValueData(NScheme::TTypeInfo type, const TCell& cell, TString& err) {
     bool ok = true;
+    if (type.GetTypeId() > NScheme::NTypeIds::PgFamily)
+         // no pg validation here
+       return ok;
+
     switch (type.GetTypeId()) {
     case NScheme::NTypeIds::Bool:
     case NScheme::NTypeIds::Int8:
@@ -1097,10 +1101,6 @@ bool CheckValueData(NScheme::TTypeInfo type, const TCell& cell, TString& err) {
         // Uuid value was verified at parsing time
         break;
 
-    case NScheme::NTypeIds::Pg:
-        // no pg validation here
-        break;
-
     default:
         err = Sprintf("Unexpected type %d", type.GetTypeId());
         return false;
@@ -1136,7 +1136,55 @@ bool CellFromProtoVal(NScheme::TTypeInfo type, i32 typmod, const Ydb::Value* vp,
             break; \
         }
 
-    switch (type.GetTypeId()) {
+    if (type.GetTypeId() > NScheme::NTypeIds::PgFamily) {
+        TString binary;
+        bool isText = false;
+        TString text = val.Gettext_value();
+        if (!text.empty()) {
+            isText = true;
+            auto desc = type.GetTypeDesc();
+            auto res = NPg::PgNativeBinaryFromNativeText(text, desc);
+            if (res.Error) {
+                err = TStringBuilder() << "Invalid text value for "
+                    << NPg::PgTypeNameFromTypeDesc(desc) << ": " << *res.Error;
+                return false;
+            }
+            binary = res.Str;
+        } else {
+            binary = val.Getbytes_value();
+        }
+        auto* desc = type.GetTypeDesc();
+        if (typmod != -1 && NPg::TypeDescNeedsCoercion(desc)) {
+            auto res = NPg::PgNativeBinaryCoerce(TStringBuf(binary), desc, typmod);
+            if (res.Error) {
+                err = TStringBuilder() << "Unable to coerce value for "
+                    << NPg::PgTypeNameFromTypeDesc(desc) << ": " << *res.Error;
+                return false;
+            }
+            if (res.NewValue) {
+                const auto valueInPool = valueDataPool.AppendString(TStringBuf(*res.NewValue));
+                c = TCell(valueInPool.data(), valueInPool.size());
+            } else if (isText) {
+                const auto valueInPool = valueDataPool.AppendString(TStringBuf(binary));
+                c = TCell(valueInPool.data(), valueInPool.size());
+            } else {
+                c = TCell(binary.data(), binary.size());
+            }
+        } else {
+            auto error = NPg::PgNativeBinaryValidate(TStringBuf(binary), desc);
+            if (error) {
+                err = TStringBuilder() << "Invalid binary value for "
+                    << NPg::PgTypeNameFromTypeDesc(desc) << ": " << *error;
+                return false;
+            }
+            if (isText) {
+                const auto valueInPool = valueDataPool.AppendString(TStringBuf(binary));
+                c = TCell(valueInPool.data(), valueInPool.size());
+            } else {
+                c = TCell(binary.data(), binary.size());
+            }
+        }
+    } else switch (type.GetTypeId()) {
     EXTRACT_VAL(Bool, bool, ui8);
     EXTRACT_VAL(Int8, int32, i8);
     EXTRACT_VAL(Uint8, uint32, ui8);
@@ -1192,60 +1240,11 @@ bool CellFromProtoVal(NScheme::TTypeInfo type, i32 typmod, const Ydb::Value* vp,
         c = TCell((const char*)&valInPool, sizeof(valInPool));
         break;
     }
-    case NScheme::NTypeIds::Pg : {
-        TString binary;
-        bool isText = false;
-        TString text = val.Gettext_value();
-        if (!text.empty()) {
-            isText = true;
-            auto desc = type.GetTypeDesc();
-            auto res = NPg::PgNativeBinaryFromNativeText(text, desc);
-            if (res.Error) {
-                err = TStringBuilder() << "Invalid text value for "
-                    << NPg::PgTypeNameFromTypeDesc(desc) << ": " << *res.Error;
-                return false;
-            }
-            binary = res.Str;
-        } else {
-            binary = val.Getbytes_value();
-        }
-        auto* desc = type.GetTypeDesc();
-        if (typmod != -1 && NPg::TypeDescNeedsCoercion(desc)) {
-            auto res = NPg::PgNativeBinaryCoerce(TStringBuf(binary), desc, typmod);
-            if (res.Error) {
-                err = TStringBuilder() << "Unable to coerce value for "
-                    << NPg::PgTypeNameFromTypeDesc(desc) << ": " << *res.Error;
-                return false;
-            }
-            if (res.NewValue) {
-                const auto valueInPool = valueDataPool.AppendString(TStringBuf(*res.NewValue));
-                c = TCell(valueInPool.data(), valueInPool.size());
-            } else if (isText) {
-                const auto valueInPool = valueDataPool.AppendString(TStringBuf(binary));
-                c = TCell(valueInPool.data(), valueInPool.size());
-            } else {
-                c = TCell(binary.data(), binary.size());
-            }
-        } else {
-            auto error = NPg::PgNativeBinaryValidate(TStringBuf(binary), desc);
-            if (error) {
-                err = TStringBuilder() << "Invalid binary value for "
-                    << NPg::PgTypeNameFromTypeDesc(desc) << ": " << *error;
-                return false;
-            }
-            if (isText) {
-                const auto valueInPool = valueDataPool.AppendString(TStringBuf(binary));
-                c = TCell(valueInPool.data(), valueInPool.size());
-            } else {
-                c = TCell(binary.data(), binary.size());
-            }
-        }
-        break;
-    }
     default:
         err = Sprintf("Unexpected type %d", type.GetTypeId());
         return false;
-    };
+    }
+
 
     return CheckValueData(type, c, err);
 }

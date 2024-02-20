@@ -22,6 +22,9 @@ namespace NKikimr {
 namespace NSchemeShard {
 
 inline bool IsAllowedKeyType(NScheme::TTypeInfo typeInfo) {
+    if (typeInfo.GetTypeId() > NScheme::NTypeIds::PgFamily)
+        return NPg::TypeDescIsComparable(typeInfo.GetTypeDesc());
+
     switch (typeInfo.GetTypeId()) {
         case NScheme::NTypeIds::Json:
         case NScheme::NTypeIds::Yson:
@@ -29,8 +32,6 @@ inline bool IsAllowedKeyType(NScheme::TTypeInfo typeInfo) {
         case NScheme::NTypeIds::Double:
         case NScheme::NTypeIds::JsonDocument:
             return false;
-        case NScheme::NTypeIds::Pg:
-            return NPg::TypeDescIsComparable(typeInfo.GetTypeDesc());
         default:
             return true;
     }

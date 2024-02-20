@@ -268,7 +268,7 @@ bool TArrowToYdbConverter::Process(const arrow::RecordBatch& batch, TString& err
         ui32 col = 0;
         for (auto& [colName, colType] : YdbSchema_) {
             // TODO: support pg types
-            Y_ABORT_UNLESS(colType.GetTypeId() != NScheme::NTypeIds::Pg, "pg types are not supported");
+            Y_ABORT_UNLESS(colType.GetTypeId() < NScheme::NTypeIds::PgFamily, "pg types are not supported");
 
             auto& column = allColumns[col];
             bool success = SwitchYqlTypeToArrowType(colType, [&]<typename TType>(TTypeWrapper<TType> typeHolder) {
@@ -318,7 +318,7 @@ bool TArrowToYdbConverter::Process(const arrow::RecordBatch& batch, TString& err
         ui32 col = 0;
         for (auto& [colName, colType] : YdbSchema_) {
             // TODO: support pg types
-            Y_ABORT_UNLESS(colType.GetTypeId() != NScheme::NTypeIds::Pg, "pg types are not supported");
+            Y_ABORT_UNLESS(colType.GetTypeId() < NScheme::NTypeIds::PgFamily, "pg types are not supported");
 
             auto& column = allColumns[col];
             auto& curCell = cells[0][col];

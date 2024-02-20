@@ -18,15 +18,12 @@ TBytesStatistics GetUnboxedValueSize(const NUdf::TUnboxedValue& value, const NSc
     if (!value) {
         return { sizeof(NUdf::TUnboxedValue), 8 }; // Special value for NULL elements
     }
-    switch (type.GetTypeId()) {
-        case NTypeIds::Pg:
-        {
-            return {
-                sizeof(NUdf::TUnboxedValue),
-                PgValueSize(value, NPg::TypeDescGetTypeLen(type.GetTypeDesc()))
-            };
-        }
-
+    if (type.GetTypeId() > NTypeIds::PgFamily) {
+        return {
+            sizeof(NUdf::TUnboxedValue),
+            PgValueSize(value, NPg::TypeDescGetTypeLen(type.GetTypeDesc()))
+        };
+    } else switch (type.GetTypeId()) {
         case NTypeIds::Bool:
         case NTypeIds::Int8:
         case NTypeIds::Uint8:
@@ -398,10 +395,6 @@ TBytesStatistics WriteColumnValuesFromArrowImpl(TAccessor editAccessor,
             Y_VERIFY_DEBUG_S(false, "Unsupported (deprecated) type: " << NScheme::TypeName(columnType.GetTypeId()));
             return WriteColumnValuesFromArrowSpecImpl<TElementAccessor<arrow::FixedSizeBinaryArray, NUdf::TStringRef>>(editAccessor, batch, columnIndex, columnPtr, columnType);
         }
-        case NTypeIds::Pg:
-            // TODO: support pg types
-            YQL_ENSURE(false, "Unsupported pg type at column " << columnIndex);
-
         default:
             YQL_ENSURE(false, "Unsupported type: " << NScheme::TypeName(columnType.GetTypeId()) << " at column " << columnIndex);
     }

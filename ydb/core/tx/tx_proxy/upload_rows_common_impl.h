@@ -404,7 +404,7 @@ private:
         } else if (reqColumns.empty()) {
             for (auto& [name, typeInfo] : SrcColumns) {
                 Ydb::Type ydbType;
-                if (typeInfo.GetTypeId() != NScheme::NTypeIds::Pg) {
+                if (typeInfo.GetTypeId() > NScheme::NTypeIds::PgFamily) {
                     ydbType.set_type_id((Ydb::Type::PrimitiveTypeId)typeInfo.GetTypeId());
                 } else {
                     auto* typeDesc = typeInfo.GetTypeDesc();
@@ -461,7 +461,7 @@ private:
                                            name.c_str(), typeName.c_str());
                     return false;
                 }
-                auto typeInRequest = NScheme::TTypeInfo(NScheme::NTypeIds::Pg, typeDesc);
+                auto typeInRequest = NScheme::TTypeInfo(NScheme::NTypeIds::PgFamily + NPg::PgTypeIdFromTypeDesc(typeDesc), typeDesc);
                 bool ok = SameDstType(typeInRequest, ci.PType, false);
                 if (!ok) {
                     errorMessage = Sprintf("Type mismatch for column %s: expected %s, got %s",

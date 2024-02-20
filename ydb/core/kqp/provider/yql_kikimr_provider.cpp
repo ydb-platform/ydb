@@ -220,14 +220,14 @@ bool TKikimrTableDescription::Load(TExprContext& ctx, bool withSystemColumns) {
                 ToString(NKikimr::NScheme::DECIMAL_PRECISION),
                 ToString(NKikimr::NScheme::DECIMAL_SCALE));
         } else {
-            if (column.TypeInfo.GetTypeId() != NKikimr::NScheme::NTypeIds::Pg) {
+            if (column.TypeInfo.GetTypeId() < NKikimr::NScheme::NTypeIds::PgFamily) {
                 type = ctx.MakeType<TDataExprType>(NKikimr::NUdf::GetDataSlot(column.Type));
             } else {
                 type = ctx.MakeType<TPgExprType>(NKikimr::NPg::PgTypeIdFromTypeDesc(column.TypeInfo.GetTypeDesc()));
             }
         }
 
-        if (!column.NotNull && column.TypeInfo.GetTypeId() != NKikimr::NScheme::NTypeIds::Pg) {
+        if (!column.NotNull && column.TypeInfo.GetTypeId() < NKikimr::NScheme::NTypeIds::PgFamily) {
             type = ctx.MakeType<TOptionalExprType>(type);
         }
 

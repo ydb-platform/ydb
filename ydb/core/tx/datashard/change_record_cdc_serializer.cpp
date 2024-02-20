@@ -162,9 +162,6 @@ protected:
             return StringToJson(NBinaryJson::SerializeToJson(cell.AsBuf()));
         case NScheme::NTypeIds::Yson:
             return YsonToJson(cell.AsBuf());
-        case NScheme::NTypeIds::Pg:
-            // TODO: support pg types
-            Y_ABORT("pg types are not supported");
         default:
             Y_ABORT("Unexpected type");
         }

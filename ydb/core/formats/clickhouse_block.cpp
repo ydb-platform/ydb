@@ -479,10 +479,6 @@ public:
         CONVERT(ActorId,        String);
         CONVERT(StepOrderId,    String);
 
-        case NScheme::NTypeIds::Pg:
-            // TODO: support pg types
-            throw yexception() << "Unsupported pg type";
-
         default:
             throw yexception() << "Unsupported type: " << type.GetTypeId();
         }
@@ -542,8 +538,8 @@ size_t AddValue(const TMutableColumnPtr& column, const TCell& cell, NScheme::TTy
     if (cell.IsNull()) {
         AddNull(column);
     } else {
-        auto typeId = type.GetTypeId();
-        if (typeId == NScheme::NTypeIds::Pg) {
+        const auto typeId = type.GetTypeId();
+        if (typeId >= NScheme::NTypeIds::PgFamily) {
             // TODO: support pg types
             Y_ABORT_UNLESS(false, "pg types are not supported");
         } else if (typeId == NScheme::NTypeIds::Decimal) {

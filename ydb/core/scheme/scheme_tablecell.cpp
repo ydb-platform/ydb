@@ -388,7 +388,7 @@ TString DbgPrintCell(const TCell& r, NScheme::TTypeInfo typeInfo, const NScheme:
     auto typeId = typeInfo.GetTypeId();
     TString res;
 
-    if (typeId == NScheme::NTypeIds::Pg) {
+    if (typeId > NScheme::NTypeIds::PgFamily) {
         res = NPg::PgTypeNameFromTypeDesc(typeInfo.GetTypeDesc());
     } else {
         NScheme::ITypeSP t = reg.GetType(typeId);
@@ -437,7 +437,7 @@ void DbgPrintValue(TString &res, const TCell &r, NScheme::TTypeInfo typeInfo) {
         case NScheme::NTypeIds::ActorId:
             res += ToString(r.AsValue<NActors::TActorId>());
             break;
-        case NScheme::NTypeIds::Pg:
+        case NScheme::NTypeIds::PgFamily:
             // TODO: support pg types
             break;
         default:

@@ -59,7 +59,7 @@ NScheme::TTypeInfo UnpackTypeInfo(NKikimr::NMiniKQL::TType* type) {
     if (type->GetKind() == NMiniKQL::TType::EKind::Pg) {
         auto pgType = static_cast<NMiniKQL::TPgType*>(type);
         auto pgTypeId = pgType->GetTypeId();
-        return NScheme::TTypeInfo(NScheme::NTypeIds::Pg, NPg::TypeDescFromPgTypeId(pgTypeId));
+        return NScheme::TTypeInfo(NScheme::NTypeIds::PgFamily + pgTypeId, NPg::TypeDescFromPgTypeId(pgTypeId));
     } else {
         bool isOptional = false;
         auto dataType = NMiniKQL::UnpackOptionalData(type, isOptional);
@@ -152,7 +152,7 @@ TKqpStreamLookupWorker::TKqpStreamLookupWorker(NKikimrKqp::TKqpStreamLookupSetti
                 keyColumn.GetId(),
                 NScheme::TTypeInfo{
                     static_cast<NScheme::TTypeId>(keyColumn.GetTypeId()),
-                    keyColumn.GetTypeId() == NScheme::NTypeIds::Pg
+                    keyColumn.GetTypeId() > NScheme::NTypeIds::PgFamily
                         ? NPg::TypeDescFromPgTypeId(keyColumn.GetTypeInfo().GetPgTypeId())
                         : nullptr
                 },
@@ -175,7 +175,7 @@ TKqpStreamLookupWorker::TKqpStreamLookupWorker(NKikimrKqp::TKqpStreamLookupSetti
             column.GetName(),
             column.GetId(),
             NScheme::TTypeInfo{static_cast<NScheme::TTypeId>(column.GetTypeId()),
-                column.GetTypeId() == NScheme::NTypeIds::Pg
+                column.GetTypeId() > NScheme::NTypeIds::PgFamily
                     ? NPg::TypeDescFromPgTypeId(column.GetTypeInfo().GetPgTypeId())
                     : nullptr,
             },

@@ -6,7 +6,7 @@ namespace NKikimr::NScheme {
 TProtoColumnType ProtoColumnTypeFromTypeInfoMod(const TTypeInfo typeInfo, const ::TString& typeMod) {
     TProtoColumnType columnType;
     columnType.TypeId = (ui32)typeInfo.GetTypeId();
-    if (typeInfo.GetTypeId() == NTypeIds::Pg) {
+    if (typeInfo.GetTypeId() > NTypeIds::PgFamily) {
         Y_ABORT_UNLESS(typeInfo.GetTypeDesc(), "no pg type descriptor");
         columnType.TypeInfo = NKikimrProto::TTypeInfo();
         columnType.TypeInfo->SetPgTypeId(NPg::PgTypeIdFromTypeDesc(typeInfo.GetTypeDesc()));
@@ -19,7 +19,7 @@ TProtoColumnType ProtoColumnTypeFromTypeInfoMod(const TTypeInfo typeInfo, const 
 
 TTypeInfoMod TypeInfoModFromProtoColumnType(ui32 typeId, const NKikimrProto::TTypeInfo* typeInfo) {
     auto type = (TTypeId)typeId;
-    if (type == NTypeIds::Pg) {
+    if (type > NTypeIds::PgFamily) {
         Y_ABORT_UNLESS(typeInfo, "no type info for pg type");
         TTypeInfoMod res;
         res.TypeInfo = TTypeInfo(type, NPg::TypeDescFromPgTypeId(typeInfo->GetPgTypeId()));

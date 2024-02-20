@@ -46,7 +46,7 @@ TKqpScanFetcherActor::TKqpScanFetcherActor(const NKikimrKqp::TKqpSnapshot& snaps
         auto typeId = Meta.GetKeyColumnTypes().at(i);
         KeyColumnTypes.push_back(NScheme::TTypeInfo(
             (NScheme::TTypeId)typeId,
-            (typeId == NScheme::NTypeIds::Pg) ?
+            (typeId > NScheme::NTypeIds::PgFamily) ?
             NPg::TypeDescFromPgTypeId(
                 Meta.GetKeyColumnTypeInfos().at(i).GetPgTypeId()
             ) : nullptr

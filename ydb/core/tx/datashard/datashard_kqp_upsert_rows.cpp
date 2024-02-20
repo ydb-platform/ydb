@@ -69,7 +69,7 @@ public:
                 NUdf::TUnboxedValue value = Row.GetElement(rowIndex);
 
                 if (value) {
-                    if (type.GetTypeId() != NScheme::NTypeIds::Pg) {
+                    if (type.GetTypeId() < NScheme::NTypeIds::PgFamily) {
                         auto slot = NUdf::GetDataSlot(type.GetTypeId());
                         MKQL_ENSURE(IsValidValue(slot, value),
                             "Malformed value for type: " << NUdf::GetDataTypeInfo(slot).Name << ", " << value);

@@ -165,8 +165,10 @@ bool SwitchYqlTypeToArrowType(const NScheme::TTypeInfo& typeInfo, TFunc&& callba
         case NScheme::NTypeIds::StepOrderId:
             break; // Deprecated types
 
-        case NScheme::NTypeIds::Pg:
-            break; // TODO: support pg types
+        case NYql::NProto::PgDecimal:
+            return callback(TTypeWrapper<arrow::Decimal128Type>());
+
+//            break; // TODO: support pg types
     }
     return false;
 }

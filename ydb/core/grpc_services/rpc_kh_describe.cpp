@@ -178,7 +178,7 @@ private:
             colMeta->set_name(col.second.Name);
             auto& typeInfo = col.second.PType;
             auto* item = colMeta->mutable_type();
-            if (typeInfo.GetTypeId() == NScheme::NTypeIds::Pg) {
+            if (typeInfo.GetTypeId() > NScheme::NTypeIds::PgFamily) {
                 auto* typeDesc = typeInfo.GetTypeDesc();
                 auto* pg = item->mutable_pg_type();
                 pg->set_type_name(NPg::PgTypeNameFromTypeDesc(typeDesc));

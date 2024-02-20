@@ -250,7 +250,22 @@ inline int CompareTypedCells(const TCell& a, const TCell& b, NScheme::TTypeInfoO
         return (va.second < vb.second) != type.IsDescending() ? -1 : 1;
     }
 
-    case NKikimr::NScheme::NTypeIds::Pg:
+    case NScheme::NTypeIds::PgBool:
+    case NScheme::NTypeIds::PgBytea:
+    case NScheme::NTypeIds::PgChar:
+    case NScheme::NTypeIds::PgInt8:
+    case NScheme::NTypeIds::PgInt2:
+    case NScheme::NTypeIds::PgInt4:
+    case NScheme::NTypeIds::PgText:
+    case NScheme::NTypeIds::PgFloat4:
+    case NScheme::NTypeIds::PgFloat8:
+    case NScheme::NTypeIds::PgVarchar:
+    case NScheme::NTypeIds::PgDate:
+    case NScheme::NTypeIds::PgTime:
+    case NScheme::NTypeIds::PgTimemstamp:
+    case NScheme::NTypeIds::PgInterval:
+    case NScheme::NTypeIds::PgDecimal:
+    case NScheme::NTypeIds::PgCstring:
     {
         auto typeDesc = type.GetTypeDesc();
         Y_ABORT_UNLESS(typeDesc, "no pg type descriptor");
@@ -348,7 +363,7 @@ inline ui64 GetValueHash(NScheme::TTypeInfo info, const TCell& cell) {
         break;
     }
 
-    if (typeId == NKikimr::NScheme::NTypeIds::Pg) {
+    if (typeId > NKikimr::NScheme::NTypeIds::PgFamily) {
         auto typeDesc = info.GetTypeDesc();
         Y_ABORT_UNLESS(typeDesc, "no pg type descriptor");
         return NPg::PgNativeBinaryHash(cell.Data(), cell.Size(), typeDesc);

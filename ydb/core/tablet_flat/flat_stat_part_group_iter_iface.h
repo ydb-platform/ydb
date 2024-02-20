@@ -26,6 +26,7 @@ struct TDataStats {
 struct IStatsPartGroupIterator {
     virtual EReady Start() = 0;
     virtual EReady Next() = 0;
+    virtual void AddLastDeltaDataSize(TChanneledDataSize& dataSize) = 0;
 
     virtual bool IsValid() const = 0;
 

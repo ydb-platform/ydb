@@ -67,29 +67,30 @@ public:
     EReady Next(TDataStats& stats) {
         Y_ABORT_UNLESS(IsValid());
 
-        auto curPageId = Groups[0]->GetPageId();
         LastRowId = Groups[0]->GetRowId();
         auto ready = Groups[0]->Next();
         if (ready == EReady::Page) {
+            Y_DEBUG_ABORT_UNLESS(false, "Shouldn't really happen");
             return ready;
         }
 
         ui64 rowCount = CountUnscreenedRows(GetLastRowId(), GetCurrentRowId());
         stats.RowCount += rowCount;
         if (rowCount) {
-            AddPageSize(stats.DataSize, curPageId, TGroupId(0));
+            Groups[0]->AddLastDeltaDataSize(stats.DataSize);
         }
         
         TRowId nextRowId = ready == EReady::Data ? Groups[0]->GetRowId() : Max<TRowId>();
         for (auto groupIndex : xrange<ui32>(1, Groups.size())) {
             while (Groups[groupIndex]->IsValid() && Groups[groupIndex]->GetRowId() < nextRowId) {
                 // eagerly include all data up to the next row id
-                if (rowCount) {
-                    AddPageSize(stats.DataSize, Groups[groupIndex]->GetPageId(), TGroupId(groupIndex));
-                }
                 if (Groups[groupIndex]->Next() == EReady::Page) {
+                    Y_DEBUG_ABORT_UNLESS(false, "Shouldn't really happen");
                     ready = EReady::Page;
                     break;
+                }
+                if (rowCount) {
+                    Groups[groupIndex]->AddLastDeltaDataSize(stats.DataSize);
                 }
             }
         }
@@ -98,24 +99,26 @@ public:
             Y_DEBUG_ABORT_UNLESS(Part->Scheme->HistoryGroup.ColsKeyIdx.size() == 3);
             while (HistoricGroups[0]->IsValid() && (!HistoricGroups[0]->GetKeyCellsCount() || HistoricGroups[0]->GetKeyCell(0).AsValue<TRowId>() < nextRowId)) {
                 // eagerly include all history up to the next row id
-                if (rowCount) {
-                    AddPageSize(stats.DataSize, HistoricGroups[0]->GetPageId(), TGroupId(0, true));
-                }
                 if (HistoricGroups[0]->Next() == EReady::Page) {
+                    Y_DEBUG_ABORT_UNLESS(false, "Shouldn't really happen");
                     ready = EReady::Page;
                     break;
+                }
+                if (rowCount) {
+                    HistoricGroups[0]->AddLastDeltaDataSize(stats.DataSize);
                 }
             }
             TRowId nextHistoryRowId = HistoricGroups[0]->IsValid() ? HistoricGroups[0]->GetRowId() : Max<TRowId>();
             for (auto groupIndex : xrange<ui32>(1, Groups.size())) {
                 while (HistoricGroups[groupIndex]->IsValid() && HistoricGroups[groupIndex]->GetRowId() < nextHistoryRowId) {
                     // eagerly include all data up to the next row id
-                    if (rowCount) {
-                        AddPageSize(stats.DataSize, HistoricGroups[groupIndex]->GetPageId(), TGroupId(groupIndex, true));
-                    }
                     if (HistoricGroups[groupIndex]->Next() == EReady::Page) {
+                        Y_DEBUG_ABORT_UNLESS(false, "Shouldn't really happen");
                         ready = EReady::Page;
                         break;
+                    }
+                    if (rowCount) {
+                        HistoricGroups[groupIndex]->AddLastDeltaDataSize(stats.DataSize);
                     }
                 }
             }
@@ -154,13 +157,6 @@ private:
             return endRowId;
         }
         return LastRowId;
-    }
-
-    void AddPageSize(TChanneledDataSize& stats, TPageId pageId, TGroupId groupId) const {
-        // TODO: move to IStatsPartGroupIterator
-        ui64 size = Part->GetPageSize(pageId, groupId);
-        ui8 channel = Part->GetPageChannel(groupId);
-        stats.Add(size, channel);
     }
 
     void FillKey() {

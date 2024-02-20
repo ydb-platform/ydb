@@ -85,7 +85,7 @@ public:
         return EPage(PageCollections[groupId.Index]->PageCollection->Page(id).Type);
     }
 
-    ui8 GetPageChannel(NPage::TGroupId groupId) const override
+    ui8 GetGroupChannel(NPage::TGroupId groupId) const override
     {
         Y_ABORT_UNLESS(groupId.Index < PageCollections.size());
         return PageCollections[groupId.Index]->Id.Channel();

@@ -25,13 +25,15 @@ class TStatsPartGroupBtreeIndexIterator : public IStatsPartGroupIterator {
         TCellsIterable EndKey;
         std::optional<TBtreeIndexNode> Node;
         std::optional<TRecIdx> Pos;
+        ui64 DataSize;
 
-        TNodeState(TPageId pageId, TRowId beginRowId, TRowId endRowId, TCellsIterable beginKey, TCellsIterable endKey)
+        TNodeState(TPageId pageId, TRowId beginRowId, TRowId endRowId, TCellsIterable beginKey, TCellsIterable endKey, ui64 dataSize)
             : PageId(pageId)
             , BeginRowId(beginRowId)
             , EndRowId(endRowId)
             , BeginKey(beginKey)
             , EndKey(endKey)
+            , DataSize(dataSize)
         {
         }
 
@@ -72,9 +74,12 @@ public:
         , GroupInfo(part->Scheme->GetLayout(groupId))
         , Meta(groupId.IsHistoric() ? part->IndexPages.BTreeHistoric[groupId.Index] : part->IndexPages.BTreeGroups[groupId.Index])
         , State(Reserve(Meta.LevelCount + 1))
+        , GroupChannel(Part->GetGroupChannel(GroupId))
+        , PrevDataSize(0)
+        , PrevPrevDataSize(0)
     {
         const static TCellsIterable EmptyKey(static_cast<const char*>(nullptr), TColumns());
-        State.emplace_back(Meta.PageId, 0, GetEndRowId(), EmptyKey, EmptyKey);
+        State.emplace_back(Meta.PageId, 0, GetEndRowId(), EmptyKey, EmptyKey, Meta.DataSize);
     }
     
     EReady Start() override {
@@ -83,6 +88,9 @@ public:
 
     EReady Next() override {
         Y_ABORT_UNLESS(!IsExhausted());
+
+        PrevPrevDataSize = PrevDataSize;
+        PrevDataSize = State.back().DataSize;
 
         if (Meta.LevelCount == 0) {
             return Exhaust();
@@ -110,6 +118,13 @@ public:
         // State.back() points to the target data page
         Y_ABORT_UNLESS(IsLeaf());
         return EReady::Data;
+    }
+
+    void AddLastDeltaDataSize(TChanneledDataSize& dataSize) override {
+        Y_ABORT_UNLESS(IsExhausted() || IsLeaf());
+        Y_DEBUG_ABORT_UNLESS(PrevDataSize >= PrevPrevDataSize);
+        ui64 delta = PrevDataSize - PrevPrevDataSize;
+        dataSize.Add(delta, GroupChannel);
     }
 
 public:
@@ -208,7 +223,9 @@ private:
         TCellsIterable beginKey = pos ? current.Node->GetKeyCellsIterable(pos - 1, GroupInfo.ColsKeyIdx) : current.BeginKey;
         TCellsIterable endKey = pos < current.Node->GetKeysCount() ? current.Node->GetKeyCellsIterable(pos, GroupInfo.ColsKeyIdx) : current.EndKey;
         
-        State.emplace_back(child.PageId, beginRowId, endRowId, beginKey, endKey);
+        ui64 dataSize = child.DataSize;
+
+        State.emplace_back(child.PageId, beginRowId, endRowId, beginKey, endKey, dataSize);
     }
 
     bool TryLoad(TNodeState& state) {
@@ -231,6 +248,8 @@ private:
     const TPartScheme::TGroupInfo& GroupInfo;
     const TBtreeIndexMeta Meta;
     TVector<TNodeState> State;
+    ui8 GroupChannel;
+    ui64 PrevDataSize, PrevPrevDataSize;
 };
 
 }

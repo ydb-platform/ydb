@@ -61,6 +61,10 @@ struct TCounters {
         Counters[name] = TEntry(value);
     }
 
+    void SetTimeCounter(const TString& name, i64 value) const {
+        SetCounter(name, value * 1000); // ms => us
+    }
+
     THashMap<i64, ui64>& GetHistogram(const TString& name) {
         return Histograms[name];
     }

@@ -1,8 +1,9 @@
 #pragma once
 #include <ydb/library/actors/core/event_pb.h>
 #include <ydb/core/tx/columnshard/blobs_action/protos/events.pb.h>
-#include <ydb/core/tx/columnshard/columnshard.h>
 #include <ydb/core/tx/columnshard/blob.h>
+#include <ydb/core/tx/columnshard/columnshard.h>
+#include <ydb/core/tx/columnshard/common/tablet_id.h>
 
 namespace NKikimr::NOlap::NBlobOperations::NEvents {
 
@@ -22,6 +23,10 @@ struct TEvDeleteSharedBlobs: public NActors::TEventPB<TEvDeleteSharedBlobs, NKik
 struct TEvDeleteSharedBlobsFinished: public NActors::TEventPB<TEvDeleteSharedBlobsFinished,
     NKikimrColumnShardBlobOperationsProto::TEvDeleteSharedBlobsFinished, TEvColumnShard::EvDeleteSharedBlobsFinished> {
     TEvDeleteSharedBlobsFinished() = default;
+    TEvDeleteSharedBlobsFinished(const TTabletId tabletId)
+    {
+        Record.SetTabletId((ui64)tabletId);
+    }
 };
 
 }

@@ -583,6 +583,7 @@ class TPortionsBucket: public TMoveOnly {
 private:
     std::shared_ptr<TPortionInfo> MainPortion;
     const std::shared_ptr<TCounters> Counters;
+    mutable std::optional<i64> LastWeight;
     TPortionsPool Others;
     std::optional<NArrow::TReplaceKey> NextBorder;
 
@@ -700,7 +701,16 @@ public:
     }
 
     i64 GetWeight() const {
-        return Others.GetWeight(MainPortion, !NextBorder);
+        LastWeight = Others.GetWeight(MainPortion, !NextBorder);
+        return *LastWeight;
+    }
+
+    i64 GetLastWeight() const {
+        if (LastWeight) {
+            return *LastWeight;
+        } else {
+            return GetWeight();
+        }
     }
 
     std::shared_ptr<TColumnEngineChanges> BuildOptimizationTask(const TCompactionLimits& limits, std::shared_ptr<TGranuleMeta> granule,
@@ -839,7 +849,7 @@ private:
     }
 
     void RemoveBucketFromRating(const std::shared_ptr<TPortionsBucket>& bucket) {
-        auto it = BucketsByWeight.find(bucket->GetWeight());
+        auto it = BucketsByWeight.find(bucket->GetLastWeight());
         AFL_VERIFY(it != BucketsByWeight.end());
         AFL_VERIFY(it->second.erase(bucket.get()));
         if (it->second.empty()) {

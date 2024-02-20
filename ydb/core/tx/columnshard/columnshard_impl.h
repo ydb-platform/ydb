@@ -429,7 +429,6 @@ private:
     TIntrusivePtr<TMediatorTimecastEntry> MediatorTimeCastEntry;
     bool MediatorTimeCastRegistered = false;
     TSet<ui64> MediatorTimeCastWaitingSteps;
-    TDuration MaxReadStaleness = TDuration::Minutes(5); // TODO: Make configurable?
     const TDuration PeriodicWakeupActivationPeriod;
     TDuration FailActivationDelay = TDuration::Seconds(1);
     const TDuration StatsReportInterval;
@@ -534,6 +533,10 @@ public:
     template <class T>
     const T& GetIndexAs() const {
         return TablesManager.GetPrimaryIndexAsVerified<T>();
+    }
+
+    bool HasIndex() const {
+        return !!TablesManager.GetPrimaryIndex();
     }
 
     NOlap::TSnapshot GetLastPlannedSnapshot() const {

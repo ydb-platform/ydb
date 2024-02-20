@@ -10,4 +10,5 @@ message TEvDeleteSharedBlobs {
 }
 
 message TEvDeleteSharedBlobsFinished {
+    optional uint64 TabletId = 1;
 }

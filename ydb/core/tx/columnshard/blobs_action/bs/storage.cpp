@@ -29,7 +29,7 @@ std::shared_ptr<IBlobsGCAction> TOperator::DoStartGCAction(const std::shared_ptr
     auto requests = gcTask->BuildRequests(PerGenerationCounter, Manager->GetTabletId(), Manager->GetCurrentGen());
     AFL_VERIFY(requests.size());
     AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("event", "StartGC")("requests_count", requests.size());
-    TActorContext::AsActorContext().Register(new TGarbageCollectionActor(gcTask, std::move(requests), TabletActorId));
+    TActorContext::AsActorContext().Register(new TGarbageCollectionActor(gcTask, std::move(requests), TabletActorId, GetSelfTabletId()));
     return gcTask;
 }
 

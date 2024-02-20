@@ -20,8 +20,8 @@ private:
         CheckFinished();
     }
 public:
-    TGarbageCollectionActor(const std::shared_ptr<TGCTask>& task, THashMap<ui32, std::unique_ptr<TEvBlobStorage::TEvCollectGarbage>>&& requests, const NActors::TActorId& tabletActorId)
-        : TBase(task->GetStorageId(), task->GetBlobsToRemove().GetBorrowed())
+    TGarbageCollectionActor(const std::shared_ptr<TGCTask>& task, THashMap<ui32, std::unique_ptr<TEvBlobStorage::TEvCollectGarbage>>&& requests, const NActors::TActorId& tabletActorId, const TTabletId selfTabletId)
+        : TBase(task->GetStorageId(), selfTabletId, task->GetBlobsToRemove().GetBorrowed())
         , TabletActorId(tabletActorId)
         , Requests(std::move(requests))
         , GCTask(task)

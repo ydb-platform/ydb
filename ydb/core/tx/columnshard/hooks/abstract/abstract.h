@@ -109,6 +109,9 @@ public:
     }
     virtual void OnIndexSelectProcessed(const std::optional<bool> /*result*/) {
     }
+    virtual TDuration GetReadTimeoutClean(const TDuration def) {
+        return def;
+    }
     virtual EOptimizerCompactionWeightControl GetCompactionControl() const {
         return EOptimizerCompactionWeightControl::Force;
     }

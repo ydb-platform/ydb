@@ -97,4 +97,17 @@ void TStorageSharedBlobsManager::OnTransactionExecuteAfterCleaning(const TBlobsC
     }
 }
 
+void TStorageSharedBlobsManager::OnTransactionCompleteAfterCleaning(const TBlobsCategories& removeTask) {
+    for (auto i = removeTask.GetSharing().GetIterator(); i.IsValid(); ++i) {
+        AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("action", "remove_share")("tablet_id_share", i.GetTabletId())("blob_id", i.GetBlobId().ToStringNew());
+        SharedBlobIds.Remove(i.GetTabletId(), i.GetBlobId());
+    }
+    for (auto i = removeTask.GetBorrowed().GetIterator(); i.IsValid(); ++i) {
+        AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("action", "remove_own")("tablet_id_own", i.GetTabletId())("blob_id", i.GetBlobId().ToStringNew());
+        auto it = BorrowedBlobIds.find(i.GetBlobId());
+        AFL_VERIFY(it != BorrowedBlobIds.end());
+        BorrowedBlobIds.erase(it);
+    }
+}
+
 }

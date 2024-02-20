@@ -458,7 +458,6 @@ private:
     TIntrusivePtr<TMediatorTimecastEntry> MediatorTimeCastEntry;
     bool MediatorTimeCastRegistered = false;
     TSet<ui64> MediatorTimeCastWaitingSteps;
-    TDuration MaxReadStaleness = TDuration::Minutes(5); // TODO: Make configurable?
     const TDuration PeriodicWakeupActivationPeriod;
     TDuration FailActivationDelay = TDuration::Seconds(1);
     const TDuration StatsReportInterval;

@@ -22,8 +22,8 @@ private:
         CheckFinished();
     }
 public:
-    TGarbageCollectionActor(const std::shared_ptr<TGCTask>& task, const NActors::TActorId& tabletActorId)
-        : TBase(task->GetStorageId(), task->GetBlobsToRemove().GetBorrowed())
+    TGarbageCollectionActor(const std::shared_ptr<TGCTask>& task, const NActors::TActorId& tabletActorId, const TTabletId selfTabletId)
+        : TBase(task->GetStorageId(), selfTabletId, task->GetBlobsToRemove().GetBorrowed())
         , TabletActorId(tabletActorId)
         , GCTask(task)
     {

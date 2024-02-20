@@ -386,7 +386,7 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
             TBase::SendDataViaActorSystem(TablePath, batch);
         }
 
-        void FillPKOnly(const ui32 pkKff = 0, const ui32 numRows = 800000) const {
+        void FillPKOnly(const double pkKff = 0, const ui32 numRows = 800000) const {
             std::vector<NArrow::NConstruction::IArrayBuilder::TPtr> builders;
             builders.emplace_back(std::make_shared<NArrow::NConstruction::TSimpleArrayConstructor<NArrow::NConstruction::TIntSeqFiller<arrow::Int64Type>>>("pk_int", numRows * pkKff));
             NArrow::NConstruction::TRecordBatchConstructor batchBuilder(builders);
@@ -3729,8 +3729,8 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
     Y_UNIT_TEST(StatsSysViewEnumStringBytes) {
         ui64 rawBytesPK1;
         ui64 bytesPK1;
-        auto csController = NYDBTest::TControllers::RegisterCSControllerGuard<NYDBTest::NColumnShard::TController>();
         {
+            auto csController = NYDBTest::TControllers::RegisterCSControllerGuard<NYDBTest::NColumnShard::TController>();
             auto settings = TKikimrSettings()
                 .SetWithSampleTables(false);
             TKikimrRunner kikimr(settings);
@@ -3741,6 +3741,7 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
             helper.GetVolumes(rawBytesPK1, bytesPK1, false);
         }
 
+        auto csController = NYDBTest::TControllers::RegisterCSControllerGuard<NYDBTest::NColumnShard::TController>();
         ui64 rawBytesUnpack1PK = 0;
         ui64 bytesUnpack1PK = 0;
         ui64 rawBytesPackAndUnpack2PK;
@@ -3895,19 +3896,31 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
             NOlap::NDataSharing::TDestinationSession session(std::make_shared<TTestController>(), pathIdsRemap, sessionId, transferContext);
             Runner.GetTestServer().GetRuntime()->Send(MakePipePeNodeCacheID(false), NActors::TActorId(), new TEvPipeCache::TEvForward(
                 new NOlap::NDataSharing::NEvents::TEvProposeFromInitiator(session), destination, false));
-            while (!CSTransferStatus->GetProposed()) {
-                Sleep(TDuration::Seconds(1));
-                Cerr << "WAIT_PROPOSING..." << Endl;
+            {
+                const TInstant start = TInstant::Now();
+                while (!CSTransferStatus->GetProposed() && TInstant::Now() - start < TDuration::Seconds(10)) {
+                    Sleep(TDuration::Seconds(1));
+                    Cerr << "WAIT_PROPOSING..." << Endl;
+                }
+                AFL_VERIFY(CSTransferStatus->GetProposed());
             }
             Runner.GetTestServer().GetRuntime()->Send(MakePipePeNodeCacheID(false), NActors::TActorId(), new TEvPipeCache::TEvForward(
                 new NOlap::NDataSharing::NEvents::TEvConfirmFromInitiator(sessionId), destination, false));
-            while (!CSTransferStatus->GetConfirmed()) {
-                Sleep(TDuration::Seconds(1));
-                Cerr << "WAIT_CONFIRMED..." << Endl;
+            {
+                const TInstant start = TInstant::Now();
+                while (!CSTransferStatus->GetConfirmed() && TInstant::Now() - start < TDuration::Seconds(10)) {
+                    Sleep(TDuration::Seconds(1));
+                    Cerr << "WAIT_CONFIRMED..." << Endl;
+                }
+                AFL_VERIFY(CSTransferStatus->GetConfirmed());
             }
-            while (!CSTransferStatus->GetFinished()) {
-                Sleep(TDuration::Seconds(1));
-                Cerr << "WAIT_FINISHED..." << Endl;
+            {
+                const TInstant start = TInstant::Now();
+                while (!CSTransferStatus->GetFinished() && TInstant::Now() - start < TDuration::Seconds(10)) {
+                    Sleep(TDuration::Seconds(1));
+                    Cerr << "WAIT_FINISHED..." << Endl;
+                }
+                AFL_VERIFY(CSTransferStatus->GetFinished());
             }
             CSTransferStatus->Reset();
         }
@@ -3915,6 +3928,7 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
 
     Y_UNIT_TEST(BlobsSharingSplit1_1) {
         auto csController = NYDBTest::TControllers::RegisterCSControllerGuard<NYDBTest::NColumnShard::TController>();
+        csController->SetCompactionControl(NYDBTest::EOptimizerCompactionWeightControl::Disable);
 
         auto settings = TKikimrSettings().SetWithSampleTables(false);
         TKikimrRunner kikimr(settings);
@@ -3929,10 +3943,44 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
         AFL_VERIFY(pathIds.size() == 1)("count", pathIds.size())("ids", JoinSeq(",", pathIds));
         Sleep(TDuration::Seconds(1));
         TSharingActor(kikimr).Execute(shardIds[0], {shardIds[1]}, false, NOlap::TSnapshot(TInstant::Now().MilliSeconds(), 1232123), {pathIds[0]});
+        AFL_VERIFY(!csController->IsTrivialLinks());
+    }
+
+    Y_UNIT_TEST(BlobsSharingSplit1_1_clean) {
+        auto csController = NYDBTest::TControllers::RegisterCSControllerGuard<NYDBTest::NColumnShard::TController>();
+        csController->SetCompactionControl(NYDBTest::EOptimizerCompactionWeightControl::Disable);
+        csController->SetPeriodicWakeupActivationPeriod(TDuration::Seconds(1));
+        csController->SetReadTimeoutClean(TDuration::Seconds(1));
+
+        auto settings = TKikimrSettings().SetWithSampleTables(false);
+        TKikimrRunner kikimr(settings);
+        Tests::NCommon::TLoggerInit(kikimr).Initialize();
+        TTypedLocalHelper helper("", kikimr, "olapTable", "olapStore12");
+        helper.CreateTestOlapTable(2, 2);
+        helper.FillPKOnly(0, 80000);
+
+        auto shardIds = csController->GetShardActualIds();
+        AFL_VERIFY(shardIds.size() == 2)("count", shardIds.size())("ids", JoinSeq(",", shardIds));
+        auto pathIds = csController->GetPathIds(shardIds[0]);
+        AFL_VERIFY(pathIds.size() == 1)("count", pathIds.size())("ids", JoinSeq(",", pathIds));
+        Sleep(TDuration::Seconds(1));
+        TSharingActor(kikimr).Execute(shardIds[0], {shardIds[1]}, false, NOlap::TSnapshot(TInstant::Now().MilliSeconds(), 1232123), {pathIds[0]});
+        AFL_VERIFY(!csController->IsTrivialLinks());
+        helper.FillPKOnly(0.8, 80000);
+
+        csController->SetCompactionControl(NYDBTest::EOptimizerCompactionWeightControl::Force);
+        const auto start = TInstant::Now();
+        while (!csController->IsTrivialLinks() && TInstant::Now() - start < TDuration::Seconds(15000)) {
+            Cerr << "WAIT_TRIVIAL_LINKS..." << Endl;
+            Sleep(TDuration::Seconds(1));
+        }
+        AFL_VERIFY(csController->IsTrivialLinks());
+        csController->CheckInvariants();
     }
 
     Y_UNIT_TEST(BlobsSharingSplit3_1) {
         auto csController = NYDBTest::TControllers::RegisterCSControllerGuard<NYDBTest::NColumnShard::TController>();
+        csController->SetCompactionControl(NYDBTest::EOptimizerCompactionWeightControl::Disable);
 
         auto settings = TKikimrSettings()
             .SetWithSampleTables(false);
@@ -3948,10 +3996,12 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
         AFL_VERIFY(pathIds.size() == 1)("count", pathIds.size())("ids", JoinSeq(",", pathIds));
         Sleep(TDuration::Seconds(1));
         TSharingActor(kikimr).Execute(shardIds[0], {shardIds[1], shardIds[2], shardIds[3]}, false, NOlap::TSnapshot(TInstant::Now().MilliSeconds(), 1232123), {pathIds[0]});
+        AFL_VERIFY(!csController->IsTrivialLinks());
     }
 
     Y_UNIT_TEST(BlobsSharingSplit1_3_1) {
         auto csController = NYDBTest::TControllers::RegisterCSControllerGuard<NYDBTest::NColumnShard::TController>();
+        csController->SetCompactionControl(NYDBTest::EOptimizerCompactionWeightControl::Disable);
 
         auto settings = TKikimrSettings()
             .SetWithSampleTables(false);
@@ -3970,10 +4020,14 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
         TSharingActor(kikimr).Execute(shardIds[2], {shardIds[0]}, false, NOlap::TSnapshot(TInstant::Now().MilliSeconds(), 1232123), {pathIds[0]});
         TSharingActor(kikimr).Execute(shardIds[3], {shardIds[0]}, false, NOlap::TSnapshot(TInstant::Now().MilliSeconds(), 1232123), {pathIds[0]});
         TSharingActor(kikimr).Execute(shardIds[0], {shardIds[1], shardIds[2], shardIds[3]}, true, NOlap::TSnapshot(TInstant::Now().MilliSeconds(), 1232123), {pathIds[0]});
+        AFL_VERIFY(!csController->IsTrivialLinks());
     }
 
-    Y_UNIT_TEST(BlobsSharingSplit1_3_2_1) {
+    Y_UNIT_TEST(BlobsSharingSplit1_3_2_1_clean) {
         auto csController = NYDBTest::TControllers::RegisterCSControllerGuard<NYDBTest::NColumnShard::TController>();
+        csController->SetCompactionControl(NYDBTest::EOptimizerCompactionWeightControl::Disable);
+        csController->SetPeriodicWakeupActivationPeriod(TDuration::Seconds(1));
+        csController->SetReadTimeoutClean(TDuration::Seconds(1));
 
         auto settings = TKikimrSettings()
             .SetWithSampleTables(false);
@@ -3991,9 +4045,20 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
         TSharingActor(kikimr).Execute(shardIds[1], {shardIds[0]}, false, NOlap::TSnapshot(TInstant::Now().MilliSeconds(), 1232123), {pathIds[0]});
         TSharingActor(kikimr).Execute(shardIds[2], {shardIds[0]}, false, NOlap::TSnapshot(TInstant::Now().MilliSeconds(), 1232123), {pathIds[0]});
         TSharingActor(kikimr).Execute(shardIds[3], {shardIds[0]}, false, NOlap::TSnapshot(TInstant::Now().MilliSeconds(), 1232123), {pathIds[0]});
-        helper.FillPKOnly(1, 800000);
+        AFL_VERIFY(!csController->IsTrivialLinks());
+        helper.FillPKOnly(0.9, 800000);
         TSharingActor(kikimr).Execute(shardIds[3], {shardIds[2]}, false, NOlap::TSnapshot(TInstant::Now().MilliSeconds(), 1232123), {pathIds[0]});
+        AFL_VERIFY(!csController->IsTrivialLinks());
         TSharingActor(kikimr).Execute(shardIds[0], {shardIds[1], shardIds[2]}, true, NOlap::TSnapshot(TInstant::Now().MilliSeconds(), 1232123), {pathIds[0]});
+        AFL_VERIFY(!csController->IsTrivialLinks());
+        csController->SetCompactionControl(NYDBTest::EOptimizerCompactionWeightControl::Force);
+        const auto start = TInstant::Now();
+        while (!csController->IsTrivialLinks() && TInstant::Now() - start < TDuration::Seconds(15)) {
+            Cerr << "WAIT_TRIVIAL_LINKS..." << Endl;
+            Sleep(TDuration::Seconds(1));
+        }
+        AFL_VERIFY(csController->IsTrivialLinks());
+        csController->CheckInvariants();
     }
 
     Y_UNIT_TEST(SelectLimit1ManyShards) {
@@ -5309,7 +5374,7 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
     Y_UNIT_TEST(Json_GetValue) {
         TAggregationTestCase testCase;
         testCase.SetQuery(R"(
-                SELECT id, JSON_VALUE(jsonval, "$.col1-proxy"), JSON_VALUE(jsondoc, "$.col1") FROM `/Root/tableWithNulls`
+                SELECT id, JSON_VALUE(jsonval, "$.col1"), JSON_VALUE(jsondoc, "$.col1") FROM `/Root/tableWithNulls`
                 WHERE JSON_VALUE(jsonval, "$.col1") = "val1" AND id = 1;
             )")
 #if SSA_RUNTIME_VERSION >= 3U

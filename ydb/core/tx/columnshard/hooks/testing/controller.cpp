@@ -18,6 +18,10 @@ bool TController::DoOnAfterFilterAssembling(const std::shared_ptr<arrow::RecordB
 
 bool TController::DoOnWriteIndexComplete(const NOlap::TColumnEngineChanges& /*changes*/, const ::NKikimr::NColumnShard::TColumnShard& /*shard*/) {
     Indexations.Inc();
+    TGuard<TMutex> g(Mutex);
+    if (SharingIds.empty()) {
+        CheckInvariants();
+    }
     return true;
 }
 
@@ -28,11 +32,14 @@ bool TController::DoOnStartCompaction(std::shared_ptr<NOlap::TColumnEngineChange
     return true;
 }
 
-void TController::DoOnAfterGCAction(const ::NKikimr::NColumnShard::TColumnShard& shard, const NOlap::IBlobsGCAction& action) {
+void TController::DoOnAfterGCAction(const ::NKikimr::NColumnShard::TColumnShard& /*shard*/, const NOlap::IBlobsGCAction& action) {
     for (auto d = action.GetBlobsToRemove().GetDirect().GetIterator(); d.IsValid(); ++d) {
-        AFL_VERIFY((ui64)d.GetTabletId() == shard.TabletID());
-        AFL_VERIFY(RemovedBlobIds[action.GetStorageId()].emplace(d.GetBlobId()).second);
+        AFL_VERIFY(RemovedBlobIds[action.GetStorageId()][d.GetBlobId()].emplace(d.GetTabletId()).second);
     }
+//    TGuard<TMutex> g(Mutex);
+//    if (SharingIds.empty()) {
+//        CheckInvariants();
+//    }
 }
 
 void TController::CheckInvariants(const ::NKikimr::NColumnShard::TColumnShard& shard, TCheckContext& context) const {
@@ -50,20 +57,22 @@ void TController::CheckInvariants(const ::NKikimr::NColumnShard::TColumnShard& s
             continue;
         }
         for (auto&& b : i.second) {
-            AFL_VERIFY(!it->second.contains(b));
+            auto itB = it->second.find(b);
+            if (itB != it->second.end()) {
+                AFL_VERIFY(!itB->second.contains((NOlap::TTabletId)shard.TabletID()));
+            }
         }
     }
-    THashMap<TString, NOlap::TBlobsCategories> categories = shard.GetStoragesManager()->GetSharedBlobsManager()->GetBlobCategories();
-    for (auto&& i : categories) {
-        auto it = ids.find(i.first);
-        for (auto cat = i.second.GetIterator(); cat.IsValid(); ++cat) {
-            AFL_VERIFY(it->second.contains(cat.GetBlobId()));
+    THashMap<TString, NOlap::TBlobsCategories> shardBlobsCategories = shard.GetStoragesManager()->GetSharedBlobsManager()->GetBlobCategories();
+    for (auto&& i : shardBlobsCategories) {
+        auto manager = shard.GetStoragesManager()->GetOperatorVerified(i.first);
+        const NOlap::TTabletsByBlob blobs = manager->GetBlobsToDelete();
+        for (auto b = blobs.GetIterator(); b.IsValid(); ++b) {
+            i.second.RemoveSharing(b.GetTabletId(), b.GetBlobId());
         }
-    }
-    THashMap<TString, NOlap::TBlobsCategories> shardBlobsCategories;
-    for (auto&& i : ids) {
-        auto storageSharingManager = shard.GetStoragesManager()->GetSharedBlobsManager()->GetStorageManagerVerified(i.first);
-        shardBlobsCategories.emplace(i.first, storageSharingManager->BuildStoreCategories(i.second));
+        for (auto b = blobs.GetIterator(); b.IsValid(); ++b) {
+            i.second.RemoveBorrowed(b.GetTabletId(), b.GetBlobId());
+        }
     }
     context.AddCategories(shard.TabletID(), std::move(shardBlobsCategories));
 }
@@ -104,6 +113,19 @@ std::vector<ui64> TController::GetPathIds(const ui64 tabletId) const {
         }
     }
     return result;
+}
+
+bool TController::IsTrivialLinks() const {
+    TGuard<TMutex> g(Mutex);
+    for (auto&& i : ShardActuals) {
+        if (!i.second->GetStoragesManager()->GetSharedBlobsManager()->IsTrivialLinks()) {
+            return false;
+        }
+        if (i.second->GetStoragesManager()->HasBlobsToDelete()) {
+            return false;
+        }
+    }
+    return true;
 }
 
 }

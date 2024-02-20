@@ -870,7 +870,7 @@ void TBasicServicesInitializer::InitializeServices(NActors::TActorSystemSetup* s
                     GET_FIELD_FROM_CONFIG(MaxSpansInBatch)
                     GET_FIELD_FROM_CONFIG(MaxBytesInBatch)
                     GET_FIELD_FROM_CONFIG(SpanExportTimeoutSeconds)
-                    GET_FIELD_FROM_CONFIG(MaxSpanExportInflight)
+                    GET_FIELD_FROM_CONFIG(MaxExportRequestsInflight)
 
 #undef GET_FIELD_FROM_CONFIG
 

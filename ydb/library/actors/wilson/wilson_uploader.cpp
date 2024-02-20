@@ -133,7 +133,7 @@ namespace NWilson {
                 , MaxBytesInBatch(params.MaxBytesInBatch)
                 , MaxBatchAccumulation(params.MaxBatchAccumulation)
                 , MaxSpanTimeInQueue(TDuration::Seconds(params.SpanExportTimeoutSeconds))
-                , MaxExportInflight(params.MaxSpanExportInflight)
+                , MaxExportInflight(params.MaxExportRequestsInflight)
                 , CollectorUrl(std::move(params.CollectorUrl))
                 , ServiceName(std::move(params.ServiceName))
                 , GrpcSigner(std::move(params.GrpcSigner))
@@ -158,7 +158,7 @@ namespace NWilson {
                     MaxSpansInBatch = 1;
                 }
                 if (MaxExportInflight == 0) {
-                    ALOG_WARN(WILSON_SERVICE_ID, "max_span_export_inflight should be greater than 0, channing to 1");
+                    ALOG_WARN(WILSON_SERVICE_ID, "max_span_export_inflight should be greater than 0, changing to 1");
                     MaxExportInflight = 1;
                 }
 
@@ -285,13 +285,13 @@ namespace NWilson {
                     GrpcSigner->SignClientContext(*context);
                 }
                 auto reader = Stub->AsyncExport(context.get(), std::move(batch.Request), &CQ);
-                auto uploadData = new TExportRequestData {
+                auto uploadData =  std::unique_ptr<TExportRequestData>(new TExportRequestData {
                     .Context = std::move(context),
                     .Reader = std::move(reader),
-                };
-                uploadData->Reader->Finish(&uploadData->Response, &uploadData->Status, uploadData);
-                ALOG_TRACE(WILSON_SERVICE_ID, "started export request " << (void*)uploadData);
-                ExportRequests.PushBack(uploadData);
+                });
+                uploadData->Reader->Finish(&uploadData->Response, &uploadData->Status, uploadData.get());
+                ALOG_TRACE(WILSON_SERVICE_ID, "started export request " << (void*)uploadData.get());
+                ExportRequests.PushBack(uploadData.release());
                 ++ExportRequestsCount;
             }
 
@@ -302,8 +302,8 @@ namespace NWilson {
                 void* tag;
                 bool ok;
                 while (CQ.AsyncNext(&tag, &ok, std::chrono::system_clock::now()) == grpc::CompletionQueue::GOT_EVENT) {
-                    auto node = static_cast<TExportRequestData*>(tag);
-                    ALOG_TRACE(WILSON_SERVICE_ID, "finished export request " << (void*)node);
+                    auto node = std::unique_ptr<TExportRequestData>(static_cast<TExportRequestData*>(tag));
+                    ALOG_TRACE(WILSON_SERVICE_ID, "finished export request " << (void*)node.get());
                     if (!node->Status.ok()) {
                         ALOG_ERROR(WILSON_SERVICE_ID,
                             "failed to commit traces: " << node->Status.error_message());
@@ -311,7 +311,6 @@ namespace NWilson {
                     
                     --ExportRequestsCount;
                     node->Unlink();
-                    delete node;
                 }
 
                 if (!ExportRequests.Empty()) {

@@ -1555,9 +1555,9 @@
     ],
     "test.test[pg-order_by_agg_input_columns_prj_and_keys_and_aggr-default.txt-Debug]": [
         {
-            "checksum": "cd7a1e26e7d3cd6ae8e89b4cf69e7a40",
-            "size": 1607,
-            "uri": "https://{canondata_backend}/1600758/2bae720d354fef176d7a7ae70957b1a227ff538a/resource.tar.gz#test.test_pg-order_by_agg_input_columns_prj_and_keys_and_aggr-default.txt-Debug_/opt.yql_patched"
+            "checksum": "0f058b9426b775c5becfd678c07f0854",
+            "size": 1677,
+            "uri": "https://{canondata_backend}/1600758/14d5560c6b6df65b25a7d0e4e072602b1a2a8743/resource.tar.gz#test.test_pg-order_by_agg_input_columns_prj_and_keys_and_aggr-default.txt-Debug_/opt.yql_patched"
         }
     ],
     "test.test[pg-order_by_agg_input_columns_prj_and_keys_and_aggr-default.txt-Plan]": [
@@ -1807,9 +1807,9 @@
     ],
     "test.test[pg-tpcds-q03-default.txt-Debug]": [
         {
-            "checksum": "9622d526d4972e896d6046ac9ac71c9a",
-            "size": 1059,
-            "uri": "https://{canondata_backend}/1781765/028f42f897160b53900546b39900217bb2eb9fb1/resource.tar.gz#test.test_pg-tpcds-q03-default.txt-Debug_/opt.yql_patched"
+            "checksum": "644eef35976320bb8290b90e23065094",
+            "size": 727,
+            "uri": "https://{canondata_backend}/1781765/8061b1bca1dbb79a1a8135dd98452c011059369f/resource.tar.gz#test.test_pg-tpcds-q03-default.txt-Debug_/opt.yql_patched"
         }
     ],
     "test.test[pg-tpcds-q03-default.txt-Plan]": [
@@ -1877,9 +1877,9 @@
     ],
     "test.test[pg-tpcds-q31-default.txt-Debug]": [
         {
-            "checksum": "b536ee2eb598a4152fd661311ccb3f6c",
-            "size": 880,
-            "uri": "https://{canondata_backend}/1781765/028f42f897160b53900546b39900217bb2eb9fb1/resource.tar.gz#test.test_pg-tpcds-q31-default.txt-Debug_/opt.yql_patched"
+            "checksum": "0acee3524e12581b10548bc72dc05c53",
+            "size": 759,
+            "uri": "https://{canondata_backend}/1781765/8061b1bca1dbb79a1a8135dd98452c011059369f/resource.tar.gz#test.test_pg-tpcds-q31-default.txt-Debug_/opt.yql_patched"
         }
     ],
     "test.test[pg-tpcds-q31-default.txt-Plan]": [
@@ -1919,9 +1919,9 @@
     ],
     "test.test[pg-tpcds-q44-default.txt-Debug]": [
         {
-            "checksum": "4ddf42fa3c3e960e82ee9a66b125381f",
-            "size": 974,
-            "uri": "https://{canondata_backend}/1781765/028f42f897160b53900546b39900217bb2eb9fb1/resource.tar.gz#test.test_pg-tpcds-q44-default.txt-Debug_/opt.yql_patched"
+            "checksum": "62d13159cf9bfd4987607f5189566427",
+            "size": 609,
+            "uri": "https://{canondata_backend}/1781765/8061b1bca1dbb79a1a8135dd98452c011059369f/resource.tar.gz#test.test_pg-tpcds-q44-default.txt-Debug_/opt.yql_patched"
         }
     ],
     "test.test[pg-tpcds-q44-default.txt-Plan]": [
@@ -1989,9 +1989,9 @@
     ],
     "test.test[pg-tpcds-q78-default.txt-Debug]": [
         {
-            "checksum": "37b04062c1d7361087b3983c23c7ec36",
-            "size": 1725,
-            "uri": "https://{canondata_backend}/1781765/028f42f897160b53900546b39900217bb2eb9fb1/resource.tar.gz#test.test_pg-tpcds-q78-default.txt-Debug_/opt.yql_patched"
+            "checksum": "b94d3f17b2683cba8d60d11a30808ca2",
+            "size": 1256,
+            "uri": "https://{canondata_backend}/1781765/8061b1bca1dbb79a1a8135dd98452c011059369f/resource.tar.gz#test.test_pg-tpcds-q78-default.txt-Debug_/opt.yql_patched"
         }
     ],
     "test.test[pg-tpcds-q78-default.txt-Plan]": [
@@ -2003,9 +2003,9 @@
     ],
     "test.test[pg-tpcds-q85-default.txt-Debug]": [
         {
-            "checksum": "61a79875b8d10cc038dc34e8ed8d3139",
-            "size": 1357,
-            "uri": "https://{canondata_backend}/1871002/2a28301cd702f47961195a0e9d71a1a846884662/resource.tar.gz#test.test_pg-tpcds-q85-default.txt-Debug_/opt.yql_patched"
+            "checksum": "b64b77214651e72022fef9f1e87aacde",
+            "size": 739,
+            "uri": "https://{canondata_backend}/1781765/8061b1bca1dbb79a1a8135dd98452c011059369f/resource.tar.gz#test.test_pg-tpcds-q85-default.txt-Debug_/opt.yql_patched"
         }
     ],
     "test.test[pg-tpcds-q85-default.txt-Plan]": [

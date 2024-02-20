@@ -11,6 +11,8 @@ class TSamplingThrottlingControl: public TThrRefBase {
     
 public:
     void HandleTracing(NWilson::TTraceId& traceId, const TRequestDiscriminator& discriminator);
+
+    ~TSamplingThrottlingControl();
     
 private:
     struct TSamplingThrottlingImpl;

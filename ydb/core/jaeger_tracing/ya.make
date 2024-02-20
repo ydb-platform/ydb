@@ -16,6 +16,7 @@ SRCS(
     sampling_throttling_control_internals.h
     settings.h
     throttler.h
+    throttler.cpp
 )
 
 END()

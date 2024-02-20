@@ -354,6 +354,7 @@ public:
 
             EvNextListingChunkReceived = EvBegin,
             EvRoundRobinStageTimeout,
+            EvTransitToErrorState,
 
             EvEnd
         };
@@ -361,14 +362,20 @@ public:
             EvEnd <= EventSpaceEnd(TEvents::ES_PRIVATE),
             "expected EvEnd <= EventSpaceEnd(TEvents::ES_PRIVATE)");
 
-        struct TEvNextListingChunkReceived :
-            public TEventLocal<TEvNextListingChunkReceived, EvNextListingChunkReceived> {
+        struct TEvNextListingChunkReceived : public TEventLocal<TEvNextListingChunkReceived, EvNextListingChunkReceived> {
             NS3Lister::TListResult ListingResult;
             TEvNextListingChunkReceived(NS3Lister::TListResult listingResult)
                 : ListingResult(std::move(listingResult)){};
         };
-        struct TEvRoundRobinStageTimeout :
-            public TEventLocal<TEvRoundRobinStageTimeout, EvRoundRobinStageTimeout> {
+
+        struct TEvRoundRobinStageTimeout : public TEventLocal<TEvRoundRobinStageTimeout, EvRoundRobinStageTimeout> {
+        };
+
+        struct TEvTransitToErrorState : public TEventLocal<TEvTransitToErrorState, EvTransitToErrorState> {
+            explicit TEvTransitToErrorState(TIssues&& issues)
+                : Issues(issues) {
+            }
+            TIssues Issues;
         };
     };
     using TBase = TActorBootstrapped<TS3FileQueueActor>;
@@ -437,6 +444,7 @@ public:
                 hFunc(TEvS3FileQueue::TEvGetNextBatch, HandleGetNextBatch);
                 hFunc(TEvPrivatePrivate::TEvNextListingChunkReceived, HandleNextListingChunkReceived);
                 cFunc(TEvPrivatePrivate::EvRoundRobinStageTimeout, HandleRoundRobinStageTimeout);
+                hFunc(TEvPrivatePrivate::TEvTransitToErrorState, HandleTransitToErrorState);
                 cFunc(TEvents::TSystem::Poison, HandlePoison);
                 default:
                     MaybeIssues = TIssues{TIssue{TStringBuilder() << "An event with unknown type has been received: '" << etype << "'"}};
@@ -477,6 +485,11 @@ public:
         } else {
             TransitToErrorState();
         }
+    }
+
+    void HandleTransitToErrorState(TEvPrivatePrivate::TEvTransitToErrorState::TPtr& ev) {
+        MaybeIssues = ev->Get().Issues;
+        TransitToErrorState();
     }
 
     bool SaveRetrievedResults(const NS3Lister::TListResult& listingResult) {
@@ -717,10 +730,17 @@ private:
                 ->Next()
                 .Subscribe([actorSystem, selfId = SelfId()](
                                const NThreading::TFuture<NS3Lister::TListResult>& future) {
-                    actorSystem->Send(
-                        selfId,
-                        new TEvPrivatePrivate::TEvNextListingChunkReceived(
-                            future.GetValue()));
+                    try {
+                        actorSystem->Send(
+                            selfId,
+                            new TEvPrivatePrivate::TEvNextListingChunkReceived(
+                                future.GetValue()));
+                    } catch (const std::exception& e) {
+                        actorSystem->Send(
+                            selfId,
+                            new TEvPrivatePrivate::TEvTransitToErrorState(
+                                TIssues{TIssue{TStringBuilder() << "An unknown exception has occurred: '" << e.what() << "'"}}));
+                    }
                 });
     }
     

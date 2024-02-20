@@ -11,6 +11,20 @@
 namespace NKikimr::NReplication {
 
 Y_UNIT_TEST_SUITE(YdbProxyTests) {
+    template <bool UseDatabase = true>
+    class TEnv: public NTestHelpers::TEnv<UseDatabase> {
+        using TBase = NTestHelpers::TEnv<UseDatabase>;
+
+    public:
+        using TBase::TBase;
+        using TBase::Send;
+
+        template <typename TEvResponse>
+        auto Send(IEventBase* ev) {
+            return TBase::template Send<TEvResponse>(this->GetYdbProxy(), ev);
+        }
+    };
+
     Y_UNIT_TEST(MakeDirectory) {
         TEnv env;
         // ok
@@ -131,7 +145,7 @@ Y_UNIT_TEST_SUITE(YdbProxyTests) {
     }
 
     Y_UNIT_TEST(StaticCreds) {
-        TEnv env("user1", "password1");
+        TEnv<true> env("user1", "password1");
         // make dir
         {
             auto ev = env.Send<TEvYdbProxy::TEvMakeDirectoryResponse>(
@@ -623,7 +637,7 @@ Y_UNIT_TEST_SUITE(YdbProxyTests) {
 
         TActorId reader = CreateTopicReader(env, "/Root/topic");
 
-        UNIT_ASSERT(WriteTopic(env, "/Root/topic", "message-0"));
+        UNIT_ASSERT(NTestHelpers::WriteTopic(env, "/Root/topic", "message-0"));
         {
             auto data = ReadTopicData(env, reader, "/Root/topic");
             UNIT_ASSERT_VALUES_EQUAL(data.Messages.size(), 1);
@@ -651,7 +665,7 @@ Y_UNIT_TEST_SUITE(YdbProxyTests) {
             env.SendAsync(reader, new TEvents::TEvPoison());
         }
 
-        UNIT_ASSERT(WriteTopic(env, "/Root/topic", "message-1"));
+        UNIT_ASSERT(NTestHelpers::WriteTopic(env, "/Root/topic", "message-1"));
         {
             auto data = ReadTopicData(env, newReader, "/Root/topic");
             UNIT_ASSERT(data.Messages.size() >= 1);
@@ -669,7 +683,7 @@ Y_UNIT_TEST_SUITE(YdbProxyTests) {
         TEnv env;
 
         auto reader = CreateTopicReader(env, "/Root/topic");
-        auto ev = env.template Send<TEvYdbProxy::TEvTopicReaderGone>(reader, new TEvYdbProxy::TEvReadTopicRequest());
+        auto ev = env.Send<TEvYdbProxy::TEvTopicReaderGone>(reader, new TEvYdbProxy::TEvReadTopicRequest());
 
         UNIT_ASSERT(ev);
         UNIT_ASSERT_VALUES_EQUAL(ev->Get()->Result.GetStatus(), NYdb::EStatus::SCHEME_ERROR);

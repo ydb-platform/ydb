@@ -104,8 +104,6 @@
   - nonblocking.h
   - note.h
   - opcdef.h
-  - os2def.h
-  - oslib/osfscontrol.h
   - paper.h
   - pire/config.h
   - pngusr.h
@@ -307,9 +305,6 @@
   - EXTERN.h
   - perl.h
   - XSUB.h
-  #endif
-  #if defined(_OS2_)
-  - os2.h
   #endif
   #if defined(_arm_)
   - arm/limits.h

@@ -804,6 +804,23 @@ struct TMbusConfigFields {
 
 // =====
 
+
+static ui32 NextValidKind(ui32 kind) {
+    do {
+        ++kind;
+        if (kind != NKikimrConsole::TConfigItem::Auto && NKikimrConsole::TConfigItem::EKind_IsValid(kind)) {
+            break;
+        }
+    } while (kind <= NKikimrConsole::TConfigItem::EKind_MAX);
+    return kind;
+}
+
+static bool HasCorrespondingManagedKind(ui32 kind, const NKikimrConfig::TAppConfig& appConfig) {
+    return (kind == NKikimrConsole::TConfigItem::NameserviceConfigItem && appConfig.HasNameserviceConfig()) ||
+            (kind == NKikimrConsole::TConfigItem::NetClassifierDistributableConfigItem && appConfig.HasNetClassifierDistributableConfig()) ||
+            (kind == NKikimrConsole::TConfigItem::NamedConfigsItem && appConfig.NamedConfigsSize());
+}
+
 struct TNodeRegistrationGrpcSettings {
     TString PathToGrpcCertFile;
     TString PathToGrpcCaFile;
@@ -834,8 +851,8 @@ struct TNodeRegistrationSettings {
     const TString &nodeAddress;
     const TString &nodeResolveHost;
     const TMaybe<TString>& path;
-    bool FixedNodeID = false;
-    ui32 InterconnectPort = 0;
+    bool FixedNodeID;
+    ui32 InterconnectPort;
 };
 
 NYdb::NDiscovery::TNodeRegistrationResult TryToRegisterDynamicNodeViaDiscoveryService(
@@ -923,6 +940,73 @@ THolder<NClient::TRegistrationResult> RegisterDynamicNodeViaLegacyService(
     }
 
     return result;
+}
+
+NYdb::NDiscovery::TNodeRegistrationResult RegisterDynamicNodeViaDiscoveryService(
+    const TNodeRegistrationGrpcSettings& gs,
+    const TVector<TString>& addrs,
+    const NYdb::NDiscovery::TNodeRegistrationSettings& nrs,
+    const IEnv& env)
+{
+    NYdb::NDiscovery::TNodeRegistrationResult result;
+    const size_t maxNumberReceivedCallUnimplemented = 5;
+    size_t currentNumberReceivedCallUnimplemented = 0;
+    while (!result.IsSuccess() && currentNumberReceivedCallUnimplemented < maxNumberReceivedCallUnimplemented) {
+        for (const auto& addr : addrs) {
+            result = TryToRegisterDynamicNodeViaDiscoveryService(
+                gs,
+                addr,
+                nrs,
+                env);
+            if (result.IsSuccess()) {
+                Cout << "Success. Registered via discovery service as " << result.GetNodeId() << Endl;
+                break;
+            }
+            Cerr << "Registration error: " << static_cast<NYdb::TStatus>(result) << Endl;
+        }
+        if (!result.IsSuccess()) {
+            env.Sleep(TDuration::Seconds(1));
+            if (result.GetStatus() == NYdb::EStatus::CLIENT_CALL_UNIMPLEMENTED) {
+                currentNumberReceivedCallUnimplemented++;
+            }
+        }
+    }
+    return result;
+}
+
+struct TNodeRegResult {
+public:
+    std::variant<
+        NYdb::NDiscovery::TNodeRegistrationResult,
+        THolder<NClient::TRegistrationResult>> Result;
+};
+
+TNodeRegResult RegisterDynamicNodeImpl(
+    const TVector<TString>& addrs,
+    const TNodeRegistrationSettings& rs,
+    const TNodeRegistrationGrpcSettings& rgs,
+    const NYdb::NDiscovery::TNodeRegistrationSettings& nrs,
+    NActors::TNodeLocation location,
+    const IEnv& env)
+{
+    std::variant<
+        NYdb::NDiscovery::TNodeRegistrationResult,
+        THolder<NClient::TRegistrationResult>> result = RegisterDynamicNodeViaDiscoveryService(
+            rgs,
+            addrs,
+            nrs,
+            env);
+
+    if (!std::get<NYdb::NDiscovery::TNodeRegistrationResult>(result).IsSuccess()) {
+        result = RegisterDynamicNodeViaLegacyService(
+            rgs,
+            location,
+            addrs,
+            rs,
+            env);
+    }
+
+    return TNodeRegResult{ .Result = std::move(result) };
 }
 
 // =====
@@ -1184,43 +1268,6 @@ public:
         return "";
     }
 
-    NYdb::NDiscovery::TNodeRegistrationResult RegisterDynamicNodeViaDiscoveryService(
-        const NConfig::TConfigFields& cf,
-        const TVector<TString>& addrs,
-        const TString& domainName,
-        const IEnv& env) const
-    {
-        NYdb::NDiscovery::TNodeRegistrationResult result;
-        const size_t maxNumberReceivedCallUnimplemented = 5;
-        size_t currentNumberReceivedCallUnimplemented = 0;
-        while (!result.IsSuccess() && currentNumberReceivedCallUnimplemented < maxNumberReceivedCallUnimplemented) {
-            for (const auto& addr : addrs) {
-                auto nrs = cf.GetNodeRegistrationSettings(domainName, cf.NodeHost, cf.NodeAddress, cf.NodeResolveHost, cf.GetSchemePath());
-                result = TryToRegisterDynamicNodeViaDiscoveryService(
-                    {
-                        cf.PathToGrpcCertFile,
-                        cf.PathToGrpcCaFile,
-                        cf.PathToGrpcPrivateKeyFile,
-                    },
-                    addr,
-                    nrs,
-                    env);
-                if (result.IsSuccess()) {
-                    Cout << "Success. Registered via discovery service as " << result.GetNodeId() << Endl;
-                    break;
-                }
-                Cerr << "Registration error: " << static_cast<NYdb::TStatus>(result) << Endl;
-            }
-            if (!result.IsSuccess()) {
-                env.Sleep(TDuration::Seconds(1));
-                if (result.GetStatus() == NYdb::EStatus::CLIENT_CALL_UNIMPLEMENTED) {
-                    currentNumberReceivedCallUnimplemented++;
-                }
-            }
-        }
-        return result;
-    }
-
     void ProcessRegistrationDynamicNodeResult(const NYdb::NDiscovery::TNodeRegistrationResult& result) {
         NodeId = result.GetNodeId();
         NActors::TScopeId scopeId;
@@ -1322,19 +1369,13 @@ public:
             cf.PathToGrpcPrivateKeyFile,
         };
 
-        std::variant<
-            NYdb::NDiscovery::TNodeRegistrationResult,
-            THolder<NClient::TRegistrationResult>> result = RegisterDynamicNodeViaDiscoveryService(
-                cf,
-                addrs,
-                domainName,
-                Env);
+        auto nrs = cf.GetNodeRegistrationSettings(domainName, cf.NodeHost, cf.NodeAddress, cf.NodeResolveHost, cf.GetSchemePath());
 
-        if (!std::get<NYdb::NDiscovery::TNodeRegistrationResult>(result).IsSuccess()) {
-            result = RegisterDynamicNodeViaLegacyService(rgs, cf.CreateNodeLocation(), addrs, rs, Env);
-        }
+        auto location = cf.CreateNodeLocation();
 
-        return ProcessRegistrationDynamicNodeResult(result);
+        auto result = RegisterDynamicNodeImpl(addrs, rs, rgs, nrs, location, Env);
+
+        return ProcessRegistrationDynamicNodeResult(result.Result);
     }
 
     void ApplyConfigForNode(NKikimrConfig::TAppConfig &appConfig) {
@@ -1354,26 +1395,25 @@ public:
     bool TryToLoadConfigForDynamicNodeFromCMS(
         const NConfig::TConfigFields& cf,
         const TString &addr,
+        const TString &domainName,
+        const TNodeRegistrationGrpcSettings& gs,
+        const IEnv& env,
         TMaybe<NKikimr::NClient::TConfigurationResult>& res,
         TString &error) const
     {
         NClient::TKikimr kikimr(GetKikimr(
-                    {
-                        cf.PathToGrpcCertFile,
-                        cf.PathToGrpcCaFile,
-                        cf.PathToGrpcPrivateKeyFile,
-                    },
+                    gs,
                     addr,
-                    Env));
+                    env));
         auto configurator = kikimr.GetNodeConfigurator();
 
         Cout << "Trying to get configs from " << addr << Endl;
 
         auto result = configurator.SyncGetNodeConfig(NodeId,
-                                                     Env.FQDNHostName(),
+                                                     env.FQDNHostName(),
                                                      cf.TenantName.GetRef(),
                                                      cf.NodeType.GetRef(),
-                                                     DeduceNodeDomain(cf),
+                                                     domainName,
                                                      AppConfig.GetAuthConfig().GetStaffApiUserToken(),
                                                      true,
                                                      1);
@@ -1395,16 +1435,24 @@ public:
         TMaybe<NKikimr::NClient::TConfigurationResult> res;
         bool success = false;
         TString error;
-        TVector<TString> addrs;
 
+        TVector<TString> addrs;
         cf.FillClusterEndpoints(AppConfig, addrs);
+
+        const TNodeRegistrationGrpcSettings rgs {
+            cf.PathToGrpcCertFile,
+            cf.PathToGrpcCaFile,
+            cf.PathToGrpcPrivateKeyFile,
+        };
+
+        const TString domainName = DeduceNodeDomain(cf);
 
         SetRandomSeed(TInstant::Now().MicroSeconds());
         int minAttempts = 10;
         int attempts = 0;
         while (!success && attempts < minAttempts) {
             for (auto addr : addrs) {
-                success = TryToLoadConfigForDynamicNodeFromCMS(cf, addr, res, error);
+                success = TryToLoadConfigForDynamicNodeFromCMS(cf, addr, domainName, rgs, Env, res, error);
                 ++attempts;
                 if (success) {
                     break;
@@ -1427,22 +1475,6 @@ public:
         ConfigFields.ValidateStaticNodeConfig();
 
         Labels["dynamic"] = "false";
-    }
-
-    static ui32 NextValidKind(ui32 kind) {
-        do {
-            ++kind;
-            if (kind != NKikimrConsole::TConfigItem::Auto && NKikimrConsole::TConfigItem::EKind_IsValid(kind)) {
-                break;
-            }
-        } while (kind <= NKikimrConsole::TConfigItem::EKind_MAX);
-        return kind;
-    }
-
-    static bool HasCorrespondingManagedKind(ui32 kind, const NKikimrConfig::TAppConfig& appConfig) {
-        return (kind == NKikimrConsole::TConfigItem::NameserviceConfigItem && appConfig.HasNameserviceConfig()) ||
-               (kind == NKikimrConsole::TConfigItem::NetClassifierDistributableConfigItem && appConfig.HasNetClassifierDistributableConfig()) ||
-               (kind == NKikimrConsole::TConfigItem::NamedConfigsItem && appConfig.NamedConfigsSize());
     }
 
     NKikimrConfig::TAppConfig GetYamlConfigFromResult(const NKikimr::NClient::TConfigurationResult& result, const TMap<TString, TString>& labels) const {

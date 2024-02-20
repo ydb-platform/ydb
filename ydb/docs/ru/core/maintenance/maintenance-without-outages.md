@@ -23,7 +23,7 @@
 
 Объектами действий могут быть:
 - Высокоуровневые — [тенанты](./embedded_monitoring/ydb_monitoring.md#tenant_list_page), отдельные сервисы на сервере (например, все динамические узлы), сервера целиком.
-- Низкоуровневые — [VDisk-и](../concepts/cluster/_includes/distributed_storage/distributed_storage_interface.md#gruppy), [PDisk-и]((../concepts/cluster/_includes/distributed_storage/distributed_storage_interface.md#gruppy)) и узлы кластера.
+- Низкоуровневые — [VDisk-и](../concepts/cluster/_includes/distributed_storage/distributed_storage_interface.md#groups), [PDisk-и]((../concepts/cluster/_includes/distributed_storage/distributed_storage_interface.md#groups)) и узлы кластера.
 
 {% note info "Затянувшиеся работы" %}
 

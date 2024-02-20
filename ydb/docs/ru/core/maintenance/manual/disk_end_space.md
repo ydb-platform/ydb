@@ -36,7 +36,7 @@
 
 2. Зайти по ssh на узел, где находится этот устройство
 
-3. Проверить, можно ли [перезапустить процесс](../maintenance_without_outages.md#restart-or-stop-node).
+3. Проверить, можно ли [перезапустить процесс](../maintenance-without-outages.md#restart-or-stop-node).
 
 4. Остановить процесс
 

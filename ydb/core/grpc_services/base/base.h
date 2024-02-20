@@ -374,8 +374,6 @@ public:
         return NJaegerTracing::TRequestDiscriminator::EMPTY;
     };
 
-    virtual const TString& GetInternalRequestType() const = 0;
-
     // validation
     virtual bool Validate(TString& error) = 0;
 
@@ -494,10 +492,6 @@ public:
 
     void StartTracing(NWilson::TSpan&& /*span*/) override {}
     void LegacyFinishSpan() override {}
-    const TString& GetInternalRequestType() const final {
-        static const TString empty = "";
-        return empty;
-    }
 
     void UpdateAuthState(NYdbGrpc::TAuthState::EAuthState state) override {
         State_.State = state;
@@ -901,10 +895,6 @@ public:
 
     void LegacyFinishSpan() override {
         Span_.End();
-    }
-
-    const TString& GetInternalRequestType() const final {
-        return TRequest::descriptor()->full_name();
     }
 
     // IRequestCtxBase
@@ -1318,10 +1308,6 @@ public:
     }
 
     void LegacyFinishSpan() override {}
-
-    const TString& GetInternalRequestType() const final {
-        return TRequest::descriptor()->full_name();
-    }
 
     void ReplyGrpcError(grpc::StatusCode code, const TString& msg, const TString& details = "") {
         Ctx_->ReplyError(code, msg, details);

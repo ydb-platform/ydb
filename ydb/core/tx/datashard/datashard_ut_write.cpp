@@ -216,7 +216,7 @@ Y_UNIT_TEST_SUITE(DataShardWrite) {
         }
     }
 
-    Y_UNIT_TEST(WritePreparedManyTables) {
+    Y_UNIT_TEST_TWIN(WritePreparedManyTables, Volatile) {
         auto [runtime, server, sender] = TestCreateServer();
 
         TShardedTableOptions opts;
@@ -234,7 +234,8 @@ Y_UNIT_TEST_SUITE(DataShardWrite) {
 
         Cerr << "===== Write prepared to table 1" << Endl;
         {
-            const auto writeResult = Write(runtime, sender, tabletId1, tableId1, opts.Columns_, rowCount, txId, NKikimrDataEvents::TEvWrite::MODE_PREPARE);
+            const auto writeResult = Write(runtime, sender, tabletId1, tableId1, opts.Columns_, rowCount, txId, 
+                Volatile ? NKikimrDataEvents::TEvWrite::MODE_VOLATILE_PREPARE : NKikimrDataEvents::TEvWrite::MODE_PREPARE);
 
             minStep1 = writeResult.GetMinStep();
             maxStep1 = writeResult.GetMaxStep();
@@ -280,7 +281,7 @@ Y_UNIT_TEST_SUITE(DataShardWrite) {
     }
 
     
-    Y_UNIT_TEST(WritePreparedNoTxCache) {
+    Y_UNIT_TEST_TWIN(WritePreparedNoTxCache, Volatile) {
         auto [runtime, server, sender] = TestCreateServer();
 
         TShardedTableOptions opts;
@@ -294,7 +295,9 @@ Y_UNIT_TEST_SUITE(DataShardWrite) {
 
         Cout << "========= Send prepare =========\n";
         {
-            const auto writeResult = Write(runtime, sender, shard, tableId, opts.Columns_, rowCount, txId, NKikimrDataEvents::TEvWrite::MODE_PREPARE);
+            const auto writeResult = Write(runtime, sender, shard, tableId, opts.Columns_, rowCount, txId, 
+                Volatile ? NKikimrDataEvents::TEvWrite::MODE_VOLATILE_PREPARE : NKikimrDataEvents::TEvWrite::MODE_PREPARE);
+
             minStep = writeResult.GetMinStep();
             maxStep = writeResult.GetMaxStep();
         }

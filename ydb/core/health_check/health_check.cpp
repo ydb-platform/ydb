@@ -1305,8 +1305,8 @@ public:
 
     void FillCompute(TDatabaseState& databaseState, Ydb::Monitoring::ComputeStatus& computeStatus, TSelfCheckContext context) {
         TVector<TNodeId>* computeNodeIds = &databaseState.ComputeNodeIds;
-        if (databaseState.ResourcePathId 
-            && databaseState.ServerlessComputeResourcesMode != NKikimrSubDomains::EServerlessComputeResourcesModeExclusive) 
+        if (databaseState.ResourcePathId
+            && databaseState.ServerlessComputeResourcesMode != NKikimrSubDomains::EServerlessComputeResourcesModeExclusive)
         {
             auto itDatabase = FilterDomainKey.find(TSubDomainKey(databaseState.ResourcePathId.OwnerId, databaseState.ResourcePathId.LocalPathId));
             if (itDatabase != FilterDomainKey.end()) {
@@ -1958,8 +1958,7 @@ public:
 
     void FillStorage(TDatabaseState& databaseState, Ydb::Monitoring::StorageStatus& storageStatus, TSelfCheckContext context) {
         if (databaseState.StoragePoolNames.empty()) {
-            // pointless in real life
-            // context.ReportStatus(Ydb::Monitoring::StatusFlag::RED, "There are no storage pools");
+            context.ReportStatus(Ydb::Monitoring::StatusFlag::RED, "There are no storage pools", ETags::StorageState);
         } else {
             for (const TString& poolName : databaseState.StoragePoolNames) {
                 auto itStoragePoolState = StoragePoolState.find(poolName);

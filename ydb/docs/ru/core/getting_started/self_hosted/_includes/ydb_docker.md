@@ -173,7 +173,7 @@ docker run --rm -it --entrypoint cat {{ ydb_local_docker_image }} THIRD_PARTY_LI
 
 {% note warning %}
 
-Данная функциональность находится в режиме "Preview".
+Данная функциональность находится в режиме "Experimental".
 
 {% endnote %}
 

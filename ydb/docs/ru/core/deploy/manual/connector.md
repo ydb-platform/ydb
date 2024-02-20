@@ -2,7 +2,7 @@
 
 {% note warning %}
 
-Данная функциональность находится в режиме "Preview".
+Данная функциональность находится в режиме "Experimental".
 
 {% endnote %}
 
@@ -53,11 +53,12 @@ docker run -d \
 
 ```bash
 docker run -it --rm ghcr.io/ydb-platform/fq-connector-go sh
+# далее в консоли внутри контейнера:
 apk add openssl
 awk -v cmd='openssl x509 -noout -subject' ' /BEGIN/{close(cmd)};{print | cmd}' < /etc/ssl/certs/ca-certificates.crt
 ```
 
-Если TLS-ключи для источников выпущены CA, не входящим в перечень доверенных, необходимо добавить сертификат этого CA в системные пути контейнера с коннектором. Сделать это можно, например, собрав собственный Docker-образ на основе имеющегося:
+Если TLS-ключи для источников выпущены CA, не входящим в перечень доверенных, необходимо добавить сертификат этого CA в системные пути контейнера с коннектором. Сделать это можно, например, собрав собственный Docker-образ на основе имеющегося. Для этого подготовьте следующий `Dockerfile`: 
 
 ```Dockerfile
 FROM ghcr.io/ydb-platform/fq-connector-go:latest
@@ -65,11 +66,16 @@ FROM ghcr.io/ydb-platform/fq-connector-go:latest
 USER root
 
 RUN apk --no-cache add ca-certificates openssl
-COPY custom_root_ca.crt /usr/local/share/ca-certificates
+COPY root_ca.crt /usr/local/share/ca-certificates
 RUN update-ca-certificates
 ```
 
-Новый образ можно использовать для развертывания сервиса с помощью команд, приведённых выше.
+Поместите `Dockerfile` и корневой сертификат CA в одной папке, зайдите в неё и соберите образ следующей командой:
+```bash
+docker build -t fq-connector-go_custom_ca .
+```
+
+Новый образ `fq-connector-go_custom_ca` можно использовать для развертывания сервиса с помощью команд, приведённых выше.
 
 ### Конфигурация {#fq-connector-go-config}
 

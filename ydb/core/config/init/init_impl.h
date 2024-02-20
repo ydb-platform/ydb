@@ -176,6 +176,12 @@ auto MutableConfigPartMerge(
     return nullptr;
 }
 
+struct TGrpcSslSettings {
+    TString PathToGrpcCertFile;
+    TString PathToGrpcCaFile;
+    TString PathToGrpcPrivateKeyFile;
+};
+
 void AddProtoConfigOptions(IProtoConfigFileProvider& out);
 void LoadBootstrapConfig(IProtoConfigFileProvider& protoConfigFileProvider, IErrorCollector& errorCollector, TVector<TString> configFiles, NKikimrConfig::TAppConfig& out);
 void LoadYamlConfig(TConfigRefs refs, const TString& yamlConfigFile, NKikimrConfig::TAppConfig& appConfig, TCallContext callCtx);
@@ -228,11 +234,9 @@ struct TConfigFields {
     TVector<TString> GRpcPublicAddressesV4;
     TVector<TString> GRpcPublicAddressesV6;
     TString GRpcPublicTargetNameOverride = "";
-    TString PathToGrpcCertFile;
+    TGrpcSslSettings GrpcSslSettings;
     TString PathToInterconnectCertFile;
-    TString PathToGrpcPrivateKeyFile;
     TString PathToInterconnectPrivateKeyFile;
-    TString PathToGrpcCaFile;
     TString PathToInterconnectCaFile;
     TString YamlConfigFile;
     bool SysLogEnabled = false;
@@ -305,13 +309,13 @@ struct TConfigFields {
         opts.AddLongOption("ignore-cms-configs", "Don't load configs from CMS")
                 .NoArgument().SetFlag(&IgnoreCmsConfigs);
         opts.AddLongOption("cert", "Path to client certificate file (PEM) for interconnect").RequiredArgument("PATH").StoreResult(&PathToInterconnectCertFile);
-        opts.AddLongOption("grpc-cert", "Path to client certificate file (PEM) for grpc").RequiredArgument("PATH").StoreResult(&PathToGrpcCertFile);
+        opts.AddLongOption("grpc-cert", "Path to client certificate file (PEM) for grpc").RequiredArgument("PATH").StoreResult(&GrpcSslSettings.PathToGrpcCertFile);
         opts.AddLongOption("ic-cert", "Path to client certificate file (PEM) for interconnect").RequiredArgument("PATH").StoreResult(&PathToInterconnectCertFile);
         opts.AddLongOption("key", "Path to private key file (PEM) for interconnect").RequiredArgument("PATH").StoreResult(&PathToInterconnectPrivateKeyFile);
-        opts.AddLongOption("grpc-key", "Path to private key file (PEM) for grpc").RequiredArgument("PATH").StoreResult(&PathToGrpcPrivateKeyFile);
+        opts.AddLongOption("grpc-key", "Path to private key file (PEM) for grpc").RequiredArgument("PATH").StoreResult(&GrpcSslSettings.PathToGrpcPrivateKeyFile);
         opts.AddLongOption("ic-key", "Path to private key file (PEM) for interconnect").RequiredArgument("PATH").StoreResult(&PathToInterconnectPrivateKeyFile);
         opts.AddLongOption("ca", "Path to certificate authority file (PEM) for interconnect").RequiredArgument("PATH").StoreResult(&PathToInterconnectCaFile);
-        opts.AddLongOption("grpc-ca", "Path to certificate authority file (PEM) for grpc").RequiredArgument("PATH").StoreResult(&PathToGrpcCaFile);
+        opts.AddLongOption("grpc-ca", "Path to certificate authority file (PEM) for grpc").RequiredArgument("PATH").StoreResult(&GrpcSslSettings.PathToGrpcCaFile);
         opts.AddLongOption("ic-ca", "Path to certificate authority file (PEM) for interconnect").RequiredArgument("PATH").StoreResult(&PathToInterconnectCaFile);
         opts.AddLongOption("data-center", "data center name (used to describe dynamic node location)")
                 .RequiredArgument("NAME").StoreResult(&DataCenter);
@@ -353,8 +357,8 @@ struct TConfigFields {
             TRACE_CONFIG_CHANGE_INPLACE_T(GRpcConfig, UpdateExplicitly);
         }
 
-        if (!PathToGrpcCertFile.Empty()) {
-            appConfig.MutableGRpcConfig()->SetPathToCertificateFile(PathToGrpcCertFile);
+        if (!GrpcSslSettings.PathToGrpcCertFile.Empty()) {
+            appConfig.MutableGRpcConfig()->SetPathToCertificateFile(GrpcSslSettings.PathToGrpcCertFile);
             TRACE_CONFIG_CHANGE_INPLACE_T(GRpcConfig, UpdateExplicitly);
         }
 
@@ -363,8 +367,8 @@ struct TConfigFields {
             TRACE_CONFIG_CHANGE_INPLACE_T(GRpcConfig, UpdateExplicitly);
         }
 
-        if (!PathToGrpcPrivateKeyFile.Empty()) {
-            appConfig.MutableGRpcConfig()->SetPathToPrivateKeyFile(PathToGrpcPrivateKeyFile);
+        if (!GrpcSslSettings.PathToGrpcPrivateKeyFile.Empty()) {
+            appConfig.MutableGRpcConfig()->SetPathToPrivateKeyFile(GrpcSslSettings.PathToGrpcPrivateKeyFile);
             TRACE_CONFIG_CHANGE_INPLACE_T(GRpcConfig, UpdateExplicitly);
         }
 
@@ -373,8 +377,8 @@ struct TConfigFields {
             TRACE_CONFIG_CHANGE_INPLACE_T(GRpcConfig, UpdateExplicitly);
         }
 
-        if (!PathToGrpcCaFile.Empty()) {
-            appConfig.MutableGRpcConfig()->SetPathToCaFile(PathToGrpcCaFile);
+        if (!GrpcSslSettings.PathToGrpcCaFile.Empty()) {
+            appConfig.MutableGRpcConfig()->SetPathToCaFile(GrpcSslSettings.PathToGrpcCaFile);
             TRACE_CONFIG_CHANGE_INPLACE_T(GRpcConfig, UpdateExplicitly);
         }
 
@@ -821,13 +825,7 @@ static bool HasCorrespondingManagedKind(ui32 kind, const NKikimrConfig::TAppConf
             (kind == NKikimrConsole::TConfigItem::NamedConfigsItem && appConfig.NamedConfigsSize());
 }
 
-struct TNodeRegistrationGrpcSettings {
-    TString PathToGrpcCertFile;
-    TString PathToGrpcCaFile;
-    TString PathToGrpcPrivateKeyFile;
-};
-
-NClient::TKikimr GetKikimr(const TNodeRegistrationGrpcSettings& cf, const TString& addr, const IEnv& env) {
+NClient::TKikimr GetKikimr(const TGrpcSslSettings& cf, const TString& addr, const IEnv& env) {
     TCommandConfig::TServerEndpoint endpoint = TCommandConfig::ParseServerAddress(addr);
     NYdbGrpc::TGRpcClientConfig grpcConfig(endpoint.Address, TDuration::Seconds(5));
     grpcConfig.LoadBalancingPolicy = "round_robin";
@@ -856,7 +854,7 @@ struct TNodeRegistrationSettings {
 };
 
 NYdb::NDiscovery::TNodeRegistrationResult TryToRegisterDynamicNodeViaDiscoveryService(
-        const TNodeRegistrationGrpcSettings& gs,
+        const TGrpcSslSettings& gs,
         const TString addr,
         const NYdb::NDiscovery::TNodeRegistrationSettings& nrs,
         const IEnv& env)
@@ -884,7 +882,7 @@ NYdb::NDiscovery::TNodeRegistrationResult TryToRegisterDynamicNodeViaDiscoverySe
 }
 
 THolder<NClient::TRegistrationResult> TryToRegisterDynamicNodeViaLegacyService(
-        const TNodeRegistrationGrpcSettings& rgs,
+        const TGrpcSslSettings& rgs,
         NActors::TNodeLocation loc,
         const TString& addr,
         const TNodeRegistrationSettings& rs,
@@ -906,7 +904,7 @@ THolder<NClient::TRegistrationResult> TryToRegisterDynamicNodeViaLegacyService(
 }
 
 THolder<NClient::TRegistrationResult> RegisterDynamicNodeViaLegacyService(
-    const TNodeRegistrationGrpcSettings& gs,
+    const TGrpcSslSettings& gs,
     NActors::TNodeLocation loc,
     const TVector<TString>& addrs,
     const TNodeRegistrationSettings& rs,
@@ -943,7 +941,7 @@ THolder<NClient::TRegistrationResult> RegisterDynamicNodeViaLegacyService(
 }
 
 NYdb::NDiscovery::TNodeRegistrationResult RegisterDynamicNodeViaDiscoveryService(
-    const TNodeRegistrationGrpcSettings& gs,
+    const TGrpcSslSettings& gs,
     const TVector<TString>& addrs,
     const NYdb::NDiscovery::TNodeRegistrationSettings& nrs,
     const IEnv& env)
@@ -1055,7 +1053,7 @@ public:
 TNodeRegResult RegisterDynamicNodeImpl(
     const TVector<TString>& addrs,
     const TNodeRegistrationSettings& rs,
-    const TNodeRegistrationGrpcSettings& rgs,
+    const TGrpcSslSettings& rgs,
     const NYdb::NDiscovery::TNodeRegistrationSettings& nrs,
     NActors::TNodeLocation location,
     const IEnv& env)
@@ -1078,6 +1076,18 @@ TNodeRegResult RegisterDynamicNodeImpl(
     }
 
     return TNodeRegResult{ .Result = std::move(result) };
+}
+
+NKikimrConfig::TAppConfig GetYamlConfigFromResult(const NKikimr::NClient::TConfigurationResult& result, const TMap<TString, TString>& labels) {
+    NKikimrConfig::TAppConfig yamlConfig;
+    if (result.HasYamlConfig() && !result.GetYamlConfig().empty()) {
+        NYamlConfig::ResolveAndParseYamlConfig(
+            result.GetYamlConfig(),
+            result.GetVolatileYamlConfigs(),
+            labels,
+            yamlConfig);
+    }
+    return yamlConfig;
 }
 
 // =====
@@ -1372,17 +1382,11 @@ public:
             cf.InterconnectPort,
         };
 
-        const TNodeRegistrationGrpcSettings rgs {
-            cf.PathToGrpcCertFile,
-            cf.PathToGrpcCaFile,
-            cf.PathToGrpcPrivateKeyFile,
-        };
-
         auto nrs = cf.GetNodeRegistrationSettings(domainName, cf.NodeHost, cf.NodeAddress, cf.NodeResolveHost, cf.GetSchemePath());
 
         auto location = cf.CreateNodeLocation();
 
-        auto result = RegisterDynamicNodeImpl(addrs, rs, rgs, nrs, location, Env);
+        auto result = RegisterDynamicNodeImpl(addrs, rs, cf.GrpcSslSettings, nrs, location, Env);
 
         result.Apply(AppConfig, NodeId, ScopeId);
     }
@@ -1405,7 +1409,7 @@ public:
         const NConfig::TConfigFields& cf,
         const TString &addr,
         const TString &domainName,
-        const TNodeRegistrationGrpcSettings& gs,
+        const TGrpcSslSettings& gs,
         const IEnv& env,
         TMaybe<NKikimr::NClient::TConfigurationResult>& res,
         TString &error) const
@@ -1448,12 +1452,6 @@ public:
         TVector<TString> addrs;
         cf.FillClusterEndpoints(AppConfig, addrs);
 
-        const TNodeRegistrationGrpcSettings rgs {
-            cf.PathToGrpcCertFile,
-            cf.PathToGrpcCaFile,
-            cf.PathToGrpcPrivateKeyFile,
-        };
-
         const TString domainName = DeduceNodeDomain(cf);
 
         SetRandomSeed(TInstant::Now().MicroSeconds());
@@ -1461,7 +1459,7 @@ public:
         int attempts = 0;
         while (!success && attempts < minAttempts) {
             for (auto addr : addrs) {
-                success = TryToLoadConfigForDynamicNodeFromCMS(cf, addr, domainName, rgs, Env, res, error);
+                success = TryToLoadConfigForDynamicNodeFromCMS(cf, addr, domainName, cf.GrpcSslSettings, Env, res, error);
                 ++attempts;
                 if (success) {
                     break;
@@ -1484,18 +1482,6 @@ public:
         ConfigFields.ValidateStaticNodeConfig();
 
         Labels["dynamic"] = "false";
-    }
-
-    NKikimrConfig::TAppConfig GetYamlConfigFromResult(const NKikimr::NClient::TConfigurationResult& result, const TMap<TString, TString>& labels) const {
-        NKikimrConfig::TAppConfig yamlConfig;
-        if (result.HasYamlConfig() && !result.GetYamlConfig().empty()) {
-            NYamlConfig::ResolveAndParseYamlConfig(
-                result.GetYamlConfig(),
-                result.GetVolatileYamlConfigs(),
-                labels,
-                yamlConfig);
-        }
-        return yamlConfig;
     }
 
     NKikimrConfig::TAppConfig GetActualDynConfig(const NKikimrConfig::TAppConfig& yamlConfig, const NKikimrConfig::TAppConfig& regularConfig) const {

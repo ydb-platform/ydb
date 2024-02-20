@@ -92,8 +92,15 @@ bool TPersQueueReadBalancer::TTxInit::Execute(TTransactionContext& txc, const TA
                 bool res = Self->TabletConfig.ParseFromString(config);
                 Y_ABORT_UNLESS(res);
                 Self->Consumers.clear();
-                for (const auto& rr : Self->TabletConfig.GetReadRules()) {
-                    Self->Consumers[rr];
+
+                if (Self->TabletConfig.ReadRulesSize() == Self->TabletConfig.ConsumerScalingSupportSize()) {
+                    for (size_t i = 0; i < Self->TabletConfig.ReadRulesSize(); ++i) {
+                        Self->Consumers[Self->TabletConfig.GetReadRules(i)].ScalingSupport = Self->TabletConfig.GetConsumerScalingSupport(i);
+                    }
+                } else {
+                    for (const auto& rr : Self->TabletConfig.GetReadRules()) {
+                        Self->Consumers[rr].ScalingSupport = NKikimrPQ::EConsumerScalingSupport::PARTIAL_SUPPORT;
+                    }
                 }
             }
             Self->Inited = true;
@@ -597,12 +604,17 @@ void TPersQueueReadBalancer::Handle(TEvPersQueue::TEvUpdateBalancerConfig::TPtr 
 
     auto oldConsumers = std::move(Consumers);
     Consumers.clear();
-    for (const auto& rr : TabletConfig.GetReadRules()) {
+    for (size_t i = 0; i < TabletConfig.ReadRulesSize(); ++i) {
+        auto& rr = TabletConfig.GetReadRules(i);
+
+        auto scalingSupport = i < TabletConfig.ConsumerScalingSupportSize() ? TabletConfig.GetConsumerScalingSupport(i)
+                                                                            : NKikimrPQ::EConsumerScalingSupport::PARTIAL_SUPPORT;
         auto it = oldConsumers.find(rr);
         if (it != oldConsumers.end()) {
-            Consumers[rr] = std::move(it->second);
+            auto& c = Consumers[rr] = std::move(it->second);
+            c.ScalingSupport = scalingSupport;
         } else {
-            Consumers[rr];
+            Consumers[rr].ScalingSupport = scalingSupport;
         }
     }
 
@@ -1147,7 +1159,7 @@ void TPersQueueReadBalancer::Handle(TEvTabletPipe::TEvServerConnected::TPtr& ev,
 }
 
 TPersQueueReadBalancer::TClientGroupInfo& TPersQueueReadBalancer::TClientInfo::AddGroup(const ui32 group) {
-    auto r = ClientGroupsInfo.insert({group, TClientGroupInfo{*this}});
+    auto r = ClientGroupsInfo.insert({group, TClientGroupInfo{ *this }});
 
     TClientGroupInfo& clientInfo = r.first->second;
     clientInfo.Group = group;
@@ -1244,9 +1256,12 @@ void TPersQueueReadBalancer::Handle(TEvPersQueue::TEvRegisterReadSession::TPtr& 
     auto& pipeInfo = jt->second;
     pipeInfo = {record.GetClientId(), record.GetSession(), ev->Sender, !groups.empty(), pipeInfo.ServerActors};
 
+    auto cit = Consumers.find(record.GetClientId());
+    NKikimrPQ::EConsumerScalingSupport scalingSupport = cit == Consumers.end() ? NKikimrPQ::EConsumerScalingSupport::PARTIAL_SUPPORT : cit->second.ScalingSupport;
+
     auto it = ClientsInfo.find(record.GetClientId());
     if (it == ClientsInfo.end()) {
-        auto p = ClientsInfo.insert({record.GetClientId(), TClientInfo{*this}});
+        auto p = ClientsInfo.insert({record.GetClientId(), TClientInfo{ *this,  scalingSupport }});
         Y_ABORT_UNLESS(p.second);
         it = p.first;
         it->second.ClientId = record.GetClientId();
@@ -1339,7 +1354,7 @@ void TPersQueueReadBalancer::Handle(TEvPersQueue::TEvGetReadSessionsInfo::TPtr& 
 
 
 bool TPersQueueReadBalancer::TClientInfo::ScalingSupport() const {
-    return true; // TODO
+    return NKikimrPQ::EConsumerScalingSupport::FULL_SUPPORT == ScalingSupport_;
 }
 
 void TPersQueueReadBalancer::TClientInfo::KillSessionsWithoutGroup(const TActorContext& ctx) {

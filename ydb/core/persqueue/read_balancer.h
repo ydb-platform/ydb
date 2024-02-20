@@ -353,6 +353,8 @@ class TPersQueueReadBalancer : public TActor<TPersQueueReadBalancer>, public TTa
 
 
     struct TConsumerInfo {
+        NKikimrPQ::EConsumerScalingSupport ScalingSupport;
+
         TVector<::NMonitoring::TDynamicCounters::TCounterPtr> AggregatedCounters;
         THolder<TTabletLabeledCountersBase> Aggr;
     };
@@ -467,11 +469,13 @@ class TPersQueueReadBalancer : public TActor<TPersQueueReadBalancer>, public TTa
     struct TClientInfo {
         constexpr static ui32 MAIN_GROUP = 0;
 
-        TClientInfo(const TPersQueueReadBalancer& balancer)
-            : Balancer(balancer) {
+        TClientInfo(const TPersQueueReadBalancer& balancer, NKikimrPQ::EConsumerScalingSupport scalingSupport)
+            : Balancer(balancer)
+            , ScalingSupport_(scalingSupport) {
         }
 
         const TPersQueueReadBalancer& Balancer;
+        const NKikimrPQ::EConsumerScalingSupport ScalingSupport_;
 
         THashMap<ui32, TClientGroupInfo> ClientGroupsInfo; //map from group to info
         ui32 SessionsWithGroup = 0;

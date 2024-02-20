@@ -24,6 +24,8 @@ THolder<TExecutionUnit> CreateExecutionUnit(EExecutionUnitKind kind,
         return CreateCheckCommitWritesTxUnit(dataShard, pipeline);
     case EExecutionUnitKind::StoreDataTx:
         return CreateStoreDataTxUnit(dataShard, pipeline);
+    case EExecutionUnitKind::StoreWrite:
+        return CreateStoreWriteUnit(dataShard, pipeline);
     case EExecutionUnitKind::StoreSchemeTx:
         return CreateStoreSchemeTxUnit(dataShard, pipeline);
     case EExecutionUnitKind::StoreSnapshotTx:
@@ -46,10 +48,10 @@ THolder<TExecutionUnit> CreateExecutionUnit(EExecutionUnitKind kind,
         return CreatePlanQueueUnit(dataShard, pipeline);
     case EExecutionUnitKind::LoadTxDetails:
         return CreateLoadTxDetailsUnit(dataShard, pipeline);
+    case EExecutionUnitKind::LoadWriteDetails:
+        return CreateLoadWriteDetailsUnit(dataShard, pipeline);
     case EExecutionUnitKind::FinalizeDataTxPlan:
         return CreateFinalizeDataTxPlanUnit(dataShard, pipeline);
-    case EExecutionUnitKind::FinalizeWriteTxPlan:
-        return CreateFinalizeWriteTxPlanUnit(dataShard, pipeline);
     case EExecutionUnitKind::ProtectSchemeEchoes:
         return CreateProtectSchemeEchoesUnit(dataShard, pipeline);
     case EExecutionUnitKind::BuildDataTxOutRS:
@@ -58,12 +60,18 @@ THolder<TExecutionUnit> CreateExecutionUnit(EExecutionUnitKind kind,
         return CreateBuildDistributedEraseTxOutRSUnit(dataShard, pipeline);
     case EExecutionUnitKind::BuildKqpDataTxOutRS:
         return CreateBuildKqpDataTxOutRSUnit(dataShard, pipeline);
+    case EExecutionUnitKind::BuildWriteOutRS:
+        return CreateBuildWriteOutRSUnit(dataShard, pipeline);
     case EExecutionUnitKind::StoreAndSendOutRS:
         return CreateStoreAndSendOutRSUnit(dataShard, pipeline);
+    case EExecutionUnitKind::StoreAndSendWriteOutRS:
+        return CreateStoreAndSendWriteOutRSUnit(dataShard, pipeline);
     case EExecutionUnitKind::PrepareDataTxInRS:
         return CreatePrepareDataTxInRSUnit(dataShard, pipeline);
     case EExecutionUnitKind::PrepareKqpDataTxInRS:
         return CreatePrepareKqpDataTxInRSUnit(dataShard, pipeline);
+    case EExecutionUnitKind::PrepareWriteTxInRS:
+        return CreatePrepareWriteTxInRSUnit(dataShard, pipeline);
     case EExecutionUnitKind::PrepareDistributedEraseTxInRS:
         return CreatePrepareDistributedEraseTxInRSUnit(dataShard, pipeline);
     case EExecutionUnitKind::LoadAndWaitInRS:
@@ -78,6 +86,8 @@ THolder<TExecutionUnit> CreateExecutionUnit(EExecutionUnitKind kind,
         return CreateExecuteCommitWritesTxUnit(dataShard, pipeline);
     case EExecutionUnitKind::CompleteOperation:
         return CreateCompleteOperationUnit(dataShard, pipeline);
+    case EExecutionUnitKind::CompleteWrite:
+        return CreateCompleteWriteUnit(dataShard, pipeline);
     case EExecutionUnitKind::ExecuteKqpScanTx:
         return CreateExecuteKqpScanTxUnit(dataShard, pipeline);
     case EExecutionUnitKind::MakeScanSnapshot:
@@ -139,7 +149,7 @@ THolder<TExecutionUnit> CreateExecutionUnit(EExecutionUnitKind kind,
     case EExecutionUnitKind::ExecuteRead:
         return CreateReadUnit(dataShard, pipeline);
     case EExecutionUnitKind::ExecuteWrite:
-        return CreateWriteUnit(dataShard, pipeline);
+        return CreateExecuteWriteUnit(dataShard, pipeline);
     default:
         Y_FAIL_S("Unexpected execution kind " << kind << " (" << (ui32)kind << ")");
     }

@@ -234,6 +234,8 @@ public:
         }
     }
 
+    void FillViews(const google::protobuf::RepeatedPtrField< ::NKqpProto::TKqpTableInfo>& views);
+
     bool NeedCheckTableVersions() const {
         return CompileStats.FromCache;
     }
@@ -361,6 +363,8 @@ public:
     bool HasTxControl() const {
         return RequestEv->HasTxControl();
     }
+
+    bool HasImpliedTx() const; // (only for QueryService API) user has not specified TxControl in the request. In this case we behave like Begin/Commit was specified.
 
     const ::Ydb::Table::TransactionControl& GetTxControl() const {
         return RequestEv->GetTxControl();

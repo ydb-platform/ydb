@@ -23,6 +23,12 @@ struct TBridgeYqlPluginOptions
     const char* GatewayConfig = nullptr;
     size_t GatewayConfigLength = 0;
 
+    const char* DqGatewayConfig = nullptr;
+    size_t DqGatewayConfigLength = 0;
+
+    const char* DqManagerConfig = nullptr;
+    size_t DqManagerConfigLength = 0;
+
     const char* FileStorageConfig = nullptr;
     size_t FileStorageConfigLength = 0;
 
@@ -42,6 +48,7 @@ struct TBridgeYqlPluginOptions
 using TBridgeYqlPlugin = void;
 
 using TFuncBridgeCreateYqlPlugin = TBridgeYqlPlugin*(const TBridgeYqlPluginOptions* options);
+using TFuncBridgeStartYqlPlugin = void(TBridgeYqlPlugin* plugin);
 using TFuncBridgeFreeYqlPlugin = void(TBridgeYqlPlugin* plugin);
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -108,6 +115,7 @@ using TFuncBridgeFreeAbortResult = void(TBridgeAbortResult* result);
 
 #define FOR_EACH_BRIDGE_INTERFACE_FUNCTION(XX) \
     XX(BridgeCreateYqlPlugin) \
+    XX(BridgeStartYqlPlugin) \
     XX(BridgeFreeYqlPlugin) \
     XX(BridgeFreeQueryResult) \
     XX(BridgeRun) \

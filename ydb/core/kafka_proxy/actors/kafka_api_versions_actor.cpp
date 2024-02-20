@@ -45,6 +45,9 @@ TApiVersionsResponseData::TPtr GetApiVersions() {
     AddApiKey<TFindCoordinatorRequestData>(response->ApiKeys, FIND_COORDINATOR, {.MaxVersion=0});
     AddApiKey<TOffsetCommitRequestData>(response->ApiKeys, OFFSET_COMMIT, {.MaxVersion=0});
     AddApiKey<TOffsetFetchRequestData>(response->ApiKeys, OFFSET_FETCH, {.MaxVersion=8});
+    AddApiKey<TCreateTopicsRequestData>(response->ApiKeys, CREATE_TOPICS, {.MaxVersion=7});
+    AddApiKey<TAlterConfigsRequestData>(response->ApiKeys, ALTER_CONFIGS, {.MaxVersion=2});
+    AddApiKey<TCreatePartitionsRequestData>(response->ApiKeys, CREATE_PARTITIONS, {.MaxVersion=3});
 
     return response;
 }

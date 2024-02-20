@@ -7,6 +7,7 @@
 #include <ydb/core/fq/libs/compute/common/run_actor_params.h>
 #include <ydb/core/fq/libs/compute/ydb/events/events.h>
 #include <ydb/core/fq/libs/ydb/ydb.h>
+#include <ydb/core/util/backoff.h>
 #include <ydb/library/services/services.pb.h>
 
 #include <ydb/public/sdk/cpp/client/ydb_query/client.h>
@@ -65,14 +66,19 @@ public:
         , Connector(connector)
         , OperationId(operationId)
         , Counters(GetStepCountersSubgroup())
+        , BackoffTimer(20, 1000)
     {}
 
     static constexpr char ActorName[] = "FQ_RESOURCES_CLEANER_ACTOR";
 
+    void SendForgetOperation(const TDuration& delay = TDuration::Zero()) {
+        Register(new TRetryActor<TEvYdbCompute::TEvForgetOperationRequest, TEvYdbCompute::TEvForgetOperationResponse, NYdb::TOperation::TOperationId>(Counters.GetCounters(ERequestType::RT_FORGET_OPERATION), delay, SelfId(), Connector, OperationId));
+    }
+
     void Start() {
         LOG_I("Start resources cleaner actor. Compute state: " << FederatedQuery::QueryMeta::ComputeStatus_Name(Params.Status));
         Become(&TResourcesCleanerActor::StateFunc);
-        Register(new TRetryActor<TEvYdbCompute::TEvForgetOperationRequest, TEvYdbCompute::TEvForgetOperationResponse, NYdb::TOperation::TOperationId>(Counters.GetCounters(ERequestType::RT_FORGET_OPERATION), SelfId(), Connector, OperationId));
+        SendForgetOperation();
     }
 
     STRICT_STFUNC(StateFunc,
@@ -81,6 +87,10 @@ public:
 
     void Handle(const TEvYdbCompute::TEvForgetOperationResponse::TPtr& ev) {
         const auto& response = *ev.Get()->Get();
+        if (response.Status == NYdb::EStatus::TIMEOUT || response.Status == NYdb::EStatus::CLIENT_DEADLINE_EXCEEDED) {
+            SendForgetOperation(TDuration::MilliSeconds(BackoffTimer.NextBackoffMs()));
+            return;
+        }
         if (response.Status != NYdb::EStatus::SUCCESS && response.Status != NYdb::EStatus::NOT_FOUND) {
             LOG_E("Can't forget operation: " << ev->Get()->Issues.ToOneLineString());
             Send(Parent, new TEvYdbCompute::TEvResourcesCleanerResponse(ev->Get()->Issues, ev->Get()->Status));
@@ -98,6 +108,7 @@ private:
     TActorId Connector;
     NYdb::TOperation::TOperationId OperationId;
     TCounters Counters;
+    NKikimr::TBackoffTimer BackoffTimer;
 };
 
 std::unique_ptr<NActors::IActor> CreateResourcesCleanerActor(const TRunActorParams& params,

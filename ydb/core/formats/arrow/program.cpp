@@ -139,18 +139,20 @@ public:
     TKernelFunction(const TFunctionPtr kernelsFunction, arrow::compute::ExecContext* ctx)
         : TBase(ctx)
         , Function(kernelsFunction)
-    {}
+    {
+        AFL_VERIFY(Function);
+    }
 
     arrow::Result<arrow::Datum> Call(const TAssignObject& assign, const TDatumBatch& batch) const override {
         auto arguments = TBase::BuildArgs(batch, assign.GetArguments());
         if (!arguments) {
             return arrow::Status::Invalid("Error parsing args.");
         }
-        try {
+//        try {
             return Function->Execute(*arguments, assign.GetOptions(), TBase::Ctx);
-        } catch (const std::exception& ex) {
-            return arrow::Status::ExecutionError(ex.what());
-        }
+//        } catch (const std::exception& ex) {
+//            return arrow::Status::ExecutionError(ex.what());
+//        }
     }
 };
 
@@ -596,6 +598,10 @@ std::shared_ptr<TDatumBatch> TDatumBatch::FromTable(const std::shared_ptr<arrow:
         });
 }
 
+TAssign TAssign::MakeTimestamp(const TColumnInfo& column, ui64 value) {
+    return TAssign(column, std::make_shared<arrow::TimestampScalar>(value, arrow::timestamp(arrow::TimeUnit::MICRO)));
+}
+
 IStepFunction<TAssign>::TPtr TAssign::GetFunction(arrow::compute::ExecContext* ctx) const {
     if (KernelFunction) {
         return std::make_shared<TKernelFunction<TAssign>>(KernelFunction, ctx);
@@ -865,12 +871,18 @@ std::shared_ptr<NArrow::TColumnFilter> TProgramStep::BuildFilter(const std::shar
     if (Filters.empty()) {
         return nullptr;
     }
-    auto datumBatch = TDatumBatch::FromTable(t);
-
-    NArrow::TStatusValidator::Validate(ApplyAssignes(*datumBatch, NArrow::GetCustomExecContext()));
-    NArrow::TColumnFilter local = NArrow::TColumnFilter::BuildAllowFilter();
-    NArrow::TStatusValidator::Validate(MakeCombinedFilter(*datumBatch, local));
-    return std::make_shared<NArrow::TColumnFilter>(std::move(local));
+    std::vector<std::shared_ptr<arrow::RecordBatch>> batches = NArrow::SliceToRecordBatches(t);
+    NArrow::TColumnFilter fullLocal = NArrow::TColumnFilter::BuildAllowFilter();
+    for (auto&& rb : batches) {
+        auto datumBatch = TDatumBatch::FromRecordBatch(rb);
+        NArrow::TStatusValidator::Validate(ApplyAssignes(*datumBatch, NArrow::GetCustomExecContext()));
+        NArrow::TColumnFilter local = NArrow::TColumnFilter::BuildAllowFilter();
+        NArrow::TStatusValidator::Validate(MakeCombinedFilter(*datumBatch, local));
+        AFL_VERIFY(local.Size() == datumBatch->Rows)("local", local.Size())("datum", datumBatch->Rows);
+        fullLocal.Append(local);
+    }
+    AFL_VERIFY(fullLocal.Size() == t->num_rows())("filter", fullLocal.Size())("t", t->num_rows());
+    return std::make_shared<NArrow::TColumnFilter>(std::move(fullLocal));
 }
 
 const std::set<ui32>& TProgramStep::GetFilterOriginalColumnIds() const {

@@ -74,6 +74,30 @@ INSERT INTO test_jsonb VALUES
 ('scalar','"a scalar"'),
 ('array','["zero", "one","two",null,"four","five", [1,2,3],{"f1":9}]'),
 ('object','{"field1":"val1","field2":"val2","field3":null, "field4": 4, "field5": [1,2,3], "field6": {"f1":9}}');
+SELECT test_json -> 'x' FROM test_jsonb WHERE json_type = 'scalar';
+SELECT test_json -> 'x' FROM test_jsonb WHERE json_type = 'array';
+SELECT test_json -> 'x' FROM test_jsonb WHERE json_type = 'object';
+SELECT test_json -> 'field2' FROM test_jsonb WHERE json_type = 'object';
+SELECT test_json ->> 'field2' FROM test_jsonb WHERE json_type = 'scalar';
+SELECT test_json ->> 'field2' FROM test_jsonb WHERE json_type = 'array';
+SELECT test_json ->> 'field2' FROM test_jsonb WHERE json_type = 'object';
+SELECT test_json -> 2 FROM test_jsonb WHERE json_type = 'scalar';
+SELECT test_json -> 2 FROM test_jsonb WHERE json_type = 'array';
+SELECT test_json -> 9 FROM test_jsonb WHERE json_type = 'array';
+SELECT test_json -> 2 FROM test_jsonb WHERE json_type = 'object';
+SELECT test_json ->> 6 FROM test_jsonb WHERE json_type = 'array';
+SELECT test_json ->> 7 FROM test_jsonb WHERE json_type = 'array';
+SELECT test_json ->> 'field4' FROM test_jsonb WHERE json_type = 'object';
+SELECT test_json ->> 'field5' FROM test_jsonb WHERE json_type = 'object';
+SELECT test_json ->> 'field6' FROM test_jsonb WHERE json_type = 'object';
+SELECT test_json ->> 2 FROM test_jsonb WHERE json_type = 'scalar';
+SELECT test_json ->> 2 FROM test_jsonb WHERE json_type = 'array';
+SELECT test_json ->> 2 FROM test_jsonb WHERE json_type = 'object';
+-- nulls
+SELECT (test_json->'field3') IS NULL AS expect_false FROM test_jsonb WHERE json_type = 'object';
+SELECT (test_json->>'field3') IS NULL AS expect_true FROM test_jsonb WHERE json_type = 'object';
+SELECT (test_json->3) IS NULL AS expect_false FROM test_jsonb WHERE json_type = 'array';
+SELECT (test_json->>3) IS NULL AS expect_true FROM test_jsonb WHERE json_type = 'array';
 -- corner cases
 select '{"a": [{"b": "c"}, {"b": "cc"}]}'::jsonb -> null::text;
 select '{"a": [{"b": "c"}, {"b": "cc"}]}'::jsonb -> null::int;
@@ -213,6 +237,7 @@ CREATE TEMP TABLE foo (serial_num int, name text, type text);
 INSERT INTO foo VALUES (847001,'t15','GE1043');
 INSERT INTO foo VALUES (847002,'t16','GE1043');
 INSERT INTO foo VALUES (847003,'sub-alpha','GESS90');
+SELECT jsonb_object_agg(name, type) FROM foo;
 INSERT INTO foo VALUES (999999, NULL, 'bar');
 SELECT jsonb_object_agg(name, type) FROM foo;
 -- jsonb_object

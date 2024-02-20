@@ -83,9 +83,14 @@ message TComputeMapping {
     TActivationPercentage Activation = 3;
 }
 
+message TSupportedComputeYdbFeatures {
+    bool ReplaceIfExists = 1;
+}
+
 message TComputeConfig {
     TInPlaceCompute InPlace = 1;
     TYdbCompute Ydb = 2;
     EComputeType DefaultCompute = 3;
     repeated TComputeMapping ComputeMapping = 4;
+    TSupportedComputeYdbFeatures SupportedComputeYdbFeatures = 5;
 }

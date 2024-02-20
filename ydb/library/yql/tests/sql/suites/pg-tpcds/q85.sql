@@ -2,10 +2,10 @@
 --TPC-DS Q85
 
 -- start query 1 in stream 0 using template ../query_templates/query85.tpl
-select  substr(r_reason_desc,1,20)
-       ,avg(ws_quantity)
-       ,avg(wr_refunded_cash)
-       ,avg(wr_fee)
+select  substr(r_reason_desc,1,20) reason
+       ,avg(ws_quantity) avg_ws_q
+       ,avg(wr_refunded_cash) avg_wr_r
+       ,avg(wr_fee) avg_wr_f
  from plato.web_sales, plato.web_returns, plato.web_page, plato.customer_demographics cd1,
       plato.customer_demographics cd2, plato.customer_address, plato.date_dim, plato.reason 
  where ws_web_page_sk = wp_web_page_sk

@@ -739,6 +739,10 @@ public:
         NQueryTrackerClient::TQueryId queryId, const TAlterQueryOptions& options),
         (override));
 
+    MOCK_METHOD(TFuture<TGetQueryTrackerInfoResult>, GetQueryTrackerInfo, (
+        const TGetQueryTrackerInfoOptions& options),
+        (override));
+
     MOCK_METHOD(TFuture<NBundleControllerClient::TBundleConfigDescriptorPtr>, GetBundleConfig, (
         const TString& bundleName,
         const NBundleControllerClient::TGetBundleConfigOptions& options), (override));

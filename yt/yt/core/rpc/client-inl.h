@@ -85,7 +85,7 @@ TSharedRefArray TTypedClientRequest<TRequestMessage, TResponse>::SerializeHeader
 {
     TSharedRefArrayBuilder builder(Attachments().size() + 1);
 
-    // COMPAT(kiselyovp): legacy RPC codecs
+    // COMPAT(danilalexeev): legacy RPC codecs
     builder.Add(EnableLegacyRpcCodecs_
         ? SerializeProtoToRefWithEnvelope(*this, RequestCodec_, false)
         : SerializeProtoToRefWithCompression(*this, RequestCodec_, false));
@@ -132,7 +132,7 @@ bool TTypedClientResponse<TResponseMessage>::TryDeserializeBody(TRef data, std::
 
     return codecId
         ? TryDeserializeProtoWithCompression(this, data, *codecId)
-        // COMPAT(kiselyovp): legacy RPC codecs
+        // COMPAT(danilalexeev): legacy RPC codecs
         : TryDeserializeProtoWithEnvelope(this, data);
 }
 

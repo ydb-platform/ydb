@@ -161,6 +161,7 @@ bool IsValidValue(NUdf::EDataSlot type, const NUdf::TUnboxedValuePod& value) {
 }
 
 bool IsLeapYear(i32 year) {
+    Y_ASSERT(year != 0);
     if (Y_UNLIKELY(year < 0)) {
         ++year;
     }
@@ -229,6 +230,7 @@ bool WriteDate32(IOutputStream& out, i32 value) {
 }
 
 void SplitTime(ui32 value, ui32& hour, ui32& min, ui32& sec) {
+    Y_ASSERT(value < 86400);
     hour = value / 3600;
     value -= hour * 3600;
     min = value / 60;
@@ -260,6 +262,26 @@ bool WriteDatetime(IOutputStream& out, ui32 value) {
     return true;
 }
 
+bool WriteDatetime64(IOutputStream& out, i64 value) {
+    if (Y_UNLIKELY(NUdf::MIN_DATETIME64 > value || value > NUdf::MAX_DATETIME64)) {
+        return false;
+    }
+
+    auto date = value / 86400;
+    value -= date * 86400;
+    if (value < 0) {
+        date -= 1;
+        value += 86400;
+    }
+    if (!WriteDate32(out, date)) {
+        return false;
+    }
+
+    out << 'T';
+    WriteTime(out, value);
+    return true;
+}
+
 void WriteUs(IOutputStream& out, ui32 value) {
     if (value) {
         out << '.';
@@ -285,10 +307,34 @@ bool WriteTimestamp(IOutputStream& out, ui64 value) {
     return true;
 }
 
+bool WriteTimestamp64(IOutputStream& out, i64 value) {
+    if (Y_UNLIKELY(NUdf::MIN_TIMESTAMP64 > value || value > NUdf::MAX_TIMESTAMP64)) {
+        return false;
+    }
+
+    auto date = value / 86400000000ll;
+    value -= date * 86400000000ll;
+    if (value < 0) {
+        date -= 1;
+        value += 86400000000ll;
+    }
+    if (!WriteDate32(out, date)) {
+        return false;
+    }
+
+    out << 'T';
+    const auto time = value / 1000000ull;
+    value -= time * 1000000ull;
+    WriteTime(out, time);
+    WriteUs(out, value);
+    return true;
+}
+
+template <i64 UpperBound>
 bool WriteInterval(IOutputStream& out, i64 signedValue) {
     ui64 value = signedValue < 0 ? -signedValue : signedValue;
 
-    if (value >= NUdf::MAX_TIMESTAMP) {
+    if (value > UpperBound) {
         return false;
     }
 
@@ -405,12 +451,6 @@ NUdf::TUnboxedValuePod ValueToString(NUdf::EDataSlot type, NUdf::TUnboxedValuePo
         }
         break;
 
-    case NUdf::EDataSlot::Date32:
-        if (!WriteDate32(out, value.Get<i32>())) {
-            return NUdf::TUnboxedValuePod();
-        }
-        break;
-
     case NUdf::EDataSlot::Datetime:
         if (!WriteDatetime(out, value.Get<ui32>())) {
             return NUdf::TUnboxedValuePod();
@@ -426,7 +466,7 @@ NUdf::TUnboxedValuePod ValueToString(NUdf::EDataSlot type, NUdf::TUnboxedValuePo
         break;
 
     case NUdf::EDataSlot::Interval:
-        if (!WriteInterval(out, value.Get<i64>())) {
+        if (!WriteInterval<NUdf::MAX_TIMESTAMP - 1>(out, value.Get<i64>())) {
             return NUdf::TUnboxedValuePod();
         }
         break;
@@ -463,6 +503,32 @@ NUdf::TUnboxedValuePod ValueToString(NUdf::EDataSlot type, NUdf::TUnboxedValuePo
         out << ',' << tz.name();
         break;
     }
+
+    case NUdf::EDataSlot::Date32:
+        if (!WriteDate32(out, value.Get<i32>())) {
+            return NUdf::TUnboxedValuePod();
+        }
+        break;
+
+    case NUdf::EDataSlot::Datetime64:
+        if (!WriteDatetime64(out, value.Get<i64>())) {
+            return NUdf::TUnboxedValuePod();
+        }
+        out << 'Z';
+        break;
+
+    case NUdf::EDataSlot::Timestamp64:
+        if (!WriteTimestamp64(out, value.Get<i64>())) {
+            return NUdf::TUnboxedValuePod();
+        }
+        out << 'Z';
+        break;
+
+    case NUdf::EDataSlot::Interval64:
+        if (!WriteInterval<NUdf::MAX_INTERVAL64>(out, value.Get<i64>())) {
+            return NUdf::TUnboxedValuePod();
+        }
+        break;
 
     case NUdf::EDataSlot::DyNumber: {
         out << NDyNumber::DyNumberToString(value.AsStringRef());
@@ -769,13 +835,15 @@ public:
             year += 1;
         }
         year -= NUdf::MIN_YEAR;
+        i32 val;
         if (Y_LIKELY(year%SOLAR_CYCLE_YEARS >= 0)) {
-            value = (year / SOLAR_CYCLE_YEARS) * SOLAR_CYCLE_DAYS + Years_[year % SOLAR_CYCLE_YEARS];
+            val = (year / SOLAR_CYCLE_YEARS) * SOLAR_CYCLE_DAYS + Years_[year % SOLAR_CYCLE_YEARS];
         } else {
-            value = (year / SOLAR_CYCLE_YEARS - 1) * SOLAR_CYCLE_DAYS + Years_[SOLAR_CYCLE_YEARS + year % SOLAR_CYCLE_YEARS];
+            val = (year / SOLAR_CYCLE_YEARS - 1) * SOLAR_CYCLE_DAYS + Years_[SOLAR_CYCLE_YEARS + year % SOLAR_CYCLE_YEARS];
         }
-        value += isLeap ? LeapMonths_[month] : Months_[month];
-        value += day - 1;
+        val += isLeap ? LeapMonths_[month] : Months_[month];
+        val += day - 1;
+        value = val;
         return true;
     }
 
@@ -1086,9 +1154,8 @@ NUdf::TUnboxedValuePod ParseDate(NUdf::TStringRef buf) {
     return NUdf::TUnboxedValuePod(value);
 }
 
-NUdf::TUnboxedValuePod ParseDate32(NUdf::TStringRef buf) {
+bool ParseDate32(ui32& pos, NUdf::TStringRef buf, i32& value) {
     ui32 year, month, day;
-    ui32 pos = 0;
     bool beforeChrist = false;
     if (pos < buf.Size()) {
         char c = buf.Data()[pos];
@@ -1101,27 +1168,35 @@ NUdf::TUnboxedValuePod ParseDate32(NUdf::TStringRef buf) {
     }
 
     if (!ParseNumber(pos, buf, year, 6) || pos == buf.Size() || buf.Data()[pos] != '-') {
-        return NUdf::TUnboxedValuePod();
+        return false;
     }
     i32 iyear = beforeChrist ? -year : year;
 
     // skip '-'
     ++pos;
     if (!ParseNumber(pos, buf, month, 2) || pos == buf.Size() || buf.Data()[pos] != '-') {
-        return NUdf::TUnboxedValuePod();
+        return false;
     }
 
     // skip '-'
     ++pos;
-    if (!ParseNumber(pos, buf, day, 2) || pos != buf.Size()) {
-        return NUdf::TUnboxedValuePod();
+    if (!ParseNumber(pos, buf, day, 2)) {
+        return false;
     }
 
-    i32 value;
     if (Y_LIKELY(MakeDate32(iyear, month, day, value))) {
+        return true;
+    }
+
+    return false;
+}
+
+NUdf::TUnboxedValuePod ParseDate32(NUdf::TStringRef buf) {
+    i32 value;
+    ui32 pos = 0;
+    if (Y_LIKELY(ParseDate32(pos, buf, value) && pos == buf.Size())) {
         return NUdf::TUnboxedValuePod(value);
     }
-
     return NUdf::TUnboxedValuePod();
 }
 
@@ -1161,6 +1236,106 @@ NUdf::TUnboxedValuePod ParseTzDate(NUdf::TStringRef str) {
     NUdf::TUnboxedValuePod out(value);
     out.SetTimezoneId(*tzId);
     return out;
+}
+
+bool ParseTime(ui32& pos, NUdf::TStringRef buf, ui32& timeValue) {
+    if (pos == buf.Size() || buf.Data()[pos] != 'T') {
+        return false;
+    }
+    ui32 hour, minute, second;
+    // skip 'T'
+    ++pos;
+    if (!ParseNumber(pos, buf, hour, 2) || pos == buf.Size() || buf.Data()[pos] != ':') {
+        return false;
+    }
+
+    // skip ':'
+    ++pos;
+    if (!ParseNumber(pos, buf, minute, 2) || pos == buf.Size() || buf.Data()[pos] != ':') {
+        return false;
+    }
+
+    // skip ':'
+    ++pos;
+    if (!ParseNumber(pos, buf, second, 2) || pos == buf.Size()) {
+        return false;
+    }
+
+    if (!MakeTime(hour, minute, second, timeValue)) {
+        return false;
+    }
+    return true;
+}
+
+bool ParseTimezoneOffset(ui32& pos, NUdf::TStringRef buf, i32& offset) {
+    bool waiting_for_z = true;
+    ui32 offset_hours = 0;
+    ui32 offset_minutes = 0;
+    bool is_offset_negative = false;
+
+    if (buf.Data()[pos] == '+' || buf.Data()[pos] == '-') {
+        is_offset_negative = buf.Data()[pos] == '-';
+
+        // Skip sign
+        ++pos;
+
+        if (!ParseNumber(pos, buf, offset_hours, 2) ||
+            pos == buf.Size() || buf.Data()[pos] != ':')
+        {
+            return false;
+        }
+
+        // Skip ':'
+        ++pos;
+
+        if (!ParseNumber(pos, buf, offset_minutes, 2) || pos != buf.Size()) {
+            return false;
+        }
+
+        waiting_for_z = false;
+    }
+
+    if (waiting_for_z) {
+        if (pos == buf.Size() || buf.Data()[pos] != 'Z') {
+            return false;
+        }
+
+        // skip 'Z'
+        ++pos;
+    }
+
+    ui32 offset_value = ((offset_hours) * 60 + offset_minutes) * 60;
+    offset = is_offset_negative ? offset_value : -offset_value;
+    return true;
+}
+
+NUdf::TUnboxedValuePod ParseDatetime64(NUdf::TStringRef buf) {
+    i32 date;
+    ui32 pos = 0;
+    if (Y_UNLIKELY(!ParseDate32(pos, buf, date))) {
+        return NUdf::TUnboxedValuePod();
+    }
+
+    ui32 time;
+    if (Y_UNLIKELY(!ParseTime(pos, buf, time))) {
+        return NUdf::TUnboxedValuePod();
+    }
+
+    i32 zoneOffset = 0;
+    if (Y_UNLIKELY(!ParseTimezoneOffset(pos, buf, zoneOffset))) {
+        return NUdf::TUnboxedValuePod();
+    }
+    if (Y_UNLIKELY(pos != buf.Size())) {
+        return NUdf::TUnboxedValuePod();
+    }
+    i64 value = 86400;
+    value *= date;
+    value += time;
+    value += zoneOffset;
+    if (Y_UNLIKELY(NUdf::MIN_DATETIME64 > value || value > NUdf::MAX_DATETIME64)) {
+        return NUdf::TUnboxedValuePod();
+    }
+    return NUdf::TUnboxedValuePod(value);
 }
 
 NUdf::TUnboxedValuePod ParseDatetime(NUdf::TStringRef buf) {
@@ -1328,6 +1503,66 @@ NUdf::TUnboxedValuePod ParseTzDatetime(NUdf::TStringRef str) {
     NUdf::TUnboxedValuePod out(value);
     out.SetTimezoneId(*tzId);
     return out;
+}
+
+bool ParseMicroseconds(ui32& pos, NUdf::TStringRef buf, ui32& microseconds) {
+    if (buf.Data()[pos] == '.') {
+        ui32 ms = 0;
+        // Skip dot
+        ++pos;
+        ui32 prevPos = pos;
+        if (!ParseNumber(pos, buf, ms, 6)) {
+            return false;
+        }
+
+        prevPos = pos - prevPos;
+
+        while (prevPos < 6) {
+            ms *= 10;
+            ++prevPos;
+        }
+        microseconds = ms;
+
+        // Skip unused digits
+        while (pos < buf.Size() && '0' <= buf.Data()[pos] && buf.Data()[pos] <= '9') {
+            ++pos;
+        }
+    }
+    return true;
+}
+
+NUdf::TUnboxedValuePod ParseTimestamp64(NUdf::TStringRef buf) {
+    i32 date;
+    ui32 pos = 0;
+    if (Y_UNLIKELY(!ParseDate32(pos, buf, date))) {
+        return NUdf::TUnboxedValuePod();
+    }
+
+    ui32 time;
+    if (Y_UNLIKELY(!ParseTime(pos, buf, time))) {
+        return NUdf::TUnboxedValuePod();
+    }
+
+    ui32 microseconds = 0;
+    if (Y_UNLIKELY(!ParseMicroseconds(pos, buf, microseconds))) {
+        return NUdf::TUnboxedValuePod();
+    }
+
+    i32 zoneOffset = 0;
+    if (Y_UNLIKELY(!ParseTimezoneOffset(pos, buf, zoneOffset))) {
+        return NUdf::TUnboxedValuePod();
+    }
+    if (Y_UNLIKELY(pos != buf.Size())) {
+        return NUdf::TUnboxedValuePod();
+    }
+    i64 value = 86400000000ull;
+    value *= date;
+    value += (i32(time) + zoneOffset)*1000000ull;
+    value += microseconds;
+    if (Y_UNLIKELY(NUdf::MIN_TIMESTAMP64 > value || value > NUdf::MAX_TIMESTAMP64)) {
+        return NUdf::TUnboxedValuePod();
+    }
+    return NUdf::TUnboxedValuePod(value);
 }
 
 NUdf::TUnboxedValuePod ParseTimestamp(NUdf::TStringRef buf) {
@@ -1553,7 +1788,7 @@ NUdf::TUnboxedValuePod ParseTzTimestamp(NUdf::TStringRef str) {
     return out;
 }
 
-template <bool DecimalPart = false>
+template <bool DecimalPart = false, i8 MaxDigits = 6>
 bool ParseNumber(std::string_view::const_iterator& pos, const std::string_view& buf, ui32& value) {
     value = 0U;
 
@@ -1561,7 +1796,7 @@ bool ParseNumber(std::string_view::const_iterator& pos, const std::string_view& 
         return false;
     }
 
-    auto digits = 6U;
+    auto digits = MaxDigits;
     do {
         value *= 10U;
         value += *pos - '0';
@@ -1577,6 +1812,7 @@ bool ParseNumber(std::string_view::const_iterator& pos, const std::string_view& 
     return true;
 }
 
+template <i64 UpperBound, ui32 MaxDays>
 NUdf::TUnboxedValuePod ParseInterval(const std::string_view& buf) {
     if (buf.empty()) {
         return NUdf::TUnboxedValuePod();
@@ -1596,7 +1832,7 @@ NUdf::TUnboxedValuePod ParseInterval(const std::string_view& buf) {
     ui32 num;
 
     if (*pos != 'T') {
-        if (!ParseNumber(pos, buf, num)) {
+        if (!ParseNumber<false, 9>(pos, buf, num)) {
             return NUdf::TUnboxedValuePod();
         }
 
@@ -1605,6 +1841,10 @@ NUdf::TUnboxedValuePod ParseInterval(const std::string_view& buf) {
             case 'W': days = 7U * num; break;
             default: return NUdf::TUnboxedValuePod();
         }
+    }
+
+    if (days > MaxDays) {
+        return NUdf::TUnboxedValuePod();
     }
 
     if (buf.cend() != pos) {
@@ -1659,7 +1899,7 @@ NUdf::TUnboxedValuePod ParseInterval(const std::string_view& buf) {
         + seconds.value_or(0U) * 1000000ull
         + microseconds.value_or(0U);
 
-    if (value >= NUdf::MAX_TIMESTAMP) {
+    if (value > UpperBound) {
         return NUdf::TUnboxedValuePod();
     }
 
@@ -1812,7 +2052,7 @@ NUdf::TUnboxedValuePod ValueFromString(NUdf::EDataSlot type, NUdf::TStringRef bu
         return ParseTimestamp(buf);
 
     case NUdf::EDataSlot::Interval:
-        return ParseInterval(buf);
+        return ParseInterval<NUdf::MAX_TIMESTAMP - 1, 2*NUdf::MAX_DATE>(buf);
 
     case NUdf::EDataSlot::TzDate:
         return ParseTzDate(buf);
@@ -1822,6 +2062,18 @@ NUdf::TUnboxedValuePod ValueFromString(NUdf::EDataSlot type, NUdf::TStringRef bu
 
     case NUdf::EDataSlot::TzTimestamp:
         return ParseTzTimestamp(buf);
+
+    case NUdf::EDataSlot::Date32:
+        return ParseDate32(buf);
+
+    case NUdf::EDataSlot::Datetime64:
+        return ParseDatetime64(buf);
+
+    case NUdf::EDataSlot::Timestamp64:
+        return ParseTimestamp64(buf);
+
+    case NUdf::EDataSlot::Interval64:
+        return ParseInterval<NUdf::MAX_INTERVAL64, NUdf::MAX_DATE32 - NUdf::MIN_DATE32>(buf);
 
     case NUdf::EDataSlot::DyNumber: {
         auto dyNumber = NDyNumber::ParseDyNumberString(buf);
@@ -1840,21 +2092,6 @@ NUdf::TUnboxedValuePod ValueFromString(NUdf::EDataSlot type, NUdf::TStringRef bu
         }
         return MakeString(TStringBuf(binaryJson->Data(), binaryJson->Size()));
     }
-
-    case NUdf::EDataSlot::Date32:
-        return ParseDate32(buf);
-
-    case NUdf::EDataSlot::Datetime64:
-        //TODO
-        return {};
-
-    case NUdf::EDataSlot::Timestamp64:
-        //TODO
-        return {};
-
-    case NUdf::EDataSlot::Interval64:
-        //TODO
-        return {};
 
     case NUdf::EDataSlot::Decimal:
     default:
@@ -1930,10 +2167,6 @@ NUdf::TUnboxedValuePod SimpleValueFromYson(NUdf::EDataSlot type, NUdf::TStringRe
         case NUdf::EDataSlot::TzTimestamp:
         case NUdf::EDataSlot::Decimal:
         case NUdf::EDataSlot::Uuid:
-        case NUdf::EDataSlot::Date32:
-        case NUdf::EDataSlot::Datetime64:
-        case NUdf::EDataSlot::Timestamp64:
-        case NUdf::EDataSlot::Interval64:
             Y_ABORT("TODO");
 
         default:
@@ -1983,6 +2216,10 @@ NUdf::TUnboxedValuePod SimpleValueFromYson(NUdf::EDataSlot type, NUdf::TStringRe
     case NUdf::EDataSlot::Int16:
     case NUdf::EDataSlot::Int32:
     case NUdf::EDataSlot::Int64:
+    case NUdf::EDataSlot::Date32:
+    case NUdf::EDataSlot::Datetime64:
+    case NUdf::EDataSlot::Timestamp64:
+    case NUdf::EDataSlot::Interval64:
     case NUdf::EDataSlot::Interval: {
         if (ytBinType != NYson::NDetail::Int64Marker) {
             return NUdf::TUnboxedValuePod();
@@ -2045,10 +2282,6 @@ NUdf::TUnboxedValuePod SimpleValueFromYson(NUdf::EDataSlot type, NUdf::TStringRe
     case NUdf::EDataSlot::Uuid:
     case NUdf::EDataSlot::DyNumber:
     case NUdf::EDataSlot::JsonDocument:
-    case NUdf::EDataSlot::Date32:
-    case NUdf::EDataSlot::Datetime64:
-    case NUdf::EDataSlot::Timestamp64:
-    case NUdf::EDataSlot::Interval64:
         Y_ABORT("TODO");
     }
 

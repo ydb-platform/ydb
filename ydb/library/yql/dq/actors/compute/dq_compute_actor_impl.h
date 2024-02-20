@@ -1458,33 +1458,32 @@ protected:
             this->RegisterWithSameMailbox(source.Actor);
         }
         for (auto& [inputIndex, transform] : InputTransformsMap) {
-            Y_ABORT_UNLESS(TaskRunner);
-                transform.ProgramBuilder.ConstructInPlace(typeEnv, *FunctionRegistry);
-                Y_ABORT_UNLESS(AsyncIoFactory);
-                const auto& inputDesc = Task.GetInputs(inputIndex);
-                CA_LOG_D("Create transform for input " << inputIndex << " " << inputDesc.ShortDebugString());
-                try {
-                    std::tie(transform.AsyncInput, transform.Actor) = AsyncIoFactory->CreateDqInputTransform(
-                        IDqAsyncIoFactory::TInputTransformArguments {
-                            .InputDesc = inputDesc,
-                            .InputIndex = inputIndex,
-                            .StatsLevel = collectStatsLevel,
-                            .TxId = TxId,
-                            .TaskId = Task.GetId(),
-                            .TransformInput = transform.InputBuffer,
-                            .SecureParams = secureParams,
-                            .TaskParams = taskParams,
-                            .ComputeActorId = this->SelfId(),
-                            .TypeEnv = typeEnv,
-                            .HolderFactory = holderFactory,
-                            .ProgramBuilder = *transform.ProgramBuilder,
-                            .Alloc = Alloc,
-                            .TraceId = ComputeActorSpan.GetTraceId()
-                        });
-                } catch (const std::exception& ex) {
-                    throw yexception() << "Failed to create input transform " << inputDesc.GetTransform().GetType() << ": " << ex.what();
-                }
-                this->RegisterWithSameMailbox(transform.Actor);
+            transform.ProgramBuilder.ConstructInPlace(typeEnv, *FunctionRegistry);
+            Y_ABORT_UNLESS(AsyncIoFactory);
+            const auto& inputDesc = Task.GetInputs(inputIndex);
+            CA_LOG_D("Create transform for input " << inputIndex << " " << inputDesc.ShortDebugString());
+            try {
+                std::tie(transform.AsyncInput, transform.Actor) = AsyncIoFactory->CreateDqInputTransform(
+                    IDqAsyncIoFactory::TInputTransformArguments {
+                        .InputDesc = inputDesc,
+                        .InputIndex = inputIndex,
+                        .StatsLevel = collectStatsLevel,
+                        .TxId = TxId,
+                        .TaskId = Task.GetId(),
+                        .TransformInput = transform.InputBuffer,
+                        .SecureParams = secureParams,
+                        .TaskParams = taskParams,
+                        .ComputeActorId = this->SelfId(),
+                        .TypeEnv = typeEnv,
+                        .HolderFactory = holderFactory,
+                        .ProgramBuilder = *transform.ProgramBuilder,
+                        .Alloc = Alloc,
+                        .TraceId = ComputeActorSpan.GetTraceId()
+                    });
+            } catch (const std::exception& ex) {
+                throw yexception() << "Failed to create input transform " << inputDesc.GetTransform().GetType() << ": " << ex.what();
+            }
+            this->RegisterWithSameMailbox(transform.Actor);
         }
         for (auto& [outputIndex, transform] : OutputTransformsMap) {
             transform.ProgramBuilder.ConstructInPlace(typeEnv, *FunctionRegistry);
@@ -2031,7 +2030,6 @@ protected:
     const IDqAsyncIoFactory::TPtr AsyncIoFactory;
     const NKikimr::NMiniKQL::IFunctionRegistry* FunctionRegistry = nullptr;
     const NDqProto::ECheckpointingMode CheckpointingMode;
-    TIntrusivePtr<IDqTaskRunner> TaskRunner;
     TDqComputeActorChannels* Channels = nullptr;
     TDqComputeActorCheckpoints* Checkpoints = nullptr;
     THashMap<ui64, TInputChannelInfo> InputChannelsMap; // Channel id -> Channel info

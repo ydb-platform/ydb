@@ -17,7 +17,8 @@ from ydb.tests.tools.fq_runner.kikimr_utils import yq_v2
 class TestS3(TestYdsBase):
     @yq_v2
     @pytest.mark.parametrize("client", [{"folder_id": "my_folder"}], indirect=True)
-    def test_yqv2_enabled(self, kikimr, s3, client):
+    @pytest.mark.parametrize("runtime_listing", [False, True])
+    def test_yqv2_enabled(self, kikimr, s3, client, runtime_listing):
         resource = boto3.resource(
             "s3",
             endpoint_url=s3.s3_url,
@@ -56,7 +57,8 @@ Pear;15;33'''
                                                  "csv_delimiter": ";"
                                              })
 
-        sql = R'''
+        sql = f'''
+            pragma s3.UseRuntimeListing="{str(runtime_listing).lower()}";
             pragma s3.UseBlocksSource="false";
             SELECT *
             FROM my_binding; -- syntax without bindings. supported only in yqv2

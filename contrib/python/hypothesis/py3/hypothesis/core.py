@@ -628,7 +628,7 @@ def get_random_for_wrapped_test(test, wrapped_test):
         return Random(global_force_seed)
     else:
         global _hypothesis_global_random
-        if _hypothesis_global_random is None:
+        if _hypothesis_global_random is None:  # pragma: no cover
             _hypothesis_global_random = Random()
         seed = _hypothesis_global_random.getrandbits(128)
         wrapped_test._hypothesis_internal_use_generated_seed = seed
@@ -920,11 +920,11 @@ class StateForActualGivenExecution:
             except TypeError as e:
                 # If we sampled from a sequence of strategies, AND failed with a
                 # TypeError, *AND that exception mentions SearchStrategy*, add a note:
-                if "SearchStrategy" in str(e):
-                    try:
-                        add_note(e, data._sampled_from_all_strategies_elements_message)
-                    except AttributeError:
-                        pass
+                if "SearchStrategy" in str(e) and hasattr(
+                    data, "_sampled_from_all_strategies_elements_message"
+                ):
+                    msg, format_arg = data._sampled_from_all_strategies_elements_message
+                    add_note(e, msg.format(format_arg))
                 raise
 
         # self.test_runner can include the execute_example method, or setup/teardown
@@ -1054,7 +1054,9 @@ class StateForActualGivenExecution:
             if TESTCASE_CALLBACKS:
                 if self.failed_normally or self.failed_due_to_deadline:
                     phase = "shrink"
-                else:
+                elif runner := getattr(self, "_runner", None):
+                    phase = runner._current_phase
+                else:  # pragma: no cover  # in case of messing with internals
                     phase = "unknown"
                 tc = make_testcase(
                     start_timestamp=self._start_timestamp,
@@ -1084,7 +1086,7 @@ class StateForActualGivenExecution:
             else:
                 database_key = None
 
-        runner = ConjectureRunner(
+        runner = self._runner = ConjectureRunner(
             self._execute_once_for_engine,
             settings=self.settings,
             random=self.random,
@@ -1510,8 +1512,7 @@ def given(
                 except UnsatisfiedAssumption:
                     raise DidNotReproduce(
                         "The test data failed to satisfy an assumption in the "
-                        "test. Have you added it since this blob was "
-                        "generated?"
+                        "test. Have you added it since this blob was generated?"
                     ) from None
 
             # There was no @reproduce_failure, so start by running any explicit

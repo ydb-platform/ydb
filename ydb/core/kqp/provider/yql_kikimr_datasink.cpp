@@ -671,7 +671,7 @@ public:
                             TString(dataSink.Cluster()),
                             key.GetTablePath(), node->Pos(), ctx);
 
-                        returningColumns = BuildColumnsList(*table, node->Pos(), ctx, sysColumnsEnabled);
+                        returningColumns = BuildColumnsList(*table, node->Pos(), ctx, sysColumnsEnabled, true /*ignoreWriteOnlyColumns*/);
 
                         break;
                     } else {
@@ -787,7 +787,7 @@ public:
                     auto replaceIfExists = (settings.Mode.Cast().Value() == "create_or_replace");
                     auto existringOk = (settings.Mode.Cast().Value() == "create_if_not_exists");
 
-                    return Build<TKiCreateTable>(ctx, node->Pos())
+                    auto createTable = Build<TKiCreateTable>(ctx, node->Pos())
                         .World(node->Child(0))
                         .DataSink(node->Child(1))
                         .Table().Build(key.GetTablePath())
@@ -807,8 +807,47 @@ public:
                         .ExistingOk<TCoAtom>()
                             .Value(existringOk)
                             .Build()
-                        .Done()
-                        .Ptr();
+                        .Done();
+
+                    bool exprEvalNeeded = false;
+
+                    for(auto item: createTable.Cast<TKiCreateTable>().Columns()) {
+                        auto columnTuple = item.Cast<TExprList>();
+                        if (columnTuple.Size() > 2) {
+                            const auto& columnConstraints = columnTuple.Item(2).Cast<TCoNameValueTuple>();
+                            for(const auto& constraint: columnConstraints.Value().Cast<TCoNameValueTupleList>()) {
+                                if (constraint.Name().Value() != "default")
+                                    continue;
+
+                                YQL_ENSURE(constraint.Value().IsValid());
+                                bool shouldEvaluate = (
+                                    constraint.Value().Cast().Ptr()->IsCallable() &&
+                                    (constraint.Value().Cast().Ptr()->Content() == "PgCast") &&
+                                    (constraint.Value().Cast().Ptr()->ChildrenSize() >= 1) &&
+                                    (constraint.Value().Cast().Ptr()->Child(0)->IsCallable()) &&
+                                    (constraint.Value().Cast().Ptr()->Child(0)->Content() == "PgConst")
+                                );
+
+                                if (shouldEvaluate) {
+                                    auto evaluatedExpr = ctx.Builder(constraint.Value().Cast().Ptr()->Pos())
+                                        .Callable("EvaluateExpr")
+                                        .Add(0, constraint.Value().Cast().Ptr())
+                                        .Seal()
+                                        .Build();
+
+                                    constraint.Ptr()->ChildRef(TCoNameValueTuple::idx_Value) = evaluatedExpr;
+                                    exprEvalNeeded = true;
+                                }
+                            }
+                        }
+                    }
+
+                    if (exprEvalNeeded) {
+                        ctx.Step.Repeat(TExprStep::ExprEval);
+                    }
+
+                    return createTable.Ptr();
+
                 } else if (mode == "alter") {
                     for (auto setting : settings.Other) {
                         if (setting.Name().Value() == "intent") {

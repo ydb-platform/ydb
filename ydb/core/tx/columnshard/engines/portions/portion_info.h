@@ -1,5 +1,6 @@
 #pragma once
 #include "column_record.h"
+#include "index_chunk.h"
 #include "meta.h"
 
 #include <ydb/core/formats/arrow/special_keys.h>
@@ -9,6 +10,10 @@
 #include <ydb/core/tx/columnshard/engines/scheme/column_features.h>
 
 #include <ydb/library/yverify_stream/yverify_stream.h>
+
+namespace NKikimrColumnShardDataSharingProto {
+class TPortionInfo;
+}
 
 namespace NKikimr::NOlap {
 
@@ -29,7 +34,10 @@ private:
     ui64 DeprecatedGranuleId = 0;
     YDB_READONLY_DEF(std::vector<TIndexChunk>, Indexes);
 
+    TConclusionStatus DeserializeFromProto(const NKikimrColumnShardDataSharingProto::TPortionInfo& proto, const TIndexInfo& info);
 public:
+    ui64 GetTxVolume() const; // fake-correct method for determ volume on rewrite this portion in transaction progress
+
     class TPage {
     private:
         YDB_READONLY_DEF(std::vector<const TColumnRecord*>, Records);
@@ -44,6 +52,9 @@ public:
 
         }
     };
+
+    static TConclusion<TPortionInfo> BuildFromProto(const NKikimrColumnShardDataSharingProto::TPortionInfo& proto, const TIndexInfo& info);
+    void SerializeToProto(NKikimrColumnShardDataSharingProto::TPortionInfo& proto) const;
 
     std::vector<TPage> BuildPages() const;
 
@@ -357,6 +368,28 @@ public:
     const TSnapshot& RecordSnapshotMax() const {
         Y_ABORT_UNLESS(Meta.RecordSnapshotMax);
         return *Meta.RecordSnapshotMax;
+    }
+
+
+    THashMap<TString, THashSet<TUnifiedBlobId>> GetBlobIdsByStorage() const {
+        THashMap<TString, THashSet<TUnifiedBlobId>> result;
+        FillBlobIdsByStorage(result);
+        return result;
+    }
+
+    void FillBlobIdsByStorage(THashMap<TString, THashSet<TUnifiedBlobId>>& result) const {
+        const TString& storageId = GetMeta().GetTierName() ? GetMeta().GetTierName() : IStoragesManager::DefaultStorageId;
+        THashMap<TString, THashSet<TUnifiedBlobId>> local;
+        for (auto&& i : Records) {
+            if (local[storageId].emplace(i.BlobRange.BlobId).second) {
+                AFL_VERIFY(result[storageId].emplace(i.BlobRange.BlobId).second);
+            }
+        }
+        for (auto&& i : Indexes) {
+            if (local[storageId].emplace(i.GetBlobRange().BlobId).second) {
+                AFL_VERIFY(result[storageId].emplace(i.GetBlobRange().BlobId).second);
+            }
+        }
     }
 
     THashSet<TUnifiedBlobId> GetBlobIds() const {

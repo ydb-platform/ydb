@@ -153,7 +153,7 @@ class Server(object):
         Listener, Client = listener_client[serializer]
 
         # do authentication later
-        self.listener = Listener(address=address, backlog=16)
+        self.listener = Listener(address=address, backlog=128)
         self.address = self.listener.address
 
         self.id_to_obj = {'0': (None, ())}
@@ -433,7 +433,6 @@ class Server(object):
                     self.id_to_refcount[ident] = 1
                     self.id_to_obj[ident] = \
                         self.id_to_local_proxy_obj[ident]
-                    obj, exposed, gettypeid = self.id_to_obj[ident]
                     util.debug('Server re-enabled tracking & INCREF %r', ident)
                 else:
                     raise ke

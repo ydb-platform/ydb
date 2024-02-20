@@ -866,6 +866,8 @@ struct TEvBlobStorage {
         EvNodeWardenQueryStorageConfig,
         EvNodeWardenStorageConfig,
         EvAskRestartVDisk,
+        EvNodeConfigInvokeOnRoot,
+        EvNodeConfigInvokeOnRootResult,
 
         // Other
         EvRunActor = EvPut + 15 * 512,
@@ -1449,8 +1451,8 @@ struct TEvBlobStorage {
                 REQUEST_VALGRIND_CHECK_MEM_IS_DEFINED(diffs[idx].Buffer.Data(), diffs[idx].Buffer.size());
 
                 if (idx) {
-                    Y_VERIFY_S(diffs[idx - 1].Offset + diffs[idx].Buffer.Size() <= diffs[idx].Offset,
-                            "EvPatch invalid: Diffs mustn't be re-covered,"
+                    Y_VERIFY_S(diffs[idx - 1].Offset + diffs[idx - 1].Buffer.Size() <= diffs[idx].Offset,
+                            "EvPatch invalid: Diffs must not overlap,"
                             << " [" << idx - 1 << "].Offset# " << diffs[idx - 1].Offset
                             << " [" << idx - 1 << "].Size# " << diffs[idx - 1].Buffer.Size()
                             << " [" << idx << "].Offset# " << diffs[idx].Offset

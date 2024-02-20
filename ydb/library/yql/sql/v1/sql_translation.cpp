@@ -53,6 +53,33 @@ TString CollectTokens(const TRule_select_stmt& selectStatement) {
     return tokenCollector.Tokens;
 }
 
+NSQLTranslation::TTranslationSettings CreateViewTranslationSettings(const NSQLTranslation::TTranslationSettings& base) {
+    NSQLTranslation::TTranslationSettings settings;
+    
+    settings.ClusterMapping = base.ClusterMapping;
+    settings.Mode = NSQLTranslation::ESqlMode::LIMITED_VIEW;
+
+    return settings;
+}
+
+TNodePtr BuildViewSelect(const TRule_select_stmt& query, TContext& ctx) {
+    const auto viewTranslationSettings = CreateViewTranslationSettings(ctx.Settings);
+    TContext viewParsingContext(viewTranslationSettings, {}, ctx.Issues);
+    TSqlSelect select(viewParsingContext, viewTranslationSettings.Mode);
+    TPosition pos;
+    auto source = select.Build(query, pos);
+    if (!source) {
+        return nullptr;
+    }
+    return BuildSelectResult(
+        pos,
+        std::move(source),
+        false,
+        false,
+        viewParsingContext.Scoped
+    );
+}
+
 }
 
 namespace NSQLTranslationV1 {
@@ -2884,7 +2911,7 @@ TNodePtr TSqlTranslation::ValueConstructor(const TRule_value_constructor& node) 
 
 TNodePtr TSqlTranslation::ListLiteral(const TRule_list_literal& node) {
     TVector<TNodePtr> values;
-    values.push_back(new TAstAtomNodeImpl(Ctx.Pos(), "AsList", TNodeFlags::Default));
+    values.push_back(new TAstAtomNodeImpl(Ctx.Pos(), "AsListMayWarn", TNodeFlags::Default));
 
     TSqlExpression sqlExpr(Ctx, Mode);
     if (node.HasBlock2() && !ExprList(sqlExpr, values, node.GetBlock2().GetRule_expr_list1())) {
@@ -4196,34 +4223,43 @@ TNodePtr TSqlTranslation::IfStatement(const TRule_if_stmt& stmt) {
 
 TNodePtr TSqlTranslation::ForStatement(const TRule_for_stmt& stmt) {
     bool isEvaluate = stmt.HasBlock1();
+    bool isParallel = stmt.HasBlock2();
     TSqlExpression expr(Ctx, Mode);
     TString itemArgName;
-    if (!NamedNodeImpl(stmt.GetRule_bind_parameter3(), itemArgName, *this)) {
+    if (!NamedNodeImpl(stmt.GetRule_bind_parameter4(), itemArgName, *this)) {
         return {};
     }
     TPosition itemArgNamePos = Ctx.Pos();
 
-    auto exprNode = expr.Build(stmt.GetRule_expr5());
+    auto exprNode = expr.Build(stmt.GetRule_expr6());
     if (!exprNode) {
         return{};
     }
 
     itemArgName = PushNamedAtom(itemArgNamePos, itemArgName);
-    auto bodyNode = DoStatement(stmt.GetRule_do_stmt6(), true, { itemArgName });
+    if (isParallel) {
+        ++Ctx.ParallelModeCount;
+    }
+
+    auto bodyNode = DoStatement(stmt.GetRule_do_stmt7(), true, { itemArgName });
+    if (isParallel) {
+        --Ctx.ParallelModeCount;
+    }
+    
     PopNamedNode(itemArgName);
     if (!bodyNode) {
         return{};
     }
 
     TNodePtr elseNode;
-    if (stmt.HasBlock7()) {
-        elseNode = DoStatement(stmt.GetBlock7().GetRule_do_stmt2(), true);
+    if (stmt.HasBlock8()) {
+        elseNode = DoStatement(stmt.GetBlock8().GetRule_do_stmt2(), true);
         if (!elseNode) {
             return{};
         }
     }
 
-    return BuildWorldForNode(Ctx.Pos(), exprNode, bodyNode, elseNode, isEvaluate);
+    return BuildWorldForNode(Ctx.Pos(), exprNode, bodyNode, elseNode, isEvaluate, isParallel);
 }
 
 bool TSqlTranslation::BindParameterClause(const TRule_bind_parameter& node, TDeferredAtom& result) {
@@ -4484,19 +4520,11 @@ bool TSqlTranslation::ParseViewQuery(std::map<TString, TDeferredAtom>& features,
     const TString queryText = CollectTokens(query);
     features["query_text"] = {Ctx.Pos(), queryText};
 
-    {
-        TSqlSelect select(Ctx, Mode);
-        TPosition pos;
-        auto source = select.Build(query, pos);
-        if (!source) {
-            return false;
-        }
-        features["query_ast"] = {BuildSelectResult(pos,
-                                                   std::move(source),
-                                                   false,
-                                                   false,
-                                                   Ctx.Scoped), Ctx};
+    const auto viewSelect = BuildViewSelect(query, Ctx);
+    if (!viewSelect) {
+        return false;
     }
+    features["query_ast"] = {viewSelect, Ctx};
 
     return true;
 }

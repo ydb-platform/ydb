@@ -80,8 +80,6 @@ namespace NKikimr::NStorage {
             item.Record.MutableProposedStorageConfig()->CopyFrom(*ProposedStorageConfig);
         }
 
-        STLOG(PRI_DEBUG, BS_NODE, NWDC35, "PersistConfig", (Record, item.Record));
-
         std::vector<TString> drives;
         if (item.Record.HasCommittedStorageConfig()) {
             EnumerateConfigDrives(item.Record.GetCommittedStorageConfig(), 0, [&](const auto& /*node*/, const auto& drive) {
@@ -95,6 +93,8 @@ namespace NKikimr::NStorage {
         }
         std::sort(drives.begin(), drives.end());
         drives.erase(std::unique(drives.begin(), drives.end()), drives.end());
+
+        STLOG(PRI_DEBUG, BS_NODE, NWDC35, "PersistConfig", (Record, item.Record), (Drives, drives));
 
         item.Drives = std::move(drives);
         item.Callback = std::move(callback);

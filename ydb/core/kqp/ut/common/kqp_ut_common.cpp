@@ -1170,7 +1170,7 @@ std::vector<NJson::TJsonValue> FindPlanNodes(const NJson::TJsonValue& plan, cons
 
 std::vector<NJson::TJsonValue> FindPlanStages(const NJson::TJsonValue& plan) {
     std::vector<NJson::TJsonValue> stages;
-    FindPlanStagesImpl(plan, stages);
+    FindPlanStagesImpl(plan.GetMapSafe().at("Plan"), stages);    
     return stages;
 }
 

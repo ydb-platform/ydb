@@ -1007,6 +1007,40 @@ Y_UNIT_TEST_SUITE(SqlParsingOnly) {
         UNIT_ASSERT_VALUES_EQUAL(1, elementStat["Write!"]);
     }
 
+    Y_UNIT_TEST(CreateTempTable) {
+        NYql::TAstParseResult res = SqlToYql("USE plato; CREATE TEMP TABLE t (a int32, primary key(a));");
+        UNIT_ASSERT(res.Root);
+
+        TVerifyLineFunc verifyLine = [](const TString& word, const TString& line) {
+            if (word == "Write!") {
+                UNIT_ASSERT_VALUES_UNEQUAL_C(TString::npos,
+                                           line.find(R"__((Write! world sink (Key '('tablescheme (String '"t"))) (Void) '('('mode 'create) '('columns '('('"a" (AsOptionalType (DataType 'Int32)) '('columnConstrains '()) '()))) '('primarykey '('"a")) '('temporary))))__"), line);
+            }
+        };
+
+        TWordCountHive elementStat = {{TString("Write!"), 0}};
+        VerifyProgram(res, elementStat, verifyLine);
+
+        UNIT_ASSERT_VALUES_EQUAL(1, elementStat["Write!"]);
+    }
+
+    Y_UNIT_TEST(CreateTemporaryTable) {
+        NYql::TAstParseResult res = SqlToYql("USE plato; CREATE TEMPORARY TABLE t (a int32, primary key(a));");
+        UNIT_ASSERT(res.Root);
+
+        TVerifyLineFunc verifyLine = [](const TString& word, const TString& line) {
+            if (word == "Write!") {
+                UNIT_ASSERT_VALUES_UNEQUAL_C(TString::npos,
+                                           line.find(R"__((Write! world sink (Key '('tablescheme (String '"t"))) (Void) '('('mode 'create) '('columns '('('"a" (AsOptionalType (DataType 'Int32)) '('columnConstrains '()) '()))) '('primarykey '('"a")) '('temporary))))__"), line);
+            }
+        };
+
+        TWordCountHive elementStat = {{TString("Write!"), 0}};
+        VerifyProgram(res, elementStat, verifyLine);
+
+        UNIT_ASSERT_VALUES_EQUAL(1, elementStat["Write!"]);
+    }
+
     Y_UNIT_TEST(CreateTableDuplicatedPkColumnsFail) {
         NYql::TAstParseResult res = SqlToYql("USE plato; CREATE TABLE t (a int32 not null, primary key(a, a));");
         UNIT_ASSERT(!res.Root);
@@ -3394,7 +3428,7 @@ Y_UNIT_TEST_SUITE(SqlToYQLErrors) {
     Y_UNIT_TEST(GroupByFewBigCubes) {
         NYql::TAstParseResult res = SqlToYql("SELECT key FROM plato.Input GROUP BY CUBE(key, subkey, key + subkey as sum), CUBE(value, value + key + subkey as total);");
         UNIT_ASSERT(!res.Root);
-        UNIT_ASSERT_NO_DIFF(Err2Str(res), "<main>:1:1: Error: Unable to GROUP BY more than 32 groups, you try use 80 groups\n");
+        UNIT_ASSERT_NO_DIFF(Err2Str(res), "<main>:1:1: Error: Unable to GROUP BY more than 64 groups, you try use 80 groups\n");
     }
 
     Y_UNIT_TEST(GroupByFewBigCubesWithPragmaLimit) {
@@ -4340,6 +4374,22 @@ select FormatType($f());
         UNIT_ASSERT(!res.Root);
         UNIT_ASSERT_NO_DIFF(Err2Str(res),
             "<main>:1:15: Error: Selecting data from monitoring source is not supported\n");
+    }
+
+    Y_UNIT_TEST(SessionStartAndSessionStateShouldSurviveSessionWindowArgsError){
+        TString query = R"(
+            $init = ($_row) -> (min(1, 2)); -- error: aggregation func min() can not be used here
+            $calculate = ($_row, $_state) -> (1);
+            $update = ($_row, $_state) -> (2);
+            SELECT
+                SessionStart() over w as session_start,
+                SessionState() over w as session_state,
+            FROM plato.Input as t
+            WINDOW w AS (
+                PARTITION BY user, SessionWindow(ts + 1, $init, $update, $calculate)
+            )
+        )";
+        ExpectFailWithError(query, "<main>:2:33: Error: Aggregation function Min requires exactly 1 argument(s), given: 2\n");
     }
 }
 

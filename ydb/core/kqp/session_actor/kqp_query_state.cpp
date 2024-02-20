@@ -71,6 +71,16 @@ bool TKqpQueryState::EnsureTableVersions(const TEvTxProxySchemeCache::TEvNavigat
     return true;
 }
 
+void TKqpQueryState::FillViews(const google::protobuf::RepeatedPtrField< ::NKqpProto::TKqpTableInfo>& views) {
+    for (const auto& view : views) {
+        const auto& pathId = view.GetTableId();
+        const auto schemaVersion = view.GetSchemaVersion();
+        auto [it, isInserted] = TableVersions.emplace(TTableId(pathId.GetOwnerId(), pathId.GetTableId()), schemaVersion);
+        if (!isInserted) {
+            Y_ENSURE(it->second == schemaVersion);
+        }
+    }
+}
 
 std::unique_ptr<TEvTxProxySchemeCache::TEvNavigateKeySet> TKqpQueryState::BuildNavigateKeySet() {
     TableVersions.clear();
@@ -78,6 +88,7 @@ std::unique_ptr<TEvTxProxySchemeCache::TEvNavigateKeySet> TKqpQueryState::BuildN
     for (const auto& tx : PreparedQuery->GetPhysicalQuery().GetTransactions()) {
         FillTables(tx);
     }
+    FillViews(PreparedQuery->GetPhysicalQuery().GetViewInfos());
 
     auto navigate = MakeHolder<NSchemeCache::TSchemeCacheNavigate>();
     navigate->DatabaseName = Database;
@@ -260,11 +271,14 @@ std::unique_ptr<NSchemeCache::TSchemeCacheNavigate> TKqpQueryState::BuildSchemeC
 }
 
 bool TKqpQueryState::IsAccessDenied(const NSchemeCache::TSchemeCacheNavigate& response, TString& message) {
-    auto rights = NACLib::EAccessRights::ReadAttributes | NACLib::EAccessRights::WriteAttributes;
+    auto checkAccessDenied = [&] (const NSchemeCache::TSchemeCacheNavigate::TEntry& result) {
+        static const auto selectRowRights = NACLib::EAccessRights::SelectRow;
+        static const auto accessAttributesRights = NACLib::EAccessRights::ReadAttributes | NACLib::EAccessRights::WriteAttributes;
+        // in future check right UseConsumer
+        return result.SecurityObject && !(result.SecurityObject->CheckAccess(selectRowRights, *UserToken) || result.SecurityObject->CheckAccess(accessAttributesRights, *UserToken));
+    };
     // don't build message string on success path
-    bool denied = std::any_of(response.ResultSet.begin(), response.ResultSet.end(), [&] (auto& result) {
-        return result.SecurityObject && !result.SecurityObject->CheckAccess(rights, *UserToken);
-    });
+    bool denied = std::any_of(response.ResultSet.begin(), response.ResultSet.end(), checkAccessDenied);
 
     if (!denied) {
         return false;
@@ -277,7 +291,7 @@ bool TKqpQueryState::IsAccessDenied(const NSchemeCache::TSchemeCacheNavigate& re
             continue;
         }
 
-        if (result.SecurityObject && !result.SecurityObject->CheckAccess(rights, *UserToken)) {
+        if (checkAccessDenied(result)) {
             builder << " '" << JoinPath(result.Path) << "'";
         }
     }
@@ -304,6 +318,44 @@ bool TKqpQueryState::HasErrors(const NSchemeCache::TSchemeCacheNavigate& respons
     message = std::move(builder);
 
     return true;
+}
+
+bool TKqpQueryState::HasImpliedTx() const {
+    if (HasTxControl()) {
+        return false;
+    }
+
+    const NKikimrKqp::EQueryAction action = RequestEv->GetAction();
+    if (action != NKikimrKqp::QUERY_ACTION_EXECUTE &&
+        action != NKikimrKqp::QUERY_ACTION_EXECUTE_PREPARED)
+    {
+        return false;
+    }
+
+    const NKikimrKqp::EQueryType queryType = RequestEv->GetType();
+    if (queryType != NKikimrKqp::QUERY_TYPE_SQL_GENERIC_QUERY &&
+        queryType != NKikimrKqp::QUERY_TYPE_SQL_GENERIC_SCRIPT &&
+        queryType != NKikimrKqp::QUERY_TYPE_SQL_GENERIC_CONCURRENT_QUERY)
+    {
+        return false;
+    }
+
+    for (const auto& transactionPtr : PreparedQuery->GetTransactions()) {
+        switch (transactionPtr->GetType()) {
+        case NKqpProto::TKqpPhyTx::TYPE_GENERIC: // data transaction
+            return true;
+        case NKqpProto::TKqpPhyTx::TYPE_UNSPECIFIED:
+        case NKqpProto::TKqpPhyTx::TYPE_COMPUTE:
+        case NKqpProto::TKqpPhyTx::TYPE_DATA: // data transaction, but not in QueryService API
+        case NKqpProto::TKqpPhyTx::TYPE_SCAN:
+        case NKqpProto::TKqpPhyTx::TYPE_SCHEME:
+        case NKqpProto::TKqpPhyTx_EType_TKqpPhyTx_EType_INT_MIN_SENTINEL_DO_NOT_USE_:
+        case NKqpProto::TKqpPhyTx_EType_TKqpPhyTx_EType_INT_MAX_SENTINEL_DO_NOT_USE_:
+            break;
+        }
+    }
+
+    return false;
 }
 
 }

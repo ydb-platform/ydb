@@ -170,6 +170,18 @@ TRACING_SCHEMA = dict(
             required=["opentelemetry"],
             additionalProperties=False,
         ),
+        uploader=dict(
+            type="object",
+            properties=dict(
+                max_spans_per_second=dict(type="integer", minimum=1),
+                max_spans_in_batch=dict(type="integer", minimum=1),
+                max_bytes_in_batch=dict(type="integer"),
+                max_batch_accumulation_milliseconds=dict(type="integer"),
+                span_export_timeout_seconds=dict(type="integer", minimum=1),
+                max_export_requests_inflight=dict(type="integer", minimum=1),
+            ),
+            additionalProperties=False,
+        ),
         sampling=dict(
             type="array",
             items=dict(

@@ -366,11 +366,14 @@
     (let save (lambda '(state) (Apply (Udf 'Stat.TDigest_Serialize) state)))
     (let load (lambda '(state) (Apply (Udf 'Stat.TDigest_Deserialize) state)))
     (let merge (lambda '(one two) (Apply (Udf 'Stat.TDigest_Merge) one two)))
-    (let finish (lambda '(state) (MatchType n
+    (let finish_with_param (lambda '(state n) (MatchType n
                                             'Tuple (lambda '() (StaticMap n (lambda '(n) (Apply get_convert_percentile state n))))
                                             'Struct (lambda '() (StaticMap n (lambda '(n) (Apply get_convert_percentile state n))))
                                             'List (lambda '() (OrderedMap n (lambda '(n) (Apply get_convert_percentile state n))))
                                             (lambda '() (Apply get_convert_percentile state n)))))
+    (let finish (lambda '(state) (MatchType n
+                                            'Tuple (lambda '() (StaticMap n (lambda '(n) (Apply finish_with_param state n))))
+                                            (lambda '() (Apply finish_with_param state n)))))
     (return (AggregationTraits (ListItemType list_type) init update save load merge finish (Null)))
 ))))
 

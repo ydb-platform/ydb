@@ -18,11 +18,16 @@ protected:
     }
 
     virtual void InitializeNecessaryStorages();
+    virtual bool DoLoadIdempotency(NTable::TDatabase& database) = 0;
+
 public:
     static const inline TString DefaultStorageId = "__DEFAULT";
     virtual ~IStoragesManager() = default;
 
     IStoragesManager() = default;
+    virtual const std::shared_ptr<NDataSharing::TSharedBlobsManager>& GetSharedBlobsManager() const = 0;
+
+    bool LoadIdempotency(NTable::TDatabase& database);
 
     void Stop() {
         for (auto&& i : Constructed) {
@@ -46,6 +51,7 @@ public:
     void OnTieringModified(const std::shared_ptr<NColumnShard::TTiersManager>& tiers);
 
     std::shared_ptr<IBlobsStorageOperator> GetOperator(const TString& storageIdExt);
+    std::shared_ptr<IBlobsStorageOperator> GetOperatorVerified(const TString& storageIdExt);
     std::shared_ptr<IBlobsStorageOperator> InitializePortionOperator(const TPortionInfo& portionInfo);
 };
 

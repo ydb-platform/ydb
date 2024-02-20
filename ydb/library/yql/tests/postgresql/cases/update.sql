@@ -12,6 +12,7 @@ CREATE TABLE upsert_test (
 );
 INSERT INTO update_test VALUES (5, 10, 'foo');
 INSERT INTO update_test(b, a) VALUES (15, 10);
+SELECT * FROM update_test;
 --
 -- Test multiple-set-clause syntax
 --

@@ -168,8 +168,6 @@ public:
 
         NKikimrProto::EReplyStatus status = ev->Get()->Status;
         if (status != NKikimrProto::OK) {
-            Cerr << "Patch Not OK response!\n" << NKikimrProto::EReplyStatus_Name(status) << Endl;
-            Cerr << ev->Get()->ErrorReason << Endl;
             TInstant now = TAppData::TimeProvider->Now();
 
             TStringStream str;
@@ -192,7 +190,6 @@ public:
             return;
         }
 
-        Cerr << "Patch OK response!\n";
         ui64 cookie = ev->Cookie;
         ui64 patchIdx = cookie;
         if (patchIdx >= IntermediateResults->Patches.size() && patchIdx >= IntermediateResults->Commands.size()) {
@@ -344,6 +341,11 @@ public:
                 IntermediateResults->Stat.GroupReadIops[std::make_pair(response.Id.Channel(), groupId)] += 1; // FIXME: count distinct blobs?
                 read.Value.Write(readItem.ValueOffset, std::move(response.Buffer));
             } else {
+                Y_VERIFY_DEBUG_S(response.Status != NKikimrProto::NODATA, "NODATA received for TEvGet"
+                    << " TabletId# " << TabletInfo->TabletID
+                    << " Id# " << response.Id
+                    << " Key# " << read.Key);
+
                 TStringStream err;
                 if (read.Message.size()) {
                     err << read.Message << Endl;

@@ -209,6 +209,11 @@ struct TDqSettings {
     bool IsSpillingEnabled() const {
         return SpillingEngine.Get().GetOrElse(TDqSettings::TDefault::SpillingEngine) != ESpillingEngine::Disable;
     }
+
+    bool IsDqReplicateEnabled(const TTypeAnnotationContext& typesCtx) const {
+        return EnableDqReplicate.Get().GetOrElse(
+            typesCtx.BlockEngineMode != EBlockEngineMode::Disable || TDqSettings::TDefault::EnableDqReplicate);
+    }
 };
 
 struct TDqConfiguration: public TDqSettings, public NCommon::TSettingDispatcher {

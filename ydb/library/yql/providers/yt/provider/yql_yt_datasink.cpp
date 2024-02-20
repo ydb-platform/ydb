@@ -243,6 +243,11 @@ public:
                     ctx);
                 res = ctx.ChangeChild(*res, TYtWriteTable::idx_Settings, std::move(settings));
             }
+            auto mutationId = ++NextMutationId_;
+            res = ctx.ChangeChild(*res, TYtWriteTable::idx_Settings, 
+                NYql::AddSetting(*res->Child(TYtWriteTable::idx_Settings),
+                    EYtSettingType::MutationId,
+                    ctx.NewAtom(res->Child(TYtWriteTable::idx_Settings)->Pos(), ToString(mutationId)), ctx));
             if (State_->Configuration->UseSystemColumns.Get().GetOrElse(DEFAULT_USE_SYS_COLUMNS)) {
                 res = ctx.ChangeChild(*res, TYtWriteTable::idx_Content,
                     ctx.Builder(node->Pos())
@@ -268,6 +273,7 @@ public:
     void Reset() final {
         TDataProviderBase::Reset();
         State_->Reset();
+        NextMutationId_ = 0;
     }
 
     bool CanExecute(const TExprNode& node) override {
@@ -567,6 +573,7 @@ private:
     }
 
 private:
+    ui32 NextMutationId_ = 0;
     TYtState::TPtr State_;
     TLazyInitHolder<IGraphTransformer> IntentDeterminationTransformer_;
     TLazyInitHolder<TVisitorTransformerBase> TypeAnnotationTransformer_;

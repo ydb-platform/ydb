@@ -1,10 +1,12 @@
 LIBRARY()
 
 SRCS(
+    limits.h
     reverse_accessor.cpp
     scalars.cpp
     snapshot.cpp
     portion.cpp
+    tablet_id.cpp
 )
 
 PEERDIR(

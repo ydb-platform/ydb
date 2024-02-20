@@ -236,6 +236,7 @@ public:
             break;
         }
 
+        case NUdf::TDataType<NUdf::TDate32>::Id:
         case NUdf::TDataType<i32>::Id: {
             const auto data = CastInst::Create(Instruction::Trunc, elem, Type::getInt32Ty(context), "data", Block_);
             const auto ext = CastInst::Create(Instruction::SExt, data, Type::getInt64Ty(context), "ext", Block_);
@@ -264,8 +265,11 @@ public:
         }
 
         case NUdf::TDataType<NUdf::TTimestamp>::Id:
-        case NUdf::TDataType<ui64>::Id:
         case NUdf::TDataType<NUdf::TInterval>::Id:
+        case NUdf::TDataType<NUdf::TInterval64>::Id:
+        case NUdf::TDataType<NUdf::TDatetime64>::Id:
+        case NUdf::TDataType<NUdf::TTimestamp64>::Id:
+        case NUdf::TDataType<ui64>::Id:
         case NUdf::TDataType<i64>::Id: {
             const auto data = CastInst::Create(Instruction::Trunc, elem, Type::getInt64Ty(context), "data", Block_);
             CallInst::Create(module.getFunction("Write64"), { buf, data }, "", Block_);
@@ -633,6 +637,7 @@ private:
             CallInst::Create(module.getFunction("ReadUint16"), { buf, velemPtr }, "", Block_);
             break;
         }
+        case NUdf::TDataType<NUdf::TDate32>::Id:
         case NUdf::TDataType<i32>::Id: {
             CallInst::Create(module.getFunction("ReadInt32"), { buf, velemPtr }, "", Block_);
             break;
@@ -643,6 +648,9 @@ private:
             break;
         }
         case NUdf::TDataType<NUdf::TInterval>::Id:
+        case NUdf::TDataType<NUdf::TInterval64>::Id:
+        case NUdf::TDataType<NUdf::TDatetime64>::Id:
+        case NUdf::TDataType<NUdf::TTimestamp64>::Id:
         case NUdf::TDataType<i64>::Id: {
             CallInst::Create(module.getFunction("ReadInt64"), { buf, velemPtr }, "", Block_);
             break;
@@ -787,6 +795,10 @@ private:
             case NUdf::TDataType<i16>::Id:
             case NUdf::TDataType<i32>::Id:
             case NUdf::TDataType<i64>::Id:
+            case NUdf::TDataType<NUdf::TDate32>::Id:
+            case NUdf::TDataType<NUdf::TDatetime64>::Id:
+            case NUdf::TDataType<NUdf::TTimestamp64>::Id:
+            case NUdf::TDataType<NUdf::TInterval64>::Id:
             case NUdf::TDataType<NUdf::TInterval>::Id: {
                 const auto sizeConst = ConstantInt::get(Type::getInt64Ty(context), (ui64)sizeof(i64));
                 CallInst::Create(module.getFunction("SkipFixedData"), { buf, sizeConst }, "", Block_);
@@ -803,7 +815,10 @@ private:
             case NUdf::TDataType<NUdf::TJson>::Id:
             case NUdf::TDataType<NUdf::TYson>::Id:
             case NUdf::TDataType<NUdf::TUuid>::Id:
-            case NUdf::TDataType<NUdf::TJsonDocument>::Id: {
+            case NUdf::TDataType<NUdf::TJsonDocument>::Id:
+            case NUdf::TDataType<NUdf::TTzDate>::Id:
+            case NUdf::TDataType<NUdf::TTzDatetime>::Id:
+            case NUdf::TDataType<NUdf::TTzTimestamp>::Id: {
                 CallInst::Create(module.getFunction("SkipVarData"), { buf }, "", Block_);
                 break;
             }

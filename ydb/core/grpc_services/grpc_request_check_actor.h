@@ -23,6 +23,19 @@
 namespace NKikimr {
 namespace NGRpcService {
 
+template<typename TCtx>
+bool TGRpcRequestProxyHandleMethods::ValidateAndReplyOnError(TCtx* ctx) {
+    TString validationError;
+    if (!ctx->Validate(validationError)) {
+        const auto issue = MakeIssue(NKikimrIssues::TIssuesIds::YDB_API_VALIDATION_ERROR, validationError);
+        ctx->RaiseIssue(issue);
+        ctx->ReplyWithYdbStatus(Ydb::StatusIds::BAD_REQUEST);
+        return false;
+    } else {
+        return true;
+    }
+}
+
 template <typename TEvent>
 class TGrpcRequestCheckActor
     : public TGRpcRequestProxyHandleMethods

@@ -4,7 +4,6 @@
 #include "blob_constructor.h"
 
 #include <ydb/library/actors/core/actor.h>
-#include <ydb/core/tx/columnshard/blob_manager.h>
 #include <ydb/core/tx/columnshard/defs.h>
 #include <ydb/core/tx/columnshard/blobs_action/abstract/write.h>
 
@@ -29,7 +28,7 @@ public:
 
 class IWriteController {
 private:
-    THashMap<TUnifiedBlobId, std::shared_ptr<NOlap::IBlobsWritingAction>> BlobActions;
+    THashMap<NOlap::TUnifiedBlobId, std::shared_ptr<NOlap::IBlobsWritingAction>> BlobActions;
     THashMap<i64, std::shared_ptr<NOlap::IBlobsWritingAction>> WritingActions;
     std::deque<NOlap::TBlobWriteInfo> WriteTasks;
 protected:
@@ -47,6 +46,19 @@ protected:
         return WriteTasks.back();
     }
 public:
+    TString DebugString() const {
+        TStringBuilder sb;
+        for (auto&& i : WritingActions) {
+            sb << i.second->GetStorageId() << ",";
+        }
+        ui64 size = 0;
+        for (auto&& i : WriteTasks) {
+            size += i.GetBlobId().BlobSize();
+        }
+
+        return TStringBuilder() << "size=" << size << ";count=" << WriteTasks.size() << ";actions=" << sb << ";";
+    }
+
     void Abort() {
         for (auto&& i : WritingActions) {
             i.second->Abort();
@@ -65,7 +77,7 @@ public:
     }
 
     void OnBlobWriteResult(const TEvBlobStorage::TEvPutResult& result) {
-        TUnifiedBlobId blobId(result.GroupId, result.Id);
+        NOlap::TUnifiedBlobId blobId(result.GroupId, result.Id);
         auto it = BlobActions.find(blobId);
         AFL_VERIFY(it != BlobActions.end());
         it->second->OnBlobWriteResult(blobId, result.Status);

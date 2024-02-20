@@ -15,7 +15,11 @@ from ydb.tests.tools.fq_runner.kikimr_utils import yq_v1, yq_all
 class TestS3(TestYdsBase):
     @yq_all
     @pytest.mark.parametrize("client", [{"folder_id": "my_folder"}], indirect=True)
-    def test_csv(self, kikimr, s3, client):
+    @pytest.mark.parametrize("runtime_listing", [False, True])
+    def test_csv(self, kikimr, s3, client, runtime_listing, yq_version):
+        if yq_version == "v1" and runtime_listing:
+            pytest.skip("Runtime listing is v2 only")
+
         resource = boto3.resource(
             "s3",
             endpoint_url=s3.s3_url,
@@ -42,7 +46,9 @@ Pear,15,33'''
         kikimr.control_plane.wait_bootstrap(1)
         client.create_storage_connection("fruitbucket", "fbucket")
 
-        sql = R'''
+        sql = f'''
+            pragma s3.UseRuntimeListing="{str(runtime_listing).lower()}";
+
             SELECT *
             FROM fruitbucket.`fruits.csv`
             WITH (format=csv_with_names, SCHEMA (
@@ -79,7 +85,60 @@ Pear,15,33'''
 
     @yq_all
     @pytest.mark.parametrize("client", [{"folder_id": "my_folder"}], indirect=True)
-    def test_raw(self, kikimr, s3, client):
+    def test_csv_with_hopping(self, kikimr, s3, client):
+        resource = boto3.resource(
+            "s3",
+            endpoint_url=s3.s3_url,
+            aws_access_key_id="key",
+            aws_secret_access_key="secret_key"
+        )
+
+        bucket = resource.Bucket("fbucket")
+        bucket.create(ACL='public-read')
+        bucket.objects.all().delete()
+
+        s3_client = boto3.client(
+            "s3",
+            endpoint_url=s3.s3_url,
+            aws_access_key_id="key",
+            aws_secret_access_key="secret_key"
+        )
+
+        fruits = R'''Time,Fruit,Price
+0,Banana,3
+1,Apple,2
+2,Pear,15'''
+        s3_client.put_object(Body=fruits, Bucket='fbucket', Key='fruits.csv', ContentType='text/plain')
+        kikimr.control_plane.wait_bootstrap(1)
+        client.create_storage_connection("fruitbucket", "fbucket")
+
+        sql = R'''
+            SELECT COUNT(*) as count,
+            FROM fruitbucket.`fruits.csv`
+            WITH (format=csv_with_names, SCHEMA (
+                Time UInt64 NOT NULL,
+                Fruit String NOT NULL,
+                Price Int NOT NULL
+            ))
+            GROUP BY HOP(CAST(Time AS Timestamp?), "PT1M", "PT1M", "PT1M")
+            '''
+
+        query_id = client.create_query("simple", sql, type=fq.QueryContent.QueryType.ANALYTICS).result.query_id
+        client.wait_query_status(query_id, fq.QueryMeta.COMPLETED)
+
+        data = client.get_result_data(query_id)
+        result_set = data.result.result_set
+        logging.debug(str(result_set))
+        assert len(result_set.columns) == 1
+        assert len(result_set.rows) == 1
+        assert result_set.rows[0].items[0].uint64_value == 3
+
+    @yq_all
+    @pytest.mark.parametrize("client", [{"folder_id": "my_folder"}], indirect=True)
+    @pytest.mark.parametrize("runtime_listing", [False, True])
+    def test_raw(self, kikimr, s3, client, runtime_listing, yq_version):
+        if yq_version == "v1" and runtime_listing:
+            pytest.skip("Runtime listing is v2 only")
 
         resource = boto3.resource(
             "s3",
@@ -106,7 +165,9 @@ Pear,15,33'''
         kikimr.control_plane.wait_bootstrap(1)
         client.create_storage_connection("rawbucket", "rbucket")
 
-        sql = R'''
+        sql = f'''
+            pragma s3.UseRuntimeListing="{str(runtime_listing).lower()}";
+
             SELECT Data
             FROM rawbucket.`*`
             WITH (format=raw, SCHEMA (
@@ -133,7 +194,10 @@ Pear,15,33'''
     @yq_all
     @pytest.mark.parametrize("client", [{"folder_id": "my_folder"}], indirect=True)
     @pytest.mark.parametrize("kikimr", [{"raw": 3, "": 4}], indirect=True)
-    def test_limit(self, kikimr, s3, client):
+    @pytest.mark.parametrize("runtime_listing", [False, True])
+    def test_limit(self, kikimr, s3, client, runtime_listing, yq_version):
+        if yq_version == "v1" and runtime_listing:
+            pytest.skip("Runtime listing is v2 only")
 
         resource = boto3.resource(
             "s3",
@@ -158,7 +222,9 @@ Pear,15,33'''
         kikimr.control_plane.wait_bootstrap(1)
         client.create_storage_connection("limbucket", "lbucket")
 
-        sql = R'''
+        sql = f'''
+            pragma s3.UseRuntimeListing="{str(runtime_listing).lower()}";
+
             SELECT Data
             FROM limbucket.`*`
             WITH (format=raw, SCHEMA (
@@ -171,7 +237,9 @@ Pear,15,33'''
         client.wait_query_status(query_id, fq.QueryMeta.FAILED)
         assert "Size of object file1.txt = 5 and exceeds limit = 3 specified for format raw" in str(client.describe_query(query_id).result)
 
-        sql = R'''
+        sql = f'''
+            pragma s3.UseRuntimeListing="{str(runtime_listing).lower()}";
+
             SELECT *
             FROM limbucket.`*`
             WITH (format=csv_with_names, SCHEMA (
@@ -185,7 +253,10 @@ Pear,15,33'''
 
     @yq_all
     @pytest.mark.parametrize("client", [{"folder_id": "my_folder"}], indirect=True)
-    def test_bad_format(self, kikimr, s3, client):
+    @pytest.mark.parametrize("runtime_listing", [False, True])
+    def test_bad_format(self, kikimr, s3, client, runtime_listing, yq_version):
+        if yq_version == "v1" and runtime_listing:
+            pytest.skip("Runtime listing is v2 only")
 
         resource = boto3.resource(
             "s3",
@@ -210,7 +281,9 @@ Pear,15,33'''
         kikimr.control_plane.wait_bootstrap(1)
         client.create_storage_connection("badbucket", "bbucket")
 
-        sql = R'''
+        sql = f'''
+            pragma s3.UseRuntimeListing="{str(runtime_listing).lower()}";
+
             select * from badbucket.`*.*` with (format=json_list, schema (data string)) limit 1;
             '''
 
@@ -386,7 +459,7 @@ Pear,15,33'''
         kikimr.compute_plane.wait_bootstrap()
         client.create_storage_connection("fruitbucket", "wbucket")
 
-        time.sleep(10) # 2 x node info update period 
+        time.sleep(10)  # 2 x node info update period
 
         sql = R'''
             SELECT Fruit, sum(Price) as Price, sum(Weight) as Weight
@@ -418,7 +491,10 @@ Pear,15,33'''
 
     @yq_all
     @pytest.mark.parametrize("client", [{"folder_id": "my_folder"}], indirect=True)
-    def test_precompute(self, kikimr, s3, client):
+    @pytest.mark.parametrize("runtime_listing", [False, True])
+    def test_precompute(self, kikimr, s3, client, runtime_listing, yq_version):
+        if yq_version == "v1" and runtime_listing:
+            pytest.skip("Runtime listing is v2 only")
 
         resource = boto3.resource(
             "s3",
@@ -445,7 +521,9 @@ Pear,15,33'''
         kikimr.control_plane.wait_bootstrap(1)
         client.create_storage_connection("prebucket", "pbucket")
 
-        sql = R'''
+        sql = f'''
+            pragma s3.UseRuntimeListing="{str(runtime_listing).lower()}";
+
             select count(*) as Cnt from prebucket.`file1.txt` with (format=raw, schema(
                 Data String NOT NULL
             ))
@@ -476,7 +554,11 @@ Pear,15,33'''
 
     @yq_all
     @pytest.mark.parametrize("client", [{"folder_id": "my_folder"}], indirect=True)
-    def test_failed_precompute(self, kikimr, s3, client):
+    @pytest.mark.parametrize("runtime_listing", [False, True])
+    def test_failed_precompute(self, kikimr, s3, client, runtime_listing, yq_version):
+        if yq_version == "v1" and runtime_listing:
+            pytest.skip("Runtime listing is v2 only")
+
         resource = boto3.resource(
             "s3",
             endpoint_url=s3.s3_url,
@@ -490,7 +572,9 @@ Pear,15,33'''
 
         client.create_storage_connection("fp", "fpbucket")
 
-        sql = R'''
+        sql = f'''
+            pragma s3.UseRuntimeListing="{str(runtime_listing).lower()}";
+
             insert into fp.`path/` with (format=json_each_row)
             select * from AS_TABLE([<|foo:123, bar:"xxx"u|>,<|foo:456, bar:"yyy"u|>]);
             '''
@@ -498,7 +582,9 @@ Pear,15,33'''
         query_id = client.create_query("simple", sql, type=fq.QueryContent.QueryType.ANALYTICS).result.query_id
         client.wait_query_status(query_id, fq.QueryMeta.COMPLETED)
 
-        sql = R'''
+        sql = f'''
+            pragma s3.UseRuntimeListing="{str(runtime_listing).lower()}";
+
             select count(*) from fp.`path/` with (format=json_each_row, schema(
                 foo Int NOT NULL,
                 bar String NOT NULL
@@ -520,7 +606,11 @@ Pear,15,33'''
 
     @yq_all
     @pytest.mark.parametrize("client", [{"folder_id": "my_folder"}], indirect=True)
-    def test_missed(self, kikimr, s3, client):
+    @pytest.mark.parametrize("runtime_listing", [False, True])
+    def test_missed(self, kikimr, s3, client, runtime_listing, yq_version):
+        if yq_version == "v1" and runtime_listing:
+            pytest.skip("Runtime listing is v2 only")
+
         resource = boto3.resource(
             "s3",
             endpoint_url=s3.s3_url,
@@ -547,7 +637,9 @@ Pear,15,33'''
         kikimr.control_plane.wait_bootstrap(1)
         client.create_storage_connection("fruitbucket", "fbucket")
 
-        sql = R'''
+        sql = f'''
+            pragma s3.UseRuntimeListing="{str(runtime_listing).lower()}";
+
             SELECT *
             FROM fruitbucket.`fruits.csv`
             WITH (format=csv_with_names, SCHEMA (
@@ -564,7 +656,11 @@ Pear,15,33'''
 
     @yq_all
     @pytest.mark.parametrize("client", [{"folder_id": "my_folder"}], indirect=True)
-    def test_simple_hits_47(self, kikimr, s3, client):
+    @pytest.mark.parametrize("runtime_listing", [False, True])
+    def test_simple_hits_47(self, kikimr, s3, client, runtime_listing, yq_version):
+        if yq_version == "v1" and runtime_listing:
+            pytest.skip("Runtime listing is v2 only")
+
         resource = boto3.resource(
             "s3",
             endpoint_url=s3.s3_url,
@@ -591,7 +687,9 @@ Pear,15,33'''
         kikimr.control_plane.wait_bootstrap(1)
         client.create_storage_connection("fruitbucket", "fbucket")
 
-        sql = R'''
+        sql = f'''
+            pragma s3.UseRuntimeListing="{str(runtime_listing).lower()}";
+
             $data = SELECT *
             FROM fruitbucket.`fruits.csv`
             WITH (format=csv_with_names, SCHEMA (
@@ -624,7 +722,10 @@ Pear,15,33'''
     @pytest.mark.parametrize("client", [{"folder_id": "my_folder"}], indirect=True)
     @pytest.mark.parametrize("raw", [True, False])
     @pytest.mark.parametrize("path_pattern", ["exact_file", "directory_scan"])
-    def test_i18n_unpartitioned(self, kikimr, s3, client, raw, path_pattern):
+    @pytest.mark.parametrize("runtime_listing", [False, True])
+    def test_i18n_unpartitioned(self, kikimr, s3, client, raw, path_pattern, runtime_listing, yq_version):
+        if yq_version == "v1" and runtime_listing:
+            pytest.skip("Runtime listing is v2 only")
 
         resource = boto3.resource(
             "s3",
@@ -662,7 +763,9 @@ Pear,15,33'''
         else:
             raise ValueError(f"Unknown path_pattern {path_pattern}")
 
-        sql = R'''
+        sql = f'''
+            pragma s3.UseRuntimeListing="{str(runtime_listing).lower()}";
+
             SELECT count(*) as cnt
             FROM i18nbucket.`{path}`
             WITH (format={format}, SCHEMA (
@@ -687,7 +790,11 @@ Pear,15,33'''
     @pytest.mark.parametrize("client", [{"folder_id": "my_folder"}], indirect=True)
     @pytest.mark.parametrize("raw", [False, True])
     @pytest.mark.parametrize("partitioning", ["hive", "projection"])
-    def test_i18n_partitioning(self, kikimr, s3, client, raw, partitioning, yq_version):
+    @pytest.mark.parametrize("runtime_listing", [False, True])
+    def test_i18n_partitioning(self, kikimr, s3, client, raw, partitioning, yq_version, runtime_listing):
+        if yq_version == "v1" and runtime_listing:
+            pytest.skip("Runtime listing is v2 only")
+
         resource = boto3.resource(
             "s3",
             endpoint_url=s3.s3_url,
@@ -719,7 +826,9 @@ Pear,15,33'''
         client.create_storage_connection("i18nbucket", "ibucket")
 
         if partitioning == "projection":
-            sql = R'''
+            sql = f'''
+                    pragma s3.UseRuntimeListing="{str(runtime_listing).lower()}";
+                    ''' + R'''
                     $projection = @@ {
                         "projection.enabled" : "true",
                         "storage.location.template" : "/folder=${folder}",
@@ -740,7 +849,9 @@ Pear,15,33'''
                     WHERE folder = 'に ちは' or folder = '%こん';
                     '''.format("raw" if raw else "csv_with_names")
         elif partitioning == "hive":
-            sql = R'''
+            sql = f'''
+                pragma s3.UseRuntimeListing="{str(runtime_listing).lower()}";
+                ''' + R'''
                 SELECT count(*) as cnt
                 FROM i18nbucket.`dataset`
                 WITH (
@@ -771,7 +882,11 @@ Pear,15,33'''
 
     @yq_all
     @pytest.mark.parametrize("client", [{"folder_id": "my_folder"}], indirect=True)
-    def test_huge_source(self, kikimr, s3, client):
+    @pytest.mark.parametrize("runtime_listing", [False, True])
+    def test_huge_source(self, kikimr, s3, client, runtime_listing, yq_version):
+        if yq_version == "v1" and runtime_listing:
+            pytest.skip("Runtime listing is v2 only")
+
         resource = boto3.resource(
             "s3",
             endpoint_url=s3.s3_url,
@@ -785,7 +900,9 @@ Pear,15,33'''
         kikimr.control_plane.wait_bootstrap(1)
         client.create_storage_connection("hugebucket", "hbucket")
 
-        sql = R'''
+        sql = f'''
+            pragma s3.UseRuntimeListing="{str(runtime_listing).lower()}";
+            ''' + R'''
             insert into hugebucket.`path/` with (format=csv_with_names)
             select * from AS_TABLE(ListReplicate(<|s:"{}"u|>, 1024 * 10));
             '''.format("*" * 1024)
@@ -793,7 +910,9 @@ Pear,15,33'''
         query_id = client.create_query("simple", sql, type=fq.QueryContent.QueryType.ANALYTICS).result.query_id
         client.wait_query_status(query_id, fq.QueryMeta.COMPLETED)
 
-        sql = R'''
+        sql = f'''
+            pragma s3.UseRuntimeListing="{str(runtime_listing).lower()}";
+
             select count(*) from hugebucket.`path/` with (format=csv_with_names, schema(
                 s String NOT NULL
             ))

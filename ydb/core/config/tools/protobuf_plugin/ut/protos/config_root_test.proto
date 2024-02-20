@@ -1,0 +1,19 @@
+import "ydb/core/config/protos/marker.proto";
+
+package NKikimrConfig;
+option java_package = "ru.yandex.kikimr.proto";
+
+message AdditionalMessage {
+}
+
+message AnotherMessage {
+    optional string Content = 1;
+    optional AdditionalMessage Field1 = 2;
+}
+
+message ActualConfigMessage {
+    option (NMarkers.Root) = true;
+    optional AdditionalMessage Field1 = 1;
+    optional AdditionalMessage Field21 = 21;
+    optional string Field201 = 201;
+}

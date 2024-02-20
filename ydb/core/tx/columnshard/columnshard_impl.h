@@ -6,14 +6,26 @@
 #include "columnshard_common.h"
 #include "columnshard_ttl.h"
 #include "columnshard_private_events.h"
-#include "blob_manager.h"
 #include "tables_manager.h"
+
+#include "blobs_action/events/delete_blobs.h"
 #include "transactions/tx_controller.h"
 #include "inflight_request_tracker.h"
 #include "counters/columnshard.h"
 #include "resource_subscriber/counters.h"
 #include "resource_subscriber/task.h"
 #include "normalizer/abstract/abstract.h"
+
+#include "data_locks/manager/manager.h"
+
+#include "data_sharing/destination/events/control.h"
+#include "data_sharing/source/events/control.h"
+#include "data_sharing/destination/events/transfer.h"
+#include "data_sharing/source/events/transfer.h"
+#include "data_sharing/manager/sessions.h"
+#include "data_sharing/manager/shared_blobs.h"
+#include "data_sharing/common/transactions/tx_extension.h"
+#include "data_sharing/modification/events/change_owning.h"
 
 #include <ydb/core/base/tablet_pipecache.h>
 #include <ydb/core/tablet/tablet_counters.h>
@@ -35,6 +47,16 @@ class TTTLColumnEngineChanges;
 class TChangesWithAppend;
 class TCompactColumnEngineChanges;
 class TInsertColumnEngineChanges;
+class TStoragesManager;
+
+namespace NDataSharing {
+class TTxDataFromSource;
+class TTxDataAckToSource;
+class TTxFinishAckToSource;
+class TTxFinishAckFromInitiator;
+
+}
+
 namespace NBlobOperations {
 namespace NBlobStorage {
 class TWriteAction;
@@ -51,7 +73,9 @@ class TGeneralCompactColumnEngineChanges;
 
 namespace NKikimr::NColumnShard {
 
+
 class TTxInsertTableCleanup;
+class TTxRemoveSharedBlobs;
 class TOperationsManager;
 
 extern bool gAllowLogBatchingDefaultValue;
@@ -116,6 +140,7 @@ class TColumnShard
     friend class TTxReadBlobRanges;
     friend class TTxApplyNormalizer;
     friend class TTxMonitoring;
+    friend class TTxRemoveSharedBlobs;
 
     friend class NOlap::TCleanupColumnEngineChanges;
     friend class NOlap::TTTLColumnEngineChanges;
@@ -127,6 +152,13 @@ class TColumnShard
     friend class NOlap::NBlobOperations::NBlobStorage::TWriteAction;
     friend class NOlap::NBlobOperations::NBlobStorage::TOperator;
     friend class NOlap::NBlobOperations::NTier::TOperator;
+
+    friend class NOlap::NDataSharing::TTxDataFromSource;
+    friend class NOlap::NDataSharing::TTxDataAckToSource;
+    friend class NOlap::NDataSharing::TTxFinishAckToSource;
+    friend class NOlap::NDataSharing::TTxFinishAckFromInitiator;
+
+    friend class NOlap::TStoragesManager;
 
     class TStoragesManager;
     friend class TTxController;
@@ -165,6 +197,22 @@ class TColumnShard
     void Handle(TEvPrivate::TEvGarbageCollectionFinished::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvPrivate::TEvTieringModified::TPtr& ev, const TActorContext&);
     void Handle(TEvPrivate::TEvNormalizerResult::TPtr& ev, const TActorContext&);
+
+    void Handle(NActors::TEvents::TEvUndelivered::TPtr& ev, const TActorContext&);
+
+    void Handle(NOlap::NBlobOperations::NEvents::TEvDeleteSharedBlobs::TPtr& ev, const TActorContext& ctx);
+
+    void Handle(NOlap::NDataSharing::NEvents::TEvApplyLinksModification::TPtr& ev, const TActorContext& ctx);
+    void Handle(NOlap::NDataSharing::NEvents::TEvApplyLinksModificationFinished::TPtr& ev, const TActorContext& ctx);
+
+    void Handle(NOlap::NDataSharing::NEvents::TEvProposeFromInitiator::TPtr& ev, const TActorContext& ctx);
+    void Handle(NOlap::NDataSharing::NEvents::TEvConfirmFromInitiator::TPtr& ev, const TActorContext& ctx);
+    void Handle(NOlap::NDataSharing::NEvents::TEvStartToSource::TPtr& ev, const TActorContext& ctx);
+    void Handle(NOlap::NDataSharing::NEvents::TEvSendDataFromSource::TPtr& ev, const TActorContext& ctx);
+    void Handle(NOlap::NDataSharing::NEvents::TEvAckDataToSource::TPtr& ev, const TActorContext& ctx);
+    void Handle(NOlap::NDataSharing::NEvents::TEvFinishedFromSource::TPtr& ev, const TActorContext& ctx);
+    void Handle(NOlap::NDataSharing::NEvents::TEvAckFinishToSource::TPtr& ev, const TActorContext& ctx);
+    void Handle(NOlap::NDataSharing::NEvents::TEvAckFinishFromInitiator::TPtr& ev, const TActorContext& ctx);
 
     ITransaction* CreateTxInitSchema();
 
@@ -213,7 +261,9 @@ class TColumnShard
     void OnTieringModified();
 public:
     enum class EOverloadStatus {
-        Shard /* "shard" */,
+        ShardTxInFly /* "shard_tx" */,
+        ShardWritesInFly /* "shard_writes" */,
+        ShardWritesSizeInFly /* "shard_writes_size" */,
         InsertTable /* "insert_table" */,
         Disk /* "disk" */,
         None /* "none" */
@@ -268,7 +318,7 @@ protected:
             LOG_S_WARN("TColumnShard.StateBroken at " << TabletID()
                        << " unhandled event type: " << ev->GetTypeRewrite()
                        << " event: " << ev->ToString());
-            Send(IEventHandle::ForwardOnNondelivery(std::move(ev), TEvents::TEvUndelivered::ReasonActorUnknown));
+            Send(IEventHandle::ForwardOnNondelivery(std::move(ev), NActors::TEvents::TEvUndelivered::ReasonActorUnknown));
             break;
         }
     }
@@ -301,6 +351,22 @@ protected:
             HFunc(TEvPrivate::TEvWriteDraft, Handle);
             HFunc(TEvPrivate::TEvGarbageCollectionFinished, Handle);
             HFunc(TEvPrivate::TEvTieringModified, Handle);
+
+            HFunc(NActors::TEvents::TEvUndelivered, Handle);
+
+            HFunc(NOlap::NBlobOperations::NEvents::TEvDeleteSharedBlobs, Handle);
+            HFunc(NOlap::NDataSharing::NEvents::TEvApplyLinksModification, Handle);
+            HFunc(NOlap::NDataSharing::NEvents::TEvApplyLinksModificationFinished, Handle);
+
+            HFunc(NOlap::NDataSharing::NEvents::TEvProposeFromInitiator, Handle);
+            HFunc(NOlap::NDataSharing::NEvents::TEvConfirmFromInitiator, Handle);
+            HFunc(NOlap::NDataSharing::NEvents::TEvStartToSource, Handle);
+            HFunc(NOlap::NDataSharing::NEvents::TEvSendDataFromSource, Handle);
+            HFunc(NOlap::NDataSharing::NEvents::TEvAckDataToSource, Handle);
+            HFunc(NOlap::NDataSharing::NEvents::TEvFinishedFromSource, Handle);
+            HFunc(NOlap::NDataSharing::NEvents::TEvAckFinishToSource, Handle);
+            HFunc(NOlap::NDataSharing::NEvents::TEvAckFinishFromInitiator, Handle);
+
         default:
             if (!HandleDefaultEvents(ev, SelfId())) {
                 LOG_S_WARN("TColumnShard.StateWork at " << TabletID()
@@ -314,6 +380,9 @@ protected:
 private:
     std::unique_ptr<TTxController> ProgressTxController;
     std::unique_ptr<TOperationsManager> OperationsManager;
+    std::shared_ptr<NOlap::NDataSharing::TSessionsManager> SharingSessionsManager;
+    std::shared_ptr<NOlap::IStoragesManager> StoragesManager;
+    std::shared_ptr<NOlap::NDataLocks::TManager> DataLocksManager;
 
     using TSchemaPreset = TSchemaPreset;
     using TTableInfo = TTableInfo;
@@ -328,8 +397,8 @@ private:
     class TWritesMonitor {
     private:
         TColumnShard& Owner;
-        ui64 WritesInFlight = 0;
-        ui64 WritesSizeInFlight = 0;
+        YDB_READONLY(ui64, WritesInFlight, 0);
+        YDB_READONLY(ui64, WritesSizeInFlight, 0);
 
     public:
         class TGuard: public TNonCopyable {
@@ -365,17 +434,8 @@ private:
             return TGuard(*this);
         }
 
-        bool ShardOverloaded() const {
-            ui64 txLimit = Owner.Settings.OverloadTxInFlight;
-            ui64 writesLimit = Owner.Settings.OverloadWritesInFlight;
-            ui64 writesSizeLimit = Owner.Settings.OverloadWritesSizeInFlight;
-            return  (txLimit && Owner.Executor()->GetStats().TxInFly > txLimit) ||
-                    (writesLimit && WritesInFlight > writesLimit) ||
-                    (writesSizeLimit && WritesSizeInFlight > writesSizeLimit);
-        }
-
         TString DebugString() const {
-            return TStringBuilder() << "TWritesMonitor: inflight " << WritesInFlight << " (" << WritesSizeInFlight << " bytes)";
+            return TStringBuilder() << "{object=write_monitor;count=" << WritesInFlight << ";size=" << WritesSizeInFlight << "}";
         }
 
     private:
@@ -394,7 +454,6 @@ private:
     ui64 LastExportNo = 0;
 
     ui64 OwnerPathId = 0;
-    ui64 TabletTxCounter = 0;
     ui64 StatsReportRound = 0;
     TString OwnerPath;
 
@@ -412,7 +471,6 @@ private:
     TActorId BufferizationWriteActorId;
     TActorId StatsReportPipe;
 
-    std::shared_ptr<NOlap::IStoragesManager> StoragesManager;
     TInFlightReadsTracker InFlightReadsTracker;
     TTablesManager TablesManager;
     std::shared_ptr<TTiersManager> Tiers;
@@ -503,8 +561,34 @@ private:
     static TDuration GetControllerStatsReportInterval();
 
 public:
+    ui64 TabletTxCounter = 0;
+
+    template <class T>
+    const T& GetIndexAs() const {
+        return TablesManager.GetPrimaryIndexAsVerified<T>();
+    }
+
+    NOlap::TSnapshot GetLastPlannedSnapshot() const {
+        return NOlap::TSnapshot(LastPlannedStep, LastPlannedTxId);
+    }
+
+    NOlap::TSnapshot GetLastCompletedTx() const {
+        return LastCompletedTx;
+    }
+
     const std::shared_ptr<NOlap::IStoragesManager>& GetStoragesManager() const {
+        AFL_VERIFY(StoragesManager);
         return StoragesManager;
+    }
+
+    const std::shared_ptr<NOlap::NDataLocks::TManager>& GetDataLocksManager() const {
+        AFL_VERIFY(DataLocksManager);
+        return DataLocksManager;
+    }
+
+    const NOlap::TInsertTable& GetInsertTable() const {
+        AFL_VERIFY(!!InsertTable);
+        return *InsertTable;
     }
 
     static constexpr NKikimrServices::TActivity::EType ActorActivityType() {

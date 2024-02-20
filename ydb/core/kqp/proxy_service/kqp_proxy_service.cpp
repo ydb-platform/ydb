@@ -626,6 +626,7 @@ public:
         const auto queryAction = ev->Get()->GetAction();
         TKqpRequestInfo requestInfo(traceId);
         ui64 requestId = PendingRequests.RegisterRequest(ev->Sender, ev->Cookie, traceId, TKqpEvents::EvQueryRequest);
+        bool explicitSession = true;
         if (ev->Get()->GetSessionId().empty()) {
             TProcessResult<TKqpSessionInfo*> result;
             if (!CreateNewSessionWorker(requestInfo, TString(DefaultKikimrPublicClusterName), false,
@@ -634,7 +635,7 @@ public:
                 ReplyProcessError(result.YdbStatus, result.Error, requestId);
                 return;
             }
-
+            explicitSession = false;
             ev->Get()->SetSessionId(result.Value->SessionId);
         }
 
@@ -648,6 +649,20 @@ public:
         auto dbCounters = sessionInfo ? sessionInfo->DbCounters : nullptr;
         if (!dbCounters) {
             dbCounters = Counters->GetDbCounters(database);
+        }
+
+        if (queryType == NKikimrKqp::QUERY_TYPE_SQL_GENERIC_QUERY ||
+            queryType == NKikimrKqp::QUERY_TYPE_SQL_GENERIC_CONCURRENT_QUERY) {
+
+            if (explicitSession &&
+                sessionInfo &&
+                !sessionInfo->PgWire && // pg wire bypasses rpc layer and doesn't perform attach
+                !sessionInfo->AttachedRpcId)
+            {
+                TString error = "Attempt to execute query on explicit session without attach";
+                ReplyProcessError(Ydb::StatusIds::BAD_REQUEST, error, requestId);
+                return;
+            }
         }
 
         PendingRequests.SetSessionId(requestId, sessionId, dbCounters);

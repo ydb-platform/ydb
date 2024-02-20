@@ -10,7 +10,7 @@ var SqlHighlightRules = function() {
         "abort|action|all|and|as|asc|ast|attach|auth|avg|begin|between|case|cli|update|clusters|columns|compile|cross|cube|default|define|in|" +
         "delete|desc|describe|distinct|discard|do|drop|else|end|exclusion|explain|fields|file|from|full|join|get|if|for|evaluate|" +
         "group|by|grouping|having|help|history|inner|insert|into|is|join|left|limitmeta|" +
-        "not|null|offset|on|only|open|operations|optimize|or|order|by|parse|pragma|preview|process|" +
+        "not|null|offset|on|only|open|operations|optimize|or|order|by|parallel|parse|pragma|preview|process|" +
         "progress|put|queries|query|quickstart|reduce|remove|replace|into|restart|result|results|right|join|rollup|run|running|" +
         "schema|scheme|select|semi|set|sets|show|status|stream|subquery|table|tables|then|union|use|using|validate|values|version|when|where|limit|" +
         "with|yamr|yt|null|revert|ignore|upsert|erase|presort|assume|any|without|window|partition|rows|range|groups|" +

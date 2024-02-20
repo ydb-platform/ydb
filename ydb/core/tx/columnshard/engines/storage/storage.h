@@ -62,7 +62,7 @@ public:
         return TModificationGuard(*this);
     }
 
-    std::shared_ptr<TGranuleMeta> GetGranuleForCompaction(const THashMap<ui64, std::shared_ptr<TGranuleMeta>>& granules) const;
+    std::shared_ptr<TGranuleMeta> GetGranuleForCompaction(const THashMap<ui64, std::shared_ptr<TGranuleMeta>>& granules, const std::shared_ptr<NDataLocks::TManager>& locksManager) const;
 
     void UpdateGranuleInfo(const TGranuleMeta& granule);
 

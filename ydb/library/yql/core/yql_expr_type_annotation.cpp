@@ -9,6 +9,7 @@
 #include <ydb/library/yql/public/udf/udf_data_type.h>
 #include <ydb/library/yql/minikql/dom/json.h>
 #include <ydb/library/yql/minikql/dom/yson.h>
+#include <ydb/library/yql/minikql/jsonpath/jsonpath.h>
 #include <ydb/library/yql/core/sql_types/simple_types.h>
 #include "ydb/library/yql/parser/pg_catalog/catalog.h"
 #include <ydb/library/yql/parser/pg_wrapper/interface/utils.h>
@@ -330,6 +331,12 @@ IGraphTransformer::TStatus TryConvertToImpl(TExprContext& ctx, TExprNode::TPtr& 
             allow = true;
             useCast = true;
         } else if (from == EDataSlot::Timestamp && to == EDataSlot::TzTimestamp) {
+            allow = true;
+            useCast = true;
+        } else if (from == EDataSlot::Date32 && (to == EDataSlot::Datetime64 || to == EDataSlot::Timestamp64)) {
+            allow = true;
+            useCast = true;
+        } else if (from == EDataSlot::Datetime64 && (to == EDataSlot::Timestamp64)) {
             allow = true;
             useCast = true;
         } else if (from == EDataSlot::Json && to == EDataSlot::Utf8) {
@@ -1305,7 +1312,7 @@ const TTaggedExprType* DryType(const TTaggedExprType* type, bool& hasOptional, T
 }
 
 template<bool Silent>
-const TDataExprType* CommonType(TPositionHandle pos, const TDataExprType* one, const TDataExprType* two, TExprContext& ctx) {
+const TDataExprType* CommonType(TPositionHandle pos, const TDataExprType* one, const TDataExprType* two, TExprContext& ctx, bool warn) {
     const auto slot1 = one->GetSlot();
     const auto slot2 = two->GetSlot();
     if (IsDataTypeDecimal(slot1) && IsDataTypeDecimal(slot2)) {
@@ -1315,7 +1322,7 @@ const TDataExprType* CommonType(TPositionHandle pos, const TDataExprType* one, c
         const auto scale = std::min<ui8>(NDecimal::MaxPrecision - whole, std::max<ui8>(parts1.second, parts2.second));
         return ctx.MakeType<TDataExprParamsType>(EDataSlot::Decimal, ToString(whole + scale), ToString(scale));
     } else if (!(IsDataTypeDecimal(slot1) || IsDataTypeDecimal(slot2))) {
-        if (const auto super = GetSuperType(slot1, slot2))
+        if (const auto super = GetSuperType(slot1, slot2, warn, &ctx, &pos))
             return ctx.MakeType<TDataExprType>(*super);
     }
 
@@ -1704,7 +1711,7 @@ const TTypeAnnotationNode* JoinCommonDryKeyType(TPositionHandle position, bool o
 }
 
 template<bool Strict, bool Silent>
-const TTypeAnnotationNode* CommonType(TPositionHandle pos, const TTypeAnnotationNode* one, const TTypeAnnotationNode* two, TExprContext& ctx) {
+const TTypeAnnotationNode* CommonType(TPositionHandle pos, const TTypeAnnotationNode* one, const TTypeAnnotationNode* two, TExprContext& ctx, bool warn) {
     if (!(one && two))
         return nullptr;
 
@@ -1718,7 +1725,7 @@ const TTypeAnnotationNode* CommonType(TPositionHandle pos, const TTypeAnnotation
     if (const auto kindOne = one->GetKind(), kindTwo = two->GetKind(); kindOne == kindTwo) {
         switch (kindOne) {
             case ETypeAnnotationKind::Data:
-                return CommonType<Silent>(pos, one->Cast<TDataExprType>(), two->Cast<TDataExprType>(), ctx);
+                return CommonType<Silent>(pos, one->Cast<TDataExprType>(), two->Cast<TDataExprType>(), ctx, warn);
             case ETypeAnnotationKind::Optional:
                 return CommonItemType<Strict, Silent>(pos, one->Cast<TOptionalExprType>(), two->Cast<TOptionalExprType>(), ctx);
             case ETypeAnnotationKind::List:
@@ -1789,23 +1796,23 @@ const TTypeAnnotationNode* CommonType(TPositionHandle pos, const TTypeAnnotation
     return nullptr;
 }
 
-template const TTypeAnnotationNode* CommonType<true, false>(TPositionHandle pos, const TTypeAnnotationNode* one, const TTypeAnnotationNode* two, TExprContext& ctx);
-template const TTypeAnnotationNode* CommonType<false, false>(TPositionHandle pos, const TTypeAnnotationNode* one, const TTypeAnnotationNode* two, TExprContext& ctx);
-template const TTypeAnnotationNode* CommonType<false, true>(TPositionHandle pos, const TTypeAnnotationNode* one, const TTypeAnnotationNode* two, TExprContext& ctx);
+template const TTypeAnnotationNode* CommonType<true, false>(TPositionHandle pos, const TTypeAnnotationNode* one, const TTypeAnnotationNode* two, TExprContext& ctx, bool warn);
+template const TTypeAnnotationNode* CommonType<false, false>(TPositionHandle pos, const TTypeAnnotationNode* one, const TTypeAnnotationNode* two, TExprContext& ctx, bool warn);
+template const TTypeAnnotationNode* CommonType<false, true>(TPositionHandle pos, const TTypeAnnotationNode* one, const TTypeAnnotationNode* two, TExprContext& ctx, bool warn);
 
-const TTypeAnnotationNode* CommonType(TPositionHandle position, const TTypeAnnotationNode::TSpanType& types, TExprContext& ctx) {
+const TTypeAnnotationNode* CommonType(TPositionHandle position, const TTypeAnnotationNode::TSpanType& types, TExprContext& ctx, bool warn) {
     switch (types.size()) {
         case 0U: return nullptr;
         case 1U: return types.front();
-        case 2U: return CommonType<false, false>(position, types.front(), types.back(), ctx);
+        case 2U: return CommonType<false, false>(position, types.front(), types.back(), ctx, warn);
         default: break;
     }
 
     const auto left = types.size() >> 1U, right = types.size() - left;
-    return CommonType<false, false>(position, CommonType(position, types.first(left), ctx), CommonType(position, types.last(right), ctx), ctx);
+    return CommonType<false, false>(position, CommonType(position, types.first(left), ctx, warn), CommonType(position, types.last(right), ctx, warn), ctx, warn);
 }
 
-const TTypeAnnotationNode* CommonTypeForChildren(const TExprNode& node, TExprContext& ctx) {
+const TTypeAnnotationNode* CommonTypeForChildren(const TExprNode& node, TExprContext& ctx, bool warn) {
     TTypeAnnotationNode::TListType types(node.ChildrenSize());
     for (auto i = 0U; i < types.size(); ++i) {
         if (const auto item = node.Child(i); EnsureComputable(*item, ctx))
@@ -1813,7 +1820,7 @@ const TTypeAnnotationNode* CommonTypeForChildren(const TExprNode& node, TExprCon
         else
             return nullptr;
     }
-    return CommonType(node.Pos(), types, ctx);
+    return CommonType(node.Pos(), types, ctx, warn);
 }
 
 size_t GetOptionalLevel(const TTypeAnnotationNode* type) {
@@ -4248,13 +4255,29 @@ ui8 GetDecimalWidthOfIntegral(EDataSlot dataSlot) {
     return NUdf::GetDataTypeInfo(dataSlot).DecimalDigits;
 }
 
-TMaybe<EDataSlot> GetSuperType(EDataSlot dataSlot1, EDataSlot dataSlot2) {
+TMaybe<EDataSlot> GetSuperType(EDataSlot dataSlot1, EDataSlot dataSlot2, bool warn, TExprContext* ctx, TPositionHandle* pos) {
     if (dataSlot1 == dataSlot2) {
         return dataSlot1;
     }
 
     if (IsDataTypeNumeric(dataSlot1) && IsDataTypeNumeric(dataSlot2)) {
-        return GetNumericDataTypeByLevel(Max(GetNumericDataTypeLevel(dataSlot1), GetNumericDataTypeLevel(dataSlot2)));
+        auto lvl1 = GetNumericDataTypeLevel(dataSlot1);
+        auto lvl2 = GetNumericDataTypeLevel(dataSlot2);
+        if (lvl1 > lvl2) {
+            std::swap(lvl1, lvl2);
+        }
+        bool isFromSignedToUnsigned = (lvl1 & 1) && !(lvl2 & 1);
+        bool isFromUnsignedToSignedSameWidth = ((lvl1 == (lvl2 & ~1u)) && ((lvl1 ^ lvl2) & 1));
+        if (warn && lvl2 < 8 && (isFromSignedToUnsigned || isFromUnsignedToSignedSameWidth)) {
+            auto issue = TIssue(ctx->GetPosition(*pos), TStringBuilder() <<
+                "Consider using explicit CAST or BITCAST to convert from " <<
+                NKikimr::NUdf::GetDataTypeInfo(dataSlot1).Name << " to " << NKikimr::NUdf::GetDataTypeInfo(dataSlot2).Name);
+            SetIssueCode(EYqlIssueCode::TIssuesIds_EIssueCode_CORE_IMPLICIT_BITCAST, issue);
+            if (!ctx->AddWarning(issue)) {
+                return {};
+            }
+        }
+        return GetNumericDataTypeByLevel(lvl2);
     }
 
     if (IsDataTypeString(dataSlot1) && IsDataTypeString(dataSlot2)) {
@@ -5119,6 +5142,7 @@ TMaybe<ui32> GetDataFixedSize(const TTypeAnnotationNode* typeAnnotation) {
         }
 
         if (EDataSlot::Timestamp == dataSlot || EDataSlot::Uint64 == dataSlot || EDataSlot::Int64 == dataSlot
+            || EDataSlot::Datetime64 == dataSlot || EDataSlot::Timestamp64 == dataSlot || EDataSlot::Interval64 == dataSlot
             || EDataSlot::Double == dataSlot || EDataSlot::Interval == dataSlot) {
             return 8;
         }
@@ -6046,6 +6070,25 @@ bool EnsureScalarType(TPositionHandle position, const TTypeAnnotationNode& type,
     return true;
 }
 
+bool EnsureValidJsonPath(const TExprNode& node, TExprContext& ctx) {
+    if (!EnsureSpecificDataType(node, EDataSlot::Utf8, ctx))
+        return false;
+
+    if (node.IsCallable("Utf8")) {
+        if (TIssues issues; !NJsonPath::ParseJsonPath(node.Tail().Content(), issues, 7U)) {
+            TIssue issue(ctx.GetPosition(node.Pos()), TStringBuilder() << "Invalid json path: " << node.Tail().Content());
+            if (bool(issues)) {
+                for (const auto& i : issues) {
+                    issue.AddSubIssue(new TIssue(i));
+                }
+            }
+            ctx.AddError(issue);
+            return false;
+        }
+    }
+    return true;
+}
+
 const TTypeAnnotationNode* GetBlockItemType(const TTypeAnnotationNode& type, bool& isScalar) {
     YQL_ENSURE(type.IsBlockOrScalar());
     const auto kind = type.GetKind();
@@ -6310,7 +6353,11 @@ TExprNode::TPtr ExpandPgAggregationTraits(TPositionHandle pos, const NPg::TAggre
     auto saveLambda = idLambda;
     auto loadLambda = idLambda;
     auto finishLambda = idLambda;
+    auto nullValue = ctx.NewCallable(pos, "Null", {});
     if (aggDesc.FinalFuncId) {
+        const ui32 originalAggResultType = NPg::LookupProc(aggDesc.FinalFuncId).ResultType;
+        ui32 aggResultType = originalAggResultType;
+        AdjustReturnType(aggResultType, aggDesc.ArgTypes, argTypes);
         finishLambda = ctx.Builder(pos)
             .Lambda()
             .Param("state")
@@ -6318,14 +6365,30 @@ TExprNode::TPtr ExpandPgAggregationTraits(TPositionHandle pos, const NPg::TAggre
                 .Atom(0, NPg::LookupProc(aggDesc.FinalFuncId).Name)
                 .Atom(1, ToString(aggDesc.FinalFuncId))
                 .List(2)
+                    .Do([aggResultType, originalAggResultType](TExprNodeBuilder& builder) -> TExprNodeBuilder& {
+                        if (aggResultType != originalAggResultType) { 
+                            builder.List(0)
+                                .Atom(0, "type")
+                                .Atom(1, NPg::LookupType(aggResultType).Name)
+                            .Seal();
+                        }
+
+                        return builder;
+                    })
                 .Seal()
                 .Arg(3, "state")
+                .Do([&aggDesc, nullValue](TExprNodeBuilder& builder) -> TExprNodeBuilder& {
+                    if (aggDesc.FinalExtra) {
+                        builder.Add(4, nullValue);
+                    }
+
+                    return builder;
+                })
             .Seal()
             .Seal()
             .Build();
     }
 
-    auto nullValue = ctx.NewCallable(pos, "Null", {});
     auto initValue = nullValue;
     if (aggDesc.InitValue) {
         initValue = ctx.Builder(pos)
@@ -6597,6 +6660,45 @@ TExprNode::TPtr ExpandPgAggregationTraits(TPositionHandle pos, const NPg::TAggre
     }
 }
 
+void AdjustReturnType(ui32& returnType, const TVector<ui32>& procArgTypes, const TVector<ui32>& argTypes) {
+    YQL_ENSURE(procArgTypes.size() >= argTypes.size());
+    if (returnType == NPg::AnyArrayOid) {
+        TMaybe<ui32> inputElementType;
+        TMaybe<ui32> inputArrayType;
+        for (ui32 i = 0; i < argTypes.size(); ++i) {
+            if (!argTypes[i]) {
+                continue;
+            }
+
+            if (procArgTypes[i] == NPg::AnyNonArrayOid) {
+                if (!inputElementType) {
+                   inputElementType = argTypes[i];
+                } else {
+                    if (*inputElementType != argTypes[i]) {
+                        return;
+                    }
+                }
+            }
+
+            if (procArgTypes[i] == NPg::AnyArrayOid) {
+                if (!inputArrayType) {
+                   inputArrayType = argTypes[i];
+                } else {
+                    if (*inputArrayType != argTypes[i]) {
+                        return;
+                    }
+                }
+            }
+        }
+
+        if (inputElementType) {
+            returnType = NPg::LookupType(*inputElementType).ArrayTypeId;
+        } else if (inputArrayType) {
+            returnType = *inputArrayType;
+        }
+    }
+}
+
 const TTypeAnnotationNode* GetOriginalResultType(TPositionHandle pos, bool isMany, const TTypeAnnotationNode* originalExtractorType, TExprContext& ctx) {
     if (!EnsureStructType(pos, *originalExtractorType, ctx)) {
         return nullptr;
@@ -6654,6 +6756,33 @@ TExprNode::TPtr ConvertToMultiLambda(const TExprNode::TPtr& lambda, TExprContext
 TStringBuf NormalizeCallableName(TStringBuf name) {
     name.ChopSuffix("MayWarn"sv);
     return name;
+}
+
+void CheckExpectedTypeAndColumnOrder(const TExprNode& node, TExprContext& ctx, TTypeAnnotationContext& typesCtx) {
+    auto it = typesCtx.ExpectedTypes.find(node.UniqueId());
+    if (it != typesCtx.ExpectedTypes.end()) {
+        YQL_ENSURE(IsSameAnnotation(*node.GetTypeAnn(), *it->second),
+            "Rewrite error, type should be : " <<
+            *it->second << ", but it is: " << *node.GetTypeAnn() << " for node " << node.Content());
+    }
+
+    auto coIt = typesCtx.ExpectedColumnOrders.find(node.UniqueId());
+    if (coIt != typesCtx.ExpectedColumnOrders.end()) {
+        TColumnOrder oldColumnOrder = coIt->second;
+        TMaybe<TColumnOrder> newColumnOrder = typesCtx.LookupColumnOrder(node);
+        if (!newColumnOrder) {
+            // keep column order after rewrite
+            // TODO: check if needed
+            auto status = typesCtx.SetColumnOrder(node, oldColumnOrder, ctx);
+            YQL_ENSURE(status == IGraphTransformer::TStatus::Ok);
+        } else {
+            YQL_ENSURE(newColumnOrder == oldColumnOrder,
+                "Rewrite error, column order should be: "
+                << FormatColumnOrder(oldColumnOrder) << ", but it is: "
+                << FormatColumnOrder(newColumnOrder) << " for node "
+                << node.Content());
+        }
+    }
 }
 
 } // NYql

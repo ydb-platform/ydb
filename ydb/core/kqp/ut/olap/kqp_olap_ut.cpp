@@ -13,6 +13,7 @@
 #include <ydb/core/formats/arrow/simple_builder/batch.h>
 #include <ydb/core/formats/arrow/ssa_runtime_version.h>
 #include <ydb/core/kqp/executer_actor/kqp_executer.h>
+#include <ydb/core/tx/columnshard/data_sharing/destination/events/control.h>
 #include <ydb/core/tx/columnshard/hooks/abstract/abstract.h>
 #include <ydb/core/tx/columnshard/hooks/testing/controller.h>
 #include <ydb/core/tx/datashard/datashard.h>
@@ -1754,7 +1755,6 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
             R"(`level` = 0 OR `uid` = "uid_3000003")",
             R"(`level` = 0 AND `uid` = "uid_3000003")",
             R"(`level` = 0 AND `uid` = "uid_3000000")",
-            R"(`timestamp` >= CAST(3000001u AS Timestamp) AND `level` > 3)",
             R"((`level`, `uid`) > (Int32("2"), "uid_3000004") OR (`level`, `uid`) < (Int32("1"), "uid_3000002"))",
             R"(Int32("3") > `level`)",
             R"((Int32("1"), "uid_3000001", "10001") = (`level`, `uid`, `resource_id`))",
@@ -1769,8 +1769,6 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
             R"((`level`, `uid`) != (Int32("1"), NULL))",
             R"(`level` >= CAST("2" As Int32))",
             R"(CAST("2" As Int32) >= `level`)",
-            R"(`timestamp` >= CAST(3000001u AS Timestamp))",
-            R"((`timestamp`, `level`) >= (CAST(3000001u AS Timestamp), 3))",
 #if SSA_RUNTIME_VERSION >= 2U
             R"(`uid` LIKE "%30000%")",
             R"(`uid` LIKE "uid%")",
@@ -1802,6 +1800,9 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
             R"(`level` * 3. > 4.f)",
             R"(`level` / 2.f <= 1.)",
             R"(`level` % 3. != 1.f)",
+            R"(`timestamp` >= Timestamp("1970-01-01T00:00:00.000001Z"))",
+            R"(`timestamp` >= Timestamp("1970-01-01T00:00:00.000001Z") AND `level` > 3)",
+            R"((`timestamp`, `level`) >= (Timestamp("1970-01-01T00:00:00.000001Z"), 3))",
 #endif
         };
 
@@ -1858,7 +1859,7 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
         std::vector<TString> testDataNoPush = {
             R"(`level` != NULL)",
             R"(`level` > NULL)",
-            R"(`timestamp` >= CAST(3000001 AS Timestamp))",
+            R"(`timestamp` >= CAST(3000001U AS Timestamp))",
             R"(`level` >= CAST("2" As Uint32))",
             R"(`level` = NULL)",
             R"(`level` > NULL)",
@@ -1881,6 +1882,7 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
             R"(`level` * 3 > 4)",
             R"(`level` / 2 <= 1)",
             R"(`level` % 3 != 1)",
+            R"(`timestamp` >= Timestamp("1970-01-01T00:00:00.000001Z"))",
 #endif
         };
 
@@ -3817,6 +3819,183 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
         Y_ABORT_UNLESS(bytesPack / bytesUnpack < 0.1);
     }
 
+    namespace {
+    class TTransferStatus {
+    private:
+        YDB_ACCESSOR(bool, Proposed, false);
+        YDB_ACCESSOR(bool, Confirmed, false);
+        YDB_ACCESSOR(bool, Finished, false);
+    public:
+        void Reset() {
+            Confirmed = false;
+            Proposed = false;
+            Finished = false;
+        }
+    };
+
+    static TMutex CSTransferStatusesMutex;
+    static std::shared_ptr<TTransferStatus> CSTransferStatus = std::make_shared<TTransferStatus>();
+    }
+
+    class TTestController: public NOlap::NDataSharing::IInitiatorController {
+    private:
+        static const inline auto Registrator = TFactory::TRegistrator<TTestController>("test");
+    protected:
+        virtual void DoProposeError(const TString& sessionId, const TString& message) const override {
+            AFL_VERIFY(false)("session_id", sessionId)("message", message);
+        }
+        virtual void DoProposeSuccess(const TString& sessionId) const override {
+            CSTransferStatus->SetProposed(true);
+            AFL_NOTICE(NKikimrServices::TX_COLUMNSHARD)("event", "sharing_proposed")("session_id", sessionId);
+        }
+        virtual void DoConfirmSuccess(const TString& sessionId) const override {
+            CSTransferStatus->SetConfirmed(true);
+            AFL_NOTICE(NKikimrServices::TX_COLUMNSHARD)("event", "sharing_confirmed")("session_id", sessionId);
+        }
+        virtual void DoFinished(const TString& sessionId) const override {
+            CSTransferStatus->SetFinished(true);
+            AFL_NOTICE(NKikimrServices::TX_COLUMNSHARD)("event", "sharing_finished")("session_id", sessionId);
+        }
+        virtual void DoStatus(const NOlap::NDataSharing::TStatusContainer& status) const override {
+            AFL_NOTICE(NKikimrServices::TX_COLUMNSHARD)("event", "status")("info", status.SerializeToProto().DebugString());
+        }
+        virtual TConclusionStatus DoDeserializeFromProto(const NKikimrColumnShardDataSharingProto::TInitiator::TController& /*proto*/) override {
+            return TConclusionStatus::Success();
+        }
+        virtual void DoSerializeToProto(NKikimrColumnShardDataSharingProto::TInitiator::TController& /*proto*/) const override {
+            
+        }
+
+        virtual TString GetClassName() const override {
+            return "test";
+        }
+    };
+
+    class TSharingActor {
+    private:
+        TKikimrRunner& Runner;
+    public:
+        TSharingActor(TKikimrRunner& runner)
+            : Runner(runner)
+        {
+        }
+
+        void Execute(const ui64 destination, const std::vector<ui64>& sources, const bool move, const NOlap::TSnapshot& snapshot, const std::set<ui64>& pathIds) {
+            Cerr << "SHARING: " << JoinSeq(",", sources) << "->" << destination << Endl;
+            THashMap<ui64, ui64> pathIdsRemap;
+            for (auto&& i : pathIds) {
+                pathIdsRemap.emplace(i, i);
+            }
+            THashSet<NOlap::TTabletId> sourceTablets;
+            for (auto&& i : sources) { 
+                AFL_VERIFY(sourceTablets.emplace((NOlap::TTabletId)i).second);
+            }
+            const TString sessionId = TGUID::CreateTimebased().AsUuidString();
+            NOlap::NDataSharing::TTransferContext transferContext((NOlap::TTabletId)destination, sourceTablets, snapshot, move);
+            NOlap::NDataSharing::TDestinationSession session(std::make_shared<TTestController>(), pathIdsRemap, sessionId, transferContext);
+            Runner.GetTestServer().GetRuntime()->Send(MakePipePeNodeCacheID(false), NActors::TActorId(), new TEvPipeCache::TEvForward(
+                new NOlap::NDataSharing::NEvents::TEvProposeFromInitiator(session), destination, false));
+            while (!CSTransferStatus->GetProposed()) {
+                Sleep(TDuration::Seconds(1));
+                Cerr << "WAIT_PROPOSING..." << Endl;
+            }
+            Runner.GetTestServer().GetRuntime()->Send(MakePipePeNodeCacheID(false), NActors::TActorId(), new TEvPipeCache::TEvForward(
+                new NOlap::NDataSharing::NEvents::TEvConfirmFromInitiator(sessionId), destination, false));
+            while (!CSTransferStatus->GetConfirmed()) {
+                Sleep(TDuration::Seconds(1));
+                Cerr << "WAIT_CONFIRMED..." << Endl;
+            }
+            while (!CSTransferStatus->GetFinished()) {
+                Sleep(TDuration::Seconds(1));
+                Cerr << "WAIT_FINISHED..." << Endl;
+            }
+            CSTransferStatus->Reset();
+        }
+    };
+
+    Y_UNIT_TEST(BlobsSharingSplit1_1) {
+        auto csController = NYDBTest::TControllers::RegisterCSControllerGuard<NYDBTest::NColumnShard::TController>();
+
+        auto settings = TKikimrSettings().SetWithSampleTables(false);
+        TKikimrRunner kikimr(settings);
+        Tests::NCommon::TLoggerInit(kikimr).Initialize();
+        TTypedLocalHelper helper("", kikimr, "olapTable", "olapStore12");
+        helper.CreateTestOlapTable(4, 4);
+        helper.FillPKOnly(0, 800000);
+
+        auto shardIds = csController->GetShardActualIds();
+        AFL_VERIFY(shardIds.size() == 4)("count", shardIds.size())("ids", JoinSeq(",", shardIds));
+        auto pathIds = csController->GetPathIds(shardIds[0]);
+        AFL_VERIFY(pathIds.size() == 1)("count", pathIds.size())("ids", JoinSeq(",", pathIds));
+        Sleep(TDuration::Seconds(1));
+        TSharingActor(kikimr).Execute(shardIds[0], {shardIds[1]}, false, NOlap::TSnapshot(TInstant::Now().MilliSeconds(), 1232123), {pathIds[0]});
+    }
+
+    Y_UNIT_TEST(BlobsSharingSplit3_1) {
+        auto csController = NYDBTest::TControllers::RegisterCSControllerGuard<NYDBTest::NColumnShard::TController>();
+
+        auto settings = TKikimrSettings()
+            .SetWithSampleTables(false);
+        TKikimrRunner kikimr(settings);
+        Tests::NCommon::TLoggerInit(kikimr).Initialize();
+        TTypedLocalHelper helper("", kikimr, "olapTable", "olapStore12");
+        helper.CreateTestOlapTable(4, 4);
+        helper.FillPKOnly(0, 800000);
+
+        auto shardIds = csController->GetShardActualIds();
+        AFL_VERIFY(shardIds.size() == 4)("count", shardIds.size())("ids", JoinSeq(",", shardIds));
+        auto pathIds = csController->GetPathIds(shardIds[0]);
+        AFL_VERIFY(pathIds.size() == 1)("count", pathIds.size())("ids", JoinSeq(",", pathIds));
+        Sleep(TDuration::Seconds(1));
+        TSharingActor(kikimr).Execute(shardIds[0], {shardIds[1], shardIds[2], shardIds[3]}, false, NOlap::TSnapshot(TInstant::Now().MilliSeconds(), 1232123), {pathIds[0]});
+    }
+
+    Y_UNIT_TEST(BlobsSharingSplit1_3_1) {
+        auto csController = NYDBTest::TControllers::RegisterCSControllerGuard<NYDBTest::NColumnShard::TController>();
+
+        auto settings = TKikimrSettings()
+            .SetWithSampleTables(false);
+        TKikimrRunner kikimr(settings);
+        Tests::NCommon::TLoggerInit(kikimr).Initialize();
+        TTypedLocalHelper helper("", kikimr, "olapTable", "olapStore12");
+        helper.CreateTestOlapTable(4, 4);
+        helper.FillPKOnly(0, 800000);
+
+        auto shardIds = csController->GetShardActualIds();
+        AFL_VERIFY(shardIds.size() == 4)("count", shardIds.size())("ids", JoinSeq(",", shardIds));
+        auto pathIds = csController->GetPathIds(shardIds[0]);
+        AFL_VERIFY(pathIds.size() == 1)("count", pathIds.size())("ids", JoinSeq(",", pathIds));
+        Sleep(TDuration::Seconds(1));
+        TSharingActor(kikimr).Execute(shardIds[1], {shardIds[0]}, false, NOlap::TSnapshot(TInstant::Now().MilliSeconds(), 1232123), {pathIds[0]});
+        TSharingActor(kikimr).Execute(shardIds[2], {shardIds[0]}, false, NOlap::TSnapshot(TInstant::Now().MilliSeconds(), 1232123), {pathIds[0]});
+        TSharingActor(kikimr).Execute(shardIds[3], {shardIds[0]}, false, NOlap::TSnapshot(TInstant::Now().MilliSeconds(), 1232123), {pathIds[0]});
+        TSharingActor(kikimr).Execute(shardIds[0], {shardIds[1], shardIds[2], shardIds[3]}, true, NOlap::TSnapshot(TInstant::Now().MilliSeconds(), 1232123), {pathIds[0]});
+    }
+
+    Y_UNIT_TEST(BlobsSharingSplit1_3_2_1) {
+        auto csController = NYDBTest::TControllers::RegisterCSControllerGuard<NYDBTest::NColumnShard::TController>();
+
+        auto settings = TKikimrSettings()
+            .SetWithSampleTables(false);
+        TKikimrRunner kikimr(settings);
+        Tests::NCommon::TLoggerInit(kikimr).Initialize();
+        TTypedLocalHelper helper("", kikimr, "olapTable", "olapStore12");
+        helper.CreateTestOlapTable(4, 4);
+        helper.FillPKOnly(0, 800000);
+
+        auto shardIds = csController->GetShardActualIds();
+        AFL_VERIFY(shardIds.size() == 4)("count", shardIds.size())("ids", JoinSeq(",", shardIds));
+        auto pathIds = csController->GetPathIds(shardIds[0]);
+        AFL_VERIFY(pathIds.size() == 1)("count", pathIds.size())("ids", JoinSeq(",", pathIds));
+        Sleep(TDuration::Seconds(1));
+        TSharingActor(kikimr).Execute(shardIds[1], {shardIds[0]}, false, NOlap::TSnapshot(TInstant::Now().MilliSeconds(), 1232123), {pathIds[0]});
+        TSharingActor(kikimr).Execute(shardIds[2], {shardIds[0]}, false, NOlap::TSnapshot(TInstant::Now().MilliSeconds(), 1232123), {pathIds[0]});
+        TSharingActor(kikimr).Execute(shardIds[3], {shardIds[0]}, false, NOlap::TSnapshot(TInstant::Now().MilliSeconds(), 1232123), {pathIds[0]});
+        helper.FillPKOnly(1, 800000);
+        TSharingActor(kikimr).Execute(shardIds[3], {shardIds[2]}, false, NOlap::TSnapshot(TInstant::Now().MilliSeconds(), 1232123), {pathIds[0]});
+        TSharingActor(kikimr).Execute(shardIds[0], {shardIds[1], shardIds[2]}, true, NOlap::TSnapshot(TInstant::Now().MilliSeconds(), 1232123), {pathIds[0]});
+    }
+
     Y_UNIT_TEST(SelectLimit1ManyShards) {
         TPortManager tp;
         ui16 mbusport = tp.GetPort(2134);
@@ -5130,7 +5309,7 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
     Y_UNIT_TEST(Json_GetValue) {
         TAggregationTestCase testCase;
         testCase.SetQuery(R"(
-                SELECT id, JSON_VALUE(jsonval, "$.col1"), JSON_VALUE(jsondoc, "$.col1") FROM `/Root/tableWithNulls`
+                SELECT id, JSON_VALUE(jsonval, "$.col1-proxy"), JSON_VALUE(jsondoc, "$.col1") FROM `/Root/tableWithNulls`
                 WHERE JSON_VALUE(jsonval, "$.col1") = "val1" AND id = 1;
             )")
 #if SSA_RUNTIME_VERSION >= 3U

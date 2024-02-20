@@ -43,6 +43,7 @@ protected:
 
     size_t TotalSec;
     size_t Threads;
+    ui64 Rate;
     unsigned int ClientTimeoutMs;
     unsigned int OperationTimeoutMs;
     unsigned int CancelAfterTimeoutMs;
@@ -60,6 +61,7 @@ protected:
     NHdr::THistogram WindowHist;
     NHdr::THistogram TotalHist;
 
+    std::atomic_uint64_t TotalQueries;
     std::atomic_uint64_t TotalRetries;
     std::atomic_uint64_t WindowRetryCount;
     std::atomic_uint64_t TotalErrors;

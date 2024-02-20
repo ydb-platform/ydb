@@ -10,6 +10,7 @@
   - atltime.h
   - audioclient.h
   - authz.h
+  - basetsd.h
   - basetyps.h
   - bcrypt.h
   - bits.h
@@ -44,6 +45,7 @@
   - dcomp.h
   - debugapi.h
   - devguid.h
+  - dinput.h
   - direct.h
   - dispex.h
   - dos.h
@@ -54,6 +56,7 @@
   - dsparse.h
   - dv.h
   - dvdmedia.h
+  - dwmapi.h
   - dwrite.h
   - dxgi.h
   - dxgi1_2.h
@@ -102,6 +105,7 @@
   - io.h
   - ioapiset.h
   - ipexport.h
+  - iphlpapi.h
   - ipifcons.h
   - iptypes.h
   - iwscapi.h
@@ -175,6 +179,7 @@
   - persist.h
   - poppack.h
   - powerbase.h
+  - powrprof.h
   - process.h
   - processenv.h
   - processsnapshot.h
@@ -301,13 +306,6 @@
   - winwlx.h
   - wnnc.h
   - wow64apiset.h
-  - wrl.h
-  - wrl/async.h
-  - wrl/client.h
-  - wrl/event.h
-  - wrl/ftm.h
-  - wrl/implements.h
-  - wrl/wrappers/corewrappers.h
   - ws2bth.h
   - ws2def.h
   - ws2ipdef.h
@@ -319,4 +317,25 @@
   - wtypes.h
   - xa.h
   - xaudio2.h
+  - xinput.h
   - xmllite.h
+
+# These headers are Microsoft Visual C specific.
+- case_sensitive: false
+  includes:
+    - vcruntime_exception.h
+    - vcruntime_new.h
+    - vcruntime_typeinfo.h
+    - vcruntime_new_debug.h
+    - yvals.h
+
+# These headers belong to UWP application development.
+- case_sensitive: false
+  includes:
+    - wrl.h
+    - wrl/async.h
+    - wrl/client.h
+    - wrl/event.h
+    - wrl/ftm.h
+    - wrl/implements.h
+    - wrl/wrappers/corewrappers.h

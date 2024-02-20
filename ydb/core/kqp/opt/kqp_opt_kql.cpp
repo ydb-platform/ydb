@@ -429,6 +429,7 @@ TExprBase BuildDeleteTable(const TKiWriteTable& write, const TKikimrTableDescrip
     return Build<TKqlDeleteRows>(ctx, write.Pos())
         .Table(BuildTableMeta(tableData, write.Pos(), ctx))
         .Input(keysToDelete)
+        .ReturningColumns(write.ReturningColumns())
         .Done();
 }
 
@@ -438,6 +439,7 @@ TExprBase BuildDeleteTableWithIndex(const TKiWriteTable& write, const TKikimrTab
     return Build<TKqlDeleteRowsIndex>(ctx, write.Pos())
         .Table(BuildTableMeta(tableData, write.Pos(), ctx))
         .Input(keysToDelete)
+        .ReturningColumns(write.ReturningColumns())
         .Done();
 }
 
@@ -445,7 +447,7 @@ TExprBase BuildRowsToDelete(const TKikimrTableDescription& tableData, bool withS
     const TPositionHandle pos, TExprContext& ctx, const TIntrusivePtr<TKqpOptimizeContext>& kqpCtx)
 {
     const auto tableMeta = BuildTableMeta(tableData, pos, ctx);
-    const auto tableColumns = BuildColumnsList(tableData, pos, ctx, withSystemColumns);
+    const auto tableColumns = BuildColumnsList(tableData, pos, ctx, withSystemColumns, true /*ignoreWriteOnlyColumns*/);
 
     const auto allRows = BuildReadTable(tableColumns, pos, tableData, false, ctx, kqpCtx);
 
@@ -464,6 +466,7 @@ TExprBase BuildDeleteTable(const TKiDeleteTable& del, const TKikimrTableDescript
     return Build<TKqlDeleteRows>(ctx, del.Pos())
         .Table(BuildTableMeta(tableData, del.Pos(), ctx))
         .Input(keysToDelete)
+        .ReturningColumns<TCoAtomList>().Build()
         .Done();
 }
 
@@ -483,6 +486,7 @@ TExprBase BuildDeleteTableWithIndex(const TKiDeleteTable& del, const TKikimrTabl
     auto tableDelete = Build<TKqlDeleteRows>(ctx, del.Pos())
         .Table(BuildTableMeta(tableData, del.Pos(), ctx))
         .Input(ProjectColumns(rowsToDelete, pk, ctx))
+        .ReturningColumns<TCoAtomList>().Build()
         .Done();
 
     TVector<TExprBase> effects;
@@ -506,6 +510,7 @@ TExprBase BuildDeleteTableWithIndex(const TKiDeleteTable& del, const TKikimrTabl
         auto indexDelete = Build<TKqlDeleteRows>(ctx, del.Pos())
             .Table(indexMeta)
             .Input(ProjectColumns(rowsToDelete, indexTableColumns, ctx))
+            .ReturningColumns<TCoAtomList>().Build()
             .Done();
 
         effects.push_back(indexDelete);
@@ -517,7 +522,7 @@ TExprBase BuildDeleteTableWithIndex(const TKiDeleteTable& del, const TKikimrTabl
 TExprBase BuildRowsToUpdate(const TKikimrTableDescription& tableData, bool withSystemColumns, const TCoLambda& filter,
     const TPositionHandle pos, TExprContext& ctx, const TIntrusivePtr<TKqpOptimizeContext>& kqpCtx)
 {
-    auto kqlReadTable = BuildReadTable(BuildColumnsList(tableData, pos, ctx, withSystemColumns), pos, tableData, false, ctx, kqpCtx);
+    auto kqlReadTable = BuildReadTable(BuildColumnsList(tableData, pos, ctx, withSystemColumns, true /*ignoreWriteOnlyColumns*/), pos, tableData, false, ctx, kqpCtx);
 
     return Build<TCoFilter>(ctx, pos)
         .Input(kqlReadTable)
@@ -699,6 +704,7 @@ TExprBase BuildUpdateTableWithIndex(const TKiUpdateTable& update, const TKikimrT
             auto indexDelete = Build<TKqlDeleteRows>(ctx, update.Pos())
                 .Table(indexMeta)
                 .Input(ProjectColumns(rowsToUpdate, indexTableColumns, ctx))
+                .ReturningColumns<TCoAtomList>().Build()
                 .Done();
 
             effects.push_back(indexDelete);

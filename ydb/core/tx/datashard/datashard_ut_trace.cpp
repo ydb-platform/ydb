@@ -44,6 +44,27 @@ Y_UNIT_TEST_SUITE(TDataShardTrace) {
                     return Nothing();
                 }
 
+                const TMaybe<TString> GetPeerMetaValues(const TString&) const override {
+                    return Nothing();
+                }
+ 
+                TString GetPeerName() const override {
+                    return {};
+                }
+
+                const TString& GetRequestName() const override {
+                    static TString empty;
+                    return empty;
+                }
+
+                TMaybe<NRpcService::TRlPath> GetRlPath() const override {
+                    return Nothing();
+                }
+
+                TInstant GetDeadline() const override {
+                    return TInstant::Max();
+                }
+
                 const TMaybe<TString> GetDatabaseName() const override {
                     return "";
                 }
@@ -292,7 +313,7 @@ Y_UNIT_TEST_SUITE(TDataShardTrace) {
         TFakeWilsonUploader::Trace &trace = uploader->Traces.begin()->second;
 
         std::string canon;
-        if (server->GetSettings().AppConfig->GetTableServiceConfig().GetEnableKqpDataQueryStreamLookup()) {
+        if (server->GetSettings().AppConfig->GetTableServiceConfig().GetEnableKqpDataQueryStreamLookup() || server->GetSettings().AppConfig->GetTableServiceConfig().GetPredicateExtract20()) {
             auto readActorSpan = trace.Root.BFSFindOne("ReadActor");
             UNIT_ASSERT(readActorSpan);
 

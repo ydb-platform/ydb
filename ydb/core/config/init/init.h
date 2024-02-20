@@ -1,6 +1,7 @@
 #pragma once
 
 #include <ydb/core/cms/console/config_item_info.h>
+#include <ydb/core/protos/config.pb.h>
 
 #include <library/cpp/getopt/small/last_getopt_opts.h>
 
@@ -53,14 +54,26 @@ public:
     virtual void Parse(const TVector<TString>& freeArgs) = 0;
 };
 
+// ===
+
+class IMemLogInitializer {
+public:
+    virtual ~IMemLogInitializer() {};
+    virtual void Init(const NKikimrConfig::TMemoryLogConfig& mem) const = 0;
+};
+
+// ===
+
 std::unique_ptr<IConfigUpdateTracer> MakeDefaultConfigUpdateTracer();
 std::unique_ptr<IProtoConfigFileProvider> MakeDefaultProtoConfigFileProvider();
 std::unique_ptr<IEnv> MakeDefaultEnv();
 std::unique_ptr<IErrorCollector> MakeDefaultErrorCollector();
+std::unique_ptr<IMemLogInitializer> MakeDefaultMemLogInitializer();
 std::unique_ptr<IInitialConfigurator> MakeDefaultInitialConfigurator(
         NConfig::IErrorCollector& errorCollector,
         NConfig::IProtoConfigFileProvider& protoConfigFileProvider,
         NConfig::IConfigUpdateTracer& configUpdateTracer,
+        NConfig::IMemLogInitializer& memLogInit,
         NConfig::IEnv& env);
 
 class TInitialConfigurator {
@@ -69,8 +82,9 @@ public:
         NConfig::IErrorCollector& errorCollector,
         NConfig::IProtoConfigFileProvider& protoConfigFileProvider,
         NConfig::IConfigUpdateTracer& configUpdateTracer,
+        NConfig::IMemLogInitializer& memLogInit,
         NConfig::IEnv& env)
-            : Impl(MakeDefaultInitialConfigurator(errorCollector, protoConfigFileProvider, configUpdateTracer, env))
+            : Impl(MakeDefaultInitialConfigurator(errorCollector, protoConfigFileProvider, configUpdateTracer, memLogInit, env))
     {}
 
     void RegisterCliOptions(NLastGetopt::TOpts& opts) {

@@ -16,8 +16,9 @@ public:
         , ErrorCollector(NConfig::MakeDefaultErrorCollector())
         , ProtoConfigFileProvider(NConfig::MakeDefaultProtoConfigFileProvider())
         , ConfigUpdateTracer(NConfig::MakeDefaultConfigUpdateTracer())
+        , MemLogInit(NConfig::MakeDefaultMemLogInitializer())
         , Env(NConfig::MakeDefaultEnv())
-        , InitCfg(*ErrorCollector, *ProtoConfigFileProvider, *ConfigUpdateTracer, *Env)
+        , InitCfg(*ErrorCollector, *ProtoConfigFileProvider, *ConfigUpdateTracer, *MemLogInit, *Env)
     {}
 
     int Run(TConfig &/*config*/) override {
@@ -34,6 +35,7 @@ protected:
     std::unique_ptr<NConfig::IErrorCollector> ErrorCollector;
     std::unique_ptr<NConfig::IProtoConfigFileProvider> ProtoConfigFileProvider;
     std::unique_ptr<NConfig::IConfigUpdateTracer> ConfigUpdateTracer;
+    std::unique_ptr<NConfig::IMemLogInitializer> MemLogInit;
     std::unique_ptr<NConfig::IEnv> Env;
 
     NConfig::TInitialConfigurator InitCfg;

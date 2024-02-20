@@ -121,6 +121,22 @@ public:
     }
 };
 
+class TDefaultMemLogInitializer
+    : public IMemLogInitializer
+{
+public:
+    void Init(const NKikimrConfig::TMemoryLogConfig& mem) const override {
+        if (mem.HasLogBufferSize() && mem.GetLogBufferSize() > 0) {
+            if (mem.HasLogGrainSize() && mem.GetLogGrainSize() > 0) {
+                TMemoryLog::CreateMemoryLogBuffer(mem.GetLogBufferSize(), mem.GetLogGrainSize());
+            } else {
+                TMemoryLog::CreateMemoryLogBuffer(mem.GetLogBufferSize());
+            }
+            MemLogWriteNullTerm("Memory_log_has_been_started_YAHOO_");
+        }
+    }
+};
+
 std::unique_ptr<IEnv> MakeDefaultEnv() {
     return std::make_unique<TDefaultEnv>();
 }
@@ -135,6 +151,10 @@ std::unique_ptr<IProtoConfigFileProvider> MakeDefaultProtoConfigFileProvider() {
 
 std::unique_ptr<IConfigUpdateTracer> MakeDefaultConfigUpdateTracer() {
     return std::make_unique<TDefaultConfigUpdateTracer>();
+}
+
+std::unique_ptr<IMemLogInitializer> MakeDefaultMemLogInitializer() {
+    return std::make_unique<TDefaultMemLogInitializer>();
 }
 
 void CopyNodeLocation(NActorsInterconnect::TNodeLocation* dst, const NYdb::NDiscovery::TNodeLocation& src) {

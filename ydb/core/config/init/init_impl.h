@@ -808,7 +808,6 @@ struct TMbusConfigFields {
 
 // =====
 
-
 static ui32 NextValidKind(ui32 kind) {
     do {
         ++kind;
@@ -1090,6 +1089,30 @@ NKikimrConfig::TAppConfig GetYamlConfigFromResult(const NKikimr::NClient::TConfi
     return yamlConfig;
 }
 
+NKikimrConfig::TAppConfig GetActualDynConfig(
+    const NKikimrConfig::TAppConfig& yamlConfig,
+    const NKikimrConfig::TAppConfig& regularConfig,
+    IConfigUpdateTracer& ConfigUpdateTracer)
+{
+    if (yamlConfig.GetYamlConfigEnabled()) {
+        for (ui32 kind = NKikimrConsole::TConfigItem::EKind_MIN; kind <= NKikimrConsole::TConfigItem::EKind_MAX; NextValidKind(kind)) {
+            if (HasCorrespondingManagedKind(kind, yamlConfig)) {
+                TRACE_CONFIG_CHANGE_INPLACE(kind, ReplaceConfigWithConsoleProto);
+            } else {
+                TRACE_CONFIG_CHANGE_INPLACE(kind, ReplaceConfigWithConsoleYaml);
+            }
+        }
+
+        return yamlConfig;
+    }
+
+    for (ui32 kind = NKikimrConsole::TConfigItem::EKind_MIN; kind <= NKikimrConsole::TConfigItem::EKind_MAX; NextValidKind(kind)) {
+        TRACE_CONFIG_CHANGE_INPLACE(kind, ReplaceConfigWithConsoleProto);
+    }
+
+    return regularConfig;
+}
+
 // =====
 
 struct TAppInitDebugInfo {
@@ -1120,6 +1143,7 @@ class TInitialConfiguratorImpl
     NConfig::IErrorCollector& ErrorCollector;
     NConfig::IProtoConfigFileProvider& ProtoConfigFileProvider;
     NConfig::IConfigUpdateTracer& ConfigUpdateTracer;
+    NConfig::IMemLogInitializer& MemLogInit;
     NConfig::IEnv& Env;
 
 public:
@@ -1127,10 +1151,12 @@ public:
         NConfig::IErrorCollector& errorCollector,
         NConfig::IProtoConfigFileProvider& protoConfigFileProvider,
         NConfig::IConfigUpdateTracer& configUpdateTracer,
+        NConfig::IMemLogInitializer& memLogInit,
         NConfig::IEnv& env)
             : ErrorCollector(errorCollector)
             , ProtoConfigFileProvider(protoConfigFileProvider)
             , ConfigUpdateTracer(configUpdateTracer)
+            , MemLogInit(memLogInit)
             , Env(env)
     {}
 
@@ -1274,14 +1300,7 @@ public:
     }
 
     void InitMemLog(const NKikimrConfig::TMemoryLogConfig& mem) const {
-        if (mem.HasLogBufferSize() && mem.GetLogBufferSize() > 0) {
-            if (mem.HasLogGrainSize() && mem.GetLogGrainSize() > 0) {
-                TMemoryLog::CreateMemoryLogBuffer(mem.GetLogBufferSize(), mem.GetLogGrainSize());
-            } else {
-                TMemoryLog::CreateMemoryLogBuffer(mem.GetLogBufferSize());
-            }
-            MemLogWriteNullTerm("Memory_log_has_been_started_YAHOO_");
-        }
+        MemLogInit.Init(mem);
     }
 
     template <class TTag>
@@ -1484,26 +1503,6 @@ public:
         Labels["dynamic"] = "false";
     }
 
-    NKikimrConfig::TAppConfig GetActualDynConfig(const NKikimrConfig::TAppConfig& yamlConfig, const NKikimrConfig::TAppConfig& regularConfig) const {
-        if (yamlConfig.GetYamlConfigEnabled()) {
-            for (ui32 kind = NKikimrConsole::TConfigItem::EKind_MIN; kind <= NKikimrConsole::TConfigItem::EKind_MAX; NextValidKind(kind)) {
-                if (HasCorrespondingManagedKind(kind, yamlConfig)) {
-                    TRACE_CONFIG_CHANGE_INPLACE(kind, ReplaceConfigWithConsoleProto);
-                } else {
-                    TRACE_CONFIG_CHANGE_INPLACE(kind, ReplaceConfigWithConsoleYaml);
-                }
-            }
-
-            return yamlConfig;
-        }
-
-        for (ui32 kind = NKikimrConsole::TConfigItem::EKind_MIN; kind <= NKikimrConsole::TConfigItem::EKind_MAX; NextValidKind(kind)) {
-            TRACE_CONFIG_CHANGE_INPLACE(kind, ReplaceConfigWithConsoleProto);
-        }
-
-        return regularConfig;
-    }
-
     void InitDynamicNode() {
         Labels["dynamic"] = "true";
         RegisterDynamicNode(ConfigFields);
@@ -1527,7 +1526,7 @@ public:
         InitDebug.OldConfig.CopyFrom(result->GetConfig());
         InitDebug.YamlConfig.CopyFrom(yamlConfig);
 
-        NKikimrConfig::TAppConfig appConfig = GetActualDynConfig(yamlConfig, result->GetConfig());
+        NKikimrConfig::TAppConfig appConfig = GetActualDynConfig(yamlConfig, result->GetConfig(), ConfigUpdateTracer);
 
         ApplyConfigForNode(appConfig);
     }
@@ -1549,9 +1548,10 @@ std::unique_ptr<IInitialConfigurator> MakeDefaultInitialConfigurator(
         NConfig::IErrorCollector& errorCollector,
         NConfig::IProtoConfigFileProvider& protoConfigFileProvider,
         NConfig::IConfigUpdateTracer& configUpdateTracer,
+        NConfig::IMemLogInitializer& memLogInit,
         NConfig::IEnv& env)
 {
-    return std::make_unique<TInitialConfiguratorImpl>(errorCollector, protoConfigFileProvider, configUpdateTracer, env);
+    return std::make_unique<TInitialConfiguratorImpl>(errorCollector, protoConfigFileProvider, configUpdateTracer, memLogInit, env);
 }
 
 } // namespace NKikimr::NConfig

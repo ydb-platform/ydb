@@ -193,8 +193,10 @@ class TTopicReader: public TBaseProxyActor<TTopicReader> {
     }
 
     void Handle(TEvPrivate::TEvTopicEventReady::TPtr& ev) {
-        auto event = Session->GetEvent(true);
-        Y_ABORT_UNLESS(event.Defined());
+        auto event = Session->GetEvent(false);
+        if (!event) {
+            return WaitEvent(ev->Get()->Sender, ev->Get()->Cookie);
+        }
 
         if (auto* x = std::get_if<TReadSessionEvent::TStartPartitionSessionEvent>(&*event)) {
             x->Confirm();
@@ -227,7 +229,7 @@ class TTopicReader: public TBaseProxyActor<TTopicReader> {
     }
 
     void PassAway() override {
-        Session->Close(TDuration::MilliSeconds(100)); // non-blocking if there is no inflight commits
+        Session->Close(TDuration::Zero());
         TBaseProxyActor<TTopicReader>::PassAway();
     }
 

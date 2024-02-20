@@ -1212,7 +1212,7 @@ class StaticConfigGenerator(object):
 
             max_export_requests_inflight = uploader.get("max_export_requests_inflight")
             if max_export_requests_inflight is not None:
-                uploader_pb.MaxSpanExportInflight = max_export_requests_inflight
+                uploader_pb.MaxExportRequestsInflight = max_export_requests_inflight
 
             return uploader_pb
 

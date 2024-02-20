@@ -129,6 +129,7 @@ std::unique_ptr<IEnv> MakeDefaultEnv();
 std::unique_ptr<IErrorCollector> MakeDefaultErrorCollector();
 std::unique_ptr<IMemLogInitializer> MakeDefaultMemLogInitializer();
 std::unique_ptr<INodeBrokerClient> MakeDefaultNodeBrokerClient();
+std::unique_ptr<IDynConfigClient> MakeDefaultDynConfigClient();
 
 std::unique_ptr<IInitialConfigurator> MakeDefaultInitialConfigurator(
         NConfig::IErrorCollector& errorCollector,
@@ -136,6 +137,7 @@ std::unique_ptr<IInitialConfigurator> MakeDefaultInitialConfigurator(
         NConfig::IConfigUpdateTracer& configUpdateTracer,
         NConfig::IMemLogInitializer& memLogInit,
         NConfig::INodeBrokerClient& nodeBrokerClient,
+        NConfig::IDynConfigClient& DynConfigClient,
         NConfig::IEnv& env);
 
 class TInitialConfigurator {
@@ -146,6 +148,7 @@ public:
         NConfig::IConfigUpdateTracer& configUpdateTracer,
         NConfig::IMemLogInitializer& memLogInit,
         NConfig::INodeBrokerClient& nodeBrokerClient,
+        NConfig::IDynConfigClient& dynConfigClient,
         NConfig::IEnv& env)
             : Impl(MakeDefaultInitialConfigurator(
                        errorCollector,
@@ -153,6 +156,7 @@ public:
                        configUpdateTracer,
                        memLogInit,
                        nodeBrokerClient,
+                       dynConfigClient,
                        env))
     {}
 

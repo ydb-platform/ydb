@@ -12,7 +12,6 @@
 #include <ydb/library/actors/core/log_iface.h>
 #include <ydb/library/yaml_config/yaml_config.h>
 #include <ydb/library/yaml_config/yaml_config_parser.h>
-#include <ydb/public/lib/deprecated/kicli/kicli.h>
 #include <ydb/public/lib/ydb_cli/common/common.h>
 #include <ydb/public/sdk/cpp/client/ydb_discovery/discovery.h>
 #include <ydb/public/sdk/cpp/client/ydb_driver/driver.h>
@@ -899,6 +898,7 @@ class TInitialConfiguratorImpl
     NConfig::IConfigUpdateTracer& ConfigUpdateTracer;
     NConfig::IMemLogInitializer& MemLogInit;
     NConfig::INodeBrokerClient& NodeBrokerClient;
+    NConfig::IDynConfigClient& DynConfigClient;
     NConfig::IEnv& Env;
 
 public:
@@ -908,12 +908,14 @@ public:
         NConfig::IConfigUpdateTracer& configUpdateTracer,
         NConfig::IMemLogInitializer& memLogInit,
         NConfig::INodeBrokerClient& nodeBrokerClient,
+        NConfig::IDynConfigClient& dynConfigClient,
         NConfig::IEnv& env)
             : ErrorCollector(errorCollector)
             , ProtoConfigFileProvider(protoConfigFileProvider)
             , ConfigUpdateTracer(configUpdateTracer)
             , MemLogInit(memLogInit)
             , NodeBrokerClient(nodeBrokerClient)
+            , DynConfigClient(dynConfigClient)
             , Env(env)
     {}
 
@@ -1158,87 +1160,6 @@ public:
         }
     }
 
-    struct TDynConfigSettings {
-        ui32 NodeId;
-        TString DomainName;
-        TString TenantName;
-        TString FQDNHostName;
-        TString NodeType;
-        TString StaffApiUserToken;
-    };
-
-    bool TryToLoadConfigForDynamicNodeFromCMS(
-        const TGrpcSslSettings& gs,
-        const TString &addr,
-        const TDynConfigSettings& settings,
-        const IEnv& env,
-        TMaybe<NKikimr::NClient::TConfigurationResult>& res,
-        TString &error) const
-    {
-        NClient::TKikimr kikimr(GetKikimr(
-                    gs,
-                    addr,
-                    env));
-        auto configurator = kikimr.GetNodeConfigurator();
-
-        Cout << "Trying to get configs from " << addr << Endl;
-
-        auto result = configurator.SyncGetNodeConfig(settings.NodeId,
-                                                     settings.FQDNHostName,
-                                                     settings.TenantName,
-                                                     settings.NodeType,
-                                                     settings.DomainName,
-                                                     settings.StaffApiUserToken,
-                                                     true,
-                                                     1);
-
-        if (!result.IsSuccess()) {
-            error = result.GetErrorMessage();
-            Cerr << "Configuration error: " << error << Endl;
-            return false;
-        }
-
-        Cout << "Success." << Endl;
-
-        res = result;
-
-        return true;
-    }
-
-    TMaybe<NKikimr::NClient::TConfigurationResult> LoadConfigForDynamicNode(
-        const TGrpcSslSettings& gs,
-        const TVector<TString>& addrs,
-        const TDynConfigSettings& settings,
-        const IEnv& env) const
-    {
-        TMaybe<NKikimr::NClient::TConfigurationResult> res;
-        bool success = false;
-        TString error;
-
-        SetRandomSeed(TInstant::Now().MicroSeconds());
-        int minAttempts = 10;
-        int attempts = 0;
-        while (!success && attempts < minAttempts) {
-            for (auto addr : addrs) {
-                success = TryToLoadConfigForDynamicNodeFromCMS(gs, addr, settings, env, res, error);
-                ++attempts;
-                if (success) {
-                    break;
-                }
-            }
-            // Randomized backoff
-            if (!success) {
-                env.Sleep(TDuration::MilliSeconds(500 + RandomNumber<ui64>(1000)));
-            }
-        }
-
-        if (!success) {
-            Cerr << "WARNING: couldn't load config from CMS: " << error << Endl;
-        }
-
-        return res;
-    }
-
     void InitStaticNode() {
         ConfigFields.ValidateStaticNodeConfig();
 
@@ -1268,7 +1189,7 @@ public:
             AppConfig.GetAuthConfig().GetStaffApiUserToken(),
         };
 
-        TMaybe<NKikimr::NClient::TConfigurationResult> result = LoadConfigForDynamicNode(ConfigFields.GrpcSslSettings, addrs, settings, Env);
+        TMaybe<NKikimr::NClient::TConfigurationResult> result = DynConfigClient.GetConfig(ConfigFields.GrpcSslSettings, addrs, settings, Env);
 
         if (!result) {
             return;
@@ -1304,9 +1225,17 @@ std::unique_ptr<IInitialConfigurator> MakeDefaultInitialConfigurator(
         NConfig::IConfigUpdateTracer& configUpdateTracer,
         NConfig::IMemLogInitializer& memLogInit,
         NConfig::INodeBrokerClient& nodeBrokerClient,
+        NConfig::IDynConfigClient& dynConfigClient,
         NConfig::IEnv& env)
 {
-    return std::make_unique<TInitialConfiguratorImpl>(errorCollector, protoConfigFileProvider, configUpdateTracer, memLogInit, nodeBrokerClient, env);
+    return std::make_unique<TInitialConfiguratorImpl>(
+        errorCollector,
+        protoConfigFileProvider,
+        configUpdateTracer,
+        memLogInit,
+        nodeBrokerClient,
+        dynConfigClient,
+        env);
 }
 
 } // namespace NKikimr::NConfig

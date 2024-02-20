@@ -18,6 +18,7 @@ public:
         , ConfigUpdateTracer(NConfig::MakeDefaultConfigUpdateTracer())
         , MemLogInit(NConfig::MakeDefaultMemLogInitializer())
         , NodeBrokerClient(NConfig::MakeDefaultNodeBrokerClient())
+        , DynConfigClient(NConfig::MakeDefaultDynConfigClient())
         , Env(NConfig::MakeDefaultEnv())
         , InitCfg(
             *ErrorCollector,
@@ -25,6 +26,7 @@ public:
             *ConfigUpdateTracer,
             *MemLogInit,
             *NodeBrokerClient,
+            *DynConfigClient,
             *Env)
     {}
 
@@ -44,6 +46,7 @@ protected:
     std::unique_ptr<NConfig::IConfigUpdateTracer> ConfigUpdateTracer;
     std::unique_ptr<NConfig::IMemLogInitializer> MemLogInit;
     std::unique_ptr<NConfig::INodeBrokerClient> NodeBrokerClient;
+    std::unique_ptr<NConfig::IDynConfigClient> DynConfigClient;
     std::unique_ptr<NConfig::IEnv> Env;
 
     NConfig::TInitialConfigurator InitCfg;

@@ -11,24 +11,6 @@
 namespace NKikimr {
 namespace NTable {
 
-struct TPartDataSize {
-    ui64 Size = 0;
-    TVector<ui64> ByChannel = { };
-
-    void Add(ui64 size, ui8 channel) {
-        Size += size;
-        if (!(channel < ByChannel.size())) {
-            ByChannel.resize(channel + 1);
-        }
-        ByChannel[channel] += size;
-    }
-};
-
-struct TPartDataStats {
-    ui64 RowCount = 0;
-    TPartDataSize DataSize = { };
-};
-
 // Iterates over part index and calculates total row count and data size
 // This iterator skips pages that are screened. Currently the logic is simple:
 // if page start key is screened then we assume that the whole previous page is screened
@@ -82,7 +64,7 @@ public:
         return Groups[0]->IsValid();
     }
 
-    EReady Next(TPartDataStats& stats) {
+    EReady Next(TDataStats& stats) {
         Y_ABORT_UNLESS(IsValid());
 
         auto curPageId = Groups[0]->GetPageId();
@@ -174,7 +156,7 @@ private:
         return LastRowId;
     }
 
-    void AddPageSize(TPartDataSize& stats, TPageId pageId, TGroupId groupId) const {
+    void AddPageSize(TChanneledDataSize& stats, TPageId pageId, TGroupId groupId) const {
         // TODO: move to IStatsPartGroupIterator
         ui64 size = Part->GetPageSize(pageId, groupId);
         ui8 channel = Part->GetPageChannel(groupId);
@@ -229,7 +211,7 @@ private:
         return rowCount;
     }
 
-    void AddBlobsSize(TPartDataSize& stats, const TFrames* frames, ELargeObj lob, ui32 &prevPage) noexcept {
+    void AddBlobsSize(TChanneledDataSize& stats, const TFrames* frames, ELargeObj lob, ui32 &prevPage) noexcept {
         const auto row = GetLastRowId();
         const auto end = GetCurrentRowId();
 

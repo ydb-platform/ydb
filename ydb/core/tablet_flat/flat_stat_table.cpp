@@ -9,7 +9,7 @@ namespace NTable {
 bool BuildStats(const TSubset& subset, TStats& stats, ui64 rowCountResolution, ui64 dataSizeResolution, IPages* env) {
     stats.Clear();
 
-    TPartDataStats iteratorStats = { };
+    TDataStats iteratorStats = { };
     TStatsIterator statsIterator(subset.Scheme->Keys);
 
     // Make index iterators for all parts

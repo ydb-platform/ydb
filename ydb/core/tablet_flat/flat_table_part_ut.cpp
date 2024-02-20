@@ -75,7 +75,7 @@ Y_UNIT_TEST_SUITE(TLegacy) {
                 TIntrusiveConstPtr<TRowScheme> scheme,
                 std::vector<ui64>& sizes)
         {
-            TPartDataStats stats = { };
+            TDataStats stats = { };
             TTestEnv env;
             // TScreenedPartIndexIterator without screen previously was TPartIndexIterator
             TStatsScreenedPartIterator idxIter(TPartView{part, nullptr, nullptr}, &env, scheme->Keys, nullptr, nullptr);
@@ -145,7 +145,7 @@ Y_UNIT_TEST_SUITE(TLegacy) {
 
         auto fnIterate = [&dbgOut, &typeRegistry] (TIntrusiveConstPtr<TPartStore> part, TIntrusiveConstPtr<TScreen> screen,
                             TIntrusiveConstPtr<TRowScheme> scheme, TIntrusiveConstPtr<NPage::TFrames> frames) -> std::pair<ui64, ui64> {
-            TPartDataStats stats = { };
+            TDataStats stats = { };
             TTestEnv env;
             TStatsScreenedPartIterator idxIter(TPartView{part, screen, nullptr}, &env, scheme->Keys, std::move(frames), nullptr);
 
@@ -304,7 +304,7 @@ Y_UNIT_TEST_SUITE(TLegacy) {
                 TScreen::THole(4200, 100000)
                 });
 
-        TPartDataStats stats = { };
+        TDataStats stats = { };
         TTestEnv env;
         TStatsIterator stIter(lay2.RowScheme()->Keys);
         {

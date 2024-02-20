@@ -1166,7 +1166,7 @@ void TPersQueueReadBalancer::TClientInfo::FillEmptyGroup(const ui32 group, const
     auto& groupInfo = AddGroup(group);
 
     for (auto& [partitionId, partitionInfo] : partitionsInfo) {
-        if (partitionInfo.GroupId == group || group == 0) { //check group
+        if (partitionInfo.GroupId == group || group == MAIN_GROUP) { //check group
             groupInfo.PartitionsInfo.insert({partitionId, partitionInfo});
             Cerr << ">>>>> Add FreePartition #2 " << partitionId << " group=" << group << Endl;
             groupInfo.FreePartition(partitionId);
@@ -1174,24 +1174,27 @@ void TPersQueueReadBalancer::TClientInfo::FillEmptyGroup(const ui32 group, const
     }
 }
 
-void TPersQueueReadBalancer::TClientInfo::AddSession(const ui32 group, const THashMap<ui32, TPartitionInfo>& partitionsInfo,
+void TPersQueueReadBalancer::TClientInfo::AddSession(const ui32 groupId, const THashMap<ui32, TPartitionInfo>& partitionsInfo,
                                                     const TActorId& sender, const NKikimrPQ::TRegisterReadSession& record) {
 
     TActorId pipe = ActorIdFromProto(record.GetPipeClient());
 
     Y_ABORT_UNLESS(pipe);
 
-    if (ClientGroupsInfo.find(group) == ClientGroupsInfo.end()) {
-        FillEmptyGroup(group, partitionsInfo);
+    if (ClientGroupsInfo.find(groupId) == ClientGroupsInfo.end()) {
+        FillEmptyGroup(groupId, partitionsInfo);
     }
 
-    auto it = ClientGroupsInfo.find(group);
-    it->second.SessionsInfo.insert({
-        it->second.SessionKey(pipe),
+    auto it = ClientGroupsInfo.find(groupId);
+    auto& group = it->second;
+    group.SessionsInfo.insert({
+        group.SessionKey(pipe),
         TClientGroupInfo::TSessionInfo(
-            record.GetSession(), sender,
+            record.GetSession(),
+            sender,
             record.HasClientNode() ? record.GetClientNode() : "none",
-            sender.NodeId(), TAppData::TimeProvider->Now()
+            sender.NodeId(),
+            TAppData::TimeProvider->Now()
         )
     });
 }
@@ -1199,7 +1202,7 @@ void TPersQueueReadBalancer::TClientInfo::AddSession(const ui32 group, const THa
 
 void TPersQueueReadBalancer::HandleOnInit(TEvPersQueue::TEvRegisterReadSession::TPtr& ev, const TActorContext&)
 {
-    Y_ABORT("");
+    Y_ABORT(""); // TODO why?
     RegisterEvents.push_back(ev->Release().Release());
 }
 
@@ -1374,6 +1377,7 @@ void TPersQueueReadBalancer::TClientInfo::MergeGroups(const TActorContext& ctx) 
             bool res = mainGroupInfo.PartitionsInfo.insert(pi).second;
             Y_ABORT_UNLESS(res);
         }
+
         for (auto& si : groupInfo.SessionsInfo) {
             auto key = si.first;
             key.second = mainGroupInfo.SessionKeySalt;
@@ -1384,14 +1388,16 @@ void TPersQueueReadBalancer::TClientInfo::MergeGroups(const TActorContext& ctx) 
                 auto& session = it->second;
                 session.NumActive += si.second.NumActive;
                 session.NumSuspended += si.second.NumSuspended;
-                // session.NumInactive TODO
+                session.NumInactive += si.second.NumInactive;
             }
             ++numSessions;
         }
+
         for (auto& fp : groupInfo.FreePartitions) {
             Cerr << ">>>>> Add FreePartition #3 " << fp << Endl;
             mainGroupInfo.FreePartition(fp);
         }
+
         ClientGroupsInfo.erase(jt);
     }
     Y_ABORT_UNLESS(mainGroupInfo.SessionsInfo.size() * numGroups == numSessions);
@@ -1454,6 +1460,9 @@ void TPersQueueReadBalancer::Handle(TEvPersQueue::TEvPartitionReleased::TPtr& ev
 
     --session->NumActive;
     --session->NumSuspended;
+    if (!clientInfo.IsReadeable(partitionId)) {
+        --session->NumInactive;
+    }
 
     clientGroupsInfo.ScheduleBalance(ctx);
 }
@@ -1627,10 +1636,11 @@ void TPersQueueReadBalancer::TClientGroupInfo::Balance(const TActorContext& ctx)
         if (cur > 0)
             --cur;
 
-        if(sessionInfo.NumActive >= realDesired)
+        ssize_t realActive = sessionInfo.NumActive - sessionInfo.NumInactive;
+        if(realActive >= realDesired)
             continue;
 
-        i64 req = ((i64)realDesired) - sessionInfo.NumActive;
+        i64 req = ((i64)realDesired) - realActive;
         Cerr << ">>>>> req=" << req << Endl;
         while (req > 0 && !FreePartitions.empty()) {
             --req;
@@ -1647,9 +1657,13 @@ void TPersQueueReadBalancer::TClientGroupInfo::Balance(const TActorContext& ctx)
 void TPersQueueReadBalancer::TClientGroupInfo::LockPartition(const TActorId pipe, TSessionInfo& sessionInfo, ui32 partition, const TActorContext& ctx) {
     auto it = PartitionsInfo.find(partition);
     Y_ABORT_UNLESS(it != PartitionsInfo.end());
-    it->second.Session = pipe;
-    it->second.State = EPS_ACTIVE;
+    auto& partitionInfo = it->second;
+    partitionInfo.Session = pipe;
+    partitionInfo.State = EPS_ACTIVE;
     ++sessionInfo.NumActive;
+    if (!ClientInfo.IsReadeable(partition)) {
+        ++sessionInfo.NumInactive;
+    }
     //TODO:rebuild structs
 
     THolder<TEvPersQueue::TEvLockPartition> res{new TEvPersQueue::TEvLockPartition};
@@ -1842,31 +1856,56 @@ bool TPersQueueReadBalancer::TClientInfo::ProccessReadingFinished(ui32 partition
     if (it == ClientGroupsInfo.end()) {
         return false;
     }
-    auto& groupInfo = it->second;
-    auto& freePartitions = groupInfo.FreePartitions;
-    auto& inactivePartitions = groupInfo.InactivePartitions;
 
     bool hasChanges = false;
 
-    std::deque<const TPartitionGraph::Node*> queue;
-    queue.push_back(n);
-    while (!queue.empty()) {
-        const auto* node = queue.front();
-        queue.pop_front();
-        
-        for (const auto* c : node->Children) {
-            if (IsReadeable(c->Id)) {
-                Cerr << ">>>>> Add FreePartition " << c->Id << Endl;
-                freePartitions.push_back(c->Id);
-                inactivePartitions.erase(c->Id);
-                hasChanges = true;
-            } else {
-                queue.push_back(c);
+    auto& groupInfo = it->second;
+    if (groupInfo.PartitionsInfo.contains(partitionId)) {
+        auto& freePartitions = groupInfo.FreePartitions;
+        auto& inactivePartitions = groupInfo.InactivePartitions;
+
+        std::deque<const TPartitionGraph::Node*> queue;
+        queue.push_back(n);
+        while (!queue.empty()) {
+            const auto* node = queue.front();
+            queue.pop_front();
+
+            for (const auto* c : node->Children) {
+                if (IsReadeable(c->Id)) {
+                    Cerr << ">>>>> Add FreePartition " << c->Id << Endl;
+                    freePartitions.push_back(c->Id);
+                    inactivePartitions.erase(c->Id);
+                    hasChanges = true;
+                } else {
+                    queue.push_back(c);
+                }
+            }
+        }
+
+        groupInfo.InactivatePartition(partitionId);
+    } else {
+        auto git = ClientGroupsInfo.find(partitionId + 1);
+        if (git != ClientGroupsInfo.end()) {
+            git->second.InactivatePartition(partitionId);
+        }
+    }
+
+
+    return hasChanges;
+}
+
+void TPersQueueReadBalancer::TClientGroupInfo:: InactivatePartition(ui32 partitionId) {
+    auto partitionIt = PartitionsInfo.find(partitionId);
+    if (partitionIt != PartitionsInfo.end()) {
+        auto& partitionInfo = partitionIt->second;
+        if (partitionInfo.Session) {
+            auto* session = FindSession(partitionInfo.Session);
+            if (session) {
+                session->NumInactive++;
             }
         }
     }
 
-    return hasChanges;
 }
 
 void TPersQueueReadBalancer::TClientGroupInfo::FreePartition(ui32 partitionId) {

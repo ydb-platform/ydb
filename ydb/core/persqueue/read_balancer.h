@@ -394,6 +394,7 @@ class TPersQueueReadBalancer : public TActor<TPersQueueReadBalancer>, public TTa
                 , Sender(sender)
                 , NumSuspended(0)
                 , NumActive(0)
+                , NumInactive(0)
                 , ClientNode(clientNode)
                 , ProxyNodeId(proxyNodeId)
                 , Timestamp(ts)
@@ -441,7 +442,9 @@ class TPersQueueReadBalancer : public TActor<TPersQueueReadBalancer>, public TTa
         
         void LockPartition(const TActorId pipe, TSessionInfo& sessionInfo, ui32 partition, const TActorContext& ctx);
         void ReleasePartition(const TActorId pipe, TSessionInfo& sessionInfo, const ui32 group, const ui32 count, const TActorContext& ctx);
+
         void FreePartition(ui32 partitionId);
+        void InactivatePartition(ui32 partitionId);
 
         TStringBuilder GetPrefix() const;
 

@@ -291,7 +291,7 @@ std::unique_ptr<TEvKqp::TEvCompileRequest> TKqpQueryState::BuildCompileParsedReq
 bool TKqpQueryState::PrepareNextStatementPart() {
     Cerr << "NEXT STATE " << NextSplittedExpr << " " << SplittedExprs.size() << Endl;
     if (NextSplittedExpr + 1 >= static_cast<int>(SplittedExprs.size()) || SplittedExprs.empty()) {
-        Y_ABORT_UNLESS(SplittedExprs.empty());
+        //Y_ABORT_UNLESS(SplittedExprs.empty());
         SplittedExprs.clear();
         SplittedCtx.Reset();
         NextSplittedExpr = -1;

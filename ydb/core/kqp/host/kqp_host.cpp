@@ -1442,7 +1442,7 @@ private:
 
             YQL_ENSURE(queryExprs.size() == 1); // TODO: TEST
 
-            //Cerr << "PREPARE> COMPILE:: " << KqpExprToPrettyString(*expr, ctx) << Endl;
+            Cerr << "PREPARE>>> COMPILE:: " << KqpExprToPrettyString(*queryExprs.front(), ctx) << Endl;
             return MakeIntrusive<TAsyncPrepareYqlResult>(queryExprs.front().Get(), ctx, *YqlTransformer, SessionCtx->QueryPtr(),
                 query.Text, sqlVersion, TransformCtx);
         } else {

@@ -70,8 +70,21 @@ namespace {
         TCreateTableAsResult result;
         result.CreateTable = ctx.ReplaceNode(std::move(root), insertData.Ref(), ctx.NewCallable(pos, "Void", {}));
 
+
+        const NYql::TExprNode::TPtr* lastReadInTopologicalOrder = nullptr;
+        NYql::VisitExpr(
+            insertData.Ptr(),
+            nullptr,
+            [&lastReadInTopologicalOrder](const NYql::TExprNode::TPtr& node) {
+                if (node->IsCallable(NYql::ReadName)) {
+                    lastReadInTopologicalOrder = &node;
+                }
+                return true;
+            }
+        );
+
         const auto insert = ctx.NewCallable(pos, "Write!", {
-            ctx.NewWorld(pos),
+            lastReadInTopologicalOrder == nullptr ? ctx.NewWorld(pos) : ctx.NewCallable(pos, "Left!", {*lastReadInTopologicalOrder}), // Left! (READ???)
             ctx.NewCallable(pos, "DataSink", {
                 ctx.NewAtom(pos, "kikimr"),
                 ctx.NewAtom(pos, "db"),

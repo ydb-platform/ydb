@@ -17,8 +17,15 @@ public:
         , ProtoConfigFileProvider(NConfig::MakeDefaultProtoConfigFileProvider())
         , ConfigUpdateTracer(NConfig::MakeDefaultConfigUpdateTracer())
         , MemLogInit(NConfig::MakeDefaultMemLogInitializer())
+        , NodeBrokerClient(NConfig::MakeDefaultNodeBrokerClient())
         , Env(NConfig::MakeDefaultEnv())
-        , InitCfg(*ErrorCollector, *ProtoConfigFileProvider, *ConfigUpdateTracer, *MemLogInit, *Env)
+        , InitCfg(
+            *ErrorCollector,
+            *ProtoConfigFileProvider,
+            *ConfigUpdateTracer,
+            *MemLogInit,
+            *NodeBrokerClient,
+            *Env)
     {}
 
     int Run(TConfig &/*config*/) override {
@@ -36,6 +43,7 @@ protected:
     std::unique_ptr<NConfig::IProtoConfigFileProvider> ProtoConfigFileProvider;
     std::unique_ptr<NConfig::IConfigUpdateTracer> ConfigUpdateTracer;
     std::unique_ptr<NConfig::IMemLogInitializer> MemLogInit;
+    std::unique_ptr<NConfig::INodeBrokerClient> NodeBrokerClient;
     std::unique_ptr<NConfig::IEnv> Env;
 
     NConfig::TInitialConfigurator InitCfg;

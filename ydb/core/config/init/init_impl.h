@@ -975,10 +975,81 @@ NYdb::NDiscovery::TNodeRegistrationResult RegisterDynamicNodeViaDiscoveryService
 }
 
 struct TNodeRegResult {
+    void ProcessRegistrationDynamicNodeResult(
+        const NYdb::NDiscovery::TNodeRegistrationResult& result,
+        NKikimrConfig::TAppConfig& appConfig,
+        ui32& nodeId,
+        TKikimrScopeId& outScopeId)
+    {
+        nodeId = result.GetNodeId();
+        NActors::TScopeId scopeId;
+        if (result.HasScopeTabletId() && result.HasScopePathId()) {
+            scopeId.first = result.GetScopeTabletId();
+            scopeId.second = result.GetScopePathId();
+        }
+        outScopeId = TKikimrScopeId(scopeId);
+
+        auto &nsConfig = *appConfig.MutableNameserviceConfig();
+        nsConfig.ClearNode();
+
+        auto &dnConfig = *appConfig.MutableDynamicNodeConfig();
+        for (auto &node : result.GetNodes()) {
+            if (node.NodeId == result.GetNodeId()) {
+                auto &nodeInfo = *dnConfig.MutableNodeInfo();
+                nodeInfo.SetNodeId(node.NodeId);
+                nodeInfo.SetHost(node.Host);
+                nodeInfo.SetPort(node.Port);
+                nodeInfo.SetResolveHost(node.ResolveHost);
+                nodeInfo.SetAddress(node.Address);
+                nodeInfo.SetExpire(node.Expire);
+                NConfig::CopyNodeLocation(nodeInfo.MutableLocation(), node.Location);
+            } else {
+                auto &info = *nsConfig.AddNode();
+                info.SetNodeId(node.NodeId);
+                info.SetAddress(node.Address);
+                info.SetPort(node.Port);
+                info.SetHost(node.Host);
+                info.SetInterconnectHost(node.ResolveHost);
+                NConfig::CopyNodeLocation(info.MutableLocation(), node.Location);
+            }
+        }
+    }
+
+    void ProcessRegistrationDynamicNodeResult(
+        const THolder<NClient::TRegistrationResult>& result,
+        NKikimrConfig::TAppConfig& appConfig,
+        ui32& nodeId,
+        TKikimrScopeId& outScopeId)
+    {
+        nodeId = result->GetNodeId();
+        outScopeId = TKikimrScopeId(result->GetScopeId());
+
+        auto &nsConfig = *appConfig.MutableNameserviceConfig();
+        nsConfig.ClearNode();
+
+        auto &dnConfig = *appConfig.MutableDynamicNodeConfig();
+        for (auto &node : result->Record().GetNodes()) {
+            if (node.GetNodeId() == result->GetNodeId()) {
+                dnConfig.MutableNodeInfo()->CopyFrom(node);
+            } else {
+                auto &info = *nsConfig.AddNode();
+                info.SetNodeId(node.GetNodeId());
+                info.SetAddress(node.GetAddress());
+                info.SetPort(node.GetPort());
+                info.SetHost(node.GetHost());
+                info.SetInterconnectHost(node.GetResolveHost());
+                info.MutableLocation()->CopyFrom(node.GetLocation());
+            }
+        }
+    }
 public:
     std::variant<
         NYdb::NDiscovery::TNodeRegistrationResult,
         THolder<NClient::TRegistrationResult>> Result;
+
+    void Apply(NKikimrConfig::TAppConfig& appConfig, ui32& nodeId, TKikimrScopeId& scopeId) {
+        std::visit([this, &appConfig, &nodeId, &scopeId](const auto& res) mutable { ProcessRegistrationDynamicNodeResult(res, appConfig, nodeId, scopeId); }, Result);
+    }
 };
 
 TNodeRegResult RegisterDynamicNodeImpl(
@@ -1268,68 +1339,6 @@ public:
         return "";
     }
 
-    void ProcessRegistrationDynamicNodeResult(const NYdb::NDiscovery::TNodeRegistrationResult& result) {
-        NodeId = result.GetNodeId();
-        NActors::TScopeId scopeId;
-        if (result.HasScopeTabletId() && result.HasScopePathId()) {
-            scopeId.first = result.GetScopeTabletId();
-            scopeId.second = result.GetScopePathId();
-        }
-        ScopeId = TKikimrScopeId(scopeId);
-
-        auto &nsConfig = *AppConfig.MutableNameserviceConfig();
-        nsConfig.ClearNode();
-
-        auto &dnConfig = *AppConfig.MutableDynamicNodeConfig();
-        for (auto &node : result.GetNodes()) {
-            if (node.NodeId == result.GetNodeId()) {
-                auto &nodeInfo = *dnConfig.MutableNodeInfo();
-                nodeInfo.SetNodeId(node.NodeId);
-                nodeInfo.SetHost(node.Host);
-                nodeInfo.SetPort(node.Port);
-                nodeInfo.SetResolveHost(node.ResolveHost);
-                nodeInfo.SetAddress(node.Address);
-                nodeInfo.SetExpire(node.Expire);
-                NConfig::CopyNodeLocation(nodeInfo.MutableLocation(), node.Location);
-            } else {
-                auto &info = *nsConfig.AddNode();
-                info.SetNodeId(node.NodeId);
-                info.SetAddress(node.Address);
-                info.SetPort(node.Port);
-                info.SetHost(node.Host);
-                info.SetInterconnectHost(node.ResolveHost);
-                NConfig::CopyNodeLocation(info.MutableLocation(), node.Location);
-            }
-        }
-    }
-
-    void ProcessRegistrationDynamicNodeResult(const THolder<NClient::TRegistrationResult>& result) {
-        NodeId = result->GetNodeId();
-        ScopeId = TKikimrScopeId(result->GetScopeId());
-
-        auto &nsConfig = *AppConfig.MutableNameserviceConfig();
-        nsConfig.ClearNode();
-
-        auto &dnConfig = *AppConfig.MutableDynamicNodeConfig();
-        for (auto &node : result->Record().GetNodes()) {
-            if (node.GetNodeId() == result->GetNodeId()) {
-                dnConfig.MutableNodeInfo()->CopyFrom(node);
-            } else {
-                auto &info = *nsConfig.AddNode();
-                info.SetNodeId(node.GetNodeId());
-                info.SetAddress(node.GetAddress());
-                info.SetPort(node.GetPort());
-                info.SetHost(node.GetHost());
-                info.SetInterconnectHost(node.GetResolveHost());
-                info.MutableLocation()->CopyFrom(node.GetLocation());
-            }
-        }
-    }
-
-    void ProcessRegistrationDynamicNodeResult(const std::variant<NYdb::NDiscovery::TNodeRegistrationResult, THolder<NClient::TRegistrationResult>>& result) {
-        std::visit([this](const auto& res){ ProcessRegistrationDynamicNodeResult(res); }, result);
-    }
-
     void RegisterDynamicNode(NConfig::TConfigFields& cf) {
         TVector<TString> addrs;
 
@@ -1375,7 +1384,7 @@ public:
 
         auto result = RegisterDynamicNodeImpl(addrs, rs, rgs, nrs, location, Env);
 
-        return ProcessRegistrationDynamicNodeResult(result.Result);
+        result.Apply(AppConfig, NodeId, ScopeId);
     }
 
     void ApplyConfigForNode(NKikimrConfig::TAppConfig &appConfig) {

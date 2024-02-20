@@ -547,22 +547,25 @@ void TWriteOperation::BuildExecutionPlan(bool loaded)
         plan.push_back(EExecutionUnitKind::ExecuteWrite);
         plan.push_back(EExecutionUnitKind::FinishProposeWrite);
         plan.push_back(EExecutionUnitKind::CompletedOperations);
-    }
-    /*
-    else if (HasVolatilePrepareFlag()) {
+    } else if (HasVolatilePrepareFlag()) {
         Y_ABORT_UNLESS(!loaded);
+        plan.push_back(EExecutionUnitKind::CheckWrite);
         plan.push_back(EExecutionUnitKind::StoreWrite);  // note: stores in memory
         plan.push_back(EExecutionUnitKind::FinishProposeWrite);
         Y_ABORT_UNLESS(!GetStep());
         plan.push_back(EExecutionUnitKind::WaitForPlan);
         plan.push_back(EExecutionUnitKind::PlanQueue);
-        plan.push_back(EExecutionUnitKind::LoadTxDetails);  // note: reloads from memory
+        plan.push_back(EExecutionUnitKind::LoadWriteDetails);  // note: reloads from memory
         plan.push_back(EExecutionUnitKind::BuildAndWaitDependencies);
+        // Note: execute will also prepare and send readsets
         plan.push_back(EExecutionUnitKind::ExecuteWrite);
+        // Note: it is important that plan here is the same as regular
+        // distributed tx, since normal tx may decide to commit in a
+        // volatile manner with dependencies, to avoid waiting for
+        // locked keys to resolve.
         plan.push_back(EExecutionUnitKind::CompleteWrite);
         plan.push_back(EExecutionUnitKind::CompletedOperations);
-    */
-    else {
+    } else {
         if (!loaded) {
             plan.push_back(EExecutionUnitKind::CheckWrite);
             plan.push_back(EExecutionUnitKind::StoreWrite);

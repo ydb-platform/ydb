@@ -600,9 +600,9 @@ bool TPipeline::LoadWriteDetails(TTransactionContext& txc, const TActorContext& 
     if (it != DataTxCache.end()) {
         auto baseTx = it->second;
         Y_ABORT_UNLESS(baseTx->GetType() == TValidatedTx::EType::WriteTx, "Wrong writeOp type in cache");
-        TValidatedWriteTx::TPtr dataTx = std::static_pointer_cast<TValidatedWriteTx>(baseTx);
+        TValidatedWriteTx::TPtr writeTx = std::static_pointer_cast<TValidatedWriteTx>(baseTx);
 
-        writeOp->FillTxData(dataTx);
+        writeOp->FillTxData(writeTx);
         // Remove writeOp from cache.
         ForgetTx(writeOp->GetTxId());
 

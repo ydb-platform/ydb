@@ -31,4 +31,5 @@ END()
 RECURSE_FOR_TESTS(
     ut_table_writer
     ut_topic_reader
+    ut_worker
 )

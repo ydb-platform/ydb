@@ -1458,7 +1458,7 @@ protected:
         return true;
     }
 
-    ui64 CalcMkqlMemoryLimit() {
+    virtual ui64 CalcMkqlMemoryLimit() {
         auto& opts = Task.GetProgram().GetSettings();
         return opts.GetHasMapJoin()/* || opts.GetHasSort()*/
             ? MemoryLimits.MkqlHeavyProgramMemoryLimit

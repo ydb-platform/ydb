@@ -13,12 +13,14 @@
 namespace NKikimr::NReplication::NService {
 
 Y_UNIT_TEST_SUITE(Worker) {
+    using namespace NTestHelpers;
+
     Y_UNIT_TEST(Basic) {
         TEnv env;
         env.GetRuntime().SetLogPriority(NKikimrServices::REPLICATION_SERVICE, NLog::PRI_DEBUG);
 
         {
-            auto ev = env.Send<TEvYdbProxy::TEvCreateTopicResponse>(
+            auto ev = env.Send<TEvYdbProxy::TEvCreateTopicResponse>(env.GetYdbProxy(),
                 new TEvYdbProxy::TEvCreateTopicRequest("/Root/topic",
                     NYdb::NTopic::TCreateTopicSettings()
                         .BeginAddConsumer()

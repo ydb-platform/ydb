@@ -8,7 +8,7 @@
 
 #include <library/cpp/testing/unittest/registar.h>
 
-namespace NKikimr::NReplication {
+namespace NKikimr::NReplication::NTestHelpers {
 
 template <bool UseDatabase = true>
 class TEnv {
@@ -134,11 +134,6 @@ public:
     auto Send(const TActorId& recipient, IEventBase* ev) {
         SendAsync(recipient, ev);
         return Server.GetRuntime()->GrabEdgeEvent<TEvResponse>(Sender);
-    }
-
-    template <typename TEvResponse>
-    auto Send(IEventBase* ev) {
-        return Send<TEvResponse>(YdbProxy, ev);
     }
 
     auto& GetRuntime() {

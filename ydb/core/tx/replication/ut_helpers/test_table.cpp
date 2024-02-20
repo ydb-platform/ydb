@@ -2,7 +2,7 @@
 
 #include <ydb/core/protos/flat_scheme_op.pb.h>
 
-namespace NKikimr::NReplication {
+namespace NKikimr::NReplication::NTestHelpers {
 
 void TTestTableDescription::TColumn::SerializeTo(NKikimrSchemeOp::TColumnDescription& proto) const {
     proto.SetName(Name);

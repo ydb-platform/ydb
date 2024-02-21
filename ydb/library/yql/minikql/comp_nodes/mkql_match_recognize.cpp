@@ -47,7 +47,17 @@ class TBackTrackingMatchRecognize {
 public:
     //TODO(YQL-16486): create a tree for backtracking(replace var names with indexes)
 
-    struct TPatternConfiguration {};
+    struct TPatternConfiguration {
+        void Save(TOutputSerializer& /*serializer*/) const {
+        }
+
+        void Load(TInputSerializer& /*serializer*/) {
+        }
+
+        friend bool operator==(const TPatternConfiguration&, const TPatternConfiguration&) {
+            return true;
+        }
+    };
 
     struct TPatternConfigurationBuilder {
         using TPatternConfigurationPtr = std::shared_ptr<TPatternConfiguration>;
@@ -151,6 +161,7 @@ class TStreamingMatchRecognize {
     using TPartitionList = TSparseList;
     using TRange = TPartitionList::TRange;
 public:
+    using TPatternConfiguration = TNfaTransitionGraph;
     using TPatternConfigurationBuilder = TNfaTransitionGraphBuilder;
     TStreamingMatchRecognize(
         NUdf::TUnboxedValue&& partitionKey,
@@ -273,6 +284,7 @@ public:
         if (isValid) {
             serializer.Write(DelayedRow);
         }
+        RowPatternConfiguration->Save(serializer);
         return serializer.MakeString();
     }
 
@@ -296,6 +308,9 @@ public:
             if (validDelayedRow) {
                 DelayedRow = serializer.Read<NUdf::TUnboxedValue>();
             }
+            auto restoredRowPatternConfiguration = std::make_shared<typename Algo::TPatternConfiguration>(); 
+            restoredRowPatternConfiguration->Load(serializer);
+            MKQL_ENSURE(*restoredRowPatternConfiguration == *RowPatternConfiguration, "Restored and current RowPatternConfiguration is different");
         }
         MKQL_ENSURE(serializer.Empty(), "State is corrupted");
     }

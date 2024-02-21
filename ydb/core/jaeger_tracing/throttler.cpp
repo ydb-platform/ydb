@@ -34,57 +34,45 @@ bool TThrottler::Throttle() {
 }
 
 ui64 TThrottler::ClampAdd(ui64 a, ui64 b) {
-    return
-    #if defined(__has_builtin) && __has_builtin(__builtin_add_overflow)
-    ClampAddBuiltin(a, b)
-    #else
-    ClampAddBackup(a, b)
-    #endif
-    ;
-}
+#if defined(__has_builtin) && __has_builtin(__builtin_add_overflow)
 
-ui64 TThrottler::ClampMultiply(ui64 a, ui64 b) {
-    return
-    #if defined(__has_builtin) && __has_builtin(__builtin_mul_overflow)
-    ClampMultiplyBuiltin(a, b)
-    #else
-    ClampMultiplyBackup(a, b)
-    #endif
-    ;
-}
-
-ui64 TThrottler::ClampAddBuiltin(ui64 a, ui64 b) {
     ui64 res;
     if (__builtin_add_overflow(a, b, &res)) {
         return Max<ui64>();
     } else {
         return res;
     }
-}
 
-ui64 TThrottler::ClampAddFallback(ui64 a, ui64 b) {
+#else
+
     if (a > Max<ui64>() - b) {
         return Max<ui64>();
     }
     return a + b;
+
+#endif
 }
 
-ui64 TThrottler::ClampMultiplyBuiltin(ui64 a, ui64 b) {
+ui64 TThrottler::ClampMultiply(ui64 a, ui64 b) {
+#if defined(__has_builtin) && __has_builtin(__builtin_mul_overflow)
+
     ui64 res;
     if (__builtin_mul_overflow(a, b, &res)) {
         return Max<ui64>();
     } else {
         return res;
     }
-}
 
-ui64 TThrottler::ClampMultiplyFallback(ui64 a, ui64 b) {
+#else
+
     ui128 prod = a;
     prod *= b;
     if (prod > Max<ui64>()) {
         return Max<ui64>();
     }
     return static_cast<ui64>(prod);
+
+#endif
 }
 
 } // namespace NKikimr::NJaegerTracing

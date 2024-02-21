@@ -15,12 +15,6 @@ private:
     static ui64 ClampAdd(ui64 a, ui64 b);
     static ui64 ClampMultiply(ui64 a, ui64 b);
 
-    static ui64 ClampAddBuiltin(ui64 a, ui64 b);
-    static ui64 ClampAddFallback(ui64 a, ui64 b);
-
-    static ui64 ClampMultiplyBuiltin(ui64 a, ui64 b);
-    static ui64 ClampMultiplyFallback(ui64 a, ui64 b);
-
     const ui64 MaxRatePerMinute;
     const ui64 MaxBurst;
     const ui64 BetweenSends;

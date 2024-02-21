@@ -551,7 +551,6 @@ private:
                 AsyncReadOperation = bucket.InitialState->ExtractWideItem(BufferForKeyAnsState);
                 if (AsyncReadOperation) {
                     BufferForKeyAnsState.resize(0);
-                    BufferForKeyAnsState.shrink_to_fit();
                     return AsyncRead();
                 }
                 for (size_t i = 0; i != KeyWidth; ++i) {
@@ -565,7 +564,6 @@ private:
                     static_cast<NUdf::TUnboxedValue&>(InMemoryProcessingState.Throat[i - KeyWidth]) = std::move(BufferForKeyAnsState[i]);
                 }
                 BufferForKeyAnsState.resize(0);
-                BufferForKeyAnsState.shrink_to_fit();
             }
             //process spilled data
             while(!bucket.Data->Empty()) {
@@ -591,7 +589,6 @@ private:
                     static_cast<NUdf::TUnboxedValue *>(InMemoryProcessingState.Throat)
                 );
                 BufferForKeyAnsState.resize(0);
-                BufferForKeyAnsState.shrink_to_fit();
             }
             if (const auto values = static_cast<NUdf::TUnboxedValue*>(InMemoryProcessingState.Extract())) {
                 Nodes.FinishItem(ctx, values, output);

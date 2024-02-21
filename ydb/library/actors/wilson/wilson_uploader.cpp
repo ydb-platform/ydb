@@ -128,7 +128,7 @@ namespace NWilson {
 
         public:
             TWilsonUploader(WilsonUploaderParams params)
-                : MaxSpansPerSecond(params.MaxSpansPerSecond)
+                : MaxSpansPerSecond(params.MaxExportedSpansPerSecond)
                 , MaxSpansInBatch(params.MaxSpansInBatch)
                 , MaxBytesInBatch(params.MaxBytesInBatch)
                 , MaxBatchAccumulation(params.MaxBatchAccumulation)

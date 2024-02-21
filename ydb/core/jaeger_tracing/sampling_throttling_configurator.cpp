@@ -33,7 +33,7 @@ void TSamplingThrottlingConfigurator::UpdateSettings(TSettings<double, TThrottli
 TSettings<double, TIntrusivePtr<TThrottler>> TSamplingThrottlingConfigurator::GenerateThrottlers(
     TSettings<double, TThrottlingSettings> settings) {
     return settings.MapThrottler([this](const TThrottlingSettings& settings) {
-        return MakeIntrusive<TThrottler>(settings.MaxRatePerMinute, settings.MaxBurst, TimeProvider);
+        return MakeIntrusive<TThrottler>(settings.MaxTracesPerMinute, settings.MaxTracesBurst, TimeProvider);
     });
 }
 

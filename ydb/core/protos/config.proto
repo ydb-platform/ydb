@@ -1603,21 +1603,21 @@ message TTracingConfig {
         // detalisation of traces sampled by this rule
         optional uint32 Level = 3;
         // maximum average amount of traces sampled by this rule
-        optional uint64 MaxRatePerMinute = 4;
+        optional uint64 MaxTracesPerMinute = 4;
         // maximum burst of traces sampled by this rule
-        optional uint64 MaxBurst = 5;
+        optional uint64 MaxTracesBurst = 5;
     }
 
     // field meaning is the same as in TSamplingScope
     message TExternalThrottlingScope {
         optional TSelectors Scope = 1;
-        optional uint64 MaxRatePerMinute = 2;
-        optional uint64 MaxBurst = 3;
+        optional uint64 MaxTracesPerMinute = 2;
+        optional uint64 MaxTracesBurst = 3;
     }
 
     message TUploaderConfig {
         // maximum average amount of spans uploaded from the node
-        optional uint64 MaxSpansPerSecond = 1;
+        optional uint64 MaxExportedSpansPerSecond = 1;
         // maximum batch size in spans
         optional uint64 MaxSpansInBatch = 2;
         // maximum batch size in bytes

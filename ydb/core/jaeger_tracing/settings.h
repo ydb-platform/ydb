@@ -9,8 +9,8 @@
 namespace NKikimr::NJaegerTracing {
 
 struct TThrottlingSettings {
-    ui64 MaxRatePerMinute;
-    ui64 MaxBurst;
+    ui64 MaxTracesPerMinute;
+    ui64 MaxTracesBurst;
 };
 
 template<class TSampling, class TThrottling>

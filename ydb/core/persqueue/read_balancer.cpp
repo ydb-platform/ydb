@@ -1634,12 +1634,15 @@ void TPersQueueReadBalancer::TClientGroupInfo::ScheduleBalance(const TActorConte
 }
 
 void TPersQueueReadBalancer::TClientGroupInfo::Balance(const TActorContext& ctx) {
-    //TODO: use filled structs
-    ui32 total = PartitionsInfo.size();
     ui32 sessionsCount = SessionsInfo.size();
 
     if (!sessionsCount) {
         return;
+    }
+
+    ui32 total = FreePartitions.size();
+    for(auto& [_, session] : SessionsInfo) {
+        total += session.NumActive - session.NumInactive;
     }
 
     //FreePartitions and PipeInfo[].NumActive are consistent

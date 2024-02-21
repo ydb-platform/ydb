@@ -171,10 +171,10 @@ private:
     STFUNC(StateFuncBody) {
         switch (ev->GetTypeRewrite()) {
             hFunc(NTaskRunnerActor::TEvTaskRunFinished, OnRunFinished);
-            hFunc(NTaskRunnerActor::TEvAsyncInputPushFinished, OnAsyncInputPushFinished);
-            hFunc(NTaskRunnerActor::TEvChannelPopFinished, OnPopFinished);
+            hFunc(NTaskRunnerActor::TEvSourceDataAck, OnSourceDataAck);
+            hFunc(NTaskRunnerActor::TEvOutputChannelData, OnOutputChannelData);
             hFunc(NTaskRunnerActor::TEvTaskRunnerCreateFinished, OnTaskRunnerCreated);
-            hFunc(NTaskRunnerActor::TEvPushFinished, OnPushFinished);
+            hFunc(NTaskRunnerActor::TEvInputChannelDataAck, OnInputChannelDataAck);
             hFunc(TEvDqCompute::TEvStateRequest, OnStateRequest);
             hFunc(NTaskRunnerActor::TEvStatistics, OnStatisticsResponse);
             hFunc(NTaskRunnerActor::TEvLoadTaskRunnerFromStateDone, OnTaskRunnerLoaded);
@@ -277,13 +277,13 @@ private:
             CA_LOG_T("Can not drain channel because it is blocked by capacity. ChannelId: " << channelId
                 << ", peerState:(" << peerState.DebugString() << ")"
             );
-            auto ev = MakeHolder<NTaskRunnerActor::TEvChannelPopFinished>(channelId);
+            auto ev = MakeHolder<NTaskRunnerActor::TEvOutputChannelData>(channelId);
             Y_ABORT_UNLESS(!ev->Finished);
             Send(SelfId(), std::move(ev));  // try again, ev.Finished == false
             return;
         }
 
-        Send(TaskRunnerActorId, new NTaskRunnerActor::TEvPop(channelId, wasFinished, peerState.GetFreeMemory()));
+        Send(TaskRunnerActorId, new NTaskRunnerActor::TEvOutputChannelDataRequest(channelId, wasFinished, peerState.GetFreeMemory()));
     }
 
     void DrainAsyncOutput(ui64 outputIndex, TAsyncOutputInfoBase& sinkInfo) override {
@@ -312,7 +312,7 @@ private:
         sinkInfo.PopStarted = true;
         ProcessOutputsState.Inflight++;
         sinkInfo.FreeSpaceBeforeSend = sinkFreeSpaceBeforeSend;
-        Send(TaskRunnerActorId, new NTaskRunnerActor::TEvSinkPop(outputIndex, sinkFreeSpaceBeforeSend));
+        Send(TaskRunnerActorId, new NTaskRunnerActor::TEvSinkDataRequest(outputIndex, sinkFreeSpaceBeforeSend));
     }
 
     bool DoHandleChannelsAfterFinishImpl() override {
@@ -334,10 +334,9 @@ private:
 
         outputChannel->Finished = true;
         ProcessOutputsState.Inflight++;
-        Send(TaskRunnerActorId, MakeHolder<NTaskRunnerActor::TEvPop>(channelId, /* wasFinished = */ true, 0));  // finish channel
+        Send(TaskRunnerActorId, MakeHolder<NTaskRunnerActor::TEvOutputChannelDataRequest>(channelId, /* wasFinished = */ true, 0));  // finish channel
         DoExecute();
     }
-
 
     void TakeInputChannelData(TChannelDataOOB&& channelDataOOB, bool ack) override {
         CA_LOG_T("took input");
@@ -373,16 +372,12 @@ private:
             batch.RowCount(),
             watermark);
 
-        auto ev = batch.RowCount()
-            ? MakeHolder<NTaskRunnerActor::TEvPush>(
-                channelData.GetChannelId(),
-                std::move(batch),
-                finished,
-                /* pauseAfterPush = */ channelData.HasCheckpoint())
-            : MakeHolder<NTaskRunnerActor::TEvPush>(
-                channelData.GetChannelId(),
-                finished,
-                /* pauseAfterPush = */ channelData.HasCheckpoint());
+        auto ev = MakeHolder<NTaskRunnerActor::TEvInputChannelData>(
+            channelData.GetChannelId(),
+            batch.RowCount() ? std::optional{std::move(batch)} : std::nullopt,
+            finished,
+            channelData.HasCheckpoint()
+        );
 
         Send(TaskRunnerActorId, ev.Release(), 0, Cookie);
 
@@ -564,7 +559,7 @@ private:
         }
     }
 
-    void OnAsyncInputPushFinished(NTaskRunnerActor::TEvAsyncInputPushFinished::TPtr& ev) {
+    void OnSourceDataAck(NTaskRunnerActor::TEvSourceDataAck::TPtr& ev) {
         auto it = SourcesMap.find(ev->Get()->Index);
         Y_ABORT_UNLESS(it != SourcesMap.end());
         auto& source = it->second;
@@ -576,7 +571,7 @@ private:
         }
     }
 
-    void OnPopFinished(NTaskRunnerActor::TEvChannelPopFinished::TPtr& ev) {
+    void OnOutputChannelData(NTaskRunnerActor::TEvOutputChannelData::TPtr& ev) {
         if (Stat) {
             Stat->AddCounters2(ev->Get()->Sensors);
         }
@@ -693,7 +688,7 @@ private:
         return result;
     }
 
-    void OnPushFinished(NTaskRunnerActor::TEvPushFinished::TPtr& ev) {
+    void OnInputChannelDataAck(NTaskRunnerActor::TEvInputChannelDataAck::TPtr& ev) {
         auto it = TakeInputChannelDataRequests.find(ev->Cookie);
         YQL_ENSURE(it != TakeInputChannelDataRequests.end());
 

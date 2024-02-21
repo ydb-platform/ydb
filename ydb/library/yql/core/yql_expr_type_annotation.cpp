@@ -318,10 +318,23 @@ IGraphTransformer::TStatus TryConvertToImpl(TExprContext& ctx, TExprNode::TPtr& 
         if (IsDataTypeNumeric(from) && IsDataTypeNumeric(to)) {
             allow = GetNumericDataTypeLevel(to) >= GetNumericDataTypeLevel(from);
             isSafe = false;
-        } else if (from == EDataSlot::Date && (to == EDataSlot::TzDate || to == EDataSlot::Datetime || to == EDataSlot::Timestamp || to == EDataSlot::TzDatetime || to == EDataSlot::TzTimestamp)) {
+        } else if (from == EDataSlot::Date && (
+                    to == EDataSlot::TzDate ||
+                    to == EDataSlot::Datetime ||
+                    to == EDataSlot::Timestamp ||
+                    to == EDataSlot::TzDatetime ||
+                    to == EDataSlot::TzTimestamp ||
+                    to == EDataSlot::Datetime64 ||
+                    to == EDataSlot::Timestamp64))
+        {
             allow = true;
             useCast = true;
-        } else if (from == EDataSlot::Datetime && (to == EDataSlot::TzDatetime || to == EDataSlot::Timestamp || to == EDataSlot::TzTimestamp)) {
+        } else if (from == EDataSlot::Datetime && (
+                    to == EDataSlot::TzDatetime ||
+                    to == EDataSlot::Timestamp ||
+                    to == EDataSlot::TzTimestamp ||
+                    to == EDataSlot::Timestamp64))
+        {
             allow = true;
             useCast = true;
         } else if (from == EDataSlot::TzDate && (to == EDataSlot::TzDatetime || to == EDataSlot::TzTimestamp)) {
@@ -330,7 +343,7 @@ IGraphTransformer::TStatus TryConvertToImpl(TExprContext& ctx, TExprNode::TPtr& 
         } else if (from == EDataSlot::TzDatetime && to == EDataSlot::TzTimestamp) {
             allow = true;
             useCast = true;
-        } else if (from == EDataSlot::Timestamp && to == EDataSlot::TzTimestamp) {
+        } else if (from == EDataSlot::Timestamp && (to == EDataSlot::TzTimestamp || to == EDataSlot::Timestamp64)) {
             allow = true;
             useCast = true;
         } else if (from == EDataSlot::Date32 && (to == EDataSlot::Datetime64 || to == EDataSlot::Timestamp64)) {
@@ -4913,26 +4926,38 @@ EDataSlot GetNumericDataTypeByLevel(ui32 level) {
 }
 
 ui32 GetDateTypeLevel(EDataSlot dataSlot) {
-    if (dataSlot == EDataSlot::Date)
+    switch (dataSlot) {
+    case EDataSlot::Date:
         return 0;
-
-    if (dataSlot == EDataSlot::Datetime)
-        return 1;
-
-    if (dataSlot == EDataSlot::Timestamp)
-        return 2;
-
-    ythrow yexception() << "Unknown date type: " << NKikimr::NUdf::GetDataTypeInfo(dataSlot).Name;
+    case EDataSlot::Date32:
+        return 5;
+    case EDataSlot::Datetime:
+        return 10;
+    case EDataSlot::Datetime64:
+        return 15;
+    case EDataSlot::Timestamp:
+        return 20;
+    case EDataSlot::Timestamp64:
+        return 25;
+    default:
+        ythrow yexception() << "Unknown date type: " << NKikimr::NUdf::GetDataTypeInfo(dataSlot).Name;
+    }
 }
 
 EDataSlot GetDateTypeByLevel(ui32 level) {
     switch (level) {
     case 0:
         return EDataSlot::Date;
-    case 1:
+    case 5:
+        return EDataSlot::Date32;
+    case 10:
         return EDataSlot::Datetime;
-    case 2:
+    case 15:
+        return EDataSlot::Datetime64;
+    case 20:
         return EDataSlot::Timestamp;
+    case 25:
+        return EDataSlot::Timestamp64;
     default:
         ythrow yexception() << "Unknown date level: " << level;
     }

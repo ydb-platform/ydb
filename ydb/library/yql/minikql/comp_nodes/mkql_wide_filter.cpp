@@ -1,6 +1,7 @@
 #include "mkql_wide_filter.h"
 #include <ydb/library/yql/minikql/computation/mkql_computation_node_holders.h>
 #include <ydb/library/yql/minikql/computation/mkql_computation_node_codegen.h>  // Y_IGNORE
+#include <ydb/library/yql/minikql/computation/mkql_computation_node_codegen_impl.h>
 #include <ydb/library/yql/minikql/mkql_node_cast.h>
 #include <ydb/library/yql/utils/cast.h>
 
@@ -134,8 +135,8 @@ private:
     }
 };
 
-class TWideFilterWithLimitWrapper : public TStatefulWideFlowCodegeneratorNode<TWideFilterWithLimitWrapper>,  public TBaseWideFilterWrapper {
-using TBaseComputation = TStatefulWideFlowCodegeneratorNode<TWideFilterWithLimitWrapper>;
+class TWideFilterWithLimitWrapper : public TSimpleStatefulWideFlowCodegeneratorNode<TWideFilterWithLimitWrapper, ui64>,  public TBaseWideFilterWrapper {
+using TBaseComputation = TSimpleStatefulWideFlowCodegeneratorNode<TWideFilterWithLimitWrapper, ui64>;
 public:
     TWideFilterWithLimitWrapper(TComputationMutables& mutables, IComputationWideFlowNode* flow, IComputationNode* limit,
             TComputationExternalNodePtrVector&& items, IComputationNode* predicate)
@@ -144,87 +145,30 @@ public:
         , Limit(limit)
     {}
 
-    EFetchResult DoCalculate(NUdf::TUnboxedValue& state, TComputationContext& ctx, NUdf::TUnboxedValue*const* output) const {
-        if (state.IsInvalid()) {
-            state = Limit->GetValue(ctx);
-        } else if (!state.Get<ui64>()) {
-            return EFetchResult::Finish;
+    void InitState(ui64& limit, TComputationContext& ctx) const {
+        limit = Limit->GetValue(ctx).Get<ui64>();
+    }
+
+    EProcessResult DoProcess(ui64& limit, TComputationContext& ctx, EFetchResult fetchRes, NUdf::TUnboxedValue*const* values) const {
+        if (limit == 0) {
+            return EProcessResult::Finish;
         }
-
-        auto **fields = GetFields(ctx);
-        while (true) {
-            PrepareArguments(ctx, output);
-
-            if (const auto result = Flow->FetchValues(ctx, fields); EFetchResult::One != result)
-                return result;
-
-            if (Predicate->GetValue(ctx).Get<bool>()) {
-                FillOutputs(ctx, output);
-
-                auto todo = state.Get<ui64>();
-                state = NUdf::TUnboxedValuePod(--todo);
-                return EFetchResult::One;
+        if (fetchRes == EFetchResult::One) {
+            auto **fields = GetFields(ctx);
+            PrepareArguments(ctx, values);
+            for (size_t idx = 0; idx < Items.size(); idx++) {
+                *fields[idx] = *values[idx];
             }
+            if (Predicate->GetValue(ctx).Get<bool>()) {
+                FillOutputs(ctx, values);
+                limit--;
+                return EProcessResult::One;
+            }
+            return EProcessResult::Fetch;
         }
+        return static_cast<EProcessResult>(fetchRes);
     }
-#ifndef MKQL_DISABLE_CODEGEN
-    TGenerateResult DoGenGetValues(const TCodegenContext& ctx, Value* statePtr, BasicBlock*& block) const {
-        auto& context = ctx.Codegen.GetContext();
 
-        const auto init = BasicBlock::Create(context, "init", ctx.Func);
-        const auto test = BasicBlock::Create(context, "test", ctx.Func);
-        const auto loop = BasicBlock::Create(context, "loop", ctx.Func);
-        const auto work = BasicBlock::Create(context, "work", ctx.Func);
-        const auto pass = BasicBlock::Create(context, "pass", ctx.Func);
-        const auto exit = BasicBlock::Create(context, "exit", ctx.Func);
-
-        const auto valueType = Type::getInt128Ty(context);
-        const auto resultType = Type::getInt32Ty(context);
-        const auto result = PHINode::Create(resultType, 3U, "result", exit);
-
-        BranchInst::Create(test, init, IsValid(statePtr, block), block);
-
-        block = init;
-
-        GetNodeValue(statePtr, Limit, ctx, block);
-        BranchInst::Create(test, block);
-
-        block = test;
-
-        const auto state = new LoadInst(valueType, statePtr, "state", block);
-        const auto done = CmpInst::Create(Instruction::ICmp, ICmpInst::ICMP_EQ, state, GetFalse(context), "done", block);
-        result->addIncoming(ConstantInt::get(resultType, -1), block);
-
-        BranchInst::Create(exit, loop, done, block);
-
-        block = loop;
-
-        auto status = GetNodeValues(Flow, ctx, block);
-        const auto good = CmpInst::Create(Instruction::ICmp, ICmpInst::ICMP_SGT, status.first, ConstantInt::get(status.first->getType(), 0), "good", block);
-
-        result->addIncoming(status.first, block);
-
-        BranchInst::Create(work, exit, good, block);
-
-        block = work;
-
-        const auto predicate = GenGetPredicate(ctx, status.second, block);
-
-        BranchInst::Create(pass, loop, predicate, block);
-
-        block = pass;
-
-        const auto decr = BinaryOperator::CreateSub(state, ConstantInt::get(state->getType(), 1ULL), "decr", block);
-        new StoreInst(decr, statePtr, block);
-
-        result->addIncoming(status.first, block);
-
-        BranchInst::Create(exit, block);
-
-        block = exit;
-        return {result, std::move(status.second)};
-    }
-#endif
 private:
     void RegisterDependencies() const final {
         if (const auto flow = FlowDependsOn(Flow)) {

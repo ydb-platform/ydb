@@ -21,7 +21,7 @@ void TGRpcYdbS3InternalService::SetupIncomingRequests(NYdbGrpc::TLoggerPtr logge
                 new NGRpcService::TGrpcRequestOperationCall<Ydb::S3Internal::IN, Ydb::S3Internal::OUT> \
                     (ctx, &CB, NGRpcService::TRequestAuxSettings{NGRpcService::TRateLimiterMode::Off, nullptr})); \
         }, &Ydb::S3Internal::V1::S3InternalService::AsyncService::Request ## NAME, \
-        #NAME, logger, getCounterBlock("export", #NAME))->Run();
+        #NAME, logger, getCounterBlock("s3listing", #NAME))->Run();
 
     ADD_REQUEST(S3Listing, S3ListingRequest, S3ListingResponse, DoS3ListingRequest);
 #undef ADD_REQUEST

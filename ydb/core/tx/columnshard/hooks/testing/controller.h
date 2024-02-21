@@ -22,6 +22,7 @@ private:
     YDB_ACCESSOR(std::optional<TDuration>, OptimizerFreshnessCheckDuration, TDuration::Zero());
     EOptimizerCompactionWeightControl CompactionControl = EOptimizerCompactionWeightControl::Force;
     std::optional<TDuration> ReadTimeoutClean;
+    std::optional<ui32> ExpectedShardsCount;
 
     THashMap<ui64, const ::NKikimr::NColumnShard::TColumnShard*> ShardActuals;
     THashMap<TString, THashMap<NOlap::TUnifiedBlobId, THashSet<NOlap::TTabletId>>> RemovedBlobIds;
@@ -185,6 +186,9 @@ public:
         } else {
             IndexesSkippingOnSelect.Inc();
         }
+    }
+    void SetExpectedShardsCount(const ui32 value) {
+        ExpectedShardsCount = value;
     }
     void SetCompactionControl(const EOptimizerCompactionWeightControl value) {
         CompactionControl = value;

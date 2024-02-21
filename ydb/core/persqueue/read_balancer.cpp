@@ -728,6 +728,7 @@ void TPersQueueReadBalancer::ClosePipe(const ui64 tabletId, const TActorContext&
         NTabletPipe::CloseClient(ctx, it->second.PipeActor);
         TabletPipes.erase(it);
         PipesRequested.erase(tabletId);
+        AggregatedStats.Cookies.erase(tabletId);
     }
 }
 

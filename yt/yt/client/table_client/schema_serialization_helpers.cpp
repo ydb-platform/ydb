@@ -95,7 +95,7 @@ void TSerializableColumnSchema::DeserializeFromCursor(NYson::TYsonPullParserCurs
             SetMaxInlineHunkSize(ExtractTo<std::optional<i64>>(cursor));
         } else if (key == TStringBuf("stable_name")) {
             cursor->Next();
-            SerializedStableName_ = ExtractTo<TString>(cursor);
+            SerializedStableName_ = ExtractTo<TColumnStableName>(cursor);
         } else if (key == TStringBuf("deleted")) {
             cursor->Next();
             Deleted_ = ExtractTo<bool>(cursor);
@@ -112,7 +112,7 @@ void TSerializableColumnSchema::SetColumnSchema(const TColumnSchema& columnSchem
 {
     static_cast<TColumnSchema&>(*this) = columnSchema;
     if (IsRenamed()) {
-        SerializedStableName_ = StableName().Get();
+        SerializedStableName_ = StableName();
     }
     LogicalTypeV1_ = columnSchema.CastToV1Type();
     RequiredV1_ = columnSchema.Required();
@@ -129,10 +129,10 @@ void TSerializableColumnSchema::SetDeletedColumnSchema(
 void TSerializableColumnSchema::RunPostprocessor()
 {
     if (Deleted() && *Deleted()) {
-        if (!SerializedStableName_ || SerializedStableName_->empty()) {
-            THROW_ERROR_EXCEPTION("stable name should be set for a deleted column");
+        if (!SerializedStableName_) {
+            THROW_ERROR_EXCEPTION("Stable name should be set for a deleted column");
         }
-        SetStableName(TStableName(*SerializedStableName_));
+        SetStableName(*SerializedStableName_);
         return;
     }
 
@@ -141,13 +141,11 @@ void TSerializableColumnSchema::RunPostprocessor()
         THROW_ERROR_EXCEPTION("Column name cannot be empty");
     }
 
-    if (SerializedStableName_.has_value()) {
-        if (SerializedStableName_->empty()) {
-            THROW_ERROR_EXCEPTION("Column stable name cannot be empty");
-        }
-        SetStableName(TStableName(*SerializedStableName_));
+    if (SerializedStableName_) {
+        ValidateColumnName(SerializedStableName_->Underlying());
+        SetStableName(*SerializedStableName_);
     } else {
-        SetStableName(TStableName(Name()));
+        SetStableName(TColumnStableName(Name()));
     }
 
     try {
@@ -219,7 +217,7 @@ void Serialize(const TDeletedColumn& schema, NYson::IYsonConsumer* consumer)
 {
     consumer->OnBeginMap();
     consumer->OnKeyedItem("stable_name");
-    consumer->OnStringScalar(schema.StableName().Get());
+    consumer->OnStringScalar(schema.StableName().Underlying());
     consumer->OnKeyedItem("deleted");
     consumer->OnBooleanScalar(true);
     consumer->OnEndMap();
@@ -336,7 +334,6 @@ void Deserialize(TTableSchemaPtr& schema, NYson::TYsonPullParserCursor* cursor)
     Deserialize(actualSchema, cursor);
     schema = New<TTableSchema>(std::move(actualSchema));
 }
-
 
 ////////////////////////////////////////////////////////////////////////////////
 

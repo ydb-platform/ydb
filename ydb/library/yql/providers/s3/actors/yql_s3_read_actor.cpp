@@ -488,7 +488,7 @@ public:
     }
 
     void HandleTransitToErrorState(TEvPrivatePrivate::TEvTransitToErrorState::TPtr& ev) {
-        MaybeIssues = ev->Get().Issues;
+        MaybeIssues = ev->Get()->Issues;
         TransitToErrorState();
     }
 

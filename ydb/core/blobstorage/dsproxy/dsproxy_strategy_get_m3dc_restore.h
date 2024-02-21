@@ -54,7 +54,7 @@ namespace NKikimr {
                     "Blob Id# %s unexpected whole situation %" PRIu32,
                     state.Id.ToString().c_str(), ui32(state.WholeSituation));
             state.WholeSituation = TBlobState::ESituation::Present;
-            const EStrategyOutcome outcome = TPut3dcStrategy(TEvBlobStorage::TEvPut::TacticMaxThroughput, false).Process(logCtx,
+            const EStrategyOutcome outcome = TPut3dcStrategy(TEvBlobStorage::TEvPut::TacticMaxThroughput, false, false).Process(logCtx,
                 state, info, blackboard, groupDiskRequests);
             switch (outcome) {
                 case EStrategyOutcome::IN_PROGRESS:

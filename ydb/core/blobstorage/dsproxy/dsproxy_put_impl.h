@@ -42,6 +42,7 @@ private:
     ui32 VMultiPutResponses = 0;
     bool AtLeastOneResponseWasNotOk = false;
     bool EnableRequestMod3x3ForMinLatecy = false;
+    bool DisableTacticMinLatencyForM3Dc = false;
 
     ui64 DoneBlobs = 0;
 
@@ -106,7 +107,8 @@ private:
 public:
     TPutImpl(const TIntrusivePtr<TBlobStorageGroupInfo> &info, const TIntrusivePtr<TGroupQueues> &state,
             TEvBlobStorage::TEvPut *ev, const TIntrusivePtr<TBlobStorageGroupProxyMon> &mon,
-            bool enableRequestMod3x3ForMinLatecy, TActorId recipient, ui64 cookie, NWilson::TTraceId traceId)
+            bool enableRequestMod3x3ForMinLatecy, bool disableTacticMinLatencyForM3Dc,
+            TActorId recipient, ui64 cookie, NWilson::TTraceId traceId)
         : Deadline(ev->Deadline)
         , Info(info)
         , Blackboard(info, state, ev->HandleClass, NKikimrBlobStorage::EGetHandleClass::AsyncRead, false)
@@ -116,6 +118,7 @@ public:
         , ApproximateFreeSpaceShare(0.f)
         , Mon(mon)
         , EnableRequestMod3x3ForMinLatecy(enableRequestMod3x3ForMinLatecy)
+        , DisableTacticMinLatencyForM3Dc(disableTacticMinLatencyForM3Dc)
         , Tactic(ev->Tactic)
     {
         BlobMap.emplace(ev->Id, Blobs.size());
@@ -130,7 +133,7 @@ public:
     TPutImpl(const TIntrusivePtr<TBlobStorageGroupInfo> &info, const TIntrusivePtr<TGroupQueues> &state,
             TBatchedVec<TEvBlobStorage::TEvPut::TPtr> &events, const TIntrusivePtr<TBlobStorageGroupProxyMon> &mon,
             NKikimrBlobStorage::EPutHandleClass putHandleClass, TEvBlobStorage::TEvPut::ETactic tactic,
-            bool enableRequestMod3x3ForMinLatecy)
+            bool enableRequestMod3x3ForMinLatecy, bool disableTacticMinLatencyForM3Dc)
         : Deadline(TInstant::Zero())
         , Info(info)
         , Blackboard(info, state, putHandleClass, NKikimrBlobStorage::EGetHandleClass::AsyncRead, false)
@@ -140,6 +143,7 @@ public:
         , ApproximateFreeSpaceShare(0.f)
         , Mon(mon)
         , EnableRequestMod3x3ForMinLatecy(enableRequestMod3x3ForMinLatecy)
+        , DisableTacticMinLatencyForM3Dc(disableTacticMinLatencyForM3Dc)
         , Tactic(tactic)
     {
         Y_ABORT_UNLESS(events.size(), "TEvPut vector is empty");
@@ -201,7 +205,7 @@ public:
         Blackboard.ChangeAll();
         switch (Info->Type.GetErasure()) {
             case TBlobStorageGroupType::ErasureMirror3dc:
-                Blackboard.RunStrategy(logCtx, TAcceleratePut3dcStrategy(Tactic, EnableRequestMod3x3ForMinLatecy));
+                Blackboard.RunStrategy(logCtx, TAcceleratePut3dcStrategy(Tactic, EnableRequestMod3x3ForMinLatecy, DisableTacticMinLatencyForM3Dc));
                 break;
             case TBlobStorageGroupType::ErasureMirror3of4:
                 Blackboard.RunStrategy(logCtx, TPut3of4Strategy(Tactic, true));

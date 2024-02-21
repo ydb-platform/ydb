@@ -137,12 +137,13 @@ namespace NKikimr {
 
             TAppData *app = NKikimr::AppData(TActivationContext::AsActorContext());
             bool enableRequestMod3x3ForMinLatency = app->FeatureFlags.GetEnable3x3RequestsForMirror3DCMinLatencyPut();
+            bool disableTacticMinLatencyForM3Dc = app->FeatureFlags.GetDisableTacticMinLatencyForM3Dc();
             // TODO(alexvru): MinLatency support
             const TActorId reqID = Register(
                     CreateBlobStorageGroupPutRequest(Info, Sessions->GroupQueues, ev->Sender, Mon,
                         ev->Get(), ev->Cookie, std::move(ev->TraceId), Mon->TimeStats.IsEnabled(),
                         PerDiskStats, kind, TActivationContext::Now(), StoragePoolCounters,
-                        enableRequestMod3x3ForMinLatency));
+                        enableRequestMod3x3ForMinLatency, disableTacticMinLatencyForM3Dc));
             ActiveRequests.insert(reqID);
         }
     }
@@ -268,19 +269,20 @@ namespace NKikimr {
             if (CurrentStateFunc() == &TThis::StateWork) {
                 TAppData *app = NKikimr::AppData(TActivationContext::AsActorContext());
                 bool enableRequestMod3x3ForMinLatency = app->FeatureFlags.GetEnable3x3RequestsForMirror3DCMinLatencyPut();
+                bool disableTacticMinLatencyForM3Dc = app->FeatureFlags.GetDisableTacticMinLatencyForM3Dc();
                 // TODO(alexvru): MinLatency support
                 if (batchedPuts.Queue.size() == 1) {
                     const TActorId reqID = Register(
                         CreateBlobStorageGroupPutRequest(Info, Sessions->GroupQueues, batchedPuts.Queue.front()->Sender,
                             Mon, batchedPuts.Queue.front()->Get(), batchedPuts.Queue.front()->Cookie,
                             std::move(batchedPuts.Queue.front()->TraceId), Mon->TimeStats.IsEnabled(), PerDiskStats, kind,
-                            TActivationContext::Now(), StoragePoolCounters, enableRequestMod3x3ForMinLatency));
+                            TActivationContext::Now(), StoragePoolCounters, enableRequestMod3x3ForMinLatency, disableTacticMinLatencyForM3Dc));
                     ActiveRequests.insert(reqID);
                 } else {
                     const TActorId reqID = Register(
                         CreateBlobStorageGroupPutRequest(Info, Sessions->GroupQueues,
                             Mon, batchedPuts.Queue, Mon->TimeStats.IsEnabled(), PerDiskStats, kind, TActivationContext::Now(),
-                            StoragePoolCounters, handleClass, tactic, enableRequestMod3x3ForMinLatency));
+                            StoragePoolCounters, handleClass, tactic, enableRequestMod3x3ForMinLatency, disableTacticMinLatencyForM3Dc));
                     ActiveRequests.insert(reqID);
                 }
             } else {

@@ -14,7 +14,7 @@ using TPutResultVec = TPutImpl::TPutResultVec;
 void TPutImpl::RunStrategies(TLogContext &logCtx, TPutResultVec &outPutResults, const TBlobStorageGroupInfo::TGroupVDisks& expired) {
     switch (Info->Type.GetErasure()) {
         case TBlobStorageGroupType::ErasureMirror3dc:
-            return RunStrategy(logCtx, TPut3dcStrategy(Tactic, EnableRequestMod3x3ForMinLatecy), outPutResults, expired);
+            return RunStrategy(logCtx, TPut3dcStrategy(Tactic, EnableRequestMod3x3ForMinLatecy, DisableTacticMinLatencyForM3Dc), outPutResults, expired);
         case TBlobStorageGroupType::ErasureMirror3of4:
             return RunStrategy(logCtx, TPut3of4Strategy(Tactic), outPutResults, expired);
         default:

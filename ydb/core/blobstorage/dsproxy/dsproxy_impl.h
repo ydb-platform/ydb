@@ -106,6 +106,7 @@ class TBlobStorageGroupProxy : public TActorBootstrapped<TBlobStorageGroupProxy>
 
     TMemorizableControlWrapper EnablePutBatching;
     TMemorizableControlWrapper EnableVPatch;
+    TMemorizableControlWrapper DisableTacticMinLatencyForM3Dc;
 
     TInstant EstablishingSessionStartTime;
 
@@ -310,10 +311,10 @@ public:
 
     TBlobStorageGroupProxy(TIntrusivePtr<TBlobStorageGroupInfo>&& info, bool forceWaitAllDrives,
             TIntrusivePtr<TDsProxyNodeMon> &nodeMon, TIntrusivePtr<TStoragePoolCounters>&& storagePoolCounters,
-            const TControlWrapper &enablePutBatching, const TControlWrapper &enableVPatch);
+            const TControlWrapper &enablePutBatching, const TControlWrapper &enableVPatch, const TControlWrapper &disableTacticMinLatencyForM3Dc);
 
     TBlobStorageGroupProxy(ui32 groupId, bool isEjected, TIntrusivePtr<TDsProxyNodeMon> &nodeMon,
-            const TControlWrapper &enablePutBatching, const TControlWrapper &enableVPatch);
+            const TControlWrapper &enablePutBatching, const TControlWrapper &enableVPatch, const TControlWrapper &disableTacticMinLatencyForM3Dc);
 
     void Bootstrap();
 

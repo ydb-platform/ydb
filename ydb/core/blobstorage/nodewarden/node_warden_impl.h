@@ -121,6 +121,7 @@ namespace NKikimr::NStorage {
 
         TControlWrapper EnablePutBatching;
         TControlWrapper EnableVPatch;
+        TControlWrapper DisableTacticMinLatencyForM3Dc;
 
         TReplQuoter::TPtr ReplNodeRequestQuoter;
         TReplQuoter::TPtr ReplNodeResponseQuoter;
@@ -137,6 +138,7 @@ namespace NKikimr::NStorage {
             : Cfg(cfg)
             , EnablePutBatching(Cfg->FeatureFlags.GetEnablePutBatchingForBlobStorage(), false, true)
             , EnableVPatch(Cfg->FeatureFlags.GetEnableVPatch(), false, true)
+            , DisableTacticMinLatencyForM3Dc(Cfg->FeatureFlags.GetDisableTacticMinLatencyForM3Dc(), false, true)
         {
             Y_ABORT_UNLESS(Cfg->BlobStorageConfig.GetServiceSet().AvailabilityDomainsSize() <= 1);
             AvailDomainId = 1;

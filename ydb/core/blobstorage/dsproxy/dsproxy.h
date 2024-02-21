@@ -54,6 +54,7 @@ const ui32 MaskSizeBits = 32;
 
 constexpr bool DefaultEnablePutBatching = true;
 constexpr bool DefaultEnableVPatch = false;
+constexpr bool DefaultDisableTacticMinLatencyForM3Dc = false;
 
 constexpr bool WithMovingPatchRequestToStaticNode = true;
 
@@ -632,7 +633,7 @@ IActor* CreateBlobStorageGroupPutRequest(const TIntrusivePtr<TBlobStorageGroupIn
     ui64 cookie, NWilson::TTraceId traceId, bool timeStatsEnabled,
     TDiskResponsivenessTracker::TPerDiskStatsPtr stats,
     TMaybe<TGroupStat::EKind> latencyQueueKind, TInstant now, TIntrusivePtr<TStoragePoolCounters> &storagePoolCounters,
-    bool enableRequestMod3x3ForMinLatecy);
+    bool enableRequestMod3x3ForMinLatecy, bool disableTacticMinLatencyForM3Dc);
 
 IActor* CreateBlobStorageGroupPutRequest(const TIntrusivePtr<TBlobStorageGroupInfo> &info,
     const TIntrusivePtr<TGroupQueues> &state,
@@ -642,7 +643,7 @@ IActor* CreateBlobStorageGroupPutRequest(const TIntrusivePtr<TBlobStorageGroupIn
     TDiskResponsivenessTracker::TPerDiskStatsPtr stats,
     TMaybe<TGroupStat::EKind> latencyQueueKind, TInstant now, TIntrusivePtr<TStoragePoolCounters> &storagePoolCounters,
     NKikimrBlobStorage::EPutHandleClass handleClass, TEvBlobStorage::TEvPut::ETactic tactic,
-    bool enableRequestMod3x3ForMinLatecy);
+    bool enableRequestMod3x3ForMinLatecy, bool disableTacticMinLatencyForM3Dc);
 
 IActor* CreateBlobStorageGroupGetRequest(const TIntrusivePtr<TBlobStorageGroupInfo> &info,
     const TIntrusivePtr<TGroupQueues> &state, const TActorId &source,
@@ -713,9 +714,9 @@ IActor* CreateBlobStorageGroupEjectedProxy(ui32 groupId, TIntrusivePtr<TDsProxyN
 IActor* CreateBlobStorageGroupProxyConfigured(TIntrusivePtr<TBlobStorageGroupInfo>&& info,
     bool forceWaitAllDrives, TIntrusivePtr<TDsProxyNodeMon> &nodeMon,
     TIntrusivePtr<TStoragePoolCounters>&& storagePoolCounters, const TControlWrapper &enablePutBatching,
-    const TControlWrapper &enableVPatch);
+    const TControlWrapper &enableVPatch, const TControlWrapper &disableTacticMinLatencyForM3Dc);
 
 IActor* CreateBlobStorageGroupProxyUnconfigured(ui32 groupId, TIntrusivePtr<TDsProxyNodeMon> &nodeMon,
-    const TControlWrapper &enablePutBatching, const TControlWrapper &enableVPatch);
+    const TControlWrapper &enablePutBatching, const TControlWrapper &enableVPatch, const TControlWrapper &disableTacticMinLatencyForM3Dc);
 
 }//NKikimr

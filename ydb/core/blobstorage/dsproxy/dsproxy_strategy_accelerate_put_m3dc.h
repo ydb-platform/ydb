@@ -15,15 +15,17 @@ public:
 
     const TEvBlobStorage::TEvPut::ETactic Tactic;
     const bool EnableRequestMod3x3ForMinLatecy;
+    const bool DisableTacticMinLatencyForM3Dc;
 
-    TAcceleratePut3dcStrategy(TEvBlobStorage::TEvPut::ETactic tactic, bool enableRequestMod3x3ForMinLatecy)
+    TAcceleratePut3dcStrategy(TEvBlobStorage::TEvPut::ETactic tactic, bool enableRequestMod3x3ForMinLatecy, bool disableTacticMinLatencyForM3Dc)
         : Tactic(tactic)
         , EnableRequestMod3x3ForMinLatecy(enableRequestMod3x3ForMinLatecy)
+        , DisableTacticMinLatencyForM3Dc(disableTacticMinLatencyForM3Dc)
     {}
 
     ui8 PreferredReplicasPerRealm(bool isDegraded) const {
         // calculate the least number of replicas we have to provide per each realm
-        if (Tactic == TEvBlobStorage::TEvPut::TacticMinLatency) {
+        if (!DisableTacticMinLatencyForM3Dc && Tactic == TEvBlobStorage::TEvPut::TacticMinLatency) {
             return EnableRequestMod3x3ForMinLatecy ? 3 : 2;
         }
         return isDegraded ? 2 : 1;

@@ -6,7 +6,7 @@ namespace NKikimr {
 
     TBlobStorageGroupProxy::TBlobStorageGroupProxy(TIntrusivePtr<TBlobStorageGroupInfo>&& info, bool forceWaitAllDrives,
             TIntrusivePtr<TDsProxyNodeMon> &nodeMon, TIntrusivePtr<TStoragePoolCounters>&& storagePoolCounters,
-            const TControlWrapper &enablePutBatching, const TControlWrapper &enableVPatch)
+            const TControlWrapper &enablePutBatching, const TControlWrapper &enableVPatch, const TControlWrapper &disableTacticMinLatencyForM3Dc)
         : GroupId(info->GroupID)
         , Info(std::move(info))
         , Topology(Info->PickTopology())
@@ -16,34 +16,36 @@ namespace NKikimr {
         , ForceWaitAllDrives(forceWaitAllDrives)
         , EnablePutBatching(enablePutBatching)
         , EnableVPatch(enableVPatch)
+        , DisableTacticMinLatencyForM3Dc(disableTacticMinLatencyForM3Dc)
     {}
 
     TBlobStorageGroupProxy::TBlobStorageGroupProxy(ui32 groupId, bool isEjected, TIntrusivePtr<TDsProxyNodeMon> &nodeMon,
-            const TControlWrapper &enablePutBatching, const TControlWrapper &enableVPatch)
+            const TControlWrapper &enablePutBatching, const TControlWrapper &enableVPatch, const TControlWrapper &disableTacticMinLatencyForM3Dc)
         : GroupId(groupId)
         , NodeMon(nodeMon)
         , IsEjected(isEjected)
         , ForceWaitAllDrives(false)
         , EnablePutBatching(enablePutBatching)
         , EnableVPatch(enableVPatch)
+        , DisableTacticMinLatencyForM3Dc(disableTacticMinLatencyForM3Dc)
     {}
 
     IActor* CreateBlobStorageGroupEjectedProxy(ui32 groupId, TIntrusivePtr<TDsProxyNodeMon> &nodeMon) {
         return new TBlobStorageGroupProxy(groupId, true, nodeMon, TControlWrapper(false, false, true),
-                TControlWrapper(false, false, true));
+                TControlWrapper(false, false, true), TControlWrapper(false, false, true));
     }
 
     IActor* CreateBlobStorageGroupProxyConfigured(TIntrusivePtr<TBlobStorageGroupInfo>&& info, bool forceWaitAllDrives,
             TIntrusivePtr<TDsProxyNodeMon> &nodeMon, TIntrusivePtr<TStoragePoolCounters>&& storagePoolCounters,
-            const TControlWrapper &enablePutBatching, const TControlWrapper &enableVPatch) {
+            const TControlWrapper &enablePutBatching, const TControlWrapper &enableVPatch, const TControlWrapper &disableTacticMinLatencyForM3Dc) {
         Y_ABORT_UNLESS(info);
         return new TBlobStorageGroupProxy(std::move(info), forceWaitAllDrives, nodeMon, std::move(storagePoolCounters),
-                enablePutBatching, enableVPatch);
+                enablePutBatching, enableVPatch, disableTacticMinLatencyForM3Dc);
     }
 
     IActor* CreateBlobStorageGroupProxyUnconfigured(ui32 groupId, TIntrusivePtr<TDsProxyNodeMon> &nodeMon,
-            const TControlWrapper &enablePutBatching, const TControlWrapper &enableVPatch) {
-        return new TBlobStorageGroupProxy(groupId, false, nodeMon, enablePutBatching, enableVPatch);
+            const TControlWrapper &enablePutBatching, const TControlWrapper &enableVPatch, const TControlWrapper &disableTacticMinLatencyForM3Dc) {
+        return new TBlobStorageGroupProxy(groupId, false, nodeMon, enablePutBatching, enableVPatch, disableTacticMinLatencyForM3Dc);
     }
 
     NActors::NLog::EPriority PriorityForStatusOutbound(NKikimrProto::EReplyStatus status) {

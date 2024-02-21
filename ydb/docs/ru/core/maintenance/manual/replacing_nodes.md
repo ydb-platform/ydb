@@ -8,7 +8,7 @@
 2. Подготовить команду DefineBox, которая описывает ресурсы кластера, в которой для ресурсов заменяемого узла будет добавлен элемент `EnforcedNodeId: <NodeId>`.
 3. Выполнить эту команду.
 4. Заменить FQDN в списке hosts в cluster.yaml.
-5. Выполнить [rolling restart](../maintenance-without-outages.md#rolling-restart).
+5. Выполнить rolling restart.
 6. Убрать из DefineBox поле EnforcedNodeId и заменить Fqdn на новое название узла.
 7. Выполнить DefineBox с новыми значениями.
 
@@ -66,7 +66,7 @@ DefineBox {
   location: {unit: 34567, data_center: MYDC, rack: r3}
 ```
 
-Затем делаем [rolling restart](../maintenance-without-outages.md#rolling-restart) кластера.
+Затем делаем rolling restart кластера.
 
 И затем делаем второй раз скорректированный DefineBox:
 

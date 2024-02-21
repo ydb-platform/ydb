@@ -51,9 +51,18 @@
     }
     
     provider "ydb" {
-      token = ""
+      token = "<TOKEN>"
+      //OR for static credentials
+      user = "<USER>"
+      password = "<PASSWORD>"
     }
     ```
+
+Где:
+
+* `token` - указывается токен доступа к БД, если он необходим.
+* `user` - имя пользователя для доступа к базе данных в случае использования аутентификации по [логину и паролю](../concepts/auth.md#static-credentials)
+* `password` - пароль для доступа к базе данных в случае использования аутентификации по [логину и паролю](../concepts/auth.md#static-credentials)
 
 ## Использование Terraform провайдера {{ ydb-short-name }} {#work-with-tf}
 
@@ -64,7 +73,6 @@
 * Строка соединения `connection_string` — выражение вида `grpc(s)://HOST:PORT/?database=/database/path`, где `grpc(s)://HOST:PORT/` эндпоинт, а `/database/path` — путь БД.
   Например, `grpcs://example.com:2135?database=/Root/testdb0`.
 * `database_endpoint` - алиас к первому пункту `connection_string` используется при создании/изменении топиков.
-* `token` - указывается токен доступа к БД, если он необходим.
 
 Если на сервере {{ ydb-short-name }} не включена авторизация, то в конфиге БД [config.yaml](../deploy/configuration/config.md) нужно указать:
 
@@ -308,10 +316,6 @@ resource "ydb_table_changefeed" "ydb_table_changefeed" {
 #### Создание таблицы в существующей БД {#example-with-connection-string}
 
 ```tf
-provider "ydb" {
-  token = ""
-}
-
 variable "my_db_connection_string" {
   type = string
   default = "grpc(s)://HOST:PORT/?database=/database/path" # можно передавать другими способами в tf
@@ -360,10 +364,6 @@ resource "ydb_table" "ydb_table" {
 #### Создание таблицы, индекса и потока изменений {#example-with-table}
 
 ```tf
-provider "ydb" {
-  token = ""
-}
-
 resource "ydb_table" "ydb_table" {
   # Путь до таблицы
   path = "path/tf_table" # Создать таблицу по пути `path/tf_table`

@@ -1781,9 +1781,11 @@ void TPersQueue::Handle(TEvPersQueue::TEvStatus::TPtr& ev, const TActorContext& 
     }
 
     ui32 cnt = 0;
-    for (auto& p : Partitions) {
-         cnt += p.second.InitDone;
+    for (auto& [_, partitionInfo] : Partitions) {
+         cnt += partitionInfo.InitDone;
     }
+
+    Cerr << ">>>>> InitDone=" << cnt << Endl;
 
     TActorId ans = CreateStatusProxyActor(TabletID(), ev->Sender, cnt, ev->Cookie, ctx);
     for (auto& p : Partitions) {

@@ -768,6 +768,8 @@ void TPersQueueReadBalancer::RequestTabletIfNeeded(const ui64 tabletId, const TA
                 AggregatedStats.Cookies[tabletId] = cookie;
             }
 
+            LOG_DEBUG(ctx, NKikimrServices::PERSQUEUE_READ_BALANCER, 
+                TStringBuilder() << "Send TEvPersQueue::TEvStatus TabletId: " << tabletId << " Cookie: " << cookie);
             NTabletPipe::SendData(ctx, pipeClient, new TEvPersQueue::TEvStatus("", true), cookie);
         }
         NTabletPipe::SendData(ctx, pipeClient, new TEvPQ::TEvSubDomainStatus(SubDomainOutOfSpace));
@@ -779,7 +781,6 @@ void TPersQueueReadBalancer::Handle(TEvPersQueue::TEvStatusResponse::TPtr& ev, c
     const auto& record = ev->Get()->Record;
     ui64 tabletId = record.GetTabletId();
     ui64 cookie = ev->Cookie;
-
 
     if ((0 != cookie && cookie != AggregatedStats.Cookies[tabletId]) || (0 == cookie && !AggregatedStats.Cookies.contains(tabletId))) {
         return;

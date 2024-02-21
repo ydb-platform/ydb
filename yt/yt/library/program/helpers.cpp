@@ -212,8 +212,8 @@ void ConfigureSingletons(const TSingletonsConfigPtr& config)
 
     NProfiling::EnablePerfCounters();
 
-    if (auto tracingConfig = config->Rpc->Tracing) {
-        NTracing::SetTracingConfig(tracingConfig);
+    if (auto tracingConfig = config->TracingTransport) {
+        NTracing::SetTracingTransportConfig(tracingConfig);
     }
 
     ConfigureTCMalloc(config->TCMalloc);
@@ -257,10 +257,10 @@ void ReconfigureSingletons(const TSingletonsConfigPtr& config, const TSingletons
 
     NRpc::TDispatcher::Get()->Configure(config->RpcDispatcher->ApplyDynamic(dynamicConfig->RpcDispatcher));
 
-    if (dynamicConfig->Rpc->Tracing) {
-        NTracing::SetTracingConfig(dynamicConfig->Rpc->Tracing);
-    } else if (config->Rpc->Tracing) {
-        NTracing::SetTracingConfig(config->Rpc->Tracing);
+    if (dynamicConfig->TracingTransport) {
+        NTracing::SetTracingTransportConfig(dynamicConfig->TracingTransport);
+    } else if (config->TracingTransport) {
+        NTracing::SetTracingTransportConfig(config->TracingTransport);
     }
 
     if (dynamicConfig->TCMalloc) {

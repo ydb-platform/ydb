@@ -66,6 +66,11 @@
   includes:
   - cuda/std/cassert
   - cuda/std/cmath
+  - cuda/std/cstddef
   - cuda/std/cstdint
+  - cuda/std/limits
+  - cuda/std/tuple
+  - cuda/std/type_traits
   - cuda/std/utility
+  - cuda_fp8.h
   - mma.h

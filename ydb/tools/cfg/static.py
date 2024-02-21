@@ -1121,7 +1121,13 @@ class StaticConfigGenerator(object):
 
     def __generate_tracing_txt(self):
         def get_selectors(selectors):
-            return config_pb2.TTracingConfig.TSelectors()
+            selectors_pb = config_pb2.TTracingConfig.TSelectors()
+
+            request_type = selectors["request_type"]
+            if request_type is not None:
+                selectors_pb.RequestType = request_type
+
+            return selectors_pb
 
         def get_sampling_scope(sampling):
             sampling_scope_pb = config_pb2.TTracingConfig.TSamplingScope()

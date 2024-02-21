@@ -5,7 +5,6 @@ LIBRARY()
 LICENSE(
     Apache-2.0 AND
     Apache-2.0 WITH LLVM-exception AND
-    BSD-2-Clause AND
     BSL-1.0 AND
     MIT AND
     NCSA AND
@@ -16,7 +15,7 @@ LICENSE_TEXTS(.yandex_meta/licenses.list.txt)
 
 VERSION(2023-06-02)
 
-ORIGINAL_SOURCE(https://github.com/llvm/llvm-project/archive/185b81e034ba60081023b6e59504dfffb560f3e3.tar.gz)
+ORIGINAL_SOURCE(https://github.com/llvm/llvm-project/archive/308c816de5a47dd7d08a29f91b68381b45ed3552.tar.gz)
 
 ADDINCL(
     GLOBAL contrib/libs/cxxsupp/libcxx/include
@@ -214,6 +213,7 @@ ENDIF()
 
 SRCS(
     src/algorithm.cpp
+    src/algorithm_old.cpp
     src/any.cpp
     src/atomic.cpp
     src/barrier.cpp
@@ -222,10 +222,13 @@ SRCS(
     src/chrono.cpp
     src/condition_variable.cpp
     src/condition_variable_destructor.cpp
-    src/debug.cpp
     src/exception.cpp
+    src/filesystem/directory_entry.cpp
     src/filesystem/directory_iterator.cpp
+    src/filesystem/filesystem_clock.cpp
+    src/filesystem/filesystem_error.cpp
     src/filesystem/operations.cpp
+    src/filesystem/path.cpp
     src/functional.cpp
     src/future.cpp
     src/hash.cpp
@@ -239,6 +242,7 @@ SRCS(
     src/mutex.cpp
     src/mutex_destructor.cpp
     src/optional.cpp
+    src/print.cpp
     src/random.cpp
     src/random_shuffle.cpp
     src/regex.cpp
@@ -252,24 +256,17 @@ SRCS(
     src/system_error.cpp
     src/thread.cpp
     src/typeinfo.cpp
-    src/utility.cpp
     src/valarray.cpp
     src/variant.cpp
     src/vector.cpp
     src/verbose_abort.cpp
 )
 
-IF (NOT GCC)
-    # compiling src/format.cpp requires -std=c++20,
-    # yet our GCC version it too auld for this.
-    SRCS(
-        src/format.cpp
-    )
-ENDIF()
-
 IF (NOT OS_WINDOWS)
     SRCS(
         src/new.cpp
+        src/new_handler.cpp
+        src/new_helpers.cpp
     )
 ENDIF()
 

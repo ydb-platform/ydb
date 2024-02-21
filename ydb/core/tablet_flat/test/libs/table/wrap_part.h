@@ -15,14 +15,25 @@ namespace NTest {
 
     template<EDirection Direction>
     struct TWrapPartImpl {
-        TWrapPartImpl(const TPartEggs &eggs, TIntrusiveConstPtr<TSlices> slices = nullptr,
-                    bool defaults = true)
+        TWrapPartImpl(const TPartEggs &eggs, TRun& run, bool defaults = true)
             : Eggs(eggs)
             , Scheme(eggs.Scheme)
             , Remap_(TRemap::Full(*Scheme))
             , Defaults(defaults)
             , State(Remap_.Size())
-            , Run(*Scheme->Keys)
+            , Run_(*Scheme->Keys) // unused
+            , Run(run)
+        {
+        }
+        
+        TWrapPartImpl(const TPartEggs &eggs, TIntrusiveConstPtr<TSlices> slices = nullptr, bool defaults = true)
+            : Eggs(eggs)
+            , Scheme(eggs.Scheme)
+            , Remap_(TRemap::Full(*Scheme))
+            , Defaults(defaults)
+            , State(Remap_.Size())
+            , Run_(*Scheme->Keys)
+            , Run(Run_)
         {
             if (slices || Eggs.Parts.size() == 1) {
                 /* Allowed to override part slice only for lone eggs */
@@ -45,6 +56,8 @@ namespace NTest {
         }
 
     public:
+        using TCells = TArrayRef<const TCell>;
+
         explicit operator bool() const noexcept
         {
             return Iter && Iter->IsValid() && Ready == EReady::Data;
@@ -69,7 +82,11 @@ namespace NTest {
         EReady Seek(TRawVals key_, ESeek seek) noexcept
         {
             const TCelled key(key_, *Scheme->Keys, false);
+            return Seek(key, seek);
+        }
 
+        EReady Seek(const TCells key, ESeek seek) noexcept
+        {
             if constexpr (Direction == EDirection::Reverse) {
                 Ready = Iter->SeekReverse(key, seek);
             } else {
@@ -102,15 +119,6 @@ namespace NTest {
             Y_ABORT_UNLESS(Ready == EReady::Data);
 
             return Iter->GetRowVersion();
-        }
-
-        EReady DoIterNext() noexcept
-        {
-            if constexpr (Direction == EDirection::Reverse) {
-                return Iter->Prev();
-            } else {
-                return Iter->Next();
-            }
         }
 
         void StopAfter(TArrayRef<const TCell> key) {
@@ -147,7 +155,11 @@ namespace NTest {
             TDbTupleRef key = Iter->GetKey();
 
             if (StopKey) {
-                auto cmp = CompareTypedCellVectors(key.Cells().data(), StopKey.data(), Scheme->Keys->Types.data(), StopKey.size());
+                auto cmp = CompareTypedCellVectors(key.Cells().data(), StopKey.data(), Scheme->Keys->Types.data(), Min(key.Cells().size(), StopKey.size()));
+                if (cmp == 0 && key.Cells().size() != StopKey.size()) {
+                    // smaller key is filled with +inf => always bigger
+                    cmp = key.Cells().size() < StopKey.size() ? +1 : -1;
+                }
                 if (Direction == EDirection::Forward && cmp > 0 || Direction == EDirection::Reverse && cmp < 0) {
                    return EReady::Gone;
                 }
@@ -167,10 +179,20 @@ namespace NTest {
         const bool Defaults = true;
 
     private:
+        EReady DoIterNext() noexcept
+        {
+            if constexpr (Direction == EDirection::Reverse) {
+                return Iter->Prev();
+            } else {
+                return Iter->Next();
+            }
+        }
+
         EReady Ready = EReady::Gone;
         bool NoBlobs = false;
         TRowState State;
-        TRun Run;
+        TRun Run_;
+        TRun& Run;
         THolder<TRunIt> Iter;
         TOwnedCellVec StopKey;
     };

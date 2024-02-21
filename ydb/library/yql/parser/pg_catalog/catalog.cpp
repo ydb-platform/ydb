@@ -73,6 +73,12 @@ bool IsCompatibleTo(ui32 actualTypeId, ui32 expectedTypeId, const TTypes& types)
         return actualDescPtr->ArrayTypeId == actualDescPtr->TypeId;
     }
 
+    if (expectedTypeId == AnyNonArrayOid) {
+        const auto& actualDescPtr = types.FindPtr(actualTypeId);
+        Y_ENSURE(actualDescPtr);
+        return actualDescPtr->ArrayTypeId != actualDescPtr->TypeId;
+    }
+
     return false;
 }
 
@@ -753,6 +759,8 @@ public:
             }
         } else if (key == "agginitval") {
             LastAggregation.InitValue = value;
+        } else if (key == "aggfinalextra") {
+            LastAggregation.FinalExtra = (value == "t");;
         }
     }
 
@@ -1920,7 +1928,6 @@ bool IsCoercible(ui32 fromTypeId, ui32 toTypeId, ECoercionCode coercionType, con
     if (toTypeId == AnyOid) {
         return true;
     }
-
     //TODO: support polymorphic types
 
     if (fromTypeId == UnknownOid) {
@@ -1941,6 +1948,12 @@ bool IsCoercible(ui32 fromTypeId, ui32 toTypeId, ECoercionCode coercionType, con
         const auto& actualDescPtr = catalog.Types.FindPtr(fromTypeId);
         Y_ENSURE(actualDescPtr);
         return actualDescPtr->ArrayTypeId == actualDescPtr->TypeId;
+    }
+
+    if (toTypeId == AnyNonArrayOid) {
+        const auto& actualDescPtr = catalog.Types.FindPtr(fromTypeId);
+        Y_ENSURE(actualDescPtr);
+        return actualDescPtr->ArrayTypeId != actualDescPtr->TypeId;
     }
 
     return false;

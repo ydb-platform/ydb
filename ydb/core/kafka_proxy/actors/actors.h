@@ -10,6 +10,11 @@
 
 namespace NKafka {
 
+static constexpr int ProxyNodeId = 1;
+static constexpr char UnderlayPrefix[] = "u-";
+
+static_assert(sizeof(UnderlayPrefix) == 3);
+
 enum EAuthSteps {
     WAIT_HANDSHAKE,
     WAIT_AUTH,

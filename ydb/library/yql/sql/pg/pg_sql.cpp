@@ -2401,8 +2401,11 @@ public:
     [[nodiscard]]
     bool ParseTransactionStmt(const TransactionStmt* value) {
         switch (value->kind) {
-        case TRANS_STMT_BEGIN: [[fallthrough]] ;
+        case TRANS_STMT_BEGIN:
         case TRANS_STMT_START:
+        case TRANS_STMT_SAVEPOINT:
+        case TRANS_STMT_RELEASE:
+        case TRANS_STMT_ROLLBACK_TO:
             return true;
         case TRANS_STMT_COMMIT:
             Statements.push_back(L(A("let"), A("world"), L(A("CommitAll!"),
@@ -2549,7 +2552,11 @@ public:
         return true;
     }
 
-    TString ResolveCluster(const TStringBuf schemaname) {
+    TString ResolveCluster(const TStringBuf schemaname, TString name) {
+        if (NYql::NPg::GetStaticColumns().contains(NPg::TTableInfoKey{"pg_catalog", name})) {
+            return "pg_catalog";
+        }
+
         if (schemaname == "public") {
             return "";
         }
@@ -2603,7 +2610,7 @@ public:
         return {};
       }
 
-      const auto cluster = ResolveCluster(schemaname);
+      const auto cluster = ResolveCluster(schemaname, TString(relname));
       const auto sinkOrSource = BuildClusterSinkOrSourceExpression(isSink, cluster);
       const auto key = BuildTableKeyExpression(relname, cluster, isScheme);
       return {sinkOrSource, key};
@@ -2630,7 +2637,7 @@ public:
             return {};
         }
 
-        const auto cluster = ResolveCluster(schemaname);
+        const auto cluster = ResolveCluster(schemaname, TString(objectName));
         const auto sinkOrSource = BuildClusterSinkOrSourceExpression(true, cluster);
         const auto key = BuildPgObjectExpression(objectName, pgObjectType);
         return {sinkOrSource, key};
@@ -3311,6 +3318,9 @@ public:
             break;
         case EXPR_SUBLINK:
             linkType = "expr";
+            break;
+        case ARRAY_SUBLINK:
+            linkType = "array";
             break;
         default:
             AddError(TStringBuilder() << "SublinkExpr: unsupported link type: " << (int)value->subLinkType);

@@ -992,56 +992,58 @@ SELECT 'hawkeye' NOT LIKE 'indio%' AS "true";
 <sql-statement>
 SELECT 'hawkeye' LIKE 'h%eye' AS "true";
 </sql-statement>
-VERIFY failed (2024-02-12T15:29:38.490512Z): 
+VERIFY failed (2024-02-18T13:38:24.295369+0300): 
   util/generic/ptr.h:110
   operator->(): requirement ptr failed
-NPrivate::InternalPanicImpl(int, char const*, char const*, int, int, int, TBasicStringBuf<char, std::__y1::char_traits<char> >, char const*, unsigned long)+600 (0x9628AF8)
-NPrivate::Panic(NPrivate::TStaticBuf const&, int, char const*, char const*, char const*, ...)+285 (0x961EA0D)
-NYql::NTypeAnnImpl::TExtContext::LoadUdfMetadata(TVector<NYql::IUdfResolver::TFunction*, std::__y1::allocator<NYql::IUdfResolver::TFunction*> > const&)+901 (0xBC09405)
-NYql::NTypeAnnImpl::UdfWrapper(TIntrusivePtr<NYql::TExprNode, TDefaultIntrusivePtrOps<NYql::TExprNode> > const&, TIntrusivePtr<NYql::TExprNode, TDefaultIntrusivePtrOps<NYql::TExprNode> >&, NYql::NTypeAnnImpl::TExtContext&)+4791 (0xBC4DA17)
-NYql::NTypeAnnImpl::TExtCallableTypeAnnotationTransformer::ProcessCore(TIntrusivePtr<NYql::TExprNode, TDefaultIntrusivePtrOps<NYql::TExprNode> > const&, TIntrusivePtr<NYql::TExprNode, TDefaultIntrusivePtrOps<NYql::TExprNode> >&, NYql::TExprContext&)+269 (0xBCB6D6D)
-NYql::TCallableTransformerBase<NYql::NTypeAnnImpl::TExtCallableTypeAnnotationTransformer>::DoTransform(TIntrusivePtr<NYql::TExprNode, TDefaultIntrusivePtrOps<NYql::TExprNode> >, TIntrusivePtr<NYql::TExprNode, TDefaultIntrusivePtrOps<NYql::TExprNode> >&, NYql::TExprContext&)+320 (0xBCB64B0)
-NYql::TGraphTransformerBase::Transform(TIntrusivePtr<NYql::TExprNode, TDefaultIntrusivePtrOps<NYql::TExprNode> >, TIntrusivePtr<NYql::TExprNode, TDefaultIntrusivePtrOps<NYql::TExprNode> >&, NYql::TExprContext&)+152 (0xA154F88)
-??+0 (0xBDC2154)
-??+0 (0xBDC168D)
-??+0 (0xBDC120E)
-??+0 (0xBDC168D)
-??+0 (0xBDC168D)
-??+0 (0xBDC168D)
-??+0 (0xBDC168D)
-??+0 (0xBDC228E)
-??+0 (0xBDC168D)
-??+0 (0xBDC120E)
-??+0 (0xBDC120E)
-??+0 (0xBDC120E)
-??+0 (0xBDC168D)
-??+0 (0xBDC120E)
-??+0 (0xBDC120E)
-??+0 (0xBDC120E)
-??+0 (0xBDC168D)
-??+0 (0xBDC168D)
-??+0 (0xBDC168D)
-??+0 (0xBDBF6E7)
-NYql::TGraphTransformerBase::Transform(TIntrusivePtr<NYql::TExprNode, TDefaultIntrusivePtrOps<NYql::TExprNode> >, TIntrusivePtr<NYql::TExprNode, TDefaultIntrusivePtrOps<NYql::TExprNode> >&, NYql::TExprContext&)+152 (0xA154F88)
-??+0 (0xA155695)
-NYql::TGraphTransformerBase::Transform(TIntrusivePtr<NYql::TExprNode, TDefaultIntrusivePtrOps<NYql::TExprNode> >, TIntrusivePtr<NYql::TExprNode, TDefaultIntrusivePtrOps<NYql::TExprNode> >&, NYql::TExprContext&)+152 (0xA154F88)
-NYql::AsyncTransformStepImpl(NYql::IGraphTransformer&, TIntrusivePtr<NYql::TExprNode, TDefaultIntrusivePtrOps<NYql::TExprNode> >&, NYql::TExprContext&, bool, bool, TBasicStringBuf<char, std::__y1::char_traits<char> > const&)+290 (0xA153A62)
-NYql::AsyncTransform(NYql::IGraphTransformer&, TIntrusivePtr<NYql::TExprNode, TDefaultIntrusivePtrOps<NYql::TExprNode> >&, NYql::TExprContext&, bool)+66 (0xA1543C2)
-NYql::TProgram::AsyncTransformWithFallback(bool)+81 (0xB07D941)
-??+0 (0xB08EF10)
-NYql::TProgram::RunAsync(TBasicString<char, std::__y1::char_traits<char> > const&, IOutputStream*, IOutputStream*, IOutputStream*, bool)+3035 (0xB07B92B)
-??+0 (0xB078A7A)
-NYql::TProgram::Run(TBasicString<char, std::__y1::char_traits<char> > const&, IOutputStream*, IOutputStream*, IOutputStream*, bool)+129 (0xB07AD11)
-Main(int, char**)+4719 (0x9507F7F)
-main+338 (0x950A1A2)
-__libc_start_main+243 (0x7F6F09D6B083)
-??+0 (0x949E029)
-??? at ???:0:0 
+NPrivate::InternalPanicImpl(int, char const*, char const*, int, int, int, TBasicStringBuf<char, std::__y1::char_traits<char> >, char const*, unsigned long)+600 (0x98F4308)
+NPrivate::Panic(NPrivate::TStaticBuf const&, int, char const*, char const*, char const*, ...)+285 (0x98EA21D)
+NYql::NTypeAnnImpl::TExtContext::LoadUdfMetadata(TVector<NYql::IUdfResolver::TFunction*, std::__y1::allocator<NYql::IUdfResolver::TFunction*> > const&)+901 (0xCA45875)
+NYql::NTypeAnnImpl::UdfWrapper(TIntrusivePtr<NYql::TExprNode, TDefaultIntrusivePtrOps<NYql::TExprNode> > const&, TIntrusivePtr<NYql::TExprNode, TDefaultIntrusivePtrOps<NYql::TExprNode> >&, NYql::NTypeAnnImpl::TExtContext&)+4791 (0xCA89E97)
+NYql::NTypeAnnImpl::TExtCallableTypeAnnotationTransformer::ProcessCore(TIntrusivePtr<NYql::TExprNode, TDefaultIntrusivePtrOps<NYql::TExprNode> > const&, TIntrusivePtr<NYql::TExprNode, TDefaultIntrusivePtrOps<NYql::TExprNode> >&, NYql::TExprContext&)+269 (0xCAF3A8D)
+NYql::TCallableTransformerBase<NYql::NTypeAnnImpl::TExtCallableTypeAnnotationTransformer>::DoTransform(TIntrusivePtr<NYql::TExprNode, TDefaultIntrusivePtrOps<NYql::TExprNode> >, TIntrusivePtr<NYql::TExprNode, TDefaultIntrusivePtrOps<NYql::TExprNode> >&, NYql::TExprContext&)+320 (0xCAF31D0)
+NYql::TGraphTransformerBase::Transform(TIntrusivePtr<NYql::TExprNode, TDefaultIntrusivePtrOps<NYql::TExprNode> >, TIntrusivePtr<NYql::TExprNode, TDefaultIntrusivePtrOps<NYql::TExprNode> >&, NYql::TExprContext&)+152 (0xAFFFD28)
+??+0 (0xCBFF174)
+??+0 (0xCBFE6AD)
+??+0 (0xCBFE22E)
+??+0 (0xCBFE6AD)
+??+0 (0xCBFE6AD)
+??+0 (0xCBFE6AD)
+??+0 (0xCBFE6AD)
+??+0 (0xCBFF2AE)
+??+0 (0xCBFE6AD)
+??+0 (0xCBFE22E)
+??+0 (0xCBFE22E)
+??+0 (0xCBFE22E)
+??+0 (0xCBFE6AD)
+??+0 (0xCBFE22E)
+??+0 (0xCBFE22E)
+??+0 (0xCBFE22E)
+??+0 (0xCBFE6AD)
+??+0 (0xCBFE6AD)
+??+0 (0xCBFE6AD)
+??+0 (0xCBFC707)
+NYql::TGraphTransformerBase::Transform(TIntrusivePtr<NYql::TExprNode, TDefaultIntrusivePtrOps<NYql::TExprNode> >, TIntrusivePtr<NYql::TExprNode, TDefaultIntrusivePtrOps<NYql::TExprNode> >&, NYql::TExprContext&)+152 (0xAFFFD28)
+??+0 (0xB000435)
+NYql::TGraphTransformerBase::Transform(TIntrusivePtr<NYql::TExprNode, TDefaultIntrusivePtrOps<NYql::TExprNode> >, TIntrusivePtr<NYql::TExprNode, TDefaultIntrusivePtrOps<NYql::TExprNode> >&, NYql::TExprContext&)+152 (0xAFFFD28)
+NYql::AsyncTransformStepImpl(NYql::IGraphTransformer&, TIntrusivePtr<NYql::TExprNode, TDefaultIntrusivePtrOps<NYql::TExprNode> >&, NYql::TExprContext&, bool, bool, TBasicStringBuf<char, std::__y1::char_traits<char> > const&)+290 (0xAFFE802)
+NYql::AsyncTransform(NYql::IGraphTransformer&, TIntrusivePtr<NYql::TExprNode, TDefaultIntrusivePtrOps<NYql::TExprNode> >&, NYql::TExprContext&, bool)+66 (0xAFFF162)
+NYql::TProgram::AsyncTransformWithFallback(bool)+81 (0xBF2B5E1)
+??+0 (0xBF3CBB0)
+NYql::TProgram::RunAsync(TBasicString<char, std::__y1::char_traits<char> > const&, IOutputStream*, IOutputStream*, IOutputStream*, bool)+3035 (0xBF295CB)
+??+0 (0xBF2671A)
+NYql::TProgram::Run(TBasicString<char, std::__y1::char_traits<char> > const&, IOutputStream*, IOutputStream*, IOutputStream*, bool)+129 (0xBF289B1)
+Main(int, char**)+5795 (0x97D20C3)
+main+338 (0x97D45B2)
+??+0 (0x7F8457E29D90)
+__libc_start_main+128 (0x7F8457E29E40)
+??+0 (0x9766029)
+__GI_raise at ../sysdeps/posix/raise.c:26:0 
+__GI_abort at ./stdlib/abort.c:79:0 
 NPrivate::InternalPanicImpl(int, char const*, char const*, int, int, int, TBasicStringBuf<char, std::__y1::char_traits<char> >, char const*, unsigned long) at /-S/util/system/yassert.cpp:90:0 
 NPrivate::Panic(NPrivate::TStaticBuf const&, int, char const*, char const*, char const*, ...) at /-S/util/system/yassert.cpp:55:0 
 TPointerCommon<TIntrusiveConstPtr<NYql::IUdfResolver, TDefaultIntrusivePtrOps<NYql::IUdfResolver> >, NYql::IUdfResolver const>::operator->() const at /-S/util/generic/ptr.h:110:0 
 NYql::NTypeAnnImpl::TExtContext::LoadUdfMetadata(TVector<NYql::IUdfResolver::TFunction*, std::__y1::allocator<NYql::IUdfResolver::TFunction*> > const&) at /-S/ydb/library/yql/core/type_ann/type_ann_core.cpp:454:0 
-NYql::NTypeAnnImpl::UdfWrapper(TIntrusivePtr<NYql::TExprNode, TDefaultIntrusivePtrOps<NYql::TExprNode> > const&, TIntrusivePtr<NYql::TExprNode, TDefaultIntrusivePtrOps<NYql::TExprNode> >&, NYql::NTypeAnnImpl::TExtContext&) at /-S/ydb/library/yql/core/type_ann/type_ann_core.cpp:7222:0 
+NYql::NTypeAnnImpl::UdfWrapper(TIntrusivePtr<NYql::TExprNode, TDefaultIntrusivePtrOps<NYql::TExprNode> > const&, TIntrusivePtr<NYql::TExprNode, TDefaultIntrusivePtrOps<NYql::TExprNode> >&, NYql::NTypeAnnImpl::TExtContext&) at /-S/ydb/library/yql/core/type_ann/type_ann_core.cpp:7238:0 
 NYql::NTypeAnnImpl::TExtCallableTypeAnnotationTransformer::ProcessCore(TIntrusivePtr<NYql::TExprNode, TDefaultIntrusivePtrOps<NYql::TExprNode> > const&, TIntrusivePtr<NYql::TExprNode, TDefaultIntrusivePtrOps<NYql::TExprNode> >&, NYql::TExprContext&) at /-S/ydb/library/yql/core/type_ann/type_ann_core.cpp:0:0 
 NYql::TCallableTransformerBase<NYql::NTypeAnnImpl::TExtCallableTypeAnnotationTransformer>::DoTransform(TIntrusivePtr<NYql::TExprNode, TDefaultIntrusivePtrOps<NYql::TExprNode> >, TIntrusivePtr<NYql::TExprNode, TDefaultIntrusivePtrOps<NYql::TExprNode> >&, NYql::TExprContext&) at /-S/ydb/library/yql/core/yql_callable_transform.h:46:0 
 NYql::TGraphTransformerBase::Transform(TIntrusivePtr<NYql::TExprNode, TDefaultIntrusivePtrOps<NYql::TExprNode> >, TIntrusivePtr<NYql::TExprNode, TDefaultIntrusivePtrOps<NYql::TExprNode> >&, NYql::TExprContext&) at /-S/ydb/library/yql/core/yql_graph_transformer.h:160:0 
@@ -1072,17 +1074,18 @@ NYql::(anonymous namespace)::TCompositeGraphTransformer::DoTransform(TIntrusiveP
 NYql::TGraphTransformerBase::Transform(TIntrusivePtr<NYql::TExprNode, TDefaultIntrusivePtrOps<NYql::TExprNode> >, TIntrusivePtr<NYql::TExprNode, TDefaultIntrusivePtrOps<NYql::TExprNode> >&, NYql::TExprContext&) at /-S/ydb/library/yql/core/yql_graph_transformer.h:160:0 
 NYql::AsyncTransformStepImpl(NYql::IGraphTransformer&, TIntrusivePtr<NYql::TExprNode, TDefaultIntrusivePtrOps<NYql::TExprNode> >&, NYql::TExprContext&, bool, bool, TBasicStringBuf<char, std::__y1::char_traits<char> > const&) at /-S/ydb/library/yql/core/yql_graph_transformer.cpp:312:0 
 NYql::AsyncTransform(NYql::IGraphTransformer&, TIntrusivePtr<NYql::TExprNode, TDefaultIntrusivePtrOps<NYql::TExprNode> >&, NYql::TExprContext&, bool) at /-S/ydb/library/yql/core/yql_graph_transformer.cpp:364:0 
-NYql::TProgram::AsyncTransformWithFallback(bool) at /-S/ydb/library/yql/core/facade/yql_facade.cpp:1149:0 
-NYql::TProgram::RunAsync(TBasicString<char, std::__y1::char_traits<char> > const&, IOutputStream*, IOutputStream*, IOutputStream*, bool)::$_0::operator()(NThreading::TFuture<void> const&) const at /-S/ydb/library/yql/core/facade/yql_facade.cpp:1023:0 
-NThreading::TFuture<NThreading::NImpl::TFutureType<NThreading::NImpl::TFutureCallResult<NYql::TProgram::RunAsync(TBasicString<char, std::__y1::char_traits<char> > const&, IOutputStream*, IOutputStream*, IOutputStream*, bool)::$_0, void>::TType>::TType> NThreading::TFuture<void>::Apply<NYql::TProgram::RunAsync(TBasicString<char, std::__y1::char_traits<char> > const&, IOutputStream*, IOutputStream*, IOutputStream*, bool)::$_0>(NYql::TProgram::RunAsync(TBasicString<char, std::__y1::char_traits<char> > const&, IOutputStream*, IOutputStream*, IOutputStream*, bool)::$_0&&) const::'lambda'(NThreading::TFuture<void> const&)::operator()(NThreading::TFuture<void> const&)::'lambda'()::operator()() const at /-S/library/cpp/threading/future/core/future-inl.h:726:0 
-void NThreading::NImpl::SetValue<NYql::IGraphTransformer::TStatus, NThreading::TFuture<NThreading::NImpl::TFutureType<NThreading::NImpl::TFutureCallResult<NYql::TProgram::RunAsync(TBasicString<char, std::__y1::char_traits<char> > const&, IOutputStream*, IOutputStream*, IOutputStream*, bool)::$_0, void>::TType>::TType> NThreading::TFuture<void>::Apply<NYql::TProgram::RunAsync(TBasicString<char, std::__y1::char_traits<char> > const&, IOutputStream*, IOutputStream*, IOutputStream*, bool)::$_0>(NYql::TProgram::RunAsync(TBasicString<char, std::__y1::char_traits<char> > const&, IOutputStream*, IOutputStream*, IOutputStream*, bool)::$_0&&) const::'lambda'(NThreading::TFuture<void> const&)::operator()(NThreading::TFuture<void> const&)::'lambda'()>(NThreading::TPromise<NYql::TProgram::RunAsync(TBasicString<char, std::__y1::char_traits<char> > const&, IOutputStream*, IOutputStream*, IOutputStream*, bool)::$_0>&, NThreading::TFuture<NThreading::NImpl::TFutureType<NThreading::NImpl::TFutureCallResult<NYql::TProgram::RunAsync(TBasicString<char, std::__y1::char_traits<char> > const&, IOutputStream*, IOutputStream*, IOutputStream*, bool)::$_0, void>::TType>::TType> NThreading::TFuture<void>::Apply<NYql::TProgram::RunAsync(TBasicString<char, std::__y1::char_traits<char> > const&, IOutputStream*, IOutputStream*, IOutputStream*, bool)::$_0>(NYql::TProgram::RunAsync(TBasicString<char, std::__y1::char_traits<char> > const&, IOutputStream*, IOutputStream*, IOutputStream*, bool)::$_0&&) const::'lambda'(NThreading::TFuture<void> const&)::operator()(NThreading::TFuture<void> const&)::'lambda'()&&) at /-S/library/cpp/threading/future/core/future-inl.h:486:0 
-NThreading::TFuture<NThreading::NImpl::TFutureType<NThreading::NImpl::TFutureCallResult<NYql::TProgram::RunAsync(TBasicString<char, std::__y1::char_traits<char> > const&, IOutputStream*, IOutputStream*, IOutputStream*, bool)::$_0, void>::TType>::TType> NThreading::TFuture<void>::Apply<NYql::TProgram::RunAsync(TBasicString<char, std::__y1::char_traits<char> > const&, IOutputStream*, IOutputStream*, IOutputStream*, bool)::$_0>(NYql::TProgram::RunAsync(TBasicString<char, std::__y1::char_traits<char> > const&, IOutputStream*, IOutputStream*, IOutputStream*, bool)::$_0&&) const::'lambda'(NThreading::TFuture<void> const&)::operator()(NThreading::TFuture<void> const&) at /-S/library/cpp/threading/future/core/future-inl.h:726:0 
-NThreading::TFuture<void> const& NThreading::TFuture<void>::Subscribe<NThreading::TFuture<NThreading::NImpl::TFutureType<NThreading::NImpl::TFutureCallResult<NYql::TProgram::RunAsync(TBasicString<char, std::__y1::char_traits<char> > const&, IOutputStream*, IOutputStream*, IOutputStream*, bool)::$_0, void>::TType>::TType> NThreading::TFuture<void>::Apply<NYql::TProgram::RunAsync(TBasicString<char, std::__y1::char_traits<char> > const&, IOutputStream*, IOutputStream*, IOutputStream*, bool)::$_0>(NYql::TProgram::RunAsync(TBasicString<char, std::__y1::char_traits<char> > const&, IOutputStream*, IOutputStream*, IOutputStream*, bool)::$_0&&) const::'lambda'(NThreading::TFuture<void> const&)>(NYql::TProgram::RunAsync(TBasicString<char, std::__y1::char_traits<char> > const&, IOutputStream*, IOutputStream*, IOutputStream*, bool)::$_0&&) const at /-S/library/cpp/threading/future/core/future-inl.h:711:0 
-NThreading::TFuture<NThreading::NImpl::TFutureType<NThreading::NImpl::TFutureCallResult<NYql::TProgram::RunAsync(TBasicString<char, std::__y1::char_traits<char> > const&, IOutputStream*, IOutputStream*, IOutputStream*, bool)::$_0, void>::TType>::TType> NThreading::TFuture<void>::Apply<NYql::TProgram::RunAsync(TBasicString<char, std::__y1::char_traits<char> > const&, IOutputStream*, IOutputStream*, IOutputStream*, bool)::$_0>(NYql::TProgram::RunAsync(TBasicString<char, std::__y1::char_traits<char> > const&, IOutputStream*, IOutputStream*, IOutputStream*, bool)::$_0&&) const at /-S/library/cpp/threading/future/core/future-inl.h:725:0 
-NYql::TProgram::RunAsync(TBasicString<char, std::__y1::char_traits<char> > const&, IOutputStream*, IOutputStream*, IOutputStream*, bool) at /-S/ydb/library/yql/core/facade/yql_facade.cpp:1014:0 
-NYql::IGraphTransformer::TStatus NYql::(anonymous namespace)::SyncExecution<TBasicString<char, std::__y1::char_traits<char> > const&, IOutputStream*, IOutputStream*, IOutputStream*, bool, TBasicString<char, std::__y1::char_traits<char> > const&, IOutputStream*&, IOutputStream*&, IOutputStream*&, bool&>(NYql::TProgram*, NThreading::TFuture<NYql::IGraphTransformer::TStatus> (NYql::TProgram::*)(TBasicString<char, std::__y1::char_traits<char> > const&, IOutputStream*, IOutputStream*, IOutputStream*, bool), TBasicString<char, std::__y1::char_traits<char> > const&, IOutputStream*&, IOutputStream*&, IOutputStream*&, bool&) at /-S/ydb/library/yql/core/facade/yql_facade.cpp:69:0 
-NYql::TProgram::Run(TBasicString<char, std::__y1::char_traits<char> > const&, IOutputStream*, IOutputStream*, IOutputStream*, bool) at /-S/ydb/library/yql/core/facade/yql_facade.cpp:949:0 
-Main(int, char**) at /-S/ydb/library/yql/tools/pgrun/pgrun.cpp:1206:0 
-main at /-S/ydb/library/yql/tools/pgrun/pgrun.cpp:1242:0 
-??? at ???:0:0 
+NYql::TProgram::AsyncTransformWithFallback(bool) at /home/marsaly/ydbwork/ydb/ydb/library/yql/core/facade/yql_facade.cpp:1149:0 
+NYql::TProgram::RunAsync(TBasicString<char, std::__y1::char_traits<char> > const&, IOutputStream*, IOutputStream*, IOutputStream*, bool)::$_0::operator()(NThreading::TFuture<void> const&) const at /home/marsaly/ydbwork/ydb/ydb/library/yql/core/facade/yql_facade.cpp:1023:0 
+NThreading::TFuture<NThreading::NImpl::TFutureType<NThreading::NImpl::TFutureCallResult<NYql::TProgram::RunAsync(TBasicString<char, std::__y1::char_traits<char> > const&, IOutputStream*, IOutputStream*, IOutputStream*, bool)::$_0, void>::TType>::TType> NThreading::TFuture<void>::Apply<NYql::TProgram::RunAsync(TBasicString<char, std::__y1::char_traits<char> > const&, IOutputStream*, IOutputStream*, IOutputStream*, bool)::$_0>(NYql::TProgram::RunAsync(TBasicString<char, std::__y1::char_traits<char> > const&, IOutputStream*, IOutputStream*, IOutputStream*, bool)::$_0&&) const::'lambda'(NThreading::TFuture<void> const&)::operator()(NThreading::TFuture<void> const&)::'lambda'()::operator()() const at /home/marsaly/ydbwork/ydb/library/cpp/threading/future/core/future-inl.h:726:0 
+void NThreading::NImpl::SetValue<NYql::IGraphTransformer::TStatus, NThreading::TFuture<NThreading::NImpl::TFutureType<NThreading::NImpl::TFutureCallResult<NYql::TProgram::RunAsync(TBasicString<char, std::__y1::char_traits<char> > const&, IOutputStream*, IOutputStream*, IOutputStream*, bool)::$_0, void>::TType>::TType> NThreading::TFuture<void>::Apply<NYql::TProgram::RunAsync(TBasicString<char, std::__y1::char_traits<char> > const&, IOutputStream*, IOutputStream*, IOutputStream*, bool)::$_0>(NYql::TProgram::RunAsync(TBasicString<char, std::__y1::char_traits<char> > const&, IOutputStream*, IOutputStream*, IOutputStream*, bool)::$_0&&) const::'lambda'(NThreading::TFuture<void> const&)::operator()(NThreading::TFuture<void> const&)::'lambda'()>(NThreading::TPromise<NYql::TProgram::RunAsync(TBasicString<char, std::__y1::char_traits<char> > const&, IOutputStream*, IOutputStream*, IOutputStream*, bool)::$_0>&, NThreading::TFuture<NThreading::NImpl::TFutureType<NThreading::NImpl::TFutureCallResult<NYql::TProgram::RunAsync(TBasicString<char, std::__y1::char_traits<char> > const&, IOutputStream*, IOutputStream*, IOutputStream*, bool)::$_0, void>::TType>::TType> NThreading::TFuture<void>::Apply<NYql::TProgram::RunAsync(TBasicString<char, std::__y1::char_traits<char> > const&, IOutputStream*, IOutputStream*, IOutputStream*, bool)::$_0>(NYql::TProgram::RunAsync(TBasicString<char, std::__y1::char_traits<char> > const&, IOutputStream*, IOutputStream*, IOutputStream*, bool)::$_0&&) const::'lambda'(NThreading::TFuture<void> const&)::operator()(NThreading::TFuture<void> const&)::'lambda'()&&) at /home/marsaly/ydbwork/ydb/library/cpp/threading/future/core/future-inl.h:486:0 
+NThreading::TFuture<NThreading::NImpl::TFutureType<NThreading::NImpl::TFutureCallResult<NYql::TProgram::RunAsync(TBasicString<char, std::__y1::char_traits<char> > const&, IOutputStream*, IOutputStream*, IOutputStream*, bool)::$_0, void>::TType>::TType> NThreading::TFuture<void>::Apply<NYql::TProgram::RunAsync(TBasicString<char, std::__y1::char_traits<char> > const&, IOutputStream*, IOutputStream*, IOutputStream*, bool)::$_0>(NYql::TProgram::RunAsync(TBasicString<char, std::__y1::char_traits<char> > const&, IOutputStream*, IOutputStream*, IOutputStream*, bool)::$_0&&) const::'lambda'(NThreading::TFuture<void> const&)::operator()(NThreading::TFuture<void> const&) at /home/marsaly/ydbwork/ydb/library/cpp/threading/future/core/future-inl.h:726:0 
+NThreading::TFuture<void> const& NThreading::TFuture<void>::Subscribe<NThreading::TFuture<NThreading::NImpl::TFutureType<NThreading::NImpl::TFutureCallResult<NYql::TProgram::RunAsync(TBasicString<char, std::__y1::char_traits<char> > const&, IOutputStream*, IOutputStream*, IOutputStream*, bool)::$_0, void>::TType>::TType> NThreading::TFuture<void>::Apply<NYql::TProgram::RunAsync(TBasicString<char, std::__y1::char_traits<char> > const&, IOutputStream*, IOutputStream*, IOutputStream*, bool)::$_0>(NYql::TProgram::RunAsync(TBasicString<char, std::__y1::char_traits<char> > const&, IOutputStream*, IOutputStream*, IOutputStream*, bool)::$_0&&) const::'lambda'(NThreading::TFuture<void> const&)>(NYql::TProgram::RunAsync(TBasicString<char, std::__y1::char_traits<char> > const&, IOutputStream*, IOutputStream*, IOutputStream*, bool)::$_0&&) const at /home/marsaly/ydbwork/ydb/library/cpp/threading/future/core/future-inl.h:711:0 
+NThreading::TFuture<NThreading::NImpl::TFutureType<NThreading::NImpl::TFutureCallResult<NYql::TProgram::RunAsync(TBasicString<char, std::__y1::char_traits<char> > const&, IOutputStream*, IOutputStream*, IOutputStream*, bool)::$_0, void>::TType>::TType> NThreading::TFuture<void>::Apply<NYql::TProgram::RunAsync(TBasicString<char, std::__y1::char_traits<char> > const&, IOutputStream*, IOutputStream*, IOutputStream*, bool)::$_0>(NYql::TProgram::RunAsync(TBasicString<char, std::__y1::char_traits<char> > const&, IOutputStream*, IOutputStream*, IOutputStream*, bool)::$_0&&) const at /home/marsaly/ydbwork/ydb/library/cpp/threading/future/core/future-inl.h:725:0 
+NYql::TProgram::RunAsync(TBasicString<char, std::__y1::char_traits<char> > const&, IOutputStream*, IOutputStream*, IOutputStream*, bool) at /home/marsaly/ydbwork/ydb/ydb/library/yql/core/facade/yql_facade.cpp:1014:0 
+NYql::IGraphTransformer::TStatus NYql::(anonymous namespace)::SyncExecution<TBasicString<char, std::__y1::char_traits<char> > const&, IOutputStream*, IOutputStream*, IOutputStream*, bool, TBasicString<char, std::__y1::char_traits<char> > const&, IOutputStream*&, IOutputStream*&, IOutputStream*&, bool&>(NYql::TProgram*, NThreading::TFuture<NYql::IGraphTransformer::TStatus> (NYql::TProgram::*)(TBasicString<char, std::__y1::char_traits<char> > const&, IOutputStream*, IOutputStream*, IOutputStream*, bool), TBasicString<char, std::__y1::char_traits<char> > const&, IOutputStream*&, IOutputStream*&, IOutputStream*&, bool&) at /home/marsaly/ydbwork/ydb/ydb/library/yql/core/facade/yql_facade.cpp:69:0 
+NYql::TProgram::Run(TBasicString<char, std::__y1::char_traits<char> > const&, IOutputStream*, IOutputStream*, IOutputStream*, bool) at /home/marsaly/ydbwork/ydb/ydb/library/yql/core/facade/yql_facade.cpp:949:0 
+Main(int, char**) at /home/marsaly/ydbwork/ydb/ydb/library/yql/tools/pgrun/pgrun.cpp:1260:0 
+main at /home/marsaly/ydbwork/ydb/ydb/library/yql/tools/pgrun/pgrun.cpp:1300:0 
+__libc_start_call_main at ../sysdeps/nptl/libc_start_call_main.h:58:0 
+__libc_start_main_impl at ../csu/libc-start.c:392:0 
 ??? at ???:0:0 

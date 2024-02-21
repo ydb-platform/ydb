@@ -267,7 +267,8 @@ struct TMessageTag
 
 TMessageWithAttachments ByteBufferToMessageWithAttachments(
     grpc_byte_buffer* buffer,
-    std::optional<ui32> messageBodySize)
+    std::optional<ui32> messageBodySize,
+    bool enveloped)
 {
     TMessageWithAttachments result;
 
@@ -279,13 +280,43 @@ TMessageWithAttachments ByteBufferToMessageWithAttachments(
         messageBodySize = bufferSize;
     }
 
-    auto data = TSharedMutableRef::Allocate<TMessageTag>(
-        *messageBodySize,
-        {.InitializeStorage = false});
+    TSharedMutableRef data;
+    char* targetMessage;
+
+    if (enveloped) {
+        NYT::NProto::TSerializedMessageEnvelope envelope;
+        // Codec remains "none".
+
+        TEnvelopeFixedHeader fixedHeader;
+        fixedHeader.EnvelopeSize = envelope.ByteSize();
+        fixedHeader.MessageSize = *messageBodySize;
+
+        size_t totalMessageSize =
+            sizeof (TEnvelopeFixedHeader) +
+            fixedHeader.EnvelopeSize +
+            fixedHeader.MessageSize;
+
+        data = TSharedMutableRef::Allocate<TMessageTag>(
+            totalMessageSize,
+            {.InitializeStorage = false});
+
+        char* targetFixedHeader = data.Begin();
+        char* targetHeader = targetFixedHeader + sizeof (TEnvelopeFixedHeader);
+        targetMessage = targetHeader + fixedHeader.EnvelopeSize;
+
+        memcpy(targetFixedHeader, &fixedHeader, sizeof (fixedHeader));
+        YT_VERIFY(envelope.SerializeToArray(targetHeader, fixedHeader.EnvelopeSize));
+    } else {
+        data = TSharedMutableRef::Allocate<TMessageTag>(
+            *messageBodySize,
+            {.InitializeStorage = false});
+
+        targetMessage = data.begin();
+    }
 
     TGrpcByteBufferStream stream(buffer);
 
-    if (stream.Load(data.begin(), *messageBodySize) != *messageBodySize) {
+    if (stream.Load(targetMessage, *messageBodySize) != *messageBodySize) {
         THROW_ERROR_EXCEPTION("Unexpected end of stream while reading message body");
     }
 
@@ -368,6 +399,23 @@ TGrpcByteBufferPtr MessageWithAttachmentsToByteBuffer(const TMessageWithAttachme
     }
 
     return TGrpcByteBufferPtr(buffer);
+}
+
+TSharedRef ExtractMessageFromEnvelopedMessage(const TSharedRef& data)
+{
+    YT_VERIFY(data.Size() >= sizeof(TEnvelopeFixedHeader));
+    const auto* fixedHeader = reinterpret_cast<const TEnvelopeFixedHeader*>(data.Begin());
+    const char* sourceHeader = data.Begin() + sizeof(TEnvelopeFixedHeader);
+    const char* sourceMessage = sourceHeader + fixedHeader->EnvelopeSize;
+
+    NYT::NProto::TSerializedMessageEnvelope envelope;
+    YT_VERIFY(envelope.ParseFromArray(sourceHeader, fixedHeader->EnvelopeSize));
+
+    auto compressedMessage = data.Slice(sourceMessage, sourceMessage + fixedHeader->MessageSize);
+
+    auto codecId = CheckedEnumCast<NCompression::ECodec>(envelope.codec());
+    auto* codec = NCompression::GetCodec(codecId);
+    return codec->Decompress(compressedMessage);
 }
 
 TErrorCode StatusCodeToErrorCode(grpc_status_code statusCode)

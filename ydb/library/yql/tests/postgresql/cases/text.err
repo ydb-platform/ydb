@@ -11,10 +11,10 @@ SELECT text 'this is a text string' = text 'this is a text strin' AS false;
 CREATE TABLE TEXT_TBL (f1 text);
 </sql-statement>
 <sql-statement>
-INSERT INTO TEXT_TBL (f1) VALUES ('doh!');
+INSERT INTO TEXT_TBL VALUES ('doh!');
 </sql-statement>
 <sql-statement>
-INSERT INTO TEXT_TBL (f1) VALUES ('hi de ho neighbor');
+INSERT INTO TEXT_TBL VALUES ('hi de ho neighbor');
 </sql-statement>
 <sql-statement>
 SELECT * FROM TEXT_TBL;

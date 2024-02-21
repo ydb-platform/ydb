@@ -1,0 +1,41 @@
+BasedOnStyle: Google
+IndentWidth: 4
+ColumnLimit: 232
+SpacesBeforeTrailingComments: 3
+InsertBraces : true
+DerivePointerAlignment: true
+PointerAlignment: Left
+AccessModifierOffset: -4
+IndentCaseLabels: true
+ShortBlockStyle: SBS_Never
+AllowShortCaseLabelsOnASingleLine : false
+AllowShortCompoundRequirementOnASingleLine : false
+AllowShortEnumsOnASingleLine : false
+AllowShortFunctionsOnASingleLine  : false
+AllowShortLambdasOnASingleLine : false
+ShortIfStyle: SIS_Never
+ShortLambdaStyle: SLS_None
+AllowShortLoopsOnASingleLine : false
+AllowAllParametersOfDeclarationOnNextLine: true
+ConstructorInitializerAllOnOneLineOrOnePerLine: false
+PackConstructorInitializersNever: true
+BreakConstructorInitializersBeforeComma: true
+IncludeCategories:
+  - Regex:           '^"[0-9,a-z,A-Z,_]*"'
+    Priority:        0
+    SortPriority:    0
+  - Regex:           '^".*'
+    Priority:        3
+    SortPriority:    3
+  - Regex:           '^<.*ydb/core.*'
+    Priority:        5
+    SortPriority:    5
+  - Regex:           '^\<.*ydb/.*'
+    Priority:        10
+    SortPriority:    10
+  - Regex:           '^\<.*\/.*'
+    Priority:        15
+    SortPriority:    15
+  - Regex:           '.*'
+    Priority:        20
+    SortPriority:    20

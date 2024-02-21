@@ -1,64 +1,27 @@
 #pragma once
 
-#include "control_wrapper.h"
-
+#include <library/cpp/int128/int128.h>
 #include <library/cpp/time_provider/time_provider.h>
 
 namespace NKikimr::NJaegerTracing {
 
-class TThrottler {
+class TThrottler: public TThrRefBase {
 public:
-    TThrottler(TControlWrapper maxRatePerMinute, TControlWrapper maxBurst,
-            TIntrusivePtr<ITimeProvider> timeProvider)
-        : TimeProvider(std::move(timeProvider))
-        , MaxRatePerMinute(std::move(maxRatePerMinute))
-        , MaxBurst(std::move(maxBurst))
-        , LastUpdate(TimeProvider->Now())
-    {}
+    TThrottler(ui64 maxRatePerMinute, ui64 maxBurst, TIntrusivePtr<ITimeProvider> timeProvider);
 
-    bool Throttle() {
-        auto maxRatePerMinute = MaxRatePerMinute.Get();
-        auto maxBurst = MaxBurst.Get();
-        auto maxTotal = maxBurst + 1;
-        CurrentBurst = std::min(CurrentBurst, maxTotal);
-        if (maxRatePerMinute == 0) {
-            return true;
-        }
-
-        auto now = TimeProvider->Now();
-        if (now < LastUpdate) {
-            return true;
-        }
-
-        const auto deltaBetweenSends = TDuration::Minutes(1) / maxRatePerMinute;
-        UpdateStats(now, deltaBetweenSends);
-
-        if (CurrentBurst < maxTotal) {
-            CurrentBurst += 1;
-            return false;
-        }
-
-        return true;
-    }
+    bool Throttle();
 
 private:
-    void UpdateStats(TInstant now, TDuration deltaBetweenSends) {
-        ui64 decrease = (now - LastUpdate) / deltaBetweenSends;
-        decrease = std::min(decrease, CurrentBurst);
-        CurrentBurst -= decrease;
-        LastUpdate += decrease * deltaBetweenSends;
-        if (CurrentBurst == 0) {
-            LastUpdate = now;
-        }
-    }
+    static ui64 ClampAdd(ui64 a, ui64 b);
+    static ui64 ClampMultiply(ui64 a, ui64 b);
 
+    const ui64 MaxRatePerMinute;
+    const ui64 MaxBurst;
+    const ui64 BetweenSends;
     TIntrusivePtr<ITimeProvider> TimeProvider;
+    std::atomic<ui64> EffectiveTs;
 
-    TControlWrapper MaxRatePerMinute;
-    TControlWrapper MaxBurst;
-
-    TInstant LastUpdate = TInstant::Zero();
-    ui64 CurrentBurst = 0;
+    static_assert(decltype(EffectiveTs)::is_always_lock_free);
 };
 
 } // namespace NKikimr::NJaegerTracing

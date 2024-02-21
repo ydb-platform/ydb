@@ -165,6 +165,16 @@ constexpr double constexptest() {
 }
 ```
 
+## C++23: Fixed width floating-point types
+
+The library also supports fixed-width floating-point types such as `std::float32_t` and `std::float64_t`. E.g., you can write:
+
+```C++
+std::float32_t result;
+auto answer = fast_float::from_chars(f.data(), f.data() + f.size(), result);
+``````
+
+
 ## Non-ASCII Inputs
 
 We also support UTF-16 and UTF-32 inputs, as well as ASCII/UTF-8, as in the following example:
@@ -305,7 +315,7 @@ The fast_float library provides a performance similar to that of the [fast_doubl
 
 ## Users
 
-The fast_float library is used by [Apache Arrow](https://github.com/apache/arrow/pull/8494) where it multiplied the number parsing speed by two or three times. It is also used by [Yandex ClickHouse](https://github.com/ClickHouse/ClickHouse) and by [Google Jsonnet](https://github.com/google/jsonnet).
+The fast_float library is used by [Apache Arrow](https://github.com/apache/arrow/pull/8494) where it multiplied the number parsing speed by two or three times. It is also used by [ClickHouse](https://github.com/ClickHouse/ClickHouse) and by [Google Jsonnet](https://github.com/google/jsonnet). It is part of GCC (as of GCC 12). It is part of WebKit (Safari).
 
 
 ## How fast is it?
@@ -371,7 +381,11 @@ the command line help.
 
 You may directly download automatically generated single-header files:
 
-https://github.com/fastfloat/fast_float/releases/download/v6.0.0/fast_float.h
+https://github.com/fastfloat/fast_float/releases/download/v6.1.0/fast_float.h
+
+## RFC 7159 
+
+If you need support for RFC 7159 (JSON standard), you may want to consider using the [fast_double_parser](https://github.com/lemire/fast_double_parser/) library instead.
 
 ## Credit
 

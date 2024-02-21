@@ -4,6 +4,7 @@ CREATE TABLE xmltest (
 );
 INSERT INTO xmltest VALUES (1, '<value>one</value>');
 INSERT INTO xmltest VALUES (2, '<value>two</value>');
+SELECT * FROM xmltest;
 SELECT xmlcomment('test');
 SELECT xmlcomment('-test');
 SELECT xmlcomment('test-');

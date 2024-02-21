@@ -139,16 +139,26 @@ namespace NKikimr::NStorage {
             }
         };
 
+        struct TScepter { // the Chosen One has the scepter; it's guaranteed that only one node holds it
+            ui64 Id = RandomNumber<ui64>(); // unique id
+        };
+
         struct TScatterTask {
-            std::optional<TBinding> Origin;
+            const std::optional<TBinding> Origin;
+            const std::weak_ptr<TScepter> Scepter;
+            const TActorId ActorId;
+
             THashSet<ui32> PendingNodes;
             bool AsyncOperationsPending = false;
             TEvScatter Request;
             TEvGather Response;
             std::vector<TEvGather> CollectedResponses; // from bound nodes
 
-            TScatterTask(const std::optional<TBinding>& origin, TEvScatter&& request)
+            TScatterTask(const std::optional<TBinding>& origin, TEvScatter&& request,
+                    const std::shared_ptr<TScepter>& scepter, TActorId actorId)
                 : Origin(origin)
+                , Scepter(scepter)
+                , ActorId(actorId)
             {
                 Request.Swap(&request);
                 if (Request.HasCookie()) {
@@ -208,7 +218,8 @@ namespace NKikimr::NStorage {
 
         // scatter tasks
         ui64 NextScatterCookie = RandomNumber<ui64>();
-        THashMap<ui64, TScatterTask> ScatterTasks;
+        using TScatterTasks = THashMap<ui64, TScatterTask>;
+        TScatterTasks ScatterTasks;
 
         // root node operation
         enum class ERootState {
@@ -216,13 +227,19 @@ namespace NKikimr::NStorage {
             COLLECT_CONFIG,
             PROPOSE_NEW_STORAGE_CONFIG,
             ERROR_TIMEOUT,
+            RELAX,
         };
         static constexpr TDuration ErrorTimeout = TDuration::Seconds(3);
         ERootState RootState = ERootState::INITIAL;
         NKikimrBlobStorage::TStorageConfig CurrentProposedStorageConfig;
+        std::shared_ptr<TScepter> Scepter;
+        TString ErrorReason;
 
         // subscribed IC sessions
         THashMap<ui32, TActorId> SubscribedSessions;
+
+        // child actors
+        THashSet<TActorId> ChildActors;
 
         friend void ::Out<ERootState>(IOutputStream&, ERootState);
 
@@ -234,8 +251,11 @@ namespace NKikimr::NStorage {
         TDistributedConfigKeeper(TIntrusivePtr<TNodeWardenConfig> cfg, const NKikimrBlobStorage::TStorageConfig& baseConfig);
 
         void Bootstrap();
+        void PassAway() override;
+        void HandleGone(STATEFN_SIG);
         void Halt(); // cease any distconf activity, unbind and reject any bindings
         bool ApplyStorageConfig(const NKikimrBlobStorage::TStorageConfig& config);
+        void HandleConfigConfirm(STATEFN_SIG);
 
         ////////////////////////////////////////////////////////////////////////////////////////////////////////////////
         // PDisk configuration retrieval and storing
@@ -303,10 +323,13 @@ namespace NKikimr::NStorage {
         void Perform(TEvGather::TCollectConfigs *response, const TEvScatter::TCollectConfigs& request, TScatterTask& task);
         void Perform(TEvGather::TProposeStorageConfig *response, const TEvScatter::TProposeStorageConfig& request, TScatterTask& task);
 
+        void SwitchToError(const TString& reason);
+
         ////////////////////////////////////////////////////////////////////////////////////////////////////////////////
         // Scatter/gather logic
 
-        void IssueScatterTask(bool locallyGenerated, TEvScatter&& request);
+        void IssueScatterTask(std::optional<TActorId> actorId, TEvScatter&& request);
+        void CheckCompleteScatterTask(TScatterTasks::iterator it);
         void FinishAsyncOperation(ui64 cookie);
         void IssueScatterTaskForNode(ui32 nodeId, TBoundNode& info, ui64 cookie, TScatterTask& task);
         void CompleteScatterTask(TScatterTask& task);
@@ -314,6 +337,15 @@ namespace NKikimr::NStorage {
         void AbortAllScatterTasks(const TBinding& binding);
         void Handle(TEvNodeConfigScatter::TPtr ev);
         void Handle(TEvNodeConfigGather::TPtr ev);
+
+        ////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+        // NodeWarden RPC
+
+        class TInvokeRequestHandlerActor;
+        struct TLifetimeToken {};
+        std::shared_ptr<TLifetimeToken> LifetimeToken = std::make_shared<TLifetimeToken>();
+
+        void Handle(TEvNodeConfigInvokeOnRoot::TPtr ev);
 
         ////////////////////////////////////////////////////////////////////////////////////////////////////////////////
         // Event delivery

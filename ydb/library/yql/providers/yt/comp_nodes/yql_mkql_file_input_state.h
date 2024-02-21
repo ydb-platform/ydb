@@ -60,12 +60,12 @@ private:
     TVector<NYT::TRawTableReaderPtr> RawReaders_;
     const size_t BlockCount_;
     const size_t BlockSize_;
-    TMkqlReaderImpl MkqlReader_;
     size_t CurrentInput_ = 0;
     size_t CurrentRecord_ = 0;
     bool Valid_ = true;
     NUdf::TUnboxedValue CurrentValue_;
     NYT::TRawTableReaderPtr CurrentReader_;
+    TMkqlReaderImpl MkqlReader_;  // Should be deleted before CurrentReader_
     std::function<void()> OnNextBlockCallback_;
 };
 

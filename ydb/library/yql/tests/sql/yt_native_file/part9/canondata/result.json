@@ -1559,6 +1559,27 @@
             "uri": "https://{canondata_backend}/1942525/e650a9108a46215c1dbecfcc5ac1f7eea9025945/resource.tar.gz#test.test_pg-aggregate_factory-default.txt-Results_/results.txt"
         }
     ],
+    "test.test[pg-order_by_distinct_same_expr_agg-default.txt-Debug]": [
+        {
+            "checksum": "a11be06aa510df5c4426828d173ae2db",
+            "size": 1595,
+            "uri": "https://{canondata_backend}/1775059/3dc32f45e46d436c6117f9365f68660a04a7a9ef/resource.tar.gz#test.test_pg-order_by_distinct_same_expr_agg-default.txt-Debug_/opt.yql"
+        }
+    ],
+    "test.test[pg-order_by_distinct_same_expr_agg-default.txt-Plan]": [
+        {
+            "checksum": "b4dd508a329723c74293d80f0278c705",
+            "size": 505,
+            "uri": "https://{canondata_backend}/1775059/3dc32f45e46d436c6117f9365f68660a04a7a9ef/resource.tar.gz#test.test_pg-order_by_distinct_same_expr_agg-default.txt-Plan_/plan.txt"
+        }
+    ],
+    "test.test[pg-order_by_distinct_same_expr_agg-default.txt-Results]": [
+        {
+            "checksum": "56933ce9c5e062393a84cf42021ed093",
+            "size": 1236,
+            "uri": "https://{canondata_backend}/1775059/3dc32f45e46d436c6117f9365f68660a04a7a9ef/resource.tar.gz#test.test_pg-order_by_distinct_same_expr_agg-default.txt-Results_/results.txt"
+        }
+    ],
     "test.test[pg-order_by_shadow_input_columns-default.txt-Debug]": [
         {
             "checksum": "386c850c4ca0a581b365d1d9a47796af",
@@ -1813,9 +1834,9 @@
     ],
     "test.test[pg-tpcds-q42-default.txt-Debug]": [
         {
-            "checksum": "787ce8c8d9198dc9b2f9dae6f0e0b97b",
-            "size": 1252,
-            "uri": "https://{canondata_backend}/1903885/d7489869939f5eed8aa352f8fd72d52a3c467e5a/resource.tar.gz#test.test_pg-tpcds-q42-default.txt-Debug_/opt.yql"
+            "checksum": "33556fcd6e2a28fce5eb71a039d015d7",
+            "size": 711,
+            "uri": "https://{canondata_backend}/1871182/e14ddf4aced6b94cffd65d03b6a9f851e5b5f624/resource.tar.gz#test.test_pg-tpcds-q42-default.txt-Debug_/opt.yql"
         }
     ],
     "test.test[pg-tpcds-q42-default.txt-Plan]": [

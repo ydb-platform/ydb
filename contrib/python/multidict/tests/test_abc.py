@@ -3,43 +3,6 @@ from collections.abc import Mapping, MutableMapping
 import pytest
 
 from multidict import MultiMapping, MutableMultiMapping
-from multidict._compat import USE_EXTENSIONS
-from multidict._multidict_py import CIMultiDict as PyCIMultiDict
-from multidict._multidict_py import CIMultiDictProxy as PyCIMultiDictProxy
-from multidict._multidict_py import MultiDict as PyMultiDict  # noqa: E402
-from multidict._multidict_py import MultiDictProxy as PyMultiDictProxy
-
-if USE_EXTENSIONS:
-    from multidict._multidict import (  # type: ignore
-        CIMultiDict,
-        CIMultiDictProxy,
-        MultiDict,
-        MultiDictProxy,
-    )
-
-
-@pytest.fixture(
-    params=([MultiDict, CIMultiDict] if USE_EXTENSIONS else [])
-    + [PyMultiDict, PyCIMultiDict],
-    ids=(["MultiDict", "CIMultiDict"] if USE_EXTENSIONS else [])
-    + ["PyMultiDict", "PyCIMultiDict"],
-)
-def cls(request):
-    return request.param
-
-
-@pytest.fixture(
-    params=(
-        [(MultiDictProxy, MultiDict), (CIMultiDictProxy, CIMultiDict)]
-        if USE_EXTENSIONS
-        else []
-    )
-    + [(PyMultiDictProxy, PyMultiDict), (PyCIMultiDictProxy, PyCIMultiDict)],
-    ids=(["MultiDictProxy", "CIMultiDictProxy"] if USE_EXTENSIONS else [])
-    + ["PyMultiDictProxy", "PyCIMultiDictProxy"],
-)
-def proxy_classes(request):
-    return request.param
 
 
 def test_abc_inheritance():
@@ -116,15 +79,14 @@ def test_abc_popall():
         B().popall("key")
 
 
-def test_multidict_inheritance(cls):
-    assert issubclass(cls, MultiMapping)
-    assert issubclass(cls, MutableMultiMapping)
+def test_multidict_inheritance(any_multidict_class):
+    assert issubclass(any_multidict_class, MultiMapping)
+    assert issubclass(any_multidict_class, MutableMultiMapping)
 
 
-def test_proxy_inheritance(proxy_classes):
-    proxy, _ = proxy_classes
-    assert issubclass(proxy, MultiMapping)
-    assert not issubclass(proxy, MutableMultiMapping)
+def test_proxy_inheritance(any_multidict_proxy_class):
+    assert issubclass(any_multidict_proxy_class, MultiMapping)
+    assert not issubclass(any_multidict_proxy_class, MutableMultiMapping)
 
 
 def test_generic_type_in_runtime():

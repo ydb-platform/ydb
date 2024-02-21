@@ -122,7 +122,7 @@ EExecutionStatus TCheckWriteUnit::Execute(TOperation::TPtr op,
                 DataShard.GetProcessingParams() ? DataShard.GetProcessingParams()->GetCoordinators() : google::protobuf::RepeatedField<ui64>{}
             }
             ));
-        LOG_DEBUG_S(ctx, NKikimrServices::TX_DATASHARD, "Prepared " << *op << " at " << DataShard.TabletID());
+        LOG_DEBUG_S(ctx, NKikimrServices::TX_DATASHARD, "Prepared write transaction " << *op << " at tablet " << DataShard.TabletID());
     }
 
     return EExecutionStatus::Executed;

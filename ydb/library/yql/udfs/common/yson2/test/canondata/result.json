@@ -114,6 +114,11 @@
             "uri": "file://test.test_JsonWithUtf8_/results.txt"
         }
     ],
+    "test.test[JsonWithNanAsString]": [
+        {
+            "uri": "file://test.test_JsonWithNanAsString_/results.txt"
+        }
+    ],
     "test.test[Lists]": [
         {
             "uri": "file://test.test_Lists_/results.txt"

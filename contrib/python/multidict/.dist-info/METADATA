@@ -1,6 +1,6 @@
 Metadata-Version: 2.1
 Name: multidict
-Version: 6.0.4
+Version: 6.0.5
 Summary: multidict implementation
 Home-page: https://github.com/aio-libs/multidict
 Author: Andrew Svetlov
@@ -9,11 +9,12 @@ License: Apache 2
 Project-URL: Chat: Gitter, https://gitter.im/aio-libs/Lobby
 Project-URL: CI: GitHub, https://github.com/aio-libs/multidict/actions
 Project-URL: Coverage: codecov, https://codecov.io/github/aio-libs/multidict
-Project-URL: Docs: RTD, https://multidict.readthedocs.io
+Project-URL: Docs: RTD, https://multidict.aio-libs.org
 Project-URL: GitHub: issues, https://github.com/aio-libs/multidict/issues
 Project-URL: GitHub: repo, https://github.com/aio-libs/multidict
-Classifier: License :: OSI Approved :: Apache Software License
+Classifier: Development Status :: 5 - Production/Stable
 Classifier: Intended Audience :: Developers
+Classifier: License :: OSI Approved :: Apache Software License
 Classifier: Programming Language :: Python
 Classifier: Programming Language :: Python :: 3
 Classifier: Programming Language :: Python :: 3.7
@@ -21,8 +22,9 @@ Classifier: Programming Language :: Python :: 3.8
 Classifier: Programming Language :: Python :: 3.9
 Classifier: Programming Language :: Python :: 3.10
 Classifier: Programming Language :: Python :: 3.11
-Classifier: Development Status :: 5 - Production/Stable
+Classifier: Programming Language :: Python :: 3.12
 Requires-Python: >=3.7
+Description-Content-Type: text/x-rst
 License-File: LICENSE
 
 =========
@@ -42,8 +44,8 @@ multidict
    :alt: PyPI
 
 .. image:: https://readthedocs.org/projects/multidict/badge/?version=latest
-   :target: http://multidict.readthedocs.org/en/latest/?badge=latest
-   :alt: Documentationb
+   :target: http://multidict.aio-libs.org/en/latest/?badge=latest
+   :alt: Documentation
 
 .. image:: https://img.shields.io/pypi/pyversions/multidict.svg
    :target: https://pypi.org/project/multidict
@@ -127,4 +129,4 @@ the usage scenario!!!
 
 Changelog
 ---------
-See `RTD page <http://multidict.readthedocs.org/en/latest/changes.html>`_.
+See `RTD page <http://multidict.aio-libs.org/en/latest/changes>`_.

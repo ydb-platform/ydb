@@ -1,5 +1,6 @@
 #include "blob.h"
 #include "defs.h"
+#include <ydb/core/tx/columnshard/common/protos/blob_range.pb.h>
 
 #include <charconv>
 
@@ -182,6 +183,36 @@ TUnifiedBlobId TUnifiedBlobId::ParseFromString(const TString& str,
 
     error = TStringBuilder() << "Wrong blob id: '" << str << "'";
     return TUnifiedBlobId();
+}
+
+NKikimr::TConclusionStatus TBlobRange::DeserializeFromProto(const NKikimrColumnShardProto::TBlobRange& proto) {
+    auto parsed = TUnifiedBlobId::BuildFromString(proto.GetBlobId(), nullptr);
+    if (!parsed) {
+        return parsed;
+    }
+    BlobId = parsed.DetachResult();
+
+    Offset = proto.GetOffset();
+    Size = proto.GetSize();
+    return TConclusionStatus::Success();
+}
+
+NKikimr::TConclusion<NKikimr::NOlap::TBlobRange> TBlobRange::BuildFromProto(const NKikimrColumnShardProto::TBlobRange& proto) {
+    TBlobRange result;
+    auto parsed = result.DeserializeFromProto(proto);
+    if (!parsed) {
+        return parsed;
+    } else {
+        return result;
+    }
+}
+
+NKikimrColumnShardProto::TBlobRange TBlobRange::SerializeToProto() const {
+    NKikimrColumnShardProto::TBlobRange result;
+    result.SetBlobId(BlobId.ToStringNew());
+    result.SetOffset(Offset);
+    result.SetSize(Size);
+    return result;
 }
 
 }

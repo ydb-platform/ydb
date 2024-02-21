@@ -142,7 +142,6 @@ std::unique_ptr<TEvKqp::TEvCompileRequest> TKqpQueryState::BuildCompileRequest(s
     settings.DocumentApiRestricted = IsDocumentApiRestricted_;
     settings.IsInternalCall = IsInternalCall();
     settings.Syntax = GetSyntax();
-    settings.IsPrepareQuery = GetAction() == NKikimrKqp::QUERY_ACTION_PREPARE;
 
     bool keepInCache = false;
     switch (GetAction()) {
@@ -174,9 +173,10 @@ std::unique_ptr<TEvKqp::TEvCompileRequest> TKqpQueryState::BuildCompileRequest(s
     if (QueryDeadlines.CancelAt) {
         compileDeadline = Min(compileDeadline, QueryDeadlines.CancelAt);
     }
+    bool isQueryActionPrepare = GetAction() == NKikimrKqp::QUERY_ACTION_PREPARE;
 
     return std::make_unique<TEvKqp::TEvCompileRequest>(UserToken, uid,
-        std::move(query), keepInCache, compileDeadline, DbCounters, std::move(cookie), UserRequestContext, std::move(Orbit), TempTablesState, GetCollectDiagnostics());
+        std::move(query), keepInCache, isQueryActionPrepare, compileDeadline, DbCounters, std::move(cookie), UserRequestContext, std::move(Orbit), TempTablesState, GetCollectDiagnostics());
 }
 
 std::unique_ptr<TEvKqp::TEvRecompileRequest> TKqpQueryState::BuildReCompileRequest(std::shared_ptr<std::atomic<bool>> cookie) {
@@ -208,12 +208,13 @@ std::unique_ptr<TEvKqp::TEvRecompileRequest> TKqpQueryState::BuildReCompileReque
     }
 
     auto compileDeadline = QueryDeadlines.TimeoutAt;
+    bool isQueryActionPrepare = GetAction() == NKikimrKqp::QUERY_ACTION_PREPARE;
     if (QueryDeadlines.CancelAt) {
         compileDeadline = Min(compileDeadline, QueryDeadlines.CancelAt);
     }
 
     return std::make_unique<TEvKqp::TEvRecompileRequest>(UserToken, CompileResult->Uid,
-        CompileResult->Query, compileDeadline, DbCounters, std::move(cookie), UserRequestContext, std::move(Orbit), TempTablesState);
+        CompileResult->Query, isQueryActionPrepare, compileDeadline, DbCounters, std::move(cookie), UserRequestContext, std::move(Orbit), TempTablesState);
 }
 
 void TKqpQueryState::AddOffsetsToTransaction() {

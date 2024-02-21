@@ -16,8 +16,7 @@ Y_UNIT_TEST_SUITE(SamplingControlTests) {
     }
 
     Y_UNIT_TEST(Simple) {
-        TControlWrapper ppm(500'000);
-        TSampler sampler(ppm, 42);
+        TSampler sampler(0.5, 42);
 
         auto samples = RunTrials(sampler, 100'000);
         UNIT_ASSERT_GE(samples, 48'000);
@@ -25,37 +24,17 @@ Y_UNIT_TEST_SUITE(SamplingControlTests) {
     }
 
     Y_UNIT_TEST(EdgeCaseLower) {
-        TControlWrapper ppm(0);
-        TSampler sampler(ppm, 42);
+        TSampler sampler(0, 42);
 
         auto samples = RunTrials(sampler, 100'000);
         UNIT_ASSERT_EQUAL(samples, 0);
     }
 
     Y_UNIT_TEST(EdgeCaseUpper) {
-        TControlWrapper ppm(1'000'000);
-        TSampler sampler(ppm, 42);
+        TSampler sampler(1, 42);
 
         auto samples = RunTrials(sampler, 100'000);
         UNIT_ASSERT_EQUAL(samples, 100'000);
-    }
-
-    Y_UNIT_TEST(ChangingControl) {
-        TControlWrapper ppm(250'000);
-        TSampler sampler(ppm, 42);
-
-        {
-            auto samples = RunTrials(sampler, 100'000);
-            UNIT_ASSERT_GE(samples, 23'000);
-            UNIT_ASSERT_LE(samples, 27'000);
-        }
-
-        ppm.Set(750'000);
-        {
-            auto samples = RunTrials(sampler, 100'000);
-            UNIT_ASSERT_GE(samples, 73'000);
-            UNIT_ASSERT_LE(samples, 77'000);
-        }
     }
 }
 

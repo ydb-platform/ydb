@@ -6,6 +6,7 @@ RECURSE(
     arrow_kernels
     arrow_parquet
     backup
+    benchmarks
     binary_json
     chunks_limiter
     dynumber

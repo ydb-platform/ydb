@@ -14,8 +14,7 @@ namespace {
         const TSharedData* TryGetPage(const TPart *part, TPageId id, TGroupId groupId) override
         {
             UNIT_ASSERT_C(part->GetPageType(id) == EPage::Index || part->GetPageType(id) == EPage::BTreeIndex, "Shouldn't request non-index pages");
-            // TODO: charge b-tree index
-            if (!Touched[groupId].insert(id).second || part->GetPageType(id) == EPage::BTreeIndex) {
+            if (!Touched[groupId].insert(id).second) {
                 return NTest::TTestEnv::TryGetPage(part, id, groupId);
             }
             return nullptr;

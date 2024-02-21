@@ -492,6 +492,9 @@ namespace NKikimr::NStorage {
         void Handle(TEvNodeWardenQueryStorageConfig::TPtr ev);
         void Handle(TEvNodeWardenStorageConfig::TPtr ev);
         void HandleUnsubscribe(STATEFN_SIG);
+        void ApplyStorageConfig(const NKikimrBlobStorage::TNodeWardenServiceSet& current,
+                const NKikimrBlobStorage::TNodeWardenServiceSet *proposed);
+        void ApplyStaticServiceSet(const NKikimrBlobStorage::TNodeWardenServiceSet& ss);
 
         ////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 

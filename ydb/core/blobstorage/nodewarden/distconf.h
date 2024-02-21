@@ -233,6 +233,7 @@ namespace NKikimr::NStorage {
         ERootState RootState = ERootState::INITIAL;
         NKikimrBlobStorage::TStorageConfig CurrentProposedStorageConfig;
         std::shared_ptr<TScepter> Scepter;
+        TString ErrorReason;
 
         // subscribed IC sessions
         THashMap<ui32, TActorId> SubscribedSessions;
@@ -254,6 +255,7 @@ namespace NKikimr::NStorage {
         void HandleGone(STATEFN_SIG);
         void Halt(); // cease any distconf activity, unbind and reject any bindings
         bool ApplyStorageConfig(const NKikimrBlobStorage::TStorageConfig& config);
+        void HandleConfigConfirm(STATEFN_SIG);
 
         ////////////////////////////////////////////////////////////////////////////////////////////////////////////////
         // PDisk configuration retrieval and storing

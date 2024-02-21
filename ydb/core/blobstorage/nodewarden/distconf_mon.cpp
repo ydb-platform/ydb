@@ -135,6 +135,7 @@ namespace NKikimr::NStorage {
                 {"binding", getBinding()},
                 {"direct_bound_nodes", getDirectBoundNodes()},
                 {"root_state", TString(TStringBuilder() << RootState)},
+                {"error_reason", ErrorReason},
                 {"has_quorum", HasQuorum()},
                 {"scepter", Scepter ? NJson::TJsonMap{
                     {"id", Scepter->Id},
@@ -168,6 +169,9 @@ namespace NKikimr::NStorage {
                         }
                         out << "<br/>";
                         out << "RootState: " << RootState << "<br/>";
+                        if (ErrorReason) {
+                           out << "ErrorReason: " << ErrorReason << "<br/>";
+                        }
                         out << "Quorum: " << (HasQuorum() ? "yes" : "no") << "<br/>";
                         out << "Scepter: " << (Scepter ? ToString(Scepter->Id) : "null");
                     }

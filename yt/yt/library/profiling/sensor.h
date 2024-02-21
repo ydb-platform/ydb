@@ -162,15 +162,12 @@ class TRateHistogram
 public:
     void Add(double value, int count = 1) const noexcept;
     void Remove(double value, int count = 1) const noexcept;
-    void Reset() noexcept;
-
-    THistogramSnapshot GetSnapshot() const;
-    void LoadSnapshot(THistogramSnapshot snapshot);
 
     explicit operator bool() const;
 
 private:
     friend class TProfiler;
+    friend struct TTesting;
 
     IHistogramImplPtr Histogram_;
 };

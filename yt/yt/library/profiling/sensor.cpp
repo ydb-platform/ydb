@@ -234,33 +234,6 @@ void TRateHistogram::Remove(double value, int count) const noexcept
     Histogram_->Remove(value, count);
 }
 
-void TRateHistogram::Reset() noexcept
-{
-    if (!Histogram_) {
-        return;
-    }
-
-    Histogram_->Reset();
-}
-
-THistogramSnapshot TRateHistogram::GetSnapshot() const
-{
-    if (!Histogram_) {
-        return {};
-    }
-
-    return Histogram_->GetSnapshot(false);
-}
-
-void TRateHistogram::LoadSnapshot(THistogramSnapshot snapshot)
-{
-    if (!Histogram_) {
-        return;
-    }
-
-    Histogram_->LoadSnapshot(snapshot);
-}
-
 TRateHistogram::operator bool() const
 {
     return Histogram_.operator bool();

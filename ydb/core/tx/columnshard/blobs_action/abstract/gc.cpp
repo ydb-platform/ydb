@@ -6,6 +6,7 @@ namespace NKikimr::NOlap {
 
 void IBlobsGCAction::OnCompleteTxAfterCleaning(NColumnShard::TColumnShard& self, const std::shared_ptr<IBlobsGCAction>& taskAction) {
     if (!AbortedFlag) {
+        NActors::TLogContextGuard logGuard = NActors::TLogContextBuilder::Build()("tablet_id", self.TabletID());
         AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("event", "OnCompleteTxAfterCleaning")("action_guid", GetActionGuid());
         auto storage = self.GetStoragesManager()->GetOperator(GetStorageId());
         storage->GetSharedBlobs()->OnTransactionCompleteAfterCleaning(BlobsToRemove);
@@ -22,6 +23,7 @@ void IBlobsGCAction::OnCompleteTxAfterCleaning(NColumnShard::TColumnShard& self,
 
 void IBlobsGCAction::OnExecuteTxAfterCleaning(NColumnShard::TColumnShard& self, TBlobManagerDb& dbBlobs) {
     if (!AbortedFlag) {
+        const NActors::TLogContextGuard logGuard = NActors::TLogContextBuilder::Build()("tablet_id", self.TabletID());
         auto storage = self.GetStoragesManager()->GetOperator(GetStorageId());
         storage->GetSharedBlobs()->OnTransactionExecuteAfterCleaning(BlobsToRemove, dbBlobs.GetDatabase());
         for (auto i = BlobsToRemove.GetIterator(); i.IsValid(); ++i) {

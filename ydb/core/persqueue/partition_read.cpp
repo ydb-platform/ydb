@@ -139,9 +139,6 @@ void TPartition::ProcessHasDataRequests(const TActorContext& ctx) {
 
 void TPartition::UpdateAvailableSize(const TActorContext& ctx) {
     FilterDeadlinedWrites(ctx);
-
-    auto now = ctx.Now();
-    WriteQuota->Update(now);
     ScheduleUpdateAvailableSize(ctx);
 }
 
@@ -178,10 +175,6 @@ void TPartition::Handle(TEvPersQueue::TEvHasDataInfo::TPtr& ev, const TActorCont
 
 void TPartition::Handle(NReadQuoterEvents::TEvAccountQuotaCountersUpdated::TPtr& ev, const TActorContext& /*ctx*/) {
     TabletCounters.Populate(*ev->Get()->AccountQuotaCounters.Get());
-}
-
-void TPartition::Handle(NReadQuoterEvents::TEvQuotaCountersUpdated::TPtr& ev, const TActorContext& /*ctx*/) {
-    PartitionCountersLabeled->GetCounters()[METRIC_READ_INFLIGHT_LIMIT_THROTTLED].Set(ev->Get()->AvgInflightLimitThrottledMicroseconds);
 }
 
 void TPartition::InitUserInfoForImportantClients(const TActorContext& ctx) {
@@ -618,9 +611,9 @@ TVector<TClientBlob> TPartition::GetReadRequestFromHead(
             }
             if (lastOffset > 0 && offset >= lastOffset)
                 break;
-            
+
             if (skip) continue;
-            
+
             if (blobs[i].IsLastPart()) {
                 bool messageSkippingBehaviour = AppData()->PQConfig.GetTopicsAreFirstClassCitizen() &&
                         readTimestampMs > blobs[i].WriteTimestamp.MilliSeconds();
@@ -694,7 +687,7 @@ void TPartition::Handle(TEvPQ::TEvRead::TPtr& ev, const TActorContext& ctx) {
     Y_ABORT_UNLESS(read->Offset <= EndOffset);
 
     auto& userInfo = UsersInfoStorage->GetOrCreate(user, ctx);
-  
+
     if (!read->SessionId.empty() && !userInfo.NoConsumer) {
         if (userInfo.Session != read->SessionId) {
             TabletCounters.Cumulative()[COUNTER_PQ_READ_ERROR_NO_SESSION].Increment(1);
@@ -705,20 +698,21 @@ void TPartition::Handle(TEvPQ::TEvRead::TPtr& ev, const TActorContext& ctx) {
         }
     }
     userInfo.ReadsInQuotaQueue++;
-    Send(ReadQuotaTrackerActor, new TEvPQ::TEvRequestQuota(ev.Release()));
+    Send(ReadQuotaTrackerActor,
+            new TEvPQ::TEvRequestQuota(ev->Get()->Cookie, std::move(IEventHandle::Upcast(std::move(ev))))
+    );
 }
 
-void TPartition::Handle(TEvPQ::TEvApproveQuota::TPtr& ev, const TActorContext& ctx) {
-    DoRead(ev->Get()->ReadRequest.Release(), ev->Get()->WaitTime, ctx);
+void TPartition::Handle(TEvPQ::TEvApproveReadQuota::TPtr& ev, const TActorContext& ctx) {
+    DoRead(std::move(ev->Get()->ReadRequest), ev->Get()->WaitTime, ctx);
 }
 
-void TPartition::DoRead(TEvPQ::TEvRead::TPtr ev, TDuration waitQuotaTime, const TActorContext& ctx) {
-    auto read = ev->Get();
+void TPartition::DoRead(TEvPQ::TEvRead::TPtr&& readEvent, TDuration waitQuotaTime, const TActorContext& ctx) {
+    auto* read = readEvent->Get();
     const TString& user = read->ClientId;
     auto userInfo = UsersInfoStorage->GetIfExists(user);
     if(!userInfo) {
-        ReplyError(ctx, read->Cookie,  NPersQueue::NErrorCode::BAD_REQUEST,
-            TStringBuilder() << "cannot finish read request. Consumer " << read->ClientId << " is gone from partition");
+        ReplyError(ctx, read->Cookie,  NPersQueue::NErrorCode::BAD_REQUEST, TStringBuilder() << "cannot finish read request. Consumer " << read->ClientId << " is gone from partition");
         Send(ReadQuotaTrackerActor, new TEvPQ::TEvConsumerRemoved(user));
         OnReadRequestFinished(read->Cookie, 0, user, ctx);
         return;
@@ -771,6 +765,7 @@ void TPartition::DoRead(TEvPQ::TEvRead::TPtr ev, TDuration waitQuotaTime, const 
             TStringBuilder() << "Offset more than EndOffset. Offset=" << offset << ", EndOffset=" << EndOffset);
         return;
     }
+    Y_ABORT_UNLESS(offset < EndOffset);
 
     ProcessRead(ctx, std::move(info), cookie, false);
 }
@@ -885,7 +880,7 @@ void TPartition::Handle(TEvPQ::TEvProxyResponse::TPtr& ev, const TActorContext& 
         LOG_INFO_S(
             ctx,
             NKikimrServices::PERSQUEUE,
-            "Reading Timestamp failed for offset " << ReadingForOffset << " ( "<< userInfo->Offset << " ) " 
+            "Reading Timestamp failed for offset " << ReadingForOffset << " ( "<< userInfo->Offset << " ) "
                                                    << ev->Get()->Response->DebugString()
         );
         if (ev->Get()->Response->GetStatus() == NMsgBusProxy::MSTATUS_OK &&

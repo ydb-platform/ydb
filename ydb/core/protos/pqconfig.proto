@@ -965,10 +965,6 @@ message TEvReadingPartitionFinishedRequest {
     optional uint32 PartitionId = 2;
 };
 
-message TEvReadBalancerGenerationRequest {
-    optional uint32 Generation = 1;
-};
-
 message TTransaction {
     enum EKind {
         KIND_UNKNOWN = 0;

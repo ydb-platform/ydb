@@ -4324,7 +4324,6 @@ void TPersQueue::Handle(NLongTxService::TEvLongTxService::TEvLockStatus::TPtr& e
 
 void TPersQueue::Handle(TEvPQ::TEvReadingPartitionFinishedRequest::TPtr& ev, const TActorContext& ctx)
 {
-    Cerr << ">>>>> ReadBalancerActorId=" << ReadBalancerActorId << Endl << Flush;
     if (ReadBalancerActorId) {
         ctx.Send(ReadBalancerActorId, ev->Release().Release());
     }

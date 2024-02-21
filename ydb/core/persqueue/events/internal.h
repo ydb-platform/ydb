@@ -184,7 +184,6 @@ struct TEvPQ {
         EvGetWriteInfoResponse,
         EvGetWriteInfoError,
         EvReadingPartitionFinishedRequest,
-        EvReadBalancerGenerationRequest,
         EvEnd
     };
 
@@ -1085,18 +1084,6 @@ struct TEvPQ {
         TEvReadingPartitionFinishedRequest(const TString& consumer, ui32 partitionId) {
             Record.SetConsumer(consumer);
             Record.SetPartitionId(partitionId);
-        }
-    };
-
-    struct TEvReadBalancerGenerationRequest : public TEventPB<TEvReadBalancerGenerationRequest, NKikimrPQ::TEvReadBalancerGenerationRequest, EvReadBalancerGenerationRequest> {
-        TEvReadBalancerGenerationRequest() = default;
-
-        TEvReadBalancerGenerationRequest(ui32 generation) {
-            Record.SetGeneration(generation);
-        }
-
-        ui32 GetGeneration() {
-            return Record.GetGeneration();
         }
     };
 };

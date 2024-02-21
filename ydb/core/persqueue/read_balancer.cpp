@@ -792,12 +792,6 @@ void TPersQueueReadBalancer::Handle(TEvPersQueue::TEvStatusResponse::TPtr& ev, c
                         consumersForBalance.insert(consumer.GetConsumer());
                     }
                 }
-            } else {
-                auto i = finishedPartitions.erase(partRes.GetPartition());
-                if (i) {
-                    // TODO commit to back is unsupported
-                    return Die(ctx);
-                }
             }
         }
 

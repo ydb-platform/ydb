@@ -24,5 +24,9 @@ IDqChannelStorage::TPtr TDqTaskRunnerExecutionContext::CreateChannelStorage(ui64
     }
 }
 
+std::function<void()> TDqTaskRunnerExecutionContext::GetWakeupCallback() const {
+        return WakeUp_;
+}
+
 } // namespace NDq
 } // namespace NYql

@@ -268,6 +268,10 @@ public:
         return TaskId;
     }
 
+    void SetSpillerFactory(std::shared_ptr<ISpillerFactory> spillerFactory) override {
+        AllocatedHolder->ProgramParsed.CompGraph->GetContext().SpillerFactory = std::move(spillerFactory);
+    }
+
     bool UseSeparatePatternAlloc(const TDqTaskSettings& taskSettings) const {
         return Context.PatternCache &&
             (Settings.OptLLVM == "OFF" || taskSettings.IsLLVMDisabled() || Settings.UseCacheForLLVM);

@@ -294,7 +294,7 @@ class TPersQueueReadBalancer : public TActor<TPersQueueReadBalancer>, public TTa
     TStringBuilder GetPrefix() const;
 
     TActorId GetPipeClient(const ui64 tabletId, const TActorContext&);
-    void RequestTabletIfNeeded(const ui64 tabletId, const TActorContext&);
+    void RequestTabletIfNeeded(const ui64 tabletId, const TActorContext&, bool pipeReconnected = false);
     void ClosePipe(const ui64 tabletId, const TActorContext&);
     void CheckStat(const TActorContext&);
     void UpdateCounters(const TActorContext&);

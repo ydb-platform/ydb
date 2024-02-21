@@ -690,7 +690,7 @@ void TPersQueueReadBalancer::Handle(TEvTabletPipe::TEvClientDestroyed::TPtr& ev,
     LOG_DEBUG_S(ctx, NKikimrServices::PERSQUEUE_READ_BALANCER, GetPrefix() << "TEvClientDestroyed " << tabletId);
 
     ClosePipe(tabletId, ctx);
-    RequestTabletIfNeeded(tabletId, ctx);
+    RequestTabletIfNeeded(tabletId, ctx, true);
 }
 
 
@@ -702,7 +702,7 @@ void TPersQueueReadBalancer::Handle(TEvTabletPipe::TEvClientConnected::TPtr& ev,
 
     if (ev->Get()->Status != NKikimrProto::OK) {
         ClosePipe(ev->Get()->TabletId, ctx);
-        RequestTabletIfNeeded(ev->Get()->TabletId, ctx);
+        RequestTabletIfNeeded(ev->Get()->TabletId, ctx, true);
 
         LOG_ERROR_S(ctx, NKikimrServices::PERSQUEUE_READ_BALANCER, GetPrefix() << "TEvClientConnected Status " << ev->Get()->Status << ", TabletId " << tabletId);
         return;
@@ -728,7 +728,6 @@ void TPersQueueReadBalancer::ClosePipe(const ui64 tabletId, const TActorContext&
         NTabletPipe::CloseClient(ctx, it->second.PipeActor);
         TabletPipes.erase(it);
         PipesRequested.erase(tabletId);
-        AggregatedStats.Cookies.erase(tabletId);
     }
 }
 
@@ -749,20 +748,28 @@ TActorId TPersQueueReadBalancer::GetPipeClient(const ui64 tabletId, const TActor
     return pipeClient;
 }
 
-void TPersQueueReadBalancer::RequestTabletIfNeeded(const ui64 tabletId, const TActorContext& ctx)
+void TPersQueueReadBalancer::RequestTabletIfNeeded(const ui64 tabletId, const TActorContext& ctx, bool pipeReconnected)
 {
-    if ((tabletId == SchemeShardId && !WaitingForACL) ||
-        (tabletId != SchemeShardId && AggregatedStats.Cookies.contains(tabletId))) {
-        return;
-    }
-
-    TActorId pipeClient = GetPipeClient(tabletId, ctx);
     if (tabletId == SchemeShardId) {
+        if (!WaitingForACL) {
+            return;
+        }
+        TActorId pipeClient = GetPipeClient(tabletId, ctx);
         NTabletPipe::SendData(ctx, pipeClient, new NSchemeShard::TEvSchemeShard::TEvDescribeScheme(tabletId, PathId));
     } else {
-        ui64 cookie = ++AggregatedStats.NextCookie;
-        AggregatedStats.Cookies[tabletId] = cookie;
-        NTabletPipe::SendData(ctx, pipeClient, new TEvPersQueue::TEvStatus("", true), cookie);
+        TActorId pipeClient = GetPipeClient(tabletId, ctx);
+        auto it = AggregatedStats.Cookies.find(tabletId);
+        if (!pipeReconnected || it != AggregatedStats.Cookies.end()) {
+            ui64 cookie;
+            if (pipeReconnected) {
+                cookie = it->second;
+            } else {
+                cookie = ++AggregatedStats.NextCookie;
+                AggregatedStats.Cookies[tabletId] = cookie;
+            }
+
+            NTabletPipe::SendData(ctx, pipeClient, new TEvPersQueue::TEvStatus("", true), cookie);
+        }
         NTabletPipe::SendData(ctx, pipeClient, new TEvPQ::TEvSubDomainStatus(SubDomainOutOfSpace));
     }
 }

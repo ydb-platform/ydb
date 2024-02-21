@@ -175,7 +175,7 @@ TRACING_SCHEMA = dict(
         uploader=dict(
             type="object",
             properties=dict(
-                max_spans_per_second=dict(type="integer", minimum=1),
+                max_exported_spans_per_second=dict(type="integer", minimum=1),
                 max_spans_in_batch=dict(type="integer", minimum=1),
                 max_bytes_in_batch=dict(type="integer"),
                 max_batch_accumulation_milliseconds=dict(type="integer"),

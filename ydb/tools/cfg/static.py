@@ -1196,9 +1196,9 @@ class StaticConfigGenerator(object):
         def get_uploader(uploader):
             uploader_pb = config_pb2.TTracingConfig.TUploaderConfig()
 
-            max_spans_per_second = uploader.get("max_spans_per_second")
-            if max_spans_per_second is not None:
-                uploader_pb.MaxExportedSpansPerSecond = max_spans_per_second
+            max_exported_spans_per_second = uploader.get("max_exported_spans_per_second")
+            if max_exported_spans_per_second is not None:
+                uploader_pb.MaxExportedSpansPerSecond = max_exported_spans_per_second
 
             max_spans_in_batch = uploader.get("max_spans_in_batch")
             if max_spans_in_batch is not None:

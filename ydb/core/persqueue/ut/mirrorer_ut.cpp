@@ -251,7 +251,6 @@ Y_UNIT_TEST_SUITE(TPersQueueMirrorer) {
                 }
             }
         }
-
     }
 
     Y_UNIT_TEST(ValidStartStream) {

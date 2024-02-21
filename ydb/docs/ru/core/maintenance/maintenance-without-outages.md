@@ -37,7 +37,7 @@
 
 В задаче обслуживания можно указать режим доступности кластера, который должен соблюдаться при [проверке выполнимости действий](#check-actionability-algorithm). Поддерживаются следующие режимы:
 - **Strong** — режим доступности, минимизирующий возможность поломки кластера.
-    - Допускается не более одного недоступного [VDisk]((../concepts/cluster/_includes/distributed_storage/distributed_storage_interface.md#storage-groups)) в каждой из затрагиваемых групп хранения.
+    - Допускается не более одного недоступного [VDisk](../concepts/cluster/_includes/distributed_storage/distributed_storage_interface.md#storage-groups) в каждой из затрагиваемых групп хранения.
     - Допускается не более одного недоступного кольца State Storage.
 - **Weak** — режим доступности, не позволяющий превысить модель отказа.
     - Допускается не более двух недоступных VDisk-ов для затрагиваемых групп хранения со схемой [block-4-2](../administration/production-storage-config.md#reliability).

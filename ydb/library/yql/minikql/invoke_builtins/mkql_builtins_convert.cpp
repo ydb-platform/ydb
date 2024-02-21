@@ -271,13 +271,28 @@ template <typename TInput, typename TOutput>
 struct TBigDateScale;
 
 template <>
+struct TBigDateScale<NUdf::TDataType<NUdf::TDate>, NUdf::TDataType<NUdf::TDatetime64>> {
+    static constexpr i32 Modifier = 86400;
+};
+
+template <>
 struct TBigDateScale<NUdf::TDataType<NUdf::TDate32>, NUdf::TDataType<NUdf::TDatetime64>> {
     static constexpr i32 Modifier = 86400;
 };
 
 template <>
+struct TBigDateScale<NUdf::TDataType<NUdf::TDatetime>, NUdf::TDataType<NUdf::TTimestamp64>> {
+    static constexpr i64 Modifier = 1000000LL;
+};
+
+template <>
 struct TBigDateScale<NUdf::TDataType<NUdf::TDatetime64>, NUdf::TDataType<NUdf::TTimestamp64>> {
     static constexpr i64 Modifier = 1000000LL;
+};
+
+template <>
+struct TBigDateScale<NUdf::TDataType<NUdf::TDate>, NUdf::TDataType<NUdf::TTimestamp64>> {
+    static constexpr i64 Modifier = 86400000000LL;
 };
 
 template <>
@@ -1174,6 +1189,32 @@ void RegisterBigDateRescale(IBuiltinFunctionRegistry& registry) {
     RegisterBigDateScaleDown<NUdf::TDataType<NUdf::TTimestamp64>, NUdf::TDataType<NUdf::TDatetime64>>(registry);
 }
 
+void RegisterNarrowToBigDateCasts(IBuiltinFunctionRegistry& registry) {
+    RegisterConvert<NUdf::TDataType<NUdf::TInterval>, NUdf::TDataType<NUdf::TInterval64>>(registry);
+    RegisterConvert<NUdf::TDataType<NUdf::TTimestamp>, NUdf::TDataType<NUdf::TTimestamp64>>(registry);
+    RegisterConvert<NUdf::TDataType<NUdf::TDatetime>, NUdf::TDataType<NUdf::TDatetime64>>(registry);
+    RegisterConvert<NUdf::TDataType<NUdf::TDate>, NUdf::TDataType<NUdf::TDate32>>(registry);
+
+    RegisterBigDateScaleUp<NUdf::TDataType<NUdf::TDate>, NUdf::TDataType<NUdf::TDatetime64>>(registry);
+    RegisterBigDateScaleUp<NUdf::TDataType<NUdf::TDate>, NUdf::TDataType<NUdf::TTimestamp64>>(registry);
+    RegisterBigDateScaleUp<NUdf::TDataType<NUdf::TDatetime>, NUdf::TDataType<NUdf::TTimestamp64>>(registry);
+}
+
+void RegisterBigDateToNarrowCasts(IBuiltinFunctionRegistry& registry) {
+    RegisterFunctionImpl<TWideToShort<i32, ui16, NYql::NUdf::MAX_DATE - 1U>, TUnaryArgsWithNullableResultOpt<NUdf::TDataType<NUdf::TDate32>, NUdf::TDataType<NUdf::TDate>, false>, TUnaryStub>(registry, integral);
+    RegisterFunctionImpl<TWideToShort<i32, ui16, NYql::NUdf::MAX_DATE - 1U>, TUnaryArgsWithNullableResultOpt<NUdf::TDataType<NUdf::TDate32>, NUdf::TDataType<NUdf::TDate>, true>, TUnaryWrap>(registry, integral);
+
+    RegisterFunctionImpl<TWideToShort<i64, ui32, NYql::NUdf::MAX_DATETIME - 1U>, TUnaryArgsWithNullableResultOpt<NUdf::TDataType<NUdf::TDatetime64>, NUdf::TDataType<NUdf::TDatetime>, false>, TUnaryStub>(registry, integral);
+    RegisterFunctionImpl<TWideToShort<i64, ui32, NYql::NUdf::MAX_DATETIME - 1U>, TUnaryArgsWithNullableResultOpt<NUdf::TDataType<NUdf::TDatetime64>, NUdf::TDataType<NUdf::TDatetime>, true>, TUnaryWrap>(registry, integral);
+
+    RegisterFunctionImpl<TWideToShort<i64, ui64, NYql::NUdf::MAX_TIMESTAMP - 1ULL>, TUnaryArgsWithNullableResultOpt<NUdf::TDataType<NUdf::TTimestamp64>, NUdf::TDataType<NUdf::TTimestamp>, false>, TUnaryStub>(registry, integral);
+    RegisterFunctionImpl<TWideToShort<i64, ui64, NYql::NUdf::MAX_TIMESTAMP - 1ULL>, TUnaryArgsWithNullableResultOpt<NUdf::TDataType<NUdf::TTimestamp64>, NUdf::TDataType<NUdf::TTimestamp>, true>, TUnaryWrap>(registry, integral);
+
+    constexpr auto TimestampLimit = static_cast<i64>(NUdf::MAX_TIMESTAMP - 1ULL);
+    RegisterFunctionImpl<TWideToShort<i64, i64, TimestampLimit, -TimestampLimit>, TUnaryArgsWithNullableResultOpt<NUdf::TDataType<NUdf::TInterval64>, NUdf::TDataType<NUdf::TInterval>, false>, TUnaryStub>(registry, integral);
+    RegisterFunctionImpl<TWideToShort<i64, i64, TimestampLimit, -TimestampLimit>, TUnaryArgsWithNullableResultOpt<NUdf::TDataType<NUdf::TInterval64>, NUdf::TDataType<NUdf::TInterval>, true>, TUnaryWrap>(registry, integral);
+}
+
 template <typename TInput, typename TOutput, bool Tz = false>
 void RegisterRescaleOpt(IBuiltinFunctionRegistry& registry) {
     RegisterFunctionImpl<TDatetimeRescale<typename TInput::TLayout, typename TOutput::TLayout, Tz>, TUnaryArgsOpt<TInput, TOutput, false>, TUnaryStub>(registry, convert);
@@ -1298,6 +1339,8 @@ void RegisterConvert(IBuiltinFunctionRegistry& registry) {
     RegisterToDateConvert(registry);
     RegisterToBigDateConvert(registry);
     RegisterBigDateRescale(registry);
+    RegisterNarrowToBigDateCasts(registry);
+    RegisterBigDateToNarrowCasts(registry);
 
     RegisterDecimalConvert(registry);
 

@@ -9,6 +9,7 @@
 #include <ydb/library/yql/core/yql_opt_utils.h>
 #include <ydb/library/yql/dq/opt/dq_opt_join.h>
 #include <ydb/library/yql/dq/opt/dq_opt_log.h>
+#include <ydb/library/yql/dq/opt/dq_opt_hopping.h>
 #include <ydb/library/yql/providers/common/transform/yql_optimize.h>
 #include <ydb/library/yql/providers/dq/common/yql_dq_settings.h>
 
@@ -111,8 +112,28 @@ protected:
     }
 
     TMaybeNode<TExprBase> RewriteAggregate(TExprBase node, TExprContext& ctx) {
-        TExprBase output = DqRewriteAggregate(node, ctx, TypesCtx, false, KqpCtx.Config->HasOptEnableOlapPushdown() || KqpCtx.Config->HasOptUseFinalizeByKey(), KqpCtx.Config->HasOptUseFinalizeByKey());
-        DumpAppliedRule("RewriteAggregate", node.Ptr(), output.Ptr(), ctx);
+        TMaybeNode<TExprBase> output;
+        auto aggregate = node.Cast<TCoAggregateBase>();
+        auto hopSetting = GetSetting(aggregate.Settings().Ref(), "hopping");        
+        if (hopSetting) {
+            auto input = aggregate.Input().Maybe<TDqConnection>();
+            if (!input) {
+                return node;
+            }
+            output = NHopping::RewriteAsHoppingWindow(
+                node,
+                ctx,
+                input.Cast(),
+                false,              // analyticsHopping
+                TDuration::MilliSeconds(TDqSettings::TDefault::WatermarksLateArrivalDelayMs),
+                true,               // defaultWatermarksMode
+                true);              // syncActor
+        } else {
+            output = DqRewriteAggregate(node, ctx, TypesCtx, false, KqpCtx.Config->HasOptEnableOlapPushdown() || KqpCtx.Config->HasOptUseFinalizeByKey(), KqpCtx.Config->HasOptUseFinalizeByKey());
+        }
+        if (output) {
+            DumpAppliedRule("RewriteAggregate", node.Ptr(), output.Cast().Ptr(), ctx);
+        }
         return output;
     }
 
@@ -136,8 +157,9 @@ protected:
 
     TMaybeNode<TExprBase> OptimizeEquiJoinWithCosts(TExprBase node, TExprContext& ctx) {
         auto maxDPccpDPTableSize = Config->MaxDPccpDPTableSize.Get().GetOrElse(TDqSettings::TDefault::MaxDPccpDPTableSize);
-        TExprBase output = DqOptimizeEquiJoinWithCosts(node, ctx, TypesCtx, Config->CostBasedOptimizationLevel.Get().GetOrElse(TDqSettings::TDefault::CostBasedOptimizationLevel), 
-            maxDPccpDPTableSize, Pctx, [](auto& rels, auto label, auto node, auto stat) {
+        auto opt = std::unique_ptr<IOptimizerNew>(MakeNativeOptimizerNew(Pctx, maxDPccpDPTableSize));
+        TExprBase output = DqOptimizeEquiJoinWithCosts(node, ctx, TypesCtx, Config->CostBasedOptimizationLevel.Get().GetOrElse(TDqSettings::TDefault::CostBasedOptimizationLevel),
+            *opt, [](auto& rels, auto label, auto node, auto stat) {
                 rels.emplace_back(std::make_shared<TKqpRelOptimizerNode>(TString(label), stat, node));
             });
         DumpAppliedRule("OptimizeEquiJoinWithCosts", node.Ptr(), output.Ptr(), ctx);

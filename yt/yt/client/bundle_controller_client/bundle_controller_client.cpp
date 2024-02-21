@@ -12,6 +12,8 @@ void TBundleConfigDescriptor::Register(TRegistrar registrar)
         .DefaultNew();
     registrar.Parameter("bundle_constraints", &TThis::ConfigConstraints)
         .DefaultNew();
+    registrar.Parameter("resource_quota", &TThis::ResourceQuota)
+        .DefaultNew();
 }
 
 ////////////////////////////////////////////////////////////////////////////////

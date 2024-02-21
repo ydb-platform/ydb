@@ -154,6 +154,9 @@ Y_UNIT_TEST_SUITE(TPersQueueMirrorer) {
 
         }
 
+        srcReader->Close(TDuration::Zero());
+        dstReader->Close(TDuration::Zero());
+
         // write to source topic
         TVector<ui32> messagesPerPartition(partitionsCount, 0);
         for (ui32 partition = 0; partition < partitionsCount; ++partition) {
@@ -163,7 +166,7 @@ Y_UNIT_TEST_SUITE(TPersQueueMirrorer) {
                 {"some_extra_field2", "another_value" + ToString(partition)},
                 {"file", "/home/user/log" + ToString(partition)}
             };
-            auto writer = CreateSimpleWriter(*driver, srcTopic, sourceId, partition + 1, std::nullopt, std::nullopt, sessionMeta); 
+            auto writer = CreateSimpleWriter(*driver, srcTopic, sourceId, partition + 1, std::nullopt, std::nullopt, sessionMeta);
 
             ui64 seqNo = writer->GetInitSeqNo();
 
@@ -211,10 +214,10 @@ Y_UNIT_TEST_SUITE(TPersQueueMirrorer) {
             auto dstReader = createReader(dstTopic, partition);
 
             for (ui32 i = 0; i < messagesPerPartition[partition]; ++i) {
-                auto dstEvent = GetNextMessageSkipAssignment(dstReader);
+                auto dstEvent = GetNextMessageSkipAssignment(dstReader, TDuration::Seconds(1));
                 UNIT_ASSERT(dstEvent);
                 Cerr << "Destination read message: " << dstEvent->DebugString() << "\n";
-                auto srcEvent = GetNextMessageSkipAssignment(srcReader);
+                auto srcEvent = GetNextMessageSkipAssignment(srcReader, TDuration::Seconds(1));
                 UNIT_ASSERT(srcEvent);
                 Cerr << "Source read message: " << srcEvent->DebugString() << "\n";
 
@@ -251,7 +254,6 @@ Y_UNIT_TEST_SUITE(TPersQueueMirrorer) {
                 }
             }
         }
-
     }
 
     Y_UNIT_TEST(ValidStartStream) {
@@ -264,7 +266,7 @@ Y_UNIT_TEST_SUITE(TPersQueueMirrorer) {
         server.AnnoyingClient->CreateTopic(topicFullName, 1);
 
         auto driver = server.AnnoyingClient->GetDriver();
-        auto writer = CreateSimpleWriter(*driver, topic, "src-id-test"); 
+        auto writer = CreateSimpleWriter(*driver, topic, "src-id-test");
         for (auto i = 0u; i < 5; i++) {
             auto res = writer->Write(TString(10, 'a'));
             UNIT_ASSERT(res);
@@ -300,7 +302,7 @@ Y_UNIT_TEST_SUITE(TPersQueueMirrorer) {
                 break;
             }
         }
-        
+
         for (auto i = 0u; i < 5; i++) {
             auto res = writer->Write(TString(10, 'b'));
             UNIT_ASSERT(res);

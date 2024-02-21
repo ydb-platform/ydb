@@ -85,6 +85,56 @@ Pear,15,33'''
 
     @yq_all
     @pytest.mark.parametrize("client", [{"folder_id": "my_folder"}], indirect=True)
+    def test_csv_with_hopping(self, kikimr, s3, client):
+        resource = boto3.resource(
+            "s3",
+            endpoint_url=s3.s3_url,
+            aws_access_key_id="key",
+            aws_secret_access_key="secret_key"
+        )
+
+        bucket = resource.Bucket("fbucket")
+        bucket.create(ACL='public-read')
+        bucket.objects.all().delete()
+
+        s3_client = boto3.client(
+            "s3",
+            endpoint_url=s3.s3_url,
+            aws_access_key_id="key",
+            aws_secret_access_key="secret_key"
+        )
+
+        fruits = R'''Time,Fruit,Price
+0,Banana,3
+1,Apple,2
+2,Pear,15'''
+        s3_client.put_object(Body=fruits, Bucket='fbucket', Key='fruits.csv', ContentType='text/plain')
+        kikimr.control_plane.wait_bootstrap(1)
+        client.create_storage_connection("fruitbucket", "fbucket")
+
+        sql = R'''
+            SELECT COUNT(*) as count,
+            FROM fruitbucket.`fruits.csv`
+            WITH (format=csv_with_names, SCHEMA (
+                Time UInt64 NOT NULL,
+                Fruit String NOT NULL,
+                Price Int NOT NULL
+            ))
+            GROUP BY HOP(CAST(Time AS Timestamp?), "PT1M", "PT1M", "PT1M")
+            '''
+
+        query_id = client.create_query("simple", sql, type=fq.QueryContent.QueryType.ANALYTICS).result.query_id
+        client.wait_query_status(query_id, fq.QueryMeta.COMPLETED)
+
+        data = client.get_result_data(query_id)
+        result_set = data.result.result_set
+        logging.debug(str(result_set))
+        assert len(result_set.columns) == 1
+        assert len(result_set.rows) == 1
+        assert result_set.rows[0].items[0].uint64_value == 3
+
+    @yq_all
+    @pytest.mark.parametrize("client", [{"folder_id": "my_folder"}], indirect=True)
     @pytest.mark.parametrize("runtime_listing", [False, True])
     def test_raw(self, kikimr, s3, client, runtime_listing, yq_version):
         if yq_version == "v1" and runtime_listing:
@@ -409,7 +459,7 @@ Pear,15,33'''
         kikimr.compute_plane.wait_bootstrap()
         client.create_storage_connection("fruitbucket", "wbucket")
 
-        time.sleep(10) # 2 x node info update period 
+        time.sleep(10)  # 2 x node info update period
 
         sql = R'''
             SELECT Fruit, sum(Price) as Price, sum(Weight) as Weight

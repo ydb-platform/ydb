@@ -2,9 +2,9 @@
 
 LIBRARY()
 
-VERSION(3.11.8)
+VERSION(3.12.2)
 
-ORIGINAL_SOURCE(https://github.com/python/cpython/archive/v3.11.8.tar.gz)
+ORIGINAL_SOURCE(https://github.com/python/cpython/archive/v3.12.2.tar.gz)
 
 LICENSE(Python-2.0)
 
@@ -55,7 +55,6 @@ ENDIF()
 
 SRCS(
     Objects/abstract.c
-    Objects/accu.c
     Objects/boolobject.c
     Objects/bytearrayobject.c
     Objects/bytes_methods.c
@@ -94,6 +93,7 @@ SRCS(
     Objects/structseq.c
     Objects/tupleobject.c
     Objects/typeobject.c
+    Objects/typevarobject.c
     Objects/unicodectype.c
     Objects/unicodeobject.c
     Objects/unionobject.c
@@ -111,12 +111,14 @@ SRCS(
     Python/Python-tokenize.c
     Python/_warnings.c
     Python/asdl.c
+    Python/assemble.c
     Python/ast.c
     Python/ast_opt.c
     Python/ast_unparse.c
     Python/bltinmodule.c
     Python/bootstrap_hash.c
     Python/ceval.c
+    Python/ceval_gil.c
     Python/codecs.c
     Python/compile.c
     Python/context.c
@@ -125,6 +127,7 @@ SRCS(
     Python/dynamic_annotations.c
     Python/errors.c
     Python/fileutils.c
+    Python/flowgraph.c
     Python/formatter_unicode.c
     Python/frame.c
     Python/frozen.c
@@ -140,11 +143,15 @@ SRCS(
     Python/import.c
     Python/importdl.c
     Python/initconfig.c
+    Python/instrumentation.c
+    Python/intrinsics.c
+    Python/legacy_tracing.c
     Python/marshal.c
     Python/modsupport.c
     Python/mysnprintf.c
     Python/mystrtoul.c
     Python/pathconfig.c
+    Python/perf_trampoline.c
     Python/preconfig.c
     Python/pyarena.c
     Python/pyctype.c
@@ -165,6 +172,7 @@ SRCS(
     Python/sysmodule.c
     Python/thread.c
     Python/traceback.c
+    Python/tracemalloc.c
 )
 
 IF (OS_WINDOWS)

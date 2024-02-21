@@ -151,6 +151,8 @@ void TBlobStorageController::Handle(TEvNodeWardenStorageConfig::TPtr ev) {
                 SysViewChangedVSlots.insert(vslotId);
                 SysViewChangedGroups.insert(vdiskId.GroupID);
             }
+        } else {
+            Y_FAIL("no storage configuration provided");
         }
     }
 

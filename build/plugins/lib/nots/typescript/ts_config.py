@@ -270,7 +270,7 @@ class TsConfig(object):
             root_dir=self.compiler_option(CompilerOptionsFields.rootDir),
             out_dir=self.compiler_option(CompilerOptionsFields.outDir),
             include=self.data.get(RootFields.include),
-            files=self.data.get(RootFields.files)
+            files=self.data.get(RootFields.files),
         )
 
         return ts_glob(ts_glob_config, all_files)

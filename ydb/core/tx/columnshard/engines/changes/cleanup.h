@@ -27,19 +27,14 @@ protected:
     virtual ui64 DoCalcMemoryForUsage() const override {
         return 0;
     }
+    virtual std::shared_ptr<NDataLocks::ILock> DoBuildDataLock() const override {
+        return std::make_shared<NDataLocks::TListPortionsLock>(PortionsToDrop);
+    }
+
 public:
     TCleanupColumnEngineChanges(const std::shared_ptr<IStoragesManager>& storagesManager)
         : TBase(storagesManager, StaticTypeName()) {
 
-    }
-
-
-    virtual THashSet<TPortionAddress> GetTouchedPortions() const override {
-        THashSet<TPortionAddress> result;
-        for (const auto& portionInfo : PortionsToDrop) {
-            result.emplace(portionInfo.GetAddress());
-        }
-        return result;
     }
 
     std::vector<TPortionInfo> PortionsToDrop;

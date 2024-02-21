@@ -612,8 +612,10 @@ namespace NKikimr {
         : TEventLocal<TEvNodeWardenStorageConfig, TEvBlobStorage::EvNodeWardenStorageConfig>
     {
         std::unique_ptr<NKikimrBlobStorage::TStorageConfig> Config;
+        std::unique_ptr<NKikimrBlobStorage::TStorageConfig> ProposedConfig;
 
-        TEvNodeWardenStorageConfig(const NKikimrBlobStorage::TStorageConfig& config);
+        TEvNodeWardenStorageConfig(const NKikimrBlobStorage::TStorageConfig& config,
+                const NKikimrBlobStorage::TStorageConfig *proposedConfig);
         ~TEvNodeWardenStorageConfig();
     };
 

@@ -146,24 +146,6 @@ public:
             return;
         }
 
-        ui64 mkqlMemoryLimit = Request.MkqlMemoryLimit > 0
-            ? Request.MkqlMemoryLimit
-            : 1_GB;
-
-        auto& alloc = Request.TxAlloc->Alloc;
-        auto rmConfig = GetKqpResourceManager()->GetConfig();
-        ui64 mkqlInitialLimit = std::min(mkqlMemoryLimit, rmConfig.GetMkqlLightProgramMemoryLimit());
-        ui64 mkqlMaxLimit = std::max(mkqlMemoryLimit, rmConfig.GetMkqlLightProgramMemoryLimit());
-        alloc.SetLimit(mkqlInitialLimit);
-
-        // TODO: KIKIMR-15350
-        alloc.Ref().SetIncreaseMemoryLimitCallback([this, &alloc, mkqlMaxLimit](ui64 currentLimit, ui64 required) {
-            if (required < mkqlMaxLimit) {
-                LOG_D("Increase memory limit from " << currentLimit << " to " << required);
-                alloc.SetLimit(required);
-            }
-        });
-
         // task runner settings
         ComputeCtx = std::make_unique<NMiniKQL::TKqpComputeContextBase>();
         RunnerContext = CreateTaskRunnerContext(ComputeCtx.get(), &Request.TxAlloc->TypeEnv);

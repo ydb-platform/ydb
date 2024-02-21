@@ -4,6 +4,13 @@
 
 namespace NKikimr::NOlap {
 
+std::shared_ptr<NKikimr::NOlap::IBlobsStorageOperator> IStoragesManager::GetOperatorVerified(const TString& storageId) {
+    TReadGuard rg(RWMutex);
+    auto it = Constructed.find(storageId);
+    AFL_VERIFY(it != Constructed.end());
+    return it->second;
+}
+
 std::shared_ptr<NKikimr::NOlap::IBlobsStorageOperator> IStoragesManager::GetOperator(const TString& storageId) {
     TReadGuard rg(RWMutex);
     auto it = Constructed.find(storageId);
@@ -36,6 +43,28 @@ void IStoragesManager::OnTieringModified(const std::shared_ptr<NColumnShard::TTi
 
 void IStoragesManager::InitializeNecessaryStorages() {
     GetOperator(DefaultStorageId);
+}
+
+bool IStoragesManager::LoadIdempotency(NTable::TDatabase& database) {
+    if (!DoLoadIdempotency(database)) {
+        return false;
+    }
+    TBlobManagerDb blobsDB(database);
+    for (auto&& i : GetStorages()) {
+        if (!i.second->Load(blobsDB)) {
+            return false;
+        }
+    }
+    return true;
+}
+
+bool IStoragesManager::HasBlobsToDelete() const {
+    for (auto&& i : Constructed) {
+        if (!i.second->GetBlobsToDelete().IsEmpty()) {
+            return true;
+        }
+    }
+    return false;
 }
 
 }

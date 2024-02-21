@@ -126,7 +126,12 @@ git config push.default current
 git config push.autoSetupRemote true
 ```
 
-This way, `git push {remote}` command will automatically set upstream for the current branch to the `{remote}` and consecutive `git push` commands will only push current branch.  
+This way, `git push {remote}` command will automatically set upstream for the current branch to the `{remote}` and consecutive `git push` commands will only push current branch.
+
+If you intend to use GitHub CLI, then set `ydb-platform/ydb` as a default repository for GitHub CLI:
+```
+gh repo set-default ydb-platform/ydb
+```
 
 ### Configure commit authorship {#author}
 
@@ -224,11 +229,17 @@ When the changes are completed and locally tested (see [Ya Build and Test](build
 
 ### Precommit checks {#precommit_checks}
 
-Prior to merging, the precommit checks are run for the Pull Request. You can see its status on the Pull Request page.
+Prior to merging, the precommit checks are run for the Pull Request.
 
-As part of the precommit checks, the YDB CI builds artifacts and runs all the tests, providing the results as a comment to the Pull Request.
+For changes in the {{ ydb-short-name }} code, precommit checks build {{ ydb-short-name }} artifacts, and run tests as described in `ya.make` files. Build and test run on a specific commit which merges your changes to the current `main` branch. If there are merge conflicts, build/test checks cannot be run, and you need to rebase your changes as described [below](#rebase).
 
-If you are not a member of the YDB team, build/test checks do not run until a team member reviews your changes and approves the PR for tests by assigning a label 'Ok-to-test'.
+You can see the checks status on the Pull Request page. Also, key information for {{ ydb-short-name }} build/test checks progress and status is published to the comments of the Pull Ruquest.
+
+If you are not a member of the YDB team, build/test checks do not run until a team member reviews your changes and approves the PR for tests by assigning a label `ok-to-test`.
+
+Checks are restarted every time you push changes to the pull request, cancelling the previous run if it's still in progress. Each iteration of checks produces its own comment on the pull request page, so you can see the history of checks.
+
+If you are a member of the YDB team, you can also restart checks on a new merge commit without pushing. To do so, add label `rebase-and-check` to the PR.
 
 ### Test results {#test-results}
 
@@ -275,8 +286,9 @@ git push fork
 ```
 
 And then create a PR from your branch with the cherry-picked fix to the stable branch. It is done similarly to opening a PR to `main`, but make sure to double-check the target branch.
-If you are using GitHub CLI, pass `-B` argument:
+
+If you are using GitHub CLI, pass `-B` argument to specify the target branch:
 
 ```
-  gh pr create --title "Title" -B stable-24-1
+gh pr create --title "Title" -B stable-24-1
 ```

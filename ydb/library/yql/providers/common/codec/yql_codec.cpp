@@ -368,6 +368,14 @@ NYT::TNode DataValueToNode(const NKikimr::NUdf::TUnboxedValuePod& value, NKikimr
             out << value.Get<ui64>() << "," << NKikimr::NMiniKQL::GetTimezoneIANAName(value.GetTimezoneId());
             return NYT::TNode(out.Str());
         }
+        case NUdf::TDataType<NUdf::TDate32>::Id:
+            return NYT::TNode((i64)value.Get<i32>());
+        case NUdf::TDataType<NUdf::TDatetime64>::Id:
+            return NYT::TNode(value.Get<i64>());
+        case NUdf::TDataType<NUdf::TTimestamp64>::Id:
+            return NYT::TNode(value.Get<i64>());
+        case NUdf::TDataType<NUdf::TInterval64>::Id:
+            return NYT::TNode(value.Get<i64>());
         case NUdf::TDataType<NUdf::TDecimal>::Id: {
             const auto params = static_cast<NKikimr::NMiniKQL::TDataDecimalType*>(type)->GetParams();
             return NYT::TNode(NDecimal::ToString(value.GetInt128(), params.first, params.second));
@@ -1009,6 +1017,22 @@ NUdf::TUnboxedValue ReadYsonValue(TType* type,
             return data;
         }
 
+        case NUdf::TDataType<NUdf::TDate32>::Id:
+            if (isTableFormat) {
+                CHECK_EXPECTED(cmd, Int64Marker);
+                return NUdf::TUnboxedValuePod((i32)buf.ReadVarI64());
+            }
+            return NUdf::TUnboxedValuePod(ReadNextSerializedNumber<i32>(cmd, buf));
+
+        case NUdf::TDataType<NUdf::TDatetime64>::Id:
+        case NUdf::TDataType<NUdf::TTimestamp64>::Id:
+        case NUdf::TDataType<NUdf::TInterval64>::Id:
+            if (isTableFormat) {
+                CHECK_EXPECTED(cmd, Int64Marker);
+                return NUdf::TUnboxedValuePod(buf.ReadVarI64());
+            }
+            return NUdf::TUnboxedValuePod(ReadNextSerializedNumber<i64>(cmd, buf));
+
         case NUdf::TDataType<NUdf::TJsonDocument>::Id: {
             if (isTableFormat) {
                 return ValueFromString(EDataSlot::JsonDocument, ReadNextString(cmd, buf));
@@ -1406,6 +1430,7 @@ NUdf::TUnboxedValue ReadSkiffData(TType* type, ui64 nativeYtTypeFlags, TInputBuf
         return NUdf::TUnboxedValuePod(i16(data));
     }
 
+    case NUdf::TDataType<NUdf::TDate32>::Id:
     case NUdf::TDataType<i32>::Id: {
         i64 data;
         buf.ReadMany((char*)&data, sizeof(data));
@@ -1420,6 +1445,9 @@ NUdf::TUnboxedValue ReadSkiffData(TType* type, ui64 nativeYtTypeFlags, TInputBuf
     }
 
     case NUdf::TDataType<NUdf::TInterval>::Id:
+    case NUdf::TDataType<NUdf::TInterval64>::Id:
+    case NUdf::TDataType<NUdf::TDatetime64>::Id:
+    case NUdf::TDataType<NUdf::TTimestamp64>::Id:
     case NUdf::TDataType<i64>::Id: {
         i64 data;
         buf.ReadMany((char*)&data, sizeof(data));
@@ -1585,6 +1613,10 @@ void SkipSkiffField(NKikimr::NMiniKQL::TType* type, ui64 nativeYtTypeFlags, TInp
         case NUdf::TDataType<i32>::Id:
         case NUdf::TDataType<i64>::Id:
         case NUdf::TDataType<NUdf::TInterval>::Id:
+        case NUdf::TDataType<NUdf::TDate32>::Id:
+        case NUdf::TDataType<NUdf::TDatetime64>::Id:
+        case NUdf::TDataType<NUdf::TTimestamp64>::Id:
+        case NUdf::TDataType<NUdf::TInterval64>::Id:
             buf.SkipMany(sizeof(i64));
             break;
 
@@ -2054,8 +2086,16 @@ void WriteYsonValueInTableFormat(TOutputBuf& buf, TType* type, const NUdf::TUnbo
             break;
 
         case NUdf::TDataType<NUdf::TInterval>::Id:
+        case NUdf::TDataType<NUdf::TInterval64>::Id:
+        case NUdf::TDataType<NUdf::TDatetime64>::Id:
+        case NUdf::TDataType<NUdf::TTimestamp64>::Id:
             buf.Write(Int64Marker);
             buf.WriteVarI64(value.Get<i64>());
+            break;
+
+        case NUdf::TDataType<NUdf::TDate32>::Id:
+            buf.Write(Int64Marker);
+            buf.WriteVarI64(value.Get<i32>());
             break;
 
         case NUdf::TDataType<NUdf::TTzDate>::Id: {
@@ -2263,6 +2303,7 @@ void WriteSkiffData(NKikimr::NMiniKQL::TType* type, ui64 nativeYtTypeFlags, cons
         break;
     }
 
+    case NUdf::TDataType<NUdf::TDate32>::Id:
     case NUdf::TDataType<i32>::Id: {
         i64 data = value.Get<i32>();
         buf.WriteMany((const char*)&data, sizeof(data));
@@ -2277,6 +2318,9 @@ void WriteSkiffData(NKikimr::NMiniKQL::TType* type, ui64 nativeYtTypeFlags, cons
     }
 
     case NUdf::TDataType<NUdf::TInterval>::Id:
+    case NUdf::TDataType<NUdf::TInterval64>::Id:
+    case NUdf::TDataType<NUdf::TDatetime64>::Id:
+    case NUdf::TDataType<NUdf::TTimestamp64>::Id:
     case NUdf::TDataType<i64>::Id: {
         i64 data = value.Get<i64>();
         buf.WriteMany((const char*)&data, sizeof(data));

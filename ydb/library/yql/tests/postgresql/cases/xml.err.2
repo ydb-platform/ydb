@@ -13,6 +13,18 @@ INSERT INTO xmltest VALUES (2, '<value>two</value>');
 <sql-statement>
 INSERT INTO xmltest VALUES (3, '<wrong');
 </sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: YtFill!
+    	INSERT INTO xmltest VALUES (3, '<wrong');
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  invalid XML document
+DETAIL:  line 1: Couldn't find end of Start Tag wrong line 1
+	<wrong
+	      ^
+
+        	INSERT INTO xmltest VALUES (3, '<wrong');
+	^
 <sql-statement>
 SELECT * FROM xmltest;
 </sql-statement>
@@ -655,6 +667,18 @@ SELECT '<>' IS NOT DOCUMENT;
 <sql-statement>
 SELECT xmlagg(data) FROM xmltest;
 </sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: Result
+    	SELECT xmlagg(data) FROM xmltest;
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  invalid XML document
+DETAIL:  line 1: Extra content at the end of the document
+	<value>one</value><value>two</value>
+	                  ^
+
+        	SELECT xmlagg(data) FROM xmltest;
+	^
 <sql-statement>
 SELECT xmlagg(data) FROM xmltest WHERE id > 10;
 </sql-statement>

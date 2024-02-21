@@ -486,7 +486,7 @@ FROM booltbl3 ORDER BY o;
 CREATE TABLE booltbl4(isfalse bool, istrue bool, isnul bool);
 </sql-statement>
 <sql-statement>
-INSERT INTO booltbl4 (isfalse, istrue, isnul) VALUES (false, true, null);
+INSERT INTO booltbl4 VALUES (false, true, null);
 </sql-statement>
 <sql-statement>
 \pset null '(null)'

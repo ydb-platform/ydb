@@ -51,6 +51,8 @@ Y_UNIT_TEST_SUITE(TConstantsTests) {
         UNIT_ASSERT_VALUES_EQUAL(typeDesc.TypeId, VarcharOid);
         typeDesc = LookupType("text");
         UNIT_ASSERT_VALUES_EQUAL(typeDesc.TypeId, TextOid);
+        typeDesc = LookupType("anynonarray");
+        UNIT_ASSERT_VALUES_EQUAL(typeDesc.TypeId, AnyNonArrayOid);
     }
 
     Y_UNIT_TEST(TRelationOidConsts) {

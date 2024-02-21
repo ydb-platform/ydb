@@ -654,7 +654,11 @@ public:
         if (queryType == NKikimrKqp::QUERY_TYPE_SQL_GENERIC_QUERY ||
             queryType == NKikimrKqp::QUERY_TYPE_SQL_GENERIC_CONCURRENT_QUERY) {
 
-            if (explicitSession && sessionInfo && !sessionInfo->AttachedRpcId) {
+            if (explicitSession &&
+                sessionInfo &&
+                !sessionInfo->PgWire && // pg wire bypasses rpc layer and doesn't perform attach
+                !sessionInfo->AttachedRpcId)
+            {
                 TString error = "Attempt to execute query on explicit session without attach";
                 ReplyProcessError(Ydb::StatusIds::BAD_REQUEST, error, requestId);
                 return;

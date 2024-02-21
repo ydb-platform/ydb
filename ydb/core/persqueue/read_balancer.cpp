@@ -783,8 +783,8 @@ void TPersQueueReadBalancer::Handle(TEvPersQueue::TEvStatusResponse::TPtr& ev, c
 
     for (const auto& partRes : record.GetPartResult()) {
         for (const auto& consumer : partRes.GetConsumerResult()) {
-            auto& finishedPartitions = ReadingFinished[consumer.GetConsumer()];
             if (consumer.GetReadingFinished()) {
+                auto& finishedPartitions = ReadingFinished[consumer.GetConsumer()];
                 auto [v, i] = finishedPartitions.insert(partRes.GetPartition());
                 if (i) {
                     auto it = ClientsInfo.find(consumer.GetConsumer());
@@ -1653,7 +1653,7 @@ void TPersQueueReadBalancer::TClientGroupInfo::Balance(const TActorContext& ctx)
         if (cur > 0)
             --cur;
 
-        i64 canRequest = ((i64)sessionInfo.NumActive) - sessionInfo.NumSuspended - realDesired;
+        i64 canRequest = ((i64)sessionInfo.NumActive) - sessionInfo.NumInactive - sessionInfo.NumSuspended - realDesired;
         if (canRequest > 0) {
             ReleasePartition(sessionKey.first, sessionInfo, Group, canRequest, ctx);
         }

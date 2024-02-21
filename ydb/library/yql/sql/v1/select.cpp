@@ -735,7 +735,7 @@ public:
             return false;
         }
 
-        samplingRate = PrepareSamplingRate(pos, sampleClause, samplingRate, true);
+        samplingRate = PrepareSamplingRate(pos, sampleClause, samplingRate);
 
         auto sampleSettings = Q(Y(Q(modeName), Y("EvaluateAtom", Y("ToString", samplingRate)), Y("EvaluateAtom", Y("ToString", samplingSeed))));
         auto sampleOption = Q(Y(Q("sample"), sampleSettings));

@@ -1088,6 +1088,28 @@ void ShowFinalAst(TProgramPtr& program, IOutputStream& stream) {
     PrintExprTo(program, stream);
 }
 
+void FillTablesMapping(const TFsPath& dataDir, THashMap<TString, TString>& tablesMapping) {
+    TVector<TFsPath> children;
+
+    dataDir.List(children);
+
+    Cerr << "Registering pre-existing tables\n";
+    for (const auto& f: children) {
+        if (f.GetExtension() != "attr") {
+            continue;
+        }
+        auto tableName = f.Basename();
+        tableName.resize(tableName.length() - 5);
+
+        if (tableName.EndsWith(".tmp")) {
+            continue;
+        }
+        const auto fullTableName = f.Parent() / tableName;
+        Cerr << "\tyt.plato." << tableName << " -> " << fullTableName << '\n';
+        tablesMapping[TString("yt.plato.") + tableName] = f.Parent() / tableName;
+    }
+}
+
 int Main(int argc, char* argv[])
 {
     using namespace NLastGetopt;
@@ -1137,6 +1159,9 @@ int Main(int argc, char* argv[])
 
     auto yqlNativeServices = NFile::TYtFileServices::Make(funcRegistry.Get(), {}, fileStorage, tempDir.Path(), keepTempFiles);
     auto ytNativeGateway = CreateYtFileGateway(yqlNativeServices, &emulateOutputForMultirun);
+    if (tempDirExists) {
+        FillTablesMapping(tempDir.Path(), yqlNativeServices->GetTablesMapping());
+    }
 
     TVector<TDataProviderInitializer> dataProvidersInit;
     dataProvidersInit.push_back(GetYtNativeDataProviderInitializer(ytNativeGateway));

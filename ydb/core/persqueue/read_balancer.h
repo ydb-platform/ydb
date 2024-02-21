@@ -77,11 +77,8 @@ class TPersQueueReadBalancer : public TActor<TPersQueueReadBalancer>, public TTa
             struct DataSize : Column<35, NScheme::NTypeIds::Uint64> {};
             struct UsedReserveSize : Column<36, NScheme::NTypeIds::Uint64> {};
 
-            struct Parent : Column<37, NScheme::NTypeIds::Uint32> {};
-            struct AdjacentParent : Column<38, NScheme::NTypeIds::Uint32> {};
-
             using TKey = TableKey<Partition>;
-            using TColumns = TableColumns<Partition, TabletId, State, DataSize, UsedReserveSize, Parent, AdjacentParent>;
+            using TColumns = TableColumns<Partition, TabletId, State, DataSize, UsedReserveSize>;
         };
 
         struct Groups : Table<34> {
@@ -146,15 +143,11 @@ class TPersQueueReadBalancer : public TActor<TPersQueueReadBalancer>, public TTa
         ui32 PartitionId;
         ui64 TabletId;
         ui32 Group;
-        ui32 Parent;
-        ui32 AdjacentParent;
 
-        TPartInfo(const ui32 partitionId, const ui64 tabletId, const ui32 group, const ui32 parent, const ui32 adjacentParent)
+        TPartInfo(const ui32 partitionId, const ui64 tabletId, const ui32 group)
             : PartitionId(partitionId)
             , TabletId(tabletId)
             , Group(group)
-            , Parent(parent)
-            , AdjacentParent(adjacentParent)
         {}
     };
 

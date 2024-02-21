@@ -1641,6 +1641,7 @@ message TTracingConfig {
 
     // Only global scope for now
     message TSelectors {
+        optional string RequestType = 1;
     }
 
     message TSamplingScope {

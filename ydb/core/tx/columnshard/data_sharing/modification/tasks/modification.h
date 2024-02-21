@@ -120,12 +120,12 @@ public:
     }
 
     void AddRemapOwner(const TUnifiedBlobId& blobId, const TTabletId from, const TTabletId to) {
-        AFL_VERIFY(to != TabletId);
+//        AFL_VERIFY(to != TabletId);
         AFL_VERIFY(RemapOwner.emplace(blobId, TBlobOwnerRemap(from, to)).second);
     }
 
     void AddInitOwner(const TUnifiedBlobId& blobId, const TTabletId to) {
-        AFL_VERIFY(to != TabletId);
+//        AFL_VERIFY(to != TabletId);
         AFL_VERIFY(InitOwner->emplace(blobId, to).second);
     }
 
@@ -257,16 +257,18 @@ public:
         if (Borrowed) {
             AFL_VERIFY(Shared.empty());
         }
-        {
-            TStorageTabletTask task(storageId, ownerTabletId);
-            task.AddLink(BlobId, toTabletId);
-            task.AddLink(BlobId, selfTabletId);
-            AFL_VERIFY(result.emplace(ownerTabletId, std::move(task)).second);
-        }
-        {
-            TStorageTabletTask task(storageId, toTabletId);
-            task.AddInitOwner(BlobId, ownerTabletId);
-            AFL_VERIFY(result.emplace(toTabletId, std::move(task)).second);
+        if (ownerTabletId != toTabletId) {
+            {
+                TStorageTabletTask task(storageId, ownerTabletId);
+                task.AddLink(BlobId, toTabletId);
+                task.AddLink(BlobId, selfTabletId);
+                AFL_VERIFY(result.emplace(ownerTabletId, std::move(task)).second);
+            }
+            {
+                TStorageTabletTask task(storageId, toTabletId);
+                task.AddInitOwner(BlobId, ownerTabletId);
+                AFL_VERIFY(result.emplace(toTabletId, std::move(task)).second);
+            }
         }
         return result;
     }

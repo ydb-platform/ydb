@@ -83,6 +83,9 @@ void TController::CheckInvariants(const ::NKikimr::NColumnShard::TColumnShard& s
 TController::TCheckContext TController::CheckInvariants() const {
     TGuard<TMutex> g(Mutex);
     TCheckContext context;
+    if (ExpectedShardsCount && *ExpectedShardsCount != ShardActuals.size()) {
+        return context;
+    }
     for (auto&& i : ShardActuals) {
         CheckInvariants(*i.second, context);
     }

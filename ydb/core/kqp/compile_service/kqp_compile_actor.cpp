@@ -173,8 +173,6 @@ private:
     }
 
     void StartSplitting(const TActorContext &ctx) {
-        Cerr << "SPLIT" << Endl;
-
         // TODO: common code, get rid of gateway
         TKqpRequestCounters::TPtr counters = new TKqpRequestCounters;
         counters->Counters = Counters;
@@ -209,12 +207,8 @@ private:
             default:
                 break;
         }
-        //---------------
 
         auto result = KqpHost->CompileQuery(QueryId.Text, prepareSettings);
-        //result.first.clear();
-        //result.second = nullptr;
-        //Y_UNUSED(result);
 
         Become(&TKqpCompileActor::CompileState);
         ReplySplitResult(ctx, std::move(result));
@@ -328,8 +322,6 @@ private:
             actorSystem->Send(selfId, processEv.Release());
         };
 
-        Cerr << "COMPILE" << Endl;
-
         AsyncCompileResult->Continue().Apply(callback);
     }
 
@@ -406,8 +398,6 @@ private:
         if (CompileActorSpan) {
             CompileActorSpan.End();
         }
-
-        Cerr << "TEST" << Endl;
 
         PassAway();
     }

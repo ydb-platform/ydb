@@ -853,9 +853,6 @@ TExprNode::TPtr KiBuildQuery(TExprBase node, TExprContext& ctx, TIntrusivePtr<TK
     bool hasData;
     txExplore.GetTableOperations(hasScheme, hasData);
 
-    Cerr << "HERE" << Endl;
-    FormatBackTrace(&Cerr);
-
     if (hasData && hasScheme) {
         TString message = TStringBuilder() << "Queries with mixed data and scheme operations "
             << "are not supported. Use separate queries for different types of operations.";

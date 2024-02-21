@@ -556,21 +556,11 @@ public:
         YQL_ENSURE(QueryState);
         TTimerGuard timer(this);
 
-        Cerr << "GOT:" << ev->Get()->Exprs.size() << Endl;
-
-        // auto world = std::move(ev->Get()->Exprs.back());
-        // ev->Get()->Exprs.pop_back();
-        Cerr << "CHECK3:: " << ev->Get()->Exprs.front()->Dead() << Endl;
-
         for (const auto& resultElem : ev->Get()->Exprs) {
             Cerr << "GOT:: COMPILED:: " << KqpExprToPrettyString(*resultElem, *ev->Get()->Ctx) << Endl;
         }
 
-        // world.Reset();
         QueryState->SaveAndCheckSplitResult(ev->Get());
-
-        //OnSuccessCompileRequest();
-
         OnSuccessSplitRequest();
     }
 
@@ -587,7 +577,6 @@ public:
     }
 
     void OnSuccessCompileRequest() {
-        Cerr << "COMPILE FINISHED" << Endl;
         if (QueryState->GetAction() == NKikimrKqp::QUERY_ACTION_PREPARE ||
             QueryState->GetAction() == NKikimrKqp::QUERY_ACTION_EXPLAIN)
         {

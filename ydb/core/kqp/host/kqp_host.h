@@ -107,17 +107,10 @@ public:
         const NActors::TActorId& target, const TExecScriptSettings& settings) = 0;
 
     /* Compilation */
-    //virtual TVector<NYql::TExprNode::TPtr> CompileYqlQuery(const TKqpQueryRef& query, bool isSql, bool sqlAutoCommit, NYql::TExprContext& ctx,
-    //    TMaybe<TSqlVersion>& sqlVersion, const TMaybe<bool>& usePgParser) const = 0;
-
     virtual TVector<NYql::TExprNode::TPtr> CompileQuery(const TKqpQueryRef& query, bool isSql, bool sqlAutoCommit, NYql::TExprContext& ctx,
         TMaybe<TSqlVersion>& sqlVersion, const TMaybe<bool>& usePgParser) const = 0;
 
     virtual std::pair<TVector<NYql::TExprNode::TPtr>, THolder<NYql::TExprContext>> CompileQuery(const TKqpQueryRef& query, const TPrepareSettings& settings) = 0;
-
-    //virtual IAsyncQueryResultPtr SplitGenericQuery(const TKqpQueryRef& query, const TPrepareSettings& settings) = 0;
-
-    //virtual IAsyncQueryResultPtr SplitGenericScript(const TKqpQueryRef& query, const TPrepareSettings& settings) = 0;
 };
 
 TIntrusivePtr<IKqpHost> CreateKqpHost(TIntrusivePtr<IKqpGateway> gateway,

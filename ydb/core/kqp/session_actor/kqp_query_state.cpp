@@ -256,22 +256,6 @@ std::unique_ptr<TEvKqp::TEvCompileRequest> TKqpQueryState::BuildCompileParsedReq
             query = TKqpQueryId(Cluster, Database, GetQuery(), settings, GetQueryParameterTypes());
             keepInCache = GetQueryKeepInCache() && query->IsSql();
             break;
-
-        /*case NKikimrKqp::QUERY_ACTION_PREPARE:
-            query = TKqpQueryId(Cluster, Database, GetQuery(), settings, GetQueryParameterTypes());
-            keepInCache = query->IsSql();
-            break;
-
-        case NKikimrKqp::QUERY_ACTION_EXECUTE_PREPARED:
-            uid = GetPreparedQuery();
-            keepInCache = GetQueryKeepInCache();
-            break;
-
-        case NKikimrKqp::QUERY_ACTION_EXPLAIN:
-            query = TKqpQueryId(Cluster, Database, GetQuery(), settings, GetQueryParameterTypes());
-            keepInCache = false;
-            break;*/
-
         default:
             YQL_ENSURE(false);
     }
@@ -291,7 +275,6 @@ std::unique_ptr<TEvKqp::TEvCompileRequest> TKqpQueryState::BuildCompileParsedReq
 bool TKqpQueryState::PrepareNextStatementPart() {
     Cerr << "NEXT STATE " << NextSplittedExpr << " " << SplittedExprs.size() << Endl;
     if (NextSplittedExpr + 1 >= static_cast<int>(SplittedExprs.size()) || SplittedExprs.empty()) {
-        //Y_ABORT_UNLESS(SplittedExprs.empty());
         SplittedExprs.clear();
         SplittedCtx.Reset();
         NextSplittedExpr = -1;

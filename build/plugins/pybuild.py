@@ -12,7 +12,6 @@ YA_IDE_VENV_VAR = 'YA_IDE_VENV'
 PY_NAMESPACE_PREFIX = 'py/namespace'
 BUILTIN_PROTO = 'builtin_proto'
 DEFAULT_FLAKE8_FILE_PROCESSING_TIME = "1.5"  # in seconds
-RUFF_CONFIG_PATHS_FILE = 'build/config/tests/ruff/ruff_config_paths.json'
 
 
 def _split_macro_call(macro_call, data, item_size, chunk_size=1024):
@@ -139,7 +138,8 @@ def get_srcdir(path, unit):
 
 @lazy
 def get_ruff_configs(unit):
-    arc_config_path = unit.resolve_arc_path(RUFF_CONFIG_PATHS_FILE)
+    rel_config_path = rootrel_arc_src(unit.get('RUFF_CONFIG_PATHS_FILE'), unit)
+    arc_config_path = unit.resolve_arc_path(rel_config_path)
     abs_config_path = unit.resolve(arc_config_path)
     with open(abs_config_path, 'r') as fd:
         return list(json.load(fd).values())
@@ -220,7 +220,7 @@ def add_python_lint_checks(unit, py_ver, files):
             params = ["ruff", "tools/ruff_linter/bin/ruff_linter"]
             params += ["FILES"] + resolved_files
             params += ["GLOBAL_RESOURCES", resource]
-            configs = [RUFF_CONFIG_PATHS_FILE, 'build/config/tests/ruff/ruff.toml'] + get_ruff_configs(unit)
+            configs = [unit.get('RUFF_CONFIG_PATHS_FILE'), 'build/config/tests/ruff/ruff.toml'] + get_ruff_configs(unit)
             params += ['CONFIGS'] + configs
             unit.on_add_linter_check(params)
 
@@ -480,7 +480,10 @@ def onpy_srcs(unit, *args):
                 # generated
                 if with_ext is None:
                     cpp_files2res.add(
-                        (os.path.splitext(filename)[0] + out_suffix, os.path.splitext(path)[0] + out_suffix)
+                        (
+                            os.path.splitext(filename)[0] + out_suffix,
+                            os.path.splitext(path)[0] + out_suffix,
+                        )
                     )
                 else:
                     cpp_files2res.add((filename + with_ext + out_suffix, path + with_ext + out_suffix))

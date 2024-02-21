@@ -89,7 +89,7 @@ bool TSessionsManager::Load(NTable::TDatabase& database, const TColumnEngineForL
             AFL_VERIFY(index);
             AFL_VERIFY(session->DeserializeDataFromProto(protoSession, *index));
             AFL_VERIFY(session->DeserializeCursorFromProto(protoSessionCursor));
-
+            AFL_VERIFY(DestSessions.emplace(session->GetSessionId(), session).second);
             if (!rowset.Next()) {
                 return false;
             }

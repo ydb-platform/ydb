@@ -15,14 +15,6 @@ inline TWriteId operator++(TWriteId& w) noexcept {
     return w;
 }
 
-class IBlobGroupSelector {
-protected:
-    virtual ~IBlobGroupSelector() = default;
-
-public:
-    virtual ui32 GetGroup(const TLogoBlobID& blobId) const = 0;
-};
-
 } // namespace NKikimr::NOlap
 
 template <>

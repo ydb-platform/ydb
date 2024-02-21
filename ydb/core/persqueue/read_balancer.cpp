@@ -1,7 +1,6 @@
 #include "read_balancer.h"
 
 #include <ydb/core/persqueue/events/internal.h>
-#include "ydb/core/persqueue/user_info.h"
 #include <ydb/core/protos/counters_pq.pb.h>
 #include <ydb/core/base/feature_flags.h>
 #include <ydb/core/tablet/tablet_exception.h>

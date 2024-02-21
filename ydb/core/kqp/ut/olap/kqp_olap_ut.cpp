@@ -6422,10 +6422,16 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
                 WITH (STORE = COLUMN, AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = 4)
                 AS SELECT * FROM `/Root/Source`;
             )", NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
-            UNIT_ASSERT(!prepareResult.IsSuccess());
-            UNIT_ASSERT_C(
-                prepareResult.GetIssues().ToString().Contains("Creating table without columns is not supported."),
-                prepareResult.GetIssues().ToString());
+            UNIT_ASSERT(prepareResult.IsSuccess());
+        }
+
+        {
+            auto it = client.StreamExecuteQuery(R"(
+                SELECT Col1, Col2 FROM `/Root/Destination3` ORDER BY Col1 ASC;
+            )", NYdb::NQuery::TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(it.GetStatus(), EStatus::SUCCESS, it.GetIssues().ToString());
+            TString output = StreamResultToYson(it);
+            CompareYson(output, R"([[1u;[1]];[10u;[10]];[100u;[100]]])");
         }
 
         {

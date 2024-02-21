@@ -653,6 +653,7 @@ public:
     {
         TTenantClientGRpcCommand::Parse(config);
         TClientCommandTenantQuotasBase::Parse(config, GRpcRequest);
+        GRpcRequest.set_path(config.Tenant);
     }
 };
 

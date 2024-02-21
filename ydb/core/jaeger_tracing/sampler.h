@@ -1,25 +1,23 @@
 #pragma once
 
-#include "control_wrapper.h"
-
 #include <util/random/fast.h>
 
 namespace NKikimr::NJaegerTracing {
 
 class TSampler {
 public:
-    TSampler(TControlWrapper samplingPPM, ui64 seed)
-        : SamplingPPM(std::move(samplingPPM))
+    TSampler(double fraction, ui64 seed)
+        : SamplingFraction(fraction)
         , Rng(seed)
     {}
 
     bool Sample() {
-        return Rng() % 1'000'000 < SamplingPPM.Get();
+        return Rng.GenRandReal1() < SamplingFraction;
     }
 
 private:
-    TControlWrapper SamplingPPM;
-    TReallyFastRng32 Rng;
+    const double SamplingFraction;
+    TFastRng64 Rng;
 };
 
 } // namespace NKikimr::NJaegerTracing

@@ -214,7 +214,7 @@ docker run --rm -it --entrypoint cat {{ ydb_local_docker_image }} THIRD_PARTY_LI
 1. Откройте в браузере страницу `http://hostname:8765/monitoring/tenant?schema=%2Flocal&name=%2Flocal`, где `hostname` - сетевое имя хоста, на котором развёрнуты контейнеры ([ссылка для localhost](http://localhost:8765/monitoring/tenant?schema=%2Flocal&name=%2Flocal)). Вы попадёте в Embedded UI базы данных `/local` локально развернутого инстанса {{ ydb-short-name }}. В панели для запросов введите код, регистрирующий базу данных `fq` из локального инстанса PostgreSQL в качестве внешнего источника данных для {{ ydb-short-name }}:
 
     ```sql
-    # Создаётся секрет, содержащий пароль "password" пользователя admin базы данных PostgreSQL
+    -- Создаётся секрет, содержащий пароль "password" пользователя admin базы данных PostgreSQL
     CREATE OBJECT pg_local_password (TYPE SECRET) WITH (value = password);
 
     CREATE EXTERNAL DATA SOURCE pg_local WITH (

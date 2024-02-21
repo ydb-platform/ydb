@@ -407,6 +407,8 @@ private:
             CompileActorSpan.End();
         }
 
+        Cerr << "TEST" << Endl;
+
         PassAway();
     }
 
@@ -499,6 +501,13 @@ private:
 
         auto kqpResult = std::move(AsyncCompileResult->GetResult());
         auto status = GetYdbStatus(kqpResult);
+
+        if (kqpResult.NeedsSplit) {
+            KqpCompileResult = TKqpCompileResult::Make(
+                Uid, status, kqpResult.Issues(), ETableReadType::Other, std::move(QueryId), {}, true);
+            Reply(KqpCompileResult);
+            return;
+        }
 
         auto database = QueryId.Database;
         if (kqpResult.SqlVersion) {

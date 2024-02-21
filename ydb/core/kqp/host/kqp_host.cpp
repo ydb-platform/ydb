@@ -336,6 +336,7 @@ private:
 class TAsyncPrepareYqlResult : public TKqpAsyncResultBase<IKqpHost::TQueryResult> {
 public:
     using TResult = IKqpHost::TQueryResult;
+<<<<<<< HEAD
 
     TAsyncPrepareYqlResult(TExprNode* queryRoot, TExprContext& exprCtx, IGraphTransformer& transformer,
         TIntrusivePtr<TKikimrQueryContext> queryCtx, const TKqpQueryRef& query, TMaybe<TSqlVersion> sqlVersion,
@@ -346,10 +347,12 @@ public:
         , TransformCtx(transformCtx)
         , QueryText(query.Text)
         , SqlVersion(sqlVersion) {}
+=======
+>>>>>>> 34055a6751 (fix)
     
     TAsyncPrepareYqlResult(TExprNode::TPtr queryRoot, TExprContext& exprCtx, IGraphTransformer& transformer,
         TIntrusivePtr<TKikimrQueryContext> queryCtx, const TKqpQueryRef& query, TMaybe<TSqlVersion> sqlVersion)
-        : TKqpAsyncResultBase(queryRoot, exprCtx, transformer)
+        : TKqpAsyncResultBase(std::move(queryRoot), exprCtx, transformer)
         , QueryCtx(queryCtx)
         , QueryText(query.Text)
         , SqlVersion(sqlVersion) {}
@@ -380,6 +383,8 @@ public:
         YQL_ENSURE(prepareResult.PreparingQuery->GetVersion() == NKikimrKqp::TPreparedQuery::VERSION_PHYSICAL_V1);
         prepareResult.QueryPlan = prepareResult.PreparingQuery->GetPhysicalQuery().GetQueryPlan();
         prepareResult.QueryAst = prepareResult.PreparingQuery->GetPhysicalQuery().GetQueryAst();
+
+        prepareResult.NeedsSplit = false;
     }
 
 private:
@@ -388,6 +393,25 @@ private:
     TIntrusivePtr<TKqlTransformContext> TransformCtx;
     TString QueryText;
     TMaybe<TSqlVersion> SqlVersion;
+};
+
+class TAsyncPrepareNeedToSplitYqlResult : public IKikimrAsyncResult<IKqpHost::TQueryResult> {
+public:
+    using TResult = IKqpHost::TQueryResult;
+
+    bool HasResult() const override {
+        return true;
+    }
+
+    TResult GetResult() override {
+        TResult result;
+        result.NeedsSplit = true;
+        return result;
+    }
+
+    NThreading::TFuture<bool> Continue() override {
+        return NThreading::MakeFuture<bool>(true);
+    }
 };
 
 class TFailExpressionEvaluation : public TSyncTransformerBase {
@@ -1176,8 +1200,6 @@ private:
         }
 
         const auto results = RewriteExpression(result, ctx);
-        //TVector<TExprNode::TPtr> results;
-        //results.push_back(result);
 
         for (const auto& resultElem : results) {
             Cerr << "TEST:: COMPILED:: " << KqpExprToPrettyString(*resultElem, ctx) << Endl;
@@ -1214,12 +1236,9 @@ private:
 
         auto queryExprs = CompileYqlQuery(query, /* isSql */ true, /* sqlAutoCommit */ false, *ExprCtx, sqlVersion,
             settings.UsePgParser);
-        //FakeWorld = nullptr;
-        Cerr << "CHECK1:: " << queryExprs.front()->Dead() << Endl;
+
         queryExprs.push_back(std::move(FakeWorld));
         return {queryExprs, std::move(ExprCtx)};
-        //Y_UNUSED(queryExprs);
-        //return {TVector<NYql::TExprNode::TPtr>{}, nullptr};
     }
 
     TVector<TExprNode::TPtr> CompileYqlQuery(const TKqpQueryRef& query, bool isSql, TExprContext& ctx,
@@ -1440,13 +1459,16 @@ private:
                 return nullptr;
             }
 
-            YQL_ENSURE(queryExprs.size() == 1); // TODO: TEST
-
-            Cerr << "PREPARE>>> COMPILE:: " << KqpExprToPrettyString(*queryExprs.front(), ctx) << Endl;
-            return MakeIntrusive<TAsyncPrepareYqlResult>(queryExprs.front().Get(), ctx, *YqlTransformer, SessionCtx->QueryPtr(),
-                query.Text, sqlVersion, TransformCtx);
+            if (queryExprs.size() > 1) {
+                Cerr << "PREPARE>>> RETRY SPLITTED <<" << Endl;
+                return MakeIntrusive<TAsyncPrepareNeedToSplitYqlResult>();
+            } else {
+                Cerr << "PREPARE>>> COMPILED:: " << KqpExprToPrettyString(*queryExprs.front(), ctx) << Endl;
+                return MakeIntrusive<TAsyncPrepareYqlResult>(queryExprs.front().Get(), ctx, *YqlTransformer, SessionCtx->QueryPtr(),
+                    query.Text, sqlVersion, TransformCtx);
+            }
         } else {
-            // Cerr << "PREPARE> OPT:: " << KqpExprToPrettyString(*expr, ctx) << Endl;
+            Cerr << "PREPARE>>> SPLITTED:: " << KqpExprToPrettyString(*expr, ctx) << Endl;
             return MakeIntrusive<TAsyncPrepareYqlResult>(expr, ctx, *YqlTransformer, SessionCtx->QueryPtr(),
                 query.Text, sqlVersion, TransformCtx);
         }

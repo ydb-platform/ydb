@@ -508,16 +508,13 @@ public:
         // is success.
         if (!QueryState->SaveAndCheckCompileResult(ev->Get())) {
             LWTRACK(KqpSessionQueryCompiled, QueryState->Orbit, TStringBuilder() << QueryState->CompileResult->Status);
-            Cerr << "TEST>>>>Compile Failed" << Endl;
 
-            auto ev = QueryState->BuildCompileRequest(CompilationCookie);
-            ev->Split = true;
-            Send(MakeKqpCompileServiceID(SelfId().NodeId()), ev.release(), 0, QueryState->QueryId,
-                QueryState->KqpSessionSpan.GetTraceId());
-
-            Cerr << "SEND..." << Endl;
-
-            if (!QueryState->SplittedExprs.empty()) {
+            if (QueryState->CompileResult->NeedToSplit) {
+                auto ev = QueryState->BuildCompileRequest(CompilationCookie);
+                ev->Split = true;
+                Send(MakeKqpCompileServiceID(SelfId().NodeId()), ev.release(), 0, QueryState->QueryId,
+                    QueryState->KqpSessionSpan.GetTraceId());
+            } else {
                 ReplyQueryCompileError();
             }
             return;

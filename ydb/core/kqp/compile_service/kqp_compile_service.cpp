@@ -778,6 +778,12 @@ private:
             << ", status: " << compileResult->Status
             << ", compileActor: " << ev->Sender);
 
+        if (compileResult->NeedToSplit) {
+            Reply(compileRequest.Sender, compileResult, compileStats, ctx,
+                compileRequest.Cookie, std::move(compileRequest.Orbit), std::move(compileRequest.CompileServiceSpan), (CollectDiagnostics ? ev->Get()->ReplayMessageUserView : std::nullopt));
+            return;
+        }
+
         bool keepInCache = compileRequest.CompileSettings.KeepInCache && compileResult->AllowCache;
         bool isPerStatementExecution = TableServiceConfig.GetEnableAstCache() && compileRequest.QueryAst;
 
@@ -806,8 +812,6 @@ private:
                     }
                 }
             }
-
-            Cerr << "TEST >> FAIL HERE" << Endl;
 
             LWTRACK(KqpCompileServiceGetCompilation, compileRequest.Orbit, compileRequest.Query.UserSid, compileActorId.ToString());
             Reply(compileRequest.Sender, compileResult, compileStats, ctx,
@@ -952,9 +956,6 @@ private:
     void Handle(TEvKqp::TEvSplitResponse::TPtr& ev, const TActorContext& ctx) {
         auto& query = ev->Get()->Query;
         auto compileRequest = RequestsQueue.FinishActiveRequest(query);
-
-        Cerr << "CHECK2:: " << ev->Get()->Exprs.front()->Dead() << Endl;
-
         ctx.Send(compileRequest.Sender, ev->Release(), 0, compileRequest.Cookie);
     }
 

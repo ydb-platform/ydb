@@ -6430,7 +6430,7 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
             CompareYson(output, R"([[1u;[1]];[10u;[10]];[100u;[100]]])");
         }
 
-        /*{
+        {
             auto prepareResult = client.ExecuteQuery(R"(
                 CREATE TABLE `/Root/Destination` (
                     Col1,
@@ -6445,7 +6445,7 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
             UNIT_ASSERT_C(
                 prepareResult.GetIssues().ToString().Contains("AS VALUES statement is not supported for CreateTableAs."),
                 prepareResult.GetIssues().ToString());
-        }*/
+        }
     }
 
      Y_UNIT_TEST(OlapCreateAsSelect_Complex) {

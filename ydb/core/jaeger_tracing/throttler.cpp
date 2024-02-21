@@ -5,9 +5,9 @@
 namespace NKikimr::NJaegerTracing {
 
 TThrottler::TThrottler(ui64 maxRatePerMinute, ui64 maxBurst, TIntrusivePtr<ITimeProvider> timeProvider)
-    : MaxRatePerMinute(maxRatePerMinute)
-    , MaxBurst(maxBurst + 1)
-    , BetweenSends(TDuration::Minutes(1).MicroSeconds() / MaxRatePerMinute)
+    : MaxTracesPerMinute(maxRatePerMinute)
+    , MaxTracesBurst(maxBurst + 1)
+    , BetweenSends(TDuration::Minutes(1).MicroSeconds() / MaxTracesPerMinute)
     , TimeProvider(std::move(timeProvider))
     , EffectiveTs(TimeProvider->Now().MicroSeconds())
 {}
@@ -15,7 +15,7 @@ TThrottler::TThrottler(ui64 maxRatePerMinute, ui64 maxBurst, TIntrusivePtr<ITime
 bool TThrottler::Throttle() {
     auto now = TimeProvider->Now().MicroSeconds();
     auto ts = EffectiveTs.load(std::memory_order_relaxed);
-    auto maxFinalTs = ClampAdd(now, ClampMultiply(BetweenSends, MaxBurst));
+    auto maxFinalTs = ClampAdd(now, ClampMultiply(BetweenSends, MaxTracesBurst));
     while (true) {
         if (ts < now) {
             if (EffectiveTs.compare_exchange_weak(ts, now + BetweenSends, std::memory_order_relaxed)) {

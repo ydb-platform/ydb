@@ -15,8 +15,8 @@ private:
     static ui64 ClampAdd(ui64 a, ui64 b);
     static ui64 ClampMultiply(ui64 a, ui64 b);
 
-    const ui64 MaxRatePerMinute;
-    const ui64 MaxBurst;
+    const ui64 MaxTracesPerMinute;
+    const ui64 MaxTracesBurst;
     const ui64 BetweenSends;
     TIntrusivePtr<ITimeProvider> TimeProvider;
     std::atomic<ui64> EffectiveTs;

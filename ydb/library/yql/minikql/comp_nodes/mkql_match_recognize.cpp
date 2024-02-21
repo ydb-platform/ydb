@@ -408,6 +408,7 @@ public:
         }
         // HasReadyOutput is not packed because when loading we can recalculate HasReadyOutput from Partitions.
         serializer.Write(Terminating);
+        NfaTransitionGraph->Save(serializer);
         return serializer.MakeString();
     }
 
@@ -437,6 +438,10 @@ public:
                 }
             }
             serializer.Read(Terminating);
+            auto restoredTransitionGraph = std::make_shared<TNfaTransitionGraph>();
+            restoredTransitionGraph->Load(serializer);
+            MKQL_ENSURE(NfaTransitionGraph, "Empty NfaTransitionGraph");
+            MKQL_ENSURE(*restoredTransitionGraph == *NfaTransitionGraph, "Restored and current NfaTransitionGraph is different");
         }
         MKQL_ENSURE(serializer.Empty(), "State is corrupted");
     }
@@ -595,7 +600,6 @@ private:
     IComputationNode* const PartitionKey;
     TType* const PartitionKeyType;
     const TMatchRecognizeProcessorParameters Parameters;
-    TNfaTransitionGraph::TPtr NfaTransitionGraph;
     const TContainerCacheOnContext Cache;
     TType* const RowType;
     TMutableObjectOverBoxedValue<TValuePackerBoxed> RowPacker;

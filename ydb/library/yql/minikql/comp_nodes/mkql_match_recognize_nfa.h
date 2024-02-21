@@ -13,6 +13,9 @@ namespace NKikimr::NMiniKQL::NMatchRecognize {
 using namespace NYql::NMatchRecognize;
 
 struct TVoidTransition {
+    friend bool operator==(const TVoidTransition&, const TVoidTransition&) {
+        return true;
+    }
 };
 using TEpsilonTransition = size_t; //to
 using TEpsilonTransitions = std::vector<TEpsilonTransition, TMKQLAllocator<TEpsilonTransition>>;
@@ -106,6 +109,12 @@ struct TNfaTransitionGraph {
             std::visit(serializer, Transitions[i]);
         }
         serializer(Input, Output);
+    }
+
+    bool operator==(const TNfaTransitionGraph& other) {
+        return Transitions == other.Transitions
+            && Input == other.Input
+            && Output == other.Output;
     }
 };
 
@@ -428,7 +437,7 @@ public:
     }
 
     void Save(TOutputSerializer& serializer) const {
-        TransitionGraph->Save(serializer);
+        // TransitionGraph is not saved/loaded, passed in constructor.
         serializer.Write(ActiveStates.size());
         for (const auto& state : ActiveStates) {
             state.Save(serializer);
@@ -437,7 +446,6 @@ public:
     }
 
     void Load(TInputSerializer& serializer) {
-        TransitionGraph->Load(serializer);
         auto stateSize = serializer.Read<ui64>();
         for (size_t i = 0; i < stateSize; ++i) {
             TState state;

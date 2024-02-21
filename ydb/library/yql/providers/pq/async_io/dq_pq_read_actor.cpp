@@ -407,7 +407,8 @@ private:
 
     struct TReadyBatch {
     public:
-        TReadyBatch(TMaybe<TInstant> watermark, ui32 dataCapacity): Watermark(watermark){
+        TReadyBatch(TMaybe<TInstant> watermark, ui32 dataCapacity)
+          : Watermark(watermark) {
             Data.reserve(dataCapacity);
         }
 

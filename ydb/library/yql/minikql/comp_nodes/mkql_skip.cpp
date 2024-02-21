@@ -121,7 +121,7 @@ private:
 class TWideSkipWrapper : public TSimpleStatefulWideFlowCodegeneratorNode<TWideSkipWrapper, ui64> {
 using TBaseComputation = TSimpleStatefulWideFlowCodegeneratorNode<TWideSkipWrapper, ui64>;
 public:
-     TWideSkipWrapper(TComputationMutables& mutables, IComputationWideFlowNode* flow, IComputationNode* count, ui32 size)
+     TWideSkipWrapper(TComputationMutables& mutables, IComputationWideFlowNode* flow, IComputationNode* count, ui32 )
         : TBaseComputation(mutables, flow, EValueRepresentation::Embedded)
         , Flow(flow)
         , Count(count)
@@ -131,7 +131,7 @@ public:
         count = Count->GetValue(ctx).Get<ui64>();
     }
 
-    EProcessResult DoProcess(ui64& skipCount, TComputationContext& ctx, EFetchResult fetchRes, NUdf::TUnboxedValue*const* values) const {
+    EProcessResult DoProcess(ui64& skipCount, TComputationContext& , EFetchResult fetchRes, NUdf::TUnboxedValue*const* ) const {
         if (fetchRes == EFetchResult::One && skipCount) {
             skipCount--;
             return EProcessResult::Fetch;

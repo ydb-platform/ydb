@@ -104,9 +104,9 @@ public:
         ICodegeneratorInlineWideNode::TGettersList new_getters;
         new_getters.reserve(getters.size());
         for (size_t pos = 0; pos < getters.size(); pos++) {
-            new_getters.push_back([pos, values] (const TCodegenContext& ctx, BasicBlock*& block) -> Value* {
-                const auto offset = GetElementPtrInst::CreateInBounds(values->getType()->getElementType(), values, {ConstantInt::get(Type::getInt64Ty(ctx.Codegen.GetContext()), pos)}, "offset", block);
-                const auto value = new LoadInst(offset, "value", block);
+            new_getters.push_back([pos, values, valueType] (const TCodegenContext& ctx, BasicBlock*& block) -> Value* {
+                const auto offset = GetElementPtrInst::CreateInBounds(valueType, values, {ConstantInt::get(Type::getInt64Ty(ctx.Codegen.GetContext()), pos)}, "offset", block);
+                const auto value = new LoadInst(valueType, offset, "value", block);
                 return value;
             });
         }

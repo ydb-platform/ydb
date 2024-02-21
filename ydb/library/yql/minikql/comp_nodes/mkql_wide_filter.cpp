@@ -196,7 +196,7 @@ public:
         , TBaseWideFilterWrapper(mutables, flow, std::move(items), predicate)
     {}
 
-    void InitState(bool& stop, TComputationContext& ctx) const {
+    void InitState(bool& stop, TComputationContext& ) const {
         stop = false;
     }
 
@@ -236,7 +236,7 @@ public:
         , TBaseWideFilterWrapper(mutables, flow, std::move(items), predicate)
     {}
 
-    void InitState(bool& start, TComputationContext& ctx) const {
+    void InitState(bool& start, TComputationContext& ) const {
         start = false;
     }
 

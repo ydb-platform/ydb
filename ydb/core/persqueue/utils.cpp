@@ -1,5 +1,7 @@
 #include "utils.h"
 
+#include <deque>
+
 #include <util/string/builder.h>
 #include <ydb/library/yverify_stream/yverify_stream.h>
 
@@ -57,11 +59,6 @@ TPartitionGraph::TPartitionGraph() {
 
 TPartitionGraph::TPartitionGraph(std::unordered_map<ui32, Node>&& partitions) {
     Partitions = std::move(partitions);
-    for (auto& [_, n] : Partitions) {
-        if (n.Parents.empty()) {
-            Roots.push_back(&n);
-        }
-    }
 }
 
 const TPartitionGraph::Node* TPartitionGraph::GetPartition(ui32 id) const {
@@ -94,10 +91,6 @@ std::set<ui32> TPartitionGraph::GetActiveChildren(ui32 id) const {
     }
 
     return result;
-}
-
-const std::vector<const TPartitionGraph::Node*>& TPartitionGraph::GetRoots() const {
-    return Roots;
 }
 
 TPartitionGraph::Node::Node(ui32 id, ui64 tabletId)

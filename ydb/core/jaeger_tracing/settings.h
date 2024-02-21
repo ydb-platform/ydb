@@ -8,6 +8,21 @@
 
 namespace NKikimr::NJaegerTracing {
 
+namespace NPrivate {
+
+template<class T, class F>
+constexpr auto Transform(const TMaybe<T>& v, F&& func) {
+    using ReturnType = TMaybe<std::invoke_result_t<F, const T&>>;
+
+    if (v) {
+        return ReturnType(std::forward<F>(func)(*v));
+    }
+
+    return ReturnType{};
+}
+
+}
+
 struct TThrottlingSettings {
     ui64 MaxRatePerMinute;
     ui64 MaxBurst;
@@ -62,7 +77,8 @@ struct TSettings {
                     .Throttler = f(samplingRule.Throttler),
                 });
             }
-            newSettings.ExternalThrottlingRules[i] = ExternalThrottlingRules[i].Transform(
+            newSettings.ExternalThrottlingRules[i] = NPrivate::Transform(
+                ExternalThrottlingRules[i],
                 [&f](const TExternalThrottlingRule<TThrottling>& rule) {
                     return TExternalThrottlingRule<TNewThrottlingType> {
                         .Throttler = f(rule.Throttler),

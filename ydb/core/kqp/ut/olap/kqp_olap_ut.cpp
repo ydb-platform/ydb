@@ -6370,8 +6370,8 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
         {
             auto prepareResult = client.ExecuteQuery(R"(
                 CREATE TABLE `/Root/Destination1` (
-                    Col1 Uint64 NOT NULL,
-                    Col2 Int32,
+                    Col1,
+                    Col2,
                     PRIMARY KEY (Col1)
                 )
                 PARTITION BY HASH(Col1)
@@ -6393,20 +6393,6 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
         {
             auto prepareResult = client.ExecuteQuery(R"(
                 CREATE TABLE `/Root/Destination2` (
-                    Col1 Uint64 NOT NULL,
-                    Col2 Int32,
-                    PRIMARY KEY (Col1)
-                )
-                PARTITION BY HASH(Col1)
-                WITH (STORE = COLUMN, AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = 4)
-                AS SELECT * FROM `/Root/Source`;
-            )", NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
-            UNIT_ASSERT_C(prepareResult.IsSuccess(), prepareResult.GetIssues().ToString());
-        }
-        
-        {
-            auto prepareResult = client.ExecuteQuery(R"(
-                CREATE TABLE `/Root/Destination` (
                     Col1,
                     Col2,
                     PRIMARY KEY (Col1)
@@ -6415,10 +6401,7 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
                 WITH (STORE = COLUMN, AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = 4)
                 AS SELECT * FROM `/Root/Source`;
             )", NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
-            UNIT_ASSERT(!prepareResult.IsSuccess());
-            UNIT_ASSERT_C(
-                prepareResult.GetIssues().ToString().Contains("Creating table with columns without type is not supported."),
-                prepareResult.GetIssues().ToString());
+            UNIT_ASSERT_C(prepareResult.IsSuccess(), prepareResult.GetIssues().ToString());
         }
 
         {
@@ -6432,7 +6415,22 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
 
         {
             auto prepareResult = client.ExecuteQuery(R"(
-                CREATE TABLE `/Root/Destination` (
+                CREATE TABLE `/Root/Destination3` (
+                    PRIMARY KEY (Col1)
+                )
+                PARTITION BY HASH(Col1)
+                WITH (STORE = COLUMN, AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = 4)
+                AS SELECT * FROM `/Root/Source`;
+            )", NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
+            UNIT_ASSERT(!prepareResult.IsSuccess());
+            UNIT_ASSERT_C(
+                prepareResult.GetIssues().ToString().Contains("Creating table without columns is not supported."),
+                prepareResult.GetIssues().ToString());
+        }
+
+        {
+            auto prepareResult = client.ExecuteQuery(R"(
+                CREATE TABLE `/Root/Destination4` (
                     Col1,
                     Col2,
                     PRIMARY KEY (Col1)
@@ -6444,6 +6442,23 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
             UNIT_ASSERT(!prepareResult.IsSuccess());
             UNIT_ASSERT_C(
                 prepareResult.GetIssues().ToString().Contains("AS VALUES statement is not supported for CreateTableAs."),
+                prepareResult.GetIssues().ToString());
+        }
+
+        {
+            auto prepareResult = client.ExecuteQuery(R"(
+                CREATE TABLE `/Root/Destination5` (
+                    Col1 Uint32 NOT NULL,
+                    Col2 Uint64,
+                    PRIMARY KEY (Col1)
+                )
+                PARTITION BY HASH(Col1)
+                WITH (STORE = COLUMN, AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = 4)
+                AS VALUES (1, 2), (3, 4);
+            )", NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
+            UNIT_ASSERT(!prepareResult.IsSuccess());
+            UNIT_ASSERT_C(
+                prepareResult.GetIssues().ToString().Contains("Column types are not supported for CREATE TABLE AS"),
                 prepareResult.GetIssues().ToString());
         }
     }
@@ -6510,9 +6525,9 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
         {
             auto prepareResult = client.ExecuteQuery(R"(
                 CREATE TABLE `/Root/Destination1` (
-                    Col1 Uint64 NOT NULL,
-                    Col2 Int32,
-                    Col3 String,
+                    Col1,
+                    Col2,
+                    Col3,
                     PRIMARY KEY (Col1)
                 )
                 PARTITION BY HASH(Col1)
@@ -6532,21 +6547,6 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
             UNIT_ASSERT_VALUES_EQUAL_C(it.GetStatus(), EStatus::SUCCESS, it.GetIssues().ToString());
             TString output = StreamResultToYson(it);
             CompareYson(output, R"([[1u;[1];["test1"]];[100u;[100];["test2"]]])");
-        }
-
-        {
-            auto prepareResult = client.ExecuteQuery(R"(
-                CREATE TABLE `/Root/Destination` (
-                    PRIMARY KEY (Col1)
-                )
-                PARTITION BY HASH(Col1)
-                WITH (STORE = COLUMN, AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = 4)
-                AS SELECT * FROM `/Root/Source`;
-            )", NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
-            UNIT_ASSERT(!prepareResult.IsSuccess());
-            UNIT_ASSERT_C(
-                prepareResult.GetIssues().ToString().Contains("Creating table without columns is not supported."),
-                prepareResult.GetIssues().ToString());
         }
     }
 

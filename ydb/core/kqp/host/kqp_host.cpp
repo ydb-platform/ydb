@@ -1199,7 +1199,7 @@ private:
             return {};
         }
 
-        const auto results = RewriteExpression(result, ctx);
+        const auto results = RewriteExpression(result, ctx, *TypesCtx, SessionCtx, Cluster);
 
         for (const auto& resultElem : results) {
             Cerr << "TEST:: COMPILED:: " << KqpExprToPrettyString(*resultElem, ctx) << Endl;
@@ -1207,8 +1207,6 @@ private:
         for (const auto& resultPart : results) {
             YQL_CLOG(INFO, ProviderKqp) << "Compiled query:\n" << KqpExprToPrettyString(*resultPart, ctx);
         }
-
-        FormatBackTrace(&Cerr);
 
         return results;
     }
@@ -1233,6 +1231,8 @@ private:
         if (!sqlVersion) {
             sqlVersion = 1;
         }
+
+        SetupYqlTransformer(EKikimrQueryType::Query);
 
         auto queryExprs = CompileYqlQuery(query, /* isSql */ true, /* sqlAutoCommit */ false, *ExprCtx, sqlVersion,
             settings.UsePgParser);
@@ -1737,6 +1737,7 @@ private:
                 ;
         };
         auto configProvider = CreateConfigProvider(*TypesCtx, gatewaysConfig, {}, allowSettings);
+        Cerr << "ADD DataSource ::  " << ConfigProviderName << Endl;
         TypesCtx->AddDataSource(ConfigProviderName, configProvider);
 
         YQL_ENSURE(TypesCtx->Initialize(*ExprCtx));

@@ -5,6 +5,11 @@
 #include <ydb/library/yql/core/expr_nodes_gen/yql_expr_nodes_gen.h>
 #include <ydb/library/yql/providers/common/provider/yql_provider.h>
 
+#include <ydb/library/yql/core/yql_graph_transformer.h>
+#include <ydb/library/yql/core/services/yql_transform_pipeline.h>
+#include <ydb/core/kqp/host/kqp_host_impl.h>
+#include <ydb/library/yql/core/type_ann/type_ann_expr.h>
+
 namespace NKikimr {
 namespace NKqp {
 
@@ -14,7 +19,9 @@ namespace {
         NYql::TExprNode::TPtr ReplaceInto = nullptr;
     };
 
-    std::optional<TCreateTableAsResult> RewriteCreateTableAs(NYql::TExprNode::TPtr root, NYql::TExprContext& ctx) {
+    std::optional<TCreateTableAsResult> RewriteCreateTableAs(NYql::TExprNode::TPtr root, NYql::TExprContext& ctx, NYql::TTypeAnnotationContext& typeCtx, const TIntrusivePtr<NYql::TKikimrSessionContext>& sessionCtx, const TString& cluster) {
+        Cerr << "REWRITE:>> " << NYql::NCommon::ExprToPrettyString(ctx, *root) << Endl;
+
         NYql::NNodes::TExprBase expr(root);
         auto maybeWrite = expr.Maybe<NYql::NNodes::TCoWrite>();
         if (!maybeWrite) {
@@ -67,10 +74,83 @@ namespace {
 
         const auto pos = insertData.Ref().Pos();
 
-        TCreateTableAsResult result;
-        result.CreateTable = ctx.ReplaceNode(std::move(root), insertData.Ref(), ctx.NewCallable(pos, "Void", {}));
+        Cerr << "INSERT:>> " << NYql::NCommon::ExprToPrettyString(ctx, *insertData.Ptr()) << Endl;
 
+        auto typeTransformer = NYql::TTransformationPipeline(&typeCtx)
+            .AddServiceTransformers()
+            .AddPreTypeAnnotation()
+            .AddIOAnnotation()
+            .AddTypeAnnotationTransformer(CreateKqpTypeAnnotationTransformer(cluster, sessionCtx->TablesPtr(), typeCtx, sessionCtx->ConfigPtr()))
+            .Build(false);
 
+        Cerr << "AFTER:>> " << Endl;
+
+        auto ptr = insertData.Ptr();
+        auto transformResult = NYql::SyncTransform(*typeTransformer, ptr, ctx);
+        if (transformResult != NYql::IGraphTransformer::TStatus::Ok) {
+            Cerr << "ERRORS: " << ctx.IssueManager.GetIssues().ToString() << Endl;
+        }
+        YQL_ENSURE(transformResult == NYql::IGraphTransformer::TStatus::Ok);
+
+        Cerr << "TRANSFORMED:>> " << Endl;
+
+        Cerr << "TEST:>> " << NYql::NCommon::ExprToPrettyString(ctx, *ptr) << Endl;
+        auto type = ptr->GetTypeAnn();
+        YQL_ENSURE(type);
+        Cerr << "TYPES:>> ";
+        type->Out(Cerr);
+        Cerr << Endl;
+
+        type = type->Cast<NYql::TListExprType>()->GetItemType();
+        YQL_ENSURE(type);
+        auto rowType = type->Cast<NYql::TStructExprType>();
+        YQL_ENSURE(rowType);
+
+        auto create = ctx.ReplaceNode(std::move(root), insertData.Ref(), ctx.NewCallable(pos, "Void", {}));
+
+        auto columns = create->Child(4)->Child(1)->Child(1);
+        auto primaryKey = create->Child(4)->Child(2)->Child(1);
+        THashSet<TStringBuf> primariKeyColumns;
+        primaryKey->ForEachChild([&](const auto& child) {
+            primariKeyColumns.insert(child.Content());
+        });
+
+        for (size_t index = 0; index < columns->ChildrenSize(); ++index) {
+            const auto name = columns->Child(index)->ChildPtr(0)->Content();
+            const bool notNull = primariKeyColumns.contains(name); //TODO: and storetype == columns
+
+            auto currentType = rowType->FindItemType(name);
+
+            if (notNull && currentType->GetKind() == NYql::ETypeAnnotationKind::Optional) {
+                currentType = currentType->Cast<NYql::TOptionalExprType>()->GetItemType();
+            }
+
+            auto typeNode = NYql::ExpandType(pos, *currentType, ctx);
+
+            if (!notNull && currentType->GetKind() != NYql::ETypeAnnotationKind::Optional) {
+                typeNode = ctx.NewCallable(pos, "AsOptionalType", { typeNode });
+            }
+
+            create = ctx.ReplaceNode(std::move(create), *columns->Child(index), ctx.NewList(pos, {
+                columns->Child(index)->ChildPtr(0),
+                typeNode,
+                ctx.NewList(pos, {
+                    ctx.NewAtom(pos, "columnConstrains"),
+                    notNull
+                        ? ctx.NewList(pos, {
+                              ctx.NewList(pos, {
+                                  ctx.NewAtom(pos, "not_null"),
+                              }),
+                          })
+                        : ctx.NewList(pos, {}),
+                }),
+                ctx.NewList(pos, {}),
+            }));
+        }
+
+        Cerr << "COLUMNS:PROCESSED>> " << NYql::NCommon::ExprToPrettyString(ctx, *create->Child(4)->Child(1)->Child(1)) << Endl;
+
+        //TODO: Use io utils
         const NYql::TExprNode::TPtr* lastReadInTopologicalOrder = nullptr;
         NYql::VisitExpr(
             insertData.Ptr(),
@@ -84,7 +164,7 @@ namespace {
         );
 
         const auto insert = ctx.NewCallable(pos, "Write!", {
-            lastReadInTopologicalOrder == nullptr ? ctx.NewWorld(pos) : ctx.NewCallable(pos, "Left!", {*lastReadInTopologicalOrder}), // Left! (READ???)
+            lastReadInTopologicalOrder == nullptr ? ctx.NewWorld(pos) : ctx.NewCallable(pos, "Left!", {*lastReadInTopologicalOrder}),
             ctx.NewCallable(pos, "DataSink", {
                 ctx.NewAtom(pos, "kikimr"),
                 ctx.NewAtom(pos, "db"),
@@ -106,6 +186,8 @@ namespace {
             }),
         });
 
+        TCreateTableAsResult result;
+        result.CreateTable = create;
         result.ReplaceInto = ctx.NewCallable(pos, "Commit!", {
             insert,
             ctx.NewCallable(pos, "DataSink", {
@@ -124,13 +206,13 @@ namespace {
     }
 }
 
-TVector<NYql::TExprNode::TPtr> RewriteExpression(const NYql::TExprNode::TPtr& root, NYql::TExprContext& ctx) {
+TVector<NYql::TExprNode::TPtr> RewriteExpression(const NYql::TExprNode::TPtr& root, NYql::TExprContext& ctx, NYql::TTypeAnnotationContext& typeCtx, const TIntrusivePtr<NYql::TKikimrSessionContext>& sessionCtx, const TString& cluster) {
     // CREATE TABLE AS statement can be used only with perstatement execution.
     // Thus we assume that there is only one such statement.
     TVector<NYql::TExprNode::TPtr> result;
-    VisitExpr(root, [&result, &ctx](const NYql::TExprNode::TPtr& node) {
+    VisitExpr(root, [&](const NYql::TExprNode::TPtr& node) {
         if (NYql::NNodes::TCoWrite::Match(node.Get())) {
-            const auto rewriteResult = RewriteCreateTableAs(node, ctx);
+            const auto rewriteResult = RewriteCreateTableAs(node, ctx, typeCtx, sessionCtx, cluster);
             if (rewriteResult) {
                 YQL_ENSURE(result.empty());
                 result.push_back(rewriteResult->CreateTable);

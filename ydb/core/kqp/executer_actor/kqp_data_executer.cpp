@@ -257,6 +257,9 @@ public:
                 for (auto& lock : info.GetLocks()) {
                     Locks.push_back(lock);
                 }
+                for (const auto& debugInfo : info.GetDebugInfo()) {
+                    DebugInfo.push_back(debugInfo);
+                }
             }
         };
         for (auto& [_, data] : ExtraData) {
@@ -275,6 +278,15 @@ public:
                 ResponseEv->LockHandle = std::move(LockHandle);
             }
             BuildLocks(*response.MutableResult()->MutableLocks(), Locks);
+        }
+
+        if (!DebugInfo.empty()) {
+            auto* debugInfos = response.MutableResult()->MutableDebugInfo();
+            debugInfos->Reserve(DebugInfo.size());
+            for (auto& debugInfo : DebugInfo) {
+                debugInfos->Add(std::move(debugInfo));
+            }
+            DebugInfo.clear();
         }
 
         auto resultSize = ResponseEv->GetByteSize();
@@ -1079,6 +1091,10 @@ private:
                 for (auto& lock : res->Record.GetTxLocks()) {
                     LOG_D("Shard " << shardId << " completed, store lock " << lock.ShortDebugString());
                     Locks.emplace_back(std::move(lock));
+                }
+
+                for (const auto& debugInfo : res->Record.GetDebugInfo()) {
+                    DebugInfo.push_back(debugInfo);
                 }
 
                 Counters->TxProxyMon->TxResultComplete->Inc();
@@ -2416,6 +2432,7 @@ private:
     ui64 TxCoordinator = 0;
     THashMap<ui64, TShardState> ShardStates;
     TVector<NKikimrDataEvents::TLock> Locks;
+    TVector<TString> DebugInfo;
     bool ReadOnlyTx = true;
     bool VolatileTx = false;
     bool ImmediateTx = false;

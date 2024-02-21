@@ -374,6 +374,22 @@ public:
             KqpUpdateDataShardStatCounters(DataShard, counters);
             KqpFillTxStats(DataShard, counters, *writeResult->Record.MutableTxStats());
 
+            DataShard.MaybeAddDebugInfo(writeResult->Record, [&](NJsonWriter::TBuf& b) {
+                b.WriteKey("op").WriteString("write");
+                b.WriteKey("tx_id").WriteULongLong(txId);
+                if (op->GetStep()) {
+                    b.WriteKey("step").WriteULongLong(op->GetStep());
+                }
+                if (op->IsReadOnly()) {
+                    b.WriteKey("readonly").WriteBool(true);
+                }
+                if (guardLocks.LockTxId) {
+                    b.WriteKey("lock_tx_id").WriteULongLong(guardLocks.LockTxId);
+                } else {
+                    b.WriteKey("version").WriteString(TStringBuilder() << writeVersion);
+                }
+            });
+
         } catch (const TNeedGlobalTxId&) {
             Y_VERIFY_S(op->GetGlobalTxId() == 0,
                 "Unexpected TNeedGlobalTxId exception for write operation with TxId# " << op->GetGlobalTxId());

@@ -122,4 +122,8 @@ message TEvWriteResult {
 
     // Statistics
     optional NKikimrQueryStats.TTxStats TxStats = 13;
+
+    // Debug info about operation results in json format
+    // Enabled with EnableQueryDebugInfo feature flag
+    repeated string DebugInfo = 14;
 }

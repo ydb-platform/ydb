@@ -43,4 +43,6 @@ message QueryStats {
     string query_ast = 5;
     uint64 total_duration_us = 6;
     uint64 total_cpu_time_us = 7;
+    // Optional query execution debug info (when enabled on the server)
+    repeated string debug_info = 8;
 }

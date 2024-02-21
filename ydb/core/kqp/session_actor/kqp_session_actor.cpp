@@ -1394,6 +1394,10 @@ public:
             QueryState->QueryStats.Executions.back().Swap(executerResults.MutableStats());
         }
 
+        for (const auto& debugInfo : executerResults.GetDebugInfo()) {
+            QueryState->DebugInfo.push_back(debugInfo);
+        }
+
         if (!response->GetIssues().empty()){
             NYql::IssuesFromMessage(response->GetIssues(), QueryState->Issues);
         }
@@ -1640,6 +1644,15 @@ public:
         }
 
         response->SetQueryDiagnostics(QueryState->ReplayMessage);
+
+        if (!QueryState->DebugInfo.empty()) {
+            auto* debugInfos = response->MutableDebugInfo();
+            debugInfos->Reserve(QueryState->DebugInfo.size());
+            for (auto& debugInfo : QueryState->DebugInfo) {
+                debugInfos->Add(std::move(debugInfo));
+            }
+            QueryState->DebugInfo.clear();
+        }
 
         // Result for scan query is sent directly to target actor.
         Y_ABORT_UNLESS(response->GetArena());

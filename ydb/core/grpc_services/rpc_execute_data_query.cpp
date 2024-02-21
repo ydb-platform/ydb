@@ -189,6 +189,7 @@ public:
                     NKqp::ConvertKqpQueryResultsToDbResult(kqpResponse, queryResult);
                 }
                 ConvertQueryStats(kqpResponse, queryResult);
+                FillDebugInfo(*queryResult, kqpResponse);
                 if (kqpResponse.HasTxMeta()) {
                     queryResult->mutable_tx_meta()->CopyFrom(kqpResponse.GetTxMeta());
                 }

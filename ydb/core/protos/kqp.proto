@@ -268,6 +268,7 @@ message TQueryResponse {
     repeated Ydb.ResultSet YdbResults = 13;
     optional TTopicOperationsResponse TopicOperations = 14;
     optional string QueryDiagnostics = 15;
+    repeated string DebugInfo = 16;
 }
 
 message TEvQueryResponse {
@@ -431,6 +432,7 @@ message TExecuterTxResult {
     reserved 5; // (deprecated) Stats
     optional NYql.NDqProto.TDqExecutionStats Stats = 6;
     reserved 7;
+    repeated string DebugInfo = 8;
 };
 
 message TExecuterTxResponse {

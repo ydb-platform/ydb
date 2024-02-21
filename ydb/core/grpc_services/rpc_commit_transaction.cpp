@@ -93,6 +93,8 @@ private:
                 FillQueryStats(*commitResult->mutable_query_stats(), kqpResponse);
             }
 
+            FillDebugInfo(*commitResult, kqpResponse);
+
             AuditContextAppend(Request_.get(), *GetProtoRequest(), *commitResult);
 
             ReplyWithResult(Ydb::StatusIds::SUCCESS, issueMessage, *commitResult, ctx);

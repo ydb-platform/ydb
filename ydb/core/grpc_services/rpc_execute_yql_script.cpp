@@ -107,6 +107,8 @@ public:
             queryResult->mutable_query_stats()->set_query_plan(kqpResponse.GetQueryPlan());
         }
 
+        FillDebugInfo(*queryResult, kqpResponse);
+
         AuditContextAppend(Request_.get(), *GetProtoRequest(), *queryResult);
 
         ReplyWithResult(Ydb::StatusIds::SUCCESS, issueMessage, *queryResult, ctx);

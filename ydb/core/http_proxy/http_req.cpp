@@ -93,7 +93,7 @@ namespace NKikimr::NHttpProxy {
         case NYdb::EStatus::ABORTED:
             return TException("Aborted", HTTP_BAD_REQUEST);
         case NYdb::EStatus::UNAVAILABLE:
-            return TException("Unavailable", HTTP_BAD_REQUEST);
+            return TException("Unavailable", HTTP_SERVICE_UNAVAILABLE);
         case NYdb::EStatus::TIMEOUT:
             return TException("RequestExpired", HTTP_BAD_REQUEST);
         case NYdb::EStatus::BAD_SESSION:

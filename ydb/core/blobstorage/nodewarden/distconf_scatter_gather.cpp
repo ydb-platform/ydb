@@ -3,7 +3,10 @@
 namespace NKikimr::NStorage {
 
     void TDistributedConfigKeeper::IssueScatterTask(std::optional<TActorId> actorId, TEvScatter&& request) {
-        const ui64 cookie = NextScatterCookie++;
+        ui64 cookie = NextScatterCookie++;
+        if (cookie == 0) {
+            cookie = NextScatterCookie++;
+        }
         STLOG(PRI_DEBUG, BS_NODE, NWDC21, "IssueScatterTask", (Request, request), (Cookie, cookie));
         Y_ABORT_UNLESS(actorId || Binding);
         const auto [it, inserted] = ScatterTasks.try_emplace(cookie, actorId ? std::nullopt : Binding, std::move(request),

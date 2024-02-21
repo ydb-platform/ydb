@@ -93,11 +93,6 @@ std::set<ui32> TPartitionGraph::GetActiveChildren(ui32 id) const {
     return result;
 }
 
-TPartitionGraph::Node::Node(ui32 id, ui64 tabletId)
-    : Id(id)
-    , TabletId(tabletId) {
-}
-
 template<typename TPartition>
 inline int GetPartitionId(TPartition p) {
     return p.GetPartitionId();
@@ -161,6 +156,11 @@ std::unordered_map<ui32, TPartitionGraph::Node> BuildGraph(const TCollection& pa
     }
 
     return result;
+}
+
+TPartitionGraph::Node::Node(ui32 id, ui64 tabletId)
+    : Id(id)
+    , TabletId(tabletId) {
 }
 
 TPartitionGraph MakePartitionGraph(const NKikimrPQ::TPQTabletConfig& config) {

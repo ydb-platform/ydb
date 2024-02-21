@@ -425,7 +425,6 @@ class TPersQueueReadBalancer : public TActor<TPersQueueReadBalancer>, public TTa
 
         THashMap<ui32, TPartitionInfo> PartitionsInfo; // partitionId -> info
         std::deque<ui32> FreePartitions;
-        std::set<ui32> InactivePartitions;
         THashMap<std::pair<TActorId, ui64>, TSessionInfo> SessionsInfo; //map from ActorID and random value - need for reordering sessions in different topics
 
         std::pair<TActorId, ui64> SessionKey(const TActorId pipe) const;
@@ -621,7 +620,6 @@ public:
             HFunc(NSchemeShard::TEvSchemeShard::TEvSubDomainPathIdFound, Handle);
             HFunc(TEvTxProxySchemeCache::TEvWatchNotifyUpdated, Handle);
             HFunc(TEvPersQueue::TEvGetPartitionsLocation, HandleOnInit);
-            HFunc(TEvPQ::TEvReadingPartitionFinishedRequest, Handle);
             default:
                 StateInitImpl(ev, SelfId());
                 break;

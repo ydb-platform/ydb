@@ -795,8 +795,8 @@ void TPersQueueReadBalancer::Handle(TEvPersQueue::TEvStatusResponse::TPtr& ev, c
             } else {
                 auto i = finishedPartitions.erase(partRes.GetPartition());
                 if (i) {
-                    // TODO commit in back
-                    consumersForBalance.insert(consumer.GetConsumer());
+                    // TODO commit to back is unsupported
+                    return Die(ctx);
                 }
             }
         }
@@ -1129,8 +1129,6 @@ void TPersQueueReadBalancer::TClientGroupInfo::InactivatePartition(ui32 partitio
 void TPersQueueReadBalancer::TClientGroupInfo::FreePartition(ui32 partitionId) {
     if (Group != TClientInfo::MAIN_GROUP || ClientInfo.IsReadeable(partitionId)) {
         FreePartitions.push_back(partitionId);
-    } else {
-        InactivePartitions.insert(partitionId);
     }
 }
 
@@ -1219,7 +1217,6 @@ bool TPersQueueReadBalancer::TClientInfo::ProccessReadingFinished(ui32 partition
     auto& groupInfo = it->second;
     if (groupInfo.PartitionsInfo.contains(partitionId)) {
         auto& freePartitions = groupInfo.FreePartitions;
-        auto& inactivePartitions = groupInfo.InactivePartitions;
 
         std::deque<const TPartitionGraph::Node*> queue;
         queue.push_back(n);
@@ -1230,7 +1227,6 @@ bool TPersQueueReadBalancer::TClientInfo::ProccessReadingFinished(ui32 partition
             for (const auto* c : node->Children) {
                 if (IsReadeable(c->Id)) {
                     freePartitions.push_back(c->Id);
-                    inactivePartitions.erase(c->Id);
                     hasChanges = true;
                 } else {
                     queue.push_back(c);

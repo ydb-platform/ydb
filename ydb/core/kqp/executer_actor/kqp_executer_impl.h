@@ -163,6 +163,14 @@ public:
        return TActorBootstrapped<TDerived>::SelfId();
     }
 
+    TString BuildMemoryLimitExceptionMessage() const {
+        if (Request.TxAlloc) {
+            return TStringBuilder() << "Memory limit exception at " << CurrentStateFuncName()
+                << ", current limit is " << Request.TxAlloc->Alloc.GetLimit() << " bytes.";
+        }
+        return TStringBuilder() << "Memory limit exception at " << CurrentStateFuncName();
+    }
+
     void ReportEventElapsedTime() {
         if (Stats) {
             ui64 elapsedMicros = TlsActivationContext->GetCurrentEventTicksAsSeconds() * 1'000'000;

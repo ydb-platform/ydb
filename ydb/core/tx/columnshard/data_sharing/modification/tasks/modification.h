@@ -340,9 +340,7 @@ public:
             {
                 TStorageTabletTask task(storageId, toTabletId);
                 task.AddLink(BlobId, selfTabletId);
-                if (Shared.empty()) {
-                    task.AddLink(BlobId, toTabletId);
-                }
+                task.AddLink(BlobId, toTabletId);
                 auto info = result.emplace(toTabletId, task);
                 if (!info.second) {
                     info.first->second.Merge(task);

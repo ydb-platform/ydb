@@ -217,6 +217,70 @@ Y_UNIT_TEST_SUITE(DataShardWrite) {
         }
 
     }
+
+    Y_UNIT_TEST(WritePreparedManyTables) {
+        auto [runtime, server, sender] = TestCreateServer();
+
+        TShardedTableOptions opts;
+        const TString tableName1 = "table-1";
+        const TString tableName2 = "table-2";
+        const auto [shards1, tableId1] = CreateShardedTable(server, sender, "/Root", tableName1, opts);
+        const auto [shards2, tableId2] = CreateShardedTable(server, sender, "/Root", tableName2, opts);
+        const ui64 tabletId1 = shards1[0];
+        const ui64 tabletId2 = shards2[0];
+        const ui64 rowCount = 3;
+        
+        ui64 txId = 100;
+        ui64 minStep1, maxStep1;
+        ui64 minStep2, maxStep2;
+
+        Cerr << "===== Write prepared to table 1" << Endl;
+        {
+            const auto writeResult = Write(runtime, sender, tabletId1, tableId1, opts.Columns_, rowCount, txId, NKikimrDataEvents::TEvWrite::MODE_PREPARE);
+
+            minStep1 = writeResult.GetMinStep();
+            maxStep1 = writeResult.GetMaxStep();
+        }
+
+        Cerr << "===== Write prepared to table 2" << Endl;
+        {
+            const auto writeResult = Write(runtime, sender, tabletId2, tableId2, opts.Columns_, rowCount, txId, NKikimrDataEvents::TEvWrite::MODE_PREPARE);
+
+            minStep2 = writeResult.GetMinStep();
+            maxStep2 = writeResult.GetMaxStep();
+        }
+
+        Cerr << "========= Send propose to coordinator" << Endl;
+        {
+            SendProposeToCoordinator(server, {tabletId1, tabletId2}, Max(minStep1, minStep2), Min(maxStep1, maxStep2), txId);
+        }
+
+        Cerr << "========= Wait for completed transactions" << Endl;
+        for (ui8 i = 0; i < 1; ++i)
+        {
+            const auto writeResult = WaitForWriteCompleted(runtime, sender);
+
+            UNIT_ASSERT_GE(writeResult.GetStep(), Max(minStep1, minStep2));
+            UNIT_ASSERT_LE(writeResult.GetStep(), Min(maxStep1, maxStep2));
+            UNIT_ASSERT_VALUES_EQUAL(writeResult.GetOrderId(), txId);
+            UNIT_ASSERT_VALUES_EQUAL(writeResult.GetTxId(), txId);
+
+            UNIT_ASSERT_VALUES_EQUAL(writeResult.TxLocksSize(), 0);
+
+            const auto& tableAccessStats = writeResult.GetTxStats().GetTableAccessStats(0);
+            UNIT_ASSERT_VALUES_EQUAL(tableAccessStats.GetUpdateRow().GetCount(), rowCount);
+            UNIT_ASSERT_VALUES_EQUAL(tableAccessStats.GetTableInfo().GetName(), "/Root/" + (writeResult.GetOrigin() == tabletId1 ? tableName1 : tableName2));
+        }
+
+        Cout << "========= Read from tables" << Endl;
+        {
+            auto tableState = TReadTableState(server, MakeReadTableSettings("/Root/" + tableName1)).All();
+            UNIT_ASSERT_VALUES_EQUAL(tableState, expectedTableState);
+            tableState = TReadTableState(server, MakeReadTableSettings("/Root/"+ tableName2)).All();
+            UNIT_ASSERT_VALUES_EQUAL(tableState, expectedTableState);
+        }
+    }
+
     
     Y_UNIT_TEST(WritePreparedNoTxCache) {
         auto [runtime, server, sender] = TestCreateServer();

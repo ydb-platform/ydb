@@ -29,6 +29,8 @@ public:
 
     bool LoadIdempotency(NTable::TDatabase& database);
 
+    bool HasBlobsToDelete() const;
+
     void Stop() {
         for (auto&& i : Constructed) {
             i.second->Stop();

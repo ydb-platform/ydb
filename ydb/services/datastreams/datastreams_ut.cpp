@@ -1513,25 +1513,25 @@ Y_UNIT_TEST_SUITE(DataStreams) {
             }
             UNIT_ASSERT_VALUES_EQUAL(result.GetResult().failed_record_count(), 0);
             Cerr << result.GetResult().DebugString() << Endl;
-            Cerr << "Second put records\n";
 
+            Cerr << "Second put records (async)\n";
+            auto secondWriteAsync = client.PutRecords(streamPath, records);
+
+            Cerr << Now().Seconds() << "Third put records\n";
             result = client.PutRecords(streamPath, records).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL(result.IsTransportError(), false);
+            if (result.GetStatus() != EStatus::SUCCESS) {
+                result.GetIssues().PrintTo(Cerr);
+            }
+            UNIT_ASSERT_VALUES_EQUAL(result.GetResult().failed_record_count(), 4);
+            UNIT_ASSERT_VALUES_EQUAL(result.GetResult().records(0).error_code(), "ProvisionedThroughputExceededException");
+
+            result = secondWriteAsync.ExtractValueSync();
             UNIT_ASSERT_VALUES_EQUAL(result.IsTransportError(), false);
             if (result.GetStatus() != EStatus::SUCCESS) {
                 result.GetIssues().PrintTo(Cerr);
             }
             Cerr << result.GetResult().DebugString() << Endl;
-            UNIT_ASSERT_VALUES_EQUAL(result.GetResult().failed_record_count(), 4);
-            UNIT_ASSERT_VALUES_EQUAL(result.GetResult().records(0).error_code(), "ProvisionedThroughputExceededException");
-
-            Sleep(TDuration::Seconds(4));
-
-            Cerr << "Third put records\n";
-            result = client.PutRecords(streamPath, records).ExtractValueSync();
-            UNIT_ASSERT_VALUES_EQUAL(result.IsTransportError(), false);
-            if (result.GetStatus() != EStatus::SUCCESS) {
-                result.GetIssues().PrintTo(Cerr);
-            }
             UNIT_ASSERT_VALUES_EQUAL(result.GetResult().failed_record_count(), 0);
             Cerr << result.GetResult().DebugString() << Endl;
 

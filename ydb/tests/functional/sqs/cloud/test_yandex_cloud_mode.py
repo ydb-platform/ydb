@@ -487,13 +487,18 @@ class TestSqsYandexCloudMode(get_test_with_sqs_tenant_installation(KikimrSqsTest
             delete_result, not_none()
         )
 
-        # shouldn't get any error
-        result_list = self._read_single_message_no_wait(queue1_url)
-        assert len(result_list) == 0 or result_list[0]['Body'] == msg_body
+        # waiting until the message appears in queue1 again
+        result_list = self._read_while_not_empty(
+            queue_url=queue1_url,
+            messages_count=1,
+            visibility_timeout=0,
+            wait_timeout=10
+        )
+        assert_that(result_list[0]['Body'], equal_to(msg_body))
 
-        # ok, getting the message again
+        # getting the message until it's moved to dlq
         for i in range(max_receive_count):
-            assert_that(self._read_single_message_no_wait(queue1_url)[0]['Body'], equal_to(msg_body))
+            self._read_single_message_no_wait(queue1_url)
 
         # check moved messages counter
         counters = self._get_sqs_counters(counters_format='text')

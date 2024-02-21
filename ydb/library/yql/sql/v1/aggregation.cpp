@@ -28,6 +28,11 @@ namespace {
         }
         return false;
     }
+
+    bool ShouldEmitAggApply(const TContext& ctx) {
+        const bool blockEngineEnabled = ctx.BlockEngineEnable || ctx.BlockEngineForce;
+        return ctx.EmitAggApply.GetOrElse(blockEngineEnabled);
+    }
 }
 
 static const THashSet<TString> AggApplyFuncs = {
@@ -58,7 +63,7 @@ public:
 
 protected:
     bool InitAggr(TContext& ctx, bool isFactory, ISource* src, TAstListNode& node, const TVector<TNodePtr>& exprs) override {
-        if (!ctx.EmitAggApply) {
+        if (!ShouldEmitAggApply(ctx)) {
             AggApplyName = "";
         }
 
@@ -709,12 +714,29 @@ public:
     {}
 
 private:
+    const TString* GetGenericKey() const final {
+        return Column;
+    }
+
+    void Join(IAggregation* aggr) final {
+        const auto percentile = dynamic_cast<TPercentileFactory*>(aggr);
+        YQL_ENSURE(percentile);
+        YQL_ENSURE(Column && percentile->Column && *Column == *percentile->Column);
+        YQL_ENSURE(AggMode == percentile->AggMode);
+        Percentiles.insert(percentile->Percentiles.cbegin(), percentile->Percentiles.cend());
+        percentile->Percentiles.clear();
+    }
+
     bool InitAggr(TContext& ctx, bool isFactory, ISource* src, TAstListNode& node, const TVector<TNodePtr>& exprs) final {
         ui32 adjustArgsCount = isFactory ? 0 : 1;
         if (exprs.size() < 0 + adjustArgsCount  || exprs.size() > 1 + adjustArgsCount) {
             ctx.Error(Pos) << "Aggregation function " << (isFactory ? "factory " : "") << Name << " requires "
                 << (0 + adjustArgsCount) << " or " << (1 + adjustArgsCount) << " arguments, given: " << exprs.size();
             return false;
+        }
+
+        if (!isFactory) {
+            Column = exprs.front()->GetColumnName();
         }
 
         if (!TAggregationFactory::InitAggr(ctx, isFactory, src, node, isFactory ? TVector<TNodePtr>() : TVector<TNodePtr>(1, exprs.front())))
@@ -806,6 +828,7 @@ private:
     TSourcePtr FakeSource;
     std::multimap<TString, TNodePtr> Percentiles;
     TNodePtr FactoryPercentile;
+    const TString* Column = nullptr;
 };
 
 TAggregationPtr BuildPercentileFactoryAggregation(TPosition pos, const TString& name, const TString& factory, EAggregateMode aggMode) {
@@ -1349,7 +1372,7 @@ public:
         Y_UNUSED(many);
         Y_UNUSED(ctx);
         Y_UNUSED(allowAggApply);
-        if (ctx.EmitAggApply && allowAggApply && AggMode != EAggregateMode::OverWindow) {
+        if (ShouldEmitAggApply(ctx) && allowAggApply && AggMode != EAggregateMode::OverWindow) {
             return Y("AggApply",
                 Q("pg_" + to_lower(PgFunc)), Y("ListItemType", type), Lambda);
         }

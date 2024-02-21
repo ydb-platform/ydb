@@ -3,13 +3,14 @@ import sys
 import jinja2
 import library.python.resource as rs
 
-from ydb.tools.ydbd_slice.kube import cms
+from ydb.tools.ydbd_slice.kube import cms, dynconfig
 
 
 def render_resource(name, params):
     env = jinja2.Environment(
         loader=jinja2.FunctionLoader(lambda x: rs.find(x).decode()), undefined=jinja2.StrictUndefined
     )
+
     template = env.get_template(name)
     return template.render(**params)
 
@@ -50,8 +51,20 @@ def generate_legacy_configs(project_path, preferred_pool_kind='ssd'):
     )
 
 
+def generate_dynconfigs(project_path, namespace_name, cluster_uuid, preferred_pool_kind='ssd'):
+    generate_file(
+        project_path=project_path,
+        filename=dynconfig.get_config_path(project_path),
+        template='/ydbd_slice/templates/common/dynconfig.yaml',
+        template_kwargs=dict(
+            preferred_pool_kind=preferred_pool_kind,
+            cluster_uuid=cluster_uuid,
+        )
+    )
+
+
 def generate_8_node_block_4_2(project_path, user, namespace_name, nodeclaim_name, node_flavor,
-                              storage_name, database_name):
+                              storage_name, database_name, cluster_uuid=''):
     generate_file(
         project_path=project_path,
         filename=f'namespace-{namespace_name}.yaml',
@@ -94,5 +107,7 @@ def generate_8_node_block_4_2(project_path, user, namespace_name, nodeclaim_name
             nodeclaim_namespace=namespace_name,
         )
     )
+
+    generate_dynconfigs(project_path, namespace_name, cluster_uuid)
 
     generate_legacy_configs(project_path)

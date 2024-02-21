@@ -1,7 +1,7 @@
 #include <library/cpp/testing/unittest/registar.h>
 #include <library/cpp/testing/hook/hook.h>
 
-#include "cbo_optimizer.h"
+#include <ydb/library/yql/parser/pg_wrapper/interface/optimizer.h>
 
 using namespace NYql;
 

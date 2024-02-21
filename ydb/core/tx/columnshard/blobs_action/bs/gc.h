@@ -1,9 +1,10 @@
 #pragma once
 
+#include "blob_manager.h"
+
 #include <ydb/core/tx/columnshard/blob_cache.h>
 #include <ydb/core/tx/columnshard/blobs_action/abstract/gc.h>
 #include <ydb/core/tx/columnshard/blobs_action/counters/remove_gc.h>
-#include <ydb/core/tx/columnshard/blob_manager.h>
 
 namespace NKikimr::NOlap::NBlobOperations::NBlobStorage {
 
@@ -18,27 +19,22 @@ public:
     using TGCListsByGroup = THashMap<ui32, TGCLists>;
 private:
     TGCListsByGroup ListsByGroupId;
-    NColumnShard::TGenStep CollectGenStepInFlight;
+    TGenStep CollectGenStepInFlight;
     // Maps PerGenerationCounter value to the group in PerGroupGCListsInFlight
     THashMap<ui64, ui32> CounterToGroupInFlight;
     std::deque<TUnifiedBlobId> KeepsToErase;
-    std::deque<TUnifiedBlobId> DeletesToErase;
-    std::shared_ptr<NColumnShard::TBlobManager> Manager;
-    std::shared_ptr<TRemoveGCCounters> Counters;
+    std::shared_ptr<TBlobManager> Manager;
 protected:
-    virtual void DoOnExecuteTxAfterCleaning(NColumnShard::TColumnShard& self, NColumnShard::TBlobManagerDb& dbBlobs) override;
+    virtual void RemoveBlobIdFromDB(const TTabletId tabletId, const TUnifiedBlobId& blobId, TBlobManagerDb& dbBlobs) override;
+    virtual void DoOnExecuteTxAfterCleaning(NColumnShard::TColumnShard& self, TBlobManagerDb& dbBlobs) override;
     virtual bool DoOnCompleteTxAfterCleaning(NColumnShard::TColumnShard& self, const std::shared_ptr<IBlobsGCAction>& taskAction) override;
 public:
     bool IsEmpty() const {
         return ListsByGroupId.empty();
     }
 
-    void SetCounters(const std::shared_ptr<TRemoveGCCounters>& counters) {
-        Counters = counters;
-    }
-
-    TGCTask(const TString& storageId, TGCListsByGroup&& listsByGroupId, const NColumnShard::TGenStep& collectGenStepInFlight, std::deque<TUnifiedBlobId>&& keepsToErase, std::deque<TUnifiedBlobId>&& deletesToErase,
-        const std::shared_ptr<NColumnShard::TBlobManager>& manager);
+    TGCTask(const TString& storageId, TGCListsByGroup&& listsByGroupId, const TGenStep& collectGenStepInFlight, std::deque<TUnifiedBlobId>&& keepsToErase,
+        const std::shared_ptr<TBlobManager>& manager, TBlobsCategories&& blobsToRemove, const std::shared_ptr<TRemoveGCCounters>& counters);
 
     bool IsFinished() const {
         return ListsByGroupId.empty();

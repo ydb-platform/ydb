@@ -5,6 +5,8 @@
 
 #include <util/generic/vector.h>
 
+#include <functional>
+
 namespace NKikimr::NReplication::NService {
 
 struct TEvWorker {
@@ -14,6 +16,7 @@ struct TEvWorker {
         EvHandshake,
         EvPoll,
         EvData,
+        EvGone,
 
         EvEnd,
     };
@@ -30,14 +33,33 @@ struct TEvWorker {
 
             explicit TRecord(ui64 offset, const TString& data);
             explicit TRecord(ui64 offset, TString&& data);
+            void Out(IOutputStream& out) const;
         };
 
         TVector<TRecord> Records;
 
+        explicit TEvData(const TVector<TRecord>& records);
         explicit TEvData(TVector<TRecord>&& records);
+        TString ToString() const override;
+    };
+
+    struct TEvGone: public TEventLocal<TEvGone, EvGone> {
+        enum EStatus {
+            SCHEME_ERROR,
+            UNAVAILABLE,
+        };
+
+        EStatus Status;
+
+        explicit TEvGone(EStatus status);
+        TString ToString() const override;
     };
 };
 
-IActor* CreateWorker(THolder<IActor>&& reader, THolder<IActor>&& writer);
+IActor* CreateWorker(std::function<IActor*(void)>&& createReaderFn, std::function<IActor*(void)>&& createWriterFn);
 
+}
+
+Y_DECLARE_OUT_SPEC(inline, NKikimr::NReplication::NService::TEvWorker::TEvData::TRecord, o, x) {
+    return x.Out(o);
 }

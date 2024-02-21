@@ -183,7 +183,7 @@ public:
         Y_ABORT("Unimplemented for local rpc");
     }
 
-    virtual void SendSerializedResult(TString&&, Ydb::StatusIds::StatusCode) override {
+    virtual void SendSerializedResult(TString&&, Ydb::StatusIds::StatusCode, EStreamCtrl) override {
         Y_ABORT("Unimplemented for local rpc");
     }
 
@@ -208,15 +208,8 @@ public:
         CostInfo->set_consumed_units(consumed_units);
     }
 
-    void SetDiskQuotaExceeded(bool disk) override {
-        if (!QuotaExceeded) {
-            QuotaExceeded = std::make_unique<Ydb::QuotaExceeded>();
-        }
-        QuotaExceeded->set_disk(disk);
-    }
-
     bool GetDiskQuotaExceeded() const override {
-        return QuotaExceeded ? QuotaExceeded->disk() : false;
+        return false;
     }
 
     TMaybe<NRpcService::TRlPath> GetRlPath() const override {
@@ -257,7 +250,6 @@ private:
     NYql::TIssueManager IssueManager;
     google::protobuf::Arena Arena;
     std::unique_ptr<Ydb::CostInfo> CostInfo;
-    std::unique_ptr<Ydb::QuotaExceeded> QuotaExceeded;
 };
 
 template<class TRequest>

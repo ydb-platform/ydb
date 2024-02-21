@@ -93,7 +93,11 @@ NSQLTranslation::TTranslationSettings GetTranslationSettings(NYql::EKikimrQueryT
     settings.V0ForceDisable = false;
     settings.WarnOnV0 = false;
     settings.DefaultCluster = cluster;
-    settings.ClusterMapping = {{cluster, TString(NYql::KikimrProviderName)}};
+    settings.ClusterMapping = {
+        {cluster, TString(NYql::KikimrProviderName)},
+        {"pg_catalog", TString(NYql::PgProviderName)},
+        {"information_schema", TString(NYql::PgProviderName)}
+    };
     auto tablePathPrefix = kqpTablePathPrefix;
     if (!tablePathPrefix.empty()) {
         settings.PathPrefix = tablePathPrefix;

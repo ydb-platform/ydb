@@ -166,6 +166,13 @@ auto TServiceBase::TMethodDescriptor::SetQueueSizeLimit(int value) const -> TMet
     return result;
 }
 
+auto TServiceBase::TMethodDescriptor::SetQueueBytesSizeLimit(i64 value) const -> TMethodDescriptor
+{
+    auto result = *this;
+    result.QueueBytesSizeLimit = value;
+    return result;
+}
+
 auto TServiceBase::TMethodDescriptor::SetConcurrencyLimit(int value) const -> TMethodDescriptor
 {
     auto result = *this;
@@ -271,6 +278,7 @@ TServiceBase::TRuntimeMethodInfo::TRuntimeMethodInfo(
     , ResponseLoggingAnchor(NLogging::TLogManager::Get()->RegisterDynamicAnchor(
         Format("%v.%v ->", ServiceId.ServiceName, Descriptor.Method)))
     , RequestQueueSizeLimitErrorCounter(Profiler.Counter("/request_queue_size_errors"))
+    , RequestQueueBytesSizeLimitErrorCounter(Profiler.Counter("/request_queue_bytes_size_errors"))
     , UnauthenticatedRequestsCounter(Profiler.Counter("/unauthenticated_requests"))
     , LoggingSuppressionFailedRequestThrottler(
         CreateReconfigurableThroughputThrottler(
@@ -697,32 +705,13 @@ private:
             MethodPerformanceCounters_->RemoteWaitTimeCounter.Record(now - retryStart);
         }
 
-        // COMPAT(kiselyovp): legacy RPC codecs
-        if (RequestHeader_->has_request_codec()) {
-            int intRequestCodecId = RequestHeader_->request_codec();
-            if (!TryEnumCast(intRequestCodecId, &RequestCodec_)) {
-                Reply(TError(
-                    NRpc::EErrorCode::ProtocolError,
-                    "Request codec %v is not supported",
-                    intRequestCodecId));
-                return;
-            }
-        } else {
-            RequestCodec_ = NCompression::ECodec::None;
-        }
-
-        if (RequestHeader_->has_response_codec()) {
-            int intResponseCodecId = RequestHeader_->response_codec();
-            if (!TryEnumCast(intResponseCodecId, &ResponseCodec_)) {
-                Reply(TError(
-                    NRpc::EErrorCode::ProtocolError,
-                    "Response codec %v is not supported",
-                    intResponseCodecId));
-                return;
-            }
-        } else {
-            ResponseCodec_ = NCompression::ECodec::None;
-        }
+        // COMPAT(danilalexeev): legacy RPC codecs
+        RequestCodec_ = RequestHeader_->has_request_codec()
+            ? CheckedEnumCast<NCompression::ECodec>(RequestHeader_->request_codec())
+            : NCompression::ECodec::None;
+        ResponseCodec_ = RequestHeader_->has_response_codec()
+            ? CheckedEnumCast<NCompression::ECodec>(RequestHeader_->response_codec())
+            : NCompression::ECodec::None;
 
         Service_->IncrementActiveRequestCount();
         ActiveRequestCountIncremented_ = true;
@@ -786,7 +775,7 @@ private:
             GetTotalMessageAttachmentSize(RequestMessage_),
             GetMessageAttachmentCount(RequestMessage_));
 
-        // COMPAT(kiselyovp)
+        // COMPAT(danilalexeev): legacy RPC codecs
         if (RequestHeader_->has_request_codec() && RequestHeader_->has_response_codec()) {
             delimitedBuilder->AppendFormat("RequestCodec: %v, ResponseCodec: %v",
                 RequestCodec_,
@@ -1332,11 +1321,16 @@ void TRequestQueue::ConfigureWeightThrottler(const TThroughputThrottlerConfigPtr
     WeightThrottler_.Reconfigure(config);
 }
 
-bool TRequestQueue::IsQueueLimitSizeExceeded() const
+bool TRequestQueue::IsQueueSizeLimitExceeded() const
 {
-    return
-        QueueSize_.load(std::memory_order::relaxed) >=
+    return QueueSize_.load(std::memory_order::relaxed) >=
         RuntimeInfo_->QueueSizeLimit.load(std::memory_order::relaxed);
+}
+
+bool TRequestQueue::IsQueueBytesSizeLimitExceeded() const
+{
+    return QueueBytesSize_.load(std::memory_order::relaxed) >=
+        RuntimeInfo_->QueueBytesSizeLimit.load(std::memory_order::relaxed);
 }
 
 int TRequestQueue::GetQueueSize() const
@@ -1362,7 +1356,7 @@ void TRequestQueue::OnRequestArrived(TServiceBase::TServiceContextPtr context)
 
     // Slow path.
     DecrementConcurrency();
-    IncrementQueueSize();
+    IncrementQueueSize(context);
 
     context->BeforeEnqueued();
     YT_VERIFY(Queue_.enqueue(std::move(context)));
@@ -1420,7 +1414,7 @@ void TRequestQueue::ScheduleRequestsFromQueue()
                 return;
             }
 
-            DecrementQueueSize();
+            DecrementQueueSize(context);
             context->AfterDequeued();
             if (context->IsCanceled()) {
                 context.Reset();
@@ -1451,15 +1445,26 @@ void TRequestQueue::RunRequest(TServiceBase::TServiceContextPtr context)
     }
 }
 
-int TRequestQueue::IncrementQueueSize()
+void TRequestQueue::IncrementQueueSize(const TServiceBase::TServiceContextPtr& context)
 {
-    return ++QueueSize_;
+    ++QueueSize_;
+
+    auto requestSize =
+        GetMessageBodySize(context->GetRequestMessage()) +
+        GetTotalMessageAttachmentSize(context->GetRequestMessage());
+    QueueBytesSize_ += requestSize;
 }
 
-void  TRequestQueue::DecrementQueueSize()
+void  TRequestQueue::DecrementQueueSize(const TServiceBase::TServiceContextPtr& context)
 {
     auto newQueueSize = --QueueSize_;
     YT_ASSERT(newQueueSize >= 0);
+
+    auto requestSize =
+        GetMessageBodySize(context->GetRequestMessage()) +
+        GetTotalMessageAttachmentSize(context->GetRequestMessage());
+    auto oldQueueBytesSize = QueueBytesSize_.fetch_sub(requestSize);
+    YT_ASSERT(oldQueueBytesSize >= requestSize);
 }
 
 int TRequestQueue::IncrementConcurrency()
@@ -1629,12 +1634,23 @@ void TServiceBase::HandleRequest(
 
     auto maybeThrottled = GetThrottledError(*header);
 
-    if (requestQueue->IsQueueLimitSizeExceeded()) {
+    if (requestQueue->IsQueueSizeLimitExceeded()) {
         runtimeInfo->RequestQueueSizeLimitErrorCounter.Increment();
         replyError(TError(
             NRpc::EErrorCode::RequestQueueSizeLimitExceeded,
             "Request queue size limit exceeded")
             << TErrorAttribute("limit", runtimeInfo->QueueSizeLimit.load())
+            << TErrorAttribute("queue", requestQueue->GetName())
+            << maybeThrottled);
+        return;
+    }
+
+    if (requestQueue->IsQueueBytesSizeLimitExceeded()) {
+        runtimeInfo->RequestQueueBytesSizeLimitErrorCounter.Increment();
+        replyError(TError(
+            NRpc::EErrorCode::RequestQueueSizeLimitExceeded,
+            "Request queue bytes size limit exceeded")
+            << TErrorAttribute("limit", runtimeInfo->QueueBytesSizeLimit.load())
             << TErrorAttribute("queue", requestQueue->GetName())
             << maybeThrottled);
         return;
@@ -1928,6 +1944,9 @@ TError TServiceBase::DoCheckRequestCompatibility(const NRpc::NProto::TRequestHea
     if (auto error = DoCheckRequestFeatures(header); !error.IsOK()) {
         return error;
     }
+    if (auto error = DoCheckRequestCodecs(header); !error.IsOK()) {
+        return error;
+    }
     return {};
 }
 
@@ -1966,6 +1985,29 @@ TError TServiceBase::DoCheckRequestFeatures(const NRpc::NProto::TRequestHeader& 
                 NRpc::EErrorCode::UnsupportedServerFeature,
                 "Server does not support the feature requested by client")
                 << TErrorAttribute("feature_id", featureId);
+        }
+    }
+    return {};
+}
+
+TError TServiceBase::DoCheckRequestCodecs(const NRpc::NProto::TRequestHeader& header)
+{
+    if (header.has_request_codec()) {
+        NCompression::ECodec requestCodec;
+        if (!TryEnumCast(header.request_codec(), &requestCodec)) {
+            return TError(
+                NRpc::EErrorCode::ProtocolError,
+                "Request codec %v is not supported",
+                header.request_codec());
+        }
+    }
+    if (header.has_response_codec()) {
+        NCompression::ECodec responseCodec;
+        if (!TryEnumCast(header.response_codec(), &responseCodec)) {
+            return TError(
+                NRpc::EErrorCode::ProtocolError,
+                "Response codec %v is not supported",
+                header.response_codec());
         }
     }
     return {};
@@ -2380,6 +2422,7 @@ TServiceBase::TRuntimeMethodInfoPtr TServiceBase::RegisterMethod(const TMethodDe
 
     runtimeInfo->Heavy.store(descriptor.Options.Heavy);
     runtimeInfo->QueueSizeLimit.store(descriptor.QueueSizeLimit);
+    runtimeInfo->QueueBytesSizeLimit.store(descriptor.QueueBytesSizeLimit);
     runtimeInfo->ConcurrencyLimit.Reconfigure(descriptor.ConcurrencyLimit);
     runtimeInfo->LogLevel.store(descriptor.LogLevel);
     runtimeInfo->LoggingSuppressionTimeout.store(descriptor.LoggingSuppressionTimeout);
@@ -2390,6 +2433,9 @@ TServiceBase::TRuntimeMethodInfoPtr TServiceBase::RegisterMethod(const TMethodDe
     auto& profiler = runtimeInfo->Profiler;
     profiler.AddFuncGauge("/request_queue_size_limit", MakeStrong(this), [=] {
         return runtimeInfo->QueueSizeLimit.load(std::memory_order::relaxed);
+    });
+    profiler.AddFuncGauge("/request_queue_bytes_size_limit", MakeStrong(this), [=] {
+        return runtimeInfo->QueueBytesSizeLimit.load(std::memory_order::relaxed);
     });
     profiler.AddFuncGauge("/concurrency_limit", MakeStrong(this), [=] {
         return runtimeInfo->ConcurrencyLimit.GetDynamicLimit();
@@ -2454,6 +2500,7 @@ void TServiceBase::DoConfigure(
 
             runtimeInfo->Heavy.store(methodConfig->Heavy.value_or(descriptor.Options.Heavy));
             runtimeInfo->QueueSizeLimit.store(methodConfig->QueueSizeLimit.value_or(descriptor.QueueSizeLimit));
+            runtimeInfo->QueueBytesSizeLimit.store(methodConfig->QueueBytesSizeLimit.value_or(descriptor.QueueBytesSizeLimit));
             runtimeInfo->ConcurrencyLimit.Reconfigure(methodConfig->ConcurrencyLimit.value_or(descriptor.ConcurrencyLimit));
             runtimeInfo->LogLevel.store(methodConfig->LogLevel.value_or(descriptor.LogLevel));
             runtimeInfo->LoggingSuppressionTimeout.store(methodConfig->LoggingSuppressionTimeout.value_or(descriptor.LoggingSuppressionTimeout));

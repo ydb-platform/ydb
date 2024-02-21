@@ -5,6 +5,9 @@
 #include <yt/yt/client/tablet_client/config.h>
 #include <yt/yt/client/tablet_client/helpers.h>
 
+#include <yt/yt/core/compression/codec.h>
+#include <yt/yt/core/compression/dictionary_codec.h>
+
 #include <yt/yt/core/ytree/convert.h>
 
 #include <yt/yt/core/misc/singleton.h>
@@ -229,6 +232,80 @@ void TKeyPrefixFilterWriterConfig::Register(TRegistrar registrar)
                     MaxKeyColumnCountInDynamicTable,
                     length);
             }
+        }
+    });
+}
+
+///////////////////////////////////////////////////////////////////////////////
+
+void TDictionaryCompressionConfig::Register(TRegistrar registrar)
+{
+    registrar.Parameter("enable", &TThis::Enable)
+        .Default(false);
+    registrar.Parameter("rebuild_period", &TThis::RebuildPeriod)
+        .Default(TDuration::Hours(3));
+    registrar.Parameter("backoff_period", &TThis::BackoffPeriod)
+        .Default(TDuration::Minutes(10));
+    registrar.Parameter("desired_processed_chunk_count", &TThis::DesiredProcessedChunkCount)
+        .GreaterThan(0)
+        .Default(10);
+    registrar.Parameter("max_processed_chunk_count", &TThis::MaxProcessedChunkCount)
+        .GreaterThan(0)
+        .Default(50);
+    registrar.Parameter("desired_sample_count", &TThis::DesiredSampleCount)
+        .GreaterThan(0)
+        .Default(10'000);
+    registrar.Parameter("desired_sampled_data_weight", &TThis::DesiredSampledDataWeight)
+        .GreaterThan(0)
+        .Default(3_MB);
+    registrar.Parameter("max_processed_sample_count", &TThis::MaxProcessedSampleCount)
+        .GreaterThan(0)
+        .Default(50'000);
+    registrar.Parameter("max_processed_data_weight", &TThis::MaxProcessedDataWeight)
+        .GreaterThan(0)
+        .Default(50_MB);
+    registrar.Parameter("max_fetched_blocks_size", &TThis::MaxFetchedBlocksSize)
+        .GreaterThan(0)
+        .Default(1_GB);
+    registrar.Parameter("column_dictionary_size", &TThis::ColumnDictionarySize)
+        .GreaterThanOrEqual(NCompression::GetDictionaryCompressionCodec()->GetMinDictionarySize())
+        .Default(32_KB);
+    registrar.Parameter("applied_policies", &TThis::AppliedPolicies)
+        .Default({
+            EDictionaryCompressionPolicy::LargeChunkFirst,
+            EDictionaryCompressionPolicy::FreshChunkFirst,
+        });
+
+    registrar.Parameter("policy_probation_samples_size", &TThis::PolicyProbationSamplesSize)
+        .GreaterThan(0)
+        .Default(12_MB);
+    registrar.Parameter("max_acceptable_compression_ratio", &TThis::MaxAcceptableCompressionRatio)
+        .Default(0.7)
+        .InRange(0, 1);
+    registrar.Parameter("max_decompression_blob_size", &TThis::MaxDecompressionBlobSize)
+        .GreaterThan(0)
+        .Default(64_MB);
+
+    registrar.Postprocessor([] (TThis* config) {
+        if (config->DesiredSampleCount > config->MaxProcessedSampleCount) {
+            THROW_ERROR_EXCEPTION("\"desired_sample_count\" cannot be greater than \"max_processed_sample_count\"");
+        }
+
+        if (config->DesiredSampledDataWeight > config->MaxProcessedDataWeight) {
+            THROW_ERROR_EXCEPTION("\"desired_sampled_data_weight\" cannot be greater than \"max_processed_data_weight\"");
+        }
+
+        if (config->MaxProcessedDataWeight > config->MaxFetchedBlocksSize) {
+            THROW_ERROR_EXCEPTION("\"max_processed_data_weight\" cannot be greater than \"max_fetched_blocks_size\"");
+        }
+
+        if (config->ColumnDictionarySize > config->DesiredSampledDataWeight) {
+            THROW_ERROR_EXCEPTION("\"column_dictionary_size\" cannot be greater than \"desired_sampled_data_weight\"");
+        }
+
+        if (config->AppliedPolicies.contains(EDictionaryCompressionPolicy::None)) {
+            THROW_ERROR_EXCEPTION("\"applied_policies\" cannot contain policy %Qlv",
+                EDictionaryCompressionPolicy::None);
         }
     });
 }

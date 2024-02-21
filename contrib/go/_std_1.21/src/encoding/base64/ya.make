@@ -1,14 +1,7 @@
 GO_LIBRARY()
-
-SRCS(
-    base64.go
-)
-
-GO_TEST_SRCS(base64_test.go)
-
-GO_XTEST_SRCS(example_test.go)
-
+IF (TRUE)
+    SRCS(
+		base64.go
+    )
+ENDIF()
 END()
-
-RECURSE(
-)

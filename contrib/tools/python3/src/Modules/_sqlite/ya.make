@@ -2,9 +2,9 @@
 
 LIBRARY()
 
-VERSION(3.11.7)
+VERSION(3.12.2)
 
-ORIGINAL_SOURCE(https://github.com/python/cpython/archive/v3.11.7.tar.gz)
+ORIGINAL_SOURCE(https://github.com/python/cpython/archive/v3.12.2.tar.gz)
 
 LICENSE(Python-2.0)
 
@@ -14,14 +14,9 @@ PEERDIR(
 
 ADDINCL(
     contrib/libs/sqlite3
+    contrib/tools/python3/src/Include
+    contrib/tools/python3/src/Include/internal
 )
-
-IF (USE_SYSTEM_PYTHON)
-    # Prevent configure error when arcadia python is a tool in a system python graph.
-    ADDINCL(
-        contrib/tools/python3/src/Include
-    )
-ENDIF()
 
 PYTHON3_ADDINCL()
 

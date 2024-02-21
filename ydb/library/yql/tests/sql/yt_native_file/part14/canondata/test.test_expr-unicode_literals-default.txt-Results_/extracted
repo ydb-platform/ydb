@@ -1,0 +1,5 @@
+<tmp_path>/program.sql:<main>: Warning: Parse Sql
+
+    <tmp_path>/program.sql:<main>:7:6: Warning: Please add suffix u for Utf8 strings or s for arbitrary binary strings
+    		    "c");
+	     ^

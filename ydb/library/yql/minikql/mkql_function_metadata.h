@@ -56,18 +56,10 @@ class TKernel;
 
 class TKernelFamily {
 public:
-    enum ENullMode {
-        Default,
-        AlwaysNull,
-        AlwaysNotNull
-    };
-
-    const ENullMode NullMode;
     const arrow::compute::FunctionOptions* FunctionOptions;
 
-    TKernelFamily(ENullMode nullMode = ENullMode::Default, const arrow::compute::FunctionOptions* functionOptions = nullptr)
-        : NullMode(nullMode)
-        , FunctionOptions(functionOptions)
+    TKernelFamily(const arrow::compute::FunctionOptions* functionOptions = nullptr)
+        : FunctionOptions(functionOptions)
     {}
 
     virtual ~TKernelFamily() = default;
@@ -77,14 +69,22 @@ public:
 
 class TKernel {
 public:
+    enum class ENullMode {
+        Default,
+        AlwaysNull,
+        AlwaysNotNull
+    };
+
     const TKernelFamily& Family;
     const std::vector<NUdf::TDataTypeId> ArgTypes;
     const NUdf::TDataTypeId ReturnType;
+    const ENullMode NullMode;
 
-    TKernel(const TKernelFamily& family, const std::vector<NUdf::TDataTypeId>& argTypes, NUdf::TDataTypeId returnType)
+    TKernel(const TKernelFamily& family, const std::vector<NUdf::TDataTypeId>& argTypes, NUdf::TDataTypeId returnType, ENullMode nullMode)
         : Family(family)
         , ArgTypes(argTypes)
         , ReturnType(returnType)
+        , NullMode(nullMode)
     {
     }
 
@@ -113,7 +113,7 @@ using TKernelFamilyMap = std::unordered_map<TString, std::unique_ptr<TKernelFami
 class TKernelFamilyBase : public TKernelFamily
 {
 public:
-    TKernelFamilyBase(ENullMode nullMode = ENullMode::Default, const arrow::compute::FunctionOptions* functionOptions = nullptr);
+    TKernelFamilyBase(const arrow::compute::FunctionOptions* functionOptions = nullptr);
 
     const TKernel* FindKernel(const NUdf::TDataTypeId* argTypes, size_t argTypesCount, NUdf::TDataTypeId returnType) const final;
     TVector<const TKernel*> GetAllKernels() const final;

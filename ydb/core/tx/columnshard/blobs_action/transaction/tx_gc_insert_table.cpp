@@ -1,4 +1,5 @@
 #include "tx_gc_insert_table.h"
+#include <ydb/core/tx/columnshard/blobs_action/blob_manager_db.h>
 
 namespace NKikimr::NColumnShard {
 
@@ -9,7 +10,7 @@ bool TTxInsertTableCleanup::Execute(TTransactionContext& txc, const TActorContex
 
     Self->TryAbortWrites(db, dbTable, std::move(WriteIdsToAbort));
 
-    TBlobManagerDb blobManagerDb(txc.DB);
+    NOlap::TBlobManagerDb blobManagerDb(txc.DB);
     auto allAborted = Self->InsertTable->GetAborted();
     auto storage = Self->StoragesManager->GetInsertOperator();
     BlobsAction = storage->StartDeclareRemovingAction("TX_CLEANUP");

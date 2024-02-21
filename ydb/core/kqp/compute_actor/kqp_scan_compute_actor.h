@@ -2,15 +2,15 @@
 #include "kqp_scan_events.h"
 
 #include <ydb/core/kqp/runtime/kqp_scan_data.h>
-#include <ydb/library/yql/dq/actors/compute/dq_compute_actor_impl.h>
+#include <ydb/library/yql/dq/actors/compute/dq_sync_compute_actor_base.h>
 #include <ydb/library/yql/dq/actors/compute/dq_compute_actor_async_io.h>
 #include <ydb/library/yql/dq/actors/compute/dq_compute_actor.h>
 
 namespace NKikimr::NKqp::NScanPrivate {
 
-class TKqpScanComputeActor: public NYql::NDq::TDqComputeActorBase<TKqpScanComputeActor> {
+class TKqpScanComputeActor: public NYql::NDq::TDqSyncComputeActorBase<TKqpScanComputeActor> {
 private:
-    using TBase = NYql::NDq::TDqComputeActorBase<TKqpScanComputeActor>;
+    using TBase = NYql::NDq::TDqSyncComputeActorBase<TKqpScanComputeActor>;
     NMiniKQL::TKqpScanComputeContext ComputeCtx;
     NKikimrTxDataShard::TKqpTransaction::TScanTaskMeta Meta;
     using TBase::TaskRunner;
@@ -82,14 +82,14 @@ public:
             : 0ul;
     }
 
-    std::any GetSourcesState() override {
+    ui64 GetSourcesState() {
         if (!ScanData) {
             return 0;
         }
         return CalculateFreeSpace();
     }
 
-    void PollSources(std::any prev) override;
+    void PollSources(ui64 prevFreeSpace);
 
     void PassAway() override {
         if (TaskRunner) {

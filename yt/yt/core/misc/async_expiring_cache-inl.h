@@ -215,7 +215,7 @@ TFuture<std::vector<TErrorOr<TValue>>> TAsyncExpiringCache<TKey, TValue>::GetMan
         if (!keysToPopulate.empty()) {
             YT_LOG_DEBUG("Populating cache entries (Keys: %v)",
                 keysToPopulate);
-            InvokeGetMany(entriesToPopulate, keysToPopulate, /* periodicRefreshTime */ std::nullopt);
+            InvokeGetMany(entriesToPopulate, keysToPopulate, /*periodicRefreshTime*/ std::nullopt);
         }
     }
 
@@ -529,7 +529,7 @@ void TAsyncExpiringCache<TKey, TValue>::InvokeGet(
 template <class TKey, class TValue>
 TFuture<TValue> TAsyncExpiringCache<TKey, TValue>::DoGet(
     const TKey& key,
-    const TErrorOr<TValue>* /* oldValue */,
+    const TErrorOr<TValue>* /*oldValue*/,
     EUpdateReason reason) noexcept
 {
     return DoGet(key, reason != EUpdateReason::InitialFetch);

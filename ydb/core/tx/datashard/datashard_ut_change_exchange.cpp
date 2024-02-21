@@ -1,11 +1,8 @@
 #include <ydb/core/tx/datashard/ut_common/datashard_ut_common.h>
-#include "change_sender_common_ops.h"
-
-#include <library/cpp/digest/md5/md5.h>
-#include <library/cpp/json/json_reader.h>
-#include <library/cpp/json/json_writer.h>
+#include "datashard_ut_common_kqp.h"
 
 #include <ydb/core/base/path.h>
+#include <ydb/core/change_exchange/change_sender_common_ops.h>
 #include <ydb/core/persqueue/events/global.h>
 #include <ydb/core/persqueue/user_info.h>
 #include <ydb/core/persqueue/write_meta.h>
@@ -13,6 +10,10 @@
 #include <ydb/public/sdk/cpp/client/ydb_datastreams/datastreams.h>
 #include <ydb/public/sdk/cpp/client/ydb_persqueue_public/persqueue.h>
 #include <ydb/public/sdk/cpp/client/ydb_topic/topic.h>
+
+#include <library/cpp/digest/md5/md5.h>
+#include <library/cpp/json/json_reader.h>
+#include <library/cpp/json/json_writer.h>
 
 #include <util/generic/size_literals.h>
 #include <util/string/join.h>
@@ -22,6 +23,7 @@
 namespace NKikimr {
 
 using namespace NDataShard;
+using namespace NDataShard::NKqpHelpers;
 using namespace Tests;
 
 Y_UNIT_TEST_SUITE(AsyncIndexChangeExchange) {
@@ -218,20 +220,20 @@ Y_UNIT_TEST_SUITE(AsyncIndexChangeExchange) {
 
         runtime.SetObserverFunc([&](TAutoPtr<IEventHandle>& ev) {
             switch (ev->GetTypeRewrite()) {
-            case TEvChangeExchange::EvEnqueueRecords:
-                for (const auto& record : ev->Get<TEvChangeExchange::TEvEnqueueRecords>()->Records) {
+            case NChangeExchange::TEvChangeExchange::EvEnqueueRecords:
+                for (const auto& record : ev->Get<NChangeExchange::TEvChangeExchange::TEvEnqueueRecords>()->Records) {
                     enqueued.insert(record.Order);
                 }
                 break;
 
-            case TEvChangeExchange::EvRequestRecords:
-                for (const auto& record : ev->Get<TEvChangeExchange::TEvRequestRecords>()->Records) {
+            case NChangeExchange::TEvChangeExchange::EvRequestRecords:
+                for (const auto& record : ev->Get<NChangeExchange::TEvChangeExchange::TEvRequestRecords>()->Records) {
                     requested.insert(record.Order);
                 }
                 break;
 
-            case TEvChangeExchange::EvRemoveRecords:
-                for (const auto& record : ev->Get<TEvChangeExchange::TEvRemoveRecords>()->Records) {
+            case NChangeExchange::TEvChangeExchange::EvRemoveRecords:
+                for (const auto& record : ev->Get<NChangeExchange::TEvChangeExchange::TEvRemoveRecords>()->Records) {
                     removed.insert(record);
                 }
                 break;
@@ -307,14 +309,14 @@ Y_UNIT_TEST_SUITE(AsyncIndexChangeExchange) {
                     return TTestActorRuntime::EEventAction::PROCESS;
                 }
 
-            case TEvChangeExchange::EvEnqueueRecords:
-                for (const auto& record : ev->Get<TEvChangeExchange::TEvEnqueueRecords>()->Records) {
+            case NChangeExchange::TEvChangeExchange::EvEnqueueRecords:
+                for (const auto& record : ev->Get<NChangeExchange::TEvChangeExchange::TEvEnqueueRecords>()->Records) {
                     enqueued.insert(record.Order);
                 }
                 break;
 
-            case TEvChangeExchange::EvRemoveRecords:
-                for (const auto& record : ev->Get<TEvChangeExchange::TEvRemoveRecords>()->Records) {
+            case NChangeExchange::TEvChangeExchange::EvRemoveRecords:
+                for (const auto& record : ev->Get<NChangeExchange::TEvChangeExchange::TEvRemoveRecords>()->Records) {
                     removed.insert(record);
                 }
                 break;
@@ -371,7 +373,7 @@ Y_UNIT_TEST_SUITE(AsyncIndexChangeExchange) {
         bool inited = false;
         runtime.SetObserverFunc([&](TAutoPtr<IEventHandle>& ev) {
             switch (ev->GetTypeRewrite()) {
-            case TEvChangeExchange::EvEnqueueRecords:
+            case NChangeExchange::TEvChangeExchange::EvEnqueueRecords:
                 delayed.emplace_back(ev.Release());
                 return TTestActorRuntime::EEventAction::DROP;
 
@@ -416,14 +418,14 @@ Y_UNIT_TEST_SUITE(AsyncIndexChangeExchange) {
         THashSet<ui64> removed;
         runtime.SetObserverFunc([&](TAutoPtr<IEventHandle>& ev) {
             switch (ev->GetTypeRewrite()) {
-            case TEvChangeExchange::EvEnqueueRecords:
-                for (const auto& record : ev->Get<TEvChangeExchange::TEvEnqueueRecords>()->Records) {
+            case NChangeExchange::TEvChangeExchange::EvEnqueueRecords:
+                for (const auto& record : ev->Get<NChangeExchange::TEvChangeExchange::TEvEnqueueRecords>()->Records) {
                     enqueued.insert(record.Order);
                 }
                 break;
 
-            case TEvChangeExchange::EvRemoveRecords:
-                for (const auto& record : ev->Get<TEvChangeExchange::TEvRemoveRecords>()->Records) {
+            case NChangeExchange::TEvChangeExchange::EvRemoveRecords:
+                for (const auto& record : ev->Get<NChangeExchange::TEvChangeExchange::TEvRemoveRecords>()->Records) {
                     removed.insert(record);
                 }
                 break;
@@ -481,7 +483,7 @@ Y_UNIT_TEST_SUITE(AsyncIndexChangeExchange) {
 
         runtime.SetObserverFunc([&](TAutoPtr<IEventHandle>& ev) {
             switch (ev->GetTypeRewrite()) {
-            case TEvChangeExchange::EvEnqueueRecords:
+            case NChangeExchange::TEvChangeExchange::EvEnqueueRecords:
                 if (preventEnqueueing) {
                     enqueued.emplace_back(ev.Release());
                     return TTestActorRuntime::EEventAction::DROP;
@@ -636,7 +638,7 @@ Y_UNIT_TEST_SUITE(AsyncIndexChangeExchange) {
 
         runtime.SetObserverFunc([&](TAutoPtr<IEventHandle>& ev) {
             switch (ev->GetTypeRewrite()) {
-            case TEvChangeExchange::EvEnqueueRecords:
+            case NChangeExchange::TEvChangeExchange::EvEnqueueRecords:
                 if (preventEnqueueing) {
                     enqueued.emplace_back(ev.Release());
                     return TTestActorRuntime::EEventAction::DROP;
@@ -1864,11 +1866,13 @@ Y_UNIT_TEST_SUITE(Cdc) {
     void WaitForContent(TServer::TPtr server, const TActorId& sender, const TString& path, const TVector<TString>& expected) {
         while (true) {
             const auto records = GetRecords(*server->GetRuntime(), sender, path, 0);
-            if (records.size() == expected.size()) {
-                for (ui32 i = 0; i < expected.size(); ++i) {
-                    AssertJsonsEqual(records.at(i).second, expected.at(i));
-                }
+            for (ui32 i = 0; i < std::min(records.size(), expected.size()); ++i) {
+                AssertJsonsEqual(records.at(i).second, expected.at(i));
+            }
 
+            if (records.size() >= expected.size()) {
+                UNIT_ASSERT_VALUES_EQUAL_C(records.size(), expected.size(),
+                    "Unexpected record: " << records.at(expected.size()).second);
                 break;
             }
 
@@ -1886,7 +1890,7 @@ Y_UNIT_TEST_SUITE(Cdc) {
 
         env.GetServer()->GetRuntime()->SetObserverFunc([&](TAutoPtr<IEventHandle>& ev) {
             switch (ev->GetTypeRewrite()) {
-            case TEvChangeExchange::EvEnqueueRecords:
+            case NChangeExchange::TEvChangeExchange::EvEnqueueRecords:
                 if (preventEnqueueing) {
                     enqueued.emplace_back(ev.Release());
                     return TTestActorRuntime::EEventAction::DROP;
@@ -2143,7 +2147,7 @@ Y_UNIT_TEST_SUITE(Cdc) {
 
         env.GetServer()->GetRuntime()->SetObserverFunc([&](TAutoPtr<IEventHandle>& ev) {
             switch (ev->GetTypeRewrite()) {
-            case TEvChangeExchange::EvEnqueueRecords:
+            case NChangeExchange::TEvChangeExchange::EvEnqueueRecords:
                 if (preventEnqueueing) {
                     enqueued.emplace_back(ev.Release());
                     return TTestActorRuntime::EEventAction::DROP;
@@ -2240,7 +2244,7 @@ Y_UNIT_TEST_SUITE(Cdc) {
 
         env.GetServer()->GetRuntime()->SetObserverFunc([&](TAutoPtr<IEventHandle>& ev) {
             switch (ev->GetTypeRewrite()) {
-            case TEvChangeExchange::EvEnqueueRecords:
+            case NChangeExchange::TEvChangeExchange::EvEnqueueRecords:
                 if (preventEnqueueing || (preventEnqueueingOnSpecificSender && *preventEnqueueingOnSpecificSender == ev->Recipient)) {
                     enqueued.emplace_back(ev.Release());
                     return TTestActorRuntime::EEventAction::DROP;
@@ -2432,7 +2436,7 @@ Y_UNIT_TEST_SUITE(Cdc) {
 
         TVector<THolder<IEventHandle>> enqueued;
         auto prevObserver = runtime.SetObserverFunc([&](TAutoPtr<IEventHandle>& ev) {
-            if (ev->GetTypeRewrite() == TEvChangeExchange::EvEnqueueRecords) {
+            if (ev->GetTypeRewrite() == NChangeExchange::TEvChangeExchange::EvEnqueueRecords) {
                 enqueued.emplace_back(ev.Release());
                 return TTestActorRuntime::EEventAction::DROP;
             }
@@ -2474,8 +2478,8 @@ Y_UNIT_TEST_SUITE(Cdc) {
 
         THashSet<ui64> enqueued;
         runtime.SetObserverFunc([&](TAutoPtr<IEventHandle>& ev) {
-            if (ev->GetTypeRewrite() == TEvChangeExchange::EvEnqueueRecords) {
-                for (const auto& record : ev->Get<TEvChangeExchange::TEvEnqueueRecords>()->Records) {
+            if (ev->GetTypeRewrite() == NChangeExchange::TEvChangeExchange::EvEnqueueRecords) {
+                for (const auto& record : ev->Get<NChangeExchange::TEvChangeExchange::TEvEnqueueRecords>()->Records) {
                     enqueued.insert(record.Order);
                 }
 
@@ -2506,8 +2510,8 @@ Y_UNIT_TEST_SUITE(Cdc) {
 
         THashSet<ui64> removed;
         runtime.SetObserverFunc([&](TAutoPtr<IEventHandle>& ev) {
-            if (ev->GetTypeRewrite() == TEvChangeExchange::EvRemoveRecords) {
-                for (const auto& record : ev->Get<TEvChangeExchange::TEvRemoveRecords>()->Records) {
+            if (ev->GetTypeRewrite() == NChangeExchange::TEvChangeExchange::EvRemoveRecords) {
+                for (const auto& record : ev->Get<NChangeExchange::TEvChangeExchange::TEvRemoveRecords>()->Records) {
                     removed.insert(record);
                 }
             }
@@ -2743,7 +2747,7 @@ Y_UNIT_TEST_SUITE(Cdc) {
                 }
                 break;
 
-            case TEvChangeExchange::EvEnqueueRecords:
+            case NChangeExchange::TEvChangeExchange::EvEnqueueRecords:
                 delayed.emplace_back(ev.Release());
                 return TTestActorRuntime::EEventAction::DROP;
 
@@ -2926,7 +2930,7 @@ Y_UNIT_TEST_SUITE(Cdc) {
 
         bool ready = false;
         auto prevObserver = runtime.SetObserverFunc([&](TAutoPtr<IEventHandle>& ev) {
-            if (ev->GetTypeRewrite() == TEvChangeExchangePrivate::EvReady) {
+            if (ev->GetTypeRewrite() == NChangeExchange::TEvChangeExchangePrivate::EvReady) {
                 ready = true;
             }
 
@@ -2948,7 +2952,7 @@ Y_UNIT_TEST_SUITE(Cdc) {
 
         THolder<IEventHandle> delayed;
         prevObserver = runtime.SetObserverFunc([&](TAutoPtr<IEventHandle>& ev) {
-            if (ev->GetTypeRewrite() == TEvChangeExchangePrivate::EvReady) {
+            if (ev->GetTypeRewrite() == NChangeExchange::TEvChangeExchangePrivate::EvReady) {
                 delayed.Reset(ev.Release());
                 return TTestActorRuntime::EEventAction::DROP;
             }
@@ -3153,6 +3157,103 @@ Y_UNIT_TEST_SUITE(Cdc) {
             R"({"update":{"value":10},"key":[1]})",
             R"({"update":{"value":20},"key":[2]})",
             R"({"update":{"value":30},"key":[3]})",
+            R"({"resolved":"***"})",
+        });
+    }
+
+    Y_UNIT_TEST(ResolvedTimestampsVolatileOutOfOrder) {
+        TPortManager portManager;
+        TServer::TPtr server = new TServer(TServerSettings(portManager.GetPort(2134), {}, DefaultPQConfig())
+            .SetUseRealThreads(false)
+            .SetDomainName("Root")
+            .SetEnableDataShardVolatileTransactions(true)
+        );
+
+        auto& runtime = *server->GetRuntime();
+        const auto edgeActor = runtime.AllocateEdgeActor();
+
+        SetupLogging(runtime);
+        InitRoot(server, edgeActor);
+        CreateShardedTable(server, edgeActor, "/Root", "Table1", SimpleTable());
+        CreateShardedTable(server, edgeActor, "/Root", "Table2", SimpleTable());
+
+        WaitTxNotification(server, edgeActor, AsyncAlterAddStream(server, "/Root", "Table1",
+            WithResolvedTimestamps(TDuration::Seconds(3), Updates(NKikimrSchemeOp::ECdcStreamFormatJson))));
+        WaitTxNotification(server, edgeActor, AsyncAlterAddStream(server, "/Root", "Table2",
+            WithResolvedTimestamps(TDuration::Seconds(3), Updates(NKikimrSchemeOp::ECdcStreamFormatJson))));
+
+        WaitForContent(server, edgeActor, "/Root/Table1/Stream", {
+            R"({"resolved":"***"})",
+        });
+        WaitForContent(server, edgeActor, "/Root/Table2/Stream", {
+            R"({"resolved":"***"})",
+        });
+
+        ExecSQL(server, edgeActor, R"(
+            UPSERT INTO `/Root/Table1` (key, value) VALUES (1, 10);
+            UPSERT INTO `/Root/Table2` (key, value) VALUES (2, 20);
+        )");
+
+        WaitForContent(server, edgeActor, "/Root/Table1/Stream", {
+            R"({"resolved":"***"})",
+            R"({"update":{"value":10},"key":[1]})",
+            R"({"resolved":"***"})",
+        });
+        WaitForContent(server, edgeActor, "/Root/Table2/Stream", {
+            R"({"resolved":"***"})",
+            R"({"update":{"value":20},"key":[2]})",
+            R"({"resolved":"***"})",
+        });
+
+        // Block readset exchange
+        std::vector<std::unique_ptr<IEventHandle>> readSets;
+        auto blockReadSets = runtime.AddObserver<TEvTxProcessing::TEvReadSet>([&](TEvTxProcessing::TEvReadSet::TPtr& ev) {
+            readSets.emplace_back(ev.Release());
+        });
+
+        // Start a distributed write to both tables
+        TString sessionId = CreateSessionRPC(runtime, "/Root");
+        auto upsertResult = SendRequest(
+            runtime,
+            MakeSimpleRequestRPC(R"(
+                UPSERT INTO `/Root/Table1` (key, value) VALUES (3, 30);
+                UPSERT INTO `/Root/Table2` (key, value) VALUES (4, 40);
+                )", sessionId, /* txId */ "", /* commitTx */ true),
+            "/Root");
+        WaitFor(runtime, [&]{ return readSets.size() >= 4; }, "readsets");
+
+        // Stop blocking further readsets
+        blockReadSets.Remove();
+
+        // Start another distributed write to both tables, it should succeed
+        ExecSQL(server, edgeActor, R"(
+            UPSERT INTO `/Root/Table1` (key, value) VALUES (5, 50);
+            UPSERT INTO `/Root/Table2` (key, value) VALUES (6, 60);
+        )");
+
+        runtime.SimulateSleep(TDuration::Seconds(10));
+
+        // Unblock readsets
+        for (auto& ev : readSets) {
+            runtime.Send(ev.release(), 0, true);
+        }
+        readSets.clear();
+
+        // There should be only one resolved timestamp after out of order writes
+        WaitForContent(server, edgeActor, "/Root/Table1/Stream", {
+            R"({"resolved":"***"})",
+            R"({"update":{"value":10},"key":[1]})",
+            R"({"resolved":"***"})",
+            R"({"update":{"value":50},"key":[5]})",
+            R"({"update":{"value":30},"key":[3]})",
+            R"({"resolved":"***"})",
+        });
+        WaitForContent(server, edgeActor, "/Root/Table2/Stream", {
+            R"({"resolved":"***"})",
+            R"({"update":{"value":20},"key":[2]})",
+            R"({"resolved":"***"})",
+            R"({"update":{"value":60},"key":[6]})",
+            R"({"update":{"value":40},"key":[4]})",
             R"({"resolved":"***"})",
         });
     }

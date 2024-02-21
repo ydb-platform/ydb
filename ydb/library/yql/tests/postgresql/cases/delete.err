@@ -18,28 +18,35 @@ INSERT INTO delete_test (a) VALUES (100);
 -- allow an alias to be specified for DELETE's target table
 DELETE FROM delete_test AS dt WHERE dt.a > 75;
 </sql-statement>
-VERIFY failed (2023-12-12T19:40:06.503020+0300): 
-  ydb/library/yql/ast/yql_ast.h:163
-  NewList(): requirement poolChildren[index] failed
-BackTrace(void**, unsigned long)+29 (0x14087F6D)
-FormatBackTrace(IOutputStream*)+32 (0x14088440)
-PrintBackTrace()+17 (0x14088491)
-NPrivate::InternalPanicImpl(int, char const*, char const*, int, int, int, TBasicStringBuf<char, std::__y1::char_traits<char> >, char const*, unsigned long)+995 (0x140CE743)
-NPrivate::Panic(NPrivate::TStaticBuf const&, int, char const*, char const*, char const*, ...)+418 (0x140C18B2)
-NYql::TAstNode::NewList(NYql::TPosition, NYql::TAstNode**, unsigned int, TMemoryPool&)+329 (0x14A48409)
-NYql::TAstNode* NSQLTranslationPG::TConverter::L<NYql::TAstNode*, NYql::TAstNode*, NYql::TAstNode*, NYql::TAstNode*, NYql::TAstNode*, NYql::TAstNode*>(NYql::TAstNode*, NYql::TAstNode*, NYql::TAstNode*, NYql::TAstNode*, NYql::TAstNode*, NYql::TAstNode*)+276 (0x155B9CD4)
-NSQLTranslationPG::TConverter::ParseDeleteStmt(DeleteStmt const*)+6165 (0x155AF055)
-NSQLTranslationPG::TConverter::ParseRawStmt(RawStmt const*)+1054 (0x155A03EE)
-NSQLTranslationPG::TConverter::ParseResult(List const*)+1256 (0x1559E908)
-NSQLTranslationPG::TConverter::OnResult(List const*)+83 (0x1559BD23)
-NYql::PGParse(TBasicString<char, std::__y1::char_traits<char> > const&, NYql::IPGParseEvents&)+1043 (0x1B7A3F33)
-NSQLTranslationPG::PGToYql(TBasicString<char, std::__y1::char_traits<char> > const&, NSQLTranslation::TTranslationSettings const&)+131 (0x1559A653)
-NSQLTranslation::SqlToYql(TBasicString<char, std::__y1::char_traits<char> > const&, NSQLTranslation::TTranslationSettings const&, TVector<NYql::TWarningRule, std::__y1::allocator<NYql::TWarningRule> >*, unsigned short*)+749 (0x1559680D)
-NYql::TProgram::ParseSql(NSQLTranslation::TTranslationSettings const&)+676 (0x16C0D5A4)
-Main(int, char**)+3099 (0x13F1462B)
-main+273 (0x13F16831)
-??+0 (0x7FD9F3629D90)
-__libc_start_main+128 (0x7FD9F3629E40)
-??+0 (0x13EA0029)
-pthread_kill at ./nptl/./nptl/pthread_kill.c:43:17
-?? at ??:0:0
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: alias is not supported
+    	-- allow an alias to be specified for DELETE's target table
+	^
+<sql-statement>
+-- if an alias is specified, don't allow the original table name
+-- to be referenced
+DELETE FROM delete_test dt WHERE delete_test.a > 25;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: alias is not supported
+    	-- if an alias is specified, don't allow the original table name
+	^
+<sql-statement>
+SELECT id, a, char_length(b) FROM delete_test;
+</sql-statement>
+<sql-statement>
+-- delete a row with a TOASTed value
+DELETE FROM delete_test WHERE a > 25;
+</sql-statement>
+-stdin-:<main>: Fatal: Pre type annotation
+
+    -stdin-:<main>: Fatal: tools/enum_parser/enum_serialization_runtime/enum_runtime.cpp:70: Key 'pg_delete' not found in enum NYql::EYtSettingType. Valid options are: 'initial', 'infer_scheme', 'force_infer_schema', 'do_not_fail_on_invalid_schema', 'direct_read', 'view', 'mode', 'scheme', 'weak_concat', 'anonymous', 'with_qb', 'inline', 'sample', 'joinLabel', 'ignore_non_existing', 'warn_non_existing', 'xlock', 'unordered', 'nonUnique', 'userschema', 'usercolumns', 'statcolumns', 'syscolumns', 'ignoretypev3', 'memUsage', 'itemsCount', 'rowFactor', 'ordered', 'keyFilter', 'keyFilter2', 'take', 'skip', 'limit', 'sortLimitBy', 'sortBy', 'reduceBy', 'reduceFilterBy', 'forceTransform', 'weakFields', 'sharded', 'combineChunks', 'jobCount', 'joinReduce', 'firstAsPrimary', 'flow', 'keepSorted', 'keySwitch', 'uniqueBy', 'opHash', 'mapOutputType', 'reduceInputType', 'noDq', 'split', 'compression_codec', 'erasure_codec', 'expiration', 'replication_factor', 'user_attrs', 'media', 'primary_medium', 'keep_meta', 'monotonic_keys', 'mutationid'. 
+    
+<sql-statement>
+SELECT id, a, char_length(b) FROM delete_test;
+</sql-statement>
+<sql-statement>
+DROP TABLE delete_test;
+</sql-statement>

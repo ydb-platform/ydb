@@ -516,16 +516,18 @@ Y_UNIT_TEST_SUITE(Charge) {
                 {TGroupId{2}, {}}
             });
 
+            // key 0 transforms into row id 0 because it's before the slice first key 1
             me.To(101).CheckByKeys(0, 9, 0, TMap<TGroupId, TArr>{
                 {TGroupId{0}, {0, 1, 2, 3_I}},
-                {TGroupId{1}, {0_g, 1, 2, 3_g}},
-                {TGroupId{2}, {0_g, 1_g, 2_g, 3, 4, 5, 6_g}}
+                {TGroupId{1}, {0, 1, 2, 3_g}},
+                {TGroupId{2}, {0, 1, 2, 3, 4, 5, 6_g}}
             });
 
+            // key 1 also transforms into row id 0 because it's before the slice first key 1
             me.To(102).CheckByKeys(1, 9, 0, TMap<TGroupId, TArr>{
                 {TGroupId{0}, {0, 1, 2, 3_I}},
-                {TGroupId{1}, {0_g, 1, 2, 3_g}},
-                {TGroupId{2}, {0_g, 1_g, 2_g, 3, 4, 5, 6_g}}
+                {TGroupId{1}, {0, 1, 2, 3_g}},
+                {TGroupId{2}, {0, 1, 2, 3, 4, 5, 6_g}}
             });
 
             me.To(103).CheckByKeys(2, 9, 0, TMap<TGroupId, TArr>{
@@ -688,10 +690,11 @@ Y_UNIT_TEST_SUITE(Charge) {
                 {TGroupId{2}, {}}
             });
 
+            // key 35 transforms into row id 26 because it's after the slice last key 35
             me.To(301).CheckByKeys(27, 35, 0, TMap<TGroupId, TArr>{
                 {TGroupId{0}, {6, 7, 8}},
-                {TGroupId{1}, {10, 11, 12_g, 13_g}},
-                {TGroupId{2}, {20_g, 21, 22, 23, 24_g, 25_g, 26_g}}
+                {TGroupId{1}, {10, 11, 12, 13}},
+                {TGroupId{2}, {20_g, 21, 22, 23, 24, 25, 26}}
             });
 
             me.To(302).CheckByKeys(27, 34, 0, TMap<TGroupId, TArr>{
@@ -758,7 +761,7 @@ Y_UNIT_TEST_SUITE(Charge) {
         });
 
         me.To(102).CheckByKeys(5, 13, 7, TMap<TGroupId, TArr>{
-            {TGroupId{0}, {1, 2, 3, 4_I}},
+            {TGroupId{0}, {1, 2, 3, 4_f}},
             {TGroupId{1}, {1_g, 2_g, 3, 4}}, // pages 3, 4 are always needed
             {TGroupId{2}, {3_g, 4_g, 5_g, 6, 7, 8, 9_g}} // pages 6, 7, 8 are always needed
         });
@@ -770,19 +773,19 @@ Y_UNIT_TEST_SUITE(Charge) {
         });
 
         me.To(104).CheckByKeys(5, 13, 5, TMap<TGroupId, TArr>{
-            {TGroupId{0}, {1, 2, 3_f, 4_f}},
+            {TGroupId{0}, {1, 2, 3_f}},
             {TGroupId{1}, {1_g, 2_g, 3, 4}},
             {TGroupId{2}, {3_g, 4_g, 5_g, 6, 7, 8}}
         });
 
         me.To(105).CheckByKeys(5, 13, 4, TMap<TGroupId, TArr>{
-            {TGroupId{0}, {1, 2, 3_f, 4_f}},
+            {TGroupId{0}, {1, 2, 3_f}},
             {TGroupId{1}, {1_g, 2_g, 3, 4_f}}, // here we touch extra pages, but it's fine
             {TGroupId{2}, {3_g, 4_g, 5_g, 6, 7, 8_f}} // here we touch extra pages, but it's fine
         });
 
         me.To(106).CheckByKeys(7, 13, 3, TMap<TGroupId, TArr>{
-            {TGroupId{0}, {1, 2, 3_f, 4_f}},
+            {TGroupId{0}, {1, 2, 3_f}},
             {TGroupId{1}, {2_g, 3, 4}},
             {TGroupId{2}, {5_g, 6, 7, 8}}
         });
@@ -801,9 +804,11 @@ Y_UNIT_TEST_SUITE(Charge) {
 
         /*_ 1xx: custom spanned loads scenarios */
 
-        me.To(101).CheckByKeys(0, 35, 8 /* rows */, { 0, 1, 2, 3_I });
-        me.To(102).CheckByKeys(0, 35, 11 /* rows */, { 0, 1, 2, 3, 4_I });
-        me.To(103).CheckByKeys(0, 35, 14 /* rows */, { 0, 1, 2, 3, 4, 5_I });
+        // key 0 transforms into row id 0 because it's before the slice first key 1
+        me.To(101).CheckByKeys(0, 35, 8 /* rows */, { 0, 1, 2 });
+        me.To(102).CheckByKeys(0, 35, 11 /* rows */, { 0, 1, 2, 3 });
+        me.To(103).CheckByKeys(0, 35, 14 /* rows */, { 0, 1, 2, 3, 4 });
+
         me.To(104).CheckByKeys(3, 35, 5 /* rows */, { 0, 1, 2 });
         me.To(105).CheckByKeys(3, 35, 6 /* rows */, { 0, 1, 2, 3_I });
         me.To(106).CheckByKeys(4, 35, 6 /* rows */, { 0, 1, 2, 3 });
@@ -815,7 +820,7 @@ Y_UNIT_TEST_SUITE(Charge) {
 
         /*_ 2xx: one row charge limit on two page */
 
-        for (const ui16 page : xrange(4)) {
+        for (const ui16 page : xrange(1, 5)) {
             const TArr span1{ page, operator""_I(page + 1) };
             const TArr span2{ page, page + 1 };
 
@@ -860,9 +865,10 @@ Y_UNIT_TEST_SUITE(Charge) {
             {TGroupId{2}, {11_g, 10_g, 9_g, 8, 7, 6, 5, 4, 3, 2_g}}
         });
 
+        // key 1 transforms into row id 0 because it's before the slice first key 1
         me.To(104).CheckByKeysReverse(15, 1, 0, TMap<TGroupId, TArr>{
             {TGroupId{0}, {3, 2, 1, 0}},
-            {TGroupId{2}, {11_g, 10_g, 9_g, 8, 7, 6, 5, 4, 3, 2_g, 1_g, 0_g}}
+            {TGroupId{2}, {11_g, 10_g, 9_g, 8, 7, 6, 5, 4, 3, 2, 1, 0}}
         });
 
         me.To(105).CheckByKeysReverse(15, 0, 0, TMap<TGroupId, TArr>{
@@ -890,9 +896,10 @@ Y_UNIT_TEST_SUITE(Charge) {
             {TGroupId{2}, {26_g, 25_g, 24_g}}
         });
 
+        // key 35 transforms into row id 26 because it's after the slice last key 35
         me.To(110).CheckByKeysReverse(35, 32, 0, TMap<TGroupId, TArr>{
             {TGroupId{0}, {8, 7, 6_I}},
-            {TGroupId{2}, {26_g, 25_g, 24_g}}
+            {TGroupId{2}, {26, 25, 24}}
         });
 
         me.To(111).CheckByKeysReverse(4, 1, 0, TMap<TGroupId, TArr>{
@@ -926,7 +933,7 @@ Y_UNIT_TEST_SUITE(Charge) {
         });
 
         me.To(202).CheckByKeysReverse(15, 5, 5, TMap<TGroupId, TArr>{
-            {TGroupId{0}, {3, 2, 1_f, 0_f}},
+            {TGroupId{0}, {3, 2, 1_f}},
             {TGroupId{2}, {11_g, 10_g, 9_g, 8, 7, 6}}
         });
 

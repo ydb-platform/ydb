@@ -15,8 +15,8 @@ multidict
    :alt: PyPI
 
 .. image:: https://readthedocs.org/projects/multidict/badge/?version=latest
-   :target: http://multidict.readthedocs.org/en/latest/?badge=latest
-   :alt: Documentationb
+   :target: http://multidict.aio-libs.org/en/latest/?badge=latest
+   :alt: Documentation
 
 .. image:: https://img.shields.io/pypi/pyversions/multidict.svg
    :target: https://pypi.org/project/multidict
@@ -100,4 +100,4 @@ the usage scenario!!!
 
 Changelog
 ---------
-See `RTD page <http://multidict.readthedocs.org/en/latest/changes.html>`_.
+See `RTD page <http://multidict.aio-libs.org/en/latest/changes>`_.

@@ -1,5 +1,7 @@
 #include "kafka_create_partitions_actor.h"
 
+#include "control_plane_common.h"
+
 #include <ydb/core/kafka_proxy/kafka_events.h>
 
 #include <ydb/services/lib/actors/pq_schema_actor.h>
@@ -17,7 +19,7 @@ public:
             TIntrusiveConstPtr<NACLib::TUserToken> userToken,
             TString topicPath,
             TString databaseName,
-            const std::function<void(TEvKafka::TEvTopicModificationResponse::EStatus, TString&)> sendResultCallback)
+            const std::function<void(EKafkaErrors, const TString&)> sendResultCallback)
         : UserToken(userToken)
         , TopicPath(topicPath)
         , DatabaseName(databaseName)
@@ -71,7 +73,7 @@ public:
     };
 
     void ReplyWithYdbStatus(Ydb::StatusIds::StatusCode status) override {
-        processYdbStatusCode(status);
+        ProcessYdbStatusCode(status);
     };
 
     void ReplyWithRpcStatus(grpc::StatusCode code, const TString& msg = "", const TString& details = "") override {
@@ -101,8 +103,7 @@ public:
     }
 
     void RaiseIssue(const NYql::TIssue& issue) override{
-        ReplyMessage = issue.GetMessage();
-        Y_UNUSED(issue);
+        Issue = issue;
     }
 
     void RaiseIssues(const NYql::TIssues& issues) override {
@@ -111,10 +112,6 @@ public:
 
     const TString& GetRequestName() const override {
         return DummyString;
-    };
-
-    void SetDiskQuotaExceeded(bool disk) override {
-        Y_UNUSED(disk);
     };
 
     bool GetDiskQuotaExceeded() const override {
@@ -154,7 +151,7 @@ public:
         Y_UNUSED(status);
     };
 
-    void SendSerializedResult(TString&& in, Ydb::StatusIds::StatusCode status) override {
+    void SendSerializedResult(TString&& in, Ydb::StatusIds::StatusCode status, EStreamCtrl) override {
         Y_UNUSED(in);
         Y_UNUSED(status);
     };
@@ -174,7 +171,7 @@ public:
 
     void SendResult(const google::protobuf::Message& result, Ydb::StatusIds::StatusCode status) override {
         Y_UNUSED(result);
-        processYdbStatusCode(status);
+        ProcessYdbStatusCode(status);
     };
 
     void SendResult(
@@ -184,7 +181,7 @@ public:
 
         Y_UNUSED(result);
         Y_UNUSED(message);
-        processYdbStatusCode(status, std::optional(std::ref(message)));
+        ProcessYdbStatusCode(status);
     };
 
     void SendResult(
@@ -192,7 +189,7 @@ public:
             const google::protobuf::RepeatedPtrField<NKikimr::NGRpcService::TYdbIssueMessageType>& message) override {
 
         Y_UNUSED(message);
-        processYdbStatusCode(status, std::optional(std::ref(message)));
+        ProcessYdbStatusCode(status);
     };
 
     const Ydb::Operations::OperationParams& operation_params() const {
@@ -214,47 +211,15 @@ private:
     const NKikimr::NGRpcService::TAuditLogParts DummyAuditLogParts;
     const TString TopicPath;
     const TString DatabaseName;
-    const std::function<void(TEvKafka::TEvTopicModificationResponse::EStatus status, TString& message)> SendResultCallback;
-    TString ReplyMessage;
+    const std::function<void(const EKafkaErrors status, const TString& message)> SendResultCallback;
+    NYql::TIssue Issue;
 
-    void processYdbStatusCode(
-            Ydb::StatusIds::StatusCode& status,
-            std::optional<std::reference_wrapper<const google::protobuf::RepeatedPtrField<
-                NKikimr::NGRpcService::TYdbIssueMessageType>>> issueMessagesOpt = std::nullopt) {
-
-        switch (status) {
-            case Ydb::StatusIds::StatusCode::StatusIds_StatusCode_SUCCESS:
-                SendResultCallback(TEvKafka::TEvTopicModificationResponse::EStatus::OK, ReplyMessage);
-                break;
-            case Ydb::StatusIds::StatusCode::StatusIds_StatusCode_BAD_REQUEST:
-                SendResultCallback(TEvKafka::TEvTopicModificationResponse::EStatus::BAD_REQUEST, ReplyMessage);
-                break;
-            case Ydb::StatusIds::StatusCode::StatusIds_StatusCode_SCHEME_ERROR:
-                if (issueMessagesOpt.has_value()) {
-                    auto& issueMessages = issueMessagesOpt.value().get();
-                    bool hasPathNotExists = std::find_if(
-                        issueMessages.begin(),
-                        issueMessages.end(),
-                        [](const auto& msg){ return msg.issue_code() == NKikimrIssues::TIssuesIds::PATH_NOT_EXIST; }
-                    ) != issueMessages.end();
-
-                    if (hasPathNotExists) {
-                        SendResultCallback(TEvKafka::TEvTopicModificationResponse:: EStatus::TOPIC_DOES_NOT_EXIST, ReplyMessage);
-                    } else {
-                        SendResultCallback(TEvKafka::TEvTopicModificationResponse::EStatus::ERROR, ReplyMessage);
-                    }
-                } else {
-                    SendResultCallback(TEvKafka::TEvTopicModificationResponse::EStatus::ERROR, ReplyMessage);
-                }
-                break;
-            default:
-                SendResultCallback(TEvKafka::TEvTopicModificationResponse::EStatus::ERROR, ReplyMessage);
-        }
+    void ProcessYdbStatusCode(Ydb::StatusIds::StatusCode& status) {
+        SendResultCallback(ConvertErrorCode(status), Issue.GetMessage());
     }
 };
 
-class TCreatePartitionsActor : public NKikimr::NGRpcProxy::V1::TPQGrpcSchemaBase<TCreatePartitionsActor, TKafkaCreatePartitionsRequest> {
-    using TBase = NKikimr::NGRpcProxy::V1::TPQGrpcSchemaBase<TCreatePartitionsActor, TKafkaCreatePartitionsRequest>;
+class TCreatePartitionsActor : public TAlterTopicActor<TCreatePartitionsActor, TKafkaTopicModificationRequest> {
 public:
 
     TCreatePartitionsActor(
@@ -263,72 +228,35 @@ public:
             TString topicPath,
             TString databaseName,
             ui32 partitionsNumber)
-        : TBase(new TKafkaCreatePartitionsRequest(
+        : TAlterTopicActor<TCreatePartitionsActor, TKafkaTopicModificationRequest>(
+            requester, 
             userToken,
             topicPath,
-            databaseName,
-            [this](TEvKafka::TEvTopicModificationResponse::EStatus status, TString& message) {
-                this->SendResult(status, message);
-            })
-        )
-        , Requester(requester)
-        , TopicPath(topicPath)
+            databaseName)
         , PartionsNumber(partitionsNumber)
     {
         KAFKA_LOG_D(
-            "Create Topic actor. DatabaseName: " << databaseName <<
+            "Create partitions actor. DatabaseName: " << databaseName <<
             ". TopicPath: " << TopicPath <<
             ". PartitionsNumber: " << PartionsNumber);
     };
 
+    void ModifyPersqueueConfig(
+            const TActorContext& ctx,
+            NKikimrSchemeOp::TPersQueueGroupDescription& groupConfig,
+            const NKikimrSchemeOp::TPersQueueGroupDescription& pqGroupDescription,
+            const NKikimrSchemeOp::TDirEntry& selfInfo
+    ) {
+        Y_UNUSED(ctx);
+        Y_UNUSED(pqGroupDescription);
+        Y_UNUSED(selfInfo);
+
+        groupConfig.SetTotalGroupCount(PartionsNumber);
+    }
+
     ~TCreatePartitionsActor() = default;
 
-    void SendResult(TEvKafka::TEvTopicModificationResponse::EStatus status, TString& message) {
-        THolder<TEvKafka::TEvTopicModificationResponse> response(new TEvKafka::TEvTopicModificationResponse());
-        response->Status = status;
-        response->TopicPath = TopicPath;
-        response->Message = message;
-        Send(Requester, response.Release());
-        Send(SelfId(), new TEvents::TEvPoison());
-    }
-
-    void FillProposeRequest(
-            NKikimr::TEvTxUserProxy::TEvProposeTransaction &proposal,
-            const TActorContext &ctx,
-            const TString &workingDir,
-            const TString &name) {
-
-        Y_UNUSED(ctx);
-
-        NKikimrSchemeOp::TModifyScheme& modifyScheme(*proposal.Record.MutableTransaction()->MutableModifyScheme());
-        modifyScheme.SetWorkingDir(workingDir);
-        modifyScheme.SetOperationType(::NKikimrSchemeOp::EOperationType::ESchemeOpAlterPersQueueGroup);
-
-        auto pqDescr = modifyScheme.MutableAlterPersQueueGroup();
-        (*pqDescr).SetTotalGroupCount(PartionsNumber);
-        (*pqDescr).SetName(name);
-    };
-
-    void Bootstrap(const NActors::TActorContext& ctx) {
-        TBase::Bootstrap(ctx);
-        SendProposeRequest(ctx);
-        Become(&TCreatePartitionsActor::StateWork);
-    };
-
-    void StateWork(TAutoPtr<IEventHandle>& ev) {
-        switch (ev->GetTypeRewrite()) {
-            hFunc(NKikimr::TEvTxProxySchemeCache::TEvNavigateKeySetResult, TActorBase::Handle);
-        default: 
-            TBase::StateWork(ev);
-        }
-    }
-
-    void HandleCacheNavigateResponse(NKikimr::TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr& ev){ Y_UNUSED(ev); }
-
 private:
-    const TActorId Requester;
-    const TString TopicPath;
-    const std::shared_ptr<TString> SerializedToken;
     const ui32 PartionsNumber;
 };
 
@@ -348,15 +276,9 @@ void TKafkaCreatePartitionsActor::Bootstrap(const NActors::TActorContext& ctx) {
         return;
     }
 
-    std::unordered_set<TString> topicNames;
-    for (auto& topic : Message->Topics) {
-        auto& topicName = topic.Name.value();
-        if (topicNames.contains(topicName)) {
-            DuplicateTopicNames.insert(topicName);
-        } else {
-            topicNames.insert(topicName);
-        }
-    }
+    DuplicateTopicNames = ExtractDuplicates<TCreatePartitionsRequestData::TCreatePartitionsTopic>(
+        Message->Topics,
+        [](TCreatePartitionsRequestData::TCreatePartitionsTopic topic) -> TString { return topic.Name.value(); });
 
     for (auto& topic : Message->Topics) {
         auto& topicName = topic.Name.value();
@@ -367,7 +289,7 @@ void TKafkaCreatePartitionsActor::Bootstrap(const NActors::TActorContext& ctx) {
 
         if (topicName == "") {
             auto result = MakeHolder<TEvKafka::TEvTopicModificationResponse>();
-            result->Status = TEvKafka::TEvTopicModificationResponse::EStatus::BAD_REQUEST;
+            result->Status = INVALID_REQUEST;
             result->Message = "Empty topic name";
             this->TopicNamesToResponses[topicName] = TAutoPtr<TEvKafka::TEvTopicModificationResponse>(result.Release());
             continue;
@@ -407,62 +329,47 @@ void TKafkaCreatePartitionsActor::Reply(const TActorContext& ctx) {
     for (auto& requestTopic : Message->Topics) {
         auto topicName = requestTopic.Name.value();
 
-        TCreatePartitionsResponseData::TCreatePartitionsTopicResult responseTopic;
-        responseTopic.Name = topicName;
-
-        if (TopicNamesToResponses.contains(topicName)) {
-            responseTopic.ErrorMessage = TopicNamesToResponses[topicName]->Message;
+        if (!TopicNamesToResponses.contains(topicName)) {
+            continue;
         }
 
-        auto setError= [&responseTopic, &responseStatus](EKafkaErrors status) { 
-            responseTopic.ErrorCode = status;
-            responseStatus = status;
-        };
+        TCreatePartitionsResponseData::TCreatePartitionsTopicResult responseTopic;
+        responseTopic.Name = topicName;
+        responseTopic.ErrorMessage = TopicNamesToResponses[topicName]->Message;
 
-        if (DuplicateTopicNames.contains(topicName)) {
-            setError(DUPLICATE_RESOURCE);
-        } else {
-            switch (TopicNamesToResponses[topicName]->Status) {
-                case TEvKafka::TEvTopicModificationResponse::OK:
-                    responseTopic.ErrorCode = NONE_ERROR;
-                    break;
-                case TEvKafka::TEvTopicModificationResponse::BAD_REQUEST:
-                case TEvKafka::TEvTopicModificationResponse::TOPIC_DOES_NOT_EXIST:
-                    setError(INVALID_REQUEST);
-                    break;
-                case TEvKafka::TEvTopicModificationResponse::ERROR:
-                    setError(UNKNOWN_SERVER_ERROR);
-                    break;
-                case TEvKafka::TEvTopicModificationResponse::INVALID_CONFIG:
-                    setError(INVALID_CONFIG);
-                    break;
-                }
-        } 
+        EKafkaErrors status = TopicNamesToResponses[topicName]->Status;
+        responseTopic.ErrorCode = status;
+        if(status != NONE_ERROR) {
+            responseStatus = status;
+        }
+
         response->Results.push_back(responseTopic);
     }
 
+    for (auto& topicName : DuplicateTopicNames) {
+        TCreatePartitionsResponseData::TCreatePartitionsTopicResult responseTopic;
+        responseTopic.Name = topicName;
+        responseTopic.ErrorMessage = "Duplicate topic in request.";
+        responseTopic.ErrorCode = INVALID_REQUEST;
+
+        response->Results.push_back(responseTopic);
+
+        responseStatus = INVALID_REQUEST;
+    } 
     Send(Context->ConnectionId, new TEvKafka::TEvResponse(CorrelationId, response, responseStatus));
 
     Die(ctx);
 };
 
 TStringBuilder TKafkaCreatePartitionsActor::InputLogMessage() {
-    TStringBuilder stringBuilder;
-    stringBuilder << "Create partitions actor: New request. ValidateOnly:" << (Message->ValidateOnly != 0) << " Topics: [";
-
-    bool isFirst = true;
-    for (auto& requestTopic : Message->Topics) {
-        if (isFirst) {
-            isFirst = false;
-        } else {
-            stringBuilder << ",";
-        }
-        stringBuilder << " " << requestTopic.Name.value();
-    }
-    stringBuilder << " ]";
-    return stringBuilder;
+    return InputLogMessage<TCreatePartitionsRequestData::TCreatePartitionsTopic>(
+            "Create partitions actor",
+            Message->Topics,
+            Message->ValidateOnly != 0,
+            [](TCreatePartitionsRequestData::TCreatePartitionsTopic topic) -> TString {
+                return topic.Name.value();
+            });
 };
-
 
 void TKafkaCreatePartitionsActor::ProcessValidateOnly(const NActors::TActorContext& ctx) {
     TCreatePartitionsResponseData::TPtr response = std::make_shared<TCreatePartitionsResponseData>();

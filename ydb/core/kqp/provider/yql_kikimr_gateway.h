@@ -215,13 +215,14 @@ struct TKikimrColumnMetadata {
     NKikimrKqp::TKqpColumnMetadataProto::EDefaultKind DefaultKind = NKikimrKqp::TKqpColumnMetadataProto::DEFAULT_KIND_UNSPECIFIED;
     TString DefaultFromSequence;
     Ydb::TypedValue DefaultFromLiteral;
+    bool IsBuildInProgress = false;
 
     TKikimrColumnMetadata() = default;
 
     TKikimrColumnMetadata(const TString& name, ui32 id, const TString& type, bool notNull,
         NKikimr::NScheme::TTypeInfo typeInfo = {}, const TString& typeMod = {}, const TString& defaultFromSequence = {},
         NKikimrKqp::TKqpColumnMetadataProto::EDefaultKind defaultKind = NKikimrKqp::TKqpColumnMetadataProto::DEFAULT_KIND_UNSPECIFIED,
-        const Ydb::TypedValue& defaultFromLiteral = {})
+        const Ydb::TypedValue& defaultFromLiteral = {}, bool isBuildInProgress = false)
         : Name(name)
         , Id(id)
         , Type(type)
@@ -231,6 +232,7 @@ struct TKikimrColumnMetadata {
         , DefaultKind(defaultKind)
         , DefaultFromSequence(defaultFromSequence)
         , DefaultFromLiteral(defaultFromLiteral)
+        , IsBuildInProgress(isBuildInProgress)
     {}
 
     explicit TKikimrColumnMetadata(const NKikimrKqp::TKqpColumnMetadataProto* message)
@@ -242,6 +244,7 @@ struct TKikimrColumnMetadata {
         , DefaultKind(message->GetDefaultKind())
         , DefaultFromSequence(message->GetDefaultFromSequence())
         , DefaultFromLiteral(message->GetDefaultFromLiteral())
+        , IsBuildInProgress(message->GetIsBuildInProgress())
     {
         auto typeInfoMod = NKikimr::NScheme::TypeInfoModFromProtoColumnType(message->GetTypeId(),
             message->HasTypeInfo() ? &message->GetTypeInfo() : nullptr);
@@ -279,6 +282,7 @@ struct TKikimrColumnMetadata {
         message->SetDefaultFromSequence(DefaultFromSequence);
         message->SetDefaultKind(DefaultKind);
         message->MutableDefaultFromLiteral()->CopyFrom(DefaultFromLiteral);
+        message->SetIsBuildInProgress(IsBuildInProgress);
         if (columnType.TypeInfo) {
             *message->MutableTypeInfo() = *columnType.TypeInfo;
         }
@@ -790,7 +794,7 @@ public:
     virtual NThreading::TFuture<TTableMetadataResult> LoadTableMetadata(
         const TString& cluster, const TString& table, TLoadTableMetadataSettings settings) = 0;
 
-    virtual NThreading::TFuture<TGenericResult> CreateTable(TKikimrTableMetadataPtr metadata, bool createDir, bool existingOk = false) = 0;
+    virtual NThreading::TFuture<TGenericResult> CreateTable(TKikimrTableMetadataPtr metadata, bool createDir, bool existingOk = false, bool replaceIfExists = false) = 0;
 
     virtual NThreading::TFuture<TGenericResult> SendSchemeExecuterRequest(const TString& cluster,
         const TMaybe<TString>& requestType,
@@ -833,17 +837,20 @@ public:
 
     virtual NThreading::TFuture<TGenericResult> DropGroup(const TString& cluster, const TDropGroupSettings& settings) = 0;
 
-    virtual NThreading::TFuture<TGenericResult> CreateColumnTable(TKikimrTableMetadataPtr metadata, bool createDir) = 0;
+    virtual NThreading::TFuture<TGenericResult> CreateColumnTable(
+        TKikimrTableMetadataPtr metadata, bool createDir, bool existingOk = false) = 0;
 
     virtual NThreading::TFuture<TGenericResult> AlterColumnTable(const TString& cluster, const TAlterColumnTableSettings& settings) = 0;
 
-    virtual NThreading::TFuture<TGenericResult> CreateTableStore(const TString& cluster, const TCreateTableStoreSettings& settings) = 0;
+    virtual NThreading::TFuture<TGenericResult> CreateTableStore(const TString& cluster,
+        const TCreateTableStoreSettings& settings, bool existingOk = false) = 0;
 
     virtual NThreading::TFuture<TGenericResult> AlterTableStore(const TString& cluster, const TAlterTableStoreSettings& settings) = 0;
 
-    virtual NThreading::TFuture<TGenericResult> DropTableStore(const TString& cluster, const TDropTableStoreSettings& settings) = 0;
+    virtual NThreading::TFuture<TGenericResult> DropTableStore(const TString& cluster,
+        const TDropTableStoreSettings& settings, bool missingOk) = 0;
 
-    virtual NThreading::TFuture<TGenericResult> CreateExternalTable(const TString& cluster, const TCreateExternalTableSettings& settings, bool createDir, bool existingOk) = 0;
+    virtual NThreading::TFuture<TGenericResult> CreateExternalTable(const TString& cluster, const TCreateExternalTableSettings& settings, bool createDir, bool existingOk, bool replaceIfExists) = 0;
 
     virtual NThreading::TFuture<TGenericResult> AlterExternalTable(const TString& cluster, const TAlterExternalTableSettings& settings) = 0;
 

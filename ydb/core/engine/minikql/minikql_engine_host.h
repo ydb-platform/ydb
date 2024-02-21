@@ -1,5 +1,6 @@
 #pragma once
 
+#include "minikql_engine_host_counters.h"
 #include "change_collector_iface.h"
 
 #include <util/generic/cast.h>
@@ -11,56 +12,6 @@
 
 namespace NKikimr {
 namespace NMiniKQL {
-
-struct TEngineHostCounters {
-    ui64 NSelectRow = 0;
-    ui64 NSelectRange = 0;
-    ui64 NUpdateRow  = 0;
-    ui64 NEraseRow = 0;
-
-    ui64 SelectRowRows = 0;
-    ui64 SelectRowBytes = 0;
-    ui64 SelectRangeRows = 0;
-    ui64 SelectRangeBytes = 0;
-    ui64 SelectRangeDeletedRowSkips = 0;
-    ui64 UpdateRowBytes = 0;
-    ui64 EraseRowBytes = 0;
-
-    ui64 InvisibleRowSkips = 0;
-
-    TEngineHostCounters& operator+=(const TEngineHostCounters& other) {
-        NSelectRow += other.NSelectRow;
-        NSelectRange += other.NSelectRange;
-        NUpdateRow += other.NUpdateRow;
-        NEraseRow += other.NEraseRow;
-        SelectRowRows += other.SelectRowRows;
-        SelectRowBytes += other.SelectRowBytes;
-        SelectRangeRows += other.SelectRangeRows;
-        SelectRangeBytes += other.SelectRangeBytes;
-        SelectRangeDeletedRowSkips += other.SelectRangeDeletedRowSkips;
-        UpdateRowBytes += other.UpdateRowBytes;
-        EraseRowBytes += other.EraseRowBytes;
-        InvisibleRowSkips += other.InvisibleRowSkips;
-        return *this;
-    }
-
-    TString ToString() const {
-        return TStringBuilder()
-            << "{NSelectRow: " << NSelectRow
-            << ", NSelectRange: " << NSelectRange
-            << ", NUpdateRow: " << NUpdateRow
-            << ", NEraseRow: " << NEraseRow
-            << ", SelectRowRows: " << SelectRowRows
-            << ", SelectRowBytes: " << SelectRowBytes
-            << ", SelectRangeRows: " << SelectRangeRows
-            << ", SelectRangeBytes: " << SelectRangeBytes
-            << ", UpdateRowBytes: " << UpdateRowBytes
-            << ", EraseRowBytes: " << EraseRowBytes
-            << ", SelectRangeDeletedRowSkips: " << SelectRangeDeletedRowSkips
-            << ", InvisibleRowSkips: " << InvisibleRowSkips
-            << "}";
-    }
-};
 
 struct IKeyAccessSampler : public TThrRefBase {
     using TPtr = TIntrusivePtr<IKeyAccessSampler>;
@@ -98,7 +49,7 @@ public:
     ui64 GetShardId() const override;
     const TScheme::TTableInfo* GetTableInfo(const TTableId& tableId) const override;
     bool IsReadonly() const override;
-    bool IsValidKey(TKeyDesc& key, std::pair<ui64, ui64>& maxSnapshotTime) const override;
+    bool IsValidKey(TKeyDesc& key) const override;
     ui64 CalculateReadSize(const TVector<const TKeyDesc*>& keys) const override;
     ui64 CalculateResultSize(const TKeyDesc& key) const override;
     void PinPages(const TVector<THolder<TKeyDesc>>& keys, ui64 pageFaultCount) override;
@@ -193,6 +144,7 @@ public:
     }
 };
 
+bool IsValidKey(const TEngineHost::TScheme& scheme, ui64 localTableId, TKeyDesc& key);
 void AnalyzeRowType(TStructLiteral* columnIds, TSmallVec<NTable::TTag>& tags, TSmallVec<NTable::TTag>& systemColumnTags);
 NUdf::TUnboxedValue GetCellValue(const TCell& cell, NScheme::TTypeInfo type);
 NUdf::TUnboxedValue CreateSelectRangeLazyRowsList(NTable::TDatabase& db, const NTable::TScheme& scheme,
@@ -203,4 +155,6 @@ NUdf::TUnboxedValue CreateSelectRangeLazyRowsList(NTable::TDatabase& db, const N
 void ConvertTableKeys(const NTable::TScheme& scheme, const NTable::TScheme::TTableInfo* tableInfo,
     const TArrayRef<const TCell>& row, TSmallVec<TRawTypeValue>& key, ui64* keyDataBytes);
 
+void ConvertTableValues(const NTable::TScheme& scheme, const NTable::TScheme::TTableInfo* tableInfo,
+    const TArrayRef<const IEngineFlatHost::TUpdateCommand>& commands,  TSmallVec<NTable::TUpdateOp>& ops, ui64* valueBytes);
 }}

@@ -30,6 +30,14 @@ public:
         Y_ABORT_UNLESS(RawBytes);
     }
 
+    TString DebugString() const {
+        return TStringBuilder() << "{"
+            << "serialized_bytes=" << SerializedBytes << ";"
+            << "records=" << RecordsCount << ";"
+            << "raw_bytes=" << RawBytes << ";"
+            << "}";
+    }
+
     double GetSerializedBytesPerRecord() const {
         AFL_VERIFY(RecordsCount);
         return 1.0 * SerializedBytes / RecordsCount;
@@ -77,6 +85,10 @@ public:
         RawBytesPerRecord = 1.0 * rawBytes / recordsCount;
     }
 
+    TString DebugString() const {
+        return TStringBuilder() << "{sbpr=" << SerializedBytesPerRecord << ";rbpr=" << RawBytesPerRecord << "}";
+    }
+
     TBatchSerializationStat(const TSimpleSerializationStat& simple) {
         SerializedBytesPerRecord = simple.GetSerializedBytesPerRecord();
         RawBytesPerRecord = simple.GetRawBytesPerRecord();
@@ -114,6 +126,7 @@ public:
 
 class TColumnSerializationStat: public TSimpleSerializationStat {
 private:
+    using TBase = TSimpleSerializationStat;
     YDB_READONLY(ui32, ColumnId, 0);
     YDB_READONLY_DEF(std::string, ColumnName);
 public:
@@ -133,6 +146,10 @@ public:
         return result;
     }
 
+    TString DebugString() const {
+        return TStringBuilder() << "{id=" << ColumnId << ";name=" << ColumnName << ";details=" << TBase::DebugString() << "}";
+    }
+
     void Merge(const TSimpleSerializationStat& item) {
         SerializedBytes += item.GetSerializedBytes();
         RawBytes += item.GetRawBytes();
@@ -146,6 +163,16 @@ private:
     std::map<ui32, TColumnSerializationStat*> StatsByColumnId;
     std::map<std::string, TColumnSerializationStat*> StatsByColumnName;
 public:
+    TString DebugString() const {
+        TStringBuilder sb;
+        sb << "{columns=";
+        for (auto&& i : ColumnStat) {
+            sb << i.DebugString();
+        }
+        sb << ";}";
+        return sb;
+    }
+
     void Merge(const TSerializationStats& item) {
         for (auto&& i : item.ColumnStat) {
             AddStat(i);

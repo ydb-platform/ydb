@@ -22,7 +22,7 @@ namespace NKikimr::NTable {
         virtual TRowId GetRowId() const = 0;
         virtual TRowId GetNextRowId() const = 0;
 
-        virtual bool HasKeyCells() const = 0;
+        virtual TPos GetKeyCellsCount() const = 0;
         virtual TCell GetKeyCell(TPos index) const = 0;
 
         virtual ~IIndexIter() = default;

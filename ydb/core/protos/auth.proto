@@ -48,6 +48,7 @@ message TAuthConfig {
     optional string LdapAuthenticationDomain = 75 [default = "ldap"];
     optional bool UseAccessServiceApiKey = 76 [default = false]; // Use IAM ApiKey
     optional string AsSignatureExpireTime = 77 [default = "1m"];
+    optional bool UseBuiltinDomain = 78 [default = true];
 }
 
 message TUserRegistryConfig {
@@ -99,9 +100,9 @@ message TLdapAuthentication {
 
     optional string Host = 1;
     optional uint32 Port = 2;
-    required string BaseDn = 3;
-    required string BindDn = 4;
-    required string BindPassword = 5;
+    optional string BaseDn = 3;
+    optional string BindDn = 4;
+    optional string BindPassword = 5;
     optional string SearchFilter = 6;
     optional string SearchAttribute = 7;
     optional TUseTls UseTls = 8;

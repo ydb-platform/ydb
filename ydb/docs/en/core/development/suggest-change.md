@@ -98,43 +98,45 @@ And copy-paste the shown token to complete the GitHub CLI configuration.
 
 YDB official repository is [https://github.com/ydb-platform/ydb](https://github.com/ydb-platform/ydb), located under the YDB organization account `ydb-platform`.
 
-Create working dir:
+To work on the {{ ydb-short-name }} code changes, you need to create a fork repository under your GitHub account. Create a fork by pressing the `Fork` button on the [official {{ ydb-short-name }} repository page](https://github.com/ydb-platform/ydb).
+
+After your fork is set up, create a local git repository with two remotes:
+- `official`: official {{ ydb-short-name }} repository, for main and stable branches
+- `fork`: your {{ ydb-short-name }} repository fork, for your development branches
+
 ```
 mkdir -p ~/ydbwork
 cd ~/ydbwork
+git clone -o official git@github.com:ydb-platform/ydb.git
 ```
 
-To work on the YDB code changes, you need to create a fork repository under your GitHub account, and clone it locally. 
-
-{% list tabs %}
-
-- GitHub CLI:
-
-There's a single GitHub CLI command which does all of that together:
-
 ```
-gh repo fork ydb-platform/ydb --default-branch-only --clone
+cd ydb
+git remote add fork git@github.com:{your_github_user_name}/ydb.git
 ```
 
-Once completed, you have a YDB Git repository fork cloned to `~/ydbwork/ydb`.
-
-- git
-
-On https://github.com/ydb-platform/ydb press Fork (Fork your own copy of ydb-platform/ydb).
-```
-git clone git@github.com:{your_name}/ydb.git
-```
-{% endlist %}
+Once completed, you have a {{ ydb-short-name }} Git repository set up in `~/ydbwork/ydb`.
 
 Forking a repository is an instant action, however cloning to the local machine takes some time to transfer about 650 MB of repository data over the network.
 
+Next, let's configure the default `git push` behavior:
+
+```
+git config push.default current
+git config push.autoSetupRemote true
+```
+
+This way, `git push {remote}` command will automatically set upstream for the current branch to the `{remote}` and consecutive `git push` commands will only push current branch.
+
+If you intend to use GitHub CLI, then set `ydb-platform/ydb` as a default repository for GitHub CLI:
+```
+gh repo set-default ydb-platform/ydb
+```
+
 ### Configure commit authorship {#author}
 
-Run the following command from your repository directory to set up your name and email for commits pushed using Git:
+Run the following command to set up your name and email for commits pushed using Git (replace example name and email with your real ones):
 
-```
-cd ~/ydbwork/ydb
-```
 ```
 git config --global user.name "Marco Polo"
 git config --global user.email "marco@ydb.tech"
@@ -146,29 +148,29 @@ To start working on a feature, ensure the steps specified in the [Setup the envi
 
 ### Refresh trunk {#fork_sync}
 
-Usually you need a fresh trunk revision to branch from. Sync fork to obtain it, running the following command:
+Usually you need a fresh revision to branch from. Sync your local `main` branch by running the following command in the repository:
+
+If your current local branch is `main`:
 
 ```
-gh repo sync your_github_login/ydb -s ydb-platform/ydb
+git pull --ff-only official main
 ```
 
-This statement performs sync remotely on GitHub. Pull the changes to the local repository then:
+If your current local branch is not `main`:
 
 ```
 cd ~/ydbwork/ydb
+git fetch official main:main
 ```
-```
-git checkout main
-git pull
-```
+
+This command updates your local `main` branch without checking it out.
 
 ### Create a development branch {#create_devbranch}
 
-Create a development branch using Git (replace "feature42" with your branch name), and assign upstream for it:
+Create a development branch using Git (replace "feature42" with a name for your new branch):
 
 ```
 git checkout -b feature42
-git push --set-upstream origin feature42
 ```
 
 ### Make changes and commits {#commit}
@@ -177,40 +179,67 @@ Edit files locally, use standard Git commands to add files, verify status, make 
 
 ```
 git add .
-```
-
-```
 git status
 ```
 
 ```
 git commit -m "Implemented feature 42"
+git push fork
 ```
 
+Consecutive pushes do not require an upstream or a branch name:
 ```
 git push
 ```
 
 ### Create a pull request to the official repository {#create_pr}
 
-When the changes are completed and locally tested (see [Ya Build and Test](build-ya.md)), run the following command from your repository root to submit a Pull Request to the YDB official repository:
+When the changes are completed and locally tested (see [Ya Build and Test](build-ya.md)), create Pull Request.
 
-```
-cd ~/ydbwork/ydb
-```
-```
-gh pr create --title "Feature 42 implemented"
-```
+{% list tabs %}
 
-After answering some questions, the Pull Request will be created and you will get a link to its page on GitHub.com.
+- GitHub UI
+
+  Visit your branch's page on GitHub.com (https://github.com/{your_github_user_name}/ydb/tree/{branch_name}), press `Contribute` and then `Open Pull Request`.
+  You can also use the link in the `git push` output to open a Pull Request:
+  
+  ```
+  ...
+  remote: Resolving deltas: 100% (1/1), completed with 1 local object.
+  remote: 
+  remote: Create a pull request for '{branch_name}' on GitHub by visiting:
+  remote:      https://github.com/{your_github_user_name}/test/pull/new/{branch_name}
+  ... 
+  ```
+
+- GitHub CLI
+
+  Install and configure [GitHub CLI](https://cli.github.com/).
+  ```
+  cd ~/ydbwork/ydb
+  ```
+  
+  ```
+  gh pr create --title "Feature 42 implemented"
+  ```
+  
+  After answering some questions, the Pull Request will be created and you will get a link to its page on GitHub.com.
+
+{% endlist %}
 
 ### Precommit checks {#precommit_checks}
 
-Prior to merging, the precommit checks are run for the Pull Request. You can see its status on the Pull Request page.
+Prior to merging, the precommit checks are run for the Pull Request.
 
-As part of the precommit checks, the YDB CI builds artifacts and runs all the tests, providing the results as a comment to the Pull Request.
+For changes in the {{ ydb-short-name }} code, precommit checks build {{ ydb-short-name }} artifacts, and run tests as described in `ya.make` files. Build and test run on a specific commit which merges your changes to the current `main` branch. If there are merge conflicts, build/test checks cannot be run, and you need to rebase your changes as described [below](#rebase).
 
-If you are not a member of the YDB team, build/test checks do not run until a team member reviews your changes and approves the PR for tests by assigning a label 'Ok-to-test'.
+You can see the checks status on the Pull Request page. Also, key information for {{ ydb-short-name }} build/test checks progress and status is published to the comments of the Pull Ruquest.
+
+If you are not a member of the YDB team, build/test checks do not run until a team member reviews your changes and approves the PR for tests by assigning a label `ok-to-test`.
+
+Checks are restarted every time you push changes to the pull request, cancelling the previous run if it's still in progress. Each iteration of checks produces its own comment on the pull request page, so you can see the history of checks.
+
+If you are a member of the YDB team, you can also restart checks on a new merge commit without pushing. To do so, add label `rebase-and-check` to the PR.
 
 ### Test results {#test-results}
 
@@ -232,11 +261,34 @@ If there's a Pull Request opened for some development branch in your repository,
 
 ### Rebase changes {#rebase}
 
-If you have conflicts on the Pull Request, you may rebase your changes on top of the actual trunk from the official repository. To do so, [refresh trunk](#fork_sync) in your fork, pull the `main` branch state to the local machine, and run the rebase command:
+If you have conflicts on the Pull Request, you may rebase your changes on top of the actual trunk from the official repository. To do so, [refresh main](#fork_sync) branch state on your local machine, and run the rebase command:
 
 ```
 # Assuming your active branch is your development branch
-gh repo sync your_github_login/ydb -s ydb-platform/ydb
-git fetch origin main:main
+git fetch official main:main
 git rebase main
+```
+
+### Cherry-picking fixes to the stable branch {#cherry_pick_stable}
+
+When required to cherry-pick a fix to the stable branch, first branch off of the stable branch:
+
+```
+git fetch official
+git checkout -b "cherry-pick-fix42" official/stable-24-1
+```
+
+Then cherry-pick the fix and push the branch to your fork:
+
+```
+git cherry-pick {fixes_commit_hash}
+git push fork
+```
+
+And then create a PR from your branch with the cherry-picked fix to the stable branch. It is done similarly to opening a PR to `main`, but make sure to double-check the target branch.
+
+If you are using GitHub CLI, pass `-B` argument to specify the target branch:
+
+```
+gh pr create --title "Title" -B stable-24-1
 ```

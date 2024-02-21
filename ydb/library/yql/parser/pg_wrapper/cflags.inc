@@ -9,11 +9,13 @@ CFLAGS(
     -Wno-duplicate-decl-specifier
     -Wno-unused-function
     -Wno-unused-variable
+    -Wno-unused-but-set-variable
     -Wno-unused-private-field
     -Wno-register
     -Wno-unguarded-availability-new
     -Wno-int-conversion
     -Wno-deprecated-declarations
+    -Wno-null-pointer-subtraction
 )
 
 IF (OS_WINDOWS)

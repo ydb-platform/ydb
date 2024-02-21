@@ -44,6 +44,27 @@ Y_UNIT_TEST_SUITE(TDataShardTrace) {
                     return Nothing();
                 }
 
+                const TMaybe<TString> GetPeerMetaValues(const TString&) const override {
+                    return Nothing();
+                }
+ 
+                TString GetPeerName() const override {
+                    return {};
+                }
+
+                const TString& GetRequestName() const override {
+                    static TString empty;
+                    return empty;
+                }
+
+                TMaybe<NRpcService::TRlPath> GetRlPath() const override {
+                    return Nothing();
+                }
+
+                TInstant GetDeadline() const override {
+                    return TInstant::Max();
+                }
+
                 const TMaybe<TString> GetDatabaseName() const override {
                     return "";
                 }
@@ -292,27 +313,24 @@ Y_UNIT_TEST_SUITE(TDataShardTrace) {
         TFakeWilsonUploader::Trace &trace = uploader->Traces.begin()->second;
 
         std::string canon;
-        if (server->GetSettings().AppConfig->GetTableServiceConfig().GetEnableKqpDataQueryStreamLookup()) {
-            auto lookupActorSpan = trace.Root.BFSFindOne("LookupActor");
-            UNIT_ASSERT(lookupActorSpan);
+        if (server->GetSettings().AppConfig->GetTableServiceConfig().GetEnableKqpDataQueryStreamLookup() || server->GetSettings().AppConfig->GetTableServiceConfig().GetPredicateExtract20()) {
+            auto readActorSpan = trace.Root.BFSFindOne("ReadActor");
+            UNIT_ASSERT(readActorSpan);
 
-            auto dsReads = lookupActorSpan->get().FindAll("Datashard.Read"); // Lookup actor sends EvRead to each shard.
+            auto dsReads = readActorSpan->get().FindAll("Datashard.Read"); // Read actor sends EvRead to each shard.
             UNIT_ASSERT_EQUAL(dsReads.size(), 2);
 
-            canon = "(Session.query.QUERY_ACTION_EXECUTE -> [(CompileService -> [(CompileActor)]) "
-                ", (DataExecuter -> [(WaitForTableResolve) , (WaitForSnapshot) , (ComputeActor) "
-                ", (ComputeActor -> [(LookupActor -> [(WaitForShardsResolve) , (Datashard.Read "
-                "-> [(Tablet.Transaction -> [(Tablet.Transaction.Execute -> [(Datashard.Unit) "
-                ", (Datashard.Unit) , (Datashard.Unit)]) , (Tablet.Transaction.Wait) , (Tablet.Transaction.Enqueued) "
-                ", (Tablet.Transaction.Execute -> [(Datashard.Unit)]) , (Tablet.Transaction.Wait) , (Tablet.Transaction.Enqueued) "
-                ", (Tablet.Transaction.Execute -> [(Datashard.Unit) , (Datashard.Unit)]) , (Tablet.WriteLog "
-                "-> [(Tablet.WriteLog.LogEntry)])])]) , (Datashard.Read "
-                "-> [(Tablet.Transaction -> [(Tablet.Transaction.Execute -> [(Datashard.Unit) , (Datashard.Unit) "
-                ", (Datashard.Unit)]) , (Tablet.Transaction.Wait) , (Tablet.Transaction.Enqueued) "
-                ", (Tablet.Transaction.Execute -> [(Datashard.Unit)]) , (Tablet.Transaction.Wait) "
-                ", (Tablet.Transaction.Enqueued) , (Tablet.Transaction.Execute -> [(Datashard.Unit) "
-                ", (Datashard.Unit)]) , (Tablet.WriteLog -> [(Tablet.WriteLog.LogEntry)])])"
-                "])])]) , (ComputeActor) , (RunTasks)])])";
+            canon = "(Session.query.QUERY_ACTION_EXECUTE -> [(CompileService -> [(CompileActor)]) , (LiteralExecuter) "
+                ", (DataExecuter -> [(WaitForTableResolve) , (WaitForShardsResolve) , (WaitForSnapshot) , (ComputeActor) "
+                ", (RunTasks) , (KqpNode.SendTasks) , (ComputeActor -> [(ReadActor -> [(WaitForShardsResolve) , (Datashard.Read "
+                "-> [(Tablet.Transaction -> [(Tablet.Transaction.Execute -> [(Datashard.Unit) , (Datashard.Unit) , (Datashard.Unit)]) "
+                ", (Tablet.Transaction.Wait) , (Tablet.Transaction.Enqueued) , (Tablet.Transaction.Execute -> [(Datashard.Unit)]) "
+                ", (Tablet.Transaction.Wait) , (Tablet.Transaction.Enqueued) , (Tablet.Transaction.Execute -> [(Datashard.Unit) "
+                ", (Datashard.Unit)]) , (Tablet.WriteLog -> [(Tablet.WriteLog.LogEntry)])])]) , (Datashard.Read -> [(Tablet.Transaction "
+                "-> [(Tablet.Transaction.Execute -> [(Datashard.Unit) , (Datashard.Unit) , (Datashard.Unit)]) , (Tablet.Transaction.Wait) "
+                ", (Tablet.Transaction.Enqueued) , (Tablet.Transaction.Execute -> [(Datashard.Unit)]) , (Tablet.Transaction.Wait) "
+                ", (Tablet.Transaction.Enqueued) , (Tablet.Transaction.Execute -> [(Datashard.Unit) , (Datashard.Unit)]) , (Tablet.WriteLog "
+                "-> [(Tablet.WriteLog.LogEntry)])])])])])])])";
         } else {
             auto deSpan = trace.Root.BFSFindOne("DataExecuter");
             UNIT_ASSERT(deSpan);

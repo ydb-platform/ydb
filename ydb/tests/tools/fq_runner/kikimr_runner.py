@@ -74,7 +74,7 @@ class BaseTenant(abc.ABC):
         if 'query_service_config' not in self.config_generator.yaml_config:
             self.config_generator.yaml_config['query_service_config'] = {}
         return self.config_generator.yaml_config['query_service_config']
-    
+
     @property
     def auth_config(self):
         if 'auth_config' not in self.config_generator.yaml_config:

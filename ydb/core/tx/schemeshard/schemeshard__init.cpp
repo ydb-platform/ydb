@@ -302,7 +302,7 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
         return true;
     }
 
-    typedef std::tuple<TPathId, ui32, ui64, TString, TString, TString, ui64, TString, bool, TString> TTableRec;
+    typedef std::tuple<TPathId, ui32, ui64, TString, TString, TString, ui64, TString, bool, TString, bool, TString> TTableRec;
     typedef TDeque<TTableRec> TTableRows;
 
     template <typename SchemaTable, typename TRowSet>
@@ -316,7 +316,9 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
             rowSet.template GetValueOrDefault<typename SchemaTable::PartitioningVersion>(0),
             rowSet.template GetValueOrDefault<typename SchemaTable::TTLSettings>(),
             rowSet.template GetValueOrDefault<typename SchemaTable::IsBackup>(false),
-            rowSet.template GetValueOrDefault<typename SchemaTable::ReplicationConfig>()
+            rowSet.template GetValueOrDefault<typename SchemaTable::ReplicationConfig>(),
+            rowSet.template GetValueOrDefault<typename SchemaTable::IsTemporary>(false),
+            rowSet.template GetValueOrDefault<typename SchemaTable::OwnerActorId>("")
         );
     }
 
@@ -356,7 +358,7 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
         return true;
     }
 
-    typedef std::tuple<TPathId, ui32, TString, NScheme::TTypeInfo, TString, ui32, ui64, ui64, ui32, ETableColumnDefaultKind, TString, bool> TColumnRec;
+    typedef std::tuple<TPathId, ui32, TString, NScheme::TTypeInfo, TString, ui32, ui64, ui64, ui32, ETableColumnDefaultKind, TString, bool, bool> TColumnRec;
     typedef TDeque<TColumnRec> TColumnRows;
 
     template <typename SchemaTable, typename TRowSet>
@@ -383,7 +385,8 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
             rowSet.template GetValueOrDefault<typename SchemaTable::Family>(0),
             rowSet.template GetValue<typename SchemaTable::DefaultKind>(),
             rowSet.template GetValue<typename SchemaTable::DefaultValue>(),
-            rowSet.template GetValueOrDefault<typename SchemaTable::NotNull>(false)
+            rowSet.template GetValueOrDefault<typename SchemaTable::NotNull>(false),
+            rowSet.template GetValueOrDefault<typename SchemaTable::IsBuildInProgress>(false)
         );
     }
 
@@ -1791,6 +1794,39 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                 }
 
                 tableInfo->IsBackup = std::get<8>(rec);
+                tableInfo->IsTemporary = std::get<10>(rec);
+
+                auto ownerActorIdStr = std::get<11>(rec);
+                tableInfo->OwnerActorId.Parse(ownerActorIdStr.c_str(), ownerActorIdStr.size());
+
+                if (tableInfo->IsTemporary) {
+                    Y_VERIFY_S(tableInfo->OwnerActorId,  "Empty OwnerActorId for temp table");
+
+                    TActorId ownerActorId = tableInfo->OwnerActorId;
+
+                    auto& tempTablesByOwner = Self->TempTablesState.TempTablesByOwner;
+                    auto& nodeStates = Self->TempTablesState.NodeStates;
+
+                    auto it = tempTablesByOwner.find(ownerActorId);
+                    auto nodeId = ownerActorId.NodeId();
+
+                    auto itNodeStates = nodeStates.find(nodeId);
+                    if (itNodeStates == nodeStates.end()) {
+                        auto& nodeState = nodeStates[nodeId];
+                        nodeState.Owners.insert(ownerActorId);
+                        nodeState.RetryState.CurrentDelay =
+                            TDuration::MilliSeconds(Self->BackgroundCleaningRetrySettings.GetStartDelayMs());
+                    } else {
+                        itNodeStates->second.Owners.insert(ownerActorId);
+                    }
+
+                    if (it == tempTablesByOwner.end()) {
+                        auto& currentTempTables = tempTablesByOwner[ownerActorId];
+                        currentTempTables.insert(pathId);
+                    } else {
+                        it->second.insert(pathId);
+                    }
+                }
 
                 Self->Tables[pathId] = tableInfo;
                 Self->IncrementPathDbRefCount(pathId);
@@ -1899,6 +1935,7 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                 auto defaultKind = std::get<9>(rec);
                 auto defaultValue = std::get<10>(rec);
                 auto notNull = std::get<11>(rec);
+                auto isBuildInProgress = std::get<12>(rec);
 
                 Y_VERIFY_S(Self->PathsById.contains(pathId), "Path doesn't exist, pathId: " << pathId);
                 Y_VERIFY_S(Self->PathsById.at(pathId)->IsTable() || Self->PathsById.at(pathId)->IsExternalTable(), "Path is not a table or external table, pathId: " << pathId);
@@ -1912,6 +1949,7 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                 colInfo.DefaultKind = defaultKind;
                 colInfo.DefaultValue = defaultValue;
                 colInfo.NotNull = notNull;
+                colInfo.IsBuildInProgress = isBuildInProgress;
 
                 if (auto it = Self->Tables.find(pathId); it != Self->Tables.end()) {
                     TTableInfo::TPtr tableInfo = it->second;
@@ -1957,6 +1995,7 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                 auto defaultKind = std::get<9>(rec);
                 auto defaultValue = std::get<10>(rec);
                 auto notNull = std::get<11>(rec);
+                auto isBuildInProgress = std::get<12>(rec);
 
                 Y_VERIFY_S(Self->PathsById.contains(pathId), "Path doesn't exist, pathId: " << pathId);
                 Y_VERIFY_S(Self->PathsById.at(pathId)->IsTable(), "Path is not a table, pathId: " << pathId);
@@ -1977,6 +2016,7 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                 colInfo.DefaultKind = defaultKind;
                 colInfo.DefaultValue = defaultValue;
                 colInfo.NotNull = notNull;
+                colInfo.IsBuildInProgress = isBuildInProgress;
                 tableInfo->AlterData->Columns[colId] = colInfo;
             }
         }

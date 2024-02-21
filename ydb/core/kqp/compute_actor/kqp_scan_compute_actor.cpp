@@ -156,22 +156,18 @@ void TKqpScanComputeActor::Handle(TEvScanExchange::TEvFetcherFinished::TPtr& ev)
     }
 }
 
-void TKqpScanComputeActor::PollSources(std::any prev) {
+void TKqpScanComputeActor::PollSources(ui64 prevFreeSpace) {
     if (!ScanData || ScanData->IsFinished()) {
         return;
     }
     const auto hasNewMemoryPred = [&]() {
-        if (!prev.has_value()) {
-            return false;
-        }
         const ui64 freeSpace = CalculateFreeSpace();
-        const ui64 prevFreeSpace = std::any_cast<ui64>(prev);
         return freeSpace > prevFreeSpace;
     };
     if (!hasNewMemoryPred() && ScanData->GetStoredBytes()) {
         return;
     }
-    const ui32 freeSpace = CalculateFreeSpace();
+    const ui64 freeSpace = CalculateFreeSpace();
     CA_LOG_D("POLL_SOURCES:START:" << Fetchers.size() << ";fs=" << freeSpace);
     for (auto&& i : Fetchers) {
         Send(i, new TEvScanExchange::TEvAckData(freeSpace));
@@ -188,7 +184,6 @@ void TKqpScanComputeActor::DoBootstrap() {
     execCtx.RandomProvider = TAppData::RandomProvider.Get();
     execCtx.TimeProvider = TAppData::TimeProvider.Get();
     execCtx.ApplyCtx = nullptr;
-    execCtx.Alloc = nullptr;
     execCtx.TypeEnv = nullptr;
     execCtx.PatternCache = GetKqpResourceManager()->GetPatternCache();
 
@@ -219,7 +214,7 @@ void TKqpScanComputeActor::DoBootstrap() {
         };
     }
 
-    auto taskRunner = CreateKqpTaskRunner(execCtx, settings, logger);
+    auto taskRunner = MakeDqTaskRunner(GetAllocator(), execCtx, settings, logger);
     TBase::SetTaskRunner(taskRunner);
 
     auto wakeup = [this] { ContinueExecute(); };

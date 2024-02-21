@@ -2,6 +2,9 @@
 #include "settings.h"
 #include <ydb/core/tx/columnshard/blobs_action/abstract/action.h>
 #include <ydb/core/tx/columnshard/counters/indexation.h>
+#include <ydb/core/tx/columnshard/data_locks/locks/abstract.h>
+#include <ydb/core/tx/columnshard/data_locks/locks/composite.h>
+#include <ydb/core/tx/columnshard/data_locks/locks/list.h>
 #include <ydb/core/tx/columnshard/engines/portions/portion_info.h>
 #include <ydb/core/tx/columnshard/engines/portions/with_blobs.h>
 #include <ydb/core/tx/columnshard/resource_subscriber/task.h>
@@ -72,7 +75,7 @@ public:
 class TWriteIndexContext: TNonCopyable {
 public:
     NTabletFlatExecutor::TTransactionContext& Txc;
-    std::shared_ptr<NColumnShard::TBlobManagerDb> BlobManagerDb;
+    std::shared_ptr<TBlobManagerDb> BlobManagerDb;
     IDbWrapper& DBWrapper;
     TWriteIndexContext(NTabletFlatExecutor::TTransactionContext& txc, IDbWrapper& dbWrapper);
 };
@@ -172,7 +175,20 @@ protected:
 
     const TString TaskIdentifier = TGUID::Create().AsGuidString();
     virtual ui64 DoCalcMemoryForUsage() const = 0;
+    virtual std::shared_ptr<NDataLocks::ILock> DoBuildDataLock() const = 0;
+    std::shared_ptr<NDataLocks::ILock> BuildDataLock() const {
+        return DoBuildDataLock();
+    }
+
 public:
+    class IMemoryPredictor {
+    public:
+        virtual ui64 AddPortion(const TPortionInfo& portionInfo) = 0;
+        virtual ~IMemoryPredictor() = default;
+    };
+
+    void OnFinish(NColumnShard::TColumnShard& self, TChangesFinishContext& context);
+
     ui64 CalcMemoryForUsage() const {
         return DoCalcMemoryForUsage();
     }
@@ -201,8 +217,6 @@ public:
     bool IsAborted() const {
         return Stage == EStage::Aborted;
     }
-
-    virtual THashSet<TPortionAddress> GetTouchedPortions() const = 0;
 
     void StartEmergency();
     void AbortEmergency();

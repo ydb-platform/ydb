@@ -1,5 +1,7 @@
 #include "yaml_config.h"
 
+#include <ydb/library/yaml_config/yaml_config_parser.h>
+
 #include <library/cpp/testing/unittest/registar.h>
 
 using namespace NKikimr;

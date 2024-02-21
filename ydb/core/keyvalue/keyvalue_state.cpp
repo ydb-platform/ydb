@@ -634,6 +634,9 @@ void TKeyValueState::InitExecute(ui64 tabletId, TActorId keyValueActorId, ui32 e
     }
 
     THelpers::DbEraseCollect(db, ctx);
+    if (IsEmptyDbStart) {
+        THelpers::DbUpdateState(StoredState, db, ctx);
+    }
 
     // corner case, if no CollectGarbage events were sent
     if (InitialCollectsSent == 0) {
@@ -758,6 +761,25 @@ TLogoBlobID TKeyValueState::AllocateLogoBlobId(ui32 size, ui32 storageChannelIdx
     } else {
         Step();
     }
+    Y_ABORT_UNLESS(!CollectOperation || THelpers::GenerationStep(id) >
+        THelpers::TGenerationStep(CollectOperation->Header.GetCollectGeneration(), CollectOperation->Header.GetCollectStep()));
+    ++InFlightForStep[id.Step()];
+    ++RequestUidStepToCount[std::make_tuple(requestUid, id.Step())];
+    return id;
+}
+
+TLogoBlobID TKeyValueState::AllocatePatchedLogoBlobId(ui32 size, ui32 storageChannelIdx, TLogoBlobID originalBlobId, ui64 requestUid) {
+    ui32 generation = ExecutorGeneration;
+    TLogoBlobID id;
+    using TEvPatch = TEvBlobStorage::TEvPatch;
+    do {
+        id = TLogoBlobID(TabletId, generation, NextLogoBlobStep, storageChannelIdx, size, NextLogoBlobCookie);
+        if (NextLogoBlobCookie < TLogoBlobID::MaxCookie) {
+            NextLogoBlobCookie++;
+        } else {
+            Step();
+        }
+    } while (TEvPatch::BlobPlacementKind(id) != TEvPatch::BlobPlacementKind(originalBlobId));
     Y_ABORT_UNLESS(!CollectOperation || THelpers::GenerationStep(id) >
         THelpers::TGenerationStep(CollectOperation->Header.GetCollectGeneration(), CollectOperation->Header.GetCollectStep()));
     ++InFlightForStep[id.Step()];
@@ -1089,6 +1111,38 @@ void TKeyValueState::ProcessCmd(TIntermediate::TWrite &request,
     }
 }
 
+void TKeyValueState::ProcessCmd(TIntermediate::TPatch &request,
+        NKikimrClient::TKeyValueResponse::TPatchResult *legacyResponse,
+        NKikimrKeyValue::StorageChannel *response,
+        ISimpleDb &db, const TActorContext &ctx, TRequestStat &/*stat*/, ui64 unixTime,
+        TIntermediate* /*intermediate*/)
+{
+    TIndexRecord& record = Index[request.PatchedKey];
+    Dereference(record, db, ctx);
+
+    record.Chain = {};
+
+    record.Chain.push_back(TIndexRecord::TChainItem(request.PatchedBlobId, 0));
+    CountWriteRecord(request.PatchedBlobId); // TODO(kruall) change to CountPatchRecord
+
+    ui32 storage_channel = request.PatchedBlobId.Channel() + MainStorageChannelInPublicApi;
+    // ctx.Send(ChannelBalancerActorId, new TChannelBalancer::TEvReportWriteLatency(channel, request.Latency));
+
+    record.CreationUnixTime = unixTime;
+    UpdateKeyValue(request.PatchedKey, record, db, ctx);
+
+    if (legacyResponse) {
+        legacyResponse->SetStatus(NKikimrProto::OK);
+        legacyResponse->SetStatusFlags(request.StatusFlags.Raw);
+    }
+    if (response) {
+        response->set_status(NKikimrKeyValue::Statuses::RSTATUS_OK);
+        response->set_status_flag(GetStatusFlag(request.StatusFlags));
+        response->set_storage_channel(storage_channel);
+    }
+}
+
+
 void TKeyValueState::ProcessCmd(const TIntermediate::TDelete &request,
         NKikimrClient::TKeyValueResponse::TDeleteRangeResult *legacyResponse,
         NKikimrKeyValue::StorageChannel */*response*/,
@@ -1396,6 +1450,10 @@ void TKeyValueState::CmdCmds(THolder<TIntermediate> &intermediate, ISimpleDb &db
             wasWrite = true;
             return intermediate->Response.AddWriteResult();
         }
+        if constexpr (std::is_same_v<Type, TIntermediate::TPatch>) {
+            wasWrite = true;
+            return intermediate->Response.AddPatchResult();
+        }
         if constexpr (std::is_same_v<Type, TIntermediate::TDelete>) {
             return intermediate->Response.AddDeleteRangeResult();
         }
@@ -1517,6 +1575,29 @@ TKeyValueState::TCheckResult TKeyValueState::CheckCmd(const TIntermediate::TWrit
     return {};
 }
 
+TKeyValueState::TCheckResult TKeyValueState::CheckCmd(const TIntermediate::TPatch &cmd, TKeySet& keys, ui32 index) const
+{
+    auto it = keys.find(cmd.OriginalKey);
+    if (it == keys.end()) {
+        TStringStream str;
+        str << "KeyValue# " << TabletId
+            << " InputKey# " << EscapeC(cmd.OriginalKey) << " does not exist in CmdPatch(" << index << ")"
+            << " Marker# KV28";
+        return {NKikimrKeyValue::Statuses::RSTATUS_NOT_FOUND, str.Str()};
+    }
+
+    if (!IsKeyLengthValid(cmd.PatchedKey)) {
+        TStringStream str;
+        str << "KeyValue# " << TabletId
+            << " Key length in CmdPatch(" << index << ") is " << cmd.PatchedKey.length() << " but max is " << MaxKeySize
+            << " Marker# KV27";
+        return {NKikimrKeyValue::Statuses::RSTATUS_INTERNAL_ERROR, str.Str()};
+    }
+    keys.insert(cmd.PatchedKey);
+    return {};
+}
+
+
 TKeyValueState::TCheckResult TKeyValueState::CheckCmd(const TIntermediate::TGetStatus &/*cmd*/, TKeySet& /*keys*/, ui32 /*index*/) const {
     return {};
 }
@@ -1589,6 +1670,7 @@ void TKeyValueState::ProcessCmds(THolder<TIntermediate> &intermediate, ISimpleDb
     success = success && CheckCmds(intermediate, intermediate->Concats, ctx, keys, info);
     success = success && CheckCmds(intermediate, intermediate->Deletes, ctx, keys, info);
     success = success && CheckCmds(intermediate, intermediate->Writes, ctx, keys, info);
+    success = success && CheckCmds(intermediate, intermediate->Patches, ctx, keys, info);
     success = success && CheckCmds(intermediate, ctx, keys, info);
     success = success && CheckCmds(intermediate, intermediate->GetStatuses, ctx, keys, info);
     if (!success) {
@@ -2302,6 +2384,111 @@ bool TKeyValueState::PrepareCmdWrite(const TActorContext &ctx, NKikimrClient::TK
     return false;
 }
 
+bool TKeyValueState::PrepareCmdPatch(const TActorContext &ctx, NKikimrClient::TKeyValueRequest &kvRequest,
+        TEvKeyValue::TEvRequest& ev, THolder<TIntermediate> &intermediate, const TTabletStorageInfo *info) {
+
+    intermediate->PatchIndices.reserve(kvRequest.CmdPatchSize());
+    for (ui32 patchIdx = 0; patchIdx < kvRequest.CmdPatchSize(); ++patchIdx) {
+        auto& request = kvRequest.GetCmdPatch(patchIdx);
+        intermediate->PatchIndices.push_back(intermediate->Commands.size());
+        auto& cmd = intermediate->Commands.emplace_back(TIntermediate::TPatch());
+        auto& interm = std::get<TIntermediate::TPatch>(cmd);
+
+        if (!request.HasOriginalKey()) {
+            TStringStream str;
+            str << "KeyValue# " << TabletId;
+            str << " Missing OriginalKey in CmdPatch(" << patchIdx << ") Marker# KV35";
+            ReplyError(ctx, str.Str(), NMsgBusProxy::MSTATUS_INTERNALERROR, NKikimrKeyValue::Statuses::RSTATUS_INTERNAL_ERROR, intermediate);
+            return true;
+        }
+        interm.OriginalKey = request.GetOriginalKey();
+        if (!request.HasPatchedKey()) {
+            TStringStream str;
+            str << "KeyValue# " << TabletId;
+            str << " Missing PatchedKey in CmdPatch(" << patchIdx << ") Marker# KV37";
+            ReplyError(ctx, str.Str(), NMsgBusProxy::MSTATUS_INTERNALERROR, NKikimrKeyValue::Statuses::RSTATUS_INTERNAL_ERROR, intermediate);
+            return true;
+        }
+        interm.PatchedKey = request.GetPatchedKey();
+
+        auto it = Index.find(request.GetOriginalKey());
+        if (it == Index.end()) {
+            TStringStream str;
+            str << "KeyValue# " << TabletId;
+            str << " Missing Value/PayloadId in CmdPatch(" << patchIdx << ") Marker# KV39";
+            ReplyError(ctx, str.Str(), NMsgBusProxy::MSTATUS_INTERNALERROR, NKikimrKeyValue::Statuses::RSTATUS_INTERNAL_ERROR, intermediate);
+            return true;
+        }
+
+        auto &[key, indexRecord] = *it;
+        if (indexRecord.Chain.size() > 1) {
+            TStringStream str;
+            str << "KeyValue# " << TabletId;
+            str << " Patching work only with one-blob values instead of many-blob values in CmdPatch(" << patchIdx << ") Marker# KV62";
+            ReplyError(ctx, str.Str(), NMsgBusProxy::MSTATUS_INTERNALERROR, NKikimrKeyValue::Statuses::RSTATUS_INTERNAL_ERROR, intermediate);
+            return true;
+        }
+
+        if (indexRecord.Chain.size() == 0 || indexRecord.Chain[0].IsInline()) {
+            TStringStream str;
+            str << "KeyValue# " << TabletId;
+            str << " Patching only with one-blob values instead of none-blob values in CmdPatch(" << patchIdx << ") Marker# KV63";
+            ReplyError(ctx, str.Str(), NMsgBusProxy::MSTATUS_INTERNALERROR, NKikimrKeyValue::Statuses::RSTATUS_INTERNAL_ERROR, intermediate);
+            return true;
+        }
+
+        interm.Diffs.resize(request.DiffsSize());
+        for (ui32 diffIdx = 0; diffIdx < request.DiffsSize(); ++diffIdx) {
+            auto &diff = request.GetDiffs(diffIdx);
+            switch (diff.GetDataCase()) {
+                case NKikimrClient::TKeyValueRequest::TCmdPatch::TDiff::kValue:
+                    interm.Diffs[diffIdx].Buffer = TRope(diff.GetValue());
+                    break;
+
+                case NKikimrClient::TKeyValueRequest::TCmdPatch::TDiff::kPayloadId:
+                    interm.Diffs[diffIdx].Buffer = ev.GetPayload(diff.GetPayloadId());
+                    break;
+
+                case NKikimrClient::TKeyValueRequest::TCmdPatch::TDiff::DATA_NOT_SET: {
+                    TStringStream str;
+                    str << "KeyValue# " << TabletId;
+                    str << " Missing Value/PayloadId in CmdPatch(" << patchIdx << ") Diff(" << diffIdx << ") Marker# KV38";
+                    ReplyError(ctx, str.Str(), NMsgBusProxy::MSTATUS_INTERNALERROR, NKikimrKeyValue::Statuses::RSTATUS_INTERNAL_ERROR, intermediate);
+                    return true;
+                }
+            }
+            interm.Diffs[diffIdx].Offset = diff.GetOffset(); 
+        }
+
+        ui32 storageChannelIdx = BLOB_CHANNEL;
+        if (request.HasStorageChannel()) {
+            auto storageChannel = request.GetStorageChannel();
+            ui32 storageChannelOffset = (ui32)storageChannel;
+            
+            if (storageChannelOffset == NKikimrClient::TKeyValueRequest::INLINE) {
+                TStringStream str;
+                str << "KeyValue# " << TabletId;
+                str << " Patching blob can't be store in inline channel CmdPatch(" << patchIdx << ") Marker# KV91";
+                ReplyError(ctx, str.Str(), NMsgBusProxy::MSTATUS_INTERNALERROR, NKikimrKeyValue::Statuses::RSTATUS_INTERNAL_ERROR, intermediate);
+                return true;
+            }
+
+            storageChannelIdx = storageChannelOffset + BLOB_CHANNEL;
+            ui32 endChannel = info->Channels.size();
+            if (storageChannelIdx >= endChannel) {
+                storageChannelIdx = BLOB_CHANNEL;
+                LOG_INFO_S(ctx, NKikimrServices::KEYVALUE, "KeyValue# " << TabletId
+                        << " CmdPatch StorageChannel# " << storageChannelOffset
+                        << " does not exist, using MAIN");
+            }
+        }
+
+        interm.OriginalBlobId = indexRecord.Chain[0].LogoBlobId;
+        interm.PatchedBlobId = TLogoBlobID(0, 0, 0, storageChannelIdx, interm.OriginalBlobId.BlobSize(), 0);
+    }
+    return false;
+}
+
 
 TKeyValueState::TPrepareResult TKeyValueState::InitGetStatusCommand(TIntermediate::TGetStatus &cmd,
         NKikimrClient::TKeyValueRequest::EStorageChannel storageChannel, const TTabletStorageInfo *info)
@@ -2899,12 +3086,26 @@ void TKeyValueState::RegisterRequestActor(const TActorContext &ctx, THolder<TInt
         }
     };
 
+    auto fixPatch = [&](TIntermediate::TPatch& patch) {
+        Y_ABORT_UNLESS(patch.PatchedBlobId.TabletID() == 0);
+        patch.PatchedBlobId = AllocatePatchedLogoBlobId(patch.PatchedBlobId.BlobSize(), patch.PatchedBlobId.Channel(), patch.OriginalBlobId, intermediate->RequestUid);
+        ui32 newRefCount = ++RefCounts[patch.PatchedBlobId];
+        Y_ABORT_UNLESS(newRefCount == 1);
+        intermediate->RefCountsIncr.emplace_back(patch.PatchedBlobId, true);
+    };
+
     for (auto& write : intermediate->Writes) {
         fixWrite(write);
+    }
+    for (auto& patch : intermediate->Patches) {
+        fixPatch(patch);
     }
     for (auto& cmd : intermediate->Commands) {
         if (auto *write = std::get_if<TIntermediate::TWrite>(&cmd)) {
             fixWrite(*write);
+        }
+        if (auto *patch = std::get_if<TIntermediate::TPatch>(&cmd)) {
+            fixPatch(*patch);
         }
     }
 
@@ -3202,6 +3403,7 @@ bool TKeyValueState::PrepareIntermediate(TEvKeyValue::TEvRequest::TPtr &ev, THol
     error = error || PrepareCmdConcat(ctx, request, intermediate);
     error = error || PrepareCmdDelete(ctx, request, intermediate);
     error = error || PrepareCmdWrite(ctx, request, *ev->Get(), intermediate, info);
+    error = error || PrepareCmdPatch(ctx, request, *ev->Get(), intermediate, info);
     error = error || PrepareCmdGetStatus(ctx, request, intermediate, info);
     error = error || PrepareCmdTrimLeakedBlobs(ctx, request, intermediate, info);
     error = error || PrepareCmdSetExecutorFastLogPolicy(ctx, request, intermediate, info);

@@ -24,7 +24,6 @@ TDataStatistics& operator += (TDataStatistics& lhs, const TDataStatistics& rhs);
 TDataStatistics  operator +  (const TDataStatistics& lhs, const TDataStatistics& rhs);
 
 bool operator == (const TDataStatistics& lhs, const TDataStatistics& rhs);
-bool operator != (const TDataStatistics& lhs, const TDataStatistics& rhs);
 
 void Serialize(const TDataStatistics& statistics, NYson::IYsonConsumer* consumer);
 
@@ -53,8 +52,11 @@ public:
         1>;
     DEFINE_BYREF_RO_PROPERTY(TCodecToDuration, CodecToDuration);
 
+    DEFINE_BYREF_RO_PROPERTY(TDuration, ValueDictionaryCompressionDuration);
+
 public:
     TCodecStatistics& Append(const TCodecDuration& codecTime);
+    TCodecStatistics& AppendToValueDictionaryCompression(TDuration duration);
 
     TCodecStatistics& operator+=(const TCodecStatistics& other);
 

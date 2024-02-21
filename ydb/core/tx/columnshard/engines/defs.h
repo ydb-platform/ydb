@@ -3,7 +3,6 @@
 #include <ydb/core/base/defs.h>
 #include <ydb/core/base/logoblob.h>
 #include <ydb/core/tx/ctor_logger.h>
-#include <ydb/core/tx/columnshard/common/snapshot.h>
 
 namespace NKikimr::NOlap {
 
@@ -15,14 +14,6 @@ inline TWriteId operator++(TWriteId& w) noexcept {
     w = TWriteId{ui64(w) + 1};
     return w;
 }
-
-class IBlobGroupSelector {
-protected:
-    virtual ~IBlobGroupSelector() = default;
-
-public:
-    virtual ui32 GetGroup(const TLogoBlobID& blobId) const = 0;
-};
 
 } // namespace NKikimr::NOlap
 

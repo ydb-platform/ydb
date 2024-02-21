@@ -84,7 +84,7 @@ attrs=[
     "target_sources_custom",
     "use_export_script",
     "add_yunittest",
-    "set_yunittest_property",   
+    "set_yunittest_property",
 ]
 copy=[
     "cmake/common.cmake",

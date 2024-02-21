@@ -50,6 +50,20 @@ Y_UNIT_TEST_SUITE(HttpProxy) {
         UNIT_ASSERT_EQUAL(request->Headers, "Host: test\r\nSome-Header: 32344\r\n\r\n");
     }
 
+    Y_UNIT_TEST(HeaderParsingError_Request) {
+        NHttp::THttpIncomingRequestPtr request = new NHttp::THttpIncomingRequest();
+        EatWholeString(request, "GET /test HTTP/1.1\r\nHost: test\r\nHeader-Without-A-Colon\r\n\r\n");
+        UNIT_ASSERT_C(request->IsError(), static_cast<int>(request->Stage));
+        UNIT_ASSERT_EQUAL_C(request->GetErrorText(), "Invalid http header", static_cast<int>(request->LastSuccessStage));
+    }
+
+    Y_UNIT_TEST(HeaderParsingError_Response) {
+        NHttp::THttpIncomingResponsePtr response = new NHttp::THttpIncomingResponse(nullptr);
+        EatWholeString(response, "HTTP/1.1 200 OK\r\nConnection: close\r\nHeader-Without-A-Colon\r\n\r\n");
+        UNIT_ASSERT_C(response->IsError(), static_cast<int>(response->Stage));
+        UNIT_ASSERT_EQUAL_C(response->GetErrorText(), "Invalid http header", static_cast<int>(response->LastSuccessStage));
+    }
+
     Y_UNIT_TEST(GetWithSpecifiedContentType) {
         NHttp::THttpIncomingRequestPtr request = new NHttp::THttpIncomingRequest();
         EatWholeString(request, "GET /test HTTP/1.1\r\nHost: test\r\nContent-Type: application/json\r\nSome-Header: 32344\r\n\r\n");
@@ -499,6 +513,34 @@ CRA/5XcX13GJwHHj6LCoc3sL7mt8qV9HKY2AOZ88mpObzISZxgPpdKCfjsrdm63V
         TString longHeader;
         longHeader.append(9000, 'X');
         httpRequest->Set(longHeader, "data");
+        actorSystem.Send(new NActors::IEventHandle(proxyId, clientId, new NHttp::TEvHttpProxy::TEvHttpOutgoingRequest(httpRequest)), 0, true);
+
+        NHttp::TEvHttpProxy::TEvHttpIncomingResponse* response = actorSystem.GrabEdgeEvent<NHttp::TEvHttpProxy::TEvHttpIncomingResponse>(handle);
+
+        UNIT_ASSERT_EQUAL(response->Response->Status, "400");
+        UNIT_ASSERT_EQUAL(response->Response->Body, "Invalid http header");
+    }
+
+    Y_UNIT_TEST(HeaderWithoutAColon) {
+        NActors::TTestActorRuntimeBase actorSystem;
+        actorSystem.SetUseRealInterconnect();
+        TPortManager portManager;
+        TIpPort port = portManager.GetTcpPort();
+        TAutoPtr<NActors::IEventHandle> handle;
+        actorSystem.Initialize();
+
+        NActors::IActor* proxy = NHttp::CreateHttpProxy();
+        NActors::TActorId proxyId = actorSystem.Register(proxy);
+        actorSystem.Send(new NActors::IEventHandle(proxyId, actorSystem.AllocateEdgeActor(), new NHttp::TEvHttpProxy::TEvAddListeningPort(port)), 0, true);
+        actorSystem.GrabEdgeEvent<NHttp::TEvHttpProxy::TEvConfirmListen>(handle);
+
+        NActors::TActorId serverId = actorSystem.AllocateEdgeActor();
+        actorSystem.Send(new NActors::IEventHandle(proxyId, serverId, new NHttp::TEvHttpProxy::TEvRegisterHandler("/test", serverId)), 0, true);
+
+        NActors::TActorId clientId = actorSystem.AllocateEdgeActor();
+        NHttp::THttpOutgoingRequestPtr httpRequest = NHttp::THttpOutgoingRequest::CreateRequestGet("http://[::1]:" + ToString(port) + "/test");
+        httpRequest->Append("Header-Without-A-Colon\r\n");
+        httpRequest->FinishHeader();
         actorSystem.Send(new NActors::IEventHandle(proxyId, clientId, new NHttp::TEvHttpProxy::TEvHttpOutgoingRequest(httpRequest)), 0, true);
 
         NHttp::TEvHttpProxy::TEvHttpIncomingResponse* response = actorSystem.GrabEdgeEvent<NHttp::TEvHttpProxy::TEvHttpIncomingResponse>(handle);

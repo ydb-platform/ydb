@@ -1,16 +1,16 @@
 {% include 'header.sql.jinja' %}
 
-select  substr(r_reason_desc,1,20)
-       ,avg(ws_quantity)
-       ,avg(wr_refunded_cash)
-       ,avg(wr_fee)
+select  substr(r_reason_desc,1,20) reason
+       ,avg(ws_quantity) avg_ws_q
+       ,avg(wr_refunded_cash) avg_wr_r
+       ,avg(wr_fee) avg_wr_f
  from {{web_sales}}, {{web_returns}}, {{web_page}}, {{customer_demographics}} cd1,
-      {{customer_demographics}} cd2, {{customer_address}}, {{date_dim}}, {{reason}} 
+      {{customer_demographics}} cd2, {{customer_address}}, {{date_dim}}, {{reason}}
  where ws_web_page_sk = wp_web_page_sk
    and ws_item_sk = wr_item_sk
    and ws_order_number = wr_order_number
    and ws_sold_date_sk = d_date_sk and d_year = 1998
-   and cd1.cd_demo_sk = wr_refunded_cdemo_sk 
+   and cd1.cd_demo_sk = wr_refunded_cdemo_sk
    and cd2.cd_demo_sk = wr_returning_cdemo_sk
    and ca_address_sk = wr_refunded_addr_sk
    and r_reason_sk = wr_reason_sk
@@ -22,18 +22,18 @@ select  substr(r_reason_desc,1,20)
      cd1.cd_marital_status = cd2.cd_marital_status
      and
      cd1.cd_education_status = '4 yr Degree'
-     and 
+     and
      cd1.cd_education_status = cd2.cd_education_status
      and
      ws_sales_price between 100.00::numeric and 150.00::numeric
     )
    or
     (
-     cd1.cd_marital_status = 'D'
+     cd1.cd_marital_status = 'S'
      and
      cd1.cd_marital_status = cd2.cd_marital_status
      and
-     cd1.cd_education_status = 'Primary' 
+     cd1.cd_education_status = 'College'
      and
      cd1.cd_education_status = cd2.cd_education_status
      and
@@ -41,11 +41,11 @@ select  substr(r_reason_desc,1,20)
     )
    or
     (
-     cd1.cd_marital_status = 'U'
+     cd1.cd_marital_status = 'D'
      and
      cd1.cd_marital_status = cd2.cd_marital_status
      and
-     cd1.cd_education_status = 'Advanced Degree'
+     cd1.cd_education_status = 'Secondary'
      and
      cd1.cd_education_status = cd2.cd_education_status
      and
@@ -57,22 +57,22 @@ select  substr(r_reason_desc,1,20)
     (
      ca_country = 'United States'
      and
-     ca_state in ('KY', 'GA', 'NM')
-     and ws_net_profit between 100::numeric and 200::numeric  
+     ca_state in ('TX', 'VA', 'CA')
+     and ws_net_profit between 100::numeric and 200::numeric
     )
     or
     (
      ca_country = 'United States'
      and
-     ca_state in ('MT', 'OR', 'IN')
+     ca_state in ('AR', 'NE', 'MO')
      and ws_net_profit between 150::numeric and 300::numeric
     )
     or
     (
      ca_country = 'United States'
      and
-     ca_state in ('WI', 'MO', 'WV')
-     and ws_net_profit between 50::numeric and 250::numeric  
+     ca_state in ('IA', 'MS', 'WA')
+     and ws_net_profit between 50::numeric and 250::numeric
     )
    )
 group by r_reason_desc

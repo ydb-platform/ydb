@@ -97,6 +97,7 @@ namespace NKikimr {
         NKikimrPQ::TPQConfig PQConfig;
         NKikimrConfig::TAwsCompatibilityConfig AwsCompatibilityConfig;
         NKikimrConfig::TS3ProxyResolverConfig S3ProxyResolverConfig;
+        NKikimrConfig::TGraphConfig GraphConfig;
 
     private:
         TAutoPtr<TMine> Mine;

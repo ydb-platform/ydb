@@ -1,7 +1,6 @@
 #pragma once
 
 #include "datashard.h"
-#include "datashard_locks.h"
 #include "datashard_trans_queue.h"
 #include "datashard_outreadset.h"
 #include "datashard_pipeline.h"
@@ -29,10 +28,12 @@
 #include <ydb/core/tx/tx_processing.h>
 #include <ydb/core/tx/tx_proxy/proxy.h>
 #include <ydb/core/tx/schemeshard/schemeshard.h>
+#include <ydb/core/tx/locks/locks.h>
 
 #include <ydb/core/base/appdata.h>
 #include <ydb/core/base/tablet_pipe.h>
 #include <ydb/library/ydb_issue/issue_helpers.h>
+#include <ydb/core/change_exchange/change_exchange.h>
 #include <ydb/core/engine/mkql_engine_flat_host.h>
 #include <ydb/core/tablet/pipe_tracker.h>
 #include <ydb/core/tablet/tablet_exception.h>
@@ -1304,8 +1305,8 @@ class TDataShard
     void Handle(TEvTxProxySchemeCache::TEvWatchNotifyUpdated::TPtr& ev, const TActorContext& ctx);
 
     // change sending
-    void Handle(TEvChangeExchange::TEvRequestRecords::TPtr& ev, const TActorContext& ctx);
-    void Handle(TEvChangeExchange::TEvRemoveRecords::TPtr& ev, const TActorContext& ctx);
+    void Handle(NChangeExchange::TEvChangeExchange::TEvRequestRecords::TPtr& ev, const TActorContext& ctx);
+    void Handle(NChangeExchange::TEvChangeExchange::TEvRemoveRecords::TPtr& ev, const TActorContext& ctx);
     void ScheduleRequestChangeRecords(const TActorContext& ctx);
     void ScheduleRemoveChangeRecords(const TActorContext& ctx);
     void Handle(TEvPrivate::TEvRequestChangeRecords::TPtr& ev, const TActorContext& ctx);
@@ -1447,11 +1448,9 @@ public:
             const TActorId& target, std::unique_ptr<IEventBase> event,
             ui64 cookie = 0);
 
-    void SendResult(const TActorContext &ctx,
-                    TOutputOpData::TResultPtr &result,
-                    const TActorId &target,
-                    ui64 step,
-                    ui64 txId);
+    void SendResult(const TActorContext &ctx, TOutputOpData::TResultPtr &result, const TActorId &target, ui64 step, ui64 txId);
+    void SendWriteResult(const TActorContext& ctx, std::unique_ptr<NEvents::TDataEvents::TEvWriteResult>& result, const TActorId& target, ui64 step, ui64 txId);
+
     void FillSplitTrajectory(ui64 origin, NKikimrTx::TBalanceTrackList& tracks);
 
     void SetCounter(NDataShard::ESimpleCounters counter, ui64 num) const {
@@ -1585,7 +1584,7 @@ public:
 
     void AddUserTable(const TPathId& tableId, TUserTable::TPtr tableInfo) {
         TableInfos[tableId.LocalPathId] = tableInfo;
-        SysLocks.UpdateSchema(tableId, *tableInfo);
+        SysLocks.UpdateSchema(tableId, tableInfo->KeyColumnTypes);
         Pipeline.GetDepTracker().UpdateSchema(tableId, *tableInfo);
     }
 
@@ -1876,7 +1875,7 @@ public:
 
     TCdcStreamHeartbeatManager& GetCdcStreamHeartbeatManager() { return CdcStreamHeartbeatManager; }
     const TCdcStreamHeartbeatManager& GetCdcStreamHeartbeatManager() const { return CdcStreamHeartbeatManager; }
-    void EmitHeartbeats(const TActorContext& ctx);
+    void EmitHeartbeats();
 
     template <typename... Args>
     bool PromoteCompleteEdge(Args&&... args) {
@@ -1947,7 +1946,7 @@ public:
 
     void CheckMediatorStateRestored();
 
-    void FillExecutionStats(const TExecutionProfile& execProfile, TEvDataShard::TEvProposeTransactionResult& result) const;
+    void FillExecutionStats(const TExecutionProfile& execProfile, NKikimrQueryStats::TTxStats& txStats) const;
 
     // Executes TTxProgressTransaction without specific operation
     void ExecuteProgressTx(const TActorContext& ctx);
@@ -2424,7 +2423,7 @@ private:
         void Enqueue(TAutoPtr<IEventHandle> event, TInstant receivedAt, ui64 tieBreakerIndex, const TActorContext& ctx) {
             TItem* item = &Items.emplace_back(std::move(event), receivedAt, tieBreakerIndex);
 
-            const ui64 txId = EvWrite::Convertor::GetTxId(item->Event);
+            const ui64 txId = NEvWrite::TConvertor::GetTxId(item->Event);
 
             auto& links = TxIds[txId];
             if (Y_UNLIKELY(links.Last)) {
@@ -2439,7 +2438,7 @@ private:
 
         TItem Dequeue() {
             TItem* first = &Items.front();
-            const ui64 txId = EvWrite::Convertor::GetTxId(first->Event);
+            const ui64 txId = NEvWrite::TConvertor::GetTxId(first->Event);
 
             auto it = TxIds.find(txId);
             Y_ABORT_UNLESS(it != TxIds.end() && it->second.First == first,
@@ -2561,9 +2560,7 @@ private:
     TInstant StartedKeyAccessSamplingAt;
     TInstant StopKeyAccessSamplingAt;
 
-    using TTableInfos = THashMap<ui64, TUserTable::TCPtr>;
-    
-    TTableInfos TableInfos;  // tableId -> local table info
+    TUserTable::TTableInfos TableInfos;  // tableId -> local table info
     TTransQueue TransQueue;
     TOutReadSets OutReadSets;
     TPipeline Pipeline;
@@ -2629,9 +2626,6 @@ private:
     TControlWrapper DataTxProfileLogThresholdMs;
     TControlWrapper DataTxProfileBufferThresholdMs;
     TControlWrapper DataTxProfileBufferSize;
-
-    TControlWrapper ReadColumnsScanEnabled;
-    TControlWrapper ReadColumnsScanInUserPool;
 
     TControlWrapper BackupReadAheadLo;
     TControlWrapper BackupReadAheadHi;
@@ -2729,7 +2723,7 @@ private:
         }
     };
 
-    using TRequestedRecord = TEvChangeExchange::TEvRequestRecords::TRecordInfo;
+    using TRequestedRecord = NChangeExchange::TEvChangeExchange::TEvRequestRecords::TRecordInfo;
 
     // split/merge
     TChangeSenderActivator ChangeSenderActivator;
@@ -2972,8 +2966,8 @@ protected:
             HFunc(TEvTxProxySchemeCache::TEvWatchNotifyUpdated, Handle);
             IgnoreFunc(TEvTxProxySchemeCache::TEvWatchNotifyDeleted);
             IgnoreFunc(TEvTxProxySchemeCache::TEvWatchNotifyUnavailable);
-            HFunc(TEvChangeExchange::TEvRequestRecords, Handle);
-            HFunc(TEvChangeExchange::TEvRemoveRecords, Handle);
+            HFunc(NChangeExchange::TEvChangeExchange::TEvRequestRecords, Handle);
+            HFunc(NChangeExchange::TEvChangeExchange::TEvRemoveRecords, Handle);
             HFunc(TEvPrivate::TEvRequestChangeRecords, Handle);
             HFunc(TEvPrivate::TEvRemoveChangeRecords, Handle);
             HFunc(TEvChangeExchange::TEvHandshake, Handle);

@@ -537,6 +537,21 @@ void CmdWrite(TTestActorRuntime* runtime, ui64 tabletId, const TActorId& sender,
     TAutoPtr<IEventHandle> handle;
     TEvPersQueue::TEvResponse *result;
 
+ 
+    runtime->SetObserverFunc(
+            [&](TAutoPtr<IEventHandle>& ev) {
+                if (auto* msg = ev->CastAsLocal<TEvQuota::TEvRequest>()) {
+                    Cerr << "Captured kesus quota request event\n";
+                    runtime->Send(new IEventHandle(
+                            ev->Sender, TActorId{},
+                            new TEvQuota::TEvClearance(TEvQuota::TEvClearance::EResult::Success), 0, ev->Cookie));
+
+                    return TTestActorRuntimeBase::EEventAction::DROP;
+                }
+                return TTestActorRuntimeBase::EEventAction::PROCESS;
+            }
+    );
+
     if (msn != -1) msgSeqNo = msn;
     TString cookie = ownerCookie;
     for (i32 retriesLeft = 2; retriesLeft > 0; --retriesLeft) {
@@ -848,10 +863,10 @@ TVector<TString> CmdSourceIdRead(TTestContext& tc) {
             sourceIds.clear();
             auto read = request->Record.AddCmdReadRange();
             auto range = read->MutableRange();
-            NPQ::TKeyPrefix ikeyFrom(NPQ::TKeyPrefix::TypeInfo, 0, NPQ::TKeyPrefix::MarkProtoSourceId);
+            NPQ::TKeyPrefix ikeyFrom(NPQ::TKeyPrefix::TypeInfo, TPartitionId(0), NPQ::TKeyPrefix::MarkProtoSourceId);
             range->SetFrom(ikeyFrom.Data(), ikeyFrom.Size());
             range->SetIncludeFrom(true);
-            NPQ::TKeyPrefix ikeyTo(NPQ::TKeyPrefix::TypeInfo, 0, NPQ::TKeyPrefix::MarkUserDeprecated);
+            NPQ::TKeyPrefix ikeyTo(NPQ::TKeyPrefix::TypeInfo, TPartitionId(0), NPQ::TKeyPrefix::MarkUserDeprecated);
             range->SetTo(ikeyTo.Data(), ikeyTo.Size());
             range->SetIncludeTo(false);
             Cout << request.Get()->ToString() << Endl;
@@ -1093,7 +1108,7 @@ void CmdForgetRead(const TCmdDirectReadSettings& settings, TTestContext& tc) {
 }
 
 void FillUserInfo(NKikimrClient::TKeyValueRequest_TCmdWrite* write, const TString& client, ui32 partition, ui64 offset) {
-    NPQ::TKeyPrefix ikey(NPQ::TKeyPrefix::TypeInfo, partition, NPQ::TKeyPrefix::MarkUser);
+    NPQ::TKeyPrefix ikey(NPQ::TKeyPrefix::TypeInfo, TPartitionId(partition), NPQ::TKeyPrefix::MarkUser);
     ikey.Append(client.c_str(), client.size());
 
     NKikimrPQ::TUserInfo userInfo;
@@ -1117,7 +1132,7 @@ void FillDeprecatedUserInfo(NKikimrClient::TKeyValueRequest_TCmdWrite* write, co
     TString session = "test-session";
     ui32 gen = 1;
     ui32 step = 2;
-    NPQ::TKeyPrefix ikeyDeprecated(NPQ::TKeyPrefix::TypeInfo, partition, NPQ::TKeyPrefix::MarkUserDeprecated);
+    NPQ::TKeyPrefix ikeyDeprecated(NPQ::TKeyPrefix::TypeInfo, TPartitionId(partition), NPQ::TKeyPrefix::MarkUserDeprecated);
     ikeyDeprecated.Append(client.c_str(), client.size());
 
     TBuffer idataDeprecated = NPQ::NDeprecatedUserData::Serialize(offset, gen, step, session);

@@ -6,6 +6,7 @@
 #include <ydb/core/kqp/opt/logical/kqp_opt_log.h>
 #include <ydb/core/kqp/opt/kqp_statistics_transformer.h>
 #include <ydb/core/kqp/opt/kqp_constant_folding_transformer.h>
+#include <ydb/core/kqp/opt/logical/kqp_opt_cbo.h>
 
 
 #include <ydb/core/kqp/opt/physical/kqp_opt_phy.h>
@@ -19,6 +20,8 @@
 #include <ydb/library/yql/utils/log/log.h>
 #include <ydb/library/yql/core/services/yql_transform_pipeline.h>
 #include <ydb/library/yql/core/yql_opt_proposed_by_data.h>
+
+#include <ydb/library/yql/providers/dq/common/yql_dq_settings.h>
 
 #include <util/generic/is_in.h>
 
@@ -134,15 +137,18 @@ class TKqpRunner : public IKqpRunner {
 public:
     TKqpRunner(TIntrusivePtr<IKqpGateway> gateway, const TString& cluster,
         const TIntrusivePtr<TTypeAnnotationContext>& typesCtx, const TIntrusivePtr<TKikimrSessionContext>& sessionCtx,
-        const NMiniKQL::IFunctionRegistry& funcRegistry)
+        const TIntrusivePtr<TKqlTransformContext>& transformCtx, const NMiniKQL::IFunctionRegistry& funcRegistry)
         : Gateway(gateway)
         , Cluster(cluster)
         , TypesCtx(*typesCtx)
+        , SessionCtx(sessionCtx)
+        , FunctionRegistry(funcRegistry)
         , Config(sessionCtx->ConfigPtr())
-        , TransformCtx(MakeIntrusive<TKqlTransformContext>(Config, sessionCtx->QueryPtr(), sessionCtx->TablesPtr()))
+        , TransformCtx(transformCtx)
         , OptimizeCtx(MakeIntrusive<TKqpOptimizeContext>(cluster, Config, sessionCtx->QueryPtr(),
             sessionCtx->TablesPtr()))
         , BuildQueryCtx(MakeIntrusive<TKqpBuildQueryContext>())
+        , Pctx(TKqpProviderContext(*OptimizeCtx, Config->CostBasedOptimizationLevel.Get().GetOrElse(TDqSettings::TDefault::CostBasedOptimizationLevel)))
     {
         CreateGraphTransformer(typesCtx, sessionCtx, funcRegistry);
     }
@@ -192,14 +198,19 @@ public:
         YQL_ENSURE(IsIn({EKikimrQueryType::Query, EKikimrQueryType::Script}, TransformCtx->QueryCtx->Type));
         YQL_ENSURE(TMaybeNode<TKiDataQueryBlocks>(query));
 
+        TypesCtx.BlockEngineMode = NYql::EBlockEngineMode::Auto;
+
         return PrepareQueryInternal(cluster, TKiDataQueryBlocks(query), ctx, settings);
     }
 
 private:
+
     TIntrusivePtr<TAsyncQueryResult> PrepareQueryInternal(const TString& cluster,
         const TKiDataQueryBlocks& dataQueryBlocks, TExprContext& ctx,
         const IKikimrQueryExecutor::TExecuteSettings& settings)
     {
+        CreateGraphTransformer(&TypesCtx, SessionCtx, FunctionRegistry);
+
         YQL_ENSURE(cluster == Cluster);
         YQL_ENSURE(!settings.CommitTx);
         YQL_ENSURE(!settings.RollbackTx);
@@ -259,8 +270,8 @@ private:
             .AddPostTypeAnnotation(/* forSubgraph */ true)
             .AddCommonOptimization()
             .Add(CreateKqpConstantFoldingTransformer(OptimizeCtx, *typesCtx, Config), "ConstantFolding")
-            .Add(CreateKqpStatisticsTransformer(OptimizeCtx, *typesCtx, Config), "Statistics")
-            .Add(CreateKqpLogOptTransformer(OptimizeCtx, *typesCtx, Config), "LogicalOptimize")
+            .Add(CreateKqpStatisticsTransformer(OptimizeCtx, *typesCtx, Config, Pctx), "Statistics")
+            .Add(CreateKqpLogOptTransformer(OptimizeCtx, *typesCtx, Config, Pctx), "LogicalOptimize")
             .Add(CreateLogicalDataProposalsInspector(*typesCtx), "ProvidersLogicalOptimize")
             .Add(CreateKqpPhyOptTransformer(OptimizeCtx, *typesCtx), "KqpPhysicalOptimize")
             .Add(CreatePhysicalDataProposalsInspector(*typesCtx), "ProvidersPhysicalOptimize")
@@ -293,7 +304,7 @@ private:
             .AddTypeAnnotationTransformer(CreateKqpTypeAnnotationTransformer(Cluster, sessionCtx->TablesPtr(), *typesCtx, Config))
             .AddPostTypeAnnotation()
             .Add(CreateKqpBuildPhysicalQueryTransformer(OptimizeCtx, BuildQueryCtx), "BuildPhysicalQuery")
-            .Add(CreateKqpStatisticsTransformer(OptimizeCtx, *typesCtx, Config), "Statistics")
+            .Add(CreateKqpStatisticsTransformer(OptimizeCtx, *typesCtx, Config, Pctx), "Statistics")
             .Build(false);
 
         auto physicalPeepholeTransformer = TTransformationPipeline(typesCtx)
@@ -311,7 +322,7 @@ private:
         TAutoPtr<IGraphTransformer> compilePhysicalQuery(new TCompilePhysicalQueryTransformer(Cluster,
             *TransformCtx,
             *OptimizeCtx,
-            TypesCtx,
+            *typesCtx,
             funcRegistry,
             Config));
 
@@ -349,11 +360,15 @@ private:
     TIntrusivePtr<IKqpGateway> Gateway;
     TString Cluster;
     TTypeAnnotationContext& TypesCtx;
+    TIntrusivePtr<TKikimrSessionContext> SessionCtx;
+    const NMiniKQL::IFunctionRegistry& FunctionRegistry;
     TKikimrConfiguration::TPtr Config;
 
     TIntrusivePtr<TKqlTransformContext> TransformCtx;
     TIntrusivePtr<TKqpOptimizeContext> OptimizeCtx;
     TIntrusivePtr<TKqpBuildQueryContext> BuildQueryCtx;
+
+    TKqpProviderContext Pctx;
 
     TAutoPtr<IGraphTransformer> Transformer;
 };
@@ -362,9 +377,9 @@ private:
 
 TIntrusivePtr<IKqpRunner> CreateKqpRunner(TIntrusivePtr<IKqpGateway> gateway, const TString& cluster,
     const TIntrusivePtr<TTypeAnnotationContext>& typesCtx, const TIntrusivePtr<TKikimrSessionContext>& sessionCtx,
-    const NMiniKQL::IFunctionRegistry& funcRegistry)
+    const TIntrusivePtr<TKqlTransformContext>& transformCtx, const NMiniKQL::IFunctionRegistry& funcRegistry)
 {
-    return new TKqpRunner(gateway, cluster, typesCtx, sessionCtx, funcRegistry);
+    return new TKqpRunner(gateway, cluster, typesCtx, sessionCtx, transformCtx, funcRegistry);
 }
 
 } // namespace NKqp

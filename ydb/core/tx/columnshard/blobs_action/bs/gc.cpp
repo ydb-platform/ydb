@@ -2,44 +2,31 @@
 #include "storage.h"
 #include <ydb/core/tx/columnshard/columnshard_private_events.h>
 #include <ydb/core/tx/columnshard/columnshard_impl.h>
-#include <ydb/core/tx/columnshard/blob_manager.h>
 #include <ydb/library/actors/core/log.h>
 
 namespace NKikimr::NOlap::NBlobOperations::NBlobStorage {
 
-void TGCTask::DoOnExecuteTxAfterCleaning(NColumnShard::TColumnShard& /*self*/, NColumnShard::TBlobManagerDb& dbBlobs) {
-    size_t numBlobs = 0;
-
-    for (; KeepsToErase.size() && numBlobs < NColumnShard::TLimits::MAX_BLOBS_TO_DELETE; ++numBlobs) {
-        dbBlobs.EraseBlobToKeep(KeepsToErase.front());
-        KeepsToErase.pop_front();
-    }
-
-    for (; DeletesToErase.size() && numBlobs < NColumnShard::TLimits::MAX_BLOBS_TO_DELETE; ++numBlobs) {
-        dbBlobs.EraseBlobToDelete(DeletesToErase.front());
-        DeletesToErase.pop_front();
-    }
-    if (KeepsToErase.empty() && DeletesToErase.empty()) {
-        Manager->OnGCFinished(CollectGenStepInFlight, dbBlobs);
-    }
+void TGCTask::RemoveBlobIdFromDB(const TTabletId tabletId, const TUnifiedBlobId& blobId, TBlobManagerDb& dbBlobs) {
+    dbBlobs.EraseBlobToDelete(blobId, tabletId);
 }
 
-bool TGCTask::DoOnCompleteTxAfterCleaning(NColumnShard::TColumnShard& self, const std::shared_ptr<IBlobsGCAction>& taskAction) {
-    if (KeepsToErase.size() || DeletesToErase.size()) {
-        TActorContext::AsActorContext().Send(self.SelfId(), std::make_unique<NColumnShard::TEvPrivate::TEvGarbageCollectionFinished>(taskAction));
-        return false;
-    } else {
-        return true;
+void TGCTask::DoOnExecuteTxAfterCleaning(NColumnShard::TColumnShard& /*self*/, TBlobManagerDb& dbBlobs) {
+    for (auto&& i : KeepsToErase) {
+        dbBlobs.EraseBlobToKeep(i);
     }
+    Manager->OnGCFinished(CollectGenStepInFlight, dbBlobs);
 }
 
-TGCTask::TGCTask(const TString& storageId, TGCListsByGroup&& listsByGroupId, const NColumnShard::TGenStep& collectGenStepInFlight, std::deque<TUnifiedBlobId>&& keepsToErase, std::deque<TUnifiedBlobId>&& deletesToErase,
-    const std::shared_ptr<NColumnShard::TBlobManager>& manager)
-    : TBase(storageId)
+bool TGCTask::DoOnCompleteTxAfterCleaning(NColumnShard::TColumnShard& /*self*/, const std::shared_ptr<IBlobsGCAction>& /*taskAction*/) {
+    return true;
+}
+
+TGCTask::TGCTask(const TString& storageId, TGCListsByGroup&& listsByGroupId, const TGenStep& collectGenStepInFlight, std::deque<TUnifiedBlobId>&& keepsToErase,
+    const std::shared_ptr<TBlobManager>& manager, TBlobsCategories&& blobsToRemove, const std::shared_ptr<TRemoveGCCounters>& counters)
+    : TBase(storageId, std::move(blobsToRemove), counters)
     , ListsByGroupId(std::move(listsByGroupId))
     , CollectGenStepInFlight(collectGenStepInFlight)
     , KeepsToErase(std::move(keepsToErase))
-    , DeletesToErase(std::move(deletesToErase))
     , Manager(manager)
 {
 }
@@ -55,28 +42,13 @@ void TGCTask::OnGCResult(TEvBlobStorage::TEvCollectGarbageResult::TPtr ev) {
 
     auto itGroup = ListsByGroupId.find(group);
     Y_ABORT_UNLESS(itGroup != ListsByGroupId.end());
-    const auto& keepList = itGroup->second.KeepList;
-    const auto& dontKeepList = itGroup->second.DontKeepList;
-
-    for (auto&& i : dontKeepList) {
-        Counters->OnReply(i.BlobSize());
-    }
-
-    AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("actor", "OnGCResult")("keep_list", keepList.size())("dont_keep_list", dontKeepList.size());
-
-    for (const auto& blobId : keepList) {
-        KeepsToErase.emplace_back(TUnifiedBlobId(group, blobId));
-    }
-    for (const auto& blobId : dontKeepList) {
-        DeletesToErase.emplace_back(TUnifiedBlobId(group, blobId));
-    }
 
     ListsByGroupId.erase(itGroup);
     CounterToGroupInFlight.erase(itCounter);
 }
 
 THashMap<ui32, std::unique_ptr<NKikimr::TEvBlobStorage::TEvCollectGarbage>> TGCTask::BuildRequests(ui64& perGenerationCounter, const ui64 tabletId, const ui64 currentGen) {
-    const ui32 channelIdx = NColumnShard::IBlobManager::BLOB_CHANNEL;
+    const ui32 channelIdx = IBlobManager::BLOB_CHANNEL;
     // Make per group requests
     THashMap<ui32, std::unique_ptr<TEvBlobStorage::TEvCollectGarbage>> requests;
     for (const auto& gl : ListsByGroupId) {
@@ -88,9 +60,6 @@ THashMap<ui32, std::unique_ptr<NKikimr::TEvBlobStorage::TEvCollectGarbage>> TGCT
             new TVector<TLogoBlobID>(gl.second.KeepList.begin(), gl.second.KeepList.end()),
             new TVector<TLogoBlobID>(gl.second.DontKeepList.begin(), gl.second.DontKeepList.end()),
             TInstant::Max(), true);
-        for (auto&& i : gl.second.DontKeepList) {
-            Counters->OnRequest(i.BlobSize());
-        }
         Y_ABORT_UNLESS(CounterToGroupInFlight.emplace(perGenerationCounter, group).second);
         perGenerationCounter += requests[group]->PerGenerationCounterStepSize();
     }

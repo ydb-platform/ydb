@@ -18,7 +18,7 @@ class TPartBtreeIndexIt : public IIndexIter {
     using TBtreeIndexMeta = NPage::TBtreeIndexMeta;
 
     struct TNodeState {
-        TChild Meta;
+        TPageId PageId;
         TRowId BeginRowId;
         TRowId EndRowId;
         TCellsIterable BeginKey;
@@ -26,8 +26,8 @@ class TPartBtreeIndexIt : public IIndexIter {
         std::optional<TBtreeIndexNode> Node;
         std::optional<TRecIdx> Pos;
 
-        TNodeState(TChild meta, TRowId beginRowId, TRowId endRowId, TCellsIterable beginKey, TCellsIterable endKey)
-            : Meta(meta)
+        TNodeState(TPageId pageId, TRowId beginRowId, TRowId endRowId, TCellsIterable beginKey, TCellsIterable endKey)
+            : PageId(pageId)
             , BeginRowId(beginRowId)
             , EndRowId(endRowId)
             , BeginKey(beginKey)
@@ -118,7 +118,7 @@ public:
         , State(Reserve(Meta.LevelCount + 1))
     {
         const static TCellsIterable EmptyKey(static_cast<const char*>(nullptr), TColumns());
-        State.emplace_back(Meta, 0, GetEndRowId(), EmptyKey, EmptyKey);
+        State.emplace_back(Meta.PageId, 0, GetEndRowId(), EmptyKey, EmptyKey);
     }
     
     EReady Seek(TRowId rowId) override {
@@ -251,7 +251,7 @@ public:
 
     TPageId GetPageId() const override {
         Y_ABORT_UNLESS(IsLeaf());
-        return State.back().Meta.PageId;
+        return State.back().PageId;
     }
 
     TRowId GetRowId() const override {
@@ -264,7 +264,7 @@ public:
         return State.back().EndRowId;
     }
 
-    bool HasKeyCells() const override {
+    TPos GetKeyCellsCount() const override {
         Y_ABORT_UNLESS(IsLeaf());
         return State.back().BeginKey.Count();
     }
@@ -332,15 +332,15 @@ private:
         Y_ABORT_UNLESS(pos < current.Node->GetChildrenCount(), "Should point to some child");
         current.Pos.emplace(pos);
 
-        auto child = current.Node->GetChild(pos);
+        auto& child = current.Node->GetShortChild(pos);
 
-        TRowId beginRowId = pos ? current.Node->GetChild(pos - 1).RowCount : current.BeginRowId;
+        TRowId beginRowId = pos ? current.Node->GetShortChild(pos - 1).RowCount : current.BeginRowId;
         TRowId endRowId = child.RowCount;
         
         TCellsIterable beginKey = pos ? current.Node->GetKeyCellsIterable(pos - 1, GroupInfo.ColsKeyIdx) : current.BeginKey;
         TCellsIterable endKey = pos < current.Node->GetKeysCount() ? current.Node->GetKeyCellsIterable(pos, GroupInfo.ColsKeyIdx) : current.EndKey;
         
-        State.emplace_back(child, beginRowId, endRowId, beginKey, endKey);
+        State.emplace_back(child.PageId, beginRowId, endRowId, beginKey, endKey);
     }
 
     bool TryLoad(TNodeState& state) {
@@ -348,7 +348,7 @@ private:
             return true;
         }
 
-        auto page = Env->TryGetPage(Part, state.Meta.PageId);
+        auto page = Env->TryGetPage(Part, state.PageId);
         if (page) {
             state.Node.emplace(*page);
             return true;

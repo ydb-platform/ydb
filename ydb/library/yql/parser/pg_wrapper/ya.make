@@ -37,6 +37,7 @@ SRCS(
     config.cpp
     cost_mocks.cpp
     syscache.cpp
+    pg_utils_wrappers.cpp
 )
 
 IF (ARCH_X86_64)
@@ -50,14 +51,12 @@ IF (ARCH_X86_64)
     )
 ENDIF()
 
-# DTCC-950
-NO_COMPILER_WARNINGS()
-
 INCLUDE(pg_sources.inc)
 
 INCLUDE(pg_kernel_sources.inc)
 
-IF (NOT OPENSOURCE AND NOT OS_WINDOWS AND NOT SANITIZER_TYPE AND NOT BUILD_TYPE == "DEBUG")
+IF (NOT OS_WINDOWS AND NOT SANITIZER_TYPE AND NOT BUILD_TYPE == "DEBUG")
+USE_LLVM_BC14()
 INCLUDE(pg_bc.all.inc)
 ELSE()
 CFLAGS(-DUSE_SLOW_PG_KERNELS)
@@ -70,6 +69,7 @@ PEERDIR(
     ydb/library/yql/minikql/arrow
     ydb/library/yql/minikql/computation
     ydb/library/yql/parser/pg_catalog
+    ydb/library/yql/parser/pg_wrapper/interface
     ydb/library/yql/providers/common/codec
     ydb/library/yql/public/issue
     ydb/library/yql/public/udf

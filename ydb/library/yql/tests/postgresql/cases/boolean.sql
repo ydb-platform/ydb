@@ -97,11 +97,17 @@ INSERT INTO booltbl4 VALUES (false, true, null);
 SELECT istrue AND isnul AND istrue FROM booltbl4;
 SELECT istrue AND istrue AND isnul FROM booltbl4;
 SELECT isnul AND istrue AND istrue FROM booltbl4;
+SELECT isfalse AND isnul AND istrue FROM booltbl4;
+SELECT istrue AND isfalse AND isnul FROM booltbl4;
+SELECT isnul AND istrue AND isfalse FROM booltbl4;
 -- OR expression need to return null if there's any nulls and none
 -- of the value is true
 SELECT isfalse OR isnul OR isfalse FROM booltbl4;
 SELECT isfalse OR isfalse OR isnul FROM booltbl4;
 SELECT isnul OR isfalse OR isfalse FROM booltbl4;
+SELECT isfalse OR isnul OR istrue FROM booltbl4;
+SELECT istrue OR isfalse OR isnul FROM booltbl4;
+SELECT isnul OR istrue OR isfalse FROM booltbl4;
 --
 -- Clean up
 -- Many tables are retained by the regression test, but these do not seem

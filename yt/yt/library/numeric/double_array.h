@@ -311,12 +311,6 @@ constexpr bool operator==(const TDerived& lhs, const TDerived& rhs)
 }
 
 template <class TDerived, class = std::enable_if_t<IsDoubleArray<TDerived>>>
-constexpr bool operator!=(const TDerived& lhs, const TDerived& rhs)
-{
-    return !(lhs == rhs);
-}
-
-template <class TDerived, class = std::enable_if_t<IsDoubleArray<TDerived>>>
 constexpr TDerived operator+(const TDerived& lhs, const TDerived& rhs)
 {
     return TDerived::Apply(lhs, rhs, [](auto x, auto y) { return x + y; });

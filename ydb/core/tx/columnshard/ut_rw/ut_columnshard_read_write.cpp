@@ -1584,7 +1584,7 @@ Y_UNIT_TEST_SUITE(EvWrite) {
         UNIT_ASSERT(blobData.size() < TLimits::GetMaxBlobSize());
 
         auto evWrite = std::make_unique<NKikimr::NEvents::TDataEvents::TEvWrite>(txId, NKikimrDataEvents::TEvWrite::MODE_PREPARE);
-        ui64 payloadIndex = NEvWrite::TPayloadHelper<NKikimr::NEvents::TDataEvents::TEvWrite>(*evWrite).AddDataToPayload(std::move(blobData));
+        ui64 payloadIndex = NEvWrite::TPayloadWriter<NKikimr::NEvents::TDataEvents::TEvWrite>(*evWrite).AddDataToPayload(std::move(blobData));
         evWrite->AddOperation(NKikimrDataEvents::TEvWrite::TOperation::OPERATION_REPLACE, {ownerId, tableId, schemaVersion}, columnsIds, payloadIndex, NKikimrDataEvents::FORMAT_ARROW);
 
         TActorId sender = runtime.AllocateEdgeActor();
@@ -1634,7 +1634,7 @@ Y_UNIT_TEST_SUITE(EvWrite) {
         UNIT_ASSERT(blobData.size() < TLimits::GetMaxBlobSize());
 
         auto evWrite = std::make_unique<NKikimr::NEvents::TDataEvents::TEvWrite>(txId, NKikimrDataEvents::TEvWrite::MODE_PREPARE);
-        ui64 payloadIndex = NEvWrite::TPayloadHelper<NKikimr::NEvents::TDataEvents::TEvWrite>(*evWrite).AddDataToPayload(std::move(blobData));
+        ui64 payloadIndex = NEvWrite::TPayloadWriter<NKikimr::NEvents::TDataEvents::TEvWrite>(*evWrite).AddDataToPayload(std::move(blobData));
         evWrite->AddOperation(NKikimrDataEvents::TEvWrite::TOperation::OPERATION_REPLACE, {ownerId, tableId, schemaVersion}, columnsIds, payloadIndex, NKikimrDataEvents::FORMAT_ARROW);
 
         TActorId sender = runtime.AllocateEdgeActor();
@@ -1681,7 +1681,7 @@ Y_UNIT_TEST_SUITE(EvWrite) {
         UNIT_ASSERT(blobData.size() > TLimits::GetMaxBlobSize());
 
         auto evWrite = std::make_unique<NKikimr::NEvents::TDataEvents::TEvWrite>(txId, NKikimrDataEvents::TEvWrite::MODE_PREPARE);
-        ui64 payloadIndex = NEvWrite::TPayloadHelper<NKikimr::NEvents::TDataEvents::TEvWrite>(*evWrite).AddDataToPayload(std::move(blobData));
+        ui64 payloadIndex = NEvWrite::TPayloadWriter<NKikimr::NEvents::TDataEvents::TEvWrite>(*evWrite).AddDataToPayload(std::move(blobData));
         evWrite->AddOperation(NKikimrDataEvents::TEvWrite::TOperation::OPERATION_REPLACE, {ownerId, tableId, schemaVersion}, columnsIds, payloadIndex, NKikimrDataEvents::FORMAT_ARROW);
 
         TActorId sender = runtime.AllocateEdgeActor();
@@ -2204,7 +2204,7 @@ Y_UNIT_TEST_SUITE(TColumnShardTestReadWrite) {
                     auto rows = batchStats->GetColumnByName("Rows");
                     auto bytes = batchStats->GetColumnByName("BlobRangeSize");
                     auto rawBytes = batchStats->GetColumnByName("RawBytes");
-                    auto internalColumnIds = batchStats->GetColumnByName("InternalColumnId");
+                    auto internalColumnIds = batchStats->GetColumnByName("InternalEntityId");
                     auto activities = batchStats->GetColumnByName("Activity");
                     AFL_VERIFY(activities);
 
@@ -2322,7 +2322,7 @@ Y_UNIT_TEST_SUITE(TColumnShardTestReadWrite) {
         SetupSchema(runtime, sender, tableId);
         TAutoPtr<IEventHandle> handle;
 
-        // Write some test data to adavnce the time
+        // Write some test data to advance the time
         {
             std::pair<ui64, ui64> triggerPortion = {1, 1000};
             TString triggerData = MakeTestBlob(triggerPortion, ydbSchema);
@@ -2477,7 +2477,7 @@ Y_UNIT_TEST_SUITE(TColumnShardTestReadWrite) {
                     Cerr << " deletes blobs: " << JoinStrings(msg->DoNotKeep->begin(), msg->DoNotKeep->end(), " ");
                     for (const auto& blobId : *msg->DoNotKeep) {
                         deletedBlobs.insert(blobId.ToString());
-                        delayedBlobs.erase(TUnifiedBlobId(0, blobId).ToStringNew());
+                        delayedBlobs.erase(NOlap::TUnifiedBlobId(0, blobId).ToStringNew());
                     }
                 }
                 Cerr << Endl;

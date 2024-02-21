@@ -108,13 +108,14 @@ struct TBlobState {
 };
 
 struct TDiskGetRequest {
-    const TLogoBlobID Id;
-    const ui32 Shift;
-    const ui32 Size;
-    ssize_t PartMapIndex = -1;
+    ui32 OrderNumber;
+    TLogoBlobID Id;
+    ui32 Shift;
+    ui32 Size;
 
-    TDiskGetRequest(const TLogoBlobID &id, const ui32 shift, const ui32 size)
-        : Id(id)
+    TDiskGetRequest(ui32 orderNumber, const TLogoBlobID &id, ui32 shift, ui32 size)
+        : OrderNumber(orderNumber)
+        , Id(id)
         , Shift(shift)
         , Size(size)
     {}
@@ -127,14 +128,16 @@ struct TDiskPutRequest {
         ReasonInitial,
         ReasonAccelerate
     };
-    const TLogoBlobID Id;
+    ui32 OrderNumber;
+    TLogoBlobID Id;
     TRope Buffer;
     EPutReason Reason;
     bool IsHandoff;
     ui8 BlobIdx;
 
-    TDiskPutRequest(const TLogoBlobID &id, TRope buffer, EPutReason reason, bool isHandoff, ui8 blobIdx)
-        : Id(id)
+    TDiskPutRequest(ui32 orderNumber, const TLogoBlobID &id, TRope buffer, EPutReason reason, bool isHandoff, ui8 blobIdx)
+        : OrderNumber(orderNumber)
+        , Id(id)
         , Buffer(std::move(buffer))
         , Reason(reason)
         , IsHandoff(isHandoff)
@@ -142,20 +145,13 @@ struct TDiskPutRequest {
     {}
 };
 
-struct TDiskRequests {
-    TDeque<TDiskGetRequest> GetsToSend;
-    TStackVec<TDiskPutRequest, TypicalPartsInBlob> PutsToSend;
-    ui32 FirstUnsentRequestIdx = 0;
-    ui32 FirstUnsentPutIdx = 0;
-};
-
 struct TGroupDiskRequests {
-    TStackVec<TDiskRequests, TypicalDisksInGroup> DiskRequestsForOrderNumber;
+    std::vector<TDiskGetRequest> GetsPending;
+    std::vector<TDiskPutRequest> PutsPending;
 
-    TGroupDiskRequests(ui32 disks);
-    void AddGet(const ui32 diskOrderNumber, const TLogoBlobID &id, const TIntervalSet<i32> &intervalSet);
-    void AddGet(const ui32 diskOrderNumber, const TLogoBlobID &id, const ui32 shift, const ui32 size);
-    void AddPut(const ui32 diskOrderNumber, const TLogoBlobID &id, TRope buffer,
+    void AddGet(ui32 diskOrderNumber, const TLogoBlobID &id, const TIntervalSet<i32> &intervalSet);
+    void AddGet(ui32 diskOrderNumber, const TLogoBlobID &id, ui32 shift, ui32 size);
+    void AddPut(ui32 diskOrderNumber, const TLogoBlobID &id, TRope buffer,
         TDiskPutRequest::EPutReason putReason, bool isHandoff, ui8 blobIdx);
 };
 
@@ -188,8 +184,7 @@ struct TBlackboard {
     TBlackboard(const TIntrusivePtr<TBlobStorageGroupInfo> &info, const TIntrusivePtr<TGroupQueues> &groupQueues,
             NKikimrBlobStorage::EPutHandleClass putHandleClass, NKikimrBlobStorage::EGetHandleClass getHandleClass,
             bool isAllRequestsTogether = true)
-        : GroupDiskRequests(info->GetTotalVDisksNum())
-        , Info(info)
+        : Info(info)
         , GroupQueues(groupQueues)
         , AccelerationMode(AccelerationModeSkipOneSlowest)
         , PutHandleClass(putHandleClass)

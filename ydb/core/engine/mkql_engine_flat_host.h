@@ -30,7 +30,7 @@ public:
     virtual bool IsReadonly() const = 0;
 
     // Validate key and fill status into it.
-    virtual bool IsValidKey(TKeyDesc& key, std::pair<ui64, ui64>& maxSnapshotTime) const = 0;
+    virtual bool IsValidKey(TKeyDesc& key) const = 0;
 
     // Calculate the whole size of data that needs to be read into memory
     virtual ui64 CalculateReadSize(const TVector<const TKeyDesc*>& keys) const = 0;

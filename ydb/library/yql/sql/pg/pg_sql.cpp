@@ -142,6 +142,10 @@ int StrCompare(const char* s1, const char* s2) {
     return strcmp(s1 ? s1 : "", s2 ? s2 : "");
 }
 
+int StrICompare(const char* s1, const char* s2) {
+    return stricmp(s1 ? s1 : "", s2 ? s2 : "");
+}
+
 std::shared_ptr<List> ListMake1(void* cell) {
     return std::shared_ptr<List>(list_make1(cell), list_free);
 }
@@ -222,6 +226,7 @@ public:
         bool AllowOver = false;
         bool AllowReturnSet = false;
         bool AllowSubLinks = false;
+        bool AutoParametrizeEnabled = true;
         TVector<TAstNode*>* WindowItems = nullptr;
         TString Scope;
     };
@@ -294,9 +299,15 @@ public:
         }
 
         for (const auto& [cluster, provider] : Settings.ClusterMapping) {
-            Provider = provider;
-            break;
+            if (provider != PgProviderName) {
+                Provider = provider;
+                break;
+            }
         }
+        if (!Provider) {
+            Provider = PgProviderName;
+        }
+        Y_ENSURE(!Provider.Empty());
 
         for (size_t i = 0; i < Settings.PgParameterTypeOids.size(); ++i) {
             const auto paramName = PREPARED_PARAM_PREFIX + ToString(i + 1);
@@ -397,7 +408,7 @@ public:
             {
                 // YQL-16284
                 const char* node_name = CAST_NODE(VariableSetStmt, node)->name;
-                char* skip_statements[] = {
+                const char* skip_statements[] = {
                     "extra_float_digits",                   // jdbc
                     "application_name",                     // jdbc
                     "statement_timeout",                    // pg_dump
@@ -409,6 +420,8 @@ public:
                     "xmloption",                            // pg_dump
                     "client_min_messages",                  // pg_dump
                     "row_security",                        // pg_dump
+                    "escape_string_warning",               // zabbix
+                    "bytea_output",                        // zabbix
                     NULL,
                 };
 
@@ -446,7 +459,6 @@ public:
         }
 
         auto* tuples = listOfTuples.mutable_value()->mutable_items();
-        size_t idx = 0;
         size_t cols = columnTypes.size();
         for (size_t idx = 0; idx < autoParamLiterals.size(); idx += cols){
             auto* tuple = tuples->Add();
@@ -636,9 +648,9 @@ public:
         auto length = ListLength(value->args);
         if (length != 3) {
             AddError(TStringBuilder() << "Expected 3 arguments, but got: " << length);
-            return;
+            return nullptr;
         }
-        auto loc = value->location;
+
         VariableSetStmt config;
         config.kind = VAR_SET_VALUE;
         auto arg0 = ListNodeNth(value->args, 0);
@@ -646,7 +658,7 @@ public:
         auto arg2 = ListNodeNth(value->args, 2);
         if (NodeTag(arg2) != T_TypeCast) {
             AddError(TStringBuilder() << "Expected type cast node as is_local arg, but got node with tag");
-            return;
+            return nullptr;
         }
         auto isLocalCast = CAST_NODE(TypeCast, arg2)->arg;
         if (NodeTag(isLocalCast) != T_A_Const) {
@@ -661,7 +673,7 @@ public:
         auto rawVal = TString(StrVal(isLocalConst->val));
         if (rawVal != "t" && rawVal != "f") {
             AddError(TStringBuilder() << "Expected t/f, but got " << rawVal);
-            return;
+            return nullptr;
         }
         config.is_local = rawVal == "t";
 
@@ -674,7 +686,7 @@ public:
         auto val = CAST_NODE(A_Const, arg1)->val;
         if (NodeTag(name) != T_String || NodeTag(val) != T_String) {
             AddError(TStringBuilder() << "Expected string const as name arg, but got something else: " << NodeTag(name));
-            return;
+            return nullptr;
         }
         config.name = (char*)StrVal(name);
         config.args = list_make1((void*)(&val));
@@ -1300,6 +1312,14 @@ public:
                     if (NodeTag(field) == T_String) {
                         name = StrVal(field);
                     }
+                } else if (NodeTag(r->val) == T_FuncCall) {
+                    auto func = CAST_NODE(FuncCall, r->val);
+                    TVector<TString> names;
+                    if (!ExtractFuncName(func, names)) {
+                        return nullptr;
+                    }
+
+                    name = names.back();
                 }
             }
 
@@ -1320,7 +1340,7 @@ public:
             return {};
         }
         ui32 index = 0;
-        for (size_t i = 0; i < ListLength(returningList); i++) {
+        for (int i = 0; i < ListLength(returningList); i++) {
             auto node = ListNodeNth(returningList, i);
             if (NodeTag(node) != T_ResTarget) {
                 NodeNotImplemented(returningList, node);
@@ -1375,7 +1395,7 @@ public:
 
         TVector <TAstNode*> targetColumns;
         if (value->cols) {
-            for (size_t i = 0; i < ListLength(value->cols); i++) {
+            for (int i = 0; i < ListLength(value->cols); i++) {
                 auto node = ListNodeNth(value->cols, i);
                 if (NodeTag(node) != T_ResTarget) {
                     NodeNotImplemented(value, node);
@@ -1612,7 +1632,7 @@ private:
         if (!CheckConstraintSupported(pk))
             return false;
 
-        for (auto i = 0; i < ListLength(pk->keys); ++i) {
+        for (int i = 0; i < ListLength(pk->keys); ++i) {
             auto node = ListNodeNth(pk->keys, i);
             auto nodeName = StrVal(node);
 
@@ -1677,7 +1697,7 @@ private:
         TColumnInfo cinfo{.Name = node->colname};
 
         if (node->constraints) {
-            for (ui32 i = 0; i < ListLength(node->constraints); ++i) {
+            for (int i = 0; i < ListLength(node->constraints); ++i) {
                 auto constraintNode =
                         CAST_NODE(Constraint, ListNodeNth(node->constraints, i));
 
@@ -1703,6 +1723,7 @@ private:
                         TExprSettings settings;
                         settings.AllowColumns = false;
                         settings.Scope = "DEFAULT";
+                        settings.AutoParametrizeEnabled = false;
                         cinfo.Default = ParseExpr(constraintNode->raw_expr, settings);
                         if (!cinfo.Default) {
                             return false;
@@ -1774,7 +1795,7 @@ private:
             }
 
             if (cinfo.NotNull) {
-                constraints.push_back(QL(QA("not_null")));   
+                constraints.push_back(QL(QA("not_null")));
             }
 
             if (cinfo.Default) {
@@ -1899,7 +1920,7 @@ public:
             return nullptr;
         }
 
-        for (ui32 i = 0; i < ListLength(value->tableElts); ++i) {
+        for (int i = 0; i < ListLength(value->tableElts); ++i) {
             auto rawNode = ListNodeNth(value->tableElts, i);
 
             switch (NodeTag(rawNode)) {
@@ -2087,13 +2108,13 @@ public:
                 AddError(TStringBuilder() << "VariableSetStmt, expected string literal for " << value->name << " option");
                 return nullptr;
             }
-            TString rawStr = TString(StrVal(val));
+            TString rawStr = to_lower(TString(StrVal(val)));
             if (name != "search_path") {
                 AddError(TStringBuilder() << "VariableSetStmt, set_config doesn't support that option:" << name);
                 return nullptr;
             }
-            if (rawStr != "pg_catalog" && rawStr != "public") {
-                AddError(TStringBuilder() << "VariableSetStmt, search path supports only public and pg_catalogue, but got :" << rawStr);
+            if (rawStr != "pg_catalog" && rawStr != "public" && rawStr != "" && rawStr != "information_schema") {
+                AddError(TStringBuilder() << "VariableSetStmt, search path supports only 'information_schema', 'public', 'pg_catalog', '' but got: '" << rawStr << "'");
                 return nullptr;
             }
             if (Settings.GUCSettings) {
@@ -2285,6 +2306,10 @@ public:
 
         auto [sink, key] = ParseWriteRangeVar(value->relation);
 
+        if (!sink || !key) {
+            return nullptr;
+        }
+
         std::vector<TAstNode*> options;
         options.push_back(QL(QA("pg_delete"), select));
         options.push_back(QL(QA("mode"), QA("delete")));
@@ -2312,6 +2337,9 @@ public:
         }
         if (varName == "server_version_num") {
             return GetPostgresServerVersionNum();
+        }
+        if (varName == "standard_conforming_strings"){
+            return "on";
         }
         return {};
     }
@@ -2373,18 +2401,25 @@ public:
     [[nodiscard]]
     bool ParseTransactionStmt(const TransactionStmt* value) {
         switch (value->kind) {
-        case TRANS_STMT_BEGIN: [[fallthrough]] ;
+        case TRANS_STMT_BEGIN:
         case TRANS_STMT_START:
+        case TRANS_STMT_SAVEPOINT:
+        case TRANS_STMT_RELEASE:
+        case TRANS_STMT_ROLLBACK_TO:
             return true;
         case TRANS_STMT_COMMIT:
             Statements.push_back(L(A("let"), A("world"), L(A("CommitAll!"),
                 A("world"))));
-            Settings.GUCSettings->Commit();
+            if (Settings.GUCSettings) {
+                Settings.GUCSettings->Commit();
+            }
             return true;
         case TRANS_STMT_ROLLBACK:
             Statements.push_back(L(A("let"), A("world"), L(A("CommitAll!"),
                 A("world"), QL(QL(QA("mode"), QA("rollback"))))));
-            Settings.GUCSettings->RollBack();
+            if (Settings.GUCSettings) {
+                Settings.GUCSettings->RollBack();
+            }
             return true;
         default:
             AddError(TStringBuilder() << "TransactionStmt: kind is not supported: " << (int)value->kind);
@@ -2517,13 +2552,17 @@ public:
         return true;
     }
 
-    TString ResolveCluster(const TStringBuf schemaname) {
+    TString ResolveCluster(const TStringBuf schemaname, TString name) {
+        if (NYql::NPg::GetStaticColumns().contains(NPg::TTableInfoKey{"pg_catalog", name})) {
+            return "pg_catalog";
+        }
+
         if (schemaname == "public") {
             return "";
         }
         if (schemaname == "" && Settings.GUCSettings) {
             auto search_path = Settings.GUCSettings->Get("search_path");
-            if (!search_path || *search_path == "public") {
+            if (!search_path || *search_path == "public" || search_path->empty()) {
                 return Settings.DefaultCluster;
             }
             return TString(*search_path);
@@ -2533,19 +2572,29 @@ public:
 
     TAstNode* BuildClusterSinkOrSourceExpression(
         bool isSink, const TStringBuf schemaname) {
-      const auto p = Settings.ClusterMapping.FindPtr(schemaname);
+      TString usedCluster(schemaname);
+      auto p = Settings.ClusterMapping.FindPtr(usedCluster);
+      if (!p) {
+        usedCluster = to_lower(usedCluster);
+        p = Settings.ClusterMapping.FindPtr(usedCluster);
+      }
+
       if (!p) {
         AddError(TStringBuilder() << "Unknown cluster: " << schemaname);
         return nullptr;
       }
 
-      return L(isSink ? A("DataSink") : A("DataSource"), QAX(*p), QAX(schemaname.Data()));
+      return L(isSink ? A("DataSink") : A("DataSource"), QAX(*p), QAX(usedCluster));
     }
 
     TAstNode* BuildTableKeyExpression(const TStringBuf relname,
-                                      bool isScheme = false) {
+        const TStringBuf cluster, bool isScheme = false
+    ) {
+        auto lowerCluster = to_lower(TString(cluster));
+        bool noPrefix = (lowerCluster == "pg_catalog" || lowerCluster == "information_schema");
+        TString tableName = noPrefix ? to_lower(TString(relname)) : TablePathPrefix + relname;
         return L(A("Key"), QL(QA(isScheme ? "tablescheme" : "table"),
-                            L(A("String"), QAX(TablePathPrefix + relname))));
+                            L(A("String"), QAX(std::move(tableName)))));
     }
 
     TReadWriteKeyExprs ParseQualifiedRelationName(const TStringBuf catalogname,
@@ -2561,9 +2610,9 @@ public:
         return {};
       }
 
-      const auto cluster = ResolveCluster(schemaname);
+      const auto cluster = ResolveCluster(schemaname, TString(relname));
       const auto sinkOrSource = BuildClusterSinkOrSourceExpression(isSink, cluster);
-      const auto key = BuildTableKeyExpression(relname, isScheme);
+      const auto key = BuildTableKeyExpression(relname, cluster, isScheme);
       return {sinkOrSource, key};
     }
 
@@ -2588,7 +2637,7 @@ public:
             return {};
         }
 
-        const auto cluster = ResolveCluster(schemaname);
+        const auto cluster = ResolveCluster(schemaname, TString(objectName));
         const auto sinkOrSource = BuildClusterSinkOrSourceExpression(true, cluster);
         const auto key = BuildPgObjectExpression(objectName, pgObjectType);
         return {sinkOrSource, key};
@@ -3091,7 +3140,7 @@ public:
             ? L(A("PgType"), QA(TPgConst::ToString(valueNType->type)))
             : L(A("PgType"), QA("unknown"));
 
-        if (Settings.AutoParametrizeEnabled && !Settings.AutoParametrizeExprDisabledScopes.contains(settings.Scope)) {
+        if (Settings.AutoParametrizeEnabled && settings.AutoParametrizeEnabled) {
             return AutoParametrizeConst(std::move(valueNType.GetRef()), pgTypeNode);
         }
 
@@ -3270,6 +3319,9 @@ public:
         case EXPR_SUBLINK:
             linkType = "expr";
             break;
+        case ARRAY_SUBLINK:
+            linkType = "array";
+            break;
         default:
             AddError(TStringBuilder() << "SublinkExpr: unsupported link type: " << (int)value->subLinkType);
             return nullptr;
@@ -3354,28 +3406,7 @@ public:
         }
 
         TVector<TString> names;
-        for (int i = 0; i < ListLength(value->funcname); ++i) {
-            auto x = ListNodeNth(value->funcname, i);
-            if (NodeTag(x) != T_String) {
-                NodeNotImplemented(value, x);
-                return nullptr;
-            }
-
-            names.push_back(to_lower(TString(StrVal(x))));
-        }
-
-        if (names.empty()) {
-            AddError("FuncCall: missing function name");
-            return nullptr;
-        }
-
-        if (names.size() > 2) {
-            AddError(TStringBuilder() << "FuncCall: too many name components:: " << names.size());
-            return nullptr;
-        }
-
-        if (names.size() == 2 && names[0] != "pg_catalog") {
-            AddError(TStringBuilder() << "FuncCall: expected pg_catalog, but got: " << names[0]);
+        if (!ExtractFuncName(value, names)) {
             return nullptr;
         }
 
@@ -3462,6 +3493,35 @@ public:
         return VL(args.data(), args.size());
     }
 
+    bool ExtractFuncName(const FuncCall* value, TVector<TString>& names) {
+        for (int i = 0; i < ListLength(value->funcname); ++i) {
+            auto x = ListNodeNth(value->funcname, i);
+            if (NodeTag(x) != T_String) {
+                NodeNotImplemented(value, x);
+                return false;
+            }
+
+            names.push_back(to_lower(TString(StrVal(x))));
+        }
+
+        if (names.empty()) {
+            AddError("FuncCall: missing function name");
+            return false;
+        }
+
+        if (names.size() > 2) {
+            AddError(TStringBuilder() << "FuncCall: too many name components:: " << names.size());
+            return false;
+        }
+
+        if (names.size() == 2 && names[0] != "pg_catalog") {
+            AddError(TStringBuilder() << "FuncCall: expected pg_catalog, but got: " << names[0]);
+            return false;
+        }
+
+        return true;
+    }
+
     TAstNode* ParseTypeCast(const TypeCast* value, const TExprSettings& settings) {
         AT_LOCATION(value);
         if (!value->arg) {
@@ -3481,7 +3541,7 @@ public:
             !typeName->pct_type &&
             (ListLength(typeName->names) == 2 &&
                 NodeTag(ListNodeNth(typeName->names, 0)) == T_String &&
-                !StrCompare(StrVal(ListNodeNth(typeName->names, 0)), "pg_catalog") || ListLength(typeName->names) == 1) &&
+                !StrICompare(StrVal(ListNodeNth(typeName->names, 0)), "pg_catalog") || ListLength(typeName->names) == 1) &&
             NodeTag(ListNodeNth(typeName->names, ListLength(typeName->names) - 1)) == T_String;
 
         if (NodeTag(arg) == T_A_Const &&
@@ -4338,7 +4398,7 @@ private:
         auto it = LowerBound(RowStarts.begin(), RowStarts.end(), Min((ui32)location, QuerySize));
         Y_ENSURE(it != RowStarts.end());
 
-        if (*it == location) {
+        if (*it == (ui32)location) {
             auto row = 1 + it - RowStarts.begin();
             auto column = 1;
             return NYql::TPosition(column, row);

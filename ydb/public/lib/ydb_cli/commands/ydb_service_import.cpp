@@ -92,6 +92,9 @@ void TCommandImportFromS3::Config(TConfig& config) {
     config.Opts->AddLongOption("retries", "Number of retries")
         .RequiredArgument("NUM").StoreResult(&NumberOfRetries).DefaultValue(NumberOfRetries);
 
+    config.Opts->AddLongOption("use-virtual-addressing", "S3 bucket virtual addressing")
+        .RequiredArgument("BOOL").StoreResult<bool>(&UseVirtualAddressing).DefaultValue("true");
+
     AddDeprecatedJsonOption(config);
     AddFormats(config, { EOutputFormat::Pretty, EOutputFormat::ProtoJsonBase64 });
     config.Opts->MutuallyExclusive("json", "format");

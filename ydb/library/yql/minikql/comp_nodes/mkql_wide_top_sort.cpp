@@ -1,7 +1,7 @@
 #include "mkql_wide_top_sort.h"
 
 #include <ydb/library/yql/minikql/computation/mkql_computation_node_codegen.h>  // Y_IGNORE
-#include <ydb/library/yql/minikql/computation/mkql_llvm_base.h>
+#include <ydb/library/yql/minikql/computation/mkql_llvm_base.h>  // Y_IGNORE
 #include <ydb/library/yql/minikql/computation/presort.h>
 #include <ydb/library/yql/minikql/mkql_node_builder.h>
 #include <ydb/library/yql/minikql/mkql_node_cast.h>
@@ -20,20 +20,31 @@ struct TKeyInfo {
     bool IsOptional;
     NUdf::ICompare::TPtr Compare;
     TType* PresortType = nullptr;
-    std::optional<TGenericPresortEncoder> LeftPacker;
-    std::optional<TGenericPresortEncoder> RightPacker;
+};
+
+struct TRuntimeKeyInfo {
+    TRuntimeKeyInfo(const TKeyInfo& keyInfo)
+        : Slot(keyInfo.Slot)
+        , IsOptional(keyInfo.IsOptional)
+        , Compare(keyInfo.Compare.Get())
+    {
+        if (keyInfo.PresortType) {
+            LeftPacker = keyInfo.PresortType;
+            RightPacker = keyInfo.PresortType;
+        }
+    }
+
+    const NUdf::EDataSlot Slot;
+    const bool IsOptional;
+    const NUdf::ICompare* const Compare;
+    mutable std::optional<TGenericPresortEncoder> LeftPacker;
+    mutable std::optional<TGenericPresortEncoder> RightPacker;
 };
 
 struct TMyValueCompare {
     TMyValueCompare(const std::vector<TKeyInfo>& keys)
-        : Keys(keys)
+        : Keys(keys.cbegin(), keys.cend())
     {
-        for (auto& key : Keys) {
-            if (key.PresortType) {
-                key.LeftPacker.emplace(key.PresortType);
-                key.RightPacker.emplace(key.PresortType);
-            }
-        }
     }
 
     int operator()(const bool* directions, const NUdf::TUnboxedValuePod* left, const NUdf::TUnboxedValuePod* right) const {
@@ -64,7 +75,7 @@ struct TMyValueCompare {
         return 0;
     }
 
-    mutable std::vector<TKeyInfo> Keys;
+    const std::vector<TRuntimeKeyInfo> Keys;
 };
 
 using TComparePtr = int(*)(const bool*, const NUdf::TUnboxedValuePod*, const NUdf::TUnboxedValuePod*);
@@ -316,8 +327,6 @@ public:
 
         const auto valueType = Type::getInt128Ty(context);
         const auto ptrValueType = PointerType::getUnqual(valueType);
-        const auto structPtrType = PointerType::getUnqual(StructType::get(context));
-        const auto contextType = GetCompContextType(context);
         const auto statusType = Type::getInt32Ty(context);
         const auto indexType = Type::getInt32Ty(ctx.Codegen.GetContext());
 
@@ -334,6 +343,7 @@ public:
 
         for (auto i = 0U; i < getters.size(); ++i) {
             getters[Indexes[i]] = [i, outs, indexType, valueType, outputPtrType, outputType](const TCodegenContext& ctx, BasicBlock*& block) {
+                Y_UNUSED(ctx);
                 const auto values = new LoadInst(outputPtrType, outs, "values", block);
                 const auto pointer = GetElementPtrInst::CreateInBounds(outputType, values, {ConstantInt::get(indexType, 0), ConstantInt::get(indexType, i)}, (TString("ptr_") += ToString(i)).c_str(), block);
                 return new LoadInst(valueType, pointer, (TString("load_") += ToString(i)).c_str(), block);
@@ -427,7 +437,7 @@ public:
             }
 
             if constexpr (!HasCount) {
-                for (auto i = 0; i < Representations.size(); ++i) {
+                for (auto i = 0U; i < Representations.size(); ++i) {
                     const auto item = getres.second[Indexes[i]](ctx, block);
                     ValueAddRef(Representations[i], item, ctx, block);
                     new StoreInst(item, placeholders[i], block);

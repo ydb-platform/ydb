@@ -373,9 +373,17 @@ std::function<NKikimr::NMiniKQL::IComputationNode* (NKikimr::NMiniKQL::TCallable
     };
 }
 
-IOptimizer* MakePgOptimizer(const IOptimizer::TInput& input, const std::function<void(const TString&)>& log)
+IOptimizer* MakePgOptimizerInternal(const IOptimizer::TInput& input, const std::function<void(const TString&)>& log)
 {
     Y_UNUSED(input);
+    Y_UNUSED(log);
+    ythrow yexception() << "PgJoinSearch does nothing";
+}
+
+IOptimizerNew* MakePgOptimizerNew(IProviderContext& pctx, TExprContext& ctx, const std::function<void(const TString&)>& log)
+{
+    Y_UNUSED(pctx);
+    Y_UNUSED(ctx);
     Y_UNUSED(log);
     ythrow yexception() << "PgJoinSearch does nothing";
 }
@@ -497,3 +505,15 @@ TString GetPostgresServerVersionStr() {
 }
 
 } // namespace NKikimr::NPg
+
+namespace NYql {
+
+ui64 HexEncode(const char *src, size_t len, char *dst) {
+    Y_UNUSED(src);
+    Y_UNUSED(len);
+    Y_UNUSED(dst);
+
+    throw yexception() << "HexEncode in pg_dummy does nothing";
+}
+
+} // NYql

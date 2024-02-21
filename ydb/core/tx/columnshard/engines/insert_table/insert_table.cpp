@@ -61,15 +61,7 @@ void TInsertTable::Abort(IDbWrapper& dbTable, const THashSet<TWriteId>& writeIds
 }
 
 THashSet<TWriteId> TInsertTable::OldWritesToAbort(const TInstant& now) const {
-    // TODO: This protection does not save us from real flooder activity.
-    // This cleanup is for seldom aborts caused by rare reasons. So there's a temporary simple O(N) here
-    // keeping in mind we need a smarter cleanup logic here not a better algo.
-    if (LastCleanup > now - CleanDelay) {
-        return {};
-    }
-    LastCleanup = now;
-
-    return Summary.GetDeprecatedInsertions(now - WaitCommitDelay);
+    return Summary.GetExpiredInsertions(now - WaitCommitDelay, CleanupPackageSize);
 }
 
 THashSet<TWriteId> TInsertTable::DropPath(IDbWrapper& dbTable, ui64 pathId) {
@@ -141,7 +133,7 @@ bool TInsertTableAccessor::RemoveBlobLink(const TUnifiedBlobId& blobId, const st
     AFL_VERIFY(itBlob != BlobLinks.end());
     AFL_VERIFY(itBlob->second >= 1);
     if (itBlob->second == 1) {
-        blobsAction->DeclareRemove(itBlob->first);
+        blobsAction->DeclareSelfRemove(itBlob->first);
         BlobLinks.erase(itBlob);
         return true;
     } else {

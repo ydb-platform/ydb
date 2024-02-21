@@ -3,7 +3,6 @@
 #include <ydb/core/base/appdata.h>
 #include <ydb/core/base/blobstorage.h>
 #include <ydb/core/base/counters.h>
-#include <ydb/core/external_sources/external_source_factory.h>
 #include <ydb/core/mon/sync_http_mon.h>
 #include <ydb/core/mon_alloc/profiler.h>
 #include <ydb/core/tablet/tablet_impl.h>
@@ -152,14 +151,9 @@ namespace NActors {
             nodeAppData->MeteringConfig = app0->MeteringConfig;
             nodeAppData->AwsCompatibilityConfig = app0->AwsCompatibilityConfig;
             nodeAppData->S3ProxyResolverConfig = app0->S3ProxyResolverConfig;
+            nodeAppData->GraphConfig = app0->GraphConfig;
             nodeAppData->EnableMvccSnapshotWithLegacyDomainRoot = app0->EnableMvccSnapshotWithLegacyDomainRoot;
             nodeAppData->IoContextFactory = app0->IoContextFactory;
-            if (app0->ExternalSourceFactory) {
-                nodeAppData->ExternalSourceFactory = app0->ExternalSourceFactory;
-            } else {
-                nodeAppData->ExternalSourceFactory = NKikimr::NExternalSource::CreateExternalSourceFactory({});
-            }
-
             if (KeyConfigGenerator) {
                 nodeAppData->KeyConfig = KeyConfigGenerator(nodeIndex);
             } else {

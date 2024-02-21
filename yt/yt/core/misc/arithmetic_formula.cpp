@@ -891,11 +891,6 @@ bool TBooleanFormulaTags::operator==(const TBooleanFormulaTags& other) const
     return Tags_ == other.Tags_;
 }
 
-bool TBooleanFormulaTags::operator!=(const TBooleanFormulaTags& other) const
-{
-    return !operator==(other);
-}
-
 void Serialize(const TBooleanFormulaTags& tags, NYson::IYsonConsumer* consumer)
 {
     BuildYsonFluently(consumer)
@@ -912,7 +907,7 @@ TString ToString(const TBooleanFormulaTags& tags)
     return ToStringViaBuilder(tags);
 }
 
-void FormatValue(TStringBuilderBase* builder, const TBooleanFormulaTags& tags, TStringBuf /* format */)
+void FormatValue(TStringBuilderBase* builder, const TBooleanFormulaTags& tags, TStringBuf /*format*/)
 {
     builder->AppendFormat("%v", tags.GetSourceTags());
 }

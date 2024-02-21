@@ -272,7 +272,8 @@ struct TMessageWithAttachments
 
 TMessageWithAttachments ByteBufferToMessageWithAttachments(
     grpc_byte_buffer* buffer,
-    std::optional<ui32> messageBodySize);
+    std::optional<ui32> messageBodySize,
+    bool enveloped);
 
 TGrpcByteBufferPtr MessageWithAttachmentsToByteBuffer(
     const TMessageWithAttachments& messageWithAttachments);

@@ -1,8 +1,8 @@
 GO_LIBRARY()
-
-SRCS(
-    guts.go
-    httplex.go
-)
-
+IF (TRUE)
+    SRCS(
+		guts.go
+		httplex.go
+    )
+ENDIF()
 END()

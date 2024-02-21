@@ -277,6 +277,14 @@ SELECT sum(salary),
 	sum(sum(salary)) OVER (ORDER BY depname DESC)
 FROM empsalary GROUP BY depname;
 </sql-statement>
+-stdin-:<main>: Error: Type annotation
+
+    -stdin-:<main>:1:1: Error: At function: RemovePrefixMembers, At function: PgSelect, At function: PgSetItem
+    	-- more than one window with GROUP BY
+	^
+        -stdin-:<main>:1:1: Error: Duplicated member: sum
+        	-- more than one window with GROUP BY
+	^
 <sql-statement>
 -- identical windows with different names
 SELECT sum(salary) OVER w1, count(*) OVER w2
@@ -1848,6 +1856,15 @@ insert into datetimes values
 (9, '19:00', '19:00 BST', '9 years', '2007-10-19 10:23:54+01', '2007-10-19 10:23:54'),
 (10, '20:00', '20:00 BST', '10 years', '2008-10-19 10:23:54+01', '2008-10-19 10:23:54');
 </sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: YtFill!
+    	insert into datetimes values
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  invalid input syntax for type time with time zone: "11:00 BST"
+
+        	insert into datetimes values
+	^
 <sql-statement>
 select id, f_time, first_value(id) over w, last_value(id) over w
 from datetimes
@@ -3066,9 +3083,42 @@ ORDER BY p, i;
     -stdin-:<main>:1:1: Error: At function: RemovePrefixMembers, At function: PgSelect, At function: PgSetItem
     	-- test strict and non-strict cases
 	^
-        -stdin-:<main>:19:29: Error: No such column: P
-        	WINDOW wnd AS (PARTITION BY P ORDER BY i ROWS BETWEEN 1 PRECEDING AND CURRENT ROW)
-	                            ^
+        -stdin-:<main>:1:1: Error: At function: PgResultItem
+        	-- test strict and non-strict cases
+	^
+            -stdin-:<main>:4:2: Error: At function: PgWindowCall
+            		logging_agg_nonstrict(v) over wnd as nstrict,
+	 ^
+                -stdin-:<main>:4:2: Error: Unsupported function: logging_agg_nonstrict
+                		logging_agg_nonstrict(v) over wnd as nstrict,
+	 ^
+        -stdin-:<main>:1:1: Error: At function: PgResultItem
+        	-- test strict and non-strict cases
+	^
+            -stdin-:<main>:5:2: Error: At function: PgWindowCall
+            		logging_agg_nonstrict_initcond(v) over wnd as nstrict_init,
+	 ^
+                -stdin-:<main>:5:2: Error: Unsupported function: logging_agg_nonstrict_initcond
+                		logging_agg_nonstrict_initcond(v) over wnd as nstrict_init,
+	 ^
+        -stdin-:<main>:1:1: Error: At function: PgResultItem
+        	-- test strict and non-strict cases
+	^
+            -stdin-:<main>:6:2: Error: At function: PgWindowCall
+            		logging_agg_strict(v::text) over wnd as strict,
+	 ^
+                -stdin-:<main>:6:2: Error: Unsupported function: logging_agg_strict
+                		logging_agg_strict(v::text) over wnd as strict,
+	 ^
+        -stdin-:<main>:1:1: Error: At function: PgResultItem
+        	-- test strict and non-strict cases
+	^
+            -stdin-:<main>:7:2: Error: At function: PgWindowCall
+            		logging_agg_strict_initcond(v) over wnd as strict_init
+	 ^
+                -stdin-:<main>:7:2: Error: Unsupported function: logging_agg_strict_initcond
+                		logging_agg_strict_initcond(v) over wnd as strict_init
+	 ^
 <sql-statement>
 -- and again, but with filter
 SELECT
@@ -3246,72 +3296,230 @@ SELECT i,AVG(v::bigint) OVER (ORDER BY i ROWS BETWEEN CURRENT ROW AND UNBOUNDED 
 SELECT i,AVG(v::int) OVER (ORDER BY i ROWS BETWEEN CURRENT ROW AND UNBOUNDED FOLLOWING)
   FROM (VALUES(1,1),(2,2),(3,NULL),(4,NULL)) t(i,v);
 </sql-statement>
-VERIFY failed (2024-01-12T02:19:37.139252+0300): Value is not boxed
-  ydb/library/yql/public/udf/udf_value_inl.h:379
-  AsBoxed(): requirement IsBoxed() failed
-BackTrace(void**, unsigned long)+29 (0x142C329D)
-FormatBackTrace(IOutputStream*)+32 (0x142C3770)
-PrintBackTrace()+17 (0x142C37C1)
-NPrivate::InternalPanicImpl(int, char const*, char const*, int, int, int, TBasicStringBuf<char, std::__y1::char_traits<char> >, char const*, unsigned long)+995 (0x143260F3)
-NPrivate::Panic(NPrivate::TStaticBuf const&, int, char const*, char const*, char const*, ...)+418 (0x14319332)
-NYql::NUdf::TUnboxedValuePod::AsBoxed() const+218 (0x154F450A)
-NYql::PointerDatumFromPod(NYql::NUdf::TUnboxedValuePod const&)+29 (0x1BB15C6D)
-NYql::TPgResolvedCall<true>::DoCalculate(NKikimr::NMiniKQL::TComputationContext&) const+771 (0x1BB577E3)
-NKikimr::NMiniKQL::TMutableComputationNode<NYql::TPgResolvedCall<true> >::GetValue(NKikimr::NMiniKQL::TComputationContext&) const+420 (0x1BB56C84)
-??+0 (0x7F17843F0C53)
-??+0 (0x7F17843F047C)
-??+0 (0x7F17843EEE01)
-??+0 (0x2011E4F2)
-NYql::NUdf::TBoxedValueAccessor::Fetch(NYql::NUdf::IBoxedValue&, NYql::NUdf::TUnboxedValue&)+244 (0x17B82E34)
-NYql::NUdf::TUnboxedValuePod::Fetch(NYql::NUdf::TUnboxedValue&) const+228 (0x17B82CB4)
-NKikimr::NMiniKQL::TForwardListValue::TIterator::Next(NYql::NUdf::TUnboxedValue&)+36 (0x17E35FF4)
-NYql::NUdf::TBoxedValueAccessor::Next(NYql::NUdf::IBoxedValue&, NYql::NUdf::TUnboxedValue&)+244 (0x151403B4)
-NYql::NUdf::TUnboxedValuePod::Next(NYql::NUdf::TUnboxedValue&) const+228 (0x15140084)
-NYql::TYsonExecuteResOrPull::WriteValue(NYql::NUdf::TUnboxedValue const&, NKikimr::NMiniKQL::TType*)+436 (0x20D5B834)
-NYql::NFile::TYtFileGateway::ExecuteResult(NYql::NFile::TSession&, NYson::TYsonWriter&, NYql::NNodes::TExprBase, NYql::TExprContext&, NYql::IYtGateway::TResOrPullOptions&&, TVector<TBasicString<char, std::__y1::char_traits<char> >, std::__y1::allocator<TBasicString<char, std::__y1::char_traits<char> > > > const&) const+2002 (0x1C6C1D32)
-NYql::NFile::TYtFileGateway::ResOrPull(TIntrusivePtr<NYql::TExprNode, TDefaultIntrusivePtrOps<NYql::TExprNode> > const&, NYql::TExprContext&, NYql::IYtGateway::TResOrPullOptions&&)+1128 (0x1C694F58)
-??+0 (0x1AEE8ACE)
-??+0 (0x1AEECD59)
-??+0 (0x1AEECCB8)
-??+0 (0x1AEECC48)
-??+0 (0x1AEECBF8)
-??+0 (0x1AEEBF8C)
-std::__y1::__function::__value_func<std::__y1::pair<NYql::IGraphTransformer::TStatus, NThreading::TFuture<std::__y1::function<NYql::IGraphTransformer::TStatus (TIntrusivePtr<NYql::TExprNode, TDefaultIntrusivePtrOps<NYql::TExprNode> > const&, TIntrusivePtr<NYql::TExprNode, TDefaultIntrusivePtrOps<NYql::TExprNode> >&, NYql::TExprContext&)> > > (TIntrusivePtr<NYql::TExprNode, TDefaultIntrusivePtrOps<NYql::TExprNode> > const&, TIntrusivePtr<NYql::TExprNode, TDefaultIntrusivePtrOps<NYql::TExprNode> >&, NYql::TExprContext&)>::operator()[abi:v15000](TIntrusivePtr<NYql::TExprNode, TDefaultIntrusivePtrOps<NYql::TExprNode> > const&, TIntrusivePtr<NYql::TExprNode, TDefaultIntrusivePtrOps<NYql::TExprNode> >&, NYql::TExprContext&) const+93 (0x1AEFCA0D)
-std::__y1::function<std::__y1::pair<NYql::IGraphTransformer::TStatus, NThreading::TFuture<std::__y1::function<NYql::IGraphTransformer::TStatus (TIntrusivePtr<NYql::TExprNode, TDefaultIntrusivePtrOps<NYql::TExprNode> > const&, TIntrusivePtr<NYql::TExprNode, TDefaultIntrusivePtrOps<NYql::TExprNode> >&, NYql::TExprContext&)> > > (TIntrusivePtr<NYql::TExprNode, TDefaultIntrusivePtrOps<NYql::TExprNode> > const&, TIntrusivePtr<NYql::TExprNode, TDefaultIntrusivePtrOps<NYql::TExprNode> >&, NYql::TExprContext&)>::operator()(TIntrusivePtr<NYql::TExprNode, TDefaultIntrusivePtrOps<NYql::TExprNode> > const&, TIntrusivePtr<NYql::TExprNode, TDefaultIntrusivePtrOps<NYql::TExprNode> >&, NYql::TExprContext&) const+56 (0x1AEFBD58)
-NYql::TExecTransformerBase::CallbackTransform(TIntrusivePtr<NYql::TExprNode, TDefaultIntrusivePtrOps<NYql::TExprNode> > const&, TIntrusivePtr<NYql::TExprNode, TDefaultIntrusivePtrOps<NYql::TExprNode> >&, NYql::TExprContext&)+811 (0x1AEFB9DB)
-NYql::TAsyncCallbackTransformer<NYql::TExecTransformerBase>::DoTransform(TIntrusivePtr<NYql::TExprNode, TDefaultIntrusivePtrOps<NYql::TExprNode> >, TIntrusivePtr<NYql::TExprNode, TDefaultIntrusivePtrOps<NYql::TExprNode> >&, NYql::TExprContext&)+64 (0x1AEE9D20)
-NYql::TGraphTransformerBase::Transform(TIntrusivePtr<NYql::TExprNode, TDefaultIntrusivePtrOps<NYql::TExprNode> >, TIntrusivePtr<NYql::TExprNode, TDefaultIntrusivePtrOps<NYql::TExprNode> >&, NYql::TExprContext&)+100 (0x15645D84)
-??+0 (0x1799623C)
-??+0 (0x17989C86)
-NYql::TGraphTransformerBase::Transform(TIntrusivePtr<NYql::TExprNode, TDefaultIntrusivePtrOps<NYql::TExprNode> >, TIntrusivePtr<NYql::TExprNode, TDefaultIntrusivePtrOps<NYql::TExprNode> >&, NYql::TExprContext&)+100 (0x15645D84)
-??+0 (0x17B2220C)
-??+0 (0x17B14548)
-??+0 (0x17B20AEC)
-??+0 (0x17B147F7)
-??+0 (0x17B207AA)
-??+0 (0x17B147F7)
-??+0 (0x17B0CD4E)
-NYql::TGraphTransformerBase::Transform(TIntrusivePtr<NYql::TExprNode, TDefaultIntrusivePtrOps<NYql::TExprNode> >, TIntrusivePtr<NYql::TExprNode, TDefaultIntrusivePtrOps<NYql::TExprNode> >&, NYql::TExprContext&)+100 (0x15645D84)
-??+0 (0x15649CA8)
-??+0 (0x156499D9)
-??+0 (0x156463E5)
-NYql::TGraphTransformerBase::Transform(TIntrusivePtr<NYql::TExprNode, TDefaultIntrusivePtrOps<NYql::TExprNode> >, TIntrusivePtr<NYql::TExprNode, TDefaultIntrusivePtrOps<NYql::TExprNode> >&, NYql::TExprContext&)+100 (0x15645D84)
-NYql::AsyncTransformStepImpl(NYql::IGraphTransformer&, TIntrusivePtr<NYql::TExprNode, TDefaultIntrusivePtrOps<NYql::TExprNode> >&, NYql::TExprContext&, bool, bool, TBasicStringBuf<char, std::__y1::char_traits<char> > const&)+1222 (0x15644E36)
-NYql::AsyncTransform(NYql::IGraphTransformer&, TIntrusivePtr<NYql::TExprNode, TDefaultIntrusivePtrOps<NYql::TExprNode> >&, NYql::TExprContext&, bool)+127 (0x156456BF)
-NYql::TProgram::AsyncTransformWithFallback(bool)+120 (0x16EA37F8)
-??+0 (0x16ECA8FE)
-??+0 (0x16ECA477)
-??+0 (0x16ECA345)
-??+0 (0x16EC8E20)
-??+0 (0x16EC8CE7)
-??+0 (0x16EA1D0D)
-NYql::TProgram::RunAsync(TBasicString<char, std::__y1::char_traits<char> > const&, IOutputStream*, IOutputStream*, IOutputStream*, bool)+3760 (0x16EA19A0)
-??+0 (0x16E9E584)
-NYql::TProgram::Run(TBasicString<char, std::__y1::char_traits<char> > const&, IOutputStream*, IOutputStream*, IOutputStream*, bool)+301 (0x16EA0A4D)
-Main(int, char**)+5378 (0x1414F2E2)
-main+273 (0x14150F11)
-??+0 (0x7F1784029D90)
-__libc_start_main+128 (0x7F1784029E40)
-??+0 (0x140DA029)
-pthread_kill at ./nptl/./nptl/pthread_kill.c:43:17
-?? at ??:0:0
+<sql-statement>
+SELECT i,AVG(v::smallint) OVER (ORDER BY i ROWS BETWEEN CURRENT ROW AND UNBOUNDED FOLLOWING)
+  FROM (VALUES(1,1),(2,2),(3,NULL),(4,NULL)) t(i,v);
+</sql-statement>
+<sql-statement>
+SELECT i,AVG(v::numeric) OVER (ORDER BY i ROWS BETWEEN CURRENT ROW AND UNBOUNDED FOLLOWING)
+  FROM (VALUES(1,1.5),(2,2.5),(3,NULL),(4,NULL)) t(i,v);
+</sql-statement>
+<sql-statement>
+SELECT i,AVG(v::interval) OVER (ORDER BY i ROWS BETWEEN CURRENT ROW AND UNBOUNDED FOLLOWING)
+  FROM (VALUES(1,'1 sec'),(2,'2 sec'),(3,NULL),(4,NULL)) t(i,v);
+</sql-statement>
+<sql-statement>
+SELECT i,SUM(v::smallint) OVER (ORDER BY i ROWS BETWEEN CURRENT ROW AND UNBOUNDED FOLLOWING)
+  FROM (VALUES(1,1),(2,2),(3,NULL),(4,NULL)) t(i,v);
+</sql-statement>
+<sql-statement>
+SELECT i,SUM(v::int) OVER (ORDER BY i ROWS BETWEEN CURRENT ROW AND UNBOUNDED FOLLOWING)
+  FROM (VALUES(1,1),(2,2),(3,NULL),(4,NULL)) t(i,v);
+</sql-statement>
+<sql-statement>
+SELECT i,SUM(v::bigint) OVER (ORDER BY i ROWS BETWEEN CURRENT ROW AND UNBOUNDED FOLLOWING)
+  FROM (VALUES(1,1),(2,2),(3,NULL),(4,NULL)) t(i,v);
+</sql-statement>
+<sql-statement>
+SELECT i,SUM(v::money) OVER (ORDER BY i ROWS BETWEEN CURRENT ROW AND UNBOUNDED FOLLOWING)
+  FROM (VALUES(1,'1.10'),(2,'2.20'),(3,NULL),(4,NULL)) t(i,v);
+</sql-statement>
+<sql-statement>
+SELECT i,SUM(v::interval) OVER (ORDER BY i ROWS BETWEEN CURRENT ROW AND UNBOUNDED FOLLOWING)
+  FROM (VALUES(1,'1 sec'),(2,'2 sec'),(3,NULL),(4,NULL)) t(i,v);
+</sql-statement>
+<sql-statement>
+SELECT i,SUM(v::numeric) OVER (ORDER BY i ROWS BETWEEN CURRENT ROW AND UNBOUNDED FOLLOWING)
+  FROM (VALUES(1,1.1),(2,2.2),(3,NULL),(4,NULL)) t(i,v);
+</sql-statement>
+<sql-statement>
+SELECT SUM(n::numeric) OVER (ORDER BY i ROWS BETWEEN CURRENT ROW AND UNBOUNDED FOLLOWING)
+  FROM (VALUES(1,1.01),(2,2),(3,3)) v(i,n);
+</sql-statement>
+<sql-statement>
+SELECT i,COUNT(v) OVER (ORDER BY i ROWS BETWEEN CURRENT ROW AND UNBOUNDED FOLLOWING)
+  FROM (VALUES(1,1),(2,2),(3,NULL),(4,NULL)) t(i,v);
+</sql-statement>
+<sql-statement>
+SELECT i,COUNT(*) OVER (ORDER BY i ROWS BETWEEN CURRENT ROW AND UNBOUNDED FOLLOWING)
+  FROM (VALUES(1,1),(2,2),(3,NULL),(4,NULL)) t(i,v);
+</sql-statement>
+<sql-statement>
+SELECT VAR_POP(n::bigint) OVER (ORDER BY i ROWS BETWEEN CURRENT ROW AND UNBOUNDED FOLLOWING)
+  FROM (VALUES(1,600),(2,470),(3,170),(4,430),(5,300)) r(i,n);
+</sql-statement>
+<sql-statement>
+SELECT VAR_POP(n::int) OVER (ORDER BY i ROWS BETWEEN CURRENT ROW AND UNBOUNDED FOLLOWING)
+  FROM (VALUES(1,600),(2,470),(3,170),(4,430),(5,300)) r(i,n);
+</sql-statement>
+<sql-statement>
+SELECT VAR_POP(n::smallint) OVER (ORDER BY i ROWS BETWEEN CURRENT ROW AND UNBOUNDED FOLLOWING)
+  FROM (VALUES(1,600),(2,470),(3,170),(4,430),(5,300)) r(i,n);
+</sql-statement>
+<sql-statement>
+SELECT VAR_POP(n::numeric) OVER (ORDER BY i ROWS BETWEEN CURRENT ROW AND UNBOUNDED FOLLOWING)
+  FROM (VALUES(1,600),(2,470),(3,170),(4,430),(5,300)) r(i,n);
+</sql-statement>
+<sql-statement>
+SELECT VAR_SAMP(n::bigint) OVER (ORDER BY i ROWS BETWEEN CURRENT ROW AND UNBOUNDED FOLLOWING)
+  FROM (VALUES(1,600),(2,470),(3,170),(4,430),(5,300)) r(i,n);
+</sql-statement>
+<sql-statement>
+SELECT VAR_SAMP(n::int) OVER (ORDER BY i ROWS BETWEEN CURRENT ROW AND UNBOUNDED FOLLOWING)
+  FROM (VALUES(1,600),(2,470),(3,170),(4,430),(5,300)) r(i,n);
+</sql-statement>
+<sql-statement>
+SELECT VAR_SAMP(n::smallint) OVER (ORDER BY i ROWS BETWEEN CURRENT ROW AND UNBOUNDED FOLLOWING)
+  FROM (VALUES(1,600),(2,470),(3,170),(4,430),(5,300)) r(i,n);
+</sql-statement>
+<sql-statement>
+SELECT VAR_SAMP(n::numeric) OVER (ORDER BY i ROWS BETWEEN CURRENT ROW AND UNBOUNDED FOLLOWING)
+  FROM (VALUES(1,600),(2,470),(3,170),(4,430),(5,300)) r(i,n);
+</sql-statement>
+<sql-statement>
+SELECT VARIANCE(n::bigint) OVER (ORDER BY i ROWS BETWEEN CURRENT ROW AND UNBOUNDED FOLLOWING)
+  FROM (VALUES(1,600),(2,470),(3,170),(4,430),(5,300)) r(i,n);
+</sql-statement>
+<sql-statement>
+SELECT VARIANCE(n::int) OVER (ORDER BY i ROWS BETWEEN CURRENT ROW AND UNBOUNDED FOLLOWING)
+  FROM (VALUES(1,600),(2,470),(3,170),(4,430),(5,300)) r(i,n);
+</sql-statement>
+<sql-statement>
+SELECT VARIANCE(n::smallint) OVER (ORDER BY i ROWS BETWEEN CURRENT ROW AND UNBOUNDED FOLLOWING)
+  FROM (VALUES(1,600),(2,470),(3,170),(4,430),(5,300)) r(i,n);
+</sql-statement>
+<sql-statement>
+SELECT VARIANCE(n::numeric) OVER (ORDER BY i ROWS BETWEEN CURRENT ROW AND UNBOUNDED FOLLOWING)
+  FROM (VALUES(1,600),(2,470),(3,170),(4,430),(5,300)) r(i,n);
+</sql-statement>
+<sql-statement>
+SELECT STDDEV_POP(n::bigint) OVER (ORDER BY i ROWS BETWEEN CURRENT ROW AND UNBOUNDED FOLLOWING)
+  FROM (VALUES(1,NULL),(2,600),(3,470),(4,170),(5,430),(6,300)) r(i,n);
+</sql-statement>
+<sql-statement>
+SELECT STDDEV_POP(n::int) OVER (ORDER BY i ROWS BETWEEN CURRENT ROW AND UNBOUNDED FOLLOWING)
+  FROM (VALUES(1,NULL),(2,600),(3,470),(4,170),(5,430),(6,300)) r(i,n);
+</sql-statement>
+<sql-statement>
+SELECT STDDEV_POP(n::smallint) OVER (ORDER BY i ROWS BETWEEN CURRENT ROW AND UNBOUNDED FOLLOWING)
+  FROM (VALUES(1,NULL),(2,600),(3,470),(4,170),(5,430),(6,300)) r(i,n);
+</sql-statement>
+<sql-statement>
+SELECT STDDEV_POP(n::numeric) OVER (ORDER BY i ROWS BETWEEN CURRENT ROW AND UNBOUNDED FOLLOWING)
+  FROM (VALUES(1,NULL),(2,600),(3,470),(4,170),(5,430),(6,300)) r(i,n);
+</sql-statement>
+<sql-statement>
+SELECT STDDEV_SAMP(n::bigint) OVER (ORDER BY i ROWS BETWEEN CURRENT ROW AND UNBOUNDED FOLLOWING)
+  FROM (VALUES(1,NULL),(2,600),(3,470),(4,170),(5,430),(6,300)) r(i,n);
+</sql-statement>
+<sql-statement>
+SELECT STDDEV_SAMP(n::int) OVER (ORDER BY i ROWS BETWEEN CURRENT ROW AND UNBOUNDED FOLLOWING)
+  FROM (VALUES(1,NULL),(2,600),(3,470),(4,170),(5,430),(6,300)) r(i,n);
+</sql-statement>
+<sql-statement>
+SELECT STDDEV_SAMP(n::smallint) OVER (ORDER BY i ROWS BETWEEN CURRENT ROW AND UNBOUNDED FOLLOWING)
+  FROM (VALUES(1,NULL),(2,600),(3,470),(4,170),(5,430),(6,300)) r(i,n);
+</sql-statement>
+<sql-statement>
+SELECT STDDEV_SAMP(n::numeric) OVER (ORDER BY i ROWS BETWEEN CURRENT ROW AND UNBOUNDED FOLLOWING)
+  FROM (VALUES(1,NULL),(2,600),(3,470),(4,170),(5,430),(6,300)) r(i,n);
+</sql-statement>
+<sql-statement>
+SELECT STDDEV(n::bigint) OVER (ORDER BY i ROWS BETWEEN CURRENT ROW AND UNBOUNDED FOLLOWING)
+  FROM (VALUES(0,NULL),(1,600),(2,470),(3,170),(4,430),(5,300)) r(i,n);
+</sql-statement>
+<sql-statement>
+SELECT STDDEV(n::int) OVER (ORDER BY i ROWS BETWEEN CURRENT ROW AND UNBOUNDED FOLLOWING)
+  FROM (VALUES(0,NULL),(1,600),(2,470),(3,170),(4,430),(5,300)) r(i,n);
+</sql-statement>
+<sql-statement>
+SELECT STDDEV(n::smallint) OVER (ORDER BY i ROWS BETWEEN CURRENT ROW AND UNBOUNDED FOLLOWING)
+  FROM (VALUES(0,NULL),(1,600),(2,470),(3,170),(4,430),(5,300)) r(i,n);
+</sql-statement>
+<sql-statement>
+SELECT STDDEV(n::numeric) OVER (ORDER BY i ROWS BETWEEN CURRENT ROW AND UNBOUNDED FOLLOWING)
+  FROM (VALUES(0,NULL),(1,600),(2,470),(3,170),(4,430),(5,300)) r(i,n);
+</sql-statement>
+<sql-statement>
+-- test that inverse transition functions work with various frame options
+SELECT i,SUM(v::int) OVER (ORDER BY i ROWS BETWEEN CURRENT ROW AND CURRENT ROW)
+  FROM (VALUES(1,1),(2,2),(3,NULL),(4,NULL)) t(i,v);
+</sql-statement>
+<sql-statement>
+SELECT i,SUM(v::int) OVER (ORDER BY i ROWS BETWEEN CURRENT ROW AND 1 FOLLOWING)
+  FROM (VALUES(1,1),(2,2),(3,NULL),(4,NULL)) t(i,v);
+</sql-statement>
+<sql-statement>
+SELECT i,SUM(v::int) OVER (ORDER BY i ROWS BETWEEN 1 PRECEDING AND 1 FOLLOWING)
+  FROM (VALUES(1,1),(2,2),(3,3),(4,4)) t(i,v);
+</sql-statement>
+<sql-statement>
+-- ensure aggregate over numeric properly recovers from NaN values
+SELECT a, b,
+       SUM(b) OVER(ORDER BY A ROWS BETWEEN 1 PRECEDING AND CURRENT ROW)
+FROM (VALUES(1,1::numeric),(2,2),(3,'NaN'),(4,3),(5,4)) t(a,b);
+</sql-statement>
+<sql-statement>
+-- It might be tempting for someone to add an inverse trans function for
+-- float and double precision. This should not be done as it can give incorrect
+-- results. This test should fail if anyone ever does this without thinking too
+-- hard about it.
+SELECT to_char(SUM(n::float8) OVER (ORDER BY i ROWS BETWEEN CURRENT ROW AND 1 FOLLOWING),'999999999999999999999D9')
+  FROM (VALUES(1,1e20),(2,1)) n(i,n);
+</sql-statement>
+<sql-statement>
+SELECT i, b, bool_and(b) OVER w, bool_or(b) OVER w
+  FROM (VALUES (1,true), (2,true), (3,false), (4,false), (5,true)) v(i,b)
+  WINDOW w AS (ORDER BY i ROWS BETWEEN CURRENT ROW AND 1 FOLLOWING);
+</sql-statement>
+<sql-statement>
+-- Tests for problems with failure to walk or mutate expressions
+-- within window frame clauses.
+-- test walker (fails with collation error if expressions are not walked)
+SELECT array_agg(i) OVER w
+  FROM generate_series(1,5) i
+WINDOW w AS (ORDER BY i ROWS BETWEEN (('foo' < 'foobar')::integer) PRECEDING AND CURRENT ROW);
+</sql-statement>
+-stdin-:<main>: Error: Expression evaluation
+
+    -stdin-:<main>:6:13: Error: At function: EvaluateExpr
+    	WINDOW w AS (ORDER BY i ROWS BETWEEN (('foo' < 'foobar')::integer) PRECEDING AND CURRENT ROW);
+	            ^
+        -stdin-:<main>: Error: Type annotation
+        
+            -stdin-:<main>:6:13: Error: At function: Unwrap
+            	WINDOW w AS (ORDER BY i ROWS BETWEEN (('foo' < 'foobar')::integer) PRECEDING AND CURRENT ROW);
+	            ^
+                -stdin-:<main>:6:59: Error: Can't unwrap PostgreSQL type
+                	WINDOW w AS (ORDER BY i ROWS BETWEEN (('foo' < 'foobar')::integer) PRECEDING AND CURRENT ROW);
+	                                                          ^
+<sql-statement>
+-- test mutator (fails when inlined if expressions are not mutated)
+CREATE FUNCTION pg_temp.f(group_size BIGINT) RETURNS SETOF integer[]
+AS $$
+    SELECT array_agg(s) OVER w
+      FROM generate_series(1,5) s
+    WINDOW w AS (ORDER BY s ROWS BETWEEN CURRENT ROW AND GROUP_SIZE FOLLOWING)
+$$ LANGUAGE SQL STABLE;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: RawStmt: alternative is not implemented yet : 261
+    	-- test mutator (fails when inlined if expressions are not mutated)
+	^
+<sql-statement>
+EXPLAIN (costs off) SELECT * FROM pg_temp.f(2);
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: RawStmt: alternative is not implemented yet : 276
+    	EXPLAIN (costs off) SELECT * FROM pg_temp.f(2);
+	^
+<sql-statement>
+SELECT * FROM pg_temp.f(2);
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:15: Error: FuncCall: expected pg_catalog, but got: pg_temp
+    	SELECT * FROM pg_temp.f(2);
+	              ^

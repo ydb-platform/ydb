@@ -1,14 +1,7 @@
 GO_LIBRARY()
-
-SRCS(
-    chunked.go
-)
-
-GO_TEST_SRCS(chunked_test.go)
-
+IF (TRUE)
+    SRCS(
+		chunked.go
+    )
+ENDIF()
 END()
-
-RECURSE(
-    ascii
-    testcert
-)

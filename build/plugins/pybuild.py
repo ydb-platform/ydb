@@ -145,6 +145,8 @@ def add_python_lint_checks(unit, py_ver, files):
                 resolved_files.append(resolved)
         return resolved_files
 
+    upath = unit.path()[3:]
+
     no_lint_value = get_no_lint_value(unit)
     if no_lint_value == "none":
         no_lint_allowed_paths = (
@@ -160,8 +162,6 @@ def add_python_lint_checks(unit, py_ver, files):
             "yt/yt/",  # YT-20053
             "yt/python/",  # YT-20053
         )
-
-        upath = unit.path()[3:]
 
         if not upath.startswith(no_lint_allowed_paths):
             ymake.report_configure_error("NO_LINT() is allowed only in " + ", ".join(no_lint_allowed_paths))
@@ -191,6 +191,27 @@ def add_python_lint_checks(unit, py_ver, files):
 
             if extra_params:
                 params += ["EXTRA_PARAMS"] + extra_params
+            unit.on_add_linter_check(params)
+
+    # ruff related stuff
+    if unit.get('STYLE_RUFF_VALUE') == 'yes':
+        if no_lint_value in ("none", "none_internal"):
+            ymake.report_configure_error(
+                'NO_LINT() and STYLE_RUFF() can\'t be enabled both at the same time',
+            )
+        # temporary allow using ruff for taxi only
+        ruff_allowed_paths = ("taxi/",)
+        if not upath.startswith(ruff_allowed_paths):
+            ymake.report_configure_error("STYLE_RUFF() is allowed only in " + ", ".join(ruff_allowed_paths))
+
+        resolved_files = get_resolved_files()
+        if resolved_files:
+            resource = "build/external_resources/ruff"
+            params = ["ruff", "tools/ruff_linter/bin/ruff_linter"]
+            params += ["FILES"] + resolved_files
+            params += ["GLOBAL_RESOURCES", resource]
+            ruff_cfg = unit.get('STYLE_RUFF_PYPROJECT_VALUE') or 'build/config/tests/ruff/ruff.toml'
+            params += ['CONFIGS', ruff_cfg]
             unit.on_add_linter_check(params)
 
     if files and unit.get('STYLE_PYTHON_VALUE') == 'yes' and is_py3(unit):

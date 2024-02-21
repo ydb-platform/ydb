@@ -107,7 +107,6 @@ SRCS(
     misc/arithmetic_formula.cpp
     GLOBAL misc/assert.cpp
     misc/backoff_strategy.cpp
-    misc/backoff_strategy_config.cpp
     misc/bitmap.cpp
     misc/bit_packed_unsigned_vector.cpp
     misc/bit_packing.cpp
@@ -129,7 +128,7 @@ SRCS(
     misc/hazard_ptr.cpp
     misc/hedging_manager.cpp
     misc/histogram.cpp
-    misc/historic_usage_aggregator.cpp
+    misc/adjusted_exponential_moving_average.cpp
     misc/hr_timer.cpp
     misc/id_generator.cpp
     misc/linear_probe.cpp

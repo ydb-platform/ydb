@@ -1,6 +1,7 @@
 #include "portion_info.h"
 #include <ydb/core/tx/columnshard/engines/scheme/index_info.h>
 #include <ydb/core/tx/columnshard/engines/db_wrapper.h>
+#include <ydb/core/tx/columnshard/data_sharing/protos/data.pb.h>
 #include <ydb/core/formats/arrow/arrow_filter.h>
 #include <util/system/tls.h>
 #include <ydb/core/formats/arrow/size_calcer.h>
@@ -120,6 +121,16 @@ ui64 TPortionInfo::GetRawBytes(const std::set<ui32>& entityIds) const {
     return sum;
 }
 
+ui64 TPortionInfo::GetIndexBytes(const std::set<ui32>& entityIds) const {
+    ui64 sum = 0;
+    for (auto&& r : Indexes) {
+        if (entityIds.contains(r.GetIndexId())) {
+            sum += r.GetBlobRange().Size;
+        }
+    }
+    return sum;
+}
+
 int TPortionInfo::CompareSelfMaxItemMinByPk(const TPortionInfo& item, const TIndexInfo& info) const {
     return CompareByColumnIdsImpl<TMaxGetter, TMinGetter>(item, info.KeyColumns);
 }
@@ -211,12 +222,157 @@ void TPortionInfo::RemoveFromDatabase(IDbWrapper& db) const {
     for (auto& record : Records) {
         db.EraseColumn(*this, record);
     }
+    for (auto& record : Indexes) {
+        db.EraseIndex(*this, record);
+    }
 }
+
 void TPortionInfo::SaveToDatabase(IDbWrapper& db) const {
     for (auto& record : Records) {
         db.WriteColumn(*this, record);
     }
+    for (auto& record : Indexes) {
+        db.WriteIndex(*this, record);
+    }
 }
+
+std::vector<NKikimr::NOlap::TPortionInfo::TPage> TPortionInfo::BuildPages() const {
+    std::vector<TPage> pages;
+    struct TPart {
+    public:
+        const TColumnRecord* Record = nullptr;
+        const TIndexChunk* Index = nullptr;
+        const ui32 RecordsCount;
+        TPart(const TColumnRecord* record, const ui32 recordsCount)
+            : Record(record)
+            , RecordsCount(recordsCount) {
+
+        }
+        TPart(const TIndexChunk* record, const ui32 recordsCount)
+            : Index(record)
+            , RecordsCount(recordsCount) {
+
+        }
+    };
+    std::map<ui32, std::deque<TPart>> entities;
+    std::map<ui32, ui32> currentCursor;
+    ui32 currentSize = 0;
+    ui32 currentId = 0;
+    for (auto&& i : Records) {
+        if (currentId != i.GetColumnId()) {
+            currentSize = 0;
+            currentId = i.GetColumnId();
+        }
+        currentSize += i.GetMeta().GetNumRowsVerified();
+        ++currentCursor[currentSize];
+        entities[i.GetColumnId()].emplace_back(&i, i.GetMeta().GetNumRowsVerified());
+    }
+    for (auto&& i : Indexes) {
+        if (currentId != i.GetIndexId()) {
+            currentSize = 0;
+            currentId = i.GetIndexId();
+        }
+        currentSize += i.GetRecordsCount();
+        ++currentCursor[currentSize];
+        entities[i.GetIndexId()].emplace_back(&i, i.GetRecordsCount());
+    }
+    const ui32 entitiesCount = entities.size();
+    ui32 predCount = 0;
+    for (auto&& i : currentCursor) {
+        if (i.second != entitiesCount) {
+            continue;
+        }
+        std::vector<const TColumnRecord*> records;
+        std::vector<const TIndexChunk*> indexes;
+        for (auto&& c : entities) {
+            ui32 readyCount = 0;
+            while (readyCount < i.first - predCount && c.second.size()) {
+                if (c.second.front().Record) {
+                    records.emplace_back(c.second.front().Record);
+                } else {
+                    AFL_VERIFY(c.second.front().Index);
+                    indexes.emplace_back(c.second.front().Index);
+                }
+                readyCount += c.second.front().RecordsCount;
+                c.second.pop_front();
+            }
+            AFL_VERIFY(readyCount == i.first - predCount)("ready", readyCount)("cursor", i.first)("pred_cursor", predCount);
+        }
+        pages.emplace_back(std::move(records), std::move(indexes), i.first - predCount);
+        predCount = i.first;
+    }
+    for (auto&& i : entities) {
+        AFL_VERIFY(i.second.empty());
+    }
+    return pages;
+}
+
+ui64 TPortionInfo::GetTxVolume() const {
+    return 1024 + Records.size() * 256 + Indexes.size() * 256;
+}
+
+void TPortionInfo::SerializeToProto(NKikimrColumnShardDataSharingProto::TPortionInfo& proto) const {
+    proto.SetPathId(PathId);
+    proto.SetPortionId(Portion);
+    *proto.MutableMinSnapshot() = MinSnapshot.SerializeToProto();
+    if (!RemoveSnapshot.IsZero()) {
+        *proto.MutableRemoveSnapshot() = RemoveSnapshot.SerializeToProto();
+    }
+    *proto.MutableMeta() = Meta.SerializeToProto();
+
+    for (auto&& r : Records) {
+        *proto.AddRecords() = r.SerializeToProto();
+    }
+
+    for (auto&& r : Indexes) {
+        *proto.AddIndexes() = r.SerializeToProto();
+    }
+}
+
+TConclusionStatus TPortionInfo::DeserializeFromProto(const NKikimrColumnShardDataSharingProto::TPortionInfo& proto, const TIndexInfo& info) {
+    PathId = proto.GetPathId();
+    Portion = proto.GetPortionId();
+    {
+        auto parse = MinSnapshot.DeserializeFromProto(proto.GetMinSnapshot());
+        if (!parse) {
+            return parse;
+        }
+    }
+    if (proto.HasRemoveSnapshot()) {
+        auto parse = RemoveSnapshot.DeserializeFromProto(proto.GetRemoveSnapshot());
+        if (!parse) {
+            return parse;
+        }
+    }
+    if (!Meta.DeserializeFromProto(proto.GetMeta(), info)) {
+        return TConclusionStatus::Fail("cannot parse meta");
+    }
+    for (auto&& i : proto.GetRecords()) {
+        auto parse = TColumnRecord::BuildFromProto(i, info);
+        if (!parse) {
+            return parse;
+        }
+        Records.emplace_back(std::move(parse.DetachResult()));
+    }
+    for (auto&& i : proto.GetIndexes()) {
+        auto parse = TIndexChunk::BuildFromProto(i);
+        if (!parse) {
+            return parse;
+        }
+        Indexes.emplace_back(std::move(parse.DetachResult()));
+    }
+    return TConclusionStatus::Success();
+}
+
+TConclusion<TPortionInfo> TPortionInfo::BuildFromProto(const NKikimrColumnShardDataSharingProto::TPortionInfo& proto, const TIndexInfo& info) {
+    TPortionInfo result;
+    auto parse = result.DeserializeFromProto(proto, info);
+    if (!parse) {
+        return parse;
+    }
+    return result;
+}
+
 std::shared_ptr<arrow::ChunkedArray> TPortionInfo::TPreparedColumn::Assemble() const {
     Y_ABORT_UNLESS(!Blobs.empty());
 

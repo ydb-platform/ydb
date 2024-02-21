@@ -130,6 +130,7 @@ private:
         if (markFinished && !TYtDqProcessWrite::Match(input.Get())) {
             with_lock(state->StatisticsMutex) {
                 state->HybridStatistics[input->Content()].Entries.emplace_back(TString{"YtExecution"}, 0, 0, 0, 0, 1);
+                state->Statistics[Max<ui32>()].Entries.emplace_back(TString{"YtExecution"}, 0, 0, 0, 0, 1);
             }
         }
         auto outSection = TYtOutputOpBase(input).Output();

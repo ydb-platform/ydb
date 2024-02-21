@@ -74,7 +74,7 @@ bool TTcpConnection::TPacket::MarkEncoded()
     return State.compare_exchange_strong(expected, EPacketState::Encoded);
 }
 
-void TTcpConnection::TPacket::OnCancel(const TError& /* error */)
+void TTcpConnection::TPacket::OnCancel(const TError& /*error*/)
 {
     auto expected = EPacketState::Queued;
     if (!State.compare_exchange_strong(expected, EPacketState::Canceled)) {
@@ -793,6 +793,12 @@ void TTcpConnection::UnsubscribeTerminated(const TCallback<void(const TError&)>&
 
 void TTcpConnection::OnEvent(EPollControl control)
 {
+    auto multiplexingBand = MultiplexingBand_.load();
+    if (multiplexingBand != ActualMultiplexingBand_) {
+        Poller_->SetExecutionPool(this, FormatEnum(multiplexingBand));
+        ActualMultiplexingBand_ = multiplexingBand;
+    }
+
     EPollControl action;
     {
         auto rawPendingControl = PendingControl_.load(std::memory_order::acquire);
@@ -2015,7 +2021,7 @@ void TTcpConnection::TryEstablishSslSession()
             }
 
             // Enable verification of the peer's certificate with the CA.
-            SSL_set_verify(Ssl_.get(), SSL_VERIFY_PEER, /* callback */ nullptr);
+            SSL_set_verify(Ssl_.get(), SSL_VERIFY_PEER, /*callback*/ nullptr);
             break;
         }
         case EVerificationMode::None:

@@ -256,7 +256,7 @@ public:
                             }
                         }
                         break;
-                        default:
+                    default:
                         break;
                     }
                     *result = value;
@@ -350,6 +350,18 @@ public:
 
                 if (!AddCluster(table, res, input, ctx)) {
                     return TStatus::Error;
+                }
+
+                if (const auto& preparingQuery = SessionCtx->Query().PreparingQuery;
+                        preparingQuery
+                        && res.Metadata->Kind == EKikimrTableKind::View
+                ) {
+                    const auto& viewMetadata = *res.Metadata;
+                    auto* viewInfo = preparingQuery->MutablePhysicalQuery()->MutableViewInfos()->Add();
+                    auto* pathId = viewInfo->MutableTableId();
+                    pathId->SetOwnerId(viewMetadata.PathId.OwnerId());
+                    pathId->SetTableId(viewMetadata.PathId.TableId());
+                    viewInfo->SetSchemaVersion(viewMetadata.SchemaVersion);
                 }
             } else {
                 TIssueScopeGuard issueScope(ctx.IssueManager, [input, &table, &ctx]() {
@@ -679,6 +691,11 @@ public:
         auto& tableDesc = SessionCtx->Tables().GetTable(cluster, tablePath);
         if (key.GetKeyType() == TKikimrKey::Type::Table) {
             if (tableDesc.Metadata->Kind == EKikimrTableKind::External) {
+                if (tableDesc.Metadata->ExternalSource.SourceType == ESourceType::ExternalDataSource && tableDesc.Metadata->TableType == NYql::ETableType::Unknown) {
+                    ctx.AddError(TIssue(node->Pos(ctx),
+                                        TStringBuilder() << "Attempt to read from external data source \"" << tablePath << "\" without table. Please specify table to read from"));
+                    return nullptr;
+                }
                 if (tableDesc.Metadata->ExternalSource.SourceType == ESourceType::ExternalDataSource) {
                     const auto& source = ExternalSourceFactory->GetOrCreate(tableDesc.Metadata->ExternalSource.Type);
                     ctx.Step.Repeat(TExprStep::DiscoveryIO)

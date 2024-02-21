@@ -69,6 +69,9 @@ message TKqpPhyColumn {
         Ydb.TypedValue DefaultFromLiteral = 5;
     }
     bool NotNull = 6;
+    // flag that indicates that column is currently under the build
+    // operation.
+    optional bool IsBuildInProgress = 7;
 }
 
 enum EKqpPhyTableKind {
@@ -344,11 +347,17 @@ message TKqpExternalSink {
     string AuthInfo = 4;
 }
 
+message TKqpInternalSink {
+    string Type = 1;
+    google.protobuf.Any Settings = 2;
+}
+
 message TKqpSink {
     uint32 OutputIndex = 1;
 
     oneof Type {
         TKqpExternalSink ExternalSink = 2;
+        TKqpInternalSink InternalSink = 3;
     }
 }
 
@@ -424,6 +433,11 @@ message TKqpSchemeOperation {
         TKqpPhyMetadataOperation UpsertObject = 24;
         TKqpPhyMetadataOperation AlterObject = 25;
         TKqpPhyMetadataOperation DropObject = 26;
+        NKikimrSchemeOp.TModifyScheme CreateColumnTable = 27;
+        NKikimrSchemeOp.TModifyScheme AlterColumnTable = 28;
+        NKikimrSchemeOp.TModifyScheme CreateTableStore = 29;
+        NKikimrSchemeOp.TModifyScheme DropTableStore = 30;
+        NKikimrSchemeOp.TModifyScheme AlterTableStore = 31;
     }
 }
 
@@ -493,4 +507,6 @@ message TKqpPhyQuery {
     bool HasUncommittedChangesRead = 9;
 
     string QueryDiagnostics = 10;
+
+    repeated TKqpTableInfo ViewInfos = 11;
 }

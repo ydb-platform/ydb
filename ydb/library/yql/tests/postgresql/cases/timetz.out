@@ -2,18 +2,16 @@
 -- TIMETZ
 --
 CREATE TABLE TIMETZ_TBL (f1 time(2) with time zone);
-INSERT INTO TIMETZ_TBL VALUES ('00:01 PDT');
-INSERT INTO TIMETZ_TBL VALUES ('01:00 PDT');
-INSERT INTO TIMETZ_TBL VALUES ('02:03 PDT');
-INSERT INTO TIMETZ_TBL VALUES ('07:07 PST');
-INSERT INTO TIMETZ_TBL VALUES ('08:08 EDT');
-INSERT INTO TIMETZ_TBL VALUES ('11:59 PDT');
-INSERT INTO TIMETZ_TBL VALUES ('12:00 PDT');
-INSERT INTO TIMETZ_TBL VALUES ('12:01 PDT');
-INSERT INTO TIMETZ_TBL VALUES ('23:59 PDT');
-INSERT INTO TIMETZ_TBL VALUES ('11:59:59.99 PM PDT');
-INSERT INTO TIMETZ_TBL VALUES ('2003-03-07 15:36:39 America/New_York');
-INSERT INTO TIMETZ_TBL VALUES ('2003-07-07 15:36:39 America/New_York');
+-- this should fail (timezone not specified without a date)
+INSERT INTO TIMETZ_TBL VALUES ('15:36:39 m2');
+ERROR:  invalid input syntax for type time with time zone: "15:36:39 m2"
+LINE 1: INSERT INTO TIMETZ_TBL VALUES ('15:36:39 m2');
+                                       ^
+-- this should fail (dynamic timezone abbreviation without a date)
+INSERT INTO TIMETZ_TBL VALUES ('15:36:39 MSK m2');
+ERROR:  invalid input syntax for type time with time zone: "15:36:39 MSK m2"
+LINE 1: INSERT INTO TIMETZ_TBL VALUES ('15:36:39 MSK m2');
+                                       ^
 SELECT f1 AS "None" FROM TIMETZ_TBL WHERE f1 < '00:00-07';
  None 
 ------

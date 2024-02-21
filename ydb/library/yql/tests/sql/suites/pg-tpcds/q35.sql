@@ -8,19 +8,19 @@ select
   cd_marital_status,
   cd_dep_count,
   count(*) cnt1,
-  avg(cd_dep_count),
-  max(cd_dep_count),
-  sum(cd_dep_count),
+  avg(cd_dep_count) a1,
+  max(cd_dep_count) x1,
+  sum(cd_dep_count) s1,
   cd_dep_employed_count,
   count(*) cnt2,
-  avg(cd_dep_employed_count),
-  max(cd_dep_employed_count),
-  sum(cd_dep_employed_count),
+  avg(cd_dep_employed_count) a2,
+  max(cd_dep_employed_count) x2,
+  sum(cd_dep_employed_count) s2,
   cd_dep_college_count,
   count(*) cnt3,
-  avg(cd_dep_college_count),
-  max(cd_dep_college_count),
-  sum(cd_dep_college_count)
+  avg(cd_dep_college_count) a3,
+  max(cd_dep_college_count) x3,
+  sum(cd_dep_college_count) s3
  from
   plato.customer c,plato.customer_address ca,plato.customer_demographics
  where

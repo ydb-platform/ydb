@@ -592,9 +592,11 @@ message TGenericClusterConfig {
 message TGenericConnectorConfig {
     // Connector instance network endpoint
     optional NYql.NConnector.NApi.TEndpoint Endpoint = 3;
-    // If true, GRPC Client will use TLS encryption.
-    // Server cert will be verified with system CA cert pool.
+    // If true, Connector GRPC Client will use TLS encryption.
     optional bool UseSsl = 4;
+    // Path to the custom CA certificate to verify Connector's certs.
+    // If empty, the default system CA certificate pool will be used.
+    optional string SslCaCrt = 5;
 
     reserved 1, 2;
 }

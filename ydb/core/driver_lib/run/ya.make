@@ -74,6 +74,7 @@ PEERDIR(
     ydb/core/grpc_services/auth_processor
     ydb/core/health_check
     ydb/core/http_proxy
+    ydb/core/jaeger_tracing
     ydb/core/kesus/proxy
     ydb/core/kesus/tablet
     ydb/core/keyvalue
@@ -133,7 +134,7 @@ PEERDIR(
     ydb/library/folder_service/proto
     ydb/library/pdisk_io
     ydb/library/security
-    ydb/library/yql/minikql/comp_nodes/llvm
+    ydb/library/yql/minikql/comp_nodes/llvm14
     ydb/library/yql/providers/pq/cm_client
     ydb/library/yql/public/udf/service/exception_policy
     ydb/public/lib/base

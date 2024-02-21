@@ -7,8 +7,16 @@ SET extra_float_digits = 0;
 -- is not
 SELECT var_pop(1.0::float8), var_samp(2.0::float8);
 SELECT stddev_pop(3.0::float8), stddev_samp(4.0::float8);
+SELECT var_pop('inf'::float8), var_samp('inf'::float8);
+SELECT stddev_pop('inf'::float8), stddev_samp('inf'::float8);
+SELECT var_pop('nan'::float8), var_samp('nan'::float8);
+SELECT stddev_pop('nan'::float8), stddev_samp('nan'::float8);
 SELECT var_pop(1.0::float4), var_samp(2.0::float4);
 SELECT stddev_pop(3.0::float4), stddev_samp(4.0::float4);
+SELECT var_pop('inf'::float4), var_samp('inf'::float4);
+SELECT stddev_pop('inf'::float4), stddev_samp('inf'::float4);
+SELECT var_pop('nan'::float4), var_samp('nan'::float4);
+SELECT stddev_pop('nan'::float4), stddev_samp('nan'::float4);
 SELECT var_pop('inf'::numeric), var_samp('inf'::numeric);
 SELECT stddev_pop('inf'::numeric), stddev_samp('inf'::numeric);
 SELECT var_pop('nan'::numeric), var_samp('nan'::numeric);
@@ -24,6 +32,17 @@ select avg(null::numeric) from generate_series(1,3);
 select avg(null::float8) from generate_series(1,3);
 select sum('NaN'::numeric) from generate_series(1,3);
 select avg('NaN'::numeric) from generate_series(1,3);
+-- verify correct results for infinite inputs
+SELECT sum(x::float8), avg(x::float8), var_pop(x::float8)
+FROM (VALUES ('1'), ('infinity')) v(x);
+SELECT sum(x::float8), avg(x::float8), var_pop(x::float8)
+FROM (VALUES ('infinity'), ('1')) v(x);
+SELECT sum(x::float8), avg(x::float8), var_pop(x::float8)
+FROM (VALUES ('infinity'), ('infinity')) v(x);
+SELECT sum(x::float8), avg(x::float8), var_pop(x::float8)
+FROM (VALUES ('-infinity'), ('infinity')) v(x);
+SELECT sum(x::float8), avg(x::float8), var_pop(x::float8)
+FROM (VALUES ('-infinity'), ('-infinity')) v(x);
 SELECT sum(x::numeric), avg(x::numeric), var_pop(x::numeric)
 FROM (VALUES ('1'), ('infinity')) v(x);
 SELECT sum(x::numeric), avg(x::numeric), var_pop(x::numeric)
@@ -41,6 +60,8 @@ SELECT avg(x::float8), var_pop(x::float8)
 FROM (VALUES (7000000000005), (7000000000007)) v(x);
 -- check single-tuple behavior
 SELECT covar_pop(1::float8,2::float8), covar_samp(3::float8,4::float8);
+SELECT covar_pop(1::float8,'inf'::float8), covar_samp(3::float8,'inf'::float8);
+SELECT covar_pop(1::float8,'nan'::float8), covar_samp(3::float8,'nan'::float8);
 -- test accum and combine functions directly
 CREATE TABLE regr_test (x float8, y float8);
 INSERT INTO regr_test VALUES (10,150),(20,250),(30,350),(80,540),(100,200);
@@ -90,3 +111,34 @@ insert into minmaxtest values(11), (12);
 create temp table t1 (a int, b int, c int, d int, primary key (a, b));
 create temp table t2 (x int, y int, z int, primary key (x, y));
 drop table t2;
+--
+-- Test GROUP BY matching of join columns that are type-coerced due to USING
+--
+create temp table t1(f1 int, f2 bigint);
+create temp table t2(f1 bigint, f22 bigint);
+drop table t1, t2;
+-- string_agg tests
+select string_agg(a,',') from (values('aaaa'),('bbbb'),('cccc')) g(a);
+select string_agg(a,',') from (values('aaaa'),(null),('bbbb'),('cccc')) g(a);
+select string_agg(a,'AB') from (values(null),(null),('bbbb'),('cccc')) g(a);
+select string_agg(a,',') from (values(null),(null)) g(a);
+-- string_agg bytea tests
+create table bytea_test_table(v bytea);
+select string_agg(v, '') from bytea_test_table;
+insert into bytea_test_table values(decode('ff','hex'));
+select string_agg(v, '') from bytea_test_table;
+insert into bytea_test_table values(decode('aa','hex'));
+select string_agg(v, '') from bytea_test_table;
+select string_agg(v, NULL) from bytea_test_table;
+select string_agg(v, decode('ee', 'hex')) from bytea_test_table;
+drop table bytea_test_table;
+-- outer reference in FILTER (PostgreSQL extension)
+select (select count(*)
+        from (values (1)) t0(inner_c))
+from (values (2),(3)) t1(outer_c); -- inner query is aggregation query
+select p, percentile_cont(p order by p) within group (order by x)  -- error
+from generate_series(1,5) x,
+     (values (0::float8),(0.1),(0.25),(0.4),(0.5),(0.6),(0.75),(0.9),(1)) v(p)
+group by p order by p;
+-- test aggregates with common transition functions share the same states
+begin work;

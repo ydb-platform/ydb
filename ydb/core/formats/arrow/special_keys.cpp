@@ -1,7 +1,7 @@
 #include "special_keys.h"
 #include "permutations.h"
 #include "reader/read_filter_merger.h"
-#include <ydb/core/formats/arrow/serializer/full.h>
+#include <ydb/core/formats/arrow/serializer/abstract.h>
 #include <ydb/core/formats/arrow/arrow_helpers.h>
 #include <ydb/core/formats/arrow/arrow_filter.h>
 
@@ -11,7 +11,7 @@ bool TSpecialKeys::DeserializeFromString(const TString& data) {
     if (!data) {
         return false;
     }
-    Data = NArrow::TStatusValidator::GetValid(NArrow::NSerialization::TFullDataDeserializer().Deserialize(data));
+    Data = NArrow::TStatusValidator::GetValid(NArrow::NSerialization::TSerializerContainer::GetDefaultSerializer()->Deserialize(data));
     return !!Data;
 }
 
@@ -25,7 +25,7 @@ NKikimr::NArrow::TReplaceKey TSpecialKeys::GetKeyByIndex(const ui32 position, co
 }
 
 TString TSpecialKeys::SerializeToString() const {
-    return NArrow::NSerialization::TFullDataSerializer(arrow::ipc::IpcWriteOptions::Defaults()).Serialize(Data);
+    return NArrow::NSerialization::TSerializerContainer::GetDefaultSerializer()->SerializeFull(Data);
 }
 
 TString TSpecialKeys::SerializeToStringDataOnlyNoCompression() const {

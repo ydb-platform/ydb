@@ -5,7 +5,7 @@
 #include <ydb/library/yql/minikql/computation/mkql_block_reader.h>
 #include <ydb/library/yql/minikql/computation/mkql_block_builder.h>
 #include <ydb/library/yql/minikql/computation/mkql_block_impl.h>
-#include <ydb/library/yql/minikql/computation/mkql_block_impl_codegen.h>
+#include <ydb/library/yql/minikql/computation/mkql_block_impl_codegen.h>  // Y_IGNORE
 #include <ydb/library/yql/minikql/computation/mkql_computation_node_impl.h>
 #include <ydb/library/yql/minikql/computation/mkql_computation_node_holders.h>
 #include <ydb/library/yql/minikql/computation/mkql_computation_node_codegen.h>  // Y_IGNORE
@@ -509,7 +509,6 @@ public:
         auto& context = ctx.Codegen.GetContext();
 
         const auto valueType = Type::getInt128Ty(context);
-        const auto ptrValueType = PointerType::getUnqual(valueType);
         const auto statusType = Type::getInt32Ty(context);
         const auto indexType = Type::getInt64Ty(context);
         const auto flagType = Type::getInt1Ty(context);
@@ -609,6 +608,7 @@ public:
         ICodegeneratorInlineWideNode::TGettersList getters(AggsParams_.size());
         for (size_t idx = 0U; idx < getters.size(); ++idx) {
             getters[idx] = [idx, getType, getPtr, indexType, statePtrType, stateOnStack](const TCodegenContext& ctx, BasicBlock*& block) {
+                Y_UNUSED(ctx);
                 const auto stateArg = new LoadInst(statePtrType, stateOnStack, "state", block);
                 return CallInst::Create(getType, getPtr, {stateArg, ConstantInt::get(indexType, idx)}, "get", block);
             };
@@ -921,7 +921,6 @@ public:
         auto& context = ctx.Codegen.GetContext();
 
         const auto valueType = Type::getInt128Ty(context);
-        const auto ptrValueType = PointerType::getUnqual(valueType);
         const auto statusType = Type::getInt32Ty(context);
         const auto indexType = Type::getInt64Ty(context);
         const auto flagType = Type::getInt1Ty(context);

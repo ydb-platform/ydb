@@ -189,7 +189,7 @@ public:
     }
 
     void SaveAllBlobIdsTo(TVector<TLogoBlobID>& vec) const override {
-        for (auto blobId : DataId.Blobs()) {
+        for (const auto& blobId : DataId.Blobs()) {
             vec.emplace_back(blobId);
         }
     }

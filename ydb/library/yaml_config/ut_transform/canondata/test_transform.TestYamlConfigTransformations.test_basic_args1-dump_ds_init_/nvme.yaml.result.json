@@ -1,0 +1,1 @@
+{"error": true, "stderr": "uncaught exception:\n    address -> REDACTED\n    what() -> \"ydb/library/yaml_config/deprecated/yaml_config_parser.cpp:913: Specify host_configs to use blobstorage init command\"\n    type -> TWithBackTrace<yexception>\n"}

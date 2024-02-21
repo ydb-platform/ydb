@@ -17,8 +17,8 @@ TEngineLogsCounters::TEngineLogsCounters()
     const std::map<i64, TString> portionSizeBorders = {{0, "0"}, {512 * 1024, "512kb"}, {1024 * 1024, "1Mb"},
         {2 * 1024 * 1024, "2Mb"}, {4 * 1024 * 1024, "4Mb"},
         {8 * 1024 * 1024, "8Mb"}, {16 * 1024 * 1024, "16Mb"},
-        {32 * 1024 * 1024, "32Mb"}, {64 * 1024 * 1024, "64Mb"}};
-    const std::set<i64> portionRecordBorders = {0, 2500, 5000, 7500, 9000, 10000, 20000, 40000, 80000, 160000};
+        {32 * 1024 * 1024, "32Mb"}, {64 * 1024 * 1024, "64Mb"}, {128 * 1024 * 1024, "128Mb"}, {256 * 1024 * 1024, "256Mb"}, {512 * 1024 * 1024, "512Mb"}};
+    const std::set<i64> portionRecordBorders = {0, 2500, 5000, 7500, 9000, 10000, 20000, 40000, 80000, 160000, 320000, 640000, 1024000};
     for (auto&& i : GetEnumNames<NOlap::NPortion::EProduced>()) {
         if (BlobSizeDistribution.size() <= (ui32)i.first) {
             BlobSizeDistribution.resize((ui32)i.first + 1);

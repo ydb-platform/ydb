@@ -454,7 +454,7 @@ class Pdb(OldPdb):
                 with self._hold_exceptions(_chained_exceptions):
                     OldPdb.interaction(self, frame, tb)
             else:
-                OldPdb.interaction(self, frame, traceback)
+                OldPdb.interaction(self, frame, tb_or_exc)
 
         except KeyboardInterrupt:
             self.stdout.write("\n" + self.shell.get_exception_only())
@@ -1111,10 +1111,13 @@ class InterruptiblePdb(Pdb):
                 raise
 
 
-def set_trace(frame=None):
+def set_trace(frame=None, header=None):
     """
     Start debugging from `frame`.
 
     If frame is not specified, debugging starts from caller's frame.
     """
-    Pdb().set_trace(frame or sys._getframe().f_back)
+    pdb = Pdb()
+    if header is not None:
+        pdb.message(header)
+    pdb.set_trace(frame or sys._getframe().f_back)

@@ -158,6 +158,41 @@ std::tuple<org::apache::arrow::flatbuf::Type, flatbuffers::Offset<void>> Seriali
     }
 }
 
+int ExtractTableIndexFromColumn(const TBatchColumn* column)
+{
+    YT_VERIFY(column->Values);
+
+    // Expecting rle but not dictionary column.
+    YT_VERIFY(column->Rle);
+    YT_VERIFY(!column->Rle->ValueColumn->Dictionary);
+
+    const auto* valueColumn = column->Rle->ValueColumn;
+    auto values = valueColumn->GetTypedValues<ui64>();
+
+    // Expecting only one element.
+    YT_VERIFY(values.size() == 1);
+
+    auto rleIndexes = column->GetTypedValues<ui64>();
+
+    auto startIndex = column->StartIndex;
+
+    int tableIndex = 0;
+    DecodeIntegerVector(
+        startIndex,
+        startIndex + 1,
+        valueColumn->Values->BaseValue,
+        valueColumn->Values->ZigZagEncoded,
+        TRange<ui32>(),
+        rleIndexes,
+        [&] (auto index) {
+            return values[index];
+        },
+        [&] (auto value) {
+            tableIndex = value;
+        });
+    return tableIndex;
+}
+
 int GetIntegralLikeTypeByteSize(ESimpleLogicalValueType type)
 {
     switch (type) {
@@ -971,10 +1006,10 @@ private:
         Reset();
 
         ssize_t sameTableRangeBeginRowIndex = 0;
-        i32 tableIndex = 0;
+        int tableIndex = 0;
 
         for (ssize_t rowIndex = 0; rowIndex < std::ssize(rows); rowIndex++) {
-            i32 currentTableIndex = -1;
+            int currentTableIndex = -1;
             if (TableCount_ > 1) {
                 const auto& elems = rows[rowIndex].Elements();
                 for (ssize_t columnIndex = std::ssize(elems) - 1; columnIndex >= 0; --columnIndex) {
@@ -997,25 +1032,38 @@ private:
 
         auto currentRows = rows.Slice(sameTableRangeBeginRowIndex, rows.size());
         WriteRowsForSingleTable(currentRows, tableIndex);
+        ++EncodedRowBatchCount_;
     }
 
     void DoWriteBatch(NTableClient::IUnversionedRowBatchPtr rowBatch) override
     {
         auto columnarBatch = rowBatch->TryAsColumnar();
         if (!columnarBatch) {
-            YT_LOG_DEBUG("Encoding non-columnar batch; running write rows (RowCount: %v)", rowBatch->GetRowCount());
             DoWrite(rowBatch->MaterializeRows());
-        } else {
-            YT_LOG_DEBUG("Encoding columnar batch (RowCount: %v)", rowBatch->GetRowCount());
-            YT_VERIFY(TableCount_ == 1);
-            Reset();
-            RowCount_ = rowBatch->GetRowCount();
-            PrepareColumns(columnarBatch->MaterializeColumns(), 0);
-            Encode(0);
+            return;
         }
+        int tableIndex = 0;
+        auto batchColumns = columnarBatch->MaterializeColumns();
+
+        if (TableCount_ > 1) {
+            tableIndex = -1;
+            for (const auto* column : batchColumns) {
+                if (column->Id == GetTableIndexColumnId()) {
+                    tableIndex = ExtractTableIndexFromColumn(column);
+                    break;
+                }
+            }
+            YT_VERIFY(tableIndex < TableCount_ && tableIndex >= 0);
+        }
+
+        Reset();
+        RowCount_ = rowBatch->GetRowCount();
+        PrepareColumns(batchColumns, tableIndex);
+        Encode(tableIndex);
+        ++EncodedColumnarBatchCount_;
     }
 
-    void Encode(i32 tableIndex)
+    void Encode(int tableIndex)
     {
         auto output = GetOutputStream();
         if (tableIndex != PrevTableIndex_ || IsSchemaMessageNeeded()) {
@@ -1034,6 +1082,16 @@ private:
         TryFlushBuffer(true);
     }
 
+    i64 GetEncodedRowBatchCount() const override
+    {
+        return EncodedRowBatchCount_;
+    }
+
+    i64 GetEncodedColumnarBatchCount() const override
+    {
+        return EncodedColumnarBatchCount_;
+    }
+
 private:
     int TableCount_ = 0;
     bool IsFirstBatch_ = true;
@@ -1045,6 +1103,9 @@ private:
     std::vector<NColumnConverters::TColumnConverters> ColumnConverters_;
     std::vector<THashMap<int, int>> TableIdToIndex_;
     std::vector<bool> IsFirstBatchForSpecificTable_;
+
+    i64 EncodedRowBatchCount_ = 0;
+    i64 EncodedColumnarBatchCount_ = 0;
 
     struct TMessage
     {
@@ -1161,7 +1222,7 @@ private:
                 std::move(bodyWriter)});
     }
 
-    void PrepareSchema(i32 tableIndex)
+    void PrepareSchema(int tableIndex)
     {
         flatbuffers::FlatBufferBuilder flatbufBuilder;
 

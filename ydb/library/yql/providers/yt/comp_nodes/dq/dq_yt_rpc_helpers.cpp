@@ -5,51 +5,20 @@
 namespace NYql::NDqs {
 
 NYT::NYPath::TRichYPath ConvertYPathFromOld(const NYT::TRichYPath& richYPath) {
-    NYT::NYPath::TRichYPath tableYPath(richYPath.Path_);
-    const auto& rngs = richYPath.GetRanges();
-    if (rngs) {
-        TVector<NYT::NChunkClient::TReadRange> ranges;
-        for (const auto& rng: *rngs) {
-            auto& range = ranges.emplace_back();
-            if (rng.LowerLimit_.Offset_) {
-                range.LowerLimit().SetOffset(*rng.LowerLimit_.Offset_);
-            }
-
-            if (rng.LowerLimit_.TabletIndex_) {
-                range.LowerLimit().SetTabletIndex(*rng.LowerLimit_.TabletIndex_);
-            }
-
-            if (rng.LowerLimit_.RowIndex_) {
-                range.LowerLimit().SetRowIndex(*rng.LowerLimit_.RowIndex_);
-            }
-
-            if (rng.UpperLimit_.Offset_) {
-                range.UpperLimit().SetOffset(*rng.UpperLimit_.Offset_);
-            }
-
-            if (rng.UpperLimit_.TabletIndex_) {
-                range.UpperLimit().SetTabletIndex(*rng.UpperLimit_.TabletIndex_);
-            }
-
-            if (rng.UpperLimit_.RowIndex_) {
-                range.UpperLimit().SetRowIndex(*rng.UpperLimit_.RowIndex_);
-            }
-        }
-        tableYPath.SetRanges(std::move(ranges));
-    }
-
-    if (richYPath.Columns_) {
-        tableYPath.SetColumns(richYPath.Columns_->Parts_);
-    }
-
-    return tableYPath;
+    TStringStream ss;
+    NYT::PathToNode(richYPath).Save(&ss);
+    NYT::NYPath::TRichYPath path;
+    NYT::NYPath::Deserialize(path, NYT::NYTree::ConvertToNode(NYT::NYson::TYsonString(ss.Str())));
+    return path;
 }
-
 
 std::unique_ptr<TSettingsHolder> CreateInputStreams(bool isArrow, const TString& token, const TString& clusterName, const ui64 timeout, bool unordered, const TVector<std::pair<NYT::TRichYPath, NYT::TFormat>>& tables, NYT::TNode samplingSpec) {
     auto connectionConfig = NYT::New<NYT::NApi::NRpcProxy::TConnectionConfig>();
     connectionConfig->ClusterUrl = clusterName;
     connectionConfig->DefaultTotalStreamingTimeout = TDuration::MilliSeconds(timeout);
+    connectionConfig->EnableRetries = true;
+    connectionConfig->DefaultPingPeriod = TDuration::MilliSeconds(5000);
+
     auto connection = CreateConnection(connectionConfig);
     auto clientOptions = NYT::NApi::TClientOptions();
 

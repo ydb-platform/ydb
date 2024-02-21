@@ -95,10 +95,12 @@ struct TWritePermissionSettings {
 struct TWriteObjectSettings {
     NNodes::TMaybeNode<NNodes::TCoAtom> Mode;
     NNodes::TCoNameValueTupleList Features;
-    TWriteObjectSettings(NNodes::TMaybeNode<NNodes::TCoAtom>&& mode, NNodes::TCoNameValueTupleList&& kvFeatures)
+    NNodes::TCoAtomList ResetFeatures;
+    TWriteObjectSettings(NNodes::TMaybeNode<NNodes::TCoAtom>&& mode, NNodes::TCoNameValueTupleList&& kvFeatures, NNodes::TCoAtomList&& resetFeatures)
         : Mode(std::move(mode))
-        , Features(std::move(kvFeatures)) {
-
+        , Features(std::move(kvFeatures))
+        , ResetFeatures(std::move(resetFeatures))
+    {
     }
 };
 
@@ -193,8 +195,8 @@ bool ValidateDateTimeFormatName(std::string_view formatName, TExprContext& ctx);
 bool ValidateTimestampFormatName(std::string_view formatName, TExprContext& ctx);
 
 bool TransformPgSetItemOption(
-    const NNodes::TCoPgSelect& pgSelect, 
-    TStringBuf optionName, 
+    const NNodes::TCoPgSelect& pgSelect,
+    TStringBuf optionName,
     std::function<void(const NNodes::TExprBase&)> lambda
 );
 
@@ -207,8 +209,8 @@ bool NeedToRenamePgSelectColumns(const NNodes::TCoPgSelect& pgSelect);
 bool RenamePgSelectColumns(
     const NNodes::TCoPgSelect& node,
     TExprNode::TPtr& output,
-    TMaybe<TVector<TString>> tableColumnOrder, 
-    TExprContext& ctx, 
+    const TMaybe<TColumnOrder>& tableColumnOrder,
+    TExprContext& ctx,
     TTypeAnnotationContext& types);
 } // namespace NCommon
 } // namespace NYql

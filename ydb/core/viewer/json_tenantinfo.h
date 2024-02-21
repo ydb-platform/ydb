@@ -388,11 +388,7 @@ public:
                 TenantNodesSystemInfo[tenantId] = std::move(ev->Get()->Record);
                 RequestDone();
                 break;
-            case NKikimrViewer::TEvViewerResponse::kQueryResponse:
-            case NKikimrViewer::TEvViewerResponse::kReserved14:
-            case NKikimrViewer::TEvViewerResponse::kReserved15:
-            case NKikimrViewer::TEvViewerResponse::kReserved16:
-            case NKikimrViewer::TEvViewerResponse::RESPONSE_NOT_SET:
+            default:
                 break;
         }
     }
@@ -424,11 +420,7 @@ public:
                 case NKikimrViewer::TEvViewerRequest::kSystemRequest:
                     SendViewerSystemRequest(tenantId);
                     break;
-                case NKikimrViewer::TEvViewerRequest::kQueryRequest:
-                case NKikimrViewer::TEvViewerRequest::kReserved14:
-                case NKikimrViewer::TEvViewerRequest::kReserved15:
-                case NKikimrViewer::TEvViewerRequest::kReserved16:
-                case NKikimrViewer::TEvViewerRequest::REQUEST_NOT_SET:
+                default:
                     break;
             }
             RequestDone();
@@ -667,9 +659,12 @@ public:
 
                 if (tenant.GetType() == NKikimrViewer::Serverless) {
                     tenant.SetStorageAllocatedSize(tenant.GetMetrics().GetStorage());
-                    tenant.SetMemoryUsed(tenant.GetMetrics().GetMemory());
-                    tenant.ClearMemoryLimit();
-                    tenant.SetCoresUsed(static_cast<double>(tenant.GetMetrics().GetCPU()) / 1000000);
+                    const bool noExclusiveNodes = tenantNodes.empty();
+                    if (noExclusiveNodes) {
+                        tenant.SetMemoryUsed(tenant.GetMetrics().GetMemory());
+                        tenant.ClearMemoryLimit();
+                        tenant.SetCoresUsed(static_cast<double>(tenant.GetMetrics().GetCPU()) / 1000000);
+                    }
                 }
 
                 if (Tablets) {

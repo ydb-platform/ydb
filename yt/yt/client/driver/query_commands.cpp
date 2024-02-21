@@ -330,6 +330,13 @@ void TAlterQueryCommand::Register(TRegistrar registrar)
             return command->Options.AccessControlObject;
         })
         .Optional(/*init*/ false);
+
+    registrar.ParameterWithUniversalAccessor<TString>(
+        "stage",
+        [] (TThis* command) -> auto& {
+            return command->Options.QueryTrackerStage;
+        })
+        .Default("production");
 }
 
 void TAlterQueryCommand::DoExecute(ICommandContextPtr context)
@@ -337,6 +344,38 @@ void TAlterQueryCommand::DoExecute(ICommandContextPtr context)
     WaitFor(context->GetClient()->AlterQuery(QueryId, Options))
         .ThrowOnError();
     ProduceEmptyOutput(context);
+}
+
+//////////////////////////////////////////////////////////////////////////////
+
+void TGetQueryTrackerInfoCommand::Register(TRegistrar registrar)
+{
+    registrar.ParameterWithUniversalAccessor<TString>(
+        "stage",
+        [] (TThis* command) -> auto& {
+            return command->Options.QueryTrackerStage;
+        })
+        .Default("production");
+
+    registrar.ParameterWithUniversalAccessor<TAttributeFilter>(
+        "attributes",
+        [] (TThis* command) -> auto& {
+            return command->Options.Attributes;
+        })
+        .Optional(/*init*/ false);
+}
+
+void TGetQueryTrackerInfoCommand::DoExecute(ICommandContextPtr context)
+{
+    auto result = WaitFor(context->GetClient()->GetQueryTrackerInfo(Options))
+        .ValueOrThrow();
+
+    context->ProduceOutputValue(BuildYsonStringFluently()
+        .BeginMap()
+            .Item("cluster_name").Value(result.ClusterName)
+            .Item("supported_features").Value(result.SupportedFeatures)
+            .Item("access_control_objects").Value(result.AccessControlObjects)
+        .EndMap());
 }
 
 //////////////////////////////////////////////////////////////////////////////

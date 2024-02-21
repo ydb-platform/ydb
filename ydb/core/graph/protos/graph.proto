@@ -6,11 +6,12 @@ option java_package = "ru.yandex.kikimr.proto";
 
 message TMetric {
     string Name = 1;
-    double Value = 2;
+    optional double Value = 2;
 }
 
 message TEvSendMetrics {
     repeated TMetric Metrics = 1;
+    optional uint64 Time = 2; // for testing purposes only
 }
 
 message TEvGetMetrics {
@@ -18,6 +19,7 @@ message TEvGetMetrics {
     optional uint64 TimeTo = 2;
     repeated string Metrics = 3;
     optional uint32 MaxPoints = 4;
+    bool SkipBorders = 5; // don't return points for TimeFrom / TimeTo when there are no values for them
 }
 
 message TMetricData {

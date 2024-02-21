@@ -160,7 +160,7 @@ private:
             pop = true;
         }
 
-        if (node.IsCallable({ "EvaluateIf!", "EvaluateFor!" })) {
+        if (node.IsCallable({ "EvaluateIf!", "EvaluateFor!", "EvaluateParallelFor!" })) {
             // scan predicate/list only
             if (node.ChildrenSize() > 1) {
                 CurrentEvalNodes.insert(&node);
@@ -586,7 +586,8 @@ IGraphTransformer::TStatus EvaluateExpression(const TExprNode::TPtr& input, TExp
             }
         }
 
-        if (node->IsCallable("EvaluateFor!")) {
+        if (node->IsCallable({"EvaluateFor!", "EvaluateParallelFor!"})) {
+            const bool seq = node->IsCallable("EvaluateFor!");
             if (!EnsureMinArgsCount(*node, 3, ctx)) {
                 return nullptr;
             }
@@ -643,20 +644,24 @@ IGraphTransformer::TStatus EvaluateExpression(const TExprNode::TPtr& input, TExp
             }
 
             auto itemsCount = list->ChildrenSize() - (list->IsCallable("List") ? 1 : 0);
-            if (itemsCount > types.EvaluateForLimit) {
-                ctx.AddError(TIssue(ctx.GetPosition(list->Pos()), TStringBuilder() << "Too large list for EVALUATE FOR, allowed: " <<
-                    types.EvaluateForLimit << ", got: " << itemsCount));
+            const auto limit = seq ? types.EvaluateForLimit : types.EvaluateParallelForLimit;
+            if (itemsCount > limit) {
+                ctx.AddError(TIssue(ctx.GetPosition(list->Pos()), TStringBuilder() << "Too large list for EVALUATE " << (seq ? "" : "PARALLEL ") << "FOR, allowed: " <<
+                    limit << ", got: " << itemsCount));
                 return nullptr;
             }
 
             auto world = node->ChildPtr(0);
             auto ret = ctx.Builder(node->Pos())
-                .Callable("Seq!")
-                    .Add(0, world)
+                .Callable(seq ? "Seq!" : "Sync!")
                     .Do([&](TExprNodeBuilder& parent) -> TExprNodeBuilder& {
-                        ui32 pos = 1;
+                        ui32 pos = 0;
+                        if (seq) {
+                            parent.Add(pos++, world);
+                        }
+
                         for (ui32 i = list->IsCallable("List") ? 1 : 0; i < list->ChildrenSize(); ++i) {
-                            auto arg = ctx.NewArgument(node->Pos(), "world");
+                            auto arg = seq ? ctx.NewArgument(node->Pos(), "world") : world;
                             auto body = ctx.Builder(node->Pos())
                                 .Apply(node->ChildPtr(2))
                                     .With(0, arg)
@@ -664,8 +669,12 @@ IGraphTransformer::TStatus EvaluateExpression(const TExprNode::TPtr& input, TExp
                                 .Seal()
                                 .Build();
 
-                            auto lambda = ctx.NewLambda(node->Pos(), ctx.NewArguments(node->Pos(), { arg }), std::move(body));
-                            parent.Add(pos++, lambda);
+                            if (seq) {
+                                auto lambda = ctx.NewLambda(node->Pos(), ctx.NewArguments(node->Pos(), { arg }), std::move(body));
+                                parent.Add(pos++, lambda);
+                            } else {
+                                parent.Add(pos++, body);
+                            }
                         }
 
                         return parent;
@@ -779,9 +788,9 @@ IGraphTransformer::TStatus EvaluateExpression(const TExprNode::TPtr& input, TExp
                 }
 
                 auto itemsCount = list->ChildrenSize();
-                if (itemsCount > types.EvaluateForLimit) {
+                if (itemsCount > types.EvaluateParallelForLimit) {
                     ctx.AddError(TIssue(ctx.GetPosition(list->Pos()), TStringBuilder() << "Too large list for subquery loop, allowed: " <<
-                        types.EvaluateForLimit << ", got: " << itemsCount));
+                        types.EvaluateParallelForLimit << ", got: " << itemsCount));
                     return nullptr;
                 }
 

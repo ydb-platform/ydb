@@ -133,8 +133,6 @@ private:
         ctx.Ctx = &*ctx.Func->arg_begin();
         ctx.Ctx->addAttr(Attribute::NonNull);
 
-        const auto indexType = Type::getInt32Ty(context);
-
         auto block = main;
 
         const auto load = BasicBlock::Create(context, "load", ctx.Func);

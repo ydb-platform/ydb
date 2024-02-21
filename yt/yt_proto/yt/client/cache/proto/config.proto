@@ -3,6 +3,7 @@ package NYT.NClient.NCache;
 import "yt_proto/yt/core/yson/proto/protobuf_interop.proto";
 
 option (NYT.NYson.NProto.derive_underscore_case_names) = true;
+option go_package = "a.yandex-team.ru/yt/go/proto/client/cache";
 
 enum ECompressionCodec
 {
@@ -41,6 +42,10 @@ message TConfig
     optional bool EnableProxyDiscovery = 19;
     optional bool EnablePowerOfTwoChoicesStrategy = 21;
     optional bool EnableSelectQueryTracingTag = 22;
+
+    optional uint32 ClusterTag = 23;
+    optional uint32 ClockClusterTag = 24;
+    optional string UdfRegistryPath = 25;
 }
 
 message TClustersConfig

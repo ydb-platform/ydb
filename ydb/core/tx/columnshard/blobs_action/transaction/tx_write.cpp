@@ -66,7 +66,7 @@ bool TTxWrite::Execute(TTransactionContext& txc, const TActorContext&) {
         }
     }
 
-    TBlobManagerDb blobManagerDb(txc.DB);
+    NOlap::TBlobManagerDb blobManagerDb(txc.DB);
     AFL_VERIFY(buffer.GetAddActions().size() == 1);
     for (auto&& i : buffer.GetAddActions()) {
         i->OnExecuteTxAfterWrite(*Self, blobManagerDb, true);
@@ -111,7 +111,7 @@ void TTxWrite::Complete(const TActorContext& ctx) {
     for (ui32 i = 0; i < buffer.GetAggregations().size(); ++i) {
         const auto& writeMeta = buffer.GetAggregations()[i]->GetWriteData()->GetWriteMeta();
         ctx.Send(writeMeta.GetSource(), Results[i].release());
-        Self->CSCounters.OnWriteTxComplete((now - writeMeta.GetWriteStartInstant()).MilliSeconds());
+        Self->CSCounters.OnWriteTxComplete(now - writeMeta.GetWriteStartInstant());
         Self->CSCounters.OnSuccessWriteResponse();
     }
 

@@ -3,7 +3,7 @@
 #include <ydb/library/actors/core/actor.h>
 #include <ydb/library/actors/core/event_local.h>
 #include <ydb/library/actors/core/events.h>
-#include <opentelemetry/proto/trace/v1/trace.pb.h>
+#include <contrib/libs/opentelemetry-proto/opentelemetry/proto/trace/v1/trace.pb.h>
 #include <grpc++/grpc++.h>
 
 namespace NWilson {
@@ -26,11 +26,17 @@ namespace NWilson {
     }
 
     struct WilsonUploaderParams {
-        TString Host;
-        ui16 Port;
-        TString RootCA;
+        TString CollectorUrl;
         TString ServiceName;
         std::unique_ptr<IGrpcSigner> GrpcSigner;
+
+        ui64 MaxSpansPerSecond = Max<ui64>();
+        ui64 MaxSpansInBatch = 150;
+        ui64 MaxBytesInBatch = 20'000'000;
+        ui64 MaxBatchAccumulationMilliseconds = 1'000;
+        TDuration MaxBatchAccumulation = TDuration::Seconds(1);
+        ui32 SpanExportTimeoutSeconds = 60 * 60 * 24 * 365;
+        ui64 MaxExportRequestsInflight = 1;
 
         NActors::IActor* CreateUploader() &&;
     };

@@ -525,31 +525,7 @@ private:
     }
 
     void CheckExpected(const TExprNode& input, TExprContext& ctx) {
-        Y_UNUSED(ctx);
-        auto it = Types.ExpectedTypes.find(input.UniqueId());
-        if (it != Types.ExpectedTypes.end()) {
-            YQL_ENSURE(IsSameAnnotation(*input.GetTypeAnn(), *it->second),
-                "Rewrite error, type should be : " <<
-                *it->second << ", but it is: " << *input.GetTypeAnn() << " for node " << input.Content());
-        }
-
-        auto coIt = Types.ExpectedColumnOrders.find(input.UniqueId());
-        if (coIt != Types.ExpectedColumnOrders.end()) {
-            TColumnOrder oldColumnOrder = coIt->second;
-            TMaybe<TColumnOrder> newColumnOrder = Types.LookupColumnOrder(input);
-            if (!newColumnOrder) {
-                // keep column order after rewrite
-                // TODO: check if needed
-                auto status = Types.SetColumnOrder(input, oldColumnOrder, ctx);
-                YQL_ENSURE(status == IGraphTransformer::TStatus::Ok);
-            } else {
-                YQL_ENSURE(newColumnOrder == oldColumnOrder,
-                    "Rewrite error, column order should be: "
-                    << FormatColumnOrder(oldColumnOrder) << ", but it is: "
-                    << FormatColumnOrder(newColumnOrder) << " for node "
-                    << input.Content());
-            }
-        }
+        CheckExpectedTypeAndColumnOrder(input, ctx, Types);
     }
 
 private:

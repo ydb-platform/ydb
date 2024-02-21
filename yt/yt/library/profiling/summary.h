@@ -17,8 +17,7 @@ public:
     TSummarySnapshot() = default;
     TSummarySnapshot(T sum, T min, T max, T last, i64 count);
 
-    bool operator == (const TSummarySnapshot& other) const;
-    bool operator != (const TSummarySnapshot& other) const;
+    bool operator == (const TSummarySnapshot& other) const = default;
 
     T Sum() const;
     T Min() const;

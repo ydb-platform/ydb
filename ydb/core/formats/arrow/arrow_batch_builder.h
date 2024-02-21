@@ -161,6 +161,7 @@ public:
 
     void AddRow(const NKikimr::TDbTupleRef& key, const NKikimr::TDbTupleRef& value) override;
     void AddRow(const TConstArrayRef<TCell>& key, const TConstArrayRef<TCell>& value);
+    void AddRow(const TConstArrayRef<TCell>& row);
 
     // You have to call it before Start()
     void Reserve(size_t numRows) {

@@ -145,8 +145,6 @@ TDataShard::TDataShard(const TActorId &tablet, TTabletStorageInfo *info)
     , DataTxProfileLogThresholdMs(0, 0, 86400000)
     , DataTxProfileBufferThresholdMs(0, 0, 86400000)
     , DataTxProfileBufferSize(0, 1000, 100)
-    , ReadColumnsScanEnabled(1, 0, 1)
-    , ReadColumnsScanInUserPool(0, 0, 1)
     , BackupReadAheadLo(0, 0, 64*1024*1024)
     , BackupReadAheadHi(0, 0, 128*1024*1024)
     , TtlReadAheadLo(0, 0, 64*1024*1024)
@@ -228,41 +226,18 @@ void TDataShard::OnStopGuardStarting(const TActorContext &ctx) {
     // Handle immediate ops that have completed BuildAndWaitDependencies
     for (const auto &kv : Pipeline.GetImmediateOps()) {
         const auto &op = kv.second;
-        // Send reject result immediately, because we cannot control when
-        // a new datashard tablet may start and block us from commiting
-        // anything new. The usual progress queue is too slow for that.
-        if (!op->Result() && !op->HasResultSentFlag()) {
-            auto kind = static_cast<NKikimrTxDataShard::ETransactionKind>(op->GetKind());
-            auto rejectStatus = NKikimrTxDataShard::TEvProposeTransactionResult::OVERLOADED;
-            TString rejectReason = TStringBuilder()
-                    << "Rejecting immediate tx "
-                    << op->GetTxId()
-                    << " because datashard "
-                    << TabletID()
-                    << " is restarting";
-            auto result = MakeHolder<TEvDataShard::TEvProposeTransactionResult>(
-                    kind, TabletID(), op->GetTxId(), rejectStatus);
-            result->AddError(NKikimrTxDataShard::TError::WRONG_SHARD_STATE, rejectReason);
-            LOG_NOTICE_S(ctx, NKikimrServices::TX_DATASHARD, rejectReason);
-
-            ctx.Send(op->GetTarget(), result.Release(), 0, op->GetCookie());
-
-            IncCounter(COUNTER_PREPARE_OVERLOADED);
-            IncCounter(COUNTER_PREPARE_COMPLETE);
-            op->SetResultSentFlag();
+        if (op->OnStopping(*this, ctx)) {
+            Pipeline.AddCandidateOp(op);
+            PlanQueue.Progress(ctx);
         }
-        // Add op to candidates because IsReadyToExecute just became true
-        Pipeline.AddCandidateOp(op);
-        PlanQueue.Progress(ctx);
     }
 
     // Handle prepared ops by notifying about imminent shutdown
     for (const auto &kv : TransQueue.GetTxsInFly()) {
         const auto &op = kv.second;
-        if (op->GetTarget() && !op->HasCompletedFlag()) {
-            auto notify = MakeHolder<TEvDataShard::TEvProposeTransactionRestart>(
-                TabletID(), op->GetTxId());
-            ctx.Send(op->GetTarget(), notify.Release(), 0, op->GetCookie());
+        if (op->OnStopping(*this, ctx)) {
+            Pipeline.AddCandidateOp(op);
+            PlanQueue.Progress(ctx);
         }
     }
 }
@@ -313,9 +288,6 @@ void TDataShard::IcbRegister() {
         appData->Icb->RegisterSharedControl(CpuUsageReportIntervalSeconds, "DataShardControls.CpuUsageReportIntervalSeconds");
         appData->Icb->RegisterSharedControl(HighDataSizeReportThreshlodBytes, "DataShardControls.HighDataSizeReportThreshlodBytes");
         appData->Icb->RegisterSharedControl(HighDataSizeReportIntervalSeconds, "DataShardControls.HighDataSizeReportIntervalSeconds");
-
-        appData->Icb->RegisterSharedControl(ReadColumnsScanEnabled, "DataShardControls.ReadColumnsScanEnabled");
-        appData->Icb->RegisterSharedControl(ReadColumnsScanInUserPool, "DataShardControls.ReadColumnsScanInUserPool");
 
         appData->Icb->RegisterSharedControl(BackupReadAheadLo, "DataShardControls.BackupReadAheadLo");
         appData->Icb->RegisterSharedControl(BackupReadAheadHi, "DataShardControls.BackupReadAheadHi");
@@ -665,14 +637,33 @@ void TDataShard::SendResult(const TActorContext &ctx,
     ctx.Send(target, res.Release(), flags);
 }
 
-void TDataShard::FillExecutionStats(const TExecutionProfile& execProfile, TEvDataShard::TEvProposeTransactionResult& result) const {
+void TDataShard::SendWriteResult(const TActorContext& ctx, std::unique_ptr<NEvents::TDataEvents::TEvWriteResult>& result, const TActorId& target, ui64 step, ui64 txId) {
+    Y_ABORT_UNLESS(txId == result->Record.GetTxId(), "%" PRIu64 " vs %" PRIu64, txId, result->Record.GetTxId());
+
+    // TODO: Volatile
+    /*
+    if (VolatileTxManager.FindByTxId(txId)) {
+        // This is a volatile transaction, and we need to wait until it is resolved
+        bool ok = VolatileTxManager.AttachVolatileTxCallback(txId, new TSendVolatileResult(this, std::move(result), target, step, txId));
+        Y_ABORT_UNLESS(ok);
+        return;
+    }
+    */
+
+    LOG_DEBUG_S(ctx, NKikimrServices::TX_DATASHARD, "Complete write [" << step << " : " << txId << "] from " << TabletID() << " at tablet " << TabletID() << " send result to client " << target);
+
+    LWTRACK(ProposeTransactionSendResult, result->GetOrbit());
+    ctx.Send(target, result.release(), 0);
+}
+
+void TDataShard::FillExecutionStats(const TExecutionProfile& execProfile, NKikimrQueryStats::TTxStats& txStats) const {
     TDuration totalCpuTime;
     for (const auto& unit : execProfile.UnitProfiles) {
         totalCpuTime += unit.second.ExecuteTime;
         totalCpuTime += unit.second.CompleteTime;
     }
-    result.Record.MutableTxStats()->MutablePerShardStats()->Clear();
-    auto& stats = *result.Record.MutableTxStats()->AddPerShardStats();
+    txStats.MutablePerShardStats()->Clear();
+    auto& stats = *txStats.AddPerShardStats();
     stats.SetShardId(TabletID());
     stats.SetCpuTimeUsec(totalCpuTime.MicroSeconds());
 }
@@ -939,7 +930,7 @@ void TDataShard::EnqueueChangeRecords(TVector<IDataShardChangeCollector::TChange
         << ", records: " << JoinSeq(", ", records));
 
     const auto now = AppData()->TimeProvider->Now();
-    TVector<TEvChangeExchange::TEvEnqueueRecords::TRecordInfo> forward(Reserve(records.size()));
+    TVector<NChangeExchange::TEvChangeExchange::TEvEnqueueRecords::TRecordInfo> forward(Reserve(records.size()));
     for (const auto& record : records) {
         forward.emplace_back(record.Order, record.PathId, record.BodySize);
 
@@ -966,7 +957,7 @@ void TDataShard::EnqueueChangeRecords(TVector<IDataShardChangeCollector::TChange
     SetCounter(COUNTER_CHANGE_QUEUE_SIZE, ChangesQueue.size());
 
     Y_ABORT_UNLESS(OutChangeSender);
-    Send(OutChangeSender, new TEvChangeExchange::TEvEnqueueRecords(std::move(forward)));
+    Send(OutChangeSender, new NChangeExchange::TEvChangeExchange::TEvEnqueueRecords(std::move(forward)));
 }
 
 void TDataShard::UpdateChangeExchangeLag(TInstant now) {
@@ -2294,7 +2285,7 @@ void TDataShard::SendAfterMediatorStepActivate(ui64 mediatorStep, const TActorCo
         PromoteFollowerReadEdge();
     }
 
-    EmitHeartbeats(ctx);
+    EmitHeartbeats();
 }
 
 void TDataShard::CheckMediatorStateRestored() {

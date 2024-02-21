@@ -121,11 +121,13 @@ struct TKikimrData {
 const TKikimrTableDescription* TKikimrTablesData::EnsureTableExists(const TString& cluster,
     const TString& table, TPositionHandle pos, TExprContext& ctx) const
 {
-    auto tempTable = TempTables.FindPtr(table);
-
     auto tablePath = table;
-    if (tempTable) {
-        tablePath = *tempTable;
+    if (TempTablesState) {
+        auto tempTableInfoIt = TempTablesState->FindInfo(table, true);
+
+        if (tempTableInfoIt != TempTablesState->TempTables.end()) {
+            tablePath = tempTableInfoIt->first;
+        }
     }
 
     auto desc = Tables.FindPtr(std::make_pair(cluster, tablePath));
@@ -141,11 +143,13 @@ const TKikimrTableDescription* TKikimrTablesData::EnsureTableExists(const TStrin
 }
 
 TKikimrTableDescription& TKikimrTablesData::GetOrAddTable(const TString& cluster, const TString& database, const TString& table, ETableType tableType) {
-    auto tempTable = TempTables.FindPtr(table);
-
     auto tablePath = table;
-    if (tempTable) {
-        tablePath = *tempTable;
+    if (TempTablesState) {
+        auto tempTableInfoIt = TempTablesState->FindInfo(table, true);
+
+        if (tempTableInfoIt != TempTablesState->TempTables.end()) {
+            tablePath = tempTableInfoIt->first;
+        }
     }
 
     if (!Tables.FindPtr(std::make_pair(cluster, tablePath))) {
@@ -165,11 +169,13 @@ TKikimrTableDescription& TKikimrTablesData::GetOrAddTable(const TString& cluster
 }
 
 TKikimrTableDescription& TKikimrTablesData::GetTable(const TString& cluster, const TString& table) {
-    auto tempTable = TempTables.FindPtr(table);
-
     auto tablePath = table;
-    if (tempTable) {
-        tablePath = *tempTable;
+    if (TempTablesState) {
+        auto tempTableInfoIt = TempTablesState->FindInfo(table, true);
+
+        if (tempTableInfoIt != TempTablesState->TempTables.end()) {
+            tablePath = tempTableInfoIt->first;
+        }
     }
 
     auto desc = Tables.FindPtr(std::make_pair(cluster, tablePath));
@@ -181,12 +187,13 @@ TKikimrTableDescription& TKikimrTablesData::GetTable(const TString& cluster, con
 const TKikimrTableDescription& TKikimrTablesData::ExistingTable(const TStringBuf& cluster,
     const TStringBuf& table) const
 {
-    auto tempTable = TempTables.FindPtr(table);
-
     auto tablePath = table;
+    if (TempTablesState) {
+        auto tempTableInfoIt = TempTablesState->FindInfo(table, true);
 
-    if (tempTable) {
-        tablePath = *tempTable;
+        if (tempTableInfoIt != TempTablesState->TempTables.end()) {
+            tablePath = tempTableInfoIt->first;
+        }
     }
 
     auto desc = Tables.FindPtr(std::make_pair(TString(cluster), TString(tablePath)));
@@ -456,10 +463,14 @@ bool TKikimrKey::Extract(const TExprNode& key) {
 }
 
 TCoAtomList BuildColumnsList(const TKikimrTableDescription& table, TPositionHandle pos,
-    TExprContext& ctx, bool withSystemColumns)
+    TExprContext& ctx, bool withSystemColumns, bool ignoreWriteOnlyColumns)
 {
     TVector<TExprBase> columnsToSelect;
     for (const auto& pair : table.Metadata->Columns) {
+        if (pair.second.IsBuildInProgress && ignoreWriteOnlyColumns) {
+            continue;
+        }
+
         auto atom = Build<TCoAtom>(ctx, pos)
             .Value(pair.second.Name)
             .Done();

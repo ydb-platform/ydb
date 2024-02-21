@@ -7,7 +7,6 @@
 #include <ydb/library/yql/providers/yt/lib/expr_traits/yql_expr_traits.h>
 #include <ydb/library/yql/providers/yt/common/yql_configuration.h>
 #include <ydb/library/yql/providers/common/codec/yql_codec_type_flags.h>
-#include <ydb/library/yql/core/cbo/cbo_optimizer.h>
 #include <ydb/library/yql/core/yql_join.h>
 #include <ydb/library/yql/core/yql_expr_type_annotation.h>
 #include <ydb/library/yql/core/yql_expr_optimize.h>
@@ -4667,6 +4666,7 @@ TYtJoinNodeOp::TPtr ImportYtEquiJoin(TYtEquiJoin equiJoin, TExprContext& ctx) {
         root->Constraints = set;
     }
 
+    root->CostBasedOptPassed = HasSetting(equiJoin.JoinOptions().Ref(), "cbo_passed");
     return root;
 }
 
@@ -4744,6 +4744,10 @@ TMaybeNode<TExprBase> ExportYtEquiJoin(TYtEquiJoin equiJoin, const TYtJoinNodeOp
 
         AppendEquiJoinRenameMap(joinSettings->Pos(), renameMap, joinSettingsNodes, ctx);
         joinSettings = ctx.ChangeChildren(*joinSettings, std::move(joinSettingsNodes));
+    }
+
+    if (!HasSetting(*joinSettings, "cbo_passed") && op.CostBasedOptPassed) {
+        joinSettings = AddSetting(*joinSettings, joinSettings->Pos(), "cbo_passed", {}, ctx);
     }
 
     auto outItemType = GetSequenceItemType(equiJoin.Pos(),

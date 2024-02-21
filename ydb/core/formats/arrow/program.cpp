@@ -20,7 +20,7 @@ enum class AggFunctionId {
     AGG_MAX = 4,
     AGG_SUM = 5,
 };
-struct GroupByOptions : public arrow::compute::ScalarAggregateOptions {
+struct GroupByOptions: public arrow::compute::ScalarAggregateOptions {
     struct Assign {
         AggFunctionId function = AggFunctionId::AGG_UNSPECIFIED;
         std::string result_column;
@@ -43,6 +43,7 @@ struct GroupByOptions : public arrow::compute::ScalarAggregateOptions {
 #include <contrib/libs/apache/arrow/cpp/src/arrow/result.h>
 #include <ydb/library/actors/core/log.h>
 #include <ydb/library/yverify_stream/yverify_stream.h>
+#include <ydb/library/yql/core/arrow_kernels/request/request.h>
 
 namespace NKikimr::NSsa {
 
@@ -138,18 +139,20 @@ public:
     TKernelFunction(const TFunctionPtr kernelsFunction, arrow::compute::ExecContext* ctx)
         : TBase(ctx)
         , Function(kernelsFunction)
-    {}
+    {
+        AFL_VERIFY(Function);
+    }
 
     arrow::Result<arrow::Datum> Call(const TAssignObject& assign, const TDatumBatch& batch) const override {
         auto arguments = TBase::BuildArgs(batch, assign.GetArguments());
         if (!arguments) {
             return arrow::Status::Invalid("Error parsing args.");
         }
-        try {
+//        try {
             return Function->Execute(*arguments, assign.GetOptions(), TBase::Ctx);
-        } catch (const std::exception& ex) {
-            return arrow::Status::ExecutionError(ex.what());
-        }
+//        } catch (const std::exception& ex) {
+//            return arrow::Status::ExecutionError(ex.what());
+//        }
     }
 };
 
@@ -595,6 +598,10 @@ std::shared_ptr<TDatumBatch> TDatumBatch::FromTable(const std::shared_ptr<arrow:
         });
 }
 
+TAssign TAssign::MakeTimestamp(const TColumnInfo& column, ui64 value) {
+    return TAssign(column, std::make_shared<arrow::TimestampScalar>(value, arrow::timestamp(arrow::TimeUnit::MICRO)));
+}
+
 IStepFunction<TAssign>::TPtr TAssign::GetFunction(arrow::compute::ExecContext* ctx) const {
     if (KernelFunction) {
         return std::make_shared<TKernelFunction<TAssign>>(KernelFunction, ctx);
@@ -605,6 +612,32 @@ IStepFunction<TAssign>::TPtr TAssign::GetFunction(arrow::compute::ExecContext* c
     return std::make_shared<TSimpleFunction>(ctx);
 }
 
+TString TAssign::DebugString() const {
+    TStringBuilder sb;
+    sb << "{";
+    if (Operation != EOperation::Unspecified) {
+        sb << "op=" << Operation << ";";
+    }
+    if (YqlOperationId) {
+        sb << "yql_op=" << (NYql::TKernelRequestBuilder::EBinaryOp)*YqlOperationId << ";";
+    }
+    if (Arguments.size()) {
+        sb << "arguments=[";
+        for (auto&& i : Arguments) {
+            sb << i.DebugString() << ";";
+        }
+        sb << "];";
+    }
+    if (Constant) {
+        sb << "const=" << Constant->ToString() << ";";
+    }
+    if (KernelFunction) {
+        sb << "kernel=" << KernelFunction->name() << ";";
+    }
+    sb << "column=" << Column.DebugString() << ";";
+    sb << "}";
+    return sb;
+}
 
 IStepFunction<TAggregateAssign>::TPtr TAggregateAssign::GetFunction(arrow::compute::ExecContext* ctx) const {
     if (KernelFunction) {
@@ -838,12 +871,18 @@ std::shared_ptr<NArrow::TColumnFilter> TProgramStep::BuildFilter(const std::shar
     if (Filters.empty()) {
         return nullptr;
     }
-    auto datumBatch = TDatumBatch::FromTable(t);
-
-    NArrow::TStatusValidator::Validate(ApplyAssignes(*datumBatch, NArrow::GetCustomExecContext()));
-    NArrow::TColumnFilter local = NArrow::TColumnFilter::BuildAllowFilter();
-    NArrow::TStatusValidator::Validate(MakeCombinedFilter(*datumBatch, local));
-    return std::make_shared<NArrow::TColumnFilter>(std::move(local));
+    std::vector<std::shared_ptr<arrow::RecordBatch>> batches = NArrow::SliceToRecordBatches(t);
+    NArrow::TColumnFilter fullLocal = NArrow::TColumnFilter::BuildAllowFilter();
+    for (auto&& rb : batches) {
+        auto datumBatch = TDatumBatch::FromRecordBatch(rb);
+        NArrow::TStatusValidator::Validate(ApplyAssignes(*datumBatch, NArrow::GetCustomExecContext()));
+        NArrow::TColumnFilter local = NArrow::TColumnFilter::BuildAllowFilter();
+        NArrow::TStatusValidator::Validate(MakeCombinedFilter(*datumBatch, local));
+        AFL_VERIFY(local.Size() == datumBatch->Rows)("local", local.Size())("datum", datumBatch->Rows);
+        fullLocal.Append(local);
+    }
+    AFL_VERIFY(fullLocal.Size() == t->num_rows())("filter", fullLocal.Size())("t", t->num_rows());
+    return std::make_shared<NArrow::TColumnFilter>(std::move(fullLocal));
 }
 
 const std::set<ui32>& TProgramStep::GetFilterOriginalColumnIds() const {

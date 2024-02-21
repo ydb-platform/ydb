@@ -106,13 +106,11 @@ public:
         NYdb::TDriver driver,
         std::shared_ptr<NYdb::ICredentialsProviderFactory> credentialsProviderFactory,
         const NActors::TActorId& computeActorId,
-        i64 bufferSize,
-        bool rangesMode)
+        i64 bufferSize)
         : TActor<TDqPqReadActor>(&TDqPqReadActor::StateFunc)
         , InputIndex(inputIndex)
         , TxId(txId)
         , BufferSize(bufferSize)
-        , RangesMode(rangesMode)
         , HolderFactory(holderFactory)
         , LogPrefix(TStringBuilder() << "SelfId: " << this->SelfId() << ", TxId: " << TxId << ", task: " << taskId << ". PQ source. ")
         , Driver(std::move(driver))
@@ -352,7 +350,6 @@ private:
 
         ui64 currentPartition = ReadParams.GetPartitioningParams().GetEachTopicPartitionGroupId();
         do {
-            // res.emplace_back(currentPartition + 1); // 1-based in pqv1
             res.emplace_back(currentPartition); // 0-based in topic API
             currentPartition += ReadParams.GetPartitioningParams().GetDqPartitionsCount();
         } while (currentPartition < ReadParams.GetPartitioningParams().GetTopicPartitionsCount());
@@ -385,21 +382,17 @@ private:
             topicReadSettings.AppendPartitionIds(partitionId);
         }
 
-        Y_UNUSED(RangesMode);
-        TLog log(MakeHolder<TActorLogBackend>(NActors::TActivationContext::ActorSystem(), NKikimrServices::KQP_COMPUTE));
         return NYdb::NTopic::TReadSessionSettings()
-            //.DisableClusterDiscovery(SourceParams.GetClusterType() == NPq::NProto::DataStreams)
             .AppendTopics(topicReadSettings)
             .ConsumerName(SourceParams.GetConsumerName())
             .MaxMemoryUsageBytes(BufferSize)
-            .ReadFromTimestamp(StartingMessageTimestamp)
-            .Log(log)
-            ;
-            //.RangesMode(RangesMode);
+            .ReadFromTimestamp(StartingMessageTimestamp);
     }
 
     static TPartitionKey MakePartitionKey(const NYdb::NTopic::TPartitionSession::TPtr& partitionSession) {
-        return std::make_pair(partitionSession->GetTopicPath(), partitionSession->GetPartitionId());
+        // auto cluster = partitionSession->GetDatabaseName() // todo: switch to federatedfTopicApi to support lb federation
+        const TString cluster; // empty value is used in YDS
+        return std::make_pair(cluster, partitionSession->GetPartitionId());
     }
 
     void SubscribeOnNextEvent() {
@@ -588,7 +581,6 @@ private:
     TDqAsyncStats IngressStats;
     const TTxId TxId;
     const i64 BufferSize;
-    const bool RangesMode;
     const THolderFactory& HolderFactory;
     const TString LogPrefix;
     NYdb::TDriver Driver;
@@ -623,8 +615,7 @@ std::pair<IDqComputeActorAsyncInput*, NActors::IActor*> CreateDqPqReadActor(
     ISecuredServiceAccountCredentialsFactory::TPtr credentialsFactory,
     const NActors::TActorId& computeActorId,
     const NKikimr::NMiniKQL::THolderFactory& holderFactory,
-    i64 bufferSize,
-    bool rangesMode
+    i64 bufferSize
     )
 {
     auto taskParamsIt = taskParams.find("pq");
@@ -648,16 +639,15 @@ std::pair<IDqComputeActorAsyncInput*, NActors::IActor*> CreateDqPqReadActor(
         std::move(driver),
         CreateCredentialsProviderFactoryForStructuredToken(credentialsFactory, token, addBearerToToken),
         computeActorId,
-        bufferSize,
-        rangesMode
+        bufferSize
     );
 
     return {actor, actor};
 }
 
-void RegisterDqPqReadActorFactory(TDqAsyncIoFactory& factory, NYdb::TDriver driver, ISecuredServiceAccountCredentialsFactory::TPtr credentialsFactory, bool rangesMode) {
+void RegisterDqPqReadActorFactory(TDqAsyncIoFactory& factory, NYdb::TDriver driver, ISecuredServiceAccountCredentialsFactory::TPtr credentialsFactory) {
     factory.RegisterSource<NPq::NProto::TDqPqTopicSource>("PqSource",
-        [driver = std::move(driver), credentialsFactory = std::move(credentialsFactory), rangesMode](
+        [driver = std::move(driver), credentialsFactory = std::move(credentialsFactory)](
             NPq::NProto::TDqPqTopicSource&& settings,
             IDqAsyncIoFactory::TSourceArguments&& args)
     {
@@ -674,8 +664,7 @@ void RegisterDqPqReadActorFactory(TDqAsyncIoFactory& factory, NYdb::TDriver driv
             credentialsFactory,
             args.ComputeActorId,
             args.HolderFactory,
-            PQReadDefaultFreeSpace,
-            rangesMode);
+            PQReadDefaultFreeSpace);
     });
 
 }

@@ -78,13 +78,17 @@ void AddResultSet(const NYdb::TResultSet& resultSet, TVector<TRow>& rows) {
 
         for (size_t col = 0; col < parser.ColumnsCount(); col++) {
             auto& valueParser = parser.ColumnParser(col);
-            if (valueParser.GetKind() == NYdb::TTypeParser::ETypeKind::Optional) {
+            bool optional = valueParser.GetKind() == NYdb::TTypeParser::ETypeKind::Optional; 
+            if (optional) {
                 valueParser.OpenOptional();
             }
             if (valueParser.GetPrimitiveType() == NYdb::EPrimitiveType::Uint64) {
                 row.Ints.push_back(valueParser.GetUint64());
             } else {
                 row.Strings.push_back(valueParser.GetString());
+            }
+            if (optional) {
+                valueParser.CloseOptional();
             }
         }
 

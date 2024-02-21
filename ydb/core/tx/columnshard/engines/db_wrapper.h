@@ -1,5 +1,6 @@
 #pragma once
 #include "defs.h"
+#include <ydb/core/tx/columnshard/common/blob.h>
 
 namespace NKikimr::NTable {
 class TDatabase;

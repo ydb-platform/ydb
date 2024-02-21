@@ -26,7 +26,7 @@ To make sure that the process is stoppable, follow these steps.
     sudo service ydbd start
    ```
 
-## Replacing equipment {#replace_hardware}
+## Replacing equipment {#replace-hardware}
 
 Before replacing equipment, make sure that the YDB process is [stoppable](#restart_process).
 If the replacement is going to take a long time, first move all the VDisks from this node and wait until replication is complete.

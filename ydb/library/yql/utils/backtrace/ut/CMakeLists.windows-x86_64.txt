@@ -18,9 +18,6 @@ target_link_libraries(ydb-library-yql-utils-backtrace-ut PUBLIC
   cpp-testing-unittest_main
   yql-utils-backtrace
 )
-target_sources(ydb-library-yql-utils-backtrace-ut PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/utils/backtrace/backtrace_ut.cpp
-)
 set_property(
   TARGET
   ydb-library-yql-utils-backtrace-ut

@@ -189,18 +189,6 @@ namespace NTest {
             return index.GetRowId();
         }
 
-        inline TRowId GetRowId(const TPart& part, ui32 pageIndex) {
-            TTestEnv env;
-            TPartIndexIt index(&part, &env, { });
-
-            Y_ABORT_UNLESS(index.Seek(0) == EReady::Data);
-            for (TPageId p = 0; p < pageIndex; p++) {
-                Y_ABORT_UNLESS(index.Next() == EReady::Data);
-            }
-
-            return index.GetRowId();
-        }
-
         inline const TPartIndexIt::TRecord * GetRecord(const TPart& part, ui32 pageIndex) {
             TTestEnv env;
             TPartIndexIt index(&part, &env, { });

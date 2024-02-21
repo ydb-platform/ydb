@@ -13,6 +13,10 @@
 namespace NKikimr::NJaegerTracing {
 
 struct TSamplingThrottlingControl::TSamplingThrottlingImpl {
+    TSamplingThrottlingImpl(TSettings<TSampler, TIntrusivePtr<TThrottler>>&& settings)
+        : Setup(std::move(settings))
+    {}
+
     TSettings<TSampler, TIntrusivePtr<TThrottler>> Setup;
 
     void HandleTracing(NWilson::TTraceId& traceId, TRequestDiscriminator discriminator);

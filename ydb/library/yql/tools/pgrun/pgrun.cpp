@@ -7,6 +7,7 @@
 #include <ydb/library/yql/providers/yt/gateway/file/yql_yt_file.h>
 #include <ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.h>
 #include <ydb/library/yql/providers/common/provider/yql_provider_names.h>
+#include <ydb/library/yql/providers/common/udf_resolve/yql_simple_udf_resolver.h>
 #include <ydb/library/yql/providers/common/proto/gateways_config.pb.h>
 #include "ydb/library/yql/providers/yt/common/yql_names.h"
 #include <ydb/library/yql/providers/yt/provider/yql_yt_provider.h>
@@ -14,6 +15,7 @@
 #include <ydb/library/yql/public/issue/yql_issue.h>
 #include <ydb/library/yql/parser/pg_wrapper/interface/utils.h>
 #include <ydb/library/yql/providers/yt/lib/schema/schema.h>
+#include <ydb/library/yql/core/services/mounts/yql_mounts.h>
 
 #include <library/cpp/getopt/last_getopt.h>
 #include <library/cpp/yson/public.h>
@@ -1126,6 +1128,7 @@ int Main(int argc, char* argv[])
     fileStorage = WithAsync(fileStorage);
 
     auto funcRegistry = CreateFunctionRegistry(&NYql::NBacktrace::KikimrBackTrace, CreateBuiltinRegistry(), false, udfsPaths);
+    IUdfResolver::TPtr udfResolver = NCommon::CreateSimpleUdfResolver(funcRegistry.Get(), fileStorage, true);;
 
     bool keepTempFiles = true;
     bool emulateOutputForMultirun = false;
@@ -1138,9 +1141,19 @@ int Main(int argc, char* argv[])
     dataProvidersInit.push_back(GetPgDataProviderInitializer());
 
     TExprContext ctx;
+
+    IModuleResolver::TPtr moduleResolver;
+    if (!GetYqlDefaultModuleResolver(ctx, moduleResolver, clusterMapping, true)) {
+        Cerr << "Errors loading default YQL libraries:" << Endl;
+        ctx.IssueManager.GetIssues().PrintTo(Cerr);
+        return -1;
+    }
+
     TExprContext::TFreezeGuard freezeGuard(ctx);
 
     TProgramFactory factory(true, funcRegistry.Get(), ctx.NextUniqueId, dataProvidersInit, runnerName);
+    factory.SetModules(moduleResolver);
+    factory.SetUdfResolver(udfResolver);
     factory.SetGatewaysConfig(gatewaysConfig.Get());
 
     const TString username = GetUsername();

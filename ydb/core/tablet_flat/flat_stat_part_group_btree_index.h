@@ -43,8 +43,6 @@ public:
         , Meta(groupId.IsHistoric() ? part->IndexPages.BTreeHistoric[groupId.Index] : part->IndexPages.BTreeGroups[groupId.Index])
         , GroupChannel(Part->GetGroupChannel(GroupId))
         , NodeIndex(0)
-        , PrevDataSize(0)
-        , PrevPrevDataSize(0)
     {
     }
     
@@ -91,18 +89,22 @@ public:
     EReady Next() override {
         Y_ABORT_UNLESS(IsValid());
 
-        PrevPrevDataSize = PrevDataSize;
-        PrevDataSize = GetCurrentNode().DataSize;
-
         NodeIndex++;
+        
+        Y_DEBUG_ABORT_UNLESS(NodeIndex == Nodes.size() || Nodes[NodeIndex - 1].EndRowId == Nodes[NodeIndex].BeginRowId);
 
         return DataOrGone();
     }
 
     void AddLastDeltaDataSize(TChanneledDataSize& dataSize) override {
-        Y_DEBUG_ABORT_UNLESS(PrevDataSize >= PrevPrevDataSize);
-        ui64 delta = PrevDataSize - PrevPrevDataSize;
-        dataSize.Add(delta, GroupChannel);
+        Y_DEBUG_ABORT_UNLESS(NodeIndex);
+        ui64 delta = Nodes[NodeIndex - 1].DataSize;
+        if (NodeIndex > 1) {
+            Y_DEBUG_ABORT_UNLESS(delta >= Nodes[NodeIndex - 2].DataSize);
+            delta -= Nodes[NodeIndex - 2].DataSize;
+        }
+        ui8 channel = Part->GetGroupChannel(GroupId);
+        dataSize.Add(delta, channel);
     }
 
 public:
@@ -149,7 +151,6 @@ private:
     ui8 GroupChannel;
     ui32 NodeIndex;
     TVector<TNodeState> Nodes;
-    ui64 PrevDataSize, PrevPrevDataSize;
 };
 
 }

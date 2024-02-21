@@ -19,6 +19,8 @@
 
 #include <util/generic/queue.h>
 
+#include <ydb/library/yql/dq/actors/spilling/spiller_factory.h>
+
 #define LOG_E(stream) LOG_ERROR_S(*TlsActivationContext, NKikimrServices::DQ_TASK_RUNNER, "SelfId: " << SelfId() << ", TxId: " << TxId << ", task: " << TaskId << ". " << stream)
 #define LOG_W(stream) LOG_WARN_S (*TlsActivationContext, NKikimrServices::DQ_TASK_RUNNER, "SelfId: " << SelfId() << ", TxId: " << TxId << ", task: " << TaskId << ". " << stream)
 #define LOG_I(stream) LOG_INFO_S (*TlsActivationContext, NKikimrServices::DQ_TASK_RUNNER, "SelfId: " << SelfId() << ", TxId: " << TxId << ", task: " << TaskId << ". " << stream)
@@ -70,13 +72,13 @@ public:
             }
         } catch (const NKikimr::TMemoryLimitExceededException& e) {
             Send(
-                ev->Sender,
+                ParentId,
                 GetError(e).Release(),
                 0,
                 ev->Cookie);
         } catch (...) {
             Send(
-                ev->Sender,
+                ParentId,
                 GetError(CurrentExceptionMessage()).Release(),
                 /*flags=*/0,
                 ev->Cookie);
@@ -98,7 +100,7 @@ private:
 
         ev->Get()->Stats = TDqTaskRunnerStatsView(TaskRunner->GetStats(), std::move(sinks), std::move(inputTransforms));
         Send(
-            ev->Sender,
+            ParentId,
             ev->Release().Release(),
             /*flags=*/0,
             ev->Cookie);
@@ -113,7 +115,7 @@ private:
             error = e.what();
         }
         Send(
-            ev->Sender,
+            ParentId,
             new TEvLoadTaskRunnerFromStateDone(std::move(error)),
             /*flags=*/0,
             ev->Cookie);
@@ -165,6 +167,7 @@ private:
                 TaskRunner->SetWatermarkIn(watermark);
             }
 
+            TaskRunner->SetSpillerFactory(std::make_shared<TDqSpillerFactory>(TxId, NActors::TActivationContext::ActorSystem(), WakeUpCallback));
             res = TaskRunner->Run();
         }
 
@@ -233,11 +236,11 @@ private:
             }
 
             st->Stats = TDqTaskRunnerStatsView(TaskRunner->GetStats(), std::move(sinks), std::move(inputTransforms));
-            Send(ev->Sender, st.Release());
+            Send(ParentId, st.Release());
         }
 
         Send(
-            ev->Sender,
+            ParentId,
             new TEvTaskRunFinished(
                 res,
                 std::move(inputChannelFreeSpace),
@@ -271,7 +274,7 @@ private:
 
         // run
         Send(
-            ev->Sender,
+            ParentId,
             new TEvInputChannelDataAck(channelId, freeSpace),
             /*flags=*/0,
             ev->Cookie);
@@ -355,7 +358,7 @@ private:
         }
 
         Send(
-            ev->Sender,
+            ParentId,
             new TEvOutputChannelData(
                 channelId,
                 std::move(chunks),
@@ -425,6 +428,7 @@ private:
         }
 
         TaskRunner->Prepare(settings, ev->Get()->MemoryLimits, *ev->Get()->ExecCtx);
+        WakeUpCallback = ev->Get()->ExecCtx->GetWakeupCallback();
 
         auto event = MakeHolder<TEvTaskRunnerCreateFinished>(
             TaskRunner->GetSecureParams(),
@@ -434,7 +438,7 @@ private:
             TaskRunner->GetHolderFactory());
 
         Send(
-            ev->Sender,
+            ParentId,
             event.Release(),
             /*flags=*/0,
             ev->Cookie);
@@ -471,6 +475,8 @@ private:
     TIntrusivePtr<NDq::IDqTaskRunner> TaskRunner;
     THashSet<ui32> InputChannelsWithDisabledCheckpoints;
     THolder<TDqMemoryQuota> MemoryQuota;
+
+    std::function<void()> WakeUpCallback;
 };
 
 struct TLocalTaskRunnerActorFactory: public ITaskRunnerActorFactory {

@@ -1,6 +1,7 @@
 #include <ydb/core/protos/blobstorage.pb.h>
 #include <ydb/core/protos/blobstorage_vdisk_internal.pb.h>
 #include <ydb/core/protos/blobstorage_vdisk_config.pb.h>
+#include <ydb/core/protos/bootstrap.pb.h>
 #include <ydb/core/protos/console_base.pb.h>
 #include <ydb/core/protos/console_config.pb.h>
 #include <ydb/core/protos/console_tenant.pb.h>

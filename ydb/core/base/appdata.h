@@ -14,6 +14,7 @@
 #include <ydb/core/grpc_services/grpc_helper.h>
 #include <ydb/core/protos/auth.pb.h>
 #include <ydb/core/protos/blobstorage.pb.h>
+#include <ydb/core/protos/bootstrap.pb.h>
 #include <ydb/core/protos/cms.pb.h>
 #include <ydb/core/protos/config.pb.h>
 #include <ydb/core/protos/datashard_config.pb.h>

@@ -14,6 +14,8 @@
 #include <util/system/hostname.h>
 #include <google/protobuf/text_format.h>
 #include <ydb/core/protos/alloc.pb.h>
+#include <ydb/core/protos/bootstrap.pb.h>
+#include <ydb/core/protos/compile_service_config.pb.h>
 #include <ydb/core/protos/http_config.pb.h>
 #include <ydb/core/protos/tenant_pool.pb.h>
 #include <ydb/core/protos/node_broker.pb.h>

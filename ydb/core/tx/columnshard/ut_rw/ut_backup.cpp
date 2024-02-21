@@ -6,6 +6,7 @@
 #include <ydb/core/formats/arrow/simple_builder/filler.h>
 #include <ydb/core/kqp/compute_actor/kqp_compute_events.h>
 #include <ydb/core/tx/columnshard/blobs_action/memory.h>
+#include <ydb/core/tx/columnshard/blobs_action/memory.h>
 #include <ydb/core/tx/columnshard/common/tests/shard_reader.h>
 #include <ydb/core/tx/columnshard/engines/changes/cleanup.h>
 #include <ydb/core/tx/columnshard/engines/changes/compaction.h>
@@ -75,9 +76,7 @@ TActorIdentity PrepareCSTable(TTestBasicRuntime& runtime, TActorId& sender) {
 
     auto evWrite =
         std::make_unique<NKikimr::NEvents::TDataEvents::TEvWrite>(txId, NKikimrDataEvents::TEvWrite::MODE_PREPARE);
-    const ui64 payloadIndex =
-        NEvWrite::TPayloadHelper<NKikimr::NEvents::TDataEvents::TEvWrite>(*evWrite).AddDataToPayload(
-            std::move(blobData));
+    const ui64 payloadIndex = NEvWrite::TPayloadWriter<NKikimr::NEvents::TDataEvents::TEvWrite>(*evWrite).AddDataToPayload(std::move(blobData));
     evWrite->AddOperation(NKikimrDataEvents::TEvWrite::TOperation::OPERATION_REPLACE, {ownerId, tableId, schemaVersion},
                           columnsIds, payloadIndex, NKikimrDataEvents::FORMAT_ARROW);
 
@@ -95,19 +94,23 @@ TActorIdentity PrepareCSTable(TTestBasicRuntime& runtime, TActorId& sender) {
     return res->SelfId();
 }
 
+}   // anonymous namespace
+
 class TMemoryStorageManager: public NOlap::IStoragesManager {
 private:
     TIntrusivePtr<TTabletStorageInfo> TabletInfo = new TTabletStorageInfo();
     using TBase = NOlap::IStoragesManager;
 protected:
-    virtual std::shared_ptr<NOlap::IBlobsStorageOperator> DoBuildOperator(const TString& /*storageId*/) override {
-        // return std::make_shared<NOlap::TMemoryOperator>(storageId);
-        return nullptr;
+    bool DoLoadIdempotency(NTable::TDatabase& /*database*/) override {
+        return true;
+    }
+    std::shared_ptr<NOlap::IBlobsStorageOperator> DoBuildOperator(const TString& /*storageId*/) override {
+        return std::make_shared<NOlap::TMemoryOperator>(storageId);
     }
 public:
+    TMemoryStorageManager() = default;
 };
 
-}   // anonymous namespace
 
 Y_UNIT_TEST_SUITE(TColumnShardBackup) {
     Y_UNIT_TEST(ActorScan) {
@@ -118,7 +121,7 @@ Y_UNIT_TEST_SUITE(TColumnShardBackup) {
         const auto csActorId = PrepareCSTable(runtime, sender);
 
         Cerr << "\n ======================================================================== \n" << Endl;
-        runtime.Register(NColumnShard::CreatBackupActor(std::make_shared<TMemoryStorageManager>(), sender, csActorId, txId, writePlanStep, tableId));
+        runtime.Register(NColumnShard::CreatBackupActor(std::make_shared<NOlap::TMemoryStorageManager>(), sender, csActorId, txId, writePlanStep, tableId));
 
         TAutoPtr<NActors::IEventHandle> handle;
         auto event = runtime.GrabEdgeEvent<NKikimr::NEvents::TBackupEvents::TEvBackupShardProposeResult>(handle);

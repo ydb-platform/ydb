@@ -39,6 +39,45 @@ std::string ToString(BackupActorState s) {
     }
 }
 
+class TBackupWriteController : public NColumnShard::IWriteController, public NColumnShard::TMonitoringObjectsCounter<TBackupWriteController, true> {
+private:
+    // NOlap::TWritingBuffer Buffer;
+    const TActorId actorID;
+
+    void DoOnReadyResult(const NActors::TActorContext& ctx, const NColumnShard::TBlobPutResult::TPtr& putResult) override {
+        NOlap::TWritingBuffer bufferStub;
+
+        auto result = std::make_unique<NColumnShard::TEvPrivate::TEvWriteBlobsResult>(putResult, std::move(bufferStub));
+        ctx.Send(actorID, result.release());
+    }
+    void DoOnStartSending() override {
+        // @TODO
+    }
+
+public:
+    TBackupWriteController(const TActorId& actorID, const std::shared_ptr<NOlap::IBlobsWritingAction>& action, std::shared_ptr<arrow::RecordBatch> arrowBatch) : actorID(actorID) {
+
+        NArrow::TBatchSplitttingContext splitCtx(6 * 1024 * 1024);
+        NArrow::TSerializedBatch batch = NArrow::TSerializedBatch::Build(arrowBatch, splitCtx);
+
+        LOG_S_DEBUG("TBackupWriteController.ctor: batch created.");
+
+        NOlap::TWritingBlob currentBlob;
+        NOlap::TWriteAggregation aggreagtion(nullptr); // stub
+        NOlap::TWideSerializedBatch wideBatch(std::move(batch), aggreagtion);
+
+        LOG_S_DEBUG("TBackupWriteController.ctor: wideBatch created.");
+
+        currentBlob.AddData(wideBatch);
+
+        auto& task = AddWriteTask(NOlap::TBlobWriteInfo::BuildWriteTask(currentBlob.GetBlobData(), action));
+
+        LOG_S_DEBUG("TBackupWriteController.ctor: task added.");
+
+        currentBlob.InitBlobId(task.GetBlobId());
+    }
+};
+
 class BackupActor : public TActorBootstrapped<BackupActor> {
     std::shared_ptr<NOlap::IStoragesManager> StoragesManager;
 
@@ -108,12 +147,12 @@ public:
         LOG_S_DEBUG("Handle BackupActor.TEvScanData.");
         AFL_VERIFY(State == BackupActorState::Progress);
 
-        auto b = ev->Get()->ArrowBatch;
-        if (b) {
-            NArrow::TStatusValidator::Validate(b->ValidateFull());
-            LOG_S_DEBUG("Handle BackupActor.TEvScanData: got batch: " << b->ToString());
+        auto batch = ev->Get()->ArrowBatch;
+        if (batch) {
+            NArrow::TStatusValidator::Validate(batch->ValidateFull());
+            LOG_S_DEBUG("Handle BackupActor.TEvScanData: got batch: " << batch->ToString());
             
-            LoadBatchToStorage(ctx);
+            LoadBatchToStorage(ctx, batch);
         } else {
             AFL_VERIFY(ev->Get()->Finished);
         }
@@ -130,8 +169,9 @@ public:
         ProcessState(ctx, BackupActorState::Progress);
     }
     
-    void Handle(TEvPrivate::TEvWriteBlobsResult::TPtr& , const TActorContext& ) {
-        // @TODO write done.
+    void Handle(TEvPrivate::TEvWriteBlobsResult::TPtr& , const TActorContext& ctx) {
+        LOG_S_DEBUG("Handle BackupActor.TEvWriteBlobsResult write done");
+        SendBackupShardProposeResult(ctx);
     }
 
 private:
@@ -234,25 +274,29 @@ private:
         ctx.Send(SenderActorId, ProposeResult.release());
     }
 
-    void LoadBatchToStorage(const TActorContext& ctx) {
+    void LoadBatchToStorage(const TActorContext& ctx, std::shared_ptr<arrow::RecordBatch> arrowBatch) {
+        LOG_S_DEBUG("Handle BackupActor.LoadBatchToStorage: start");
+        
         auto insert_op = StoragesManager->GetInsertOperator();
         auto action = insert_op->StartWritingAction("BACKUP:WRITING");
 
+        // const ui64 tableId = TableId;
+        // const ui64 writeId = 1;
+        // const TActorId self_actor_id = SelfId();
 
-        // const auto& record = ev->Get()->Record;
-        const ui64 tableId = TableId; // record.GetTableId();
-        const ui64 writeId = 1; //record.GetWriteId();
-        const auto source = SenderActorId; // ev->Sender;
+        // NEvWrite::TWriteMeta writeMeta(writeId, tableId, self_actor_id);
+        // auto arrowData = std::make_shared<TProtoArrowData>(nullptr);
+        // std::shared_ptr<arrow::Schema> replaceKey; // snapshotSchema->GetIndexInfo().GetReplaceKey()
+        // auto writeData = std::make_shared<NEvWrite::TWriteData>(writeMeta, arrowData, replaceKey, action);
 
-        NEvWrite::TWriteMeta writeMeta(writeId, tableId, source);
-        // auto arrowData = std::make_shared<arrow::RecordBatch>(std::move(b));
-        auto arrowData = std::make_shared<TProtoArrowData>(nullptr);
-        std::shared_ptr<arrow::Schema> replaceKey; // snapshotSchema->GetIndexInfo().GetReplaceKey()
+        // [[maybe_unused]]
+        // NOlap::TWriteAggregation aggregation(writeData);
+        // std::vector<std::shared_ptr<NOlap::TWriteAggregation>> aggregations;
+        // auto writeController = std::make_shared<NOlap::TIndexedWriteController>(SelfId(), action, std::move(aggregations));
 
-        auto writeData = std::make_shared<NEvWrite::TWriteData>(writeMeta, arrowData, replaceKey, action);
-        NOlap::TWriteAggregation aggregation(writeData);
+        auto writeController = std::make_shared<TBackupWriteController>(SelfId(), action, arrowBatch);
 
-        auto writeController = std::make_shared<NOlap::TIndexedWriteController>(SelfId(), action, aggregation);
+        LOG_S_DEBUG("Handle BackupActor.LoadBatchToStorage: controller created");
 
         ctx.Register(CreateWriteActor(TableId, writeController, TInstant::Max()));
 

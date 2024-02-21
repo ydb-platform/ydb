@@ -31,6 +31,10 @@ public:
     ~TLoggerInit() {
         Initialize();
     }
+    TLoggerInit& Clear() {
+        Services.clear();
+        return *this;
+    }
     TLoggerInit& SetComponents(const std::vector<NKikimrServices::EServiceKikimr> services, const TString& name) {
         Services[name] = services;
         return *this;

@@ -1028,6 +1028,58 @@ namespace NKikimr {
         }
     };
 
+    // class TEvictVDiskActor : public TActorBootstrapped<TEvictVDiskActor> {
+    //     const ui32 PDiskId;
+    //     const TVDiskID VDiskId;
+    //     const TActorId BsControllerId;
+    //     const TActorId NotifyId;
+    //     const TActorId Sender;
+
+    //     friend class TActorBootstrapped<TEvictVDiskActor>;
+
+    //     void Bootstrap(const TActorContext &ctx) {
+    //         NKikimrBlobStorage::TConfigRequest request;
+    //         request.IgnoreDegradedGroupsChecks = true;
+    //         auto *cmd = request.AddCommand()->MutableReassignGroupDisk();
+    //         cmd->SetGroupId(VDiskId.GetGroupId());
+    //         cmd->SetGroupGeneration(VDiskId.GetGroupGeneration());
+    //         cmd->SetFailRealmIdx(VDiskId.GetFailRealmIdx());
+    //         cmd->SetFailDomainIdx(VDiskId.GetFailDomainIdx());
+    //         cmd->SetVDiskIdx(VDiskId.GetVDiskIdx());
+
+    //         ctx.Send(BsControllerId, request);
+    //         ctx.Send(NotifyId, new TEvents::TEvActorDied);
+    //         ctx.Send(Sender, new NMon::TEvHttpInfoRes(MakeReply()));
+    //         Die(ctx);
+    //     }
+
+    //     TString MakeReply() const {
+    //         TStringStream str;
+    //         HTML(str) {
+    //             str << "VDisk evict request has been sent <br>\n"
+    //                 << "<a class=\"btn btn-default\" href=\"?\">Go back to the main VDisk page</a>";
+    //         }
+    //         return str.Str();
+    //     }
+
+    // public:
+    //     TEvictVDiskActor(
+    //         const ui32 pDiskId,
+    //         const TVDiskID &vDiskId,
+    //         const TActorId &bsControllerId,
+    //         const TActorId &notifyId,
+    //         const TActorId &sender
+    //     )
+    //         : TActorBootstrapped<TEvictVDiskActor>()
+    //         , PDiskId(pDiskId)
+    //         , VDiskId(vDiskId)
+    //         , BsControllerId(bsControllerId)
+    //         , NotifyId(notifyId)
+    //         , Sender(sender)
+    //     {
+    //     }
+    // };
+
     ////////////////////////////////////////////////////////////////////////////
     // TSkeletonFrontMonMainPageActor
     ////////////////////////////////////////////////////////////////////////////
@@ -1165,6 +1217,17 @@ namespace NKikimr {
                     "<a class=\"btn btn-default\" href=\"?\">Go back to the main VDisk page</a>"
                 );
             }
+        // } else if (type == "evict") {
+        //     if (IsVDiskRestartAllowed(vDiskMonGroup.VDiskState())) {
+        //         return new TEvictVDiskActor(
+        //             cfg->BaseInfo.PDiskId, selfVDiskId, MakeBSControllerID(selfVDiskId.GroupId), notifyId, ev->Sender
+        //         );
+        //     } else {
+        //         return new TMonErrorActor(notifyId, ev,
+        //             "VDisk evict in the normal state is not allowed <br>\n"
+        //             "<a class=\"btn btn-default\" href=\"?\">Go back to the main VDisk page</a>"
+        //         );
+        //     }
         } else {
             auto s = Sprintf("Unknown value '%s' for CGI parameter 'type'", type.data());
             return new TMonErrorActor(notifyId, ev, s);

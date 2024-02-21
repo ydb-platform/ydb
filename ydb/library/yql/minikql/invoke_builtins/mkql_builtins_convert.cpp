@@ -350,6 +350,36 @@ struct TBigDateScaleDown : public TArithmeticConstraintsUnary<typename TInput::T
 #endif
 };
 
+template <typename TInput, typename TOutput, i64 UpperBound>
+struct TBigDateToNarrowScaleDown : public TArithmeticConstraintsUnary<typename TInput::TLayout, typename TOutput::TLayout> {
+    static_assert(
+            sizeof(typename TInput::TLayout) > sizeof(typename TOutput::TLayout),
+            "Output size should be smaller than input size.");
+    static_assert(std::is_same_v<i64, typename TInput::TLayout>, "Expect i64 input type");
+    static_assert(std::is_unsigned_v<typename TOutput::TLayout>, "Expect unsigned output type");
+
+    static NUdf::TUnboxedValuePod Execute(const NUdf::TUnboxedValuePod& arg) {
+        auto result = arg.template Get<typename TInput::TLayout>() / TBigDateScale<TOutput, TInput>::Modifier;
+        if (result < 0 || result > UpperBound) {
+            return NUdf::TUnboxedValuePod();
+        }
+        return NUdf::TUnboxedValuePod(static_cast<typename TOutput::TLayout>(result));
+    }
+
+#ifndef MKQL_DISABLE_CODEGEN
+    static Value* Generate(Value* arg, const TCodegenContext& ctx, BasicBlock*& block)
+    {
+        auto& context = ctx.Codegen.GetContext();
+        const auto val = GetterFor<typename TInput::TLayout>(arg, context, block);
+        const auto div = BinaryOperator::CreateSDiv(val, ConstantInt::get(val->getType(), TBigDateScale<TOutput, TInput>::Modifier), "div", block);
+        const auto good = GenInBounds(div, ConstantInt::get(val->getType(), 0), ConstantInt::get(val->getType(), UpperBound), block);
+        const auto cast = StaticCast<typename TInput::TLayout, typename TOutput::TLayout>(div, context, block);
+        const auto full = SetterFor<typename TOutput::TLayout>(cast, context, block);
+        return SelectInst::Create(good, full, ConstantInt::get(arg->getType(), 0), "result", block);
+    }
+#endif
+};
+
 template <typename TInput, typename TOutput, bool Tz = false>
 struct TDatetimeScaleUp : public TArithmeticConstraintsUnary<TInput, TOutput> {
     static_assert(sizeof(TInput) < sizeof(TOutput), "Output size should be wider than input size.");
@@ -1213,6 +1243,33 @@ void RegisterBigDateToNarrowCasts(IBuiltinFunctionRegistry& registry) {
     constexpr auto TimestampLimit = static_cast<i64>(NUdf::MAX_TIMESTAMP - 1ULL);
     RegisterFunctionImpl<TWideToShort<i64, i64, TimestampLimit, -TimestampLimit>, TUnaryArgsWithNullableResultOpt<NUdf::TDataType<NUdf::TInterval64>, NUdf::TDataType<NUdf::TInterval>, false>, TUnaryStub>(registry, integral);
     RegisterFunctionImpl<TWideToShort<i64, i64, TimestampLimit, -TimestampLimit>, TUnaryArgsWithNullableResultOpt<NUdf::TDataType<NUdf::TInterval64>, NUdf::TDataType<NUdf::TInterval>, true>, TUnaryWrap>(registry, integral);
+
+    RegisterFunctionImpl<
+        TBigDateToNarrowScaleDown<NUdf::TDataType<NUdf::TDatetime64>, NUdf::TDataType<NUdf::TDate>, NUdf::MAX_DATE - 1U>,
+        TUnaryArgsWithNullableResultOpt<NUdf::TDataType<NUdf::TDatetime64>, NUdf::TDataType<NUdf::TDate>, false>,
+        TUnaryStub>(registry, integral);
+    RegisterFunctionImpl<
+        TBigDateToNarrowScaleDown<NUdf::TDataType<NUdf::TDatetime64>, NUdf::TDataType<NUdf::TDate>, NUdf::MAX_DATE - 1U>,
+        TUnaryArgsWithNullableResultOpt<NUdf::TDataType<NUdf::TDatetime64>, NUdf::TDataType<NUdf::TDate>, true>,
+        TUnaryWrap>(registry, integral);
+
+    RegisterFunctionImpl<
+        TBigDateToNarrowScaleDown<NUdf::TDataType<NUdf::TTimestamp64>, NUdf::TDataType<NUdf::TDate>, NUdf::MAX_DATE - 1U>,
+        TUnaryArgsWithNullableResultOpt<NUdf::TDataType<NUdf::TTimestamp64>, NUdf::TDataType<NUdf::TDate>, false>,
+        TUnaryStub>(registry, integral);
+    RegisterFunctionImpl<
+        TBigDateToNarrowScaleDown<NUdf::TDataType<NUdf::TTimestamp64>, NUdf::TDataType<NUdf::TDate>, NUdf::MAX_DATE - 1U>,
+        TUnaryArgsWithNullableResultOpt<NUdf::TDataType<NUdf::TTimestamp64>, NUdf::TDataType<NUdf::TDate>, true>,
+        TUnaryWrap>(registry, integral);
+
+    RegisterFunctionImpl<
+        TBigDateToNarrowScaleDown<NUdf::TDataType<NUdf::TTimestamp64>, NUdf::TDataType<NUdf::TDatetime>, NUdf::MAX_DATETIME - 1U>,
+        TUnaryArgsWithNullableResultOpt<NUdf::TDataType<NUdf::TTimestamp64>, NUdf::TDataType<NUdf::TDatetime>, false>,
+        TUnaryStub>(registry, integral);
+    RegisterFunctionImpl<
+        TBigDateToNarrowScaleDown<NUdf::TDataType<NUdf::TTimestamp64>, NUdf::TDataType<NUdf::TDatetime>, NUdf::MAX_DATETIME - 1U>,
+        TUnaryArgsWithNullableResultOpt<NUdf::TDataType<NUdf::TTimestamp64>, NUdf::TDataType<NUdf::TDatetime>, true>,
+        TUnaryWrap>(registry, integral);
 }
 
 template <typename TInput, typename TOutput, bool Tz = false>

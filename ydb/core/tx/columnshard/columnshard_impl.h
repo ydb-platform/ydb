@@ -565,6 +565,11 @@ public:
         return TablesManager.GetPrimaryIndexAsVerified<T>();
     }
 
+    template <class T>
+    T& MutableIndexAs() {
+        return TablesManager.MutablePrimaryIndexAsVerified<T>();
+    }
+
     bool HasIndex() const {
         return !!TablesManager.GetPrimaryIndex();
     }

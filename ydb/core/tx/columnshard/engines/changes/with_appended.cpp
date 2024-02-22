@@ -6,7 +6,28 @@
 
 namespace NKikimr::NOlap {
 
-void TChangesWithAppend::DoWriteIndex(NColumnShard::TColumnShard& self, TWriteIndexContext& /*context*/) {
+void TChangesWithAppend::DoWriteIndexOnExecute(NColumnShard::TColumnShard& self, TWriteIndexContext& context) {
+    {
+        auto g = self.MutableIndexAs<TColumnEngineForLogs>().GranulesStorage->StartPackModification();
+        THashSet<ui64> usedPortionIds;
+        for (auto& [_, portionInfo] : PortionsToRemove) {
+            Y_ABORT_UNLESS(!portionInfo.Empty());
+            Y_ABORT_UNLESS(portionInfo.HasRemoveSnapshot());
+            AFL_VERIFY(usedPortionIds.emplace(portionInfo.GetPortionId()).second)("portion_info", portionInfo.DebugString(true));
+            portionInfo.SaveToDatabase(context.DBWrapper);
+        }
+        for (auto& portionInfoWithBlobs : AppendedPortions) {
+            auto& portionInfo = portionInfoWithBlobs.GetPortionInfo();
+            Y_ABORT_UNLESS(!portionInfo.Empty());
+            AFL_VERIFY(usedPortionIds.emplace(portionInfo.GetPortionId()).second)("portion_info", portionInfo.DebugString(true));
+            portionInfo.SaveToDatabase(context.DBWrapper);
+        }
+    }
+
+    for (auto& [_, portionInfo] : PortionsToRemove) {
+        self.MutableIndexAs<TColumnEngineForLogs>().CleanupPortions[portionInfo.GetRemoveSnapshot()].emplace_back(portionInfo);
+    }
+
     for (auto& portionInfo : AppendedPortions) {
         switch (portionInfo.GetPortionInfo().GetMeta().Produced) {
             case NOlap::TPortionMeta::EProduced::UNSPECIFIED:
@@ -44,35 +65,18 @@ void TChangesWithAppend::DoWriteIndex(NColumnShard::TColumnShard& self, TWriteIn
     }
 }
 
-bool TChangesWithAppend::DoApplyChanges(TColumnEngineForLogs& self, TApplyChangesContext& context) {
-    // Save new portions (their column records)
+void TChangesWithAppend::DoWriteIndexOnComplete(NColumnShard::TColumnShard& self, TWriteIndexCompleteContext& /*context*/) {
     {
-        auto g = self.GranulesStorage->StartPackModification();
-        THashSet<ui64> usedPortionIds;
+        auto g = self.MutableIndexAs<TColumnEngineForLogs>().GranulesStorage->StartPackModification();
         for (auto& [_, portionInfo] : PortionsToRemove) {
-            Y_ABORT_UNLESS(!portionInfo.Empty());
-            Y_ABORT_UNLESS(portionInfo.HasRemoveSnapshot());
-
-            const TPortionInfo& oldInfo = self.GetGranuleVerified(portionInfo.GetPathId()).GetPortionVerified(portionInfo.GetPortion());
-            AFL_VERIFY(usedPortionIds.emplace(portionInfo.GetPortionId()).second)("portion_info", portionInfo.DebugString(true));
-            self.UpsertPortion(portionInfo, &oldInfo);
-
-            portionInfo.SaveToDatabase(context.DB);
+            const TPortionInfo& oldInfo = self.MutableIndexAs<TColumnEngineForLogs>().GetGranuleVerified(portionInfo.GetPathId()).GetPortionVerified(portionInfo.GetPortion());
+            self.MutableIndexAs<TColumnEngineForLogs>().UpsertPortion(portionInfo, &oldInfo);
         }
         for (auto& portionInfoWithBlobs : AppendedPortions) {
             auto& portionInfo = portionInfoWithBlobs.GetPortionInfo();
-            Y_ABORT_UNLESS(!portionInfo.Empty());
-            AFL_VERIFY(usedPortionIds.emplace(portionInfo.GetPortionId()).second)("portion_info", portionInfo.DebugString(true));
-            self.UpsertPortion(portionInfo);
-            portionInfo.SaveToDatabase(context.DB);
+            self.MutableIndexAs<TColumnEngineForLogs>().UpsertPortion(portionInfo);
         }
     }
-
-    for (auto& [_, portionInfo] : PortionsToRemove) {
-        self.CleanupPortions[portionInfo.GetRemoveSnapshot()].emplace_back(portionInfo);
-    }
-
-    return true;
 }
 
 void TChangesWithAppend::DoCompile(TFinalizationContext& context) {

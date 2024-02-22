@@ -51,7 +51,6 @@
   - fwriteerror.h
   - gdbm.h
   - gmp.h
-  - gnutls/x509.h
   - hp-timing.h
   - httpd_wrap.h
   - i86.h
@@ -342,7 +341,6 @@
   #endif
   #if defined(_TRASH_) && TODO
   - gcrypt.h
-  - gnutls/gnutls.h
   - gdwmfapi.h
   - winmmap.h
   - sf_unistd.h

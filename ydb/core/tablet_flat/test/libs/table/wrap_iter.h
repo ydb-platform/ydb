@@ -1,5 +1,6 @@
 #pragma once
 
+#include "ydb/core/tablet_flat/flat_part_overlay.h"
 #include <ydb/core/tablet_flat/flat_table_subset.h>
 #include <ydb/core/tablet_flat/flat_iterator.h>
 #include <ydb/core/tablet_flat/flat_row_scheme.h>
@@ -26,7 +27,7 @@ namespace NTest {
             for (auto &partView: Flatten) {
                 Y_ABORT_UNLESS(partView.Part, "Creating TWrapIter without a part");
                 Y_ABORT_UNLESS(partView.Slices, "Creating TWrapIter without slices");
-                Y_ABORT_UNLESS(!partView.Screen, "Creating TWrapIter with a screen");
+                TOverlay{partView.Screen, partView.Slices}.Validate();
                 parts.push_back(&partView);
             }
             std::sort(parts.begin(), parts.end(),

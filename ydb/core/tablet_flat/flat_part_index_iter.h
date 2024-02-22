@@ -97,6 +97,15 @@ public:
         return bool(Iter);
     }
 
+    void AddLastDeltaDataSize(TChanneledDataSize& dataSize) override {
+        Y_DEBUG_ABORT_UNLESS(Index);
+        Y_DEBUG_ABORT_UNLESS(Iter.Off());
+        TPageId pageId = (Iter - 1)->GetPageId();
+        ui64 delta = Part->GetPageSize(pageId, GroupId);
+        ui8 channel = Part->GetGroupChannel(GroupId);
+        dataSize.Add(delta, channel);
+    }
+
     // for precharge and TForward only
     TIndex* TryLoadRaw() {
         return TryGetIndex();

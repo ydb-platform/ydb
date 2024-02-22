@@ -129,7 +129,7 @@ namespace NTable {
         virtual ui64 BackingSize() const = 0;
         virtual ui64 GetPageSize(NPage::TPageId id, NPage::TGroupId groupId = { }) const = 0;
         virtual NPage::EPage GetPageType(NPage::TPageId id, NPage::TGroupId groupId = { }) const = 0;
-        virtual ui8 GetPageChannel(NPage::TPageId id, NPage::TGroupId groupId = { }) const = 0;
+        virtual ui8 GetGroupChannel(NPage::TGroupId groupId = { }) const = 0;
         virtual ui8 GetPageChannel(ELargeObj lob, ui64 ref) const = 0;
 
     protected:

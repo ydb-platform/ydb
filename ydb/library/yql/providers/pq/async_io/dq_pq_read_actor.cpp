@@ -383,23 +383,13 @@ private:
             topicReadSettings.AppendPartitionIds(partitionId);
         }
 
-<<<<<<< HEAD
         TLog log(MakeHolder<TActorLogBackend>(NActors::TActivationContext::ActorSystem(), NKikimrServices::YDB_SDK));
-        return NYdb::NPersQueue::TReadSessionSettings()
-            .DisableClusterDiscovery(SourceParams.GetClusterType() == NPq::NProto::DataStreams)
-            .AppendTopics(topicReadSettings)
-            .ConsumerName(SourceParams.GetConsumerName())
-            .MaxMemoryUsageBytes(BufferSize)
-            .StartingMessageTimestamp(StartingMessageTimestamp)
-            .RangesMode(RangesMode)
-            .Log(log);
-=======
         return NYdb::NTopic::TReadSessionSettings()
             .AppendTopics(topicReadSettings)
             .ConsumerName(SourceParams.GetConsumerName())
             .MaxMemoryUsageBytes(BufferSize)
-            .ReadFromTimestamp(StartingMessageTimestamp);
->>>>>>> upstream/main
+            .ReadFromTimestamp(StartingMessageTimestamp)
+            .Log(log);
     }
 
     static TPartitionKey MakePartitionKey(const NYdb::NTopic::TPartitionSession::TPtr& partitionSession) {

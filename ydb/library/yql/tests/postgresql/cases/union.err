@@ -1,6 +1,7 @@
 Registering pre-existing tables
 	INT4_TBL
 	VARCHAR_TBL
+	INT8_TBL
 	CHAR_TBL
 	TEXT_TBL
 <sql-statement>

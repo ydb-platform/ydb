@@ -39,6 +39,7 @@ message TStorageFileContent {
         uint64 Timestamp = 3;
         fixed64 Key = 4;
         TPDiskMetadataRecord Meta = 5;
+        bool Unformatted = 6;
     }
 
     repeated TRecord Record = 1;

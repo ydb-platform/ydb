@@ -497,10 +497,6 @@ bool TColumnEngineForLogs::ApplyChanges(IDbWrapper& db, std::shared_ptr<TColumnE
         TFinalizationContext context(LastGranule, LastPortion, snapshot);
         indexChanges->Compile(context);
     }
-    {
-        TApplyChangesContext context(db, snapshot);
-        Y_ABORT_UNLESS(indexChanges->ApplyChanges(*this, context));
-    }
     db.WriteCounter(LAST_PORTION, LastPortion);
     db.WriteCounter(LAST_GRANULE, LastGranule);
 

@@ -56,5 +56,7 @@ private:
     THolder<NYdb::TDriver> Driver;
 };
 
+void CreateDatabase(TTestEnv& env, const TString& databaseName, size_t nodeCount = 1);
+
 } // namespace NStat
 } // namespace NKikimr

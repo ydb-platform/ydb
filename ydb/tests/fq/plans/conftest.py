@@ -67,6 +67,11 @@ def s3(request) -> S3:
 
 
 @pytest.fixture
+def stats_mode():
+    return ''
+
+
+@pytest.fixture
 def kikimr(request: pytest.FixtureRequest, s3: S3, yq_version: str, stats_mode: str):
     kikimr_extensions = [AddInflightExtension(),
                          AddDataInflightExtension(),

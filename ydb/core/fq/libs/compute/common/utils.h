@@ -1,5 +1,6 @@
 #pragma once
 
+#include <memory>
 #include <ydb/core/fq/libs/compute/common/config.h>
 #include <ydb/core/fq/libs/shared_resources/shared_resources.h>
 #include <ydb/core/fq/libs/ydb/ydb.h>
@@ -42,5 +43,15 @@ struct TPublicStat {
 };
 
 TPublicStat GetPublicStat(const TString& statistics);
+
+struct IPlanStatProcessor {
+    virtual ~IPlanStatProcessor() = default;
+    virtual Ydb::Query::StatsMode GetStatsMode() = 0;
+    virtual TString ConvertPlan(TString& plan)  = 0;
+    virtual TString GetQueryStat(TString& plan, double& cpuUsage) = 0;
+    virtual TPublicStat GetPublicStat(TString& stat) = 0;
+};
+
+std::unique_ptr<IPlanStatProcessor> CreateStatProcessor(const TString& statViewName);
 
 } // namespace NFq

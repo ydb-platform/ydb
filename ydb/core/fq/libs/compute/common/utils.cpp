@@ -1,7 +1,11 @@
 #include "utils.h"
 
 #include <library/cpp/json/json_reader.h>
+#include <library/cpp/json/json_writer.h>
 #include <library/cpp/json/yson/json2yson.h>
+#include <memory>
+
+#include <ydb/core/fq/libs/control_plane_storage/internal/utils.h>
 
 namespace NFq {
 
@@ -621,7 +625,7 @@ void EnumeratePlansV2(NYson::TYsonWriter& writer, NJson::TJsonValue& value, ui32
     }
 }
 
-TString GetV1StatFromV2PlanV2(const TString& plan) {
+TString GetV1StatFromV2PlanV2(const TString& plan, double* cpuUsage) {
     TStringStream out;
     NYson::TYsonWriter writer(&out);
     writer.OnBeginMap();
@@ -655,6 +659,9 @@ TString GetV1StatFromV2PlanV2(const TString& plan) {
                         if (totals.CpuTimeUs.Sum) {
                             writer.OnKeyedItem("cpu");
                             writer.OnStringScalar(FormatDurationUs(totals.CpuTimeUs.Sum));
+                            if (cpuUsage) {
+                                *cpuUsage = totals.CpuTimeUs.Sum / 1'000'000.0;
+                            }
                         }
                         if (totals.SourceCpuTimeUs.Sum) {
                             writer.OnKeyedItem("scpu");
@@ -748,6 +755,70 @@ TPublicStat GetPublicStat(const TString& statistics) {
         }
     }
     return counters;
+}
+
+struct TNoneStatProcessor : IPlanStatProcessor {
+    Ydb::Query::StatsMode GetStatsMode() override {
+        return Ydb::Query::StatsMode::STATS_MODE_NONE;
+    }
+
+    TString ConvertPlan(TString& plan) override {
+        return plan;
+    }
+
+    TString GetQueryStat(TString&, double& cpuUsage) override {
+        cpuUsage = 0.0;
+        return "";
+    }
+
+    TPublicStat GetPublicStat(TString&) override {
+        return TPublicStat{};
+    }
+};
+
+struct TBasicStatProcessor : TNoneStatProcessor {
+    Ydb::Query::StatsMode GetStatsMode() override {
+        return Ydb::Query::StatsMode::STATS_MODE_BASIC;
+    }
+};
+
+struct TFullStatProcessor : IPlanStatProcessor {
+    Ydb::Query::StatsMode GetStatsMode() override {
+        return Ydb::Query::StatsMode::STATS_MODE_FULL;
+    }
+
+    TString ConvertPlan(TString& plan) override {
+        return plan;
+    }
+
+    TString GetQueryStat(TString& plan, double& cpuUsage) override {
+        return GetV1StatFromV2Plan(plan, &cpuUsage);
+    }
+
+    TPublicStat GetPublicStat(TString& stat) override {
+        return NFq::GetPublicStat(stat);
+    }
+};
+
+struct TProfileStatProcessor : TFullStatProcessor {
+    Ydb::Query::StatsMode GetStatsMode() override {
+        return Ydb::Query::StatsMode::STATS_MODE_PROFILE;
+    }
+};
+
+struct TProdStatProcessor : TFullStatProcessor {
+    TString GetQueryStat(TString& plan, double& cpuUsage) override {
+        return GetPrettyStatistics(GetV1StatFromV2Plan(plan, &cpuUsage));
+    }
+};
+
+std::unique_ptr<IPlanStatProcessor> CreateStatProcessor(const TString& statViewName) {
+    if (statViewName == "fq_dev_hint_stat_none") return std::make_unique<TNoneStatProcessor>();
+    if (statViewName == "fq_dev_hint_stat_basc") return std::make_unique<TBasicStatProcessor>();
+    if (statViewName == "fq_dev_hint_stat_full") return std::make_unique<TFullStatProcessor>();
+    if (statViewName == "fq_dev_hint_stat_prof") return std::make_unique<TProfileStatProcessor>();
+    if (statViewName == "fq_dev_hint_stat_prod") return std::make_unique<TProdStatProcessor>();
+    return std::make_unique<TFullStatProcessor>();
 }
 
 } // namespace NFq

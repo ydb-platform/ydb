@@ -15,11 +15,14 @@ target_link_libraries(ydb-core-statistics PUBLIC
   contrib-libs-cxxsupp
   yutil
   library-actors-core
+  ydb-library-query_actor
   ydb-core-protos
   ydb-core-scheme
 )
 target_sources(ydb-core-statistics PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/core/statistics/events.h
   ${CMAKE_SOURCE_DIR}/ydb/core/statistics/stat_service.h
+  ${CMAKE_SOURCE_DIR}/ydb/core/statistics/save_load_stats.h
   ${CMAKE_SOURCE_DIR}/ydb/core/statistics/stat_service.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/statistics/save_load_stats.cpp
 )

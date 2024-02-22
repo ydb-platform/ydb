@@ -33,6 +33,7 @@ target_sources(ydb-core-statistics-ut PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/core/statistics/ut/ut_common.h
   ${CMAKE_SOURCE_DIR}/ydb/core/statistics/ut/ut_common.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/statistics/ut/ut_statistics.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/statistics/ut/ut_save_load_stats.cpp
 )
 set_property(
   TARGET

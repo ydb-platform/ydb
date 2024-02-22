@@ -22,7 +22,7 @@ target_link_libraries(providers-yt-dq_task_preprocessor PUBLIC
   yql-utils-log
   yql-utils-failure_injector
   library-yql-minikql
-  minikql-computation-llvm
+  yql-minikql-computation
   providers-common-codec
   providers-dq-interface
   providers-yt-codec

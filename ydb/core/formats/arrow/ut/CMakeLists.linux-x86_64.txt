@@ -35,9 +35,6 @@ target_link_options(ydb-core-formats-arrow-ut PRIVATE
   -Wl,--no-as-needed
   -fPIC
   -fPIC
-  -lpthread
-  -lrt
-  -ldl
 )
 target_sources(ydb-core-formats-arrow-ut PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/core/formats/arrow/ut_arrow.cpp
@@ -45,6 +42,7 @@ target_sources(ydb-core-formats-arrow-ut PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/core/formats/arrow/ut/ut_dictionary.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/formats/arrow/ut/ut_size_calcer.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/formats/arrow/ut/ut_column_filter.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/formats/arrow/ut/ut_hash.cpp
 )
 set_property(
   TARGET
@@ -71,6 +69,7 @@ set_yunittest_property(
   PROPERTY
   LABELS
   SMALL
+  $FILTER_ONLY_TEST_TAGS
 )
 set_yunittest_property(
   TEST

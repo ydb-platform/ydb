@@ -33,6 +33,7 @@ target_link_libraries(ydb-core-viewer PUBLIC
   core-blobstorage-base
   blobstorage-vdisk-common
   core-client-server
+  core-graph-api
   ydb-core-grpc_services
   core-grpc_services-local_rpc
   ydb-core-health_check
@@ -52,6 +53,56 @@ target_link_libraries(ydb-core-viewer PUBLIC
   cpp-client-ydb_types
 )
 target_sources(ydb-core-viewer PRIVATE
+  ${CMAKE_SOURCE_DIR}/ydb/core/viewer/browse_db.h
+  ${CMAKE_SOURCE_DIR}/ydb/core/viewer/browse_pq.h
+  ${CMAKE_SOURCE_DIR}/ydb/core/viewer/browse.h
+  ${CMAKE_SOURCE_DIR}/ydb/core/viewer/counters_hosts.h
+  ${CMAKE_SOURCE_DIR}/ydb/core/viewer/json_acl.h
+  ${CMAKE_SOURCE_DIR}/ydb/core/viewer/json_blobindexstat.h
+  ${CMAKE_SOURCE_DIR}/ydb/core/viewer/json_browse.h
+  ${CMAKE_SOURCE_DIR}/ydb/core/viewer/json_bscontrollerinfo.h
+  ${CMAKE_SOURCE_DIR}/ydb/core/viewer/json_bsgroupinfo.h
+  ${CMAKE_SOURCE_DIR}/ydb/core/viewer/json_cluster.h
+  ${CMAKE_SOURCE_DIR}/ydb/core/viewer/json_compute.h
+  ${CMAKE_SOURCE_DIR}/ydb/core/viewer/json_config.h
+  ${CMAKE_SOURCE_DIR}/ydb/core/viewer/json_content.h
+  ${CMAKE_SOURCE_DIR}/ydb/core/viewer/json_counters.h
+  ${CMAKE_SOURCE_DIR}/ydb/core/viewer/json_describe.h
+  ${CMAKE_SOURCE_DIR}/ydb/core/viewer/json_local_rpc.h
+  ${CMAKE_SOURCE_DIR}/ydb/core/viewer/json_getblob.h
+  ${CMAKE_SOURCE_DIR}/ydb/core/viewer/json_graph.h
+  ${CMAKE_SOURCE_DIR}/ydb/core/viewer/json_healthcheck.h
+  ${CMAKE_SOURCE_DIR}/ydb/core/viewer/json_hiveinfo.h
+  ${CMAKE_SOURCE_DIR}/ydb/core/viewer/json_hotkeys.h
+  ${CMAKE_SOURCE_DIR}/ydb/core/viewer/json_labeledcounters.h
+  ${CMAKE_SOURCE_DIR}/ydb/core/viewer/json_metainfo.h
+  ${CMAKE_SOURCE_DIR}/ydb/core/viewer/json_netinfo.h
+  ${CMAKE_SOURCE_DIR}/ydb/core/viewer/json_nodeinfo.h
+  ${CMAKE_SOURCE_DIR}/ydb/core/viewer/json_nodelist.h
+  ${CMAKE_SOURCE_DIR}/ydb/core/viewer/json_nodes.h
+  ${CMAKE_SOURCE_DIR}/ydb/core/viewer/json_pdiskinfo.h
+  ${CMAKE_SOURCE_DIR}/ydb/core/viewer/json_query.h
+  ${CMAKE_SOURCE_DIR}/ydb/core/viewer/json_render.h
+  ${CMAKE_SOURCE_DIR}/ydb/core/viewer/json_storage.h
+  ${CMAKE_SOURCE_DIR}/ydb/core/viewer/json_sysinfo.h
+  ${CMAKE_SOURCE_DIR}/ydb/core/viewer/json_tabletcounters.h
+  ${CMAKE_SOURCE_DIR}/ydb/core/viewer/json_tabletinfo.h
+  ${CMAKE_SOURCE_DIR}/ydb/core/viewer/json_tenants.h
+  ${CMAKE_SOURCE_DIR}/ydb/core/viewer/json_tenantinfo.h
+  ${CMAKE_SOURCE_DIR}/ydb/core/viewer/json_topicinfo.h
+  ${CMAKE_SOURCE_DIR}/ydb/core/viewer/json_pqconsumerinfo.h
+  ${CMAKE_SOURCE_DIR}/ydb/core/viewer/json_vdisk_req.h
+  ${CMAKE_SOURCE_DIR}/ydb/core/viewer/json_vdiskinfo.h
+  ${CMAKE_SOURCE_DIR}/ydb/core/viewer/json_vdiskstat.h
+  ${CMAKE_SOURCE_DIR}/ydb/core/viewer/json_wb_req.h
+  ${CMAKE_SOURCE_DIR}/ydb/core/viewer/json_whoami.h
+  ${CMAKE_SOURCE_DIR}/ydb/core/viewer/log.h
+  ${CMAKE_SOURCE_DIR}/ydb/core/viewer/viewer_request.h
+  ${CMAKE_SOURCE_DIR}/ydb/core/viewer/viewer.h
+  ${CMAKE_SOURCE_DIR}/ydb/core/viewer/wb_aggregate.h
+  ${CMAKE_SOURCE_DIR}/ydb/core/viewer/wb_filter.h
+  ${CMAKE_SOURCE_DIR}/ydb/core/viewer/wb_group.h
+  ${CMAKE_SOURCE_DIR}/ydb/core/viewer/wb_merge.h
   ${CMAKE_SOURCE_DIR}/ydb/core/viewer/json_handlers_vdisk.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/viewer/json_handlers_viewer.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/viewer/viewer_request.cpp
@@ -79,6 +130,7 @@ target_link_libraries(ydb-core-viewer.global PUBLIC
   core-blobstorage-base
   blobstorage-vdisk-common
   core-client-server
+  core-graph-api
   ydb-core-grpc_services
   core-grpc_services-local_rpc
   ydb-core-health_check

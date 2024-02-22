@@ -26,6 +26,7 @@ target_link_libraries(ydb-core-tx-columnshard-splitter-ut PUBLIC
   ydb-library-arrow_kernels
   tx-columnshard-counters
   formats-arrow-compression
+  columnshard-engines-portions
   core-kqp-common
   yql-parser-pg_wrapper
   yql-public-udf
@@ -34,8 +35,12 @@ target_link_libraries(ydb-core-tx-columnshard-splitter-ut PUBLIC
   core-tx-tx_proxy
   ydb-core-tx
   ydb-core-mind
+  minikql-comp_nodes-llvm14
   udf-service-exception_policy
   yql-sql-pg
+  ydb-services-kesus
+  ydb-services-persqueue_cluster_discovery
+  ydb-services-ydb
 )
 target_sources(ydb-core-tx-columnshard-splitter-ut PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/core/tx/columnshard/splitter/ut/ut_splitter.cpp
@@ -65,6 +70,7 @@ set_yunittest_property(
   PROPERTY
   LABELS
   SMALL
+  $FILTER_ONLY_TEST_TAGS
 )
 set_yunittest_property(
   TEST

@@ -22,6 +22,13 @@ target_link_libraries(blobstorage-vdisk-handoff PUBLIC
   ydb-core-protos
 )
 target_sources(blobstorage-vdisk-handoff PRIVATE
+  ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/vdisk/handoff/defs.h
+  ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/vdisk/handoff/handoff_basic.h
+  ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/vdisk/handoff/handoff_delegate.h
+  ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/vdisk/handoff/handoff_map.h
+  ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/vdisk/handoff/handoff_mon.h
+  ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/vdisk/handoff/handoff_proxy.h
+  ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/vdisk/handoff/handoff_synclogproxy.h
   ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/vdisk/handoff/handoff_basic.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/vdisk/handoff/handoff_delegate.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/vdisk/handoff/handoff_map.cpp

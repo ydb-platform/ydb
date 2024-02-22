@@ -22,6 +22,8 @@ target_link_libraries(yql-core-sql_types PUBLIC
   tools-enum_parser-enum_serialization_runtime
 )
 target_sources(yql-core-sql_types PRIVATE
+  ${CMAKE_SOURCE_DIR}/ydb/library/yql/core/sql_types/match_recognize.h
+  ${CMAKE_SOURCE_DIR}/ydb/library/yql/core/sql_types/simple_types.h
   ${CMAKE_SOURCE_DIR}/ydb/library/yql/core/sql_types/match_recognize.cpp
   ${CMAKE_SOURCE_DIR}/ydb/library/yql/core/sql_types/simple_types.cpp
 )

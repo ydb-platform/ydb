@@ -8,6 +8,7 @@
 
 add_subdirectory(jsonpath)
 add_subdirectory(v0)
+add_subdirectory(v0_proto_split)
 add_subdirectory(v1)
 add_subdirectory(v1_ansi)
-add_subdirectory(v1_proto)
+add_subdirectory(v1_proto_split)

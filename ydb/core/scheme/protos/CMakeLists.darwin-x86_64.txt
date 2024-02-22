@@ -64,6 +64,14 @@ target_proto_messages(core-scheme-protos PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/core/scheme/protos/key_range.proto
   ${CMAKE_SOURCE_DIR}/ydb/core/scheme/protos/pathid.proto
 )
+target_sources(core-scheme-protos PRIVATE
+  ${CMAKE_BINARY_DIR}/ydb/core/scheme/protos/type_info.pb.h
+  ${CMAKE_BINARY_DIR}/ydb/core/scheme/protos/type_info.grpc.pb.h
+  ${CMAKE_BINARY_DIR}/ydb/core/scheme/protos/key_range.pb.h
+  ${CMAKE_BINARY_DIR}/ydb/core/scheme/protos/key_range.grpc.pb.h
+  ${CMAKE_BINARY_DIR}/ydb/core/scheme/protos/pathid.pb.h
+  ${CMAKE_BINARY_DIR}/ydb/core/scheme/protos/pathid.grpc.pb.h
+)
 target_proto_addincls(core-scheme-protos
   ./
   ${CMAKE_SOURCE_DIR}/

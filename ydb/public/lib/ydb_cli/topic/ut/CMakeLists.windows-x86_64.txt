@@ -32,6 +32,7 @@ target_link_libraries(ydb-public-lib-ydb_cli-topic-ut PUBLIC
   ydb_persqueue_core-ut-ut_utils
 )
 target_sources(ydb-public-lib-ydb_cli-topic-ut PRIVATE
+  ${CMAKE_SOURCE_DIR}/ydb/public/lib/ydb_cli/topic/topic_write.h
   ${CMAKE_SOURCE_DIR}/ydb/public/lib/ydb_cli/topic/topic_write.cpp
   ${CMAKE_SOURCE_DIR}/ydb/public/lib/ydb_cli/topic/topic_write_ut.cpp
   ${CMAKE_SOURCE_DIR}/ydb/public/lib/ydb_cli/topic/topic_read_ut.cpp
@@ -61,6 +62,7 @@ set_yunittest_property(
   PROPERTY
   LABELS
   MEDIUM
+  $FILTER_ONLY_TEST_TAGS
 )
 set_yunittest_property(
   TEST

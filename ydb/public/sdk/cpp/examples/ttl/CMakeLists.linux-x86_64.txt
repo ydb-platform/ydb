@@ -22,11 +22,10 @@ target_link_options(ttl PRIVATE
   -Wl,--no-as-needed
   -fPIC
   -fPIC
-  -lpthread
-  -lrt
-  -ldl
 )
 target_sources(ttl PRIVATE
+  ${CMAKE_SOURCE_DIR}/ydb/public/sdk/cpp/examples/ttl/ttl.h
+  ${CMAKE_SOURCE_DIR}/ydb/public/sdk/cpp/examples/ttl/util.h
   ${CMAKE_SOURCE_DIR}/ydb/public/sdk/cpp/examples/ttl/main.cpp
   ${CMAKE_SOURCE_DIR}/ydb/public/sdk/cpp/examples/ttl/ttl.cpp
 )

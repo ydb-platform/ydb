@@ -20,6 +20,7 @@ target_link_libraries(ydb-core-kqp-ut-service PUBLIC
   library-cpp-cpuid_check
   cpp-testing-unittest_main
   ydb-core-kqp
+  contrib-libs-fmt
   cpp-threading-local_executor
   kqp-ut-common
   yql-sql-pg
@@ -59,6 +60,7 @@ set_yunittest_property(
   PROPERTY
   LABELS
   MEDIUM
+  $FILTER_ONLY_TEST_TAGS
 )
 set_yunittest_property(
   TEST

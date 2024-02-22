@@ -77,12 +77,13 @@ target_link_libraries(ydb-core-testlib PUBLIC
   library-mkql_proto-protos
   library-persqueue-topic_parser
   ydb-library-security
-  minikql-comp_nodes-llvm
+  minikql-comp_nodes-llvm14
   udf-service-exception_policy
   public-lib-base
   lib-deprecated-kicli
   cpp-client-ydb_driver
   client-ydb_persqueue_public-codecs
+  cpp-client-ydb_query
   cpp-client-ydb_table
   ydb-services-auth
   ydb-services-cms
@@ -103,6 +104,15 @@ target_link_libraries(ydb-core-testlib PUBLIC
   ydb-core-http_proxy
 )
 target_sources(ydb-core-testlib PRIVATE
+  ${CMAKE_SOURCE_DIR}/ydb/core/testlib/actor_helpers.h
+  ${CMAKE_SOURCE_DIR}/ydb/core/testlib/fake_coordinator.h
+  ${CMAKE_SOURCE_DIR}/ydb/core/testlib/fake_scheme_shard.h
+  ${CMAKE_SOURCE_DIR}/ydb/core/testlib/minikql_compile.h
+  ${CMAKE_SOURCE_DIR}/ydb/core/testlib/mock_pq_metacache.h
+  ${CMAKE_SOURCE_DIR}/ydb/core/testlib/tablet_helpers.h
+  ${CMAKE_SOURCE_DIR}/ydb/core/testlib/tenant_runtime.h
+  ${CMAKE_SOURCE_DIR}/ydb/core/testlib/test_client.h
+  ${CMAKE_SOURCE_DIR}/ydb/core/testlib/tx_helpers.h
   ${CMAKE_SOURCE_DIR}/ydb/core/testlib/actor_helpers.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/testlib/common_helper.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/testlib/cs_helper.cpp

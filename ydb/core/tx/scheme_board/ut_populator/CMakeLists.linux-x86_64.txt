@@ -33,9 +33,6 @@ target_link_options(ydb-core-tx-scheme_board-ut_populator PRIVATE
   -Wl,--no-as-needed
   -fPIC
   -fPIC
-  -lpthread
-  -lrt
-  -ldl
 )
 target_sources(ydb-core-tx-scheme_board-ut_populator PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/core/tx/scheme_board/populator_ut.cpp
@@ -66,6 +63,7 @@ set_yunittest_property(
   PROPERTY
   LABELS
   MEDIUM
+  $FILTER_ONLY_TEST_TAGS
 )
 set_yunittest_property(
   TEST

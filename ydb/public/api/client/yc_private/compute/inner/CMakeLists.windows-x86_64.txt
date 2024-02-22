@@ -38,6 +38,10 @@ target_link_libraries(yc_private-compute-inner PUBLIC
 target_proto_messages(yc_private-compute-inner PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/public/api/client/yc_private/compute/inner/disk_service.proto
 )
+target_sources(yc_private-compute-inner PRIVATE
+  ${CMAKE_BINARY_DIR}/ydb/public/api/client/yc_private/compute/inner/disk_service.pb.h
+  ${CMAKE_BINARY_DIR}/ydb/public/api/client/yc_private/compute/inner/disk_service.grpc.pb.h
+)
 target_proto_addincls(yc_private-compute-inner
   ./
   ${CMAKE_SOURCE_DIR}/

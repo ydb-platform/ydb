@@ -29,8 +29,6 @@ target_link_options(idx_test PRIVATE
   -Wl,-platform_version,macos,11.0,11.0
   -fPIC
   -fPIC
-  -framework
-  CoreFoundation
 )
 target_sources(idx_test PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/tests/tools/idx_test/main.cpp

@@ -20,6 +20,7 @@ target_link_libraries(cpp-digest-old_crc PUBLIC
   yutil
 )
 target_sources(cpp-digest-old_crc PRIVATE
+  ${CMAKE_BINARY_DIR}/library/cpp/digest/old_crc/crc.inc
   ${CMAKE_SOURCE_DIR}/library/cpp/digest/old_crc/crc.cpp
   ${CMAKE_BINARY_DIR}/library/cpp/digest/old_crc/crc.inc
 )

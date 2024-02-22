@@ -26,6 +26,7 @@ target_link_libraries(core-services-mounts PUBLIC
   library-yql-core
 )
 target_sources(core-services-mounts PRIVATE
+  ${CMAKE_SOURCE_DIR}/ydb/library/yql/core/services/mounts/yql_mounts.h
   ${CMAKE_SOURCE_DIR}/ydb/library/yql/core/services/mounts/yql_mounts.cpp
 )
 

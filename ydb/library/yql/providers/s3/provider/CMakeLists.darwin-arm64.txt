@@ -27,7 +27,7 @@ target_link_libraries(providers-s3-provider PUBLIC
   yql-core-type_ann
   yql-dq-expr_nodes
   yql-dq-integration
-  minikql-comp_nodes-llvm
+  yql-minikql-comp_nodes
   providers-common-config
   providers-common-dq
   providers-common-http_gateway

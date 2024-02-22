@@ -17,6 +17,32 @@ target_link_libraries(library-actors-util PUBLIC
   library-cpp-pop_count
 )
 target_sources(library-actors-util PRIVATE
+  ${CMAKE_SOURCE_DIR}/ydb/library/actors/util/affinity.h
+  ${CMAKE_SOURCE_DIR}/ydb/library/actors/util/cpu_load_log.h
+  ${CMAKE_SOURCE_DIR}/ydb/library/actors/util/cpumask.h
+  ${CMAKE_SOURCE_DIR}/ydb/library/actors/util/datetime.h
+  ${CMAKE_SOURCE_DIR}/ydb/library/actors/util/defs.h
+  ${CMAKE_SOURCE_DIR}/ydb/library/actors/util/funnel_queue.h
+  ${CMAKE_SOURCE_DIR}/ydb/library/actors/util/futex.h
+  ${CMAKE_SOURCE_DIR}/ydb/library/actors/util/intrinsics.h
+  ${CMAKE_SOURCE_DIR}/ydb/library/actors/util/local_process_key.h
+  ${CMAKE_SOURCE_DIR}/ydb/library/actors/util/named_tuple.h
+  ${CMAKE_SOURCE_DIR}/ydb/library/actors/util/queue_chunk.h
+  ${CMAKE_SOURCE_DIR}/ydb/library/actors/util/queue_oneone_inplace.h
+  ${CMAKE_SOURCE_DIR}/ydb/library/actors/util/memory_track.h
+  ${CMAKE_SOURCE_DIR}/ydb/library/actors/util/memory_tracker.h
+  ${CMAKE_SOURCE_DIR}/ydb/library/actors/util/recentwnd.h
+  ${CMAKE_SOURCE_DIR}/ydb/library/actors/util/rope.h
+  ${CMAKE_SOURCE_DIR}/ydb/library/actors/util/rc_buf.h
+  ${CMAKE_SOURCE_DIR}/ydb/library/actors/util/shared_data.h
+  ${CMAKE_SOURCE_DIR}/ydb/library/actors/util/shared_data_rope_backend.h
+  ${CMAKE_SOURCE_DIR}/ydb/library/actors/util/should_continue.h
+  ${CMAKE_SOURCE_DIR}/ydb/library/actors/util/thread.h
+  ${CMAKE_SOURCE_DIR}/ydb/library/actors/util/threadparkpad.h
+  ${CMAKE_SOURCE_DIR}/ydb/library/actors/util/thread_load_log.h
+  ${CMAKE_SOURCE_DIR}/ydb/library/actors/util/ticket_lock.h
+  ${CMAKE_SOURCE_DIR}/ydb/library/actors/util/timerfd.h
+  ${CMAKE_SOURCE_DIR}/ydb/library/actors/util/unordered_cache.h
   ${CMAKE_SOURCE_DIR}/ydb/library/actors/util/affinity.cpp
   ${CMAKE_SOURCE_DIR}/ydb/library/actors/util/memory_track.cpp
   ${CMAKE_SOURCE_DIR}/ydb/library/actors/util/memory_tracker.cpp

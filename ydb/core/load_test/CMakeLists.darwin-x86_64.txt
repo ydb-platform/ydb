@@ -43,6 +43,11 @@ target_link_libraries(ydb-core-load_test PUBLIC
   tools-enum_parser-enum_serialization_runtime
 )
 target_sources(ydb-core-load_test PRIVATE
+  ${CMAKE_SOURCE_DIR}/ydb/core/load_test/ycsb/actors.h
+  ${CMAKE_SOURCE_DIR}/ydb/core/load_test/ycsb/common.h
+  ${CMAKE_SOURCE_DIR}/ydb/core/load_test/ycsb/defs.h
+  ${CMAKE_SOURCE_DIR}/ydb/core/load_test/ycsb/info_collector.h
+  ${CMAKE_SOURCE_DIR}/ydb/core/load_test/ycsb/test_load_actor.h
   ${CMAKE_SOURCE_DIR}/ydb/core/load_test/aggregated_result.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/load_test/archive.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/load_test/config_examples.cpp

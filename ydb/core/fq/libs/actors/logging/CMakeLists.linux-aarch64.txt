@@ -15,3 +15,6 @@ target_link_libraries(libs-actors-logging INTERFACE
   library-actors-core
   ydb-core-protos
 )
+target_sources(libs-actors-logging INTERFACE
+  ${CMAKE_SOURCE_DIR}/ydb/core/fq/libs/actors/logging/log.h
+)

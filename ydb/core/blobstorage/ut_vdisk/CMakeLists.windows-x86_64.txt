@@ -32,6 +32,8 @@ target_link_libraries(ydb-core-blobstorage-ut_vdisk PUBLIC
   yql-sql-pg_dummy
 )
 target_sources(ydb-core-blobstorage-ut_vdisk PRIVATE
+  ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/ut_vdisk/defaults.h
+  ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/ut_vdisk/gen_restarts.h
   ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/ut_vdisk/gen_restarts.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/ut_vdisk/huge_migration_ut.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/ut_vdisk/mon_reregister_ut.cpp
@@ -62,6 +64,7 @@ set_yunittest_property(
   PROPERTY
   LABELS
   MEDIUM
+  $FILTER_ONLY_TEST_TAGS
 )
 set_yunittest_property(
   TEST

@@ -53,6 +53,12 @@ target_proto_messages(client-yc_private-servicecontrol PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/public/api/client/yc_private/servicecontrol/access_service.proto
   ${CMAKE_SOURCE_DIR}/ydb/public/api/client/yc_private/servicecontrol/resource.proto
 )
+target_sources(client-yc_private-servicecontrol PRIVATE
+  ${CMAKE_BINARY_DIR}/ydb/public/api/client/yc_private/servicecontrol/access_service.pb.h
+  ${CMAKE_BINARY_DIR}/ydb/public/api/client/yc_private/servicecontrol/access_service.grpc.pb.h
+  ${CMAKE_BINARY_DIR}/ydb/public/api/client/yc_private/servicecontrol/resource.pb.h
+  ${CMAKE_BINARY_DIR}/ydb/public/api/client/yc_private/servicecontrol/resource.grpc.pb.h
+)
 target_proto_addincls(client-yc_private-servicecontrol
   ./
   ${CMAKE_SOURCE_DIR}/

@@ -6,7 +6,6 @@
 # original buildsystem will not be accepted.
 
 
-add_subdirectory(service)
 
 add_library(yt-library-tvm)
 target_compile_options(yt-library-tvm PRIVATE

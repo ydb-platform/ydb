@@ -6,6 +6,7 @@
 # original buildsystem will not be accepted.
 
 
+add_subdirectory(no_llvm)
 
 add_executable(ydb-library-yql-public-purecalc-io_specs-mkql-ut)
 target_compile_options(ydb-library-yql-public-purecalc-io_specs-mkql-ut PRIVATE
@@ -17,7 +18,7 @@ target_link_libraries(ydb-library-yql-public-purecalc-io_specs-mkql-ut PUBLIC
   library-cpp-cpuid_check
   cpp-testing-unittest_main
   udf-service-exception_policy
-  public-purecalc-common
+  yql-public-purecalc
   purecalc-io_specs-mkql
   purecalc-ut-lib
 )
@@ -25,8 +26,6 @@ target_link_options(ydb-library-yql-public-purecalc-io_specs-mkql-ut PRIVATE
   -Wl,-platform_version,macos,11.0,11.0
   -fPIC
   -fPIC
-  -framework
-  CoreFoundation
 )
 target_sources(ydb-library-yql-public-purecalc-io_specs-mkql-ut PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/library/yql/public/purecalc/io_specs/mkql/ut/test_spec.cpp
@@ -56,6 +55,7 @@ set_yunittest_property(
   PROPERTY
   LABELS
   MEDIUM
+  $FILTER_ONLY_TEST_TAGS
 )
 set_yunittest_property(
   TEST

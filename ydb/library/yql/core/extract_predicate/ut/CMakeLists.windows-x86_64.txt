@@ -33,6 +33,10 @@ target_link_libraries(ydb-library-yql-core-extract_predicate-ut PUBLIC
   providers-result-provider
   yt-gateway-file
   providers-yt-provider
+  yt-codec-codegen
+  yt-comp_nodes-llvm14
+  minikql-comp_nodes-llvm14
+  minikql-invoke_builtins-llvm14
   yql-sql-pg
 )
 target_sources(ydb-library-yql-core-extract_predicate-ut PRIVATE
@@ -63,6 +67,7 @@ set_yunittest_property(
   PROPERTY
   LABELS
   MEDIUM
+  $FILTER_ONLY_TEST_TAGS
 )
 set_yunittest_property(
   TEST

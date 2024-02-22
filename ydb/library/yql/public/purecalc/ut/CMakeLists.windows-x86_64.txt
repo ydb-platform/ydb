@@ -23,6 +23,8 @@ target_link_libraries(ydb-library-yql-public-purecalc-ut PUBLIC
   purecalc-ut-protos
 )
 target_sources(ydb-library-yql-public-purecalc-ut PRIVATE
+  ${CMAKE_SOURCE_DIR}/ydb/library/yql/public/purecalc/ut/empty_stream.h
+  ${CMAKE_SOURCE_DIR}/ydb/library/yql/public/purecalc/ut/fake_spec.h
   ${CMAKE_SOURCE_DIR}/ydb/library/yql/public/purecalc/ut/fake_spec.cpp
   ${CMAKE_SOURCE_DIR}/ydb/library/yql/public/purecalc/ut/test_schema.cpp
   ${CMAKE_SOURCE_DIR}/ydb/library/yql/public/purecalc/ut/test_sexpr.cpp
@@ -57,6 +59,7 @@ set_yunittest_property(
   PROPERTY
   LABELS
   MEDIUM
+  $FILTER_ONLY_TEST_TAGS
 )
 set_yunittest_property(
   TEST

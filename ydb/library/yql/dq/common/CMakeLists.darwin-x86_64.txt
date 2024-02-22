@@ -25,6 +25,7 @@ target_link_libraries(yql-dq-common PUBLIC
   tools-enum_parser-enum_serialization_runtime
 )
 target_sources(yql-dq-common PRIVATE
+  ${CMAKE_SOURCE_DIR}/ydb/library/yql/dq/common/dq_resource_quoter.h
   ${CMAKE_SOURCE_DIR}/ydb/library/yql/dq/common/dq_common.cpp
   ${CMAKE_SOURCE_DIR}/ydb/library/yql/dq/common/dq_value.cpp
   ${CMAKE_SOURCE_DIR}/ydb/library/yql/dq/common/dq_serialized_batch.cpp

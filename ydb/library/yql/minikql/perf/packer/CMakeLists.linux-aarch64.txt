@@ -15,7 +15,7 @@ target_link_libraries(packer PUBLIC
   contrib-libs-linux-headers
   contrib-libs-cxxsupp
   yutil
-  minikql-comp_nodes-llvm
+  minikql-comp_nodes-llvm14
   yql-public-udf
   udf-service-exception_policy
   yql-sql-pg_dummy
@@ -26,9 +26,6 @@ target_link_options(packer PRIVATE
   -Wl,--no-as-needed
   -fPIC
   -fPIC
-  -lpthread
-  -lrt
-  -ldl
 )
 target_sources(packer PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/library/yql/minikql/perf/packer/packer.cpp

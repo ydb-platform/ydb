@@ -9,6 +9,7 @@
 add_subdirectory(actors)
 add_subdirectory(behaviour)
 add_subdirectory(local_rpc)
+add_subdirectory(utils)
 
 add_library(core-kqp-gateway)
 target_compile_options(core-kqp-gateway PRIVATE
@@ -28,6 +29,8 @@ target_link_libraries(core-kqp-gateway PUBLIC
   gateway-behaviour-tablestore
   gateway-behaviour-table
   gateway-behaviour-external_data_source
+  gateway-behaviour-view
+  kqp-gateway-utils
   providers-result-expr_nodes
 )
 target_sources(core-kqp-gateway PRIVATE

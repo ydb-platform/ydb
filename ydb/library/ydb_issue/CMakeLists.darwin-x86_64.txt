@@ -22,6 +22,7 @@ target_link_libraries(ydb-library-ydb_issue PUBLIC
   library-cpp-resource
 )
 target_sources(ydb-library-ydb_issue PRIVATE
+  ${CMAKE_SOURCE_DIR}/ydb/library/ydb_issue/issue_helpers.h
   ${CMAKE_SOURCE_DIR}/ydb/library/ydb_issue/issue_helpers.cpp
 )
 

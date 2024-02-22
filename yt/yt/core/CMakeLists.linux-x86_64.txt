@@ -131,7 +131,7 @@ target_sources(yt-yt-core PRIVATE
   ${CMAKE_SOURCE_DIR}/yt/yt/core/concurrency/thread_pool.cpp
   ${CMAKE_SOURCE_DIR}/yt/yt/core/concurrency/throughput_throttler.cpp
   ${CMAKE_SOURCE_DIR}/yt/yt/core/concurrency/two_level_fair_share_thread_pool.cpp
-  ${CMAKE_SOURCE_DIR}/yt/yt/core/concurrency/recurring_executor_base.cpp
+  ${CMAKE_SOURCE_DIR}/yt/yt/core/concurrency/retrying_periodic_executor.cpp
   ${CMAKE_SOURCE_DIR}/yt/yt/core/concurrency/scheduled_executor.cpp
   ${CMAKE_SOURCE_DIR}/yt/yt/core/crypto/config.cpp
   ${CMAKE_SOURCE_DIR}/yt/yt/core/crypto/crypto.cpp
@@ -140,7 +140,6 @@ target_sources(yt-yt-core PRIVATE
   ${CMAKE_SOURCE_DIR}/yt/yt/core/logging/config.cpp
   ${CMAKE_SOURCE_DIR}/yt/yt/core/logging/formatter.cpp
   ${CMAKE_SOURCE_DIR}/yt/yt/core/logging/fluent_log.cpp
-  ${CMAKE_SOURCE_DIR}/yt/yt/core/logging/log_manager.cpp
   ${CMAKE_SOURCE_DIR}/yt/yt/core/logging/logger_owner.cpp
   ${CMAKE_SOURCE_DIR}/yt/yt/core/logging/serializable_logger.cpp
   ${CMAKE_SOURCE_DIR}/yt/yt/core/logging/stream_output.cpp
@@ -151,7 +150,6 @@ target_sources(yt-yt-core PRIVATE
   ${CMAKE_SOURCE_DIR}/yt/yt/core/logging/zstd_compression.cpp
   ${CMAKE_SOURCE_DIR}/yt/yt/core/misc/arithmetic_formula.cpp
   ${CMAKE_SOURCE_DIR}/yt/yt/core/misc/backoff_strategy.cpp
-  ${CMAKE_SOURCE_DIR}/yt/yt/core/misc/backoff_strategy_config.cpp
   ${CMAKE_SOURCE_DIR}/yt/yt/core/misc/bitmap.cpp
   ${CMAKE_SOURCE_DIR}/yt/yt/core/misc/bit_packed_unsigned_vector.cpp
   ${CMAKE_SOURCE_DIR}/yt/yt/core/misc/bit_packing.cpp
@@ -280,6 +278,7 @@ target_sources(yt-yt-core PRIVATE
   ${CMAKE_SOURCE_DIR}/yt/yt/core/yson/string_merger.cpp
   ${CMAKE_SOURCE_DIR}/yt/yt/core/yson/ypath_designated_consumer.cpp
   ${CMAKE_SOURCE_DIR}/yt/yt/core/yson/depth_limiting_yson_consumer.cpp
+  ${CMAKE_SOURCE_DIR}/yt/yt/core/yson/list_verb_lazy_yson_consumer.cpp
   ${CMAKE_SOURCE_DIR}/yt/yt/core/yson/attributes_stripper.cpp
   ${CMAKE_SOURCE_DIR}/yt/yt/core/ytree/attribute_consumer.cpp
   ${CMAKE_SOURCE_DIR}/yt/yt/core/ytree/helpers.cpp
@@ -371,6 +370,7 @@ target_link_libraries(yt-yt-core.global PUBLIC
 )
 target_sources(yt-yt-core.global PRIVATE
   ${CMAKE_SOURCE_DIR}/yt/yt/core/logging/log.cpp
+  ${CMAKE_SOURCE_DIR}/yt/yt/core/logging/log_manager.cpp
   ${CMAKE_SOURCE_DIR}/yt/yt/core/misc/assert.cpp
   ${CMAKE_SOURCE_DIR}/yt/yt/core/misc/guid.cpp
   ${CMAKE_SOURCE_DIR}/yt/yt/core/misc/ref_tracked.cpp

@@ -14,12 +14,35 @@ target_link_libraries(blobstorage-vdisk-skeleton PUBLIC
   contrib-libs-cxxsupp
   yutil
   ydb-core-base
+  blobstorage-vdisk-balance
   vdisk-hulldb-base
   vdisk-hulldb-bulksst_add
   blobstorage-vdisk-synclog
   ydb-core-protos
 )
 target_sources(blobstorage-vdisk-skeleton PRIVATE
+  ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/vdisk/skeleton/defs.h
+  ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/vdisk/skeleton/blobstorage_db.h
+  ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/vdisk/skeleton/blobstorage_monactors.h
+  ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/vdisk/skeleton/blobstorage_skeleton.h
+  ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/vdisk/skeleton/blobstorage_skeletonerr.h
+  ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/vdisk/skeleton/blobstorage_skeletonfront.h
+  ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/vdisk/skeleton/blobstorage_syncfull.h
+  ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/vdisk/skeleton/blobstorage_syncfullhandler.h
+  ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/vdisk/skeleton/blobstorage_takedbsnap.h
+  ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/vdisk/skeleton/skeleton_block_and_get.h
+  ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/vdisk/skeleton/skeleton_capturevdisklayout.h
+  ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/vdisk/skeleton/skeleton_compactionstate.h
+  ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/vdisk/skeleton/skeleton_events.h
+  ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/vdisk/skeleton/skeleton_loggedrec.h
+  ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/vdisk/skeleton/skeleton_mon_dbmainpage.h
+  ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/vdisk/skeleton/skeleton_mon_util.h
+  ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/vdisk/skeleton/skeleton_oos_logic.h
+  ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/vdisk/skeleton/skeleton_oos_tracker.h
+  ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/vdisk/skeleton/skeleton_overload_handler.h
+  ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/vdisk/skeleton/skeleton_vmultiput_actor.h
+  ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/vdisk/skeleton/skeleton_vmovedpatch_actor.h
+  ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/vdisk/skeleton/skeleton_vpatch_actor.h
   ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/vdisk/skeleton/blobstorage_db.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/vdisk/skeleton/blobstorage_monactors.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/vdisk/skeleton/blobstorage_skeleton.cpp

@@ -32,6 +32,9 @@ target_link_libraries(library-ytprof-proto PUBLIC
 target_proto_messages(library-ytprof-proto PRIVATE
   ${CMAKE_SOURCE_DIR}/yt/yt/library/ytprof/proto/profile.proto
 )
+target_sources(library-ytprof-proto PRIVATE
+  ${CMAKE_BINARY_DIR}/yt/yt/library/ytprof/proto/profile.pb.h
+)
 target_proto_addincls(library-ytprof-proto
   ./yt
   ${CMAKE_SOURCE_DIR}/yt

@@ -15,6 +15,4 @@ target_link_libraries(restricted-boost-typeof INTERFACE
   contrib-libs-linux-headers
   contrib-libs-cxxsupp
   restricted-boost-config
-  restricted-boost-preprocessor
-  restricted-boost-type_traits
 )

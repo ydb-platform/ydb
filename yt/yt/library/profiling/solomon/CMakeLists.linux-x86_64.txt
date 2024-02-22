@@ -42,6 +42,7 @@ target_proto_messages(library-profiling-solomon PRIVATE
   ${CMAKE_SOURCE_DIR}/yt/yt/library/profiling/solomon/sensor_dump.proto
 )
 target_sources(library-profiling-solomon PRIVATE
+  ${CMAKE_BINARY_DIR}/yt/yt/library/profiling/solomon/sensor_dump.pb.h
   ${CMAKE_SOURCE_DIR}/yt/yt/library/profiling/solomon/cube.cpp
   ${CMAKE_SOURCE_DIR}/yt/yt/library/profiling/solomon/exporter.cpp
   ${CMAKE_SOURCE_DIR}/yt/yt/library/profiling/solomon/percpu.cpp

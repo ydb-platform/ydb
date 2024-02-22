@@ -19,6 +19,24 @@ target_link_libraries(vdisk-hulldb-generic PUBLIC
   ydb-core-protos
 )
 target_sources(vdisk-hulldb-generic PRIVATE
+  ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/vdisk/hulldb/generic/blobstorage_hulldatamerger.h
+  ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/vdisk/hulldb/generic/blobstorage_hullmergeits.h
+  ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/vdisk/hulldb/generic/blobstorage_hulloptlsn.h
+  ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/vdisk/hulldb/generic/blobstorage_hullrecmerger.h
+  ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/vdisk/hulldb/generic/blobstorage_hullwritesst.h
+  ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/vdisk/hulldb/generic/defs.h
+  ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/vdisk/hulldb/generic/hulldb_bulksstloaded.h
+  ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/vdisk/hulldb/generic/hulldb_bulksstmngr.h
+  ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/vdisk/hulldb/generic/hullds_idx.h
+  ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/vdisk/hulldb/generic/hullds_idxsnap.h
+  ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/vdisk/hulldb/generic/hullds_idxsnap_it.h
+  ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/vdisk/hulldb/generic/hullds_leveledssts.h
+  ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/vdisk/hulldb/generic/hullds_sst.h
+  ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/vdisk/hulldb/generic/hullds_sst_it.h
+  ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/vdisk/hulldb/generic/hullds_sstslice.h
+  ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/vdisk/hulldb/generic/hullds_sstslice_it.h
+  ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/vdisk/hulldb/generic/hullds_sstvec.h
+  ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/vdisk/hulldb/generic/hullds_sstvec_it.h
   ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/vdisk/hulldb/generic/blobstorage_hulloptlsn.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/vdisk/hulldb/generic/hulldb_bulksstmngr.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/vdisk/hulldb/generic/hullds_idx.cpp

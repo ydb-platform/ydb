@@ -30,9 +30,6 @@ target_link_options(mon-test PRIVATE
   -Wl,--no-as-needed
   -fPIC
   -fPIC
-  -lpthread
-  -lrt
-  -ldl
 )
 target_sources(mon-test PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/library/schlab/mon/test/test.cpp

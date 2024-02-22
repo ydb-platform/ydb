@@ -56,6 +56,12 @@ target_proto_messages(client-yc_private-kms PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/public/api/client/yc_private/kms/symmetric_crypto_service.proto
   ${CMAKE_SOURCE_DIR}/ydb/public/api/client/yc_private/kms/symmetric_key.proto
 )
+target_sources(client-yc_private-kms PRIVATE
+  ${CMAKE_BINARY_DIR}/ydb/public/api/client/yc_private/kms/symmetric_crypto_service.pb.h
+  ${CMAKE_BINARY_DIR}/ydb/public/api/client/yc_private/kms/symmetric_crypto_service.grpc.pb.h
+  ${CMAKE_BINARY_DIR}/ydb/public/api/client/yc_private/kms/symmetric_key.pb.h
+  ${CMAKE_BINARY_DIR}/ydb/public/api/client/yc_private/kms/symmetric_key.grpc.pb.h
+)
 target_proto_addincls(client-yc_private-kms
   ./
   ${CMAKE_SOURCE_DIR}/

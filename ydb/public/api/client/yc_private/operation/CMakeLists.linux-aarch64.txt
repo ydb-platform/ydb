@@ -40,6 +40,10 @@ target_link_libraries(client-yc_private-operation PUBLIC
 target_proto_messages(client-yc_private-operation PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/public/api/client/yc_private/operation/operation.proto
 )
+target_sources(client-yc_private-operation PRIVATE
+  ${CMAKE_BINARY_DIR}/ydb/public/api/client/yc_private/operation/operation.pb.h
+  ${CMAKE_BINARY_DIR}/ydb/public/api/client/yc_private/operation/operation.grpc.pb.h
+)
 target_proto_addincls(client-yc_private-operation
   ./
   ${CMAKE_SOURCE_DIR}/

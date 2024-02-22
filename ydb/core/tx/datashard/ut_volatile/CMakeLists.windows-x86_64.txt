@@ -32,6 +32,7 @@ target_link_libraries(ydb-core-tx-datashard-ut_volatile PUBLIC
   cpp-client-ydb_result
 )
 target_sources(ydb-core-tx-datashard-ut_volatile PRIVATE
+  ${CMAKE_SOURCE_DIR}/ydb/core/tx/datashard/datashard_ut_common_pq.h
   ${CMAKE_SOURCE_DIR}/ydb/core/tx/datashard/datashard_ut_common_pq.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/tx/datashard/datashard_ut_volatile.cpp
 )
@@ -60,6 +61,7 @@ set_yunittest_property(
   PROPERTY
   LABELS
   MEDIUM
+  $FILTER_ONLY_TEST_TAGS
 )
 set_yunittest_property(
   TEST

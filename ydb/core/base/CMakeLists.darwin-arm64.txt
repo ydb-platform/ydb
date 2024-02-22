@@ -28,9 +28,9 @@ target_link_libraries(ydb-core-base PUBLIC
   core-base-services
   ydb-core-debug
   ydb-core-erasure
+  core-graph-api
   ydb-core-protos
   core-protos-out
-  ydb-core-scheme
   ydb-library-aclib
   ydb-library-login
   ydb-library-pdisk_io
@@ -42,6 +42,42 @@ target_link_libraries(ydb-core-base PUBLIC
   library-cpp-dwarf_backtrace
 )
 target_sources(ydb-core-base PRIVATE
+  ${CMAKE_SOURCE_DIR}/ydb/core/base/appdata.h
+  ${CMAKE_SOURCE_DIR}/ydb/core/base/backtrace.h
+  ${CMAKE_SOURCE_DIR}/ydb/core/base/blobstorage.h
+  ${CMAKE_SOURCE_DIR}/ydb/core/base/channel_profiles.h
+  ${CMAKE_SOURCE_DIR}/ydb/core/base/counters.h
+  ${CMAKE_SOURCE_DIR}/ydb/core/base/defs.h
+  ${CMAKE_SOURCE_DIR}/ydb/core/base/domain.h
+  ${CMAKE_SOURCE_DIR}/ydb/core/base/event_filter.h
+  ${CMAKE_SOURCE_DIR}/ydb/core/base/events.h
+  ${CMAKE_SOURCE_DIR}/ydb/core/base/group_stat.h
+  ${CMAKE_SOURCE_DIR}/ydb/core/base/hive.h
+  ${CMAKE_SOURCE_DIR}/ydb/core/base/interconnect_channels.h
+  ${CMAKE_SOURCE_DIR}/ydb/core/base/localdb.h
+  ${CMAKE_SOURCE_DIR}/ydb/core/base/location.h
+  ${CMAKE_SOURCE_DIR}/ydb/core/base/logoblob.h
+  ${CMAKE_SOURCE_DIR}/ydb/core/base/memobserver.h
+  ${CMAKE_SOURCE_DIR}/ydb/core/base/nameservice.h
+  ${CMAKE_SOURCE_DIR}/ydb/core/base/pool_stats_collector.h
+  ${CMAKE_SOURCE_DIR}/ydb/core/base/resource_profile.h
+  ${CMAKE_SOURCE_DIR}/ydb/core/base/row_version.h
+  ${CMAKE_SOURCE_DIR}/ydb/core/base/shared_quota.h
+  ${CMAKE_SOURCE_DIR}/ydb/core/base/statestorage.h
+  ${CMAKE_SOURCE_DIR}/ydb/core/base/statestorage_guardian_impl.h
+  ${CMAKE_SOURCE_DIR}/ydb/core/base/statestorage_impl.h
+  ${CMAKE_SOURCE_DIR}/ydb/core/base/storage_pools.h
+  ${CMAKE_SOURCE_DIR}/ydb/core/base/subdomain.h
+  ${CMAKE_SOURCE_DIR}/ydb/core/base/tablet.h
+  ${CMAKE_SOURCE_DIR}/ydb/core/base/tablet_pipe.h
+  ${CMAKE_SOURCE_DIR}/ydb/core/base/tablet_pipecache.h
+  ${CMAKE_SOURCE_DIR}/ydb/core/base/tablet_resolver.h
+  ${CMAKE_SOURCE_DIR}/ydb/core/base/tabletid.h
+  ${CMAKE_SOURCE_DIR}/ydb/core/base/tablet_types.h
+  ${CMAKE_SOURCE_DIR}/ydb/core/base/traceid.h
+  ${CMAKE_SOURCE_DIR}/ydb/core/base/tracing.h
+  ${CMAKE_SOURCE_DIR}/ydb/core/base/tx_processing.h
+  ${CMAKE_SOURCE_DIR}/ydb/core/base/user_registry.h
   ${CMAKE_SOURCE_DIR}/ydb/core/base/actor_activity_names.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/base/appdata.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/base/backtrace.cpp

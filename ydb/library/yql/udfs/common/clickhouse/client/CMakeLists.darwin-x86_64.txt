@@ -524,8 +524,6 @@ target_link_options(clickhouse_client_udf.dyn PRIVATE
   -undefined
   dynamic_lookup
   -fPIC
-  -framework
-  CoreFoundation
 )
 target_sources(clickhouse_client_udf.dyn PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/library/yql/udfs/common/clickhouse/client/clickhouse_client_udf.cpp

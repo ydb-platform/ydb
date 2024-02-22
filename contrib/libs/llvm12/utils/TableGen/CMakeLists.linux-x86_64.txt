@@ -31,9 +31,6 @@ target_link_options(llvm-tblgen PRIVATE
   -Wl,--no-as-needed
   -fPIC
   -fPIC
-  -lpthread
-  -lrt
-  -ldl
 )
 target_sources(llvm-tblgen PRIVATE
   ${CMAKE_SOURCE_DIR}/contrib/libs/llvm12/utils/TableGen/AsmMatcherEmitter.cpp

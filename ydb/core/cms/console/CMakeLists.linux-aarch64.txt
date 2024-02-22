@@ -44,6 +44,26 @@ target_link_libraries(core-cms-console PUBLIC
   public-lib-operation_id
 )
 target_sources(core-cms-console PRIVATE
+  ${CMAKE_SOURCE_DIR}/ydb/core/cms/console/config_helpers.h
+  ${CMAKE_SOURCE_DIR}/ydb/core/cms/console/configs_cache.h
+  ${CMAKE_SOURCE_DIR}/ydb/core/cms/console/configs_config.h
+  ${CMAKE_SOURCE_DIR}/ydb/core/cms/console/configs_dispatcher.h
+  ${CMAKE_SOURCE_DIR}/ydb/core/cms/console/console.h
+  ${CMAKE_SOURCE_DIR}/ydb/core/cms/console/console_configs_manager.h
+  ${CMAKE_SOURCE_DIR}/ydb/core/cms/console/console_configs_provider.h
+  ${CMAKE_SOURCE_DIR}/ydb/core/cms/console/console_configs_subscriber.h
+  ${CMAKE_SOURCE_DIR}/ydb/core/cms/console/console_impl.h
+  ${CMAKE_SOURCE_DIR}/ydb/core/cms/console/console_tenants_manager.h
+  ${CMAKE_SOURCE_DIR}/ydb/core/cms/console/console__scheme.h
+  ${CMAKE_SOURCE_DIR}/ydb/core/cms/console/defs.h
+  ${CMAKE_SOURCE_DIR}/ydb/core/cms/console/http.h
+  ${CMAKE_SOURCE_DIR}/ydb/core/cms/console/immediate_controls_configurator.h
+  ${CMAKE_SOURCE_DIR}/ydb/core/cms/console/log_settings_configurator.h
+  ${CMAKE_SOURCE_DIR}/ydb/core/cms/console/logger.h
+  ${CMAKE_SOURCE_DIR}/ydb/core/cms/console/modifications_validator.h
+  ${CMAKE_SOURCE_DIR}/ydb/core/cms/console/shared_cache_configurator.h
+  ${CMAKE_SOURCE_DIR}/ydb/core/cms/console/tx_processor.h
+  ${CMAKE_SOURCE_DIR}/ydb/core/cms/console/util.h
   ${CMAKE_SOURCE_DIR}/ydb/core/cms/console/config_helpers.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/cms/console/configs_cache.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/cms/console/configs_config.cpp

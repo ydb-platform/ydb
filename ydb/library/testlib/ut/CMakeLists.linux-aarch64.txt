@@ -21,9 +21,6 @@ target_link_options(ydb-library-testlib-ut PRIVATE
   -Wl,--no-as-needed
   -fPIC
   -fPIC
-  -lpthread
-  -lrt
-  -ldl
 )
 target_sources(ydb-library-testlib-ut PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/library/testlib/ut/gtest_compat_ut.cpp
@@ -40,6 +37,7 @@ set_property(
   PROPERTY
   LABELS
   SMALL
+  $FILTER_ONLY_TEST_TAGS
 )
 set_property(
   TEST

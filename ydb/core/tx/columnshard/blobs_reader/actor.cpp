@@ -15,7 +15,7 @@ void TActor::Handle(NBlobCache::TEvBlobCache::TEvReadBlobRangeResult::TPtr& ev) 
     bool aborted = false;
     if (event.Status != NKikimrProto::EReplyStatus::OK) {
         WaitingBlobsCount.Sub(Task->GetWaitingCount());
-        if (!Task->AddError(event.BlobRange, IBlobsReadingAction::TErrorStatus::Fail(event.Status, "cannot get blob: " + event.Data.substr(1024)))) {
+        if (!Task->AddError(event.BlobRange, IBlobsReadingAction::TErrorStatus::Fail(event.Status, "cannot get blob: " + event.Data.substr(0, 1024)))) {
             aborted = true;
         }
     } else {

@@ -41,10 +41,11 @@ def setup_logging(logfile, is_debug):
 
 class Configuration:
     def __init__(
-        self, srcdir, dstdir, patchdir, skip_tests, runner, splitter, report_path, parallel, logfile, is_debug
+        self, srcdir, dstdir, udfs, patchdir, skip_tests, runner, splitter, report_path, parallel, logfile, is_debug
     ):
         self.srcdir = srcdir
         self.dstdir = dstdir
+        self.udfs = udfs
         self.patchdir = patchdir
         self.skip_tests = skip_tests
         self.runner = runner
@@ -126,8 +127,12 @@ class TestCaseBuilder:
                 test_err_name = test_out_name.with_suffix(".err")
 
                 logger.debug("Running %s '%s' -> [%s]", self.config.runner, sqlfile, outfile)
+                args = self.config.runner + ["--datadir", tempdir]
+                for udf in self.config.udfs:
+                    args.append("--udf")
+                    args.append(udf)
                 with open(sqlfile, 'rb') as f, open(test_out_name, 'wb') as fout, open(test_err_name, 'wb') as ferr:
-                    pi = subprocess.run(self.config.runner + ["--datadir", tempdir], stdin=f, stdout=fout, stderr=ferr)
+                    pi = subprocess.run(args, stdin=f, stdout=fout, stderr=ferr)
 
                 if pi.returncode != 0:
                     logger.warning("%s returned error code %d", self.config.runner, pi.returncode)
@@ -394,6 +399,14 @@ def patch_cases(cases, patches, patchdir):
     multiple=False,
     type=click.Path(exists=True, file_okay=False, resolve_path=True, path_type=Path),
 )
+@click.option(
+    "--udf",
+    "-u",
+    help="Load shared library with UDF by given path",
+    required=False,
+    multiple=True,
+    type=click.Path(dir_okay=False, resolve_path=True, path_type=Path),
+)
 @click.option("--skip", "-s", help="Comma-separated list of testsuits to skip", multiple=False, type=click.STRING)
 @click.option("--runner", help="Test runner", default=RUNNER, required=False, multiple=False, type=click.STRING)
 @click.option(
@@ -420,8 +433,11 @@ def patch_cases(cases, patches, patchdir):
 )
 @click.option("--debug/--no-debug", help="Logs verbosity", default=False, required=False)
 @click.version_option(version=svn_version(), prog_name=PROGRAM_NAME)
-def cli(cases, srcdir, dstdir, patchdir, skip, runner, splitter, report, parallel, logfile, debug):
+def cli(cases, srcdir, dstdir, patchdir, udf, skip, runner, splitter, report, parallel, logfile, debug):
     setup_logging(logfile, debug)
+
+    if udf:
+        LOGGER.debug("UDFs: %s", udf)
 
     if skip is not None:
         skip_tests = frozenset(
@@ -431,7 +447,7 @@ def cli(cases, srcdir, dstdir, patchdir, skip, runner, splitter, report, paralle
         skip_tests = frozenset()
 
     config = Configuration(
-        srcdir, dstdir, patchdir, skip_tests, runner.split(), splitter.split(), report, parallel, logfile, debug
+        srcdir, dstdir, udf, patchdir, skip_tests, runner.split(), splitter.split(), report, parallel, logfile, debug
     )
 
     if not cases:

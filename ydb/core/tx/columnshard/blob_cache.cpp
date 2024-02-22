@@ -62,18 +62,8 @@ private:
         // (e.g. DS blobs from the same tablet residing on the same DS group, or 2 small blobs from the same tablet)
         std::tuple<ui64, ui32, EReadVariant> BlobSource() const {
             const TUnifiedBlobId& blobId = BlobRange.BlobId;
-
             Y_ABORT_UNLESS(blobId.IsValid());
-
-            if (blobId.IsDsBlob()) {
-                // Tablet & group restriction
-                return {blobId.GetTabletId(), blobId.GetDsGroup(), ReadVariant()};
-            } else if (blobId.IsSmallBlob()) {
-                // Tablet restriction, no group restrictions
-                return {blobId.GetTabletId(), 0, ReadVariant()};
-            }
-
-            return {0, 0, EReadVariant::FAST};
+            return {blobId.GetTabletId(), blobId.GetDsGroup(), ReadVariant()};
         }
     };
 
@@ -409,7 +399,6 @@ private:
             ui64 requestSize = 0;
             ui32 dsGroup = std::get<1>(target);
             TReadItem::EReadVariant readVariant = std::get<2>(target);
-            Y_ABORT_UNLESS(rangesGroup.begin()->BlobId.IsDsBlob());
 
             std::vector<ui64> dsReads;
 

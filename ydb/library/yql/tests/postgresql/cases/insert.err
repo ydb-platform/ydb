@@ -1280,10 +1280,6 @@ where attname = 'a'
    or attrelid = 'mlparted11'::regclass)
 order by attrelid::regclass::text;
 </sql-statement>
--stdin-:<main>: Fatal: Table metadata loading
-
-    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.pg_attribute
-    
 <sql-statement>
 alter table mlparted1 attach partition mlparted11 for values from (2) to (5);
 </sql-statement>

@@ -711,17 +711,27 @@ CREATE TABLE attmp_array2 (id int);
 <sql-statement>
 SELECT typname FROM pg_type WHERE oid = 'attmp_array[]'::regtype;
 </sql-statement>
--stdin-:<main>: Fatal: Table metadata loading
+-stdin-:<main>: Fatal: Execution
 
-    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.pg_type
-    
+    -stdin-:<main>:1:1: Fatal: Execution of node: Result
+    	SELECT typname FROM pg_type WHERE oid = 'attmp_array[]'::regtype;
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  type "attmp_array[]" does not exist
+
+        	SELECT typname FROM pg_type WHERE oid = 'attmp_array[]'::regtype;
+	^
 <sql-statement>
 SELECT typname FROM pg_type WHERE oid = 'attmp_array2[]'::regtype;
 </sql-statement>
--stdin-:<main>: Fatal: Table metadata loading
+-stdin-:<main>: Fatal: Execution
 
-    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.pg_type
-    
+    -stdin-:<main>:1:1: Fatal: Execution of node: Result
+    	SELECT typname FROM pg_type WHERE oid = 'attmp_array2[]'::regtype;
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  type "attmp_array2[]" does not exist
+
+        	SELECT typname FROM pg_type WHERE oid = 'attmp_array2[]'::regtype;
+	^
 <sql-statement>
 ALTER TABLE attmp_array2 RENAME TO _attmp_array;
 </sql-statement>
@@ -733,17 +743,27 @@ ALTER TABLE attmp_array2 RENAME TO _attmp_array;
 <sql-statement>
 SELECT typname FROM pg_type WHERE oid = 'attmp_array[]'::regtype;
 </sql-statement>
--stdin-:<main>: Fatal: Table metadata loading
+-stdin-:<main>: Fatal: Execution
 
-    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.pg_type
-    
+    -stdin-:<main>:1:1: Fatal: Execution of node: Result
+    	SELECT typname FROM pg_type WHERE oid = 'attmp_array[]'::regtype;
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  type "attmp_array[]" does not exist
+
+        	SELECT typname FROM pg_type WHERE oid = 'attmp_array[]'::regtype;
+	^
 <sql-statement>
 SELECT typname FROM pg_type WHERE oid = '_attmp_array[]'::regtype;
 </sql-statement>
--stdin-:<main>: Fatal: Table metadata loading
+-stdin-:<main>: Fatal: Execution
 
-    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.pg_type
-    
+    -stdin-:<main>:1:1: Fatal: Execution of node: Result
+    	SELECT typname FROM pg_type WHERE oid = '_attmp_array[]'::regtype;
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  type "_attmp_array[]" does not exist
+
+        	SELECT typname FROM pg_type WHERE oid = '_attmp_array[]'::regtype;
+	^
 <sql-statement>
 DROP TABLE _attmp_array;
 </sql-statement>
@@ -757,10 +777,15 @@ CREATE TABLE attmp_array (id int);
 <sql-statement>
 SELECT typname FROM pg_type WHERE oid = 'attmp_array[]'::regtype;
 </sql-statement>
--stdin-:<main>: Fatal: Table metadata loading
+-stdin-:<main>: Fatal: Execution
 
-    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.pg_type
-    
+    -stdin-:<main>:1:1: Fatal: Execution of node: Result
+    	SELECT typname FROM pg_type WHERE oid = 'attmp_array[]'::regtype;
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  type "attmp_array[]" does not exist
+
+        	SELECT typname FROM pg_type WHERE oid = 'attmp_array[]'::regtype;
+	^
 <sql-statement>
 ALTER TABLE attmp_array RENAME TO _attmp_array;
 </sql-statement>
@@ -772,10 +797,15 @@ ALTER TABLE attmp_array RENAME TO _attmp_array;
 <sql-statement>
 SELECT typname FROM pg_type WHERE oid = '_attmp_array[]'::regtype;
 </sql-statement>
--stdin-:<main>: Fatal: Table metadata loading
+-stdin-:<main>: Fatal: Execution
 
-    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.pg_type
-    
+    -stdin-:<main>:1:1: Fatal: Execution of node: Result
+    	SELECT typname FROM pg_type WHERE oid = '_attmp_array[]'::regtype;
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  type "_attmp_array[]" does not exist
+
+        	SELECT typname FROM pg_type WHERE oid = '_attmp_array[]'::regtype;
+	^
 <sql-statement>
 DROP TABLE _attmp_array;
 </sql-statement>
@@ -1674,10 +1704,6 @@ alter table parent_noinh_convalid validate constraint check_a_is_2;
 <sql-statement>
 select convalidated from pg_constraint where conrelid = 'parent_noinh_convalid'::regclass and conname = 'check_a_is_2';
 </sql-statement>
--stdin-:<main>: Fatal: Table metadata loading
-
-    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.pg_constraint
-    
 <sql-statement>
 -- cleanup
 drop table parent_noinh_convalid, child_noinh_convalid;
@@ -2092,20 +2118,28 @@ FROM pg_trigger JOIN pg_constraint con ON con.oid = tgconstraint
 WHERE tgrelid = 'pktable'::regclass
 ORDER BY 1,2,3;
 </sql-statement>
--stdin-:<main>: Fatal: Table metadata loading
+-stdin-:<main>: Error: Type annotation
 
-    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.pg_constraint
-    
+    -stdin-:<main>:1:1: Error: At function: AssumeColumnOrder, At function: Sort
+    	SELECT conname, tgfoid::regproc, tgtype, tgdeferrable, tginitdeferred
+	^
+        -stdin-:<main>:1:1: Error: Expected comparable type, but got: Tuple<pgname,pgregproc,pgint2>
+        	SELECT conname, tgfoid::regproc, tgtype, tgdeferrable, tginitdeferred
+	^
 <sql-statement>
 SELECT conname, tgfoid::regproc, tgtype, tgdeferrable, tginitdeferred
 FROM pg_trigger JOIN pg_constraint con ON con.oid = tgconstraint
 WHERE tgrelid = 'fktable'::regclass
 ORDER BY 1,2,3;
 </sql-statement>
--stdin-:<main>: Fatal: Table metadata loading
+-stdin-:<main>: Error: Type annotation
 
-    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.pg_constraint
-    
+    -stdin-:<main>:1:1: Error: At function: AssumeColumnOrder, At function: Sort
+    	SELECT conname, tgfoid::regproc, tgtype, tgdeferrable, tginitdeferred
+	^
+        -stdin-:<main>:1:1: Error: Expected comparable type, but got: Tuple<pgname,pgregproc,pgint2>
+        	SELECT conname, tgfoid::regproc, tgtype, tgdeferrable, tginitdeferred
+	^
 <sql-statement>
 -- temp tables should go away by themselves, need not drop them.
 -- test check constraint adding
@@ -4829,10 +4863,6 @@ from pg_class join pg_attribute on (pg_class.oid = pg_attribute.attrelid)
 where relname in ('p1','p2','c1','gc1') and attnum > 0 and not attisdropped
 order by relname, attnum;
 </sql-statement>
--stdin-:<main>: Fatal: Table metadata loading
-
-    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.pg_attribute
-    
 <sql-statement>
 -- should work
 alter table only p1 drop column name;
@@ -4913,10 +4943,6 @@ from pg_class join pg_attribute on (pg_class.oid = pg_attribute.attrelid)
 where relname in ('p1','p2','c1','gc1') and attnum > 0 and not attisdropped
 order by relname, attnum;
 </sql-statement>
--stdin-:<main>: Fatal: Table metadata loading
-
-    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.pg_attribute
-    
 <sql-statement>
 drop table p1, p2 cascade;
 </sql-statement>
@@ -4959,10 +4985,44 @@ from pg_attribute
 where attnum > 0 and attrelid::regclass in ('depth0', 'depth1', 'depth2')
 order by attrelid::regclass::text, attnum;
 </sql-statement>
--stdin-:<main>: Fatal: Table metadata loading
+-stdin-:<main>: Error: Type annotation
 
-    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.pg_attribute
-    
+    -stdin-:<main>:1:1: Error: At function: RemovePrefixMembers, At function: PgSelect
+    	select attrelid::regclass, attname, attinhcount, attislocal
+	^
+        -stdin-:<main>: Error: At function: PgSetItem
+        
+            -stdin-:<main>:1:1: Error: At function: PgWhere
+            	select attrelid::regclass, attname, attinhcount, attislocal
+	^
+                -stdin-:<main>:3:18: Error: At function: PgAnd
+                	where attnum > 0 and attrelid::regclass in ('depth0', 'depth1', 'depth2')
+	                 ^
+                    -stdin-:<main>:3:41: Error: At function: PgIn
+                    	where attnum > 0 and attrelid::regclass in ('depth0', 'depth1', 'depth2')
+	                                        ^
+                        -stdin-:<main>:3:41: Error: Cannot compare items of type: regclass
+                        	where attnum > 0 and attrelid::regclass in ('depth0', 'depth1', 'depth2')
+	                                        ^
+-stdin-:<main>: Error: Type annotation
+
+    -stdin-:<main>:1:1: Error: At function: PgSelect
+    	select attrelid::regclass, attname, attinhcount, attislocal
+	^
+        -stdin-:<main>: Error: At function: PgSetItem
+        
+            -stdin-:<main>:1:1: Error: At function: PgWhere
+            	select attrelid::regclass, attname, attinhcount, attislocal
+	^
+                -stdin-:<main>:3:18: Error: At function: PgAnd
+                	where attnum > 0 and attrelid::regclass in ('depth0', 'depth1', 'depth2')
+	                 ^
+                    -stdin-:<main>:3:41: Error: At function: ToPg, At function: SqlIn
+                    	where attnum > 0 and attrelid::regclass in ('depth0', 'depth1', 'depth2')
+	                                        ^
+                        -stdin-:<main>:3:41: Error: Can't lookup pgregclass in collection of pgregclass: types pgregclass and pgregclass are not comparable
+                        	where attnum > 0 and attrelid::regclass in ('depth0', 'depth1', 'depth2')
+	                                        ^
 <sql-statement>
 -- test renumbering of child-table columns in inherited operations
 create table p1 (f1 int);
@@ -5713,10 +5773,22 @@ select conname, obj_description(oid, 'pg_constraint') as desc
   from pg_constraint where conname like 'at_partitioned%'
   order by conname;
 </sql-statement>
--stdin-:<main>: Fatal: Table metadata loading
+-stdin-:<main>: Error: Type annotation
 
-    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.pg_constraint
-    
+    -stdin-:<main>:1:1: Error: At function: RemovePrefixMembers, At function: PgSelect
+    	select conname, obj_description(oid, 'pg_constraint') as desc
+	^
+        -stdin-:<main>: Error: At function: PgSetItem
+        
+            -stdin-:<main>:1:1: Error: At function: PgWhere
+            	select conname, obj_description(oid, 'pg_constraint') as desc
+	^
+                -stdin-:<main>:2:36: Error: At function: PgLike
+                	  from pg_constraint where conname like 'at_partitioned%'
+	                                   ^
+                    -stdin-:<main>:2:36: Error: Expected pg text, but got name
+                    	  from pg_constraint where conname like 'at_partitioned%'
+	                                   ^
 <sql-statement>
 alter table at_partitioned alter column name type varchar(127);
 </sql-statement>
@@ -5750,10 +5822,22 @@ select conname, obj_description(oid, 'pg_constraint') as desc
   from pg_constraint where conname like 'at_partitioned%'
   order by conname;
 </sql-statement>
--stdin-:<main>: Fatal: Table metadata loading
+-stdin-:<main>: Error: Type annotation
 
-    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.pg_constraint
-    
+    -stdin-:<main>:1:1: Error: At function: RemovePrefixMembers, At function: PgSelect
+    	select conname, obj_description(oid, 'pg_constraint') as desc
+	^
+        -stdin-:<main>: Error: At function: PgSetItem
+        
+            -stdin-:<main>:1:1: Error: At function: PgWhere
+            	select conname, obj_description(oid, 'pg_constraint') as desc
+	^
+                -stdin-:<main>:2:36: Error: At function: PgLike
+                	  from pg_constraint where conname like 'at_partitioned%'
+	                                   ^
+                    -stdin-:<main>:2:36: Error: Expected pg text, but got name
+                    	  from pg_constraint where conname like 'at_partitioned%'
+	                                   ^
 <sql-statement>
 -- Don't remove this DROP, it exposes bug #15672
 drop table at_partitioned;
@@ -5854,10 +5938,15 @@ select reltoastrelid <> 0 as has_toast_table
 from pg_class
 where oid = 'test_storage'::regclass;
 </sql-statement>
--stdin-:<main>: Fatal: Table metadata loading
+-stdin-:<main>: Fatal: Execution
 
-    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.pg_class
-    
+    -stdin-:<main>:1:1: Fatal: Execution of node: Result
+    	select reltoastrelid <> 0 as has_toast_table
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  relation "test_storage" does not exist
+
+        	select reltoastrelid <> 0 as has_toast_table
+	^
 <sql-statement>
 -- test that SET STORAGE propagates to index correctly
 create index test_storage_idx on test_storage (b, a);
@@ -5909,10 +5998,25 @@ select relname, conname, coninhcount, conislocal, connoinherit
   where relname like 'test_inh_check%' and c.conrelid = r.oid
   order by 1, 2;
 </sql-statement>
--stdin-:<main>: Fatal: Table metadata loading
+-stdin-:<main>: Error: Type annotation
 
-    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.pg_constraint
-    
+    -stdin-:<main>:1:1: Error: At function: RemovePrefixMembers, At function: PgSelect
+    	select relname, conname, coninhcount, conislocal, connoinherit
+	^
+        -stdin-:<main>: Error: At function: PgSetItem
+        
+            -stdin-:<main>:1:1: Error: At function: PgWhere
+            	select relname, conname, coninhcount, conislocal, connoinherit
+	^
+                -stdin-:<main>:3:40: Error: At function: PgAnd
+                	  where relname like 'test_inh_check%' and c.conrelid = r.oid
+	                                       ^
+                    -stdin-:<main>:3:17: Error: At function: PgLike
+                    	  where relname like 'test_inh_check%' and c.conrelid = r.oid
+	                ^
+                        -stdin-:<main>:3:17: Error: Expected pg text, but got name
+                        	  where relname like 'test_inh_check%' and c.conrelid = r.oid
+	                ^
 <sql-statement>
 ALTER TABLE test_inh_check ALTER COLUMN a TYPE numeric;
 </sql-statement>
@@ -5935,10 +6039,25 @@ select relname, conname, coninhcount, conislocal, connoinherit
   where relname like 'test_inh_check%' and c.conrelid = r.oid
   order by 1, 2;
 </sql-statement>
--stdin-:<main>: Fatal: Table metadata loading
+-stdin-:<main>: Error: Type annotation
 
-    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.pg_constraint
-    
+    -stdin-:<main>:1:1: Error: At function: RemovePrefixMembers, At function: PgSelect
+    	select relname, conname, coninhcount, conislocal, connoinherit
+	^
+        -stdin-:<main>: Error: At function: PgSetItem
+        
+            -stdin-:<main>:1:1: Error: At function: PgWhere
+            	select relname, conname, coninhcount, conislocal, connoinherit
+	^
+                -stdin-:<main>:3:40: Error: At function: PgAnd
+                	  where relname like 'test_inh_check%' and c.conrelid = r.oid
+	                                       ^
+                    -stdin-:<main>:3:17: Error: At function: PgLike
+                    	  where relname like 'test_inh_check%' and c.conrelid = r.oid
+	                ^
+                        -stdin-:<main>:3:17: Error: Expected pg text, but got name
+                        	  where relname like 'test_inh_check%' and c.conrelid = r.oid
+	                ^
 <sql-statement>
 -- also try noinherit, local, and local+inherited cases
 ALTER TABLE test_inh_check ADD CONSTRAINT bnoinherit CHECK (b > 100) NO INHERIT;
@@ -5986,10 +6105,25 @@ select relname, conname, coninhcount, conislocal, connoinherit
   where relname like 'test_inh_check%' and c.conrelid = r.oid
   order by 1, 2;
 </sql-statement>
--stdin-:<main>: Fatal: Table metadata loading
+-stdin-:<main>: Error: Type annotation
 
-    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.pg_constraint
-    
+    -stdin-:<main>:1:1: Error: At function: RemovePrefixMembers, At function: PgSelect
+    	select relname, conname, coninhcount, conislocal, connoinherit
+	^
+        -stdin-:<main>: Error: At function: PgSetItem
+        
+            -stdin-:<main>:1:1: Error: At function: PgWhere
+            	select relname, conname, coninhcount, conislocal, connoinherit
+	^
+                -stdin-:<main>:3:40: Error: At function: PgAnd
+                	  where relname like 'test_inh_check%' and c.conrelid = r.oid
+	                                       ^
+                    -stdin-:<main>:3:17: Error: At function: PgLike
+                    	  where relname like 'test_inh_check%' and c.conrelid = r.oid
+	                ^
+                        -stdin-:<main>:3:17: Error: Expected pg text, but got name
+                        	  where relname like 'test_inh_check%' and c.conrelid = r.oid
+	                ^
 <sql-statement>
 ALTER TABLE test_inh_check ALTER COLUMN b TYPE numeric;
 </sql-statement>
@@ -6012,10 +6146,25 @@ select relname, conname, coninhcount, conislocal, connoinherit
   where relname like 'test_inh_check%' and c.conrelid = r.oid
   order by 1, 2;
 </sql-statement>
--stdin-:<main>: Fatal: Table metadata loading
+-stdin-:<main>: Error: Type annotation
 
-    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.pg_constraint
-    
+    -stdin-:<main>:1:1: Error: At function: RemovePrefixMembers, At function: PgSelect
+    	select relname, conname, coninhcount, conislocal, connoinherit
+	^
+        -stdin-:<main>: Error: At function: PgSetItem
+        
+            -stdin-:<main>:1:1: Error: At function: PgWhere
+            	select relname, conname, coninhcount, conislocal, connoinherit
+	^
+                -stdin-:<main>:3:40: Error: At function: PgAnd
+                	  where relname like 'test_inh_check%' and c.conrelid = r.oid
+	                                       ^
+                    -stdin-:<main>:3:17: Error: At function: PgLike
+                    	  where relname like 'test_inh_check%' and c.conrelid = r.oid
+	                ^
+                        -stdin-:<main>:3:17: Error: Expected pg text, but got name
+                        	  where relname like 'test_inh_check%' and c.conrelid = r.oid
+	                ^
 <sql-statement>
 -- ALTER COLUMN TYPE with different schema in children
 -- Bug at https://postgr.es/m/20170102225618.GA10071@telsasoft.com
@@ -8231,17 +8380,31 @@ SELECT col_description('comment_test'::regclass, 1) as comment;
 <sql-statement>
 SELECT indexrelid::regclass::text as index, obj_description(indexrelid, 'pg_class') as comment FROM pg_index where indrelid = 'comment_test'::regclass ORDER BY 1, 2;
 </sql-statement>
--stdin-:<main>: Fatal: Table metadata loading
+-stdin-:<main>: Error: Type annotation
 
-    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.pg_index
-    
+    -stdin-:<main>:1:1: Error: At function: RemovePrefixMembers, At function: PgSelect, At function: PgSetItem, At function: PgResultItem
+    	SELECT indexrelid::regclass::text as index, obj_description(indexrelid, 'pg_class') as comment FROM pg_index where indrelid = 'comment_test'::regclass ORDER BY 1, 2;
+	^
+        -stdin-:<main>:1:45: Error: At function: PgCall
+        	SELECT indexrelid::regclass::text as index, obj_description(indexrelid, 'pg_class') as comment FROM pg_index where indrelid = 'comment_test'::regclass ORDER BY 1, 2;
+	                                            ^
+            -stdin-:<main>:1:45: Error: No such proc: obj_description
+            	SELECT indexrelid::regclass::text as index, obj_description(indexrelid, 'pg_class') as comment FROM pg_index where indrelid = 'comment_test'::regclass ORDER BY 1, 2;
+	                                            ^
 <sql-statement>
 SELECT conname as constraint, obj_description(oid, 'pg_constraint') as comment FROM pg_constraint where conrelid = 'comment_test'::regclass ORDER BY 1, 2;
 </sql-statement>
--stdin-:<main>: Fatal: Table metadata loading
+-stdin-:<main>: Error: Type annotation
 
-    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.pg_constraint
-    
+    -stdin-:<main>:1:1: Error: At function: RemovePrefixMembers, At function: PgSelect, At function: PgSetItem, At function: PgResultItem
+    	SELECT conname as constraint, obj_description(oid, 'pg_constraint') as comment FROM pg_constraint where conrelid = 'comment_test'::regclass ORDER BY 1, 2;
+	^
+        -stdin-:<main>:1:31: Error: At function: PgCall
+        	SELECT conname as constraint, obj_description(oid, 'pg_constraint') as comment FROM pg_constraint where conrelid = 'comment_test'::regclass ORDER BY 1, 2;
+	                              ^
+            -stdin-:<main>:1:31: Error: No such proc: obj_description
+            	SELECT conname as constraint, obj_description(oid, 'pg_constraint') as comment FROM pg_constraint where conrelid = 'comment_test'::regclass ORDER BY 1, 2;
+	                              ^
 <sql-statement>
 -- Change the datatype of all the columns. ALTER TABLE is optimized to not
 -- rebuild an index if the new data type is binary compatible with the old
@@ -8312,17 +8475,31 @@ SELECT col_description('comment_test'::regclass, 1) as comment;
 <sql-statement>
 SELECT indexrelid::regclass::text as index, obj_description(indexrelid, 'pg_class') as comment FROM pg_index where indrelid = 'comment_test'::regclass ORDER BY 1, 2;
 </sql-statement>
--stdin-:<main>: Fatal: Table metadata loading
+-stdin-:<main>: Error: Type annotation
 
-    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.pg_index
-    
+    -stdin-:<main>:1:1: Error: At function: RemovePrefixMembers, At function: PgSelect, At function: PgSetItem, At function: PgResultItem
+    	SELECT indexrelid::regclass::text as index, obj_description(indexrelid, 'pg_class') as comment FROM pg_index where indrelid = 'comment_test'::regclass ORDER BY 1, 2;
+	^
+        -stdin-:<main>:1:45: Error: At function: PgCall
+        	SELECT indexrelid::regclass::text as index, obj_description(indexrelid, 'pg_class') as comment FROM pg_index where indrelid = 'comment_test'::regclass ORDER BY 1, 2;
+	                                            ^
+            -stdin-:<main>:1:45: Error: No such proc: obj_description
+            	SELECT indexrelid::regclass::text as index, obj_description(indexrelid, 'pg_class') as comment FROM pg_index where indrelid = 'comment_test'::regclass ORDER BY 1, 2;
+	                                            ^
 <sql-statement>
 SELECT conname as constraint, obj_description(oid, 'pg_constraint') as comment FROM pg_constraint where conrelid = 'comment_test'::regclass ORDER BY 1, 2;
 </sql-statement>
--stdin-:<main>: Fatal: Table metadata loading
+-stdin-:<main>: Error: Type annotation
 
-    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.pg_constraint
-    
+    -stdin-:<main>:1:1: Error: At function: RemovePrefixMembers, At function: PgSelect, At function: PgSetItem, At function: PgResultItem
+    	SELECT conname as constraint, obj_description(oid, 'pg_constraint') as comment FROM pg_constraint where conrelid = 'comment_test'::regclass ORDER BY 1, 2;
+	^
+        -stdin-:<main>:1:31: Error: At function: PgCall
+        	SELECT conname as constraint, obj_description(oid, 'pg_constraint') as comment FROM pg_constraint where conrelid = 'comment_test'::regclass ORDER BY 1, 2;
+	                              ^
+            -stdin-:<main>:1:31: Error: No such proc: obj_description
+            	SELECT conname as constraint, obj_description(oid, 'pg_constraint') as comment FROM pg_constraint where conrelid = 'comment_test'::regclass ORDER BY 1, 2;
+	                              ^
 <sql-statement>
 -- Check compatibility for foreign keys and comments. This is done
 -- separately as rebuilding the column type of the parent leads
@@ -8397,17 +8574,31 @@ SELECT col_description('comment_test_child'::regclass, 1) as comment;
 <sql-statement>
 SELECT indexrelid::regclass::text as index, obj_description(indexrelid, 'pg_class') as comment FROM pg_index where indrelid = 'comment_test_child'::regclass ORDER BY 1, 2;
 </sql-statement>
--stdin-:<main>: Fatal: Table metadata loading
+-stdin-:<main>: Error: Type annotation
 
-    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.pg_index
-    
+    -stdin-:<main>:1:1: Error: At function: RemovePrefixMembers, At function: PgSelect, At function: PgSetItem, At function: PgResultItem
+    	SELECT indexrelid::regclass::text as index, obj_description(indexrelid, 'pg_class') as comment FROM pg_index where indrelid = 'comment_test_child'::regclass ORDER BY 1, 2;
+	^
+        -stdin-:<main>:1:45: Error: At function: PgCall
+        	SELECT indexrelid::regclass::text as index, obj_description(indexrelid, 'pg_class') as comment FROM pg_index where indrelid = 'comment_test_child'::regclass ORDER BY 1, 2;
+	                                            ^
+            -stdin-:<main>:1:45: Error: No such proc: obj_description
+            	SELECT indexrelid::regclass::text as index, obj_description(indexrelid, 'pg_class') as comment FROM pg_index where indrelid = 'comment_test_child'::regclass ORDER BY 1, 2;
+	                                            ^
 <sql-statement>
 SELECT conname as constraint, obj_description(oid, 'pg_constraint') as comment FROM pg_constraint where conrelid = 'comment_test_child'::regclass ORDER BY 1, 2;
 </sql-statement>
--stdin-:<main>: Fatal: Table metadata loading
+-stdin-:<main>: Error: Type annotation
 
-    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.pg_constraint
-    
+    -stdin-:<main>:1:1: Error: At function: RemovePrefixMembers, At function: PgSelect, At function: PgSetItem, At function: PgResultItem
+    	SELECT conname as constraint, obj_description(oid, 'pg_constraint') as comment FROM pg_constraint where conrelid = 'comment_test_child'::regclass ORDER BY 1, 2;
+	^
+        -stdin-:<main>:1:31: Error: At function: PgCall
+        	SELECT conname as constraint, obj_description(oid, 'pg_constraint') as comment FROM pg_constraint where conrelid = 'comment_test_child'::regclass ORDER BY 1, 2;
+	                              ^
+            -stdin-:<main>:1:31: Error: No such proc: obj_description
+            	SELECT conname as constraint, obj_description(oid, 'pg_constraint') as comment FROM pg_constraint where conrelid = 'comment_test_child'::regclass ORDER BY 1, 2;
+	                              ^
 <sql-statement>
 -- Check that we map relation oids to filenodes and back correctly.  Only
 -- display bad mappings so the test output doesn't change all the time.  A
@@ -8562,3126 +8753,103 @@ UNION ALL
 SELECT 'toast index', ri.relkind, ri.relpersistence FROM pg_class r join pg_class t ON t.oid = r.reltoastrelid JOIN pg_index i ON i.indrelid = t.oid JOIN pg_class ri ON ri.oid = i.indexrelid WHERE r.relname ~ '^unlogged1'
 ORDER BY relname;
 </sql-statement>
--stdin-:<main>: Fatal: Table metadata loading
-
-    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.pg_index
-    
-<sql-statement>
-CREATE UNLOGGED TABLE unlogged2(f1 SERIAL PRIMARY KEY, f2 INTEGER REFERENCES unlogged1); -- foreign key
-</sql-statement>
--stdin-:<main>: Error: Parse Sql
-
-    -stdin-:<main>:1:1: Error: UNLOGGED tables not supported
-    	CREATE UNLOGGED TABLE unlogged2(f1 SERIAL PRIMARY KEY, f2 INTEGER REFERENCES unlogged1); -- foreign key
-	^
-<sql-statement>
-CREATE UNLOGGED TABLE unlogged3(f1 SERIAL PRIMARY KEY, f2 INTEGER REFERENCES unlogged3); -- self-referencing foreign key
-</sql-statement>
--stdin-:<main>: Error: Parse Sql
-
-    -stdin-:<main>:1:1: Error: UNLOGGED tables not supported
-    	CREATE UNLOGGED TABLE unlogged3(f1 SERIAL PRIMARY KEY, f2 INTEGER REFERENCES unlogged3); -- self-referencing foreign key
-	^
-<sql-statement>
-ALTER TABLE unlogged3 SET LOGGED; -- skip self-referencing foreign key
-</sql-statement>
--stdin-:<main>: Error: Parse Sql
-
-    -stdin-:<main>:1:1: Error: RawStmt: alternative is not implemented yet : 244
-    	ALTER TABLE unlogged3 SET LOGGED; -- skip self-referencing foreign key
-	^
-<sql-statement>
-ALTER TABLE unlogged2 SET LOGGED; -- fails because a foreign key to an unlogged table exists
-</sql-statement>
--stdin-:<main>: Error: Parse Sql
-
-    -stdin-:<main>:1:1: Error: RawStmt: alternative is not implemented yet : 244
-    	ALTER TABLE unlogged2 SET LOGGED; -- fails because a foreign key to an unlogged table exists
-	^
-<sql-statement>
-ALTER TABLE unlogged1 SET LOGGED;
-</sql-statement>
--stdin-:<main>: Error: Parse Sql
-
-    -stdin-:<main>:1:1: Error: RawStmt: alternative is not implemented yet : 244
-    	ALTER TABLE unlogged1 SET LOGGED;
-	^
-<sql-statement>
--- check relpersistence of an unlogged table after changing to permanent
-SELECT relname, relkind, relpersistence FROM pg_class WHERE relname ~ '^unlogged1'
-UNION ALL
-SELECT 'toast table', t.relkind, t.relpersistence FROM pg_class r JOIN pg_class t ON t.oid = r.reltoastrelid WHERE r.relname ~ '^unlogged1'
-UNION ALL
-SELECT 'toast index', ri.relkind, ri.relpersistence FROM pg_class r join pg_class t ON t.oid = r.reltoastrelid JOIN pg_index i ON i.indrelid = t.oid JOIN pg_class ri ON ri.oid = i.indexrelid WHERE r.relname ~ '^unlogged1'
-ORDER BY relname;
-</sql-statement>
--stdin-:<main>: Fatal: Table metadata loading
-
-    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.pg_index
-    
-<sql-statement>
-ALTER TABLE unlogged1 SET LOGGED; -- silently do nothing
-</sql-statement>
--stdin-:<main>: Error: Parse Sql
-
-    -stdin-:<main>:1:1: Error: RawStmt: alternative is not implemented yet : 244
-    	ALTER TABLE unlogged1 SET LOGGED; -- silently do nothing
-	^
-<sql-statement>
-DROP TABLE unlogged3;
-</sql-statement>
-<sql-statement>
-DROP TABLE unlogged2;
-</sql-statement>
-<sql-statement>
-DROP TABLE unlogged1;
-</sql-statement>
-<sql-statement>
--- set unlogged
-CREATE TABLE logged1(f1 SERIAL PRIMARY KEY, f2 TEXT);
-</sql-statement>
-<sql-statement>
--- check relpersistence of a permanent table
-SELECT relname, relkind, relpersistence FROM pg_class WHERE relname ~ '^logged1'
-UNION ALL
-SELECT 'toast table', t.relkind, t.relpersistence FROM pg_class r JOIN pg_class t ON t.oid = r.reltoastrelid WHERE r.relname ~ '^logged1'
-UNION ALL
-SELECT 'toast index', ri.relkind, ri.relpersistence FROM pg_class r join pg_class t ON t.oid = r.reltoastrelid JOIN pg_index i ON i.indrelid = t.oid JOIN pg_class ri ON ri.oid = i.indexrelid WHERE r.relname ~ '^logged1'
-ORDER BY relname;
-</sql-statement>
--stdin-:<main>: Fatal: Table metadata loading
-
-    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.pg_index
-    
-<sql-statement>
-CREATE TABLE logged2(f1 SERIAL PRIMARY KEY, f2 INTEGER REFERENCES logged1); -- foreign key
-</sql-statement>
--stdin-:<main>: Error: Parse Sql
-
-    -stdin-:<main>:1:1: Error: column constraint not supported
-    	CREATE TABLE logged2(f1 SERIAL PRIMARY KEY, f2 INTEGER REFERENCES logged1); -- foreign key
-	^
-<sql-statement>
-CREATE TABLE logged3(f1 SERIAL PRIMARY KEY, f2 INTEGER REFERENCES logged3); -- self-referencing foreign key
-</sql-statement>
--stdin-:<main>: Error: Parse Sql
-
-    -stdin-:<main>:1:1: Error: column constraint not supported
-    	CREATE TABLE logged3(f1 SERIAL PRIMARY KEY, f2 INTEGER REFERENCES logged3); -- self-referencing foreign key
-	^
-<sql-statement>
-ALTER TABLE logged1 SET UNLOGGED; -- fails because a foreign key from a permanent table exists
-</sql-statement>
--stdin-:<main>: Error: Parse Sql
-
-    -stdin-:<main>:1:1: Error: RawStmt: alternative is not implemented yet : 244
-    	ALTER TABLE logged1 SET UNLOGGED; -- fails because a foreign key from a permanent table exists
-	^
-<sql-statement>
-ALTER TABLE logged3 SET UNLOGGED; -- skip self-referencing foreign key
-</sql-statement>
--stdin-:<main>: Error: Parse Sql
-
-    -stdin-:<main>:1:1: Error: RawStmt: alternative is not implemented yet : 244
-    	ALTER TABLE logged3 SET UNLOGGED; -- skip self-referencing foreign key
-	^
-<sql-statement>
-ALTER TABLE logged2 SET UNLOGGED;
-</sql-statement>
--stdin-:<main>: Error: Parse Sql
-
-    -stdin-:<main>:1:1: Error: RawStmt: alternative is not implemented yet : 244
-    	ALTER TABLE logged2 SET UNLOGGED;
-	^
-<sql-statement>
-ALTER TABLE logged1 SET UNLOGGED;
-</sql-statement>
--stdin-:<main>: Error: Parse Sql
-
-    -stdin-:<main>:1:1: Error: RawStmt: alternative is not implemented yet : 244
-    	ALTER TABLE logged1 SET UNLOGGED;
-	^
-<sql-statement>
--- check relpersistence of a permanent table after changing to unlogged
-SELECT relname, relkind, relpersistence FROM pg_class WHERE relname ~ '^logged1'
-UNION ALL
-SELECT 'toast table', t.relkind, t.relpersistence FROM pg_class r JOIN pg_class t ON t.oid = r.reltoastrelid WHERE r.relname ~ '^logged1'
-UNION ALL
-SELECT 'toast index', ri.relkind, ri.relpersistence FROM pg_class r join pg_class t ON t.oid = r.reltoastrelid JOIN pg_index i ON i.indrelid = t.oid JOIN pg_class ri ON ri.oid = i.indexrelid WHERE r.relname ~ '^logged1'
-ORDER BY relname;
-</sql-statement>
--stdin-:<main>: Fatal: Table metadata loading
-
-    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.pg_index
-    
-<sql-statement>
-ALTER TABLE logged1 SET UNLOGGED; -- silently do nothing
-</sql-statement>
--stdin-:<main>: Error: Parse Sql
-
-    -stdin-:<main>:1:1: Error: RawStmt: alternative is not implemented yet : 244
-    	ALTER TABLE logged1 SET UNLOGGED; -- silently do nothing
-	^
-<sql-statement>
-DROP TABLE logged3;
-</sql-statement>
-<sql-statement>
-DROP TABLE logged2;
-</sql-statement>
-<sql-statement>
-DROP TABLE logged1;
-</sql-statement>
-<sql-statement>
--- test ADD COLUMN IF NOT EXISTS
-CREATE TABLE test_add_column(c1 integer);
-</sql-statement>
-<sql-statement>
-\d test_add_column
-</sql-statement>
-Metacommand \d test_add_column is not supported
-<sql-statement>
-ALTER TABLE test_add_column
-	ADD COLUMN c2 integer;
-</sql-statement>
--stdin-:<main>: Error: Parse Sql
-
-    -stdin-:<main>:1:1: Error: RawStmt: alternative is not implemented yet : 244
-    	ALTER TABLE test_add_column
-	^
-<sql-statement>
-\d test_add_column
-</sql-statement>
-Metacommand \d test_add_column is not supported
-<sql-statement>
-ALTER TABLE test_add_column
-	ADD COLUMN c2 integer; -- fail because c2 already exists
-</sql-statement>
--stdin-:<main>: Error: Parse Sql
-
-    -stdin-:<main>:1:1: Error: RawStmt: alternative is not implemented yet : 244
-    	ALTER TABLE test_add_column
-	^
-<sql-statement>
-ALTER TABLE ONLY test_add_column
-	ADD COLUMN c2 integer; -- fail because c2 already exists
-</sql-statement>
--stdin-:<main>: Error: Parse Sql
-
-    -stdin-:<main>:1:1: Error: RawStmt: alternative is not implemented yet : 244
-    	ALTER TABLE ONLY test_add_column
-	^
-<sql-statement>
-\d test_add_column
-</sql-statement>
-Metacommand \d test_add_column is not supported
-<sql-statement>
-ALTER TABLE test_add_column
-	ADD COLUMN IF NOT EXISTS c2 integer; -- skipping because c2 already exists
-</sql-statement>
--stdin-:<main>: Error: Parse Sql
-
-    -stdin-:<main>:1:1: Error: RawStmt: alternative is not implemented yet : 244
-    	ALTER TABLE test_add_column
-	^
-<sql-statement>
-ALTER TABLE ONLY test_add_column
-	ADD COLUMN IF NOT EXISTS c2 integer; -- skipping because c2 already exists
-</sql-statement>
--stdin-:<main>: Error: Parse Sql
-
-    -stdin-:<main>:1:1: Error: RawStmt: alternative is not implemented yet : 244
-    	ALTER TABLE ONLY test_add_column
-	^
-<sql-statement>
-\d test_add_column
-</sql-statement>
-Metacommand \d test_add_column is not supported
-<sql-statement>
-ALTER TABLE test_add_column
-	ADD COLUMN c2 integer, -- fail because c2 already exists
-	ADD COLUMN c3 integer primary key;
-</sql-statement>
--stdin-:<main>: Error: Parse Sql
-
-    -stdin-:<main>:1:1: Error: RawStmt: alternative is not implemented yet : 244
-    	ALTER TABLE test_add_column
-	^
-<sql-statement>
-\d test_add_column
-</sql-statement>
-Metacommand \d test_add_column is not supported
-<sql-statement>
-ALTER TABLE test_add_column
-	ADD COLUMN IF NOT EXISTS c2 integer, -- skipping because c2 already exists
-	ADD COLUMN c3 integer primary key;
-</sql-statement>
--stdin-:<main>: Error: Parse Sql
-
-    -stdin-:<main>:1:1: Error: RawStmt: alternative is not implemented yet : 244
-    	ALTER TABLE test_add_column
-	^
-<sql-statement>
-\d test_add_column
-</sql-statement>
-Metacommand \d test_add_column is not supported
-<sql-statement>
-ALTER TABLE test_add_column
-	ADD COLUMN IF NOT EXISTS c2 integer, -- skipping because c2 already exists
-	ADD COLUMN IF NOT EXISTS c3 integer primary key; -- skipping because c3 already exists
-</sql-statement>
--stdin-:<main>: Error: Parse Sql
-
-    -stdin-:<main>:1:1: Error: RawStmt: alternative is not implemented yet : 244
-    	ALTER TABLE test_add_column
-	^
-<sql-statement>
-\d test_add_column
-</sql-statement>
-Metacommand \d test_add_column is not supported
-<sql-statement>
-ALTER TABLE test_add_column
-	ADD COLUMN IF NOT EXISTS c2 integer, -- skipping because c2 already exists
-	ADD COLUMN IF NOT EXISTS c3 integer, -- skipping because c3 already exists
-	ADD COLUMN c4 integer REFERENCES test_add_column;
-</sql-statement>
--stdin-:<main>: Error: Parse Sql
-
-    -stdin-:<main>:1:1: Error: RawStmt: alternative is not implemented yet : 244
-    	ALTER TABLE test_add_column
-	^
-<sql-statement>
-\d test_add_column
-</sql-statement>
-Metacommand \d test_add_column is not supported
-<sql-statement>
-ALTER TABLE test_add_column
-	ADD COLUMN IF NOT EXISTS c4 integer REFERENCES test_add_column;
-</sql-statement>
--stdin-:<main>: Error: Parse Sql
-
-    -stdin-:<main>:1:1: Error: RawStmt: alternative is not implemented yet : 244
-    	ALTER TABLE test_add_column
-	^
-<sql-statement>
-\d test_add_column
-</sql-statement>
-Metacommand \d test_add_column is not supported
-<sql-statement>
-ALTER TABLE test_add_column
-	ADD COLUMN IF NOT EXISTS c5 SERIAL CHECK (c5 > 8);
-</sql-statement>
--stdin-:<main>: Error: Parse Sql
-
-    -stdin-:<main>:1:1: Error: RawStmt: alternative is not implemented yet : 244
-    	ALTER TABLE test_add_column
-	^
-<sql-statement>
-\d test_add_column
-</sql-statement>
-Metacommand \d test_add_column is not supported
-<sql-statement>
-ALTER TABLE test_add_column
-	ADD COLUMN IF NOT EXISTS c5 SERIAL CHECK (c5 > 10);
-</sql-statement>
--stdin-:<main>: Error: Parse Sql
-
-    -stdin-:<main>:1:1: Error: RawStmt: alternative is not implemented yet : 244
-    	ALTER TABLE test_add_column
-	^
-<sql-statement>
-\d test_add_column*
-</sql-statement>
-Metacommand \d test_add_column* is not supported
-<sql-statement>
-DROP TABLE test_add_column;
-</sql-statement>
-<sql-statement>
-\d test_add_column*
-</sql-statement>
-Metacommand \d test_add_column* is not supported
-<sql-statement>
--- assorted cases with multiple ALTER TABLE steps
-CREATE TABLE ataddindex(f1 INT);
-</sql-statement>
-<sql-statement>
-INSERT INTO ataddindex VALUES (42), (43);
-</sql-statement>
-<sql-statement>
-CREATE UNIQUE INDEX ataddindexi0 ON ataddindex(f1);
-</sql-statement>
--stdin-:<main>: Error: Parse Sql
-
-    -stdin-:<main>:1:1: Error: unique index creation is not supported yet
-    	CREATE UNIQUE INDEX ataddindexi0 ON ataddindex(f1);
-	^
-<sql-statement>
-ALTER TABLE ataddindex
-  ADD PRIMARY KEY USING INDEX ataddindexi0,
-  ALTER f1 TYPE BIGINT;
-</sql-statement>
--stdin-:<main>: Error: Parse Sql
-
-    -stdin-:<main>:1:1: Error: RawStmt: alternative is not implemented yet : 244
-    	ALTER TABLE ataddindex
-	^
-<sql-statement>
-\d ataddindex
-</sql-statement>
-Metacommand \d ataddindex is not supported
-<sql-statement>
-DROP TABLE ataddindex;
-</sql-statement>
-<sql-statement>
-CREATE TABLE ataddindex(f1 VARCHAR(10));
-</sql-statement>
-<sql-statement>
-INSERT INTO ataddindex(f1) VALUES ('foo'), ('a');
-</sql-statement>
-<sql-statement>
-ALTER TABLE ataddindex
-  ALTER f1 SET DATA TYPE TEXT,
-  ADD EXCLUDE ((f1 LIKE 'a') WITH =);
-</sql-statement>
--stdin-:<main>: Error: Parse Sql
-
-    -stdin-:<main>:1:1: Error: RawStmt: alternative is not implemented yet : 244
-    	ALTER TABLE ataddindex
-	^
-<sql-statement>
-\d ataddindex
-</sql-statement>
-Metacommand \d ataddindex is not supported
-<sql-statement>
-DROP TABLE ataddindex;
-</sql-statement>
-<sql-statement>
-CREATE TABLE ataddindex(id int, ref_id int);
-</sql-statement>
-<sql-statement>
-ALTER TABLE ataddindex
-  ADD PRIMARY KEY (id),
-  ADD FOREIGN KEY (ref_id) REFERENCES ataddindex;
-</sql-statement>
--stdin-:<main>: Error: Parse Sql
-
-    -stdin-:<main>:1:1: Error: RawStmt: alternative is not implemented yet : 244
-    	ALTER TABLE ataddindex
-	^
-<sql-statement>
-\d ataddindex
-</sql-statement>
-Metacommand \d ataddindex is not supported
-<sql-statement>
-DROP TABLE ataddindex;
-</sql-statement>
-<sql-statement>
-CREATE TABLE ataddindex(id int, ref_id int);
-</sql-statement>
-<sql-statement>
-ALTER TABLE ataddindex
-  ADD UNIQUE (id),
-  ADD FOREIGN KEY (ref_id) REFERENCES ataddindex (id);
-</sql-statement>
--stdin-:<main>: Error: Parse Sql
-
-    -stdin-:<main>:1:1: Error: RawStmt: alternative is not implemented yet : 244
-    	ALTER TABLE ataddindex
-	^
-<sql-statement>
-\d ataddindex
-</sql-statement>
-Metacommand \d ataddindex is not supported
-<sql-statement>
-DROP TABLE ataddindex;
-</sql-statement>
-<sql-statement>
--- unsupported constraint types for partitioned tables
-CREATE TABLE partitioned (
-	a int,
-	b int
-) PARTITION BY RANGE (a, (a+b+1));
-</sql-statement>
--stdin-:<main>: Error: Parse Sql
-
-    -stdin-:<main>:1:1: Error: PARTITION BY clause not supported
-    	-- unsupported constraint types for partitioned tables
-	^
-<sql-statement>
-ALTER TABLE partitioned ADD EXCLUDE USING gist (a WITH &&);
-</sql-statement>
--stdin-:<main>: Error: Parse Sql
-
-    -stdin-:<main>:1:1: Error: RawStmt: alternative is not implemented yet : 244
-    	ALTER TABLE partitioned ADD EXCLUDE USING gist (a WITH &&);
-	^
-<sql-statement>
--- cannot drop column that is part of the partition key
-ALTER TABLE partitioned DROP COLUMN a;
-</sql-statement>
--stdin-:<main>: Error: Parse Sql
-
-    -stdin-:<main>:1:1: Error: RawStmt: alternative is not implemented yet : 244
-    	-- cannot drop column that is part of the partition key
-	^
-<sql-statement>
-ALTER TABLE partitioned ALTER COLUMN a TYPE char(5);
-</sql-statement>
--stdin-:<main>: Error: Parse Sql
-
-    -stdin-:<main>:1:1: Error: RawStmt: alternative is not implemented yet : 244
-    	ALTER TABLE partitioned ALTER COLUMN a TYPE char(5);
-	^
-<sql-statement>
-ALTER TABLE partitioned DROP COLUMN b;
-</sql-statement>
--stdin-:<main>: Error: Parse Sql
-
-    -stdin-:<main>:1:1: Error: RawStmt: alternative is not implemented yet : 244
-    	ALTER TABLE partitioned DROP COLUMN b;
-	^
-<sql-statement>
-ALTER TABLE partitioned ALTER COLUMN b TYPE char(5);
-</sql-statement>
--stdin-:<main>: Error: Parse Sql
-
-    -stdin-:<main>:1:1: Error: RawStmt: alternative is not implemented yet : 244
-    	ALTER TABLE partitioned ALTER COLUMN b TYPE char(5);
-	^
-<sql-statement>
--- partitioned table cannot participate in regular inheritance
-CREATE TABLE nonpartitioned (
-	a int,
-	b int
-);
-</sql-statement>
-<sql-statement>
-ALTER TABLE partitioned INHERIT nonpartitioned;
-</sql-statement>
--stdin-:<main>: Error: Parse Sql
-
-    -stdin-:<main>:1:1: Error: RawStmt: alternative is not implemented yet : 244
-    	ALTER TABLE partitioned INHERIT nonpartitioned;
-	^
-<sql-statement>
-ALTER TABLE nonpartitioned INHERIT partitioned;
-</sql-statement>
--stdin-:<main>: Error: Parse Sql
-
-    -stdin-:<main>:1:1: Error: RawStmt: alternative is not implemented yet : 244
-    	ALTER TABLE nonpartitioned INHERIT partitioned;
-	^
-<sql-statement>
--- cannot add NO INHERIT constraint to partitioned tables
-ALTER TABLE partitioned ADD CONSTRAINT chk_a CHECK (a > 0) NO INHERIT;
-</sql-statement>
--stdin-:<main>: Error: Parse Sql
-
-    -stdin-:<main>:1:1: Error: RawStmt: alternative is not implemented yet : 244
-    	-- cannot add NO INHERIT constraint to partitioned tables
-	^
-<sql-statement>
-DROP TABLE partitioned, nonpartitioned;
-</sql-statement>
-<sql-statement>
---
--- ATTACH PARTITION
---
--- check that target table is partitioned
-CREATE TABLE unparted (
-	a int
-);
-</sql-statement>
-<sql-statement>
-CREATE TABLE fail_part (like unparted);
-</sql-statement>
--stdin-:<main>: Error: Parse Sql
-
-    -stdin-:<main>:1:1: Error: CreateStmt: alternative is not implemented yet : 389
-    	CREATE TABLE fail_part (like unparted);
-	^
-<sql-statement>
-ALTER TABLE unparted ATTACH PARTITION fail_part FOR VALUES IN ('a');
-</sql-statement>
--stdin-:<main>: Error: Parse Sql
-
-    -stdin-:<main>:1:1: Error: RawStmt: alternative is not implemented yet : 244
-    	ALTER TABLE unparted ATTACH PARTITION fail_part FOR VALUES IN ('a');
-	^
-<sql-statement>
-DROP TABLE unparted, fail_part;
-</sql-statement>
-<sql-statement>
--- check that partition bound is compatible
-CREATE TABLE list_parted (
-	a int NOT NULL,
-	b char(2) COLLATE "C",
-	CONSTRAINT check_a CHECK (a > 0)
-) PARTITION BY LIST (a);
-</sql-statement>
--stdin-:<main>: Error: Parse Sql
-
-    -stdin-:<main>:1:1: Error: PARTITION BY clause not supported
-    	-- check that partition bound is compatible
-	^
-<sql-statement>
-CREATE TABLE fail_part (LIKE list_parted);
-</sql-statement>
--stdin-:<main>: Error: Parse Sql
-
-    -stdin-:<main>:1:1: Error: CreateStmt: alternative is not implemented yet : 389
-    	CREATE TABLE fail_part (LIKE list_parted);
-	^
-<sql-statement>
-ALTER TABLE list_parted ATTACH PARTITION fail_part FOR VALUES FROM (1) TO (10);
-</sql-statement>
--stdin-:<main>: Error: Parse Sql
-
-    -stdin-:<main>:1:1: Error: RawStmt: alternative is not implemented yet : 244
-    	ALTER TABLE list_parted ATTACH PARTITION fail_part FOR VALUES FROM (1) TO (10);
-	^
-<sql-statement>
-DROP TABLE fail_part;
-</sql-statement>
-<sql-statement>
--- check that the table being attached exists
-ALTER TABLE list_parted ATTACH PARTITION nonexistent FOR VALUES IN (1);
-</sql-statement>
--stdin-:<main>: Error: Parse Sql
-
-    -stdin-:<main>:1:1: Error: RawStmt: alternative is not implemented yet : 244
-    	-- check that the table being attached exists
-	^
-<sql-statement>
--- check ownership of the source table
-CREATE ROLE regress_test_me;
-</sql-statement>
--stdin-:<main>: Error: Parse Sql
-
-    -stdin-:<main>:1:1: Error: RawStmt: alternative is not implemented yet : 285
-    	-- check ownership of the source table
-	^
-<sql-statement>
-CREATE ROLE regress_test_not_me;
-</sql-statement>
--stdin-:<main>: Error: Parse Sql
-
-    -stdin-:<main>:1:1: Error: RawStmt: alternative is not implemented yet : 285
-    	CREATE ROLE regress_test_not_me;
-	^
-<sql-statement>
-CREATE TABLE not_owned_by_me (LIKE list_parted);
-</sql-statement>
--stdin-:<main>: Error: Parse Sql
-
-    -stdin-:<main>:1:1: Error: CreateStmt: alternative is not implemented yet : 389
-    	CREATE TABLE not_owned_by_me (LIKE list_parted);
-	^
-<sql-statement>
-ALTER TABLE not_owned_by_me OWNER TO regress_test_not_me;
-</sql-statement>
--stdin-:<main>: Error: Parse Sql
-
-    -stdin-:<main>:1:1: Error: RawStmt: alternative is not implemented yet : 244
-    	ALTER TABLE not_owned_by_me OWNER TO regress_test_not_me;
-	^
-<sql-statement>
-SET SESSION AUTHORIZATION regress_test_me;
-</sql-statement>
--stdin-:<main>: Error: Parse Sql
-
-    -stdin-:<main>:1:1: Error: VariableSetStmt, not supported name: session_authorization
-    	SET SESSION AUTHORIZATION regress_test_me;
-	^
-<sql-statement>
-CREATE TABLE owned_by_me (
-	a int
-) PARTITION BY LIST (a);
-</sql-statement>
--stdin-:<main>: Error: Parse Sql
-
-    -stdin-:<main>:1:1: Error: PARTITION BY clause not supported
-    	CREATE TABLE owned_by_me (
-	^
-<sql-statement>
-ALTER TABLE owned_by_me ATTACH PARTITION not_owned_by_me FOR VALUES IN (1);
-</sql-statement>
--stdin-:<main>: Error: Parse Sql
-
-    -stdin-:<main>:1:1: Error: RawStmt: alternative is not implemented yet : 244
-    	ALTER TABLE owned_by_me ATTACH PARTITION not_owned_by_me FOR VALUES IN (1);
-	^
-<sql-statement>
-RESET SESSION AUTHORIZATION;
-</sql-statement>
--stdin-:<main>: Error: Parse Sql
-
-    -stdin-:<main>:1:1: Error: VariableSetStmt, not supported kind: 4
-    	RESET SESSION AUTHORIZATION;
-	^
-<sql-statement>
-DROP TABLE owned_by_me, not_owned_by_me;
-</sql-statement>
-<sql-statement>
-DROP ROLE regress_test_not_me;
-</sql-statement>
--stdin-:<main>: Error: Parse Sql
-
-    -stdin-:<main>:1:1: Error: RawStmt: alternative is not implemented yet : 287
-    	DROP ROLE regress_test_not_me;
-	^
-<sql-statement>
-DROP ROLE regress_test_me;
-</sql-statement>
--stdin-:<main>: Error: Parse Sql
-
-    -stdin-:<main>:1:1: Error: RawStmt: alternative is not implemented yet : 287
-    	DROP ROLE regress_test_me;
-	^
-<sql-statement>
--- check that the table being attached is not part of regular inheritance
-CREATE TABLE parent (LIKE list_parted);
-</sql-statement>
--stdin-:<main>: Error: Parse Sql
-
-    -stdin-:<main>:1:1: Error: CreateStmt: alternative is not implemented yet : 389
-    	-- check that the table being attached is not part of regular inheritance
-	^
-<sql-statement>
-CREATE TABLE child () INHERITS (parent);
-</sql-statement>
--stdin-:<main>: Error: Parse Sql
-
-    -stdin-:<main>:1:1: Error: table inheritance not supported
-    	CREATE TABLE child () INHERITS (parent);
-	^
-<sql-statement>
-ALTER TABLE list_parted ATTACH PARTITION child FOR VALUES IN (1);
-</sql-statement>
--stdin-:<main>: Error: Parse Sql
-
-    -stdin-:<main>:1:1: Error: RawStmt: alternative is not implemented yet : 244
-    	ALTER TABLE list_parted ATTACH PARTITION child FOR VALUES IN (1);
-	^
-<sql-statement>
-ALTER TABLE list_parted ATTACH PARTITION parent FOR VALUES IN (1);
-</sql-statement>
--stdin-:<main>: Error: Parse Sql
-
-    -stdin-:<main>:1:1: Error: RawStmt: alternative is not implemented yet : 244
-    	ALTER TABLE list_parted ATTACH PARTITION parent FOR VALUES IN (1);
-	^
-<sql-statement>
-DROP TABLE parent CASCADE;
-</sql-statement>
--stdin-:<main>: Error: Parse Sql
-
-    -stdin-:<main>:1:1: Error: CASCADE is not implemented
-    	DROP TABLE parent CASCADE;
-	^
-<sql-statement>
--- check any TEMP-ness
-CREATE TEMP TABLE temp_parted (a int) PARTITION BY LIST (a);
-</sql-statement>
--stdin-:<main>: Error: Parse Sql
-
-    -stdin-:<main>:1:1: Error: PARTITION BY clause not supported
-    	-- check any TEMP-ness
-	^
-<sql-statement>
-CREATE TABLE perm_part (a int);
-</sql-statement>
-<sql-statement>
-ALTER TABLE temp_parted ATTACH PARTITION perm_part FOR VALUES IN (1);
-</sql-statement>
--stdin-:<main>: Error: Parse Sql
-
-    -stdin-:<main>:1:1: Error: RawStmt: alternative is not implemented yet : 244
-    	ALTER TABLE temp_parted ATTACH PARTITION perm_part FOR VALUES IN (1);
-	^
-<sql-statement>
-DROP TABLE temp_parted, perm_part;
-</sql-statement>
-<sql-statement>
--- check that the table being attached is not a typed table
-CREATE TYPE mytype AS (a int);
-</sql-statement>
--stdin-:<main>: Error: Parse Sql
-
-    -stdin-:<main>:1:1: Error: RawStmt: alternative is not implemented yet : 314
-    	-- check that the table being attached is not a typed table
-	^
-<sql-statement>
-CREATE TABLE fail_part OF mytype;
-</sql-statement>
--stdin-:<main>: Error: Parse Sql
-
-    -stdin-:<main>:1:1: Error: typed tables not supported
-    	CREATE TABLE fail_part OF mytype;
-	^
-<sql-statement>
-ALTER TABLE list_parted ATTACH PARTITION fail_part FOR VALUES IN (1);
-</sql-statement>
--stdin-:<main>: Error: Parse Sql
-
-    -stdin-:<main>:1:1: Error: RawStmt: alternative is not implemented yet : 244
-    	ALTER TABLE list_parted ATTACH PARTITION fail_part FOR VALUES IN (1);
-	^
-<sql-statement>
-DROP TYPE mytype CASCADE;
-</sql-statement>
--stdin-:<main>: Error: Parse Sql
-
-    -stdin-:<main>:1:1: Error: DropStmt: alternative is not implemented yet : 373
-    	DROP TYPE mytype CASCADE;
-	^
-<sql-statement>
--- check that the table being attached has only columns present in the parent
-CREATE TABLE fail_part (like list_parted, c int);
-</sql-statement>
--stdin-:<main>: Error: Parse Sql
-
-    -stdin-:<main>:1:1: Error: CreateStmt: alternative is not implemented yet : 389
-    	-- check that the table being attached has only columns present in the parent
-	^
-<sql-statement>
-ALTER TABLE list_parted ATTACH PARTITION fail_part FOR VALUES IN (1);
-</sql-statement>
--stdin-:<main>: Error: Parse Sql
-
-    -stdin-:<main>:1:1: Error: RawStmt: alternative is not implemented yet : 244
-    	ALTER TABLE list_parted ATTACH PARTITION fail_part FOR VALUES IN (1);
-	^
-<sql-statement>
-DROP TABLE fail_part;
-</sql-statement>
-<sql-statement>
--- check that the table being attached has every column of the parent
-CREATE TABLE fail_part (a int NOT NULL);
-</sql-statement>
-<sql-statement>
-ALTER TABLE list_parted ATTACH PARTITION fail_part FOR VALUES IN (1);
-</sql-statement>
--stdin-:<main>: Error: Parse Sql
-
-    -stdin-:<main>:1:1: Error: RawStmt: alternative is not implemented yet : 244
-    	ALTER TABLE list_parted ATTACH PARTITION fail_part FOR VALUES IN (1);
-	^
-<sql-statement>
-DROP TABLE fail_part;
-</sql-statement>
-<sql-statement>
--- check that columns match in type, collation and NOT NULL status
-CREATE TABLE fail_part (
-	b char(3),
-	a int NOT NULL
-);
-</sql-statement>
-<sql-statement>
-ALTER TABLE list_parted ATTACH PARTITION fail_part FOR VALUES IN (1);
-</sql-statement>
--stdin-:<main>: Error: Parse Sql
-
-    -stdin-:<main>:1:1: Error: RawStmt: alternative is not implemented yet : 244
-    	ALTER TABLE list_parted ATTACH PARTITION fail_part FOR VALUES IN (1);
-	^
-<sql-statement>
-ALTER TABLE fail_part ALTER b TYPE char (2) COLLATE "POSIX";
-</sql-statement>
--stdin-:<main>: Error: Parse Sql
-
-    -stdin-:<main>:1:1: Error: RawStmt: alternative is not implemented yet : 244
-    	ALTER TABLE fail_part ALTER b TYPE char (2) COLLATE "POSIX";
-	^
-<sql-statement>
-ALTER TABLE list_parted ATTACH PARTITION fail_part FOR VALUES IN (1);
-</sql-statement>
--stdin-:<main>: Error: Parse Sql
-
-    -stdin-:<main>:1:1: Error: RawStmt: alternative is not implemented yet : 244
-    	ALTER TABLE list_parted ATTACH PARTITION fail_part FOR VALUES IN (1);
-	^
-<sql-statement>
-DROP TABLE fail_part;
-</sql-statement>
-<sql-statement>
--- check that the table being attached has all constraints of the parent
-CREATE TABLE fail_part (
-	b char(2) COLLATE "C",
-	a int NOT NULL
-);
-</sql-statement>
-<sql-statement>
-ALTER TABLE list_parted ATTACH PARTITION fail_part FOR VALUES IN (1);
-</sql-statement>
--stdin-:<main>: Error: Parse Sql
-
-    -stdin-:<main>:1:1: Error: RawStmt: alternative is not implemented yet : 244
-    	ALTER TABLE list_parted ATTACH PARTITION fail_part FOR VALUES IN (1);
-	^
-<sql-statement>
--- check that the constraint matches in definition with parent's constraint
-ALTER TABLE fail_part ADD CONSTRAINT check_a CHECK (a >= 0);
-</sql-statement>
--stdin-:<main>: Error: Parse Sql
-
-    -stdin-:<main>:1:1: Error: RawStmt: alternative is not implemented yet : 244
-    	-- check that the constraint matches in definition with parent's constraint
-	^
-<sql-statement>
-ALTER TABLE list_parted ATTACH PARTITION fail_part FOR VALUES IN (1);
-</sql-statement>
--stdin-:<main>: Error: Parse Sql
-
-    -stdin-:<main>:1:1: Error: RawStmt: alternative is not implemented yet : 244
-    	ALTER TABLE list_parted ATTACH PARTITION fail_part FOR VALUES IN (1);
-	^
-<sql-statement>
-DROP TABLE fail_part;
-</sql-statement>
-<sql-statement>
--- check the attributes and constraints after partition is attached
-CREATE TABLE part_1 (
-	a int NOT NULL,
-	b char(2) COLLATE "C",
-	CONSTRAINT check_a CHECK (a > 0)
-);
-</sql-statement>
--stdin-:<main>: Error: Parse Sql
-
-    -stdin-:<main>:1:1: Error: table constraint not supported
-    	-- check the attributes and constraints after partition is attached
-	^
-<sql-statement>
-ALTER TABLE list_parted ATTACH PARTITION part_1 FOR VALUES IN (1);
-</sql-statement>
--stdin-:<main>: Error: Parse Sql
-
-    -stdin-:<main>:1:1: Error: RawStmt: alternative is not implemented yet : 244
-    	ALTER TABLE list_parted ATTACH PARTITION part_1 FOR VALUES IN (1);
-	^
-<sql-statement>
--- attislocal and conislocal are always false for merged attributes and constraints respectively.
-SELECT attislocal, attinhcount FROM pg_attribute WHERE attrelid = 'part_1'::regclass AND attnum > 0;
-</sql-statement>
--stdin-:<main>: Fatal: Table metadata loading
-
-    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.pg_attribute
-    
-<sql-statement>
-SELECT conislocal, coninhcount FROM pg_constraint WHERE conrelid = 'part_1'::regclass AND conname = 'check_a';
-</sql-statement>
--stdin-:<main>: Fatal: Table metadata loading
-
-    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.pg_constraint
-    
-<sql-statement>
--- check that the new partition won't overlap with an existing partition
-CREATE TABLE fail_part (LIKE part_1 INCLUDING CONSTRAINTS);
-</sql-statement>
--stdin-:<main>: Error: Parse Sql
-
-    -stdin-:<main>:1:1: Error: CreateStmt: alternative is not implemented yet : 389
-    	-- check that the new partition won't overlap with an existing partition
-	^
-<sql-statement>
-ALTER TABLE list_parted ATTACH PARTITION fail_part FOR VALUES IN (1);
-</sql-statement>
--stdin-:<main>: Error: Parse Sql
-
-    -stdin-:<main>:1:1: Error: RawStmt: alternative is not implemented yet : 244
-    	ALTER TABLE list_parted ATTACH PARTITION fail_part FOR VALUES IN (1);
-	^
-<sql-statement>
-DROP TABLE fail_part;
-</sql-statement>
-<sql-statement>
--- check that an existing table can be attached as a default partition
-CREATE TABLE def_part (LIKE list_parted INCLUDING CONSTRAINTS);
-</sql-statement>
--stdin-:<main>: Error: Parse Sql
-
-    -stdin-:<main>:1:1: Error: CreateStmt: alternative is not implemented yet : 389
-    	-- check that an existing table can be attached as a default partition
-	^
-<sql-statement>
-ALTER TABLE list_parted ATTACH PARTITION def_part DEFAULT;
-</sql-statement>
--stdin-:<main>: Error: Parse Sql
-
-    -stdin-:<main>:1:1: Error: RawStmt: alternative is not implemented yet : 244
-    	ALTER TABLE list_parted ATTACH PARTITION def_part DEFAULT;
-	^
-<sql-statement>
--- check attaching default partition fails if a default partition already
--- exists
-CREATE TABLE fail_def_part (LIKE part_1 INCLUDING CONSTRAINTS);
-</sql-statement>
--stdin-:<main>: Error: Parse Sql
-
-    -stdin-:<main>:1:1: Error: CreateStmt: alternative is not implemented yet : 389
-    	-- check attaching default partition fails if a default partition already
-	^
-<sql-statement>
-ALTER TABLE list_parted ATTACH PARTITION fail_def_part DEFAULT;
-</sql-statement>
--stdin-:<main>: Error: Parse Sql
-
-    -stdin-:<main>:1:1: Error: RawStmt: alternative is not implemented yet : 244
-    	ALTER TABLE list_parted ATTACH PARTITION fail_def_part DEFAULT;
-	^
-<sql-statement>
--- check validation when attaching list partitions
-CREATE TABLE list_parted2 (
-	a int,
-	b char
-) PARTITION BY LIST (a);
-</sql-statement>
--stdin-:<main>: Error: Parse Sql
-
-    -stdin-:<main>:1:1: Error: PARTITION BY clause not supported
-    	-- check validation when attaching list partitions
-	^
-<sql-statement>
--- check that violating rows are correctly reported
-CREATE TABLE part_2 (LIKE list_parted2);
-</sql-statement>
--stdin-:<main>: Error: Parse Sql
-
-    -stdin-:<main>:1:1: Error: CreateStmt: alternative is not implemented yet : 389
-    	-- check that violating rows are correctly reported
-	^
-<sql-statement>
-INSERT INTO part_2 VALUES (3, 'a');
-</sql-statement>
--stdin-:<main>: Fatal: Table metadata loading
-
-    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.part_2
-    
-<sql-statement>
-ALTER TABLE list_parted2 ATTACH PARTITION part_2 FOR VALUES IN (2);
-</sql-statement>
--stdin-:<main>: Error: Parse Sql
-
-    -stdin-:<main>:1:1: Error: RawStmt: alternative is not implemented yet : 244
-    	ALTER TABLE list_parted2 ATTACH PARTITION part_2 FOR VALUES IN (2);
-	^
-<sql-statement>
--- should be ok after deleting the bad row
-DELETE FROM part_2;
-</sql-statement>
--stdin-:<main>: Fatal: Pre type annotation
-
-    -stdin-:<main>: Fatal: tools/enum_parser/enum_serialization_runtime/enum_runtime.cpp:70: Key 'pg_delete' not found in enum NYql::EYtSettingType. Valid options are: 'initial', 'infer_scheme', 'force_infer_schema', 'do_not_fail_on_invalid_schema', 'direct_read', 'view', 'mode', 'scheme', 'weak_concat', 'anonymous', 'with_qb', 'inline', 'sample', 'joinLabel', 'ignore_non_existing', 'warn_non_existing', 'xlock', 'unordered', 'nonUnique', 'userschema', 'usercolumns', 'statcolumns', 'syscolumns', 'ignoretypev3', 'memUsage', 'itemsCount', 'rowFactor', 'ordered', 'keyFilter', 'keyFilter2', 'take', 'skip', 'limit', 'sortLimitBy', 'sortBy', 'reduceBy', 'reduceFilterBy', 'forceTransform', 'weakFields', 'sharded', 'combineChunks', 'jobCount', 'joinReduce', 'firstAsPrimary', 'flow', 'keepSorted', 'keySwitch', 'uniqueBy', 'opHash', 'mapOutputType', 'reduceInputType', 'noDq', 'split', 'compression_codec', 'erasure_codec', 'expiration', 'replication_factor', 'user_attrs', 'media', 'primary_medium', 'keep_meta', 'monotonic_keys', 'mutationid'. 
-    
-<sql-statement>
-ALTER TABLE list_parted2 ATTACH PARTITION part_2 FOR VALUES IN (2);
-</sql-statement>
--stdin-:<main>: Error: Parse Sql
-
-    -stdin-:<main>:1:1: Error: RawStmt: alternative is not implemented yet : 244
-    	ALTER TABLE list_parted2 ATTACH PARTITION part_2 FOR VALUES IN (2);
-	^
-<sql-statement>
--- check partition cannot be attached if default has some row for its values
-CREATE TABLE list_parted2_def PARTITION OF list_parted2 DEFAULT;
-</sql-statement>
--stdin-:<main>: Error: Parse Sql
-
-    -stdin-:<main>:1:1: Error: table inheritance not supported
-    	-- check partition cannot be attached if default has some row for its values
-	^
-<sql-statement>
-INSERT INTO list_parted2_def VALUES (11, 'z');
-</sql-statement>
--stdin-:<main>: Fatal: Table metadata loading
-
-    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.list_parted2_def
-    
-<sql-statement>
-CREATE TABLE part_3 (LIKE list_parted2);
-</sql-statement>
--stdin-:<main>: Error: Parse Sql
-
-    -stdin-:<main>:1:1: Error: CreateStmt: alternative is not implemented yet : 389
-    	CREATE TABLE part_3 (LIKE list_parted2);
-	^
-<sql-statement>
-ALTER TABLE list_parted2 ATTACH PARTITION part_3 FOR VALUES IN (11);
-</sql-statement>
--stdin-:<main>: Error: Parse Sql
-
-    -stdin-:<main>:1:1: Error: RawStmt: alternative is not implemented yet : 244
-    	ALTER TABLE list_parted2 ATTACH PARTITION part_3 FOR VALUES IN (11);
-	^
-<sql-statement>
--- should be ok after deleting the bad row
-DELETE FROM list_parted2_def WHERE a = 11;
-</sql-statement>
--stdin-:<main>: Fatal: Pre type annotation
-
-    -stdin-:<main>: Fatal: tools/enum_parser/enum_serialization_runtime/enum_runtime.cpp:70: Key 'pg_delete' not found in enum NYql::EYtSettingType. Valid options are: 'initial', 'infer_scheme', 'force_infer_schema', 'do_not_fail_on_invalid_schema', 'direct_read', 'view', 'mode', 'scheme', 'weak_concat', 'anonymous', 'with_qb', 'inline', 'sample', 'joinLabel', 'ignore_non_existing', 'warn_non_existing', 'xlock', 'unordered', 'nonUnique', 'userschema', 'usercolumns', 'statcolumns', 'syscolumns', 'ignoretypev3', 'memUsage', 'itemsCount', 'rowFactor', 'ordered', 'keyFilter', 'keyFilter2', 'take', 'skip', 'limit', 'sortLimitBy', 'sortBy', 'reduceBy', 'reduceFilterBy', 'forceTransform', 'weakFields', 'sharded', 'combineChunks', 'jobCount', 'joinReduce', 'firstAsPrimary', 'flow', 'keepSorted', 'keySwitch', 'uniqueBy', 'opHash', 'mapOutputType', 'reduceInputType', 'noDq', 'split', 'compression_codec', 'erasure_codec', 'expiration', 'replication_factor', 'user_attrs', 'media', 'primary_medium', 'keep_meta', 'monotonic_keys', 'mutationid'. 
-    
-<sql-statement>
-ALTER TABLE list_parted2 ATTACH PARTITION part_3 FOR VALUES IN (11);
-</sql-statement>
--stdin-:<main>: Error: Parse Sql
-
-    -stdin-:<main>:1:1: Error: RawStmt: alternative is not implemented yet : 244
-    	ALTER TABLE list_parted2 ATTACH PARTITION part_3 FOR VALUES IN (11);
-	^
-<sql-statement>
--- adding constraints that describe the desired partition constraint
--- (or more restrictive) will help skip the validation scan
-CREATE TABLE part_3_4 (
-	LIKE list_parted2,
-	CONSTRAINT check_a CHECK (a IN (3))
-);
-</sql-statement>
--stdin-:<main>: Error: Parse Sql
-
-    -stdin-:<main>:1:1: Error: CreateStmt: alternative is not implemented yet : 389
-    	-- adding constraints that describe the desired partition constraint
-	^
-<sql-statement>
--- however, if a list partition does not accept nulls, there should be
--- an explicit NOT NULL constraint on the partition key column for the
--- validation scan to be skipped;
-ALTER TABLE list_parted2 ATTACH PARTITION part_3_4 FOR VALUES IN (3, 4);
-</sql-statement>
--stdin-:<main>: Error: Parse Sql
-
-    -stdin-:<main>:1:1: Error: RawStmt: alternative is not implemented yet : 244
-    	-- however, if a list partition does not accept nulls, there should be
-	^
-<sql-statement>
--- adding a NOT NULL constraint will cause the scan to be skipped
-ALTER TABLE list_parted2 DETACH PARTITION part_3_4;
-</sql-statement>
--stdin-:<main>: Error: Parse Sql
-
-    -stdin-:<main>:1:1: Error: RawStmt: alternative is not implemented yet : 244
-    	-- adding a NOT NULL constraint will cause the scan to be skipped
-	^
-<sql-statement>
-ALTER TABLE part_3_4 ALTER a SET NOT NULL;
-</sql-statement>
--stdin-:<main>: Error: Parse Sql
-
-    -stdin-:<main>:1:1: Error: RawStmt: alternative is not implemented yet : 244
-    	ALTER TABLE part_3_4 ALTER a SET NOT NULL;
-	^
-<sql-statement>
-ALTER TABLE list_parted2 ATTACH PARTITION part_3_4 FOR VALUES IN (3, 4);
-</sql-statement>
--stdin-:<main>: Error: Parse Sql
-
-    -stdin-:<main>:1:1: Error: RawStmt: alternative is not implemented yet : 244
-    	ALTER TABLE list_parted2 ATTACH PARTITION part_3_4 FOR VALUES IN (3, 4);
-	^
-<sql-statement>
--- check if default partition scan skipped
-ALTER TABLE list_parted2_def ADD CONSTRAINT check_a CHECK (a IN (5, 6));
-</sql-statement>
--stdin-:<main>: Error: Parse Sql
-
-    -stdin-:<main>:1:1: Error: RawStmt: alternative is not implemented yet : 244
-    	-- check if default partition scan skipped
-	^
-<sql-statement>
-CREATE TABLE part_55_66 PARTITION OF list_parted2 FOR VALUES IN (55, 66);
-</sql-statement>
--stdin-:<main>: Error: Parse Sql
-
-    -stdin-:<main>:1:1: Error: table inheritance not supported
-    	CREATE TABLE part_55_66 PARTITION OF list_parted2 FOR VALUES IN (55, 66);
-	^
-<sql-statement>
--- check validation when attaching range partitions
-CREATE TABLE range_parted (
-	a int,
-	b int
-) PARTITION BY RANGE (a, b);
-</sql-statement>
--stdin-:<main>: Error: Parse Sql
-
-    -stdin-:<main>:1:1: Error: PARTITION BY clause not supported
-    	-- check validation when attaching range partitions
-	^
-<sql-statement>
--- check that violating rows are correctly reported
-CREATE TABLE part1 (
-	a int NOT NULL CHECK (a = 1),
-	b int NOT NULL CHECK (b >= 1 AND b <= 10)
-);
-</sql-statement>
--stdin-:<main>: Error: Parse Sql
-
-    -stdin-:<main>:1:1: Error: column constraint not supported
-    	-- check that violating rows are correctly reported
-	^
-<sql-statement>
-INSERT INTO part1 VALUES (1, 10);
-</sql-statement>
--stdin-:<main>: Fatal: Table metadata loading
-
-    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.part1
-    
-<sql-statement>
--- Remember the TO bound is exclusive
-ALTER TABLE range_parted ATTACH PARTITION part1 FOR VALUES FROM (1, 1) TO (1, 10);
-</sql-statement>
--stdin-:<main>: Error: Parse Sql
-
-    -stdin-:<main>:1:1: Error: RawStmt: alternative is not implemented yet : 244
-    	-- Remember the TO bound is exclusive
-	^
-<sql-statement>
--- should be ok after deleting the bad row
-DELETE FROM part1;
-</sql-statement>
--stdin-:<main>: Fatal: Pre type annotation
-
-    -stdin-:<main>: Fatal: tools/enum_parser/enum_serialization_runtime/enum_runtime.cpp:70: Key 'pg_delete' not found in enum NYql::EYtSettingType. Valid options are: 'initial', 'infer_scheme', 'force_infer_schema', 'do_not_fail_on_invalid_schema', 'direct_read', 'view', 'mode', 'scheme', 'weak_concat', 'anonymous', 'with_qb', 'inline', 'sample', 'joinLabel', 'ignore_non_existing', 'warn_non_existing', 'xlock', 'unordered', 'nonUnique', 'userschema', 'usercolumns', 'statcolumns', 'syscolumns', 'ignoretypev3', 'memUsage', 'itemsCount', 'rowFactor', 'ordered', 'keyFilter', 'keyFilter2', 'take', 'skip', 'limit', 'sortLimitBy', 'sortBy', 'reduceBy', 'reduceFilterBy', 'forceTransform', 'weakFields', 'sharded', 'combineChunks', 'jobCount', 'joinReduce', 'firstAsPrimary', 'flow', 'keepSorted', 'keySwitch', 'uniqueBy', 'opHash', 'mapOutputType', 'reduceInputType', 'noDq', 'split', 'compression_codec', 'erasure_codec', 'expiration', 'replication_factor', 'user_attrs', 'media', 'primary_medium', 'keep_meta', 'monotonic_keys', 'mutationid'. 
-    
-<sql-statement>
-ALTER TABLE range_parted ATTACH PARTITION part1 FOR VALUES FROM (1, 1) TO (1, 10);
-</sql-statement>
--stdin-:<main>: Error: Parse Sql
-
-    -stdin-:<main>:1:1: Error: RawStmt: alternative is not implemented yet : 244
-    	ALTER TABLE range_parted ATTACH PARTITION part1 FOR VALUES FROM (1, 1) TO (1, 10);
-	^
-<sql-statement>
--- adding constraints that describe the desired partition constraint
--- (or more restrictive) will help skip the validation scan
-CREATE TABLE part2 (
-	a int NOT NULL CHECK (a = 1),
-	b int NOT NULL CHECK (b >= 10 AND b < 18)
-);
-</sql-statement>
--stdin-:<main>: Error: Parse Sql
-
-    -stdin-:<main>:1:1: Error: column constraint not supported
-    	-- adding constraints that describe the desired partition constraint
-	^
-<sql-statement>
-ALTER TABLE range_parted ATTACH PARTITION part2 FOR VALUES FROM (1, 10) TO (1, 20);
-</sql-statement>
--stdin-:<main>: Error: Parse Sql
-
-    -stdin-:<main>:1:1: Error: RawStmt: alternative is not implemented yet : 244
-    	ALTER TABLE range_parted ATTACH PARTITION part2 FOR VALUES FROM (1, 10) TO (1, 20);
-	^
-<sql-statement>
--- Create default partition
-CREATE TABLE partr_def1 PARTITION OF range_parted DEFAULT;
-</sql-statement>
--stdin-:<main>: Error: Parse Sql
-
-    -stdin-:<main>:1:1: Error: table inheritance not supported
-    	-- Create default partition
-	^
-<sql-statement>
--- Only one default partition is allowed, hence, following should give error
-CREATE TABLE partr_def2 (LIKE part1 INCLUDING CONSTRAINTS);
-</sql-statement>
--stdin-:<main>: Error: Parse Sql
-
-    -stdin-:<main>:1:1: Error: CreateStmt: alternative is not implemented yet : 389
-    	-- Only one default partition is allowed, hence, following should give error
-	^
-<sql-statement>
-ALTER TABLE range_parted ATTACH PARTITION partr_def2 DEFAULT;
-</sql-statement>
--stdin-:<main>: Error: Parse Sql
-
-    -stdin-:<main>:1:1: Error: RawStmt: alternative is not implemented yet : 244
-    	ALTER TABLE range_parted ATTACH PARTITION partr_def2 DEFAULT;
-	^
-<sql-statement>
--- Overlapping partitions cannot be attached, hence, following should give error
-INSERT INTO partr_def1 VALUES (2, 10);
-</sql-statement>
--stdin-:<main>: Fatal: Table metadata loading
-
-    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.partr_def1
-    
-<sql-statement>
-CREATE TABLE part3 (LIKE range_parted);
-</sql-statement>
--stdin-:<main>: Error: Parse Sql
-
-    -stdin-:<main>:1:1: Error: CreateStmt: alternative is not implemented yet : 389
-    	CREATE TABLE part3 (LIKE range_parted);
-	^
-<sql-statement>
-ALTER TABLE range_parted ATTACH partition part3 FOR VALUES FROM (2, 10) TO (2, 20);
-</sql-statement>
--stdin-:<main>: Error: Parse Sql
-
-    -stdin-:<main>:1:1: Error: RawStmt: alternative is not implemented yet : 244
-    	ALTER TABLE range_parted ATTACH partition part3 FOR VALUES FROM (2, 10) TO (2, 20);
-	^
-<sql-statement>
--- Attaching partitions should be successful when there are no overlapping rows
-ALTER TABLE range_parted ATTACH partition part3 FOR VALUES FROM (3, 10) TO (3, 20);
-</sql-statement>
--stdin-:<main>: Error: Parse Sql
-
-    -stdin-:<main>:1:1: Error: RawStmt: alternative is not implemented yet : 244
-    	-- Attaching partitions should be successful when there are no overlapping rows
-	^
-<sql-statement>
--- check that leaf partitions are scanned when attaching a partitioned
--- table
-CREATE TABLE part_5 (
-	LIKE list_parted2
-) PARTITION BY LIST (b);
-</sql-statement>
--stdin-:<main>: Error: Parse Sql
-
-    -stdin-:<main>:1:1: Error: PARTITION BY clause not supported
-    	-- check that leaf partitions are scanned when attaching a partitioned
-	^
-<sql-statement>
--- check that violating rows are correctly reported
-CREATE TABLE part_5_a PARTITION OF part_5 FOR VALUES IN ('a');
-</sql-statement>
--stdin-:<main>: Error: Parse Sql
-
-    -stdin-:<main>:1:1: Error: table inheritance not supported
-    	-- check that violating rows are correctly reported
-	^
-<sql-statement>
-INSERT INTO part_5_a (a, b) VALUES (6, 'a');
-</sql-statement>
--stdin-:<main>: Fatal: Table metadata loading
-
-    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.part_5_a
-    
-<sql-statement>
-ALTER TABLE list_parted2 ATTACH PARTITION part_5 FOR VALUES IN (5);
-</sql-statement>
--stdin-:<main>: Error: Parse Sql
-
-    -stdin-:<main>:1:1: Error: RawStmt: alternative is not implemented yet : 244
-    	ALTER TABLE list_parted2 ATTACH PARTITION part_5 FOR VALUES IN (5);
-	^
-<sql-statement>
--- delete the faulting row and also add a constraint to skip the scan
-DELETE FROM part_5_a WHERE a NOT IN (3);
-</sql-statement>
--stdin-:<main>: Fatal: Pre type annotation
-
-    -stdin-:<main>: Fatal: tools/enum_parser/enum_serialization_runtime/enum_runtime.cpp:70: Key 'pg_delete' not found in enum NYql::EYtSettingType. Valid options are: 'initial', 'infer_scheme', 'force_infer_schema', 'do_not_fail_on_invalid_schema', 'direct_read', 'view', 'mode', 'scheme', 'weak_concat', 'anonymous', 'with_qb', 'inline', 'sample', 'joinLabel', 'ignore_non_existing', 'warn_non_existing', 'xlock', 'unordered', 'nonUnique', 'userschema', 'usercolumns', 'statcolumns', 'syscolumns', 'ignoretypev3', 'memUsage', 'itemsCount', 'rowFactor', 'ordered', 'keyFilter', 'keyFilter2', 'take', 'skip', 'limit', 'sortLimitBy', 'sortBy', 'reduceBy', 'reduceFilterBy', 'forceTransform', 'weakFields', 'sharded', 'combineChunks', 'jobCount', 'joinReduce', 'firstAsPrimary', 'flow', 'keepSorted', 'keySwitch', 'uniqueBy', 'opHash', 'mapOutputType', 'reduceInputType', 'noDq', 'split', 'compression_codec', 'erasure_codec', 'expiration', 'replication_factor', 'user_attrs', 'media', 'primary_medium', 'keep_meta', 'monotonic_keys', 'mutationid'. 
-    
-<sql-statement>
-ALTER TABLE part_5 ADD CONSTRAINT check_a CHECK (a IS NOT NULL AND a = 5);
-</sql-statement>
--stdin-:<main>: Error: Parse Sql
-
-    -stdin-:<main>:1:1: Error: RawStmt: alternative is not implemented yet : 244
-    	ALTER TABLE part_5 ADD CONSTRAINT check_a CHECK (a IS NOT NULL AND a = 5);
-	^
-<sql-statement>
-ALTER TABLE list_parted2 ATTACH PARTITION part_5 FOR VALUES IN (5);
-</sql-statement>
--stdin-:<main>: Error: Parse Sql
-
-    -stdin-:<main>:1:1: Error: RawStmt: alternative is not implemented yet : 244
-    	ALTER TABLE list_parted2 ATTACH PARTITION part_5 FOR VALUES IN (5);
-	^
-<sql-statement>
-ALTER TABLE list_parted2 DETACH PARTITION part_5;
-</sql-statement>
--stdin-:<main>: Error: Parse Sql
-
-    -stdin-:<main>:1:1: Error: RawStmt: alternative is not implemented yet : 244
-    	ALTER TABLE list_parted2 DETACH PARTITION part_5;
-	^
-<sql-statement>
-ALTER TABLE part_5 DROP CONSTRAINT check_a;
-</sql-statement>
--stdin-:<main>: Error: Parse Sql
-
-    -stdin-:<main>:1:1: Error: RawStmt: alternative is not implemented yet : 244
-    	ALTER TABLE part_5 DROP CONSTRAINT check_a;
-	^
-<sql-statement>
--- scan should again be skipped, even though NOT NULL is now a column property
-ALTER TABLE part_5 ADD CONSTRAINT check_a CHECK (a IN (5)), ALTER a SET NOT NULL;
-</sql-statement>
--stdin-:<main>: Error: Parse Sql
-
-    -stdin-:<main>:1:1: Error: RawStmt: alternative is not implemented yet : 244
-    	-- scan should again be skipped, even though NOT NULL is now a column property
-	^
-<sql-statement>
-ALTER TABLE list_parted2 ATTACH PARTITION part_5 FOR VALUES IN (5);
-</sql-statement>
--stdin-:<main>: Error: Parse Sql
-
-    -stdin-:<main>:1:1: Error: RawStmt: alternative is not implemented yet : 244
-    	ALTER TABLE list_parted2 ATTACH PARTITION part_5 FOR VALUES IN (5);
-	^
-<sql-statement>
--- Check the case where attnos of the partitioning columns in the table being
--- attached differs from the parent.  It should not affect the constraint-
--- checking logic that allows to skip the scan.
-CREATE TABLE part_6 (
-	c int,
-	LIKE list_parted2,
-	CONSTRAINT check_a CHECK (a IS NOT NULL AND a = 6)
-);
-</sql-statement>
--stdin-:<main>: Error: Parse Sql
-
-    -stdin-:<main>:1:1: Error: CreateStmt: alternative is not implemented yet : 389
-    	-- Check the case where attnos of the partitioning columns in the table being
-	^
-<sql-statement>
-ALTER TABLE part_6 DROP c;
-</sql-statement>
--stdin-:<main>: Error: Parse Sql
-
-    -stdin-:<main>:1:1: Error: RawStmt: alternative is not implemented yet : 244
-    	ALTER TABLE part_6 DROP c;
-	^
-<sql-statement>
-ALTER TABLE list_parted2 ATTACH PARTITION part_6 FOR VALUES IN (6);
-</sql-statement>
--stdin-:<main>: Error: Parse Sql
-
-    -stdin-:<main>:1:1: Error: RawStmt: alternative is not implemented yet : 244
-    	ALTER TABLE list_parted2 ATTACH PARTITION part_6 FOR VALUES IN (6);
-	^
-<sql-statement>
--- Similar to above, but the table being attached is a partitioned table
--- whose partition has still different attnos for the root partitioning
--- columns.
-CREATE TABLE part_7 (
-	LIKE list_parted2,
-	CONSTRAINT check_a CHECK (a IS NOT NULL AND a = 7)
-) PARTITION BY LIST (b);
-</sql-statement>
--stdin-:<main>: Error: Parse Sql
-
-    -stdin-:<main>:1:1: Error: PARTITION BY clause not supported
-    	-- Similar to above, but the table being attached is a partitioned table
-	^
-<sql-statement>
-CREATE TABLE part_7_a_null (
-	c int,
-	d int,
-	e int,
-	LIKE list_parted2,  -- 'a' will have attnum = 4
-	CONSTRAINT check_b CHECK (b IS NULL OR b = 'a'),
-	CONSTRAINT check_a CHECK (a IS NOT NULL AND a = 7)
-);
-</sql-statement>
--stdin-:<main>: Error: Parse Sql
-
-    -stdin-:<main>:1:1: Error: CreateStmt: alternative is not implemented yet : 389
-    	CREATE TABLE part_7_a_null (
-	^
-<sql-statement>
-ALTER TABLE part_7_a_null DROP c, DROP d, DROP e;
-</sql-statement>
--stdin-:<main>: Error: Parse Sql
-
-    -stdin-:<main>:1:1: Error: RawStmt: alternative is not implemented yet : 244
-    	ALTER TABLE part_7_a_null DROP c, DROP d, DROP e;
-	^
-<sql-statement>
-ALTER TABLE part_7 ATTACH PARTITION part_7_a_null FOR VALUES IN ('a', null);
-</sql-statement>
--stdin-:<main>: Error: Parse Sql
-
-    -stdin-:<main>:1:1: Error: RawStmt: alternative is not implemented yet : 244
-    	ALTER TABLE part_7 ATTACH PARTITION part_7_a_null FOR VALUES IN ('a', null);
-	^
-<sql-statement>
-ALTER TABLE list_parted2 ATTACH PARTITION part_7 FOR VALUES IN (7);
-</sql-statement>
--stdin-:<main>: Error: Parse Sql
-
-    -stdin-:<main>:1:1: Error: RawStmt: alternative is not implemented yet : 244
-    	ALTER TABLE list_parted2 ATTACH PARTITION part_7 FOR VALUES IN (7);
-	^
-<sql-statement>
--- Same example, but check this time that the constraint correctly detects
--- violating rows
-ALTER TABLE list_parted2 DETACH PARTITION part_7;
-</sql-statement>
--stdin-:<main>: Error: Parse Sql
-
-    -stdin-:<main>:1:1: Error: RawStmt: alternative is not implemented yet : 244
-    	-- Same example, but check this time that the constraint correctly detects
-	^
-<sql-statement>
-ALTER TABLE part_7 DROP CONSTRAINT check_a; -- thusly, scan won't be skipped
-</sql-statement>
--stdin-:<main>: Error: Parse Sql
-
-    -stdin-:<main>:1:1: Error: RawStmt: alternative is not implemented yet : 244
-    	ALTER TABLE part_7 DROP CONSTRAINT check_a; -- thusly, scan won't be skipped
-	^
-<sql-statement>
-INSERT INTO part_7 (a, b) VALUES (8, null), (9, 'a');
-</sql-statement>
--stdin-:<main>: Fatal: Table metadata loading
-
-    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.part_7
-    
-<sql-statement>
-SELECT tableoid::regclass, a, b FROM part_7 order by a;
-</sql-statement>
--stdin-:<main>: Fatal: Table metadata loading
-
-    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.part_7
-    
-<sql-statement>
-ALTER TABLE list_parted2 ATTACH PARTITION part_7 FOR VALUES IN (7);
-</sql-statement>
--stdin-:<main>: Error: Parse Sql
-
-    -stdin-:<main>:1:1: Error: RawStmt: alternative is not implemented yet : 244
-    	ALTER TABLE list_parted2 ATTACH PARTITION part_7 FOR VALUES IN (7);
-	^
-<sql-statement>
--- check that leaf partitions of default partition are scanned when
--- attaching a partitioned table.
-ALTER TABLE part_5 DROP CONSTRAINT check_a;
-</sql-statement>
--stdin-:<main>: Error: Parse Sql
-
-    -stdin-:<main>:1:1: Error: RawStmt: alternative is not implemented yet : 244
-    	-- check that leaf partitions of default partition are scanned when
-	^
-<sql-statement>
-CREATE TABLE part5_def PARTITION OF part_5 DEFAULT PARTITION BY LIST(a);
-</sql-statement>
--stdin-:<main>: Error: Parse Sql
-
-    -stdin-:<main>:1:1: Error: table inheritance not supported
-    	CREATE TABLE part5_def PARTITION OF part_5 DEFAULT PARTITION BY LIST(a);
-	^
-<sql-statement>
-CREATE TABLE part5_def_p1 PARTITION OF part5_def FOR VALUES IN (5);
-</sql-statement>
--stdin-:<main>: Error: Parse Sql
-
-    -stdin-:<main>:1:1: Error: table inheritance not supported
-    	CREATE TABLE part5_def_p1 PARTITION OF part5_def FOR VALUES IN (5);
-	^
-<sql-statement>
-INSERT INTO part5_def_p1 VALUES (5, 'y');
-</sql-statement>
--stdin-:<main>: Fatal: Table metadata loading
-
-    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.part5_def_p1
-    
-<sql-statement>
-CREATE TABLE part5_p1 (LIKE part_5);
-</sql-statement>
--stdin-:<main>: Error: Parse Sql
-
-    -stdin-:<main>:1:1: Error: CreateStmt: alternative is not implemented yet : 389
-    	CREATE TABLE part5_p1 (LIKE part_5);
-	^
-<sql-statement>
-ALTER TABLE part_5 ATTACH PARTITION part5_p1 FOR VALUES IN ('y');
-</sql-statement>
--stdin-:<main>: Error: Parse Sql
-
-    -stdin-:<main>:1:1: Error: RawStmt: alternative is not implemented yet : 244
-    	ALTER TABLE part_5 ATTACH PARTITION part5_p1 FOR VALUES IN ('y');
-	^
-<sql-statement>
--- should be ok after deleting the bad row
-DELETE FROM part5_def_p1 WHERE b = 'y';
-</sql-statement>
--stdin-:<main>: Fatal: Pre type annotation
-
-    -stdin-:<main>: Fatal: tools/enum_parser/enum_serialization_runtime/enum_runtime.cpp:70: Key 'pg_delete' not found in enum NYql::EYtSettingType. Valid options are: 'initial', 'infer_scheme', 'force_infer_schema', 'do_not_fail_on_invalid_schema', 'direct_read', 'view', 'mode', 'scheme', 'weak_concat', 'anonymous', 'with_qb', 'inline', 'sample', 'joinLabel', 'ignore_non_existing', 'warn_non_existing', 'xlock', 'unordered', 'nonUnique', 'userschema', 'usercolumns', 'statcolumns', 'syscolumns', 'ignoretypev3', 'memUsage', 'itemsCount', 'rowFactor', 'ordered', 'keyFilter', 'keyFilter2', 'take', 'skip', 'limit', 'sortLimitBy', 'sortBy', 'reduceBy', 'reduceFilterBy', 'forceTransform', 'weakFields', 'sharded', 'combineChunks', 'jobCount', 'joinReduce', 'firstAsPrimary', 'flow', 'keepSorted', 'keySwitch', 'uniqueBy', 'opHash', 'mapOutputType', 'reduceInputType', 'noDq', 'split', 'compression_codec', 'erasure_codec', 'expiration', 'replication_factor', 'user_attrs', 'media', 'primary_medium', 'keep_meta', 'monotonic_keys', 'mutationid'. 
-    
-<sql-statement>
-ALTER TABLE part_5 ATTACH PARTITION part5_p1 FOR VALUES IN ('y');
-</sql-statement>
--stdin-:<main>: Error: Parse Sql
-
-    -stdin-:<main>:1:1: Error: RawStmt: alternative is not implemented yet : 244
-    	ALTER TABLE part_5 ATTACH PARTITION part5_p1 FOR VALUES IN ('y');
-	^
-<sql-statement>
--- check that the table being attached is not already a partition
-ALTER TABLE list_parted2 ATTACH PARTITION part_2 FOR VALUES IN (2);
-</sql-statement>
--stdin-:<main>: Error: Parse Sql
-
-    -stdin-:<main>:1:1: Error: RawStmt: alternative is not implemented yet : 244
-    	-- check that the table being attached is not already a partition
-	^
-<sql-statement>
--- check that circular inheritance is not allowed
-ALTER TABLE part_5 ATTACH PARTITION list_parted2 FOR VALUES IN ('b');
-</sql-statement>
--stdin-:<main>: Error: Parse Sql
-
-    -stdin-:<main>:1:1: Error: RawStmt: alternative is not implemented yet : 244
-    	-- check that circular inheritance is not allowed
-	^
-<sql-statement>
-ALTER TABLE list_parted2 ATTACH PARTITION list_parted2 FOR VALUES IN (0);
-</sql-statement>
--stdin-:<main>: Error: Parse Sql
-
-    -stdin-:<main>:1:1: Error: RawStmt: alternative is not implemented yet : 244
-    	ALTER TABLE list_parted2 ATTACH PARTITION list_parted2 FOR VALUES IN (0);
-	^
-<sql-statement>
--- If a partitioned table being created or an existing table being attached
--- as a partition does not have a constraint that would allow validation scan
--- to be skipped, but an individual partition does, then the partition's
--- validation scan is skipped.
-CREATE TABLE quuux (a int, b text) PARTITION BY LIST (a);
-</sql-statement>
--stdin-:<main>: Error: Parse Sql
-
-    -stdin-:<main>:1:1: Error: PARTITION BY clause not supported
-    	-- If a partitioned table being created or an existing table being attached
-	^
-<sql-statement>
-CREATE TABLE quuux_default PARTITION OF quuux DEFAULT PARTITION BY LIST (b);
-</sql-statement>
--stdin-:<main>: Error: Parse Sql
-
-    -stdin-:<main>:1:1: Error: table inheritance not supported
-    	CREATE TABLE quuux_default PARTITION OF quuux DEFAULT PARTITION BY LIST (b);
-	^
-<sql-statement>
-CREATE TABLE quuux_default1 PARTITION OF quuux_default (
-	CONSTRAINT check_1 CHECK (a IS NOT NULL AND a = 1)
-) FOR VALUES IN ('b');
-</sql-statement>
--stdin-:<main>: Error: Parse Sql
-
-    -stdin-:<main>:1:1: Error: table inheritance not supported
-    	CREATE TABLE quuux_default1 PARTITION OF quuux_default (
-	^
-<sql-statement>
-CREATE TABLE quuux1 (a int, b text);
-</sql-statement>
-<sql-statement>
-ALTER TABLE quuux ATTACH PARTITION quuux1 FOR VALUES IN (1); -- validate!
-</sql-statement>
--stdin-:<main>: Error: Parse Sql
-
-    -stdin-:<main>:1:1: Error: RawStmt: alternative is not implemented yet : 244
-    	ALTER TABLE quuux ATTACH PARTITION quuux1 FOR VALUES IN (1); -- validate!
-	^
-<sql-statement>
-CREATE TABLE quuux2 (a int, b text);
-</sql-statement>
-<sql-statement>
-ALTER TABLE quuux ATTACH PARTITION quuux2 FOR VALUES IN (2); -- skip validation
-</sql-statement>
--stdin-:<main>: Error: Parse Sql
-
-    -stdin-:<main>:1:1: Error: RawStmt: alternative is not implemented yet : 244
-    	ALTER TABLE quuux ATTACH PARTITION quuux2 FOR VALUES IN (2); -- skip validation
-	^
-<sql-statement>
-DROP TABLE quuux1, quuux2;
-</sql-statement>
-<sql-statement>
--- should validate for quuux1, but not for quuux2
-CREATE TABLE quuux1 PARTITION OF quuux FOR VALUES IN (1);
-</sql-statement>
--stdin-:<main>: Error: Parse Sql
-
-    -stdin-:<main>:1:1: Error: table inheritance not supported
-    	-- should validate for quuux1, but not for quuux2
-	^
-<sql-statement>
-CREATE TABLE quuux2 PARTITION OF quuux FOR VALUES IN (2);
-</sql-statement>
--stdin-:<main>: Error: Parse Sql
-
-    -stdin-:<main>:1:1: Error: table inheritance not supported
-    	CREATE TABLE quuux2 PARTITION OF quuux FOR VALUES IN (2);
-	^
-<sql-statement>
-DROP TABLE quuux;
-</sql-statement>
-<sql-statement>
--- check validation when attaching hash partitions
--- Use hand-rolled hash functions and operator class to get predictable result
--- on different machines. part_test_int4_ops is defined in insert.sql.
--- check that the new partition won't overlap with an existing partition
-CREATE TABLE hash_parted (
-	a int,
-	b int
-) PARTITION BY HASH (a part_test_int4_ops);
-</sql-statement>
--stdin-:<main>: Error: Parse Sql
-
-    -stdin-:<main>:1:1: Error: PARTITION BY clause not supported
-    	-- check validation when attaching hash partitions
-	^
-<sql-statement>
-CREATE TABLE hpart_1 PARTITION OF hash_parted FOR VALUES WITH (MODULUS 4, REMAINDER 0);
-</sql-statement>
--stdin-:<main>: Error: Parse Sql
-
-    -stdin-:<main>:1:65: Error: ERROR:  unrecognized hash partition bound specification "MODULUS"
-
-    	CREATE TABLE hpart_1 PARTITION OF hash_parted FOR VALUES WITH (MODULUS 4, REMAINDER 0);
-	                                                                ^
-<sql-statement>
-CREATE TABLE fail_part (LIKE hpart_1);
-</sql-statement>
--stdin-:<main>: Error: Parse Sql
-
-    -stdin-:<main>:1:1: Error: CreateStmt: alternative is not implemented yet : 389
-    	CREATE TABLE fail_part (LIKE hpart_1);
-	^
-<sql-statement>
-ALTER TABLE hash_parted ATTACH PARTITION fail_part FOR VALUES WITH (MODULUS 8, REMAINDER 4);
-</sql-statement>
--stdin-:<main>: Error: Parse Sql
-
-    -stdin-:<main>:1:70: Error: ERROR:  unrecognized hash partition bound specification "MODULUS"
-
-    	ALTER TABLE hash_parted ATTACH PARTITION fail_part FOR VALUES WITH (MODULUS 8, REMAINDER 4);
-	                                                                     ^
-<sql-statement>
-ALTER TABLE hash_parted ATTACH PARTITION fail_part FOR VALUES WITH (MODULUS 8, REMAINDER 0);
-</sql-statement>
--stdin-:<main>: Error: Parse Sql
-
-    -stdin-:<main>:1:70: Error: ERROR:  unrecognized hash partition bound specification "MODULUS"
-
-    	ALTER TABLE hash_parted ATTACH PARTITION fail_part FOR VALUES WITH (MODULUS 8, REMAINDER 0);
-	                                                                     ^
-<sql-statement>
-DROP TABLE fail_part;
-</sql-statement>
-<sql-statement>
--- check validation when attaching hash partitions
--- check that violating rows are correctly reported
-CREATE TABLE hpart_2 (LIKE hash_parted);
-</sql-statement>
--stdin-:<main>: Error: Parse Sql
-
-    -stdin-:<main>:1:1: Error: CreateStmt: alternative is not implemented yet : 389
-    	-- check validation when attaching hash partitions
-	^
-<sql-statement>
-INSERT INTO hpart_2 VALUES (3, 0);
-</sql-statement>
--stdin-:<main>: Fatal: Table metadata loading
-
-    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.hpart_2
-    
-<sql-statement>
-ALTER TABLE hash_parted ATTACH PARTITION hpart_2 FOR VALUES WITH (MODULUS 4, REMAINDER 1);
-</sql-statement>
--stdin-:<main>: Error: Parse Sql
-
-    -stdin-:<main>:1:68: Error: ERROR:  unrecognized hash partition bound specification "MODULUS"
-
-    	ALTER TABLE hash_parted ATTACH PARTITION hpart_2 FOR VALUES WITH (MODULUS 4, REMAINDER 1);
-	                                                                   ^
-<sql-statement>
--- should be ok after deleting the bad row
-DELETE FROM hpart_2;
-</sql-statement>
--stdin-:<main>: Fatal: Pre type annotation
-
-    -stdin-:<main>: Fatal: tools/enum_parser/enum_serialization_runtime/enum_runtime.cpp:70: Key 'pg_delete' not found in enum NYql::EYtSettingType. Valid options are: 'initial', 'infer_scheme', 'force_infer_schema', 'do_not_fail_on_invalid_schema', 'direct_read', 'view', 'mode', 'scheme', 'weak_concat', 'anonymous', 'with_qb', 'inline', 'sample', 'joinLabel', 'ignore_non_existing', 'warn_non_existing', 'xlock', 'unordered', 'nonUnique', 'userschema', 'usercolumns', 'statcolumns', 'syscolumns', 'ignoretypev3', 'memUsage', 'itemsCount', 'rowFactor', 'ordered', 'keyFilter', 'keyFilter2', 'take', 'skip', 'limit', 'sortLimitBy', 'sortBy', 'reduceBy', 'reduceFilterBy', 'forceTransform', 'weakFields', 'sharded', 'combineChunks', 'jobCount', 'joinReduce', 'firstAsPrimary', 'flow', 'keepSorted', 'keySwitch', 'uniqueBy', 'opHash', 'mapOutputType', 'reduceInputType', 'noDq', 'split', 'compression_codec', 'erasure_codec', 'expiration', 'replication_factor', 'user_attrs', 'media', 'primary_medium', 'keep_meta', 'monotonic_keys', 'mutationid'. 
-    
-<sql-statement>
-ALTER TABLE hash_parted ATTACH PARTITION hpart_2 FOR VALUES WITH (MODULUS 4, REMAINDER 1);
-</sql-statement>
--stdin-:<main>: Error: Parse Sql
-
-    -stdin-:<main>:1:68: Error: ERROR:  unrecognized hash partition bound specification "MODULUS"
-
-    	ALTER TABLE hash_parted ATTACH PARTITION hpart_2 FOR VALUES WITH (MODULUS 4, REMAINDER 1);
-	                                                                   ^
-<sql-statement>
--- check that leaf partitions are scanned when attaching a partitioned
--- table
-CREATE TABLE hpart_5 (
-	LIKE hash_parted
-) PARTITION BY LIST (b);
-</sql-statement>
--stdin-:<main>: Error: Parse Sql
-
-    -stdin-:<main>:1:1: Error: PARTITION BY clause not supported
-    	-- check that leaf partitions are scanned when attaching a partitioned
-	^
-<sql-statement>
--- check that violating rows are correctly reported
-CREATE TABLE hpart_5_a PARTITION OF hpart_5 FOR VALUES IN ('1', '2', '3');
-</sql-statement>
--stdin-:<main>: Error: Parse Sql
-
-    -stdin-:<main>:1:1: Error: table inheritance not supported
-    	-- check that violating rows are correctly reported
-	^
-<sql-statement>
-INSERT INTO hpart_5_a (a, b) VALUES (7, 1);
-</sql-statement>
--stdin-:<main>: Fatal: Table metadata loading
-
-    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.hpart_5_a
-    
-<sql-statement>
-ALTER TABLE hash_parted ATTACH PARTITION hpart_5 FOR VALUES WITH (MODULUS 4, REMAINDER 2);
-</sql-statement>
--stdin-:<main>: Error: Parse Sql
-
-    -stdin-:<main>:1:68: Error: ERROR:  unrecognized hash partition bound specification "MODULUS"
-
-    	ALTER TABLE hash_parted ATTACH PARTITION hpart_5 FOR VALUES WITH (MODULUS 4, REMAINDER 2);
-	                                                                   ^
-<sql-statement>
--- should be ok after deleting the bad row
-DELETE FROM hpart_5_a;
-</sql-statement>
--stdin-:<main>: Fatal: Pre type annotation
-
-    -stdin-:<main>: Fatal: tools/enum_parser/enum_serialization_runtime/enum_runtime.cpp:70: Key 'pg_delete' not found in enum NYql::EYtSettingType. Valid options are: 'initial', 'infer_scheme', 'force_infer_schema', 'do_not_fail_on_invalid_schema', 'direct_read', 'view', 'mode', 'scheme', 'weak_concat', 'anonymous', 'with_qb', 'inline', 'sample', 'joinLabel', 'ignore_non_existing', 'warn_non_existing', 'xlock', 'unordered', 'nonUnique', 'userschema', 'usercolumns', 'statcolumns', 'syscolumns', 'ignoretypev3', 'memUsage', 'itemsCount', 'rowFactor', 'ordered', 'keyFilter', 'keyFilter2', 'take', 'skip', 'limit', 'sortLimitBy', 'sortBy', 'reduceBy', 'reduceFilterBy', 'forceTransform', 'weakFields', 'sharded', 'combineChunks', 'jobCount', 'joinReduce', 'firstAsPrimary', 'flow', 'keepSorted', 'keySwitch', 'uniqueBy', 'opHash', 'mapOutputType', 'reduceInputType', 'noDq', 'split', 'compression_codec', 'erasure_codec', 'expiration', 'replication_factor', 'user_attrs', 'media', 'primary_medium', 'keep_meta', 'monotonic_keys', 'mutationid'. 
-    
-<sql-statement>
-ALTER TABLE hash_parted ATTACH PARTITION hpart_5 FOR VALUES WITH (MODULUS 4, REMAINDER 2);
-</sql-statement>
--stdin-:<main>: Error: Parse Sql
-
-    -stdin-:<main>:1:68: Error: ERROR:  unrecognized hash partition bound specification "MODULUS"
-
-    	ALTER TABLE hash_parted ATTACH PARTITION hpart_5 FOR VALUES WITH (MODULUS 4, REMAINDER 2);
-	                                                                   ^
-<sql-statement>
--- check that the table being attach is with valid modulus and remainder value
-CREATE TABLE fail_part(LIKE hash_parted);
-</sql-statement>
--stdin-:<main>: Error: Parse Sql
-
-    -stdin-:<main>:1:1: Error: CreateStmt: alternative is not implemented yet : 389
-    	-- check that the table being attach is with valid modulus and remainder value
-	^
-<sql-statement>
-ALTER TABLE hash_parted ATTACH PARTITION fail_part FOR VALUES WITH (MODULUS 0, REMAINDER 1);
-</sql-statement>
--stdin-:<main>: Error: Parse Sql
-
-    -stdin-:<main>:1:70: Error: ERROR:  unrecognized hash partition bound specification "MODULUS"
-
-    	ALTER TABLE hash_parted ATTACH PARTITION fail_part FOR VALUES WITH (MODULUS 0, REMAINDER 1);
-	                                                                     ^
-<sql-statement>
-ALTER TABLE hash_parted ATTACH PARTITION fail_part FOR VALUES WITH (MODULUS 8, REMAINDER 8);
-</sql-statement>
--stdin-:<main>: Error: Parse Sql
-
-    -stdin-:<main>:1:70: Error: ERROR:  unrecognized hash partition bound specification "MODULUS"
-
-    	ALTER TABLE hash_parted ATTACH PARTITION fail_part FOR VALUES WITH (MODULUS 8, REMAINDER 8);
-	                                                                     ^
-<sql-statement>
-ALTER TABLE hash_parted ATTACH PARTITION fail_part FOR VALUES WITH (MODULUS 3, REMAINDER 2);
-</sql-statement>
--stdin-:<main>: Error: Parse Sql
-
-    -stdin-:<main>:1:70: Error: ERROR:  unrecognized hash partition bound specification "MODULUS"
-
-    	ALTER TABLE hash_parted ATTACH PARTITION fail_part FOR VALUES WITH (MODULUS 3, REMAINDER 2);
-	                                                                     ^
-<sql-statement>
-DROP TABLE fail_part;
-</sql-statement>
-<sql-statement>
--- fails with incorrect object type
-CREATE VIEW at_v1 AS SELECT 1 as a;
-</sql-statement>
--stdin-:<main>: Error: Parse Sql
-
-    -stdin-:<main>:1:1: Error: expected at least one target column
-    	-- fails with incorrect object type
-	^
-<sql-statement>
-ALTER TABLE at_v1 ATTACH PARTITION dummy default;
-</sql-statement>
--stdin-:<main>: Error: Parse Sql
-
-    -stdin-:<main>:1:1: Error: RawStmt: alternative is not implemented yet : 244
-    	ALTER TABLE at_v1 ATTACH PARTITION dummy default;
-	^
-<sql-statement>
-DROP VIEW at_v1;
-</sql-statement>
--stdin-:<main>: Error: Parse Sql
-
-    -stdin-:<main>:1:1: Error: View not found: 'at_v1'
-    	DROP VIEW at_v1;
-	^
-<sql-statement>
---
--- DETACH PARTITION
---
--- check that the table is partitioned at all
-CREATE TABLE regular_table (a int);
-</sql-statement>
-<sql-statement>
-ALTER TABLE regular_table DETACH PARTITION any_name;
-</sql-statement>
--stdin-:<main>: Error: Parse Sql
-
-    -stdin-:<main>:1:1: Error: RawStmt: alternative is not implemented yet : 244
-    	ALTER TABLE regular_table DETACH PARTITION any_name;
-	^
-<sql-statement>
-DROP TABLE regular_table;
-</sql-statement>
-<sql-statement>
--- check that the partition being detached exists at all
-ALTER TABLE list_parted2 DETACH PARTITION part_4;
-</sql-statement>
--stdin-:<main>: Error: Parse Sql
-
-    -stdin-:<main>:1:1: Error: RawStmt: alternative is not implemented yet : 244
-    	-- check that the partition being detached exists at all
-	^
-<sql-statement>
-ALTER TABLE hash_parted DETACH PARTITION hpart_4;
-</sql-statement>
--stdin-:<main>: Error: Parse Sql
-
-    -stdin-:<main>:1:1: Error: RawStmt: alternative is not implemented yet : 244
-    	ALTER TABLE hash_parted DETACH PARTITION hpart_4;
-	^
-<sql-statement>
--- check that the partition being detached is actually a partition of the parent
-CREATE TABLE not_a_part (a int);
-</sql-statement>
-<sql-statement>
-ALTER TABLE list_parted2 DETACH PARTITION not_a_part;
-</sql-statement>
--stdin-:<main>: Error: Parse Sql
-
-    -stdin-:<main>:1:1: Error: RawStmt: alternative is not implemented yet : 244
-    	ALTER TABLE list_parted2 DETACH PARTITION not_a_part;
-	^
-<sql-statement>
-ALTER TABLE list_parted2 DETACH PARTITION part_1;
-</sql-statement>
--stdin-:<main>: Error: Parse Sql
-
-    -stdin-:<main>:1:1: Error: RawStmt: alternative is not implemented yet : 244
-    	ALTER TABLE list_parted2 DETACH PARTITION part_1;
-	^
-<sql-statement>
-ALTER TABLE hash_parted DETACH PARTITION not_a_part;
-</sql-statement>
--stdin-:<main>: Error: Parse Sql
-
-    -stdin-:<main>:1:1: Error: RawStmt: alternative is not implemented yet : 244
-    	ALTER TABLE hash_parted DETACH PARTITION not_a_part;
-	^
-<sql-statement>
-DROP TABLE not_a_part;
-</sql-statement>
-<sql-statement>
--- check that, after being detached, attinhcount/coninhcount is dropped to 0 and
--- attislocal/conislocal is set to true
-ALTER TABLE list_parted2 DETACH PARTITION part_3_4;
-</sql-statement>
--stdin-:<main>: Error: Parse Sql
-
-    -stdin-:<main>:1:1: Error: RawStmt: alternative is not implemented yet : 244
-    	-- check that, after being detached, attinhcount/coninhcount is dropped to 0 and
-	^
-<sql-statement>
-SELECT attinhcount, attislocal FROM pg_attribute WHERE attrelid = 'part_3_4'::regclass AND attnum > 0;
-</sql-statement>
--stdin-:<main>: Fatal: Table metadata loading
-
-    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.pg_attribute
-    
-<sql-statement>
-SELECT coninhcount, conislocal FROM pg_constraint WHERE conrelid = 'part_3_4'::regclass AND conname = 'check_a';
-</sql-statement>
--stdin-:<main>: Fatal: Table metadata loading
-
-    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.pg_constraint
-    
-<sql-statement>
-DROP TABLE part_3_4;
-</sql-statement>
-<sql-statement>
--- check that a detached partition is not dropped on dropping a partitioned table
-CREATE TABLE range_parted2 (
-    a int
-) PARTITION BY RANGE(a);
-</sql-statement>
--stdin-:<main>: Error: Parse Sql
-
-    -stdin-:<main>:1:1: Error: PARTITION BY clause not supported
-    	-- check that a detached partition is not dropped on dropping a partitioned table
-	^
-<sql-statement>
-CREATE TABLE part_rp PARTITION OF range_parted2 FOR VALUES FROM (0) to (100);
-</sql-statement>
--stdin-:<main>: Error: Parse Sql
-
-    -stdin-:<main>:1:1: Error: table inheritance not supported
-    	CREATE TABLE part_rp PARTITION OF range_parted2 FOR VALUES FROM (0) to (100);
-	^
-<sql-statement>
-ALTER TABLE range_parted2 DETACH PARTITION part_rp;
-</sql-statement>
--stdin-:<main>: Error: Parse Sql
-
-    -stdin-:<main>:1:1: Error: RawStmt: alternative is not implemented yet : 244
-    	ALTER TABLE range_parted2 DETACH PARTITION part_rp;
-	^
-<sql-statement>
-DROP TABLE range_parted2;
-</sql-statement>
-<sql-statement>
-SELECT * from part_rp;
-</sql-statement>
--stdin-:<main>: Fatal: Table metadata loading
-
-    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.part_rp
-    
-<sql-statement>
-DROP TABLE part_rp;
-</sql-statement>
-<sql-statement>
--- concurrent detach
-CREATE TABLE range_parted2 (
-	a int
-) PARTITION BY RANGE(a);
-</sql-statement>
--stdin-:<main>: Error: Parse Sql
-
-    -stdin-:<main>:1:1: Error: PARTITION BY clause not supported
-    	-- concurrent detach
-	^
-<sql-statement>
-CREATE TABLE part_rp PARTITION OF range_parted2 FOR VALUES FROM (0) to (100);
-</sql-statement>
--stdin-:<main>: Error: Parse Sql
-
-    -stdin-:<main>:1:1: Error: table inheritance not supported
-    	CREATE TABLE part_rp PARTITION OF range_parted2 FOR VALUES FROM (0) to (100);
-	^
-<sql-statement>
-BEGIN;
-</sql-statement>
-<sql-statement>
--- doesn't work in a partition block
-ALTER TABLE range_parted2 DETACH PARTITION part_rp CONCURRENTLY;
-</sql-statement>
--stdin-:<main>: Error: Parse Sql
-
-    -stdin-:<main>:1:1: Error: RawStmt: alternative is not implemented yet : 244
-    	-- doesn't work in a partition block
-	^
-<sql-statement>
-COMMIT;
-</sql-statement>
-<sql-statement>
-CREATE TABLE part_rpd PARTITION OF range_parted2 DEFAULT;
-</sql-statement>
--stdin-:<main>: Error: Parse Sql
-
-    -stdin-:<main>:1:1: Error: table inheritance not supported
-    	CREATE TABLE part_rpd PARTITION OF range_parted2 DEFAULT;
-	^
-<sql-statement>
--- doesn't work if there's a default partition
-ALTER TABLE range_parted2 DETACH PARTITION part_rp CONCURRENTLY;
-</sql-statement>
--stdin-:<main>: Error: Parse Sql
-
-    -stdin-:<main>:1:1: Error: RawStmt: alternative is not implemented yet : 244
-    	-- doesn't work if there's a default partition
-	^
-<sql-statement>
--- doesn't work for the default partition
-ALTER TABLE range_parted2 DETACH PARTITION part_rpd CONCURRENTLY;
-</sql-statement>
--stdin-:<main>: Error: Parse Sql
-
-    -stdin-:<main>:1:1: Error: RawStmt: alternative is not implemented yet : 244
-    	-- doesn't work for the default partition
-	^
-<sql-statement>
-DROP TABLE part_rpd;
-</sql-statement>
-<sql-statement>
--- works fine
-ALTER TABLE range_parted2 DETACH PARTITION part_rp CONCURRENTLY;
-</sql-statement>
--stdin-:<main>: Error: Parse Sql
-
-    -stdin-:<main>:1:1: Error: RawStmt: alternative is not implemented yet : 244
-    	-- works fine
-	^
-<sql-statement>
-\d+ range_parted2
-</sql-statement>
-Metacommand \d+ range_parted2 is not supported
-<sql-statement>
--- constraint should be created
-\d part_rp
-</sql-statement>
-Metacommand \d part_rp is not supported
-<sql-statement>
-CREATE TABLE part_rp100 PARTITION OF range_parted2 (CHECK (a>=123 AND a<133 AND a IS NOT NULL)) FOR VALUES FROM (100) to (200);
-</sql-statement>
--stdin-:<main>: Error: Parse Sql
-
-    -stdin-:<main>:1:1: Error: table inheritance not supported
-    	CREATE TABLE part_rp100 PARTITION OF range_parted2 (CHECK (a>=123 AND a<133 AND a IS NOT NULL)) FOR VALUES FROM (100) to (200);
-	^
-<sql-statement>
-ALTER TABLE range_parted2 DETACH PARTITION part_rp100 CONCURRENTLY;
-</sql-statement>
--stdin-:<main>: Error: Parse Sql
-
-    -stdin-:<main>:1:1: Error: RawStmt: alternative is not implemented yet : 244
-    	ALTER TABLE range_parted2 DETACH PARTITION part_rp100 CONCURRENTLY;
-	^
-<sql-statement>
--- redundant constraint should not be created
-\d part_rp100
-</sql-statement>
-Metacommand \d part_rp100 is not supported
-<sql-statement>
-DROP TABLE range_parted2;
-</sql-statement>
-<sql-statement>
--- Check ALTER TABLE commands for partitioned tables and partitions
--- cannot add/drop column to/from *only* the parent
-ALTER TABLE ONLY list_parted2 ADD COLUMN c int;
-</sql-statement>
--stdin-:<main>: Error: Parse Sql
-
-    -stdin-:<main>:1:1: Error: RawStmt: alternative is not implemented yet : 244
-    	-- Check ALTER TABLE commands for partitioned tables and partitions
-	^
-<sql-statement>
-ALTER TABLE ONLY list_parted2 DROP COLUMN b;
-</sql-statement>
--stdin-:<main>: Error: Parse Sql
-
-    -stdin-:<main>:1:1: Error: RawStmt: alternative is not implemented yet : 244
-    	ALTER TABLE ONLY list_parted2 DROP COLUMN b;
-	^
-<sql-statement>
--- cannot add a column to partition or drop an inherited one
-ALTER TABLE part_2 ADD COLUMN c text;
-</sql-statement>
--stdin-:<main>: Error: Parse Sql
-
-    -stdin-:<main>:1:1: Error: RawStmt: alternative is not implemented yet : 244
-    	-- cannot add a column to partition or drop an inherited one
-	^
-<sql-statement>
-ALTER TABLE part_2 DROP COLUMN b;
-</sql-statement>
--stdin-:<main>: Error: Parse Sql
-
-    -stdin-:<main>:1:1: Error: RawStmt: alternative is not implemented yet : 244
-    	ALTER TABLE part_2 DROP COLUMN b;
-	^
-<sql-statement>
--- Nor rename, alter type
-ALTER TABLE part_2 RENAME COLUMN b to c;
-</sql-statement>
--stdin-:<main>: Error: Parse Sql
-
-    -stdin-:<main>:1:1: Error: RawStmt: alternative is not implemented yet : 264
-    	-- Nor rename, alter type
-	^
-<sql-statement>
-ALTER TABLE part_2 ALTER COLUMN b TYPE text;
-</sql-statement>
--stdin-:<main>: Error: Parse Sql
-
-    -stdin-:<main>:1:1: Error: RawStmt: alternative is not implemented yet : 244
-    	ALTER TABLE part_2 ALTER COLUMN b TYPE text;
-	^
-<sql-statement>
--- cannot add/drop NOT NULL or check constraints to *only* the parent, when
--- partitions exist
-ALTER TABLE ONLY list_parted2 ALTER b SET NOT NULL;
-</sql-statement>
--stdin-:<main>: Error: Parse Sql
-
-    -stdin-:<main>:1:1: Error: RawStmt: alternative is not implemented yet : 244
-    	-- cannot add/drop NOT NULL or check constraints to *only* the parent, when
-	^
-<sql-statement>
-ALTER TABLE ONLY list_parted2 ADD CONSTRAINT check_b CHECK (b <> 'zz');
-</sql-statement>
--stdin-:<main>: Error: Parse Sql
-
-    -stdin-:<main>:1:1: Error: RawStmt: alternative is not implemented yet : 244
-    	ALTER TABLE ONLY list_parted2 ADD CONSTRAINT check_b CHECK (b <> 'zz');
-	^
-<sql-statement>
-ALTER TABLE list_parted2 ALTER b SET NOT NULL;
-</sql-statement>
--stdin-:<main>: Error: Parse Sql
-
-    -stdin-:<main>:1:1: Error: RawStmt: alternative is not implemented yet : 244
-    	ALTER TABLE list_parted2 ALTER b SET NOT NULL;
-	^
-<sql-statement>
-ALTER TABLE ONLY list_parted2 ALTER b DROP NOT NULL;
-</sql-statement>
--stdin-:<main>: Error: Parse Sql
-
-    -stdin-:<main>:1:1: Error: RawStmt: alternative is not implemented yet : 244
-    	ALTER TABLE ONLY list_parted2 ALTER b DROP NOT NULL;
-	^
-<sql-statement>
-ALTER TABLE list_parted2 ADD CONSTRAINT check_b CHECK (b <> 'zz');
-</sql-statement>
--stdin-:<main>: Error: Parse Sql
-
-    -stdin-:<main>:1:1: Error: RawStmt: alternative is not implemented yet : 244
-    	ALTER TABLE list_parted2 ADD CONSTRAINT check_b CHECK (b <> 'zz');
-	^
-<sql-statement>
-ALTER TABLE ONLY list_parted2 DROP CONSTRAINT check_b;
-</sql-statement>
--stdin-:<main>: Error: Parse Sql
-
-    -stdin-:<main>:1:1: Error: RawStmt: alternative is not implemented yet : 244
-    	ALTER TABLE ONLY list_parted2 DROP CONSTRAINT check_b;
-	^
-<sql-statement>
--- It's alright though, if no partitions are yet created
-CREATE TABLE parted_no_parts (a int) PARTITION BY LIST (a);
-</sql-statement>
--stdin-:<main>: Error: Parse Sql
-
-    -stdin-:<main>:1:1: Error: PARTITION BY clause not supported
-    	-- It's alright though, if no partitions are yet created
-	^
-<sql-statement>
-ALTER TABLE ONLY parted_no_parts ALTER a SET NOT NULL;
-</sql-statement>
--stdin-:<main>: Error: Parse Sql
-
-    -stdin-:<main>:1:1: Error: RawStmt: alternative is not implemented yet : 244
-    	ALTER TABLE ONLY parted_no_parts ALTER a SET NOT NULL;
-	^
-<sql-statement>
-ALTER TABLE ONLY parted_no_parts ADD CONSTRAINT check_a CHECK (a > 0);
-</sql-statement>
--stdin-:<main>: Error: Parse Sql
-
-    -stdin-:<main>:1:1: Error: RawStmt: alternative is not implemented yet : 244
-    	ALTER TABLE ONLY parted_no_parts ADD CONSTRAINT check_a CHECK (a > 0);
-	^
-<sql-statement>
-ALTER TABLE ONLY parted_no_parts ALTER a DROP NOT NULL;
-</sql-statement>
--stdin-:<main>: Error: Parse Sql
-
-    -stdin-:<main>:1:1: Error: RawStmt: alternative is not implemented yet : 244
-    	ALTER TABLE ONLY parted_no_parts ALTER a DROP NOT NULL;
-	^
-<sql-statement>
-ALTER TABLE ONLY parted_no_parts DROP CONSTRAINT check_a;
-</sql-statement>
--stdin-:<main>: Error: Parse Sql
-
-    -stdin-:<main>:1:1: Error: RawStmt: alternative is not implemented yet : 244
-    	ALTER TABLE ONLY parted_no_parts DROP CONSTRAINT check_a;
-	^
-<sql-statement>
-DROP TABLE parted_no_parts;
-</sql-statement>
-<sql-statement>
--- cannot drop inherited NOT NULL or check constraints from partition
-ALTER TABLE list_parted2 ALTER b SET NOT NULL, ADD CONSTRAINT check_a2 CHECK (a > 0);
-</sql-statement>
--stdin-:<main>: Error: Parse Sql
-
-    -stdin-:<main>:1:1: Error: RawStmt: alternative is not implemented yet : 244
-    	-- cannot drop inherited NOT NULL or check constraints from partition
-	^
-<sql-statement>
-ALTER TABLE part_2 ALTER b DROP NOT NULL;
-</sql-statement>
--stdin-:<main>: Error: Parse Sql
-
-    -stdin-:<main>:1:1: Error: RawStmt: alternative is not implemented yet : 244
-    	ALTER TABLE part_2 ALTER b DROP NOT NULL;
-	^
-<sql-statement>
-ALTER TABLE part_2 DROP CONSTRAINT check_a2;
-</sql-statement>
--stdin-:<main>: Error: Parse Sql
-
-    -stdin-:<main>:1:1: Error: RawStmt: alternative is not implemented yet : 244
-    	ALTER TABLE part_2 DROP CONSTRAINT check_a2;
-	^
-<sql-statement>
--- Doesn't make sense to add NO INHERIT constraints on partitioned tables
-ALTER TABLE list_parted2 add constraint check_b2 check (b <> 'zz') NO INHERIT;
-</sql-statement>
--stdin-:<main>: Error: Parse Sql
-
-    -stdin-:<main>:1:1: Error: RawStmt: alternative is not implemented yet : 244
-    	-- Doesn't make sense to add NO INHERIT constraints on partitioned tables
-	^
-<sql-statement>
--- check that a partition cannot participate in regular inheritance
-CREATE TABLE inh_test () INHERITS (part_2);
-</sql-statement>
--stdin-:<main>: Error: Parse Sql
-
-    -stdin-:<main>:1:1: Error: table inheritance not supported
-    	-- check that a partition cannot participate in regular inheritance
-	^
-<sql-statement>
-CREATE TABLE inh_test (LIKE part_2);
-</sql-statement>
--stdin-:<main>: Error: Parse Sql
-
-    -stdin-:<main>:1:1: Error: CreateStmt: alternative is not implemented yet : 389
-    	CREATE TABLE inh_test (LIKE part_2);
-	^
-<sql-statement>
-ALTER TABLE inh_test INHERIT part_2;
-</sql-statement>
--stdin-:<main>: Error: Parse Sql
-
-    -stdin-:<main>:1:1: Error: RawStmt: alternative is not implemented yet : 244
-    	ALTER TABLE inh_test INHERIT part_2;
-	^
-<sql-statement>
-ALTER TABLE part_2 INHERIT inh_test;
-</sql-statement>
--stdin-:<main>: Error: Parse Sql
-
-    -stdin-:<main>:1:1: Error: RawStmt: alternative is not implemented yet : 244
-    	ALTER TABLE part_2 INHERIT inh_test;
-	^
-<sql-statement>
--- cannot drop or alter type of partition key columns of lower level
--- partitioned tables; for example, part_5, which is list_parted2's
--- partition, is partitioned on b;
-ALTER TABLE list_parted2 DROP COLUMN b;
-</sql-statement>
--stdin-:<main>: Error: Parse Sql
-
-    -stdin-:<main>:1:1: Error: RawStmt: alternative is not implemented yet : 244
-    	-- cannot drop or alter type of partition key columns of lower level
-	^
-<sql-statement>
-ALTER TABLE list_parted2 ALTER COLUMN b TYPE text;
-</sql-statement>
--stdin-:<main>: Error: Parse Sql
-
-    -stdin-:<main>:1:1: Error: RawStmt: alternative is not implemented yet : 244
-    	ALTER TABLE list_parted2 ALTER COLUMN b TYPE text;
-	^
-<sql-statement>
--- dropping non-partition key columns should be allowed on the parent table.
-ALTER TABLE list_parted DROP COLUMN b;
-</sql-statement>
--stdin-:<main>: Error: Parse Sql
-
-    -stdin-:<main>:1:1: Error: RawStmt: alternative is not implemented yet : 244
-    	-- dropping non-partition key columns should be allowed on the parent table.
-	^
-<sql-statement>
-SELECT * FROM list_parted;
-</sql-statement>
--stdin-:<main>: Fatal: Table metadata loading
-
-    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.list_parted
-    
-<sql-statement>
--- cleanup
-DROP TABLE list_parted, list_parted2, range_parted;
-</sql-statement>
-<sql-statement>
-DROP TABLE fail_def_part;
-</sql-statement>
-<sql-statement>
-DROP TABLE hash_parted;
-</sql-statement>
-<sql-statement>
--- more tests for certain multi-level partitioning scenarios
-create table p (a int, b int) partition by range (a, b);
-</sql-statement>
--stdin-:<main>: Error: Parse Sql
-
-    -stdin-:<main>:1:1: Error: PARTITION BY clause not supported
-    	-- more tests for certain multi-level partitioning scenarios
-	^
-<sql-statement>
-create table p1 (b int, a int not null) partition by range (b);
-</sql-statement>
--stdin-:<main>: Error: Parse Sql
-
-    -stdin-:<main>:1:1: Error: PARTITION BY clause not supported
-    	create table p1 (b int, a int not null) partition by range (b);
-	^
-<sql-statement>
-create table p11 (like p1);
-</sql-statement>
--stdin-:<main>: Error: Parse Sql
-
-    -stdin-:<main>:1:1: Error: CreateStmt: alternative is not implemented yet : 389
-    	create table p11 (like p1);
-	^
-<sql-statement>
-alter table p11 drop a;
-</sql-statement>
--stdin-:<main>: Error: Parse Sql
-
-    -stdin-:<main>:1:1: Error: RawStmt: alternative is not implemented yet : 244
-    	alter table p11 drop a;
-	^
-<sql-statement>
-alter table p11 add a int;
-</sql-statement>
--stdin-:<main>: Error: Parse Sql
-
-    -stdin-:<main>:1:1: Error: RawStmt: alternative is not implemented yet : 244
-    	alter table p11 add a int;
-	^
-<sql-statement>
-alter table p11 drop a;
-</sql-statement>
--stdin-:<main>: Error: Parse Sql
-
-    -stdin-:<main>:1:1: Error: RawStmt: alternative is not implemented yet : 244
-    	alter table p11 drop a;
-	^
-<sql-statement>
-alter table p11 add a int not null;
-</sql-statement>
--stdin-:<main>: Error: Parse Sql
-
-    -stdin-:<main>:1:1: Error: RawStmt: alternative is not implemented yet : 244
-    	alter table p11 add a int not null;
-	^
-<sql-statement>
--- attnum for key attribute 'a' is different in p, p1, and p11
-select attrelid::regclass, attname, attnum
-from pg_attribute
-where attname = 'a'
- and (attrelid = 'p'::regclass
-   or attrelid = 'p1'::regclass
-   or attrelid = 'p11'::regclass)
-order by attrelid::regclass::text;
-</sql-statement>
--stdin-:<main>: Fatal: Table metadata loading
-
-    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.pg_attribute
-    
-<sql-statement>
-alter table p1 attach partition p11 for values from (2) to (5);
-</sql-statement>
--stdin-:<main>: Error: Parse Sql
-
-    -stdin-:<main>:1:1: Error: RawStmt: alternative is not implemented yet : 244
-    	alter table p1 attach partition p11 for values from (2) to (5);
-	^
-<sql-statement>
-insert into p1 (a, b) values (2, 3);
-</sql-statement>
-<sql-statement>
--- check that partition validation scan correctly detects violating rows
-alter table p attach partition p1 for values from (1, 2) to (1, 10);
-</sql-statement>
--stdin-:<main>: Error: Parse Sql
-
-    -stdin-:<main>:1:1: Error: RawStmt: alternative is not implemented yet : 244
-    	-- check that partition validation scan correctly detects violating rows
-	^
-<sql-statement>
--- cleanup
-drop table p;
-</sql-statement>
-<sql-statement>
-drop table p1;
-</sql-statement>
-<sql-statement>
--- validate constraint on partitioned tables should only scan leaf partitions
-create table parted_validate_test (a int) partition by list (a);
-</sql-statement>
--stdin-:<main>: Error: Parse Sql
-
-    -stdin-:<main>:1:1: Error: PARTITION BY clause not supported
-    	-- validate constraint on partitioned tables should only scan leaf partitions
-	^
-<sql-statement>
-create table parted_validate_test_1 partition of parted_validate_test for values in (0, 1);
-</sql-statement>
--stdin-:<main>: Error: Parse Sql
-
-    -stdin-:<main>:1:1: Error: table inheritance not supported
-    	create table parted_validate_test_1 partition of parted_validate_test for values in (0, 1);
-	^
-<sql-statement>
-alter table parted_validate_test add constraint parted_validate_test_chka check (a > 0) not valid;
-</sql-statement>
--stdin-:<main>: Error: Parse Sql
-
-    -stdin-:<main>:1:1: Error: RawStmt: alternative is not implemented yet : 244
-    	alter table parted_validate_test add constraint parted_validate_test_chka check (a > 0) not valid;
-	^
-<sql-statement>
-alter table parted_validate_test validate constraint parted_validate_test_chka;
-</sql-statement>
--stdin-:<main>: Error: Parse Sql
-
-    -stdin-:<main>:1:1: Error: RawStmt: alternative is not implemented yet : 244
-    	alter table parted_validate_test validate constraint parted_validate_test_chka;
-	^
-<sql-statement>
-drop table parted_validate_test;
-</sql-statement>
-<sql-statement>
--- test alter column options
-CREATE TABLE attmp(i integer);
-</sql-statement>
-<sql-statement>
-INSERT INTO attmp VALUES (1);
-</sql-statement>
-<sql-statement>
-ALTER TABLE attmp ALTER COLUMN i SET (n_distinct = 1, n_distinct_inherited = 2);
-</sql-statement>
--stdin-:<main>: Error: Parse Sql
-
-    -stdin-:<main>:1:1: Error: RawStmt: alternative is not implemented yet : 244
-    	ALTER TABLE attmp ALTER COLUMN i SET (n_distinct = 1, n_distinct_inherited = 2);
-	^
-<sql-statement>
-ALTER TABLE attmp ALTER COLUMN i RESET (n_distinct_inherited);
-</sql-statement>
--stdin-:<main>: Error: Parse Sql
-
-    -stdin-:<main>:1:1: Error: RawStmt: alternative is not implemented yet : 244
-    	ALTER TABLE attmp ALTER COLUMN i RESET (n_distinct_inherited);
-	^
-<sql-statement>
-ANALYZE attmp;
-</sql-statement>
--stdin-:<main>: Error: Parse Sql
-
-    -stdin-:<main>:1:1: Error: RawStmt: alternative is not implemented yet : 275
-    	ANALYZE attmp;
-	^
-<sql-statement>
-DROP TABLE attmp;
-</sql-statement>
-<sql-statement>
-DROP USER regress_alter_table_user1;
-</sql-statement>
--stdin-:<main>: Error: Parse Sql
-
-    -stdin-:<main>:1:1: Error: RawStmt: alternative is not implemented yet : 287
-    	DROP USER regress_alter_table_user1;
-	^
-<sql-statement>
--- check that violating rows are correctly reported when attaching as the
--- default partition
-create table defpart_attach_test (a int) partition by list (a);
-</sql-statement>
--stdin-:<main>: Error: Parse Sql
-
-    -stdin-:<main>:1:1: Error: PARTITION BY clause not supported
-    	-- check that violating rows are correctly reported when attaching as the
-	^
-<sql-statement>
-create table defpart_attach_test1 partition of defpart_attach_test for values in (1);
-</sql-statement>
--stdin-:<main>: Error: Parse Sql
-
-    -stdin-:<main>:1:1: Error: table inheritance not supported
-    	create table defpart_attach_test1 partition of defpart_attach_test for values in (1);
-	^
-<sql-statement>
-create table defpart_attach_test_d (b int, a int);
-</sql-statement>
-<sql-statement>
-alter table defpart_attach_test_d drop b;
-</sql-statement>
--stdin-:<main>: Error: Parse Sql
-
-    -stdin-:<main>:1:1: Error: RawStmt: alternative is not implemented yet : 244
-    	alter table defpart_attach_test_d drop b;
-	^
-<sql-statement>
-insert into defpart_attach_test_d values (1), (2);
-</sql-statement>
-<sql-statement>
--- error because its constraint as the default partition would be violated
--- by the row containing 1
-alter table defpart_attach_test attach partition defpart_attach_test_d default;
-</sql-statement>
--stdin-:<main>: Error: Parse Sql
-
-    -stdin-:<main>:1:1: Error: RawStmt: alternative is not implemented yet : 244
-    	-- error because its constraint as the default partition would be violated
-	^
-<sql-statement>
-delete from defpart_attach_test_d where a = 1;
-</sql-statement>
--stdin-:<main>: Fatal: Pre type annotation
-
-    -stdin-:<main>: Fatal: tools/enum_parser/enum_serialization_runtime/enum_runtime.cpp:70: Key 'pg_delete' not found in enum NYql::EYtSettingType. Valid options are: 'initial', 'infer_scheme', 'force_infer_schema', 'do_not_fail_on_invalid_schema', 'direct_read', 'view', 'mode', 'scheme', 'weak_concat', 'anonymous', 'with_qb', 'inline', 'sample', 'joinLabel', 'ignore_non_existing', 'warn_non_existing', 'xlock', 'unordered', 'nonUnique', 'userschema', 'usercolumns', 'statcolumns', 'syscolumns', 'ignoretypev3', 'memUsage', 'itemsCount', 'rowFactor', 'ordered', 'keyFilter', 'keyFilter2', 'take', 'skip', 'limit', 'sortLimitBy', 'sortBy', 'reduceBy', 'reduceFilterBy', 'forceTransform', 'weakFields', 'sharded', 'combineChunks', 'jobCount', 'joinReduce', 'firstAsPrimary', 'flow', 'keepSorted', 'keySwitch', 'uniqueBy', 'opHash', 'mapOutputType', 'reduceInputType', 'noDq', 'split', 'compression_codec', 'erasure_codec', 'expiration', 'replication_factor', 'user_attrs', 'media', 'primary_medium', 'keep_meta', 'monotonic_keys', 'mutationid'. 
-    
-<sql-statement>
-alter table defpart_attach_test_d add check (a > 1);
-</sql-statement>
--stdin-:<main>: Error: Parse Sql
-
-    -stdin-:<main>:1:1: Error: RawStmt: alternative is not implemented yet : 244
-    	alter table defpart_attach_test_d add check (a > 1);
-	^
-<sql-statement>
--- should be attached successfully and without needing to be scanned
-alter table defpart_attach_test attach partition defpart_attach_test_d default;
-</sql-statement>
--stdin-:<main>: Error: Parse Sql
-
-    -stdin-:<main>:1:1: Error: RawStmt: alternative is not implemented yet : 244
-    	-- should be attached successfully and without needing to be scanned
-	^
-<sql-statement>
--- check that attaching a partition correctly reports any rows in the default
--- partition that should not be there for the new partition to be attached
--- successfully
-create table defpart_attach_test_2 (like defpart_attach_test_d);
-</sql-statement>
--stdin-:<main>: Error: Parse Sql
-
-    -stdin-:<main>:1:1: Error: CreateStmt: alternative is not implemented yet : 389
-    	-- check that attaching a partition correctly reports any rows in the default
-	^
-<sql-statement>
-alter table defpart_attach_test attach partition defpart_attach_test_2 for values in (2);
-</sql-statement>
--stdin-:<main>: Error: Parse Sql
-
-    -stdin-:<main>:1:1: Error: RawStmt: alternative is not implemented yet : 244
-    	alter table defpart_attach_test attach partition defpart_attach_test_2 for values in (2);
-	^
-<sql-statement>
-drop table defpart_attach_test;
-</sql-statement>
-<sql-statement>
--- check combinations of temporary and permanent relations when attaching
--- partitions.
-create table perm_part_parent (a int) partition by list (a);
-</sql-statement>
--stdin-:<main>: Error: Parse Sql
-
-    -stdin-:<main>:1:1: Error: PARTITION BY clause not supported
-    	-- check combinations of temporary and permanent relations when attaching
-	^
-<sql-statement>
-create temp table temp_part_parent (a int) partition by list (a);
-</sql-statement>
--stdin-:<main>: Error: Parse Sql
-
-    -stdin-:<main>:1:1: Error: PARTITION BY clause not supported
-    	create temp table temp_part_parent (a int) partition by list (a);
-	^
-<sql-statement>
-create table perm_part_child (a int);
-</sql-statement>
-<sql-statement>
-create temp table temp_part_child (a int);
-</sql-statement>
-<sql-statement>
-alter table temp_part_parent attach partition perm_part_child default; -- error
-</sql-statement>
--stdin-:<main>: Error: Parse Sql
-
-    -stdin-:<main>:1:1: Error: RawStmt: alternative is not implemented yet : 244
-    	alter table temp_part_parent attach partition perm_part_child default; -- error
-	^
-<sql-statement>
-alter table perm_part_parent attach partition temp_part_child default; -- error
-</sql-statement>
--stdin-:<main>: Error: Parse Sql
-
-    -stdin-:<main>:1:1: Error: RawStmt: alternative is not implemented yet : 244
-    	alter table perm_part_parent attach partition temp_part_child default; -- error
-	^
-<sql-statement>
-alter table temp_part_parent attach partition temp_part_child default; -- ok
-</sql-statement>
--stdin-:<main>: Error: Parse Sql
-
-    -stdin-:<main>:1:1: Error: RawStmt: alternative is not implemented yet : 244
-    	alter table temp_part_parent attach partition temp_part_child default; -- ok
-	^
-<sql-statement>
-drop table perm_part_parent cascade;
-</sql-statement>
--stdin-:<main>: Error: Parse Sql
-
-    -stdin-:<main>:1:1: Error: CASCADE is not implemented
-    	drop table perm_part_parent cascade;
-	^
-<sql-statement>
-drop table temp_part_parent cascade;
-</sql-statement>
--stdin-:<main>: Error: Parse Sql
-
-    -stdin-:<main>:1:1: Error: CASCADE is not implemented
-    	drop table temp_part_parent cascade;
-	^
-<sql-statement>
--- check that attaching partitions to a table while it is being used is
--- prevented
-create table tab_part_attach (a int) partition by list (a);
-</sql-statement>
--stdin-:<main>: Error: Parse Sql
-
-    -stdin-:<main>:1:1: Error: PARTITION BY clause not supported
-    	-- check that attaching partitions to a table while it is being used is
-	^
-<sql-statement>
-create or replace function func_part_attach() returns trigger
-  language plpgsql as $$
-  begin
-    execute 'create table tab_part_attach_1 (a int)';
-    execute 'alter table tab_part_attach attach partition tab_part_attach_1 for values in (1)';
-    return null;
-  end $$;
-</sql-statement>
--stdin-:<main>: Error: Parse Sql
-
-    -stdin-:<main>:1:1: Error: RawStmt: alternative is not implemented yet : 261
-    	create or replace function func_part_attach() returns trigger
-	^
-<sql-statement>
-create trigger trig_part_attach before insert on tab_part_attach
-  for each statement execute procedure func_part_attach();
-</sql-statement>
--stdin-:<main>: Error: Parse Sql
-
-    -stdin-:<main>:1:1: Error: RawStmt: alternative is not implemented yet : 283
-    	create trigger trig_part_attach before insert on tab_part_attach
-	^
-<sql-statement>
-insert into tab_part_attach values (1);
-</sql-statement>
--stdin-:<main>: Fatal: Table metadata loading
-
-    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.tab_part_attach
-    
-<sql-statement>
-drop table tab_part_attach;
-</sql-statement>
-<sql-statement>
-drop function func_part_attach();
-</sql-statement>
--stdin-:<main>: Error: Parse Sql
-
-    -stdin-:<main>:1:1: Error: DropStmt: alternative is not implemented yet : 386
-    	drop function func_part_attach();
-	^
-<sql-statement>
--- test case where the partitioning operator is a SQL function whose
--- evaluation results in the table's relcache being rebuilt partway through
--- the execution of an ATTACH PARTITION command
-create function at_test_sql_partop (int4, int4) returns int language sql
-as $$ select case when $1 = $2 then 0 when $1 > $2 then 1 else -1 end; $$;
-</sql-statement>
--stdin-:<main>: Error: Parse Sql
-
-    -stdin-:<main>:1:1: Error: RawStmt: alternative is not implemented yet : 261
-    	-- test case where the partitioning operator is a SQL function whose
-	^
-<sql-statement>
-create operator class at_test_sql_partop for type int4 using btree as
-    operator 1 < (int4, int4), operator 2 <= (int4, int4),
-    operator 3 = (int4, int4), operator 4 >= (int4, int4),
-    operator 5 > (int4, int4), function 1 at_test_sql_partop(int4, int4);
-</sql-statement>
--stdin-:<main>: Error: Parse Sql
-
-    -stdin-:<main>:1:1: Error: RawStmt: alternative is not implemented yet : 298
-    	create operator class at_test_sql_partop for type int4 using btree as
-	^
-<sql-statement>
-create table at_test_sql_partop (a int) partition by range (a at_test_sql_partop);
-</sql-statement>
--stdin-:<main>: Error: Parse Sql
-
-    -stdin-:<main>:1:1: Error: PARTITION BY clause not supported
-    	create table at_test_sql_partop (a int) partition by range (a at_test_sql_partop);
-	^
-<sql-statement>
-create table at_test_sql_partop_1 (a int);
-</sql-statement>
-<sql-statement>
-alter table at_test_sql_partop attach partition at_test_sql_partop_1 for values from (0) to (10);
-</sql-statement>
--stdin-:<main>: Error: Parse Sql
-
-    -stdin-:<main>:1:1: Error: RawStmt: alternative is not implemented yet : 244
-    	alter table at_test_sql_partop attach partition at_test_sql_partop_1 for values from (0) to (10);
-	^
-<sql-statement>
-drop table at_test_sql_partop;
-</sql-statement>
-<sql-statement>
-drop operator class at_test_sql_partop using btree;
-</sql-statement>
--stdin-:<main>: Error: Parse Sql
-
-    -stdin-:<main>:1:1: Error: Not supported object type for DROP
-    	drop operator class at_test_sql_partop using btree;
-	^
-<sql-statement>
-drop function at_test_sql_partop;
-</sql-statement>
--stdin-:<main>: Error: Parse Sql
-
-    -stdin-:<main>:1:1: Error: DropStmt: alternative is not implemented yet : 386
-    	drop function at_test_sql_partop;
-	^
-<sql-statement>
-/* Test case for bug #16242 */
--- We create a parent and child where the child has missing
--- non-null attribute values, and arrange to pass them through
--- tuple conversion from the child to the parent tupdesc
-create table bar1 (a integer, b integer not null default 1)
-  partition by range (a);
-</sql-statement>
--stdin-:<main>: Error: Parse Sql
-
-    -stdin-:<main>:1:1: Error: PARTITION BY clause not supported
-    	/* Test case for bug #16242 */
-	^
-<sql-statement>
-create table bar2 (a integer);
-</sql-statement>
-<sql-statement>
-insert into bar2 values (1);
-</sql-statement>
-<sql-statement>
-alter table bar2 add column b integer not null default 1;
-</sql-statement>
--stdin-:<main>: Error: Parse Sql
-
-    -stdin-:<main>:1:1: Error: RawStmt: alternative is not implemented yet : 244
-    	alter table bar2 add column b integer not null default 1;
-	^
-<sql-statement>
--- (at this point bar2 contains tuple with natts=1)
-alter table bar1 attach partition bar2 default;
-</sql-statement>
--stdin-:<main>: Error: Parse Sql
-
-    -stdin-:<main>:1:1: Error: RawStmt: alternative is not implemented yet : 244
-    	-- (at this point bar2 contains tuple with natts=1)
-	^
-<sql-statement>
--- this works:
-select * from bar1;
-</sql-statement>
--stdin-:<main>: Fatal: Table metadata loading
-
-    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.bar1
-    
-<sql-statement>
--- this exercises tuple conversion:
-create function xtrig()
-  returns trigger language plpgsql
-as $$
-  declare
-    r record;
-  begin
-    for r in select * from old loop
-      raise info 'a=%, b=%', r.a, r.b;
-    end loop;
-    return NULL;
-  end;
-$$;
-</sql-statement>
--stdin-:<main>: Error: Parse Sql
-
-    -stdin-:<main>:1:1: Error: RawStmt: alternative is not implemented yet : 261
-    	-- this exercises tuple conversion:
-	^
-<sql-statement>
-create trigger xtrig
-  after update on bar1
-  referencing old table as old
-  for each statement execute procedure xtrig();
-</sql-statement>
--stdin-:<main>: Error: Parse Sql
-
-    -stdin-:<main>:1:1: Error: RawStmt: alternative is not implemented yet : 283
-    	create trigger xtrig
-	^
-<sql-statement>
-update bar1 set a = a + 1;
-</sql-statement>
--stdin-:<main>: Fatal: Pre type annotation
-
-    -stdin-:<main>: Fatal: tools/enum_parser/enum_serialization_runtime/enum_runtime.cpp:70: Key 'pg_update' not found in enum NYql::EYtSettingType. Valid options are: 'initial', 'infer_scheme', 'force_infer_schema', 'do_not_fail_on_invalid_schema', 'direct_read', 'view', 'mode', 'scheme', 'weak_concat', 'anonymous', 'with_qb', 'inline', 'sample', 'joinLabel', 'ignore_non_existing', 'warn_non_existing', 'xlock', 'unordered', 'nonUnique', 'userschema', 'usercolumns', 'statcolumns', 'syscolumns', 'ignoretypev3', 'memUsage', 'itemsCount', 'rowFactor', 'ordered', 'keyFilter', 'keyFilter2', 'take', 'skip', 'limit', 'sortLimitBy', 'sortBy', 'reduceBy', 'reduceFilterBy', 'forceTransform', 'weakFields', 'sharded', 'combineChunks', 'jobCount', 'joinReduce', 'firstAsPrimary', 'flow', 'keepSorted', 'keySwitch', 'uniqueBy', 'opHash', 'mapOutputType', 'reduceInputType', 'noDq', 'split', 'compression_codec', 'erasure_codec', 'expiration', 'replication_factor', 'user_attrs', 'media', 'primary_medium', 'keep_meta', 'monotonic_keys', 'mutationid'. 
-    
-<sql-statement>
-/* End test case for bug #16242 */
-/* Test case for bug #17409 */
-create table attbl (p1 int constraint pk_attbl primary key);
-</sql-statement>
-<sql-statement>
-create table atref (c1 int references attbl(p1));
-</sql-statement>
--stdin-:<main>: Error: Parse Sql
-
-    -stdin-:<main>:1:1: Error: column constraint not supported
-    	create table atref (c1 int references attbl(p1));
-	^
-<sql-statement>
-cluster attbl using pk_attbl;
-</sql-statement>
--stdin-:<main>: Error: Parse Sql
-
-    -stdin-:<main>:1:1: Error: RawStmt: alternative is not implemented yet : 252
-    	cluster attbl using pk_attbl;
-	^
-<sql-statement>
-alter table attbl alter column p1 set data type bigint;
-</sql-statement>
--stdin-:<main>: Error: Parse Sql
-
-    -stdin-:<main>:1:1: Error: RawStmt: alternative is not implemented yet : 244
-    	alter table attbl alter column p1 set data type bigint;
-	^
-<sql-statement>
-alter table atref alter column c1 set data type bigint;
-</sql-statement>
--stdin-:<main>: Error: Parse Sql
-
-    -stdin-:<main>:1:1: Error: RawStmt: alternative is not implemented yet : 244
-    	alter table atref alter column c1 set data type bigint;
-	^
-<sql-statement>
-drop table attbl, atref;
-</sql-statement>
-<sql-statement>
-create table attbl (p1 int constraint pk_attbl primary key);
-</sql-statement>
-<sql-statement>
-alter table attbl replica identity using index pk_attbl;
-</sql-statement>
--stdin-:<main>: Error: Parse Sql
-
-    -stdin-:<main>:1:1: Error: RawStmt: alternative is not implemented yet : 244
-    	alter table attbl replica identity using index pk_attbl;
-	^
-<sql-statement>
-create table atref (c1 int references attbl(p1));
-</sql-statement>
--stdin-:<main>: Error: Parse Sql
-
-    -stdin-:<main>:1:1: Error: column constraint not supported
-    	create table atref (c1 int references attbl(p1));
-	^
-<sql-statement>
-alter table attbl alter column p1 set data type bigint;
-</sql-statement>
--stdin-:<main>: Error: Parse Sql
-
-    -stdin-:<main>:1:1: Error: RawStmt: alternative is not implemented yet : 244
-    	alter table attbl alter column p1 set data type bigint;
-	^
-<sql-statement>
-alter table atref alter column c1 set data type bigint;
-</sql-statement>
--stdin-:<main>: Error: Parse Sql
-
-    -stdin-:<main>:1:1: Error: RawStmt: alternative is not implemented yet : 244
-    	alter table atref alter column c1 set data type bigint;
-	^
-<sql-statement>
-drop table attbl, atref;
-</sql-statement>
-<sql-statement>
-/* End test case for bug #17409 */
--- Test that ALTER TABLE rewrite preserves a clustered index
--- for normal indexes and indexes on constraints.
-create table alttype_cluster (a int);
-</sql-statement>
-<sql-statement>
-alter table alttype_cluster add primary key (a);
-</sql-statement>
--stdin-:<main>: Error: Parse Sql
-
-    -stdin-:<main>:1:1: Error: RawStmt: alternative is not implemented yet : 244
-    	alter table alttype_cluster add primary key (a);
-	^
-<sql-statement>
-create index alttype_cluster_ind on alttype_cluster (a);
-</sql-statement>
-<sql-statement>
-alter table alttype_cluster cluster on alttype_cluster_ind;
-</sql-statement>
--stdin-:<main>: Error: Parse Sql
-
-    -stdin-:<main>:1:1: Error: RawStmt: alternative is not implemented yet : 244
-    	alter table alttype_cluster cluster on alttype_cluster_ind;
-	^
-<sql-statement>
--- Normal index remains clustered.
-select indexrelid::regclass, indisclustered from pg_index
-  where indrelid = 'alttype_cluster'::regclass
-  order by indexrelid::regclass::text;
-</sql-statement>
--stdin-:<main>: Fatal: Table metadata loading
-
-    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.pg_index
-    
-<sql-statement>
-alter table alttype_cluster alter a type bigint;
-</sql-statement>
--stdin-:<main>: Error: Parse Sql
-
-    -stdin-:<main>:1:1: Error: RawStmt: alternative is not implemented yet : 244
-    	alter table alttype_cluster alter a type bigint;
-	^
-<sql-statement>
-select indexrelid::regclass, indisclustered from pg_index
-  where indrelid = 'alttype_cluster'::regclass
-  order by indexrelid::regclass::text;
-</sql-statement>
--stdin-:<main>: Fatal: Table metadata loading
-
-    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.pg_index
-    
-<sql-statement>
--- Constraint index remains clustered.
-alter table alttype_cluster cluster on alttype_cluster_pkey;
-</sql-statement>
--stdin-:<main>: Error: Parse Sql
-
-    -stdin-:<main>:1:1: Error: RawStmt: alternative is not implemented yet : 244
-    	-- Constraint index remains clustered.
-	^
-<sql-statement>
-select indexrelid::regclass, indisclustered from pg_index
-  where indrelid = 'alttype_cluster'::regclass
-  order by indexrelid::regclass::text;
-</sql-statement>
--stdin-:<main>: Fatal: Table metadata loading
-
-    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.pg_index
-    
-<sql-statement>
-alter table alttype_cluster alter a type int;
-</sql-statement>
--stdin-:<main>: Error: Parse Sql
-
-    -stdin-:<main>:1:1: Error: RawStmt: alternative is not implemented yet : 244
-    	alter table alttype_cluster alter a type int;
-	^
-<sql-statement>
-select indexrelid::regclass, indisclustered from pg_index
-  where indrelid = 'alttype_cluster'::regclass
-  order by indexrelid::regclass::text;
-</sql-statement>
--stdin-:<main>: Fatal: Table metadata loading
-
-    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.pg_index
-    
-<sql-statement>
-drop table alttype_cluster;
-</sql-statement>
-<sql-statement>
---
--- Check that attaching or detaching a partitioned partition correctly leads
--- to its partitions' constraint being updated to reflect the parent's
--- newly added/removed constraint
-create table target_parted (a int, b int) partition by list (a);
-</sql-statement>
--stdin-:<main>: Error: Parse Sql
-
-    -stdin-:<main>:1:1: Error: PARTITION BY clause not supported
-    	--
-	^
-<sql-statement>
-create table attach_parted (a int, b int) partition by list (b);
-</sql-statement>
--stdin-:<main>: Error: Parse Sql
-
-    -stdin-:<main>:1:1: Error: PARTITION BY clause not supported
-    	create table attach_parted (a int, b int) partition by list (b);
-	^
-<sql-statement>
-create table attach_parted_part1 partition of attach_parted for values in (1);
-</sql-statement>
--stdin-:<main>: Error: Parse Sql
-
-    -stdin-:<main>:1:1: Error: table inheritance not supported
-    	create table attach_parted_part1 partition of attach_parted for values in (1);
-	^
-<sql-statement>
--- insert a row directly into the leaf partition so that its partition
--- constraint is built and stored in the relcache
-insert into attach_parted_part1 values (1, 1);
-</sql-statement>
--stdin-:<main>: Fatal: Table metadata loading
-
-    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.attach_parted_part1
-    
-<sql-statement>
--- the following better invalidate the partition constraint of the leaf
--- partition too...
-alter table target_parted attach partition attach_parted for values in (1);
-</sql-statement>
--stdin-:<main>: Error: Parse Sql
-
-    -stdin-:<main>:1:1: Error: RawStmt: alternative is not implemented yet : 244
-    	-- the following better invalidate the partition constraint of the leaf
-	^
-<sql-statement>
--- ...such that the following insert fails
-insert into attach_parted_part1 values (2, 1);
-</sql-statement>
--stdin-:<main>: Fatal: Table metadata loading
-
-    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.attach_parted_part1
-    
-<sql-statement>
--- ...and doesn't when the partition is detached along with its own partition
-alter table target_parted detach partition attach_parted;
-</sql-statement>
--stdin-:<main>: Error: Parse Sql
-
-    -stdin-:<main>:1:1: Error: RawStmt: alternative is not implemented yet : 244
-    	-- ...and doesn't when the partition is detached along with its own partition
-	^
-<sql-statement>
-insert into attach_parted_part1 values (2, 1);
-</sql-statement>
--stdin-:<main>: Fatal: Table metadata loading
-
-    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.attach_parted_part1
-    
+VERIFY failed (2024-02-22T12:52:30.697481+0300): 
+  ydb/library/yql/minikql/comp_nodes/llvm14/mkql_join_dict.cpp:149
+  JoinDicts(): requirement !HasNullInKey(key1) failed
+NPrivate::InternalPanicImpl(int, char const*, char const*, int, int, int, TBasicStringBuf<char, std::__y1::char_traits<char> >, char const*, unsigned long)+600 (0x98FE298)
+NPrivate::Panic(NPrivate::TStaticBuf const&, int, char const*, char const*, char const*, ...)+285 (0x98F41AD)
+??+0 (0x1183A001)
+??+0 (0x7F802C7D12B5)
+??+0 (0x7F802C7D0C92)
+??+0 (0x7F802C7D087D)
+??+0 (0x110F9F98)
+std::__y1::back_insert_iterator<std::__y1::vector<NYql::NUdf::TUnboxedValue, NKikimr::NMiniKQL::TMKQLAllocator<NYql::NUdf::TUnboxedValue, (NKikimr::NMiniKQL::EMemorySubPool)0> > > std::__y1::transform[abi:v160005]<NKikimr::NMiniKQL::IComputationNode* const*, std::__y1::back_insert_iterator<std::__y1::vector<NYql::NUdf::TUnboxedValue, NKikimr::NMiniKQL::TMKQLAllocator<NYql::NUdf::TUnboxedValue, (NKikimr::NMiniKQL::EMemorySubPool)0> > >, std::__y1::__bind<NYql::NUdf::TUnboxedValue (NKikimr::NMiniKQL::IComputationNode::*)(NKikimr::NMiniKQL::TComputationContext&) const, std::__y1::placeholders::__ph<1> const&, std::__y1::reference_wrapper<NKikimr::NMiniKQL::TComputationContext> > >(NKikimr::NMiniKQL::IComputationNode* const*, NKikimr::NMiniKQL::IComputationNode* const*, std::__y1::back_insert_iterator<std::__y1::vector<NYql::NUdf::TUnboxedValue, NKikimr::NMiniKQL::TMKQLAllocator<NYql::NUdf::TUnboxedValue, (NKikimr::NMiniKQL::EMemorySubPool)0> > >, std::__y1::__bind<NYql::NUdf::TUnboxedValue (NKikimr::NMiniKQL::I+131 (0x110AFF63)
+??+0 (0x110B1966)
+??+0 (0x110B0DC4)
+??+0 (0x1180B44F)
+??+0 (0x1180A5EF)
+??+0 (0xF33A607)
+NYql::TComputationGraphProxy::GetValue()+23 (0xF319C77)
+NYql::NFile::TYtFileGateway::ExecuteResult(NYql::NFile::TSession&, NYson::TYsonWriter&, NYql::NNodes::TExprBase, NYql::TExprContext&, NYql::IYtGateway::TResOrPullOptions&&, TVector<TBasicString<char, std::__y1::char_traits<char> >, std::__y1::allocator<TBasicString<char, std::__y1::char_traits<char> > > > const&) const+1930 (0xF2ED13A)
+NYql::NFile::TYtFileGateway::ResOrPull(TIntrusivePtr<NYql::TExprNode, TDefaultIntrusivePtrOps<NYql::TExprNode> > const&, NYql::TExprContext&, NYql::IYtGateway::TResOrPullOptions&&)+881 (0xF2D75C1)
+??+0 (0xE4BFF15)
+??+0 (0xE4C34CA)
+NYql::TExecTransformerBase::CallbackTransform(TIntrusivePtr<NYql::TExprNode, TDefaultIntrusivePtrOps<NYql::TExprNode> > const&, TIntrusivePtr<NYql::TExprNode, TDefaultIntrusivePtrOps<NYql::TExprNode> >&, NYql::TExprContext&)+1098 (0xE4C771A)
+NYql::TAsyncCallbackTransformer<NYql::TExecTransformerBase>::DoTransform(TIntrusivePtr<NYql::TExprNode, TDefaultIntrusivePtrOps<NYql::TExprNode> >, TIntrusivePtr<NYql::TExprNode, TDefaultIntrusivePtrOps<NYql::TExprNode> >&, NYql::TExprContext&)+37 (0xE4C2CB5)
+NYql::TGraphTransformerBase::Transform(TIntrusivePtr<NYql::TExprNode, TDefaultIntrusivePtrOps<NYql::TExprNode> >, TIntrusivePtr<NYql::TExprNode, TDefaultIntrusivePtrOps<NYql::TExprNode> >&, NYql::TExprContext&)+152 (0xB00A018)
+??+0 (0xC64EE54)
+??+0 (0xC643ABF)
+NYql::TGraphTransformerBase::Transform(TIntrusivePtr<NYql::TExprNode, TDefaultIntrusivePtrOps<NYql::TExprNode> >, TIntrusivePtr<NYql::TExprNode, TDefaultIntrusivePtrOps<NYql::TExprNode> >&, NYql::TExprContext&)+152 (0xB00A018)
+??+0 (0xC73D9DF)
+??+0 (0xC742250)
+??+0 (0xC73D502)
+??+0 (0xC7420EC)
+??+0 (0xC73D502)
+??+0 (0xC7420EC)
+??+0 (0xC73D502)
+??+0 (0xC73A004)
+NYql::TGraphTransformerBase::Transform(TIntrusivePtr<NYql::TExprNode, TDefaultIntrusivePtrOps<NYql::TExprNode> >, TIntrusivePtr<NYql::TExprNode, TDefaultIntrusivePtrOps<NYql::TExprNode> >&, NYql::TExprContext&)+152 (0xB00A018)
+??+0 (0xB00A725)
+NYql::TGraphTransformerBase::Transform(TIntrusivePtr<NYql::TExprNode, TDefaultIntrusivePtrOps<NYql::TExprNode> >, TIntrusivePtr<NYql::TExprNode, TDefaultIntrusivePtrOps<NYql::TExprNode> >&, NYql::TExprContext&)+152 (0xB00A018)
+NYql::AsyncTransformStepImpl(NYql::IGraphTransformer&, TIntrusivePtr<NYql::TExprNode, TDefaultIntrusivePtrOps<NYql::TExprNode> >&, NYql::TExprContext&, bool, bool, TBasicStringBuf<char, std::__y1::char_traits<char> > const&)+290 (0xB008AF2)
+NYql::AsyncTransform(NYql::IGraphTransformer&, TIntrusivePtr<NYql::TExprNode, TDefaultIntrusivePtrOps<NYql::TExprNode> >&, NYql::TExprContext&, bool)+66 (0xB009452)
+NYql::TProgram::AsyncTransformWithFallback(bool)+81 (0xBF3F631)
+??+0 (0xBF50C00)
+NYql::TProgram::RunAsync(TBasicString<char, std::__y1::char_traits<char> > const&, IOutputStream*, IOutputStream*, IOutputStream*, bool)+3035 (0xBF3D61B)
+??+0 (0xBF3A76A)
+NYql::TProgram::Run(TBasicString<char, std::__y1::char_traits<char> > const&, IOutputStream*, IOutputStream*, IOutputStream*, bool)+129 (0xBF3CA01)
+Main(int, char**)+6478 (0x97DB9EE)
+main+334 (0x97DE31E)
+??+0 (0x7F802C429D90)
+__libc_start_main+128 (0x7F802C429E40)
+??+0 (0x9770029)
+__GI___pthread_kill at ./nptl/pthread_kill.c:89:0
+__GI_raise at ../sysdeps/posix/raise.c:26:0
+__GI_abort at ./stdlib/abort.c:79:0
+NPrivate::InternalPanicImpl(int, char const*, char const*, int, int, int, TBasicStringBuf<char, std::__y1::char_traits<char> >, char const*, unsigned long) at /-S/util/system/yassert.cpp:90:0
+NPrivate::Panic(NPrivate::TStaticBuf const&, int, char const*, char const*, char const*, ...) at /-S/util/system/yassert.cpp:55:0
+NKikimr::NMiniKQL::(anonymous namespace)::TJoinDictWrapper<false>::JoinDicts(NKikimr::NMiniKQL::TComputationContext&, NYql::NUdf::TUnboxedValuePod, NYql::NUdf::TUnboxedValuePod) const at /-B/ydb/library/yql/minikql/comp_nodes/llvm14/mkql_join_dict.cpp:149:0
+??? at ???:0:0
+??? at ???:0:0
+??? at ???:0:0
+NKikimr::NMiniKQL::TCodegeneratorRootNode<NKikimr::NMiniKQL::TMutableCodegeneratorNode<NKikimr::NMiniKQL::(anonymous namespace)::TListMapWrapper>, true>::GetValue(NKikimr::NMiniKQL::TComputationContext&) const at /-B/ydb/library/yql/minikql/comp_nodes/llvm14/ydb/library/yql/minikql/computation/mkql_computation_node_codegen.h:845:0
+std::__y1::back_insert_iterator<std::__y1::vector<NYql::NUdf::TUnboxedValue, NKikimr::NMiniKQL::TMKQLAllocator<NYql::NUdf::TUnboxedValue, (NKikimr::NMiniKQL::EMemorySubPool)0> > > std::__y1::transform[abi:v160005]<NKikimr::NMiniKQL::IComputationNode* const*, std::__y1::back_insert_iterator<std::__y1::vector<NYql::NUdf::TUnboxedValue, NKikimr::NMiniKQL::TMKQLAllocator<NYql::NUdf::TUnboxedValue, (NKikimr::NMiniKQL::EMemorySubPool)0> > >, std::__y1::__bind<NYql::NUdf::TUnboxedValue (NKikimr::NMiniKQL::IComputationNode::*)(NKikimr::NMiniKQL::TComputationContext&) const, std::__y1::placeholders::__ph<1> const&, std::__y1::reference_wrapper<NKikimr::NMiniKQL::TComputationContext> > >(NKikimr::NMiniKQL::IComputationNode* const*, NKikimr::NMiniKQL::IComputationNode* const*, std::__y1::back_insert_iterator<std::__y1::vector<NYql::NUdf::TUnboxedValue, NKikimr::NMiniKQL::TMKQLAllocator<NYql::NUdf::TUnboxedValue, (NKikimr::NMiniKQL::EMemorySubPool)0> > >, std::__y1::__bind<NYql::NUdf::TUnboxedValue (NKikimr::NMiniKQL::IComputationNode::*)(NKikimr::NMiniKQL::TComputationContext&) const, std::__y1::placeholders::__ph<1> const&, std::__y1::reference_wrapper<NKikimr::NMiniKQL::TComputationContext> >) at /-S/contrib/libs/cxxsupp/libcxx/include/__algorithm/transform.h:26:0
+NKikimr::NMiniKQL::(anonymous namespace)::TOrderedExtendWrapper<false>::DoCalculate(NKikimr::NMiniKQL::TComputationContext&) const at /-B/ydb/library/yql/minikql/comp_nodes/llvm14/mkql_extend.cpp:540:0
+NKikimr::NMiniKQL::TMutableComputationNode<NKikimr::NMiniKQL::(anonymous namespace)::TOrderedExtendWrapper<false> >::GetValue(NKikimr::NMiniKQL::TComputationContext&) const at /-S/ydb/library/yql/minikql/computation/mkql_computation_node_impl.h:217:0
+NKikimr::NMiniKQL::(anonymous namespace)::TAlgoBaseWrapper<NKikimr::NMiniKQL::(anonymous namespace)::TAlgoWrapper, true>::DoCalculate(NKikimr::NMiniKQL::TComputationContext&) const at /-B/ydb/library/yql/minikql/comp_nodes/llvm14/mkql_sort.cpp:340:0
+NKikimr::NMiniKQL::TMutableComputationNode<NKikimr::NMiniKQL::(anonymous namespace)::TAlgoBaseWrapper<NKikimr::NMiniKQL::(anonymous namespace)::TAlgoWrapper, true> >::GetValue(NKikimr::NMiniKQL::TComputationContext&) const at /-S/ydb/library/yql/minikql/computation/mkql_computation_node_impl.h:214:0
+NKikimr::NMiniKQL::(anonymous namespace)::TComputationGraph::GetValue() at /-B/ydb/library/yql/minikql/computation/llvm14/mkql_computation_node_graph.cpp:623:0
+NYql::TComputationGraphProxy::GetValue() at /-S/ydb/library/yql/providers/yt/lib/lambda_builder/lambda_builder.cpp:116:0
+NYql::NFile::TYtFileGateway::ExecuteResult(NYql::NFile::TSession&, NYson::TYsonWriter&, NYql::NNodes::TExprBase, NYql::TExprContext&, NYql::IYtGateway::TResOrPullOptions&&, TVector<TBasicString<char, std::__y1::char_traits<char> >, std::__y1::allocator<TBasicString<char, std::__y1::char_traits<char> > > > const&) const at /home/marsaly/ydbwork/ydb/ydb/library/yql/providers/yt/gateway/file/yql_yt_file.cpp:1198:0
+NYql::NFile::TYtFileGateway::ResOrPull(TIntrusivePtr<NYql::TExprNode, TDefaultIntrusivePtrOps<NYql::TExprNode> > const&, NYql::TExprContext&, NYql::IYtGateway::TResOrPullOptions&&) at /home/marsaly/ydbwork/ydb/ydb/library/yql/providers/yt/gateway/file/yql_yt_file.cpp:644:0
+NYql::(anonymous namespace)::TYtDataSourceExecTransformer::HandleResOrPull(TIntrusivePtr<NYql::TExprNode, TDefaultIntrusivePtrOps<NYql::TExprNode> > const&, NYql::TExprContext&) at /home/marsaly/ydbwork/ydb/ydb/library/yql/providers/yt/provider/yql_yt_datasource_exec.cpp:181:0
+std::__y1::__function::__func<std::__y1::function<std::__y1::pair<NYql::IGraphTransformer::TStatus, NThreading::TFuture<std::__y1::function<NYql::IGraphTransformer::TStatus (TIntrusivePtr<NYql::TExprNode, TDefaultIntrusivePtrOps<NYql::TExprNode> > const&, TIntrusivePtr<NYql::TExprNode, TDefaultIntrusivePtrOps<NYql::TExprNode> >&, NYql::TExprContext&)> > > (TIntrusivePtr<NYql::TExprNode, TDefaultIntrusivePtrOps<NYql::TExprNode> > const&, TIntrusivePtr<NYql::TExprNode, TDefaultIntrusivePtrOps<NYql::TExprNode> >&, NYql::TExprContext&)> NYql::TExecTransformerBase::Hndl<NYql::(anonymous namespace)::TYtDataSourceExecTransformer>(std::__y1::pair<NYql::IGraphTransformer::TStatus, NThreading::TFuture<std::__y1::function<NYql::IGraphTransformer::TStatus (TIntrusivePtr<NYql::TExprNode, TDefaultIntrusivePtrOps<NYql::TExprNode> > const&, TIntrusivePtr<NYql::TExprNode, TDefaultIntrusivePtrOps<NYql::TExprNode> >&, NYql::TExprContext&)> > > (NYql::(anonymous namespace)::TYtDataSourceExecTransformer::*)(TIntrusivePtr<NYql::TExprNode, TDefaultIntrusivePtrOps<NYql::TExprNode> > const&, NYql::TExprContext&))::'lambda'(TIntrusivePtr<NYql::TExprNode, TDefaultIntrusivePtrOps<NYql::TExprNode> > const&, TIntrusivePtr<NYql::TExprNode, TDefaultIntrusivePtrOps<NYql::TExprNode> >&, NYql::TExprContext&), std::__y1::allocator<std::__y1::function<std::__y1::pair<NYql::IGraphTransformer::TStatus, NThreading::TFuture<std::__y1::function<NYql::IGraphTransformer::TStatus (TIntrusivePtr<NYql::TExprNode, TDefaultIntrusivePtrOps<NYql::TExprNode> > const&, TIntrusivePtr<NYql::TExprNode, TDefaultIntrusivePtrOps<NYql::TExprNode> >&, NYql::TExprContext&)> > > (TIntrusivePtr<NYql::TExprNode, TDefaultIntrusivePtrOps<NYql::TExprNode> > const&, TIntrusivePtr<NYql::TExprNode, TDefaultIntrusivePtrOps<NYql::TExprNode> >&, NYql::TExprContext&)> NYql::TExecTransformerBase::Hndl<NYql::(anonymous namespace)::TYtDataSourceExecTransformer>(std::__y1::pair<NYql::IGraphTransformer::TStatus, NThreading::TFuture<std::__y1::function<NYql::IGraphTransformer::TStatus (TIntrusivePtr<NYql::TExprNode, TDefaultIntrusivePtrOps<NYql::TExprNode> > const&, TIntrusivePtr<NYql::TExprNode, TDefaultIntrusivePtrOps<NYql::TExprNode> >&, NYql::TExprContext&)> > > (NYql::(anonymous namespace)::TYtDataSourceExecTransformer::*)(TIntrusivePtr<NYql::TExprNode, TDefaultIntrusivePtrOps<NYql::TExprNode> > const&, NYql::TExprContext&))::'lambda'(TIntrusivePtr<NYql::TExprNode, TDefaultIntrusivePtrOps<NYql::TExprNode> > const&, TIntrusivePtr<NYql::TExprNode, TDefaultIntrusivePtrOps<NYql::TExprNode> >&, NYql::TExprContext&)>, std::__y1::pair<NYql::IGraphTransformer::TStatus, NThreading::TFuture<std::__y1::function<NYql::IGraphTransformer::TStatus (TIntrusivePtr<NYql::TExprNode, TDefaultIntrusivePtrOps<NYql::TExprNode> > const&, TIntrusivePtr<NYql::TExprNode, TDefaultIntrusivePtrOps<NYql::TExprNode> >&, NYql::TExprContext&)> > > (TIntrusivePtr<NYql::TExprNode, TDefaultIntrusivePtrOps<NYql::TExprNode> > const&, TIntrusivePtr<NYql::TExprNode, TDefaultIntrusivePtrOps<NYql::TExprNode> >&, NYql::TExprContext&)>::operator()(TIntrusivePtr<NYql::TExprNode, TDefaultIntrusivePtrOps<NYql::TExprNode> > const&, TIntrusivePtr<NYql::TExprNode, TDefaultIntrusivePtrOps<NYql::TExprNode> >&, NYql::TExprContext&) at /home/marsaly/ydbwork/ydb/contrib/libs/cxxsupp/libcxx/include/__functional/function.h:356:0
+NYql::TExecTransformerBase::CallbackTransform(TIntrusivePtr<NYql::TExprNode, TDefaultIntrusivePtrOps<NYql::TExprNode> > const&, TIntrusivePtr<NYql::TExprNode, TDefaultIntrusivePtrOps<NYql::TExprNode> >&, NYql::TExprContext&) at /home/marsaly/ydbwork/ydb/ydb/library/yql/providers/common/transform/yql_exec.cpp:27:0
+NYql::TAsyncCallbackTransformer<NYql::TExecTransformerBase>::DoTransform(TIntrusivePtr<NYql::TExprNode, TDefaultIntrusivePtrOps<NYql::TExprNode> >, TIntrusivePtr<NYql::TExprNode, TDefaultIntrusivePtrOps<NYql::TExprNode> >&, NYql::TExprContext&) at /home/marsaly/ydbwork/ydb/ydb/library/yql/core/yql_graph_transformer.h:332:0
+NYql::TGraphTransformerBase::Transform(TIntrusivePtr<NYql::TExprNode, TDefaultIntrusivePtrOps<NYql::TExprNode> >, TIntrusivePtr<NYql::TExprNode, TDefaultIntrusivePtrOps<NYql::TExprNode> >&, NYql::TExprContext&) at /-S/ydb/library/yql/core/yql_graph_transformer.h:160:0
+NYql::IGraphTransformer::TStatus NYql::(anonymous namespace)::TResultCallableExecutionTransformer::HandleFillOrPull<NYql::NNodes::NGenerated::TResultStub<NYql::NNodes::TExprBase, NYql::NNodes::NGenerated::TResOrPullBaseStub<NYql::NNodes::TExprBase, NYql::NNodes::TCallable, NYql::NNodes::TCoAtom, NYql::NNodes::NGenerated::TCoNameValueTupleListStub<NYql::NNodes::TExprBase, NYql::NNodes::TListBase, NYql::NNodes::NGenerated::TCoNameValueTupleStub<NYql::NNodes::TExprBase, NYql::NNodes::TCoAtom> > > > >(NYql::NNodes::TExprBase, TIntrusivePtr<NYql::TExprNode, TDefaultIntrusivePtrOps<NYql::TExprNode> >&, NYql::TExprContext&, NYql::IDataProvider&) at /home/marsaly/ydbwork/ydb/ydb/library/yql/providers/result/provider/yql_result_provider.cpp:609:0
+NYql::(anonymous namespace)::TResultCallableExecutionTransformer::DoTransform(TIntrusivePtr<NYql::TExprNode, TDefaultIntrusivePtrOps<NYql::TExprNode> >, TIntrusivePtr<NYql::TExprNode, TDefaultIntrusivePtrOps<NYql::TExprNode> >&, NYql::TExprContext&) at /home/marsaly/ydbwork/ydb/ydb/library/yql/providers/result/provider/yql_result_provider.cpp:248:0
+NYql::TGraphTransformerBase::Transform(TIntrusivePtr<NYql::TExprNode, TDefaultIntrusivePtrOps<NYql::TExprNode> >, TIntrusivePtr<NYql::TExprNode, TDefaultIntrusivePtrOps<NYql::TExprNode> >&, NYql::TExprContext&) at /-S/ydb/library/yql/core/yql_graph_transformer.h:160:0
+NYql::(anonymous namespace)::TExecutionTransformer::ExecuteNode(TIntrusivePtr<NYql::TExprNode, TDefaultIntrusivePtrOps<NYql::TExprNode> > const&, TIntrusivePtr<NYql::TExprNode, TDefaultIntrusivePtrOps<NYql::TExprNode> >&, NYql::TExprContext&, unsigned int) at /-S/ydb/library/yql/core/yql_execution.cpp:274:0
+NYql::(anonymous namespace)::TExecutionTransformer::ExecuteChildren(TIntrusivePtr<NYql::TExprNode, TDefaultIntrusivePtrOps<NYql::TExprNode> > const&, TIntrusivePtr<NYql::TExprNode, TDefaultIntrusivePtrOps<NYql::TExprNode> >&, NYql::TExprContext&, unsigned int) at /-S/ydb/library/yql/core/yql_execution.cpp:340:0
+NYql::(anonymous namespace)::TExecutionTransformer::ExecuteNode(TIntrusivePtr<NYql::TExprNode, TDefaultIntrusivePtrOps<NYql::TExprNode> > const&, TIntrusivePtr<NYql::TExprNode, TDefaultIntrusivePtrOps<NYql::TExprNode> >&, NYql::TExprContext&, unsigned int) at /-S/ydb/library/yql/core/yql_execution.cpp:285:0
+NYql::(anonymous namespace)::TExecutionTransformer::ExecuteChildren(TIntrusivePtr<NYql::TExprNode, TDefaultIntrusivePtrOps<NYql::TExprNode> > const&, TIntrusivePtr<NYql::TExprNode, TDefaultIntrusivePtrOps<NYql::TExprNode> >&, NYql::TExprContext&, unsigned int) at /-S/ydb/library/yql/core/yql_execution.cpp:321:0
+NYql::(anonymous namespace)::TExecutionTransformer::ExecuteNode(TIntrusivePtr<NYql::TExprNode, TDefaultIntrusivePtrOps<NYql::TExprNode> > const&, TIntrusivePtr<NYql::TExprNode, TDefaultIntrusivePtrOps<NYql::TExprNode> >&, NYql::TExprContext&, unsigned int) at /-S/ydb/library/yql/core/yql_execution.cpp:285:0
+NYql::(anonymous namespace)::TExecutionTransformer::ExecuteChildren(TIntrusivePtr<NYql::TExprNode, TDefaultIntrusivePtrOps<NYql::TExprNode> > const&, TIntrusivePtr<NYql::TExprNode, TDefaultIntrusivePtrOps<NYql::TExprNode> >&, NYql::TExprContext&, unsigned int) at /-S/ydb/library/yql/core/yql_execution.cpp:321:0
+NYql::(anonymous namespace)::TExecutionTransformer::ExecuteNode(TIntrusivePtr<NYql::TExprNode, TDefaultIntrusivePtrOps<NYql::TExprNode> > const&, TIntrusivePtr<NYql::TExprNode, TDefaultIntrusivePtrOps<NYql::TExprNode> >&, NYql::TExprContext&, unsigned int) at /-S/ydb/library/yql/core/yql_execution.cpp:285:0
+NYql::(anonymous namespace)::TExecutionTransformer::DoTransform(TIntrusivePtr<NYql::TExprNode, TDefaultIntrusivePtrOps<NYql::TExprNode> >, TIntrusivePtr<NYql::TExprNode, TDefaultIntrusivePtrOps<NYql::TExprNode> >&, NYql::TExprContext&) at /-S/ydb/library/yql/core/yql_execution.cpp:77:0
+NYql::TGraphTransformerBase::Transform(TIntrusivePtr<NYql::TExprNode, TDefaultIntrusivePtrOps<NYql::TExprNode> >, TIntrusivePtr<NYql::TExprNode, TDefaultIntrusivePtrOps<NYql::TExprNode> >&, NYql::TExprContext&) at /-S/ydb/library/yql/core/yql_graph_transformer.h:160:0
+NYql::(anonymous namespace)::TCompositeGraphTransformer::DoTransform(TIntrusivePtr<NYql::TExprNode, TDefaultIntrusivePtrOps<NYql::TExprNode> >, TIntrusivePtr<NYql::TExprNode, TDefaultIntrusivePtrOps<NYql::TExprNode> >&, NYql::TExprContext&) at /-S/ydb/library/yql/core/yql_graph_transformer.cpp:47:0
+NYql::TGraphTransformerBase::Transform(TIntrusivePtr<NYql::TExprNode, TDefaultIntrusivePtrOps<NYql::TExprNode> >, TIntrusivePtr<NYql::TExprNode, TDefaultIntrusivePtrOps<NYql::TExprNode> >&, NYql::TExprContext&) at /-S/ydb/library/yql/core/yql_graph_transformer.h:160:0
+NYql::AsyncTransformStepImpl(NYql::IGraphTransformer&, TIntrusivePtr<NYql::TExprNode, TDefaultIntrusivePtrOps<NYql::TExprNode> >&, NYql::TExprContext&, bool, bool, TBasicStringBuf<char, std::__y1::char_traits<char> > const&) at /-S/ydb/library/yql/core/yql_graph_transformer.cpp:312:0
+NYql::AsyncTransform(NYql::IGraphTransformer&, TIntrusivePtr<NYql::TExprNode, TDefaultIntrusivePtrOps<NYql::TExprNode> >&, NYql::TExprContext&, bool) at /-S/ydb/library/yql/core/yql_graph_transformer.cpp:364:0
+NYql::TProgram::AsyncTransformWithFallback(bool) at /home/marsaly/ydbwork/ydb/ydb/library/yql/core/facade/yql_facade.cpp:1149:0
+NThreading::TFuture<NThreading::NImpl::TFutureType<NThreading::NImpl::TFutureCallResult<NYql::TProgram::RunAsync(TBasicString<char, std::__y1::char_traits<char> > const&, IOutputStream*, IOutputStream*, IOutputStream*, bool)::$_0, void>::TType>::TType> NThreading::TFuture<void>::Apply<NYql::TProgram::RunAsync(TBasicString<char, std::__y1::char_traits<char> > const&, IOutputStream*, IOutputStream*, IOutputStream*, bool)::$_0>(NYql::TProgram::RunAsync(TBasicString<char, std::__y1::char_traits<char> > const&, IOutputStream*, IOutputStream*, IOutputStream*, bool)::$_0&&) const::'lambda'(NThreading::TFuture<void> const&)::operator()(NThreading::TFuture<void> const&) at /home/marsaly/ydbwork/ydb/library/cpp/threading/future/core/future-inl.h:726:0
+NYql::TProgram::RunAsync(TBasicString<char, std::__y1::char_traits<char> > const&, IOutputStream*, IOutputStream*, IOutputStream*, bool) at /home/marsaly/ydbwork/ydb/ydb/library/yql/core/facade/yql_facade.cpp:1014:0
+NYql::IGraphTransformer::TStatus NYql::(anonymous namespace)::SyncExecution<TBasicString<char, std::__y1::char_traits<char> > const&, IOutputStream*, IOutputStream*, IOutputStream*, bool, TBasicString<char, std::__y1::char_traits<char> > const&, IOutputStream*&, IOutputStream*&, IOutputStream*&, bool&>(NYql::TProgram*, NThreading::TFuture<NYql::IGraphTransformer::TStatus> (NYql::TProgram::*)(TBasicString<char, std::__y1::char_traits<char> > const&, IOutputStream*, IOutputStream*, IOutputStream*, bool), TBasicString<char, std::__y1::char_traits<char> > const&, IOutputStream*&, IOutputStream*&, IOutputStream*&, bool&) at /home/marsaly/ydbwork/ydb/ydb/library/yql/core/facade/yql_facade.cpp:69:0
+NYql::TProgram::Run(TBasicString<char, std::__y1::char_traits<char> > const&, IOutputStream*, IOutputStream*, IOutputStream*, bool) at /home/marsaly/ydbwork/ydb/ydb/library/yql/core/facade/yql_facade.cpp:949:0
+Main(int, char**) at /home/marsaly/ydbwork/ydb/ydb/library/yql/tools/pgrun/pgrun.cpp:1271:0
+main at /home/marsaly/ydbwork/ydb/ydb/library/yql/tools/pgrun/pgrun.cpp:1311:0
+__libc_start_call_main at ../sysdeps/nptl/libc_start_call_main.h:58:0
+__libc_start_main_impl at ../csu/libc-start.c:392:0
+??? at ???:0:0

@@ -182,6 +182,8 @@ std::unique_ptr<TEvKqp::TEvCompileRequest> TKqpQueryState::BuildCompileRequest(s
         compileDeadline = Min(compileDeadline, QueryDeadlines.CancelAt);
     }
 
+    bool isQueryActionPrepare = GetAction() == NKikimrKqp::QUERY_ACTION_PREPARE;
+
     TMaybe<TQueryAst> statementAst;
     if (!Statements.empty()) {
         YQL_ENSURE(CurrentStatementId < Statements.size());
@@ -189,7 +191,7 @@ std::unique_ptr<TEvKqp::TEvCompileRequest> TKqpQueryState::BuildCompileRequest(s
     }
 
     return std::make_unique<TEvKqp::TEvCompileRequest>(UserToken, uid, std::move(query), keepInCache,
-        perStatementResult, compileDeadline, DbCounters, std::move(cookie), UserRequestContext,
+        isQueryActionPrepare, perStatementResult, compileDeadline, DbCounters, std::move(cookie), UserRequestContext,
         std::move(Orbit), TempTablesState, GetCollectDiagnostics(), statementAst);
 }
 

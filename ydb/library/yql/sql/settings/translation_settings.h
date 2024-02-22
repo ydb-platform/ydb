@@ -107,7 +107,6 @@ namespace NSQLTranslation {
         bool AssumeYdbOnClusterWithSlash;
         TString DynamicClusterProvider;
         TString FileAliasPrefix;
-        bool PerStatementExecution = false;
 
         TVector<ui32> PgParameterTypeOids;
         bool AutoParametrizeEnabled = false;

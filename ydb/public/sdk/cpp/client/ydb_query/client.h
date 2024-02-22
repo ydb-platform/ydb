@@ -90,6 +90,9 @@ public:
     NThreading::TFuture<TScriptExecutionOperation> ExecuteScript(const TString& script,
         const TExecuteScriptSettings& settings = TExecuteScriptSettings());
 
+    NThreading::TFuture<TScriptExecutionOperation> ExecuteScript(const TString& script,
+        const TParams& params, const TExecuteScriptSettings& settings = TExecuteScriptSettings());
+
     TAsyncFetchScriptResultsResult FetchScriptResults(const NKikimr::NOperationId::TOperationId& operationId, int64_t resultSetIndex,
         const TFetchScriptResultsSettings& settings = TFetchScriptResultsSettings());
 

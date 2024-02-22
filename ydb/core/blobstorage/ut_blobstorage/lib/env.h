@@ -39,6 +39,8 @@ struct TEnvironmentSetup {
         const bool SuppressCompatibilityCheck = false;
         const TFeatureFlags FeatureFlags;
         const NPDisk::EDeviceType DiskType = NPDisk::EDeviceType::DEVICE_TYPE_NVME;
+        const ui32 BurstThresholdNs = 0;
+        const TString VDiskKind = "";
     };
 
     const TSettings Settings;
@@ -323,6 +325,16 @@ struct TEnvironmentSetup {
                     config->CacheAccessor = std::make_unique<TAccessor>(Cache[nodeId]);
                 }
                 config->FeatureFlags = Settings.FeatureFlags;
+                if (Settings.VDiskKind) {
+                    NKikimrBlobStorage::TAllVDiskKinds vdiskConfig;
+                    auto* kind = vdiskConfig.AddVDiskKinds();
+                    kind->SetKind(NKikimrBlobStorage::TVDiskKind::Test1);
+                    if (Settings.BurstThresholdNs) {
+                        kind->MutableConfig()->SetBurstThresholdNs(Settings.BurstThresholdNs);
+                    }
+
+                    config->AllVDiskKinds = MakeIntrusive<TAllVDiskKinds>(vdiskConfig);
+                }
                 warden.reset(CreateBSNodeWarden(config));
             }
 
@@ -408,7 +420,11 @@ struct TEnvironmentSetup {
         cmd2->SetName(StoragePoolName);
         cmd2->SetKind(StoragePoolName);
         cmd2->SetErasureSpecies(TBlobStorageGroupType::ErasureSpeciesName(Settings.Erasure.GetErasure()));
-        cmd2->SetVDiskKind("Default");
+        if (Settings.VDiskKind) {
+            cmd2->SetVDiskKind(Settings.VDiskKind);
+        } else {
+            cmd2->SetVDiskKind("Default");
+        }
         cmd2->SetNumGroups(numGroups ? numGroups : NumGroups);
         cmd2->AddPDiskFilter()->AddProperty()->SetType(pdiskType);
         if (Settings.Encryption) {
@@ -428,7 +444,11 @@ struct TEnvironmentSetup {
         cmd->SetName(poolName);
         cmd->SetKind(poolName);
         cmd->SetErasureSpecies(TBlobStorageGroupType::ErasureSpeciesName(Settings.Erasure.GetErasure()));
-        cmd->SetVDiskKind("Default");
+        if (Settings.VDiskKind) {
+            cmd->SetVDiskKind(Settings.VDiskKind);
+        } else {
+            cmd->SetVDiskKind("Default");
+        }
         cmd->SetNumGroups(1);
         cmd->AddPDiskFilter()->AddProperty()->SetType(NKikimrBlobStorage::EPDiskType::ROT);
         if (Settings.Encryption) {

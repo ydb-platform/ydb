@@ -209,6 +209,7 @@ namespace NKikimr {
         TDuration WhiteboardUpdateInterval;
         bool EnableVDiskCooldownTimeout;
         TControlWrapper EnableVPatch = true;
+        ui64 BurstThresholdNs = 1'000'000'000;
 
         ///////////// FEATURE FLAGS ////////////////////////
         NKikimrConfig::TFeatureFlags FeatureFlags;
@@ -228,6 +229,7 @@ namespace NKikimr {
     class TAllVDiskKinds : public TThrRefBase {
     public:
         TAllVDiskKinds(const TString &prototext = TString());
+        TAllVDiskKinds(const NKikimrBlobStorage::TAllVDiskKinds &proto);
         TIntrusivePtr<TVDiskConfig> MakeVDiskConfig(const TVDiskConfig::TBaseInfo &baseInfo);
         void Merge(const NKikimrBlobStorage::TAllVDiskKinds &allVDiskKinds);
 

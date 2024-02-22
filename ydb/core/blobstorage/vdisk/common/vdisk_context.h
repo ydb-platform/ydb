@@ -100,7 +100,8 @@ namespace NKikimr {
                 TReplQuoter::TPtr replPDiskReadQuoter = nullptr,
                 TReplQuoter::TPtr replPDiskWriteQuoter = nullptr,
                 TReplQuoter::TPtr replNodeRequestQuoter = nullptr,
-                TReplQuoter::TPtr replNodeResponseQuoter = nullptr);
+                TReplQuoter::TPtr replNodeResponseQuoter = nullptr,
+                ui64 burstThresholdNs = 1'000'000'000);
 
         // The function checks response from PDisk. Normally, it's OK.
         // Other alternatives are: 1) shutdown; 2) FAIL

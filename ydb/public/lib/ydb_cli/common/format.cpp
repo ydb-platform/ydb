@@ -421,17 +421,6 @@ void TQueryPlanPrinter::PrintPrettyTableImpl(const NJson::TJsonValue& plan, TStr
                     nRows = JsonToString(outputRows);
                 }
             }
-
-            /*
-            if (stats.contains("CpuTimeUs")) {
-                auto cpuTimeUs = stats.at("CpuTimeUs");
-                if (cpuTimeUs.IsMap()) {
-                    cpuTime = JsonToString(cpuTimeUs.GetMapSafe().at("Max"));
-                } else {
-                    cpuTime = JsonToString(cpuTimeUs);
-                }
-            }
-            */
         }
 
         newRow.Column(1, std::move(cpuTime));

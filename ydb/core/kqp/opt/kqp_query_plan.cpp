@@ -922,7 +922,6 @@ private:
                     const auto& arg = expr.Cast<TDqStageBase>().Program().Args().Arg(i);
                     LambdaInputs[CurrentArgContext.AddArg(arg.Ptr().Get())] = inputIds[0];
                     inputIds.erase(inputIds.begin());
-                    ArgToStageInputMapping[arg.Ptr().Get()] = expr.Cast<TDqStageBase>().Inputs().Item(i).Ptr();
                 }
             }
 
@@ -1735,7 +1734,6 @@ private:
     TNodeSet VisitedStages;
     std::unordered_map<TArgContext, std::variant<ui32, TQueryPlanNode*>, TArgContext::HashFunction> LambdaInputs;
     TArgContext CurrentArgContext;
-    TMap<TExprNode*, TExprNode::TPtr> ArgToStageInputMapping;
 };
 
 using ModifyFunction = std::function<void (NJson::TJsonValue& node)>;
@@ -2134,8 +2132,6 @@ NJson::TJsonValue SimplifyQueryPlan(NJson::TJsonValue& plan) {
     plan = ReconstructQueryPlanRec(plan, 0, planIndex, precomputes, nodeCounter);
     RemoveRedundantNodes(plan, redundantNodes);
     ComputeCpuTimes(plan);
-
-    YQL_CLOG(TRACE, CoreDq) << "CPU plan: " << plan.GetStringRobust();
 
     return plan;
 }

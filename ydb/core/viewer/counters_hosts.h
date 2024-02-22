@@ -16,6 +16,7 @@ using namespace NActors;
 using namespace NNodeWhiteboard;
 
 class TCountersHostsList : public TActorBootstrapped<TCountersHostsList> {
+    IViewer* Viewer;
     NMon::TEvHttpInfo::TPtr Event;
     THolder<TEvInterconnect::TEvNodesInfo> NodesInfo;
     TMap<TNodeId, THolder<TEvWhiteboard::TEvSystemStateResponse>> NodesResponses;
@@ -29,8 +30,9 @@ public:
         return NKikimrServices::TActivity::VIEWER_HANDLER;
     }
 
-    TCountersHostsList(IViewer*, NMon::TEvHttpInfo::TPtr& ev)
-        : Event(ev)
+    TCountersHostsList(IViewer* viewer, NMon::TEvHttpInfo::TPtr& ev)
+        : Viewer(viewer)
+        , Event(ev)
     {}
 
     void Bootstrap(const TActorContext& ctx) {
@@ -145,7 +147,7 @@ public:
                 }
             }
         }
-        ctx.Send(Event->Sender, new NMon::TEvHttpInfoRes(HTTPOKTEXT + text.Str(), 0, NMon::IEvHttpInfoRes::EContentType::Custom));
+        ctx.Send(Event->Sender, new NMon::TEvHttpInfoRes(Viewer->GetHTTPOKTEXT(Event->Get()) + text.Str(), 0, NMon::IEvHttpInfoRes::EContentType::Custom));
         Die(ctx);
     }
 

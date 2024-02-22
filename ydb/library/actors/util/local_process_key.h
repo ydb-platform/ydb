@@ -1,7 +1,5 @@
 #pragma once
 
-#include <ydb/library/actors/actor_type/common.h>
-
 #include <util/string/builder.h>
 #include <util/system/mutex.h>
 #include <util/generic/strbuf.h>
@@ -9,23 +7,6 @@
 #include <util/generic/hash.h>
 #include <util/generic/singleton.h>
 #include <util/generic/serialized_enum.h>
-
-
-struct TActivityIndex {
-    ui32 Value;
-
-    explicit TActivityIndex(ui32 value)
-        : Value(value)
-    {}
-
-    template <typename EEnum, typename std::enable_if<std::is_enum<EEnum>::value, bool>::type v = true>
-    TActivityIndex(EEnum activityType);
-
-    operator ui32() const {
-        return Value;
-    }
-};
-
 
 class TLocalProcessKeyStateIndexLimiter {
 public:
@@ -58,12 +39,12 @@ public:
         return MaxKeysCount;
     }
 
-    TStringBuf GetNameByIndex(ui32 index) const {
+    TStringBuf GetNameByIndex(size_t index) const {
         Y_ABORT_UNLESS(index < Names.size());
         return Names[index];
     }
 
-    ui32 GetIndexByName(TStringBuf name) const {
+    size_t GetIndexByName(TStringBuf name) const {
         TGuard<TMutex> g(Mutex);
         auto it = Map.find(name);
         Y_ENSURE(it != Map.end());
@@ -74,7 +55,7 @@ public:
         Names.resize(MaxKeysCount);
     }
 
-    ui32 Register(TStringBuf name) {
+    size_t Register(TStringBuf name) {
         TGuard<TMutex> g(Mutex);
         auto it = Map.find(name);
         if (it != Map.end()) {
@@ -96,7 +77,7 @@ private:
 
 private:
     TVector<TString> Names;
-    THashMap<TString, ui32> Map;
+    THashMap<TString, size_t> Map;
     TMutex Mutex;
 };
 
@@ -107,12 +88,12 @@ public:
         return Name;
     }
 
-    static ui32 GetIndex() {
+    static size_t GetIndex() {
         return Index;
     }
 
 private:
-    inline static ui32 Index = TLocalProcessKeyState<T>::GetInstance().Register(Name);
+    inline static size_t Index = TLocalProcessKeyState<T>::GetInstance().Register(Name);
 };
 
 template <typename T, class TClass, ui32 KeyLengthLimit = 0>
@@ -122,7 +103,7 @@ public:
         return Name;
     }
 
-    static ui32 GetIndex() {
+    static size_t GetIndex() {
         return Index;
     }
 
@@ -138,7 +119,7 @@ private:
     }
 
     static const inline TString Name = TypeName<TClass>();
-    inline static ui32 Index = TLocalProcessKeyState<T>::GetInstance().Register(TypeNameRobust());
+    inline static size_t Index = TLocalProcessKeyState<T>::GetInstance().Register(TypeNameRobust());
 };
 
 template <typename T, typename EnumT>
@@ -148,17 +129,17 @@ public:
         return TLocalProcessKeyState<T>::GetInstance().GetNameByIndex(GetIndex(key));
     }
 
-    static ui32 GetIndex(const EnumT key) {
+    static size_t GetIndex(const EnumT key) {
         ui32 index = static_cast<ui32>(key);
         Y_ABORT_UNLESS(index < Enum2Index.size());
         return Enum2Index[index];
     }
 
 private:
-    inline static TVector<ui32> RegisterAll() {
+    inline static TVector<size_t> RegisterAll() {
         static_assert(std::is_enum<EnumT>::value, "Enum is required");
 
-        TVector<ui32> enum2Index;
+        TVector<size_t> enum2Index;
         auto names = GetEnumNames<EnumT>();
         ui32 maxId = 0;
         for (const auto& [k, v] : names) {
@@ -172,10 +153,5 @@ private:
         return enum2Index;
     }
 
-    inline static TVector<ui32> Enum2Index = RegisterAll();
+    inline static TVector<size_t> Enum2Index = RegisterAll();
 };
-
-template <typename EEnum, typename std::enable_if<std::is_enum<EEnum>::value, bool>::type v>
-TActivityIndex::TActivityIndex(EEnum activityEnumType)
-    : Value(TEnumProcessKey<NActors::TActorActivityTag, EEnum>::GetIndex(activityEnumType))
-{}

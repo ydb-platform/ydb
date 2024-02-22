@@ -150,7 +150,6 @@ bool TBlobManager::LoadState(IBlobManagerDb& db, const TTabletId selfTabletId) {
     }
 
     for (auto it = BlobsToDelete.GetIterator(); it.IsValid(); ++it) {
-        AFL_VERIFY(it.GetBlobId().IsDsBlob());
         BlobsManagerCounters.OnDeleteBlobMarker(it.GetBlobId().BlobSize());
     }
     BlobsManagerCounters.OnBlobsDelete(BlobsToDelete);
@@ -158,8 +157,6 @@ bool TBlobManager::LoadState(IBlobManagerDb& db, const TTabletId selfTabletId) {
     // Build the list of steps that cannot be garbage collected before Keep flag is set on the blobs
     THashSet<TGenStep> genStepsWithBlobsToKeep;
     for (const auto& unifiedBlobId : blobsToKeep) {
-        Y_ABORT_UNLESS(unifiedBlobId.IsDsBlob(), "Not a DS blob id in Keep table: %s", unifiedBlobId.ToStringNew().c_str());
-
         TLogoBlobID blobId = unifiedBlobId.GetLogoBlobId();
         TGenStep genStep{blobId.Generation(), blobId.Step()};
         Y_ABORT_UNLESS(genStep > LastCollectedGenStep);
@@ -332,8 +329,6 @@ void TBlobManager::DoSaveBlobBatch(TBlobBatch&& blobBatch, IBlobManagerDb& db) {
     // Add this batch to KeepQueue
     TGenStep edgeGenStep = EdgeGenStep();
     for (auto&& blobId: blobBatch.BatchInfo->GetBlobIds()) {
-        Y_DEBUG_ABORT_UNLESS(blobId.IsDsBlob(), "Not a DS blob id: %s", blobId.ToStringNew().c_str());
-
         auto logoBlobId = blobId.GetLogoBlobId();
         TGenStep genStep{logoBlobId.Generation(), logoBlobId.Step()};
 

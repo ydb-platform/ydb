@@ -2799,6 +2799,7 @@ struct TConvertToAstSettings {
     bool RefAtoms = false;
     std::function<bool(const TExprNode&)> NoInlineFunc;
     bool PrintArguments = false;
+    bool AllowFreeArgs = false;
 };
 
 TAstParseResult ConvertToAst(const TExprNode& root, TExprContext& ctx, const TConvertToAstSettings& settings);

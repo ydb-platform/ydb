@@ -1093,7 +1093,7 @@ void FillTablesMapping(const TFsPath& dataDir, THashMap<TString, TString>& table
 
     dataDir.List(children);
 
-    Cerr << "Registering pre-existing tables\n";
+    bool regMsgLogged = false;
     for (const auto& f: children) {
         if (f.GetExtension() != "attr") {
             continue;
@@ -1103,6 +1103,11 @@ void FillTablesMapping(const TFsPath& dataDir, THashMap<TString, TString>& table
 
         if (tableName.EndsWith(".tmp")) {
             continue;
+        }
+        if (!regMsgLogged) {
+            regMsgLogged = true;
+
+            Cerr << "Registering pre-existing tables\n";
         }
         const auto fullTableName = f.Parent() / tableName;
         Cerr << "\tyt.plato." << tableName << " -> " << fullTableName << '\n';

@@ -381,7 +381,7 @@ void TQueryPlanPrinter::PrintSimplifyJson(const NJson::TJsonValue& plan) {
 
 void TQueryPlanPrinter::PrintPrettyTable(const NJson::TJsonValue& plan) {
     static const TVector<TString> explainColumnNames = {"Operation", "E-Cost", "E-Rows"};
-    static const TVector<TString> explainAnalyzeColumnNames = {"Operation", "DurationUs", "Rows", "E-Cost", "E-Rows"};
+    static const TVector<TString> explainAnalyzeColumnNames = {"Operation", "A-Cpu", "A-Rows", "E-Cost", "E-Rows"};
 
     if (plan.GetMapSafe().contains("SimplifiedPlan")) {
         auto queryPlan = plan.GetMapSafe().at("SimplifiedPlan");
@@ -407,7 +407,7 @@ void TQueryPlanPrinter::PrintPrettyTableImpl(const NJson::TJsonValue& plan, TStr
 
     auto& newRow = table.AddRow();
     if (AnalyzeMode) {
-        TString duration;
+        TString cpuTime;
         TString nRows;
 
         if (node.contains("Stats")) {
@@ -422,17 +422,19 @@ void TQueryPlanPrinter::PrintPrettyTableImpl(const NJson::TJsonValue& plan, TStr
                 }
             }
 
-            if (stats.contains("DurationUs")) {
-                auto durationUs = stats.at("DurationUs");
-                if (durationUs.IsMap()) {
-                    duration = JsonToString(durationUs.GetMapSafe().at("Sum"));
+            /*
+            if (stats.contains("CpuTimeUs")) {
+                auto cpuTimeUs = stats.at("CpuTimeUs");
+                if (cpuTimeUs.IsMap()) {
+                    cpuTime = JsonToString(cpuTimeUs.GetMapSafe().at("Max"));
                 } else {
-                    duration = JsonToString(durationUs);
+                    cpuTime = JsonToString(cpuTimeUs);
                 }
             }
+            */
         }
 
-        newRow.Column(1, std::move(duration));
+        newRow.Column(1, std::move(cpuTime));
         newRow.Column(2, std::move(nRows));
     }
 
@@ -456,11 +458,14 @@ void TQueryPlanPrinter::PrintPrettyTableImpl(const NJson::TJsonValue& plan, TStr
     if (node.contains("Operators")) {
         for (const auto& op : node.at("Operators").GetArraySafe()) {
             TVector<TString> info;
+            TString aCpu;
             TString eCost;
             TString eRows;
 
             for (const auto& [key, value] : op.GetMapSafe()) {
-                if (key == "E-Cost") {
+                if (key == "A-Cpu") {
+                    aCpu = JsonToString(value);
+                } else if (key == "E-Cost") {
                     eCost = JsonToString(value);
                 } else if (key == "E-Rows") {
                     eRows = JsonToString(value);
@@ -479,6 +484,7 @@ void TQueryPlanPrinter::PrintPrettyTableImpl(const NJson::TJsonValue& plan, TStr
 
             newRow.Column(0, std::move(operation));
             if (AnalyzeMode) {
+                newRow.Column(1, std::move(aCpu));
                 newRow.Column(3, std::move(eCost));
                 newRow.Column(4, std::move(eRows));
             }

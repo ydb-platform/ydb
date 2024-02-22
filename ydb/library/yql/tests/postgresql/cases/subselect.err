@@ -1,3 +1,7 @@
+Registering pre-existing tables
+	INT4_TBL
+	INT8_TBL
+	TEXT_TBL
 <sql-statement>
 --
 -- SUBSELECT
@@ -197,10 +201,6 @@ SELECT ss.f1 AS "Correlated Field", ss.f3 AS "Second Field"
   WHERE f1 NOT IN (SELECT f1+1 FROM INT4_TBL
                    WHERE f1 != ss.f1 AND f1 < 2147483647);
 </sql-statement>
--stdin-:<main>: Fatal: Table metadata loading
-
-    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.INT4_TBL
-    
 <sql-statement>
 select q1, float8(count(*)) / (select count(*) from int8_tbl)
 from int8_tbl group by q1 order by q1;

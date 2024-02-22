@@ -1,3 +1,5 @@
+Registering pre-existing tables
+	INT8_TBL
 <sql-statement>
 --
 -- SELECT

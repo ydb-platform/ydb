@@ -671,7 +671,7 @@ private:
         std::unique_ptr<TWideUnboxedValuesSpillerAdapter> InitialState; //state collected before switching to spilling mode
         std::unique_ptr<TWideUnboxedValuesSpillerAdapter> Data; //data collected in spilling mode
     };
-    static constexpr size_t SpilledBucketCount = 4;
+    static constexpr size_t SpilledBucketCount = 128;
     std::deque<TSpilledBucket> SpilledBuckets;
     ISpiller::TPtr Spiller;
     EFetchResult InputDataFetchResult;

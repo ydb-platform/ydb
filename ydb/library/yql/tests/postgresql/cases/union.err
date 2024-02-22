@@ -4,6 +4,7 @@ Registering pre-existing tables
 	INT8_TBL
 	CHAR_TBL
 	TEXT_TBL
+	FLOAT8_TBL
 <sql-statement>
 --
 -- UNION (also INTERSECT, EXCEPT)
@@ -69,38 +70,22 @@ UNION
 SELECT f1 FROM FLOAT8_TBL
 ORDER BY 1;
 </sql-statement>
--stdin-:<main>: Fatal: Table metadata loading
-
-    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.FLOAT8_TBL
-    
 <sql-statement>
 SELECT f1 AS ten FROM FLOAT8_TBL
 UNION ALL
 SELECT f1 FROM FLOAT8_TBL;
 </sql-statement>
--stdin-:<main>: Fatal: Table metadata loading
-
-    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.FLOAT8_TBL
-    
 <sql-statement>
 SELECT f1 AS nine FROM FLOAT8_TBL
 UNION
 SELECT f1 FROM INT4_TBL
 ORDER BY 1;
 </sql-statement>
--stdin-:<main>: Fatal: Table metadata loading
-
-    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.FLOAT8_TBL
-    
 <sql-statement>
 SELECT f1 AS ten FROM FLOAT8_TBL
 UNION ALL
 SELECT f1 FROM INT4_TBL;
 </sql-statement>
--stdin-:<main>: Fatal: Table metadata loading
-
-    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.FLOAT8_TBL
-    
 <sql-statement>
 SELECT f1 AS five FROM FLOAT8_TBL
   WHERE f1 BETWEEN -1e6 AND 1e6
@@ -109,10 +94,22 @@ SELECT f1 FROM INT4_TBL
   WHERE f1 BETWEEN 0 AND 1000000
 ORDER BY 1;
 </sql-statement>
--stdin-:<main>: Fatal: Table metadata loading
+-stdin-:<main>: Error: Type annotation
 
-    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.FLOAT8_TBL
-    
+    -stdin-:<main>:1:1: Error: At function: RemovePrefixMembers, At function: PgSelect
+    	SELECT f1 AS five FROM FLOAT8_TBL
+	^
+        -stdin-:<main>: Error: At function: PgSetItem
+        
+            -stdin-:<main>:1:1: Error: At function: PgWhere
+            	SELECT f1 AS five FROM FLOAT8_TBL
+	^
+                -stdin-:<main>:2:12: Error: At function: PgBetween
+                	  WHERE f1 BETWEEN -1e6 AND 1e6
+	           ^
+                    -stdin-:<main>:2:12: Error: Mismatch of type of between elements: float8 and numeric
+                    	  WHERE f1 BETWEEN -1e6 AND 1e6
+	           ^
 <sql-statement>
 SELECT CAST(f1 AS char(4)) AS three FROM VARCHAR_TBL
 UNION

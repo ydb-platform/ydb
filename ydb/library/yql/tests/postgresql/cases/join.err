@@ -3,6 +3,7 @@ Registering pre-existing tables
 	INT2_TBL
 	INT8_TBL
 	TEXT_TBL
+	FLOAT8_TBL
 <sql-statement>
 --
 -- JOIN

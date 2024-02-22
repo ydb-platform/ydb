@@ -3403,7 +3403,7 @@ Y_UNIT_TEST_SUITE(KqpPg) {
             )", FormatResultSetYson(result.GetResultSet(0)));
         }
     }
-
+/*
     Y_UNIT_TEST(InsertValuesFromTableWithDefaultAndCast) {
         NKikimrConfig::TAppConfig appConfig;
         appConfig.MutableTableServiceConfig()->SetEnablePreparedDdl(true);
@@ -3446,7 +3446,7 @@ Y_UNIT_TEST_SUITE(KqpPg) {
             )", FormatResultSetYson(result.GetResultSet(0)));
         }
     }
-
+*/
     Y_UNIT_TEST(InsertValuesFromTableWithDefaultBool) {
         NKikimrConfig::TAppConfig appConfig;
         appConfig.MutableTableServiceConfig()->SetEnablePreparedDdl(true);

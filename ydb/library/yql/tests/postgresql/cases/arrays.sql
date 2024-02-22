@@ -133,6 +133,22 @@ select cardinality('[2:4]={5,6,7}'::int[]);
 select cardinality('{{1,2}}'::int[]);
 select cardinality('{{1,2},{3,4},{5,6}}'::int[]);
 select cardinality('{{{1,9},{5,6}},{{2,3},{3,4}}}'::int[]);
+-- array_agg(anyarray)
+select array_agg(ar)
+  from (values ('{1,2}'::int[]), ('{3,4}'::int[])) v(ar);
+select array_agg(ar)
+  from (select array_agg(array[i, i+1, i-1])
+        from generate_series(1,2) a(i)) b(ar);
+select array_agg(array[i+1.2, i+1.3, i+1.4]) from generate_series(1,3) g(i);
+select array_agg(array['Hello', i::text]) from generate_series(9,11) g(i);
+-- errors
+select array_agg('{}'::int[]) from generate_series(1,2);
+select array_agg(null::int[]) from generate_series(1,2);
+select array_agg(ar)
+  from (values ('{1,2}'::int[]), ('{3}'::int[])) v(ar);
+-- array(select array-value ...)
+select array(select array[i,i/2] from generate_series(1,5) i);
+select array(select array['Hello', i::text] from generate_series(9,11) i);
 -- Insert/update on a column that is array of composite
 create temp table t1 (f1 int8_tbl[]);
 -- Check that arrays of composites are safely detoasted when needed

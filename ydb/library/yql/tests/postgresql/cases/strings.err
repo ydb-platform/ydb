@@ -1,3 +1,7 @@
+Registering pre-existing tables
+	VARCHAR_TBL
+	CHAR_TBL
+	TEXT_TBL
 <sql-statement>
 --
 -- STRINGS
@@ -345,17 +349,9 @@ SELECT E'De\\123dBeEf'::bytea;
 --
 SELECT CAST(f1 AS text) AS "text(char)" FROM CHAR_TBL;
 </sql-statement>
--stdin-:<main>: Fatal: Table metadata loading
-
-    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.CHAR_TBL
-    
 <sql-statement>
 SELECT CAST(f1 AS text) AS "text(varchar)" FROM VARCHAR_TBL;
 </sql-statement>
--stdin-:<main>: Fatal: Table metadata loading
-
-    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.VARCHAR_TBL
-    
 <sql-statement>
 SELECT CAST(name 'namefield' AS text) AS "text(name)";
 </sql-statement>
@@ -363,42 +359,22 @@ SELECT CAST(name 'namefield' AS text) AS "text(name)";
 -- since this is an explicit cast, it should truncate w/o error:
 SELECT CAST(f1 AS char(10)) AS "char(text)" FROM TEXT_TBL;
 </sql-statement>
--stdin-:<main>: Fatal: Table metadata loading
-
-    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.TEXT_TBL
-    
 <sql-statement>
 -- note: implicit-cast case is tested in char.sql
 SELECT CAST(f1 AS char(20)) AS "char(text)" FROM TEXT_TBL;
 </sql-statement>
--stdin-:<main>: Fatal: Table metadata loading
-
-    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.TEXT_TBL
-    
 <sql-statement>
 SELECT CAST(f1 AS char(10)) AS "char(varchar)" FROM VARCHAR_TBL;
 </sql-statement>
--stdin-:<main>: Fatal: Table metadata loading
-
-    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.VARCHAR_TBL
-    
 <sql-statement>
 SELECT CAST(name 'namefield' AS char(10)) AS "char(name)";
 </sql-statement>
 <sql-statement>
 SELECT CAST(f1 AS varchar) AS "varchar(text)" FROM TEXT_TBL;
 </sql-statement>
--stdin-:<main>: Fatal: Table metadata loading
-
-    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.TEXT_TBL
-    
 <sql-statement>
 SELECT CAST(f1 AS varchar) AS "varchar(char)" FROM CHAR_TBL;
 </sql-statement>
--stdin-:<main>: Fatal: Table metadata loading
-
-    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.CHAR_TBL
-    
 <sql-statement>
 SELECT CAST(name 'namefield' AS varchar) AS "varchar(name)";
 </sql-statement>

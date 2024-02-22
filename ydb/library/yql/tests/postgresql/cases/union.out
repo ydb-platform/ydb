@@ -124,6 +124,47 @@ SELECT 1.1 AS two UNION (SELECT 2 UNION ALL SELECT 2) ORDER BY 1;
    2
 (2 rows)
 
+SELECT f1 AS three FROM VARCHAR_TBL
+UNION
+SELECT CAST(f1 AS varchar) FROM CHAR_TBL
+ORDER BY 1;
+ three 
+-------
+ a
+ ab
+ abcd
+(3 rows)
+
+SELECT f1 AS eight FROM VARCHAR_TBL
+UNION ALL
+SELECT f1 FROM CHAR_TBL;
+ eight 
+-------
+ a
+ ab
+ abcd
+ abcd
+ a
+ ab
+ abcd
+ abcd
+(8 rows)
+
+SELECT f1 AS five FROM TEXT_TBL
+UNION
+SELECT f1 FROM VARCHAR_TBL
+UNION
+SELECT TRIM(TRAILING FROM f1) FROM CHAR_TBL
+ORDER BY 1;
+       five        
+-------------------
+ a
+ ab
+ abcd
+ doh!
+ hi de ho neighbor
+(5 rows)
+
 -- nested cases
 (SELECT 1,2,3 UNION SELECT 4,5,6) INTERSECT SELECT 4,5,6;
  ?column? | ?column? | ?column? 

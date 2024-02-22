@@ -30,7 +30,7 @@ namespace NWilson {
         TString ServiceName;
         std::unique_ptr<IGrpcSigner> GrpcSigner;
 
-        ui64 MaxSpansPerSecond = Max<ui64>();
+        ui64 MaxExportedSpansPerSecond = Max<ui64>();
         ui64 MaxSpansInBatch = 150;
         ui64 MaxBytesInBatch = 20'000'000;
         ui64 MaxBatchAccumulationMilliseconds = 1'000;

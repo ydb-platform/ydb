@@ -146,7 +146,17 @@ namespace NKqpHelpers {
         if (result.result_sets_size() == 0) {
             return "<empty>";
         }
-        return FormatResult(result.result_sets(0));
+        if (result.result_sets_size() == 1) {
+            return FormatResult(result.result_sets(0));
+        }
+        TStringBuilder sb;
+        for (int i = 0; i < result.result_sets_size(); ++i) {
+            if (i != 0) {
+                sb << "\n";
+            }
+            sb << FormatResult(result.result_sets(i));
+        }
+        return sb;
     }
 
     inline TString FormatResult(const Ydb::Table::ExecuteDataQueryResponse& response) {

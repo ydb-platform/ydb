@@ -71,7 +71,7 @@ namespace NSQLTranslationV1 {
         virtual bool IsStream() const;
         virtual EOrderKind GetOrderKind() const;
         virtual TWriteSettings GetWriteSettings() const;
-        TNodePtr PrepareSamplingRate(TPosition pos, ESampleClause clause, TNodePtr samplingRate, bool tempUseBlockExpr); //TODO fixme YQL-17526
+        TNodePtr PrepareSamplingRate(TPosition pos, ESampleClause clause, TNodePtr samplingRate);
         virtual bool SetSamplingOptions(TContext& ctx, TPosition pos, ESampleClause clause, ESampleMode mode, TNodePtr samplingRate, TNodePtr samplingSeed);
         virtual bool SetTableHints(TContext& ctx, TPosition pos, const TTableHints& hints, const TTableHints& contextHints);
         virtual bool CalculateGroupingHint(TContext& ctx, const TVector<TString>& columns, ui64& hint) const;

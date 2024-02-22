@@ -1,3 +1,5 @@
+Registering pre-existing tables
+	yt.plato.INT2_TBL -> /tmp/tmp3epwr9em/INT2_TBL
 <sql-statement>
 --
 -- NUMEROLOGY
@@ -22,10 +24,6 @@ INSERT INTO TEMP_FLOAT (f1)
 INSERT INTO TEMP_FLOAT (f1)
   SELECT float8(f1) FROM INT2_TBL;
 </sql-statement>
--stdin-:<main>: Fatal: Table metadata loading
-
-    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.INT2_TBL
-    
 <sql-statement>
 SELECT f1 FROM TEMP_FLOAT
   ORDER BY f1;
@@ -47,10 +45,6 @@ INSERT INTO TEMP_INT4 (f1)
 INSERT INTO TEMP_INT4 (f1)
   SELECT int4(f1) FROM INT2_TBL;
 </sql-statement>
--stdin-:<main>: Fatal: Table metadata loading
-
-    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.INT2_TBL
-    
 <sql-statement>
 SELECT f1 FROM TEMP_INT4
   ORDER BY f1;

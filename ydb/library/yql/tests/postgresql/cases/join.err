@@ -1,5 +1,6 @@
 Registering pre-existing tables
-	yt.plato.TEXT_TBL -> /tmp/tmpa5ar86g1/TEXT_TBL
+	yt.plato.INT2_TBL -> /tmp/tmp7pveaovt/INT2_TBL
+	yt.plato.TEXT_TBL -> /tmp/tmp7pveaovt/TEXT_TBL
 <sql-statement>
 --
 -- JOIN

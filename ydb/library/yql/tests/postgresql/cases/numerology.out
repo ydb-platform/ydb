@@ -8,8 +8,12 @@
 --  so let's try explicit conversions for now - tgl 97/05/07
 --
 CREATE TABLE TEMP_FLOAT (f1 FLOAT8);
+INSERT INTO TEMP_FLOAT (f1)
+  SELECT float8(f1) FROM INT2_TBL;
 -- int4
 CREATE TABLE TEMP_INT4 (f1 INT4);
+INSERT INTO TEMP_INT4 (f1)
+  SELECT int4(f1) FROM INT2_TBL;
 -- int2
 CREATE TABLE TEMP_INT2 (f1 INT2);
 --

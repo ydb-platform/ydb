@@ -1,3 +1,5 @@
+Registering pre-existing tables
+	yt.plato.CHAR_TBL -> /tmp/tmp0o_794eb/CHAR_TBL
 <sql-statement>
 --
 -- STRINGS
@@ -345,10 +347,6 @@ SELECT E'De\\123dBeEf'::bytea;
 --
 SELECT CAST(f1 AS text) AS "text(char)" FROM CHAR_TBL;
 </sql-statement>
--stdin-:<main>: Fatal: Table metadata loading
-
-    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.CHAR_TBL
-    
 <sql-statement>
 SELECT CAST(f1 AS text) AS "text(varchar)" FROM VARCHAR_TBL;
 </sql-statement>
@@ -395,10 +393,6 @@ SELECT CAST(f1 AS varchar) AS "varchar(text)" FROM TEXT_TBL;
 <sql-statement>
 SELECT CAST(f1 AS varchar) AS "varchar(char)" FROM CHAR_TBL;
 </sql-statement>
--stdin-:<main>: Fatal: Table metadata loading
-
-    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.CHAR_TBL
-    
 <sql-statement>
 SELECT CAST(name 'namefield' AS varchar) AS "varchar(name)";
 </sql-statement>

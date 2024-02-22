@@ -243,6 +243,19 @@ SELECT E'De\\123dBeEf'::bytea;
  DeSdBeEf
 (1 row)
 
+--
+-- test conversions between various string types
+-- E021-10 implicit casting among the character data types
+--
+SELECT CAST(f1 AS text) AS "text(char)" FROM CHAR_TBL;
+ text(char) 
+------------
+ a
+ ab
+ abcd
+ abcd
+(4 rows)
+
 SELECT CAST(name 'namefield' AS text) AS "text(name)";
  text(name) 
 ------------
@@ -254,6 +267,15 @@ SELECT CAST(name 'namefield' AS char(10)) AS "char(name)";
 ------------
  namefield 
 (1 row)
+
+SELECT CAST(f1 AS varchar) AS "varchar(char)" FROM CHAR_TBL;
+ varchar(char) 
+---------------
+ a
+ ab
+ abcd
+ abcd
+(4 rows)
 
 SELECT CAST(name 'namefield' AS varchar) AS "varchar(name)";
  varchar(name) 

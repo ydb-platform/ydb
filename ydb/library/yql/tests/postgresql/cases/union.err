@@ -1,3 +1,5 @@
+Registering pre-existing tables
+	yt.plato.CHAR_TBL -> /tmp/tmpe_04_836/CHAR_TBL
 <sql-statement>
 --
 -- UNION (also INTERSECT, EXCEPT)

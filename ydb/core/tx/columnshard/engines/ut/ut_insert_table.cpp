@@ -47,7 +47,7 @@ Y_UNIT_TEST_SUITE(TColumnEngineTestInsertTable) {
         ui64 writeId = 0;
         ui64 tableId = 0;
         TString dedupId = "0";
-        TUnifiedBlobId blobId1(2222, 1, 1, 100, 1);
+        TUnifiedBlobId blobId1(2222, 1, 1, 100, 2, 0, 1);
 
         TTestInsertTableDB dbTable;
         TInsertTable insertTable;
@@ -62,7 +62,7 @@ Y_UNIT_TEST_SUITE(TColumnEngineTestInsertTable) {
         UNIT_ASSERT(!ok);
 
         // insert different blodId with the same writeId and dedupId
-        TUnifiedBlobId blobId2(2222, 1, 2, 100, 1);
+        TUnifiedBlobId blobId2(2222, 1, 2, 100, 2, 0, 1);
         ok = insertTable.Insert(dbTable, TInsertedData(writeId, tableId, dedupId, blobId2, TLocalHelper::GetMetaProto(), indexSnapshot, {}));
         UNIT_ASSERT(!ok);
 

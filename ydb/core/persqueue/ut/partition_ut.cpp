@@ -1609,9 +1609,11 @@ Y_UNIT_TEST_F(WriteSubDomainOutOfSpace_IgnoreQuotaDeadline, TPartitionFixture)
 }
 
 Y_UNIT_TEST_F(GetPartitionWriteInfoSuccess, TPartitionFixture) {
+    Ctx->Runtime->SetLogPriority( NKikimrServices::PERSQUEUE, NActors::NLog::PRI_DEBUG);
+    Ctx->Runtime->GetAppData().PQConfig.MutableQuotingConfig()->SetEnableQuoting(false);
+
     CreatePartition({
                     .Partition=TPartitionId{2, 10, 100'001},
-                    .Begin=0, .End=10,
                     //
                     // partition configuration
                     //
@@ -1631,34 +1633,49 @@ Y_UNIT_TEST_F(GetPartitionWriteInfoSuccess, TPartitionFixture) {
     auto ownerCookie = ownerEvent->Response->GetPartitionResponse().GetCmdGetOwnershipResult().GetOwnerCookie();
 
     TAutoPtr<IEventHandle> handle;
-    std::function<bool(const TEvPQ::TEvError&)> truth = [&](const TEvPQ::TEvError& e) { return cookie == e.Cookie; };
+    auto truth = [&](const TEvPQ::TEvProxyResponse& e) { return cookie == e.Cookie; };
 
     TString data = "data for write";
 
     for (auto i = 0; i < 3; i++) {
-        SendWrite(++cookie, i, ownerCookie, i + 100, data, false, (i+1)*2);
+        SendWrite(++cookie, i, ownerCookie, i + 100, data, true, (i+1)*2);
         SendDiskStatusResponse();
-        auto event = Ctx->Runtime->GrabEdgeEvent<TEvPQ::TEvProxyResponse>(handle, TDuration::Seconds(1));
+        {
+            auto event = Ctx->Runtime->GrabEdgeEvent<TEvPQ::TEvError>(TDuration::Seconds(1));
+            UNIT_ASSERT(event == nullptr);
+        }
+        auto event = Ctx->Runtime->GrabEdgeEventIf<TEvPQ::TEvProxyResponse>(handle, truth, TDuration::Seconds(1));
+        UNIT_ASSERT(event != nullptr);
+    }
+    SendWrite(++cookie, 3, ownerCookie, 110, data, true, 7);
+    SendDiskStatusResponse();
+    {
+        auto event = Ctx->Runtime->GrabEdgeEventIf<TEvPQ::TEvProxyResponse>(handle, truth, TDuration::Seconds(1));
         UNIT_ASSERT(event != nullptr);
     }
     SendGetWriteInfo(100'001);
     {
+        {
+            auto event = Ctx->Runtime->GrabEdgeEvent<TEvPQ::TEvGetWriteInfoError>(TDuration::Seconds(1));
+            UNIT_ASSERT(event == nullptr);
+
+        }
         auto event = Ctx->Runtime->GrabEdgeEvent<TEvPQ::TEvGetWriteInfoResponse>(TDuration::Seconds(1));
         UNIT_ASSERT(event != nullptr);
         Cerr << "Got write info resposne. Body keys: " << event->BodyKeys.size() << ", head: " << event->BlobsFromHead.size() << ", src id info: " << event->SrcIdInfo.size() << Endl;
         UNIT_ASSERT_VALUES_EQUAL(event->BodyKeys.size(), 1);
-        UNIT_ASSERT_VALUES_EQUAL(event->BlobsFromHead.size(), 3);
+        UNIT_ASSERT_VALUES_EQUAL(event->BlobsFromHead.size(), 1);
         UNIT_ASSERT_VALUES_EQUAL(event->SrcIdInfo.size(), 1);
 
         UNIT_ASSERT_VALUES_EQUAL(event->SrcIdInfo.begin()->second.MinSeqNo, 2);
-        UNIT_ASSERT_VALUES_EQUAL(event->SrcIdInfo.begin()->second.SeqNo, 6);
-        UNIT_ASSERT_VALUES_EQUAL(event->SrcIdInfo.begin()->second.Offset, 102);
+        UNIT_ASSERT_VALUES_EQUAL(event->SrcIdInfo.begin()->second.SeqNo, 7);
+        UNIT_ASSERT_VALUES_EQUAL(event->SrcIdInfo.begin()->second.Offset, 110);
 
-        UNIT_ASSERT(event->BodyKeys.begin()->Key.ToString().StartsWith("d0000000001_"));
-        UNIT_ASSERT(event->BlobsFromHead.begin()->GetBlobSize() > 0);
         Cerr << "Body key 1: " << event->BodyKeys.begin()->Key.ToString() << ", size: " << event->BodyKeys.begin()->CumulativeSize << Endl;
         Cerr << "Body key last " << event->BodyKeys.back().Key.ToString() << ", size: " << event->BodyKeys.back().CumulativeSize << Endl;
         Cerr << "Head blob 1 size: " << event->BlobsFromHead.begin()->GetBlobSize() << Endl;
+        UNIT_ASSERT(event->BodyKeys.begin()->Key.ToString().StartsWith("D0000100001_"));
+        UNIT_ASSERT(event->BlobsFromHead.begin()->GetBlobSize() > 0);
     }
 
 } // GetPartitionWriteInfoSuccess

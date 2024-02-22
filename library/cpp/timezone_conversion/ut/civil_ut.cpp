@@ -103,6 +103,11 @@ Y_UNIT_TEST_SUITE(DateTime) {
         UNIT_ASSERT_VALUES_EQUAL(NDatetime::WeekdayOnTheWeek(d, NDatetime::TWeekday::wednesday), NDatetime::TCivilDay(2013, 1, 2));
         UNIT_ASSERT_VALUES_EQUAL(NDatetime::WeekdayOnTheWeek(d, NDatetime::TWeekday::friday), NDatetime::TCivilDay(2013, 1, 4));
     }
+    Y_UNIT_TEST(WeekdayFromCivilSecond) {
+        NDatetime::TCivilSecond s(2013, 1, 2, 10, 12, 9);
+        NDatetime::TWeekday wd = NDatetime::GetWeekday(s);
+        UNIT_ASSERT_VALUES_EQUAL(wd, NDatetime::TWeekday::wednesday);
+    }
     Y_UNIT_TEST(CivilUnit) {
         using namespace NDatetime;
 

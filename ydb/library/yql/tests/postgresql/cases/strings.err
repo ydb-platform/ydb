@@ -1,6 +1,7 @@
 Registering pre-existing tables
-	yt.plato.VARCHAR_TBL -> /tmp/tmpg0rwt7a_/VARCHAR_TBL
-	yt.plato.CHAR_TBL -> /tmp/tmpg0rwt7a_/CHAR_TBL
+	yt.plato.VARCHAR_TBL -> /tmp/tmp57f9tkgt/VARCHAR_TBL
+	yt.plato.CHAR_TBL -> /tmp/tmp57f9tkgt/CHAR_TBL
+	yt.plato.TEXT_TBL -> /tmp/tmp57f9tkgt/TEXT_TBL
 <sql-statement>
 --
 -- STRINGS
@@ -358,18 +359,10 @@ SELECT CAST(name 'namefield' AS text) AS "text(name)";
 -- since this is an explicit cast, it should truncate w/o error:
 SELECT CAST(f1 AS char(10)) AS "char(text)" FROM TEXT_TBL;
 </sql-statement>
--stdin-:<main>: Fatal: Table metadata loading
-
-    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.TEXT_TBL
-    
 <sql-statement>
 -- note: implicit-cast case is tested in char.sql
 SELECT CAST(f1 AS char(20)) AS "char(text)" FROM TEXT_TBL;
 </sql-statement>
--stdin-:<main>: Fatal: Table metadata loading
-
-    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.TEXT_TBL
-    
 <sql-statement>
 SELECT CAST(f1 AS char(10)) AS "char(varchar)" FROM VARCHAR_TBL;
 </sql-statement>
@@ -379,10 +372,6 @@ SELECT CAST(name 'namefield' AS char(10)) AS "char(name)";
 <sql-statement>
 SELECT CAST(f1 AS varchar) AS "varchar(text)" FROM TEXT_TBL;
 </sql-statement>
--stdin-:<main>: Fatal: Table metadata loading
-
-    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.TEXT_TBL
-    
 <sql-statement>
 SELECT CAST(f1 AS varchar) AS "varchar(char)" FROM CHAR_TBL;
 </sql-statement>

@@ -1,0 +1,5 @@
+CREATE TABLE TEXT_TBL (f1 text);
+
+INSERT INTO TEXT_TBL VALUES ('doh!');
+INSERT INTO TEXT_TBL VALUES ('hi de ho neighbor');
+

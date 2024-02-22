@@ -1,6 +1,7 @@
 Registering pre-existing tables
-	yt.plato.VARCHAR_TBL -> /tmp/tmp45ke7dly/VARCHAR_TBL
-	yt.plato.CHAR_TBL -> /tmp/tmp45ke7dly/CHAR_TBL
+	yt.plato.VARCHAR_TBL -> /tmp/tmpm6abltsp/VARCHAR_TBL
+	yt.plato.CHAR_TBL -> /tmp/tmpm6abltsp/CHAR_TBL
+	yt.plato.TEXT_TBL -> /tmp/tmpm6abltsp/TEXT_TBL
 <sql-statement>
 --
 -- UNION (also INTERSECT, EXCEPT)
@@ -135,10 +136,6 @@ UNION
 SELECT TRIM(TRAILING FROM f1) FROM CHAR_TBL
 ORDER BY 1;
 </sql-statement>
--stdin-:<main>: Fatal: Table metadata loading
-
-    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.TEXT_TBL
-    
 <sql-statement>
 --
 -- INTERSECT and EXCEPT

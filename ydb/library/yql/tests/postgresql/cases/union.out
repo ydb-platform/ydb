@@ -150,6 +150,21 @@ SELECT f1 FROM CHAR_TBL;
  abcd
 (8 rows)
 
+SELECT f1 AS five FROM TEXT_TBL
+UNION
+SELECT f1 FROM VARCHAR_TBL
+UNION
+SELECT TRIM(TRAILING FROM f1) FROM CHAR_TBL
+ORDER BY 1;
+       five        
+-------------------
+ a
+ ab
+ abcd
+ doh!
+ hi de ho neighbor
+(5 rows)
+
 -- nested cases
 (SELECT 1,2,3 UNION SELECT 4,5,6) INTERSECT SELECT 4,5,6;
  ?column? | ?column? | ?column? 

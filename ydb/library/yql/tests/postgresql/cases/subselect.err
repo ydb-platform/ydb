@@ -1,3 +1,5 @@
+Registering pre-existing tables
+	yt.plato.TEXT_TBL -> /tmp/tmpgu0ap011/TEXT_TBL
 <sql-statement>
 --
 -- SUBSELECT

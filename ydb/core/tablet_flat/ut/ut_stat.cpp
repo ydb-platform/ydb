@@ -23,7 +23,7 @@ namespace {
         TMap<TGroupId, TSet<TPageId>> Touched;
     };
 
-    NPage::TConf PageConf(size_t groups, bool writeBTreeIndex) noexcept
+    NPage::TConf PageConf(size_t groups, bool writeBTreeIndex, bool lowResolution = false) noexcept
     {
         NPage::TConf conf{ true, 2 * 1024 };
 
@@ -31,6 +31,10 @@ namespace {
         for (size_t group : xrange(groups)) {
             conf.Group(group).IndexMin = 1024; /* Should cover index buffer grow code */
             conf.Group(group).BTreeIndexNodeTargetSize = 512; /* Should cover up/down moves */
+            if (lowResolution) {
+                // make more levels
+                conf.Group(group).BTreeIndexNodeKeysMin = conf.Group(group).BTreeIndexNodeKeysMax = 2;
+            }
         }
         conf.SmallEdge = 19;  /* Packed to page collection large cell values */
         conf.LargeEdge = 29;  /* Large values placed to single blobs */
@@ -57,14 +61,25 @@ namespace {
         }
     }
 
-    template<typename TEnv>
-    void Check(const TSubset& subset, ui64 expectedRows, ui64 expectedData, ui64 expectedIndex) {
+    void Check(const TSubset& subset, THistogram histogram, ui64 resolution) {
+        ui64 additionalErrorRate = 1;
+        if (subset.Flatten.size() > 1 && subset.Flatten[0]->GroupsCount > 1) {
+            additionalErrorRate = 2;
+        }
+        for (ui32 i = 1; i < histogram.size(); i++) {
+            auto delta = histogram[i].Value - histogram[i - 1].Value;
+            UNIT_ASSERT_GE_C(delta, resolution, "Delta = " << delta << " Resolution = " << resolution);
+            UNIT_ASSERT_LE_C(delta, resolution * additionalErrorRate * 3 / 2, "Delta = " << delta << " Resolution = " << resolution);
+        }
+    }
+
+    void Check(const TSubset& subset, ui64 expectedRows, ui64 expectedData, ui64 expectedIndex, ui64 rowCountResolution = 531, ui64 dataSizeResolution = 53105) {
         TStats stats;
-        TEnv env;
+        TTouchEnv env;
 
         const ui32 attempts = 10;
         for (ui32 attempt : xrange(attempts)) {
-            if (NTable::BuildStats(subset, stats, 531, 53105, &env)) {
+            if (NTable::BuildStats(subset, stats, rowCountResolution, dataSizeResolution, &env)) {
                 break;
             }
             UNIT_ASSERT_C(attempt + 1 < attempts, "Too many attempts");
@@ -77,14 +92,10 @@ namespace {
 
         Cerr << "RowCountHistogram:" << Endl;
         Dump(subset, stats.RowCountHistogram);
+        Check(subset, stats.RowCountHistogram, rowCountResolution);
         Cerr << "DataSizeHistogram:" << Endl;
         Dump(subset, stats.DataSizeHistogram);
-    }
-    
-    
-    void Check(const TSubset& subset, ui64 expectedRows, ui64 expectedData, ui64 expectedIndex) {
-        Check<TTestEnv>(subset, expectedRows, expectedData, expectedIndex);
-        Check<TTouchEnv>(subset, expectedRows, expectedData, expectedIndex);
+        Check(subset, stats.DataSizeHistogram, dataSizeResolution);
     }
 }
 
@@ -245,6 +256,45 @@ Y_UNIT_TEST_SUITE(BuildStats) {
         TMixerSeq mixer(4, Mass1.Saved.Size());
         auto subset = TMake(Mass1, PageConf(Mass1.Model->Scheme->Families.size(), false)).Mixed(0, 4, mixer, 0.3);
         Check(*subset, 24000, 4054290, 19168);
+    }
+
+    Y_UNIT_TEST(Single_LowResolution_BTreeIndex)
+    {
+        auto subset = TMake(Mass0, PageConf(Mass0.Model->Scheme->Families.size(), true, true)).Mixed(0, 1, TMixerOne{ });   
+        Check(*subset, 24000, 2106439, 56610, 5310, 531050);
+    }
+
+    Y_UNIT_TEST(Single_Slices_LowResolution_BTreeIndex)
+    {
+        auto subset = TMake(Mass0, PageConf(Mass0.Model->Scheme->Families.size(), true, true)).Mixed(0, 1, TMixerOne{ }, 0, 13);   
+        subset->Flatten.begin()->Slices->Describe(Cerr); Cerr << Endl;
+        Check(*subset, 12816, 1121048, 56610, 5310, 531050);
+    }
+
+    Y_UNIT_TEST(Single_Groups_LowResolution_BTreeIndex)
+    {
+        auto subset = TMake(Mass1, PageConf(Mass1.Model->Scheme->Families.size(), true, true)).Mixed(0, 1, TMixerOne{ });   
+        Check(*subset, 24000, 2460139, 29557, 5310, 531050);
+    }
+
+    Y_UNIT_TEST(Single_Groups_Slices_LowResolution_BTreeIndex)
+    {
+        auto subset = TMake(Mass1, PageConf(Mass1.Model->Scheme->Families.size(), true, true)).Mixed(0, 1, TMixerOne{ }, 0, 13);   
+        subset->Flatten.begin()->Slices->Describe(Cerr); Cerr << Endl;
+        Check(*subset, 10440, 1060798, 29557, 5310, 531050);
+    }
+
+    Y_UNIT_TEST(Single_Groups_History_LowResolution_BTreeIndex)
+    {
+        auto subset = TMake(Mass1, PageConf(Mass1.Model->Scheme->Families.size(), true, true)).Mixed(0, 1, TMixerOne{ }, 0.3);   
+        Check(*subset, 24000, 4054050, 42292, 5310, 531050);
+    }
+
+    Y_UNIT_TEST(Single_Groups_History_Slices_LowResolution_BTreeIndex)
+    {
+        auto subset = TMake(Mass1, PageConf(Mass1.Model->Scheme->Families.size(), true, true)).Mixed(0, 1, TMixerOne{ }, 0.3, 13);   
+        subset->Flatten.begin()->Slices->Describe(Cerr); Cerr << Endl;
+        Check(*subset, 13570, 2277890, 42292, 5310, 531050);
     }
 }
 

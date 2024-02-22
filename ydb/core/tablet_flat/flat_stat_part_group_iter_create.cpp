@@ -4,10 +4,10 @@
 
 namespace NKikimr::NTable {
 
-THolder<IStatsPartGroupIterator> CreateStatsPartGroupIterator(const TPart* part, IPages* env, NPage::TGroupId groupId)
+THolder<IStatsPartGroupIterator> CreateStatsPartGroupIterator(const TPart* part, IPages* env, NPage::TGroupId groupId, ui64 rowCountResolution, ui64 dataSizeResolution)
 {
     if (groupId.Index < (groupId.IsHistoric() ? part->IndexPages.BTreeHistoric : part->IndexPages.BTreeGroups).size()) {
-        return MakeHolder<TStatsPartGroupBtreeIndexIterator>(part, env, groupId);
+        return MakeHolder<TStatsPartGroupBtreeIndexIterator>(part, env, groupId, rowCountResolution, dataSizeResolution);
     } else {
         return MakeHolder<TPartIndexIt>(part, env, groupId);
     }

@@ -40,6 +40,6 @@ struct IStatsPartGroupIterator {
     virtual ~IStatsPartGroupIterator() = default;
 };
 
-THolder<IStatsPartGroupIterator> CreateStatsPartGroupIterator(const TPart* part, IPages* env, NPage::TGroupId groupId);
+THolder<IStatsPartGroupIterator> CreateStatsPartGroupIterator(const TPart* part, IPages* env, NPage::TGroupId groupId, ui64 rowCountResolution, ui64 dataSizeResolution);
     
 }

@@ -21,7 +21,8 @@ class TStatsScreenedPartIterator {
 
 public:
     TStatsScreenedPartIterator(TPartView partView, IPages* env, TIntrusiveConstPtr<TKeyCellDefaults> keyDefaults, 
-            TIntrusiveConstPtr<TFrames> small, TIntrusiveConstPtr<TFrames> large)
+            TIntrusiveConstPtr<TFrames> small, TIntrusiveConstPtr<TFrames> large,
+            ui64 rowCountResolution, ui64 dataSizeResolution)
         : Part(std::move(partView.Part))
         , KeyDefaults(std::move(keyDefaults))
         , Groups(::Reserve(Part->GroupsCount))
@@ -31,11 +32,20 @@ public:
         , Large(std::move(large))
         , CurrentHole(TScreen::Iter(Screen, CurrentHoleIdx, 0, 1))
     {
-        for (ui32 groupIndex : xrange(Part->GroupsCount)) {
-            Groups.push_back(CreateStatsPartGroupIterator(Part.Get(), env, TGroupId(groupIndex)));
-        }
-        for (ui32 groupIndex : xrange(Part->HistoricGroupsCount)) {
-            HistoricGroups.push_back(CreateStatsPartGroupIterator(Part.Get(), env, TGroupId(groupIndex, true)));
+        for (bool historic : {false, true}) {
+            for (ui32 groupIndex : xrange(historic ? Part->HistoricGroupsCount : Part->GroupsCount)) {
+                ui64 groupRowCountResolution, groupDataSizeResolution;
+                if (groupIndex == 0 && Part->GroupsCount > 1) {
+                    // make steps as small as possible because they will affect groups resolution
+                    groupRowCountResolution = groupDataSizeResolution = 0;
+                } else {
+                    groupRowCountResolution = rowCountResolution;
+                    groupDataSizeResolution = dataSizeResolution;
+                }
+
+                (historic ? HistoricGroups : Groups).push_back(
+                    CreateStatsPartGroupIterator(Part.Get(), env, TGroupId(groupIndex, historic), groupRowCountResolution, groupDataSizeResolution));
+            }
         }
     }
 

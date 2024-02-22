@@ -1,3 +1,5 @@
+Registering pre-existing tables
+	INT4_TBL
 <sql-statement>
 --
 -- SELECT_DISTINCT_ON

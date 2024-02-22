@@ -1,4 +1,5 @@
 Registering pre-existing tables
+	INT4_TBL
 	VARCHAR_TBL
 	CHAR_TBL
 	TEXT_TBL

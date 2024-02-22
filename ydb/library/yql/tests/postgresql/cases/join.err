@@ -1,4 +1,5 @@
 Registering pre-existing tables
+	INT4_TBL
 	INT2_TBL
 	TEXT_TBL
 <sql-statement>

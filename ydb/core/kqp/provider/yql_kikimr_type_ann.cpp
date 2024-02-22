@@ -418,6 +418,13 @@ private:
         THashSet<TString> generateColumnsIfInsertColumnsSet;
 
         for(const auto& [name, info] : table->Metadata->Columns) {
+            if (info.IsBuildInProgress && rowType->FindItem(name)) {
+                ctx.AddError(YqlIssue(pos, TIssuesIds::KIKIMR_BAD_REQUEST, TStringBuilder()
+                    << "Column is under build operation, write operation is not allowed to column: " << name
+                    << " for table: " << table->Metadata->Name));
+                return TStatus::Error;
+            }
+
             if (rowType->FindItem(name)) {
                 continue;
             }
@@ -431,7 +438,7 @@ private:
             }
 
             if (info.IsDefaultKindDefined()) {
-                if (op == TYdbOperation::Upsert) {
+                if (op == TYdbOperation::Upsert && !info.IsBuildInProgress) {
                     generateColumnsIfInsertColumnsSet.emplace(name);
                 }
 
@@ -625,6 +632,13 @@ private:
                     << "Column '" << item->GetName() << "' does not exist in table '" << node.Table().Value() << "'."));
                 return TStatus::Error;
             }
+
+            if (column->IsBuildInProgress) {
+                ctx.AddError(YqlIssue(ctx.GetPosition(node.Pos()), TIssuesIds::KIKIMR_BAD_REQUEST, TStringBuilder()
+                    << "Column '" << item->GetName() << "' is under the build operation '" << node.Table().Value() << "'."));
+                return TStatus::Error;
+            }
+
             if (column->NotNull && item->HasOptionalOrNull()) {
                 if (item->GetItemType()->GetKind() == ETypeAnnotationKind::Pg) {
                     //no type-level notnull check for pg types.
@@ -635,6 +649,8 @@ private:
                 return TStatus::Error;
             }
         }
+
+
 
         if (!node.ReturningColumns().Empty()) {
             ctx.AddError(TIssue(ctx.GetPosition(node.Pos()), TStringBuilder()
@@ -808,7 +824,13 @@ virtual TStatus HandleCreateTable(TKiCreateTable create, TExprContext& ctx) over
 
                         columnMeta.SetDefaultFromLiteral();
 
-                        if (auto pgConst = constraint.Value().Maybe<TCoPgConst>()) {
+                        YQL_ENSURE(constraint.Value().IsValid());
+                        const auto& constrValue = constraint.Value().Cast();
+                        bool isPgNull = constrValue.Ptr()->IsCallable() &&
+                            constrValue.Ptr()->Content() == "PgCast" && constrValue.Ptr()->ChildrenSize() >= 1 &&
+                            constrValue.Ptr()->Child(0)->IsCallable() && constrValue.Ptr()->Child(0)->Content() == "Null";
+
+                        if (constrValue.Maybe<TCoPgConst>() || isPgNull) {
                             auto actualPgType = actualType->Cast<TPgExprType>();
                             YQL_ENSURE(actualPgType);
 
@@ -819,25 +841,38 @@ virtual TStatus HandleCreateTable(TKiCreateTable create, TExprContext& ctx) over
                                 return TStatus::Error;
                             }
 
-                            TString content = TString(pgConst.Cast().Value().Value());
-                            auto parseResult = NKikimr::NPg::PgNativeBinaryFromNativeText(content, typeDesc);
-                            if (parseResult.Error) {
-                                ctx.AddError(TIssue(ctx.GetPosition(constraint.Pos()),
-                                    TStringBuilder() << "Failed to parse default expr for typename " << actualPgType->GetName()
-                                    << ", error reason: " << *parseResult.Error));
-                                return TStatus::Error;
+                            if (isPgNull) {
+                                if (columnMeta.NotNull) {
+                                    ctx.AddError(TIssue(ctx.GetPosition(constraint.Pos()), TStringBuilder() << "Default expr " << columnName
+                                        << " is nullable or optional, but column has not null constraint. "));
+                                    return TStatus::Error;
+                                }
+
+                                columnMeta.DefaultFromLiteral.mutable_value()->set_null_flag_value(NProtoBuf::NULL_VALUE);
+
+                            } else {
+                                YQL_ENSURE(constrValue.Maybe<TCoPgConst>());
+                                auto pgConst = constrValue.Cast<TCoPgConst>();
+                                TString content = TString(pgConst.Value().Value());
+                                auto parseResult = NKikimr::NPg::PgNativeBinaryFromNativeText(content, typeDesc);
+                                if (parseResult.Error) {
+                                    ctx.AddError(TIssue(ctx.GetPosition(constraint.Pos()),
+                                        TStringBuilder() << "Failed to parse default expr for typename " << actualPgType->GetName()
+                                        << ", error reason: " << *parseResult.Error));
+                                    return TStatus::Error;
+                                }
+
+                                columnMeta.DefaultFromLiteral.mutable_value()->set_bytes_value(parseResult.Str);
                             }
 
-                            columnMeta.DefaultFromLiteral.mutable_value()->set_bytes_value(parseResult.Str);
                             auto* pg = columnMeta.DefaultFromLiteral.mutable_type()->mutable_pg_type();
-
                             pg->set_type_name(NKikimr::NPg::PgTypeNameFromTypeDesc(typeDesc));
                             pg->set_oid(NKikimr::NPg::PgTypeIdFromTypeDesc(typeDesc));
-                        } else if (auto literal = constraint.Value().Maybe<TCoDataCtor>()) {
-                            FillLiteralProto(constraint.Value().Cast<TCoDataCtor>(), columnMeta.DefaultFromLiteral);
+                        } else if (auto literal = constrValue.Maybe<TCoDataCtor>()) {
+                            FillLiteralProto(literal.Cast(), columnMeta.DefaultFromLiteral);
                         } else {
                             ctx.AddError(TIssue(ctx.GetPosition(constraint.Pos()),
-                                TStringBuilder() << "Unsupported type of default value " << constraint.Value().Cast().Ptr()->Content()));
+                                TStringBuilder() << "Unsupported type of default value"));
                             return TStatus::Error;
                         }
 

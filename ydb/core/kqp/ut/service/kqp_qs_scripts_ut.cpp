@@ -225,7 +225,7 @@ Y_UNIT_TEST_SUITE(KqpQueryServiceScripts) {
         UNIT_ASSERT_C(results.IsSuccess(), results.GetIssues().ToString());
 
         CompareYson(R"([
-            111
+            [17]
         ])", FormatResultSetYson(results.GetResultSet()));
     }
 

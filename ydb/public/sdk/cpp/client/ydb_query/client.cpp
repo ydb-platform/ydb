@@ -81,14 +81,6 @@ public:
             Connections_, DbDriverState_, query, txControl, params, settings, session);
     }
 
-    NThreading::TFuture<TScriptExecutionOperation> ExecuteScript(const TString& script, const TExecuteScriptSettings& settings) {
-        return ExecuteScript(script, {}, settings);
-    }
-
-    NThreading::TFuture<TScriptExecutionOperation> ExecuteScript(const TString& script, const TParams& params, const TExecuteScriptSettings& settings) {
-        return ExecuteScript(script, MakeMaybe(params), settings);
-    }
-
     NThreading::TFuture<TScriptExecutionOperation> ExecuteScript(const TString& script, const TMaybe<TParams>& params, const TExecuteScriptSettings& settings) {
         using namespace Ydb::Query;
         auto request = MakeOperationRequest<ExecuteScriptRequest>(settings);
@@ -549,7 +541,13 @@ TAsyncExecuteQueryIterator TQueryClient::StreamExecuteQuery(const TString& query
 NThreading::TFuture<TScriptExecutionOperation> TQueryClient::ExecuteScript(const TString& script,
     const TExecuteScriptSettings& settings)
 {
-    return Impl_->ExecuteScript(script, settings);
+    return Impl_->ExecuteScript(script, {}, settings);
+}
+
+NThreading::TFuture<TScriptExecutionOperation> TQueryClient::ExecuteScript(const TString& script,
+    const TParams& params, const TExecuteScriptSettings& settings)
+{
+    return Impl_->ExecuteScript(script, params, settings);
 }
 
 TAsyncFetchScriptResultsResult TQueryClient::FetchScriptResults(const NKikimr::NOperationId::TOperationId& operationId, int64_t resultSetIndex,

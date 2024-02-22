@@ -166,10 +166,10 @@ auto TServiceBase::TMethodDescriptor::SetQueueSizeLimit(int value) const -> TMet
     return result;
 }
 
-auto TServiceBase::TMethodDescriptor::SetQueueBytesSizeLimit(i64 value) const -> TMethodDescriptor
+auto TServiceBase::TMethodDescriptor::SetQueueByteSizeLimit(i64 value) const -> TMethodDescriptor
 {
     auto result = *this;
-    result.QueueBytesSizeLimit = value;
+    result.QueueByteSizeLimit = value;
     return result;
 }
 
@@ -285,7 +285,7 @@ TServiceBase::TRuntimeMethodInfo::TRuntimeMethodInfo(
     , ResponseLoggingAnchor(NLogging::TLogManager::Get()->RegisterDynamicAnchor(
         Format("%v.%v ->", ServiceId.ServiceName, Descriptor.Method)))
     , RequestQueueSizeLimitErrorCounter(Profiler.Counter("/request_queue_size_errors"))
-    , RequestQueueBytesSizeLimitErrorCounter(Profiler.Counter("/request_queue_bytes_size_errors"))
+    , RequestQueueByteSizeLimitErrorCounter(Profiler.Counter("/request_queue_byte_size_errors"))
     , UnauthenticatedRequestsCounter(Profiler.Counter("/unauthenticated_requests"))
     , LoggingSuppressionFailedRequestThrottler(
         CreateReconfigurableThroughputThrottler(
@@ -1339,10 +1339,10 @@ bool TRequestQueue::IsQueueSizeLimitExceeded() const
         RuntimeInfo_->QueueSizeLimit.load(std::memory_order::relaxed);
 }
 
-bool TRequestQueue::IsQueueBytesSizeLimitExceeded() const
+bool TRequestQueue::IsQueueByteSizeLimitExceeded() const
 {
     return QueueBytesSize_.load(std::memory_order::relaxed) >=
-        RuntimeInfo_->QueueBytesSizeLimit.load(std::memory_order::relaxed);
+        RuntimeInfo_->QueueByteSizeLimit.load(std::memory_order::relaxed);
 }
 
 int TRequestQueue::GetQueueSize() const
@@ -1657,12 +1657,12 @@ void TServiceBase::HandleRequest(
         return;
     }
 
-    if (requestQueue->IsQueueBytesSizeLimitExceeded()) {
-        runtimeInfo->RequestQueueBytesSizeLimitErrorCounter.Increment();
+    if (requestQueue->IsQueueByteSizeLimitExceeded()) {
+        runtimeInfo->RequestQueueByteSizeLimitErrorCounter.Increment();
         replyError(TError(
             NRpc::EErrorCode::RequestQueueSizeLimitExceeded,
             "Request queue bytes size limit exceeded")
-            << TErrorAttribute("limit", runtimeInfo->QueueBytesSizeLimit.load())
+            << TErrorAttribute("limit", runtimeInfo->QueueByteSizeLimit.load())
             << TErrorAttribute("queue", requestQueue->GetName())
             << maybeThrottled);
         return;
@@ -2437,7 +2437,7 @@ TServiceBase::TRuntimeMethodInfoPtr TServiceBase::RegisterMethod(const TMethodDe
 
     runtimeInfo->Heavy.store(descriptor.Options.Heavy);
     runtimeInfo->QueueSizeLimit.store(descriptor.QueueSizeLimit);
-    runtimeInfo->QueueBytesSizeLimit.store(descriptor.QueueBytesSizeLimit);
+    runtimeInfo->QueueByteSizeLimit.store(descriptor.QueueByteSizeLimit);
     runtimeInfo->ConcurrencyLimit.Reconfigure(descriptor.ConcurrencyLimit);
     runtimeInfo->LogLevel.store(descriptor.LogLevel);
     runtimeInfo->LoggingSuppressionTimeout.store(descriptor.LoggingSuppressionTimeout);
@@ -2449,8 +2449,8 @@ TServiceBase::TRuntimeMethodInfoPtr TServiceBase::RegisterMethod(const TMethodDe
     profiler.AddFuncGauge("/request_queue_size_limit", MakeStrong(this), [=] {
         return runtimeInfo->QueueSizeLimit.load(std::memory_order::relaxed);
     });
-    profiler.AddFuncGauge("/request_queue_bytes_size_limit", MakeStrong(this), [=] {
-        return runtimeInfo->QueueBytesSizeLimit.load(std::memory_order::relaxed);
+    profiler.AddFuncGauge("/request_queue_byte_size_limit", MakeStrong(this), [=] {
+        return runtimeInfo->QueueByteSizeLimit.load(std::memory_order::relaxed);
     });
     profiler.AddFuncGauge("/concurrency_limit", MakeStrong(this), [=] {
         return runtimeInfo->ConcurrencyLimit.GetDynamicLimit();
@@ -2515,7 +2515,7 @@ void TServiceBase::DoConfigure(
 
             runtimeInfo->Heavy.store(methodConfig->Heavy.value_or(descriptor.Options.Heavy));
             runtimeInfo->QueueSizeLimit.store(methodConfig->QueueSizeLimit.value_or(descriptor.QueueSizeLimit));
-            runtimeInfo->QueueBytesSizeLimit.store(methodConfig->QueueBytesSizeLimit.value_or(descriptor.QueueBytesSizeLimit));
+            runtimeInfo->QueueByteSizeLimit.store(methodConfig->QueueByteSizeLimit.value_or(descriptor.QueueByteSizeLimit));
             runtimeInfo->ConcurrencyLimit.Reconfigure(methodConfig->ConcurrencyLimit.value_or(descriptor.ConcurrencyLimit));
             runtimeInfo->LogLevel.store(methodConfig->LogLevel.value_or(descriptor.LogLevel));
             runtimeInfo->LoggingSuppressionTimeout.store(methodConfig->LoggingSuppressionTimeout.value_or(descriptor.LoggingSuppressionTimeout));

@@ -561,7 +561,7 @@ protected:
         int QueueSizeLimit = 10'000;
 
         //! Maximum total size of requests in queue (both waiting and executing).
-        i64 QueueBytesSizeLimit = 2_GB;
+        i64 QueueByteSizeLimit = 2_GB;
 
         //! Maximum number of requests executing concurrently.
         int ConcurrencyLimit = 10'000;
@@ -603,7 +603,7 @@ protected:
         TMethodDescriptor SetHeavy(bool value) const;
         TMethodDescriptor SetResponseCodec(NCompression::ECodec value) const;
         TMethodDescriptor SetQueueSizeLimit(int value) const;
-        TMethodDescriptor SetQueueBytesSizeLimit(i64 value) const;
+        TMethodDescriptor SetQueueByteSizeLimit(i64 value) const;
         TMethodDescriptor SetConcurrencyLimit(int value) const;
         TMethodDescriptor SetSystem(bool value) const;
         TMethodDescriptor SetLogLevel(NLogging::ELogLevel value) const;
@@ -708,13 +708,13 @@ protected:
         std::atomic<bool> Pooled = true;
 
         std::atomic<int> QueueSizeLimit = 0;
-        std::atomic<i64> QueueBytesSizeLimit = 0;
+        std::atomic<i64> QueueByteSizeLimit = 0;
 
         TDynamicConcurrencyLimit ConcurrencyLimit;
         std::atomic<double> WaitingTimeoutFraction = 0;
 
         NProfiling::TCounter RequestQueueSizeLimitErrorCounter;
-        NProfiling::TCounter RequestQueueBytesSizeLimitErrorCounter;
+        NProfiling::TCounter RequestQueueByteSizeLimitErrorCounter;
         NProfiling::TCounter UnauthenticatedRequestsCounter;
 
         std::atomic<NLogging::ELogLevel> LogLevel = {};
@@ -1032,7 +1032,7 @@ public:
     void Configure(const TMethodConfigPtr& config);
 
     bool IsQueueSizeLimitExceeded() const;
-    bool IsQueueBytesSizeLimitExceeded() const;
+    bool IsQueueByteSizeLimitExceeded() const;
 
     int GetQueueSize() const;
     int GetConcurrency() const;

@@ -161,7 +161,6 @@ class TRateHistogram
 {
 public:
     void Add(double value, int count = 1) const noexcept;
-    void Remove(double value, int count = 1) const noexcept;
 
     explicit operator bool() const;
 

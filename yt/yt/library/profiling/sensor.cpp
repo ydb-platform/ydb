@@ -225,15 +225,6 @@ void TRateHistogram::Add(double value, int count) const noexcept
     Histogram_->Add(value, count);
 }
 
-void TRateHistogram::Remove(double value, int count) const noexcept
-{
-    if (!Histogram_) {
-        return;
-    }
-
-    Histogram_->Remove(value, count);
-}
-
 TRateHistogram::operator bool() const
 {
     return Histogram_.operator bool();

@@ -336,7 +336,6 @@ private:
 class TAsyncPrepareYqlResult : public TKqpAsyncResultBase<IKqpHost::TQueryResult> {
 public:
     using TResult = IKqpHost::TQueryResult;
-<<<<<<< HEAD
 
     TAsyncPrepareYqlResult(TExprNode* queryRoot, TExprContext& exprCtx, IGraphTransformer& transformer,
         TIntrusivePtr<TKikimrQueryContext> queryCtx, const TKqpQueryRef& query, TMaybe<TSqlVersion> sqlVersion,
@@ -347,13 +346,14 @@ public:
         , TransformCtx(transformCtx)
         , QueryText(query.Text)
         , SqlVersion(sqlVersion) {}
-=======
->>>>>>> 34055a6751 (fix)
     
     TAsyncPrepareYqlResult(TExprNode::TPtr queryRoot, TExprContext& exprCtx, IGraphTransformer& transformer,
-        TIntrusivePtr<TKikimrQueryContext> queryCtx, const TKqpQueryRef& query, TMaybe<TSqlVersion> sqlVersion)
+        TIntrusivePtr<TKikimrQueryContext> queryCtx, const TKqpQueryRef& query, TMaybe<TSqlVersion> sqlVersion,
+        TIntrusivePtr<TKqlTransformContext> transformCtx)
         : TKqpAsyncResultBase(std::move(queryRoot), exprCtx, transformer)
         , QueryCtx(queryCtx)
+        , ExprCtx(exprCtx)
+        , TransformCtx(transformCtx)
         , QueryText(query.Text)
         , SqlVersion(sqlVersion) {}
 

@@ -1095,6 +1095,7 @@ int Main(int argc, char* argv[])
 
     const TString runnerName{"pgrun"};
     TVector<TString> udfsPaths;
+
     TString rawDataDir;
     THashMap<TString, TString> clusterMapping;
 
@@ -1107,6 +1108,7 @@ int Main(int argc, char* argv[])
     opts.AddLongOption("print-ast", "print initial & final ASTs to stderr").NoArgument();
     opts.AddLongOption("print-result", "print program execution result to stderr").NoArgument();
     opts.AddLongOption("datadir", "directory for tables").StoreResult<TString>(&rawDataDir);
+    opts.AddLongOption('u', "udf", "Load shared library with UDF by given path").AppendTo(&udfsPaths);
     opts.SetFreeArgsMax(0);
 
     TOptsParseResult res(&opts, argc, argv);

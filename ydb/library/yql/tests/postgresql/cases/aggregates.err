@@ -1,3 +1,5 @@
+Registering pre-existing tables
+	yt.plato.VARCHAR_TBL -> /tmp/tmpo6e5ul8l/VARCHAR_TBL
 <sql-statement>
 --
 -- AGGREGATES

@@ -1,5 +1,6 @@
 Registering pre-existing tables
-	yt.plato.CHAR_TBL -> /tmp/tmpe_04_836/CHAR_TBL
+	yt.plato.VARCHAR_TBL -> /tmp/tmp45ke7dly/VARCHAR_TBL
+	yt.plato.CHAR_TBL -> /tmp/tmp45ke7dly/CHAR_TBL
 <sql-statement>
 --
 -- UNION (also INTERSECT, EXCEPT)
@@ -115,29 +116,17 @@ UNION
 SELECT f1 FROM CHAR_TBL
 ORDER BY 1;
 </sql-statement>
--stdin-:<main>: Fatal: Table metadata loading
-
-    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.VARCHAR_TBL
-    
 <sql-statement>
 SELECT f1 AS three FROM VARCHAR_TBL
 UNION
 SELECT CAST(f1 AS varchar) FROM CHAR_TBL
 ORDER BY 1;
 </sql-statement>
--stdin-:<main>: Fatal: Table metadata loading
-
-    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.VARCHAR_TBL
-    
 <sql-statement>
 SELECT f1 AS eight FROM VARCHAR_TBL
 UNION ALL
 SELECT f1 FROM CHAR_TBL;
 </sql-statement>
--stdin-:<main>: Fatal: Table metadata loading
-
-    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.VARCHAR_TBL
-    
 <sql-statement>
 SELECT f1 AS five FROM TEXT_TBL
 UNION
@@ -148,7 +137,7 @@ ORDER BY 1;
 </sql-statement>
 -stdin-:<main>: Fatal: Table metadata loading
 
-    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.VARCHAR_TBL
+    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.TEXT_TBL
     
 <sql-statement>
 --

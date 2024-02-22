@@ -256,11 +256,29 @@ SELECT CAST(f1 AS text) AS "text(char)" FROM CHAR_TBL;
  abcd
 (4 rows)
 
+SELECT CAST(f1 AS text) AS "text(varchar)" FROM VARCHAR_TBL;
+ text(varchar) 
+---------------
+ a
+ ab
+ abcd
+ abcd
+(4 rows)
+
 SELECT CAST(name 'namefield' AS text) AS "text(name)";
  text(name) 
 ------------
  namefield
 (1 row)
+
+SELECT CAST(f1 AS char(10)) AS "char(varchar)" FROM VARCHAR_TBL;
+ char(varchar) 
+---------------
+ a         
+ ab        
+ abcd      
+ abcd      
+(4 rows)
 
 SELECT CAST(name 'namefield' AS char(10)) AS "char(name)";
  char(name) 

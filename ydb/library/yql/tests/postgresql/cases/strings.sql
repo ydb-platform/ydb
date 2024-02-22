@@ -68,7 +68,9 @@ SELECT E'De\\123dBeEf'::bytea;
 -- E021-10 implicit casting among the character data types
 --
 SELECT CAST(f1 AS text) AS "text(char)" FROM CHAR_TBL;
+SELECT CAST(f1 AS text) AS "text(varchar)" FROM VARCHAR_TBL;
 SELECT CAST(name 'namefield' AS text) AS "text(name)";
+SELECT CAST(f1 AS char(10)) AS "char(varchar)" FROM VARCHAR_TBL;
 SELECT CAST(name 'namefield' AS char(10)) AS "char(name)";
 SELECT CAST(f1 AS varchar) AS "varchar(char)" FROM CHAR_TBL;
 SELECT CAST(name 'namefield' AS varchar) AS "varchar(name)";

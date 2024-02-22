@@ -40,7 +40,7 @@ select_distinct_on,4,0,0.0
 select_having,23,19,82.61
 select_implicit,44,28,63.64
 select_into,67,3,4.48
-strings,390,291,74.62
+strings,390,293,75.13
 subselect,234,97,41.45
 text,76,16,21.05
 time,39,29,74.36
@@ -49,7 +49,7 @@ timestamptz,315,97,30.79
 timetz,45,19,42.22
 truncate,193,41,21.24
 unicode,13,4,30.77
-union,186,37,19.89
+union,186,39,20.97
 update,288,23,7.99
 varchar,24,15,62.5
 window,298,5,1.68

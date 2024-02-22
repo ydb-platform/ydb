@@ -67,6 +67,7 @@ Y_UNIT_TEST(DirectReadBadSessionOrPipe) {
     }, [&](const TString& dispatchName, std::function<void(TTestActorRuntime&)> setup, bool& activeZone) {
         TFinalizer finalizer(tc);
         tc.Prepare(dispatchName, setup, activeZone);
+        tc.Runtime->SetLogPriority(NKikimrServices::PERSQUEUE, NLog::PRI_DEBUG);
         activeZone = false;
         tc.Runtime->SetScheduledLimit(1000);
 
@@ -122,6 +123,7 @@ Y_UNIT_TEST(DirectReadOldPipe) {
     }, [&](const TString& dispatchName, std::function<void(TTestActorRuntime&)> setup, bool& activeZone) {
         TFinalizer finalizer(tc);
         tc.Prepare(dispatchName, setup, activeZone);
+        tc.Runtime->SetLogPriority(NKikimrServices::PERSQUEUE, NLog::PRI_DEBUG);
         activeZone = false;
         tc.Runtime->SetScheduledLimit(1000);
 

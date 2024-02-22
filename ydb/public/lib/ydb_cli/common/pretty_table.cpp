@@ -1,6 +1,7 @@
 #include "pretty_table.h"
 #include "common.h"
 
+#include <library/cpp/colorizer/colors.h>
 #include <util/generic/algorithm.h>
 #include <util/generic/xrange.h>
 #include <util/stream/format.h>
@@ -17,34 +18,112 @@ TPrettyTable::TRow::TRow(size_t nColumns)
 
 size_t TPrettyTable::TRow::ColumnWidth(size_t columnIndex) const {
     Y_ABORT_UNLESS(columnIndex < Columns.size());
+    enum {
+        TEXT,
+        COLOR,
+        UTF8,
+    } state = TEXT;
 
     size_t width = 0;
     TStringBuf data;
     for (const auto& line : Columns.at(columnIndex)) {
         data = line;
 
-        width = Max(width, line.size());
+        // flag of first symbol in color
+        bool first = false;
+        // flag of enfing of color
+        bool endcolor = false;
+        int utf8Len = 0;
+        // count of visible chars
+        size_t curLen = 0;
+        for (char ch : data) {
+            switch (state) {
+                case TEXT:
+                    // begin of color
+                    if (ch == '\033') {
+                        state = COLOR;
+                        first = true;
+                        endcolor = false;
+                    // begin utf8
+                    } else  if ((ch & 0x80) != 0) {
+                        curLen++;
+                        utf8Len = 0;
+                        // if the first bit of the character is not 0, we met a multibyte
+                        // counting the number of single bits at the beginning of a byte
+                        while ((ch & 0x80) != 0) {
+                            utf8Len++;
+                            ch <<= 1;
+                        }
+                        state = UTF8;
+                    // common text
+                    } else {
+                        curLen++;
+                    }
+                    break;
+                case UTF8:
+                    // skip n chars
+                    utf8Len -= 1;
+                    if (utf8Len == 0) {
+                        curLen++;
+                        while ((ch & 0x80) != 0) {
+                            utf8Len++;
+                            ch <<= 1;
+                        }
+                        if (utf8Len != 0) {
+                            state = UTF8;
+                        } else {
+                            state = TEXT;
+                        }
+                    }
+                    break;
+                case COLOR:
+                    // first symbol must be [
+                    if (first) {
+                        if (ch != '[') {
+                            state = TEXT;
+                        }
+                        first = false;
+                    // at the end of color can be digits, m and ;
+                    } else if (endcolor) {
+                        if (ch != ';' && !isdigit(ch) && ch != 'm' ) {
+                            curLen++;
+                            state = TEXT;
+                        }
+                    // ending after ;
+                    } else {
+                        if (ch == ';') {
+                            endcolor = true;
+                        }
+                    }
+                    break;
+            }
+        }
+
+        width = Max(width, curLen);
     }
 
     return width;
 }
 
-size_t TPrettyTable::TRow::PrintColumns(IOutputStream& o, const TVector<size_t>& widths, size_t offset) const {
+size_t TPrettyTable::TRow::PrintColumns(IOutputStream& o, const TVector<size_t>& widths, size_t offset, TString& oldColor) const {
     bool next = false;
     size_t firstColLen = 0;
-
+    NColorizer::TColors colors = NColorizer::AutoColors(Cout);
+    
     for (size_t columnIndex : xrange(Columns.size())) {
         enum {
             TEXT,
             COLOR,
             UTF8,
         } state = TEXT;
+        o << colors.Default();
         if (columnIndex == 0) {
             o << "│ ";
+            o << oldColor;
         } else {
             o << " │ ";
         }
-
+        
         if (size_t width = widths.at(columnIndex)) {
             const auto& column = Columns.at(columnIndex);
 
@@ -85,8 +164,8 @@ size_t TPrettyTable::TRow::PrintColumns(IOutputStream& o, const TVector<size_t>&
                             } else  if ((ch & 0x80) != 0) {
                                 o << s;
                                 s = "";
-                                curLen++;
                                 utf8Len = 0;
+                                curLen++;
                                 // if the first bit of the character is not 0, we met a multibyte
                                 // counting the number of single bits at the beginning of a byte
                                 while ((ch & 0x80) != 0) {
@@ -115,9 +194,23 @@ size_t TPrettyTable::TRow::PrintColumns(IOutputStream& o, const TVector<size_t>&
                             // skip n chars
                             utf8Len -= 1;
                             if (utf8Len == 0) {
+                                while ((ch & 0x80) != 0) {
+                                    utf8Len++;
+                                    ch <<= 1;
+                                }
+                                if (curLen + utf8Len > width) {
+                                    next = true;
+                                    curLen -= 1;
+                                    break;
+                                }
                                 curLen++;
-                                s = ch;
-                                state = TEXT;
+                                if (utf8Len != 0) {
+                                    o << data.SubStr(absCurLen, utf8Len);
+                                    state = UTF8;
+                                } else {
+                                    s = ch;
+                                    state = TEXT;
+                                }
                             }
                             break;
                         case COLOR:
@@ -135,6 +228,7 @@ size_t TPrettyTable::TRow::PrintColumns(IOutputStream& o, const TVector<size_t>&
                             } else if (endcolor) {
                                 if (ch != ';' && !isdigit(ch) && ch != 'm' ) {
                                     o << s;
+                                    oldColor = s;
                                     curLen++;
                                     if (curLen > width) {
                                         next = true;
@@ -167,9 +261,10 @@ size_t TPrettyTable::TRow::PrintColumns(IOutputStream& o, const TVector<size_t>&
             if (columnIndex == 0) {
                 firstColLen = absCurLen - 1;
             }
-            
         }
     }
+    
+    o << colors.Default();
     o << " │" << Endl;
     if (next) {
         return firstColLen;
@@ -232,8 +327,9 @@ void TPrettyTable::Print(IOutputStream& o) const {
 
         size_t res = 1;
         size_t offset = 0;
+        TString oldColor = "";
         while (res != 0) {
-            res = row.PrintColumns(o, widths, offset);
+            res = row.PrintColumns(o, widths, offset, oldColor);
             offset += res;
         }
 

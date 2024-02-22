@@ -402,6 +402,29 @@ void TQueryPlanPrinter::PrintPrettyTable(const NJson::TJsonValue& plan) {
     }
 }
 
+TString replaceAll(TString str, const TString& from, const TString& to) {
+    if (!from) {
+        return str;
+    }
+        
+    size_t startPos = 0;
+    while ((startPos = str.find(from, startPos)) != TString::npos) {
+        str.replace(startPos, from.length(), to);
+        startPos += to.length();
+    }
+
+    return str;
+}
+
+TString SimplifyBigNumbers(TString nRows, size_t accuracy) {
+    size_t ePos;
+    accuracy += 2; // add len of "x."
+    if ((ePos = nRows.find("e")) != TString::npos) {
+        nRows.replace(accuracy, ePos - accuracy, "");
+    }
+    return nRows;
+}
+
 void TQueryPlanPrinter::PrintPrettyTableImpl(const NJson::TJsonValue& plan, TString& offset, TPrettyTable& table) {
     const auto& node = plan.GetMapSafe();
 
@@ -420,6 +443,7 @@ void TQueryPlanPrinter::PrintPrettyTableImpl(const NJson::TJsonValue& plan, TStr
                 } else {
                     nRows = JsonToString(outputRows);
                 }
+                nRows = SimplifyBigNumbers(nRows, 2);
             }
 
             if (stats.contains("DurationUs")) {
@@ -429,6 +453,7 @@ void TQueryPlanPrinter::PrintPrettyTableImpl(const NJson::TJsonValue& plan, TStr
                 } else {
                     duration = JsonToString(durationUs);
                 }
+                duration = SimplifyBigNumbers(duration, 2);
             }
         }
 
@@ -440,13 +465,13 @@ void TQueryPlanPrinter::PrintPrettyTableImpl(const NJson::TJsonValue& plan, TStr
     TStringBuf color;
     switch(offset.size() % 3) {
         case 0: 
-            color = colors.Red();
+            color = colors.LightRed();
             break;
         case 1:
-            color = colors.Green();
+            color = colors.LightGreen();
             break;
         case 2:
-            color = colors.Blue();
+            color = colors.LightBlue();
             break;
         default:
             color = colors.Default();
@@ -462,18 +487,20 @@ void TQueryPlanPrinter::PrintPrettyTableImpl(const NJson::TJsonValue& plan, TStr
             for (const auto& [key, value] : op.GetMapSafe()) {
                 if (key == "E-Cost") {
                     eCost = JsonToString(value);
+                    eCost = SimplifyBigNumbers(eCost, 2);
                 } else if (key == "E-Rows") {
                     eRows = JsonToString(value);
+                    eRows = SimplifyBigNumbers(eRows, 2);
                 } else if (key != "Name") {
-                    info.emplace_back(TStringBuilder() << key << ": " << JsonToString(value));
+                    info.emplace_back(TStringBuilder() << colors.LightYellow() << key << colors.Default() << ": " << replaceAll(JsonToString(value), "item.", ""));
                 }
             }
 
             TStringBuilder operation;
             if (info.empty()) {
-                operation << offset << color << " -> " << colors.Default() << op.GetMapSafe().at("Name").GetString();
+                operation << offset << color << " -> " << colors.LightCyan() << op.GetMapSafe().at("Name").GetString() << colors.Default();
             } else {
-                operation << offset << color << " -> " << colors.Default() << op.GetMapSafe().at("Name").GetString()
+                operation << offset << color << " -> " << colors.LightCyan() << op.GetMapSafe().at("Name").GetString() << colors.Default()
                      << " (" << JoinStrings(info, ", ") << ")";
             }
 
@@ -489,7 +516,7 @@ void TQueryPlanPrinter::PrintPrettyTableImpl(const NJson::TJsonValue& plan, TStr
         }
     } else {
         TStringBuilder operation;
-        operation << offset << color << " -> " << colors.Default() << node.at("Node Type").GetString();
+        operation << offset << color << " -> " << colors.LightCyan() << node.at("Node Type").GetString() << colors.Default();
         newRow.Column(0, std::move(operation));
     }
 

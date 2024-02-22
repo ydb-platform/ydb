@@ -82,6 +82,14 @@ public:
     }
 
     NThreading::TFuture<TScriptExecutionOperation> ExecuteScript(const TString& script, const TExecuteScriptSettings& settings) {
+        return ExecuteScript(script, {}, settings);
+    }
+
+    NThreading::TFuture<TScriptExecutionOperation> ExecuteScript(const TString& script, const TParams& params, const TExecuteScriptSettings& settings) {
+        return ExecuteScript(script, MakeMaybe(params), settings);
+    }
+
+    NThreading::TFuture<TScriptExecutionOperation> ExecuteScript(const TString& script, const TMaybe<TParams>& params, const TExecuteScriptSettings& settings) {
         using namespace Ydb::Query;
         auto request = MakeOperationRequest<ExecuteScriptRequest>(settings);
         request.set_exec_mode(settings.ExecMode_);
@@ -89,6 +97,11 @@ public:
         request.mutable_script_content()->set_syntax(settings.Syntax_);
         request.mutable_script_content()->set_text(script);
         SetDuration(settings.ResultsTtl_, *request.mutable_results_ttl());
+
+        if (params) {
+            *request.mutable_parameters() = params->GetProtoMap();
+        }
+
         auto promise = NThreading::NewPromise<TScriptExecutionOperation>();
 
         auto responseCb = [promise]

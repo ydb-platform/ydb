@@ -257,10 +257,6 @@ class TPersQueueReadBalancer : public TActor<TPersQueueReadBalancer>, public TTa
         }
         RegisterEvents.clear();
 
-        for (auto& [_, partitionInfo] : PartitionsInfo) {
-            RequestTabletIfNeeded(partitionInfo.TabletId, ctx, true);
-        }
-
         auto wakeupInterval = AppData(ctx)->PQConfig.GetBalancerWakeupIntervalSec();
         Y_ABORT_UNLESS(0 < wakeupInterval);
         ctx.Schedule(TDuration::Seconds(wakeupInterval), new TEvents::TEvWakeup());

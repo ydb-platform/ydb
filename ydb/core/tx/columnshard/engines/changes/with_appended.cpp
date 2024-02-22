@@ -6,16 +6,6 @@
 
 namespace NKikimr::NOlap {
 
-void TChangesWithAppend::DoDebugString(TStringOutput& out) const {
-    if (ui32 added = AppendedPortions.size()) {
-        out << "portions_count:" << added << ";portions=(";
-        for (auto& portionInfo : AppendedPortions) {
-            out << portionInfo;
-        }
-        out << "); ";
-    }
-}
-
 void TChangesWithAppend::DoWriteIndex(NColumnShard::TColumnShard& self, TWriteIndexContext& /*context*/) {
     for (auto& portionInfo : AppendedPortions) {
         switch (portionInfo.GetPortionInfo().GetMeta().Produced) {

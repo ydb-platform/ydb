@@ -41,8 +41,8 @@ auto GetStepAndTxId(const E& event)
     return GetStepAndTxId(event.Step, event.TxId);
 }
 
-bool LastOffsetHasBeenCommited(const TUserInfo& userInfo, ui64 EndOffset) {
-    return static_cast<ui64>(std::max<i64>(userInfo.Offset, 0)) == EndOffset;
+bool TPartition::LastOffsetHasBeenCommited(const TUserInfo& userInfo) const {
+    return !IsActive() && static_cast<ui64>(std::max<i64>(userInfo.Offset, 0)) == EndOffset;
 }
 
 struct TMirrorerInfo {
@@ -655,8 +655,6 @@ void TPartition::Handle(TEvPQ::TEvPartitionStatus::TPtr& ev, const TActorContext
 
     result.SetWriteBytesQuota(TotalPartitionWriteSpeed);
 
-    bool inactivePartition = !IsActive();
-
     TVector<ui64> resSpeed;
     resSpeed.resize(4);
     ui64 maxQuota = 0;
@@ -723,7 +721,7 @@ void TPartition::Handle(TEvPQ::TEvPartitionStatus::TPtr& ev, const TActorContext
             clientInfo->SetAvgReadSpeedPerHour(userInfo.AvgReadBytes[2].GetValue());
             clientInfo->SetAvgReadSpeedPerDay(userInfo.AvgReadBytes[3].GetValue());
 
-            clientInfo->SetReadingFinished(inactivePartition && LastOffsetHasBeenCommited(userInfo, EndOffset));
+            clientInfo->SetReadingFinished(LastOffsetHasBeenCommited(userInfo));
         }
 
     }
@@ -1848,7 +1846,7 @@ void TPartition::OnProcessTxsAndUserActsWriteComplete(ui64 cookie, const TActorC
                 TabletCounters.Cumulative()[COUNTER_PQ_WRITE_TIMESTAMP_CACHE_HIT].Increment(1);
             }
 
-            if (!IsActive() && LastOffsetHasBeenCommited(userInfo, EndOffset)) {
+            if (LastOffsetHasBeenCommited(userInfo)) {
                 SendReadingFinished(user);
             }
         } else {

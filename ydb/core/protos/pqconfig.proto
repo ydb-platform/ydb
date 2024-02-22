@@ -960,7 +960,7 @@ message TEvCheckPartitionStatusResponse {
 };
 
 // The consumer's reading of the partition is finished
-message TEvReadingPartitionFinishedRequest {
+message TEvReadingPartitionStatusRequest {
     optional string Consumer = 1;
     optional uint32 PartitionId = 2;
 };

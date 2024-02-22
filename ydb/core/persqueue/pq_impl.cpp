@@ -1785,8 +1785,6 @@ void TPersQueue::Handle(TEvPersQueue::TEvStatus::TPtr& ev, const TActorContext& 
          cnt += partitionInfo.InitDone;
     }
 
-    Cerr << ">>>>> InitDone=" << cnt << Endl;
-
     TActorId ans = CreateStatusProxyActor(TabletID(), ev->Sender, cnt, ev->Cookie, ctx);
     for (auto& p : Partitions) {
         if (!p.second.InitDone)
@@ -4326,7 +4324,7 @@ void TPersQueue::Handle(NLongTxService::TEvLongTxService::TEvLockStatus::TPtr& e
     }
 }
 
-void TPersQueue::Handle(TEvPQ::TEvReadingPartitionFinishedRequest::TPtr& ev, const TActorContext& ctx)
+void TPersQueue::Handle(TEvPQ::TEvReadingPartitionStatusRequest::TPtr& ev, const TActorContext& ctx)
 {
     if (ReadBalancerActorId) {
         ctx.Send(ReadBalancerActorId, ev->Release().Release());
@@ -4387,7 +4385,7 @@ bool TPersQueue::HandleHook(STFUNC_SIG)
         HFuncTraced(TEvMediatorTimecast::TEvRegisterTabletResult, Handle);
         HFuncTraced(TEvPQ::TEvCheckPartitionStatusRequest, Handle);
         HFuncTraced(NLongTxService::TEvLongTxService::TEvLockStatus, Handle);
-        HFuncTraced(TEvPQ::TEvReadingPartitionFinishedRequest, Handle);
+        HFuncTraced(TEvPQ::TEvReadingPartitionStatusRequest, Handle);
         default:
             return false;
     }

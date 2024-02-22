@@ -183,7 +183,7 @@ struct TEvPQ {
         EvGetWriteInfoRequest,
         EvGetWriteInfoResponse,
         EvGetWriteInfoError,
-        EvReadingPartitionFinishedRequest,
+        EvReadingPartitionStatusRequest,
         EvEnd
     };
 
@@ -1078,10 +1078,10 @@ struct TEvPQ {
         }
     };
 
-    struct TEvReadingPartitionFinishedRequest : public TEventPB<TEvReadingPartitionFinishedRequest, NKikimrPQ::TEvReadingPartitionFinishedRequest, EvReadingPartitionFinishedRequest> {
-        TEvReadingPartitionFinishedRequest() = default;
+    struct TEvReadingPartitionStatusRequest : public TEventPB<TEvReadingPartitionStatusRequest, NKikimrPQ::TEvReadingPartitionStatusRequest, EvReadingPartitionStatusRequest> {
+        TEvReadingPartitionStatusRequest() = default;
 
-        TEvReadingPartitionFinishedRequest(const TString& consumer, ui32 partitionId) {
+        TEvReadingPartitionStatusRequest(const TString& consumer, ui32 partitionId) {
             Record.SetConsumer(consumer);
             Record.SetPartitionId(partitionId);
         }

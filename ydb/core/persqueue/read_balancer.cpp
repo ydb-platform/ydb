@@ -1070,7 +1070,9 @@ void TPersQueueReadBalancer::GetStat(const TActorContext& ctx) {
 
     // TEvStatsWakeup must processed before next TEvWakeup, which send next status request to TPersQueue
     const auto& config = AppData(ctx)->PQConfig;
-    ui64 delayMs = std::min(config.GetBalancerStatsWakeupIntervalSec() * 1000, config.GetBalancerWakeupIntervalSec() * 500);
+    auto wakeupInterval = std::max<ui64>(config.GetBalancerWakeupIntervalSec(), 1);
+    auto stateWakeupInterval = std::max<ui64>(config.GetBalancerWakeupIntervalSec(), 1);
+    ui64 delayMs = std::min(stateWakeupInterval * 1000, wakeupInterval * 500);
     if (0 < delayMs) {
         Schedule(TDuration::MilliSeconds(delayMs), new TEvPQ::TEvStatsWakeup(++AggregatedStats.Round));
     }
@@ -1210,7 +1212,7 @@ bool TPersQueueReadBalancer::TClientInfo::ProccessReadingFinished(ui32 partition
         return false;
     }
 
-    auto it = ClientGroupsInfo.find(0);
+    auto it = ClientGroupsInfo.find(MAIN_GROUP);
     if (it == ClientGroupsInfo.end()) {
         return false;
     }
@@ -1857,7 +1859,7 @@ void TPersQueueReadBalancer::Handle(TEvTxProxySchemeCache::TEvWatchNotifyUpdated
     }
 }
 
-void TPersQueueReadBalancer::Handle(TEvPQ::TEvReadingPartitionFinishedRequest::TPtr& ev, const TActorContext& ctx) {
+void TPersQueueReadBalancer::Handle(TEvPQ::TEvReadingPartitionStatusRequest::TPtr& ev, const TActorContext& ctx) {
     auto& r = ev->Get()->Record;
 
     auto& finishedPartitions = ReadingFinished[r.GetConsumer()];

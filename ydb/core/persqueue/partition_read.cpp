@@ -30,7 +30,7 @@ namespace NKikimr::NPQ {
 static const ui32 MAX_USER_ACTS = 1000;
 
 void TPartition::SendReadingFinished(const TString& consumer) {
-    Send(Tablet, new TEvPQ::TEvReadingPartitionFinishedRequest(consumer, Partition.OriginalPartitionId));
+    Send(Tablet, new TEvPQ::TEvReadingPartitionStatusRequest(consumer, Partition.OriginalPartitionId));
 }
 
 void TPartition::FillReadFromTimestamps(const NKikimrPQ::TPQTabletConfig& config, const TActorContext& ctx) {

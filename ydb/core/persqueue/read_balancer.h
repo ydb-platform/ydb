@@ -187,7 +187,8 @@ class TPersQueueReadBalancer : public TActor<TPersQueueReadBalancer>, public TTa
 
         GetStat(ctx); //TODO: do it only on signals from outerspace right now
 
-        ctx.Schedule(TDuration::Seconds(AppData(ctx)->PQConfig.GetBalancerWakeupIntervalSec()), new TEvents::TEvWakeup()); //TODO: remove it
+        auto wakeupInterval = std::max<ui64>(AppData(ctx)->PQConfig.GetBalancerWakeupIntervalSec(), 1);
+        ctx.Schedule(TDuration::Seconds(wakeupInterval), new TEvents::TEvWakeup());
     }
 
     void HandleUpdateACL(TEvPersQueue::TEvUpdateACL::TPtr&, const TActorContext &ctx) {
@@ -257,8 +258,7 @@ class TPersQueueReadBalancer : public TActor<TPersQueueReadBalancer>, public TTa
         }
         RegisterEvents.clear();
 
-        auto wakeupInterval = AppData(ctx)->PQConfig.GetBalancerWakeupIntervalSec();
-        Y_ABORT_UNLESS(0 < wakeupInterval);
+        auto wakeupInterval = std::max<ui64>(AppData(ctx)->PQConfig.GetBalancerWakeupIntervalSec(), 1);
         ctx.Schedule(TDuration::Seconds(wakeupInterval), new TEvents::TEvWakeup());
 
         ctx.Send(ctx.SelfID, new TEvPersQueue::TEvUpdateACL());
@@ -292,7 +292,7 @@ class TPersQueueReadBalancer : public TActor<TPersQueueReadBalancer>, public TTa
     void Handle(NSchemeShard::TEvSchemeShard::TEvSubDomainPathIdFound::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvTxProxySchemeCache::TEvWatchNotifyUpdated::TPtr& ev, const TActorContext& ctx);
 
-    void Handle(TEvPQ::TEvReadingPartitionFinishedRequest::TPtr& ev, const TActorContext& ctx);
+    void Handle(TEvPQ::TEvReadingPartitionStatusRequest::TPtr& ev, const TActorContext& ctx);
 
     TStringBuilder GetPrefix() const;
 
@@ -655,7 +655,7 @@ public:
             HFunc(TEvTxProxySchemeCache::TEvWatchNotifyUpdated, Handle);
             HFunc(TEvPersQueue::TEvStatus, Handle);
             HFunc(TEvPersQueue::TEvGetPartitionsLocation, Handle);
-            HFunc(TEvPQ::TEvReadingPartitionFinishedRequest, Handle);
+            HFunc(TEvPQ::TEvReadingPartitionStatusRequest, Handle);
 
             default:
                 HandleDefaultEvents(ev, SelfId());

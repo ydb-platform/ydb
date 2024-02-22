@@ -1110,7 +1110,7 @@ void FillTablesMapping(const TFsPath& dataDir, THashMap<TString, TString>& table
             Cerr << "Registering pre-existing tables\n";
         }
         const auto fullTableName = f.Parent() / tableName;
-        Cerr << "\tyt.plato." << tableName << " -> " << fullTableName << '\n';
+        Cerr << '\t' << tableName << '\n';
         tablesMapping[TString("yt.plato.") + tableName] = f.Parent() / tableName;
     }
 }

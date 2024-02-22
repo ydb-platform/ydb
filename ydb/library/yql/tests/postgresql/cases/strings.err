@@ -1,7 +1,7 @@
 Registering pre-existing tables
-	yt.plato.VARCHAR_TBL -> /tmp/tmp57f9tkgt/VARCHAR_TBL
-	yt.plato.CHAR_TBL -> /tmp/tmp57f9tkgt/CHAR_TBL
-	yt.plato.TEXT_TBL -> /tmp/tmp57f9tkgt/TEXT_TBL
+	VARCHAR_TBL
+	CHAR_TBL
+	TEXT_TBL
 <sql-statement>
 --
 -- STRINGS

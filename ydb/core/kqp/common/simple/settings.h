@@ -13,7 +13,6 @@ struct TKqpQuerySettings {
     bool IsInternalCall = false;
     NKikimrKqp::EQueryType QueryType = NKikimrKqp::EQueryType::QUERY_TYPE_UNDEFINED;
     Ydb::Query::Syntax Syntax = Ydb::Query::Syntax::SYNTAX_UNSPECIFIED;
-    bool IsPrepareQuery = false;
 
     explicit TKqpQuerySettings(NKikimrKqp::EQueryType queryType)
         : QueryType(queryType) {}

@@ -232,21 +232,33 @@ private:
     TDuration Ttl;
 };
 
+struct TKqpCompileSettings {
+    TKqpCompileSettings(bool keepInCache, bool isQueryActionPrepare, const TInstant& deadline, ECompileActorAction action = ECompileActorAction::COMPILE)
+        : KeepInCache(keepInCache)
+        , IsQueryActionPrepare(isQueryActionPrepare)
+        , Deadline(deadline)
+        , Action(action)
+    {}
+
+    bool KeepInCache;
+    bool IsQueryActionPrepare;
+    TInstant Deadline;
+    ECompileActorAction Action;
+};
+
 struct TKqpCompileRequest {
-    TKqpCompileRequest(const TActorId& sender, const TString& uid, TKqpQueryId query, bool keepInCache,
-        const TIntrusiveConstPtr<NACLib::TUserToken>& userToken, const TInstant& deadline, TKqpDbCountersPtr dbCounters,
+    TKqpCompileRequest(const TActorId& sender, const TString& uid, TKqpQueryId query, const TKqpCompileSettings& compileSettings,
+        const TIntrusiveConstPtr<NACLib::TUserToken>& userToken, TKqpDbCountersPtr dbCounters,
         ui64 cookie, std::shared_ptr<std::atomic<bool>> intrestedInResult,
         const TIntrusivePtr<TUserRequestContext>& userRequestContext,
         NLWTrace::TOrbit orbit = {}, NWilson::TSpan span = {},
         TKqpTempTablesState::TConstPtr tempTablesState = {},
-        ECompileActorAction action = ECompileActorAction::COMPILE,
         TMaybe<TQueryAst> astResult = {})
         : Sender(sender)
         , Query(std::move(query))
         , Uid(uid)
-        , KeepInCache(keepInCache)
+        , CompileSettings(compileSettings)
         , UserToken(userToken)
-        , Deadline(deadline)
         , DbCounters(dbCounters)
         , UserRequestContext(userRequestContext)
         , Orbit(std::move(orbit))
@@ -254,16 +266,14 @@ struct TKqpCompileRequest {
         , Cookie(cookie)
         , TempTablesState(std::move(tempTablesState))
         , IntrestedInResult(std::move(intrestedInResult))
-        , Action(action)
         , AstResult(std::move(astResult))
     {}
 
     TActorId Sender;
     TKqpQueryId Query;
     TString Uid;
-    bool KeepInCache = false;
+    TKqpCompileSettings CompileSettings;
     TIntrusiveConstPtr<NACLib::TUserToken> UserToken;
-    TInstant Deadline;
     TKqpDbCountersPtr DbCounters;
     TActorId CompileActor;
 
@@ -273,7 +283,6 @@ struct TKqpCompileRequest {
     ui64 Cookie;
     TKqpTempTablesState::TConstPtr TempTablesState;
     std::shared_ptr<std::atomic<bool>> IntrestedInResult;
-    ECompileActorAction Action;
     TMaybe<TQueryAst> AstResult;
 
     bool IsIntrestedInResult() const {
@@ -636,11 +645,11 @@ private:
             ev->Get()->Orbit,
             ev->Get()->Query ? ev->Get()->Query->UserSid : 0);
 
+        TKqpCompileSettings compileSettings(request.KeepInCache, request.IsQueryActionPrepare, request.Deadline, TableServiceConfig.GetEnableAstCache() ? ECompileActorAction::PARSE : ECompileActorAction::COMPILE);
         TKqpCompileRequest compileRequest(ev->Sender, CreateGuidAsString(), std::move(*request.Query),
-            request.KeepInCache, request.UserToken, request.Deadline, dbCounters,
-            ev->Cookie, std::move(ev->Get()->IntrestedInResult), ev->Get()->UserRequestContext,
-            std::move(ev->Get()->Orbit), std::move(compileServiceSpan), std::move(ev->Get()->TempTablesState),
-            TableServiceConfig.GetEnableAstCache() ? ECompileActorAction::PARSE : ECompileActorAction::COMPILE);
+            compileSettings, request.UserToken, dbCounters, ev->Cookie, std::move(ev->Get()->IntrestedInResult),
+            ev->Get()->UserRequestContext, std::move(ev->Get()->Orbit), std::move(compileServiceSpan),
+            std::move(ev->Get()->TempTablesState));
 
         if (!RequestsQueue.Enqueue(std::move(compileRequest))) {
             Counters->ReportCompileRequestRejected(dbCounters);
@@ -693,13 +702,13 @@ private:
 
             NWilson::TSpan compileServiceSpan(TWilsonKqp::CompileService, ev->Get() ? std::move(ev->TraceId) : NWilson::TTraceId(), "CompileService");
 
+            TKqpCompileSettings compileSettings(true, request.IsQueryActionPrepare, request.Deadline, TableServiceConfig.GetEnableAstCache() ? ECompileActorAction::PARSE : ECompileActorAction::COMPILE);
             TKqpCompileRequest compileRequest(ev->Sender, request.Uid, compileResult ? *compileResult->Query : *request.Query,
-                true, request.UserToken, request.Deadline, dbCounters,
+                compileSettings, request.UserToken, dbCounters,
                 ev->Cookie, std::move(ev->Get()->IntrestedInResult),
                 ev->Get()->UserRequestContext,
                 ev->Get() ? std::move(ev->Get()->Orbit) : NLWTrace::TOrbit(),
-                std::move(compileServiceSpan), std::move(ev->Get()->TempTablesState),
-                TableServiceConfig.GetEnableAstCache() ? ECompileActorAction::PARSE : ECompileActorAction::COMPILE);
+                std::move(compileServiceSpan), std::move(ev->Get()->TempTablesState));
 
             if (!RequestsQueue.Enqueue(std::move(compileRequest))) {
                 Counters->ReportCompileRequestRejected(dbCounters);
@@ -750,14 +759,14 @@ private:
             << ", status: " << compileResult->Status
             << ", compileActor: " << ev->Sender);
 
-        bool keepInCache = compileRequest.KeepInCache && compileResult->AllowCache;
+        bool keepInCache = compileRequest.CompileSettings.KeepInCache && compileResult->AllowCache;
 
         bool hasTempTablesNameClashes = HasTempTablesNameClashes(compileResult, compileRequest.TempTablesState, true);
 
         try {
             if (compileResult->Status == Ydb::StatusIds::SUCCESS) {
                 if (!hasTempTablesNameClashes) {
-                    UpdateQueryCache(compileResult, keepInCache);
+                    UpdateQueryCache(compileResult, keepInCache, compileRequest.CompileSettings.IsQueryActionPrepare);
                 }
 
                 if (ev->Get()->ReplayMessage) {
@@ -838,14 +847,14 @@ private:
         return compileResult->PreparedQuery->HasTempTables(tempTablesState, withSessionId);
     }
 
-    void UpdateQueryCache(TKqpCompileResult::TConstPtr compileResult, bool keepInCache) {
+    void UpdateQueryCache(TKqpCompileResult::TConstPtr compileResult, bool keepInCache, bool isQueryActionPrepare) {
         if (QueryCache.FindByUid(compileResult->Uid, false)) {
             QueryCache.Replace(compileResult);
         } else if (keepInCache) {
             if (QueryCache.Insert(compileResult, TableServiceConfig.GetEnableAstCache())) {
                 Counters->CompileQueryCacheEvicted->Inc();
             }
-            if (compileResult->Query && compileResult->Query->Settings.IsPrepareQuery) {
+            if (compileResult->Query && isQueryActionPrepare) {
                 if (InsertPreparingQuery(compileResult, true)) {
                     Counters->CompileQueryCacheEvicted->Inc();
                 };
@@ -858,7 +867,7 @@ private:
         auto& query = ev->Get()->Query;
         auto compileRequest = RequestsQueue.FinishActiveRequest(query);
         if (parseResult && parseResult->Ast->IsOk()) {
-            auto compileResult = QueryCache.FindByAst(query, *parseResult->Ast, compileRequest.KeepInCache);
+            auto compileResult = QueryCache.FindByAst(query, *parseResult->Ast, compileRequest.CompileSettings.KeepInCache);
             if (HasTempTablesNameClashes(compileResult, compileRequest.TempTablesState)) {
                 compileResult = nullptr;
             }
@@ -881,7 +890,7 @@ private:
             compileRequest.Orbit,
             compileRequest.Query.UserSid);
 
-        compileRequest.Action = ECompileActorAction::COMPILE;
+        compileRequest.CompileSettings.Action = ECompileActorAction::COMPILE;
         compileRequest.AstResult = std::move(parseResult);
 
         if (!RequestsQueue.Enqueue(std::move(compileRequest))) {
@@ -942,10 +951,10 @@ private:
                 break;
             }
 
-            if (request->Deadline && request->Deadline < TAppData::TimeProvider->Now()) {
+            if (request->CompileSettings.Deadline && request->CompileSettings.Deadline < TAppData::TimeProvider->Now()) {
                 LOG_DEBUG_S(ctx, NKikimrServices::KQP_COMPILE_SERVICE, "Compilation timed out"
                     << ", sender: " << request->Sender
-                    << ", deadline: " << request->Deadline);
+                    << ", deadline: " << request->CompileSettings.Deadline);
 
                 Counters->ReportCompileRequestTimeout(request->DbCounters);
 
@@ -963,7 +972,7 @@ private:
     void StartCompilation(TKqpCompileRequest&& request, const TActorContext& ctx) {
         auto compileActor = CreateKqpCompileActor(ctx.SelfID, KqpSettings, TableServiceConfig, QueryServiceConfig, MetadataProviderConfig, ModuleResolverState, Counters,
             request.Uid, request.Query, request.UserToken, FederatedQuerySetup, request.DbCounters, request.UserRequestContext,
-            request.CompileServiceSpan.GetTraceId(), request.TempTablesState, request.Action, std::move(request.AstResult), CollectDiagnostics);
+            request.CompileServiceSpan.GetTraceId(), request.TempTablesState, request.CompileSettings.Action, std::move(request.AstResult), CollectDiagnostics);
         auto compileActorId = ctx.ExecutorThread.RegisterActor(compileActor, TMailboxType::HTSwap,
             AppData(ctx)->UserPoolId);
 

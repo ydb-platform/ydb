@@ -393,6 +393,80 @@ Y_UNIT_TEST_SUITE(KqpParams) {
         }
     }
 
+    Y_UNIT_TEST(CheckCacheWithRecompilationQuery) {
+        NYdb::NTable::TExecDataQuerySettings execSettings;
+        execSettings.KeepInQueryCache(true);
+        execSettings.CollectQueryStats(ECollectQueryStatsMode::Basic);
+
+        NKikimrConfig::TAppConfig appConfig;
+        appConfig.MutableTableServiceConfig()->SetEnableAstCache(true);
+        auto setting = NKikimrKqp::TKqpSetting();
+        auto serverSettings = TKikimrSettings()
+            .SetAppConfig(appConfig)
+            .SetKqpSettings({setting});
+
+        TKikimrRunner kikimr(serverSettings.SetWithSampleTables(true));
+        kikimr.GetTestServer().GetRuntime()->SetLogPriority(NKikimrServices::GRPC_SERVER, NActors::NLog::PRI_DEBUG);
+        auto db = kikimr.GetTableClient();
+        auto session = db.CreateSession().GetValueSync().GetSession();
+
+        auto schemeResult = session.ExecuteSchemeQuery(R"(
+            --!syntax_v1
+
+            CREATE TABLE `TestCacheWithRecompile` (
+                version Int64,
+                id Int64,
+                PRIMARY KEY (version, id)
+            );
+        )").GetValueSync();
+        UNIT_ASSERT_C(schemeResult.IsSuccess(), schemeResult.GetIssues().ToString());
+
+        auto query = Q1_(R"(
+            --!syntax_v1
+
+            DECLARE $items as List<Struct<version:Int64,id:Int64>>;
+            UPSERT INTO `/Root/TestCacheWithRecompile`
+            SELECT `version`, `id` FROM AS_TABLE($items);
+        )");
+
+        auto prepareResult = session.PrepareDataQuery(query).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(prepareResult.GetStatus(), EStatus::SUCCESS, prepareResult.GetIssues().ToString());
+
+        auto params = prepareResult.GetQuery().GetParamsBuilder()
+        .AddParam("$items")
+            .BeginList()
+            .AddListItem()
+                .BeginStruct()
+                    .AddMember("id").Int64(0)
+                    .AddMember("version").Int64(1)
+                .EndStruct()
+            .EndList()
+            .Build()
+        .Build();
+
+        auto execResult = session.ExecuteDataQuery(query, TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx(), params, execSettings).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(execResult.GetStatus(), EStatus::SUCCESS, execResult.GetIssues().ToString());
+        auto stats = NYdb::TProtoAccessor::GetProto(*execResult.GetStats());
+        UNIT_ASSERT_VALUES_EQUAL(stats.compilation().from_cache(), true);
+
+        schemeResult = session.ExecuteSchemeQuery(R"(
+            --!syntax_v1
+
+            DROP TABLE TestCacheWithRecompile;
+            CREATE TABLE `TestCacheWithRecompile` (
+                version Int64,
+                id Int64,
+                PRIMARY KEY (version, id)
+            );
+        )").GetValueSync();
+        UNIT_ASSERT_C(schemeResult.IsSuccess(), schemeResult.GetIssues().ToString());
+
+        execResult = session.ExecuteDataQuery(query, TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx(), params, execSettings).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(execResult.GetStatus(), EStatus::SUCCESS, execResult.GetIssues().ToString());
+        stats = NYdb::TProtoAccessor::GetProto(*execResult.GetStats());
+        UNIT_ASSERT_VALUES_EQUAL(stats.compilation().from_cache(), false);
+    }
+
     Y_UNIT_TEST(ExplicitSameParameterTypesQueryCacheCheck) {
         TKikimrRunner kikimr;
         auto db = kikimr.GetTableClient();

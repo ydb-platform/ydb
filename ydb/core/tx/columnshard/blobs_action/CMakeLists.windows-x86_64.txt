@@ -12,13 +12,9 @@ add_subdirectory(counters)
 add_subdirectory(events)
 add_subdirectory(protos)
 add_subdirectory(storages_manager)
-add_subdirectory(tier)
 add_subdirectory(transaction)
 
 add_library(tx-columnshard-blobs_action)
-target_compile_options(tx-columnshard-blobs_action PRIVATE
-  -DKIKIMR_DISABLE_S3_OPS
-)
 target_link_libraries(tx-columnshard-blobs_action PUBLIC
   contrib-libs-cxxsupp
   yutil
@@ -27,7 +23,6 @@ target_link_libraries(tx-columnshard-blobs_action PUBLIC
   ydb-core-tablet_flat
   core-tx-tiering
   columnshard-blobs_action-abstract
-  columnshard-blobs_action-bs
   columnshard-blobs_action-counters
   columnshard-blobs_action-transaction
   columnshard-blobs_action-events

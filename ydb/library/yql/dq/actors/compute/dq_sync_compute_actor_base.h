@@ -270,7 +270,7 @@ protected:
         return TaskRunner ? TaskRunner->GetMeteringStats() : nullptr;
     }
 
-    const IDqAsyncOutputBuffer* GetSink(ui64, const TBase::TAsyncOutputInfoBase& sinkInfo) const override final {
+    const IDqAsyncOutputBuffer* GetSink(ui64, const typename TBase::TAsyncOutputInfoBase& sinkInfo) const override final {
         return sinkInfo.Buffer.Get();
     }
 
@@ -287,7 +287,7 @@ protected:
         return this->MemoryQuota->GetProfileStats();
     }
 
-    virtual void DrainOutputChannel(TBase::TOutputChannelInfo& outputChannel) final {
+    virtual void DrainOutputChannel(typename TBase::TOutputChannelInfo& outputChannel) final {
         YQL_ENSURE(!outputChannel.Finished || this->Checkpoints);
 
         const bool wasFinished = outputChannel.Finished;
@@ -336,7 +336,7 @@ protected:
         this->ProcessOutputsState.AllOutputsFinished &= outputChannel.Finished;
         this->ProcessOutputsState.DataWasSent |= (!wasFinished && outputChannel.Finished) || sentChunks;
     }
-    void DrainAsyncOutput(ui64 outputIndex, TBase::TAsyncOutputInfoBase& outputInfo) override final {
+    void DrainAsyncOutput(ui64 outputIndex, typename TBase::TAsyncOutputInfoBase& outputInfo) override final {
         this->ProcessOutputsState.AllOutputsFinished &= outputInfo.Finished;
         if (outputInfo.Finished && !this->Checkpoints) {
             return;

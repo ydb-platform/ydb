@@ -146,7 +146,11 @@ namespace NTest {
                         }
                     }
                     auto slices_ = MakeIntrusive<TSlices>(slices);
-                    TPartView partView(part, slices_->ToScreen(), slices_);
+                    TPartView partView {
+                        .Part = part,
+                        .Screen = slices_->ToScreen(),
+                        .Slices =  slices_
+                    };
                     TOverlay{partView.Screen, partView.Slices}.Validate();
                     subset->Flatten.push_back(partView);
                 } else {

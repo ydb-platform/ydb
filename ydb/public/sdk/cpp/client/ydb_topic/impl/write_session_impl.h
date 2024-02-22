@@ -478,6 +478,9 @@ private:
     TInstant LastCountersLogTs;
     TWriterCounters::TPtr Counters;
     TDuration WakeupInterval;
+
+    // Set by the write session, if Settings.DirectWriteToPartition is true and Settings.PartitionId is unset. Otherwise ignored.
+    TMaybe<ui64> DirectWriteToPartitionId;
 protected:
     ui64 MessagesAcquired = 0;
 };

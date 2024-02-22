@@ -234,6 +234,9 @@ public:
         IRandomProvider *const RandomProvider;
     };
 
+//TODO (YQ-2068) temporary flag for changing interface
+#define Y_YQL_DQ_NO_PROGRAM_BUILDER_FOR_TRANSFORM
+
     struct TInputTransformArguments {
         const NDqProto::TTaskInput& InputDesc;
         const ui64 InputIndex;
@@ -246,7 +249,6 @@ public:
         const NActors::TActorId& ComputeActorId;
         const NKikimr::NMiniKQL::TTypeEnvironment& TypeEnv;
         const NKikimr::NMiniKQL::THolderFactory& HolderFactory;
-        NKikimr::NMiniKQL::TProgramBuilder& ProgramBuilder;
         std::shared_ptr<NKikimr::NMiniKQL::TScopedAlloc> Alloc;
         NWilson::TTraceId TraceId;
     };
@@ -263,7 +265,6 @@ public:
         const THashMap<TString, TString>& TaskParams;
         const NKikimr::NMiniKQL::TTypeEnvironment& TypeEnv;
         const NKikimr::NMiniKQL::THolderFactory& HolderFactory;
-        NKikimr::NMiniKQL::TProgramBuilder& ProgramBuilder;
     };
 
     // Creates source.

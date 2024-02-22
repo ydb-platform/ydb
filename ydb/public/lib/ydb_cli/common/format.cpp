@@ -479,7 +479,7 @@ void TQueryPlanPrinter::PrintPrettyTableImpl(const NJson::TJsonValue& plan, TStr
                 } else if (key == "E-Rows") {
                     eRows = JsonToString(value);
                 } else if (key != "Name") {
-                    info.emplace_back(TStringBuilder() << colors.LightYellow() << key << colors.Default() << ": " << replaceAll(JsonToString(value), "item.", ""));
+                    info.emplace_back(TStringBuilder() << colors.LightYellow() << key << colors.Default() << ": " << replaceAll(replaceAll(JsonToString(value), "item.", ""), "state.", ""));
                 }
             }
 

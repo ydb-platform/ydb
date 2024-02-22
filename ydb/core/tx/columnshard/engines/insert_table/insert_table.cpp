@@ -79,17 +79,29 @@ THashSet<TWriteId> TInsertTable::DropPath(IDbWrapper& dbTable, ui64 pathId) {
     return Summary.GetInsertedByPathId(pathId);
 }
 
-void TInsertTable::EraseCommitted(IDbWrapper& dbTable, const TInsertedData& data, const std::shared_ptr<IBlobsDeclareRemovingAction>& blobsAction) {
-    if (Summary.EraseCommitted(data)) {
-        RemoveBlobLink(data.GetBlobRange().BlobId, blobsAction);
+void TInsertTable::EraseCommittedOnExecute(IDbWrapper& dbTable, const TInsertedData& data, const std::shared_ptr<IBlobsDeclareRemovingAction>& blobsAction) {
+    if (Summary.HasCommitted(data)) {
         dbTable.EraseCommitted(data);
+        RemoveBlobLinkOnExecute(data.GetBlobRange().BlobId, blobsAction);
     }
 }
 
-void TInsertTable::EraseAborted(IDbWrapper& dbTable, const TInsertedData& data, const std::shared_ptr<IBlobsDeclareRemovingAction>& blobsAction) {
-    if (Summary.EraseAborted((TWriteId)data.WriteTxId)) {
-        RemoveBlobLink(data.GetBlobRange().BlobId, blobsAction);
+void TInsertTable::EraseCommittedOnComplete(const TInsertedData& data) {
+    if (Summary.EraseCommitted(data)) {
+        RemoveBlobLinkOnComplete(data.GetBlobRange().BlobId);
+    }
+}
+
+void TInsertTable::EraseAbortedOnExecute(IDbWrapper& dbTable, const TInsertedData& data, const std::shared_ptr<IBlobsDeclareRemovingAction>& blobsAction) {
+    if (Summary.HasAborted((TWriteId)data.WriteTxId)) {
         dbTable.EraseAborted(data);
+        RemoveBlobLinkOnExecute(data.GetBlobRange().BlobId, blobsAction);
+    }
+}
+
+void TInsertTable::EraseAbortedOnComplete(const TInsertedData& data) {
+    if (Summary.EraseAborted((TWriteId)data.WriteTxId)) {
+        RemoveBlobLinkOnComplete(data.GetBlobRange().BlobId);
     }
 }
 
@@ -127,13 +139,24 @@ std::vector<TCommittedBlob> TInsertTable::Read(ui64 pathId, const TSnapshot& sna
     return result;
 }
 
-bool TInsertTableAccessor::RemoveBlobLink(const TUnifiedBlobId& blobId, const std::shared_ptr<IBlobsDeclareRemovingAction>& blobsAction) {
+bool TInsertTableAccessor::RemoveBlobLinkOnExecute(const TUnifiedBlobId& blobId, const std::shared_ptr<IBlobsDeclareRemovingAction>& blobsAction) {
     AFL_VERIFY(blobsAction);
     auto itBlob = BlobLinks.find(blobId);
     AFL_VERIFY(itBlob != BlobLinks.end());
     AFL_VERIFY(itBlob->second >= 1);
     if (itBlob->second == 1) {
         blobsAction->DeclareSelfRemove(itBlob->first);
+        return true;
+    } else {
+        return false;
+    }
+}
+
+bool TInsertTableAccessor::RemoveBlobLinkOnComplete(const TUnifiedBlobId& blobId) {
+    auto itBlob = BlobLinks.find(blobId);
+    AFL_VERIFY(itBlob != BlobLinks.end());
+    AFL_VERIFY(itBlob->second >= 1);
+    if (itBlob->second == 1) {
         BlobLinks.erase(itBlob);
         return true;
     } else {

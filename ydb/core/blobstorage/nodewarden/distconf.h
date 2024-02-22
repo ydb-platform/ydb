@@ -76,11 +76,11 @@ namespace NKikimr::NStorage {
             };
 
             struct TEvStorageConfigLoaded : TEventLocal<TEvStorageConfigLoaded, EvStorageConfigLoaded> {
-                std::vector<std::tuple<TString, NKikimrBlobStorage::TPDiskMetadataRecord>> MetadataPerPath;
+                std::vector<std::tuple<TString, NKikimrBlobStorage::TPDiskMetadataRecord, std::optional<ui64>>> MetadataPerPath;
             };
 
             struct TEvStorageConfigStored : TEventLocal<TEvStorageConfigStored, EvStorageConfigStored> {
-                std::vector<std::tuple<TString, bool>> StatusPerPath;
+                std::vector<std::tuple<TString, bool, std::optional<ui64>>> StatusPerPath;
             };
         };
 
@@ -437,7 +437,7 @@ namespace NKikimr::NStorage {
         EnumerateConfigDrives(config, 0, cb, &nodeMap);
 
         // process responses
-        generateSuccessful([&](const TNodeIdentifier& node, const TString& path) {
+        generateSuccessful([&](const TNodeIdentifier& node, const TString& path, std::optional<ui64> /*guid*/) {
             const auto it = nodeMap.find(node.NodeId());
             if (it == nodeMap.end() || TNodeIdentifier(*it->second) != node) { // unexpected node answers
                 return;
@@ -498,4 +498,122 @@ namespace NKikimr::NStorage {
         return ok > err;
     }
 
+    template<typename T>
+    bool HasStorageQuorum(const NKikimrBlobStorage::TStorageConfig& config, T&& generateSuccessful,
+            const TNodeWardenConfig& nwConfig, bool allowUnformatted) {
+        auto makeError = [&](TString error) -> bool {
+            STLOG(PRI_CRIT, BS_NODE, NWDC41, "configuration incorrect", (Error, error));
+            Y_DEBUG_ABORT_UNLESS(false, "%s", error.c_str());
+            return false;
+        };
+        if (!config.HasBlobStorageConfig()) { // no storage config at all -- however, this is quite strange
+            return makeError("no BlobStorageConfig section in config");
+        }
+        const auto& bsConfig = config.GetBlobStorageConfig();
+        if (!bsConfig.HasServiceSet()) { // maybe this is initial configuration
+            return !config.GetGeneration() || makeError("non-initial configuration with missing ServiceSet");
+        }
+        const auto& ss = bsConfig.GetServiceSet();
+
+        // build map of group infos
+        struct TGroupRecord {
+            TIntrusivePtr<TBlobStorageGroupInfo> Info;
+            TBlobStorageGroupInfo::TGroupVDisks Confirmed; // a set of confirmed group disks
+
+            TGroupRecord(TIntrusivePtr<TBlobStorageGroupInfo>&& info)
+                : Info(std::move(info))
+                , Confirmed(&Info->GetTopology())
+            {}
+        };
+        THashMap<ui32, TGroupRecord> groups;
+        for (const auto& group : ss.GetGroups()) {
+            const ui32 groupId = group.GetGroupID();
+            if (TGroupID(groupId).ConfigurationType() != EGroupConfigurationType::Static) {
+                return makeError("nonstatic group id in static configuration section");
+            }
+
+            TStringStream err;
+            TIntrusivePtr<TBlobStorageGroupInfo> info = TBlobStorageGroupInfo::Parse(group, &nwConfig.StaticKey, &err);
+            if (!info) {
+                return makeError(TStringBuilder() << "failed to parse static group " << groupId << ": " << err.Str());
+            }
+
+            if (const auto [it, inserted] = groups.emplace(groupId, std::move(info)); !inserted) {
+                return makeError("duplicate group id in static configuration section");
+            }
+        }
+
+        // fill in pdisk map
+        THashMap<std::tuple<ui32, ui32, ui64>, TString> pdiskIdToPath; // (nodeId, pdiskId, pdiskGuid) -> path
+        for (const auto& pdisk : ss.GetPDisks()) {
+            const auto [it, inserted] = pdiskIdToPath.emplace(std::make_tuple(pdisk.GetNodeID(), pdisk.GetPDiskID(),
+                pdisk.GetPDiskGuid()), pdisk.GetPath());
+            if (!inserted) {
+                return makeError("duplicate pdisk in static configuration section");
+            }
+        }
+
+        // create confirmation map
+        THashMultiMap<std::tuple<ui32, TString, std::optional<ui64>>, TVDiskID> confirm;
+        for (const auto& vdisk : ss.GetVDisks()) {
+            if (!vdisk.HasVDiskID() || !vdisk.HasVDiskLocation()) {
+                return makeError("incorrect TVDisk record");
+            }
+            const auto vdiskId = VDiskIDFromVDiskID(vdisk.GetVDiskID());
+            const auto it = groups.find(vdiskId.GroupID);
+            if (it == groups.end()) {
+                return makeError(TStringBuilder() << "VDisk " << vdiskId << " does not match any static group");
+            }
+            const TGroupRecord& group = it->second;
+            if (vdiskId.GroupGeneration != group.Info->GroupGeneration) {
+                return makeError(TStringBuilder() << "VDisk " << vdiskId << " group generation mismatch");
+            }
+            const auto& location = vdisk.GetVDiskLocation();
+            const auto jt = pdiskIdToPath.find(std::make_tuple(location.GetNodeID(), location.GetPDiskID(),
+                location.GetPDiskGuid()));
+            if (jt == pdiskIdToPath.end()) {
+                return makeError(TStringBuilder() << "VDisk " << vdiskId << " points to incorrect PDisk record");
+            }
+            confirm.emplace(std::make_tuple(location.GetNodeID(), jt->second, location.GetPDiskGuid()), vdiskId);
+            if (allowUnformatted) {
+                confirm.emplace(std::make_tuple(location.GetNodeID(), jt->second, std::nullopt), vdiskId);
+            }
+        }
+
+        // process responded nodes
+        generateSuccessful([&](const TNodeIdentifier& node, const TString& path, std::optional<ui64> guid) {
+            const auto key = std::make_tuple(node.NodeId(), path, guid);
+            const auto [begin, end] = confirm.equal_range(key);
+            for (auto it = begin; it != end; ++it) {
+                const TVDiskID& vdiskId = it->second;
+                TGroupRecord& group = groups.at(vdiskId.GroupID);
+                group.Confirmed |= {&group.Info->GetTopology(), vdiskId};
+            }
+        });
+
+        // scan all groups and find ones without quorum
+        for (const auto& [groupId, group] : groups) {
+            if (const auto& checker = group.Info->GetQuorumChecker(); !checker.CheckQuorumForGroup(group.Confirmed)) {
+                return false;
+            }
+        }
+
+        return true; // all group meet their quorums
+    }
+
+    // Ensure configuration has quorum in both disk and storage ways for current and previous configuration.
+    template<typename T>
+    bool HasConfigQuorum(const NKikimrBlobStorage::TStorageConfig& config, T&& generateSuccessful,
+            const TNodeWardenConfig& nwConfig) {
+        return HasDiskQuorum(config, generateSuccessful) &&
+            HasStorageQuorum(config, generateSuccessful, nwConfig, true) && (!config.HasPrevConfig() || (
+            HasDiskQuorum(config.GetPrevConfig(), generateSuccessful) &&
+            HasStorageQuorum(config.GetPrevConfig(), generateSuccessful, nwConfig, false)));
+    }
+
 } // NKikimr::NStorage
+
+template<>
+struct THash<std::optional<ui64>> {
+    size_t operator ()(std::optional<ui64> x) const { return MultiHash(x.has_value(), x.value_or(0)); }
+};

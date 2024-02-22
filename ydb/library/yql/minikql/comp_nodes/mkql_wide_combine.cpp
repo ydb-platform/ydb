@@ -619,30 +619,27 @@ private:
                 break;
             case EOperatingMode::SpillState: {
                 MKQL_ENSURE(EOperatingMode::InMemory == Mode, "Internal logic error");
-                MKQL_ENSURE(!Spiller, "Internal logic error");
                 MKQL_ENSURE(ctx.SpillerFactory, "Internal logic error");
 
-                Spiller = ctx.SpillerFactory->CreateSpiller();
                 SpilledBuckets.resize(SpilledBucketCount);
                 for (auto &b: SpilledBuckets) {
-                    b.InitialState = std::make_unique<TWideUnboxedValuesSpillerAdapter>(Spiller, KeyAndStateType, 1 << 20);
+                    b.Spiller = ctx.SpillerFactory->CreateSpiller();
+                    b.InitialState = std::make_unique<TWideUnboxedValuesSpillerAdapter>(b.Spiller, KeyAndStateType, 1 << 20);
                 }
                 FinalizingSpillerBuckets = false;
                 break;
             }
             case EOperatingMode::SpillData:
                 MKQL_ENSURE(EOperatingMode::SpillState == Mode, "Internal logic error");
-                MKQL_ENSURE(Spiller,"Internal logic error");
                 MKQL_ENSURE(SpilledBuckets.size() == SpilledBucketCount, "Internal logic error");
                 for (auto &b: SpilledBuckets) {
-                    b.Data = std::make_unique<TWideUnboxedValuesSpillerAdapter>(Spiller, UsedInputItemType, 1 << 20);
+                    b.Data = std::make_unique<TWideUnboxedValuesSpillerAdapter>(b.Spiller, UsedInputItemType, 1 << 20);
                 }
                 InputDataFetchResult = EFetchResult::Yield;
                 FinalizingSpillerBuckets = false;
                 break;
             case EOperatingMode::ProcessSpilled:
                 MKQL_ENSURE(EOperatingMode::SpillData == Mode, "Internal logic error");
-                MKQL_ENSURE(Spiller,"Internal logic error");
                 MKQL_ENSURE(SpilledBuckets.size() == SpilledBucketCount, "Internal logic error");
                 break;
         }
@@ -670,10 +667,10 @@ private:
     struct TSpilledBucket {
         std::unique_ptr<TWideUnboxedValuesSpillerAdapter> InitialState; //state collected before switching to spilling mode
         std::unique_ptr<TWideUnboxedValuesSpillerAdapter> Data; //data collected in spilling mode
+        ISpiller::TPtr Spiller;
     };
     static constexpr size_t SpilledBucketCount = 128;
     std::deque<TSpilledBucket> SpilledBuckets;
-    ISpiller::TPtr Spiller;
     EFetchResult InputDataFetchResult;
     size_t CurrentAsyncOperationBucketId;
     std::optional<NThreading::TFuture<ISpiller::TKey>> AsyncWriteOperation;

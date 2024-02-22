@@ -918,7 +918,8 @@ private:
             CurrentArgContext.stack.push_back(expr.Ptr().Get());
 
             if (inputIds.size() == expr.Cast<TDqStageBase>().Program().Args().Size()) {
-                for (const auto& arg : expr.Cast<TDqStageBase>().Program().Args()) {
+                for (size_t i = 0; i < expr.Cast<TDqStageBase>().Program().Args().Size(); i++ ) {
+                    const auto& arg = expr.Cast<TDqStageBase>().Program().Args().Arg(i);
                     LambdaInputs[CurrentArgContext.AddArg(arg.Ptr().Get())] = inputIds[0];
                     inputIds.erase(inputIds.begin());
                 }
@@ -1392,7 +1393,6 @@ private:
 
         TOperator op;
         op.Properties["Name"] = name;
-        op.Properties["Condition"] = MakeJoinConditionString(join.LeftKeysColumns(), join.RightKeysColumns());
 
         auto operatorId = AddOperator(planNode, name, std::move(op));
 
@@ -1408,8 +1408,6 @@ private:
 
         TOperator op;
         op.Properties["Name"] = name;
-        op.Properties["Condition"] = MakeJoinConditionString(join.LeftKeysColumns(), join.RightKeysColumns());
-
 
         AddOptimizerEstimates(op, join);
 
@@ -1940,7 +1938,7 @@ NJson::TJsonValue ReconstructQueryPlanRec(const NJson::TJsonValue& plan,
         result["PlanNodeType"] = plan.GetMapSafe().at("PlanNodeType").GetStringSafe();
     }
 
-    if (plan.GetMapSafe().contains("Stats")) {
+    if (plan.GetMapSafe().contains("Stats") && operatorIndex==0) {
         result["Stats"] = plan.GetMapSafe().at("Stats");
     }
 
@@ -2073,6 +2071,41 @@ NJson::TJsonValue ReconstructQueryPlanRec(const NJson::TJsonValue& plan,
     return result;
 }
 
+double ComputeCpuTimes(NJson::TJsonValue& plan) {
+    double currCpuTime = 0;
+
+    if (plan.GetMapSafe().contains("Plans")) {
+        for (auto& p : plan.GetMapSafe().at("Plans").GetArraySafe()) {
+            currCpuTime += ComputeCpuTimes(p);
+        }
+    }
+
+    if (plan.GetMapSafe().contains("Stats") && plan.GetMapSafe().contains("Operators")) {
+        YQL_CLOG(TRACE, CoreDq) << "Found Operators";
+
+        auto& ops = plan.GetMapSafe().at("Operators").GetArraySafe();
+
+        const auto& stats = plan.GetMapSafe().at("Stats").GetMapSafe();
+
+        if (stats.contains("CpuTimeUs")) {
+            double opCpuTime;
+
+            auto& cpuTime = stats.at("CpuTimeUs");
+            if (cpuTime.IsMap()) {
+                opCpuTime = cpuTime.GetMapSafe().at("Max").GetDoubleSafe();
+            } else {
+                opCpuTime = cpuTime.GetDoubleSafe();
+            }
+
+            currCpuTime += opCpuTime;
+        }
+
+        ops[0]["A-Cpu"] = currCpuTime / 1000.0;
+    }
+
+    return currCpuTime;
+}
+
 NJson::TJsonValue SimplifyQueryPlan(NJson::TJsonValue& plan) {
      static const THashSet<TString> redundantNodes = {
        "UnionAll",
@@ -2098,6 +2131,8 @@ NJson::TJsonValue SimplifyQueryPlan(NJson::TJsonValue& plan) {
     int nodeCounter = 0;
     plan = ReconstructQueryPlanRec(plan, 0, planIndex, precomputes, nodeCounter);
     RemoveRedundantNodes(plan, redundantNodes);
+    ComputeCpuTimes(plan);
+
     return plan;
 }
 

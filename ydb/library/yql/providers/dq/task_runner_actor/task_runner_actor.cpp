@@ -228,10 +228,10 @@ public:
             cFunc(NActors::TEvents::TEvPoison::EventType, TTaskRunnerActor::PassAway);
             hFunc(TEvTaskRunnerCreate, OnDqTask);
             hFunc(TEvContinueRun, OnContinueRun);
-            hFunc(TEvPop, OnChannelPop);
-            hFunc(TEvPush, OnChannelPush);
-            hFunc(TEvSinkPop, OnSinkPop);
-            hFunc(TEvSinkPopFinished, OnSinkPopFinished);
+            hFunc(TEvOutputChannelDataRequest, OnOutputhannelDataRequest);
+            hFunc(TEvInputChannelData, OnInputChannelData);
+            hFunc(TEvSinkDataRequest, OnSinkDataRequest);
+            hFunc(TEvSinkData, OnSinkData);
             IgnoreFunc(TEvStatistics);
             default: {
                 auto message = TStringBuilder() << "Unexpected event: " << ev->GetTypeRewrite() << " (" << ev->GetTypeName() << ")" << " stageId: " << StageId;
@@ -362,22 +362,21 @@ private:
         Run(ev);
     }
 
-    void OnChannelPush(TEvPush::TPtr& ev) {
+    void OnInputChannelData(TEvInputChannelData::TPtr& ev) {
         auto* actorSystem = TActivationContext::ActorSystem();
         auto replyTo = ev->Sender;
         auto selfId = SelfId();
-        auto hasData = ev->Get()->HasData;
         auto finish = ev->Get()->Finish;
         auto channelId = ev->Get()->ChannelId;
         auto cookie = ev->Cookie;
         auto data = ev->Get()->Data;
-        Invoker->Invoke([hasData, selfId, cookie, finish, channelId, taskRunner=TaskRunner, data, actorSystem, replyTo, settings=Settings, stageId=StageId] () mutable {
+        Invoker->Invoke([selfId, cookie, finish, channelId, taskRunner=TaskRunner, data, actorSystem, replyTo, settings=Settings, stageId=StageId] () mutable {
             try {
                 // todo:(whcrc) finish output channel?
                 ui64 freeSpace = 0;
-                if (hasData) {
+                if (data) {
                     // auto guard = taskRunner->BindAllocator(); // only for local mode
-                    taskRunner->GetInputChannel(channelId)->Push(std::move(data));
+                    taskRunner->GetInputChannel(channelId)->Push(std::move(*data));
                     freeSpace = taskRunner->GetInputChannel(channelId)->GetFreeSpace();
                 }
                 if (finish) {
@@ -389,7 +388,7 @@ private:
                     new IEventHandle(
                         replyTo,
                         selfId,
-                        new TEvPushFinished(channelId, freeSpace),
+                        new TEvInputChannelDataAck(channelId, freeSpace),
                         /*flags=*/0,
                         cookie));
             } catch (...) {
@@ -433,7 +432,7 @@ private:
                     new IEventHandle(
                         parentId,
                         selfId,
-                        new TEvAsyncInputPushFinished(index, source->GetFreeSpace()),
+                        new TEvSourceDataAck(index, source->GetFreeSpace()),
                         /*flags=*/0,
                         cookie));
             } catch (...) {
@@ -449,7 +448,7 @@ private:
         });
     }
 
-    void OnChannelPop(TEvPop::TPtr& ev) {
+    void OnOutputhannelDataRequest(TEvOutputChannelDataRequest::TPtr& ev) {
         auto* actorSystem = TActivationContext::ActorSystem();
         auto replyTo = ev->Sender;
         auto selfId = SelfId();
@@ -477,7 +476,7 @@ private:
                     new IEventHandle(
                         replyTo,
                         selfId,
-                        new TEvChannelPopFinished(
+                        new TEvOutputChannelData(
                             channelId,
                             std::move(result.DataChunks),
                             Nothing(),
@@ -500,7 +499,7 @@ private:
         });
     }
 
-    void OnSinkPopFinished(TEvSinkPopFinished::TPtr& ev) {
+    void OnSinkData(TEvSinkData::TPtr& ev) {
         auto guard = TaskRunner->BindAllocator();
         NKikimr::NMiniKQL::TUnboxedValueBatch batch;
         auto sink = TaskRunner->GetSink(ev->Get()->Index);
@@ -517,7 +516,7 @@ private:
             ev->Get()->Changed);
     }
 
-    void OnSinkPop(TEvSinkPop::TPtr& ev) {
+    void OnSinkDataRequest(TEvSinkDataRequest::TPtr& ev) {
         auto selfId = SelfId();
         auto* actorSystem = TActivationContext::ActorSystem();
 
@@ -543,7 +542,7 @@ private:
                 }
                 auto finished = sink->IsFinished();
                 bool changed = finished || ev->Get()->Size > 0 || hasCheckpoint;
-                auto event = MakeHolder<TEvSinkPopFinished>(
+                auto event = MakeHolder<TEvSinkData>(
                     ev->Get()->Index,
                     std::move(maybeCheckpoint), size, checkpointSize, finished, changed);
                 event->Batch = std::move(batch);

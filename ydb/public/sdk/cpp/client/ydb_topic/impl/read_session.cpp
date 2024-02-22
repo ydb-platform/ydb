@@ -34,6 +34,8 @@ TReadSession::TReadSession(const TReadSessionSettings& settings,
 }
 
 TReadSession::~TReadSession() {
+    Close(TDuration::Zero());
+
     Abort(EStatus::ABORTED, "Aborted");
     ClearAllEvents();
 

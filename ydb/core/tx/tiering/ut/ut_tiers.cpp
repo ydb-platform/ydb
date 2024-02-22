@@ -548,7 +548,7 @@ Y_UNIT_TEST_SUITE(ColumnShardTiers) {
         Tests::TServer::TPtr server = new Tests::TServer(serverSettings);
         server->EnableGRpc(grpcPort);
         Tests::TClient client(serverSettings);
-        Tests::NCommon::TLoggerInit(server->GetRuntime()).SetComponents({ NKikimrServices::TX_COLUMNSHARD }).Initialize();
+        Tests::NCommon::TLoggerInit(server->GetRuntime()).Clear().SetComponents({ NKikimrServices::TX_COLUMNSHARD }, "CS").Initialize();
 
         auto& runtime = *server->GetRuntime();
 //        runtime.SetLogPriority(NKikimrServices::TX_PROXY, NLog::PRI_TRACE);

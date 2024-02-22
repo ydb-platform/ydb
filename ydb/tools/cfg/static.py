@@ -1122,7 +1122,13 @@ class StaticConfigGenerator(object):
 
     def __generate_tracing_txt(self):
         def get_selectors(selectors):
-            return config_pb2.TTracingConfig.TSelectors()
+            selectors_pb = config_pb2.TTracingConfig.TSelectors()
+
+            request_type = selectors["request_type"]
+            if request_type is not None:
+                selectors_pb.RequestType = request_type
+
+            return selectors_pb
 
         def get_sampling_scope(sampling):
             sampling_scope_pb = config_pb2.TTracingConfig.TSamplingScope()
@@ -1131,8 +1137,8 @@ class StaticConfigGenerator(object):
                 sampling_scope_pb.Scope.CopyFrom(get_selectors(selectors))
             sampling_scope_pb.Fraction = sampling['fraction']
             sampling_scope_pb.Level = sampling['level']
-            sampling_scope_pb.MaxRatePerMinute = sampling['max_rate_per_minute']
-            sampling_scope_pb.MaxBurst = sampling.get('max_burst', 0)
+            sampling_scope_pb.MaxTracesPerMinute = sampling['max_traces_per_minute']
+            sampling_scope_pb.MaxTracesBurst = sampling.get('max_traces_burst', 0)
             return sampling_scope_pb
 
         def get_external_throttling(throttling):
@@ -1140,8 +1146,8 @@ class StaticConfigGenerator(object):
             selectors = throttling.get("scope")
             if selectors is not None:
                 throttling_scope_pb.Scope.CopyFrom(get_selectors(selectors))
-            throttling_scope_pb.MaxRatePerMinute = throttling['max_rate_per_minute']
-            throttling_scope_pb.MaxBurst = throttling.get('max_burst', 0)
+            throttling_scope_pb.MaxTracesPerMinute = throttling['max_traces_per_minute']
+            throttling_scope_pb.MaxTracesBurst = throttling.get('max_traces_burst', 0)
             return throttling_scope_pb
 
         def get_auth_config(auth):
@@ -1190,9 +1196,9 @@ class StaticConfigGenerator(object):
         def get_uploader(uploader):
             uploader_pb = config_pb2.TTracingConfig.TUploaderConfig()
 
-            max_spans_per_second = uploader.get("max_spans_per_second")
-            if max_spans_per_second is not None:
-                uploader_pb.MaxSpansPerSecond = max_spans_per_second
+            max_exported_spans_per_second = uploader.get("max_exported_spans_per_second")
+            if max_exported_spans_per_second is not None:
+                uploader_pb.MaxExportedSpansPerSecond = max_exported_spans_per_second
 
             max_spans_in_batch = uploader.get("max_spans_in_batch")
             if max_spans_in_batch is not None:

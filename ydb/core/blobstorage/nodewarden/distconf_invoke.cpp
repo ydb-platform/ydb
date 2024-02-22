@@ -46,8 +46,8 @@ namespace NKikimr::NStorage {
             } else if (Self->Binding) {
                 if (RequestSessionId) {
                     FinishWithError(TResult::ERROR, "no double-hop invokes allowed");
-                } else if (Self->Binding->NodeId != ConnectedPeerNodeId) { // subscribe to session first
-                    Send(TActivationContext::InterconnectProxy(Self->Binding->NodeId), new TEvInterconnect::TEvConnectNode);
+                } else if (Self->Binding->RootNodeId != ConnectedPeerNodeId) { // subscribe to session first
+                    Send(TActivationContext::InterconnectProxy(Self->Binding->RootNodeId), new TEvInterconnect::TEvConnectNode);
                     UnsubscribeInterconnect();
                 } else { // session is already established, forward event to peer node
                     Y_ABORT_UNLESS(Event);

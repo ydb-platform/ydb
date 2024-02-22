@@ -148,6 +148,11 @@ ui64 TKqpComputeActor::CalcMkqlMemoryLimit() {
     return TBase::CalcMkqlMemoryLimit() + ComputeCtx.GetTableScans().size() * MemoryLimits.ChannelBufferSize;
 }
 
+void TKqpComputeActor::CheckRunStatus() {
+    ProcessOutputsState.LastPopReturnedNoData = !ProcessOutputsState.DataWasSent;
+    TBase::CheckRunStatus();
+}
+
 void TKqpComputeActor::FillExtraStats(NDqProto::TDqComputeActorStats* dst, bool last) {
     if (last && SysViewActorId && ScanData && dst->TasksSize() > 0) {
         YQL_ENSURE(dst->TasksSize() == 1);

@@ -352,6 +352,9 @@ IGraphTransformer::TStatus TryConvertToImpl(TExprContext& ctx, TExprNode::TPtr& 
         } else if (from == EDataSlot::Datetime64 && (to == EDataSlot::Timestamp64)) {
             allow = true;
             useCast = true;
+        } else if (from == EDataSlot::Interval && (to == EDataSlot::Interval64)) {
+            allow = true;
+            useCast = true;
         } else if (from == EDataSlot::Json && to == EDataSlot::Utf8) {
             allow = true;
             useCast = true;
@@ -4929,16 +4932,10 @@ ui32 GetDateTypeLevel(EDataSlot dataSlot) {
     switch (dataSlot) {
     case EDataSlot::Date:
         return 0;
-    case EDataSlot::Date32:
-        return 5;
     case EDataSlot::Datetime:
-        return 10;
-    case EDataSlot::Datetime64:
-        return 15;
+        return 1;
     case EDataSlot::Timestamp:
-        return 20;
-    case EDataSlot::Timestamp64:
-        return 25;
+        return 2;
     default:
         ythrow yexception() << "Unknown date type: " << NKikimr::NUdf::GetDataTypeInfo(dataSlot).Name;
     }
@@ -4948,16 +4945,10 @@ EDataSlot GetDateTypeByLevel(ui32 level) {
     switch (level) {
     case 0:
         return EDataSlot::Date;
-    case 5:
-        return EDataSlot::Date32;
-    case 10:
+    case 1:
         return EDataSlot::Datetime;
-    case 15:
-        return EDataSlot::Datetime64;
-    case 20:
+    case 2:
         return EDataSlot::Timestamp;
-    case 25:
-        return EDataSlot::Timestamp64;
     default:
         ythrow yexception() << "Unknown date level: " << level;
     }

@@ -256,6 +256,7 @@ public:
                                                 : KqpValidateLocks(tabletId, sysLocks, kqpLocks, useGenericReadSets, inReadSets);
 
             if (!validated) {
+                LOG_TRACE_S(ctx, NKikimrServices::TX_DATASHARD, "Operation " << *op << " at " << tabletId << " aborting because locks are not valid");
                 writeOp->SetError(NKikimrDataEvents::TEvWriteResult::STATUS_LOCKS_BROKEN, "Operation is aborting because locks are not valid");
 
                 for (auto& brokenLock : brokenLocks) {

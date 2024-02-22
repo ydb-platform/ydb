@@ -56,6 +56,11 @@ SELECT '{
 		"one": 1,
 		"two":"two",
 		"averyveryveryveryveryveryveryveryveryverylongfieldname":}'::json;
+-- ERROR missing value for last field
+--constructors
+-- array_to_json
+SELECT array_to_json(array(select 1 as a));
+SELECT array_to_json(array_agg(x),false) from generate_series(5,10) x;
 SELECT array_to_json('{{1,5},{99,100}}'::int[]);
 BEGIN;
 COMMIT;

@@ -40,10 +40,15 @@ def find_sql_tests(path):
     return tests
 
 
-def run_sql_test(sql, out, tmp_path, runner):
+def run_sql_test(sql, out, tmp_path, runner, udfs):
     LOGGER.debug("Running %s '%s' -> [%s]", runner, sql, ', '.join("'{}'".format(a) for a in out))
     with open(sql, 'rb') as f:
-        pi = subprocess.run([runner, "--datadir", tmp_path],
+        args = [runner, "--datadir", tmp_path]
+        for udf in udfs:
+            args.append("--udf")  
+            args.append(udf)  
+         
+        pi = subprocess.run(args,
                             stdin=f, stdout=subprocess.PIPE, stderr=sys.stderr, check=True)
 
     min_diff = sys.maxsize

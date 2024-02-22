@@ -276,6 +276,21 @@ LINE 1: SELECT '{
                ^
 DETAIL:  Expected JSON value, but found "}".
 CONTEXT:  JSON data, line 4: ...yveryveryveryveryveryveryveryverylongfieldname":}
+-- ERROR missing value for last field
+--constructors
+-- array_to_json
+SELECT array_to_json(array(select 1 as a));
+ array_to_json 
+---------------
+ [1]
+(1 row)
+
+SELECT array_to_json(array_agg(x),false) from generate_series(5,10) x;
+ array_to_json  
+----------------
+ [5,6,7,8,9,10]
+(1 row)
+
 SELECT array_to_json('{{1,5},{99,100}}'::int[]);
   array_to_json   
 ------------------

@@ -38,7 +38,7 @@ class TStatsPartGroupBtreeIndexIterator : public IStatsPartGroupIterator {
 
 public:
     TStatsPartGroupBtreeIndexIterator(const TPart* part, IPages* env, TGroupId groupId,
-            ui64 rowCountResolution, ui64 dataSizeResolution)
+            ui64 rowCountResolution, ui64 dataSizeResolution, const TVector<TRowId>& splitPoints)
         : Part(part)
         , Env(env)
         , GroupId(groupId)
@@ -48,7 +48,9 @@ public:
         , NodeIndex(0)
         , RowCountResolution(rowCountResolution)
         , DataSizeResolution(dataSizeResolution)
+        , SplitPoints(splitPoints) // make copy for Start
     {
+        Y_DEBUG_ABORT_UNLESS(std::is_sorted(SplitPoints.begin(), SplitPoints.end()));
     }
     
     EReady Start() override {
@@ -60,11 +62,17 @@ public:
 
         for (ui32 height = 0; height < Meta.LevelCount; height++) {
             bool hasChanges = false;
+            size_t splitPointIndex = 0;
 
             for (auto &nodeState : Nodes) {
-                if (nodeState.EndRowId - nodeState.BeginRowId <= RowCountResolution
+                while (splitPointIndex < SplitPoints.size() && SplitPoints[splitPointIndex] < nodeState.BeginRowId) {
+                    splitPointIndex++;
+                }
+                if (splitPointIndex < SplitPoints.size() && SplitPoints[splitPointIndex] < nodeState.EndRowId) {
+                    // split node and go deeper
+                } else if (nodeState.EndRowId - nodeState.BeginRowId <= RowCountResolution
                         && nodeState.EndDataSize - nodeState.BeginDataSize <= DataSizeResolution) {
-                    nextNodes.push_back(nodeState); // move current node on the next level as-is
+                    nextNodes.push_back(nodeState); // lift current node on the next level as-is
                     continue; // don't go deeper
                 }
 
@@ -169,6 +177,7 @@ private:
     TVector<TNodeState> Nodes;
     ui64 RowCountResolution;
     ui64 DataSizeResolution;
+    TVector<TRowId> SplitPoints;
 };
 
 }

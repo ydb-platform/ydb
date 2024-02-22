@@ -32,6 +32,19 @@ public:
         , Large(std::move(large))
         , CurrentHole(TScreen::Iter(Screen, CurrentHoleIdx, 0, 1))
     {
+        TVector<TRowId> splitPoints;
+        if (Screen) {
+            splitPoints.reserve(Screen->Size() * 2);
+            for (auto hole : *Screen) {
+                for (auto splitPoint : {hole.Begin, hole.End}) {
+                    Y_DEBUG_ABORT_UNLESS(splitPoints.empty() || splitPoints.back() <= splitPoint);
+                    if (0 < splitPoint && splitPoint < Part->Stat.Rows - 1 && (splitPoints.empty() || splitPoints.back() < splitPoint)) {
+                        splitPoints.push_back(splitPoint);
+                    }
+                }
+            }
+        }
+
         for (bool historic : {false, true}) {
             for (ui32 groupIndex : xrange(historic ? Part->HistoricGroupsCount : Part->GroupsCount)) {
                 ui64 groupRowCountResolution, groupDataSizeResolution;
@@ -44,7 +57,9 @@ public:
                 }
 
                 (historic ? HistoricGroups : Groups).push_back(
-                    CreateStatsPartGroupIterator(Part.Get(), env, TGroupId(groupIndex, historic), groupRowCountResolution, groupDataSizeResolution));
+                    CreateStatsPartGroupIterator(Part.Get(), env, TGroupId(groupIndex, historic), 
+                        groupRowCountResolution, groupDataSizeResolution, 
+                        historic || groupRowCountResolution == 0 ? TVector<TRowId>() : splitPoints));
             }
         }
     }

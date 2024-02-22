@@ -471,7 +471,7 @@ class TS3Uploader: public TActorBootstrapped<TS3Uploader> {
     }
 
     void Retry() {
-        Delay = Min(Delay * ++Attempt, TDuration::Minutes(10));
+        Delay = Min(Delay * ++Attempt, MaxDelay);
         const TDuration random = TDuration::FromValue(TAppData::RandomProvider->GenRand64() % Delay.MicroSeconds());
         this->Schedule(Delay + random, new TEvents::TEvWakeup());
     }
@@ -637,8 +637,10 @@ private:
     const ui32 Retries;
     ui32 Attempt;
 
-    TActorId Client;
     TDuration Delay;
+    static constexpr TDuration MaxDelay = TDuration::Minutes(10);
+
+    TActorId Client;
     bool SchemeUploaded;
     bool MetadataUploaded;
     bool MultiPart;

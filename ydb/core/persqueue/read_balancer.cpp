@@ -736,7 +736,7 @@ TActorId TPersQueueReadBalancer::GetPipeClient(const ui64 tabletId, const TActor
 
     auto it = TabletPipes.find(tabletId);
     if (it == TabletPipes.end()) {
-        NTabletPipe::TClientConfig clientConfig;
+        NTabletPipe::TClientConfig clientConfig(NTabletPipe::TClientRetryPolicy::WithRetries());
         pipeClient = ctx.RegisterWithSameMailbox(NTabletPipe::CreateClient(ctx.SelfID, tabletId, clientConfig));
         TabletPipes[tabletId].PipeActor = pipeClient;
         auto res = PipesRequested.insert(tabletId);
@@ -758,6 +758,7 @@ void TPersQueueReadBalancer::RequestTabletIfNeeded(const ui64 tabletId, const TA
         NTabletPipe::SendData(ctx, pipeClient, new NSchemeShard::TEvSchemeShard::TEvDescribeScheme(tabletId, PathId));
     } else {
         TActorId pipeClient = GetPipeClient(tabletId, ctx);
+
         auto it = AggregatedStats.Cookies.find(tabletId);
         if (!pipeReconnected || it != AggregatedStats.Cookies.end()) {
             ui64 cookie;
@@ -772,6 +773,7 @@ void TPersQueueReadBalancer::RequestTabletIfNeeded(const ui64 tabletId, const TA
                 TStringBuilder() << "Send TEvPersQueue::TEvStatus TabletId: " << tabletId << " Cookie: " << cookie);
             NTabletPipe::SendData(ctx, pipeClient, new TEvPersQueue::TEvStatus("", true), cookie);
         }
+
         NTabletPipe::SendData(ctx, pipeClient, new TEvPQ::TEvSubDomainStatus(SubDomainOutOfSpace));
     }
 }

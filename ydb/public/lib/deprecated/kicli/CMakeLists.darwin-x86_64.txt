@@ -28,6 +28,7 @@ target_link_libraries(lib-deprecated-kicli PUBLIC
   yql-public-issue
 )
 target_sources(lib-deprecated-kicli PRIVATE
+  ${CMAKE_SOURCE_DIR}/ydb/public/lib/deprecated/kicli/kicli.h
   ${CMAKE_SOURCE_DIR}/ydb/public/lib/deprecated/kicli/configurator.cpp
   ${CMAKE_SOURCE_DIR}/ydb/public/lib/deprecated/kicli/dynamic_node.cpp
   ${CMAKE_SOURCE_DIR}/ydb/public/lib/deprecated/kicli/error.cpp

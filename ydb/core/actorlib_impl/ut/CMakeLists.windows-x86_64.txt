@@ -26,6 +26,7 @@ target_link_libraries(ydb-core-actorlib_impl-ut PUBLIC
   library-cpp-svnversion
   core-testlib-actors
   testlib-basics-default
+  minikql-comp_nodes-llvm14
 )
 target_sources(ydb-core-actorlib_impl-ut PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/core/actorlib_impl/actor_activity_ut.cpp
@@ -59,6 +60,7 @@ set_yunittest_property(
   PROPERTY
   LABELS
   MEDIUM
+  $FILTER_ONLY_TEST_TAGS
 )
 set_yunittest_property(
   TEST

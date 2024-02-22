@@ -41,6 +41,22 @@ target_link_libraries(ydb-core-mind PUBLIC
   core-tx-schemeshard
 )
 target_sources(ydb-core-mind PRIVATE
+  ${CMAKE_SOURCE_DIR}/ydb/core/mind/configured_tablet_bootstrapper.h
+  ${CMAKE_SOURCE_DIR}/ydb/core/mind/defs.h
+  ${CMAKE_SOURCE_DIR}/ydb/core/mind/dynamic_nameserver.h
+  ${CMAKE_SOURCE_DIR}/ydb/core/mind/dynamic_nameserver_impl.h
+  ${CMAKE_SOURCE_DIR}/ydb/core/mind/labels_maintainer.h
+  ${CMAKE_SOURCE_DIR}/ydb/core/mind/lease_holder.h
+  ${CMAKE_SOURCE_DIR}/ydb/core/mind/local.h
+  ${CMAKE_SOURCE_DIR}/ydb/core/mind/node_broker.h
+  ${CMAKE_SOURCE_DIR}/ydb/core/mind/node_broker_impl.h
+  ${CMAKE_SOURCE_DIR}/ydb/core/mind/node_broker__scheme.h
+  ${CMAKE_SOURCE_DIR}/ydb/core/mind/table_adapter.h
+  ${CMAKE_SOURCE_DIR}/ydb/core/mind/tenant_node_enumeration.h
+  ${CMAKE_SOURCE_DIR}/ydb/core/mind/tenant_pool.h
+  ${CMAKE_SOURCE_DIR}/ydb/core/mind/tenant_slot_broker.h
+  ${CMAKE_SOURCE_DIR}/ydb/core/mind/tenant_slot_broker_impl.h
+  ${CMAKE_SOURCE_DIR}/ydb/core/mind/tenant_slot_broker__scheme.h
   ${CMAKE_SOURCE_DIR}/ydb/core/mind/configured_tablet_bootstrapper.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/mind/dynamic_nameserver.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/mind/dynamic_nameserver_mon.cpp

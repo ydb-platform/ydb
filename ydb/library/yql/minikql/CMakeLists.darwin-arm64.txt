@@ -48,6 +48,30 @@ target_link_libraries(library-yql-minikql PUBLIC
   public-lib-scheme_types
 )
 target_sources(library-yql-minikql PRIVATE
+  ${CMAKE_SOURCE_DIR}/ydb/library/yql/minikql/aligned_page_pool.h
+  ${CMAKE_SOURCE_DIR}/ydb/library/yql/minikql/compact_hash.h
+  ${CMAKE_SOURCE_DIR}/ydb/library/yql/minikql/defs.h
+  ${CMAKE_SOURCE_DIR}/ydb/library/yql/minikql/mkql_buffer.h
+  ${CMAKE_SOURCE_DIR}/ydb/library/yql/minikql/mkql_function_metadata.h
+  ${CMAKE_SOURCE_DIR}/ydb/library/yql/minikql/mkql_function_registry.h
+  ${CMAKE_SOURCE_DIR}/ydb/library/yql/minikql/mkql_node.h
+  ${CMAKE_SOURCE_DIR}/ydb/library/yql/minikql/mkql_node_builder.h
+  ${CMAKE_SOURCE_DIR}/ydb/library/yql/minikql/mkql_node_cast.h
+  ${CMAKE_SOURCE_DIR}/ydb/library/yql/minikql/mkql_node_printer.h
+  ${CMAKE_SOURCE_DIR}/ydb/library/yql/minikql/mkql_node_serialization.h
+  ${CMAKE_SOURCE_DIR}/ydb/library/yql/minikql/mkql_node_visitor.h
+  ${CMAKE_SOURCE_DIR}/ydb/library/yql/minikql/mkql_opt_literal.h
+  ${CMAKE_SOURCE_DIR}/ydb/library/yql/minikql/mkql_program_builder.h
+  ${CMAKE_SOURCE_DIR}/ydb/library/yql/minikql/mkql_runtime_version.h
+  ${CMAKE_SOURCE_DIR}/ydb/library/yql/minikql/mkql_string_util.h
+  ${CMAKE_SOURCE_DIR}/ydb/library/yql/minikql/mkql_terminator.h
+  ${CMAKE_SOURCE_DIR}/ydb/library/yql/minikql/mkql_type_builder.h
+  ${CMAKE_SOURCE_DIR}/ydb/library/yql/minikql/mkql_type_ops.h
+  ${CMAKE_SOURCE_DIR}/ydb/library/yql/minikql/mkql_watermark.h
+  ${CMAKE_SOURCE_DIR}/ydb/library/yql/minikql/mkql_unboxed_value_stream.h
+  ${CMAKE_SOURCE_DIR}/ydb/library/yql/minikql/pack_num.h
+  ${CMAKE_SOURCE_DIR}/ydb/library/yql/minikql/primes.h
+  ${CMAKE_SOURCE_DIR}/ydb/library/yql/minikql/watermark_tracker.h
   ${CMAKE_SOURCE_DIR}/ydb/library/yql/minikql/aligned_page_pool.cpp
   ${CMAKE_SOURCE_DIR}/ydb/library/yql/minikql/compact_hash.cpp
   ${CMAKE_SOURCE_DIR}/ydb/library/yql/minikql/mkql_alloc.cpp

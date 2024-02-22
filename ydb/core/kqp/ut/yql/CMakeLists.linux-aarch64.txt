@@ -30,9 +30,6 @@ target_link_options(ydb-core-kqp-ut-yql PRIVATE
   -Wl,--no-as-needed
   -fPIC
   -fPIC
-  -lpthread
-  -lrt
-  -ldl
 )
 target_sources(ydb-core-kqp-ut-yql PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/core/kqp/ut/yql/kqp_pragma_ut.cpp
@@ -64,6 +61,7 @@ set_yunittest_property(
   PROPERTY
   LABELS
   MEDIUM
+  $FILTER_ONLY_TEST_TAGS
 )
 set_yunittest_property(
   TEST

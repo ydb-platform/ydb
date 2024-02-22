@@ -36,13 +36,12 @@ target_link_options(protobuf PRIVATE
   -Wl,-platform_version,macos,11.0,11.0
   -fPIC
   -fPIC
-  -framework
-  CoreFoundation
 )
 target_proto_messages(protobuf PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/library/yql/public/purecalc/examples/protobuf/main.proto
 )
 target_sources(protobuf PRIVATE
+  ${CMAKE_BINARY_DIR}/ydb/library/yql/public/purecalc/examples/protobuf/main.pb.h
   ${CMAKE_SOURCE_DIR}/ydb/library/yql/public/purecalc/examples/protobuf/main.cpp
 )
 target_allocator(protobuf

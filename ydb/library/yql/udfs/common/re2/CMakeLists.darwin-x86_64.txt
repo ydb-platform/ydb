@@ -59,8 +59,6 @@ target_link_options(re2_udf.dyn PRIVATE
   -undefined
   dynamic_lookup
   -fPIC
-  -framework
-  CoreFoundation
 )
 target_sources(re2_udf.dyn PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/library/yql/udfs/common/re2/re2_udf.cpp

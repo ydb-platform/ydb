@@ -20,3 +20,7 @@ target_link_libraries(core-grpc_services-base INTERFACE
   cpp-client-resources
   yql-public-issue
 )
+target_sources(core-grpc_services-base INTERFACE
+  ${CMAKE_SOURCE_DIR}/ydb/core/grpc_services/base/base_service.h
+  ${CMAKE_SOURCE_DIR}/ydb/core/grpc_services/base/base.h
+)

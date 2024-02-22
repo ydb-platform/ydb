@@ -30,6 +30,8 @@ target_link_libraries(ydb-core-control-ut PUBLIC
 target_sources(ydb-core-control-ut PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/core/control/immediate_control_board_ut.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/control/immediate_control_board_actor_ut.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/control/immediate_control_board_sampler_ut.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/control/immediate_control_board_throttler_ut.cpp
 )
 set_property(
   TARGET
@@ -56,6 +58,7 @@ set_yunittest_property(
   PROPERTY
   LABELS
   MEDIUM
+  $FILTER_ONLY_TEST_TAGS
 )
 set_yunittest_property(
   TEST

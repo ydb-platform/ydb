@@ -35,11 +35,9 @@ target_link_options(ydb-core-tx-tx_proxy-ut_storage_tenant PRIVATE
   -Wl,--no-as-needed
   -fPIC
   -fPIC
-  -lpthread
-  -lrt
-  -ldl
 )
 target_sources(ydb-core-tx-tx_proxy-ut_storage_tenant PRIVATE
+  ${CMAKE_SOURCE_DIR}/ydb/core/tx/tx_proxy/proxy_ut_helpers.h
   ${CMAKE_SOURCE_DIR}/ydb/core/tx/tx_proxy/storage_tenant_ut.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/tx/tx_proxy/proxy_ut_helpers.cpp
 )
@@ -68,6 +66,7 @@ set_yunittest_property(
   PROPERTY
   LABELS
   MEDIUM
+  $FILTER_ONLY_TEST_TAGS
 )
 set_yunittest_property(
   TEST

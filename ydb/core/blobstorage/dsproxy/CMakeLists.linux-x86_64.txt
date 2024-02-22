@@ -10,6 +10,7 @@ add_subdirectory(mock)
 add_subdirectory(ut)
 add_subdirectory(ut_fat)
 add_subdirectory(ut_ftol)
+add_subdirectory(ut_strategy)
 
 add_library(core-blobstorage-dsproxy)
 target_link_libraries(core-blobstorage-dsproxy PUBLIC
@@ -27,6 +28,32 @@ target_link_libraries(core-blobstorage-dsproxy PUBLIC
   ydb-core-util
 )
 target_sources(core-blobstorage-dsproxy PRIVATE
+  ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/dsproxy/dsproxy.h
+  ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/dsproxy/dsproxy_impl.h
+  ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/dsproxy/dsproxy_blackboard.h
+  ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/dsproxy/dsproxy_get_impl.h
+  ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/dsproxy/dsproxy_mon.h
+  ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/dsproxy/dsproxy_monactor.h
+  ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/dsproxy/dsproxy_nodemon.h
+  ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/dsproxy/dsproxy_nodemonactor.h
+  ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/dsproxy/dsproxy_put_impl.h
+  ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/dsproxy/dsproxy_quorum_tracker.h
+  ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/dsproxy/dsproxy_responsiveness.h
+  ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/dsproxy/dsproxy_strategy_accelerate_put.h
+  ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/dsproxy/dsproxy_strategy_accelerate_put_m3dc.h
+  ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/dsproxy/dsproxy_strategy_base.h
+  ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/dsproxy/dsproxy_strategy_get_bold.h
+  ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/dsproxy/dsproxy_strategy_get_m3dc_basic.h
+  ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/dsproxy/dsproxy_strategy_get_m3dc_restore.h
+  ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/dsproxy/dsproxy_strategy_get_m3of4.h
+  ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/dsproxy/dsproxy_strategy_get_min_iops_block.h
+  ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/dsproxy/dsproxy_strategy_get_min_iops_mirror.h
+  ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/dsproxy/dsproxy_strategy_m3of4_base.h
+  ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/dsproxy/dsproxy_strategy_put_m3dc.h
+  ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/dsproxy/dsproxy_strategy_put_m3of4.h
+  ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/dsproxy/dsproxy_strategy_restore.h
+  ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/dsproxy/group_sessions.h
+  ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/dsproxy/log_acc.h
   ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/dsproxy/dsproxy_impl.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/dsproxy/dsproxy_encrypt.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/dsproxy/dsproxy_request.cpp

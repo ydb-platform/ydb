@@ -27,9 +27,6 @@ target_link_options(ydb-library-actors-core-ut PRIVATE
   -Wl,--no-as-needed
   -fPIC
   -fPIC
-  -lpthread
-  -lrt
-  -ldl
 )
 target_sources(ydb-library-actors-core-ut PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/library/actors/core/actor_coroutine_ut.cpp
@@ -70,6 +67,7 @@ set_yunittest_property(
   PROPERTY
   LABELS
   MEDIUM
+  $FILTER_ONLY_TEST_TAGS
 )
 set_yunittest_property(
   TEST

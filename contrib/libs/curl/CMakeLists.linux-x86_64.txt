@@ -58,7 +58,6 @@ target_sources(contrib-libs-curl PRIVATE
   ${CMAKE_SOURCE_DIR}/contrib/libs/curl/lib/curl_get_line.c
   ${CMAKE_SOURCE_DIR}/contrib/libs/curl/lib/curl_gethostname.c
   ${CMAKE_SOURCE_DIR}/contrib/libs/curl/lib/curl_gssapi.c
-  ${CMAKE_SOURCE_DIR}/contrib/libs/curl/lib/curl_log.c
   ${CMAKE_SOURCE_DIR}/contrib/libs/curl/lib/curl_memrchr.c
   ${CMAKE_SOURCE_DIR}/contrib/libs/curl/lib/curl_multibyte.c
   ${CMAKE_SOURCE_DIR}/contrib/libs/curl/lib/curl_ntlm_core.c
@@ -69,6 +68,7 @@ target_sources(contrib-libs-curl PRIVATE
   ${CMAKE_SOURCE_DIR}/contrib/libs/curl/lib/curl_sasl.c
   ${CMAKE_SOURCE_DIR}/contrib/libs/curl/lib/curl_sspi.c
   ${CMAKE_SOURCE_DIR}/contrib/libs/curl/lib/curl_threads.c
+  ${CMAKE_SOURCE_DIR}/contrib/libs/curl/lib/curl_trc.c
   ${CMAKE_SOURCE_DIR}/contrib/libs/curl/lib/dict.c
   ${CMAKE_SOURCE_DIR}/contrib/libs/curl/lib/doh.c
   ${CMAKE_SOURCE_DIR}/contrib/libs/curl/lib/dynbuf.c

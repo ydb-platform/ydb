@@ -67,6 +67,14 @@ target_proto_messages(client-yc_public-events PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/public/api/client/yc_public/events/common.proto
   ${CMAKE_SOURCE_DIR}/ydb/public/api/client/yc_public/events/yq.proto
 )
+target_sources(client-yc_public-events PRIVATE
+  ${CMAKE_BINARY_DIR}/ydb/public/api/client/yc_public/events/options.pb.h
+  ${CMAKE_BINARY_DIR}/ydb/public/api/client/yc_public/events/options.grpc.pb.h
+  ${CMAKE_BINARY_DIR}/ydb/public/api/client/yc_public/events/common.pb.h
+  ${CMAKE_BINARY_DIR}/ydb/public/api/client/yc_public/events/common.grpc.pb.h
+  ${CMAKE_BINARY_DIR}/ydb/public/api/client/yc_public/events/yq.pb.h
+  ${CMAKE_BINARY_DIR}/ydb/public/api/client/yc_public/events/yq.grpc.pb.h
+)
 target_proto_addincls(client-yc_public-events
   ./
   ${CMAKE_SOURCE_DIR}/

@@ -47,6 +47,52 @@ target_link_libraries(library-actors-core PUBLIC
   cpp-threading-future
 )
 target_sources(library-actors-core PRIVATE
+  ${CMAKE_SOURCE_DIR}/ydb/library/actors/core/actor_coroutine.h
+  ${CMAKE_SOURCE_DIR}/ydb/library/actors/core/actor.h
+  ${CMAKE_SOURCE_DIR}/ydb/library/actors/core/actorid.h
+  ${CMAKE_SOURCE_DIR}/ydb/library/actors/core/actorsystem.h
+  ${CMAKE_SOURCE_DIR}/ydb/library/actors/core/ask.h
+  ${CMAKE_SOURCE_DIR}/ydb/library/actors/core/buffer.h
+  ${CMAKE_SOURCE_DIR}/ydb/library/actors/core/callstack.h
+  ${CMAKE_SOURCE_DIR}/ydb/library/actors/core/config.h
+  ${CMAKE_SOURCE_DIR}/ydb/library/actors/core/cpu_manager.h
+  ${CMAKE_SOURCE_DIR}/ydb/library/actors/core/cpu_state.h
+  ${CMAKE_SOURCE_DIR}/ydb/library/actors/core/defs.h
+  ${CMAKE_SOURCE_DIR}/ydb/library/actors/core/event.h
+  ${CMAKE_SOURCE_DIR}/ydb/library/actors/core/event_local.h
+  ${CMAKE_SOURCE_DIR}/ydb/library/actors/core/event_pb.h
+  ${CMAKE_SOURCE_DIR}/ydb/library/actors/core/events.h
+  ${CMAKE_SOURCE_DIR}/ydb/library/actors/core/executelater.h
+  ${CMAKE_SOURCE_DIR}/ydb/library/actors/core/executor_pool_base.h
+  ${CMAKE_SOURCE_DIR}/ydb/library/actors/core/executor_pool_basic.h
+  ${CMAKE_SOURCE_DIR}/ydb/library/actors/core/executor_pool_io.h
+  ${CMAKE_SOURCE_DIR}/ydb/library/actors/core/executor_pool_shared.h
+  ${CMAKE_SOURCE_DIR}/ydb/library/actors/core/executor_thread.h
+  ${CMAKE_SOURCE_DIR}/ydb/library/actors/core/harmonizer.h
+  ${CMAKE_SOURCE_DIR}/ydb/library/actors/core/hfunc.h
+  ${CMAKE_SOURCE_DIR}/ydb/library/actors/core/interconnect.h
+  ${CMAKE_SOURCE_DIR}/ydb/library/actors/core/invoke.h
+  ${CMAKE_SOURCE_DIR}/ydb/library/actors/core/io_dispatcher.h
+  ${CMAKE_SOURCE_DIR}/ydb/library/actors/core/lease.h
+  ${CMAKE_SOURCE_DIR}/ydb/library/actors/core/log.h
+  ${CMAKE_SOURCE_DIR}/ydb/library/actors/core/log_settings.h
+  ${CMAKE_SOURCE_DIR}/ydb/library/actors/core/log_buffer.h
+  ${CMAKE_SOURCE_DIR}/ydb/library/actors/core/log_metrics.h
+  ${CMAKE_SOURCE_DIR}/ydb/library/actors/core/mailbox.h
+  ${CMAKE_SOURCE_DIR}/ydb/library/actors/core/mailbox_queue_revolving.h
+  ${CMAKE_SOURCE_DIR}/ydb/library/actors/core/mailbox_queue_simple.h
+  ${CMAKE_SOURCE_DIR}/ydb/library/actors/core/mon.h
+  ${CMAKE_SOURCE_DIR}/ydb/library/actors/core/mon_stats.h
+  ${CMAKE_SOURCE_DIR}/ydb/library/actors/core/monotonic.h
+  ${CMAKE_SOURCE_DIR}/ydb/library/actors/core/monotonic_provider.h
+  ${CMAKE_SOURCE_DIR}/ydb/library/actors/core/worker_context.h
+  ${CMAKE_SOURCE_DIR}/ydb/library/actors/core/probes.h
+  ${CMAKE_SOURCE_DIR}/ydb/library/actors/core/process_stats.h
+  ${CMAKE_SOURCE_DIR}/ydb/library/actors/core/scheduler_actor.h
+  ${CMAKE_SOURCE_DIR}/ydb/library/actors/core/scheduler_basic.h
+  ${CMAKE_SOURCE_DIR}/ydb/library/actors/core/scheduler_cookie.h
+  ${CMAKE_SOURCE_DIR}/ydb/library/actors/core/scheduler_queue.h
+  ${CMAKE_SOURCE_DIR}/ydb/library/actors/core/servicemap.h
   ${CMAKE_SOURCE_DIR}/ydb/library/actors/core/actor_bootstrapped.cpp
   ${CMAKE_SOURCE_DIR}/ydb/library/actors/core/actor_coroutine.cpp
   ${CMAKE_SOURCE_DIR}/ydb/library/actors/core/actor.cpp
@@ -65,6 +111,7 @@ target_sources(library-actors-core PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/library/actors/core/executor_pool_base.cpp
   ${CMAKE_SOURCE_DIR}/ydb/library/actors/core/executor_pool_basic.cpp
   ${CMAKE_SOURCE_DIR}/ydb/library/actors/core/executor_pool_io.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/library/actors/core/executor_pool_shared.cpp
   ${CMAKE_SOURCE_DIR}/ydb/library/actors/core/executor_thread.cpp
   ${CMAKE_SOURCE_DIR}/ydb/library/actors/core/harmonizer.cpp
   ${CMAKE_SOURCE_DIR}/ydb/library/actors/core/interconnect.cpp

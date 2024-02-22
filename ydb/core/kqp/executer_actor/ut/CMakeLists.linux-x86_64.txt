@@ -34,9 +34,6 @@ target_link_options(ydb-core-kqp-executer_actor-ut PRIVATE
   -Wl,--no-as-needed
   -fPIC
   -fPIC
-  -lpthread
-  -lrt
-  -ldl
 )
 set_property(
   TARGET
@@ -63,6 +60,7 @@ set_yunittest_property(
   PROPERTY
   LABELS
   SMALL
+  $FILTER_ONLY_TEST_TAGS
 )
 set_yunittest_property(
   TEST

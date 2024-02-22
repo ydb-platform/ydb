@@ -33,10 +33,10 @@ target_link_options(ydb-core-tablet_flat-ut PRIVATE
   -Wl,-platform_version,macos,11.0,11.0
   -fPIC
   -fPIC
-  -framework
-  CoreFoundation
 )
 target_sources(ydb-core-tablet_flat-ut PRIVATE
+  ${CMAKE_SOURCE_DIR}/ydb/core/tablet_flat/ut/flat_test_db.h
+  ${CMAKE_SOURCE_DIR}/ydb/core/tablet_flat/ut/flat_test_db_helpers.h
   ${CMAKE_SOURCE_DIR}/ydb/core/tablet_flat/datetime_ut.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/tablet_flat/decimal_ut.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/tablet_flat/flat_cxx_database_ut.cpp
@@ -51,7 +51,8 @@ target_sources(ydb-core-tablet_flat-ut PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/core/tablet_flat/flat_table_part_ut.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/tablet_flat/ut/flat_test_db.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/tablet_flat/shared_handle_ut.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/tablet_flat/ut/ut_btree_index.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/tablet_flat/ut/ut_btree_index_nodes.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/tablet_flat/ut/ut_btree_index_iter_charge.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/tablet_flat/ut/ut_self.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/tablet_flat/ut/ut_iterator.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/tablet_flat/ut/ut_memtable.cpp
@@ -103,6 +104,7 @@ set_yunittest_property(
   PROPERTY
   LABELS
   MEDIUM
+  $FILTER_ONLY_TEST_TAGS
 )
 set_yunittest_property(
   TEST

@@ -20,6 +20,7 @@ target_link_libraries(clicommands PUBLIC
   contrib-libs-linux-headers
   contrib-libs-cxxsupp
   yutil
+  contrib-libs-fmt
   restricted-patched-replxx
   cpp-histogram-hdr
   cpp-protobuf-json
@@ -27,6 +28,7 @@ target_link_libraries(clicommands PUBLIC
   cpp-threading-local_executor
   kikimr_backup
   ydb-library-workload
+  library-yaml_config-public
   public-lib-operation_id
   public-lib-stat_visualization
   common
@@ -55,16 +57,16 @@ target_sources(clicommands PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/public/lib/ydb_cli/commands/interactive/line_reader.cpp
   ${CMAKE_SOURCE_DIR}/ydb/public/lib/ydb_cli/commands/benchmark_utils.cpp
   ${CMAKE_SOURCE_DIR}/ydb/public/lib/ydb_cli/commands/click_bench.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/public/lib/ydb_cli/commands/kv_workload.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/public/lib/ydb_cli/commands/stock_workload.cpp
   ${CMAKE_SOURCE_DIR}/ydb/public/lib/ydb_cli/commands/topic_operations_scenario.cpp
   ${CMAKE_SOURCE_DIR}/ydb/public/lib/ydb_cli/commands/topic_read_scenario.cpp
   ${CMAKE_SOURCE_DIR}/ydb/public/lib/ydb_cli/commands/topic_write_scenario.cpp
   ${CMAKE_SOURCE_DIR}/ydb/public/lib/ydb_cli/commands/topic_readwrite_scenario.cpp
   ${CMAKE_SOURCE_DIR}/ydb/public/lib/ydb_cli/commands/tpch.cpp
   ${CMAKE_SOURCE_DIR}/ydb/public/lib/ydb_cli/commands/query_workload.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/public/lib/ydb_cli/commands/ydb_admin.cpp
   ${CMAKE_SOURCE_DIR}/ydb/public/lib/ydb_cli/commands/ydb_sdk_core_access.cpp
   ${CMAKE_SOURCE_DIR}/ydb/public/lib/ydb_cli/commands/ydb_command.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/public/lib/ydb_cli/commands/ydb_dynamic_config.cpp
   ${CMAKE_SOURCE_DIR}/ydb/public/lib/ydb_cli/commands/ydb_profile.cpp
   ${CMAKE_SOURCE_DIR}/ydb/public/lib/ydb_cli/commands/ydb_root_common.cpp
   ${CMAKE_SOURCE_DIR}/ydb/public/lib/ydb_cli/commands/ydb_service_auth.cpp
@@ -87,6 +89,7 @@ target_link_libraries(clicommands.global PUBLIC
   contrib-libs-linux-headers
   contrib-libs-cxxsupp
   yutil
+  contrib-libs-fmt
   restricted-patched-replxx
   cpp-histogram-hdr
   cpp-protobuf-json
@@ -94,6 +97,7 @@ target_link_libraries(clicommands.global PUBLIC
   cpp-threading-local_executor
   kikimr_backup
   ydb-library-workload
+  library-yaml_config-public
   public-lib-operation_id
   public-lib-stat_visualization
   common
@@ -118,14 +122,15 @@ target_link_libraries(clicommands.global PUBLIC
   library-cpp-resource
 )
 target_sources(clicommands.global PRIVATE
-  ${CMAKE_BINARY_DIR}/ydb/public/lib/ydb_cli/commands/6b4a693856d7dfaada0935e4f9b61c1b.cpp
+  ${CMAKE_BINARY_DIR}/ydb/public/lib/ydb_cli/commands/93bc55e26f576673786aed13327b5397.cpp
 )
 resources(clicommands.global
-  ${CMAKE_BINARY_DIR}/ydb/public/lib/ydb_cli/commands/6b4a693856d7dfaada0935e4f9b61c1b.cpp
+  ${CMAKE_BINARY_DIR}/ydb/public/lib/ydb_cli/commands/93bc55e26f576673786aed13327b5397.cpp
   INPUTS
   ${CMAKE_SOURCE_DIR}/ydb/public/lib/ydb_cli/commands/click_bench_queries.sql
   ${CMAKE_SOURCE_DIR}/ydb/public/lib/ydb_cli/commands/click_bench_schema.sql
   ${CMAKE_SOURCE_DIR}/ydb/public/lib/ydb_cli/commands/tpch_schema.sql
+  ${CMAKE_SOURCE_DIR}/ydb/public/lib/ydb_cli/commands/tpch_queries.sql
   ${CMAKE_SOURCE_DIR}/ydb/public/lib/ydb_cli/commands/click_bench_canonical/q0.result
   ${CMAKE_SOURCE_DIR}/ydb/public/lib/ydb_cli/commands/click_bench_canonical/q1.result
   ${CMAKE_SOURCE_DIR}/ydb/public/lib/ydb_cli/commands/click_bench_canonical/q2.result
@@ -173,6 +178,7 @@ resources(clicommands.global
   click_bench_queries.sql
   click_bench_schema.sql
   tpch_schema.sql
+  tpch_queries.sql
   q0.result
   q1.result
   q2.result

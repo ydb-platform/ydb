@@ -6,6 +6,7 @@
 # original buildsystem will not be accepted.
 
 
+add_subdirectory(indexes)
 
 add_library(columnshard-engines-scheme)
 target_compile_options(columnshard-engines-scheme PRIVATE
@@ -17,6 +18,7 @@ target_link_libraries(columnshard-engines-scheme PUBLIC
   ydb-core-protos
   core-formats-arrow
   library-actors-core
+  engines-scheme-indexes
 )
 target_sources(columnshard-engines-scheme PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/core/tx/columnshard/engines/scheme/abstract_scheme.cpp

@@ -20,6 +20,7 @@ target_link_libraries(ydb-core-client-metadata-ut PUBLIC
   yutil
   cpp-testing-unittest_main
   core-client-metadata
+  minikql-invoke_builtins-llvm14
   udf-service-stub
   yql-sql-pg_dummy
 )
@@ -29,9 +30,6 @@ target_link_options(ydb-core-client-metadata-ut PRIVATE
   -Wl,--no-as-needed
   -fPIC
   -fPIC
-  -lpthread
-  -lrt
-  -ldl
 )
 target_sources(ydb-core-client-metadata-ut PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/core/client/metadata/ut/functions_metadata_ut.cpp
@@ -61,6 +59,7 @@ set_yunittest_property(
   PROPERTY
   LABELS
   SMALL
+  $FILTER_ONLY_TEST_TAGS
 )
 set_yunittest_property(
   TEST

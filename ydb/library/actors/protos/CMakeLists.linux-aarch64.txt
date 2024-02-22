@@ -68,6 +68,12 @@ target_proto_messages(library-actors-protos PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/library/actors/protos/services_common.proto
   ${CMAKE_SOURCE_DIR}/ydb/library/actors/protos/unittests.proto
 )
+target_sources(library-actors-protos PRIVATE
+  ${CMAKE_BINARY_DIR}/ydb/library/actors/protos/actors.pb.h
+  ${CMAKE_BINARY_DIR}/ydb/library/actors/protos/interconnect.pb.h
+  ${CMAKE_BINARY_DIR}/ydb/library/actors/protos/services_common.pb.h
+  ${CMAKE_BINARY_DIR}/ydb/library/actors/protos/unittests.pb.h
+)
 target_proto_addincls(library-actors-protos
   ./
   ${CMAKE_SOURCE_DIR}/

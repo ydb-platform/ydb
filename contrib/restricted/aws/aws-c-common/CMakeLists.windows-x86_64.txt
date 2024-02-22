@@ -74,8 +74,6 @@ target_sources_custom(restricted-aws-aws-c-common
   SRCS
   ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/aws-c-common/source/arch/intel/encoding_avx2.c
   CUSTOM_FLAGS
-  -mavx2
-  -mfma
-  -mbmi
-  -mbmi2
+  /arch:AVX2
+  /DAVX2_ENABLED=1
 )

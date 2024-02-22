@@ -33,14 +33,16 @@ target_link_libraries(ydb-library-yql-core-ut PUBLIC
   providers-result-provider
   yt-gateway-file
   providers-yt-provider
+  yt-codec-codegen
+  yt-comp_nodes-llvm14
+  minikql-comp_nodes-llvm14
+  minikql-invoke_builtins-llvm14
   yql-sql-pg
 )
 target_link_options(ydb-library-yql-core-ut PRIVATE
   -Wl,-platform_version,macos,11.0,11.0
   -fPIC
   -fPIC
-  -framework
-  CoreFoundation
 )
 target_sources(ydb-library-yql-core-ut PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/library/yql/core/ut/yql_csv_ut.cpp
@@ -79,6 +81,7 @@ set_yunittest_property(
   PROPERTY
   LABELS
   MEDIUM
+  $FILTER_ONLY_TEST_TAGS
 )
 set_yunittest_property(
   TEST

@@ -23,6 +23,9 @@ target_link_libraries(library-cpp-scheme PUBLIC
   tools-enum_parser-enum_serialization_runtime
 )
 target_sources(library-cpp-scheme PRIVATE
+  ${CMAKE_SOURCE_DIR}/library/cpp/scheme/scheme_cast.h
+  ${CMAKE_SOURCE_DIR}/library/cpp/scheme/scimpl.h
+  ${CMAKE_SOURCE_DIR}/library/cpp/scheme/scimpl_defs.h
   ${CMAKE_SOURCE_DIR}/library/cpp/scheme/scheme.cpp
   ${CMAKE_SOURCE_DIR}/library/cpp/scheme/scimpl_private.cpp
   ${CMAKE_SOURCE_DIR}/library/cpp/scheme/scimpl_protobuf.cpp

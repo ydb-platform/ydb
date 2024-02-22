@@ -35,9 +35,6 @@ target_link_options(ydb-core-tx-tiering-ut PRIVATE
   -Wl,--no-as-needed
   -fPIC
   -fPIC
-  -lpthread
-  -lrt
-  -ldl
 )
 target_sources(ydb-core-tx-tiering-ut PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/core/tx/tiering/ut/ut_tiers.cpp
@@ -67,6 +64,7 @@ set_yunittest_property(
   PROPERTY
   LABELS
   MEDIUM
+  $FILTER_ONLY_TEST_TAGS
 )
 set_yunittest_property(
   TEST

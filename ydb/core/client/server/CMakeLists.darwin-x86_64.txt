@@ -54,6 +54,19 @@ target_link_libraries(core-client-server PUBLIC
   cpp-deprecated-atomic
 )
 target_sources(core-client-server PRIVATE
+  ${CMAKE_SOURCE_DIR}/ydb/core/client/server/document_conversion.h
+  ${CMAKE_SOURCE_DIR}/ydb/core/client/server/http_ping.h
+  ${CMAKE_SOURCE_DIR}/ydb/core/client/server/msgbus_http_server.h
+  ${CMAKE_SOURCE_DIR}/ydb/core/client/server/msgbus_server.h
+  ${CMAKE_SOURCE_DIR}/ydb/core/client/server/msgbus_server_persqueue.h
+  ${CMAKE_SOURCE_DIR}/ydb/core/client/server/msgbus_server_pq_metacache.h
+  ${CMAKE_SOURCE_DIR}/ydb/core/client/server/msgbus_server_pq_metarequest.h
+  ${CMAKE_SOURCE_DIR}/ydb/core/client/server/msgbus_server_proxy.h
+  ${CMAKE_SOURCE_DIR}/ydb/core/client/server/msgbus_server_request.h
+  ${CMAKE_SOURCE_DIR}/ydb/core/client/server/msgbus_servicereq.h
+  ${CMAKE_SOURCE_DIR}/ydb/core/client/server/msgbus_tabletreq.h
+  ${CMAKE_SOURCE_DIR}/ydb/core/client/server/grpc_server.h
+  ${CMAKE_SOURCE_DIR}/ydb/core/client/server/grpc_proxy_status.h
   ${CMAKE_SOURCE_DIR}/ydb/core/client/server/http_ping.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/client/server/msgbus_blobstorage_config.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/client/server/msgbus_bsadm.cpp

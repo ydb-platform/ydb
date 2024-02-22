@@ -21,6 +21,8 @@ target_link_libraries(ydb-library-yql-providers-yt-provider-ut PUBLIC
   providers-yt-provider
   yt-lib-schema
   yt-gateway-file
+  yt-codec-codegen
+  yt-comp_nodes-llvm14
   yql-core-ut_common
   library-yql-ast
   udf-service-terminate_policy
@@ -34,15 +36,14 @@ target_link_libraries(ydb-library-yql-providers-yt-provider-ut PUBLIC
   providers-dq-provider
   providers-result-provider
   yql-sql-v1
-  minikql-invoke_builtins-llvm
+  minikql-invoke_builtins-llvm14
+  minikql-comp_nodes-llvm14
   yql-sql-pg
 )
 target_link_options(ydb-library-yql-providers-yt-provider-ut PRIVATE
   -Wl,-platform_version,macos,11.0,11.0
   -fPIC
   -fPIC
-  -framework
-  CoreFoundation
 )
 target_sources(ydb-library-yql-providers-yt-provider-ut PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/library/yql/providers/yt/provider/ut/yql_yt_dq_integration_ut.cpp
@@ -74,6 +75,7 @@ set_yunittest_property(
   PROPERTY
   LABELS
   SMALL
+  $FILTER_ONLY_TEST_TAGS
 )
 set_yunittest_property(
   TEST

@@ -100,6 +100,24 @@ target_link_libraries(libs-apache-arrow PUBLIC
   contrib-libs-flatbuffers
 )
 target_sources(libs-apache-arrow PRIVATE
+  ${CMAKE_BINARY_DIR}/contrib/libs/apache/arrow/cpp/src/generated/File.fbs.h
+  ${CMAKE_BINARY_DIR}/contrib/libs/apache/arrow/cpp/src/generated/File.iter.fbs.h
+  ${CMAKE_BINARY_DIR}/contrib/libs/apache/arrow/cpp/src/generated/Message.fbs.h
+  ${CMAKE_BINARY_DIR}/contrib/libs/apache/arrow/cpp/src/generated/Message.iter.fbs.h
+  ${CMAKE_BINARY_DIR}/contrib/libs/apache/arrow/cpp/src/generated/Schema.fbs.h
+  ${CMAKE_BINARY_DIR}/contrib/libs/apache/arrow/cpp/src/generated/Schema.iter.fbs.h
+  ${CMAKE_BINARY_DIR}/contrib/libs/apache/arrow/cpp/src/generated/SparseTensor.fbs.h
+  ${CMAKE_BINARY_DIR}/contrib/libs/apache/arrow/cpp/src/generated/SparseTensor.iter.fbs.h
+  ${CMAKE_BINARY_DIR}/contrib/libs/apache/arrow/cpp/src/generated/Tensor.fbs.h
+  ${CMAKE_BINARY_DIR}/contrib/libs/apache/arrow/cpp/src/generated/Tensor.iter.fbs.h
+  ${CMAKE_BINARY_DIR}/contrib/libs/apache/arrow/cpp/src/generated/feather.fbs.h
+  ${CMAKE_BINARY_DIR}/contrib/libs/apache/arrow/cpp/src/generated/feather.iter.fbs.h
+  ${CMAKE_BINARY_DIR}/contrib/libs/apache/arrow/cpp/src/generated/File.bfbs
+  ${CMAKE_BINARY_DIR}/contrib/libs/apache/arrow/cpp/src/generated/Message.bfbs
+  ${CMAKE_BINARY_DIR}/contrib/libs/apache/arrow/cpp/src/generated/Schema.bfbs
+  ${CMAKE_BINARY_DIR}/contrib/libs/apache/arrow/cpp/src/generated/SparseTensor.bfbs
+  ${CMAKE_BINARY_DIR}/contrib/libs/apache/arrow/cpp/src/generated/Tensor.bfbs
+  ${CMAKE_BINARY_DIR}/contrib/libs/apache/arrow/cpp/src/generated/feather.bfbs
   ${CMAKE_SOURCE_DIR}/contrib/libs/apache/arrow/cpp/src/arrow/adapters/orc/adapter.cc
   ${CMAKE_SOURCE_DIR}/contrib/libs/apache/arrow/cpp/src/arrow/adapters/orc/adapter_util.cc
   ${CMAKE_SOURCE_DIR}/contrib/libs/apache/arrow/cpp/src/arrow/array/array_base.cc

@@ -32,6 +32,12 @@ target_link_libraries(library-cpp-messagebus PUBLIC
   cpp-deprecated-atomic
 )
 target_sources(library-cpp-messagebus PRIVATE
+  ${CMAKE_SOURCE_DIR}/library/cpp/messagebus/misc/atomic_box.h
+  ${CMAKE_SOURCE_DIR}/library/cpp/messagebus/misc/granup.h
+  ${CMAKE_SOURCE_DIR}/library/cpp/messagebus/misc/test_sync.h
+  ${CMAKE_SOURCE_DIR}/library/cpp/messagebus/misc/tokenquota.h
+  ${CMAKE_SOURCE_DIR}/library/cpp/messagebus/misc/weak_ptr.h
+  ${CMAKE_SOURCE_DIR}/library/cpp/messagebus/ybus.h
   ${CMAKE_SOURCE_DIR}/library/cpp/messagebus/acceptor.cpp
   ${CMAKE_SOURCE_DIR}/library/cpp/messagebus/acceptor_status.cpp
   ${CMAKE_SOURCE_DIR}/library/cpp/messagebus/connection.cpp

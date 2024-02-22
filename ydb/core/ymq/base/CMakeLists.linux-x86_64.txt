@@ -45,6 +45,7 @@ target_link_libraries(core-ymq-base PUBLIC
   public-lib-scheme_types
 )
 target_sources(core-ymq-base PRIVATE
+  ${CMAKE_SOURCE_DIR}/ydb/core/ymq/base/events_writer_iface.h
   ${CMAKE_SOURCE_DIR}/ydb/core/ymq/base/acl.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/ymq/base/action.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/ymq/base/counters.cpp

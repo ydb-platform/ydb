@@ -31,10 +31,18 @@ target_link_libraries(blobstorage-ut_blobstorage-lib PUBLIC
   core-tx-mediator
   core-tx-coordinator
   ydb-core-util
+  minikql-comp_nodes-llvm14
   udf-service-exception_policy
   yql-sql-pg_dummy
 )
 target_sources(blobstorage-ut_blobstorage-lib PRIVATE
+  ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/ut_blobstorage/lib/activity.h
+  ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/ut_blobstorage/lib/common.h
+  ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/ut_blobstorage/lib/defs.h
+  ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/ut_blobstorage/lib/env.h
+  ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/ut_blobstorage/lib/node_warden_mock.h
+  ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/ut_blobstorage/lib/node_warden_mock_state.h
+  ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/ut_blobstorage/lib/node_warden_mock_vdisk.h
   ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/ut_blobstorage/lib/node_warden_mock_bsc.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/ut_blobstorage/lib/node_warden_mock_pipe.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/ut_blobstorage/lib/node_warden_mock_state.cpp

@@ -40,6 +40,10 @@ target_link_libraries(fq-libs-grpc PUBLIC
 target_proto_messages(fq-libs-grpc PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/core/fq/libs/grpc/fq_private_v1.proto
 )
+target_sources(fq-libs-grpc PRIVATE
+  ${CMAKE_BINARY_DIR}/ydb/core/fq/libs/grpc/fq_private_v1.pb.h
+  ${CMAKE_BINARY_DIR}/ydb/core/fq/libs/grpc/fq_private_v1.grpc.pb.h
+)
 target_proto_addincls(fq-libs-grpc
   ./
   ${CMAKE_SOURCE_DIR}/

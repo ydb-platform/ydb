@@ -7,11 +7,14 @@
 
 
 add_subdirectory(protos)
+add_subdirectory(test_util)
+add_subdirectory(ut)
 
 add_library(library-actors-wilson)
 target_link_libraries(library-actors-wilson PUBLIC
   contrib-libs-cxxsupp
   yutil
+  contrib-libs-opentelemetry-proto
   library-actors-core
   library-actors-protos
   actors-wilson-protos

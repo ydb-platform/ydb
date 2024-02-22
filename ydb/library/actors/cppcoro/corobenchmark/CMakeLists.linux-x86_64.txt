@@ -22,9 +22,6 @@ target_link_options(corobenchmark PRIVATE
   -Wl,--no-as-needed
   -fPIC
   -fPIC
-  -lpthread
-  -lrt
-  -ldl
 )
 target_sources(corobenchmark PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/library/actors/cppcoro/corobenchmark/main.cpp

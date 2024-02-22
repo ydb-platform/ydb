@@ -23,6 +23,10 @@ target_link_libraries(library-yaml_config-validator PUBLIC
   tools-enum_parser-enum_serialization_runtime
 )
 target_sources(library-yaml_config-validator PRIVATE
+  ${CMAKE_SOURCE_DIR}/ydb/library/yaml_config/validator/validator_builder.h
+  ${CMAKE_SOURCE_DIR}/ydb/library/yaml_config/validator/validator.h
+  ${CMAKE_SOURCE_DIR}/ydb/library/yaml_config/validator/validator_checks.h
+  ${CMAKE_SOURCE_DIR}/ydb/library/yaml_config/validator/configurators.h
   ${CMAKE_SOURCE_DIR}/ydb/library/yaml_config/validator/validator_builder.cpp
   ${CMAKE_SOURCE_DIR}/ydb/library/yaml_config/validator/validator.cpp
   ${CMAKE_SOURCE_DIR}/ydb/library/yaml_config/validator/validator_checks.cpp

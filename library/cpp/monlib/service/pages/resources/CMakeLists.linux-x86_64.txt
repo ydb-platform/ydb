@@ -21,6 +21,11 @@ target_link_libraries(service-pages-resources INTERFACE
   library-cpp-resource
   cpp-monlib-dynamic_counters
 )
+target_sources(service-pages-resources INTERFACE
+  ${CMAKE_SOURCE_DIR}/library/cpp/monlib/service/pages/resources/css_mon_page.h
+  ${CMAKE_SOURCE_DIR}/library/cpp/monlib/service/pages/resources/fonts_mon_page.h
+  ${CMAKE_SOURCE_DIR}/library/cpp/monlib/service/pages/resources/js_mon_page.h
+)
 
 add_global_library_for(service-pages-resources.global service-pages-resources)
 target_link_libraries(service-pages-resources.global PUBLIC

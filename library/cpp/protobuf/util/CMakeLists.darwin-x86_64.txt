@@ -18,6 +18,9 @@ target_link_libraries(cpp-protobuf-util PUBLIC
   cpp-string_utils-base64
 )
 target_sources(cpp-protobuf-util PRIVATE
+  ${CMAKE_SOURCE_DIR}/library/cpp/protobuf/util/iterators.h
+  ${CMAKE_SOURCE_DIR}/library/cpp/protobuf/util/pb_utils.h
+  ${CMAKE_SOURCE_DIR}/library/cpp/protobuf/util/repeated_field_utils.h
   ${CMAKE_SOURCE_DIR}/library/cpp/protobuf/util/is_equal.cpp
   ${CMAKE_SOURCE_DIR}/library/cpp/protobuf/util/merge.cpp
   ${CMAKE_SOURCE_DIR}/library/cpp/protobuf/util/path.cpp

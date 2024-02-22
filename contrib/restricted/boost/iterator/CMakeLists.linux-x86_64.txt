@@ -17,7 +17,6 @@ target_link_libraries(restricted-boost-iterator INTERFACE
   restricted-boost-assert
   restricted-boost-concept_check
   restricted-boost-config
-  restricted-boost-conversion
   restricted-boost-core
   restricted-boost-detail
   restricted-boost-function_types

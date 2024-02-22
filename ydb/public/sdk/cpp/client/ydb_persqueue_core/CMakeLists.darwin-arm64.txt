@@ -28,6 +28,9 @@ target_link_libraries(cpp-client-ydb_persqueue_core PUBLIC
   api-grpc-draft
   api-protos
 )
+target_sources(cpp-client-ydb_persqueue_core PRIVATE
+  ${CMAKE_SOURCE_DIR}/ydb/public/sdk/cpp/client/ydb_persqueue_core/persqueue.h
+)
 generate_enum_serilization(cpp-client-ydb_persqueue_core
   ${CMAKE_SOURCE_DIR}/ydb/public/sdk/cpp/client/ydb_persqueue_core/persqueue.h
   INCLUDE_HEADERS

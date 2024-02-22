@@ -25,6 +25,12 @@ target_link_libraries(core-blobstorage-nodewarden PUBLIC
   ydb-library-pdisk_io
 )
 target_sources(core-blobstorage-nodewarden PRIVATE
+  ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/nodewarden/defs.h
+  ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/nodewarden/group_stat_aggregator.h
+  ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/nodewarden/distconf.h
+  ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/nodewarden/node_warden.h
+  ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/nodewarden/node_warden_events.h
+  ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/nodewarden/node_warden_impl.h
   ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/nodewarden/group_stat_aggregator.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/nodewarden/distconf.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/nodewarden/distconf_binding.cpp

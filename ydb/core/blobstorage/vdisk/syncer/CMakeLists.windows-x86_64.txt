@@ -24,6 +24,25 @@ target_link_libraries(blobstorage-vdisk-syncer PUBLIC
   version
 )
 target_sources(blobstorage-vdisk-syncer PRIVATE
+  ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/vdisk/syncer/defs.h
+  ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/vdisk/syncer/blobstorage_syncer_committer.h
+  ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/vdisk/syncer/blobstorage_syncer_data.h
+  ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/vdisk/syncer/blobstorage_syncer_dataserdes.h
+  ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/vdisk/syncer/blobstorage_syncer_defs.h
+  ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/vdisk/syncer/blobstorage_syncer.h
+  ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/vdisk/syncer/blobstorage_syncer_localwriter.h
+  ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/vdisk/syncer/blobstorage_syncer_recoverlostdata.h
+  ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/vdisk/syncer/blobstorage_syncer_recoverlostdata_proxy.h
+  ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/vdisk/syncer/blobstorage_syncer_scheduler.h
+  ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/vdisk/syncer/guid_firstrun.h
+  ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/vdisk/syncer/guid_propagator.h
+  ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/vdisk/syncer/guid_proxybase.h
+  ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/vdisk/syncer/guid_proxyobtain.h
+  ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/vdisk/syncer/guid_proxywrite.h
+  ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/vdisk/syncer/guid_recovery.h
+  ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/vdisk/syncer/syncer_context.h
+  ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/vdisk/syncer/syncer_job_actor.h
+  ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/vdisk/syncer/syncer_job_task.h
   ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/vdisk/syncer/blobstorage_syncer_committer.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/vdisk/syncer/blobstorage_syncer.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/vdisk/syncer/blobstorage_syncer_data.cpp

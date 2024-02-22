@@ -18,8 +18,6 @@ target_link_options(pagination PRIVATE
   -Wl,-platform_version,macos,11.0,11.0
   -fPIC
   -fPIC
-  -framework
-  CoreFoundation
 )
 target_sources(pagination PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/public/sdk/cpp/examples/pagination/main.cpp

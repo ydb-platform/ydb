@@ -18,8 +18,6 @@ target_link_options(secondary_index_builtin PRIVATE
   -Wl,-platform_version,macos,11.0,11.0
   -fPIC
   -fPIC
-  -framework
-  CoreFoundation
 )
 target_sources(secondary_index_builtin PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/public/sdk/cpp/examples/secondary_index_builtin/main.cpp

@@ -22,9 +22,6 @@ target_link_options(sqs PRIVATE
   -Wl,--no-as-needed
   -fPIC
   -fPIC
-  -lpthread
-  -lrt
-  -ldl
 )
 target_sources(sqs PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/core/ymq/client/bin/main.cpp

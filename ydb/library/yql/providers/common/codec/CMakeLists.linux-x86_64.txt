@@ -22,7 +22,7 @@ target_link_libraries(providers-common-codec PUBLIC
   contrib-libs-linux-headers
   contrib-libs-cxxsupp
   yutil
-  minikql-computation-llvm
+  yql-minikql-computation
   parser-pg_wrapper-interface
   providers-common-mkql
   cpp-yson-node
@@ -32,6 +32,11 @@ target_link_libraries(providers-common-codec PUBLIC
   tools-enum_parser-enum_serialization_runtime
 )
 target_sources(providers-common-codec PRIVATE
+  ${CMAKE_SOURCE_DIR}/ydb/library/yql/providers/common/codec/yql_codec.h
+  ${CMAKE_SOURCE_DIR}/ydb/library/yql/providers/common/codec/yql_codec_buf.h
+  ${CMAKE_SOURCE_DIR}/ydb/library/yql/providers/common/codec/yql_codec_results.h
+  ${CMAKE_SOURCE_DIR}/ydb/library/yql/providers/common/codec/yql_restricted_yson.h
+  ${CMAKE_SOURCE_DIR}/ydb/library/yql/providers/common/codec/yql_codec_type_flags.h
   ${CMAKE_SOURCE_DIR}/ydb/library/yql/providers/common/codec/yql_codec.cpp
   ${CMAKE_SOURCE_DIR}/ydb/library/yql/providers/common/codec/yql_codec_buf.cpp
   ${CMAKE_SOURCE_DIR}/ydb/library/yql/providers/common/codec/yql_codec_results.cpp

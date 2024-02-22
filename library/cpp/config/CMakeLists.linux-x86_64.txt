@@ -27,6 +27,7 @@ target_link_libraries(library-cpp-config PUBLIC
   cpp-string_utils-relaxed_escaper
 )
 target_sources(library-cpp-config PRIVATE
+  ${CMAKE_BINARY_DIR}/library/cpp/config/code.inc
   ${CMAKE_SOURCE_DIR}/library/cpp/config/config.cpp
   ${CMAKE_SOURCE_DIR}/library/cpp/config/sax.cpp
   ${CMAKE_SOURCE_DIR}/library/cpp/config/value.cpp

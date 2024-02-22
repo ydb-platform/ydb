@@ -23,7 +23,7 @@ target_link_libraries(ydb-library-yql-minikql-arrow-ut PUBLIC
   yql-public-udf
   udf-service-exception_policy
   yql-sql-pg_dummy
-  minikql-invoke_builtins-llvm
+  minikql-invoke_builtins-llvm14
 )
 target_sources(ydb-library-yql-minikql-arrow-ut PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/library/yql/minikql/arrow/mkql_functions_ut.cpp
@@ -53,6 +53,7 @@ set_yunittest_property(
   PROPERTY
   LABELS
   MEDIUM
+  $FILTER_ONLY_TEST_TAGS
 )
 set_yunittest_property(
   TEST

@@ -16,6 +16,9 @@ target_link_libraries(providers-function-expr_nodes PUBLIC
   yql-core-expr_nodes
 )
 target_sources(providers-function-expr_nodes PRIVATE
+  ${CMAKE_BINARY_DIR}/ydb/library/yql/providers/function/expr_nodes/dq_function_expr_nodes.gen.h
+  ${CMAKE_BINARY_DIR}/ydb/library/yql/providers/function/expr_nodes/dq_function_expr_nodes.decl.inl.h
+  ${CMAKE_BINARY_DIR}/ydb/library/yql/providers/function/expr_nodes/dq_function_expr_nodes.defs.inl.h
   ${CMAKE_SOURCE_DIR}/ydb/library/yql/providers/function/expr_nodes/dq_function_expr_nodes.cpp
   ${CMAKE_BINARY_DIR}/ydb/library/yql/providers/function/expr_nodes/dq_function_expr_nodes.gen.h
   ${CMAKE_BINARY_DIR}/ydb/library/yql/providers/function/expr_nodes/dq_function_expr_nodes.decl.inl.h

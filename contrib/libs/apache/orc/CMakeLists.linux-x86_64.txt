@@ -45,6 +45,7 @@ target_proto_messages(libs-apache-orc PRIVATE
   ${CMAKE_SOURCE_DIR}/contrib/libs/apache/orc/proto/orc_proto.proto
 )
 target_sources(libs-apache-orc PRIVATE
+  ${CMAKE_BINARY_DIR}/contrib/libs/apache/orc/proto/orc_proto.pb.h
   ${CMAKE_SOURCE_DIR}/contrib/libs/apache/orc/c++/src/Adaptor.cc
   ${CMAKE_SOURCE_DIR}/contrib/libs/apache/orc/c++/src/BloomFilter.cc
   ${CMAKE_SOURCE_DIR}/contrib/libs/apache/orc/c++/src/ByteRLE.cc

@@ -14,9 +14,17 @@ target_link_libraries(library-ycloud-api INTERFACE
   yutil
   client-yc_private-iam
   client-yc_private-servicecontrol
+  client-yc_private-accessservice
   client-yc_private-resourcemanager
   library-actors-core
   library-grpc-client
   ydb-core-base
   ydb-core-grpc_caching
+)
+target_sources(library-ycloud-api INTERFACE
+  ${CMAKE_SOURCE_DIR}/ydb/library/ycloud/api/access_service.h
+  ${CMAKE_SOURCE_DIR}/ydb/library/ycloud/api/folder_service.h
+  ${CMAKE_SOURCE_DIR}/ydb/library/ycloud/api/folder_service_transitional.h
+  ${CMAKE_SOURCE_DIR}/ydb/library/ycloud/api/iam_token_service.h
+  ${CMAKE_SOURCE_DIR}/ydb/library/ycloud/api/user_account_service.h
 )

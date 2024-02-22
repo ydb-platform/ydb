@@ -32,9 +32,6 @@ target_link_options(ydb-core-client-server-ut PRIVATE
   -Wl,--no-as-needed
   -fPIC
   -fPIC
-  -lpthread
-  -lrt
-  -ldl
 )
 target_sources(ydb-core-client-server-ut PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/core/client/server/msgbus_server_pq_metarequest_ut.cpp
@@ -64,6 +61,7 @@ set_yunittest_property(
   PROPERTY
   LABELS
   MEDIUM
+  $FILTER_ONLY_TEST_TAGS
 )
 set_yunittest_property(
   TEST

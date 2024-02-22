@@ -31,3 +31,8 @@ target_link_libraries(blobstorage-vdisk-hulldb INTERFACE
   vdisk-hulldb-bulksst_add
   ydb-core-protos
 )
+target_sources(blobstorage-vdisk-hulldb INTERFACE
+  ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/vdisk/hulldb/blobstorage_hullgcmap.h
+  ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/vdisk/hulldb/hull_ds_all.h
+  ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/vdisk/hulldb/hull_ds_all_snap.h
+)

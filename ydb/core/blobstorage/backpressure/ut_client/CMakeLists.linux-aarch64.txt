@@ -30,11 +30,11 @@ target_link_options(ydb-core-blobstorage-backpressure-ut_client PRIVATE
   -Wl,--no-as-needed
   -fPIC
   -fPIC
-  -lpthread
-  -lrt
-  -ldl
 )
 target_sources(ydb-core-blobstorage-backpressure-ut_client PRIVATE
+  ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/backpressure/ut_client/defs.h
+  ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/backpressure/ut_client/loader.h
+  ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/backpressure/ut_client/skeleton_front_mock.h
   ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/backpressure/ut_client/backpressure_ut.cpp
 )
 set_property(
@@ -62,6 +62,7 @@ set_yunittest_property(
   PROPERTY
   LABELS
   MEDIUM
+  $FILTER_ONLY_TEST_TAGS
 )
 set_yunittest_property(
   TEST

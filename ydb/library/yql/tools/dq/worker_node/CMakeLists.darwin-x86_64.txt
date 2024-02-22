@@ -23,7 +23,7 @@ target_link_libraries(worker_node PUBLIC
   yql-dq-comp_nodes
   dq-integration-transform
   yql-dq-transform
-  minikql-comp_nodes-llvm
+  minikql-comp_nodes-llvm14
   providers-clickhouse-actors
   providers-common-comp_nodes
   providers-dq-runtime
@@ -43,6 +43,8 @@ target_link_libraries(worker_node PUBLIC
   yql-utils-failure_injector
   yql-utils-backtrace
   yt-comp_nodes-dq
+  yt-comp_nodes-llvm14
+  yt-codec-codegen
   providers-yt-mkql_dq
   dq-actors-yt
   providers-dq-global_worker_manager
@@ -53,8 +55,6 @@ target_link_options(worker_node PRIVATE
   -Wl,-platform_version,macos,11.0,11.0
   -fPIC
   -fPIC
-  -framework
-  CoreFoundation
 )
 target_sources(worker_node PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/library/yql/tools/dq/worker_node/main.cpp

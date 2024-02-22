@@ -26,6 +26,7 @@ target_link_libraries(yt-library-program PUBLIC
   cpp-yt-mlock
   cpp-yt-stockpile
   cpp-yt-string
+  cpp-getopt-small
 )
 target_sources(yt-library-program PRIVATE
   ${CMAKE_SOURCE_DIR}/yt/yt/library/program/build_attributes.cpp

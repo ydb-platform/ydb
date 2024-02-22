@@ -129,6 +129,14 @@ void TDataShardLocksDb::PersistLockCounter(ui64 lockId, ui64 counter) {
     HasChanges_ = true;
 }
 
+void TDataShardLocksDb::PersistLockFlags(ui64 lockId, ui64 flags) {
+    using Schema = TDataShard::Schema;
+    NIceDb::TNiceDb db(DB);
+    db.Table<Schema::Locks>().Key(lockId).Update(
+        NIceDb::TUpdate<Schema::Locks::Flags>(flags));
+    HasChanges_ = true;
+}
+
 void TDataShardLocksDb::PersistRemoveLock(ui64 lockId) {
     // We remove lock changes unless it's managed by volatile tx manager
     bool isVolatile = Self.GetVolatileTxManager().FindByCommitTxId(lockId);

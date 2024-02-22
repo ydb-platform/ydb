@@ -1352,8 +1352,13 @@ private:
                 case NKqpProto::TKqpPhyTableOperation::kReadRanges:
                 case NKqpProto::TKqpPhyTableOperation::kReadRange:
                 case NKqpProto::TKqpPhyTableOperation::kLookup: {
-                    auto partitions = PrunePartitions(op, stageInfo, HolderFactory(), TypeEnv());
+                    bool isFullScan = false;
+                    auto partitions = PrunePartitions(op, stageInfo, HolderFactory(), TypeEnv(), isFullScan);
                     auto readSettings = ExtractReadSettings(op, stageInfo, HolderFactory(), TypeEnv());
+
+                    if (!readSettings.ItemsLimit && isFullScan) {
+                        Counters->Counters->FullScansExecuted->Inc();
+                    }
 
                     for (auto& [shardId, shardInfo] : partitions) {
                         YQL_ENSURE(!shardInfo.KeyWriteRanges);
@@ -1890,7 +1895,11 @@ private:
                     const auto& stage = stageInfo.Meta.GetStage(stageInfo.Id);
                     if (stage.SourcesSize() > 0 && stage.GetSources(0).GetTypeCase() == NKqpProto::TKqpSource::kReadRangesSource) {
                         const auto& source = stage.GetSources(0).GetReadRangesSource();
-                        SourceScanStageIdToParititions[stageInfo.Id] = PrunePartitions(source, stageInfo, HolderFactory(), TypeEnv());
+                        bool isFullScan;
+                        SourceScanStageIdToParititions[stageInfo.Id] = PrunePartitions(source, stageInfo, HolderFactory(), TypeEnv(), isFullScan);
+                        if (isFullScan && !source.HasItemsLimit()) {
+                            Counters->Counters->FullScansExecuted->Inc();
+                        }
                         for (const auto& [shardId, _] : SourceScanStageIdToParititions.at(stageId)) {
                             shardIds.insert(shardId);
                         }

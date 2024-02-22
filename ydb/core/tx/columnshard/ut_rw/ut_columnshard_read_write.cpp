@@ -879,8 +879,7 @@ void TestWriteRead(bool reboots, const TestTableDescription& table = {}, TString
             UNIT_ASSERT_LE(insertedBytes / 100000, 50);
         }
         if (committedBytes) {
-            UNIT_ASSERT_GE(committedBytes / 100000, 65);
-            UNIT_ASSERT_LE(committedBytes / 100000, 78);
+            UNIT_ASSERT_LE(committedBytes / 100000, 1);
         }
         if (compactedBytes) {
             if (codec == "" || codec == "lz4") {

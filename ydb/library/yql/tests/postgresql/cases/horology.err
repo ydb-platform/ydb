@@ -2,6 +2,7 @@ Registering pre-existing tables
 	TIME_TBL
 	TIMESTAMPTZ_TBL
 	TIMESTAMP_TBL
+	INTERVAL_TBL
 	TIMETZ_TBL
 <sql-statement>
 --
@@ -526,28 +527,16 @@ SELECT t.d1 AS t, i.f1 AS i, t.d1 + i.f1 AS "add", t.d1 - i.f1 AS "subtract"
     AND i.f1 BETWEEN '00:00' AND '23:00'
   ORDER BY 1,2;
 </sql-statement>
--stdin-:<main>: Fatal: Table metadata loading
-
-    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.INTERVAL_TBL
-    
 <sql-statement>
 SELECT t.f1 AS t, i.f1 AS i, t.f1 + i.f1 AS "add", t.f1 - i.f1 AS "subtract"
   FROM TIME_TBL t, INTERVAL_TBL i
   ORDER BY 1,2;
 </sql-statement>
--stdin-:<main>: Fatal: Table metadata loading
-
-    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.INTERVAL_TBL
-    
 <sql-statement>
 SELECT t.f1 AS t, i.f1 AS i, t.f1 + i.f1 AS "add", t.f1 - i.f1 AS "subtract"
   FROM TIMETZ_TBL t, INTERVAL_TBL i
   ORDER BY 1,2;
 </sql-statement>
--stdin-:<main>: Fatal: Table metadata loading
-
-    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.INTERVAL_TBL
-    
 <sql-statement>
 -- SQL9x OVERLAPS operator
 -- test with time zone
@@ -760,20 +749,12 @@ SELECT d.f1 AS "timestamp", t.f1 AS "interval", d.f1 + t.f1 AS plus
   FROM TEMP_TIMESTAMP d, INTERVAL_TBL t
   ORDER BY plus, "timestamp", "interval";
 </sql-statement>
--stdin-:<main>: Fatal: Table metadata loading
-
-    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.INTERVAL_TBL
-    
 <sql-statement>
 SELECT d.f1 AS "timestamp", t.f1 AS "interval", d.f1 - t.f1 AS minus
   FROM TEMP_TIMESTAMP d, INTERVAL_TBL t
   WHERE isfinite(d.f1)
   ORDER BY minus, "timestamp", "interval";
 </sql-statement>
--stdin-:<main>: Fatal: Table metadata loading
-
-    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.INTERVAL_TBL
-    
 <sql-statement>
 SELECT d.f1 AS "timestamp",
    timestamp with time zone '1980-01-06 00:00 GMT' AS gpstime_zero,

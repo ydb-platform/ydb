@@ -59,6 +59,11 @@ SELECT (timestamp without time zone '2000-11-26', timestamp without time zone '2
 SELECT (time '00:00', time '01:00')
   OVERLAPS (time '00:30', time '01:30') AS "True";
 CREATE TABLE TEMP_TIMESTAMP (f1 timestamp with time zone);
+-- get some candidate input values
+INSERT INTO TEMP_TIMESTAMP (f1)
+  SELECT d1 FROM TIMESTAMP_TBL
+  WHERE d1 BETWEEN '13-jun-1957' AND '1-jan-1997'
+   OR d1 BETWEEN '1-jan-1999' AND '1-jan-2010';
 DROP TABLE TEMP_TIMESTAMP;
 --
 -- Comparisons between datetime types, especially overflow cases

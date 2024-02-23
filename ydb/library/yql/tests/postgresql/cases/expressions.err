@@ -1,3 +1,5 @@
+Registering pre-existing tables
+	date_tbl
 <sql-statement>
 --
 -- expression evaluation tests that don't fit into a more specific file
@@ -124,10 +126,6 @@ select count(*) from date_tbl
 select count(*) from date_tbl
   where f1 between '1997-01-01' and '1998-01-01';
 </sql-statement>
--stdin-:<main>: Fatal: Table metadata loading
-
-    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.date_tbl
-    
 <sql-statement>
 explain (costs off)
 select count(*) from date_tbl
@@ -142,10 +140,6 @@ select count(*) from date_tbl
 select count(*) from date_tbl
   where f1 not between '1997-01-01' and '1998-01-01';
 </sql-statement>
--stdin-:<main>: Fatal: Table metadata loading
-
-    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.date_tbl
-    
 <sql-statement>
 explain (costs off)
 select count(*) from date_tbl
@@ -160,10 +154,6 @@ select count(*) from date_tbl
 select count(*) from date_tbl
   where f1 between symmetric '1997-01-01' and '1998-01-01';
 </sql-statement>
--stdin-:<main>: Fatal: Table metadata loading
-
-    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.date_tbl
-    
 <sql-statement>
 explain (costs off)
 select count(*) from date_tbl
@@ -178,10 +168,6 @@ select count(*) from date_tbl
 select count(*) from date_tbl
   where f1 not between symmetric '1997-01-01' and '1998-01-01';
 </sql-statement>
--stdin-:<main>: Fatal: Table metadata loading
-
-    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.date_tbl
-    
 <sql-statement>
 --
 -- Test parsing of a no-op cast to a type with unspecified typmod

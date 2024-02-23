@@ -1,7 +1,7 @@
 Registering pre-existing tables
 	INT4_TBL
-	INT8_TBL
 	TEXT_TBL
+	int8_tbl
 <sql-statement>
 --
 -- SUBSELECT
@@ -205,9 +205,12 @@ SELECT ss.f1 AS "Correlated Field", ss.f3 AS "Second Field"
 select q1, float8(count(*)) / (select count(*) from int8_tbl)
 from int8_tbl group by q1 order by q1;
 </sql-statement>
--stdin-:<main>: Fatal: Table metadata loading
+-stdin-:<main>: Fatal: Optimization
 
-    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.int8_tbl
+    -stdin-:<main>:1:1: Fatal: ydb/library/yql/core/common_opt/yql_co_pgselect.cpp:3236  ExpandPgSelectImpl(): requirement order failed
+    	select q1, float8(count(*)) / (select count(*) from int8_tbl)
+	^
+    -stdin-:<main>: Fatal: ydb/library/yql/core/common_opt/yql_co_pgselect.cpp:704  RewriteSubLinksPartial(): requirement status.Level != IGraphTransformer::TStatus::Error failed
     
 <sql-statement>
 -- Unspecified-type literals in output columns should resolve as text
@@ -808,7 +811,7 @@ from
 </sql-statement>
 -stdin-:<main>: Fatal: Table metadata loading
 
-    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.int8_tbl
+    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.int4_tbl
     
 <sql-statement>
 --
@@ -988,10 +991,22 @@ select '1'::text in (select '1'::name union all select '1'::name);
 -- this fails by default, of course
 select * from int8_tbl where q1 in (select c1 from inner_text);
 </sql-statement>
--stdin-:<main>: Fatal: Table metadata loading
+-stdin-:<main>: Error: Type annotation
 
-    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.int8_tbl
-    
+    -stdin-:<main>:1:1: Error: At function: RemovePrefixMembers, At function: PgSelect
+    	--
+	^
+        -stdin-:<main>: Error: At function: PgSetItem
+        
+            -stdin-:<main>:1:1: Error: At function: PgWhere
+            	--
+	^
+                -stdin-:<main>:6:33: Error: At function: PgSubLink, At function: PgOp
+                	select * from int8_tbl where q1 in (select c1 from inner_text);
+	                                ^
+                    -stdin-:<main>:6:33: Error: Unable to find an overload for operator = with given argument type(s): (int8,text)
+                    	select * from int8_tbl where q1 in (select c1 from inner_text);
+	                                ^
 <sql-statement>
 begin;
 </sql-statement>
@@ -1025,10 +1040,22 @@ select * from int8_tbl where q1 in (select c1 from inner_text);
 <sql-statement>
 select * from int8_tbl where q1 in (select c1 from inner_text);
 </sql-statement>
--stdin-:<main>: Fatal: Table metadata loading
+-stdin-:<main>: Error: Type annotation
 
-    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.int8_tbl
-    
+    -stdin-:<main>:1:1: Error: At function: RemovePrefixMembers, At function: PgSelect
+    	select * from int8_tbl where q1 in (select c1 from inner_text);
+	^
+        -stdin-:<main>: Error: At function: PgSetItem
+        
+            -stdin-:<main>:1:1: Error: At function: PgWhere
+            	select * from int8_tbl where q1 in (select c1 from inner_text);
+	^
+                -stdin-:<main>:1:33: Error: At function: PgSubLink, At function: PgOp
+                	select * from int8_tbl where q1 in (select c1 from inner_text);
+	                                ^
+                    -stdin-:<main>:1:33: Error: Unable to find an overload for operator = with given argument type(s): (int8,text)
+                    	select * from int8_tbl where q1 in (select c1 from inner_text);
+	                                ^
 <sql-statement>
 -- inlining of this function results in unusual number of hash clauses,
 -- which we can still cope with
@@ -1052,10 +1079,22 @@ select * from int8_tbl where q1 in (select c1 from inner_text);
 <sql-statement>
 select * from int8_tbl where q1 in (select c1 from inner_text);
 </sql-statement>
--stdin-:<main>: Fatal: Table metadata loading
+-stdin-:<main>: Error: Type annotation
 
-    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.int8_tbl
-    
+    -stdin-:<main>:1:1: Error: At function: RemovePrefixMembers, At function: PgSelect
+    	select * from int8_tbl where q1 in (select c1 from inner_text);
+	^
+        -stdin-:<main>: Error: At function: PgSetItem
+        
+            -stdin-:<main>:1:1: Error: At function: PgWhere
+            	select * from int8_tbl where q1 in (select c1 from inner_text);
+	^
+                -stdin-:<main>:1:33: Error: At function: PgSubLink, At function: PgOp
+                	select * from int8_tbl where q1 in (select c1 from inner_text);
+	                                ^
+                    -stdin-:<main>:1:33: Error: Unable to find an overload for operator = with given argument type(s): (int8,text)
+                    	select * from int8_tbl where q1 in (select c1 from inner_text);
+	                                ^
 <sql-statement>
 -- inlining of this function causes LHS and RHS to be switched,
 -- which we can't cope with, so hashing should be abandoned
@@ -1079,10 +1118,22 @@ select * from int8_tbl where q1 in (select c1 from inner_text);
 <sql-statement>
 select * from int8_tbl where q1 in (select c1 from inner_text);
 </sql-statement>
--stdin-:<main>: Fatal: Table metadata loading
+-stdin-:<main>: Error: Type annotation
 
-    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.int8_tbl
-    
+    -stdin-:<main>:1:1: Error: At function: RemovePrefixMembers, At function: PgSelect
+    	select * from int8_tbl where q1 in (select c1 from inner_text);
+	^
+        -stdin-:<main>: Error: At function: PgSetItem
+        
+            -stdin-:<main>:1:1: Error: At function: PgWhere
+            	select * from int8_tbl where q1 in (select c1 from inner_text);
+	^
+                -stdin-:<main>:1:33: Error: At function: PgSubLink, At function: PgOp
+                	select * from int8_tbl where q1 in (select c1 from inner_text);
+	                                ^
+                    -stdin-:<main>:1:33: Error: Unable to find an overload for operator = with given argument type(s): (int8,text)
+                    	select * from int8_tbl where q1 in (select c1 from inner_text);
+	                                ^
 <sql-statement>
 rollback;  -- to get rid of the bogus operator
 </sql-statement>

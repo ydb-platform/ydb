@@ -33,6 +33,16 @@ SELECT f1 FROM VARCHAR_TBL
 UNION
 SELECT TRIM(TRAILING FROM f1) FROM CHAR_TBL
 ORDER BY 1;
+--
+-- INTERSECT and EXCEPT
+--
+SELECT q2 FROM int8_tbl INTERSECT SELECT q1 FROM int8_tbl ORDER BY 1;
+SELECT q2 FROM int8_tbl INTERSECT ALL SELECT q1 FROM int8_tbl ORDER BY 1;
+SELECT q2 FROM int8_tbl EXCEPT SELECT q1 FROM int8_tbl ORDER BY 1;
+SELECT q2 FROM int8_tbl EXCEPT ALL SELECT q1 FROM int8_tbl ORDER BY 1;
+SELECT q2 FROM int8_tbl EXCEPT ALL SELECT DISTINCT q1 FROM int8_tbl ORDER BY 1;
+SELECT q1 FROM int8_tbl EXCEPT ALL SELECT q2 FROM int8_tbl ORDER BY 1;
+SELECT q1 FROM int8_tbl EXCEPT ALL SELECT DISTINCT q2 FROM int8_tbl ORDER BY 1;
 -- nested cases
 (SELECT 1,2,3 UNION SELECT 4,5,6) INTERSECT SELECT 4,5,6;
 (SELECT 1,2,3 UNION SELECT 4,5,6 ORDER BY 1,2) INTERSECT SELECT 4,5,6;
@@ -42,6 +52,23 @@ select x from (values (array[1, 2]), (array[1, 3])) _(x) intersect select x from
 select x from (values (array[1, 2]), (array[1, 3])) _(x) except select x from (values (array[1, 2]), (array[1, 4])) _(x);
 select x from (values (array[1, 2]), (array[1, 3])) _(x) intersect select x from (values (array[1, 2]), (array[1, 4])) _(x);
 select x from (values (array[1, 2]), (array[1, 3])) _(x) except select x from (values (array[1, 2]), (array[1, 4])) _(x);
+--
+-- Operator precedence and (((((extra))))) parentheses
+--
+SELECT q1 FROM int8_tbl INTERSECT SELECT q2 FROM int8_tbl UNION ALL SELECT q2 FROM int8_tbl  ORDER BY 1;
+SELECT q1 FROM int8_tbl INTERSECT (((SELECT q2 FROM int8_tbl UNION ALL SELECT q2 FROM int8_tbl))) ORDER BY 1;
+(((SELECT q1 FROM int8_tbl INTERSECT SELECT q2 FROM int8_tbl ORDER BY 1))) UNION ALL SELECT q2 FROM int8_tbl;
+SELECT q1 FROM int8_tbl UNION ALL (((SELECT q2 FROM int8_tbl EXCEPT SELECT q1 FROM int8_tbl ORDER BY 1)));
+--
+-- Subqueries with ORDER BY & LIMIT clauses
+--
+-- In this syntax, ORDER BY/LIMIT apply to the result of the EXCEPT
+SELECT q1,q2 FROM int8_tbl EXCEPT SELECT q2,q1 FROM int8_tbl
+ORDER BY q2,q1;
+--
+-- New syntaxes (7.1) permit new tests
+--
+(((((select * from int8_tbl)))));
 -- This should fail, but it should produce an error cursor
 SELECT '3.4'::numeric UNION SELECT 'foo';
 --
@@ -74,3 +101,13 @@ SELECT * FROM
    SELECT 2 AS t, 4 AS x) ss
 WHERE x > 3
 ORDER BY x;
+select distinct q1 from
+  (select distinct * from int8_tbl i81
+   union all
+   select distinct * from int8_tbl i82) ss
+where q2 = q2;
+select distinct q1 from
+  (select distinct * from int8_tbl i81
+   union all
+   select distinct * from int8_tbl i82) ss
+where -q1 = q2;

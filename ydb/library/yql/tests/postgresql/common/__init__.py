@@ -39,6 +39,7 @@ def find_sql_tests(path):
 
     return tests
 
+
 def load_init_scripts_for_testcase(testcase_name, init_scripts_cfg, init_scripts_dir):
     with open(init_scripts_cfg, 'r') as cfg:
         for lineno, line in enumerate(cfg, 1):
@@ -60,6 +61,7 @@ def load_init_scripts_for_testcase(testcase_name, init_scripts_cfg, init_scripts
         LOGGER.debug("Init scripts: %s", ", ".join(s.stem for s in scripts))
 
     return scripts
+
 
 def run_sql_test(sql, out, tmp_path, runner, udfs, init_scripts_cfg, init_scripts_dir):
     args = [runner, "--datadir", tmp_path]

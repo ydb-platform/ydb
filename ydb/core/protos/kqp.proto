@@ -318,6 +318,7 @@ message TKqpDefaultSettings {
 
 message TCreateSessionRequest {
     optional string Database = 1;
+    optional string ApplicationName = 2;
 }
 
 message TEvCreateSessionRequest {

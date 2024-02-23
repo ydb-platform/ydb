@@ -33,12 +33,12 @@ namespace NKikimr::NKqp {
 // common case).
 class TKqpQueryState : public TNonCopyable {
 public:
-    TKqpQueryState(TEvKqp::TEvQueryRequest::TPtr& ev, ui64 queryId, const TString& database,
-        const TString& cluster, TKqpDbCountersPtr dbCounters, bool longSession,
-        const NKikimrConfig::TTableServiceConfig& tableServiceConfig, const NKikimrConfig::TQueryServiceConfig& queryServiceConfig,
-        const TString& sessionId, TMonotonic startedAt)
+    TKqpQueryState(TEvKqp::TEvQueryRequest::TPtr& ev, ui64 queryId, const TString& database, const TMaybe<TString>& applicationName,
+        const TString& cluster, TKqpDbCountersPtr dbCounters, bool longSession, const NKikimrConfig::TTableServiceConfig& tableServiceConfig,
+        const NKikimrConfig::TQueryServiceConfig& queryServiceConfig, const TString& sessionId, TMonotonic startedAt)
         : QueryId(queryId)
         , Database(database)
+        , ApplicationName(applicationName)
         , Cluster(cluster)
         , DbCounters(dbCounters)
         , Sender(ev->Sender)
@@ -78,6 +78,7 @@ public:
     // with cookie less than current QueryId.
     ui64 QueryId = 0;
     TString Database;
+    TMaybe<TString> ApplicationName;
     TString Cluster;
     TKqpDbCountersPtr DbCounters;
     TActorId Sender;

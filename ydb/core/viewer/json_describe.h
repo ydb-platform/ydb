@@ -3,6 +3,7 @@
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 #include <ydb/library/actors/core/mon.h>
 #include <ydb/core/base/tablet_pipe.h>
+#include <ydb/core/external_sources/external_source_factory.h>
 #include <ydb/library/services/services.pb.h>
 #include <ydb/core/tx/schemeshard/schemeshard.h>
 #include <ydb/core/tx/tx_proxy/proxy.h>
@@ -268,12 +269,49 @@ public:
                 headers = Viewer->GetHTTPFORBIDDEN(Event->Get());
             }
             TProtoToJson::ProtoToJson(json, *DescribeResult, JsonSettings);
+            DecodeExternalTableContent(json);
         } else {
             json << "null";
         }
 
         Send(Event->Sender, new NMon::TEvHttpInfoRes(headers + json.Str(), 0, NMon::IEvHttpInfoRes::EContentType::Custom));
         PassAway();
+    }
+
+    void DecodeExternalTableContent(TStringStream& json) const {
+        if (!DescribeResult) {
+            return;
+        }
+
+        if (!DescribeResult->GetPathDescription().HasExternalTableDescription()) {
+            return;
+        }
+
+        const auto& content = DescribeResult->GetPathDescription().GetExternalTableDescription().GetContent();
+        if (!content) {
+            return;
+        }
+
+        NExternalSource::IExternalSourceFactory::TPtr externalSourceFactory{NExternalSource::CreateExternalSourceFactory({})};
+        NJson::TJsonValue root;
+        const auto& sourceType = DescribeResult->GetPathDescription().GetExternalTableDescription().GetSourceType();
+        try {
+            NJson::ReadJsonTree(json.Str(), &root);
+            root["PathDescription"]["ExternalTableDescription"].EraseValue("Content");
+            auto source = externalSourceFactory->GetOrCreate(sourceType);
+            auto parameters = source->GetParameters(content);
+            for (const auto& [key, items]: parameters) {
+                NJson::TJsonValue array{NJson::EJsonValueType::JSON_ARRAY};
+                for (const auto& item: items) {
+                    array.AppendValue(item);
+                }
+                root["PathDescription"]["ExternalTableDescription"]["Content"][key] = array;
+            }
+        } catch (...) {
+            BLOG_CRIT("Сan't unpack content for external table: " << sourceType << ", error: " << CurrentExceptionMessage());
+        }
+        json.Clear();
+        json << root;
     }
 
     void HandleTimeout() {

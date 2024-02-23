@@ -270,6 +270,7 @@ PEERDIR(
     ydb/core/blobstorage/base
     ydb/core/blobstorage/vdisk/common
     ydb/core/client/server
+    ydb/core/external_sources
     ydb/core/graph/api
     ydb/core/grpc_services
     ydb/core/grpc_services/local_rpc

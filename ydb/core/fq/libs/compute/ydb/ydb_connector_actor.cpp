@@ -52,8 +52,10 @@ public:
         settings.ExecMode(event.ExecMode);
         settings.StatsMode(event.StatsMode);
         settings.TraceId(event.TraceId);
+        auto queryParametersCopy = event.QueryParameters;
+        NYdb::TParams params(std::move(queryParametersCopy));
         QueryClient
-            ->ExecuteScript(event.Sql, settings)
+            ->ExecuteScript(event.Sql, params, settings)
             .Apply([actorSystem = NActors::TActivationContext::ActorSystem(), recipient = ev->Sender, cookie = ev->Cookie, database = ComputeConnection.database()](auto future) {
                 try {
                     auto response = future.ExtractValueSync();

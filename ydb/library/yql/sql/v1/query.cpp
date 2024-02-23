@@ -1050,7 +1050,7 @@ public:
                 Y_ENSURE(resetableParam, "Empty parameter");
                 Y_ENSURE(resetableParam.IsSet(), "Can't reset " << resetableParam.GetValueReset().Name << " in create mode");
                 const auto& [id, value] = resetableParam.GetValueSet();
-                settings = L(settings, Q(Y(Q(to_lower(id.Name)), value)));
+                settings = L(settings, Q(Y(Q(id.Name), value)));
             }
             if (Params.TableSettings.CompactionPolicy) {
                 settings = L(settings, Q(Y(Q("compactionPolicy"), Params.TableSettings.CompactionPolicy)));
@@ -1300,9 +1300,9 @@ public:
                 Y_ENSURE(resetableParam, "Empty parameter");
                 if (resetableParam.IsSet()) {
                     const auto& [id, value] = resetableParam.GetValueSet();
-                    settings = L(settings, Q(Y(Q(to_lower(id.Name)), value)));
+                    settings = L(settings, Q(Y(Q(id.Name), value)));
                 } else {
-                    settings = L(settings, Q(Y(Q(to_lower(resetableParam.GetValueReset().Name)))));
+                    settings = L(settings, Q(Y(Q(resetableParam.GetValueReset().Name))));
                 }
             }
             if (Params.TableSettings.CompactionPolicy) {

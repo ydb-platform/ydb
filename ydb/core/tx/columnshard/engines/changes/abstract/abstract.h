@@ -74,10 +74,10 @@ public:
 
 class TWriteIndexContext: TNonCopyable {
 public:
-    NTabletFlatExecutor::TTransactionContext& Txc;
-    std::shared_ptr<TBlobManagerDb> BlobManagerDb;
+    NTable::TDatabase* DB;
     IDbWrapper& DBWrapper;
-    TWriteIndexContext(NTabletFlatExecutor::TTransactionContext& txc, IDbWrapper& dbWrapper);
+    TColumnEngineForLogs& EngineLogs;
+    TWriteIndexContext(NTable::TDatabase* db, IDbWrapper& dbWrapper, TColumnEngineForLogs& engineLogs);
 };
 
 class TChangesFinishContext {
@@ -146,8 +146,8 @@ private:
 protected:
     virtual void DoDebugString(TStringOutput& out) const = 0;
     virtual void DoCompile(TFinalizationContext& context) = 0;
-    virtual void DoWriteIndexOnExecute(NColumnShard::TColumnShard& self, TWriteIndexContext& context) = 0;
-    virtual void DoWriteIndexOnComplete(NColumnShard::TColumnShard& self, TWriteIndexCompleteContext& context) = 0;
+    virtual void DoWriteIndexOnExecute(NColumnShard::TColumnShard* self, TWriteIndexContext& context) = 0;
+    virtual void DoWriteIndexOnComplete(NColumnShard::TColumnShard* self, TWriteIndexCompleteContext& context) = 0;
     virtual void DoOnFinish(NColumnShard::TColumnShard& self, TChangesFinishContext& context) = 0;
     virtual bool NeedConstruction() const {
         return true;
@@ -217,8 +217,8 @@ public:
     virtual TPortionInfoWithBlobs* GetWritePortionInfo(const ui32 index) = 0;
     virtual bool NeedWritePortion(const ui32 index) const = 0;
 
-    void WriteIndexOnExecute(NColumnShard::TColumnShard& self, TWriteIndexContext& context);
-    void WriteIndexOnComplete(NColumnShard::TColumnShard& self, TWriteIndexCompleteContext& context);
+    void WriteIndexOnExecute(NColumnShard::TColumnShard* self, TWriteIndexContext& context);
+    void WriteIndexOnComplete(NColumnShard::TColumnShard* self, TWriteIndexCompleteContext& context);
 
     void Compile(TFinalizationContext& context) noexcept;
 

@@ -44,9 +44,11 @@ void TCompactColumnEngineChanges::DoStart(NColumnShard::TColumnShard& self) {
     GranuleMeta->OnCompactionStarted();
 }
 
-void TCompactColumnEngineChanges::DoWriteIndexOnComplete(NColumnShard::TColumnShard& self, TWriteIndexCompleteContext& context) {
+void TCompactColumnEngineChanges::DoWriteIndexOnComplete(NColumnShard::TColumnShard* self, TWriteIndexCompleteContext& context) {
     TBase::DoWriteIndexOnComplete(self, context);
-    self.IncCounter(NColumnShard::COUNTER_COMPACTION_TIME, context.Duration.MilliSeconds());
+    if (self) {
+        self->IncCounter(NColumnShard::COUNTER_COMPACTION_TIME, context.Duration.MilliSeconds());
+    }
 }
 
 void TCompactColumnEngineChanges::DoOnFinish(NColumnShard::TColumnShard& self, TChangesFinishContext& context) {

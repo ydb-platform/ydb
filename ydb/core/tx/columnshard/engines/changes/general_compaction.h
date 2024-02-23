@@ -7,7 +7,7 @@ namespace NKikimr::NOlap::NCompaction {
 class TGeneralCompactColumnEngineChanges: public TCompactColumnEngineChanges {
 private:
     using TBase = TCompactColumnEngineChanges;
-    virtual void DoWriteIndexOnComplete(NColumnShard::TColumnShard& self, TWriteIndexCompleteContext& context) override;
+    virtual void DoWriteIndexOnComplete(NColumnShard::TColumnShard* self, TWriteIndexCompleteContext& context) override;
     std::map<NIndexedReader::TSortableBatchPosition, bool> CheckPoints;
     void BuildAppendedPortionsByFullBatches(TConstructionContext& context) noexcept;
     void BuildAppendedPortionsByChunks(TConstructionContext& context) noexcept;

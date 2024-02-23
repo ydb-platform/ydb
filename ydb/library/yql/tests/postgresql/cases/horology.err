@@ -1,5 +1,6 @@
 Registering pre-existing tables
 	TIME_TBL
+	TIMESTAMPTZ_TBL
 	TIMESTAMP_TBL
 	TIMETZ_TBL
 <sql-statement>
@@ -447,17 +448,9 @@ SELECT timestamptz(date '1994-01-01', time with time zone '11:00-5') AS "Jan_01_
 <sql-statement>
 SELECT d1 + interval '1 year' AS one_year FROM TIMESTAMPTZ_TBL;
 </sql-statement>
--stdin-:<main>: Fatal: Table metadata loading
-
-    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.TIMESTAMPTZ_TBL
-    
 <sql-statement>
 SELECT d1 - interval '1 year' AS one_year FROM TIMESTAMPTZ_TBL;
 </sql-statement>
--stdin-:<main>: Fatal: Table metadata loading
-
-    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.TIMESTAMPTZ_TBL
-    
 <sql-statement>
 --
 -- time, interval arithmetic

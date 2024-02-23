@@ -95,7 +95,6 @@ ydb/tests/functional/clickbench test.py.test_plans*
 ydb/tests/functional/clickbench test.py.test_run*
 ydb/tests/functional/kqp/kqp_indexes ConsistentIndexRead.InteractiveTx
 ydb/tests/functional/kqp/kqp_query_session KqpQuerySession.NoLocalAttach
-ydb/tests/functional/postgresql test_postgres.py.TestPostgresSuite.test_postgres_suite*
 ydb/tests/functional/restarts test_restarts.py.*
 ydb/tests/functional/serverless test_serverless.py.test_database_with_disk_quotas[enable_alter_database_create_hive_first--*]
 ydb/tests/functional/sqs/cloud test_common.py.TestCommonSqsYandexCloudMode.test_private_create_queue[tables_format_v0-std]

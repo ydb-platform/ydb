@@ -1,7 +1,7 @@
 Registering pre-existing tables
 	INT4_TBL
 	VARCHAR_TBL
-	INT8_TBL
+	int8_tbl
 <sql-statement>
 --
 -- AGGREGATES
@@ -543,10 +543,17 @@ SELECT oldcnt(*) AS cnt_1000 FROM onek;
 <sql-statement>
 SELECT sum2(q1,q2) FROM int8_tbl;
 </sql-statement>
--stdin-:<main>: Fatal: Table metadata loading
+-stdin-:<main>: Error: Type annotation
 
-    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.int8_tbl
-    
+    -stdin-:<main>:1:1: Error: At function: RemovePrefixMembers, At function: PgSelect, At function: PgSetItem, At function: PgResultItem
+    	SELECT sum2(q1,q2) FROM int8_tbl;
+	^
+        -stdin-:<main>:1:8: Error: At function: PgCall
+        	SELECT sum2(q1,q2) FROM int8_tbl;
+	       ^
+            -stdin-:<main>:1:8: Error: No such proc: sum2
+            	SELECT sum2(q1,q2) FROM int8_tbl;
+	       ^
 <sql-statement>
 -- test for outer-level aggregates
 -- this should work
@@ -2387,10 +2394,17 @@ drop view aggordview1;
 -- variadic aggregates
 select least_agg(q1,q2) from int8_tbl;
 </sql-statement>
--stdin-:<main>: Fatal: Table metadata loading
+-stdin-:<main>: Error: Type annotation
 
-    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.int8_tbl
-    
+    -stdin-:<main>:1:1: Error: At function: RemovePrefixMembers, At function: PgSelect, At function: PgSetItem, At function: PgResultItem
+    	-- variadic aggregates
+	^
+        -stdin-:<main>:2:8: Error: At function: PgCall
+        	select least_agg(q1,q2) from int8_tbl;
+	       ^
+            -stdin-:<main>:2:8: Error: No such proc: least_agg
+            	select least_agg(q1,q2) from int8_tbl;
+	       ^
 <sql-statement>
 select least_agg(variadic array[q1,q2]) from int8_tbl;
 </sql-statement>
@@ -2402,10 +2416,17 @@ select least_agg(variadic array[q1,q2]) from int8_tbl;
 <sql-statement>
 select cleast_agg(q1,q2) from int8_tbl;
 </sql-statement>
--stdin-:<main>: Fatal: Table metadata loading
+-stdin-:<main>: Error: Type annotation
 
-    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.int8_tbl
-    
+    -stdin-:<main>:1:1: Error: At function: RemovePrefixMembers, At function: PgSelect, At function: PgSetItem, At function: PgResultItem
+    	select cleast_agg(q1,q2) from int8_tbl;
+	^
+        -stdin-:<main>:1:8: Error: At function: PgCall
+        	select cleast_agg(q1,q2) from int8_tbl;
+	       ^
+            -stdin-:<main>:1:8: Error: No such proc: cleast_agg
+            	select cleast_agg(q1,q2) from int8_tbl;
+	       ^
 <sql-statement>
 select cleast_agg(4.5,f1) from int4_tbl;
 </sql-statement>

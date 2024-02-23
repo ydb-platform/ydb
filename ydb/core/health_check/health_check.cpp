@@ -1305,8 +1305,8 @@ public:
 
     void FillCompute(TDatabaseState& databaseState, Ydb::Monitoring::ComputeStatus& computeStatus, TSelfCheckContext context) {
         TVector<TNodeId>* computeNodeIds = &databaseState.ComputeNodeIds;
-        if (databaseState.ResourcePathId 
-            && databaseState.ServerlessComputeResourcesMode != NKikimrSubDomains::EServerlessComputeResourcesModeExclusive) 
+        if (databaseState.ResourcePathId
+            && databaseState.ServerlessComputeResourcesMode != NKikimrSubDomains::EServerlessComputeResourcesModeExclusive)
         {
             auto itDatabase = FilterDomainKey.find(TSubDomainKey(databaseState.ResourcePathId.OwnerId, databaseState.ResourcePathId.LocalPathId));
             if (itDatabase != FilterDomainKey.end()) {
@@ -2074,7 +2074,7 @@ public:
         }
     }
 
-    const TDuration MAX_CLOCKSKEW_RED_ISSUE_TIME = TDuration::MicroSeconds(25000);
+    const TDuration MAX_CLOCKSKEW_ORANGE_ISSUE_TIME = TDuration::MicroSeconds(25000);
     const TDuration MAX_CLOCKSKEW_YELLOW_ISSUE_TIME = TDuration::MicroSeconds(5000);
 
     void FillNodesSyncStatus(TOverallStateContext& context) {
@@ -2098,8 +2098,8 @@ public:
         FillNodeInfo(maxClockSkewPeerId, syncContext.Location.mutable_peer());
 
         TDuration maxClockSkewTime = TDuration::MicroSeconds(maxClockSkewUs);
-        if (maxClockSkewTime > MAX_CLOCKSKEW_RED_ISSUE_TIME) {
-            syncContext.ReportStatus(Ydb::Monitoring::StatusFlag::RED, TStringBuilder() << "The nodes have a time difference of " << maxClockSkewTime.MilliSeconds() << " ms", ETags::SyncState);
+        if (maxClockSkewTime > MAX_CLOCKSKEW_ORANGE_ISSUE_TIME) {
+            syncContext.ReportStatus(Ydb::Monitoring::StatusFlag::ORANGE, TStringBuilder() << "The nodes have a time difference of " << maxClockSkewTime.MilliSeconds() << " ms", ETags::SyncState);
         } else if (maxClockSkewTime > MAX_CLOCKSKEW_YELLOW_ISSUE_TIME) {
             syncContext.ReportStatus(Ydb::Monitoring::StatusFlag::YELLOW, TStringBuilder() << "The nodes have a time difference of " << maxClockSkewTime.MilliSeconds() << " ms", ETags::SyncState);
         } else {

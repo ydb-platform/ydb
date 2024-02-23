@@ -156,7 +156,7 @@ namespace NKikimr::NStorage {
                 }
 
                 for (const auto& [path, m, guid] : msg.MetadataPerPath) {
-                    auto addConfig = [&, path = path](const auto& config, auto func, auto& set) {
+                    auto addConfig = [&, path = path, guid = guid](const auto& config, auto func, auto& set) {
                         auto& ptr = set[config];
                         if (!ptr) {
                             ptr = (res->*func)();

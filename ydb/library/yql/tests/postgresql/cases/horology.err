@@ -1,5 +1,6 @@
 Registering pre-existing tables
 	TIME_TBL
+	TIMETZ_TBL
 <sql-statement>
 --
 -- HOROLOGY

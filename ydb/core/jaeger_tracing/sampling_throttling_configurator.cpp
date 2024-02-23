@@ -23,7 +23,8 @@ TIntrusivePtr<TSamplingThrottlingControl> TSamplingThrottlingConfigurator::GetCo
 }
 
 void TSamplingThrottlingConfigurator::UpdateSettings(TSettings<double, TThrottlingSettings> settings) {
-    CurrentSettings = GenerateThrottlers(std::move(settings));
+    auto enrichedSettings = GenerateThrottlers(std::move(settings));
+    CurrentSettings = PropagateUnspecifiedRequest(std::move(enrichedSettings));
 
     for (auto& control : IssuedControls) {
         control->UpdateImpl(GenerateSetup());
@@ -35,6 +36,30 @@ TSettings<double, TIntrusivePtr<TThrottler>> TSamplingThrottlingConfigurator::Ge
     return settings.MapThrottler([this](const TThrottlingSettings& settings) {
         return MakeIntrusive<TThrottler>(settings.MaxTracesPerMinute, settings.MaxTracesBurst, TimeProvider);
     });
+}
+
+TSettings<double, TIntrusivePtr<TThrottler>> TSamplingThrottlingConfigurator::PropagateUnspecifiedRequest(
+    TSettings<double, TIntrusivePtr<TThrottler>> setup) {
+    auto unspecifiedRequestType = static_cast<size_t>(ERequestType::UNSPECIFIED);
+
+    for (size_t requestType = 0; requestType < kRequestTypesCnt; ++requestType) {
+        if (requestType == unspecifiedRequestType) {
+            continue;
+        }
+
+        auto& requestTypeSamplingRules = setup.SamplingRules[requestType];
+        for (const auto& [database, rules] : setup.SamplingRules[unspecifiedRequestType]) {
+            auto& databaseSamplingRules = requestTypeSamplingRules[database];
+            databaseSamplingRules.insert(databaseSamplingRules.end(), rules.begin(), rules.end());
+        }
+
+        auto& requestTypeThrottlingRules = setup.ExternalThrottlingRules[requestType];
+        for (const auto& [database, rules] : setup.ExternalThrottlingRules[unspecifiedRequestType]) {
+            auto& databaseThrottlingRules = requestTypeThrottlingRules[database];
+            databaseThrottlingRules.insert(databaseThrottlingRules.end(), rules.begin(), rules.end());
+        }
+    }
+    return setup;
 }
 
 std::unique_ptr<TSamplingThrottlingControl::TSamplingThrottlingImpl> TSamplingThrottlingConfigurator::GenerateSetup() {

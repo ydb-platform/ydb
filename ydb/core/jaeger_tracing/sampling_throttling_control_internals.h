@@ -19,12 +19,12 @@ struct TSamplingThrottlingControl::TSamplingThrottlingImpl {
 
     TSettings<TSampler, TIntrusivePtr<TThrottler>> Setup;
 
-    void HandleTracing(NWilson::TTraceId& traceId, const TRequestDiscriminator& discriminator);
+    void HandleTracing(NWilson::TTraceId& traceId, TRequestDiscriminator discriminator);
 
 private:
-    bool Throttle(ERequestType requestType);
+    bool Throttle(size_t requestType, const TMaybe<TString>& database);
 
-    TMaybe<ui8> Sample(ERequestType requestType);
+    TMaybe<ui8> Sample(size_t requestType, const TMaybe<TString>& database);
 };
 
 } // namespace NKikimr::NJaegerTracing

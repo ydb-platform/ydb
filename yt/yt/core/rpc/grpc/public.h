@@ -12,7 +12,7 @@ DECLARE_REFCOUNTED_CLASS(TServerCredentialsConfig)
 DECLARE_REFCOUNTED_CLASS(TServerAddressConfig)
 DECLARE_REFCOUNTED_CLASS(TServerConfig)
 DECLARE_REFCOUNTED_CLASS(TChannelCredentialsConfig)
-DECLARE_REFCOUNTED_CLASS(TChannelConfigBase)
+DECLARE_REFCOUNTED_CLASS(TChannelConfigTemplate)
 DECLARE_REFCOUNTED_CLASS(TChannelConfig)
 
 ////////////////////////////////////////////////////////////////////////////////

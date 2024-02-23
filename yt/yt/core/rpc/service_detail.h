@@ -1035,6 +1035,7 @@ public:
     bool IsQueueByteSizeLimitExceeded() const;
 
     int GetQueueSize() const;
+    i64 GetQueueByteSize() const;
     int GetConcurrency() const;
 
     void OnRequestArrived(TServiceBase::TServiceContextPtr context);
@@ -1067,7 +1068,7 @@ private:
     std::atomic<bool> Throttled_ = false;
 
     std::atomic<int> QueueSize_ = 0;
-    std::atomic<i64> QueueBytesSize_ = 0;
+    std::atomic<i64> QueueByteSize_ = 0;
     moodycamel::ConcurrentQueue<TServiceBase::TServiceContextPtr> Queue_;
 
 

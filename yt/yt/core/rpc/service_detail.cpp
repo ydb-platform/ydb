@@ -1341,13 +1341,18 @@ bool TRequestQueue::IsQueueSizeLimitExceeded() const
 
 bool TRequestQueue::IsQueueByteSizeLimitExceeded() const
 {
-    return QueueBytesSize_.load(std::memory_order::relaxed) >=
+    return QueueByteSize_.load(std::memory_order::relaxed) >=
         RuntimeInfo_->QueueByteSizeLimit.load(std::memory_order::relaxed);
 }
 
 int TRequestQueue::GetQueueSize() const
 {
     return QueueSize_.load(std::memory_order::relaxed);
+}
+
+i64 TRequestQueue::GetQueueByteSize() const
+{
+    return QueueByteSize_.load(std::memory_order::relaxed);
 }
 
 int TRequestQueue::GetConcurrency() const
@@ -1464,7 +1469,7 @@ void TRequestQueue::IncrementQueueSize(const TServiceBase::TServiceContextPtr& c
     auto requestSize =
         GetMessageBodySize(context->GetRequestMessage()) +
         GetTotalMessageAttachmentSize(context->GetRequestMessage());
-    QueueBytesSize_ += requestSize;
+    QueueByteSize_ += requestSize;
 }
 
 void  TRequestQueue::DecrementQueueSize(const TServiceBase::TServiceContextPtr& context)
@@ -1475,7 +1480,7 @@ void  TRequestQueue::DecrementQueueSize(const TServiceBase::TServiceContextPtr& 
     auto requestSize =
         GetMessageBodySize(context->GetRequestMessage()) +
         GetTotalMessageAttachmentSize(context->GetRequestMessage());
-    auto oldQueueBytesSize = QueueBytesSize_.fetch_sub(requestSize);
+    auto oldQueueBytesSize = QueueByteSize_.fetch_sub(requestSize);
     YT_ASSERT(oldQueueBytesSize >= requestSize);
 }
 
@@ -1859,6 +1864,9 @@ void TServiceBase::RegisterRequestQueue(
     }
     profiler.AddFuncGauge("/request_queue_size", MakeStrong(this), [=] {
         return requestQueue->GetQueueSize();
+    });
+    profiler.AddFuncGauge("/request_queue_byte_size", MakeStrong(this), [=] {
+        return requestQueue->GetQueueByteSize();
     });
     profiler.AddFuncGauge("/concurrency", MakeStrong(this), [=] {
         return requestQueue->GetConcurrency();

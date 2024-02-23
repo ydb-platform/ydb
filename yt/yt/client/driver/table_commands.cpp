@@ -798,10 +798,10 @@ void TSelectRowsCommand::Register(TRegistrar registrar)
         })
         .Optional(/*init*/ false);
 
-    registrar.ParameterWithUniversalAccessor<std::optional<bool>>(
-        "use_web_assembly",
+    registrar.ParameterWithUniversalAccessor<std::optional<NApi::EExecutionBackend>>(
+        "execution_backend",
         [] (TThis* command) -> auto& {
-            return command->Options.UseWebAssembly;
+            return command->Options.ExecutionBackend;
         })
         .Optional(/*init*/ false);
 }

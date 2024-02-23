@@ -999,8 +999,8 @@ TFuture<TSelectRowsResult> TClientBase::SelectRows(
     req->set_fail_on_incomplete_result(options.FailOnIncompleteResult);
     req->set_verbose_logging(options.VerboseLogging);
     req->set_new_range_inference(options.NewRangeInference);
-    if (options.UseWebAssembly) {
-        req->set_use_web_assembly(*options.UseWebAssembly);
+    if (options.ExecutionBackend) {
+        req->set_execution_backend(static_cast<int>(*options.ExecutionBackend));
     }
     req->set_enable_code_cache(options.EnableCodeCache);
     req->set_memory_limit_per_node(options.MemoryLimitPerNode);

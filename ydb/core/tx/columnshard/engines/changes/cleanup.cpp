@@ -15,31 +15,39 @@ void TCleanupColumnEngineChanges::DoDebugString(TStringOutput& out) const {
     }
 }
 
-void TCleanupColumnEngineChanges::DoWriteIndexOnExecute(NColumnShard::TColumnShard& self, TWriteIndexContext& context) {
-    self.IncCounter(NColumnShard::COUNTER_PORTIONS_ERASED, PortionsToDrop.size());
+void TCleanupColumnEngineChanges::DoWriteIndexOnExecute(NColumnShard::TColumnShard* self, TWriteIndexContext& context) {
     THashSet<ui64> pathIds;
-    for (auto&& p : PortionsToDrop) {
-        p.RemoveFromDatabase(context.DBWrapper);
+    if (self) {
+        for (auto&& p : PortionsToDrop) {
+            p.RemoveFromDatabase(context.DBWrapper);
 
-        auto removing = BlobsAction.GetRemoving(p);
-        for (auto&& r : p.Records) {
-            removing->DeclareRemove((TTabletId)self.TabletID(), r.BlobRange.BlobId);
+            auto removing = BlobsAction.GetRemoving(p);
+            for (auto&& r : p.Records) {
+                removing->DeclareRemove((TTabletId)self->TabletID(), r.BlobRange.BlobId);
+            }
+            pathIds.emplace(p.GetPathId());
         }
-        pathIds.emplace(p.GetPathId());
-        self.IncCounter(NColumnShard::COUNTER_RAW_BYTES_ERASED, p.RawBytesSum());
-    }
-    for (auto&& p: pathIds) {
-        self.TablesManager.TryFinalizeDropPath(context.Txc, p);
+        if (context.DB) {
+            for (auto&& p : pathIds) {
+                self->TablesManager.TryFinalizeDropPath(*context.DB, p);
+            }
+        }
     }
 }
 
-void TCleanupColumnEngineChanges::DoWriteIndexOnComplete(NColumnShard::TColumnShard& /*self*/, TWriteIndexCompleteContext& context) {
+void TCleanupColumnEngineChanges::DoWriteIndexOnComplete(NColumnShard::TColumnShard* self, TWriteIndexCompleteContext& context) {
     for (auto& portionInfo : PortionsToDrop) {
         if (!context.EngineLogs.ErasePortion(portionInfo)) {
             AFL_WARN(NKikimrServices::TX_COLUMNSHARD)("event", "Cannot erase portion")("portion", portionInfo.DebugString());
         }
     }
     context.TriggerActivity = NeedRepeat ? NColumnShard::TBackgroundActivity::Cleanup() : NColumnShard::TBackgroundActivity::None();
+    if (self) {
+        self->IncCounter(NColumnShard::COUNTER_PORTIONS_ERASED, PortionsToDrop.size());
+        for (auto&& p : PortionsToDrop) {
+            self->IncCounter(NColumnShard::COUNTER_RAW_BYTES_ERASED, p.RawBytesSum());
+        }
+    }
 }
 
 void TCleanupColumnEngineChanges::DoStart(NColumnShard::TColumnShard& self) {

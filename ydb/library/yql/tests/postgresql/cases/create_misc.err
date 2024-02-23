@@ -1,6 +1,7 @@
 Registering pre-existing tables
 	tenk1
 	tenk2
+	hobbies_r
 <sql-statement>
 --
 -- CREATE_MISC
@@ -59,10 +60,6 @@ INSERT INTO hobbies_r (name, person)
 <sql-statement>
 INSERT INTO hobbies_r (name) VALUES ('skywalking');
 </sql-statement>
--stdin-:<main>: Fatal: Table metadata loading
-
-    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.hobbies_r
-    
 <sql-statement>
 INSERT INTO equipment_r (name, hobby) VALUES ('advil', 'posthacking');
 </sql-statement>

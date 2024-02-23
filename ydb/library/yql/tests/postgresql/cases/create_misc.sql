@@ -5,6 +5,7 @@
 --	(any resemblance to real life is purely coincidental)
 --
 INSERT INTO tenk2 SELECT * FROM tenk1;
+INSERT INTO hobbies_r (name) VALUES ('skywalking');
 --
 -- for internal portal (cursor) tests
 --

@@ -349,7 +349,9 @@ def load_patches(patchdir):
         if ps is not False:
             yield p.stem, ps
 
+
 reInitScriptsCfgLine = re.compile(r"^([\w.]+):\s*([\w.]+(?:\s+[\w.]+)*)$")
+
 
 def load_init_scripts(initscriptscfg, initscriptsdir, tests_set):
     init_scripts_map = dict()
@@ -390,6 +392,7 @@ def load_init_scripts(initscriptscfg, initscriptsdir, tests_set):
             init_scripts_map[test_name] = deps
 
     return init_scripts_map
+
 
 def patch_cases(cases, patches, patchdir):
     for i, sql_full_name in enumerate(cases):

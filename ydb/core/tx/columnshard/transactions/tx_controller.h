@@ -59,7 +59,7 @@ public:
         {}
 
         bool operator!() const {
-            return Status != NKikimrTxColumnShard::EResultStatus::PREPARED;
+            return Status != NKikimrTxColumnShard::EResultStatus::PREPARED && Status != NKikimrTxColumnShard::EResultStatus::SUCCESS;
         }
 
         TString DebugString() const {

@@ -813,10 +813,10 @@ public:
         ReplyAndPassAway();
     }
 
-    bool IsStaticNode(const TEvInterconnect::TNodeInfo& nodeInfo) const {
+    bool IsStaticNode(const TNodeId nodeId) const {
         TAppData* appData = AppData();
         if (appData->DynamicNameserviceConfig) {
-            return nodeInfo.NodeId <= AppData()->DynamicNameserviceConfig->MaxStaticNodeId;
+            return nodeId <= AppData()->DynamicNameserviceConfig->MaxStaticNodeId;
         } else {
             return true;
         }
@@ -827,7 +827,7 @@ public:
         NodesInfo = ev->Release();
         for (const auto& ni : NodesInfo->Nodes) {
             MergedNodeInfo[ni.NodeId] = &ni;
-            if (IsStaticNode(ni) && needComputeFromStaticNodes) {
+            if (IsStaticNode(ni.NodeId) && needComputeFromStaticNodes) {
                 DatabaseState[DomainPath].ComputeNodeIds.push_back(ni.NodeId);
                 RequestComputeNode(ni.NodeId);
             }
@@ -2081,7 +2081,12 @@ public:
         TNodeId maxClockSkewPeerId = 0;
         TNodeId maxClockSkewNodeId = 0;
         for (auto& [nodeId, nodeSystemState] : MergedNodeSystemState) {
-            if (abs(nodeSystemState->GetMaxClockSkewWithPeerUs()) > maxClockSkewUs) {
+            auto& computeNodeIds = DatabaseState[FilterDatabase].ComputeNodeIds;
+            bool IsCheckingNode = IsSpecificDatabaseFilter()
+                                    && std::find(computeNodeIds.begin(), computeNodeIds.end(), nodeId) != computeNodeIds.end()
+                                    || IsStaticNode(nodeId);
+
+            if (IsCheckingNode && abs(nodeSystemState->GetMaxClockSkewWithPeerUs()) > maxClockSkewUs) {
                 maxClockSkewUs = abs(nodeSystemState->GetMaxClockSkewWithPeerUs());
                 maxClockSkewPeerId = nodeSystemState->GetMaxClockSkewPeerId();
                 maxClockSkewNodeId = nodeId;

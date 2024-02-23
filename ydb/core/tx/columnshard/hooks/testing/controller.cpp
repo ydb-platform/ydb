@@ -16,11 +16,12 @@ bool TController::DoOnAfterFilterAssembling(const std::shared_ptr<arrow::RecordB
     return true;
 }
 
-bool TController::DoOnWriteIndexComplete(const NOlap::TColumnEngineChanges& /*changes*/, const ::NKikimr::NColumnShard::TColumnShard& /*shard*/) {
+bool TController::DoOnWriteIndexComplete(const NOlap::TColumnEngineChanges& /*changes*/, const ::NKikimr::NColumnShard::TColumnShard& shard) {
     TGuard<TMutex> g(Mutex);
     Indexations.Inc();
     if (SharingIds.empty()) {
-        CheckInvariants();
+        TCheckContext context;
+        CheckInvariants(shard, context);
     }
     return true;
 }

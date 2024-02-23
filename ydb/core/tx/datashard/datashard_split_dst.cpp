@@ -175,6 +175,7 @@ public:
 
         LOG_DEBUG_S(ctx, NKikimrServices::TX_DATASHARD, Self->TabletID() << " Received snapshot for split/merge TxId " << opId
                     << " from tabeltId " << srcTabletId);
+        LOG_TRACE_S(ctx, NKikimrServices::TX_DATASHARD, Self->TabletID() << " Received snapshot: " << record.DebugString());
 
         if (!Self->DstSplitSchemaInitialized) {
             LegacyInitSchema(txc);
@@ -293,6 +294,7 @@ public:
 
             Self->State = TShardState::Ready;
             Self->PersistSys(db, Schema::Sys_State, Self->State);
+            Self->SendRegistrationRequestTimeCast(ctx);
         }
 
         return true;

@@ -7,11 +7,13 @@
 
 namespace NKikimr::NOlap {
 
-void TInsertColumnEngineChanges::DoWriteIndexOnExecute(NColumnShard::TColumnShard& self, TWriteIndexContext& context) {
+void TInsertColumnEngineChanges::DoWriteIndexOnExecute(NColumnShard::TColumnShard* self, TWriteIndexContext& context) {
     TBase::DoWriteIndexOnExecute(self, context);
-    auto removing = BlobsAction.GetRemoving(IStoragesManager::DefaultStorageId);
-    for (const auto& insertedData : DataToIndex) {
-        self.InsertTable->EraseCommittedOnExecute(context.DBWrapper, insertedData, removing);
+    if (self) {
+        auto removing = BlobsAction.GetRemoving(IStoragesManager::DefaultStorageId);
+        for (const auto& insertedData : DataToIndex) {
+            self->InsertTable->EraseCommittedOnExecute(context.DBWrapper, insertedData, removing);
+        }
     }
 }
 
@@ -26,17 +28,19 @@ void TInsertColumnEngineChanges::DoStart(NColumnShard::TColumnShard& self) {
     self.BackgroundController.StartIndexing(*this);
 }
 
-void TInsertColumnEngineChanges::DoWriteIndexOnComplete(NColumnShard::TColumnShard& self, TWriteIndexCompleteContext& context) {
+void TInsertColumnEngineChanges::DoWriteIndexOnComplete(NColumnShard::TColumnShard* self, TWriteIndexCompleteContext& context) {
     TBase::DoWriteIndexOnComplete(self, context);
-    for (const auto& insertedData : DataToIndex) {
-        self.InsertTable->EraseCommittedOnComplete(insertedData);
+    if (self) {
+        for (const auto& insertedData : DataToIndex) {
+            self->InsertTable->EraseCommittedOnComplete(insertedData);
+        }
+        if (!DataToIndex.empty()) {
+            self->UpdateInsertTableCounters();
+        }
+        self->IncCounter(NColumnShard::COUNTER_INDEXING_BLOBS_WRITTEN, context.BlobsWritten);
+        self->IncCounter(NColumnShard::COUNTER_INDEXING_BYTES_WRITTEN, context.BytesWritten);
+        self->IncCounter(NColumnShard::COUNTER_INDEXING_TIME, context.Duration.MilliSeconds());
     }
-    if (!DataToIndex.empty()) {
-        self.UpdateInsertTableCounters();
-    }
-    self.IncCounter(NColumnShard::COUNTER_INDEXING_BLOBS_WRITTEN, context.BlobsWritten);
-    self.IncCounter(NColumnShard::COUNTER_INDEXING_BYTES_WRITTEN, context.BytesWritten);
-    self.IncCounter(NColumnShard::COUNTER_INDEXING_TIME, context.Duration.MilliSeconds());
 }
 
 void TInsertColumnEngineChanges::DoOnFinish(NColumnShard::TColumnShard& self, TChangesFinishContext& /*context*/) {

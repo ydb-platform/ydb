@@ -35,7 +35,7 @@ TConclusionStatus TColumnEngineChanges::ConstructBlobs(TConstructionContext& con
     return result;
 }
 
-void TColumnEngineChanges::WriteIndexOnExecute(NColumnShard::TColumnShard& self, TWriteIndexContext& context) {
+void TColumnEngineChanges::WriteIndexOnExecute(NColumnShard::TColumnShard* self, TWriteIndexContext& context) {
     Y_ABORT_UNLESS(Stage != EStage::Aborted);
     Y_ABORT_UNLESS(Stage <= EStage::Written);
     Y_ABORT_UNLESS(Stage >= EStage::Compiled);
@@ -44,13 +44,15 @@ void TColumnEngineChanges::WriteIndexOnExecute(NColumnShard::TColumnShard& self,
     Stage = EStage::Written;
 }
 
-void TColumnEngineChanges::WriteIndexOnComplete(NColumnShard::TColumnShard& self, TWriteIndexCompleteContext& context) {
-    Y_ABORT_UNLESS(Stage == EStage::Written);
+void TColumnEngineChanges::WriteIndexOnComplete(NColumnShard::TColumnShard* self, TWriteIndexCompleteContext& context) {
+    Y_ABORT_UNLESS(Stage == EStage::Written || !self);
     Stage = EStage::Finished;
     AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("event", "WriteIndexComplete")("type", TypeString())("success", context.FinishedSuccessfully);
     DoWriteIndexOnComplete(self, context);
-    OnFinish(self, context);
-    self.IncCounter(GetCounterIndex(context.FinishedSuccessfully));
+    if (self) {
+        OnFinish(*self, context);
+        self->IncCounter(GetCounterIndex(context.FinishedSuccessfully));
+    }
 
 }
 
@@ -105,10 +107,10 @@ void TColumnEngineChanges::OnFinish(NColumnShard::TColumnShard& self, TChangesFi
     DoOnFinish(self, context);
 }
 
-TWriteIndexContext::TWriteIndexContext(NTabletFlatExecutor::TTransactionContext& txc, IDbWrapper& dbWrapper)
-    : Txc(txc)
-    , BlobManagerDb(std::make_shared<TBlobManagerDb>(txc.DB))
+TWriteIndexContext::TWriteIndexContext(NTable::TDatabase* db, IDbWrapper& dbWrapper, TColumnEngineForLogs& engineLogs)
+    : DB(db)
     , DBWrapper(dbWrapper)
+    , EngineLogs(engineLogs)
 {
 
 }

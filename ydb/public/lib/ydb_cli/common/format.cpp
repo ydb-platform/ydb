@@ -402,6 +402,20 @@ void TQueryPlanPrinter::PrintPrettyTable(const NJson::TJsonValue& plan) {
     }
 }
 
+TString replaceAll(TString str, const TString& from, const TString& to) {
+    if (!from) {
+        return str;
+    }
+        
+    size_t startPos = 0;
+    while ((startPos = str.find(from, startPos)) != TString::npos) {
+        str.replace(startPos, from.length(), to);
+        startPos += to.length();
+    }
+
+    return str;
+}
+
 void TQueryPlanPrinter::PrintPrettyTableImpl(const NJson::TJsonValue& plan, TString& offset, TPrettyTable& table) {
     const auto& node = plan.GetMapSafe();
 
@@ -431,13 +445,13 @@ void TQueryPlanPrinter::PrintPrettyTableImpl(const NJson::TJsonValue& plan, TStr
     TStringBuf color;
     switch(offset.size() % 3) {
         case 0: 
-            color = colors.Red();
+            color = colors.LightRed();
             break;
         case 1:
-            color = colors.Green();
+            color = colors.LightGreen();
             break;
         case 2:
-            color = colors.Blue();
+            color = colors.LightBlue();
             break;
         default:
             color = colors.Default();
@@ -459,15 +473,15 @@ void TQueryPlanPrinter::PrintPrettyTableImpl(const NJson::TJsonValue& plan, TStr
                 } else if (key == "E-Rows") {
                     eRows = JsonToString(value);
                 } else if (key != "Name") {
-                    info.emplace_back(TStringBuilder() << key << ": " << JsonToString(value));
+                    info.emplace_back(TStringBuilder() << colors.LightYellow() << key << colors.Default() << ": " << replaceAll(replaceAll(JsonToString(value), "item.", ""), "state.", ""));
                 }
             }
 
             TStringBuilder operation;
             if (info.empty()) {
-                operation << offset << color << " -> " << colors.Default() << op.GetMapSafe().at("Name").GetString();
+                operation << offset << color << " -> " << colors.LightCyan() << op.GetMapSafe().at("Name").GetString() << colors.Default();
             } else {
-                operation << offset << color << " -> " << colors.Default() << op.GetMapSafe().at("Name").GetString()
+                operation << offset << color << " -> " << colors.LightCyan() << op.GetMapSafe().at("Name").GetString() << colors.Default()
                      << " (" << JoinStrings(info, ", ") << ")";
             }
 
@@ -484,7 +498,7 @@ void TQueryPlanPrinter::PrintPrettyTableImpl(const NJson::TJsonValue& plan, TStr
         }
     } else {
         TStringBuilder operation;
-        operation << offset << color << " -> " << colors.Default() << node.at("Node Type").GetString();
+        operation << offset << color << " -> " << colors.LightCyan() << node.at("Node Type").GetString() << colors.Default();
         newRow.Column(0, std::move(operation));
     }
 

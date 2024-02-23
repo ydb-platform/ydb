@@ -6,6 +6,10 @@
 --
 INSERT INTO tenk2 SELECT * FROM tenk1;
 INSERT INTO hobbies_r (name) VALUES ('skywalking');
+INSERT INTO equipment_r (name, hobby) VALUES ('advil', 'posthacking');
+INSERT INTO equipment_r (name, hobby) VALUES ('peet''s coffee', 'posthacking');
+INSERT INTO equipment_r (name, hobby) VALUES ('hightops', 'basketball');
+INSERT INTO equipment_r (name, hobby) VALUES ('guts', 'skywalking');
 --
 -- for internal portal (cursor) tests
 --

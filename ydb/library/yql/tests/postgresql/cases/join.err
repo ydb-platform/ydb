@@ -2676,10 +2676,14 @@ select q1, unique2, thousand, hundred
   from int8_tbl a left join tenk1 b on q1 = unique2
   where coalesce(thousand,123) = q1 and q1 = coalesce(hundred,123);
 </sql-statement>
--stdin-:<main>: Fatal: Table metadata loading
+-stdin-:<main>: Error: Type annotation
 
-    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.int8_tbl
-    
+    -stdin-:<main>:1:1: Error: At function: AssumeColumnOrder, At function: PgReplaceUnknown, At function: OrderedMap, At function: OrderedFilter, At function: OrderedMap, At function: EquiJoin
+    	select q1, unique2, thousand, hundred
+	^
+        -stdin-:<main>:1:1: Error: Cannot compare key columns (a._alias_a.q1 has type: pgint8, b._alias_b.unique2 has type: pgint4)
+        	select q1, unique2, thousand, hundred
+	^
 <sql-statement>
 explain (costs off)
 select f1, unique2, case when unique2 is null then f1 else 0 end

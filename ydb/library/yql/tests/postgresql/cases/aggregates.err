@@ -1170,10 +1170,6 @@ select max(min(unique1)) from tenk1;
 <sql-statement>
 select (select max(min(unique1)) from int8_tbl) from tenk1;
 </sql-statement>
--stdin-:<main>: Fatal: Table metadata loading
-
-    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.int8_tbl
-    
 <sql-statement>
 --
 -- Test removal of redundant GROUP BY columns

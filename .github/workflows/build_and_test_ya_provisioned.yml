@@ -13,10 +13,12 @@ on:
         description: "Build preset"
         options:
           - debug
+          - release
           - relwithdebinfo
           - release-asan
           - release-tsan
           - release-msan
+          - release-cmake14
       test_size:
         type: choice
         default: "small,medium,large"

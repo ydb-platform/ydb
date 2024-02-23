@@ -1,4 +1,5 @@
 Registering pre-existing tables
+	onek
 	tenk1
 	int8_tbl
 <sql-statement>
@@ -10,82 +11,46 @@ SELECT ''::text AS two, unique1, unique2, stringu1
 		FROM onek WHERE unique1 > 50
 		ORDER BY unique1 LIMIT 2;
 </sql-statement>
--stdin-:<main>: Fatal: Table metadata loading
-
-    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.onek
-    
 <sql-statement>
 SELECT ''::text AS five, unique1, unique2, stringu1
 		FROM onek WHERE unique1 > 60
 		ORDER BY unique1 LIMIT 5;
 </sql-statement>
--stdin-:<main>: Fatal: Table metadata loading
-
-    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.onek
-    
 <sql-statement>
 SELECT ''::text AS two, unique1, unique2, stringu1
 		FROM onek WHERE unique1 > 60 AND unique1 < 63
 		ORDER BY unique1 LIMIT 5;
 </sql-statement>
--stdin-:<main>: Fatal: Table metadata loading
-
-    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.onek
-    
 <sql-statement>
 SELECT ''::text AS three, unique1, unique2, stringu1
 		FROM onek WHERE unique1 > 100
 		ORDER BY unique1 LIMIT 3 OFFSET 20;
 </sql-statement>
--stdin-:<main>: Fatal: Table metadata loading
-
-    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.onek
-    
 <sql-statement>
 SELECT ''::text AS zero, unique1, unique2, stringu1
 		FROM onek WHERE unique1 < 50
 		ORDER BY unique1 DESC LIMIT 8 OFFSET 99;
 </sql-statement>
--stdin-:<main>: Fatal: Table metadata loading
-
-    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.onek
-    
 <sql-statement>
 SELECT ''::text AS eleven, unique1, unique2, stringu1
 		FROM onek WHERE unique1 < 50
 		ORDER BY unique1 DESC LIMIT 20 OFFSET 39;
 </sql-statement>
--stdin-:<main>: Fatal: Table metadata loading
-
-    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.onek
-    
 <sql-statement>
 SELECT ''::text AS ten, unique1, unique2, stringu1
 		FROM onek
 		ORDER BY unique1 OFFSET 990;
 </sql-statement>
--stdin-:<main>: Fatal: Table metadata loading
-
-    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.onek
-    
 <sql-statement>
 SELECT ''::text AS five, unique1, unique2, stringu1
 		FROM onek
 		ORDER BY unique1 OFFSET 990 LIMIT 5;
 </sql-statement>
--stdin-:<main>: Fatal: Table metadata loading
-
-    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.onek
-    
 <sql-statement>
 SELECT ''::text AS five, unique1, unique2, stringu1
 		FROM onek
 		ORDER BY unique1 LIMIT 5 OFFSET 900;
 </sql-statement>
--stdin-:<main>: Fatal: Table metadata loading
-
-    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.onek
-    
 <sql-statement>
 -- Test null limit and offset.  The planner would discard a simple null
 -- constant, so to ensure executor is exercised, do this:
@@ -604,10 +569,6 @@ SELECT  thousand
 		FROM onek WHERE thousand < 5
 		ORDER BY thousand FETCH FIRST 2 ROW ONLY;
 </sql-statement>
--stdin-:<main>: Fatal: Table metadata loading
-
-    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.onek
-    
 <sql-statement>
 -- SKIP LOCKED and WITH TIES are incompatible
 SELECT  thousand

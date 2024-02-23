@@ -1,4 +1,5 @@
 Registering pre-existing tables
+	onek
 	INT4_TBL
 	tenk1
 	VARCHAR_TBL
@@ -13,10 +14,6 @@ SET extra_float_digits = 0;
 <sql-statement>
 SELECT avg(four) AS avg_1 FROM onek;
 </sql-statement>
--stdin-:<main>: Fatal: Table metadata loading
-
-    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.onek
-    
 <sql-statement>
 SELECT avg(a) AS avg_32 FROM aggtest WHERE a < 100;
 </sql-statement>
@@ -43,10 +40,6 @@ SELECT avg(gpa) AS avg_3_4 FROM ONLY student;
 <sql-statement>
 SELECT sum(four) AS sum_1500 FROM onek;
 </sql-statement>
--stdin-:<main>: Fatal: Table metadata loading
-
-    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.onek
-    
 <sql-statement>
 SELECT sum(a) AS sum_198 FROM aggtest;
 </sql-statement>
@@ -71,10 +64,6 @@ SELECT sum(gpa) AS avg_6_8 FROM ONLY student;
 <sql-statement>
 SELECT max(four) AS max_3 FROM onek;
 </sql-statement>
--stdin-:<main>: Fatal: Table metadata loading
-
-    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.onek
-    
 <sql-statement>
 SELECT max(a) AS max_100 FROM aggtest;
 </sql-statement>
@@ -476,55 +465,60 @@ DROP TABLE regr_test;
 -- test count, distinct
 SELECT count(four) AS cnt_1000 FROM onek;
 </sql-statement>
--stdin-:<main>: Fatal: Table metadata loading
-
-    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.onek
-    
 <sql-statement>
 SELECT count(DISTINCT four) AS cnt_4 FROM onek;
 </sql-statement>
--stdin-:<main>: Fatal: Table metadata loading
-
-    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.onek
-    
 <sql-statement>
 select ten, count(*), sum(four) from onek
 group by ten order by ten;
 </sql-statement>
--stdin-:<main>: Fatal: Table metadata loading
-
-    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.onek
-    
 <sql-statement>
 select ten, count(four), sum(DISTINCT four) from onek
 group by ten order by ten;
 </sql-statement>
--stdin-:<main>: Fatal: Table metadata loading
-
-    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.onek
-    
 <sql-statement>
 -- user-defined aggregates
 SELECT newavg(four) AS avg_1 FROM onek;
 </sql-statement>
--stdin-:<main>: Fatal: Table metadata loading
+-stdin-:<main>: Error: Type annotation
 
-    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.onek
-    
+    -stdin-:<main>:1:1: Error: At function: RemovePrefixMembers, At function: PgSelect, At function: PgSetItem, At function: PgResultItem
+    	-- user-defined aggregates
+	^
+        -stdin-:<main>:2:8: Error: At function: PgCall
+        	SELECT newavg(four) AS avg_1 FROM onek;
+	       ^
+            -stdin-:<main>:2:8: Error: No such proc: newavg
+            	SELECT newavg(four) AS avg_1 FROM onek;
+	       ^
 <sql-statement>
 SELECT newsum(four) AS sum_1500 FROM onek;
 </sql-statement>
--stdin-:<main>: Fatal: Table metadata loading
+-stdin-:<main>: Error: Type annotation
 
-    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.onek
-    
+    -stdin-:<main>:1:1: Error: At function: RemovePrefixMembers, At function: PgSelect, At function: PgSetItem, At function: PgResultItem
+    	SELECT newsum(four) AS sum_1500 FROM onek;
+	^
+        -stdin-:<main>:1:8: Error: At function: PgCall
+        	SELECT newsum(four) AS sum_1500 FROM onek;
+	       ^
+            -stdin-:<main>:1:8: Error: No such proc: newsum
+            	SELECT newsum(four) AS sum_1500 FROM onek;
+	       ^
 <sql-statement>
 SELECT newcnt(four) AS cnt_1000 FROM onek;
 </sql-statement>
--stdin-:<main>: Fatal: Table metadata loading
+-stdin-:<main>: Error: Type annotation
 
-    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.onek
-    
+    -stdin-:<main>:1:1: Error: At function: RemovePrefixMembers, At function: PgSelect, At function: PgSetItem, At function: PgResultItem
+    	SELECT newcnt(four) AS cnt_1000 FROM onek;
+	^
+        -stdin-:<main>:1:8: Error: At function: PgCall
+        	SELECT newcnt(four) AS cnt_1000 FROM onek;
+	       ^
+            -stdin-:<main>:1:8: Error: No such proc: newcnt
+            	SELECT newcnt(four) AS cnt_1000 FROM onek;
+	       ^
 <sql-statement>
 SELECT newcnt(*) AS cnt_1000 FROM onek;
 </sql-statement>

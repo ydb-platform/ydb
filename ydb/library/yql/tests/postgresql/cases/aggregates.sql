@@ -3,6 +3,9 @@
 --
 -- avoid bit-exact output here because operations may not be bit-exact.
 SET extra_float_digits = 0;
+SELECT avg(four) AS avg_1 FROM onek;
+SELECT sum(four) AS sum_1500 FROM onek;
+SELECT max(four) AS max_3 FROM onek;
 -- population variance is defined for a single tuple, sample variance
 -- is not
 SELECT var_pop(1.0::float8), var_samp(2.0::float8);
@@ -77,6 +80,13 @@ SELECT float8_regr_combine('{0,0,0,0,0,0}'::float8[],
 SELECT float8_regr_combine('{3,60,200,750,20000,2000}'::float8[],
                            '{2,180,200,740,57800,-3400}'::float8[]);
 DROP TABLE regr_test;
+-- test count, distinct
+SELECT count(four) AS cnt_1000 FROM onek;
+SELECT count(DISTINCT four) AS cnt_4 FROM onek;
+select ten, count(*), sum(four) from onek
+group by ten order by ten;
+select ten, count(four), sum(DISTINCT four) from onek
+group by ten order by ten;
 --
 -- test for bitwise integer aggregates
 --

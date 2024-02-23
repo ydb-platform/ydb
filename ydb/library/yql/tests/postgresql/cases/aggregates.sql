@@ -98,6 +98,7 @@ CREATE TEMPORARY TABLE bool_test(
 -- plan, which has almost identical cost, will not be.  we want to test
 -- the optimized plan, so temporarily disable parallel query.
 begin;
+select max(unique1) from tenk1 where unique1 > 42000;
 rollback;
 -- try it on an inheritance tree
 create table minmaxtest(f1 int);

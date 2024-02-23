@@ -1,13 +1,13 @@
 testcase,statements,successful,ratio
-aggregates,416,85,20.43
+aggregates,416,86,20.67
 alter_table,1679,233,13.88
-arrays,410,117,28.54
+arrays,410,118,28.78
 bit,115,90,78.26
 boolean,93,79,84.95
 case,63,35,55.56
 char,25,16,64.0
 comments,7,7,100.0
-create_misc,76,3,3.95
+create_misc,76,4,5.26
 create_table,368,48,13.04
 date,264,202,76.52
 dbsize,24,20,83.33
@@ -53,5 +53,5 @@ union,186,55,29.57
 update,288,23,7.99
 uuid,36,29,80.56
 varchar,24,15,62.5
-window,298,5,1.68
+window,298,8,2.68
 xml,234,18,7.69

@@ -1,5 +1,6 @@
 Registering pre-existing tables
 	INT4_TBL
+	tenk1
 	VARCHAR_TBL
 	CHAR_TBL
 	TEXT_TBL
@@ -201,10 +202,6 @@ select count(*) from
 select count(*) from
   ( select unique1 from tenk1 union select fivethous from tenk1 ) ss;
 </sql-statement>
--stdin-:<main>: Fatal: Table metadata loading
-
-    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.tenk1
-    
 <sql-statement>
 explain (costs off)
 select count(*) from
@@ -219,10 +216,6 @@ select count(*) from
 select count(*) from
   ( select unique1 from tenk1 intersect select fivethous from tenk1 ) ss;
 </sql-statement>
--stdin-:<main>: Fatal: Table metadata loading
-
-    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.tenk1
-    
 <sql-statement>
 explain (costs off)
 select unique1 from tenk1 except select unique2 from tenk1 where unique2 != 10;
@@ -235,10 +228,6 @@ select unique1 from tenk1 except select unique2 from tenk1 where unique2 != 10;
 <sql-statement>
 select unique1 from tenk1 except select unique2 from tenk1 where unique2 != 10;
 </sql-statement>
--stdin-:<main>: Fatal: Table metadata loading
-
-    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.tenk1
-    
 <sql-statement>
 set enable_hashagg to off;
 </sql-statement>
@@ -261,10 +250,6 @@ select count(*) from
 select count(*) from
   ( select unique1 from tenk1 union select fivethous from tenk1 ) ss;
 </sql-statement>
--stdin-:<main>: Fatal: Table metadata loading
-
-    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.tenk1
-    
 <sql-statement>
 explain (costs off)
 select count(*) from
@@ -279,10 +264,6 @@ select count(*) from
 select count(*) from
   ( select unique1 from tenk1 intersect select fivethous from tenk1 ) ss;
 </sql-statement>
--stdin-:<main>: Fatal: Table metadata loading
-
-    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.tenk1
-    
 <sql-statement>
 explain (costs off)
 select unique1 from tenk1 except select unique2 from tenk1 where unique2 != 10;
@@ -295,10 +276,6 @@ select unique1 from tenk1 except select unique2 from tenk1 where unique2 != 10;
 <sql-statement>
 select unique1 from tenk1 except select unique2 from tenk1 where unique2 != 10;
 </sql-statement>
--stdin-:<main>: Fatal: Table metadata loading
-
-    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.tenk1
-    
 <sql-statement>
 reset enable_hashagg;
 </sql-statement>

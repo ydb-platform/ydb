@@ -1,4 +1,5 @@
 Registering pre-existing tables
+	tenk1
 	int8_tbl
 <sql-statement>
 --
@@ -436,10 +437,6 @@ select unique1, unique2, nextval('testseq')
 select unique1, unique2, nextval('testseq')
   from tenk1 order by unique2 limit 10;
 </sql-statement>
--stdin-:<main>: Fatal: Table metadata loading
-
-    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.tenk1
-    
 <sql-statement>
 select currval('testseq');
 </sql-statement>
@@ -466,10 +463,6 @@ select unique1, unique2, nextval('testseq')
 select unique1, unique2, nextval('testseq')
   from tenk1 order by tenthous limit 10;
 </sql-statement>
--stdin-:<main>: Fatal: Table metadata loading
-
-    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.tenk1
-    
 <sql-statement>
 select currval('testseq');
 </sql-statement>
@@ -572,10 +565,6 @@ select sum(tenthous) as s1, sum(tenthous) + random()*0 as s2
 select sum(tenthous) as s1, sum(tenthous) + random()*0 as s2
   from tenk1 group by thousand order by thousand limit 3;
 </sql-statement>
--stdin-:<main>: Fatal: Table metadata loading
-
-    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.tenk1
-    
 <sql-statement>
 --
 -- FETCH FIRST

@@ -1,5 +1,6 @@
 Registering pre-existing tables
 	INT4_TBL
+	tenk1
 	VARCHAR_TBL
 	int8_tbl
 <sql-statement>
@@ -585,10 +586,23 @@ select
   (select max((select i.unique2 from tenk1 i where i.unique1 = o.unique1)))
 from tenk1 o;
 </sql-statement>
--stdin-:<main>: Fatal: Table metadata loading
+-stdin-:<main>: Error: Type annotation
 
-    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.tenk1
-    
+    -stdin-:<main>:1:1: Error: At function: RemovePrefixMembers, At function: PgSelect, At function: PgSetItem, At function: PgResultItem
+    	-- Test handling of sublinks within outer-level aggregates.
+	^
+        -stdin-:<main>:4:3: Error: At function: PgSubLink, At function: PgSelect, At function: PgSetItem, At function: PgResultItem
+        	  (select max((select i.unique2 from tenk1 i where i.unique1 = o.unique1)))
+	  ^
+            -stdin-:<main>:4:11: Error: At function: PgAgg
+            	  (select max((select i.unique2 from tenk1 i where i.unique1 = o.unique1)))
+	          ^
+                -stdin-:<main>:4:15: Error: At function: PgSubLink, At function: PgSelect, At function: PgSetItem
+                	  (select max((select i.unique2 from tenk1 i where i.unique1 = o.unique1)))
+	              ^
+                    -stdin-:<main>:4:64: Error: No such column: unique1
+                    	  (select max((select i.unique2 from tenk1 i where i.unique1 = o.unique1)))
+	                                                               ^
 <sql-statement>
 -- Test handling of Params within aggregate arguments in hashed aggregation.
 -- Per bug report from Jeevan Chalke.
@@ -850,10 +864,6 @@ explain (costs off)
 <sql-statement>
 select min(unique1) from tenk1;
 </sql-statement>
--stdin-:<main>: Fatal: Table metadata loading
-
-    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.tenk1
-    
 <sql-statement>
 explain (costs off)
   select max(unique1) from tenk1;
@@ -866,10 +876,6 @@ explain (costs off)
 <sql-statement>
 select max(unique1) from tenk1;
 </sql-statement>
--stdin-:<main>: Fatal: Table metadata loading
-
-    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.tenk1
-    
 <sql-statement>
 explain (costs off)
   select max(unique1) from tenk1 where unique1 < 42;
@@ -882,10 +888,6 @@ explain (costs off)
 <sql-statement>
 select max(unique1) from tenk1 where unique1 < 42;
 </sql-statement>
--stdin-:<main>: Fatal: Table metadata loading
-
-    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.tenk1
-    
 <sql-statement>
 explain (costs off)
   select max(unique1) from tenk1 where unique1 > 42;
@@ -898,10 +900,6 @@ explain (costs off)
 <sql-statement>
 select max(unique1) from tenk1 where unique1 > 42;
 </sql-statement>
--stdin-:<main>: Fatal: Table metadata loading
-
-    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.tenk1
-    
 <sql-statement>
 -- the planner may choose a generic aggregate here if parallel query is
 -- enabled, since that plan will be parallel safe and the "optimized"
@@ -929,10 +927,6 @@ explain (costs off)
 <sql-statement>
 select max(unique1) from tenk1 where unique1 > 42000;
 </sql-statement>
--stdin-:<main>: Fatal: Table metadata loading
-
-    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.tenk1
-    
 <sql-statement>
 rollback;
 </sql-statement>
@@ -949,10 +943,6 @@ explain (costs off)
 <sql-statement>
 select max(tenthous) from tenk1 where thousand = 33;
 </sql-statement>
--stdin-:<main>: Fatal: Table metadata loading
-
-    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.tenk1
-    
 <sql-statement>
 explain (costs off)
   select min(tenthous) from tenk1 where thousand = 33;
@@ -965,10 +955,6 @@ explain (costs off)
 <sql-statement>
 select min(tenthous) from tenk1 where thousand = 33;
 </sql-statement>
--stdin-:<main>: Fatal: Table metadata loading
-
-    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.tenk1
-    
 <sql-statement>
 -- check parameter propagation into an indexscan subquery
 explain (costs off)
@@ -986,7 +972,7 @@ select f1, (select min(unique1) from tenk1 where unique1 > f1) AS gt
 </sql-statement>
 -stdin-:<main>: Fatal: Table metadata loading
 
-    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.tenk1
+    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.int4_tbl
     
 <sql-statement>
 -- check some cases that were handled incorrectly in 8.3.0
@@ -1001,10 +987,6 @@ explain (costs off)
 <sql-statement>
 select distinct max(unique2) from tenk1;
 </sql-statement>
--stdin-:<main>: Fatal: Table metadata loading
-
-    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.tenk1
-    
 <sql-statement>
 explain (costs off)
   select max(unique2) from tenk1 order by 1;
@@ -1017,10 +999,6 @@ explain (costs off)
 <sql-statement>
 select max(unique2) from tenk1 order by 1;
 </sql-statement>
--stdin-:<main>: Fatal: Table metadata loading
-
-    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.tenk1
-    
 <sql-statement>
 explain (costs off)
   select max(unique2) from tenk1 order by max(unique2);
@@ -1033,10 +1011,6 @@ explain (costs off)
 <sql-statement>
 select max(unique2) from tenk1 order by max(unique2);
 </sql-statement>
--stdin-:<main>: Fatal: Table metadata loading
-
-    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.tenk1
-    
 <sql-statement>
 explain (costs off)
   select max(unique2) from tenk1 order by max(unique2)+1;
@@ -1049,10 +1023,6 @@ explain (costs off)
 <sql-statement>
 select max(unique2) from tenk1 order by max(unique2)+1;
 </sql-statement>
--stdin-:<main>: Fatal: Table metadata loading
-
-    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.tenk1
-    
 <sql-statement>
 explain (costs off)
   select max(unique2), generate_series(1,3) as g from tenk1 order by g desc;
@@ -1083,10 +1053,6 @@ explain (costs off)
 <sql-statement>
 select max(100) from tenk1;
 </sql-statement>
--stdin-:<main>: Fatal: Table metadata loading
-
-    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.tenk1
-    
 <sql-statement>
 -- try it on an inheritance tree
 create table minmaxtest(f1 int);
@@ -1193,16 +1159,20 @@ drop table minmaxtest cascade;
 -- check for correct detection of nested-aggregate errors
 select max(min(unique1)) from tenk1;
 </sql-statement>
--stdin-:<main>: Fatal: Table metadata loading
+-stdin-:<main>: Fatal: Execution
 
-    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.tenk1
-    
+    -stdin-:<main>:1:1: Fatal: Execution of node: Result
+    	-- check for correct detection of nested-aggregate errors
+	^
+        -stdin-:<main>:1:1: Fatal: ydb/library/yql/providers/common/mkql/yql_provider_mkql.cpp:364  GetCallable(): requirement Callables.cend() != compiler failed, message: Missed callable: PgAgg
+        	-- check for correct detection of nested-aggregate errors
+	^
 <sql-statement>
 select (select max(min(unique1)) from int8_tbl) from tenk1;
 </sql-statement>
 -stdin-:<main>: Fatal: Table metadata loading
 
-    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.tenk1
+    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.int8_tbl
     
 <sql-statement>
 --
@@ -2934,10 +2904,17 @@ CREATE AGGREGATE balk(int4)
 <sql-statement>
 SELECT balk(hundred) FROM tenk1;
 </sql-statement>
--stdin-:<main>: Fatal: Table metadata loading
+-stdin-:<main>: Error: Type annotation
 
-    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.tenk1
-    
+    -stdin-:<main>:1:1: Error: At function: RemovePrefixMembers, At function: PgSelect, At function: PgSetItem, At function: PgResultItem
+    	SELECT balk(hundred) FROM tenk1;
+	^
+        -stdin-:<main>:1:8: Error: At function: PgCall
+        	SELECT balk(hundred) FROM tenk1;
+	       ^
+            -stdin-:<main>:1:8: Error: No such proc: balk
+            	SELECT balk(hundred) FROM tenk1;
+	       ^
 <sql-statement>
 ROLLBACK;
 </sql-statement>
@@ -3016,10 +2993,17 @@ EXPLAIN (COSTS OFF) SELECT balk(hundred) FROM tenk1;
 <sql-statement>
 SELECT balk(hundred) FROM tenk1;
 </sql-statement>
--stdin-:<main>: Fatal: Table metadata loading
+-stdin-:<main>: Error: Type annotation
 
-    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.tenk1
-    
+    -stdin-:<main>:1:1: Error: At function: RemovePrefixMembers, At function: PgSelect, At function: PgSetItem, At function: PgResultItem
+    	SELECT balk(hundred) FROM tenk1;
+	^
+        -stdin-:<main>:1:8: Error: At function: PgCall
+        	SELECT balk(hundred) FROM tenk1;
+	       ^
+            -stdin-:<main>:1:8: Error: No such proc: balk
+            	SELECT balk(hundred) FROM tenk1;
+	       ^
 <sql-statement>
 ROLLBACK;
 </sql-statement>
@@ -3098,10 +3082,6 @@ FROM (SELECT * FROM tenk1
       UNION ALL SELECT * FROM tenk1
       UNION ALL SELECT * FROM tenk1) u;
 </sql-statement>
--stdin-:<main>: Fatal: Table metadata loading
-
-    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.tenk1
-    
 <sql-statement>
 -- variance(int8) covers numeric_combine
 -- avg(numeric) covers numeric_avg_combine
@@ -3124,10 +3104,6 @@ FROM (SELECT * FROM tenk1
       UNION ALL SELECT * FROM tenk1
       UNION ALL SELECT * FROM tenk1) u;
 </sql-statement>
--stdin-:<main>: Fatal: Table metadata loading
-
-    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.tenk1
-    
 <sql-statement>
 ROLLBACK;
 </sql-statement>
@@ -3246,10 +3222,6 @@ group by unique1
 having sum(fivethous) > 4975
 order by sum(twothousand);
 </sql-statement>
--stdin-:<main>: Fatal: Table metadata loading
-
-    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.tenk1
-    
 <sql-statement>
 set work_mem to default;
 </sql-statement>

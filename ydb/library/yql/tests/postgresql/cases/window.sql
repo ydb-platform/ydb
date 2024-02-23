@@ -18,9 +18,22 @@ INSERT INTO empsalary VALUES
 ('sales', 3, 4800, '2007-08-01'),
 ('develop', 8, 6000, '2006-10-01'),
 ('develop', 11, 5200, '2007-08-15');
+-- no window operation
+SELECT four FROM tenk1 WHERE FALSE WINDOW w AS (PARTITION BY ten);
+-- opexpr with different windows evaluation.
+SELECT * FROM(
+  SELECT count(*) OVER (PARTITION BY four ORDER BY ten) +
+    sum(hundred) OVER (PARTITION BY two ORDER BY ten) AS total,
+    count(*) OVER (PARTITION BY four ORDER BY ten) AS fourcount,
+    sum(hundred) OVER (PARTITION BY two ORDER BY ten) AS twosum
+    FROM tenk1
+)sub
+WHERE total <> fourcount + twosum;
 -- identical windows with different names
 SELECT sum(salary) OVER w1, count(*) OVER w2
 FROM empsalary WINDOW w1 AS (ORDER BY salary), w2 AS (ORDER BY salary);
+-- empty table
+SELECT count(*) OVER (PARTITION BY four) FROM (SELECT * FROM tenk1 WHERE FALSE)s;
 -- Test in_range for other numeric datatypes
 create temp table numerics(
     id int,

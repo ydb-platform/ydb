@@ -3,6 +3,7 @@
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 #include <ydb/library/actors/core/mon.h>
 #include <ydb/core/base/tablet_pipe.h>
+#include <ydb/core/external_sources/external_source_factory.h>
 #include <ydb/library/services/services.pb.h>
 #include <ydb/core/tx/schemeshard/schemeshard.h>
 #include <ydb/core/tx/tx_proxy/proxy.h>
@@ -291,12 +292,13 @@ public:
             return;
         }
 
+        NExternalSource::IExternalSourceFactory::TPtr externalSourceFactory{NExternalSource::CreateExternalSourceFactory({})};
         NJson::TJsonValue root;
         const auto& sourceType = DescribeResult->GetPathDescription().GetExternalTableDescription().GetSourceType();
         try {
             NJson::ReadJsonTree(json.Str(), &root);
             root["PathDescription"]["ExternalTableDescription"].EraseValue("Content");
-            auto source = AppData()->ExternalSourceFactory->GetOrCreate(sourceType);
+            auto source = externalSourceFactory->GetOrCreate(sourceType);
             auto parameters = source->GetParameters(content);
             for (const auto& [key, items]: parameters) {
                 NJson::TJsonValue array{NJson::EJsonValueType::JSON_ARRAY};

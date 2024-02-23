@@ -102,10 +102,6 @@ namespace NYdb {
 
 namespace NKikimr {
 
-namespace NExternalSource {
-    struct IExternalSourceFactory;
-}
-
 namespace NScheme {
     class TTypeRegistry;
 }
@@ -152,7 +148,6 @@ struct TAppData {
     const NDataShard::IExportFactory *DataShardExportFactory = nullptr;
     const TFormatFactory* FormatFactory = nullptr;
     const NSQS::IEventsWriterFactory* SqsEventsWriterFactory = nullptr;
-    TIntrusivePtr<NExternalSource::IExternalSourceFactory> ExternalSourceFactory;
 
     NSQS::IAuthFactory* SqsAuthFactory = nullptr;
 

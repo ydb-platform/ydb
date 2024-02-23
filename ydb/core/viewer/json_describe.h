@@ -265,7 +265,7 @@ public:
             const auto *descriptor = NKikimrScheme::EStatus_descriptor();
             auto accessDeniedStatus = descriptor->FindValueByNumber(NKikimrScheme::StatusAccessDenied)->name();
             if (DescribeResult->GetStatus() == accessDeniedStatus) {
-                headers = HTTPFORBIDDENJSON;
+                headers = Viewer->GetHTTPFORBIDDEN(Event->Get());
             }
             TProtoToJson::ProtoToJson(json, *DescribeResult, JsonSettings);
         } else {

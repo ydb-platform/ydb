@@ -6068,7 +6068,7 @@ Y_UNIT_TEST_SUITE(ExternalTable) {
         TVerifyLineFunc verifyLine = [](const TString& word, const TString& line) {
             if (word == "Write") {
                 UNIT_ASSERT_STRING_CONTAINS(line, R"#('actions '('('dropColumns '('"my_column")#");
-                UNIT_ASSERT_STRING_CONTAINS(line, R"#(('setTableSettings '('('location (String '"abc")) '('other_prop (String '"42")) '('x (String '"y")))))#");
+                UNIT_ASSERT_STRING_CONTAINS(line, R"#(('setTableSettings '('('location (String '"abc")) '('Other_Prop (String '"42")) '('x (String '"y")))))#");
                 UNIT_ASSERT_STRING_CONTAINS(line, R"#(('tableType 'externalTable))#");
                 UNIT_ASSERT_STRING_CONTAINS(line, R"#(('mode 'alter))#");
             }

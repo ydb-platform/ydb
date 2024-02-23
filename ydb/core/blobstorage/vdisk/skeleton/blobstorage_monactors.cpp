@@ -1030,7 +1030,6 @@ namespace NKikimr {
     };
 
     class TEvictVDiskActor : public TActorBootstrapped<TEvictVDiskActor> {
-        const ui32 PDiskId;
         const TVDiskID VDiskId;
         const ui64 BsControllerId;
         const TActorId NotifyId;
@@ -1093,14 +1092,12 @@ namespace NKikimr {
 
     public:
         TEvictVDiskActor(
-            const ui32 pDiskId,
             const TVDiskID &vDiskId,
             const ui64 &bsControllerId,
             const TActorId &notifyId,
             const TActorId &sender
         )
             : TActorBootstrapped<TEvictVDiskActor>()
-            , PDiskId(pDiskId)
             , VDiskId(vDiskId)
             , BsControllerId(bsControllerId)
             , NotifyId(notifyId)
@@ -1247,16 +1244,7 @@ namespace NKikimr {
                 );
             }
         } else if (type == "evict") {
-            if (IsVDiskRestartAllowed(vDiskMonGroup.VDiskState())) {
-                return new TEvictVDiskActor(
-                    cfg->BaseInfo.PDiskId, selfVDiskId, MakeBSControllerID(selfVDiskId.GroupID), notifyId, ev->Sender
-                );
-            } else {
-                return new TMonErrorActor(notifyId, ev,
-                    "VDisk evict in the normal state is not allowed <br>\n"
-                    "<a class=\"btn btn-default\" href=\"?\">Go back to the main VDisk page</a>"
-                );
-            }
+            return new TEvictVDiskActor(selfVDiskId, MakeBSControllerID(1), notifyId, ev->Sender);
         } else {
             auto s = Sprintf("Unknown value '%s' for CGI parameter 'type'", type.data());
             return new TMonErrorActor(notifyId, ev, s);

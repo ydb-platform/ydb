@@ -3,6 +3,7 @@ LIBRARY()
 SRCS(
     tx_controller.cpp
     locks_db.cpp
+    propose_transaction_base.cpp
 )
 
 PEERDIR(

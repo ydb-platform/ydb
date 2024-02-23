@@ -1,6 +1,7 @@
 #include "tx_write.h"
 
 namespace NKikimr::NColumnShard {
+
 bool TTxWrite::InsertOneBlob(TTransactionContext& txc, const NOlap::TWideSerializedBatch& batch, const TWriteId writeId) {
     NKikimrTxColumnShard::TLogicalMetadata meta;
     meta.SetNumRows(batch->GetRowsCount());
@@ -27,7 +28,6 @@ bool TTxWrite::InsertOneBlob(TTransactionContext& txc, const NOlap::TWideSeriali
     }
     return false;
 }
-
 
 bool TTxWrite::Execute(TTransactionContext& txc, const TActorContext&) {
     NActors::TLogContextGuard logGuard = NActors::TLogContextBuilder::Build(NKikimrServices::TX_COLUMNSHARD)("tablet_id", Self->TabletID())("tx_state", "execute");
@@ -76,25 +76,27 @@ bool TTxWrite::Execute(TTransactionContext& txc, const TActorContext&) {
     }
     for (auto&& aggr : buffer.GetAggregations()) {
         const auto& writeMeta = aggr->GetWriteData()->GetWriteMeta();
-        std::unique_ptr<TEvColumnShard::TEvWriteResult> result;
-        TWriteOperation::TPtr operation;
         if (!writeMeta.HasLongTxId()) {
-            operation = Self->OperationsManager->GetOperation((TWriteId)writeMeta.GetWriteId());
+            auto operation = Self->OperationsManager->GetOperation((TWriteId)writeMeta.GetWriteId());
             Y_ABORT_UNLESS(operation);
             Y_ABORT_UNLESS(operation->GetStatus() == EOperationStatus::Started);
-        }
-        if (operation) {
             operation->OnWriteFinish(txc, aggr->GetWriteIds());
-            auto txInfo = Self->ProgressTxController->RegisterTxWithDeadline(operation->GetTxId(), NKikimrTxColumnShard::TX_KIND_COMMIT_WRITE, "", writeMeta.GetSource(), 0, txc);
-            Y_UNUSED(txInfo);
-            NEvents::TDataEvents::TCoordinatorInfo tInfo = Self->ProgressTxController->GetCoordinatorInfo(operation->GetTxId());
-            Results.emplace_back(NEvents::TDataEvents::TEvWriteResult::BuildPrepared(Self->TabletID(), operation->GetTxId(), tInfo));
+            ProposeTransaction(TTxController::TBasicTxInfo(NKikimrTxColumnShard::TX_KIND_COMMIT_WRITE, operation->GetTxId()), "", writeMeta.GetSource(), 0, txc);            
         } else {
             Y_ABORT_UNLESS(aggr->GetWriteIds().size() == 1);
             Results.emplace_back(std::make_unique<TEvColumnShard::TEvWriteResult>(Self->TabletID(), writeMeta, (ui64)aggr->GetWriteIds().front(), NKikimrTxColumnShard::EResultStatus::SUCCESS));
         }
     }
     return true;
+}
+
+void TTxWrite::OnProposeResult(TTxController::TProposeResult& proposeResult, const TTxController::TTxInfo& txInfo) {
+    Y_UNUSED(proposeResult);
+    Results.emplace_back(NEvents::TDataEvents::TEvWriteResult::BuildPrepared(Self->TabletID(), txInfo.TxId, Self->GetProgressTxController().BuildCoordinatorInfo(txInfo)));
+}
+
+void TTxWrite::OnProposeError(TTxController::TProposeResult& proposeResult, const TTxController::TBasicTxInfo& txInfo) {
+    AFL_VERIFY("Unexpected behaviour")("tx_id", txInfo.TxId)("details", proposeResult.DebugString());
 }
 
 void TTxWrite::Complete(const TActorContext& ctx) {

@@ -23,7 +23,7 @@ ui64 TTxController::GetAllowedStep() const {
 }
 
 ui64 TTxController::GetMemoryUsage() const {
-    return  BasicTxInfo.size() * sizeof(TBasicTxInfo) +
+    return  BasicTxInfo.size() * sizeof(TTxInfo) +
             DeadlineQueue.size() * sizeof(TPlanQueueItem) +
             (PlanQueue.size() + RunningQueue.size()) * sizeof(TPlanQueueItem);
 }
@@ -45,9 +45,11 @@ bool TTxController::Load(NTabletFlatExecutor::TTransactionContext& txc) {
         return false;
 
     while (!rowset.EndOfSet()) {
-        ui64 txId = rowset.GetValue<Schema::TxInfo::TxId>();
-        auto& txInfo = BasicTxInfo[txId];
-        txInfo.TxId = txId;
+        const ui64 txId = rowset.GetValue<Schema::TxInfo::TxId>();
+        const NKikimrTxColumnShard::ETransactionKind txKind = rowset.GetValue<Schema::TxInfo::TxKind>();
+        
+        auto txInfoIt = BasicTxInfo.emplace(txId, TTxInfo(txKind, txId)).first;
+        auto& txInfo = txInfoIt->second;
         txInfo.MaxStep = rowset.GetValue<Schema::TxInfo::MaxStep>();
         if (txInfo.MaxStep != Max<ui64>()) {
             txInfo.MinStep = txInfo.MaxStep - MaxCommitTxDelay.MilliSeconds();
@@ -55,7 +57,6 @@ bool TTxController::Load(NTabletFlatExecutor::TTransactionContext& txc) {
         txInfo.PlanStep = rowset.GetValueOrDefault<Schema::TxInfo::PlanStep>(0);
         txInfo.Source = rowset.GetValue<Schema::TxInfo::Source>();
         txInfo.Cookie = rowset.GetValue<Schema::TxInfo::Cookie>();
-        txInfo.TxKind = rowset.GetValue<Schema::TxInfo::TxKind>();
 
         if (txInfo.PlanStep != 0) {
             PlanQueue.emplace(txInfo.PlanStep, txInfo.TxId);
@@ -90,12 +91,11 @@ TTxController::ITransactionOperatior::TPtr TTxController::GetVerifiedTxOperator(
     return it->second;
 }
 
-const TTxController::TBasicTxInfo& TTxController::RegisterTx(const ui64 txId, const NKikimrTxColumnShard::ETransactionKind& txKind, const TString& txBody, const TActorId& source, const ui64 cookie, NTabletFlatExecutor::TTransactionContext& txc) {
+TTxController::TTxInfo TTxController::RegisterTx(const ui64 txId, const NKikimrTxColumnShard::ETransactionKind& txKind, const TString& txBody, const TActorId& source, const ui64 cookie, NTabletFlatExecutor::TTransactionContext& txc) {
     NIceDb::TNiceDb db(txc.DB);
 
-    auto& txInfo = BasicTxInfo[txId];
-    txInfo.TxId = txId;
-    txInfo.TxKind = txKind;
+    auto txInfoIt = BasicTxInfo.emplace(txId, TTxInfo(txKind, txId)).first;
+    auto& txInfo = txInfoIt->second;
     txInfo.Source = source;
     txInfo.Cookie = cookie;
 
@@ -108,12 +108,11 @@ const TTxController::TBasicTxInfo& TTxController::RegisterTx(const ui64 txId, co
     return txInfo;
 }
 
-const TTxController::TBasicTxInfo& TTxController::RegisterTxWithDeadline(const ui64 txId, const NKikimrTxColumnShard::ETransactionKind& txKind, const TString& txBody, const TActorId& source, const ui64 cookie, NTabletFlatExecutor::TTransactionContext& txc) {
+TTxController::TTxInfo TTxController::RegisterTxWithDeadline(const ui64 txId, const NKikimrTxColumnShard::ETransactionKind& txKind, const TString& txBody, const TActorId& source, const ui64 cookie, NTabletFlatExecutor::TTransactionContext& txc) {
     NIceDb::TNiceDb db(txc.DB);
 
-    auto& txInfo = BasicTxInfo[txId];
-    txInfo.TxId = txId;
-    txInfo.TxKind = txKind;
+    auto txInfoIt = BasicTxInfo.emplace(txId, TTxInfo(txKind, txId)).first;
+    auto& txInfo = txInfoIt->second;
     txInfo.Source = source;
     txInfo.Cookie = cookie;
     txInfo.MinStep = GetAllowedStep();
@@ -174,7 +173,7 @@ bool TTxController::CancelTx(const ui64 txId, NTabletFlatExecutor::TTransactionC
     return true;
 }
 
-std::optional<TTxController::TBasicTxInfo> TTxController::StartPlannedTx() {
+std::optional<TTxController::TTxInfo> TTxController::StartPlannedTx() {
     if (!PlanQueue.empty()) {
         auto node = PlanQueue.extract(PlanQueue.begin());
         auto& item = node.value();
@@ -206,17 +205,19 @@ std::optional<TTxController::TPlanQueueItem> TTxController::GetPlannedTx() const
     return *PlanQueue.begin();
 }
 
-const TTxController::TBasicTxInfo* TTxController::GetTxInfo(const ui64 txId) const {
-    return BasicTxInfo.FindPtr(txId);
+std::optional<TTxController::TTxInfo> TTxController::GetTxInfo(const ui64 txId) const {
+    auto txPtr = BasicTxInfo.FindPtr(txId);
+    if (txPtr) {
+        return *txPtr;
+    }
+    return std::nullopt;
 }
 
-NEvents::TDataEvents::TCoordinatorInfo TTxController::GetCoordinatorInfo(const ui64 txId) const {
-    auto txInfo = BasicTxInfo.FindPtr(txId);
-    Y_ABORT_UNLESS(txInfo);
+NEvents::TDataEvents::TCoordinatorInfo TTxController::BuildCoordinatorInfo(const TTxInfo& txInfo) const {
     if (Owner.ProcessingParams) {
-        return NEvents::TDataEvents::TCoordinatorInfo(txInfo->MinStep, txInfo->MaxStep, Owner.ProcessingParams->GetCoordinators());
+        return NEvents::TDataEvents::TCoordinatorInfo(txInfo.MinStep, txInfo.MaxStep, Owner.ProcessingParams->GetCoordinators());
     }
-    return NEvents::TDataEvents::TCoordinatorInfo(txInfo->MinStep, txInfo->MaxStep, {});
+    return NEvents::TDataEvents::TCoordinatorInfo(txInfo.MinStep, txInfo.MaxStep, {});
 }
 
 size_t TTxController::CleanExpiredTxs(NTabletFlatExecutor::TTransactionContext& txc) {

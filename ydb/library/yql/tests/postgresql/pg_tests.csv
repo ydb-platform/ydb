@@ -12,7 +12,7 @@ create_table,368,48,13.04
 date,264,202,76.52
 dbsize,24,20,83.33
 delete,10,5,50.0
-expressions,63,14,22.22
+expressions,63,18,28.57
 float4,96,82,85.42
 float8,168,139,82.74
 functional_deps,40,7,17.5

@@ -1,7 +1,7 @@
 #pragma once
 
 #include "node.h"
-#include "yson_serialize_common.h"
+#include "yson_struct_enum.h"
 
 #include <yt/yt/core/misc/error.h>
 #include <yt/yt/core/misc/mpl.h>
@@ -9,6 +9,8 @@
 
 #include <yt/yt/core/yson/public.h>
 #include <yt/yt/library/syncmap/map.h>
+
+#include <library/cpp/yt/misc/enum.h>
 
 #include <util/generic/algorithm.h>
 

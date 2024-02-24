@@ -1,6 +1,6 @@
 #pragma once
 
-#include "yson_serialize_common.h"
+#include "yson_struct_enum.h"
 
 #include <yt/yt/core/yson/public.h>
 #include <yt/yt/core/ypath/public.h>

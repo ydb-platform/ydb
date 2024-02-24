@@ -659,7 +659,7 @@ TEST_F(TLoggingTest, StructuredLoggingJsonFormat)
         /*commonFields*/ THashMap<TString, INodePtr>{},
         /*enableControlMessages*/ true,
         /*enableSourceLocation*/ false,
-        /*enableInstant*/ true,
+        /*enableSystemFields*/ true,
         jsonFormat);
 
     auto writer = CreateFileLogWriter(
@@ -761,6 +761,36 @@ TEST_F(TLoggingTest, StructuredValidationWithSamplingRate)
 
     EXPECT_LT(counter, iterations);
     EXPECT_GT(counter, 0);
+}
+
+TEST_F(TLoggingTest, StructuredLoggingDisableSystemFields)
+{
+    TLogEvent event;
+    event.Family = ELogFamily::Structured;
+    event.Category = Logger.GetCategory();
+    event.Level = ELogLevel::Debug;
+    event.MessageRef = BuildYsonStringFluently<EYsonType::MapFragment>()
+        .Item("message").Value("test_message")
+        .Finish()
+        .ToSharedRef();
+    event.MessageKind = ELogMessageKind::Structured;
+
+    auto formatter = std::make_unique<TStructuredLogFormatter>(
+        ELogFormat::Yson,
+        /*commonFields*/ THashMap<TString, INodePtr>{},
+        /*enableControlMessages*/ true,
+        /*enableSourceLocation*/ false,
+        /*enableSystemFields*/ false);
+
+    TStringStream stringStream;
+    formatter->WriteFormatted(&stringStream, event);
+
+    auto message = DeserializeStructuredEvent(stringStream.Str(), ELogFormat::Yson);
+    EXPECT_EQ(message->GetChildOrThrow("message")->AsString()->GetValue(), "test_message");
+
+    EXPECT_EQ(message->FindChild("instant"), nullptr);
+    EXPECT_EQ(message->FindChild("level"), nullptr);
+    EXPECT_EQ(message->FindChild("category"), nullptr);
 }
 
 ////////////////////////////////////////////////////////////////////////////////

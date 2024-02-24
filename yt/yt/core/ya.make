@@ -280,7 +280,6 @@ SRCS(
     ytree/ypath_detail.cpp
     ytree/ypath_resolver.cpp
     ytree/ypath_service.cpp
-    ytree/yson_serializable.cpp
     ytree/yson_struct.cpp
     ytree/yson_struct_detail.cpp
 

@@ -18,9 +18,6 @@ namespace NYT::NYTree {
 
 namespace NPrivate {
 
-template <class T>
-concept IsYsonStructOrYsonSerializable = std::derived_from<T, TYsonStructBase> || std::derived_from<T, TYsonSerializableLite>;
-
 // TODO(shakurov): get rid of this once concept support makes it into the standard
 // library implementation. Use equality-comparability instead.
 template <class T>
@@ -89,8 +86,8 @@ inline void LoadFromNode(
     }
 }
 
-// TYsonStruct or TYsonSerializable
-template <IsYsonStructOrYsonSerializable T>
+// TYsonStruct
+template <CYsonStructDerived T>
 void LoadFromNode(
     TIntrusivePtr<T>& parameterValue,
     NYTree::INodePtr node,
@@ -313,7 +310,7 @@ void LoadFromCursor(
 
 ////////////////////////////////////////////////////////////////////////////////
 
-template <IsYsonStructOrYsonSerializable T>
+template <CYsonStructDerived T>
 void LoadFromCursor(
     TIntrusivePtr<T>& parameterValue,
     NYson::TYsonPullParserCursor* cursor,
@@ -366,8 +363,8 @@ inline void LoadFromCursor(
     }
 }
 
-// TYsonStruct or TYsonSerializable
-template <IsYsonStructOrYsonSerializable T>
+// TYsonStruct
+template <CYsonStructDerived T>
 void LoadFromCursor(
     TIntrusivePtr<T>& parameterValue,
     NYson::TYsonPullParserCursor* cursor,
@@ -544,7 +541,7 @@ struct TGetRecursiveUnrecognized
     }
 };
 
-template <IsYsonStructOrYsonSerializable T>
+template <CYsonStructDerived T>
 struct TGetRecursiveUnrecognized<T>
 {
     static IMapNodePtr Do(const T& parameter)
@@ -553,7 +550,7 @@ struct TGetRecursiveUnrecognized<T>
     }
 };
 
-template <IsYsonStructOrYsonSerializable T>
+template <CYsonStructDerived T>
 struct TGetRecursiveUnrecognized<TIntrusivePtr<T>>
 {
     static IMapNodePtr Do(const TIntrusivePtr<T>& parameter)
@@ -572,8 +569,8 @@ void InvokeForComposites(
     const F& /*func*/)
 { }
 
-// TYsonStruct or TYsonSerializable
-template <IsYsonStructOrYsonSerializable T, class F>
+// TYsonStruct
+template <CYsonStructDerived T, class F>
 inline void InvokeForComposites(
     const TIntrusivePtr<T>* parameterValue,
     const NYPath::TYPath& path,
@@ -621,8 +618,8 @@ void InvokeForComposites(
     const F& /*func*/)
 { }
 
-// TYsonStruct or TYsonSerializable
-template <IsYsonStructOrYsonSerializable T, class F>
+// TYsonStruct
+template <CYsonStructDerived T, class F>
 inline void InvokeForComposites(const TIntrusivePtr<T>* parameter, const F& func)
 {
     func(*parameter);
@@ -788,7 +785,7 @@ void TYsonStructParameter<TValue>::Postprocess(const TYsonStructBase* self, cons
     NPrivate::InvokeForComposites(
         &value,
         path,
-        [] <NPrivate::IsYsonStructOrYsonSerializable T> (TIntrusivePtr<T> obj, const NYPath::TYPath& subpath) {
+        [] <CYsonStructDerived T> (TIntrusivePtr<T> obj, const NYPath::TYPath& subpath) {
             if (obj) {
                 obj->Postprocess(subpath);
             }

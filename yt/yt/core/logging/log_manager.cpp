@@ -852,7 +852,7 @@ private:
                     writerConfig->CommonFields,
                     writerConfig->AreSystemMessagesEnabled(),
                     writerConfig->EnableSourceLocation,
-                    writerConfig->EnableInstant,
+                    writerConfig->EnableSystemFields,
                     writerConfig->JsonFormat);
 
             default:

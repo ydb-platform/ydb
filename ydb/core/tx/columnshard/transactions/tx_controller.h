@@ -27,13 +27,25 @@ public:
     };
 
     struct TBasicTxInfo {
-        ui64 TxId;
+        const NKikimrTxColumnShard::ETransactionKind TxKind;
+        const ui64 TxId;
+    public:
+        TBasicTxInfo(const NKikimrTxColumnShard::ETransactionKind& txKind, const ui64 txId)
+            : TxKind(txKind)
+            , TxId(txId)
+        {}
+    };
+
+    struct TTxInfo : public TBasicTxInfo {
         ui64 MaxStep = Max<ui64>();
         ui64 MinStep = 0;
         ui64 PlanStep = 0;
         TActorId Source;
         ui64 Cookie = 0;
-        NKikimrTxColumnShard::ETransactionKind TxKind;
+    public:
+        TTxInfo(const NKikimrTxColumnShard::ETransactionKind& txKind, const ui64 txId)
+            : TBasicTxInfo(txKind, txId)
+        {}
     };
 
     class TProposeResult {
@@ -47,18 +59,22 @@ public:
         {}
 
         bool operator!() const {
-            return Status != NKikimrTxColumnShard::EResultStatus::PREPARED;
+            return Status != NKikimrTxColumnShard::EResultStatus::PREPARED && Status != NKikimrTxColumnShard::EResultStatus::SUCCESS;
+        }
+
+        TString DebugString() const {
+            return TStringBuilder() << "status=" << (ui64) Status << ";message=" << StatusMessage;
         }
     };
 
     class ITransactionOperatior {
     protected:
-        TBasicTxInfo TxInfo;
+        TTxInfo TxInfo;
     public:
         using TPtr = std::shared_ptr<ITransactionOperatior>;
-        using TFactory = NObjectFactory::TParametrizedObjectFactory<ITransactionOperatior, NKikimrTxColumnShard::ETransactionKind, TBasicTxInfo>;
+        using TFactory = NObjectFactory::TParametrizedObjectFactory<ITransactionOperatior, NKikimrTxColumnShard::ETransactionKind, TTxInfo>;
 
-        ITransactionOperatior(const TBasicTxInfo& txInfo)
+        ITransactionOperatior(const TTxInfo& txInfo)
             : TxInfo(txInfo)
         {}
 
@@ -87,7 +103,7 @@ public:
 private:
     const TDuration MaxCommitTxDelay = TDuration::Seconds(30);
     TColumnShard& Owner;
-    THashMap<ui64, TBasicTxInfo> BasicTxInfo;
+    THashMap<ui64, TTxInfo> BasicTxInfo;
     std::set<TPlanQueueItem> DeadlineQueue;
     std::set<TPlanQueueItem> PlanQueue;
     std::set<TPlanQueueItem> RunningQueue;
@@ -109,19 +125,19 @@ public:
 
     bool Load(NTabletFlatExecutor::TTransactionContext& txc);
 
-    const TBasicTxInfo& RegisterTx(const ui64 txId, const NKikimrTxColumnShard::ETransactionKind& txKind, const TString& txBody, const TActorId& source, const ui64 cookie, NTabletFlatExecutor::TTransactionContext& txc);
-    const TBasicTxInfo& RegisterTxWithDeadline(const ui64 txId, const NKikimrTxColumnShard::ETransactionKind& txKind, const TString& txBody, const TActorId& source, const ui64 cookie, NTabletFlatExecutor::TTransactionContext& txc);
+    TTxInfo RegisterTx(const ui64 txId, const NKikimrTxColumnShard::ETransactionKind& txKind, const TString& txBody, const TActorId& source, const ui64 cookie, NTabletFlatExecutor::TTransactionContext& txc);
+    TTxInfo RegisterTxWithDeadline(const ui64 txId, const NKikimrTxColumnShard::ETransactionKind& txKind, const TString& txBody, const TActorId& source, const ui64 cookie, NTabletFlatExecutor::TTransactionContext& txc);
 
     bool CancelTx(const ui64 txId, NTabletFlatExecutor::TTransactionContext& txc);
 
-    std::optional<TBasicTxInfo> StartPlannedTx();
+    std::optional<TTxInfo> StartPlannedTx();
     void FinishPlannedTx(const ui64 txId, NTabletFlatExecutor::TTransactionContext& txc);
     void CompleteRunningTx(const TPlanQueueItem& tx);
 
     std::optional<TPlanQueueItem> GetPlannedTx() const;
     TPlanQueueItem GetFrontTx() const;
-    const TBasicTxInfo* GetTxInfo(const ui64 txId) const;
-    NEvents::TDataEvents::TCoordinatorInfo GetCoordinatorInfo(const ui64 txId) const;
+    std::optional<TTxInfo> GetTxInfo(const ui64 txId) const;
+    NEvents::TDataEvents::TCoordinatorInfo BuildCoordinatorInfo(const TTxInfo& txInfo) const;
 
     size_t CleanExpiredTxs(NTabletFlatExecutor::TTransactionContext& txc);
 

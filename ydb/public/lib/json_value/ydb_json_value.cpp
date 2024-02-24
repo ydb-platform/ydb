@@ -745,11 +745,15 @@ namespace {
                     const TString& memberName = TypeParser.GetMemberName();
                     const auto it = jsonMap.find(memberName);
                     if (it == jsonMap.end()) {
-                        ThrowFatalError(TStringBuilder() << "No member \"" << memberName
-                            << "\" in the map in json string for YDB struct type");
+                        // missing JSON value is treated as NULL on input
+                        ValueBuilder.AddMember(memberName);
+                        TypeParser.OpenOptional();
+                        ValueBuilder.EmptyOptional(GetType());
+                        TypeParser.CloseOptional();
+                    } else {
+                        ValueBuilder.AddMember(memberName);
+                        ParseValue(it->second);
                     }
-                    ValueBuilder.AddMember(memberName);
-                    ParseValue(it->second);
                 }
 
                 ValueBuilder.EndStruct();

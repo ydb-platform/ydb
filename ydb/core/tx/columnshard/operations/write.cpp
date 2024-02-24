@@ -13,11 +13,12 @@
 
 namespace NKikimr::NColumnShard {
 
-    TWriteOperation::TWriteOperation(const TWriteId writeId, const ui64 txId, const EOperationStatus& status, const TInstant createdAt)
+    TWriteOperation::TWriteOperation(const TWriteId writeId, const ui64 lockId, const ui64 cookie, const EOperationStatus& status, const TInstant createdAt)
         : Status(status)
         , CreatedAt(createdAt)
         , WriteId(writeId)
-        , TxId(txId)
+        , LockId(lockId)
+        , Cookie(cookie)
     {
     }
 
@@ -94,13 +95,15 @@ namespace NKikimr::NColumnShard {
         while (!rowset.EndOfSet()) {
             const TWriteId writeId = (TWriteId) rowset.GetValue<Schema::Operations::WriteId>();
             const ui64 createdAtSec = rowset.GetValue<Schema::Operations::CreatedAt>();
-            const ui64 txId = rowset.GetValue<Schema::Operations::TxId>();
+            const ui64 lockId = rowset.GetValue<Schema::Operations::LockId>();
+            const ui64 cookie = rowset.GetValueOrDefault<Schema::Operations::Cookie>(0);
             const TString metadata = rowset.GetValue<Schema::Operations::Metadata>();
-            NKikimrTxColumnShard::TInternalOperationData metaProto;
-            Y_ABORT_UNLESS(metaProto.ParseFromString(metadata));
             const EOperationStatus status = (EOperationStatus) rowset.GetValue<Schema::Operations::Status>();
 
-            auto operation = std::make_shared<TWriteOperation>(writeId, txId, status, TInstant::Seconds(createdAtSec));
+            NKikimrTxColumnShard::TInternalOperationData metaProto;
+            Y_ABORT_UNLESS(metaProto.ParseFromString(metadata));
+
+            auto operation = std::make_shared<TWriteOperation>(writeId, lockId, cookie, status, TInstant::Seconds(createdAtSec));
             operation->FromProto(metaProto);
 
             Y_ABORT_UNLESS(operation->GetStatus() != EOperationStatus::Draft);
@@ -110,7 +113,7 @@ namespace NKikimr::NColumnShard {
                 AFL_ERROR(NKikimrServices::TX_COLUMNSHARD)("event", "duplicated_operation")("operation", *operation);
                 return false;
             }
-            Transactions[txId].push_back(operation->GetWriteId());
+            Locks[lockId].push_back(operation->GetWriteId());
             LastWriteId = std::max(LastWriteId, operation->GetWriteId());
             if (!rowset.Next()) {
                 return false;
@@ -181,12 +184,11 @@ namespace NKikimr::NColumnShard {
         return ++LastWriteId;
     }
 
-    TWriteOperation::TPtr TOperationsManager::RegisterOperation(const ui64 txId) {
+    TWriteOperation::TPtr TOperationsManager::RegisterOperation(const ui64 lockId, const ui64 cookie) {
         auto writeId = BuildNextWriteId();
-        auto operation = std::make_shared<TWriteOperation>(writeId, txId, EOperationStatus::Draft, AppData()->TimeProvider->Now());
+        auto operation = std::make_shared<TWriteOperation>(writeId, lockId, cookie, EOperationStatus::Draft, AppData()->TimeProvider->Now());
         Y_ABORT_UNLESS(Operations.emplace(operation->GetWriteId(), operation).second);
-
-        Transactions[operation->GetTxId()].push_back(operation->GetWriteId());
+        Locks[operation->GetLockId()].push_back(operation->GetWriteId());
         return operation;
     }
 }

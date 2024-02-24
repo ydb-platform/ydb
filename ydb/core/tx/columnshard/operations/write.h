@@ -32,13 +32,14 @@ namespace NKikimr::NColumnShard {
         YDB_READONLY(EOperationStatus, Status, EOperationStatus::Draft);
         YDB_READONLY_DEF(TInstant, CreatedAt);
         YDB_READONLY_DEF(TWriteId, WriteId);
-        YDB_READONLY(ui64, TxId, 0);
+        YDB_READONLY(ui64, LockId, 0);
+        YDB_READONLY(ui64, Cookie, 0);
         YDB_READONLY_DEF(TVector<TWriteId>, GlobalWriteIds);
 
     public:
         using TPtr = std::shared_ptr<TWriteOperation>;
 
-        TWriteOperation(const TWriteId writeId, const ui64 txId, const EOperationStatus& status, const TInstant createdAt);
+        TWriteOperation(const TWriteId writeId, const ui64 lockId, const ui64 cookie, const EOperationStatus& status, const TInstant createdAt);
 
         void Start(TColumnShard& owner, const ui64 tableId, const NEvWrite::IDataContainer::TPtr& data, const NActors::TActorId& source, const TActorContext& ctx);
         void OnWriteFinish(NTabletFlatExecutor::TTransactionContext& txc, const TVector<TWriteId>& globalWriteIds);
@@ -46,7 +47,7 @@ namespace NKikimr::NColumnShard {
         void Abort(TColumnShard& owner, NTabletFlatExecutor::TTransactionContext& txc) const;
 
         void Out(IOutputStream& out) const {
-            out << "write_id=" << (ui64) WriteId << ";tx_id=" << TxId;
+            out << "write_id=" << (ui64) WriteId << ";lock_id=" << LockId;
         }
 
         void ToProto(NKikimrTxColumnShard::TInternalOperationData& proto) const;
@@ -54,7 +55,7 @@ namespace NKikimr::NColumnShard {
     };
 
     class TOperationsManager {
-        TMap<ui64, TVector<TWriteId>> Transactions;
+        TMap<ui64, TVector<TWriteId>> Locks;
         TMap<TWriteId, TWriteOperation::TPtr> Operations;
         TWriteId LastWriteId = TWriteId(0);
 
@@ -65,7 +66,7 @@ namespace NKikimr::NColumnShard {
         bool CommitTransaction(TColumnShard& owner, const ui64 txId, NTabletFlatExecutor::TTransactionContext& txc, const NOlap::TSnapshot& snapshot);
         bool AbortTransaction(TColumnShard& owner, const ui64 txId, NTabletFlatExecutor::TTransactionContext& txc);
 
-        TWriteOperation::TPtr RegisterOperation(const ui64 txId);
+        TWriteOperation::TPtr RegisterOperation(const ui64 lockId, const ui64 cookie);
     private:
         TWriteId BuildNextWriteId();
         void RemoveOperation(const TWriteOperation::TPtr& op, NTabletFlatExecutor::TTransactionContext& txc);

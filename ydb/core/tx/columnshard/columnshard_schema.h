@@ -302,14 +302,15 @@ struct Schema : NIceDb::Schema {
 
     struct Operations : NIceDb::Schema::Table<OperationsTableId> {
         struct WriteId : Column<1, NScheme::NTypeIds::Uint64> {};
-        struct TxId : Column<2, NScheme::NTypeIds::Uint64> {};
+        struct LockId : Column<2, NScheme::NTypeIds::Uint64> {};
         struct Status : Column<3, NScheme::NTypeIds::Uint32> {};
         struct CreatedAt : Column<4, NScheme::NTypeIds::Uint64> {};
         struct GlobalWriteId : Column<5, NScheme::NTypeIds::Uint64> {};
         struct Metadata : Column<6, NScheme::NTypeIds::String> {};
+        struct Cookie : Column<7, NScheme::NTypeIds::Uint64> {};
 
         using TKey = TableKey<WriteId>;
-        using TColumns = TableColumns<TxId, WriteId, Status, CreatedAt, GlobalWriteId, Metadata>;
+        using TColumns = TableColumns<LockId, WriteId, Status, CreatedAt, GlobalWriteId, Metadata, Cookie>;
     };
 
     struct TierBlobsDraft: NIceDb::Schema::Table<(ui32)ETierTables::TierBlobsDraft> {
@@ -690,7 +691,8 @@ struct Schema : NIceDb::Schema {
             NIceDb::TUpdate<Operations::Status>((ui32)operation.GetStatus()),
             NIceDb::TUpdate<Operations::CreatedAt>(operation.GetCreatedAt().Seconds()),
             NIceDb::TUpdate<Operations::Metadata>(metadata),
-            NIceDb::TUpdate<Operations::TxId>(operation.GetTxId())
+            NIceDb::TUpdate<Operations::LockId>(operation.GetLockId()),
+            NIceDb::TUpdate<Operations::Cookie>(operation.GetCookie())
         );
     }
 

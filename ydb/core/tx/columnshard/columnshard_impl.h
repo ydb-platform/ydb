@@ -570,6 +570,11 @@ public:
         return TablesManager.MutablePrimaryIndexAsVerified<T>();
     }
 
+    TTxController& GetProgressTxController() const {
+        AFL_VERIFY(ProgressTxController);
+        return *ProgressTxController;
+    }
+
     bool HasIndex() const {
         return !!TablesManager.GetPrimaryIndex();
     }

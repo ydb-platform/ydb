@@ -133,7 +133,7 @@ namespace NKikimr::NColumnShard {
                 }
             }
         }
-        {   
+        {
             auto rowset = db.Table<Schema::OperationTxIds>().Select();
             if (!rowset.IsReady()) {
                 return false;
@@ -158,7 +158,7 @@ namespace NKikimr::NColumnShard {
         if (!lockId) {
             ACFL_ERROR("details", "unknown_transaction");
             return true;
-        }       
+        }
         auto tIt = Locks.find(*lockId);
         AFL_VERIFY(tIt != Locks.end())("tx_id", txId)("lock_id", *lockId);
 
@@ -167,7 +167,7 @@ namespace NKikimr::NColumnShard {
             auto opPtr = Operations.FindPtr(opId);
             (*opPtr)->Commit(owner, txc, snapshot);
             commited.emplace_back(*opPtr);
-        } 
+        }
         OnTransactionFinish(commited, txId, txc);
         return true;
     }
@@ -179,10 +179,10 @@ namespace NKikimr::NColumnShard {
         if (!lockId) {
             ACFL_ERROR("details", "unknown_transaction");
             return true;
-        }       
+        }
         auto tIt = Locks.find(*lockId);
         AFL_VERIFY(tIt != Locks.end())("tx_id", txId)("lock_id", *lockId);
-    
+
         TVector<TWriteOperation::TPtr> aborted;
         for (auto&& opId : tIt->second) {
             auto opPtr = Operations.FindPtr(opId);
@@ -244,5 +244,22 @@ namespace NKikimr::NColumnShard {
         Y_ABORT_UNLESS(Operations.emplace(operation->GetWriteId(), operation).second);
         Locks[operation->GetLockId()].push_back(operation->GetWriteId());
         return operation;
+    }
+
+    EOperationBehaviour TOperationsManager::GetBehaviour(const NEvents::TDataEvents::TEvWrite& evWrite) {
+        if (evWrite.Record.HasTxId() && evWrite.Record.GetTxMode() == NKikimrDataEvents::TEvWrite::MODE_PREPARE) {
+            return EOperationBehaviour::InTxWrite;
+        }
+
+        if (evWrite.Record.HasLockTxId() && evWrite.Record.HasLockNodeId()) {
+            if (evWrite.Record.HasLocks() && evWrite.Record.GetLocks().GetOp() == NKikimrDataEvents::TKqpLocks::Commit) {
+                return EOperationBehaviour::CommitWriteLock;
+            }
+
+            if (evWrite.Record.GetTxMode() == NKikimrDataEvents::TEvWrite::MODE_PREPARE) {
+                return EOperationBehaviour::WriteWithLock;
+            }
+        }
+        return EOperationBehaviour::Undefined;
     }
 }

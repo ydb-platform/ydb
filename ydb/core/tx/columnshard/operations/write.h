@@ -1,6 +1,7 @@
 #pragma once
 
 #include <ydb/core/tx/data_events/write_data.h>
+#include <ydb/core/tx/data_events/events.h>
 #include <ydb/core/tx/columnshard/common/snapshot.h>
 #include <ydb/core/tx/columnshard/engines/defs.h>
 #include <ydb/core/protos/tx_columnshard.pb.h>
@@ -31,7 +32,8 @@ namespace NKikimr::NColumnShard {
      enum class EOperationBehaviour : ui32 {
         Undefined = 1,
         InTxWrite = 2,
-        WriteWithLock = 3
+        WriteWithLock = 3,
+        CommitWriteLock = 4
     };
 
     class TWriteOperation {
@@ -77,6 +79,8 @@ namespace NKikimr::NColumnShard {
         std::optional<ui64> GetLockForTx(const ui64 lockId) const;
 
         TWriteOperation::TPtr RegisterOperation(const ui64 lockId, const ui64 cookie);
+        static EOperationBehaviour GetBehaviour(const NEvents::TDataEvents::TEvWrite& evWrite);
+
     private:
         TWriteId BuildNextWriteId();
         void RemoveOperation(const TWriteOperation::TPtr& op, NTabletFlatExecutor::TTransactionContext& txc);

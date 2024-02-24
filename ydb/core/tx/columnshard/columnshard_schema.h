@@ -48,7 +48,8 @@ struct Schema : NIceDb::Schema {
         SharedBlobIdsTableId,
         BorrowedBlobIdsTableId,
         SourceSessionsTableId,
-        DestinationSessionsTableId
+        DestinationSessionsTableId,
+        OperationTxIdsId
     };
 
     enum class ETierTables: ui32 {
@@ -313,6 +314,14 @@ struct Schema : NIceDb::Schema {
         using TColumns = TableColumns<LockId, WriteId, Status, CreatedAt, GlobalWriteId, Metadata, Cookie>;
     };
 
+    struct OperationTxIds : NIceDb::Schema::Table<OperationTxIdsId> {
+        struct TxId : Column<1, NScheme::NTypeIds::Uint64> {};
+        struct LockId : Column<2, NScheme::NTypeIds::Uint64> {};
+
+        using TKey = TableKey<TxId, LockId>;
+        using TColumns = TableColumns<TxId, LockId>;
+    };
+
     struct TierBlobsDraft: NIceDb::Schema::Table<(ui32)ETierTables::TierBlobsDraft> {
         struct StorageId: Column<1, NScheme::NTypeIds::String> {};
         struct BlobId: Column<2, NScheme::NTypeIds::String> {};
@@ -457,7 +466,8 @@ struct Schema : NIceDb::Schema {
         SharedBlobIds,
         BorrowedBlobIds,
         SourceSessions,
-        DestinationSessions
+        DestinationSessions,
+        OperationTxIds
         >;
 
     //
@@ -679,27 +689,6 @@ struct Schema : NIceDb::Schema {
         }
         return true;
     }
-
-    // Operations
-    static void Operations_Write(NIceDb::TNiceDb& db, const TWriteOperation& operation) {
-        TString metadata;
-        NKikimrTxColumnShard::TInternalOperationData proto;
-        operation.ToProto(proto);
-        Y_ABORT_UNLESS(proto.SerializeToString(&metadata));
-
-        db.Table<Operations>().Key((ui64)operation.GetWriteId()).Update(
-            NIceDb::TUpdate<Operations::Status>((ui32)operation.GetStatus()),
-            NIceDb::TUpdate<Operations::CreatedAt>(operation.GetCreatedAt().Seconds()),
-            NIceDb::TUpdate<Operations::Metadata>(metadata),
-            NIceDb::TUpdate<Operations::LockId>(operation.GetLockId()),
-            NIceDb::TUpdate<Operations::Cookie>(operation.GetCookie())
-        );
-    }
-
-    static void Operations_Erase(NIceDb::TNiceDb& db, const TWriteId writeId) {
-        db.Table<Operations>().Key((ui64)writeId).Delete();
-    }
-
 };
 
 }

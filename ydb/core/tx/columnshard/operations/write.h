@@ -28,6 +28,12 @@ namespace NKikimr::NColumnShard {
         Prepared = 3
     };
 
+     enum class EOperationBehaviour : ui32 {
+        Undefined = 1,
+        InTxWrite = 2,
+        WriteWithLock = 3
+    };
+
     class TWriteOperation {
         YDB_READONLY(EOperationStatus, Status, EOperationStatus::Draft);
         YDB_READONLY_DEF(TInstant, CreatedAt);
@@ -35,6 +41,7 @@ namespace NKikimr::NColumnShard {
         YDB_READONLY(ui64, LockId, 0);
         YDB_READONLY(ui64, Cookie, 0);
         YDB_READONLY_DEF(TVector<TWriteId>, GlobalWriteIds);
+        YDB_ACCESSOR(EOperationBehaviour, Behaviour, EOperationBehaviour::Undefined);
 
     public:
         using TPtr = std::shared_ptr<TWriteOperation>;
@@ -56,6 +63,7 @@ namespace NKikimr::NColumnShard {
 
     class TOperationsManager {
         TMap<ui64, TVector<TWriteId>> Locks;
+        TMap<ui64, ui64> Tx2Lock;
         TMap<TWriteId, TWriteOperation::TPtr> Operations;
         TWriteId LastWriteId = TWriteId(0);
 
@@ -65,11 +73,14 @@ namespace NKikimr::NColumnShard {
         TWriteOperation::TPtr GetOperation(const TWriteId writeId) const;
         bool CommitTransaction(TColumnShard& owner, const ui64 txId, NTabletFlatExecutor::TTransactionContext& txc, const NOlap::TSnapshot& snapshot);
         bool AbortTransaction(TColumnShard& owner, const ui64 txId, NTabletFlatExecutor::TTransactionContext& txc);
+        void LinkTransaction(const ui64 lockId, const ui64 txId, NTabletFlatExecutor::TTransactionContext& txc);
+        std::optional<ui64> GetLockForTx(const ui64 lockId) const;
 
         TWriteOperation::TPtr RegisterOperation(const ui64 lockId, const ui64 cookie);
     private:
         TWriteId BuildNextWriteId();
         void RemoveOperation(const TWriteOperation::TPtr& op, NTabletFlatExecutor::TTransactionContext& txc);
+        void OnTransactionFinish(const TVector<TWriteOperation::TPtr>& operations, const ui64 txId, NTabletFlatExecutor::TTransactionContext& txc);
     };
 }
 

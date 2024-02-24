@@ -289,6 +289,7 @@ void TColumnShard::Handle(NEvents::TDataEvents::TEvWrite::TPtr& ev, const TActor
 
     auto writeOperation = OperationsManager->RegisterOperation(txId, cookie);
     Y_ABORT_UNLESS(writeOperation);
+    writeOperation->SetBehaviour(EOperationBehaviour::InTxWrite);
     writeOperation->Start(*this, tableId, arrowData, source, ctx);
 }
 

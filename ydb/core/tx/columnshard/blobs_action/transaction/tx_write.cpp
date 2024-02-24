@@ -81,7 +81,15 @@ bool TTxWrite::Execute(TTransactionContext& txc, const TActorContext&) {
             Y_ABORT_UNLESS(operation);
             Y_ABORT_UNLESS(operation->GetStatus() == EOperationStatus::Started);
             operation->OnWriteFinish(txc, aggr->GetWriteIds());
-            ProposeTransaction(TTxController::TBasicTxInfo(NKikimrTxColumnShard::TX_KIND_COMMIT_WRITE, operation->GetLockId()), "", writeMeta.GetSource(), operation->GetCookie(), txc);            
+            if (operation->GetBehaviour() == EOperationBehaviour::InTxWrite) {
+                NKikimrTxColumnShard::TCommitWriteTxBody proto;
+                proto.SetLockId(operation->GetLockId());
+                TString txBody;
+                Y_ABORT_UNLESS(proto.SerializeToString(&txBody));
+                ProposeTransaction(TTxController::TBasicTxInfo(NKikimrTxColumnShard::TX_KIND_COMMIT_WRITE, operation->GetLockId()), txBody, writeMeta.GetSource(), operation->GetCookie(), txc);            
+            } else {
+                Results.emplace_back(NEvents::TDataEvents::TEvWriteResult::BuildCompleted(Self->TabletID(), operation->GetLockId()));
+            }
         } else {
             Y_ABORT_UNLESS(aggr->GetWriteIds().size() == 1);
             Results.emplace_back(std::make_unique<TEvColumnShard::TEvWriteResult>(Self->TabletID(), writeMeta, (ui64)aggr->GetWriteIds().front(), NKikimrTxColumnShard::EResultStatus::SUCCESS));

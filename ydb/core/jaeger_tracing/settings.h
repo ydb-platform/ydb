@@ -31,12 +31,10 @@ auto MapValues(const THashMap<TKey, TValue>& m, TFunc&& f) {
     result.reserve(m.size());
     for (const auto& [key, value] : m) {
         result.emplace(key, f(value));
-        // result[key] = f(value);
     }
     return result;
 }
 
-// TODO: remove if unused
 template<class T, size_t Size, class TFunc>
 auto MapValues(const std::array<T, Size>& v, TFunc&& f) {
     using TResultValue = std::invoke_result_t<TFunc, const T&>;
@@ -77,7 +75,7 @@ struct TSamplingRule {
         return TSamplingRule<TSampling, TNewThrottlingType> {
             .Level = Level,
             .Sampler = Sampler,
-            .TThrottler = std::forward<TFunc>(f)(Throttler),
+            .Throttler = std::forward<TFunc>(f)(Throttler),
         };
     }
 };
@@ -91,7 +89,7 @@ struct TExternalThrottlingRule {
         using TNewThrottlingType = std::invoke_result_t<TFunc, const TThrottling&>;
 
         return TExternalThrottlingRule<TNewThrottlingType> {
-            .TThrottler = std::forward<TFunc>(f)(Throttler),
+            .Throttler = std::forward<TFunc>(f)(Throttler),
         };
     }
 };
@@ -128,7 +126,7 @@ public:
         return TSettings<TNewSamplingType, TThrottling> {
             .SamplingRules = MapValues(
                 SamplingRules,
-                [&f](const auto& v) {
+                [&f](const TSamplingRule<TSampling, TThrottling>& v) {
                     return v.MapSampler(f);
                 }
             ),
@@ -143,13 +141,13 @@ public:
         return TSettings<TSampling, TNewThrottlingType> {
             .SamplingRules = MapValues(
                 SamplingRules,
-                [&f](const auto& v) {
+                [&f](const TSamplingRule<TSampling, TThrottling>& v) {
                     return v.MapThrottler(f);
                 }
             ),
             .ExternalThrottlingRules = MapValues(
                 ExternalThrottlingRules,
-                [&f](const auto& v) {
+                [&f](const TExternalThrottlingRule<TThrottling>& v) {
                     return v.MapThrottler(f);
                 }
             ),

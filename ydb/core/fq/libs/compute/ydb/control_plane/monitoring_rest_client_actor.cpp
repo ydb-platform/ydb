@@ -102,55 +102,56 @@ public:
             return;
         }        
 
-        LOG_D(response.Response->Body);
         try {
             NJson::TJsonReaderConfig jsonConfig;
             NJson::TJsonValue info;
             if (NJson::ReadJsonTree(response.Response->Body, &jsonConfig, &info)) {
-                forwardResponse->Issues.AddIssue("Mailformed JSON");
-                Send(request->Sender, forwardResponse.release(), 0, request->Cookie);
-                return;
-            }
-
-            bool usageFound = false;
-            if (auto* tenantNode = info.GetValueByPath("TenantInfo")) {
-                if (tenantNode->GetType() == NJson::JSON_ARRAY) {
-                    for (auto tenantItem : tenantNode->GetArray()) {
-                        if (auto* nameNode = tenantItem.GetValueByPath("Name")) {
-                            if (nameNode->GetStringSafe() != Database) {
-                                continue;
+                bool usageFound = false;
+                if (auto* tenantNode = info.GetValueByPath("TenantInfo")) {
+                    if (tenantNode->GetType() == NJson::JSON_ARRAY) {
+                        for (auto tenantItem : tenantNode->GetArray()) {
+                            if (auto* nameNode = tenantItem.GetValueByPath("Name")) {
+                                if (nameNode->GetStringSafe() != Database) {
+                                    continue;
+                                }
                             }
                             if (auto* poolNode = tenantItem.GetValueByPath("PoolStats")) {
                                 if (poolNode->GetType() == NJson::JSON_ARRAY) {
                                     for (auto poolItem : poolNode->GetArray()) {
-                                        if (auto* nameNode = tenantItem.GetValueByPath("Name")) {
+                                        if (auto* nameNode = poolItem.GetValueByPath("Name")) {
                                             if (nameNode->GetStringSafe() == "User") {
-                                                if (auto* usageNode = tenantItem.GetValueByPath("Usage")) {
+                                                if (auto* usageNode = poolItem.GetValueByPath("Usage")) {
                                                     forwardResponse->InstantLoad = usageNode->GetDoubleSafe();
                                                     usageFound = true;
                                                     break;
                                                 }
-                                                // + "Threads"
+                                                if (auto* threadsNode = poolItem.GetValueByPath("Threads")) {
+                                                    forwardResponse->CpuNumber = threadsNode->GetIntegerSafe();
+                                                }
                                             }
                                         }
                                     }
                                 }
                             }
-                        }
-                        if (usageFound) {
-                            break;
+                            if (usageFound) {
+                                break;
+                            }
                         }
                     }
                 }
-            }
-
-            if (!usageFound) {
-                forwardResponse->Issues.AddIssue("User pool node load missed");
+                if (!usageFound) {
+                    forwardResponse->Issues.AddIssue(TStringBuilder() << "MISSED User pool node load for database \"" << Database << '"');
+                }
+            } else {
+                forwardResponse->Issues.AddIssue("Mailformed JSON");
             }
         } catch(const std::exception& e) {
             forwardResponse->Issues.AddIssue(TStringBuilder() << "Error on JSON parsing: '" << e.what() << "'");
         }
 
+        if (forwardResponse->Issues) {
+            LOG_E(response.Response->Body);
+        }
         Send(request->Sender, forwardResponse.release(), 0, request->Cookie);
     }
 

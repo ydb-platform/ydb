@@ -100,7 +100,7 @@ struct Perfomancer {
             regs[0] = regs[8].Shuffle<false>(mask14);
             regs[2] = regs[10].Shuffle<false>(mask15);
 
-            regs[8]  = regs[10].Shuffle<false>(mask10);
+            regs[8]  = regs[8].Shuffle<false>(mask10);
             regs[10] = regs[10].Shuffle<false>(mask11);
 
             regs[8]  = regs[8].Shuffle<false>(mask14);

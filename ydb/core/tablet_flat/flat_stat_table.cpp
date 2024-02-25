@@ -12,20 +12,22 @@ bool BuildStats(const TSubset& subset, TStats& stats, ui64 rowCountResolution, u
     TDataStats iteratorStats = { };
     TStatsIterator statsIterator(subset.Scheme->Keys);
 
-    // THashSet<ui64> epochs;
-    // for (const auto& part : subset.Flatten) {
-    //     epochs.insert(part->Epoch.ToCounter());
-    // }
-    // // if rowCountResolution = 300, 3-leveled SST, let's move each iterator up to 25 rows 
-    // ui64 iterRowCountResolution = rowCountResolution / epochs.size() / 4;
-    // ui64 iterDataSizeResolution = dataSizeResolution / epochs.size() / 4;
+    THashSet<ui64> epochs;
+    for (const auto& part : subset.Flatten) {
+        Y_UNUSED(part);
+        // epochs.insert(part->Epoch.ToCounter());
+        epochs.insert(42);
+    }
+    // if rowCountResolution = 300, 3-leveled SST, let's move each iterator up to 25 rows 
+    ui64 iterRowCountResolution = rowCountResolution / epochs.size() / 4;
+    ui64 iterDataSizeResolution = dataSizeResolution / epochs.size() / 4;
 
     // Make index iterators for all parts
     bool started = true;
     for (const auto& part : subset.Flatten) {
         stats.IndexSize.Add(part->IndexesRawSize, part->Label.Channel());
         TAutoPtr<TStatsScreenedPartIterator> iter = new TStatsScreenedPartIterator(part, env, subset.Scheme->Keys, part->Small, part->Large, 
-            0, 0);
+            iterRowCountResolution, iterDataSizeResolution);
         auto ready = iter->Start();
         if (ready == EReady::Page) {
             started = false;

@@ -80,6 +80,7 @@ struct TEvYdbCompute {
             , ExecMode(execMode)
             , StatsMode(statsMode)
             , TraceId(traceId)
+            , QueryParameters(queryParameters)
         {}
 
         TString Sql;
@@ -90,6 +91,7 @@ struct TEvYdbCompute {
         Ydb::Query::ExecMode ExecMode = Ydb::Query::EXEC_MODE_EXECUTE;
         Ydb::Query::StatsMode StatsMode = Ydb::Query::StatsMode::STATS_MODE_FULL;
         TString TraceId;
+        std::map<TString, Ydb::TypedValue> QueryParameters;
     };
 
     struct TEvExecuteScriptResponse : public NActors::TEventLocal<TEvExecuteScriptResponse, EvExecuteScriptResponse> {

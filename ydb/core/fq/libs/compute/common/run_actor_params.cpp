@@ -57,7 +57,7 @@ TRunActorParams::TRunActorParams(
     const TString& operationId,
     const NFq::NConfig::TYdbStorageConfig& computeConnection,
     TDuration resultTtl,
-    ::google::protobuf::Map<TString, Ydb::TypedValue>&& queryParameters
+    std::map<TString, Ydb::TypedValue>&& queryParameters
     )
     : YqSharedResources(yqSharedResources)
     , CredentialsProviderFactory(credentialsProviderFactory)

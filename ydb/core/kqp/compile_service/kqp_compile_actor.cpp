@@ -54,8 +54,8 @@ public:
         NWilson::TTraceId traceId, TKqpTempTablesState::TConstPtr tempTablesState, bool collectFullDiagnostics,
         bool perStatementResult,
         ECompileActorAction compileAction, TMaybe<TQueryAst> queryAst,
-        NYql::TExprContext* ctx,
-        NYql::TExprNode::TPtr expr)
+        NYql::TExprContext* splitCtx,
+        NYql::TExprNode::TPtr splitExpr)
         : Owner(owner)
         , ModuleResolverState(moduleResolverState)
         , Counters(counters)
@@ -77,8 +77,8 @@ public:
         , PerStatementResult(perStatementResult)
         , CompileAction(compileAction)
         , QueryAst(std::move(queryAst))
-        , Ctx(ctx)
-        , Expr(expr)
+        , SplitCtx(splitCtx)
+        , SplitExpr(splitExpr)
     {
         Config->Init(kqpSettings->DefaultSettings.GetDefaultSettings(), QueryId.Cluster, kqpSettings->Settings, false);
 
@@ -154,14 +154,13 @@ private:
 
     void ReplySplitResult(const TActorContext &ctx, std::pair<TVector<NYql::TExprNode::TPtr>, THolder<NYql::TExprContext>> result) {
         Y_UNUSED(ctx);
-        //ALOG_DEBUG(NKikimrServices::KQP_COMPILE_ACTOR, "Send parsing result"
-        //    << ", self: " << SelfId()
-        //    << ", owner: " << Owner
-        //    << (AstResult && AstResult->Ast->IsOk() ? ", parsing is successful" : ", parsing is not successful"));
+        ALOG_DEBUG(NKikimrServices::KQP_COMPILE_ACTOR, "Send split result"
+            << ", self: " << SelfId()
+            << ", owner: " << Owner
+            << (!result.first.empty() ? ", split is successful" : ", split is not successful"));
 
         auto responseEv = MakeHolder<TEvKqp::TEvSplitResponse>(QueryId, std::move(result.first), std::move(result.second));
         Send(Owner, responseEv.Release());
-        //Y_UNUSED(responseEv);
 
         Counters->ReportCompileFinish(DbCounters);
 
@@ -255,7 +254,7 @@ private:
 
         KqpHost = CreateKqpHost(Gateway, QueryId.Cluster, QueryId.Database, Config, ModuleResolverState->ModuleResolver,
             FederatedQuerySetup, UserToken, ApplicationName, AppData(ctx)->FunctionRegistry,
-            false, false, std::move(TempTablesState), nullptr, Ctx);
+            false, false, std::move(TempTablesState), nullptr, SplitCtx);
 
         IKqpHost::TPrepareSettings prepareSettings;
         prepareSettings.DocumentApiRestricted = QueryId.Settings.DocumentApiRestricted;
@@ -293,11 +292,11 @@ private:
 
             case NKikimrKqp::QUERY_TYPE_SQL_GENERIC_QUERY:
                 prepareSettings.ConcurrentResults = false;
-                AsyncCompileResult = KqpHost->PrepareGenericQuery(QueryRef, prepareSettings, Expr);
+                AsyncCompileResult = KqpHost->PrepareGenericQuery(QueryRef, prepareSettings, SplitExpr);
                 break;
 
             case NKikimrKqp::QUERY_TYPE_SQL_GENERIC_CONCURRENT_QUERY:
-                AsyncCompileResult = KqpHost->PrepareGenericQuery(QueryRef, prepareSettings, Expr);
+                AsyncCompileResult = KqpHost->PrepareGenericQuery(QueryRef, prepareSettings, SplitExpr);
                 break;
 
             case NKikimrKqp::QUERY_TYPE_SQL_GENERIC_SCRIPT:
@@ -492,7 +491,7 @@ private:
         auto kqpResult = std::move(AsyncCompileResult->GetResult());
         auto status = GetYdbStatus(kqpResult);
 
-        if (kqpResult.NeedsSplit) {
+        if (kqpResult.NeedToSplit) {
             KqpCompileResult = TKqpCompileResult::Make(
                 Uid, status, kqpResult.Issues(), ETableReadType::Other, std::move(QueryId), {}, true);
             Reply(KqpCompileResult);
@@ -588,8 +587,8 @@ private:
     ECompileActorAction CompileAction;
     TMaybe<TQueryAst> QueryAst;
 
-    NYql::TExprContext* Ctx = nullptr;
-    NYql::TExprNode::TPtr Expr = nullptr;
+    NYql::TExprContext* SplitCtx = nullptr;
+    NYql::TExprNode::TPtr SplitExpr = nullptr;
 };
 
 void ApplyServiceConfig(TKikimrConfiguration& kqpConfig, const TTableServiceConfig& serviceConfig) {
@@ -635,7 +634,7 @@ IActor* CreateKqpCompileActor(const TActorId& owner, const TKqpSettings::TConstP
     const TMaybe<TString>& applicationName, const TIntrusivePtr<TUserRequestContext>& userRequestContext,
     NWilson::TTraceId traceId, TKqpTempTablesState::TConstPtr tempTablesState,
     ECompileActorAction compileAction, TMaybe<TQueryAst> queryAst, bool collectFullDiagnostics,
-    bool perStatementResult, NYql::TExprContext* ctx, NYql::TExprNode::TPtr expr)
+    bool perStatementResult, NYql::TExprContext* splitCtx, NYql::TExprNode::TPtr splitExpr)
 {
     return new TKqpCompileActor(owner, kqpSettings, tableServiceConfig, queryServiceConfig, metadataProviderConfig,
                                 moduleResolverState, counters, applicationName,
@@ -643,7 +642,7 @@ IActor* CreateKqpCompileActor(const TActorId& owner, const TKqpSettings::TConstP
                                 federatedQuerySetup, userRequestContext,
                                 std::move(traceId), std::move(tempTablesState), collectFullDiagnostics,
                                 perStatementResult, compileAction, std::move(queryAst),
-                                ctx, expr);
+                                splitCtx, splitExpr);
 }
 
 } // namespace NKqp

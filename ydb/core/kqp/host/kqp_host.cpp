@@ -336,16 +336,6 @@ private:
 class TAsyncPrepareYqlResult : public TKqpAsyncResultBase<IKqpHost::TQueryResult> {
 public:
     using TResult = IKqpHost::TQueryResult;
-
-    TAsyncPrepareYqlResult(TExprNode* queryRoot, TExprContext& exprCtx, IGraphTransformer& transformer,
-        TIntrusivePtr<TKikimrQueryContext> queryCtx, const TKqpQueryRef& query, TMaybe<TSqlVersion> sqlVersion,
-        TIntrusivePtr<TKqlTransformContext> transformCtx)
-        : TKqpAsyncResultBase(queryRoot, exprCtx, transformer)
-        , QueryCtx(queryCtx)
-        , ExprCtx(exprCtx)
-        , TransformCtx(transformCtx)
-        , QueryText(query.Text)
-        , SqlVersion(sqlVersion) {}
     
     TAsyncPrepareYqlResult(TExprNode::TPtr queryRoot, TExprContext& exprCtx, IGraphTransformer& transformer,
         TIntrusivePtr<TKikimrQueryContext> queryCtx, const TKqpQueryRef& query, TMaybe<TSqlVersion> sqlVersion,
@@ -384,7 +374,7 @@ public:
         prepareResult.QueryPlan = prepareResult.PreparingQuery->GetPhysicalQuery().GetQueryPlan();
         prepareResult.QueryAst = prepareResult.PreparingQuery->GetPhysicalQuery().GetQueryAst();
 
-        prepareResult.NeedsSplit = false;
+        prepareResult.NeedToSplit = false;
     }
 
 private:
@@ -405,7 +395,7 @@ public:
 
     TResult GetResult() override {
         TResult result;
-        result.NeedsSplit = true;
+        result.NeedToSplit = true;
         return result;
     }
 

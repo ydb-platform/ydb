@@ -3,13 +3,13 @@
 
 #include <ydb/library/actors/core/event_local.h>
 #include <ydb/library/aclib/aclib.h>
+#include <ydb/library/yql/ast/yql_expr.h>
 #include <ydb/core/kqp/common/simple/temp_tables.h>
 #include <ydb/core/kqp/common/simple/kqp_event_ids.h>
 #include <ydb/core/kqp/common/simple/query_id.h>
 #include <ydb/core/kqp/common/simple/query_ast.h>
 #include <ydb/core/kqp/common/kqp_user_request_context.h>
 #include <ydb/core/kqp/counters/kqp_counters.h>
-#include <ydb/library/yql/ast/yql_expr.h>
 
 namespace NKikimr::NKqp::NPrivateEvents {
 
@@ -61,8 +61,8 @@ struct TEvCompileRequest: public TEventLocal<TEvCompileRequest, TKqpEvents::EvCo
     TMaybe<TQueryAst> QueryAst;
     bool Split = false;
 
-    NYql::TExprContext* Ctx = nullptr;
-    NYql::TExprNode::TPtr Expr = nullptr;
+    NYql::TExprContext* SplitCtx = nullptr;
+    NYql::TExprNode::TPtr SplitExpr = nullptr;
 };
 
 struct TEvRecompileRequest: public TEventLocal<TEvRecompileRequest, TKqpEvents::EvRecompileRequest> {
@@ -128,14 +128,14 @@ struct TEvParseResponse: public TEventLocal<TEvParseResponse, TKqpEvents::EvPars
 };
 
 struct TEvSplitResponse: public TEventLocal<TEvSplitResponse, TKqpEvents::EvSplitResponse> {
-    TEvSplitResponse(const TKqpQueryId& query, TVector<NYql::TExprNode::TPtr> exprs, THolder<NYql::TExprContext> ctx)
+    TEvSplitResponse(const TKqpQueryId& query, TVector<NYql::TExprNode::TPtr> splitExprs, THolder<NYql::TExprContext> splitCtx)
         : Query(query)
-        , Ctx(std::move(ctx))
-        , Exprs(std::move(exprs)) {}
+        , SplitCtx(std::move(splitCtx))
+        , SplitExprs(std::move(splitExprs)) {}
 
     TKqpQueryId Query;
-    THolder<NYql::TExprContext> Ctx;
-    TVector<NYql::TExprNode::TPtr> Exprs;
+    THolder<NYql::TExprContext> SplitCtx;
+    TVector<NYql::TExprNode::TPtr> SplitExprs;
 };
 
 struct TEvCompileInvalidateRequest: public TEventLocal<TEvCompileInvalidateRequest,

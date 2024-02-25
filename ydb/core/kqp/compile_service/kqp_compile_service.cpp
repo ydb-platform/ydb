@@ -255,7 +255,9 @@ struct TKqpCompileRequest {
         const TIntrusivePtr<TUserRequestContext>& userRequestContext,
         NLWTrace::TOrbit orbit = {}, NWilson::TSpan span = {},
         TKqpTempTablesState::TConstPtr tempTablesState = {},
-        TMaybe<TQueryAst> queryAst = {})
+        TMaybe<TQueryAst> queryAst = {},
+        NYql::TExprContext* splitCtx = nullptr,
+        NYql::TExprNode::TPtr splitExpr = nullptr)
         : Sender(sender)
         , Query(std::move(query))
         , Uid(uid)
@@ -270,6 +272,8 @@ struct TKqpCompileRequest {
         , TempTablesState(std::move(tempTablesState))
         , IntrestedInResult(std::move(intrestedInResult))
         , QueryAst(std::move(queryAst))
+        , SplitCtx(splitCtx)
+        , SplitExpr(splitExpr)
     {}
 
     TActorId Sender;
@@ -289,8 +293,8 @@ struct TKqpCompileRequest {
     std::shared_ptr<std::atomic<bool>> IntrestedInResult;
     TMaybe<TQueryAst> QueryAst;
 
-    NYql::TExprContext* Ctx = nullptr;
-    NYql::TExprNode::TPtr Expr = nullptr;
+    NYql::TExprContext* SplitCtx;
+    NYql::TExprNode::TPtr SplitExpr;
 
     bool IsIntrestedInResult() const {
         return IntrestedInResult->load();
@@ -565,6 +569,7 @@ private:
     void PerformRequest(TEvKqp::TEvCompileRequest::TPtr& ev, const TActorContext& ctx) {
         auto& request = *ev->Get();
 
+        // TODO: common code
         LOG_DEBUG_S(ctx, NKikimrServices::KQP_COMPILE_SERVICE, "Perform request, TraceId.SpanIdPtr: " << ev->TraceId.GetSpanIdPtr());
 
         NWilson::TSpan compileServiceSpan(TWilsonKqp::CompileService, std::move(ev->TraceId), "CompileService");
@@ -658,13 +663,12 @@ private:
         TKqpCompileRequest compileRequest(ev->Sender, CreateGuidAsString(), std::move(*request.Query),
             compileSettings, request.UserToken, dbCounters, request.ApplicationName, ev->Cookie, std::move(ev->Get()->IntrestedInResult),
             ev->Get()->UserRequestContext, std::move(ev->Get()->Orbit), std::move(compileServiceSpan),
-            std::move(ev->Get()->TempTablesState));
+            std::move(ev->Get()->TempTablesState), request.SplitCtx, request.SplitExpr);
 
+        // TODO: ????
         if (ev->Get()->Split) {
             compileRequest.Action = ECompileActorAction::SPLIT;
         }
-        compileRequest.Ctx = request.Ctx;
-        compileRequest.Expr = request.Expr;
 
         if (TableServiceConfig.GetEnableAstCache() && request.QueryAst) {
             return CompileByAst(*request.QueryAst, compileRequest, ctx);
@@ -1019,7 +1023,7 @@ private:
         auto compileActor = CreateKqpCompileActor(ctx.SelfID, KqpSettings, TableServiceConfig, QueryServiceConfig, MetadataProviderConfig, ModuleResolverState, Counters,
             request.Uid, request.Query, request.UserToken, FederatedQuerySetup, request.DbCounters, request.ApplicationName, request.UserRequestContext,
             request.CompileServiceSpan.GetTraceId(), request.TempTablesState, request.CompileSettings.Action, std::move(request.QueryAst), CollectDiagnostics,
-            request.CompileSettings.PerStatementResult, request.Ctx, request.Expr);
+            request.CompileSettings.PerStatementResult, request.SplitCtx, request.SplitExpr);
         auto compileActorId = ctx.ExecutorThread.RegisterActor(compileActor, TMailboxType::HTSwap,
             AppData(ctx)->UserPoolId);
 

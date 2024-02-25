@@ -142,8 +142,8 @@ bool TKqpQueryState::SaveAndCheckParseResult(TEvKqp::TEvParseResponse&& ev) {
 }
 
 bool TKqpQueryState::SaveAndCheckSplitResult(TEvKqp::TEvSplitResponse* ev) {
-    SplittedExprs = std::move(ev->Exprs);
-    SplittedCtx = std::move(ev->Ctx);
+    SplittedExprs = std::move(ev->SplitExprs);
+    SplittedCtx = std::move(ev->SplitCtx);
     NextSplittedExpr = -1;
     return true;
 }

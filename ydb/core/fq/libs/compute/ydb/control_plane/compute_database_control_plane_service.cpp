@@ -370,7 +370,7 @@ public:
                 auto monitoringEndpoint = loadConfig.GetMonitoringEndpoint();
                 auto credentialsProvider = CredentialsProviderFactory(GetYdbCredentialSettings(config.GetControlPlaneConnection()))->CreateProvider();
                 if (monitoringEndpoint) {
-                    clientActor = Register(CreateMonitoringRestClientActor(monitoringEndpoint, config.GetExecutionConnection().GetDatabase(), credentialsProvider).release());
+                    clientActor = Register(CreateMonitoringRestClientActor(monitoringEndpoint, config.GetControlPlaneConnection().GetDatabase(), credentialsProvider).release());
                 } else {
                     clientActor = Register(CreateMonitoringGrpcClientActor(CreateGrpcClientSettings(config), credentialsProvider).release());
                 }
@@ -393,7 +393,7 @@ public:
                 auto monitoringEndpoint = loadConfig.GetMonitoringEndpoint();
                 auto credentialsProvider = CredentialsProviderFactory(GetYdbCredentialSettings(config.GetControlPlaneConnection()))->CreateProvider();
                 if (monitoringEndpoint) {
-                    clientActor = Register(CreateMonitoringRestClientActor(monitoringEndpoint, config.GetExecutionConnection().GetDatabase(), credentialsProvider).release());
+                    clientActor = Register(CreateMonitoringRestClientActor(monitoringEndpoint, config.GetControlPlaneConnection().GetDatabase(), credentialsProvider).release());
                 } else {
                     clientActor = Register(CreateMonitoringGrpcClientActor(CreateGrpcClientSettings(config), credentialsProvider).release());
                 }

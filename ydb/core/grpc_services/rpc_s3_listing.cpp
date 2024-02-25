@@ -683,7 +683,6 @@ private:
             vb.BeginStruct();
             for (size_t i = 0; i < columns.size(); ++i) {
                 const auto& colMeta = columns[i];
-                const auto type = getTypeFromColMeta(colMeta);
 
                 const auto& cell = row.GetCells()[i];
                 vb.AddMember(colMeta.Name);

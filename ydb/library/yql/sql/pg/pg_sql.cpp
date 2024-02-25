@@ -2189,7 +2189,7 @@ public:
                 } else if (name.StartsWith("ydb.")) {
                     providerName = NYql::YdbProviderName;
                 } else {
-                    
+                    Y_ASSERT(0);
                 }
 
                 auto providerSource = L(A("DataSource"), QA(providerName), QA("$all"));

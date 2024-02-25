@@ -42,8 +42,8 @@ bool TSamplingThrottlingControl::TSamplingThrottlingImpl::Throttle(
     bool throttle = true;
 
     auto& requestTypeThrottlingRules = Setup.ExternalThrottlingRules[requestType];
-    if (auto it = requestTypeThrottlingRules.FindPtr(database)) {
-        for (auto& throttlingRule : *it) {
+    if (auto databaseThrottlingRules = requestTypeThrottlingRules.FindPtr(database)) {
+        for (auto& throttlingRule : *databaseThrottlingRules) {
             throttle = throttlingRule.Throttler->Throttle() && throttle;
         }
     }
@@ -54,8 +54,8 @@ TMaybe<ui8> TSamplingThrottlingControl::TSamplingThrottlingImpl::Sample(
     size_t requestType, const TMaybe<TString>& database) {
     TMaybe<ui8> level;
     auto& requestTypeThrottlingRules = Setup.SamplingRules[requestType];
-    if (auto it = requestTypeThrottlingRules.FindPtr(database)) {
-        for (auto& samplingRule : *it) {
+    if (auto databaseThrottlingRules = requestTypeThrottlingRules.FindPtr(database)) {
+        for (auto& samplingRule : *databaseThrottlingRules) {
             if (samplingRule.Sampler.Sample() && !samplingRule.Throttler->Throttle()) {
                 auto sampledLevel = samplingRule.Level;
                 if (!level || sampledLevel > *level) {

@@ -106,7 +106,6 @@ Pear;15;33'''
         validate_query(R"SELECT 1 FROM foo.bar;",
                        R"Cannot find table 'foo.[bar]' because it does not exist or you do not have access permissions. Please check correctness of table path and user permissions.")
 
-
     @yq_v2
     @pytest.mark.parametrize("client", [{"folder_id": "my_folder"}], indirect=True)
     def test_query_parameters(self, kikimr, client):
@@ -119,10 +118,11 @@ Pear;15;33'''
 
         p1 = ydb.TypedValue(
             type=ydb.Type(type_id=ydb.Type.INT64),
-            value = ydb.Value(int64_value=10)
+            value=ydb.Value(int64_value=10)
         )
 
-        query_id = client.create_query("simple", sql, parameters={"$x" : p1}, type=fq.QueryContent.QueryType.ANALYTICS).result.query_id
+        query_id = client.create_query("simple", sql, parameters={
+                                       "$x": p1}, type=fq.QueryContent.QueryType.ANALYTICS).result.query_id
         client.wait_query_status(query_id, fq.QueryMeta.COMPLETED)
 
         data = client.get_result_data(query_id)

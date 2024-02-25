@@ -207,7 +207,7 @@ message TTableServiceConfig {
     optional uint32 CompileTimeoutMs = 12 [default = 60000];
     optional TResourceManager ResourceManager = 13;
     optional TQueryLimits QueryLimits = 14;
-    optional uint32 SqlVersion = 15;
+    optional uint32 SqlVersion = 15 [default = 1];
     optional TSpillingServiceConfig SpillingServiceConfig = 16;
     optional TShutdownSettings ShutdownSettings = 17;
     optional TSessionBalancerSettings SessionBalancerSettings = 18;

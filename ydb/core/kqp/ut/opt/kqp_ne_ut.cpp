@@ -4043,7 +4043,7 @@ Y_UNIT_TEST_SUITE(KqpNewEngine) {
                 .Build()
                 .Build();
             before = counters.FullScansExecuted->GetAtomic();
-            auto result2 = session.ExecuteDataQuery(req, TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx()).ExtractValueSync();
+            auto result2 = session.ExecuteDataQuery(req, TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx(), params2).ExtractValueSync();
             result2.GetIssues().PrintTo(Cerr);
             AssertSuccessResult(result);
             UNIT_ASSERT_GT(counters.FullScansExecuted->GetAtomic(), before);

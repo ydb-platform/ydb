@@ -300,7 +300,7 @@ void TGraceJoinPacker::Pack()  {
         }
         case NUdf::EDataSlot::TzTimestamp:
         {
-            WriteUnaligned<ui32>(buffPtr, value.Get<ui64>());
+            WriteUnaligned<ui64>(buffPtr, value.Get<ui64>());
             WriteUnaligned<ui16>(buffPtr + sizeof(ui64), value.GetTimezoneId());
             break;
         }

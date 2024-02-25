@@ -17,8 +17,8 @@ bool BuildStats(const TSubset& subset, TStats& stats, ui64 rowCountResolution, u
         epochs.insert(part->Epoch.ToCounter());
     }
     // if rowCountResolution = 300, 3-leveled SST, let's move each iterator up to 25 rows 
-    ui64 iterRowCountResolution = rowCountResolution / epochs.size() / 4;
-    ui64 iterDataSizeResolution = dataSizeResolution / epochs.size() / 4;
+    ui64 iterRowCountResolution = rowCountResolution / Max(1lu, epochs.size()) / 4;
+    ui64 iterDataSizeResolution = dataSizeResolution / Max(1lu, epochs.size()) / 4;
 
     // Make index iterators for all parts
     bool started = true;

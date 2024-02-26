@@ -662,6 +662,23 @@ Y_UNIT_TEST_SUITE(KqpQueryService) {
             }
         };
 
+        auto checkRename = [&](bool expectSuccess, int nameSuffix, int nameSuffixTo) {
+            const TString sql = fmt::format(R"sql(
+                ALTER TABLE TestDdl_{name_suffix} RENAME TO TestDdl_{name_suffix_to}
+                )sql",
+                "name_suffix"_a = nameSuffix,
+                "name_suffix_to"_a = nameSuffixTo
+            );
+
+            auto result = db.ExecuteQuery(sql, TTxControl::NoTx()).ExtractValueSync();
+            if (expectSuccess) {
+                UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+            } else {
+                UNIT_ASSERT_VALUES_UNEQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+            }
+            UNIT_ASSERT(result.GetResultSets().empty());
+        };
+
         // usual create
         checkCreate(true, EEx::Empty, 0);
         checkUpsert(0);
@@ -694,6 +711,16 @@ Y_UNIT_TEST_SUITE(KqpQueryService) {
         checkDrop(true, EEx::IfExists, 1); // real drop
         checkExists(false, 1);
         checkDrop(true, EEx::IfExists, 1);
+
+        // rename
+        Y_UNUSED(checkRename);
+        /*
+        checkCreate(true, EEx::Empty, 2);
+        checkRename(true, 2, 3);
+        checkRename(false, 2, 3); // already renamed, no such table
+        checkDrop(false, EEx::Empty, 2); // no such table
+        checkDrop(true, EEx::Empty, 3);
+        */
     }
 
     Y_UNIT_TEST(DdlColumnTable) {

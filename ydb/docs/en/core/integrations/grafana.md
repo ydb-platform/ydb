@@ -76,7 +76,7 @@ The query editor allows you to get data in different representation: time series
 
 ### Time series
 
-Time series visualization options are selectable after adding to your query one field with `Date`, `Datetime` or `Timestamp` type and at least one field with `number` type. You can select time series visualizations using the visualization options. Grafana interprets timestamp rows without explicit time zone as UTC. Any other column is treated as a value column.
+Time series visualization options are selectable if the query returns at least one field with `Date`, `Datetime`, or `Timestamp` type type and at least one field with `number` type. Then you can select time series visualization options. Grafana interprets timestamp rows without explicit time zone as UTC. Any other column is treated as a value column.
 
 #### Multi-line time series
 

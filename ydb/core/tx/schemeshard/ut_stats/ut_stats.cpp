@@ -303,6 +303,7 @@ Y_UNIT_TEST_SUITE(TSchemeshardStatsBatchingTest) {
         TTestEnv env(runtime);
 
         runtime.SetLogPriority(NKikimrServices::FLAT_TX_SCHEMESHARD, NActors::NLog::PRI_TRACE);
+        runtime.SetLogPriority(NKikimrServices::PERSQUEUE_READ_BALANCER, NActors::NLog::PRI_TRACE);
 
         auto& appData = runtime.GetAppData();
 

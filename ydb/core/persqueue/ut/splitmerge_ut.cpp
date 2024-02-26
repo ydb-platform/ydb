@@ -102,6 +102,7 @@ TTopicSdkTestSetup CreateSetup() {
 
     setup.GetRuntime().GetAppData().PQConfig.SetTopicsAreFirstClassCitizen(true);
     setup.GetRuntime().GetAppData().PQConfig.SetUseSrcIdMetaMappingInFirstClass(true);
+    setup.GetRuntime().GetAppData().PQConfig.SetBalancerWakeupIntervalSec(1);
 
     return setup;
 }
@@ -125,7 +126,12 @@ struct TTestReadSession {
         ui64 SeqNo;
         ui64 Offset;
         TString Data;
+
+        TReadSessionEvent::TDataReceivedEvent::TMessage Msg;
+        bool Commited;
     };
+
+    bool AutoCommit;
 
     std::shared_ptr<IReadSession> Session;
 
@@ -133,7 +139,8 @@ struct TTestReadSession {
     std::vector<MsgInfo> ReceivedMessages;
     std::set<size_t> Partitions;
 
-    TTestReadSession(TTopicClient& client, size_t expectedMessagesCount) {
+    TTestReadSession(TTopicClient& client, size_t expectedMessagesCount, bool autoCommit = true)
+        : AutoCommit(autoCommit) {
         auto readSettings = TReadSessionSettings()
             .ConsumerName(TEST_CONSUMER)
             .AppendTopics(TEST_TOPIC);
@@ -153,7 +160,13 @@ struct TTestReadSession {
                 ReceivedMessages.push_back({message.GetPartitionSession()->GetPartitionId(),
                                             message.GetSeqNo(),
                                             message.GetOffset(),
-                                            message.GetData()});
+                                            message.GetData(),
+                                            message,
+                                            AutoCommit});
+
+                if (AutoCommit) {
+                    message.Commit();
+                }
             }
 
             if (ReceivedMessages.size() == expectedMessagesCount) {
@@ -174,6 +187,15 @@ struct TTestReadSession {
 
     void WaitAllMessages() {
         Promise.GetFuture().GetValueSync();
+    }
+
+    void Commit() {
+        for (auto& m : ReceivedMessages) {
+            if (!m.Commited) {
+                m.Msg.Commit();
+                m.Commited = true;
+            }
+        }
     }
 };
 
@@ -219,7 +241,7 @@ Y_UNIT_TEST_SUITE(TopicSplitMerge) {
 
         auto writeSession = CreateWriteSession(client, "producer-1");
 
-        TTestReadSession ReadSession(client, 2);
+        TTestReadSession ReadSession(client, 2, false);
 
         UNIT_ASSERT(writeSession->Write(Msg("message_1.1", 2)));
 
@@ -227,6 +249,11 @@ Y_UNIT_TEST_SUITE(TopicSplitMerge) {
         SplitPartition(setup, ++txId, 0, "a");
 
         UNIT_ASSERT(writeSession->Write(Msg("message_1.2", 3)));
+
+        Sleep(TDuration::Seconds(1)); // Wait read session events
+
+        UNIT_ASSERT_EQUAL_C(1, ReadSession.Partitions.size(), "We are reading only one partitions because offset is not commited");
+        ReadSession.Commit();
 
         ReadSession.WaitAllMessages();
 
@@ -277,6 +304,8 @@ Y_UNIT_TEST_SUITE(TopicSplitMerge) {
         writeSession4->Write(TWriteMessage("message_4.1"));
 
         ReadSession.WaitAllMessages();
+
+        Cerr << ">>>>> All messages received" << Endl;
 
         for(const auto& info : ReadSession.ReceivedMessages) {
             if (info.Data == "message_1.1") {

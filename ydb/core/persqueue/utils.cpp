@@ -1,10 +1,8 @@
 #include "utils.h"
 
 #include <deque>
-#include <util/string/builder.h>
 
-//#include <ydb/core/base/appdata_fwd.h>
-//#include <ydb/core/base/feature_flags.h>
+#include <util/string/builder.h>
 #include <ydb/library/yverify_stream/yverify_stream.h>
 
 namespace NKikimr::NPQ {
@@ -96,7 +94,17 @@ std::set<ui32> TPartitionGraph::GetActiveChildren(ui32 id) const {
 }
 
 template<typename TPartition>
-std::unordered_map<ui32, TPartitionGraph::Node> BuildGraph(const ::google::protobuf::RepeatedPtrField<TPartition>& partitions) {
+inline int GetPartitionId(TPartition p) {
+    return p.GetPartitionId();
+}
+
+template<>
+inline int GetPartitionId(NKikimrPQ::TUpdateBalancerConfig::TPartition p) {
+    return p.GetPartition();
+}
+
+template<typename TPartition, typename TCollection = ::google::protobuf::RepeatedPtrField<TPartition>>
+std::unordered_map<ui32, TPartitionGraph::Node> BuildGraph(const TCollection& partitions) {
     std::unordered_map<ui32, TPartitionGraph::Node> result;
 
     if (0 == partitions.size()) {
@@ -104,12 +112,12 @@ std::unordered_map<ui32, TPartitionGraph::Node> BuildGraph(const ::google::proto
     }
 
     for (const auto& p : partitions) {
-        result.emplace(p.GetPartitionId(), TPartitionGraph::Node(p.GetPartitionId(), p.GetTabletId()));
+        result.emplace(GetPartitionId(p), TPartitionGraph::Node(GetPartitionId(p), p.GetTabletId()));
     }
 
     std::deque<TPartitionGraph::Node*> queue;
     for(const auto& p : partitions) {
-        auto& node = result[p.GetPartitionId()];
+        auto& node = result[GetPartitionId(p)];
 
         node.Children.reserve(p.ChildPartitionIdsSize());
         for (auto id : p.GetChildPartitionIds()) {
@@ -150,7 +158,6 @@ std::unordered_map<ui32, TPartitionGraph::Node> BuildGraph(const ::google::proto
     return result;
 }
 
-
 TPartitionGraph::Node::Node(ui32 id, ui64 tabletId)
     : Id(id)
     , TabletId(tabletId) {
@@ -158,6 +165,10 @@ TPartitionGraph::Node::Node(ui32 id, ui64 tabletId)
 
 TPartitionGraph MakePartitionGraph(const NKikimrPQ::TPQTabletConfig& config) {
     return TPartitionGraph(BuildGraph<NKikimrPQ::TPQTabletConfig::TPartition>(config.GetAllPartitions()));
+}
+
+TPartitionGraph MakePartitionGraph(const NKikimrPQ::TUpdateBalancerConfig& config) {
+    return TPartitionGraph(BuildGraph<NKikimrPQ::TUpdateBalancerConfig::TPartition>(config.GetPartitions()));
 }
 
 TPartitionGraph MakePartitionGraph(const NKikimrSchemeOp::TPersQueueGroupDescription& config) {

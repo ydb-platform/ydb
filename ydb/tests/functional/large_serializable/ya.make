@@ -8,13 +8,26 @@ TEST_SRCS(
     test_serializable.py
 )
 
+IF(AUTOCHECK)
+
 REQUIREMENTS(
     cpu:4
     ram:32
 )
-
 TIMEOUT(600)
 SIZE(MEDIUM)
+
+ELSE()
+
+TAG(ya:fat)
+REQUIREMENTS(
+    cpu:4
+    ram:32
+)
+TIMEOUT(1200)
+SIZE(LARGE)
+
+ENDIF()
 
 DEPENDS(
     ydb/tests/tools/ydb_serializable

@@ -24,9 +24,9 @@ Please note that Grafana does not validate that queries are safe. Queries can co
 
 The plugin supports [gRPC and gRPCS](https://grpc.io/) transport protocols. A TLS/SSL certificate needs to be provided when using `grpcs://`.
 
-### Manual configuration
+### Configuration via UI
 
-Once the plugin is installed on your Grafana instance, follow [these instructions](https://grafana.com/docs/grafana/latest/datasources/add-a-data-source/) to add a new YDB data source, and enter configuration options.
+Once the plugin is installed on your Grafana instance, follow [these instructions](https://grafana.com/docs/grafana/latest/datasources/add-a-data-source/) to add a new {{ ydb-short-name }} data source, and enter configuration options.
 
 ### With a configuration file
 

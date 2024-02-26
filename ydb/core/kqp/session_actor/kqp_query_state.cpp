@@ -240,6 +240,12 @@ std::unique_ptr<TEvKqp::TEvRecompileRequest> TKqpQueryState::BuildReCompileReque
         compileDeadline, DbCounters, ApplicationName, std::move(cookie), UserRequestContext, std::move(Orbit), TempTablesState);
 }
 
+std::unique_ptr<TEvKqp::TEvCompileRequest> TKqpQueryState::BuildSplitRequest(std::shared_ptr<std::atomic<bool>> cookie) {
+    auto request = BuildCompileRequest(cookie);
+    request->Split = true;
+    return request;
+}
+
 std::unique_ptr<TEvKqp::TEvCompileRequest> TKqpQueryState::BuildCompileSplittedRequest(std::shared_ptr<std::atomic<bool>> cookie) {
     TMaybe<TKqpQueryId> query;
     TMaybe<TString> uid;

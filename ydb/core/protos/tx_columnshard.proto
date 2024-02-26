@@ -181,6 +181,10 @@ message TCommitTxBody {
     repeated uint64 WriteIds = 2;
 }
 
+message TCommitWriteTxBody {
+    optional uint64 LockId = 1;
+}
+
 message TSchemaPresetVersionInfo {
     optional uint64 Id = 1;
     optional uint64 SinceStep = 2;

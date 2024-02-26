@@ -22,27 +22,27 @@ public:
 
 Y_UNIT_TEST_SUITE(TWrapperTests) {
     Y_UNIT_TEST(TestOk) {
-        auto events = std::make_shared<TEvents>();
+        TEvents events;
         PGParse(TString("SELECT 1"), events);
-        UNIT_ASSERT(events->Result);
-        UNIT_ASSERT(!events->Issue);
+        UNIT_ASSERT(events.Result);
+        UNIT_ASSERT(!events.Issue);
         const auto expected = "({RAWSTMT :stmt {SELECT :distinctClause <> :intoClause <> :targetList "
         "({RESTARGET :name <> :indirection <> :val {A_CONST :val 1 :location 7} :location 7}) :fromClause <> "
         ":whereClause <> :groupClause <> :groupDistinct false :havingClause <> :windowClause <> :valuesLists <> :sortClause <> "
         ":limitOffset <> :limitCount <> :limitOption 0 :lockingClause <> :withClause <> :op 0 :all false :larg <> "
         ":rarg <>} :stmt_location 0 :stmt_len 0})";
-        UNIT_ASSERT_NO_DIFF(*events->Result, expected);
+        UNIT_ASSERT_NO_DIFF(*events.Result, expected);
     }
 
     Y_UNIT_TEST(TestFail) {
-        auto events = std::make_shared<TEvents>();
+        TEvents events;
         PGParse(TString(" \n  SELECT1"), events);
-        UNIT_ASSERT(!events->Result);
-        UNIT_ASSERT(events->Issue);
-        auto msg = events->Issue->GetMessage();
+        UNIT_ASSERT(!events.Result);
+        UNIT_ASSERT(events.Issue);
+        auto msg = events.Issue->GetMessage();
         UNIT_ASSERT_NO_DIFF(msg, "ERROR:  syntax error at or near \"SELECT1\"\n");
-        UNIT_ASSERT_VALUES_EQUAL(events->Issue->Position.Row, 2);
-        UNIT_ASSERT_VALUES_EQUAL(events->Issue->Position.Column, 3);
+        UNIT_ASSERT_VALUES_EQUAL(events.Issue->Position.Row, 2);
+        UNIT_ASSERT_VALUES_EQUAL(events.Issue->Position.Column, 3);
     }
 }
 
@@ -58,16 +58,16 @@ Y_UNIT_TEST_SUITE(TMTWrapperTests) {
                 iters /= 100;
 #endif
                 for (ui32 i = 0; i < iters; ++i) {
-                    auto events = std::make_shared<TEvents>();
+                    TEvents events;
                     PGParse(TString("SELECT 1"), events);
-                    Y_ENSURE(events->Result);
-                    Y_ENSURE(!events->Issue);
+                    Y_ENSURE(events.Result);
+                    Y_ENSURE(!events.Issue);
                     const auto expected = "({RAWSTMT :stmt {SELECT :distinctClause <> :intoClause <> :targetList "
                     "({RESTARGET :name <> :indirection <> :val {A_CONST :val 1 :location 7} :location 7}) :fromClause <> "
                     ":whereClause <> :groupClause <> :groupDistinct false :havingClause <> :windowClause <> :valuesLists <> :sortClause <> "
                     ":limitOffset <> :limitCount <> :limitOption 0 :lockingClause <> :withClause <> :op 0 :all false :larg <> "
                     ":rarg <>} :stmt_location 0 :stmt_len 0})";
-                    Y_ENSURE(*events->Result == expected);
+                    Y_ENSURE(*events.Result == expected);
                 }
             }));
         }
@@ -90,14 +90,14 @@ Y_UNIT_TEST_SUITE(TMTWrapperTests) {
                 iters /= 100;
 #endif
                 for (ui32 i = 0; i < iters; ++i) {
-                    auto events = std::make_shared<TEvents>();
+                    TEvents events;
                     PGParse(TString(" \n  SELECT1"), events);
-                    Y_ENSURE(!events->Result);
-                    Y_ENSURE(events->Issue);
-                    auto msg = events->Issue->GetMessage();
+                    Y_ENSURE(!events.Result);
+                    Y_ENSURE(events.Issue);
+                    auto msg = events.Issue->GetMessage();
                     Y_ENSURE(msg == "ERROR:  syntax error at or near \"SELECT1\"\n");
-                    Y_ENSURE(events->Issue->Position.Row == 2);
-                    Y_ENSURE(events->Issue->Position.Column == 3);
+                    Y_ENSURE(events.Issue->Position.Row == 2);
+                    Y_ENSURE(events.Issue->Position.Column == 3);
                 }
             }));
         }

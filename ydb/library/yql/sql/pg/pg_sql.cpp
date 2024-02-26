@@ -187,16 +187,16 @@ std::tuple<TStringBuf, TStringBuf> getSchemaAndObjectName(const List* nameList) 
     }
 }
 
-class TBaseConverter : public IPGParseEvents {
+class TConverter : public IPGParseEvents {
     friend class TLocationGuard;
 
 private:
     class TLocationGuard {
     private:
-        TBaseConverter* Owner;
+        TConverter* Owner;
 
     public:
-        TLocationGuard(TBaseConverter* owner, int location)
+        TLocationGuard(TConverter* owner, int location)
             : Owner(owner)
         {
             Owner->PushPosition(location);
@@ -284,11 +284,15 @@ public:
         THashMap<TString, Ydb::TypedValue> AutoParamValues;
     };
 
-    TBaseConverter(const NSQLTranslation::TTranslationSettings& settings, const TString& query)
-        : Settings(settings)
+    TConverter(TVector<TAstParseResult>& astParseResults, const NSQLTranslation::TTranslationSettings& settings,
+            const TString& query, bool perStatementResult)
+        : AstParseResults(astParseResults)
+        , Settings(settings)
         , DqEngineEnabled(Settings.DqDefaultAuto->Allow())
         , BlockEngineEnabled(Settings.BlockDefaultAuto->Allow())
+        , PerStatementResult(perStatementResult)
     {
+        AstParseResults.push_back({});
         ScanRows(query);
 
         for (auto& flag : Settings.Flags) {
@@ -328,17 +332,28 @@ public:
 
     }
 
-    void virtual OnResult(const List* raw) = 0;
-
-    void OnResult() {
-        if (!State.AutoParamValues.empty()) {
-            GetAstParseResult().PgAutoParamValues = std::move(State.AutoParamValues);
+    void OnResult(const List* raw) {
+        if (!PerStatementResult) {
+             AstParseResults[StatementId].Pool = std::make_unique<TMemoryPool>(4096);
+            AstParseResults[StatementId].Root = ParseResult(raw);
+            if (!State.AutoParamValues.empty()) {
+                AstParseResults[StatementId].PgAutoParamValues = std::move(State.AutoParamValues);
+            }
+            return;
         }
-        State = {};
+        AstParseResults.resize(ListLength(raw));
+        for (; StatementId < AstParseResults.size(); ++StatementId) {
+            AstParseResults[StatementId].Pool = std::make_unique<TMemoryPool>(4096);
+            AstParseResults[StatementId].Root = ParseResult(raw, StatementId);
+            if (!State.AutoParamValues.empty()) {
+                AstParseResults[StatementId].PgAutoParamValues = std::move(State.AutoParamValues);
+            }
+            State = {};
+        }
     }
 
     void OnError(const TIssue& issue) {
-        GetAstParseResult().Issues.AddIssue(issue);
+        AstParseResults[StatementId].Issues.AddIssue(issue);
     }
 
     TAstNode* ParseResult(const List* raw, const TMaybe<ui32> statementId = Nothing()) {
@@ -4293,11 +4308,11 @@ public:
     }
 
     TAstNode* VL(TAstNode** nodes, ui32 size, TPosition pos = {}) {
-        return TAstNode::NewList(pos.Row ? pos : State.Positions.back(), nodes, size, *GetAstParseResult().Pool);
+        return TAstNode::NewList(pos.Row ? pos : State.Positions.back(), nodes, size, *AstParseResults[StatementId].Pool);
     }
 
     TAstNode* VL(TArrayRef<TAstNode*> nodes, TPosition pos = {}) {
-        return TAstNode::NewList(pos.Row ? pos : State.Positions.back(), nodes.data(), nodes.size(), *GetAstParseResult().Pool);
+        return TAstNode::NewList(pos.Row ? pos : State.Positions.back(), nodes.data(), nodes.size(), *AstParseResults[StatementId].Pool);
     }
 
     TAstNode* QVL(TAstNode** nodes, ui32 size, TPosition pos = {}) {
@@ -4313,7 +4328,7 @@ public:
     }
 
     TAstNode* A(const TStringBuf str, TPosition pos = {}, ui32 flags = 0) {
-        return TAstNode::NewAtom(pos.Row ? pos : State.Positions.back(), str, *GetAstParseResult().Pool, flags);
+        return TAstNode::NewAtom(pos.Row ? pos : State.Positions.back(), str, *AstParseResults[StatementId].Pool, flags);
     }
 
     TAstNode* AX(const TString& str, TPosition pos = {}) {
@@ -4336,7 +4351,7 @@ public:
     TAstNode* L(TNodes... nodes) {
         TLState state;
         LImpl(state, nodes...);
-        return TAstNode::NewList(state.Position.Row ? state.Position : State.Positions.back(), state.Nodes.data(), state.Nodes.size(), *GetAstParseResult().Pool);
+        return TAstNode::NewList(state.Position.Row ? state.Position : State.Positions.back(), state.Nodes.data(), state.Nodes.size(), *AstParseResults[StatementId].Pool);
     }
 
     template <typename... TNodes>
@@ -4360,11 +4375,11 @@ public:
 
 private:
     void AddError(const TString& value) {
-        GetAstParseResult().Issues.AddIssue(TIssue(State.Positions.back(), value));
+        AstParseResults[StatementId].Issues.AddIssue(TIssue(State.Positions.back(), value));
     }
 
     void AddWarning(int code, const TString& value) {
-        GetAstParseResult().Issues.AddIssue(TIssue(State.Positions.back(), value).SetCode(code, ESeverity::TSeverityIds_ESeverityId_S_WARNING));
+        AstParseResults[StatementId].Issues.AddIssue(TIssue(State.Positions.back(), value).SetCode(code, ESeverity::TSeverityIds_ESeverityId_S_WARNING));
     }
 
     struct TLState {
@@ -4454,9 +4469,8 @@ private:
         return L(A("PgProjectionRef"), QA(ToString(num - 1)));
     }
 
-    virtual TAstParseResult& GetAstParseResult() = 0;
-
 private:
+    TVector<TAstParseResult>& AstParseResults;
     NSQLTranslation::TTranslationSettings Settings;
     bool DqEngineEnabled = false;
     bool DqEngineForce = false;
@@ -4469,82 +4483,26 @@ private:
     static const THashMap<TStringBuf, TString> ProviderToInsertModeMap;
 
     TState State;
+    ui32 StatementId = 0;
+    bool PerStatementResult;
 };
 
-const THashMap<TStringBuf, TString> TBaseConverter::ProviderToInsertModeMap = {
+const THashMap<TStringBuf, TString> TConverter::ProviderToInsertModeMap = {
     {NYql::KikimrProviderName, "insert_abort"},
     {NYql::YtProviderName, "append"}
 };
 
-class TConverter : public TBaseConverter {
-public:
-    TConverter(TAstParseResult& astParseResult, const NSQLTranslation::TTranslationSettings& settings, const TString& query)
-        : TBaseConverter(settings, query)
-        , AstParseResult(astParseResult)
-    {}
-
-    void OnResult(const List* raw) override {
-        AstParseResult.Pool = std::make_unique<TMemoryPool>(4096);
-        AstParseResult.Root = ParseResult(raw);
-        TBaseConverter::OnResult();
-    }
-
-private:
-    TAstParseResult& GetAstParseResult() override {
-        return AstParseResult;
-    }
-
-private:
-    TAstParseResult& AstParseResult;
-};
-
-class TStatementsConverter : public TBaseConverter {
-public:
-    TStatementsConverter(TVector<TAstParseResult>& astParseResults, const NSQLTranslation::TTranslationSettings& settings, const TString& query)
-        : TBaseConverter(settings, query)
-        , AstParseResults(astParseResults)
-    {
-        AstParseResults.push_back({});
-    }
-
-    void OnResult(const List* raw) override {
-        AstParseResults.resize(ListLength(raw));
-        for (; StatementId < AstParseResults.size(); ++StatementId) {
-            GetAstParseResult().Pool = std::make_unique<TMemoryPool>(4096);
-            GetAstParseResult().Root = ParseResult(raw, StatementId);
-            TBaseConverter::OnResult();
-        }
-    }
-
-private:
-    TAstParseResult& GetAstParseResult() override {
-        Y_ENSURE(StatementId < AstParseResults.size());
-        return AstParseResults[StatementId];
-    }
-
-private:
-    TVector<TAstParseResult>& AstParseResults;
-    ui32 StatementId = 0;
-};
-
-std::shared_ptr<TBaseConverter> MakeConverter(TAstParseResult& astParseResult, const NSQLTranslation::TTranslationSettings& settings, const TString& query) {
-    return std::make_shared<TConverter>(astParseResult, settings, query);
-}
-
-std::shared_ptr<TBaseConverter> MakeStatementsConverter(TVector<TAstParseResult>& astParseResults, const NSQLTranslation::TTranslationSettings& settings, const TString& query) {
-    return std::make_shared<TStatementsConverter>(astParseResults, settings, query);
-}
-
 NYql::TAstParseResult PGToYql(const TString& query, const NSQLTranslation::TTranslationSettings& settings) {
-    NYql::TAstParseResult result;
-    auto converter = MakeConverter(result, settings, query);
+    TVector<NYql::TAstParseResult> results;
+    TConverter converter(results, settings, query, false);
     NYql::PGParse(query, converter);
-    return result;
+    Y_ENSURE(!results.empty());
+    return std::move(results.back());
 }
 
 TVector<NYql::TAstParseResult> PGToYqlStatements(const TString& query, const NSQLTranslation::TTranslationSettings& settings) {
     TVector<NYql::TAstParseResult> results;
-    auto converter = MakeStatementsConverter(results, settings, query);
+    TConverter converter(results, settings, query, true);
     NYql::PGParse(query, converter);
     return results;
 }

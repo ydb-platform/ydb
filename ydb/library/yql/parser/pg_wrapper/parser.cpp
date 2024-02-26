@@ -180,7 +180,7 @@ static struct TGlobalInit {
     }
 } GlobalInit;
 
-void PGParse(const TString& input, const std::shared_ptr<IPGParseEvents>& events) {
+void PGParse(const TString& input, IPGParseEvents& events) {
     pg_thread_init();
 
     PgQueryInternalParsetreeAndError parsetree_and_error;
@@ -210,9 +210,9 @@ void PGParse(const TString& input, const std::shared_ptr<IPGParseEvents>& events
             walker.Advance(input[i]);
         }
 
-        events->OnError(TIssue(position, "ERROR:  " + TString(parsetree_and_error.error->message) + "\n"));
+        events.OnError(TIssue(position, "ERROR:  " + TString(parsetree_and_error.error->message) + "\n"));
     } else {
-        events->OnResult(parsetree_and_error.tree);
+        events.OnResult(parsetree_and_error.tree);
     }
 }
 

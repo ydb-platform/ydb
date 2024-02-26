@@ -17,6 +17,6 @@ public:
 
 TString PrintPGTree(const List* raw);
 
-void PGParse(const TString& input, const std::shared_ptr<IPGParseEvents>& events);
+void PGParse(const TString& input, IPGParseEvents& events);
 
 }

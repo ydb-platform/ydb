@@ -106,11 +106,8 @@ public:
     virtual IAsyncQueryResultPtr StreamExecuteYqlScript(const TKqpQueryRef& script, const ::google::protobuf::Map<TProtoStringType, ::Ydb::TypedValue>& parameters,
         const NActors::TActorId& target, const TExecScriptSettings& settings) = 0;
 
-    /* Compilation */
-    virtual TVector<NYql::TExprNode::TPtr> CompileQuery(const TKqpQueryRef& query, bool isSql, bool sqlAutoCommit, NYql::TExprContext& ctx,
-        TMaybe<TSqlVersion>& sqlVersion, const TMaybe<bool>& usePgParser) const = 0;
-
-    virtual std::pair<TVector<NYql::TExprNode::TPtr>, THolder<NYql::TExprContext>> CompileQuery(const TKqpQueryRef& query, const TPrepareSettings& settings) = 0;
+    /* Split */
+    virtual std::pair<TVector<NYql::TExprNode::TPtr>, THolder<NYql::TExprContext>> SplitQuery(const TKqpQueryRef& query, const TPrepareSettings& settings) = 0;
 };
 
 TIntrusivePtr<IKqpHost> CreateKqpHost(TIntrusivePtr<IKqpGateway> gateway,

@@ -132,6 +132,7 @@ namespace {
                     typeNode = ctx.NewCallable(pos, "AsOptionalType", { typeNode });
                 }
 
+                // TODO: replacenodes
                 create = ctx.ReplaceNode(std::move(create), *columns->Child(index), ctx.NewList(pos, {
                     columns->Child(index)->ChildPtr(0),
                     typeNode,

@@ -207,7 +207,7 @@ private:
                 break;
         }
 
-        auto result = KqpHost->CompileQuery(QueryId.Text, prepareSettings);
+        auto result = KqpHost->SplitQuery(QueryId.Text, prepareSettings);
 
         Become(&TKqpCompileActor::CompileState);
         ReplySplitResult(ctx, std::move(result));

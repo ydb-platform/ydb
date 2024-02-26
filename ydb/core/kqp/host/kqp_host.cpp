@@ -985,8 +985,8 @@ public:
         : Gateway(gateway)
         , Cluster(cluster)
         , ApplicationName(applicationName)
-        , ExprCtx(ctx ? ctx : new TExprContext())
-        , NeedDeleteCtx(ctx == nullptr)
+        , ExprCtxStorage(ctx ? nullptr : new TExprContext())
+        , ExprCtx(ctx ? ctx : ExprCtxStorage.Get())
         , ModuleResolver(moduleResolver)
         , KeepConfigChanges(keepConfigChanges)
         , IsInternalCall(isInternalCall)
@@ -1009,13 +1009,6 @@ public:
         SessionCtx->SetDatabase(database);
         SessionCtx->SetCluster(cluster);
         SessionCtx->SetTempTables(std::move(tempTablesState));
-    }
-
-    ~TKqpHost() {
-        if (!NeedDeleteCtx) {
-            auto unused = ExprCtx.Release();
-            Y_UNUSED(unused);
-        }
     }
 
     IAsyncQueryResultPtr ExecuteSchemeQuery(const TKqpQueryRef& query, bool isSql, const TExecSettings& settings) override {
@@ -1201,7 +1194,7 @@ private:
         return results;
     }
 
-    std::pair<TVector<NYql::TExprNode::TPtr>, THolder<TExprContext>> CompileQuery(const TKqpQueryRef& query, const TPrepareSettings& settings) override {
+    std::pair<TVector<NYql::TExprNode::TPtr>, THolder<TExprContext>> SplitQuery(const TKqpQueryRef& query, const TPrepareSettings& settings) override {
         SessionCtx->Query().PrepareOnly = true;
         SessionCtx->Query().PreparingQuery = std::make_unique<NKikimrKqp::TPreparedQuery>();
         SessionCtx->Query().PreparingQuery->SetVersion(NKikimrKqp::TPreparedQuery::VERSION_PHYSICAL_V1);
@@ -1228,7 +1221,7 @@ private:
             settings.UsePgParser);
 
         queryExprs.push_back(std::move(FakeWorld));
-        return {queryExprs, std::move(ExprCtx)};
+        return {queryExprs, std::move(ExprCtxStorage)};
     }
 
     TVector<TExprNode::TPtr> CompileYqlQuery(const TKqpQueryRef& query, bool isSql, TExprContext& ctx,
@@ -1795,8 +1788,8 @@ private:
     TIntrusivePtr<IKqpGateway> Gateway;
     TString Cluster;
     const TMaybe<TString> ApplicationName;
-    THolder<TExprContext> ExprCtx;
-    bool NeedDeleteCtx = false;
+    THolder<TExprContext> ExprCtxStorage;
+    TExprContext* ExprCtx;
     IModuleResolver::TPtr ModuleResolver;
     bool KeepConfigChanges;
     bool IsInternalCall;

@@ -317,6 +317,8 @@ private:
 
 class TSpillingSupportState : public TComputationValue<TSpillingSupportState> {
     typedef TComputationValue<TSpillingSupportState> TBase;
+    typedef std::optional<NThreading::TFuture<ISpiller::TKey>> TAsyncWriteOperation;
+    typedef std::optional<NThreading::TFuture<std::optional<TRope>>> TAsyncReadOperation;
 public:
     enum class EOperatingMode {
         InMemory, // try to perform all processing in memory
@@ -348,9 +350,9 @@ public:
     }
 
     EFetchResult DoCalculate(TComputationContext& ctx, NUdf::TUnboxedValue*const* output) {
-        if (HasRunningSpillingAsyncOperation()) {
+        /* if (GetMode() != EOperatingMode::InMemory && !HasDataToProcess()) {
             return EFetchResult::Yield;
-        }
+        }*/ 
         while (true) {
             switch(GetMode()) {
                 case EOperatingMode::InMemory: {
@@ -384,23 +386,9 @@ public:
     }
 private:
     EFetchResult AsyncWrite() {
-        MKQL_ENSURE(!AsyncReadOperation.has_value(), "Internal logic error");
-        // MKQL_ENSURE(AsyncWriteOperation.has_value(), "Internal logic error");
-        // MKQL_ENSURE(AsyncWriteOperation.has_value(), "Internal logic error");
-        // AsyncWriteOperation->Subscribe(this->DoCalculate) //TODO YQL-16988
-        /*AsyncWriteOperation->Subscribe([actorSystem = NActors::TActivationContext::ActorSystem(), selfId = SelfId(), cookie, key, amount](const NYdb::TAsyncStatus& status) {
-            actorSystem->Send(new NActors::IEventHandle(selfId, selfId, new TEvPrivate::TEvQuotaReceived(status.GetValueSync(), key.first, key.second, amount), 0, cookie));
-        });*/
         return EFetchResult::Yield;
     }
     EFetchResult AsyncRead() {
-        MKQL_ENSURE(!AsyncWriteOperation.has_value(), "Internal logic error");
-        MKQL_ENSURE(AsyncReadOperation.has_value(), "Internal logic error");
-        MKQL_ENSURE(AsyncReadOperation.has_value(), "Internal logic error");
-        /*AsyncReadOperation->Subscribe([](){
-            std::cout << "hello world" << std::endl;
-        });*/
-        //AsyncReadOperation.Subscribe() //TODO YQL-16988
         return EFetchResult::Yield;
     }
     EFetchResult DoCalculateInMemory(TComputationContext& ctx, NUdf::TUnboxedValue*const* output) {
@@ -444,20 +432,33 @@ private:
         //2. Finilizes buckets
         //During each phase asyn operation may be returned
         //On next call execution is continued
-        MKQL_ENSURE(!AsyncReadOperation, "Internal logic error");
-        if (AsyncWriteOperation) {
-            MKQL_ENSURE(AsyncWriteOperation->HasValue(), "Internal logic error");
-            SpilledBuckets[CurrentAsyncOperationBucketId].InitialState->AsyncWriteCompleted(AsyncWriteOperation->ExtractValue());
-            AsyncWriteOperation = std::nullopt;
+        for (ui64 i = 0; i < SpilledBuckets.size(); ++i) {
+            if (SpilledBuckets[i].AsyncWriteOperation.has_value() && SpilledBuckets[i].AsyncWriteOperation->HasValue()) {
+                SpilledBuckets[i].InitialState->AsyncWriteCompleted(SpilledBuckets[i].AsyncWriteOperation->ExtractValue());
+                SpilledBuckets[i].AsyncWriteOperation = std::nullopt;
+            }
         }
-        while (const auto keyAndState = InMemoryProcessingState.Extract()) {
+
+        while (true) {
+            auto keyAndState = NextValueToSave;
+            if (!NextValueToSave) {
+                keyAndState = InMemoryProcessingState.Extract();
+            }
+            if (!keyAndState) break;
+
+            NextValueToSave = nullptr;
+
             auto hash = Hasher(keyAndState); //Hasher uses only key for hashing
             auto bucketId = hash % SpilledBucketCount;
             auto& bucket = SpilledBuckets[bucketId];
+
+            if (bucket.AsyncWriteOperation.has_value()) {
+                NextValueToSave = keyAndState;
+                return;
+            }
             MKQL_ENSURE(bucket.InitialState, "Internal logic error");
             if (auto chunkIsBeingStored = bucket.InitialState->WriteWideItem({keyAndState, KeyAndStateType->GetElementsCount()})) {
-                CurrentAsyncOperationBucketId = bucketId;
-                AsyncWriteOperation = chunkIsBeingStored;
+                bucket.AsyncWriteOperation = chunkIsBeingStored;
                 return;
             }
             for (size_t i = 0; i != KeyAndStateType->GetElementsCount(); ++i) {
@@ -465,26 +466,45 @@ private:
                 keyAndState[i].UnRef();
             }
         }
-        if (!FinalizingSpillerBuckets) {
-            FinalizingSpillerBuckets = true;
-            CurrentAsyncOperationBucketId = 0;
-        }
-        for(; CurrentAsyncOperationBucketId != SpilledBuckets.size(); ++CurrentAsyncOperationBucketId) {
-            if (auto chunkIsBeingStored = SpilledBuckets[CurrentAsyncOperationBucketId].InitialState->FinishWriting()) {
-                AsyncWriteOperation = chunkIsBeingStored;
-                return;
+
+        ui64 finishedCount = 0;
+        for (auto& bucket : SpilledBuckets) {
+            if (!bucket.AsyncWriteOperation.has_value()) {
+                auto writeOperation = bucket.InitialState->FinishWriting();
+                if (!writeOperation) {
+                    ++finishedCount;
+                } else {
+                    bucket.AsyncWriteOperation = writeOperation;
+                }
             }
         }
+
+        if (finishedCount != SpilledBuckets.size()) return;
+
         InMemoryProcessingState.ReadMore<false>();
         SwitchMode(EOperatingMode::SpillData, ctx);
     }
 
     void SpillData(TComputationContext& ctx) {
-        if (AsyncWriteOperation) {
-            MKQL_ENSURE(AsyncWriteOperation->HasValue(), "Internal logic error");
-            SpilledBuckets[CurrentAsyncOperationBucketId].Data->AsyncWriteCompleted(AsyncWriteOperation->ExtractValue());
-            AsyncWriteOperation = std::nullopt;
+        for (ui64 i = 0; i < SpilledBuckets.size(); ++i) {
+            if (SpilledBuckets[i].AsyncWriteOperation.has_value() && SpilledBuckets[i].AsyncWriteOperation->HasValue()) {
+                SpilledBuckets[i].Data->AsyncWriteCompleted(SpilledBuckets[i].AsyncWriteOperation->ExtractValue());
+                SpilledBuckets[i].AsyncWriteOperation = std::nullopt;
+            }
         }
+
+        if (BufferForUsedInputItems.size()) {
+            auto& bucket = SpilledBuckets[BufferForUsedInputItemsBucketId];
+            if (bucket.AsyncWriteOperation.has_value()) return;
+
+            const auto chunkIsBeingStored = bucket.Data->WriteWideItem(BufferForUsedInputItems);
+            BufferForUsedInputItems.resize(0); //for freeing allocated key value asap
+            if (chunkIsBeingStored) {
+                bucket.AsyncWriteOperation = chunkIsBeingStored;
+            }
+
+        }
+
         while (!FinalizingSpillerBuckets) {
             auto **fields = ctx.WideFields.data() + WideFieldsIndex;
             for (auto i = 0U; i < Nodes.ItemNodes.size(); ++i) {
@@ -505,11 +525,14 @@ private:
                         }
                     }
                     auto &bucket = SpilledBuckets[bucketId];
+                    if (bucket.AsyncWriteOperation.has_value()) {
+                        BufferForUsedInputItemsBucketId = bucketId;
+                        return;
+                    }
                     const auto chunkIsBeingStored = bucket.Data->WriteWideItem(BufferForUsedInputItems);
                     BufferForUsedInputItems.resize(0); //for freeing allocated key value asap
                     if (chunkIsBeingStored) {
-                        CurrentAsyncOperationBucketId = bucketId;
-                        AsyncWriteOperation = chunkIsBeingStored;
+                        bucket.AsyncWriteOperation = chunkIsBeingStored;
                         return;
                     }
                     break;
@@ -517,24 +540,31 @@ private:
                 case EFetchResult::Yield:
                     return;
                 case EFetchResult::Finish:
-                    CurrentAsyncOperationBucketId = 0;
                     FinalizingSpillerBuckets = true;
                     break;
             }
         }
-        for(; CurrentAsyncOperationBucketId != SpilledBuckets.size(); ++CurrentAsyncOperationBucketId) {
-            auto& bucket = SpilledBuckets[CurrentAsyncOperationBucketId];
-            if (auto chunkIsBeingStored = bucket.Data->FinishWriting()) {
-                AsyncWriteOperation = chunkIsBeingStored;
-                return;
+
+        ui64 finishedCount = 0;
+        for (auto& bucket : SpilledBuckets) {
+            if (!bucket.AsyncWriteOperation.has_value()) {
+                auto writeOperation = bucket.Data->FinishWriting();
+                if (!writeOperation) {
+                    ++finishedCount;
+                } else {
+                    bucket.AsyncWriteOperation = writeOperation;
+                }
             }
         }
+
+        if (finishedCount != SpilledBuckets.size()) return;
+
         SwitchMode(EOperatingMode::ProcessSpilled, ctx);
     }
 
     EFetchResult ProcessSpilledData(TComputationContext& ctx, NUdf::TUnboxedValue*const* output){
         if (AsyncReadOperation) {
-            MKQL_ENSURE(AsyncReadOperation->HasValue(), "Internal logic error");
+            if (!AsyncReadOperation->HasValue()) return EFetchResult::Yield;
             if (RecoverState) {
                 SpilledBuckets[0].InitialState->AsyncReadCompleted(AsyncReadOperation->ExtractValue().value(), ctx.HolderFactory);
             } else {
@@ -604,15 +634,17 @@ private:
         return Mode;
     }
 
-    bool HasRunningSpillingAsyncOperation() const {
-        return
-            (AsyncWriteOperation.has_value() && !AsyncWriteOperation->HasValue()) ||
-            (AsyncReadOperation.has_value() && !AsyncReadOperation->HasValue());
+    ui64 GetNextWriteOperation() {
+        for (ui64 i = 0; i < SpilledBuckets.size(); ++i) {
+            if (SpilledBuckets[i].AsyncWriteOperation.has_value() && SpilledBuckets[i].AsyncWriteOperation->HasValue()) {
+                return i;
+            }
+        }
+        assert(false);
+        return -1;
     }
 
     void SwitchMode(EOperatingMode mode, TComputationContext& ctx) {
-        MKQL_ENSURE(!AsyncReadOperation, "Internal logic error");
-        MKQL_ENSURE(!AsyncWriteOperation, "Internal logic error");
         switch(mode) {
             case EOperatingMode::InMemory:
                 MKQL_ENSURE(false, "Internal logic error");
@@ -667,16 +699,19 @@ private:
     struct TSpilledBucket {
         std::unique_ptr<TWideUnboxedValuesSpillerAdapter> InitialState; //state collected before switching to spilling mode
         std::unique_ptr<TWideUnboxedValuesSpillerAdapter> Data; //data collected in spilling mode
+        TAsyncWriteOperation AsyncWriteOperation;
         ISpiller::TPtr Spiller;
     };
+    TAsyncReadOperation AsyncReadOperation;
     static constexpr size_t SpilledBucketCount = 128;
     std::deque<TSpilledBucket> SpilledBuckets;
     EFetchResult InputDataFetchResult;
-    size_t CurrentAsyncOperationBucketId;
-    std::optional<NThreading::TFuture<ISpiller::TKey>> AsyncWriteOperation;
-    std::optional<NThreading::TFuture<std::optional<TRope>>> AsyncReadOperation;
+    // size_t CurrentAsyncOperationBucketId;
+    ui64 BufferForUsedInputItemsBucketId;
     TUnboxedValueVector BufferForUsedInputItems;
     TUnboxedValueVector BufferForKeyAnsState;
+
+     NUdf::TUnboxedValuePod* NextValueToSave = nullptr;
 };
 
 #ifndef MKQL_DISABLE_CODEGEN

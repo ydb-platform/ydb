@@ -2082,10 +2082,9 @@ public:
         TNodeId maxClockSkewNodeId = 0;
         for (auto& [nodeId, nodeSystemState] : MergedNodeSystemState) {
             auto& computeNodeIds = DatabaseState[FilterDatabase].ComputeNodeIds;
-            bool IsCheckingNode = IsSpecificDatabaseFilter()
-                                    && std::find(computeNodeIds.begin(), computeNodeIds.end(), nodeId) != computeNodeIds.end()
-                                    || IsStaticNode(nodeId);
-
+            bool IsCheckingNode = !IsSpecificDatabaseFilter()
+                                    || IsStaticNode(nodeId)
+                                    || std::find(computeNodeIds.begin(), computeNodeIds.end(), nodeId) != computeNodeIds.end();
             if (IsCheckingNode && abs(nodeSystemState->GetMaxClockSkewWithPeerUs()) > maxClockSkewUs) {
                 maxClockSkewUs = abs(nodeSystemState->GetMaxClockSkewWithPeerUs());
                 maxClockSkewPeerId = nodeSystemState->GetMaxClockSkewPeerId();

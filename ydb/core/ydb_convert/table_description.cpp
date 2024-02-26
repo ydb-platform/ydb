@@ -528,10 +528,6 @@ void FillColumnDescription(Ydb::Table::DescribeTableResult& out, const NKikimrSc
     auto& schema = in.GetSchema();
 
     for (const auto& column : schema.GetColumns()) {
-        Y_ENSURE(
-            column.GetTypeId() != NScheme::NTypeIds::Pg || !column.GetNotNull(),
-            "It is not allowed to create NOT NULL column with pg type"
-        );
         auto newColumn = out.add_columns();
         AddColumn(newColumn, column);
     }

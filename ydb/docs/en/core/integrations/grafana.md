@@ -32,7 +32,9 @@ Once the plugin is installed on your Grafana instance, follow [these instruction
 
 Alternatively, it is possible to configure data sources using configuration files with Grafana’s provisioning system. To read about how it works, including all the settings that you can set for this data source, refer to [Provisioning Grafana data sources](https://grafana.com/docs/grafana/latest/administration/provisioning/#data-sources) documentation.
 
-Plugin supports different authentication types [authentication types](../reference/ydb-sdk/auth.md).
+### Authentication
+
+The Grafana plugin supports various authentication [authentication methods](../reference/ydb-sdk/auth.md).
 
 Here is an example for this data source using user/password:
 

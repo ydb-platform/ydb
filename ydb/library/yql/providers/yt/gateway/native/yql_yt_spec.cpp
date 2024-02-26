@@ -472,6 +472,8 @@ void FillSpec(NYT::TNode& spec,
             spec["force_job_size_adjuster"] = *val;
         }
     }
+    spec["reducer"]["environment"]["TMPDIR"] = ".";
+    spec["mapper"]["environment"]["TMPDIR"] = ".";
 }
 
 void FillSecureVault(NYT::TNode& spec, const IYtGateway::TSecureParams& secureParams) {

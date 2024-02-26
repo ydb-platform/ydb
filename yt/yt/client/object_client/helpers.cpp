@@ -76,7 +76,6 @@ bool IsVersionedType(EObjectType type)
         type == EObjectType::TransactionMap ||
         type == EObjectType::TopmostTransactionMap ||
         type == EObjectType::ClusterNodeNode ||
-        type == EObjectType::LegacyClusterNodeMap ||
         type == EObjectType::ClusterNodeMap ||
         type == EObjectType::DataNodeMap ||
         type == EObjectType::ExecNodeMap ||

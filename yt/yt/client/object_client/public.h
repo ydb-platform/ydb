@@ -294,7 +294,6 @@ DEFINE_ENUM(EObjectType,
     ((RackMap)                                      (801))
     ((ClusterNode)                                  (802))
     ((ClusterNodeNode)                              (803))
-    ((LegacyClusterNodeMap)                         (804))
     ((ClusterNodeMap)                               (807))
     ((DataNodeMap)                                  (808))
     ((ExecNodeMap)                                  (809))

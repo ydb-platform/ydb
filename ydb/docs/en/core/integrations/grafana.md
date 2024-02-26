@@ -36,7 +36,7 @@ Alternatively, it is possible to configure data sources using configuration file
 
 The Grafana plugin supports various authentication [authentication methods](../reference/ydb-sdk/auth.md).
 
-Here is an example for this data source using user/password:
+Below is an example config for authenticating a {{ ydb-short-name }} data source using username and password:
 
 ```yaml
 apiVersion: 1

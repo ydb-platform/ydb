@@ -309,7 +309,7 @@ resource "ydb_table_changefeed" "ydb_table_changefeed" {
 
 * `name` — (обязательный) имя читателя.
 * `supported_codecs` — (необязательный) поддерживаемые кодек данных.
-* `starting_message_timestamp_ms` — (необязательный) временная метка в формате [UNIX timestamp](https://ru.wikipedia.org/wiki/Unix-время), с которой читатель начнет читать данные.
+* `starting_message_timestamp_ms` — (необязательный) временная метка в формате [UNIX timestamp](https://ru.wikipedia.org/wiki/Unix-время) в миллисекундах, с которой читатель начнет читать данные.
 
 ### Примеры использования {manage-examples}
 
@@ -494,4 +494,4 @@ resource "ydb_topic" "ydb_topic" {
 
 * `name` - (обязательное) имя читателя.
 * `supported_codecs` - поддерживаемые кодировки сжатия данных, по умолчанию - `"gzip", "raw", "zstd"`.
-* `starting_message_timestamp_ms` - временная метка в формате UNIX timestamp, с которой читатель начнёт читать данные, по умаолчанию - 0, то есть с начала поставки.
+* `starting_message_timestamp_ms` - временная метка в формате [UNIX timestamp](https://ru.wikipedia.org/wiki/Unix-время) в миллисекундах, с которой читатель начнёт читать данные, по умаолчанию - 0, то есть с начала поставки.

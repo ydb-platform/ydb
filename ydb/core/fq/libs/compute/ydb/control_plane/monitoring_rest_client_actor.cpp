@@ -143,7 +143,7 @@ public:
                     forwardResponse->Issues.AddIssue(TStringBuilder() << "MISSED User pool node load for database \"" << Database << '"');
                 }
             } else {
-                forwardResponse->Issues.AddIssue("Mailformed JSON");
+                forwardResponse->Issues.AddIssue("Malformed JSON");
             }
         } catch(const std::exception& e) {
             forwardResponse->Issues.AddIssue(TStringBuilder() << "Error on JSON parsing: '" << e.what() << "'");

@@ -82,10 +82,8 @@ namespace NXml {
 
         TDocHolder doc(xmlCtxtReadMemory(pctx.Get(), xml.c_str(), (int)xml.size(), nullptr, nullptr, XML_PARSE_NOCDATA));
 
-        if (!doc) {
-            TString strToParse(xml.c_str(), (int)xml.size());
-            THROW(XmlException, "Can't parse string") << " string: " << strToParse;
-        }
+        if (!doc)
+            THROW(XmlException, "Can't parse string");
 
         Doc = std::move(doc);
     }

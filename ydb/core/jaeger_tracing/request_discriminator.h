@@ -3,7 +3,9 @@
 #include <cstddef>
 
 #include <util/generic/hash.h>
+#include <util/generic/maybe.h>
 #include <util/generic/strbuf.h>
+#include <util/generic/string.h>
 
 namespace NKikimr::NJaegerTracing {
 
@@ -33,6 +35,7 @@ static const THashMap<TStringBuf, ERequestType> NameToRequestType = {
 
 struct TRequestDiscriminator {
     ERequestType RequestType = ERequestType::UNSPECIFIED;
+    TMaybe<TString> Database = NothingObject;
 
     static const TRequestDiscriminator EMPTY;
 };

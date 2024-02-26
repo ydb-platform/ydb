@@ -57,9 +57,7 @@ void TKeyValueGRpcService::SetupIncomingRequests(NYdbGrpc::TLoggerPtr logger) {
                 Ydb::KeyValue::Y_CAT(methodName, Response)>(reqCtx, &method,                        \
                     TRequestAuxSettings {                                                           \
                         .RlMode = rlMode,                                                           \
-                        .RequestDiscriminator = {                                                   \
-                            .RequestType = NJaegerTracing::ERequestType::requestType,               \
-                        },                                                                          \
+                        .RequestType = NJaegerTracing::ERequestType::requestType,                   \
                     }));                                                  \
         },                                                                                                   \
         &Ydb::KeyValue::V1::KeyValueService::AsyncService::Y_CAT(Request, methodName),       \

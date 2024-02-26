@@ -955,7 +955,7 @@ private:
     TError DoCheckRequestCodecs(const NRpc::NProto::TRequestHeader& header);
 
     void OnRequestTimeout(TRequestId requestId, ERequestProcessingStage stage, bool aborted);
-    void OnReplyBusTerminated(const NYT::NBus::IBusPtr& bus, const TError& error);
+    void OnReplyBusTerminated(const NYT::TWeakPtr<NYT::NBus::IBus>& busWeak, const TError& error);
 
     void OnRequestAuthenticated(
         const NProfiling::TWallTimer& timer,

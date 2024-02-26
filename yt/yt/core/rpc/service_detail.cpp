@@ -335,10 +335,18 @@ public:
 
     ~TServiceContext()
     {
-        if (!Replied_ && !CanceledList_.IsFired()) {
+        if (!Replied_) {
             // Prevent alerting.
             RequestInfoSet_ = true;
-            Reply(TError(NRpc::EErrorCode::Unavailable, "Service is unable to complete your request"));
+            if (CanceledList_.IsFired()) {
+                if (TimedOutLatch_) {
+                    Reply(TError(NYT::EErrorCode::Timeout, "Request timed out"));
+                } else {
+                    Reply(TError(NYT::EErrorCode::Canceled, "Request canceled"));
+                }
+            } else {
+                Reply(TError(NRpc::EErrorCode::Unavailable, "Service is unable to complete your request"));
+            }
         }
 
         Finish();
@@ -466,7 +474,7 @@ public:
             RequestId_);
 
         if (RuntimeInfo_->Descriptor.StreamingEnabled) {
-            static const auto CanceledError = TError("Request canceled");
+            static const auto CanceledError = TError(NYT::EErrorCode::Canceled, "Request canceled");
             AbortStreamsUnlessClosed(CanceledError);
         }
 
@@ -491,11 +499,12 @@ public:
             stage);
 
         if (RuntimeInfo_->Descriptor.StreamingEnabled) {
-            static const auto TimedOutError = TError("Request timed out");
+            static const auto TimedOutError = TError(NYT::EErrorCode::Timeout, "Request timed out");
             AbortStreamsUnlessClosed(TimedOutError);
         }
 
         CanceledList_.Fire(GetCanceledError());
+
         MethodPerformanceCounters_->TimedOutRequestCounter.Increment();
 
         // Guards from race with DoGuardedRun.
@@ -681,7 +690,7 @@ private:
 
     bool IsRegistrable()
     {
-        if (RuntimeInfo_->Descriptor.Cancelable && !RequestHeader_->uncancelable()) {
+        if (Cancelable_) {
             return true;
         }
 
@@ -725,11 +734,11 @@ private:
 
         BuildGlobalRequestInfo();
 
+        Cancelable_ = RuntimeInfo_->Descriptor.Cancelable && !RequestHeader_->uncancelable();
+
         if (IsRegistrable()) {
             Service_->RegisterRequest(this);
         }
-
-        Cancelable_ = RuntimeInfo_->Descriptor.Cancelable && !RequestHeader_->uncancelable();
     }
 
     void BuildGlobalRequestInfo()
@@ -2046,10 +2055,10 @@ void TServiceBase::OnRequestTimeout(TRequestId requestId, ERequestProcessingStag
     context->HandleTimeout(stage);
 }
 
-void TServiceBase::OnReplyBusTerminated(const IBusPtr& bus, const TError& error)
+void TServiceBase::OnReplyBusTerminated(const NYT::TWeakPtr<NYT::NBus::IBus>& busWeak, const TError& error)
 {
     std::vector<TServiceContextPtr> contexts;
-    {
+    if (auto bus = busWeak.Lock()) {
         auto* bucket = GetReplyBusBucket(bus);
         auto guard = Guard(bucket->Lock);
         auto it = bucket->ReplyBusToContexts.find(bus);
@@ -2111,7 +2120,7 @@ void TServiceBase::RegisterRequest(TServiceContext* context)
     }
 
     if (subscribe) {
-        replyBus->SubscribeTerminated(BIND(&TServiceBase::OnReplyBusTerminated, MakeWeak(this), replyBus));
+        replyBus->SubscribeTerminated(BIND(&TServiceBase::OnReplyBusTerminated, MakeWeak(this), MakeWeak(replyBus.Get())));
     }
 
     auto pendingPayloads = GetAndErasePendingPayloads(requestId);
@@ -2144,6 +2153,9 @@ void TServiceBase::UnregisterRequest(TServiceContext* context)
         if (it != bucket->ReplyBusToContexts.end()) {
             auto& contexts = it->second;
             contexts.erase(context);
+            if (contexts.empty()) {
+                bucket->ReplyBusToContexts.erase(it);
+            }
         }
     }
 }

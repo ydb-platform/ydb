@@ -2153,6 +2153,10 @@ namespace NKikimr {
                                     TABLED() {str << "VDiskIncarnationGuid";}
                                     TABLED() {str << Db->GetVDiskIncarnationGuid(true);}
                                 }
+                                TABLER() {
+                                    TABLED() {str << "BurstThresholdNs";}
+                                    TABLED() {str << Config->BurstThresholdNs;}
+                                }
                             }
                         }
 

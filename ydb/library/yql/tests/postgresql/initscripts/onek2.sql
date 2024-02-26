@@ -1017,5 +1017,5 @@ INSERT INTO onek2 VALUES
 (74, 996, 0, 2, 4, 14, 4, 74, 74, 74, 74, 8, 9, 'WCAAAA', 'IMBAAA', 'AAAAxx'),
 (744, 997, 0, 0, 4, 4, 4, 44, 144, 244, 744, 8, 9, 'QCAAAA', 'JMBAAA', 'HHHHxx'),
 (0, 998, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 'AAAAAA', 'KMBAAA', 'OOOOxx'),
-(278, 999, 0, 2, 8, 18, 8, 78, 78, 278, 278, 16, 17, 'SKAAAA', 'LMBAAA', 'VVVVxx')
+(278, 999, 0, 2, 8, 18, 8, 78, 78, 278, 278, 16, 17, 'SKAAAA', 'LMBAAA', 'VVVVxx');
 

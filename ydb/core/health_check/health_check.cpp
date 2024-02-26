@@ -519,6 +519,15 @@ public:
         return FilterDatabase && FilterDatabase != DomainPath;
     }
 
+    bool IsTimeDifferenceCheckNode(const TNodeId nodeId) {
+        if (!IsSpecificDatabaseFilter() || IsStaticNode(nodeId)) {
+            return true;
+        }
+
+        auto& computeNodeIds = DatabaseState[FilterDatabase].ComputeNodeIds;
+        return std::find(computeNodeIds.begin(), computeNodeIds.end(), nodeId) != computeNodeIds.end();
+    }
+
     void Bootstrap() {
         FilterDatabase = Request->Database;
         if (Request->Request.operation_params().has_operation_timeout()) {
@@ -2081,11 +2090,7 @@ public:
         TNodeId maxClockSkewPeerId = 0;
         TNodeId maxClockSkewNodeId = 0;
         for (auto& [nodeId, nodeSystemState] : MergedNodeSystemState) {
-            auto& computeNodeIds = DatabaseState[FilterDatabase].ComputeNodeIds;
-            bool IsCheckingNode = !IsSpecificDatabaseFilter()
-                                    || IsStaticNode(nodeId)
-                                    || std::find(computeNodeIds.begin(), computeNodeIds.end(), nodeId) != computeNodeIds.end();
-            if (IsCheckingNode && abs(nodeSystemState->GetMaxClockSkewWithPeerUs()) > maxClockSkewUs) {
+            if (IsTimeDifferenceCheckNode(nodeId) && abs(nodeSystemState->GetMaxClockSkewWithPeerUs()) > maxClockSkewUs) {
                 maxClockSkewUs = abs(nodeSystemState->GetMaxClockSkewWithPeerUs());
                 maxClockSkewPeerId = nodeSystemState->GetMaxClockSkewPeerId();
                 maxClockSkewNodeId = nodeId;

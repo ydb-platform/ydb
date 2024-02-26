@@ -1195,27 +1195,8 @@ private:
     }
 
     std::pair<TVector<NYql::TExprNode::TPtr>, THolder<TExprContext>> SplitQuery(const TKqpQueryRef& query, const TPrepareSettings& settings) override {
-        SessionCtx->Query().PrepareOnly = true;
-        SessionCtx->Query().PreparingQuery = std::make_unique<NKikimrKqp::TPreparedQuery>();
-        SessionCtx->Query().PreparingQuery->SetVersion(NKikimrKqp::TPreparedQuery::VERSION_PHYSICAL_V1);
-
-        if (settings.DocumentApiRestricted) {
-            SessionCtx->Query().DocumentApiRestricted = *settings.DocumentApiRestricted;
-        }
-        if (settings.IsInternalCall) {
-            SessionCtx->Query().IsInternalCall = *settings.IsInternalCall;
-        }
-        if (settings.ConcurrentResults) {
-            //YQL_ENSURE(*settings.ConcurrentResults || queryType == EKikimrQueryType::Query);
-            SessionCtx->Query().ConcurrentResults = *settings.ConcurrentResults;
-        }
-
-        TMaybe<TSqlVersion> sqlVersion = settings.SyntaxVersion;
-        if (!sqlVersion) {
-            sqlVersion = 1;
-        }
-
         SetupYqlTransformer(EKikimrQueryType::Query);
+        auto sqlVersion = SetupQueryParameters(settings, EKikimrQueryType::Query);
 
         auto queryExprs = CompileYqlQuery(query, /* isSql */ true, /* sqlAutoCommit */ false, *ExprCtx, sqlVersion,
             settings.UsePgParser);
@@ -1408,11 +1389,7 @@ private:
             SessionCtx, *ExecuteCtx);
     }
 
-    IAsyncQueryResultPtr PrepareQueryInternal(const TKqpQueryRef& query, NYql::TExprNode::TPtr expr, EKikimrQueryType queryType,
-        const TPrepareSettings& settings, TExprContext& ctx)
-    {
-        SetupYqlTransformer(queryType);
-
+    TMaybe<TSqlVersion> SetupQueryParameters(const TPrepareSettings& settings, EKikimrQueryType queryType) {
         SessionCtx->Query().PrepareOnly = true;
         SessionCtx->Query().PreparingQuery = std::make_unique<NKikimrKqp::TPreparedQuery>();
         SessionCtx->Query().PreparingQuery->SetVersion(NKikimrKqp::TPreparedQuery::VERSION_PHYSICAL_V1);
@@ -1432,6 +1409,15 @@ private:
         if (!sqlVersion) {
             sqlVersion = 1;
         }
+
+        return sqlVersion;
+    }
+
+    IAsyncQueryResultPtr PrepareQueryInternal(const TKqpQueryRef& query, NYql::TExprNode::TPtr expr, EKikimrQueryType queryType,
+        const TPrepareSettings& settings, TExprContext& ctx)
+    {
+        SetupYqlTransformer(queryType);
+        auto sqlVersion = SetupQueryParameters(settings, queryType);
 
         if (!expr) {
             TKqpTranslationSettingsBuilder settingsBuilder(SessionCtx->Query().Type, SessionCtx->Config()._KqpYqlSyntaxVersion.Get().GetRef(), Cluster, query.Text, SessionCtx->Config().BindingsMode);
@@ -1720,7 +1706,6 @@ private:
                 ;
         };
         auto configProvider = CreateConfigProvider(*TypesCtx, gatewaysConfig, {}, allowSettings);
-        Cerr << "ADD DataSource ::  " << ConfigProviderName << Endl;
         TypesCtx->AddDataSource(ConfigProviderName, configProvider);
 
         YQL_ENSURE(TypesCtx->Initialize(*ExprCtx));

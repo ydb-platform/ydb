@@ -93,7 +93,7 @@ pqconfig:
 
 ```tf
   resource "ydb_table" "ydb_table" {
-    path = "path/to/table"
+    path = "path/to/table" # путь относительно корня базы
     connection_string = "grpc(s)://HOST:PORT/?database=/database/path" # в примерах ниже мы поместим в переменную tf
     column {
       name = "a"
@@ -249,7 +249,7 @@ ttl {
 
 ```tf
 resource "ydb_table_index" "ydb_table_index" {
-  table_path        = "path/to/table"
+  table_path        = "path/to/table" # путь относительно корня базы
   connection_string = "grpc(s)://HOST:PORT/?database=/database/path"
   name              = "my_index"
   type              = "global_sync" # "global_async"
@@ -323,7 +323,7 @@ variable "my_db_connection_string" {
 
 resource "ydb_table" "ydb_table" {
   # Путь до таблицы
-  path = "path/tf_table" # Создать таблицу по пути `path/tf_table`
+  path = "path/to/table" # путь относительно корня базы
 
   connection_string = var.my_db_connection_string
 
@@ -366,7 +366,7 @@ resource "ydb_table" "ydb_table" {
 ```tf
 resource "ydb_table" "ydb_table" {
   # Путь до таблицы
-  path = "path/tf_table" # Создать таблицу по пути `path/tf_table`
+  path = "path/to/table" # путь относительно корня базы
   
   # ConnectionString до базы данных.
   connection_string = var.my_db_connection_string

@@ -741,11 +741,11 @@ message MultipleWindowsStat {
 
 enum ConsumerScalingSupport {
     // The consumer can't work with scaling.
-    NOT_SUPPORT = 1;
+    NO_SUPPORT = 0;
     // The consumer does not commit offsets. The order of messages may be disrupted at the time of scaling.
-    PARTIAL_SUPPORT = 2;
+    PARTIAL_SUPPORT = 1;
     // The consumer fully supports scaling: during the reading process, offsets are regularly committed.
-    FULL_SUPPORT = 3;
+    FULL_SUPPORT = 2;
 }
 
 // Consumer description.

@@ -1079,6 +1079,52 @@ message Credentials {
     }
 }
 
+enum ReadRuleScalingSupport {
+    // The consumer can't work with scaling.
+    NO_SUPPORT = 0;
+    // The consumer does not commit offsets. The order of messages may be disrupted at the time of scaling.
+    PARTIAL_SUPPORT = 1;
+    // The consumer fully supports scaling: during the reading process, offsets are regularly committed.
+    FULL_SUPPORT = 2;
+}
+
+enum AutoScalingStrategy {
+    // Auto scaling disabled
+    DISABLED = 0;
+    // The auto scaling may only increase the number of partitions
+    SCALE_UP = 1;
+    // The auto scaling may increase and decrease the number of partitions
+    SCALE_UP_AND_DOWN = 2;
+}
+
+message AutoScalingSettings {
+    // Strategy of auto scaling
+    AutoScalingStrategy strategy = 1;
+
+    // Minimum partition count auto merge would stop working at.
+    // Zero value means default - 1.
+    int64 min_active_partitions = 2 [(Ydb.value) = ">= 0"];
+    // Maximum partition count auto merge would stop working at.
+    // Zero value means default - 1.
+    int64 max_active_partitions = 3 [(Ydb.value) = ">= 0"];
+    // Limit for total partition count, including active (open for write) and read-only partitions.
+    // Zero value means default - 100.
+    int64 partition_count_limit = 4 [(Ydb.value) = ">= 0"];
+
+    // The time of exceeding the threshold value in seconds, after which the partition will be
+    // auto scaling.
+    // Zero value means default - 300.
+    int32 threshold_time_seconds = 5;
+    // The threshold value of the write speed to the partition as a percentage, when exceeded,
+    // the partition will be auto split.
+    // Zero value means default - 90.
+    int32 scale_up_partition_write_speed_threshold_percent = 6 [(Ydb.value) = ">= 0"];
+    // The threshold value of the write speed to the partition as a percentage, if it is not reached,
+    // the partition will be auto merged.
+    // Zero value means default - 30.
+    int32 scale_down_partition_write_speed_threshold_percent = 7 [(Ydb.value) = ">= 0"];
+}
+
 /**
  * Message for describing topic internals.
  */
@@ -1088,8 +1134,13 @@ message TopicSettings {
         FORMAT_BASE = 1;
     }
 
-    // How many partitions in topic. Must less than database limit. Default limit - 10.
-    int32 partitions_count = 1 [(value) = "> 0"];
+    oneof partitioning {
+        // How many partitions in topic. Must less than database limit. Default limit - 10.
+        int32 partitions_count = 1 [(value) = "> 0"];
+        // Settings for auto scaling the partition number
+        AutoScalingSettings auto_scaling_settings = 15;
+    };
+
     oneof retention {
         // How long data in partition should be stored. Must be greater than 0 and less than limit for this database.
         // Default limit - 36 hours.
@@ -1137,6 +1188,10 @@ message TopicSettings {
 
         // Client service type.
         string service_type = 7;
+
+        // Parameter for the consumer's support for topic scaling.
+        // Default NOT_SUPPORTED
+        ReadRuleScalingSupport scaling_support = 8;
     }
 
     // List of consumer read rules for this topic.

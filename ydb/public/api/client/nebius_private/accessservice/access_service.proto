@@ -1,0 +1,55 @@
+syntax = "proto3";
+
+package nebius.iam.v1;
+
+import "google/api/field_behavior.proto";
+import "google/protobuf/any.proto";
+import "google/protobuf/timestamp.proto";
+import "google/rpc/status.proto";
+import "ydb/public/api/client/nebius_private/accessservice/access.proto";
+
+// DO NOT REMOVE! THESE OPTIONS ARE NEEDED FOR Bazel BUILD TO CORRESPOND TO buf generate:
+option java_multiple_files = true;
+option java_outer_classname = "AccessServiceProto";
+option java_package = "ai.nebius.iam.access.api.priv.v1";
+option go_package = "a.yandex-team.ru/api/nebius-ai/proto/nebius/iam/v1";
+// END
+
+service AccessService {
+  rpc Authenticate(AuthenticateRequest) returns (AuthenticateResponse);
+  rpc Authorize(AuthorizeRequest) returns (AuthorizeResponse);
+}
+
+message AuthenticateRequest {
+  oneof credentials {
+    string iam_token = 1;
+  }
+}
+
+message AuthenticateResponse {
+  Account account = 1;
+  google.protobuf.Timestamp session_expires_at = 2;
+}
+
+message AuthorizeRequest {
+  map<int64, AuthorizeCheck> checks = 1;
+}
+
+message AuthorizeResponse {
+  map<int64, AuthorizeResult> results = 1;
+}
+
+message AuthorizeCheck {
+  Permission permission = 1;
+  string container_id = 2;
+  ResourcePath resource_path = 3;
+  oneof credentials {
+    string iam_token = 4;
+    Account account = 5;
+  }
+}
+
+message AuthorizeResult {
+  bool authorized = 1;
+  Account account = 2;
+}

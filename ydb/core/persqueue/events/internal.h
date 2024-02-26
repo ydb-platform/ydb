@@ -183,6 +183,7 @@ struct TEvPQ {
         EvGetWriteInfoRequest,
         EvGetWriteInfoResponse,
         EvGetWriteInfoError,
+        EvReadingPartitionStatusRequest,
         EvEnd
     };
 
@@ -1074,6 +1075,15 @@ struct TEvPQ {
             Cookie(cookie),
             Message(std::move(message))
         {
+        }
+    };
+
+    struct TEvReadingPartitionStatusRequest : public TEventPB<TEvReadingPartitionStatusRequest, NKikimrPQ::TEvReadingPartitionStatusRequest, EvReadingPartitionStatusRequest> {
+        TEvReadingPartitionStatusRequest() = default;
+
+        TEvReadingPartitionStatusRequest(const TString& consumer, ui32 partitionId) {
+            Record.SetConsumer(consumer);
+            Record.SetPartitionId(partitionId);
         }
     };
 };

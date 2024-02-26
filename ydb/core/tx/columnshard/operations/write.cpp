@@ -247,10 +247,6 @@ namespace NKikimr::NColumnShard {
     }
 
     EOperationBehaviour TOperationsManager::GetBehaviour(const NEvents::TDataEvents::TEvWrite& evWrite) {
-        if (evWrite.Record.HasTxId() && evWrite.Record.GetTxMode() == NKikimrDataEvents::TEvWrite::MODE_PREPARE) {
-            return EOperationBehaviour::InTxWrite;
-        }
-
         if (evWrite.Record.HasLockTxId() && evWrite.Record.HasLockNodeId()) {
             if (evWrite.Record.HasLocks() && evWrite.Record.GetLocks().GetOp() == NKikimrDataEvents::TKqpLocks::Commit) {
                 return EOperationBehaviour::CommitWriteLock;
@@ -259,6 +255,12 @@ namespace NKikimr::NColumnShard {
             if (evWrite.Record.GetTxMode() == NKikimrDataEvents::TEvWrite::MODE_PREPARE) {
                 return EOperationBehaviour::WriteWithLock;
             }
+
+            return EOperationBehaviour::Undefined;
+        }
+
+        if (evWrite.Record.HasTxId() && evWrite.Record.GetTxMode() == NKikimrDataEvents::TEvWrite::MODE_PREPARE) {
+            return EOperationBehaviour::InTxWrite;
         }
         return EOperationBehaviour::Undefined;
     }

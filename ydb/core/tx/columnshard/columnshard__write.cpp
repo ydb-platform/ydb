@@ -230,7 +230,7 @@ public:
         LockId = evWrite.Record.GetLockTxId();
         TxId = evWrite.Record.GetTxId();
         KqpLocks = evWrite.Record.GetLocks();
-        return !LockId && TxId && KqpLocks.GetOp() == NKikimrDataEvents::TKqpLocks::Commit;
+        return !!LockId && !!TxId && KqpLocks.GetOp() == NKikimrDataEvents::TKqpLocks::Commit;
     }
 
 private:

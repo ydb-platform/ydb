@@ -433,13 +433,13 @@ static const char* const GetTablesFormatQuery = R"__(
             '('Name (Utf8String '"CreateQueuesWithTabletFormat"))))
         (let tablesFormatSettingSelect '('Value))
         (let tablesFormatSettingRead (SelectRow settingsTable tablesFormatSettingRow tablesFormatSettingSelect))
-        (let tablesFormatSetting 
-            (If (Exists tablesFormatSettingRead) 
+        (let tablesFormatSetting
+            (If (Exists tablesFormatSettingRead)
                 (Cast (Member tablesFormatSettingRead 'Value) 'Uint32)
                 defaultTablesFormat
             )
         )
-        
+
         (return (AsList
             (SetResult 'tablesFormat tablesFormatSetting)
                 )
@@ -624,7 +624,7 @@ void TCreateQueueSchemaActorV2::OnExecuted(TSqsEvents::TEvExecuted::TPtr& ev) {
                 TablesFormat_ = static_cast<ui32>(formatValue);
             }
             if (!formatValue.HaveValue() || TablesFormat_ > 1) {
-                RLOG_SQS_WARN("Incorrect TablesFormat settings for account " 
+                RLOG_SQS_WARN("Incorrect TablesFormat settings for account "
                     << QueuePath_.UserName << ", responce:" << record);
 
                 auto resp = MakeErrorResponse(NErrors::INTERNAL_FAILURE);
@@ -635,7 +635,7 @@ void TCreateQueueSchemaActorV2::OnExecuted(TSqsEvents::TEvExecuted::TPtr& ev) {
                 PassAway();
                 return;
             }
-            RLOG_SQS_DEBUG("Got table format '" << TablesFormat_ << "' for " 
+            RLOG_SQS_DEBUG("Got table format '" << TablesFormat_ << "' for "
                 << QueuePath_.UserName << record);
         }
 
@@ -885,12 +885,12 @@ static const char* const CommitQueueParamsQuery = R"__(
             (ListIf willCommit (UpdateRow queuesTable queuesRow queuesUpdate))
             (ListIf willCommit (UpdateRow eventsTable eventsRow eventsUpdate))
             (ListIf willCommit (UpdateRow attrsTable attrRow attrUpdate))
-            
-            
+
+
             (If (Not willCommit) (AsList (Void))
                 (Map (ListFromRange (Uint64 '0) shards) (lambda '(shardOriginal) (block '(
                     (let shard (Cast shardOriginal 'Uint32))
-                        
+
                     (let row '(%5$s))
                     (let update '(
                         '('CleanupTimestamp now)
@@ -920,7 +920,7 @@ TString GetStateTableKeys(ui32 tablesFormat, bool isFifo) {
             '('QueueIdNumber queueIdNumber)
             '('Shard shard)
         )__";
-        
+
     }
     return "'('State shardOriginal)";
 }
@@ -965,7 +965,7 @@ void TCreateQueueSchemaActorV2::CommitNewVersion() {
     auto ev = MakeExecuteEvent(query);
     auto* trans = ev->Record.MutableTransaction()->MutableMiniKQLTransaction();
     Y_ABORT_UNLESS(TablesFormat_ == 1 || LeaderTabletId_ != 0);
-    TInstant createdTimestamp = Request_.HasCreatedTimestamp() ? TInstant::Seconds(Request_.GetCreatedTimestamp()) : QueueCreationTimestamp_; 
+    TInstant createdTimestamp = Request_.HasCreatedTimestamp() ? TInstant::Seconds(Request_.GetCreatedTimestamp()) : QueueCreationTimestamp_;
     TParameters(trans->MutableParams()->MutableProto())
         .Utf8("NAME", QueuePath_.QueueName)
         .Utf8("CUSTOMNAME", CustomQueueName_)
@@ -1283,7 +1283,7 @@ static const char* EraseQueueRecordQuery = R"__(
                 (Utf8String '"")
             )
         )
-        
+
         (let tablesFormat
             (Coalesce
                 (Member queuesRead 'TablesFormat)
@@ -1294,7 +1294,7 @@ static const char* EraseQueueRecordQuery = R"__(
         (let removedQueueRow '(
             '('RemoveTimestamp now)
             '('QueueIdNumber currentVersion)))
-        
+
         (let removedQueueUpdate '(
             '('Account userName)
             '('QueueName name)
@@ -1331,11 +1331,11 @@ static const char* EraseQueueRecordQuery = R"__(
                 (If queueExists (UpdateRow removedQueuesTable removedQueueRow removedQueueUpdate) (Void))
                 (If queueExists (EraseRow queuesTable queuesRow) (Void))
             )
-            
+
                 (If queueExists
                     (Map (ListFromRange (Uint64 '0) shards) (lambda '(shardOriginal) (block '(
                         (let shard (Cast shardOriginal 'Uint32))
-                            
+
                         (let stateRow '(%4$s))
                         (return (EraseRow stateTable stateRow))
                     ))))
@@ -1352,7 +1352,7 @@ void TDeleteQueueSchemaActorV2::NextAction() {
             if (TablesFormat_ == 1) {
                 queueStateDir = Join("/", Cfg().GetRoot(), IsFifo_ ? FIFO_TABLES_DIR : STD_TABLES_DIR);
             }
-            
+
             auto ev = MakeExecuteEvent(Sprintf(
                 EraseQueueRecordQuery,
                 QueuePath_.GetUserPath().c_str(),

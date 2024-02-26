@@ -152,6 +152,7 @@ struct TSqsEvents {
         TDuration MessageRetentionPeriod = TDuration::Zero();
         TDuration ReceiveMessageWaitTime = TDuration::Zero();
         TDuration VisibilityTimeout = TDuration::Zero();
+        TString FolderId = "";
 
         // has operator<<
     };
@@ -939,7 +940,7 @@ struct TSqsEvents {
         ui64 Type;
     };
 
-    struct TEvNodeTrackerSubscribeRequest 
+    struct TEvNodeTrackerSubscribeRequest
         : public NActors::TEventLocal<TEvNodeTrackerSubscribeRequest, EvNodeTrackerSubscribeRequest>
     {
         explicit TEvNodeTrackerSubscribeRequest(
@@ -958,8 +959,8 @@ struct TSqsEvents {
         bool IsFifo;
         std::optional<ui64> TabletId;
     };
-    
-    struct TEvNodeTrackerUnsubscribeRequest 
+
+    struct TEvNodeTrackerUnsubscribeRequest
         : public NActors::TEventLocal<TEvNodeTrackerUnsubscribeRequest, EvNodeTrackerUnsubscribeRequest>
     {
         TEvNodeTrackerUnsubscribeRequest(ui64 subscriptionId)
@@ -978,17 +979,17 @@ struct TSqsEvents {
         ui32 NodeId;
         bool Disconnected;
     };
-    
+
     struct TEvForceReloadState : public NActors::TEventLocal<TEvForceReloadState, EvForceReloadState> {
         explicit TEvForceReloadState(TDuration nextTryAfter = TDuration::Zero())
             : NextTryAfter(nextTryAfter)
         {}
         TDuration NextTryAfter;
     };
-    
+
     struct TEvReloadStateRequest : public NActors::TEventPB<TEvReloadStateRequest, TReloadStateRequest, EvReloadStateRequest> {
         TEvReloadStateRequest() = default;
-        
+
         TEvReloadStateRequest(const TString& user, const TString& queue) {
             Record.MutableTarget()->SetUserName(user);
             Record.MutableTarget()->SetQueueName(queue);

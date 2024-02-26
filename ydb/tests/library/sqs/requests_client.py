@@ -137,7 +137,7 @@ class SqsHttpApi(object):
             logging.debug('Returning {} by default'.format(default))
             return default
         if response.status_code != 200:
-            logger.warn("Last request failed with code {}, reason '{}' and text '{}'".format(
+            logger.warning("Last request failed with code {}, reason '{}' and text '{}'".format(
                 response.status_code, response.reason, response.text
             ))
             # Assert that no internal info will be given to user
@@ -198,7 +198,16 @@ class SqsHttpApi(object):
             extract_result_method=lambda x: x['CountQueuesResponse']['CountQueuesResult']['Count'],
         )
 
-    def create_queue(self, queue_name, is_fifo=False, attributes=None, private_api=False, created_timestamp_sec=None, custom_name=None):
+    def create_queue(
+        self,
+        queue_name,
+        is_fifo=False,
+        attributes=None,
+        private_api=False,
+        created_timestamp_sec=None,
+        custom_name=None,
+        folder_id=None,
+    ):
         # if is_fifo and not queue_name.endswith('.fifo'):
         #     return None
         if attributes is None:
@@ -211,6 +220,8 @@ class SqsHttpApi(object):
             params['CreatedTimestamp'] = created_timestamp_sec
         if custom_name is not None:
             params['CustomQueueName'] = custom_name
+        if folder_id is not None:
+            params['FolderId'] = folder_id
 
         for i, (k, v) in enumerate(attributes.items()):
             params['Attribute.{id}.Name'.format(id=i+1)] = k

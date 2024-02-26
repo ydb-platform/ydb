@@ -168,6 +168,8 @@ message TGetQueueAttributesResponse {
     optional string RedrivePolicy = 16;
     /// Contains queue ARN
     optional string QueueArn = 17;
+    // Contains queue folder_id
+    optional string FolderId = 18;
 }
 
 message TGetQueueAttributesBatchRequest {

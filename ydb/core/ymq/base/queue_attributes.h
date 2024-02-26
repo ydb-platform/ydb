@@ -26,6 +26,7 @@ public:
     TMaybe<ui64> MaximumMessageSize; // bytes
     TMaybe<bool> ContentBasedDeduplication; // bool
     TRedrivePolicy RedrivePolicy;
+    TMaybe<TString> FolderId;
 
 private:
     bool TryParseLimitedValue(const TString& attrName, const TString& valueStr, const ui64 allowedMinValue, const ui64 allowedMaxValue, TMaybe<ui64>& result, bool clamp);

@@ -413,10 +413,16 @@ class KikimrSqsTestBase(object):
         ]
         return any_of(*urls_matchers)
 
-    def _create_queue_and_assert(self, queue_name, is_fifo=False, use_http=False, attributes=None, shards=None, retries=3):
+    def _create_queue_and_assert(
+        self, queue_name, is_fifo=False, use_http=False, attributes=None, shards=None, retries=3, folder_id=None
+    ):
         self.queue_url = None
         if attributes is None:
             attributes = dict()
+
+        if folder_id:
+            attributes["FolderID"] = folder_id
+
         logging.debug('Create queue. Attributes: {}. Use http: {}. Is fifo: {}'.format(attributes, use_http, is_fifo))
         assert (len(attributes.keys()) == 0 or use_http), 'Attributes are supported only for http queue creation'
         assert (shards is None or not use_http), 'Custom shards number is only supported in non-http mode'

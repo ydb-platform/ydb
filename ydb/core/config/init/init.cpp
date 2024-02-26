@@ -458,6 +458,8 @@ public:
             // Randomized backoff
             if (!success) {
                 env.Sleep(TDuration::MilliSeconds(500 + RandomNumber<ui64>(1000)));
+            } else {
+                break;
             }
         }
 
@@ -731,7 +733,7 @@ NKikimrConfig::TAppConfig GetActualDynConfig(
     IConfigUpdateTracer& ConfigUpdateTracer)
 {
     if (yamlConfig.GetYamlConfigEnabled()) {
-        for (ui32 kind = NKikimrConsole::TConfigItem::EKind_MIN; kind <= NKikimrConsole::TConfigItem::EKind_MAX; NextValidKind(kind)) {
+        for (ui32 kind = NKikimrConsole::TConfigItem::EKind_MIN; kind <= NKikimrConsole::TConfigItem::EKind_MAX; kind = NextValidKind(kind)) {
             if (HasCorrespondingManagedKind(kind, yamlConfig)) {
                 TRACE_CONFIG_CHANGE_INPLACE(kind, ReplaceConfigWithConsoleProto);
             } else {
@@ -742,7 +744,7 @@ NKikimrConfig::TAppConfig GetActualDynConfig(
         return yamlConfig;
     }
 
-    for (ui32 kind = NKikimrConsole::TConfigItem::EKind_MIN; kind <= NKikimrConsole::TConfigItem::EKind_MAX; NextValidKind(kind)) {
+    for (ui32 kind = NKikimrConsole::TConfigItem::EKind_MIN; kind <= NKikimrConsole::TConfigItem::EKind_MAX; kind = NextValidKind(kind)) {
         TRACE_CONFIG_CHANGE_INPLACE(kind, ReplaceConfigWithConsoleProto);
     }
 
@@ -772,4 +774,9 @@ std::unique_ptr<IInitialConfigurator> MakeDefaultInitialConfigurator(
 
 Y_DECLARE_OUT_SPEC(, NKikimr::NConfig::TWithDefault<TString>, stream, value) {
     stream << value.Value;
+}
+
+template<>
+TMaybe<TString, NMaybe::TPolicyUndefinedFail> FromString<TMaybe<TString, NMaybe::TPolicyUndefinedFail>, char>(const char* data, size_t size) {
+    return TString{data, size};
 }

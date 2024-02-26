@@ -283,12 +283,12 @@ struct TCommonAppOptions {
     TWithDefault<ui32> LogSamplingLevel; // log settings
     TWithDefault<ui32> LogSamplingRate; // log settings
     TWithDefault<TString> LogFormat;// log settings
-    TMaybe<TString> SysLogServiceTag; // unique tags for sys logs
-    TMaybe<TString> LogFileName; // log file name to initialize file log backend
+    TMaybe<TString, NMaybe::TPolicyUndefinedFail> SysLogServiceTag; // unique tags for sys logs
+    TMaybe<TString, NMaybe::TPolicyUndefinedFail> LogFileName; // log file name to initialize file log backend
     TWithDefault<TString> ClusterName; // log settings
 
     ui32 NodeId = 0;
-    TMaybe<TString> NodeIdValue;
+    TMaybe<TString, NMaybe::TPolicyUndefinedFail> NodeIdValue;
     ui32 DefaultInterconnectPort = 19001;
     ui32 MonitoringPort = 0;
     TString MonitoringAddress;
@@ -298,7 +298,7 @@ struct TCommonAppOptions {
     size_t CompileInflightLimit = 100000; // MiniKQLCompileService
     TString UDFsDir;
     TVector<TString> UDFsPaths;
-    TMaybe<TString> TenantName;
+    TMaybe<TString, NMaybe::TPolicyUndefinedFail> TenantName;
     TVector<TString> NodeBrokerAddresses;
     ui32 NodeBrokerPort = 0;
     bool NodeBrokerUseTls = false;
@@ -312,8 +312,8 @@ struct TCommonAppOptions {
     TString NodeDomain;
     ui32 SqsHttpPort = 0;
     TString NodeKind = TString(NODE_KIND_YDB);
-    TMaybe<TString> NodeType;
-    TMaybe<TString> DataCenter;
+    TMaybe<TString, NMaybe::TPolicyUndefinedFail> NodeType;
+    TMaybe<TString, NMaybe::TPolicyUndefinedFail> DataCenter;
     TString Rack = "";
     ui32 Body = 0;
     ui32 GRpcPort = 0;
@@ -334,7 +334,6 @@ struct TCommonAppOptions {
     bool SuppressVersionCheck = false;
 
     void RegisterCliOptions(NLastGetopt::TOpts& opts) {
-        // FIXME remove default value where TMaybe used
         opts.AddLongOption("cluster-name", "which cluster this node belongs to")
             .DefaultValue("unknown").OptionalArgument("STR")
             .Handler(new TWithDefaultOptHandler(&ClusterName));
@@ -970,14 +969,24 @@ public:
             InitDynamicNode();
         }
 
+        Cout << __LINE__ << Endl;
+
         LoadYamlConfig(refs, CommonAppOptions.YamlConfigFile, AppConfig, CALL_CTX());
 
+        Cout << __LINE__ << Endl;
+
         Option("sys-file", TCfg::TActorSystemConfigFieldTag{}, CALL_CTX());
+
+
+        Cout << __LINE__ << Endl;
 
         if (!AppConfig.HasActorSystemConfig()) {
             AppConfig.MutableActorSystemConfig()->CopyFrom(*DummyActorSystemConfig());
             TRACE_CONFIG_CHANGE_INPLACE_T(ActorSystemConfig, SetExplicitly);
         }
+
+
+        Cout << __LINE__ << Endl;
 
         Option("domains-file", TCfg::TDomainsConfigFieldTag{}, CALL_CTX());
         Option("bs-file", TCfg::TBlobStorageConfigFieldTag{}, CALL_CTX());
@@ -985,6 +994,9 @@ public:
 
         // This flag is set per node and we prefer flag over CMS.
         CommonAppOptions.ApplyLogSettings(AppConfig, ConfigUpdateTracer);
+
+
+        Cout << __LINE__ << Endl;
 
         Option("ic-file", TCfg::TInterconnectConfigFieldTag{}, &TInitialConfiguratorImpl::SetupInterconnectConfigDefaults, CALL_CTX());
         Option("channels-file", TCfg::TChannelProfileConfigFieldTag{}, CALL_CTX());
@@ -1015,6 +1027,9 @@ public:
         Option(nullptr, TCfg::TTracingConfigFieldTag{}, CALL_CTX());
         Option(nullptr, TCfg::TFailureInjectionConfigFieldTag{}, CALL_CTX());
 
+
+        Cout << __LINE__ << Endl;
+
         CommonAppOptions.ApplyFields(AppConfig, Env, ConfigUpdateTracer);
 
        // MessageBus options.
@@ -1023,7 +1038,12 @@ public:
             TRACE_CONFIG_CHANGE_INPLACE_T(MessageBusConfig, UpdateExplicitly);
         }
 
+
+        Cout << __LINE__ << Endl;
+
         TenantName = FillTenantPoolConfig(CommonAppOptions);
+
+        Cout << "configured" << Endl;
 
         FillData(CommonAppOptions);
     }
@@ -1039,7 +1059,7 @@ public:
             }
         }
 
-        if (cf.NodeId) { // FIXME: do we really need it ???
+        if (cf.NodeId) {
             NodeId = cf.NodeId;
 
             Labels["node_id"] = ToString(NodeId);
@@ -1104,7 +1124,7 @@ public:
         Labels["node_id"] = ToString(cf.NodeId);
         Labels["node_host"] = Env.FQDNHostName();
         Labels["tenant"] = (cf.TenantName ? cf.TenantName.GetRef() : TString(""));
-        Labels["node_type"] = cf.NodeType.GetRef();
+        Labels["node_type"] = (cf.NodeType ? cf.NodeType.GetRef() : TString(""));
         // will be replaced with proper version info
         Labels["branch"] = GetBranch();
         Labels["rev"] = GetProgramCommitId();
@@ -1203,15 +1223,24 @@ public:
             DeduceNodeDomain(CommonAppOptions, AppConfig),
             CommonAppOptions.TenantName.GetRef(),
             Env.FQDNHostName(),
-            CommonAppOptions.NodeType.GetRef(),
+            (CommonAppOptions.NodeType ? CommonAppOptions.NodeType.GetRef() : TString("")),
             AppConfig.GetAuthConfig().GetStaffApiUserToken(),
         };
 
+
+        Cout << __LINE__ << Endl;
+
         TMaybe<NKikimr::NClient::TConfigurationResult> result = DynConfigClient.GetConfig(CommonAppOptions.GrpcSslSettings, addrs, settings, Env);
+
+
+        Cout << __LINE__ << Endl;
 
         if (!result) {
             return;
         }
+
+
+        Cout << __LINE__ << Endl;
 
         NKikimrConfig::TAppConfig yamlConfig = GetYamlConfigFromResult(*result, Labels);
         NYamlConfig::ReplaceUnmanagedKinds(result->GetConfig(), yamlConfig);
@@ -1219,7 +1248,13 @@ public:
         InitDebug.OldConfig.CopyFrom(result->GetConfig());
         InitDebug.YamlConfig.CopyFrom(yamlConfig);
 
+
+        Cout << __LINE__ << Endl;
+
         NKikimrConfig::TAppConfig appConfig = GetActualDynConfig(yamlConfig, result->GetConfig(), ConfigUpdateTracer);
+
+
+        Cout << __LINE__ << Endl;
 
         ApplyConfigForNode(appConfig);
     }

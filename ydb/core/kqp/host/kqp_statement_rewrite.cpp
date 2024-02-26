@@ -20,8 +20,6 @@ namespace {
     };
 
     std::optional<TCreateTableAsResult> RewriteCreateTableAs(NYql::TExprNode::TPtr root, NYql::TExprContext& ctx, NYql::TTypeAnnotationContext& typeCtx, const TIntrusivePtr<NYql::TKikimrSessionContext>& sessionCtx, const TString& cluster) {
-        Cerr << "REWRITE:>> " << NYql::NCommon::ExprToPrettyString(ctx, *root) << Endl;
-
         NYql::NNodes::TExprBase expr(root);
         auto maybeWrite = expr.Maybe<NYql::NNodes::TCoWrite>();
         if (!maybeWrite) {
@@ -81,8 +79,6 @@ namespace {
             .AddTypeAnnotationTransformer(CreateKqpTypeAnnotationTransformer(cluster, sessionCtx->TablesPtr(), typeCtx, sessionCtx->ConfigPtr()))
             .Build(false);
 
-        Cerr << "AFTER:>> " << Endl;
-
         auto ptr = insertData.Ptr();
         auto transformResult = NYql::SyncTransform(*typeTransformer, ptr, ctx);
         if (transformResult != NYql::IGraphTransformer::TStatus::Ok) {
@@ -90,14 +86,8 @@ namespace {
         }
         YQL_ENSURE(transformResult == NYql::IGraphTransformer::TStatus::Ok);
 
-        Cerr << "TRANSFORMED:>> " << Endl;
-
-        Cerr << "TEST:>> " << NYql::NCommon::ExprToPrettyString(ctx, *ptr) << Endl;
         auto type = ptr->GetTypeAnn();
         YQL_ENSURE(type);
-        Cerr << "TYPES:>> ";
-        type->Out(Cerr);
-        Cerr << Endl;
 
         type = type->Cast<NYql::TListExprType>()->GetItemType();
         YQL_ENSURE(type);
@@ -107,86 +97,52 @@ namespace {
         auto create = ctx.ReplaceNode(std::move(root), insertData.Ref(), ctx.NewCallable(pos, "Void", {}));
 
         auto columns = create->Child(4)->Child(1)->Child(1);
+        if (columns->ChildrenSize() != 0) {
+            ctx.AddError(NYql::TIssue(ctx.GetPosition(pos), "CREATE TABLE AS with columns is not supported"));
+            return std::nullopt;
+        }
+
         auto primaryKey = create->Child(4)->Child(2)->Child(1);
         THashSet<TStringBuf> primariKeyColumns;
         primaryKey->ForEachChild([&](const auto& child) {
             primariKeyColumns.insert(child.Content());
         });
 
-        if (columns->ChildrenSize() != 0) {
-            for (size_t index = 0; index < columns->ChildrenSize(); ++index) {
-                const auto name = columns->Child(index)->ChildPtr(0)->Content();
-                const bool notNull = primariKeyColumns.contains(name); //TODO: and storetype == columns
+        std::vector<NYql::TExprNodePtr> columnNodes;
+        for (const auto* item : rowType->GetItems()) {
+            const auto name = item->GetName();
+            auto currentType = item->GetItemType();
 
-                auto currentType = rowType->FindItemType(name);
+            const bool notNull = primariKeyColumns.contains(name); //TODO: and storetype == columns
 
-                if (notNull && currentType->GetKind() == NYql::ETypeAnnotationKind::Optional) {
-                    currentType = currentType->Cast<NYql::TOptionalExprType>()->GetItemType();
-                }
-
-                auto typeNode = NYql::ExpandType(pos, *currentType, ctx);
-
-                if (!notNull && currentType->GetKind() != NYql::ETypeAnnotationKind::Optional) {
-                    typeNode = ctx.NewCallable(pos, "AsOptionalType", { typeNode });
-                }
-
-                // TODO: replacenodes
-                create = ctx.ReplaceNode(std::move(create), *columns->Child(index), ctx.NewList(pos, {
-                    columns->Child(index)->ChildPtr(0),
-                    typeNode,
-                    ctx.NewList(pos, {
-                        ctx.NewAtom(pos, "columnConstrains"),
-                        notNull
-                            ? ctx.NewList(pos, {
-                                ctx.NewList(pos, {
-                                    ctx.NewAtom(pos, "not_null"),
-                                }),
-                            })
-                            : ctx.NewList(pos, {}),
-                    }),
-                    ctx.NewList(pos, {}),
-                }));
-            }
-        } else {
-            std::vector<NYql::TExprNodePtr> columnNodes;
-            for (const auto* item : rowType->GetItems()) {
-                const auto name = item->GetName();
-                auto currentType = item->GetItemType();
-
-                const bool notNull = primariKeyColumns.contains(name); //TODO: and storetype == columns
-
-                if (notNull && currentType->GetKind() == NYql::ETypeAnnotationKind::Optional) {
-                    currentType = currentType->Cast<NYql::TOptionalExprType>()->GetItemType();
-                }
-
-                auto typeNode = NYql::ExpandType(pos, *currentType, ctx);
-
-                if (!notNull && currentType->GetKind() != NYql::ETypeAnnotationKind::Optional) {
-                    typeNode = ctx.NewCallable(pos, "AsOptionalType", { typeNode });
-                }
-
-                columnNodes.push_back(ctx.NewList(pos, {
-                    ctx.NewAtom(pos, name),
-                    typeNode,
-                    ctx.NewList(pos, {
-                        ctx.NewAtom(pos, "columnConstrains"),
-                        notNull
-                            ? ctx.NewList(pos, {
-                                ctx.NewList(pos, {
-                                    ctx.NewAtom(pos, "not_null"),
-                                }),
-                            })
-                            : ctx.NewList(pos, {}),
-                    }),
-                    ctx.NewList(pos, {}),
-                }));
+            if (notNull && currentType->GetKind() == NYql::ETypeAnnotationKind::Optional) {
+                currentType = currentType->Cast<NYql::TOptionalExprType>()->GetItemType();
             }
 
-            create = ctx.ReplaceNode(std::move(create), *columns, ctx.NewList(pos, std::move(columnNodes)));
+            auto typeNode = NYql::ExpandType(pos, *currentType, ctx);
+
+            if (!notNull && currentType->GetKind() != NYql::ETypeAnnotationKind::Optional) {
+                typeNode = ctx.NewCallable(pos, "AsOptionalType", { typeNode });
+            }
+
+            columnNodes.push_back(ctx.NewList(pos, {
+                ctx.NewAtom(pos, name),
+                typeNode,
+                ctx.NewList(pos, {
+                    ctx.NewAtom(pos, "columnConstrains"),
+                    notNull
+                        ? ctx.NewList(pos, {
+                            ctx.NewList(pos, {
+                                ctx.NewAtom(pos, "not_null"),
+                            }),
+                        })
+                        : ctx.NewList(pos, {}),
+                }),
+                ctx.NewList(pos, {}),
+            }));
         }
 
-
-        Cerr << "COLUMNS:PROCESSED>> " << NYql::NCommon::ExprToPrettyString(ctx, *create->Child(4)->Child(1)->Child(1)) << Endl;
+        create = ctx.ReplaceNode(std::move(create), *columns, ctx.NewList(pos, std::move(columnNodes)));
 
         //TODO: Use io utils
         const NYql::TExprNode::TPtr* lastReadInTopologicalOrder = nullptr;

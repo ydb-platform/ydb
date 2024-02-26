@@ -6370,8 +6370,6 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
         {
             auto prepareResult = client.ExecuteQuery(R"(
                 CREATE TABLE `/Root/Destination1` (
-                    Col1,
-                    Col2,
                     PRIMARY KEY (Col1)
                 )
                 PARTITION BY HASH(Col1)
@@ -6393,8 +6391,6 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
         {
             auto prepareResult = client.ExecuteQuery(R"(
                 CREATE TABLE `/Root/Destination2` (
-                    Col1,
-                    Col2,
                     PRIMARY KEY (Col1)
                 )
                 PARTITION BY HASH(Col1)
@@ -6482,6 +6478,23 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
                 prepareResult.GetIssues().ToString().Contains("Scheme operations cannot be executed inside transaction"),
                 prepareResult.GetIssues().ToString());
         }
+
+        {
+            auto prepareResult = client.ExecuteQuery(R"(
+                CREATE TABLE `/Root/Destination7` (
+                    Col3,
+                    Col4,
+                    PRIMARY KEY (Col3)
+                )
+                PARTITION BY HASH(Col3)
+                WITH (STORE = COLUMN, AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = 4)
+                AS SELECT * FROM `/Root/Source`;
+            )", NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
+            UNIT_ASSERT(!prepareResult.IsSuccess());
+            UNIT_ASSERT_C(
+                prepareResult.GetIssues().ToString().Contains("CREATE TABLE AS with columns is not supported"),
+                prepareResult.GetIssues().ToString());
+        }
     }
 
      Y_UNIT_TEST(OlapCreateAsSelect_Complex) {
@@ -6546,9 +6559,6 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
         {
             auto prepareResult = client.ExecuteQuery(R"(
                 CREATE TABLE `/Root/Destination1` (
-                    Col1,
-                    Col2,
-                    Col3,
                     PRIMARY KEY (Col1)
                 )
                 PARTITION BY HASH(Col1)

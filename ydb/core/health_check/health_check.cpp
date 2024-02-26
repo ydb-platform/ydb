@@ -524,7 +524,12 @@ public:
             return true;
         }
 
-        auto& computeNodeIds = DatabaseState[FilterDatabase].ComputeNodeIds;
+        auto it = DatabaseState.find(FilterDatabase);
+        if (it == DatabaseState.end()) {
+            return false;
+        }
+        auto& computeNodeIds = it->second.ComputeNodeIds;
+
         return std::find(computeNodeIds.begin(), computeNodeIds.end(), nodeId) != computeNodeIds.end();
     }
 

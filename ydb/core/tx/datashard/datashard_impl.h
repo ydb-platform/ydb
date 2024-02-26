@@ -328,6 +328,7 @@ class TDataShard
 
     class TWaitVolatileDependencies;
     class TSendVolatileResult;
+    class TSendVolatileWriteResult;
 
     struct TEvPrivate {
         enum EEv {

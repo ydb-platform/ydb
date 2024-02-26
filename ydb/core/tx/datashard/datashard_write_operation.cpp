@@ -35,8 +35,8 @@
 namespace NKikimr {
 namespace NDataShard {
 
-TValidatedWriteTx::TValidatedWriteTx(TDataShard* self, TTransactionContext& txc, ui64 globalTxId, TInstant receivedAt, const TRowVersion& readVersion, const TRowVersion& writeVersion, const NEvents::TDataEvents::TEvWrite& ev)
-    : UserDb(*self, txc.DB, globalTxId, readVersion, writeVersion, EngineHostCounters, TAppData::TimeProvider->Now())
+TValidatedWriteTx::TValidatedWriteTx(TDataShard* self, TTransactionContext& txc, ui64 globalTxId, TInstant receivedAt, const NEvents::TDataEvents::TEvWrite& ev)
+    : UserDb(*self, txc.DB, globalTxId, TRowVersion::Min(), TRowVersion::Max(), EngineHostCounters, TAppData::TimeProvider->Now())
     , KeyValidator(*self, txc.DB)
     , TabletId(self->TabletID())
     , ReceivedAt(receivedAt)
@@ -410,8 +410,7 @@ TValidatedWriteTx::TPtr TWriteOperation::BuildWriteTx(TDataShard* self, TTransac
 {
     if (!WriteTx) {
         Y_ABORT_UNLESS(WriteRequest);
-        auto [readVersion, writeVersion] = self->GetReadWriteVersions(this);
-        WriteTx = std::make_shared<TValidatedWriteTx>(self, txc, GetGlobalTxId(), GetReceivedAt(), readVersion, writeVersion, *WriteRequest);
+        WriteTx = std::make_shared<TValidatedWriteTx>(self, txc, GetGlobalTxId(), GetReceivedAt(), *WriteRequest);
     }
     return WriteTx;
 }
@@ -515,9 +514,8 @@ ERestoreDataStatus TWriteOperation::RestoreTxData(TDataShard* self, TTransaction
         LocksCache().Locks[lock.LockId] = lock;
 
     bool extractKeys = WriteTx->IsTxInfoLoaded();
-    auto [readVersion, writeVersion] = self->GetReadWriteVersions(this);
 
-    WriteTx = std::make_shared<TValidatedWriteTx>(self, txc, GetTxId(), GetReceivedAt(), readVersion, writeVersion, *WriteRequest);
+    WriteTx = std::make_shared<TValidatedWriteTx>(self, txc, GetTxId(), GetReceivedAt(), *WriteRequest);
     if (WriteTx->Ready() && extractKeys) {
         WriteTx->ExtractKeys(true);
     }
@@ -547,22 +545,25 @@ void TWriteOperation::BuildExecutionPlan(bool loaded)
         plan.push_back(EExecutionUnitKind::ExecuteWrite);
         plan.push_back(EExecutionUnitKind::FinishProposeWrite);
         plan.push_back(EExecutionUnitKind::CompletedOperations);
-    }
-    /*
-    else if (HasVolatilePrepareFlag()) {
+    } else if (HasVolatilePrepareFlag()) {
         Y_ABORT_UNLESS(!loaded);
+        plan.push_back(EExecutionUnitKind::CheckWrite);
         plan.push_back(EExecutionUnitKind::StoreWrite);  // note: stores in memory
         plan.push_back(EExecutionUnitKind::FinishProposeWrite);
         Y_ABORT_UNLESS(!GetStep());
         plan.push_back(EExecutionUnitKind::WaitForPlan);
         plan.push_back(EExecutionUnitKind::PlanQueue);
-        plan.push_back(EExecutionUnitKind::LoadTxDetails);  // note: reloads from memory
+        plan.push_back(EExecutionUnitKind::LoadWriteDetails);  // note: reloads from memory
         plan.push_back(EExecutionUnitKind::BuildAndWaitDependencies);
+        // Note: execute will also prepare and send readsets
         plan.push_back(EExecutionUnitKind::ExecuteWrite);
+        // Note: it is important that plan here is the same as regular
+        // distributed tx, since normal tx may decide to commit in a
+        // volatile manner with dependencies, to avoid waiting for
+        // locked keys to resolve.
         plan.push_back(EExecutionUnitKind::CompleteWrite);
         plan.push_back(EExecutionUnitKind::CompletedOperations);
-    */
-    else {
+    } else {
         if (!loaded) {
             plan.push_back(EExecutionUnitKind::CheckWrite);
             plan.push_back(EExecutionUnitKind::StoreWrite);

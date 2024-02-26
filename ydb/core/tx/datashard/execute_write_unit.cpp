@@ -55,6 +55,18 @@ public:
         DataShard.SubscribeNewLocks(ctx);
     }
 
+    EExecutionStatus OnTabletNotReady(TWriteOperation& writeOp, TValidatedWriteTx& writeTx, TTransactionContext& txc, const TActorContext& ctx)
+    {
+        LOG_TRACE_S(ctx, NKikimrServices::TX_DATASHARD, "Tablet " << DataShard.TabletID() << " is not ready for " << writeOp << " execution");
+
+        DataShard.IncCounter(COUNTER_TX_TABLET_NOT_READY);
+
+        writeTx.ResetCollectedChanges();
+
+        writeOp.ReleaseTxData(txc);
+        return EExecutionStatus::Restart;
+    }
+
     void DoUpdateToUserDb(TWriteOperation* writeOp, TTransactionContext& txc, const TActorContext& ctx) {
         TValidatedWriteTx::TPtr& writeTx = writeOp->GetWriteTx();
 
@@ -77,10 +89,6 @@ public:
 
         const NTable::TScheme& scheme = txc.DB.GetScheme();
         const NTable::TScheme::TTableInfo* tableInfo = scheme.GetTableInfo(localTableId);
-
-        auto [readVersion, writeVersion] = DataShard.GetReadWriteVersions(writeOp);
-        writeTx->SetReadVersion(readVersion);
-        writeTx->SetWriteVersion(writeVersion);
 
         TSmallVec<TRawTypeValue> key;
         TSmallVec<NTable::TUpdateOp> ops;
@@ -248,6 +256,7 @@ public:
                                                 : KqpValidateLocks(tabletId, sysLocks, kqpLocks, useGenericReadSets, inReadSets);
 
             if (!validated) {
+                LOG_TRACE_S(ctx, NKikimrServices::TX_DATASHARD, "Operation " << *op << " at " << tabletId << " aborting because locks are not valid");
                 writeOp->SetError(NKikimrDataEvents::TEvWriteResult::STATUS_LOCKS_BROKEN, "Operation is aborting because locks are not valid");
 
                 for (auto& brokenLock : brokenLocks) {
@@ -349,25 +358,55 @@ public:
                 txc.DB.RollbackChanges();
             }
             return EExecutionStatus::Continue;
-        }
+        } catch (const TNotReadyTabletException&) {
+            return OnTabletNotReady(*writeOp, *writeTx, txc, ctx);
+        } catch (const TLockedWriteLimitException&) {
+            writeTx->ResetCollectedChanges();
 
-        if (Pipeline.AddLockDependencies(op, guardLocks)) {
+            writeOp->SetError(NKikimrDataEvents::TEvWriteResult::STATUS_INTERNAL_ERROR, TStringBuilder() << "Shard " << DataShard.TabletID() << " cannot write more uncommitted changes");
+
+            for (auto& table : guardLocks.AffectedTables) {
+                Y_ABORT_UNLESS(guardLocks.LockTxId);
+                op->Result()->AddTxLock(
+                    guardLocks.LockTxId,
+                    DataShard.TabletID(),
+                    DataShard.Generation(),
+                    Max<ui64>(),
+                    table.GetTableId().OwnerId,
+                    table.GetTableId().LocalPathId,
+                    false
+                );
+            }
+
+            writeOp->ReleaseTxData(txc);
+
+            // Transaction may have made some changes before it hit the limit,
+            // so we need to roll them back.
             if (txc.DB.HasChanges()) {
                 txc.DB.RollbackChanges();
             }
-            return EExecutionStatus::Continue;
+            return EExecutionStatus::Executed;
         }
 
-        op->ChangeRecords() = std::move(writeOp->GetWriteTx()->GetCollectedChanges());
-
-        DataShard.SysLocksTable().ApplyLocks();
-        DataShard.SubscribeNewLocks(ctx);
         Pipeline.AddCommittingOp(op);
 
-        return EExecutionStatus::DelayCompleteNoMoreRestarts;
+        op->ResetCurrentTimer();
+
+        if (txc.DB.HasChanges()) {
+            op->SetWaitCompletionFlag(true);
+        }
+
+        if (op->HasVolatilePrepareFlag() && !op->PreparedOutReadSets().empty()) {
+            return EExecutionStatus::DelayCompleteNoMoreRestarts;
+        }
+
+        return EExecutionStatus::ExecutedNoMoreRestarts;
     }
 
-    void Complete(TOperation::TPtr, const TActorContext&) override {
+    void Complete(TOperation::TPtr op, const TActorContext& ctx) override {
+        if (op->HasVolatilePrepareFlag() && !op->PreparedOutReadSets().empty()) {
+            DataShard.SendReadSets(ctx, std::move(op->PreparedOutReadSets()));
+        }
     }
 
 };  // TExecuteWriteUnit

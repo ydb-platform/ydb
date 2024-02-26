@@ -1,5 +1,7 @@
 #pragma once
 
+#include "init.h"
+
 #include <ydb/public/sdk/cpp/client/ydb_discovery/discovery.h>
 #include <ydb/public/sdk/cpp/client/ydb_driver/driver.h>
 
@@ -180,14 +182,110 @@ void LoadYamlConfig(TConfigRefs refs, const TString& yamlConfigFile, NKikimrConf
 void CopyNodeLocation(NActorsInterconnect::TNodeLocation* dst, const NYdb::NDiscovery::TNodeLocation& src);
 void CopyNodeLocation(NYdb::NDiscovery::TNodeLocation* dst, const NActorsInterconnect::TNodeLocation& src);
 
-struct TConfigFields {
-    TMaybe<ui32> LogLevel; // log settings
-    TMaybe<ui32> LogSamplingLevel; // log settings
-    TMaybe<ui32> LogSamplingRate; // log settings
-    TMaybe<TString> LogFormat;// log settings
-    TMaybe<TString> SysLogServiceTag; //unique tags for sys logs
+template <class TType>
+struct TWithDefault {
+    using TWrappedType = TType;
+    TType Value;
+    bool Default = false;
+
+    constexpr explicit operator bool() const {
+        return !Default;
+    }
+
+    void EnsureDefined() const {
+        if (Y_UNLIKELY(!Default)) {
+            //Policy::OnEmpty(typeid(TValueType));
+            // FIXME throw
+        }
+    }
+
+    constexpr const TType& GetRef() const& {
+        EnsureDefined();
+
+        return Value;
+    }
+
+    constexpr TType& GetRef()& {
+        EnsureDefined();
+
+        return Value;
+    }
+
+    constexpr const TType&& GetRef() const&& {
+        EnsureDefined();
+
+        return std::move(Value);
+    }
+
+    constexpr const TType& operator*() const& {
+        return GetRef();
+    }
+
+    constexpr TType& operator*() & {
+        return GetRef();
+    }
+};
+
+template <class TType>
+class TWithDefaultOptHandler
+  : public NLastGetopt::IOptHandler
+{
+public:
+    TWithDefaultOptHandler(TType* target)
+        : Target(target)
+    {}
+
+    void HandleOpt(const NLastGetopt::TOptsParser* parser) override {
+        const auto* curOpt = parser->CurOpt();
+        TStringBuf val(parser->CurValStr());
+        try {
+            if (!val.IsInited() || parser->CurVal() == curOpt->GetDefaultValue().Data()) {
+                Target->Value = FromString<typename TType::TWrappedType>(curOpt->GetDefaultValue());
+                Target->Default = true;
+                return;
+            }
+            Target->Value = FromString<typename TType::TWrappedType>(val);
+        } catch (...) {
+            ythrow NLastGetopt::TUsageException() << "failed to parse opt " << curOpt->ToShortString() << " value " << TString(val).Quote() << ": " << CurrentExceptionMessage();
+        }
+    }
+
+private:
+    TType* Target;
+};
+
+template <>
+class TWithDefaultOptHandler<TWithDefault<TString>>
+  : public NLastGetopt::IOptHandler
+{
+public:
+    TWithDefaultOptHandler(TWithDefault<TString>* target)
+        : Target(target)
+    {}
+
+    void HandleOpt(const NLastGetopt::TOptsParser* parser) override {
+        const auto* curOpt = parser->CurOpt();
+        TStringBuf val(parser->CurValStr());
+        if (!val.IsInited() || parser->CurVal() == curOpt->GetDefaultValue().Data()) {
+            Target->Value = curOpt->GetDefaultValue();
+            Target->Default = true;
+            return;
+        }
+        Target->Value = val;
+    }
+
+private:
+    TWithDefault<TString>* Target;
+};
+
+struct TCommonAppOptions {
+    TWithDefault<ui32> LogLevel; // log settings
+    TWithDefault<ui32> LogSamplingLevel; // log settings
+    TWithDefault<ui32> LogSamplingRate; // log settings
+    TWithDefault<TString> LogFormat;// log settings
+    TMaybe<TString> SysLogServiceTag; // unique tags for sys logs
     TMaybe<TString> LogFileName; // log file name to initialize file log backend
-    TMaybe<TString> ClusterName; // log settings
+    TWithDefault<TString> ClusterName; // log settings
 
     ui32 NodeId = 0;
     TMaybe<TString> NodeIdValue;
@@ -238,17 +336,22 @@ struct TConfigFields {
     void RegisterCliOptions(NLastGetopt::TOpts& opts) {
         // FIXME remove default value where TMaybe used
         opts.AddLongOption("cluster-name", "which cluster this node belongs to")
-            .DefaultValue("unknown").OptionalArgument("STR").StoreResult(&ClusterName);
+            .DefaultValue("unknown").OptionalArgument("STR")
+            .Handler(new TWithDefaultOptHandler(&ClusterName));
         opts.AddLongOption("log-level", "default logging level").OptionalArgument("1-7")
-            .DefaultValue(ToString(DefaultLogLevel)).StoreResult(&LogLevel);
+            .DefaultValue(ToString(DefaultLogLevel))
+            .Handler(new TWithDefaultOptHandler(&LogLevel));
         opts.AddLongOption("log-sampling-level", "sample logs equal to or above this level").OptionalArgument("1-7")
-            .DefaultValue(ToString(DefaultLogSamplingLevel)).StoreResult(&LogSamplingLevel);
+            .DefaultValue(ToString(DefaultLogSamplingLevel))
+            .Handler(new TWithDefaultOptHandler(&LogSamplingLevel));
         opts.AddLongOption("log-sampling-rate",
                            "log only each Nth message with priority matching sampling level; 0 turns log sampling off")
             .OptionalArgument(Sprintf("0,%" PRIu32, Max<ui32>()))
-            .DefaultValue(ToString(DefaultLogSamplingRate)).StoreResult(&LogSamplingRate);
+            .DefaultValue(ToString(DefaultLogSamplingRate))
+            .Handler(new TWithDefaultOptHandler(&LogSamplingRate));
         opts.AddLongOption("log-format", "log format to use; short skips the priority and timestamp")
-            .DefaultValue("full").OptionalArgument("full|short|json").StoreResult(&LogFormat);
+            .DefaultValue("full").OptionalArgument("full|short|json")
+            .Handler(new TWithDefaultOptHandler(&LogFormat));
         opts.AddLongOption("syslog", "send to syslog instead of stderr").SetFlag(&SysLogEnabled);
         opts.AddLongOption("syslog-service-tag", "unique tag for syslog").RequiredArgument("NAME").StoreResult(&SysLogServiceTag);
         opts.AddLongOption("log-file-name", "file name for log backend").RequiredArgument("NAME").StoreResult(&LogFileName);
@@ -256,23 +359,23 @@ struct TConfigFields {
         opts.AddLongOption('n', "node", "Node ID or 'static' to auto-detect using naming file and ic-port.")
             .RequiredArgument("[NUM|static]").StoreResult(&NodeIdValue);
         opts.AddLongOption("node-broker", "node broker address host:port")
-                .RequiredArgument("ADDR").AppendTo(&NodeBrokerAddresses);
+            .RequiredArgument("ADDR").AppendTo(&NodeBrokerAddresses);
         opts.AddLongOption("node-broker-port", "node broker port (hosts from naming file are used)")
-                .RequiredArgument("PORT").StoreResult(&NodeBrokerPort);
+            .RequiredArgument("PORT").StoreResult(&NodeBrokerPort);
         opts.AddLongOption("node-broker-use-tls", "use tls for node broker (hosts from naming file are used)")
-                .RequiredArgument("PORT").StoreResult(&NodeBrokerUseTls);
+            .RequiredArgument("PORT").StoreResult(&NodeBrokerUseTls);
         opts.AddLongOption("node-address", "address for dynamic node")
-                .RequiredArgument("ADDR").StoreResult(&NodeAddress);
+            .RequiredArgument("ADDR").StoreResult(&NodeAddress);
         opts.AddLongOption("node-host", "hostname for dynamic node")
-                .RequiredArgument("NAME").StoreResult(&NodeHost);
+            .RequiredArgument("NAME").StoreResult(&NodeHost);
         opts.AddLongOption("node-resolve-host", "resolve hostname for dynamic node")
-                .RequiredArgument("NAME").StoreResult(&NodeResolveHost);
+            .RequiredArgument("NAME").StoreResult(&NodeResolveHost);
         opts.AddLongOption("node-domain", "domain for dynamic node to register in")
-                .RequiredArgument("NAME").StoreResult(&NodeDomain);
+            .RequiredArgument("NAME").StoreResult(&NodeDomain);
         opts.AddLongOption("ic-port", "interconnect port")
-                .RequiredArgument("NUM").StoreResult(&InterconnectPort);
+            .RequiredArgument("NUM").StoreResult(&InterconnectPort);
         opts.AddLongOption("sqs-port", "sqs port")
-                .RequiredArgument("NUM").StoreResult(&SqsHttpPort);
+            .RequiredArgument("NUM").StoreResult(&SqsHttpPort);
         opts.AddLongOption("tenant", "add binding for Local service to specified tenant, might be one of {'/<root>', '/<root>/<path_to_user>'}")
             .RequiredArgument("NAME").StoreResult(&TenantName);
         opts.AddLongOption("mon-port", "Monitoring port").OptionalArgument("NUM").StoreResult(&MonitoringPort);
@@ -290,16 +393,17 @@ struct TConfigFields {
         opts.AddLongOption("grpc-public-address-v6", "set public ipv6 address for discovery").RequiredArgument("ADDR").EmplaceTo(&GRpcPublicAddressesV6);
         opts.AddLongOption("grpc-public-target-name-override", "set public hostname override for TLS in discovery").RequiredArgument("HOST").StoreResult(&GRpcPublicTargetNameOverride);
         opts.AddLongOption('r', "restarts-count-file", "State for restarts monitoring counter,\nuse empty string to disable\n")
-                .OptionalArgument("PATH").DefaultValue(RestartsCountFile).StoreResult(&RestartsCountFile);
+            .OptionalArgument("PATH").DefaultValue(RestartsCountFile)
+            .StoreResult(&RestartsCountFile);
         opts.AddLongOption("compile-inflight-limit", "Limit on parallel programs compilation").OptionalArgument("NUM").StoreResult(&CompileInflightLimit);
         opts.AddLongOption("udf", "Load shared library with UDF by given path").AppendTo(&UDFsPaths);
         opts.AddLongOption("udfs-dir", "Load all shared libraries with UDFs found in given directory").StoreResult(&UDFsDir);
         opts.AddLongOption("node-kind", Sprintf("Kind of the node (affects list of services activated allowed values are {'%s', '%s'} )", NODE_KIND_YDB.data(), NODE_KIND_YQ.data()))
-                .RequiredArgument("NAME").StoreResult(&NodeKind);
+            .RequiredArgument("NAME").StoreResult(&NodeKind);
         opts.AddLongOption("node-type", "Type of the node")
-                .RequiredArgument("NAME").StoreResult(&NodeType);
+            .RequiredArgument("NAME").StoreResult(&NodeType);
         opts.AddLongOption("ignore-cms-configs", "Don't load configs from CMS")
-                .NoArgument().SetFlag(&IgnoreCmsConfigs);
+            .NoArgument().SetFlag(&IgnoreCmsConfigs);
         opts.AddLongOption("cert", "Path to client certificate file (PEM) for interconnect").RequiredArgument("PATH").StoreResult(&PathToInterconnectCertFile);
         opts.AddLongOption("grpc-cert", "Path to client certificate file (PEM) for grpc").RequiredArgument("PATH").StoreResult(&GrpcSslSettings.PathToGrpcCertFile);
         opts.AddLongOption("ic-cert", "Path to client certificate file (PEM) for interconnect").RequiredArgument("PATH").StoreResult(&PathToInterconnectCertFile);
@@ -310,16 +414,15 @@ struct TConfigFields {
         opts.AddLongOption("grpc-ca", "Path to certificate authority file (PEM) for grpc").RequiredArgument("PATH").StoreResult(&GrpcSslSettings.PathToGrpcCaFile);
         opts.AddLongOption("ic-ca", "Path to certificate authority file (PEM) for interconnect").RequiredArgument("PATH").StoreResult(&PathToInterconnectCaFile);
         opts.AddLongOption("data-center", "data center name (used to describe dynamic node location)")
-                .RequiredArgument("NAME").StoreResult(&DataCenter);
+            .RequiredArgument("NAME").StoreResult(&DataCenter);
         opts.AddLongOption("rack", "rack name (used to describe dynamic node location)")
-                .RequiredArgument("NAME").StoreResult(&Rack);
+            .RequiredArgument("NAME").StoreResult(&Rack);
         opts.AddLongOption("body", "body name (used to describe dynamic node location)")
-                .RequiredArgument("NUM").StoreResult(&Body);
+            .RequiredArgument("NUM").StoreResult(&Body);
         opts.AddLongOption("yaml-config", "Yaml config").OptionalArgument("PATH").StoreResult(&YamlConfigFile);
 
         opts.AddLongOption("tiny-mode", "Start in a tiny mode")
-                .NoArgument().SetFlag(&TinyMode);
-
+            .NoArgument().SetFlag(&TinyMode);
     }
 
     void ApplyFields(NKikimrConfig::TAppConfig& appConfig, IEnv& env, IConfigUpdateTracer& ConfigUpdateTracer) const {
@@ -695,7 +798,7 @@ struct TConfigFields {
     }
 };
 
-struct TMbusConfigFields {
+struct TMbusAppOptions {
     ui32 BusProxyPort = NMsgBusProxy::TProtocol::DefaultPort;
     NBus::TBusQueueConfig ProxyBusQueueConfig;
     NBus::TBusServerSessionConfig ProxyBusSessionConfig;
@@ -771,99 +874,15 @@ struct TMbusConfigFields {
 
 // =====
 
-TString DeduceNodeDomain(const NConfig::TConfigFields& cf, const NKikimrConfig::TAppConfig& appConfig) {
-    if (cf.NodeDomain) {
-        return cf.NodeDomain;
-    }
-
-    if (appConfig.GetDomainsConfig().DomainSize() == 1) {
-        return appConfig.GetDomainsConfig().GetDomain(0).GetName();
-    }
-
-    if (appConfig.GetTenantPoolConfig().SlotsSize() == 1) {
-        auto &slot = appConfig.GetTenantPoolConfig().GetSlots(0);
-        if (slot.GetDomainName()) {
-            return slot.GetDomainName();
-        }
-
-        auto &tenantName = slot.GetTenantName();
-        if (IsStartWithSlash(tenantName)) {
-            return ToString(ExtractDomain(tenantName));
-        }
-    }
-
-    return "";
-}
-
-ui32 NextValidKind(ui32 kind) {
-    do {
-        ++kind;
-        if (kind != NKikimrConsole::TConfigItem::Auto && NKikimrConsole::TConfigItem::EKind_IsValid(kind)) {
-            break;
-        }
-    } while (kind <= NKikimrConsole::TConfigItem::EKind_MAX);
-    return kind;
-}
-
-bool HasCorrespondingManagedKind(ui32 kind, const NKikimrConfig::TAppConfig& appConfig) {
-    return (kind == NKikimrConsole::TConfigItem::NameserviceConfigItem && appConfig.HasNameserviceConfig()) ||
-            (kind == NKikimrConsole::TConfigItem::NetClassifierDistributableConfigItem && appConfig.HasNetClassifierDistributableConfig()) ||
-            (kind == NKikimrConsole::TConfigItem::NamedConfigsItem && appConfig.NamedConfigsSize());
-}
-
-NClient::TKikimr GetKikimr(const TGrpcSslSettings& cf, const TString& addr, const IEnv& env) {
-    TCommandConfig::TServerEndpoint endpoint = TCommandConfig::ParseServerAddress(addr);
-    NYdbGrpc::TGRpcClientConfig grpcConfig(endpoint.Address, TDuration::Seconds(5));
-    grpcConfig.LoadBalancingPolicy = "round_robin";
-    if (endpoint.EnableSsl.Defined()) {
-        grpcConfig.EnableSsl = endpoint.EnableSsl.GetRef();
-        auto& sslCredentials = grpcConfig.SslCredentials;
-        if (cf.PathToGrpcCaFile) {
-            sslCredentials.pem_root_certs = env.ReadFromFile(cf.PathToGrpcCaFile, "CA certificates");
-        }
-        if (cf.PathToGrpcCertFile && cf.PathToGrpcPrivateKeyFile) {
-            sslCredentials.pem_cert_chain = env.ReadFromFile(cf.PathToGrpcCertFile, "Client certificates");
-            sslCredentials.pem_private_key = env.ReadFromFile(cf.PathToGrpcPrivateKeyFile, "Client certificates key");
-        }
-    }
-    return NClient::TKikimr(grpcConfig);
-}
-
-NKikimrConfig::TAppConfig GetYamlConfigFromResult(const NKikimr::NClient::TConfigurationResult& result, const TMap<TString, TString>& labels) {
-    NKikimrConfig::TAppConfig yamlConfig;
-    if (result.HasYamlConfig() && !result.GetYamlConfig().empty()) {
-        NYamlConfig::ResolveAndParseYamlConfig(
-            result.GetYamlConfig(),
-            result.GetVolatileYamlConfigs(),
-            labels,
-            yamlConfig);
-    }
-    return yamlConfig;
-}
-
+TString DeduceNodeDomain(const NConfig::TCommonAppOptions& cf, const NKikimrConfig::TAppConfig& appConfig);
+ui32 NextValidKind(ui32 kind);
+bool HasCorrespondingManagedKind(ui32 kind, const NKikimrConfig::TAppConfig& appConfig);
+NClient::TKikimr GetKikimr(const TGrpcSslSettings& cf, const TString& addr, const IEnv& env);
+NKikimrConfig::TAppConfig GetYamlConfigFromResult(const NKikimr::NClient::TConfigurationResult& result, const TMap<TString, TString>& labels);
 NKikimrConfig::TAppConfig GetActualDynConfig(
     const NKikimrConfig::TAppConfig& yamlConfig,
     const NKikimrConfig::TAppConfig& regularConfig,
-    IConfigUpdateTracer& ConfigUpdateTracer)
-{
-    if (yamlConfig.GetYamlConfigEnabled()) {
-        for (ui32 kind = NKikimrConsole::TConfigItem::EKind_MIN; kind <= NKikimrConsole::TConfigItem::EKind_MAX; NextValidKind(kind)) {
-            if (HasCorrespondingManagedKind(kind, yamlConfig)) {
-                TRACE_CONFIG_CHANGE_INPLACE(kind, ReplaceConfigWithConsoleProto);
-            } else {
-                TRACE_CONFIG_CHANGE_INPLACE(kind, ReplaceConfigWithConsoleYaml);
-            }
-        }
-
-        return yamlConfig;
-    }
-
-    for (ui32 kind = NKikimrConsole::TConfigItem::EKind_MIN; kind <= NKikimrConsole::TConfigItem::EKind_MAX; NextValidKind(kind)) {
-        TRACE_CONFIG_CHANGE_INPLACE(kind, ReplaceConfigWithConsoleProto);
-    }
-
-    return regularConfig;
-}
+    IConfigUpdateTracer& ConfigUpdateTracer);
 
 // =====
 
@@ -887,8 +906,8 @@ class TInitialConfiguratorImpl
     NKikimrConfig::TAppConfig BaseConfig;
     NKikimrConfig::TAppConfig AppConfig;
 
-    NConfig::TConfigFields ConfigFields;
-    NConfig::TMbusConfigFields MbusConfigFields;
+    NConfig::TCommonAppOptions CommonAppOptions;
+    NConfig::TMbusAppOptions MbusAppOptions;
 
     TAppInitDebugInfo InitDebug;
 
@@ -919,7 +938,7 @@ public:
     {}
 
     void ValidateOptions(const NLastGetopt::TOpts& opts, const NLastGetopt::TOptsParseResult& parseResult) override {
-        MbusConfigFields.ValidateCliOptions(opts, parseResult);
+        MbusAppOptions.ValidateCliOptions(opts, parseResult);
     }
 
     void Parse(const TVector<TString>& freeArgs) override {
@@ -929,29 +948,29 @@ public:
 
         Option("auth-file", TCfg::TAuthConfigFieldTag{}, CALL_CTX());
         LoadBootstrapConfig(ProtoConfigFileProvider, ErrorCollector, freeArgs, BaseConfig);
-        LoadYamlConfig(refs, ConfigFields.YamlConfigFile, AppConfig, CALL_CTX());
+        LoadYamlConfig(refs, CommonAppOptions.YamlConfigFile, AppConfig, CALL_CTX());
         OptionMerge("auth-token-file", TCfg::TAuthConfigFieldTag{}, CALL_CTX());
 
         // start memorylog as soon as possible
         Option("memorylog-file", TCfg::TMemoryLogConfigFieldTag{}, &TInitialConfiguratorImpl::InitMemLog, CALL_CTX());
         Option("naming-file", TCfg::TNameserviceConfigFieldTag{}, CALL_CTX());
 
-        ConfigFields.NodeId = ConfigFields.DeduceNodeId(AppConfig, Env);
-        Cout << "Determined node ID: " << ConfigFields.NodeId << Endl;
+        CommonAppOptions.NodeId = CommonAppOptions.DeduceNodeId(AppConfig, Env);
+        Cout << "Determined node ID: " << CommonAppOptions.NodeId << Endl;
 
-        ConfigFields.ValidateTenant();
+        CommonAppOptions.ValidateTenant();
 
-        ConfigFields.ApplyServicesMask(ServicesMask);
+        CommonAppOptions.ApplyServicesMask(ServicesMask);
 
-        PreFillLabels(ConfigFields);
+        PreFillLabels(CommonAppOptions);
 
-        if (ConfigFields.IsStaticNode()) {
+        if (CommonAppOptions.IsStaticNode()) {
             InitStaticNode();
         } else {
             InitDynamicNode();
         }
 
-        LoadYamlConfig(refs, ConfigFields.YamlConfigFile, AppConfig, CALL_CTX());
+        LoadYamlConfig(refs, CommonAppOptions.YamlConfigFile, AppConfig, CALL_CTX());
 
         Option("sys-file", TCfg::TActorSystemConfigFieldTag{}, CALL_CTX());
 
@@ -965,7 +984,7 @@ public:
         Option("log-file", TCfg::TLogConfigFieldTag{}, &TInitialConfiguratorImpl::SetupLogConfigDefaults, CALL_CTX());
 
         // This flag is set per node and we prefer flag over CMS.
-        ConfigFields.ApplyLogSettings(AppConfig, ConfigUpdateTracer);
+        CommonAppOptions.ApplyLogSettings(AppConfig, ConfigUpdateTracer);
 
         Option("ic-file", TCfg::TInterconnectConfigFieldTag{}, &TInitialConfiguratorImpl::SetupInterconnectConfigDefaults, CALL_CTX());
         Option("channels-file", TCfg::TChannelProfileConfigFieldTag{}, CALL_CTX());
@@ -996,20 +1015,20 @@ public:
         Option(nullptr, TCfg::TTracingConfigFieldTag{}, CALL_CTX());
         Option(nullptr, TCfg::TFailureInjectionConfigFieldTag{}, CALL_CTX());
 
-        ConfigFields.ApplyFields(AppConfig, Env, ConfigUpdateTracer);
+        CommonAppOptions.ApplyFields(AppConfig, Env, ConfigUpdateTracer);
 
        // MessageBus options.
         if (!AppConfig.HasMessageBusConfig()) {
-            MbusConfigFields.InitMessageBusConfig(AppConfig);
+            MbusAppOptions.InitMessageBusConfig(AppConfig);
             TRACE_CONFIG_CHANGE_INPLACE_T(MessageBusConfig, UpdateExplicitly);
         }
 
-        TenantName = FillTenantPoolConfig(ConfigFields);
+        TenantName = FillTenantPoolConfig(CommonAppOptions);
 
-        FillData(ConfigFields);
+        FillData(CommonAppOptions);
     }
 
-    void FillData(const NConfig::TConfigFields& cf) {
+    void FillData(const NConfig::TCommonAppOptions& cf) {
         if (cf.TenantName && ScopeId.IsEmpty()) {
             const TString myDomain = DeduceNodeDomain(cf, AppConfig);
             for (const auto& domain : AppConfig.GetDomainsConfig().GetDomain()) {
@@ -1031,7 +1050,7 @@ public:
         ClusterName = AppConfig.GetNameserviceConfig().GetClusterUUID();
     }
 
-    TString FillTenantPoolConfig(const NConfig::TConfigFields& cf) {
+    TString FillTenantPoolConfig(const NConfig::TCommonAppOptions& cf) {
         auto &slot = *AppConfig.MutableTenantPoolConfig()->AddSlots();
         slot.SetId("static-slot");
         slot.SetIsDynamic(false);
@@ -1041,7 +1060,7 @@ public:
     }
 
     void SetupLogConfigDefaults(NKikimrConfig::TLogConfig& logConfig) {
-        ConfigFields.SetupLogConfigDefaults(logConfig, ConfigUpdateTracer);
+        CommonAppOptions.SetupLogConfigDefaults(logConfig, ConfigUpdateTracer);
     }
 
     void AddLabelToAppConfig(const TString& name, const TString& value) {
@@ -1081,7 +1100,7 @@ public:
         MutableConfigPartMerge(refs, optname, tag, AppConfig, ctx);
     }
 
-    void PreFillLabels(const NConfig::TConfigFields& cf) {
+    void PreFillLabels(const NConfig::TCommonAppOptions& cf) {
         Labels["node_id"] = ToString(cf.NodeId);
         Labels["node_host"] = Env.FQDNHostName();
         Labels["tenant"] = (cf.TenantName ? cf.TenantName.GetRef() : TString(""));
@@ -1099,14 +1118,14 @@ public:
     }
 
     void SetupBootstrapConfigDefaults(NKikimrConfig::TBootstrap& bootstrapConfig) {
-        ConfigFields.SetupBootstrapConfigDefaults(bootstrapConfig, ConfigUpdateTracer);
+        CommonAppOptions.SetupBootstrapConfigDefaults(bootstrapConfig, ConfigUpdateTracer);
     };
 
     void SetupInterconnectConfigDefaults(NKikimrConfig::TInterconnectConfig& icConfig) {
-        ConfigFields.SetupInterconnectConfigDefaults(icConfig, ConfigUpdateTracer);
+        CommonAppOptions.SetupInterconnectConfigDefaults(icConfig, ConfigUpdateTracer);
     };
 
-    void RegisterDynamicNode(NConfig::TConfigFields& cf) {
+    void RegisterDynamicNode(NConfig::TCommonAppOptions& cf) {
         TVector<TString> addrs;
 
         cf.FillClusterEndpoints(AppConfig, addrs);
@@ -1160,35 +1179,35 @@ public:
     }
 
     void InitStaticNode() {
-        ConfigFields.ValidateStaticNodeConfig();
+        CommonAppOptions.ValidateStaticNodeConfig();
 
         Labels["dynamic"] = "false";
     }
 
     void InitDynamicNode() {
         Labels["dynamic"] = "true";
-        RegisterDynamicNode(ConfigFields);
+        RegisterDynamicNode(CommonAppOptions);
 
         Labels["node_id"] = ToString(NodeId);
         AddLabelToAppConfig("node_id", Labels["node_id"]);
 
-        if (ConfigFields.IgnoreCmsConfigs) {
+        if (CommonAppOptions.IgnoreCmsConfigs) {
             return;
         }
 
         TVector<TString> addrs;
-        ConfigFields.FillClusterEndpoints(AppConfig, addrs);
+        CommonAppOptions.FillClusterEndpoints(AppConfig, addrs);
 
         TDynConfigSettings settings {
             NodeId,
-            DeduceNodeDomain(ConfigFields, AppConfig),
-            ConfigFields.TenantName.GetRef(),
+            DeduceNodeDomain(CommonAppOptions, AppConfig),
+            CommonAppOptions.TenantName.GetRef(),
             Env.FQDNHostName(),
-            ConfigFields.NodeType.GetRef(),
+            CommonAppOptions.NodeType.GetRef(),
             AppConfig.GetAuthConfig().GetStaffApiUserToken(),
         };
 
-        TMaybe<NKikimr::NClient::TConfigurationResult> result = DynConfigClient.GetConfig(ConfigFields.GrpcSslSettings, addrs, settings, Env);
+        TMaybe<NKikimr::NClient::TConfigurationResult> result = DynConfigClient.GetConfig(CommonAppOptions.GrpcSslSettings, addrs, settings, Env);
 
         if (!result) {
             return;
@@ -1206,8 +1225,8 @@ public:
     }
 
     void RegisterCliOptions(NLastGetopt::TOpts& opts) override {
-        ConfigFields.RegisterCliOptions(opts);
-        MbusConfigFields.RegisterCliOptions(opts);
+        CommonAppOptions.RegisterCliOptions(opts);
+        MbusAppOptions.RegisterCliOptions(opts);
         opts.AddLongOption("label", "labels for this node")
             .Optional().RequiredArgument("KEY=VALUE")
             .KVHandler([&](TString key, TString val) {
@@ -1249,16 +1268,6 @@ std::unique_ptr<IInitialConfigurator> MakeDefaultInitialConfigurator(
         NConfig::IMemLogInitializer& memLogInit,
         NConfig::INodeBrokerClient& nodeBrokerClient,
         NConfig::IDynConfigClient& dynConfigClient,
-        NConfig::IEnv& env)
-{
-    return std::make_unique<TInitialConfiguratorImpl>(
-        errorCollector,
-        protoConfigFileProvider,
-        configUpdateTracer,
-        memLogInit,
-        nodeBrokerClient,
-        dynConfigClient,
-        env);
-}
+        NConfig::IEnv& env);
 
 } // namespace NKikimr::NConfig

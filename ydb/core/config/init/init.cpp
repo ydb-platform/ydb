@@ -1,4 +1,3 @@
-#include "init.h"
 #include "init_impl.h"
 
 namespace NKikimr::NConfig {
@@ -656,4 +655,121 @@ void LoadYamlConfig(TConfigRefs refs, const TString& yamlConfigFile, NKikimrConf
     }
 }
 
+TString DeduceNodeDomain(const NConfig::TCommonAppOptions& cf, const NKikimrConfig::TAppConfig& appConfig) {
+    if (cf.NodeDomain) {
+        return cf.NodeDomain;
+    }
+
+    if (appConfig.GetDomainsConfig().DomainSize() == 1) {
+        return appConfig.GetDomainsConfig().GetDomain(0).GetName();
+    }
+
+    if (appConfig.GetTenantPoolConfig().SlotsSize() == 1) {
+        auto &slot = appConfig.GetTenantPoolConfig().GetSlots(0);
+        if (slot.GetDomainName()) {
+            return slot.GetDomainName();
+        }
+
+        auto &tenantName = slot.GetTenantName();
+        if (IsStartWithSlash(tenantName)) {
+            return ToString(ExtractDomain(tenantName));
+        }
+    }
+
+    return "";
+}
+
+ui32 NextValidKind(ui32 kind) {
+    do {
+        ++kind;
+        if (kind != NKikimrConsole::TConfigItem::Auto && NKikimrConsole::TConfigItem::EKind_IsValid(kind)) {
+            break;
+        }
+    } while (kind <= NKikimrConsole::TConfigItem::EKind_MAX);
+    return kind;
+}
+
+bool HasCorrespondingManagedKind(ui32 kind, const NKikimrConfig::TAppConfig& appConfig) {
+    return (kind == NKikimrConsole::TConfigItem::NameserviceConfigItem && appConfig.HasNameserviceConfig()) ||
+            (kind == NKikimrConsole::TConfigItem::NetClassifierDistributableConfigItem && appConfig.HasNetClassifierDistributableConfig()) ||
+            (kind == NKikimrConsole::TConfigItem::NamedConfigsItem && appConfig.NamedConfigsSize());
+}
+
+NClient::TKikimr GetKikimr(const TGrpcSslSettings& cf, const TString& addr, const IEnv& env) {
+    TCommandConfig::TServerEndpoint endpoint = TCommandConfig::ParseServerAddress(addr);
+    NYdbGrpc::TGRpcClientConfig grpcConfig(endpoint.Address, TDuration::Seconds(5));
+    grpcConfig.LoadBalancingPolicy = "round_robin";
+    if (endpoint.EnableSsl.Defined()) {
+        grpcConfig.EnableSsl = endpoint.EnableSsl.GetRef();
+        auto& sslCredentials = grpcConfig.SslCredentials;
+        if (cf.PathToGrpcCaFile) {
+            sslCredentials.pem_root_certs = env.ReadFromFile(cf.PathToGrpcCaFile, "CA certificates");
+        }
+        if (cf.PathToGrpcCertFile && cf.PathToGrpcPrivateKeyFile) {
+            sslCredentials.pem_cert_chain = env.ReadFromFile(cf.PathToGrpcCertFile, "Client certificates");
+            sslCredentials.pem_private_key = env.ReadFromFile(cf.PathToGrpcPrivateKeyFile, "Client certificates key");
+        }
+    }
+    return NClient::TKikimr(grpcConfig);
+}
+
+NKikimrConfig::TAppConfig GetYamlConfigFromResult(const NKikimr::NClient::TConfigurationResult& result, const TMap<TString, TString>& labels) {
+    NKikimrConfig::TAppConfig yamlConfig;
+    if (result.HasYamlConfig() && !result.GetYamlConfig().empty()) {
+        NYamlConfig::ResolveAndParseYamlConfig(
+            result.GetYamlConfig(),
+            result.GetVolatileYamlConfigs(),
+            labels,
+            yamlConfig);
+    }
+    return yamlConfig;
+}
+
+NKikimrConfig::TAppConfig GetActualDynConfig(
+    const NKikimrConfig::TAppConfig& yamlConfig,
+    const NKikimrConfig::TAppConfig& regularConfig,
+    IConfigUpdateTracer& ConfigUpdateTracer)
+{
+    if (yamlConfig.GetYamlConfigEnabled()) {
+        for (ui32 kind = NKikimrConsole::TConfigItem::EKind_MIN; kind <= NKikimrConsole::TConfigItem::EKind_MAX; NextValidKind(kind)) {
+            if (HasCorrespondingManagedKind(kind, yamlConfig)) {
+                TRACE_CONFIG_CHANGE_INPLACE(kind, ReplaceConfigWithConsoleProto);
+            } else {
+                TRACE_CONFIG_CHANGE_INPLACE(kind, ReplaceConfigWithConsoleYaml);
+            }
+        }
+
+        return yamlConfig;
+    }
+
+    for (ui32 kind = NKikimrConsole::TConfigItem::EKind_MIN; kind <= NKikimrConsole::TConfigItem::EKind_MAX; NextValidKind(kind)) {
+        TRACE_CONFIG_CHANGE_INPLACE(kind, ReplaceConfigWithConsoleProto);
+    }
+
+    return regularConfig;
+}
+
+std::unique_ptr<IInitialConfigurator> MakeDefaultInitialConfigurator(
+        NConfig::IErrorCollector& errorCollector,
+        NConfig::IProtoConfigFileProvider& protoConfigFileProvider,
+        NConfig::IConfigUpdateTracer& configUpdateTracer,
+        NConfig::IMemLogInitializer& memLogInit,
+        NConfig::INodeBrokerClient& nodeBrokerClient,
+        NConfig::IDynConfigClient& dynConfigClient,
+        NConfig::IEnv& env)
+{
+    return std::make_unique<TInitialConfiguratorImpl>(
+        errorCollector,
+        protoConfigFileProvider,
+        configUpdateTracer,
+        memLogInit,
+        nodeBrokerClient,
+        dynConfigClient,
+        env);
+}
+
 } // namespace NKikimr::NConfig
+
+Y_DECLARE_OUT_SPEC(, NKikimr::NConfig::TWithDefault<TString>, stream, value) {
+    stream << value.Value;
+}

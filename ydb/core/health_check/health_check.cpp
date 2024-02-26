@@ -2090,7 +2090,8 @@ public:
         TNodeId maxClockSkewPeerId = 0;
         TNodeId maxClockSkewNodeId = 0;
         for (auto& [nodeId, nodeSystemState] : MergedNodeSystemState) {
-            if (IsTimeDifferenceCheckNode(nodeId) && abs(nodeSystemState->GetMaxClockSkewWithPeerUs()) > maxClockSkewUs) {
+            if (IsTimeDifferenceCheckNode(nodeId) && IsTimeDifferenceCheckNode(nodeSystemState->GetMaxClockSkewPeerId())
+                    && abs(nodeSystemState->GetMaxClockSkewWithPeerUs()) > maxClockSkewUs) {
                 maxClockSkewUs = abs(nodeSystemState->GetMaxClockSkewWithPeerUs());
                 maxClockSkewPeerId = nodeSystemState->GetMaxClockSkewPeerId();
                 maxClockSkewNodeId = nodeId;

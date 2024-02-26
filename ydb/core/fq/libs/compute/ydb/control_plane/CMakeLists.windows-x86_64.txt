@@ -14,6 +14,7 @@ target_compile_options(compute-ydb-control_plane PRIVATE
 target_link_libraries(compute-ydb-control_plane PUBLIC
   contrib-libs-cxxsupp
   yutil
+  library-cpp-json
   library-actors-core
   library-actors-protos
   compute-ydb-synchronization_service
@@ -22,6 +23,8 @@ target_link_libraries(compute-ydb-control_plane PUBLIC
   ydb-core-protos
   library-db_pool-protos
   yql-public-issue
+  library-yql-utils
+  yql-utils-actors
   api-grpc
   api-grpc-draft
   lib-operation_id-protos
@@ -32,5 +35,6 @@ target_sources(compute-ydb-control_plane PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/core/fq/libs/compute/ydb/control_plane/compute_databases_cache.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/fq/libs/compute/ydb/control_plane/database_monitoring.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/fq/libs/compute/ydb/control_plane/monitoring_grpc_client_actor.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/fq/libs/compute/ydb/control_plane/monitoring_rest_client_actor.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/fq/libs/compute/ydb/control_plane/ydbcp_grpc_client_actor.cpp
 )

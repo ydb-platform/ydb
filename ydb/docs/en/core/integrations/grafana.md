@@ -22,7 +22,7 @@ Please note that Grafana does not validate that queries are safe. Queries can co
 
 ### Data transfer protocol support
 
-The plugin supports `GRPCS` and `GRPC` transport protocols. Please note that you need to provide TLS/SSL certificate when using `grpcs`.
+The plugin supports [gRPC and gRPCS](https://grpc.io/) transport protocols. A TLS/SSL certificate needs to be provided when using `grpcs://`.
 
 ### Manual configuration
 

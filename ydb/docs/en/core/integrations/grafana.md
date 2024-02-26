@@ -1,14 +1,12 @@
 # {{ ydb-short-name }} data source for Grafana
 
-## Version compatibility
-
-Plugin requires `v9.2` and higher of Grafana.
-
-The YDB data source plugin allows you to query and visualize YDB data from within Grafana.
+The [{{ ydb-short-name }} data source plugin](https://grafana.com/grafana/plugins/ydbtech-ydb-datasource/) allows you to use [Grafana](https://grafana.com) to query and visualize data from {{ ydb-short-name }}.
 
 ## Installation
 
-For detailed instructions on how to install the plugin on Grafana Cloud or locally, please checkout the [Plugin installation docs](https://grafana.com/docs/grafana/latest/plugins/installation/).
+Prerequisites: the plugin requires `v9.2` and higher of Grafana.
+
+Follow the Grafana's [plugin installation docs](https://grafana.com/docs/grafana/latest/plugins/installation/) to install a plugin named `ydb-grafana-datasource-plugin`.
 
 ## Configuration
 

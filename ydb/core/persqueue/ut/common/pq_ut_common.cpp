@@ -589,6 +589,7 @@ void CmdWrite(TTestActorRuntime* runtime, ui64 tabletId, const TActorId& sender,
 
             if (error) {
                 UNIT_ASSERT(
+                    result->Record.GetErrorCode() == NPersQueue::NErrorCode::WRITE_ERROR_PARTITION_INACTIVE ||
                     result->Record.GetErrorCode() == NPersQueue::NErrorCode::WRITE_ERROR_PARTITION_IS_FULL ||
                     result->Record.GetErrorCode() == NPersQueue::NErrorCode::BAD_REQUEST ||
                     result->Record.GetErrorCode() == NPersQueue::NErrorCode::WRONG_COOKIE

@@ -374,7 +374,7 @@ public:
                 }
                 return;
             }
-        } 
+        }
         const TString& url = ev->Get()->State->BuildUrl();
         LOG_D("CommitMultipartUpload ERROR " << url);
         if (RetryOperation(result.CurlResponseCode, result.Content.HttpResponseCode, url, "CommitMultipartUpload")) {
@@ -516,7 +516,7 @@ public:
             return;
         }
         const TString& url = ev->Get()->State->BuildUrl();
-        LOG_D("ListParts ERROR " << ev->Get()->State->BuildUrl());
+        LOG_D("ListParts ERROR " << url);
         if (RetryOperation(result.CurlResponseCode, result.Content.HttpResponseCode, url, "ListParts")) {
             PushListParts(ev->Get()->State);
         }

@@ -8,6 +8,7 @@
 #include <ydb/core/kqp/common/kqp_lwtrace_probes.h>
 #include <ydb/core/kqp/common/kqp_ru_calc.h>
 #include <ydb/core/kqp/common/kqp_timeouts.h>
+#include <ydb/core/kqp/common/simple/query_ast.h>
 #include <ydb/core/kqp/compile_service/kqp_compile_service.h>
 #include <ydb/core/kqp/executer_actor/kqp_executer.h>
 #include <ydb/core/kqp/executer_actor/kqp_locks_helper.h>
@@ -513,6 +514,19 @@ public:
         OnSuccessCompileRequest();
     }
 
+    void Handle(TEvKqp::TEvParseResponse::TPtr& ev) {
+        QueryState->SaveAndCheckParseResult(std::move(*ev->Get()));
+        CompileStatement();
+    }
+
+    void CompileStatement() {
+        auto request = QueryState->BuildCompileRequest(CompilationCookie);
+        LOG_D("Sending CompileQuery request");
+
+        Send(MakeKqpCompileServiceID(SelfId().NodeId()), request.release(), 0, QueryState->QueryId,
+            QueryState->KqpSessionSpan.GetTraceId());
+    }
+
     void OnSuccessCompileRequest() {
         if (QueryState->GetAction() == NKikimrKqp::QUERY_ACTION_PREPARE ||
             QueryState->GetAction() == NKikimrKqp::QUERY_ACTION_EXPLAIN)
@@ -799,7 +813,7 @@ public:
             request.QueryType = queryState->GetType();
             if (Y_LIKELY(queryState->PreparedQuery)) {
                 ui64 resultSetsCount = queryState->PreparedQuery->GetPhysicalQuery().ResultBindingsSize();
-                request.AllowTrailingResults = (resultSetsCount == 1);
+                request.AllowTrailingResults = (resultSetsCount == 1 && queryState->Statements.size() <= 1);
                 request.AllowTrailingResults &= (QueryState->RequestEv->GetSupportsStreamTrailingResult());
             }
         }
@@ -969,6 +983,7 @@ public:
 
     bool ExecutePhyTx(const TKqpPhyTxHolder::TConstPtr& tx, bool commit) {
         if (tx) {
+            QueryState->PrepareStatementTransaction(tx->GetType());
             switch (tx->GetType()) {
                 case NKqpProto::TKqpPhyTx::TYPE_SCHEME:
                     YQL_ENSURE(tx->StagesSize() == 0);
@@ -1118,9 +1133,18 @@ public:
         ExecuterId = RegisterWithSameMailbox(executerActor);
     }
 
+    static ui32 GetResultsCount(const IKqpGateway::TExecPhysicalRequest& req) {
+        ui32 results = 0;
+        for (const auto& transaction : req.Transactions) {
+            results += transaction.Body->ResultsSize();
+        }
+        return results;
+    }
+
     void SendToExecuter(IKqpGateway::TExecPhysicalRequest&& request, bool isRollback = false) {
         if (QueryState) {
             request.Orbit = std::move(QueryState->Orbit);
+            QueryState->StatementResultSize = GetResultsCount(request);
         }
         request.PerRequestDataSizeLimit = RequestControls.PerRequestDataSizeLimit;
         request.MaxShardCount = RequestControls.MaxShardCount;
@@ -1132,7 +1156,7 @@ public:
             RequestCounters, Settings.TableService.GetAggregationConfig(), Settings.TableService.GetExecuterRetriesConfig(),
             AsyncIoFactory, QueryState ? QueryState->PreparedQuery : nullptr, Settings.TableService.GetChannelTransportVersion(), SelfId(), 2 * TDuration::Seconds(MetadataProviderConfig.GetRefreshPeriodSeconds()),
             QueryState ? QueryState->UserRequestContext : MakeIntrusive<TUserRequestContext>("", Settings.Database, SessionId),
-            Settings.TableService.GetEnableOlapSink());
+            Settings.TableService.GetEnableOlapSink(), QueryState ? QueryState->StatementResultIndex : 0);
 
         auto exId = RegisterWithSameMailbox(executerActor);
         LOG_D("Created new KQP executer: " << exId << " isRollback: " << isRollback);
@@ -1623,7 +1647,16 @@ public:
 
         QueryResponse = std::move(resEv);
 
-        Cleanup();
+        ProcessNextStatement();
+    }
+
+    void ProcessNextStatement() {
+        if (QueryState->ProcessingLastStatement()) {
+            Cleanup();
+            return;
+        }
+        QueryState->PrepareNextStatement();
+        CompileStatement();
     }
 
     void ReplyQueryCompileError() {
@@ -2108,6 +2141,7 @@ public:
 
                 // forgotten messages from previous aborted request
                 hFunc(TEvKqp::TEvCompileResponse, Handle);
+                hFunc(TEvKqp::TEvParseResponse, Handle);
                 hFunc(TEvTxProxySchemeCache::TEvNavigateKeySetResult, Handle);
                 hFunc(TEvents::TEvUndelivered, HandleNoop);
 

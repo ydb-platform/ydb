@@ -101,6 +101,7 @@ Ydb::StatusIds::StatusCode ConvertPersQueueInternalCodeToStatus(const Ydb::PersQ
             return Ydb::StatusIds::ABORTED;
         case OVERLOAD:
         case WRITE_ERROR_PARTITION_IS_FULL:
+        case WRITE_ERROR_PARTITION_INACTIVE:
         case WRITE_ERROR_DISK_IS_FULL:
             return Ydb::StatusIds::OVERLOADED;
         case BAD_REQUEST:

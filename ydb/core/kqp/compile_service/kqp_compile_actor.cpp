@@ -52,14 +52,14 @@ public:
         TKqpDbCountersPtr dbCounters, std::optional<TKqpFederatedQuerySetup> federatedQuerySetup,
         const TIntrusivePtr<TUserRequestContext>& userRequestContext,
         NWilson::TTraceId traceId, TKqpTempTablesState::TConstPtr tempTablesState, bool collectFullDiagnostics,
-        ECompileActorAction compileAction, TMaybe<TQueryAst> astResult)
+        bool perStatementResult, ECompileActorAction compileAction, TMaybe<TQueryAst> queryAst)
         : Owner(owner)
         , ModuleResolverState(moduleResolverState)
         , Counters(counters)
         , FederatedQuerySetup(federatedQuerySetup)
         , Uid(uid)
         , QueryId(queryId)
-        , QueryRef(QueryId.Text, QueryId.QueryParameterTypes, astResult)
+        , QueryRef(QueryId.Text, QueryId.QueryParameterTypes, queryAst)
         , UserToken(userToken)
         , DbCounters(dbCounters)
         , Config(MakeIntrusive<TKikimrConfiguration>())
@@ -70,8 +70,9 @@ public:
         , CompileActorSpan(TWilsonKqp::CompileActor, std::move(traceId), "CompileActor")
         , TempTablesState(std::move(tempTablesState))
         , CollectFullDiagnostics(collectFullDiagnostics)
+        , PerStatementResult(perStatementResult)
         , CompileAction(compileAction)
-        , AstResult(std::move(astResult))
+        , QueryAst(std::move(queryAst))
     {
         Config->Init(kqpSettings->DefaultSettings.GetDefaultSettings(), QueryId.Cluster, kqpSettings->Settings, false);
 
@@ -127,26 +128,22 @@ private:
     }
 
 private:
-    void SetQueryAst(const TActorContext &ctx) {
-        TString cluster  = QueryId.Cluster;
+
+    TVector<TQueryAst> GetAstStatements(const TActorContext &ctx) {
+        TString cluster = QueryId.Cluster;
         TString kqpTablePathPrefix = Config->_KqpTablePathPrefix.Get().GetRef();
         ui16 kqpYqlSyntaxVersion = Config->_KqpYqlSyntaxVersion.Get().GetRef();
         NSQLTranslation::EBindingsMode bindingsMode = Config->BindingsMode;
         bool isEnableExternalDataSources = AppData(ctx)->FeatureFlags.GetEnableExternalDataSources();
         bool isEnablePgConstsToParams = Config->EnablePgConstsToParams;
+        bool perStatementExecution = Config->EnablePerStatementQueryExecution && PerStatementResult;
 
-        auto astResult = ParseQuery(ConvertType(QueryId.Settings.QueryType), QueryId.Settings.Syntax, QueryId.Text, QueryId.QueryParameterTypes, QueryId.IsSql(), cluster, kqpTablePathPrefix, kqpYqlSyntaxVersion, bindingsMode, isEnableExternalDataSources, isEnablePgConstsToParams);
-        YQL_ENSURE(astResult.Ast);
-        if (astResult.Ast->IsOk()) {
-            AstResult = std::move(astResult);
-        }
+        return ParseStatements(ConvertType(QueryId.Settings.QueryType), QueryId.Settings.Syntax, QueryId.Text, QueryId.QueryParameterTypes, cluster, kqpTablePathPrefix, kqpYqlSyntaxVersion, bindingsMode, isEnableExternalDataSources, isEnablePgConstsToParams, QueryId.IsSql(), perStatementExecution);
     }
 
     void StartParsing(const TActorContext &ctx) {
-        SetQueryAst(ctx);
-
         Become(&TKqpCompileActor::CompileState);
-        ReplyParseResult(ctx);
+        ReplyParseResult(ctx, GetAstStatements(ctx));
     }
 
     void StartCompilation(const TActorContext &ctx) {
@@ -352,15 +349,38 @@ private:
             << ", at state:" << state);
     }
 
-    void ReplyParseResult(const TActorContext &ctx) {
+    void ReplyParseResult(const TActorContext &ctx, TVector<TQueryAst>&& astStatements) {
         Y_UNUSED(ctx);
+
+        if (astStatements.empty()) {
+            NYql::TIssue issue(NYql::TPosition(), "Parsing result of query is empty");
+            ReplyError(Ydb::StatusIds::INTERNAL_ERROR, {issue});
+            return;
+        }
+
+        for (size_t statementId = 0; statementId < astStatements.size(); ++statementId) {
+            if (!astStatements[statementId].Ast || !astStatements[statementId].Ast->IsOk() || !astStatements[statementId].Ast->Root) {
+                ALOG_ERROR(NKikimrServices::KQP_COMPILE_ACTOR, "Get parsing result with error"
+                    << ", self: " << SelfId()
+                    << ", owner: " << Owner
+                    << ", statement id: " << statementId);
+
+                NYql::TIssue issue(NYql::TPosition(), "Error while parsing query.");
+                for (const auto& i : astStatements[statementId].Ast->Issues) {
+                    issue.AddSubIssue(MakeIntrusive<NYql::TIssue>(i));
+                }
+
+                ReplyError(Ydb::StatusIds::INTERNAL_ERROR, {issue});
+                return;
+            }
+        }
+
         ALOG_DEBUG(NKikimrServices::KQP_COMPILE_ACTOR, "Send parsing result"
             << ", self: " << SelfId()
             << ", owner: " << Owner
-            << (AstResult && AstResult->Ast->IsOk() ? ", parsing is successful" : ", parsing is not successful"));
+            << ", statements size: " << astStatements.size());
 
-        auto responseEv = MakeHolder<TEvKqp::TEvParseResponse>(QueryId, std::move(AstResult));
-        AstResult = Nothing();
+        auto responseEv = MakeHolder<TEvKqp::TEvParseResponse>(QueryId, std::move(astStatements));
         Send(Owner, responseEv.Release());
 
         Counters->ReportCompileFinish(DbCounters);
@@ -379,8 +399,8 @@ private:
         KqpCompileResult->PreparedQuery = preparedQueryHolder;
         KqpCompileResult->AllowCache = CanCacheQuery(KqpCompileResult->PreparedQuery->GetPhysicalQuery());
 
-        if (AstResult) {
-            KqpCompileResult->Ast = AstResult->Ast;
+        if (QueryAst) {
+            KqpCompileResult->Ast = QueryAst->Ast;
         }
     }
 
@@ -482,8 +502,9 @@ private:
     TKqpTempTablesState::TConstPtr TempTablesState;
     bool CollectFullDiagnostics;
 
+    const bool PerStatementResult;
     ECompileActorAction CompileAction;
-    TMaybe<TQueryAst> AstResult;
+    TMaybe<TQueryAst> QueryAst;
 };
 
 void ApplyServiceConfig(TKikimrConfiguration& kqpConfig, const TTableServiceConfig& serviceConfig) {
@@ -512,6 +533,7 @@ void ApplyServiceConfig(TKikimrConfiguration& kqpConfig, const TTableServiceConf
     kqpConfig.IndexAutoChooserMode = serviceConfig.GetIndexAutoChooseMode();
     kqpConfig.EnablePgConstsToParams = serviceConfig.GetEnablePgConstsToParams() && serviceConfig.GetEnableAstCache();
     kqpConfig.ExtractPredicateRangesLimit = serviceConfig.GetExtractPredicateRangesLimit();
+    kqpConfig.EnablePerStatementQueryExecution = serviceConfig.GetEnablePerStatementQueryExecution();
 
     if (const auto limit = serviceConfig.GetResourceManager().GetMkqlHeavyProgramMemoryLimit()) {
         kqpConfig._KqpYqlCombinerMemoryLimit = std::max(1_GB, limit - (limit >> 2U));
@@ -527,14 +549,15 @@ IActor* CreateKqpCompileActor(const TActorId& owner, const TKqpSettings::TConstP
     std::optional<TKqpFederatedQuerySetup> federatedQuerySetup,
     TKqpDbCountersPtr dbCounters, const TIntrusivePtr<TUserRequestContext>& userRequestContext,
     NWilson::TTraceId traceId, TKqpTempTablesState::TConstPtr tempTablesState,
-    ECompileActorAction compileAction, TMaybe<TQueryAst> astResult, bool collectFullDiagnostics)
+    ECompileActorAction compileAction, TMaybe<TQueryAst> queryAst, bool collectFullDiagnostics,
+    bool perStatementResult)
 {
     return new TKqpCompileActor(owner, kqpSettings, tableServiceConfig, queryServiceConfig, metadataProviderConfig,
                                 moduleResolverState, counters,
                                 uid, query, userToken, dbCounters,
                                 federatedQuerySetup, userRequestContext,
                                 std::move(traceId), std::move(tempTablesState), collectFullDiagnostics,
-                                compileAction, std::move(astResult));
+                                perStatementResult, compileAction, std::move(queryAst));
 }
 
 } // namespace NKqp

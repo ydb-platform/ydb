@@ -207,6 +207,34 @@ on (x1 = xx1) where (xx2 is not null);
 begin;
 rollback;
 --
+-- regression test: check a case where join_clause_is_movable_into() gives
+-- an imprecise result, causing an assertion failure
+--
+select count(*)
+from
+  (select t3.tenthous as x1, coalesce(t1.stringu1, t2.stringu1) as x2
+   from tenk1 t1
+   left join tenk1 t2 on t1.unique1 = t2.unique1
+   join tenk1 t3 on t1.unique2 = t3.unique2) ss,
+  tenk1 t4,
+  tenk1 t5
+where t4.thousand = t5.unique1 and ss.x1 = t4.tenthous and ss.x2 = t5.stringu1;
+ count 
+-------
+  1000
+(1 row)
+
+select count(*) from
+  (select * from tenk1 x order by x.thousand, x.twothousand, x.fivethous) x
+  left join
+  (select * from tenk1 y order by y.unique2) y
+  on x.thousand = y.unique2 and x.twothousand = y.hundred and x.fivethous = y.unique2;
+ count 
+-------
+ 10000
+(1 row)
+
+--
 -- Clean up
 --
 DROP TABLE t1;
@@ -237,6 +265,13 @@ INSERT INTO tt1 VALUES (2, NULL);
 CREATE TEMP TABLE tt2 ( tt2_id int4, joincol int4 );
 INSERT INTO tt2 VALUES (21, 11);
 INSERT INTO tt2 VALUES (22, 11);
+select count(*) from tenk1 a, tenk1 b
+  where a.hundred = b.thousand and (b.fivethous % 10) < 10;
+ count  
+--------
+ 100000
+(1 row)
+
 --
 -- regression test for 8.2 bug with improper re-ordering of left joins
 --

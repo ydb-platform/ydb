@@ -36,6 +36,8 @@ select * from int8_tbl offset (case when random() < 0.5 then null::bigint end);
 -- Test assorted cases involving backwards fetch from a LIMIT plan node
 begin;
 rollback;
+select sum(tenthous) as s1, sum(tenthous) + random()*0 as s2
+  from tenk1 group by thousand order by thousand limit 3;
 SELECT  thousand
 		FROM onek WHERE thousand < 5
 		ORDER BY thousand FETCH FIRST 2 ROW ONLY;

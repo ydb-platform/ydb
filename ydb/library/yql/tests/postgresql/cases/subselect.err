@@ -1575,6 +1575,15 @@ select * from
   where ten < 10 + nextval('ts1')
   order by 1;
 </sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: YtMapReduce!
+    	select * from
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  relation "ts1" does not exist
+
+        	select * from
+	^
 <sql-statement>
 select nextval('ts1');
 </sql-statement>

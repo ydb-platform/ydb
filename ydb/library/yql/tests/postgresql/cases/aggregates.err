@@ -1164,6 +1164,14 @@ select max(min(unique1)) from tenk1;
 <sql-statement>
 select (select max(min(unique1)) from int8_tbl) from tenk1;
 </sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:8: Fatal: Execution of node: YtMapReduce!
+    	select (select max(min(unique1)) from int8_tbl) from tenk1;
+	       ^
+        -stdin-:<main>:1:8: Fatal: ydb/library/yql/providers/common/mkql/yql_provider_mkql.cpp:364  GetCallable(): requirement Callables.cend() != compiler failed, message: Missed callable: PgAgg
+        	select (select max(min(unique1)) from int8_tbl) from tenk1;
+	       ^
 <sql-statement>
 --
 -- Test removal of redundant GROUP BY columns

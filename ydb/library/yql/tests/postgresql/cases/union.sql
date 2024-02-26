@@ -48,6 +48,16 @@ SELECT q1 FROM int8_tbl EXCEPT ALL SELECT DISTINCT q2 FROM int8_tbl ORDER BY 1;
 (SELECT 1,2,3 UNION SELECT 4,5,6 ORDER BY 1,2) INTERSECT SELECT 4,5,6;
 (SELECT 1,2,3 UNION SELECT 4,5,6) EXCEPT SELECT 4,5,6;
 (SELECT 1,2,3 UNION SELECT 4,5,6 ORDER BY 1,2) EXCEPT SELECT 4,5,6;
+select count(*) from
+  ( select unique1 from tenk1 union select fivethous from tenk1 ) ss;
+select count(*) from
+  ( select unique1 from tenk1 intersect select fivethous from tenk1 ) ss;
+select unique1 from tenk1 except select unique2 from tenk1 where unique2 != 10;
+select count(*) from
+  ( select unique1 from tenk1 union select fivethous from tenk1 ) ss;
+select count(*) from
+  ( select unique1 from tenk1 intersect select fivethous from tenk1 ) ss;
+select unique1 from tenk1 except select unique2 from tenk1 where unique2 != 10;
 select x from (values (array[1, 2]), (array[1, 3])) _(x) intersect select x from (values (array[1, 2]), (array[1, 4])) _(x);
 select x from (values (array[1, 2]), (array[1, 3])) _(x) except select x from (values (array[1, 2]), (array[1, 4])) _(x);
 select x from (values (array[1, 2]), (array[1, 3])) _(x) intersect select x from (values (array[1, 2]), (array[1, 4])) _(x);

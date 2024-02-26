@@ -402,6 +402,15 @@ select unique1, unique2, nextval('testseq')
 select unique1, unique2, nextval('testseq')
   from tenk1 order by unique2 limit 10;
 </sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: YtMap!
+    	select unique1, unique2, nextval('testseq')
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  relation "testseq" does not exist
+
+        	select unique1, unique2, nextval('testseq')
+	^
 <sql-statement>
 select currval('testseq');
 </sql-statement>
@@ -428,6 +437,15 @@ select unique1, unique2, nextval('testseq')
 select unique1, unique2, nextval('testseq')
   from tenk1 order by tenthous limit 10;
 </sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: YtMap!
+    	select unique1, unique2, nextval('testseq')
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  relation "testseq" does not exist
+
+        	select unique1, unique2, nextval('testseq')
+	^
 <sql-statement>
 select currval('testseq');
 </sql-statement>

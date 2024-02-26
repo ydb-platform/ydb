@@ -103,6 +103,10 @@ CREATE TEMPORARY TABLE bool_test(
   b2 BOOL,
   b3 BOOL,
   b4 BOOL);
+select min(unique1) from tenk1;
+select max(unique1) from tenk1;
+select max(unique1) from tenk1 where unique1 < 42;
+select max(unique1) from tenk1 where unique1 > 42;
 -- the planner may choose a generic aggregate here if parallel query is
 -- enabled, since that plan will be parallel safe and the "optimized"
 -- plan, which has almost identical cost, will not be.  we want to test
@@ -110,6 +114,13 @@ CREATE TEMPORARY TABLE bool_test(
 begin;
 select max(unique1) from tenk1 where unique1 > 42000;
 rollback;
+select max(tenthous) from tenk1 where thousand = 33;
+select min(tenthous) from tenk1 where thousand = 33;
+select distinct max(unique2) from tenk1;
+select max(unique2) from tenk1 order by 1;
+select max(unique2) from tenk1 order by max(unique2);
+select max(unique2) from tenk1 order by max(unique2)+1;
+select max(100) from tenk1;
 -- try it on an inheritance tree
 create table minmaxtest(f1 int);
 create index minmaxtesti on minmaxtest(f1);

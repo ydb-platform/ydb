@@ -18,11 +18,68 @@ INSERT INTO empsalary VALUES
 ('sales', 3, 4800, '2007-08-01'),
 ('develop', 8, 6000, '2006-10-01'),
 ('develop', 11, 5200, '2007-08-15');
+-- empty window specification
+SELECT COUNT(*) OVER () FROM tenk1 WHERE unique2 < 10;
+ count 
+-------
+    10
+    10
+    10
+    10
+    10
+    10
+    10
+    10
+    10
+    10
+(10 rows)
+
+SELECT COUNT(*) OVER w FROM tenk1 WHERE unique2 < 10 WINDOW w AS ();
+ count 
+-------
+    10
+    10
+    10
+    10
+    10
+    10
+    10
+    10
+    10
+    10
+(10 rows)
+
 -- no window operation
 SELECT four FROM tenk1 WHERE FALSE WINDOW w AS (PARTITION BY ten);
  four 
 ------
 (0 rows)
+
+SELECT row_number() OVER (ORDER BY unique2) FROM tenk1 WHERE unique2 < 10;
+ row_number 
+------------
+          1
+          2
+          3
+          4
+          5
+          6
+          7
+          8
+          9
+         10
+(10 rows)
+
+SELECT count(*) OVER (PARTITION BY four), four FROM (SELECT * FROM tenk1 WHERE two = 1)s WHERE unique2 < 10;
+ count | four 
+-------+------
+     4 |    1
+     4 |    1
+     4 |    1
+     4 |    1
+     2 |    3
+     2 |    3
+(6 rows)
 
 -- opexpr with different windows evaluation.
 SELECT * FROM(
@@ -59,6 +116,128 @@ SELECT count(*) OVER (PARTITION BY four) FROM (SELECT * FROM tenk1 WHERE FALSE)s
  count 
 -------
 (0 rows)
+
+-- window function with ORDER BY an expression involving aggregates (9.1 bug)
+select ten,
+  sum(unique1) + sum(unique2) as res,
+  rank() over (order by sum(unique1) + sum(unique2)) as rank
+from tenk1
+group by ten order by ten;
+ ten |   res    | rank 
+-----+----------+------
+   0 |  9976146 |    4
+   1 | 10114187 |    9
+   2 | 10059554 |    8
+   3 |  9878541 |    1
+   4 |  9881005 |    2
+   5 |  9981670 |    5
+   6 |  9947099 |    3
+   7 | 10120309 |   10
+   8 |  9991305 |    6
+   9 | 10040184 |    7
+(10 rows)
+
+SELECT sum(unique1) over (rows between current row and unbounded following),
+	unique1, four
+FROM tenk1 WHERE unique1 < 10;
+ sum | unique1 | four 
+-----+---------+------
+  45 |       4 |    0
+  41 |       2 |    2
+  39 |       1 |    1
+  38 |       6 |    2
+  32 |       9 |    1
+  23 |       8 |    0
+  15 |       5 |    1
+  10 |       3 |    3
+   7 |       7 |    3
+   0 |       0 |    0
+(10 rows)
+
+SELECT sum(unique1) over (rows between 2 preceding and 2 following),
+	unique1, four
+FROM tenk1 WHERE unique1 < 10;
+ sum | unique1 | four 
+-----+---------+------
+   7 |       4 |    0
+  13 |       2 |    2
+  22 |       1 |    1
+  26 |       6 |    2
+  29 |       9 |    1
+  31 |       8 |    0
+  32 |       5 |    1
+  23 |       3 |    3
+  15 |       7 |    3
+  10 |       0 |    0
+(10 rows)
+
+SELECT sum(unique1) over (rows between 2 preceding and 2 following exclude no others),
+	unique1, four
+FROM tenk1 WHERE unique1 < 10;
+ sum | unique1 | four 
+-----+---------+------
+   7 |       4 |    0
+  13 |       2 |    2
+  22 |       1 |    1
+  26 |       6 |    2
+  29 |       9 |    1
+  31 |       8 |    0
+  32 |       5 |    1
+  23 |       3 |    3
+  15 |       7 |    3
+  10 |       0 |    0
+(10 rows)
+
+SELECT sum(unique1) over (rows between 2 preceding and 1 preceding),
+	unique1, four
+FROM tenk1 WHERE unique1 < 10;
+ sum | unique1 | four 
+-----+---------+------
+     |       4 |    0
+   4 |       2 |    2
+   6 |       1 |    1
+   3 |       6 |    2
+   7 |       9 |    1
+  15 |       8 |    0
+  17 |       5 |    1
+  13 |       3 |    3
+   8 |       7 |    3
+  10 |       0 |    0
+(10 rows)
+
+SELECT sum(unique1) over (rows between 1 following and 3 following),
+	unique1, four
+FROM tenk1 WHERE unique1 < 10;
+ sum | unique1 | four 
+-----+---------+------
+   9 |       4 |    0
+  16 |       2 |    2
+  23 |       1 |    1
+  22 |       6 |    2
+  16 |       9 |    1
+  15 |       8 |    0
+  10 |       5 |    1
+   7 |       3 |    3
+   0 |       7 |    3
+     |       0 |    0
+(10 rows)
+
+SELECT sum(unique1) over (rows between unbounded preceding and 1 following),
+	unique1, four
+FROM tenk1 WHERE unique1 < 10;
+ sum | unique1 | four 
+-----+---------+------
+   6 |       4 |    0
+   7 |       2 |    2
+  13 |       1 |    1
+  22 |       6 |    2
+  30 |       9 |    1
+  35 |       8 |    0
+  38 |       5 |    1
+  45 |       3 |    3
+  45 |       7 |    3
+  45 |       0 |    0
+(10 rows)
 
 -- Test in_range for other numeric datatypes
 create temp table numerics(

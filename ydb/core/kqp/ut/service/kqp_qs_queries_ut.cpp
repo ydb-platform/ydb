@@ -713,6 +713,7 @@ Y_UNIT_TEST_SUITE(KqpQueryService) {
         checkDrop(true, EEx::IfExists, 1);
 
         // rename
+        Y_UNUSED(checkRename);
         /*
         checkCreate(true, EEx::Empty, 2);
         checkRename(true, 2, 3);

@@ -38,7 +38,7 @@ private:
 
 #define GET_IMPL()                              \
     if (!Impl) {                                \
-        Impl = MakeHolder<TImpl>();             \
+        Impl = std::make_shared<TImpl>();       \
     }                                           \
     Impl
 

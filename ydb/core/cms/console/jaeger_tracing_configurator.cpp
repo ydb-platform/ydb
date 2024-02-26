@@ -32,6 +32,7 @@ private:
 
     void ApplyConfigs(const NKikimrConfig::TTracingConfig& cfg);
     static TMaybe<ERequestType> GetRequestType(const NKikimrConfig::TTracingConfig::TSelectors& selectors);
+    static TMaybe<TString> GetDatabase(const NKikimrConfig::TTracingConfig::TSelectors& selectors);
     static TSettings<double, TThrottlingSettings> GetSettings(const NKikimrConfig::TTracingConfig& cfg);
 
     TSamplingThrottlingConfigurator TracingConfigurator;
@@ -85,18 +86,28 @@ TMaybe<ERequestType> TJaegerTracingConfigurator::GetRequestType(const NKikimrCon
     return {};
 }
 
+TMaybe<TString> TJaegerTracingConfigurator::GetDatabase(const NKikimrConfig::TTracingConfig::TSelectors& selectors) {
+    if (selectors.HasDatabase()) {
+        return selectors.GetDatabase();
+    }
+    return NothingObject;
+}
+
 TSettings<double, TThrottlingSettings> TJaegerTracingConfigurator::GetSettings(const NKikimrConfig::TTracingConfig& cfg) {
     TSettings<double, TThrottlingSettings> settings;
 
     for (const auto& samplingRule : cfg.GetSampling()) {
+        const auto& scope = samplingRule.GetScope();
+
         ERequestType requestType;
-        if (auto parsedRequestType = GetRequestType(samplingRule.GetScope())) {
+        if (auto parsedRequestType = GetRequestType(scope)) {
             requestType = *parsedRequestType;
         } else {
             ALOG_ERROR(NKikimrServices::CMS_CONFIGS, "failed to parse request type in the rule "
                        << samplingRule.ShortDebugString() << ". Skipping the rule");
             continue;
         }
+
         if (!samplingRule.HasLevel() || !samplingRule.HasFraction() || !samplingRule.HasMaxTracesPerMinute()) {
             ALOG_ERROR(NKikimrServices::CMS_CONFIGS, "missing required fields in rule " << samplingRule.ShortDebugString()
                        << " (required fields are: level, fraction, max_traces_per_minute). Skipping the rule");
@@ -129,10 +140,19 @@ TSettings<double, TThrottlingSettings> TJaegerTracingConfigurator::GetSettings(c
                 .MaxTracesBurst = samplingRule.GetMaxTracesBurst(),
             },
         };
-        settings.SamplingRules[static_cast<size_t>(requestType)].push_back(rule);
+
+        auto& requestTypeRules = settings.SamplingRules[static_cast<size_t>(requestType)];
+        auto database = GetDatabase(scope);
+        if (database) {
+            requestTypeRules.DatabaseRules[*database].push_back(rule);
+        } else {
+            requestTypeRules.Global.push_back(rule);
+        }
     }
 
     for (const auto& throttlingRule : cfg.GetExternalThrottling()) {
+        const auto& scope = throttlingRule.GetScope();
+
         ERequestType requestType;
         if (auto parsedRequestType = GetRequestType(throttlingRule.GetScope())) {
             requestType = *parsedRequestType;
@@ -161,14 +181,13 @@ TSettings<double, TThrottlingSettings> TJaegerTracingConfigurator::GetSettings(c
                 .MaxTracesBurst = maxBurst,
             },
         };
-        auto& currentRule = settings.ExternalThrottlingRules[static_cast<size_t>(requestType)];
-        if (currentRule) {
-            ALOG_WARN(NKikimrServices::CMS_CONFIGS, "duplicate external throttling rule for scope "
-                      << throttlingRule.GetScope() << ". Adding the limits");
-            currentRule->Throttler.MaxTracesBurst += rule.Throttler.MaxTracesBurst;
-            currentRule->Throttler.MaxTracesPerMinute += rule.Throttler.MaxTracesPerMinute;
+
+        auto& requestTypeRules = settings.ExternalThrottlingRules[static_cast<size_t>(requestType)];
+        auto database = GetDatabase(scope);
+        if (database) {
+            requestTypeRules.DatabaseRules[*database].push_back(rule);
         } else {
-            currentRule = rule;
+            requestTypeRules.Global.push_back(rule);
         }
     }
 
@@ -181,7 +200,7 @@ TSettings<double, TThrottlingSettings> TJaegerTracingConfigurator::GetSettings(c
             },
         };
 
-        settings.ExternalThrottlingRules[static_cast<size_t>(ERequestType::UNSPECIFIED)] = rule;
+        settings.ExternalThrottlingRules[static_cast<size_t>(ERequestType::UNSPECIFIED)].Global.push_back(rule);
     }
 
     return settings;

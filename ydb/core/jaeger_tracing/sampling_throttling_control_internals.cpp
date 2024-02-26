@@ -3,13 +3,38 @@
 
 namespace NKikimr::NJaegerTracing {
 
+namespace {
+
+template<class T, class TAction>
+void ForEachMatchingRule(TRequestTypeRules<T>& rules, const TMaybe<TString>& database, TAction&& action) {
+    for (auto& rule : rules.Global) {
+        action(rule);
+    }
+    if (database) {
+        if (auto databaseRules = rules.DatabaseRules.FindPtr(*database)) {
+            for (auto& rule : *databaseRules) {
+                action(rule);
+            }
+        }
+    }
+}
+
+} // namespace anonymous
+
 void TSamplingThrottlingControl::TSamplingThrottlingImpl::HandleTracing(
-    NWilson::TTraceId& traceId, const TRequestDiscriminator& discriminator) {
-    auto requestType = discriminator.RequestType;
+    NWilson::TTraceId& traceId, TRequestDiscriminator discriminator) {
+    auto requestType = static_cast<size_t>(discriminator.RequestType);
+    auto database = std::move(discriminator.Database);
 
     if (traceId) {
-        bool throttle = Throttle(requestType);
-        throttle = Throttle(ERequestType::UNSPECIFIED) && throttle;
+        bool throttle = true;
+
+        ForEachMatchingRule(
+            Setup.ExternalThrottlingRules[requestType], database,
+            [&throttle](auto& throttlingRule) {
+                throttle = throttlingRule.Throttler->Throttle() && throttle;
+            });
+
         if (throttle) {
             traceId = {};
         }
@@ -17,40 +42,21 @@ void TSamplingThrottlingControl::TSamplingThrottlingImpl::HandleTracing(
 
     if (!traceId) {
         TMaybe<ui8> level;
-        if (auto sampled_level = Sample(requestType)) {
-            level = sampled_level;
-        }
-        if (auto sampled_level = Sample(ERequestType::UNSPECIFIED)) {
-            if (!level || *sampled_level > *level) {
-                level = sampled_level;
-            }
-        }
+        ForEachMatchingRule(
+            Setup.SamplingRules[requestType], database,
+            [&level](auto& samplingRule) {
+                if (!samplingRule.Sampler.Sample() || samplingRule.Throttler->Throttle()) {
+                    return;
+                }
+                if (!level || samplingRule.Level > *level) {
+                    level = samplingRule.Level;
+                }
+            });
 
         if (level) {
             traceId = NWilson::TTraceId::NewTraceId(*level, Max<ui32>());
         }
     }
-}
-
-bool TSamplingThrottlingControl::TSamplingThrottlingImpl::Throttle(ERequestType requestType) {
-    auto& throttlingRule = Setup.ExternalThrottlingRules[static_cast<size_t>(requestType)];
-    if (throttlingRule) {
-        return throttlingRule->Throttler->Throttle();
-    } else {
-        return true;
-    }
-}
-
-TMaybe<ui8> TSamplingThrottlingControl::TSamplingThrottlingImpl::Sample(ERequestType requestType) {
-    TMaybe<ui8> level;
-    for (auto& samplingRule : Setup.SamplingRules[static_cast<size_t>(requestType)]) {
-        if (samplingRule.Sampler.Sample() && !samplingRule.Throttler->Throttle()) {
-            if (!level || *level < samplingRule.Level) {
-                level = samplingRule.Level;
-            }
-        }
-    }
-    return level;
 }
 
 } // namespace NKikimr::NJaegerTracing

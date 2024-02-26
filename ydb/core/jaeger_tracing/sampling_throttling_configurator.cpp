@@ -9,6 +9,33 @@
 
 namespace NKikimr::NJaegerTracing {
 
+namespace {
+
+template<class T>
+void PropagateUnspecifiedRequest(TRulesContainer<T>& rules) {
+    constexpr auto unspecifiedRequestType = static_cast<size_t>(ERequestType::UNSPECIFIED);
+    const auto& unspecifiedRequestTypeRules = rules[unspecifiedRequestType];
+    
+    for (size_t requestType = 0; requestType < kRequestTypesCnt; ++requestType) {
+        if (requestType == unspecifiedRequestType) {
+            continue;
+        }
+
+        auto& requestTypeDatabaseRules = rules[requestType].DatabaseRules;
+        auto& requestTypeGlobalRules = rules[requestType].Global;
+        for (const auto& [database, unspecifiedDatabaseRules] : unspecifiedRequestTypeRules.DatabaseRules) {
+            auto& databaseRules = requestTypeDatabaseRules[database];
+            databaseRules.insert(databaseRules.end(), unspecifiedDatabaseRules.begin(),
+                                         unspecifiedDatabaseRules.end());
+        }
+        requestTypeGlobalRules.insert(requestTypeGlobalRules.end(),
+                                      unspecifiedRequestTypeRules.Global.begin(),
+                                      unspecifiedRequestTypeRules.Global.end());
+    }
+}
+
+} // namespace anonymous
+
 TSamplingThrottlingConfigurator::TSamplingThrottlingConfigurator(TIntrusivePtr<ITimeProvider> timeProvider,
                                                                  TIntrusivePtr<IRandomProvider>& randomProvider)
     : TimeProvider(std::move(timeProvider))
@@ -23,7 +50,10 @@ TIntrusivePtr<TSamplingThrottlingControl> TSamplingThrottlingConfigurator::GetCo
 }
 
 void TSamplingThrottlingConfigurator::UpdateSettings(TSettings<double, TThrottlingSettings> settings) {
-    CurrentSettings = GenerateThrottlers(std::move(settings));
+    auto enrichedSettings = GenerateThrottlers(std::move(settings));
+    PropagateUnspecifiedRequest(enrichedSettings.SamplingRules);
+    PropagateUnspecifiedRequest(enrichedSettings.ExternalThrottlingRules);
+    CurrentSettings = std::move(enrichedSettings);
 
     for (auto& control : IssuedControls) {
         control->UpdateImpl(GenerateSetup());

@@ -70,7 +70,7 @@ Here are fields that are supported in connection configuration:
 
 ## Building queries
 
-[YQL dialect](../yql/reference/index.md) is used to query YDB.
+{{ ydb-short-name }} is queried with a SQL dialect named [YQL](../yql/reference/index.md).
 Queries can contain macros which simplify syntax and allow for dynamic parts.
 The query editor allows you to get data in different representation: time series, table or logs.
 

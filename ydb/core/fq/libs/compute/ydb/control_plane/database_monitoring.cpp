@@ -113,6 +113,10 @@ public:
             auto delta = now - LastCpuLoad;
             LastCpuLoad = now;
 
+            if (response.CpuNumber) {
+                CpuNumber = response.CpuNumber;
+            }
+
             InstantLoad = response.InstantLoad;
             // exponential moving average 
             if (!Ready || delta >= AverageLoadInterval) {
@@ -252,7 +256,7 @@ private:
     const double DefaultQueryLoad;
     const ui32 PendingQueueSize;
     const bool Strict;
-    const ui32 CpuNumber;
+    ui32 CpuNumber = 0;
 
     TQueue<TEvYdbCompute::TEvCpuQuotaRequest::TPtr> PendingQueue;
 };

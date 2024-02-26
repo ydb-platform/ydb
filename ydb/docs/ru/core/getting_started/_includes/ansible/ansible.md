@@ -117,6 +117,17 @@ static-node-9 static-node-9.ydb-cluster.com
 * Для типа избыточности `block-4-2` значение `ydb_database_groups` равно семи.
 * Для типа избыточности `mirror-3-dc` значение `ydb_database_groups` равно восьми.
 
+
+Значение переменных `system_timezone` и `system_ntp_servers` зависит от свойств инфраструктуры, на которой развертывается YDB кластер. По умолчанию в `system_ntp_servers` указан набор NTP-серверов без учёта географического расположения инфраструктуры, на которой будет развертываться YDB кластер. Мы настоятельно рекомендуем использовать локальный NTP-сервер для on-premise инфраструктуры и следующие NTP-серверы для облачных провайдеров:
+* Yandex Cloud:
+  + `system_timezone`: Europe/Moscow
+  + `system_ntp_servers`: [0.ru.pool.ntp.org, 1.ru.pool.ntp.org, ntp0.NL.net, ntp2.vniiftri.ru, ntp.ix.ru, ntps1-1.cs.tu-berlin.de] [Подробнее](https://cloud.yandex.ru/ru/docs/tutorials/infrastructure-management/ntp) о настройках NTP-серверов Yandex Cloud.
+* AWS:
+  + `system_timezone`: USA/<regioan_name>
+  + `system_ntp_servers`: [169.254.169.123, time.aws.com] [Подробнее](https://docs.aws.amazon.com/AWSEC2/latest/UserGuide/set-time.html#configure-time-sync) о настройках NTP-серверов AWS.
+
+Для других облачных провайдеров процесс настройки NTP-серверов имеет свои особенности. О том как настраивается синхронизация времени на виртуальных машинах Azure можно прочесть в [данной](https://learn.microsoft.com/en-us/azure/virtual-machines/linux/time-sync) статье, а специфика подключения к NTP-серверам в Alibaba описана в этой [статье](https://www.alibabacloud.com/help/en/ecs/user-guide/alibaba-cloud-ntp-server).
+
 Изменения других секций конфигурационного файла `50-inventory.yaml` не требуется. Далее можно изменить стандартный пароль root пользователя YDB, который содержится в зашифрованном инвентаризационном файле `99-inventory-vault.yaml` и файле `ansible_vault_password_file.txt`. Для изменения пароля – укажите новый пароль в файле `ansible_vault_password_file.txt` и продублируйте его в файле `99-inventory-vault.yaml` в формате:
   ```yaml
   all:

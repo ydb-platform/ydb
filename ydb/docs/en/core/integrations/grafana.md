@@ -103,7 +103,7 @@ Table visualizations will always be available for any valid {{ ydb-short-name }}
 
 To use the Logs panel your query must return a time and string values. You can select logs visualizations using the visualization options.
 
-By default only the first text field will be represented as log line, but this can be customized using query builder.
+By default, only the first text field will be represented as log line. This can be customized using the query builder.
 
 ### Macros
 

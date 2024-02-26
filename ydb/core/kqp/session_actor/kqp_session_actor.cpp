@@ -461,7 +461,7 @@ public:
 
     void CompileQueryParsed() {
         YQL_ENSURE(QueryState);
-        auto ev = QueryState->BuildCompileParsedRequest(CompilationCookie);
+        auto ev = QueryState->BuildCompileSplittedRequest(CompilationCookie);
         LOG_D("Sending CompileParsedQuery request");
 
         Send(MakeKqpCompileServiceID(SelfId().NodeId()), ev.release(), 0, QueryState->QueryId,

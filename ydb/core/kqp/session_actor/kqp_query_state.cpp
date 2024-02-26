@@ -240,7 +240,7 @@ std::unique_ptr<TEvKqp::TEvRecompileRequest> TKqpQueryState::BuildReCompileReque
         compileDeadline, DbCounters, ApplicationName, std::move(cookie), UserRequestContext, std::move(Orbit), TempTablesState);
 }
 
-std::unique_ptr<TEvKqp::TEvCompileRequest> TKqpQueryState::BuildCompileParsedRequest(std::shared_ptr<std::atomic<bool>> cookie) {
+std::unique_ptr<TEvKqp::TEvCompileRequest> TKqpQueryState::BuildCompileSplittedRequest(std::shared_ptr<std::atomic<bool>> cookie) {
     TMaybe<TKqpQueryId> query;
     TMaybe<TString> uid;
 
@@ -266,9 +266,9 @@ std::unique_ptr<TEvKqp::TEvCompileRequest> TKqpQueryState::BuildCompileParsedReq
     }
 
     auto request = std::make_unique<TEvKqp::TEvCompileRequest>(UserToken, uid,
-        std::move(query), keepInCache, compileDeadline, DbCounters, std::move(cookie), UserRequestContext, std::move(Orbit), TempTablesState, GetCollectDiagnostics());
-    request->Ctx = SplittedCtx.Get();
-    request->Expr = SplittedExprs[NextSplittedExpr];
+        std::move(query), keepInCache, compileDeadline, DbCounters, std::move(cookie),
+        UserRequestContext, std::move(Orbit), TempTablesState, GetCollectDiagnostics(),
+        false, SplittedCtx.Get(), SplittedExprs.at(NextSplittedExpr));
     return request;
 }
 

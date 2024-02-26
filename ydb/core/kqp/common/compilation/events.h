@@ -18,7 +18,8 @@ struct TEvCompileRequest: public TEventLocal<TEvCompileRequest, TKqpEvents::EvCo
         TMaybe<TKqpQueryId>&& query, bool keepInCache, bool isQueryActionPrepare, bool perStatementResult, TInstant deadline,
         TKqpDbCountersPtr dbCounters, const TMaybe<TString>& applicationName, std::shared_ptr<std::atomic<bool>> intrestedInResult, 
         const TIntrusivePtr<TUserRequestContext>& userRequestContext, NLWTrace::TOrbit orbit = {},
-        TKqpTempTablesState::TConstPtr tempTablesState = nullptr, bool collectDiagnostics = false, TMaybe<TQueryAst> queryAst = Nothing())
+        TKqpTempTablesState::TConstPtr tempTablesState = nullptr, bool collectDiagnostics = false, TMaybe<TQueryAst> queryAst = Nothing(),
+        bool split = false, NYql::TExprContext* splitCtx = nullptr, NYql::TExprNode::TPtr splitExpr = nullptr)
         : UserToken(userToken)
         , Uid(uid)
         , Query(std::move(query))
@@ -34,6 +35,9 @@ struct TEvCompileRequest: public TEventLocal<TEvCompileRequest, TKqpEvents::EvCo
         , IntrestedInResult(std::move(intrestedInResult))
         , CollectDiagnostics(collectDiagnostics)
         , QueryAst(queryAst)
+        , Split(split)
+        , SplitCtx(splitCtx)
+        , SplitExpr(splitExpr)
     {
         Y_ENSURE(Uid.Defined() != Query.Defined());
     }

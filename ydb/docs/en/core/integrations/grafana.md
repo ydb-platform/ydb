@@ -44,13 +44,13 @@ datasources:
   - name: YDB
     type: ydbtech-ydb-datasource
     jsonData:
-      authKind: "UserPassword",
-      endpoint: 'grpcs://endpoint',
-      dbLocation: 'location',
-      user: 'username',
+      authKind: "UserPassword"
+      endpoint: 'grpcs://<hostname>:2135'
+      dbLocation: 'location'
+      user: '<username>'
     secureJsonData:
-      password: 'userpassword',
-      certificate: 'certificate',
+      password: '<userpassword>'
+      certificate: 'certificate'
 ```
 
 Here are fields that are supported in connection configuration:

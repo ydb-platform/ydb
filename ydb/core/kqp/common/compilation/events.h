@@ -14,15 +14,16 @@ namespace NKikimr::NKqp::NPrivateEvents {
 
 struct TEvCompileRequest: public TEventLocal<TEvCompileRequest, TKqpEvents::EvCompileRequest> {
     TEvCompileRequest(const TIntrusiveConstPtr<NACLib::TUserToken>& userToken, const TMaybe<TString>& uid,
-        TMaybe<TKqpQueryId>&& query, bool keepInCache, bool isQueryActionPrepare, TInstant deadline,
+        TMaybe<TKqpQueryId>&& query, bool keepInCache, bool isQueryActionPrepare, bool perStatementResult, TInstant deadline,
         TKqpDbCountersPtr dbCounters, std::shared_ptr<std::atomic<bool>> intrestedInResult, 
         const TIntrusivePtr<TUserRequestContext>& userRequestContext, NLWTrace::TOrbit orbit = {},
-        TKqpTempTablesState::TConstPtr tempTablesState = nullptr, bool collectDiagnostics = false)
+        TKqpTempTablesState::TConstPtr tempTablesState = nullptr, bool collectDiagnostics = false, TMaybe<TQueryAst> queryAst = Nothing())
         : UserToken(userToken)
         , Uid(uid)
         , Query(std::move(query))
         , KeepInCache(keepInCache)
         , IsQueryActionPrepare(isQueryActionPrepare)
+        , PerStatementResult(perStatementResult)
         , Deadline(deadline)
         , DbCounters(dbCounters)
         , UserRequestContext(userRequestContext)
@@ -30,6 +31,7 @@ struct TEvCompileRequest: public TEventLocal<TEvCompileRequest, TKqpEvents::EvCo
         , TempTablesState(std::move(tempTablesState))
         , IntrestedInResult(std::move(intrestedInResult))
         , CollectDiagnostics(collectDiagnostics)
+        , QueryAst(queryAst)
     {
         Y_ENSURE(Uid.Defined() != Query.Defined());
     }
@@ -39,6 +41,7 @@ struct TEvCompileRequest: public TEventLocal<TEvCompileRequest, TKqpEvents::EvCo
     TMaybe<TKqpQueryId> Query;
     bool KeepInCache = false;
     bool IsQueryActionPrepare = false;
+    bool PerStatementResult = false;
     // it is allowed for local event to use absolute time (TInstant) instead of time interval (TDuration)
     TInstant Deadline;
     TKqpDbCountersPtr DbCounters;
@@ -51,6 +54,8 @@ struct TEvCompileRequest: public TEventLocal<TEvCompileRequest, TKqpEvents::EvCo
     std::shared_ptr<std::atomic<bool>> IntrestedInResult;
 
     bool CollectDiagnostics = false;
+
+    TMaybe<TQueryAst> QueryAst;
 };
 
 struct TEvRecompileRequest: public TEventLocal<TEvRecompileRequest, TKqpEvents::EvRecompileRequest> {
@@ -103,12 +108,14 @@ struct TEvCompileResponse: public TEventLocal<TEvCompileResponse, TKqpEvents::Ev
 };
 
 struct TEvParseResponse: public TEventLocal<TEvParseResponse, TKqpEvents::EvParseResponse> {
-    TEvParseResponse(const TKqpQueryId& query, TMaybe<TQueryAst> astResult)
-        : AstResult(std::move(astResult))
-        , Query(query) {}
+    TEvParseResponse(const TKqpQueryId& query, TVector<TQueryAst> astStatements, NLWTrace::TOrbit orbit = {})
+        : AstStatements(std::move(astStatements))
+        , Query(query)
+        , Orbit(std::move(orbit)) {}
 
-    TMaybe<TQueryAst> AstResult;
+    TVector<TQueryAst> AstStatements;
     TKqpQueryId Query;
+    NLWTrace::TOrbit Orbit;
 };
 
 struct TEvCompileInvalidateRequest: public TEventLocal<TEvCompileInvalidateRequest,

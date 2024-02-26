@@ -3683,6 +3683,7 @@ Y_UNIT_TEST_SUITE(KqpPg) {
         }
 
         appConfig.MutableTableServiceConfig()->SetEnablePgConstsToParams(true);
+        appConfig.MutableTableServiceConfig()->SetEnablePerStatementQueryExecution(true);
         auto setting = NKikimrKqp::TKqpSetting();
         auto serverSettings = TKikimrSettings()
             .SetAppConfig(appConfig)
@@ -3713,6 +3714,32 @@ Y_UNIT_TEST_SUITE(KqpPg) {
                     SELECT * FROM PgTable WHERE key = 4;
                 )");
                 auto result = db.ExecuteQuery(query, NYdb::NQuery::TTxControl::BeginTx().CommitTx(), settings).ExtractValueSync();
+                UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+                auto stats = NYdb::TProtoAccessor::GetProto(*result.GetStats());
+                UNIT_ASSERT_VALUES_EQUAL(stats.compilation().from_cache(), true);
+            }
+        }
+
+        {
+            // Check NoTx
+            {
+                const auto query = Q_(R"(
+                    CREATE TABLE PgTable3 (
+                        key int4 PRIMARY KEY,
+                        value text
+                    );
+                    SELECT * FROM PgTable3 WHERE key = 3;
+                )");
+                auto result = db.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx(), settings).ExtractValueSync();
+                UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+            }
+
+            {
+                const auto query = Q_(R"(
+                    SELECT * FROM PgTable3 WHERE key = 4;
+                    SELECT * FROM PgTable3 WHERE key = 5;
+                )");
+                auto result = db.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx(), settings).ExtractValueSync();
                 UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
                 auto stats = NYdb::TProtoAccessor::GetProto(*result.GetStats());
                 UNIT_ASSERT_VALUES_EQUAL(stats.compilation().from_cache(), true);
@@ -3766,7 +3793,7 @@ Y_UNIT_TEST_SUITE(KqpPg) {
                     SELECT (1, 2);
                 )");
                 auto result = db.ExecuteQuery(query, NYdb::NQuery::TTxControl::BeginTx().CommitTx(), settings).ExtractValueSync();
-                UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::GENERIC_ERROR, result.GetIssues().ToString());
+                UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::INTERNAL_ERROR, result.GetIssues().ToString());
                 UNIT_ASSERT(result.GetIssues().ToString().Contains("alternative is not implemented yet : 138"));
             }
         }

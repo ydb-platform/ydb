@@ -27,8 +27,9 @@ class TDefaultErrorCollector
     : public IErrorCollector
 {
 public:
+    // TODO(Enjection): CFG-UX-0 replace regular throw with just collecting
     void Fatal(TString error) override {
-        Cerr << error << Endl;
+        ythrow yexception() << error;
     }
 };
 
@@ -100,7 +101,8 @@ public:
         if (auto* opt = Opts.FindPtr(optName); opt && (*opt)->ParsedOption) {
             return (*opt)->ParsedOption.GetRef();
         }
-        return ""; // FIXME: throw
+        // TODO(Enjection): CFG-UX-0 replace with IErrorCollector call
+        ythrow yexception() << "option " << optName.Quote() << " undefined";
     }
 };
 
@@ -774,9 +776,4 @@ std::unique_ptr<IInitialConfigurator> MakeDefaultInitialConfigurator(
 
 Y_DECLARE_OUT_SPEC(, NKikimr::NConfig::TWithDefault<TString>, stream, value) {
     stream << value.Value;
-}
-
-template<>
-TMaybe<TString, NMaybe::TPolicyUndefinedFail> FromString<TMaybe<TString, NMaybe::TPolicyUndefinedFail>, char>(const char* data, size_t size) {
-    return TString{data, size};
 }

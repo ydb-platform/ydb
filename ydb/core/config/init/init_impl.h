@@ -114,9 +114,7 @@ auto MutableConfigPart(
 
         TString path = protoConfigFileProvider.Get(optname);
         const TString protoString = protoConfigFileProvider.GetProtoFromFile(path, errorCollector);
-        /*
-         * FIXME: if (ErrorCollector.HasFatal()) { return; }
-         */
+        // TODO(Enjeciton): CFG-UX-0 handle error collector errors
         const bool result = ParsePBFromString(protoString, res);
         if (!result) {
             errorCollector.Fatal(Sprintf("Can't parse protobuf: %s", path.c_str()));
@@ -156,9 +154,7 @@ auto MutableConfigPartMerge(
 
         TString path = protoConfigFileProvider.Get(optname);
         const TString protoString = protoConfigFileProvider.GetProtoFromFile(path, errorCollector);
-        /*
-         * FIXME: if (ErrorCollector.HasFatal()) { return; }
-         */
+        // TODO(Enjection): CFG-UX-0 handle error collector errors
         const bool result = ParsePBFromString(protoString, &cfg);
         if (!result) {
             errorCollector.Fatal(Sprintf("Can't parse protobuf: %s", path.c_str()));
@@ -192,8 +188,7 @@ struct TWithDefault {
 
     void EnsureDefined() const {
         if (Y_UNLIKELY(!Default)) {
-            //Policy::OnEmpty(typeid(TValueType));
-            // FIXME throw
+            ythrow yexception() << "TWithDefault access through GetRef() assuming it is non-default";
         }
     }
 
@@ -216,11 +211,11 @@ struct TWithDefault {
     }
 
     constexpr const TType& operator*() const& {
-        return GetRef();
+        return Value;
     }
 
     constexpr TType& operator*() & {
-        return GetRef();
+        return Value;
     }
 };
 
@@ -281,12 +276,12 @@ struct TCommonAppOptions {
     TWithDefault<ui32> LogSamplingLevel; // log settings
     TWithDefault<ui32> LogSamplingRate; // log settings
     TWithDefault<TString> LogFormat;// log settings
-    TMaybe<TString, NMaybe::TPolicyUndefinedFail> SysLogServiceTag; // unique tags for sys logs
-    TMaybe<TString, NMaybe::TPolicyUndefinedFail> LogFileName; // log file name to initialize file log backend
+    TMaybe<TString> SysLogServiceTag; // unique tags for sys logs
+    TMaybe<TString> LogFileName; // log file name to initialize file log backend
     TWithDefault<TString> ClusterName; // log settings
 
     ui32 NodeId = 0;
-    TMaybe<TString, NMaybe::TPolicyUndefinedFail> NodeIdValue;
+    TMaybe<TString> NodeIdValue;
     ui32 DefaultInterconnectPort = 19001;
     ui32 MonitoringPort = 0;
     TString MonitoringAddress;
@@ -296,7 +291,7 @@ struct TCommonAppOptions {
     size_t CompileInflightLimit = 100000; // MiniKQLCompileService
     TString UDFsDir;
     TVector<TString> UDFsPaths;
-    TMaybe<TString, NMaybe::TPolicyUndefinedFail> TenantName;
+    TMaybe<TString> TenantName;
     TVector<TString> NodeBrokerAddresses;
     ui32 NodeBrokerPort = 0;
     bool NodeBrokerUseTls = false;
@@ -310,8 +305,8 @@ struct TCommonAppOptions {
     TString NodeDomain;
     ui32 SqsHttpPort = 0;
     TString NodeKind = TString(NODE_KIND_YDB);
-    TMaybe<TString, NMaybe::TPolicyUndefinedFail> NodeType;
-    TMaybe<TString, NMaybe::TPolicyUndefinedFail> DataCenter;
+    TMaybe<TString> NodeType;
+    TMaybe<TString> DataCenter;
     TString Rack = "";
     ui32 Body = 0;
     ui32 GRpcPort = 0;

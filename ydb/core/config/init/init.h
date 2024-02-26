@@ -30,6 +30,7 @@ public:
 class IErrorCollector {
 public:
     virtual ~IErrorCollector() {}
+    // TODO(Enjection): CFG-UX-0 replace regular throw with just collecting
     virtual void Fatal(TString error) = 0;
 };
 

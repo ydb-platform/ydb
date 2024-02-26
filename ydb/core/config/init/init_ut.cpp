@@ -48,8 +48,3 @@ Y_UNIT_TEST_SUITE(Init) {
         }
     }
 }
-
-template<>
-TMaybe<TString, NMaybe::TPolicyUndefinedFail> FromString<TMaybe<TString, NMaybe::TPolicyUndefinedFail>, char>(const char* data, size_t size) {
-    return TString{data, size};
-}

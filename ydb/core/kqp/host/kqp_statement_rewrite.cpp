@@ -74,8 +74,6 @@ namespace {
 
         const auto pos = insertData.Ref().Pos();
 
-        Cerr << "INSERT:>> " << NYql::NCommon::ExprToPrettyString(ctx, *insertData.Ptr()) << Endl;
-
         auto typeTransformer = NYql::TTransformationPipeline(&typeCtx)
             .AddServiceTransformers()
             .AddPreTypeAnnotation()

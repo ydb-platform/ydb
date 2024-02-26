@@ -126,7 +126,7 @@ WHERE $__timeFilter(`timeCol`)
 
 ### Templates and variables
 
-To add a new YDB query variable, refer to [Add a query variable](https://grafana.com/docs/grafana/latest/variables/variable-types/add-query-variable/).
+To add a new {{ ydb-short-name }} query variable, refer to [Add a query variable](https://grafana.com/docs/grafana/latest/variables/variable-types/add-query-variable/).
 After creating a variable, you can use it in your YDB queries by using [Variable syntax](https://grafana.com/docs/grafana/latest/variables/syntax/).
 For more information about variables, refer to [Templates and variables](https://grafana.com/docs/grafana/latest/variables/).
 

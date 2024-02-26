@@ -1,4 +1,4 @@
-# YDB data source for Grafana
+# {{ ydb-short-name }} data source for Grafana
 
 ## Version compatibility
 

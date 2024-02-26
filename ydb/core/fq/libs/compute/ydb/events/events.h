@@ -457,16 +457,17 @@ struct TEvYdbCompute {
     };
 
     struct TEvCpuLoadResponse : public NActors::TEventLocal<TEvCpuLoadResponse, EvCpuLoadResponse> {
-        TEvCpuLoadResponse(double instantLoad = 0.0, double averageLoad = 0.0)
-            : InstantLoad(instantLoad), AverageLoad(averageLoad)
+        TEvCpuLoadResponse(double instantLoad = 0.0, double averageLoad = 0.0, ui32 cpuNumber = 0)
+            : InstantLoad(instantLoad), AverageLoad(averageLoad), CpuNumber(cpuNumber)
         {}
 
         TEvCpuLoadResponse(NYql::TIssues issues)
-            : InstantLoad(0.0), AverageLoad(0.0), Issues(std::move(issues))
+            : InstantLoad(0.0), AverageLoad(0.0), CpuNumber(0), Issues(std::move(issues))
         {}
 
         double InstantLoad;
         double AverageLoad;
+        ui32 CpuNumber;
         NYql::TIssues Issues;
     };
 

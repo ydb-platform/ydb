@@ -38,11 +38,27 @@ struct TDataEvents {
     public:
         TEvWrite() = default;
 
-        TEvWrite(ui64 txId, NKikimrDataEvents::TEvWrite::ETxMode txMode) {
-            Y_ABORT_UNLESS(txMode != NKikimrDataEvents::TEvWrite::MODE_UNSPECIFIED);
 
-            Record.SetTxId(txId);
+        TEvWrite(const ui64 txId, NKikimrDataEvents::TEvWrite::ETxMode txMode) {
+            Y_ABORT_UNLESS(txMode != NKikimrDataEvents::TEvWrite::MODE_UNSPECIFIED);
             Record.SetTxMode(txMode);
+            Record.SetTxId(txId);
+        }
+
+        TEvWrite(NKikimrDataEvents::TEvWrite::ETxMode txMode) {
+            Y_ABORT_UNLESS(txMode != NKikimrDataEvents::TEvWrite::MODE_UNSPECIFIED);
+            Record.SetTxMode(txMode);
+        }
+
+        TEvWrite& SetTxId(const ui64 txId) {
+            Record.SetTxId(txId);
+            return *this;
+        }
+
+        TEvWrite& SetLockId(const ui64 lockTxId, const ui64 lockNodeId) {
+            Record.SetLockTxId(lockTxId);
+            Record.SetLockNodeId(lockNodeId);
+            return *this;
         }
 
         void AddOperation(NKikimrDataEvents::TEvWrite_TOperation::EOperationType operationType, const TTableId& tableId, const std::vector<ui32>& columnIds,

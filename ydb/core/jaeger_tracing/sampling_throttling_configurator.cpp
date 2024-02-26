@@ -2,12 +2,40 @@
 
 #include "sampling_throttling_control.h"
 #include "sampling_throttling_control_internals.h"
+#include "ydb/library/actors/core/log.h"
 
 #include <library/cpp/random_provider/random_provider.h>
 #include <library/cpp/time_provider/time_provider.h>
 #include <util/string/cast.h>
 
 namespace NKikimr::NJaegerTracing {
+
+namespace {
+
+template<class T>
+void PropagateUnspecifiedRequest(TRulesContainer<T>& rules) {
+    constexpr auto unspecifiedRequestType = static_cast<size_t>(ERequestType::UNSPECIFIED);
+    const auto& unspecifiedRequestTypeRules = rules[unspecifiedRequestType];
+    
+    for (size_t requestType = 0; requestType < kRequestTypesCnt; ++requestType) {
+        if (requestType == unspecifiedRequestType) {
+            continue;
+        }
+
+        auto& requestTypeDatabaseRules = rules[requestType].DatabaseRules;
+        auto& requestTypeGlobalRules = rules[requestType].Global;
+        for (const auto& [database, unspecifiedDatabaseRules] : unspecifiedRequestTypeRules.DatabaseRules) {
+            auto& databaseRules = requestTypeDatabaseRules[database];
+            databaseRules.insert(databaseRules.end(), unspecifiedDatabaseRules.begin(),
+                                         unspecifiedDatabaseRules.end());
+        }
+        requestTypeGlobalRules.insert(requestTypeGlobalRules.end(),
+                                      unspecifiedRequestTypeRules.Global.begin(),
+                                      unspecifiedRequestTypeRules.Global.end());
+    }
+}
+
+} // namespace anonymous
 
 TSamplingThrottlingConfigurator::TSamplingThrottlingConfigurator(TIntrusivePtr<ITimeProvider> timeProvider,
                                                                  TIntrusivePtr<IRandomProvider>& randomProvider)
@@ -24,7 +52,9 @@ TIntrusivePtr<TSamplingThrottlingControl> TSamplingThrottlingConfigurator::GetCo
 
 void TSamplingThrottlingConfigurator::UpdateSettings(TSettings<double, TThrottlingSettings> settings) {
     auto enrichedSettings = GenerateThrottlers(std::move(settings));
-    CurrentSettings = PropagateUnspecifiedRequest(std::move(enrichedSettings));
+    PropagateUnspecifiedRequest(enrichedSettings.SamplingRules);
+    PropagateUnspecifiedRequest(enrichedSettings.ExternalThrottlingRules);
+    CurrentSettings = std::move(enrichedSettings);
 
     for (auto& control : IssuedControls) {
         control->UpdateImpl(GenerateSetup());
@@ -36,30 +66,6 @@ TSettings<double, TIntrusivePtr<TThrottler>> TSamplingThrottlingConfigurator::Ge
     return settings.MapThrottler([this](const TThrottlingSettings& settings) {
         return MakeIntrusive<TThrottler>(settings.MaxTracesPerMinute, settings.MaxTracesBurst, TimeProvider);
     });
-}
-
-TSettings<double, TIntrusivePtr<TThrottler>> TSamplingThrottlingConfigurator::PropagateUnspecifiedRequest(
-    TSettings<double, TIntrusivePtr<TThrottler>> setup) {
-    auto unspecifiedRequestType = static_cast<size_t>(ERequestType::UNSPECIFIED);
-
-    for (size_t requestType = 0; requestType < kRequestTypesCnt; ++requestType) {
-        if (requestType == unspecifiedRequestType) {
-            continue;
-        }
-
-        auto& requestTypeSamplingRules = setup.SamplingRules[requestType];
-        for (const auto& [database, rules] : setup.SamplingRules[unspecifiedRequestType]) {
-            auto& databaseSamplingRules = requestTypeSamplingRules[database];
-            databaseSamplingRules.insert(databaseSamplingRules.end(), rules.begin(), rules.end());
-        }
-
-        auto& requestTypeThrottlingRules = setup.ExternalThrottlingRules[requestType];
-        for (const auto& [database, rules] : setup.ExternalThrottlingRules[unspecifiedRequestType]) {
-            auto& databaseThrottlingRules = requestTypeThrottlingRules[database];
-            databaseThrottlingRules.insert(databaseThrottlingRules.end(), rules.begin(), rules.end());
-        }
-    }
-    return setup;
 }
 
 std::unique_ptr<TSamplingThrottlingControl::TSamplingThrottlingImpl> TSamplingThrottlingConfigurator::GenerateSetup() {

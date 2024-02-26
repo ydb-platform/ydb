@@ -27,8 +27,6 @@ public:
 private:
     TSettings<double, TIntrusivePtr<TThrottler>> GenerateThrottlers(
         TSettings<double, TThrottlingSettings> settings);
-    TSettings<double, TIntrusivePtr<TThrottler>> PropagateUnspecifiedRequest(
-        TSettings<double, TIntrusivePtr<TThrottler>> setup);
     
     std::unique_ptr<TSamplingThrottlingControl::TSamplingThrottlingImpl> GenerateSetup();
 

@@ -141,7 +141,12 @@ TSettings<double, TThrottlingSettings> TJaegerTracingConfigurator::GetSettings(c
                 .MaxTracesBurst = samplingRule.GetMaxTracesBurst(),
             },
         };
-        settings.SamplingRules[static_cast<size_t>(requestType)][database].push_back(rule);
+        auto& requestTypeRules = settings.SamplingRules[static_cast<size_t>(requestType)];
+        if (database) {
+            requestTypeRules.DatabaseRules[*database].push_back(rule);
+        } else {
+            requestTypeRules.Global.push_back(rule);
+        }
     }
 
     for (const auto& throttlingRule : cfg.GetExternalThrottling()) {
@@ -176,7 +181,13 @@ TSettings<double, TThrottlingSettings> TJaegerTracingConfigurator::GetSettings(c
                 .MaxTracesBurst = maxBurst,
             },
         };
-        settings.ExternalThrottlingRules[static_cast<size_t>(requestType)][database].push_back(rule);
+
+        auto& requestTypeRules = settings.ExternalThrottlingRules[static_cast<size_t>(requestType)];
+        if (database) {
+            requestTypeRules.DatabaseRules[*database].push_back(rule);
+        } else {
+            requestTypeRules.Global.push_back(rule);
+        }
     }
 
     // If external_throttling section is absent we want to allow all requests to be traced
@@ -188,8 +199,7 @@ TSettings<double, TThrottlingSettings> TJaegerTracingConfigurator::GetSettings(c
             },
         };
 
-        settings.ExternalThrottlingRules[static_cast<size_t>(ERequestType::UNSPECIFIED)][NothingObject]
-            .push_back(rule);
+        settings.ExternalThrottlingRules[static_cast<size_t>(ERequestType::UNSPECIFIED)].Global.push_back(rule);
     }
 
     return settings;

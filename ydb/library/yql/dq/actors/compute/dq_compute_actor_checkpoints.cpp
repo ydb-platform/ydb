@@ -151,6 +151,7 @@ STRICT_STFUNC_EXC(TDqComputeActorCheckpoints::StateFunc,
     hFunc(TEvDqCompute::TEvRun, Handle);
     hFunc(NActors::TEvInterconnect::TEvNodeDisconnected, Handle);
     hFunc(NActors::TEvInterconnect::TEvNodeConnected, Handle);
+    hFunc(NActors::TEvents::TEvUndelivered, Handle);
     hFunc(TEvRetryQueuePrivate::TEvRetry, Handle);
     hFunc(TEvents::TEvWakeup, Handle);
     cFunc(TEvents::TEvPoisonPill::EventType, PassAway);,
@@ -391,6 +392,13 @@ void TDqComputeActorCheckpoints::Handle(NActors::TEvInterconnect::TEvNodeDisconn
 void TDqComputeActorCheckpoints::Handle(NActors::TEvInterconnect::TEvNodeConnected::TPtr& ev) {
     LOG_D("Handle connected node " << ev->Get()->NodeId);
     EventsQueue.HandleNodeConnected(ev->Get()->NodeId);
+}
+
+void TDqComputeActorCheckpoints::Handle(NActors::TEvents::TEvUndelivered::TPtr& ev) {
+    LOG_D("Handle undelivered");
+    if (!EventsQueue.HandleUndelivered(ev)) {
+        LOG_E("TEvUndelivered: " << ev->Get()->SourceType);
+    }
 }
 
 void TDqComputeActorCheckpoints::Handle(TEvRetryQueuePrivate::TEvRetry::TPtr& ev) {

@@ -28,12 +28,11 @@ struct TS3State : public TThrRefBase
     const NKikimr::NMiniKQL::IFunctionRegistry* FunctionRegistry = nullptr;
     ISecuredServiceAccountCredentialsFactory::TPtr CredentialsFactory;
     IHTTPGateway::TPtr Gateway;
-    TMaybe<ui64> MaxTasksPerStage;
 };
 
 TDataProviderInitializer GetS3DataProviderInitializer(IHTTPGateway::TPtr gateway, ISecuredServiceAccountCredentialsFactory::TPtr credentialsFactory = nullptr, bool allowLocalFiles = false);
 
-TIntrusivePtr<IDataProvider> CreateS3DataSource(TS3State::TPtr state, IHTTPGateway::TPtr gateway);
-TIntrusivePtr<IDataProvider> CreateS3DataSink(TS3State::TPtr state, IHTTPGateway::TPtr gateway);
+TIntrusivePtr<IDataProvider> CreateS3DataSource(TS3State::TPtr state);
+TIntrusivePtr<IDataProvider> CreateS3DataSink(TS3State::TPtr state);
 
 } // namespace NYql

@@ -14,8 +14,6 @@ PEERDIR(
     ydb/core/protos
     ydb/library/yaml_config
     ydb/library/yql/minikql
-    ydb/library/yql/parser/pg_wrapper
-    ydb/library/yql/parser/pg_wrapper/interface
     ydb/library/yql/public/udf
     ydb/library/yql/public/udf/service/exception_policy
     ydb/public/lib/deprecated/kicli

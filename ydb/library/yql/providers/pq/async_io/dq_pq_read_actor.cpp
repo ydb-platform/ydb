@@ -93,7 +93,7 @@ struct TEvPrivate {
 class TDqPqReadActor : public NActors::TActor<TDqPqReadActor>, public IDqComputeActorAsyncInput {
 public:
     using TPartitionKey = std::pair<TString, ui64>; // Cluster, partition id.
-    using TDebugOffsets = TMaybe<std::pair<ui64, ui64>>;
+    using TDebugOffsets = THashMap<ui64, std::pair<ui64, ui64>>;
 
     TDqPqReadActor(
         ui64 inputIndex,
@@ -173,7 +173,7 @@ public:
 
         DeferredCommits.emplace(checkpoint.GetId(), std::make_pair(std::move(CurrentDeferredCommit), CurrentDeferredCommitOffset));
         CurrentDeferredCommit = NYdb::NTopic::TDeferredCommit();
-        CurrentDeferredCommitOffset.Clear();
+        CurrentDeferredCommitOffset.clear();
     }
 
     void LoadState(const NDqProto::TSourceState& state) override {
@@ -216,13 +216,13 @@ public:
 
     void CommitState(const NDqProto::TCheckpoint& checkpoint) override {
         const auto checkpointId = checkpoint.GetId();
+        SRC_LOG_D("Commit state, checkpoint " << checkpointId);
         while (!DeferredCommits.empty() && DeferredCommits.front().first <= checkpointId) {
+            SRC_LOG_D("Commit checkpoint " << DeferredCommits.front().first);
             auto& valuePair = DeferredCommits.front().second;
-            const auto& offsets = valuePair.second;
-            if (offsets.Empty()) {
-                SRC_LOG_D("Commit offset: [ empty ]");
-            } else {
-                SRC_LOG_D("Commit offset: [" << offsets->first << ", " << offsets->second << "]");
+            const auto& offsetMap = valuePair.second;
+            for (const auto& [partitionId, offsets]: offsetMap) {
+                SRC_LOG_D("Commit offset, partition id " << partitionId << " [" << offsets.first << ", " << offsets.second << ")");
             }
             valuePair.first.Commit();
             DeferredCommits.pop();
@@ -434,11 +434,13 @@ private:
         for (const auto& [PartitionSession, ranges] : readyBatch.OffsetRanges) {
             for (const auto& [start, end] : ranges) {
                 CurrentDeferredCommit.Add(PartitionSession, start, end);
-                if (!CurrentDeferredCommitOffset) {
-                    CurrentDeferredCommitOffset = std::make_pair(start, end);
+                auto offsetsIt = CurrentDeferredCommitOffset.find(PartitionSession->GetPartitionId());
+                if (offsetsIt == CurrentDeferredCommitOffset.end()) {
+                    CurrentDeferredCommitOffset[PartitionSession->GetPartitionId()] = std::make_pair(start, end);
                 } else {
-                    CurrentDeferredCommitOffset->first = std::min(CurrentDeferredCommitOffset->first, start);
-                    CurrentDeferredCommitOffset->second = std::max(CurrentDeferredCommitOffset->second, end);
+                    auto& offsets = offsetsIt->second;
+                    offsets.first = std::min(offsets.first, start);
+                    offsets.second = std::max(offsets.second, end);
                 }
             }
             PartitionToOffset[MakePartitionKey(PartitionSession)] = ranges.back().second;

@@ -519,7 +519,7 @@ public:
         return FilterDatabase && FilterDatabase != DomainPath;
     }
 
-    bool IsTimeDifferenceCheckNode(const TNodeId nodeId) {
+    bool IsTimeDifferenceCheckNode(const TNodeId nodeId) const {
         if (!IsSpecificDatabaseFilter() || IsStaticNode(nodeId)) {
             return true;
         }

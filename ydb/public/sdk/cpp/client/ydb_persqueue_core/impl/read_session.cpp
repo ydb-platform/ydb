@@ -849,16 +849,6 @@ private:
     THashMap<TPartitionStream::TPtr, TDisjointIntervalTree<ui64>> Offsets; // Partition stream -> offsets set.
 };
 
-TDeferredCommit::TDeferredCommit() {
-}
-
-TDeferredCommit::TDeferredCommit(TDeferredCommit&&) = default;
-
-TDeferredCommit& TDeferredCommit::operator=(TDeferredCommit&&) = default;
-
-TDeferredCommit::~TDeferredCommit() {
-}
-
 #define GET_IMPL()                              \
     if (!Impl) {                                \
         Impl = MakeHolder<TImpl>();             \

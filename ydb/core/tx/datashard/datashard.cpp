@@ -647,7 +647,7 @@ public:
     }
 
     void OnAbort(ui64 txId) override {
-        WriteResult = NEvents::TDataEvents::TEvWriteResult::BuildError(Self->TabletID(), txId, NKikimrDataEvents::TEvWriteResult::STATUS_CANCELLED, "Distributed transaction aborted due to commit failure");
+        WriteResult = NEvents::TDataEvents::TEvWriteResult::BuildError(Self->TabletID(), txId, NKikimrDataEvents::TEvWriteResult::STATUS_ABORTED, "Distributed transaction aborted due to commit failure");
         OnCommit(txId);
     }
 

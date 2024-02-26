@@ -376,6 +376,7 @@ Y_UNIT_TEST_SUITE(TS3ListingTest) {
                 for (auto item : row.items()) {
                     if (item.has_text_value()) {
                         commonPrefixes.emplace_back(item.text_value());
+                        break;
                     }
                 }
             }
@@ -386,6 +387,7 @@ Y_UNIT_TEST_SUITE(TS3ListingTest) {
                 for (auto item : row.items()) {
                     if (item.has_text_value()) {
                         contents.emplace_back(item.text_value());
+                        break;
                     }
                 }
             }

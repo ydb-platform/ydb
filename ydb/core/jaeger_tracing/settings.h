@@ -79,7 +79,7 @@ public:
         return TSettings<TNewSamplingType, TThrottling> {
             .SamplingRules = MapContainerValues(
                 SamplingRules,
-                [&f](const TSamplingRule<TSampling, TThrottling>& v) -> TSamplingRule<TNewSamplingType, TThrottling> {
+                [&f](const auto& v) {
                     return v.MapSampler(f);
                 }
             ),
@@ -94,13 +94,13 @@ public:
         return TSettings<TSampling, TNewThrottlingType> {
             .SamplingRules = MapContainerValues(
                 SamplingRules,
-                [&f](const TSamplingRule<TSampling, TThrottling>& v) -> TSamplingRule<TSampling, TNewThrottlingType> {
+                [&f](const auto& v) {
                     return v.MapThrottler(f);
                 }
             ),
             .ExternalThrottlingRules = MapContainerValues(
                 ExternalThrottlingRules,
-                [&f](const TExternalThrottlingRule<TThrottling>& v) -> TExternalThrottlingRule<TNewThrottlingType> {
+                [&f](const auto& v) {
                     return v.MapThrottler(f);
                 }
             ),

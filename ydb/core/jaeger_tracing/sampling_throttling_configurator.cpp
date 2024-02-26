@@ -2,7 +2,6 @@
 
 #include "sampling_throttling_control.h"
 #include "sampling_throttling_control_internals.h"
-#include "ydb/library/actors/core/log.h"
 
 #include <library/cpp/random_provider/random_provider.h>
 #include <library/cpp/time_provider/time_provider.h>

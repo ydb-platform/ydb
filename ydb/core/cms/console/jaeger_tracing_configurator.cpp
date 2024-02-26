@@ -107,7 +107,6 @@ TSettings<double, TThrottlingSettings> TJaegerTracingConfigurator::GetSettings(c
                        << samplingRule.ShortDebugString() << ". Skipping the rule");
             continue;
         }
-        auto database = GetDatabase(scope);
 
         if (!samplingRule.HasLevel() || !samplingRule.HasFraction() || !samplingRule.HasMaxTracesPerMinute()) {
             ALOG_ERROR(NKikimrServices::CMS_CONFIGS, "missing required fields in rule " << samplingRule.ShortDebugString()
@@ -141,7 +140,9 @@ TSettings<double, TThrottlingSettings> TJaegerTracingConfigurator::GetSettings(c
                 .MaxTracesBurst = samplingRule.GetMaxTracesBurst(),
             },
         };
+
         auto& requestTypeRules = settings.SamplingRules[static_cast<size_t>(requestType)];
+        auto database = GetDatabase(scope);
         if (database) {
             requestTypeRules.DatabaseRules[*database].push_back(rule);
         } else {
@@ -160,7 +161,6 @@ TSettings<double, TThrottlingSettings> TJaegerTracingConfigurator::GetSettings(c
                        << throttlingRule.ShortDebugString() << ". Skipping the rule");
             continue;
         }
-        auto database = GetDatabase(scope);
 
         if (!throttlingRule.HasMaxTracesPerMinute()) {
             ALOG_ERROR(NKikimrServices::CMS_CONFIGS, "missing required field max_traces_per_minute in rule "
@@ -183,6 +183,7 @@ TSettings<double, TThrottlingSettings> TJaegerTracingConfigurator::GetSettings(c
         };
 
         auto& requestTypeRules = settings.ExternalThrottlingRules[static_cast<size_t>(requestType)];
+        auto database = GetDatabase(scope);
         if (database) {
             requestTypeRules.DatabaseRules[*database].push_back(rule);
         } else {

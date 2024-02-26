@@ -14,8 +14,8 @@ std::pair<ui64, ui64> GetMessageOffsetRange(const TReadSessionEvent::TDataReceiv
 class TDeferredCommit::TImpl {
 public:
 
-    void Add(const TPartitionSession::TPtr& partitionStream, ui64 startOffset, ui64 endOffset);
-    void Add(const TPartitionSession::TPtr& partitionStream, ui64 offset);
+    void Add(const TPartitionSession::TPtr& partitionSession, ui64 startOffset, ui64 endOffset);
+    void Add(const TPartitionSession::TPtr& partitionSession, ui64 offset);
 
     void Add(const TReadSessionEvent::TDataReceivedEvent::TMessage& message);
     void Add(const TReadSessionEvent::TDataReceivedEvent& dataReceivedEvent);
@@ -23,22 +23,11 @@ public:
     void Commit();
 
 private:
-    static void Add(const TPartitionSession::TPtr& partitionStream, TDisjointIntervalTree<ui64>& offsetSet, ui64 startOffset, ui64 endOffset);
+    static void Add(const TPartitionSession::TPtr& partitionSession, TDisjointIntervalTree<ui64>& offsetSet, ui64 startOffset, ui64 endOffset);
 
 private:
-    // Partition stream -> offsets set.
     THashMap<TPartitionSession::TPtr, TDisjointIntervalTree<ui64>> Offsets;
 };
-
-TDeferredCommit::TDeferredCommit() {
-}
-
-TDeferredCommit::TDeferredCommit(TDeferredCommit&&) = default;
-
-TDeferredCommit& TDeferredCommit::operator=(TDeferredCommit&&) = default;
-
-TDeferredCommit::~TDeferredCommit() {
-}
 
 #define GET_IMPL()                              \
     if (!Impl) {                                \
@@ -46,12 +35,12 @@ TDeferredCommit::~TDeferredCommit() {
     }                                           \
     Impl
 
-void TDeferredCommit::Add(const TPartitionSession::TPtr& partitionStream, ui64 startOffset, ui64 endOffset) {
-    GET_IMPL()->Add(partitionStream, startOffset, endOffset);
+void TDeferredCommit::Add(const TPartitionSession::TPtr& partitionSession, ui64 startOffset, ui64 endOffset) {
+    GET_IMPL()->Add(partitionSession, startOffset, endOffset);
 }
 
-void TDeferredCommit::Add(const TPartitionSession::TPtr& partitionStream, ui64 offset) {
-    GET_IMPL()->Add(partitionStream, offset);
+void TDeferredCommit::Add(const TPartitionSession::TPtr& partitionSession, ui64 offset) {
+    GET_IMPL()->Add(partitionSession, offset);
 }
 
 void TDeferredCommit::Add(const TReadSessionEvent::TDataReceivedEvent::TMessage& message) {

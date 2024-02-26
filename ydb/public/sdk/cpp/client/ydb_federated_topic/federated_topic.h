@@ -94,6 +94,10 @@ public:
         return TopicOriginDatabase->id();
     }
 
+    NTopic::TPartitionSession* GetPartitionSession() const {
+        return PartitionSession.Get();
+    }
+
 private:
     NTopic::TPartitionSession::TPtr PartitionSession;
     std::shared_ptr<TDbInfo> ReadSourceDatabase;
@@ -210,7 +214,7 @@ struct TReadSessionEvent {
 //! Set of offsets to commit.
 //! Class that could store offsets in order to commit them later.
 //! This class is not thread safe.
-class TDeferredCommit {
+class TDeferredCommit : public TMoveOnly {
 public:
     //! Add message to set.
     void Add(const TReadSessionEvent::TDataReceivedEvent::TMessage& message);
@@ -219,21 +223,13 @@ public:
     void Add(const TReadSessionEvent::TDataReceivedEvent& dataReceivedEvent);
 
     //! Add offsets range to set.
-    void Add(const TFederatedPartitionSession& partitionSession, ui64 startOffset, ui64 endOffset);
+    void Add(const TFederatedPartitionSession::TPtr& partitionSession, ui64 startOffset, ui64 endOffset);
 
     //! Add offset to set.
-    void Add(const TFederatedPartitionSession& partitionSession, ui64 offset);
+    void Add(const TFederatedPartitionSession::TPtr& partitionSession, ui64 offset);
 
     //! Commit all added offsets.
     void Commit();
-
-    TDeferredCommit();
-    TDeferredCommit(const TDeferredCommit&) = delete;
-    TDeferredCommit(TDeferredCommit&&);
-    TDeferredCommit& operator=(const TDeferredCommit&) = delete;
-    TDeferredCommit& operator=(TDeferredCommit&&);
-
-    ~TDeferredCommit();
 
 private:
     class TImpl;

@@ -233,7 +233,7 @@ public:
 
 private:
     class TImpl;
-    THolder<TImpl> Impl;
+    std::shared_ptr<TImpl> Impl;
 };
 
 //! Event debug string.

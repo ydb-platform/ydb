@@ -57,10 +57,10 @@ private:
     explicit TAtomicPtr(T* ptr);
 
     template <class T_, bool EnableAcquireHazard_>
-    friend bool operator==(const TAtomicPtr<T_, EnableAcquireHazard_>& lhs, const TIntrusivePtr<T_>& rhs);
+    friend bool operator==(const TAtomicPtr<T_, EnableAcquireHazard_>& lhs, const T_* rhs);
 
     template <class T_, bool EnableAcquireHazard_>
-    friend bool operator==(const TIntrusivePtr<T_>& lhs, const TAtomicPtr<T_, EnableAcquireHazard_>& rhs);
+    friend bool operator==(const T_* lhs, const TAtomicPtr<T_, EnableAcquireHazard_>& rhs);
 
     std::atomic<T*> Ptr_ = nullptr;
 

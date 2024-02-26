@@ -97,7 +97,7 @@ ORDER BY `timestamp`
 
 ### Tables
 
-Table visualizations will always be available for any valid YDB query.
+Table visualizations will always be available for any valid {{ ydb-short-name }} query.
 
 ### Visualizing logs with the Logs Panel
 

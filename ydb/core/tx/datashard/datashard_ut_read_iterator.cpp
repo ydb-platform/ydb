@@ -3218,10 +3218,11 @@ Y_UNIT_TEST_SUITE(DataShardReadIterator) {
         helper.TestReadOneKey(tableName, {1, 1, 1}, 101);
     }
 
-    Y_UNIT_TEST_TWIN(TryCommitLocksPrepared, BreakLocks) {
+    Y_UNIT_TEST_QUAD(TryCommitLocksPrepared, Volatile, BreakLocks) {
         TTestHelper helper;
 
         auto runtime = helper.Server->GetRuntime();
+        runtime->SetLogPriority(NKikimrServices::TX_DATASHARD, NLog::PRI_TRACE);
 
         const ui64 lockTxId = 1011121314;
         const TString tableName1 = "table-1";
@@ -3266,7 +3267,8 @@ Y_UNIT_TEST_SUITE(DataShardReadIterator) {
 
         Cerr << "===== Commit locks on table 1" << Endl;
         {
-            auto writeRequest = std::make_unique<NKikimr::NEvents::TDataEvents::TEvWrite>(++helper.TxId, NKikimrDataEvents::TEvWrite::MODE_PREPARE);
+            auto writeRequest = std::make_unique<NKikimr::NEvents::TDataEvents::TEvWrite>(++helper.TxId, 
+                Volatile ? NKikimrDataEvents::TEvWrite::MODE_VOLATILE_PREPARE : NKikimrDataEvents::TEvWrite::MODE_PREPARE);
 
             NKikimrDataEvents::TKqpLocks& kqpLocks = *writeRequest->Record.MutableLocks();
             kqpLocks.MutableLocks()->CopyFrom(readLocks);
@@ -3284,7 +3286,8 @@ Y_UNIT_TEST_SUITE(DataShardReadIterator) {
 
         Cerr << "===== Write and commit locks on table 2" << Endl;
         {
-            auto writeRequest = helper.MakeWriteRequest(tableName2, helper.TxId, {1, 1, 1, 1001}, NKikimrDataEvents::TEvWrite::MODE_PREPARE);
+            auto writeRequest = helper.MakeWriteRequest(tableName2, helper.TxId, {1, 1, 1, 1001}, 
+                Volatile ? NKikimrDataEvents::TEvWrite::MODE_VOLATILE_PREPARE : NKikimrDataEvents::TEvWrite::MODE_PREPARE);
 
             NKikimrDataEvents::TKqpLocks& kqpLocks = *writeRequest->Record.MutableLocks();
             kqpLocks.AddSendingShards(tabletId1);

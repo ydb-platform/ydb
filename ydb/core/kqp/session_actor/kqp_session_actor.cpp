@@ -459,10 +459,10 @@ public:
         Become(&TKqpSessionActor::ExecuteState);
     }
 
-    void CompileQueryParsed() {
+    void CompileSplittedQuery() {
         YQL_ENSURE(QueryState);
         auto ev = QueryState->BuildCompileSplittedRequest(CompilationCookie);
-        LOG_D("Sending CompileParsedQuery request");
+        LOG_D("Sending CompileSplittedQuery request");
 
         Send(MakeKqpCompileServiceID(SelfId().NodeId()), ev.release(), 0, QueryState->QueryId,
             QueryState->KqpSessionSpan.GetTraceId());
@@ -555,8 +555,8 @@ public:
         YQL_ENSURE(QueryState);
         TTimerGuard timer(this);
 
-        for (const auto& resultElem : ev->Get()->SplitExprs) {
-            Cerr << "GOT:: COMPILED:: " << KqpExprToPrettyString(*resultElem, *ev->Get()->SplitCtx) << Endl;
+        for (const auto& resultElem : ev->Get()->Exprs) {
+            Cerr << "GOT:: COMPILED:: " << KqpExprToPrettyString(*resultElem, *ev->Get()->Ctx) << Endl;
         }
 
         QueryState->SaveAndCheckSplitResult(ev->Get());
@@ -569,7 +569,7 @@ public:
 
     bool ExecuteNextStatementPart() {
         if (QueryState->PrepareNextStatementPart()) {
-            CompileQueryParsed();
+            CompileSplittedQuery();
             return true;
         }
         return false;

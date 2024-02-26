@@ -142,8 +142,9 @@ bool TKqpQueryState::SaveAndCheckParseResult(TEvKqp::TEvParseResponse&& ev) {
 }
 
 bool TKqpQueryState::SaveAndCheckSplitResult(TEvKqp::TEvSplitResponse* ev) {
-    SplittedExprs = std::move(ev->SplitExprs);
-    SplittedCtx = std::move(ev->SplitCtx);
+    SplittedExprs = std::move(ev->Exprs);
+    SplittedWorld = std::move(ev->World);
+    SplittedCtx = std::move(ev->Ctx);
     NextSplittedExpr = -1;
     return true;
 }
@@ -254,13 +255,10 @@ std::unique_ptr<TEvKqp::TEvCompileRequest> TKqpQueryState::BuildCompileSplittedR
     settings.DocumentApiRestricted = IsDocumentApiRestricted_;
     settings.IsInternalCall = IsInternalCall();
     settings.Syntax = GetSyntax();
-    settings.IsPrepareQuery = GetAction() == NKikimrKqp::QUERY_ACTION_PREPARE;
 
-    bool keepInCache = false;
     switch (GetAction()) {
         case NKikimrKqp::QUERY_ACTION_EXECUTE:
             query = TKqpQueryId(Cluster, Database, GetQuery(), settings, GetQueryParameterTypes());
-            keepInCache = GetQueryKeepInCache() && query->IsSql();
             break;
         default:
             YQL_ENSURE(false);
@@ -272,21 +270,13 @@ std::unique_ptr<TEvKqp::TEvCompileRequest> TKqpQueryState::BuildCompileSplittedR
     }
 
     auto request = std::make_unique<TEvKqp::TEvCompileRequest>(UserToken, uid,
-        std::move(query), keepInCache, compileDeadline, DbCounters, std::move(cookie),
+        std::move(query), false, compileDeadline, DbCounters, std::move(cookie),
         UserRequestContext, std::move(Orbit), TempTablesState, GetCollectDiagnostics(),
         false, SplittedCtx.Get(), SplittedExprs.at(NextSplittedExpr));
     return request;
 }
 
 bool TKqpQueryState::PrepareNextStatementPart() {
-    Cerr << "NEXT STATE " << NextSplittedExpr << " " << SplittedExprs.size() << Endl;
-    if (NextSplittedExpr + 1 >= static_cast<int>(SplittedExprs.size()) || SplittedExprs.empty()) {
-        SplittedExprs.clear();
-        SplittedCtx.Reset();
-        NextSplittedExpr = -1;
-        return false;
-    }
-
     QueryData = {};
     PreparedQuery = {};
     CompileResult = {};
@@ -298,7 +288,16 @@ bool TKqpQueryState::PrepareNextStatementPart() {
     Commited = false;
     TopicOperations = {};
     ReplayMessage = {};
+
     ++NextSplittedExpr;
+    
+    if (NextSplittedExpr >= static_cast<int>(SplittedExprs.size()) || SplittedExprs.empty()) {
+        SplittedWorld.Reset();
+        SplittedExprs.clear();
+        SplittedCtx.Reset();
+        NextSplittedExpr = -1;
+        return false;
+    }
 
     return true;
 }

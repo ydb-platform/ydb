@@ -107,7 +107,13 @@ public:
         const NActors::TActorId& target, const TExecScriptSettings& settings) = 0;
 
     /* Split */
-    virtual std::pair<TVector<NYql::TExprNode::TPtr>, THolder<NYql::TExprContext>> SplitQuery(const TKqpQueryRef& query, const TPrepareSettings& settings) = 0;
+    struct TSplitResult {
+        THolder<NYql::TExprContext> Ctx;
+        TVector<NYql::TExprNode::TPtr> Exprs;
+        NYql::TExprNode::TPtr World;
+    };
+
+    virtual TSplitResult SplitQuery(const TKqpQueryRef& query, const TPrepareSettings& settings) = 0;
 };
 
 TIntrusivePtr<IKqpHost> CreateKqpHost(TIntrusivePtr<IKqpGateway> gateway,

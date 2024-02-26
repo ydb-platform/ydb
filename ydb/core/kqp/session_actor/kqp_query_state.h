@@ -124,6 +124,7 @@ public:
 
     THolder<NYql::TExprContext> SplittedCtx;
     TVector<NYql::TExprNode::TPtr> SplittedExprs;
+    NYql::TExprNode::TPtr SplittedWorld;
     int NextSplittedExpr = 0;
 
     TString ReplayMessage;

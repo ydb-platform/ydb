@@ -1194,15 +1194,18 @@ private:
         return results;
     }
 
-    std::pair<TVector<NYql::TExprNode::TPtr>, THolder<TExprContext>> SplitQuery(const TKqpQueryRef& query, const TPrepareSettings& settings) override {
+    TSplitResult SplitQuery(const TKqpQueryRef& query, const TPrepareSettings& settings) override {
         SetupYqlTransformer(EKikimrQueryType::Query);
         auto sqlVersion = SetupQueryParameters(settings, EKikimrQueryType::Query);
 
         auto queryExprs = CompileYqlQuery(query, /* isSql */ true, /* sqlAutoCommit */ false, *ExprCtx, sqlVersion,
             settings.UsePgParser);
 
-        queryExprs.push_back(std::move(FakeWorld));
-        return {queryExprs, std::move(ExprCtxStorage)};
+        return TSplitResult{
+            .Ctx = std::move(ExprCtxStorage),
+            .Exprs = std::move(queryExprs),
+            .World = std::move(FakeWorld),
+        };
     }
 
     TVector<TExprNode::TPtr> CompileYqlQuery(const TKqpQueryRef& query, bool isSql, TExprContext& ctx,

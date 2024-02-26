@@ -1184,9 +1184,6 @@ private:
 
         const auto results = RewriteExpression(result, ctx, *TypesCtx, SessionCtx, Cluster);
 
-        for (const auto& resultElem : results) {
-            Cerr << "TEST:: COMPILED:: " << KqpExprToPrettyString(*resultElem, ctx) << Endl;
-        }
         for (const auto& resultPart : results) {
             YQL_CLOG(INFO, ProviderKqp) << "Compiled query:\n" << KqpExprToPrettyString(*resultPart, ctx);
         }
@@ -1432,15 +1429,12 @@ private:
             }
 
             if (queryExprs.size() > 1) {
-                Cerr << "PREPARE>>> RETRY SPLITTED <<" << Endl;
                 return MakeIntrusive<TAsyncPrepareNeedToSplitYqlResult>();
             } else {
-                Cerr << "PREPARE>>> COMPILED:: " << KqpExprToPrettyString(*queryExprs.front(), ctx) << Endl;
                 return MakeIntrusive<TAsyncPrepareYqlResult>(queryExprs.front().Get(), ctx, *YqlTransformer, SessionCtx->QueryPtr(),
                     query.Text, sqlVersion, TransformCtx);
             }
         } else {
-            Cerr << "PREPARE>>> SPLITTED:: " << KqpExprToPrettyString(*expr, ctx) << Endl;
             return MakeIntrusive<TAsyncPrepareYqlResult>(expr, ctx, *YqlTransformer, SessionCtx->QueryPtr(),
                 query.Text, sqlVersion, TransformCtx);
         }

@@ -28,9 +28,9 @@ The plugin supports [gRPC and gRPCS](https://grpc.io/) transport protocols. A TL
 
 Once the plugin is installed on your Grafana instance, follow [these instructions](https://grafana.com/docs/grafana/latest/datasources/add-a-data-source/) to add a new {{ ydb-short-name }} data source, and enter configuration options.
 
-### With a configuration file
+### Configuration with provisioning system
 
-It is possible to configure data sources using configuration files with Grafana’s provisioning system. To read about how it works, including all the settings that you can set for this data source, refer to [Provisioning Grafana data sources](https://grafana.com/docs/grafana/latest/administration/provisioning/#data-sources).
+Alternatively, it is possible to configure data sources using configuration files with Grafana’s provisioning system. To read about how it works, including all the settings that you can set for this data source, refer to [Provisioning Grafana data sources](https://grafana.com/docs/grafana/latest/administration/provisioning/#data-sources) documentation.
 
 Plugin supports different authentication types [authentication types](../reference/ydb-sdk/auth.md).
 

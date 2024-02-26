@@ -29,10 +29,11 @@ namespace NActors {
             }
         }
         Shared.reset(new TSharedExecutorPool(Config.Shared, ExecutorPoolCount, poolsWithSharedThreads));
-        // auto sharedPool = static_cast<TSharedExecutorPool*>(Shared.get());
+        auto sharedPool = static_cast<TSharedExecutorPool*>(Shared.get());
 
         ui64 ts = GetCycleCountFast();
         Harmonizer.reset(MakeHarmonizer(ts));
+        Harmonizer->SetSharedPool(sharedPool);
 
         Executors.Reset(new TAutoPtr<IExecutorPool>[ExecutorPoolCount]);
 

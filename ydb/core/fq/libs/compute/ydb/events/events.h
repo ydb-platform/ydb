@@ -117,9 +117,10 @@ struct TEvYdbCompute {
     };
 
     struct TEvGetOperationResponse : public NActors::TEventLocal<TEvGetOperationResponse, EvGetOperationResponse> {
-        TEvGetOperationResponse(NYql::TIssues issues, NYdb::EStatus status)
+        TEvGetOperationResponse(NYql::TIssues issues, NYdb::EStatus status, bool ready)
             : Issues(std::move(issues))
             , Status(status)
+            , Ready(ready)
         {}
 
         TEvGetOperationResponse(NYdb::NQuery::EExecStatus execStatus, Ydb::StatusIds::StatusCode statusCode, const TVector<Ydb::Query::ResultSetMeta>& resultSetsMeta, const Ydb::TableStats::QueryStats& queryStats, NYql::TIssues issues)
@@ -129,6 +130,7 @@ struct TEvYdbCompute {
             , QueryStats(queryStats)
             , Issues(std::move(issues))
             , Status(NYdb::EStatus::SUCCESS)
+            , Ready(true)
         {}
 
         NYdb::NQuery::EExecStatus ExecStatus = NYdb::NQuery::EExecStatus::Unspecified;
@@ -137,6 +139,7 @@ struct TEvYdbCompute {
         Ydb::TableStats::QueryStats QueryStats;
         NYql::TIssues Issues;
         NYdb::EStatus Status;
+        bool Ready;
     };
 
     struct TEvFetchScriptResultRequest : public NActors::TEventLocal<TEvFetchScriptResultRequest, EvFetchScriptResultRequest> {

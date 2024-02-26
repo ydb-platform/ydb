@@ -2169,7 +2169,7 @@ public:
                 AddError(TStringBuilder() << "VariableSetStmt, expected string literal for " << value->name << " option");
                 return nullptr;
             }
-        } else if (name.StartsWith("dq.") || name.StartsWith("yt.") || name.StartsWith("s3.")) {
+        } else if (name.StartsWith("dq.") || name.StartsWith("yt.") || name.StartsWith("s3.") || name.StartsWith("ydb.")) {
             if (ListLength(value->args) != 1) {
                 AddError(TStringBuilder() << "VariableSetStmt, expected 1 arg, but got: " << ListLength(value->args));
                 return nullptr;
@@ -2184,8 +2184,12 @@ public:
                     providerName = NYql::DqProviderName;
                 } else if (name.StartsWith("yt.")) {
                     providerName = NYql::YtProviderName;
-                } else {
+                } else if (name.StartsWith("s3.")) {
                     providerName = NYql::S3ProviderName;
+                } else if (name.StartsWith("ydb.")) {
+                    providerName = NYql::YdbProviderName;
+                } else {
+                    Y_ASSERT(0);
                 }
 
                 auto providerSource = L(A("DataSource"), QA(providerName), QA("$all"));

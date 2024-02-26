@@ -50,8 +50,11 @@ public:
         }
     }
 
-    const NJaegerTracing::TRequestDiscriminator& GetRequestDiscriminator() const override {
-        return AuxSettings.RequestDiscriminator;
+    NJaegerTracing::TRequestDiscriminator GetRequestDiscriminator() const override {
+        return {
+            .RequestType = AuxSettings.RequestType,
+            .Database = TBase::GetDatabaseName(),
+        };
     }
 
 private:

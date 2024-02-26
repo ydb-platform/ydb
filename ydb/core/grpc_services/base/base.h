@@ -344,7 +344,7 @@ struct TRequestAuxSettings {
     TRateLimiterMode RlMode = TRateLimiterMode::Off;
     void (*CustomAttributeProcessor)(const TSchemeBoardEvents::TDescribeSchemeResult& schemeData, ICheckerIface*) = nullptr;
     TAuditMode AuditMode = TAuditMode::Off;
-    NJaegerTracing::TRequestDiscriminator RequestDiscriminator = NJaegerTracing::TRequestDiscriminator::EMPTY;
+    NJaegerTracing::ERequestType RequestType = NJaegerTracing::ERequestType::UNSPECIFIED;
 };
 
 class TGRpcRequestProxySimple;
@@ -378,7 +378,7 @@ public:
     virtual void LegacyFinishSpan() = 0;
 
     // Used for per-type sampling
-    virtual const NJaegerTracing::TRequestDiscriminator& GetRequestDiscriminator() const {
+    virtual NJaegerTracing::TRequestDiscriminator GetRequestDiscriminator() const {
         return NJaegerTracing::TRequestDiscriminator::EMPTY;
     };
 
@@ -1403,7 +1403,7 @@ class TGrpcRequestCall
     using TRequestIface = typename std::conditional<IsOperation, IRequestOpCtx, IRequestNoOpCtx>::type;
 
 public:
-    static IActor* CreateRpcActor(typename std::conditional<IsOperation, IRequestOpCtx, IRequestNoOpCtx>::type* msg);
+    static IActor* CreateRpcActor(TRequestIface* msg);
     static constexpr bool IsOp = IsOperation;
 
     using TBase = std::conditional_t<TProtoHasValidate<TReq>::Value,
@@ -1445,8 +1445,11 @@ public:
         }
     }
 
-    const NJaegerTracing::TRequestDiscriminator& GetRequestDiscriminator() const override {
-        return AuxSettings.RequestDiscriminator;
+    NJaegerTracing::TRequestDiscriminator GetRequestDiscriminator() const override {
+        return {
+            .RequestType = AuxSettings.RequestType,
+            .Database = TBase::GetDatabaseName(),
+        };
     }
 
     // IRequestCtxBaseMtSafe

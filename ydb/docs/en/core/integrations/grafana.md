@@ -10,9 +10,15 @@ Follow the Grafana's [plugin installation docs](https://grafana.com/docs/grafana
 
 ## Configuration
 
-### YDB user for the data source
+### {{ ydb-short-name }} user for the data source
 
-Set up an YDB user account with readonly permission [(more about permissions)](../cluster/access.md) and access to databases and tables you want to query. Please note that Grafana does not validate that queries are safe. Queries can contain any SQL statement including modification instructions.
+Set up an {{ ydb-short-name }} user account with **read-only** permissions [(more about permissions)](../cluster/access.md) and access to databases and tables you want to query. 
+
+{% note warning %}
+
+Please note that Grafana does not validate that queries are safe. Queries can contain any SQL statements including data modification instructions.
+
+{% endnote %}
 
 ### Data transfer protocol support
 

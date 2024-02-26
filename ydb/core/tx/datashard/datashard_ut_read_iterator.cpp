@@ -3698,7 +3698,7 @@ Y_UNIT_TEST_SUITE(DataShardReadIterator) {
         helper.CheckLockBroken(tableName, 10, {11, 11, 11}, lockTxId, *readResult1);
     }
 
-    Y_UNIT_TEST(ShouldReturnBrokenLockWhenReadRangeInvisibleRowSkips2) {
+    Y_UNIT_TEST_TWIN(ShouldReturnBrokenLockWhenReadRangeInvisibleRowSkips2, EvWrite) {
         // Almost the same as ShouldReturnBrokenLockWhenReadRangeInvisibleRowSkips:
         // 1. tx1: read some **non-existing** range1
         // 2. tx2: upsert into range2 > range1 range and commit.
@@ -3722,6 +3722,9 @@ Y_UNIT_TEST_SUITE(DataShardReadIterator) {
         CheckResult(helper.Tables[tableName].UserTable, *readResult1, {});
         UNIT_ASSERT_VALUES_EQUAL(readResult1->Record.TxLocksSize(), 1);
         UNIT_ASSERT_VALUES_EQUAL(readResult1->Record.BrokenTxLocksSize(), 0);
+
+        auto rows = EvWrite ? TEvWriteRows{{{300, 0, 0, 3000}}} : TEvWriteRows{};
+        auto evWriteObservers = ReplaceEvProposeTransactionWithEvWrite(*helper.Server->GetRuntime(), rows);
 
         // write new data above snapshot
         ExecSQL(helper.Server, helper.Sender, R"(

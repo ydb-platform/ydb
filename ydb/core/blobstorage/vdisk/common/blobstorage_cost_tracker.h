@@ -318,7 +318,7 @@ private:
     ::NMonitoring::TDynamicCounters::TCounterPtr DefragDiskCost;
     ::NMonitoring::TDynamicCounters::TCounterPtr InternalDiskCost;
 
-    TAtomic BucketCapacity = 1'000'000'000;  // 10^9 nsec
+    TAtomic BucketCapacity;  // 10^9 nsec
     TAtomic DiskTimeAvailableNs = 1'000'000'000;
     TBucketQuoter<i64, TSpinLock, TAppDataTimerMs<TInstantTimerMs>> Bucket;
     TLight BurstDetector;
@@ -327,7 +327,7 @@ private:
 
 public:
     TBsCostTracker(const TBlobStorageGroupType& groupType, NPDisk::EDeviceType diskType,
-            const TIntrusivePtr<::NMonitoring::TDynamicCounters>& counters);
+            const TIntrusivePtr<::NMonitoring::TDynamicCounters>& counters, ui64 burstThresholdNs);
 
     template<class TEv>
     ui64 GetCost(const TEv& ev) const {
@@ -340,35 +340,15 @@ public:
         return cost;
     }
 
-private:
-    void UpdateBucketCapacity() {
-        if (!CostModel) {
-            return;
-        }
-        ui64 maxPartSize = GroupType.MaxPartSize(TBlobStorageGroupType::ECrcMode::CrcModeWholePart, MaxVDiskBlobSize);
-        ui64 maxHugePartSize = GroupType.MaxPartSize(TBlobStorageGroupType::ECrcMode::CrcModeWholePart,
-                CostModel->HugeBlobSize);
-        ui64 capacity = std::max({
-            CostModel->ReadCost(maxHugePartSize),
-            CostModel->WriteCost(maxPartSize),
-            CostModel->HugeWriteCost(maxHugePartSize)
-        }) * ConcurrentHugeRequestsAllowed;
-
-        if (capacity != (ui64)AtomicGet(BucketCapacity)) {
-            AtomicSet(BucketCapacity, capacity);
-        }
-    }
-
 public:
     void UpdateCostModel(const TCostModel& costModel) {
         if (CostModel) {
             CostModel->Update(costModel);
         }
-        UpdateBucketCapacity();
     }
 
     void CountRequest(ui64 cost) {
-        Bucket.Use(cost);
+        Bucket.UseAndFill(cost);
         BurstDetector.Set(!Bucket.IsAvail(), SeqnoBurstDetector.fetch_add(1));
     }
 

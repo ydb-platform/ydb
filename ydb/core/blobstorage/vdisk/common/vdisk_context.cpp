@@ -30,7 +30,8 @@ namespace NKikimr {
                 TReplQuoter::TPtr replPDiskReadQuoter,
                 TReplQuoter::TPtr replPDiskWriteQuoter,
                 TReplQuoter::TPtr replNodeRequestQuoter,
-                TReplQuoter::TPtr replNodeResponseQuoter)
+                TReplQuoter::TPtr replNodeResponseQuoter,
+                ui64 burstThresholdNs)
         : TBSProxyContext(vdiskCounters->GetSubgroup("subsystem", "memhull"))
         , VDiskActorId(vdiskActorId)
         , Top(std::move(top))
@@ -57,7 +58,7 @@ namespace NKikimr {
         , ReplPDiskWriteQuoter(std::move(replPDiskWriteQuoter))
         , ReplNodeRequestQuoter(std::move(replNodeRequestQuoter))
         , ReplNodeResponseQuoter(std::move(replNodeResponseQuoter))
-        , CostTracker(std::make_shared<TBsCostTracker>(Top->GType, type, vdiskCounters))
+        , CostTracker(std::make_shared<TBsCostTracker>(Top->GType, type, vdiskCounters, burstThresholdNs))
         , OutOfSpaceState(Top->GetTotalVDisksNum(), Top->GetOrderNumber(ShortSelfVDisk))
         , CostMonGroup(vdiskCounters, "subsystem", "cost")
         , Logger(as ? ActorSystemLogger(as) : DevNullLogger())

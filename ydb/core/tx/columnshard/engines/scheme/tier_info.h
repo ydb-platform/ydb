@@ -19,6 +19,10 @@ private:
     ui32 TtlUnitsInSecond;
     YDB_READONLY_DEF(std::optional<NArrow::NSerialization::TSerializerContainer>, Serializer);
 public:
+    static TString GetTtlTierName() {
+        return "__TTL";
+    }
+
     TTierInfo(const TString& tierName, TDuration evictDuration, const TString& column, ui32 unitsInSecond = 0)
         : Name(tierName)
         , EvictColumnName(column)
@@ -45,7 +49,7 @@ public:
     std::optional<TInstant> ScalarToInstant(const std::shared_ptr<arrow::Scalar>& scalar) const;
 
     static std::shared_ptr<TTierInfo> MakeTtl(const TDuration evictDuration, const TString& ttlColumn, ui32 unitsInSecond = 0) {
-        return std::make_shared<TTierInfo>("TTL", evictDuration, ttlColumn, unitsInSecond);
+        return std::make_shared<TTierInfo>(GetTtlTierName(), evictDuration, ttlColumn, unitsInSecond);
     }
 
     TString GetDebugString() const {
@@ -99,12 +103,19 @@ class TTiering {
     using TTiersMap = THashMap<TString, std::shared_ptr<TTierInfo>>;
     TTiersMap TierByName;
     TSet<TTierRef> OrderedTiers;
+    YDB_READONLY_DEF(TString, EvictColumnName);
+
 public:
-
-    std::shared_ptr<TTierInfo> Ttl;
-
     const TTiersMap& GetTierByName() const {
         return TierByName;
+    }
+
+    std::shared_ptr<TTierInfo> GetTierByName(const TString& name) const {
+        auto tIt = TierByName.find(name);
+        if (tIt == TierByName.end()) {
+            return nullptr;
+        }
+        return tIt->second;
     }
 
     const TSet<TTierRef>& GetOrderedTiers() const {
@@ -115,14 +126,14 @@ public:
         return !OrderedTiers.empty();
     }
 
-    void Add(const std::shared_ptr<TTierInfo>& tier) {
-        if (HasTiers()) {
-            // TODO: support different ttl columns
-            Y_ABORT_UNLESS(tier->GetEvictColumnName() == OrderedTiers.begin()->Get().GetEvictColumnName());
+    bool Add(const std::shared_ptr<TTierInfo>& tier) {
+        if (EvictColumnName) {
+            return tier->GetEvictColumnName() == EvictColumnName;
         }
-
+        EvictColumnName = tier->GetEvictColumnName();
         TierByName.emplace(tier->GetName(), tier);
         OrderedTiers.emplace(tier);
+        return true;
     }
 
     TString GetHottestTierName() const {
@@ -141,24 +152,10 @@ public:
         return {};
     }
 
-    THashSet<TString> GetTtlColumns() const {
-        THashSet<TString> out;
-        if (Ttl) {
-            out.insert(Ttl->GetEvictColumnName());
-        }
-        for (auto& [tierName, tier] : TierByName) {
-            out.insert(tier->GetEvictColumnName());
-        }
-        return out;
-    }
-
     TString GetDebugString() const {
         TStringBuilder sb;
-        if (Ttl) {
-            sb << Ttl->GetDebugString() << "; ";
-        }
-        for (auto&& i : OrderedTiers) {
-            sb << i.Get().GetDebugString() << "; ";
+        for (auto&& [_, i] : TierByName) {
+            sb << i->GetDebugString() << "; ";
         }
         return sb;
     }

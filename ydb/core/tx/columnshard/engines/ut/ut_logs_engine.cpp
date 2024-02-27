@@ -12,6 +12,7 @@
 #include <ydb/core/tx/columnshard/data_locks/manager/manager.h>
 #include <ydb/core/tx/columnshard/background_controller.h>
 #include <ydb/core/tx/columnshard/engines/changes/abstract/abstract.h>
+#include <ydb/core/tx/columnshard/test_helper/helper.h>
 
 
 namespace NKikimr {
@@ -169,21 +170,21 @@ private:
     THashMap<ui32, TIndex> Indices;
 };
 
-static const std::vector<std::pair<TString, TTypeInfo>> testColumns = {
+static const std::vector<NArrow::TTest::TTestColumn> testColumns = {
     // PK
-    {"timestamp", TTypeInfo(NTypeIds::Timestamp) },
-    {"resource_type", TTypeInfo(NTypeIds::Utf8) },
-    {"resource_id", TTypeInfo(NTypeIds::Utf8) },
-    {"uid", TTypeInfo(NTypeIds::Utf8) },
+    NArrow::TTest::TTestColumn("timestamp", TTypeInfo(NTypeIds::Timestamp) ),
+    NArrow::TTest::TTestColumn("resource_type", TTypeInfo(NTypeIds::Utf8) ),
+    NArrow::TTest::TTestColumn("resource_id", TTypeInfo(NTypeIds::Utf8) ),
+    NArrow::TTest::TTestColumn("uid", TTypeInfo(NTypeIds::Utf8) ),
     //
-    {"message", TTypeInfo(NTypeIds::Utf8) }
+    NArrow::TTest::TTestColumn("message", TTypeInfo(NTypeIds::Utf8) )
 };
 
 static const std::vector<std::pair<TString, TTypeInfo>> testKey = {
-    {"timestamp", TTypeInfo(NTypeIds::Timestamp) },
-    {"resource_type", TTypeInfo(NTypeIds::Utf8) },
-    {"resource_id", TTypeInfo(NTypeIds::Utf8) },
-    {"uid", TTypeInfo(NTypeIds::Utf8) }
+    NArrow::TTest::TTestColumn("timestamp", TTypeInfo(NTypeIds::Timestamp) ),
+    NArrow::TTest::TTestColumn("resource_type", TTypeInfo(NTypeIds::Utf8) ),
+    NArrow::TTest::TTestColumn("resource_id", TTypeInfo(NTypeIds::Utf8) ),
+    NArrow::TTest::TTestColumn("uid", TTypeInfo(NTypeIds::Utf8) )
 };
 
 template <typename TKeyDataType>

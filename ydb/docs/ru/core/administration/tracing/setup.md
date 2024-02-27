@@ -180,23 +180,23 @@ tracing_config:
 tracing_config:
   sampling:
     - scope:
-        request_type: KeyValue.ExecuteTransaction
+        database: /Root/db1
       fraction: 0.5
       level: 5 
       max_rate_per_minute: 100
     - scope:
-        request_type: KeyValue.ExecuteTransaction
+        database: /Root/db1
       fraction: 0.01
       level: 15
       max_rate_per_minute: 5
 ```
 
-При достаточно маленьном потоке запросов типа KeyValue.ExecuteTransaction, будут сэмплироваться:
+При достаточно маленьном потоке запросов к базе `/Root/db1`, будут сэмплироваться:
 
 * 1% запросов с уровнем детализации 15
 * 49.5% запросов с уровнем детализации 5
 
-При достаточно большом потоке запросов типа KeyValue.ExecuteTransaction, будут сэмплироваться:
+При достаточно большом потоке запросов к базе `/Root/db1`, будут сэмплироваться:
 
 * 5 запросов в минуту с уровнем детализации 15
 * от 95 до 100 запросов в минуту с уровнем детализации 5

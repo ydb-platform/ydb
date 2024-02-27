@@ -207,6 +207,8 @@ partitioning_settings = {
 * `auto_partitioning_by_size_enabled` — (необязательный) включение автопартиционирования по размеру (bool), по умолчанию - включено.
 * `auto_partitioning_by_load` — (необязательный) включение [автопартицирования по нагрузке](../concepts/datamodel/table.md#auto_partitioning_by_load).
 
+Подробнее про параметры и их значения по умолчанию написано по ссылкам выше.
+
 #### ttl {#ttl}
 
 Аргумент `ttl` описывает настройки [Time To Live](../concepts/ttl.md).

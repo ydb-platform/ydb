@@ -36,7 +36,7 @@ namespace NFwd {
 
             Offset = (Offset + 1) % Capacity;
 
-            const ui32 was = LoadedPages[Offset].Data.size();
+            const ui64 was = LoadedPages[Offset].Data.size();
 
             LoadedPages[Offset].Data = page.Release();
             LoadedPages[Offset].PageId = page.PageId;

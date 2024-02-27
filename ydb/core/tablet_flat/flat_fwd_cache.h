@@ -15,7 +15,7 @@ namespace NFwd {
     public:
         const TSharedData* Get(TPageId pageId) const
         {
-            if (pageId <= LastLoadedPageId) {
+            if (pageId < FirstUnloadedPageId) {
                 for (const auto& page : LoadedPages) {
                     if (page.PageId == pageId) {
                         return &page.Data;
@@ -40,7 +40,7 @@ namespace NFwd {
 
             LoadedPages[Offset].Data = page.Release();
             LoadedPages[Offset].PageId = page.PageId;
-            LastLoadedPageId = Max(LastLoadedPageId, page.PageId);
+            FirstUnloadedPageId = Max(FirstUnloadedPageId, page.PageId + 1);
 
             return was;
         }
@@ -48,7 +48,7 @@ namespace NFwd {
     private:
         std::array<NPageCollection::TLoadedPage, Capacity> LoadedPages;
         ui32 Offset = 0;
-        TPageId LastLoadedPageId = 0;
+        TPageId FirstUnloadedPageId = 0;
     };
 
     class TCache : public IPageLoadingLogic {

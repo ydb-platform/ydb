@@ -385,17 +385,20 @@ Y_UNIT_TEST_SUITE(NFwd) {
     Y_UNIT_TEST(TLoadedPagesCircularBuffer) {
         auto buffer = TLoadedPagesCircularBuffer<5>();
 
-        for (ui32 pageId = 1; pageId < 42; pageId++) {
-            auto page = TPage(pageId * 1, pageId * 10, pageId * 100, pageId * 1000);
+        for (ui32 pageId = 0; pageId < 42; pageId++) {
+            // doesn't have current
+            UNIT_ASSERT_VALUES_EQUAL(buffer.Get(pageId), nullptr);\
+
+            auto page = TPage(pageId * 1, pageId * 10 + 1, pageId * 100, pageId * 1000);
             page.Data =  TSharedData::Copy(TString(page.Size, 'x'));
 
-            UNIT_ASSERT_VALUES_EQUAL(buffer.Emplace(page), pageId >= 5 ? (pageId - 5) * 10 : 0);
+            UNIT_ASSERT_VALUES_EQUAL(buffer.Emplace(page), pageId >= 5 ? (pageId - 5) * 10 + 1 : 0);
 
             // has trace
             for (ui32 i = 0; i < Min(5u, pageId); i++) {
                 auto got = buffer.Get(pageId - i);
                 UNIT_ASSERT_VALUES_UNEQUAL(got, nullptr);
-                UNIT_ASSERT_VALUES_EQUAL(got->size(), (pageId - i) * 10);
+                UNIT_ASSERT_VALUES_EQUAL(got->size(), (pageId - i) * 10 + 1);
             }
             // doesn't have next
             UNIT_ASSERT_VALUES_EQUAL(buffer.Get(pageId + 1), nullptr);

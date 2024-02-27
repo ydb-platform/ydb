@@ -4,6 +4,8 @@
 #include "resource_subscriber/actor.h"
 #include "engines/writer/buffer/actor.h"
 
+#include <ydb/core/protos/table_stats.pb.h>
+
 namespace NKikimr {
 
 IActor* CreateColumnShard(const TActorId& tablet, TTabletStorageInfo* info) {

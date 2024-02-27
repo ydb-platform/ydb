@@ -1,6 +1,8 @@
 #pragma once
 
 #include <ydb/core/protos/sys_view.pb.h>
+#include <ydb/core/protos/tablet.pb.h>
+#include <ydb/core/protos/labeled_counters.pb.h>
 
 #include <util/generic/hash.h>
 

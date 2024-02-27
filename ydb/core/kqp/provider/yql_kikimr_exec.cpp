@@ -17,6 +17,7 @@
 #include <ydb/library/yql/public/issue/yql_issue.h>
 
 #include <ydb/core/ydb_convert/ydb_convert.h>
+#include <ydb/core/protos/index_builder.pb.h>
 
 #include <ydb/public/sdk/cpp/client/ydb_proto/accessor.h>
 #include <ydb/public/api/protos/ydb_topic.pb.h>

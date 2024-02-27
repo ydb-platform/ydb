@@ -3,6 +3,8 @@
 #include <ydb/core/kqp/query_data/kqp_query_data.h>
 #include <ydb/core/protos/tx_proxy.pb.h>
 #include <ydb/core/protos/tx_datashard.pb.h>
+#include <ydb/library/ydb_issue/proto/issue_id.pb.h>
+#include <ydb/core/protos/data_events.pb.h>
 
 #include <ydb/core/kqp/topics/kqp_topics.h>
 #include <ydb/core/kqp/counters/kqp_counters.h>

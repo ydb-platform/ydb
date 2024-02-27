@@ -2,6 +2,8 @@
 #include "schemeshard__operation_common.h"
 #include "schemeshard_impl.h"
 
+#include <ydb/core/protos/blob_depot_config.pb.h>
+
 namespace NKikimr::NSchemeShard {
 
     namespace {

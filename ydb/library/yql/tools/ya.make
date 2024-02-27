@@ -6,6 +6,7 @@ RECURSE(
     mrrun
     pgrun
     pg-make-test
+    purebench
     sql2yql
     sql_formatter
     udf_dep_stub

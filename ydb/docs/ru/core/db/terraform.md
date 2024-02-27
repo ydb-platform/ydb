@@ -211,12 +211,6 @@ partitioning_settings = {
 
 Аргумент `ttl` описывает настройки [Time To Live](../concepts/ttl.md).
 
-{% note info %}
-
-Изменение TTL производится через удаление и последующее создание.
-
-{% endnote %}
-
 Пример:
 
 ```tf

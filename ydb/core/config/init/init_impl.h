@@ -962,24 +962,14 @@ public:
             InitDynamicNode();
         }
 
-        Cout << __LINE__ << Endl;
-
         LoadYamlConfig(refs, CommonAppOptions.YamlConfigFile, AppConfig, CALL_CTX());
 
-        Cout << __LINE__ << Endl;
-
         Option("sys-file", TCfg::TActorSystemConfigFieldTag{}, CALL_CTX());
-
-
-        Cout << __LINE__ << Endl;
 
         if (!AppConfig.HasActorSystemConfig()) {
             AppConfig.MutableActorSystemConfig()->CopyFrom(*DummyActorSystemConfig());
             TRACE_CONFIG_CHANGE_INPLACE_T(ActorSystemConfig, SetExplicitly);
         }
-
-
-        Cout << __LINE__ << Endl;
 
         Option("domains-file", TCfg::TDomainsConfigFieldTag{}, CALL_CTX());
         Option("bs-file", TCfg::TBlobStorageConfigFieldTag{}, CALL_CTX());
@@ -987,9 +977,6 @@ public:
 
         // This flag is set per node and we prefer flag over CMS.
         CommonAppOptions.ApplyLogSettings(AppConfig, ConfigUpdateTracer);
-
-
-        Cout << __LINE__ << Endl;
 
         Option("ic-file", TCfg::TInterconnectConfigFieldTag{}, &TInitialConfiguratorImpl::SetupInterconnectConfigDefaults, CALL_CTX());
         Option("channels-file", TCfg::TChannelProfileConfigFieldTag{}, CALL_CTX());
@@ -1020,9 +1007,6 @@ public:
         Option(nullptr, TCfg::TTracingConfigFieldTag{}, CALL_CTX());
         Option(nullptr, TCfg::TFailureInjectionConfigFieldTag{}, CALL_CTX());
 
-
-        Cout << __LINE__ << Endl;
-
         CommonAppOptions.ApplyFields(AppConfig, Env, ConfigUpdateTracer);
 
        // MessageBus options.
@@ -1030,9 +1014,6 @@ public:
             MbusAppOptions.InitMessageBusConfig(AppConfig);
             TRACE_CONFIG_CHANGE_INPLACE_T(MessageBusConfig, UpdateExplicitly);
         }
-
-
-        Cout << __LINE__ << Endl;
 
         TenantName = FillTenantPoolConfig(CommonAppOptions);
 
@@ -1220,20 +1201,11 @@ public:
             AppConfig.GetAuthConfig().GetStaffApiUserToken(),
         };
 
-
-        Cout << __LINE__ << Endl;
-
         TMaybe<NKikimr::NClient::TConfigurationResult> result = DynConfigClient.GetConfig(CommonAppOptions.GrpcSslSettings, addrs, settings, Env);
-
-
-        Cout << __LINE__ << Endl;
 
         if (!result) {
             return;
         }
-
-
-        Cout << __LINE__ << Endl;
 
         NKikimrConfig::TAppConfig yamlConfig = GetYamlConfigFromResult(*result, Labels);
         NYamlConfig::ReplaceUnmanagedKinds(result->GetConfig(), yamlConfig);
@@ -1241,13 +1213,7 @@ public:
         InitDebug.OldConfig.CopyFrom(result->GetConfig());
         InitDebug.YamlConfig.CopyFrom(yamlConfig);
 
-
-        Cout << __LINE__ << Endl;
-
         NKikimrConfig::TAppConfig appConfig = GetActualDynConfig(yamlConfig, result->GetConfig(), ConfigUpdateTracer);
-
-
-        Cout << __LINE__ << Endl;
 
         ApplyConfigForNode(appConfig);
     }

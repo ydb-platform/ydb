@@ -72,7 +72,13 @@
 
 * Строка соединения `connection_string` — выражение вида `grpc(s)://HOST:PORT/?database=/database/path`, где `grpc(s)://HOST:PORT/` эндпоинт, а `/database/path` — путь БД.
   Например, `grpcs://example.com:2135?database=/Root/testdb0`.
-* `database_endpoint` - алиас к первому пункту `connection_string` используется при создании/изменении топиков.
+* `database_endpoint` - используется при работе с ресурсом [топиков](#topic_resource) (аналог `connection_string` при работе с ресурсами таблиц).
+
+{% note info %}
+
+Если требуется, пользователь может передавать строку соединения с БД стандартными средствами Terraform - через variables
+
+{% endnote %}
 
 Если на сервере {{ ydb-short-name }} не включена авторизация, то в конфиге БД [config.yaml](../deploy/configuration/config.md) нужно указать:
 
@@ -94,7 +100,7 @@ pqconfig:
 ```tf
   resource "ydb_table" "ydb_table" {
     path = "path/to/table" # путь относительно корня базы
-    connection_string = "grpc(s)://HOST:PORT/?database=/database/path" # в примерах ниже мы поместим в переменную tf
+    connection_string = "grpc(s)://HOST:PORT/?database=/database/path" #пример подключения к БД
     column {
       name = "a"
       type = "Utf8"
@@ -128,8 +134,8 @@ pqconfig:
 
 Поддерживаются следующие аргументы:
 
-* `path` — (обязательный) путь таблицы.
-* `connection_string` — (обязательный) строка соединения.
+* `path` — (обязательный) путь таблицы, относительно корня базы (пример - `/path/to/table`).
+* `connection_string` — (обязательный) [строка соединения](#connection_string).
 
 * `column` — (обязательный) свойства колонки (см. аргумент [column](#column)).
 * `family` — (необязательный) группа колонок (см. аргумент [family](#family)).
@@ -239,7 +245,7 @@ ttl {
 ```tf
 resource "ydb_table_index" "ydb_table_index" {
   table_path        = "path/to/table" # путь относительно корня базы
-  connection_string = "grpc(s)://HOST:PORT/?database=/database/path"
+  connection_string = "grpc(s)://HOST:PORT/?database=/database/path" #пример подключения к БД
   name              = "my_index"
   type              = "global_sync" # "global_async"
   columns           = ["a", "b"]
@@ -299,16 +305,11 @@ resource "ydb_table_changefeed" "ydb_table_changefeed" {
 #### Создание таблицы в существующей БД {#example-with-connection-string}
 
 ```tf
-variable "my_db_connection_string" {
-  type = string
-  default = "grpc(s)://HOST:PORT/?database=/database/path" # можно передавать другими способами в tf
-}
-
 resource "ydb_table" "ydb_table" {
   # Путь до таблицы
   path = "path/to/table" # путь относительно корня базы
 
-  connection_string = var.my_db_connection_string
+  connection_string = "grpc(s)://HOST:PORT/?database=/database/path" #пример подключения к БД
 
   column {
     name = "a"
@@ -352,7 +353,7 @@ resource "ydb_table" "ydb_table" {
   path = "path/to/table" # путь относительно корня базы
   
   # ConnectionString до базы данных.
-  connection_string = var.my_db_connection_string
+  connection_string = "grpc(s)://HOST:PORT/?database=/database/path" #пример подключения к БД
 
   column {
     name = "a"
@@ -434,13 +435,13 @@ resource "ydb_table_index" "ydb_table_index" {
 
 {% endnote %}
 
-### Описание ресурса `ydb_topic`
+### Описание ресурса `ydb_topic` {#topic_resource}
 
 Пример:
 
 ```tf
 resource "ydb_topic" "ydb_topic" {
-  database_endpoint = var.my_db_connection_string
+  database_endpoint = "grpcs://example.com:2135/?database=/Root/testdb0" #пример подключения к БД
   name              = "test/test1"
   supported_codecs  = ["zstd"]
 
@@ -467,7 +468,7 @@ resource "ydb_topic" "ydb_topic" {
 Поддерживаются следующие аргументы:
 
 * `name` - (обязательный) имя топика.
-* `database_endpoint` - (обязательный) полный путь до базы данных, например: `"grpcs://example.com:2135/?database=/Root/testdb0"` (передаем в переменной tf - `var.my_db_connection_string`).
+* `database_endpoint` - (обязательный) полный путь до базы данных, например: `"grpcs://example.com:2135/?database=/Root/testdb0"` аналог `connection_string` для таблиц.
 * `retention_period_ms` - длительность хранения данных в миллисекундах, значение по умолчанию - `86400000` (сутки).
 * `partitions_count` - количество партиций, значение по умолчанию - `2`.
 * `supported_codecs` - поддерживаемые кодеки сжатия данных, значение по умолчанию - `"gzip", "raw", "zstd"`.

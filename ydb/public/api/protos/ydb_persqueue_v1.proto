@@ -1079,15 +1079,6 @@ message Credentials {
     }
 }
 
-enum ReadRuleScalingSupport {
-    // The consumer can't work with scaling.
-    NO_SUPPORT = 0;
-    // The consumer does not commit offsets. The order of messages may be disrupted at the time of scaling.
-    PARTIAL_SUPPORT = 1;
-    // The consumer fully supports scaling: during the reading process, offsets are regularly committed.
-    FULL_SUPPORT = 2;
-}
-
 enum AutoScalingStrategy {
     // Auto scaling disabled
     DISABLED = 0;
@@ -1189,9 +1180,18 @@ message TopicSettings {
         // Client service type.
         string service_type = 7;
 
+        enum ScalingSupport {
+            // The consumer can't work with scaling.
+            SCALING_SUPPORT_NO = 0;
+            // The consumer does not commit offsets. The order of messages may be disrupted at the time of scaling.
+            SCALING_SUPPORT_WITHOUT_ORDER_GUARANTIES = 1;
+            // The consumer fully supports scaling: during the reading process, offsets are regularly committed.
+            SCALING_SUPPORT_WITH_ORDER_GUARANTIES = 2;
+        }
+
         // Parameter for the consumer's support for topic scaling.
         // Default NOT_SUPPORTED
-        ReadRuleScalingSupport scaling_support = 8;
+        ScalingSupport scaling_support = 8;
     }
 
     // List of consumer read rules for this topic.

@@ -739,15 +739,6 @@ message MultipleWindowsStat {
     int64 per_day = 3;
 }
 
-enum ConsumerScalingSupport {
-    // The consumer can't work with scaling.
-    NO_SUPPORT = 0;
-    // The consumer does not commit offsets. The order of messages may be disrupted at the time of scaling.
-    PARTIAL_SUPPORT = 1;
-    // The consumer fully supports scaling: during the reading process, offsets are regularly committed.
-    FULL_SUPPORT = 2;
-}
-
 // Consumer description.
 message Consumer {
     // Must have valid not empty name as a key.
@@ -771,9 +762,18 @@ message Consumer {
     // Filled only when requested statistics in Describe*Request.
     ConsumerStats consumer_stats = 7;
 
+    enum ScalingSupport {
+        // The consumer can't work with scaling.
+        SCALING_SUPPORT_NO = 0;
+        // The consumer does not commit offsets. The order of messages may be disrupted at the time of scaling.
+        SCALING_SUPPORT_WITHOUT_ORDER_GUARANTIES = 1;
+        // The consumer fully supports scaling: during the reading process, offsets are regularly committed.
+        SCALING_SUPPORT_WITH_ORDER_GUARANTIES = 2;
+    }
+
     // Parameter for the consumer's support for topic scaling.
     // Default NOT_SUPPORTED
-    ConsumerScalingSupport scaling_support = 8;
+    ScalingSupport scaling_support = 8;
 
     message ConsumerStats {
         // Minimal timestamp of last read from partitions.
@@ -809,7 +809,7 @@ message AlterConsumer {
     map<string, string> alter_attributes = 6;
 
     // Parameter for the consumer's support for topic scaling.
-    optional ConsumerScalingSupport set_scaling_support = 7;
+    optional Consumer.ScalingSupport set_scaling_support = 7;
 }
 
 enum AutoScalingStrategy {

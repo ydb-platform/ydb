@@ -359,7 +359,7 @@ namespace NTable {
         bool LoadIndexes() noexcept
         {
             bool ready = true;
-            if (Levels) {
+            if (false && Levels) {
                 for (const auto &run: *Levels) {
                     for (const auto &item : run) {
                         for (auto indexPageId : item.Part->IndexPages.Groups) {

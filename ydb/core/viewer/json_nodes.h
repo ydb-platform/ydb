@@ -411,15 +411,17 @@ public:
                     const auto localPathId = entry.DomainInfo->DomainKey.LocalPathId;
                     FilterSubDomainKey = TSubDomainKey(ownerId, localPathId);
                 }
+
+                if (FilterTenant.empty()) {
+                    RequestForTenant(path);
+                }
+                
                 if (entry.DomainInfo->ResourcesDomainKey && entry.DomainInfo->DomainKey != entry.DomainInfo->ResourcesDomainKey) {
                     TPathId resourceDomainKey(entry.DomainInfo->ResourcesDomainKey);
                     BLOG_TRACE("Requesting navigate for resource domain " << resourceDomainKey);
                     RequestSchemeCacheNavigate(resourceDomainKey);
                     ++RequestsBeforeNodeList;
                 } else {
-                    if (FilterTenant.empty()) {
-                        RequestForTenant(path);
-                    }
                     if (Storage) {
                         if (entry.DomainDescription) {
                             for (const auto& storagePool : entry.DomainDescription->Description.GetStoragePools()) {

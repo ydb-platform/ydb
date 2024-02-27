@@ -36,9 +36,10 @@ namespace NKikimr {
 namespace NDataShard {
 
 TValidatedWriteTx::TValidatedWriteTx(TDataShard* self, TTransactionContext& txc, ui64 globalTxId, TInstant receivedAt, const NEvents::TDataEvents::TEvWrite& ev)
-    : UserDb(*self, txc.DB, globalTxId, TRowVersion::Min(), TRowVersion::Max(), EngineHostCounters, TAppData::TimeProvider->Now())
-    , KeyValidator(*self, txc.DB)
+    : KeyValidator(*self, txc.DB)
     , TabletId(self->TabletID())
+    , IsImmediate(ev.Record.GetTxMode() == NKikimrDataEvents::TEvWrite::MODE_IMMEDIATE)
+    , GlobalTxId(globalTxId)
     , ReceivedAt(receivedAt)
     , TxSize(0)
     , ErrCode(NKikimrTxDataShard::TError::OK)
@@ -47,17 +48,12 @@ TValidatedWriteTx::TValidatedWriteTx(TDataShard* self, TTransactionContext& txc,
     ComputeTxSize();
     NActors::NMemory::TLabel<MemoryLabelValidatedDataTx>::Add(TxSize);
 
-    UserDb.SetIsWriteTx(true);
-
     const NKikimrDataEvents::TEvWrite& record = ev.Record;
 
     if (record.GetLockTxId()) {
-        UserDb.SetLockTxId(record.GetLockTxId());
-        UserDb.SetLockNodeId(record.GetLockNodeId());
+        LockTxId = record.GetLockTxId();
+        LockNodeId = record.GetLockNodeId();
     }
-
-    if (record.GetTxMode() == NKikimrDataEvents::TEvWrite::MODE_IMMEDIATE)
-        UserDb.SetIsImmediateTx(true);
 
     NKikimrTxDataShard::TKqpTransaction::TDataTaskMeta meta;
 
@@ -239,7 +235,7 @@ bool TValidatedWriteTx::ReValidateKeys()
 {
     using EResult = NMiniKQL::IEngineFlat::EResult;
 
-    TKeyValidator::TValidateOptions options(UserDb);
+    TKeyValidator::TValidateOptions options(LockTxId, LockNodeId, false, IsImmediate, true);
     auto [result, error] = GetKeyValidator().ValidateKeys(options);
     if (result != EResult::Ok) {
         ErrStr = std::move(error);

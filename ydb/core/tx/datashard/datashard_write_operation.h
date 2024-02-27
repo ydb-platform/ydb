@@ -31,18 +31,10 @@ public:
     }
 
     ui64 GetTxId() const override {
-        return UserDb.GetGlobalTxId();
+        return GlobalTxId;
     }
 
-    ui64 LockTxId() const {
-        return UserDb.GetLockTxId();
-    }
-    ui32 LockNodeId() const {
-        return UserDb.GetLockNodeId();
-    }
-    bool Immediate() const {
-        return UserDb.GetIsImmediateTx();
-    }
+
     bool NeedDiagnostics() const {
         return true;
     }
@@ -59,7 +51,7 @@ public:
         return TxInfo().HasWrites();
     }
     bool HasLockedWrites() const {
-        return HasWrites() && LockTxId();
+        return HasWrites() && LockTxId;
     }
     bool HasDynamicWrites() const {
         return TxInfo().DynKeysCount != 0;
@@ -72,47 +64,8 @@ public:
         return KeyValidator;
     }
 
-    TDataShardUserDb& GetUserDb() {
-        return UserDb;
-    }
-
-    const TDataShardUserDb& GetUserDb() const {
-        return UserDb;
-    }
-
     bool CanCancel();
     bool CheckCancelled();
-
-    void SetWriteVersion(TRowVersion writeVersion) {
-        UserDb.SetWriteVersion(writeVersion);
-    }
-    void SetReadVersion(TRowVersion readVersion) {
-        UserDb.SetReadVersion(readVersion);
-    }
-
-    void SetVolatileTxId(ui64 txId) {
-        UserDb.SetVolatileTxId(txId);
-    }
-
-    TVector<IDataShardChangeCollector::TChange> GetCollectedChanges() const {
-        return UserDb.GetCollectedChanges();
-    }
-    void ResetCollectedChanges() {
-        UserDb.ResetCollectedChanges();
-    }
-
-    TVector<ui64> GetVolatileCommitTxIds() const {
-        return UserDb.GetVolatileCommitTxIds();
-    }
-    const absl::flat_hash_set<ui64>& GetVolatileDependencies() const {
-        return UserDb.GetVolatileDependencies();
-    }
-    std::optional<ui64> GetVolatileChangeGroup() {
-        return UserDb.GetChangeGroup();
-    }
-    bool GetVolatileCommitOrdered() const {
-        return UserDb.GetVolatileCommitOrdered();
-    }
 
     ui32 ExtractKeys(bool allowErrors);
     bool ReValidateKeys();
@@ -153,12 +106,15 @@ private:
     void ComputeTxSize();
 
 private:
-    TDataShardUserDb UserDb;
     TKeyValidator KeyValidator;
-    NMiniKQL::TEngineHostCounters EngineHostCounters;
 
     const ui64 TabletId;
+    const bool IsImmediate;
 
+    YDB_READONLY_DEF(ui64, LockTxId);
+    YDB_READONLY_DEF(ui32, LockNodeId);
+
+    YDB_READONLY_DEF(ui64, GlobalTxId);
     YDB_READONLY_DEF(TTableId, TableId);
     YDB_READONLY_DEF(std::optional<NKikimrDataEvents::TKqpLocks>, KqpLocks);
     YDB_READONLY_DEF(std::vector<ui32>, ColumnIds);
@@ -267,11 +223,11 @@ public:
     }
 
     ui64 LockTxId() const override {
-        return WriteTx ? WriteTx->LockTxId() : 0;
+        return WriteTx ? WriteTx->GetLockTxId() : 0;
     }
 
     ui32 LockNodeId() const override {
-        return WriteTx ? WriteTx->LockNodeId() : 0;
+        return WriteTx ? WriteTx->GetLockNodeId() : 0;
     }
 
     bool HasLockedWrites() const override {

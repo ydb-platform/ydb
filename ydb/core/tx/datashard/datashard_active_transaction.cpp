@@ -234,7 +234,8 @@ bool TValidatedDataTx::ReValidateKeys()
     using EResult = NMiniKQL::IEngineFlat::EResult;
 
     if (IsKqpTx()) {
-        TKeyValidator::TValidateOptions options(EngineBay.GetUserDb());
+        const auto& userDb = EngineBay.GetUserDb();
+        TKeyValidator::TValidateOptions options(userDb.GetLockTxId(), userDb.GetLockNodeId(), userDb.GetIsRepeatableSnapshot(), userDb.GetIsImmediateTx(), userDb.GetIsWriteTx());
         auto [result, error] = EngineBay.GetKeyValidator().ValidateKeys(options);
         if (result != EResult::Ok) {
             ErrStr = std::move(error);

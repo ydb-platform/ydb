@@ -55,19 +55,19 @@ public:
         DataShard.SubscribeNewLocks(ctx);
     }
 
-    EExecutionStatus OnTabletNotReady(TWriteOperation& writeOp, TValidatedWriteTx& writeTx, TTransactionContext& txc, const TActorContext& ctx)
+    EExecutionStatus OnTabletNotReady(TDataShardUserDb& userDb, TWriteOperation& writeOp, TTransactionContext& txc, const TActorContext& ctx)
     {
         LOG_TRACE_S(ctx, NKikimrServices::TX_DATASHARD, "Tablet " << DataShard.TabletID() << " is not ready for " << writeOp << " execution");
 
         DataShard.IncCounter(COUNTER_TX_TABLET_NOT_READY);
 
-        writeTx.ResetCollectedChanges();
+        userDb.ResetCollectedChanges();
 
         writeOp.ReleaseTxData(txc);
         return EExecutionStatus::Restart;
     }
 
-    void DoUpdateToUserDb(TWriteOperation* writeOp, TTransactionContext& txc, const TActorContext& ctx) {
+    void DoUpdateToUserDb(TDataShardUserDb& userDb, TWriteOperation* writeOp, TTransactionContext& txc, const TActorContext& ctx) {
         TValidatedWriteTx::TPtr& writeTx = writeOp->GetWriteTx();
 
         if (!writeTx->HasOperations()) {
@@ -122,7 +122,7 @@ public:
                 ops.emplace_back(columnTag, NTable::ECellOp::Set, cell.IsNull() ? TRawTypeValue() : TRawTypeValue(cell.Data(), cell.Size(), vtypeInfo));
             }
 
-            writeTx->GetUserDb().UpdateRow(fullTableId, key, ops);
+            userDb.UpdateRow(fullTableId, key, ops);
         }
 
         DataShard.IncCounter(COUNTER_WRITE_ROWS, matrix.GetRowCount());
@@ -152,7 +152,6 @@ public:
         const TValidatedWriteTx::TPtr& writeTx = writeOp->GetWriteTx();
 
         DataShard.ReleaseCache(*writeOp);
-        writeTx->GetUserDb().ResetCounters();
 
         if (writeOp->IsTxDataReleased()) {
             switch (Pipeline.RestoreDataTx(writeOp, txc)) {
@@ -194,8 +193,21 @@ public:
             return EExecutionStatus::Executed;
         }
 
+        NMiniKQL::TEngineHostCounters engineHostCounters;
+        const ui64 txId = writeTx->GetTxId();
+        const auto [readVersion, writeVersion] = DataShard.GetReadWriteVersions(writeOp);
+        
+        TDataShardUserDb userDb(DataShard, txc.DB, op->GetGlobalTxId(), readVersion, writeVersion, engineHostCounters, TAppData::TimeProvider->Now());
+        userDb.SetIsWriteTx(true);
+        userDb.SetIsImmediateTx(op->IsImmediate());
+        userDb.SetLockTxId(writeTx->GetLockTxId());
+        userDb.SetLockNodeId(writeTx->GetLockNodeId());
+
+        if (op->HasVolatilePrepareFlag()) {
+            userDb.SetVolatileTxId(txId);
+        }
+
         try {
-            const ui64 txId = writeTx->GetTxId();
             const auto* kqpLocks = writeTx->GetKqpLocks() ? &writeTx->GetKqpLocks().value() : nullptr;
             const auto& inReadSets = op->InReadSets();
             auto& awaitingDecisions = op->AwaitingDecisions();
@@ -273,18 +285,9 @@ public:
                 return EExecutionStatus::Executed;
             }
 
-            auto [readVersion, writeVersion] = DataShard.GetReadWriteVersions(writeOp);
-            writeTx->SetReadVersion(readVersion);
-            writeTx->SetWriteVersion(writeVersion);
+            KqpCommitLocks(tabletId, kqpLocks, sysLocks, writeVersion, userDb);
 
-            if (op->HasVolatilePrepareFlag()) {
-                writeTx->SetVolatileTxId(txId);
-            }
-
-
-            KqpCommitLocks(tabletId, kqpLocks, sysLocks, writeVersion, writeTx->GetUserDb());
-
-            DoUpdateToUserDb(writeOp, txc, ctx);
+            DoUpdateToUserDb(userDb, writeOp, txc, ctx);
 
             writeOp->SetWriteResult(NEvents::TDataEvents::TEvWriteResult::BuildCompleted(DataShard.TabletID(), writeOp->GetTxId()));
 
@@ -294,7 +297,7 @@ public:
                 writeResult->Record.SetStep(op->GetStep());
 
             if (Pipeline.AddLockDependencies(op, guardLocks)) {
-                writeTx->ResetCollectedChanges();
+                userDb.ResetCollectedChanges();
                 writeOp->ReleaseTxData(txc);
                 if (txc.DB.HasChanges()) {
                     txc.DB.RollbackChanges();
@@ -304,17 +307,17 @@ public:
 
             // Note: any transaction (e.g. immediate or non-volatile) may decide to commit as volatile due to dependencies
             // Such transactions would have no participants and become immediately committed
-            auto commitTxIds = writeTx->GetVolatileCommitTxIds();
+            auto commitTxIds = userDb.GetVolatileCommitTxIds();
             if (commitTxIds) {
                 TVector<ui64> participants(awaitingDecisions.begin(), awaitingDecisions.end());
                 DataShard.GetVolatileTxManager().PersistAddVolatileTx(
                     txId,
                     writeVersion,
                     commitTxIds,
-                    writeTx->GetVolatileDependencies(),
+                    userDb.GetVolatileDependencies(),
                     participants,
-                    writeTx->GetVolatileChangeGroup(),
-                    writeTx->GetVolatileCommitOrdered(),
+                    userDb.GetChangeGroup(),
+                    userDb.GetVolatileCommitOrdered(),
                     txc
                 );
             }
@@ -335,11 +338,11 @@ public:
             // Note: may erase persistent locks, must be after we persist volatile tx
             AddLocksToResult(writeOp, ctx);
 
-            if (auto changes = std::move(writeTx->GetCollectedChanges())) {
+            if (auto changes = std::move(userDb.GetCollectedChanges())) {
                 op->ChangeRecords() = std::move(changes);
             }
 
-            auto& counters = writeTx->GetUserDb().GetCounters();
+            const auto& counters = userDb.GetCounters();
             KqpUpdateDataShardStatCounters(DataShard, counters);
             KqpFillTxStats(DataShard, counters, *writeResult->Record.MutableTxStats());
 
@@ -359,9 +362,9 @@ public:
             }
             return EExecutionStatus::Continue;
         } catch (const TNotReadyTabletException&) {
-            return OnTabletNotReady(*writeOp, *writeTx, txc, ctx);
+            return OnTabletNotReady(userDb, *writeOp, txc, ctx);
         } catch (const TLockedWriteLimitException&) {
-            writeTx->ResetCollectedChanges();
+            userDb.ResetCollectedChanges();
 
             writeOp->SetError(NKikimrDataEvents::TEvWriteResult::STATUS_INTERNAL_ERROR, TStringBuilder() << "Shard " << DataShard.TabletID() << " cannot write more uncommitted changes");
 

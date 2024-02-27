@@ -65,12 +65,17 @@ void TKeyValidator::AddWriteRange(const TTableId& tableId, const TTableRange& ra
     Info.SetLoaded();
 }
 
-TKeyValidator::TValidateOptions::TValidateOptions(const TDataShardUserDb& userDb)
-    : IsLockTxId(static_cast<bool>(userDb.GetLockTxId()))
-    , IsLockNodeId(static_cast<bool>(userDb.GetLockNodeId()))
-    , IsRepeatableSnapshot(userDb.GetIsRepeatableSnapshot())
-    , IsImmediateTx(userDb.GetIsImmediateTx())
-    , IsWriteTx(userDb.GetIsWriteTx())
+TKeyValidator::TValidateOptions::TValidateOptions(
+        ui64 LockTxId,
+        ui32 LockNodeId,
+        bool isRepeatableSnapshot,
+        bool isImmediateTx,
+        bool isWriteTx)
+    : IsLockTxId(static_cast<bool>(LockTxId))
+    , IsLockNodeId(static_cast<bool>(LockNodeId))
+    , IsRepeatableSnapshot(isRepeatableSnapshot)
+    , IsImmediateTx(isImmediateTx)
+    , IsWriteTx(isWriteTx)
 {
 }
 

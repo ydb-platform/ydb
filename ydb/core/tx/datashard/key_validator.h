@@ -29,8 +29,12 @@ public:
         bool IsRepeatableSnapshot;
         bool IsImmediateTx;
         bool IsWriteTx;
-        
-        TValidateOptions(const TDataShardUserDb& userDb);
+
+        TValidateOptions(ui64 LockTxId,
+                         ui32 LockNodeId,
+                         bool isRepeatableSnapshot,
+                         bool isImmediateTx,
+                         bool isWriteTx);
     };
 
     bool IsValidKey(TKeyDesc& key, const TValidateOptions& options) const;

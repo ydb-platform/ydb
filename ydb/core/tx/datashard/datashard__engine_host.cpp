@@ -305,7 +305,13 @@ public:
     }
 
     bool IsValidKey(TKeyDesc& key) const override {
-        TKeyValidator::TValidateOptions options(UserDb);
+        TKeyValidator::TValidateOptions options(
+            UserDb.GetLockTxId(),
+            UserDb.GetLockNodeId(),
+            UserDb.GetIsRepeatableSnapshot(),
+            UserDb.GetIsImmediateTx(),
+            UserDb.GetIsWriteTx()
+        );
         return GetKeyValidator().IsValidKey(key, options);
     }
 

@@ -112,7 +112,7 @@ THashMap<ui64, TShardParamValuesAndRanges> PartitionParamByKey(
 THashMap<ui64, TShardParamValuesAndRanges> PartitionParamByKeyPrefix(
     const NUdf::TUnboxedValue& value, NKikimr::NMiniKQL::TType* type,
     const TTableId& tableId, const TIntrusiveConstPtr<TTableConstInfo>& tableInfo, const TKeyDesc& key,
-    const NMiniKQL::THolderFactory&, const NMiniKQL::TTypeEnvironment& typeEnv, bool isFullScan)
+    const NMiniKQL::THolderFactory&, const NMiniKQL::TTypeEnvironment& typeEnv, bool& isFullScan)
 {
     YQL_ENSURE(tableInfo);
 
@@ -754,7 +754,7 @@ using namespace NMiniKQL;
 
 THashMap<ui64, TShardInfo> PartitionLookupByParameterValue(const NKqpProto::TKqpPhyParamValue& proto,
     const TStageInfo& stageInfo, const THolderFactory& holderFactory,
-    const TTypeEnvironment& typeEnv, bool isFullScan)
+    const TTypeEnvironment& typeEnv, bool& isFullScan)
 {
     const auto& name = proto.GetParamName();
     auto [type, value] = stageInfo.Meta.Tx.Params->GetParameterUnboxedValue(name);
@@ -784,7 +784,7 @@ THashMap<ui64, TShardInfo> PartitionLookupByParameterValue(const NKqpProto::TKqp
 
 THashMap<ui64, TShardInfo> PartitionLookupByRowsList(const NKqpProto::TKqpPhyRowsList& proto,
     const TStageInfo& stageInfo, const THolderFactory& holderFactory,
-    const TTypeEnvironment& typeEnv, bool isFullScan)
+    const TTypeEnvironment& typeEnv, bool& isFullScan)
 {
     std::unordered_map<ui64, THashSet<TString>> shardParams; // shardId -> paramNames
     std::unordered_map<ui64, TShardParamValuesAndRanges> ret;

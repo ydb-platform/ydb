@@ -234,9 +234,6 @@ public:
         IRandomProvider *const RandomProvider;
     };
 
-//TODO (YQ-2068) temporary flag for changing interface
-#define Y_YQL_DQ_NO_PROGRAM_BUILDER_FOR_TRANSFORM
-
     struct TInputTransformArguments {
         const NDqProto::TTaskInput& InputDesc;
         const ui64 InputIndex;

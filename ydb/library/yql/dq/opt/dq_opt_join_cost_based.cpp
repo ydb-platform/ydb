@@ -1023,7 +1023,14 @@ TExprBase BuildTree(TExprContext& ctx, const TCoEquiJoin& equiJoin,
         rightJoinColumns.push_back(BuildAtom(pair.second.AttributeName, equiJoin.Pos(), ctx));
     }
 
-    TVector<TExprBase> options;
+    auto optionsList = ctx.Builder(equiJoin.Pos())
+        .List()
+            .List(0)
+                .Atom(0, "join_algo")
+                .Atom(1, std::to_string(reorderResult->JoinAlgo))
+            .Seal()
+        .Seal()
+        .Build();
 
     // Build the final output
     return Build<TCoEquiJoinTuple>(ctx,equiJoin.Pos())
@@ -1036,9 +1043,7 @@ TExprBase BuildTree(TExprContext& ctx, const TCoEquiJoin& equiJoin,
         .RightKeys()
             .Add(rightJoinColumns)
             .Build()
-        .Options()
-            .Add(options)
-            .Build()
+        .Options(optionsList)
         .Done();
 }
 

@@ -329,6 +329,9 @@ namespace {
                 }
                 forceSortedMerge = true;
             }
+            else if (option.IsAtom("join_algo")) {
+                //do nothing
+            }
             else {
                 ctx.AddError(TIssue(ctx.GetPosition(option.Pos()), TStringBuilder() <<
                     "Unknown option name: " << option.Content()));
@@ -768,6 +771,8 @@ IGraphTransformer::TStatus ValidateEquiJoinOptions(TPositionHandle positionHandl
                     "Duplicated preferred_sort set: " << JoinSeq(", ", sortBy)));
             }
         } else if (optionName == "cbo_passed") {
+            // do nothing
+        } else if (optionName == "join_algo") {
             // do nothing
         } else {
             ctx.AddError(TIssue(position, TStringBuilder() <<

@@ -135,7 +135,6 @@ pqconfig:
 * `family` — (необязательный) группа колонок (см. аргумент [family](#family)).
 * `primary_key` — (обязательный) [первичный ключ](../yql/reference/syntax/create_table.md#columns) таблицы, содержит упорядоченный список имён колонок первичного ключа.
 * `ttl` — (необязательный) TTL (см. аргумент [ttl](#ttl)).
-* `attributes` — (необязательный) атрибуты таблицы.
 * `partitioning_settings` — (необязательный) настройки партицирования (см. аргумент [partitioning_settings](#partitioning-settings)).
 * `key_bloom_filter` — (необязательный) (bool) использовать [фильтра Блума для первичного ключа](../concepts/datamodel/table.md#bloom-filter), значение по умолчанию - false.
 * `read_replicas_settings` — (необязательный) настройки [реплик для чтения](../concepts/datamodel/table.md#read_only_replicas).

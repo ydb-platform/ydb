@@ -3,12 +3,12 @@
 #include <ydb/library/yql/core/yql_expr_optimize.h>
 #include <ydb/library/yql/core/expr_nodes/yql_expr_nodes.h>
 #include <ydb/library/yql/core/expr_nodes_gen/yql_expr_nodes_gen.h>
-#include <ydb/library/yql/providers/common/provider/yql_provider.h>
-
-#include <ydb/library/yql/core/yql_graph_transformer.h>
-#include <ydb/library/yql/core/services/yql_transform_pipeline.h>
 #include <ydb/core/kqp/host/kqp_host_impl.h>
+#include <ydb/core/kqp/provider/rewrite_io_utils.h>
+#include <ydb/library/yql/core/services/yql_transform_pipeline.h>
 #include <ydb/library/yql/core/type_ann/type_ann_expr.h>
+#include <ydb/library/yql/core/yql_graph_transformer.h>
+#include <ydb/library/yql/providers/common/provider/yql_provider.h>
 
 namespace NKikimr {
 namespace NKqp {
@@ -82,9 +82,8 @@ namespace {
         auto ptr = insertData.Ptr();
         auto transformResult = NYql::SyncTransform(*typeTransformer, ptr, ctx);
         if (transformResult != NYql::IGraphTransformer::TStatus::Ok) {
-            Cerr << "ERRORS: " << ctx.IssueManager.GetIssues().ToString() << Endl;
+            return std::nullopt;
         }
-        YQL_ENSURE(transformResult == NYql::IGraphTransformer::TStatus::Ok);
 
         auto type = ptr->GetTypeAnn();
         YQL_ENSURE(type);
@@ -144,21 +143,10 @@ namespace {
 
         create = ctx.ReplaceNode(std::move(create), *columns, ctx.NewList(pos, std::move(columnNodes)));
 
-        //TODO: Use io utils
-        const NYql::TExprNode::TPtr* lastReadInTopologicalOrder = nullptr;
-        NYql::VisitExpr(
-            insertData.Ptr(),
-            nullptr,
-            [&lastReadInTopologicalOrder](const NYql::TExprNode::TPtr& node) {
-                if (node->IsCallable(NYql::ReadName)) {
-                    lastReadInTopologicalOrder = &node;
-                }
-                return true;
-            }
-        );
+        const auto topLevelRead = NYql::FindTopLevelRead(insertData.Ptr());
 
         const auto insert = ctx.NewCallable(pos, "Write!", {
-            lastReadInTopologicalOrder == nullptr ? ctx.NewWorld(pos) : ctx.NewCallable(pos, "Left!", {*lastReadInTopologicalOrder}),
+            topLevelRead == nullptr ? ctx.NewWorld(pos) : ctx.NewCallable(pos, "Left!", {topLevelRead.Get()}),
             ctx.NewCallable(pos, "DataSink", {
                 ctx.NewAtom(pos, "kikimr"),
                 ctx.NewAtom(pos, "db"),

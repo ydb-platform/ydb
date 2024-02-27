@@ -1182,13 +1182,19 @@ private:
             return {};
         }
 
-        const auto results = RewriteExpression(result, ctx, *TypesCtx, SessionCtx, Cluster);
+        YQL_CLOG(INFO, ProviderKqp) << "Compiled query:\n" << KqpExprToPrettyString(*resultPart, ctx);
 
-        for (const auto& resultPart : results) {
-            YQL_CLOG(INFO, ProviderKqp) << "Compiled query:\n" << KqpExprToPrettyString(*resultPart, ctx);
+        if (Config.EnableCreateTableAs) {
+            const auto results = RewriteExpression(result, ctx, *TypesCtx, SessionCtx, Cluster);
+
+            for (const auto& resultPart : results) {
+                YQL_CLOG(INFO, ProviderKqp) << "Splitted Compiled query part:\n" << KqpExprToPrettyString(*resultPart, ctx);
+            }
+
+            return results;
         }
 
-        return results;
+        return {result};
     }
 
     TSplitResult SplitQuery(const TKqpQueryRef& query, const TPrepareSettings& settings) override {

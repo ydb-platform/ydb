@@ -72,9 +72,8 @@ namespace NFwd {
         {
             Y_ABORT_UNLESS(pageId != Max<TPageId>(), "Invalid requested pageId");
 
-            if (auto *page = Trace.Get(pageId)) {
+            if (auto *page = Trace.Get(pageId))
                 return { page, false, true };
-            }
 
             Rewind(pageId).Shrink(); /* points Offset to pageId */
 
@@ -123,16 +122,16 @@ namespace NFwd {
             };
 
             while (auto more = Index.More(until())) {
-                auto size = head->AddToQueue(more, EPage::DataPage);
+                auto size = head->AddToQueue(*more, EPage::DataPage);
 
                 Stat.Fetch += size;
                 OnFetch += size;
 
-                Pages.emplace_back(more, size, 0, Max<TPageId>());
+                Pages.emplace_back(*more, size, 0, Max<TPageId>());
                 Pages.back().Fetch = EFetch::Wait;
             }
 
-            Grow = Grow && Index.On(true) < Max<TPageId>();
+            Grow = Grow && Index.HasMore();
 
             return Pages.at(Offset);
         }
@@ -142,7 +141,7 @@ namespace NFwd {
             while (auto drop = Index.Clean(pageId)) {
                 auto &page = Pages.at(Offset);
 
-                if (!Pages || page.PageId != drop.PageId) {
+                if (!Pages || page.PageId != *drop) {
                     Y_ABORT("Dropping page that is not exist in cache");
                 } else if (page.Size == 0) {
                     Y_ABORT("Dropping page that has not been touched");

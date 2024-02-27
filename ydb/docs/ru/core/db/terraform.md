@@ -129,7 +129,7 @@ pqconfig:
 Поддерживаются следующие аргументы:
 
 * `path` — (обязательный) путь таблицы.
-* `connection_string` — строка соединения.
+* `connection_string` — (обязательный) строка соединения.
 
 * `column` — (обязательный) свойства колонки (см. аргумент [column](#column)).
 * `family` — (необязательный) группа колонок (см. аргумент [family](#family)).
@@ -137,7 +137,7 @@ pqconfig:
 * `ttl` — (необязательный) TTL (см. аргумент [ttl](#ttl)).
 * `attributes` — (необязательный) атрибуты таблицы.
 * `partitioning_settings` — (необязательный) настройки партицирования (см. аргумент [partitioning_settings](#partitioning-settings)).
-* `key_bloom_filter` — (необязательный) (true|false) использовать [фильтра Блума для первичного ключа](../concepts/datamodel/table.md#bloom-filter).
+* `key_bloom_filter` — (необязательный) (bool) использовать [фильтра Блума для первичного ключа](../concepts/datamodel/table.md#bloom-filter), значение по умолчанию - false.
 * `read_replicas_settings` — (необязательный) настройки [реплик для чтения](../concepts/datamodel/table.md#read_only_replicas).
 
 #### column {#column}

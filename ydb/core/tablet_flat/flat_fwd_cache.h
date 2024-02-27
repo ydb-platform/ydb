@@ -10,52 +10,51 @@ namespace NKikimr {
 namespace NTable {
 namespace NFwd {
 
+    template<size_t Capacity>
+    class TLoadedPagesCircularBuffer {
+    public:
+        const TSharedData* Get(TPageId pageId) const
+        {
+            if (pageId <= LastLoadedPageId) {
+                for (const auto& page : LoadedPages) {
+                    if (page.PageId == pageId) {
+                        return &page.Data;
+                    }
+                }
+                
+                Y_ABORT("Failed to locate page within forward trace");
+            }
+
+            // next pages may be requested, ignore them
+            return nullptr;
+        }
+
+        // returns released data size
+        ui64 Emplace(TPage &page)
+        {
+            Y_ABORT_UNLESS(page, "Cannot push invalid page to trace cache");
+
+            Offset = (Offset + 1) % Capacity;
+
+            const ui32 was = LoadedPages[Offset].Data.size();
+
+            LoadedPages[Offset].Data = page.Release();
+            LoadedPages[Offset].PageId = page.PageId;
+            LastLoadedPageId = Max(LastLoadedPageId, page.PageId);
+
+            return was;
+        }
+
+    private:
+        std::array<NPageCollection::TLoadedPage, Capacity> LoadedPages;
+        ui32 Offset = 0;
+        TPageId LastLoadedPageId = 0;
+    };
+
     class TCache : public IPageLoadingLogic {
+    public:
         using TGroupId = NPage::TGroupId;
 
-        template<size_t Items>
-        struct TRound {
-            const TSharedData* Get(TPageId pageId) const
-            {
-                if (pageId < Edge) {
-                    const auto pred = [pageId](const NPageCollection::TLoadedPage &page) {
-                        return page.PageId == pageId;
-                    };
-
-                    auto it = std::find_if(Pages.begin(), Pages.end(), pred);
-
-                    if (it == Pages.end()) {
-                        Y_ABORT("Failed to locate page within forward trace");
-                    }
-
-                    return &it->Data;
-                }
-
-                return nullptr;
-            }
-
-            ui32 Emplace(TPage &page)
-            {
-                Y_ABORT_UNLESS(page, "Cannot push invalid page to trace cache");
-
-                Offset = (Pages.size() + Offset - 1) % Pages.size();
-
-                const ui32 was = Pages[Offset].Data.size();
-
-                Pages[Offset].Data = page.Release();
-                Pages[Offset].PageId = page.PageId;
-                Edge = Max(Edge, page.PageId + 1);
-
-                return was;
-            }
-
-        private:
-            std::array<NPageCollection::TLoadedPage, Items> Pages;
-            TPageId Edge = 0;
-            ui32 Offset = 0;
-        };
-
-    public:
         TCache() = delete;
 
         TCache(const TPart* part, IPages* env, TGroupId groupId, const TIntrusiveConstPtr<TSlices>& bounds = nullptr)
@@ -64,15 +63,18 @@ namespace NFwd {
 
         ~TCache()
         {
-            for (auto &it: Pages) it.Release();
+            for (auto &it: Pages) {
+                it.Release();
+            }
         }
 
         TResult Handle(IPageLoadingQueue *head, TPageId pageId, ui64 lower) noexcept override
         {
             Y_ABORT_UNLESS(pageId != Max<TPageId>(), "Invalid requested pageId");
 
-            if (auto *page = Trace.Get(pageId))
+            if (auto *page = Trace.Get(pageId)) {
                 return { page, false, true };
+            }
 
             Rewind(pageId).Shrink(); /* points Offset to pageId */
 
@@ -160,8 +162,9 @@ namespace NFwd {
 
         TCache& Shrink() noexcept
         {
-            for (; Offset && Pages[0].Ready(); Offset--)
+            for (; Offset && Pages[0].Ready(); Offset--) {
                 Pages.pop_front();
+            }
 
             return *this;
         }
@@ -169,7 +172,7 @@ namespace NFwd {
     private:
         bool Grow = true;       /* Have some pages for Forward(...) */
         TForward Index;
-        TRound<TPart::Trace> Trace;
+        TLoadedPagesCircularBuffer<TPart::Trace> Trace;
 
         /*_ Forward cache line state */
 

@@ -15,7 +15,7 @@ std::shared_ptr<NKikimr::NOlap::IBlobsStorageOperator> TStoragesManager::DoBuild
         return nullptr;
     } else {
 #ifndef KIKIMR_DISABLE_S3_OPS
-        return std::make_shared<NOlap::NBlobOperations::NTier::TOperator>(storageId, Shard.TabletID(), Shard.SelfId(), Shard.GetTierManagerPointer(storageId), SharedBlobsManager->GetStorageManagerGuarantee(storageId));
+        return std::make_shared<NOlap::NBlobOperations::NTier::TOperator>(storageId, Shard.SelfId(), Shard.GetTierManagerPointer(storageId), SharedBlobsManager->GetStorageManagerGuarantee(storageId));
 #else
         return nullptr;
 #endif

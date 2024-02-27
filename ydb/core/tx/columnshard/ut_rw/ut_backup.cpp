@@ -144,7 +144,6 @@ Y_UNIT_TEST_SUITE(TColumnShardBackup) {
 
         auto op = std::make_shared<NOlap::NBlobOperations::NTier::TOperator>(
             storageId,
-            tableId,
             tabletActorID,
             tierManager, 
             sharedBlobsManager->GetStorageManagerGuarantee(storageId)

@@ -33,7 +33,7 @@ protected:
     virtual void DoOnTieringModified(const std::shared_ptr<NColumnShard::TTiersManager>& tiers) override;
 
 public:
-    TOperator(const TString& storageId, const ui64 tabletID, const TActorIdentity tabletActorID, const NColumnShard::NTiers::TManager* tierManager, const std::shared_ptr<NDataSharing::TStorageSharedBlobsManager>& storageSharedBlobsManager);
+    TOperator(const TString& storageId, const TActorIdentity tabletActorID, const NColumnShard::NTiers::TManager* tierManager, const std::shared_ptr<NDataSharing::TStorageSharedBlobsManager>& storageSharedBlobsManager);
 
     virtual TTabletsByBlob GetBlobsToDelete() const override {
         auto result = GCInfo->GetBlobsToDelete();

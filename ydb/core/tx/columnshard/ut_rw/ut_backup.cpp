@@ -6,6 +6,7 @@
 #include <ydb/core/formats/arrow/simple_builder/filler.h>
 #include <ydb/core/kqp/compute_actor/kqp_compute_events.h>
 #include <ydb/core/tx/columnshard/blobs_action/memory.h>
+#include <ydb/core/tx/columnshard/blobs_action/tier/storage.h>
 #include <ydb/core/tx/columnshard/blobs_action/storages_manager/manager.h>
 #include <ydb/core/tx/columnshard/common/tests/shard_reader.h>
 #include <ydb/core/tx/columnshard/engines/changes/cleanup.h>

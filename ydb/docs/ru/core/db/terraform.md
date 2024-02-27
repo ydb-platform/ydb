@@ -203,9 +203,9 @@ partitioning_settings = {
 * `partition_at_keys` — (необязательный) [партицирование по первичному ключу](../concepts/datamodel/table.md#partition_at_keys).
 * `auto_partitioning_min_partitions_count` — (необязательный) [минимально возможное количество партиций](../concepts/datamodel/table.md#auto_partitioning_min_partitions_count) при автопартицировании.
 * `auto_partitioning_max_partitions_count` — (необязательный) [максимально возможное количество партиций](../concepts/datamodel/table.md#auto_partitioning_max_partitions_count) при автопартицировании.
-* `auto_partitioning_partition_size_mb` — (необязательный) задание значения [автопартицирования по размеру](../concepts/datamodel/table.md#auto_partitioning_partition_size_mb).
-* `auto_partitioning_by_size_enabled` — (необязательный) включение автопартиционирования по размеру (bool), по умолчанию - включено.
-* `auto_partitioning_by_load` — (необязательный) включение [автопартицирования по нагрузке](../concepts/datamodel/table.md#auto_partitioning_by_load).
+* `auto_partitioning_partition_size_mb` — (необязательный) задание значения [автопартицирования по размеру](../concepts/datamodel/table.md#auto_partitioning_partition_size_mb) в мегабайтах.
+* `auto_partitioning_by_size_enabled` — (необязательный) включение автопартиционирования по размеру (bool), по умолчанию - включено (true).
+* `auto_partitioning_by_load` — (необязательный) включение [автопартицирования по нагрузке](../concepts/datamodel/table.md#auto_partitioning_by_load) (bool), по умолчанию - выключено (false).
 
   Подробнее про параметры и их значения по умолчанию написано по ссылкам выше.
 

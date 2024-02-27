@@ -3,7 +3,7 @@
 #include "defs.h"
 #include "blobstorage_readbatch.h"
 #include "blobstorage_hullcompactdeferredqueue.h"
-#include <ydb/core/blobstorage/vdisk/handoff/handoff_map.h>
+#include <ydb/core/blobstorage/vdisk/balance/handoff_map.h>
 #include <ydb/core/blobstorage/vdisk/hulldb/generic/blobstorage_hullwritesst.h>
 #include <ydb/core/blobstorage/vdisk/hulldb/blobstorage_hullgcmap.h>
 #include <ydb/core/blobstorage/vdisk/scrub/restore_corrupted_blob_actor.h>

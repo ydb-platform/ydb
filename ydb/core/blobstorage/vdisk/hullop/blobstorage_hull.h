@@ -10,7 +10,6 @@ namespace NKikimr {
 
     class TLsnMngr;
     class TPDiskCtx;
-    class THandoffDelegate;
     struct TEvLocalStatusResult;
     using TPDiskCtxPtr = std::shared_ptr<TPDiskCtx>;
 
@@ -61,7 +60,6 @@ namespace NKikimr {
         THull(
             TIntrusivePtr<TLsnMngr> lsnMngr,
             TPDiskCtxPtr pdiskCtx,
-            TIntrusivePtr<THandoffDelegate> handoffDelegate,
             const TActorId skeletonId,
             bool runHandoff,
             THullDbRecovery &&uncond,

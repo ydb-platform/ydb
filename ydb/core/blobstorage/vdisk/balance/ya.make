@@ -12,6 +12,7 @@ PEERDIR(
 SRCS(
     balancing_actor.cpp
     deleter.cpp
+    handoff_map.cpp
     sender.cpp
     utils.cpp
 )

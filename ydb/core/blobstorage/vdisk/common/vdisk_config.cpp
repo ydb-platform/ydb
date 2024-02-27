@@ -79,7 +79,6 @@ namespace NKikimr {
         HandoffMaxInFlightByteSize = 16u << 20u;
         HandoffTimeout = TDuration::Seconds(10);
         RunRepl = !baseInfo.ReadOnly;
-        RunHandoff = false;
 
         ReplMaxTimeToMakeProgress = VDiskPerformance.at(baseInfo.DeviceType).ReplMaxTimeToMakeProgress;
 

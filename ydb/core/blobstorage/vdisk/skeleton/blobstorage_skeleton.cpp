@@ -1825,11 +1825,6 @@ namespace NKikimr {
                     Config->DskTrackerInterval)));
                 ActiveActors.Insert(Db->DskSpaceTrackerID, __FILE__, __LINE__, ctx, NKikimrServices::BLOBSTORAGE); // keep forever
 
-                // start handoff proxies right now, because they are required for Hull compactions
-                if (Config->RunHandoff && !Config->BaseInfo.DonorMode) {
-                    ActiveActors.Insert(Db->Handoff->RunProxies(ctx), ctx, NKikimrServices::BLOBSTORAGE);
-                }
-
                 // run LogCutter in the same mailbox
                 TLogCutterCtx logCutterCtx = {VCtx, PDiskCtx, Db->LsnMngr, Config,
                         (TActorId)(Db->LoggerID)};
@@ -1868,8 +1863,8 @@ namespace NKikimr {
                     Db->HugeKeeperID);
 
                 // create Hull
-                Hull = std::make_shared<THull>(Db->LsnMngr, PDiskCtx, Db->Handoff, Db->SkeletonID,
-                        Config->RunHandoff, std::move(*ev->Get()->Uncond),
+                Hull = std::make_shared<THull>(Db->LsnMngr, PDiskCtx, Db->SkeletonID,
+                        Config->FeatureFlags.GetUseVDisksBalancing(), std::move(*ev->Get()->Uncond),
                         ctx.ExecutorThread.ActorSystem, Config->BarrierValidation);
                 ActiveActors.Insert(Hull->RunHullServices(Config, HullLogCtx, Db->SyncLogFirstLsnToKeep,
                         Db->LoggerID, Db->LogCutterID, ctx), ctx, NKikimrServices::BLOBSTORAGE);
@@ -2707,7 +2702,7 @@ namespace NKikimr {
             : TActorBootstrapped<TSkeleton>()
             , Config(cfg)
             , VCtx(vctx)
-            , Db(new TDb(cfg, info, vctx))
+            , Db(new TDb(cfg, vctx))
             , GInfo(info)
             , Hull()
             , LocalRecovInfo()

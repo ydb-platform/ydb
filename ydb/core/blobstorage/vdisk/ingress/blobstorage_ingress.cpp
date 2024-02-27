@@ -256,6 +256,24 @@ namespace NKikimr {
         return handoff[handoffNodeId].ToVector();
     }
 
+    NMatrix::TVectorType TIngress::GetVDiskHandoffDeletedVec(const TBlobStorageGroupInfo::TTopology *top,
+                                                 const TVDiskIdShort &vdisk,
+                                                 const TLogoBlobID &id) const {
+        Y_ABORT_UNLESS(IngressMode(top->GType) == EMode::GENERIC);
+        Y_DEBUG_ABORT_UNLESS(id.PartId() == 0);
+        SETUP_VECTORS(Data, top->GType);
+
+        ui8 nodeId = top->GetIdxInSubgroup(vdisk, id.Hash());
+
+        if (nodeId < totalParts) {
+            return TVectorType(0, totalParts);
+        }
+
+        ui8 handoffNodeId = nodeId - totalParts;
+        Y_DEBUG_ABORT_UNLESS(handoffNodeId < handoffNum);
+        return handoff[handoffNodeId].DeletedPartsVector();
+    }
+
     NMatrix::TVectorType TIngress::LocalParts(TBlobStorageGroupType gtype) const {
         switch (IngressMode(gtype)) {
             case EMode::GENERIC: {
@@ -297,7 +315,8 @@ namespace NKikimr {
 
     void TIngress::DeleteHandoff(const TBlobStorageGroupInfo::TTopology *top,
                                  const TVDiskIdShort &vdisk,
-                                 const TLogoBlobID &id) {
+                                 const TLogoBlobID &id,
+                                 bool deleteLocal) {
         Y_ABORT_UNLESS(IngressMode(top->GType) == EMode::GENERIC);
 
         Y_DEBUG_ABORT_UNLESS(id.PartId() != 0);
@@ -311,8 +330,10 @@ namespace NKikimr {
         Y_DEBUG_ABORT_UNLESS(handoffNodeId < handoffNum);
 
         ui8 i = id.PartId() - 1u;
-        local.Clear(i);                     // delete local
         handoff[handoffNodeId].Delete(i);   // delete handoff
+        if (deleteLocal) {
+            local.Clear(i);
+        }
     }
 
     // Make a copy of ingress w/o local bits

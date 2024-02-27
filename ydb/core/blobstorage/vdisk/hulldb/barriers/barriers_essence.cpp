@@ -4,18 +4,16 @@
 namespace NKikimr {
     namespace NGcOpt {
 
-        TBarriersEssence::TBarriersEssence(NBarriers::TMemViewSnap memViewSnap, const TBlobStorageGroupInfo::TTopology* top, const TVDiskIdShort& vDisk)
+        TBarriersEssence::TBarriersEssence(NBarriers::TMemViewSnap memViewSnap, TBlobStorageGroupType gtype)
             : MemViewSnap(std::move(memViewSnap))
             , BuildStat(std::make_unique<NGc::TBuildStat>())
-            , IngressMode(TIngress::IngressMode(top->GType))
-            , Top(top)
-            , VDisk(vDisk)
+            , IngressMode(TIngress::IngressMode(gtype))
         {}
 
         TIntrusivePtr<TBarriersEssence> TBarriersEssence::Create(const THullCtxPtr &hullCtx,
                 const NBarriers::TBarriersDsSnapshot &snapshot)
         {
-            return MakeIntrusive<TBarriersEssence>(snapshot.GetMemViewSnap(), hullCtx->VCtx->Top.get(), hullCtx->VCtx->ShortSelfVDisk);
+            return MakeIntrusive<TBarriersEssence>(snapshot.GetMemViewSnap(), hullCtx->VCtx->Top->GType);
         }
 
         TIntrusivePtr<TBarriersEssence> TBarriersEssence::Create(const THullCtxPtr &hullCtx,
@@ -93,10 +91,8 @@ namespace NKikimr {
             // is item is spread over multiple ssts?
             const bool itemIsSpreadOverMultipleSsts = recsMerged > 1;
 
-            const bool isUselessHandoffCopy = Top->IsHandoff(VDisk, id.Hash()) && ingress.GetVDiskHandoffVec(Top, VDisk, id).Empty();
-
             // check if we have to keep data associated with this blob
-            const bool keepData = (keepBySoftBarrier || keepByFlags) && keepByHardBarrier && !isUselessHandoffCopy;
+            const bool keepData = (keepBySoftBarrier || keepByFlags) && keepByHardBarrier;
 
             // check if we have to keep index data; when item is stored in multiple SSTables, we can't just drop one
             // index and keep others as this index may contain Keep flag vital for blob consistency -- in case when

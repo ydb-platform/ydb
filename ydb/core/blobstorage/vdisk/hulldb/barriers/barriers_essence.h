@@ -20,7 +20,7 @@ namespace NGcOpt {
     //////////////////////////////////////////////////////////////////////////////////////////
     class TBarriersEssence : public TThrRefBase, TNonCopyable {
     public: // public for unit tests, actually private
-        TBarriersEssence(NBarriers::TMemViewSnap memViewSnap, const TBlobStorageGroupInfo::TTopology* top, const TVDiskIdShort& vDisk);
+        TBarriersEssence(NBarriers::TMemViewSnap memViewSnap, TBlobStorageGroupType gtype);
 
         // Builds TBarriersEssence from TBarriersDsSnapshot,
         // can work asynchronously
@@ -73,8 +73,6 @@ namespace NGcOpt {
         NBarriers::TMemViewSnap MemViewSnap;
         std::unique_ptr<NGc::TBuildStat> BuildStat;
         const TIngress::EMode IngressMode;
-        const TBlobStorageGroupInfo::TTopology* Top;
-        const TVDiskIdShort& VDisk;
 
         NGc::TKeepStatus KeepBarrier(const TKeyBarrier &key) const;
         NGc::TKeepStatus KeepLogoBlob(const TLogoBlobID &id,

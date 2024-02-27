@@ -6,7 +6,7 @@
 #include <ydb/core/formats/arrow/simple_builder/filler.h>
 #include <ydb/core/kqp/compute_actor/kqp_compute_events.h>
 #include <ydb/core/tx/columnshard/blobs_action/memory.h>
-#include <ydb/core/tx/columnshard/blobs_action/memory.h>
+#include <ydb/core/tx/columnshard/blobs_action/storages_manager/manager.h>
 #include <ydb/core/tx/columnshard/common/tests/shard_reader.h>
 #include <ydb/core/tx/columnshard/engines/changes/cleanup.h>
 #include <ydb/core/tx/columnshard/engines/changes/compaction.h>
@@ -96,20 +96,20 @@ TActorIdentity PrepareCSTable(TTestBasicRuntime& runtime, TActorId& sender) {
 
 }   // anonymous namespace
 
-class TMemoryStorageManager: public NOlap::IStoragesManager {
-private:
-    TIntrusivePtr<TTabletStorageInfo> TabletInfo = new TTabletStorageInfo();
-    using TBase = NOlap::IStoragesManager;
-protected:
-    bool DoLoadIdempotency(NTable::TDatabase& /*database*/) override {
-        return true;
-    }
-    std::shared_ptr<NOlap::IBlobsStorageOperator> DoBuildOperator(const TString& /*storageId*/) override {
-        return std::make_shared<NOlap::TMemoryOperator>(storageId);
-    }
-public:
-    TMemoryStorageManager() = default;
-};
+// class TMemoryStorageManager: public NOlap::IStoragesManager {
+// private:
+//     TIntrusivePtr<TTabletStorageInfo> TabletInfo = new TTabletStorageInfo();
+//     using TBase = NOlap::IStoragesManager;
+// protected:
+//     bool DoLoadIdempotency(NTable::TDatabase& /*database*/) override {
+//         return true;
+//     }
+//     std::shared_ptr<NOlap::IBlobsStorageOperator> DoBuildOperator(const TString& /*storageId*/) override {
+//         return std::make_shared<NOlap::TMemoryOperator>(storageId);
+//     }
+// public:
+//     TMemoryStorageManager() = default;
+// };
 
 
 Y_UNIT_TEST_SUITE(TColumnShardBackup) {
@@ -121,7 +121,36 @@ Y_UNIT_TEST_SUITE(TColumnShardBackup) {
         const auto csActorId = PrepareCSTable(runtime, sender);
 
         Cerr << "\n ======================================================================== \n" << Endl;
-        runtime.Register(NColumnShard::CreatBackupActor(std::make_shared<NOlap::TMemoryStorageManager>(), sender, csActorId, txId, writePlanStep, tableId));
+
+        // @todo almost is stub
+
+        const auto storageId = "some storageId";
+        const TActorIdentity tabletActorID(sender);
+        auto sharedBlobsManager = std::make_shared<NOlap::NDataSharing::TSharedBlobsManager>(NOlap::TTabletId{});
+
+        NKikimrSchemeOp::TStorageTierConfig cfgProto;
+        cfgProto.SetName("some_name");
+        ::NKikimrSchemeOp::TS3Settings s3_settings;
+        s3_settings.set_endpoint("fake");
+        *cfgProto.MutableObjectStorage() = s3_settings;
+
+        // tierManager->GetS3Settings(); -> create fake externl op
+        NColumnShard::NTiers::TTierConfig cfg("tier_name", cfgProto);
+
+        // unqiue?
+        // tierManager->GetS3Settings() with fake ep.
+        // S3Settings from Config.GetPatchedConfig(secrets) in ctor TManager
+        auto* tierManager = new NColumnShard::NTiers::TManager(tableId, tabletActorID, cfg);
+
+        auto op = std::make_shared<NOlap::NBlobOperations::NTier::TOperator>(
+            storageId,
+            tableId,
+            tabletActorID,
+            tierManager, 
+            sharedBlobsManager->GetStorageManagerGuarantee(storageId)
+        );
+
+        runtime.Register(NColumnShard::CreatBackupActor(op, sender, csActorId, txId, writePlanStep, tableId));
 
         TAutoPtr<NActors::IEventHandle> handle;
         auto event = runtime.GrabEdgeEvent<NKikimr::NEvents::TBackupEvents::TEvBackupShardProposeResult>(handle);

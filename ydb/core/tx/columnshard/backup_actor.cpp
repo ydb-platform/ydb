@@ -2,6 +2,7 @@
 
 #include <ydb/core/kqp/compute_actor/kqp_compute_events.h>
 #include <ydb/core/tx/columnshard/blobs_action/abstract/storages_manager.h>
+#include <ydb/core/tx/columnshard/blobs_action/tier/storage.h>
 #include <ydb/core/tx/columnshard/operations/write_data.h>
 #include <ydb/core/tx/columnshard/engines/writer/indexed_blob_constructor.h>
 #include <ydb/core/tx/data_events/backup_events.h>
@@ -63,7 +64,9 @@ public:
         LOG_S_DEBUG("TBackupWriteController.ctor: batch created.");
 
         NOlap::TWritingBlob currentBlob;
-        NOlap::TWriteAggregation aggreagtion(nullptr); // stub
+
+        // @TODO stub
+        NOlap::TWriteAggregation aggreagtion(nullptr);
         NOlap::TWideSerializedBatch wideBatch(std::move(batch), aggreagtion);
 
         LOG_S_DEBUG("TBackupWriteController.ctor: wideBatch created.");
@@ -79,7 +82,7 @@ public:
 };
 
 class BackupActor : public TActorBootstrapped<BackupActor> {
-    std::shared_ptr<NOlap::IStoragesManager> StoragesManager;
+    std::shared_ptr<NOlap::NBlobOperations::NTier::TOperator> InsertOperator;
 
     const TActorId SenderActorId;
     const TActorIdentity CSActorId;
@@ -96,9 +99,9 @@ class BackupActor : public TActorBootstrapped<BackupActor> {
     std::optional<NActors::TActorId> ScanActorId;
 
 public:
-    BackupActor(std::shared_ptr<NOlap::IStoragesManager> storagesManager, const TActorId senderActorId, const TActorIdentity csActorId, const ui64 txId, const int planStep,
+    BackupActor(std::shared_ptr<NOlap::NBlobOperations::NTier::TOperator> insertOperator, const TActorId senderActorId, const TActorIdentity csActorId, const ui64 txId, const int planStep,
                 const ui64 tableId)
-        : StoragesManager(storagesManager)
+        : InsertOperator(insertOperator)
         , SenderActorId(senderActorId)
         , CSActorId(csActorId)
         , TxId(txId)
@@ -277,8 +280,7 @@ private:
     void LoadBatchToStorage(const TActorContext& ctx, std::shared_ptr<arrow::RecordBatch> arrowBatch) {
         LOG_S_DEBUG("Handle BackupActor.LoadBatchToStorage: start");
         
-        auto insert_op = StoragesManager->GetInsertOperator();
-        auto action = insert_op->StartWritingAction("BACKUP:WRITING");
+        auto action = InsertOperator->StartWritingAction("BACKUP:WRITING");
 
         // const ui64 tableId = TableId;
         // const ui64 writeId = 1;
@@ -304,9 +306,9 @@ private:
     }
 };
 
-IActor* CreatBackupActor(std::shared_ptr<NOlap::IStoragesManager> storagesManager, const TActorId senderActorId, const TActorIdentity csActorId, const ui64 txId,
+IActor* CreatBackupActor(std::shared_ptr<NOlap::NBlobOperations::NTier::TOperator> insertOperator, const TActorId senderActorId, const TActorIdentity csActorId, const ui64 txId,
                          const int planStep, const ui64 tableId) {
-    return new BackupActor(storagesManager, senderActorId, csActorId, txId, planStep, tableId);
+    return new BackupActor(insertOperator, senderActorId, csActorId, txId, planStep, tableId);
 }
 
 }   // namespace NKikimr::NColumnShard

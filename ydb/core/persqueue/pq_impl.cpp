@@ -1510,8 +1510,6 @@ void TPersQueue::ProcessUpdateConfigRequest(TAutoPtr<TEvPersQueue::TEvUpdateConf
 
     NKikimrPQ::TPQTabletConfig cfg = record.GetTabletConfig();
 
-    Migrate(cfg);
-
     Y_ABORT_UNLESS(cfg.HasVersion());
     int curConfigVersion = cfg.GetVersion();
 
@@ -1638,6 +1636,7 @@ void TPersQueue::ProcessUpdateConfigRequest(TAutoPtr<TEvPersQueue::TEvUpdateConf
     TString str;
     Y_ABORT_UNLESS(CheckPersQueueConfig(cfg, true, &str), "%s", str.c_str());
 
+    Migrate(cfg);
     BeginWriteConfig(cfg, bootstrapCfg, ctx);
 
     NewConfig = cfg;

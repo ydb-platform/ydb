@@ -657,17 +657,20 @@ private:
             ev->Get()->Orbit,
             ev->Get()->Query ? ev->Get()->Query->UserSid : 0);
 
-        TKqpCompileSettings compileSettings(request.KeepInCache, request.IsQueryActionPrepare, request.PerStatementResult,
-            request.Deadline, TableServiceConfig.GetEnableAstCache() ? ECompileActorAction::PARSE : ECompileActorAction::COMPILE);
+        TKqpCompileSettings compileSettings(
+            request.KeepInCache,
+            request.IsQueryActionPrepare,
+            request.PerStatementResult,
+            request.Deadline,
+            ev->Get()->Split
+                ? ECompileActorAction::SPLIT
+                : TableServiceConfig.GetEnableAstCache()
+                    ? ECompileActorAction::PARSE
+                    : ECompileActorAction::COMPILE);
         TKqpCompileRequest compileRequest(ev->Sender, CreateGuidAsString(), std::move(*request.Query),
             compileSettings, request.UserToken, dbCounters, request.ApplicationName, ev->Cookie, std::move(ev->Get()->IntrestedInResult),
             ev->Get()->UserRequestContext, std::move(ev->Get()->Orbit), std::move(compileServiceSpan),
             std::move(ev->Get()->TempTablesState), request.SplitCtx, request.SplitExpr);
-
-        // TODO: ????
-        if (ev->Get()->Split) {
-            compileRequest.Action = ECompileActorAction::SPLIT;
-        }
 
         if (TableServiceConfig.GetEnableAstCache() && request.QueryAst) {
             return CompileByAst(*request.QueryAst, compileRequest, ctx);

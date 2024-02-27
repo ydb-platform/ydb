@@ -19,7 +19,27 @@ namespace {
         NYql::TExprNode::TPtr ReplaceInto = nullptr;
     };
 
-    std::optional<TCreateTableAsResult> RewriteCreateTableAs(NYql::TExprNode::TPtr root, NYql::TExprContext& ctx, NYql::TTypeAnnotationContext& typeCtx, const TIntrusivePtr<NYql::TKikimrSessionContext>& sessionCtx, const TString& cluster) {
+    bool IsColumnTable(const NYql::NNodes::TMaybeNode<NYql::NNodes::TCoNameValueTupleList>& tableSettings) {
+        if (!tableSettings) {
+            return false;
+        }
+        for (const auto& field : tableSettings.Cast()) {
+            if (field.Name().Value() == "storeType") {
+                YQL_ENSURE(field.Value().Maybe<NYql::NNodes::TCoAtom>());
+                if (field.Value().Cast<NYql::NNodes::TCoAtom>().StringValue() == "COLUMN") {
+                    return true;
+                }
+            }
+        }
+        return false;
+    }
+
+    std::optional<TCreateTableAsResult> RewriteCreateTableAs(
+            NYql::TExprNode::TPtr root,
+            NYql::TExprContext& exprCtx,
+            NYql::TTypeAnnotationContext& typeCtx,
+            const TIntrusivePtr<NYql::TKikimrSessionContext>& sessionCtx,
+            const TString& cluster) {
         NYql::NNodes::TExprBase expr(root);
         auto maybeWrite = expr.Maybe<NYql::NNodes::TCoWrite>();
         if (!maybeWrite) {
@@ -55,7 +75,7 @@ namespace {
         if (!maybeList) {
             return std::nullopt;
         }
-        auto settings = NYql::NCommon::ParseWriteTableSettings(maybeList.Cast(), ctx);
+        auto settings = NYql::NCommon::ParseWriteTableSettings(maybeList.Cast(), exprCtx);
         if (!settings.Mode) {
             return std::nullopt;
         }
@@ -79,25 +99,23 @@ namespace {
             .AddTypeAnnotationTransformer(CreateKqpTypeAnnotationTransformer(cluster, sessionCtx->TablesPtr(), typeCtx, sessionCtx->ConfigPtr()))
             .Build(false);
 
-        auto ptr = insertData.Ptr();
-        auto transformResult = NYql::SyncTransform(*typeTransformer, ptr, ctx);
+        auto insertDataPtr = insertData.Ptr();
+        const auto transformResult = NYql::SyncTransform(*typeTransformer, insertDataPtr, exprCtx);
         if (transformResult != NYql::IGraphTransformer::TStatus::Ok) {
             return std::nullopt;
         }
-
-        auto type = ptr->GetTypeAnn();
+        auto type = insertDataPtr->GetTypeAnn();
         YQL_ENSURE(type);
-
         type = type->Cast<NYql::TListExprType>()->GetItemType();
         YQL_ENSURE(type);
-        auto rowType = type->Cast<NYql::TStructExprType>();
+        const auto rowType = type->Cast<NYql::TStructExprType>();
         YQL_ENSURE(rowType);
 
-        auto create = ctx.ReplaceNode(std::move(root), insertData.Ref(), ctx.NewCallable(pos, "Void", {}));
+        auto create = exprCtx.ReplaceNode(std::move(root), insertData.Ref(), exprCtx.NewCallable(pos, "Void", {}));
 
         auto columns = create->Child(4)->Child(1)->Child(1);
         if (columns->ChildrenSize() != 0) {
-            ctx.AddError(NYql::TIssue(ctx.GetPosition(pos), "CREATE TABLE AS with columns is not supported"));
+            exprCtx.AddError(NYql::TIssue(exprCtx.GetPosition(pos), "CREATE TABLE AS with columns is not supported"));
             return std::nullopt;
         }
 
@@ -112,74 +130,74 @@ namespace {
             const auto name = item->GetName();
             auto currentType = item->GetItemType();
 
-            const bool notNull = primariKeyColumns.contains(name); //TODO: and storetype == columns
+            const bool notNull = primariKeyColumns.contains(name) && IsColumnTable(settings.TableSettings);
 
             if (notNull && currentType->GetKind() == NYql::ETypeAnnotationKind::Optional) {
                 currentType = currentType->Cast<NYql::TOptionalExprType>()->GetItemType();
             }
 
-            auto typeNode = NYql::ExpandType(pos, *currentType, ctx);
+            auto typeNode = NYql::ExpandType(pos, *currentType, exprCtx);
 
             if (!notNull && currentType->GetKind() != NYql::ETypeAnnotationKind::Optional) {
-                typeNode = ctx.NewCallable(pos, "AsOptionalType", { typeNode });
+                typeNode = exprCtx.NewCallable(pos, "AsOptionalType", { typeNode });
             }
 
-            columnNodes.push_back(ctx.NewList(pos, {
-                ctx.NewAtom(pos, name),
+            columnNodes.push_back(exprCtx.NewList(pos, {
+                exprCtx.NewAtom(pos, name),
                 typeNode,
-                ctx.NewList(pos, {
-                    ctx.NewAtom(pos, "columnConstrains"),
+                exprCtx.NewList(pos, {
+                    exprCtx.NewAtom(pos, "columnConstrains"),
                     notNull
-                        ? ctx.NewList(pos, {
-                            ctx.NewList(pos, {
-                                ctx.NewAtom(pos, "not_null"),
+                        ? exprCtx.NewList(pos, {
+                            exprCtx.NewList(pos, {
+                                exprCtx.NewAtom(pos, "not_null"),
                             }),
                         })
-                        : ctx.NewList(pos, {}),
+                        : exprCtx.NewList(pos, {}),
                 }),
-                ctx.NewList(pos, {}),
+                exprCtx.NewList(pos, {}),
             }));
         }
 
-        create = ctx.ReplaceNode(std::move(create), *columns, ctx.NewList(pos, std::move(columnNodes)));
+        create = exprCtx.ReplaceNode(std::move(create), *columns, exprCtx.NewList(pos, std::move(columnNodes)));
 
         const auto topLevelRead = NYql::FindTopLevelRead(insertData.Ptr());
 
-        const auto insert = ctx.NewCallable(pos, "Write!", {
-            topLevelRead == nullptr ? ctx.NewWorld(pos) : ctx.NewCallable(pos, "Left!", {topLevelRead.Get()}),
-            ctx.NewCallable(pos, "DataSink", {
-                ctx.NewAtom(pos, "kikimr"),
-                ctx.NewAtom(pos, "db"),
+        const auto insert = exprCtx.NewCallable(pos, "Write!", {
+            topLevelRead == nullptr ? exprCtx.NewWorld(pos) : exprCtx.NewCallable(pos, "Left!", {topLevelRead.Get()}),
+            exprCtx.NewCallable(pos, "DataSink", {
+                exprCtx.NewAtom(pos, "kikimr"),
+                exprCtx.NewAtom(pos, "db"),
             }),
-            ctx.NewCallable(pos, "Key", {
-                ctx.NewList(pos, {
-                    ctx.NewAtom(pos, "table"),
-                    ctx.NewCallable(pos, "String", {
-                        ctx.NewAtom(pos, key.Ptr()->Child(0)->Child(1)->Child(0)->Content()),
+            exprCtx.NewCallable(pos, "Key", {
+                exprCtx.NewList(pos, {
+                    exprCtx.NewAtom(pos, "table"),
+                    exprCtx.NewCallable(pos, "String", {
+                        exprCtx.NewAtom(pos, key.Ptr()->Child(0)->Child(1)->Child(0)->Content()),
                     }),
                 }),
             }),
             insertData.Ptr(),
-            ctx.NewList(pos, {
-                ctx.NewList(pos, {
-                    ctx.NewAtom(pos, "mode"),
-                    ctx.NewAtom(pos, "replace"),
+            exprCtx.NewList(pos, {
+                exprCtx.NewList(pos, {
+                    exprCtx.NewAtom(pos, "mode"),
+                    exprCtx.NewAtom(pos, "replace"),
                 }),
             }),
         });
 
         TCreateTableAsResult result;
         result.CreateTable = create;
-        result.ReplaceInto = ctx.NewCallable(pos, "Commit!", {
+        result.ReplaceInto = exprCtx.NewCallable(pos, "Commit!", {
             insert,
-            ctx.NewCallable(pos, "DataSink", {
-                ctx.NewAtom(pos, "kikimr"),
-                ctx.NewAtom(pos, "db"),
+            exprCtx.NewCallable(pos, "DataSink", {
+                exprCtx.NewAtom(pos, "kikimr"),
+                exprCtx.NewAtom(pos, "db"),
             }),
-            ctx.NewList(pos, {
-                ctx.NewList(pos, {
-                    ctx.NewAtom(pos, "mode"),
-                    ctx.NewAtom(pos, "flush"),
+            exprCtx.NewList(pos, {
+                exprCtx.NewList(pos, {
+                    exprCtx.NewAtom(pos, "mode"),
+                    exprCtx.NewAtom(pos, "flush"),
                 }),
             }),
         });
@@ -188,13 +206,18 @@ namespace {
     }
 }
 
-TVector<NYql::TExprNode::TPtr> RewriteExpression(const NYql::TExprNode::TPtr& root, NYql::TExprContext& ctx, NYql::TTypeAnnotationContext& typeCtx, const TIntrusivePtr<NYql::TKikimrSessionContext>& sessionCtx, const TString& cluster) {
+TVector<NYql::TExprNode::TPtr> RewriteExpression(
+        const NYql::TExprNode::TPtr& root,
+        NYql::TExprContext& exprCtx,
+        NYql::TTypeAnnotationContext& typeCtx,
+        const TIntrusivePtr<NYql::TKikimrSessionContext>& sessionCtx,
+        const TString& cluster) {
     // CREATE TABLE AS statement can be used only with perstatement execution.
     // Thus we assume that there is only one such statement.
     TVector<NYql::TExprNode::TPtr> result;
     VisitExpr(root, [&](const NYql::TExprNode::TPtr& node) {
         if (NYql::NNodes::TCoWrite::Match(node.Get())) {
-            const auto rewriteResult = RewriteCreateTableAs(node, ctx, typeCtx, sessionCtx, cluster);
+            const auto rewriteResult = RewriteCreateTableAs(node, exprCtx, typeCtx, sessionCtx, cluster);
             if (rewriteResult) {
                 YQL_ENSURE(result.empty());
                 result.push_back(rewriteResult->CreateTable);

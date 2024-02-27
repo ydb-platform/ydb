@@ -554,11 +554,6 @@ public:
 
         YQL_ENSURE(QueryState);
         TTimerGuard timer(this);
-
-        for (const auto& resultElem : ev->Get()->Exprs) {
-            Cerr << "GOT:: COMPILED:: " << KqpExprToPrettyString(*resultElem, *ev->Get()->Ctx) << Endl;
-        }
-
         QueryState->SaveAndCheckSplitResult(ev->Get());
         OnSuccessSplitRequest();
     }

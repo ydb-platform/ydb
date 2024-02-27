@@ -336,7 +336,7 @@ private:
 class TAsyncPrepareYqlResult : public TKqpAsyncResultBase<IKqpHost::TQueryResult> {
 public:
     using TResult = IKqpHost::TQueryResult;
-    
+
     TAsyncPrepareYqlResult(TExprNode::TPtr queryRoot, TExprContext& exprCtx, IGraphTransformer& transformer,
         TIntrusivePtr<TKikimrQueryContext> queryCtx, const TKqpQueryRef& query, TMaybe<TSqlVersion> sqlVersion,
         TIntrusivePtr<TKqlTransformContext> transformCtx)

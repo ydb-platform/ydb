@@ -136,7 +136,7 @@ public:
          return skipCount == 0 ? output : ctx.WideFields.data() + StubsIndex;
      }
 
-    EProcessResult DoProcess(ui64& skipCount, TComputationContext&, EFetchResult fetchRes, NUdf::TUnboxedValue*const*, NUdf::TUnboxedValue*const*) const {
+    EProcessResult DoProcess(ui64& skipCount, TComputationContext&, EFetchResult fetchRes, NUdf::TUnboxedValue*const*) const {
         if (fetchRes == EFetchResult::One && skipCount) {
             skipCount--;
             return EProcessResult::Fetch;

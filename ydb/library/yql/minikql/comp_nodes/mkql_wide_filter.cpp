@@ -156,13 +156,13 @@ public:
         return limit != 0 ? PrepareArguments(ctx, output) : nullptr;
     }
 
-    EProcessResult DoProcess(ui64& limit, TComputationContext& ctx, EFetchResult fetchRes, NUdf::TUnboxedValue*const*, NUdf::TUnboxedValue*const* values) const {
+    EProcessResult DoProcess(ui64& limit, TComputationContext& ctx, EFetchResult fetchRes, NUdf::TUnboxedValue*const* output) const {
         if (limit == 0) {
             return EProcessResult::Finish;
         }
         if (fetchRes == EFetchResult::One) {
             if (Predicate->GetValue(ctx).Get<bool>()) {
-                FillOutputs(ctx, values);
+                FillOutputs(ctx, output);
                 limit--;
                 return EProcessResult::One;
             }
@@ -198,10 +198,10 @@ public:
     }
 
     NUdf::TUnboxedValue*const* PrepareInput(bool& stop, TComputationContext& ctx, NUdf::TUnboxedValue*const* output) const {
-        return !stop ? output : PrepareArguments(ctx, output);
+        return !stop ? PrepareArguments(ctx, output) : nullptr;
     }
 
-    TBaseComputation::EProcessResult DoProcess(bool& stop, TComputationContext& ctx, EFetchResult fetchRes, NUdf::TUnboxedValue*const*, NUdf::TUnboxedValue*const* values) const {
+    TBaseComputation::EProcessResult DoProcess(bool& stop, TComputationContext& ctx, EFetchResult fetchRes, NUdf::TUnboxedValue*const* output) const {
         if (stop) {
             return TBaseComputation::EProcessResult::Finish;
         }
@@ -211,7 +211,7 @@ public:
                 stop = true;
             }
             if (Inclusive || predicate) {
-                FillOutputs(ctx, values);
+                FillOutputs(ctx, output);
                 return TBaseComputation::EProcessResult::One;
             }
             return TBaseComputation::EProcessResult::Finish;
@@ -241,18 +241,18 @@ public:
         start = false;
     }
 
-    NUdf::TUnboxedValue*const* PrepareInput(bool&, TComputationContext&, NUdf::TUnboxedValue*const* output) const {
-        return output;
+    NUdf::TUnboxedValue*const* PrepareInput(bool& start, TComputationContext& ctx, NUdf::TUnboxedValue*const* output) const {
+        return start ? output : PrepareArguments(ctx, output);
     }
 
-    TBaseComputation::EProcessResult DoProcess(bool& start, TComputationContext& ctx, EFetchResult fetchRes, NUdf::TUnboxedValue*const*, NUdf::TUnboxedValue*const* values) const {
+    TBaseComputation::EProcessResult DoProcess(bool& start, TComputationContext& ctx, EFetchResult fetchRes, NUdf::TUnboxedValue*const* output) const {
         if (!start && fetchRes == EFetchResult::One) {
             const bool predicate = Predicate->GetValue(ctx).Get<bool>();
             if (!predicate) {
                 start = true;
             }
             if (!Inclusive && !predicate) {
-                FillOutputs(ctx, values);
+                FillOutputs(ctx, output);
                 return TBaseComputation::EProcessResult::One;
             }
             return TBaseComputation::EProcessResult::Fetch;

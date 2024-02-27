@@ -77,7 +77,7 @@ public:
 
         auto& task = AddWriteTask(NOlap::TBlobWriteInfo::BuildWriteTask(currentBlob.GetBlobData(), action));
 
-        LOG_S_DEBUG("TBackupWriteController.ctor: task added.");
+        LOG_S_DEBUG("TBackupWriteController.ctor: task added, blob_id=" << task.GetBlobId());
 
         currentBlob.InitBlobId(task.GetBlobId());
     }
@@ -167,8 +167,6 @@ public:
             // ResultStats = ev->Get()->StatsOnFinished->GetMetrics();
 
             LOG_S_DEBUG("Handle BackupActor.TEvScanData: finished.");
-
-            // ProcessState(ctx, BackupActorState::Done);
             return;
         }
 
@@ -181,7 +179,7 @@ public:
         LOG_S_DEBUG("Handle BackupActor.TEvWriteBlobsResult write done");
 
         ProcessState(ctx, BackupActorState::Done);
-        
+
         SendBackupShardProposeResult(ctx);
     }
 

@@ -97,20 +97,36 @@ TActorIdentity PrepareCSTable(TTestBasicRuntime& runtime, TActorId& sender) {
 
 }   // anonymous namespace
 
-// class TMemoryStorageManager: public NOlap::IStoragesManager {
-// private:
-//     TIntrusivePtr<TTabletStorageInfo> TabletInfo = new TTabletStorageInfo();
-//     using TBase = NOlap::IStoragesManager;
-// protected:
-//     bool DoLoadIdempotency(NTable::TDatabase& /*database*/) override {
-//         return true;
-//     }
-//     std::shared_ptr<NOlap::IBlobsStorageOperator> DoBuildOperator(const TString& /*storageId*/) override {
-//         return std::make_shared<NOlap::TMemoryOperator>(storageId);
-//     }
-// public:
-//     TMemoryStorageManager() = default;
-// };
+std::shared_ptr<NOlap::NBlobOperations::NTier::TOperator> PrepareInsertOp(const TActorId& sender) {
+    const auto storageId = "some storageId";
+    const TActorIdentity tabletActorID(sender);
+    auto sharedBlobsManager = std::make_shared<NOlap::NDataSharing::TSharedBlobsManager>(NOlap::TTabletId{});
+
+    NKikimrSchemeOp::TStorageTierConfig cfgProto;
+    cfgProto.SetName("some_name");
+
+    ::NKikimrSchemeOp::TS3Settings s3_settings;
+    s3_settings.set_endpoint("fake");
+
+    *cfgProto.MutableObjectStorage() = s3_settings;
+
+    // tierManager->GetS3Settings(); -> create fake externl op
+    NColumnShard::NTiers::TTierConfig cfg("tier_name", cfgProto);
+
+    // unqiue?
+    // tierManager->GetS3Settings() with fake ep.
+    // S3Settings from Config.GetPatchedConfig(secrets) in ctor TManager
+    auto* tierManager = new NColumnShard::NTiers::TManager(tableId, tabletActorID, cfg);
+
+    tierManager->Start(nullptr);
+
+    return std::make_shared<NOlap::NBlobOperations::NTier::TOperator>(
+        storageId,
+        tabletActorID,
+        tierManager, 
+        sharedBlobsManager->GetStorageManagerGuarantee(storageId)
+    );
+}
 
 
 Y_UNIT_TEST_SUITE(TColumnShardBackup) {
@@ -123,36 +139,7 @@ Y_UNIT_TEST_SUITE(TColumnShardBackup) {
 
         Cerr << "\n ======================================================================== \n" << Endl;
 
-        // @todo almost is stub
-
-        const auto storageId = "some storageId";
-        const TActorIdentity tabletActorID(sender);
-        auto sharedBlobsManager = std::make_shared<NOlap::NDataSharing::TSharedBlobsManager>(NOlap::TTabletId{});
-
-        NKikimrSchemeOp::TStorageTierConfig cfgProto;
-        cfgProto.SetName("some_name");
-
-        ::NKikimrSchemeOp::TS3Settings s3_settings;
-        s3_settings.set_endpoint("fake");
-
-        *cfgProto.MutableObjectStorage() = s3_settings;
-
-        // tierManager->GetS3Settings(); -> create fake externl op
-        NColumnShard::NTiers::TTierConfig cfg("tier_name", cfgProto);
-
-        // unqiue?
-        // tierManager->GetS3Settings() with fake ep.
-        // S3Settings from Config.GetPatchedConfig(secrets) in ctor TManager
-        auto* tierManager = new NColumnShard::NTiers::TManager(tableId, tabletActorID, cfg);
-
-        tierManager->Start(nullptr);
-
-        auto op = std::make_shared<NOlap::NBlobOperations::NTier::TOperator>(
-            storageId,
-            tabletActorID,
-            tierManager, 
-            sharedBlobsManager->GetStorageManagerGuarantee(storageId)
-        );
+        auto op = PrepareInsertOp(sender);
 
         runtime.Register(NColumnShard::CreatBackupActor(op, sender, csActorId, txId, writePlanStep, tableId));
 
@@ -162,6 +149,42 @@ Y_UNIT_TEST_SUITE(TColumnShardBackup) {
         UNIT_ASSERT(event);
 
         Cerr << "\n ======================================================================== \n" << Endl;
+
+        auto action = op->StartReadingAction("BACKUP::READ");
+
+        Cerr << "\n GetStorageId: " << action->GetStorageId() << Endl;
+
+        // auto bid = NOlap::TUnifiedBlobId::BuildFromString(
+        //     "DS:4294967295:[0:397918:36139339:255:1:57560:1]", 
+        //     nullptr
+        // );
+
+        // UNIT_ASSERT(bid->IsValid());
+        // NOlap::TBlobRange r(bid.GetResult());
+
+        NOlap::TBlobRange r;
+
+        action->AddRange(r, "some result");
+
+        THashSet<NOlap::TBlobRange> hs;
+        hs.insert(r);
+
+        action->Start(hs);
+
+        THashSet<NOlap::TBlobRange> result;
+        action->FillExpectedRanges(result);
+
+        Cerr << "\n k FillExpectedRanges: " << result.size() << Endl;
+
+        for (const auto & r : result) {
+            Cerr << "\n result: " << r.ToString() << Endl;
+        }
+
+        auto ranges = action->GetRangesForRead();
+        for (const auto& [k, v] : ranges) {
+            Cerr << "\n k GetTabletId: " << k.GetTabletId() << Endl;
+            Cerr << "\n k: " << k.ToStringLegacy() << Endl;
+        }
 
         // {
         //     NActors::TLogContextGuard guard = NActors::TLogContextBuilder::Build(NKikimrServices::TX_COLUMNSHARD)("TEST_STEP", 3);

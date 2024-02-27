@@ -397,7 +397,6 @@ Y_UNIT_TEST(TestUserInfoCompatibility) {
         CmdGetOffset(1, client, 1, tc);
         CmdGetOffset(2, client, 1, tc);
         CmdGetOffset(3, client, 1, tc);
-
     });
 }
 

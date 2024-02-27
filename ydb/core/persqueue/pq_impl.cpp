@@ -4,6 +4,8 @@
 #include "partition_log.h"
 #include "partition.h"
 #include "read.h"
+#include "utils.h"
+
 #include <ydb/core/base/tx_processing.h>
 #include <ydb/core/base/feature_flags.h>
 #include <ydb/core/persqueue/config/config.h>
@@ -998,6 +1000,8 @@ void TPersQueue::ReadConfig(const NKikimrClient::TKeyValueResponse::TReadResult&
         bool res = Config.ParseFromString(read.GetValue());
         Y_ABORT_UNLESS(res);
 
+        Migrate(Config);
+
         if (!Config.PartitionsSize()) {
             for (const auto partitionId : Config.GetPartitionIds()) {
                 Config.AddPartitions()->SetPartitionId(partitionId);
@@ -1505,6 +1509,8 @@ void TPersQueue::ProcessUpdateConfigRequest(TAutoPtr<TEvPersQueue::TEvUpdateConf
     Y_ABORT_UNLESS(newConfigVersion >= oldConfigVersion);
 
     NKikimrPQ::TPQTabletConfig cfg = record.GetTabletConfig();
+
+    Migrate(cfg);
 
     Y_ABORT_UNLESS(cfg.HasVersion());
     int curConfigVersion = cfg.GetVersion();

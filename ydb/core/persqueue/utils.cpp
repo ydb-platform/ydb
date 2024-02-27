@@ -46,6 +46,7 @@ ui64 PutUnitsSize(const ui64 size) {
 }
 
 void Migrate(NKikimrPQ::TPQTabletConfig& config) {
+    Cerr << ">>>>> Migrate" << Endl;
     if (!config.ConsumersSize()) {
         for(size_t i = 0; i < config.ReadRulesSize(); ++i) {
             auto* consumer = config.AddConsumers();
@@ -60,13 +61,7 @@ void Migrate(NKikimrPQ::TPQTabletConfig& config) {
             if (i < config.ConsumerCodecsSize()) {
                 auto& src = config.GetConsumerCodecs(i);
                 auto* dst = consumer->MutableCodec();
-
-                for (auto value : src.GetIds()) {
-                    dst->AddIds(value);
-                }
-                for (auto& value : src.GetCodecs()) {
-                    dst->AddCodecs(value);
-                }
+                dst->CopyFrom(src);
             }
             if (i < config.ReadRuleServiceTypesSize()) {
                 consumer->SetServiceType(config.GetReadRuleServiceTypes(i));

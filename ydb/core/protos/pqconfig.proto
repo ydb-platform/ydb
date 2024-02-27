@@ -325,13 +325,13 @@ message TPQTabletConfig {
 
     message TConsumer {
         optional string Name = 1;
-        optional uint64 ReadFromTimestampsMs = 2;
-        optional uint64 FormatVersion = 3;
+        optional uint64 ReadFromTimestampsMs = 2 [default = 0];
+        optional uint64 FormatVersion = 3 [default = 0];
         optional TCodecs Codec = 4;
         optional string ServiceType = 5;
         optional EConsumerScalingSupport ScalingSupport = 6;
-        optional uint64 Version = 7;
-        optional uint64 Generation = 8;
+        optional uint64 Version = 7 [default = 0];
+        optional uint64 Generation = 8 [default = 0];
     }
 
     repeated TConsumer Consumers = 37;

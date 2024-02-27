@@ -163,6 +163,9 @@ void TInitConfigStep::Handle(TEvKeyValue::TEvResponse::TPtr& ev, const TActorCon
     switch (response.GetStatus()) {
     case NKikimrProto::OK:
         Y_ABORT_UNLESS(Partition()->Config.ParseFromString(response.GetValue()));
+
+        Migrate(Partition()->Config);
+
         if (Partition()->Config.GetVersion() < Partition()->TabletConfig.GetVersion()) {
             auto event = MakeHolder<TEvPQ::TEvChangePartitionConfig>(Partition()->TopicConverter,
                                                                      Partition()->TabletConfig);

@@ -127,7 +127,7 @@ TExprNode::TPtr RebuildArgumentsOnlyLambdaForBlocks(const TExprNode& lambda, TEx
 
 TExprNode::TPtr OptimizeWideToBlocks(const TExprNode::TPtr& node, TExprContext& ctx, TTypeAnnotationContext& types) {
     Y_UNUSED(types);
-    if (node->Head().IsCallable("WideFromBlocks")) {
+    if (node->Head().IsCallable("WideFromBlocks") && IsSameAnnotation(*node->GetTypeAnn(), *node->Head().Head().GetTypeAnn())) {
         YQL_CLOG(DEBUG, CorePeepHole) << "Drop " << node->Content() << " over " << node->Head().Content();
         return ctx.NewCallable(node->Pos(), "ReplicateScalars", { node->Head().HeadPtr() });
     }

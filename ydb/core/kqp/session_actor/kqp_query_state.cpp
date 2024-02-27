@@ -269,11 +269,18 @@ std::unique_ptr<TEvKqp::TEvCompileRequest> TKqpQueryState::BuildCompileSplittedR
         compileDeadline = Min(compileDeadline, QueryDeadlines.CancelAt);
     }
 
-    auto request = std::make_unique<TEvKqp::TEvCompileRequest>(UserToken, uid,
-        std::move(query), false, compileDeadline, DbCounters, std::move(cookie),
-        UserRequestContext, std::move(Orbit), TempTablesState, GetCollectDiagnostics(),
-        Nothing(), false, SplittedCtx.Get(), SplittedExprs.at(NextSplittedExpr));
-    return request;
+    const bool perStatementResult = !HasTxControl() && GetAction() == NKikimrKqp::QUERY_ACTION_EXECUTE;
+
+    TMaybe<TQueryAst> statementAst;
+    if (!Statements.empty()) {
+        YQL_ENSURE(CurrentStatementId < Statements.size());
+        statementAst = Statements[CurrentStatementId];
+    }
+
+    return std::make_unique<TEvKqp::TEvCompileRequest>(UserToken, uid, std::move(query), false,
+        false, perStatementResult, compileDeadline, DbCounters, std::move(cookie), UserRequestContext,
+        std::move(Orbit), TempTablesState, GetCollectDiagnostics(), statementAst,
+        false, SplittedCtx.Get(), SplittedExprs.at(NextSplittedExpr));
 }
 
 bool TKqpQueryState::PrepareNextStatementPart() {

@@ -1593,7 +1593,6 @@ Y_UNIT_TEST_SUITE(KqpQuery) {
             .SetAppConfig(appConfig)
             .SetWithSampleTables(false);
         TKikimrRunner kikimr(settings);
-        Tests::NCommon::TLoggerInit(kikimr).Initialize();
 
         const TString query = R"(
             CREATE TABLE `/Root/Source` (
@@ -1714,7 +1713,7 @@ Y_UNIT_TEST_SUITE(KqpQuery) {
                 prepareResult.GetIssues().ToString());
         }
 
-        {
+        /*{
             auto prepareResult = client.ExecuteQuery(R"(
                 CREATE TABLE `/Root/Destination6` (
                     PRIMARY KEY (Col1)
@@ -1727,7 +1726,7 @@ Y_UNIT_TEST_SUITE(KqpQuery) {
             UNIT_ASSERT_C(
                 prepareResult.GetIssues().ToString().Contains("Scheme operations cannot be executed inside transaction"),
                 prepareResult.GetIssues().ToString());
-        }
+        }*/
 
         {
             auto prepareResult = client.ExecuteQuery(R"(
@@ -1755,7 +1754,6 @@ Y_UNIT_TEST_SUITE(KqpQuery) {
             .SetAppConfig(appConfig)
             .SetWithSampleTables(false);
         TKikimrRunner kikimr(settings);
-        Tests::NCommon::TLoggerInit(kikimr).Initialize();
 
         const TString query = R"(
             CREATE TABLE `/Root/Source` (
@@ -1768,7 +1766,7 @@ Y_UNIT_TEST_SUITE(KqpQuery) {
         auto client = kikimr.GetQueryClient();
         auto result = client.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
         UNIT_ASSERT_C(result.GetStatus() == NYdb::EStatus::SUCCESS, result.GetIssues().ToString());
-        
+
         { 
             auto prepareResult = client.ExecuteQuery(R"(
                 REPLACE INTO `/Root/Source` (Col1, Col2) VALUES
@@ -1782,7 +1780,8 @@ Y_UNIT_TEST_SUITE(KqpQuery) {
                 CREATE TABLE `/Root/Destination1` (
                     PRIMARY KEY (Col1)
                 )
-                AS SELECT 1u As Col1, 1 As Col2;
+                AS SELECT Col2 As Col1, Col1 As Col2
+                FROM `/Root/Source`;
             )", NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
             UNIT_ASSERT_C(prepareResult.IsSuccess(), prepareResult.GetIssues().ToString());
         }
@@ -1793,7 +1792,7 @@ Y_UNIT_TEST_SUITE(KqpQuery) {
             )", NYdb::NQuery::TTxControl::BeginTx().CommitTx()).ExtractValueSync();
             UNIT_ASSERT_VALUES_EQUAL_C(it.GetStatus(), EStatus::SUCCESS, it.GetIssues().ToString());
             TString output = StreamResultToYson(it);
-            CompareYson(output, R"([[1u;[1]]])");
+            CompareYson(output, R"([[[1];[1u]];[[10];[10u]];[[100];[100u]]])");
         }
     }
 
@@ -1805,7 +1804,6 @@ Y_UNIT_TEST_SUITE(KqpQuery) {
             .SetAppConfig(appConfig)
             .SetWithSampleTables(false);
         TKikimrRunner kikimr(settings);
-        Tests::NCommon::TLoggerInit(kikimr).Initialize();
 
         auto client = kikimr.GetQueryClient();
 

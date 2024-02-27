@@ -1582,6 +1582,7 @@ protected:
                         .InputIndex = inputIndex,
                         .StatsLevel = collectStatsLevel,
                         .TxId = TxId,
+                        .TaskId = Task.GetId(),
                         .SecureParams = secureParams,
                         .TaskParams = taskParams,
                         .ReadRanges = readRanges,

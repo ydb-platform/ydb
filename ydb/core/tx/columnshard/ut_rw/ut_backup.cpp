@@ -131,8 +131,10 @@ Y_UNIT_TEST_SUITE(TColumnShardBackup) {
 
         NKikimrSchemeOp::TStorageTierConfig cfgProto;
         cfgProto.SetName("some_name");
+
         ::NKikimrSchemeOp::TS3Settings s3_settings;
         s3_settings.set_endpoint("fake");
+
         *cfgProto.MutableObjectStorage() = s3_settings;
 
         // tierManager->GetS3Settings(); -> create fake externl op
@@ -142,6 +144,8 @@ Y_UNIT_TEST_SUITE(TColumnShardBackup) {
         // tierManager->GetS3Settings() with fake ep.
         // S3Settings from Config.GetPatchedConfig(secrets) in ctor TManager
         auto* tierManager = new NColumnShard::NTiers::TManager(tableId, tabletActorID, cfg);
+
+        tierManager->Start(nullptr);
 
         auto op = std::make_shared<NOlap::NBlobOperations::NTier::TOperator>(
             storageId,

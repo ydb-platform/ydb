@@ -46,13 +46,15 @@ private:
     const TActorId actorID;
 
     void DoOnReadyResult(const NActors::TActorContext& ctx, const NColumnShard::TBlobPutResult::TPtr& putResult) override {
+        LOG_S_DEBUG("TBackupWriteController call DoOnReadyResult");
+
         NOlap::TWritingBuffer bufferStub;
 
         auto result = std::make_unique<NColumnShard::TEvPrivate::TEvWriteBlobsResult>(putResult, std::move(bufferStub));
         ctx.Send(actorID, result.release());
     }
     void DoOnStartSending() override {
-        // @TODO
+        LOG_S_DEBUG("TBackupWriteController call DoOnStartSending");
     }
 
 public:
@@ -163,7 +165,10 @@ public:
         if (ev->Get()->Finished) {
             AFL_VERIFY(ev->Get()->StatsOnFinished);
             // ResultStats = ev->Get()->StatsOnFinished->GetMetrics();
-            ProcessState(ctx, BackupActorState::Done);
+
+            LOG_S_DEBUG("Handle BackupActor.TEvScanData: finished.");
+
+            // ProcessState(ctx, BackupActorState::Done);
             return;
         }
 
@@ -174,6 +179,9 @@ public:
     
     void Handle(TEvPrivate::TEvWriteBlobsResult::TPtr& , const TActorContext& ctx) {
         LOG_S_DEBUG("Handle BackupActor.TEvWriteBlobsResult write done");
+
+        ProcessState(ctx, BackupActorState::Done);
+        
         SendBackupShardProposeResult(ctx);
     }
 

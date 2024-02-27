@@ -12,7 +12,6 @@ namespace NKikimr::NOlap {
 
 class TSimpleChunkMeta {
 protected:
-    std::shared_ptr<arrow::Scalar> Min;
     std::shared_ptr<arrow::Scalar> Max;
     std::optional<ui32> NumRows;
     std::optional<ui32> RawBytes;
@@ -25,9 +24,6 @@ public:
         return sizeof(ui32) + sizeof(ui32) + 8 * 3 * 2;
     }
 
-    std::shared_ptr<arrow::Scalar> GetMin() const {
-        return Min;
-    }
     std::shared_ptr<arrow::Scalar> GetMax() const {
         return Max;
     }
@@ -49,8 +45,8 @@ public:
         return *RawBytes;
     }
 
-    bool HasMinMax() const noexcept {
-        return Min.get() && Max.get();
+    bool HasMax() const noexcept {
+        return Max.get();
     }
 
 };

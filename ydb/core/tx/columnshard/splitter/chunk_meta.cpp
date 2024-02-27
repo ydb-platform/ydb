@@ -4,13 +4,13 @@
 
 namespace NKikimr::NOlap {
 
-TSimpleChunkMeta::TSimpleChunkMeta(const std::shared_ptr<arrow::Array>& column, const bool needMinMax, const bool isSortedColumn) {
+TSimpleChunkMeta::TSimpleChunkMeta(const std::shared_ptr<arrow::Array>& column, const bool needMax, const bool isSortedColumn) {
     Y_ABORT_UNLESS(column);
     Y_ABORT_UNLESS(column->length());
     NumRows = column->length();
     RawBytes = NArrow::GetArrayDataSize(column);
 
-    if (needMinMax) {
+    if (needMax) {
         std::pair<i32, i32> minMaxPos = {0, (column->length() - 1)};
         if (!isSortedColumn) {
             minMaxPos = NArrow::FindMinMaxPosition(column);
@@ -18,10 +18,8 @@ TSimpleChunkMeta::TSimpleChunkMeta(const std::shared_ptr<arrow::Array>& column, 
             Y_ABORT_UNLESS(minMaxPos.second >= 0);
         }
 
-        Min = NArrow::GetScalar(column, minMaxPos.first);
         Max = NArrow::GetScalar(column, minMaxPos.second);
 
-        Y_ABORT_UNLESS(Min);
         Y_ABORT_UNLESS(Max);
     }
 }

@@ -14,13 +14,9 @@ TChunkMeta::TChunkMeta(const TColumnChunkLoadContext& context, const TIndexInfo&
     if (context.GetMetaProto().HasRawBytes()) {
         RawBytes = context.GetMetaProto().GetRawBytes();
     }
-    if (context.GetMetaProto().HasMinValue()) {
-        AFL_VERIFY(field)("field_id", context.GetAddress().GetColumnId())("field_name", indexInfo.GetColumnName(context.GetAddress().GetColumnId()));
-        Min = ConstantToScalar(context.GetMetaProto().GetMinValue(), field->type());
-    }
-    if (context.GetMetaProto().HasMaxValue()) {
-        AFL_VERIFY(field)("field_id", context.GetAddress().GetColumnId())("field_name", indexInfo.GetColumnName(context.GetAddress().GetColumnId()));
-        Max = ConstantToScalar(context.GetMetaProto().GetMaxValue(), field->type());
+    if (proto.HasMaxValue()) {
+        AFL_VERIFY(field)("field_id", address.GetColumnId())("field_name", indexInfo.GetColumnName(address.GetColumnId()));
+        Max = ConstantToScalar(proto.GetMaxValue(), field->type());
     }
 }
 
@@ -37,8 +33,7 @@ NKikimrTxColumnShard::TIndexColumnMeta TChunkMeta::SerializeToProto() const {
     if (RawBytes) {
         meta.SetRawBytes(*RawBytes);
     }
-    if (HasMinMax()) {
-        ScalarToConstant(*Min, *meta.MutableMinValue());
+    if (HasMax()) {
         ScalarToConstant(*Max, *meta.MutableMaxValue());
         ScalarToConstant(*Max, *meta.MutableMinValue());
     }

@@ -520,7 +520,7 @@ public:
     }
 
     bool IsTimeDifferenceCheckNode(const TNodeId nodeId) const {
-        if (!IsSpecificDatabaseFilter() || IsStaticNode(nodeId)) {
+        if (!IsSpecificDatabaseFilter()) {
             return true;
         }
 

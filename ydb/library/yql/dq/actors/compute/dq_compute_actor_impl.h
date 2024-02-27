@@ -797,7 +797,7 @@ protected:
         }
     };
 
-    struct TAsyncInputTransformHelper: TAsyncInputHelper{
+    struct TAsyncInputTransformHelper: TAsyncInputHelper {
         NUdf::TUnboxedValue InputBuffer;
 
         using TAsyncInputHelper::TAsyncInputHelper;
@@ -1242,7 +1242,7 @@ protected:
         IRandomProvider* randomProvider
         )
     {
-                auto collectStatsLevel = StatsModeToCollectStatsLevel(RuntimeSettings.StatsMode);
+        auto collectStatsLevel = StatsModeToCollectStatsLevel(RuntimeSettings.StatsMode);
         for (auto& [inputIndex, source] : SourcesMap) {
             Y_ABORT_UNLESS(AsyncIoFactory);
             const auto& inputDesc = Task.GetInputs(inputIndex);
@@ -1459,12 +1459,12 @@ protected:
 
 private:
     void InitializeTask() {
-                for (ui32 i = 0; i < Task.InputsSize(); ++i) {
+        for (ui32 i = 0; i < Task.InputsSize(); ++i) {
             const auto& inputDesc = Task.GetInputs(i);
             Y_ABORT_UNLESS(!inputDesc.HasSource() || inputDesc.ChannelsSize() == 0); // HasSource => no channels
 
             if (inputDesc.HasTransform()) {
-                                auto result = InputTransformsMap.emplace(
+                auto result = InputTransformsMap.emplace(
                     i,
                     static_cast<TDerived*>(this)->template CreateInputHelper<TAsyncInputTransformHelper>(LogPrefix, i, NDqProto::WATERMARKS_MODE_DISABLED)
                 );

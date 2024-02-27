@@ -756,7 +756,7 @@ Y_UNIT_TEST_SUITE(TColumnEngineTestLogs) {
             std::shared_ptr<arrow::DataType> ttlColType = arrow::timestamp(arrow::TimeUnit::MICRO);
             THashMap<ui64, NOlap::TTiering> pathTtls;
             NOlap::TTiering tiering;
-            tiering.Ttl = NOlap::TTierInfo::MakeTtl(TDuration::MicroSeconds(TInstant::Now().MicroSeconds() - 10000), "timestamp");
+            tiering.Add(NOlap::TTierInfo::MakeTtl(TDuration::MicroSeconds(TInstant::Now().MicroSeconds() - 10000), "timestamp"));
             pathTtls.emplace(pathId, std::move(tiering));
             Ttl(engine, db, pathTtls, 10);
 

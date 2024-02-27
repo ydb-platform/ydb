@@ -37,9 +37,9 @@ IActor* CreateKqpCompileActor(const TActorId& owner, const TKqpSettings::TConstP
     const TIntrusivePtr<TUserRequestContext>& userRequestContext, NWilson::TTraceId traceId = {},
     TKqpTempTablesState::TConstPtr tempTablesState = nullptr,
     ECompileActorAction compileAction = ECompileActorAction::COMPILE,
-    bool PerStatementResult = false);
-    TMaybe<TQueryAst> astResult = {},
+    TMaybe<TQueryAst> queryAst = {},
     bool collectFullDiagnostics = false,
+    bool PerStatementResult = false,
     NYql::TExprContext* ctx = nullptr,
     NYql::TExprNode::TPtr expr = nullptr);
 

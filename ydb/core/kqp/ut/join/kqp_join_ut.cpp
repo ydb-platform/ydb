@@ -1367,6 +1367,7 @@ Y_UNIT_TEST_SUITE(KqpJoin) {
     Y_UNIT_TEST_TWIN(AllowJoinsForComplexPredicates, StreamLookup) {
         NKikimrConfig::TAppConfig appConfig;
         appConfig.MutableTableServiceConfig()->SetEnableKqpDataQueryStreamIdxLookupJoin(StreamLookup);
+        appConfig.MutableTableServiceConfig()->SetIdxLookupJoinPointsLimit(10);
         //appConfig.MutableTableServiceConfig()->SetEnableKqpDataQueryStreamLookup(false);
 
         auto appsettings = TKikimrSettings().SetAppConfig(appConfig);
@@ -1395,6 +1396,7 @@ Y_UNIT_TEST_SUITE(KqpJoin) {
                 [[105u];["One"];[105u];["One"];["Name2"]]
             ])", FormatResultSetYson(result.GetResultSet(0)));
             AssertTableReads(result, "/Root/Join2", 5);
+            UNIT_ASSERT(result.GetQueryPlan().Contains("Lookup"));
         }
 
         {
@@ -1412,6 +1414,7 @@ Y_UNIT_TEST_SUITE(KqpJoin) {
                 [[101u];["Two"];[101u];["Two"];["Name1"]]
             ])", FormatResultSetYson(result.GetResultSet(0)));
             AssertTableReads(result, "/Root/Join2", 2);
+            UNIT_ASSERT(result.GetQueryPlan().Contains("Lookup"));
         }
 
         {
@@ -1430,6 +1433,44 @@ Y_UNIT_TEST_SUITE(KqpJoin) {
                 [[103u];["One"];[103u];["One"];["Name1"]]
             ])", FormatResultSetYson(result.GetResultSet(0)));
             AssertTableReads(result, "/Root/Join2", 3);
+            UNIT_ASSERT(result.GetQueryPlan().Contains("Lookup"));
+        }
+
+        {
+            auto result = session.ExecuteDataQuery(R"(
+                --!syntax_v1
+
+                SELECT l.Fk21, l.Fk22, r.Key1, r.Key2, r.Name  FROM Join1 as l JOIN Join2 as r
+                    ON (l.Fk21 = r.Key1 AND l.Fk22 = r.Key2)
+                WHERE r.Key1 = 101u or r.Key1 = 105u
+                    ORDER BY l.Fk21 ASC, l.Fk22 ASC
+            )", TTxControl::BeginTx().CommitTx(), settings).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+            CompareYson(R"([
+                [[101u];["One"];[101u];["One"];["Name1"]];
+                [[101u];["Two"];[101u];["Two"];["Name1"]];
+                [[105u];["One"];[105u];["One"];["Name2"]]
+            ])", FormatResultSetYson(result.GetResultSet(0)));
+            AssertTableReads(result, "/Root/Join2", 3);
+            UNIT_ASSERT(result.GetQueryPlan().Contains("Lookup"));
+        }
+
+        {
+            auto result = session.ExecuteDataQuery(R"(
+                --!syntax_v1
+
+                SELECT l.Fk21, l.Fk22, r.Key1, r.Key2, r.Name  FROM Join1 as l JOIN Join2 as r
+                    ON (l.Fk21 = r.Key1 AND l.Fk22 = r.Key2)
+                WHERE (r.Key1 = 101u  AND r.Key2 = "One") OR r.Key1 = 105u
+                    ORDER BY l.Fk21 ASC, l.Fk22 ASC
+            )", TTxControl::BeginTx().CommitTx(), settings).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+            CompareYson(R"([
+                [[101u];["One"];[101u];["One"];["Name1"]];
+                [[105u];["One"];[105u];["One"];["Name2"]]
+            ])", FormatResultSetYson(result.GetResultSet(0)));
+            AssertTableReads(result, "/Root/Join2", 2);
+            UNIT_ASSERT(result.GetQueryPlan().Contains("Lookup"));
         }
     }
 }

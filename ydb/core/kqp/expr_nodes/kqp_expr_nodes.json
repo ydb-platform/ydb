@@ -104,7 +104,8 @@
             "Base": "TKqlReadTableRangesBase",
             "Match": {"Type": "Callable", "Name": "KqlReadTableRanges"},
             "Children": [
-                {"Index": 5, "Name": "PrefixPointsExpr", "Type": "TExprBase", "Optional": true}
+                {"Index": 5, "Name": "PrefixPointsExpr", "Type": "TExprBase", "Optional": true},
+                {"Index": 6, "Name": "PredicateExpr", "Type": "TCoLambda", "Optional": true}
             ]
         },
         {
@@ -131,7 +132,8 @@
             "Match": {"Type": "Callable", "Name": "TKqlReadTableIndexRanges"},
             "Children": [
                 {"Index": 5, "Name": "Index", "Type": "TCoAtom"},
-                {"Index": 6, "Name": "PrefixPointsExpr", "Type": "TExprBase", "Optional": true}
+                {"Index": 6, "Name": "PrefixPointsExpr", "Type": "TExprBase", "Optional": true},
+                {"Index": 7, "Name": "PredicateExpr", "Type": "TCoLambda", "Optional": true}
             ]
         },
         {

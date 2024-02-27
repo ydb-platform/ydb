@@ -472,8 +472,12 @@ TExprBase KqpPushExtractedPredicateToReadTable(TExprBase node, TExprContext& ctx
 
     if (!input) {
         TMaybeNode<TExprBase> prefix;
+        TMaybeNode<TCoLambda> predicateExpr;
         if (kqpCtx.Config->PredicateExtract20) {
             prefix = prefixPointsExpr;
+            if (prefix) {
+                predicateExpr = ctx.DeepCopyLambda(flatmap.Lambda().Ref());
+            }
         }
 
         if (indexName) {
@@ -485,6 +489,7 @@ TExprBase KqpPushExtractedPredicateToReadTable(TExprBase node, TExprContext& ctx
                 .ExplainPrompt(prompt.BuildNode(ctx, read.Pos()))
                 .Index(indexName.Cast())
                 .PrefixPointsExpr(prefix)
+                .PredicateExpr(predicateExpr)
                 .Done();
         } else {
             input = Build<TKqlReadTableRanges>(ctx, read.Pos())
@@ -494,12 +499,12 @@ TExprBase KqpPushExtractedPredicateToReadTable(TExprBase node, TExprContext& ctx
                 .Settings(read.Settings())
                 .ExplainPrompt(prompt.BuildNode(ctx, read.Pos()))
                 .PrefixPointsExpr(prefix)
+                .PredicateExpr(predicateExpr)
                 .Done();
         }
     }
 
     *input = readMatch->BuildProcessNodes(*input, ctx);
-
     if (node.Maybe<TCoFlatMap>()) {
         return Build<TCoFlatMap>(ctx, node.Pos())
             .Input(*input)

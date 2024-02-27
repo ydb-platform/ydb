@@ -23,6 +23,16 @@ public:
         return sb;
     }
 
+    void Merge(TCompositeReadBlobs&& blobs) {
+        for (auto&& i : blobs.BlobsByStorage) {
+            BlobsByStorage[i.first].Merge(std::move(i.second));
+        }
+    }
+
+    void Clear() {
+        BlobsByStorage.clear();
+    }
+
     bool IsEmpty() const {
         return BlobsByStorage.empty();
     }
@@ -35,6 +45,9 @@ public:
     }
     void Add(const TString& storageId, TActionReadBlobs&& data) {
         AFL_VERIFY(BlobsByStorage.emplace(storageId, std::move(data)).second);
+    }
+    void Add(const TString& storageId, const TBlobRange& blobId, TString&& value) {
+        BlobsByStorage[storageId].Add(blobId, std::move(value));
     }
     TString Extract(const TString& storageId, const TBlobRange& range) {
         auto it = BlobsByStorage.find(storageId);

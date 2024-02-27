@@ -12,11 +12,7 @@ private:
 protected:
     virtual std::shared_ptr<IBlobsStorageOperator> DoBuildOperator(const TString& storageId) = 0;
     THashMap<TString, std::shared_ptr<IBlobsStorageOperator>> Constructed;
-    std::shared_ptr<IBlobsStorageOperator> BuildOperator(const TString& storageId) {
-        auto result = DoBuildOperator(storageId);
-        Y_ABORT_UNLESS(result);
-        return result;
-    }
+    std::shared_ptr<IBlobsStorageOperator> BuildOperator(const TString& storageId);
 
     virtual void DoInitialize();
     virtual bool DoLoadIdempotency(NTable::TDatabase& database) = 0;

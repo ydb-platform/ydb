@@ -58,10 +58,6 @@ public:
         return DoCheckModificationCompatibility(*newMeta);
     }
 
-    const TString& GetStorageId() const {
-        return IStoragesManager::DefaultStorageId;
-    }
-
     virtual ~IIndexMeta() = default;
 
     std::shared_ptr<IPortionDataChunk> BuildIndex(const ui32 indexId, std::map<ui32, std::vector<std::shared_ptr<IPortionDataChunk>>>& data, const TIndexInfo& indexInfo) const {
@@ -72,19 +68,16 @@ public:
         return DoFillIndexCheckers(info, schema);
     }
 
-    bool DeserializeFromProto(const NKikimrSchemeOp::TOlapIndexDescription& proto) {
-        IndexId = proto.GetId();
-        AFL_VERIFY(IndexId);
-        IndexName = proto.GetName();
-        AFL_VERIFY(IndexName);
-        return DoDeserializeFromProto(proto);
-    }
+    bool DeserializeFromProto(const NKikimrSchemeOp::TOlapIndexDescription& proto);
 
     void SerializeToProto(NKikimrSchemeOp::TOlapIndexDescription& proto) const {
         AFL_VERIFY(IndexId);
         proto.SetId(IndexId);
         AFL_VERIFY(IndexName);
         proto.SetName(IndexName);
+        if (StorageId) {
+            proto.SetStorageId(StorageId);
+        }
         return DoSerializeToProto(proto);
     }
 

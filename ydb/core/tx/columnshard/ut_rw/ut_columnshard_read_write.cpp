@@ -1709,9 +1709,9 @@ Y_UNIT_TEST_SUITE(EvWrite) {
         const ui64 ownerId = 0;
         const ui64 tableId = 1;
         const ui64 schemaVersion = 1;
-        const std::vector<std::pair<TString, TTypeInfo>> schema = {
-                                                                    {"key", TTypeInfo(NTypeIds::Uint64) },
-                                                                    {"field", TTypeInfo(NTypeIds::Utf8) }
+        const std::vector<NArrow::NTest::TTestColumn> schema = {
+                                                                    NArrow::NTest::TTestColumn("key", TTypeInfo(NTypeIds::Uint64) ),
+                                                                    NArrow::NTest::TTestColumn("field", TTypeInfo(NTypeIds::Utf8) )
                                                                 };
         const std::vector<ui32> columnsIds = {1, 2};
         PrepareTablet(runtime, tableId, schema);
@@ -1967,14 +1967,14 @@ Y_UNIT_TEST_SUITE(TColumnShardTestReadWrite) {
     Y_UNIT_TEST(ReadSomePrograms) {
         TestTableDescription table;
         table.Schema = {
-            {"timestamp", TTypeInfo(NTypeIds::Timestamp) },
-            {"resource_id", TTypeInfo(NTypeIds::Utf8) },
-            {"uid", TTypeInfo(NTypeIds::Utf8) },
-            {"level", TTypeInfo(NTypeIds::Int32) },
-            {"message", TTypeInfo(NTypeIds::Utf8) }
+            NArrow::NTest::TTestColumn("timestamp", TTypeInfo(NTypeIds::Timestamp) ),
+            NArrow::NTest::TTestColumn("resource_id", TTypeInfo(NTypeIds::Utf8) ),
+            NArrow::NTest::TTestColumn("uid", TTypeInfo(NTypeIds::Utf8) ),
+            NArrow::NTest::TTestColumn("level", TTypeInfo(NTypeIds::Int32) ),
+            NArrow::NTest::TTestColumn("message", TTypeInfo(NTypeIds::Utf8) )
         };
         table.Pk = {
-            {"timestamp", TTypeInfo(NTypeIds::Timestamp) }
+            NArrow::NTest::TTestColumn("timestamp", TTypeInfo(NTypeIds::Timestamp) )
         };
 
         TestSomePrograms(table);

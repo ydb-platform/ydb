@@ -1,4 +1,5 @@
 #include "meta.h"
+#include <ydb/core/tx/columnshard/blobs_action/abstract/storages_manager.h>
 #include <ydb/core/tx/columnshard/engines/portions/column_record.h>
 #include <ydb/core/tx/columnshard/engines/portions/portion_info.h>
 #include <ydb/core/tx/columnshard/engines/scheme/index_info.h>
@@ -32,9 +33,8 @@ std::shared_ptr<NKikimr::NOlap::IPortionDataChunk> TIndexByColumns::DoBuildIndex
     return std::make_shared<TPortionIndexChunk>(indexId, recordsCount, NArrow::GetBatchDataSize(indexBatch), indexData);
 }
 
-bool TIndexByColumns::DoDeserializeFromProto(const NKikimrSchemeOp::TOlapIndexDescription& proto) {
+bool TIndexByColumns::DoDeserializeFromProto(const NKikimrSchemeOp::TOlapIndexDescription& /*proto*/) {
     Serializer = NArrow::NSerialization::TSerializerContainer::GetDefaultSerializer();
-    StorageId = proto.GetStorageId() ? proto.GetStorageId() : IStoragesManager::DefaultStorageId;
     return true;
 }
 
@@ -59,6 +59,15 @@ NKikimr::TConclusionStatus TIndexByColumns::CheckSameColumnsForModification(cons
         }
     }
     return TConclusionStatus::Success();
+}
+
+bool IIndexMeta::DeserializeFromProto(const NKikimrSchemeOp::TOlapIndexDescription& proto) {
+    IndexId = proto.GetId();
+    AFL_VERIFY(IndexId);
+    IndexName = proto.GetName();
+    AFL_VERIFY(IndexName);
+    StorageId = proto.GetStorageId() ? proto.GetStorageId() : IStoragesManager::DefaultStorageId;
+    return DoDeserializeFromProto(proto);
 }
 
 }   // namespace NKikimr::NOlap::NIndexes

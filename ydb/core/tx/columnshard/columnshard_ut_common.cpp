@@ -408,7 +408,9 @@ namespace NKikimr::NColumnShard {
             indexInfo.KeyColumns.push_back(indexInfo.ColumnNames[c.GetName()]);
         }
 
-        indexInfo.SetAllKeys(nullptr);
+        auto storage = std::make_shared<NOlap::TTestStoragesManager>();
+        storage->Initialize();
+        indexInfo.SetAllKeys(std::make_shared<NOlap::TTestStoragesManager>());
         return indexInfo;
     }
 

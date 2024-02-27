@@ -1,10 +1,35 @@
 #pragma once
 #include <ydb/core/scheme_types/scheme_type_info.h>
+#include <ydb/core/tx/columnshard/blobs_action/abstract/storages_manager.h>
+
 #include <ydb/library/accessor/accessor.h>
+
 #include <contrib/libs/apache/arrow/cpp/src/arrow/type.h>
 
 namespace NKikimrSchemeOp {
 class TOlapColumnDescription;
+}
+
+namespace NKikimr::NOlap {
+
+class TTestStoragesManager: public NOlap::IStoragesManager {
+private:
+    using TBase = NOlap::IStoragesManager;
+    TIntrusivePtr<TTabletStorageInfo> TabletInfo = new TTabletStorageInfo();
+    std::shared_ptr<NOlap::NDataSharing::TSharedBlobsManager> SharedBlobsManager = std::make_shared<NOlap::NDataSharing::TSharedBlobsManager>(NOlap::TTabletId(0));
+protected:
+    virtual bool DoLoadIdempotency(NTable::TDatabase& /*database*/) override {
+        return true;
+    }
+
+    virtual std::shared_ptr<NOlap::IBlobsStorageOperator> DoBuildOperator(const TString& storageId) override;
+    virtual const std::shared_ptr<NDataSharing::TSharedBlobsManager>& DoGetSharedBlobsManager() const override {
+        return SharedBlobsManager;
+    }
+public:
+};
+
+
 }
 
 namespace NKikimr::NArrow::NTest {
@@ -15,7 +40,7 @@ private:
     YDB_ACCESSOR_DEF(NScheme::TTypeInfo, Type);
     YDB_ACCESSOR_DEF(TString, StorageId);
 public:
-    TTestColumn(const TString& name, const NScheme::TTypeInfo& type)
+    explicit TTestColumn(const TString& name, const NScheme::TTypeInfo& type)
         : Name(name)
         , Type(type) {
 

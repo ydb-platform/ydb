@@ -4,6 +4,9 @@ PEERDIR(
     ydb/core/protos
     contrib/libs/apache/arrow
     ydb/library/actors/core
+    ydb/core/tx/columnshard/blobs_action/bs
+    ydb/core/tx/columnshard/blobs_action/tier
+    ydb/core/wrappers
 )
 
 SRCS(

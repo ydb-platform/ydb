@@ -68,4 +68,10 @@ bool IStoragesManager::HasBlobsToDelete() const {
     return false;
 }
 
+std::shared_ptr<NKikimr::NOlap::IBlobsStorageOperator> IStoragesManager::BuildOperator(const TString& storageId) {
+    auto result = DoBuildOperator(storageId);
+    AFL_VERIFY(result)("storage_id", storageId);
+    return result;
+}
+
 }

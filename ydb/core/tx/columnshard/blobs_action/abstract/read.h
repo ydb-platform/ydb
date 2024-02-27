@@ -14,11 +14,19 @@ private:
 public:
     TString DebugString() const;
 
+    TActionReadBlobs() = default;
+
     TActionReadBlobs(THashMap<TBlobRange, TString>&& blobs)
         : Blobs(std::move(blobs))
     {
         for (auto&& i : Blobs) {
             AFL_VERIFY(i.second.size());
+        }
+    }
+
+    void Merge(TActionReadBlobs&& item) {
+        for (auto&& i : item.Blobs) {
+            Add(i.first, std::move(i.second));
         }
     }
 

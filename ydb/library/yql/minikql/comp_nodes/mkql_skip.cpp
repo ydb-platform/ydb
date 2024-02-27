@@ -121,17 +121,22 @@ private:
 class TWideSkipWrapper : public TSimpleStatefulWideFlowCodegeneratorNode<TWideSkipWrapper, ui64> {
 using TBaseComputation = TSimpleStatefulWideFlowCodegeneratorNode<TWideSkipWrapper, ui64>;
 public:
-     TWideSkipWrapper(TComputationMutables& mutables, IComputationWideFlowNode* flow, IComputationNode* count, ui32 )
+     TWideSkipWrapper(TComputationMutables& mutables, IComputationWideFlowNode* flow, IComputationNode* count, ui32 size)
         : TBaseComputation(mutables, flow, EValueRepresentation::Embedded)
         , Flow(flow)
         , Count(count)
+        , StubsIndex(mutables.IncrementWideFieldsIndex(size))
     {}
 
     void InitState(ui64& count, TComputationContext& ctx) const {
         count = Count->GetValue(ctx).Get<ui64>();
     }
 
-    EProcessResult DoProcess(ui64& skipCount, TComputationContext& , EFetchResult fetchRes, NUdf::TUnboxedValue*const* ) const {
+    NUdf::TUnboxedValue*const* PrepareInput(ui64& skipCount, TComputationContext& ctx, NUdf::TUnboxedValue*const* output) const {
+         return skipCount == 0 ? output : ctx.WideFields.data() + StubsIndex;
+     }
+
+    EProcessResult DoProcess(ui64& skipCount, TComputationContext&, EFetchResult fetchRes, NUdf::TUnboxedValue*const*, NUdf::TUnboxedValue*const*) const {
         if (fetchRes == EFetchResult::One && skipCount) {
             skipCount--;
             return EProcessResult::Fetch;
@@ -147,6 +152,7 @@ private:
 
     IComputationWideFlowNode* const Flow;
     IComputationNode* const Count;
+    const ui32 StubsIndex;
 };
 
 class TSkipStreamWrapper : public TMutableComputationNode<TSkipStreamWrapper> {

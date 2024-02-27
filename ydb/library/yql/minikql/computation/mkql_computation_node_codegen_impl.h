@@ -36,7 +36,7 @@ private:
         for (size_t pos = 0; pos < width; pos++) {
             valuePtrsVec[pos] = valuesVec.data() + pos;
         }
-        auto res = static_cast<const TDerived*>(this)->DoProcess(*static_cast<TState*>(state.GetRawPtr()), ctx, fetchRes, valuePtrsVec.data());
+        auto res = static_cast<const TDerived*>(this)->DoProcess(*static_cast<TState*>(state.GetRawPtr()), ctx, fetchRes, valuePtrsVec.data(), valuePtrsVec.data());
         for (size_t pos = 0; pos < width; pos++) {
             values[pos] = valuesVec[pos].Release();
         }
@@ -52,8 +52,9 @@ public:
         }
         EProcessResult res = EProcessResult::Fetch;
         while (res == EProcessResult::Fetch) {
-            auto fetchRes = SourceFlow->FetchValues(ctx, output);
-            res = static_cast<const TDerived*>(this)->DoProcess(*static_cast<TState*>(state.GetRawPtr()), ctx, fetchRes, output);
+            auto *const *input = static_cast<const TDerived*>(this)->PrepareInput(*static_cast<TState*>(state.GetRawPtr()), ctx, output);
+            auto fetchRes = input ? SourceFlow->FetchValues(ctx, input) : EFetchResult::One;
+            res = static_cast<const TDerived*>(this)->DoProcess(*static_cast<TState*>(state.GetRawPtr()), ctx, fetchRes, input, output);
         }
         return static_cast<EFetchResult>(res);
     }

@@ -2102,6 +2102,28 @@
         }
     ],
     "test.test[pg_catalog-pg_roles-default.txt-Results]": [],
+    "test.test[pg_catalog-user-default.txt-Analyze]": [
+        {
+            "checksum": "a3b64a2cf9903b3868a2dd88a18fc46e",
+            "size": 922,
+            "uri": "https://{canondata_backend}/1936842/356668b054049036b6fc6ae585623a4cb1b29102/resource.tar.gz#test.test_pg_catalog-user-default.txt-Analyze_/plan.txt"
+        }
+    ],
+    "test.test[pg_catalog-user-default.txt-Debug]": [
+        {
+            "checksum": "5ac7c126efc58cd288a01b5f301bc2be",
+            "size": 720,
+            "uri": "https://{canondata_backend}/1936842/356668b054049036b6fc6ae585623a4cb1b29102/resource.tar.gz#test.test_pg_catalog-user-default.txt-Debug_/opt.yql_patched"
+        }
+    ],
+    "test.test[pg_catalog-user-default.txt-Plan]": [
+        {
+            "checksum": "a3b64a2cf9903b3868a2dd88a18fc46e",
+            "size": 922,
+            "uri": "https://{canondata_backend}/1936842/356668b054049036b6fc6ae585623a4cb1b29102/resource.tar.gz#test.test_pg_catalog-user-default.txt-Plan_/plan.txt"
+        }
+    ],
+    "test.test[pg_catalog-user-default.txt-Results]": [],
     "test.test[produce-process_with_lambda-default.txt-Analyze]": [
         {
             "checksum": "ebe34f5d2b86ce7954a161dc02a783aa",

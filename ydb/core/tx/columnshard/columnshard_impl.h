@@ -301,7 +301,7 @@ public:
     }
 
 private:
-    void OverloadWriteFail(const EOverloadStatus overloadReason, const NEvWrite::TWriteData& writeData, std::unique_ptr<NActors::IEventBase>&& event, const TActorContext& ctx);
+    void OverloadWriteFail(const EOverloadStatus overloadReason, const NEvWrite::TWriteData& writeData, const ui64 cookie, std::unique_ptr<NActors::IEventBase>&& event, const TActorContext& ctx);
     EOverloadStatus CheckOverloaded(const ui64 tableId) const;
 
 protected:
@@ -460,7 +460,6 @@ private:
     TIntrusivePtr<TMediatorTimecastEntry> MediatorTimeCastEntry;
     bool MediatorTimeCastRegistered = false;
     TSet<ui64> MediatorTimeCastWaitingSteps;
-    TDuration MaxReadStaleness = TDuration::Minutes(5); // TODO: Make configurable?
     const TDuration PeriodicWakeupActivationPeriod;
     TDuration FailActivationDelay = TDuration::Seconds(1);
     const TDuration StatsReportInterval;
@@ -566,6 +565,20 @@ public:
     template <class T>
     const T& GetIndexAs() const {
         return TablesManager.GetPrimaryIndexAsVerified<T>();
+    }
+
+    template <class T>
+    T& MutableIndexAs() {
+        return TablesManager.MutablePrimaryIndexAsVerified<T>();
+    }
+
+    TTxController& GetProgressTxController() const {
+        AFL_VERIFY(ProgressTxController);
+        return *ProgressTxController;
+    }
+
+    bool HasIndex() const {
+        return !!TablesManager.GetPrimaryIndex();
     }
 
     NOlap::TSnapshot GetLastPlannedSnapshot() const {

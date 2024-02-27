@@ -56,9 +56,8 @@ namespace NTest {
             return Store->GetPageType(groupId.Index, id);
         }
 
-        ui8 GetPageChannel(NPage::TPageId id, NPage::TGroupId groupId) const override
+        ui8 GetGroupChannel(NPage::TGroupId groupId) const override
         {
-            Y_UNUSED(id);
             Y_UNUSED(groupId);
             return 0;
         }
@@ -178,6 +177,18 @@ namespace NTest {
             return index.GetLastRecord();
         }
 
+        inline TRowId GetRowId(const TPart& part, ui32 pageIndex) {
+            TTestEnv env;
+            TPartIndexIt index(&part, &env, { });
+
+            Y_ABORT_UNLESS(index.Seek(0) == EReady::Data);
+            for (TPageId p = 0; p < pageIndex; p++) {
+                Y_ABORT_UNLESS(index.Next() == EReady::Data);
+            }
+
+            return index.GetRowId();
+        }
+
         inline const TPartIndexIt::TRecord * GetRecord(const TPart& part, ui32 pageIndex) {
             TTestEnv env;
             TPartIndexIt index(&part, &env, { });
@@ -202,6 +213,33 @@ namespace NTest {
             TPartIndexIt index(&part, &env, groupId);
             index.Seek(index.GetEndRowId() - 1);
             return index.GetPageId();
+        }
+
+        inline TSlice MakeSlice(const TPartStore& part, ui32 pageIndex1Inclusive, ui32 pageIndex2Exclusive) {
+            auto mainPagesCount = CountMainPages(part);
+            Y_ABORT_UNLESS(pageIndex1Inclusive < pageIndex2Exclusive);
+            Y_ABORT_UNLESS(pageIndex2Exclusive <= mainPagesCount);
+            auto getKey = [&] (const NPage::TIndex::TRecord* record) {
+                TSmallVec<TCell> key;
+                for (const auto& info : part.Scheme->Groups[0].ColsKeyIdx) {
+                    key.push_back(record->Cell(info));
+                }
+                return TSerializedCellVec(key);
+            };
+            TSlice slice;
+            slice.FirstInclusive = true;
+            slice.FirstRowId = IndexTools::GetRowId(part, pageIndex1Inclusive);
+            slice.FirstKey = pageIndex1Inclusive > 0 
+                ? getKey(IndexTools::GetRecord(part, pageIndex1Inclusive)) 
+                : part.Slices->begin()->FirstKey;
+            slice.LastInclusive = false;
+            slice.LastRowId = pageIndex2Exclusive < mainPagesCount 
+                ? IndexTools::GetRowId(part, pageIndex2Exclusive)
+                : part.Stat.Rows;
+            slice.LastKey = pageIndex2Exclusive < mainPagesCount 
+                ? getKey(IndexTools::GetRecord(part, pageIndex2Exclusive)) 
+                : part.Slices->rbegin()->LastKey;
+            return slice;
         }
     }
 

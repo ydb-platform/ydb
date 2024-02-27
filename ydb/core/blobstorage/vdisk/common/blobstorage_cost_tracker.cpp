@@ -42,7 +42,7 @@ public:
 };
 
 TBsCostTracker::TBsCostTracker(const TBlobStorageGroupType& groupType, NPDisk::EDeviceType diskType,
-        const TIntrusivePtr<::NMonitoring::TDynamicCounters>& counters)
+        const TIntrusivePtr<::NMonitoring::TDynamicCounters>& counters, ui64 burstThresholdNs)
     : GroupType(groupType)
     , CostCounters(counters->GetSubgroup("subsystem", "advancedCost"))
     , UserDiskCost(CostCounters->GetCounter("UserDiskCost", true))
@@ -50,6 +50,7 @@ TBsCostTracker::TBsCostTracker(const TBlobStorageGroupType& groupType, NPDisk::E
     , ScrubDiskCost(CostCounters->GetCounter("ScrubDiskCost", true))
     , DefragDiskCost(CostCounters->GetCounter("DefragDiskCost", true))
     , InternalDiskCost(CostCounters->GetCounter("InternalDiskCost", true))
+    , BucketCapacity(burstThresholdNs / GroupType.BlobSubgroupSize())
     , Bucket(&DiskTimeAvailableNs, &BucketCapacity, nullptr, nullptr, nullptr, nullptr, true)
 {
     BurstDetector.Initialize(CostCounters, "BurstDetector");
@@ -67,7 +68,6 @@ TBsCostTracker::TBsCostTracker(const TBlobStorageGroupType& groupType, NPDisk::E
         CostModel = std::make_unique<TBsCostModelErasureNone>(diskType);
         break;
     }
-    UpdateBucketCapacity();
 }
 
 } // NKikimr

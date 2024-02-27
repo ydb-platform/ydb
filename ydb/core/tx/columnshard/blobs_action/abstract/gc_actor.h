@@ -15,13 +15,14 @@ private:
     using TBase = TActorBootstrapped<TDerived>;
     const TString OperatorId;
     TBlobsByTablet BlobIdsByTablets;
+    const TTabletId SelfTabletId;
     virtual void DoOnSharedRemovingFinished() = 0;
     void OnSharedRemovingFinished() {
         SharedRemovingFinished = true;
         DoOnSharedRemovingFinished();
     }
     void Handle(NEvents::TEvDeleteSharedBlobsFinished::TPtr& ev) {
-        AFL_VERIFY(BlobIdsByTablets.Remove((TTabletId)ev->Cookie));
+        AFL_VERIFY(BlobIdsByTablets.Remove((TTabletId)ev->Get()->Record.GetTabletId()));
         if (BlobIdsByTablets.IsEmpty()) {
             AFL_VERIFY(!SharedRemovingFinished);
             OnSharedRemovingFinished();
@@ -37,9 +38,10 @@ private:
 protected:
     bool SharedRemovingFinished = false;
 public:
-    TSharedBlobsCollectionActor(const TString& operatorId, const TBlobsByTablet& blobIds)
+    TSharedBlobsCollectionActor(const TString& operatorId, const TTabletId selfTabletId, const TBlobsByTablet& blobIds)
         : OperatorId(operatorId)
         , BlobIdsByTablets(blobIds)
+        , SelfTabletId(selfTabletId)
     {
 
     }
@@ -58,7 +60,7 @@ public:
             OnSharedRemovingFinished();
         } else {
             for (auto&& i : BlobIdsByTablets) {
-                auto ev = std::make_unique<NEvents::TEvDeleteSharedBlobs>(TBase::SelfId(), (ui64)i.first, OperatorId, i.second);
+                auto ev = std::make_unique<NEvents::TEvDeleteSharedBlobs>(TBase::SelfId(), (ui64)SelfTabletId, OperatorId, i.second);
                 NActors::TActivationContext::AsActorContext().Send(MakePipePeNodeCacheID(false),
                     new TEvPipeCache::TEvForward(ev.release(), (ui64)i.first, true), IEventHandle::FlagTrackDelivery, (ui64)i.first);
             }

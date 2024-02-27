@@ -1,6 +1,5 @@
 #pragma once
 
-#include "flat_part_laid.h"
 #include "flat_stat_part.h"
 #include "flat_table_subset.h"
 
@@ -15,31 +14,31 @@ namespace NTable {
 // Iterates over all parts and maintains total row count and data size
 class TStatsIterator {
 public:
-    explicit TStatsIterator(TIntrusiveConstPtr<TKeyCellDefaults> keyColumns)
-        : KeyColumns(keyColumns)
+    explicit TStatsIterator(TIntrusiveConstPtr<TKeyCellDefaults> keyDefaults)
+        : KeyDefaults(keyDefaults)
         , Heap(TIterKeyGreater{ this })
     {}
 
-    void Add(THolder<TScreenedPartIndexIterator> pi) {
-        Y_ABORT_UNLESS(pi->IsValid());
-        Iterators.PushBack(std::move(pi));
-        TScreenedPartIndexIterator* it = Iterators.back();
-        Heap.push(it);
+    void Add(THolder<TStatsScreenedPartIterator> iterator) {
+        Y_ABORT_UNLESS(iterator->IsValid());
+        Iterators.PushBack(std::move(iterator));
+        TStatsScreenedPartIterator* iteratorPtr = Iterators.back();
+        Heap.push(iteratorPtr);
     }
 
-    EReady Next(TPartDataStats& stats) {
+    EReady Next(TDataStats& stats) {
         ui64 lastRowCount = stats.RowCount;
         ui64 lastDataSize = stats.DataSize.Size;
 
         TCellsStorage cellsStorage;
 
         while (!Heap.empty()) {
-            TScreenedPartIndexIterator* it = Heap.top();
+            TStatsScreenedPartIterator* it = Heap.top();
             Heap.pop();
 
             // makes key copy
             cellsStorage.Reset({it->GetCurrentKey().Columns, it->GetCurrentKey().ColumnCount});
-            TDbTupleRef key(KeyColumns->BasicTypes().data(), cellsStorage.GetCells().data(), cellsStorage.GetCells().size());
+            TDbTupleRef key(KeyDefaults->BasicTypes().data(), cellsStorage.GetCells().data(), cellsStorage.GetCells().size());
 
             auto ready = it->Next(stats);
             if (ready == EReady::Page) {
@@ -76,20 +75,20 @@ public:
 
 private:
     int CompareKeys(const TDbTupleRef& a, const TDbTupleRef& b) const noexcept {
-        return ComparePartKeys(a.Cells(), b.Cells(), *KeyColumns);
+        return ComparePartKeys(a.Cells(), b.Cells(), *KeyDefaults);
     }
 
     struct TIterKeyGreater {
         const TStatsIterator* Self;
 
-        bool operator ()(const TScreenedPartIndexIterator* a, const TScreenedPartIndexIterator* b) const {
+        bool operator ()(const TStatsScreenedPartIterator* a, const TStatsScreenedPartIterator* b) const {
             return Self->CompareKeys(a->GetCurrentKey(), b->GetCurrentKey()) > 0;
         }
     };
 
-    TIntrusiveConstPtr<TKeyCellDefaults> KeyColumns;
-    THolderVector<TScreenedPartIndexIterator> Iterators;
-    TPriorityQueue<TScreenedPartIndexIterator*, TSmallVec<TScreenedPartIndexIterator*>, TIterKeyGreater> Heap;
+    TIntrusiveConstPtr<TKeyCellDefaults> KeyDefaults;
+    THolderVector<TStatsScreenedPartIterator> Iterators;
+    TPriorityQueue<TStatsScreenedPartIterator*, TSmallVec<TStatsScreenedPartIterator*>, TIterKeyGreater> Heap;
 };
 
 struct TBucket {
@@ -101,8 +100,8 @@ using THistogram = TVector<TBucket>;
 
 struct TStats {
     ui64 RowCount = 0;
-    TPartDataSize DataSize = { };
-    TPartDataSize IndexSize = { };
+    TChanneledDataSize DataSize = { };
+    TChanneledDataSize IndexSize = { };
     THistogram RowCountHistogram;
     THistogram DataSizeHistogram;
 

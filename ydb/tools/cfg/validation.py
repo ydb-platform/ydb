@@ -129,7 +129,9 @@ SYS_SCHEMA = {
 
 SELECTORS_CONFIGS = dict(
     type="object",
-    properties={},
+    properties=dict(
+        request_type=dict(type="string"),
+    ),
     required=[],
     additionalProperties=False,
 )
@@ -173,7 +175,7 @@ TRACING_SCHEMA = dict(
         uploader=dict(
             type="object",
             properties=dict(
-                max_spans_per_second=dict(type="integer", minimum=1),
+                max_exported_spans_per_second=dict(type="integer", minimum=1),
                 max_spans_in_batch=dict(type="integer", minimum=1),
                 max_bytes_in_batch=dict(type="integer"),
                 max_batch_accumulation_milliseconds=dict(type="integer"),
@@ -190,10 +192,10 @@ TRACING_SCHEMA = dict(
                     scope=SELECTORS_CONFIGS,
                     fraction=dict(type="number", minimum=0, maximum=1),
                     level=dict(type="integer", minimum=0, maximum=15),
-                    max_rate_per_minute=dict(type="integer", minimum=0),
-                    max_burst=dict(type="integer", minimum=0),
+                    max_traces_per_minute=dict(type="integer", minimum=0),
+                    max_traces_burst=dict(type="integer", minimum=0),
                 ),
-                required=["fraction", "level", "max_rate_per_minute"],
+                required=["fraction", "level", "max_traces_per_minute"],
             ),
         ),
         external_throttling=dict(
@@ -202,10 +204,10 @@ TRACING_SCHEMA = dict(
                 type="object",
                 properties=dict(
                     scope=SELECTORS_CONFIGS,
-                    max_rate_per_minute=dict(type="integer", minimum=0),
-                    max_burst=dict(type="integer", minimum=0),
+                    max_traces_per_minute=dict(type="integer", minimum=0),
+                    max_traces_burst=dict(type="integer", minimum=0),
                 ),
-                required=["max_rate_per_minute"],
+                required=["max_traces_per_minute"],
             ),
         ),
     ),

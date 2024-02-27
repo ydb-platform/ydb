@@ -93,8 +93,8 @@ public:
             ReplyErrorAndPassAway(issues, "Error describe a database at the synchronization stage");
             return;
         }
-        const auto& result = ev.Get()->Get()->Record;
-        if (result.synchronized()) {
+        ComputeDatabase = ev.Get()->Get()->Record;
+        if (ComputeDatabase.synchronized()) {
             LOG_I("Synchronization has already completed for the scope " << Scope);
             ReplyAndPassAway();
         } else {
@@ -395,6 +395,7 @@ private:
                 new IEventHandle(SelfId(), SelfId(), new TEvControlPlaneProxy::TEvCreateConnectionRequest{{}, proto, {}, {}, {}});
 
             request.Get()->Get()->YDBClient = Client;
+            request.Get()->Get()->ComputeDatabase = ComputeDatabase;
 
             Register(NFq::NPrivate::MakeCreateConnectionActor(
                 SelfId(),
@@ -423,6 +424,8 @@ private:
                 new IEventHandle(SelfId(), SelfId(), new TEvControlPlaneProxy::TEvCreateBindingRequest{{}, proto, {}, {}, {}});
 
             request.Get()->Get()->YDBClient = Client;
+            request.Get()->Get()->ComputeDatabase = ComputeDatabase;
+
             auto it = Connections.find(binding.second.content().connection_id());
             if (it == Connections.end()) {
                 NYql::TIssue issue {TStringBuilder {}
@@ -558,6 +561,7 @@ private:
     TString Scope;
     NConfig::TCommonConfig CommonConfig;
     NFq::TComputeConfig ComputeConfig;
+    FederatedQuery::Internal::ComputeDatabaseInternal ComputeDatabase;
     NFq::NConfig::TYdbStorageConfig ConnectionConfig;
     TSigner::TPtr Signer;
     TYqSharedResources::TPtr YqSharedResources;

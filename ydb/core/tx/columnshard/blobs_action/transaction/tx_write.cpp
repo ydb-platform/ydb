@@ -1,6 +1,7 @@
 #include "tx_write.h"
 
 namespace NKikimr::NColumnShard {
+
 bool TTxWrite::InsertOneBlob(TTransactionContext& txc, const NOlap::TWideSerializedBatch& batch, const TWriteId writeId) {
     NKikimrTxColumnShard::TLogicalMetadata meta;
     meta.SetNumRows(batch->GetRowsCount());
@@ -27,7 +28,6 @@ bool TTxWrite::InsertOneBlob(TTransactionContext& txc, const NOlap::TWideSeriali
     }
     return false;
 }
-
 
 bool TTxWrite::Execute(TTransactionContext& txc, const TActorContext&) {
     NActors::TLogContextGuard logGuard = NActors::TLogContextBuilder::Build(NKikimrServices::TX_COLUMNSHARD)("tablet_id", Self->TabletID())("tx_state", "execute");
@@ -76,25 +76,35 @@ bool TTxWrite::Execute(TTransactionContext& txc, const TActorContext&) {
     }
     for (auto&& aggr : buffer.GetAggregations()) {
         const auto& writeMeta = aggr->GetWriteData()->GetWriteMeta();
-        std::unique_ptr<TEvColumnShard::TEvWriteResult> result;
-        TWriteOperation::TPtr operation;
         if (!writeMeta.HasLongTxId()) {
-            operation = Self->OperationsManager->GetOperation((TWriteId)writeMeta.GetWriteId());
+            auto operation = Self->OperationsManager->GetOperation((TWriteId)writeMeta.GetWriteId());
             Y_ABORT_UNLESS(operation);
             Y_ABORT_UNLESS(operation->GetStatus() == EOperationStatus::Started);
-        }
-        if (operation) {
             operation->OnWriteFinish(txc, aggr->GetWriteIds());
-            auto txInfo = Self->ProgressTxController->RegisterTxWithDeadline(operation->GetTxId(), NKikimrTxColumnShard::TX_KIND_COMMIT_WRITE, "", writeMeta.GetSource(), 0, txc);
-            Y_UNUSED(txInfo);
-            NEvents::TDataEvents::TCoordinatorInfo tInfo = Self->ProgressTxController->GetCoordinatorInfo(operation->GetTxId());
-            Results.emplace_back(NEvents::TDataEvents::TEvWriteResult::BuildPrepared(Self->TabletID(), operation->GetTxId(), tInfo));
+            if (operation->GetBehaviour() == EOperationBehaviour::InTxWrite) {
+                NKikimrTxColumnShard::TCommitWriteTxBody proto;
+                proto.SetLockId(operation->GetLockId());
+                TString txBody;
+                Y_ABORT_UNLESS(proto.SerializeToString(&txBody));
+                ProposeTransaction(TTxController::TBasicTxInfo(NKikimrTxColumnShard::TX_KIND_COMMIT_WRITE, operation->GetLockId()), txBody, writeMeta.GetSource(), operation->GetCookie(), txc);
+            } else {
+                Results.emplace_back(NEvents::TDataEvents::TEvWriteResult::BuildCompleted(Self->TabletID(), operation->GetLockId()));
+            }
         } else {
             Y_ABORT_UNLESS(aggr->GetWriteIds().size() == 1);
             Results.emplace_back(std::make_unique<TEvColumnShard::TEvWriteResult>(Self->TabletID(), writeMeta, (ui64)aggr->GetWriteIds().front(), NKikimrTxColumnShard::EResultStatus::SUCCESS));
         }
     }
     return true;
+}
+
+void TTxWrite::OnProposeResult(TTxController::TProposeResult& proposeResult, const TTxController::TTxInfo& txInfo) {
+    Y_UNUSED(proposeResult);
+    Results.emplace_back(NEvents::TDataEvents::TEvWriteResult::BuildPrepared(Self->TabletID(), txInfo.TxId, Self->GetProgressTxController().BuildCoordinatorInfo(txInfo)));
+}
+
+void TTxWrite::OnProposeError(TTxController::TProposeResult& proposeResult, const TTxController::TBasicTxInfo& txInfo) {
+    AFL_VERIFY("Unexpected behaviour")("tx_id", txInfo.TxId)("details", proposeResult.DebugString());
 }
 
 void TTxWrite::Complete(const TActorContext& ctx) {
@@ -110,7 +120,12 @@ void TTxWrite::Complete(const TActorContext& ctx) {
     AFL_VERIFY(buffer.GetAggregations().size() == Results.size());
     for (ui32 i = 0; i < buffer.GetAggregations().size(); ++i) {
         const auto& writeMeta = buffer.GetAggregations()[i]->GetWriteData()->GetWriteMeta();
-        ctx.Send(writeMeta.GetSource(), Results[i].release());
+        auto operation = Self->OperationsManager->GetOperation((TWriteId)writeMeta.GetWriteId());
+        if (operation) {
+            ctx.Send(writeMeta.GetSource(), Results[i].release(), 0, operation->GetCookie());
+        } else {
+            ctx.Send(writeMeta.GetSource(), Results[i].release());
+        }
         Self->CSCounters.OnWriteTxComplete(now - writeMeta.GetWriteStartInstant());
         Self->CSCounters.OnSuccessWriteResponse();
     }

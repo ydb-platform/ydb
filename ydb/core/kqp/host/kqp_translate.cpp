@@ -199,5 +199,58 @@ TQueryAst ParseQuery(NYql::EKikimrQueryType queryType, const TMaybe<Ydb::Query::
     return TQueryAst(std::make_shared<NYql::TAstParseResult>(std::move(astRes)), sqlVersion, deprecatedSQL);
 }
 
+TVector<TQueryAst> ParseStatements(NYql::EKikimrQueryType queryType, const TMaybe<bool>& usePgParser, const TString& queryText,
+        std::shared_ptr<std::map<TString, Ydb::Type>> queryParameters, bool sqlAutoCommit,
+        TMaybe<ui16>& sqlVersion, TString cluster, TString kqpTablePathPrefix,
+        ui16 kqpYqlSyntaxVersion, NSQLTranslation::EBindingsMode bindingsMode, bool isEnableExternalDataSources,
+        NYql::TExprContext& ctx, bool isEnablePgConstsToParams, bool isSql) {
+
+    TVector<TQueryAst> result;
+    NYql::TAstParseResult astRes;
+    if (isSql) {
+        auto settings = GetTranslationSettings(queryType, usePgParser, sqlAutoCommit, queryText, queryParameters, sqlVersion, cluster, kqpTablePathPrefix, kqpYqlSyntaxVersion, bindingsMode, isEnableExternalDataSources, ctx, isEnablePgConstsToParams);
+        ui16 actualSyntaxVersion = 0;
+        auto astStatements = NSQLTranslation::SqlToAstStatements(queryText, settings, nullptr, &actualSyntaxVersion);
+        sqlVersion = actualSyntaxVersion;
+        for (auto&& ast : astStatements) {
+            result.push_back({std::make_shared<NYql::TAstParseResult>(std::move(ast)), sqlVersion, (actualSyntaxVersion == 0)});
+        }
+        return result;
+    } else {
+        sqlVersion = {};
+        return {{std::make_shared<NYql::TAstParseResult>(NYql::ParseAst(queryText)), sqlVersion, true}};
+    }
+}
+
+TVector<TQueryAst> ParseStatements(NYql::EKikimrQueryType queryType, const TMaybe<Ydb::Query::Syntax>& syntax, const TString& queryText, std::shared_ptr<std::map<TString, Ydb::Type>> queryParameters,
+        TString cluster, TString kqpTablePathPrefix, ui16 kqpYqlSyntaxVersion, NSQLTranslation::EBindingsMode bindingsMode, bool isEnableExternalDataSources, bool isEnablePgConstsToParams, bool isSql,
+        bool perStatementExecution) {
+    if (!perStatementExecution) {
+        return {ParseQuery(queryType, syntax, queryText, queryParameters, isSql, cluster, kqpTablePathPrefix, kqpYqlSyntaxVersion, bindingsMode, isEnableExternalDataSources, isEnablePgConstsToParams)};
+    }
+    TMaybe<ui16> sqlVersion;
+    TMaybe<bool> usePgParser;
+    if (syntax)
+        switch (*syntax) {
+            case Ydb::Query::Syntax::SYNTAX_YQL_V1:
+                usePgParser = false;
+                break;
+            case Ydb::Query::Syntax::SYNTAX_PG:
+                usePgParser = true;
+                break;
+            default:
+                break;
+        }
+
+    NYql::TExprContext ctx;
+    bool sqlAutoCommit;
+    if (queryType == NYql::EKikimrQueryType::YqlScript || queryType == NYql::EKikimrQueryType::YqlScriptStreaming) {
+            sqlAutoCommit = true;
+    } else {
+        sqlAutoCommit = false;
+    }
+    return ParseStatements(queryType, usePgParser, queryText, queryParameters, sqlAutoCommit, sqlVersion, cluster, kqpTablePathPrefix, kqpYqlSyntaxVersion, bindingsMode, isEnableExternalDataSources, ctx, isEnablePgConstsToParams, isSql);
+}
+
 } // namespace NKqp
 } // namespace NKikimr

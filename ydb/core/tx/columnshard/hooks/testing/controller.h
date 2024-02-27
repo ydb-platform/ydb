@@ -21,9 +21,11 @@ private:
     YDB_ACCESSOR(std::optional<ui64>, GuaranteeIndexationStartBytesLimit, 0);
     YDB_ACCESSOR(std::optional<TDuration>, OptimizerFreshnessCheckDuration, TDuration::Zero());
     EOptimizerCompactionWeightControl CompactionControl = EOptimizerCompactionWeightControl::Force;
+    std::optional<TDuration> ReadTimeoutClean;
+    std::optional<ui32> ExpectedShardsCount;
 
     THashMap<ui64, const ::NKikimr::NColumnShard::TColumnShard*> ShardActuals;
-    THashMap<TString, THashSet<NOlap::TUnifiedBlobId>> RemovedBlobIds;
+    THashMap<TString, THashMap<NOlap::TUnifiedBlobId, THashSet<NOlap::TTabletId>>> RemovedBlobIds;
     TMutex Mutex;
 
     class TBlobInfo {
@@ -113,7 +115,6 @@ private:
 
     void CheckInvariants(const ::NKikimr::NColumnShard::TColumnShard& shard, TCheckContext& context) const;
 
-    TCheckContext CheckInvariants() const;
     THashSet<TString> SharingIds;
 protected:
     virtual void DoOnTabletInitCompleted(const ::NKikimr::NColumnShard::TColumnShard& shard) override;
@@ -138,6 +139,9 @@ protected:
     virtual TDuration GetOptimizerFreshnessCheckDuration(const TDuration defaultValue) const override {
         return OptimizerFreshnessCheckDuration.value_or(defaultValue);
     }
+    virtual TDuration GetReadTimeoutClean(const TDuration def) override {
+        return ReadTimeoutClean.value_or(def);
+    }
     virtual EOptimizerCompactionWeightControl GetCompactionControl() const override {
         return CompactionControl;
     }
@@ -150,11 +154,16 @@ protected:
     }
     virtual void DoOnDataSharingStarted(const ui64 /*tabletId*/, const TString& sessionId) override {
         TGuard<TMutex> g(Mutex);
-        CheckInvariants();
+        if (SharingIds.empty()) {
+            CheckInvariants();
+        }
         SharingIds.emplace(sessionId);
     }
 
 public:
+    bool IsTrivialLinks() const;
+    TCheckContext CheckInvariants() const;
+
     ui32 GetShardActualsCount() const {
         TGuard<TMutex> g(Mutex);
         return ShardActuals.size();
@@ -180,8 +189,14 @@ public:
             IndexesSkippingOnSelect.Inc();
         }
     }
+    void SetExpectedShardsCount(const ui32 value) {
+        ExpectedShardsCount = value;
+    }
     void SetCompactionControl(const EOptimizerCompactionWeightControl value) {
         CompactionControl = value;
+    }
+    void SetReadTimeoutClean(const TDuration d) {
+        ReadTimeoutClean = d;
     }
 
     bool HasPKSortingOnly() const;

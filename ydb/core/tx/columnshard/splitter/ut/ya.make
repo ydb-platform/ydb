@@ -8,6 +8,7 @@ PEERDIR(
 
     ydb/core/tx/columnshard/counters
     ydb/core/tx/columnshard/engines/portions
+    ydb/core/tx/columnshard/common
     ydb/core/kqp/common
     ydb/library/yql/parser/pg_wrapper
     ydb/library/yql/public/udf

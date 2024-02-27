@@ -36,8 +36,9 @@ IActor* CreateKqpCompileActor(const TActorId& owner, const TKqpSettings::TConstP
     NWilson::TTraceId traceId = {},
     TKqpTempTablesState::TConstPtr tempTablesState = nullptr,
     ECompileActorAction compileAction = ECompileActorAction::COMPILE,
-    TMaybe<TQueryAst> astResult = {},
-    bool collectFullDiagnostics = false);
+    TMaybe<TQueryAst> queryAst = {},
+    bool collectFullDiagnostics = false,
+    bool PerStatementResult = false);
 
 IActor* CreateKqpCompileRequestActor(const TActorId& owner, const TIntrusiveConstPtr<NACLib::TUserToken>& userToken, const TMaybe<TString>& uid,
     TMaybe<TKqpQueryId>&& query, bool keepInCache, const TInstant& deadline, TKqpDbCountersPtr dbCounters,

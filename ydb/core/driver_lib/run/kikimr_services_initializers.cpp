@@ -866,7 +866,7 @@ void TBasicServicesInitializer::InitializeServices(NActors::TActorSystemSetup* s
                         uploaderParams.field = uploaderConfig.Get##field(); \
                     }
 
-                    GET_FIELD_FROM_CONFIG(MaxSpansPerSecond)
+                    GET_FIELD_FROM_CONFIG(MaxExportedSpansPerSecond)
                     GET_FIELD_FROM_CONFIG(MaxSpansInBatch)
                     GET_FIELD_FROM_CONFIG(MaxBytesInBatch)
                     GET_FIELD_FROM_CONFIG(SpanExportTimeoutSeconds)

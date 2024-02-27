@@ -117,6 +117,8 @@ drop table t2;
 create temp table t1(f1 int, f2 bigint);
 create temp table t2(f1 bigint, f22 bigint);
 drop table t1, t2;
+select array_agg(distinct a)
+  from (values (1),(2),(1),(3),(null),(2)) v(a);
 -- string_agg tests
 select string_agg(a,',') from (values('aaaa'),('bbbb'),('cccc')) g(a);
 select string_agg(a,',') from (values('aaaa'),(null),('bbbb'),('cccc')) g(a);

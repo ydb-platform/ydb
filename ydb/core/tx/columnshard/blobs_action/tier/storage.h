@@ -11,7 +11,6 @@ namespace NKikimr::NOlap::NBlobOperations::NTier {
 class TOperator: public IBlobsStorageOperator {
 private:
     using TBase = IBlobsStorageOperator;
-    const ui64 TabletId;
     const NActors::TActorId TabletActorId;
     std::shared_ptr<TGCInfo> GCInfo = std::make_shared<TGCInfo>();
 
@@ -35,6 +34,12 @@ protected:
 
 public:
     TOperator(const TString& storageId, const NColumnShard::TColumnShard& shard, const std::shared_ptr<NDataSharing::TStorageSharedBlobsManager>& storageSharedBlobsManager);
+
+    virtual TTabletsByBlob GetBlobsToDelete() const override {
+        auto result = GCInfo->GetBlobsToDelete();
+        result.Add(GCInfo->GetBlobsToDeleteInFuture());
+        return result;
+    }
 
     virtual std::shared_ptr<IBlobInUseTracker> GetBlobsTracker() const override {
         return GCInfo;

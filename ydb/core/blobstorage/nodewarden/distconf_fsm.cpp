@@ -5,9 +5,12 @@ namespace NKikimr::NStorage {
     struct TExConfigError : yexception {};
 
     void TDistributedConfigKeeper::CheckRootNodeStatus() {
-        if (Binding) {
-            Y_ABORT_UNLESS(!Scepter);
-            Y_ABORT_UNLESS(RootState == ERootState::INITIAL); // we can't pretend to be root while we are bound to someone
+        Y_VERIFY_S(Binding ? RootState == ERootState::INITIAL && !Scepter :
+            RootState == ERootState::INITIAL || RootState == ERootState::ERROR_TIMEOUT ? !Scepter :
+            static_cast<bool>(Scepter), "Binding# " << (Binding ? Binding->ToString() : "<null>")
+            << " RootState# " << RootState << " Scepter# " << (Scepter ? ToString(Scepter->Id) : "<null>"));
+
+        if (Binding || RootState != ERootState::INITIAL) {
             return;
         }
 
@@ -17,7 +20,17 @@ namespace NKikimr::NStorage {
             Y_ABORT_UNLESS(!Scepter);
             Scepter = std::make_shared<TScepter>();
 
-            STLOG(PRI_DEBUG, BS_NODE, NWDC19, "Starting config collection");
+            auto makeAllBoundNodes = [&] {
+                TStringStream s;
+                const char *sep = "{";
+                for (const auto& [nodeId, _] : AllBoundNodes) {
+                    s << std::exchange(sep, " ") << nodeId;
+                }
+                s << '}';
+                return s.Str();
+            };
+            STLOG(PRI_DEBUG, BS_NODE, NWDC19, "Starting config collection", (Scepter, Scepter->Id),
+                (AllBoundNodes, makeAllBoundNodes()));
             RootState = ERootState::COLLECT_CONFIG;
             TEvScatter task;
             task.MutableCollectConfigs();
@@ -31,13 +44,16 @@ namespace NKikimr::NStorage {
         STLOG(PRI_ERROR, BS_NODE, NWDC38, "SwitchToError", (RootState, RootState), (Reason, reason));
         Scepter.reset();
         RootState = ERootState::ERROR_TIMEOUT;
-        TActivationContext::Schedule(ErrorTimeout, new IEventHandle(TEvPrivate::EvErrorTimeout, 0, SelfId(), {}, nullptr, 0));
+        ErrorReason = reason;
+        const TDuration timeout = TDuration::FromValue(ErrorTimeout.GetValue() * (25 + RandomNumber(51u)) / 50);
+        TActivationContext::Schedule(timeout, new IEventHandle(TEvPrivate::EvErrorTimeout, 0, SelfId(), {}, nullptr, 0));
     }
 
     void TDistributedConfigKeeper::HandleErrorTimeout() {
         STLOG(PRI_DEBUG, BS_NODE, NWDC20, "Error timeout hit");
         Y_ABORT_UNLESS(!Scepter);
         RootState = ERootState::INITIAL;
+        ErrorReason = {};
         IssueNextBindRequest();
     }
 
@@ -131,7 +147,7 @@ namespace NKikimr::NStorage {
 
         struct TDiskConfigInfo {
             NKikimrBlobStorage::TStorageConfig Config;
-            THashSet<std::tuple<TNodeIdentifier, TString>> HavingDisks;
+            THashSet<std::tuple<TNodeIdentifier, TString, std::optional<ui64>>> HavingDisks;
         };
         THashMap<TStorageConfigMeta, TDiskConfigInfo> committedConfigs;
         THashMap<TStorageConfigMeta, TDiskConfigInfo> proposedConfigs;
@@ -146,7 +162,7 @@ namespace NKikimr::NStorage {
                     r.Config.CopyFrom(config.GetConfig());
                 }
                 for (const auto& disk : config.GetDisks()) {
-                    r.HavingDisks.emplace(disk.GetNodeId(), disk.GetPath());
+                    r.HavingDisks.emplace(disk.GetNodeId(), disk.GetPath(), disk.HasGuid() ? std::make_optional(disk.GetGuid()) : std::nullopt);
                 }
             }
         }
@@ -155,15 +171,12 @@ namespace NKikimr::NStorage {
                 TDiskConfigInfo& r = it->second;
 
                 auto generateSuccessful = [&](auto&& callback) {
-                    for (const auto& [node, path] : r.HavingDisks) {
-                        callback(node, path);
+                    for (const auto& [node, path, guid] : r.HavingDisks) {
+                        callback(node, path, guid);
                     }
                 };
 
-                const bool quorum = HasDiskQuorum(r.Config, generateSuccessful) &&
-                    (!r.Config.HasPrevConfig() || HasDiskQuorum(r.Config.GetPrevConfig(), generateSuccessful));
-
-                if (quorum) {
+                if (HasConfigQuorum(r.Config, generateSuccessful, *Cfg)) {
                     ++it;
                 } else {
                     set->erase(it++);
@@ -214,6 +227,7 @@ namespace NKikimr::NStorage {
             if (propositionBase) {
                 configToPropose->SetGeneration(configToPropose->GetGeneration() + 1);
                 configToPropose->MutablePrevConfig()->CopyFrom(*propositionBase);
+                configToPropose->MutablePrevConfig()->ClearPrevConfig();
             }
             UpdateFingerprint(configToPropose);
 
@@ -232,20 +246,20 @@ namespace NKikimr::NStorage {
         auto generateSuccessful = [&](auto&& callback) {
             for (const auto& item : res->GetStatus()) {
                 const TNodeIdentifier node(item.GetNodeId());
-                for (const TString& path : item.GetSuccessfulDrives()) {
-                    callback(node, path);
+                for (const auto& drive : item.GetSuccessfulDrives()) {
+                    callback(node, drive.GetPath(), drive.HasGuid() ? std::make_optional(drive.GetGuid()) : std::nullopt);
                 }
             }
         };
 
-        if (HasDiskQuorum(CurrentProposedStorageConfig, generateSuccessful) &&
-                HasDiskQuorum(CurrentProposedStorageConfig.GetPrevConfig(), generateSuccessful)) {
+        if (HasConfigQuorum(CurrentProposedStorageConfig, generateSuccessful, *Cfg)) {
             // apply configuration and spread it
             ApplyStorageConfig(CurrentProposedStorageConfig);
             for (const auto& [nodeId, info] : DirectBoundNodes) {
                 SendEvent(nodeId, info, std::make_unique<TEvNodeConfigReversePush>(GetRootNodeId(), &StorageConfig.value()));
             }
             CurrentProposedStorageConfig.Clear();
+            RootState = ERootState::RELAX;
         } else {
             CurrentProposedStorageConfig.Clear();
             SwitchToError("no quorum for ProposedStorageConfig");
@@ -489,13 +503,33 @@ namespace NKikimr::NStorage {
                             auto *status = task.Response.MutableProposeStorageConfig()->AddStatus();
                             SelfNode.Serialize(status->MutableNodeId());
                             status->SetStatus(TEvGather::TProposeStorageConfig::ACCEPTED);
-                            for (const auto& [path, ok] : msg.StatusPerPath) {
+                            for (const auto& [path, ok, guid] : msg.StatusPerPath) {
                                 if (ok) {
-                                    status->AddSuccessfulDrives(path);
+                                    auto *drive = status->AddSuccessfulDrives();
+                                    drive->SetPath(path);
+                                    if (guid) {
+                                        drive->SetGuid(*guid);
+                                    }
                                 }
                             }
 
-                            FinishAsyncOperation(cookie);
+                            if (StorageConfig && StorageConfig->GetGeneration()) {
+                                Y_ABORT_UNLESS(ProposedStorageConfig);
+                                
+                                // TODO(alexvru): check if this is valid
+                                Y_DEBUG_ABORT_UNLESS(StorageConfig->GetGeneration() < ProposedStorageConfig->GetGeneration() || (
+                                    StorageConfig->GetGeneration() == ProposedStorageConfig->GetGeneration() &&
+                                    StorageConfig->GetFingerprint() == ProposedStorageConfig->GetFingerprint()));
+
+                                const TActorId wardenId = MakeBlobStorageNodeWardenID(SelfId().NodeId());
+                                auto ev = std::make_unique<TEvNodeWardenStorageConfig>(*StorageConfig,
+                                    StorageConfig->GetGeneration() < ProposedStorageConfig->GetGeneration()
+                                        ? &ProposedStorageConfig.value()
+                                        : nullptr);
+                                Send(wardenId, ev.release(), 0, cookie);
+                            } else {
+                                FinishAsyncOperation(cookie);
+                            }
                         }
                     });
 

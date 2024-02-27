@@ -58,4 +58,13 @@ bool IStoragesManager::LoadIdempotency(NTable::TDatabase& database) {
     return true;
 }
 
+bool IStoragesManager::HasBlobsToDelete() const {
+    for (auto&& i : Constructed) {
+        if (!i.second->GetBlobsToDelete().IsEmpty()) {
+            return true;
+        }
+    }
+    return false;
+}
+
 }

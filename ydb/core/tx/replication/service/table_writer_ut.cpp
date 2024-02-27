@@ -12,6 +12,8 @@
 namespace NKikimr::NReplication::NService {
 
 Y_UNIT_TEST_SUITE(LocalTableWriter) {
+    using namespace NTestHelpers;
+
     Y_UNIT_TEST(WriteTable) {
         TEnv env;
         env.GetRuntime().SetLogPriority(NKikimrServices::REPLICATION_SERVICE, NLog::PRI_DEBUG);

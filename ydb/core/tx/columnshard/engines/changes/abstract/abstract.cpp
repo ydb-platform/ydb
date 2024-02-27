@@ -35,31 +35,24 @@ TConclusionStatus TColumnEngineChanges::ConstructBlobs(TConstructionContext& con
     return result;
 }
 
-bool TColumnEngineChanges::ApplyChanges(TColumnEngineForLogs& self, TApplyChangesContext& context) {
-    Y_ABORT_UNLESS(Stage == EStage::Compiled);
-    Y_ABORT_UNLESS(DoApplyChanges(self, context));
-    Stage = EStage::Applied;
-    return true;
-}
-
-void TColumnEngineChanges::WriteIndex(NColumnShard::TColumnShard& self, TWriteIndexContext& context) {
+void TColumnEngineChanges::WriteIndexOnExecute(NColumnShard::TColumnShard* self, TWriteIndexContext& context) {
     Y_ABORT_UNLESS(Stage != EStage::Aborted);
-    if ((ui32)Stage >= (ui32)EStage::Written) {
-        return;
-    }
-    Y_ABORT_UNLESS(Stage == EStage::Applied);
+    Y_ABORT_UNLESS(Stage <= EStage::Written);
+    Y_ABORT_UNLESS(Stage >= EStage::Compiled);
 
-    DoWriteIndex(self, context);
+    DoWriteIndexOnExecute(self, context);
     Stage = EStage::Written;
 }
 
-void TColumnEngineChanges::WriteIndexComplete(NColumnShard::TColumnShard& self, TWriteIndexCompleteContext& context) {
-    Y_ABORT_UNLESS(Stage == EStage::Written);
+void TColumnEngineChanges::WriteIndexOnComplete(NColumnShard::TColumnShard* self, TWriteIndexCompleteContext& context) {
+    Y_ABORT_UNLESS(Stage == EStage::Written || !self);
     Stage = EStage::Finished;
     AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("event", "WriteIndexComplete")("type", TypeString())("success", context.FinishedSuccessfully);
-    DoWriteIndexComplete(self, context);
-    OnFinish(self, context);
-    self.IncCounter(GetCounterIndex(context.FinishedSuccessfully));
+    DoWriteIndexOnComplete(self, context);
+    if (self) {
+        OnFinish(*self, context);
+        self->IncCounter(GetCounterIndex(context.FinishedSuccessfully));
+    }
 
 }
 
@@ -114,10 +107,10 @@ void TColumnEngineChanges::OnFinish(NColumnShard::TColumnShard& self, TChangesFi
     DoOnFinish(self, context);
 }
 
-TWriteIndexContext::TWriteIndexContext(NTabletFlatExecutor::TTransactionContext& txc, IDbWrapper& dbWrapper)
-    : Txc(txc)
-    , BlobManagerDb(std::make_shared<TBlobManagerDb>(txc.DB))
+TWriteIndexContext::TWriteIndexContext(NTable::TDatabase* db, IDbWrapper& dbWrapper, TColumnEngineForLogs& engineLogs)
+    : DB(db)
     , DBWrapper(dbWrapper)
+    , EngineLogs(engineLogs)
 {
 
 }

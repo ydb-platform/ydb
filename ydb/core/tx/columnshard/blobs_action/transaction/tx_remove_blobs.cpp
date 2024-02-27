@@ -14,7 +14,7 @@ void TTxRemoveSharedBlobs::Complete(const TActorContext& ctx) {
     NActors::TLogContextGuard logGuard = NActors::TLogContextBuilder::Build(NKikimrServices::TX_COLUMNSHARD)("tablet_id", Self->TabletID())("tx_state", "complete");
     RemoveAction->OnCompleteTxAfterRemoving(*Self, true);
 
-    ctx.Send(InitiatorActorId, new NOlap::NBlobOperations::NEvents::TEvDeleteSharedBlobsFinished());
+    ctx.Send(InitiatorActorId, new NOlap::NBlobOperations::NEvents::TEvDeleteSharedBlobsFinished((NOlap::TTabletId)Self->TabletID()));
 }
 
 }

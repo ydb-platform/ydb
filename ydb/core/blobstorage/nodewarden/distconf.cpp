@@ -49,10 +49,11 @@ namespace NKikimr::NStorage {
     bool TDistributedConfigKeeper::ApplyStorageConfig(const NKikimrBlobStorage::TStorageConfig& config) {
         if (!StorageConfig || StorageConfig->GetGeneration() < config.GetGeneration()) {
             StorageConfig.emplace(config);
-            Send(MakeBlobStorageNodeWardenID(SelfId().NodeId()), new TEvNodeWardenStorageConfig(*StorageConfig));
             if (ProposedStorageConfig && ProposedStorageConfig->GetGeneration() <= StorageConfig->GetGeneration()) {
                 ProposedStorageConfig.reset();
             }
+            Send(MakeBlobStorageNodeWardenID(SelfId().NodeId()), new TEvNodeWardenStorageConfig(*StorageConfig,
+                ProposedStorageConfig ? &ProposedStorageConfig.value() : nullptr));
             PersistConfig({});
             return true;
         } else if (StorageConfig->GetGeneration() && StorageConfig->GetGeneration() == config.GetGeneration() &&
@@ -60,6 +61,12 @@ namespace NKikimr::NStorage {
             // TODO: fingerprint mismatch, abort operation
         }
         return false;
+    }
+
+    void TDistributedConfigKeeper::HandleConfigConfirm(STATEFN_SIG) {
+        if (ev->Cookie) {
+            FinishAsyncOperation(ev->Cookie);
+        }
     }
 
     void TDistributedConfigKeeper::SendEvent(ui32 nodeId, ui64 cookie, TActorId sessionId, std::unique_ptr<IEventBase> ev) {
@@ -204,6 +211,7 @@ namespace NKikimr::NStorage {
             cFunc(TEvPrivate::EvErrorTimeout, HandleErrorTimeout);
             hFunc(TEvPrivate::TEvStorageConfigLoaded, Handle);
             hFunc(TEvPrivate::TEvStorageConfigStored, Handle);
+            fFunc(TEvBlobStorage::EvNodeWardenStorageConfigConfirm, HandleConfigConfirm);
             hFunc(NMon::TEvHttpInfo, Handle);
             fFunc(TEvents::TSystem::Gone, HandleGone);
             cFunc(TEvents::TSystem::Wakeup, HandleWakeup);

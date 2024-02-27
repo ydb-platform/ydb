@@ -2319,9 +2319,9 @@
     ],
     "test.test[pg-tpcds-q16-default.txt-Debug]": [
         {
-            "checksum": "5f7bcf588f17a8bec04edc7e70ca6509",
-            "size": 3305,
-            "uri": "https://{canondata_backend}/1936997/ad7538cf8edf8e81865f7eee42c2de851daf1211/resource.tar.gz#test.test_pg-tpcds-q16-default.txt-Debug_/opt.yql_patched"
+            "checksum": "5248ac897649d8227ebdd9e281cfa540",
+            "size": 3117,
+            "uri": "https://{canondata_backend}/1773845/461e7989a09a65be78c660f6a49d876212096306/resource.tar.gz#test.test_pg-tpcds-q16-default.txt-Debug_/opt.yql_patched"
         }
     ],
     "test.test[pg-tpcds-q16-default.txt-Plan]": [
@@ -2385,9 +2385,9 @@
     ],
     "test.test[pg-tpcds-q78-default.txt-Debug]": [
         {
-            "checksum": "675bb53485999ee028e10065a1ea4c8e",
-            "size": 1726,
-            "uri": "https://{canondata_backend}/1936997/ad7538cf8edf8e81865f7eee42c2de851daf1211/resource.tar.gz#test.test_pg-tpcds-q78-default.txt-Debug_/opt.yql_patched"
+            "checksum": "b9a70464875d7439e6cddd96dd16babc",
+            "size": 1257,
+            "uri": "https://{canondata_backend}/1773845/461e7989a09a65be78c660f6a49d876212096306/resource.tar.gz#test.test_pg-tpcds-q78-default.txt-Debug_/opt.yql_patched"
         }
     ],
     "test.test[pg-tpcds-q78-default.txt-Plan]": [
@@ -2407,9 +2407,9 @@
     ],
     "test.test[pg-tpcds-q85-default.txt-Debug]": [
         {
-            "checksum": "8e6960f3af5cbb71740ec70cf5265017",
-            "size": 1358,
-            "uri": "https://{canondata_backend}/1871002/616290c68f4557542b5fbf174765825f6519b81f/resource.tar.gz#test.test_pg-tpcds-q85-default.txt-Debug_/opt.yql_patched"
+            "checksum": "74984502a5242e562f466d4b2e3e97f4",
+            "size": 740,
+            "uri": "https://{canondata_backend}/1773845/461e7989a09a65be78c660f6a49d876212096306/resource.tar.gz#test.test_pg-tpcds-q85-default.txt-Debug_/opt.yql_patched"
         }
     ],
     "test.test[pg-tpcds-q85-default.txt-Plan]": [

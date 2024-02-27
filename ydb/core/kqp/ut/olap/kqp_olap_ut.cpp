@@ -252,6 +252,15 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
             SetShardingMethod("HASH_FUNCTION_CONSISTENCY_64");
         }
 
+        TString GetQueryResult(const TString& request) const {
+                auto db = KikimrRunner.GetQueryClient();
+                auto result = db.ExecuteQuery(request, NYdb::NQuery::TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+                UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+                const TString output = FormatResultSetYson(result.GetResultSet(0));
+                Cout << output << Endl;
+                return output;
+        }
+
         void PrintCount() {
             const TString selectQuery = "SELECT COUNT(*), MAX(pk_int), MIN(pk_int) FROM `" + TablePath + "`";
 
@@ -386,7 +395,7 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
             TBase::SendDataViaActorSystem(TablePath, batch);
         }
 
-        void FillPKOnly(const ui32 pkKff = 0, const ui32 numRows = 800000) const {
+        void FillPKOnly(const double pkKff = 0, const ui32 numRows = 800000) const {
             std::vector<NArrow::NConstruction::IArrayBuilder::TPtr> builders;
             builders.emplace_back(std::make_shared<NArrow::NConstruction::TSimpleArrayConstructor<NArrow::NConstruction::TIntSeqFiller<arrow::Int64Type>>>("pk_int", numRows * pkKff));
             NArrow::NConstruction::TRecordBatchConstructor batchBuilder(builders);
@@ -3729,8 +3738,8 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
     Y_UNIT_TEST(StatsSysViewEnumStringBytes) {
         ui64 rawBytesPK1;
         ui64 bytesPK1;
-        auto csController = NYDBTest::TControllers::RegisterCSControllerGuard<NYDBTest::NColumnShard::TController>();
         {
+            auto csController = NYDBTest::TControllers::RegisterCSControllerGuard<NYDBTest::NColumnShard::TController>();
             auto settings = TKikimrSettings()
                 .SetWithSampleTables(false);
             TKikimrRunner kikimr(settings);
@@ -3741,6 +3750,7 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
             helper.GetVolumes(rawBytesPK1, bytesPK1, false);
         }
 
+        auto csController = NYDBTest::TControllers::RegisterCSControllerGuard<NYDBTest::NColumnShard::TController>();
         ui64 rawBytesUnpack1PK = 0;
         ui64 bytesUnpack1PK = 0;
         ui64 rawBytesPackAndUnpack2PK;
@@ -3871,129 +3881,203 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
         }
     };
 
-    class TSharingActor {
+    class TSharingDataTestCase {
     private:
-        TKikimrRunner& Runner;
+        const ui32 ShardsCount;
+        TKikimrRunner& Kikimr;
+        TTypedLocalHelper Helper;
+        NYDBTest::TControllers::TGuard<NYDBTest::NColumnShard::TController> Controller;
+        std::vector<ui64> ShardIds;
+        std::vector<ui64> PathIds;
+        YDB_ACCESSOR(bool, RebootTablet, false);
     public:
-        TSharingActor(TKikimrRunner& runner)
-            : Runner(runner)
-        {
+        const TTypedLocalHelper& GetHelper() const {
+            return Helper;
         }
 
-        void Execute(const ui64 destination, const std::vector<ui64>& sources, const bool move, const NOlap::TSnapshot& snapshot, const std::set<ui64>& pathIds) {
+        void AddRecords(const ui32 recordsCount, const double kff = 0) {
+            Helper.FillPKOnly(kff, recordsCount);
+        }
+
+        TSharingDataTestCase(const ui32 shardsCount, TKikimrRunner& kikimr)
+            : ShardsCount(shardsCount)
+            , Kikimr(kikimr)
+            , Helper("", Kikimr, "olapTable", "olapStore12")
+            , Controller(NYDBTest::TControllers::RegisterCSControllerGuard<NYDBTest::NColumnShard::TController>())
+        {
+            Controller->SetCompactionControl(NYDBTest::EOptimizerCompactionWeightControl::Disable);
+            Controller->SetExpectedShardsCount(ShardsCount);
+            Controller->SetPeriodicWakeupActivationPeriod(TDuration::Seconds(1));
+            Controller->SetReadTimeoutClean(TDuration::Seconds(1));
+
+            Tests::NCommon::TLoggerInit(Kikimr).SetComponents({NKikimrServices::TX_COLUMNSHARD}, "CS").Initialize();
+
+            Helper.CreateTestOlapTable(ShardsCount, ShardsCount);
+            ShardIds = Controller->GetShardActualIds();
+            AFL_VERIFY(ShardIds.size() == ShardsCount)("count", ShardIds.size())("ids", JoinSeq(",", ShardIds));
+            std::set<ui64> pathIdsSet;
+            for (auto&& i : ShardIds) {
+                auto pathIds = Controller->GetPathIds(i);
+                pathIdsSet.insert(pathIds.begin(), pathIds.end());
+            }
+            PathIds = std::vector<ui64>(pathIdsSet.begin(), pathIdsSet.end());
+            AFL_VERIFY(PathIds.size() == 1)("count", PathIds.size())("ids", JoinSeq(",", PathIds));
+        }
+
+        void WaitNormalization() {
+            Controller->SetCompactionControl(NYDBTest::EOptimizerCompactionWeightControl::Force);
+            const auto start = TInstant::Now();
+            while (!Controller->IsTrivialLinks() && TInstant::Now() - start < TDuration::Seconds(30)) {
+                Cerr << "WAIT_TRIVIAL_LINKS..." << Endl;
+                Sleep(TDuration::Seconds(1));
+            }
+            AFL_VERIFY(Controller->IsTrivialLinks());
+            Controller->CheckInvariants();
+        }
+
+        void Execute(const ui64 destinationIdx, const std::vector<ui64>& sourceIdxs, const bool move, const NOlap::TSnapshot& snapshot, const std::set<ui64>& pathIdxs) {
+            AFL_VERIFY(destinationIdx < ShardIds.size());
+            const ui64 destination = ShardIds[destinationIdx];
+            std::vector<ui64> sources;
+            for (auto&& i : sourceIdxs) {
+                AFL_VERIFY(i < ShardIds.size());
+                sources.emplace_back(ShardIds[i]);
+            }
+            std::set<ui64> pathIds;
+            for (auto&& i : pathIdxs) {
+                AFL_VERIFY(i < PathIds.size());
+                AFL_VERIFY(pathIds.emplace(PathIds[i]).second);
+            }
             Cerr << "SHARING: " << JoinSeq(",", sources) << "->" << destination << Endl;
             THashMap<ui64, ui64> pathIdsRemap;
             for (auto&& i : pathIds) {
                 pathIdsRemap.emplace(i, i);
             }
             THashSet<NOlap::TTabletId> sourceTablets;
-            for (auto&& i : sources) { 
+            for (auto&& i : sources) {
                 AFL_VERIFY(sourceTablets.emplace((NOlap::TTabletId)i).second);
             }
             const TString sessionId = TGUID::CreateTimebased().AsUuidString();
             NOlap::NDataSharing::TTransferContext transferContext((NOlap::TTabletId)destination, sourceTablets, snapshot, move);
             NOlap::NDataSharing::TDestinationSession session(std::make_shared<TTestController>(), pathIdsRemap, sessionId, transferContext);
-            Runner.GetTestServer().GetRuntime()->Send(MakePipePeNodeCacheID(false), NActors::TActorId(), new TEvPipeCache::TEvForward(
+            Kikimr.GetTestServer().GetRuntime()->Send(MakePipePeNodeCacheID(false), NActors::TActorId(), new TEvPipeCache::TEvForward(
                 new NOlap::NDataSharing::NEvents::TEvProposeFromInitiator(session), destination, false));
-            while (!CSTransferStatus->GetProposed()) {
-                Sleep(TDuration::Seconds(1));
-                Cerr << "WAIT_PROPOSING..." << Endl;
+            {
+                const TInstant start = TInstant::Now();
+                while (!CSTransferStatus->GetProposed() && TInstant::Now() - start < TDuration::Seconds(10)) {
+                    Sleep(TDuration::Seconds(1));
+                    Cerr << "WAIT_PROPOSING..." << Endl;
+                }
+                AFL_VERIFY(CSTransferStatus->GetProposed());
             }
-            Runner.GetTestServer().GetRuntime()->Send(MakePipePeNodeCacheID(false), NActors::TActorId(), new TEvPipeCache::TEvForward(
-                new NOlap::NDataSharing::NEvents::TEvConfirmFromInitiator(sessionId), destination, false));
-            while (!CSTransferStatus->GetConfirmed()) {
-                Sleep(TDuration::Seconds(1));
-                Cerr << "WAIT_CONFIRMED..." << Endl;
+            if (RebootTablet) {
+                Kikimr.GetTestServer().GetRuntime()->Send(MakePipePeNodeCacheID(false), NActors::TActorId(), new TEvPipeCache::TEvForward(
+                    new TEvents::TEvPoisonPill(), destination, false));
             }
-            while (!CSTransferStatus->GetFinished()) {
-                Sleep(TDuration::Seconds(1));
-                Cerr << "WAIT_FINISHED..." << Endl;
+            {
+                const TInstant start = TInstant::Now();
+                while (!CSTransferStatus->GetConfirmed() && TInstant::Now() - start < TDuration::Seconds(10)) {
+                    Kikimr.GetTestServer().GetRuntime()->Send(MakePipePeNodeCacheID(false), NActors::TActorId(), new TEvPipeCache::TEvForward(
+                        new NOlap::NDataSharing::NEvents::TEvConfirmFromInitiator(sessionId), destination, false));
+                    Sleep(TDuration::Seconds(1));
+                    Cerr << "WAIT_CONFIRMED..." << Endl;
+                }
+                AFL_VERIFY(CSTransferStatus->GetConfirmed());
+            }
+            if (RebootTablet) {
+                Kikimr.GetTestServer().GetRuntime()->Send(MakePipePeNodeCacheID(false), NActors::TActorId(), new TEvPipeCache::TEvForward(
+                    new TEvents::TEvPoisonPill(), destination, false));
+                for (auto&& i : sources) {
+                    Kikimr.GetTestServer().GetRuntime()->Send(MakePipePeNodeCacheID(false), NActors::TActorId(), new TEvPipeCache::TEvForward(
+                        new TEvents::TEvPoisonPill(), i, false));
+                }
+            }
+            {
+                const TInstant start = TInstant::Now();
+                while (!CSTransferStatus->GetFinished() && TInstant::Now() - start < TDuration::Seconds(10)) {
+                    Sleep(TDuration::Seconds(1));
+                    Cerr << "WAIT_FINISHED..." << Endl;
+                }
+                AFL_VERIFY(CSTransferStatus->GetFinished());
             }
             CSTransferStatus->Reset();
+            AFL_VERIFY(!Controller->IsTrivialLinks());
         }
     };
 
     Y_UNIT_TEST(BlobsSharingSplit1_1) {
-        auto csController = NYDBTest::TControllers::RegisterCSControllerGuard<NYDBTest::NColumnShard::TController>();
-
         auto settings = TKikimrSettings().SetWithSampleTables(false);
         TKikimrRunner kikimr(settings);
-        Tests::NCommon::TLoggerInit(kikimr).Initialize();
-        TTypedLocalHelper helper("", kikimr, "olapTable", "olapStore12");
-        helper.CreateTestOlapTable(4, 4);
-        helper.FillPKOnly(0, 800000);
-
-        auto shardIds = csController->GetShardActualIds();
-        AFL_VERIFY(shardIds.size() == 4)("count", shardIds.size())("ids", JoinSeq(",", shardIds));
-        auto pathIds = csController->GetPathIds(shardIds[0]);
-        AFL_VERIFY(pathIds.size() == 1)("count", pathIds.size())("ids", JoinSeq(",", pathIds));
+        TSharingDataTestCase tester(4, kikimr);
+        tester.AddRecords(800000);
         Sleep(TDuration::Seconds(1));
-        TSharingActor(kikimr).Execute(shardIds[0], {shardIds[1]}, false, NOlap::TSnapshot(TInstant::Now().MilliSeconds(), 1232123), {pathIds[0]});
+        tester.Execute(0, {1}, false, NOlap::TSnapshot(TInstant::Now().MilliSeconds(), 1232123), {0});
+    }
+
+    Y_UNIT_TEST(BlobsSharingSplit1_1_clean) {
+        auto settings = TKikimrSettings().SetWithSampleTables(false);
+        TKikimrRunner kikimr(settings);
+        TSharingDataTestCase tester(2, kikimr);
+        tester.AddRecords(80000);
+        CompareYson(tester.GetHelper().GetQueryResult("SELECT COUNT(*) FROM `/Root/olapStore12/olapTable`"), R"([[80000u;]])");
+        Sleep(TDuration::Seconds(1));
+        tester.Execute(0, {1}, false, NOlap::TSnapshot(TInstant::Now().MilliSeconds(), 1232123), {0});
+        CompareYson(tester.GetHelper().GetQueryResult("SELECT COUNT(*) FROM `/Root/olapStore12/olapTable`"), R"([[119928u;]])");
+        tester.AddRecords(80000, 0.8);
+        tester.WaitNormalization();
+        CompareYson(tester.GetHelper().GetQueryResult("SELECT COUNT(*) FROM `/Root/olapStore12/olapTable`"), R"([[183928u;]])");
+    }
+
+    Y_UNIT_TEST(BlobsSharingSplit1_1_clean_with_restarts) {
+        auto settings = TKikimrSettings().SetWithSampleTables(false);
+        TKikimrRunner kikimr(settings);
+        TSharingDataTestCase tester(2, kikimr);
+        tester.SetRebootTablet(true);
+        tester.AddRecords(80000);
+        CompareYson(tester.GetHelper().GetQueryResult("SELECT COUNT(*) FROM `/Root/olapStore12/olapTable`"), R"([[80000u;]])");
+        Sleep(TDuration::Seconds(1));
+        tester.Execute(0, {1}, false, NOlap::TSnapshot(TInstant::Now().MilliSeconds(), 1232123), {0});
+        CompareYson(tester.GetHelper().GetQueryResult("SELECT COUNT(*) FROM `/Root/olapStore12/olapTable`"), R"([[119928u;]])");
+        tester.AddRecords(80000, 0.8);
+        tester.WaitNormalization();
+        CompareYson(tester.GetHelper().GetQueryResult("SELECT COUNT(*) FROM `/Root/olapStore12/olapTable`"), R"([[183928u;]])");
     }
 
     Y_UNIT_TEST(BlobsSharingSplit3_1) {
-        auto csController = NYDBTest::TControllers::RegisterCSControllerGuard<NYDBTest::NColumnShard::TController>();
-
-        auto settings = TKikimrSettings()
-            .SetWithSampleTables(false);
+        auto settings = TKikimrSettings().SetWithSampleTables(false);
         TKikimrRunner kikimr(settings);
-        Tests::NCommon::TLoggerInit(kikimr).Initialize();
-        TTypedLocalHelper helper("", kikimr, "olapTable", "olapStore12");
-        helper.CreateTestOlapTable(4, 4);
-        helper.FillPKOnly(0, 800000);
-
-        auto shardIds = csController->GetShardActualIds();
-        AFL_VERIFY(shardIds.size() == 4)("count", shardIds.size())("ids", JoinSeq(",", shardIds));
-        auto pathIds = csController->GetPathIds(shardIds[0]);
-        AFL_VERIFY(pathIds.size() == 1)("count", pathIds.size())("ids", JoinSeq(",", pathIds));
+        TSharingDataTestCase tester(4, kikimr);
+        tester.AddRecords(800000);
         Sleep(TDuration::Seconds(1));
-        TSharingActor(kikimr).Execute(shardIds[0], {shardIds[1], shardIds[2], shardIds[3]}, false, NOlap::TSnapshot(TInstant::Now().MilliSeconds(), 1232123), {pathIds[0]});
+        tester.Execute(0, {1, 2, 3}, false, NOlap::TSnapshot(TInstant::Now().MilliSeconds(), 1232123), {0});
     }
 
     Y_UNIT_TEST(BlobsSharingSplit1_3_1) {
-        auto csController = NYDBTest::TControllers::RegisterCSControllerGuard<NYDBTest::NColumnShard::TController>();
-
-        auto settings = TKikimrSettings()
-            .SetWithSampleTables(false);
+        auto settings = TKikimrSettings().SetWithSampleTables(false);
         TKikimrRunner kikimr(settings);
-        Tests::NCommon::TLoggerInit(kikimr).Initialize();
-        TTypedLocalHelper helper("", kikimr, "olapTable", "olapStore12");
-        helper.CreateTestOlapTable(4, 4);
-        helper.FillPKOnly(0, 800000);
-
-        auto shardIds = csController->GetShardActualIds();
-        AFL_VERIFY(shardIds.size() == 4)("count", shardIds.size())("ids", JoinSeq(",", shardIds));
-        auto pathIds = csController->GetPathIds(shardIds[0]);
-        AFL_VERIFY(pathIds.size() == 1)("count", pathIds.size())("ids", JoinSeq(",", pathIds));
+        TSharingDataTestCase tester(4, kikimr);
+        tester.AddRecords(800000);
         Sleep(TDuration::Seconds(1));
-        TSharingActor(kikimr).Execute(shardIds[1], {shardIds[0]}, false, NOlap::TSnapshot(TInstant::Now().MilliSeconds(), 1232123), {pathIds[0]});
-        TSharingActor(kikimr).Execute(shardIds[2], {shardIds[0]}, false, NOlap::TSnapshot(TInstant::Now().MilliSeconds(), 1232123), {pathIds[0]});
-        TSharingActor(kikimr).Execute(shardIds[3], {shardIds[0]}, false, NOlap::TSnapshot(TInstant::Now().MilliSeconds(), 1232123), {pathIds[0]});
-        TSharingActor(kikimr).Execute(shardIds[0], {shardIds[1], shardIds[2], shardIds[3]}, true, NOlap::TSnapshot(TInstant::Now().MilliSeconds(), 1232123), {pathIds[0]});
+        tester.Execute(1, {0}, false, NOlap::TSnapshot(TInstant::Now().MilliSeconds(), 1232123), {0});
+        tester.Execute(2, {0}, false, NOlap::TSnapshot(TInstant::Now().MilliSeconds(), 1232123), {0});
+        tester.Execute(3, {0}, false, NOlap::TSnapshot(TInstant::Now().MilliSeconds(), 1232123), {0});
+        tester.Execute(0, {1, 2, 3}, false, NOlap::TSnapshot(TInstant::Now().MilliSeconds(), 1232123), {0});
     }
 
-    Y_UNIT_TEST(BlobsSharingSplit1_3_2_1) {
-        auto csController = NYDBTest::TControllers::RegisterCSControllerGuard<NYDBTest::NColumnShard::TController>();
-
-        auto settings = TKikimrSettings()
-            .SetWithSampleTables(false);
+    Y_UNIT_TEST(BlobsSharingSplit1_3_2_1_clean) {
+        auto settings = TKikimrSettings().SetWithSampleTables(false);
         TKikimrRunner kikimr(settings);
-        Tests::NCommon::TLoggerInit(kikimr).Initialize();
-        TTypedLocalHelper helper("", kikimr, "olapTable", "olapStore12");
-        helper.CreateTestOlapTable(4, 4);
-        helper.FillPKOnly(0, 800000);
-
-        auto shardIds = csController->GetShardActualIds();
-        AFL_VERIFY(shardIds.size() == 4)("count", shardIds.size())("ids", JoinSeq(",", shardIds));
-        auto pathIds = csController->GetPathIds(shardIds[0]);
-        AFL_VERIFY(pathIds.size() == 1)("count", pathIds.size())("ids", JoinSeq(",", pathIds));
+        TSharingDataTestCase tester(4, kikimr);
+        tester.AddRecords(800000);
         Sleep(TDuration::Seconds(1));
-        TSharingActor(kikimr).Execute(shardIds[1], {shardIds[0]}, false, NOlap::TSnapshot(TInstant::Now().MilliSeconds(), 1232123), {pathIds[0]});
-        TSharingActor(kikimr).Execute(shardIds[2], {shardIds[0]}, false, NOlap::TSnapshot(TInstant::Now().MilliSeconds(), 1232123), {pathIds[0]});
-        TSharingActor(kikimr).Execute(shardIds[3], {shardIds[0]}, false, NOlap::TSnapshot(TInstant::Now().MilliSeconds(), 1232123), {pathIds[0]});
-        helper.FillPKOnly(1, 800000);
-        TSharingActor(kikimr).Execute(shardIds[3], {shardIds[2]}, false, NOlap::TSnapshot(TInstant::Now().MilliSeconds(), 1232123), {pathIds[0]});
-        TSharingActor(kikimr).Execute(shardIds[0], {shardIds[1], shardIds[2]}, true, NOlap::TSnapshot(TInstant::Now().MilliSeconds(), 1232123), {pathIds[0]});
+        tester.Execute(1, {0}, false, NOlap::TSnapshot(TInstant::Now().MilliSeconds(), 1232123), {0});
+        tester.Execute(2, {0}, false, NOlap::TSnapshot(TInstant::Now().MilliSeconds(), 1232123), {0});
+        tester.Execute(3, {0}, false, NOlap::TSnapshot(TInstant::Now().MilliSeconds(), 1232123), {0});
+        tester.AddRecords(800000, 0.9);
+        Sleep(TDuration::Seconds(1));
+        tester.Execute(3, {2}, false, NOlap::TSnapshot(TInstant::Now().MilliSeconds(), 1232123), {0});
+        tester.Execute(0, {1, 2}, false, NOlap::TSnapshot(TInstant::Now().MilliSeconds(), 1232123), {0});
+        tester.WaitNormalization();
     }
 
     Y_UNIT_TEST(SelectLimit1ManyShards) {
@@ -5309,7 +5393,7 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
     Y_UNIT_TEST(Json_GetValue) {
         TAggregationTestCase testCase;
         testCase.SetQuery(R"(
-                SELECT id, JSON_VALUE(jsonval, "$.col1-proxy"), JSON_VALUE(jsondoc, "$.col1") FROM `/Root/tableWithNulls`
+                SELECT id, JSON_VALUE(jsonval, "$.col1"), JSON_VALUE(jsondoc, "$.col1") FROM `/Root/tableWithNulls`
                 WHERE JSON_VALUE(jsonval, "$.col1") = "val1" AND id = 1;
             )")
 #if SSA_RUNTIME_VERSION >= 3U

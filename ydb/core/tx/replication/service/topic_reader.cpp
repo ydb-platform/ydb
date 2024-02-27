@@ -66,6 +66,7 @@ class TRemoteTopicReader: public TActor<TRemoteTopicReader> {
 
     void Handle(TEvYdbProxy::TEvTopicReaderGone::TPtr& ev) {
         LOG_D("Handle " << ev->Get()->ToString());
+
         switch (ev->Get()->Result.GetStatus()) {
         case NYdb::EStatus::SCHEME_ERROR:
             return Leave(TEvWorker::TEvGone::SCHEME_ERROR);

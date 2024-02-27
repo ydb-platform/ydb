@@ -47,6 +47,7 @@ private:
 };
 
 TPartitionGraph MakePartitionGraph(const NKikimrPQ::TPQTabletConfig& config);
+TPartitionGraph MakePartitionGraph(const NKikimrPQ::TUpdateBalancerConfig& config);
 TPartitionGraph MakePartitionGraph(const NKikimrSchemeOp::TPersQueueGroupDescription& config);
 
 } // NKikimr::NPQ

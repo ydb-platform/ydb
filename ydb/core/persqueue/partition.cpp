@@ -41,6 +41,10 @@ auto GetStepAndTxId(const E& event)
     return GetStepAndTxId(event.Step, event.TxId);
 }
 
+bool TPartition::LastOffsetHasBeenCommited(const TUserInfo& userInfo) const {
+    return !IsActive() && static_cast<ui64>(std::max<i64>(userInfo.Offset, 0)) == EndOffset;
+}
+
 struct TMirrorerInfo {
     TMirrorerInfo(const TActorId& actor, const TTabletCountersBase& baseline)
     : Actor(actor) {
@@ -85,6 +89,10 @@ TString TPartition::LogPrefix() const {
     return TStringBuilder() << "" << SelfId() << " " << state << " Partition: " << Partition << " ";
 }
 
+bool TPartition::IsActive() const {
+    return PartitionConfig == nullptr || PartitionConfig->GetStatus() == NKikimrPQ::ETopicPartitionStatus::Active;
+}
+
 bool TPartition::CanWrite() const {
     if (PartitionConfig == nullptr) {
         // Old format without AllPartitions configuration field.
@@ -99,16 +107,20 @@ bool TPartition::CanWrite() const {
         // Pending configuration tx inactivate this partition.
         return false;
     }
-    if (ClosedInternalPartition)
-        return false;
 
-    return PartitionConfig->GetStatus() == NKikimrPQ::ETopicPartitionStatus::Active;
+    if (ClosedInternalPartition) {
+        return false;
+    }
+
+    return IsActive();
 }
 
 bool TPartition::CanEnqueue() const {
-    if (ClosedInternalPartition)
+    if (ClosedInternalPartition) {
         return false;
-    return PartitionConfig == nullptr || PartitionConfig->GetStatus() == NKikimrPQ::ETopicPartitionStatus::Active;
+    }
+
+    return IsActive();
 }
 
 ui64 GetOffsetEstimate(const std::deque<TDataKey>& container, TInstant timestamp, ui64 offset) {
@@ -708,6 +720,8 @@ void TPartition::Handle(TEvPQ::TEvPartitionStatus::TPtr& ev, const TActorContext
             clientInfo->SetAvgReadSpeedPerMin(userInfo.AvgReadBytes[1].GetValue());
             clientInfo->SetAvgReadSpeedPerHour(userInfo.AvgReadBytes[2].GetValue());
             clientInfo->SetAvgReadSpeedPerDay(userInfo.AvgReadBytes[3].GetValue());
+
+            clientInfo->SetReadingFinished(LastOffsetHasBeenCommited(userInfo));
         }
 
     }
@@ -1830,6 +1844,10 @@ void TPartition::OnProcessTxsAndUserActsWriteComplete(ui64 cookie, const TActorC
                 ReadTimestampForOffset(user, userInfo, ctx);
             } else {
                 TabletCounters.Cumulative()[COUNTER_PQ_WRITE_TIMESTAMP_CACHE_HIT].Increment(1);
+            }
+
+            if (LastOffsetHasBeenCommited(userInfo)) {
+                SendReadingFinished(user);
             }
         } else {
             auto ui = UsersInfoStorage->GetIfExists(user);

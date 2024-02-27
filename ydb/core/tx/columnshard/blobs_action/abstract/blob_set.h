@@ -367,7 +367,11 @@ public:
         if (it == Data.end()) {
             return false;
         } else {
-            return it->second.erase(blobId);
+            const bool result = it->second.erase(blobId);
+            if (result && it->second.empty()) {
+                Data.erase(it);
+            }
+            return result;
         }
     }
 
@@ -461,6 +465,12 @@ public:
     }
     void AddSharing(const TTabletId tabletId, const TUnifiedBlobId& id) {
         AFL_VERIFY(Sharing.Add(tabletId, id));
+    }
+    void RemoveSharing(const TTabletId tabletId, const TUnifiedBlobId& id) {
+        Y_UNUSED(Sharing.Remove(tabletId, id));
+    }
+    void RemoveBorrowed(const TTabletId tabletId, const TUnifiedBlobId& id) {
+        Y_UNUSED(Borrowed.Remove(tabletId, id));
     }
     TBlobsCategories(const TTabletId selfTabletId)
         : SelfTabletId(selfTabletId)

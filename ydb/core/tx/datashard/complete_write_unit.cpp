@@ -103,6 +103,28 @@ void TCompleteWriteUnit::Complete(TOperation::TPtr op, const TActorContext &ctx)
 
     DataShard.EnqueueChangeRecords(std::move(op->ChangeRecords()));
     DataShard.EmitHeartbeats();
+
+    if (op->HasOutputData()) {
+        const auto& outReadSets = op->OutReadSets();
+        const auto& expectedReadSets = op->ExpectedReadSets();
+        auto itOut = outReadSets.begin();
+        auto itExpected = expectedReadSets.begin();
+        while (itExpected != expectedReadSets.end()) {
+            while (itOut != outReadSets.end() && itOut->first < itExpected->first) {
+                ++itOut;
+            }
+            if (itOut != outReadSets.end() && itOut->first == itExpected->first) {
+                ++itOut;
+                ++itExpected;
+                continue;
+            }
+            // We have an expected readset without a corresponding out readset
+            for (const auto& recipient : itExpected->second) {
+                DataShard.SendReadSetNoData(ctx, recipient, op->GetStep(), op->GetTxId(), itExpected->first.first, itExpected->first.second);
+            }
+            ++itExpected;
+        }
+    }
 }
 
 THolder<TExecutionUnit> CreateCompleteWriteUnit(TDataShard &dataShard, TPipeline &pipeline)

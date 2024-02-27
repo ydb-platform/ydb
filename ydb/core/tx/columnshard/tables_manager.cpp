@@ -331,7 +331,7 @@ TTablesManager::TTablesManager(const std::shared_ptr<NOlap::IStoragesManager>& s
 {
 }
 
-bool TTablesManager::TryFinalizeDropPath(NTabletFlatExecutor::TTransactionContext& txc, const ui64 pathId) {
+bool TTablesManager::TryFinalizeDropPath(NTable::TDatabase& dbTable, const ui64 pathId) {
     auto itDrop = PathsToDrop.find(pathId);
     if (itDrop == PathsToDrop.end()) {
         return false;
@@ -340,7 +340,7 @@ bool TTablesManager::TryFinalizeDropPath(NTabletFlatExecutor::TTransactionContex
         return false;
     }
     PathsToDrop.erase(itDrop);
-    NIceDb::TNiceDb db(txc.DB);
+    NIceDb::TNiceDb db(dbTable);
     NColumnShard::Schema::EraseTableInfo(db, pathId);
     const auto& table = Tables.find(pathId);
     Y_ABORT_UNLESS(table != Tables.end(), "No schema for path %lu", pathId);

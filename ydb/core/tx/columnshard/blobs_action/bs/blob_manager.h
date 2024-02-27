@@ -163,6 +163,12 @@ private:
 public:
     TBlobManager(TIntrusivePtr<TTabletStorageInfo> tabletInfo, const ui32 gen, const TTabletId selfTabletId);
 
+    TTabletsByBlob GetBlobsToDeleteAll() const {
+        auto result = BlobsToDelete;
+        result.Add(BlobsToDeleteDelayed);
+        return result;
+    }
+
     virtual void OnBlobFree(const TUnifiedBlobId& blobId) override;
 
     const NColumnShard::TBlobsManagerCounters& GetCounters() const {

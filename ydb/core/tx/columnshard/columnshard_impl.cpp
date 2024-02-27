@@ -195,7 +195,8 @@ ui64 TColumnShard::GetOutdatedStep() const {
 }
 
 ui64 TColumnShard::GetMinReadStep() const {
-    ui64 delayMillisec = MaxReadStaleness.MilliSeconds();
+    const TDuration maxReadStaleness = NYDBTest::TControllers::GetColumnShardController()->GetReadTimeoutClean(TDuration::Minutes(5));
+    ui64 delayMillisec = maxReadStaleness.MilliSeconds();
     ui64 passedStep = GetOutdatedStep();
     ui64 minReadStep = (passedStep > delayMillisec ? passedStep - delayMillisec : 0);
     return minReadStep;
@@ -829,7 +830,7 @@ void TColumnShard::Handle(NActors::TEvents::TEvUndelivered::TPtr& ev, const TAct
 }
 
 void TColumnShard::Handle(NOlap::NDataSharing::NEvents::TEvProposeFromInitiator::TPtr& ev, const TActorContext& ctx) {
-    AFL_NOTICE(NKikimrServices::TX_COLUMNSHARD)("process", "BlobsSharing")("event", "TEvStartFromInitiator");
+    AFL_NOTICE(NKikimrServices::TX_COLUMNSHARD)("process", "BlobsSharing")("event", "TEvProposeFromInitiator");
     auto reqSession = std::make_shared<NOlap::NDataSharing::TDestinationSession>();
     auto conclusion = reqSession->DeserializeDataFromProto(ev->Get()->Record.GetSession(), TablesManager.GetPrimaryIndexAsVerified<NOlap::TColumnEngineForLogs>());
     if (!conclusion) {
@@ -852,7 +853,7 @@ void TColumnShard::Handle(NOlap::NDataSharing::NEvents::TEvProposeFromInitiator:
 }
 
 void TColumnShard::Handle(NOlap::NDataSharing::NEvents::TEvConfirmFromInitiator::TPtr& ev, const TActorContext& ctx) {
-    AFL_NOTICE(NKikimrServices::TX_COLUMNSHARD)("process", "BlobsSharing")("event", "TEvStartFromInitiator");
+    AFL_NOTICE(NKikimrServices::TX_COLUMNSHARD)("process", "BlobsSharing")("event", "TEvConfirmFromInitiator");
     auto currentSession = SharingSessionsManager->GetDestinationSession(ev->Get()->Record.GetSessionId());
     if (!currentSession) {
         AFL_NOTICE(NKikimrServices::TX_COLUMNSHARD)("process", "BlobsSharing")("event", "TEvStartFromInitiator")("problem", "not_exists_session")("session_id", ev->Get()->Record.GetSessionId());
@@ -1013,10 +1014,9 @@ void TColumnShard::Handle(NOlap::NBlobOperations::NEvents::TEvDeleteSharedBlobs:
     NActors::TLogContextGuard gLogging = NActors::TLogContextBuilder::Build(NKikimrServices::TX_COLUMNSHARD)("tablet_id", TabletID())("event", "TEvDeleteSharedBlobs");
     auto removeAction = StoragesManager->GetOperator(ev->Get()->Record.GetStorageId())->StartDeclareRemovingAction("DELETE_SHARED_BLOBS");
     for (auto&& i : ev->Get()->Record.GetBlobIds()) {
-        TLogoBlobID blobId;
-        TString error;
-        AFL_VERIFY(TLogoBlobID::Parse(blobId, i, error))("problem", error);
-        removeAction->DeclareRemove((NOlap::TTabletId)ev->Get()->Record.GetSourceTabletId(), NOlap::TUnifiedBlobId(Max<ui32>(), blobId));
+        auto blobId = NOlap::TUnifiedBlobId::BuildFromString(i, nullptr);
+        AFL_VERIFY(!!blobId)("problem", blobId.GetErrorMessage());
+        removeAction->DeclareRemove((NOlap::TTabletId)ev->Get()->Record.GetSourceTabletId(), *blobId);
     }
     Execute(new TTxRemoveSharedBlobs(this, removeAction, NActors::ActorIdFromProto(ev->Get()->Record.GetSourceActorId())), ctx);
 }

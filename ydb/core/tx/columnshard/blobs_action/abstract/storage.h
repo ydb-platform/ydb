@@ -67,6 +67,7 @@ public:
 
     void Stop();
 
+    virtual TTabletsByBlob GetBlobsToDelete() const = 0;
     virtual std::shared_ptr<IBlobInUseTracker> GetBlobsTracker() const = 0;
 
     virtual ~IBlobsStorageOperator() = default;

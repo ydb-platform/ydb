@@ -9,7 +9,7 @@ namespace NKikimrSchemeOp {
     class TTableDescription;
 }
 
-namespace NKikimr::NReplication {
+namespace NKikimr::NReplication::NTestHelpers {
 
 struct TTestTableDescription {
     struct TColumn {

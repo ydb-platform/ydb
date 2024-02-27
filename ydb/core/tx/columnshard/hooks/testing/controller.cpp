@@ -16,26 +16,38 @@ bool TController::DoOnAfterFilterAssembling(const std::shared_ptr<arrow::RecordB
     return true;
 }
 
-bool TController::DoOnWriteIndexComplete(const NOlap::TColumnEngineChanges& /*changes*/, const ::NKikimr::NColumnShard::TColumnShard& /*shard*/) {
+bool TController::DoOnWriteIndexComplete(const NOlap::TColumnEngineChanges& /*changes*/, const ::NKikimr::NColumnShard::TColumnShard& shard) {
+    TGuard<TMutex> g(Mutex);
     Indexations.Inc();
+    if (SharingIds.empty()) {
+        TCheckContext context;
+        CheckInvariants(shard, context);
+    }
     return true;
 }
 
 bool TController::DoOnStartCompaction(std::shared_ptr<NOlap::TColumnEngineChanges>& changes) {
+    TGuard<TMutex> g(Mutex);
     if (auto compaction = dynamic_pointer_cast<NOlap::TCompactColumnEngineChanges>(changes)) {
         Compactions.Inc();
     }
     return true;
 }
 
-void TController::DoOnAfterGCAction(const ::NKikimr::NColumnShard::TColumnShard& shard, const NOlap::IBlobsGCAction& action) {
+void TController::DoOnAfterGCAction(const ::NKikimr::NColumnShard::TColumnShard& /*shard*/, const NOlap::IBlobsGCAction& action) {
+    TGuard<TMutex> g(Mutex);
     for (auto d = action.GetBlobsToRemove().GetDirect().GetIterator(); d.IsValid(); ++d) {
-        AFL_VERIFY((ui64)d.GetTabletId() == shard.TabletID());
-        AFL_VERIFY(RemovedBlobIds[action.GetStorageId()].emplace(d.GetBlobId()).second);
+        AFL_VERIFY(RemovedBlobIds[action.GetStorageId()][d.GetBlobId()].emplace(d.GetTabletId()).second);
     }
+//    if (SharingIds.empty()) {
+//        CheckInvariants();
+//    }
 }
 
 void TController::CheckInvariants(const ::NKikimr::NColumnShard::TColumnShard& shard, TCheckContext& context) const {
+    if (!shard.HasIndex()) {
+        return;
+    }
     const auto& index = shard.GetIndexAs<NOlap::TColumnEngineForLogs>();
     std::vector<std::shared_ptr<NOlap::TGranuleMeta>> granules = index.GetTables({}, {});
     THashMap<TString, THashSet<NOlap::TUnifiedBlobId>> ids;
@@ -50,20 +62,22 @@ void TController::CheckInvariants(const ::NKikimr::NColumnShard::TColumnShard& s
             continue;
         }
         for (auto&& b : i.second) {
-            AFL_VERIFY(!it->second.contains(b));
+            auto itB = it->second.find(b);
+            if (itB != it->second.end()) {
+                AFL_VERIFY(!itB->second.contains((NOlap::TTabletId)shard.TabletID()));
+            }
         }
     }
-    THashMap<TString, NOlap::TBlobsCategories> categories = shard.GetStoragesManager()->GetSharedBlobsManager()->GetBlobCategories();
-    for (auto&& i : categories) {
-        auto it = ids.find(i.first);
-        for (auto cat = i.second.GetIterator(); cat.IsValid(); ++cat) {
-            AFL_VERIFY(it->second.contains(cat.GetBlobId()));
+    THashMap<TString, NOlap::TBlobsCategories> shardBlobsCategories = shard.GetStoragesManager()->GetSharedBlobsManager()->GetBlobCategories();
+    for (auto&& i : shardBlobsCategories) {
+        auto manager = shard.GetStoragesManager()->GetOperatorVerified(i.first);
+        const NOlap::TTabletsByBlob blobs = manager->GetBlobsToDelete();
+        for (auto b = blobs.GetIterator(); b.IsValid(); ++b) {
+            i.second.RemoveSharing(b.GetTabletId(), b.GetBlobId());
         }
-    }
-    THashMap<TString, NOlap::TBlobsCategories> shardBlobsCategories;
-    for (auto&& i : ids) {
-        auto storageSharingManager = shard.GetStoragesManager()->GetSharedBlobsManager()->GetStorageManagerVerified(i.first);
-        shardBlobsCategories.emplace(i.first, storageSharingManager->BuildStoreCategories(i.second));
+        for (auto b = blobs.GetIterator(); b.IsValid(); ++b) {
+            i.second.RemoveBorrowed(b.GetTabletId(), b.GetBlobId());
+        }
     }
     context.AddCategories(shard.TabletID(), std::move(shardBlobsCategories));
 }
@@ -71,6 +85,9 @@ void TController::CheckInvariants(const ::NKikimr::NColumnShard::TColumnShard& s
 TController::TCheckContext TController::CheckInvariants() const {
     TGuard<TMutex> g(Mutex);
     TCheckContext context;
+    if (ExpectedShardsCount && *ExpectedShardsCount != ShardActuals.size()) {
+        return context;
+    }
     for (auto&& i : ShardActuals) {
         CheckInvariants(*i.second, context);
     }
@@ -104,6 +121,19 @@ std::vector<ui64> TController::GetPathIds(const ui64 tabletId) const {
         }
     }
     return result;
+}
+
+bool TController::IsTrivialLinks() const {
+    TGuard<TMutex> g(Mutex);
+    for (auto&& i : ShardActuals) {
+        if (!i.second->GetStoragesManager()->GetSharedBlobsManager()->IsTrivialLinks()) {
+            return false;
+        }
+        if (i.second->GetStoragesManager()->HasBlobsToDelete()) {
+            return false;
+        }
+    }
+    return true;
 }
 
 }

@@ -1,0 +1,9 @@
+USE plato;
+
+SELECT * FROM Input
+SAMPLE(0.5)
+ORDER BY key;
+
+SELECT * FROM (SELECT* from Input)
+SAMPLE(0.5)
+ORDER BY key;

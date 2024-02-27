@@ -753,10 +753,6 @@ SELECT CAST(q1 AS oid) FROM INT8_TBL;
 <sql-statement>
 SELECT oid::int8 FROM pg_class WHERE relname = 'pg_class';
 </sql-statement>
--stdin-:<main>: Fatal: Table metadata loading
-
-    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.pg_class
-    
 <sql-statement>
 -- bit operations
 SELECT q1, q2, q1 & q2 AS "and", q1 | q2 AS "or", q1 # q2 AS "xor", ~q1 AS "not" FROM INT8_TBL;

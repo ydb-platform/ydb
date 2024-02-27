@@ -49,9 +49,10 @@ public:
         const NKikimrConfig::TTableServiceConfig::TExecuterRetriesConfig& executerRetriesConfig,
         TPreparedQueryHolder::TConstPtr preparedQuery,
         const NKikimrConfig::TTableServiceConfig::EChannelTransportVersion chanTransportVersion,
-        TDuration maximalSecretsSnapshotWaitTime, const TIntrusivePtr<TUserRequestContext>& userRequestContext)
+        TDuration maximalSecretsSnapshotWaitTime, const TIntrusivePtr<TUserRequestContext>& userRequestContext,
+        ui32 statementResultIndex)
         : TBase(std::move(request), database, userToken, counters, executerRetriesConfig, chanTransportVersion, aggregation,
-            maximalSecretsSnapshotWaitTime, userRequestContext, TWilsonKqp::ScanExecuter, "ScanExecuter",
+            maximalSecretsSnapshotWaitTime, userRequestContext, statementResultIndex, TWilsonKqp::ScanExecuter, "ScanExecuter",
             false
         )
         , PreparedQuery(preparedQuery)
@@ -90,6 +91,8 @@ public:
 
         } catch (const yexception& e) {
             InternalError(e.what());
+        } catch (const TMemoryLimitExceededException&) {
+            RuntimeError(Ydb::StatusIds::PRECONDITION_FAILED, NYql::TIssues({NYql::TIssue(BuildMemoryLimitExceptionMessage())}));
         }
         ReportEventElapsedTime();
     }
@@ -124,6 +127,8 @@ private:
             }
         } catch (const yexception& e) {
             InternalError(e.what());
+        } catch (const TMemoryLimitExceededException&) {
+            RuntimeError(Ydb::StatusIds::PRECONDITION_FAILED, NYql::TIssues({NYql::TIssue(BuildMemoryLimitExceptionMessage())}));
         }
         ReportEventElapsedTime();
     }
@@ -363,10 +368,10 @@ IActor* CreateKqpScanExecuter(IKqpGateway::TExecPhysicalRequest&& request, const
     const NKikimrConfig::TTableServiceConfig::TAggregationConfig& aggregation,
     const NKikimrConfig::TTableServiceConfig::TExecuterRetriesConfig& executerRetriesConfig,
     TPreparedQueryHolder::TConstPtr preparedQuery, const NKikimrConfig::TTableServiceConfig::EChannelTransportVersion chanTransportVersion,
-    TDuration maximalSecretsSnapshotWaitTime, const TIntrusivePtr<TUserRequestContext>& userRequestContext)
+    TDuration maximalSecretsSnapshotWaitTime, const TIntrusivePtr<TUserRequestContext>& userRequestContext, ui32 statementResultIndex)
 {
     return new TKqpScanExecuter(std::move(request), database, userToken, counters, aggregation, executerRetriesConfig,
-        preparedQuery, chanTransportVersion, maximalSecretsSnapshotWaitTime, userRequestContext);
+        preparedQuery, chanTransportVersion, maximalSecretsSnapshotWaitTime, userRequestContext, statementResultIndex);
 }
 
 } // namespace NKqp

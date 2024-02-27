@@ -1,7 +1,9 @@
 #include "manager.h"
 #include <ydb/core/tx/columnshard/columnshard_impl.h>
 #include <ydb/core/tx/columnshard/blobs_action/bs/storage.h>
+#ifndef KIKIMR_DISABLE_S3_OPS
 #include <ydb/core/tx/columnshard/blobs_action/tier/storage.h>
+#endif
 
 namespace NKikimr::NOlap {
 

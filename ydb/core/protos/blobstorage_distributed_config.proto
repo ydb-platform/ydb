@@ -39,6 +39,7 @@ message TStorageFileContent {
         uint64 Timestamp = 3;
         fixed64 Key = 4;
         TPDiskMetadataRecord Meta = 5;
+        bool Unformatted = 6;
     }
 
     repeated TRecord Record = 1;
@@ -93,6 +94,7 @@ message TEvNodeConfigGather {
         message TDiskIdentifier {
             TNodeIdentifier NodeId = 1;
             string Path = 2;
+            optional fixed64 Guid = 3;
         }
         message TPersistentConfig {
             repeated TDiskIdentifier Disks = 1; // disks with the same config
@@ -116,7 +118,13 @@ message TEvNodeConfigGather {
             TNodeIdentifier NodeId = 1;
             EStatus Status = 2;
             string Reason = 3;
-            repeated string SuccessfulDrives = 4;
+
+            message TDrive {
+                string Path = 1;
+                optional fixed64 Guid = 2;
+            }
+            reserved 4;
+            repeated TDrive SuccessfulDrives = 5;
         }
         repeated TStatus Status = 1;
     }

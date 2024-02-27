@@ -787,8 +787,7 @@ private:
                         else if (columns.cend() != it)
                             it = columns.erase(it);
                     } else {
-                        columns.resize(i);
-                        break;
+                        return {};
                     }
                 }
             } else

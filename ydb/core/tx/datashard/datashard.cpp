@@ -582,11 +582,18 @@ public:
     { }
 
     void OnCommit(ui64) override {
-        LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::TX_DATASHARD,
+        TString error = Result->GetError();
+        if (error) {
+            LOG_ERROR_S(*TlsActivationContext, NKikimrServices::TX_DATASHARD,
+                    "Complete [" << Step << " : " << TxId << "] from " << Self->TabletID()
+                    << " at tablet " << Self->TabletID() << ", error: " << error);
+        } else {
+            LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::TX_DATASHARD,
                     "Complete [" << Step << " : " << TxId << "] from " << Self->TabletID()
                     << " at tablet " << Self->TabletID() << " send result to client "
                     << Target <<  ", exec latency: " << Result->Record.GetExecLatency()
                     << " ms, propose latency: " << Result->Record.GetProposeLatency() << " ms");
+        }
 
         ui64 resultSize = Result->GetTxResult().size();
         ui32 flags = IEventHandle::MakeFlags(TInterconnectChannels::GetTabletChannel(resultSize), 0);
@@ -604,6 +611,49 @@ public:
 private:
     TDataShard* Self;
     TOutputOpData::TResultPtr Result;
+    TActorId Target;
+    ui64 Step;
+    ui64 TxId;
+};
+
+class TDataShard::TSendVolatileWriteResult final: public IVolatileTxCallback {
+public:
+    TSendVolatileWriteResult(
+        TDataShard* self, std::unique_ptr<NEvents::TDataEvents::TEvWriteResult> writeResult,
+        const TActorId& target,
+        ui64 step, ui64 txId
+    )
+        : Self(self)
+        , WriteResult(std::move(writeResult))
+        , Target(target)
+        , Step(step)
+        , TxId(txId)
+    {
+    }
+
+    void OnCommit(ui64) override {
+        if (WriteResult->IsError()) {
+            LOG_ERROR_S(*TlsActivationContext, NKikimrServices::TX_DATASHARD, 
+                "Complete volatile write [" << Step << " : " << TxId << "] from " << Self->TabletID() 
+                << " at tablet " << Self->TabletID() << ", error:  " << WriteResult->GetError());
+        } else {
+            LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::TX_DATASHARD, 
+                "Complete volatile write [" << Step << " : " << TxId << "] from " << Self->TabletID() 
+                << " at tablet " << Self->TabletID() << " send result to client " << Target);
+        }
+
+        LWTRACK(ProposeTransactionSendResult, WriteResult->GetOrbit());
+        Self->Send(Target, WriteResult.release(), 0);
+    }
+
+    void OnAbort(ui64 txId) override {
+        WriteResult = NEvents::TDataEvents::TEvWriteResult::BuildError(Self->TabletID(), txId, NKikimrDataEvents::TEvWriteResult::STATUS_ABORTED, "Distributed transaction aborted due to commit failure");
+        OnCommit(txId);
+    }
+
+private:
+    TDataShard* Self;
+    std::unique_ptr<NEvents::TDataEvents::TEvWriteResult> WriteResult;
     TActorId Target;
     ui64 Step;
     ui64 TxId;
@@ -640,15 +690,12 @@ void TDataShard::SendResult(const TActorContext &ctx,
 void TDataShard::SendWriteResult(const TActorContext& ctx, std::unique_ptr<NEvents::TDataEvents::TEvWriteResult>& result, const TActorId& target, ui64 step, ui64 txId) {
     Y_ABORT_UNLESS(txId == result->Record.GetTxId(), "%" PRIu64 " vs %" PRIu64, txId, result->Record.GetTxId());
 
-    // TODO: Volatile
-    /*
     if (VolatileTxManager.FindByTxId(txId)) {
         // This is a volatile transaction, and we need to wait until it is resolved
-        bool ok = VolatileTxManager.AttachVolatileTxCallback(txId, new TSendVolatileResult(this, std::move(result), target, step, txId));
+        bool ok = VolatileTxManager.AttachVolatileTxCallback(txId, new TSendVolatileWriteResult(this, std::move(result), target, step, txId));
         Y_ABORT_UNLESS(ok);
         return;
     }
-    */
 
     LOG_DEBUG_S(ctx, NKikimrServices::TX_DATASHARD, "Complete write [" << step << " : " << txId << "] from " << TabletID() << " at tablet " << TabletID() << " send result to client " << target);
 

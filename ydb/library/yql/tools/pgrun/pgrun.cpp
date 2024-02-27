@@ -7,6 +7,7 @@
 #include <ydb/library/yql/providers/yt/gateway/file/yql_yt_file.h>
 #include <ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.h>
 #include <ydb/library/yql/providers/common/provider/yql_provider_names.h>
+#include <ydb/library/yql/providers/common/udf_resolve/yql_simple_udf_resolver.h>
 #include <ydb/library/yql/providers/common/proto/gateways_config.pb.h>
 #include "ydb/library/yql/providers/yt/common/yql_names.h"
 #include <ydb/library/yql/providers/yt/provider/yql_yt_provider.h>
@@ -14,6 +15,7 @@
 #include <ydb/library/yql/public/issue/yql_issue.h>
 #include <ydb/library/yql/parser/pg_wrapper/interface/utils.h>
 #include <ydb/library/yql/providers/yt/lib/schema/schema.h>
+#include <ydb/library/yql/core/services/mounts/yql_mounts.h>
 
 #include <library/cpp/getopt/last_getopt.h>
 #include <library/cpp/yson/public.h>
@@ -1086,6 +1088,33 @@ void ShowFinalAst(TProgramPtr& program, IOutputStream& stream) {
     PrintExprTo(program, stream);
 }
 
+void FillTablesMapping(const TFsPath& dataDir, THashMap<TString, TString>& tablesMapping) {
+    TVector<TFsPath> children;
+
+    dataDir.List(children);
+
+    bool regMsgLogged = false;
+    for (const auto& f: children) {
+        if (f.GetExtension() != "attr") {
+            continue;
+        }
+        auto tableName = f.Basename();
+        tableName.resize(tableName.length() - 5);
+
+        if (tableName.EndsWith(".tmp")) {
+            continue;
+        }
+        if (!regMsgLogged) {
+            regMsgLogged = true;
+
+            Cerr << "Registering pre-existing tables\n";
+        }
+        const auto fullTableName = f.Parent() / tableName;
+        Cerr << '\t' << tableName << '\n';
+        tablesMapping[TString("yt.plato.") + tableName] = f.Parent() / tableName;
+    }
+}
+
 int Main(int argc, char* argv[])
 {
     using namespace NLastGetopt;
@@ -1093,6 +1122,7 @@ int Main(int argc, char* argv[])
 
     const TString runnerName{"pgrun"};
     TVector<TString> udfsPaths;
+
     TString rawDataDir;
     THashMap<TString, TString> clusterMapping;
 
@@ -1105,6 +1135,7 @@ int Main(int argc, char* argv[])
     opts.AddLongOption("print-ast", "print initial & final ASTs to stderr").NoArgument();
     opts.AddLongOption("print-result", "print program execution result to stderr").NoArgument();
     opts.AddLongOption("datadir", "directory for tables").StoreResult<TString>(&rawDataDir);
+    opts.AddLongOption('u', "udf", "Load shared library with UDF by given path").AppendTo(&udfsPaths);
     opts.SetFreeArgsMax(0);
 
     TOptsParseResult res(&opts, argc, argv);
@@ -1126,21 +1157,35 @@ int Main(int argc, char* argv[])
     fileStorage = WithAsync(fileStorage);
 
     auto funcRegistry = CreateFunctionRegistry(&NYql::NBacktrace::KikimrBackTrace, CreateBuiltinRegistry(), false, udfsPaths);
+    IUdfResolver::TPtr udfResolver = NCommon::CreateSimpleUdfResolver(funcRegistry.Get(), fileStorage, true);;
 
     bool keepTempFiles = true;
     bool emulateOutputForMultirun = false;
 
     auto yqlNativeServices = NFile::TYtFileServices::Make(funcRegistry.Get(), {}, fileStorage, tempDir.Path(), keepTempFiles);
     auto ytNativeGateway = CreateYtFileGateway(yqlNativeServices, &emulateOutputForMultirun);
+    if (tempDirExists) {
+        FillTablesMapping(tempDir.Path(), yqlNativeServices->GetTablesMapping());
+    }
 
     TVector<TDataProviderInitializer> dataProvidersInit;
     dataProvidersInit.push_back(GetYtNativeDataProviderInitializer(ytNativeGateway));
     dataProvidersInit.push_back(GetPgDataProviderInitializer());
 
     TExprContext ctx;
+
+    IModuleResolver::TPtr moduleResolver;
+    if (!GetYqlDefaultModuleResolver(ctx, moduleResolver, clusterMapping, true)) {
+        Cerr << "Errors loading default YQL libraries:" << Endl;
+        ctx.IssueManager.GetIssues().PrintTo(Cerr);
+        return -1;
+    }
+
     TExprContext::TFreezeGuard freezeGuard(ctx);
 
     TProgramFactory factory(true, funcRegistry.Get(), ctx.NextUniqueId, dataProvidersInit, runnerName);
+    factory.SetModules(moduleResolver);
+    factory.SetUdfResolver(udfResolver);
     factory.SetGatewaysConfig(gatewaysConfig.Get());
 
     const TString username = GetUsername();

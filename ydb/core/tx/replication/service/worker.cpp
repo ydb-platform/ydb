@@ -36,7 +36,7 @@ TEvWorker::TEvData::TEvData(TVector<TRecord>&& records)
 void TEvWorker::TEvData::TRecord::Out(IOutputStream& out) const {
     out << "{"
         << " Offset: " << Offset
-        << " Data: " << Data
+        << " Data: " << Data.size() << "b"
     << " }";
 }
 

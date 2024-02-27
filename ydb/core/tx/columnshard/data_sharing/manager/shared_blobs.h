@@ -32,8 +32,8 @@ private:
         if (doRemove) {
             auto it = BorrowedBlobIds.find(blobId);
             if (it != BorrowedBlobIds.end()) {
-                AFL_VERIFY(it->second == tabletId);
-                blobs.AddBorrowed(tabletId, blobId);
+                AFL_VERIFY(it->second != tabletId);
+                blobs.AddBorrowed(it->second, blobId);
             } else {
                 blobs.AddDirect(tabletId, blobId);
             }
@@ -48,6 +48,9 @@ public:
 
     }
 
+    bool IsTrivialLinks() const {
+        return BorrowedBlobIds.empty() && SharedBlobIds.IsEmpty();
+    }
     TTabletId GetSelfTabletId() const {
         return SelfTabletId;
     }
@@ -152,17 +155,7 @@ public:
     }
 
     void OnTransactionExecuteAfterCleaning(const TBlobsCategories& removeTask, NTable::TDatabase& db);
-
-    void OnTransactionCompleteAfterCleaning(const TBlobsCategories& removeTask) {
-        for (auto i = removeTask.GetSharing().GetIterator(); i.IsValid(); ++i) {
-            SharedBlobIds.Remove(i.GetTabletId(), i.GetBlobId());
-        }
-        for (auto i = removeTask.GetBorrowed().GetIterator(); i.IsValid(); ++i) {
-            auto it = BorrowedBlobIds.find(i.GetBlobId());
-            AFL_VERIFY(it != BorrowedBlobIds.end());
-            BorrowedBlobIds.erase(it);
-        }
-    }
+    void OnTransactionCompleteAfterCleaning(const TBlobsCategories& removeTask);
 };
 
 class TSharedBlobsManager {
@@ -174,6 +167,15 @@ public:
         : SelfTabletId(tabletId)
     {
 
+    }
+
+    bool IsTrivialLinks() const {
+        for (auto&& i : Storages) {
+            if (!i.second->IsTrivialLinks()) {
+                return false;
+            }
+        }
+        return true;
     }
 
     THashMap<TString, TBlobsCategories> GetBlobCategories() const {

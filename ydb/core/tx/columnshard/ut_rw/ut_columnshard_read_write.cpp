@@ -879,8 +879,7 @@ void TestWriteRead(bool reboots, const TestTableDescription& table = {}, TString
             UNIT_ASSERT_LE(insertedBytes / 100000, 50);
         }
         if (committedBytes) {
-            UNIT_ASSERT_GE(committedBytes / 100000, 65);
-            UNIT_ASSERT_LE(committedBytes / 100000, 78);
+            UNIT_ASSERT_LE(committedBytes / 100000, 1);
         }
         if (compactedBytes) {
             if (codec == "" || codec == "lz4") {
@@ -1583,7 +1582,8 @@ Y_UNIT_TEST_SUITE(EvWrite) {
         TString blobData = NArrow::SerializeBatchNoCompression(batch);
         UNIT_ASSERT(blobData.size() < TLimits::GetMaxBlobSize());
 
-        auto evWrite = std::make_unique<NKikimr::NEvents::TDataEvents::TEvWrite>(txId, NKikimrDataEvents::TEvWrite::MODE_PREPARE);
+        auto evWrite = std::make_unique<NKikimr::NEvents::TDataEvents::TEvWrite>(NKikimrDataEvents::TEvWrite::MODE_PREPARE);
+        evWrite->SetTxId(txId);
         ui64 payloadIndex = NEvWrite::TPayloadWriter<NKikimr::NEvents::TDataEvents::TEvWrite>(*evWrite).AddDataToPayload(std::move(blobData));
         evWrite->AddOperation(NKikimrDataEvents::TEvWrite::TOperation::OPERATION_REPLACE, {ownerId, tableId, schemaVersion}, columnsIds, payloadIndex, NKikimrDataEvents::FORMAT_ARROW);
 
@@ -1633,7 +1633,8 @@ Y_UNIT_TEST_SUITE(EvWrite) {
         TString blobData = NArrow::SerializeBatchNoCompression(batch);
         UNIT_ASSERT(blobData.size() < TLimits::GetMaxBlobSize());
 
-        auto evWrite = std::make_unique<NKikimr::NEvents::TDataEvents::TEvWrite>(txId, NKikimrDataEvents::TEvWrite::MODE_PREPARE);
+        auto evWrite = std::make_unique<NKikimr::NEvents::TDataEvents::TEvWrite>(NKikimrDataEvents::TEvWrite::MODE_PREPARE);
+        evWrite->SetTxId(txId);
         ui64 payloadIndex = NEvWrite::TPayloadWriter<NKikimr::NEvents::TDataEvents::TEvWrite>(*evWrite).AddDataToPayload(std::move(blobData));
         evWrite->AddOperation(NKikimrDataEvents::TEvWrite::TOperation::OPERATION_REPLACE, {ownerId, tableId, schemaVersion}, columnsIds, payloadIndex, NKikimrDataEvents::FORMAT_ARROW);
 
@@ -1680,7 +1681,8 @@ Y_UNIT_TEST_SUITE(EvWrite) {
         TString blobData = NArrow::SerializeBatchNoCompression(batch);
         UNIT_ASSERT(blobData.size() > TLimits::GetMaxBlobSize());
 
-        auto evWrite = std::make_unique<NKikimr::NEvents::TDataEvents::TEvWrite>(txId, NKikimrDataEvents::TEvWrite::MODE_PREPARE);
+        auto evWrite = std::make_unique<NKikimr::NEvents::TDataEvents::TEvWrite>(NKikimrDataEvents::TEvWrite::MODE_PREPARE);
+        evWrite->SetTxId(txId);
         ui64 payloadIndex = NEvWrite::TPayloadWriter<NKikimr::NEvents::TDataEvents::TEvWrite>(*evWrite).AddDataToPayload(std::move(blobData));
         evWrite->AddOperation(NKikimrDataEvents::TEvWrite::TOperation::OPERATION_REPLACE, {ownerId, tableId, schemaVersion}, columnsIds, payloadIndex, NKikimrDataEvents::FORMAT_ARROW);
 
@@ -1697,6 +1699,103 @@ Y_UNIT_TEST_SUITE(EvWrite) {
 
         auto readResult = ReadAllAsBatch(runtime, tableId, NOlap::TSnapshot(11, txId), schema);
         UNIT_ASSERT_VALUES_EQUAL(readResult->num_rows(), 2048);
+    }
+
+    Y_UNIT_TEST(WriteWithLock) {
+        using namespace NArrow;
+
+        TTestBasicRuntime runtime;
+        TTester::Setup(runtime);
+
+        const ui64 ownerId = 0;
+        const ui64 tableId = 1;
+        const ui64 schemaVersion = 1;
+        const std::vector<std::pair<TString, TTypeInfo>> schema = {
+                                                                    {"key", TTypeInfo(NTypeIds::Uint64) },
+                                                                    {"field", TTypeInfo(NTypeIds::Utf8) }
+                                                                };
+        const std::vector<ui32> columnsIds = {1, 2};
+        PrepareTablet(runtime, tableId, schema);
+        const ui64 txId = 111;
+        const ui64 lockId = 110;
+
+        {
+            NConstruction::IArrayBuilder::TPtr keyColumn = std::make_shared<NConstruction::TSimpleArrayConstructor<NConstruction::TIntSeqFiller<arrow::UInt64Type>>>("key");
+            NConstruction::IArrayBuilder::TPtr column = std::make_shared<NConstruction::TSimpleArrayConstructor<NConstruction::TStringPoolFiller>>("field", NConstruction::TStringPoolFiller(8, 100));
+            auto batch = NConstruction::TRecordBatchConstructor({ keyColumn, column }).BuildBatch(2048);
+            TString blobData = NArrow::SerializeBatchNoCompression(batch);
+            UNIT_ASSERT(blobData.size() < TLimits::GetMaxBlobSize());
+            auto evWrite = std::make_unique<NKikimr::NEvents::TDataEvents::TEvWrite>(NKikimrDataEvents::TEvWrite::MODE_PREPARE);
+            evWrite->SetLockId(lockId, 1);
+
+            ui64 payloadIndex = NEvWrite::TPayloadWriter<NKikimr::NEvents::TDataEvents::TEvWrite>(*evWrite).AddDataToPayload(std::move(blobData));
+            evWrite->AddOperation(NKikimrDataEvents::TEvWrite::TOperation::OPERATION_REPLACE, {ownerId, tableId, schemaVersion}, columnsIds, payloadIndex, NKikimrDataEvents::FORMAT_ARROW);
+
+            TActorId sender = runtime.AllocateEdgeActor();
+            ForwardToTablet(runtime, TTestTxConfig::TxTablet0, sender, evWrite.release());
+
+            {
+                TAutoPtr<NActors::IEventHandle> handle;
+                auto event = runtime.GrabEdgeEvent<NKikimr::NEvents::TDataEvents::TEvWriteResult>(handle);
+                UNIT_ASSERT(event);
+                UNIT_ASSERT_VALUES_EQUAL(event->Record.GetOrigin(), TTestTxConfig::TxTablet0);
+                UNIT_ASSERT_VALUES_EQUAL(event->Record.GetTxId(), lockId);
+                UNIT_ASSERT_VALUES_EQUAL((ui64)event->Record.GetStatus(), (ui64)NKikimrDataEvents::TEvWriteResult::STATUS_COMPLETED);
+
+                auto readResult = ReadAllAsBatch(runtime, tableId, NOlap::TSnapshot(10, lockId), schema);
+                UNIT_ASSERT_VALUES_EQUAL(readResult->num_rows(), 0);
+            }
+        }
+        {
+            NConstruction::IArrayBuilder::TPtr keyColumn = std::make_shared<NConstruction::TSimpleArrayConstructor<NConstruction::TIntSeqFiller<arrow::UInt64Type>>>("key", 2049);
+            NConstruction::IArrayBuilder::TPtr column = std::make_shared<NConstruction::TSimpleArrayConstructor<NConstruction::TStringPoolFiller>>("field", NConstruction::TStringPoolFiller(8, 100));
+            auto batch = NConstruction::TRecordBatchConstructor({ keyColumn, column }).BuildBatch(2048);
+            TString blobData = NArrow::SerializeBatchNoCompression(batch);
+            UNIT_ASSERT(blobData.size() < TLimits::GetMaxBlobSize());
+            auto evWrite = std::make_unique<NKikimr::NEvents::TDataEvents::TEvWrite>(NKikimrDataEvents::TEvWrite::MODE_PREPARE);
+            evWrite->SetLockId(lockId, 1);
+
+            ui64 payloadIndex = NEvWrite::TPayloadWriter<NKikimr::NEvents::TDataEvents::TEvWrite>(*evWrite).AddDataToPayload(std::move(blobData));
+            evWrite->AddOperation(NKikimrDataEvents::TEvWrite::TOperation::OPERATION_REPLACE, {ownerId, tableId, schemaVersion}, columnsIds, payloadIndex, NKikimrDataEvents::FORMAT_ARROW);
+
+            TActorId sender = runtime.AllocateEdgeActor();
+            ForwardToTablet(runtime, TTestTxConfig::TxTablet0, sender, evWrite.release());
+
+            {
+                TAutoPtr<NActors::IEventHandle> handle;
+                auto event = runtime.GrabEdgeEvent<NKikimr::NEvents::TDataEvents::TEvWriteResult>(handle);
+                UNIT_ASSERT(event);
+                UNIT_ASSERT_VALUES_EQUAL(event->Record.GetOrigin(), TTestTxConfig::TxTablet0);
+                UNIT_ASSERT_VALUES_EQUAL(event->Record.GetTxId(), lockId);
+                UNIT_ASSERT_VALUES_EQUAL((ui64)event->Record.GetStatus(), (ui64)NKikimrDataEvents::TEvWriteResult::STATUS_COMPLETED);
+
+                auto readResult = ReadAllAsBatch(runtime, tableId, NOlap::TSnapshot(10, txId), schema);
+                UNIT_ASSERT_VALUES_EQUAL(readResult->num_rows(), 0);
+            }
+        }
+        {
+            auto evWrite = std::make_unique<NKikimr::NEvents::TDataEvents::TEvWrite>(NKikimrDataEvents::TEvWrite::MODE_PREPARE);
+            evWrite->SetLockId(lockId, 1);
+            evWrite->SetTxId(txId);
+            evWrite->Record.MutableLocks()->SetOp(NKikimrDataEvents::TKqpLocks::Commit);
+
+            TActorId sender = runtime.AllocateEdgeActor();
+            ForwardToTablet(runtime, TTestTxConfig::TxTablet0, sender, evWrite.release());
+
+            {
+                TAutoPtr<NActors::IEventHandle> handle;
+                auto event = runtime.GrabEdgeEvent<NKikimr::NEvents::TDataEvents::TEvWriteResult>(handle);
+                UNIT_ASSERT(event);
+                UNIT_ASSERT_VALUES_EQUAL(event->Record.GetOrigin(), TTestTxConfig::TxTablet0);
+                UNIT_ASSERT_VALUES_EQUAL((ui64)event->Record.GetStatus(), (ui64)NKikimrDataEvents::TEvWriteResult::STATUS_PREPARED);
+                UNIT_ASSERT_VALUES_EQUAL(event->Record.GetTxId(), txId);
+            }
+
+            PlanWriteTx(runtime, sender, NOlap::TSnapshot(11, txId));
+        }
+
+        auto readResult = ReadAllAsBatch(runtime, tableId, NOlap::TSnapshot(11, txId), schema);
+        UNIT_ASSERT_VALUES_EQUAL(readResult->num_rows(), 2 * 2048);
     }
 }
 
@@ -2322,7 +2421,7 @@ Y_UNIT_TEST_SUITE(TColumnShardTestReadWrite) {
         SetupSchema(runtime, sender, tableId);
         TAutoPtr<IEventHandle> handle;
 
-        // Write some test data to adavnce the time
+        // Write some test data to advance the time
         {
             std::pair<ui64, ui64> triggerPortion = {1, 1000};
             TString triggerData = MakeTestBlob(triggerPortion, ydbSchema);
@@ -2477,7 +2576,7 @@ Y_UNIT_TEST_SUITE(TColumnShardTestReadWrite) {
                     Cerr << " deletes blobs: " << JoinStrings(msg->DoNotKeep->begin(), msg->DoNotKeep->end(), " ");
                     for (const auto& blobId : *msg->DoNotKeep) {
                         deletedBlobs.insert(blobId.ToString());
-                        delayedBlobs.erase(TUnifiedBlobId(0, blobId).ToStringNew());
+                        delayedBlobs.erase(NOlap::TUnifiedBlobId(0, blobId).ToStringNew());
                     }
                 }
                 Cerr << Endl;

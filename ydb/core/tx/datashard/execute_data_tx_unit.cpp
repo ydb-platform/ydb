@@ -313,7 +313,7 @@ void TExecuteDataTxUnit::ExecuteDataTx(TOperation::TPtr op,
 
     KqpUpdateDataShardStatCounters(DataShard, counters);
     if (tx->GetDataTx()->CollectStats()) {
-        KqpFillTxStats(DataShard, counters, *result);
+        KqpFillTxStats(DataShard, counters, *result->Record.MutableTxStats());
     }
 
     if (counters.InvisibleRowSkips && op->LockTxId()) {

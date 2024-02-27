@@ -128,7 +128,7 @@ SRCS(
     misc/hazard_ptr.cpp
     misc/hedging_manager.cpp
     misc/histogram.cpp
-    misc/historic_usage_aggregator.cpp
+    misc/adjusted_exponential_moving_average.cpp
     misc/hr_timer.cpp
     misc/id_generator.cpp
     misc/linear_probe.cpp

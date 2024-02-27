@@ -12,30 +12,29 @@
 #include <ydb/core/fq/libs/control_plane_proxy/control_plane_proxy.h>
 #include <ydb/library/yql/public/issue/yql_issue.h>
 
-namespace NFq {
-namespace NPrivate {
+namespace NFq::NPrivate {
 
 using namespace NActors;
 using namespace NThreading;
 using namespace NYdb;
 
 template<typename TDerived>
-class TPlainBaseActor : public NActors::TActorBootstrapped<TDerived> {
+class TPlainBaseActor : public TActorBootstrapped<TDerived> {
 public:
-    using TBase = NActors::TActorBootstrapped<TDerived>;
+    using TBase = TActorBootstrapped<TDerived>;
     using TBase::Become;
     using TBase::SelfId;
     using TBase::Send;
 
 public:
     TPlainBaseActor(const TActorId& successActorId,
-               const TActorId& errorActorId,
-               TDuration requestTimeout,
-               const NPrivate::TRequestCommonCountersPtr& counters)
+                    const TActorId& errorActorId,
+                    TDuration requestTimeout,
+                    const TRequestCommonCountersPtr& counters)
         : Counters(counters)
         , SuccessActorId(successActorId)
         , ErrorActorId(errorActorId)
-        , RequestTimeout(requestTimeout) { }
+        , RequestTimeout(std::move(requestTimeout)) { }
 
     void Bootstrap() {
         CPP_LOG_T("TBaseActor Bootstrap started. Actor id: " << SelfId());
@@ -84,7 +83,7 @@ protected:
     virtual IEventBase* MakeTimeoutEventImpl(NYql::TIssue issue) = 0;
 
 protected:
-    const NPrivate::TRequestCommonCountersPtr Counters;
+    const TRequestCommonCountersPtr Counters;
     const TActorId SuccessActorId;
     const TActorId ErrorActorId;
     const TDuration RequestTimeout;
@@ -112,7 +111,7 @@ public:
     TBaseActor(const TActorId& proxyActorId,
                const TEventRequestPtr request,
                TDuration requestTimeout,
-               const NPrivate::TRequestCommonCountersPtr& counters)
+               const TRequestCommonCountersPtr& counters)
         : TPlainBaseActor<TDerived>(proxyActorId,
                                     request->Sender,
                                     std::move(requestTimeout),
@@ -152,5 +151,4 @@ protected:
     const TEventRequestPtr Request;
 };
 
-} // namespace NPrivate
-} // namespace NFq
+} // namespace NFq::NPrivate

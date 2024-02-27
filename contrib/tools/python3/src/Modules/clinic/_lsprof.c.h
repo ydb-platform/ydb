@@ -2,6 +2,12 @@
 preserve
 [clinic start generated code]*/
 
+#if defined(Py_BUILD_CORE) && !defined(Py_BUILD_CORE_MODULE)
+#  include "pycore_gc.h"            // PyGC_Head
+#  include "pycore_runtime.h"       // _Py_ID()
+#endif
+
+
 PyDoc_STRVAR(_lsprof_Profiler_getstats__doc__,
 "getstats($self, /)\n"
 "--\n"
@@ -39,10 +45,10 @@ _lsprof_Profiler_getstats_impl(ProfilerObject *self, PyTypeObject *cls);
 static PyObject *
 _lsprof_Profiler_getstats(ProfilerObject *self, PyTypeObject *cls, PyObject *const *args, Py_ssize_t nargs, PyObject *kwnames)
 {
-    if (nargs) {
+    if (nargs || (kwnames && PyTuple_GET_SIZE(kwnames))) {
         PyErr_SetString(PyExc_TypeError, "getstats() takes no arguments");
         return NULL;
     }
     return _lsprof_Profiler_getstats_impl(self, cls);
 }
-/*[clinic end generated code: output=0615a53cce828f06 input=a9049054013a1b77]*/
+/*[clinic end generated code: output=cc3b236bc414a372 input=a9049054013a1b77]*/

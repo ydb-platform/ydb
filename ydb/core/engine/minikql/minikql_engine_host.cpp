@@ -1051,6 +1051,23 @@ NUdf::TUnboxedValue GetCellValue(const TCell& cell, NScheme::TTypeInfo type) {
             return NUdf::TUnboxedValuePod(v);
         }
 
+        case NYql::NProto::TypeIds::Date32: {
+            NUdf::TDataType<NUdf::TDate32>::TLayout v = cell.AsValue<i32>();
+            return NUdf::TUnboxedValuePod(v);
+        }
+        case NYql::NProto::TypeIds::Datetime64: {
+            NUdf::TDataType<NUdf::TDatetime64>::TLayout v = cell.AsValue<i64>();
+            return NUdf::TUnboxedValuePod(v);
+        }
+        case NYql::NProto::TypeIds::Timestamp64: {
+            NUdf::TDataType<NUdf::TTimestamp64>::TLayout v = cell.AsValue<i64>();
+            return NUdf::TUnboxedValuePod(v);
+        }
+        case NYql::NProto::TypeIds::Interval64: {
+            NUdf::TDataType<NUdf::TInterval64>::TLayout v = cell.AsValue<i64>();
+            return NUdf::TUnboxedValuePod(v);
+        }
+
         case NYql::NProto::TypeIds::TzDate:
         case NYql::NProto::TypeIds::TzDatetime:
         case NYql::NProto::TypeIds::TzTimestamp:

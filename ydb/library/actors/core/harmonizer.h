@@ -2,9 +2,11 @@
 
 #include "defs.h"
 #include "config.h"
+#include "executor_pool_shared.h"
 
 namespace NActors {
     class IExecutorPool;
+    class TSharedExecutorPool;
 
     template <typename T>
     struct TWaitingStats;
@@ -45,6 +47,7 @@ namespace NActors {
         virtual void Enable(bool enable) = 0;
         virtual TPoolHarmonizerStats GetPoolStats(i16 poolId) const = 0;
         virtual THarmonizerStats GetStats() const = 0;
+        virtual void SetSharedPool(TSharedExecutorPool* pool) = 0;
     };
 
     IHarmonizer* MakeHarmonizer(ui64 ts);

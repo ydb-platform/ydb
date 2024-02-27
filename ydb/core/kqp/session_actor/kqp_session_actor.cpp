@@ -8,6 +8,7 @@
 #include <ydb/core/kqp/common/kqp_lwtrace_probes.h>
 #include <ydb/core/kqp/common/kqp_ru_calc.h>
 #include <ydb/core/kqp/common/kqp_timeouts.h>
+#include <ydb/core/kqp/common/simple/query_ast.h>
 #include <ydb/core/kqp/compile_service/kqp_compile_service.h>
 #include <ydb/core/kqp/executer_actor/kqp_executer.h>
 #include <ydb/core/kqp/executer_actor/kqp_locks_helper.h>
@@ -18,6 +19,7 @@
 #include <ydb/core/kqp/rm_service/kqp_snapshot_manager.h>
 #include <ydb/core/ydb_convert/ydb_convert.h>
 #include <ydb/core/tx/schemeshard/schemeshard.h>
+#include <ydb/core/kqp/rm_service/kqp_rm_service.h>
 #include <ydb/public/lib/operation_id/operation_id.h>
 
 #include <ydb/core/util/ulid.h>
@@ -512,6 +514,19 @@ public:
         OnSuccessCompileRequest();
     }
 
+    void Handle(TEvKqp::TEvParseResponse::TPtr& ev) {
+        QueryState->SaveAndCheckParseResult(std::move(*ev->Get()));
+        CompileStatement();
+    }
+
+    void CompileStatement() {
+        auto request = QueryState->BuildCompileRequest(CompilationCookie);
+        LOG_D("Sending CompileQuery request");
+
+        Send(MakeKqpCompileServiceID(SelfId().NodeId()), request.release(), 0, QueryState->QueryId,
+            QueryState->KqpSessionSpan.GetTraceId());
+    }
+
     void OnSuccessCompileRequest() {
         if (QueryState->GetAction() == NKikimrKqp::QUERY_ACTION_PREPARE ||
             QueryState->GetAction() == NKikimrKqp::QUERY_ACTION_EXPLAIN)
@@ -619,6 +634,23 @@ public:
         QueryState->TxId = UlidGen.Next();
         QueryState->TxCtx = MakeIntrusive<TKqpTransactionContext>(false, AppData()->FunctionRegistry,
             AppData()->TimeProvider, AppData()->RandomProvider, Config->EnableKqpImmediateEffects);
+
+        auto& alloc = QueryState->TxCtx->TxAlloc;
+        ui64 mkqlInitialLimit = Settings.MkqlInitialMemoryLimit;
+
+        const auto& queryLimitsProto = Settings.TableService.GetQueryLimits();
+        const auto& phaseLimitsProto = queryLimitsProto.GetPhaseLimits();
+        ui64 mkqlMaxLimit = phaseLimitsProto.GetComputeNodeMemoryLimitBytes();
+        mkqlMaxLimit = mkqlMaxLimit ? mkqlMaxLimit : ui64(Settings.MkqlMaxMemoryLimit);
+
+        alloc->Alloc.SetLimit(mkqlInitialLimit);
+        alloc->Alloc.Ref().SetIncreaseMemoryLimitCallback([this, &alloc, mkqlMaxLimit](ui64 currentLimit, ui64 required) {
+            if (required < mkqlMaxLimit) {
+                LOG_D("Increase memory limit from " << currentLimit << " to " << required);
+                alloc->Alloc.SetLimit(required);
+            }
+        });
+
         QueryState->QueryData = std::make_shared<TQueryData>(QueryState->TxCtx->TxAlloc);
         QueryState->TxCtx->SetIsolationLevel(settings);
         QueryState->TxCtx->OnBeginQuery();
@@ -748,6 +780,8 @@ public:
             }
         } catch(const yexception& ex) {
             ythrow TRequestFail(Ydb::StatusIds::BAD_REQUEST) << ex.what();
+        } catch(const TMemoryLimitExceededException&) {
+            ythrow TRequestFail(Ydb::StatusIds::BAD_REQUEST) << BuildMemoryLimitExceptionMessage();
         }
         return true;
     }
@@ -779,7 +813,7 @@ public:
             request.QueryType = queryState->GetType();
             if (Y_LIKELY(queryState->PreparedQuery)) {
                 ui64 resultSetsCount = queryState->PreparedQuery->GetPhysicalQuery().ResultBindingsSize();
-                request.AllowTrailingResults = (resultSetsCount == 1);
+                request.AllowTrailingResults = (resultSetsCount == 1 && queryState->Statements.size() <= 1);
                 request.AllowTrailingResults &= (QueryState->RequestEv->GetSupportsStreamTrailingResult());
             }
         }
@@ -949,6 +983,7 @@ public:
 
     bool ExecutePhyTx(const TKqpPhyTxHolder::TConstPtr& tx, bool commit) {
         if (tx) {
+            QueryState->PrepareStatementTransaction(tx->GetType());
             switch (tx->GetType()) {
                 case NKqpProto::TKqpPhyTx::TYPE_SCHEME:
                     YQL_ENSURE(tx->StagesSize() == 0);
@@ -1098,9 +1133,18 @@ public:
         ExecuterId = RegisterWithSameMailbox(executerActor);
     }
 
+    static ui32 GetResultsCount(const IKqpGateway::TExecPhysicalRequest& req) {
+        ui32 results = 0;
+        for (const auto& transaction : req.Transactions) {
+            results += transaction.Body->ResultsSize();
+        }
+        return results;
+    }
+
     void SendToExecuter(IKqpGateway::TExecPhysicalRequest&& request, bool isRollback = false) {
         if (QueryState) {
             request.Orbit = std::move(QueryState->Orbit);
+            QueryState->StatementResultSize = GetResultsCount(request);
         }
         request.PerRequestDataSizeLimit = RequestControls.PerRequestDataSizeLimit;
         request.MaxShardCount = RequestControls.MaxShardCount;
@@ -1112,7 +1156,7 @@ public:
             RequestCounters, Settings.TableService.GetAggregationConfig(), Settings.TableService.GetExecuterRetriesConfig(),
             AsyncIoFactory, QueryState ? QueryState->PreparedQuery : nullptr, Settings.TableService.GetChannelTransportVersion(), SelfId(), 2 * TDuration::Seconds(MetadataProviderConfig.GetRefreshPeriodSeconds()),
             QueryState ? QueryState->UserRequestContext : MakeIntrusive<TUserRequestContext>("", Settings.Database, SessionId),
-            Settings.TableService.GetEnableOlapSink());
+            Settings.TableService.GetEnableOlapSink(), QueryState ? QueryState->StatementResultIndex : 0);
 
         auto exId = RegisterWithSameMailbox(executerActor);
         LOG_D("Created new KQP executer: " << exId << " isRollback: " << isRollback);
@@ -1603,7 +1647,16 @@ public:
 
         QueryResponse = std::move(resEv);
 
-        Cleanup();
+        ProcessNextStatement();
+    }
+
+    void ProcessNextStatement() {
+        if (QueryState->ProcessingLastStatement()) {
+            Cleanup();
+            return;
+        }
+        QueryState->PrepareNextStatement();
+        CompileStatement();
     }
 
     void ReplyQueryCompileError() {
@@ -1732,10 +1785,17 @@ public:
 
             const auto& phyQuery = QueryState->PreparedQuery->GetPhysicalQuery();
             FillColumnsMeta(phyQuery, response);
-        } else if (compileResult->Status == Ydb::StatusIds::TIMEOUT && QueryState->QueryDeadlines.CancelAt) {
-            // The compile timeout cause cancelation execution of request.
-            // So in case of cancel after we can reply with canceled status
-            ev.SetYdbStatus(Ydb::StatusIds::CANCELLED);
+        } else {
+            if (compileResult->Status == Ydb::StatusIds::TIMEOUT && QueryState->QueryDeadlines.CancelAt) {
+                // The compile timeout cause cancelation execution of request.
+                // So in case of cancel after we can reply with canceled status
+                ev.SetYdbStatus(Ydb::StatusIds::CANCELLED);
+            }
+
+            auto& preparedQuery = compileResult->PreparedQuery;
+            if (preparedQuery && QueryState->ReportStats() && QueryState->GetStatsMode() >= Ydb::Table::QueryStatsCollection::STATS_COLLECTION_FULL) {
+                response.SetQueryAst(preparedQuery->GetPhysicalQuery().GetQueryAst());
+            }
         }
     }
 
@@ -2051,6 +2111,9 @@ public:
             ReplyQueryError(ex.Status, ex.what(), ex.Issues);
         } catch (const yexception& ex) {
             InternalError(ex.what());
+        } catch (const TMemoryLimitExceededException&) {
+            ReplyQueryError(Ydb::StatusIds::INTERNAL_ERROR,
+                BuildMemoryLimitExceptionMessage());
         }
     }
 
@@ -2078,6 +2141,7 @@ public:
 
                 // forgotten messages from previous aborted request
                 hFunc(TEvKqp::TEvCompileResponse, Handle);
+                hFunc(TEvKqp::TEvParseResponse, Handle);
                 hFunc(TEvTxProxySchemeCache::TEvNavigateKeySetResult, Handle);
                 hFunc(TEvents::TEvUndelivered, HandleNoop);
 
@@ -2090,6 +2154,9 @@ public:
             ReplyQueryError(ex.Status, ex.what(), ex.Issues);
         } catch (const yexception& ex) {
             InternalError(ex.what());
+        } catch (const TMemoryLimitExceededException&) {
+            ReplyQueryError(Ydb::StatusIds::UNDETERMINED,
+                BuildMemoryLimitExceptionMessage());
         }
     }
 
@@ -2125,14 +2192,24 @@ public:
             }
         } catch (const yexception& ex) {
             InternalError(ex.what());
+        } catch (const TMemoryLimitExceededException&) {
+            ReplyQueryError(Ydb::StatusIds::INTERNAL_ERROR,
+                BuildMemoryLimitExceptionMessage());
         }
     }
 
     STATEFN(FinalCleanupState) {
-        switch (ev->GetTypeRewrite()) {
-            hFunc(TEvents::TEvGone, HandleFinalCleanup);
-            hFunc(TEvents::TEvUndelivered, HandleNoop);
-            hFunc(TEvKqpSnapshot::TEvCreateSnapshotResponse, Handle);
+        try {
+            switch (ev->GetTypeRewrite()) {
+                hFunc(TEvents::TEvGone, HandleFinalCleanup);
+                hFunc(TEvents::TEvUndelivered, HandleNoop);
+                hFunc(TEvKqpSnapshot::TEvCreateSnapshotResponse, Handle);
+            }
+        } catch (const yexception& ex) {
+            InternalError(ex.what());
+        } catch (const TMemoryLimitExceededException&) {
+            ReplyQueryError(Ydb::StatusIds::INTERNAL_ERROR,
+                BuildMemoryLimitExceptionMessage());
         }
     }
 
@@ -2162,6 +2239,15 @@ private:
             ReplyQueryError(Ydb::StatusIds::INTERNAL_ERROR, message);
         } else {
             CleanupAndPassAway();
+        }
+    }
+
+    TString BuildMemoryLimitExceptionMessage() const {
+        if (QueryState && QueryState->TxCtx) {
+            return TStringBuilder() << "Memory limit exception at " << CurrentStateFuncName()
+                << ", current limit is " << QueryState->TxCtx->TxAlloc->Alloc.GetLimit() << " bytes.";
+        } else {
+            return TStringBuilder() << "Memory limit exception at " << CurrentStateFuncName();
         }
     }
 

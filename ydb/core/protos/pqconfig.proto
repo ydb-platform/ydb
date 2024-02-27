@@ -283,6 +283,15 @@ enum ETopicPartitionStatus {
     Deleted = 3; // the partition can't be written and read
 }
 
+enum EConsumerScalingSupport {
+    // The consumer can't work with scaling.
+    NOT_SUPPORT = 1;
+    // The consumer does not commit offsets. The order of messages may be disrupted at the time of scaling.
+    PARTIAL_SUPPORT = 2;
+    // The consumer fully supports scaling: during the reading process, offsets are regularly committed.
+    FULL_SUPPORT = 3;
+}
+
 message TPQTabletConfig {
     optional uint64 CacheSize = 1 [default = 104857600]; //100Mb, per tablet
     optional TPartitionConfig PartitionConfig = 2; //mandatory
@@ -297,7 +306,7 @@ message TPQTabletConfig {
     optional string Topic = 11;
     optional string DC = 12;
 
-    // ReadRules, ReadTopicTimestampMs, ReadRuleVersions, ConsumerFormatVersions and ConsumersCodecs form a consumer data array stored by columns
+    // ReadRules, ReadTopicTimestampMs, ReadRuleVersions, ConsumerFormatVersions, ConsumersCodecs and ConsumerScalingSupport form a consumer data array stored by columns
     repeated string ReadRules = 13;
     repeated uint64 ReadFromTimestampsMs = 14;
     repeated uint64 ConsumerFormatVersions = 15;
@@ -306,6 +315,7 @@ message TPQTabletConfig {
         repeated string Codecs = 2;
     }
     repeated TCodecs ConsumerCodecs = 16;
+    repeated EConsumerScalingSupport ConsumerScalingSupport = 37;
     repeated string ReadRuleServiceTypes = 17;
 
     optional uint64 FormatVersion = 20;
@@ -359,8 +369,7 @@ message TPQTabletConfig {
     }
     optional TPartitionStrategy PartitionStrategy = 35;
 
-    repeated TPartition AllPartitions = 36;
-
+    repeated TPartition AllPartitions = 36; // filled by schemeshard
 }
 
 message THeartbeat {
@@ -377,6 +386,7 @@ message TMessageGroupInfo {
     }
 
     optional uint64 SeqNo = 1;
+    optional uint64 MinSeqNo = 9;
     optional uint64 Offset = 2;
     optional uint64 WriteTimestamp = 3; // TInstant::TValue
     optional uint64 CreateTimestamp = 4; // TInstant::TValue
@@ -764,7 +774,10 @@ message TStatusResponse {
         optional uint64 LastReadTimestampMs = 7;
         optional NPersQueue.NErrorCode.EErrorCode ErrorCode = 8;
         optional uint64 CommitedOffset = 9;
+
+        optional bool ReadingFinished = 10;
     }
+
 
     optional uint64 TabletId = 1;
     repeated TPartResult PartResult = 2;
@@ -946,6 +959,12 @@ message TEvCheckPartitionStatusResponse {
     optional uint64 SeqNo = 2;
 };
 
+// The consumer's reading of the partition is finished
+message TEvReadingPartitionStatusRequest {
+    optional string Consumer = 1;
+    optional uint32 PartitionId = 2;
+};
+
 message TTransaction {
     enum EKind {
         KIND_UNKNOWN = 0;
@@ -992,9 +1011,19 @@ message TTransaction {
     // получатель результата
     //
     optional NActorsProto.TActorId SourceActor = 14;
+
+    optional uint64 WriteId = 15;
 };
 
 message TTabletTxInfo {
+    message TTxWriteInfo {
+        optional uint64 WriteId = 1;
+        optional uint32 OriginalPartitionId = 2;
+        optional uint32 InternalPartitionId = 3;
+    };
+
     optional uint64 LastStep = 2;
     optional uint64 LastTxId = 3;
+    repeated TTxWriteInfo TxWrites = 4;
+    optional uint64 NextSupportivePartitionId = 5;
 }

@@ -188,11 +188,19 @@ TCodecStatistics& TCodecStatistics::Append(const std::pair<ECodec, TDuration>& c
     return *this;
 }
 
+TCodecStatistics& TCodecStatistics::AppendToValueDictionaryCompression(TDuration duration)
+{
+    ValueDictionaryCompressionDuration_ += duration;
+    TotalDuration_ += duration;
+    return *this;
+}
+
 TCodecStatistics& TCodecStatistics::operator+=(const TCodecStatistics& other)
 {
     for (const auto& pair : other.CodecToDuration_) {
         Append(pair);
     }
+    AppendToValueDictionaryCompression(other.ValueDictionaryCompressionDuration_);
     return *this;
 }
 
@@ -204,6 +212,11 @@ TDuration TCodecStatistics::GetTotalDuration() const
 void FormatValue(TStringBuilderBase* builder, const TCodecStatistics& statistics, TStringBuf /* spec */)
 {
     FormatKeyValueRange(builder, statistics.CodecToDuration(), TDefaultFormatter());
+    if (statistics.ValueDictionaryCompressionDuration()) {
+        builder->AppendString(", ");
+        builder->AppendFormat("ValueDictionaryCompressionDuration: %v",
+            statistics.ValueDictionaryCompressionDuration());
+    }
 }
 
 TString ToString(const TCodecStatistics& statistics)

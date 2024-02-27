@@ -33,9 +33,9 @@ static_assert(
     "Incorrect type order.");
 
 DEFINE_BIT_ENUM_WITH_UNDERLYING_TYPE(EValueFlags, ui8,
-    ((None)       (0x0000))
-    ((Aggregate)  (0x0001))
-    ((Hunk)       (0x0002))
+    ((None)        (0x00))
+    ((Aggregate)   (0x01))
+    ((Hunk)        (0x02))
 );
 
 DEFINE_ENUM_WITH_UNDERLYING_TYPE(ESimpleLogicalValueType, ui32,

@@ -1,4 +1,6 @@
 RECURSE(
+    protos
+    tools
     utils
 )
 

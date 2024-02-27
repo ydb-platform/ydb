@@ -276,6 +276,16 @@ void TDictionaryCompressionConfig::Register(TRegistrar registrar)
             EDictionaryCompressionPolicy::FreshChunkFirst,
         });
 
+    registrar.Parameter("policy_probation_samples_size", &TThis::PolicyProbationSamplesSize)
+        .GreaterThan(0)
+        .Default(12_MB);
+    registrar.Parameter("max_acceptable_compression_ratio", &TThis::MaxAcceptableCompressionRatio)
+        .Default(0.7)
+        .InRange(0, 1);
+    registrar.Parameter("max_decompression_blob_size", &TThis::MaxDecompressionBlobSize)
+        .GreaterThan(0)
+        .Default(64_MB);
+
     registrar.Postprocessor([] (TThis* config) {
         if (config->DesiredSampleCount > config->MaxProcessedSampleCount) {
             THROW_ERROR_EXCEPTION("\"desired_sample_count\" cannot be greater than \"max_processed_sample_count\"");

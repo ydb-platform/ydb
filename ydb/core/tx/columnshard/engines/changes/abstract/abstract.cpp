@@ -35,31 +35,24 @@ TConclusionStatus TColumnEngineChanges::ConstructBlobs(TConstructionContext& con
     return result;
 }
 
-bool TColumnEngineChanges::ApplyChanges(TColumnEngineForLogs& self, TApplyChangesContext& context) {
-    Y_ABORT_UNLESS(Stage == EStage::Compiled);
-    Y_ABORT_UNLESS(DoApplyChanges(self, context));
-    Stage = EStage::Applied;
-    return true;
-}
-
-void TColumnEngineChanges::WriteIndex(NColumnShard::TColumnShard& self, TWriteIndexContext& context) {
+void TColumnEngineChanges::WriteIndexOnExecute(NColumnShard::TColumnShard* self, TWriteIndexContext& context) {
     Y_ABORT_UNLESS(Stage != EStage::Aborted);
-    if ((ui32)Stage >= (ui32)EStage::Written) {
-        return;
-    }
-    Y_ABORT_UNLESS(Stage == EStage::Applied);
+    Y_ABORT_UNLESS(Stage <= EStage::Written);
+    Y_ABORT_UNLESS(Stage >= EStage::Compiled);
 
-    DoWriteIndex(self, context);
+    DoWriteIndexOnExecute(self, context);
     Stage = EStage::Written;
 }
 
-void TColumnEngineChanges::WriteIndexComplete(NColumnShard::TColumnShard& self, TWriteIndexCompleteContext& context) {
-    Y_ABORT_UNLESS(Stage == EStage::Written);
+void TColumnEngineChanges::WriteIndexOnComplete(NColumnShard::TColumnShard* self, TWriteIndexCompleteContext& context) {
+    Y_ABORT_UNLESS(Stage == EStage::Written || !self);
     Stage = EStage::Finished;
     AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("event", "WriteIndexComplete")("type", TypeString())("success", context.FinishedSuccessfully);
-    DoWriteIndexComplete(self, context);
-    DoOnFinish(self, context);
-    self.IncCounter(GetCounterIndex(context.FinishedSuccessfully));
+    DoWriteIndexOnComplete(self, context);
+    if (self) {
+        OnFinish(*self, context);
+        self->IncCounter(GetCounterIndex(context.FinishedSuccessfully));
+    }
 
 }
 
@@ -82,10 +75,11 @@ TColumnEngineChanges::~TColumnEngineChanges() {
 void TColumnEngineChanges::Abort(NColumnShard::TColumnShard& self, TChangesFinishContext& context) {
     Y_ABORT_UNLESS(Stage != EStage::Finished && Stage != EStage::Created && Stage != EStage::Aborted);
     Stage = EStage::Aborted;
-    DoOnFinish(self, context);
+    OnFinish(self, context);
 }
 
 void TColumnEngineChanges::Start(NColumnShard::TColumnShard& self) {
+    self.DataLocksManager->RegisterLock(TypeString() + "::" + GetTaskIdentifier(), BuildDataLock());
     Y_ABORT_UNLESS(Stage == EStage::Created);
     DoStart(self);
     Stage = EStage::Started;
@@ -108,10 +102,15 @@ void TColumnEngineChanges::AbortEmergency() {
     OnAbortEmergency();
 }
 
-TWriteIndexContext::TWriteIndexContext(NTabletFlatExecutor::TTransactionContext& txc, IDbWrapper& dbWrapper)
-    : Txc(txc)
-    , BlobManagerDb(std::make_shared<NColumnShard::TBlobManagerDb>(txc.DB))
+void TColumnEngineChanges::OnFinish(NColumnShard::TColumnShard& self, TChangesFinishContext& context) {
+    self.DataLocksManager->UnregisterLock(TypeString() + "::" + GetTaskIdentifier());
+    DoOnFinish(self, context);
+}
+
+TWriteIndexContext::TWriteIndexContext(NTable::TDatabase* db, IDbWrapper& dbWrapper, TColumnEngineForLogs& engineLogs)
+    : DB(db)
     , DBWrapper(dbWrapper)
+    , EngineLogs(engineLogs)
 {
 
 }

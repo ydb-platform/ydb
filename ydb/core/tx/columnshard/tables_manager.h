@@ -140,7 +140,7 @@ private:
 public:
     TTablesManager(const std::shared_ptr<NOlap::IStoragesManager>& storagesManager, const ui64 tabletId);
 
-    bool TryFinalizeDropPath(NTabletFlatExecutor::TTransactionContext& txc, const ui64 pathId);
+    bool TryFinalizeDropPath(NTable::TDatabase& dbTable, const ui64 pathId);
 
     const TTtl& GetTtl() const {
         return Ttl;
@@ -187,6 +187,32 @@ public:
     const NOlap::IColumnEngine& GetPrimaryIndexSafe() const {
         Y_ABORT_UNLESS(!!PrimaryIndex);
         return *PrimaryIndex;
+    }
+
+    template <class TIndex>
+    TIndex& MutablePrimaryIndexAsVerified() {
+        AFL_VERIFY(!!PrimaryIndex);
+        auto result = dynamic_cast<TIndex*>(PrimaryIndex.get());
+        AFL_VERIFY(result);
+        return *result;
+    }
+
+    template <class TIndex>
+    const TIndex& GetPrimaryIndexAsVerified() const {
+        AFL_VERIFY(!!PrimaryIndex);
+        auto result = dynamic_cast<const TIndex*>(PrimaryIndex.get());
+        AFL_VERIFY(result);
+        return *result;
+    }
+
+    template <class TIndex>
+    const TIndex* GetPrimaryIndexAsOptional() const {
+        if (!PrimaryIndex) {
+            return nullptr;
+        }
+        auto result = dynamic_cast<const TIndex*>(PrimaryIndex.get());
+        AFL_VERIFY(result);
+        return result;
     }
 
     bool InitFromDB(NIceDb::TNiceDb& db);

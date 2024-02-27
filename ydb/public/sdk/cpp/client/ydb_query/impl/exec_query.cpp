@@ -136,16 +136,21 @@ struct TExecuteQueryBuffer : public TThrRefBase, TNonCopyable {
         Iterator_.ReadNext().Subscribe([self](TAsyncExecuteQueryPart partFuture) mutable {
             auto part = partFuture.ExtractValue();
 
+            if (const auto& st = part.GetStats()) {
+                self->Stats_ = st;
+            }
+
             if (!part.IsSuccess()) {
+                TMaybe<TExecStats> stats;
+                std::swap(self->Stats_, stats);
+
                 if (part.EOS()) {
                     TVector<NYql::TIssue> issues;
                     TVector<Ydb::ResultSet> resultProtos;
-                    TMaybe<TExecStats> stats;
                     TMaybe<TTransaction> tx;
 
                     std::swap(self->Issues_, issues);
                     std::swap(self->ResultSets_, resultProtos);
-                    std::swap(self->Stats_, stats);
                     std::swap(self->Tx_, tx);
 
                     TVector<TResultSet> resultSets;
@@ -160,7 +165,7 @@ struct TExecuteQueryBuffer : public TThrRefBase, TNonCopyable {
                         std::move(tx)
                     ));
                 } else {
-                    self->Promise_.SetValue(TExecuteQueryResult(std::move(part), {}, {}, {}));
+                    self->Promise_.SetValue(TExecuteQueryResult(std::move(part), {}, std::move(stats), {}));
                 }
 
                 return;
@@ -183,10 +188,6 @@ struct TExecuteQueryBuffer : public TThrRefBase, TNonCopyable {
                 }
 
                 resultSet.mutable_rows()->Add(inRsProto.rows().begin(), inRsProto.rows().end());
-            }
-
-            if (const auto& st = part.GetStats()) {
-                self->Stats_ = st;
             }
 
             if (const auto& tx = part.GetTransaction()) {

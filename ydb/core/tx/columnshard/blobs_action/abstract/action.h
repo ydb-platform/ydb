@@ -55,7 +55,7 @@ public:
         return !!Writing;
     }
 
-    void OnExecuteTxAfterAction(NColumnShard::TColumnShard& self, NColumnShard::TBlobManagerDb& dbBlobs, const bool blobsWroteSuccessfully) {
+    void OnExecuteTxAfterAction(NColumnShard::TColumnShard& self, TBlobManagerDb& dbBlobs, const bool blobsWroteSuccessfully) {
         if (Removing) {
             Removing->OnExecuteTxAfterRemoving(self, dbBlobs, blobsWroteSuccessfully);
         }
@@ -144,7 +144,7 @@ public:
         return false;
     }
 
-    void OnExecuteTxAfterAction(NColumnShard::TColumnShard& self, NColumnShard::TBlobManagerDb& dbBlobs, const bool blobsWroteSuccessfully) {
+    void OnExecuteTxAfterAction(NColumnShard::TColumnShard& self, TBlobManagerDb& dbBlobs, const bool blobsWroteSuccessfully) {
         for (auto&& i : StorageActions) {
             i.second.OnExecuteTxAfterAction(self, dbBlobs, blobsWroteSuccessfully);
         }

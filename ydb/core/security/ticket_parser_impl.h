@@ -1182,7 +1182,6 @@ private:
             html << "<table class='table simple-table1 table-hover table-condensed'>";
             html << "<thead><tr>";
             html << "<th>Ticket</th>";
-            html << "<th>UID</th>";
             html << "<th>Database</th>";
             html << "<th>Subject</th>";
             html << "<th>Error</th>";
@@ -1195,10 +1194,7 @@ private:
             html << "<th>Peer</th>";
             html << "</tr></thead><tbody>";
             for (const auto& [key, record] : GetDerived()->GetUserTokens()) {
-                html << "<tr>";
-                html << "<td>" << record.GetMaskedTicket() << "</td>";
-                TDerived::WriteTokenRecordValues(html, key, record);
-                html << "</tr>";
+                WriteTokenRecordValues(html, key, record);
             }
             html << "</tbody></table>";
             html << "</div>";
@@ -1588,6 +1584,8 @@ protected:
 
     template <typename TTokenRecord>
     static void WriteTokenRecordValues(TStringBuilder& html, const TString& key, const TTokenRecord& record) {
+        html << "<tr>";
+        html << "<td>" << record.GetMaskedTicket() << "</td>";
         html << "<td>" << record.Database << "</td>";
         html << "<td>" << record.Subject << "</td>";
         html << "<td>" << record.Error << "</td>";
@@ -1598,6 +1596,7 @@ protected:
         html << "<td>" << record.ExpireTime << "</td>";
         html << "<td>" << record.AccessTime << "</td>";
         html << "<td>" << record.PeerName << "</td>";
+        html << "</tr>";
     }
 
     void InitCounters(::NMonitoring::TDynamicCounterPtr counters) {

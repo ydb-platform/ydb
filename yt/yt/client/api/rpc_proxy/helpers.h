@@ -280,7 +280,8 @@ std::vector<TSharedRef> SerializeRowset(
 template <class TRow>
 TIntrusivePtr<NApi::IRowset<TRow>> DeserializeRowset(
     const NProto::TRowsetDescriptor& descriptor,
-    const TSharedRef& data);
+    const TSharedRef& data,
+    NTableClient::TRowBufferPtr buffer = nullptr);
 
 std::vector<TSharedRef> SerializeRowset(
     const NTableClient::TTableSchema& schema,

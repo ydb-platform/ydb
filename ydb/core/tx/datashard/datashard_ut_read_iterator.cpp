@@ -747,6 +747,17 @@ struct TTestHelper {
         CheckResult(Tables[tableName].UserTable, *readResult, gold);
     }
 
+    void TestReadOneMissingKey(const TString& tableName, const std::vector<ui32>& keys)
+    {
+        auto readRequest = GetBaseReadRequest(tableName, 1);
+        AddKeyQuery(*readRequest, keys);
+
+        auto readResult = SendRead(tableName, readRequest.release());
+
+        UNIT_ASSERT_VALUES_EQUAL(readResult->Record.GetStatus().GetCode(), Ydb::StatusIds::SUCCESS);
+        UNIT_ASSERT_VALUES_EQUAL(readResult->GetRowsCount(), 0);
+    }
+
     void WriteRowTwin(const TString& tableName, const TVector<ui32>& values, bool isEvWrite) {
         if(isEvWrite)
             WriteRow(tableName, values);
@@ -3177,7 +3188,7 @@ Y_UNIT_TEST_SUITE(DataShardReadIterator) {
             NKikimrDataEvents::TEvWriteResult writeResult = helper.SendWrite(tabletId, std::move(writeRequest));
 
             UNIT_ASSERT_VALUES_EQUAL(writeResult.GetStatus(), NKikimrDataEvents::TEvWriteResult::STATUS_COMPLETED);
-            UNIT_ASSERT(writeResult.TxLocksSize() == 1);
+            UNIT_ASSERT_VALUES_EQUAL(writeResult.TxLocksSize(), 1);
             const auto& writeLock = writeResult.GetTxLocks(0);
             UNIT_ASSERT_VALUES_EQUAL(writeLock.GetLockId(), readLock.GetLockId());
             UNIT_ASSERT_VALUES_EQUAL(writeLock.GetDataShard(), readLock.GetDataShard());
@@ -3200,10 +3211,138 @@ Y_UNIT_TEST_SUITE(DataShardReadIterator) {
             NKikimrDataEvents::TEvWriteResult writeResult = helper.SendWrite(tabletId, std::move(writeRequest));
 
             UNIT_ASSERT_VALUES_EQUAL(writeResult.GetStatus(), NKikimrDataEvents::TEvWriteResult::STATUS_COMPLETED);
+            UNIT_ASSERT_VALUES_EQUAL(writeResult.TxLocksSize(), 0);
         }
 
         // Read written data.
         helper.TestReadOneKey(tableName, {1, 1, 1}, 101);
+    }
+
+    Y_UNIT_TEST_QUAD(TryCommitLocksPrepared, Volatile, BreakLocks) {
+        TTestHelper helper;
+
+        auto runtime = helper.Server->GetRuntime();
+        runtime->SetLogPriority(NKikimrServices::TX_DATASHARD, NLog::PRI_TRACE);
+
+        const ui64 lockTxId = 1011121314;
+        const TString tableName1 = "table-1";
+        const TString tableName2 = "table-1-many";
+        const ui64 tabletId1 = helper.Tables[tableName1].TabletId;
+        const ui64 tabletId2 = helper.Tables[tableName2].TabletId;
+        const ui64 nodeId = runtime->GetNodeId();
+        ui64 minStep1, maxStep1;
+        ui64 minStep2, maxStep2;
+
+        // Upsert 3 rows to table 2
+        helper.UpsertMany(1, 3);
+
+        Cout << "========= Read origin data from table 2" << Endl;
+        {
+            helper.TestReadOneKey(tableName2, {1, 1, 1}, 1);
+        }
+
+        NLongTxService::TLockHandle lockHandle(lockTxId, runtime->GetActorSystem(0));
+
+        Cerr << "===== Read in a transaction on table 1" << Endl;
+        ::google::protobuf::RepeatedPtrField<::NKikimrDataEvents::TLock> readLocks;
+        {
+            auto readRequest1 = helper.GetBaseReadRequest(tableName1, 1);
+            readRequest1->Record.SetLockTxId(lockTxId);
+            readRequest1->Record.SetLockNodeId(nodeId);
+            AddKeyQuery(*readRequest1, {1});
+
+            auto readResult1 = helper.SendRead(tableName1, readRequest1.release());
+            CheckResult(helper.Tables[tableName1].UserTable, *readResult1, { {1, 1, 1, 100} });
+
+            UNIT_ASSERT_VALUES_EQUAL(readResult1->Record.TxLocksSize(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(readResult1->Record.BrokenTxLocksSize(), 0);
+            readLocks = readResult1->Record.GetTxLocks();
+            UNIT_ASSERT_VALUES_EQUAL(readLocks.size(), 1);
+        }
+
+        if (BreakLocks) {
+            Cout << "========= Break lock by writing data to table 1" << Endl;
+            helper.WriteRow(tableName1, {1, 1, 1, 999});
+        }
+
+        Cerr << "===== Commit locks on table 1" << Endl;
+        {
+            auto writeRequest = std::make_unique<NKikimr::NEvents::TDataEvents::TEvWrite>(++helper.TxId, 
+                Volatile ? NKikimrDataEvents::TEvWrite::MODE_VOLATILE_PREPARE : NKikimrDataEvents::TEvWrite::MODE_PREPARE);
+
+            NKikimrDataEvents::TKqpLocks& kqpLocks = *writeRequest->Record.MutableLocks();
+            kqpLocks.MutableLocks()->CopyFrom(readLocks);
+            kqpLocks.AddSendingShards(tabletId1);
+            kqpLocks.AddReceivingShards(tabletId2);
+            kqpLocks.SetOp(::NKikimrDataEvents::TKqpLocks::Commit);
+
+            NKikimrDataEvents::TEvWriteResult writeResult = helper.SendWrite(tabletId1, std::move(writeRequest));
+
+            UNIT_ASSERT_VALUES_EQUAL(writeResult.GetStatus(), NKikimrDataEvents::TEvWriteResult::STATUS_PREPARED);
+            UNIT_ASSERT_VALUES_EQUAL(writeResult.TxLocksSize(), 0);
+            minStep1 = writeResult.GetMinStep();
+            maxStep1 = writeResult.GetMaxStep();
+        }
+
+        Cerr << "===== Write and commit locks on table 2" << Endl;
+        {
+            auto writeRequest = helper.MakeWriteRequest(tableName2, helper.TxId, {1, 1, 1, 1001}, 
+                Volatile ? NKikimrDataEvents::TEvWrite::MODE_VOLATILE_PREPARE : NKikimrDataEvents::TEvWrite::MODE_PREPARE);
+
+            NKikimrDataEvents::TKqpLocks& kqpLocks = *writeRequest->Record.MutableLocks();
+            kqpLocks.AddSendingShards(tabletId1);
+            kqpLocks.AddReceivingShards(tabletId2);
+            kqpLocks.SetOp(::NKikimrDataEvents::TKqpLocks::Commit);
+
+            NKikimrDataEvents::TEvWriteResult writeResult = helper.SendWrite(tabletId2, std::move(writeRequest));
+
+            UNIT_ASSERT_VALUES_EQUAL(writeResult.GetStatus(), NKikimrDataEvents::TEvWriteResult::STATUS_PREPARED);
+            UNIT_ASSERT_VALUES_EQUAL(writeResult.TxLocksSize(), 0);
+            minStep2 = writeResult.GetMinStep();
+            maxStep2 = writeResult.GetMaxStep();
+        }
+
+        Cerr << "========= Send propose to coordinator" << Endl;
+        {
+            SendProposeToCoordinator(helper.Server, {tabletId1, tabletId2}, Max(minStep1, minStep2), Min(maxStep1, maxStep2), helper.TxId);
+        }
+
+        Cerr << "========= Wait for completed transactions" << Endl;
+        for (ui8 i = 0; i < 1; ++i)
+        {
+            auto expectedStatus = BreakLocks ? 
+                NKikimrDataEvents::TEvWriteResult::STATUS_LOCKS_BROKEN :
+                NKikimrDataEvents::TEvWriteResult::STATUS_COMPLETED;
+
+            auto writeResult = WaitForWriteCompleted(*runtime, helper.Sender, expectedStatus);
+
+            if (!BreakLocks) {
+                UNIT_ASSERT_GE(writeResult.GetStep(), Max(minStep1, minStep2));
+                UNIT_ASSERT_LE(writeResult.GetStep(), Min(maxStep1, maxStep2));
+                UNIT_ASSERT_VALUES_EQUAL(writeResult.GetOrderId(), helper.TxId);
+                UNIT_ASSERT_VALUES_EQUAL(writeResult.GetTxId(), helper.TxId);
+
+                UNIT_ASSERT_VALUES_EQUAL(writeResult.TxLocksSize(), 0);
+
+                if (writeResult.GetOrigin() == tabletId1) {
+                    const auto& tableAccessStats = writeResult.GetTxStats().GetTableAccessStats(0);
+                    UNIT_ASSERT_VALUES_EQUAL(tableAccessStats.GetTableInfo().GetName(), "/Root/" + tableName1);
+                } else if (writeResult.GetOrigin() == tabletId2) {
+                    const auto& tableAccessStats = writeResult.GetTxStats().GetTableAccessStats(0);
+                    UNIT_ASSERT_VALUES_EQUAL(tableAccessStats.GetTableInfo().GetName(), "/Root/" + tableName2);
+                    UNIT_ASSERT_VALUES_EQUAL(tableAccessStats.GetUpdateRow().GetCount(), 1);
+                } else {
+                    UNIT_FAIL("Unknown origin tablet");
+                }
+            }
+
+        }
+
+        Cout << "========= Read written data" << Endl;
+        {
+            auto expectedValue = BreakLocks ? 1 : 1001;
+            helper.TestReadOneKey(tableName2, {1, 1, 1}, expectedValue);
+        }
     }
 
     Y_UNIT_TEST(ShouldCommitLocksWhenReadWriteInSeparateTransactions) {
@@ -3226,7 +3365,7 @@ Y_UNIT_TEST_SUITE(DataShardReadIterator) {
         NKikimrDataEvents::TEvWriteResult writeResult = helper.SendWrite(tabletId, std::move(writeRequest));
 
         UNIT_ASSERT_VALUES_EQUAL(writeResult.GetStatus(), NKikimrDataEvents::TEvWriteResult::STATUS_COMPLETED);
-        UNIT_ASSERT(writeResult.TxLocksSize() == 1);
+        UNIT_ASSERT_VALUES_EQUAL(writeResult.TxLocksSize(), 1);
         const auto& writeLock = writeResult.GetTxLocks(0);
         UNIT_ASSERT_VALUES_EQUAL(writeLock.GetLockId(), lockTxId);
         UNIT_ASSERT_VALUES_EQUAL(writeLock.GetDataShard(), tabletId);
@@ -3247,7 +3386,7 @@ Y_UNIT_TEST_SUITE(DataShardReadIterator) {
 
         NKikimrDataEvents::TEvWriteResult writeResult2 = helper.SendWrite(tabletId, std::move(writeRequest2));
 
-        UNIT_ASSERT_VALUES_EQUAL(writeResult.GetStatus(), NKikimrDataEvents::TEvWriteResult::STATUS_COMPLETED);
+        UNIT_ASSERT_VALUES_EQUAL(writeResult2.GetStatus(), NKikimrDataEvents::TEvWriteResult::STATUS_COMPLETED);
 
         // Read written data.
         helper.TestReadOneKey(tableName, {1, 1, 1}, 101);
@@ -3273,7 +3412,7 @@ Y_UNIT_TEST_SUITE(DataShardReadIterator) {
         NKikimrDataEvents::TEvWriteResult writeResult = helper.SendWrite(tabletId, std::move(writeRequest));
 
         UNIT_ASSERT_VALUES_EQUAL(writeResult.GetStatus(), NKikimrDataEvents::TEvWriteResult::STATUS_COMPLETED);
-        UNIT_ASSERT(writeResult.TxLocksSize() == 1);
+        UNIT_ASSERT_VALUES_EQUAL(writeResult.TxLocksSize(), 1);
         const auto& writeLock = writeResult.GetTxLocks(0);
         UNIT_ASSERT_VALUES_EQUAL(writeLock.GetLockId(), lockTxId);
         UNIT_ASSERT_VALUES_EQUAL(writeLock.GetDataShard(), tabletId);
@@ -3315,7 +3454,7 @@ Y_UNIT_TEST_SUITE(DataShardReadIterator) {
         NKikimrDataEvents::TEvWriteResult writeResult = helper.SendWrite(tabletId, std::move(writeRequest));
 
         UNIT_ASSERT_VALUES_EQUAL(writeResult.GetStatus(), NKikimrDataEvents::TEvWriteResult::STATUS_COMPLETED);
-        UNIT_ASSERT(writeResult.TxLocksSize() == 1);
+        UNIT_ASSERT_VALUES_EQUAL(writeResult.TxLocksSize(), 1);
         const auto& writeLock = writeResult.GetTxLocks(0);
         UNIT_ASSERT_VALUES_EQUAL(writeLock.GetLockId(), lockTxId);
         UNIT_ASSERT_VALUES_EQUAL(writeLock.GetDataShard(), tabletId);
@@ -3347,6 +3486,115 @@ Y_UNIT_TEST_SUITE(DataShardReadIterator) {
 
         // read written data
         helper.TestReadOneKey(tableName, {1, 1, 1}, 202);
+    }
+
+    Y_UNIT_TEST_TWIN(TryWriteManyRows, Commit) {
+        TTestHelper helper;
+
+        auto runtime = helper.Server->GetRuntime();
+
+        const ui64 lockTxId = 1011121314;
+        const TString tableName = "table-1";
+        const TTableId& tableId = helper.Tables[tableName].TableId;
+        const ui64 tabletId = helper.Tables[tableName].TabletId;
+        const auto& columns = helper.Tables[tableName].Columns;
+        const ui64 nodeId = runtime->GetNodeId();
+
+        const ui64 initialRowCount = 8;
+
+        const ui64 writeCount = 55;
+        const ui64 rowCount = 77;
+
+        NLongTxService::TLockHandle lockHandle(lockTxId, runtime->GetActorSystem(0));
+
+        NKikimrDataEvents::TLock firstLock;
+
+        Cerr << "========= Wait for table stats" << Endl;
+        {
+            ui64 statRowCount = WaitTableStats(*runtime, tabletId).GetTableStats().GetRowCount();
+            UNIT_ASSERT_VALUES_EQUAL(statRowCount, initialRowCount);
+        }
+
+        Cerr << "========= Read key" << Endl;
+        {
+            helper.TestReadOneKey(tableName, {1, 1, 1}, 100);
+        }
+
+        Cerr << "========= Write many rows" << Endl;
+        for (ui64 i = 0; i < writeCount; ++i) {
+            ui64 seed = 1000000 + i * rowCount * columns.size();
+            auto writeRequest = MakeWriteRequest(++helper.TxId, NKikimrDataEvents::TEvWrite::MODE_IMMEDIATE, tableId, columns, rowCount, seed);
+            writeRequest->Record.SetLockTxId(lockTxId);
+            writeRequest->Record.SetLockNodeId(nodeId);
+
+            NKikimrDataEvents::TEvWriteResult writeResult = helper.SendWrite(tabletId, std::move(writeRequest));
+
+            UNIT_ASSERT_VALUES_EQUAL(writeResult.GetStatus(), NKikimrDataEvents::TEvWriteResult::STATUS_COMPLETED);
+            UNIT_ASSERT_VALUES_EQUAL(writeResult.TxLocksSize(), 1);
+            const auto& writeLock = writeResult.GetTxLocks(0);
+            UNIT_ASSERT_VALUES_EQUAL(writeLock.GetLockId(), lockTxId);
+            UNIT_ASSERT_VALUES_EQUAL(writeLock.GetDataShard(), tabletId);
+            UNIT_ASSERT_VALUES_EQUAL(writeLock.GetGeneration(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(writeLock.GetCounter(), 0);
+            UNIT_ASSERT_VALUES_EQUAL(writeLock.GetHasWrites(), true);
+
+            const auto& tableAccessStats = writeResult.GetTxStats().GetTableAccessStats(0);
+            UNIT_ASSERT_VALUES_EQUAL(tableAccessStats.GetTableInfo().GetName(), "/Root/" + tableName);
+            UNIT_ASSERT_VALUES_EQUAL(tableAccessStats.GetUpdateRow().GetCount(), rowCount);
+
+            if (i==0) {
+                firstLock.CopyFrom(writeLock);
+            } else {
+                UNIT_ASSERT_VALUES_EQUAL(firstLock.ShortDebugString(), writeLock.ShortDebugString());
+            }
+        }
+
+        Cerr << "========= " << (Commit ? "Commit" : "Rollback") << " locks" << Endl;
+        {
+            auto writeRequest = std::make_unique<NKikimr::NEvents::TDataEvents::TEvWrite>(++helper.TxId, NKikimrDataEvents::TEvWrite::MODE_IMMEDIATE);
+            NKikimrDataEvents::TKqpLocks& kqpLocks = *writeRequest->Record.MutableLocks();
+            kqpLocks.MutableLocks()->Add()->CopyFrom(firstLock);
+
+            kqpLocks.AddSendingShards(tabletId);
+            kqpLocks.AddReceivingShards(tabletId);
+
+            if (Commit) {
+                kqpLocks.SetOp(::NKikimrDataEvents::TKqpLocks::Commit );
+            } else {
+                kqpLocks.SetOp(::NKikimrDataEvents::TKqpLocks::Rollback);
+            }
+
+            NKikimrDataEvents::TEvWriteResult writeResult = helper.SendWrite(tabletId, std::move(writeRequest));
+
+            UNIT_ASSERT_VALUES_EQUAL(writeResult.GetStatus(), NKikimrDataEvents::TEvWriteResult::STATUS_COMPLETED);
+            UNIT_ASSERT_VALUES_EQUAL(writeResult.TxLocksSize(), 0);
+        }
+
+        Cerr << "========= Read new key" << Endl;
+        {
+            const std::vector<ui32> key = {1000000, 1000001, 1000002};
+
+            if (Commit) {
+                helper.TestReadOneKey(tableName, key, 1000003);
+            } else {
+                helper.TestReadOneMissingKey(tableName, key);
+            }
+        }
+
+        Cerr << "========= Compact table" << Endl;
+        {
+            CompactTable(*runtime, tabletId, tableId, false);
+        }
+
+        Cerr << "========= Wait for table stats" << Endl;
+        {
+            ui64 expectedRowCount = initialRowCount;
+            if (Commit)
+                 expectedRowCount += writeCount * rowCount;
+
+            ui64 statRowCount = WaitTableStats(*runtime, tabletId, 0, expectedRowCount).GetTableStats().GetRowCount();
+            UNIT_ASSERT_VALUES_EQUAL(statRowCount, expectedRowCount);
+        }
     }
 
     Y_UNIT_TEST_TWIN(ShouldReturnBrokenLockWhenReadKey, EvWrite) {
@@ -3450,7 +3698,7 @@ Y_UNIT_TEST_SUITE(DataShardReadIterator) {
         helper.CheckLockBroken(tableName, 10, {11, 11, 11}, lockTxId, *readResult1);
     }
 
-    Y_UNIT_TEST(ShouldReturnBrokenLockWhenReadRangeInvisibleRowSkips2) {
+    Y_UNIT_TEST_TWIN(ShouldReturnBrokenLockWhenReadRangeInvisibleRowSkips2, EvWrite) {
         // Almost the same as ShouldReturnBrokenLockWhenReadRangeInvisibleRowSkips:
         // 1. tx1: read some **non-existing** range1
         // 2. tx2: upsert into range2 > range1 range and commit.
@@ -3474,6 +3722,9 @@ Y_UNIT_TEST_SUITE(DataShardReadIterator) {
         CheckResult(helper.Tables[tableName].UserTable, *readResult1, {});
         UNIT_ASSERT_VALUES_EQUAL(readResult1->Record.TxLocksSize(), 1);
         UNIT_ASSERT_VALUES_EQUAL(readResult1->Record.BrokenTxLocksSize(), 0);
+
+        auto rows = EvWrite ? TEvWriteRows{{{300, 0, 0, 3000}}} : TEvWriteRows{};
+        auto evWriteObservers = ReplaceEvProposeTransactionWithEvWrite(*helper.Server->GetRuntime(), rows);
 
         // write new data above snapshot
         ExecSQL(helper.Server, helper.Sender, R"(

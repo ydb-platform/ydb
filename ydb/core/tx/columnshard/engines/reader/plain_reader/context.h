@@ -23,9 +23,6 @@ private:
     NIndexes::TIndexCheckerContainer IndexChecker;
     TReadMetadata::TConstPtr ReadMetadata;
     std::shared_ptr<TColumnsSet> EmptyColumns = std::make_shared<TColumnsSet>();
-    std::shared_ptr<TColumnsSet> PKFFColumns;
-    std::shared_ptr<TColumnsSet> EFPKColumns;
-    std::shared_ptr<TColumnsSet> FFMinusEFColumns;
     std::shared_ptr<IFetchingStep> BuildColumnsFetchingPlan(const bool needSnapshotsFilter, const bool exclusiveSource, const bool partialUsageByPredicate) const;
     std::array<std::array<std::array<std::shared_ptr<IFetchingStep>, 2>, 2>, 2> CacheFetchingScripts;
 public:

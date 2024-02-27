@@ -71,7 +71,8 @@ namespace NSQLTranslationV1 {
         virtual bool IsStream() const;
         virtual EOrderKind GetOrderKind() const;
         virtual TWriteSettings GetWriteSettings() const;
-        virtual bool SetSamplingOptions(TContext& ctx, TPosition pos, ESampleMode mode, TNodePtr samplingRate, TNodePtr samplingSeed);
+        TNodePtr PrepareSamplingRate(TPosition pos, ESampleClause clause, TNodePtr samplingRate);
+        virtual bool SetSamplingOptions(TContext& ctx, TPosition pos, ESampleClause clause, ESampleMode mode, TNodePtr samplingRate, TNodePtr samplingSeed);
         virtual bool SetTableHints(TContext& ctx, TPosition pos, const TTableHints& hints, const TTableHints& contextHints);
         virtual bool CalculateGroupingHint(TContext& ctx, const TVector<TString>& columns, ui64& hint) const;
         virtual TNodePtr BuildFilter(TContext& ctx, const TString& label);
@@ -86,7 +87,7 @@ namespace NSQLTranslationV1 {
         virtual TNodePtr BuildSort(TContext& ctx, const TString& label);
         virtual TNodePtr BuildCleanupColumns(TContext& ctx, const TString& label);
         virtual bool BuildSamplingLambda(TNodePtr& node);
-        virtual bool SetSamplingRate(TContext& ctx, TNodePtr samplingRate);
+        virtual bool SetSamplingRate(TContext& ctx, ESampleClause clause, TNodePtr samplingRate);
         virtual IJoin* GetJoin();
         virtual ISource* GetCompositeSource();
         virtual bool IsSelect() const;

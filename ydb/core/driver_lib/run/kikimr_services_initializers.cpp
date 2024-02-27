@@ -828,28 +828,58 @@ void TBasicServicesInitializer::InitializeServices(NActors::TActorSystemSetup* s
     }
 
     if (Config.HasTracingConfig() && Config.GetTracingConfig().HasBackend()) {
-        const auto& tracing_backend = Config.GetTracingConfig().GetBackend();
+        const auto& tracingConfig = Config.GetTracingConfig();
+        const auto& tracingBackend = tracingConfig.GetBackend();
+
         std::unique_ptr<NWilson::IGrpcSigner> grpcSigner;
-        if (tracing_backend.HasAuthConfig() && Factories && Factories->WilsonGrpcSignerFactory) {
-            grpcSigner = Factories->WilsonGrpcSignerFactory(tracing_backend.GetAuthConfig());
+        if (tracingBackend.HasAuthConfig() && Factories && Factories->WilsonGrpcSignerFactory) {
+            grpcSigner = Factories->WilsonGrpcSignerFactory(tracingBackend.GetAuthConfig());
             if (!grpcSigner) {
                 Cerr << "Failed to initialize wilson grpc signer due to misconfiguration. Config provided: "
-                        << tracing_backend.GetAuthConfig().DebugString() << Endl;
+                        << tracingBackend.GetAuthConfig().DebugString() << Endl;
             }
         }
-        NActors::IActor* wilsonUploader = nullptr;
-        switch (tracing_backend.GetBackendCase()) {
+
+        std::unique_ptr<NActors::IActor> wilsonUploader;
+        switch (tracingBackend.GetBackendCase()) {
             case NKikimrConfig::TTracingConfig::TBackendConfig::BackendCase::kOpentelemetry: {
-                const auto& opentelemetry = tracing_backend.GetOpentelemetry();
+                const auto& opentelemetry = tracingBackend.GetOpentelemetry();
                 if (!(opentelemetry.HasCollectorUrl() && opentelemetry.HasServiceName())) {
                     Cerr << "Both collector_url and service_name should be present in opentelemetry backend config" << Endl;
                     break;
                 }
-                wilsonUploader = NWilson::WilsonUploaderParams {
+
+                NWilson::WilsonUploaderParams uploaderParams {
                     .CollectorUrl = opentelemetry.GetCollectorUrl(),
                     .ServiceName = opentelemetry.GetServiceName(),
                     .GrpcSigner = std::move(grpcSigner),
-                }.CreateUploader();
+                };
+
+                if (tracingConfig.HasUploader()) {
+                    const auto& uploaderConfig = tracingConfig.GetUploader();
+
+#ifdef GET_FIELD_FROM_CONFIG
+#error Macro collision
+#endif
+#define GET_FIELD_FROM_CONFIG(field) \
+                    if (uploaderConfig.Has##field()) { \
+                        uploaderParams.field = uploaderConfig.Get##field(); \
+                    }
+
+                    GET_FIELD_FROM_CONFIG(MaxExportedSpansPerSecond)
+                    GET_FIELD_FROM_CONFIG(MaxSpansInBatch)
+                    GET_FIELD_FROM_CONFIG(MaxBytesInBatch)
+                    GET_FIELD_FROM_CONFIG(SpanExportTimeoutSeconds)
+                    GET_FIELD_FROM_CONFIG(MaxExportRequestsInflight)
+
+#undef GET_FIELD_FROM_CONFIG
+
+                    if (uploaderConfig.HasMaxBatchAccumulationMilliseconds()) {
+                        uploaderParams.MaxBatchAccumulation = TDuration::MilliSeconds(uploaderConfig.GetMaxBatchAccumulationMilliseconds());
+                    }
+                }
+
+                wilsonUploader.reset(std::move(uploaderParams).CreateUploader());
                 break;
             }
 
@@ -861,7 +891,7 @@ void TBasicServicesInitializer::InitializeServices(NActors::TActorSystemSetup* s
         if (wilsonUploader) {
             setup->LocalServices.emplace_back(
                 NWilson::MakeWilsonUploaderId(),
-                TActorSetupCmd(wilsonUploader, TMailboxType::ReadAsFilled, appData->BatchPoolId));
+                TActorSetupCmd(wilsonUploader.release(), TMailboxType::ReadAsFilled, appData->BatchPoolId));
         }
     }
 }

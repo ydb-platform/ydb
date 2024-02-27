@@ -725,7 +725,7 @@ void TPathDescriber::DescribeDomainRoot(TPathElement::TPtr pathEl) {
     if (const auto& serverlessComputeResourcesMode = subDomainInfo->GetServerlessComputeResourcesMode()) {
         entry->SetServerlessComputeResourcesMode(*serverlessComputeResourcesMode);
     }
-    
+
     if (TTabletId sharedHive = subDomainInfo->GetSharedHive()) {
         entry->SetSharedHive(sharedHive.GetValue());
     }
@@ -1118,6 +1118,8 @@ void TSchemeShard::DescribeTable(const TTableInfo::TPtr tableInfo, const NScheme
                 colDescr->SetFamilyName(it->second);
             }
         }
+
+        colDescr->SetIsBuildInProgress(cinfo.IsBuildInProgress);
 
         switch (cinfo.DefaultKind) {
             case ETableColumnDefaultKind::None:

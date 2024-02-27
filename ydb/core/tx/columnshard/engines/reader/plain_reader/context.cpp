@@ -51,7 +51,7 @@ std::shared_ptr<NKikimr::NOlap::NPlainReader::IFetchingStep> TSpecialReadContext
         }
     } else if (exclusiveSource) {
         TColumnsSet columnsFetch = *EFColumns;
-        if (needSnapshots || FFColumns->Contains(SpecColumns)) {
+        if (needSnapshots || FFColumns->Cross(*SpecColumns)) {
             columnsFetch = columnsFetch + *SpecColumns;
         }
         if (partialUsageByPredicate) {
@@ -60,7 +60,7 @@ std::shared_ptr<NKikimr::NOlap::NPlainReader::IFetchingStep> TSpecialReadContext
         AFL_VERIFY(columnsFetch.GetColumnsCount());
         current = current->AttachNext(std::make_shared<TBlobsFetchingStep>(std::make_shared<TColumnsSet>(columnsFetch), "ef"));
 
-        if (needSnapshots || FFColumns->Contains(SpecColumns)) {
+        if (needSnapshots || FFColumns->Cross(*SpecColumns)) {
             current = current->AttachNext(std::make_shared<TAssemblerStep>(SpecColumns));
             current = current->AttachNext(std::make_shared<TSnapshotFilter>());
             columnsFetch = columnsFetch - *SpecColumns;

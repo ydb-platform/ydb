@@ -492,8 +492,8 @@ Y_UNIT_TEST_SUITE(KqpProxy) {
 
     Y_UNIT_TEST(ExecuteScriptFailsWithoutFeatureFlag) {
         NKikimrConfig::TAppConfig appConfig;
+        appConfig.MutableFeatureFlags()->SetEnableScriptExecutionOperations(false);
         NYdb::TKikimrWithGrpcAndRootSchema server(appConfig);
-        appConfig.MutableFeatureFlags()->SetEnableScriptExecutionOperations(false); // default
         server.Server_->GetRuntime()->SetLogPriority(NKikimrServices::KQP_PROXY, NActors::NLog::PRI_DEBUG);
 
         ui16 grpc = server.GetPort();

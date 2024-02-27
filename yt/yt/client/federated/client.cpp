@@ -421,6 +421,7 @@ public:
     UNIMPLEMENTED_METHOD(TFuture<TQuery>, GetQuery, (NQueryTrackerClient::TQueryId, const TGetQueryOptions&));
     UNIMPLEMENTED_METHOD(TFuture<TListQueriesResult>, ListQueries, (const TListQueriesOptions&));
     UNIMPLEMENTED_METHOD(TFuture<void>, AlterQuery, (NQueryTrackerClient::TQueryId, const TAlterQueryOptions&));
+    UNIMPLEMENTED_METHOD(TFuture<TGetQueryTrackerInfoResult>, GetQueryTrackerInfo, (const TGetQueryTrackerInfoOptions&));
     UNIMPLEMENTED_METHOD(TFuture<NBundleControllerClient::TBundleConfigDescriptorPtr>, GetBundleConfig, (const TString&, const NBundleControllerClient::TGetBundleConfigOptions&));
     UNIMPLEMENTED_METHOD(TFuture<void>, SetBundleConfig, (const TString&, const NBundleControllerClient::TBundleTargetConfigPtr&, const NBundleControllerClient::TSetBundleConfigOptions&));
     UNIMPLEMENTED_METHOD(TFuture<ITableReaderPtr>, CreateTableReader, (const NYPath::TRichYPath&, const TTableReaderOptions&));
@@ -699,7 +700,7 @@ ITransactionPtr TClient::AttachTransaction(
 
 void TClient::HandleError(const TErrorOr<void>& error, int clientIndex)
 {
-    if (!NRpc::IsChannelFailureError(error)) {
+    if (!NRpc::IsChannelFailureError(error) && !Config_->RetryAnyError) {
         return;
     }
 
@@ -761,4 +762,4 @@ IClientPtr CreateClient(
 
 ////////////////////////////////////////////////////////////////////////////////
 
-} // NYT::NClient::NFederated
+} // namespace NYT::NClient::NFederated

@@ -750,6 +750,10 @@ public:
         const TAlterQueryOptions& options),
         (queryId, options))
 
+    DELEGATE_METHOD(TFuture<TGetQueryTrackerInfoResult>, GetQueryTrackerInfo, (
+        const TGetQueryTrackerInfoOptions& options),
+        (options))
+
     // Bundle Controller
     DELEGATE_METHOD(TFuture<NBundleControllerClient::TBundleConfigDescriptorPtr>, GetBundleConfig, (
         const TString& bundleName,

@@ -197,6 +197,7 @@ public:
 
 private:
     ESimpleLogicalValueType V1Type_;
+    EValueType WireType_;
     bool IsOfV1Type_;
 };
 

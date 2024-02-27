@@ -1,6 +1,7 @@
 #include "portion_info.h"
 #include <ydb/core/tx/columnshard/engines/scheme/index_info.h>
 #include <ydb/core/tx/columnshard/engines/db_wrapper.h>
+#include <ydb/core/tx/columnshard/data_sharing/protos/data.pb.h>
 #include <ydb/core/formats/arrow/arrow_filter.h>
 #include <util/system/tls.h>
 #include <ydb/core/formats/arrow/size_calcer.h>
@@ -304,6 +305,72 @@ std::vector<NKikimr::NOlap::TPortionInfo::TPage> TPortionInfo::BuildPages() cons
         AFL_VERIFY(i.second.empty());
     }
     return pages;
+}
+
+ui64 TPortionInfo::GetTxVolume() const {
+    return 1024 + Records.size() * 256 + Indexes.size() * 256;
+}
+
+void TPortionInfo::SerializeToProto(NKikimrColumnShardDataSharingProto::TPortionInfo& proto) const {
+    proto.SetPathId(PathId);
+    proto.SetPortionId(Portion);
+    *proto.MutableMinSnapshot() = MinSnapshot.SerializeToProto();
+    if (!RemoveSnapshot.IsZero()) {
+        *proto.MutableRemoveSnapshot() = RemoveSnapshot.SerializeToProto();
+    }
+    *proto.MutableMeta() = Meta.SerializeToProto();
+
+    for (auto&& r : Records) {
+        *proto.AddRecords() = r.SerializeToProto();
+    }
+
+    for (auto&& r : Indexes) {
+        *proto.AddIndexes() = r.SerializeToProto();
+    }
+}
+
+TConclusionStatus TPortionInfo::DeserializeFromProto(const NKikimrColumnShardDataSharingProto::TPortionInfo& proto, const TIndexInfo& info) {
+    PathId = proto.GetPathId();
+    Portion = proto.GetPortionId();
+    {
+        auto parse = MinSnapshot.DeserializeFromProto(proto.GetMinSnapshot());
+        if (!parse) {
+            return parse;
+        }
+    }
+    if (proto.HasRemoveSnapshot()) {
+        auto parse = RemoveSnapshot.DeserializeFromProto(proto.GetRemoveSnapshot());
+        if (!parse) {
+            return parse;
+        }
+    }
+    if (!Meta.DeserializeFromProto(proto.GetMeta(), info)) {
+        return TConclusionStatus::Fail("cannot parse meta");
+    }
+    for (auto&& i : proto.GetRecords()) {
+        auto parse = TColumnRecord::BuildFromProto(i, info);
+        if (!parse) {
+            return parse;
+        }
+        Records.emplace_back(std::move(parse.DetachResult()));
+    }
+    for (auto&& i : proto.GetIndexes()) {
+        auto parse = TIndexChunk::BuildFromProto(i);
+        if (!parse) {
+            return parse;
+        }
+        Indexes.emplace_back(std::move(parse.DetachResult()));
+    }
+    return TConclusionStatus::Success();
+}
+
+TConclusion<TPortionInfo> TPortionInfo::BuildFromProto(const NKikimrColumnShardDataSharingProto::TPortionInfo& proto, const TIndexInfo& info) {
+    TPortionInfo result;
+    auto parse = result.DeserializeFromProto(proto, info);
+    if (!parse) {
+        return parse;
+    }
+    return result;
 }
 
 std::shared_ptr<arrow::ChunkedArray> TPortionInfo::TPreparedColumn::Assemble() const {

@@ -77,9 +77,11 @@ public:
                     YQL_CLOG(DEBUG, ProviderYt) << "Set poller_interval to " << d;
                 } else {
                     YQL_CLOG(ERROR, ProviderYt) << "Invalid poller_interval value " << p->AsString();
+                    throw yexception() << "Invalid poller_interval value " << p->AsString();
                 }
             } catch (...) {
                 YQL_CLOG(ERROR, ProviderYt) << "Cannot parse poller_interval: " << CurrentExceptionMessage();
+                throw;
             }
         }
     }

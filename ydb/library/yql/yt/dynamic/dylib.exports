@@ -1,5 +1,6 @@
 # YT <-> YQL bridge.
 BridgeCreateYqlPlugin
+BridgeStartYqlPlugin
 BridgeFreeYqlPlugin
 BridgeFreeQueryResult
 BridgeRun

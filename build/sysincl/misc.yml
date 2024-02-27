@@ -502,3 +502,10 @@
 - source_filter: "^contrib/libs/fp16/include/fp16/psimd.h"
   includes:
     - psimd.h
+
+- source_filter: "^vendor/github.com/NVIDIA"
+  includes:
+    - nvml.h: 
+      - vendor/github.com/NVIDIA/go-dcgm/pkg/dcgm/nvml.h
+      - vendor/github.com/NVIDIA/go-nvml/gen/nvml/nvml.h
+      - vendor/github.com/NVIDIA/go-nvml/pkg/nvml/nvml.h

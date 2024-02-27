@@ -1052,6 +1052,9 @@ class GnuToolchainOptions(ToolchainOptions):
         if build.host.is_apple and build.target.is_apple and to_bool(preset('APPLE_SDK_LOCAL'), default=False):
             self.os_sdk_local = True
 
+        if build.host.is_apple and build.target.is_ios and to_bool(preset('MAPSMOBI_BUILD_TARGET'), default=False):
+            self.os_sdk_local = True
+
         if self.os_sdk == 'local':
             self.os_sdk_local = True
 
@@ -1841,8 +1844,9 @@ class MSVC(object):
         A complete list of the values supported by the Windows SDK can be found at
         https://docs.microsoft.com/en-us/cpp/porting/modifying-winver-and-win32-winnt
         """
-        Windows7 = '0x0601'
-        Windows8 = '0x0602'
+        Windows07 = '0x0601'
+        Windows08 = '0x0602'
+        Windows10 = '0x0A00'
 
     def __init__(self, tc, build):
         """
@@ -2046,7 +2050,7 @@ class MSVCCompiler(MSVC, Compiler):
                     '-Wno-unused-command-line-argument',
                 ]
 
-        win_version_min = self.WindowsVersion.Windows7
+        win_version_min = self.WindowsVersion.Windows07
         defines.append('/D_WIN32_WINNT={0}'.format(win_version_min))
 
         if winapi_unicode:
@@ -2174,6 +2178,8 @@ class Python(object):
         self.tc = tc
 
     def configure_posix(self, python=None, python_config=None):
+        self.check_configuration()
+
         python = python or preset('PYTHON_BIN') or which('python')
         python_config = python_config or preset('PYTHON_CONFIG') or which('python-config')
 
@@ -2194,8 +2200,21 @@ class Python(object):
         # They are not used separately and get overriden together, so it is safe.
         # TODO(somov): Удалить эту переменную и PYTHON_LIBRARIES из makelist-ов.
         self.libraries = ''
-        if preset('USE_ARCADIA_PYTHON') == 'no' and not preset('USE_SYSTEM_PYTHON') and not self.tc.os_sdk_local:
-            raise Exception("Use fixed python (see https://clubs.at.yandex-team.ru/arcadia/15392) or set OS_SDK=local flag")
+
+    def check_configuration(self):
+        if preset('USE_ARCADIA_PYTHON') == 'no':
+
+            # Set USE_LOCAL_PYTHON to enable configuration
+            # when we still using fixed OS SDK,
+            # but at the same time using Python from the local system.
+            #
+            # This configuration is not guaranteed to work,
+            # for example, if local and fixed OS SDKs differ much.
+            if preset('USE_LOCAL_PYTHON') == 'yes':
+                return
+
+            if not preset('USE_SYSTEM_PYTHON') and not self.tc.os_sdk_local:
+                raise Exception("Use fixed python (see https://clubs.at.yandex-team.ru/arcadia/15392) or set OS_SDK=local flag")
 
     def print_variables(self):
         variables = Variables({
@@ -2272,6 +2291,13 @@ class Cuda(object):
         self.peerdirs = ['build/platform/cuda']
 
         self.nvcc_flags = [
+            # Compress fatbinary to reduce size of .nv_fatbin and prevent problems with linking
+            #
+            # Idea comes from many resources, one of them is https://discourse.llvm.org/t/lld-relocation-overflows-and-nv-fatbin/58889/6
+            # Some sources suggest using `-Xfatbin=-compress-all`, other suggest using `-Xcuda-fatbinary --compress-all`
+            # We will use the same flag as in nixpkgs
+            # (https://github.com/NixOS/nixpkgs/pull/220402/files#diff-a38e6c4e8421c03dc6c2a60c9a172ceb4059048b65798e5d4a400a7a4a5720ffR167)
+            "-Xfatbin=-compress-all",
             # Allow __host__, __device__ annotations in lambda declaration.
             "--expt-extended-lambda",
             # Allow host code to invoke __device__ constexpr functions and vice versa
@@ -2334,10 +2360,12 @@ class Cuda(object):
         emit('_SRC_CU_CMD', cmd)
         emit('_SRC_CU_PEERDIR', ' '.join(sorted(self.peerdirs)))
 
+    # This method is only used to set HAVE_CUDA=no automatically during ymake initialization
+    # (i.e. is used only in `auto_have_cuda` invocation)
     def have_cuda_in_arcadia(self):
         host, target = self.build.host_target
 
-        if not any((host.is_linux_x86_64, host.is_macos_x86_64, host.is_windows_x86_64, host.is_linux_powerpc)):
+        if not any((host.is_linux_x86_64, host.is_windows_x86_64)):
             return False
 
         if host != target:
@@ -2359,14 +2387,11 @@ class Cuda(object):
             return False
         if self.build.is_sanitized:
             return False
-        if self.build.host_target[1].is_macos_x86_64 or self.build.host_target[1].is_macos_arm64:
-            # DEVTOOLSSUPPORT-19178 CUDA is rarely needed on Mac. Disable it by default but allow explicit builds with CUDA.
-            return False
         return self.cuda_root.from_user or self.use_arcadia_cuda.value and self.have_cuda_in_arcadia()
 
     def auto_cuda_version(self):
         if self.use_arcadia_cuda.value:
-            return '10.1'
+            return '11.4'
 
         if not self.have_cuda.value:
             return None
@@ -2398,10 +2423,6 @@ class Cuda(object):
             # do not impose any restrictions, when build not for "linux 64-bit"
             return ''
 
-        # do not include 'lto' type,
-        # because we already perform static linking
-        supported_types = ['compute', 'sm']
-
         # Equality to CUDA 11.4 is rather strict comparison
         # TODO: find out how we can relax check (e.g. to include more version of CUDA toolkit)
         if self.cuda_version.value == '11.4':
@@ -2410,19 +2431,15 @@ class Cuda(object):
             #   (these devices run only on arm64)
             # * drop support for '37'
             #   the single place it's used in Arcadia is https://a.yandex-team.ru/arcadia/sdg/sdc/third_party/cub/common.mk?rev=r13268523#L69
-            supported_vers = ['35',
-                              '50', '52',
-                              '60', '61',
-                              '70', '75',
-                              '80', '86']
+            return ':'.join(
+                ['sm_35',
+                 'sm_50', 'sm_52',
+                 'sm_60', 'sm_61',
+                 'sm_70', 'sm_75',
+                 'sm_80', 'sm_86',
+                 'compute_86'])
         else:
-            supported_vers = []
-
-        cuda_architectures = ['{typ}_{ver}'.format(typ=typ, ver=ver)
-                              for typ in supported_types
-                              for ver in supported_vers]
-
-        return ':'.join(cuda_architectures)
+            return ''
 
     def auto_use_arcadia_cuda(self):
         return not self.cuda_root.from_user
@@ -2442,8 +2459,6 @@ class Cuda(object):
         return select((
             (host.is_linux_x86_64 and target.is_linux_x86_64, '$CUDA_HOST_TOOLCHAIN_RESOURCE_GLOBAL/bin/clang'),
             (host.is_linux_x86_64 and target.is_linux_armv8, '$CUDA_HOST_TOOLCHAIN_RESOURCE_GLOBAL/bin/clang'),
-            (host.is_linux_powerpc and target.is_linux_powerpc, '$CUDA_HOST_TOOLCHAIN_RESOURCE_GLOBAL/bin/clang'),
-            (host.is_macos_x86_64 and target.is_macos_x86_64, '$CUDA_HOST_TOOLCHAIN_RESOURCE_GLOBAL/usr/bin/clang'),
         ))
 
     def cuda_windows_host_compiler(self):
@@ -2497,7 +2512,7 @@ class CuDNN(object):
         return self.cudnn_version.value in ('7.6.5', '8.0.5')
 
     def auto_cudnn_version(self):
-        return '7.6.5'
+        return '8.0.5'
 
     def print_(self):
         if self.cuda.have_cuda.value and self.have_cudnn():

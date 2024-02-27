@@ -331,6 +331,9 @@ DEFINE_ENUM(EObjectType,
     // Zookeeper stuff
     ((ZookeeperShard)                              (1400))
     ((ZookeeperShardMap)                           (1401))
+
+    // Flow stuff
+    ((Pipeline)                                    (1600))
 );
 
 //! A bit mask marking schema types.

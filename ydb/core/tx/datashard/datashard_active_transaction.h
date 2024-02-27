@@ -114,7 +114,7 @@ struct TSchemaOperation {
 };
 
 /// @note This class incapsulates Engine stuff for minor needs. Do not return TEngine out of it.
-class TValidatedDataTx : TNonCopyable {
+class TValidatedDataTx : TNonCopyable, public TValidatedTx {
 public:
     using TPtr = std::shared_ptr<TValidatedDataTx>;
 
@@ -128,13 +128,15 @@ public:
 
     ~TValidatedDataTx();
 
+    EType GetType() const override { return EType::DataTx; };
+
     static constexpr ui64 MaxReorderTxKeys() { return 100; }
 
     NKikimrTxDataShard::TError::EKind Code() const { return ErrCode; }
     const TString GetErrors() const { return ErrStr; }
 
     TStepOrder StepTxId() const { return StepTxId_; }
-    ui64 TxId() const { return StepTxId_.TxId; }
+    ui64 GetTxId() const override { return StepTxId_.TxId; }
     const TString& Body() const { return TxBody; }
 
     ui64 LockTxId() const { return Tx.GetLockTxId(); }
@@ -150,7 +152,6 @@ public:
 
     bool Ready() const { return ErrCode == NKikimrTxDataShard::TError::OK; }
     bool RequirePrepare() const { return ErrCode == NKikimrTxDataShard::TError::SNAPSHOT_NOT_READY_YET; }
-    bool RequireWrites() const { return TxInfo().HasWrites() || !Immediate(); }
     bool HasWrites() const { return TxInfo().HasWrites(); }
     bool HasLockedWrites() const { return HasWrites() && LockTxId(); }
     bool HasDynamicWrites() const { return TxInfo().DynKeysCount != 0; }
@@ -192,10 +193,7 @@ public:
     std::optional<ui64> GetVolatileChangeGroup() const { return EngineBay.GetVolatileChangeGroup(); }
     bool GetVolatileCommitOrdered() const { return EngineBay.GetVolatileCommitOrdered(); }
 
-    TActorId Source() const { return Source_; }
-    void SetSource(const TActorId& actorId) { Source_ = actorId; }
     void SetStep(ui64 step) { StepTxId_.Step = step; }
-    bool IsProposed() const { return Source_ != TActorId(); }
 
     bool IsTableRead() const { return Tx.HasReadTableTransaction(); }
 
@@ -272,9 +270,9 @@ public:
 
     ui64 GetTxSize() const { return TxSize; }
     ui32 KeysCount() const { return TxInfo().ReadsCount + TxInfo().WritesCount; }
-
-    void SetTxCacheUsage(ui64 val) { TxCacheUsage = val; }
-    ui64 GetTxCacheUsage() const { return TxCacheUsage; }
+    ui64 GetMemoryConsumption() const override {
+        return GetTxSize() + GetMemoryAllocated();
+    }
 
     void ReleaseTxData();
     bool IsTxDataReleased() const { return IsReleased; }
@@ -291,13 +289,11 @@ public:
 private:
     TStepOrder StepTxId_;
     TString TxBody;
-    TActorId Source_;
     TEngineBay EngineBay;
     NKikimrTxDataShard::TDataTransaction Tx;
     NKikimrTxDataShard::TError::EKind ErrCode;
     TString ErrStr;
     ui64 TxSize;
-    ui64 TxCacheUsage;
     bool IsReleased;
     bool BuiltTaskRunner;
     TMaybe<ui64> PerShardKeysSizeLimitBytes_;
@@ -309,12 +305,6 @@ private:
 
     void ComputeTxSize();
     void ComputeDeadline();
-};
-
-enum class ERestoreDataStatus {
-    Ok,
-    Restart,
-    Error,
 };
 
 ///

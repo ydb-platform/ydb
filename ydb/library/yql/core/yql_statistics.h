@@ -24,7 +24,7 @@ struct TOptimizerStatistics {
     EStatisticsType Type = BaseTable;
     double Nrows = 0;
     int Ncols = 0;
-    double Cost;
+    double Cost = 0;
     const TVector<TString>& KeyColumns;
 
     TOptimizerStatistics() : KeyColumns(EmptyColumns) {}

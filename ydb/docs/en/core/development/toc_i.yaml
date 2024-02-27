@@ -3,6 +3,8 @@ items:
   href: suggest-change.md
 - name: Ya Make build system
   href: build-ya.md
+- name: Releases
+  href: manage-releases.md
 - name: Core
   items:
   - name: LocalDB

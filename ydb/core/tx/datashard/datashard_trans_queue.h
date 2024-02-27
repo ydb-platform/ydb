@@ -26,6 +26,7 @@ class TTransQueue {
 public:
     friend class TPipeline;
     friend class TActiveTransaction;
+    friend class TWriteOperation;
 
     TTransQueue(TDataShard * self)
         : Self(self)

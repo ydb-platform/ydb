@@ -9,19 +9,28 @@ namespace NTable {
 bool BuildStats(const TSubset& subset, TStats& stats, ui64 rowCountResolution, ui64 dataSizeResolution, IPages* env) {
     stats.Clear();
 
-    TPartDataStats stIterStats = { };
-    TStatsIterator stIter(subset.Scheme->Keys);
+    TDataStats iteratorStats = { };
+    TStatsIterator statsIterator(subset.Scheme->Keys);
+
+    THashSet<ui64> epochs;
+    for (const auto& part : subset.Flatten) {
+        epochs.insert(part->Epoch.ToCounter());
+    }
+    // if rowCountResolution = 300, 3-leveled SST, let's move each iterator up to 25 rows 
+    ui64 iterRowCountResolution = rowCountResolution / Max(1lu, epochs.size()) / 4;
+    ui64 iterDataSizeResolution = dataSizeResolution / Max(1lu, epochs.size()) / 4;
 
     // Make index iterators for all parts
     bool started = true;
-    for (auto& pi : subset.Flatten) {
-        stats.IndexSize.Add(pi->IndexesRawSize, pi->Label.Channel());
-        TAutoPtr<TScreenedPartIndexIterator> iter = new TScreenedPartIndexIterator(pi, env, subset.Scheme->Keys, pi->Small, pi->Large);
+    for (const auto& part : subset.Flatten) {
+        stats.IndexSize.Add(part->IndexesRawSize, part->Label.Channel());
+        TAutoPtr<TStatsScreenedPartIterator> iter = new TStatsScreenedPartIterator(part, env, subset.Scheme->Keys, part->Small, part->Large, 
+            iterRowCountResolution, iterDataSizeResolution);
         auto ready = iter->Start();
         if (ready == EReady::Page) {
             started = false;
         } else if (ready == EReady::Data) {
-            stIter.Add(iter);
+            statsIterator.Add(iter);
         }
     }
     if (!started) {
@@ -31,35 +40,35 @@ bool BuildStats(const TSubset& subset, TStats& stats, ui64 rowCountResolution, u
     ui64 prevRows = 0;
     ui64 prevSize = 0;
     while (true) {
-        auto ready = stIter.Next(stIterStats);
+        auto ready = statsIterator.Next(iteratorStats);
         if (ready == EReady::Page) {
             return false;
         } else if (ready == EReady::Gone) {
             break;
         }
 
-        const bool nextRowsBucket = (stIterStats.RowCount >= prevRows + rowCountResolution);
-        const bool nextSizeBucket = (stIterStats.DataSize.Size >= prevSize + dataSizeResolution);
+        const bool nextRowsBucket = (iteratorStats.RowCount >= prevRows + rowCountResolution);
+        const bool nextSizeBucket = (iteratorStats.DataSize.Size >= prevSize + dataSizeResolution);
 
         if (!nextRowsBucket && !nextSizeBucket)
             continue;
 
-        TDbTupleRef currentKey = stIter.GetCurrentKey();
+        TDbTupleRef currentKey = statsIterator.GetCurrentKey();
         TString serializedKey = TSerializedCellVec::Serialize(TConstArrayRef<TCell>(currentKey.Columns, currentKey.ColumnCount));
 
         if (nextRowsBucket) {
-            prevRows = stIterStats.RowCount;
+            prevRows = iteratorStats.RowCount;
             stats.RowCountHistogram.push_back({serializedKey, prevRows});
         }
 
         if (nextSizeBucket) {
-            prevSize = stIterStats.DataSize.Size;
+            prevSize = iteratorStats.DataSize.Size;
             stats.DataSizeHistogram.push_back({serializedKey, prevSize});
         }
     }
 
-    stats.RowCount = stIterStats.RowCount;
-    stats.DataSize = std::move(stIterStats.DataSize);
+    stats.RowCount = iteratorStats.RowCount;
+    stats.DataSize = std::move(iteratorStats.DataSize);
 
     return true;
 }

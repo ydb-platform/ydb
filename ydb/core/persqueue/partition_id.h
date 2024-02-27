@@ -13,8 +13,10 @@ namespace NKikimr::NPQ {
 class TPartitionId {
 public:
     TPartitionId() = default;
+
     explicit TPartitionId(ui32 partition) :
-        TPartitionId(partition, Nothing(), partition)
+        OriginalPartitionId(partition),
+        InternalPartitionId(partition)
     {
     }
 
@@ -46,12 +48,9 @@ public:
         }
     }
 
-    //
-    // FIXME: используется в RequestRange
-    //
-    TPartitionId NextInternalPartitionId() const
+    bool IsSupportivePartition() const
     {
-        return {OriginalPartitionId, WriteId, InternalPartitionId + 1};
+        return WriteId.Defined();
     }
 
     ui32 OriginalPartitionId = 0;

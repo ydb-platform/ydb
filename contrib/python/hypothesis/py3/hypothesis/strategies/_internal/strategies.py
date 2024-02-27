@@ -473,6 +473,8 @@ class SampledFromStrategy(SearchStrategy):
     non-empty subset of the elements.
     """
 
+    _MAX_FILTER_CALLS = 10_000
+
     def __init__(self, elements, repr_=None, transformations=()):
         super().__init__()
         self.elements = cu.check_sample(elements, "sampled_from")
@@ -531,18 +533,10 @@ class SampledFromStrategy(SearchStrategy):
         if isinstance(result, SearchStrategy) and all(
             isinstance(x, SearchStrategy) for x in self.elements
         ):
-            max_num_strats = 3
-            preamble = (
-                f"(first {max_num_strats}) "
-                if len(self.elements) > max_num_strats
-                else ""
-            )
-            strat_reprs = ", ".join(
-                map(get_pretty_function_description, self.elements[:max_num_strats])
-            )
             data._sampled_from_all_strategies_elements_message = (
                 "sample_from was given a collection of strategies: "
-                f"{preamble}{strat_reprs}. Was one_of intended?"
+                "{!r}. Was one_of intended?",
+                self.elements,
             )
         if result is filter_not_satisfied:
             data.mark_invalid(f"Aborted test because unable to satisfy {self!r}")
@@ -575,8 +569,7 @@ class SampledFromStrategy(SearchStrategy):
 
         # Impose an arbitrary cutoff to prevent us from wasting too much time
         # on very large element lists.
-        cutoff = 10000
-        max_good_indices = min(max_good_indices, cutoff)
+        max_good_indices = min(max_good_indices, self._MAX_FILTER_CALLS - 3)
 
         # Before building the list of allowed indices, speculatively choose
         # one of them. We don't yet know how many allowed indices there will be,
@@ -588,7 +581,7 @@ class SampledFromStrategy(SearchStrategy):
         # just use that and return immediately.  Note that we also track the
         # allowed elements, in case of .map(some_stateful_function)
         allowed = []
-        for i in range(min(len(self.elements), cutoff)):
+        for i in range(min(len(self.elements), self._MAX_FILTER_CALLS - 3)):
             if i not in known_bad_indices:
                 element = self.get_element(i)
                 if element is not filter_not_satisfied:

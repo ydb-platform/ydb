@@ -12,6 +12,7 @@ namespace NYql::NPg {
 constexpr ui32 UnknownOid = 705;
 constexpr ui32 AnyOid = 2276;
 constexpr ui32 AnyArrayOid = 2277;
+constexpr ui32 AnyNonArrayOid = 2776;
 constexpr ui32 RecordOid = 2249;
 constexpr ui32 VarcharOid = 1043;
 constexpr ui32 TextOid = 25;
@@ -156,6 +157,7 @@ struct TAggregateDesc {
     ui32 SerializeFuncId = 0;
     ui32 DeserializeFuncId = 0;
     TString InitValue;
+    bool FinalExtra = false;
 };
 
 enum class EAmType {

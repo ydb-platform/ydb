@@ -8,6 +8,10 @@
 #include <ydb/core/tx/columnshard/engines/changes/compaction.h>
 #include <ydb/core/tx/columnshard/blobs_action/bs/storage.h>
 #include <ydb/core/tx/columnshard/hooks/testing/controller.h>
+#include <ydb/core/tx/columnshard/data_sharing/manager/shared_blobs.h>
+#include <ydb/core/tx/columnshard/data_locks/manager/manager.h>
+#include <ydb/core/tx/columnshard/background_controller.h>
+#include <ydb/core/tx/columnshard/engines/changes/abstract/abstract.h>
 
 
 namespace NKikimr {
@@ -20,6 +24,8 @@ using TDefaultTestsController = NKikimr::NYDBTest::NColumnShard::TController;
 using namespace NKikimr::NOlap::NEngines::NTest;
 
 namespace {
+
+std::shared_ptr<NDataLocks::TManager> EmptyDataLocksManager = std::make_shared<NDataLocks::TManager>();
 
 class TTestDbWrapper : public IDbWrapper {
 private:
@@ -289,6 +295,12 @@ bool Insert(TColumnEngineForLogs& engine, TTestDbWrapper& db, TSnapshot snap,
     AddIdsToBlobs(changes->AppendedPortions, blobs, step);
 
     const bool result = engine.ApplyChanges(db, changes, snap);
+
+    NOlap::TWriteIndexContext contextExecute(nullptr, db, engine);
+    changes->WriteIndexOnExecute(nullptr, contextExecute);
+    NColumnShard::TBackgroundActivity triggered;
+    NOlap::TWriteIndexCompleteContext contextComplete(NActors::TActivationContext::AsActorContext(), 0, 0, TDuration::Zero(), triggered, engine);
+    changes->WriteIndexOnComplete(nullptr, contextComplete);
     changes->AbortEmergency();
     return result;
 }
@@ -301,7 +313,7 @@ struct TExpected {
 
 bool Compact(TColumnEngineForLogs& engine, TTestDbWrapper& db, TSnapshot snap, THashMap<TBlobRange, TString>&& blobs, ui32& step,
              const TExpected& /*expected*/, THashMap<TBlobRange, TString>* blobsPool = nullptr) {
-    std::shared_ptr<TCompactColumnEngineChanges> changes = dynamic_pointer_cast<TCompactColumnEngineChanges>(engine.StartCompaction(TestLimits(), {}));
+    std::shared_ptr<TCompactColumnEngineChanges> changes = dynamic_pointer_cast<TCompactColumnEngineChanges>(engine.StartCompaction(TestLimits(), EmptyDataLocksManager));
     UNIT_ASSERT(changes);
     //    UNIT_ASSERT_VALUES_EQUAL(changes->SwitchedPortions.size(), expected.SrcPortions);
     changes->SetBlobs(std::move(blobs));
@@ -315,6 +327,11 @@ bool Compact(TColumnEngineForLogs& engine, TTestDbWrapper& db, TSnapshot snap, T
     //    UNIT_ASSERT_VALUES_EQUAL(changes->GetTmpGranuleIds().size(), expected.NewGranules);
 
     const bool result = engine.ApplyChanges(db, changes, snap);
+    NOlap::TWriteIndexContext contextExecute(nullptr, db, engine);
+    changes->WriteIndexOnExecute(nullptr, contextExecute);
+    NColumnShard::TBackgroundActivity triggered;
+    NOlap::TWriteIndexCompleteContext contextComplete(NActors::TActivationContext::AsActorContext(), 0, 0, TDuration::Zero(), triggered, engine);
+    changes->WriteIndexOnComplete(nullptr, contextComplete);
     if (blobsPool) {
         for (auto&& i : changes->AppendedPortions) {
             for (auto&& r : i.GetPortionInfo().Records) {
@@ -328,7 +345,7 @@ bool Compact(TColumnEngineForLogs& engine, TTestDbWrapper& db, TSnapshot snap, T
 
 bool Cleanup(TColumnEngineForLogs& engine, TTestDbWrapper& db, TSnapshot snap, ui32 expectedToDrop) {
     THashSet<ui64> pathsToDrop;
-    std::shared_ptr<TCleanupColumnEngineChanges> changes = engine.StartCleanup(snap, pathsToDrop, 1000);
+    std::shared_ptr<TCleanupColumnEngineChanges> changes = engine.StartCleanup(snap, pathsToDrop, EmptyDataLocksManager);
     UNIT_ASSERT(changes || !expectedToDrop);
     if (!expectedToDrop && !changes) {
         return true;
@@ -338,19 +355,29 @@ bool Cleanup(TColumnEngineForLogs& engine, TTestDbWrapper& db, TSnapshot snap, u
 
     changes->StartEmergency();
     const bool result = engine.ApplyChanges(db, changes, snap);
+    NOlap::TWriteIndexContext contextExecute(nullptr, db, engine);
+    changes->WriteIndexOnExecute(nullptr, contextExecute);
+    NColumnShard::TBackgroundActivity triggered;
+    NOlap::TWriteIndexCompleteContext contextComplete(NActors::TActivationContext::AsActorContext(), 0, 0, TDuration::Zero(), triggered, engine);
+    changes->WriteIndexOnComplete(nullptr, contextComplete);
     changes->AbortEmergency();
     return result;
 }
 
 bool Ttl(TColumnEngineForLogs& engine, TTestDbWrapper& db,
          const THashMap<ui64, NOlap::TTiering>& pathEviction, ui32 expectedToDrop) {
-    std::shared_ptr<TTTLColumnEngineChanges> changes = engine.StartTtl(pathEviction, {}, 512 * 1024 * 1024);
+    std::shared_ptr<TTTLColumnEngineChanges> changes = engine.StartTtl(pathEviction, EmptyDataLocksManager, 512 * 1024 * 1024);
     UNIT_ASSERT(changes);
     UNIT_ASSERT_VALUES_EQUAL(changes->PortionsToRemove.size(), expectedToDrop);
 
 
     changes->StartEmergency();
     const bool result = engine.ApplyChanges(db, changes, TSnapshot(1,1));
+    NOlap::TWriteIndexContext contextExecute(nullptr, db, engine);
+    changes->WriteIndexOnExecute(nullptr, contextExecute);
+    NColumnShard::TBackgroundActivity triggered;
+    NOlap::TWriteIndexCompleteContext contextComplete(NActors::TActivationContext::AsActorContext(), 0, 0, TDuration::Zero(), triggered, engine);
+    changes->WriteIndexOnComplete(nullptr, contextComplete);
     changes->AbortEmergency();
     return result;
 }
@@ -377,12 +404,22 @@ class TTestStoragesManager: public NOlap::IStoragesManager {
 private:
     using TBase = NOlap::IStoragesManager;
     TIntrusivePtr<TTabletStorageInfo> TabletInfo = new TTabletStorageInfo();
+    std::shared_ptr<NOlap::NDataSharing::TSharedBlobsManager> SharedBlobsManager = std::make_shared<NOlap::NDataSharing::TSharedBlobsManager>(NOlap::TTabletId(0));
 protected:
+    virtual bool DoLoadIdempotency(NTable::TDatabase& /*database*/) override {
+        return true;
+    }
+
     virtual std::shared_ptr<NOlap::IBlobsStorageOperator> DoBuildOperator(const TString& storageId) override {
         if (storageId == TBase::DefaultStorageId) {
-            return std::make_shared<NOlap::NBlobOperations::NBlobStorage::TOperator>(storageId, NActors::TActorId(), TabletInfo, 1);
+            return std::make_shared<NOlap::NBlobOperations::NBlobStorage::TOperator>(storageId, NActors::TActorId(), TabletInfo,
+                1, SharedBlobsManager->GetStorageManagerGuarantee(TBase::DefaultStorageId));
         } else 
             return nullptr;
+    }
+public:
+    virtual const std::shared_ptr<NDataSharing::TSharedBlobsManager>& GetSharedBlobsManager() const override {
+        return SharedBlobsManager;
     }
 };
 

@@ -273,7 +273,7 @@ bool TAggregateExpander::IsNeedPickle(const TVector<const TTypeAnnotationNode*>&
 {
     bool needPickle = false;
     for (auto type : keyItemTypes) {
-        needPickle = needPickle || AllowPickle && !IsDataOrOptionalOfData(type);
+        needPickle |= !IsDataOrOptionalOfData(type);
     }
     return needPickle;
 }

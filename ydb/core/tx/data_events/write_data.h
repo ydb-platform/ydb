@@ -5,6 +5,7 @@
 #include <ydb/library/accessor/accessor.h>
 
 #include <ydb/library/actors/core/monotonic.h>
+#include <util/generic/guid.h>
 
 namespace NKikimr::NOlap {
 class IBlobsWritingAction;
@@ -31,12 +32,14 @@ class TWriteMeta {
     YDB_ACCESSOR(ui64, WritePartId, 0);
     YDB_ACCESSOR_DEF(TString, DedupId);
 
+    YDB_READONLY(TString, Id, TGUID::CreateTimebased().AsUuidString());
     YDB_READONLY(TMonotonic, WriteStartInstant, TMonotonic::Now());
     YDB_ACCESSOR(TMonotonic, WriteMiddle1StartInstant, TMonotonic::Now());
     YDB_ACCESSOR(TMonotonic, WriteMiddle2StartInstant, TMonotonic::Now());
     YDB_ACCESSOR(TMonotonic, WriteMiddle3StartInstant, TMonotonic::Now());
     YDB_ACCESSOR(TMonotonic, WriteMiddle4StartInstant, TMonotonic::Now());
     YDB_ACCESSOR(TMonotonic, WriteMiddle5StartInstant, TMonotonic::Now());
+    YDB_ACCESSOR(TMonotonic, WriteMiddle6StartInstant, TMonotonic::Now());
 public:
     TWriteMeta(const ui64 writeId, const ui64 tableId, const NActors::TActorId& source)
         : WriteId(writeId)

@@ -22,6 +22,8 @@ junit4_test="flag"
 junit5_test="flag"
 app_main_class="str"
 jar_source_set="list"
+enable_preview="flag"
+annotation_processors="list"
 
 publish="flag"
 publish_group="str"
@@ -70,5 +72,7 @@ test=[
     "/ut",
     "/src/test",
     "/src/test/java",
-    "/src/test-integration"
+    "/src/test-integration",
+    "/src/testFixtures",
+    "/src/intTest",
 ]

@@ -8,7 +8,9 @@ import random
 import string
 import typing  # noqa: F401
 import sys
+from six.moves.urllib.parse import urlparse
 
+from ydb.library.yql.providers.common.proto.gateways_config_pb2 import TGenericConnectorConfig
 from ydb.tests.library.common import yatest_common
 from ydb.tests.library.harness.kikimr_cluster import kikimr_cluster_factory
 from ydb.tests.library.harness.kikimr_config import KikimrConfigGenerator
@@ -255,6 +257,34 @@ def enable_tls():
     return os.getenv('YDB_GRPC_ENABLE_TLS') == 'true'
 
 
+def generic_connector_config():
+    endpoint = os.getenv("FQ_CONNECTOR_ENDPOINT")
+    if not endpoint:
+        return None
+
+    parsed = urlparse(endpoint)
+    if not parsed.hostname:
+        raise ValueError("Invalid host '{}' in FQ_CONNECTOR_ENDPOINT".format(parsed.hostname))
+
+    if not (1024 <= parsed.port <= 65535):
+        raise ValueError("Invalid port '{}' in FQ_CONNECTOR_ENDPOINT".format(parsed.port))
+
+    valid_schemes = ['grpc', 'grpcs']
+    if parsed.scheme not in valid_schemes:
+        raise ValueError("Invalid schema '{}' in FQ_CONNECTOR_ENDPOINT (possible: {})".format(parsed.scheme, valid_schemes))
+
+    cfg = TGenericConnectorConfig()
+    cfg.Endpoint.host = parsed.hostname
+    cfg.Endpoint.port = parsed.port
+
+    if parsed.scheme == 'grpc':
+        cfg.UseSsl = False
+    elif parsed.scheme == 'grpcs':
+        cfg.UseSsl = True
+
+    return cfg
+
+
 def grpc_tls_data_path(arguments):
     default_store = arguments.ydb_working_dir if arguments.ydb_working_dir else None
     return os.getenv('YDB_GRPC_TLS_DATA_PATH', default_store)
@@ -338,6 +368,7 @@ def deploy(arguments):
         default_users=default_users(),
         extra_feature_flags=enable_feature_flags,
         extra_grpc_services=arguments.enabled_grpc_services,
+        generic_connector_config=generic_connector_config(),
         **optionals
     )
 

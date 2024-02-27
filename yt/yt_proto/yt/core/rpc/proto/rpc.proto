@@ -144,7 +144,6 @@ message TResponseHeader
 
     optional int32 format = 3; // EMessageFormat
 
-    // COMPAT(kiseloyvp): this is missing when legacy mode is used
     optional int32 codec = 6; // ECodec
 
     reserved 5;

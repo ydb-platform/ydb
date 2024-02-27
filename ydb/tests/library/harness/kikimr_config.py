@@ -161,6 +161,7 @@ class KikimrConfigGenerator(object):
             enforce_user_token_requirement=False,
             default_user_sid=None,
             pg_compatible_expirement=False,
+            generic_connector_config=None,  # typing.Optional[TGenericConnectorConfig]
     ):
         if extra_feature_flags is None:
             extra_feature_flags = []
@@ -384,6 +385,33 @@ class KikimrConfigGenerator(object):
             self.yaml_config["table_service_config"]["index_auto_choose_mode"] = 'max_used_prefix'
             self.yaml_config["feature_flags"]['enable_temp_tables'] = True
             self.yaml_config["feature_flags"]['enable_table_pg_types'] = True
+
+        if generic_connector_config:
+            if "query_service_config" not in self.yaml_config:
+                self.yaml_config["query_service_config"] = {}
+
+            self.yaml_config["query_service_config"]["generic"] = {
+                "connector": {
+                    "endpoint": {
+                        "host": generic_connector_config.Endpoint.host,
+                        "port": generic_connector_config.Endpoint.port,
+                    },
+                    "use_ssl": generic_connector_config.UseSsl
+                },
+                "default_settings": [
+                    {
+                        "name": "DateTimeFormat",
+                        "value": "string"
+                    },
+                    {
+                        "name": "UsePredicatePushdown",
+                        "value": "true"
+                    }
+                ]
+            }
+
+            self.yaml_config["feature_flags"]["enable_external_data_sources"] = True
+            self.yaml_config["feature_flags"]["enable_script_execution_operations"] = True
 
     @property
     def pdisks_info(self):

@@ -12,12 +12,12 @@ namespace NYql {
 
 using namespace NYql::NDq;
 
-namespace { 
+namespace {
 
     THashMap<TString,EJoinKind> JoinKindMap = {
-        {"Inner",EJoinKind::InnerJoin}, 
-        {"Left",EJoinKind::LeftJoin}, 
-        {"Right",EJoinKind::RightJoin}, 
+        {"Inner",EJoinKind::InnerJoin},
+        {"Left",EJoinKind::LeftJoin},
+        {"Right",EJoinKind::RightJoin},
         {"Full",EJoinKind::OuterJoin},
         {"LeftOnly",EJoinKind::LeftOnly},
         {"RightOnly",EJoinKind::RightOnly},
@@ -52,21 +52,21 @@ TVector<TString> TRelOptimizerNode::Labels()  {
 
 void TRelOptimizerNode::Print(std::stringstream& stream, int ntabs) {
     for (int i = 0; i < ntabs; i++){
-        stream << "\t";
+        stream << "    ";
     }
     stream << "Rel: " << Label << "\n";
 
     for (int i = 0; i < ntabs; i++){
-        stream << "\t";
+        stream << "    ";
     }
     stream << *Stats << "\n";
 }
 
-TJoinOptimizerNode::TJoinOptimizerNode(const std::shared_ptr<IBaseOptimizerNode>& left, const std::shared_ptr<IBaseOptimizerNode>& right, 
+TJoinOptimizerNode::TJoinOptimizerNode(const std::shared_ptr<IBaseOptimizerNode>& left, const std::shared_ptr<IBaseOptimizerNode>& right,
         const std::set<std::pair<TJoinColumn, TJoinColumn>>& joinConditions, const EJoinKind joinType, const EJoinAlgoType joinAlgo, bool nonReorderable) :
-    IBaseOptimizerNode(JoinNodeType), 
-    LeftArg(left), 
-    RightArg(right), 
+    IBaseOptimizerNode(JoinNodeType),
+    LeftArg(left),
+    RightArg(right),
     JoinConditions(joinConditions),
     JoinType(joinType),
     JoinAlgo(joinAlgo) {
@@ -86,19 +86,19 @@ TVector<TString> TJoinOptimizerNode::Labels() {
 
 void TJoinOptimizerNode::Print(std::stringstream& stream, int ntabs) {
     for (int i = 0; i < ntabs; i++){
-        stream << "\t";
+        stream << "    ";
     }
 
     stream << "Join: (" << JoinType << ") ";
     for (auto c : JoinConditions){
-        stream << c.first.RelName << "." << c.first.AttributeName 
-            << "=" << c.second.RelName << "." 
-            << c.second.AttributeName << ", ";
+        stream << c.first.RelName << "." << c.first.AttributeName
+            << "=" << c.second.RelName << "."
+            << c.second.AttributeName << ",";
     }
     stream << "\n";
 
     for (int i = 0; i < ntabs; i++){
-        stream << "\t";
+        stream << "    ";
     }
 
     if (Stats) {

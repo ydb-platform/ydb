@@ -2563,7 +2563,7 @@ private:
                     YQL_ENSURE(tables[idx.first].InferSchemaRows() > 0);
                     requests.push_back({idx.second, tables[idx.first].Table(), tables[idx.first].InferSchemaRows()});
                 }
-                return InferSchemaFromTablesContents(execCtx->YtServer_, execCtx->GetAuth(), tx->GetId(), requests);
+                return InferSchemaFromTablesContents(execCtx->YtServer_, execCtx->GetAuth(), tx->GetId(), requests, execCtx->Session_->Queue_);
 #else
                 ythrow yexception() << "Unimplemented RPC reader on non-linux platforms";
 #endif

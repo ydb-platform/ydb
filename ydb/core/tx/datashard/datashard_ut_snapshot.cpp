@@ -8,6 +8,7 @@
 #include <ydb/core/tx/tx_proxy/upload_rows.h>
 
 #include <ydb/core/kqp/ut/common/kqp_ut_common.h> // Y_UNIT_TEST_(TWIN|QUAD)
+#include <ydb/core/mind/local.h>
 
 #include <ydb/library/yql/minikql/mkql_node_printer.h>
 
@@ -3821,6 +3822,170 @@ Y_UNIT_TEST_SUITE(DataShardSnapshots) {
         ExecSQL(server, sender, Q_("UPSERT INTO `/Root/table-1` (key, value) VALUES (1, 11), (2, 22), (3, 33)"));
         auto duration = runtime.GetCurrentTime() - start;
         UNIT_ASSERT_C(duration <= TDuration::MilliSeconds(200), "UPSERT takes too much time: " << duration);
+    }
+
+    Y_UNIT_TEST(UncommittedWriteRestartDuringCommit) {
+        NKikimrConfig::TAppConfig app;
+        app.MutableTableServiceConfig()->SetEnableKqpDataQuerySourceRead(true);
+
+        TPortManager pm;
+        TServerSettings serverSettings(pm.GetPort(2134));
+        serverSettings.SetDomainName("Root")
+            .SetUseRealThreads(false)
+            .SetDomainPlanResolution(100)
+            .SetAppConfig(app)
+            // Bug was with non-volatile transactions
+            .SetEnableDataShardVolatileTransactions(false);
+
+        Tests::TServer::TPtr server = new TServer(serverSettings);
+        auto &runtime = *server->GetRuntime();
+        auto sender = runtime.AllocateEdgeActor();
+
+        runtime.SetLogPriority(NKikimrServices::TX_DATASHARD, NLog::PRI_TRACE);
+        runtime.SetLogPriority(NKikimrServices::TX_PROXY, NLog::PRI_DEBUG);
+        runtime.SetLogPriority(NKikimrServices::KQP_EXECUTER, NLog::PRI_TRACE);
+        runtime.SetLogPriority(NKikimrServices::KQP_SESSION, NLog::PRI_TRACE);
+
+        InitRoot(server, sender);
+
+        TDisableDataShardLogBatching disableDataShardLogBatching;
+        CreateShardedTable(server, sender, "/Root", "table-1", 1);
+        CreateShardedTable(server, sender, "/Root", "table-2", 1);
+
+        // Insert some initial data
+        ExecSQL(server, sender, Q_("UPSERT INTO `/Root/table-1` (key, value) VALUES (1, 10);"));
+        ExecSQL(server, sender, Q_("UPSERT INTO `/Root/table-2` (key, value) VALUES (2, 20);"));
+
+        const auto shards1 = GetTableShards(server, sender, "/Root/table-1");
+
+        TString sessionId, txId;
+
+        // Start inserting a row into table-1
+        Cerr << "... sending initial upsert" << Endl;
+        UNIT_ASSERT_VALUES_EQUAL(
+            KqpSimpleBegin(runtime, sessionId, txId, Q_(R"(
+                UPSERT INTO `/Root/table-1` (key, value) VALUES (3, 30);
+                )")),
+            "<empty>");
+
+        // We want to block readsets
+        std::vector<std::unique_ptr<IEventHandle>> readSets;
+        auto blockReadSets = runtime.AddObserver<TEvTxProcessing::TEvReadSet>([&](TEvTxProcessing::TEvReadSet::TPtr& ev) {
+            readSets.emplace_back(ev.Release());
+        });
+
+        // Start committing an additional read/write
+        // Note: select on table-1 flushes accumulated changes
+        // Note: select on table-2 ensures we have an outgoing readset
+        Cerr << "... sending commit request" << Endl;
+        auto commitFuture = SendRequest(runtime, MakeSimpleRequestRPC(Q_(R"(
+            SELECT key, value FROM `/Root/table-1`
+            UNION ALL
+            SELECT key, value FROM `/Root/table-2`
+            ORDER BY key;
+
+            UPSERT INTO `/Root/table-2` (key, value) VALUES (4, 40);
+            )"), sessionId, txId, true /* commitTx */));
+
+        WaitFor(runtime, [&]{ return readSets.size() >= 2; }, "readset exchange");
+        UNIT_ASSERT_VALUES_EQUAL(readSets.size(), 2u);
+
+        // We want to block local boot to make sure it stays down during rollback
+        std::vector<std::unique_ptr<IEventHandle>> blockedLocalBoot;
+        auto blockLocalBoot = runtime.AddObserver<TEvLocal::TEvBootTablet>([&](TEvLocal::TEvBootTablet::TPtr& ev) {
+            Cerr << "... blocking TEvLocal::TEvBootTablet" << Endl;
+            blockedLocalBoot.emplace_back(std::move(ev.Release()));
+        });
+
+        // Kill current datashard actor with TEvPoison (so it doesn't have a chance to reply)
+        Cerr << "... sending TEvPoison to " << shards1.at(0) << Endl;
+        ForwardToTablet(runtime, shards1.at(0), sender, new TEvents::TEvPoison);
+
+        // Wait until hive tries to boot a new instance (old instance is dead by that point)
+        WaitFor(runtime, [&]{ return blockedLocalBoot.size() > 0; }, "blocked local boot", 3);
+
+        // Stop blocking and resend readsets
+        blockReadSets.Remove();
+        Cerr << "... resending readsets" << Endl;
+        for (auto& ev : readSets) {
+            runtime.Send(ev.release(), 0, true);
+        }
+        readSets.clear();
+
+        // Wait until commit fails with UNDETERMINED
+        Cerr << "... waiting for commit result" << Endl;
+        UNIT_ASSERT_VALUES_EQUAL(
+            FormatResult(AwaitResponse(runtime, std::move(commitFuture))),
+            "ERROR: UNDETERMINED");
+
+        // Sleep a little to make sure everything settles
+        Cerr << "... sleeping for 1 second" << Endl;
+        runtime.SimulateSleep(TDuration::Seconds(1));
+
+        // We want to detect a restarting datashard and block its progress queue
+        TActorId shard1actor;
+        std::vector<std::unique_ptr<IEventHandle>> blockedProgress;
+        auto blockProgressQueue = runtime.AddObserver([&](TAutoPtr<IEventHandle>& ev) {
+            switch (ev->GetTypeRewrite()) {
+                case TEvTablet::TEvBoot::EventType: {
+                    auto* msg = ev->Get<TEvTablet::TEvBoot>();
+                    Cerr << "... observed TEvBoot for " << msg->TabletID << " at " << ev->GetRecipientRewrite() << Endl;
+                    if (msg->TabletID == shards1.at(0)) {
+                        shard1actor = ev->GetRecipientRewrite();
+                    }
+                    break;
+                }
+                case EventSpaceBegin(TKikimrEvents::ES_PRIVATE) + 0 /* EvProgressTransaction */: {
+                    if (shard1actor && ev->GetRecipientRewrite() == shard1actor) {
+                        Cerr << "... blocking TEvProgressTranasction at " << ev->GetRecipientRewrite() << Endl;
+                        blockedProgress.emplace_back(ev.Release());
+                        return;
+                    }
+                    break;
+                }
+            }
+        });
+
+        // Unblock local boot
+        blockLocalBoot.Remove();
+        Cerr << "... unblocking local boot" << Endl;
+        for (auto& ev : blockedLocalBoot) {
+            runtime.Send(ev.release(), 0, true);
+        }
+        blockedLocalBoot.clear();
+
+        // Wait until a new instance starts and is blocked at progress queue handling
+        WaitFor(runtime, [&]{ return blockedProgress.size() > 0; }, "blocked progress", 10);
+
+        // Sleep a little to make sure datashard subscribes to lock and handles the response
+        Cerr << "... sleeping for 1 second" << Endl;
+        runtime.SimulateSleep(TDuration::Seconds(1));
+
+        // Unblock progress queue and resend blocked messages
+        Cerr << "... resending progress queue" << Endl;
+        blockProgressQueue.Remove();
+        for (auto& ev : blockedProgress) {
+            runtime.Send(ev.release(), 0, true);
+        }
+        blockedProgress.clear();
+
+        // Sleep a little to make sure everything settles
+        Cerr << "... sleeping for 1 second" << Endl;
+        runtime.SimulateSleep(TDuration::Seconds(1));
+
+        // Now make a read query, we must not observe partial commit
+        Cerr << "... checking final table state" << Endl;
+        UNIT_ASSERT_VALUES_EQUAL(
+            KqpSimpleExec(runtime, Q_(R"(
+                SELECT key, value FROM `/Root/table-1`
+                UNION ALL
+                SELECT key, value FROM `/Root/table-2`
+                ORDER BY key;
+                )")),
+            "{ items { uint32_value: 1 } items { uint32_value: 10 } }, "
+            "{ items { uint32_value: 2 } items { uint32_value: 20 } }, "
+            "{ items { uint32_value: 3 } items { uint32_value: 30 } }, "
+            "{ items { uint32_value: 4 } items { uint32_value: 40 } }");
     }
 
 }

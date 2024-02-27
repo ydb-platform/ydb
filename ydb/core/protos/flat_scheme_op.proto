@@ -89,6 +89,9 @@ message TColumnDescription {
         Ydb.TypedValue DefaultFromLiteral = 10; // Literal default value
     }
     optional bool NotNull = 8;
+    // flag that indicates that column is currently under the build
+    // operation.
+    optional bool IsBuildInProgress = 11 [default = false];
 }
 
 message TStorageSettings {

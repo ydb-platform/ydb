@@ -1,10 +1,10 @@
 GO_LIBRARY()
-
-SRCS(
-    doc.go
-    sig.s
-    signal.go
-    signal_unix.go
-)
-
+IF (TRUE)
+    SRCS(
+		doc.go
+		sig.s
+		signal.go
+		signal_unix.go
+    )
+ENDIF()
 END()

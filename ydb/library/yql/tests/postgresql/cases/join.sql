@@ -34,6 +34,19 @@ INSERT INTO J2_TBL VALUES (NULL, 0);
 -- useful in some tests below
 create temp table onerow();
 --
+-- CORRELATION NAMES
+-- Make sure that table/column aliases are supported
+-- before diving into more complex join syntax.
+--
+SELECT *
+  FROM J1_TBL AS tx;
+SELECT *
+  FROM J1_TBL tx;
+SELECT *
+  FROM J1_TBL AS t1 (a, b, c);
+SELECT *
+  FROM J1_TBL t1 (a, b, c);
+--
 -- More complicated constructs
 --
 --
@@ -61,6 +74,19 @@ insert into y values (1,111);
 insert into y values (2,222);
 insert into y values (3,333);
 insert into y values (4,null);
+select * from x;
+select * from y;
+select * from (x left join y on (x1 = y1)) left join x xx(xx1,xx2)
+on (x1 = xx1);
+select * from (x left join y on (x1 = y1)) left join x xx(xx1,xx2)
+on (x1 = xx1 and xx2 is not null);
+-- these should NOT give the same answers as above
+select * from (x left join y on (x1 = y1)) left join x xx(xx1,xx2)
+on (x1 = xx1) where (x2 is not null);
+select * from (x left join y on (x1 = y1)) left join x xx(xx1,xx2)
+on (x1 = xx1) where (y2 is not null);
+select * from (x left join y on (x1 = y1)) left join x xx(xx1,xx2)
+on (x1 = xx1) where (xx2 is not null);
 -- try that with GEQO too
 begin;
 rollback;
@@ -137,6 +163,10 @@ create temp table zt2 (f2 int primary key);
 create temp table zt3 (f3 int primary key);
 insert into zt1 values(53);
 insert into zt2 values(53);
+select * from
+  zt2 left join zt3 on (f2 = f3)
+      left join zt1 on (f3 = f1)
+where f2 = 53;
 --
 -- test for sane behavior with noncanonical merge clauses, per bug #4926
 --
@@ -152,3 +182,82 @@ begin;
 create temp table tidv (idv mycomptype);
 create index on tidv (idv);
 rollback;
+--
+-- test incorrect failure to NULL pulled-up subexpressions
+--
+begin;
+create temp table a (
+     code char not null,
+     constraint a_pk primary key (code)
+);
+create temp table b (
+     a char not null,
+     num integer not null,
+     constraint b_pk primary key (a, num)
+);
+create temp table c (
+     name char not null,
+     a char,
+     constraint c_pk primary key (name)
+);
+insert into a (code) values ('p');
+insert into a (code) values ('q');
+insert into b (a, num) values ('p', 1);
+insert into b (a, num) values ('p', 2);
+insert into c (name, a) values ('A', 'p');
+insert into c (name, a) values ('B', 'q');
+insert into c (name, a) values ('C', null);
+rollback;
+--
+-- test incorrect handling of placeholders that only appear in targetlists,
+-- per bug #6154
+--
+SELECT * FROM
+( SELECT 1 as key1 ) sub1
+LEFT JOIN
+( SELECT sub3.key3, sub4.value2, COALESCE(sub4.value2, 66) as value3 FROM
+    ( SELECT 1 as key3 ) sub3
+    LEFT JOIN
+    ( SELECT sub5.key5, COALESCE(sub6.value1, 1) as value2 FROM
+        ( SELECT 1 as key5 ) sub5
+        LEFT JOIN
+        ( SELECT 2 as key6, 42 as value1 ) sub6
+        ON sub5.key5 = sub6.key6
+    ) sub4
+    ON sub4.key5 = sub3.key3
+) sub2
+ON sub1.key1 = sub2.key3;
+-- test the path using join aliases, too
+SELECT * FROM
+( SELECT 1 as key1 ) sub1
+LEFT JOIN
+( SELECT sub3.key3, value2, COALESCE(value2, 66) as value3 FROM
+    ( SELECT 1 as key3 ) sub3
+    LEFT JOIN
+    ( SELECT sub5.key5, COALESCE(sub6.value1, 1) as value2 FROM
+        ( SELECT 1 as key5 ) sub5
+        LEFT JOIN
+        ( SELECT 2 as key6, 42 as value1 ) sub6
+        ON sub5.key5 = sub6.key6
+    ) sub4
+    ON sub4.key5 = sub3.key3
+) sub2
+ON sub1.key1 = sub2.key3;
+--
+-- nested nestloops can require nested PlaceHolderVars
+--
+create temp table nt1 (
+  id int primary key,
+  a1 boolean,
+  a2 boolean
+);
+insert into nt1 values (1,true,true);
+insert into nt1 values (2,true,false);
+insert into nt1 values (3,false,false);
+select * from
+  int8_tbl t1 left join
+  (select q1 as x, 42 as y from int8_tbl t2) ss
+  on t1.q2 = ss.x
+where
+  1 = (select 1 from int8_tbl t3 where ss.y is not null limit 1)
+order by 1,2;

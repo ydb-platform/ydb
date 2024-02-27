@@ -769,7 +769,7 @@ TEST_F(TSchedulerTest, CancelInApplyUnique)
     BIND([=] () {
         auto promise = NewPromise<int>();
 
-        auto f2 = promise.ToFuture().ApplyUnique(BIND([] (TErrorOr<int>&& /* error */) {
+        auto f2 = promise.ToFuture().ApplyUnique(BIND([] (TErrorOr<int>&& /*error*/) {
             auto canceler = NYT::NConcurrency::GetCurrentFiberCanceler();
             canceler(TError("kek"));
 

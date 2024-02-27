@@ -9,13 +9,7 @@ namespace NKikimr::NOlap {
 
 void TTTLColumnEngineChanges::DoDebugString(TStringOutput& out) const {
     TBase::DoDebugString(out);
-    if (PortionsToEvict.size()) {
-        out << "eviction=(count=" << PortionsToEvict.size() << ";portions=[";
-        for (auto& info : PortionsToEvict) {
-            out << info.GetPortionInfo() << ";to=" << info.GetFeatures().TargetTierName << ";";
-        }
-        out << "];";
-    }
+    out << "eviction=" << PortionsToEvict.size() << ";";
 }
 
 void TTTLColumnEngineChanges::DoStart(NColumnShard::TColumnShard& self) {
@@ -28,7 +22,7 @@ void TTTLColumnEngineChanges::DoStart(NColumnShard::TColumnShard& self) {
             agent->AddRange(rec.BlobRange);
         }
     }
-    self.BackgroundController.StartTtl(*this);
+    self.BackgroundController.StartTtl();
 }
 
 void TTTLColumnEngineChanges::DoOnFinish(NColumnShard::TColumnShard& self, TChangesFinishContext& /*context*/) {

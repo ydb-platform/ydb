@@ -537,6 +537,21 @@ void CmdWrite(TTestActorRuntime* runtime, ui64 tabletId, const TActorId& sender,
     TAutoPtr<IEventHandle> handle;
     TEvPersQueue::TEvResponse *result;
 
+ 
+    runtime->SetObserverFunc(
+            [&](TAutoPtr<IEventHandle>& ev) {
+                if (auto* msg = ev->CastAsLocal<TEvQuota::TEvRequest>()) {
+                    Cerr << "Captured kesus quota request event\n";
+                    runtime->Send(new IEventHandle(
+                            ev->Sender, TActorId{},
+                            new TEvQuota::TEvClearance(TEvQuota::TEvClearance::EResult::Success), 0, ev->Cookie));
+
+                    return TTestActorRuntimeBase::EEventAction::DROP;
+                }
+                return TTestActorRuntimeBase::EEventAction::PROCESS;
+            }
+    );
+
     if (msn != -1) msgSeqNo = msn;
     TString cookie = ownerCookie;
     for (i32 retriesLeft = 2; retriesLeft > 0; --retriesLeft) {
@@ -574,6 +589,7 @@ void CmdWrite(TTestActorRuntime* runtime, ui64 tabletId, const TActorId& sender,
 
             if (error) {
                 UNIT_ASSERT(
+                    result->Record.GetErrorCode() == NPersQueue::NErrorCode::WRITE_ERROR_PARTITION_INACTIVE ||
                     result->Record.GetErrorCode() == NPersQueue::NErrorCode::WRITE_ERROR_PARTITION_IS_FULL ||
                     result->Record.GetErrorCode() == NPersQueue::NErrorCode::BAD_REQUEST ||
                     result->Record.GetErrorCode() == NPersQueue::NErrorCode::WRONG_COOKIE

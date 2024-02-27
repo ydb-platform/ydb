@@ -9,9 +9,9 @@ LICENSE(
 
 LICENSE_TEXTS(.yandex_meta/licenses.list.txt)
 
-VERSION(1.58.0)
+VERSION(1.59.0)
 
-ORIGINAL_SOURCE(https://github.com/nghttp2/nghttp2/archive/v1.58.0.tar.gz)
+ORIGINAL_SOURCE(https://github.com/nghttp2/nghttp2/archive/v1.59.0.tar.gz)
 
 ADDINCL(
     GLOBAL contrib/libs/nghttp2/lib/includes
@@ -29,6 +29,7 @@ CFLAGS(
 )
 
 SRCS(
+    lib/nghttp2_alpn.c
     lib/nghttp2_buf.c
     lib/nghttp2_callbacks.c
     lib/nghttp2_debug.c
@@ -41,7 +42,6 @@ SRCS(
     lib/nghttp2_http.c
     lib/nghttp2_map.c
     lib/nghttp2_mem.c
-    lib/nghttp2_npn.c
     lib/nghttp2_option.c
     lib/nghttp2_outbound_item.c
     lib/nghttp2_pq.c

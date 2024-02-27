@@ -7,6 +7,8 @@
 #include <ydb/core/tx/columnshard/blobs_action/blob_manager_db.h>
 #include <ydb/core/tx/columnshard/blobs_action/counters/storage.h>
 #include <ydb/core/tx/columnshard/blobs_action/counters/remove_gc.h>
+#include <ydb/core/tx/columnshard/data_sharing/manager/shared_blobs.h>
+
 #include <ydb/library/accessor/accessor.h>
 
 namespace NKikimr::NColumnShard {
@@ -29,16 +31,17 @@ public:
 
 class IBlobsStorageOperator {
 private:
+    YDB_READONLY_DEF(TTabletId, SelfTabletId);
     YDB_READONLY_DEF(TString, StorageId);
-
     std::shared_ptr<IBlobsGCAction> CurrentGCAction;
     YDB_READONLY(bool, Stopped, false);
     std::shared_ptr<NBlobOperations::TStorageCounters> Counters;
+    YDB_ACCESSOR_DEF(std::shared_ptr<NDataSharing::TStorageSharedBlobsManager>, SharedBlobs);
 protected:
-    virtual std::shared_ptr<IBlobsDeclareRemovingAction> DoStartDeclareRemovingAction() = 0;
+    virtual std::shared_ptr<IBlobsDeclareRemovingAction> DoStartDeclareRemovingAction(const std::shared_ptr<NBlobOperations::TRemoveDeclareCounters>& counters) = 0;
     virtual std::shared_ptr<IBlobsWritingAction> DoStartWritingAction() = 0;
     virtual std::shared_ptr<IBlobsReadingAction> DoStartReadingAction() = 0;
-    virtual bool DoLoad(NColumnShard::IBlobManagerDb& dbBlobs) = 0;
+    virtual bool DoLoad(IBlobManagerDb& dbBlobs) = 0;
     virtual bool DoStop() {
         return true;
     }
@@ -54,14 +57,17 @@ protected:
     }
 
 public:
-    IBlobsStorageOperator(const TString& storageId)
-        : StorageId(storageId)
+    IBlobsStorageOperator(const TString& storageId, const std::shared_ptr<NDataSharing::TStorageSharedBlobsManager>& sharedBlobs)
+        : SelfTabletId(sharedBlobs->GetSelfTabletId())
+        , StorageId(storageId)
+        , SharedBlobs(sharedBlobs)
     {
         Counters = std::make_shared<NBlobOperations::TStorageCounters>(storageId);
     }
 
     void Stop();
 
+    virtual TTabletsByBlob GetBlobsToDelete() const = 0;
     virtual std::shared_ptr<IBlobInUseTracker> GetBlobsTracker() const = 0;
 
     virtual ~IBlobsStorageOperator() = default;
@@ -70,7 +76,7 @@ public:
         return TStringBuilder() << "(storage_id=" << StorageId << ";details=(" << DoDebugString() << "))";
     }
 
-    bool Load(NColumnShard::IBlobManagerDb& dbBlobs) {
+    bool Load(IBlobManagerDb& dbBlobs) {
         return DoLoad(dbBlobs);
     }
     void OnTieringModified(const std::shared_ptr<NColumnShard::TTiersManager>& tiers) {
@@ -78,9 +84,7 @@ public:
     }
 
     std::shared_ptr<IBlobsDeclareRemovingAction> StartDeclareRemovingAction(const TString& consumerId) {
-        auto result = DoStartDeclareRemovingAction();
-        result->SetCounters(Counters->GetConsumerCounter(consumerId)->GetRemoveDeclareCounters());
-        return result;
+        return DoStartDeclareRemovingAction(Counters->GetConsumerCounter(consumerId)->GetRemoveDeclareCounters());
     }
     std::shared_ptr<IBlobsWritingAction> StartWritingAction(const TString& consumerId) {
         auto result = DoStartWritingAction();

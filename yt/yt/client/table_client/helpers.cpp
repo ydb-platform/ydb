@@ -540,7 +540,7 @@ void ToUnversionedValue(
 
 void FromUnversionedValue(TYsonString* value, TUnversionedValue unversionedValue)
 {
-    if (unversionedValue.Type != EValueType::Any) {
+    if (!IsAnyOrComposite(unversionedValue.Type)) {
         THROW_ERROR_EXCEPTION("Cannot parse YSON string from %Qlv",
             unversionedValue.Type);
     }

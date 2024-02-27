@@ -20,6 +20,7 @@ namespace NDataShard {
 struct TUserTable : public TThrRefBase {
     using TPtr = TIntrusivePtr<TUserTable>;
     using TCPtr = TIntrusiveConstPtr<TUserTable>;
+    using TTableInfos = THashMap<ui64, TUserTable::TCPtr>;
 
     struct TUserFamily {
         using ECodec = NTable::NPage::ECodec;

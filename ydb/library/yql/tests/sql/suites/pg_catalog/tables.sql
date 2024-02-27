@@ -1,9 +1,9 @@
 --!syntax_pg
 select
-count(*),
-min(table_schema),
-min(table_name),
-max(table_schema),
-max(table_name)
+count(*) n,
+min(table_schema) min_s,
+min(table_name) min_t,
+max(table_schema) max_s,
+max(table_name) max_t
 from information_schema.tables;
 

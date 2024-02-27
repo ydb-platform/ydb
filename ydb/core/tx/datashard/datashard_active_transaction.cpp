@@ -24,7 +24,6 @@ TValidatedDataTx::TValidatedDataTx(TDataShard *self,
     , EngineBay(self, txc, ctx, stepTxId)
     , ErrCode(NKikimrTxDataShard::TError::OK)
     , TxSize(0)
-    , TxCacheUsage(0)
     , IsReleased(false)
     , BuiltTaskRunner(false)
     , IsReadOnly(true)
@@ -280,11 +279,10 @@ bool TValidatedDataTx::CheckCancelled(ui64 tabletId) {
     TInstant now = AppData()->TimeProvider->Now();
     Cancelled = (now >= Deadline());
 
-    Cancelled = Cancelled || gCancelTxFailPoint.Check(tabletId, TxId());
+    Cancelled = Cancelled || gCancelTxFailPoint.Check(tabletId, GetTxId());
 
     if (Cancelled) {
-        LOG_NOTICE_S(*TlsActivationContext->ExecutorThread.ActorSystem, NKikimrServices::TX_DATASHARD,
-            "CANCELLED TxId " << TxId() << " at " << tabletId);
+        LOG_NOTICE_S(*TlsActivationContext->ExecutorThread.ActorSystem, NKikimrServices::TX_DATASHARD, "CANCELLED TxId " << GetTxId() << " at " << tabletId);
     }
     return Cancelled;
 }
@@ -332,7 +330,7 @@ void TActiveTransaction::FillTxData(TValidatedDataTx::TPtr dataTx)
     Y_ABORT_UNLESS(!DataTx);
     Y_ABORT_UNLESS(TxBody.empty() || HasVolatilePrepareFlag());
 
-    Target = dataTx->Source();
+    Target = dataTx->GetSource();
     DataTx = dataTx;
 
     if (DataTx->HasStreamResponse())
@@ -543,9 +541,7 @@ void TActiveTransaction::ReleaseTxData(NTabletFlatExecutor::TTxMemoryProviderBas
     DataTx->ReleaseTxData();
     // Immediate transactions have no body stored.
     if (!IsImmediate() && !HasVolatilePrepareFlag()) {
-        UntrackMemory();
-        TxBody.clear();
-        TrackMemory();
+        ClearTxBody();
     }
 
     //InReadSets.clear();
@@ -687,50 +683,6 @@ void TActiveTransaction::FinalizeDataTxPlan()
     RewriteExecutionPlan(plan);
 }
 
-class TFinalizeDataTxPlanUnit : public TExecutionUnit {
-public:
-    TFinalizeDataTxPlanUnit(TDataShard &dataShard, TPipeline &pipeline)
-        : TExecutionUnit(EExecutionUnitKind::FinalizeDataTxPlan, false, dataShard, pipeline)
-    { }
-
-    bool IsReadyToExecute(TOperation::TPtr) const override {
-        return true;
-    }
-
-    EExecutionStatus Execute(TOperation::TPtr op,
-                             TTransactionContext &txc,
-                             const TActorContext &ctx) override
-    {
-        Y_UNUSED(txc);
-        Y_UNUSED(ctx);
-
-        TActiveTransaction *tx = dynamic_cast<TActiveTransaction*>(op.Get());
-        Y_VERIFY_S(tx, "cannot cast operation of kind " << op->GetKind());
-        Y_VERIFY_S(tx->IsDataTx(), "unexpected non-data tx");
-
-        if (auto dataTx = tx->GetDataTx()) {
-            // Restore transaction type flags
-            if (dataTx->IsKqpDataTx() && !tx->IsKqpDataTransaction())
-                tx->SetKqpDataTransactionFlag();
-            Y_VERIFY_S(!dataTx->IsKqpScanTx(), "unexpected kqp scan tx");
-        }
-
-        tx->FinalizeDataTxPlan();
-
-        return EExecutionStatus::Executed;
-    }
-
-    void Complete(TOperation::TPtr op,
-                  const TActorContext &ctx) override
-    {
-        Y_UNUSED(op);
-        Y_UNUSED(ctx);
-    }
-};
-
-THolder<TExecutionUnit> CreateFinalizeDataTxPlanUnit(TDataShard &dataShard, TPipeline &pipeline) {
-    return THolder(new TFinalizeDataTxPlanUnit(dataShard, pipeline));
-}
 
 void TActiveTransaction::BuildExecutionPlan(bool loaded)
 {

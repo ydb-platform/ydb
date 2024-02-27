@@ -51,27 +51,6 @@ void SerializeAndAddProtoWithHeader(
     message.SerializeWithCachedSizesToArray(reinterpret_cast<google::protobuf::uint8*>(ref.Begin() + sizeof(fixedHeader)));
 }
 
-size_t GetAllocationSpaceForProtoWithEnvelope(const google::protobuf::MessageLite& message)
-{
-    return
-        sizeof (TEnvelopeFixedHeader) +
-        message.ByteSizeLong();
-}
-
-void SerializeAndAddProtoWithEnvelope(
-    TSharedRefArrayBuilder* builder,
-    const google::protobuf::MessageLite& message)
-{
-    auto ref = builder->AllocateAndAdd(
-        sizeof (TEnvelopeFixedHeader) +
-        message.GetCachedSize());
-    auto* header = static_cast<TEnvelopeFixedHeader*>(static_cast<void*>(ref.Begin()));
-    // Empty (default) TSerializedMessageEnvelope.
-    header->EnvelopeSize = 0;
-    header->MessageSize = message.GetCachedSize();
-    message.SerializeWithCachedSizesToArray(reinterpret_cast<google::protobuf::uint8*>(ref.Begin() + sizeof(TEnvelopeFixedHeader)));
-}
-
 bool DeserializeFromProtoWithHeader(
     google::protobuf::MessageLite* message,
     TRef data)
@@ -165,17 +144,17 @@ TSharedRefArray CreateResponseMessage(
     const std::vector<TSharedRef>& attachments)
 {
     NProto::TResponseHeader header;
+    header.set_codec(ToProto<int>(NCompression::ECodec::None));
     TSharedRefArrayBuilder builder(
         2 + attachments.size(),
-        GetAllocationSpaceForProtoWithHeader(header) + GetAllocationSpaceForProtoWithEnvelope(body),
+        GetAllocationSpaceForProtoWithHeader(header) + body.ByteSizeLong(),
         GetRefCountedTypeCookie<TSerializedMessageTag>());
     SerializeAndAddProtoWithHeader(
         &builder,
         TFixedMessageHeader{EMessageType::Response},
         header);
-    SerializeAndAddProtoWithEnvelope(
-        &builder,
-        body);
+    auto ref = builder.AllocateAndAdd(body.GetCachedSize());
+    body.SerializeWithCachedSizesToArray(reinterpret_cast<google::protobuf::uint8*>(ref.Begin()));
     for (auto attachment : attachments) {
         builder.Add(std::move(attachment));
     }

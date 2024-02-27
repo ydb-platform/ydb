@@ -1,11 +1,10 @@
-{%- set mainClassTargets = targets|selectattr("app_main_class") -%}
-{%- set publish = targets|selectattr('publish') -%}
-{%- set hasJunit5Test = targets|selectattr('junit5_test') -%}
-{%- set target0 = targets[0] -%}
-{%- set with_kotlin = target0.with_kotlin -%}
-{%- set kotlin_version = target0.kotlin_version -%}
+{%- set mainClass = target.app_main_class -%}
+{%- set publish = target.publish -%}
+{%- set with_kotlin = target.with_kotlin -%}
+{%- set kotlin_version = target.kotlin_version -%}
+{%- set hasJunit5Test = extra_targets|selectattr('junit5_test') -%}
 plugins {
-{%- if mainClassTargets %}
+{%- if mainClass %}
     `application`
 {%- else %}
     `java-library`
@@ -16,21 +15,21 @@ plugins {
 {%- endif -%}
 {%- if with_kotlin and kotlin_version %}
     kotlin("jvm") version "{{ kotlin_version }}"
-{%-     if target0.with_kotlinc_plugin_allopen %}
+{%-     if target.with_kotlinc_plugin_allopen %}
     kotlin("plugin.allopen") version "{{ kotlin_version }}"
 {%      endif -%}
-{%-     if target0.with_kotlinc_plugin_lombok %}
+{%-     if target.with_kotlinc_plugin_lombok %}
     kotlin("plugin.lombok") version "{{ kotlin_version }}"
 {%      endif -%}
-{%-     if target0.with_kotlinc_plugin_noarg %}
+{%-     if target.with_kotlinc_plugin_noarg %}
     kotlin("plugin.noarg") version "{{ kotlin_version }}"
 {%      endif -%}
-{%-     if target0.with_kotlinc_plugin_serialization %}
+{%-     if target.with_kotlinc_plugin_serialization %}
     kotlin("plugin.serialization") version "{{ kotlin_version }}"
 {%      endif -%}
 {%- endif %}
 }
-{%- if target0.with_kotlinc_plugin_allopen %}
+{%- if target.with_kotlinc_plugin_allopen %}
 
 allOpen {
     annotation("org.springframework.stereotype.Component")
@@ -39,26 +38,61 @@ allOpen {
 {%- if with_kotlin %}
 
 kotlin {
-    jvmToolchain({%- if target0.required_jdk -%}{{ target0.required_jdk }}{%- else -%}17{%- endif -%})
+    jvmToolchain({%- if target.required_jdk -%}{{ target.required_jdk }}{%- else -%}17{%- endif -%})
 }
 {%  endif -%}
 {%- if publish %}
 
-group = "{{ target0.publish_group }}"
-version = {% if target0.publish_version and target0.publish_version != "no" -%}"{{ target0.publish_version }}"{%- else -%}project.properties["version"]{%- endif %}
+group = "{{ target.publish_group }}"
+version = {% if target.publish_version and target.publish_version != "no" -%}"{{ target.publish_version }}"{%- else -%}project.properties["version"]{%- endif %}
 {%  endif %}
 
+{% if target.enable_preview %}
+tasks.withType<JavaCompile> {
+    options.compilerArgs.add("--enable-preview")
+
+    options.compilerArgs.add("-Xlint:preview")
+    options.release.set({%- if target.required_jdk -%}{{ target.required_jdk }}{%- else -%}17{%- endif -%})
+}
+
+
+tasks.withType<JavaExec> {
+     jvmArgs?.add("--enable-preview")
+ }
+tasks.withType<Test> {
+    jvmArgs?.add("--enable-preview")
+    environment["JAVA_TOOL_OPTIONS"] = "--enable-preview"
+}
+
+tasks.withType<Javadoc> {
+    val javadocOptions = options as CoreJavadocOptions
+    javadocOptions.addStringOption("source", "{%- if target.required_jdk -%}{{ target.required_jdk }}{%- else -%}17{%- endif -%}")
+    javadocOptions.addBooleanOption("-enable-preview", true)
+}
+{% endif %}
+
+
+val bucketUsername: String by project
+val bucketPassword: String by project
 repositories {
-    mavenCentral()
+   repositories {
+    maven {
+        url = uri("https://bucket.yandex-team.ru/v1/maven/central")
+        credentials {
+            username = "$bucketUsername"
+            password = "$bucketPassword"
+        }
+    }
+}
+
+
 }
 
 val project_root="{%- if exportRoot.startswith(arcadiaRoot + '/') -%}{{ arcadiaRoot }}{%- else -%}{{ exportRoot }}{%- endif -%}"
 
-{%  if mainClassTargets -%}
+{%  if mainClass -%}
 application {
-{%- for target in mainClassTargets %}
-    mainClass.set("{{ target.app_main_class }}")
-{%  endfor -%}
+    mainClass.set("{{ mainClass }}")
 }
 
 {%  endif -%}
@@ -97,44 +131,74 @@ tasks.test {
 
 {%  endif -%}
 
-{%  for target in targets -%}
-{%-     if target.jar_source_set is defined -%}
-{%-         for source_set in target.jar_source_set -%}
+{%- if target.jar_source_set is defined -%}
+{%-     for source_set in target.jar_source_set -%}
+{%-         set srcdir_glob = split(source_set, ':') -%}
+sourceSets.main.java.srcDirs += "{{ srcdir_glob[0] }}"
+{%          endfor -%}
+{%- endif -%}
+
+{%  for extra_target in extra_targets -%}
+{%-     if extra_target.jar_source_set is defined -%}
+{%-         for source_set in extra_target.jar_source_set -%}
 {%-             set srcdir_glob = split(source_set, ':') -%}
 sourceSets.main.java.srcDirs += "{{ srcdir_glob[0] }}"
 {%              endfor -%}
 {%-     endif -%}
 {%- endfor -%}
 
-dependencies {
-{%- for target in targets -%}
-{%-    for library in target.consumer if library.classpath -%}
-{%-        if library.prebuilt and library.jar and (library.type != "contrib" or build_contribs) -%}
-{%-            if target.isTest %}
-    testImplementation
-{%-            else %}
-    implementation
-{%-            endif -%}(files("$project_root/{{ library.jar }}"))
-{%-        else -%}
-{%-            if target.isTest %}
-{%-                if library.type != "contrib" and library.test2test %}
-    testImplementation(project(path = ":{{ library.test2test | replace("/", ":") }}", configuration = "testArtifacts"))
-{%-                else %}
-    testImplementation({{ library.classpath }})
-{%-                endif %}
-{%-            elif library.type != "contrib" %}
-    implementation({{ library.classpath }})
-{%-            else %}
-    api({{ library.classpath }})
-{%-            endif -%}
-{%-            if library.excludes.consumer is defined %} {
-{%                 for exclude in library.excludes.consumer if exclude.classpath -%}
-{%                     set classpath = exclude.classpath|replace('"','') -%}
-{%                     set classpath_parts = split(classpath, ':') -%}
-        exclude(group = "{{ classpath_parts[0] }}", module = "{{ classpath_parts[1] }}")
-{%                 endfor -%}
+sourceSets {
+    val test by getting {
+        java.srcDir("ut/java")
+        resources.srcDir("ut/resources")
+        java.srcDir("src/test-integration/java")
+        resources.srcDir("src/test-integration/resources")
+        java.srcDir("src/testFixtures/java")
+        resources.srcDir("src/testFixtures/resources")
+        java.srcDir("src/intTest/java")
+        resources.srcDir("src/intTest/resources")
     }
-{%-            endif -%}
+}
+
+dependencies {
+{%- for library in target.consumer if library.classpath -%}
+{%-     if library.prebuilt and library.jar and (library.type != "contrib" or build_contribs) %}
+    implementation(files("$project_root/{{ library.jar }}"))
+{%-     else -%}
+{%-         if library.type != "contrib" %}
+    implementation({{ library.classpath }})
+{%-         else %}
+    api({{ library.classpath }})
+{%-         endif -%}
+{%-         if library.excludes.consumer is defined %} {
+{%              for exclude in library.excludes.consumer if exclude.classpath -%}
+{%                  set classpath = exclude.classpath|replace('"','') -%}
+{%                  set classpath_parts = split(classpath, ':') -%}
+        exclude(group = "{{ classpath_parts[0] }}", module = "{{ classpath_parts[1] }}")
+{%              endfor -%}
+    }
+{%-         endif -%}
+{%-     endif -%}
+{%- endfor -%}
+
+{%- for extra_target in extra_targets -%}
+{%-     for library in extra_target.consumer if library.classpath -%}
+{%-         if library.prebuilt and library.jar and (library.type != "contrib" or build_contribs) %}
+    testImplementation(files("$project_root/{{ library.jar }}"))
+{%-         else -%}
+{%-             if library.type != "contrib" and library.test2test %}
+    testImplementation(project(path = ":{{ library.test2test | replace("/", ":") }}", configuration = "testArtifacts"))
+{%-             else %}
+    testImplementation({{ library.classpath }})
+{%-             endif -%}
+{%-             if library.excludes.consumer is defined %} {
+{%                  for exclude in library.excludes.consumer if exclude.classpath -%}
+{%                      set classpath = exclude.classpath|replace('"','') -%}
+{%                      set classpath_parts = split(classpath, ':') -%}
+        exclude(group = "{{ classpath_parts[0] }}", module = "{{ classpath_parts[1] }}")
+{%                  endfor -%}
+    }
+{%-             endif -%}
 {%-         endif -%}
 {%-     endfor -%}
 {%- endfor %}

@@ -307,13 +307,17 @@ public:
         out << TypeName(*this);
     }
 
-    virtual void SetupTxSpanName() noexcept {
-        TxSpan.Attribute("Type", TypeName(*this));
+    void SetupTxSpanName() noexcept {
+        if (TxSpan) {
+            TxSpan.Attribute("Type", TypeName(*this));
+        }
     }
 
     void SetupTxSpan(NWilson::TTraceId traceId) noexcept {
         TxSpan = NWilson::TSpan(TWilsonTablet::Tablet, std::move(traceId), "Tablet.Transaction");
-        TxSpan.Attribute("Type", TypeName(*this));
+        if (TxSpan) {
+            TxSpan.Attribute("Type", TypeName(*this));
+        }
     }
 
 public:

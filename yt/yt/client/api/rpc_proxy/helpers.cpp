@@ -908,6 +908,10 @@ void ToProto(NProto::TJob* protoJob, const NApi::TJob& job)
     if (job.Error) {
         protoJob->set_error(job.Error.ToString());
     }
+    if (job.InterruptionInfo) {
+        protoJob->set_interruption_info(job.InterruptionInfo.ToString());
+    }
+
     if (job.BriefStatistics) {
         protoJob->set_brief_statistics(job.BriefStatistics.ToString());
     }
@@ -1015,6 +1019,11 @@ void FromProto(NApi::TJob* job, const NProto::TJob& protoJob)
         job->Error = TYsonString(protoJob.error());
     } else {
         job->Error = TYsonString();
+    }
+    if (protoJob.has_interruption_info()) {
+        job->InterruptionInfo = TYsonString(protoJob.interruption_info());
+    } else {
+        job->InterruptionInfo = TYsonString();
     }
     if (protoJob.has_brief_statistics()) {
         job->BriefStatistics = TYsonString(protoJob.brief_statistics());
@@ -1842,7 +1851,8 @@ auto ReadRows<TVersionedRow>(IWireProtocolReader* reader, const TTableSchema& sc
 template <class TRow>
 TIntrusivePtr<NApi::IRowset<TRow>> DeserializeRowset(
     const NProto::TRowsetDescriptor& descriptor,
-    const TSharedRef& data)
+    const TSharedRef& data,
+    NTableClient::TRowBufferPtr rowBuffer)
 {
     if (descriptor.rowset_format() != NApi::NRpcProxy::NProto::RF_YT_WIRE) {
         THROW_ERROR_EXCEPTION("Unsupported rowset format %Qv",
@@ -1855,8 +1865,12 @@ TIntrusivePtr<NApi::IRowset<TRow>> DeserializeRowset(
         TRowsetTraits<TRow>::Kind,
         NApi::NRpcProxy::NProto::RF_YT_WIRE);
 
-    struct TDeserializedRowsetTag { };
-    auto reader = CreateWireProtocolReader(data, New<TRowBuffer>(TDeserializedRowsetTag()));
+    if (!rowBuffer) {
+        struct TDeserializedRowsetTag { };
+        rowBuffer = New<TRowBuffer>(TDeserializedRowsetTag());
+    }
+
+    auto reader = CreateWireProtocolReader(data, std::move(rowBuffer));
 
     auto schema = DeserializeRowsetSchema(descriptor);
     auto rows = ReadRows<TRow>(reader.get(), *schema);
@@ -1866,10 +1880,13 @@ TIntrusivePtr<NApi::IRowset<TRow>> DeserializeRowset(
 // Instantiate templates.
 template NApi::IUnversionedRowsetPtr DeserializeRowset(
     const NProto::TRowsetDescriptor& descriptor,
-    const TSharedRef& data);
+    const TSharedRef& data,
+    NTableClient::TRowBufferPtr buffer = nullptr);
+
 template NApi::IVersionedRowsetPtr DeserializeRowset(
     const NProto::TRowsetDescriptor& descriptor,
-    const TSharedRef& data);
+    const TSharedRef& data,
+    NTableClient::TRowBufferPtr buffer = nullptr);
 
 ////////////////////////////////////////////////////////////////////////////////
 

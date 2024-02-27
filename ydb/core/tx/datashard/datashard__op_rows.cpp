@@ -16,7 +16,7 @@ class TTxDirectBase : public TTransactionBase<TDataShard> {
 
 public:
     TTxDirectBase(TDataShard* ds, TEvRequest ev)
-        : TBase(ds)
+        : TBase(ds, std::move(ev->TraceId))
         , Ev(ev)
     {
     }

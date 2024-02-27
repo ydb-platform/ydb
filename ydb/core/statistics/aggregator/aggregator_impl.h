@@ -42,12 +42,16 @@ private:
         enum EEv {
             EvPropagate = EventSpaceBegin(TEvents::ES_PRIVATE),
             EvFastPropagateCheck,
+            EvProcessUrgent,
+            EvPropagateTimeout,
 
             EvEnd
         };
 
         struct TEvPropagate : public TEventLocal<TEvPropagate, EvPropagate> {};
         struct TEvFastPropagateCheck : public TEventLocal<TEvFastPropagateCheck, EvFastPropagateCheck> {};
+        struct TEvProcessUrgent : public TEventLocal<TEvProcessUrgent, EvProcessUrgent> {};
+        struct TEvPropagateTimeout : public TEventLocal<TEvPropagateTimeout, EvPropagateTimeout> {};
     };
 
 private:
@@ -73,12 +77,16 @@ private:
     void Handle(TEvTabletPipe::TEvServerConnected::TPtr& ev);
     void Handle(TEvTabletPipe::TEvServerDisconnected::TPtr& ev);
     void Handle(TEvPrivate::TEvFastPropagateCheck::TPtr& ev);
+    void Handle(TEvStatistics::TEvPropagateStatisticsResponse::TPtr& ev);
+    void Handle(TEvPrivate::TEvProcessUrgent::TPtr& ev);
+    void Handle(TEvPrivate::TEvPropagateTimeout::TPtr& ev);
 
     void ProcessRequests(TNodeId nodeId, const std::vector<TSSId>& ssIds);
     void SendStatisticsToNode(TNodeId nodeId, const std::vector<TSSId>& ssIds);
     void PropagateStatistics();
     void PropagateFastStatistics();
-    void PropagateStatisticsImpl(const std::vector<TNodeId>& nodeIds, const std::vector<TSSId>& ssIds);
+    size_t PropagatePart(const std::vector<TNodeId>& nodeIds, const std::vector<TSSId>& ssIds,
+        size_t lastSSIndex, bool useSizeLimit);
 
     void PersistSysParam(NIceDb::TNiceDb& db, ui64 id, const TString& value);
 
@@ -99,6 +107,9 @@ private:
             hFunc(TEvTabletPipe::TEvServerConnected, Handle);
             hFunc(TEvTabletPipe::TEvServerDisconnected, Handle);
             hFunc(TEvPrivate::TEvFastPropagateCheck, Handle);
+            hFunc(TEvStatistics::TEvPropagateStatisticsResponse, Handle);
+            hFunc(TEvPrivate::TEvProcessUrgent, Handle);
+            hFunc(TEvPrivate::TEvPropagateTimeout, Handle);
             default:
                 if (!HandleDefaultEvents(ev, SelfId())) {
                     LOG_CRIT(TlsActivationContext->AsActorContext(), NKikimrServices::STATISTICS,
@@ -118,7 +129,8 @@ private:
     static constexpr size_t StatsSizeLimitBytes = 2 << 20; // limit for stats size in one message
 
     TDuration PropagateInterval;
-    bool IsPropagateInFlight = false; // is slow propagation started
+    TDuration PropagateTimeout;
+    static constexpr TDuration FastCheckInterval = TDuration::MilliSeconds(50);
 
     std::unordered_map<TSSId, TString> BaseStats; // schemeshard id -> serialized stats for all paths
 
@@ -134,6 +146,14 @@ private:
     bool FastCheckInFlight = false;
     std::unordered_set<TNodeId> FastNodes; // nodes for fast propagation
     std::unordered_set<TSSId> FastSchemeShards; // schemeshards for fast propagation
+
+    bool PropagationInFlight = false;
+    std::vector<TNodeId> PropagationNodes;
+    std::vector<TSSId> PropagationSchemeShards;
+    size_t LastSSIndex = 0;
+
+    std::queue<TEvStatistics::TEvRequestStats::TPtr> PendingRequests;
+    bool ProcessUrgentInFlight = false;
 };
 
 } // NKikimr::NStat

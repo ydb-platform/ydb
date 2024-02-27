@@ -42,6 +42,8 @@ namespace NKikimr {
 
                 LookupActor = 9,
                     LookupActorShardsResolve = 10,
+                
+                BulkUpsertActor = 9,
 
                 WriteActor = 11,
                     WriteActorTableNavigate = 11,

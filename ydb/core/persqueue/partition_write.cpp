@@ -29,7 +29,7 @@ static const ui32 BATCH_UNPACK_SIZE_BORDER = 500_KB;
 static const ui32 MAX_WRITE_CYCLE_SIZE = 16_MB;
 static const ui32 MAX_INLINE_SIZE = 1000;
 
-static constexpr NPersQueue::NErrorCode::EErrorCode InactivePartitionErrorCode = NPersQueue::NErrorCode::WRITE_ERROR_PARTITION_IS_FULL;
+static constexpr NPersQueue::NErrorCode::EErrorCode InactivePartitionErrorCode = NPersQueue::NErrorCode::WRITE_ERROR_PARTITION_INACTIVE;
 
 void TPartition::ReplyOwnerOk(const TActorContext& ctx, const ui64 dst, const TString& cookie, ui64 seqNo) {
     LOG_DEBUG_S(ctx, NKikimrServices::PERSQUEUE, "TPartition::ReplyOwnerOk. Partition: " << Partition);
@@ -211,6 +211,11 @@ void TPartition::ProcessReserveRequests(const TActorContext& ctx) {
         const bool& lastRequest = ReserveRequests.front()->LastRequest;
 
         auto it = Owners.find(owner);
+        if (ClosedInternalPartition) {
+            ReplyError(ctx, cookie, NPersQueue::NErrorCode::BAD_REQUEST, "ReserveRequest to closed supportive partition");
+            ReserveRequests.pop_front();
+            continue;
+        }
         if (it == Owners.end() || it->second.OwnerCookie != ownerCookie) {
             ReplyError(ctx, cookie, NPersQueue::NErrorCode::BAD_REQUEST, "ReserveRequest from dead ownership session");
             ReserveRequests.pop_front();
@@ -219,12 +224,12 @@ void TPartition::ProcessReserveRequests(const TActorContext& ctx) {
 
         const ui64 currentSize = ReservedSize + WriteInflightSize + WriteCycleSize;
         if (currentSize != 0 && currentSize + size > maxWriteInflightSize) {
-            LOG_DEBUG_S(ctx, NKikimrServices::PERSQUEUE, "Reserve processing: maxWriteInflightSize riched. Partition: " << Partition);           
+            LOG_DEBUG_S(ctx, NKikimrServices::PERSQUEUE, "Reserve processing: maxWriteInflightSize riched. Partition: " << Partition);
             break;
         }
 
         if (WaitingForSubDomainQuota(ctx, currentSize)) {
-            LOG_DEBUG_S(ctx, NKikimrServices::PERSQUEUE, "Reserve processing: SubDomainOutOfSpace. Partition: " << Partition);         
+            LOG_DEBUG_S(ctx, NKikimrServices::PERSQUEUE, "Reserve processing: SubDomainOutOfSpace. Partition: " << Partition);
             break;
         }
 
@@ -284,7 +289,6 @@ void TPartition::AnswerCurrentWrites(const TActorContext& ctx) {
     while (!Responses.empty()) {
         const auto& response = Responses.front();
 
-        const TDuration quotedTime = response.QuotedTime;
         const TDuration queueTime = response.QueueTime;
         const TDuration writeTime = ctx.Now() - response.WriteTimeBaseline;
 
@@ -341,7 +345,7 @@ void TPartition::AnswerCurrentWrites(const TActorContext& ctx) {
             ReplyWrite(
                 ctx, writeResponse.Cookie, s, seqNo, partNo, totalParts,
                 already ? maxOffset : offset, CurrentTimestamp, already, maxSeqNo,
-                quotedTime, TopicQuotaWaitTimeForCurrentBlob, queueTime, writeTime
+                PartitionQuotaWaitTimeForCurrentBlob, TopicQuotaWaitTimeForCurrentBlob, queueTime, writeTime
             );
             LOG_DEBUG_S(
                 ctx,
@@ -353,7 +357,7 @@ void TPartition::AnswerCurrentWrites(const TActorContext& ctx) {
                 ", Offset: " << offset << " is " << (already ? "already written" : "stored on disk")
             );
             if (PartitionWriteQuotaWaitCounter) {
-                PartitionWriteQuotaWaitCounter->IncFor(quotedTime.MilliSeconds());
+                PartitionWriteQuotaWaitCounter->IncFor(PartitionQuotaWaitTimeForCurrentBlob.MilliSeconds());
             }
 
             if (!already && partNo + 1 == totalParts && !writeResponse.Msg.HeartbeatVersion)
@@ -409,6 +413,7 @@ void TPartition::AnswerCurrentWrites(const TActorContext& ctx) {
         Responses.pop_front();
     }
     TopicQuotaWaitTimeForCurrentBlob = TDuration::Zero();
+    PartitionQuotaWaitTimeForCurrentBlob = TDuration::Zero();
 }
 
 void TPartition::SyncMemoryStateWithKVState(const TActorContext& ctx) {
@@ -481,13 +486,11 @@ void TPartition::SyncMemoryStateWithKVState(const TActorContext& ctx) {
 
 void TPartition::Handle(TEvPQ::TEvHandleWriteResponse::TPtr&, const TActorContext& ctx) {
     PQ_LOG_T("TPartition::HandleOnWrite TEvHandleWriteResponse.");
-
     HandleWriteResponse(ctx);
 }
 
 void TPartition::HandleWriteResponse(const TActorContext& ctx) {
     PQ_LOG_T("TPartition::HandleWriteResponse.");
-
     Y_ABORT_UNLESS(CurrentStateFunc() == &TThis::StateWrite);
     ui64 prevEndOffset = EndOffset;
 
@@ -521,10 +524,20 @@ void TPartition::HandleWriteResponse(const TActorContext& ctx) {
     //All ok
     auto now = ctx.Now();
     const auto& quotingConfig = AppData()->PQConfig.GetQuotingConfig();
-    if (quotingConfig.GetTopicWriteQuotaEntityToLimit() == NKikimrPQ::TPQConfig::TQuotingConfig::USER_PAYLOAD_SIZE) {
-        WriteQuota->Exaust(WriteNewSize, now);
-    } else {
-        WriteQuota->Exaust(WriteCycleSize, now);
+    if (WriteQuotaTrackerActor) {
+        ui64 size = 0;
+
+        if (quotingConfig.GetTopicWriteQuotaEntityToLimit() == NKikimrPQ::TPQConfig::TQuotingConfig::USER_PAYLOAD_SIZE) {
+            size = WriteNewSize;
+        } else {
+            size = WriteCycleSize;
+        }
+        if (TopicQuotaConsumedCookie == 0) {
+            Send(WriteQuotaTrackerActor, new TEvPQ::TEvConsumed(size));
+        } else {
+            Send(WriteQuotaTrackerActor, new TEvPQ::TEvConsumed(size, TopicQuotaConsumedCookie, {}));
+        }
+        TopicQuotaConsumedCookie = 0;
     }
     for (auto& avg : AvgWriteBytes) {
         avg.Update(WriteNewSize, now);
@@ -667,6 +680,9 @@ void TPartition::HandleOnWrite(TEvPQ::TEvWrite::TPtr& ev, const TActorContext& c
         if (offset && needToChangeOffset)
             ++*offset;
     }
+    if (WaitingForPreviousBlobQuota() || WaitingForSubDomainQuota(ctx)) {
+        SetDeadlinesForWrites(ctx);
+    }
     WriteInflightSize += size;
 
     // TODO: remove decReservedSize == 0
@@ -727,7 +743,7 @@ void TPartition::HandleOnWrite(TEvPQ::TEvDeregisterMessageGroup::TPtr& ev, const
         return ReplyError(ctx, ev->Get()->Cookie, NPersQueue::NErrorCode::SOURCEID_DELETED,
             "SourceId doesn't exist");
     }
-    
+
     EmplaceRequest(TDeregisterMessageGroupMsg(*ev->Get()), ctx);
 }
 
@@ -932,6 +948,7 @@ TPartition::ProcessResult TPartition::ProcessRequest(TWriteMsg& p, ProcessParame
             );
 
             sourceId.Update(THeartbeat{*hbVersion, p.Msg.Data});
+
             return ProcessResult::Continue;
         }
 
@@ -1202,7 +1219,6 @@ bool TPartition::AppendHeadWithNewWrites(TEvKeyValue::TEvRequest* request, const
                 break;
         }
     }
-
     if (const auto heartbeat = sourceIdBatch.CanEmitHeartbeat()) {
         if (heartbeat->Version > LastEmittedHeartbeat) {
             LOG_INFO_S(
@@ -1237,6 +1253,7 @@ bool TPartition::AppendHeadWithNewWrites(TEvKeyValue::TEvRequest* request, const
             LastEmittedHeartbeat = heartbeat->Version;
         }
     }
+
 
     UpdateWriteBufferIsFullState(ctx.Now());
 
@@ -1397,25 +1414,15 @@ void TPartition::Handle(TEvPQ::TEvQuotaDeadlineCheck::TPtr&, const TActorContext
     FilterDeadlinedWrites(ctx);
 }
 
-bool TPartition::ProcessWrites(TEvKeyValue::TEvRequest* request, TInstant now, const TActorContext& ctx) {
+bool TPartition::ProcessWrites(TEvKeyValue::TEvRequest* request, TInstant, const TActorContext& ctx) {
     PQ_LOG_T("TPartition::ProcessWrites.");
-
     FilterDeadlinedWrites(ctx);
-
-    if (!WriteQuota->CanExaust(now)) { // Waiting for partition quota.
-        SetDeadlinesForWrites(ctx);
-        return false;
-    }
 
     if (WaitingForPreviousBlobQuota() || WaitingForSubDomainQuota(ctx)) { // Waiting for topic quota.
         SetDeadlinesForWrites(ctx);
-
-        if (StartTopicQuotaWaitTimeForCurrentBlob == TInstant::Zero() && !Requests.empty()) {
-            StartTopicQuotaWaitTimeForCurrentBlob = now;
-        }
         return false;
     }
-
+    Y_ABORT_UNLESS(!PendingWriteRequest);
     QuotaDeadline = TInstant::Zero();
 
     if (Requests.empty())
@@ -1453,13 +1460,12 @@ bool TPartition::ProcessWrites(TEvKeyValue::TEvRequest* request, TInstant now, c
 
     LOG_DEBUG_S(
             ctx, NKikimrServices::PERSQUEUE,
-            "writing blob: topic '" << TopicName() << "' partition " << Partition
+            "Add new write blob: topic '" << TopicName() << "' partition " << Partition
                 << " compactOffset " << key.GetOffset() << "," << key.GetCount()
                 << " HeadOffset " << Head.Offset << " endOffset " << EndOffset << " curOffset "
                 << NewHead.GetNextOffset() << " " << key.ToString()
                 << " size " << res.second << " WTime " << ctx.Now().MilliSeconds()
     );
-
     AddNewWriteBlob(res, request, headCleared, ctx);
     return true;
 }
@@ -1467,7 +1473,6 @@ bool TPartition::ProcessWrites(TEvKeyValue::TEvRequest* request, TInstant now, c
 void TPartition::FilterDeadlinedWrites(const TActorContext& ctx) {
     if (QuotaDeadline == TInstant::Zero() || QuotaDeadline > ctx.Now())
         return;
-
     PQ_LOG_T("TPartition::FilterDeadlinedWrites.");
 
     std::deque<TMessage> newRequests;
@@ -1511,15 +1516,17 @@ void TPartition::HandleWrites(const TActorContext& ctx) {
             return;
         }
     }
+    if (PendingWriteRequest) {
+        return;
+    }
 
     PQ_LOG_T("TPartition::HandleWrites. Requests.size()=" << Requests.size());
-
     Become(&TThis::StateWrite);
 
     THolder<TEvKeyValue::TEvRequest> request(new TEvKeyValue::TEvRequest);
 
     Y_ABORT_UNLESS(Head.PackedSize + NewHead.PackedSize <= 2 * MaxSizeCheck);
-    
+
     TInstant now = ctx.Now();
     WriteCycleStartTime = now;
 
@@ -1542,7 +1549,6 @@ void TPartition::HandleWrites(const TActorContext& ctx) {
             Y_ABORT_UNLESS(!res);
         }
         Y_ABORT_UNLESS(Requests.empty()
-                    || !WriteQuota->CanExaust(now)
                     || WaitingForPreviousBlobQuota()
                     || WaitingForSubDomainQuota(ctx)); //in this case all writes must be processed or no quota left
         AnswerCurrentWrites(ctx); //in case if all writes are already done - no answer will be called on kv write, no kv write at all
@@ -1551,26 +1557,20 @@ void TPartition::HandleWrites(const TActorContext& ctx) {
     }
 
     WritesTotal.Inc();
-    WriteBlobWithQuota(ctx, std::move(request));
+    Y_ABORT_UNLESS(!PendingWriteRequest);
+    PendingWriteRequest = std::move(request);
+    RequestBlobQuota();
 }
 
 void TPartition::RequestQuotaForWriteBlobRequest(size_t dataSize, ui64 cookie) {
     LOG_DEBUG_S(
             TActivationContext::AsActorContext(), NKikimrServices::PERSQUEUE,
-            "Send write quota request." <<
-            " Topic: \"" << TopicName() << "\"." <<
+            "Send write quota request." <<" Topic: \"" << TopicName() << "\"." <<
             " Partition: " << Partition << "." <<
             " Amount: " << dataSize << "." <<
             " Cookie: " << cookie
     );
-
-    Send(MakeQuoterServiceID(),
-        new TEvQuota::TEvRequest(
-            TEvQuota::EResourceOperator::And,
-            { TEvQuota::TResourceLeaf(TopicWriteQuoterPath, TopicWriteQuotaResourcePath, dataSize) },
-            TDuration::Max()),
-        0,
-        cookie);
+    Send(WriteQuotaTrackerActor, new TEvPQ::TEvRequestQuota(cookie, nullptr));
 }
 
 bool TPartition::WaitingForPreviousBlobQuota() const {
@@ -1590,29 +1590,37 @@ bool TPartition::WaitingForSubDomainQuota(const TActorContext& ctx, const ui64 w
     return MeteringDataSize(ctx) + withSize > ReserveSize();
 }
 
-void TPartition::WriteBlobWithQuota(const TActorContext& /*ctx*/, THolder<TEvKeyValue::TEvRequest>&& request) {
-    PQ_LOG_T("TPartition::WriteBlobWithQuota.");
-    
+void TPartition::RequestBlobQuota() {
+    PQ_LOG_T("TPartition::RequestBlobQuota.");
+
     // Request quota and write blob.
     // Mirrored topics are not quoted in local dc.
-    const bool skip = !IsQuotingEnabled() || TopicWriteQuotaResourcePath.empty();
-    if (size_t quotaRequestSize = skip ? 0 : GetQuotaRequestSize(*request)) {
+    const bool skip = !WriteQuotaTrackerActor;
+    if (size_t quotaRequestSize = skip ? 0 : GetQuotaRequestSize(*PendingWriteRequest)) {
         // Request with data. We should check before attempting to write data whether we have enough quota.
         Y_ABORT_UNLESS(!WaitingForPreviousBlobQuota());
 
         TopicQuotaRequestCookie = NextTopicWriteQuotaRequestCookie++;
         RequestQuotaForWriteBlobRequest(quotaRequestSize, TopicQuotaRequestCookie);
+    } else {
+        WritePendingBlob();
     }
 
-    AddMetaKey(request.Get());
+}
 
+void TPartition::WritePendingBlob() {
+    Y_ABORT_UNLESS(CurrentStateFunc() == &TThis::StateWrite);
+    Y_ABORT_UNLESS(PendingWriteRequest);
+
+    AddMetaKey(PendingWriteRequest.Get());
     WriteStartTime = TActivationContext::Now();
     // Write blob
 #if 1
     // PQ -> CacheProxy -> KV
-    Send(BlobCache, request.Release());
+    Send(BlobCache, PendingWriteRequest.Release());
+    PendingWriteRequest = nullptr;
 #else
-    Send(Tablet, request.Release());
+    Send(Tablet, PendingWriteRequest.Release());
 #endif
 }
 

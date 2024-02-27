@@ -125,6 +125,11 @@ public:
 
     NYql::TIssues Issues;
 
+    TVector<TQueryAst> Statements;
+    ui32 CurrentStatementId = 0;
+    ui32 StatementResultIndex = 0;
+    ui32 StatementResultSize = 0;
+
     NKikimrKqp::EQueryAction GetAction() const {
         return RequestEv->GetAction();
     }
@@ -233,6 +238,8 @@ public:
             }
         }
     }
+
+    void FillViews(const google::protobuf::RepeatedPtrField< ::NKqpProto::TKqpTableInfo>& views);
 
     bool NeedCheckTableVersions() const {
         return CompileStats.FromCache;
@@ -368,6 +375,44 @@ public:
         return RequestEv->GetTxControl();
     }
 
+    bool ProcessingLastStatement() const {
+        return CurrentStatementId + 1 >= Statements.size();
+    }
+
+    void PrepareCurrentStatement() {
+        QueryData = {};
+        PreparedQuery = {};
+        CompileResult = {};
+        TxCtx = {};
+        CurrentTx = 0;
+        TableVersions = {};
+        MaxReadType = ETableReadType::Other;
+        Commit = false;
+        Commited = false;
+        TopicOperations = {};
+        ReplayMessage = {};
+    }
+
+    void PrepareNextStatement() {
+        CurrentStatementId++;
+        StatementResultIndex += StatementResultSize;
+        StatementResultSize = 0;
+        PrepareCurrentStatement();
+    }
+
+    void PrepareStatementTransaction(NKqpProto::TKqpPhyTx_EType txType) {
+        if (!HasTxControl()) {
+            switch (txType) {
+                case NKqpProto::TKqpPhyTx::TYPE_SCHEME:
+                    TxCtx->EffectiveIsolationLevel = NKikimrKqp::ISOLATION_LEVEL_UNDEFINED;
+                    break;
+                default:
+                    Commit = true;
+                    TxCtx->EffectiveIsolationLevel = NKikimrKqp::ISOLATION_LEVEL_SERIALIZABLE;
+            }
+        }
+    }
+
     // validate the compiled query response and ensure that all table versions are not
     // changed since the last compilation.
      bool EnsureTableVersions(const TEvTxProxySchemeCache::TEvNavigateKeySetResult& response);
@@ -376,6 +421,7 @@ public:
     std::unique_ptr<TEvTxProxySchemeCache::TEvNavigateKeySet> BuildNavigateKeySet();
     // same the context of the compiled query to the query state.
     bool SaveAndCheckCompileResult(TEvKqp::TEvCompileResponse* ev);
+    bool SaveAndCheckParseResult(TEvKqp::TEvParseResponse&& ev);
     // build the compilation request.
     std::unique_ptr<TEvKqp::TEvCompileRequest> BuildCompileRequest(std::shared_ptr<std::atomic<bool>> cookie);
     // TODO(gvit): get rid of code duplication in these requests,

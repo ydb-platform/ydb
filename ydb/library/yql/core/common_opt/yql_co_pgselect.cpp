@@ -8,6 +8,25 @@
 
 namespace NYql {
 
+TExprNode::TPtr BuildArrayAggTraits(TExprContext& ctx, TPositionHandle pos, const TExprNode::TPtr& typeNode) {
+    return ctx.Builder(pos)
+        .Callable("AggApply")
+            .Atom(0, "pg_array_agg")
+            .Callable(1, "ListItemType")
+                .Add(0, typeNode)
+            .Seal()
+            .Lambda(2)
+                .Param("row")
+                .Callable("SingleMember")
+                    .Callable(0, "RemoveSystemMembers")
+                        .Arg(0, "row")
+                    .Seal()
+                .Seal()
+            .Seal()
+        .Seal()
+        .Build();
+}
+
 TNodeMap<ui32> GatherSubLinks(const TExprNode::TPtr& root) {
     TNodeMap<ui32> subLinks;
 
@@ -248,6 +267,32 @@ std::pair<TExprNode::TPtr, TExprNode::TPtr> RewriteSubLinksPartial(TPositionHand
                             .Seal()
                         .Seal()
                         .Build();
+                } else if (linkType == "array") {
+                    auto typeNode = ctx.NewCallable(node->Pos(), "TypeOf", { select });
+                    auto aggTraits = BuildArrayAggTraits(ctx, node->Pos(), typeNode);
+                    auto aggregate = ctx.Builder(node->Pos())
+                        .Callable("Aggregate")
+                            .Add(0, select)
+                            .List(1)
+                            .Seal()
+                            .List(2)
+                                .List(0)
+                                    .Atom(0, "a")
+                                    .Add(1, aggTraits)
+                                .Seal()
+                            .Seal()
+                            .List(3)
+                            .Seal()
+                        .Seal()
+                        .Build();
+
+                    return ctx.Builder(node->Pos())
+                        .Callable("SingleMember")
+                            .Callable(0, "ToOptional")
+                                .Add(0, aggregate)
+                            .Seal()
+                        .Seal()
+                        .Build();
                 } else if (linkType == "any" || linkType == "all") {
                     const bool useIn = testLambda->Tail().IsCallable("PgResolvedOp")
                         && testLambda->Tail().Head().Content() == "="
@@ -347,6 +392,7 @@ std::pair<TExprNode::TPtr, TExprNode::TPtr> RewriteSubLinksPartial(TPositionHand
                 TExprNode::TPtr someTraits;
                 TExprNode::TPtr orTraits;
                 TExprNode::TPtr andTraits;
+                TExprNode::TPtr aggArrayTraits = BuildArrayAggTraits(ctx, node->Pos(), selectTypeNode);
                 for (ui32 factoryIndex = 0; factoryIndex < 4; ++factoryIndex)
                 {
                     TStringBuf name;
@@ -474,6 +520,17 @@ std::pair<TExprNode::TPtr, TExprNode::TPtr> RewriteSubLinksPartial(TPositionHand
                             .Add(1, someTraits)
                         .Seal()
                         .Build());
+                } else if (linkType == "array") {
+                    if (sublinkColumns) {
+                        sublinkColumns->push_back(columnName + "_value");
+                    }
+
+                    aggregateItems.push_back(ctx.Builder(node->Pos())
+                        .List()
+                            .Atom(0, columnName + "_value")
+                            .Add(1, aggArrayTraits)
+                        .Seal()
+                        .Build());
                 } else if (linkType == "any") {
                     if (sublinkColumns) {
                         sublinkColumns->push_back(columnName + "_count");
@@ -576,6 +633,13 @@ std::pair<TExprNode::TPtr, TExprNode::TPtr> RewriteSubLinksPartial(TPositionHand
                             .Callable(2, "String")
                                 .Atom(0, "More than one row returned by a subquery used as an expression")
                             .Seal()
+                        .Seal()
+                        .Build();
+                } else if (linkType == "array") {
+                    return ctx.Builder(node->Pos())
+                        .Callable("Member")
+                            .Add(0, originalArg)
+                            .Atom(1, columnName + "_value")
                         .Seal()
                         .Build();
                 } else if (linkType == "any") {

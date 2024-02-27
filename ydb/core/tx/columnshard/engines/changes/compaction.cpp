@@ -27,14 +27,6 @@ void TCompactColumnEngineChanges::DoCompile(TFinalizationContext& context) {
     }
 }
 
-bool TCompactColumnEngineChanges::DoApplyChanges(TColumnEngineForLogs& self, TApplyChangesContext& context) {
-    return TBase::DoApplyChanges(self, context);
-}
-
-void TCompactColumnEngineChanges::DoWriteIndex(NColumnShard::TColumnShard& self, TWriteIndexContext& context) {
-    TBase::DoWriteIndex(self, context);
-}
-
 void TCompactColumnEngineChanges::DoStart(NColumnShard::TColumnShard& self) {
     TBase::DoStart(self);
 
@@ -47,14 +39,16 @@ void TCompactColumnEngineChanges::DoStart(NColumnShard::TColumnShard& self) {
         }
     }
 
-    self.BackgroundController.StartCompaction(NKikimr::NOlap::TPlanCompactionInfo(GranuleMeta->GetPathId()), *this);
+    self.BackgroundController.StartCompaction(NKikimr::NOlap::TPlanCompactionInfo(GranuleMeta->GetPathId()));
     NeedGranuleStatusProvide = true;
     GranuleMeta->OnCompactionStarted();
 }
 
-void TCompactColumnEngineChanges::DoWriteIndexComplete(NColumnShard::TColumnShard& self, TWriteIndexCompleteContext& context) {
-    TBase::DoWriteIndexComplete(self, context);
-    self.IncCounter(NColumnShard::COUNTER_COMPACTION_TIME, context.Duration.MilliSeconds());
+void TCompactColumnEngineChanges::DoWriteIndexOnComplete(NColumnShard::TColumnShard* self, TWriteIndexCompleteContext& context) {
+    TBase::DoWriteIndexOnComplete(self, context);
+    if (self) {
+        self->IncCounter(NColumnShard::COUNTER_COMPACTION_TIME, context.Duration.MilliSeconds());
+    }
 }
 
 void TCompactColumnEngineChanges::DoOnFinish(NColumnShard::TColumnShard& self, TChangesFinishContext& context) {
@@ -85,14 +79,6 @@ TCompactColumnEngineChanges::TCompactColumnEngineChanges(const TSplitSettings& s
 
 TCompactColumnEngineChanges::~TCompactColumnEngineChanges() {
     Y_DEBUG_ABORT_UNLESS(!NActors::TlsActivationContext || !NeedGranuleStatusProvide);
-}
-
-THashSet<TPortionAddress> TCompactColumnEngineChanges::GetTouchedPortions() const {
-    THashSet<TPortionAddress> result = TBase::GetTouchedPortions();
-    for (auto&& i : SwitchedPortions) {
-        result.emplace(i.GetAddress());
-    }
-    return result;
 }
 
 }

@@ -504,13 +504,6 @@ SELECT f.f1, exp(ln(f.f1)) AS exp_ln_f1
  1.2345678901234e-200 | 1.23456789012339e-200
 (3 rows)
 
--- check edge cases for exp
-SELECT exp('inf'::float8), exp('-inf'::float8), exp('nan'::float8);
-   exp    | exp | exp 
-----------+-----+-----
- Infinity |   0 | NaN
-(1 row)
-
 -- cube root
 SELECT ||/ float8 '27' AS three;
  three 

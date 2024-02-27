@@ -111,3 +111,36 @@ insert into minmaxtest values(11), (12);
 create temp table t1 (a int, b int, c int, d int, primary key (a, b));
 create temp table t2 (x int, y int, z int, primary key (x, y));
 drop table t2;
+--
+-- Test GROUP BY matching of join columns that are type-coerced due to USING
+--
+create temp table t1(f1 int, f2 bigint);
+create temp table t2(f1 bigint, f22 bigint);
+drop table t1, t2;
+select array_agg(distinct a)
+  from (values (1),(2),(1),(3),(null),(2)) v(a);
+-- string_agg tests
+select string_agg(a,',') from (values('aaaa'),('bbbb'),('cccc')) g(a);
+select string_agg(a,',') from (values('aaaa'),(null),('bbbb'),('cccc')) g(a);
+select string_agg(a,'AB') from (values(null),(null),('bbbb'),('cccc')) g(a);
+select string_agg(a,',') from (values(null),(null)) g(a);
+-- string_agg bytea tests
+create table bytea_test_table(v bytea);
+select string_agg(v, '') from bytea_test_table;
+insert into bytea_test_table values(decode('ff','hex'));
+select string_agg(v, '') from bytea_test_table;
+insert into bytea_test_table values(decode('aa','hex'));
+select string_agg(v, '') from bytea_test_table;
+select string_agg(v, NULL) from bytea_test_table;
+select string_agg(v, decode('ee', 'hex')) from bytea_test_table;
+drop table bytea_test_table;
+-- outer reference in FILTER (PostgreSQL extension)
+select (select count(*)
+        from (values (1)) t0(inner_c))
+from (values (2),(3)) t1(outer_c); -- inner query is aggregation query
+select p, percentile_cont(p order by p) within group (order by x)  -- error
+from generate_series(1,5) x,
+     (values (0::float8),(0.1),(0.25),(0.4),(0.5),(0.6),(0.75),(0.9),(1)) v(p)
+group by p order by p;
+-- test aggregates with common transition functions share the same states
+begin work;

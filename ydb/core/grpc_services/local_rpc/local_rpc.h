@@ -267,21 +267,29 @@ void SetRequestSyncOperationMode(TRequest&) {
     // nothing
 }
 
-template<typename TRpc>
-NThreading::TFuture<typename TRpc::TResponse> DoLocalRpc(typename TRpc::TRequest&& proto, const TString& database,
-        const TMaybe<TString>& token, const TMaybe<TString>& requestType,
-        TActorSystem* actorSystem, bool internalCall = false)
-{
+template<typename TRpc, typename TLocalRpcCtor /*(TRpc::TRequest&&, TPromiseWrapper<TRpc::Response>&&) -> IRequestOpCtx* */>
+NThreading::TFuture<typename TRpc::TResponse> DoLocalRpc(typename TRpc::TRequest&& proto, TActorSystem* actorSystem, TLocalRpcCtor&& ctor) {
     auto promise = NThreading::NewPromise<typename TRpc::TResponse>();
 
     SetRequestSyncOperationMode(proto);
 
     using TCbWrapper = TPromiseWrapper<typename TRpc::TResponse>;
-    auto req = new TLocalRpcCtx<TRpc, TCbWrapper>(std::move(proto), TCbWrapper(promise), database, token, requestType, internalCall);
+    NGRpcService::IRequestOpCtx* req = ctor(std::move(proto), TCbWrapper(promise));
     auto actor = TRpc::CreateRpcActor(req);
     actorSystem->Register(actor, TMailboxType::HTSwap, actorSystem->AppData<TAppData>()->UserPoolId);
 
     return promise.GetFuture();
+}
+
+template<typename TRpc>
+NThreading::TFuture<typename TRpc::TResponse> DoLocalRpc(typename TRpc::TRequest&& proto, const TString& database,
+        const TMaybe<TString>& token, const TMaybe<TString>& requestType,
+        TActorSystem* actorSystem, bool internalCall = false)
+{
+    using TCbWrapper = TPromiseWrapper<typename TRpc::TResponse>;
+    return DoLocalRpc<TRpc>(std::move(proto), actorSystem, [&](typename TRpc::TRequest&& proto, TCbWrapper&& wrapper) {
+        return new TLocalRpcCtx<TRpc, TCbWrapper>(std::move(proto), wrapper, database, token, requestType, internalCall);
+    });
 }
 
 template<typename TRpc>

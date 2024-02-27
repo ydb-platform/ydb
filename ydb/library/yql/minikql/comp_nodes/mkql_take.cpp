@@ -107,7 +107,11 @@ public:
         count = Count->GetValue(ctx).Get<ui64>();
     }
 
-    EProcessResult DoProcess(ui64& takeCount, TComputationContext& , EFetchResult fetchRes, NUdf::TUnboxedValue*const* ) const {
+    NUdf::TUnboxedValue*const* PrepareInput(ui64& takeCount, TComputationContext&, NUdf::TUnboxedValue*const* output) const {
+        return takeCount != 0 ? output : nullptr;
+    }
+
+    EProcessResult DoProcess(ui64& takeCount, TComputationContext& , EFetchResult fetchRes, NUdf::TUnboxedValue*const*, NUdf::TUnboxedValue*const*) const {
         if (takeCount == 0) {
             return EProcessResult::Finish;
         } else if (fetchRes == EFetchResult::One) {

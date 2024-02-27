@@ -27,7 +27,7 @@ protected:
         return ctx.WideFields.data() + WideFieldsIndex;
     }
 
-    void PrepareArguments(TComputationContext& ctx, NUdf::TUnboxedValue*const* output) const {
+    NUdf::TUnboxedValue*const* PrepareArguments(TComputationContext& ctx, NUdf::TUnboxedValue*const* output) const {
         auto** fields = GetFields(ctx);
 
         for (auto i = 0U; i < Items.size(); ++i) {
@@ -36,6 +36,8 @@ protected:
             else
                 fields[i] = output[i];
         }
+
+        return fields;
     }
 
     void FillOutputs(TComputationContext& ctx, NUdf::TUnboxedValue*const* output) const {
@@ -45,15 +47,6 @@ protected:
             if (const auto out = output[i])
                 if (Predicate == Items[i] || Items[i]->GetDependencesCount() > 0U)
                     *out = *fields[i];
-    }
-
-    bool ApplyPredicate(TComputationContext& ctx, NUdf::TUnboxedValue*const* values) const {
-        auto **fields = GetFields(ctx);
-        PrepareArguments(ctx, values);
-        for (size_t idx = 0; idx < Items.size(); idx++) {
-            *fields[idx] = *values[idx];
-        }
-        return Predicate->GetValue(ctx).Get<bool>();
     }
 
 #ifndef MKQL_DISABLE_CODEGEN
@@ -159,12 +152,16 @@ public:
         limit = Limit->GetValue(ctx).Get<ui64>();
     }
 
-    EProcessResult DoProcess(ui64& limit, TComputationContext& ctx, EFetchResult fetchRes, NUdf::TUnboxedValue*const* values) const {
+    NUdf::TUnboxedValue*const* PrepareInput(ui64& limit, TComputationContext& ctx, NUdf::TUnboxedValue*const* output) const {
+        return limit != 0 ? PrepareArguments(ctx, output) : nullptr;
+    }
+
+    EProcessResult DoProcess(ui64& limit, TComputationContext& ctx, EFetchResult fetchRes, NUdf::TUnboxedValue*const*, NUdf::TUnboxedValue*const* values) const {
         if (limit == 0) {
             return EProcessResult::Finish;
         }
         if (fetchRes == EFetchResult::One) {
-            if (ApplyPredicate(ctx, values)) {
+            if (Predicate->GetValue(ctx).Get<bool>()) {
                 FillOutputs(ctx, values);
                 limit--;
                 return EProcessResult::One;
@@ -200,12 +197,16 @@ public:
         stop = false;
     }
 
-    TBaseComputation::EProcessResult DoProcess(bool& stop, TComputationContext& ctx, EFetchResult fetchRes, NUdf::TUnboxedValue*const* values) const {
+    NUdf::TUnboxedValue*const* PrepareInput(bool& stop, TComputationContext& ctx, NUdf::TUnboxedValue*const* output) const {
+        return !stop ? output : PrepareArguments(ctx, output);
+    }
+
+    TBaseComputation::EProcessResult DoProcess(bool& stop, TComputationContext& ctx, EFetchResult fetchRes, NUdf::TUnboxedValue*const*, NUdf::TUnboxedValue*const* values) const {
         if (stop) {
             return TBaseComputation::EProcessResult::Finish;
         }
         if (fetchRes == EFetchResult::One) {
-            const bool predicate = ApplyPredicate(ctx, values);
+            const bool predicate = Predicate->GetValue(ctx).Get<bool>();
             if (!predicate) {
                 stop = true;
             }
@@ -240,9 +241,13 @@ public:
         start = false;
     }
 
-    TBaseComputation::EProcessResult DoProcess(bool& start, TComputationContext& ctx, EFetchResult fetchRes, NUdf::TUnboxedValue*const* values) const {
+    NUdf::TUnboxedValue*const* PrepareInput(bool&, TComputationContext&, NUdf::TUnboxedValue*const* output) const {
+        return output;
+    }
+
+    TBaseComputation::EProcessResult DoProcess(bool& start, TComputationContext& ctx, EFetchResult fetchRes, NUdf::TUnboxedValue*const*, NUdf::TUnboxedValue*const* values) const {
         if (!start && fetchRes == EFetchResult::One) {
-            const bool predicate = ApplyPredicate(ctx, values);
+            const bool predicate = Predicate->GetValue(ctx).Get<bool>();
             if (!predicate) {
                 start = true;
             }

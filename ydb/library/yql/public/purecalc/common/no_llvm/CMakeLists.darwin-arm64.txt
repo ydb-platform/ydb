@@ -45,6 +45,7 @@ target_link_libraries(purecalc-common-no_llvm PUBLIC
   minikql-invoke_builtins-no_llvm
   minikql-comp_nodes-no_llvm
   minikql-codegen-no_llvm
+  parser-pg_wrapper-interface
 )
 target_sources(purecalc-common-no_llvm PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/library/yql/public/purecalc/common/compile_mkql.cpp

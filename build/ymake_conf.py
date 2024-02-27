@@ -1248,7 +1248,7 @@ class GnuToolchain(Toolchain):
         elif target.is_arm968e_s:
             self.c_flags_platform.append('-march=armv5te -mcpu=arm968e-s -mthumb-interwork -mlittle-endian')
 
-        if (target.is_armv7 or target.is_armv8m or target.is_armv7em) and build.is_size_optimized:
+        if (target.is_armv7 or target.is_armv8m or target.is_armv7em or target.is_armv5te) and build.is_size_optimized:
             # Enable ARM Thumb2 variable-length instruction encoding
             # to reduce code size
             self.c_flags_platform.append('-mthumb')

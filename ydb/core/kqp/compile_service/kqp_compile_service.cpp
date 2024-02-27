@@ -499,7 +499,7 @@ private:
         bool enableSequences = TableServiceConfig.GetEnableSequences();
         bool enableColumnsWithDefault = TableServiceConfig.GetEnableColumnsWithDefault();
         bool enableOlapSink = TableServiceConfig.GetEnableOlapSink();
-        bool enableCreateTableAs = TableServiceConfig.GetEnableCreateTableAs()
+        bool enableCreateTableAs = TableServiceConfig.GetEnableCreateTableAs();
 
         auto mkqlHeavyLimit = TableServiceConfig.GetResourceManager().GetMkqlHeavyProgramMemoryLimit();
 

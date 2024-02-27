@@ -763,6 +763,10 @@ public:
                     : Build<TCoAtom>(ctx, node->Pos()).Value("table").Done(); // v0 support
                 auto mode = settings.Mode.Cast();
                 if (mode == "create" || mode == "create_if_not_exists" || mode == "create_or_replace") {
+                    if (node->Child(3)->Content() != "Void") {
+                        ctx.AddError(TIssue(ctx.GetPosition(node->Pos()), "Creating table with data is not supported."));
+                        return nullptr;
+                    }
                     YQL_ENSURE(settings.Columns);
                     if (settings.Columns.Cast().Empty()) {
                         ctx.AddError(TIssue(ctx.GetPosition(node->Pos()), "Creating table without columns is not supported."));

@@ -1836,9 +1836,9 @@ Y_UNIT_TEST_SUITE(KqpQuery) {
                 AS SELECT Col2 As Col1, Col1 As Col2
                 FROM `/Root/Source`;
             )", NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
-            UNIT_ASSERT_C(prepareResult.IsSuccess(), prepareResult.GetIssues().ToString());
+            UNIT_ASSERT_C(!prepareResult.IsSuccess(), prepareResult.GetIssues().ToString());
             UNIT_ASSERT_C(
-                prepareResult.GetIssues().ToString().Contains("CREATE TABLE AS with columns is not supported"),
+                prepareResult.GetIssues().ToString().Contains("Creating table with data is not supported."),
                 prepareResult.GetIssues().ToString());
         }
     }

@@ -696,7 +696,7 @@ void TSingleClusterReadSessionImpl<UseMigrationProtocol>::ConfirmPartitionStream
 template<bool UseMigrationProtocol>
 void TSingleClusterReadSessionImpl<UseMigrationProtocol>::Commit(const TPartitionStreamImpl<UseMigrationProtocol>* partitionStream, ui64 startOffset, ui64 endOffset) {
     LOG_LAZY(Log,
-        TLOG_DEBUG,
+        TLOG_INFO,
         GetLogPrefix() << "Commit offsets [" << startOffset << ", " << endOffset
             << "). Partition stream id: " << GetPartitionStreamId(partitionStream)
     );

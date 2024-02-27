@@ -385,7 +385,7 @@ Y_UNIT_TEST_SUITE(NFwd) {
     Y_UNIT_TEST(TLoadedPagesCircularBuffer) {
         auto buffer = TLoadedPagesCircularBuffer<5>();
 
-        for (ui32 pageId = 1; pageId < 10; pageId++) {
+        for (ui32 pageId = 1; pageId < 42; pageId++) {
             auto page = TPage(pageId * 1, pageId * 10, pageId * 100, pageId * 1000);
             page.Data =  TSharedData::Copy(TString(page.Size, 'x'));
 

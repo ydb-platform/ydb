@@ -21,7 +21,7 @@ namespace NFwd {
                         return &page.Data;
                     }
                 }
-                
+
                 Y_ABORT("Failed to locate page within forward trace");
             }
 

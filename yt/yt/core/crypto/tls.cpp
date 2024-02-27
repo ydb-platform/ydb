@@ -54,6 +54,24 @@ struct TSslContextImpl
 
     TSslContextImpl()
     {
+        Reset();
+    }
+
+    ~TSslContextImpl()
+    {
+        if (Ctx) {
+            SSL_CTX_free(Ctx);
+        }
+        if (ActiveCtx_) {
+            SSL_CTX_free(ActiveCtx_);
+        }
+    }
+
+    void Reset()
+    {
+        if (Ctx) {
+            SSL_CTX_free(Ctx);
+        }
 #if OPENSSL_VERSION_NUMBER >= 0x10100000L
         Ctx = SSL_CTX_new(TLS_method());
         if (!Ctx) {
@@ -77,12 +95,37 @@ struct TSslContextImpl
 #endif
     }
 
-    ~TSslContextImpl()
+    void Commit()
     {
-        if (Ctx) {
-            SSL_CTX_free(Ctx);
+        SSL_CTX* oldCtx;
+        YT_ASSERT(Ctx);
+        {
+            auto guard = WriterGuard(Lock_);
+            oldCtx = ActiveCtx_;
+            ActiveCtx_ = Ctx;
+            Ctx = nullptr;
+        }
+        if (oldCtx) {
+            SSL_CTX_free(oldCtx);
         }
     }
+
+    SSL* NewSsl()
+    {
+        auto guard = ReaderGuard(Lock_);
+        YT_ASSERT(ActiveCtx_);
+        return SSL_new(ActiveCtx_);
+    }
+
+    bool IsActive(const SSL* ssl)
+    {
+        auto guard = ReaderGuard(Lock_);
+        return SSL_get_SSL_CTX(ssl) == ActiveCtx_;
+    }
+
+private:
+    YT_DECLARE_SPIN_LOCK(NThreading::TReaderWriterSpinLock, Lock_);
+    SSL_CTX* ActiveCtx_ = nullptr;
 };
 
 DEFINE_REFCOUNTED_TYPE(TSslContextImpl)
@@ -104,7 +147,7 @@ public:
         , Invoker_(CreateSerializedInvoker(poller->GetInvoker(), "crypto_tls_connection"))
         , Underlying_(std::move(connection))
     {
-        Ssl_ = SSL_new(Ctx_->Ctx);
+        Ssl_ = Ctx_->NewSsl();
         if (!Ssl_) {
             THROW_ERROR_EXCEPTION("SSL_new failed")
                 << GetLastSslError();
@@ -122,6 +165,11 @@ public:
 
         InputBuffer_ = TSharedMutableRef::Allocate<TTlsBufferTag>(TlsBufferSize);
         OutputBuffer_ = TSharedMutableRef::Allocate<TTlsBufferTag>(TlsBufferSize);
+    }
+
+    void SetHost(const TString& host)
+    {
+        SSL_set_tlsext_host_name(Ssl_, host.c_str());
     }
 
     ~TTlsConnection()
@@ -496,12 +544,16 @@ public:
         , Poller_(std::move(poller))
     { }
 
-    TFuture<IConnectionPtr> Dial(const TNetworkAddress& remote) override
+    TFuture<IConnectionPtr> Dial(const TNetworkAddress& remote, TRemoteContextPtr context) override
     {
-        return Underlying_->Dial(remote).Apply(BIND([ctx = Ctx_, poller = Poller_] (const IConnectionPtr& underlying) -> IConnectionPtr {
-            auto connection = New<TTlsConnection>(ctx, poller, underlying);
-            connection->StartClient();
-            return connection;
+        return Underlying_->Dial(remote)
+            .Apply(BIND([ctx = Ctx_, poller = Poller_, context = std::move(context)](const IConnectionPtr& underlying) -> IConnectionPtr {
+                auto connection = New<TTlsConnection>(ctx, poller, underlying);
+                if (context != nullptr && context->Host != std::nullopt) {
+                    connection->SetHost(*(context->Host));
+                }
+                connection->StartClient();
+                return connection;
         }));
     }
 
@@ -557,6 +609,22 @@ private:
 TSslContext::TSslContext()
     : Impl_(New<TSslContextImpl>())
 { }
+
+void TSslContext::Reset()
+{
+    Impl_->Reset();
+}
+
+void TSslContext::Commit(TInstant time)
+{
+    CommitTime_ = time;
+    Impl_->Commit();
+}
+
+TInstant TSslContext::GetCommitTime()
+{
+    return CommitTime_;
+}
 
 void TSslContext::UseBuiltinOpenSslX509Store()
 {

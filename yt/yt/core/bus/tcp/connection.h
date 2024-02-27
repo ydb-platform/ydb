@@ -277,6 +277,8 @@ private:
     const EEncryptionMode EncryptionMode_;
     const EVerificationMode VerificationMode_;
 
+    NYTree::IAttributeDictionaryPtr PeerAttributes_;
+
     size_t MaxFragmentsPerWrite_ = 256;
 
     void Open();

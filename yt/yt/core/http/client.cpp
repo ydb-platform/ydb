@@ -126,11 +126,15 @@ private:
         return TNetworkAddress(address, parsedUrl.Port.value_or(GetDefaultPort(parsedUrl)));
     }
 
-    std::pair<THttpOutputPtr, THttpInputPtr> OpenHttp(const TNetworkAddress& address)
+    std::pair<THttpOutputPtr, THttpInputPtr> OpenHttp(const TUrlRef& urlRef)
     {
+        auto context = New<TRemoteContext>();
+        context->Host = urlRef.Host;
+        auto address = GetAddress(urlRef);
+
         // TODO(aleexfi): Enable connection pool by default
         if (Config_->MaxIdleConnections == 0) {
-            auto connection = WaitFor(Dialer_->Dial(address)).ValueOrThrow();
+            auto connection = WaitFor(Dialer_->Dial(address, std::move(context))).ValueOrThrow();
 
             auto input = New<THttpInput>(
                 connection,
@@ -146,7 +150,7 @@ private:
 
             return {std::move(output), std::move(input)};
         } else {
-            auto connection = WaitFor(ConnectionPool_->Connect(address)).ValueOrThrow();
+            auto connection = WaitFor(ConnectionPool_->Connect(address, std::move(context))).ValueOrThrow();
 
             auto reuseSharedState = New<NDetail::TReusableConnectionState>(connection, ConnectionPool_);
 
@@ -239,8 +243,8 @@ private:
         THttpInputPtr response;
 
         auto urlRef = ParseUrl(url);
-        auto address = GetAddress(urlRef);
-        std::tie(request, response) = OpenHttp(address);
+
+        std::tie(request, response) = OpenHttp(urlRef);
 
         request->SetHost(urlRef.Host, urlRef.PortStr);
         if (headers) {

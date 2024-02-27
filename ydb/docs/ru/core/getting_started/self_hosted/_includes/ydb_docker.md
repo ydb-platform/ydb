@@ -244,6 +244,6 @@ docker run --rm -it --entrypoint cat {{ ydb_local_docker_image }} THIRD_PARTY_LI
 
 {% note info %}
 
-О дополнительных опциях запуска коннектора можно узнать в [руководстве по развертыванию](../../../deploy/manual/connector.md#fq-connector-go-launch). В качестве внешних источников данных можно использовать любое хранилище или базу данных из перечня [поддерживаемых](../../../concepts/federated_query/architecture.md#supported-datasources).
+О дополнительных опциях запуска коннектора можно узнать в [руководстве по развертыванию](../../../deploy/manual/connector.md#fq-connector-go-docker). В качестве внешних источников данных можно использовать любое хранилище или базу данных из перечня [поддерживаемых](../../../concepts/federated_query/architecture.md#supported-datasources).
 
 {% endnote %}

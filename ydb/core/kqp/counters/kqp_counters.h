@@ -345,6 +345,8 @@ public:
     void RemoveDbCounters(const TString& database);
 
 public:
+    ::NMonitoring::TDynamicCounters::TCounterPtr FullScansExecuted;
+    
     // Lease updates counters
     ::NMonitoring::THistogramPtr LeaseUpdateLatency;
     ::NMonitoring::THistogramPtr RunActorLeaseUpdateBacklog;

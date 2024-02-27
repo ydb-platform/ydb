@@ -45,6 +45,7 @@ public:
     struct TPrepareSettings: public TExecSettings {
         TMaybe<bool> IsInternalCall;
         TMaybe<bool> ConcurrentResults;
+        bool PerStatementResult;
 
         TString ToString() const {
             return TStringBuilder() << "TPrepareSettings{"

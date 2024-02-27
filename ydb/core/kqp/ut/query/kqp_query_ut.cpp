@@ -1713,7 +1713,7 @@ Y_UNIT_TEST_SUITE(KqpQuery) {
                 prepareResult.GetIssues().ToString());
         }
 
-        /*{
+        {
             auto prepareResult = client.ExecuteQuery(R"(
                 CREATE TABLE `/Root/Destination6` (
                     PRIMARY KEY (Col1)
@@ -1724,9 +1724,9 @@ Y_UNIT_TEST_SUITE(KqpQuery) {
             )", NYdb::NQuery::TTxControl::BeginTx().CommitTx()).ExtractValueSync();
             UNIT_ASSERT(!prepareResult.IsSuccess());
             UNIT_ASSERT_C(
-                prepareResult.GetIssues().ToString().Contains("Scheme operations cannot be executed inside transaction"),
+                prepareResult.GetIssues().ToString().Contains("Query can be executed only in per-statement mode (NoTx)"),
                 prepareResult.GetIssues().ToString());
-        }*/
+        }
 
         {
             auto prepareResult = client.ExecuteQuery(R"(

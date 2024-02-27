@@ -1182,9 +1182,9 @@ private:
             return {};
         }
 
-        YQL_CLOG(INFO, ProviderKqp) << "Compiled query:\n" << KqpExprToPrettyString(*resultPart, ctx);
+        YQL_CLOG(INFO, ProviderKqp) << "Compiled query:\n" << KqpExprToPrettyString(*result, ctx);
 
-        if (Config.EnableCreateTableAs) {
+        if (Config->EnableCreateTableAs) {
             const auto results = RewriteExpression(result, ctx, *TypesCtx, SessionCtx, Cluster);
 
             for (const auto& resultPart : results) {

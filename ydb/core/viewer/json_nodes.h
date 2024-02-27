@@ -421,19 +421,15 @@ public:
                     BLOG_TRACE("Requesting navigate for resource domain " << resourceDomainKey);
                     RequestSchemeCacheNavigate(resourceDomainKey);
                     ++RequestsBeforeNodeList;
-                } else {
-                    if (Storage) {
-                        if (entry.DomainDescription) {
-                            for (const auto& storagePool : entry.DomainDescription->Description.GetStoragePools()) {
-                                TString storagePoolName = storagePool.GetName();
-                                THolder<TEvBlobStorage::TEvControllerSelectGroups> request = MakeHolder<TEvBlobStorage::TEvControllerSelectGroups>();
-                                request->Record.SetReturnAllMatchingGroups(true);
-                                request->Record.AddGroupParameters()->MutableStoragePoolSpecifier()->SetName(storagePoolName);
-                                BLOG_TRACE("Requesting BSControllerSelectGroups for " << storagePoolName);
-                                RequestBSControllerSelectGroups(std::move(request));
-                                ++RequestsBeforeNodeList;
-                            }
-                        }
+                } else if (Storage && entry.DomainDescription) {
+                    for (const auto& storagePool : entry.DomainDescription->Description.GetStoragePools()) {
+                        TString storagePoolName = storagePool.GetName();
+                        THolder<TEvBlobStorage::TEvControllerSelectGroups> request = MakeHolder<TEvBlobStorage::TEvControllerSelectGroups>();
+                        request->Record.SetReturnAllMatchingGroups(true);
+                        request->Record.AddGroupParameters()->MutableStoragePoolSpecifier()->SetName(storagePoolName);
+                        BLOG_TRACE("Requesting BSControllerSelectGroups for " << storagePoolName);
+                        RequestBSControllerSelectGroups(std::move(request));
+                        ++RequestsBeforeNodeList;
                     }
                 }
             } else {

@@ -5,13 +5,15 @@
 namespace NKikimr::NOlap {
 
 std::shared_ptr<NKikimr::NOlap::IBlobsStorageOperator> IStoragesManager::GetOperatorVerified(const TString& storageId) {
+    AFL_VERIFY(Initialized);
+    AFL_VERIFY(storageId);
     TReadGuard rg(RWMutex);
     auto it = Constructed.find(storageId);
-    AFL_VERIFY(it != Constructed.end());
+    AFL_VERIFY(it != Constructed.end())("storage_id", storageId);
     return it->second;
 }
 
-std::shared_ptr<NKikimr::NOlap::IBlobsStorageOperator> IStoragesManager::GetOperator(const TString& storageId) {
+std::shared_ptr<NKikimr::NOlap::IBlobsStorageOperator> IStoragesManager::GetOperatorGuarantee(const TString& storageId) {
     TReadGuard rg(RWMutex);
     auto it = Constructed.find(storageId);
     if (it == Constructed.end()) {
@@ -26,26 +28,23 @@ std::shared_ptr<NKikimr::NOlap::IBlobsStorageOperator> IStoragesManager::GetOper
     return it->second;
 }
 
-std::shared_ptr<IBlobsStorageOperator> IStoragesManager::InitializePortionOperator(const TPortionInfo& portionInfo) {
-    Y_ABORT_UNLESS(!portionInfo.HasStorageOperator());
-    if (portionInfo.GetMeta().GetTierName()) {
-        return GetOperator(portionInfo.GetMeta().GetTierName());
-    } else {
-        return GetOperator(DefaultStorageId);
-    }
+std::shared_ptr<NKikimr::NOlap::IBlobsStorageOperator> IStoragesManager::GetOperator(const TString& storageId) {
+    return GetOperatorGuarantee(storageId);
 }
 
 void IStoragesManager::OnTieringModified(const std::shared_ptr<NColumnShard::TTiersManager>& tiers) {
     for (auto&& i : tiers->GetManagers()) {
-        GetOperator(i.second.GetTierName())->OnTieringModified(tiers);
+        GetOperatorGuarantee(i.second.GetTierName())->OnTieringModified(tiers);
     }
 }
 
-void IStoragesManager::InitializeNecessaryStorages() {
+void IStoragesManager::DoInitialize() {
     GetOperator(DefaultStorageId);
+    GetOperator(MemoryStorageId);
 }
 
 bool IStoragesManager::LoadIdempotency(NTable::TDatabase& database) {
+    AFL_VERIFY(Initialized);
     if (!DoLoadIdempotency(database)) {
         return false;
     }
@@ -55,6 +54,8 @@ bool IStoragesManager::LoadIdempotency(NTable::TDatabase& database) {
             return false;
         }
     }
+    GetOperatorVerified(DefaultStorageId);
+    GetSharedBlobsManager()->GetStorageManagerVerified(DefaultStorageId);
     return true;
 }
 

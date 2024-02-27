@@ -183,9 +183,9 @@ TString THelper::GetTestTableSchema() const {
     TStringBuilder sb;
     sb << R"(Columns{ Name: "timestamp" Type : "Timestamp" NotNull : true })";
     sb << R"(Columns{ Name: "resource_id" Type : "Utf8" })";
-    sb << R"(Columns{ Name: "uid" Type : "Utf8" })";
+    sb << R"(Columns{ Name: "uid" Type : "Utf8" StorageId : "__MEMORY" })";
     sb << R"(Columns{ Name: "level" Type : "Int32" })";
-    sb << R"(Columns{ Name: "message" Type : "Utf8" })";
+    sb << R"(Columns{ Name: "message" Type : "Utf8" StorageId : "__MEMORY" })";
     if (GetWithJsonDocument()) {
         sb << R"(Columns{ Name: "json_payload" Type : "JsonDocument" })";
     }

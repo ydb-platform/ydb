@@ -17,9 +17,8 @@ private:
     YDB_READONLY_DEF(std::shared_ptr<IBlobsStorageOperator>, StorageOperator);
     YDB_READONLY_DEF(std::shared_ptr<IStoragesManager>, StoragesManager);
 public:
-    TSaverContext(const std::shared_ptr<IBlobsStorageOperator>& storageOperator, const std::shared_ptr<IStoragesManager>& storagesManager)
-        : StorageOperator(storageOperator)
-        , StoragesManager(storagesManager) {
+    TSaverContext(const std::shared_ptr<IStoragesManager>& storagesManager)
+        : StoragesManager(storagesManager) {
 
     }
 
@@ -135,14 +134,14 @@ struct TIndexInfo;
 class TColumnFeatures {
 private:
     ui32 ColumnId;
+    YDB_READONLY_DEF(std::shared_ptr<IBlobsStorageOperator>, Operator);
     YDB_READONLY_DEF(NArrow::NSerialization::TSerializerContainer, Serializer);
     std::optional<NArrow::NDictionary::TEncodingSettings> DictionaryEncoding;
     std::shared_ptr<TColumnLoader> Loader;
-
     NArrow::NTransformation::ITransformer::TPtr GetLoadTransformer() const;
 
     void InitLoader(const TIndexInfo& info);
-    TColumnFeatures(const ui32 columnId);
+    TColumnFeatures(const ui32 columnId, const std::shared_ptr<IBlobsStorageOperator>& blobsOperator);
 public:
 
     TString DebugString() const {
@@ -154,8 +153,8 @@ public:
     }
 
     NArrow::NTransformation::ITransformer::TPtr GetSaveTransformer() const;
-    static std::optional<TColumnFeatures> BuildFromProto(const NKikimrSchemeOp::TOlapColumnDescription& columnInfo, const TIndexInfo& indexInfo);
-    static TColumnFeatures BuildFromIndexInfo(const ui32 columnId, const TIndexInfo& indexInfo);
+    static std::optional<TColumnFeatures> BuildFromProto(const NKikimrSchemeOp::TOlapColumnDescription& columnInfo, const TIndexInfo& indexInfo, const std::shared_ptr<IStoragesManager>& operators);
+    static TColumnFeatures BuildFromIndexInfo(const ui32 columnId, const TIndexInfo& indexInfo, const std::shared_ptr<IBlobsStorageOperator>& blobsOperator);
 
     const std::shared_ptr<TColumnLoader>& GetLoader() const {
         AFL_VERIFY(Loader);

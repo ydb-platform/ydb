@@ -28,6 +28,7 @@ class IIndexMeta {
 private:
     YDB_READONLY_DEF(TString, IndexName);
     YDB_READONLY(ui32, IndexId, 0);
+    YDB_READONLY(TString, StorageId, IStoragesManager::DefaultStorageId);
 protected:
     virtual std::shared_ptr<IPortionDataChunk> DoBuildIndex(const ui32 indexId, std::map<ui32, std::vector<std::shared_ptr<IPortionDataChunk>>>& data, const TIndexInfo& indexInfo) const = 0;
     virtual void DoFillIndexCheckers(const std::shared_ptr<NRequest::TDataForIndexesCheckers>& info, const NSchemeShard::TOlapSchema& schema) const = 0;
@@ -55,6 +56,10 @@ public:
             return TConclusionStatus::Fail("new meta have to be same index class (" + GetClassName() + "), but new class name: " + newMeta->GetClassName());
         }
         return DoCheckModificationCompatibility(*newMeta);
+    }
+
+    const TString& GetStorageId() const {
+        return IStoragesManager::DefaultStorageId;
     }
 
     virtual ~IIndexMeta() = default;

@@ -9,47 +9,93 @@
 
 namespace NKikimr::NOlap::NBlobOperations::NRead {
 
+class TCompositeReadBlobs {
+private:
+    THashMap<TString, TActionReadBlobs> BlobsByStorage;
+public:
+    TString DebugString() const {
+        TStringBuilder sb;
+        sb << "{";
+        for (auto&& i : BlobsByStorage) {
+            sb << "{storage_id:" << i.first << ";blobs:" << i.second.DebugString() << "};";
+        }
+        sb << "}";
+        return sb;
+    }
+
+    bool IsEmpty() const {
+        return BlobsByStorage.empty();
+    }
+
+    THashMap<TString, TActionReadBlobs>::iterator begin() {
+        return BlobsByStorage.begin();
+    }
+    THashMap<TString, TActionReadBlobs>::iterator end() {
+        return BlobsByStorage.end();
+    }
+    void Add(const TString& storageId, TActionReadBlobs&& data) {
+        AFL_VERIFY(BlobsByStorage.emplace(storageId, std::move(data)).second);
+    }
+    TString Extract(const TString& storageId, const TBlobRange& range) {
+        auto it = BlobsByStorage.find(storageId);
+        AFL_VERIFY(it != BlobsByStorage.end());
+        auto result = it->second.Extract(range);
+        if (it->second.IsEmpty()) {
+            BlobsByStorage.erase(it);
+        }
+        return result;
+    }
+
+    ui64 GetTotalBlobsSize() const {
+        ui64 result = 0;
+        for (auto&& i : BlobsByStorage) {
+            result += i.second.GetTotalBlobsSize();
+        }
+        return result;
+    }
+};
+
 class ITask: public NColumnShard::TMonitoringObjectsCounter<ITask> {
 private:
-    THashMap<TBlobRange, std::shared_ptr<IBlobsReadingAction>> BlobsWaiting;
-    std::vector<std::shared_ptr<IBlobsReadingAction>> Agents;
+    THashMap<TString, std::shared_ptr<IBlobsReadingAction>> AgentsWaiting;
+    YDB_READONLY_DEF(TReadActionsCollection, Agents);
     bool BlobsFetchingStarted = false;
     bool TaskFinishedWithError = false;
     bool DataIsReadyFlag = false;
     const ui64 TaskIdentifier = 0;
     const TString ExternalTaskId;
     bool AbortFlag = false;
-    std::optional<ui64> AllRangesSize;
-    std::optional<ui64> AllRangesCount;
-    std::optional<ui64> ReadRangesCount;
     TString TaskCustomer;
     std::shared_ptr<NResourceBroker::NSubscribe::TResourcesGuard> ResourcesGuard;
-    ui32 BlobErrorsCount = 0;
-    ui32 BlobsDataCount = 0;
+    i64 BlobsWaitingCount = 0;
     bool ResultsExtracted = false;
 protected:
     bool IsFetchingStarted() const {
         return BlobsFetchingStarted;
     }
 
-    THashMap<TBlobRange, TString> ExtractBlobsData();
+    TCompositeReadBlobs ExtractBlobsData();
 
     virtual void DoOnDataReady(const std::shared_ptr<NResourceBroker::NSubscribe::TResourcesGuard>& resourcesGuard) = 0;
-    virtual bool DoOnError(const TBlobRange& range, const IBlobsReadingAction::TErrorStatus& status) = 0;
+    virtual bool DoOnError(const TString& storageId, const TBlobRange& range, const IBlobsReadingAction::TErrorStatus& status) = 0;
 
     void OnDataReady();
-    bool OnError(const TBlobRange& range, const IBlobsReadingAction::TErrorStatus& status);
+    bool OnError(const TString& storageId, const TBlobRange& range, const IBlobsReadingAction::TErrorStatus& status);
 
     virtual TString DoDebugString() const {
         return "";
     }
 public:
+    i64 GetWaitingRangesCount() const {
+        return BlobsWaitingCount;
+    }
+
     void Abort() {
         AbortFlag = true;
     }
 
     bool IsFinished() const {
-        return BlobsWaiting.empty() && BlobsFetchingStarted;
+        return AgentsWaiting.empty() && BlobsFetchingStarted;
     }
 
     ui64 GetTaskIdentifier() const {
@@ -62,43 +108,14 @@ public:
 
     TString DebugString() const;
 
-    ui64 GetAllRangesSize() const {
-        Y_ABORT_UNLESS(AllRangesSize);
-        return *AllRangesSize;
-    }
-
-    ui64 GetAllRangesCount() const {
-        Y_ABORT_UNLESS(AllRangesCount);
-        return *AllRangesCount;
-    }
-
-    ui64 GetReadRangesCount() const {
-        Y_ABORT_UNLESS(ReadRangesCount);
-        return *ReadRangesCount;
-    }
-
-    ui32 GetWaitingCount() const {
-        return BlobsWaiting.size();
-    }
-
-    THashSet<TBlobRange> GetExpectedRanges() const {
-        THashSet<TBlobRange> result;
-        for (auto&& i : Agents) {
-            i->FillExpectedRanges(result);
-        }
-        return result;
-    }
-
-    const std::vector<std::shared_ptr<IBlobsReadingAction>>& GetAgents() const;
-
     virtual ~ITask();
 
-    ITask(const std::vector<std::shared_ptr<IBlobsReadingAction>>& actions, const TString& taskCustomer, const TString& externalTaskId = "");
+    ITask(const TReadActionsCollection& actions, const TString& taskCustomer, const TString& externalTaskId = "");
 
     void StartBlobsFetching(const THashSet<TBlobRange>& rangesInProgress);
 
-    bool AddError(const TBlobRange& range, const IBlobsReadingAction::TErrorStatus& status);
-    void AddData(const TBlobRange& range, const TString& data);
+    bool AddError(const TString& storageId, const TBlobRange& range, const IBlobsReadingAction::TErrorStatus& status);
+    void AddData(const TString& storageId, const TBlobRange& range, const TString& data);
 
     class TReadSubscriber: public NResourceBroker::NSubscribe::ITask {
     private:

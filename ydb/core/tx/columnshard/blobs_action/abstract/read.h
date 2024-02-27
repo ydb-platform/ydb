@@ -8,13 +8,68 @@
 
 namespace NKikimr::NOlap {
 
+class TActionReadBlobs {
+private:
+    THashMap<TBlobRange, TString> Blobs;
+public:
+    TString DebugString() const;
+
+    TActionReadBlobs(THashMap<TBlobRange, TString>&& blobs)
+        : Blobs(std::move(blobs))
+    {
+        for (auto&& i : Blobs) {
+            AFL_VERIFY(i.second.size());
+        }
+    }
+
+    THashMap<TBlobRange, TString>::iterator begin() {
+        return Blobs.begin();
+    }
+
+    THashMap<TBlobRange, TString>::iterator end() {
+        return Blobs.end();
+    }
+
+    ui64 GetTotalBlobsSize() const {
+        ui64 result = 0;
+        for (auto&& i : Blobs) {
+            result += i.second.size();
+        }
+        return result;
+    }
+
+    void Add(THashMap<TBlobRange, TString>&& blobs) {
+        for (auto&& i : blobs) {
+            AFL_VERIFY(i.second.size());
+            AFL_VERIFY(Blobs.emplace(i.first, std::move(i.second)).second);
+        }
+    }
+
+    void Add(const TBlobRange& range, TString&& data) {
+        AFL_VERIFY(data.size());
+        AFL_VERIFY(Blobs.emplace(range, std::move(data)).second);
+    }
+
+    TString Extract(const TBlobRange& bRange) {
+        auto it = Blobs.find(bRange);
+        AFL_VERIFY(it != Blobs.end());
+        TString result = it->second;
+        Blobs.erase(it);
+        return result;
+    }
+
+    bool IsEmpty() const {
+        return Blobs.empty();
+    }
+};
+
 class IBlobsReadingAction: public ICommonBlobsAction {
 public:
     using TErrorStatus = TConclusionSpecialStatus<NKikimrProto::EReplyStatus, NKikimrProto::EReplyStatus::OK, NKikimrProto::EReplyStatus::ERROR>;
 private:
     using TBase = ICommonBlobsAction;
 
-    THashMap<TUnifiedBlobId, THashSet<TBlobRange>> RangesForRead;
+    THashSet<TBlobRange> RangesForRead;
     THashMap<TBlobRange, TString> RangesForResult;
     TMonotonic StartWaitingRanges;
     i32 WaitingRangesCount = 0;
@@ -22,11 +77,47 @@ private:
     THashMap<TBlobRange, TErrorStatus> Fails;
     std::shared_ptr<NBlobOperations::TReadCounters> Counters;
     bool Started = false;
+    bool DataExtracted = false;
     YDB_ACCESSOR(bool, IsBackgroundProcess, true);
 protected:
-    virtual void DoStartReading(const THashMap<TUnifiedBlobId, THashSet<TBlobRange>>& range) = 0;
-    void StartReading(THashMap<TUnifiedBlobId, THashSet<TBlobRange>>&& ranges);
+    virtual void DoStartReading(THashSet<TBlobRange>&& range) = 0;
+    void StartReading(THashSet<TBlobRange>&& ranges);
 public:
+
+    const THashSet<TBlobRange>& GetRangesForRead() const {
+        return RangesForRead;
+    }
+
+    void Merge(const std::shared_ptr<IBlobsReadingAction>& action) {
+        AFL_VERIFY(action);
+        AFL_VERIFY(!Started);
+        for (auto&& i : action->RangesForResult) {
+            RangesForResult.emplace(i.first, i.second);
+            auto it = RangesForRead.find(i.first);
+            if (it != RangesForRead.end()) {
+                RangesForRead.erase(it);
+            }
+        }
+        for (auto&& i : action->RangesForResult) {
+            RangesForResult.emplace(i.first, i.second);
+        }
+        for (auto&& i : action->RangesForRead) {
+            if (!RangesForResult.contains(i)) {
+                RangesForRead.emplace(i);
+            }
+        }
+    }
+
+    TActionReadBlobs ExtractBlobsData() {
+        AFL_VERIFY(Started);
+        AFL_VERIFY(IsFinished());
+        AFL_VERIFY(!DataExtracted);
+        DataExtracted = true;
+        auto result = TActionReadBlobs(std::move(Replies));
+        RangesForResult.clear();
+        Replies.clear();
+        return result;
+    }
 
     void SetCounters(std::shared_ptr<NBlobOperations::TReadCounters> counters) {
         Counters = counters;
@@ -38,14 +129,10 @@ public:
 
     }
 
-    void ExtractBlobsDataTo(THashMap<TBlobRange, TString>& result);
-
     ui64 GetExpectedBlobsSize() const {
         ui64 result = 0;
         for (auto&& i : RangesForRead) {
-            for (auto&& b : i.second) {
-                result += b.Size;
-            }
+            result += i.Size;
         }
         for (auto&& i : RangesForResult) {
             result += i.first.Size;
@@ -54,29 +141,10 @@ public:
     }
 
     ui64 GetExpectedBlobsCount() const {
-        ui64 result = 0;
-        for (auto&& i : RangesForRead) {
-            result += i.second.size();
-        }
-        return result + RangesForResult.size();
+        return RangesForRead.size() + RangesForResult.size();
     }
 
-    void FillExpectedRanges(THashSet<TBlobRange>& ranges) const {
-        for (auto&& i : RangesForRead) {
-            for (auto&& b : i.second) {
-                Y_ABORT_UNLESS(ranges.emplace(b).second);
-            }
-        }
-        for (auto&& i : RangesForResult) {
-            Y_ABORT_UNLESS(ranges.emplace(i.first).second);
-        }
-    }
-
-    const THashMap<TUnifiedBlobId, THashSet<TBlobRange>>& GetRangesForRead() const {
-        return RangesForRead;
-    }
-
-    void AddRange(const TBlobRange& range, const TString& result = Default<TString>());
+    void AddRange(const TBlobRange& range, const std::optional<TString>& result = {});
 
     void Start(const THashSet<TBlobRange>& rangesInProgress);
     void OnReadResult(const TBlobRange& range, const TString& data);
@@ -88,6 +156,48 @@ public:
 
     bool IsFinished() const {
         return WaitingRangesCount == 0;
+    }
+};
+
+class TReadActionsCollection {
+private:
+    THashMap<TString, std::shared_ptr<IBlobsReadingAction>> Actions;
+public:
+    THashMap<TString, std::shared_ptr<IBlobsReadingAction>>::const_iterator begin() const {
+        return Actions.begin();
+    }
+
+    THashMap<TString, std::shared_ptr<IBlobsReadingAction>>::const_iterator end() const {
+        return Actions.end();
+    }
+
+    THashMap<TString, std::shared_ptr<IBlobsReadingAction>>::iterator begin() {
+        return Actions.begin();
+    }
+
+    THashMap<TString, std::shared_ptr<IBlobsReadingAction>>::iterator end() {
+        return Actions.end();
+    }
+
+    ui32 IsEmpty() const {
+        return Actions.empty();
+    }
+
+    void Add(const std::shared_ptr<IBlobsReadingAction>& action) {
+        auto it = Actions.find(action->GetStorageId());
+        if (it == Actions.end()) {
+            Actions.emplace(action->GetStorageId(), action);
+        } else {
+            it->second->Merge(action);
+        }
+    }
+
+    TReadActionsCollection() = default;
+
+    TReadActionsCollection(const std::vector<std::shared_ptr<IBlobsReadingAction>>& actions) {
+        for (auto&& a: actions) {
+            Add(a);
+        }
     }
 };
 

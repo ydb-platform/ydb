@@ -352,12 +352,12 @@ void TestWrite(const TestTableDescription& table) {
 
     SetupSchema(runtime, sender, tableId, table);
 
-    const std::vector<std::pair<TString, TTypeInfo>>& ydbSchema = table.Schema;
+    const auto& ydbSchema = table.Schema;
 
     bool ok = WriteData(runtime, sender, writeId++, tableId, MakeTestBlob({0, 100}, ydbSchema), ydbSchema);
     UNIT_ASSERT(ok);
 
-    std::vector<std::pair<TString, TTypeInfo>> schema = ydbSchema;
+    auto schema = ydbSchema;
 
     // no data
 
@@ -373,7 +373,7 @@ void TestWrite(const TestTableDescription& table) {
 
     // missing columns
 
-    schema.resize(4);
+    schema = NArrow::NTest::TTestColumn::CropSchema(schema, 4);
     ok = WriteData(runtime, sender, writeId++, tableId, MakeTestBlob({0, 100}, schema), schema);
     UNIT_ASSERT(ok);
 
@@ -381,7 +381,7 @@ void TestWrite(const TestTableDescription& table) {
     // It fails only if we specify source schema. No way to detect it from serialized batch data.
 
     schema = ydbSchema;
-    schema[0].second = TTypeInfo(NTypeIds::Int64);
+    schema[0].SetType(TTypeInfo(NTypeIds::Int64));
     ok = WriteData(runtime, sender, writeId++, tableId, MakeTestBlob({0, 100}, schema),
                    schema);
     UNIT_ASSERT(!ok);
@@ -390,7 +390,7 @@ void TestWrite(const TestTableDescription& table) {
 
     for (size_t i = 0; i < ydbSchema.size(); ++i) {
         schema = ydbSchema;
-        schema[i].second = TTypeInfo(NTypeIds::Int8);
+        schema[i].SetType(TTypeInfo(NTypeIds::Int8));
         ok = WriteData(runtime, sender, writeId++, tableId, MakeTestBlob({0, 100}, schema), schema);
         UNIT_ASSERT(!ok);
     }
@@ -399,24 +399,24 @@ void TestWrite(const TestTableDescription& table) {
 
     for (size_t i = 0; i < ydbSchema.size(); ++i) {
         schema = ydbSchema;
-        schema[i].second = TTypeInfo(NTypeIds::Int64);
+        schema[i].SetType(TTypeInfo(NTypeIds::Int64));
         ok = WriteData(runtime, sender, writeId++, tableId, MakeTestBlob({0, 100}, schema), schema);
-        UNIT_ASSERT(ok == (ydbSchema[i].second == TTypeInfo(NTypeIds::Int64)));
+        UNIT_ASSERT(ok == (ydbSchema[i].GetType() == TTypeInfo(NTypeIds::Int64)));
     }
 
     schema = ydbSchema;
-    schema[1].second = TTypeInfo(NTypeIds::Utf8);
-    schema[5].second = TTypeInfo(NTypeIds::Int32);
+    schema[1].SetType(TTypeInfo(NTypeIds::Utf8));
+    schema[5].SetType(TTypeInfo(NTypeIds::Int32));
     ok = WriteData(runtime, sender, writeId++, tableId, MakeTestBlob({0, 100}, schema), schema);
     UNIT_ASSERT(!ok);
 
     // reordered columns
 
-    THashMap<TString, TTypeInfo> remap(ydbSchema.begin(), ydbSchema.end());
+    THashMap<TString, TTypeInfo> remap = NArrow::NTest::TTestColumn::ConvertToHash(ydbSchema);
 
-    schema.resize(0);
+    schema.clear();
     for (auto& [name, typeInfo] : remap) {
-        schema.push_back({name, typeInfo});
+        schema.push_back(NArrow::NTest::TTestColumn(name, typeInfo));
     }
 
     ok = WriteData(runtime, sender, writeId++, tableId, MakeTestBlob({0, 100}, schema), schema);
@@ -624,7 +624,7 @@ void TestWriteRead(bool reboots, const TestTableDescription& table = {}, TString
     runtime.DispatchEvents(options);
 
     auto write = [&](TTestBasicRuntime& runtime, TActorId& sender, ui64 writeId, ui64 tableId,
-                     const TString& data, const std::vector<std::pair<TString, TTypeInfo>>& ydbSchema, std::vector<ui64>& intWriteIds) {
+                     const TString& data, const std::vector<NArrow::NTest::TTestColumn>& ydbSchema, std::vector<ui64>& intWriteIds) {
         bool ok = WriteData(runtime, sender, writeId, tableId, data, ydbSchema, true, &intWriteIds);
         if (reboots) {
             RebootTablet(runtime, TTestTxConfig::TxTablet0, sender);
@@ -654,8 +654,8 @@ void TestWriteRead(bool reboots, const TestTableDescription& table = {}, TString
 
     SetupSchema(runtime, sender, tableId, table, codec);
 
-    const std::vector<std::pair<TString, TTypeInfo>>& ydbSchema = table.Schema;
-    const std::vector<std::pair<TString, TTypeInfo>>& testYdbPk = table.Pk;
+    const std::vector<NArrow::NTest::TTestColumn>& ydbSchema = table.Schema;
+    const std::vector<NArrow::NTest::TTestColumn>& testYdbPk = table.Pk;
 
     // ----xx
     // -----xx..
@@ -946,7 +946,7 @@ void TestCompactionInGranuleImpl(bool reboots, const TestTableDescription& table
     runtime.DispatchEvents(options);
 
     auto write = [&](TTestBasicRuntime& runtime, TActorId& sender, ui64 writeId, ui64 tableId,
-                     const TString& data, const std::vector<std::pair<TString, TTypeInfo>>& ydbSchema, std::vector<ui64>& writeIds) {
+                     const TString& data, const std::vector<NArrow::NTest::TTestColumn>& ydbSchema, std::vector<ui64>& writeIds) {
         bool ok = WriteData(runtime, sender, writeId, tableId, data, ydbSchema, true, &writeIds);
         if (reboots) {
             RebootTablet(runtime, TTestTxConfig::TxTablet0, sender);
@@ -1037,7 +1037,7 @@ void TestCompactionInGranuleImpl(bool reboots, const TestTableDescription& table
         UNIT_ASSERT(rb);
         UNIT_ASSERT(reader.IsCorrectlyFinished());
 
-        if (ydbPk[0].second == TTypeInfo(NTypeIds::String) || ydbPk[0].second == TTypeInfo(NTypeIds::Utf8)) {
+        if (ydbPk[0].GetType() == TTypeInfo(NTypeIds::String) || ydbPk[0].GetType() == TTypeInfo(NTypeIds::Utf8)) {
             UNIT_ASSERT(DataHas<std::string>({rb}, triggerPortion, true));
             UNIT_ASSERT(DataHas<std::string>({rb}, smallWrites, true));
         } else {
@@ -1429,7 +1429,7 @@ struct TReadAggregateResult {
     std::vector<int64_t> Counts = {100};
 };
 
-void TestReadAggregate(const std::vector<std::pair<TString, TTypeInfo>>& ydbSchema, const TString& testDataBlob,
+void TestReadAggregate(const std::vector<NArrow::NTest::TTestColumn>& ydbSchema, const TString& testDataBlob,
                        bool addProjection, const std::vector<ui32>& aggKeys = {},
                        const TReadAggregateResult& expectedResult = {},
                        const TReadAggregateResult& expectedFiltered = {1, {1}, {1}, {1}}) {
@@ -1448,8 +1448,7 @@ void TestReadAggregate(const std::vector<std::pair<TString, TTypeInfo>>& ydbSche
     ui64 planStep = 100;
     ui64 txId = 100;
 
-    auto pk = ydbSchema;
-    pk.resize(4);
+    auto pk = NArrow::NTest::TTestColumn::CropSchema(ydbSchema, 4);
     TestTableDescription table{.Schema = ydbSchema, .Pk = pk};
     SetupSchema(runtime, sender, tableId, table);
 
@@ -1479,8 +1478,8 @@ void TestReadAggregate(const std::vector<std::pair<TString, TTypeInfo>>& ydbSche
 
     ui32 prog = 0;
     for (ui32 i = 0; i < ydbSchema.size(); ++i, ++prog) {
-        if (intTypes.contains(ydbSchema[i].second.GetTypeId()) ||
-            strTypes.contains(ydbSchema[i].second.GetTypeId())) {
+        if (intTypes.contains(ydbSchema[i].GetType().GetTypeId()) ||
+            strTypes.contains(ydbSchema[i].GetType().GetTypeId())) {
             checkResult.insert(prog);
         }
 
@@ -1496,8 +1495,8 @@ void TestReadAggregate(const std::vector<std::pair<TString, TTypeInfo>>& ydbSche
 
     for (ui32 i = 0; i < ydbSchema.size(); ++i, ++prog) {
         isFiltered.insert(prog);
-        if (intTypes.contains(ydbSchema[i].second.GetTypeId()) ||
-            strTypes.contains(ydbSchema[i].second.GetTypeId())) {
+        if (intTypes.contains(ydbSchema[i].GetType().GetTypeId()) ||
+            strTypes.contains(ydbSchema[i].GetType().GetTypeId())) {
             checkResult.insert(prog);
         }
 
@@ -1515,8 +1514,8 @@ void TestReadAggregate(const std::vector<std::pair<TString, TTypeInfo>>& ydbSche
     std::vector<TString> unnamedColumns = {"100", "101", "102", "103"};
     if (!addProjection) {
         for (auto& key : aggKeys) {
-            namedColumns.push_back(ydbSchema[key].first);
-            unnamedColumns.push_back(ydbSchema[key].first);
+            namedColumns.push_back(ydbSchema[key].GetName());
+            unnamedColumns.push_back(ydbSchema[key].GetName());
         }
     }
 
@@ -1566,9 +1565,9 @@ Y_UNIT_TEST_SUITE(EvWrite) {
         const ui64 ownerId = 0;
         const ui64 tableId = 1;
         const ui64 schemaVersion = 1;
-        const std::vector<std::pair<TString, TTypeInfo>> schema = {
-                                                                    {"key", TTypeInfo(NTypeIds::Uint64) },
-                                                                    {"field", TTypeInfo(NTypeIds::Utf8) }
+        const std::vector<NArrow::NTest::TTestColumn> schema = {
+            NArrow::NTest::TTestColumn("key", TTypeInfo(NTypeIds::Uint64)),
+            NArrow::NTest::TTestColumn("field", TTypeInfo(NTypeIds::Utf8))
                                                                 };
         const std::vector<ui32> columnsIds = {1, 2};
         PrepareTablet(runtime, tableId, schema);
@@ -1617,10 +1616,10 @@ Y_UNIT_TEST_SUITE(EvWrite) {
         const ui64 ownerId = 0;
         const ui64 tableId = 1;
         const ui64 schemaVersion = 1;
-        const std::vector<std::pair<TString, TTypeInfo>> schema = {
-                                                                    {"key", TTypeInfo(NTypeIds::Uint64) },
-                                                                    {"field", TTypeInfo(NTypeIds::Utf8) }
-                                                                };
+        const std::vector<NArrow::NTest::TTestColumn> schema = {
+            NArrow::NTest::TTestColumn("key", TTypeInfo(NTypeIds::Uint64)),
+            NArrow::NTest::TTestColumn("field", TTypeInfo(NTypeIds::Utf8))
+        };
         const std::vector<ui32> columnsIds = {1, 2};
         PrepareTablet(runtime, tableId, schema);
         const ui64 txId = 111;
@@ -1665,10 +1664,10 @@ Y_UNIT_TEST_SUITE(EvWrite) {
         const ui64 ownerId = 0;
         const ui64 tableId = 1;
         const ui64 schemaVersion = 1;
-        const std::vector<std::pair<TString, TTypeInfo>> schema = {
-                                                                    {"key", TTypeInfo(NTypeIds::Uint64) },
-                                                                    {"field", TTypeInfo(NTypeIds::Utf8) }
-                                                                };
+        const std::vector<NArrow::NTest::TTestColumn> schema = {
+            NArrow::NTest::TTestColumn("key", TTypeInfo(NTypeIds::Uint64)),
+            NArrow::NTest::TTestColumn("field", TTypeInfo(NTypeIds::Utf8))
+        };
         const std::vector<ui32> columnsIds = {1, 2};
         PrepareTablet(runtime, tableId, schema);
         const ui64 txId = 111;
@@ -1886,8 +1885,8 @@ Y_UNIT_TEST_SUITE(TColumnShardTestReadWrite) {
         auto schema = TTestSchema::YdbSchema();
         auto pk = TTestSchema::YdbPkSchema();
 
-        schema[0].second = TTypeInfo(typeId);
-        pk[0].second = TTypeInfo(typeId);
+        schema[0].SetType(TTypeInfo(typeId));
+        pk[0].SetType(TTypeInfo(typeId));
         TestTableDescription table{.Schema = schema, .Pk = pk};
         TestCompactionInGranuleImpl(reboot, table);
     }
@@ -2012,7 +2011,7 @@ Y_UNIT_TEST_SUITE(TColumnShardTestReadWrite) {
             Cerr << "-- group by key: " << key << "\n";
 
             // the type has the same values in test batch so result would be grouped in one row
-            if (sameValTypes.contains(schema[key].second.GetTypeId())) {
+            if (sameValTypes.contains(schema[key].GetType().GetTypeId())) {
                 TestReadAggregate(schema, testBlob, (key % 2), { key }, resGrouped, resFiltered);
             } else {
                 TestReadAggregate(schema, testBlob, (key % 2), { key }, resDefault, resFiltered);
@@ -2020,8 +2019,8 @@ Y_UNIT_TEST_SUITE(TColumnShardTestReadWrite) {
         }
         for (ui32 key = 0; key < schema.size() - 1; ++key) {
             Cerr << "-- group by key: " << key << ", " << key + 1 << "\n";
-            if (sameValTypes.contains(schema[key].second.GetTypeId()) &&
-                sameValTypes.contains(schema[key + 1].second.GetTypeId())) {
+            if (sameValTypes.contains(schema[key].GetType().GetTypeId()) &&
+                sameValTypes.contains(schema[key + 1].GetType().GetTypeId())) {
                 TestReadAggregate(schema, testBlob, (key % 2), { key, key + 1 }, resGrouped, resFiltered);
             } else {
                 TestReadAggregate(schema, testBlob, (key % 2), { key, key + 1 }, resDefault, resFiltered);
@@ -2029,9 +2028,9 @@ Y_UNIT_TEST_SUITE(TColumnShardTestReadWrite) {
         }
         for (ui32 key = 0; key < schema.size() - 2; ++key) {
             Cerr << "-- group by key: " << key << ", " << key + 1 << ", " << key + 2 << "\n";
-            if (sameValTypes.contains(schema[key].second.GetTypeId()) &&
-                sameValTypes.contains(schema[key + 1].second.GetTypeId()) &&
-                sameValTypes.contains(schema[key + 1].second.GetTypeId())) {
+            if (sameValTypes.contains(schema[key].GetType().GetTypeId()) &&
+                sameValTypes.contains(schema[key + 1].GetType().GetTypeId()) &&
+                sameValTypes.contains(schema[key + 1].GetType().GetTypeId())) {
                 TestReadAggregate(schema, testBlob, (key % 2), { key, key + 1, key + 2 }, resGrouped, resFiltered);
             } else {
                 TestReadAggregate(schema, testBlob, (key % 2), { key, key + 1, key + 2 }, resDefault, resFiltered);
@@ -2044,10 +2043,10 @@ Y_UNIT_TEST_SUITE(TColumnShardTestReadWrite) {
         TTestBasicRuntime& Runtime;
         const ui64 PlanStep;
         const ui64 TxId;
-        const std::vector<std::pair<TString, TTypeInfo>> YdbPk;
+        const std::vector<NArrow::NTest::TTestColumn> YdbPk;
 
     public:
-        TTabletReadPredicateTest(TTestBasicRuntime& runtime, const ui64 planStep, const ui64 txId, const std::vector<std::pair<TString, TTypeInfo>>& ydbPk)
+        TTabletReadPredicateTest(TTestBasicRuntime& runtime, const ui64 planStep, const ui64 txId, const std::vector<NArrow::NTest::TTestColumn>& ydbPk)
             : Runtime(runtime)
             , PlanStep(planStep)
             , TxId(txId)
@@ -2067,14 +2066,14 @@ Y_UNIT_TEST_SUITE(TColumnShardTestReadWrite) {
 
             bool GetInclude() const noexcept { return Include; }
 
-            std::vector<TCell> GetCellVec(const std::vector<std::pair<TString, TTypeInfo>>& pk,
+            std::vector<TCell> GetCellVec(const std::vector<NArrow::NTest::TTestColumn>& pk,
                                         std::vector<TString>& mem, bool trailingNulls = false) const
             {
                 UNIT_ASSERT(Border.size() <= pk.size());
                 std::vector<TCell> cells;
                 size_t i = 0;
                 for (; i < Border.size(); ++i) {
-                    cells.push_back(MakeTestCell(pk[i].second, Border[i], mem));
+                    cells.push_back(MakeTestCell(pk[i].GetType(), Border[i], mem));
                 }
                 for (; trailingNulls && i < pk.size(); ++i) {
                     cells.push_back(TCell());
@@ -2094,7 +2093,7 @@ Y_UNIT_TEST_SUITE(TColumnShardTestReadWrite) {
             TTestCaseOptions& SetTo(const TBorder& border) { To = border; return *this; }
             TTestCaseOptions& SetExpectedCount(ui32 count) { ExpectedCount = count; return *this; }
 
-            TSerializedTableRange MakeRange(const std::vector<std::pair<TString, TTypeInfo>>& pk) const {
+            TSerializedTableRange MakeRange(const std::vector<NArrow::NTest::TTestColumn>& pk) const {
                 std::vector<TString> mem;
                 auto cellsFrom = From ? From->GetCellVec(pk, mem, false) : std::vector<TCell>();
                 auto cellsTo = To ? To->GetCellVec(pk, mem) : std::vector<TCell>();
@@ -2172,7 +2171,7 @@ Y_UNIT_TEST_SUITE(TColumnShardTestReadWrite) {
         SetupSchema(runtime, sender, tableId, table, "lz4");
         TAutoPtr<IEventHandle> handle;
 
-        bool isStrPk0 = table.Pk[0].second == TTypeInfo(NTypeIds::String) || table.Pk[0].second == TTypeInfo(NTypeIds::Utf8);
+        bool isStrPk0 = table.Pk[0].GetType() == TTypeInfo(NTypeIds::String) || table.Pk[0].GetType() == TTypeInfo(NTypeIds::Utf8);
 
         // Write different keys: grow on compaction
 
@@ -2321,7 +2320,7 @@ Y_UNIT_TEST_SUITE(TColumnShardTestReadWrite) {
                     if (!keyColumnId) {
                         keyColumnId = internalColumnId;
                     }
-                    Cerr << "[" << __LINE__ << "] " << activity << " " << table.Pk[0].second.GetTypeId() << " "
+                    Cerr << "[" << __LINE__ << "] " << activity << " " << table.Pk[0].GetType().GetTypeId() << " "
                         << pathId << " " << kindStr << " " << numRows << " " << numBytes << " " << numRawBytes << "\n";
 
                     if (pathId == tableId) {
@@ -2359,12 +2358,12 @@ Y_UNIT_TEST_SUITE(TColumnShardTestReadWrite) {
         auto schema = TTestSchema::YdbSchema();
         auto pk = TTestSchema::YdbPkSchema();
         TTestBlobOptions opts;
-        opts.SameValueColumns.emplace(pk[0].first);
+        opts.SameValueColumns.emplace(pk[0].GetName());
 
-        schema[0].second = TTypeInfo(typeId);
-        pk[0].second = TTypeInfo(typeId);
-        schema[1].second = TTypeInfo(typeId);
-        pk[1].second = TTypeInfo(typeId);
+        schema[0].SetType(TTypeInfo(typeId));
+        pk[0].SetType(TTypeInfo(typeId));
+        schema[1].SetType(TTypeInfo(typeId));
+        pk[1].SetType(TTypeInfo(typeId));
         TestTableDescription table{.Schema = schema, .Pk = pk};
         TestCompactionSplitGranuleImpl(table, opts);
     }

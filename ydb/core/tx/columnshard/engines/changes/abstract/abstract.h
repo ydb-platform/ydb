@@ -1,5 +1,8 @@
 #pragma once
 #include "settings.h"
+#include <ydb/core/protos/counters_columnshard.pb.h>
+#include <ydb/core/formats/arrow/arrow_helpers.h>
+#include <ydb/core/tx/columnshard/blobs_reader/task.h>
 #include <ydb/core/tx/columnshard/blobs_action/abstract/action.h>
 #include <ydb/core/tx/columnshard/counters/indexation.h>
 #include <ydb/core/tx/columnshard/data_locks/locks/abstract.h>
@@ -8,8 +11,6 @@
 #include <ydb/core/tx/columnshard/engines/portions/portion_info.h>
 #include <ydb/core/tx/columnshard/engines/portions/with_blobs.h>
 #include <ydb/core/tx/columnshard/resource_subscriber/task.h>
-#include <ydb/core/protos/counters_columnshard.pb.h>
-#include <ydb/core/formats/arrow/arrow_helpers.h>
 #include <ydb/core/tx/columnshard/splitter/settings.h>
 
 #include <contrib/libs/apache/arrow/cpp/src/arrow/scalar.h>
@@ -39,12 +40,10 @@ struct TPortionEvictionFeatures {
     const TString TargetTierName;
     const ui64 PathId;      // portion path id for cold-storage-key construct
     bool DataChanges = true;
-    const std::shared_ptr<IBlobsStorageOperator> StorageOperator;
 
-    TPortionEvictionFeatures(const TString& targetTierName, const ui64 pathId, const std::shared_ptr<IBlobsStorageOperator>& storageOperator)
+    TPortionEvictionFeatures(const TString& targetTierName, const ui64 pathId)
         : TargetTierName(targetTierName)
         , PathId(pathId)
-        , StorageOperator(storageOperator)
     {}
 };
 
@@ -222,12 +221,7 @@ public:
 
     void Compile(TFinalizationContext& context) noexcept;
 
-    void SetBlobs(THashMap<TBlobRange, TString>&& blobs) {
-        Y_ABORT_UNLESS(!blobs.empty());
-        Blobs = std::move(blobs);
-    }
-
-    THashMap<TBlobRange, TString> Blobs;
+    NBlobOperations::NRead::TCompositeReadBlobs Blobs;
     std::shared_ptr<NResourceBroker::NSubscribe::TResourcesGuard> ResourcesGuard;
 
     std::vector<std::shared_ptr<IBlobsReadingAction>> GetReadingActions() const {
@@ -239,11 +233,7 @@ public:
     TString DebugString() const;
 
     ui64 TotalBlobsSize() const {
-        ui64 size = 0;
-        for (const auto& [_, blob] : Blobs) {
-            size += blob.size();
-        }
-        return size;
+        return Blobs.GetTotalBlobsSize();
     }
 
 };

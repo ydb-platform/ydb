@@ -273,6 +273,14 @@ public:
         return Portions;
     }
 
+    std::vector<std::shared_ptr<TPortionInfo>> GetPortionsVector() const {
+        std::vector<std::shared_ptr<TPortionInfo>> result;
+        for (auto&& i : Portions) {
+            result.emplace_back(i.second);
+        }
+        return result;
+    }
+
     ui64 GetPathId() const {
         return PathId;
     }

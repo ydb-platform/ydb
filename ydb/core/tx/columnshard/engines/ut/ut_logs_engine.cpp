@@ -417,10 +417,10 @@ protected:
         } else 
             return nullptr;
     }
-public:
-    virtual const std::shared_ptr<NDataSharing::TSharedBlobsManager>& GetSharedBlobsManager() const override {
+    virtual const std::shared_ptr<NDataSharing::TSharedBlobsManager>& DoGetSharedBlobsManager() const override {
         return SharedBlobsManager;
     }
+public:
 };
 
 std::shared_ptr<NKikimr::NOlap::IStoragesManager> CommonStoragesManager = std::make_shared<TTestStoragesManager>();

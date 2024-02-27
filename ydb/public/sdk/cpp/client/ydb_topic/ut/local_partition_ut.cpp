@@ -1,6 +1,6 @@
 #include "ut_utils/topic_sdk_test_setup.h"
 
-#include <ydb/core/persqueue/ut/common/splitmerge_ut_common.h>
+#include <ydb/core/persqueue/ut/common/autoscaling_ut_common.h>
 
 #include <ydb/public/sdk/cpp/client/ydb_persqueue_core/ut/ut_utils/ut_utils.h>
 

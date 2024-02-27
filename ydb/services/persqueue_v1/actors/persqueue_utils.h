@@ -7,6 +7,8 @@
 #include <ydb/core/base/counters.h>
 #include <ydb/core/base/ticket_parser.h>
 #include <ydb/core/tx/scheme_cache/scheme_cache.h>
+#include <ydb/public/api/protos/ydb_status_codes.pb.h>
+#include <ydb/public/api/protos/draft/persqueue_error_codes.pb.h> // double check
 
 namespace NKikimr::NGRpcProxy::V1 {
 

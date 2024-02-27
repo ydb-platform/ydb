@@ -6,6 +6,8 @@
 
 #include <ydb/core/base/domain.h>
 #include <ydb/core/erasure/erasure.h>
+#include <ydb/core/protos/blobstorage_config.pb.h>
+#include <ydb/core/protos/tablet.pb.h>
 
 #include <library/cpp/json/writer/json.h>
 #include <library/cpp/protobuf/json/util.h>

@@ -15,6 +15,7 @@
 #include <ydb/library/yql/dq/tasks/dq_tasks_graph.h>
 #include <ydb/library/yql/utils/plan/plan_utils.h>
 #include <ydb/library/yql/providers/dq/common/yql_dq_settings.h>
+#include <ydb/library/yql/dq/actors/protos/dq_stats.pb.h>
 
 #include <ydb/public/lib/ydb_cli/common/format.h>
 

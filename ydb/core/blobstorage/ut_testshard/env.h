@@ -2,6 +2,8 @@
 
 #include "defs.h"
 
+#include <ydb/core/protos/blob_depot_config.pb.h>
+
 using namespace NActors;
 using namespace NKikimr;
 

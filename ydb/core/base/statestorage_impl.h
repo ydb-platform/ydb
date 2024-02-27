@@ -1,5 +1,6 @@
 #pragma once
-#include "ydb/core/scheme/scheme_pathid.h"
+#include <ydb/core/scheme/scheme_pathid.h>
+#include <ydb/core/protos/base.pb.h>
 #include "statestorage.h"
 
 namespace NKikimr {

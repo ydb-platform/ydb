@@ -49,6 +49,7 @@
 #include <ydb/core/protos/tx_datashard.pb.h>
 #include <ydb/core/protos/subdomains.pb.h>
 #include <ydb/core/protos/counters_datashard.pb.h>
+#include <ydb/core/protos/table_stats.pb.h>
 
 #include <ydb/public/api/protos/ydb_status_codes.pb.h>
 

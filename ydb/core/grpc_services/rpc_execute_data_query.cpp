@@ -10,6 +10,7 @@
 #include <ydb/core/base/counters.h>
 #include <ydb/core/protos/console_config.pb.h>
 #include <ydb/core/ydb_convert/ydb_convert.h>
+#include <ydb/core/protos/query_stats.pb.h>
 #include <ydb/public/lib/operation_id/operation_id.h>
 
 #include <ydb/core/kqp/executer_actor/kqp_executer.h>

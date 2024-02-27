@@ -111,7 +111,7 @@ public:
         return takeCount != 0 ? output : nullptr;
     }
 
-    EProcessResult DoProcess(ui64& takeCount, TComputationContext& , EFetchResult fetchRes, NUdf::TUnboxedValue*const*, NUdf::TUnboxedValue*const*) const {
+    EProcessResult DoProcess(ui64& takeCount, TComputationContext& , EFetchResult fetchRes, NUdf::TUnboxedValue*const*) const {
         if (takeCount == 0) {
             return EProcessResult::Finish;
         } else if (fetchRes == EFetchResult::One) {

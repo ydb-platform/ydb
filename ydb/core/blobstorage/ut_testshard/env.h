@@ -81,7 +81,7 @@ struct TEnvironmentSetup {
         auto domainsInfo = MakeIntrusive<TDomainsInfo>();
         auto domain = TDomainsInfo::TDomain::ConstructEmptyDomain(DomainName, DomainId);
         domainsInfo->AddDomain(domain.Get());
-        domainsInfo->AddHive(domain->DefaultHiveUid, MakeDefaultHiveID(domain->DefaultStateStorageGroup));
+        domainsInfo->AddHive(MakeDefaultHiveID());
         return std::make_unique<TTestActorSystem>(Settings.NodeCount, NLog::PRI_ERROR, domainsInfo);
     }
 
@@ -132,7 +132,7 @@ struct TEnvironmentSetup {
     NKikimrBlobStorage::TConfigResponse Invoke(const NKikimrBlobStorage::TConfigRequest& request) {
         const TActorId edge = Runtime->AllocateEdgeActor(Settings.ControllerNodeId, __FILE__, __LINE__);
 
-        const TActorId clientId = Runtime->Register(NKikimr::NTabletPipe::CreateClient(edge, MakeBSControllerID(DomainId),
+        const TActorId clientId = Runtime->Register(NKikimr::NTabletPipe::CreateClient(edge, MakeBSControllerID(),
             NTabletPipe::TClientRetryPolicy::WithRetries()), edge.NodeId());
 
         {
@@ -255,10 +255,10 @@ struct TEnvironmentSetup {
             IActor* (*Create)(const TActorId&, TTabletStorageInfo*);
         };
         std::vector<TTabletInfo> tablets{
-            {MakeBSControllerID(DomainId), TTabletTypes::BSController, &CreateFlatBsController},
+            {MakeBSControllerID(), TTabletTypes::BSController, &CreateFlatBsController},
         };
 
-        for (const auto& [uid, tabletId] : Runtime->GetDomainsInfo()->HivesByHiveUid) {
+        if (const ui64 tabletId = Runtime->GetDomainsInfo()->GetHive(); tabletId != TDomainsInfo::BadTabletId) {
             tablets.push_back(TTabletInfo{tabletId, TTabletTypes::Hive, &CreateDefaultHive});
         }
 
@@ -337,7 +337,7 @@ struct TEnvironmentSetup {
             auto *cmd = request.AddCommand();
             auto *vg = cmd->MutableAllocateVirtualGroup();
             vg->SetName("vg");
-            vg->SetHiveId(Runtime->GetDomainsInfo()->HivesByHiveUid.begin()->second);
+            vg->SetHiveId(Runtime->GetDomainsInfo()->GetHive());
             vg->SetStoragePoolName("virtual");
             auto *prof = vg->AddChannelProfiles();
             prof->SetStoragePoolName(StoragePoolName);

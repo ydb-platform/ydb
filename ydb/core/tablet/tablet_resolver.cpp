@@ -193,7 +193,7 @@ class TTabletResolver : public TActorBootstrapped<TTabletResolver> {
     }
 
     void ResolveRequest(ui64 tabletId, const TActorContext &ctx) {
-        const TActorId ssproxy = MakeStateStorageProxyID(StateStorageGroupFromTabletID(tabletId));
+        const TActorId ssproxy = MakeStateStorageProxyID();
         ctx.Send(ssproxy, new TEvStateStorage::TEvLookup(tabletId, 0), IEventHandle::FlagTrackDelivery, tabletId);
 
         InFlyResolveCounter->Inc();

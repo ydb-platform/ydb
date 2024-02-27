@@ -2802,13 +2802,8 @@ ui64 GetFirstTablet(NSchemeCache::TSchemeCacheRequest &cacheRequest) {
     return firstKey.GetPartitions().begin()->ShardId;
 }
 
-const TDomainsInfo::TDomain& TDataReq::SelectDomain(NSchemeCache::TSchemeCacheRequest &cacheRequest, const TActorContext &ctx) {
-    ui64 firstTabletId = GetFirstTablet(cacheRequest);
-
-    auto appdata = AppData(ctx);
-    const ui32 selfDomain = appdata->DomainsInfo->GetDomainUidByTabletId(firstTabletId);
-    Y_ABORT_UNLESS(selfDomain != appdata->DomainsInfo->BadDomainId);
-    return appdata->DomainsInfo->GetDomain(selfDomain);
+const TDomainsInfo::TDomain& TDataReq::SelectDomain(NSchemeCache::TSchemeCacheRequest& /*cacheRequest*/, const TActorContext &ctx) {
+    return *AppData(ctx)->DomainsInfo->GetDomain();
 }
 
 ui64 TDataReq::SelectCoordinator(NSchemeCache::TSchemeCacheRequest &cacheRequest, const TActorContext &ctx) {
@@ -2867,11 +2862,7 @@ void TDataReq::RegisterPlan(const TActorContext &ctx) {
     Y_ABORT_UNLESS(domainsInfo);
 
     ui64 totalReadSize = 0;
-    TSet<ui32> affectedDomains;
     for (const auto &xp : PerTablet) {
-        const ui32 tabletDomain = domainsInfo->GetDomainUidByTabletId(xp.first);
-        Y_ABORT_UNLESS(tabletDomain != Max<ui32>());
-        affectedDomains.insert(tabletDomain);
         totalReadSize += xp.second.ReadSize;
     }
 

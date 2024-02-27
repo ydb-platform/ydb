@@ -1719,8 +1719,8 @@ public:
         GetDerived()->InitCounters(counters);
 
         GetDerived()->InitAuthProvider();
-        if (AppData() && AppData()->DomainsInfo && !AppData()->DomainsInfo->Domains.empty()) {
-            DomainName = "/" + AppData()->DomainsInfo->Domains.begin()->second->Name;
+        if (AppData() && AppData()->DomainsInfo && AppData()->DomainsInfo->Domain) {
+            DomainName = "/" + AppData()->DomainsInfo->GetDomain()->Name;
         }
 
         GetDerived()->InitTime();

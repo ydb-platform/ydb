@@ -7,7 +7,7 @@ Y_UNIT_TEST_SUITE(SpaceCheckForDiskReassign) {
         using TVSlotId = TNodeWardenMockActor::TVSlotId;
 
         TNodeWardenMockActor::TSetup::TPtr setup = MakeIntrusive<TNodeWardenMockActor::TSetup>();
-        setup->TabletId = MakeBSControllerID(1);
+        setup->TabletId = MakeBSControllerID();
 
         std::vector<std::vector<ui32>> driveSize = {
             // 8 nodes

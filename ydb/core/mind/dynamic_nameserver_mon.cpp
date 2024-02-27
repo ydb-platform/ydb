@@ -187,11 +187,8 @@ void TDynamicNameserver::Handle(NMon::TEvHttpInfo::TPtr &ev, const TActorContext
 
         OutputStaticNodes(*StaticConfig, str);
 
-        auto dinfo = AppData(ctx)->DomainsInfo;
-        for (auto &pr : dinfo->Domains) {
-            auto name = pr.second->Name;
-            auto config = DynamicConfigs[pr.first];
-            OutputDynamicNodes(name, config, str);
+        if (const auto& domain = AppData(ctx)->DomainsInfo->Domain) {
+            OutputDynamicNodes(domain->Name, DynamicConfigs[domain->DomainUid], str);
         }
     }
     ctx.Send(ev->Sender, new NMon::TEvHttpInfoRes(str.Str()));

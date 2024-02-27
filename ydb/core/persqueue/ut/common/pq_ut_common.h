@@ -91,10 +91,10 @@ struct TTestContext {
 
 
     TTestContext() {
-        TabletId = MakeTabletID(0, 0, 1);
+        TabletId = MakeTabletID(false, 1);
         TabletIds.push_back(TabletId);
 
-        BalancerTabletId = MakeTabletID(0, 0, 2);
+        BalancerTabletId = MakeTabletID(false, 2);
         TabletIds.push_back(BalancerTabletId);
     }
 

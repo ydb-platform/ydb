@@ -60,15 +60,11 @@ public:
     {
         TBase::Bootstrap(TActivationContext::AsActorContext());
 
-        auto dinfo = AppData()->DomainsInfo;
-        auto domain = dinfo->Domains.begin()->second;
-        ui32 group = dinfo->GetDefaultStateStorageGroup(domain->DomainUid);
-
         NTabletPipe::TClientConfig pipeConfig;
         pipeConfig.RetryPolicy = {
             .RetryLimitCount = 10,
         };
-        auto pipe = NTabletPipe::CreateClient(IActor::SelfId(), MakeConsoleID(group), pipeConfig);
+        auto pipe = NTabletPipe::CreateClient(IActor::SelfId(), MakeConsoleID(), pipeConfig);
         ConsolePipe = IActor::RegisterWithSameMailbox(pipe);
 
         SendRequest();

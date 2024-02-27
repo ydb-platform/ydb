@@ -47,12 +47,6 @@ public:
         LOG_DEBUG_S(ctx, NKikimrServices::CMS,
                     "TJsonProxyBase::Bootstrap url=" << RequestEvent->Get()->Request.GetPathInfo());
 
-        auto dinfo = AppData(ctx)->DomainsInfo;
-        if (dinfo->Domains.size() != 1) {
-            ReplyWithErrorAndDie(TString("HTTP/1.1 501 Not Implemented\r\n\r\nMultiple domains are not supported."), ctx);
-            return;
-        }
-
         TAutoPtr<TRequestEvent> request = PrepareRequest(ctx);
         if (!request) {
             LOG_ERROR_S(ctx, NKikimrServices::CMS,
@@ -248,10 +242,8 @@ public:
     {
     }
 
-    ui64 GetTabletId(const TActorContext &ctx) const override {
-        auto dinfo = AppData(ctx)->DomainsInfo;
-        ui32 domain = dinfo->Domains.begin()->first;
-        return useConsole ? MakeConsoleID(domain) : MakeCmsID(domain);
+    ui64 GetTabletId(const TActorContext& /*ctx*/) const override {
+        return useConsole ? MakeConsoleID() : MakeCmsID();
     }
 
     TString GetTabletName() const override {

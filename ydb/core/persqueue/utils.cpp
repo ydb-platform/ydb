@@ -45,6 +45,42 @@ ui64 PutUnitsSize(const ui64 size) {
     return putUnitsCount;        
 }
 
+void Migrate(NKikimrPQ::TPQTabletConfig& config) {
+    if (!config.ConsumersSize()) {
+        for(size_t i = 0; i < config.ReadRulesSize(); ++i) {
+            auto* consumer = config.AddConsumers();
+
+            consumer->SetName(config.GetReadRules(i));
+            if (i < config.ReadFromTimestampsMsSize()) {
+                consumer->SetReadFromTimestampsMs(config.GetReadFromTimestampsMs(i));
+            }
+            if (i < config.ConsumerFormatVersionsSize()) {
+                consumer->SetFormatVersion(config.GetConsumerFormatVersions(i));
+            }
+            if (i < config.ConsumerCodecsSize()) {
+                auto& src = config.GetConsumerCodecs(i);
+                auto* dst = consumer->MutableCodec();
+
+                for (auto value : src.GetIds()) {
+                    dst->AddIds(value);
+                }
+                for (auto& value : src.GetCodecs()) {
+                    dst->AddCodecs(value);
+                }
+            }
+            if (i < config.ReadRuleServiceTypesSize()) {
+                consumer->SetServiceType(config.GetReadRuleServiceTypes(i));
+            }
+            if (i < config.ReadRuleVersionsSize()) {
+                consumer->SetVersion(config.GetReadRuleVersions(i));
+            }
+            if (i < config.ReadRuleGenerationsSize()) {
+                consumer->SetGeneration(config.GetReadRuleGenerations(i));
+            }
+        }
+    }
+}
+
 const NKikimrPQ::TPQTabletConfig::TPartition* GetPartitionConfig(const NKikimrPQ::TPQTabletConfig& config, const ui32 partitionId) {
     for(const auto& p : config.GetPartitions()) {
         if (partitionId == p.GetPartitionId()) {

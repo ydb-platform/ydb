@@ -66,16 +66,12 @@ bool TPersQueueReadBalancer::TTxInit::Execute(TTransactionContext& txc, const TA
             if (!config.empty()) {
                 bool res = Self->TabletConfig.ParseFromString(config);
                 Y_ABORT_UNLESS(res);
+
+                Migrate(Self->TabletConfig);
                 Self->Consumers.clear();
 
-                if (Self->TabletConfig.ReadRulesSize() == Self->TabletConfig.ConsumerScalingSupportSize()) {
-                    for (size_t i = 0; i < Self->TabletConfig.ReadRulesSize(); ++i) {
-                        Self->Consumers[Self->TabletConfig.GetReadRules(i)].ScalingSupport = Self->TabletConfig.GetConsumerScalingSupport(i);
-                    }
-                } else {
-                    for (const auto& rr : Self->TabletConfig.GetReadRules()) {
-                        Self->Consumers[rr].ScalingSupport = DefaultScalingSupport();
-                    }
+                for (auto& consumer : Self->TabletConfig.GetConsumers()) {
+                    Self->Consumers[consumer.GetName()].ScalingSupport = consumer.HasScalingSupport() ? consumer.GetScalingSupport() : DefaultScalingSupport();
                 }
 
                 Self->PartitionGraph = MakePartitionGraph(Self->TabletConfig);
@@ -536,6 +532,8 @@ void TPersQueueReadBalancer::Handle(TEvPersQueue::TEvUpdateBalancerConfig::TPtr 
     Path = record.GetPath();
     TxId = record.GetTxId();
     TabletConfig = record.GetTabletConfig();
+    Migrate(TabletConfig);
+
     SchemeShardId = record.GetSchemeShardId();
     TotalGroups = record.HasTotalGroupCount() ? record.GetTotalGroupCount() : 0;
     ui32 prevNextPartitionId = NextPartitionId;
@@ -547,17 +545,15 @@ void TPersQueueReadBalancer::Handle(TEvPersQueue::TEvUpdateBalancerConfig::TPtr 
 
     auto oldConsumers = std::move(Consumers);
     Consumers.clear();
-    for (size_t i = 0; i < TabletConfig.ReadRulesSize(); ++i) {
-        auto& rr = TabletConfig.GetReadRules(i);
+    for (auto& consumer : TabletConfig.GetConsumers()) {
+        auto scalingSupport = consumer.HasScalingSupport() ? consumer.GetScalingSupport() : DefaultScalingSupport();
 
-        auto scalingSupport = i < TabletConfig.ConsumerScalingSupportSize() ? TabletConfig.GetConsumerScalingSupport(i)
-                                                                            : DefaultScalingSupport();
-        auto it = oldConsumers.find(rr);
+        auto it = oldConsumers.find(consumer.GetName());
         if (it != oldConsumers.end()) {
-            auto& c = Consumers[rr] = std::move(it->second);
+            auto& c = Consumers[consumer.GetName()] = std::move(it->second);
             c.ScalingSupport = scalingSupport;
         } else {
-            Consumers[rr].ScalingSupport = scalingSupport;
+            Consumers[consumer.GetName()].ScalingSupport = scalingSupport;
         }
     }
 

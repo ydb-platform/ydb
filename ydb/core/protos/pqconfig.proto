@@ -307,22 +307,34 @@ message TPQTabletConfig {
     optional string DC = 12;
 
     // ReadRules, ReadTopicTimestampMs, ReadRuleVersions, ConsumerFormatVersions, ConsumersCodecs and ConsumerScalingSupport form a consumer data array stored by columns
-    repeated string ReadRules = 13;
-    repeated uint64 ReadFromTimestampsMs = 14;
-    repeated uint64 ConsumerFormatVersions = 15;
+    repeated string ReadRules = 13; // Deprecated. Use Consumers.Name
+    repeated uint64 ReadFromTimestampsMs = 14; // Deprecated. Use Consumers.ReadFromTimestampsMs
+    repeated uint64 ConsumerFormatVersions = 15; // Deprecated. Use Consumers.FormatVersion
     message TCodecs {
         repeated int64 Ids = 1;
         repeated string Codecs = 2;
     }
-    repeated TCodecs ConsumerCodecs = 16;
-    repeated EConsumerScalingSupport ConsumerScalingSupport = 37;
-    repeated string ReadRuleServiceTypes = 17;
+    repeated TCodecs ConsumerCodecs = 16; // Deprecated. Use Consumers.Codec
+    repeated string ReadRuleServiceTypes = 17; // Deprecated. Use Consumers.ServiceType
 
     optional uint64 FormatVersion = 20;
     optional TCodecs Codecs = 21;
 
-    repeated uint64 ReadRuleVersions = 22;
-    repeated uint64 ReadRuleGenerations = 32;
+    repeated uint64 ReadRuleVersions = 22; // Deprecated. Use Consumers.Version
+    repeated uint64 ReadRuleGenerations = 32; // Deprecated. Use Consumers.Generation
+
+    message TConsumer {
+        optional string Name = 1;
+        optional uint64 ReadFromTimestampsMs = 2;
+        optional uint64 FormatVersion = 3;
+        optional TCodecs Codec = 4;
+        optional string ServiceType = 5;
+        optional EConsumerScalingSupport ScalingSupport = 6;
+        optional uint64 Version = 7;
+        optional uint64 Generation = 8;
+    }
+
+    repeated TConsumer Consumers = 37;
 
     optional string TopicPath = 23;
 

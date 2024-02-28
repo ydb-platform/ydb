@@ -6,6 +6,9 @@
 #include <ydb/public/lib/json_value/ydb_json_value.h>
 #include <ydb/library/arrow_parquet/result_set_parquet_printer.h>
 
+#include <iomanip>
+#include <strstream>
+
 namespace NYdb {
 namespace NConsoleClient {
 
@@ -416,6 +419,19 @@ TString replaceAll(TString str, const TString& from, const TString& to) {
     return str;
 }
 
+TString formatPrettyTableDouble(double value) {
+    std::strstream stream;
+
+    if (1e-3 < value && value < 1e8 || value == 0) {
+        stream << std::round(value) << '\0';
+        return ToString(stream.str());
+    }
+
+
+    stream << std::fixed << std::setprecision(3) << std::scientific << value << '\0';
+    return ToString(stream.str());   
+}
+
 void TQueryPlanPrinter::PrintPrettyTableImpl(const NJson::TJsonValue& plan, TString& offset, TPrettyTable& table) {
     const auto& node = plan.GetMapSafe();
 
@@ -467,11 +483,11 @@ void TQueryPlanPrinter::PrintPrettyTableImpl(const NJson::TJsonValue& plan, TStr
 
             for (const auto& [key, value] : op.GetMapSafe()) {
                 if (key == "A-Cpu") {
-                    aCpu = JsonToString(value);
+                    aCpu = formatPrettyTableDouble(value.GetDouble());
                 } else if (key == "E-Cost") {
-                    eCost = JsonToString(value);
+                    eCost = formatPrettyTableDouble(value.GetDouble());
                 } else if (key == "E-Rows") {
-                    eRows = JsonToString(value);
+                    eRows = formatPrettyTableDouble(value.GetDouble());
                 } else if (key != "Name") {
                     info.emplace_back(TStringBuilder() << colors.LightYellow() << key << colors.Default() << ": " << replaceAll(replaceAll(JsonToString(value), "item.", ""), "state.", ""));
                 }

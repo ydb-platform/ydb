@@ -11,24 +11,6 @@
 namespace NKikimr {
 namespace NTable {
 
-struct TPartDataSize {
-    ui64 Size = 0;
-    TVector<ui64> ByChannel = { };
-
-    void Add(ui64 size, ui8 channel) {
-        Size += size;
-        if (!(channel < ByChannel.size())) {
-            ByChannel.resize(channel + 1);
-        }
-        ByChannel[channel] += size;
-    }
-};
-
-struct TPartDataStats {
-    ui64 RowCount = 0;
-    TPartDataSize DataSize = { };
-};
-
 // Iterates over part index and calculates total row count and data size
 // This iterator skips pages that are screened. Currently the logic is simple:
 // if page start key is screened then we assume that the whole previous page is screened
@@ -39,7 +21,8 @@ class TStatsScreenedPartIterator {
 
 public:
     TStatsScreenedPartIterator(TPartView partView, IPages* env, TIntrusiveConstPtr<TKeyCellDefaults> keyDefaults, 
-            TIntrusiveConstPtr<TFrames> small, TIntrusiveConstPtr<TFrames> large)
+            TIntrusiveConstPtr<TFrames> small, TIntrusiveConstPtr<TFrames> large,
+            ui64 rowCountResolution, ui64 dataSizeResolution)
         : Part(std::move(partView.Part))
         , KeyDefaults(std::move(keyDefaults))
         , Groups(::Reserve(Part->GroupsCount))
@@ -49,11 +32,35 @@ public:
         , Large(std::move(large))
         , CurrentHole(TScreen::Iter(Screen, CurrentHoleIdx, 0, 1))
     {
-        for (ui32 groupIndex : xrange(Part->GroupsCount)) {
-            Groups.push_back(CreateStatsPartGroupIterator(Part.Get(), env, TGroupId(groupIndex)));
+        TVector<TRowId> splitPoints;
+        if (Screen) {
+            splitPoints.reserve(Screen->Size() * 2);
+            for (auto hole : *Screen) {
+                for (auto splitPoint : {hole.Begin, hole.End}) {
+                    Y_DEBUG_ABORT_UNLESS(splitPoints.empty() || splitPoints.back() <= splitPoint);
+                    if (0 < splitPoint && splitPoint < Part->Stat.Rows - 1 && (splitPoints.empty() || splitPoints.back() < splitPoint)) {
+                        splitPoints.push_back(splitPoint);
+                    }
+                }
+            }
         }
-        for (ui32 groupIndex : xrange(Part->HistoricGroupsCount)) {
-            HistoricGroups.push_back(CreateStatsPartGroupIterator(Part.Get(), env, TGroupId(groupIndex, true)));
+
+        for (bool historic : {false, true}) {
+            for (ui32 groupIndex : xrange(historic ? Part->HistoricGroupsCount : Part->GroupsCount)) {
+                ui64 groupRowCountResolution, groupDataSizeResolution;
+                if (groupIndex == 0 && Part->GroupsCount > 1) {
+                    // make steps as small as possible because they will affect groups resolution
+                    groupRowCountResolution = groupDataSizeResolution = 0;
+                } else {
+                    groupRowCountResolution = rowCountResolution;
+                    groupDataSizeResolution = dataSizeResolution;
+                }
+
+                (historic ? HistoricGroups : Groups).push_back(
+                    CreateStatsPartGroupIterator(Part.Get(), env, TGroupId(groupIndex, historic), 
+                        groupRowCountResolution, groupDataSizeResolution, 
+                        historic || groupRowCountResolution == 0 ? TVector<TRowId>() : splitPoints));
+            }
         }
     }
 
@@ -82,32 +89,33 @@ public:
         return Groups[0]->IsValid();
     }
 
-    EReady Next(TPartDataStats& stats) {
+    EReady Next(TDataStats& stats) {
         Y_ABORT_UNLESS(IsValid());
 
-        auto curPageId = Groups[0]->GetPageId();
         LastRowId = Groups[0]->GetRowId();
         auto ready = Groups[0]->Next();
         if (ready == EReady::Page) {
+            Y_DEBUG_ABORT_UNLESS(false, "Shouldn't really happen");
             return ready;
         }
 
         ui64 rowCount = CountUnscreenedRows(GetLastRowId(), GetCurrentRowId());
         stats.RowCount += rowCount;
         if (rowCount) {
-            AddPageSize(stats.DataSize, curPageId, TGroupId(0));
+            Groups[0]->AddLastDeltaDataSize(stats.DataSize);
         }
         
         TRowId nextRowId = ready == EReady::Data ? Groups[0]->GetRowId() : Max<TRowId>();
         for (auto groupIndex : xrange<ui32>(1, Groups.size())) {
             while (Groups[groupIndex]->IsValid() && Groups[groupIndex]->GetRowId() < nextRowId) {
                 // eagerly include all data up to the next row id
-                if (rowCount) {
-                    AddPageSize(stats.DataSize, Groups[groupIndex]->GetPageId(), TGroupId(groupIndex));
-                }
                 if (Groups[groupIndex]->Next() == EReady::Page) {
+                    Y_DEBUG_ABORT_UNLESS(false, "Shouldn't really happen");
                     ready = EReady::Page;
                     break;
+                }
+                if (rowCount) {
+                    Groups[groupIndex]->AddLastDeltaDataSize(stats.DataSize);
                 }
             }
         }
@@ -116,24 +124,26 @@ public:
             Y_DEBUG_ABORT_UNLESS(Part->Scheme->HistoryGroup.ColsKeyIdx.size() == 3);
             while (HistoricGroups[0]->IsValid() && (!HistoricGroups[0]->GetKeyCellsCount() || HistoricGroups[0]->GetKeyCell(0).AsValue<TRowId>() < nextRowId)) {
                 // eagerly include all history up to the next row id
-                if (rowCount) {
-                    AddPageSize(stats.DataSize, HistoricGroups[0]->GetPageId(), TGroupId(0, true));
-                }
                 if (HistoricGroups[0]->Next() == EReady::Page) {
+                    Y_DEBUG_ABORT_UNLESS(false, "Shouldn't really happen");
                     ready = EReady::Page;
                     break;
+                }
+                if (rowCount) {
+                    HistoricGroups[0]->AddLastDeltaDataSize(stats.DataSize);
                 }
             }
             TRowId nextHistoryRowId = HistoricGroups[0]->IsValid() ? HistoricGroups[0]->GetRowId() : Max<TRowId>();
             for (auto groupIndex : xrange<ui32>(1, Groups.size())) {
                 while (HistoricGroups[groupIndex]->IsValid() && HistoricGroups[groupIndex]->GetRowId() < nextHistoryRowId) {
                     // eagerly include all data up to the next row id
-                    if (rowCount) {
-                        AddPageSize(stats.DataSize, HistoricGroups[groupIndex]->GetPageId(), TGroupId(groupIndex, true));
-                    }
                     if (HistoricGroups[groupIndex]->Next() == EReady::Page) {
+                        Y_DEBUG_ABORT_UNLESS(false, "Shouldn't really happen");
                         ready = EReady::Page;
                         break;
+                    }
+                    if (rowCount) {
+                        HistoricGroups[groupIndex]->AddLastDeltaDataSize(stats.DataSize);
                     }
                 }
             }
@@ -172,13 +182,6 @@ private:
             return endRowId;
         }
         return LastRowId;
-    }
-
-    void AddPageSize(TPartDataSize& stats, TPageId pageId, TGroupId groupId) const {
-        // TODO: move to IStatsPartGroupIterator
-        ui64 size = Part->GetPageSize(pageId, groupId);
-        ui8 channel = Part->GetPageChannel(pageId, groupId);
-        stats.Add(size, channel);
     }
 
     void FillKey() {
@@ -229,7 +232,7 @@ private:
         return rowCount;
     }
 
-    void AddBlobsSize(TPartDataSize& stats, const TFrames* frames, ELargeObj lob, ui32 &prevPage) noexcept {
+    void AddBlobsSize(TChanneledDataSize& stats, const TFrames* frames, ELargeObj lob, ui32 &prevPage) noexcept {
         const auto row = GetLastRowId();
         const auto end = GetCurrentRowId();
 

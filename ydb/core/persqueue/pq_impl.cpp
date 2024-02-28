@@ -1769,6 +1769,8 @@ void TPersQueue::Handle(TEvPersQueue::TEvPartitionClientInfo::TPtr& ev, const TA
 
 void TPersQueue::Handle(TEvPersQueue::TEvStatus::TPtr& ev, const TActorContext& ctx)
 {
+    ReadBalancerActorId = ev->Sender;
+
     if (!ConfigInited) {
         THolder<TEvPersQueue::TEvStatusResponse> res = MakeHolder<TEvPersQueue::TEvStatusResponse>();
         auto& resp = res->Record;
@@ -1779,8 +1781,8 @@ void TPersQueue::Handle(TEvPersQueue::TEvStatus::TPtr& ev, const TActorContext& 
     }
 
     ui32 cnt = 0;
-    for (auto& p : Partitions) {
-         cnt += p.second.InitDone;
+    for (auto& [_, partitionInfo] : Partitions) {
+         cnt += partitionInfo.InitDone;
     }
 
     TActorId ans = CreateStatusProxyActor(TabletID(), ev->Sender, cnt, ev->Cookie, ctx);
@@ -2800,10 +2802,12 @@ void TPersQueue::Handle(TEvPersQueue::TEvRequest::TPtr& ev, const TActorContext&
 }
 
 
-void TPersQueue::Handle(TEvTabletPipe::TEvServerConnected::TPtr& ev, const TActorContext&)
+void TPersQueue::Handle(TEvTabletPipe::TEvServerConnected::TPtr& ev, const TActorContext& ctx)
 {
     auto it = PipesInfo.insert({ev->Get()->ClientId, {}}).first;
     it->second.ServerActors++;
+    LOG_DEBUG_S(ctx, NKikimrServices::PERSQUEUE, "Tablet " << TabletID() << " server connected, pipe "
+                << ev->Get()->ClientId.ToString() << ", now have " << it->second.ServerActors << " active actors on pipe");
 
     Counters->Simple()[COUNTER_PQ_TABLET_OPENED_PIPES] = PipesInfo.size();
 }
@@ -2825,6 +2829,8 @@ void TPersQueue::Handle(TEvTabletPipe::TEvServerDisconnected::TPtr& ev, const TA
         if (!it->second.SessionId.Empty()) {
             DestroySession(it->second);
         }
+        LOG_DEBUG_S(ctx, NKikimrServices::PERSQUEUE, "Tablet " << TabletID() << " server disconnected, pipe "
+                    << ev->Get()->ClientId.ToString() << " destroyed");
         PipesInfo.erase(it);
         Counters->Simple()[COUNTER_PQ_TABLET_OPENED_PIPES] = PipesInfo.size();
     }
@@ -4245,6 +4251,8 @@ NTabletPipe::TClientConfig TPersQueue::GetPipeClientConfig()
 
 void TPersQueue::Handle(TEvPQ::TEvSubDomainStatus::TPtr& ev, const TActorContext& ctx)
 {
+    ReadBalancerActorId = ev->Sender;
+
     const TEvPQ::TEvSubDomainStatus& event = *ev->Get();
     SubDomainOutOfSpace = event.SubDomainOutOfSpace();
 
@@ -4275,7 +4283,8 @@ void TPersQueue::Handle(TEvPersQueue::TEvProposeTransactionAttach::TPtr &ev, con
     ctx.Send(ev->Sender, new TEvPersQueue::TEvProposeTransactionAttachResult(TabletID(), txId, status), 0, ev->Cookie);
 }
 
-void TPersQueue::Handle(TEvPQ::TEvCheckPartitionStatusRequest::TPtr& ev, const TActorContext& ctx) {
+void TPersQueue::Handle(TEvPQ::TEvCheckPartitionStatusRequest::TPtr& ev, const TActorContext& ctx)
+{
     auto& record = ev->Get()->Record;
     auto it = Partitions.find(TPartitionId(TPartitionId(record.GetPartition())));
     if (it == Partitions.end()) {
@@ -4295,7 +4304,8 @@ void TPersQueue::Handle(TEvPQ::TEvCheckPartitionStatusRequest::TPtr& ev, const T
     }
 }
 
-void TPersQueue::ProcessCheckPartitionStatusRequests(const TPartitionId& partitionId) {
+void TPersQueue::ProcessCheckPartitionStatusRequests(const TPartitionId& partitionId)
+{
     Y_ABORT_UNLESS(!partitionId.WriteId.Defined());
     ui32 originalPartitionId = partitionId.OriginalPartitionId;
     auto sit = CheckPartitionStatusRequests.find(originalPartitionId);
@@ -4315,6 +4325,13 @@ void TPersQueue::Handle(NLongTxService::TEvLongTxService::TEvLockStatus::TPtr& e
     if (TxWrites.contains(writeId)) {
         TTxWriteInfo& txWrite = TxWrites.at(writeId);
         txWrite.LongTxSubscriptionStatus = record.GetStatus();
+    }
+}
+
+void TPersQueue::Handle(TEvPQ::TEvReadingPartitionStatusRequest::TPtr& ev, const TActorContext& ctx)
+{
+    if (ReadBalancerActorId) {
+        ctx.Send(ReadBalancerActorId, ev->Release().Release());
     }
 }
 
@@ -4372,6 +4389,7 @@ bool TPersQueue::HandleHook(STFUNC_SIG)
         HFuncTraced(TEvMediatorTimecast::TEvRegisterTabletResult, Handle);
         HFuncTraced(TEvPQ::TEvCheckPartitionStatusRequest, Handle);
         HFuncTraced(NLongTxService::TEvLongTxService::TEvLockStatus, Handle);
+        HFuncTraced(TEvPQ::TEvReadingPartitionStatusRequest, Handle);
         default:
             return false;
     }

@@ -3,6 +3,8 @@
 #include "tabletid.h"
 #include "localdb.h"
 
+#include <ydb/core/protos/blobstorage_config.pb.h>
+
 #include <util/generic/map.h>
 #include <util/generic/hash.h>
 #include <util/generic/ptr.h>

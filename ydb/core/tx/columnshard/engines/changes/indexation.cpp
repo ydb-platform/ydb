@@ -7,21 +7,13 @@
 
 namespace NKikimr::NOlap {
 
-bool TInsertColumnEngineChanges::DoApplyChanges(TColumnEngineForLogs& self, TApplyChangesContext& context) {
-    if (!TBase::DoApplyChanges(self, context)) {
-        return false;
-    }
-    return true;
-}
-
-void TInsertColumnEngineChanges::DoWriteIndex(NColumnShard::TColumnShard& self, TWriteIndexContext& context) {
-    TBase::DoWriteIndex(self, context);
-    auto removing = BlobsAction.GetRemoving(IStoragesManager::DefaultStorageId);
-    for (const auto& insertedData : DataToIndex) {
-        self.InsertTable->EraseCommitted(context.DBWrapper, insertedData, removing);
-    }
-    if (!DataToIndex.empty()) {
-        self.UpdateInsertTableCounters();
+void TInsertColumnEngineChanges::DoWriteIndexOnExecute(NColumnShard::TColumnShard* self, TWriteIndexContext& context) {
+    TBase::DoWriteIndexOnExecute(self, context);
+    if (self) {
+        auto removing = BlobsAction.GetRemoving(IStoragesManager::DefaultStorageId);
+        for (const auto& insertedData : DataToIndex) {
+            self->InsertTable->EraseCommittedOnExecute(context.DBWrapper, insertedData, removing);
+        }
     }
 }
 
@@ -36,10 +28,19 @@ void TInsertColumnEngineChanges::DoStart(NColumnShard::TColumnShard& self) {
     self.BackgroundController.StartIndexing(*this);
 }
 
-void TInsertColumnEngineChanges::DoWriteIndexComplete(NColumnShard::TColumnShard& self, TWriteIndexCompleteContext& context) {
-    self.IncCounter(NColumnShard::COUNTER_INDEXING_BLOBS_WRITTEN, context.BlobsWritten);
-    self.IncCounter(NColumnShard::COUNTER_INDEXING_BYTES_WRITTEN, context.BytesWritten);
-    self.IncCounter(NColumnShard::COUNTER_INDEXING_TIME, context.Duration.MilliSeconds());
+void TInsertColumnEngineChanges::DoWriteIndexOnComplete(NColumnShard::TColumnShard* self, TWriteIndexCompleteContext& context) {
+    TBase::DoWriteIndexOnComplete(self, context);
+    if (self) {
+        for (const auto& insertedData : DataToIndex) {
+            self->InsertTable->EraseCommittedOnComplete(insertedData);
+        }
+        if (!DataToIndex.empty()) {
+            self->UpdateInsertTableCounters();
+        }
+        self->IncCounter(NColumnShard::COUNTER_INDEXING_BLOBS_WRITTEN, context.BlobsWritten);
+        self->IncCounter(NColumnShard::COUNTER_INDEXING_BYTES_WRITTEN, context.BytesWritten);
+        self->IncCounter(NColumnShard::COUNTER_INDEXING_TIME, context.Duration.MilliSeconds());
+    }
 }
 
 void TInsertColumnEngineChanges::DoOnFinish(NColumnShard::TColumnShard& self, TChangesFinishContext& /*context*/) {

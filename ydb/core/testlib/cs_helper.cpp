@@ -5,6 +5,7 @@
 #include <ydb/library/binary_json/write.h>
 
 #include <ydb/library/actors/core/event.h>
+#include <ydb/public/api/protos/ydb_table.pb.h>
 #include <library/cpp/testing/unittest/registar.h>
 
 #include <contrib/libs/apache/arrow/cpp/src/arrow/buffer.h>

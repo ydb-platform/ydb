@@ -3,13 +3,13 @@
 #include <ydb/core/blobstorage/base/common_latency_hist_bounds.h>
 #include <ydb/core/blobstorage/lwtrace_probes/blobstorage_probes.h>
 #include <ydb/core/mon/mon.h>
+#include <ydb/core/protos/blobstorage_disk.pb.h>
 #include <ydb/core/protos/node_whiteboard.pb.h>
 #include <ydb/core/util/light.h>
 
 #include <library/cpp/bucket_quoter/bucket_quoter.h>
 #include <library/cpp/containers/stack_vector/stack_vec.h>
 #include <library/cpp/monlib/dynamic_counters/percentile/percentile_lg.h>
-
 
 namespace NKikimr {
 

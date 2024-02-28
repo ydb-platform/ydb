@@ -4,23 +4,43 @@
 #include "ydb/core/scheme/scheme_tablecell.h"
 
 namespace NKikimr::NTable {
-    
-    struct IStatsPartGroupIterator {
-        virtual EReady Start() = 0;
-        virtual EReady Next() = 0;
 
-        virtual bool IsValid() const = 0;
+struct TChanneledDataSize {
+    ui64 Size = 0;
+    TVector<ui64> ByChannel = { };
 
-        virtual TRowId GetEndRowId() const = 0;
-        virtual TPageId GetPageId() const = 0;
-        virtual TRowId GetRowId() const = 0;
+    void Add(ui64 size, ui8 channel) {
+        Size += size;
+        if (!(channel < ByChannel.size())) {
+            ByChannel.resize(channel + 1);
+        }
+        ByChannel[channel] += size;
+    }
+};
 
-        virtual TPos GetKeyCellsCount() const = 0;
-        virtual TCell GetKeyCell(TPos index) const = 0;
+struct TDataStats {
+    ui64 RowCount = 0;
+    TChanneledDataSize DataSize = { };
+};
 
-        virtual ~IStatsPartGroupIterator() = default;
-    };
+struct IStatsPartGroupIterator {
+    virtual EReady Start() = 0;
+    virtual EReady Next() = 0;
+    virtual void AddLastDeltaDataSize(TChanneledDataSize& dataSize) = 0;
 
-    THolder<IStatsPartGroupIterator> CreateStatsPartGroupIterator(const TPart* part, IPages* env, NPage::TGroupId groupId);
+    virtual bool IsValid() const = 0;
+
+    virtual TRowId GetEndRowId() const = 0;
+    virtual TPageId GetPageId() const = 0;
+    virtual TRowId GetRowId() const = 0;
+
+    virtual TPos GetKeyCellsCount() const = 0;
+    virtual TCell GetKeyCell(TPos index) const = 0;
+
+    virtual ~IStatsPartGroupIterator() = default;
+};
+
+THolder<IStatsPartGroupIterator> CreateStatsPartGroupIterator(const TPart* part, IPages* env, NPage::TGroupId groupId, 
+    ui64 rowCountResolution, ui64 dataSizeResolution, const TVector<TRowId>& splitPoints);
     
 }

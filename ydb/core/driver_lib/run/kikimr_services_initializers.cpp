@@ -108,6 +108,8 @@
 
 #include <ydb/library/services/services.pb.h>
 #include <ydb/core/protos/console_config.pb.h>
+#include <ydb/core/protos/node_limits.pb.h>
+#include <ydb/core/protos/compile_service_config.pb.h>
 
 #include <ydb/core/public_http/http_service.h>
 

@@ -9,6 +9,7 @@
 #include <ydb/core/base/domain.h>
 #include <ydb/core/base/feature_flags.h>
 #include <ydb/core/cms/console/validators/registry.h>
+#include <ydb/core/protos/netclassifier.pb.h>
 
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 #include <library/cpp/monlib/service/pages/templates.h>

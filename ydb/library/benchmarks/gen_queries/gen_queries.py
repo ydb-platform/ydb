@@ -12,14 +12,15 @@ class Profile:
     profile: str
     pragmas: str
     tables: str
+    bindings: bool
 
 
 def main():
     profiles = [
-        Profile("yql", "dqrun", "pragmas_scalar.yql", "tables_bindings.jinja"),
-        Profile("yql", "dqrun_block", "pragmas_block.yql", "tables_bindings.jinja"),
-        Profile("pg", "dqrun", "pragmas_scalar_pg.yql", "tables_bindings.jinja"),
-        Profile("pg", "postgres", None, "tables_postgres.jinja"),
+        Profile("yql", "dqrun", "pragmas_scalar.yql", "tables_bindings.jinja", True),
+        Profile("yql", "dqrun_block", "pragmas_block.yql", "tables_bindings.jinja", True),
+        Profile("pg", "dqrun", "pragmas_scalar_pg.yql", "tables_bindings.jinja", True),
+        Profile("pg", "postgres", None, "tables_postgres.jinja", False),
     ]
     parser = argparse.ArgumentParser()
     parser.add_argument('--syntax', default='yql', help='syntax "pg" or "yql"')
@@ -43,6 +44,8 @@ def main():
     if not os.path.exists(path):
         os.makedirs(path, exist_ok=True)
     b = Builder()
+    b.add_link("bindings.json", f"bindings_{args.variant}_{args.syntax}.json")
+    b.add_vars({"data": f"{args.variant}/1"})
     if p.pragmas:
         b.add_link("pragmas.sql", p.pragmas)
     else:
@@ -53,6 +56,12 @@ def main():
         queries = range(1, 23)
     else:
         queries = range(1, 100)
+
+    if p.bindings:
+        with open(f"{path}/bindings.json", "w") as f:
+            print("Generating bindings")
+            json = b.build("bindings.json", True)
+            f.write(json)
 
     for q in queries:
         with open(f"{path}/q{q}.sql", "w") as f:

@@ -36,12 +36,6 @@
 #include <queue>
 #include <variant>
 
-namespace NKikimrServices {
-    // using constant value from ydb/core/protos/services.proto
-    // but to avoid peerdir on ydb/core/protos we introduce this constant
-    constexpr ui32 KQP_COMPUTE = 535;
-};
-
 #define SRC_LOG_T(s) \
     LOG_TRACE_S(*NActors::TlsActivationContext, NKikimrServices::KQP_COMPUTE, LogPrefix << s)
 #define SRC_LOG_D(s) \

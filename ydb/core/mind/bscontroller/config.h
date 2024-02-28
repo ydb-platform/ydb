@@ -4,6 +4,8 @@
 #include "error.h"
 #include "impl.h"
 
+#include <ydb/core/protos/blob_depot_config.pb.h>
+
 namespace NKikimr {
     namespace NBsController {
 

@@ -97,7 +97,9 @@ void TNodeWarden::Handle(TEvNodeWardenStorageConfig::TPtr ev) {
         if (const auto& bsConfig = StorageConfig.GetBlobStorageConfig(); bsConfig.HasServiceSet()) {
             const NKikimrBlobStorage::TNodeWardenServiceSet *proposed = nullptr;
             if (const auto& proposedConfig = ev->Get()->ProposedConfig) {
-                Y_ABORT_UNLESS(StorageConfig.GetGeneration() < proposedConfig->GetGeneration());
+                Y_VERIFY_S(StorageConfig.GetGeneration() < proposedConfig->GetGeneration(),
+                    "StorageConfig.Generation# " << StorageConfig.GetGeneration()
+                    << " ProposedConfig.Generation# " << proposedConfig->GetGeneration());
                 Y_ABORT_UNLESS(proposedConfig->HasBlobStorageConfig()); // must have the BlobStorageConfig and the ServiceSet
                 const auto& proposedBsConfig = proposedConfig->GetBlobStorageConfig();
                 Y_ABORT_UNLESS(proposedBsConfig.HasServiceSet());

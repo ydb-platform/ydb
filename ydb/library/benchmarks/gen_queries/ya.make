@@ -13,6 +13,10 @@ RESOURCE(
     tables.jinja tables_bindings.jinja
     tables_postgres.jinja tables_postgres.jinja
     header.sql.jinja header.sql.jinja
+    bindings_tpcds.json bindings_ds_yql.json
+    bindings_tpcds_pg.json bindings_ds_pg.json
+    bindings_tpch.json bindings_h_yql.json
+    bindings_tpch_pg.json bindings_h_pg.json
 )
 
 RESOURCE(

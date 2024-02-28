@@ -9,14 +9,19 @@
 #include <ydb/core/tablet_flat/test/libs/table/test_make.h>
 #include <ydb/core/tablet_flat/test/libs/table/test_mixer.h>
 #include "ydb/core/tablet_flat/flat_part_btree_index_iter.h"
+#include "ydb/core/tablet_flat/flat_stat_table.h"
 #include "ydb/core/tablet_flat/test/libs/table/wrap_iter.h"
+#include "ydb/core/tx/datashard/datashard.h"
 #include <ydb/core/tablet_flat/test/libs/table/test_writer.h>
 #include <ydb/core/tablet_flat/test/libs/table/test_envs.h>
 #include <ydb/core/tablet_flat/test/libs/table/wrap_part.h>
 #include <ydb/core/tablet_flat/test/libs/table/test_steps.h>
 
-namespace NKikimr {
-namespace NTable {
+#ifndef BENCHMARK_MAKE_LARGE_PART
+#define BENCHMARK_MAKE_LARGE_PART 0
+#endif
+
+namespace NKikimr::NTable {
 
 namespace {
     using namespace NTest;
@@ -26,14 +31,10 @@ namespace {
 
     NPage::TConf PageConf(size_t groups, bool writeBTreeIndex) noexcept
     {
-        NPage::TConf conf{ true, 1024 };
+        NPage::TConf conf;
 
         conf.Groups.resize(groups);
-        for (size_t group : xrange(groups)) {
-            conf.Group(group).PageSize = 1024;
-            conf.Group(group).BTreeIndexNodeTargetSize = 1024;
-        }
-
+        
         conf.WriteBTreeIndex = writeBTreeIndex;
 
         conf.SliceSize = conf.Group(0).PageSize * 4;
@@ -41,66 +42,28 @@ namespace {
         return conf;
     }
 
-    struct TPartEggsFixture : public benchmark::Fixture {
+    struct TPartFixture : public benchmark::Fixture {
         using TGroupId = NPage::TGroupId;
 
-        void SetUp(const ::benchmark::State& state) 
-        {
-            const bool groups = state.range(1);
-
-            TLayoutCook lay;
-
-            lay
-                .Col(0, 0,  NScheme::NTypeIds::Uint32)
-                .Col(0, 1,  NScheme::NTypeIds::Uint32)
-                .Col(0, 2,  NScheme::NTypeIds::Uint32)
-                .Col(0, 3,  NScheme::NTypeIds::Uint32)
-                .Col(groups ? 1 : 0, 4,  NScheme::NTypeIds::Uint32)
-                .Key({0, 1, 2});
-
-            TPartCook cook(lay, PageConf(groups ? 2 : 1, true));
-            
-            for (ui32 i = 0; (groups ? cook.GetDataBytes(0) + cook.GetDataBytes(1) : cook.GetDataBytes(0)) < 100ull*1024*1024; i++) {
-                cook.Add(*TSchemedCookRow(*lay).Col(i / 10000, i / 100 % 100, i % 100, i, i));
-            }
-
-            Eggs = cook.Finish();
-
-            const auto part = Eggs.Lone();
-
-            Cerr << "DataBytes = " << part->Stat.Bytes << " DataPages = " << IndexTools::CountMainPages(*part) << Endl;
-            Cerr << "FlatIndexBytes = " << part->GetPageSize(part->IndexPages.Groups[groups ? 1 : 0], {}) << " BTreeIndexBytes = " << part->IndexPages.BTreeGroups[groups ? 1 : 0].IndexSize << Endl;
-            Cerr << "Levels = " << part->IndexPages.BTreeGroups[groups ? 1 : 0].LevelCount << Endl;
-
-            // 100 MB
-            UNIT_ASSERT_GE(part->Stat.Bytes, 100ull*1024*1024);
-            UNIT_ASSERT_LE(part->Stat.Bytes, 100ull*1024*1024 + 10ull*1024*1024);
-
-            GroupId = TGroupId(groups ? 1 : 0);
-        }
-
-        TPartEggs Eggs;
-        TTestEnv Env;
-        TGroupId GroupId;
-    };
-
-    struct TPartSubsetFixture : public benchmark::Fixture {
-        using TGroupId = NPage::TGroupId;
-
-        void SetUp(const ::benchmark::State& state) 
+        void SetUp(::benchmark::State& state) 
         {
             const bool useBTree = state.range(0);
             const bool groups = state.range(1);
             const bool history = state.range(2);
 
-            Mass = new NTest::TMass(new NTest::TModelStd(groups), history ? 1000000 : 300000);
+            ui64 rows = history ? 300000 : 1000000;
+            if (BENCHMARK_MAKE_LARGE_PART) {
+                rows *= 10;
+            }
+            Mass = new NTest::TMass(new NTest::TModelStd(groups), rows);
             Subset = TMake(*Mass, PageConf(Mass->Model->Scheme->Families.size(), useBTree)).Mixed(0, 1, TMixerOne{ }, history ? 0.7 : 0);
             
-            for (const auto& part : Subset->Flatten) {
-                Cerr << "DataBytes = " << part->Stat.Bytes << " DataPages = " << IndexTools::CountMainPages(*part) << Endl;
-                Cerr << "FlatIndexBytes = " << part->GetPageSize(part->IndexPages.Groups[groups ? 1 : 0], {}) << " BTreeIndexBytes = " << (useBTree ? part->IndexPages.BTreeGroups[groups ? 1 : 0].IndexSize : 0) << Endl;
+            for (const auto& part : Subset->Flatten) { // single part
+                state.counters["DataBytes"] = part->Stat.Bytes;
+                state.counters["DataPages"] = IndexTools::CountMainPages(*part);
+                state.counters["IndexBytes"] = part->IndexesRawSize;
                 if (useBTree) {
-                    Cerr << "Levels = " << part->IndexPages.BTreeGroups[groups ? 1 : 0].LevelCount << Endl;
+                    state.counters["Levels{0}"] = part->IndexPages.BTreeGroups[0].LevelCount;
                 }
             }
 
@@ -111,6 +74,9 @@ namespace {
                 Checker = new TCheckIt(*Subset, {new TTestEnv()});
                 CheckerReverse = new TCheckReverseIt(*Subset, {new TTestEnv()});
             }
+
+            GroupId = TGroupId(groups, history);
+            Part = Subset->Flatten[0].Part.Get();
         }
 
         TMersenne<ui64> Rnd;
@@ -119,87 +85,99 @@ namespace {
         TAutoPtr<TCheckIt> Checker;
         TAutoPtr<TCheckReverseIt> CheckerReverse;
         TTestEnv Env;
+        TGroupId GroupId;
+        TPart const* Part;
     };
 }
 
-BENCHMARK_DEFINE_F(TPartEggsFixture, SeekRowId)(benchmark::State& state) {
+BENCHMARK_DEFINE_F(TPartFixture, SeekRowId)(benchmark::State& state) {
     const bool useBTree = state.range(0);
 
     for (auto _ : state) {
         THolder<IIndexIter> iter;
 
         if (useBTree) {
-            iter = MakeHolder<TPartBtreeIndexIt>(Eggs.Lone().Get(), &Env, GroupId);
+            iter = MakeHolder<TPartBtreeIndexIt>(Part, &Env, GroupId);
         } else {
-            iter = MakeHolder<TPartIndexIt>(Eggs.Lone().Get(), &Env, GroupId);
+            iter = MakeHolder<TPartIndexIt>(Part, &Env, GroupId);
         }
 
-        iter->Seek(RandomNumber<ui32>(Eggs.Lone()->Stat.Rows));    
+        iter->Seek(RandomNumber<ui32>(Part->Stat.Rows));    
     }
 }
 
-BENCHMARK_DEFINE_F(TPartEggsFixture, Next)(benchmark::State& state) {
+BENCHMARK_DEFINE_F(TPartFixture, Next)(benchmark::State& state) {
     const bool useBTree = state.range(0);
 
     THolder<IIndexIter> iter;
 
     if (useBTree) {
-        iter = MakeHolder<TPartBtreeIndexIt>(Eggs.Lone().Get(), &Env, GroupId);
+        iter = MakeHolder<TPartBtreeIndexIt>(Part, &Env, GroupId);
     } else {
-        iter = MakeHolder<TPartIndexIt>(Eggs.Lone().Get(), &Env, GroupId);
+        iter = MakeHolder<TPartIndexIt>(Part, &Env, GroupId);
     }
 
-    iter->Seek(RandomNumber<ui32>(Eggs.Lone()->Stat.Rows));
+    iter->Seek(RandomNumber<ui32>(Part->Stat.Rows));
 
     for (auto _ : state) {
         if (!iter->IsValid()) {
-            iter->Seek(RandomNumber<ui32>(Eggs.Lone()->Stat.Rows));
+            iter->Seek(RandomNumber<ui32>(Part->Stat.Rows));
         }
         iter->Next();
     }
 }
 
-BENCHMARK_DEFINE_F(TPartEggsFixture, Prev)(benchmark::State& state) {
+BENCHMARK_DEFINE_F(TPartFixture, Prev)(benchmark::State& state) {
     const bool useBTree = state.range(0);
 
     THolder<IIndexIter> iter;
 
     if (useBTree) {
-        iter = MakeHolder<TPartBtreeIndexIt>(Eggs.Lone().Get(), &Env, GroupId);
+        iter = MakeHolder<TPartBtreeIndexIt>(Part, &Env, GroupId);
     } else {
-        iter = MakeHolder<TPartIndexIt>(Eggs.Lone().Get(), &Env, GroupId);
+        iter = MakeHolder<TPartIndexIt>(Part, &Env, GroupId);
     }
 
-    iter->Seek(RandomNumber<ui32>(Eggs.Lone()->Stat.Rows));
+    iter->Seek(RandomNumber<ui32>(Part->Stat.Rows));
 
     for (auto _ : state) {
         if (!iter->IsValid()) {
-            iter->Seek(RandomNumber<ui32>(Eggs.Lone()->Stat.Rows));
+            iter->Seek(RandomNumber<ui32>(Part->Stat.Rows));
         }
         iter->Prev();
     }
 }
 
-BENCHMARK_DEFINE_F(TPartEggsFixture, SeekKey)(benchmark::State& state) {
+BENCHMARK_DEFINE_F(TPartFixture, SeekKey)(benchmark::State& state) {
     const bool useBTree = state.range(0);
-    const ESeek seek = ESeek(state.range(2));
+    const ESeek seek = ESeek(state.range(3));
+
+    TRowTool rowTool(*Subset->Scheme);
+    auto tags = TVector<TTag>();
+    for (auto c : Subset->Scheme->Cols) {
+        tags.push_back(c.Tag);
+    }
 
     for (auto _ : state) {
         THolder<IIndexIter> iter;
 
         if (useBTree) {
-            iter = MakeHolder<TPartBtreeIndexIt>(Eggs.Lone().Get(), &Env, GroupId);
+            iter = MakeHolder<TPartBtreeIndexIt>(Part, &Env, GroupId);
         } else {
-            iter = MakeHolder<TPartIndexIt>(Eggs.Lone().Get(), &Env, GroupId);
+            iter = MakeHolder<TPartIndexIt>(Part, &Env, GroupId);
         }
 
-        ui32 rowId = RandomNumber<ui32>(Eggs.Lone()->Stat.Rows);
-        TVector<TCell> key{TCell::Make(rowId / 10000), TCell::Make(rowId / 100 % 100), TCell::Make(rowId % 100)};
-        iter->Seek(seek, key, Eggs.Scheme->Keys.Get());
+        state.PauseTiming();
+        auto& row = *Mass->Saved.Any(Rnd);
+        auto key_ = rowTool.LookupKey(row);
+        const TCelled key(key_, *Subset->Scheme->Keys, false);
+        state.ResumeTiming();
+
+        iter->Seek(seek, key, Subset->Scheme->Keys.Get());
     }
 }
 
-BENCHMARK_DEFINE_F(TPartSubsetFixture, DoReads)(benchmark::State& state) {
+BENCHMARK_DEFINE_F(TPartFixture, DoReads)(benchmark::State& state) {
     const bool reverse = state.range(3);
     const ESeek seek = static_cast<ESeek>(state.range(4));
     const ui32 items = state.range(5);
@@ -221,7 +199,7 @@ BENCHMARK_DEFINE_F(TPartSubsetFixture, DoReads)(benchmark::State& state) {
     }
 }
 
-BENCHMARK_DEFINE_F(TPartSubsetFixture, DoCharge)(benchmark::State& state) {
+BENCHMARK_DEFINE_F(TPartFixture, DoCharge)(benchmark::State& state) {
     const bool reverse = state.range(3);
     const ui32 items = state.range(4);
 
@@ -245,32 +223,43 @@ BENCHMARK_DEFINE_F(TPartSubsetFixture, DoCharge)(benchmark::State& state) {
     }
 }
 
-BENCHMARK_REGISTER_F(TPartEggsFixture, SeekRowId)
-    ->ArgsProduct({
-        /* b-tree */ {0, 1},
-        /* groups: */ {0, 1}})
-    ->Unit(benchmark::kMicrosecond);
+BENCHMARK_DEFINE_F(TPartFixture, BuildStats)(benchmark::State& state) {
+    for (auto _ : state) {
+        TStats stats;
+        BuildStats(*Subset, stats, NDataShard::gDbStatsRowCountResolution, NDataShard::gDbStatsDataSizeResolution, &Env);
+    }
+}
 
-BENCHMARK_REGISTER_F(TPartEggsFixture, Next)
-    ->ArgsProduct({
-        /* b-tree */ {0, 1},
-        /* groups: */ {0, 1}})
-    ->Unit(benchmark::kMicrosecond);
-
-BENCHMARK_REGISTER_F(TPartEggsFixture, Prev)
-    ->ArgsProduct({
-        /* b-tree */ {0, 1},
-        /* groups: */ {0, 1}})
-    ->Unit(benchmark::kMicrosecond);
-
-BENCHMARK_REGISTER_F(TPartEggsFixture, SeekKey)
+BENCHMARK_REGISTER_F(TPartFixture, SeekRowId)
     ->ArgsProduct({
         /* b-tree */ {0, 1},
         /* groups: */ {0, 1},
+        /* history: */ {0}})
+    ->Unit(benchmark::kMicrosecond);
+
+BENCHMARK_REGISTER_F(TPartFixture, Next)
+    ->ArgsProduct({
+        /* b-tree */ {0, 1},
+        /* groups: */ {0, 1},
+        /* history: */ {0}})
+    ->Unit(benchmark::kMicrosecond);
+
+BENCHMARK_REGISTER_F(TPartFixture, Prev)
+    ->ArgsProduct({
+        /* b-tree */ {0, 1},
+        /* groups: */ {0, 1},
+        /* history: */ {0}})
+    ->Unit(benchmark::kMicrosecond);
+
+BENCHMARK_REGISTER_F(TPartFixture, SeekKey)
+    ->ArgsProduct({
+        /* b-tree */ {0, 1},
+        /* groups: */ {0, 1},
+        /* history: */ {0},
         /* ESeek: */ {1}})
     ->Unit(benchmark::kMicrosecond);
 
-BENCHMARK_REGISTER_F(TPartSubsetFixture, DoReads)
+BENCHMARK_REGISTER_F(TPartFixture, DoReads)
     ->ArgsProduct({
         /* b-tree */ {0, 1},
         /* groups: */ {1},
@@ -280,7 +269,7 @@ BENCHMARK_REGISTER_F(TPartSubsetFixture, DoReads)
         /* items */ {1, 50, 1000}})
     ->Unit(benchmark::kMicrosecond);
 
-BENCHMARK_REGISTER_F(TPartSubsetFixture, DoCharge)
+BENCHMARK_REGISTER_F(TPartFixture, DoCharge)
     ->ArgsProduct({
         /* b-tree */ {0, 1},
         /* groups: */ {1},
@@ -289,5 +278,11 @@ BENCHMARK_REGISTER_F(TPartSubsetFixture, DoCharge)
         /* items */ {1, 50, 1000}})
     ->Unit(benchmark::kMicrosecond);
 
-}
+BENCHMARK_REGISTER_F(TPartFixture, BuildStats)
+    ->ArgsProduct({
+        /* b-tree */ {0, 1},
+        /* groups: */ {0, 1},
+        /* history: */ {0, 1}})
+    ->Unit(benchmark::kMicrosecond);
+
 }

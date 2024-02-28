@@ -6,6 +6,7 @@
 #include <ydb/core/tx/sequenceproxy/public/events.h>
 
 #include <ydb/core/base/counters.h>
+#include <ydb/library/services/services.pb.h>
 #include <library/cpp/monlib/dynamic_counters/counters.h>
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 #include <ydb/library/actors/core/hfunc.h>

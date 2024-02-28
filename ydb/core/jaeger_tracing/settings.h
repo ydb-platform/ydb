@@ -4,6 +4,7 @@
 
 #include <library/cpp/containers/stack_vector/stack_vec.h>
 
+#include <util/generic/hash.h>
 #include <util/system/types.h>
 
 namespace NKikimr::NJaegerTracing {
@@ -18,60 +19,146 @@ struct TSamplingRule {
     ui8 Level;
     TSampling Sampler;
     TThrottling Throttler;
-};
-
-template<class TThrottling>
-struct TExternalThrottlingRule {
-    TThrottling Throttler;
-};
-
-template<class TSampling, class TThrottling>
-struct TSettings {
-    std::array<TStackVec<TSamplingRule<TSampling, TThrottling>, 2>, kRequestTypesCnt> SamplingRules;
-    std::array<TMaybe<TExternalThrottlingRule<TThrottling>>, kRequestTypesCnt> ExternalThrottlingRules;
 
     template<class TFunc>
     auto MapSampler(TFunc&& f) const {
         using TNewSamplingType = std::invoke_result_t<TFunc, const TSampling&>;
 
-        TSettings<TNewSamplingType, TThrottling> newSettings;
-        for (size_t i = 0; i < kRequestTypesCnt; ++i) {
-            for (auto& samplingRule : SamplingRules[i]) {
-                newSettings.SamplingRules[i].push_back(TSamplingRule<TNewSamplingType, TThrottling> {
-                    .Level = samplingRule.Level,
-                    .Sampler = f(samplingRule.Sampler),
-                    .Throttler = samplingRule.Throttler,
-                });
-            }
-            newSettings.ExternalThrottlingRules[i] = ExternalThrottlingRules[i];
-        }
-
-        return newSettings;
+        return TSamplingRule<TNewSamplingType, TThrottling> {
+            .Level = Level,
+            .Sampler = std::forward<TFunc>(f)(Sampler),
+            .Throttler = Throttler,
+        };
     }
 
     template<class TFunc>
     auto MapThrottler(TFunc&& f) const {
         using TNewThrottlingType = std::invoke_result_t<TFunc, const TThrottling&>;
 
-        TSettings<TSampling, TNewThrottlingType> newSettings;
-        for (size_t i = 0; i < kRequestTypesCnt; ++i) {
-            for (auto& samplingRule : SamplingRules[i]) {
-                newSettings.SamplingRules[i].push_back(TSamplingRule<TSampling, TNewThrottlingType> {
-                    .Level = samplingRule.Level,
-                    .Sampler = samplingRule.Sampler,
-                    .Throttler = f(samplingRule.Throttler),
-                });
-            }
-            newSettings.ExternalThrottlingRules[i] = ExternalThrottlingRules[i].Transform(
-                [&f](const TExternalThrottlingRule<TThrottling>& rule) {
-                    return TExternalThrottlingRule<TNewThrottlingType> {
-                        .Throttler = f(rule.Throttler),
-                    };
-                }
-            );
-        }
+        return TSamplingRule<TSampling, TNewThrottlingType> {
+            .Level = Level,
+            .Sampler = Sampler,
+            .Throttler = std::forward<TFunc>(f)(Throttler),
+        };
+    }
+};
 
-        return newSettings;
+template<class TThrottling>
+struct TExternalThrottlingRule {
+    TThrottling Throttler;
+
+    template<class TFunc>
+    auto MapThrottler(TFunc&& f) const {
+        using TNewThrottlingType = std::invoke_result_t<TFunc, const TThrottling&>;
+
+        return TExternalThrottlingRule<TNewThrottlingType> {
+            .Throttler = std::forward<TFunc>(f)(Throttler),
+        };
+    }
+};
+
+template<class T>
+struct TRequestTypeRules {
+    TStackVec<T, 4> Global;
+    THashMap<TString, TStackVec<T, 4>> DatabaseRules;
+};
+
+template<class T>
+using TRulesContainer = std::array<TRequestTypeRules<T>, kRequestTypesCnt>;
+
+template<class TSampling, class TThrottling>
+struct TSettings {
+public:
+    TRulesContainer<TSamplingRule<TSampling, TThrottling>> SamplingRules;
+    TRulesContainer<TExternalThrottlingRule<TThrottling>> ExternalThrottlingRules;
+
+    template<class TFunc>
+    auto MapSampler(TFunc&& f) const {
+        using TNewSamplingType = std::invoke_result_t<TFunc, const TSampling&>;
+
+        return TSettings<TNewSamplingType, TThrottling> {
+            .SamplingRules = MapContainerValues(
+                SamplingRules,
+                [&f](const auto& v) {
+                    return v.MapSampler(f);
+                }
+            ),
+            .ExternalThrottlingRules = ExternalThrottlingRules,
+        };
+    }
+
+    template<class TFunc>
+    auto MapThrottler(TFunc&& f) const {
+        using TNewThrottlingType = std::invoke_result_t<TFunc, const TThrottling&>;
+
+        return TSettings<TSampling, TNewThrottlingType> {
+            .SamplingRules = MapContainerValues(
+                SamplingRules,
+                [&f](const auto& v) {
+                    return v.MapThrottler(f);
+                }
+            ),
+            .ExternalThrottlingRules = MapContainerValues(
+                ExternalThrottlingRules,
+                [&f](const auto& v) {
+                    return v.MapThrottler(f);
+                }
+            ),
+        };
+    }
+
+private:
+    template<class T, size_t OnStack, class TFunc>
+    static auto MapValues(const TStackVec<T, OnStack>& v, TFunc&& f) {
+        using TResultValue = std::invoke_result_t<TFunc, const T&>;
+
+        TStackVec<TResultValue, OnStack> result;
+        result.reserve(v.size());
+        for (const auto& item : v) {
+            result.push_back(f(item));
+        }
+        return result;
+    }
+
+    template<class TKey, class TValue, class TFunc>
+    static auto MapValues(const THashMap<TKey, TValue>& m, TFunc&& f) {
+        using TResultValue = std::invoke_result_t<TFunc, const TValue&>;
+
+        THashMap<TKey, TResultValue> result;
+        result.reserve(m.size());
+        for (const auto& [key, value] : m) {
+            result.emplace(key, f(value));
+        }
+        return result;
+    }
+
+    template<class T, size_t Size, class TFunc>
+    static auto MapValues(const std::array<T, Size>& v, TFunc&& f) {
+        using TResultValue = std::invoke_result_t<TFunc, const T&>;
+
+        return [&v, &f]<size_t... I>(std::index_sequence<I...>) -> std::array<TResultValue, Size> {
+            return { f(v[I])...};
+        }(std::make_index_sequence<Size>());
+    }
+
+    template<class T, class TFunc>
+    static TRulesContainer<std::invoke_result_t<TFunc, const T&>> MapContainerValues(const TRulesContainer<T>& v, TFunc&& f) {
+        using TResultValue = std::invoke_result_t<TFunc, const T&>;
+
+        return MapValues(
+            v,
+            [&f](const TRequestTypeRules<T>& reqTypeRules) {
+                return TRequestTypeRules<TResultValue> {
+                    .Global = MapValues(reqTypeRules.Global, f),
+                    .DatabaseRules = MapValues(
+                        reqTypeRules.DatabaseRules,
+                        [&f](const auto& dbSamplingRules) {
+                            return MapValues(dbSamplingRules, f);
+                        }
+                    ),
+                };
+            }
+        );
     }
 };
 

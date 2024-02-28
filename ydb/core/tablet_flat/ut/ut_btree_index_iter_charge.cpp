@@ -158,23 +158,8 @@ namespace {
         if (params.Slices) {
             TSlices slices;
             auto partSlices = (TSlices*)part.Slices.Get();
-
-            auto getKey = [&] (const NPage::TIndex::TRecord* record) {
-                TSmallVec<TCell> key;
-                for (const auto& info : part.Scheme->Groups[0].ColsKeyIdx) {
-                    key.push_back(record->Cell(info));
-                }
-                return TSerializedCellVec(key);
-            };
-            auto add = [&](ui32 pageIndex1 /*inclusive*/, ui32 pageIndex2 /*exclusive*/) {
-                TSlice slice;
-                slice.FirstInclusive = true;
-                slice.FirstRowId = pageIndex1 * 2;
-                slice.FirstKey = pageIndex1 > 0 ? getKey(IndexTools::GetRecord(part, pageIndex1)) : partSlices->begin()->FirstKey;
-                slice.LastInclusive = false;
-                slice.LastRowId = pageIndex2 * 2;
-                slice.LastKey = pageIndex2 < 20 ? getKey(IndexTools::GetRecord(part, pageIndex2)) : partSlices->begin()->LastKey;
-                slices.push_back(slice);
+            auto add = [&](ui32 pageIndex1Inclusive, ui32 pageIndex2Exclusive) {
+                slices.push_back(IndexTools::MakeSlice(part, pageIndex1Inclusive, pageIndex2Exclusive));
             };
             add(0, 2);
             add(3, 4);

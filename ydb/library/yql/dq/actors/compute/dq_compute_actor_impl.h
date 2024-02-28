@@ -801,7 +801,6 @@ protected:
 
     struct TAsyncInputTransformHelper : TAsyncInputHelper {
         NUdf::TUnboxedValue InputBuffer;
-        TMaybe<NKikimr::NMiniKQL::TProgramBuilder> ProgramBuilder;
 
         using TAsyncInputHelper::TAsyncInputHelper;
     };
@@ -936,7 +935,6 @@ protected:
 
     struct TAsyncOutputTransformInfo : public TAsyncOutputInfoBase {
         IDqOutputConsumer::TPtr OutputBuffer;
-        TMaybe<NKikimr::NMiniKQL::TProgramBuilder> ProgramBuilder;
     };
 
 protected:
@@ -1262,6 +1260,7 @@ protected:
                         .InputIndex = inputIndex,
                         .StatsLevel = collectStatsLevel,
                         .TxId = TxId,
+                        .TaskId = Task.GetId(),
                         .SecureParams = secureParams,
                         .TaskParams = taskParams,
                         .ReadRanges = readRanges,
@@ -1281,7 +1280,6 @@ protected:
             this->RegisterWithSameMailbox(source.Actor);
         }
         for (auto& [inputIndex, transform] : InputTransformsMap) {
-            transform.ProgramBuilder.ConstructInPlace(typeEnv, *FunctionRegistry);
             Y_ABORT_UNLESS(AsyncIoFactory);
             const auto& inputDesc = Task.GetInputs(inputIndex);
             CA_LOG_D("Create transform for input " << inputIndex << " " << inputDesc.ShortDebugString());
@@ -1299,7 +1297,6 @@ protected:
                         .ComputeActorId = this->SelfId(),
                         .TypeEnv = typeEnv,
                         .HolderFactory = holderFactory,
-                        .ProgramBuilder = *transform.ProgramBuilder,
                         .Alloc = Alloc,
                         .TraceId = ComputeActorSpan.GetTraceId()
                     });
@@ -1309,7 +1306,6 @@ protected:
             this->RegisterWithSameMailbox(transform.Actor);
         }
         for (auto& [outputIndex, transform] : OutputTransformsMap) {
-            transform.ProgramBuilder.ConstructInPlace(typeEnv, *FunctionRegistry);
             Y_ABORT_UNLESS(AsyncIoFactory);
             const auto& outputDesc = Task.GetOutputs(outputIndex);
             CA_LOG_D("Create transform for output " << outputIndex << " " << outputDesc.ShortDebugString());
@@ -1326,7 +1322,6 @@ protected:
                         .TaskParams = taskParams,
                         .TypeEnv = typeEnv,
                         .HolderFactory = holderFactory,
-                        .ProgramBuilder = *transform.ProgramBuilder
                     });
             } catch (const std::exception& ex) {
                 throw yexception() << "Failed to create output transform " << outputDesc.GetTransform().GetType() << ": " << ex.what();

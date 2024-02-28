@@ -1,6 +1,7 @@
 #include "tx_write_index.h"
 #include <ydb/core/tx/columnshard/blobs_action/blob_manager_db.h>
 #include <ydb/core/tx/columnshard/engines/changes/abstract/abstract.h>
+#include <ydb/core/tx/columnshard/engines/column_engine_logs.h>
 #include <ydb/core/tx/columnshard/hooks/abstract/abstract.h>
 
 namespace NKikimr::NColumnShard {
@@ -21,10 +22,11 @@ bool TTxWriteIndex::Execute(TTransactionContext& txc, const TActorContext& ctx) 
         NOlap::TDbWrapper dbWrap(txc.DB, &dsGroupSelector);
         AFL_VERIFY(Self->TablesManager.MutablePrimaryIndex().ApplyChanges(dbWrap, changes, snapshot));
         LOG_S_DEBUG(TxPrefix() << "(" << changes->TypeString() << ") apply" << TxSuffix());
-        NOlap::TWriteIndexContext context(txc, dbWrap);
-        changes->WriteIndex(*Self, context);
+        NOlap::TWriteIndexContext context(&txc.DB, dbWrap, Self->MutableIndexAs<NOlap::TColumnEngineForLogs>());
+        changes->WriteIndexOnExecute(Self, context);
 
-        changes->MutableBlobsAction().OnExecuteTxAfterAction(*Self, *context.BlobManagerDb, true);
+        NOlap::TBlobManagerDb blobManagerDb(txc.DB);
+        changes->MutableBlobsAction().OnExecuteTxAfterAction(*Self, blobManagerDb, true);
 
         Self->UpdateIndexCounters();
     } else {
@@ -55,8 +57,8 @@ void TTxWriteIndex::Complete(const TActorContext& ctx) {
     const ui64 bytesWritten = changes->GetBlobsAction().GetWritingTotalSize();
 
     if (!Ev->Get()->IndexChanges->IsAborted()) {
-        NOlap::TWriteIndexCompleteContext context(ctx, blobsWritten, bytesWritten, Ev->Get()->Duration, TriggerActivity);
-        Ev->Get()->IndexChanges->WriteIndexComplete(*Self, context);
+        NOlap::TWriteIndexCompleteContext context(ctx, blobsWritten, bytesWritten, Ev->Get()->Duration, TriggerActivity, Self->MutableIndexAs<NOlap::TColumnEngineForLogs>());
+        Ev->Get()->IndexChanges->WriteIndexOnComplete(Self, context);
     }
 
     if (Ev->Get()->GetPutStatus() == NKikimrProto::TRYLATER) {

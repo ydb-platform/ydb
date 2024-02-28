@@ -2,6 +2,8 @@
 #include "table_settings.h"
 #include "column_families.h"
 
+#include <ydb/core/protos/follower_group.pb.h>
+
 #include <util/generic/list.h>
 #include <util/string/builder.h>
 

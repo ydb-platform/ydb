@@ -4,6 +4,7 @@
 
 #include <ydb/core/base/appdata.h>
 #include <ydb/core/grpc_services/counters/proxy_counters.h>
+#include <ydb/core/protos/table_service_config.pb.h>
 
 #include <util/system/hostname.h>
 

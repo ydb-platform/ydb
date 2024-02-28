@@ -147,7 +147,7 @@ namespace NKikimr::NStorage {
 
         struct TDiskConfigInfo {
             NKikimrBlobStorage::TStorageConfig Config;
-            THashSet<std::tuple<TNodeIdentifier, TString>> HavingDisks;
+            THashSet<std::tuple<TNodeIdentifier, TString, std::optional<ui64>>> HavingDisks;
         };
         THashMap<TStorageConfigMeta, TDiskConfigInfo> committedConfigs;
         THashMap<TStorageConfigMeta, TDiskConfigInfo> proposedConfigs;
@@ -162,7 +162,7 @@ namespace NKikimr::NStorage {
                     r.Config.CopyFrom(config.GetConfig());
                 }
                 for (const auto& disk : config.GetDisks()) {
-                    r.HavingDisks.emplace(disk.GetNodeId(), disk.GetPath());
+                    r.HavingDisks.emplace(disk.GetNodeId(), disk.GetPath(), disk.HasGuid() ? std::make_optional(disk.GetGuid()) : std::nullopt);
                 }
             }
         }
@@ -171,15 +171,12 @@ namespace NKikimr::NStorage {
                 TDiskConfigInfo& r = it->second;
 
                 auto generateSuccessful = [&](auto&& callback) {
-                    for (const auto& [node, path] : r.HavingDisks) {
-                        callback(node, path);
+                    for (const auto& [node, path, guid] : r.HavingDisks) {
+                        callback(node, path, guid);
                     }
                 };
 
-                const bool quorum = HasDiskQuorum(r.Config, generateSuccessful) &&
-                    (!r.Config.HasPrevConfig() || HasDiskQuorum(r.Config.GetPrevConfig(), generateSuccessful));
-
-                if (quorum) {
+                if (HasConfigQuorum(r.Config, generateSuccessful, *Cfg)) {
                     ++it;
                 } else {
                     set->erase(it++);
@@ -249,14 +246,13 @@ namespace NKikimr::NStorage {
         auto generateSuccessful = [&](auto&& callback) {
             for (const auto& item : res->GetStatus()) {
                 const TNodeIdentifier node(item.GetNodeId());
-                for (const TString& path : item.GetSuccessfulDrives()) {
-                    callback(node, path);
+                for (const auto& drive : item.GetSuccessfulDrives()) {
+                    callback(node, drive.GetPath(), drive.HasGuid() ? std::make_optional(drive.GetGuid()) : std::nullopt);
                 }
             }
         };
 
-        if (HasDiskQuorum(CurrentProposedStorageConfig, generateSuccessful) &&
-                HasDiskQuorum(CurrentProposedStorageConfig.GetPrevConfig(), generateSuccessful)) {
+        if (HasConfigQuorum(CurrentProposedStorageConfig, generateSuccessful, *Cfg)) {
             // apply configuration and spread it
             ApplyStorageConfig(CurrentProposedStorageConfig);
             for (const auto& [nodeId, info] : DirectBoundNodes) {
@@ -507,16 +503,29 @@ namespace NKikimr::NStorage {
                             auto *status = task.Response.MutableProposeStorageConfig()->AddStatus();
                             SelfNode.Serialize(status->MutableNodeId());
                             status->SetStatus(TEvGather::TProposeStorageConfig::ACCEPTED);
-                            for (const auto& [path, ok] : msg.StatusPerPath) {
+                            for (const auto& [path, ok, guid] : msg.StatusPerPath) {
                                 if (ok) {
-                                    status->AddSuccessfulDrives(path);
+                                    auto *drive = status->AddSuccessfulDrives();
+                                    drive->SetPath(path);
+                                    if (guid) {
+                                        drive->SetGuid(*guid);
+                                    }
                                 }
                             }
 
                             if (StorageConfig && StorageConfig->GetGeneration()) {
                                 Y_ABORT_UNLESS(ProposedStorageConfig);
+                                
+                                // TODO(alexvru): check if this is valid
+                                Y_DEBUG_ABORT_UNLESS(StorageConfig->GetGeneration() < ProposedStorageConfig->GetGeneration() || (
+                                    StorageConfig->GetGeneration() == ProposedStorageConfig->GetGeneration() &&
+                                    StorageConfig->GetFingerprint() == ProposedStorageConfig->GetFingerprint()));
+
                                 const TActorId wardenId = MakeBlobStorageNodeWardenID(SelfId().NodeId());
-                                auto ev = std::make_unique<TEvNodeWardenStorageConfig>(*StorageConfig, &ProposedStorageConfig.value());
+                                auto ev = std::make_unique<TEvNodeWardenStorageConfig>(*StorageConfig,
+                                    StorageConfig->GetGeneration() < ProposedStorageConfig->GetGeneration()
+                                        ? &ProposedStorageConfig.value()
+                                        : nullptr);
                                 Send(wardenId, ev.release(), 0, cookie);
                             } else {
                                 FinishAsyncOperation(cookie);

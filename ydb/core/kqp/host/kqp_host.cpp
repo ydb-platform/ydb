@@ -1151,7 +1151,7 @@ public:
     }
 
 private:
-    TVector<TExprNode::TPtr> CompileQuery(const TKqpQueryRef& query, bool isSql, TExprContext& ctx, TMaybe<TSqlVersion>& sqlVersion, TKqpTranslationSettingsBuilder& settingsBuilder)
+    TVector<TExprNode::TPtr> CompileQuery(const TKqpQueryRef& query, bool isSql, TExprContext& ctx, TMaybe<TSqlVersion>& sqlVersion, TKqpTranslationSettingsBuilder& settingsBuilder) const
     {
         std::shared_ptr<NYql::TAstParseResult> queryAst;
         if (!query.AstResult) {
@@ -1201,8 +1201,11 @@ private:
         SetupYqlTransformer(EKikimrQueryType::Query);
         auto sqlVersion = SetupQueryParameters(settings, EKikimrQueryType::Query);
 
-        auto queryExprs = CompileYqlQuery(query, /* isSql */ true, /* sqlAutoCommit */ false, *ExprCtx, sqlVersion,
-            settings.UsePgParser, settings.PerStatementResult);
+        TKqpTranslationSettingsBuilder settingsBuilder(SessionCtx->Query().Type, SessionCtx->Config()._KqpYqlSyntaxVersion.Get().GetRef(), Cluster, query.Text, SessionCtx->Config().BindingsMode);
+        settingsBuilder
+            .SetSqlAutoCommit(false)
+            .SetUsePgParser(settings.UsePgParser);
+        auto queryExprs = CompileYqlQuery(query, /* isSql */ true, *ExprCtx, sqlVersion, settingsBuilder, settings.PerStatementResult);
 
         return TSplitResult{
             .Ctx = std::move(ExprCtxStorage),
@@ -1216,7 +1219,7 @@ private:
     {
         auto queryExprs = CompileQuery(query, isSql, ctx, sqlVersion, settingsBuilder);
         if (!queryExprs) {
-            return nullptr;
+            return {};
         }
 
         if (!isSql) {

@@ -270,6 +270,9 @@ void TDictionaryCompressionConfig::Register(TRegistrar registrar)
     registrar.Parameter("column_dictionary_size", &TThis::ColumnDictionarySize)
         .GreaterThanOrEqual(NCompression::GetDictionaryCompressionCodec()->GetMinDictionarySize())
         .Default(32_KB);
+    registrar.Parameter("compression_level", &TThis::CompressionLevel)
+        .InRange(1, NCompression::GetDictionaryCompressionCodec()->GetMaxCompressionLevel())
+        .Default(NCompression::GetDictionaryCompressionCodec()->GetDefaultCompressionLevel());
     registrar.Parameter("applied_policies", &TThis::AppliedPolicies)
         .Default({
             EDictionaryCompressionPolicy::LargeChunkFirst,

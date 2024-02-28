@@ -159,9 +159,11 @@ public:
         }
         cacheRecord.Waiters.clear();
         TString error;
+        bool isRetryableError = true;
         if (event->Get()->Error.empty()) {
             if (event->Get()->Response != nullptr && !StatusSuccess(event->Get()->Response->Status)) {
                 error = event->Get()->Response->Message;
+                isRetryableError = IsRetryableError(event->Get()->Response->Status);
             }
         } else {
             error = event->Get()->Error;
@@ -169,10 +171,15 @@ public:
         if (!error.empty()) {
             LOG_WARN_S(ctx, HttpLog, "Error from " << cacheRecord.GetName() << ": " << error);
         }
-        LOG_DEBUG_S(ctx, HttpLog, "OutgoingUpdate " << cacheRecord.GetName());
-        cacheRecord.UpdateResponse(response, event->Get()->Error, ctx.Now());
-        RefreshQueue.push({it->first, it->second.RefreshTime});
-        LOG_DEBUG_S(ctx, HttpLog, "OutgoingSchedule " << cacheRecord.GetName() << " at " << cacheRecord.RefreshTime << " until " << cacheRecord.DeathTime);
+        if (isRetryableError) {
+            LOG_DEBUG_S(ctx, HttpLog, "OutgoingUpdate " << cacheRecord.GetName());
+            cacheRecord.UpdateResponse(response, event->Get()->Error, ctx.Now());
+            RefreshQueue.push({it->first, it->second.RefreshTime});
+            LOG_DEBUG_S(ctx, HttpLog, "OutgoingSchedule " << cacheRecord.GetName() << " at " << cacheRecord.RefreshTime << " until " << cacheRecord.DeathTime);
+        } else {
+            LOG_DEBUG_S(ctx, HttpLog, "Response with non retryable error: OutgoingForget " << cacheRecord.GetName());
+            Cache.erase(it);
+        }
     }
 
     void Handle(NHttp::TEvHttpProxy::TEvHttpOutgoingRequest::TPtr event, const NActors::TActorContext& ctx) {
@@ -248,6 +255,14 @@ public:
             HFunc(NHttp::TEvHttpProxy::TEvHttpOutgoingResponse, Handle);
             CFunc(NActors::TEvents::TSystem::Wakeup, HandleRefresh);
         }
+    }
+
+private:
+    static bool IsRetryableError(const TStringBuf& status) {
+        if (status == "401") {
+            return false;
+        }
+        return true;
     }
 };
 

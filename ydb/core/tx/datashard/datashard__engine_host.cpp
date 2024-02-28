@@ -310,7 +310,8 @@ public:
             UserDb.GetLockNodeId(),
             UserDb.GetIsRepeatableSnapshot(),
             UserDb.GetIsImmediateTx(),
-            UserDb.GetIsWriteTx()
+            UserDb.GetIsWriteTx(), 
+            Scheme
         );
         return GetKeyValidator().IsValidKey(key, options);
     }
@@ -475,7 +476,7 @@ private:
 
 TEngineBay::TEngineBay(TDataShard* self, TTransactionContext& txc, const TActorContext& ctx, const TStepOrder& stepTxId)
     : StepTxId(stepTxId)
-    , KeyValidator(*self, txc.DB)
+    , KeyValidator(*self)
 {
     auto now = TAppData::TimeProvider->Now();
     EngineHost = MakeHolder<TDataShardEngineHost>(self, *this, txc.DB, stepTxId.TxId, EngineHostCounters, now);

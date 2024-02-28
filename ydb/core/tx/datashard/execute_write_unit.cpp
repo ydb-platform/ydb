@@ -154,7 +154,7 @@ public:
         DataShard.ReleaseCache(*writeOp);
 
         if (writeOp->IsTxDataReleased()) {
-            switch (Pipeline.RestoreDataTx(writeOp, txc)) {
+            switch (Pipeline.RestoreWriteTx(writeOp, txc)) {
                 case ERestoreDataStatus::Ok:
                     break;
 
@@ -179,7 +179,7 @@ public:
 
         ui64 tabletId = DataShard.TabletID();
 
-        if (op->IsImmediate() && !writeOp->ReValidateKeys()) {
+        if (op->IsImmediate() && !writeOp->ReValidateKeys(txc.DB.GetScheme())) {
             // Immediate transactions may be reordered with schema changes and become invalid
             Y_ABORT_UNLESS(!writeTx->Ready());
             writeOp->SetError(NKikimrDataEvents::TEvWriteResult::STATUS_INTERNAL_ERROR, writeTx->GetErrStr());

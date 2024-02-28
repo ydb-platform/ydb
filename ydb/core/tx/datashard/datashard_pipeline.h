@@ -277,12 +277,12 @@ public:
         return tx->RestoreTxData(Self, txc, ctx);
     }
 
-    ERestoreDataStatus RestoreDataTx(
-        TWriteOperation* tx,
+    ERestoreDataStatus RestoreWriteTx(
+        TWriteOperation* writeOp,
         TTransactionContext& txc
     )
     {
-        return tx->RestoreTxData(Self, txc);
+        return writeOp->RestoreTxData(Self, txc.DB);
     }
 
     void RegisterDistributedWrites(const TOperation::TPtr& op, NTable::TDatabase& db);

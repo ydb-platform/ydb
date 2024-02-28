@@ -13,7 +13,7 @@ class TDataShardUserDb;
 
 class TKeyValidator {
 public:
-    TKeyValidator(const TDataShard& self, const NTable::TDatabase& db);
+    TKeyValidator(const TDataShard& self);
 
     struct TColumnWriteMeta {
         NTable::TColumn Column;
@@ -29,12 +29,14 @@ public:
         bool IsRepeatableSnapshot;
         bool IsImmediateTx;
         bool IsWriteTx;
+        const NTable::TScheme& Scheme;
 
         TValidateOptions(ui64 LockTxId,
                          ui32 LockNodeId,
                          bool isRepeatableSnapshot,
                          bool isImmediateTx,
-                         bool isWriteTx);
+                         bool isWriteTx,
+                         const NTable::TScheme& scheme);
     };
 
     bool IsValidKey(TKeyDesc& key, const TValidateOptions& options) const;
@@ -46,7 +48,6 @@ public:
     const NMiniKQL::IEngineFlat::TValidationInfo& GetInfo() const;
 private:
     const TDataShard& Self;
-    const NTable::TDatabase& Db;
 
     NMiniKQL::IEngineFlat::TValidationInfo Info;
 };

@@ -50,7 +50,7 @@ EExecutionStatus TBuildWriteOutRSUnit::Execute(TOperation::TPtr op, TTransaction
     DataShard.ReleaseCache(*writeOp);
 
     if (writeOp->IsTxDataReleased()) {
-        switch (Pipeline.RestoreDataTx(writeOp, txc)) {
+        switch (Pipeline.RestoreWriteTx(writeOp, txc)) {
             case ERestoreDataStatus::Ok:
                 break;
             case ERestoreDataStatus::Restart:

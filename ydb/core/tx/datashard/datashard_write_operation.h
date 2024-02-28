@@ -19,7 +19,7 @@ class TValidatedWriteTx: TNonCopyable, public TValidatedTx {
 public:
     using TPtr = std::shared_ptr<TValidatedWriteTx>;
 
-    TValidatedWriteTx(TDataShard* self, TTransactionContext& txc, ui64 globalTxId, TInstant receivedAt, const NEvents::TDataEvents::TEvWrite& ev);
+    TValidatedWriteTx(TDataShard* self, ui64 globalTxId, TInstant receivedAt, const NEvents::TDataEvents::TEvWrite& ev);
     ~TValidatedWriteTx();
 
     EType GetType() const override { 
@@ -67,9 +67,9 @@ public:
     bool CanCancel();
     bool CheckCancelled();
 
-    ui32 ExtractKeys(bool allowErrors);
-    bool ReValidateKeys();
-    
+    ui32 ExtractKeys(const NTable::TScheme& scheme, bool allowErrors);
+    bool ReValidateKeys(const NTable::TScheme& scheme);
+
     ui64 HasOperations() const {
         return Matrix.GetRowCount() != 0;
     }
@@ -136,12 +136,12 @@ public:
     static TWriteOperation* CastWriteOperation(TOperation::TPtr op);
 
     explicit TWriteOperation(const TBasicOpInfo& op, ui64 tabletId);
-    explicit TWriteOperation(const TBasicOpInfo& op, NEvents::TDataEvents::TEvWrite::TPtr&& ev, TDataShard* self, TTransactionContext& txc);
+    explicit TWriteOperation(const TBasicOpInfo& op, NEvents::TDataEvents::TEvWrite::TPtr&& ev, TDataShard* self);
     ~TWriteOperation();
 
     void FillTxData(TValidatedWriteTx::TPtr dataTx);
-    void FillTxData(TDataShard* self, TTransactionContext& txc, const TActorId& target, const TString& txBody, const TVector<TSysTables::TLocksTable::TLock>& locks, ui64 artifactFlags);
-    void FillVolatileTxData(TDataShard* self, TTransactionContext& txc);
+    void FillTxData(TDataShard* self, const TActorId& target, const TString& txBody, const TVector<TSysTables::TLocksTable::TLock>& locks, ui64 artifactFlags);
+    void FillVolatileTxData(TDataShard* self);
 
     TString GetTxBody() const;
     void SetTxBody(const TString& txBody);
@@ -153,12 +153,12 @@ public:
         TOperation::Deactivate();
     }
 
-    ui32 ExtractKeys() {
-        return WriteTx ? WriteTx->ExtractKeys(false) : 0;
+    ui32 ExtractKeys(const NTable::TScheme& scheme) {
+        return WriteTx ? WriteTx->ExtractKeys(scheme, false) : 0;
     }
 
-    bool ReValidateKeys() {
-        return WriteTx ? WriteTx->ReValidateKeys() : true;
+    bool ReValidateKeys(const NTable::TScheme& scheme) {
+        return WriteTx ? WriteTx->ReValidateKeys(scheme) : true;
     }
 
     void MarkAsUsingSnapshot() {
@@ -203,7 +203,7 @@ public:
     }
 
     void ReleaseTxData(NTabletFlatExecutor::TTxMemoryProviderBase& provider);
-    ERestoreDataStatus RestoreTxData(TDataShard* self, TTransactionContext& txc);
+    ERestoreDataStatus RestoreTxData(TDataShard* self, NTable::TDatabase& db);
 
     // TOperation iface.
     void BuildExecutionPlan(bool loaded) override;
@@ -244,7 +244,7 @@ public:
     TValidatedWriteTx::TPtr& GetWriteTx() {
         return WriteTx;
     }
-    TValidatedWriteTx::TPtr BuildWriteTx(TDataShard* self, TTransactionContext& txc);
+    TValidatedWriteTx::TPtr BuildWriteTx(TDataShard* self);
 
     void ClearWriteTx() { 
         WriteTx = nullptr; 

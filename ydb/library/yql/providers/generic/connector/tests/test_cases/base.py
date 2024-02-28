@@ -62,6 +62,7 @@ class BaseTestCase:
                         GenericSettings.ClickHouseCluster(database=self.database.name, protocol=EProtocol.NATIVE)
                     ],
                     postgresql_clusters=[],
+                    ydb_clusters=[]
                 )
 
             case EDataSourceKind.POSTGRESQL:
@@ -69,6 +70,18 @@ class BaseTestCase:
                     date_time_format=EDateTimeFormat.YQL_FORMAT,
                     clickhouse_clusters=[],
                     postgresql_clusters=[GenericSettings.PostgreSQLCluster(database=self.database.name, schema=None)],
+                    ydb_clusters=[]
                 )
+            
+            case EDataSourceKind.YDB:
+                return GenericSettings(
+                    date_time_format=EDateTimeFormat.YQL_FORMAT,
+                    clickhouse_clusters=[],
+                    postgresql_clusters=[],
+                    ydb_clusters=[
+                        GenericSettings.YdbCluster(database=self.database.name)
+                    ],
+                )
+            
             case _:
                 raise Exception(f'invalid data source: {self.data_source_kind}')

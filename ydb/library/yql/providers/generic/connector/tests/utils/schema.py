@@ -10,6 +10,7 @@ from ydb.public.api.protos.ydb_value_pb2 import Type, OptionalType
 
 import ydb.library.yql.providers.generic.connector.tests.utils.clickhouse as clickhouse
 import ydb.library.yql.providers.generic.connector.tests.utils.postgresql as postgresql
+import ydb.library.yql.providers.generic.connector.tests.utils.ydb as utils_ydb
 
 YsonList: TypeAlias = yson.yson_types.YsonList
 
@@ -18,6 +19,7 @@ YsonList: TypeAlias = yson.yson_types.YsonList
 class DataSourceType:
     ch: clickhouse.Type = None
     pg: postgresql.Type = None
+    ydb: utils_ydb.Type = None
 
     def pick(self, kind: EDataSourceKind.ValueType) -> str:
         target = None
@@ -26,6 +28,8 @@ class DataSourceType:
                 target = self.ch
             case EDataSourceKind.POSTGRESQL:
                 target = self.pg
+            case EDataSourceKind.YDB:
+                target = self.ydb
             case _:
                 raise Exception(f'invalid data source: {kind}')
 

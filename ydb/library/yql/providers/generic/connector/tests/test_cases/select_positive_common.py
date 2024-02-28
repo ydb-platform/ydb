@@ -90,6 +90,7 @@ class Factory:
                 (
                     EDataSourceKind.CLICKHOUSE,
                     EDataSourceKind.POSTGRESQL,
+                    EDataSourceKind.YDB,
                 ),
             ),
             # SELECT COL1 FROM table
@@ -101,6 +102,7 @@ class Factory:
                 ],
                 (
                     EDataSourceKind.CLICKHOUSE,
+                    EDataSourceKind.YDB,
                     # NOTE: YQ-2264: doesn't work for PostgreSQL because of implicit cast to lowercase (COL1 -> col1)
                 ),
             ),
@@ -123,6 +125,7 @@ class Factory:
                 (
                     EDataSourceKind.CLICKHOUSE,
                     EDataSourceKind.POSTGRESQL,
+                    EDataSourceKind.YDB,
                 ),
             ),
             # SELECT col2, COL1 FROM table
@@ -134,6 +137,7 @@ class Factory:
                 ],
                 (
                     EDataSourceKind.CLICKHOUSE,
+                    EDataSourceKind.YDB,
                     # NOTE: YQ-2264: doesn't work for PostgreSQL because of implicit cast to lowercase (COL1 -> col1)
                 ),
             ),
@@ -156,6 +160,7 @@ class Factory:
                 ],
                 (
                     EDataSourceKind.CLICKHOUSE,
+                    EDataSourceKind.YDB,
                     # NOTE: YQ-2264: doesn't work for PostgreSQL because of implicit cast to lowercase (COL1 -> col1)
                 ),
             ),
@@ -176,6 +181,7 @@ class Factory:
                 (
                     EDataSourceKind.CLICKHOUSE,
                     EDataSourceKind.POSTGRESQL,
+                    EDataSourceKind.YDB,
                 ),
             ),
         )

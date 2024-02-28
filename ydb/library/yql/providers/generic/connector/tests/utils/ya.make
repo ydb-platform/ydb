@@ -18,6 +18,7 @@ PY_SRCS(
     schema.py
     settings.py
     sql.py
+    ydb.py
 )
 
 PEERDIR(

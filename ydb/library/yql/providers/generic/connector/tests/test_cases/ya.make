@@ -13,6 +13,7 @@ PY_SRCS(
     select_positive_common.py
     select_positive_postgresql.py
     select_positive_postgresql_schema.py
+    select_positive_ydb.py
 )
 
 PEERDIR(

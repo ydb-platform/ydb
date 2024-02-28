@@ -20,6 +20,14 @@ services:
     ports:
       - 9000
       - 8123
+  ydb:
+    image: cr.yandex/yc/yandex-docker-local-ydb@sha256:f22b9e27f65cdda05357c6395b1e2d1e94efb80f4c593f583ecba8c016c10314
+    container_name: ${USER}_connector-integration-tests-ydb
+    environment:
+      GRPC_PORT: 60000
+    hostname: localhost
+    ports:
+      - 60000:60000
   fq-connector-go:
     container_name: ${USER}_connector-integration-tests-fq-connector-go
     image: ghcr.io/ydb-platform/fq-connector-go:v0.2.0@sha256:996ea072265911945b56f5fd5c10b0655b78e6c9e455701d1985e808b5516426

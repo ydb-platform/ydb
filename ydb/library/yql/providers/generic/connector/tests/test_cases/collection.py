@@ -9,6 +9,7 @@ import ydb.library.yql.providers.generic.connector.tests.test_cases.select_posit
 import ydb.library.yql.providers.generic.connector.tests.test_cases.select_positive_common as select_positive_common
 import ydb.library.yql.providers.generic.connector.tests.test_cases.select_positive_postgresql as select_positive_postgresql
 import ydb.library.yql.providers.generic.connector.tests.test_cases.select_positive_postgresql_schema as select_positive_postgresql_schema
+import ydb.library.yql.providers.generic.connector.tests.test_cases.select_positive_ydb as select_positive_ydb
 from utils.settings import Settings
 
 
@@ -25,6 +26,7 @@ class Collection(object):
             'select_positive_postgresql_schema': select_positive_postgresql_schema.Factory().make_test_cases(),
             'select_positive_clickhouse': select_positive_clickhouse.Factory().make_test_cases()
             + select_positive_common.Factory(ss).make_test_cases(EDataSourceKind.CLICKHOUSE),
+            'select_positive_ydb': select_positive_ydb.Factory().make_test_cases(),
             'select_datetime': select_datetime.Factory().make_test_cases(),
         }
 

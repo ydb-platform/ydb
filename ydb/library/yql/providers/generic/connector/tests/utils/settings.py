@@ -47,6 +47,19 @@ class Settings:
 
     postgresql: PostgreSQL
 
+    @dataclass
+    class Ydb:
+        cluster_name: str
+        host_external: str
+        host_internal: str
+        port_external: int
+        port_internal: int
+        dbname: str
+        username: str
+        password: str
+
+    ydb: Ydb
+
     @classmethod
     def from_env(cls) -> 'Settings':
         docker_compose_file = yatest.common.source_path(
@@ -83,6 +96,16 @@ class Settings:
                 username='user',
                 password='password',
             ),
+            ydb=cls.Ydb(
+                cluster_name='ydb_integration_test',
+                host_external='localhost',
+                host_internal='ydb',
+                port_external=60000,
+                port_internal=60000,
+                dbname='local',
+                username='user',
+                password='password',
+            ),
         )
 
     def get_cluster_name(self, data_source_kind: EDataSourceKind) -> str:
@@ -91,6 +114,8 @@ class Settings:
                 return self.clickhouse.cluster_name
             case EDataSourceKind.POSTGRESQL:
                 return self.postgresql.cluster_name
+            case EDataSourceKind.YDB:
+                return self.ydb.cluster_name
             case _:
                 raise Exception(f'invalid data source: {EDataSourceKind.Name(data_source_kind)}')
 
@@ -118,3 +143,12 @@ class GenericSettings:
     postgresql_clusters: Sequence[PostgreSQLCluster]
 
     date_time_format: EDateTimeFormat
+
+    @dataclass
+    class YdbCluster:
+        def __hash__(self) -> int:
+            return hash(self.database)
+
+        database: str
+
+    ydb_clusters: Sequence[YdbCluster]

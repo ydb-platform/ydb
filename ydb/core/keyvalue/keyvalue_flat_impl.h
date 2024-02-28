@@ -63,9 +63,11 @@ protected:
                 alter.AddColumn(TABLE_ID, "key", KEY_TAG, NScheme::TSmallBoundedString::TypeId, false);
                 alter.AddColumnToKey(TABLE_ID, KEY_TAG);
                 alter.AddColumn(TABLE_ID, "value", VALUE_TAG, NScheme::TString::TypeId, false);
-                // Init log batching settings
-                alter.SetExecutorAllowLogBatching(true);
-                alter.SetExecutorLogFlushPeriod(TDuration::MicroSeconds(500));
+                if (NKikimr::AppData(ctx)->FeatureFlags.GetEnableKeyvalueLogBatching()) { 
+                    // Init log batching settings
+                    alter.SetExecutorAllowLogBatching(true);
+                    alter.SetExecutorLogFlushPeriod(TDuration::MicroSeconds(500));
+                }
                 Self.State.Clear();
             } else {
                 LOG_DEBUG_S(ctx, NKikimrServices::KEYVALUE, "KeyValue# " << txc.Tablet << " TTxInit flat ReadDb Tree");

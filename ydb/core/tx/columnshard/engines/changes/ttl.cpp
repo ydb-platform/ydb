@@ -44,20 +44,14 @@ std::optional<TPortionInfoWithBlobs> TTTLColumnEngineChanges::UpdateEvictedPorti
     auto serializer = tiering->GetSerializer(evictFeatures.TargetTierName);
     auto blobSchema = context.SchemaVersions.GetSchema(portionInfo.GetMinSnapshot());
     auto portionWithBlobs = TPortionInfoWithBlobs::RestorePortion(portionInfo, srcBlobs, blobSchema->GetIndexInfo(), SaverContext.GetStoragesManager());
-    if (!serializer) {
-        // Nothing to recompress. We have no other kinds of evictions yet.
-        evictFeatures.DataChanges = false;
-        portionWithBlobs.GetPortionInfo().MutableMeta().SetTierName(evictFeatures.TargetTierName);
-        return portionWithBlobs;
-    }
-
-    auto resultSchema = context.SchemaVersions.GetLastSchema();
-    AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("portion_for_eviction", portionInfo.DebugString());
-
-    TSaverContext saverContext(SaverContext.GetStoragesManager());
-    saverContext.SetTierName(evictFeatures.TargetTierName).SetExternalSerializer(*serializer);
     portionWithBlobs.GetPortionInfo().MutableMeta().SetTierName(evictFeatures.TargetTierName);
-    return portionWithBlobs.ChangeSaver(resultSchema, saverContext, SaverContext.GetStoragesManager()->GetOperatorVerified(saverContext.GetTierName()));
+    auto resultSchema = context.SchemaVersions.GetLastSchema();
+    TSaverContext saverContext(SaverContext.GetStoragesManager());
+    if (serializer) {
+        saverContext.SetExternalSerializer(*serializer);
+    }
+    AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("portion_for_eviction", portionInfo.DebugString());
+    return portionWithBlobs.ChangeSaver(resultSchema, saverContext);
 }
 
 NKikimr::TConclusionStatus TTTLColumnEngineChanges::DoConstructBlobs(TConstructionContext& context) noexcept {

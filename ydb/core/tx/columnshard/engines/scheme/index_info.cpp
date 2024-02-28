@@ -305,7 +305,7 @@ TColumnSaver TIndexInfo::GetColumnSaver(const ui32 columnId, const TSaverContext
     }
 
     if (!!context.GetExternalSerializer()) {
-        return TColumnSaver(transformer, *context.GetExternalSerializer());
+        return TColumnSaver(transformer, context.GetExternalSerializer());
     } else if (!!serializer) {
         return TColumnSaver(transformer, serializer);
     } else if (DefaultSerializer) {

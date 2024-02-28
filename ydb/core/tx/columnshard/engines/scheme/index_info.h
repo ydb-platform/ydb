@@ -60,7 +60,7 @@ public:
     }
 
     const TString& GetColumnStorageId(const ui32 columnId, const TString& specialTier) const {
-        if (specialTier) {
+        if (specialTier && specialTier != IStoragesManager::DefaultStorageId) {
             return specialTier;
         } else {
             auto it = ColumnFeatures.find(columnId);

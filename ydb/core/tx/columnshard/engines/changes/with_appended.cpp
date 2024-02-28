@@ -99,7 +99,7 @@ std::vector<TPortionInfoWithBlobs> TChangesWithAppend::MakeAppendedPortions(cons
     auto resultSchema = context.SchemaVersions.GetSchema(snapshot);
     TEntityGroups groups(IStoragesManager::DefaultStorageId);
     for (auto&& i : resultSchema->GetIndexInfo().GetEntityIds()) {
-        groups.Add(i, resultSchema->GetIndexInfo().GetEntityStorageId(i, ""));
+        groups.Add(i, resultSchema->GetIndexInfo().GetEntityStorageId(i, IStoragesManager::DefaultStorageId));
     }
 
     std::shared_ptr<NOlap::TSerializationStats> stats = std::make_shared<NOlap::TSerializationStats>();
@@ -127,7 +127,7 @@ std::vector<TPortionInfoWithBlobs> TChangesWithAppend::MakeAppendedPortions(cons
             out.emplace_back(TPortionInfoWithBlobs::BuildByBlobs(slice.GroupChunksByBlobs(groups), nullptr, pathId, snapshot, SaverContext.GetStoragesManager()));
             NArrow::TFirstLastSpecialKeys primaryKeys(slice.GetFirstLastPKBatch(resultSchema->GetIndexInfo().GetReplaceKey()));
             NArrow::TMinMaxSpecialKeys snapshotKeys(b, TIndexInfo::ArrowSchemaSnapshot());
-            out.back().GetPortionInfo().AddMetadata(*resultSchema, primaryKeys, snapshotKeys, SaverContext.GetTierName());
+            out.back().GetPortionInfo().AddMetadata(*resultSchema, primaryKeys, snapshotKeys, IStoragesManager::DefaultStorageId);
             recordIdx += slice.GetRecordsCount();
         }
     }

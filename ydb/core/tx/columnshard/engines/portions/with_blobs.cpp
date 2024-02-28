@@ -147,28 +147,36 @@ NKikimr::NOlap::TPortionInfoWithBlobs TPortionInfoWithBlobs::BuildByBlobs(std::v
     return result;
 }
 
-std::optional<NKikimr::NOlap::TPortionInfoWithBlobs> TPortionInfoWithBlobs::ChangeSaver(ISnapshotSchema::TPtr currentSchema, const TSaverContext& saverContext, const std::shared_ptr<IBlobsStorageOperator>& bOperator) const {
+std::optional<NKikimr::NOlap::TPortionInfoWithBlobs> TPortionInfoWithBlobs::ChangeSaver(ISnapshotSchema::TPtr currentSchema, const TSaverContext& saverContext) const {
     TPortionInfoWithBlobs result(PortionInfo, CachedBatch);
     result.PortionInfo.Records.clear();
-    std::optional<TPortionInfoWithBlobs::TBlobInfo::TBuilder> bBuilder;
+    auto& index = currentSchema->GetIndexInfo();
+    THashMap<TString, TPortionInfoWithBlobs::TBlobInfo::TBuilder> bBuilderByStorage;
     for (auto& rec : PortionInfo.Records) {
         auto field = currentSchema->GetFieldByColumnIdVerified(rec.ColumnId);
 
         const TString blobOriginal = GetBlobByRangeVerified(rec.ColumnId, rec.Chunk);
         {
-            auto rb = NArrow::TStatusValidator::GetValid(currentSchema->GetColumnLoaderVerified(rec.ColumnId)->Apply(blobOriginal));
-            auto columnSaver = currentSchema->GetColumnSaver(rec.ColumnId, saverContext);
-            const TString newBlob = columnSaver.Apply(rb);
-            if (newBlob.size() >= TPortionInfo::BLOB_BYTES_LIMIT) {
-                return {};
+            TString newBlob = blobOriginal;
+            if (!!saverContext.GetExternalSerializer()) {
+                auto rb = NArrow::TStatusValidator::GetValid(currentSchema->GetColumnLoaderVerified(rec.ColumnId)->Apply(blobOriginal));
+                Y_ABORT_UNLESS(rb);
+                Y_ABORT_UNLESS(rb->num_columns() == 1);
+                auto columnSaver = currentSchema->GetColumnSaver(rec.ColumnId, saverContext);
+                newBlob = columnSaver.Apply(rb);
+                if (newBlob.size() >= TPortionInfo::BLOB_BYTES_LIMIT) {
+                    return {};
+                }
             }
-            if (!bBuilder || result.GetBlobs().back().GetSize() + newBlob.size() >= TPortionInfo::BLOB_BYTES_LIMIT) {
-                bBuilder = result.StartBlob(bOperator);
+            const TString& storageId = index.GetColumnStorageId(rec.GetColumnId(), PortionInfo.GetMeta().GetTierName());
+            auto itBuilder = bBuilderByStorage.find(storageId);
+            if (itBuilder == bBuilderByStorage.end()) {
+                itBuilder = bBuilderByStorage.emplace(storageId, result.StartBlob(saverContext.GetStoragesManager()->GetOperatorVerified(storageId))).first;
+            } else if (itBuilder->second.GetSize() + newBlob.size() >= TPortionInfo::BLOB_BYTES_LIMIT) {
+                itBuilder->second = result.StartBlob(saverContext.GetStoragesManager()->GetOperatorVerified(storageId));
             }
-            Y_ABORT_UNLESS(rb);
-            Y_ABORT_UNLESS(rb->num_columns() == 1);
 
-            bBuilder->AddChunk(std::make_shared<TSimpleOrderedColumnChunk>(rec, newBlob));
+            itBuilder->second.AddChunk(std::make_shared<TSimpleOrderedColumnChunk>(rec, newBlob));
         }
     }
     const auto pred = [](const TColumnRecord& l, const TColumnRecord& r) {

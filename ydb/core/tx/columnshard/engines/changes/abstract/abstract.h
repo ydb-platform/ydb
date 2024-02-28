@@ -39,7 +39,6 @@ class TPortionInfoWithBlobs;
 struct TPortionEvictionFeatures {
     const TString TargetTierName;
     const ui64 PathId;      // portion path id for cold-storage-key construct
-    bool DataChanges = true;
 
     TPortionEvictionFeatures(const TString& targetTierName, const ui64 pathId)
         : TargetTierName(targetTierName)

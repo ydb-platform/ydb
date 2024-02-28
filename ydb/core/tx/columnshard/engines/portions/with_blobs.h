@@ -34,12 +34,15 @@ public:
         private:
             TBlobInfo* OwnerBlob;
             TPortionInfoWithBlobs* OwnerPortion;
-
         public:
             TBuilder(TBlobInfo& blob, TPortionInfoWithBlobs& portion)
                 : OwnerBlob(&blob)
                 , OwnerPortion(&portion) {
             }
+            ui64 GetSize() const {
+                return OwnerBlob->GetSize();
+            }
+
             void AddChunk(const std::shared_ptr<IPortionDataChunk>& chunk) {
                 return OwnerBlob->AddChunk(*OwnerPortion, chunk);
             }
@@ -106,7 +109,7 @@ public:
     static TPortionInfoWithBlobs BuildByBlobs(std::vector<TSplittedBlob>&& chunks,
         std::shared_ptr<arrow::RecordBatch> batch, const ui64 granule, const TSnapshot& snapshot, const std::shared_ptr<IStoragesManager>& operators);
 
-    std::optional<TPortionInfoWithBlobs> ChangeSaver(ISnapshotSchema::TPtr currentSchema, const TSaverContext& saverContext, const std::shared_ptr<IBlobsStorageOperator>& bOperator) const;
+    std::optional<TPortionInfoWithBlobs> ChangeSaver(ISnapshotSchema::TPtr currentSchema, const TSaverContext& saverContext) const;
 
     const TString& GetBlobByRangeVerified(const ui32 columnId, const ui32 chunkId) const {
         for (auto&& b : Blobs) {

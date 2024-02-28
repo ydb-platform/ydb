@@ -12,30 +12,12 @@ namespace NKikimr::NOlap {
 
 class TSaverContext {
 private:
-    TString TierName;
-    std::optional<NArrow::NSerialization::TSerializerContainer> ExternalSerializer;
-    YDB_READONLY_DEF(std::shared_ptr<IBlobsStorageOperator>, StorageOperator);
+    YDB_ACCESSOR_DEF(NArrow::NSerialization::TSerializerContainer, ExternalSerializer);
     YDB_READONLY_DEF(std::shared_ptr<IStoragesManager>, StoragesManager);
 public:
     TSaverContext(const std::shared_ptr<IStoragesManager>& storagesManager)
         : StoragesManager(storagesManager) {
 
-    }
-
-    const std::optional<NArrow::NSerialization::TSerializerContainer>& GetExternalSerializer() const {
-        return ExternalSerializer;
-    }
-    TSaverContext& SetExternalSerializer(const std::optional<NArrow::NSerialization::TSerializerContainer>& value) {
-        AFL_VERIFY(!!value);
-        ExternalSerializer = value;
-        return *this;
-    }
-    const TString& GetTierName() const {
-        return TierName;
-    }
-    TSaverContext& SetTierName(const TString& value) {
-        TierName = value;
-        return *this;
     }
 };
 

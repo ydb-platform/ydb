@@ -288,6 +288,7 @@ DEFINE_ENUM(EObjectType,
     ((AreaMap)                                      (714))
     ((HunkStorage)                                  (715))
     ((HunkTablet)                                   (716))
+    ((VirtualTabletCellMap)                         (717))
 
     // Node Tracker stuff
     ((Rack)                                         (800))
@@ -326,6 +327,7 @@ DEFINE_ENUM(EObjectType,
     ((ChaosTableReplica)                           (1205))
     ((ChaosReplicatedTable)                        (1206))
     ((ReplicationCardCollocation)                  (1207))
+    ((VirtualChaosCellMap)                         (1208))
 
     // Maintenance tracker stuff
     ((ClusterProxyNode)                            (1500))

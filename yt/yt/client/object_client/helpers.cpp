@@ -92,11 +92,13 @@ bool IsVersionedType(EObjectType type)
         type == EObjectType::LockMap ||
         type == EObjectType::TabletMap ||
         type == EObjectType::TabletCellMap ||
+        type == EObjectType::VirtualTabletCellMap ||
         type == EObjectType::TabletCellNode ||
         type == EObjectType::TabletCellBundleMap ||
         type == EObjectType::TabletActionMap ||
         type == EObjectType::AreaMap ||
         type == EObjectType::ChaosCellMap ||
+        type == EObjectType::VirtualChaosCellMap ||
         type == EObjectType::ChaosCellBundleMap ||
         type == EObjectType::SysNode ||
         type == EObjectType::PortalEntrance ||

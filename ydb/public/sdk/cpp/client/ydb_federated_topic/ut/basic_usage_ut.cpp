@@ -696,6 +696,7 @@ Y_UNIT_TEST_SUITE(BasicUsage) {
             UNIT_ASSERT(!messages.empty());
 
             auto& message = messages.front();
+            Cerr << "Data received: " << message.DebugString(false);
             UNIT_ASSERT_VALUES_EQUAL(message.GetOffset(), commitOnFirstReadCount);
             UNIT_ASSERT_VALUES_EQUAL(message.GetData(), sentMessages[commitOnFirstReadCount]);
 

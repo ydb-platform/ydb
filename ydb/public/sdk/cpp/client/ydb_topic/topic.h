@@ -1270,20 +1270,21 @@ TString DebugString(const TWriteSessionEvent::TEvent& event);
 using TSessionClosedHandler = std::function<void(const TSessionClosedEvent&)>;
 
 //! Settings for write session.
-struct TWriteSessionSettings : public TRequestSettings<TWriteSessionSettings> {
-    using TSelf = TWriteSessionSettings;
+template <typename TDerived>
+struct TWriteSessionSettingsBase : public TRequestSettings<TWriteSessionSettingsBase<TDerived>> {
+    using TSelf = TDerived;
 
-    TWriteSessionSettings() = default;
-    TWriteSessionSettings(const TWriteSessionSettings&) = default;
-    TWriteSessionSettings(TWriteSessionSettings&&) = default;
-    TWriteSessionSettings(const TString& path, const TString& producerId, const TString& messageGroupId) {
+    TWriteSessionSettingsBase() = default;
+    TWriteSessionSettingsBase(const TWriteSessionSettingsBase&) = default;
+    TWriteSessionSettingsBase(TWriteSessionSettingsBase&&) = default;
+    TWriteSessionSettingsBase(const TString& path, const TString& producerId, const TString& messageGroupId) {
         Path(path);
         ProducerId(producerId);
         MessageGroupId(messageGroupId);
     }
 
-    TWriteSessionSettings& operator=(const TWriteSessionSettings&) = default;
-    TWriteSessionSettings& operator=(TWriteSessionSettings&&) = default;
+    TWriteSessionSettingsBase& operator=(const TWriteSessionSettingsBase&) = default;
+    TWriteSessionSettingsBase& operator=(TWriteSessionSettingsBase&&) = default;
 
     //! Path of topic to write.
     FLUENT_SETTING(TString, Path);
@@ -1328,7 +1329,7 @@ struct TWriteSessionSettings : public TRequestSettings<TWriteSessionSettings> {
     FLUENT_SETTING(IRetryPolicy::TPtr, RetryPolicy);
 
     //! User metadata that may be attached to write session.
-    TWriteSessionSettings& AppendSessionMeta(const TString& key, const TString& value) {
+    TWriteSessionSettingsBase& AppendSessionMeta(const TString& key, const TString& value) {
         Meta_.Fields[key] = value;
         return *this;
     };
@@ -1397,6 +1398,9 @@ struct TWriteSessionSettings : public TRequestSettings<TWriteSessionSettings> {
     FLUENT_SETTING_DEFAULT(bool, ValidateSeqNo, true);
 };
 
+struct TWriteSessionSettings : public TWriteSessionSettingsBase<TWriteSessionSettings> {
+};
+
 //! Read settings for single topic.
 struct TTopicReadSettings {
     using TSelf = TTopicReadSettings;
@@ -1426,8 +1430,9 @@ struct TTopicReadSettings {
 };
 
 //! Settings for read session.
-struct TReadSessionSettings: public TRequestSettings<TReadSessionSettings> {
-    using TSelf = TReadSessionSettings;
+template <typename TDerived>
+struct TReadSessionSettingsBase: public TRequestSettings<TReadSessionSettingsBase<TDerived>> {
+    using TSelf = TDerived;
 
     struct TEventHandlers {
         using TSelf = TEventHandlers;
@@ -1566,6 +1571,10 @@ struct TReadSessionSettings: public TRequestSettings<TReadSessionSettings> {
 
     //! Log.
     FLUENT_SETTING_OPTIONAL(TLog, Log);
+};
+
+//! Settings for read session.
+struct TReadSessionSettings: public TReadSessionSettingsBase<TReadSessionSettings> {
 };
 
 //! Contains the message to write and all the options.

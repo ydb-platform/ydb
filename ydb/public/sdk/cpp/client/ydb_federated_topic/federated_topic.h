@@ -13,6 +13,7 @@ namespace NYdb::NFederatedTopic {
 using NTopic::TPrintable;
 using TDbInfo = Ydb::FederationDiscovery::DatabaseInfo;
 
+using TTopicReadSettings = NTopic::TTopicReadSettings;
 using TSessionClosedEvent = NTopic::TSessionClosedEvent;
 
 //! Federated partition session.
@@ -241,7 +242,7 @@ TString DebugString(const TReadSessionEvent::TEvent& event);
 
 
 //! Settings for federated write session.
-struct TFederatedWriteSessionSettings : public NTopic::TWriteSessionSettings {
+struct TFederatedWriteSessionSettings : public NTopic::TWriteSessionSettingsBase<TFederatedWriteSessionSettings> {
     using TSelf = TFederatedWriteSessionSettings;
 
     //! Preferred database
@@ -259,21 +260,21 @@ struct TFederatedWriteSessionSettings : public NTopic::TWriteSessionSettings {
     TFederatedWriteSessionSettings& operator=(TFederatedWriteSessionSettings&&) = default;
 
     TFederatedWriteSessionSettings(const TString& path, const TString& producerId, const TString& messageGroupId)
-        : NTopic::TWriteSessionSettings(path, producerId, messageGroupId) {
+        : NTopic::TWriteSessionSettingsBase<TSelf>(path, producerId, messageGroupId) {
     }
 
-    TFederatedWriteSessionSettings(const NTopic::TWriteSessionSettings& settings)
-        : NTopic::TWriteSessionSettings(settings) {
-    }
-    TFederatedWriteSessionSettings(NTopic::TWriteSessionSettings&& settings)
-        : NTopic::TWriteSessionSettings(std::move(settings)) {
-    }
+    // TFederatedWriteSessionSettings(const NTopic::TWriteSessionSettings& settings)
+    //     : NTopic::TWriteSessionSettingsBase<TSelf>(settings) {
+    // }
+    // TFederatedWriteSessionSettings(NTopic::TWriteSessionSettings&& settings)
+    //     : NTopic::TWriteSessionSettingsBase<TSelf>(std::move(settings)) {
+    // }
     // TFederatedWriteSessionSettings& operator=(const NTopic::TWriteSessionSettings&);
     // TFederatedWriteSessionSettings& operator=(NTopic::TWriteSessionSettings&&);
 };
 
 //! Settings for read session.
-struct TFederatedReadSessionSettings: public NTopic::TReadSessionSettings {
+struct TFederatedReadSessionSettings: public NTopic::TReadSessionSettingsBase<TFederatedReadSessionSettings> {
     using TSelf = TFederatedReadSessionSettings;
 
     NTopic::TReadSessionSettings& EventHandlers(const TEventHandlers&) {
@@ -519,18 +520,18 @@ void TPrintable<TFederatedPartitionSession>::DebugString(TStringBuilder& res, bo
 template<>
 void TPrintable<NFederatedTopic::TReadSessionEvent::TDataReceivedEvent>::DebugString(TStringBuilder& res, bool) const;
 template<>
-void TPrintable<NFederatedTopic::TReadSessionEvent::TFederated<NFederatedTopic::TReadSessionEvent::TDataReceivedEvent::TMessage>>::DebugString(TStringBuilder& res, bool) const;
+void TPrintable<NFederatedTopic::TReadSessionEvent::TFederated<NTopic::TReadSessionEvent::TDataReceivedEvent::TMessage>>::DebugString(TStringBuilder& res, bool) const;
 template<>
-void TPrintable<NFederatedTopic::TReadSessionEvent::TFederated<NFederatedTopic::TReadSessionEvent::TDataReceivedEvent::TCompressedMessage>>::DebugString(TStringBuilder& res, bool) const;
+void TPrintable<NFederatedTopic::TReadSessionEvent::TFederated<NTopic::TReadSessionEvent::TDataReceivedEvent::TCompressedMessage>>::DebugString(TStringBuilder& res, bool) const;
 template<>
-void TPrintable<NFederatedTopic::TReadSessionEvent::TFederated<NFederatedTopic::TReadSessionEvent::TCommitOffsetAcknowledgementEvent>>::DebugString(TStringBuilder& res, bool) const;
+void TPrintable<NFederatedTopic::TReadSessionEvent::TFederated<NTopic::TReadSessionEvent::TCommitOffsetAcknowledgementEvent>>::DebugString(TStringBuilder& res, bool) const;
 template<>
-void TPrintable<NFederatedTopic::TReadSessionEvent::TFederated<NFederatedTopic::TReadSessionEvent::TStartPartitionSessionEvent>>::DebugString(TStringBuilder& res, bool) const;
+void TPrintable<NFederatedTopic::TReadSessionEvent::TFederated<NTopic::TReadSessionEvent::TStartPartitionSessionEvent>>::DebugString(TStringBuilder& res, bool) const;
 template<>
-void TPrintable<NFederatedTopic::TReadSessionEvent::TFederated<NFederatedTopic::TReadSessionEvent::TStopPartitionSessionEvent>>::DebugString(TStringBuilder& res, bool) const;
+void TPrintable<NFederatedTopic::TReadSessionEvent::TFederated<NTopic::TReadSessionEvent::TStopPartitionSessionEvent>>::DebugString(TStringBuilder& res, bool) const;
 template<>
-void TPrintable<NFederatedTopic::TReadSessionEvent::TFederated<NFederatedTopic::TReadSessionEvent::TPartitionSessionStatusEvent>>::DebugString(TStringBuilder& res, bool) const;
+void TPrintable<NFederatedTopic::TReadSessionEvent::TFederated<NTopic::TReadSessionEvent::TPartitionSessionStatusEvent>>::DebugString(TStringBuilder& res, bool) const;
 template<>
-void TPrintable<NFederatedTopic::TReadSessionEvent::TFederated<NFederatedTopic::TReadSessionEvent::TPartitionSessionClosedEvent>>::DebugString(TStringBuilder& res, bool) const;
+void TPrintable<NFederatedTopic::TReadSessionEvent::TFederated<NTopic::TReadSessionEvent::TPartitionSessionClosedEvent>>::DebugString(TStringBuilder& res, bool) const;
 
 }

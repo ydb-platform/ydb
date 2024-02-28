@@ -1,5 +1,7 @@
 #include "kqp_write_actor.h"
 
+#include "kqp_write_table.h"
+
 #include <util/generic/singleton.h>
 #include <ydb/core/actorlib_impl/long_timer.h>
 #include <ydb/core/base/tablet_pipecache.h>
@@ -44,6 +46,9 @@ namespace {
 
         return delay;
     }
+
+    struct TResumeNotificationManager {
+    };
 
     constexpr i64 kInFlightMemoryLimitPerActor = 1_GB;
 }
@@ -180,6 +185,7 @@ private:
         if (ev->Get()->Request->ErrorCount > 0) {
             RuntimeError(TStringBuilder() << "Failed to get table: "
                 << TableId << "'", NYql::NDqProto::StatusIds::SCHEME_ERROR);
+            return;
         }
         auto& resultSet = ev->Get()->Request->ResultSet;
         YQL_ENSURE(resultSet.size() == 1);
@@ -191,6 +197,7 @@ private:
 
         if (SchemeEntry->TableId.SchemaVersion != TableId.SchemaVersion) {
             RuntimeError(TStringBuilder() << "Schema was updated.", NYql::NDqProto::StatusIds::SCHEME_ERROR);
+            return;
         }
 
         Prepare();
@@ -284,6 +291,7 @@ private:
             RuntimeError(
                 initStatus.GetErrorMessage(),
                 NYql::NDqProto::StatusIds::INTERNAL_ERROR);
+            return;
         }
 
         const auto& splittedData = shardsSplitter->GetSplitData();
@@ -331,6 +339,7 @@ private:
             RuntimeError(
                 TStringBuilder() << "ShardId=" << shardId << " for table '" << Settings.GetTable().GetPath() << "' retry limit exceeded",
                 NYql::NDqProto::StatusIds::UNAVAILABLE);
+            return;
         }
 
         auto evWrite = std::make_unique<NKikimr::NEvents::TDataEvents::TEvWrite>(
@@ -434,17 +443,27 @@ private:
 
     void Prepare() {
         YQL_ENSURE(SchemeEntry);
+        if (!SchemeEntry->ColumnTableInfo) {
+            RuntimeError("Expected column table.", NYql::NDqProto::StatusIds::SCHEME_ERROR);
+            return;
+        }
+        if (!SchemeEntry->ColumnTableInfo->Description.HasSchema()) {
+            RuntimeError("Unknown schema for column table.", NYql::NDqProto::StatusIds::SCHEME_ERROR);
+            return;
+        }
+
+        Serializer = CreateColumnShardPayloadSerializer(
+            *SchemeEntry,
+            TConstArrayRef<NKikimrKqp::TKqpColumnMetadataProto>{
+                *Settings.GetColumns().data(),
+                static_cast<size_t>(Settings.GetColumns().size())},
+            TypeEnv);
+
         std::vector<std::pair<TString, NScheme::TTypeInfo>> batchBuilderColumns;
         THashMap<ui32, ui32> writeColumnIdToIndex;
         {
             batchBuilderColumns.reserve(Settings.ColumnsSize());
             WriteColumnIds.reserve(Settings.ColumnsSize());
-            if (!SchemeEntry->ColumnTableInfo) {
-                RuntimeError("Expected column table.", NYql::NDqProto::StatusIds::SCHEME_ERROR);
-            }
-            if (!SchemeEntry->ColumnTableInfo->Description.HasSchema()) {
-                RuntimeError("Unknown schema for column table.", NYql::NDqProto::StatusIds::SCHEME_ERROR);
-            }
             i32 number = 0;
             for (const auto& column : SchemeEntry->ColumnTableInfo->Description.GetSchema().GetColumns()) {
                 Y_ABORT_UNLESS(column.HasTypeId());
@@ -489,6 +508,7 @@ private:
         TString err;
         if (!BatchBuilder->Start(batchBuilderColumns, 0, 0, err)) {
             RuntimeError("Failed to start batch builder: " + err, NYql::NDqProto::StatusIds::PRECONDITION_FAILED);
+            return;
         }
     }
 
@@ -535,6 +555,8 @@ private:
     std::optional<NSchemeCache::TSchemeCacheNavigate::TEntry> SchemeEntry;
 
     std::unique_ptr<NArrow::TArrowBatchBuilder> BatchBuilder;
+
+    IPayloadSerializerPtr Serializer = nullptr;
 
     struct TInFlightBatch {
         TString Data;

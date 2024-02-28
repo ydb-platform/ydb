@@ -106,12 +106,14 @@ public:
         std::shared_ptr<NYdb::ICredentialsProviderFactory> credentialsProviderFactory,
         const NActors::TActorId& computeActorId,
         i64 bufferSize,
-        bool rangesMode)
+        bool rangesMode,
+        bool skipCommit)
         : TActor<TDqPqReadActor>(&TDqPqReadActor::StateFunc)
         , InputIndex(inputIndex)
         , TxId(txId)
         , BufferSize(bufferSize)
         , RangesMode(rangesMode)
+        , SkipCommit(skipCommit)
         , HolderFactory(holderFactory)
         , LogPrefix(TStringBuilder() << "SelfId: " << this->SelfId() << ", TxId: " << TxId << ", task: " << taskId << ". PQ source. ")
         , Driver(std::move(driver))
@@ -225,7 +227,9 @@ public:
             } else {
                 SRC_LOG_D("Commit offset: [" << offsets->first << ", " << offsets->second << "]");
             }
-            valuePair.first.Commit();
+            if (!SkipCommit) {
+                valuePair.first.Commit();
+            }
             DeferredCommits.pop();
         }
     }
@@ -583,6 +587,7 @@ private:
     const TTxId TxId;
     const i64 BufferSize;
     const bool RangesMode;
+    const bool SkipCommit;
     const THolderFactory& HolderFactory;
     const TString LogPrefix;
     NYdb::TDriver Driver;
@@ -618,7 +623,8 @@ std::pair<IDqComputeActorAsyncInput*, NActors::IActor*> CreateDqPqReadActor(
     const NActors::TActorId& computeActorId,
     const NKikimr::NMiniKQL::THolderFactory& holderFactory,
     i64 bufferSize,
-    bool rangesMode
+    bool rangesMode,
+    bool skipCommit
     )
 {
     auto taskParamsIt = taskParams.find("pq");
@@ -643,15 +649,16 @@ std::pair<IDqComputeActorAsyncInput*, NActors::IActor*> CreateDqPqReadActor(
         CreateCredentialsProviderFactoryForStructuredToken(credentialsFactory, token, addBearerToToken),
         computeActorId,
         bufferSize,
-        rangesMode
+        rangesMode,
+        skipCommit
     );
 
     return {actor, actor};
 }
 
-void RegisterDqPqReadActorFactory(TDqAsyncIoFactory& factory, NYdb::TDriver driver, ISecuredServiceAccountCredentialsFactory::TPtr credentialsFactory, bool rangesMode) {
+void RegisterDqPqReadActorFactory(TDqAsyncIoFactory& factory, NYdb::TDriver driver, ISecuredServiceAccountCredentialsFactory::TPtr credentialsFactory, bool rangesMode, bool skipCommit) {
     factory.RegisterSource<NPq::NProto::TDqPqTopicSource>("PqSource",
-        [driver = std::move(driver), credentialsFactory = std::move(credentialsFactory), rangesMode](
+        [driver = std::move(driver), credentialsFactory = std::move(credentialsFactory), rangesMode, skipCommit](
             NPq::NProto::TDqPqTopicSource&& settings,
             IDqAsyncIoFactory::TSourceArguments&& args)
     {
@@ -669,7 +676,8 @@ void RegisterDqPqReadActorFactory(TDqAsyncIoFactory& factory, NYdb::TDriver driv
             args.ComputeActorId,
             args.HolderFactory,
             PQReadDefaultFreeSpace,
-            rangesMode);
+            rangesMode,
+            skipCommit);
     });
 
 }

@@ -7,6 +7,8 @@
 #include <ydb/core/kqp/compute_actor/kqp_compute_events.h>
 #include <ydb/core/tx/columnshard/blobs_action/memory.h>
 #include <ydb/core/tx/columnshard/blobs_action/tier/storage.h>
+#include <ydb/core/tx/conveyor/usage/abstract.h>
+#include <ydb/core/tx/columnshard/blobs_reader/actor.h>
 #include <ydb/core/tx/columnshard/blobs_action/storages_manager/manager.h>
 #include <ydb/core/tx/columnshard/common/tests/shard_reader.h>
 #include <ydb/core/tx/columnshard/engines/changes/cleanup.h>
@@ -46,6 +48,7 @@ constexpr ui64 tableId = 1;
 const std::vector<std::pair<TString, TTypeInfo>> schema = {{"key", TTypeInfo(NTypeIds::Uint64)},
                                                                {"field", TTypeInfo(NTypeIds::Utf8)}};
 
+// @TODO useless?
 class TDisableCompactionController : public NKikimr::NYDBTest::NColumnShard::TController {
 protected:
     virtual bool DoOnStartCompaction(std::shared_ptr<NOlap::TColumnEngineChanges>& changes) {
@@ -54,6 +57,57 @@ protected:
     }
 
 public:
+};
+
+
+class TReadS3BackupTask: public NOlap::NBlobOperations::NRead::ITask {
+private:
+    using TBase = NOlap::NBlobOperations::NRead::ITask;
+    // typename TConveyorTask::TDataContainer Data;
+    // std::shared_ptr<THashMap<ui64, ISnapshotSchema::TPtr>> Schemas;
+    // TNormalizationContext NormContext;
+
+public:
+     TReadS3BackupTask(// const TNormalizationContext& nCtx, 
+                        const std::vector<std::shared_ptr<NOlap::IBlobsReadingAction>>& actions
+                        // typename TConveyorTask::TDataContainer&& data, 
+                        // std::shared_ptr<THashMap<ui64, ISnapshotSchema::TPtr>> schemas
+                        )
+        : TBase(actions, "CS::BACKUP")
+        // , Data(std::move(data))
+        // , Schemas(std::move(schemas))
+        // , NormContext(nCtx)
+    {
+        // LOG_S_DEBUG("Handle TReadS3BackupTask.DoOnDataReady: ctor done");
+    }
+
+protected:
+    void DoOnDataReady(const std::shared_ptr<NOlap::NResourceBroker::NSubscribe::TResourcesGuard>& resourcesGuard) override {
+        Y_UNUSED(resourcesGuard);
+
+         LOG_S_DEBUG("Handle TReadS3BackupTask.DoOnDataReady: call");
+
+        LOG_S_DEBUG("Handle TReadS3BackupTask.DoOnDataReady: " << DebugString());
+
+        for (const auto& [k, v] : ExtractBlobsData()) {
+            LOG_S_DEBUG("Handle TReadS3BackupTask.DoOnDataReady: range=" << k.ToString() << ", v=" << v);
+        }
+
+        // NormContext.SetResourcesGuard(resourcesGuard);
+        // std::shared_ptr<NConveyor::ITask> task = std::make_shared<TConveyorTask>(std::move(ExtractBlobsData()), NormContext, std::move(Data), Schemas);
+        // NConveyor::TCompServiceOperator::SendTaskToExecute(task);
+    }
+
+    bool DoOnError(const NOlap::TBlobRange& range, const NOlap::IBlobsReadingAction::TErrorStatus& status) override {
+        Y_UNUSED(status, range);
+
+         LOG_S_DEBUG("Handle TReadS3BackupTask.DoOnError: call");
+
+        return false;
+    }
+
+public:
+    using TBase::TBase;
 };
 
 TActorIdentity PrepareCSTable(TTestBasicRuntime& runtime, TActorId& sender) {
@@ -141,7 +195,12 @@ Y_UNIT_TEST_SUITE(TColumnShardBackup) {
 
         auto op = PrepareInsertOp(sender);
 
-        runtime.Register(NColumnShard::CreatBackupActor(op, sender, csActorId, txId, writePlanStep, tableId));
+        NBlobCache::TUnifiedBlobId blob_id;
+        auto cb = [&blob_id](const NBlobCache::TUnifiedBlobId& b) {
+            blob_id = b;
+        };
+
+        runtime.Register(NColumnShard::CreatBackupActor(op, sender, csActorId, txId, writePlanStep, tableId, cb));
 
         TAutoPtr<NActors::IEventHandle> handle;
         auto event = runtime.GrabEdgeEvent<NKikimr::NEvents::TBackupEvents::TEvBackupShardProposeResult>(handle);
@@ -153,38 +212,49 @@ Y_UNIT_TEST_SUITE(TColumnShardBackup) {
         auto action = op->StartReadingAction("BACKUP::READ");
 
         Cerr << "\n GetStorageId: " << action->GetStorageId() << Endl;
+        NOlap::TBlobRange blob_range(blob_id);
 
-        // auto bid = NOlap::TUnifiedBlobId::BuildFromString(
-        //     "DS:4294967295:[0:397918:36139339:255:1:57560:1]", 
-        //     nullptr
-        // );
+        action->AddRange(blob_range, "some blob_range");
+        // THashSet<NOlap::TBlobRange> hs;
+        // hs.insert(r);
+        // // action->Start(hs);
 
-        // UNIT_ASSERT(bid->IsValid());
-        // NOlap::TBlobRange r(bid.GetResult());
+        // THashSet<NOlap::TBlobRange> result;
+        // result.insert(blob_range);
+        // action->FillExpectedRanges(result);
 
-        NOlap::TBlobRange r;
+        // for (const auto & r : result) {
+        //     Cerr << "\n result: " << r.ToString() << Endl;
+        // }
 
-        action->AddRange(r, "some result");
+        std::vector<std::shared_ptr<NOlap::IBlobsReadingAction>> actions;
+        actions.push_back(action);
 
-        THashSet<NOlap::TBlobRange> hs;
-        hs.insert(r);
+        auto task = std::make_shared<TReadS3BackupTask>(actions);
+        Cerr << "\n created TReadS3BackupTask." << Endl;
 
-        action->Start(hs);
+        auto* p = new NOlap::NBlobOperations::NRead::TActor(task);
 
-        THashSet<NOlap::TBlobRange> result;
-        action->FillExpectedRanges(result);
+        Cerr << "\n created NRead." << Endl;
 
-        Cerr << "\n k FillExpectedRanges: " << result.size() << Endl;
+        // TActorContext::AsActorContext().Register(p);
+        runtime.Register(p);
 
-        for (const auto & r : result) {
-            Cerr << "\n result: " << r.ToString() << Endl;
-        }
+        Cerr << "\n TReadS3BackupTask registred." << Endl;
 
-        auto ranges = action->GetRangesForRead();
-        for (const auto& [k, v] : ranges) {
-            Cerr << "\n k GetTabletId: " << k.GetTabletId() << Endl;
-            Cerr << "\n k: " << k.ToStringLegacy() << Endl;
-        }
+        // // TActorContext::AsActorContext();
+        // Cerr << "\n TActor start registring." << Endl;
+        
+        // // TActorContext::AsActorContext()
+        // runtime.Register(new NOlap::NBlobOperations::NRead::TActor(task));
+
+        // Cerr << "\n TActor registred." << Endl;
+
+        // auto ranges = action->GetRangesForRead();
+        // for (const auto& [k, v] : ranges) {
+        //     Cerr << "\n k GetTabletId: " << k.GetTabletId() << Endl;
+        //     Cerr << "\n k: " << k.ToStringLegacy() << Endl;
+        // }
 
         // {
         //     NActors::TLogContextGuard guard = NActors::TLogContextBuilder::Build(NKikimrServices::TX_COLUMNSHARD)("TEST_STEP", 3);

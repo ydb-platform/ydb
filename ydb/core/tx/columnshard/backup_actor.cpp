@@ -45,6 +45,8 @@ private:
     // NOlap::TWritingBuffer Buffer;
     const TActorId actorID;
 
+    NBlobCache::TUnifiedBlobId BlobId;
+
     void DoOnReadyResult(const NActors::TActorContext& ctx, const NColumnShard::TBlobPutResult::TPtr& putResult) override {
         LOG_S_DEBUG("TBackupWriteController call DoOnReadyResult");
 
@@ -58,7 +60,10 @@ private:
     }
 
 public:
-    TBackupWriteController(const TActorId& actorID, const std::shared_ptr<NOlap::IBlobsWritingAction>& action, std::shared_ptr<arrow::RecordBatch> arrowBatch) : actorID(actorID) {
+    TBackupWriteController(const TActorId& actorID, 
+        const std::shared_ptr<NOlap::IBlobsWritingAction>& action, 
+        std::shared_ptr<arrow::RecordBatch> arrowBatch
+    ) : actorID(actorID) {
 
         NArrow::TBatchSplitttingContext splitCtx(6 * 1024 * 1024);
         NArrow::TSerializedBatch batch = NArrow::TSerializedBatch::Build(arrowBatch, splitCtx);
@@ -79,8 +84,12 @@ public:
 
         LOG_S_DEBUG("TBackupWriteController.ctor: task added, blob_id=" << task.GetBlobId());
 
+        BlobId = task.GetBlobId();
+
         currentBlob.InitBlobId(task.GetBlobId());
     }
+
+    NBlobCache::TUnifiedBlobId GetBlobID() const noexcept { return BlobId; }
 };
 
 class BackupActor : public TActorBootstrapped<BackupActor> {
@@ -92,6 +101,8 @@ class BackupActor : public TActorBootstrapped<BackupActor> {
     const ui64 PlanStep;
     const ui64 TableId;
 
+    std::function<void(const NBlobCache::TUnifiedBlobId&)> Cb;
+
     BackupActorState State = BackupActorState::Invalid;
 
     // @TODO think about columns
@@ -101,14 +112,20 @@ class BackupActor : public TActorBootstrapped<BackupActor> {
     std::optional<NActors::TActorId> ScanActorId;
 
 public:
-    BackupActor(std::shared_ptr<NOlap::NBlobOperations::NTier::TOperator> insertOperator, const TActorId senderActorId, const TActorIdentity csActorId, const ui64 txId, const int planStep,
-                const ui64 tableId)
+    BackupActor(std::shared_ptr<NOlap::NBlobOperations::NTier::TOperator> insertOperator, 
+                const TActorId senderActorId, 
+                const TActorIdentity csActorId, 
+                const ui64 txId, 
+                const int planStep,
+                const ui64 tableId,
+                std::function<void(const NBlobCache::TUnifiedBlobId&)> cb)
         : InsertOperator(insertOperator)
         , SenderActorId(senderActorId)
         , CSActorId(csActorId)
         , TxId(txId)
         , PlanStep(planStep)
-        , TableId(tableId) {
+        , TableId(tableId)
+        , Cb(std::move(cb)) {
     }
 
     void Bootstrap(const TActorContext& ctx) {
@@ -304,6 +321,10 @@ private:
 
         auto writeController = std::make_shared<TBackupWriteController>(SelfId(), action, arrowBatch);
 
+        if (Cb) {
+            Cb(writeController->GetBlobID());
+        }
+
         LOG_S_DEBUG("Handle BackupActor.LoadBatchToStorage: controller created");
 
         ctx.Register(CreateWriteActor(TableId, writeController, TInstant::Max()));
@@ -312,9 +333,14 @@ private:
     }
 };
 
-IActor* CreatBackupActor(std::shared_ptr<NOlap::NBlobOperations::NTier::TOperator> insertOperator, const TActorId senderActorId, const TActorIdentity csActorId, const ui64 txId,
-                         const int planStep, const ui64 tableId) {
-    return new BackupActor(insertOperator, senderActorId, csActorId, txId, planStep, tableId);
+IActor* CreatBackupActor(std::shared_ptr<NOlap::NBlobOperations::NTier::TOperator> insertOperator, 
+                        const TActorId senderActorId, 
+                        const TActorIdentity csActorId, 
+                        const ui64 txId,
+                        const int planStep, 
+                        const ui64 tableId,
+                        std::function<void(const NBlobCache::TUnifiedBlobId&)> cb) {
+    return new BackupActor(insertOperator, senderActorId, csActorId, txId, planStep, tableId, std::move(cb));
 }
 
 }   // namespace NKikimr::NColumnShard

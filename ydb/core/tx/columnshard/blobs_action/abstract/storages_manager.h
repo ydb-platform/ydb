@@ -39,13 +39,7 @@ public:
 
     bool HasBlobsToDelete() const;
 
-    void Stop() {
-        AFL_VERIFY(Initialized);
-        for (auto&& i : Constructed) {
-            i.second->Stop();
-        }
-        Initialized = false;
-    }
+    void Stop();
 
     std::shared_ptr<IBlobsStorageOperator> GetDefaultOperator() {
         return GetOperator(DefaultStorageId);

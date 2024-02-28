@@ -79,7 +79,7 @@ Y_UNIT_TEST_SUITE(Splitter) {
             ui32 blobsCount = 0;
             ui32 slicesCount = 0;
             std::shared_ptr<arrow::RecordBatch> sliceBatch;
-            while (limiter.Next(chunksForBlob, sliceBatch)) {
+            while (limiter.Next(chunksForBlob, sliceBatch, NKikimr::NOlap::TEntityGroups("default"))) {
                 ++slicesCount;
                 TStringBuilder sb;
                 std::map<ui32, ui32> recordsCountByColumn;

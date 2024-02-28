@@ -95,6 +95,7 @@ struct TTestSchema {
             s3Config.SetProxyScheme(NKikimrSchemeOp::TS3Settings::HTTP);
 #else
             s3Config.SetEndpoint("fake");
+            s3Config.SetSecretKey("fakeSecret");
 #endif
             s3Config.SetRequestTimeoutMs(10000);
             s3Config.SetHttpRequestTimeoutMs(10000);

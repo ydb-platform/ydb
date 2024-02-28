@@ -74,4 +74,13 @@ std::shared_ptr<NKikimr::NOlap::IBlobsStorageOperator> IStoragesManager::BuildOp
     return result;
 }
 
+void IStoragesManager::Stop() {
+    if (Initialized) {
+        for (auto&& i : Constructed) {
+            i.second->Stop();
+        }
+        Initialized = false;
+    }
+}
+
 }

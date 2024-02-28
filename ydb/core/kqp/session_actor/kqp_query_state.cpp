@@ -278,8 +278,8 @@ std::unique_ptr<TEvKqp::TEvCompileRequest> TKqpQueryState::BuildCompileSplittedR
     }
 
     return std::make_unique<TEvKqp::TEvCompileRequest>(UserToken, uid, std::move(query), false,
-        false, perStatementResult, compileDeadline, DbCounters, std::move(cookie), UserRequestContext,
-        std::move(Orbit), TempTablesState, GetCollectDiagnostics(), statementAst,
+        false, perStatementResult, compileDeadline, DbCounters, ApplicationName, std::move(cookie),
+        UserRequestContext, std::move(Orbit), TempTablesState, GetCollectDiagnostics(), statementAst,
         false, SplittedCtx.Get(), SplittedExprs.at(NextSplittedExpr));
 }
 

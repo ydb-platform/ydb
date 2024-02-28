@@ -223,7 +223,7 @@ void Init(
             yqSharedResources->UserSpaceYdbDriver,
             credentialsFactory,
             !protoConfig.GetReadActorsFactoryConfig().GetPqReadActorFactoryConfig().GetCookieCommitMode(),
-            protoConfig.GetReadActorsFactoryConfig().GetPqReadActorFactoryConfig().GetUseCommit());
+            protoConfig.GetReadActorsFactoryConfig().GetPqReadActorFactoryConfig().GetSkipCommit());
         RegisterYdbReadActorFactory(*asyncIoFactory, yqSharedResources->UserSpaceYdbDriver, credentialsFactory);
         RegisterS3ReadActorFactory(*asyncIoFactory, credentialsFactory, httpGateway, s3HttpRetryPolicy, readActorFactoryCfg,
             yqCounters->GetSubgroup("subsystem", "S3ReadActor"));

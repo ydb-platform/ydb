@@ -488,6 +488,9 @@ class YqTenant(BaseTenant):
                 'retry_config': {
                     'max_retry_time_ms': 3000
                 }
+            },
+            'pq_read_actor_factory_config': {
+                'skip_commit': True
             }
         }
 

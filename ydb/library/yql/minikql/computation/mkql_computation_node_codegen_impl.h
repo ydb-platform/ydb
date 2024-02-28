@@ -28,19 +28,19 @@ private:
     }
 
     EProcessResult DoProcessWrapper(NUdf::TUnboxedValue &state, TComputationContext& ctx, EFetchResult fetchRes, NUdf::TUnboxedValuePod* values, size_t width) const {
-        TVector<NUdf::TUnboxedValue> valuesVec(width, NUdf::TUnboxedValuePod());
+        TVector<NUdf::TUnboxedValuePod> inputVec(values, values + width);
+        Fill(values, values + width, NUdf::TUnboxedValuePod());
+        TVector<NUdf::TUnboxedValue*> outputPtrsVec(width, nullptr);
         for (size_t pos = 0; pos < width; pos++) {
-            valuesVec[pos] = values[pos];
+            outputPtrsVec[pos] = static_cast<NUdf::TUnboxedValue*>(values + pos);
         }
-        TVector<NUdf::TUnboxedValue*> valuePtrsVec(width, nullptr);
+        auto *const *inputPtrs = static_cast<const TDerived*>(this)->PrepareInput(*static_cast<TState*>(state.GetRawPtr()), ctx, outputPtrsVec.data());
         for (size_t pos = 0; pos < width; pos++) {
-            valuePtrsVec[pos] = valuesVec.data() + pos;
+            if(auto in = inputPtrs[pos]) {
+                *in = inputVec[pos];
+            }
         }
-        auto res = static_cast<const TDerived*>(this)->DoProcess(*static_cast<TState*>(state.GetRawPtr()), ctx, fetchRes, valuePtrsVec.data());
-        for (size_t pos = 0; pos < width; pos++) {
-            values[pos] = valuesVec[pos].Release();
-        }
-        return res;
+        return static_cast<const TDerived*>(this)->DoProcess(*static_cast<TState*>(state.GetRawPtr()), ctx, fetchRes, outputPtrsVec.data());
     }
 
 public:

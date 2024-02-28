@@ -131,7 +131,6 @@ public:
 
         InitWatermarkTracker();
         IngressStats.Level = statsLevel;
-         SRC_LOG_D("RangesMode " << RangesMode << ", skipCommit " << SkipCommit);
     }
 
     NYdb::NPersQueue::TPersQueueClientSettings GetPersQueueClientSettings() const {

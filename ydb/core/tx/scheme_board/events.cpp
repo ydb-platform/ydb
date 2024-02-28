@@ -20,15 +20,18 @@ TOpaquePathDescription MakeOpaquePathDescription(NKikimrSchemeBoard::TEvUpdate& 
     // PathSubdomainPathId's absence is a marker that input message was sent
     // from the older populator implementation
 
+    // Move out elements out of the repeated field.
+    // Mark field as empty to prevent subsequent extraction attempts
+    TString data;
+    auto* field = update.MutableDescribeSchemeResultSerialized();
+    if (field->size() == 1) {
+        data = std::move(*field->begin());
+    } else {
+        data = JoinRange("", field->begin(), field->end());
+    }
+    field->Clear();
+
     if (update.HasPathSubdomainPathId()) {
-        Y_ABORT_UNLESS(update.GetDescribeSchemeResultSerialized().size() == 1);
-
-        // Move out single element out of the repeated field.
-        // Mark field as empty to prevent subsequent extraction attempts
-        auto field = update.MutableDescribeSchemeResultSerialized();
-        TString data = std::move(*field->begin());
-        field->Clear();
-
         return TOpaquePathDescription{
             .DescribeSchemeResultSerialized = std::move(data),
             //NOTE: unsuccessful describe results cannot be here, by design
@@ -44,21 +47,8 @@ TOpaquePathDescription MakeOpaquePathDescription(NKikimrSchemeBoard::TEvUpdate& 
         };
 
     } else {
-        Y_ABORT_UNLESS(update.GetDescribeSchemeResultSerialized().size() > 1);
-
-        // Concat several elements of the repeated field.
-        //NOTE: the last one is the base, only the base has the core of path information,
-        // the first ones are hollow except additional data about table partitioning,
-        // child listing or topic (pers-queue-group).
-        // Parse the base to get essential path attributes.
-        // Mark field as empty to prevent subsequent extraction attempts
-        auto field = update.GetDescribeSchemeResultSerialized();
-        TString data = JoinRange("", field.begin(), field.end());
-        TString base = std::move(*field.rbegin());
-        field.Clear();
-
         google::protobuf::Arena arena;
-        const auto* proto = DeserializeDescribeSchemeResult(base, &arena);
+        const auto* proto = DeserializeDescribeSchemeResult(data, &arena);
 
         return TOpaquePathDescription{
             .DescribeSchemeResultSerialized = std::move(data),

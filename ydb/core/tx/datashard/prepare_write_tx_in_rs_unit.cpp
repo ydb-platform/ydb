@@ -38,7 +38,7 @@ EExecutionStatus TPrepareWriteTxInRSUnit::Execute(TOperation::TPtr op, TTransact
     const TValidatedWriteTx::TPtr& writeTx = writeOp->GetWriteTx();
 
     if (writeOp->IsTxDataReleased()) {
-        switch (Pipeline.RestoreDataTx(writeOp, txc)) {
+        switch (Pipeline.RestoreWriteTx(writeOp, txc)) {
             case ERestoreDataStatus::Ok:
                 break;
             case ERestoreDataStatus::Restart:

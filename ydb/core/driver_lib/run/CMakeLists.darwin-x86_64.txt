@@ -157,7 +157,6 @@ target_sources(run PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/core/driver_lib/run/config.h
   ${CMAKE_SOURCE_DIR}/ydb/core/driver_lib/run/config_parser.h
   ${CMAKE_SOURCE_DIR}/ydb/core/driver_lib/run/driver.h
-  ${CMAKE_SOURCE_DIR}/ydb/core/driver_lib/run/dummy.h
   ${CMAKE_SOURCE_DIR}/ydb/core/driver_lib/run/factories.h
   ${CMAKE_SOURCE_DIR}/ydb/core/driver_lib/run/kikimr_services_initializers.h
   ${CMAKE_SOURCE_DIR}/ydb/core/driver_lib/run/main.h
@@ -167,7 +166,6 @@ target_sources(run PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/core/driver_lib/run/auto_config_initializer.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/driver_lib/run/config.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/driver_lib/run/config_parser.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/driver_lib/run/dummy.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/driver_lib/run/factories.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/driver_lib/run/kikimr_services_initializers.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/driver_lib/run/main.cpp

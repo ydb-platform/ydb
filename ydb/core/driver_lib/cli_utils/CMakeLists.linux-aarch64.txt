@@ -16,7 +16,6 @@ target_link_libraries(cli_utils PUBLIC
   contrib-libs-cxxsupp
   yutil
   cpp-deprecated-enum_codegen
-  library-grpc-client
   cpp-protobuf-json
   library-cpp-yson
   ydb-core-actorlib_impl
@@ -24,6 +23,7 @@ target_link_libraries(cli_utils PUBLIC
   core-blobstorage-pdisk
   core-client-minikql_compile
   core-client-scheme_cache_lib
+  core-config-init
   cli_base
   ydb-core-engine
   ydb-core-erasure
@@ -32,6 +32,7 @@ target_link_libraries(cli_utils PUBLIC
   ydb-core-scheme
   ydb-library-aclib
   library-folder_service-proto
+  library-grpc-client
   ydb-library-yaml_config
   api-grpc
   api-grpc-draft

@@ -6,6 +6,7 @@
 # original buildsystem will not be accepted.
 
 
+add_subdirectory(init)
 add_subdirectory(protos)
 add_subdirectory(tools)
 add_subdirectory(ut)

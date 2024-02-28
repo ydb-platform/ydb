@@ -7,6 +7,7 @@
 #include <ydb/library/ycloud/api/user_account_service.h>
 #include <ydb/library/testlib/service_mocks/user_account_service_mock.h>
 #include <ydb/library/testlib/service_mocks/access_service_mock.h>
+#include <ydb/library/testlib/service_mocks/nebius_access_service_mock.h>
 #include <ydb/library/testlib/service_mocks/ldap_mock/ldap_simple_server.h>
 #include <ydb/public/lib/deprecated/kicli/kicli.h>
 #include <util/system/tempfile.h>
@@ -17,6 +18,8 @@
 namespace NKikimr {
 
 using TAccessServiceMock = TTicketParserAccessServiceMock;
+using TNebiusAccessServiceMock = TTicketParserNebiusAccessServiceMock;
+
 namespace {
 
 TString certificateContent = R"___(-----BEGIN CERTIFICATE-----
@@ -226,6 +229,47 @@ void CheckRequiredLdapSettings(std::function<void(NKikimrProto::TLdapAuthenticat
     UNIT_ASSERT_STRINGS_EQUAL(ticketParserResult->Error.Message, expectedErrorMessage);
 
     ldapServer.Stop();
+}
+
+template <class TAccessServiceMock>
+void SetUseAccessService(NKikimrProto::TAuthConfig& authConfig);
+
+template <>
+void SetUseAccessService<NKikimr::TAccessServiceMock>(NKikimrProto::TAuthConfig& authConfig) {
+    authConfig.SetUseAccessService(true);
+    authConfig.SetAccessServiceType("Yandex");
+}
+
+template <>
+void SetUseAccessService<TTicketParserAccessServiceMockV2>(NKikimrProto::TAuthConfig& authConfig) {
+    authConfig.SetUseAccessService(true);
+    authConfig.SetAccessServiceType("Yandex");
+}
+
+template <>
+void SetUseAccessService<NKikimr::TNebiusAccessServiceMock>(NKikimrProto::TAuthConfig& authConfig) {
+    authConfig.SetUseAccessService(true);
+    authConfig.SetAccessServiceType("Nebius");
+}
+
+template <class TAccessServiceMock>
+bool IsApiKeySupported() {
+    return true;
+}
+
+template <>
+bool IsApiKeySupported<NKikimr::TNebiusAccessServiceMock>() {
+    return false;
+}
+
+template <class TAccessServiceMock>
+bool IsSignatureSupported() {
+    return true;
+}
+
+template <>
+bool IsSignatureSupported<NKikimr::TNebiusAccessServiceMock>() {
+    return false;
 }
 
 } // namespace
@@ -907,7 +951,8 @@ Y_UNIT_TEST_SUITE(TTicketParserTest) {
         ldapServer.Stop();
     }
 
-    Y_UNIT_TEST(AccessServiceAuthenticationOk) {
+    template <typename TAccessServiceMock>
+    void AccessServiceAuthenticationOk() {
         using namespace Tests;
 
         TPortManager tp;
@@ -917,7 +962,7 @@ Y_UNIT_TEST_SUITE(TTicketParserTest) {
         TString accessServiceEndpoint = "localhost:" + ToString(accessServicePort);
         NKikimrProto::TAuthConfig authConfig;
         authConfig.SetUseBlackBox(false);
-        authConfig.SetUseAccessService(true);
+        SetUseAccessService<TAccessServiceMock>(authConfig);
         authConfig.SetUseAccessServiceTLS(false);
         authConfig.SetAccessServiceEndpoint(accessServiceEndpoint);
         authConfig.SetUseStaff(false);
@@ -929,14 +974,13 @@ Y_UNIT_TEST_SUITE(TTicketParserTest) {
         server.GetRuntime()->SetLogPriority(NKikimrServices::TICKET_PARSER, NLog::PRI_TRACE);
         server.GetRuntime()->SetLogPriority(NKikimrServices::GRPC_CLIENT, NLog::PRI_TRACE);
         TClient client(settings);
-        NClient::TKikimr kikimr(client.GetClientConfig());
         client.InitRootScheme();
         TTestActorRuntime* runtime = server.GetRuntime();
 
         TString userToken = "user1";
 
         // Access Server Mock
-        NKikimr::TAccessServiceMock accessServiceMock;
+        TAccessServiceMock accessServiceMock;
         grpc::ServerBuilder builder;
         builder.AddListeningPort(accessServiceEndpoint, grpc::InsecureServerCredentials()).RegisterService(&accessServiceMock);
         std::unique_ptr<grpc::Server> accessServer(builder.BuildAndStart());
@@ -945,7 +989,19 @@ Y_UNIT_TEST_SUITE(TTicketParserTest) {
 
         TAutoPtr<IEventHandle> handle;
         TEvTicketParser::TEvAuthorizeTicketResult* result = runtime->GrabEdgeEvent<TEvTicketParser::TEvAuthorizeTicketResult>(handle);
-        UNIT_ASSERT(result->Error.empty());
+        UNIT_ASSERT_C(result->Error.empty(), result->Error);
+        UNIT_ASSERT_VALUES_EQUAL(accessServiceMock.AuthorizeCount.load(), 0);
+        UNIT_ASSERT_VALUES_EQUAL(accessServiceMock.AuthenticateCount.load(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(result->Ticket, userToken);
+        UNIT_ASSERT_VALUES_EQUAL(result->Token->GetUserSID(), userToken + "@as");
+    }
+
+    Y_UNIT_TEST(AccessServiceAuthenticationOk) {
+        AccessServiceAuthenticationOk<NKikimr::TAccessServiceMock>();
+    }
+
+    Y_UNIT_TEST(NebiusAccessServiceAuthenticationOk) {
+        AccessServiceAuthenticationOk<NKikimr::TNebiusAccessServiceMock>();
     }
 
     Y_UNIT_TEST(AccessServiceAuthenticationApiKeyOk) {
@@ -1044,7 +1100,8 @@ Y_UNIT_TEST_SUITE(TTicketParserTest) {
         UNIT_ASSERT_VALUES_EQUAL(result->Token->GetUserSID(), "login1@passport");
     }
 
-    Y_UNIT_TEST(AuthenticationUnavailable) {
+    template <typename TAccessServiceMock>
+    void AuthenticationUnavailable() {
         using namespace Tests;
 
         TPortManager tp;
@@ -1054,7 +1111,7 @@ Y_UNIT_TEST_SUITE(TTicketParserTest) {
         TString accessServiceEndpoint = "localhost:" + ToString(servicePort);
         NKikimrProto::TAuthConfig authConfig;
         authConfig.SetUseBlackBox(false);
-        authConfig.SetUseAccessService(true);
+        SetUseAccessService<TAccessServiceMock>(authConfig);
         authConfig.SetUseAccessServiceTLS(false);
         authConfig.SetAccessServiceEndpoint(accessServiceEndpoint);
         authConfig.SetUseStaff(false);
@@ -1072,7 +1129,7 @@ Y_UNIT_TEST_SUITE(TTicketParserTest) {
         TString userToken = "user1";
 
         // Access Server Mock
-        NKikimr::TAccessServiceMock accessServiceMock;
+        TAccessServiceMock accessServiceMock;
         grpc::ServerBuilder builder;
         builder.AddListeningPort(accessServiceEndpoint, grpc::InsecureServerCredentials()).RegisterService(&accessServiceMock);
         std::unique_ptr<grpc::Server> accessServer(builder.BuildAndStart());
@@ -1087,9 +1144,20 @@ Y_UNIT_TEST_SUITE(TTicketParserTest) {
         UNIT_ASSERT(!result->Error.empty());
         UNIT_ASSERT(result->Error.Retryable);
         UNIT_ASSERT_VALUES_EQUAL(result->Error.Message, "Service Unavailable");
+        UNIT_ASSERT_VALUES_EQUAL(accessServiceMock.AuthorizeCount.load(), 0);
+        UNIT_ASSERT_GE(accessServiceMock.AuthenticateCount.load(), 1);
     }
 
-    Y_UNIT_TEST(AuthenticationRetryError) {
+    Y_UNIT_TEST(AuthenticationUnavailable) {
+        AuthenticationUnavailable<NKikimr::TAccessServiceMock>();
+    }
+
+    Y_UNIT_TEST(NebiusAuthenticationUnavailable) {
+        AuthenticationUnavailable<NKikimr::TNebiusAccessServiceMock>();
+    }
+
+    template <typename TAccessServiceMock>
+    void AuthenticationRetryError() {
         using namespace Tests;
 
         TPortManager tp;
@@ -1099,7 +1167,7 @@ Y_UNIT_TEST_SUITE(TTicketParserTest) {
         TString accessServiceEndpoint = "localhost:" + ToString(servicePort);
         NKikimrProto::TAuthConfig authConfig;
         authConfig.SetUseBlackBox(false);
-        authConfig.SetUseAccessService(true);
+        SetUseAccessService<TAccessServiceMock>(authConfig);
         authConfig.SetUseAccessServiceTLS(false);
         authConfig.SetAccessServiceEndpoint(accessServiceEndpoint);
         authConfig.SetUseStaff(false);
@@ -1116,7 +1184,7 @@ Y_UNIT_TEST_SUITE(TTicketParserTest) {
         client.InitRootScheme();
 
         // Access Server Mock
-        NKikimr::TAccessServiceMock accessServiceMock;
+        TAccessServiceMock accessServiceMock;
         grpc::ServerBuilder builder;
         builder.AddListeningPort(accessServiceEndpoint, grpc::InsecureServerCredentials()).RegisterService(&accessServiceMock);
         std::unique_ptr<grpc::Server> accessServer(builder.BuildAndStart());
@@ -1126,9 +1194,16 @@ Y_UNIT_TEST_SUITE(TTicketParserTest) {
         TAutoPtr<IEventHandle> handle;
 
         accessServiceMock.ShouldGenerateRetryableError = true;
+
+        // for signature
         TEvTicketParser::TEvAuthorizeTicket::TAccessKeySignature signature {.AccessKeyId = "AKIAIOSFODNN7EXAMPLE"};
         TEvTicketParser::TEvAuthorizeTicket::TAccessKeySignature retrySignature = signature;
-        runtime->Send(new IEventHandle(MakeTicketParserID(), sender, new TEvTicketParser::TEvAuthorizeTicket(std::move(signature), "", {})), 0);
+
+        if (IsSignatureSupported<TAccessServiceMock>()) {
+            runtime->Send(new IEventHandle(MakeTicketParserID(), sender, new TEvTicketParser::TEvAuthorizeTicket(std::move(signature), "", {})), 0);
+        } else {
+            runtime->Send(new IEventHandle(MakeTicketParserID(), sender, new TEvTicketParser::TEvAuthorizeTicket("user1")), 0);
+        }
         TEvTicketParser::TEvAuthorizeTicketResult* result = runtime->GrabEdgeEvent<TEvTicketParser::TEvAuthorizeTicketResult>(handle);
         UNIT_ASSERT(!result->Error.empty());
         UNIT_ASSERT(result->Error.Retryable);
@@ -1138,14 +1213,29 @@ Y_UNIT_TEST_SUITE(TTicketParserTest) {
         accessServiceMock.ShouldGenerateRetryableError = false;
         Sleep(TDuration::Seconds(10));
 
-        runtime->Send(new IEventHandle(MakeTicketParserID(), sender, new TEvTicketParser::TEvAuthorizeTicket(std::move(retrySignature), "", {})), 0);
+        if (IsSignatureSupported<TAccessServiceMock>()) {
+            runtime->Send(new IEventHandle(MakeTicketParserID(), sender, new TEvTicketParser::TEvAuthorizeTicket(std::move(retrySignature), "", {})), 0);
+        } else {
+            runtime->Send(new IEventHandle(MakeTicketParserID(), sender, new TEvTicketParser::TEvAuthorizeTicket("user1")), 0);
+        }
         result = runtime->GrabEdgeEvent<TEvTicketParser::TEvAuthorizeTicketResult>(handle);
         UNIT_ASSERT(result->Error.empty());
         UNIT_ASSERT(result->Token != nullptr);
         UNIT_ASSERT_VALUES_EQUAL(result->Token->GetUserSID(), "user1@as");
+        UNIT_ASSERT_VALUES_EQUAL(accessServiceMock.AuthorizeCount.load(), 0);
+        UNIT_ASSERT_GE(accessServiceMock.AuthenticateCount.load(), 2);
     }
 
-    Y_UNIT_TEST(AuthenticationRetryErrorImmediately) {
+    Y_UNIT_TEST(AuthenticationRetryError) {
+        AuthenticationRetryError<NKikimr::TAccessServiceMock>();
+    }
+
+    Y_UNIT_TEST(NebiusAuthenticationRetryError) {
+        AuthenticationRetryError<NKikimr::TNebiusAccessServiceMock>();
+    }
+
+    template <typename TAccessServiceMock>
+    void AuthenticationRetryErrorImmediately() {
         using namespace Tests;
 
         TPortManager tp;
@@ -1155,7 +1245,7 @@ Y_UNIT_TEST_SUITE(TTicketParserTest) {
         TString accessServiceEndpoint = "localhost:" + ToString(servicePort);
         NKikimrProto::TAuthConfig authConfig;
         authConfig.SetUseBlackBox(false);
-        authConfig.SetUseAccessService(true);
+        SetUseAccessService<TAccessServiceMock>(authConfig);
         authConfig.SetUseAccessServiceTLS(false);
         authConfig.SetAccessServiceEndpoint(accessServiceEndpoint);
         authConfig.SetUseStaff(false);
@@ -1172,7 +1262,7 @@ Y_UNIT_TEST_SUITE(TTicketParserTest) {
         client.InitRootScheme();
 
         // Access Server Mock
-        NKikimr::TAccessServiceMock accessServiceMock;
+        TAccessServiceMock accessServiceMock;
         grpc::ServerBuilder builder;
         builder.AddListeningPort(accessServiceEndpoint, grpc::InsecureServerCredentials()).RegisterService(&accessServiceMock);
         std::unique_ptr<grpc::Server> accessServer(builder.BuildAndStart());
@@ -1182,9 +1272,16 @@ Y_UNIT_TEST_SUITE(TTicketParserTest) {
         TAutoPtr<IEventHandle> handle;
 
         accessServiceMock.ShouldGenerateOneRetryableError = true;
+
+        // for signature
         TEvTicketParser::TEvAuthorizeTicket::TAccessKeySignature signature {.AccessKeyId = "AKIAIOSFODNN7EXAMPLE"};
         TEvTicketParser::TEvAuthorizeTicket::TAccessKeySignature retrySignature = signature;
-        runtime->Send(new IEventHandle(MakeTicketParserID(), sender, new TEvTicketParser::TEvAuthorizeTicket(std::move(signature), "", {})), 0);
+
+        if (IsSignatureSupported<TAccessServiceMock>()) {
+            runtime->Send(new IEventHandle(MakeTicketParserID(), sender, new TEvTicketParser::TEvAuthorizeTicket(std::move(signature), "", {})), 0);
+        } else {
+            runtime->Send(new IEventHandle(MakeTicketParserID(), sender, new TEvTicketParser::TEvAuthorizeTicket(TString("user1"))), 0);
+        }
         TEvTicketParser::TEvAuthorizeTicketResult* result = runtime->GrabEdgeEvent<TEvTicketParser::TEvAuthorizeTicketResult>(handle);
         UNIT_ASSERT(!result->Error.empty());
         UNIT_ASSERT(result->Error.Retryable);
@@ -1192,11 +1289,25 @@ Y_UNIT_TEST_SUITE(TTicketParserTest) {
 
         Sleep(TDuration::Seconds(2));
 
-        runtime->Send(new IEventHandle(MakeTicketParserID(), sender, new TEvTicketParser::TEvAuthorizeTicket(std::move(retrySignature), "", {})), 0);
+        if (IsSignatureSupported<TAccessServiceMock>()) {
+            runtime->Send(new IEventHandle(MakeTicketParserID(), sender, new TEvTicketParser::TEvAuthorizeTicket(std::move(retrySignature), "", {})), 0);
+        } else {
+            runtime->Send(new IEventHandle(MakeTicketParserID(), sender, new TEvTicketParser::TEvAuthorizeTicket(TString("user1"))), 0);
+        }
         result = runtime->GrabEdgeEvent<TEvTicketParser::TEvAuthorizeTicketResult>(handle);
         UNIT_ASSERT(result->Error.empty());
         UNIT_ASSERT(result->Token != nullptr);
         UNIT_ASSERT_VALUES_EQUAL(result->Token->GetUserSID(), "user1@as");
+        UNIT_ASSERT_VALUES_EQUAL(accessServiceMock.AuthorizeCount.load(), 0);
+        UNIT_ASSERT_GE(accessServiceMock.AuthenticateCount.load(), 2);
+    }
+
+    Y_UNIT_TEST(AuthenticationRetryErrorImmediately) {
+        AuthenticationRetryErrorImmediately<NKikimr::TAccessServiceMock>();
+    }
+
+    Y_UNIT_TEST(NebiusAuthenticationRetryErrorImmediately) {
+        AuthenticationRetryErrorImmediately<NKikimr::TNebiusAccessServiceMock>();
     }
 
     template <typename TAccessServiceMock, bool EnableBulkAuthorization = false>
@@ -1210,7 +1321,7 @@ Y_UNIT_TEST_SUITE(TTicketParserTest) {
         TString accessServiceEndpoint = "localhost:" + ToString(servicePort);
         NKikimrProto::TAuthConfig authConfig;
         authConfig.SetUseBlackBox(false);
-        authConfig.SetUseAccessService(true);
+        SetUseAccessService<TAccessServiceMock>(authConfig);
         authConfig.SetUseAccessServiceTLS(false);
         authConfig.SetAccessServiceEndpoint(accessServiceEndpoint);
         authConfig.SetUseStaff(false);
@@ -1238,13 +1349,22 @@ Y_UNIT_TEST_SUITE(TTicketParserTest) {
         TAutoPtr<IEventHandle> handle;
 
         accessServiceMock.ShouldGenerateRetryableError = true;
+
+        // for signature
         TEvTicketParser::TEvAuthorizeTicket::TAccessKeySignature signature {.AccessKeyId = "AKIAIOSFODNN7EXAMPLE"};
         TEvTicketParser::TEvAuthorizeTicket::TAccessKeySignature retrySignature = signature;
+
         const TVector<TEvTicketParser::TEvAuthorizeTicket::TEntry> entries {{
                                                                         TEvTicketParser::TEvAuthorizeTicket::ToPermissions({"something.read"}),
                                                                         {{"folder_id", "aaaa1234"}, {"database_id", "bbbb4554"}}
                                                                     }};
-        runtime->Send(new IEventHandle(MakeTicketParserID(), sender, new TEvTicketParser::TEvAuthorizeTicket(std::move(signature), "", entries)), 0);
+
+        if (IsSignatureSupported<TAccessServiceMock>()) {
+            runtime->Send(new IEventHandle(MakeTicketParserID(), sender, new TEvTicketParser::TEvAuthorizeTicket(std::move(signature), "", entries)), 0);
+        } else {
+            runtime->Send(new IEventHandle(MakeTicketParserID(), sender, new TEvTicketParser::TEvAuthorizeTicket("user1", entries)), 0);
+        }
+
         TEvTicketParser::TEvAuthorizeTicketResult* result = runtime->GrabEdgeEvent<TEvTicketParser::TEvAuthorizeTicketResult>(handle);
         UNIT_ASSERT(!result->Error.empty());
         UNIT_ASSERT(result->Error.Retryable);
@@ -1254,7 +1374,12 @@ Y_UNIT_TEST_SUITE(TTicketParserTest) {
         accessServiceMock.ShouldGenerateRetryableError = false;
         Sleep(TDuration::Seconds(10));
 
-        runtime->Send(new IEventHandle(MakeTicketParserID(), sender, new TEvTicketParser::TEvAuthorizeTicket(std::move(retrySignature), "", entries)), 0);
+        if (IsSignatureSupported<TAccessServiceMock>()) {
+            runtime->Send(new IEventHandle(MakeTicketParserID(), sender, new TEvTicketParser::TEvAuthorizeTicket(std::move(retrySignature), "", entries)), 0);
+        } else {
+            runtime->Send(new IEventHandle(MakeTicketParserID(), sender, new TEvTicketParser::TEvAuthorizeTicket("user1", entries)), 0);
+        }
+
         result = runtime->GrabEdgeEvent<TEvTicketParser::TEvAuthorizeTicketResult>(handle);
         UNIT_ASSERT(result->Error.empty());
         UNIT_ASSERT(result->Token != nullptr);
@@ -1271,6 +1396,10 @@ Y_UNIT_TEST_SUITE(TTicketParserTest) {
         AuthorizationRetryError<TTicketParserAccessServiceMockV2, true>();
     }
 
+    Y_UNIT_TEST(NebiusAuthorizationRetryError) {
+        AuthorizationRetryError<NKikimr::TNebiusAccessServiceMock>();
+    }
+
     template <typename TAccessServiceMock, bool EnableBulkAuthorization = false>
     void AuthorizationRetryErrorImmediately() {
         using namespace Tests;
@@ -1282,7 +1411,7 @@ Y_UNIT_TEST_SUITE(TTicketParserTest) {
         TString accessServiceEndpoint = "localhost:" + ToString(servicePort);
         NKikimrProto::TAuthConfig authConfig;
         authConfig.SetUseBlackBox(false);
-        authConfig.SetUseAccessService(true);
+        SetUseAccessService<TAccessServiceMock>(authConfig);
         authConfig.SetUseAccessServiceTLS(false);
         authConfig.SetAccessServiceEndpoint(accessServiceEndpoint);
         authConfig.SetUseStaff(false);
@@ -1310,13 +1439,22 @@ Y_UNIT_TEST_SUITE(TTicketParserTest) {
         TAutoPtr<IEventHandle> handle;
 
         accessServiceMock.ShouldGenerateOneRetryableError = true;
+
+        // for signature
         TEvTicketParser::TEvAuthorizeTicket::TAccessKeySignature signature {.AccessKeyId = "AKIAIOSFODNN7EXAMPLE"};
         TEvTicketParser::TEvAuthorizeTicket::TAccessKeySignature retrySignature = signature;
+
         const TVector<TEvTicketParser::TEvAuthorizeTicket::TEntry> entries {{
                                                                         TEvTicketParser::TEvAuthorizeTicket::ToPermissions({"something.read"}),
                                                                         {{"folder_id", "aaaa1234"}, {"database_id", "bbbb4554"}}
                                                                     }};
-        runtime->Send(new IEventHandle(MakeTicketParserID(), sender, new TEvTicketParser::TEvAuthorizeTicket(std::move(signature), "", entries)), 0);
+
+        if (IsSignatureSupported<TAccessServiceMock>()) {
+            runtime->Send(new IEventHandle(MakeTicketParserID(), sender, new TEvTicketParser::TEvAuthorizeTicket(std::move(signature), "", entries)), 0);
+        } else {
+            runtime->Send(new IEventHandle(MakeTicketParserID(), sender, new TEvTicketParser::TEvAuthorizeTicket("user1", entries)), 0);
+        }
+
         TEvTicketParser::TEvAuthorizeTicketResult* result = runtime->GrabEdgeEvent<TEvTicketParser::TEvAuthorizeTicketResult>(handle);
         UNIT_ASSERT(!result->Error.empty());
         UNIT_ASSERT(result->Error.Retryable);
@@ -1324,7 +1462,12 @@ Y_UNIT_TEST_SUITE(TTicketParserTest) {
 
         Sleep(TDuration::Seconds(2));
 
-        runtime->Send(new IEventHandle(MakeTicketParserID(), sender, new TEvTicketParser::TEvAuthorizeTicket(std::move(retrySignature), "", entries)), 0);
+        if (IsSignatureSupported<TAccessServiceMock>()) {
+            runtime->Send(new IEventHandle(MakeTicketParserID(), sender, new TEvTicketParser::TEvAuthorizeTicket(std::move(retrySignature), "", entries)), 0);
+        } else {
+            runtime->Send(new IEventHandle(MakeTicketParserID(), sender, new TEvTicketParser::TEvAuthorizeTicket("user1", entries)), 0);
+        }
+
         result = runtime->GrabEdgeEvent<TEvTicketParser::TEvAuthorizeTicketResult>(handle);
         UNIT_ASSERT(result->Error.empty());
         UNIT_ASSERT(result->Token != nullptr);
@@ -1339,6 +1482,10 @@ Y_UNIT_TEST_SUITE(TTicketParserTest) {
 
     Y_UNIT_TEST(BulkAuthorizationRetryErrorImmediately) {
         AuthorizationRetryErrorImmediately<TTicketParserAccessServiceMockV2, true>();
+    }
+
+    Y_UNIT_TEST(NebiusAuthorizationRetryErrorImmediately) {
+        AuthorizationRetryErrorImmediately<NKikimr::TNebiusAccessServiceMock>();
     }
 
     Y_UNIT_TEST(AuthenticationUnsupported) {
@@ -1385,6 +1532,53 @@ Y_UNIT_TEST_SUITE(TTicketParserTest) {
         UNIT_ASSERT(!result->Error.empty());
         UNIT_ASSERT(!result->Error.Retryable);
         UNIT_ASSERT_VALUES_EQUAL(result->Error.Message, "Token is not supported");
+    }
+
+    Y_UNIT_TEST(NebiusAccessKeySignatureUnsupported) {
+        using namespace Tests;
+
+        TPortManager tp;
+        ui16 port = tp.GetPort(2134);
+        ui16 grpcPort = tp.GetPort(2135);
+        ui16 servicePort = tp.GetPort(4284);
+        TString accessServiceEndpoint = "localhost:" + ToString(servicePort);
+        NKikimrProto::TAuthConfig authConfig;
+        authConfig.SetUseBlackBox(false);
+        authConfig.SetUseLoginProvider(false);
+        authConfig.SetUseAccessService(true);
+        authConfig.SetAccessServiceType("Nebius");
+        authConfig.SetUseAccessServiceTLS(false);
+        authConfig.SetAccessServiceEndpoint(accessServiceEndpoint);
+        authConfig.SetUseStaff(false);
+        auto settings = TServerSettings(port, authConfig);
+        settings.SetDomainName("Root");
+        settings.CreateTicketParser = NKikimr::CreateTicketParser;
+        TServer server(settings);
+        server.EnableGRpc(grpcPort);
+        server.GetRuntime()->SetLogPriority(NKikimrServices::TICKET_PARSER, NLog::PRI_TRACE);
+        server.GetRuntime()->SetLogPriority(NKikimrServices::GRPC_CLIENT, NLog::PRI_TRACE);
+        TClient client(settings);
+        NClient::TKikimr kikimr(client.GetClientConfig());
+        client.InitRootScheme();
+
+        // Access Server Mock
+        NKikimr::TNebiusAccessServiceMock accessServiceMock;
+        grpc::ServerBuilder builder;
+        builder.AddListeningPort(accessServiceEndpoint, grpc::InsecureServerCredentials()).RegisterService(&accessServiceMock);
+        std::unique_ptr<grpc::Server> accessServer(builder.BuildAndStart());
+
+        TTestActorRuntime* runtime = server.GetRuntime();
+        TActorId sender = runtime->AllocateEdgeActor();
+        TAutoPtr<IEventHandle> handle;
+
+        TEvTicketParser::TEvAuthorizeTicket::TAccessKeySignature signature {.AccessKeyId = "AKIAIOSFODNN7EXAMPLE"};
+        TEvTicketParser::TEvAuthorizeTicket::TAccessKeySignature retrySignature = signature;
+        runtime->Send(new IEventHandle(MakeTicketParserID(), sender, new TEvTicketParser::TEvAuthorizeTicket(std::move(signature), "", {})), 0);
+
+        TEvTicketParser::TEvAuthorizeTicketResult* result = runtime->GrabEdgeEvent<TEvTicketParser::TEvAuthorizeTicketResult>(handle);
+        UNIT_ASSERT(!result->Error.empty());
+        UNIT_ASSERT(!result->Error.Retryable);
+        UNIT_ASSERT_VALUES_EQUAL(result->Error.Message, "Access key signature is not supported");
     }
 
     Y_UNIT_TEST(AuthenticationUnknown) {
@@ -1443,8 +1637,8 @@ Y_UNIT_TEST_SUITE(TTicketParserTest) {
         TString accessServiceEndpoint = "localhost:" + ToString(servicePort);
         NKikimrProto::TAuthConfig authConfig;
         authConfig.SetUseBlackBox(false);
-        authConfig.SetUseAccessService(true);
-        authConfig.SetUseAccessServiceApiKey(true);
+        SetUseAccessService<TAccessServiceMock>(authConfig);
+        authConfig.SetUseAccessServiceApiKey(IsApiKeySupported<TAccessServiceMock>());
         authConfig.SetUseAccessServiceTLS(false);
         authConfig.SetAccessServiceEndpoint(accessServiceEndpoint);
         authConfig.SetUseStaff(false);
@@ -1478,9 +1672,9 @@ Y_UNIT_TEST_SUITE(TTicketParserTest) {
                                            {{"folder_id", "aaaa1234"}, {"database_id", "bbbb4554"}},
                                            {"something.read"})), 0);
         TEvTicketParser::TEvAuthorizeTicketResult* result = runtime->GrabEdgeEvent<TEvTicketParser::TEvAuthorizeTicketResult>(handle);
-        UNIT_ASSERT(result->Error.empty());
-        UNIT_ASSERT(result->Token->IsExist("something.read-bbbb4554@as"));
-        UNIT_ASSERT(!result->Token->IsExist("something.write-bbbb4554@as"));
+        UNIT_ASSERT_C(result->Error.empty(), result->Error);
+        UNIT_ASSERT_C(result->Token->IsExist("something.read-bbbb4554@as"), result->Token->ShortDebugString());
+        UNIT_ASSERT_C(!result->Token->IsExist("something.write-bbbb4554@as"), result->Token->ShortDebugString());
 
         accessServiceMock.AllowedUserPermissions.insert("user1-something.connect");
         runtime->Send(new IEventHandle(MakeTicketParserID(), sender, new TEvTicketParser::TEvAuthorizeTicket(
@@ -1488,21 +1682,23 @@ Y_UNIT_TEST_SUITE(TTicketParserTest) {
                                            {{"folder_id", "aaaa1234"}, {"database_id", "bbbb4554"}},
                                            {"something.read", "something.connect", "something.list", "something.update"})), 0);
         result = runtime->GrabEdgeEvent<TEvTicketParser::TEvAuthorizeTicketResult>(handle);
-        UNIT_ASSERT(result->Error.empty());
-        UNIT_ASSERT(result->Token->IsExist("something.read-bbbb4554@as"));
-        UNIT_ASSERT(result->Token->IsExist("something.connect-bbbb4554@as"));
-        UNIT_ASSERT(!result->Token->IsExist("something.list-bbbb4554@as"));
-        UNIT_ASSERT(!result->Token->IsExist("something.update-bbbb4554@as"));
+        UNIT_ASSERT_C(result->Error.empty(), result->Error);
+        UNIT_ASSERT_C(result->Token->IsExist("something.read-bbbb4554@as"), result->Token->ShortDebugString());
+        UNIT_ASSERT_C(result->Token->IsExist("something.connect-bbbb4554@as"), result->Token->ShortDebugString());
+        UNIT_ASSERT_C(!result->Token->IsExist("something.list-bbbb4554@as"), result->Token->ShortDebugString());
+        UNIT_ASSERT_C(!result->Token->IsExist("something.update-bbbb4554@as"), result->Token->ShortDebugString());
 
         // Authorization ApiKey successful.
-        runtime->Send(new IEventHandle(MakeTicketParserID(), sender, new TEvTicketParser::TEvAuthorizeTicket(
-                                           "ApiKey ApiKey-value-valid",
-                                           {{"folder_id", "aaaa1234"}, {"database_id", "bbbb4554"}},
-                                           {"something.read"})), 0);
-        result = runtime->GrabEdgeEvent<TEvTicketParser::TEvAuthorizeTicketResult>(handle);
-        UNIT_ASSERT(result->Error.empty());
-        UNIT_ASSERT(result->Token->IsExist("something.read-bbbb4554@as"));
-        UNIT_ASSERT(!result->Token->IsExist("something.write-bbbb4554@as"));
+        if (IsApiKeySupported<TAccessServiceMock>()) {
+            runtime->Send(new IEventHandle(MakeTicketParserID(), sender, new TEvTicketParser::TEvAuthorizeTicket(
+                                            "ApiKey ApiKey-value-valid",
+                                            {{"folder_id", "aaaa1234"}, {"database_id", "bbbb4554"}},
+                                            {"something.read"})), 0);
+            result = runtime->GrabEdgeEvent<TEvTicketParser::TEvAuthorizeTicketResult>(handle);
+            UNIT_ASSERT_C(result->Error.empty(), result->Error);
+            UNIT_ASSERT_C(result->Token->IsExist("something.read-bbbb4554@as"), result->Token->ShortDebugString());
+            UNIT_ASSERT_C(!result->Token->IsExist("something.write-bbbb4554@as"), result->Token->ShortDebugString());
+        }
 
         // Authorization failure with not enough permissions.
         runtime->Send(new IEventHandle(MakeTicketParserID(), sender, new TEvTicketParser::TEvAuthorizeTicket(
@@ -1520,9 +1716,9 @@ Y_UNIT_TEST_SUITE(TTicketParserTest) {
                                            {{"folder_id", "aaaa1234"}, {"database_id", "bbbb4554"}},
                                            {"something.read"})), 0);
         result = runtime->GrabEdgeEvent<TEvTicketParser::TEvAuthorizeTicketResult>(handle);
-        UNIT_ASSERT(result->Error.empty());
-        UNIT_ASSERT(result->Token->IsExist("something.read-bbbb4554@as"));
-        UNIT_ASSERT(!result->Token->IsExist("something.write-bbbb4554@as"));
+        UNIT_ASSERT_C(result->Error.empty(), result->Error);
+        UNIT_ASSERT_C(result->Token->IsExist("something.read-bbbb4554@as"), result->Token->ShortDebugString());
+        UNIT_ASSERT_C(!result->Token->IsExist("something.write-bbbb4554@as"), result->Token->ShortDebugString());
 
         // Authorization failure with invalid token.
         runtime->Send(new IEventHandle(MakeTicketParserID(), sender, new TEvTicketParser::TEvAuthorizeTicket(
@@ -1562,8 +1758,8 @@ Y_UNIT_TEST_SUITE(TTicketParserTest) {
                                            {{"folder_id", "aaaa1234"}, {"database_id", "XXXXXXXX"}},
                                            {"something.read"})), 0);
         result = runtime->GrabEdgeEvent<TEvTicketParser::TEvAuthorizeTicketResult>(handle);
-        UNIT_ASSERT(result->Error.empty());
-        UNIT_ASSERT(result->Token->IsExist("something.read-XXXXXXXX@as"));
+        UNIT_ASSERT_C(result->Error.empty(), result->Error);
+        UNIT_ASSERT_C(result->Token->IsExist("something.read-XXXXXXXX@as"), result->Token->ShortDebugString());
 
         // Authorization successful with right database_id.
         accessServiceMock.AllowedResourceIds.clear();
@@ -1573,8 +1769,8 @@ Y_UNIT_TEST_SUITE(TTicketParserTest) {
                                            {{"folder_id", "XXXXXXXX"}, {"database_id", "bbbb4554"}},
                                            {"something.read"})), 0);
         result = runtime->GrabEdgeEvent<TEvTicketParser::TEvAuthorizeTicketResult>(handle);
-        UNIT_ASSERT(result->Error.empty());
-        UNIT_ASSERT(result->Token->IsExist("something.read-bbbb4554@as"));
+        UNIT_ASSERT_C(result->Error.empty(), result->Error);
+        UNIT_ASSERT_C(result->Token->IsExist("something.read-bbbb4554@as"), result->Token->ShortDebugString());
 
         // Authorization successful for gizmo resource
         accessServiceMock.AllowedResourceIds.clear();
@@ -1584,9 +1780,9 @@ Y_UNIT_TEST_SUITE(TTicketParserTest) {
                                            {{"gizmo_id", "gizmo"}, },
                                            {"monitoring.view"})), 0);
         result = runtime->GrabEdgeEvent<TEvTicketParser::TEvAuthorizeTicketResult>(handle);
-        UNIT_ASSERT(result->Error.empty());
-        UNIT_ASSERT(result->Token->IsExist("monitoring.view@as"));
-        UNIT_ASSERT(result->Token->IsExist("monitoring.view-gizmo@as"));
+        UNIT_ASSERT_C(result->Error.empty(), result->Error);
+        UNIT_ASSERT_C(result->Token->IsExist("monitoring.view@as"), result->Token->ShortDebugString());
+        UNIT_ASSERT_C(result->Token->IsExist("monitoring.view-gizmo@as"), result->Token->ShortDebugString());
     }
 
     Y_UNIT_TEST(Authorization) {
@@ -1595,6 +1791,10 @@ Y_UNIT_TEST_SUITE(TTicketParserTest) {
 
     Y_UNIT_TEST(BulkAuthorization) {
         Authorization<TTicketParserAccessServiceMockV2, true>();
+    }
+
+    Y_UNIT_TEST(NebiusAuthorization) {
+        Authorization<NKikimr::TNebiusAccessServiceMock>();
     }
 
     template <typename TAccessServiceMock, bool EnableBulkAuthorization = false>
@@ -1608,7 +1808,7 @@ Y_UNIT_TEST_SUITE(TTicketParserTest) {
         TString accessServiceEndpoint = "localhost:" + ToString(servicePort);
         NKikimrProto::TAuthConfig authConfig;
         authConfig.SetUseBlackBox(false);
-        authConfig.SetUseAccessService(true);
+        SetUseAccessService<TAccessServiceMock>(authConfig);
         authConfig.SetUseAccessServiceTLS(false);
         authConfig.SetAccessServiceEndpoint(accessServiceEndpoint);
         authConfig.SetUseStaff(false);
@@ -1654,7 +1854,8 @@ Y_UNIT_TEST_SUITE(TTicketParserTest) {
         result = runtime->GrabEdgeEvent<TEvTicketParser::TEvAuthorizeTicketResult>(handle);
         UNIT_ASSERT(!result->Error.empty());
         UNIT_ASSERT(!result->Error.Retryable);
-        UNIT_ASSERT_VALUES_EQUAL(result->Error.Message, "something.write for folder_id aaaa1234 - Access Denied");
+        UNIT_ASSERT_STRING_CONTAINS(result->Error.Message, "something.write for ");
+        UNIT_ASSERT_STRING_CONTAINS(result->Error.Message, "aaaa1234");
     }
 
     Y_UNIT_TEST(AuthorizationWithRequiredPermissions) {
@@ -1663,6 +1864,10 @@ Y_UNIT_TEST_SUITE(TTicketParserTest) {
 
     Y_UNIT_TEST(BulkAuthorizationWithRequiredPermissions) {
         AuthorizationWithRequiredPermissions<TTicketParserAccessServiceMockV2, true>();
+    }
+
+    Y_UNIT_TEST(NebiusAuthorizationWithRequiredPermissions) {
+        AuthorizationWithRequiredPermissions<NKikimr::TNebiusAccessServiceMock>();
     }
 
     template <typename TAccessServiceMock, bool EnableBulkAuthorization = false>
@@ -1859,7 +2064,7 @@ Y_UNIT_TEST_SUITE(TTicketParserTest) {
         TString accessServiceEndpoint = "localhost:" + ToString(servicePort);
         NKikimrProto::TAuthConfig authConfig;
         authConfig.SetUseBlackBox(false);
-        authConfig.SetUseAccessService(true);
+        SetUseAccessService<TAccessServiceMock>(authConfig);
         authConfig.SetUseAccessServiceTLS(false);
         authConfig.SetAccessServiceEndpoint(accessServiceEndpoint);
         authConfig.SetUseStaff(false);
@@ -1908,6 +2113,10 @@ Y_UNIT_TEST_SUITE(TTicketParserTest) {
         AuthorizationUnavailable<TTicketParserAccessServiceMockV2, true>();
     }
 
+    Y_UNIT_TEST(NebiusAuthorizationUnavailable) {
+        AuthorizationUnavailable<NKikimr::TNebiusAccessServiceMock>();
+    }
+
     template <typename TAccessServiceMock, bool EnableBulkAuthorization = false>
     void AuthorizationModify() {
         using namespace Tests;
@@ -1919,7 +2128,7 @@ Y_UNIT_TEST_SUITE(TTicketParserTest) {
         TString accessServiceEndpoint = "localhost:" + ToString(servicePort);
         NKikimrProto::TAuthConfig authConfig;
         authConfig.SetUseBlackBox(false);
-        authConfig.SetUseAccessService(true);
+        SetUseAccessService<TAccessServiceMock>(authConfig);
         authConfig.SetUseAccessServiceTLS(false);
         authConfig.SetAccessServiceEndpoint(accessServiceEndpoint);
         authConfig.SetUseStaff(false);
@@ -1977,6 +2186,10 @@ Y_UNIT_TEST_SUITE(TTicketParserTest) {
 
     Y_UNIT_TEST(BulkAuthorizationModify) {
         AuthorizationModify<TTicketParserAccessServiceMockV2, true>();
+    }
+
+    Y_UNIT_TEST(NebiusAuthorizationModify) {
+        AuthorizationModify<NKikimr::TNebiusAccessServiceMock>();
     }
 }
 }

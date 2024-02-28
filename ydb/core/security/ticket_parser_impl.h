@@ -3,6 +3,7 @@
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 #include <ydb/library/actors/core/hfunc.h>
 #include <library/cpp/digest/md5/md5.h>
+#include <ydb/library/nebius_cloud/impl/access_service.h>
 #include <ydb/library/ycloud/api/access_service.h>
 #include <ydb/library/ycloud/api/user_account_service.h>
 #include <ydb/library/ycloud/api/service_account_service.h>
@@ -88,6 +89,8 @@ private:
     using TEvAccessServiceBulkAuthorizeRequest = TEvRequestWithKey<NCloud::TEvAccessService::TEvBulkAuthorizeRequest>;
     using TEvAccessServiceGetUserAccountRequest = TEvRequestWithKey<NCloud::TEvUserAccountService::TEvGetUserAccountRequest>;
     using TEvAccessServiceGetServiceAccountRequest = TEvRequestWithKey<NCloud::TEvServiceAccountService::TEvGetServiceAccountRequest>;
+    using TEvNebiusAccessServiceAuthorizeRequest = TEvRequestWithKey<NNebiusCloud::TEvAccessService::TEvAuthorizeRequest>;
+    using TEvNebiusAccessServiceAuthenticateRequest = TEvRequestWithKey<NNebiusCloud::TEvAccessService::TEvAuthenticateRequest>;
 
     struct TTokenRefreshRecord {
         TString Key;
@@ -249,6 +252,18 @@ protected:
         return now + ExpireTime;
     }
 
+    bool AccessServiceEnabled() const {
+        return (AccessServiceValidatorV1 && AccessServiceValidatorV2) || NebiusAccessServiceValidator;
+    }
+
+    bool ApiKeyEnabled() const {
+        return AccessServiceValidatorV1 && AccessServiceValidatorV2 && Config.GetUseAccessServiceApiKey();
+    }
+
+    bool IsAccessKeySignatureSupported() const {
+        return AccessServiceValidatorV1 && AccessServiceValidatorV2; // Signature is supported by Yandex AccessService and is not supported by Nebius AccessService
+    }
+
 private:
     TString DomainName;
     ::NMonitoring::TDynamicCounters::TCounterPtr CounterTicketsReceived;
@@ -274,6 +289,7 @@ private:
     TActorId AccessServiceValidatorV2;
     TActorId UserAccountService;
     TActorId ServiceAccountService;
+    TActorId NebiusAccessServiceValidator;
     TString UserAccountDomain;
     TString AccessServiceDomain;
     TString ServiceDomain;
@@ -359,30 +375,38 @@ private:
         return request;
     }
 
+    template <typename TPathsContainerPtr>
+    static void AddResourcePath(TPathsContainerPtr pathsContainer, const TString& id, const TString& type) {
+        auto resourcePath = pathsContainer->add_resource_path();
+        resourcePath->set_id(id);
+        resourcePath->set_type(type);
+    }
+
+    template <>
+    static void AddResourcePath<nebius::iam::v1::ResourcePath*>(nebius::iam::v1::ResourcePath* pathsContainer, const TString& id, const TString& type) {
+        auto resourcePath = pathsContainer->add_path();
+        resourcePath->set_id(id);
+        Y_UNUSED(type);
+    }
+
     template <typename TTokenRecord, typename TPathsContainerPtr>
     void addResourcePaths(const TTokenRecord& record, const TString& permission, TPathsContainerPtr pathsContainer) const {
-        auto addResourcePath = [&pathsContainer] (const TString& id, const TString& type) {
-            auto resourcePath = pathsContainer->add_resource_path();
-            resourcePath->set_id(id);
-            resourcePath->set_type(type);
-        };
-
         if (const auto databaseId = record.GetAttributeValue(permission, "database_id"); databaseId) {
-            addResourcePath(databaseId, "ydb.database");
+            AddResourcePath(pathsContainer, databaseId, "ydb.database");
         } else if (const auto serviceAccountId = record.GetAttributeValue(permission, "service_account_id"); serviceAccountId) {
-            addResourcePath(serviceAccountId, "iam.serviceAccount");
+            AddResourcePath(pathsContainer, serviceAccountId, "iam.serviceAccount");
         }
 
         if (const auto folderId = record.GetAttributeValue(permission, "folder_id"); folderId) {
-            addResourcePath(folderId, "resource-manager.folder");
+            AddResourcePath(pathsContainer, folderId, "resource-manager.folder");
         }
 
         if (const auto cloudId = record.GetAttributeValue(permission, "cloud_id"); cloudId) {
-            addResourcePath(cloudId, "resource-manager.cloud");
+            AddResourcePath(pathsContainer, cloudId, "resource-manager.cloud");
         }
 
         if (const TString gizmoId = record.GetAttributeValue(permission, "gizmo_id"); gizmoId) {
-            addResourcePath(gizmoId, "iam.gizmo");
+            AddResourcePath(pathsContainer, gizmoId, "iam.gizmo");
         }
     }
 
@@ -416,22 +440,62 @@ private:
     }
 
     template <typename TTokenRecord>
+    void NebiusAccessServiceAuthorize(const TString& key, TTokenRecord& record) const {
+        auto request = MakeHolder<TEvNebiusAccessServiceAuthorizeRequest>(key);
+        TStringBuilder requestForPermissions;
+        i64 i = 0;
+        for (const auto& [permissionName, permissionRecord] : record.Permissions) {
+            auto& check = (*request->Request.mutable_checks())[i];
+            check.set_iam_token(record.Ticket);
+            check.mutable_permission()->set_name(permissionName);
+            addResourcePaths(record, permissionName, check.mutable_resource_path());
+            requestForPermissions << " " << permissionName;
+            ++i;
+        }
+        BLOG_TRACE("Ticket " << record.GetMaskedTicket() << " asking for AccessServiceAuthorization(" << requestForPermissions << ")");
+        record.ResponsesLeft++;
+        Send(NebiusAccessServiceValidator, request.Release());
+    }
+
+    template <typename TTokenRecord>
     void RequestAccessServiceAuthorization(const TString& key, TTokenRecord& record) const {
         if (AppData()->FeatureFlags.GetEnableAccessServiceBulkAuthorization()) {
             AccessServiceBulkAuthorize(key, record);
+        } else if (NebiusAccessServiceValidator) {
+            NebiusAccessServiceAuthorize(key, record);
         } else {
             AccessServiceAuthorize(key, record);
         }
     }
 
     template <typename TTokenRecord>
-    void RequestAccessServiceAuthentication(const TString& key, TTokenRecord& record) const {
+    void AccessServiceAuthenticate(const TString& key, TTokenRecord& record) const {
         BLOG_TRACE("Ticket " << record.GetMaskedTicket() << " asking for AccessServiceAuthentication");
 
         auto request = CreateAccessServiceRequest<TEvAccessServiceAuthenticateRequest>(key, record);
 
         record.ResponsesLeft++;
         Send(AccessServiceValidatorV1, request.Release());
+    }
+
+    template <typename TTokenRecord>
+    void NebiusAccessServiceAuthenticate(const TString& key, TTokenRecord& record) const {
+        BLOG_TRACE("Ticket " << record.GetMaskedTicket() << " asking for AccessServiceAuthentication");
+
+        auto request = MakeHolder<TEvNebiusAccessServiceAuthenticateRequest>(key);
+        request->Request.set_iam_token(record.Ticket);
+
+        record.ResponsesLeft++;
+        Send(NebiusAccessServiceValidator, request.Release());
+    }
+
+    template <typename TTokenRecord>
+    void RequestAccessServiceAuthentication(const TString& key, TTokenRecord& record) const {
+        if (NebiusAccessServiceValidator) {
+            NebiusAccessServiceAuthenticate(key, record);
+        } else {
+            AccessServiceAuthenticate(key, record);
+        }
     }
 
 
@@ -449,6 +513,19 @@ private:
         }
     }
 
+    template <>
+    TString GetSubjectName<nebius::iam::v1::Account>(const nebius::iam::v1::Account& account) {
+        using Subject = nebius::iam::v1::Account;
+        switch (account.type_case()) {
+        case Subject::TypeCase::kUserAccount:
+            return account.user_account().id() + "@" + AccessServiceDomain;
+        case Subject::TypeCase::kServiceAccount:
+            return account.service_account().id() + "@" + AccessServiceDomain;
+        default:
+            return "Unknown subject type";
+        }
+    }
+
     template <typename TSubjectType>
     typename TPermissionRecord::TTypeCase ConvertSubjectType(const TSubjectType& type) {
         switch (type) {
@@ -458,6 +535,19 @@ private:
             return TPermissionRecord::TTypeCase::SERVICE_ACCOUNT_TYPE;
         case TSubjectType::kAnonymousAccount:
             return TPermissionRecord::TTypeCase::ANONYMOUS_ACCOUNT_TYPE;
+        default:
+            return TPermissionRecord::TTypeCase::TYPE_NOT_SET;
+        }
+    }
+
+    template <>
+    typename TPermissionRecord::TTypeCase ConvertSubjectType<nebius::iam::v1::Account::TypeCase>(const nebius::iam::v1::Account::TypeCase& type) {
+        using Account = nebius::iam::v1::Account;
+        switch (type) {
+        case Account::kUserAccount:
+            return TPermissionRecord::TTypeCase::USER_ACCOUNT_TYPE;
+        case Account::kServiceAccount:
+            return TPermissionRecord::TTypeCase::SERVICE_ACCOUNT_TYPE;
         default:
             return TPermissionRecord::TTypeCase::TYPE_NOT_SET;
         }
@@ -612,6 +702,14 @@ private:
 
         CounterTicketsReceived->Inc();
         const auto& signature = ev->Get()->Signature;
+        if (!IsAccessKeySignatureSupported() && (signature.AccessKeyId || signature.Signature)) {
+            TEvTicketParser::TError error;
+            error.Message = "Access key signature is not supported";
+            error.Retryable = false;
+            BLOG_ERROR("Ticket " << MaskTicket(signature.AccessKeyId) << ": " << error);
+            Send(sender, new TEvTicketParser::TEvAuthorizeTicketResult(ev->Get()->Ticket, error), 0, cookie);
+            return;
+        }
         if (ticket.empty() && !signature.AccessKeyId) {
             TEvTicketParser::TError error;
             error.Message = "Ticket is empty";
@@ -673,6 +771,50 @@ private:
             return;
         }
         record.AuthorizeRequests.emplace_back(ev.Release());
+    }
+
+    void Handle(NNebiusCloud::TEvAccessService::TEvAuthenticateResponse::TPtr& ev) {
+        NNebiusCloud::TEvAccessService::TEvAuthenticateResponse* response = ev->Get();
+        TEvNebiusAccessServiceAuthenticateRequest* request = response->Request->Get<TEvNebiusAccessServiceAuthenticateRequest>();
+        auto& userTokens = GetDerived()->GetUserTokens();
+        auto it = userTokens.find(request->Key);
+        if (it == userTokens.end()) {
+            // wtf? it should be there
+            BLOG_ERROR("Ticket " << MaskTicket(request->Request.iam_token()) << " has expired during build");
+        } else {
+            const auto& key = it->first;
+            auto& record = it->second;
+            record.ResponsesLeft--;
+            if (response->Status.Ok()) {
+                const auto& account = response->Response.account();
+                switch (account.type_case()) {
+                case nebius::iam::v1::Account::TypeCase::kUserAccount:
+                case nebius::iam::v1::Account::TypeCase::kServiceAccount:
+                    record.Subject = GetSubjectName(account);
+                    break;
+                default:
+                    record.Subject.clear();
+                    SetError(key, record, {"Unknown subject type", false});
+                    break;
+                }
+                record.TokenType = TDerived::ETokenType::AccessService; // the only supported
+                if (!record.Subject.empty()) {
+                    SetToken(key, record, new NACLib::TUserToken({
+                        .OriginalUserToken = record.Ticket,
+                        .UserSID = record.Subject,
+                        .AuthType = record.GetAuthType()
+                    }));
+                }
+            } else {
+                if (record.ResponsesLeft == 0 && (record.TokenType == TDerived::ETokenType::Unknown || record.TokenType == TDerived::ETokenType::AccessService || record.TokenType == TDerived::ETokenType::ApiKey)) {
+                    bool retryable = IsRetryableGrpcError(response->Status);
+                    SetError(key, record, {response->Status.Msg, retryable});
+                }
+            }
+            if (record.ResponsesLeft == 0) {
+                Respond(record);
+            }
+        }
     }
 
     void Handle(NCloud::TEvAccessService::TEvAuthenticateResponse::TPtr& ev) {
@@ -737,7 +879,7 @@ private:
                 }
             } else {
                 if (record.ResponsesLeft == 0 && (record.TokenType == TDerived::ETokenType::Unknown || record.TokenType == TDerived::ETokenType::AccessService || record.TokenType == TDerived::ETokenType::ApiKey)) {
-                bool retryable = IsRetryableGrpcError(response->Status);
+                    bool retryable = IsRetryableGrpcError(response->Status);
                     SetError(key, record, {response->Status.Msg, retryable});
                 }
             }
@@ -791,6 +933,20 @@ private:
         }
     }
 
+    template <class TResourcePath>
+    TString GetResourcePathIdForRequiredPermissions(const TResourcePath& resourcePath) {
+        if (resourcePath.type() == "resource-manager.folder") {
+            return " folder_id " + resourcePath.id();
+        }
+        if (resourcePath.type() == "resource-manager.cloud") {
+            return " cloud_id " + resourcePath.id();
+        }
+        if (resourcePath.type() == "iam.serviceAccount") {
+            return " service_account_id " + resourcePath.id();
+        }
+        return "";
+    };
+
     template <typename TTokenRecord>
     void SetAccessServiceBulkAuthorizeError(const TString& key, TTokenRecord& record, const TString& errorMessage, bool isRetryableError) {
         for (auto& [permissionName, permissionRecord] : record.Permissions) {
@@ -804,20 +960,132 @@ private:
         SetError(key, record, {.Message = errorMessage, .Retryable = isRetryableError});
     }
 
-    void Handle(NCloud::TEvAccessService::TEvBulkAuthorizeResponse::TPtr& ev) {
-        auto getResourcePathIdForRequiredPermissions = [] (const ::yandex::cloud::priv::accessservice::v2::Resource& resource_path) -> TString {
-            if (resource_path.type() == "resource-manager.folder") {
-                return " folder_id " + resource_path.id();
-            }
-            if (resource_path.type() == "resource-manager.cloud") {
-                return " cloud_id " + resource_path.id();
-            }
-            if (resource_path.type() == "iam.serviceAccount") {
-                return " service_account_id " + resource_path.id();
-            }
-            return "";
-        };
+    void Handle(NNebiusCloud::TEvAccessService::TEvAuthorizeResponse::TPtr& ev) {
+        NNebiusCloud::TEvAccessService::TEvAuthorizeResponse* response = ev->Get();
+        TEvNebiusAccessServiceAuthorizeRequest* request = response->Request->Get<TEvNebiusAccessServiceAuthorizeRequest>();
+        const TString& key(request->Key);
+        auto& userTokens = GetDerived()->GetUserTokens();
+        auto itToken = userTokens.find(key);
+        if (itToken == userTokens.end()) {
+            BLOG_ERROR("Ticket(key) "
+                        << MaskTicket(key)
+                        << " has expired during permission check");
+        } else {
+            auto& record = itToken->second;
+            --record.ResponsesLeft;
+            auto& examinedPermissions = record.Permissions;
+            if (response->Status.Ok()) {
+                if (response->Response.results_size() == 0) {
+                    SetAccessServiceBulkAuthorizeError(key, record, TStringBuilder() << "Internal error: no results in authorize response", false);
+                } else {
+                    for (auto& [permissionName, permissionRecord] : examinedPermissions) {
+                        permissionRecord.Error.clear();
+                    }
 
+                    size_t permissionDeniedCount = 0;
+                    bool hasRequiredPermissionFailed = false;
+                    std::vector<typename THashMap<TString, TPermissionRecord>::iterator> requiredPermissions;
+                    THashSet<TString> processedPermissions;
+                    bool internalError = false;
+                    bool subjectIsResolved = false;
+                    for (const auto& [resultKey, result] : response->Response.results()) {
+                        const auto checkIt = request->Request.checks().find(resultKey);
+                        if (checkIt == request->Request.checks().end()) {
+                            SetAccessServiceBulkAuthorizeError(key, record, TStringBuilder() << "Internal error: unknown result key: " << resultKey, false);
+                            BLOG_W("Internal error: unknown result key: " << resultKey << " for ticket " << record.GetMaskedTicket());
+                            internalError = true;
+                            break;
+                        }
+                        const auto& check = checkIt->second;
+
+                        if (!subjectIsResolved) {
+                            const auto& account = result.account();
+                            record.Subject = GetSubjectName(account);
+                            auto subjectType = ConvertSubjectType(account.type_case());
+                            for (auto& [_, permissionRecord] : record.Permissions) {
+                                permissionRecord.Subject = record.Subject;
+                                permissionRecord.SubjectType = subjectType;
+                            }
+                            subjectIsResolved = true;
+                        }
+
+                        const TString& permissionName = check.permission().name();
+                        auto permissionIt = examinedPermissions.find(permissionName);
+                        if (permissionIt != examinedPermissions.end()) {
+                            processedPermissions.insert(permissionIt->first);
+                            auto& permissionRecord = permissionIt->second;
+                            if (!result.authorized()) {
+                                permissionDeniedCount++;
+                                permissionRecord.Subject.clear();
+                                BLOG_TRACE("Ticket " << record.GetMaskedTicket() << " permission " << permissionName << " access denied for subject \"" << (record.Subject ? record.Subject : "<not resolved>") << "\"");
+                                TStringBuilder errorMessage;
+                                if (permissionRecord.IsRequired()) {
+                                    hasRequiredPermissionFailed = true;
+                                    errorMessage << permissionIt->first << " for";
+                                    for (const auto& resourcePath : check.resource_path().path()) {
+                                        errorMessage << ' ' << resourcePath.id();
+                                    }
+                                    errorMessage << " - ";
+                                    requiredPermissions.push_back(permissionIt);
+                                }
+                                errorMessage << "Access Denied";
+                                permissionRecord.Error = {.Message = errorMessage, .Retryable = false};
+                            }
+                        } else {
+                            BLOG_W("Received response for unknown permission " << permissionName << " for ticket " << record.GetMaskedTicket());
+                        }
+                    }
+                    if (!internalError) {
+                        if (processedPermissions.size() != examinedPermissions.size()) {
+                            auto printAbsentPermissions = [&]() -> TString {
+                                TStringBuilder b;
+                                for (const auto& [name, _] : examinedPermissions) {
+                                    auto it = processedPermissions.find(name);
+                                    if (it != processedPermissions.end()) {
+                                        continue;
+                                    }
+                                    if (b) {
+                                        b << ", ";
+                                    }
+                                    b << name;
+                                }
+                                return std::move(b);
+                            };
+                            BLOG_W("Received response with not all permissions. Absent permissions: " << printAbsentPermissions());
+                            SetAccessServiceBulkAuthorizeError(key, record, TStringBuilder() << "Internal error: not all permissions in authorize response", false);
+                        } else if (permissionDeniedCount < examinedPermissions.size() && !hasRequiredPermissionFailed) {
+                            record.TokenType = TDerived::ETokenType::AccessService;
+                            SetToken(key, record, new NACLib::TUserToken({
+                                .OriginalUserToken = record.Ticket,
+                                .UserSID = record.Subject,
+                                .AuthType = record.GetAuthType()
+                            }));
+                        } else {
+                            if (hasRequiredPermissionFailed) {
+                                TStringBuilder errorMessage;
+                                auto it = requiredPermissions.cbegin();
+                                errorMessage << (*it)->second.Error.Message;
+                                ++it;
+                                for (; it != requiredPermissions.cend(); ++it) {
+                                    errorMessage << ", " << (*it)->second.Error.Message;
+                                }
+                                SetError(key, record, {.Message = errorMessage, .Retryable = false});
+                            } else {
+                                SetError(key, record, {.Message = "Access Denied", .Retryable = false});
+                            }
+                        }
+                    }
+                }
+            } else {
+                SetAccessServiceBulkAuthorizeError(key, record, response->Status.Msg, IsRetryableGrpcError(response->Status));
+            }
+            if (record.ResponsesLeft == 0) {
+                Respond(record);
+            }
+        }
+    }
+
+    void Handle(NCloud::TEvAccessService::TEvBulkAuthorizeResponse::TPtr& ev) {
         NCloud::TEvAccessService::TEvBulkAuthorizeResponse* response = ev->Get();
         TEvAccessServiceBulkAuthorizeRequest* request = response->Request->Get<TEvAccessServiceBulkAuthorizeRequest>();
         const TString& key(request->Key);
@@ -860,12 +1128,12 @@ private:
                                 hasRequiredPermissionFailed = true;
                                 errorMessage << permissionDeniedIt->first << " for";
                                 for (const auto& resourcePath : result.resource_path()) {
-                                    errorMessage << getResourcePathIdForRequiredPermissions(resourcePath);
+                                    errorMessage << GetResourcePathIdForRequiredPermissions(resourcePath);
                                 }
                                 errorMessage << " - ";
                                 requiredPermissions.push_back(permissionDeniedIt);
                             }
-                            permissionDeniedError = result.permission_denied_error().message();;
+                            permissionDeniedError = result.permission_denied_error().message();
                             errorMessage << permissionDeniedError;
                             permissionDeniedRecord.Error = {.Message = errorMessage, .Retryable = false};
                         } else {
@@ -1234,13 +1502,13 @@ protected:
         }
 
         if (tokenType == "Bearer" || tokenType == "IAM") {
-            if (AccessServiceValidatorV1 && AccessServiceValidatorV2) {
+            if (AccessServiceEnabled()) {
                 return TDerived::ETokenType::AccessService;
             } else {
                 return TDerived::ETokenType::Unsupported;
             }
         } else if (tokenType == "ApiKey") {
-            if (AccessServiceValidatorV1 && AccessServiceValidatorV2 && Config.GetUseAccessServiceApiKey()) {
+            if (ApiKeyEnabled()) {
                 return TDerived::ETokenType::ApiKey;
             } else {
                 return TDerived::ETokenType::Unsupported;
@@ -1261,10 +1529,16 @@ protected:
         for (const TString& sid : record.AdditionalSIDs) {
             token->AddGroupSID(sid);
         }
+        Cerr << "EnrichUserTokenWithBuiltins. Permissions: " << record.Permissions.size() << "\n";
         if (!record.Permissions.empty()) {
             TString subject;
             TVector<TString> groups;
             for (const auto& [permission, rec] : record.Permissions) {
+                Cerr << "Perm " << permission << " Subj " << rec.Subject << " Err \"" << rec.Error.Message << "\"";
+                for (const auto& [k ,v] : rec.Attributes) {
+                    Cerr << " (" << k << ", " << v << ")";
+                }
+                Cerr << "\n";
                 if (rec.IsPermissionOk()) {
                     subject = rec.Subject;
                     AddPermissionSids(groups, record, permission);
@@ -1296,7 +1570,7 @@ protected:
     template <typename TTokenRecord>
     void InitTokenRecord(const TString& key, TTokenRecord& record, TInstant) {
         if (GetDerived()->CanInitAccessServiceToken(record)) {
-            if (AccessServiceValidatorV1 && AccessServiceValidatorV2) {
+            if (AccessServiceEnabled()) {
                 if (record.Permissions) {
                     RequestAccessServiceAuthorization(key, record);
                 } else {
@@ -1580,6 +1854,7 @@ protected:
         html << "<tr><td>Access Service</td><td>" << HtmlBool((bool)AccessServiceValidatorV1 && (bool)AccessServiceValidatorV2) << "</td></tr>";
         html << "<tr><td>User Account Service</td><td>" << HtmlBool((bool)UserAccountService) << "</td></tr>";
         html << "<tr><td>Service Account Service</td><td>" << HtmlBool((bool)ServiceAccountService) << "</td></tr>";
+        html << "<tr><td>Nebius Access Service</td><td>" << HtmlBool((bool)NebiusAccessServiceValidator) << "</td></tr>";
     }
 
     template <typename TTokenRecord>
@@ -1614,36 +1889,49 @@ protected:
                                                          NMonitoring::ExplicitHistogram({0, 1, 5, 10, 50, 100, 500, 1000, 2000, 5000, 10000, 30000, 60000}));
     }
 
+    void FillAccessServiceSettings(NGrpcActorClient::TGrpcClientSettings& settings) {
+        settings.Endpoint = Config.GetAccessServiceEndpoint();
+        if (Config.GetUseAccessServiceTLS()) {
+            settings.CertificateRootCA = TUnbufferedFileInput(Config.GetPathToRootCA()).ReadAll();
+        }
+        settings.GrpcKeepAliveTimeMs = Config.GetAccessServiceGrpcKeepAliveTimeMs();
+        settings.GrpcKeepAliveTimeoutMs = Config.GetAccessServiceGrpcKeepAliveTimeoutMs();
+    }
+
     void InitAuthProvider() {
         AccessServiceDomain = Config.GetAccessServiceDomain();
         UserAccountDomain = Config.GetUserAccountDomain();
         ServiceDomain = Config.GetServiceDomain();
 
         if (Config.GetUseAccessService()) {
-            NCloud::TAccessServiceSettings settings;
-            settings.Endpoint = Config.GetAccessServiceEndpoint();
-            if (Config.GetUseAccessServiceTLS()) {
-                settings.CertificateRootCA = TUnbufferedFileInput(Config.GetPathToRootCA()).ReadAll();
-            }
-            settings.GrpcKeepAliveTimeMs = Config.GetAccessServiceGrpcKeepAliveTimeMs();
-            settings.GrpcKeepAliveTimeoutMs = Config.GetAccessServiceGrpcKeepAliveTimeoutMs();
-            AccessServiceValidatorV1 = Register(NCloud::CreateAccessServiceV1(settings), TMailboxType::HTSwap, AppData()->UserPoolId);
-            if (Config.GetCacheAccessServiceAuthentication()) {
-                AccessServiceValidatorV1 = Register(NGrpcActorClient::CreateGrpcServiceCache<NCloud::TEvAccessService::TEvAuthenticateRequest, NCloud::TEvAccessService::TEvAuthenticateResponse>(
-                                                          AccessServiceValidatorV1,
-                                                          Config.GetGrpcCacheSize(),
-                                                          TDuration::MilliSeconds(Config.GetGrpcSuccessLifeTime()),
-                                                          TDuration::MilliSeconds(Config.GetGrpcErrorLifeTime())), TMailboxType::HTSwap, AppData()->UserPoolId);
-            }
-            if (Config.GetCacheAccessServiceAuthorization()) {
-                AccessServiceValidatorV1 = Register(NGrpcActorClient::CreateGrpcServiceCache<NCloud::TEvAccessService::TEvAuthorizeRequest, NCloud::TEvAccessService::TEvAuthorizeResponse>(
-                                                          AccessServiceValidatorV1,
-                                                          Config.GetGrpcCacheSize(),
-                                                          TDuration::MilliSeconds(Config.GetGrpcSuccessLifeTime()),
-                                                          TDuration::MilliSeconds(Config.GetGrpcErrorLifeTime())), TMailboxType::HTSwap, AppData()->UserPoolId);
-            }
+            if (Config.GetAccessServiceType() == "Yandex") {
+                NCloud::TAccessServiceSettings settings;
+                FillAccessServiceSettings(settings);
 
-            AccessServiceValidatorV2 = Register(NCloud::CreateAccessServiceV2(settings), TMailboxType::HTSwap, AppData()->UserPoolId);
+                AccessServiceValidatorV1 = Register(NCloud::CreateAccessServiceV1(settings), TMailboxType::HTSwap, AppData()->UserPoolId);
+                if (Config.GetCacheAccessServiceAuthentication()) {
+                    AccessServiceValidatorV1 = Register(NGrpcActorClient::CreateGrpcServiceCache<NCloud::TEvAccessService::TEvAuthenticateRequest, NCloud::TEvAccessService::TEvAuthenticateResponse>(
+                                                            AccessServiceValidatorV1,
+                                                            Config.GetGrpcCacheSize(),
+                                                            TDuration::MilliSeconds(Config.GetGrpcSuccessLifeTime()),
+                                                            TDuration::MilliSeconds(Config.GetGrpcErrorLifeTime())), TMailboxType::HTSwap, AppData()->UserPoolId);
+                }
+                if (Config.GetCacheAccessServiceAuthorization()) {
+                    AccessServiceValidatorV1 = Register(NGrpcActorClient::CreateGrpcServiceCache<NCloud::TEvAccessService::TEvAuthorizeRequest, NCloud::TEvAccessService::TEvAuthorizeResponse>(
+                                                            AccessServiceValidatorV1,
+                                                            Config.GetGrpcCacheSize(),
+                                                            TDuration::MilliSeconds(Config.GetGrpcSuccessLifeTime()),
+                                                            TDuration::MilliSeconds(Config.GetGrpcErrorLifeTime())), TMailboxType::HTSwap, AppData()->UserPoolId);
+                }
+
+                AccessServiceValidatorV2 = Register(NCloud::CreateAccessServiceV2(settings), TMailboxType::HTSwap, AppData()->UserPoolId);
+            } else if (Config.GetAccessServiceType() == "Nebius") {
+                NNebiusCloud::TAccessServiceSettings settings;
+                FillAccessServiceSettings(settings);
+                NebiusAccessServiceValidator = Register(NNebiusCloud::CreateAccessServiceV1(settings), TMailboxType::HTSwap, AppData()->UserPoolId);
+            } else {
+                Y_ABORT("Unknown AccessServiceType setting: \"%s\"", Config.GetAccessServiceType().c_str());
+            }
         }
 
         if (Config.GetUseUserAccountService()) {
@@ -1706,6 +1994,9 @@ protected:
         if (ServiceAccountService) {
             Send(ServiceAccountService, new TEvents::TEvPoisonPill);
         }
+        if (NebiusAccessServiceValidator) {
+            Send(NebiusAccessServiceValidator, new TEvents::TEvPoisonPill);
+        }
         TBase::PassAway();
     }
 
@@ -1747,6 +2038,8 @@ public:
             hFunc(NCloud::TEvAccessService::TEvBulkAuthorizeResponse, Handle);
             hFunc(NCloud::TEvUserAccountService::TEvGetUserAccountResponse, Handle);
             hFunc(NCloud::TEvServiceAccountService::TEvGetServiceAccountResponse, Handle);
+            hFunc(NNebiusCloud::TEvAccessService::TEvAuthenticateResponse, Handle);
+            hFunc(NNebiusCloud::TEvAccessService::TEvAuthorizeResponse, Handle);
             hFunc(NMon::TEvHttpInfo, Handle);
             cFunc(TEvents::TSystem::Wakeup, HandleRefresh);
             cFunc(TEvents::TSystem::PoisonPill, PassAway);

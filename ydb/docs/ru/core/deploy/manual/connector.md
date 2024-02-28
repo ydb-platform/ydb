@@ -17,6 +17,31 @@
 
 Коннектор может быть установлен с помощью бинарного дистрибутива или с помощью Docker-образа.
 
+### Запуск из бинарного дистрибутива
+
+Для установки коннектора на физический или виртуальный сервер без средств контейнерной виртуализации используйте бинарные дистрибутивы.
+
+1. На [странице с релизами](https://github.com/ydb-platform/fq-connector-go/releases) коннектора выберите последний релиз, скачайте архив для подходящей вам платформы и архитектуры. Так выглядит команда для скачивания коннектора версии `v0.2.2` под платформу Linux и архитектуру процессора `amd64`:
+    ```bash
+    wget https://github.com/ydb-platform/fq-connector-go/releases/download/v0.2.2/fq-connector-go-v0.2.2-linux-amd64.tar.gz
+    tar -xzf fq-connector-go-v0.2.2-linux-amd64.tar.gz
+    ```
+
+1. Разместите исполняемый и конфигурационный файлы коннектора в удобные для вас директории, например, `/usr/local/bin` и `/usr/local/etc`:
+    ```bash
+    sudo cp fq-connector-go /usr/local/bin
+    sudo cp fq-connector-go.yaml /usr/local/etc
+    ```
+
+1. В [рекомендуемом режиме использования](../../deploy/manual/deploy-ydb-federated-query.md#general-scheme) коннектор развёртывается на тех же серверах, что и динамические узлы {{ ydb-short-name }}, следовательно, шифрование сетевых соединений между ними *не требуется*. Однако если вам всё же необходимо включить шифрование, [подготовьте пару TLS-ключей](../manual/deploy-ydb-on-premises.md#tls-certificates) и пропишите пути до публичного и приватного ключа в поля `connector_server.tls.cert` и `connector_server.tls.key` конфигурационного файла `fq-connector-go.yaml`:
+    ```yaml
+    connector_server:
+      # ...
+      tls:
+        cert: "/usr/local/etc/tls/cert.crt"
+        key: "/usr/local/etc/tls/key.key"
+    ```
+
 ### Запуск в Docker {#fq-connector-go-docker}
 
 Для запуска коннектора используйте официальный [Docker-образ](https://github.com/ydb-platform/fq-connector-go/pkgs/container/fq-connector-go). Он уже содержит [конфигурационный файл](https://github.com/ydb-platform/fq-connector-go/blob/main/app/server/config/config.prod.yaml) сервиса. Запустить сервис с настройками по умолчанию можно следующей командой: 
@@ -40,8 +65,15 @@ docker run -d \
     ghcr.io/ydb-platform/fq-connector-go:latest
 ```
 
-Для организации шифрованных соединений между {{ ydb-short-name }} и коннектором [подготовьте пару TLS-ключей](../manual/deploy-ydb-on-premises.md#tls-certificates) и примонтируйте папку с ключами в контейнер, а также пропишите пути до публичного и приватного ключа в секции конфигурационного файла `connector_server.tls.cert` и `connector_server.tls.key` соответственно:
+В [рекомендуемом режиме использования](../../deploy/manual/deploy-ydb-federated-query.md#general-scheme) коннектор развёртывается на тех же серверах, что и динамические узлы {{ ydb-short-name }}, следовательно, шифрование сетевых соединений между ними *не требуется*. Но если вам всё же необходимо включить шифрование между {{ ydb-short-name }} и коннектором, [подготовьте пару TLS-ключей](../manual/deploy-ydb-on-premises.md#tls-certificates) и примонтируйте папку с ключами в контейнер, а также пропишите пути до публичного и приватного ключа в секции конфигурационного файла `connector_server.tls.cert` и `connector_server.tls.key` соответственно:
 
+```yaml
+connector_server:
+  # ...
+  tls:
+    cert: "/usr/local/etc/tls/cert.crt"
+    key: "/usr/local/etc/tls/key.key"
+```
 ```bash
 docker run -d \
     --name=fq-connector-go \
@@ -78,13 +110,6 @@ docker build -t fq-connector-go_custom_ca .
 ```
 
 Новый образ `fq-connector-go_custom_ca` можно использовать для развёртывания сервиса с помощью команд, приведённых выше.
-
-### Запуск из бинарного дистрибутива
-
-Для установки коннектора на физический или виртуальный сервер без средств контейнерной виртуализации используйте бинарные дистрибутивы.
-
-1. На странице с релизами (...)
-
 
 ### Конфигурация {#fq-connector-go-config}
 

@@ -38,9 +38,9 @@ static const TString defaultTableSchema = R"(
     }
 )";
 
-static const TVector<std::pair<TString, TTypeInfo>> defaultYdbSchema = {
-    {"timestamp", TTypeInfo(NTypeIds::Timestamp) },
-    {"data", TTypeInfo(NTypeIds::Utf8) }
+static const TVector<NArrow::NTest::TTestColumn> defaultYdbSchema = {
+    NArrow::NTest::TTestColumn("timestamp", TTypeInfo(NTypeIds::Timestamp) ),
+    NArrow::NTest::TTestColumn("data", TTypeInfo(NTypeIds::Utf8) )
 };
 
 }}

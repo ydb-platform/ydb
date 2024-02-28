@@ -18,6 +18,7 @@ message TS3ReadActorFactoryConfig {
 
 message TPqReadActorFactoryConfig {
     bool CookieCommitMode = 1; // Turn off RangesMode setting in PQ read session.
+    bool UseCommit = 2;        // Commit offset to api. False - not commited.
 }
 
 message TReadActorsFactoryConfig {

@@ -1274,18 +1274,6 @@ template <typename TDerived>
 struct TWriteSessionSettingsBase : public TRequestSettings<TWriteSessionSettingsBase<TDerived>> {
     using TSelf = TDerived;
 
-    TWriteSessionSettingsBase() = default;
-    TWriteSessionSettingsBase(const TWriteSessionSettingsBase&) = default;
-    TWriteSessionSettingsBase(TWriteSessionSettingsBase&&) = default;
-    TWriteSessionSettingsBase(const TString& path, const TString& producerId, const TString& messageGroupId) {
-        Path(path);
-        ProducerId(producerId);
-        MessageGroupId(messageGroupId);
-    }
-
-    TWriteSessionSettingsBase& operator=(const TWriteSessionSettingsBase&) = default;
-    TWriteSessionSettingsBase& operator=(TWriteSessionSettingsBase&&) = default;
-
     //! Path of topic to write.
     FLUENT_SETTING(TString, Path);
 
@@ -1399,6 +1387,13 @@ struct TWriteSessionSettingsBase : public TRequestSettings<TWriteSessionSettings
 };
 
 struct TWriteSessionSettings : public TWriteSessionSettingsBase<TWriteSessionSettings> {
+    TWriteSessionSettings() = default;
+
+    TWriteSessionSettings(const TString& path, const TString& producerId, const TString& messageGroupId) {
+        Path(path);
+        ProducerId(producerId);
+        MessageGroupId(messageGroupId);
+    }
 };
 
 //! Read settings for single topic.

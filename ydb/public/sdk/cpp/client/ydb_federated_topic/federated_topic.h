@@ -245,6 +245,14 @@ TString DebugString(const TReadSessionEvent::TEvent& event);
 struct TFederatedWriteSessionSettings : public NTopic::TWriteSessionSettingsBase<TFederatedWriteSessionSettings> {
     using TSelf = TFederatedWriteSessionSettings;
 
+    TFederatedWriteSessionSettings() = default;
+
+    TFederatedWriteSessionSettings(const TString& path, const TString& producerId, const TString& messageGroupId) {
+        Path(path);
+        ProducerId(producerId);
+        MessageGroupId(messageGroupId);
+    }
+
     //! Preferred database
     //! If specified database is unavailable, session will write to other database.
     FLUENT_SETTING_OPTIONAL(TString, PreferredDatabase);
@@ -252,25 +260,6 @@ struct TFederatedWriteSessionSettings : public NTopic::TWriteSessionSettingsBase
     //! Write to other databases if there are problems with connection
     //! to the preferred one.
     FLUENT_SETTING_DEFAULT(bool, AllowFallback, true);
-
-    TFederatedWriteSessionSettings() = default;
-    TFederatedWriteSessionSettings(const TFederatedWriteSessionSettings&) = default;
-    TFederatedWriteSessionSettings(TFederatedWriteSessionSettings&&) = default;
-    TFederatedWriteSessionSettings& operator=(const TFederatedWriteSessionSettings&) = default;
-    TFederatedWriteSessionSettings& operator=(TFederatedWriteSessionSettings&&) = default;
-
-    TFederatedWriteSessionSettings(const TString& path, const TString& producerId, const TString& messageGroupId)
-        : NTopic::TWriteSessionSettingsBase<TSelf>(path, producerId, messageGroupId) {
-    }
-
-    // TFederatedWriteSessionSettings(const NTopic::TWriteSessionSettings& settings)
-    //     : NTopic::TWriteSessionSettingsBase<TSelf>(settings) {
-    // }
-    // TFederatedWriteSessionSettings(NTopic::TWriteSessionSettings&& settings)
-    //     : NTopic::TWriteSessionSettingsBase<TSelf>(std::move(settings)) {
-    // }
-    // TFederatedWriteSessionSettings& operator=(const NTopic::TWriteSessionSettings&);
-    // TFederatedWriteSessionSettings& operator=(NTopic::TWriteSessionSettings&&);
 };
 
 //! Settings for read session.

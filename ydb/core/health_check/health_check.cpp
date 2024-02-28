@@ -1448,6 +1448,8 @@ public:
                 case NKikimrBlobStorage::TPDiskState::Timeout:
                 case NKikimrBlobStorage::TPDiskState::NodeDisconnected:
                 case NKikimrBlobStorage::TPDiskState::Unknown:
+                case NKikimrBlobStorage::TPDiskState::PermanentBadDevice:
+                case NKikimrBlobStorage::TPDiskState::TransientBadDevice:
                     context.ReportStatus(Ydb::Monitoring::StatusFlag::RED,
                                          TStringBuilder() << "PDisk state is " << NKikimrBlobStorage::TPDiskState::E_Name(pDiskMetrics.GetState()),
                                          ETags::PDiskState);

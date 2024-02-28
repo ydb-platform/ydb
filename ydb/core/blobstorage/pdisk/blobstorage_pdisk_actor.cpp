@@ -962,9 +962,24 @@ public:
     void Handle(NPDisk::TEvDeviceError::TPtr &ev) {
         LOG_ERROR_S(*TlsActivationContext, NKikimrServices::BS_PDISK,
                 "Actor recieved device error, info# " << ev->Get()->Info);
-        *PDisk->Mon.PDiskState = NKikimrBlobStorage::TPDiskState::DeviceIoError;
+
         *PDisk->Mon.PDiskBriefState = TPDiskMon::TPDisk::Error;
-        *PDisk->Mon.PDiskDetailedState = TPDiskMon::TPDisk::ErrorDeviceIoError;
+        switch (ev->Get()->ErrorType) {
+        case TEvDeviceError::EErrorType::READ:
+            *PDisk->Mon.PDiskState = NKikimrBlobStorage::TPDiskState::TransientBadDevice;
+            *PDisk->Mon.PDiskDetailedState = TPDiskMon::TPDisk::ErrorTransientBadDevice;
+            break;
+        case TEvDeviceError::EErrorType::SLOWDOWN:
+        case TEvDeviceError::EErrorType::WRITE:
+            *PDisk->Mon.PDiskState = NKikimrBlobStorage::TPDiskState::PermanentBadDevice;
+            *PDisk->Mon.PDiskDetailedState = TPDiskMon::TPDisk::ErrorPermanentBadDevice;
+            break;
+        default:
+            *PDisk->Mon.PDiskState = NKikimrBlobStorage::TPDiskState::DeviceIoError;
+            *PDisk->Mon.PDiskDetailedState = TPDiskMon::TPDisk::ErrorDeviceIoError;
+            break;
+        }
+    
         PDisk->ErrorStr = ev->Get()->Info;
         InitError("io error");
     }

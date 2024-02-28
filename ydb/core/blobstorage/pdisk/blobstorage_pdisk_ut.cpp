@@ -707,7 +707,8 @@ Y_UNIT_TEST_SUITE(TPDiskTest) {
 
     Y_UNIT_TEST(DeviceHaltTooLong) {
         TActorTestContext testCtx({ false });
-        testCtx.TestCtx.SectorMap->ImitateRandomWait = {TDuration::Seconds(1), TDuration::Seconds(2)};
+        testCtx.TestCtx.SectorMap->ImitateRandomWait.store(true);
+        testCtx.TestCtx.SectorMap->RandomWaitInterval = {TDuration::Seconds(1), TDuration::Seconds(2)};
 
         TVDiskMock mock(&testCtx);
 
@@ -904,6 +905,58 @@ Y_UNIT_TEST_SUITE(TPDiskTest) {
     }
     Y_UNIT_TEST(SmallDisk40) {
         SmallDisk(40);
+    }
+
+    bool TestDiskSlowdown(TActorTestContext& testCtx, const ui64 blobSize, const ui32 blobsNum) {
+        TVDiskMock mock(&testCtx);
+        testCtx.TestCtx.SectorMap->RandomWaitInterval = {TDuration::Seconds(10), TDuration::Seconds(10)};
+
+        NPDisk::TPDisk* pdisk = testCtx.GetPDisk();
+        mock.Init();
+        mock.ReserveChunk();
+        const ui32 chunk = *mock.Chunks[EChunkState::RESERVED].begin();
+
+        testCtx.TestCtx.SectorMap->ImitateRandomWait.store(true);
+
+        for (ui32 i = 0; i < blobsNum; ++i) {
+            TString chunkWriteData = PrepareData(blobSize);
+            auto res = testCtx.TestResponse<NPDisk::TEvChunkWriteResult>(
+                    new NPDisk::TEvChunkWrite(mock.PDiskParams->Owner, mock.PDiskParams->OwnerRound,
+                        chunk, 0, new NPDisk::TEvChunkWrite::TStrokaBackedUpParts(chunkWriteData), nullptr, false, 0));
+            
+            switch (res->Status) {
+            case NKikimrProto::OK:
+                break;
+            case NKikimrProto::CORRUPTED:
+                UNIT_ASSERT(*pdisk->Mon.PDiskBriefState == TPDiskMon::TPDisk::Error);
+                UNIT_ASSERT(*pdisk->Mon.PDiskState == NKikimrBlobStorage::TPDiskState::PermanentBadDevice);
+                UNIT_ASSERT(*pdisk->Mon.PDiskDetailedState == TPDiskMon::TPDisk::ErrorPermanentBadDevice);
+                return true;
+            default:
+                UNIT_FAIL("Unexpected status# " << NKikimrProto::EReplyStatus_Name(res->Status) <<
+                        ", errorReason# " << res->ErrorReason);
+                break;
+            }
+        }
+
+        return false;
+    }
+
+    Y_UNIT_TEST(CriticalOverestimation) {
+        TActorTestContext testCtx(TActorTestContext::TSettings{
+            .IsBad = false,
+            .DeviceCriticalOverestimationRatio = 1,
+            .DeviceCriticalOverestimationTimeMs = 100,
+        });
+        UNIT_ASSERT(TestDiskSlowdown(testCtx, 1_MB, 10));
+    }
+
+    Y_UNIT_TEST(NoResponseRecievedInLongTime) {
+        TActorTestContext testCtx(TActorTestContext::TSettings{
+            .IsBad = false,
+            .MaxNoResponseDeviceTimeMs = 100,
+        });
+        UNIT_ASSERT(TestDiskSlowdown(testCtx, 1_MB, 10));
     }
 
     Y_UNIT_TEST(PDiskIncreaseLogChunksLimitAfterRestart) {

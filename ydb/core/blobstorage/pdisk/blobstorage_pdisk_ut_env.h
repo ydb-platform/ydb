@@ -21,11 +21,15 @@ public:
     struct TSettings {
         bool IsBad;
         bool UsePDiskMock = false;
+        bool UseSectorMap = true;
         ui64 DiskSize = 0;
         EDiskMode DiskMode = EDiskMode::DM_NONE;
         ui32 ChunkSize = 128 * (1 << 20);
         bool SmallDisk = false;
         bool SuppressCompatibilityCheck = false;
+        ui64 DeviceCriticalOverestimationRatio = 1e6;
+        ui64 DeviceCriticalOverestimationTimeMs = 1e6;
+        ui64 MaxNoResponseDeviceTimeMs = 1e6;
     };
 
 private:
@@ -42,6 +46,10 @@ public:
 
     TIntrusivePtr<TPDiskConfig> DefaultPDiskConfig(bool isBad) {
         TString path;
+        if (!Settings.UseSectorMap) {
+            path = Sprintf("%s/pdisk.dat", TestCtx.Dir);
+        }
+
         EntropyPool().Read(&TestCtx.PDiskGuid, sizeof(TestCtx.PDiskGuid));
         ui64 formatGuid = TestCtx.PDiskGuid + static_cast<ui64>(isBad);
         if (Settings.DiskSize) {
@@ -59,12 +67,15 @@ public:
         pDiskConfig->EnableSectorEncryption = !pDiskConfig->SectorMap;
         pDiskConfig->FeatureFlags.SetEnableSmallDiskOptimization(Settings.SmallDisk);
         pDiskConfig->FeatureFlags.SetSuppressCompatibilityCheck(Settings.SuppressCompatibilityCheck);
+        pDiskConfig->DeviceCriticalOverestimationRatio = Settings.DeviceCriticalOverestimationRatio;
+        pDiskConfig->DeviceCriticalOverestimationTimeMs = Settings.DeviceCriticalOverestimationTimeMs;
+        pDiskConfig->MaxNoResponseDeviceTimeMs = Settings.MaxNoResponseDeviceTimeMs;
         return pDiskConfig;
     }
 
     TActorTestContext(TSettings settings)
         : Runtime(new TTestActorRuntime(1, true))
-        , TestCtx(false, true, settings.DiskMode, settings.DiskSize)
+        , TestCtx(!settings.UseSectorMap, settings.UseSectorMap, settings.DiskMode, settings.DiskSize)
         , Settings(settings)
     {
         auto appData = MakeHolder<TAppData>(0, 0, 0, 0, TMap<TString, ui32>(), nullptr, nullptr, nullptr, nullptr);

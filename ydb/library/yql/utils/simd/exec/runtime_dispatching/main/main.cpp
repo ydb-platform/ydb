@@ -33,7 +33,7 @@ public:
         result.assign(columns.back().size(), 0);
     }
 
-    void MergeColumns(ui8* result, const ui8* data[4], size_t sizes[4], size_t length) override {
+    void MergeColumns(ui8* result, ui8* const data[4], size_t sizes[4], size_t length) override {
         auto begin = std::chrono::steady_clock::now();
         m_worker->MergeColumns(result, data, sizes, length);
         auto end = std::chrono::steady_clock::now();
@@ -110,7 +110,7 @@ int main() {
             std::vector<ui32>(length, 3),
             std::vector<ui32>(length, 4)
         };
-        const ui8* data[4]{
+        ui8* data[4]{
             reinterpret_cast<ui8*>(data_vectors[0].data()),
             reinterpret_cast<ui8*>(data_vectors[1].data()),
             reinterpret_cast<ui8*>(data_vectors[2].data()),

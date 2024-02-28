@@ -473,7 +473,13 @@ void TQueryPlanPrinter::PrintPrettyTableImpl(const NJson::TJsonValue& plan, TStr
                 } else if (key == "E-Rows") {
                     eRows = JsonToString(value);
                 } else if (key != "Name") {
-                    info.emplace_back(TStringBuilder() << colors.LightYellow() << key << colors.Default() << ": " << replaceAll(replaceAll(JsonToString(value), "item.", ""), "state.", ""));
+                    if (key == "Predicate" || key == "Condition" || key == "SortBy") {
+                        info.emplace_back(TStringBuilder() << replaceAll(replaceAll(JsonToString(value), "item.", ""), "state.", ""));
+                    } else if (key == "Table") {
+                        info.insert(info.begin(), TStringBuilder() << colors.LightYellow() << key << colors.Default() << ":" << colors.LightGreen() << " " << replaceAll(replaceAll(JsonToString(value), "item.", ""), "state.", "") << colors.Default());
+                    } else {
+                        info.emplace_back(TStringBuilder() << colors.LightYellow() << key << colors.Default() << ": " << replaceAll(replaceAll(JsonToString(value), "item.", ""), "state.", ""));
+                    }
                 }
             }
 

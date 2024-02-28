@@ -395,7 +395,7 @@ void TWriteSessionActor<UseMigrationProtocol>::Handle(typename TEvWriteInit::TPt
                 InitRequest.has_partition_id() ||
                 InitRequest.has_partition_with_generation())
             ||
-            (InitRequest.producer_id().empty() && (!InitRequest.has_message_group_id() || InitRequest.message_group_id().empty()));
+            InitRequest.producer_id().empty();
 
         if (!isScenarioSupported) {
             CloseSession("unsupported producer_id / message_group_id / partition_id settings in init request",
@@ -836,12 +836,14 @@ void TWriteSessionActor<UseMigrationProtocol>::Handle(NPQ::TEvPartitionWriter::T
     OwnerCookie = result.GetResult().OwnerCookie;
 
     const auto& maxSeqNo = result.GetResult().SourceIdInfo.GetSeqNo();
-    if (!UseDeduplication) {
-        if (maxSeqNo != 0) {
-            return CloseSession("Internal server error: have maxSeqNo != with deduplication disabled",
-                                PersQueue::ErrorCode::ERROR, ctx);
-        }
-    }
+
+    // ToDo: uncomment after fixing KIKIMR-21124
+    // if (!UseDeduplication) {
+    //     if (maxSeqNo != 0) {
+    //         return CloseSession("Internal server error: have maxSeqNo != with deduplication disabled",
+    //                             PersQueue::ErrorCode::ERROR, ctx);
+    //     }
+    // }
 
     OwnerCookie = result.GetResult().OwnerCookie;
     MakeAndSentInitResponse(maxSeqNo, ctx);

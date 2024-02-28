@@ -282,6 +282,16 @@ TWriteOperation* TWriteOperation::CastWriteOperation(TOperation::TPtr op)
     return writeOp;
 }
 
+TWriteOperation* TWriteOperation::TryCastWriteOperation(TOperation::TPtr op)
+{
+    if (!op->IsWriteTx())
+        return nullptr;
+    
+    TWriteOperation* writeOp = dynamic_cast<TWriteOperation*>(op.Get());
+    Y_ABORT_UNLESS(writeOp);
+    return writeOp;
+}
+
 TWriteOperation::TWriteOperation(const TBasicOpInfo& op, ui64 tabletId)
     : TOperation(op)
     , TabletId(tabletId)

@@ -134,6 +134,7 @@ public:
     using TPtr = TIntrusivePtr<TWriteOperation>;
 
     static TWriteOperation* CastWriteOperation(TOperation::TPtr op);
+    static TWriteOperation* TryCastWriteOperation(TOperation::TPtr op);
 
     explicit TWriteOperation(const TBasicOpInfo& op, ui64 tabletId);
     explicit TWriteOperation(const TBasicOpInfo& op, NEvents::TDataEvents::TEvWrite::TPtr&& ev, TDataShard* self);

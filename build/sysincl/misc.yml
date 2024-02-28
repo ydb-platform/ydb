@@ -384,6 +384,16 @@
     - lwip/stats.h
     - lwip/sys.h
     - lwip/tcpip.h
+    # contrib/libs/connectedhomeip/src/crypto uses boringssl on OS_DARWIN
+    - openssl/aead.h:
+      - contrib/libs/connectedhomeip/third_party/boringssl/repo/src/include/openssl/aead.h
+    - openssl/base.h:
+      - contrib/libs/connectedhomeip/third_party/boringssl/repo/src/include/openssl/base.h
+    - openssl/is_boringssl.h:
+      - contrib/libs/connectedhomeip/third_party/boringssl/repo/src/include/openssl/is_boringssl.h
+    # contrib/libs/connectedhomeip: src/lib/support, src/inet, src/system on OS_DARWIN
+    - nlfaultinjection.hpp:
+      - contrib/libs/connectedhomeip/third_party/nlfaultinjection/include/nlfaultinjection.hpp
 
 - source_filter: "^contrib/libs/glibcasm"
   includes:

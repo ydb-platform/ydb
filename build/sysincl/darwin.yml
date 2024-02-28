@@ -43,6 +43,7 @@
   - crt_externs.h
   - curses.h
   - dispatch/dispatch.h
+  - dns_sd.h
   - editline/readline.h
   - Files.h
   - ffi/ffi.h
@@ -189,6 +190,7 @@
   - Carbon/Carbon.h
   - CFNetwork/CFNetwork.h
   - Cocoa/Cocoa.h
+  - CoreData/CoreData.h
   - CoreFoundation/CFArray.h
   - CoreFoundation/CFBase.h
   - CoreFoundation/CFBundle.h
@@ -228,6 +230,10 @@
   - IOKit/hid/IOHIDKeys.h
   - IOKit/hid/IOHIDLib.h
   - IOKit/kext/KextManager.h
+  - IOKit/network/IOEthernetController.h
+  - IOKit/network/IOEthernetInterface.h
+  - IOKit/network/IONetworkInterface.h
+  - IOKit/network/IONetworkMedium.h
   - IOKit/ps/IOPSKeys.h
   - IOKit/ps/IOPSKeys.h
   - IOKit/ps/IOPowerSources.h
@@ -239,6 +245,7 @@
   - Kernel/IOKit/hidsystem/IOHIDUsageTables.h
   - Metal/Metal.h
   - metal_stdlib
+  - Network/Network.h
   - OpenCL/cl.h
   - OpenCL/cl_gl.h
   - OpenCL/opencl.h
@@ -265,6 +272,7 @@
   - Security/Security.h
   - SystemConfiguration/SystemConfiguration.h
   - SystemConfiguration/SCDynamicStoreCopySpecific.h
+  - SystemConfiguration/SCNetworkConfiguration.h
   - TextUtils.h
   - Types.h
   - UIKit/UIImage.h

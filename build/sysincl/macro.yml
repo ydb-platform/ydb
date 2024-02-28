@@ -1180,6 +1180,8 @@
 # after resolving a problem via ADDINCL there will be much more errors. So currently these types of errors hide under empty resolving
 - source_filter: "^contrib/libs/connectedhomeip/src"
   includes:
+    - CHIP_SYSTEM_CONFIG_PLATFORM_LOG_INCLUDE:
+      - contrib/libs/connectedhomeip/src/platform/Darwin/Logging.h
     - CHIP_SYSTEM_LAYER_IMPL_CONFIG_FILE:
       - contrib/libs/connectedhomeip/src/system/SystemLayerImplSelect.h
       - contrib/libs/connectedhomeip/src/system/SystemLayerImplFreeRTOS.h

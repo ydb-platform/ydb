@@ -1,4 +1,5 @@
 #include "kqp_topics.h"
+#include "ydb/core/persqueue/utils.h"
 
 #include <ydb/core/base/path.h>
 #include <ydb/library/actors/core/log.h>
@@ -293,16 +294,7 @@ bool TTopicOperations::ProcessSchemeCacheNavigate(const NSchemeCache::TSchemeCac
                 result.PQGroupInfo->Description;
 
             if (Consumer_) {
-                bool found = false;
-
-                for (auto& consumer : description.GetPQTabletConfig().GetReadRules()) {
-                    if (Consumer_ == consumer) {
-                        found = true;
-                        break;
-                    }
-                }
-
-                if (!found) {
+                if (!NPQ::HasConsumer(description.GetPQTabletConfig(), *Consumer_)) {
                     builder << "Unknown consumer '" << *Consumer_ << "'";
 
                     status = Ydb::StatusIds::BAD_REQUEST;

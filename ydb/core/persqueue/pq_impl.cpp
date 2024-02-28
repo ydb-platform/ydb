@@ -1134,10 +1134,12 @@ void TPersQueue::InitializeMeteringSink(const TActorContext& ctx) {
     }
 
     auto countReadRulesWithPricing = [&](const TActorContext& ctx, const auto& config) {
+        auto& defaultClientServiceType = AppData(ctx)->PQConfig.GetDefaultClientServiceType().GetName();
+
         ui32 result = 0;
-        for (ui32 i = 0; i < config.ReadRulesSize(); ++i) {
-            TString rrServiceType = config.ReadRuleServiceTypesSize() <= i ? "" : config.GetReadRuleServiceTypes(i);
-            if (rrServiceType.empty() || rrServiceType == AppData(ctx)->PQConfig.GetDefaultClientServiceType().GetName())
+        for (auto& consumer : config.GetConsumers()) {
+            TString serviceType = consumer.GetServiceType();
+            if (serviceType.empty() || serviceType == defaultClientServiceType)
                 ++result;
         }
         return result;
@@ -1639,7 +1641,7 @@ void TPersQueue::ProcessUpdateConfigRequest(TAutoPtr<TEvPersQueue::TEvUpdateConf
     Migrate(cfg);
     BeginWriteConfig(cfg, bootstrapCfg, ctx);
 
-    NewConfig = cfg;
+    NewConfig = std::move(cfg);
 }
 
 void TPersQueue::BeginWriteConfig(const NKikimrPQ::TPQTabletConfig& cfg,

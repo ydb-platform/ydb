@@ -3,6 +3,7 @@
 #include <ydb/library/persqueue/obfuscate/obfuscate.h>
 #include <ydb/library/persqueue/topic_parser/topic_parser.h>
 #include <ydb/core/base/feature_flags.h>
+#include <ydb/core/persqueue/utils.h>
 
 #include <ydb/public/lib/jwt/jwt.h>
 
@@ -92,6 +93,9 @@ namespace NKikimr::NGRpcProxy::V1 {
             }
         }
 
+        auto* consumer = config->AddConsumers();
+
+        consumer->SetName(consumerName);
         config->AddReadRules(consumerName);
 
         if (rr.starting_message_timestamp_ms() < 0) {
@@ -100,6 +104,7 @@ namespace NKikimr::NGRpcProxy::V1 {
                 Ydb::PersQueue::ErrorCode::VALIDATION_ERROR
             );
         }
+        consumer->SetReadFromTimestampsMs(rr.starting_message_timestamp_ms());
         config->AddReadFromTimestampsMs(rr.starting_message_timestamp_ms());
 
         if (!Ydb::PersQueue::V1::TopicSettings::Format_IsValid((int)rr.supported_format()) || rr.supported_format() == 0) {
@@ -108,6 +113,7 @@ namespace NKikimr::NGRpcProxy::V1 {
                 Ydb::PersQueue::ErrorCode::INVALID_ARGUMENT
             );
         }
+        consumer->SetFormatVersion(rr.supported_format() - 1);
         config->AddConsumerFormatVersions(rr.supported_format() - 1);
 
         if (rr.version() < 0) {
@@ -116,7 +122,10 @@ namespace NKikimr::NGRpcProxy::V1 {
                 Ydb::PersQueue::ErrorCode::VALIDATION_ERROR
             );
         }
+        consumer->SetVersion(rr.version());
         config->AddReadRuleVersions(rr.version());
+
+        auto cct = consumer->MutableCodec();
         auto ct = config->AddConsumerCodecs();
         if (rr.supported_codecs().size() > MAX_SUPPORTED_CODECS_COUNT) {
             return TMsgPqCodes(
@@ -131,8 +140,13 @@ namespace NKikimr::NGRpcProxy::V1 {
                     TStringBuilder() << "Unknown codec with value " << codec  << " for " << rr.consumer_name(),
                     Ydb::PersQueue::ErrorCode::INVALID_ARGUMENT
                 );
-            ct->AddIds(codec - 1);
-            ct->AddCodecs(to_lower(Ydb::PersQueue::V1::Codec_Name((Ydb::PersQueue::V1::Codec)codec)).substr(6));
+
+            auto codecName = to_lower(Ydb::PersQueue::V1::Codec_Name((Ydb::PersQueue::V1::Codec)codec)).substr(6);
+
+            cct->AddIds(codec - 1);
+            cct->AddCodecs(codecName);
+
+            ct->CopyFrom(*cct);
         }
 
         if (rr.important()) {
@@ -205,6 +219,9 @@ namespace NKikimr::NGRpcProxy::V1 {
             }
         }
 
+        auto* consumer = config->AddConsumers();
+
+        consumer->SetName(consumerName);
         config->AddReadRules(consumerName);
 
         if (rr.read_from().seconds() < 0) {
@@ -213,9 +230,12 @@ namespace NKikimr::NGRpcProxy::V1 {
                 Ydb::PersQueue::ErrorCode::VALIDATION_ERROR
             );
         }
+        consumer->SetReadFromTimestampsMs(rr.read_from().seconds() * 1000);
         config->AddReadFromTimestampsMs(rr.read_from().seconds() * 1000);
 
+        consumer->SetFormatVersion(0);
         config->AddConsumerFormatVersions(0);
+
         TString serviceType;
         const auto& pqConfig = AppData(ctx)->PQConfig;
 
@@ -276,9 +296,13 @@ namespace NKikimr::NGRpcProxy::V1 {
             }
         }
 
+        consumer->SetServiceType(serviceType);
         config->AddReadRuleServiceTypes(serviceType);
+
+        consumer->SetVersion(version);
         config->AddReadRuleVersions(version);
 
+        auto cct = consumer->MutableCodec();
         auto ct = config->AddConsumerCodecs();
 
         for(const auto& codec : rr.supported_codecs().codecs()) {
@@ -288,8 +312,10 @@ namespace NKikimr::NGRpcProxy::V1 {
                     Ydb::PersQueue::ErrorCode::INVALID_ARGUMENT
                 );
             }
-            ct->AddIds(codec - 1);
-            ct->AddCodecs(Ydb::Topic::Codec_IsValid(codec) ? LegacySubstr(to_lower(Ydb::Topic::Codec_Name((Ydb::Topic::Codec)codec)), 6) : "CUSTOM");
+            cct->AddIds(codec - 1);
+            cct->AddCodecs(Ydb::Topic::Codec_IsValid(codec) ? LegacySubstr(to_lower(Ydb::Topic::Codec_Name((Ydb::Topic::Codec)codec)), 6) : "CUSTOM");
+
+            ct->CopyFrom(*cct);
         }
 
         if (rr.important()) {
@@ -309,9 +335,6 @@ namespace NKikimr::NGRpcProxy::V1 {
         const TString& consumerName,
         const TActorContext& ctx
     ) {
-        THashSet<TString> rulesToRemove;
-        rulesToRemove.insert(consumerName);
-
         config->ClearReadRuleVersions();
         config->ClearReadRules();
         config->ClearReadFromTimestampsMs();
@@ -320,21 +343,27 @@ namespace NKikimr::NGRpcProxy::V1 {
         config->MutablePartitionConfig()->ClearImportantClientId();
         config->ClearReadRuleServiceTypes();
 
+        config->ClearConsumers();
+
         for (const auto& importantConsumer : originalConfig.GetPartitionConfig().GetImportantClientId()) {
-            if (rulesToRemove.find(importantConsumer) == rulesToRemove.end()) {
+            if (importantConsumer != consumerName) {
                 config->MutablePartitionConfig()->AddImportantClientId(importantConsumer);
             }
         }
 
+        bool removed = false;
+
         const auto& pqConfig = AppData(ctx)->PQConfig;
         for (size_t i = 0; i < originalConfig.ReadRulesSize(); i++) {
-            if (auto it = rulesToRemove.find(originalConfig.GetReadRules(i)); it != rulesToRemove.end()) {
-                rulesToRemove.erase(it);
+            auto& readRule = originalConfig.GetReadRules(i);
+
+            if (readRule == consumerName) {
+                removed = true;
                 continue;
             }
 
             config->AddReadRuleVersions(originalConfig.GetReadRuleVersions(i));
-            config->AddReadRules(originalConfig.GetReadRules(i));
+            config->AddReadRules(readRule);
             config->AddReadFromTimestampsMs(originalConfig.GetReadFromTimestampsMs(i));
             config->AddConsumerFormatVersions(originalConfig.GetConsumerFormatVersions(i));
             auto ct = config->AddConsumerCodecs();
@@ -347,14 +376,24 @@ namespace NKikimr::NGRpcProxy::V1 {
             } else {
                 if (pqConfig.GetDisallowDefaultClientServiceType()) {
                     return TStringBuilder() << "service type cannot be empty for consumer '"
-                        << originalConfig.GetReadRules(i) << "'";
+                        << readRule << "'";
                 }
                 config->AddReadRuleServiceTypes(pqConfig.GetDefaultClientServiceType().GetName());
             }
         }
 
-        if (rulesToRemove.size() > 0) {
-            return TStringBuilder() << "Rule for consumer " << *rulesToRemove.begin() << " doesn't exist";
+        for (auto& consumer : originalConfig.GetConsumers()) {
+            if (consumerName == consumer.GetName()) {
+                removed = true;
+                continue;
+            }
+
+            auto* dst = config->AddConsumers();
+            dst->CopyFrom(consumer);
+        }
+
+        if (!removed) {
+            return TStringBuilder() << "Rule for consumer " << consumerName << " doesn't exist";
         }
 
         return "";
@@ -364,9 +403,10 @@ namespace NKikimr::NGRpcProxy::V1 {
                               const TClientServiceTypes& supportedClientServiceTypes,
                               TString& error, const TActorContext& ctx) {
 
-        if (config.GetReadRules().size() > MAX_READ_RULES_COUNT) {
+        size_t consumerCount = NPQ::ConsumerCount(config);
+        if (consumerCount > MAX_READ_RULES_COUNT) {
             error = TStringBuilder() << "read rules count cannot be more than "
-                                     << MAX_READ_RULES_COUNT << ", provided " << config.GetReadRules().size();
+                                     << MAX_READ_RULES_COUNT << ", provided " << consumerCount;
             return false;
         }
 
@@ -1108,6 +1148,7 @@ namespace NKikimr::NGRpcProxy::V1 {
 
 
         auto config = pqDescr.MutablePQTabletConfig();
+        NPQ::Migrate(*config);
         auto partConfig = config->MutablePartitionConfig();
 
         if (request.alter_attributes().size()) {
@@ -1186,11 +1227,11 @@ namespace NKikimr::NGRpcProxy::V1 {
 
         i32 dropped = 0;
 
-        for (ui32 i = 0; i < config->ReadRulesSize(); ++i) {
-            TString oldName = config->GetReadRules(i);
-            TString name = NPersQueue::ConvertOldConsumerName(oldName, ctx);
+        for (const auto& c : config->GetConsumers()) {
+            auto& oldName = c.GetName();
+            auto name = NPersQueue::ConvertOldConsumerName(oldName, ctx);
+
             bool erase = false;
-            bool important = false;
             for (auto consumer: request.drop_consumers()) {
                 if (consumer == name || consumer == oldName) {
                     erase = true;
@@ -1199,20 +1240,15 @@ namespace NKikimr::NGRpcProxy::V1 {
                 }
             }
             if (erase) continue;
-            for (auto imp : partConfig->GetImportantClientId()) {
-                if (imp == oldName) {
-                    important = true;
-                    break;
-                }
-            }
+
             consumers.push_back({false, Ydb::Topic::Consumer{}}); // do not check service type for presented consumers
             auto& consumer = consumers.back().second;
             consumer.set_name(name);
-            consumer.set_important(important);
-            consumer.mutable_read_from()->set_seconds(config->GetReadFromTimestampsMs(i) / 1000);
-            (*consumer.mutable_attributes())["_service_type"] = config->GetReadRuleServiceTypes(i);
-            (*consumer.mutable_attributes())["_version"] = TStringBuilder() << config->GetReadRuleVersions(i);
-            for (ui32 codec : config->GetConsumerCodecs(i).GetIds()) {
+            consumer.set_important(NPQ::IsImportantClient(*config, oldName));
+            consumer.mutable_read_from()->set_seconds(c.GetReadFromTimestampsMs() / 1000);
+            (*consumer.mutable_attributes())["_service_type"] = c.GetServiceType();
+            (*consumer.mutable_attributes())["_version"] = TStringBuilder() << c.GetVersion();
+            for (ui32 codec : c.GetCodec().GetIds()) {
                 consumer.mutable_supported_codecs()->add_codecs(codec + 1);
             }
         }
@@ -1252,6 +1288,7 @@ namespace NKikimr::NGRpcProxy::V1 {
         config->ClearReadRuleServiceTypes();
         config->ClearReadRuleGenerations();
         config->ClearReadRuleVersions();
+        config->ClearConsumers();
 
         for (const auto& rr : consumers) {
             auto messageAndCode = AddReadRuleToConfig(config, rr.second, supportedClientServiceTypes, rr.first, ctx);

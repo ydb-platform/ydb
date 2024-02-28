@@ -528,10 +528,10 @@ void TPersQueueReadBalancer::Handle(TEvPersQueue::TEvUpdateBalancerConfig::TPtr 
     Version = record.GetVersion();
     MaxPartsPerTablet = record.GetPartitionPerTablet();
     PathId = record.GetPathId();
-    Topic = record.GetTopicName();
-    Path = record.GetPath();
+    Topic = std::move(record.GetTopicName());
+    Path = std::move(record.GetPath());
     TxId = record.GetTxId();
-    TabletConfig = record.GetTabletConfig();
+    TabletConfig = std::move(record.GetTabletConfig());
     Migrate(TabletConfig);
 
     SchemeShardId = record.GetSchemeShardId();

@@ -2,10 +2,10 @@
 
 #include "persqueue_utils.h"
 
-#include <ydb/core/ydb_convert/ydb_convert.h>
-
-#include <ydb/library/persqueue/obfuscate/obfuscate.h>
 #include <ydb/core/client/server/ic_nodes_cache_service.h>
+#include <ydb/core/persqueue/utils.h>
+#include <ydb/core/ydb_convert/ydb_convert.h>
+#include <ydb/library/persqueue/obfuscate/obfuscate.h>
 
 namespace NKikimr::NGRpcProxy::V1 {
 
@@ -135,8 +135,10 @@ void TPQDescribeTopicActor::HandleCacheNavigateResponse(TEvTxProxySchemeCache::T
 
         const auto& pqConfig = AppData(ActorContext())->PQConfig;
         for (ui32 i = 0; i < config.ReadRulesSize(); ++i) {
+            auto& readRuleName = config.GetReadRules(i);
+
             auto rr = settings->add_read_rules();
-            auto consumerName = NPersQueue::ConvertOldConsumerName(config.GetReadRules(i), ActorContext());
+            auto consumerName = NPersQueue::ConvertOldConsumerName(readRuleName, ActorContext());
             rr->set_consumer_name(consumerName);
             rr->set_starting_message_timestamp_ms(config.GetReadFromTimestampsMs(i));
             rr->set_supported_format(
@@ -145,14 +147,7 @@ void TPQDescribeTopicActor::HandleCacheNavigateResponse(TEvTxProxySchemeCache::T
             for (const auto &codec : config.GetConsumerCodecs(i).GetIds()) {
                 rr->add_supported_codecs((Ydb::PersQueue::V1::Codec) (codec + 1));
             }
-            bool important = false;
-            for (const auto &c : partConfig.GetImportantClientId()) {
-                if (c == config.GetReadRules(i)) {
-                    important = true;
-                    break;
-                }
-            }
-            rr->set_important(important);
+            rr->set_important(NPQ::IsImportantClient(config, readRuleName));
 
             if (i < config.ReadRuleServiceTypesSize()) {
                 rr->set_service_type(config.GetReadRuleServiceTypes(i));
@@ -1031,7 +1026,6 @@ bool TDescribeConsumerActor::ApplyResponse(
 bool FillConsumerProto(Ydb::Topic::Consumer *rr, const NKikimrPQ::TPQTabletConfig& config, ui32 i,
                         const NActors::TActorContext& ctx, Ydb::StatusIds::StatusCode& status, TString& error)
 {
-    const auto &partConfig = config.GetPartitionConfig();
     const auto& pqConfig = AppData(ctx)->PQConfig;
 
     auto consumerName = NPersQueue::ConvertOldConsumerName(config.GetReadRules(i), ctx);
@@ -1043,14 +1037,8 @@ bool FillConsumerProto(Ydb::Topic::Consumer *rr, const NKikimrPQ::TPQTabletConfi
     for (const auto &codec : config.GetConsumerCodecs(i).GetIds()) {
         rr->mutable_supported_codecs()->add_codecs((Ydb::Topic::Codec) (codec + 1));
     }
-    bool important = false;
-    for (const auto &c : partConfig.GetImportantClientId()) {
-        if (c == config.GetReadRules(i)) {
-            important = true;
-            break;
-        }
-    }
-    rr->set_important(important);
+
+    rr->set_important(NPQ::IsImportantClient(config, config.GetReadRules(i)));
     TString serviceType = "";
     if (i < config.ReadRuleServiceTypesSize()) {
         serviceType = config.GetReadRuleServiceTypes(i);

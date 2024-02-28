@@ -15,6 +15,10 @@ ui64 PutUnitsSize(const ui64 size);
 TString SourceIdHash(const TString& sourceId);
 
 void Migrate(NKikimrPQ::TPQTabletConfig& config);
+bool HasConsumer(const NKikimrPQ::TPQTabletConfig& config, const TString& consumerName);
+size_t ConsumerCount(const NKikimrPQ::TPQTabletConfig& config);
+
+bool IsImportantClient(const NKikimrPQ::TPQTabletConfig& config, const TString& consumerName);
 
 const NKikimrPQ::TPQTabletConfig::TPartition* GetPartitionConfig(const NKikimrPQ::TPQTabletConfig& config, const ui32 partitionId);
 

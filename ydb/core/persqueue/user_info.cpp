@@ -181,9 +181,9 @@ TUserInfo TUsersInfoStorage::CreateUserInfo(const TActorContext& ctx,
 {
     TString defaultServiceType = AppData(ctx)->PQConfig.GetDefaultClientServiceType().GetName();
     TString userServiceType = "";
-    for (ui32 i = 0; i < Config.ReadRulesSize(); ++i) {
-        if (Config.GetReadRules(i) == user) {
-            userServiceType = Config.ReadRuleServiceTypesSize() > i ? Config.GetReadRuleServiceTypes(i) : "";
+    for (auto& consumer : Config.GetConsumers()) {
+        if (consumer.GetName() == user) {
+            userServiceType = consumer.GetServiceType();
             break;
         }
     }

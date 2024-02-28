@@ -2,7 +2,7 @@ import os
 import shutil
 
 from .lockfile import PnpmLockfile
-from .utils import build_pre_lockfile_path, build_lockfile_path, build_ws_config_path
+from .utils import build_lockfile_path, build_pre_lockfile_path, build_ws_config_path
 from .workspace import PnpmWorkspace
 from ..base import BasePackageManager, PackageManagerError
 from ..base.constants import NODE_MODULES_WORKSPACE_BUNDLE_FILENAME
@@ -33,6 +33,10 @@ class PnpmPackageManager(BasePackageManager):
         """
         return cls.load_lockfile(build_lockfile_path(dir_path))
 
+    @staticmethod
+    def get_local_pnpm_store():
+        return os.path.join(home_dir(), ".cache", "pnpm-store")
+
     def create_node_modules(self, yatool_prebuilder_path=None, local_cli=False):
         """
         Creates node_modules directory according to the lockfile.
@@ -46,7 +50,7 @@ class PnpmPackageManager(BasePackageManager):
         # Local mode optimizations (run from the `ya tool nots`)
         if local_cli:
             # Use single CAS for all the projects built locally
-            store_dir = os.path.join(home_dir(), ".cache", "pnpm-store")
+            store_dir = self.get_local_pnpm_store()
             # It's a default value of pnpm itself. But it should be defined explicitly for not using values from the lockfiles or from the previous installations.
             virtual_store_dir = self._nm_path('.pnpm')
 

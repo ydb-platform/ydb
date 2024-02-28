@@ -127,11 +127,11 @@ namespace NWilson {
             size_t ExportRequestsCount = 0;
 
         public:
-            TWilsonUploader(WilsonUploaderParams params)
+            TWilsonUploader(TWilsonUploaderParams params)
                 : MaxSpansPerSecond(params.MaxExportedSpansPerSecond)
                 , MaxSpansInBatch(params.MaxSpansInBatch)
                 , MaxBytesInBatch(params.MaxBytesInBatch)
-                , MaxBatchAccumulation(params.MaxBatchAccumulation)
+                , MaxBatchAccumulation(TDuration::MilliSeconds(params.MaxBatchAccumulationMilliseconds))
                 , MaxSpanTimeInQueue(TDuration::Seconds(params.SpanExportTimeoutSeconds))
                 , MaxExportInflight(params.MaxExportRequestsInflight)
                 , CollectorUrl(std::move(params.CollectorUrl))
@@ -363,11 +363,11 @@ namespace NWilson {
 
     } // anonymous
 
-    IActor* CreateWilsonUploader(WilsonUploaderParams params) {
+    IActor* CreateWilsonUploader(TWilsonUploaderParams params) {
         return new TWilsonUploader(std::move(params));
     }
 
-    IActor* WilsonUploaderParams::CreateUploader() && {
+    IActor* TWilsonUploaderParams::CreateUploader() && {
         return CreateWilsonUploader(std::move(*this));
     }
 

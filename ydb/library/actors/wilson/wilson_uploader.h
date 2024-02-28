@@ -25,7 +25,7 @@ namespace NWilson {
         return NActors::TActorId(0, TStringBuf("WilsonUpload", 12));
     }
 
-    struct WilsonUploaderParams {
+    struct TWilsonUploaderParams {
         TString CollectorUrl;
         TString ServiceName;
         std::unique_ptr<IGrpcSigner> GrpcSigner;
@@ -34,13 +34,12 @@ namespace NWilson {
         ui64 MaxSpansInBatch = 150;
         ui64 MaxBytesInBatch = 20'000'000;
         ui64 MaxBatchAccumulationMilliseconds = 1'000;
-        TDuration MaxBatchAccumulation = TDuration::Seconds(1);
         ui32 SpanExportTimeoutSeconds = 60 * 60 * 24 * 365;
         ui64 MaxExportRequestsInflight = 1;
 
         NActors::IActor* CreateUploader() &&;
     };
 
-    NActors::IActor* CreateWilsonUploader(WilsonUploaderParams params);
+    NActors::IActor* CreateWilsonUploader(TWilsonUploaderParams params);
 
 } // NWilson

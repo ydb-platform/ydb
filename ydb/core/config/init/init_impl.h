@@ -10,6 +10,13 @@
 #include <ydb/core/cms/console/config_item_info.h>
 #include <ydb/core/driver_lib/run/config.h>
 #include <ydb/core/protos/config.pb.h>
+#include <ydb/core/protos/node_broker.pb.h>
+#include <ydb/core/protos/alloc.pb.h>
+#include <ydb/core/protos/resource_broker.pb.h>
+#include <ydb/core/protos/http_config.pb.h>
+#include <ydb/core/protos/tenant_pool.pb.h>
+#include <ydb/core/protos/compile_service_config.pb.h>
+#include <ydb/core/protos/cms.pb.h>
 #include <ydb/library/aclib/aclib.h>
 #include <ydb/library/actors/core/log_iface.h>
 #include <ydb/library/yaml_config/yaml_config.h>

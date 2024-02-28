@@ -292,9 +292,9 @@ public:
                 Self->PromoteFollowerReadEdge(txc);
             }
 
-            Self->State = TShardState::Ready;
-            Self->PersistSys(db, Schema::Sys_State, Self->State);
-            Self->SendRegistrationRequestTimeCast(ctx);
+            // Note: we persist Ready, but keep current state in memory until Complete
+            Self->SetPersistState(TShardState::Ready, txc);
+            Self->State = TShardState::SplitDstReceivingSnapshot;
         }
 
         return true;
@@ -308,9 +308,36 @@ public:
 
         ctx.Send(ackTo, new TEvDataShard::TEvSplitTransferSnapshotAck(opId, Self->TabletID()));
 
-        if (LastSnapshotReceived) {
-            // We have received all the data, reload everything from the received system tables
-            Self->Execute(Self->CreateTxInit(), ctx);
+        // Note: we skip init in an unlikely event of state resetting between Execute and Complete
+        if (LastSnapshotReceived && Self->State == TShardState::SplitDstReceivingSnapshot) {
+            // We have received all the data, finish shard initialization
+            // Note: previously we used TxInit, however received system tables
+            // have been empty for years now, and since pipes are still open we
+            // may receive requests between TxInit loading the Ready state and
+            // its Complete method initializing everything properly. Instead
+            // necessary steps are repeated here.
+            Self->State = TShardState::Ready;
+
+            // We are already in StateWork, but we need to repeat many steps now that we are Ready
+            Self->SwitchToWork(ctx);
+
+            // We can send the registration request now that we are ready
+            Self->SendRegistrationRequestTimeCast(ctx);
+
+            // Initialize snapshot expiration queue with current context time
+            Self->GetSnapshotManager().InitExpireQueue(ctx.Now());
+            if (Self->GetSnapshotManager().HasExpiringSnapshots()) {
+                Self->PlanCleanup(ctx);
+            }
+
+            // Initialize change senders
+            Self->KillChangeSender(ctx);
+            Self->CreateChangeSender(ctx);
+            Self->MaybeActivateChangeSender(ctx);
+            Self->EmitHeartbeats();
+
+            // Switch mvcc state if needed
+            Self->CheckMvccStateChangeCanStart(ctx);
         }
     }
 };

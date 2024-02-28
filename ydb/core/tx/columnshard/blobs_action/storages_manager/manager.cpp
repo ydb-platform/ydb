@@ -14,7 +14,11 @@ std::shared_ptr<NKikimr::NOlap::IBlobsStorageOperator> TStoragesManager::DoBuild
         return std::make_shared<NOlap::NBlobOperations::NBlobStorage::TOperator>(storageId, Shard.SelfId(), Shard.Info(),
             Shard.Executor()->Generation(), SharedBlobsManager->GetStorageManagerGuarantee(storageId));
     } else if (storageId == TBase::MemoryStorageId) {
-        Singleton<NWrappers::NExternalStorage::TFakeExternalStorage>()->SetSecretKey("fakeSecret");
+        {
+            static TMutex mutexLocal;
+            TGuard<TMutex> g(mutexLocal);
+            Singleton<NWrappers::NExternalStorage::TFakeExternalStorage>()->SetSecretKey("fakeSecret");
+        }
         return std::make_shared<NOlap::NBlobOperations::NTier::TOperator>(storageId, Shard.SelfId(), std::make_shared<NWrappers::NExternalStorage::TFakeExternalStorageConfig>("fakeBucket", "fakeSecret"),
             SharedBlobsManager->GetStorageManagerGuarantee(storageId));
     } else if (!Shard.Tiers) {

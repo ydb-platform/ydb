@@ -8,3 +8,9 @@ ydb-core-tx-columnshard-ut_schema/TColumnShardTestSchema::RebootForgetAfterFail
 ydb-library-yql-sql-pg-ut/PgSqlParsingAutoparam::AutoParamValues_DifferentTypes
 ydb-core-blobstorage-ut_blobstorage/[6/10]*
 ydb/core/blobstorage/ut_blobstorage/Defragmentation::DoesItWork
+ydb/core/persqueue/ut/PQCountersSimple.Partition
+ydb/core/persqueue/ut/PQCountersSimple.PartitionFirstClass
+ydb/core/persqueue/ut/PQCountersSimple.PartitionWriteQuota
+ydb/core/persqueue/ut/TPQTabletTests.DropTablet_Before_Write
+ydb/core/tx/schemeshard/ut_base/TSchemeShardTest.CreatePersQueueGroup
+ydb/core/tx/schemeshard/ut_base/TSchemeShardTest.DropPQ

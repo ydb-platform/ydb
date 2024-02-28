@@ -2377,7 +2377,7 @@ Y_UNIT_TEST_SUITE(Cdc) {
             case TSchemeBoardEvents::EvUpdate:
                 if (auto* msg = ev->Get<TSchemeBoardEvents::TEvUpdate>()) {
                     NKikimrScheme::TEvDescribeSchemeResult desc;
-                    Y_ABORT_UNLESS(ParseFromStringNoSizeLimit(desc, msg->GetRecord().GetDescribeSchemeResultSerialized()));
+                    Y_ABORT_UNLESS(ParseFromStringNoSizeLimit(desc, *msg->GetRecord().GetDescribeSchemeResultSerialized().begin()));
                     if (desc.GetPath() == "/Root/Table/Stream" && desc.GetPathDescription().GetSelf().GetCreateFinished()) {
                         delayed.emplace_back(ev.Release());
                         return TTestActorRuntime::EEventAction::DROP;

@@ -818,16 +818,16 @@ Y_UNIT_TEST_F(DropTablet_Before_Write, TPQTabletFixture)
                                   }});
 
     //
-    // транзакция пришла после того как состояние было записано на диск. не будет обработана
-    //
-    WaitProposeTransactionResponse({.TxId=txId_3,
-                                   .Status=NKikimrPQ::TEvProposeTransactionResult::ABORTED});
-
-    //
     // транзакция пришла до того как состояние было записано на диск. будет обработана
     //
     WaitProposeTransactionResponse({.TxId=txId_2,
                                    .Status=NKikimrPQ::TEvProposeTransactionResult::PREPARED});
+
+    //
+    // транзакция пришла после того как состояние было записано на диск. не будет обработана
+    //
+    WaitProposeTransactionResponse({.TxId=txId_3,
+                                   .Status=NKikimrPQ::TEvProposeTransactionResult::ABORTED});
 }
 
 Y_UNIT_TEST_F(UpdateConfig_1, TPQTabletFixture)

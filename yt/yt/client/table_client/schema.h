@@ -235,6 +235,11 @@ public:
     //! Constructs an empty non-strict schema.
     TTableSchema() = default;
 
+    TTableSchema(TTableSchema&&) = default;
+    TTableSchema& operator=(TTableSchema&&) = default;
+    TTableSchema(const TTableSchema&) = default;
+    TTableSchema& operator=(const TTableSchema&) = default;
+
     //! Constructs a schema with given columns and strictness flag.
     //! No validation is performed.
     explicit TTableSchema(
@@ -375,16 +380,25 @@ public:
     i64 GetMemoryUsage() const;
 
 private:
-    std::shared_ptr<const std::vector<TColumnSchema>> Columns_;
-    std::vector<TDeletedColumn> DeletedColumns_;
+    struct TColumnInfo
+    {
+        TColumnInfo(std::vector<TColumnSchema> columns, std::vector<TDeletedColumn> deletedColumns)
+            : Columns(std::move(columns))
+            , DeletedColumns(std::move(deletedColumns))
+        {
+        }
 
+        std::vector<TColumnSchema> Columns;
+        std::vector<TDeletedColumn> DeletedColumns;
+    };
+
+
+    std::shared_ptr<const TColumnInfo> ColumnInfo_;
     int KeyColumnCount_ = 0;
     bool HasComputedColumns_ = false;
     bool HasAggregateColumns_ = false;
     THunkColumnIds HunkColumnsIds_;
 
-    // NB: Strings are owned by Columns_, addresses are immutable
-    // inside TTableSchema.
     THashMap<TStringBuf, int> StableNameToColumnIndex_;
     THashMap<TStringBuf, int> NameToColumnIndex_;
     THashMap<TStringBuf, int> StableNameToDeletedColumnIndex_;

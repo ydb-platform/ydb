@@ -172,6 +172,20 @@ class TPartitionWriter: public TActorBootstrapped<TPartitionWriter>, private TRl
         SendInitResult(ownerCookie, sourceIdInfo, writeId);
     }
 
+    TString IssuesAsString(const NKikimrKqp::TQueryResponse& response) {
+        NYql::TIssues issues;
+        NYql::IssuesFromMessage(response.GetQueryIssues(), issues);
+        return issues.ToString();
+    }
+
+    void InitResult(const TString& reason, const NKikimrKqp::TEvQueryResponse& record) {
+        NKikimrClient::TResponse response;
+        response.SetStatus(NMsgBusProxy::MSTATUS_ERROR);
+        response.SetErrorCode(NPersQueue::NErrorCode::BAD_REQUEST);
+        response.SetErrorReason(IssuesAsString(record.GetResponse()));
+        return InitResult(reason, std::move(response));
+    }
+
     template <typename... Args>
     void SendWriteResult(Args&&... args) {
         Send(Client, new TEvPartitionWriter::TEvWriteResponse(Opts.SessionId, Opts.TxId, std::forward<Args>(args)...));
@@ -217,6 +231,10 @@ class TPartitionWriter: public TActorBootstrapped<TPartitionWriter>, private TRl
         Y_UNUSED(ctx);
 
         auto& record = ev->Get()->Record.GetRef();
+        if (record.GetYdbStatus() != Ydb::StatusIds::SUCCESS) {
+            return InitResult("Invalid KQP session", record);
+        }
+
         WriteId = record.GetResponse().GetTopicOperations().GetWriteId();
 
         LOG_DEBUG_S(ctx, NKikimrServices::PQ_WRITE_PROXY,

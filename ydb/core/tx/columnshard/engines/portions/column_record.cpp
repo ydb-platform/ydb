@@ -44,6 +44,7 @@ NKikimrTxColumnShard::TIndexColumnMeta TChunkMeta::SerializeToProto() const {
     }
     if (HasMax()) {
         ScalarToConstant(*Max, *meta.MutableMaxValue());
+        ScalarToConstant(*Max, *meta.MutableMinValue());
     }
     return meta;
 }

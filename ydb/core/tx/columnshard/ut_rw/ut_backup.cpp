@@ -18,6 +18,7 @@
 #include <ydb/core/tx/columnshard/hooks/testing/controller.h>
 #include <ydb/core/tx/columnshard/operations/write_data.h>
 #include <ydb/core/tx/data_events/backup_events.h>
+#include <ydb/core/wrappers/fake_storage.h>
 
 #include <ydb/library/actors/protos/unittests.pb.h>
 #include <ydb/library/yverify_stream/yverify_stream.h>
@@ -209,71 +210,35 @@ Y_UNIT_TEST_SUITE(TColumnShardBackup) {
 
         Cerr << "\n ======================================================================== \n" << Endl;
 
-        auto action = op->StartReadingAction("BACKUP::READ");
+        std::string actual;
+        for (const auto& [bucketId, store] : Singleton<NWrappers::NExternalStorage::TFakeExternalStorage>()-> GetStorage()) {
+            // Cerr << "GetStorage bucketId=" << bucketId << Endl;
+            for(const auto& a : store) {
+                // Cerr << "value: " << a.first << " " << a.second << Endl;
 
-        Cerr << "\n GetStorageId: " << action->GetStorageId() << Endl;
-        NOlap::TBlobRange blob_range(blob_id);
+                // @TODO only once write now.
+                actual = a.second;
+            }
+        }
 
-        action->AddRange(blob_range, "some blob_range");
-        // THashSet<NOlap::TBlobRange> hs;
-        // hs.insert(r);
-        // // action->Start(hs);
+        std::string expected;
+        {
+            NActors::TLogContextGuard guard = NActors::TLogContextBuilder::Build(NKikimrServices::TX_COLUMNSHARD)("TEST_STEP", 3);
+            NOlap::NTests::TShardReader reader(runtime, TTestTxConfig::TxTablet0, tableId, NOlap::TSnapshot(writePlanStep, txId));
 
-        // THashSet<NOlap::TBlobRange> result;
-        // result.insert(blob_range);
-        // action->FillExpectedRanges(result);
-
-        // for (const auto & r : result) {
-        //     Cerr << "\n result: " << r.ToString() << Endl;
-        // }
-
-        std::vector<std::shared_ptr<NOlap::IBlobsReadingAction>> actions;
-        actions.push_back(action);
-
-        auto task = std::make_shared<TReadS3BackupTask>(actions);
-        Cerr << "\n created TReadS3BackupTask." << Endl;
-
-        auto* p = new NOlap::NBlobOperations::NRead::TActor(task);
-
-        Cerr << "\n created NRead." << Endl;
-
-        // TActorContext::AsActorContext().Register(p);
-        runtime.Register(p);
-
-        Cerr << "\n TReadS3BackupTask registred." << Endl;
-
-        // // TActorContext::AsActorContext();
-        // Cerr << "\n TActor start registring." << Endl;
-        
-        // // TActorContext::AsActorContext()
-        // runtime.Register(new NOlap::NBlobOperations::NRead::TActor(task));
-
-        // Cerr << "\n TActor registred." << Endl;
-
-        // auto ranges = action->GetRangesForRead();
-        // for (const auto& [k, v] : ranges) {
-        //     Cerr << "\n k GetTabletId: " << k.GetTabletId() << Endl;
-        //     Cerr << "\n k: " << k.ToStringLegacy() << Endl;
-        // }
-
-        // {
-        //     NActors::TLogContextGuard guard = NActors::TLogContextBuilder::Build(NKikimrServices::TX_COLUMNSHARD)("TEST_STEP", 3);
-        //     NOlap::NTests::TShardReader reader(runtime, TTestTxConfig::TxTablet0, tableId, NOlap::TSnapshot(writePlanStep, txId));
-
-        //     for(const auto& name : TTestSchema::ExtractNames(schema)) {
-        //         Cerr << "column: " << name << Endl;
-        //     }
-        //     reader.SetReplyColumns(TTestSchema::ExtractNames(schema));
+            reader.SetReplyColumns(TTestSchema::ExtractNames(schema));
             
-        //     auto rb = reader.ReadAll();
-        //     UNIT_ASSERT(rb);
-        //     NArrow::ExtractColumnsValidate(rb, TTestSchema::ExtractNames(schema));
-        //     UNIT_ASSERT((ui32)rb->num_columns() == TTestSchema::ExtractNames(schema).size());
-        //     UNIT_ASSERT(rb->num_rows());
-        //     UNIT_ASSERT(reader.IsCorrectlyFinished());
+            auto rb = reader.ReadAll();
+            UNIT_ASSERT(rb);
+            NArrow::ExtractColumnsValidate(rb, TTestSchema::ExtractNames(schema));
+            UNIT_ASSERT((ui32)rb->num_columns() == TTestSchema::ExtractNames(schema).size());
+            UNIT_ASSERT(rb->num_rows());
+            UNIT_ASSERT(reader.IsCorrectlyFinished());
 
-        //     Cerr << "reader read_all: " << rb->ToString() << Endl;
-        // }
+            expected = NArrow::SerializeBatchNoCompression(rb);
+        }
+
+        UNIT_ASSERT_EQUAL(actual, expected);
     }
 }
 

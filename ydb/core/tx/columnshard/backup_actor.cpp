@@ -61,6 +61,7 @@ private:
 
 public:
     TBackupWriteController(const TActorId& actorID, 
+        // @TODO action with blob
         const std::shared_ptr<NOlap::IBlobsWritingAction>& action, 
         std::shared_ptr<arrow::RecordBatch> arrowBatch
     ) : actorID(actorID) {

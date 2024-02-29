@@ -66,6 +66,11 @@ public:
         return it->second;
     }
 
+    const TMap<TString, TFakeBucketStorage>& GetStorage() const {
+        // TGuard<TMutex> g(Mutex);
+        return BucketStorages;
+    }
+
     TFakeBucketStorage& MutableBucket(const TString& bucketId) const {
         TGuard<TMutex> g(Mutex);
         auto it = BucketStorages.find(bucketId);

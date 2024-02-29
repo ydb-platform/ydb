@@ -96,6 +96,10 @@ struct FallbackTrait {
         return ans;
     }
 
+    inline FallbackTrait<T> Shuffle128(const FallbackTrait<T>& other) {
+        return other;
+    }
+
     inline void SetMask(T* ptr) {
         Value = *ptr;
     }
@@ -106,6 +110,10 @@ struct FallbackTrait {
 
     inline void Store(T* ptr) {
         *ptr = Value;
+    }
+
+    inline FallbackTrait<T> Blend(const FallbackTrait<T>& other, const FallbackTrait<T>& mask) const {
+        return other.Value == 1 ? other : mask;
     }
 };
 

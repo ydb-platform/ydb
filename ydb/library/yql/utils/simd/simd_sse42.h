@@ -75,16 +75,16 @@ struct TSimd8 {
         return crc;
     }
 
-    inline int ToBitMask() const {
-        return _mm_movemask_epi8(this->Value);
-    }
-
     inline void SetMask(T* ptr) {
         Value = _mm_setr_epi8(ptr[0], ptr[1], ptr[2], ptr[3], ptr[4],
                               ptr[5], ptr[6], ptr[7], ptr[8], ptr[9],
                              ptr[10], ptr[11], ptr[12], ptr[13], ptr[14],
                              ptr[15]
                              );
+    }
+
+    inline int ToBitMask() const {
+        return _mm_movemask_epi8(this->Value);
     }
 
     inline bool Any() const {
@@ -159,6 +159,10 @@ struct TSimd8 {
         return _mm_blendv_epi8(this->Value, other.Value, mask.Value);
     }
 
+    inline TSimd8<T> Blend(const TSimd8<T>& other, const TSimd8<T>& mask) const {
+        return _mm_blendv_epi8(Value, other.Value, mask.Value);
+    }
+    
     template<int N>
     inline TSimd8<T> ByteShift128() const {
         if constexpr (N < 0) {
@@ -325,6 +329,8 @@ struct TSimd8 {
         *this = *this ^ other;
         return *this;
     };
+
+    //Add64
 
     inline TSimd8<T> operator+(const TSimd8<T>& other) const {
         return _mm_add_epi8(this->Value, other.Value);

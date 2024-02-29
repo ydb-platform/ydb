@@ -1,4 +1,4 @@
-#include <ydb/library/yql/utils/simd/exec/runtime_dispatching/algo.h>
+#include <ydb/library/yql/utils/simd/exec/merge_columns/merge.h>
 #include <immintrin.h>
 
 template<>

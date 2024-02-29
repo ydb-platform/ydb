@@ -1,4 +1,4 @@
-#include <ydb/library/yql/utils/simd/exec/merge_columns/algo.h>
+#include <ydb/library/yql/utils/simd/exec/merge_columns/merge.h>
 
 int main() {
     i8* data[4];

@@ -4009,6 +4009,7 @@ public:
     TAstNode* ParseSortBy(const PG_SortBy* value, bool allowAggregates, bool useProjectionRefs) {
         AT_LOCATION(value);
         bool asc = true;
+        bool nullsFirst = Settings.SortNullsFirst;
         switch (value->sortby_dir) {
         case SORTBY_DEFAULT:
             break;
@@ -4022,8 +4023,17 @@ public:
             return nullptr;
         }
 
-        if (value->sortby_nulls != SORTBY_NULLS_DEFAULT) {
-            AddError(TStringBuilder() << "sortby_nulls unsupported value: " << (int)value->sortby_nulls);
+        switch (value->sortby_nulls) {
+        case SORTBY_NULLS_DEFAULT:
+            break;
+        case SORTBY_NULLS_FIRST:
+            nullsFirst = true;
+            break;
+        case SORTBY_NULLS_LAST:
+            nullsFirst = false;
+            break;
+        default:
+            AddError(TStringBuilder() << "sortby_dir unsupported value: " << (int)value->sortby_dir);
             return nullptr;
         }
 
@@ -4049,7 +4059,7 @@ public:
         }
 
         auto lambda = L(A("lambda"), QL(), expr);
-        return L(A("PgSort"), L(A("Void")), lambda, QA(asc ? "asc" : "desc"));
+        return L(A("PgSort"), L(A("Void")), lambda, QA(asc ? "asc" : "desc"), QA(nullsFirst ? "first" : "last"));
     }
 
     TAstNode* ParseColumnRef(const ColumnRef* value, const TExprSettings& settings) {

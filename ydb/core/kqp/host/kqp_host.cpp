@@ -1601,7 +1601,7 @@ private:
         TKqpTranslationSettingsBuilder settingsBuilder(SessionCtx->Query().Type, SessionCtx->Config()._KqpYqlSyntaxVersion.Get().GetRef(), Cluster, script.Text, SessionCtx->Config().BindingsMode);
         settingsBuilder.SetSqlAutoCommit(true);
         auto scriptExprs = CompileYqlQuery(script, true, ctx, sqlVersion, settingsBuilder, false);
-        if (!scriptExprs.empty()) {
+        if (scriptExprs.empty()) {
             return nullptr;
         }
         YQL_ENSURE(scriptExprs.size() == 1);

@@ -214,6 +214,10 @@ public:
 
     static void ResetGlobalsUT();
 
+    bool IsMemoryYellowZoneReached() {
+        return IsMemoryYellowZoneThresholdReached;
+    }
+
 protected:
     void* Alloc(size_t size);
     void Free(void* ptr, size_t size) noexcept;
@@ -221,6 +225,11 @@ protected:
     void UpdatePeaks() {
         PeakAllocated = Max(PeakAllocated, GetAllocated());
         PeakUsed = Max(PeakUsed, GetUsed());
+
+        if (Limit != 0) {
+            IsMemoryYellowZoneThresholdReached = (100 * GetUsed() / Limit) > MemoryYellowZoneThreshold;
+        }
+        
     }
 
     bool TryIncreaseLimit(ui64 required);
@@ -253,6 +262,9 @@ protected:
 
     TIncreaseMemoryLimitCallback IncreaseMemoryLimitCallback;
     const TSourceLocation DebugInfo;
+
+    const ui8 MemoryYellowZoneThreshold = 80;
+    bool IsMemoryYellowZoneThresholdReached = false;
 };
 
 using TAlignedPagePool = TAlignedPagePoolImpl<>;

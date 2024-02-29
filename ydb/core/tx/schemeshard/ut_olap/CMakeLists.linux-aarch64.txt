@@ -27,6 +27,7 @@ target_link_libraries(ydb-core-tx-schemeshard-ut_olap PUBLIC
   ydb-core-formats
   ydb-core-tx
   core-tx-columnshard
+  tx-columnshard-test_helper
   tx-schemeshard-ut_helpers
   udf-service-exception_policy
 )

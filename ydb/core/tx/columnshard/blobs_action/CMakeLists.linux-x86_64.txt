@@ -32,5 +32,4 @@ target_link_libraries(tx-columnshard-blobs_action PUBLIC
 )
 target_sources(tx-columnshard-blobs_action PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/core/tx/columnshard/blobs_action/blob_manager_db.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/tx/columnshard/blobs_action/memory.cpp
 )

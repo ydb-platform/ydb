@@ -134,23 +134,33 @@ void TPQDescribeTopicActor::HandleCacheNavigateResponse(TEvTxProxySchemeCache::T
         }
 
         const auto& pqConfig = AppData(ActorContext())->PQConfig;
-        for (ui32 i = 0; i < config.ReadRulesSize(); ++i) {
-            auto& readRuleName = config.GetReadRules(i);
 
+        Cerr << ">>>>> ReadRules=" << config.ReadRulesSize() << " ";
+        for (auto& c : config.GetReadRules()) {
+            Cerr << c << ", ";
+        }
+        Cerr << Endl;
+        Cerr << ">>>>> Consumers=" << config.ConsumersSize() << " ";
+        for (auto& c : config.GetConsumers()) {
+            Cerr << c.GetName() << ", ";
+        }
+        Cerr << Endl;
+
+        for (const auto& consumer : config.GetConsumers()) {
             auto rr = settings->add_read_rules();
-            auto consumerName = NPersQueue::ConvertOldConsumerName(readRuleName, ActorContext());
+            auto consumerName = NPersQueue::ConvertOldConsumerName(consumer.GetName(), ActorContext());
             rr->set_consumer_name(consumerName);
-            rr->set_starting_message_timestamp_ms(config.GetReadFromTimestampsMs(i));
+            rr->set_starting_message_timestamp_ms(consumer.GetReadFromTimestampsMs());
             rr->set_supported_format(
-                                     (Ydb::PersQueue::V1::TopicSettings::Format) (config.GetConsumerFormatVersions(i) + 1));
-            rr->set_version(config.GetReadRuleVersions(i));
-            for (const auto &codec : config.GetConsumerCodecs(i).GetIds()) {
+                                     (Ydb::PersQueue::V1::TopicSettings::Format) (consumer.GetFormatVersion() + 1));
+            rr->set_version(consumer.GetVersion());
+            for (const auto &codec : consumer.GetCodec().GetIds()) {
                 rr->add_supported_codecs((Ydb::PersQueue::V1::Codec) (codec + 1));
             }
-            rr->set_important(NPQ::IsImportantClient(config, readRuleName));
+            rr->set_important(NPQ::IsImportantClient(config, consumer.GetName()));
 
-            if (i < config.ReadRuleServiceTypesSize()) {
-                rr->set_service_type(config.GetReadRuleServiceTypes(i));
+            if (consumer.HasServiceType()) {
+                rr->set_service_type(consumer.GetServiceType());
             } else {
                 if (pqConfig.GetDisallowDefaultClientServiceType()) {
                     this->Request_->RaiseIssue(FillIssue(

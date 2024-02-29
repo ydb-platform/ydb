@@ -4,14 +4,14 @@
 #include <ydb/public/api/client/yc_private/servicecontrol/access_service.grpc.pb.h>
 #include <ydb/public/api/client/yc_private/accessservice/access_service.grpc.pb.h>
 #include "access_service.h"
-#include "grpc_service_client.h"
-#include "grpc_service_cache.h"
+#include <ydb/library/grpc/actor_client/grpc_service_client.h>
+#include <ydb/library/grpc/actor_client/grpc_service_cache.h>
 
 namespace NCloud {
 
 using namespace NKikimr;
 
-class TAccessServiceV1 : public NActors::TActor<TAccessServiceV1>, TGrpcServiceClient<yandex::cloud::priv::servicecontrol::v1::AccessService> {
+class TAccessServiceV1 : public NActors::TActor<TAccessServiceV1>, NGrpcActorClient::TGrpcServiceClient<yandex::cloud::priv::servicecontrol::v1::AccessService> {
     using TThis = TAccessServiceV1;
     using TBase = NActors::TActor<TAccessServiceV1>;
 
@@ -83,7 +83,7 @@ public:
     }
 };
 
-class TAccessServiceV2 : public NActors::TActor<TAccessServiceV2>, TGrpcServiceClient<yandex::cloud::priv::accessservice::v2::AccessService> {
+class TAccessServiceV2 : public NActors::TActor<TAccessServiceV2>, NGrpcActorClient::TGrpcServiceClient<yandex::cloud::priv::accessservice::v2::AccessService> {
     using TThis = TAccessServiceV2;
     using TBase = NActors::TActor<TAccessServiceV2>;
 
@@ -139,8 +139,8 @@ IActor* CreateAccessServiceV2(const TAccessServiceSettings& settings) {
 
 IActor* CreateAccessServiceWithCache(const TAccessServiceSettings& settings) {
     IActor* accessService = CreateAccessServiceV1(settings);
-    accessService = CreateGrpcServiceCache<TEvAccessService::TEvAuthenticateRequest, TEvAccessService::TEvAuthenticateResponse>(accessService);
-    accessService = CreateGrpcServiceCache<TEvAccessService::TEvAuthorizeRequest, TEvAccessService::TEvAuthorizeResponse>(accessService);
+    accessService = NGrpcActorClient::CreateGrpcServiceCache<TEvAccessService::TEvAuthenticateRequest, TEvAccessService::TEvAuthenticateResponse>(accessService);
+    accessService = NGrpcActorClient::CreateGrpcServiceCache<TEvAccessService::TEvAuthorizeRequest, TEvAccessService::TEvAuthorizeResponse>(accessService);
     return accessService;
 }
 

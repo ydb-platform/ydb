@@ -1121,7 +1121,7 @@ inline void TSingleClusterReadSessionImpl<true>::OnReadDoneImpl(
     TDeferredActions<true>& deferred) {
     Y_ABORT_UNLESS(Lock.IsLocked());
 
-    LOG_LAZY(Log, TLOG_DEBUG, GetLogPrefix() << "Committed response: " << msg);
+    LOG_LAZY(Log, TLOG_INFO, GetLogPrefix() << "Committed response: " << msg);
 
     TMap<ui64, TIntrusivePtr<TPartitionStreamImpl<true>>> partitionStreams;
     for (const Ydb::PersQueue::V1::CommitCookie& cookieProto : msg.cookies()) {
@@ -1377,7 +1377,7 @@ inline void TSingleClusterReadSessionImpl<false>::OnReadDoneImpl(
     TDeferredActions<false>& deferred) {
     Y_ABORT_UNLESS(Lock.IsLocked());
 
-    LOG_LAZY(Log, TLOG_DEBUG, GetLogPrefix() << "Committed response: " << msg);
+    LOG_LAZY(Log, TLOG_INFO, GetLogPrefix() << "Committed response: " << msg);
 
     for (const auto& rangeProto : msg.partitions_committed_offsets()) {
         auto partitionStreamIt = PartitionStreams.find(rangeProto.partition_session_id());

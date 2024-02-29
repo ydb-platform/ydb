@@ -1610,24 +1610,27 @@ void TPersQueue::ProcessUpdateConfigRequest(TAutoPtr<TEvPersQueue::TEvUpdateConf
     if (!cfg.HasCacheSize() && Config.HasCacheSize()) //if not set and it is alter - preserve old cache size
         cfg.SetCacheSize(Config.GetCacheSize());
 
+    Migrate(cfg);
+
     // set rr generation for provided read rules
     {
         THashMap<TString, std::pair<ui64, ui64>> existed; // map name -> rrVersion, rrGeneration
-        for (ui32 i = 0; i < Config.ReadRulesSize(); ++i) {
-            auto version = i < Config.ReadRuleVersionsSize() ? Config.GetReadRuleVersions(i) : 0;
-            auto generation = i < Config.ReadRuleGenerationsSize() ? Config.GetReadRuleGenerations(i) : 0;
-            existed[Config.GetReadRules(i)] = std::make_pair(version, generation);
+        for (const auto& c : Config.GetConsumers()) {
+            existed[c.GetName()] = std::make_pair(c.GetVersion(), c.GetGeneration());
         }
-        for (ui32 i = 0; i < cfg.ReadRulesSize(); ++i) {
-            auto version = i < cfg.ReadRuleVersionsSize() ? cfg.GetReadRuleVersions(i) : 0;
-            auto it = existed.find(cfg.GetReadRules(i));
+
+        for (auto& c : *cfg.MutableConsumers()) {
+            auto it = existed.find(c.GetName());
             ui64 generation = 0;
-            if (it != existed.end() && it->second.first == version) {
+            if (it != existed.end() && it->second.first == c.GetVersion()) {
                 generation = it->second.second;
             } else {
                 generation = curConfigVersion;
             }
-            cfg.AddReadRuleGenerations(generation);
+            c.SetGeneration(generation);
+            if (ReadRuleCompatible()) {
+                cfg.AddReadRuleGenerations(generation);
+            }
         }
     }
 
@@ -1638,7 +1641,6 @@ void TPersQueue::ProcessUpdateConfigRequest(TAutoPtr<TEvPersQueue::TEvUpdateConf
     TString str;
     Y_ABORT_UNLESS(CheckPersQueueConfig(cfg, true, &str), "%s", str.c_str());
 
-    Migrate(cfg);
     BeginWriteConfig(cfg, bootstrapCfg, ctx);
 
     NewConfig = std::move(cfg);

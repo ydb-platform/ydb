@@ -351,7 +351,7 @@ struct TCommonAppOptions {
         opts.AddLongOption("log-format", "log format to use; short skips the priority and timestamp")
             .DefaultValue("full").OptionalArgument("full|short|json")
             .Handler(new TWithDefaultOptHandler(&LogFormat));
-        opts.AddLongOption("syslog", "send to syslog instead of stderr").SetFlag(&SysLogEnabled);
+        opts.AddLongOption("syslog", "send to syslog instead of stderr").NoArgument().SetFlag(&SysLogEnabled);
         opts.AddLongOption("syslog-service-tag", "unique tag for syslog").RequiredArgument("NAME").StoreResult(&SysLogServiceTag);
         opts.AddLongOption("log-file-name", "file name for log backend").RequiredArgument("NAME").StoreResult(&LogFileName);
         opts.AddLongOption("tcp", "start tcp interconnect").NoArgument().SetFlag(&TcpEnabled);

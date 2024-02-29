@@ -5020,10 +5020,35 @@ Y_UNIT_TEST_SUITE(TPersQueueTest) {
     ReadRuleVersions: 567
     TopicPath: "/Root/PQ/rt3.dc1--acc--topic3"
     YdbDatabasePath: "/Root"
+    Consumers {
+      Name: "first-consumer"
+      ReadFromTimestampsMs: 11223344000
+      FormatVersion: 0
+      Codec {
+      }
+      ServiceType: "data-streams"
+      Version: 0
+    }
+    Consumers {
+      Name: "consumer"
+      ReadFromTimestampsMs: 111000
+      FormatVersion: 0
+      Codec {
+        Ids: 2
+        Ids: 10004
+        Codecs: "lzop"
+        Codecs: "CUSTOM"
+      }
+      ServiceType: "data-streams"
+      Version: 567
+    }
   }
   ErrorCode: OK
 }
 )___";
+
+        Cerr << ">>>>> " << res.DebugString() << Endl;
+
         UNIT_ASSERT_VALUES_EQUAL(res.DebugString(), resultDescribe);
 
         Cerr << "DESCRIBES:\n";

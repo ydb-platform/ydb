@@ -96,7 +96,9 @@ namespace NKikimr::NGRpcProxy::V1 {
         auto* consumer = config->AddConsumers();
 
         consumer->SetName(consumerName);
-        config->AddReadRules(consumerName);
+        if (NPQ::ReadRuleCompatible()) {
+            config->AddReadRules(consumerName);
+        }
 
         if (rr.starting_message_timestamp_ms() < 0) {
             return TMsgPqCodes(
@@ -105,7 +107,9 @@ namespace NKikimr::NGRpcProxy::V1 {
             );
         }
         consumer->SetReadFromTimestampsMs(rr.starting_message_timestamp_ms());
-        config->AddReadFromTimestampsMs(rr.starting_message_timestamp_ms());
+        if (NPQ::ReadRuleCompatible()) {
+            config->AddReadFromTimestampsMs(rr.starting_message_timestamp_ms());
+        }
 
         if (!Ydb::PersQueue::V1::TopicSettings::Format_IsValid((int)rr.supported_format()) || rr.supported_format() == 0) {
             return TMsgPqCodes(
@@ -114,7 +118,9 @@ namespace NKikimr::NGRpcProxy::V1 {
             );
         }
         consumer->SetFormatVersion(rr.supported_format() - 1);
-        config->AddConsumerFormatVersions(rr.supported_format() - 1);
+        if (NPQ::ReadRuleCompatible()) {
+            config->AddConsumerFormatVersions(rr.supported_format() - 1);
+        }
 
         if (rr.version() < 0) {
             return TMsgPqCodes(
@@ -123,7 +129,9 @@ namespace NKikimr::NGRpcProxy::V1 {
             );
         }
         consumer->SetVersion(rr.version());
-        config->AddReadRuleVersions(rr.version());
+        if (NPQ::ReadRuleCompatible()) {
+            config->AddReadRuleVersions(rr.version());
+        }
 
         auto cct = consumer->MutableCodec();
         auto ct = config->AddConsumerCodecs();
@@ -146,7 +154,9 @@ namespace NKikimr::NGRpcProxy::V1 {
             cct->AddIds(codec - 1);
             cct->AddCodecs(codecName);
 
-            ct->CopyFrom(*cct);
+            if (NPQ::ReadRuleCompatible()) {
+                ct->CopyFrom(*cct);
+            }
         }
 
         if (rr.important()) {
@@ -167,7 +177,10 @@ namespace NKikimr::NGRpcProxy::V1 {
                     Ydb::PersQueue::ErrorCode::INVALID_ARGUMENT
                 );
             }
-            config->AddReadRuleServiceTypes(rr.service_type());
+            consumer->SetServiceType(rr.service_type());
+            if (NPQ::ReadRuleCompatible()) {
+                config->AddReadRuleServiceTypes(rr.service_type());
+            }
         } else {
             const auto& pqConfig = AppData(ctx)->PQConfig;
             if (pqConfig.GetDisallowDefaultClientServiceType()) {
@@ -177,7 +190,10 @@ namespace NKikimr::NGRpcProxy::V1 {
                 );
             }
             const auto& defaultCientServiceType = pqConfig.GetDefaultClientServiceType().GetName();
-            config->AddReadRuleServiceTypes(defaultCientServiceType);
+            consumer->SetServiceType(defaultCientServiceType);
+            if (NPQ::ReadRuleCompatible()) {
+                config->AddReadRuleServiceTypes(defaultCientServiceType);
+            }
         }
         return TMsgPqCodes("", Ydb::PersQueue::ErrorCode::OK);
     }
@@ -222,7 +238,9 @@ namespace NKikimr::NGRpcProxy::V1 {
         auto* consumer = config->AddConsumers();
 
         consumer->SetName(consumerName);
-        config->AddReadRules(consumerName);
+        if (NPQ::ReadRuleCompatible()) {
+            config->AddReadRules(consumerName);
+        }
 
         if (rr.read_from().seconds() < 0) {
             return TMsgPqCodes(
@@ -231,10 +249,14 @@ namespace NKikimr::NGRpcProxy::V1 {
             );
         }
         consumer->SetReadFromTimestampsMs(rr.read_from().seconds() * 1000);
-        config->AddReadFromTimestampsMs(rr.read_from().seconds() * 1000);
+        if (NPQ::ReadRuleCompatible()) {
+            config->AddReadFromTimestampsMs(rr.read_from().seconds() * 1000);
+        }
 
         consumer->SetFormatVersion(0);
-        config->AddConsumerFormatVersions(0);
+        if (NPQ::ReadRuleCompatible()) {
+            config->AddConsumerFormatVersions(0);
+        }
 
         TString serviceType;
         const auto& pqConfig = AppData(ctx)->PQConfig;
@@ -297,10 +319,14 @@ namespace NKikimr::NGRpcProxy::V1 {
         }
 
         consumer->SetServiceType(serviceType);
-        config->AddReadRuleServiceTypes(serviceType);
+        if (NPQ::ReadRuleCompatible()) {
+            config->AddReadRuleServiceTypes(serviceType);
+        }
 
         consumer->SetVersion(version);
-        config->AddReadRuleVersions(version);
+        if (NPQ::ReadRuleCompatible()) {
+            config->AddReadRuleVersions(version);
+        }
 
         auto cct = consumer->MutableCodec();
         auto ct = config->AddConsumerCodecs();
@@ -315,7 +341,9 @@ namespace NKikimr::NGRpcProxy::V1 {
             cct->AddIds(codec - 1);
             cct->AddCodecs(Ydb::Topic::Codec_IsValid(codec) ? LegacySubstr(to_lower(Ydb::Topic::Codec_Name((Ydb::Topic::Codec)codec)), 6) : "CUSTOM");
 
-            ct->CopyFrom(*cct);
+            if (NPQ::ReadRuleCompatible()) {
+                ct->CopyFrom(*cct);
+            }
         }
 
         if (rr.important()) {
@@ -342,7 +370,6 @@ namespace NKikimr::NGRpcProxy::V1 {
         config->ClearConsumerCodecs();
         config->MutablePartitionConfig()->ClearImportantClientId();
         config->ClearReadRuleServiceTypes();
-
         config->ClearConsumers();
 
         for (const auto& importantConsumer : originalConfig.GetPartitionConfig().GetImportantClientId()) {
@@ -354,31 +381,33 @@ namespace NKikimr::NGRpcProxy::V1 {
         bool removed = false;
 
         const auto& pqConfig = AppData(ctx)->PQConfig;
-        for (size_t i = 0; i < originalConfig.ReadRulesSize(); i++) {
-            auto& readRule = originalConfig.GetReadRules(i);
+        if (NPQ::ReadRuleCompatible()) {
+            for (size_t i = 0; i < originalConfig.ReadRulesSize(); i++) {
+                auto& readRule = originalConfig.GetReadRules(i);
 
-            if (readRule == consumerName) {
-                removed = true;
-                continue;
-            }
-
-            config->AddReadRuleVersions(originalConfig.GetReadRuleVersions(i));
-            config->AddReadRules(readRule);
-            config->AddReadFromTimestampsMs(originalConfig.GetReadFromTimestampsMs(i));
-            config->AddConsumerFormatVersions(originalConfig.GetConsumerFormatVersions(i));
-            auto ct = config->AddConsumerCodecs();
-            for (size_t j = 0; j < originalConfig.GetConsumerCodecs(i).CodecsSize(); j++) {
-                ct->AddCodecs(originalConfig.GetConsumerCodecs(i).GetCodecs(j));
-                ct->AddIds(originalConfig.GetConsumerCodecs(i).GetIds(j));
-            }
-            if (i < originalConfig.ReadRuleServiceTypesSize()) {
-                config->AddReadRuleServiceTypes(originalConfig.GetReadRuleServiceTypes(i));
-            } else {
-                if (pqConfig.GetDisallowDefaultClientServiceType()) {
-                    return TStringBuilder() << "service type cannot be empty for consumer '"
-                        << readRule << "'";
+                if (readRule == consumerName) {
+                    removed = true;
+                    continue;
                 }
-                config->AddReadRuleServiceTypes(pqConfig.GetDefaultClientServiceType().GetName());
+
+                config->AddReadRuleVersions(originalConfig.GetReadRuleVersions(i));
+                config->AddReadRules(readRule);
+                config->AddReadFromTimestampsMs(originalConfig.GetReadFromTimestampsMs(i));
+                config->AddConsumerFormatVersions(originalConfig.GetConsumerFormatVersions(i));
+                auto ct = config->AddConsumerCodecs();
+                for (size_t j = 0; j < originalConfig.GetConsumerCodecs(i).CodecsSize(); j++) {
+                    ct->AddCodecs(originalConfig.GetConsumerCodecs(i).GetCodecs(j));
+                    ct->AddIds(originalConfig.GetConsumerCodecs(i).GetIds(j));
+                }
+                if (i < originalConfig.ReadRuleServiceTypesSize()) {
+                    config->AddReadRuleServiceTypes(originalConfig.GetReadRuleServiceTypes(i));
+                } else {
+                    if (pqConfig.GetDisallowDefaultClientServiceType()) {
+                        return TStringBuilder() << "service type cannot be empty for consumer '"
+                            << readRule << "'";
+                    }
+                    config->AddReadRuleServiceTypes(pqConfig.GetDefaultClientServiceType().GetName());
+                }
             }
         }
 

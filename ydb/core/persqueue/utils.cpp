@@ -46,49 +46,41 @@ ui64 PutUnitsSize(const ui64 size) {
 }
 
 void Migrate(NKikimrPQ::TPQTabletConfig& config) {
-    // Remove it after version 25.1 and removing modification ReadRulese fields.
-    // For back compatibility ReadRules is source for Consumers
-    config.ClearConsumers();
+    if (config.ReadRulesSize()) {
+        config.ClearConsumers();
 
-    for(size_t i = 0; i < config.ReadRulesSize(); ++i) {
-        auto* consumer = config.AddConsumers();
+        for(size_t i = 0; i < config.ReadRulesSize(); ++i) {
+            auto* consumer = config.AddConsumers();
 
-        consumer->SetName(config.GetReadRules(i));
-        if (i < config.ReadFromTimestampsMsSize()) {
-            consumer->SetReadFromTimestampsMs(config.GetReadFromTimestampsMs(i));
-        }
-        if (i < config.ConsumerFormatVersionsSize()) {
-            consumer->SetFormatVersion(config.GetConsumerFormatVersions(i));
-        }
-        if (i < config.ConsumerCodecsSize()) {
-            auto& src = config.GetConsumerCodecs(i);
-            auto* dst = consumer->MutableCodec();
-            dst->CopyFrom(src);
-        }
-        if (i < config.ReadRuleServiceTypesSize()) {
-            consumer->SetServiceType(config.GetReadRuleServiceTypes(i));
-        }
-        if (i < config.ReadRuleVersionsSize()) {
-            consumer->SetVersion(config.GetReadRuleVersions(i));
-        }
-        if (i < config.ReadRuleGenerationsSize()) {
-            consumer->SetGeneration(config.GetReadRuleGenerations(i));
+            consumer->SetName(config.GetReadRules(i));
+            if (i < config.ReadFromTimestampsMsSize()) {
+                consumer->SetReadFromTimestampsMs(config.GetReadFromTimestampsMs(i));
+            }
+            if (i < config.ConsumerFormatVersionsSize()) {
+                consumer->SetFormatVersion(config.GetConsumerFormatVersions(i));
+            }
+            if (i < config.ConsumerCodecsSize()) {
+                auto& src = config.GetConsumerCodecs(i);
+                auto* dst = consumer->MutableCodec();
+                dst->CopyFrom(src);
+            }
+            if (i < config.ReadRuleServiceTypesSize()) {
+                consumer->SetServiceType(config.GetReadRuleServiceTypes(i));
+            }
+            if (i < config.ReadRuleVersionsSize()) {
+                consumer->SetVersion(config.GetReadRuleVersions(i));
+            }
+            if (i < config.ReadRuleGenerationsSize()) {
+                consumer->SetGeneration(config.GetReadRuleGenerations(i));
+            }
         }
     }
 }
 
 bool HasConsumer(const NKikimrPQ::TPQTabletConfig& config, const TString& consumerName) {
-    if (config.ConsumersSize()) {
-        for (auto& cons : config.GetConsumers()) {
-            if (cons.GetName() == consumerName) {
-                return true;
-            }
-        }
-    } else {
-        for (auto& cons : config.GetReadRules()) {
-            if (cons == consumerName) {
-                return true;
-            }
+    for (auto& cons : config.GetConsumers()) {
+        if (cons.GetName() == consumerName) {
+            return true;
         }
     }
 
@@ -96,7 +88,7 @@ bool HasConsumer(const NKikimrPQ::TPQTabletConfig& config, const TString& consum
 }
 
 size_t ConsumerCount(const NKikimrPQ::TPQTabletConfig& config) {
-    return std::max<size_t>(config.ReadRulesSize(), config.ConsumersSize());
+    return config.ConsumersSize();
 }
 
 bool IsImportantClient(const NKikimrPQ::TPQTabletConfig& config, const TString& consumerName) {

@@ -106,7 +106,7 @@ public:
 public:
     ~TProgram();
 
-    void AddCredentials(const TVector<std::pair<TString, TCredential>>& credentials);
+    bool AddCredentials(const TVector<std::pair<TString, TCredential>>& credentials);
     void ClearCredentials();
 
     void AddUserDataTable(const TUserDataTable& userDataTable);
@@ -329,6 +329,11 @@ public:
 
     void SetAbortHidden(std::function<void()>&& func) {
         AbortHidden_ = std::move(func);
+    }
+
+    TMaybe<TSet<TString>> GetUsedClusters() {
+        CollectUsedClusters();
+        return UsedClusters_;
     }
 
 private:

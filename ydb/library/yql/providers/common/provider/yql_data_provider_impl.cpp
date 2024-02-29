@@ -106,6 +106,10 @@ void TDataProviderBase::AddCluster(const TString& name, const THashMap<TString, 
     Y_UNUSED(name, properties);
 }
 
+bool TDataProviderBase::UpdateAuth(TExprContext&) {
+    YQL_ENSURE(false, "Unimplemented");
+}
+
 const THashMap<TString, TString>* TDataProviderBase::GetClusterTokens() {
     return nullptr;
 }

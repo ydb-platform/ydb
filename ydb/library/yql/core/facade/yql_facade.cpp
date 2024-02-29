@@ -431,20 +431,30 @@ TString TProgram::TakeSessionId() {
     }
 }
 
-void TProgram::AddCredentials(const TVector<std::pair<TString, TCredential>>& credentials) {
+bool TProgram::AddCredentials(const TVector<std::pair<TString, TCredential>>& credentials) {
     for (const auto& credential : credentials) {
         Credentials_->AddCredential(credential.first, credential.second);
     }
 
-    if (auto modules = dynamic_cast<TModuleResolver*>(Modules_.get())) {
-        modules->SetCredentials(Credentials_);
+    if (TypeCtx_) {
+        for (auto sink : TypeCtx_->DataSinks) {
+            if (!sink->UpdateAuth(*ExprCtx_)) {
+                return false;
+            }
+        }
+        for (auto source : TypeCtx_->DataSources) {
+            if (!source->UpdateAuth(*ExprCtx_)) {
+                return false;
+            }
+        }
     }
-    if (UrlListerManager_) {
-        UrlListerManager_->SetCredentials(Credentials_);
-    }
+
+    return true;
 }
 
 void TProgram::ClearCredentials() {
+    Y_ENSURE(!TypeCtx_, "TypeCtx_ already created");
+
     Credentials_ = MakeIntrusive<TCredentials>();
 
     if (auto modules = dynamic_cast<TModuleResolver*>(Modules_.get())) {

@@ -133,6 +133,10 @@ public:
     }
 
     bool Initialize(TExprContext& ctx) override {
+        return SetAuth(ctx);
+    }
+
+    bool SetAuth(TExprContext& ctx) {
         auto category = YtProviderName;
         auto cred = State_->Types->Credentials->FindCredential(TString("default_").append(category));
         if (cred) {
@@ -146,6 +150,12 @@ public:
         }
 
         return true;
+    }
+
+    bool UpdateAuth(TExprContext& ctx) override {
+        State_->Configuration->UpdateAuth(*State_->Types);
+
+        return SetAuth(ctx);
     }
 
     const THashMap<TString, TString>* GetClusterTokens() override {

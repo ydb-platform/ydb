@@ -303,6 +303,12 @@ struct TYtConfiguration : public TYtSettings, public NCommon::TSettingDispatcher
         this->FreezeDefaults();
     }
 
+    void UpdateAuth(const TTypeAnnotationContext& typeCtx) {
+        for (auto& cluster: this->ValidClusters) {
+            Tokens[cluster] = typeCtx.Credentials->FindCredentialContent("cluster:default_" + cluster, "default_yt", Tokens[cluster]);
+        }
+    }
+
     TYtSettings::TConstPtr Snapshot() const;
 
     THashMap<TString, TString> Tokens;

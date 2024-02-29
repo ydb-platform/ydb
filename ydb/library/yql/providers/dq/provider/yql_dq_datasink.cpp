@@ -136,6 +136,11 @@ public:
         return TypeAnnotationTransformer->CanParse(node);
     }
 
+    bool UpdateAuth(TExprContext& ctx) override {
+        Y_UNUSED(ctx);
+        return true;
+    }
+
     IGraphTransformer& GetTypeAnnotationTransformer(bool instantOnly) override {
         Y_UNUSED(instantOnly);
         return *TypeAnnotationTransformer;

@@ -939,6 +939,11 @@ namespace {
             return ResultProviderName;
         }
 
+        bool UpdateAuth(TExprContext& ctx) override {
+            Y_UNUSED(ctx);
+            return true;
+        }
+
         bool ValidateParameters(TExprNode& node, TExprContext& ctx, TMaybe<TString>& cluster) override {
             if (!EnsureArgsCount(node, 1, ctx)) {
                 return false;

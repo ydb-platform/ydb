@@ -110,6 +110,7 @@ public:
     virtual TExprNode::TPtr GetClusterInfo(const TString& cluster, TExprContext& ctx) = 0;
     virtual const THashMap<TString, TString>* GetClusterTokens() = 0;
     virtual void AddCluster(const TString& name, const THashMap<TString, TString>& properties) = 0;
+    virtual bool UpdateAuth(TExprContext& ctx) = 0;
 
     //-- discovery & rewrite
     virtual IGraphTransformer& GetIODiscoveryTransformer() = 0;

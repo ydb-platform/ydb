@@ -155,6 +155,11 @@ public:
         return *FinalizingTransformer_;
     }
 
+    bool UpdateAuth(TExprContext& ctx) override {
+        Y_UNUSED(ctx);
+        return true;
+    }
+
     bool CollectStatistics(NYson::TYsonWriter& writer, bool totalOnly) override {
         if (State_->Statistics.empty()) {
             return false;

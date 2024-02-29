@@ -177,6 +177,11 @@ namespace {
             return true;
         }
 
+        bool UpdateAuth(TExprContext& ctx) override {
+            Y_UNUSED(ctx);
+            return true;
+        }
+
         bool CollectStatistics(NYson::TYsonWriter& writer, bool totalOnly) override {
             if (Statistics.Entries.empty()) {
                 return false;

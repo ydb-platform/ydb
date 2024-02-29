@@ -48,6 +48,7 @@ public:
     TExprNode::TPtr GetClusterInfo(const TString& cluster, TExprContext& ctx) override;
     void AddCluster(const TString& name, const THashMap<TString, TString>& properties) override;
     const THashMap<TString, TString>* GetClusterTokens() override;
+    bool UpdateAuth(TExprContext& ctx) override;
     IGraphTransformer& GetIODiscoveryTransformer() override;
     IGraphTransformer& GetEpochsTransformer() override;
     IGraphTransformer& GetIntentDeterminationTransformer() override;

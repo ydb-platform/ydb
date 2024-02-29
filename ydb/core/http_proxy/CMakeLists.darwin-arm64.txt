@@ -18,6 +18,7 @@ target_link_libraries(ydb-core-http_proxy PUBLIC
   contrib-restricted-nlohmann_json
   library-actors-http
   library-actors-core
+  library-grpc-actor_client
   ydb-core-base
   ydb-core-protos
   core-grpc_services-local_rpc

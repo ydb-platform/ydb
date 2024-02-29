@@ -17,6 +17,7 @@ target_link_libraries(compute-ydb-synchronization_service PUBLIC
   yutil
   library-actors-core
   library-actors-protos
+  library-grpc-actor_client
   libs-control_plane_storage-proto
   api-grpc
   library-db_pool-protos

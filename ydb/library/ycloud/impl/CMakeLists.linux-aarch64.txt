@@ -15,8 +15,7 @@ target_link_libraries(library-ycloud-impl PUBLIC
   yutil
   library-ycloud-api
   library-actors-core
-  cpp-digest-crc32c
-  library-grpc-client
+  library-grpc-actor_client
   library-cpp-json
   ydb-core-base
   ydb-library-services
@@ -27,9 +26,6 @@ target_sources(library-ycloud-impl PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/library/ycloud/impl/access_service.h
   ${CMAKE_SOURCE_DIR}/ydb/library/ycloud/impl/folder_service.h
   ${CMAKE_SOURCE_DIR}/ydb/library/ycloud/impl/folder_service_transitional.h
-  ${CMAKE_SOURCE_DIR}/ydb/library/ycloud/impl/grpc_service_cache.h
-  ${CMAKE_SOURCE_DIR}/ydb/library/ycloud/impl/grpc_service_client.h
-  ${CMAKE_SOURCE_DIR}/ydb/library/ycloud/impl/grpc_service_settings.h
   ${CMAKE_SOURCE_DIR}/ydb/library/ycloud/impl/iam_token_service.h
   ${CMAKE_SOURCE_DIR}/ydb/library/ycloud/impl/mock_access_service.h
   ${CMAKE_SOURCE_DIR}/ydb/library/ycloud/impl/service_account_service.h

@@ -18,6 +18,7 @@ target_link_libraries(compute-ydb-control_plane PUBLIC
   library-cpp-json
   library-actors-core
   library-actors-protos
+  library-grpc-actor_client
   compute-ydb-synchronization_service
   libs-control_plane_storage-proto
   libs-quota_manager-proto

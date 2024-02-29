@@ -11353,6 +11353,13 @@
             "uri": "https://{canondata_backend}/1936947/feceb71e6c925b39a34ab09e3bcd03d162bc6b1e/resource.tar.gz#test_sql2yql.test_pg-range_function_scalar_/sql.yql"
         }
     ],
+    "test_sql2yql.test[pg-record_from_table_row]": [
+        {
+            "checksum": "252126909d824d05cdd65844f8429313",
+            "size": 732,
+            "uri": "https://{canondata_backend}/1937429/6c80ea12421e08c27b3e211492dc22d34e4429ce/resource.tar.gz#test_sql2yql.test_pg-record_from_table_row_/sql.yql"
+        }
+    ],
     "test_sql2yql.test[pg-select_agg]": [
         {
             "checksum": "e6dc3141786c94a8cc4c07b9c88f6465",

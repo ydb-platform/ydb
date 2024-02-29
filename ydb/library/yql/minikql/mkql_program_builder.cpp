@@ -9,6 +9,7 @@
 #include "ydb/library/yql/minikql/mkql_type_builder.h"
 #include "ydb/library/yql/core/sql_types/match_recognize.h"
 #include "ydb/library/yql/core/sql_types/time_order_recover.h"
+#include <ydb/library/yql/parser/pg_catalog/catalog.h>
 
 #include <util/string/cast.h>
 #include <util/string/printf.h>
@@ -5467,6 +5468,31 @@ TRuntimeNode TProgramBuilder::PgTableContent(
     TCallableBuilder callableBuilder(Env, __func__, returnType);
     callableBuilder.Add(NewDataLiteral<NUdf::EDataSlot::String>(cluster));
     callableBuilder.Add(NewDataLiteral<NUdf::EDataSlot::String>(table));
+    return TRuntimeNode(callableBuilder.Build(), false);
+}
+
+TRuntimeNode TProgramBuilder::PgToRecord(TRuntimeNode input, const TArrayRef<std::pair<std::string_view, std::string_view>>& members) {
+    if constexpr (RuntimeVersion < 48U) {
+        THROW yexception() << "Runtime version (" << RuntimeVersion << ") too old for " << __func__;
+    }
+
+    MKQL_ENSURE(input.GetStaticType()->IsStruct(), "Expected struct");
+    auto structType = AS_TYPE(TStructType, input.GetStaticType());
+    for (ui32 i = 0; i < structType->GetMembersCount(); ++i) {
+        auto itemType = structType->GetMemberType(i);
+        MKQL_ENSURE(itemType->IsNull() || itemType->IsPg(), "Expected null or pg");
+    }
+
+    auto returnType = NewPgType(NYql::NPg::LookupType("record").TypeId);
+    TCallableBuilder callableBuilder(Env, __func__, returnType);
+    callableBuilder.Add(input);
+    TVector<TRuntimeNode> names;
+    for (const auto& x : members) {
+        names.push_back(NewDataLiteral<NUdf::EDataSlot::String>(x.first));
+        names.push_back(NewDataLiteral<NUdf::EDataSlot::String>(x.second));
+    }
+
+    callableBuilder.Add(NewTuple(names));
     return TRuntimeNode(callableBuilder.Build(), false);
 }
 

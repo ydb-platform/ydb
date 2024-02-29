@@ -280,6 +280,10 @@ public:
         return AppData()->AllowShadowDataInSchemeShardForTests;
     }
 
+    void SetLocalSequences(const THashSet<TString>& localSequences) {
+        LocalSequences = localSequences;
+    }
+
     THolder<TProposeResponse> Propose(const TString& owner, TOperationContext& context) override {
         const TTabletId ssId = context.SS->SelfTabletId();
 

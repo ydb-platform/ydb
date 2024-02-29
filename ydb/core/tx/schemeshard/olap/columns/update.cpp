@@ -14,6 +14,7 @@ namespace NKikimr::NSchemeShard {
         Name = columnSchema.GetName();
         NotNullFlag = columnSchema.GetNotNull();
         TypeName = columnSchema.GetType();
+        StorageId = columnSchema.GetStorageId();
         if (columnSchema.HasSerializer()) {
             NArrow::NSerialization::TSerializerContainer serializer;
             if (!serializer.DeserializeFromProto(columnSchema.GetSerializer())) {
@@ -63,6 +64,7 @@ namespace NKikimr::NSchemeShard {
     void TOlapColumnAdd::ParseFromLocalDB(const NKikimrSchemeOp::TOlapColumnDescription& columnSchema) {
         Name = columnSchema.GetName();
         TypeName = columnSchema.GetType();
+        StorageId = columnSchema.GetStorageId();
 
         if (columnSchema.HasTypeInfo()) {
             Type = NScheme::TypeInfoModFromProtoColumnType(
@@ -94,6 +96,7 @@ namespace NKikimr::NSchemeShard {
         columnSchema.SetName(Name);
         columnSchema.SetType(TypeName);
         columnSchema.SetNotNull(NotNullFlag);
+        columnSchema.SetStorageId(StorageId);
         if (Serializer) {
             Serializer->SerializeToProto(*columnSchema.MutableSerializer());
         }
@@ -110,6 +113,9 @@ namespace NKikimr::NSchemeShard {
 
     bool TOlapColumnAdd::ApplyDiff(const TOlapColumnDiff& diffColumn, IErrorCollector& errors) {
         Y_ABORT_UNLESS(GetName() == diffColumn.GetName());
+        if (diffColumn.GetStorageId()) {
+            StorageId = *diffColumn.GetStorageId();
+        }
         if (diffColumn.GetSerializer()) {
             Serializer = diffColumn.GetSerializer();
         }

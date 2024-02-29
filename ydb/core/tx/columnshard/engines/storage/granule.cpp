@@ -61,10 +61,6 @@ void TGranuleMeta::AddColumnRecord(const TIndexInfo& indexInfo, const TPortionIn
         AFL_VERIFY(it->second->IsEqualWithSnapshots(portion))("self", it->second->DebugString())("item", portion.DebugString());
     }
     it->second->AddRecord(indexInfo, rec, portionMeta);
-
-    if (portionMeta) {
-        it->second->InitOperator(Owner->GetStoragesManager()->InitializePortionOperator(*it->second), false);
-    }
 }
 
 void TGranuleMeta::OnAfterChangePortion(const std::shared_ptr<TPortionInfo> portionAfter, NStorageOptimizer::IOptimizerPlanner::TModificationGuard* modificationGuard) {

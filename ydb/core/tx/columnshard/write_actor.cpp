@@ -41,7 +41,7 @@ public:
         }
 
         WriteController->OnBlobWriteResult(*msg);
-        if (WriteController->IsBlobActionsReady()) {
+        if (WriteController->IsReady()) {
             return SendResultAndDie(ctx, NKikimrProto::OK);
         }
     }
@@ -84,7 +84,7 @@ public:
             writeInfo->GetWriteOperator()->SendWriteBlobRequest(writeInfo->GetData(), writeInfo->GetBlobId());
         }
 
-        if (WriteController->IsBlobActionsReady()) {
+        if (WriteController->IsReady()) {
             return SendResultAndDie(ctx, NKikimrProto::OK);
         }
         Become(&TThis::StateWait);

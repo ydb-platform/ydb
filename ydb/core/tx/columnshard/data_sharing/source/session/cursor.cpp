@@ -5,7 +5,7 @@
 
 namespace NKikimr::NOlap::NDataSharing {
 
-void TSourceCursor::BuildSelection(const std::shared_ptr<TSharedBlobsManager>& sharedBlobsManager) {
+void TSourceCursor::BuildSelection(const std::shared_ptr<TSharedBlobsManager>& sharedBlobsManager, const TVersionedIndex& index) {
     THashMap<ui64, NEvents::TPathIdData> result;
     auto itCurrentPath = PortionsForSend.find(StartPathId);
     AFL_VERIFY(itCurrentPath != PortionsForSend.end());
@@ -41,7 +41,7 @@ void TSourceCursor::BuildSelection(const std::shared_ptr<TSharedBlobsManager>& s
     THashMap<TTabletId, TTaskForTablet> tabletTasksResult;
 
     for (auto&& i : result) {
-        THashMap<TTabletId, TTaskForTablet> tabletTasks = i.second.BuildLinkTabletTasks(sharedBlobsManager, SelfTabletId, TransferContext);
+        THashMap<TTabletId, TTaskForTablet> tabletTasks = i.second.BuildLinkTabletTasks(sharedBlobsManager, SelfTabletId, TransferContext, index);
         for (auto&& t : tabletTasks) {
             auto it = tabletTasksResult.find(t.first);
             if (it == tabletTasksResult.end()) {
@@ -56,7 +56,7 @@ void TSourceCursor::BuildSelection(const std::shared_ptr<TSharedBlobsManager>& s
     std::swap(Selected, result);
 }
 
-bool TSourceCursor::Next(const std::shared_ptr<TSharedBlobsManager>& sharedBlobsManager) {
+bool TSourceCursor::Next(const std::shared_ptr<TSharedBlobsManager>& sharedBlobsManager, const TVersionedIndex& index) {
     PreviousSelected = std::move(Selected);
     LinksModifiedTablets.clear();
     Selected.clear();
@@ -71,7 +71,7 @@ bool TSourceCursor::Next(const std::shared_ptr<TSharedBlobsManager>& sharedBlobs
     NextPathId = {};
     NextPortionId = {};
     ++PackIdx;
-    BuildSelection(sharedBlobsManager);
+    BuildSelection(sharedBlobsManager, index);
     AFL_VERIFY(IsValid());
     return true;
 }
@@ -141,7 +141,7 @@ TSourceCursor::TSourceCursor(const TTabletId selfTabletId, const std::set<ui64>&
 {
 }
 
-bool TSourceCursor::Start(const std::shared_ptr<TSharedBlobsManager>& sharedBlobsManager, const THashMap<ui64, std::vector<std::shared_ptr<TPortionInfo>>>& portions) {
+bool TSourceCursor::Start(const std::shared_ptr<TSharedBlobsManager>& sharedBlobsManager, const THashMap<ui64, std::vector<std::shared_ptr<TPortionInfo>>>& portions, const TVersionedIndex& index) {
     AFL_VERIFY(!IsStartedFlag);
     std::map<ui64, std::map<ui32, std::shared_ptr<TPortionInfo>>> local;
     std::vector<std::shared_ptr<TPortionInfo>> portionsLock;
@@ -170,9 +170,9 @@ bool TSourceCursor::Start(const std::shared_ptr<TSharedBlobsManager>& sharedBlob
 
         NextPathId = PortionsForSend.begin()->first;
         NextPortionId = PortionsForSend.begin()->second.begin()->first;
-        AFL_VERIFY(Next(sharedBlobsManager));
+        AFL_VERIFY(Next(sharedBlobsManager, index));
     } else {
-        BuildSelection(sharedBlobsManager);
+        BuildSelection(sharedBlobsManager, index);
     }
     IsStartedFlag = true;
     return true;

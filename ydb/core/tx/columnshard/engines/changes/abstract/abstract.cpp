@@ -17,13 +17,7 @@ TString TColumnEngineChanges::DebugString() const {
 TConclusionStatus TColumnEngineChanges::ConstructBlobs(TConstructionContext& context) noexcept {
     Y_ABORT_UNLESS(Stage == EStage::Started);
 
-    {
-        ui64 readBytes = 0;
-        for (auto&& i : Blobs) {
-            readBytes += i.first.Size;
-        }
-        context.Counters.CompactionInputSize(readBytes);
-    }
+    context.Counters.CompactionInputSize(Blobs.GetTotalBlobsSize());
     const TMonotonic start = TMonotonic::Now();
     TConclusionStatus result = DoConstructBlobs(context);
     if (result.Ok()) {

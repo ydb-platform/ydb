@@ -63,7 +63,7 @@ public:
         return std::move(Slices);
     }
 
-    bool Next(std::vector<std::vector<std::shared_ptr<IPortionDataChunk>>>& portionBlobs, std::shared_ptr<arrow::RecordBatch>& batch);
+    bool Next(std::vector<std::vector<std::shared_ptr<IPortionDataChunk>>>& portionBlobs, std::shared_ptr<arrow::RecordBatch>& batch, const TEntityGroups& groups);
 };
 
 }

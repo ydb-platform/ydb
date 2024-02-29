@@ -10,7 +10,7 @@
 
 namespace NKikimr::NOlap::NDataSharing {
 
-NKikimr::TConclusionStatus TDestinationSession::DataReceived(THashMap<ui64, NEvents::TPathIdData>&& data, TColumnEngineForLogs& index, const std::shared_ptr<IStoragesManager>& manager) {
+NKikimr::TConclusionStatus TDestinationSession::DataReceived(THashMap<ui64, NEvents::TPathIdData>&& data, TColumnEngineForLogs& index, const std::shared_ptr<IStoragesManager>& /*manager*/) {
     auto guard = index.GranulesStorage->StartPackModification();
     for (auto&& i : data) {
         auto it = PathIds.find(i.first);
@@ -19,7 +19,7 @@ NKikimr::TConclusionStatus TDestinationSession::DataReceived(THashMap<ui64, NEve
             ui32 contains = 0;
             ui32 notContains = 0;
             THashMap<TString, THashSet<TUnifiedBlobId>> blobIds;
-            portion.FillBlobIdsByStorage(blobIds);
+            portion.FillBlobIdsByStorage(blobIds, index.GetVersionedIndex());
             for (auto&& s : blobIds) {
                 auto it = CurrentBlobIds.find(s.first);
                 if (it == CurrentBlobIds.end()) {
@@ -34,8 +34,6 @@ NKikimr::TConclusionStatus TDestinationSession::DataReceived(THashMap<ui64, NEve
             }
             AFL_VERIFY(!contains || !notContains);
             if (!contains) {
-                auto storage = manager->GetOperatorVerified(portion.GetMeta().GetTierName() ? portion.GetMeta().GetTierName() : IStoragesManager::DefaultStorageId);
-                portion.InitOperator(storage, false);
                 portion.SetPathId(it->second);
                 index.UpsertPortion(std::move(portion));
             }
@@ -178,7 +176,7 @@ bool TDestinationSession::DoStart(const NColumnShard::TColumnShard& shard, const
     THashMap<TString, THashSet<TUnifiedBlobId>> local;
     for (auto&& i : portions) {
         for (auto&& p : i.second) {
-            p->FillBlobIdsByStorage(local);
+            p->FillBlobIdsByStorage(local, shard.GetIndexAs<TColumnEngineForLogs>().GetVersionedIndex());
         }
     }
     std::swap(CurrentBlobIds, local);

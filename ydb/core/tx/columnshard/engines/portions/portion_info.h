@@ -17,7 +17,12 @@ class TPortionInfo;
 
 namespace NKikimr::NOlap {
 
+namespace NBlobOperations::NRead {
+class TCompositeReadBlobs;
+}
+
 struct TIndexInfo;
+class TVersionedIndex;
 class IDbWrapper;
 
 class TPortionInfo {
@@ -29,12 +34,15 @@ private:
     TSnapshot RemoveSnapshot = TSnapshot::Zero(); // {XPlanStep, XTxId} is snapshot where the blob has been removed (i.e. compacted into another one)
 
     TPortionMeta Meta;
-    std::shared_ptr<NOlap::IBlobsStorageOperator> BlobsOperator;
     ui64 DeprecatedGranuleId = 0;
     YDB_READONLY_DEF(std::vector<TIndexChunk>, Indexes);
 
     TConclusionStatus DeserializeFromProto(const NKikimrColumnShardDataSharingProto::TPortionInfo& proto, const TIndexInfo& info);
 public:
+    THashMap<TChunkAddress, TString> DecodeBlobAddresses(NBlobOperations::NRead::TCompositeReadBlobs&& blobs, const TIndexInfo& indexInfo) const;
+
+    const TString& GetColumnStorageId(const ui32 columnId, const TIndexInfo& indexInfo) const;
+
     ui64 GetTxVolume() const; // fake-correct method for determ volume on rewrite this portion in transaction progress
 
     class TPage {
@@ -127,10 +135,6 @@ public:
         return Portion;
     }
 
-    bool HasStorageOperator() const {
-        return !!BlobsOperator;
-    }
-
     NJson::TJsonValue SerializeToJsonVisual() const {
         NJson::TJsonValue result = NJson::JSON_MAP;
         result.InsertValue("id", Portion);
@@ -146,22 +150,8 @@ public:
         return result;
     }
 
-    void InitOperator(const std::shared_ptr<NOlap::IBlobsStorageOperator>& bOperator, const bool rewrite) {
-        if (rewrite) {
-            AFL_VERIFY(!!BlobsOperator);
-        } else {
-            AFL_VERIFY(!BlobsOperator);
-        }
-        AFL_VERIFY(!!bOperator);
-        BlobsOperator = bOperator;
-    }
-
     static constexpr const ui32 BLOB_BYTES_LIMIT = 8 * 1024 * 1024;
 
-    const std::shared_ptr<NOlap::IBlobsStorageOperator>& GetBlobsStorage() const {
-        Y_ABORT_UNLESS(BlobsOperator);
-        return BlobsOperator;
-    }
     std::vector<const TColumnRecord*> GetColumnChunksPointers(const ui32 columnId) const;
 
     TSerializationStats GetSerializationStat(const ISnapshotSchema& schema) const {
@@ -176,7 +166,6 @@ public:
 
     void ResetMeta() {
         Meta = TPortionMeta();
-        BlobsOperator = nullptr;
     }
 
     const TPortionMeta& GetMeta() const {
@@ -215,11 +204,10 @@ public:
         return TPortionInfo();
     }
 
-    TPortionInfo(const ui64 pathId, const ui64 portionId, const TSnapshot& minSnapshot, const std::shared_ptr<NOlap::IBlobsStorageOperator>& blobsOperator)
+    TPortionInfo(const ui64 pathId, const ui64 portionId, const TSnapshot& minSnapshot)
         : PathId(pathId)
         , Portion(portionId)
-        , MinSnapshot(minSnapshot)
-        , BlobsOperator(blobsOperator) {
+        , MinSnapshot(minSnapshot) {
     }
 
     TString DebugString(const bool withDetails = false) const;
@@ -369,37 +357,17 @@ public:
     }
 
 
-    THashMap<TString, THashSet<TUnifiedBlobId>> GetBlobIdsByStorage() const {
+    THashMap<TString, THashSet<TUnifiedBlobId>> GetBlobIdsByStorage(const TIndexInfo& indexInfo) const {
         THashMap<TString, THashSet<TUnifiedBlobId>> result;
-        FillBlobIdsByStorage(result);
+        FillBlobIdsByStorage(result, indexInfo);
         return result;
     }
 
-    void FillBlobIdsByStorage(THashMap<TString, THashSet<TUnifiedBlobId>>& result) const {
-        const TString& storageId = GetMeta().GetTierName() ? GetMeta().GetTierName() : IStoragesManager::DefaultStorageId;
-        THashMap<TString, THashSet<TUnifiedBlobId>> local;
-        for (auto&& i : Records) {
-            if (local[storageId].emplace(i.BlobRange.BlobId).second) {
-                AFL_VERIFY(result[storageId].emplace(i.BlobRange.BlobId).second);
-            }
-        }
-        for (auto&& i : Indexes) {
-            if (local[storageId].emplace(i.GetBlobRange().BlobId).second) {
-                AFL_VERIFY(result[storageId].emplace(i.GetBlobRange().BlobId).second);
-            }
-        }
-    }
+    void FillBlobRangesByStorage(THashMap<TString, THashSet<TBlobRange>>& result, const TIndexInfo& indexInfo) const;
+    void FillBlobRangesByStorage(THashMap<TString, THashSet<TBlobRange>>& result, const TVersionedIndex& index) const;
 
-    THashSet<TUnifiedBlobId> GetBlobIds() const {
-        THashSet<TUnifiedBlobId> result;
-        for (auto&& i : Records) {
-            result.emplace(i.BlobRange.BlobId);
-        }
-        for (auto&& i : Indexes) {
-            result.emplace(i.GetBlobRange().BlobId);
-        }
-        return result;
-    }
+    void FillBlobIdsByStorage(THashMap<TString, THashSet<TUnifiedBlobId>>& result, const TIndexInfo& indexInfo) const;
+    void FillBlobIdsByStorage(THashMap<TString, THashSet<TUnifiedBlobId>>& result, const TVersionedIndex& index) const;
 
     ui32 GetRecordsCount() const {
         ui32 result = 0;
@@ -613,7 +581,7 @@ public:
 
     template <class TExternalBlobInfo>
     TPreparedBatchData PrepareForAssemble(const ISnapshotSchema& dataSchema, const ISnapshotSchema& resultSchema,
-        THashMap<TBlobRange, TExternalBlobInfo>& blobsData) const {
+        THashMap<TChunkAddress, TExternalBlobInfo>& blobsData) const {
         std::vector<TColumnAssemblingInfo> columns;
         auto arrowResultSchema = resultSchema.GetSchema();
         columns.reserve(arrowResultSchema->num_fields());
@@ -637,7 +605,7 @@ public:
                     AFL_VERIFY((ui32)resultPos < columns.size());
                     currentAssembler = &columns[resultPos];
                 }
-                auto it = blobsData.find(rec.BlobRange);
+                auto it = blobsData.find(rec.GetAddress());
                 Y_ABORT_UNLESS(it != blobsData.end());
                 currentAssembler->AddBlobInfo(rec.Chunk, std::move(it->second));
                 blobsData.erase(it);
@@ -654,9 +622,8 @@ public:
         return TPreparedBatchData(std::move(preparedColumns), arrowResultSchema, rowsCount);
     }
 
-    std::shared_ptr<arrow::RecordBatch> AssembleInBatch(const ISnapshotSchema& dataSchema,
-        const ISnapshotSchema& resultSchema,
-        THashMap<TBlobRange, TString>& data) const {
+    std::shared_ptr<arrow::RecordBatch> AssembleInBatch(const ISnapshotSchema& dataSchema, const ISnapshotSchema& resultSchema,
+        THashMap<TChunkAddress, TString>& data) const {
         auto batch = PrepareForAssemble(dataSchema, resultSchema, data).Assemble();
         Y_ABORT_UNLESS(batch->Validate().ok());
         return batch;

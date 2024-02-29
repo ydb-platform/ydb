@@ -38,11 +38,11 @@ private:
     THashMap<ui32, std::shared_ptr<arrow::Field>> ArrowColumnByColumnIdCache;
     THashMap<ui32, NIndexes::TIndexMetaContainer> Indexes;
     TIndexInfo(const TString& name);
-    bool DeserializeFromProto(const NKikimrSchemeOp::TColumnTableSchema& schema);
+    bool DeserializeFromProto(const NKikimrSchemeOp::TColumnTableSchema& schema, const std::shared_ptr<IStoragesManager>& operators);
     TColumnFeatures& GetOrCreateColumnFeatures(const ui32 columnId) const;
     void BuildSchemaWithSpecials();
     void BuildArrowSchema();
-    void InitializeCaches();
+    void InitializeCaches(const std::shared_ptr<IStoragesManager>& operators);
 public:
     static constexpr const char* SPEC_COL_PLAN_STEP = NOlap::NPortion::TSpecialColumns::SPEC_COL_PLAN_STEP;
     static constexpr const char* SPEC_COL_TX_ID = NOlap::NPortion::TSpecialColumns::SPEC_COL_TX_ID;
@@ -51,6 +51,30 @@ public:
 
     const THashMap<ui32, NIndexes::TIndexMetaContainer>& GetIndexes() const {
         return Indexes;
+    }
+
+    const TString& GetIndexStorageId(const ui32 indexId) const {
+        auto it = Indexes.find(indexId);
+        AFL_VERIFY(it != Indexes.end());
+        return it->second->GetStorageId();
+    }
+
+    const TString& GetColumnStorageId(const ui32 columnId, const TString& specialTier) const {
+        if (specialTier && specialTier != IStoragesManager::DefaultStorageId) {
+            return specialTier;
+        } else {
+            auto it = ColumnFeatures.find(columnId);
+            AFL_VERIFY(it != ColumnFeatures.end());
+            return it->second.GetOperator()->GetStorageId();
+        }
+    }
+
+    const TString& GetEntityStorageId(const ui32 entityId, const TString& specialTier) const {
+        auto it = Indexes.find(entityId);
+        if (it != Indexes.end()) {
+            return it->second->GetStorageId();
+        }
+        return GetColumnStorageId(entityId, specialTier);
     }
 
     enum class ESpecialColumn : ui32 {
@@ -102,7 +126,7 @@ public:
         return result;
     }
 
-    static std::optional<TIndexInfo> BuildFromProto(const NKikimrSchemeOp::TColumnTableSchema& schema);
+    static std::optional<TIndexInfo> BuildFromProto(const NKikimrSchemeOp::TColumnTableSchema& schema, const std::shared_ptr<IStoragesManager>& operators);
 
     static const std::vector<std::string>& SnapshotColumnNames() {
         static std::vector<std::string> result = {SPEC_COL_PLAN_STEP, SPEC_COL_TX_ID};
@@ -157,6 +181,13 @@ public:
     /// Returns names of columns defined by the specific ids.
     std::vector<TString> GetColumnNames(const std::vector<ui32>& ids) const;
     std::vector<ui32> GetColumnIds() const;
+    std::vector<ui32> GetEntityIds() const {
+        auto result = GetColumnIds();
+        for (auto&& i : Indexes) {
+            result.emplace_back(i.first);
+        }
+        return result;
+    }
 
     /// Returns info of columns defined by specific ids.
     std::vector<TNameTypeInfo> GetColumns(const std::vector<ui32>& ids) const;
@@ -179,7 +210,7 @@ public:
     const std::shared_ptr<arrow::Schema>& GetPrimaryKey() const { return PrimaryKey; }
 
     /// Initializes sorting, replace, index and extended keys.
-    void SetAllKeys();
+    void SetAllKeys(const std::shared_ptr<IStoragesManager>& operators);
 
     void CheckTtlColumn(const TString& ttlColumn) const {
         Y_ABORT_UNLESS(!ttlColumn.empty());

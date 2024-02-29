@@ -4,14 +4,18 @@
 
 namespace NKikimr::NOlap {
 
-bool TGeneralSerializedSlice::GroupBlobs(std::vector<TSplittedBlob>& blobs) {
+bool TGeneralSerializedSlice::GroupBlobsImpl(const TString& currentGroupName, const std::set<ui32>& entityIds, std::vector<TSplittedBlob>& blobs) {
     std::vector<std::shared_ptr<IPortionDataChunk>> chunksInProgress;
     std::sort(Data.begin(), Data.end());
     for (auto&& i : Data) {
+        if (!entityIds.empty() && !entityIds.contains(i.GetEntityId())) {
+            continue;
+        }
         for (auto&& p : i.GetChunks()) {
             chunksInProgress.emplace_back(p);
         }
     }
+    AFL_VERIFY(chunksInProgress.size());
     std::vector<TSplittedBlob> result;
     Y_ABORT_UNLESS(Settings.GetMaxBlobSize() >= 2 * Settings.GetMinBlobSize());
     while (chunksInProgress.size()) {
@@ -20,7 +24,7 @@ bool TGeneralSerializedSlice::GroupBlobs(std::vector<TSplittedBlob>& blobs) {
             fullSize += i->GetPackedSize();
         }
         if (fullSize < Settings.GetMaxBlobSize()) {
-            result.emplace_back(TSplittedBlob());
+            result.emplace_back(TSplittedBlob(currentGroupName));
             for (auto&& i : chunksInProgress) {
                 result.back().Take(i);
             }
@@ -39,7 +43,7 @@ bool TGeneralSerializedSlice::GroupBlobs(std::vector<TSplittedBlob>& blobs) {
                     Y_ABORT_UNLESS(otherSize >= Settings.GetMinBlobSize());
                     Y_ABORT_UNLESS(partSize < Settings.GetMaxBlobSize());
                     if (partSize >= Settings.GetMinBlobSize()) {
-                        result.emplace_back(TSplittedBlob());
+                        result.emplace_back(TSplittedBlob(currentGroupName));
                         for (ui32 chunk = 0; chunk < i; ++chunk) {
                             result.back().Take(chunksInProgress[chunk]);
                         }
@@ -60,7 +64,7 @@ bool TGeneralSerializedSlice::GroupBlobs(std::vector<TSplittedBlob>& blobs) {
                             chunksInProgress.insert(chunksInProgress.begin() + i, newChunks.begin(), newChunks.end());
                         }
 
-                        TSplittedBlob newBlob;
+                        TSplittedBlob newBlob(currentGroupName);
                         for (ui32 chunk = 0; chunk <= i; ++chunk) {
                             newBlob.Take(chunksInProgress[chunk]);
                         }

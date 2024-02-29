@@ -35,6 +35,10 @@ private:
     TIndexChunk() = default;
     TConclusionStatus DeserializeFromProto(const NKikimrColumnShardDataSharingProto::TIndexChunk& proto);
 public:
+    TChunkAddress GetAddress() const {
+        return TChunkAddress(IndexId, ChunkIdx);
+    }
+
     TIndexChunk(const ui32 indexId, const ui32 chunkIdx, const ui32 recordsCount, const ui64 rawBytes, const TBlobRange& blobRange)
         : IndexId(indexId)
         , ChunkIdx(chunkIdx)

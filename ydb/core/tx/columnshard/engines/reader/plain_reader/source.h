@@ -2,12 +2,13 @@
 #include "context.h"
 #include "columns_set.h"
 #include "fetched_data.h"
-#include <ydb/core/tx/columnshard/resource_subscriber/task.h>
-#include <ydb/core/tx/columnshard/engines/reader/read_filter_merger.h>
 #include <ydb/core/tx/columnshard/blob.h>
+#include <ydb/core/tx/columnshard/blobs_action/abstract/action.h>
+#include <ydb/core/tx/columnshard/common/snapshot.h>
+#include <ydb/core/tx/columnshard/engines/reader/read_filter_merger.h>
 #include <ydb/core/tx/columnshard/engines/portions/portion_info.h>
 #include <ydb/core/tx/columnshard/engines/insert_table/data.h>
-#include <ydb/core/tx/columnshard/common/snapshot.h>
+#include <ydb/core/tx/columnshard/resource_subscriber/task.h>
 #include <ydb/core/formats/arrow/arrow_helpers.h>
 
 namespace NKikimr::NOlap {
@@ -54,6 +55,8 @@ protected:
     virtual void DoAbort() = 0;
     virtual void DoApplyIndex(const NIndexes::TIndexCheckerContainer& indexMeta) = 0;
 public:
+    virtual THashMap<TChunkAddress, TString> DecodeBlobAddresses(NBlobOperations::NRead::TCompositeReadBlobs&& blobsOriginal) const = 0;
+
     const NArrow::TReplaceKey& GetStartReplaceKey() const {
         return StartReplaceKey;
     }
@@ -157,8 +160,7 @@ public:
 
     IDataSource(const ui32 sourceIdx, const std::shared_ptr<TSpecialReadContext>& context, 
         const NArrow::TReplaceKey& start, const NArrow::TReplaceKey& finish,
-        const TSnapshot& recordSnapshotMax, const std::optional<ui32> recordsCount
-    )
+        const TSnapshot& recordSnapshotMax, const std::optional<ui32> recordsCount)
         : SourceIdx(sourceIdx)
         , Start(context->GetReadMetadata()->BuildSortedPosition(start))
         , Finish(context->GetReadMetadata()->BuildSortedPosition(finish))
@@ -184,9 +186,10 @@ class TPortionDataSource: public IDataSource {
 private:
     using TBase = IDataSource;
     std::shared_ptr<TPortionInfo> Portion;
+    std::shared_ptr<ISnapshotSchema> Schema;
 
     void NeedFetchColumns(const std::set<ui32>& columnIds,
-        const std::shared_ptr<IBlobsReadingAction>& readingAction, THashMap<TBlobRange, ui32>& nullBlocks,
+        TBlobsAction& blobsAction, THashMap<TChunkAddress, ui32>& nullBlocks,
         const std::shared_ptr<NArrow::TColumnFilter>& filter);
 
     virtual void DoApplyIndex(const NIndexes::TIndexCheckerContainer& indexChecker) override;
@@ -205,6 +208,10 @@ private:
 
     virtual void DoAbort() override;
 public:
+    virtual THashMap<TChunkAddress, TString> DecodeBlobAddresses(NBlobOperations::NRead::TCompositeReadBlobs&& blobsOriginal) const override {
+        return Portion->DecodeBlobAddresses(std::move(blobsOriginal), Schema->GetIndexInfo());
+    }
+
     virtual ui64 GetRawBytes(const std::set<ui32>& columnIds) const override {
         return Portion->GetRawBytes(columnIds);
     }
@@ -225,6 +232,7 @@ public:
         const NArrow::TReplaceKey& start, const NArrow::TReplaceKey& finish)
         : TBase(sourceIdx, context, start, finish, portion->RecordSnapshotMax(), portion->GetRecordsCount())
         , Portion(portion)
+        , Schema(GetContext()->GetReadMetadata()->GetLoadSchema(Portion->GetMinSnapshot()))
     {
     }
 };
@@ -255,6 +263,16 @@ private:
         return result;
     }
 public:
+    virtual THashMap<TChunkAddress, TString> DecodeBlobAddresses(NBlobOperations::NRead::TCompositeReadBlobs&& blobsOriginal) const override {
+        THashMap<TChunkAddress, TString> result;
+        for (auto&& i : blobsOriginal) {
+            for (auto&& b : i.second) {
+                result.emplace(TChunkAddress(1, 1), std::move(b.second));
+            }
+        }
+        return result;
+    }
+
     virtual ui64 GetRawBytes(const std::set<ui32>& /*columnIds*/) const override {
         return CommittedBlob.GetBlobRange().Size;
     }

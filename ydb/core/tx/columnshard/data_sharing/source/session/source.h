@@ -59,12 +59,12 @@ public:
         return Cursor;
     }
 
-    bool TryNextCursor(const ui32 packIdx, const std::shared_ptr<TSharedBlobsManager>& sharedBlobsManager) {
+    bool TryNextCursor(const ui32 packIdx, const std::shared_ptr<TSharedBlobsManager>& sharedBlobsManager, const TVersionedIndex& index) {
         AFL_VERIFY(Cursor);
         if (packIdx != Cursor->GetPackIdx()) {
             return false;
         }
-        Cursor->Next(sharedBlobsManager);
+        Cursor->Next(sharedBlobsManager, index);
         return true;
     }
 

@@ -22,8 +22,6 @@ constexpr bool ReadRuleCompatible() { return true; }
 bool HasConsumer(const NKikimrPQ::TPQTabletConfig& config, const TString& consumerName);
 size_t ConsumerCount(const NKikimrPQ::TPQTabletConfig& config);
 
-bool IsImportantClient(const NKikimrPQ::TPQTabletConfig& config, const TString& consumerName);
-
 const NKikimrPQ::TPQTabletConfig::TPartition* GetPartitionConfig(const NKikimrPQ::TPQTabletConfig& config, const ui32 partitionId);
 
 // The graph of split-merge operations. 

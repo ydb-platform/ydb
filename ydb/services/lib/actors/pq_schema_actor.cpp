@@ -166,7 +166,10 @@ namespace NKikimr::NGRpcProxy::V1 {
                     Ydb::PersQueue::ErrorCode::VALIDATION_ERROR
                 );
             }
-            config->MutablePartitionConfig()->AddImportantClientId(consumerName);
+            consumer->SetImportant(true);
+            if (NPQ::ReadRuleCompatible()) {
+                config->MutablePartitionConfig()->AddImportantClientId(consumerName);
+            }
         }
 
         if (!rr.service_type().empty()) {
@@ -350,7 +353,10 @@ namespace NKikimr::NGRpcProxy::V1 {
             if (pqConfig.GetTopicsAreFirstClassCitizen() && !AppData(ctx)->FeatureFlags.GetEnableTopicDiskSubDomainQuota()) {
                 return TMsgPqCodes(TStringBuilder() << "important flag is forbiden for consumer " << rr.name(), Ydb::PersQueue::ErrorCode::INVALID_ARGUMENT);
             }
-            config->MutablePartitionConfig()->AddImportantClientId(consumerName);
+            consumer->SetImportant(true);
+            if (NPQ::ReadRuleCompatible()) {
+                config->MutablePartitionConfig()->AddImportantClientId(consumerName);
+            }
         }
 
         return TMsgPqCodes("", Ydb::PersQueue::ErrorCode::OK);
@@ -372,9 +378,11 @@ namespace NKikimr::NGRpcProxy::V1 {
         config->ClearReadRuleServiceTypes();
         config->ClearConsumers();
 
-        for (const auto& importantConsumer : originalConfig.GetPartitionConfig().GetImportantClientId()) {
-            if (importantConsumer != consumerName) {
-                config->MutablePartitionConfig()->AddImportantClientId(importantConsumer);
+        if (NPQ::ReadRuleCompatible()) {
+            for (const auto& importantConsumer : originalConfig.GetPartitionConfig().GetImportantClientId()) {
+                if (importantConsumer != consumerName) {
+                    config->MutablePartitionConfig()->AddImportantClientId(importantConsumer);
+                }
             }
         }
 
@@ -1272,7 +1280,7 @@ namespace NKikimr::NGRpcProxy::V1 {
             consumers.push_back({false, Ydb::Topic::Consumer{}}); // do not check service type for presented consumers
             auto& consumer = consumers.back().second;
             consumer.set_name(name);
-            consumer.set_important(NPQ::IsImportantClient(*config, oldName));
+            consumer.set_important(c.GetImportant());
             consumer.mutable_read_from()->set_seconds(c.GetReadFromTimestampsMs() / 1000);
             (*consumer.mutable_attributes())["_service_type"] = c.GetServiceType();
             (*consumer.mutable_attributes())["_version"] = TStringBuilder() << c.GetVersion();

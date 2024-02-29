@@ -45,6 +45,16 @@ ui64 PutUnitsSize(const ui64 size) {
     return putUnitsCount;        
 }
 
+bool IsImportantClient(const NKikimrPQ::TPQTabletConfig& config, const TString& consumerName) {
+    for (const auto& i : config.GetPartitionConfig().GetImportantClientId()) {
+        if (consumerName == i) {
+            return true;
+        }
+    }
+
+    return false;
+}
+
 void Migrate(NKikimrPQ::TPQTabletConfig& config) {
     // if ReadRules isn`t empty than it is old configuration format
     // when modify new format (add or alter a consumer) readRules is cleared
@@ -75,6 +85,7 @@ void Migrate(NKikimrPQ::TPQTabletConfig& config) {
             if (i < config.ReadRuleGenerationsSize()) {
                 consumer->SetGeneration(config.GetReadRuleGenerations(i));
             }
+            consumer->SetImportant(IsImportantClient(config, consumer.GetName()));
         }
     }
 }
@@ -91,16 +102,6 @@ bool HasConsumer(const NKikimrPQ::TPQTabletConfig& config, const TString& consum
 
 size_t ConsumerCount(const NKikimrPQ::TPQTabletConfig& config) {
     return config.ConsumersSize();
-}
-
-bool IsImportantClient(const NKikimrPQ::TPQTabletConfig& config, const TString& consumerName) {
-    for (const auto& i : config.GetPartitionConfig().GetImportantClientId()) {
-        if (consumerName == i) {
-            return true;
-        }
-    }
-
-    return false;
 }
 
 const NKikimrPQ::TPQTabletConfig::TPartition* GetPartitionConfig(const NKikimrPQ::TPQTabletConfig& config, const ui32 partitionId) {

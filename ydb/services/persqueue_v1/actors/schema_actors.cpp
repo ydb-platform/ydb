@@ -146,7 +146,7 @@ void TPQDescribeTopicActor::HandleCacheNavigateResponse(TEvTxProxySchemeCache::T
             for (const auto &codec : consumer.GetCodec().GetIds()) {
                 rr->add_supported_codecs((Ydb::PersQueue::V1::Codec) (codec + 1));
             }
-            rr->set_important(NPQ::IsImportantClient(config, consumer.GetName()));
+            rr->set_important(consumer.GetImportant());
 
             if (consumer.HasServiceType()) {
                 rr->set_service_type(consumer.GetServiceType());
@@ -1036,7 +1036,7 @@ bool FillConsumerProto(Ydb::Topic::Consumer *rr, const NKikimrPQ::TPQTabletConfi
         rr->mutable_supported_codecs()->add_codecs((Ydb::Topic::Codec) (codec + 1));
     }
 
-    rr->set_important(NPQ::IsImportantClient(config, consumer.GetName()));
+    rr->set_important(consumer.GetImportant());
     TString serviceType = "";
     if (consumer.HasServiceType()) {
         serviceType = consumer.GetServiceType();

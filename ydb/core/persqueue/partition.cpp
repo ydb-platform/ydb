@@ -279,11 +279,13 @@ ui64 TPartition::GetUsedStorage(const TActorContext& ctx) {
 }
 
 ui64 TPartition::ImportantClientsMinOffset() const {
-    const auto& partConfig = Config.GetPartitionConfig();
-
     ui64 minOffset = EndOffset;
-    for (const auto& importantClientId : partConfig.GetImportantClientId()) {
-        const TUserInfo* userInfo = UsersInfoStorage->GetIfExists(importantClientId);
+    for (const auto& consumer : Config.GetConsumers()) {
+        if (!consumer.GetImportant()) {
+            continue;
+        }
+
+        const TUserInfo* userInfo = UsersInfoStorage->GetIfExists(consumer.GetName());
         ui64 curOffset = StartOffset;
         if (userInfo && userInfo->Offset >= 0) //-1 means no offset
             curOffset = userInfo->Offset;
@@ -1773,8 +1775,10 @@ void TPartition::BeginChangePartitionConfig(const NKikimrPQ::TPQTabletConfig& co
     }
 
     TSet<TString> important;
-    for (const auto& importantUser : config.GetPartitionConfig().GetImportantClientId()) {
-        important.insert(importantUser);
+    for (const auto& consumer : config.GetConsumers()) {
+        if (consumer.GetImportant()) {
+            important.insert(consumer.GetName());
+        }
     }
 
     for (auto& consumer : config.GetConsumers()) {

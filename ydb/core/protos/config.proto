@@ -1541,7 +1541,6 @@ message TTracingConfig {
         optional TAuthConfig AuthConfig = 2;
     }
 
-    // Only global scope for now
     message TSelectors {
         optional string RequestType = 1;
         optional string Database = 2;

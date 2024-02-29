@@ -8,7 +8,6 @@
 
 namespace NKikimr::NColumnShard {
 class TColumnShard;
-class TBlobManagerDb;
 }
 
 namespace NKikimr::NOlap {
@@ -24,6 +23,7 @@ private:
     THashSet<TUnifiedBlobId> BlobsWaiting;
     bool Aborted = false;
     std::shared_ptr<NBlobOperations::TWriteCounters> Counters;
+    void AddDataForWrite(const TUnifiedBlobId& blobId, const TString& data);
 protected:
     virtual void DoOnExecuteTxBeforeWrite(NColumnShard::TColumnShard& self, TBlobManagerDb& dbBlobs) = 0;
     virtual void DoOnCompleteTxBeforeWrite(NColumnShard::TColumnShard& self) = 0;
@@ -44,6 +44,14 @@ public:
     virtual ~IBlobsWritingAction();
     bool IsReady() const;
 
+    void Merge(const std::shared_ptr<IBlobsWritingAction>& action) {
+        AFL_VERIFY(action);
+        AFL_VERIFY(!WritingStarted);
+        for (auto&& i : action->BlobsForWrite) {
+            AddDataForWrite(i.first, i.second);
+        }
+    }
+
     void SetCounters(std::shared_ptr<NBlobOperations::TWriteCounters> counters) {
         Counters = counters;
     }
@@ -56,7 +64,6 @@ public:
         Aborted = true;
     }
     TUnifiedBlobId AddDataForWrite(const TString& data);
-
     void OnBlobWriteResult(const TUnifiedBlobId& blobId, const NKikimrProto::EReplyStatus status);
 
     void OnExecuteTxBeforeWrite(NColumnShard::TColumnShard& self, TBlobManagerDb& dbBlobs) {
@@ -85,6 +92,45 @@ public:
     }
 
     void SendWriteBlobRequest(const TString& data, const TUnifiedBlobId& blobId);
+};
+
+class TWriteActionsCollection {
+private:
+    THashMap<TString, std::shared_ptr<IBlobsWritingAction>> Actions;
+public:
+    THashMap<TString, std::shared_ptr<IBlobsWritingAction>>::const_iterator begin() const {
+        return Actions.begin();
+    }
+
+    THashMap<TString, std::shared_ptr<IBlobsWritingAction>>::const_iterator end() const {
+        return Actions.end();
+    }
+
+    THashMap<TString, std::shared_ptr<IBlobsWritingAction>>::iterator begin() {
+        return Actions.begin();
+    }
+
+    THashMap<TString, std::shared_ptr<IBlobsWritingAction>>::iterator end() {
+        return Actions.end();
+    }
+
+    std::shared_ptr<IBlobsWritingAction> Add(const std::shared_ptr<IBlobsWritingAction>& action) {
+        auto it = Actions.find(action->GetStorageId());
+        if (it == Actions.end()) {
+            return Actions.emplace(action->GetStorageId(), action).first->second;
+        } else if (action.get() != it->second.get()) {
+            it->second->Merge(action);
+        }
+        return it->second;
+    }
+
+    TWriteActionsCollection() = default;
+
+    TWriteActionsCollection(const std::vector<std::shared_ptr<IBlobsWritingAction>>& actions) {
+        for (auto&& a : actions) {
+            Add(a);
+        }
+    }
 };
 
 }

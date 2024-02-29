@@ -563,11 +563,12 @@ Y_UNIT_TEST_SUITE(ColumnShardTiers) {
         //        runtime.SetLogPriority(NKikimrServices::TX_PROXY_SCHEME_CACHE, NLog::PRI_DEBUG);
 
         TLocalHelper lHelper(*server);
+        lHelper.SetOptionalStorageId("__DEFAULT");
         lHelper.StartSchemaRequest("CREATE OBJECT secretAccessKey ( "
             "TYPE SECRET) WITH (value = ak)");
         lHelper.StartSchemaRequest("CREATE OBJECT secretSecretKey ( "
-            "TYPE SECRET) WITH (value = sk)");
-        Singleton<NKikimr::NWrappers::NExternalStorage::TFakeExternalStorage>()->SetSecretKey("sk");
+            "TYPE SECRET) WITH (value = fakeSecret)");
+        Singleton<NKikimr::NWrappers::NExternalStorage::TFakeExternalStorage>()->SetSecretKey("fakeSecret");
 
         lHelper.StartSchemaRequest("CREATE OBJECT tier1 ( "
             "TYPE TIER) WITH (tierConfig = `" + TierConfigProtoStr + "`)");

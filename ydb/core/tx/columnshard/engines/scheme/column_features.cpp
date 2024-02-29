@@ -26,9 +26,12 @@ void TColumnFeatures::InitLoader(const TIndexInfo& info) {
     Loader = std::make_shared<TColumnLoader>(GetLoadTransformer(), Serializer, schema, ColumnId);
 }
 
-std::optional<NKikimr::NOlap::TColumnFeatures> TColumnFeatures::BuildFromProto(const NKikimrSchemeOp::TOlapColumnDescription& columnInfo, const TIndexInfo& indexInfo) {
+std::optional<NKikimr::NOlap::TColumnFeatures> TColumnFeatures::BuildFromProto(const NKikimrSchemeOp::TOlapColumnDescription& columnInfo, const TIndexInfo& indexInfo,
+    const std::shared_ptr<IStoragesManager>& operators)
+{
     const ui32 columnId = columnInfo.GetId();
-    TColumnFeatures result(columnId);
+    auto bOperator = operators->GetOperatorVerified(columnInfo.GetStorageId() ? columnInfo.GetStorageId() : IStoragesManager::DefaultStorageId);
+    TColumnFeatures result(columnId, bOperator);
     if (columnInfo.HasSerializer()) {
         AFL_VERIFY(result.Serializer.DeserializeFromProto(columnInfo.GetSerializer()));
     } else if (columnInfo.HasCompression()) {
@@ -43,14 +46,17 @@ std::optional<NKikimr::NOlap::TColumnFeatures> TColumnFeatures::BuildFromProto(c
     return result;
 }
 
-NKikimr::NOlap::TColumnFeatures TColumnFeatures::BuildFromIndexInfo(const ui32 columnId, const TIndexInfo& indexInfo) {
-    TColumnFeatures result(columnId);
+NKikimr::NOlap::TColumnFeatures TColumnFeatures::BuildFromIndexInfo(const ui32 columnId, const TIndexInfo& indexInfo,
+    const std::shared_ptr<IBlobsStorageOperator>& blobsOperator) 
+{
+    TColumnFeatures result(columnId, blobsOperator);
     result.InitLoader(indexInfo);
     return result;
 }
 
-TColumnFeatures::TColumnFeatures(const ui32 columnId)
+TColumnFeatures::TColumnFeatures(const ui32 columnId, const std::shared_ptr<IBlobsStorageOperator>& blobsOperator)
     : ColumnId(columnId)
+    , Operator(blobsOperator)
     , Serializer(NArrow::NSerialization::TSerializerContainer::GetDefaultSerializer())
 {
 

@@ -22,7 +22,7 @@ void TInsertColumnEngineChanges::DoStart(NColumnShard::TColumnShard& self) {
     Y_ABORT_UNLESS(DataToIndex.size());
     auto reading = BlobsAction.GetReading(IStoragesManager::DefaultStorageId);
     for (auto&& insertedData : DataToIndex) {
-        reading->AddRange(insertedData.GetBlobRange(), insertedData.GetBlobData().value_or(""));
+        reading->AddRange(insertedData.GetBlobRange(), insertedData.GetBlobData());
     }
 
     self.BackgroundController.StartIndexing(*this);
@@ -74,12 +74,10 @@ TConclusionStatus TInsertColumnEngineChanges::DoConstructBlobs(TConstructionCont
 
         std::shared_ptr<arrow::RecordBatch> batch;
         {
-            auto itBlobData = Blobs.find(blobRange);
-            Y_ABORT_UNLESS(itBlobData != Blobs.end(), "Data for range %s has not been read", blobRange.ToString().c_str());
-            Y_ABORT_UNLESS(!itBlobData->second.empty(), "Blob data not present");
+            const auto blobData = Blobs.Extract(IStoragesManager::DefaultStorageId, blobRange);
+            Y_ABORT_UNLESS(blobData.size(), "Blob data not present");
             // Prepare batch
-            batch = NArrow::DeserializeBatch(itBlobData->second, indexInfo.ArrowSchema());
-            Blobs.erase(itBlobData);
+            batch = NArrow::DeserializeBatch(blobData, indexInfo.ArrowSchema());
             AFL_VERIFY(batch)("event", "cannot_parse")
                 ("data_snapshot", TStringBuilder() << inserted.GetSnapshot())
                 ("index_snapshot", TStringBuilder() << blobSchema->GetSnapshot());
@@ -92,7 +90,7 @@ TConclusionStatus TInsertColumnEngineChanges::DoConstructBlobs(TConstructionCont
         Y_DEBUG_ABORT_UNLESS(NArrow::IsSorted(pathBatches[inserted.PathId].back(), resultSchema->GetIndexInfo().GetReplaceKey()));
     }
 
-    Y_ABORT_UNLESS(Blobs.empty());
+    Y_ABORT_UNLESS(Blobs.IsEmpty());
     const std::vector<std::string> comparableColumns = resultSchema->GetIndexInfo().GetReplaceKey()->field_names();
     for (auto& [pathId, batches] : pathBatches) {
         NIndexedReader::TMergePartialStream stream(resultSchema->GetIndexInfo().GetReplaceKey(), resultSchema->GetIndexInfo().ArrowSchemaWithSpecials(), false);

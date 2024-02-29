@@ -399,8 +399,23 @@ void TDataShard::SendRegistrationRequestTimeCast(const TActorContext &ctx) {
     if (RegistrationSended)
         return;
 
-    if (!ProcessingParams)
+    if (!ProcessingParams) {
+        LOG_DEBUG_S(ctx, NKikimrServices::TX_DATASHARD, TabletID()
+            << " not sending time cast registration request in state "
+            << DatashardStateName(State)
+            << ": missing processing params");
         return;
+    }
+
+    if (State == TShardState::WaitScheme ||
+        State == TShardState::SplitDstReceivingSnapshot)
+    {
+        // We don't have all the necessary info yet
+        LOG_DEBUG_S(ctx, NKikimrServices::TX_DATASHARD, TabletID()
+            << " not sending time cast registration request in state "
+            << DatashardStateName(State));
+        return;
+    }
 
     LOG_INFO_S(ctx, NKikimrServices::TX_DATASHARD, "Send registration request to time cast "
          << DatashardStateName(State) << " tabletId " << TabletID()
@@ -2028,6 +2043,13 @@ TRowVersion TDataShard::GetMvccTxVersion(EMvccTxMode mode, TOperation* op) const
         }
     }
 
+    LOG_TRACE_S(*TlsActivationContext, NKikimrServices::TX_DATASHARD, "GetMvccTxVersion at " << TabletID()
+        << " CompleteEdge# " << SnapshotManager.GetCompleteEdge()
+        << " IncompleteEdge# " << SnapshotManager.GetIncompleteEdge()
+        << " UnprotectedReadEdge# " << SnapshotManager.GetUnprotectedReadEdge()
+        << " ImmediateWriteEdge# " << SnapshotManager.GetImmediateWriteEdge()
+        << " ImmediateWriteEdgeReplied# " << SnapshotManager.GetImmediateWriteEdgeReplied());
+
     TRowVersion edge;
     TRowVersion readEdge = Max(
             SnapshotManager.GetCompleteEdge(),
@@ -2142,6 +2164,8 @@ TDataShard::TPromotePostExecuteEdges TDataShard::PromoteImmediatePostExecuteEdge
                 // We need to wait for completion until the flag is committed
                 res.WaitCompletion = true;
             }
+            LOG_TRACE_S(*TlsActivationContext, NKikimrServices::TX_DATASHARD, "PromoteImmediatePostExecuteEdges at " << TabletID()
+                << " promoting UnprotectedReadEdge to " << version);
             SnapshotManager.PromoteUnprotectedReadEdge(version);
 
             // We want to promote the complete edge when protected reads are
@@ -2304,6 +2328,19 @@ void TDataShard::SendAfterMediatorStepActivate(ui64 mediatorStep, const TActorCo
     for (auto it = MediatorDelayedReplies.begin(); it != MediatorDelayedReplies.end();) {
         const ui64 step = it->first.Step;
 
+        if (SrcSplitDescription) {
+            if (State == TShardState::SplitSrcSendingSnapshot ||
+                State == TShardState::SplitSrcWaitForPartitioningChanged ||
+                State == TShardState::PreOffline ||
+                State == TShardState::Offline)
+            {
+                // We cannot send replies, since dst shard is now in charge
+                // of keeping track of acknowledged writes. So we expect
+                // split src logic to reboot this shard later.
+                break;
+            }
+        }
+
         if (step <= mediatorStep) {
             SnapshotManager.PromoteImmediateWriteEdgeReplied(it->first);
             Send(it->second.Target, it->second.Event.Release(), 0, it->second.Cookie);
@@ -2371,13 +2408,16 @@ void TDataShard::CheckMediatorStateRestored() {
     // HEAD reads must include that in their results.
     const ui64 waitStep = CoordinatorPrevReadStepMax;
     const ui64 readStep = CoordinatorPrevReadStepMax;
-
-    LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::TX_DATASHARD, "CheckMediatorStateRestored: waitStep# " << waitStep << " readStep# " << readStep);
+    const ui64 observedStep = GetMaxObservedStep();
+    LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::TX_DATASHARD, "CheckMediatorStateRestored at " << TabletID() << ":"
+        << " waitStep# " << waitStep
+        << " readStep# " << readStep
+        << " observedStep# " << observedStep);
 
     // WARNING: we must perform this check BEFORE we update unprotected read edge
     // We may enter this code path multiple times, and we expect that the above
     // read step may be refined while we wait based on pessimistic backup step.
-    if (GetMaxObservedStep() < waitStep) {
+    if (observedStep < waitStep) {
         // We need to wait until we observe mediator step that is at least
         // as large as the step we found.
         if (MediatorTimeCastWaitingSteps.insert(waitStep).second) {
@@ -2398,7 +2438,10 @@ void TDataShard::CheckMediatorStateRestored() {
             SnapshotManager.GetImmediateWriteEdge().Step > SnapshotManager.GetCompleteEdge().Step
             ? SnapshotManager.GetImmediateWriteEdge().Prev()
             : TRowVersion::Min();
-        SnapshotManager.PromoteUnprotectedReadEdge(Max(lastReadEdge, preImmediateWriteEdge));
+        const TRowVersion edge = Max(lastReadEdge, preImmediateWriteEdge);
+        LOG_TRACE_S(*TlsActivationContext, NKikimrServices::TX_DATASHARD, "CheckMediatorStateRestored at " << TabletID()
+            << " promoting UnprotectedReadEdge to " << edge);
+        SnapshotManager.PromoteUnprotectedReadEdge(edge);
     }
 
     // Promote the replied immediate write edge up to the currently observed step
@@ -2407,7 +2450,7 @@ void TDataShard::CheckMediatorStateRestored() {
     // data that is definitely not replied yet.
     if (SnapshotManager.GetImmediateWriteEdgeReplied() < SnapshotManager.GetImmediateWriteEdge()) {
         const ui64 writeStep = SnapshotManager.GetImmediateWriteEdge().Step;
-        const TRowVersion edge(GetMaxObservedStep(), Max<ui64>());
+        const TRowVersion edge(observedStep, Max<ui64>());
         SnapshotManager.PromoteImmediateWriteEdgeReplied(
             Min(edge, SnapshotManager.GetImmediateWriteEdge()));
         // Try to ensure writes become visible sooner rather than later
@@ -2544,6 +2587,10 @@ bool TDataShard::CheckDataTxReject(const TString& opDescr,
         rejectDescriptions.push_back(TStringBuilder()
             << "is in process of split opId " << DstSplitOpId
             << " state " << DatashardStateName(State));
+    } else if (State == TShardState::WaitScheme) {
+        reject = true;
+        rejectReasons |= ERejectReasons::WrongState;
+        rejectDescriptions.push_back("is not created yet");
     } else if (State == TShardState::PreOffline || State == TShardState::Offline) {
         reject = true;
         rejectStatus = NKikimrTxDataShard::TEvProposeTransactionResult::ERROR;
@@ -2706,6 +2753,11 @@ void TDataShard::Handle(TEvDataShard::TEvProposeTransaction::TPtr &ev, const TAc
     auto* msg = ev->Get();
     LWTRACK(ProposeTransactionRequest, msg->Orbit);
 
+    if (CheckDataTxRejectAndReply(ev, ctx)) {
+        IncCounter(COUNTER_PREPARE_REQUEST);
+        return;
+    }
+
     // Check if we need to delay an immediate transaction
     if (MediatorStateWaiting &&
         (ev->Get()->GetFlags() & TTxFlags::Immediate) &&
@@ -2737,10 +2789,6 @@ void TDataShard::Handle(TEvDataShard::TEvProposeTransaction::TPtr &ev, const TAc
     }
 
     IncCounter(COUNTER_PREPARE_REQUEST);
-
-    if (CheckDataTxRejectAndReply(ev, ctx)) {
-        return;
-    }
 
     switch (ev->Get()->GetTxKind()) {
     case NKikimrTxDataShard::TX_KIND_DATA:

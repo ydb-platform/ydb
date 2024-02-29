@@ -570,6 +570,31 @@ Y_UNIT_TEST_SUITE(NFwd) {
             {10, 10, 4, 2, 0});
     }
 
+    Y_UNIT_TEST(Pages_Twice)
+    {
+        // 20 pages, 50 bytes each
+        const auto eggs = CookPart();
+
+        TPagesWrap wrap(eggs.Lone(), 200, 350);
+        
+        wrap.To(0).Get(5, false, true, true, 
+            {1, 0, 1, 0, 0});
+        wrap.To(1).Get(5, false, true, true, 
+            {1, 0, 1, 0, 0});
+        wrap.To(2).Fill({5, 6, 7, 8, 9, 10, 11}, 
+            {7, 7, 1, 0, 0});
+        
+        wrap.To(3).Get(5, true, false, true, 
+            {7, 7, 1, 0, 0});
+        wrap.To(4).Get(5, true, false, true, 
+            {7, 7, 1, 0, 0});
+
+        wrap.To(5).Get(6, true, false, true, 
+            {7, 7, 2, 0, 0});
+        wrap.To(6).Get(6, true, false, true, 
+            {7, 7, 2, 0, 0});
+    }
+
     Y_UNIT_TEST(Pages_Jump_Done)
     {
         // 20 pages, 50 bytes each
@@ -705,6 +730,8 @@ Y_UNIT_TEST_SUITE(NFwd) {
             {1, 0, 1, 0, 0});
         wrap.To(1).Fill({5, 6, 7, 8, 9, 10, 11}, 
             {7, 7, 1, 0, 0});
+        wrap.To(2).Get(11, true, false, true, 
+            {7, 7, 2, 0, 0});
     }
 
     Y_UNIT_TEST(TLoadedPagesCircularBuffer) {

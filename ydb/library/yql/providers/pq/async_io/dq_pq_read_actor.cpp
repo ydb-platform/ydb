@@ -382,7 +382,7 @@ private:
         NYdb::NPersQueue::TTopicReadSettings topicReadSettings;
         topicReadSettings.Path(SourceParams.GetTopicPath());
         auto partitionsToRead = GetPartitionsToRead();
-        SRC_LOG_D("PartitionsToRead: " << JoinSeq(", ", partitionsToRead));
+        SRC_LOG_D("RangesMode: " << RangesMode << ", PartitionsToRead: " << JoinSeq(", ", partitionsToRead));
         for (const auto partitionId : partitionsToRead) {
             topicReadSettings.AppendPartitionGroupIds(partitionId);
         }

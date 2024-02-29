@@ -18,7 +18,6 @@ TVector<TSysTables::TTableColumnInfo> BuildColumns(const TConstArrayRef<NKikimrK
     result.reserve(inputColumns.size());
     i32 number = 0;
     for (const auto& column : inputColumns) {
-        Cerr << "TEST: " << number << " " << column.GetName() << " " << column.GetId() << Endl;
         result.emplace_back(
             column.GetName(),
             column.GetId(),

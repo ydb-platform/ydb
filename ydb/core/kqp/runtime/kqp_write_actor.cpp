@@ -121,9 +121,10 @@ private:
     }
 
     i64 GetFreeSpace() const final {
-        return SchemeEntry
-            ? MemoryLimit - (MemoryInFlight + BatchBuilder->Bytes())
-            : std::numeric_limits<i64>::min(); // Can't use zero here because compute can use overcommit!
+        return MemoryLimit;
+//        return SchemeEntry
+//            ? MemoryLimit - (MemoryInFlight + BatchBuilder->Bytes())
+//            : std::numeric_limits<i64>::min(); // Can't use zero here because compute can use overcommit!
     }
 
     void SendData(NMiniKQL::TUnboxedValueBatch&& data, i64, const TMaybe<NYql::NDqProto::TCheckpoint>&, bool finished) final {
@@ -140,17 +141,19 @@ private:
         YQL_ENSURE(SchemeEntry);
         YQL_ENSURE(BatchBuilder);
 
-        TVector<TCell> cells(Columns.size());
+        /*TVector<TCell> cells(Columns.size());
         data.ForEachRow([&](const auto& row) {
             for (size_t index = 0; index < Columns.size(); ++index) {
                 cells[SendIndexToWriteIndexMapping[index]] = MakeCell(
                     Columns[index].PType,
                     row.GetElement(index),
                     TypeEnv,
-                    /* copy */ false);
+                    false);
             }
             BatchBuilder->AddRow(TConstArrayRef<TCell>{cells.begin(), cells.end()});
-        });
+        });*/
+
+        Serializer->AddData(std::move(data));
     }
 
     STFUNC(StateFunc) {
@@ -240,7 +243,7 @@ private:
                 IEventHandle::FlagTrackDelivery);
         } else if (ev->Get()->GetStatus() == NKikimrDataEvents::TEvWriteResult::STATUS_COMPLETED) {
             CA_LOG_D("Got completed result TxId=" << ev->Get()->Record.GetTxId() << ", TabletId=" << ev->Get()->Record.GetOrigin());
-            auto& batchesQueue = InFlightBatches.at(ev->Get()->Record.GetOrigin());
+            /*auto& batchesQueue = InFlightBatches.at(ev->Get()->Record.GetOrigin());
 
             if (!batchesQueue.empty()
                 && (ev->Get()->Record.GetTxId() == batchesQueue.front().TxId
@@ -260,7 +263,8 @@ private:
                 if (needToResume && GetFreeSpace() > 0) {
                     Callbacks->ResumeExecution();
                 }
-            }
+            }*/
+            Serializer->NextBatch(ev->Get()->Record.GetOrigin());
         }
 
         ProcessRows();
@@ -282,7 +286,7 @@ private:
 
         const bool needToResume = (GetFreeSpace() <= 0);
 
-        auto shardsSplitter = NKikimr::NEvWrite::IShardsSplitter::BuildSplitter(*SchemeEntry);
+        /*auto shardsSplitter = NKikimr::NEvWrite::IShardsSplitter::BuildSplitter(*SchemeEntry);
         YQL_ENSURE(shardsSplitter);
 
         const auto dataAccessor = GetDataAccessor(BatchBuilder->FlushBatch(true));
@@ -305,7 +309,9 @@ private:
 
                 RequestNewTxId();
             }
-        }
+        }*/
+
+
 
         if (needToResume && GetFreeSpace() > 0) {
             Callbacks->ResumeExecution();
@@ -318,6 +324,8 @@ private:
                 if (const auto txId = AllocateTxId(); txId) {
                     batches.front().TxId = *txId;
                     SendRequestShard(shardId);
+                } else {
+                    RequestNewTxId();
                 }
             }
         }
@@ -342,10 +350,14 @@ private:
             return;
         }
 
+        if (!Serializer->GetBatch(shardId)) {
+            return;
+        }
+
         auto evWrite = std::make_unique<NKikimr::NEvents::TDataEvents::TEvWrite>(
             inFlightBatch.TxId, NKikimrDataEvents::TEvWrite::MODE_PREPARE);
         ui64 payloadIndex = NKikimr::NEvWrite::TPayloadWriter<NKikimr::NEvents::TDataEvents::TEvWrite>(*evWrite)
-            .AddDataToPayload(TString(inFlightBatch.Data));
+            .AddDataToPayload(TString(*Serializer->GetBatch(shardId)));
 
         evWrite->AddOperation(
             NKikimrDataEvents::TEvWrite::TOperation::OPERATION_REPLACE,
@@ -372,6 +384,7 @@ private:
     }
 
     void RetryShard(const ui64 shardId) {
+        return;
         if (!InFlightBatches.contains(shardId) || InFlightBatches.at(shardId).empty()) {
             return;
         }
@@ -452,14 +465,21 @@ private:
             return;
         }
 
+        // TODO: do smth else
+        TVector<NKikimrKqp::TKqpColumnMetadataProto> tmp;
+        for (const auto & column : Settings.GetColumns()) {
+            tmp.push_back(column);
+        }
+
         Serializer = CreateColumnShardPayloadSerializer(
             *SchemeEntry,
-            TConstArrayRef<NKikimrKqp::TKqpColumnMetadataProto>{
-                *Settings.GetColumns().data(),
-                static_cast<size_t>(Settings.GetColumns().size())},
+            tmp,
+            //TConstArrayRef<NKikimrKqp::TKqpColumnMetadataProto>{
+            //    *Settings.GetColumns().data(),
+            //    static_cast<size_t>(Settings.GetColumns().size())},
             TypeEnv);
 
-        std::vector<std::pair<TString, NScheme::TTypeInfo>> batchBuilderColumns;
+        /*std::vector<std::pair<TString, NScheme::TTypeInfo>> batchBuilderColumns;
         THashMap<ui32, ui32> writeColumnIdToIndex;
         {
             batchBuilderColumns.reserve(Settings.ColumnsSize());
@@ -509,10 +529,10 @@ private:
         if (!BatchBuilder->Start(batchBuilderColumns, 0, 0, err)) {
             RuntimeError("Failed to start batch builder: " + err, NYql::NDqProto::StatusIds::PRECONDITION_FAILED);
             return;
-        }
+        }*/
     }
 
-    NKikimr::NEvWrite::IShardsSplitter::IEvWriteDataAccessor::TPtr GetDataAccessor(
+    /*NKikimr::NEvWrite::IShardsSplitter::IEvWriteDataAccessor::TPtr GetDataAccessor(
             const std::shared_ptr<arrow::RecordBatch>& batch) const {
         struct TDataAccessor : public NKikimr::NEvWrite::IShardsSplitter::IEvWriteDataAccessor {
             std::shared_ptr<arrow::RecordBatch> Batch;
@@ -531,7 +551,7 @@ private:
         };
 
         return std::make_shared<TDataAccessor>(batch);
-    }
+    }*/
 
 
     NActors::TActorId TxProxyId = MakeTxProxyID();

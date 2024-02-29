@@ -440,20 +440,20 @@ namespace NKikimr::NGRpcProxy::V1 {
         }
 
         THashSet<TString> readRuleConsumers;
-        for (auto consumerName : config.GetReadRules()) {
-            if (readRuleConsumers.find(consumerName) != readRuleConsumers.end()) {
-                error = TStringBuilder() << "Duplicate consumer name " << consumerName;
+        for (auto consumer : config.GetConsumers()) {
+            if (readRuleConsumers.find(consumer.GetName()) != readRuleConsumers.end()) {
+                error = TStringBuilder() << "Duplicate consumer name " << consumer.GetName();
                 return true;
             }
-            readRuleConsumers.insert(consumerName);
+            readRuleConsumers.insert(consumer.GetName());
         }
 
         for (const auto& t : supportedClientServiceTypes) {
 
             auto type = t.first;
-            auto count = std::count_if(config.GetReadRuleServiceTypes().begin(), config.GetReadRuleServiceTypes().end(),
-                        [type](const TString& cType){
-                            return type == cType;
+            auto count = std::count_if(config.GetConsumers().begin(), config.GetConsumers().end(),
+                        [type](const auto& c){
+                            return type == c.GetServiceType();
                         });
             auto limit = t.second.MaxCount;
             if (count > limit) {
@@ -462,13 +462,12 @@ namespace NKikimr::NGRpcProxy::V1 {
             }
         }
         if (config.GetCodecs().IdsSize() > 0) {
-            for (ui32 i = 0; i < config.ConsumerCodecsSize(); ++i) {
-                TString name = NPersQueue::ConvertOldConsumerName(config.GetReadRules(i), ctx);
+            for (const auto& consumer : config.GetConsumers()) {
+                TString name = NPersQueue::ConvertOldConsumerName(consumer.GetName(), ctx);
 
-                auto& consumerCodecs = config.GetConsumerCodecs(i);
-                if (consumerCodecs.IdsSize() > 0) {
+                if (consumer.GetCodec().IdsSize() > 0) {
                     THashSet<i64> codecs;
-                    for (auto& cc : consumerCodecs.GetIds()) {
+                    for (auto& cc : consumer.GetCodec().GetIds()) {
                         codecs.insert(cc);
                     }
                     for (auto& cc : config.GetCodecs().GetIds()) {

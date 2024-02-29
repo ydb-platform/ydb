@@ -135,17 +135,6 @@ void TPQDescribeTopicActor::HandleCacheNavigateResponse(TEvTxProxySchemeCache::T
 
         const auto& pqConfig = AppData(ActorContext())->PQConfig;
 
-        Cerr << ">>>>> ReadRules=" << config.ReadRulesSize() << " ";
-        for (auto& c : config.GetReadRules()) {
-            Cerr << c << ", ";
-        }
-        Cerr << Endl;
-        Cerr << ">>>>> Consumers=" << config.ConsumersSize() << " ";
-        for (auto& c : config.GetConsumers()) {
-            Cerr << c.GetName() << ", ";
-        }
-        Cerr << Endl;
-
         for (const auto& consumer : config.GetConsumers()) {
             auto rr = settings->add_read_rules();
             auto consumerName = NPersQueue::ConvertOldConsumerName(consumer.GetName(), ActorContext());

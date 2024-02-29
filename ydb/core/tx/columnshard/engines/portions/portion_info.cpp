@@ -1,11 +1,14 @@
 #include "portion_info.h"
-#include <ydb/core/tx/columnshard/engines/scheme/index_info.h>
-#include <ydb/core/tx/columnshard/engines/db_wrapper.h>
+#include <ydb/core/tx/columnshard/blobs_reader/task.h>
 #include <ydb/core/tx/columnshard/data_sharing/protos/data.pb.h>
+#include <ydb/core/tx/columnshard/engines/column_engine.h>
+#include <ydb/core/tx/columnshard/engines/db_wrapper.h>
+#include <ydb/core/tx/columnshard/engines/scheme/index_info.h>
 #include <ydb/core/formats/arrow/arrow_filter.h>
-#include <util/system/tls.h>
 #include <ydb/core/formats/arrow/size_calcer.h>
 #include <ydb/core/formats/arrow/simple_arrays_cache.h>
+
+#include <util/system/tls.h>
 
 namespace NKikimr::NOlap {
 
@@ -60,7 +63,7 @@ std::shared_ptr<arrow::Scalar> TPortionInfo::MaxValue(ui32 columnId) const {
 }
 
 TPortionInfo TPortionInfo::CopyWithFilteredColumns(const THashSet<ui32>& columnIds) const {
-    TPortionInfo result(PathId, Portion, GetMinSnapshot(), BlobsOperator);
+    TPortionInfo result(PathId, Portion, GetMinSnapshot());
     result.Meta = Meta;
     result.Records.reserve(columnIds.size());
 
@@ -134,16 +137,13 @@ TString TPortionInfo::DebugString(const bool withDetails) const {
     if (RemoveSnapshot.Valid()) {
         sb << "remove_snapshot:(" << RemoveSnapshot.DebugString() << ");";
     }
-    if (BlobsOperator) {
-        sb << "blobs_operator:" << BlobsOperator->DebugString() << ";";
-    }
     sb << "chunks:(" << Records.size() << ");";
     if (IS_TRACE_LOG_ENABLED(NKikimrServices::TX_COLUMNSHARD)) {
-        std::set<TString> blobIds;
+        THashSet<TBlobRange> blobRanges;
         for (auto&& i : Records) {
-            blobIds.emplace(::ToString(i.BlobRange.BlobId));
+            blobRanges.emplace(i.BlobRange);
         }
-        sb << "blobs:" << JoinSeq(",", blobIds) << ";blobs_count:" << blobIds.size() << ";";
+        sb << "blobs:" << JoinSeq(",", blobRanges) << ";ranges_count:" << blobRanges.size() << ";";
     }
     return sb << ")";
 }
@@ -335,6 +335,89 @@ TConclusion<TPortionInfo> TPortionInfo::BuildFromProto(const NKikimrColumnShardD
         return parse;
     }
     return result;
+}
+
+THashMap<NKikimr::NOlap::TChunkAddress, TString> TPortionInfo::DecodeBlobAddresses(NBlobOperations::NRead::TCompositeReadBlobs&& blobs, const TIndexInfo& indexInfo) const {
+    THashMap<TChunkAddress, TString> result;
+    for (auto&& i : blobs) {
+        for (auto&& b : i.second) {
+            bool found = false;
+            TString columnStorageId;
+            ui32 columnId = 0;
+            for (auto&& record : Records) {
+                if (record.GetBlobRange() == b.first) {
+                    if (columnId != record.GetColumnId()) {
+                        columnStorageId = GetColumnStorageId(record.GetColumnId(), indexInfo);
+                    }
+                    if (columnStorageId != i.first) {
+                        continue;
+                    }
+                    result.emplace(record.GetAddress(), std::move(b.second));
+                    found = true;
+                    break;
+                }
+            }
+            if (found) {
+                continue;
+            }
+            for (auto&& record : Indexes) {
+                if (record.GetBlobRange() == b.first) {
+                    if (columnId != record.GetIndexId()) {
+                        columnStorageId = indexInfo.GetIndexStorageId(record.GetIndexId());
+                    }
+                    if (columnStorageId != i.first) {
+                        continue;
+                    }
+                    result.emplace(record.GetAddress(), std::move(b.second));
+                    found = true;
+                    break;
+                }
+            }
+            AFL_VERIFY(found)("blobs", blobs.DebugString())("records", DebugString(true))("problem", b.first);
+        }
+    }
+    return result;
+}
+
+const TString& TPortionInfo::GetColumnStorageId(const ui32 columnId, const TIndexInfo& indexInfo) const {
+    return indexInfo.GetColumnStorageId(columnId, GetMeta().GetTierName());
+}
+
+void TPortionInfo::FillBlobRangesByStorage(THashMap<TString, THashSet<TBlobRange>>& result, const TIndexInfo& indexInfo) const {
+    for (auto&& i : Records) {
+        const TString& storageId = GetColumnStorageId(i.GetColumnId(), indexInfo);
+        AFL_VERIFY(result[storageId].emplace(i.GetBlobRange()).second)("blob_id", i.GetBlobRange().ToString());
+    }
+    for (auto&& i : Indexes) {
+        const TString& storageId = indexInfo.GetIndexStorageId(i.GetIndexId());
+        AFL_VERIFY(result[storageId].emplace(i.GetBlobRange()).second)("blob_id", i.GetBlobRange().ToString());
+    }
+}
+
+void TPortionInfo::FillBlobRangesByStorage(THashMap<TString, THashSet<TBlobRange>>& result, const TVersionedIndex& index) const {
+    auto schema = index.GetSchema(GetMinSnapshot());
+    return FillBlobRangesByStorage(result, schema->GetIndexInfo());
+}
+
+void TPortionInfo::FillBlobIdsByStorage(THashMap<TString, THashSet<TUnifiedBlobId>>& result, const TIndexInfo& indexInfo) const {
+    THashMap<TString, THashSet<TUnifiedBlobId>> local;
+    for (auto&& i : Records) {
+        const TString& storageId = GetColumnStorageId(i.GetColumnId(), indexInfo);
+        if (local[storageId].emplace(i.BlobRange.BlobId).second) {
+            AFL_VERIFY(result[storageId].emplace(i.GetBlobRange().BlobId).second)("blob_id", i.GetBlobRange().BlobId.ToStringNew());
+        }
+    }
+    for (auto&& i : Indexes) {
+        const TString& storageId = indexInfo.GetIndexStorageId(i.GetIndexId());
+        if (local[storageId].emplace(i.GetBlobRange().BlobId).second) {
+            AFL_VERIFY(result[storageId].emplace(i.GetBlobRange().BlobId).second)("blob_id", i.GetBlobRange().BlobId.ToStringNew());
+        }
+    }
+}
+
+void TPortionInfo::FillBlobIdsByStorage(THashMap<TString, THashSet<TUnifiedBlobId>>& result, const TVersionedIndex& index) const {
+    auto schema = index.GetSchema(GetMinSnapshot());
+    return FillBlobIdsByStorage(result, schema->GetIndexInfo());
 }
 
 std::shared_ptr<arrow::ChunkedArray> TPortionInfo::TPreparedColumn::Assemble() const {

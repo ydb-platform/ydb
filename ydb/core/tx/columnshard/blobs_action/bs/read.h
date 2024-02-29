@@ -9,7 +9,7 @@ private:
     using TBase = IBlobsReadingAction;
     const TActorId BlobCacheActorId;
 protected:
-    virtual void DoStartReading(const THashMap<TUnifiedBlobId, THashSet<TBlobRange>>& ranges) override;
+    virtual void DoStartReading(THashSet<TBlobRange>&& ranges) override;
 public:
 
     TReadingAction(const TString& storageId, const TActorId& blobCacheActorId)

@@ -1,13 +1,16 @@
 #include "transfer.h"
 #include <ydb/core/tx/columnshard/data_sharing/modification/tasks/modification.h>
 #include <ydb/core/tx/columnshard/data_sharing/manager/shared_blobs.h>
+#include <ydb/core/tx/columnshard/engines/column_engine.h>
 
 namespace NKikimr::NOlap::NDataSharing::NEvents {
 
-THashMap<NKikimr::NOlap::TTabletId, NKikimr::NOlap::NDataSharing::TTaskForTablet> TPathIdData::BuildLinkTabletTasks(const std::shared_ptr<TSharedBlobsManager>& sharedBlobs, const TTabletId selfTabletId, const TTransferContext& context) {
+THashMap<NKikimr::NOlap::TTabletId, NKikimr::NOlap::NDataSharing::TTaskForTablet> TPathIdData::BuildLinkTabletTasks(
+    const std::shared_ptr<TSharedBlobsManager>& sharedBlobs, const TTabletId selfTabletId, const TTransferContext& context, const TVersionedIndex& index) {
     THashMap<TString, THashSet<TUnifiedBlobId>> blobIds;
     for (auto&& i : Portions) {
-        i.FillBlobIdsByStorage(blobIds);
+        auto schema = index.GetSchema(i.GetMinSnapshot());
+        i.FillBlobIdsByStorage(blobIds, schema->GetIndexInfo());
     }
 
     THashMap<TString, THashMap<TUnifiedBlobId, TBlobSharing>> blobsInfo;

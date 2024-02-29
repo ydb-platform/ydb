@@ -3,6 +3,7 @@
 #include <contrib/libs/apache/arrow/cpp/src/arrow/array/array_base.h>
 #include <ydb/core/formats/arrow/arrow_filter.h>
 #include <ydb/core/tx/columnshard/blob.h>
+#include <ydb/core/tx/columnshard/blobs_reader/task.h>
 #include <ydb/core/tx/columnshard/engines/portions/portion_info.h>
 #include <ydb/library/accessor/accessor.h>
 #include <ydb/library/actors/core/log.h>
@@ -11,7 +12,7 @@ namespace NKikimr::NOlap {
 
 class TFetchedData {
 protected:
-    using TBlobs = THashMap<TBlobRange, TPortionInfo::TAssembleBlobInfo>;
+    using TBlobs = THashMap<TChunkAddress, TPortionInfo::TAssembleBlobInfo>;
     YDB_ACCESSOR_DEF(TBlobs, Blobs);
     YDB_READONLY_DEF(std::shared_ptr<arrow::Table>, Table);
     YDB_READONLY_DEF(std::shared_ptr<NArrow::TColumnFilter>, Filter);
@@ -33,8 +34,8 @@ public:
         return UseFilter ? nullptr : Filter;
     }
 
-    TString ExtractBlob(const TBlobRange& bRange) {
-        auto it = Blobs.find(bRange);
+    TString ExtractBlob(const TChunkAddress& address) {
+        auto it = Blobs.find(address);
         AFL_VERIFY(it != Blobs.end());
         AFL_VERIFY(it->second.IsBlob());
         auto result = it->second.GetData();
@@ -42,13 +43,13 @@ public:
         return result;
     }
 
-    void AddBlobs(THashMap<TBlobRange, TString>&& blobs) {
-        for (auto&& i : blobs) {
+    void AddBlobs(THashMap<TChunkAddress, TString>&& blobData) {
+        for (auto&& i : blobData) {
             AFL_VERIFY(Blobs.emplace(i.first, std::move(i.second)).second);
         }
     }
 
-    void AddNulls(THashMap<TBlobRange, ui32>&& blobs) {
+    void AddNulls(THashMap<TChunkAddress, ui32>&& blobs) {
         for (auto&& i : blobs) {
             AFL_VERIFY(Blobs.emplace(i.first, i.second).second);
         }

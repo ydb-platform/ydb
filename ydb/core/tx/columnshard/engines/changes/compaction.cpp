@@ -31,11 +31,17 @@ void TCompactColumnEngineChanges::DoStart(NColumnShard::TColumnShard& self) {
     TBase::DoStart(self);
 
     Y_ABORT_UNLESS(SwitchedPortions.size());
+    THashMap<TString, THashSet<TBlobRange>> blobRanges;
+    auto& index = self.GetIndexAs<TColumnEngineForLogs>().GetVersionedIndex();
     for (const auto& p : SwitchedPortions) {
         Y_ABORT_UNLESS(!p.Empty());
-        auto action = BlobsAction.GetReading(p);
-        for (const auto& rec : p.Records) {
-            action->AddRange(rec.BlobRange);
+        p.FillBlobRangesByStorage(blobRanges, index);
+    }
+
+    for (const auto& p : blobRanges) {
+        auto action = BlobsAction.GetReading(p.first);
+        for (auto&& b: p.second) {
+            action->AddRange(b);
         }
     }
 

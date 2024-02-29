@@ -42,7 +42,7 @@ struct Perfomancer {
             while (cnt + size1 + size2 <= Trait::SIZE) {
 
                 for (size_t i = 0; i < size1; ++i) {
-                    result[cnt++] = 0x80;
+                    result[cnt++] = 0xFF;
                 }
 
                 if (cnt + size2 > Trait::SIZE) break;

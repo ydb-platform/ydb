@@ -30,16 +30,17 @@ def parse_componenet(component):
     res['name'] = deduce_name(path)
     res['version'] = ver
     res["properties"] = [
-        {'name': 'arcadia_path', 'value': path},
+        {'name': 'arcadia_module_subdir', 'value': path},
         {'name': 'language', 'value': props['lang']}
     ]
     return res
 
 
 def main():
-    parser = argparse.ArgumentParser(description='Generate SBOM datea from used contribs info')
-    parser.add_argument('-o', '--output', type=argparse.FileType('w', encoding='UTF-8'), help='resulting SBOM file')
-    parser.add_argument('--vcs-info', type=argparse.FileType('r', encoding='UTF-8'), help='VCS information file')
+    parser = argparse.ArgumentParser(description='Generate SBOM data from used contribs info')
+    parser.add_argument('-o', '--output', type=argparse.FileType('w', encoding='UTF-8'), help='resulting SBOM file', required=True)
+    parser.add_argument('--vcs-info', type=argparse.FileType('r', encoding='UTF-8'), help='VCS information file', required=True)
+    parser.add_argument('--mod-path', type=str, help='Path to module in arcadia', required=True)
     parser.add_argument('libinfo', metavar='N', type=str, nargs='*', help='libraries info for components section')
 
     args = parser.parse_args()
@@ -53,7 +54,7 @@ def main():
     res["version"] = 1
     res["components"] = [parse_componenet(lib) for lib in args.libinfo]
     res["properties"] = [
-        {'name': 'commit_hash', 'value': vcs['ARCADIA_SOURCE_HG_HASH']}
+        {'name': 'commit_hash', 'value': vcs['ARCADIA_SOURCE_HG_HASH'], 'arcadia_module_subdir': args.mod_path}
     ]
     if vcs.get('DIRTY', '') == 'dirty':
         res["properties"].append({'name': 'has_uncommited_changes', 'value': True})

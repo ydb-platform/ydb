@@ -18,11 +18,6 @@ TChunkMeta::TChunkMeta(const TColumnChunkLoadContext& context, const TIndexInfo&
         AFL_VERIFY(field)("field_id", context.GetAddress().GetColumnId())("field_name", indexInfo.GetColumnName(context.GetAddress().GetColumnId()));
         Max = ConstantToScalar(context.GetMetaProto().GetMaxValue(), field->type());
     }
-    return TConclusionStatus::Success();
-}
-
-TChunkMeta::TChunkMeta(const TColumnChunkLoadContext& context, const TIndexInfo& indexInfo) {
-    AFL_VERIFY(DeserializeFromProto(context.GetAddress(), context.GetMetaProto(), indexInfo));
 }
 
 TChunkMeta::TChunkMeta(const std::shared_ptr<arrow::Array>& column, const ui32 columnId, const TIndexInfo& indexInfo)

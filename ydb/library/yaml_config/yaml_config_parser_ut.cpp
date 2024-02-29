@@ -1,6 +1,8 @@
 #include "yaml_config_parser.h"
 #include "yaml_config_helpers.h"
 
+#include <ydb/core/protos/key.pb.h>
+
 #include <library/cpp/testing/unittest/registar.h>
 
 using namespace NKikimr::NYaml;

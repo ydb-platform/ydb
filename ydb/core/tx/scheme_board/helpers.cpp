@@ -8,6 +8,8 @@
 #include <ydb/library/actors/core/interconnect.h>
 
 #include <util/stream/format.h>
+#include <ydb/core/protos/flat_scheme_op.pb.h>
+#include <ydb/core/protos/subdomains.pb.h>
 
 namespace NKikimr {
 namespace NSchemeBoard {

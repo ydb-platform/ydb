@@ -158,6 +158,8 @@ THolder<TExecutionUnit> CreateExecutionUnit(EExecutionUnitKind kind,
 }
 
 bool TExecutionUnit::CheckRejectDataTx(TOperation::TPtr op, const TActorContext& ctx) {
+    TWriteOperation* writeOp = TWriteOperation::TryCastWriteOperation(op);
+
     // Reject operations after receiving EvSplit
     // This is to avoid races when split is in progress
     if (DataShard.GetState() == TShardState::SplitSrcWaitForNoTxInFlight ||
@@ -168,8 +170,13 @@ bool TExecutionUnit::CheckRejectDataTx(TOperation::TPtr op, const TActorContext&
         TString err = TStringBuilder()
             << "Wrong shard state: " << (TShardState)DataShard.GetState()
             << " tablet id: " << DataShard.TabletID();
-        BuildResult(op, NKikimrTxDataShard::TEvProposeTransactionResult::OVERLOADED)
-            ->AddError(NKikimrTxDataShard::TError::WRONG_SHARD_STATE, err);
+
+        if (writeOp) {
+            writeOp->SetError(NKikimrDataEvents::TEvWriteResult::STATUS_OVERLOADED, err);
+        } else {
+            BuildResult(op, NKikimrTxDataShard::TEvProposeTransactionResult::OVERLOADED)
+                ->AddError(NKikimrTxDataShard::TError::WRONG_SHARD_STATE, err);
+        }
 
         LOG_NOTICE_S(ctx, NKikimrServices::TX_DATASHARD,
             "Tablet " << DataShard.TabletID() << " rejecting tx due to split");
@@ -187,7 +194,11 @@ bool TExecutionUnit::CheckRejectDataTx(TOperation::TPtr op, const TActorContext&
             << "Wrong shard state: " << (TShardState)DataShard.GetState()
             << " tablet id: " << DataShard.TabletID();
         // TODO: Return SCHEME_CHANGED if the shard has been split
-        BuildResult(op)->AddError(NKikimrTxDataShard::TError::WRONG_SHARD_STATE, err);
+        if (writeOp) {
+            writeOp->SetError(NKikimrDataEvents::TEvWriteResult::STATUS_INTERNAL_ERROR, err);
+        } else {        
+            BuildResult(op)->AddError(NKikimrTxDataShard::TError::WRONG_SHARD_STATE, err);
+        }
 
         LOG_NOTICE_S(ctx, NKikimrServices::TX_DATASHARD, err);
 
@@ -198,8 +209,13 @@ bool TExecutionUnit::CheckRejectDataTx(TOperation::TPtr op, const TActorContext&
     if (DataShard.IsStopping()) {
         TString err = TStringBuilder()
             << "Tablet " << DataShard.TabletID() << " is restarting";
-        BuildResult(op, NKikimrTxDataShard::TEvProposeTransactionResult::OVERLOADED)
-            ->AddError(NKikimrTxDataShard::TError::WRONG_SHARD_STATE, err);
+
+        if (writeOp) {
+            writeOp->SetError(NKikimrDataEvents::TEvWriteResult::STATUS_OVERLOADED, err);
+        } else {
+            BuildResult(op, NKikimrTxDataShard::TEvProposeTransactionResult::OVERLOADED)
+                ->AddError(NKikimrTxDataShard::TError::WRONG_SHARD_STATE, err);
+        }
 
         LOG_NOTICE_S(ctx, NKikimrServices::TX_DATASHARD, err);
 
@@ -211,8 +227,13 @@ bool TExecutionUnit::CheckRejectDataTx(TOperation::TPtr op, const TActorContext&
         TString err = TStringBuilder()
                 << "Wrong shard state: " << (TShardState)DataShard.GetState()
                 << " tablet id: " << DataShard.TabletID();
-        BuildResult(op, NKikimrTxDataShard::TEvProposeTransactionResult::OVERLOADED)
+
+        if (writeOp) {
+            writeOp->SetError(NKikimrDataEvents::TEvWriteResult::STATUS_OVERLOADED, err);
+        } else {
+            BuildResult(op, NKikimrTxDataShard::TEvProposeTransactionResult::OVERLOADED)
                 ->AddError(NKikimrTxDataShard::TError::WRONG_SHARD_STATE, err);
+        }
 
         LOG_NOTICE_S(ctx, NKikimrServices::TX_DATASHARD,
                      "Tablet " << DataShard.TabletID() << " rejecting tx due to mvcc state change");
@@ -224,8 +245,13 @@ bool TExecutionUnit::CheckRejectDataTx(TOperation::TPtr op, const TActorContext&
     if (!op->IsReadOnly() && DataShard.CheckChangesQueueOverflow()) {
         TString err = TStringBuilder()
                 << "Can't execute at blocked shard: " << " tablet id: " << DataShard.TabletID();
-        BuildResult(op, NKikimrTxDataShard::TEvProposeTransactionResult::OVERLOADED)
-                ->AddError(NKikimrTxDataShard::TError::SHARD_IS_BLOCKED, err);
+
+        if (writeOp) {
+            writeOp->SetError(NKikimrDataEvents::TEvWriteResult::STATUS_OVERLOADED, err);
+        } else {                
+            BuildResult(op, NKikimrTxDataShard::TEvProposeTransactionResult::OVERLOADED)
+                    ->AddError(NKikimrTxDataShard::TError::SHARD_IS_BLOCKED, err);
+        }
 
         LOG_NOTICE_S(ctx, NKikimrServices::TX_DATASHARD,
                      "Tablet " << DataShard.TabletID() << " rejecting tx due to changes queue overflow");
@@ -238,8 +264,13 @@ bool TExecutionUnit::CheckRejectDataTx(TOperation::TPtr op, const TActorContext&
         TString err = TStringBuilder()
             << "Can't execute write tx at replicated table:"
             << " tablet id: " << DataShard.TabletID();
-        BuildResult(op, NKikimrTxDataShard::TEvProposeTransactionResult::EXEC_ERROR)
+
+        if (writeOp) {
+            writeOp->SetError(NKikimrDataEvents::TEvWriteResult::STATUS_BAD_REQUEST, err);
+        } else {            
+            BuildResult(op, NKikimrTxDataShard::TEvProposeTransactionResult::EXEC_ERROR)
                 ->AddError(NKikimrTxDataShard::TError::WRONG_SHARD_STATE, err);
+        }
 
         LOG_NOTICE_S(ctx, NKikimrServices::TX_DATASHARD, err);
 

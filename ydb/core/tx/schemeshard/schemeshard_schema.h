@@ -5,6 +5,8 @@
 #include <ydb/core/scheme/scheme_pathid.h>
 #include <ydb/core/protos/tx_datashard.pb.h>
 #include <ydb/core/protos/tx.pb.h>
+#include <ydb/public/api/protos/ydb_status_codes.pb.h>
+#include <ydb/library/login/protos/login.pb.h>
 #include <ydb/core/tablet_flat/flat_cxx_database.h>
 
 namespace NKikimr::NSchemeShard {

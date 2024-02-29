@@ -5,6 +5,9 @@
 
 #include <ydb/core/kesus/tablet/events.h>
 
+#include <ydb/library/ydb_issue/proto/issue_id.pb.h>
+#include <ydb/public/api/protos/ydb_status_codes.pb.h>
+
 namespace NKikimr {
 
 TTestServer::TTestServer(const TOptions &opts)

@@ -2383,15 +2383,23 @@ private:
                 );
             for (auto& idx: idxs) {
                 batchRes.push_back(batchGet->Get(tables[idx.first].Table() + "&/@", getOpts).Apply([idx, &attributes](const TFuture<NYT::TNode>& f) {
-                    NYT::TNode attrs = f.GetValue();
-                    if (GetTypeFromAttributes(attrs, false) == "link") {
-                        // override some attributes by the link ones
-                        if (attrs.HasKey(QB2Premapper)) {
-                            attributes[idx.first][QB2Premapper] = attrs[QB2Premapper];
+                    try {
+                        NYT::TNode attrs = f.GetValue();
+                        if (GetTypeFromAttributes(attrs, false) == "link") {
+                            // override some attributes by the link ones
+                            if (attrs.HasKey(QB2Premapper)) {
+                                attributes[idx.first][QB2Premapper] = attrs[QB2Premapper];
+                            }
+                            if (attrs.HasKey(YqlRowSpecAttribute)) {
+                                attributes[idx.first][YqlRowSpecAttribute] = attrs[YqlRowSpecAttribute];
+                            }
                         }
-                        if (attrs.HasKey(YqlRowSpecAttribute)) {
-                            attributes[idx.first][YqlRowSpecAttribute] = attrs[YqlRowSpecAttribute];
+                    } catch (const TErrorResponse& e) {
+                        // Yt returns NoSuchTransaction as inner issue for ResolveError
+                        if (!e.IsResolveError() || e.IsNoSuchTransaction()) {
+                            throw;
                         }
+                        // Just ignore. Original table path may be deleted at this time
                     }
                 }));
             }
@@ -2695,7 +2703,7 @@ private:
         }
 
         TString type;
-        NYT::TNode rowSpec; 
+        NYT::TNode rowSpec;
         if (execCtx->Options_.FillSettings().Format == IDataProvider::EResultFormat::Skiff) {
             auto ytType =  ParseYTType(pull.Input().Ref(), ctx, execCtx, columns);
 
@@ -2970,7 +2978,7 @@ private:
                     return ExecCalc(lambda, extraUsage, tmpTablePath, execCtx, {},
                         TSkiffExprResultFactory(execCtx->Options_.FillSettings().RowsLimitPerWrite,
                             execCtx->Options_.FillSettings().AllResultsBytesLimit,
-                            hasListResult, 
+                            hasListResult,
                             rowSpec,
                             execCtx->Options_.OptLLVM()),
                         &columns,

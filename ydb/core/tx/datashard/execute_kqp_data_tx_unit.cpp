@@ -107,7 +107,7 @@ EExecutionStatus TExecuteKqpDataTxUnit::Execute(TOperation::TPtr op, TTransactio
     ui64 tabletId = DataShard.TabletID();
     const TValidatedDataTx::TPtr& dataTx = tx->GetDataTx();
 
-    if (op->IsImmediate() && !dataTx->ReValidateKeys()) {
+    if (op->IsImmediate() && !dataTx->ReValidateKeys(txc.DB.GetScheme())) {
         // Immediate transactions may be reordered with schema changes and become invalid
         Y_ABORT_UNLESS(!dataTx->Ready());
         op->SetAbortedFlag();

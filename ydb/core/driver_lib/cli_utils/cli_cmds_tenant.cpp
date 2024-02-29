@@ -8,6 +8,7 @@
 #include <ydb/public/api/grpc/ydb_operation_v1.grpc.pb.h>
 #include <ydb/public/api/grpc/ydb_auth_v1.grpc.pb.h>
 #include <ydb/public/api/grpc/ydb_cms_v1.grpc.pb.h>
+#include <ydb/core/protos/console_base.pb.h>
 
 #include <util/string/split.h>
 #include <util/string/join.h>

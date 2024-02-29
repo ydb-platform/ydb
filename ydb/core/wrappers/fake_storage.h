@@ -40,6 +40,7 @@ public:
         return it->second;
     }
     void Remove(const TString& objectId) {
+        TGuard<TMutex> g(Mutex);
         Data.erase(objectId);
     }
 };
@@ -116,12 +117,17 @@ class TFakeExternalStorageOperator: public IExternalStorageOperator {
 private:
     const TString Bucket;
     const TString SecretKey;
+    std::shared_ptr<TFakeExternalStorage> OwnedStorage;
 
     template <class TEvent>
     void ExecuteImpl(TEvent& ev) const {
         ev->Get()->MutableRequest().WithBucket(Bucket);
         Y_ABORT_UNLESS(SecretKey == Singleton<TFakeExternalStorage>()->GetSecretKey());
-        Singleton<TFakeExternalStorage>()->Execute(ev, ReplyAdapter);
+        if (OwnedStorage) {
+            OwnedStorage->Execute(ev, ReplyAdapter);
+        } else {
+            Singleton<TFakeExternalStorage>()->Execute(ev, ReplyAdapter);
+        }
     }
 
     virtual TString DoDebugString() const override {
@@ -129,9 +135,10 @@ private:
     }
 
 public:
-    TFakeExternalStorageOperator(const TString& bucket, const TString& secretKey)
+    TFakeExternalStorageOperator(const TString& bucket, const TString& secretKey, const std::shared_ptr<TFakeExternalStorage> storage = {})
         : Bucket(bucket)
         , SecretKey(secretKey)
+        , OwnedStorage(storage)
     {
     }
     virtual void Execute(TEvCheckObjectExistsRequest::TPtr& ev) const override {

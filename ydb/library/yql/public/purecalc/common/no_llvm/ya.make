@@ -8,6 +8,8 @@ PEERDIR(
     ydb/library/yql/minikql/invoke_builtins/no_llvm
     ydb/library/yql/minikql/comp_nodes/no_llvm
     ydb/library/yql/minikql/codegen/no_llvm
+    ydb/library/yql/parser/pg_wrapper
+    ydb/library/yql/parser/pg_wrapper/interface
 )
 
 END()

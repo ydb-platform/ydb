@@ -26,6 +26,7 @@ private:
 
     std::shared_ptr<arrow::Schema> GetArrowSchema() const;
     YDB_FLAG_ACCESSOR(WithJsonDocument, false);
+    YDB_ACCESSOR(TString, OptionalStorageId, "__MEMORY");
     TString ShardingMethod = "HASH_FUNCTION_CONSISTENCY_64";
     bool WithSomeNulls_ = false;
 protected:

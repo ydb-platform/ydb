@@ -5,6 +5,7 @@
 #include <ydb/core/tx/tx.h>
 #include <ydb/core/tx/message_seqno.h>
 #include <ydb/core/protos/tx_columnshard.pb.h>
+#include <ydb/public/api/protos/ydb_status_codes.pb.h>
 #include <ydb/core/tx/data_events/write_data.h>
 
 #include <ydb/core/tx/long_tx_service/public/types.h>

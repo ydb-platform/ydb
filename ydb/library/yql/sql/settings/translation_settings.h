@@ -5,6 +5,7 @@
 #include <util/generic/hash.h>
 #include <util/generic/hash_set.h>
 #include <util/generic/map.h>
+#include <util/generic/maybe.h>
 #include <util/generic/vector.h>
 
 namespace google::protobuf {
@@ -114,6 +115,8 @@ namespace NSQLTranslation {
 
         TGUCSettings::TPtr GUCSettings = std::make_shared<TGUCSettings>();
         bool UnicodeLiterals = false;
+
+        TMaybe<TString> ApplicationName;
     };
 
     bool ParseTranslationSettings(const TString& query, NSQLTranslation::TTranslationSettings& settings, NYql::TIssues& issues);

@@ -20,6 +20,7 @@
 #include <ydb/public/lib/operation_id/operation_id.h>
 
 #include <ydb/library/yql/public/issue/protos/issue_severity.pb.h>
+#include <ydb/core/protos/blobstorage_config.pb.h>
 
 #include <ydb/library/actors/core/hfunc.h>
 

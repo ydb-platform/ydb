@@ -15,6 +15,9 @@
 #include <ydb/library/yql/public/issue/yql_issue.h>
 #include <ydb/library/yql/public/issue/yql_issue_message.h>
 #include <ydb/library/yql/core/issue/protos/issue_id.pb.h>
+#include <ydb/core/protos/console_config.pb.h>
+#include <ydb/core/protos/console_base.pb.h>
+#include <ydb/public/api/protos/ydb_status_codes.pb.h>
 
 #include <ydb/library/grpc/client/grpc_client_low.h>
 

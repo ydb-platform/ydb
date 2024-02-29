@@ -323,7 +323,9 @@ void EnsureDataOrOptionalOfData(TRuntimeNode node) {
 }
 
 TProgramBuilder::TProgramBuilder(const TTypeEnvironment& env, const IFunctionRegistry& functionRegistry, bool voidWithEffects)
-    : Env(env), FunctionRegistry(functionRegistry), VoidWithEffects(voidWithEffects)
+    : TTypeBuilder(env)
+    , FunctionRegistry(functionRegistry)
+    , VoidWithEffects(voidWithEffects)
 {}
 
 const TTypeEnvironment& TProgramBuilder::GetTypeEnvironment() const {
@@ -2325,38 +2327,6 @@ TRuntimeNode TProgramBuilder::NewEmptyStruct() {
     return TRuntimeNode(Env.GetEmptyStructLazy(), true);
 }
 
-TType* TProgramBuilder::NewEmptyStructType() {
-    return Env.GetEmptyStructLazy()->GetGenericType();
-}
-
-TType* TProgramBuilder::NewStructType(TType* baseStructType, const std::string_view& memberName, TType* memberType) {
-    MKQL_ENSURE(baseStructType->IsStruct(), "Expected struct type");
-
-    const auto& detailedBaseStructType = static_cast<const TStructType&>(*baseStructType);
-    TStructTypeBuilder builder(Env);
-    builder.Reserve(detailedBaseStructType.GetMembersCount() + 1);
-    for (ui32 i = 0, e = detailedBaseStructType.GetMembersCount(); i < e; ++i) {
-        builder.Add(detailedBaseStructType.GetMemberName(i), detailedBaseStructType.GetMemberType(i));
-    }
-
-    builder.Add(memberName, memberType);
-    return builder.Build();
-}
-
-TType* TProgramBuilder::NewStructType(const TArrayRef<const std::pair<std::string_view, TType*>>& memberTypes) {
-    TStructTypeBuilder builder(Env);
-    builder.Reserve(memberTypes.size());
-    for (auto& x : memberTypes) {
-        builder.Add(x.first, x.second);
-    }
-
-    return builder.Build();
-}
-
-TType* TProgramBuilder::NewArrayType(const TArrayRef<const std::pair<std::string_view, TType*>>& memberTypes) {
-    return NewStructType(memberTypes);
-}
-
 TRuntimeNode TProgramBuilder::NewStruct(const TArrayRef<const std::pair<std::string_view, TRuntimeNode>>& members) {
     if (members.empty()) {
         return NewEmptyStruct();
@@ -2406,46 +2376,6 @@ TRuntimeNode TProgramBuilder::NewList(TType* itemType, const TArrayRef<const TRu
     return TRuntimeNode(builder.Build(), true);
 }
 
-TType* TProgramBuilder::NewDataType(NUdf::TDataTypeId schemeType, bool optional) {
-    return optional ? NewOptionalType(TDataType::Create(schemeType, Env)) : TDataType::Create(schemeType, Env);
-}
-
-TType* TProgramBuilder::NewPgType(ui32 typeId) {
-    return TPgType::Create(typeId, Env);
-}
-
-TType* TProgramBuilder::NewDecimalType(ui8 precision, ui8 scale) {
-    return TDataDecimalType::Create(precision, scale, Env);
-}
-
-TType* TProgramBuilder::NewOptionalType(TType* itemType) {
-    return TOptionalType::Create(itemType, Env);
-}
-
-TType* TProgramBuilder::NewListType(TType* itemType) {
-    return TListType::Create(itemType, Env);
-}
-
-TType* TProgramBuilder::NewStreamType(TType* itemType) {
-    return TStreamType::Create(itemType, Env);
-}
-
-TType* TProgramBuilder::NewFlowType(TType* itemType) {
-    return TFlowType::Create(itemType, Env);
-}
-
-TType* TProgramBuilder::NewBlockType(TType* itemType, TBlockType::EShape shape) {
-    return TBlockType::Create(itemType, shape, Env);
-}
-
-TType* TProgramBuilder::NewTaggedType(TType* baseType, const std::string_view& tag) {
-    return TTaggedType::Create(baseType, tag, Env);
-}
-
-TType* TProgramBuilder::NewDictType(TType* keyType, TType* payloadType, bool multi) {
-    return TDictType::Create(keyType, multi ? NewListType(payloadType) : payloadType, Env);
-}
-
 TRuntimeNode TProgramBuilder::NewEmptyDict() {
     return TRuntimeNode(Env.GetEmptyDictLazy(), true);
 }
@@ -2460,17 +2390,6 @@ TRuntimeNode TProgramBuilder::NewEmptyTuple() {
     return TRuntimeNode(Env.GetEmptyTupleLazy(), true);
 }
 
-TType* TProgramBuilder::NewEmptyTupleType() {
-    return Env.GetEmptyTupleLazy()->GetGenericType();
-}
-
-TType* TProgramBuilder::NewTupleType(const TArrayRef<TType* const>& elements) {
-    return TTupleType::Create(elements.size(), elements.data(), Env);
-}
-
-TType* TProgramBuilder::NewArrayType(const TArrayRef<TType* const>& elements) {
-    return NewTupleType(elements);
-}
 
 TRuntimeNode TProgramBuilder::NewTuple(TType* tupleType, const TArrayRef<const TRuntimeNode>& elements) {
     MKQL_ENSURE(tupleType->IsTuple(), "Expected tuple type");
@@ -2488,27 +2407,6 @@ TRuntimeNode TProgramBuilder::NewTuple(const TArrayRef<const TRuntimeNode>& elem
     return NewTuple(NewTupleType(types), elements);
 }
 
-TType* TProgramBuilder::NewEmptyMultiType() {
-    if (RuntimeVersion > 35) {
-        return TMultiType::Create(0, nullptr, Env);
-    }
-    return Env.GetEmptyTupleLazy()->GetGenericType();
-}
-
-TType* TProgramBuilder::NewMultiType(const TArrayRef<TType* const>& elements) {
-    if (RuntimeVersion > 35) {
-        return TMultiType::Create(elements.size(), elements.data(), Env);
-    }
-    return TTupleType::Create(elements.size(), elements.data(), Env);
-}
-
-TType* TProgramBuilder::NewResourceType(const std::string_view& tag) {
-    return TResourceType::Create(tag, Env);
-}
-
-TType* TProgramBuilder::NewVariantType(TType* underlyingType) {
-    return TVariantType::Create(underlyingType, Env);
-}
 
 TRuntimeNode TProgramBuilder::NewVariant(TRuntimeNode item, ui32 index, TType* variantType) {
     const auto type = AS_TYPE(TVariantType, variantType);

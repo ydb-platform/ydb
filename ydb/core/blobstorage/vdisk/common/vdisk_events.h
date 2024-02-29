@@ -18,6 +18,7 @@
 #include <ydb/core/base/event_filter.h>
 #include <ydb/core/base/interconnect_channels.h>
 #include <ydb/core/protos/blobstorage_config.pb.h>
+#include <ydb/core/protos/blobstorage_disk.pb.h>
 
 #include <ydb/core/util/pb.h>
 

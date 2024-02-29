@@ -43,8 +43,7 @@ EExecutionStatus TStoreAndSendWriteOutRSUnit::Execute(TOperation::TPtr op,
                                                  TTransactionContext &txc,
                                                  const TActorContext &ctx)
 {
-    TWriteOperation* writeOp = dynamic_cast<TWriteOperation*>(op.Get());
-    Y_VERIFY_S(writeOp, "cannot cast operation of kind " << op->GetKind());
+    TWriteOperation* writeOp = TWriteOperation::CastWriteOperation(op);
 
     bool newArtifact = false;
     // TODO: move artifact flags into operation flags.

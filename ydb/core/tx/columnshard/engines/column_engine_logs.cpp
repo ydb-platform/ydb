@@ -225,8 +225,7 @@ bool TColumnEngineForLogs::LoadCounters(IDbWrapper& db) {
 std::shared_ptr<TInsertColumnEngineChanges> TColumnEngineForLogs::StartInsert(std::vector<TInsertedData>&& dataToIndex) noexcept {
     Y_ABORT_UNLESS(dataToIndex.size());
 
-    TSaverContext saverContext(StoragesManager->GetInsertOperator(), StoragesManager);
-
+    TSaverContext saverContext(StoragesManager);
     auto changes = std::make_shared<TInsertColumnEngineChanges>(std::move(dataToIndex), TSplitSettings(), saverContext);
     auto pkSchema = VersionedIndex.GetLastSchema()->GetIndexInfo().GetReplaceKey();
 
@@ -407,7 +406,7 @@ TDuration TColumnEngineForLogs::ProcessTiering(const ui64 pathId, const TTiering
                 }
                 if (currentTierName != tierName) {
                     AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("event", "tiering switch detected")("from", currentTierName)("to", tierName);
-                    context.Changes->AddPortionToEvict(*info, TPortionEvictionFeatures(tierName, pathId, StoragesManager->GetOperator(tierName)));
+                    context.Changes->AddPortionToEvict(*info, TPortionEvictionFeatures(tierName, pathId));
                     context.AppPortionForEvictionChecker(*info);
                     SignalCounters.OnPortionToEvict(info->BlobsBytes());
                 }
@@ -470,7 +469,7 @@ std::shared_ptr<TTTLColumnEngineChanges> TColumnEngineForLogs::StartTtl(const TH
         ("internal", EvictionsController.MutableNextCheckInstantForTierings().size())
         ;
 
-    TSaverContext saverContext(StoragesManager->GetDefaultOperator(), StoragesManager);
+    TSaverContext saverContext(StoragesManager);
 
     auto changes = std::make_shared<TTTLColumnEngineChanges>(TSplitSettings(), saverContext);
 

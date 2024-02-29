@@ -3,16 +3,4 @@
 
 namespace NKikimr::NOlap {
 
-std::shared_ptr<NKikimr::NOlap::IBlobsWritingAction> TBlobsAction::GetWriting(const TPortionInfo& portionInfo) {
-    return GetStorageAction(portionInfo.GetBlobsStorage()->GetStorageId()).GetWriting(ConsumerId);
-}
-
-std::shared_ptr<NKikimr::NOlap::IBlobsReadingAction> TBlobsAction::GetReading(const TPortionInfo& portionInfo) {
-    return GetStorageAction(portionInfo.GetBlobsStorage()->GetStorageId()).GetReading(ConsumerId);
-}
-
-std::shared_ptr<NKikimr::NOlap::IBlobsDeclareRemovingAction> TBlobsAction::GetRemoving(const TPortionInfo& portionInfo) {
-    return GetStorageAction(portionInfo.GetBlobsStorage()->GetStorageId()).GetRemoving(ConsumerId);
-}
-
 }

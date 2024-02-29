@@ -10,6 +10,10 @@ TConclusionStatus TAlterColumnOperation::DoDeserialize(NYql::TObjectSettingsImpl
         }
         ColumnName = *fValue;
     }
+    StorageId = features.Extract("STORAGE_ID");
+    if (StorageId && !*StorageId) {
+        return TConclusionStatus::Fail("STORAGE_ID cannot be empty string");
+    }
     {
         auto result = DictionaryEncodingDiff.DeserializeFromRequestFeatures(features);
         if (!result) {
@@ -28,6 +32,9 @@ TConclusionStatus TAlterColumnOperation::DoDeserialize(NYql::TObjectSettingsImpl
 void TAlterColumnOperation::DoSerializeScheme(NKikimrSchemeOp::TAlterColumnTableSchema& schemaData) const {
     auto* column = schemaData.AddAlterColumns();
     column->SetName(ColumnName);
+    if (StorageId && !!*StorageId) {
+        column->SetStorageId(*StorageId);
+    }
     if (!!Serializer) {
         Serializer.SerializeToProto(*column->MutableSerializer());
     }

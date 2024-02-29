@@ -221,7 +221,8 @@ bool TTopicOperations::TabletHasReadOperations(ui64 tabletId) const
 {
     for (auto& [_, value] : Operations_) {
         if (value.GetTabletId() == tabletId) {
-            return value.HasReadOperations();
+            // reading from a topic and writing to a topic contain read operations
+            return value.HasReadOperations() || value.HasWriteOperations();
         }
     }
     return false;

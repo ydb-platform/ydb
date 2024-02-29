@@ -6,6 +6,7 @@
 #include <ydb/core/testlib/actors/test_runtime.h>
 #include <ydb/core/testlib/basics/runtime.h>
 #include <ydb/core/testlib/tablet_helpers.h>
+#include <ydb/core/protos/msgbus_kv.pb.h>
 
 
 const bool ENABLE_DETAILED_PQ_LOG = false;

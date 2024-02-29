@@ -8,6 +8,8 @@
 #include <ydb/core/formats/arrow/arrow_helpers.h>
 #include <ydb/core/formats/arrow/size_calcer.h>
 
+#include <ydb/public/api/protos/ydb_formats.pb.h>
+
 using namespace NYdb;
 
 namespace {

@@ -13,11 +13,17 @@
 #include <ydb/core/control/immediate_control_board_impl.h>
 #include <ydb/core/grpc_services/grpc_helper.h>
 #include <ydb/core/protos/auth.pb.h>
+#include <ydb/core/protos/blobstorage.pb.h>
+#include <ydb/core/protos/bootstrap.pb.h>
 #include <ydb/core/protos/cms.pb.h>
 #include <ydb/core/protos/config.pb.h>
+#include <ydb/core/protos/datashard_config.pb.h>
 #include <ydb/core/protos/key.pb.h>
+#include <ydb/core/protos/kqp.pb.h>
 #include <ydb/core/protos/pqconfig.pb.h>
+#include <ydb/core/protos/netclassifier.pb.h>
 #include <ydb/core/protos/stream.pb.h>
+#include <ydb/core/protos/shared_cache.pb.h>
 #include <ydb/library/pdisk_io/aio.h>
 
 #include <ydb/core/base/event_filter.h>

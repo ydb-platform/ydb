@@ -1202,9 +1202,15 @@ protected:
             }
         };
 
+        bool isFullScan = false;
         const THashMap<ui64, TShardInfo> partitions = SourceScanStageIdToParititions.empty()
-            ? PrunePartitions(source, stageInfo, HolderFactory(), TypeEnv())
+            ? PrunePartitions(source, stageInfo, HolderFactory(), TypeEnv(), isFullScan)
             : SourceScanStageIdToParititions.at(stageInfo.Id);
+
+        if (isFullScan && !source.HasItemsLimit()) {
+            Counters->Counters->FullScansExecuted->Inc();
+        }
+
         if (partitions.size() > 0 && source.GetSequentialInFlightShards() > 0 && partitions.size() > source.GetSequentialInFlightShards()) {
             auto [startShard, shardInfo] = MakeVirtualTablePartition(source, stageInfo, HolderFactory(), TypeEnv());
             if (Stats) {
@@ -1476,9 +1482,14 @@ protected:
             Y_DEBUG_ABORT_UNLESS(stageInfo.Meta.TablePath == op.GetTable().GetPath());
 
             auto columns = BuildKqpColumns(op, tableInfo);
-            auto partitions = PrunePartitions(op, stageInfo, HolderFactory(), TypeEnv());
+            bool isFullScan;
+            auto partitions = PrunePartitions(op, stageInfo, HolderFactory(), TypeEnv(), isFullScan);
             const bool isOlapScan = (op.GetTypeCase() == NKqpProto::TKqpPhyTableOperation::kReadOlapRange);
             auto readSettings = ExtractReadSettings(op, stageInfo, HolderFactory(), TypeEnv());
+
+            if (isFullScan && readSettings.ItemsLimit) {
+                Counters->Counters->FullScansExecuted->Inc();
+            }
 
             if (op.GetTypeCase() == NKqpProto::TKqpPhyTableOperation::kReadRange) {
                 stageInfo.Meta.SkipNullKeys.assign(op.GetReadRange().GetSkipNullKeys().begin(),

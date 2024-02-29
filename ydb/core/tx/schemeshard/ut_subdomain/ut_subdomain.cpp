@@ -2,6 +2,8 @@
 #include <ydb/core/tx/datashard/datashard.h>
 #include <ydb/core/persqueue/events/internal.h>
 
+#include <ydb/core/protos/blockstore_config.pb.h>
+
 using namespace NKikimr;
 using namespace NSchemeShard;
 using namespace NSchemeShardUT_Private;

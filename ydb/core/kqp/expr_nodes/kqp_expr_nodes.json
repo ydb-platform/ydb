@@ -105,7 +105,8 @@
             "Match": {"Type": "Callable", "Name": "KqlReadTableRanges"},
             "Children": [
                 {"Index": 5, "Name": "PrefixPointsExpr", "Type": "TExprBase", "Optional": true},
-                {"Index": 6, "Name": "PredicateExpr", "Type": "TCoLambda", "Optional": true}
+                {"Index": 6, "Name": "PredicateExpr", "Type": "TCoLambda", "Optional": true},
+                {"Index": 7, "Name": "PredicateUsedColumns", "Type": "TCoAtomList", "Optional": true}
             ]
         },
         {
@@ -133,7 +134,8 @@
             "Children": [
                 {"Index": 5, "Name": "Index", "Type": "TCoAtom"},
                 {"Index": 6, "Name": "PrefixPointsExpr", "Type": "TExprBase", "Optional": true},
-                {"Index": 7, "Name": "PredicateExpr", "Type": "TCoLambda", "Optional": true}
+                {"Index": 7, "Name": "PredicateExpr", "Type": "TCoLambda", "Optional": true},
+                {"Index": 8, "Name": "PredicateUsedColumns", "Type": "TCoAtomList", "Optional": true}
             ]
         },
         {

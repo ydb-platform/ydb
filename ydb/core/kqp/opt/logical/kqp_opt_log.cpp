@@ -87,20 +87,20 @@ protected:
         return output;
     }
 
-    TMaybeNode<TExprBase> PushExtractedPredicateToReadTable(TExprBase node, TExprContext& ctx) {
+    TMaybeNode<TExprBase> PushExtractedPredicateToReadTable(TExprBase node, TExprContext& ctx, const TGetParents& getParents) {
         if (!KqpCtx.Config->PredicateExtract20) {
             return node;
         }
-        TExprBase output = KqpPushExtractedPredicateToReadTable(node, ctx, KqpCtx, TypesCtx);
+        TExprBase output = KqpPushExtractedPredicateToReadTable(node, ctx, KqpCtx, TypesCtx, *getParents());
         DumpAppliedRule("PushExtractedPredicateToReadTable", node.Ptr(), output.Ptr(), ctx);
         return output;
     }
 
-    TMaybeNode<TExprBase> LatePushExtractedPredicateToReadTable(TExprBase node, TExprContext& ctx) {
+    TMaybeNode<TExprBase> LatePushExtractedPredicateToReadTable(TExprBase node, TExprContext& ctx, const TGetParents& getParents) {
         if (KqpCtx.Config->PredicateExtract20) {
             return node;
         }
-        TExprBase output = KqpPushExtractedPredicateToReadTable(node, ctx, KqpCtx, TypesCtx);
+        TExprBase output = KqpPushExtractedPredicateToReadTable(node, ctx, KqpCtx, TypesCtx, *getParents());
         DumpAppliedRule("PushExtractedPredicateToReadTable", node.Ptr(), output.Ptr(), ctx);
         return output;
     }
@@ -172,8 +172,8 @@ protected:
         return output;
     }
 
-    TMaybeNode<TExprBase> JoinToIndexLookup(TExprBase node, TExprContext& ctx, const TGetParents& getParents) {
-        TExprBase output = KqpJoinToIndexLookup(node, ctx, KqpCtx, *getParents());
+    TMaybeNode<TExprBase> JoinToIndexLookup(TExprBase node, TExprContext& ctx) {
+        TExprBase output = KqpJoinToIndexLookup(node, ctx, KqpCtx);
         DumpAppliedRule("JoinToIndexLookup", node.Ptr(), output.Ptr(), ctx);
         return output;
     }

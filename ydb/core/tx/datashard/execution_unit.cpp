@@ -248,6 +248,8 @@ bool TExecutionUnit::CheckRejectDataTx(TOperation::TPtr op, const TActorContext&
 
         if (writeOp) {
             writeOp->SetError(NKikimrDataEvents::TEvWriteResult::STATUS_OVERLOADED, err);
+
+            DataShard.SetOverloadSubscribed(writeOp->GetWriteTx()->GetOverloadSubscribe(), writeOp->GetRecipient(), op->GetTarget(), ERejectReasons::ChangesQueueOverflow, writeOp->GetWriteResult()->Record);
         } else {                
             BuildResult(op, NKikimrTxDataShard::TEvProposeTransactionResult::OVERLOADED)
                     ->AddError(NKikimrTxDataShard::TError::SHARD_IS_BLOCKED, err);

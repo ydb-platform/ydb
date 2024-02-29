@@ -172,20 +172,8 @@ static void Reject(TDataShard* self, TEvRequest& ev, const TString& txDesc,
     response->Record.SetTabletID(self->TabletID());
     response->Record.SetErrorDescription(rejectDescription);
 
-    if (ev->Get()->Record.HasOverloadSubscribe() && self->HasPipeServer(ev->Recipient)) {
-        ui64 seqNo = ev->Get()->Record.GetOverloadSubscribe();
-        auto allowed = (
-            ERejectReasons::OverloadByProbability |
-            ERejectReasons::YellowChannels |
-            ERejectReasons::ChangesQueueOverflow);
-        if ((rejectReasons & allowed) != ERejectReasons::None &&
-            (rejectReasons - allowed) == ERejectReasons::None)
-        {
-            if (self->AddOverloadSubscriber(ev->Recipient, ev->Sender, seqNo, rejectReasons)) {
-                response->Record.SetOverloadSubscribed(seqNo);
-            }
-        }
-    }
+    std::optional<ui64> overloadSubscribe = ev->Get()->Record.HasOverloadSubscribe() ? ev->Get()->Record.GetOverloadSubscribe() : std::optional<ui64>{};
+    self->SetOverloadSubscribed(overloadSubscribe, ev->Recipient, ev->Sender, rejectReasons, response->Record);
 
     ctx.Send(ev->Sender, std::move(response));
 }

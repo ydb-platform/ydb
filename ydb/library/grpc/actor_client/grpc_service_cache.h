@@ -6,7 +6,7 @@
 #include <ydb/library/actors/core/mailbox.h>
 #include <ydb/core/util/simple_cache.h>
 
-namespace NCloud {
+namespace NGrpcActorClient {
 
 template <typename TEventRequestType, typename TEventResponseType>
 class TGrpcServiceCache : public NActors::TActorBootstrapped<TGrpcServiceCache<TEventRequestType, TEventResponseType>> {
@@ -108,7 +108,7 @@ class TGrpcServiceCache : public NActors::TActorBootstrapped<TGrpcServiceCache<T
     }
 
     void PassAway() {
-        TBase::Send(GetUnderlyingActor(), new TEvents::TEvPoison());
+        TBase::Send(GetUnderlyingActor(), new NActors::TEvents::TEvPoison());
         TBase::PassAway();
     }
 
@@ -118,7 +118,7 @@ public:
             // we register underlying actor with the same pool and mailbox type
             auto& ctx = NActors::TlsActivationContext;
             const auto& mailbox = ctx->Mailbox;
-            UnderlyingActor = ctx->Register(std::get<NActors::IActor*>(UnderlyingActor), TBase::SelfId(), static_cast<TMailboxType::EType>(mailbox.Type));
+            UnderlyingActor = ctx->Register(std::get<NActors::IActor*>(UnderlyingActor), TBase::SelfId(), static_cast<NActors::TMailboxType::EType>(mailbox.Type));
         }
         TBase::Become(&TThis::StateWork);
     }
@@ -126,9 +126,9 @@ public:
     static constexpr NKikimrServices::TActivity::EType ActorActivityType() { return NKikimrServices::TActivity::ACTOR_SERVICE_CACHE; }
 
     TGrpcServiceCache(const std::variant<NActors::TActorId, NActors::IActor*>& underlyingActor,
-                       size_t grpcCacheSize = 1024,
-                       TDuration grpcCacheSuccessLifeTime = TDuration::Minutes(1),
-                       TDuration grpcCacheErrorLifeTime = TDuration::Seconds(10))
+                      size_t grpcCacheSize = 1024,
+                      TDuration grpcCacheSuccessLifeTime = TDuration::Minutes(1),
+                      TDuration grpcCacheErrorLifeTime = TDuration::Seconds(10))
         : UnderlyingActor(underlyingActor)
     {
         Cache.MaxSize = grpcCacheSize;
@@ -140,7 +140,7 @@ public:
         switch (ev->GetTypeRewrite()) {
             hFunc(TEventRequestType, Handle);
             hFunc(TEventResponseType, Handle);
-            cFunc(TEvents::TSystem::Poison, PassAway);
+            cFunc(NActors::TEvents::TSystem::Poison, PassAway);
             default:
                 this->Forward(ev, GetUnderlyingActor());
                 break;
@@ -149,19 +149,19 @@ public:
 };
 
 template <typename TEventRequestType, typename TEventResponseType>
-inline IActor* CreateGrpcServiceCache(const NActors::TActorId& underlyingActor,
-                                      size_t grpcCacheSize = 1024,
-                                      TDuration grpcCacheSuccessLifeTime = TDuration::Minutes(1),
-                                      TDuration grpcCacheErrorLifeTime = TDuration::Seconds(10)) {
+inline NActors::IActor* CreateGrpcServiceCache(const NActors::TActorId& underlyingActor,
+                                               size_t grpcCacheSize = 1024,
+                                               TDuration grpcCacheSuccessLifeTime = TDuration::Minutes(1),
+                                               TDuration grpcCacheErrorLifeTime = TDuration::Seconds(10)) {
     return new TGrpcServiceCache<TEventRequestType, TEventResponseType>(underlyingActor, grpcCacheSize, grpcCacheSuccessLifeTime, grpcCacheErrorLifeTime);
 }
 
 template <typename TEventRequestType, typename TEventResponseType>
-inline IActor* CreateGrpcServiceCache(NActors::IActor* underlyingActor,
-                                      size_t grpcCacheSize = 1024,
-                                      TDuration grpcCacheSuccessLifeTime = TDuration::Minutes(1),
-                                      TDuration grpcCacheErrorLifeTime = TDuration::Seconds(10)) {
+inline NActors::IActor* CreateGrpcServiceCache(NActors::IActor* underlyingActor,
+                                               size_t grpcCacheSize = 1024,
+                                               TDuration grpcCacheSuccessLifeTime = TDuration::Minutes(1),
+                                               TDuration grpcCacheErrorLifeTime = TDuration::Seconds(10)) {
     return new TGrpcServiceCache<TEventRequestType, TEventResponseType>(underlyingActor, grpcCacheSize, grpcCacheSuccessLifeTime, grpcCacheErrorLifeTime);
 }
 
-}
+} // namespace NGrpcActorClient

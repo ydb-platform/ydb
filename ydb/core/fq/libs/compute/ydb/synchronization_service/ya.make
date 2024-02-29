@@ -7,6 +7,7 @@ SRCS(
 PEERDIR(
     ydb/library/actors/core
     ydb/library/actors/protos
+    ydb/library/grpc/actor_client
     ydb/core/fq/libs/control_plane_storage/proto
     ydb/public/api/grpc
     ydb/library/db_pool/protos

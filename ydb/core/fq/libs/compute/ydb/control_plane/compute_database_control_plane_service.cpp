@@ -160,7 +160,7 @@ public:
     }
 
     void Handle(TEvYdbCompute::TEvInvalidateSynchronizationResponse::TPtr& ev) {
-        auto client = ev->Cookie == OnlyDatabaseCreateCookie 
+        auto client = ev->Cookie == OnlyDatabaseCreateCookie
             ? Clients->GetClient(Scope, Result.connection().endpoint(), Result.connection().database())
             : Clients->GetClient(Scope);
         if (!client) {
@@ -297,11 +297,11 @@ public:
     static constexpr char ActorName[] = "FQ_COMPUTE_DATABASE_SERVICE_ACTOR";
 
     void Bootstrap() {
-        SynchronizationServiceActorId = Register(CreateSynchronizationServiceActor(CommonConfig, 
+        SynchronizationServiceActorId = Register(CreateSynchronizationServiceActor(CommonConfig,
                                                                                           Config,
-                                                                                          Signer, 
-                                                                                          YqSharedResources, 
-                                                                                          CredentialsProviderFactory, 
+                                                                                          Signer,
+                                                                                          YqSharedResources,
+                                                                                          CredentialsProviderFactory,
                                                                                           Counters).release());
         const auto& controlPlane = Config.GetYdb().GetControlPlane();
         switch (controlPlane.type_case()) {
@@ -319,8 +319,8 @@ public:
         Become(&TComputeDatabaseControlPlaneServiceActor::StateFunc);
     }
 
-    static NCloud::TGrpcClientSettings CreateGrpcClientSettings(const NConfig::TYdbStorageConfig& connection) {
-        NCloud::TGrpcClientSettings settings;
+    static NGrpcActorClient::TGrpcClientSettings CreateGrpcClientSettings(const NConfig::TYdbStorageConfig& connection) {
+        NGrpcActorClient::TGrpcClientSettings settings;
         settings.Endpoint = connection.GetEndpoint();
         settings.EnableSsl = connection.GetUseSsl();
         if (connection.GetCertificateFile()) {
@@ -329,8 +329,8 @@ public:
         return settings;
     }
 
-    static NCloud::TGrpcClientSettings CreateGrpcClientSettings(const NConfig::TComputeDatabaseConfig& config) {
-        NCloud::TGrpcClientSettings settings;
+    static NGrpcActorClient::TGrpcClientSettings CreateGrpcClientSettings(const NConfig::TComputeDatabaseConfig& config) {
+        NGrpcActorClient::TGrpcClientSettings settings;
         const auto& connection = config.GetControlPlaneConnection();
         settings.Endpoint = connection.GetEndpoint();
         settings.EnableSsl = connection.GetUseSsl();
@@ -441,7 +441,7 @@ public:
 
 private:
     TActorId GetMonitoringActorIdByScope(const TString& scope) {
-        return Config.GetYdb().GetControlPlane().HasSingle() 
+        return Config.GetYdb().GetControlPlane().HasSingle()
             ? MonitoringActorId
             : Clients->GetClient(scope).MonitoringActorId;
     }

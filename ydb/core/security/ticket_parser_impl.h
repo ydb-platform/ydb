@@ -9,7 +9,7 @@
 #include <ydb/library/ycloud/impl/user_account_service.h>
 #include <ydb/library/ycloud/impl/service_account_service.h>
 #include <ydb/library/ycloud/impl/access_service.h>
-#include <ydb/library/ycloud/impl/grpc_service_cache.h>
+#include <ydb/library/grpc/actor_client/grpc_service_cache.h>
 #include <ydb/core/base/counters.h>
 #include <ydb/core/base/domain.h>
 #include <ydb/core/mon/mon.h>
@@ -1630,14 +1630,14 @@ protected:
             settings.GrpcKeepAliveTimeoutMs = Config.GetAccessServiceGrpcKeepAliveTimeoutMs();
             AccessServiceValidatorV1 = Register(NCloud::CreateAccessServiceV1(settings), TMailboxType::HTSwap, AppData()->UserPoolId);
             if (Config.GetCacheAccessServiceAuthentication()) {
-                AccessServiceValidatorV1 = Register(NCloud::CreateGrpcServiceCache<NCloud::TEvAccessService::TEvAuthenticateRequest, NCloud::TEvAccessService::TEvAuthenticateResponse>(
+                AccessServiceValidatorV1 = Register(NGrpcActorClient::CreateGrpcServiceCache<NCloud::TEvAccessService::TEvAuthenticateRequest, NCloud::TEvAccessService::TEvAuthenticateResponse>(
                                                           AccessServiceValidatorV1,
                                                           Config.GetGrpcCacheSize(),
                                                           TDuration::MilliSeconds(Config.GetGrpcSuccessLifeTime()),
                                                           TDuration::MilliSeconds(Config.GetGrpcErrorLifeTime())), TMailboxType::HTSwap, AppData()->UserPoolId);
             }
             if (Config.GetCacheAccessServiceAuthorization()) {
-                AccessServiceValidatorV1 = Register(NCloud::CreateGrpcServiceCache<NCloud::TEvAccessService::TEvAuthorizeRequest, NCloud::TEvAccessService::TEvAuthorizeResponse>(
+                AccessServiceValidatorV1 = Register(NGrpcActorClient::CreateGrpcServiceCache<NCloud::TEvAccessService::TEvAuthorizeRequest, NCloud::TEvAccessService::TEvAuthorizeResponse>(
                                                           AccessServiceValidatorV1,
                                                           Config.GetGrpcCacheSize(),
                                                           TDuration::MilliSeconds(Config.GetGrpcSuccessLifeTime()),
@@ -1655,7 +1655,7 @@ protected:
             }
             UserAccountService = Register(CreateUserAccountService(settings), TMailboxType::HTSwap, AppData()->UserPoolId);
             if (Config.GetCacheUserAccountService()) {
-                UserAccountService = Register(NCloud::CreateGrpcServiceCache<NCloud::TEvUserAccountService::TEvGetUserAccountRequest, NCloud::TEvUserAccountService::TEvGetUserAccountResponse>(
+                UserAccountService = Register(NGrpcActorClient::CreateGrpcServiceCache<NCloud::TEvUserAccountService::TEvGetUserAccountRequest, NCloud::TEvUserAccountService::TEvGetUserAccountResponse>(
                                                       UserAccountService,
                                                       Config.GetGrpcCacheSize(),
                                                       TDuration::MilliSeconds(Config.GetGrpcSuccessLifeTime()),
@@ -1671,7 +1671,7 @@ protected:
             }
             ServiceAccountService = Register(NCloud::CreateServiceAccountService(settings), TMailboxType::HTSwap, AppData()->UserPoolId);
             if (Config.GetCacheServiceAccountService()) {
-                ServiceAccountService = Register(NCloud::CreateGrpcServiceCache<NCloud::TEvServiceAccountService::TEvGetServiceAccountRequest, NCloud::TEvServiceAccountService::TEvGetServiceAccountResponse>(
+                ServiceAccountService = Register(NGrpcActorClient::CreateGrpcServiceCache<NCloud::TEvServiceAccountService::TEvGetServiceAccountRequest, NCloud::TEvServiceAccountService::TEvGetServiceAccountResponse>(
                                                          ServiceAccountService,
                                                          Config.GetGrpcCacheSize(),
                                                          TDuration::MilliSeconds(Config.GetGrpcSuccessLifeTime()),

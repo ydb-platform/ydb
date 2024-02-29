@@ -382,7 +382,7 @@ private:
         NYdb::NPersQueue::TTopicReadSettings topicReadSettings;
         topicReadSettings.Path(SourceParams.GetTopicPath());
         auto partitionsToRead = GetPartitionsToRead();
-        SRC_LOG_D("PartitionsToRead: " << JoinSeq(", ", partitionsToRead));
+        SRC_LOG_D("RangesMode: " << RangesMode << ", PartitionsToRead: " << JoinSeq(", ", partitionsToRead));
         for (const auto partitionId : partitionsToRead) {
             topicReadSettings.AppendPartitionGroupIds(partitionId);
         }
@@ -495,6 +495,8 @@ private:
                 curBatch.Data.emplace_back(std::move(item));
                 curBatch.UsedSpace += size;
 
+                CheckAndUpdateOffset(message.GetPartitionStream(), message.GetOffset());
+
                 auto& offsets = curBatch.OffsetRanges[message.GetPartitionStream()];
                 if (!offsets.empty() && offsets.back().second == message.GetOffset()) {
                     offsets.back().second = message.GetOffset() + 1;
@@ -577,6 +579,18 @@ private:
             return std::make_pair(item, usedSpace);
         }
 
+        void CheckAndUpdateOffset(const NYdb::NPersQueue::TPartitionStream::TPtr& partitionStreamPtr, ui64 offset) {
+            auto offsetIt = Self.LastOffsetByPartitionStream.find(partitionStreamPtr);
+            if (offsetIt == Self.LastOffsetByPartitionStream.end()) {
+                Self.LastOffsetByPartitionStream[partitionStreamPtr] = offset;
+                return;
+            }
+            ui64 lastOffset = offsetIt->second;
+            if (offset <=  lastOffset) {
+                ythrow yexception() << "Invalid message offset " << offset << ", last offset " << lastOffset;
+            }
+        }
+
         TDqPqReadActor& Self;
         ui32 BatchCapacity;
         const TString& LogPrefix;
@@ -609,6 +623,7 @@ private:
     std::queue<TReadyBatch> ReadyBuffer;
     TMaybe<TDqSourceWatermarkTracker<TPartitionKey>> WatermarkTracker;
     TMaybe<TInstant> NextIdlenesCheckAt;
+    THashMap<NYdb::NPersQueue::TPartitionStream::TPtr, ui64> LastOffsetByPartitionStream;
 };
 
 std::pair<IDqComputeActorAsyncInput*, NActors::IActor*> CreateDqPqReadActor(

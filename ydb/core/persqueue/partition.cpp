@@ -174,8 +174,7 @@ void AddCheckDiskRequest(TEvKeyValue::TEvRequest *request, ui32 numChannels) {
 TPartition::TPartition(ui64 tabletId, const TPartitionId& partition, const TActorId& tablet, ui32 tabletGeneration, const TActorId& blobCache,
                        const NPersQueue::TTopicConverterPtr& topicConverter, TString dcId, bool isServerless,
                        const NKikimrPQ::TPQTabletConfig& tabletConfig, const TTabletCountersBase& counters, bool subDomainOutOfSpace, ui32 numChannels,
-                       bool newPartition,
-                       TVector<TTransaction> distrTxs, const TActorId& writeQuoterActorId)
+                       const TActorId& writeQuoterActorId, bool newPartition, TVector<TTransaction> distrTxs)
     : Initializer(this)
     , TabletID(tabletId)
     , TabletGeneration(tabletGeneration)
@@ -2566,7 +2565,7 @@ void TPartition::Handle(TEvPQ::TEvApproveWriteQuota::TPtr& ev, const TActorConte
             " Topic: \"" << TopicName() << "\"." <<
             " Partition: " << Partition << ": Cookie: " << cookie
     );
-    
+
     // Search for proper request
     Y_ABORT_UNLESS(TopicQuotaRequestCookie == cookie);
     TopicQuotaRequestCookie = 0;
@@ -2581,7 +2580,7 @@ void TPartition::Handle(TEvPQ::TEvApproveWriteQuota::TPtr& ev, const TActorConte
     if (TopicWriteQuotaWaitCounter) {
         TopicWriteQuotaWaitCounter->IncFor(TopicQuotaWaitTimeForCurrentBlob.MilliSeconds());
     }
-    
+
     if (CurrentStateFunc() == &TThis::StateIdle)
         HandleWrites(ctx);
 }

@@ -6,9 +6,16 @@ namespace NKikimr {
 namespace NPQ {
 
 void TPartitionQuoterBase::Bootstrap(const TActorContext &ctx) {
-    Become(&TThis::StateWork);
+    if (TotalPartitionQuotaEnabled)
+        PartitionTotalQuotaTracker = CreatePartitionTotalQuotaTracker(PQTabletConfig, ctx);
+    Become(&TThis::StateWaitParent);
     ScheduleWakeUp(ctx);
 }
+
+void TPartitionQuoterBase::HandleQuotaRequestOnInit(TEvPQ::TEvRequestQuota::TPtr& ev, const TActorContext&) {
+    PendingQuotaRequests.emplace_back(ev);
+}
+
 
 void TPartitionQuoterBase::HandleQuotaRequest(TEvPQ::TEvRequestQuota::TPtr& ev, const TActorContext& ctx) {
     QuotaRequestedTimes.emplace(ev->Get()->Cookie, ctx.Now());
@@ -26,7 +33,7 @@ void TPartitionQuoterBase::HandleQuotaRequest(TEvPQ::TEvRequestQuota::TPtr& ev, 
 void TPartitionQuoterBase::StartQuoting(TRequestContext&& context) {
     RequestsInflight++;
     auto& request = context.Request;
-    auto& accountQuotaTracker = GetAccountQuotaTracker(request);
+    auto* accountQuotaTracker = GetAccountQuotaTracker(request);
     if (accountQuotaTracker) {
         Send(accountQuotaTracker->Actor, new NAccountQuoterEvents::TEvRequest(request->Cookie, request->Request.Release()));
         PendingAccountQuotaRequests[request->Cookie] = std::move(context);
@@ -66,7 +73,7 @@ void TPartitionQuoterBase::ApproveQuota(TRequestContext& context) {
 }
 
 void TPartitionQuoterBase::ProcessPartitionTotalQuotaQueue() {
-    if (!PartitionTotalQuotaTracker.Defined())
+    if (!PartitionTotalQuotaTracker)
         return;
     while (!WaitingTotalPartitionQuotaRequests.empty() && PartitionTotalQuotaTracker->CanExaust(ActorContext().Now())) {
         auto& request = WaitingTotalPartitionQuotaRequests.front();
@@ -76,7 +83,7 @@ void TPartitionQuoterBase::ProcessPartitionTotalQuotaQueue() {
 }
 
 void TPartitionQuoterBase::HandleConsumed(TEvPQ::TEvConsumed::TPtr& ev, const TActorContext& ctx) {
-    if (PartitionTotalQuotaTracker.Defined())
+    if (PartitionTotalQuotaTracker)
         PartitionTotalQuotaTracker->Exaust(ev->Get()->ConsumedBytes, ctx.Now());
     HandleConsumedImpl(ev);
 
@@ -103,6 +110,17 @@ void TPartitionQuoterBase::ProcessInflightQueue() {
             UpdateCounters(ActorContext());
         }
     }
+}
+
+void TPartitionQuoterBase::HandleSetParent(TEvPQ::TEvSetQuoterParent::TPtr& ev) {
+    if (!Parent) {
+        Parent = ev->Get()->Parent;
+    }
+    Become(&TThis::StateWork);
+    for (auto& evPending : PendingQuotaRequests) {
+        HandleQuotaRequest(evPending, ActorContext());
+    }
+    PendingQuotaRequests.clear();
 }
 
 void TPartitionQuoterBase::HandleConfigUpdate(TEvPQ::TEvChangePartitionConfig::TPtr& ev, const TActorContext& ctx) {
@@ -141,9 +159,9 @@ void TReadQuoter::OnAccountQuotaApproved(TRequestContext&& context) {
     CheckConsumerPerPartitionQuota(std::move(context));
 }
 
-THolder<TAccountQuoterHolder>& TReadQuoter::GetAccountQuotaTracker(const THolder<TEvPQ::TEvRequestQuota>& request) {
+TAccountQuoterHolder* TReadQuoter::GetAccountQuotaTracker(const THolder<TEvPQ::TEvRequestQuota>& request) {
     auto clientId = request->Request->CastAsLocal<TEvPQ::TEvRead>()->ClientId;
-    return GetOrCreateConsumerQuota(clientId, ActorContext())->AccountQuotaTracker;
+    return GetOrCreateConsumerQuota(clientId, ActorContext())->AccountQuotaTracker.Get();
 }
 
 IEventBase* TReadQuoter::MakeQuotaApprovedEvent(TRequestContext& context) {

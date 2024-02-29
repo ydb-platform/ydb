@@ -4186,6 +4186,26 @@ void TPersQueue::SendEvProposePartitionConfig(const TActorContext& ctx,
     tx.PartitionRepliesExpected = Partitions.size();
 }
 
+TActorId TPersQueue::GetPartitionQuoter(const TPartitionId& partition) {
+    if (!AppData()->PQConfig.GetQuotingConfig().GetEnableQuoting())
+        return TActorId{};
+
+    auto& quoterId = PartitionWriteQuoters[partition.OriginalPartitionId];
+    if (!quoterId) {
+        quoterId = Register(new TWriteQuoter(
+            TopicConverter,
+            Config,
+            AppData()->PQConfig,
+            partition,
+            SelfId(),
+            TabletID(),
+            IsLocalDC,
+            *Counters
+        ));
+    }
+    return quoterId;
+}
+
 TPartition* TPersQueue::CreatePartitionActor(const TPartitionId& partitionId,
                                              const NPersQueue::TTopicConverterPtr topicConverter,
                                              const NKikimrPQ::TPQTabletConfig& config,
@@ -4207,6 +4227,7 @@ TPartition* TPersQueue::CreatePartitionActor(const TPartitionId& partitionId,
                           *Counters,
                           SubDomainOutOfSpace,
                           (ui32)channels,
+                          GetPartitionQuoter(partitionId),
                           newPartition);
 }
 

@@ -648,6 +648,9 @@ void TInitDataStep::Handle(TEvKeyValue::TEvResponse::TPtr &ev, const TActorConte
 //
 
 void TPartition::Bootstrap(const TActorContext& ctx) {
+    if (WriteQuotaTrackerActor && !Partition.IsSupportivePartition()) {
+        Send(WriteQuotaTrackerActor, new TEvPQ::TEvSetQuoterParent(SelfId()));
+    }
     Become(&TThis::StateInit);
     Initializer.Execute(ctx);
 }
@@ -672,19 +675,7 @@ void TPartition::Initialize(const TActorContext& ctx) {
         TabletID,
         Counters
     ));
-    if (WriteQuotaTrackerActor == TActorId{} && AppData()->PQConfig.GetQuotingConfig().GetEnableQuoting()) {
-        WriteQuotaTrackerActor = Register(new TWriteQuoter(
-            TopicConverter,
-            Config,
-            Partition,
-            Tablet,
-            SelfId(),
-            TabletID,
-            IsLocalDC,
-            Counters,
-            ctx
-        ));
-    }
+
     TotalPartitionWriteSpeed = Config.GetPartitionConfig().GetWriteSpeedInBytesPerSecond();
     WriteTimestamp = ctx.Now();
     LastUsedStorageMeterTimestamp = ctx.Now();

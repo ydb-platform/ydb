@@ -1,15 +1,12 @@
 #include "helpers.h"
 
-#include <google/protobuf/io/coded_stream.h>
-#include <google/protobuf/io/zero_copy_stream_impl_lite.h>
-#include <google/protobuf/wire_format_lite.h>
-
-#include <ydb/library/actors/core/executor_thread.h>
-#include <ydb/library/actors/core/interconnect.h>
-
-#include <util/stream/format.h>
+#include <ydb/core/util/pb.h>
 #include <ydb/core/protos/flat_scheme_op.pb.h>
 #include <ydb/core/protos/subdomains.pb.h>
+
+#include <util/string/join.h>
+
+#include <contrib/libs/protobuf/src/google/protobuf/util/json_util.h>
 
 namespace NKikimr {
 namespace NSchemeBoard {
@@ -17,6 +14,9 @@ namespace NSchemeBoard {
 TActorId MakeInterconnectProxyId(const ui32 nodeId) {
     return TActivationContext::InterconnectProxy(nodeId);
 }
+
+// NKikimrScheme::TEvDescribeSchemeResult
+//
 
 ui64 GetPathVersion(const NKikimrScheme::TEvDescribeSchemeResult& record) {
     if (!record.HasPathDescription()) {
@@ -36,6 +36,10 @@ ui64 GetPathVersion(const NKikimrScheme::TEvDescribeSchemeResult& record) {
     return self.GetPathVersion();
 }
 
+// Object path-id is determined from TDescribeSchemeResult with backward compatibility support.
+// DescribeSchemeResult.PathOwnerId should be used.
+// DescribeSchemeResult.PathDescription.Self.SchemeshardId is deprecated.
+// DescribeSchemeResult.PathOwnerId takes preference.
 TPathId GetPathId(const NKikimrScheme::TEvDescribeSchemeResult &record) {
     if (record.HasPathId() && record.HasPathOwnerId()) {
         return TPathId(record.GetPathOwnerId(), record.GetPathId());
@@ -83,6 +87,40 @@ TSet<ui64> GetAbandonedSchemeShardIds(const NKikimrScheme::TEvDescribeSchemeResu
     );
 }
 
+// NKikimrSchemeBoard::TEvUpdate
+//
+
+ui64 GetPathVersion(const NKikimrSchemeBoard::TEvUpdate& record) {
+    return record.GetPathDirEntryPathVersion();
+}
+
+TSet<ui64> GetAbandonedSchemeShardIds(const NKikimrSchemeBoard::TEvUpdate& record) {
+    return TSet<ui64>(
+        record.GetPathAbandonedTenantsSchemeShards().begin(),
+        record.GetPathAbandonedTenantsSchemeShards().end()
+    );
+}
+
+// NKikimrSchemeBoard::TEvNotify
+//
+
+ui64 GetPathVersion(const NKikimrSchemeBoard::TEvNotify& record) {
+    return record.GetVersion();
+}
+
+NSchemeBoard::TDomainId GetDomainId(const NKikimrSchemeBoard::TEvNotify& record) {
+    return PathIdFromPathId(record.GetPathSubdomainPathId());
+}
+
+TSet<ui64> GetAbandonedSchemeShardIds(const NKikimrSchemeBoard::TEvNotify& record) {
+    return TSet<ui64>(
+        record.GetPathAbandonedTenantsSchemeShards().begin(),
+        record.GetPathAbandonedTenantsSchemeShards().end()
+    );
+}
+
+// Assorted methods
+//
 TIntrusivePtr<TEventSerializedData> SerializeEvent(IEventBase* ev) {
     TAllocChunkSerializer serializer;
     Y_ABORT_UNLESS(ev->SerializeToArcadiaStream(&serializer));
@@ -98,21 +136,44 @@ void MultiSend(const TVector<const TActorId*>& recipients, const TActorId& sende
     }
 }
 
-TString PreSerializedProtoField(TString data, int fieldNo) {
-    using CodedOutputStream = google::protobuf::io::CodedOutputStream;
-    using StringOutputStream = google::protobuf::io::StringOutputStream;
-    using WireFormat = google::protobuf::internal::WireFormatLite;
+// Work with TEvDescribeSchemeResult and its parts
+//
 
-    TString key;
-    {
-        StringOutputStream stream(&key);
-        CodedOutputStream output(&stream);
-        WireFormat::WriteTag(fieldNo, WireFormat::WireType::WIRETYPE_LENGTH_DELIMITED, &output);
-        output.WriteVarint32(data.size());
-    }
+TString SerializeDescribeSchemeResult(const NKikimrScheme::TEvDescribeSchemeResult& proto) {
+    TString serialized;
+    Y_PROTOBUF_SUPPRESS_NODISCARD proto.SerializeToString(&serialized);
+    return serialized;
+}
 
-    data.prepend(key);
-    return data;
+TString SerializeDescribeSchemeResult(const TString& preSerializedPart, const NKikimrScheme::TEvDescribeSchemeResult& protoPart) {
+    return Join("", preSerializedPart, SerializeDescribeSchemeResult(protoPart));
+}
+
+NKikimrScheme::TEvDescribeSchemeResult DeserializeDescribeSchemeResult(const TString& serialized) {
+    NKikimrScheme::TEvDescribeSchemeResult result;
+    Y_ABORT_UNLESS(ParseFromStringNoSizeLimit(result, serialized));
+    return result;
+}
+
+NKikimrScheme::TEvDescribeSchemeResult* DeserializeDescribeSchemeResult(const TString& serialized, google::protobuf::Arena* arena) {
+    auto* proto = google::protobuf::Arena::CreateMessage<NKikimrScheme::TEvDescribeSchemeResult>(arena);
+    Y_ABORT_UNLESS(ParseFromStringNoSizeLimit(*proto, serialized));
+    return proto;
+}
+
+TString JsonFromDescribeSchemeResult(const TString& serialized) {
+    using namespace google::protobuf::util;
+
+    google::protobuf::Arena arena;
+    const auto* proto = DeserializeDescribeSchemeResult(serialized, &arena);
+
+    JsonPrintOptions opts;
+    opts.preserve_proto_field_names = true;
+
+    TString json;
+    MessageToJsonString(*proto, &json, opts);
+
+    return json;
 }
 
 } // NSchemeBoard

@@ -37,6 +37,11 @@ public:
                              "  Kind: \"pool-kind-1\" "
                              "} "
                              " Name: \"Root\" ");
+
+        // Context->SetLogPriority(NKikimrServices::SCHEME_BOARD_REPLICA, NLog::PRI_DEBUG);
+        // Context->SetLogPriority(NKikimrServices::SCHEME_BOARD_SUBSCRIBER, NLog::PRI_DEBUG);
+        // Context->SetLogPriority(NKikimrServices::TX_PROXY_SCHEME_CACHE, NLog::PRI_DEBUG);
+        // Context->SetLogPriority(NKikimrServices::FLAT_TX_SCHEMESHARD, NLog::PRI_DEBUG);
     }
 
     UNIT_TEST_SUITE(TCacheTest);

@@ -495,6 +495,8 @@ private:
                 curBatch.Data.emplace_back(std::move(item));
                 curBatch.UsedSpace += size;
 
+                CheckAndUpdateOffset(partitionKey, message.GetOffset());
+
                 auto& offsets = curBatch.OffsetRanges[message.GetPartitionStream()];
                 if (!offsets.empty() && offsets.back().second == message.GetOffset()) {
                     offsets.back().second = message.GetOffset() + 1;
@@ -577,6 +579,18 @@ private:
             return std::make_pair(item, usedSpace);
         }
 
+        void CheckAndUpdateOffset(const TPartitionKey& partitionKey, ui64 offset) {
+            auto offsetIt = Self.LastOffsetByPartition.find(partitionKey);
+            if (offsetIt == Self.LastOffsetByPartition.end()) {
+                Self.LastOffsetByPartition[partitionKey] = offset;
+                return;
+            }
+            ui64 lastOffset = offsetIt->second;
+            if (offset <=  lastOffset) {
+                ythrow yexception() << "Invalid message offset " << offset << ", last offset " << lastOffset;
+            }
+        }
+
         TDqPqReadActor& Self;
         ui32 BatchCapacity;
         const TString& LogPrefix;
@@ -609,6 +623,7 @@ private:
     std::queue<TReadyBatch> ReadyBuffer;
     TMaybe<TDqSourceWatermarkTracker<TPartitionKey>> WatermarkTracker;
     TMaybe<TInstant> NextIdlenesCheckAt;
+    THashMap<TPartitionKey, ui64> LastOffsetByPartition;
 };
 
 std::pair<IDqComputeActorAsyncInput*, NActors::IActor*> CreateDqPqReadActor(

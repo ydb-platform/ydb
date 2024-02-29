@@ -50,6 +50,10 @@ struct TTestSchema {
             : Name(name)
         {}
 
+        TString DebugString() const {
+            return TStringBuilder() << "{Column=" << TtlColumn << ";EvictAfter=" << EvictAfter.value_or(TDuration::Zero()) << ";Name=" << Name << ";Codec=" << Codec << "};";
+        }
+
         NKikimrSchemeOp::EColumnCodec GetCodecId() const {
             if (Codec == "none") {
                 return NKikimrSchemeOp::EColumnCodec::ColumnCodecPlain;
@@ -126,6 +130,15 @@ struct TTestSchema {
         TTableSpecials& SetTtl(std::optional<TDuration> ttl) {
             EvictAfter = ttl;
             return *this;
+        }
+
+        TString DebugString() const {
+            auto result =  TStringBuilder() << "WaitEmptyAfter=" << WaitEmptyAfter << ";Tiers=";
+            for (auto&& tier : Tiers) {
+                result << "{" << tier.DebugString() << "}";
+            }
+            result << ";TTL=" << TStorageTier::DebugString();
+            return result;
         }
     };
 

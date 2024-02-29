@@ -35,6 +35,7 @@ private:
     TAtomic TTLStartedCounter = 0;
     NMetadata::NFetcher::ISnapshot::TPtr CurrentConfig;
     bool CompactionEnabledFlag = true;
+    YDB_ACCESSOR(bool, TTLEnabled, true);
     ui32 TiersModificationsCount = 0;
 protected:
     virtual void OnTieringModified(const std::shared_ptr<TTiersManager>& /*tiers*/) override {
@@ -43,6 +44,9 @@ protected:
     }
     virtual bool DoOnStartCompaction(std::shared_ptr<NOlap::TColumnEngineChanges>& changes) override {
         if (!CompactionEnabledFlag) {
+            changes = nullptr;
+        }
+        if (!TTLEnabled && dynamic_pointer_cast<NOlap::TTTLColumnEngineChanges>(changes)) {
             changes = nullptr;
         }
         return true;
@@ -62,6 +66,9 @@ protected:
 public:
     void SetCompactionEnabled(const bool value) {
         CompactionEnabledFlag = value;
+    }
+    virtual bool IsTTLEnabled() const override {
+        return TTLEnabled;
     }
     void SetTiersSnapshot(TTestBasicRuntime& runtime, const TActorId& tabletActorId, const NMetadata::NFetcher::ISnapshot::TPtr& snapshot) {
         CurrentConfig = snapshot;
@@ -578,8 +585,12 @@ std::vector<std::pair<ui32, ui64>> TestTiers(bool reboots, const std::vector<TSt
             }
         }
     }
+    for (auto&& s : specs) {
+        Cerr << s.DebugString() << Endl;
+    }
 
     auto csControllerGuard = NKikimr::NYDBTest::TControllers::RegisterCSControllerGuard<TWaitCompactionController>();
+    csControllerGuard->SetTTLEnabled(false);
     TTestBasicRuntime runtime;
     TTester::Setup(runtime);
 
@@ -637,6 +648,7 @@ std::vector<std::pair<ui32, ui64>> TestTiers(bool reboots, const std::vector<TSt
     if (reboots) {
         RebootTablet(runtime, TTestTxConfig::TxTablet0, sender);
     }
+    csControllerGuard->SetTTLEnabled(true);
 
     runtime.SetLogPriority(NKikimrServices::TX_COLUMNSHARD, NActors::NLog::PRI_DEBUG);
 
@@ -703,7 +715,7 @@ std::vector<std::pair<ui32, ui64>> TestTiers(bool reboots, const std::vector<TSt
             }
 
             // Eviction
-
+            
             TriggerTTL(runtime, sender, NOlap::TSnapshot(++planStep, ++txId), {}, 0, specs[i].TtlColumn);
 
             Cerr << "-- " << (hasColdEviction ? "COLD" : "HOT")
@@ -841,8 +853,8 @@ private:
 
 TTestSchema::TTableSpecials InitialSpec(const EInitialEviction init, TDuration initTs) {
     TTestSchema::TTableSpecials spec;
+    spec.TtlColumn = "timestamp";
     if (init == EInitialEviction::Ttl) {
-        spec.TtlColumn = "timestamp";
         spec.EvictAfter = initTs;
     }
     return spec;

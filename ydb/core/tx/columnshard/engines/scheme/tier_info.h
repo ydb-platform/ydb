@@ -127,12 +127,15 @@ public:
     }
 
     bool Add(const std::shared_ptr<TTierInfo>& tier) {
-        if (EvictColumnName) {
-            return tier->GetEvictColumnName() == EvictColumnName;
+        if (EvictColumnName && tier->GetEvictColumnName() != EvictColumnName) {
+            // AFL_VERIFY(false)("column_name", tier->GetEvictColumnName())("evict_column_name", EvictColumnName);
+            return false;
         }
         EvictColumnName = tier->GetEvictColumnName();
         TierByName.emplace(tier->GetName(), tier);
-        OrderedTiers.emplace(tier);
+        if (tier->GetName() != TTierInfo::GetTtlTierName()) {
+            OrderedTiers.emplace(tier);
+        }
         return true;
     }
 

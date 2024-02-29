@@ -13,12 +13,14 @@ using namespace NDataShardReadTableTest;
 Y_UNIT_TEST_SUITE(DataShardWrite) {
     const TString expectedTableState = "key = 0, value = 1\nkey = 2, value = 3\nkey = 4, value = 5\n";
 
-    std::tuple<TTestActorRuntime&, Tests::TServer::TPtr, TActorId> TestCreateServer() {
-        TPortManager pm;
-        TServerSettings serverSettings(pm.GetPort(2134));
-        serverSettings.SetDomainName("Root").SetUseRealThreads(false);
+    std::tuple<TTestActorRuntime&, Tests::TServer::TPtr, TActorId> TestCreateServer(std::optional<TServerSettings> serverSettings = {}) {
+        if (!serverSettings) {
+            TPortManager pm;
+            serverSettings = TServerSettings(pm.GetPort(2134));
+            serverSettings->SetDomainName("Root").SetUseRealThreads(false);
+        }
 
-        Tests::TServer::TPtr server = new TServer(serverSettings);
+        Tests::TServer::TPtr server = new TServer(serverSettings.value());
         auto& runtime = *server->GetRuntime();
         auto sender = runtime.AllocateEdgeActor();
 
@@ -316,6 +318,48 @@ Y_UNIT_TEST_SUITE(DataShardWrite) {
         {
             auto tableState = TReadTableState(server, MakeReadTableSettings("/Root/table-1")).All();
             UNIT_ASSERT_VALUES_EQUAL(tableState, expectedTableState);
+        }
+
+    }
+
+    Y_UNIT_TEST(ShouldRejectOnChangeQueueOverflow) {
+        TPortManager pm;
+        TServerSettings serverSettings(pm.GetPort(2134));
+        serverSettings.SetDomainName("Root").SetUseRealThreads(false).SetChangesQueueItemsLimit(1);
+
+        auto [runtime, server, sender] = TestCreateServer(serverSettings);
+
+        auto opts = TShardedTableOptions()
+            .Columns({{"key", "Uint32", true, false},{"value", "Uint32", false, false}})
+            .Indexes({TShardedTableOptions::TIndex{"by_value", {"value"}, {}, NKikimrSchemeOp::EIndexTypeGlobalAsync}});
+
+        auto [shards, tableId] = CreateShardedTable(server, sender, "/Root", "table-1", opts);
+
+        TVector<THolder<IEventHandle>> blockedEnqueueRecords;
+        auto prevObserverFunc = runtime.SetObserverFunc([&](TAutoPtr<IEventHandle>& ev) {
+            if (ev->GetTypeRewrite() == NChangeExchange::TEvChangeExchange::EvEnqueueRecords) {
+                blockedEnqueueRecords.emplace_back(ev.Release());
+                return TTestActorRuntime::EEventAction::DROP;
+            }
+
+            return TTestActorRuntime::EEventAction::PROCESS;
+        });
+
+        const ui64 shard = shards[0];
+        const ui32 rowCount = 1;
+
+        ui64 txId = 100;
+
+        Cout << "========= Send immediate write, expecting success =========\n";
+        {
+            Write(runtime, sender, shard, tableId, opts.Columns_, rowCount, ++txId, NKikimrDataEvents::TEvWrite::MODE_IMMEDIATE);
+        }
+
+        UNIT_ASSERT_VALUES_EQUAL(blockedEnqueueRecords.size(), rowCount);
+
+        Cout << "========= Send immediate write, expecting overloaded =========\n";
+        {
+            Write(runtime, sender, shard, tableId, opts.Columns_, rowCount, ++txId, NKikimrDataEvents::TEvWrite::MODE_IMMEDIATE, NKikimrDataEvents::TEvWriteResult::STATUS_OVERLOADED);
         }
 
     } // Y_UNIT_TEST

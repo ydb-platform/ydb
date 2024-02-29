@@ -1016,7 +1016,6 @@ bool TDescribeConsumerActor::ApplyResponse(
         const auto& location = record.GetLocations(i);
         auto* locationResult = Result.mutable_partitions(i)->mutable_partition_location();
         SetPartitionLocation(location, locationResult);
-
     }
     return true;
 }

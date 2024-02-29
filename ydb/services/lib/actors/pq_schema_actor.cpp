@@ -133,8 +133,8 @@ namespace NKikimr::NGRpcProxy::V1 {
             config->AddReadRuleVersions(rr.version());
         }
 
-        auto cct = consumer->MutableCodec();
-        auto ct = config->AddConsumerCodecs();
+        auto* cct = consumer->MutableCodec();
+        auto* ct = NPQ::ReadRuleCompatible() ? config->AddConsumerCodecs() : nullptr;
         if (rr.supported_codecs().size() > MAX_SUPPORTED_CODECS_COUNT) {
             return TMsgPqCodes(
                 TStringBuilder() << "supported_codecs count cannot be more than "
@@ -328,8 +328,8 @@ namespace NKikimr::NGRpcProxy::V1 {
             config->AddReadRuleVersions(version);
         }
 
-        auto cct = consumer->MutableCodec();
-        auto ct = config->AddConsumerCodecs();
+        auto* cct = consumer->MutableCodec();
+        auto* ct = NPQ::ReadRuleCompatible() ? config->AddConsumerCodecs() : nullptr;
 
         for(const auto& codec : rr.supported_codecs().codecs()) {
             if ((!Ydb::Topic::Codec_IsValid(codec) && codec < Ydb::Topic::CODEC_CUSTOM) || codec == 0) {
@@ -394,7 +394,7 @@ namespace NKikimr::NGRpcProxy::V1 {
                 config->AddReadRules(readRule);
                 config->AddReadFromTimestampsMs(originalConfig.GetReadFromTimestampsMs(i));
                 config->AddConsumerFormatVersions(originalConfig.GetConsumerFormatVersions(i));
-                auto ct = config->AddConsumerCodecs();
+                auto* ct = config->AddConsumerCodecs();
                 for (size_t j = 0; j < originalConfig.GetConsumerCodecs(i).CodecsSize(); j++) {
                     ct->AddCodecs(originalConfig.GetConsumerCodecs(i).GetCodecs(j));
                     ct->AddIds(originalConfig.GetConsumerCodecs(i).GetIds(j));

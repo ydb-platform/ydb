@@ -684,7 +684,7 @@ private:
 
     bool IsSwitchToSpillingModeCondition() const {
         //TODO implement me
-        return true;
+        return TlsAllocState->IsMemoryYellowZoneReached();
     }
 
 private:

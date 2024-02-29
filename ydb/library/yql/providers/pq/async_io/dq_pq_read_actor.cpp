@@ -495,7 +495,7 @@ private:
                 curBatch.Data.emplace_back(std::move(item));
                 curBatch.UsedSpace += size;
 
-                CheckAndUpdateOffset(partitionKey, message.GetOffset());
+                CheckAndUpdateOffset(message.GetPartitionStream(), message.GetOffset());
 
                 auto& offsets = curBatch.OffsetRanges[message.GetPartitionStream()];
                 if (!offsets.empty() && offsets.back().second == message.GetOffset()) {
@@ -579,10 +579,10 @@ private:
             return std::make_pair(item, usedSpace);
         }
 
-        void CheckAndUpdateOffset(const TPartitionKey& partitionKey, ui64 offset) {
-            auto offsetIt = Self.LastOffsetByPartition.find(partitionKey);
-            if (offsetIt == Self.LastOffsetByPartition.end()) {
-                Self.LastOffsetByPartition[partitionKey] = offset;
+        void CheckAndUpdateOffset(const NYdb::NPersQueue::TPartitionStream::TPtr& partitionStreamPtr, ui64 offset) {
+            auto offsetIt = Self.LastOffsetByPartitionStream.find(partitionStreamPtr);
+            if (offsetIt == Self.LastOffsetByPartitionStream.end()) {
+                Self.LastOffsetByPartitionStream[partitionStreamPtr] = offset;
                 return;
             }
             ui64 lastOffset = offsetIt->second;
@@ -623,7 +623,7 @@ private:
     std::queue<TReadyBatch> ReadyBuffer;
     TMaybe<TDqSourceWatermarkTracker<TPartitionKey>> WatermarkTracker;
     TMaybe<TInstant> NextIdlenesCheckAt;
-    THashMap<TPartitionKey, ui64> LastOffsetByPartition;
+    THashMap<NYdb::NPersQueue::TPartitionStream::TPtr, ui64> LastOffsetByPartitionStream;
 };
 
 std::pair<IDqComputeActorAsyncInput*, NActors::IActor*> CreateDqPqReadActor(

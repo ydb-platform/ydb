@@ -68,13 +68,6 @@ Y_UNIT_TEST_SUITE(TColorLimitsTest) {
     }
 
     Y_UNIT_TEST(Colors) {
-        Cout << Endl;
-        i64 chunks = 1000;
-
-        NPDisk::TColorLimits limits = NPDisk::TColorLimits::MakeChunkLimits();
-
-        //limits.GetOccupancyForColor(NKikimrBlobStorage::TPDiskSpaceColor::E color, i64 total)
-
         NKikimrBlobStorage::TPDiskSpaceColor_E colors[] = {
             NKikimrBlobStorage::TPDiskSpaceColor::BLACK,
             NKikimrBlobStorage::TPDiskSpaceColor::RED,
@@ -86,39 +79,64 @@ Y_UNIT_TEST_SUITE(TColorLimitsTest) {
             NKikimrBlobStorage::TPDiskSpaceColor::CYAN
         };
 
-        i64 cur = 0;
-        i64 all = 0;
+        auto printLimitsFn = [&colors](int percent) {
+            NPDisk::TColorLimits limits = NPDisk::TColorLimits::MakeChunkLimits(percent);
 
-        for (auto color : colors) {
-            i64 curChunks = limits.GetQuotaForColor(color, chunks);
+            Cout << "Print for " << (percent / 10.0) << "%" << Endl;
 
-            SetColor(color);
+            i64 chunks = 1000;
 
-            for (i64 i = 0; i < (curChunks - all); i++) {
+            i64 cur = 0;
+            i64 all = 0;
+
+            std::map<NKikimrBlobStorage::TPDiskSpaceColor_E, i64> sizeByColor;
+
+            for (auto color : colors) {
+                i64 curChunks = limits.GetQuotaForColor(color, chunks);
+
+                SetColor(color);
+
+                i64 sz = curChunks - all;
+
+                sizeByColor[color] = sz;
+
+                for (i64 i = 0; i < sz; i++) {
+                    Cout << "#";
+
+                    if ((++cur % 100) == 0) {
+                        cur = 0;
+                        Cout << Endl;
+                    }
+                }
+
+                all = curChunks;
+            }
+
+            SetColor(NKikimrBlobStorage::TPDiskSpaceColor::GREEN);
+            for (i64 i = 0; i < (chunks - all); i++) {
                 Cout << "#";
-
+                
                 if ((++cur % 100) == 0) {
                     cur = 0;
                     Cout << Endl;
                 }
             }
 
-            all = curChunks;
-        }
+            ClearColor();
 
-        SetColor(NKikimrBlobStorage::TPDiskSpaceColor::GREEN);
-        for (i64 i = 0; i < (chunks - all); i++) {
-            Cout << "#";
-            
-            if ((++cur % 100) == 0) {
-                cur = 0;
-                Cout << Endl;
+            Cout << Endl;
+
+            for (auto color : colors) {
+                Cout << color << ": " << sizeByColor[color] << Endl;
             }
-        }
 
-        ClearColor();
+            Cout << Endl;
+        };
 
-        Cout << Endl;
+        printLimitsFn(130);
+        printLimitsFn(100);
+        printLimitsFn(65);
+        printLimitsFn(13);
     }
 }
 } // namespace NKikimr

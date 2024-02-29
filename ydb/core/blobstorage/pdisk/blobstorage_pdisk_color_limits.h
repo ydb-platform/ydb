@@ -49,16 +49,26 @@ struct TColorLimits {
         str << "  Cyan = Total * " << Cyan.ToString() << "\n";
     }
 
-    static TColorLimits MakeChunkLimits() {
+    static TColorLimits MakeChunkLimits(i64 cyan = 130) {
+        cyan = Min<i64>(130, cyan);
+        cyan = Max<i64>(13, cyan);
+
+        i64 lightYellow = cyan / 130.0 * 100;
+        i64 yellow = cyan / 130.0 * 80;
+        i64 lightOrange = cyan / 130.0 * 65;
+        i64 preOrange = cyan / 130.0 * 50;
+        i64 orange = cyan / 130.0 * 30;
+        i64 red = cyan / 130.0 * 10;
+
         return {
             {1,   1000, 2}, // Black: Leave bare minimum for disaster recovery
-            {10,  1000, 3}, // Red
-            {30,  1000, 4}, // Orange
-            {50,  1000, 4}, // PreOrange
-            {65,  1000, 5}, // LightOrange
-            {80,  1000, 6}, // Yellow: Stop serving user writes at 8% free space
-            {100, 1000, 7}, // LightYellow: Ask tablets to move to another group at 10% free space
-            {130, 1000, 8}, // Cyan: 13% free space or less
+            {red,  1000, 3}, // Red
+            {orange,  1000, 4}, // Orange
+            {preOrange,  1000, 4}, // PreOrange
+            {lightOrange,  1000, 5}, // LightOrange
+            {yellow,  1000, 6}, // Yellow: Stop serving user writes at 8% free space
+            {lightYellow, 1000, 7}, // LightYellow: Ask tablets to move to another group at 10% free space
+            {cyan, 1000, 8}, // Cyan: 13% free space or less
         };
     }
 

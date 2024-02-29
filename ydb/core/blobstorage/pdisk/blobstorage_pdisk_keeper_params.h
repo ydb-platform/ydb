@@ -40,6 +40,8 @@ struct TKeeperParams {
 
     // Small disk
     bool SeparateCommonLog = true;
+
+    ui32 CyanLimit = 130;
 };
 
 } // NPDisk

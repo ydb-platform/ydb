@@ -127,6 +127,8 @@ struct TPDiskConfig : public TThrRefBase {
 
     ui64 ExpectedSlotCount = 0;
 
+    ui32 CyanLimit = 130;
+
     NKikimrConfig::TFeatureFlags FeatureFlags;
 
     ui64 MinLogChunksTotal = 4ull; // for tiny disks
@@ -369,6 +371,10 @@ struct TPDiskConfig : public TThrRefBase {
 
         if (cfg->HasExpectedSlotCount()) {
             ExpectedSlotCount = cfg->GetExpectedSlotCount();
+        }
+
+        if (cfg->HasCyanLimit()) {
+            CyanLimit = cfg->GetCyanLimit();
         }
     }
 };

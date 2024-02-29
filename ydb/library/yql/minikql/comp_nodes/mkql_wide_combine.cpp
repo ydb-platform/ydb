@@ -459,6 +459,10 @@ private:
             MKQL_ENSURE(bucket.InitialState, "Internal logic error");
             if (auto chunkIsBeingStored = bucket.InitialState->WriteWideItem({keyAndState, KeyAndStateType->GetElementsCount()})) {
                 bucket.AsyncWriteOperation = chunkIsBeingStored;
+                for (size_t i = 0; i != KeyAndStateType->GetElementsCount(); ++i) {
+                //releasing values stored in unsafe TUnboxedValue buffer
+                keyAndState[i].UnRef();
+            }
                 return;
             }
             for (size_t i = 0; i != KeyAndStateType->GetElementsCount(); ++i) {

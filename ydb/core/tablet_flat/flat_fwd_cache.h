@@ -64,17 +64,21 @@ namespace NFwd {
 
         ~TCache()
         {
-            for (auto &it: Pages) it.Release();
+            for (auto &it: Pages) {
+                it.Release();
+            }
         }
 
         TResult Handle(IPageLoadingQueue *head, TPageId pageId, ui64 lower) noexcept override
         {
             Y_ABORT_UNLESS(pageId != Max<TPageId>(), "Invalid requested pageId");
 
-            if (auto *page = Trace.Get(pageId))
+            if (auto *page = Trace.Get(pageId)) {
                 return { page, false, true };
+            }
 
-            Rewind(pageId).Shrink(); /* points Offset to pageId */
+            Rewind(pageId); /* points Offset to pageId */
+            Shrink();
 
             bool more = Grow && (OnHold + OnFetch <= lower);
 
@@ -105,7 +109,7 @@ namespace NFwd {
 
                 Stat.Saved += one.Data.size();
                 OnFetch -= one.Data.size();
-                OnHold += it->Settle(one);
+                OnHold += it->Settle(one); // settle of a dropped page returns 0 and releases its data
 
                 ++it;
             }
@@ -135,7 +139,7 @@ namespace NFwd {
             return Pages.at(Offset);
         }
 
-        TCache& Rewind(TPageId pageId) noexcept
+        void Rewind(TPageId pageId) noexcept
         {
             while (auto drop = Index.Clean(pageId)) {
                 auto &page = Pages.at(Offset);
@@ -144,26 +148,23 @@ namespace NFwd {
                     Y_ABORT("Dropping page that is not exist in cache");
                 } else if (page.Size == 0) {
                     Y_ABORT("Dropping page that has not been touched");
-                } else if (page.Usage == EUsage::Keep) {
+                } else if (page.Usage == EUsage::Keep && page) {
                     OnHold -= Trace.Emplace(page);
-                } else if (auto size = page.Release().size()) {
-                    OnHold -= size;
-
-                    *(page.Ready() ? &Stat.After : &Stat.Before) += size;
+                } else {
+                    OnHold -= page.Release().size();
+                    *(page.Ready() ? &Stat.After : &Stat.Before) += page.Size;
                 }
 
+                // keep pending pages but increment offset
                 Offset++;
             }
-
-            return *this;
         }
 
-        TCache& Shrink() noexcept
+        void Shrink() noexcept
         {
-            for (; Offset && Pages[0].Ready(); Offset--)
+            for (; Offset && Pages[0].Ready(); Offset--) {
                 Pages.pop_front();
-
-            return *this;
+            }
         }
 
     private:

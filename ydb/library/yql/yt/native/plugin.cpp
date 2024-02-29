@@ -75,6 +75,8 @@ namespace NNative {
 using namespace NYson;
 using namespace NKikimr::NMiniKQL;
 
+static const TString YqlAgent = "yql_agent";
+
 ////////////////////////////////////////////////////////////////////////////////
 
 std::optional<TString> MaybeToOptional(const TMaybe<TString>& maybeStr)
@@ -326,14 +328,13 @@ public:
 
             ProgramFactory_ = std::make_unique<NYql::TProgramFactory>(
                 false, FuncRegistry_.Get(), ExprContext_.NextUniqueId, dataProvidersInit, "embedded");
-            auto credentials = MakeIntrusive<NYql::TCredentials>();
+
             if (options.YTTokenPath) {
                 TFsPath path(options.YTTokenPath);
-                auto token = TIFStream(path).ReadAll();
-                credentials->AddCredential("default_yt", NYql::TCredential("yt", "", token));
+                YqlAgentToken_ = TIFStream(path).ReadAll();
             }
             ProgramFactory_->AddUserDataTable(userDataTable);
-            ProgramFactory_->SetCredentials(credentials);
+            ProgramFactory_->SetCredentials(MakeIntrusive<NYql::TCredentials>());
             ProgramFactory_->SetModules(ModuleResolver_);
             ProgramFactory_->SetUdfResolver(NYql::NCommon::CreateSimpleUdfResolver(FuncRegistry_.Get(), FileStorage_));
             ProgramFactory_->SetGatewaysConfig(&GatewaysConfig_);
@@ -353,9 +354,57 @@ public:
         }
     }
 
+    TClustersResult GuardedGetUsedClusters(
+        TString queryText,
+        TYsonString settings,
+        std::vector<TQueryFile> files)
+    {
+        auto program = ProgramFactory_->Create("-memory-", queryText);
+
+        program->AddCredentials({{"default_yt", NYql::TCredential("yt", "", YqlAgentToken_)}});
+        program->SetOperationAttrsYson(PatchQueryAttributes(OperationAttributes_, settings));
+
+        auto userDataTable = FilesToUserTable(files);
+        program->AddUserDataTable(userDataTable);
+
+        NSQLTranslation::TTranslationSettings sqlSettings;
+        sqlSettings.ClusterMapping = Clusters_;
+        sqlSettings.ModuleMapping = Modules_;
+        if (DefaultCluster_) {
+            sqlSettings.DefaultCluster = *DefaultCluster_;
+        }
+        sqlSettings.SyntaxVersion = 1;
+        sqlSettings.V0Behavior = NSQLTranslation::EV0Behavior::Disable;
+
+        if (!program->ParseSql(sqlSettings)) {
+            return TClustersResult{
+                .YsonError = IssuesToYtErrorYson(program->Issues()),
+            };
+        }
+
+        if (!program->Compile(YqlAgent)) {
+            return TClustersResult{
+                .YsonError = IssuesToYtErrorYson(program->Issues()),
+            };
+        }
+
+        auto usedClusters = program->GetUsedClusters();
+        if (!usedClusters) {
+            return TClustersResult{
+                .YsonError = MessageToYtErrorYson("Can't get clusters from query"),
+            };
+        }
+
+        std::vector<TString> clustersList(usedClusters->begin(), usedClusters->end());
+        return TClustersResult{
+            .Clusters = clustersList,
+        };
+    }
+
     TQueryResult GuardedRun(
         TQueryId queryId,
-        TString impersonationUser,
+        TString user,
+        TString token,
         TString queryText,
         TYsonString settings,
         std::vector<TQueryFile> files,
@@ -367,7 +416,7 @@ public:
             ActiveQueriesProgress_[queryId].Program = program;
         }
 
-        program->AddCredentials({{"impersonation_user_yt", NYql::TCredential("yt", "", impersonationUser)}});
+        program->AddCredentials({{"default_yt", NYql::TCredential("yt", "", token)}});
         program->SetOperationAttrsYson(PatchQueryAttributes(OperationAttributes_, settings));
 
         auto userDataTable = FilesToUserTable(files);
@@ -410,7 +459,7 @@ public:
             };
         }
 
-        if (!program->Compile(impersonationUser)) {
+        if (!program->Compile(user)) {
             return TQueryResult{
                 .YsonError = IssuesToYtErrorYson(program->Issues()),
             };
@@ -426,13 +475,13 @@ public:
         // NYT::NYqlClient::EExecuteMode (yt/yt/ytlib/yql_client/public.h)
         switch (executeMode) {
         case 0: // Validate.
-            status = program->Validate(impersonationUser, nullptr);
+            status = program->Validate(user, nullptr);
             break;
         case 1: // Optimize.
-            status = program->OptimizeWithConfig(impersonationUser, pipelineConfigurator);
+            status = program->OptimizeWithConfig(user, pipelineConfigurator);
             break;
         case 2: // Run.
-            status = program->RunWithConfig(impersonationUser, pipelineConfigurator);
+            status = program->RunWithConfig(user, pipelineConfigurator);
             break;
         default: // Unknown.
             return TQueryResult{
@@ -473,21 +522,38 @@ public:
         };
     }
 
+    TClustersResult GetUsedClusters(
+        TString queryText,
+        TYsonString settings,
+        std::vector<TQueryFile> files) noexcept override
+    {
+        try {
+            return GuardedGetUsedClusters(queryText, settings, files);
+        } catch (const std::exception& ex) {
+            return TClustersResult{
+                .YsonError = MessageToYtErrorYson(ex.what()),
+            };
+        }
+    }
+
     TQueryResult Run(
         TQueryId queryId,
-        TString impersonationUser,
+        TString user,
+        TString token,
         TString queryText,
         TYsonString settings,
         std::vector<TQueryFile> files,
         int executeMode) noexcept override
     {
         try {
-            return GuardedRun(queryId, impersonationUser, queryText, settings, files, executeMode);
-        } catch (const std::exception& ex) {
-            {
-                auto guard = WriterGuard(ProgressSpinLock);
-                ActiveQueriesProgress_.erase(queryId);
+            auto result = GuardedRun(queryId, user, token, queryText, settings, files, executeMode);
+            if (result.YsonError) {
+                RemoveQuery(queryId);
             }
+
+            return result;
+        } catch (const std::exception& ex) {
+            RemoveQuery(queryId);
 
             return TQueryResult{
                 .YsonError = MessageToYtErrorYson(ex.what()),
@@ -523,10 +589,12 @@ public:
                 };
             }
             if (!ActiveQueriesProgress_[queryId].Compiled) {
+                ActiveQueriesProgress_.erase(queryId);
                 return TAbortResult{
                     .YsonError = MessageToYtErrorYson(Format("Query %v is not compiled", queryId)),
                 };
             }
+
             program = ActiveQueriesProgress_[queryId].Program;
         }
 
@@ -554,9 +622,17 @@ private:
     std::optional<TString> DefaultCluster_;
     THashMap<TString, TString> Modules_;
     TYsonString OperationAttributes_;
+    TString YqlAgentToken_;
+
     YT_DECLARE_SPIN_LOCK(NThreading::TReaderWriterSpinLock, ProgressSpinLock);
     THashMap<TQueryId, TActiveQuery> ActiveQueriesProgress_;
     TVector<NYql::TDataProviderInitializer> DataProvidersInit_;
+
+    void RemoveQuery(TQueryId queryId)
+    {
+        auto guard = WriterGuard(ProgressSpinLock);
+        ActiveQueriesProgress_.erase(queryId);
+    }
 
     static TString PatchQueryAttributes(TYsonString configAttributes, TYsonString querySettings)
     {

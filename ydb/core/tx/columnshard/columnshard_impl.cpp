@@ -719,7 +719,7 @@ void TColumnShard::SetupCompaction() {
 }
 
 bool TColumnShard::SetupTtl(const THashMap<ui64, NOlap::TTiering>& pathTtls) {
-    if (!AppDataVerified().ColumnShardConfig.GetTTLEnabled()) {
+    if (!AppDataVerified().ColumnShardConfig.GetTTLEnabled() || !NYDBTest::TControllers::GetColumnShardController()->IsTTLEnabled()) {
         AFL_WARN(NKikimrServices::TX_COLUMNSHARD)("event", "skip_ttl")("reason", "disabled");
         return false;
     }

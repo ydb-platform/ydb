@@ -90,11 +90,11 @@ TString TPartition::LogPrefix() const {
 }
 
 bool TPartition::IsActive() const {
-    return PartitionConfig == nullptr || PartitionConfig->GetStatus() == NKikimrPQ::ETopicPartitionStatus::Active;
+    return !PartitionConfig || PartitionConfig->GetStatus() == NKikimrPQ::ETopicPartitionStatus::Active;
 }
 
 bool TPartition::CanWrite() const {
-    if (PartitionConfig == nullptr) {
+    if (!PartitionConfig) {
         // Old format without AllPartitions configuration field.
         // It is not split/merge partition.
         return true;

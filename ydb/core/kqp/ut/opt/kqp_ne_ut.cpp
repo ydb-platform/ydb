@@ -2641,6 +2641,22 @@ Y_UNIT_TEST_SUITE(KqpNewEngine) {
         ])", FormatResultSetYson(result.GetResultSet(0)));
     }
 
+    Y_UNIT_TEST(DeleteON) {
+        auto kikimr = DefaultKikimrRunner();
+        auto db = kikimr.GetTableClient();
+        auto session = db.CreateSession().GetValueSync().GetSession();
+
+        NYdb::NTable::TExecDataQuerySettings execSettings;
+        execSettings.CollectQueryStats(ECollectQueryStatsMode::Basic);
+
+        auto result = session.ExecuteDataQuery(R"(
+            --!syntax_v1
+
+            DELETE FROM `/Root/Join2` where (Key1 = 1 and Key2 = "") OR Key1 = 3;
+        )", TTxControl::BeginTx().CommitTx(), execSettings).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+    }
+
     Y_UNIT_TEST(JoinWithPrecompute) {
         auto kikimr = DefaultKikimrRunner();
         auto db = kikimr.GetTableClient();

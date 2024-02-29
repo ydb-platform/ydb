@@ -79,6 +79,14 @@ struct TSimd8 {
         return _mm_movemask_epi8(this->Value);
     }
 
+    inline void SetMask(T* ptr) {
+        Value = _mm_setr_epi8(ptr[0], ptr[1], ptr[2], ptr[3], ptr[4],
+                              ptr[5], ptr[6], ptr[7], ptr[8], ptr[9],
+                             ptr[10], ptr[11], ptr[12], ptr[13], ptr[14],
+                             ptr[15]
+                             );
+    }
+
     inline bool Any() const {
         return !_mm_testz_si128(this->Value, this->Value);
     }

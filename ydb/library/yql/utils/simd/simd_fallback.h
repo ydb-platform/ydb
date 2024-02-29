@@ -96,6 +96,14 @@ struct FallbackTrait {
         return ans;
     }
 
+    inline void SetMask(T* ptr) {
+        Value = *ptr;
+    }
+
+    inline void Load(T* ptr) {
+        Value = *ptr;
+    }
+
     inline void Store(T* ptr) {
         *ptr = Value;
     }

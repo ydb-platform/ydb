@@ -8,8 +8,12 @@ namespace NPQ {
 void TPartitionQuoterBase::Bootstrap(const TActorContext &ctx) {
     if (TotalPartitionQuotaEnabled)
         PartitionTotalQuotaTracker = CreatePartitionTotalQuotaTracker(PQTabletConfig, ctx);
-    Become(&TThis::StateWaitParent);
-    ScheduleWakeUp(ctx);
+    if (!Parent.Defined()) {
+        Become(&TThis::StateWaitParent);
+    } else {
+        Become(&TThis::StateWork);
+        ScheduleWakeUp(ctx);
+    }
 }
 
 void TPartitionQuoterBase::HandleQuotaRequestOnInit(TEvPQ::TEvRequestQuota::TPtr& ev, const TActorContext&) {
@@ -121,6 +125,7 @@ void TPartitionQuoterBase::HandleSetParent(TEvPQ::TEvSetQuoterParent::TPtr& ev) 
         HandleQuotaRequest(evPending, ActorContext());
     }
     PendingQuotaRequests.clear();
+    ScheduleWakeUp(ActorContext());
 }
 
 void TPartitionQuoterBase::HandleConfigUpdate(TEvPQ::TEvChangePartitionConfig::TPtr& ev, const TActorContext& ctx) {

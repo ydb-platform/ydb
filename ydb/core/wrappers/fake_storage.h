@@ -66,9 +66,14 @@ public:
         return it->second;
     }
 
-    const TMap<TString, TFakeBucketStorage>& GetStorage() const {
-        // TGuard<TMutex> g(Mutex);
-        return BucketStorages;
+    std::vector<TString> GetBucketIds() const {
+        TGuard<TMutex> g(Mutex);
+        std::vector<TString> result;
+        for(const auto& [bucketId, _]: BucketStorages) {
+            result.push_back(bucketId);
+        }
+
+        return result;;
     }
 
     TFakeBucketStorage& MutableBucket(const TString& bucketId) const {

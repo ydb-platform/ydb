@@ -42,13 +42,12 @@ std::string ToString(BackupActorState s) {
 
 class TBackupWriteController : public NColumnShard::IWriteController, public NColumnShard::TMonitoringObjectsCounter<TBackupWriteController, true> {
 private:
-    // NOlap::TWritingBuffer Buffer;
     const TActorId actorID;
 
     NBlobCache::TUnifiedBlobId BlobId;
 
     void DoOnReadyResult(const NActors::TActorContext& ctx, const NColumnShard::TBlobPutResult::TPtr& putResult) override {
-        LOG_S_DEBUG("TBackupWriteController call DoOnReadyResult");
+        AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("TBackupWriteController.DoOnReadyResult", "start");
 
         NOlap::TWritingBuffer bufferStub;
 
@@ -56,7 +55,7 @@ private:
         ctx.Send(actorID, result.release());
     }
     void DoOnStartSending() override {
-        LOG_S_DEBUG("TBackupWriteController call DoOnStartSending");
+        AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("TBackupWriteController.DoOnStartSending", "start");
     }
 
 public:
@@ -69,23 +68,17 @@ public:
         NArrow::TBatchSplitttingContext splitCtx(6 * 1024 * 1024);
         NArrow::TSerializedBatch batch = NArrow::TSerializedBatch::Build(arrowBatch, splitCtx);
 
-        LOG_S_DEBUG("TBackupWriteController.ctor: batch created.");
-
         NOlap::TWritingBlob currentBlob;
 
         // @TODO stub
         NOlap::TWriteAggregation aggreagtion(nullptr);
         NOlap::TWideSerializedBatch wideBatch(std::move(batch), aggreagtion);
 
-        LOG_S_DEBUG("TBackupWriteController.ctor: wideBatch created.");
-
         currentBlob.AddData(wideBatch);
 
         auto& task = AddWriteTask(NOlap::TBlobWriteInfo::BuildWriteTask(currentBlob.GetBlobData(), action));
 
-        LOG_S_DEBUG("TBackupWriteController.ctor: task added, blob_id=" << task.GetBlobId());
-
-        BlobId = task.GetBlobId();
+        AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("TBackupWriteController.ctor", "create")("task", task.GetBlobId());
 
         currentBlob.InitBlobId(task.GetBlobId());
     }
@@ -93,7 +86,7 @@ public:
     NBlobCache::TUnifiedBlobId GetBlobID() const noexcept { return BlobId; }
 };
 
-class BackupActor : public TActorBootstrapped<BackupActor> {
+class TBackupActor : public TActorBootstrapped<TBackupActor> {
     std::shared_ptr<NOlap::NBlobOperations::NTier::TOperator> InsertOperator;
 
     const TActorId SenderActorId;
@@ -102,36 +95,31 @@ class BackupActor : public TActorBootstrapped<BackupActor> {
     const ui64 PlanStep;
     const ui64 TableId;
 
-    std::function<void(const NBlobCache::TUnifiedBlobId&)> Cb;
-
     BackupActorState State = BackupActorState::Invalid;
 
-    // @TODO think about columns
     NKikimrSSA::TProgram ProgramProto = NKikimrSSA::TProgram();
+
+    // @TODO think about columns
     const std::vector<TString> replyColumns{"key", "field"};
 
     std::optional<NActors::TActorId> ScanActorId;
 
 public:
-    BackupActor(std::shared_ptr<NOlap::NBlobOperations::NTier::TOperator> insertOperator, 
+    TBackupActor(std::shared_ptr<NOlap::NBlobOperations::NTier::TOperator> insertOperator, 
                 const TActorId senderActorId, 
                 const TActorIdentity csActorId, 
                 const ui64 txId, 
                 const int planStep,
-                const ui64 tableId,
-                std::function<void(const NBlobCache::TUnifiedBlobId&)> cb)
+                const ui64 tableId)
         : InsertOperator(insertOperator)
         , SenderActorId(senderActorId)
         , CSActorId(csActorId)
         , TxId(txId)
         , PlanStep(planStep)
-        , TableId(tableId)
-        , Cb(std::move(cb)) {
+        , TableId(tableId) {
     }
 
     void Bootstrap(const TActorContext& ctx) {
-        LOG_S_DEBUG("BackupActor Bootstrap selfID()=" << SelfId().ToString() << ", cs=" << CSActorId.ToString());
-
         ProcessState(ctx, BackupActorState::Init);
         Become(&TThis::StateWork);
     }
@@ -148,7 +136,7 @@ public:
     }
 
     void Handle(NKqp::TEvKqpCompute::TEvScanInitActor::TPtr& ev, const TActorContext& ctx) {
-        LOG_S_DEBUG("Handle BackupActor.TEvScanInitActor.");
+        AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("TBackupActor.Handle", "creaTEvScanInitActorte");
 
         AFL_VERIFY(State == BackupActorState::Init);
         AFL_VERIFY(ev);
@@ -160,21 +148,19 @@ public:
     }
 
     void Handle(NKqp::TEvKqpCompute::TEvScanError::TPtr&, const TActorContext& ctx) {
-        Cerr << "\ncall BackupActor::Handle with TEvScanError" << Endl;
+        AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("TBackupActor.Handle", "TEvScanError");
 
         auto result = std::make_unique<NEvents::TBackupEvents::TEvBackupShardProposeResult>();
         ctx.Send(SenderActorId, result.release());
     }
 
     void Handle(NKqp::TEvKqpCompute::TEvScanData::TPtr& ev, const TActorContext& ctx) {
-        LOG_S_DEBUG("Handle BackupActor.TEvScanData.");
+        AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("TBackupActor.Handle", "TEvScanData");
         AFL_VERIFY(State == BackupActorState::Progress);
 
         auto batch = ev->Get()->ArrowBatch;
         if (batch) {
             NArrow::TStatusValidator::Validate(batch->ValidateFull());
-            LOG_S_DEBUG("Handle BackupActor.TEvScanData: got batch: " << batch->ToString());
-            
             LoadBatchToStorage(ctx, batch);
         } else {
             AFL_VERIFY(ev->Get()->Finished);
@@ -184,17 +170,17 @@ public:
             AFL_VERIFY(ev->Get()->StatsOnFinished);
             // ResultStats = ev->Get()->StatsOnFinished->GetMetrics();
 
-            LOG_S_DEBUG("Handle BackupActor.TEvScanData: finished.");
+            AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("TBackupActor.Handle", "finished");
             return;
         }
 
-        LOG_S_DEBUG("Handle BackupActor.TEvScanData: not finished, send ack.");
+        AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("TBackupActor.Handle", "not finished, send ack");
 
         ProcessState(ctx, BackupActorState::Progress);
     }
     
     void Handle(TEvPrivate::TEvWriteBlobsResult::TPtr& , const TActorContext& ctx) {
-        LOG_S_DEBUG("Handle BackupActor.TEvWriteBlobsResult write done");
+        AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("TBackupActor.Handle", "TEvWriteBlobsResult");
 
         ProcessState(ctx, BackupActorState::Done);
 
@@ -203,13 +189,13 @@ public:
 
 private:
     void ProcessState(const TActorContext& ctx, const BackupActorState newState) {
-        LOG_S_DEBUG("BackupActor::ProcessState change state from " << ToString(State) << " to " << ToString(newState));
+        AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("BackupActor.ProcessState", "change state")
+            ("from", ToString(State))("to", ToString(newState));
 
         State = newState;
 
         switch (State) {
             case BackupActorState::Invalid: {
-                LOG_S_DEBUG("BackupActor with broken state");
                 break;
             }
             case BackupActorState::Init: {
@@ -290,7 +276,7 @@ private:
         AFL_VERIFY(State != BackupActorState::Done);
         AFL_VERIFY(ScanActorId);
 
-        LOG_S_DEBUG("BackupActor::SendScanDataAck ScanActorId=" << ScanActorId->ToString());
+        AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("ScanActorId", ScanActorId->ToString());
 
         ctx.Send(*ScanActorId,
                  new NKqp::TEvKqpCompute::TEvScanDataAck(DefaultFreeSpace, DefaultGeneration, DefaultMaxChunks));
@@ -302,35 +288,11 @@ private:
     }
 
     void LoadBatchToStorage(const TActorContext& ctx, std::shared_ptr<arrow::RecordBatch> arrowBatch) {
-        LOG_S_DEBUG("Handle BackupActor.LoadBatchToStorage: start");
+        AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("BackupActor.LoadBatchToStorage", "start");
         
         auto action = InsertOperator->StartWritingAction("BACKUP:WRITING");
-
-        // const ui64 tableId = TableId;
-        // const ui64 writeId = 1;
-        // const TActorId self_actor_id = SelfId();
-
-        // NEvWrite::TWriteMeta writeMeta(writeId, tableId, self_actor_id);
-        // auto arrowData = std::make_shared<TProtoArrowData>(nullptr);
-        // std::shared_ptr<arrow::Schema> replaceKey; // snapshotSchema->GetIndexInfo().GetReplaceKey()
-        // auto writeData = std::make_shared<NEvWrite::TWriteData>(writeMeta, arrowData, replaceKey, action);
-
-        // [[maybe_unused]]
-        // NOlap::TWriteAggregation aggregation(writeData);
-        // std::vector<std::shared_ptr<NOlap::TWriteAggregation>> aggregations;
-        // auto writeController = std::make_shared<NOlap::TIndexedWriteController>(SelfId(), action, std::move(aggregations));
-
         auto writeController = std::make_shared<TBackupWriteController>(SelfId(), action, arrowBatch);
-
-        if (Cb) {
-            Cb(writeController->GetBlobID());
-        }
-
-        LOG_S_DEBUG("Handle BackupActor.LoadBatchToStorage: controller created");
-
         ctx.Register(CreateWriteActor(TableId, writeController, TInstant::Max()));
-
-        // @TODO how we can know about writing status? event in source?
     }
 };
 
@@ -339,9 +301,8 @@ IActor* CreatBackupActor(std::shared_ptr<NOlap::NBlobOperations::NTier::TOperato
                         const TActorIdentity csActorId, 
                         const ui64 txId,
                         const int planStep, 
-                        const ui64 tableId,
-                        std::function<void(const NBlobCache::TUnifiedBlobId&)> cb) {
-    return new BackupActor(insertOperator, senderActorId, csActorId, txId, planStep, tableId, std::move(cb));
+                        const ui64 tableId) {
+    return new TBackupActor(insertOperator, senderActorId, csActorId, txId, planStep, tableId);
 }
 
 }   // namespace NKikimr::NColumnShard

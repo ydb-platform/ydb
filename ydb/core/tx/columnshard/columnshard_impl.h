@@ -80,7 +80,7 @@ class TOperationsManager;
 
 extern bool gAllowLogBatchingDefaultValue;
 
-IActor* CreatBackupActor(std::shared_ptr<NOlap::NBlobOperations::NTier::TOperator> insertOperator, TActorId senderActorId, TActorIdentity csActorId, ui64 TxId, int PlanStep, ui64 TableId, std::function<void(const NBlobCache::TUnifiedBlobId&)> cb);
+IActor* CreatBackupActor(std::shared_ptr<NOlap::NBlobOperations::NTier::TOperator> insertOperator, TActorId senderActorId, TActorIdentity csActorId, ui64 TxId, int PlanStep, ui64 TableId);
 IActor* CreateWriteActor(ui64 tabletId, IWriteController::TPtr writeController, const TInstant deadline);
 IActor* CreateColumnShardScan(const TActorId& scanComputeActor, ui32 scanId, ui64 txId);
 

@@ -49,68 +49,6 @@ constexpr ui64 tableId = 1;
 const std::vector<std::pair<TString, TTypeInfo>> schema = {{"key", TTypeInfo(NTypeIds::Uint64)},
                                                                {"field", TTypeInfo(NTypeIds::Utf8)}};
 
-// @TODO useless?
-class TDisableCompactionController : public NKikimr::NYDBTest::NColumnShard::TController {
-protected:
-    virtual bool DoOnStartCompaction(std::shared_ptr<NOlap::TColumnEngineChanges>& changes) {
-        changes = nullptr;
-        return true;
-    }
-
-public:
-};
-
-
-class TReadS3BackupTask: public NOlap::NBlobOperations::NRead::ITask {
-private:
-    using TBase = NOlap::NBlobOperations::NRead::ITask;
-    // typename TConveyorTask::TDataContainer Data;
-    // std::shared_ptr<THashMap<ui64, ISnapshotSchema::TPtr>> Schemas;
-    // TNormalizationContext NormContext;
-
-public:
-     TReadS3BackupTask(// const TNormalizationContext& nCtx, 
-                        const std::vector<std::shared_ptr<NOlap::IBlobsReadingAction>>& actions
-                        // typename TConveyorTask::TDataContainer&& data, 
-                        // std::shared_ptr<THashMap<ui64, ISnapshotSchema::TPtr>> schemas
-                        )
-        : TBase(actions, "CS::BACKUP")
-        // , Data(std::move(data))
-        // , Schemas(std::move(schemas))
-        // , NormContext(nCtx)
-    {
-        // LOG_S_DEBUG("Handle TReadS3BackupTask.DoOnDataReady: ctor done");
-    }
-
-protected:
-    void DoOnDataReady(const std::shared_ptr<NOlap::NResourceBroker::NSubscribe::TResourcesGuard>& resourcesGuard) override {
-        Y_UNUSED(resourcesGuard);
-
-         LOG_S_DEBUG("Handle TReadS3BackupTask.DoOnDataReady: call");
-
-        LOG_S_DEBUG("Handle TReadS3BackupTask.DoOnDataReady: " << DebugString());
-
-        for (const auto& [k, v] : ExtractBlobsData()) {
-            LOG_S_DEBUG("Handle TReadS3BackupTask.DoOnDataReady: range=" << k.ToString() << ", v=" << v);
-        }
-
-        // NormContext.SetResourcesGuard(resourcesGuard);
-        // std::shared_ptr<NConveyor::ITask> task = std::make_shared<TConveyorTask>(std::move(ExtractBlobsData()), NormContext, std::move(Data), Schemas);
-        // NConveyor::TCompServiceOperator::SendTaskToExecute(task);
-    }
-
-    bool DoOnError(const NOlap::TBlobRange& range, const NOlap::IBlobsReadingAction::TErrorStatus& status) override {
-        Y_UNUSED(status, range);
-
-         LOG_S_DEBUG("Handle TReadS3BackupTask.DoOnError: call");
-
-        return false;
-    }
-
-public:
-    using TBase::TBase;
-};
-
 TActorIdentity PrepareCSTable(TTestBasicRuntime& runtime, TActorId& sender) {
     using namespace NArrow;
 
@@ -164,13 +102,8 @@ std::shared_ptr<NOlap::NBlobOperations::NTier::TOperator> PrepareInsertOp(const 
     s3_settings.set_endpoint("fake");
 
     *cfgProto.MutableObjectStorage() = s3_settings;
-
-    // tierManager->GetS3Settings(); -> create fake externl op
     NColumnShard::NTiers::TTierConfig cfg("tier_name", cfgProto);
 
-    // unqiue?
-    // tierManager->GetS3Settings() with fake ep.
-    // S3Settings from Config.GetPatchedConfig(secrets) in ctor TManager
     auto* tierManager = new NColumnShard::NTiers::TManager(tableId, tabletActorID, cfg);
 
     tierManager->Start(nullptr);
@@ -192,34 +125,14 @@ Y_UNIT_TEST_SUITE(TColumnShardBackup) {
 
         const auto csActorId = PrepareCSTable(runtime, sender);
 
-        Cerr << "\n ======================================================================== \n" << Endl;
-
         auto op = PrepareInsertOp(sender);
 
-        NBlobCache::TUnifiedBlobId blob_id;
-        auto cb = [&blob_id](const NBlobCache::TUnifiedBlobId& b) {
-            blob_id = b;
-        };
-
-        runtime.Register(NColumnShard::CreatBackupActor(op, sender, csActorId, txId, writePlanStep, tableId, cb));
+        runtime.Register(NColumnShard::CreatBackupActor(op, sender, csActorId, txId, writePlanStep, tableId));
 
         TAutoPtr<NActors::IEventHandle> handle;
         auto event = runtime.GrabEdgeEvent<NKikimr::NEvents::TBackupEvents::TEvBackupShardProposeResult>(handle);
 
         UNIT_ASSERT(event);
-
-        Cerr << "\n ======================================================================== \n" << Endl;
-
-        std::string actual;
-        for (const auto& [bucketId, store] : Singleton<NWrappers::NExternalStorage::TFakeExternalStorage>()-> GetStorage()) {
-            // Cerr << "GetStorage bucketId=" << bucketId << Endl;
-            for(const auto& a : store) {
-                // Cerr << "value: " << a.first << " " << a.second << Endl;
-
-                // @TODO only once write now.
-                actual = a.second;
-            }
-        }
 
         std::string expected;
         {
@@ -236,6 +149,18 @@ Y_UNIT_TEST_SUITE(TColumnShardBackup) {
             UNIT_ASSERT(reader.IsCorrectlyFinished());
 
             expected = NArrow::SerializeBatchNoCompression(rb);
+        }
+
+        std::string actual;
+        { // get data from fake s3
+            const auto bucketIds = Singleton<NWrappers::NExternalStorage::TFakeExternalStorage>()->GetBucketIds();
+            UNIT_ASSERT(1 == bucketIds.size());
+
+            auto& fakeBucketStorage = Singleton<NWrappers::NExternalStorage::TFakeExternalStorage>()->GetBucket(bucketIds.front());
+            for(const auto& data : fakeBucketStorage) {
+                 actual = data.second;
+                 break;
+            }
         }
 
         UNIT_ASSERT_EQUAL(actual, expected);

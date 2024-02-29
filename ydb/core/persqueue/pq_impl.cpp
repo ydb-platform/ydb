@@ -928,6 +928,21 @@ void TPersQueue::AddSupportivePartition(const TPartitionId& partitionId)
     NewSupportivePartitions.insert(partitionId);
 }
 
+NKikimrPQ::TPQTabletConfig TPersQueue::MakeSupportivePartitionConfig() const
+{
+    NKikimrPQ::TPQTabletConfig partitionConfig = Config;
+
+    partitionConfig.MutableReadRules()->Clear();
+    partitionConfig.MutableReadFromTimestampsMs()->Clear();
+    partitionConfig.MutableConsumerFormatVersions()->Clear();
+    partitionConfig.MutableConsumerCodecs()->Clear();
+    partitionConfig.MutableReadRuleServiceTypes()->Clear();
+    partitionConfig.MutableReadRuleVersions()->Clear();
+    partitionConfig.MutableReadRuleGenerations()->Clear();
+
+    return partitionConfig;
+}
+
 void TPersQueue::CreateSupportivePartitionActor(const TPartitionId& partitionId,
                                                 const TActorContext& ctx)
 {
@@ -936,7 +951,7 @@ void TPersQueue::CreateSupportivePartitionActor(const TPartitionId& partitionId,
     TPartitionInfo& partition = Partitions.at(partitionId);
     partition.Actor = ctx.Register(CreatePartitionActor(partitionId,
                                                         TopicConverter,
-                                                        Config,
+                                                        MakeSupportivePartitionConfig(),
                                                         true,
                                                         ctx));
 }

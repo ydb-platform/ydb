@@ -30,6 +30,7 @@ namespace NYdb {
             bool UseTopicCommit = false;
             bool UseTableSelect = true;
             bool UseTableUpsert = true;
+            bool ReadWithoutConsumer = false;
             size_t CommitPeriod = 15;
             size_t CommitMessages = 1'000'000;
         };

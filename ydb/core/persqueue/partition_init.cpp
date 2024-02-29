@@ -172,7 +172,7 @@ void TInitConfigStep::Handle(TEvKeyValue::TEvResponse::TPtr& ev, const TActorCon
 
     case NKikimrProto::NODATA:
         Partition()->Config = Partition()->TabletConfig;
-        Partition()->PartitionConfig = GetPartitionConfig(Partition()->Config, Partition()->Partition.OriginalPartitionId);
+        Partition()->PartitionConfig = GetPartitionConfig(Partition()->Config, Partition()->Partition);
         Partition()->PartitionGraph = MakePartitionGraph(Partition()->Config);
         break;
 

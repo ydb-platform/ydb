@@ -586,8 +586,8 @@ private:
     TPartitionId Partition;
     NKikimrPQ::TPQTabletConfig Config;
     NKikimrPQ::TPQTabletConfig TabletConfig;
-    const NKikimrPQ::TPQTabletConfig::TPartition* PartitionConfig = nullptr;
-    const NKikimrPQ::TPQTabletConfig::TPartition* PendingPartitionConfig = nullptr;
+    TMaybe<NKikimrPQ::TPQTabletConfig::TPartition> PartitionConfig;
+    TMaybe<NKikimrPQ::TPQTabletConfig::TPartition> PendingPartitionConfig;
 
     const TTabletCountersBase& Counters;
     NPersQueue::TTopicConverterPtr TopicConverter;
@@ -776,7 +776,7 @@ private:
     TDeque<std::unique_ptr<IEventBase>> PendingEvents;
     TRowVersion LastEmittedHeartbeat;
 
-    const NKikimrPQ::TPQTabletConfig::TPartition* GetPartitionConfig(const NKikimrPQ::TPQTabletConfig& config);
+    TMaybe<NKikimrPQ::TPQTabletConfig::TPartition> GetPartitionConfig(const NKikimrPQ::TPQTabletConfig& config);
 
     bool ClosedInternalPartition = false;
 

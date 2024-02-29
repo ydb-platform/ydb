@@ -45,13 +45,19 @@ ui64 PutUnitsSize(const ui64 size) {
     return putUnitsCount;        
 }
 
-const NKikimrPQ::TPQTabletConfig::TPartition* GetPartitionConfig(const NKikimrPQ::TPQTabletConfig& config, const ui32 partitionId) {
+TMaybe<NKikimrPQ::TPQTabletConfig::TPartition> GetPartitionConfig(const NKikimrPQ::TPQTabletConfig& config, const TPartitionId& partitionId) {
     for(const auto& p : config.GetPartitions()) {
-        if (partitionId == p.GetPartitionId()) {
-            return &p;
+        if (partitionId.OriginalPartitionId == p.GetPartitionId()) {
+            if (partitionId.WriteId.Defined()) {
+                auto newConfig = p;
+                newConfig.SetPartitionId(partitionId.InternalPartitionId);
+                return newConfig;
+            } else {
+                return p;
+            }
         }
     }
-    return nullptr;
+    return Nothing();
 }
 
 TPartitionGraph::TPartitionGraph() {

@@ -90,11 +90,11 @@ TString TPartition::LogPrefix() const {
 }
 
 bool TPartition::IsActive() const {
-    return PartitionConfig == nullptr || PartitionConfig->GetStatus() == NKikimrPQ::ETopicPartitionStatus::Active;
+    return !PartitionConfig || PartitionConfig->GetStatus() == NKikimrPQ::ETopicPartitionStatus::Active;
 }
 
 bool TPartition::CanWrite() const {
-    if (PartitionConfig == nullptr) {
+    if (!PartitionConfig) {
         // Old format without AllPartitions configuration field.
         // It is not split/merge partition.
         return true;
@@ -755,7 +755,7 @@ void TPartition::Handle(TEvPQ::TEvPartitionStatus::TPtr& ev, const TActorContext
                     "Topic PartitionStatus PartitionSize: " << result.GetPartitionSize()
                     << " UsedReserveSize: " << result.GetUsedReserveSize()
                     << " ReserveSize: " << ReserveSize()
-                    << " PartitionConfig" << Config.GetPartitionConfig();
+                    << " PartitionConfig: " << Config.GetPartitionConfig();
         );
     }
 
@@ -1566,7 +1566,7 @@ void TPartition::RemoveDistrTx()
     Y_ABORT_UNLESS(UserActionAndTransactionEventsFrontIs<TTransaction>());
 
     UserActionAndTransactionEvents.pop_front();
-    PendingPartitionConfig = nullptr;
+    PendingPartitionConfig = Nothing();
 }
 
 bool TPartition::ProcessUserActionOrTransaction(TTransaction& t,
@@ -1879,7 +1879,7 @@ void TPartition::OnProcessTxsAndUserActsWriteComplete(ui64 cookie, const TActorC
     if (ChangeConfig) {
         ReportCounters(ctx, true);
         ChangeConfig = nullptr;
-        PendingPartitionConfig = nullptr;
+        PendingPartitionConfig = Nothing();
     }
 
     ProcessTxsAndUserActs(ctx);
@@ -1927,7 +1927,7 @@ void TPartition::EndChangePartitionConfig(const NKikimrPQ::TPQTabletConfig& conf
 
 TString TPartition::GetKeyConfig() const
 {
-    return Sprintf("_config_%u", Partition.OriginalPartitionId);
+    return Sprintf("_config_%u", Partition.InternalPartitionId);
 }
 
 void TPartition::ChangePlanStepAndTxId(ui64 step, ui64 txId)
@@ -2660,9 +2660,9 @@ void TPartition::Handle(TEvPQ::TEvCheckPartitionStatusRequest::TPtr& ev, const T
     Send(ev->Sender, response.Release());
 }
 
-const NKikimrPQ::TPQTabletConfig::TPartition* TPartition::GetPartitionConfig(const NKikimrPQ::TPQTabletConfig& config)
+TMaybe<NKikimrPQ::TPQTabletConfig::TPartition> TPartition::GetPartitionConfig(const NKikimrPQ::TPQTabletConfig& config)
 {
-    return NPQ::GetPartitionConfig(config, Partition.OriginalPartitionId);
+    return NPQ::GetPartitionConfig(config, Partition);
 }
 
 bool TPartition::IsSupportive() const

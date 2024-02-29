@@ -1,4 +1,7 @@
 #include "interconnect.h"
+
+#include <ydb/core/base/location.h>
+
 #include <util/digest/murmur.h>
 #include <google/protobuf/text_format.h>
 
@@ -67,7 +70,9 @@ namespace NActors {
         for (int i = 0, count = unknown.field_count(); i < count; ++i) {
             const NProtoBuf::UnknownField& field = unknown.field(i);
             Y_ABORT_UNLESS(field.type() == NProtoBuf::UnknownField::TYPE_LENGTH_DELIMITED, "Location# %s", makeString().data());
-            Items.emplace_back(TKeys::E(field.number()), field.length_delimited());
+            if (!descriptor->IsReservedNumber(field.number())) {
+                Items.emplace_back(TKeys::E(field.number()), field.length_delimited());
+            }
         }
         std::sort(Items.begin(), Items.end());
     }

@@ -362,14 +362,14 @@ namespace NYql {
                 return ValidationError(
                     clusterConfig,
                     context,
-                    "For YDB clusters you must set either database name or database id");
+                    "For YDB clusters you must set either database name or database id, but you have set both of them");
             }
 
             if (!clusterConfig.HasDatabaseName() && !clusterConfig.HasDatabaseId()) {
                 return ValidationError(
                     clusterConfig,
                     context,
-                    "For YDB clusters you must set either database name or database id");
+                    "For YDB clusters you must set either database name or database id, but you have set none of them");
             }
         }
 

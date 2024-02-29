@@ -17,6 +17,7 @@
 #include <ydb/library/yql/public/udf/arrow/util.h>
 #include <ydb/library/yql/utils/log/log.h>
 #include <ydb/library/yql/utils/yql_panic.h>
+#include <ydb/public/sdk/cpp/client/ydb_types/credentials/credentials.h>
 
 namespace NYql::NDq {
 
@@ -103,14 +104,14 @@ namespace NYql::NDq {
             ui64 inputIndex,
             TCollectStatsLevel statsLevel,
             NConnector::IClient::TPtr client,
-            ISecuredServiceAccountCredentialsFactory::TPtr credentialsFactory,
+            NYdb::TCredentialsProviderPtr credentialsProvider,
             NConnector::TSource&& source,
             const NActors::TActorId& computeActorId,
             const NKikimr::NMiniKQL::THolderFactory& holderFactory)
             : InputIndex_(inputIndex)
             , ComputeActorId_(computeActorId)
             , Client_(std::move(client))
-            , CredentialsFactory_(std::move(credentialsFactory))
+            , CredentialsProvider_(std::move(credentialsProvider))
             , HolderFactory_(holderFactory)
             , Source_(source)
         {
@@ -464,21 +465,8 @@ namespace NYql::NDq {
             }
 
             // Token may have expired. Refresh it.
-            Y_ENSURE(CredentialsFactory_, "CredentialsFactory is not initialized");
-
-            auto structuredTokenJSON = TStructuredTokenBuilder().SetServiceAccountIdAuth(
-                                                                    Source_.GetServiceAccountId(),
-                                                                    Source_.GetServiceAccountIdSignature())
-                                           .ToJson();
-
-            // If service account is provided, obtain IAM-token
-            Y_ENSURE(structuredTokenJSON, "empty structured token");
-
-            auto credentialsProviderFactory = CreateCredentialsProviderFactoryForStructuredToken(
-                CredentialsFactory_,
-                structuredTokenJSON,
-                false);
-            auto iamToken = credentialsProviderFactory->CreateProvider()->GetAuthInfo();
+            Y_ENSURE(CredentialsProvider_, "CredentialsProvider is not initialized");
+            auto iamToken = CredentialsProvider_->GetAuthInfo();
             Y_ENSURE(iamToken, "empty IAM token");
 
             *dsi->mutable_credentials()->mutable_token()->mutable_value() = iamToken;
@@ -517,7 +505,7 @@ namespace NYql::NDq {
         const NActors::TActorId ComputeActorId_;
 
         NConnector::IClient::TPtr Client_;
-        ISecuredServiceAccountCredentialsFactory::TPtr CredentialsFactory_;
+        NYdb::TCredentialsProviderPtr CredentialsProvider_;
         NConnector::IListSplitsStreamIterator::TPtr ListSplitsIterator_;
         TVector<NConnector::NApi::TSplit> Splits_; // accumulated list of table splits
         NConnector::IReadSplitsStreamIterator::TPtr ReadSplitsIterator_;
@@ -548,6 +536,36 @@ namespace NYql::NDq {
                                         << ", use_tls=" << ToString(dsi.use_tls())
                                         << ", protocol=" << NYql::NConnector::NApi::EProtocol_Name(dsi.protocol());
 
+        // FIXME: strange piece of logic - authToken is created but not used:
+        // https://a.yandex-team.ru/arcadia/ydb/library/yql/providers/clickhouse/actors/yql_ch_read_actor.cpp?rev=r11550199#L140
+        /*
+        const auto token = secureParams.Value(params.token(), TString{});
+        const auto credentialsProviderFactory =
+            CreateCredentialsProviderFactoryForStructuredToken(credentialsFactory, token);
+        const auto authToken = credentialsProviderFactory->CreateProvider()->GetAuthInfo();
+        const auto one = token.find('#'), two = token.rfind('#');
+        YQL_ENSURE(one != TString::npos && two != TString::npos && one < two, "Bad token format:" << token);
+        */
+
+        // Obtain token to access remote data source if necessary
+        NYdb::TCredentialsProviderPtr credentialProvider;
+        if (source.GetServiceAccountId() && source.GetServiceAccountIdSignature()) {
+            Y_ENSURE(credentialsFactory, "CredentialsFactory is not initialized");
+
+            auto structuredTokenJSON = TStructuredTokenBuilder().SetServiceAccountIdAuth(
+                                                                    source.GetServiceAccountId(), source.GetServiceAccountIdSignature())
+                                           .ToJson();
+
+            // If service account is provided, obtain IAM-token
+            Y_ENSURE(structuredTokenJSON, "empty structured token");
+
+            auto credentialsProviderFactory = CreateCredentialsProviderFactoryForStructuredToken(
+                credentialsFactory,
+                structuredTokenJSON,
+                false);
+            credentialProvider = credentialsProviderFactory->CreateProvider();
+        }
+
         // TODO: partitioning is not implemented now, but this code will be useful for the further research:
         /*
         TStringBuilder part;
@@ -565,7 +583,7 @@ namespace NYql::NDq {
             inputIndex,
             statsLevel,
             genericClient,
-            credentialsFactory,
+            std::move(credentialProvider),
             std::move(source),
             computeActorId,
             holderFactory);

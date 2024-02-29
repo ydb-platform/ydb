@@ -148,9 +148,12 @@ namespace NYql {
                         }
                     }
 
-                    // copy service account ids to enable work with tokens during runtime phase
-                    source.SetServiceAccountId(clusterConfig.GetServiceAccountId());
-                    source.SetServiceAccountIdSignature(clusterConfig.GetServiceAccountIdSignature());
+                    // Managed YDB supports access via IAM token.
+                    // Copy service account ids to obtain tokens during request execution phase.
+                    if (clusterConfig.kind() == NConnector::NApi::EDataSourceKind::YDB) {
+                        source.SetServiceAccountId(clusterConfig.GetServiceAccountId());
+                        source.SetServiceAccountIdSignature(clusterConfig.GetServiceAccountIdSignature());
+                    }
 
                     // preserve source description for read actor
                     protoSettings.PackFrom(source);

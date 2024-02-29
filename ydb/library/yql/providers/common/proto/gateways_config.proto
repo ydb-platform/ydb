@@ -620,8 +620,8 @@ message TGenericGatewayConfig {
 /////////////////////////////// Db Resolver ///////////////////////////////////
 
 message TDbResolverConfig {
-    // Ydb / Yds mvp endpoint, for example:
-    // https://ydbc.ydb.cloud.yandex.net:8789/ydbc/cloud-prod/
+    // Ydb / Yds MVP endpoint. Expected format: 
+    // [http|https]://host:port/ydbc/cloud-prod/
     optional string YdbMvpEndpoint = 2;
 }
 

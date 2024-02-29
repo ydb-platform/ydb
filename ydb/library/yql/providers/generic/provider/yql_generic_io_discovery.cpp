@@ -172,7 +172,7 @@ namespace NYql {
                         endpointDst->set_host(databaseDescription.Host);
                         endpointDst->set_port(databaseDescription.Port);
 
-                        // If we work with managed YDB, we find out database name 
+                        // If we work with managed YDB, we find out database name
                         // only after database id (== cluster id) resolving.
                         if (clusterConfigIter->second.kind() == NConnector::NApi::EDataSourceKind::YDB) {
                             clusterConfigIter->second.set_databasename(databaseDescription.Database);

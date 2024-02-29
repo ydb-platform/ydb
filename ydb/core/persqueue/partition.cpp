@@ -883,7 +883,7 @@ void TPartition::Handle(TEvPersQueue::TEvProposeTransaction::TPtr& ev, const TAc
     Y_ABORT_UNLESS(event.HasData());
     const NKikimrPQ::TDataTransaction& txBody = event.GetData();
 
-    if (!txBody.GetImmediate()) {
+    if (!txBody.GetImmediate() || txBody.HasWriteId()) {
         ReplyPropose(ctx,
                      event,
                      NKikimrPQ::TEvProposeTransactionResult::ABORTED);
@@ -1615,6 +1615,10 @@ bool TPartition::BeginTransaction(const TEvPQ::TEvTxCalcPredicate& tx,
 {
     Y_UNUSED(ctx);
     bool predicate = true;
+
+    if (tx.SupportivePartitionActor != TActorId()) {
+        return false;
+    }
 
     for (auto& operation : tx.Operations) {
         const TString& consumer = operation.GetConsumer();

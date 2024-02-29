@@ -30,7 +30,15 @@ protected:
 
     void ReadMessage(TTopicReadSessionPtr reader, NTable::TTransaction& tx, ui64 offset);
 
-    void WriteMessage(const TString& data);
+    void WriteMessage(const TString& message);
+    void WriteMessages(const TVector<TString>& messages,
+                       const TString& topic, const TString& groupId,
+                       NTable::TTransaction& tx);
+
+    void CreateTopic(const TString& path = TEST_TOPIC,
+                     const TString& consumer = TEST_CONSUMER,
+                     size_t partitionCount = 1,
+                     std::optional<size_t> maxPartitionCount = std::nullopt);
 
 protected:
     const TDriver& GetDriver() const;
@@ -131,7 +139,7 @@ E TFixture::ReadEvent(TTopicReadSessionPtr reader)
     return *ev;
 }
 
-void TFixture::WriteMessage(const TString& data)
+void TFixture::WriteMessage(const TString& message)
 {
     NTopic::TWriteSessionSettings options;
     options.Path(TEST_TOPIC);
@@ -139,8 +147,37 @@ void TFixture::WriteMessage(const TString& data)
 
     NTopic::TTopicClient client(GetDriver());
     auto session = client.CreateSimpleBlockingWriteSession(options);
-    UNIT_ASSERT(session->Write(data));
+    UNIT_ASSERT(session->Write(message));
     session->Close();
+}
+
+void TFixture::WriteMessages(const TVector<TString>& messages,
+                             const TString& topic, const TString& groupId,
+                             NTable::TTransaction& tx)
+{
+    NTopic::TWriteSessionSettings options;
+    options.Path(topic);
+    options.MessageGroupId(groupId);
+
+    NTopic::TTopicClient client(GetDriver());
+    auto session = client.CreateSimpleBlockingWriteSession(options);
+
+    for (auto& message : messages) {
+        NTopic::TWriteMessage params(message);
+        params.Tx(tx);
+        UNIT_ASSERT(session->Write(std::move(params)));
+    }
+
+    UNIT_ASSERT(session->Close());
+}
+
+void TFixture::CreateTopic(const TString& path,
+                           const TString& consumer,
+                           size_t partitionCount,
+                           std::optional<size_t> maxPartitionCount)
+
+{
+    Setup->CreateTopic(path, consumer, partitionCount, maxPartitionCount);
 }
 
 const TDriver& TFixture::GetDriver() const
@@ -215,28 +252,18 @@ Y_UNIT_TEST_F(TwoSessionOneConsumer, TFixture)
 
 Y_UNIT_TEST_F(WriteToTopic, TFixture)
 {
-    NTopic::TWriteSessionSettings options;
-    options.Path(TEST_TOPIC);
-    options.MessageGroupId(TEST_MESSAGE_GROUP_ID);
+    TString topic[2] = {
+        TEST_TOPIC,
+        TEST_TOPIC + "_2"
+    };
+
+    CreateTopic(topic[1]);
 
     auto session = CreateSession();
     auto tx = BeginTx(session);
 
-    auto writeMessages = [&](const TVector<TString>& messages) {
-        NTopic::TTopicClient client(GetDriver());
-        auto session = client.CreateSimpleBlockingWriteSession(options);
-
-        for (auto& message : messages) {
-            NTopic::TWriteMessage params(message);
-            params.Tx(tx);
-            UNIT_ASSERT(session->Write(std::move(params)));
-        }
-
-        UNIT_ASSERT(session->Close());
-    };
-
-    writeMessages({"a", "bb", "ccc", "dddd"});
-    writeMessages({"eeeee", "ffffff", "ggggggg"});
+    WriteMessages({"#1", "#2", "#3"}, topic[0], TEST_MESSAGE_GROUP_ID, tx);
+    WriteMessages({"#4", "#5"}, topic[1], TEST_MESSAGE_GROUP_ID, tx);
 
     CommitTx(tx, EStatus::ABORTED);
 }

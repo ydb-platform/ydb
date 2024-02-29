@@ -60,6 +60,14 @@ public:
         }
     }
 
+    explicit TEnv(const TString& builtin)
+        : TEnv(false)
+    {
+        UNIT_ASSERT_STRING_CONTAINS(builtin, "@builtin");
+        Init(builtin);
+        Client.ModifyOwner("/", DomainName, builtin);
+    }
+
     explicit TEnv(const TString& user, const TString& password)
         : TEnv(false)
     {

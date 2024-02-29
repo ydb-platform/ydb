@@ -28,6 +28,7 @@ message TReplicationConfig {
     // credentials
     oneof Credentials {
         TStaticCredentials StaticCredentials = 3;
+        string OAuthToken = 7;
     }
 
     // targets to be replicated

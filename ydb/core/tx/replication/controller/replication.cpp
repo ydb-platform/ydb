@@ -92,6 +92,9 @@ public:
             case NKikimrReplication::TReplicationConfig::kStaticCredentials:
                 ydbProxy.Reset(CreateYdbProxy(Config.GetSrcEndpoint(), Config.GetSrcDatabase(), Config.GetStaticCredentials()));
                 break;
+            case NKikimrReplication::TReplicationConfig::kOAuthToken:
+                ydbProxy.Reset(CreateYdbProxy(Config.GetSrcEndpoint(), Config.GetSrcDatabase(), Config.GetOAuthToken()));
+                break;
             default:
                 ErrorState(TStringBuilder() << "Unexpected credentials: " << Config.GetCredentialsCase());
                 break;

@@ -155,6 +155,17 @@ Y_UNIT_TEST_SUITE(YdbProxy) {
         }
     }
 
+    Y_UNIT_TEST(OAuthToken) {
+        TEnv<true> env("user@builtin");
+        // make dir
+        {
+            auto ev = env.Send<TEvYdbProxy::TEvMakeDirectoryResponse>(
+                new TEvYdbProxy::TEvMakeDirectoryRequest("/Root/dir", {}));
+            UNIT_ASSERT(ev);
+            UNIT_ASSERT(ev->Get()->Result.IsSuccess());
+        }
+    }
+
     Y_UNIT_TEST(CreateTable) {
         TEnv<false> env;
         // invalid key

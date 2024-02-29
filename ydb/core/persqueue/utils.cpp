@@ -46,6 +46,8 @@ ui64 PutUnitsSize(const ui64 size) {
 }
 
 void Migrate(NKikimrPQ::TPQTabletConfig& config) {
+    // if ReadRules isn`t empty than it is old configuration format
+    // when modify new format (add or alter a consumer) readRules is cleared
     if (config.ReadRulesSize()) {
         config.ClearConsumers();
 

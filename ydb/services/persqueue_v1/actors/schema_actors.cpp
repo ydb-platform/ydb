@@ -1023,25 +1023,25 @@ bool TDescribeConsumerActor::ApplyResponse(
 }
 
 
-bool FillConsumerProto(Ydb::Topic::Consumer *rr, const NKikimrPQ::TPQTabletConfig& config, ui32 i,
+bool FillConsumerProto(Ydb::Topic::Consumer *rr, const NKikimrPQ::TPQTabletConfig& config, const NKikimrPQ::TPQTabletConfig::TConsumer& consumer,
                         const NActors::TActorContext& ctx, Ydb::StatusIds::StatusCode& status, TString& error)
 {
     const auto& pqConfig = AppData(ctx)->PQConfig;
 
-    auto consumerName = NPersQueue::ConvertOldConsumerName(config.GetReadRules(i), ctx);
+    auto consumerName = NPersQueue::ConvertOldConsumerName(consumer.GetName(), ctx);
     rr->set_name(consumerName);
-    rr->mutable_read_from()->set_seconds(config.GetReadFromTimestampsMs(i) / 1000);
-    auto version = config.GetReadRuleVersions(i);
+    rr->mutable_read_from()->set_seconds(consumer.GetReadFromTimestampsMs() / 1000);
+    auto version = consumer.GetVersion();
     if (version != 0)
         (*rr->mutable_attributes())["_version"] = TStringBuilder() << version;
-    for (const auto &codec : config.GetConsumerCodecs(i).GetIds()) {
+    for (const auto &codec : consumer.GetCodec().GetIds()) {
         rr->mutable_supported_codecs()->add_codecs((Ydb::Topic::Codec) (codec + 1));
     }
 
-    rr->set_important(NPQ::IsImportantClient(config, config.GetReadRules(i)));
+    rr->set_important(NPQ::IsImportantClient(config, consumer.GetName()));
     TString serviceType = "";
-    if (i < config.ReadRuleServiceTypesSize()) {
-        serviceType = config.GetReadRuleServiceTypes(i);
+    if (consumer.HasServiceType()) {
+        serviceType = consumer.GetServiceType();
     } else {
         if (pqConfig.GetDisallowDefaultClientServiceType()) {
             error = "service type must be set for all read rules";
@@ -1143,12 +1143,14 @@ void TDescribeTopicActor::HandleCacheNavigateResponse(TEvTxProxySchemeCache::TEv
         }
         auto consumerName = NPersQueue::ConvertNewConsumerName(Settings.Consumer, ActorContext());
         bool found = false;
-        for (ui32 i = 0; i < config.ReadRulesSize(); ++i) {
-            if (consumerName == config.GetReadRules(i)) found = true;
+        for (const auto& consumer : config.GetConsumers()) {
+            if (consumerName == consumer.GetName()) {
+                 found = true;
+            }
             auto rr = Result.add_consumers();
             Ydb::StatusIds::StatusCode status;
             TString error;
-            if (!FillConsumerProto(rr, config, i, ActorContext(), status, error)) {
+            if (!FillConsumerProto(rr, config, consumer, ActorContext(), status, error)) {
                 return RaiseError(error, Ydb::PersQueue::ErrorCode::ERROR, status, ActorContext());
             }
         }
@@ -1198,14 +1200,16 @@ void TDescribeConsumerActor::HandleCacheNavigateResponse(TEvTxProxySchemeCache::
 
         auto consumerName = NPersQueue::ConvertNewConsumerName(Settings.Consumer, ActorContext());
         bool found = false;
-        for (ui32 i = 0; i < config.ReadRulesSize(); ++i) {
-            if (consumerName != config.GetReadRules(i))
+        for (const auto& consumer : config.GetConsumers()) {
+            if (consumerName != consumer.GetName()) {
                 continue;
+            }
             found = true;
+
             auto rr = Result.mutable_consumer();
             Ydb::StatusIds::StatusCode status;
             TString error;
-            if (!FillConsumerProto(rr, config, i, ActorContext(), status, error)) {
+            if (!FillConsumerProto(rr, config, consumer, ActorContext(), status, error)) {
                 return RaiseError(error, Ydb::PersQueue::ErrorCode::ERROR, status, ActorContext());
             }
             break;

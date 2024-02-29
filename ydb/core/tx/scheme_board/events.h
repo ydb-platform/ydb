@@ -2,7 +2,7 @@
 
 #include "defs.h"
 #include "helpers.h"
-#include "two_part_description.h"
+#include "opaque_path_description.h"
 
 #include <ydb/core/scheme/scheme_pathid.h>
 #include <ydb/core/base/statestorage.h>
@@ -13,6 +13,8 @@
 #include <util/string/builder.h>
 
 namespace NKikimr {
+
+using namespace NSchemeBoard;
 
 struct TSchemeBoardEvents {
     using TDescribeSchemeResult = NKikimrScheme::TEvDescribeSchemeResult;
@@ -114,7 +116,7 @@ struct TSchemeBoardEvents {
         const TLocalPathId DeletedPathBegin = 0; // The points are inclusive
         const TLocalPathId DeletedPathEnd = 0; // [DeletedPathBegin; DeletedPathEnd]
         const TLocalPathId MigratedPathId = InvalidLocalPathId;
-        NSchemeBoard::TTwoPartDescription Description;
+        TOpaquePathDescription Description;
 
         TEvDescribeResult() = default;
 
@@ -132,7 +134,7 @@ struct TSchemeBoardEvents {
 
         explicit TEvDescribeResult(
                 TLocalPathId deletedPathBegin, TLocalPathId deletedPathEnd,
-                const NSchemeBoard::TTwoPartDescription& description)
+                const TOpaquePathDescription& description)
             : Commit(false)
             , DeletedPathBegin(deletedPathBegin)
             , DeletedPathEnd(deletedPathEnd)
@@ -159,16 +161,24 @@ struct TSchemeBoardEvents {
         }
 
         bool HasDescription() const {
-            return Description;
+            return !Description.IsEmpty();
         }
 
         TString ToString() const override {
-            return TStringBuilder() << ToStringHeader() << " {"
+            auto builder = TStringBuilder() << ToStringHeader() << " {"
                 << " Commit: " << (Commit ? "true" : "false")
                 << " DeletedPathBegin: " << DeletedPathBegin
                 << " DeletedPathEnd: " << DeletedPathEnd
-                << " msg: " << Description.Record.ShortDebugString()
-            << " }";
+            ;
+            if (HasDescription()) {
+                builder << " { Path: " << Description.Path
+                    << " PathId: " << Description.PathId
+                    << " PathVersion: " << Description.PathVersion
+                    << " }"
+                ;
+            }
+            builder << " }";
+            return builder;
         }
     };
 
@@ -219,6 +229,9 @@ struct TSchemeBoardEvents {
     struct TEvUpdate: public TEventPreSerializedPB<TEvUpdate, NKikimrSchemeBoard::TEvUpdate, EvUpdate> {
         TEvUpdate() = default;
 
+        TString GetPath() const {
+            return Record.GetPath();
+        }
         TPathId GetPathId() const {
             if (!Record.HasLocalPathId()) {
                 return TPathId();
@@ -230,6 +243,8 @@ struct TSchemeBoardEvents {
             );
         }
 
+        TOpaquePathDescription ExtractPathDescription();
+
         TString ToString() const override {
             return PrintOwnerGeneration(this, Record);
         }
@@ -240,58 +255,17 @@ struct TSchemeBoardEvents {
 
         TEvUpdateBuilder() = default;
 
-        explicit TEvUpdateBuilder(const ui64 owner, const ui64 generation) {
-            Record.SetOwner(owner);
-            Record.SetGeneration(generation);
-        }
-
-        explicit TEvUpdateBuilder(const ui64 owner, const ui64 generation, const TPathId& pathId) {
-            Record.SetOwner(owner);
-            Record.SetGeneration(generation);
-            Record.SetPathOwnerId(pathId.OwnerId);
-            Record.SetLocalPathId(pathId.LocalPathId);
-            Record.SetIsDeletion(true);
-        }
-
+        explicit TEvUpdateBuilder(const ui64 owner, const ui64 generation);
+        explicit TEvUpdateBuilder(const ui64 owner, const ui64 generation, const TPathId& pathId);
         explicit TEvUpdateBuilder(
             const ui64 owner,
             const ui64 generation,
-            const TDescribeSchemeResult& describeSchemeResult,
+            const TOpaquePathDescription& pathDescription,
             const bool isDeletion = false
-        ) {
-            Record.SetOwner(owner);
-            Record.SetGeneration(generation);
-            if (describeSchemeResult.HasPath()) {
-                Record.SetPath(describeSchemeResult.GetPath());
-            }
-            if (describeSchemeResult.HasPathDescription()
-                && describeSchemeResult.GetPathDescription().HasSelf()) {
-                Record.SetPathOwnerId(describeSchemeResult.GetPathDescription().GetSelf().GetSchemeshardId());
-            }
-            Record.SetLocalPathId(describeSchemeResult.GetPathId());
-            if (describeSchemeResult.HasPathOwnerId()) {
-                Record.SetPathOwnerId(describeSchemeResult.GetPathOwnerId());
-            }
-            Record.SetIsDeletion(isDeletion);
-        }
+        );
 
-        void SetDescribeSchemeResult(TString preSerialized) {
-            PreSerializedData = NSchemeBoard::PreSerializedProtoField(
-                std::move(preSerialized), Record.kDescribeSchemeResultFieldNumber);
-        }
-
-        void SetDescribeSchemeResult(TDescribeSchemeResult describeSchemeResult) {
-            *Record.MutableDescribeSchemeResult() = std::move(describeSchemeResult);
-        }
-
-        void SetDescribeSchemeResult(TString preSerialized, TDescribeSchemeResult describeSchemeResult) {
-            SetDescribeSchemeResult(std::move(preSerialized));
-            SetDescribeSchemeResult(std::move(describeSchemeResult));
-        }
-
-        void SetDescribeSchemeResult(NSchemeBoard::TTwoPartDescription twoPart) {
-            SetDescribeSchemeResult(std::move(twoPart.PreSerialized), std::move(twoPart.Record));
-        }
+        void SetDescribeSchemeResultSerialized(const TString& serialized);
+        void SetDescribeSchemeResultSerialized(TString&& serialized);
     };
 
     struct TEvUpdateAck: public TEventPB<TEvUpdateAck, NKikimrSchemeBoard::TEvUpdateAck, EvUpdateAck> {
@@ -398,6 +372,21 @@ struct TSchemeBoardEvents {
         }
     };
 
+    template <typename T>
+    static TStringBuilder& PrintPathVersion(TStringBuilder& out, const T& record) {
+        return out
+            << " Version: " << NSchemeBoard::GetPathVersion(record)
+        ;
+    }
+
+    template <>
+    TString PrintPath(const IEventBase* ev, const NKikimrSchemeBoard::TEvNotify& record) {
+        auto out = TStringBuilder() << ev->ToStringHeader() << " {";
+        PrintPath(out, record);
+        PrintPathVersion(out, record);
+        return out << " }";
+    }
+
     struct TEvNotify: public TEventPreSerializedPB<TEvNotify, NKikimrSchemeBoard::TEvNotify, EvNotify> {
         TEvNotify() = default;
 
@@ -411,32 +400,11 @@ struct TSchemeBoardEvents {
 
         TEvNotifyBuilder() = default;
 
-        explicit TEvNotifyBuilder(const TString& path, const bool isDeletion = false) {
-            Record.SetPath(path);
-            Record.SetIsDeletion(isDeletion);
-        }
+        explicit TEvNotifyBuilder(const TString& path, const bool isDeletion = false);
+        explicit TEvNotifyBuilder(const TPathId& pathId, const bool isDeletion = false);
+        explicit TEvNotifyBuilder(const TString& path, const TPathId& pathId, const bool isDeletion = false);
 
-        explicit TEvNotifyBuilder(const TPathId& pathId, const bool isDeletion = false) {
-            Record.SetPathOwnerId(pathId.OwnerId);
-            Record.SetLocalPathId(pathId.LocalPathId);
-            Record.SetIsDeletion(isDeletion);
-        }
-
-        explicit TEvNotifyBuilder(
-            const TString& path,
-            const TPathId& pathId,
-            const bool isDeletion = false
-        ) {
-            Record.SetPath(path);
-            Record.SetPathOwnerId(pathId.OwnerId);
-            Record.SetLocalPathId(pathId.LocalPathId);
-            Record.SetIsDeletion(isDeletion);
-        }
-
-        void SetDescribeSchemeResult(const TString& preSerialized) {
-            PreSerializedData = NSchemeBoard::PreSerializedProtoField(
-                preSerialized, Record.kDescribeSchemeResultFieldNumber);
-        }
+        void SetPathDescription(const TOpaquePathDescription& pathDescription);
     };
 
     struct TEvNotifyAck: public TEventPB<TEvNotifyAck, NKikimrSchemeBoard::TEvNotifyAck, EvNotifyAck> {

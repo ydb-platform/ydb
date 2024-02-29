@@ -187,7 +187,6 @@ public:
         result->SetReason(record.GetReason());
         result->SetPath(record.GetPath());
         result->MutablePathDescription()->CopyFrom(record.GetPathDescription());
-        result->SetPathOwner(record.GetPathOwner());
         result->SetPathId(record.GetPathId());
         result->SetLastExistedPrefixPath(record.GetLastExistedPrefixPath());
         result->SetLastExistedPrefixPathId(record.GetLastExistedPrefixPathId());
@@ -206,7 +205,6 @@ public:
 
         TAutoPtr<NKikimrViewer::TEvDescribeSchemeInfo> result(new NKikimrViewer::TEvDescribeSchemeInfo());
         result->SetPath(path);
-        result->SetPathOwner(schemeShardId);
         result->SetPathId(pathId.LocalPathId);
         result->SetPathOwnerId(pathId.OwnerId);
 

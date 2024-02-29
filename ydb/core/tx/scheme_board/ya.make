@@ -13,6 +13,7 @@ PEERDIR(
 
 SRCS(
     cache.cpp
+    events.cpp
     helpers.cpp
     load_test.cpp
     monitoring.cpp
@@ -20,6 +21,7 @@ SRCS(
     replica.cpp
     subscriber.cpp
     two_part_description.cpp
+    opaque_path_description.cpp
 )
 
 GENERATE_ENUM_SERIALIZATION(subscriber.h)

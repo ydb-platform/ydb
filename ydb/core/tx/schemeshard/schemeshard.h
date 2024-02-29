@@ -331,10 +331,9 @@ struct TEvSchemeShard {
                                                                   EvDescribeSchemeResult> {
         TEvDescribeSchemeResult() = default;
 
-        TEvDescribeSchemeResult(const TString& path, ui64 pathOwner, TPathId pathId)
+        TEvDescribeSchemeResult(const TString& path, TPathId pathId)
         {
             Record.SetPath(path);
-            Record.SetPathOwner(pathOwner);
             Record.SetPathId(pathId.LocalPathId);
             Record.SetPathOwnerId(pathId.OwnerId);
         }
@@ -345,8 +344,8 @@ struct TEvSchemeShard {
 
         TEvDescribeSchemeResultBuilder() = default;
 
-        TEvDescribeSchemeResultBuilder(const TString& path, ui64 pathOwner, TPathId pathId)
-            : TEvDescribeSchemeResult(path, pathOwner, pathId)
+        TEvDescribeSchemeResultBuilder(const TString& path, TPathId pathId)
+            : TEvDescribeSchemeResult(path, pathId)
         {
         }
     };

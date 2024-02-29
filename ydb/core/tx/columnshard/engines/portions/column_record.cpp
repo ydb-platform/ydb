@@ -15,7 +15,7 @@ TChunkMeta::TChunkMeta(const TColumnChunkLoadContext& context, const TIndexInfo&
         RawBytes = context.GetMetaProto().GetRawBytes();
     }
     if (proto.HasMaxValue()) {
-        AFL_VERIFY(field)("field_id", address.GetColumnId())("field_name", indexInfo.GetColumnName(address.GetColumnId()));
+        AFL_VERIFY(field)("field_id", context.GetAddress().GetColumnId())("field_name", indexInfo.GetColumnName(context.GetAddress().GetColumnId()));
         Max = ConstantToScalar(proto.GetMaxValue(), field->type());
     }
     return TConclusionStatus::Success();

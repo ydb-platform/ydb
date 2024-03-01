@@ -277,7 +277,8 @@ void TDictionaryCompressionConfig::Register(TRegistrar registrar)
         .Default({
             EDictionaryCompressionPolicy::LargeChunkFirst,
             EDictionaryCompressionPolicy::FreshChunkFirst,
-        });
+        })
+        .ResetOnLoad();
 
     registrar.Parameter("policy_probation_samples_size", &TThis::PolicyProbationSamplesSize)
         .GreaterThan(0)

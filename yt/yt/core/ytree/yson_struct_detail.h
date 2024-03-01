@@ -18,7 +18,6 @@ struct TLoadParameterOptions
 {
     NYPath::TYPath Path;
     std::optional<EUnrecognizedStrategy> RecursiveUnrecognizedRecursively;
-    std::optional<EMergeStrategy> MergeStrategy;
 };
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -39,12 +38,6 @@ struct IYsonStructParameter
     virtual void SafeLoad(
         TYsonStructBase* self,
         NYTree::INodePtr node,
-        const TLoadParameterOptions& options,
-        const std::function<void()>& validate) = 0;
-
-    virtual void SafeLoad(
-        TYsonStructBase* self,
-        NYson::TYsonPullParserCursor* cursor,
         const TLoadParameterOptions& options,
         const std::function<void()>& validate) = 0;
 
@@ -77,7 +70,7 @@ struct IYsonStructMeta
     virtual const THashSet<TString>& GetRegisteredKeys() const = 0;
     virtual void Postprocess(TYsonStructBase* target, const TYPath& path) const = 0;
     virtual IYsonStructParameterPtr GetParameter(const TString& keyOrAlias) const = 0;
-    virtual void LoadParameter(TYsonStructBase* target, const TString& key, const NYTree::INodePtr& node, EMergeStrategy mergeStrategy) const = 0;
+    virtual void LoadParameter(TYsonStructBase* target, const TString& key, const NYTree::INodePtr& node) const = 0;
 
     virtual void LoadStruct(
         TYsonStructBase* target,
@@ -118,7 +111,7 @@ public:
     const THashSet<TString>& GetRegisteredKeys() const override;
 
     IYsonStructParameterPtr GetParameter(const TString& keyOrAlias) const override;
-    void LoadParameter(TYsonStructBase* target, const TString& key, const NYTree::INodePtr& node, EMergeStrategy mergeStrategy) const override;
+    void LoadParameter(TYsonStructBase* target, const TString& key, const NYTree::INodePtr& node) const override;
 
     void Postprocess(TYsonStructBase* target, const TYPath& path) const override;
 
@@ -223,12 +216,6 @@ public:
         NYTree::INodePtr node,
         const TLoadParameterOptions& options) override;
 
-    void SafeLoad(
-        TYsonStructBase* self,
-        NYTree::INodePtr node,
-        const TLoadParameterOptions& options,
-        const std::function<void()>& validate) override;
-
     void Load(
         TYsonStructBase* self,
         NYson::TYsonPullParserCursor* cursor,
@@ -236,7 +223,7 @@ public:
 
     void SafeLoad(
         TYsonStructBase* self,
-        NYson::TYsonPullParserCursor* cursor,
+        NYTree::INodePtr node,
         const TLoadParameterOptions& options,
         const std::function<void()>& validate) override;
 
@@ -278,8 +265,8 @@ public:
     TYsonStructParameter& NonEmpty();
     // Register alias for parameter. Used in deserialization.
     TYsonStructParameter& Alias(const TString& name);
-    // Set merge strategy for parameter
-    TYsonStructParameter& MergeBy(EMergeStrategy strategy);
+    // Set field to T() (or suitable analogue) before deserializations.
+    TYsonStructParameter& ResetOnLoad();
 
     // Register constructor with parameters as initializer of default value for ref-counted class.
     template <class... TArgs>
@@ -293,9 +280,9 @@ private:
     bool SerializeDefault_ = true;
     std::vector<TPostprocessor> Postprocessors_;
     std::vector<TString> Aliases_;
-    EMergeStrategy MergeStrategy_ = EMergeStrategy::Default;
     bool TriviallyInitializedIntrusivePtr_ = false;
     bool Optional_ = false;
+    bool ResetOnLoad_ = false;
 };
 
 ////////////////////////////////////////////////////////////////////////////////

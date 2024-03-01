@@ -90,7 +90,7 @@ public:
 
     // TODO(renadeen): remove this methods.
     void SaveParameter(const TString& key, NYson::IYsonConsumer* consumer) const;
-    void LoadParameter(const TString& key, const NYTree::INodePtr& node, EMergeStrategy mergeStrategy);
+    void LoadParameter(const TString& key, const NYTree::INodePtr& node);
     void ResetParameter(const TString& key);
 
     std::vector<TString> GetAllParameterAliases(const TString& key) const;

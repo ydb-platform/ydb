@@ -1332,6 +1332,136 @@ void FromProto(
     FromProto(&manifest->Clusters, protoManifest.clusters());
 }
 
+void ToProto(
+    NProto::TQuery* protoQuery,
+    const NApi::TQuery& query)
+{
+    protoQuery->Clear();
+
+    ToProto(protoQuery->mutable_id(), query.Id);
+
+    if (query.Engine) {
+        protoQuery->set_engine(ConvertQueryEngineToProto(*query.Engine));
+    }
+    if (query.Query) {
+        protoQuery->set_query(*query.Query);
+    }
+    if (query.Files) {
+        protoQuery->set_files(query.Files->ToString());
+    }
+    if (query.StartTime) {
+        protoQuery->set_start_time(NYT::ToProto<i64>(*query.StartTime));
+    }
+    if (query.FinishTime) {
+        protoQuery->set_start_time(NYT::ToProto<i64>(*query.FinishTime));
+    }
+    if (query.Settings) {
+        protoQuery->set_settings(query.Settings.ToString());
+    }
+    if (query.User) {
+        protoQuery->set_user(*query.User);
+    }
+    if (query.AccessControlObject) {
+        protoQuery->set_access_control_object(*query.AccessControlObject);
+    }
+    if (query.State) {
+        protoQuery->set_state(ConvertQueryStateToProto(*query.State));
+    }
+    if (query.ResultCount) {
+        protoQuery->set_result_count(*query.ResultCount);
+    }
+    if (query.Progress) {
+        protoQuery->set_progress(query.Progress.ToString());
+    }
+    if (query.Error) {
+        ToProto(protoQuery->mutable_error(), *query.Error);
+    }
+    if (query.Annotations) {
+        protoQuery->set_annotations(query.Annotations.ToString());
+    }
+    if (query.OtherAttributes) {
+        ToProto(protoQuery->mutable_other_attributes(), *query.OtherAttributes);
+    }
+}
+
+void FromProto(
+    NApi::TQuery* query,
+    const NProto::TQuery& protoQuery)
+{
+    FromProto(&query->Id, protoQuery.id());
+
+    if (protoQuery.has_engine()) {
+        query->Engine = ConvertQueryEngineFromProto(protoQuery.engine());
+    } else {
+        query->Engine.reset();
+    }
+    if (protoQuery.has_query()) {
+        query->Query = protoQuery.query();
+    } else {
+        query->Query.reset();
+    }
+    if (protoQuery.has_files()) {
+        query->Files = TYsonString(protoQuery.files());
+    } else {
+        query->Files.reset();
+    }
+    if (protoQuery.has_start_time()) {
+        query->StartTime = TInstant::FromValue(protoQuery.start_time());
+    } else {
+        query->StartTime.reset();
+    }
+    if (protoQuery.has_finish_time()) {
+        query->FinishTime = TInstant::FromValue(protoQuery.finish_time());
+    } else {
+        query->FinishTime.reset();
+    }
+    if (protoQuery.has_settings()) {
+        query->Settings = TYsonString(protoQuery.settings());
+    } else {
+        query->Settings = TYsonString{};
+    }
+    if (protoQuery.has_user()) {
+        query->User = protoQuery.user();
+    } else {
+        query->User.reset();
+    }
+    if (protoQuery.has_access_control_object()) {
+        query->AccessControlObject = protoQuery.access_control_object();
+    } else {
+        query->AccessControlObject.reset();
+    }
+    if (protoQuery.has_state()) {
+        query->State = ConvertQueryStateFromProto(protoQuery.state());
+    } else {
+        query->State.reset();
+    }
+    if (protoQuery.result_count()) {
+        query->ResultCount = protoQuery.result_count();
+    } else {
+        query->ResultCount.reset();
+    }
+    if (protoQuery.has_progress()) {
+        query->Progress = TYsonString(protoQuery.progress());
+    } else {
+        query->Progress = TYsonString{};
+    }
+    if (protoQuery.has_error()) {
+        query->Error = FromProto<TError>(protoQuery.error());
+    } else {
+        query->Error.reset();
+    }
+    if (protoQuery.has_annotations()) {
+        query->Annotations = TYsonString(protoQuery.annotations());
+    } else {
+        query->Annotations = TYsonString{};
+    }
+    if (protoQuery.has_other_attributes()) {
+        query->OtherAttributes = NYTree::FromProto(protoQuery.other_attributes());
+    } else if (query->OtherAttributes) {
+        query->OtherAttributes->Clear();
+    }
+}
+
 ////////////////////////////////////////////////////////////////////////////////
 // ENUMS
 ////////////////////////////////////////////////////////////////////////////////
@@ -1644,6 +1774,98 @@ NJobTrackerClient::EJobState ConvertJobStateFromProto(
             return NJobTrackerClient::EJobState::None;
         case NProto::EJobState::JS_UNKNOWN:
             THROW_ERROR_EXCEPTION("Protobuf contains unknown value for job state");
+    }
+    YT_ABORT();
+}
+
+NProto::EQueryEngine ConvertQueryEngineToProto(
+    NQueryTrackerClient::EQueryEngine queryEngine)
+{
+    switch (queryEngine) {
+        case NQueryTrackerClient::EQueryEngine::Ql:
+            return NProto::EQueryEngine::QE_QL;
+        case NQueryTrackerClient::EQueryEngine::Yql:
+            return NProto::EQueryEngine::QE_YQL;
+        case NQueryTrackerClient::EQueryEngine::Chyt:
+            return NProto::EQueryEngine::QE_CHYT;
+        case NQueryTrackerClient::EQueryEngine::Mock:
+            return NProto::EQueryEngine::QE_MOCK;
+        case NQueryTrackerClient::EQueryEngine::Spyt:
+            return NProto::EQueryEngine::QE_SPYT;
+    }
+    YT_ABORT();
+}
+
+NQueryTrackerClient::EQueryEngine ConvertQueryEngineFromProto(
+    NProto::EQueryEngine proto)
+{
+    switch (proto) {
+        case NProto::EQueryEngine::QE_QL:
+            return NQueryTrackerClient::EQueryEngine::Ql;
+        case NProto::EQueryEngine::QE_YQL:
+            return NQueryTrackerClient::EQueryEngine::Yql;
+        case NProto::EQueryEngine::QE_CHYT:
+            return NQueryTrackerClient::EQueryEngine::Chyt;
+        case NProto::EQueryEngine::QE_MOCK:
+            return NQueryTrackerClient::EQueryEngine::Mock;
+        case NProto::EQueryEngine::QE_SPYT:
+            return NQueryTrackerClient::EQueryEngine::Spyt;
+        case NProto::EQueryEngine::QE_UNKNOWN:
+            THROW_ERROR_EXCEPTION("Protobuf contains unknown value for query engine");
+    }
+    YT_ABORT();
+}
+
+NProto::EQueryState ConvertQueryStateToProto(
+    NQueryTrackerClient::EQueryState queryState)
+{
+    switch (queryState) {
+        case NQueryTrackerClient::EQueryState::Draft:
+            return NProto::EQueryState::QS_DRAFT;
+        case NQueryTrackerClient::EQueryState::Pending:
+            return NProto::EQueryState::QS_PENDING;
+        case NQueryTrackerClient::EQueryState::Running:
+            return NProto::EQueryState::QS_RUNNING;
+        case NQueryTrackerClient::EQueryState::Aborting:
+            return NProto::EQueryState::QS_ABORTING;
+        case NQueryTrackerClient::EQueryState::Aborted:
+            return NProto::EQueryState::QS_ABORTED;
+        case NQueryTrackerClient::EQueryState::Completing:
+            return NProto::EQueryState::QS_COMPLETING;
+        case NQueryTrackerClient::EQueryState::Completed:
+            return NProto::EQueryState::QS_COMPLETED;
+        case NQueryTrackerClient::EQueryState::Failing:
+            return NProto::EQueryState::QS_FAILING;
+        case NQueryTrackerClient::EQueryState::Failed:
+            return NProto::EQueryState::QS_FAILED;
+    }
+    YT_ABORT();
+}
+
+NQueryTrackerClient::EQueryState ConvertQueryStateFromProto(
+    NProto::EQueryState proto)
+{
+    switch (proto) {
+        case NProto::EQueryState::QS_DRAFT:
+            return NQueryTrackerClient::EQueryState::Draft;
+        case NProto::EQueryState::QS_PENDING:
+            return NQueryTrackerClient::EQueryState::Pending;
+        case NProto::EQueryState::QS_RUNNING:
+            return NQueryTrackerClient::EQueryState::Running;
+        case NProto::EQueryState::QS_ABORTING:
+            return NQueryTrackerClient::EQueryState::Aborting;
+        case NProto::EQueryState::QS_ABORTED:
+            return NQueryTrackerClient::EQueryState::Aborted;
+        case NProto::EQueryState::QS_COMPLETING:
+            return NQueryTrackerClient::EQueryState::Completing;
+        case NProto::EQueryState::QS_COMPLETED:
+            return NQueryTrackerClient::EQueryState::Completed;
+        case NProto::EQueryState::QS_FAILING:
+            return NQueryTrackerClient::EQueryState::Failing;
+        case NProto::EQueryState::QS_FAILED:
+            return NQueryTrackerClient::EQueryState::Failed;
+        case NProto::EQueryState::QS_UNKNOWN:
+            THROW_ERROR_EXCEPTION("Protobuf contains unknown value for query state");
     }
     YT_ABORT();
 }

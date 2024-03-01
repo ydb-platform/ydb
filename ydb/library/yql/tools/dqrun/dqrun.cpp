@@ -962,6 +962,10 @@ int RunMain(int argc, const char* argv[])
 
 int main(int argc, const char* argv[])
 {
+    std::set_terminate([] () {
+        FormatBackTrace(&Cerr);
+        abort();
+    });
     Y_UNUSED(NUdf::GetStaticSymbols());
     NYql::NBacktrace::RegisterKikimrFatalActions();
     NYql::NBacktrace::EnableKikimrSymbolize();

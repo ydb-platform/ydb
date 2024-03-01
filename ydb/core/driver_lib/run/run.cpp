@@ -173,36 +173,25 @@ public:
             }
 
             bool isExplicitTabletIds = domain.ExplicitCoordinatorsSize() + domain.ExplicitMediatorsSize() + domain.ExplicitAllocatorsSize();
-
-            const ui32 defaultSSId = domainId;
-            const ui32 schemeBoardSSId = (domain.HasSchemeBoardSSId() && domain.GetSchemeBoardSSId()) ? domain.GetSchemeBoardSSId() : defaultSSId;
-            Y_ABORT_UNLESS(Find(domain.GetSSId(), defaultSSId) != domain.GetSSId().end());
-            Y_ABORT_UNLESS(Find(domain.GetSSId(), schemeBoardSSId) != domain.GetSSId().end());
+            Y_ABORT_UNLESS(isExplicitTabletIds);
+            Y_ABORT_UNLESS(domain.SSIdSize() == 0 || (domain.SSIdSize() == 1 && domain.GetSSId(0) == 1));
+            Y_ABORT_UNLESS(domain.HiveUidSize() == 0 || (domain.HiveUidSize() == 1 && domain.GetHiveUid(0) == 1));
 
             TDomainsInfo::TDomain::TPtr domainPtr = nullptr;
             if (isExplicitTabletIds) {
                 domainPtr = TDomainsInfo::TDomain::ConstructDomainWithExplicitTabletIds(domainName, domainId, schemeRoot,
-                                                                                     defaultSSId, schemeBoardSSId, domain.GetSSId(),
-                                                                                     domainId, domain.GetHiveUid(),
                                                                                      planResolution,
                                                                                      domain.GetExplicitCoordinators(),
                                                                                      domain.GetExplicitMediators(),
                                                                                      domain.GetExplicitAllocators(),
                                                                                      poolTypes);
-            } else {
-                domainPtr = TDomainsInfo::TDomain::ConstructDomain(domainName, domainId, schemeRoot,
-                                                                defaultSSId, schemeBoardSSId, domain.GetSSId(),
-                                                                domainId, domain.GetHiveUid(),
-                                                                planResolution,
-                                                                domain.GetCoordinator(), domain.GetMediator(),
-                                                                domain.GetProxy(), poolTypes);
             }
 
             appData->DomainsInfo->AddDomain(domainPtr.Release());
         }
 
         for (const NKikimrConfig::TDomainsConfig::THiveConfig &hiveConfig : Config.GetDomainsConfig().GetHiveConfig()) {
-            appData->DomainsInfo->AddHive(hiveConfig.GetHiveUid(), hiveConfig.GetHive());
+            appData->DomainsInfo->AddHive(hiveConfig.GetHive());
         }
 
         for (const NKikimrConfig::TDomainsConfig::TNamedCompactionPolicy &policy : Config.GetDomainsConfig().GetNamedCompactionPolicy()) {

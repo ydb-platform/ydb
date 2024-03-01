@@ -132,13 +132,12 @@ public:
     TActorId CreateSubscriber(
         const TActorId& owner,
         const TPath& path,
-        ui64 stateStorageGroup = 0,
         ui64 domainOwnerId = 1,
         bool grabResponse = true,
         ui32 nodeIndex = 0
     ) {
         const TActorId subscriber = Register(
-            CreateSchemeBoardSubscriber(owner, path, stateStorageGroup, domainOwnerId), nodeIndex
+            CreateSchemeBoardSubscriber(owner, path, domainOwnerId), nodeIndex
         );
         EnableScheduleForActor(subscriber, true);
 
@@ -153,12 +152,11 @@ public:
     TActorId CreateSubscriber(
         const TActorId& owner,
         const TPath& path,
-        ui64 stateStorageGroup = 0,
         ui64 domainOwnerId = 1,
         ui32 nodeIndex = 0
     ) {
         return CreateSubscriber<TSchemeBoardEvents::TEvNotify>(
-            owner, path, stateStorageGroup, domainOwnerId, false, nodeIndex
+            owner, path, domainOwnerId, false, nodeIndex
         );
     }
 
@@ -170,7 +168,6 @@ class TTestWithSchemeshard: public NUnitTest::TTestBase {
         TAppPrepare& app,
         const TString& name,
         ui32 domainUid,
-        ui32 stateStorageGroup,
         ui64 hiveTabletId,
         ui64 schemeshardTabletId
     ) {
@@ -178,12 +175,10 @@ class TTestWithSchemeshard: public NUnitTest::TTestBase {
         ui32 planResolution = 50;
         auto domain = TDomainsInfo::TDomain::ConstructDomainWithExplicitTabletIds(
             name, domainUid, schemeshardTabletId,
-            stateStorageGroup, stateStorageGroup, TVector<ui32>{stateStorageGroup},
-            domainUid, TVector<ui32>{domainUid},
             planResolution,
-            TVector<ui64>{TDomainsInfo::MakeTxCoordinatorIDFixed(domainUid, 1)},
+            TVector<ui64>{TDomainsInfo::MakeTxCoordinatorIDFixed(1)},
             TVector<ui64>{},
-            TVector<ui64>{TDomainsInfo::MakeTxAllocatorIDFixed(domainUid, 1)},
+            TVector<ui64>{TDomainsInfo::MakeTxAllocatorIDFixed(1)},
             DefaultPoolKinds(2)
         );
 
@@ -192,7 +187,7 @@ class TTestWithSchemeshard: public NUnitTest::TTestBase {
         runtime.SetTxAllocatorTabletIds(ids);
 
         app.AddDomain(domain.Release());
-        app.AddHive(domainUid, hiveTabletId);
+        app.AddHive(hiveTabletId);
     }
 
     static void SetupRuntime(TTestActorRuntime& runtime) {
@@ -201,8 +196,8 @@ class TTestWithSchemeshard: public NUnitTest::TTestBase {
         }
 
         TAppPrepare app;
-        AddDomain(runtime, app, "Root", 0, 0, TTestTxConfig::Hive, TTestTxConfig::SchemeShard);
-        SetupChannelProfiles(app, 0, 1);
+        AddDomain(runtime, app, "Root", 0, TTestTxConfig::Hive, TTestTxConfig::SchemeShard);
+        SetupChannelProfiles(app, 1);
         SetupTabletServices(runtime, &app, true);
     }
 

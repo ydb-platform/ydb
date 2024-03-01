@@ -26,12 +26,10 @@ void TTester::Setup(TTestActorRuntime& runtime) {
 
     auto domain = TDomainsInfo::TDomain::ConstructDomainWithExplicitTabletIds(
                       "dc-1", domainId, FAKE_SCHEMESHARD_TABLET_ID,
-                      domainId, domainId, std::vector<ui32>{domainId},
-                      domainId, std::vector<ui32>{domainId},
                       planResolution,
-                      std::vector<ui64>{TDomainsInfo::MakeTxCoordinatorIDFixed(domainId, 1)},
+                      std::vector<ui64>{TDomainsInfo::MakeTxCoordinatorIDFixed(1)},
                       std::vector<ui64>{},
-                      std::vector<ui64>{TDomainsInfo::MakeTxAllocatorIDFixed(domainId, 1)});
+                      std::vector<ui64>{TDomainsInfo::MakeTxAllocatorIDFixed(1)});
 
     TVector<ui64> ids = runtime.GetTxAllocatorTabletIds();
     ids.insert(ids.end(), domain->TxAllocators.begin(), domain->TxAllocators.end());

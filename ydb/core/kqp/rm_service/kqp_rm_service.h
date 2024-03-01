@@ -103,7 +103,7 @@ public:
 
 
 NActors::IActor* CreateTakeResourcesSnapshotActor(
-    const TString& boardPath, ui32 stateStorageGroupId,
+    const TString& boardPath,
     std::function<void(TVector<NKikimrKqp::TKqpNodeResources>&&)>&& callback);
 
 

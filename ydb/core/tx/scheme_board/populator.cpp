@@ -756,8 +756,7 @@ class TPopulator: public TMonitorableActor<TPopulator> {
         const auto& info = ev->Get()->Info;
 
         if (!info) {
-            SBP_LOG_E("Publish on unconfigured SchemeBoard"
-                << ": StateStorage group# " << StateStorageGroup);
+            SBP_LOG_E("Publish on unconfigured SchemeBoard");
             Become(&TThis::StateCalm);
             return;
         }
@@ -835,8 +834,7 @@ class TPopulator: public TMonitorableActor<TPopulator> {
     }
 
     void HandleUndelivered() {
-        SBP_LOG_E("Publish on unavailable SchemeBoard"
-            << ": StateStorage group# " << StateStorageGroup);
+        SBP_LOG_E("Publish on unavailable SchemeBoard");
         Become(&TThis::StateCalm);
     }
 
@@ -863,12 +861,10 @@ public:
     explicit TPopulator(
             const ui64 owner,
             const ui64 generation,
-            const ui32 ssId,
             std::vector<std::pair<TPathId, NSchemeBoard::TTwoPartDescription>>&& twoPartDescriptions,
             const ui64 maxPathId)
         : Owner(owner)
         , Generation(generation)
-        , StateStorageGroup(ssId)
         , MaxPathId(TPathId(owner, maxPathId))
     {
         for (const auto& [pathId, twoPart] : twoPartDescriptions) {
@@ -879,7 +875,7 @@ public:
     void Bootstrap() {
         TMonitorableActor::Bootstrap();
 
-        const TActorId proxy = MakeStateStorageProxyID(StateStorageGroup);
+        const TActorId proxy = MakeStateStorageProxyID();
         Send(proxy, new TEvStateStorage::TEvListSchemeBoard(), IEventHandle::FlagTrackDelivery);
         Become(&TThis::StateResolve);
     }
@@ -925,7 +921,6 @@ public:
 private:
     const ui64 Owner;
     const ui64 Generation;
-    const ui64 StateStorageGroup;
 
     TMap<TPathId, TOpaquePathDescription> Descriptions;
     TPathId MaxPathId;
@@ -951,11 +946,10 @@ private:
 IActor* CreateSchemeBoardPopulator(
     const ui64 owner,
     const ui64 generation,
-    const ui32 ssId,
     std::vector<std::pair<TPathId, NSchemeBoard::TTwoPartDescription>>&& twoPartDescriptions,
     const ui64 maxPathId
 ) {
-    return new NSchemeBoard::TPopulator(owner, generation, ssId, std::move(twoPartDescriptions), maxPathId);
+    return new NSchemeBoard::TPopulator(owner, generation, std::move(twoPartDescriptions), maxPathId);
 }
 
 } // NKikimr

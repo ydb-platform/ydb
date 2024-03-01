@@ -122,9 +122,8 @@ public:
 
     void Bootstrap() override {
         TIntrusivePtr<TDomainsInfo> domains = AppData()->DomainsInfo;
-        TIntrusivePtr<TDomainsInfo::TDomain> domain = domains->Domains.begin()->second;
-        ui64 hiveId = domains->GetHive(domain->DefaultHiveUid);
-        if (hiveId != 0) {
+        ui64 hiveId = domains->GetHive();
+        if (hiveId != TDomainsInfo::BadTabletId) {
             RequestHiveStorageStats(hiveId);
         }
         TBase::Bootstrap();

@@ -445,19 +445,16 @@ struct TEvStateStorage {
 
         const EStatus Status;
         const TString Path;
-        const ui32 StateStorageGroupId;
         TMap<TActorId, TBoardInfoEntry> InfoEntries;
 
-        TEvBoardInfo(EStatus status, const TString &path, ui32 stateStorageGroupId)
+        TEvBoardInfo(EStatus status, const TString &path)
             : Status(status)
             , Path(path)
-            , StateStorageGroupId(stateStorageGroupId)
         {}
 
         TEvBoardInfo(const TEvBoardInfo &x)
             : Status(x.Status)
             , Path(x.Path)
-            , StateStorageGroupId(x.StateStorageGroupId)
             , InfoEntries(x.InfoEntries)
         {}
     };
@@ -466,13 +463,11 @@ struct TEvStateStorage {
 
         const TEvBoardInfo::EStatus Status;
         const TString Path;
-        const ui32 StateStorageGroupId;
         TMap<TActorId, TBoardInfoEntry> Updates;
 
-        TEvBoardInfoUpdate(TEvBoardInfo::EStatus status, const TString &path, ui32 stateStorageGroupId)
+        TEvBoardInfoUpdate(TEvBoardInfo::EStatus status, const TString &path)
             : Status(status)
             , Path(path)
-            , StateStorageGroupId(stateStorageGroupId)
         {}
     };
 };
@@ -509,7 +504,6 @@ struct TStateStorageInfo : public TThrRefBase {
         ui32 ContentHash() const;
     };
 
-    ui32 StateStorageGroup;
     ui32 NToSelect;
     TVector<TRing> Rings;
 
@@ -521,8 +515,7 @@ struct TStateStorageInfo : public TThrRefBase {
     ui32 ContentHash() const;
 
     TStateStorageInfo()
-        : StateStorageGroup(Max<ui32>())
-        , NToSelect(0)
+        : NToSelect(0)
         , Hash(Max<ui64>())
     {}
 
@@ -562,10 +555,10 @@ IActor* CreateStateStorageFollowerGuardian(ui64 tabletId, const TActorId &follow
 IActor* CreateStateStorageBoardReplica(const TIntrusivePtr<TStateStorageInfo> &, ui32);
 IActor* CreateSchemeBoardReplica(const TIntrusivePtr<TStateStorageInfo>&, ui32);
 IActor* CreateBoardLookupActor(
-    const TString &path, const TActorId &owner, ui32 groupId, EBoardLookupMode mode,
+    const TString &path, const TActorId &owner, EBoardLookupMode mode,
     TBoardRetrySettings boardRetrySettings = {});
 IActor* CreateBoardPublishActor(
-    const TString &path, const TString &payload, const TActorId &owner, ui32 groupId, ui32 ttlMs, bool reg,
+    const TString &path, const TString &payload, const TActorId &owner, ui32 ttlMs, bool reg,
     TBoardRetrySettings boardRetrySettings = {});
 
 TString MakeEndpointsBoardPath(const TString &database);

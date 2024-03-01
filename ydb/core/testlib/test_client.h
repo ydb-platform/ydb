@@ -54,13 +54,13 @@ namespace Tests {
 
     constexpr const char* TestDomainName = "dc-1";
     const ui32 TestDomain = 1;
-    const ui64 DummyTablet1 = 0x840100;
-    const ui64 DummyTablet2 = 0x840101;
-    const ui64 Coordinator = 0x800001;
-    const ui64 Mediator = 0x810001;
-    const ui64 TxAllocator = 0x820001;
-    const ui64 SchemeRoot = 0x850100;
-    const ui64 Hive = 0xA001;
+    const ui64 DummyTablet1 = MakeTabletID(false, 0x840100);
+    const ui64 DummyTablet2 = MakeTabletID(false, 0x840101);
+    const ui64 Coordinator = MakeTabletID(false, 0x800001);
+    const ui64 Mediator = MakeTabletID(false, 0x810001);
+    const ui64 TxAllocator = MakeTabletID(false, 0x820001);
+    const ui64 SchemeRoot = MakeTabletID(false, 0x850100);
+    const ui64 Hive = MakeTabletID(false, 0xA001);
 
     struct TServerSetup {
         TString IpAddress;
@@ -79,10 +79,17 @@ namespace Tests {
     bool IsServerRedirected();
     TServerSetup GetServerSetup();
 
-    ui64 ChangeDomain(ui64 tabletId, ui32 domainUid);
-    ui64 ChangeStateStorage(ui64 tabletId, ui32 ssUid);
-    NMiniKQL::IFunctionRegistry* DefaultFrFactory(const NScheme::TTypeRegistry& typeRegistry);
+    inline ui64 ChangeDomain(ui64 tabletId, ui32 id) {
+        const ui64 mask = static_cast<ui64>(0xfff) << 44;
+        return (tabletId & ~mask) | static_cast<ui64>(id & 0xfff) << 44;
+    }
 
+    inline ui64 ChangeStateStorage(ui64 tabletId, ui32 id) {
+        const ui64 mask = static_cast<ui64>(0xff) << 56;
+        return (tabletId & ~mask) | static_cast<ui64>(id & 0xff) << 56;
+    }
+
+    NMiniKQL::IFunctionRegistry* DefaultFrFactory(const NScheme::TTypeRegistry& typeRegistry);
 
     struct TServerSettings: public TThrRefBase, public TTestFeatureFlagsHolder<TServerSettings> {
         static constexpr ui64 BOX_ID = 999;

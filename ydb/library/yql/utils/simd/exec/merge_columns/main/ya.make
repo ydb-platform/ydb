@@ -4,6 +4,6 @@ PROGRAM()
 
 SRCS(main.cpp)
 
-PEERDIR(ydb/library/yql/utils/simd/exec/merge_columns)
+PEERDIR(ydb/library/yql/utils/simd)
 
 END()

@@ -67,7 +67,7 @@ template <typename T>
 struct FallbackTrait {
 
     T Value;
-    
+
     static const int SIZE = sizeof(T);
 
     inline FallbackTrait() : Value() {}

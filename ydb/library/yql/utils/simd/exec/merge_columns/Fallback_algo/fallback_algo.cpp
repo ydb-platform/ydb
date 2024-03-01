@@ -1,7 +1,7 @@
-#include <ydb/library/yql/utils/simd/exec/merge_columns/merge.h>
+#include <ydb/library/yql/utils/simd/simd.h>
 
 template<>
-THolder<Perfomancer::Interface> Perfomancer::Create<FallbackTrait>() {
+THolder<NSimd::Perfomancer::Interface> NSimd::Perfomancer::Create<NSimd::FallbackTrait>() {
     Cerr << "FallbackTrait ";
     return MakeHolder<Algo<FallbackTrait>>();
 }

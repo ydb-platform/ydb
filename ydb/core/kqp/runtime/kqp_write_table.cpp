@@ -118,7 +118,6 @@ public:
         TString err;
         if (!BatchBuilder.Start(BuildBatchBuilderColumns(schemeEntry), 0, 0, err)) {
             yexception() << "Failed to start batch builder: " + err;
-            return;
         }
     }
 

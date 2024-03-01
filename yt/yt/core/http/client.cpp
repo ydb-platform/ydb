@@ -270,6 +270,32 @@ private:
         }));
     }
 
+    IResponsePtr DoRequest(
+        EMethod method,
+        const TString& url,
+        const std::optional<TSharedRef>& body,
+        const THeadersPtr& headers,
+        int redirectCount = 0)
+    {
+        auto [request, response] = StartAndWriteHeaders(method, url, headers);
+
+        if (body) {
+            WaitFor(request->WriteBody(*body))
+                .ThrowOnError();
+        } else {
+            WaitFor(request->Close())
+                .ThrowOnError();
+        }
+
+        // Waits for response headers internally.
+        auto redirectUrl = response->TryGetRedirectUrl();
+        if (redirectUrl && redirectCount < Config_->MaxRedirectCount) {
+            return DoRequest(method, *redirectUrl, body, headers, redirectCount + 1);
+        }
+
+        return IResponsePtr(response);
+    }
+
     TFuture<IResponsePtr> Request(
         EMethod method,
         const TString& url,
@@ -277,20 +303,7 @@ private:
         const THeadersPtr& headers)
     {
         return WrapError(url, BIND([=, this, this_ = MakeStrong(this)] {
-            auto [request, response] = StartAndWriteHeaders(method, url, headers);
-
-            if (body) {
-                WaitFor(request->WriteBody(*body))
-                    .ThrowOnError();
-            } else {
-                WaitFor(request->Close())
-                    .ThrowOnError();
-            }
-
-            // Waits for response headers internally.
-            response->GetStatusCode();
-
-            return IResponsePtr(response);
+            return DoRequest(method, url, body, headers);
         }));
     }
 };

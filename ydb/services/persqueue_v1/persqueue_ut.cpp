@@ -5028,6 +5028,7 @@ Y_UNIT_TEST_SUITE(TPersQueueTest) {
       }
       ServiceType: "data-streams"
       Version: 0
+      Important: false
     }
     Consumers {
       Name: "consumer"
@@ -5041,6 +5042,7 @@ Y_UNIT_TEST_SUITE(TPersQueueTest) {
       }
       ServiceType: "data-streams"
       Version: 567
+      Important: true
     }
   }
   ErrorCode: OK

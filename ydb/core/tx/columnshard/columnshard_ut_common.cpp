@@ -431,13 +431,15 @@ namespace NKikimr::NColumnShard {
         PlanSchemaTx(runtime, sender, snap);
     }
 
-    void PrepareTablet(TTestBasicRuntime& runtime, const ui64 tableId, const std::vector<NArrow::NTest::TTestColumn>& schema, const ui32 keySize) {
+    void PrepareTablet(TTestBasicRuntime& runtime, const ui64 tableId,
+                       const std::vector<NArrow::NTest::TTestColumn>& schema, const ui32 keySize) {
         using namespace NTxUT;
-        CreateTestBootstrapper(runtime, CreateTestTabletInfo(TTestTxConfig::TxTablet0, TTabletTypes::ColumnShard), [](const TActorId& tablet, TTabletStorageInfo* info) {
-            auto res = CreateColumnShard(tablet, info);
-            Cerr << "PrepareTablet: CS actor_id=" << res->SelfId() << Endl;
-            return res;
-        });
+        CreateTestBootstrapper(runtime, CreateTestTabletInfo(TTestTxConfig::TxTablet0, TTabletTypes::ColumnShard),
+                               [](const TActorId& tablet, TTabletStorageInfo* info) {
+                                   auto res = CreateColumnShard(tablet, info);
+                                   Cerr << "PrepareTablet: CS actor_id=" << res->SelfId() << Endl;
+                                   return res;
+                               });
 
         TDispatchOptions options;
         options.FinalEvents.push_back(TDispatchOptions::TFinalEventCondition(TEvTablet::EvBoot));

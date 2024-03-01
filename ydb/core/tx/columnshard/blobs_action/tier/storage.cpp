@@ -81,10 +81,11 @@ TOperator::TOperator(const TString& storageId, const TActorId& shardActorId, con
     InitNewExternalOperator();
 }
 
-TOperator::TOperator(const TString& storageId, const TActorIdentity tabletActorID, const NColumnShard::NTiers::TManager* tierManager,  const std::shared_ptr<NDataSharing::TStorageSharedBlobsManager>& storageSharedBlobsManager)
+TOperator::TOperator(const TString& storageId, const TActorIdentity tabletActorID,
+                     const NColumnShard::NTiers::TManager* tierManager,
+                     const std::shared_ptr<NDataSharing::TStorageSharedBlobsManager>& storageSharedBlobsManager)
     : TBase(storageId, storageSharedBlobsManager)
-    , TabletActorId(tabletActorID)
-{
+    , TabletActorId(tabletActorID) {
     InitNewExternalOperator(tierManager);
 }
 

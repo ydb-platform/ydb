@@ -5,10 +5,9 @@
 #include <ydb/core/formats/arrow/simple_builder/batch.h>
 #include <ydb/core/formats/arrow/simple_builder/filler.h>
 #include <ydb/core/kqp/compute_actor/kqp_compute_events.h>
-#include <ydb/core/tx/columnshard/blobs_action/tier/storage.h>
-#include <ydb/core/tx/conveyor/usage/abstract.h>
-#include <ydb/core/tx/columnshard/blobs_reader/actor.h>
 #include <ydb/core/tx/columnshard/blobs_action/storages_manager/manager.h>
+#include <ydb/core/tx/columnshard/blobs_action/tier/storage.h>
+#include <ydb/core/tx/columnshard/blobs_reader/actor.h>
 #include <ydb/core/tx/columnshard/common/tests/shard_reader.h>
 #include <ydb/core/tx/columnshard/engines/changes/cleanup.h>
 #include <ydb/core/tx/columnshard/engines/changes/compaction.h>
@@ -16,6 +15,7 @@
 #include <ydb/core/tx/columnshard/hooks/abstract/abstract.h>
 #include <ydb/core/tx/columnshard/hooks/testing/controller.h>
 #include <ydb/core/tx/columnshard/operations/write_data.h>
+#include <ydb/core/tx/conveyor/usage/abstract.h>
 #include <ydb/core/tx/data_events/backup_events.h>
 #include <ydb/core/wrappers/fake_storage.h>
 
@@ -46,17 +46,15 @@ constexpr ui64 txId = 111;
 constexpr int writePlanStep = 11;
 constexpr ui64 tableId = 1;
 
-const std::vector<TTestColumn> schema = {
-    TTestColumn{"key", NScheme::TTypeInfo{NTypeIds::Uint64}},
-    TTestColumn{"field", NScheme::TTypeInfo{NTypeIds::Utf8}}
-};
+const std::vector<TTestColumn> schema = {TTestColumn{"key", NScheme::TTypeInfo{NTypeIds::Uint64}},
+                                         TTestColumn{"field", NScheme::TTypeInfo{NTypeIds::Utf8}}};
 
 TActorIdentity PrepareCSTable(TTestBasicRuntime& runtime, TActorId& sender) {
     using namespace NArrow;
 
     const ui64 ownerId = 0;
     const ui64 schemaVersion = 1;
-    
+
     const std::vector<ui32> columnsIds = {1, 2};
     auto res = PrepareTabletActor(runtime, tableId, schema);
 
@@ -70,9 +68,9 @@ TActorIdentity PrepareCSTable(TTestBasicRuntime& runtime, TActorId& sender) {
     TString blobData = NArrow::SerializeBatchNoCompression(batch);
     UNIT_ASSERT(blobData.size() < TLimits::GetMaxBlobSize());
 
-    auto evWrite =
-        std::make_unique<NEvents::TDataEvents::TEvWrite>(txId, NKikimrDataEvents::TEvWrite::MODE_PREPARE);
-    const ui64 payloadIndex = NEvWrite::TPayloadWriter<NEvents::TDataEvents::TEvWrite>(*evWrite).AddDataToPayload(std::move(blobData));
+    auto evWrite = std::make_unique<NEvents::TDataEvents::TEvWrite>(txId, NKikimrDataEvents::TEvWrite::MODE_PREPARE);
+    const ui64 payloadIndex =
+        NEvWrite::TPayloadWriter<NEvents::TDataEvents::TEvWrite>(*evWrite).AddDataToPayload(std::move(blobData));
     evWrite->AddOperation(NKikimrDataEvents::TEvWrite::TOperation::OPERATION_REPLACE, {ownerId, tableId, schemaVersion},
                           columnsIds, payloadIndex, NKikimrDataEvents::FORMAT_ARROW);
 
@@ -110,14 +108,9 @@ std::shared_ptr<NTier::TOperator> PrepareInsertOp(const TActorId& sender) {
 
     tierManager->Start(nullptr);
 
-    return std::make_shared<NTier::TOperator>(
-        storageId,
-        tabletActorID,
-        tierManager, 
-        sharedBlobsManager->GetStorageManagerGuarantee(storageId)
-    );
+    return std::make_shared<NTier::TOperator>(storageId, tabletActorID, tierManager,
+                                              sharedBlobsManager->GetStorageManagerGuarantee(storageId));
 }
-
 
 Y_UNIT_TEST_SUITE(TColumnShardBackup) {
     Y_UNIT_TEST(ActorScan) {
@@ -129,7 +122,8 @@ Y_UNIT_TEST_SUITE(TColumnShardBackup) {
 
         auto op = PrepareInsertOp(sender);
 
-        runtime.Register(CreatBackupActor(op, sender, csActorId, tableId, NOlap::TSnapshot{writePlanStep, txId}, TTestSchema::ExtractNames(schema)));
+        runtime.Register(CreatBackupActor(op, sender, csActorId, tableId, NOlap::TSnapshot{writePlanStep, txId},
+                                          TTestSchema::ExtractNames(schema)));
 
         TAutoPtr<NActors::IEventHandle> handle;
         auto event = runtime.GrabEdgeEvent<NEvents::TBackupEvents::TEvBackupShardProposeResult>(handle);
@@ -138,11 +132,13 @@ Y_UNIT_TEST_SUITE(TColumnShardBackup) {
 
         std::string expected;
         {
-            NActors::TLogContextGuard guard = NActors::TLogContextBuilder::Build(NKikimrServices::TX_COLUMNSHARD)("TEST_STEP", 3);
-            NOlap::NTests::TShardReader reader(runtime, TTestTxConfig::TxTablet0, tableId, NOlap::TSnapshot(writePlanStep, txId));
+            NActors::TLogContextGuard guard =
+                NActors::TLogContextBuilder::Build(NKikimrServices::TX_COLUMNSHARD)("TEST_STEP", 3);
+            NOlap::NTests::TShardReader reader(runtime, TTestTxConfig::TxTablet0, tableId,
+                                               NOlap::TSnapshot(writePlanStep, txId));
 
             reader.SetReplyColumns(TTestSchema::ExtractNames(schema));
-            
+
             auto rb = reader.ReadAll();
             UNIT_ASSERT(rb);
             NArrow::ExtractColumnsValidate(rb, TTestSchema::ExtractNames(schema));
@@ -154,14 +150,14 @@ Y_UNIT_TEST_SUITE(TColumnShardBackup) {
         }
 
         std::string actual;
-        { // get data from fake s3
+        {   // get data from fake s3
             const auto bucketIds = Singleton<TFakeExternalStorage>()->GetBucketIds();
             UNIT_ASSERT(1 == bucketIds.size());
 
             auto& fakeBucketStorage = Singleton<TFakeExternalStorage>()->GetBucket(bucketIds.front());
-            for(const auto& data : fakeBucketStorage) {
-                 actual = data.second;
-                 break;
+            for (const auto& data : fakeBucketStorage) {
+                actual = data.second;
+                break;
             }
         }
 

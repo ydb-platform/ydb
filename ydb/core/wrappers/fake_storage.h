@@ -70,11 +70,11 @@ public:
     std::vector<TString> GetBucketIds() const {
         TGuard<TMutex> g(Mutex);
         std::vector<TString> result;
-        for(const auto& [bucketId, _]: BucketStorages) {
+        for (const auto& [bucketId, _] : BucketStorages) {
             result.push_back(bucketId);
         }
 
-        return result;;
+        return result;
     }
 
     TFakeBucketStorage& MutableBucket(const TString& bucketId) const {

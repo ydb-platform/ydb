@@ -38,7 +38,9 @@ public:
     TOperator(const TString& storageId, const NColumnShard::TColumnShard& shard, const std::shared_ptr<NDataSharing::TStorageSharedBlobsManager>& storageSharedBlobsManager);
     TOperator(const TString& storageId, const TActorId& shardActorId, const std::shared_ptr<NWrappers::IExternalStorageConfig>& storageConfig,
         const std::shared_ptr<NDataSharing::TStorageSharedBlobsManager>& storageSharedBlobsManager);
-    TOperator(const TString& storageId, const TActorIdentity tabletActorID, const NColumnShard::NTiers::TManager* tierManager,  const std::shared_ptr<NDataSharing::TStorageSharedBlobsManager>& storageSharedBlobsManager);
+    TOperator(const TString& storageId, const TActorIdentity tabletActorID,
+              const NColumnShard::NTiers::TManager* tierManager,
+              const std::shared_ptr<NDataSharing::TStorageSharedBlobsManager>& storageSharedBlobsManager);
 
     virtual TTabletsByBlob GetBlobsToDelete() const override {
         auto result = GCInfo->GetBlobsToDelete();

@@ -3,8 +3,8 @@
 #include <ydb/core/kqp/compute_actor/kqp_compute_events.h>
 #include <ydb/core/tx/columnshard/blobs_action/abstract/storages_manager.h>
 #include <ydb/core/tx/columnshard/blobs_action/tier/storage.h>
-#include <ydb/core/tx/columnshard/operations/write_data.h>
 #include <ydb/core/tx/columnshard/engines/writer/indexed_blob_constructor.h>
+#include <ydb/core/tx/columnshard/operations/write_data.h>
 #include <ydb/core/tx/data_events/backup_events.h>
 #include <ydb/core/util/backoff.h>
 
@@ -57,16 +57,13 @@ private:
     }
 
 public:
-    TBackupWriteController(const TActorId& actorID, 
-        // @TODO action with blob
-        const std::shared_ptr<NOlap::IBlobsWritingAction>& action, 
-        std::shared_ptr<arrow::RecordBatch> arrowBatch
-    ) : actorID(actorID) {
-
+    TBackupWriteController(const TActorId& actorID,
+                           const std::shared_ptr<NOlap::IBlobsWritingAction>& action,
+                           std::shared_ptr<arrow::RecordBatch> arrowBatch)
+        : actorID(actorID) {
         NArrow::TBatchSplitttingContext splitCtx(NColumnShard::TLimits::GetMaxBlobSize());
 
         NArrow::TSerializedBatch batch = NArrow::TSerializedBatch::Build(arrowBatch, splitCtx);
-
 
         NOlap::TWritingBlob currentBlob;
 
@@ -101,12 +98,9 @@ class TBackupActor : public TActorBootstrapped<TBackupActor> {
     std::optional<NActors::TActorId> ScanActorId;
 
 public:
-    TBackupActor(std::shared_ptr<NOlap::NBlobOperations::NTier::TOperator> insertOperator, 
-                const TActorId senderActorId, 
-                const TActorIdentity csActorId, 
-                const ui64 tableId, 
-                const NOlap::TSnapshot snapshot,
-                const std::vector<TString>& columnsNames)
+    TBackupActor(std::shared_ptr<NOlap::NBlobOperations::NTier::TOperator> insertOperator, const TActorId senderActorId,
+                 const TActorIdentity csActorId, const ui64 tableId, const NOlap::TSnapshot snapshot,
+                 const std::vector<TString>& columnsNames)
         : InsertOperator(insertOperator)
         , SenderActorId(senderActorId)
         , CSActorId(csActorId)
@@ -174,8 +168,8 @@ public:
 
         ProcessState(ctx, BackupActorState::Progress);
     }
-    
-    void Handle(TEvPrivate::TEvWriteBlobsResult::TPtr& , const TActorContext& ctx) {
+
+    void Handle(TEvPrivate::TEvWriteBlobsResult::TPtr&, const TActorContext& ctx) {
         AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("TBackupActor.Handle", "TEvWriteBlobsResult");
 
         ProcessState(ctx, BackupActorState::Done);
@@ -185,8 +179,8 @@ public:
 
 private:
     void ProcessState(const TActorContext& ctx, const BackupActorState newState) {
-        AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("BackupActor.ProcessState", "change state")
-            ("from", ToString(State))("to", ToString(newState));
+        AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)
+        ("BackupActor.ProcessState", "change state")("from", ToString(State))("to", ToString(newState));
 
         State = newState;
 
@@ -285,7 +279,7 @@ private:
 
     void LoadBatchToStorage(const TActorContext& ctx, std::shared_ptr<arrow::RecordBatch> arrowBatch) {
         AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("BackupActor.LoadBatchToStorage", "start");
-        
+
         auto action = InsertOperator->StartWritingAction("BACKUP:WRITING");
         auto writeController = std::make_shared<TBackupWriteController>(SelfId(), action, arrowBatch);
         ctx.Register(CreateWriteActor(TableId, writeController, TInstant::Max()));
@@ -294,12 +288,9 @@ private:
     }
 };
 
-IActor* CreatBackupActor(std::shared_ptr<NOlap::NBlobOperations::NTier::TOperator> insertOperator, 
-                        const TActorId senderActorId, 
-                        const TActorIdentity csActorId, 
-                        const ui64 tableId, 
-                        const NOlap::TSnapshot snapshot,
-                        const std::vector<TString>& columnsNames) {
+IActor* CreatBackupActor(std::shared_ptr<NOlap::NBlobOperations::NTier::TOperator> insertOperator,
+                         const TActorId senderActorId, const TActorIdentity csActorId, const ui64 tableId,
+                         const NOlap::TSnapshot snapshot, const std::vector<TString>& columnsNames) {
     return new TBackupActor(insertOperator, senderActorId, csActorId, tableId, snapshot, columnsNames);
 }
 

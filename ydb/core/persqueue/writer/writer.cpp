@@ -181,7 +181,7 @@ class TPartitionWriter: public TActorBootstrapped<TPartitionWriter>, private TRl
     void InitResult(const TString& reason, const NKikimrKqp::TEvQueryResponse& record) {
         NKikimrClient::TResponse response;
         response.SetStatus(NMsgBusProxy::MSTATUS_ERROR);
-        response.SetErrorCode(NPersQueue::NErrorCode::BAD_REQUEST);
+        response.SetErrorCode(NPersQueue::NErrorCode::UNKNOWN_TXID);
         response.SetErrorReason(IssuesAsString(record.GetResponse()));
         return InitResult(reason, std::move(response));
     }

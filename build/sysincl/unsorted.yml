@@ -359,9 +359,6 @@
   - sys/systemcfg.h
   - sys/thread.h
   #endif
-  - iostream.h
-  - streambuf.h
-  - ostream.h
   - nacl/nacl_random.h
   - jemalloc/jemalloc.h
   - sys/inttypes.h

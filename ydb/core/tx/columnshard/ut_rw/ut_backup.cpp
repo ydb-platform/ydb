@@ -33,20 +33,23 @@ using namespace NColumnShard;
 using namespace Tests;
 using namespace NTxUT;
 
-namespace {
-
-namespace NTypeIds = NScheme::NTypeIds;
+using TTestColumn = NArrow::NTest::TTestColumn;
+using TFakeExternalStorage = NWrappers::NExternalStorage::TFakeExternalStorage;
 using TTypeId = NScheme::TTypeId;
 using TTypeInfo = NScheme::TTypeInfo;
+using TDefaultTestsController = NYDBTest::NColumnShard::TController;
 
-using TDefaultTestsController = NKikimr::NYDBTest::NColumnShard::TController;
+namespace NTypeIds = NScheme::NTypeIds;
+namespace NTier = NOlap::NBlobOperations::NTier;
 
 constexpr ui64 txId = 111;
 constexpr int writePlanStep = 11;
 constexpr ui64 tableId = 1;
 
-const std::vector<std::pair<TString, TTypeInfo>> schema = {{"key", TTypeInfo(NTypeIds::Uint64)},
-                                                               {"field", TTypeInfo(NTypeIds::Utf8)}};
+const std::vector<TTestColumn> schema = {
+    TTestColumn{"key", NScheme::TTypeInfo{NTypeIds::Uint64}},
+    TTestColumn{"field", NScheme::TTypeInfo{NTypeIds::Utf8}}
+};
 
 TActorIdentity PrepareCSTable(TTestBasicRuntime& runtime, TActorId& sender) {
     using namespace NArrow;
@@ -55,7 +58,7 @@ TActorIdentity PrepareCSTable(TTestBasicRuntime& runtime, TActorId& sender) {
     const ui64 schemaVersion = 1;
     
     const std::vector<ui32> columnsIds = {1, 2};
-    auto res = PrepareTabletActor(runtime, tableId, NArrow::NTest::TTestColumn::BuildFromPairs(schema));
+    auto res = PrepareTabletActor(runtime, tableId, schema);
 
     auto keyColumn =
         std::make_shared<NConstruction::TSimpleArrayConstructor<NConstruction::TIntSeqFiller<arrow::UInt64Type>>>(
@@ -68,15 +71,15 @@ TActorIdentity PrepareCSTable(TTestBasicRuntime& runtime, TActorId& sender) {
     UNIT_ASSERT(blobData.size() < TLimits::GetMaxBlobSize());
 
     auto evWrite =
-        std::make_unique<NKikimr::NEvents::TDataEvents::TEvWrite>(txId, NKikimrDataEvents::TEvWrite::MODE_PREPARE);
-    const ui64 payloadIndex = NEvWrite::TPayloadWriter<NKikimr::NEvents::TDataEvents::TEvWrite>(*evWrite).AddDataToPayload(std::move(blobData));
+        std::make_unique<NEvents::TDataEvents::TEvWrite>(txId, NKikimrDataEvents::TEvWrite::MODE_PREPARE);
+    const ui64 payloadIndex = NEvWrite::TPayloadWriter<NEvents::TDataEvents::TEvWrite>(*evWrite).AddDataToPayload(std::move(blobData));
     evWrite->AddOperation(NKikimrDataEvents::TEvWrite::TOperation::OPERATION_REPLACE, {ownerId, tableId, schemaVersion},
                           columnsIds, payloadIndex, NKikimrDataEvents::FORMAT_ARROW);
 
     ForwardToTablet(runtime, TTestTxConfig::TxTablet0, sender, evWrite.release());
 
     TAutoPtr<NActors::IEventHandle> handle;
-    auto event = runtime.GrabEdgeEvent<NKikimr::NEvents::TDataEvents::TEvWriteResult>(handle);
+    auto event = runtime.GrabEdgeEvent<NEvents::TDataEvents::TEvWriteResult>(handle);
 
     UNIT_ASSERT(event);
     UNIT_ASSERT_VALUES_EQUAL(event->Record.GetOrigin(), TTestTxConfig::TxTablet0);
@@ -87,30 +90,27 @@ TActorIdentity PrepareCSTable(TTestBasicRuntime& runtime, TActorId& sender) {
     return res->SelfId();
 }
 
-}   // anonymous namespace
-
-std::shared_ptr<NOlap::NBlobOperations::NTier::TOperator> PrepareInsertOp(const TActorId& sender) {
+std::shared_ptr<NTier::TOperator> PrepareInsertOp(const TActorId& sender) {
     const auto storageId = "some storageId";
     const TActorIdentity tabletActorID(sender);
 
-    
     auto sharedBlobsManager = std::make_shared<NOlap::NDataSharing::TSharedBlobsManager>(NOlap::TTabletId{tableId});
 
     NKikimrSchemeOp::TStorageTierConfig cfgProto;
     cfgProto.SetName("some_name");
 
     ::NKikimrSchemeOp::TS3Settings s3_settings;
-    s3_settings.set_secretkey(Singleton<NWrappers::NExternalStorage::TFakeExternalStorage>()->GetSecretKey());
+    s3_settings.set_secretkey(Singleton<TFakeExternalStorage>()->GetSecretKey());
     s3_settings.set_endpoint("fake");
 
     *cfgProto.MutableObjectStorage() = s3_settings;
-    NColumnShard::NTiers::TTierConfig cfg("tier_name", cfgProto);
+    NTiers::TTierConfig cfg("tier_name", cfgProto);
 
-    auto* tierManager = new NColumnShard::NTiers::TManager(tableId, tabletActorID, cfg);
+    auto* tierManager = new NTiers::TManager(tableId, tabletActorID, cfg);
 
     tierManager->Start(nullptr);
 
-    return std::make_shared<NOlap::NBlobOperations::NTier::TOperator>(
+    return std::make_shared<NTier::TOperator>(
         storageId,
         tabletActorID,
         tierManager, 
@@ -129,10 +129,10 @@ Y_UNIT_TEST_SUITE(TColumnShardBackup) {
 
         auto op = PrepareInsertOp(sender);
 
-        runtime.Register(NColumnShard::CreatBackupActor(op, sender, csActorId, txId, writePlanStep, tableId));
+        runtime.Register(CreatBackupActor(op, sender, csActorId, tableId, NOlap::TSnapshot{writePlanStep, txId}, TTestSchema::ExtractNames(schema)));
 
         TAutoPtr<NActors::IEventHandle> handle;
-        auto event = runtime.GrabEdgeEvent<NKikimr::NEvents::TBackupEvents::TEvBackupShardProposeResult>(handle);
+        auto event = runtime.GrabEdgeEvent<NEvents::TBackupEvents::TEvBackupShardProposeResult>(handle);
 
         UNIT_ASSERT(event);
 
@@ -141,12 +141,12 @@ Y_UNIT_TEST_SUITE(TColumnShardBackup) {
             NActors::TLogContextGuard guard = NActors::TLogContextBuilder::Build(NKikimrServices::TX_COLUMNSHARD)("TEST_STEP", 3);
             NOlap::NTests::TShardReader reader(runtime, TTestTxConfig::TxTablet0, tableId, NOlap::TSnapshot(writePlanStep, txId));
 
-            reader.SetReplyColumns(TTestSchema::ExtractNames(NArrow::NTest::TTestColumn::BuildFromPairs(schema)));
+            reader.SetReplyColumns(TTestSchema::ExtractNames(schema));
             
             auto rb = reader.ReadAll();
             UNIT_ASSERT(rb);
-            NArrow::ExtractColumnsValidate(rb, TTestSchema::ExtractNames(NArrow::NTest::TTestColumn::BuildFromPairs(schema)));
-            UNIT_ASSERT((ui32)rb->num_columns() == TTestSchema::ExtractNames(NArrow::NTest::TTestColumn::BuildFromPairs(schema)).size());
+            NArrow::ExtractColumnsValidate(rb, TTestSchema::ExtractNames(schema));
+            UNIT_ASSERT((ui32)rb->num_columns() == TTestSchema::ExtractNames(schema).size());
             UNIT_ASSERT(rb->num_rows());
             UNIT_ASSERT(reader.IsCorrectlyFinished());
 
@@ -155,10 +155,10 @@ Y_UNIT_TEST_SUITE(TColumnShardBackup) {
 
         std::string actual;
         { // get data from fake s3
-            const auto bucketIds = Singleton<NWrappers::NExternalStorage::TFakeExternalStorage>()->GetBucketIds();
+            const auto bucketIds = Singleton<TFakeExternalStorage>()->GetBucketIds();
             UNIT_ASSERT(1 == bucketIds.size());
 
-            auto& fakeBucketStorage = Singleton<NWrappers::NExternalStorage::TFakeExternalStorage>()->GetBucket(bucketIds.front());
+            auto& fakeBucketStorage = Singleton<TFakeExternalStorage>()->GetBucket(bucketIds.front());
             for(const auto& data : fakeBucketStorage) {
                  actual = data.second;
                  break;

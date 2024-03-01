@@ -40,18 +40,16 @@ std::string ToString(BackupActorState s) {
     }
 }
 
-class TBackupWriteController : public NColumnShard::IWriteController, public NColumnShard::TMonitoringObjectsCounter<TBackupWriteController, true> {
+class TBackupWriteController : public IWriteController, public TMonitoringObjectsCounter<TBackupWriteController, true> {
 private:
     const TActorId actorID;
 
-    NBlobCache::TUnifiedBlobId BlobId;
-
-    void DoOnReadyResult(const NActors::TActorContext& ctx, const NColumnShard::TBlobPutResult::TPtr& putResult) override {
+    void DoOnReadyResult(const NActors::TActorContext& ctx, const TBlobPutResult::TPtr& putResult) override {
         AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("TBackupWriteController.DoOnReadyResult", "start");
 
         NOlap::TWritingBuffer bufferStub;
 
-        auto result = std::make_unique<NColumnShard::TEvPrivate::TEvWriteBlobsResult>(putResult, std::move(bufferStub));
+        auto result = std::make_unique<TEvPrivate::TEvWriteBlobsResult>(putResult, std::move(bufferStub));
         ctx.Send(actorID, result.release());
     }
     void DoOnStartSending() override {
@@ -85,8 +83,6 @@ public:
 
         currentBlob.InitBlobId(task.GetBlobId());
     }
-
-    NBlobCache::TUnifiedBlobId GetBlobID() const noexcept { return BlobId; }
 };
 
 class TBackupActor : public TActorBootstrapped<TBackupActor> {
@@ -94,16 +90,13 @@ class TBackupActor : public TActorBootstrapped<TBackupActor> {
 
     const TActorId SenderActorId;
     const TActorIdentity CSActorId;
-    const ui64 TxId;
-    const ui64 PlanStep;
     const ui64 TableId;
+    const NOlap::TSnapshot Snapshot;
+    const std::vector<TString> ColumnsNames;
 
     BackupActorState State = BackupActorState::Invalid;
 
     NKikimrSSA::TProgram ProgramProto = NKikimrSSA::TProgram();
-
-    // @TODO think about columns
-    const std::vector<TString> replyColumns{"key", "field"};
 
     std::optional<NActors::TActorId> ScanActorId;
 
@@ -111,15 +104,15 @@ public:
     TBackupActor(std::shared_ptr<NOlap::NBlobOperations::NTier::TOperator> insertOperator, 
                 const TActorId senderActorId, 
                 const TActorIdentity csActorId, 
-                const ui64 txId, 
-                const int planStep,
-                const ui64 tableId)
+                const ui64 tableId, 
+                const NOlap::TSnapshot snapshot,
+                const std::vector<TString>& columnsNames)
         : InsertOperator(insertOperator)
         , SenderActorId(senderActorId)
         , CSActorId(csActorId)
-        , TxId(txId)
-        , PlanStep(planStep)
-        , TableId(tableId) {
+        , TableId(tableId)
+        , Snapshot(snapshot)
+        , ColumnsNames(columnsNames) {
     }
 
     void Bootstrap(const TActorContext& ctx) {
@@ -220,8 +213,8 @@ private:
         for (auto&& command : *ProgramProto.MutableCommand()) {
             if (command.HasProjection()) {
                 NKikimrSSA::TProgram::TProjection proj;
-                for (auto&& i : replyColumns) {
-                    proj.AddColumns()->SetName(i);
+                for (auto& name : ColumnsNames) {
+                    proj.AddColumns()->SetName(name);
                 }
                 *command.MutableProjection() = proj;
                 return;
@@ -230,8 +223,8 @@ private:
         {
             auto* command = ProgramProto.AddCommand();
             NKikimrSSA::TProgram::TProjection proj;
-            for (auto&& i : replyColumns) {
-                proj.AddColumns()->SetName(i);
+            for (auto& name : ColumnsNames) {
+                proj.AddColumns()->SetName(name);
             }
             *command->MutableProjection() = proj;
         }
@@ -240,11 +233,11 @@ private:
     std::unique_ptr<TEvDataShard::TEvKqpScan> BuildScanEvent() const {
         auto ev = std::make_unique<TEvDataShard::TEvKqpScan>();
         ev->Record.SetLocalPathId(TableId);
-        ev->Record.MutableSnapshot()->SetStep(PlanStep);
-        ev->Record.MutableSnapshot()->SetTxId(TxId);
+        ev->Record.MutableSnapshot()->SetStep(Snapshot.GetPlanStep());
+        ev->Record.MutableSnapshot()->SetTxId(Snapshot.GetTxId());
 
         ev->Record.SetStatsMode(NYql::NDqProto::DQ_STATS_MODE_FULL);
-        ev->Record.SetTxId(TxId);
+        ev->Record.SetTxId(Snapshot.GetTxId());
 
         // // ev->Record.SetReverse(Reverse);
         // // ev->Record.SetItemsLimit(Limit);
@@ -304,10 +297,10 @@ private:
 IActor* CreatBackupActor(std::shared_ptr<NOlap::NBlobOperations::NTier::TOperator> insertOperator, 
                         const TActorId senderActorId, 
                         const TActorIdentity csActorId, 
-                        const ui64 txId,
-                        const int planStep, 
-                        const ui64 tableId) {
-    return new TBackupActor(insertOperator, senderActorId, csActorId, txId, planStep, tableId);
+                        const ui64 tableId, 
+                        const NOlap::TSnapshot snapshot,
+                        const std::vector<TString>& columnsNames) {
+    return new TBackupActor(insertOperator, senderActorId, csActorId, tableId, snapshot, columnsNames);
 }
 
 }   // namespace NKikimr::NColumnShard

@@ -210,7 +210,7 @@ private:
         }
         bool nonReorderable = op->LinkSettings.ForceSortedMerge;
         Ctx->HasForceSortedMerge = Ctx->HasForceSortedMerge || op->LinkSettings.ForceSortedMerge;
-        Ctx->HasHints = Ctx->HasHints || !op->LinkSettings.LeftHints.empty() || !op->LinkSettings.LeftHints.empty();
+        Ctx->HasHints = Ctx->HasHints || !op->LinkSettings.LeftHints.empty() || !op->LinkSettings.RightHints.empty();
 
         return std::make_shared<TYtJoinOptimizerNode>(
             left, right, joinConditions, joinKind, EJoinAlgoType::GraceJoin, nonReorderable ? op : nullptr

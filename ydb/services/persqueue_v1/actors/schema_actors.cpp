@@ -1021,7 +1021,7 @@ bool TDescribeConsumerActor::ApplyResponse(
 }
 
 
-bool FillConsumerProto(Ydb::Topic::Consumer *rr, const NKikimrPQ::TPQTabletConfig& config, const NKikimrPQ::TPQTabletConfig::TConsumer& consumer,
+bool FillConsumerProto(Ydb::Topic::Consumer *rr, const NKikimrPQ::TPQTabletConfig::TConsumer& consumer,
                         const NActors::TActorContext& ctx, Ydb::StatusIds::StatusCode& status, TString& error)
 {
     const auto& pqConfig = AppData(ctx)->PQConfig;
@@ -1148,7 +1148,7 @@ void TDescribeTopicActor::HandleCacheNavigateResponse(TEvTxProxySchemeCache::TEv
             auto rr = Result.add_consumers();
             Ydb::StatusIds::StatusCode status;
             TString error;
-            if (!FillConsumerProto(rr, config, consumer, ActorContext(), status, error)) {
+            if (!FillConsumerProto(rr, consumer, ActorContext(), status, error)) {
                 return RaiseError(error, Ydb::PersQueue::ErrorCode::ERROR, status, ActorContext());
             }
         }
@@ -1207,7 +1207,7 @@ void TDescribeConsumerActor::HandleCacheNavigateResponse(TEvTxProxySchemeCache::
             auto rr = Result.mutable_consumer();
             Ydb::StatusIds::StatusCode status;
             TString error;
-            if (!FillConsumerProto(rr, config, consumer, ActorContext(), status, error)) {
+            if (!FillConsumerProto(rr, consumer, ActorContext(), status, error)) {
                 return RaiseError(error, Ydb::PersQueue::ErrorCode::ERROR, status, ActorContext());
             }
             break;

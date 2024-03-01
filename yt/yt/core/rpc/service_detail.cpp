@@ -115,6 +115,34 @@ void TDynamicConcurrencyLimit::SetDynamicLimit(std::optional<int> dynamicLimit)
 
 ////////////////////////////////////////////////////////////////////////////////
 
+void TDynamicConcurrencyByteLimit::Reconfigure(i64 limit)
+{
+    ConfigByteLimit_.store(limit, std::memory_order::relaxed);
+    SetDynamicByteLimit(limit);
+}
+
+i64 TDynamicConcurrencyByteLimit::GetByteLimitFromConfiguration() const
+{
+    return ConfigByteLimit_.load(std::memory_order::relaxed);
+}
+
+i64 TDynamicConcurrencyByteLimit::GetDynamicByteLimit() const
+{
+    return DynamicByteLimit_.load(std::memory_order::relaxed);
+}
+
+void TDynamicConcurrencyByteLimit::SetDynamicByteLimit(std::optional<i64> dynamicLimit)
+{
+    auto limit = dynamicLimit.has_value() ? *dynamicLimit : ConfigByteLimit_.load(std::memory_order::relaxed);
+    auto oldLimit = DynamicByteLimit_.exchange(limit, std::memory_order::relaxed);
+
+    if (oldLimit != limit) {
+        Updated_.Fire();
+    }
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
 TServiceBase::TMethodDescriptor::TMethodDescriptor(
     TString method,
     TLiteHandler liteHandler,
@@ -177,6 +205,13 @@ auto TServiceBase::TMethodDescriptor::SetConcurrencyLimit(int value) const -> TM
 {
     auto result = *this;
     result.ConcurrencyLimit = value;
+    return result;
+}
+
+auto TServiceBase::TMethodDescriptor::SetConcurrencyByteLimit(i64 value) const -> TMethodDescriptor
+{
+    auto result = *this;
+    result.ConcurrencyByteLimit = value;
     return result;
 }
 
@@ -1042,15 +1077,15 @@ private:
         }
 
         if (RequestRun_) {
-            RequestQueue_->OnRequestFinished();
+            auto requestTotalSize = GetMessageBodySize(RequestMessage_) +
+                GetTotalMessageAttachmentSize(RequestMessage_);
+            RequestQueue_->OnRequestFinished(requestTotalSize);
         }
-
 
         if (ActiveRequestCountIncremented_) {
             Service_->DecrementActiveRequestCount();
         }
     }
-
 
     void LogRequest() override
     {
@@ -1298,6 +1333,10 @@ bool TRequestQueue::Register(TServiceBase* service, TServiceBase::TRuntimeMethod
             RuntimeInfo_->ConcurrencyLimit.SubscribeUpdated(BIND(
                 &TRequestQueue::OnConcurrencyLimitChanged,
                 MakeWeak(this)));
+
+            RuntimeInfo_->ConcurrencyByteLimit.SubscribeUpdated(BIND(
+                &TRequestQueue::OnConcurrencyByteLimitChanged,
+                MakeWeak(this)));
         }
         Registered_.store(true, std::memory_order::release);
     }
@@ -1308,6 +1347,13 @@ bool TRequestQueue::Register(TServiceBase* service, TServiceBase::TRuntimeMethod
 void TRequestQueue::OnConcurrencyLimitChanged()
 {
     if (QueueSize_.load() > 0) {
+        ScheduleRequestsFromQueue();
+    }
+}
+
+void TRequestQueue::OnConcurrencyByteLimitChanged()
+{
+    if (QueueByteSize_.load() > 0) {
         ScheduleRequestsFromQueue();
     }
 }
@@ -1369,11 +1415,16 @@ int TRequestQueue::GetConcurrency() const
     return Concurrency_.load(std::memory_order::relaxed);
 }
 
-void TRequestQueue::OnRequestArrived(TServiceBase::TServiceContextPtr context)
+i64 TRequestQueue::GetConcurrencyByte() const
+{
+    return ConcurrencyByte_.load(std::memory_order::relaxed);
+}
+
+void TRequestQueue::OnRequestArrived(const TServiceBase::TServiceContextPtr& context)
 {
     // Fast path.
-    auto newConcurrencySemaphore = IncrementConcurrency();
-    if (newConcurrencySemaphore <= RuntimeInfo_->ConcurrencyLimit.GetDynamicLimit() &&
+    auto concurrencyExceeded = IncrementConcurrency(context);
+    if (concurrencyExceeded &&
         !AreThrottlersOverdrafted())
     {
         RunRequest(std::move(context));
@@ -1381,7 +1432,7 @@ void TRequestQueue::OnRequestArrived(TServiceBase::TServiceContextPtr context)
     }
 
     // Slow path.
-    DecrementConcurrency();
+    DecrementConcurrency(GetTotalRequestSize(context));
     IncrementQueueSize(context);
 
     context->BeforeEnqueued();
@@ -1390,9 +1441,9 @@ void TRequestQueue::OnRequestArrived(TServiceBase::TServiceContextPtr context)
     ScheduleRequestsFromQueue();
 }
 
-void TRequestQueue::OnRequestFinished()
+void TRequestQueue::OnRequestFinished(i64 requestTotalSize)
 {
-    DecrementConcurrency();
+    DecrementConcurrency(requestTotalSize);
 
     if (QueueSize_.load() > 0) {
         // Slow path.
@@ -1447,7 +1498,7 @@ void TRequestQueue::ScheduleRequestsFromQueue()
             }
         }
 
-        IncrementConcurrency();
+        IncrementConcurrency(context);
         RunRequest(std::move(context));
     }
 }
@@ -1474,34 +1525,38 @@ void TRequestQueue::RunRequest(TServiceBase::TServiceContextPtr context)
 void TRequestQueue::IncrementQueueSize(const TServiceBase::TServiceContextPtr& context)
 {
     ++QueueSize_;
-
-    auto requestSize =
-        GetMessageBodySize(context->GetRequestMessage()) +
-        GetTotalMessageAttachmentSize(context->GetRequestMessage());
-    QueueByteSize_ += requestSize;
+    QueueByteSize_.fetch_add(GetTotalRequestSize(context));
 }
 
 void  TRequestQueue::DecrementQueueSize(const TServiceBase::TServiceContextPtr& context)
 {
     auto newQueueSize = --QueueSize_;
+    auto oldQueueBytesSize = QueueByteSize_.fetch_sub(GetTotalRequestSize(context));
+
     YT_ASSERT(newQueueSize >= 0);
-
-    auto requestSize =
-        GetMessageBodySize(context->GetRequestMessage()) +
-        GetTotalMessageAttachmentSize(context->GetRequestMessage());
-    auto oldQueueBytesSize = QueueByteSize_.fetch_sub(requestSize);
-    YT_ASSERT(oldQueueBytesSize >= requestSize);
+    YT_ASSERT(oldQueueBytesSize >= 0);
 }
 
-int TRequestQueue::IncrementConcurrency()
+i64 TRequestQueue::GetTotalRequestSize(const TServiceBase::TServiceContextPtr& context)
 {
-    return ++Concurrency_;
+    return GetMessageBodySize(context->GetRequestMessage()) +
+        GetTotalMessageAttachmentSize(context->GetRequestMessage());
 }
 
-void TRequestQueue::DecrementConcurrency()
+bool TRequestQueue::IncrementConcurrency(const TServiceBase::TServiceContextPtr& context)
+{
+    auto resultSize = ++Concurrency_ <= RuntimeInfo_->ConcurrencyLimit.GetDynamicLimit();
+    auto resultByteSize = ConcurrencyByte_.fetch_add(GetTotalRequestSize(context)) <= RuntimeInfo_->ConcurrencyByteLimit.GetDynamicByteLimit();
+    return resultSize && resultByteSize;
+}
+
+void TRequestQueue::DecrementConcurrency(i64 requestTotalSize)
 {
     auto newConcurrencySemaphore = --Concurrency_;
+    auto newConcurrencyByteSemaphore = ConcurrencyByte_.fetch_sub(requestTotalSize);
+
     YT_ASSERT(newConcurrencySemaphore >= 0);
+    YT_ASSERT(newConcurrencyByteSemaphore >= 0);
 }
 
 bool TRequestQueue::AreThrottlersOverdrafted() const
@@ -1516,9 +1571,7 @@ void TRequestQueue::AcquireThrottlers(const TServiceBase::TServiceContextPtr& co
 {
     if (BytesThrottler_.Specified.load(std::memory_order::acquire)) {
         // Slow path.
-        auto requestSize =
-            GetMessageBodySize(context->GetRequestMessage()) +
-            GetTotalMessageAttachmentSize(context->GetRequestMessage());
+        auto requestSize = GetTotalRequestSize(context);
         BytesThrottler_.Throttler->Acquire(requestSize);
     }
     if (WeightThrottler_.Specified.load(std::memory_order::acquire)) {
@@ -1879,6 +1932,9 @@ void TServiceBase::RegisterRequestQueue(
     });
     profiler.AddFuncGauge("/concurrency", MakeStrong(this), [=] {
         return requestQueue->GetConcurrency();
+    });
+    profiler.AddFuncGauge("/concurrency_byte", MakeStrong(this), [=] {
+        return requestQueue->GetConcurrencyByte();
     });
 
     TMethodConfigPtr methodConfig;
@@ -2459,6 +2515,7 @@ TServiceBase::TRuntimeMethodInfoPtr TServiceBase::RegisterMethod(const TMethodDe
     runtimeInfo->QueueSizeLimit.store(descriptor.QueueSizeLimit);
     runtimeInfo->QueueByteSizeLimit.store(descriptor.QueueByteSizeLimit);
     runtimeInfo->ConcurrencyLimit.Reconfigure(descriptor.ConcurrencyLimit);
+    runtimeInfo->ConcurrencyByteLimit.Reconfigure(descriptor.ConcurrencyByteLimit);
     runtimeInfo->LogLevel.store(descriptor.LogLevel);
     runtimeInfo->LoggingSuppressionTimeout.store(descriptor.LoggingSuppressionTimeout);
 
@@ -2474,6 +2531,9 @@ TServiceBase::TRuntimeMethodInfoPtr TServiceBase::RegisterMethod(const TMethodDe
     });
     profiler.AddFuncGauge("/concurrency_limit", MakeStrong(this), [=] {
         return runtimeInfo->ConcurrencyLimit.GetDynamicLimit();
+    });
+    profiler.AddFuncGauge("/concurrency_byte_limit", MakeStrong(this), [=] {
+        return runtimeInfo->ConcurrencyByteLimit.GetDynamicByteLimit();
     });
 
     return runtimeInfo;
@@ -2537,6 +2597,7 @@ void TServiceBase::DoConfigure(
             runtimeInfo->QueueSizeLimit.store(methodConfig->QueueSizeLimit.value_or(descriptor.QueueSizeLimit));
             runtimeInfo->QueueByteSizeLimit.store(methodConfig->QueueByteSizeLimit.value_or(descriptor.QueueByteSizeLimit));
             runtimeInfo->ConcurrencyLimit.Reconfigure(methodConfig->ConcurrencyLimit.value_or(descriptor.ConcurrencyLimit));
+            runtimeInfo->ConcurrencyByteLimit.Reconfigure(methodConfig->ConcurrencyByteLimit.value_or(descriptor.ConcurrencyByteLimit));
             runtimeInfo->LogLevel.store(methodConfig->LogLevel.value_or(descriptor.LogLevel));
             runtimeInfo->LoggingSuppressionTimeout.store(methodConfig->LoggingSuppressionTimeout.value_or(descriptor.LoggingSuppressionTimeout));
             runtimeInfo->Pooled.store(methodConfig->Pooled.value_or(config->Pooled.value_or(descriptor.Pooled)));

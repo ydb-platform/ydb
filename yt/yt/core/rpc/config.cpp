@@ -104,6 +104,9 @@ void TMethodConfig::Register(TRegistrar registrar)
     registrar.Parameter("concurrency_limit", &TThis::ConcurrencyLimit)
         .Alias("max_concurrency")
         .Optional();
+    registrar.Parameter("concurrency_byte_limit", &TThis::ConcurrencyByteLimit)
+        .Alias("max_concurrency_byte")
+        .Optional();
     registrar.Parameter("log_level", &TThis::LogLevel)
         .Optional();
     registrar.Parameter("request_bytes_throttler", &TThis::RequestBytesThrottler)

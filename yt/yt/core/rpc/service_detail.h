@@ -476,6 +476,24 @@ private:
 
 ////////////////////////////////////////////////////////////////////////////////
 
+class TDynamicConcurrencyByteLimit
+{
+public:
+    DEFINE_SIGNAL(void(), Updated);
+
+    void Reconfigure(i64 limit);
+    i64 GetByteLimitFromConfiguration() const;
+
+    i64 GetDynamicByteLimit() const;
+    void SetDynamicByteLimit(std::optional<i64> dynamicLimit);
+
+private:
+    std::atomic<i64> ConfigByteLimit_ = 0;
+    std::atomic<i64> DynamicByteLimit_ = 0;
+};
+
+////////////////////////////////////////////////////////////////////////////////
+
 //! Provides a base for implementing IService.
 class TServiceBase
     : public virtual IService
@@ -566,6 +584,9 @@ protected:
         //! Maximum number of requests executing concurrently.
         int ConcurrencyLimit = 10'000;
 
+        //! Maximum total size of requests executing concurrently.
+        i64 ConcurrencyByteLimit = 4_GB;
+
         //! System requests are completely transparent to derived classes;
         //! in particular, |BeforeInvoke| is not called.
         //! Also system methods do not require authentication.
@@ -605,6 +626,7 @@ protected:
         TMethodDescriptor SetQueueSizeLimit(int value) const;
         TMethodDescriptor SetQueueByteSizeLimit(i64 value) const;
         TMethodDescriptor SetConcurrencyLimit(int value) const;
+        TMethodDescriptor SetConcurrencyByteLimit(i64 value) const;
         TMethodDescriptor SetSystem(bool value) const;
         TMethodDescriptor SetLogLevel(NLogging::ELogLevel value) const;
         TMethodDescriptor SetLoggingSuppressionTimeout(TDuration value) const;
@@ -711,6 +733,7 @@ protected:
         std::atomic<i64> QueueByteSizeLimit = 0;
 
         TDynamicConcurrencyLimit ConcurrencyLimit;
+        TDynamicConcurrencyByteLimit ConcurrencyByteLimit;
         std::atomic<double> WaitingTimeoutFraction = 0;
 
         NProfiling::TCounter RequestQueueSizeLimitErrorCounter;
@@ -1037,9 +1060,10 @@ public:
     int GetQueueSize() const;
     i64 GetQueueByteSize() const;
     int GetConcurrency() const;
+    i64 GetConcurrencyByte() const;
 
-    void OnRequestArrived(TServiceBase::TServiceContextPtr context);
-    void OnRequestFinished();
+    void OnRequestArrived(const TServiceBase::TServiceContextPtr& context);
+    void OnRequestFinished(i64 requestTotalSize);
 
     void ConfigureWeightThrottler(const NConcurrency::TThroughputThrottlerConfigPtr& config);
     void ConfigureBytesThrottler(const NConcurrency::TThroughputThrottlerConfigPtr& config);
@@ -1054,6 +1078,7 @@ private:
     TServiceBase::TRuntimeMethodInfo* RuntimeInfo_ = nullptr;
 
     std::atomic<int> Concurrency_ = 0;
+    std::atomic<i64> ConcurrencyByte_ = 0;
 
     struct TRequestThrottler
     {
@@ -1075,17 +1100,20 @@ private:
     void ScheduleRequestsFromQueue();
     void RunRequest(TServiceBase::TServiceContextPtr context);
 
+    i64 GetTotalRequestSize(const TServiceBase::TServiceContextPtr& context);
+
     void IncrementQueueSize(const TServiceBase::TServiceContextPtr& context);
     void DecrementQueueSize(const TServiceBase::TServiceContextPtr& context);
 
-    int IncrementConcurrency();
-    void DecrementConcurrency();
+    bool IncrementConcurrency(const TServiceBase::TServiceContextPtr& context);
+    void DecrementConcurrency(i64 requestTotalSize);
 
     bool AreThrottlersOverdrafted() const;
     void AcquireThrottlers(const TServiceBase::TServiceContextPtr& context);
     void SubscribeToThrottlers();
 
     void OnConcurrencyLimitChanged();
+    void OnConcurrencyByteLimitChanged();
 };
 
 DEFINE_REFCOUNTED_TYPE(TRequestQueue)

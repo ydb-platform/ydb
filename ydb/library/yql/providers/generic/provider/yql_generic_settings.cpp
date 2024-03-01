@@ -84,6 +84,7 @@ namespace NYql {
             "default_" + cluster.name(),
             "default_generic",
             cluster.GetToken());
+        Y_ENSURE(iamToken);
         if (iamToken) {
             return b.SetIAMToken(iamToken).ToJson();
         }

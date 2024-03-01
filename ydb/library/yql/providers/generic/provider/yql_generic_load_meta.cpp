@@ -262,23 +262,36 @@ namespace NYql {
         void FillCredentials(NConnector::NApi::TDescribeTableRequest& request, const TGenericClusterConfig& clusterConfig) {
             auto dsi = request.mutable_data_source_instance();
 
-            // If login/password is provided, just copy them into request
+            // If login/password is provided, just copy them into request:
+            // connector will use Basic Auth to access external data sources.
             if (clusterConfig.GetCredentials().Hasbasic()) {
                 *dsi->mutable_credentials() = clusterConfig.GetCredentials();
                 return;
             }
 
-            Y_ENSURE(State_->CredentialsFactory, "CredentialsFactory is not initialized");
+            // If there are no Basic Auth, two options can be considered:
 
-            // If service account is provided, prepare to obtain IAM-token
+            // 1. Client provided own IAM-token to access external data source
+            auto iamToken = State_->Types->Credentials->FindCredentialContent(
+                "default_" + clusterConfig.name(),
+                "default_generic",
+                clusterConfig.GetToken());
+            if (iamToken) {
+                *dsi->mutable_credentials()->mutable_token()->mutable_value() = iamToken;
+                *dsi->mutable_credentials()->mutable_token()->mutable_type() = "IAM";
+            }
+
+            // 2. Client provided service account creds that must be converted into IAM-token
+            Y_ENSURE(State_->CredentialsFactory, "CredentialsFactory is not initialized");
 
             auto structuredTokenJSON = TStructuredTokenBuilder().SetServiceAccountIdAuth(
                                                                     clusterConfig.GetServiceAccountId(),
                                                                     clusterConfig.GetServiceAccountIdSignature())
                                            .ToJson();
+
             Y_ENSURE(structuredTokenJSON, "empty structured token");
 
-            // Create provider or get existing one.
+            // Create provider (== Token Accessor client) or get existing one.
             // It's crucial to reuse providers because their construction implies synchronous IO.
             auto providersIt = State_->CredentialProviders.find(clusterConfig.name());
             if (providersIt == State_->CredentialProviders.end()) {
@@ -288,11 +301,11 @@ namespace NYql {
                     false);
 
                 providersIt = State_->CredentialProviders.emplace(
-                                                             std::make_pair(clusterConfig.name(), credentialsProviderFactory->CreateProvider()))
-                                  .first;
+                                std::make_pair(clusterConfig.name(), credentialsProviderFactory->CreateProvider()))
+                                .first;
             }
 
-            auto iamToken = providersIt->second->GetAuthInfo();
+            iamToken = providersIt->second->GetAuthInfo();
             Y_ENSURE(iamToken, "empty IAM token");
 
             *dsi->mutable_credentials()->mutable_token()->mutable_value() = iamToken;

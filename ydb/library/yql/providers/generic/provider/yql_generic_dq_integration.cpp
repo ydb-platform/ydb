@@ -102,7 +102,7 @@ namespace NYql {
                     const auto& clusterConfig = State_->Configuration->ClusterNamesToClusterConfigs[clusterName];
                     const auto& endpoint = clusterConfig.endpoint();
 
-                    NConnector::TSource source;
+                    NGeneric::TSource source;
 
                     // for backward compability full path can be used (cluster_name.`db_name.table`)
                     // TODO: simplify during https://st.yandex-team.ru/YQ-2494
@@ -149,10 +149,16 @@ namespace NYql {
                     }
 
                     // Managed YDB supports access via IAM token.
-                    // Copy service account ids to obtain tokens during request execution phase.
+                    // If exist, copy service account creds to obtain tokens during request execution phase.
+                    // If exists, copy previously created token.
                     if (clusterConfig.kind() == NConnector::NApi::EDataSourceKind::YDB) {
                         source.SetServiceAccountId(clusterConfig.GetServiceAccountId());
                         source.SetServiceAccountIdSignature(clusterConfig.GetServiceAccountIdSignature());
+                        source.SetToken(State_->Types->Credentials->FindCredentialContent(
+                            "default_" + clusterConfig.name(),
+                            "default_generic",
+                            clusterConfig.GetToken())
+                        );
                     }
 
                     // preserve source description for read actor

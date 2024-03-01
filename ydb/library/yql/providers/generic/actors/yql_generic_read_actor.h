@@ -9,7 +9,7 @@
 namespace NYql::NDq {
 
     std::pair<NYql::NDq::IDqComputeActorAsyncInput*, NActors::IActor*>
-    CreateGenericReadActor(NConnector::IClient::TPtr genericClient, NConnector::TSource&& params, ui64 inputIndex,
+    CreateGenericReadActor(NConnector::IClient::TPtr genericClient, NGeneric::TSource&& params, ui64 inputIndex,
                            TCollectStatsLevel statsLevel, const THashMap<TString, TString>& secureParams,
                            const THashMap<TString, TString>& taskParams, const NActors::TActorId& computeActorId,
                            ISecuredServiceAccountCredentialsFactory::TPtr credentialsFactory,

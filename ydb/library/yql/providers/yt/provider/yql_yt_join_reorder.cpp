@@ -46,6 +46,14 @@ void DebugPrint(TYtJoinNode::TPtr node, TExprContext& ctx, int level) {
     }
 }
 
+class TYtProviderContext: public TDummyProviderContext {
+public:
+    TYtProviderContext() { }
+
+    bool HasForceSortedMerge = false;
+    bool HasHints = false;
+};
+
 class TJoinReorderer {
 public:
     TJoinReorderer(
@@ -69,6 +77,7 @@ public:
         std::shared_ptr<IBaseOptimizerNode> tree;
         std::shared_ptr<IProviderContext> ctx;
         BuildOptimizerJoinTree(tree, ctx, Root);
+        auto ytCtx = std::static_pointer_cast<TYtProviderContext>(ctx);
 
         std::function<void(const TString& str)> log;
 
@@ -80,9 +89,17 @@ public:
 
         switch (State->Types->CostBasedOptimizer) {
         case ECostBasedOptimizerType::PG:
+            if (ytCtx->HasForceSortedMerge || ytCtx->HasHints) {
+                YQL_CLOG(ERROR, ProviderYt) << "PG CBO does not support link settings";
+                return Root;
+            }
             opt = std::unique_ptr<IOptimizerNew>(MakePgOptimizerNew(*ctx, Ctx, log));
             break;
         case ECostBasedOptimizerType::Native:
+            if (ytCtx->HasHints) {
+                YQL_CLOG(ERROR, ProviderYt) << "Native CBO does not suppor link hints";
+                return Root;
+            }
             opt = std::unique_ptr<IOptimizerNew>(NDq::MakeNativeOptimizerNew(*ctx, 100000));
             break;
         default:
@@ -154,13 +171,14 @@ class TOptimizerTreeBuilder
 public:
     TOptimizerTreeBuilder(std::shared_ptr<IBaseOptimizerNode>& tree, std::shared_ptr<IProviderContext>& ctx, TYtJoinNodeOp::TPtr inputTree)
         : Tree(tree)
-        , Ctx(ctx)
+        , OutCtx(ctx)
         , InputTree(inputTree)
     { }
 
     void Do() {
-        Ctx = std::make_shared<TDummyProviderContext>();
+        Ctx = std::make_shared<TYtProviderContext>();
         Tree = ProcessNode(InputTree);
+        OutCtx = Ctx;
     }
 
 private:
@@ -191,6 +209,8 @@ private:
             joinConditions.insert({lcol, rcol});
         }
         bool nonReorderable = op->LinkSettings.ForceSortedMerge;
+        Ctx->HasForceSortedMerge = Ctx->HasForceSortedMerge || op->LinkSettings.ForceSortedMerge;
+        Ctx->HasHints = Ctx->HasHints || !op->LinkSettings.LeftHints.empty() || !op->LinkSettings.RightHints.empty();
 
         return std::make_shared<TYtJoinOptimizerNode>(
             left, right, joinConditions, joinKind, EJoinAlgoType::GraceJoin, nonReorderable ? op : nullptr
@@ -234,7 +254,8 @@ private:
     }
 
     std::shared_ptr<IBaseOptimizerNode>& Tree;
-    std::shared_ptr<IProviderContext>& Ctx;
+    std::shared_ptr<TYtProviderContext> Ctx;
+    std::shared_ptr<IProviderContext>& OutCtx;
 
     TYtJoinNodeOp::TPtr InputTree;
 };

@@ -546,11 +546,13 @@ namespace NYql::NDq {
         part << ';';
         */
 
+        auto tokenProvider = CreateGenericTokenProvider(source, credentialsFactory);
+
         const auto actor = new TGenericReadActor(
             inputIndex,
             statsLevel,
             genericClient,
-            CreateGenericTokenProvider(source, credentialsFactory),
+            std::move(tokenProvider),
             std::move(source),
             computeActorId,
             holderFactory);

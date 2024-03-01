@@ -31,7 +31,6 @@ TVector<TSysTables::TTableColumnInfo> BuildColumns(const TConstArrayRef<NKikimrK
             number++
         );
     }
-    Cerr << "TEST::BuildColumns: " << result.size() << Endl;
     return result;
 }
 
@@ -57,7 +56,6 @@ std::vector<ui32> BuildWriteIndex(
             result.push_back(writeColumnIdToIndex.at(column.GetId()));
         }
     }
-    Cerr << "TEST::BuildWriteIndex: " << result.size() << " " << writeColumnIdToIndex.size() << Endl;
     return result;
 }
 
@@ -71,19 +69,16 @@ std::vector<ui32> BuildWriteColumnIds(const NSchemeCache::TSchemeCacheNavigate::
     for (const auto& column : columns) {
         result.push_back(column.GetId());
     }
-    Cerr << "TEST::BuildWriteColumnIds: " << result.size() << Endl;
     return result;
 }
 
 std::set<std::string> BuildNotNullColumns(const TConstArrayRef<NKikimrKqp::TKqpColumnMetadataProto> inputColumns) {
     std::set<std::string> result;
     for (const auto& column : inputColumns) {
-        if (column.GetNotNull()) {
+        if (column.GetNotNull()) { // TODO: Recheck
             result.insert(column.GetName());
         }
     }
-    // TODO: Recheck
-    Cerr << "TEST::BuildNotNullColumns: " << result.size() << " " << inputColumns.size() << Endl;
     return result;
 }
 
@@ -101,8 +96,6 @@ std::vector<std::pair<TString, NScheme::TTypeInfo>> BuildBatchBuilderColumns(
             column.HasTypeInfo() ? &column.GetTypeInfo() : nullptr);
         result.emplace_back(column.GetName(), typeInfoMod.TypeInfo);
     }
-
-    Cerr << "TEST::BuildBatchBuilderColumns: " << result.size() << Endl;
     return result;
 }
 
@@ -146,28 +139,31 @@ public:
 
         Closed |= close;
 
-        auto shardsSplitter = NKikimr::NEvWrite::IShardsSplitter::BuildSplitter(SchemeEntry);
-        if (!shardsSplitter) {
-            ythrow yexception() << "Failed to build splitter";
-        }
+        const auto batch = BatchBuilder.FlushBatch(true);
+        if (batch) {
+            const auto dataAccessor = GetDataAccessor(batch);
 
-        const auto dataAccessor = GetDataAccessor(BatchBuilder.FlushBatch(true));
-        auto initStatus = shardsSplitter->SplitData(SchemeEntry, *dataAccessor);
-        if (!initStatus.Ok()) {
-            ythrow yexception() << "Failed to split batch: " << initStatus.GetErrorMessage();
-        }
+            auto shardsSplitter = NKikimr::NEvWrite::IShardsSplitter::BuildSplitter(SchemeEntry);
+            if (!shardsSplitter) {
+                ythrow yexception() << "Failed to build splitter";
+            }
+            auto initStatus = shardsSplitter->SplitData(SchemeEntry, *dataAccessor);
+            if (!initStatus.Ok()) {
+                ythrow yexception() << "Failed to split batch: " << initStatus.GetErrorMessage();
+            }
 
-        const auto& splittedData = shardsSplitter->GetSplitData();
+            const auto& splittedData = shardsSplitter->GetSplitData();
 
-        for (auto& [shard, infos] : splittedData.GetShardsInfo()) {
-            for (auto&& shardInfo : infos) {
-                auto& inFlightBatch = Batches[shard].emplace_back();
-                inFlightBatch = shardInfo->GetData();
-                ++BatchesCount;
-                MemoryInFlight += inFlightBatch.size();
-                YQL_ENSURE(!inFlightBatch.empty());
+            for (auto& [shard, infos] : splittedData.GetShardsInfo()) {
+                for (auto&& shardInfo : infos) {
+                    auto& inFlightBatch = Batches[shard].emplace_back();
+                    inFlightBatch = shardInfo->GetData();
+                    ++BatchesCount;
+                    MemoryInFlight += inFlightBatch.size();
+                    YQL_ENSURE(!inFlightBatch.empty());
 
-                PendingShards.insert(shard);
+                    PendingShards.insert(shard);
+                }
             }
         }
     }

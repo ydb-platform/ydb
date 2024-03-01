@@ -180,6 +180,9 @@ private:
     }
 
     void Handle(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr& ev) {
+        if (SchemeEntry) {
+            return;
+        }
         if (ev->Get()->Request->ErrorCount > 0) {
             RuntimeError(TStringBuilder() << "Failed to get table: "
                 << TableId << "'", NYql::NDqProto::StatusIds::SCHEME_ERROR);
@@ -408,10 +411,6 @@ private:
         TVector<NKikimrKqp::TKqpColumnMetadataProto> tmp;
         for (const auto & column : Settings.GetColumns()) {
             tmp.push_back(column);
-        }
-
-        for (const auto& column : Settings.GetColumns()) {
-            Cerr << "COLUMN " << column.GetName() << " " << column.GetNotNull() << Endl;
         }
 
         try {

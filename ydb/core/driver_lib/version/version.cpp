@@ -34,22 +34,24 @@ TCompatibilityInfo::TCompatibilityInfo() {
         },
         .CanLoadFrom = {
             TCompatibilityRuleConstructor{
-                .Application = "ydb",
                 .LowerLimit = TVersionConstructor{ .Year = 23, .Major = 4 },
                 .UpperLimit = TVersionConstructor{ .Year = 24, .Major = 1 },
             },
         },
         .StoresReadableBy = {
             TCompatibilityRuleConstructor{
-                .Application = "ydb",
                 .LowerLimit = TVersionConstructor{ .Year = 23, .Major = 4 },
                 .UpperLimit = TVersionConstructor{ .Year = 24, .Major = 1 },
             },
         },
         .CanConnectTo = {
             TCompatibilityRuleConstructor{
-                .Application = "ydb",
                 .LowerLimit = TVersionConstructor{ .Year = 23, .Major = 4 },
+                .UpperLimit = TVersionConstructor{ .Year = 24, .Major = 1 },
+            },
+            TCompatibilityRuleConstructor{
+                .Application = "nbs",
+                .LowerLimit = TVersionConstructor{ .Year = 23, .Major = 3 },
                 .UpperLimit = TVersionConstructor{ .Year = 24, .Major = 1 },
             },
         }

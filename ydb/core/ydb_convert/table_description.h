@@ -132,4 +132,8 @@ bool FillTableDescription(NKikimrSchemeOp::TModifyScheme& out,
 void FillSequenceDescription(Ydb::Table::CreateTableRequest& out,
     const NKikimrSchemeOp::TTableDescription& in);
 
+// out
+void FillSequenceDescription(Ydb::Table::CreateTableRequest& out,
+    const NKikimrSchemeOp::TTableDescription& in);
+
 } // namespace NKikimr

@@ -62,6 +62,10 @@ ELSE()
 CFLAGS(-DUSE_SLOW_PG_KERNELS)
 ENDIF()
 
+IF (BUILD_TYPE == "DEBUG")
+CFLAGS(-DDISABLE_COMPLEX_MACRO)
+ENDIF()
+
 PEERDIR(
     library/cpp/resource
     library/cpp/yson

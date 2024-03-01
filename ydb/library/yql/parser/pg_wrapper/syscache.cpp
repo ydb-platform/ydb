@@ -6,7 +6,9 @@
 extern "C" {
 #include "utils/syscache.h"
 #include "catalog/pg_database.h"
+#include "catalog/pg_class.h"
 #include "catalog/pg_proc.h"
+#include "catalog/pg_namespace.h"
 #include "catalog/pg_type.h"
 #include "catalog/pg_type_d.h"
 #include "catalog/pg_authid.h"
@@ -52,9 +54,30 @@ bool OidEquals1(const THeapTupleKey& key1, const THeapTupleKey& key2) {
     return (Oid)std::get<0>(key1) == (Oid)std::get<0>(key2);
 }
 
+size_t NsNameHasher(const THeapTupleKey& key) {
+    return CombineHashes(
+        std::hash<std::string_view>()((const char*)std::get<0>(key)),
+        std::hash<Oid>()((Oid)std::get<1>(key)));
+}
+
+bool NsNameEquals(const THeapTupleKey& key1, const THeapTupleKey& key2) {
+    return strcmp((const char*)std::get<0>(key1), (const char*)std::get<0>(key2)) == 0 &&
+        (Oid)std::get<1>(key1) == (Oid)std::get<1>(key2);
+}
+
+struct TSysCacheItem {
+    TSysCacheItem(THeapTupleHasher hasher, THeapTupleEquals equals, TupleDesc desc)
+        : Map(0, hasher, equals)
+        , Desc(desc)
+    {}
+
+    TSysCacheHashMap Map;
+    TupleDesc Desc;
+};
+
 struct TSysCache {
     TArenaMemoryContext Arena;
-    std::unique_ptr<TSysCacheHashMap> Maps[SysCacheSize];
+    std::unique_ptr<TSysCacheItem> Items[SysCacheSize];
 
     static const TSysCache& Instance() {
         return *Singleton<TSysCache>();
@@ -66,6 +89,7 @@ struct TSysCache {
         InitializeTypes();
         InitializeDatabase();
         InitializeAuthId();
+        InitializeNameNamespaces();
         Arena.Release();
     }
 
@@ -85,7 +109,6 @@ struct TSysCache {
     }
 
     void InitializeProcs() {
-        auto& map = Maps[PROCOID] = std::make_unique<TSysCacheHashMap>(0, OidHasher1, OidEquals1);
         TupleDesc tupleDesc = CreateTemplateTupleDesc(Natts_pg_proc);
         FillAttr(tupleDesc, Anum_pg_proc_oid, OIDOID);
         FillAttr(tupleDesc, Anum_pg_proc_proname, NAMEOID);
@@ -117,6 +140,8 @@ struct TSysCache {
         FillAttr(tupleDesc, Anum_pg_proc_prosqlbody, PG_NODE_TREEOID);
         FillAttr(tupleDesc, Anum_pg_proc_proconfig, TEXTARRAYOID);
         FillAttr(tupleDesc, Anum_pg_proc_proacl, ACLITEMARRAYOID);
+        auto& cacheItem = Items[PROCOID] = std::make_unique<TSysCacheItem>(OidHasher1, OidEquals1, tupleDesc);
+        auto& map = cacheItem->Map;
 
         NPg::EnumProc([&](ui32 oid, const NPg::TProcDesc& desc){
             auto key = THeapTupleKey(oid, 0, 0, 0);
@@ -128,19 +153,18 @@ struct TSysCache {
             std::fill_n(nulls, Anum_pg_proc_prorettype, false); // fixed part of Form_pg_proc
             FillDatum(Natts_pg_proc, values, nulls, Anum_pg_proc_oid, oid);
             FillDatum(Natts_pg_proc, values, nulls, Anum_pg_proc_prorettype, desc.ResultType);
-            auto name = MakeFixedString(desc.Name, NPg::LookupType(NAMEOID).TypeLen);
+            auto name = MakeFixedString(desc.Name, NAMEDATALEN);
             FillDatum(Natts_pg_proc, values, nulls, Anum_pg_proc_proname, (Datum)name);
             HeapTuple h = heap_form_tuple(tupleDesc, values, nulls);
             auto row = (Form_pg_proc)GETSTRUCT(h);
             Y_ENSURE(row->oid == oid);
             Y_ENSURE(row->prorettype == desc.ResultType);
             Y_ENSURE(NameStr(row->proname) == desc.Name);
-            map->emplace(key, h);
+            map.emplace(key, h);
         });
     }
 
     void InitializeTypes() {
-        auto& map = Maps[TYPEOID] = std::make_unique<TSysCacheHashMap>(0, OidHasher1, OidEquals1);
         TupleDesc tupleDesc = CreateTemplateTupleDesc(Natts_pg_type);
         FillAttr(tupleDesc, Anum_pg_type_oid, OIDOID);
         FillAttr(tupleDesc, Anum_pg_type_typname, NAMEOID);
@@ -174,6 +198,8 @@ struct TSysCache {
         FillAttr(tupleDesc, Anum_pg_type_typdefaultbin, PG_NODE_TREEOID);
         FillAttr(tupleDesc, Anum_pg_type_typdefault, TEXTOID);
         FillAttr(tupleDesc, Anum_pg_type_typacl, ACLITEMARRAYOID);
+        auto& cacheItems = Items[TYPEOID] = std::make_unique<TSysCacheItem>(OidHasher1, OidEquals1, tupleDesc);
+        auto& map = cacheItems->Map;
 
         NPg::EnumTypes([&](ui32 oid, const NPg::TTypeDesc& desc){
             auto key = THeapTupleKey(oid, 0, 0, 0);
@@ -226,13 +252,12 @@ struct TSysCache {
             Y_ENSURE(row->typmodout == desc.TypeModOutFuncId);
             Y_ENSURE(row->typalign == desc.TypeAlign);
             Y_ENSURE(row->typstorage == TYPSTORAGE_PLAIN);
-            map->emplace(key, h);
+            map.emplace(key, h);
         });
 
     }
 
     void InitializeDatabase() {
-        auto& map = Maps[DATABASEOID] = std::make_unique<TSysCacheHashMap>(0, OidHasher1, OidEquals1);
         TupleDesc tupleDesc = CreateTemplateTupleDesc(Natts_pg_database);
         FillAttr(tupleDesc, Anum_pg_database_oid, OIDOID);
         FillAttr(tupleDesc, Anum_pg_database_datname, NAMEOID);
@@ -248,6 +273,8 @@ struct TSysCache {
         FillAttr(tupleDesc, Anum_pg_database_datminmxid, XIDOID);
         FillAttr(tupleDesc, Anum_pg_database_dattablespace, OIDOID);
         FillAttr(tupleDesc, Anum_pg_database_datacl, ACLITEMARRAYOID);
+        auto& cacheItems = Items[DATABASEOID] = std::make_unique<TSysCacheItem>(OidHasher1, OidEquals1, tupleDesc);
+        auto& map = cacheItems->Map;
 
         for (ui32 oid = 1; oid <= 3; ++oid) {
             auto key = THeapTupleKey(oid, 0, 0, 0);
@@ -269,12 +296,11 @@ struct TSysCache {
             auto row = (Form_pg_database) GETSTRUCT(h);
             Y_ENSURE(row->oid == oid);
             Y_ENSURE(strcmp(NameStr(row->datname), name) == 0);
-            map->emplace(key, h);
+            map.emplace(key, h);
         }
     }
 
     void InitializeAuthId() {
-        auto& map = Maps[AUTHOID] = std::make_unique<TSysCacheHashMap>(0, OidHasher1, OidEquals1);
         TupleDesc tupleDesc = CreateTemplateTupleDesc(Natts_pg_authid);
         FillAttr(tupleDesc, Anum_pg_authid_oid, OIDOID);
         FillAttr(tupleDesc, Anum_pg_authid_rolname, NAMEOID);
@@ -288,6 +314,9 @@ struct TSysCache {
         FillAttr(tupleDesc, Anum_pg_authid_rolconnlimit, INT4OID);
         FillAttr(tupleDesc, Anum_pg_authid_rolpassword, TEXTOID);
         FillAttr(tupleDesc, Anum_pg_authid_rolvaliduntil, TIMESTAMPTZOID);
+        auto& cacheItems = Items[AUTHOID] = std::make_unique<TSysCacheItem>(OidHasher1, OidEquals1, tupleDesc);
+        auto& map = cacheItems->Map;
+
         auto key = THeapTupleKey(1, 0, 0, 0);
 
         const char* rolname = "postgres";
@@ -318,7 +347,69 @@ struct TSysCache {
         Y_ENSURE(row->rolreplication);
         Y_ENSURE(row->rolbypassrls);
         Y_ENSURE(row->rolconnlimit == -1);
-        map->emplace(key, h);
+        map.emplace(key, h);
+    }
+
+    void InitializeNameNamespaces() {
+        TupleDesc tupleDesc = CreateTemplateTupleDesc(Natts_pg_class);
+        FillAttr(tupleDesc, Anum_pg_class_oid, OIDOID);
+        FillAttr(tupleDesc, Anum_pg_class_relname, NAMEOID);
+        FillAttr(tupleDesc, Anum_pg_class_relnamespace, OIDOID);
+        FillAttr(tupleDesc, Anum_pg_class_reltype, OIDOID);
+        FillAttr(tupleDesc, Anum_pg_class_reloftype, OIDOID);
+        FillAttr(tupleDesc, Anum_pg_class_relowner, OIDOID);
+        FillAttr(tupleDesc, Anum_pg_class_relam, OIDOID);
+        FillAttr(tupleDesc, Anum_pg_class_relfilenode, OIDOID);
+        FillAttr(tupleDesc, Anum_pg_class_reltablespace, OIDOID);
+        FillAttr(tupleDesc, Anum_pg_class_relpages, INT4OID);
+        FillAttr(tupleDesc, Anum_pg_class_reltuples, FLOAT4OID);
+        FillAttr(tupleDesc, Anum_pg_class_relallvisible, INT4OID);
+        FillAttr(tupleDesc, Anum_pg_class_reltoastrelid, OIDOID);
+        FillAttr(tupleDesc, Anum_pg_class_relhasindex, BOOLOID);
+        FillAttr(tupleDesc, Anum_pg_class_relisshared, BOOLOID);
+        FillAttr(tupleDesc, Anum_pg_class_relpersistence, CHAROID);
+        FillAttr(tupleDesc, Anum_pg_class_relkind, CHAROID);
+        FillAttr(tupleDesc, Anum_pg_class_relnatts, INT2OID);
+        FillAttr(tupleDesc, Anum_pg_class_relchecks, INT2OID);
+        FillAttr(tupleDesc, Anum_pg_class_relhasrules, BOOLOID);
+        FillAttr(tupleDesc, Anum_pg_class_relhastriggers, BOOLOID);
+        FillAttr(tupleDesc, Anum_pg_class_relhassubclass, BOOLOID);
+        FillAttr(tupleDesc, Anum_pg_class_relrowsecurity, BOOLOID);
+        FillAttr(tupleDesc, Anum_pg_class_relforcerowsecurity, BOOLOID);
+        FillAttr(tupleDesc, Anum_pg_class_relispopulated, BOOLOID);
+        FillAttr(tupleDesc, Anum_pg_class_relreplident, CHAROID);
+        FillAttr(tupleDesc, Anum_pg_class_relispartition, BOOLOID);
+        FillAttr(tupleDesc, Anum_pg_class_relrewrite, OIDOID);
+        FillAttr(tupleDesc, Anum_pg_class_relfrozenxid, XIDOID);
+        FillAttr(tupleDesc, Anum_pg_class_relminmxid, XIDOID);
+        FillAttr(tupleDesc, Anum_pg_class_relacl, ACLITEMARRAYOID);
+        FillAttr(tupleDesc, Anum_pg_class_reloptions, TEXTARRAYOID);
+        FillAttr(tupleDesc, Anum_pg_class_relpartbound, PG_NODE_TREEOID);
+        auto& cacheItems = Items[RELNAMENSP] = std::make_unique<TSysCacheItem>(NsNameHasher, NsNameEquals, tupleDesc);
+        auto& map = cacheItems->Map;
+
+        Datum values[Natts_pg_class];
+        bool nulls[Natts_pg_class];
+        Zero(values);
+        std::fill_n(nulls, Natts_pg_class, true);
+        std::fill_n(nulls, Anum_pg_class_relminmxid, false); // fixed part of Form_pg_class
+        for (const auto& t : NPg::GetStaticTables()) {
+            auto name = (Datum)MakeFixedString(t.Name, NAMEDATALEN);
+            auto ns = (Datum)(t.Schema == "pg_catalog" ? PG_CATALOG_NAMESPACE : 1);
+            FillDatum(Natts_pg_class, values, nulls, Anum_pg_class_oid, (Datum)t.Oid);
+            FillDatum(Natts_pg_class, values, nulls, Anum_pg_class_relname, name);
+            FillDatum(Natts_pg_class, values, nulls, Anum_pg_class_relnamespace, ns);
+            FillDatum(Natts_pg_class, values, nulls, Anum_pg_class_relowner, (Datum)1);
+            HeapTuple h = heap_form_tuple(tupleDesc, values, nulls);
+            auto row = (Form_pg_class) GETSTRUCT(h);
+            Y_ENSURE(row->oid == t.Oid);
+            Y_ENSURE(strcmp(NameStr(row->relname), t.Name.c_str()) == 0);
+            Y_ENSURE(row->relowner == 1);
+            Y_ENSURE(row->relnamespace == ns);
+
+            auto key = THeapTupleKey(name, ns, 0, 0);
+            map.emplace(key, h);
+        }
     }
 };
 
@@ -327,14 +418,15 @@ struct TSysCache {
 
 
 HeapTuple SearchSysCache(int cacheId, Datum key1, Datum key2, Datum key3, Datum key4) {
-	Y_ENSURE(cacheId >= 0 && cacheId < SysCacheSize);
-    const auto& map = NYql::TSysCache::Instance().Maps[cacheId];
-    if (!map) {
+    Y_ENSURE(cacheId >= 0 && cacheId < SysCacheSize);
+    const auto& cacheItem = NYql::TSysCache::Instance().Items[cacheId];
+    if (!cacheItem) {
         return nullptr;
     }
 
-    auto it = map->find(std::make_tuple(key1, key2, key3, key4));
-    if (it == map->end()) {
+    const auto& map = cacheItem->Map;
+    auto it = map.find(std::make_tuple(key1, key2, key3, key4));
+    if (it == map.end()) {
         return nullptr;
     }
 
@@ -359,6 +451,22 @@ HeapTuple SearchSysCache4(int cacheId, Datum key1, Datum key2, Datum key3, Datum
 
 void ReleaseSysCache(HeapTuple tuple) {
     Y_UNUSED(tuple);
+}
+
+Oid GetSysCacheOid(int cacheId, AttrNumber oidcol, Datum key1, Datum key2, Datum key3, Datum key4) {
+    Y_ENSURE(cacheId >= 0 && cacheId < SysCacheSize);
+    const auto& cacheItem = NYql::TSysCache::Instance().Items[cacheId];
+    HeapTuple tuple;
+    bool isNull;
+    Oid result;
+
+    tuple = SearchSysCache(cacheId, key1, key2, key3, key4);
+    if (!HeapTupleIsValid(tuple))
+        return InvalidOid;
+    result = heap_getattr(tuple, oidcol, cacheItem->Desc, &isNull);
+    Y_ENSURE(!isNull); /* columns used as oids should never be NULL */
+    ReleaseSysCache(tuple);
+    return result;
 }
 
 

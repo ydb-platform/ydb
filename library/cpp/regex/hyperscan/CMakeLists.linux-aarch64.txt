@@ -6,6 +6,18 @@
 # original buildsystem will not be accepted.
 
 
-add_subdirectory(hyperscan)
-add_subdirectory(pcre)
-add_subdirectory(pire)
+
+add_library(cpp-regex-hyperscan)
+target_link_libraries(cpp-regex-hyperscan PUBLIC
+  contrib-libs-linux-headers
+  contrib-libs-cxxsupp
+  yutil
+  contrib-libs-hyperscan
+  libs-hyperscan-runtime_core2
+  libs-hyperscan-runtime_corei7
+  libs-hyperscan-runtime_avx2
+  libs-hyperscan-runtime_avx512
+)
+target_sources(cpp-regex-hyperscan PRIVATE
+  ${CMAKE_SOURCE_DIR}/library/cpp/regex/hyperscan/hyperscan.cpp
+)

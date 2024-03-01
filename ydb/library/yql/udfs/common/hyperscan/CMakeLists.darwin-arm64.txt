@@ -6,6 +6,9 @@
 # original buildsystem will not be accepted.
 
 
-add_subdirectory(hyperscan)
-add_subdirectory(pcre)
-add_subdirectory(pire)
+
+add_library(udfs-common-hyperscan INTERFACE)
+target_link_libraries(udfs-common-hyperscan INTERFACE
+  contrib-libs-cxxsupp
+  yutil
+)

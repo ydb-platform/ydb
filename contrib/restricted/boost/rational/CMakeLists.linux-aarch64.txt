@@ -6,6 +6,17 @@
 # original buildsystem will not be accepted.
 
 
-add_subdirectory(hyperscan)
-add_subdirectory(pcre)
-add_subdirectory(pire)
+
+add_library(restricted-boost-rational INTERFACE)
+target_link_libraries(restricted-boost-rational INTERFACE
+  contrib-libs-linux-headers
+  contrib-libs-cxxsupp
+  restricted-boost-assert
+  restricted-boost-config
+  restricted-boost-core
+  restricted-boost-integer
+  restricted-boost-static_assert
+  restricted-boost-throw_exception
+  restricted-boost-type_traits
+  restricted-boost-utility
+)

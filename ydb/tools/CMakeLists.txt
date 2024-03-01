@@ -7,4 +7,5 @@
 
 
 add_subdirectory(blobsan)
+add_subdirectory(query_replay)
 add_subdirectory(tsserver)

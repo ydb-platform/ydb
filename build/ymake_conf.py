@@ -1475,6 +1475,12 @@ class GnuCompiler(Compiler):
         if self.target.is_x86_64:
             self.c_flags.append('-m64')
 
+        if self.target.is_wasm64:
+            # WebAssembly-specific exception handling flags
+            self.c_foptions += [
+                '-fwasm-exceptions',
+            ]
+
         self.debug_info_flags = ['-g']
         if self.target.is_linux:
             self.debug_info_flags.append('-ggnu-pubnames')

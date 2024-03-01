@@ -61,6 +61,7 @@ class PnpmPackageManager(BasePackageManager):
             "--ignore-scripts",
             "--no-verify-store-integrity",
             "--offline",
+            "--config.confirmModulesPurge=false",  # hack for https://st.yandex-team.ru/FBP-1295
             "--package-import-method",
             "hardlink",
             # "--registry" will be set later inside self._exec_command()

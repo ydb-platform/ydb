@@ -4009,11 +4009,13 @@ public:
     TAstNode* ParseSortBy(const PG_SortBy* value, bool allowAggregates, bool useProjectionRefs) {
         AT_LOCATION(value);
         bool asc = true;
-        bool nullsFirst = Settings.SortNullsFirst;
+        bool nullsFirst = true;
         switch (value->sortby_dir) {
         case SORTBY_DEFAULT:
-            break;
         case SORTBY_ASC:
+            if (Settings.PgSortNulls) {
+                nullsFirst = false;
+            }
             break;
         case SORTBY_DESC:
             asc = false;

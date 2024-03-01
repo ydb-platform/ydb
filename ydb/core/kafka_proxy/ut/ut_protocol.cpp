@@ -290,15 +290,19 @@ std::vector<NTopic::TReadSessionEvent::TDataReceivedEvent> Read(std::shared_ptr<
 }
 
 struct TTopicConfig {
+    inline static const std::map<TString, TString> DummyMap;
+
     TTopicConfig(
             TString name,
             ui32 partionsNumber,
             std::optional<TString> retentionMs = std::nullopt,
-            std::optional<TString> retentionBytes = std::nullopt)
+            std::optional<TString> retentionBytes = std::nullopt,
+            const std::map<TString, TString>& configs = DummyMap)
         : Name(name)
         , PartitionsNumber(partionsNumber)
         , RetentionMs(retentionMs)
         , RetentionBytes(retentionBytes)
+        , Configs(configs)
     {
     }
 
@@ -306,6 +310,7 @@ struct TTopicConfig {
     ui32 PartitionsNumber;
     std::optional<TString> RetentionMs;
     std::optional<TString> RetentionBytes;
+    std::map<TString, TString> Configs;
 };
 
 class TTestClient {
@@ -634,6 +639,13 @@ public:
             addConfig(topicToCreate.RetentionMs, "retention.ms");
             addConfig(topicToCreate.RetentionBytes, "retention.bytes");
 
+            for (auto const& [name, value] : topicToCreate.Configs) {
+                NKafka::TCreateTopicsRequestData::TCreatableTopic::TCreateableTopicConfig config;
+                config.Name = name;
+                config.Value = value;
+                topic.Configs.push_back(config);
+            }
+
             request.Topics.push_back(topic);
         }
 
@@ -683,6 +695,12 @@ public:
             addConfig(topicToModify.RetentionMs, "retention.ms");
             addConfig(topicToModify.RetentionBytes, "retention.bytes");
 
+            for (auto const& [name, value] : topicToModify.Configs) {
+                NKafka::TAlterConfigsRequestData::TAlterConfigsResource::TAlterableConfig config;
+                config.Name = name;
+                config.Value = value;
+                resource.Configs.push_back(config);
+            }
             request.Resources.push_back(resource);
         }
 
@@ -1778,6 +1796,30 @@ Y_UNIT_TEST_SUITE(KafkaProtocol) {
             UNIT_ASSERT(!result993.IsSuccess());
         }
 
+        {
+            // Legal, but meaningless for Logbroker config
+            std::map<TString, TString> configs { std::make_pair("flush.messages", "1") };
+            auto msg = client.CreateTopics( { TTopicConfig("topic-987-test", 1, std::nullopt, std::nullopt, configs) });
+            UNIT_ASSERT_VALUES_EQUAL(msg->Topics.size(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(msg->Topics[0].Name.value(), "topic-987-test");
+            UNIT_ASSERT_VALUES_EQUAL(msg->Topics[0].ErrorCode, NONE_ERROR);
+
+            auto result = pqClient.DescribeTopic("/Root/topic-987-test", describeTopicSettings).GetValueSync();
+            UNIT_ASSERT(result.IsSuccess());
+        }
+
+        {
+            // Both legal and illegal configs
+            std::map<TString, TString> configs { std::make_pair("compression.type", "zstd"), std::make_pair("flush.messages", "1") };
+            auto msg = client.CreateTopics( { TTopicConfig("topic-986-test", 1, std::nullopt, std::nullopt, configs) });
+            UNIT_ASSERT_VALUES_EQUAL(msg->Topics.size(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(msg->Topics[0].Name.value(), "topic-986-test");
+            UNIT_ASSERT_VALUES_EQUAL(msg->Topics[0].ErrorCode, INVALID_REQUEST);
+
+            auto result = pqClient.DescribeTopic("/Root/topic-986-test", describeTopicSettings).GetValueSync();
+            UNIT_ASSERT(!result.IsSuccess());
+        }
+
     } // Y_UNIT_TEST(CreateTopicsScenario)
 
     Y_UNIT_TEST(CreatePartitionsScenario) {
@@ -2086,6 +2128,27 @@ Y_UNIT_TEST_SUITE(KafkaProtocol) {
             UNIT_ASSERT_VALUES_EQUAL(msg->Responses[0].ResourceName.value(), shortTopic0Name);
             UNIT_ASSERT_VALUES_EQUAL(msg->Responses[0].ErrorCode, INVALID_REQUEST);
         }
+
+        {
+            // Legal, but meaningless for Logbroker config 
+            std::map<TString, TString> configs { std::make_pair("flush.messages", "1") };
+            auto msg = client.AlterConfigs({ TTopicConfig(shortTopic0Name, 1, std::nullopt, std::nullopt, configs) });
+
+            UNIT_ASSERT_VALUES_EQUAL(msg->Responses.size(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(msg->Responses[0].ResourceName.value(), shortTopic0Name);
+            UNIT_ASSERT_VALUES_EQUAL(msg->Responses[0].ErrorCode, NONE_ERROR);
+        }
+
+        {
+            // Both legal and illegal configs
+            std::map<TString, TString> configs { std::make_pair("compression.type", "zstd"), std::make_pair("flush.messages", "1") };
+            auto msg = client.AlterConfigs({ TTopicConfig(shortTopic0Name, 1, std::nullopt, std::nullopt, configs) });
+
+            UNIT_ASSERT_VALUES_EQUAL(msg->Responses.size(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(msg->Responses[0].ResourceName.value(), shortTopic0Name);
+            UNIT_ASSERT_VALUES_EQUAL(msg->Responses[0].ErrorCode, INVALID_REQUEST);
+        }
+
     }
 
     Y_UNIT_TEST(LoginWithApiKey) {

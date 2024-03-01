@@ -3,6 +3,7 @@
 #include <ydb/library/dynumber/dynumber.h>
 
 #include <ydb/library/actors/core/log.h>
+#include <ydb/core/protos/flat_scheme_op.pb.h>
 
 #include <util/datetime/base.h>
 #include <util/string/cast.h>

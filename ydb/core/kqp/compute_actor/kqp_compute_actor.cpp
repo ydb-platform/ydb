@@ -12,6 +12,8 @@
 #include <ydb/library/yql/providers/generic/actors/yql_generic_source_factory.h>
 #include <ydb/library/yql/providers/s3/actors/yql_s3_sink_factory.h>
 #include <ydb/library/yql/providers/s3/actors/yql_s3_source_factory.h>
+#include <ydb/core/protos/ssa.pb.h>
+#include <ydb/library/yql/dq/proto/dq_tasks.pb.h>
 
 
 namespace NKikimr {

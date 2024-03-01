@@ -6,6 +6,7 @@
 #include <ydb/library/actors/core/events.h>
 #include <library/cpp/logger/backend.h>
 #include <ydb/core/protos/config.pb.h>
+#include <ydb/library/services/services.pb.h>
 
 #include <library/cpp/logger/record.h>
 #include <ydb/library/actors/core/hfunc.h>

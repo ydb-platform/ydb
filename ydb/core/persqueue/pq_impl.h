@@ -429,7 +429,7 @@ private:
     THashMap<ui32, TVector<TEvPQ::TEvCheckPartitionStatusRequest::TPtr>> CheckPartitionStatusRequests;
     TMaybe<ui64> TabletGeneration;
 
-    TPartitionId MakePartitionId(ui32 originalPartitionId, TMaybe<ui64> writeId) const;
+    TMaybe<TPartitionId> FindPartitionId(const NKikimrPQ::TDataTransaction& txBody) const;
 
     void InitPlanStep(const NKikimrPQ::TTabletTxInfo& info = {});
     void SavePlanStep(NKikimrPQ::TTabletTxInfo& info);
@@ -473,6 +473,7 @@ private:
     void AddSupportivePartition(const TPartitionId& shadowPartitionId);
     void CreateSupportivePartitionActors(const TActorContext& ctx);
     void CreateSupportivePartitionActor(const TPartitionId& shadowPartitionId, const TActorContext& ctx);
+    NKikimrPQ::TPQTabletConfig MakeSupportivePartitionConfig() const;
     void SubscribeWriteId(ui64 writeId, const TActorContext& ctx);
 
     bool AllOriginalPartitionsInited() const;

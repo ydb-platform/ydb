@@ -1446,7 +1446,7 @@ Y_UNIT_TEST_TWIN(TestOutOfOrderLockLost, StreamLookup) {
     }
 }
 
-Y_UNIT_TEST_TWIN(TestOutOfOrderReadOnlyAllowed, StreamLookup) {
+Y_UNIT_TEST_QUAD(TestOutOfOrderReadOnlyAllowed, StreamLookup, EvWrite) {
     TPortManager pm;
     NKikimrConfig::TAppConfig app;
     app.MutableTableServiceConfig()->SetEnableKqpDataQuerySourceRead(false);
@@ -1467,11 +1467,16 @@ Y_UNIT_TEST_TWIN(TestOutOfOrderReadOnlyAllowed, StreamLookup) {
 
     InitRoot(server, sender);
 
-    CreateShardedTable(server, sender, "/Root", "table-1", 1);
-    CreateShardedTable(server, sender, "/Root", "table-2", 1);
+    auto [shards1, tableId1] = CreateShardedTable(server, sender, "/Root", "table-1", 1);
+    auto [shards2, tableId2] = CreateShardedTable(server, sender, "/Root", "table-2", 1);
 
-    ExecSQL(server, sender, Q_("UPSERT INTO `/Root/table-1` (key, value) VALUES (1, 1);"));
-    ExecSQL(server, sender, Q_("UPSERT INTO `/Root/table-2` (key, value) VALUES (2, 1);"));
+    {
+        auto rows = EvWrite ? TEvWriteRows{{tableId1, {1, 1}}, {tableId2, {2, 1}}} : TEvWriteRows{};
+        auto evWriteObservers = ReplaceEvProposeTransactionWithEvWrite(runtime, rows);
+
+        ExecSQL(server, sender, Q_("UPSERT INTO `/Root/table-1` (key, value) VALUES (1, 1);"));
+        ExecSQL(server, sender, Q_("UPSERT INTO `/Root/table-2` (key, value) VALUES (2, 1);"));
+    }
 
     TString sessionId = CreateSessionRPC(runtime);
 
@@ -1499,10 +1504,15 @@ Y_UNIT_TEST_TWIN(TestOutOfOrderReadOnlyAllowed, StreamLookup) {
     };
     auto prevObserverFunc = runtime.SetObserverFunc(captureRS);
 
+    auto rows = EvWrite ? TEvWriteRows{{tableId1, {3, 2}}, {tableId2, {4, 2}}} : TEvWriteRows{};
+    auto evWriteObservers = ReplaceEvProposeTransactionWithEvWrite(runtime, rows);
+
     // Send a commit request, it would block on readset exchange
     auto f2 = SendRequest(runtime, MakeSimpleRequestRPC(Q_(R"(
         UPSERT INTO `/Root/table-1` (key, value) VALUES (3, 2);
         UPSERT INTO `/Root/table-2` (key, value) VALUES (4, 2))"), sessionId, txId, true));
+
+    evWriteObservers = TTestActorRuntimeBase::TEventObserverHolderPair{};
 
     // Wait until we captured both readsets
     const size_t expectedReadSets = usesVolatileTxs ? 4 : 2;
@@ -1550,7 +1560,7 @@ Y_UNIT_TEST_TWIN(TestOutOfOrderReadOnlyAllowed, StreamLookup) {
     }
 }
 
-Y_UNIT_TEST_TWIN(TestOutOfOrderNonConflictingWrites, StreamLookup) {
+Y_UNIT_TEST_QUAD(TestOutOfOrderNonConflictingWrites, StreamLookup, EvWrite) {
     TPortManager pm;
     NKikimrConfig::TAppConfig app;
     app.MutableTableServiceConfig()->SetEnableKqpDataQueryStreamLookup(StreamLookup);
@@ -1570,11 +1580,16 @@ Y_UNIT_TEST_TWIN(TestOutOfOrderNonConflictingWrites, StreamLookup) {
 
     InitRoot(server, sender);
 
-    CreateShardedTable(server, sender, "/Root", "table-1", 1);
-    CreateShardedTable(server, sender, "/Root", "table-2", 1);
+    auto [shards1, tableId1] = CreateShardedTable(server, sender, "/Root", "table-1", 1);
+    auto [shards2, tableId2] = CreateShardedTable(server, sender, "/Root", "table-2", 1);
 
-    ExecSQL(server, sender, Q_("UPSERT INTO `/Root/table-1` (key, value) VALUES (1, 1);"));
-    ExecSQL(server, sender, Q_("UPSERT INTO `/Root/table-2` (key, value) VALUES (2, 1);"));
+    {
+        auto rows = EvWrite ? TEvWriteRows{{tableId1, {1, 1}}, {tableId2, {2, 1}}} : TEvWriteRows{};
+        auto evWriteObservers = ReplaceEvProposeTransactionWithEvWrite(runtime, rows);
+
+        ExecSQL(server, sender, Q_("UPSERT INTO `/Root/table-1` (key, value) VALUES (1, 1);"));
+        ExecSQL(server, sender, Q_("UPSERT INTO `/Root/table-2` (key, value) VALUES (2, 1);"));
+    }
 
     TString sessionId = CreateSessionRPC(runtime);
 
@@ -1603,10 +1618,15 @@ Y_UNIT_TEST_TWIN(TestOutOfOrderNonConflictingWrites, StreamLookup) {
     };
     auto prevObserverFunc = runtime.SetObserverFunc(captureRS);
 
+    auto rows = EvWrite ? TEvWriteRows{{tableId1, {3, 2}}, {tableId2, {4, 2}}} : TEvWriteRows{};
+    auto evWriteObservers = ReplaceEvProposeTransactionWithEvWrite(runtime, rows);
+
     // Send a commit request, it would block on readset exchange
     auto f2 = SendRequest(runtime, MakeSimpleRequestRPC(Q_(R"(
         UPSERT INTO `/Root/table-1` (key, value) VALUES (3, 2);
         UPSERT INTO `/Root/table-2` (key, value) VALUES (4, 2))"), sessionId, txId, true));
+
+    evWriteObservers = TTestActorRuntimeBase::TEventObserverHolderPair{};
 
     // Wait until we captured both readsets
     const size_t expectedReadSets = usesVolatileTxs ? 4 : 2;
@@ -1622,7 +1642,10 @@ Y_UNIT_TEST_TWIN(TestOutOfOrderNonConflictingWrites, StreamLookup) {
 
     // Now send non-conflicting upsert to both tables
     {
-        blockReadSets = false; // needed for volatile transactions
+        auto rows1 = EvWrite ? TEvWriteRows{{tableId1, {5, 3}}, {tableId2, {6, 3}}} : TEvWriteRows{};
+        auto evWriteObservers1 = ReplaceEvProposeTransactionWithEvWrite(runtime, rows1);
+
+        blockReadSets = false;  // needed for volatile transactions
         auto result = KqpSimpleExec(runtime, Q_(R"(
             UPSERT INTO `/Root/table-1` (key, value) VALUES (5, 3);
             UPSERT INTO `/Root/table-2` (key, value) VALUES (6, 3))"));
@@ -1632,6 +1655,9 @@ Y_UNIT_TEST_TWIN(TestOutOfOrderNonConflictingWrites, StreamLookup) {
 
     // Check that immediate non-conflicting upsert is working too
     {
+        auto rows1 = EvWrite ? TEvWriteRows{{tableId1, {7, 4}}} : TEvWriteRows{};
+        auto evWriteObservers1 = ReplaceEvProposeTransactionWithEvWrite(runtime, rows1);
+
         auto result = KqpSimpleExec(runtime, Q_("UPSERT INTO `/Root/table-1` (key, value) VALUES (7, 4)"));
         UNIT_ASSERT_VALUES_EQUAL(result, "<empty>");
     }

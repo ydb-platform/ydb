@@ -15,7 +15,7 @@ namespace NKikimr::NKqp::NPrivateEvents {
 struct TEvCompileRequest: public TEventLocal<TEvCompileRequest, TKqpEvents::EvCompileRequest> {
     TEvCompileRequest(const TIntrusiveConstPtr<NACLib::TUserToken>& userToken, const TMaybe<TString>& uid,
         TMaybe<TKqpQueryId>&& query, bool keepInCache, bool isQueryActionPrepare, bool perStatementResult, TInstant deadline,
-        TKqpDbCountersPtr dbCounters, std::shared_ptr<std::atomic<bool>> intrestedInResult, 
+        TKqpDbCountersPtr dbCounters, const TMaybe<TString>& applicationName, std::shared_ptr<std::atomic<bool>> intrestedInResult, 
         const TIntrusivePtr<TUserRequestContext>& userRequestContext, NLWTrace::TOrbit orbit = {},
         TKqpTempTablesState::TConstPtr tempTablesState = nullptr, bool collectDiagnostics = false, TMaybe<TQueryAst> queryAst = Nothing())
         : UserToken(userToken)
@@ -26,6 +26,7 @@ struct TEvCompileRequest: public TEventLocal<TEvCompileRequest, TKqpEvents::EvCo
         , PerStatementResult(perStatementResult)
         , Deadline(deadline)
         , DbCounters(dbCounters)
+        , ApplicationName(applicationName)
         , UserRequestContext(userRequestContext)
         , Orbit(std::move(orbit))
         , TempTablesState(std::move(tempTablesState))
@@ -46,6 +47,7 @@ struct TEvCompileRequest: public TEventLocal<TEvCompileRequest, TKqpEvents::EvCo
     TInstant Deadline;
     TKqpDbCountersPtr DbCounters;
     TMaybe<bool> DocumentApiRestricted;
+    TMaybe<TString> ApplicationName;
 
     TIntrusivePtr<TUserRequestContext> UserRequestContext;
     NLWTrace::TOrbit Orbit;
@@ -61,7 +63,7 @@ struct TEvCompileRequest: public TEventLocal<TEvCompileRequest, TKqpEvents::EvCo
 struct TEvRecompileRequest: public TEventLocal<TEvRecompileRequest, TKqpEvents::EvRecompileRequest> {
     TEvRecompileRequest(const TIntrusiveConstPtr<NACLib::TUserToken>& userToken, const TString& uid,
         const TMaybe<TKqpQueryId>& query, bool isQueryActionPrepare, TInstant deadline,
-        TKqpDbCountersPtr dbCounters, std::shared_ptr<std::atomic<bool>> intrestedInResult,
+        TKqpDbCountersPtr dbCounters, const TMaybe<TString>& applicationName, std::shared_ptr<std::atomic<bool>> intrestedInResult,
         const TIntrusivePtr<TUserRequestContext>& userRequestContext, NLWTrace::TOrbit orbit = {},
         TKqpTempTablesState::TConstPtr tempTablesState = nullptr)
         : UserToken(userToken)
@@ -70,6 +72,7 @@ struct TEvRecompileRequest: public TEventLocal<TEvRecompileRequest, TKqpEvents::
         , IsQueryActionPrepare(isQueryActionPrepare)
         , Deadline(deadline)
         , DbCounters(dbCounters)
+        , ApplicationName(applicationName)
         , UserRequestContext(userRequestContext)
         , Orbit(std::move(orbit))
         , TempTablesState(std::move(tempTablesState))
@@ -84,6 +87,7 @@ struct TEvRecompileRequest: public TEventLocal<TEvRecompileRequest, TKqpEvents::
 
     TInstant Deadline;
     TKqpDbCountersPtr DbCounters;
+    TMaybe<TString> ApplicationName;
 
     TIntrusivePtr<TUserRequestContext> UserRequestContext;
     NLWTrace::TOrbit Orbit;

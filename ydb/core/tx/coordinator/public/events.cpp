@@ -1,5 +1,7 @@
 #include "events.h"
 
+#include <ydb/core/protos/base.pb.h>
+
 namespace NKikimr {
 
 TEvTxCoordinator::TEvCoordinatorStep::TEvCoordinatorStep(ui64 step, ui64 prevStep, ui64 mediatorId, ui64 coordinatorId, ui64 activeGeneration)

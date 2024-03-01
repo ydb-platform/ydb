@@ -1,6 +1,8 @@
 #include "cli.h"
 #include "cli_cmds.h"
 
+#include <ydb/core/protos/base.pb.h>
+
 namespace NKikimr {
 namespace NDriverClient {
 

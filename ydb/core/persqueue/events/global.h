@@ -6,6 +6,7 @@
 #include <ydb/library/actors/core/actorid.h>
 #include <ydb/core/base/blobstorage.h>
 #include <ydb/core/protos/msgbus.pb.h>
+#include <ydb/core/protos/msgbus_pq.pb.h>
 #include <ydb/core/tx/datashard/datashard.h>
 #include <ydb/public/api/protos/draft/persqueue_common.pb.h>
 

@@ -53,7 +53,7 @@ void TController::CheckInvariants(const ::NKikimr::NColumnShard::TColumnShard& s
     THashMap<TString, THashSet<NOlap::TUnifiedBlobId>> ids;
     for (auto&& i : granules) {
         for (auto&& p : i->GetPortions()) {
-            p.second->FillBlobIdsByStorage(ids);
+            p.second->FillBlobIdsByStorage(ids, index.GetVersionedIndex());
         }
     }
     for (auto&& i : ids) {

@@ -185,6 +185,7 @@ message TIssuesIds {
 
 // pg
         PG_NO_LOCKING_SUPPORT = 7000;
+        PG_COMPAT = 7001;
 
 // range [200000, 399999) reserved for KiKiMR issue codes, do not use!
 

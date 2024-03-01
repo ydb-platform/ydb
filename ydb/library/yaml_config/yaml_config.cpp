@@ -6,6 +6,8 @@
 
 #include <library/cpp/protobuf/json/json2proto.h>
 
+#include <ydb/core/protos/netclassifier.pb.h>
+
 namespace NKikimr::NYamlConfig {
 
 NKikimrConfig::TAppConfig YamlToProto(

@@ -4,6 +4,8 @@
 
 #include <library/cpp/testing/unittest/registar.h>
 
+#include <ydb/core/protos/key.pb.h>
+
 using namespace NKikimr;
 
 const char *WholeConfig = R"(---

@@ -2,6 +2,7 @@
 
 #include "common.h"
 
+#include <ydb/core/protos/kqp.pb.h>
 
 namespace NKqpRun {
 

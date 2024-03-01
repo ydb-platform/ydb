@@ -22,20 +22,23 @@ class TStatsPartGroupBtreeIndexIterator : public IStatsPartGroupIterator {
         TRowId BeginRowId;
         TRowId EndRowId;
         TCellsIterable BeginKey;
-        ui64 DataSize;
+        ui64 BeginDataSize;
+        ui64 EndDataSize;
 
-        TNodeState(TPageId pageId, TRowId beginRowId, TRowId endRowId, TCellsIterable beginKey, ui64 dataSize)
+        TNodeState(TPageId pageId, TRowId beginRowId, TRowId endRowId, TCellsIterable beginKey, ui64 beginDataSize, ui64 endDataSize)
             : PageId(pageId)
             , BeginRowId(beginRowId)
             , EndRowId(endRowId)
             , BeginKey(beginKey)
-            , DataSize(dataSize)
+            , BeginDataSize(beginDataSize)
+            , EndDataSize(endDataSize)
         {
         }
     };
 
 public:
-    TStatsPartGroupBtreeIndexIterator(const TPart* part, IPages* env, TGroupId groupId)
+    TStatsPartGroupBtreeIndexIterator(const TPart* part, IPages* env, TGroupId groupId,
+            ui64 rowCountResolution, ui64 dataSizeResolution, const TVector<TRowId>& splitPoints)
         : Part(part)
         , Env(env)
         , GroupId(groupId)
@@ -43,7 +46,11 @@ public:
         , Meta(groupId.IsHistoric() ? part->IndexPages.BTreeHistoric[groupId.Index] : part->IndexPages.BTreeGroups[groupId.Index])
         , GroupChannel(Part->GetGroupChannel(GroupId))
         , NodeIndex(0)
+        , RowCountResolution(rowCountResolution)
+        , DataSizeResolution(dataSizeResolution)
+        , SplitPoints(splitPoints) // make copy for Start
     {
+        Y_DEBUG_ABORT_UNLESS(std::is_sorted(SplitPoints.begin(), SplitPoints.end()));
     }
     
     EReady Start() override {
@@ -51,14 +58,28 @@ public:
 
         bool ready = true;
         TVector<TNodeState> nextNodes;
-        Nodes.emplace_back(Meta.PageId, 0, GetEndRowId(), EmptyKey, Meta.DataSize);
+        Nodes.emplace_back(Meta.PageId, 0, GetEndRowId(), EmptyKey, 0, Meta.DataSize);
 
         for (ui32 height = 0; height < Meta.LevelCount; height++) {
+            bool hasChanges = false;
+            size_t splitPointIndex = 0;
+
             for (auto &nodeState : Nodes) {
+                while (splitPointIndex < SplitPoints.size() && SplitPoints[splitPointIndex] < nodeState.BeginRowId) {
+                    splitPointIndex++;
+                }
+                if (splitPointIndex < SplitPoints.size() && SplitPoints[splitPointIndex] < nodeState.EndRowId) {
+                    // split node and go deeper
+                } else if (nodeState.EndRowId - nodeState.BeginRowId <= RowCountResolution
+                        && nodeState.EndDataSize - nodeState.BeginDataSize <= DataSizeResolution) {
+                    nextNodes.push_back(nodeState); // lift current node on the next level as-is
+                    continue; // don't go deeper
+                }
+
                 auto page = Env->TryGetPage(Part, nodeState.PageId);
                 if (!page) {
                     ready = false;
-                    continue;
+                    continue; // continue requesting other nodes
                 }
                 TBtreeIndexNode node(*page);
 
@@ -68,14 +89,20 @@ public:
                     TRowId beginRowId = pos ? node.GetShortChild(pos - 1).RowCount : nodeState.BeginRowId;
                     TRowId endRowId = child.RowCount;
                     TCellsIterable beginKey = pos ? node.GetKeyCellsIterable(pos - 1, GroupInfo.ColsKeyIdx) : nodeState.BeginKey;
-                    ui64 dataSize = child.DataSize;
+                    ui64 beginDataSize = pos ? node.GetShortChild(pos - 1).DataSize : nodeState.BeginDataSize;
+                    ui64 endDataSize = child.DataSize;
 
-                    nextNodes.emplace_back(child.PageId, beginRowId, endRowId, beginKey, dataSize);
+                    nextNodes.emplace_back(child.PageId, beginRowId, endRowId, beginKey, beginDataSize, endDataSize);
+                    hasChanges = true;
                 }
             }
 
             Nodes.swap(nextNodes);
             nextNodes.clear();
+
+            if (!hasChanges) {
+                break; // don't go deeper
+            }
         }
 
         if (!ready) {
@@ -90,7 +117,7 @@ public:
         Y_ABORT_UNLESS(IsValid());
 
         NodeIndex++;
-        
+
         Y_DEBUG_ABORT_UNLESS(NodeIndex == Nodes.size() || Nodes[NodeIndex - 1].EndRowId == Nodes[NodeIndex].BeginRowId);
 
         return DataOrGone();
@@ -98,11 +125,8 @@ public:
 
     void AddLastDeltaDataSize(TChanneledDataSize& dataSize) override {
         Y_DEBUG_ABORT_UNLESS(NodeIndex);
-        ui64 delta = Nodes[NodeIndex - 1].DataSize;
-        if (NodeIndex > 1) {
-            Y_DEBUG_ABORT_UNLESS(delta >= Nodes[NodeIndex - 2].DataSize);
-            delta -= Nodes[NodeIndex - 2].DataSize;
-        }
+        Y_DEBUG_ABORT_UNLESS(Nodes[NodeIndex - 1].EndDataSize >= Nodes[NodeIndex - 1].BeginDataSize);
+        ui64 delta = Nodes[NodeIndex - 1].EndDataSize - Nodes[NodeIndex - 1].BeginDataSize;
         ui8 channel = Part->GetGroupChannel(GroupId);
         dataSize.Add(delta, channel);
     }
@@ -151,6 +175,9 @@ private:
     ui8 GroupChannel;
     ui32 NodeIndex;
     TVector<TNodeState> Nodes;
+    ui64 RowCountResolution;
+    ui64 DataSizeResolution;
+    TVector<TRowId> SplitPoints;
 };
 
 }

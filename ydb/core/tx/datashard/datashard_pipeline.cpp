@@ -9,6 +9,7 @@
 #include <ydb/core/base/cputime.h>
 #include <ydb/core/base/feature_flags.h>
 #include <ydb/core/tx/balance_coverage/balance_coverage_builder.h>
+#include <ydb/core/protos/kqp.pb.h>
 
 namespace NKikimr {
 namespace NDataShard {
@@ -610,10 +611,10 @@ bool TPipeline::LoadWriteDetails(TTransactionContext& txc, const TActorContext& 
     } else if (writeOp->HasVolatilePrepareFlag()) {
         // Since transaction is volatile it was never stored on disk, and it
         // shouldn't have any artifacts yet.
-        writeOp->FillVolatileTxData(Self, txc);
+        writeOp->FillVolatileTxData(Self);
 
         ui32 keysCount = 0;
-        keysCount = writeOp->ExtractKeys();
+        keysCount = writeOp->ExtractKeys(txc.DB.GetScheme());
 
         LOG_DEBUG_S(ctx, NKikimrServices::TX_DATASHARD, "LoadWriteDetails at " << Self->TabletID() << " loaded writeOp from memory " << writeOp->GetStep() << ":" << writeOp->GetTxId() << " keys extracted: " << keysCount);
     } else {
@@ -631,11 +632,11 @@ bool TPipeline::LoadWriteDetails(TTransactionContext& txc, const TActorContext& 
         if (MaybeRequestMoreTxMemory(requiredMem, txc))
             return false;
 
-        writeOp->FillTxData(Self, txc, target, txBody, std::move(locks), artifactFlags);
+        writeOp->FillTxData(Self, target, txBody, std::move(locks), artifactFlags);
 
         ui32 keysCount = 0;
         //if (Config.LimitActiveTx > 1)
-        keysCount = writeOp->ExtractKeys();
+        keysCount = writeOp->ExtractKeys(txc.DB.GetScheme());
 
         LOG_DEBUG_S(ctx, NKikimrServices::TX_DATASHARD, "LoadWriteDetails at " << Self->TabletID() << " loaded writeOp from db " << writeOp->GetStep() << ":" << writeOp->GetTxId() << " keys extracted: " << keysCount);
     }
@@ -1632,7 +1633,7 @@ TOperation::TPtr TPipeline::BuildOperation(NEvents::TDataEvents::TEvWrite::TPtr&
 {
     const auto& rec = ev->Get()->Record;
     TBasicOpInfo info(rec.GetTxId(), EOperationKind::WriteTx, NEvWrite::TConvertor::GetProposeFlags(rec.GetTxMode()), 0, receivedAt, tieBreakerIndex);
-    auto writeOp = MakeIntrusive<TWriteOperation>(info, std::move(ev), Self, txc);
+    auto writeOp = MakeIntrusive<TWriteOperation>(info, std::move(ev), Self);
     writeOp->OperationSpan = std::move(operationSpan);
     auto writeTx = writeOp->GetWriteTx();
     Y_ABORT_UNLESS(writeTx);
@@ -1647,7 +1648,7 @@ TOperation::TPtr TPipeline::BuildOperation(NEvents::TDataEvents::TEvWrite::TPtr&
         return writeOp;
     }
 
-    writeTx->ExtractKeys(true);
+    writeTx->ExtractKeys(txc.DB.GetScheme(), true);
 
     if (!writeTx->Ready()) {
         badRequest(NEvWrite::TConvertor::ConvertErrCode(writeOp->GetWriteTx()->GetErrCode()), TStringBuilder() << "Cannot parse tx keys " << writeOp->GetTxId() << ". " << writeOp->GetWriteTx()->GetErrCode() << ": " << writeOp->GetWriteTx()->GetErrStr());

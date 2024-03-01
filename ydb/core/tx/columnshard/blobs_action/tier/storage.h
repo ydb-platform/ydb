@@ -13,7 +13,7 @@ private:
     using TBase = IBlobsStorageOperator;
     const NActors::TActorId TabletActorId;
     std::shared_ptr<TGCInfo> GCInfo = std::make_shared<TGCInfo>();
-
+    std::optional<NKikimrSchemeOp::TS3Settings> CurrentS3Settings;
     NWrappers::NExternalStorage::IExternalStorageConfig::TPtr InitializationConfig;
     NWrappers::NExternalStorage::IExternalStorageConfig::TPtr ExternalStorageConfig;
     TSpinLock ChangeOperatorLock;

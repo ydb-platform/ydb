@@ -477,6 +477,11 @@ def _select_matching_version(erm_json, resource_name, range_str, dep_is_required
 
 @_with_report_configure_error
 def on_prepare_deps_configure(unit):
+    # Originally this peerdir was in .conf file
+    # but it kept taking default value of NPM_CONTRIBS_PATH
+    # before it was updated by CUSTOM_CONTRIB_TYPESCRIPT()
+    # so I moved it here.
+    unit.onpeerdir(unit.get("NPM_CONTRIBS_PATH"))
     pm = _create_pm(unit)
     pj = pm.load_package_json_from_dir(pm.sources_path)
     has_deps = pj.has_dependencies()

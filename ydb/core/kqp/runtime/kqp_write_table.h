@@ -14,13 +14,19 @@ namespace NKqp {
 
 class IPayloadSerializer : public TThrRefBase {
 public:
-    virtual void AddData(NMiniKQL::TUnboxedValueBatch&& data) = 0;
+    virtual void AddData(NMiniKQL::TUnboxedValueBatch&& data, bool close) = 0;
+
+    virtual bool IsClosed() = 0;
+    virtual bool IsEmpty() = 0;
+    virtual bool IsFinished() = 0;
 
     virtual NKikimrDataEvents::EDataFormat GetDataFormat() = 0;
     virtual std::vector<ui32> GetWriteColumnIds() = 0;
 
     virtual std::optional<TStringBuf> GetBatch(const ui64 shard) = 0;
     virtual void NextBatch(const ui64 shard) = 0;
+
+    virtual const THashSet<ui64>& GetPendingShards() = 0;
 
     virtual i64 GetMemoryInFlight() = 0;
 };

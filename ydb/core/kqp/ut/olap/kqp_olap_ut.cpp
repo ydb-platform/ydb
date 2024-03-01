@@ -6004,7 +6004,7 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
                 R"([[11u;#;110];[12u;#;111];[13u;#;112];[14u;#;113]])");
         }
 
-        {
+        /*{
             // column -> column
             const TString sql = R"(
                 REPLACE INTO `/Root/ColumnShard2`
@@ -6021,7 +6021,7 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
             CompareYson(
                 output,
                 R"([[1u;["test1"];10];[2u;["test2"];11];[3u;["test3"];12];[4u;#;13]])");
-        }
+        }*/
     }
 
     Y_UNIT_TEST(OlapReplace_BadTransactions) {

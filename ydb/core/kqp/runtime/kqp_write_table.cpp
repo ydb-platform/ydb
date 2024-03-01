@@ -31,6 +31,7 @@ TVector<TSysTables::TTableColumnInfo> BuildColumns(const TConstArrayRef<NKikimrK
             number++
         );
     }
+    Cerr << "TEST::BuildColumns: " << result.size() << Endl;
     return result;
 }
 
@@ -52,11 +53,11 @@ std::vector<ui32> BuildWriteIndex(
     std::vector<ui32> result;
     {
         result.reserve(inputColumns.size());
-        i32 number = 0;
         for (const auto& column : inputColumns) {
-            result[number++] = writeColumnIdToIndex.at(column.GetId());
+            result.push_back(writeColumnIdToIndex.at(column.GetId()));
         }
     }
+    Cerr << "TEST::BuildWriteIndex: " << result.size() << " " << writeColumnIdToIndex.size() << Endl;
     return result;
 }
 
@@ -70,6 +71,7 @@ std::vector<ui32> BuildWriteColumnIds(const NSchemeCache::TSchemeCacheNavigate::
     for (const auto& column : columns) {
         result.push_back(column.GetId());
     }
+    Cerr << "TEST::BuildWriteColumnIds: " << result.size() << Endl;
     return result;
 }
 
@@ -80,6 +82,8 @@ std::set<std::string> BuildNotNullColumns(const TConstArrayRef<NKikimrKqp::TKqpC
             result.insert(column.GetName());
         }
     }
+    // TODO: Recheck
+    Cerr << "TEST::BuildNotNullColumns: " << result.size() << " " << inputColumns.size() << Endl;
     return result;
 }
 
@@ -97,6 +101,8 @@ std::vector<std::pair<TString, NScheme::TTypeInfo>> BuildBatchBuilderColumns(
             column.HasTypeInfo() ? &column.GetTypeInfo() : nullptr);
         result.emplace_back(column.GetName(), typeInfoMod.TypeInfo);
     }
+
+    Cerr << "TEST::BuildBatchBuilderColumns: " << result.size() << Endl;
     return result;
 }
 
@@ -123,7 +129,9 @@ public:
         }
     }
 
-    void AddData(NMiniKQL::TUnboxedValueBatch&& data) override {
+    void AddData(NMiniKQL::TUnboxedValueBatch&& data, bool close) override {
+        YQL_ENSURE(!Closed);
+
         TVector<TCell> cells(Columns.size());
         data.ForEachRow([&](const auto& row) {
             for (size_t index = 0; index < Columns.size(); ++index) {
@@ -135,6 +143,8 @@ public:
             }
             BatchBuilder.AddRow(TConstArrayRef<TCell>{cells.begin(), cells.end()});
         });
+
+        Closed |= close;
 
         auto shardsSplitter = NKikimr::NEvWrite::IShardsSplitter::BuildSplitter(SchemeEntry);
         if (!shardsSplitter) {
@@ -153,8 +163,11 @@ public:
             for (auto&& shardInfo : infos) {
                 auto& inFlightBatch = Batches[shard].emplace_back();
                 inFlightBatch = shardInfo->GetData();
-                YQL_ENSURE(!inFlightBatch.empty());
+                ++BatchesCount;
                 MemoryInFlight += inFlightBatch.size();
+                YQL_ENSURE(!inFlightBatch.empty());
+
+                PendingShards.insert(shard);
             }
         }
     }
@@ -179,11 +192,33 @@ public:
         auto it = Batches.find(shard);
         YQL_ENSURE(it != std::end(Batches));
         YQL_ENSURE(!it->second.empty());
+        --BatchesCount;
+        MemoryInFlight += it->second.front().size();
         it->second.pop_front();
+
+        if (it->second.empty()) {
+            PendingShards.erase(shard);
+        }
+    }
+
+    const THashSet<ui64>& GetPendingShards() override {
+        return PendingShards;
     }
 
     i64 GetMemoryInFlight() override {
         return MemoryInFlight;
+    }
+
+    bool IsClosed() override {
+        return Closed;
+    }
+
+    bool IsEmpty() override {
+        return BatchesCount == 0;
+    }
+
+    bool IsFinished() override {
+        return IsClosed() && IsEmpty();
     }
 
 private:
@@ -217,9 +252,13 @@ private:
 
     NArrow::TArrowBatchBuilder BatchBuilder;
 
+    ui64 BatchesCount = 0;
     THashMap<ui64, std::deque<TString>> Batches;
+    THashSet<ui64> PendingShards;
 
     i64 MemoryInFlight = 0;
+
+    bool Closed = false;
 };
 
 IPayloadSerializerPtr CreateColumnShardPayloadSerializer(

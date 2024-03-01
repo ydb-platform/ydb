@@ -40,6 +40,7 @@ target_link_libraries(dqrun PUBLIC
   providers-clickhouse-provider
   providers-common-comp_nodes
   providers-common-proto
+  common-token_accessor-client
   providers-common-udf_resolve
   providers-generic-actors
   providers-generic-provider

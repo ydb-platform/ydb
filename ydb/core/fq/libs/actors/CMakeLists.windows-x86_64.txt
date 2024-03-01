@@ -76,7 +76,6 @@ target_link_libraries(fq-libs-actors PUBLIC
   providers-pq-provider
   providers-pq-task_meta
   providers-s3-provider
-  providers-ydb-provider
   yql-public-issue
   public-issue-protos
   yql-sql-settings

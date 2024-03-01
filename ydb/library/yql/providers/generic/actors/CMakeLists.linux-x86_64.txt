@@ -17,10 +17,12 @@ target_link_libraries(providers-generic-actors PUBLIC
   yutil
   dq-actors-compute
   yql-minikql-computation
+  providers-common-structured_token
   common-token_accessor-client
   providers-generic-proto
   yql-public-types
   generic-connector-libcpp
+  client-ydb_types-credentials
 )
 target_sources(providers-generic-actors PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/library/yql/providers/generic/actors/yql_generic_read_actor.cpp

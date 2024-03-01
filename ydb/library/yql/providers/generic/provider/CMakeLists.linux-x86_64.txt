@@ -35,19 +35,23 @@ target_link_libraries(providers-generic-provider PUBLIC
   providers-common-provider
   providers-common-pushdown
   providers-common-structured_token
+  common-token_accessor-client
   providers-common-transform
   providers-dq-common
   providers-dq-expr_nodes
   providers-generic-expr_nodes
   providers-generic-proto
+  connector-api-common
   generic-connector-libcpp
   yql-utils-plan
+  client-ydb_types-credentials
 )
 target_sources(providers-generic-provider PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/library/yql/providers/generic/provider/yql_generic_provider.h
   ${CMAKE_SOURCE_DIR}/ydb/library/yql/providers/generic/provider/yql_generic_provider_impl.h
   ${CMAKE_SOURCE_DIR}/ydb/library/yql/providers/generic/provider/yql_generic_settings.h
   ${CMAKE_SOURCE_DIR}/ydb/library/yql/providers/generic/provider/yql_generic_state.h
+  ${CMAKE_SOURCE_DIR}/ydb/library/yql/providers/generic/provider/yql_generic_utils.h
   ${CMAKE_SOURCE_DIR}/ydb/library/yql/providers/generic/provider/yql_generic_cluster_config.cpp
   ${CMAKE_SOURCE_DIR}/ydb/library/yql/providers/generic/provider/yql_generic_datasink.cpp
   ${CMAKE_SOURCE_DIR}/ydb/library/yql/providers/generic/provider/yql_generic_datasink_execution.cpp
@@ -64,4 +68,5 @@ target_sources(providers-generic-provider PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/library/yql/providers/generic/provider/yql_generic_provider.cpp
   ${CMAKE_SOURCE_DIR}/ydb/library/yql/providers/generic/provider/yql_generic_settings.cpp
   ${CMAKE_SOURCE_DIR}/ydb/library/yql/providers/generic/provider/yql_generic_state.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/library/yql/providers/generic/provider/yql_generic_utils.cpp
 )

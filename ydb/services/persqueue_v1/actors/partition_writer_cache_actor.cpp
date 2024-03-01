@@ -106,6 +106,11 @@ void TPartitionWriterCacheActor::Handle(NPQ::TEvPartitionWriter::TEvInitResult::
 
     if (result.IsSuccess()) {
         p->second->OnEvInitResult(ev);
+    } else {
+        auto response = result.GetError().Response;
+        ctx.Send(Owner, new NPQ::TEvPartitionWriter::TEvWriteResponse(result.SessionId, result.TxId,
+                                                                      EErrorCode::InternalError, result.GetError().Reason,
+                                                                      std::move(response)));
     }
 
     if (!result.SessionId && !result.TxId) {

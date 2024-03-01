@@ -40,6 +40,8 @@ protected:
                      size_t partitionCount = 1,
                      std::optional<size_t> maxPartitionCount = std::nullopt);
 
+    void WriteToTopicWithInvalidTxId(bool invalidTxId);
+
 protected:
     const TDriver& GetDriver() const;
 
@@ -185,6 +187,47 @@ const TDriver& TFixture::GetDriver() const
     return *Driver;
 }
 
+void TFixture::WriteToTopicWithInvalidTxId(bool invalidTxId)
+{
+    auto tableSession = CreateSession();
+    auto tx = BeginTx(tableSession);
+
+    NTopic::TWriteSessionSettings options;
+    options.Path(TEST_TOPIC);
+    options.MessageGroupId(TEST_MESSAGE_GROUP_ID);
+
+    NTopic::TTopicClient client(GetDriver());
+    auto writeSession = client.CreateWriteSession(options);
+
+    auto event = writeSession->GetEvent(true);
+    UNIT_ASSERT(event.Defined() && std::holds_alternative<TWriteSessionEvent::TReadyToAcceptEvent>(event.GetRef()));
+    auto token = std::move(std::get<TWriteSessionEvent::TReadyToAcceptEvent>(event.GetRef()).ContinuationToken);
+
+    NTopic::TWriteMessage params("message");
+    params.Tx(tx);
+
+    if (invalidTxId) {
+        CommitTx(tx, EStatus::SUCCESS);
+    } else {
+        UNIT_ASSERT(tableSession.Close().ExtractValueSync().IsSuccess());
+    }
+
+    writeSession->Write(std::move(token), std::move(params));
+
+    while (true) {
+        event = writeSession->GetEvent(true);
+        UNIT_ASSERT(event.Defined());
+        auto& v = event.GetRef();
+        if (auto e = std::get_if<TWriteSessionEvent::TAcksEvent>(&v); e) {
+            UNIT_ASSERT(false);
+        } else if (auto e = std::get_if<TWriteSessionEvent::TReadyToAcceptEvent>(&v); e) {
+            ;
+        } else if (auto e = std::get_if<TSessionClosedEvent>(&v); e) {
+            break;
+        }
+    }
+}
+
 Y_UNIT_TEST_F(SessionAbort, TFixture)
 {
     {
@@ -266,6 +309,16 @@ Y_UNIT_TEST_F(WriteToTopic, TFixture)
     WriteMessages({"#4", "#5"}, topic[1], TEST_MESSAGE_GROUP_ID, tx);
 
     CommitTx(tx, EStatus::ABORTED);
+}
+
+Y_UNIT_TEST_F(WriteToTopic_Invalid_Session, TFixture)
+{
+    WriteToTopicWithInvalidTxId(false);
+}
+
+Y_UNIT_TEST_F(WriteToTopic_Invalid_Tx, TFixture)
+{
+    WriteToTopicWithInvalidTxId(true);
 }
 
 }

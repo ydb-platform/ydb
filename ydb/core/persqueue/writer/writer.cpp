@@ -222,6 +222,7 @@ class TPartitionWriter: public TActorBootstrapped<TPartitionWriter>, private TRl
         switch (ev->GetTypeRewrite()) {
             HFunc(NKqp::TEvKqp::TEvQueryResponse, HandleWriteId);
             hFunc(TEvPartitionWriter::TEvWriteRequest, HoldPending);
+            SFunc(TEvents::TEvWakeup, GetWriteId);
         default:
             return StateBase(ev);
         }
@@ -231,7 +232,13 @@ class TPartitionWriter: public TActorBootstrapped<TPartitionWriter>, private TRl
         Y_UNUSED(ctx);
 
         auto& record = ev->Get()->Record.GetRef();
-        if (record.GetYdbStatus() != Ydb::StatusIds::SUCCESS) {
+        switch (record.GetYdbStatus()) {
+        case Ydb::StatusIds::SUCCESS:
+            break;
+        case Ydb::StatusIds::SESSION_BUSY:
+            Schedule(TDuration::MilliSeconds(100), new TEvents::TEvWakeup());
+            return;
+        default:
             return InitResult("Invalid KQP session", record);
         }
 

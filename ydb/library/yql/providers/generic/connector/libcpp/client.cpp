@@ -24,7 +24,11 @@ namespace NYql::NConnector {
         TClientGRPC() = delete;
         TClientGRPC(const TGenericConnectorConfig& config) {
             GrpcConfig_ = NYdbGrpc::TGRpcClientConfig();
+
+            Y_ENSURE(config.GetEndpoint().host(), TStringBuilder() << "Empty host in TGenericConnectorConfig: " << config.DebugString());
+            Y_ENSURE(config.GetEndpoint().port(), TStringBuilder() << "Empty port in TGenericConnectorConfig: " << config.DebugString());
             GrpcConfig_.Locator = TStringBuilder() << config.GetEndpoint().host() << ":" << config.GetEndpoint().port();
+
             GrpcConfig_.EnableSsl = config.GetUseSsl();
 
             // Read content of CA cert

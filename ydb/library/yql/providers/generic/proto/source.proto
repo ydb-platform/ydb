@@ -2,18 +2,20 @@ syntax = "proto3";
 
 option cc_enable_arenas = true;
 
-package NYql.Generic;
+package NYql.NConnector;
 
 import "ydb/library/yql/providers/generic/connector/api/service/protos/connector.proto";
 import "ydb/library/yql/providers/generic/connector/api/common/data_source.proto";
 
 message TSource {
-    // Token to access database
-    // FIXME: unused field, delete it:
-    string token = 1;
     // Prepared Select expression
     NYql.NConnector.NApi.TSelect select = 2;
-    // Description of instance to connect
-    // FIXME: DataSourceInstance is already incapsulated into select, delete it:
-    NYql.NConnector.NApi.TDataSourceInstance data_source_instance = 3;
+
+    // ServiceAccountId and ServiceAccountIdSignature are used to obtain tokens
+    // to access external data source supporting this kind of authentication
+    // during the runtime phase.
+    string ServiceAccountId = 4;
+    string ServiceAccountIdSignature = 5;
+
+    reserved 1, 3;
 }

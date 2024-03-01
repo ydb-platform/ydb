@@ -1,5 +1,6 @@
 #include "database_resolver.h"
 
+#include <util/string/split.h>
 #include <ydb/core/fq/libs/common/cache.h>
 #include <ydb/core/fq/libs/config/protos/issue_id.pb.h>
 #include <ydb/core/fq/libs/events/events.h>
@@ -136,7 +137,7 @@ private:
         const auto requestIter = Requests.find(ev->Get()->Request);
         HandledIds++;
 
-        LOG_T("ResponseProcessor::Handle(HttpIncomingResponse): got MDB API response: code=" << ev->Get()->Response->Status);
+        LOG_T("ResponseProcessor::Handle(HttpIncomingResponse): got API response: code=" << ev->Get()->Response->Status);
 
         try {
             HandleResponse(ev, requestIter, errorMessage, result);
@@ -312,7 +313,12 @@ public:
             }
 
             Y_ENSURE(endpoint);
-            return TDatabaseDescription{endpoint, "", 0, database, secure};
+
+            TVector<TString> split = StringSplitter(endpoint).Split(':');
+
+            Y_ENSURE(split.size() == 2);
+
+            return TDatabaseDescription{endpoint, split[0], FromString(split[1]), database, secure};
         };
         Parsers[NYql::EDatabaseType::Ydb] = ydbParser;
         Parsers[NYql::EDatabaseType::DataStreams] = [ydbParser](
@@ -327,9 +333,11 @@ public:
             if (!isDedicatedDb && ret.Endpoint.StartsWith("ydb.")) {
                 // Replace "ydb." -> "yds."
                 ret.Endpoint[2] = 's';
+                ret.Host[2] = 's';
             }
             if (isDedicatedDb) {
                 ret.Endpoint = "u-" + ret.Endpoint;
+                ret.Host = "u-" + ret.Host;
             }
             return ret;
         };
@@ -486,6 +494,7 @@ private:
             try {
                 TString url;
                 if (IsIn({NYql::EDatabaseType::Ydb, NYql::EDatabaseType::DataStreams }, databaseType)) {
+                    YQL_ENSURE(ev->Get()->YdbMvpEndpoint.Size() > 0, "empty YDB MVP Endpoint");
                     url = TUrlBuilder(ev->Get()->YdbMvpEndpoint + "/database")
                             .AddUrlParam("databaseId", databaseId)
                             .Build();
@@ -497,7 +506,6 @@ private:
                             .AddPathComponent("hosts")
                             .Build();
                 }
-                LOG_D("ResponseProccessor::Handle(EndpointRequest): start GET request: " << url);
 
                 NHttp::THttpOutgoingRequestPtr httpRequest = NHttp::THttpOutgoingRequest::CreateRequestGet(url);
 
@@ -506,6 +514,8 @@ private:
                 if (token) {
                     httpRequest->Set("Authorization", token);
                 }
+
+                LOG_D("ResponseProccessor::Handle(EndpointRequest): start GET request: " << "url: "  << httpRequest->URL);
 
                 requests[httpRequest] = TResolveParams{databaseId, databaseType, databaseAuth};
             } catch (const std::exception& e) {

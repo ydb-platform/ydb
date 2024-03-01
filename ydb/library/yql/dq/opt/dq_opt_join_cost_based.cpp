@@ -344,6 +344,7 @@ std::shared_ptr<TJoinOptimizerNode> PickBestNonReorderabeJoin(const std::shared_
     }
 
     Y_ENSURE(bestJoinValid,"No join was chosen!");
+    node->Stats = std::make_shared<TOptimizerStatistics>(ComputeJoinStats(*left->Stats, *right->Stats, leftJoinKeys, rightJoinKeys, bestJoinAlgo, ctx));
     node->JoinAlgo = bestJoinAlgo;
     return node;
 }

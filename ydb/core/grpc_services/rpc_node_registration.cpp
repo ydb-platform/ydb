@@ -51,30 +51,17 @@ public:
         }
 
         auto dinfo = AppData(ctx)->DomainsInfo;
-        ui32 group;
         auto request = TEvNodeRegistrationRequest::GetProtoRequest(Request);
         const TString& domainPath = request->domain_path();
-        if (!domainPath.Empty()) {
-            auto *domain = dinfo->GetDomainByName(domainPath);
-            if (!domain) {
-                auto error = Sprintf("Unknown domain %s", domainPath.data());
-                ReplyWithErrorAndDie(error, ctx);
-                return;
-            }
-            group = dinfo->GetDefaultStateStorageGroup(domain->DomainUid);
-        } else {
-            if (dinfo->Domains.size() > 1) {
-                auto error = "Ambiguous domain (specify DomainPath in request)";
-                ReplyWithErrorAndDie(error, ctx);
-                return;
-            }
-            auto domain = dinfo->Domains.begin()->second;
-            group = dinfo->GetDefaultStateStorageGroup(domain->DomainUid);
+        if (domainPath && dinfo->GetDomain()->Name != domainPath) {
+            auto error = Sprintf("Unknown domain %s", domainPath.data());
+            ReplyWithErrorAndDie(error, ctx);
+            return;
         }
 
         NTabletPipe::TClientConfig pipeConfig;
         pipeConfig.RetryPolicy = {.RetryLimitCount = 10};
-        auto pipe = NTabletPipe::CreateClient(SelfId(), MakeNodeBrokerID(group), pipeConfig);
+        auto pipe = NTabletPipe::CreateClient(SelfId(), MakeNodeBrokerID(), pipeConfig);
         NodeBrokerPipe = ctx.RegisterWithSameMailbox(pipe);
 
         TAutoPtr<TEvNodeBroker::TEvRegistrationRequest> nodeBrokerRequest

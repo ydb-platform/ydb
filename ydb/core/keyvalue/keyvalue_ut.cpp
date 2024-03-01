@@ -83,7 +83,7 @@ struct TTestContext {
 
     TTestContext() {
         TabletType = TTabletTypes::KeyValue;
-        TabletId = MakeTabletID(0, 0, 1);
+        TabletId = MakeTabletID(false, 1);
         TabletIds.push_back(TabletId);
     }
 

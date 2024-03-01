@@ -28,13 +28,10 @@ TString DatabaseFromDomain(const TAppData* appdata = AppData()) {
     auto dinfo = appdata->DomainsInfo;
     if (!dinfo)
         ythrow yexception() << "Invalid DomainsInfo ptr";
-    if (dinfo->Domains.empty() || dinfo->Domains.size() != 1)
-        ythrow yexception() << "Unexpected domains container size: "
-                            << dinfo->Domains.size();
-    if (!dinfo->Domains.begin()->second)
-        ythrow yexception() << "Empty domain params";
+    if (!dinfo->Domain)
+        ythrow yexception() << "No Domain defined";
 
-    return TString("/") + dinfo->Domains.begin()->second->Name;
+    return TString("/") + dinfo->GetDomain()->Name;
 }
 
 struct TDatabaseInfo {

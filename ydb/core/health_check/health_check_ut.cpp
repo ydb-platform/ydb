@@ -589,8 +589,7 @@ Y_UNIT_TEST_SUITE(THealthCheckTest) {
             entry.Path = {"Root", "shared"};
             entry.DomainInfo = MakeIntrusive<TDomainInfo>(SHARED_DOMAIN_KEY, SHARED_DOMAIN_KEY);
             auto domains = runtime.GetAppData().DomainsInfo;
-            auto domain = domains->Domains.begin()->second;
-            ui64 hiveId = domains->GetHive(domain->DefaultHiveUid);
+            ui64 hiveId = domains->GetHive();
             entry.DomainInfo->Params.SetHive(hiveId);
         }
     }
@@ -1411,8 +1410,7 @@ Y_UNIT_TEST_SUITE(THealthCheckTest) {
                         entry.Path = {"Root", "database"};
                         entry.DomainInfo = MakeIntrusive<TDomainInfo>(SUBDOMAIN_KEY, SUBDOMAIN_KEY);
                         auto domains = runtime.GetAppData().DomainsInfo;
-                        auto domain = domains->Domains.begin()->second;
-                        ui64 hiveId = domains->GetHive(domain->DefaultHiveUid);
+                        ui64 hiveId = domains->GetHive();
                         entry.DomainInfo->Params.SetHive(hiveId);
                     }
                     break;

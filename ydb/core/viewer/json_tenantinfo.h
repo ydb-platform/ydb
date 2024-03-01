@@ -108,7 +108,7 @@ public:
         OffloadMerge = FromStringWithDefault<bool>(params.Get("offload_merge"), OffloadMerge);
 
         TIntrusivePtr<TDomainsInfo> domains = AppData()->DomainsInfo;
-        TIntrusivePtr<TDomainsInfo::TDomain> domain = domains->Domains.begin()->second;
+        auto *domain = domains->GetDomain();
 
         RequestConsoleListTenants();
 
@@ -122,7 +122,7 @@ public:
             RequestSchemeCacheNavigate(DomainPath);
         }
         RootId = GetDomainId({domain->SchemeRoot, 1});
-        RootHiveId = domains->GetHive(domain->DefaultHiveUid);
+        RootHiveId = domains->GetHive();
         RequestHiveDomainStats(RootHiveId);
         if (Storage) {
             RequestHiveStorageStats(RootHiveId);
@@ -450,7 +450,7 @@ public:
     void ReplyAndPassAway() {
         BLOG_TRACE("ReplyAndPassAway() started");
         TIntrusivePtr<TDomainsInfo> domains = AppData()->DomainsInfo;
-        TIntrusivePtr<TDomainsInfo::TDomain> domain = domains->Domains.begin()->second;
+        auto *domain = domains->GetDomain();
         THashMap<TString, NKikimrViewer::EFlag> OverallByDomainId;
         TMap<TNodeId, NKikimrWhiteboard::TSystemStateInfo> NodeSystemStateInfo;
 
@@ -547,13 +547,10 @@ public:
                     tablets.emplace_back(entry.DomainInfo->Params.GetSchemeShard());
                 } else {
                     tablets.emplace_back(domain->SchemeRoot);
-
-                    ui32 hiveDomain = domains->GetHiveDomainUid(domain->DefaultHiveUid);
-                    ui64 defaultStateStorageGroup = domains->GetDefaultStateStorageGroup(hiveDomain);
-                    tablets.emplace_back(MakeBSControllerID(defaultStateStorageGroup));
-                    tablets.emplace_back(MakeConsoleID(defaultStateStorageGroup));
+                    tablets.emplace_back(MakeBSControllerID());
+                    tablets.emplace_back(MakeConsoleID());
                 }
-                TTabletId hiveId = domains->GetHive(domain->DefaultHiveUid);
+                TTabletId hiveId = domains->GetHive();
                 if (entry.DomainInfo->Params.HasHive()) {
                     hiveId = entry.DomainInfo->Params.GetHive();
                 } else {

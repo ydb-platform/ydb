@@ -138,7 +138,7 @@ public:
         IMetricEncoder* e = encoder.Get();
 
         TIntrusivePtr<TDomainsInfo> domains = AppData()->DomainsInfo;
-        TIntrusivePtr<TDomainsInfo::TDomain> domain = domains->Domains.begin()->second;
+        auto *domain = domains->GetDomain();
         auto filterDatabase = Database ? Database : "/" + domain->Name;
         e->OnStreamBegin();
         if (recordCounters->size() > 0) {

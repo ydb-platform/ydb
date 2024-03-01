@@ -45,15 +45,12 @@ void TTester::Setup(TTestActorRuntime& runtime, const TOptions& opts) {
 
     TAppPrepare app;
 
-
     auto domain = TDomainsInfo::TDomain::ConstructDomainWithExplicitTabletIds(
                       "dc-1", domainId, FAKE_SCHEMESHARD_TABLET_ID,
-                      domainId, domainId, TVector<ui32>{domainId},
-                      domainId, TVector<ui32>{domainId},
                       planResolution,
-                      TVector<ui64>{TDomainsInfo::MakeTxCoordinatorIDFixed(domainId, 1)},
+                      TVector<ui64>{TDomainsInfo::MakeTxCoordinatorIDFixed(1)},
                       TVector<ui64>{},
-                      TVector<ui64>{TDomainsInfo::MakeTxAllocatorIDFixed(domainId, 1)});
+                      TVector<ui64>{TDomainsInfo::MakeTxAllocatorIDFixed(1)});
 
     TVector<ui64> ids = runtime.GetTxAllocatorTabletIds();
     ids.insert(ids.end(), domain->TxAllocators.begin(), domain->TxAllocators.end());

@@ -745,8 +745,8 @@ public:
     TMaybe<TString> GetDomainName() override {
         TAppData* appData = AppData(ActorSystem);
         if (GetDomainLoginOnly()) {
-            if (appData->DomainsInfo && !appData->DomainsInfo->Domains.empty()) {
-                return appData->DomainsInfo->Domains.begin()->second->Name;
+            if (appData->DomainsInfo && appData->DomainsInfo->Domain) {
+                return appData->DomainsInfo->GetDomain()->Name;
             }
         }
         return {};

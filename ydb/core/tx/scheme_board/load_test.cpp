@@ -183,18 +183,16 @@ class TLoadProducer: public TActorBootstrapped<TLoadProducer> {
     }
 
     void Boot() {
-        const TActorId proxy = MakeStateStorageProxyID(StateStorageGroupFromTabletID(Owner));
+        const TActorId proxy = MakeStateStorageProxyID();
         Send(proxy, new TEvStateStorage::TEvListSchemeBoard(), IEventHandle::FlagTrackDelivery);
 
         Become(&TThis::StateBoot);
     }
 
     void Populate() {
-        const ui32 ssId = StateStorageGroupFromTabletID(Owner);
-
         Descriptions = GenerateDescriptions(Owner, Config, NextPathId);
         Populator = Register(CreateSchemeBoardPopulator(
-            Owner, Max<ui64>(), ssId, std::vector<std::pair<TPathId, TTwoPartDescription>>(Descriptions.begin(), Descriptions.end()), NextPathId
+            Owner, Max<ui64>(), std::vector<std::pair<TPathId, TTwoPartDescription>>(Descriptions.begin(), Descriptions.end()), NextPathId
         ));
 
         TPathId pathId(Owner, NextPathId - 1);
@@ -203,7 +201,7 @@ class TLoadProducer: public TActorBootstrapped<TLoadProducer> {
 
         // subscriber will help us to know when sync is completed
         Subscriber = Register(CreateSchemeBoardSubscriber(
-            SelfId(), topPath, ssId,
+            SelfId(), topPath,
             ESchemeBoardSubscriberDeletionPolicy::Majority
         ));
 
@@ -324,10 +322,9 @@ private:
 
 class TLoadConsumer: public TActorBootstrapped<TLoadConsumer> {
     void Subscribe(const TPathId& pathId) {
-        const ui32 ssId = StateStorageGroupFromTabletID(Owner);
         for (ui32 i = 0; i < Config.SubscriberMulti; ++i) {
             const TActorId subscriber = Register(CreateSchemeBoardSubscriber(
-                SelfId(), pathId, ssId,
+                SelfId(), pathId,
                 ESchemeBoardSubscriberDeletionPolicy::Majority
             ));
 

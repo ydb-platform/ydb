@@ -322,7 +322,7 @@ Y_UNIT_TEST_SUITE(DataShardWrite) {
 
     }
 
-    Y_UNIT_TEST(ShouldRejectOnChangeQueueOverflow) {
+    Y_UNIT_TEST(RejectOnChangeQueueOverflow) {
         TPortManager pm;
         TServerSettings serverSettings(pm.GetPort(2134));
         serverSettings.SetDomainName("Root").SetUseRealThreads(false).SetChangesQueueItemsLimit(1);
@@ -362,7 +362,18 @@ Y_UNIT_TEST_SUITE(DataShardWrite) {
             Write(runtime, sender, shard, tableId, opts.Columns_, rowCount, ++txId, NKikimrDataEvents::TEvWrite::MODE_IMMEDIATE, NKikimrDataEvents::TEvWriteResult::STATUS_OVERLOADED);
         }
 
-    } // Y_UNIT_TEST
+        Cout << "========= Send immediate write + OverloadSubscribe, expecting overloaded =========\n";
+        {
+            ui64 secNo = 55;
+
+            auto request = MakeWriteRequest(++txId, NKikimrDataEvents::TEvWrite::MODE_IMMEDIATE, tableId, opts.Columns_, rowCount);
+            request->Record.SetOverloadSubscribe(secNo);
+           
+            auto writeResult = Write(runtime, sender, shard, std::move(request), NKikimrDataEvents::TEvWriteResult::STATUS_OVERLOADED);
+            UNIT_ASSERT_VALUES_EQUAL(writeResult.GetOverloadSubscribed(), secNo);
+        }
+
+    }  // Y_UNIT_TEST
 
 } // Y_UNIT_TEST_SUITE
 } // namespace NKikimr

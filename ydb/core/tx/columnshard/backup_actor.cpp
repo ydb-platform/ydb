@@ -65,13 +65,16 @@ public:
         std::shared_ptr<arrow::RecordBatch> arrowBatch
     ) : actorID(actorID) {
 
-        NArrow::TBatchSplitttingContext splitCtx(6 * 1024 * 1024);
+        NArrow::TBatchSplitttingContext splitCtx(NColumnShard::TLimits::GetMaxBlobSize());
+
         NArrow::TSerializedBatch batch = NArrow::TSerializedBatch::Build(arrowBatch, splitCtx);
+
 
         NOlap::TWritingBlob currentBlob;
 
         // @TODO stub
         NOlap::TWriteAggregation aggreagtion(nullptr);
+
         NOlap::TWideSerializedBatch wideBatch(std::move(batch), aggreagtion);
 
         currentBlob.AddData(wideBatch);
@@ -293,6 +296,8 @@ private:
         auto action = InsertOperator->StartWritingAction("BACKUP:WRITING");
         auto writeController = std::make_shared<TBackupWriteController>(SelfId(), action, arrowBatch);
         ctx.Register(CreateWriteActor(TableId, writeController, TInstant::Max()));
+
+        AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("SendBackupShardProposeResult", "actor registred");
     }
 };
 

@@ -5,7 +5,6 @@
 #include <ydb/core/formats/arrow/simple_builder/batch.h>
 #include <ydb/core/formats/arrow/simple_builder/filler.h>
 #include <ydb/core/kqp/compute_actor/kqp_compute_events.h>
-#include <ydb/core/tx/columnshard/blobs_action/memory.h>
 #include <ydb/core/tx/columnshard/blobs_action/tier/storage.h>
 #include <ydb/core/tx/conveyor/usage/abstract.h>
 #include <ydb/core/tx/columnshard/blobs_reader/actor.h>
@@ -56,7 +55,7 @@ TActorIdentity PrepareCSTable(TTestBasicRuntime& runtime, TActorId& sender) {
     const ui64 schemaVersion = 1;
     
     const std::vector<ui32> columnsIds = {1, 2};
-    auto res = PrepareTabletActor(runtime, tableId, schema);
+    auto res = PrepareTabletActor(runtime, tableId, NArrow::NTest::TTestColumn::BuildFromPairs(schema));
 
     auto keyColumn =
         std::make_shared<NConstruction::TSimpleArrayConstructor<NConstruction::TIntSeqFiller<arrow::UInt64Type>>>(
@@ -93,12 +92,15 @@ TActorIdentity PrepareCSTable(TTestBasicRuntime& runtime, TActorId& sender) {
 std::shared_ptr<NOlap::NBlobOperations::NTier::TOperator> PrepareInsertOp(const TActorId& sender) {
     const auto storageId = "some storageId";
     const TActorIdentity tabletActorID(sender);
-    auto sharedBlobsManager = std::make_shared<NOlap::NDataSharing::TSharedBlobsManager>(NOlap::TTabletId{});
+
+    
+    auto sharedBlobsManager = std::make_shared<NOlap::NDataSharing::TSharedBlobsManager>(NOlap::TTabletId{tableId});
 
     NKikimrSchemeOp::TStorageTierConfig cfgProto;
     cfgProto.SetName("some_name");
 
     ::NKikimrSchemeOp::TS3Settings s3_settings;
+    s3_settings.set_secretkey(Singleton<NWrappers::NExternalStorage::TFakeExternalStorage>()->GetSecretKey());
     s3_settings.set_endpoint("fake");
 
     *cfgProto.MutableObjectStorage() = s3_settings;
@@ -139,12 +141,12 @@ Y_UNIT_TEST_SUITE(TColumnShardBackup) {
             NActors::TLogContextGuard guard = NActors::TLogContextBuilder::Build(NKikimrServices::TX_COLUMNSHARD)("TEST_STEP", 3);
             NOlap::NTests::TShardReader reader(runtime, TTestTxConfig::TxTablet0, tableId, NOlap::TSnapshot(writePlanStep, txId));
 
-            reader.SetReplyColumns(TTestSchema::ExtractNames(schema));
+            reader.SetReplyColumns(TTestSchema::ExtractNames(NArrow::NTest::TTestColumn::BuildFromPairs(schema)));
             
             auto rb = reader.ReadAll();
             UNIT_ASSERT(rb);
-            NArrow::ExtractColumnsValidate(rb, TTestSchema::ExtractNames(schema));
-            UNIT_ASSERT((ui32)rb->num_columns() == TTestSchema::ExtractNames(schema).size());
+            NArrow::ExtractColumnsValidate(rb, TTestSchema::ExtractNames(NArrow::NTest::TTestColumn::BuildFromPairs(schema)));
+            UNIT_ASSERT((ui32)rb->num_columns() == TTestSchema::ExtractNames(NArrow::NTest::TTestColumn::BuildFromPairs(schema)).size());
             UNIT_ASSERT(rb->num_rows());
             UNIT_ASSERT(reader.IsCorrectlyFinished());
 

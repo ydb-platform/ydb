@@ -455,7 +455,7 @@ namespace NKikimr::NColumnShard {
     }
 
     IActor* PrepareTabletActor(TTestBasicRuntime& runtime, const ui64 tableId,
-                               const std::vector<std::pair<TString, NScheme::TTypeInfo>>& schema, const ui32 keySize) {
+                               const std::vector<NArrow::NTest::TTestColumn>& schema, const ui32 keySize) {
         using namespace NTxUT;
 
         IActor* res;

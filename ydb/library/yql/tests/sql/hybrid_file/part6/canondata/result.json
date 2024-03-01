@@ -1905,9 +1905,9 @@
     ],
     "test.test[pg-select_win_count_all-default.txt-Debug]": [
         {
-            "checksum": "e534c1e50b2958fb47b4ae4c557798f5",
-            "size": 1787,
-            "uri": "https://{canondata_backend}/1937027/ada6abcf938e1f8d16f0582e4d91ef5e675daa49/resource.tar.gz#test.test_pg-select_win_count_all-default.txt-Debug_/opt.yql_patched"
+            "checksum": "f42643da0632c0a4361857b47ec8ac09",
+            "size": 1793,
+            "uri": "https://{canondata_backend}/1871182/c1b1f4292928931b25dbbf2079b4b20fc3a40c26/resource.tar.gz#test.test_pg-select_win_count_all-default.txt-Debug_/opt.yql_patched"
         }
     ],
     "test.test[pg-select_win_count_all-default.txt-Plan]": [

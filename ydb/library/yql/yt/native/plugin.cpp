@@ -589,7 +589,6 @@ public:
                 };
             }
             if (!ActiveQueriesProgress_[queryId].Compiled) {
-                ActiveQueriesProgress_.erase(queryId);
                 return TAbortResult{
                     .YsonError = MessageToYtErrorYson(Format("Query %v is not compiled", queryId)),
                 };
@@ -631,7 +630,9 @@ private:
     void RemoveQuery(TQueryId queryId)
     {
         auto guard = WriterGuard(ProgressSpinLock);
-        ActiveQueriesProgress_.erase(queryId);
+        if (ActiveQueriesProgress_.contains(queryId)) {
+            ActiveQueriesProgress_.erase(queryId);
+        }
     }
 
     static TString PatchQueryAttributes(TYsonString configAttributes, TYsonString querySettings)

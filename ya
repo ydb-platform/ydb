@@ -34,33 +34,33 @@ REGISTRY_ENDPOINT = os.environ.get("YA_REGISTRY_ENDPOINT", "https://devtools-reg
 PLATFORM_MAP = {
     "data": {
         "darwin": {
-            "md5": "6cd9ea7703da9d98d60f5832f58fa580",
+            "md5": "49b23aec9b35dd50e5b501cba8fa8506",
             "urls": [
-                f"{REGISTRY_ENDPOINT}/5906509465"
+                f"{REGISTRY_ENDPOINT}/5913866981"
             ]
         },
         "darwin-arm64": {
-            "md5": "291bdf0b8c80d0170ffa58704d4a5ffc",
+            "md5": "524eba2a6b8a110f74ec3af3d797d75a",
             "urls": [
-                f"{REGISTRY_ENDPOINT}/5906508920"
+                f"{REGISTRY_ENDPOINT}/5913866362"
             ]
         },
         "linux-aarch64": {
-            "md5": "8a72969fe85dd714e196464a3235d73e",
+            "md5": "428c4e351692a73c54c12d066f380d77",
             "urls": [
-                f"{REGISTRY_ENDPOINT}/5906508268"
+                f"{REGISTRY_ENDPOINT}/5913865738"
             ]
         },
         "win32-clang-cl": {
-            "md5": "bfef41a71b55f1def067638bee248513",
+            "md5": "1e544de639a99bddc066d97974b2e6e0",
             "urls": [
-                f"{REGISTRY_ENDPOINT}/5906510149"
+                f"{REGISTRY_ENDPOINT}/5913867458"
             ]
         },
         "linux": {
-            "md5": "7e66908052d27f2c6f11fe9e3941171b",
+            "md5": "bf1abc6a526876977d4a74a5be16a13c",
             "urls": [
-                f"{REGISTRY_ENDPOINT}/5906510622"
+                f"{REGISTRY_ENDPOINT}/5913868103"
             ]
         }
     }

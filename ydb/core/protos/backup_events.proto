@@ -3,24 +3,9 @@ import "ydb/library/actors/protos/actors.proto";
 package NKikimrBackupEvents;
 option java_package = "ru.yandex.kikimr.proto";
 
-message TEvBackupShardPropose {
-    optional NActorsProto.TActorId Source = 1;
-
-    optional uint64 TableId = 2;
-    optional uint64 ShardNum = 3;
-}
-
-message TEvBackupShardProposeResult {
+message TEvBackupShardResult {
     enum EStatus {
         STATUS_UNSPECIFIED = 0;
-        STATUS_PREPARED = 1;
-        STATUS_COMPLETED = 2;
-        STATUS_ABORTED = 3;
-        STATUS_INTERNAL_ERROR = 4;
-        STATUS_OVERLOADED = 5;
-        STATUS_CANCELLED = 6;        
-        STATUS_BAD_REQUEST = 7;
-        STATUS_SCHEME_CHANGED = 8;
     }
 
     // Status

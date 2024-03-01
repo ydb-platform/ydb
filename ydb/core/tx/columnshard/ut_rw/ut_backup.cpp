@@ -126,7 +126,7 @@ Y_UNIT_TEST_SUITE(TColumnShardBackup) {
                                           TTestSchema::ExtractNames(schema)));
 
         TAutoPtr<NActors::IEventHandle> handle;
-        auto event = runtime.GrabEdgeEvent<NEvents::TBackupEvents::TEvBackupShardProposeResult>(handle);
+        auto event = runtime.GrabEdgeEvent<NEvents::TBackupEvents::TEvBackupShardResult>(handle);
 
         UNIT_ASSERT(event);
 

@@ -140,7 +140,8 @@ public:
     void Handle(NKqp::TEvKqpCompute::TEvScanError::TPtr&, const TActorContext& ctx) {
         AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("TBackupActor.Handle", "TEvScanError");
 
-        auto result = std::make_unique<NEvents::TBackupEvents::TEvBackupShardProposeResult>();
+        // @TODO discuss about error
+        auto result = std::make_unique<NEvents::TBackupEvents::TEvBackupShardResult>();
         ctx.Send(SenderActorId, result.release());
     }
 
@@ -174,7 +175,7 @@ public:
 
         ProcessState(ctx, BackupActorState::Done);
 
-        SendBackupShardProposeResult(ctx);
+        SendBackupShardResult(ctx);
     }
 
 private:
@@ -197,7 +198,7 @@ private:
                 break;
             }
             case BackupActorState::Done: {
-                SendBackupShardProposeResult(ctx);
+                SendBackupShardResult(ctx);
                 break;
             }
         }
@@ -272,8 +273,8 @@ private:
                  new NKqp::TEvKqpCompute::TEvScanDataAck(DefaultFreeSpace, DefaultGeneration, DefaultMaxChunks));
     }
 
-    void SendBackupShardProposeResult(const TActorContext& ctx) {
-        auto ProposeResult = std::make_unique<NEvents::TBackupEvents::TEvBackupShardProposeResult>();
+    void SendBackupShardResult(const TActorContext& ctx) {
+        auto ProposeResult = std::make_unique<NEvents::TBackupEvents::TEvBackupShardResult>();
         ctx.Send(SenderActorId, ProposeResult.release());
     }
 

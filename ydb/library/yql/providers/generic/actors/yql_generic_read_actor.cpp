@@ -145,7 +145,7 @@ namespace NYql::NDq {
             // Prepare request
             NConnector::NApi::TListSplitsRequest request;
             NConnector::NApi::TSelect select = Source_.select(); // copy TSelect from source
-            TokenProvider_->MaybeFillToken(select.mutable_data_source_instance());
+            TokenProvider_->MaybeFillToken(*select.mutable_data_source_instance());
             *request.mutable_selects()->Add() = std::move(select);
 
             // Initialize stream
@@ -241,7 +241,7 @@ namespace NYql::NDq {
                 Splits_.cbegin(), Splits_.cend(),
                 [&](const NConnector::NApi::TSplit& split) {
                     NConnector::NApi::TSplit splitCopy = split;
-                    TokenProvider_->MaybeFillToken(splitCopy.mutable_select()->mutable_data_source_instance());
+                    TokenProvider_->MaybeFillToken(*splitCopy.mutable_select()->mutable_data_source_instance());
                     *request.mutable_splits()->Add() = std::move(split);
                 });
 

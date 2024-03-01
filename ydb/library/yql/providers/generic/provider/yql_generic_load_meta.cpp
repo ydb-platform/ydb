@@ -269,7 +269,7 @@ namespace NYql {
                 return;
             }
 
-            // If there are no Basic Auth, two options can be considered:
+            // If there are no Basic Auth parameters, two options can be considered:
 
             // 1. Client provided own IAM-token to access external data source
             auto iamToken = State_->Types->Credentials->FindCredentialContent(
@@ -292,7 +292,7 @@ namespace NYql {
 
             Y_ENSURE(structuredTokenJSON, "empty structured token");
 
-            // Create provider (== Token Accessor client) or get existing one.
+            // Create provider or get existing one.
             // It's crucial to reuse providers because their construction implies synchronous IO.
             auto providersIt = State_->CredentialProviders.find(clusterConfig.name());
             if (providersIt == State_->CredentialProviders.end()) {

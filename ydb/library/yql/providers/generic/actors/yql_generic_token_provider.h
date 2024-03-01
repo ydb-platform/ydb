@@ -7,22 +7,20 @@
 namespace NYql::NDq {
     // When accessing external data sources using authentication via tokens,
     // there are two options:
-    // 1. Use static IAM-token provided by user (especially usefull during debugging);
-    // 2. Use service account credentials in order to get (and renew) token by demand.
+    // 1. Use static IAM-token provided by user (especially useful during debugging);
+    // 2. Use service account credentials in order to get (and refresh) IAM-token by demand.
     class TGenericTokenProvider {
     public:
         using TPtr = std::unique_ptr<TGenericTokenProvider>;
 
-        TGenericTokenProvider() = delete;
-
         TGenericTokenProvider(const NYql::NGeneric::TSource& source,
                               const ISecuredServiceAccountCredentialsFactory::TPtr& credentialsFactory);
 
-        void MaybeFillToken(NConnector::NApi::TDataSourceInstance* dsi) const;
+        void MaybeFillToken(NConnector::NApi::TDataSourceInstance& dsi) const;
 
     private:
         NYql::NGeneric::TSource Source_;
-        std::string StaticIAMToken_;
+        TString StaticIAMToken_;
         NYdb::TCredentialsProviderPtr CredentialsProvider_;
     };
 

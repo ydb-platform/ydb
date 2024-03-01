@@ -6,7 +6,7 @@
 
 {% endnote %}
 
-[Коннекторы](../../concepts/federated_query/architecture.md#connectors) - специальные микросервисы, предоставляющие {{ ydb-full-name }} универсальную абстракцию доступа ко внешним источникам данных. Коннекторы являются ключевым элементом системы обработки [федеративных запросов](../../concepts/federated_query/index.md) {{ ydb-full-name }}. В данном руководстве мы рассмотрим особенности развёртывания коннекторов в режиме on-premise.
+[Коннекторы](../../concepts/federated_query/architecture.md#connectors) - специальные микросервисы, предоставляющие {{ ydb-full-name }} универсальную абстракцию доступа ко внешним источникам данных. Коннекторы выступают в качестве точек расширения системы обработки [федеративных запросов](../../concepts/federated_query/index.md) {{ ydb-full-name }}. В данном руководстве мы рассмотрим особенности развёртывания коннекторов в режиме on-premise.
 
 ## fq-connector-go {#fq-connector-go}
 
@@ -65,7 +65,7 @@
 
     - С использованием systemd
 
-        Вместе с бинарным дистрибутивом fq-connector-go распространяется [пример](https://github.com/ydb-platform/fq-connector-go/blob/main/examples/systemd/fq-connector-go.service) конфигурационного файла для системы инициализации `systemd`. Скопируйте этот файл в директорию `/etc/systemd/system` и запустите сервис:
+        Вместе с бинарным дистрибутивом fq-connector-go распространяется [пример](https://github.com/ydb-platform/fq-connector-go/blob/main/examples/systemd/fq-connector-go.service) конфигурационного файла (юнита) для системы инициализации `systemd`. Скопируйте юнит в директорию `/etc/systemd/system`, активизируйте и запустите сервис:
 
         ```bash
         cd /tmp/connector
@@ -80,7 +80,6 @@
         ● fq-connector-go.service - YDB FQ Connector Go
             Loaded: loaded (/etc/systemd/system/fq-connector-go.service; enabled; vendor preset: enabled)
             Active: active (running) since Thu 2024-02-29 17:51:42 MSK; 2s ago
-
         ```
 
         Логи сервиса можно прочитать с помощью команды:

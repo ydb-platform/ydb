@@ -157,8 +157,7 @@ namespace NYql {
                         source.SetToken(State_->Types->Credentials->FindCredentialContent(
                             "default_" + clusterConfig.name(),
                             "default_generic",
-                            clusterConfig.GetToken())
-                        );
+                            clusterConfig.GetToken()));
                     }
 
                     // preserve source description for read actor

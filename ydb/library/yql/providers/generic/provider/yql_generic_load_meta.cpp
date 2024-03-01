@@ -279,6 +279,7 @@ namespace NYql {
             if (iamToken) {
                 *dsi->mutable_credentials()->mutable_token()->mutable_value() = iamToken;
                 *dsi->mutable_credentials()->mutable_token()->mutable_type() = "IAM";
+                return;
             }
 
             // 2. Client provided service account creds that must be converted into IAM-token
@@ -301,8 +302,8 @@ namespace NYql {
                     false);
 
                 providersIt = State_->CredentialProviders.emplace(
-                                std::make_pair(clusterConfig.name(), credentialsProviderFactory->CreateProvider()))
-                                .first;
+                                                             std::make_pair(clusterConfig.name(), credentialsProviderFactory->CreateProvider()))
+                                  .first;
             }
 
             iamToken = providersIt->second->GetAuthInfo();

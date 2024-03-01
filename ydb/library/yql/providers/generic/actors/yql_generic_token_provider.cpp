@@ -7,7 +7,8 @@ namespace NYql::NDq {
         const NYql::NGeneric::TSource& source, const ISecuredServiceAccountCredentialsFactory::TPtr& credentialsFactory)
         : Source_(source)
         , StaticIAMToken_(source.GetToken())
-        , CredentialsProvider_(nullptr) {
+        , CredentialsProvider_(nullptr)
+    {
         // 1. User has provided IAM-token itself.
         // This token will be used during the whole lifetime of a read actor.
         if (!StaticIAMToken_.empty()) {
@@ -49,7 +50,7 @@ namespace NYql::NDq {
             return;
         }
 
-        // 3. Otherwise use credentials provider to get token 
+        // 3. Otherwise use credentials provider to get token
         Y_ENSURE(CredentialsProvider_, "CredentialsProvider is not initialized");
 
         auto iamToken = CredentialsProvider_->GetAuthInfo();

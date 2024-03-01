@@ -25,7 +25,7 @@ THolder<TEvSchemeShard::TEvModifySchemeTransaction> CreateTablePropose(
     }
 
     auto& modifyScheme = *record.AddTransaction();
-    modifyScheme.SetOperationType(NKikimrSchemeOp::ESchemeOpCreateTable);
+    modifyScheme.SetOperationType(NKikimrSchemeOp::ESchemeOpCreateIndexedTable);
     modifyScheme.SetInternal(true);
 
     const TPath domainPath = TPath::Init(importInfo->DomainPathId, ss);
@@ -37,13 +37,25 @@ THolder<TEvSchemeShard::TEvModifySchemeTransaction> CreateTablePropose(
 
     modifyScheme.SetWorkingDir(wdAndPath.first);
 
-    auto& tableDesc = *modifyScheme.MutableCreateTable();
+    auto* indexedTable = modifyScheme.MutableCreateIndexedTable();
+    auto& tableDesc = *(indexedTable->MutableTableDescription());
     tableDesc.SetName(wdAndPath.second);
 
     Y_ABORT_UNLESS(ss->TableProfilesLoaded);
     Ydb::StatusIds::StatusCode status;
     if (!FillTableDescription(modifyScheme, item.Scheme, ss->TableProfiles, status, error)) {
         return nullptr;
+    }
+
+    for(const auto& sequenceDescription: item.Scheme.sequence_descriptions()) {
+        auto seqDesc = indexedTable->MutableSequenceDescription()->Add();
+        seqDesc->SetName(sequenceDescription.name());
+        seqDesc->SetMinValue(sequenceDescription.min_value());
+        seqDesc->SetMaxValue(sequenceDescription.max_value());
+        seqDesc->SetStartValue(sequenceDescription.start_value());
+        seqDesc->SetCache(sequenceDescription.cache());
+        seqDesc->SetIncrement(sequenceDescription.increment());
+        seqDesc->SetCycle(sequenceDescription.cycle());
     }
 
     return propose;

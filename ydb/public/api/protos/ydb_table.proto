@@ -355,7 +355,7 @@ message ColumnMeta {
     // Column default value option
     oneof default_value {
         TypedValue from_literal = 5;
-        SequenceDescription from_sequence = 6;
+        string from_sequence = 6; // path to sequence
     }
 }
 
@@ -552,6 +552,8 @@ message CreateTableRequest {
     bool temporary = 19;
     // Is table column or row oriented
     StoreType store_type = 20;
+    // List of sequence descriptions
+    repeated SequenceDescription sequence_descriptions = 21;
 }
 
 message CreateTableResponse {

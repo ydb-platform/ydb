@@ -62,6 +62,9 @@ TLog TPartitionStreamImpl<UseMigrationProtocol>::GetLog() const {
 
 template<bool UseMigrationProtocol>
 void TPartitionStreamImpl<UseMigrationProtocol>::Commit(ui64 startOffset, ui64 endOffset) {
+
+    LOG_LAZY(GetLog(), TLOG_INFO, TStringBuilder() << "Commit offsets (stream): [" << startOffset << ", " << endOffset << "). Partition stream id: " << GetPartitionStreamId(this));
+
     std::vector<std::pair<ui64, ui64>> toCommit;
     if (auto sessionShared = CbContext->LockShared()) {
         Y_ABORT_UNLESS(endOffset > startOffset);

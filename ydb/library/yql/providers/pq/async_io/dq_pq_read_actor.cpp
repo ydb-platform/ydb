@@ -437,7 +437,6 @@ private:
 
         for (const auto& [partitionStream, ranges] : readyBatch.OffsetRanges) {
             for (const auto& [start, end] : ranges) {
-                SRC_LOG_D("Add range to commit [" << start << ", " << end << ")");
                 CurrentDeferredCommit.Add(partitionStream, start, end);
                 if (!CurrentDeferredCommitOffset) {
                     CurrentDeferredCommitOffset = std::make_pair(start, end);

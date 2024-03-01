@@ -2039,7 +2039,6 @@ void TTcpConnection::TryEstablishSslSession()
                     return;
                 }
             }
-
             [[fallthrough]];
         case EVerificationMode::Ca: {
             if (!Config_->CA) {

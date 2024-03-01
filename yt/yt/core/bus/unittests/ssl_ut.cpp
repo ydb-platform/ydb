@@ -50,7 +50,7 @@ class TSslTest
 {
 public:
     NTesting::TPortHolder Port;
-    TString Address;
+    TString AddressWithHostName;
     TString AddressWithIpV4;
     TString AddressWithIpV6;
 
@@ -171,7 +171,7 @@ qrpW/AReSwhvwVugcMFUgMXaDx/3SAY75B808wX1tizv76omWZAQ774FeGQGyP4C
 rPl77gAcribJm3TzBVHm2m6jBGtb
 -----END PRIVATE KEY-----)foo";
 
-    const char* CAWithSAN = R"foo(-----BEGIN CERTIFICATE-----
+    const char* CAWithIpInSAN = R"foo(-----BEGIN CERTIFICATE-----
 MIIFHzCCAwegAwIBAgIUQEt4xnHWGulMGzqad434c4Mw+cAwDQYJKoZIhvcNAQEL
 BQAwJjERMA8GA1UECgwIWVRzYXVydXMxETAPBgNVBAMMCFlUc2F1cnVzMB4XDTI0
 MDIyOTEwMTIzM1oXDTM0MDIyNjEwMTIzM1owJjERMA8GA1UECgwIWVRzYXVydXMx
@@ -202,7 +202,7 @@ w/cDyD142joRYwQG0HQkmE4ph4mYFwKhmYOv11Wik9zvEt156VPFaExu6rkjmLia
 nTkPBMUXiU3GIb4H7k78sEjv1g==
 -----END CERTIFICATE-----)foo";
 
-    const char* CertChainWithSAN = R"foo(-----BEGIN CERTIFICATE-----
+    const char* CertChainWithIpInSAN = R"foo(-----BEGIN CERTIFICATE-----
 MIIFVTCCAz2gAwIBAgIBATANBgkqhkiG9w0BAQsFADAmMREwDwYDVQQKDAhZVHNh
 dXJ1czERMA8GA1UEAwwIWVRzYXVydXMwHhcNMjQwMjI5MTAxMjMzWhcNMzQwMjI2
 MTAxMjMzWjATMREwDwYDVQQKDAhZVHNhdXJ1czCCAiIwDQYJKoZIhvcNAQEBBQAD
@@ -234,7 +234,7 @@ K9HRlSRV1+BNXmPYtI8hvbAYw05+AWKCk0J5r1GQtPx+Tx3sug/2qks26oURgEHc
 ySl4OPJLp2lhKCUkKVP24Tzg/iS1xT/uHQ==
 -----END CERTIFICATE-----)foo";
 
-    const char* PrivateKeyWithSAN = R"foo(-----BEGIN PRIVATE KEY-----
+    const char* PrivateKeyWithIpInSAN = R"foo(-----BEGIN PRIVATE KEY-----
 MIIJQgIBADANBgkqhkiG9w0BAQEFAASCCSwwggkoAgEAAoICAQCeAYU/lqVqZBBI
 GqnG2aFefyTngJBY9omS9PJyI5A0VYQwYXUKKKeO7wdZaSw/9YuftmBGnJD633iW
 sGzbt9rP23pb8R6U3NZY53QiZYpTIkeQfjHHD9NH1GUbBYZM85wDc/vt9TyOMGph
@@ -290,7 +290,7 @@ AbE/BnHl1tAmZXLMrHq/4r0wYUjBsA==
     TSslTest()
     {
         Port = NTesting::GetFreePort();
-        Address = Format("localhost:%v", Port);
+        AddressWithHostName = Format("localhost:%v", Port);
         AddressWithIpV4 = Format("127.0.0.1:%v", Port);
         AddressWithIpV6 = Format("[::1]:%v", Port);
     }
@@ -309,7 +309,7 @@ TEST_F(TSslTest, RequiredAndRequiredEncryptionMode)
     auto server = CreateBusServer(serverConfig);
     server->Start(New<TEmptyBusHandler>());
 
-    auto clientConfig = TBusClientConfig::CreateTcp(Address);
+    auto clientConfig = TBusClientConfig::CreateTcp(AddressWithHostName);
     clientConfig->EncryptionMode = EEncryptionMode::Required;
     auto client = CreateBusClient(clientConfig);
 
@@ -337,7 +337,7 @@ TEST_F(TSslTest, RequiredAndOptionalEncryptionMode)
     auto server = CreateBusServer(serverConfig);
     server->Start(New<TEmptyBusHandler>());
 
-    auto clientConfig = TBusClientConfig::CreateTcp(Address);
+    auto clientConfig = TBusClientConfig::CreateTcp(AddressWithHostName);
     clientConfig->EncryptionMode = EEncryptionMode::Optional;
     auto client = CreateBusClient(clientConfig);
 
@@ -365,7 +365,7 @@ TEST_F(TSslTest, OptionalAndRequiredEncryptionMode)
     auto server = CreateBusServer(serverConfig);
     server->Start(New<TEmptyBusHandler>());
 
-    auto clientConfig = TBusClientConfig::CreateTcp(Address);
+    auto clientConfig = TBusClientConfig::CreateTcp(AddressWithHostName);
     clientConfig->EncryptionMode = EEncryptionMode::Required;
     auto client = CreateBusClient(clientConfig);
 
@@ -393,7 +393,7 @@ TEST_F(TSslTest, OptionalAndOptionalEncryptionMode)
     auto server = CreateBusServer(serverConfig);
     server->Start(New<TEmptyBusHandler>());
 
-    auto clientConfig = TBusClientConfig::CreateTcp(Address);
+    auto clientConfig = TBusClientConfig::CreateTcp(AddressWithHostName);
     clientConfig->EncryptionMode = EEncryptionMode::Optional;
     auto client = CreateBusClient(clientConfig);
 
@@ -417,7 +417,7 @@ TEST_F(TSslTest, DisabledAndDisabledEncryptionMode)
     auto server = CreateBusServer(serverConfig);
     server->Start(New<TEmptyBusHandler>());
 
-    auto clientConfig = TBusClientConfig::CreateTcp(Address);
+    auto clientConfig = TBusClientConfig::CreateTcp(AddressWithHostName);
     clientConfig->EncryptionMode = EEncryptionMode::Disabled;
     auto client = CreateBusClient(clientConfig);
 
@@ -445,7 +445,7 @@ TEST_F(TSslTest, RequiredAndDisabledEncryptionMode)
     auto server = CreateBusServer(serverConfig);
     server->Start(New<TEmptyBusHandler>());
 
-    auto clientConfig = TBusClientConfig::CreateTcp(Address);
+    auto clientConfig = TBusClientConfig::CreateTcp(AddressWithHostName);
     clientConfig->EncryptionMode = EEncryptionMode::Disabled;
     auto client = CreateBusClient(clientConfig);
 
@@ -464,7 +464,7 @@ TEST_F(TSslTest, DisabledAndRequiredEncryptionMode)
     auto server = CreateBusServer(serverConfig);
     server->Start(New<TEmptyBusHandler>());
 
-    auto clientConfig = TBusClientConfig::CreateTcp(Address);
+    auto clientConfig = TBusClientConfig::CreateTcp(AddressWithHostName);
     clientConfig->EncryptionMode = EEncryptionMode::Required;
     auto client = CreateBusClient(clientConfig);
 
@@ -483,7 +483,7 @@ TEST_F(TSslTest, DisabledAndOptionalEncryptionMode)
     auto server = CreateBusServer(serverConfig);
     server->Start(New<TEmptyBusHandler>());
 
-    auto clientConfig = TBusClientConfig::CreateTcp(Address);
+    auto clientConfig = TBusClientConfig::CreateTcp(AddressWithHostName);
     clientConfig->EncryptionMode = EEncryptionMode::Optional;
     auto client = CreateBusClient(clientConfig);
 
@@ -507,7 +507,7 @@ TEST_F(TSslTest, OptionalAndDisabledEncryptionMode)
     auto server = CreateBusServer(serverConfig);
     server->Start(New<TEmptyBusHandler>());
 
-    auto clientConfig = TBusClientConfig::CreateTcp(Address);
+    auto clientConfig = TBusClientConfig::CreateTcp(AddressWithHostName);
     clientConfig->EncryptionMode = EEncryptionMode::Disabled;
     auto client = CreateBusClient(clientConfig);
 
@@ -539,7 +539,7 @@ TEST_F(TSslTest, CAVerificationModeFailure)
     auto server = CreateBusServer(serverConfig);
     server->Start(New<TEmptyBusHandler>());
 
-    auto clientConfig = TBusClientConfig::CreateTcp(Address);
+    auto clientConfig = TBusClientConfig::CreateTcp(AddressWithHostName);
     clientConfig->EncryptionMode = EEncryptionMode::Required;
     clientConfig->VerificationMode = EVerificationMode::Ca;
     auto client = CreateBusClient(clientConfig);
@@ -567,7 +567,7 @@ TEST_F(TSslTest, CAVerificationModeSuccess)
     auto server = CreateBusServer(serverConfig);
     server->Start(New<TEmptyBusHandler>());
 
-    auto clientConfig = TBusClientConfig::CreateTcp(Address);
+    auto clientConfig = TBusClientConfig::CreateTcp(AddressWithHostName);
     clientConfig->CA = New<NCrypto::TPemBlobConfig>();
     clientConfig->CA->Value = CA;
     clientConfig->EncryptionMode = EEncryptionMode::Required;
@@ -590,7 +590,7 @@ TEST_F(TSslTest, CAVerificationModeSuccess)
         .ThrowOnError();
 }
 
-TEST_F(TSslTest, FullVerificationMode)
+TEST_F(TSslTest, FullVerificationModeByHostName)
 {
     // Reset ctx in order to unload possibly loaded CA.
     TSslContext::Get()->Reset();
@@ -605,7 +605,7 @@ TEST_F(TSslTest, FullVerificationMode)
     auto server = CreateBusServer(serverConfig);
     server->Start(New<TEmptyBusHandler>());
 
-    auto clientConfig = TBusClientConfig::CreateTcp(Address);
+    auto clientConfig = TBusClientConfig::CreateTcp(AddressWithHostName);
     clientConfig->EncryptionMode = EEncryptionMode::Required;
     clientConfig->VerificationMode = EVerificationMode::Full;
     clientConfig->CA = New<NCrypto::TPemBlobConfig>();
@@ -626,19 +626,20 @@ TEST_F(TSslTest, FullVerificationMode)
         .ThrowOnError();
 }
 
-TEST_F(TSslTest, FullVerificationModeWithSANCerts)
+TEST_F(TSslTest, FullVerificationModeByIpAddress)
 {
     // Reset ctx in order to unload possibly loaded CA.
     TSslContext::Get()->Reset();
 
+    // Connect via ipv4 and ipv6 addresses.
     for (const auto& address : {AddressWithIpV4, AddressWithIpV6}) {
         auto serverConfig = TBusServerConfig::CreateTcp(Port);
         serverConfig->EncryptionMode = EEncryptionMode::Required;
         serverConfig->VerificationMode = EVerificationMode::None;
         serverConfig->CertificateChain = New<NCrypto::TPemBlobConfig>();
-        serverConfig->CertificateChain->Value = CertChainWithSAN;
+        serverConfig->CertificateChain->Value = CertChainWithIpInSAN;
         serverConfig->PrivateKey = New<NCrypto::TPemBlobConfig>();
-        serverConfig->PrivateKey->Value = PrivateKeyWithSAN;
+        serverConfig->PrivateKey->Value = PrivateKeyWithIpInSAN;
         auto server = CreateBusServer(serverConfig);
         server->Start(New<TEmptyBusHandler>());
 
@@ -646,7 +647,7 @@ TEST_F(TSslTest, FullVerificationModeWithSANCerts)
         clientConfig->EncryptionMode = EEncryptionMode::Required;
         clientConfig->VerificationMode = EVerificationMode::Full;
         clientConfig->CA = New<NCrypto::TPemBlobConfig>();
-        clientConfig->CA->Value = CAWithSAN;
+        clientConfig->CA->Value = CAWithIpInSAN;
         auto client = CreateBusClient(clientConfig);
 
         auto bus = client->CreateBus(New<TEmptyBusHandler>());
@@ -664,7 +665,7 @@ TEST_F(TSslTest, FullVerificationModeWithSANCerts)
     }
 }
 
-TEST_F(TSslTest, FullVerificationAlternativeHostName)
+TEST_F(TSslTest, FullVerificationByAlternativeHostName)
 {
     // Reset ctx in order to unload possibly loaded CA.
     TSslContext::Get()->Reset();
@@ -729,7 +730,7 @@ TEST_F(TSslTest, ServerCipherList)
     auto server = CreateBusServer(serverConfig);
     server->Start(New<TEmptyBusHandler>());
 
-    auto clientConfig = TBusClientConfig::CreateTcp(Address);
+    auto clientConfig = TBusClientConfig::CreateTcp(AddressWithHostName);
     clientConfig->EncryptionMode = EEncryptionMode::Required;
     clientConfig->VerificationMode = EVerificationMode::None;
     auto client = CreateBusClient(clientConfig);
@@ -763,7 +764,7 @@ TEST_F(TSslTest, DifferentCipherLists)
     auto server = CreateBusServer(serverConfig);
     server->Start(New<TEmptyBusHandler>());
 
-    auto clientConfig = TBusClientConfig::CreateTcp(Address);
+    auto clientConfig = TBusClientConfig::CreateTcp(AddressWithHostName);
     clientConfig->EncryptionMode = EEncryptionMode::Required;
     clientConfig->VerificationMode = EVerificationMode::None;
     clientConfig->CipherList = "AES128-GCM-SHA256";

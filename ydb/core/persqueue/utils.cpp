@@ -85,7 +85,7 @@ void Migrate(NKikimrPQ::TPQTabletConfig& config) {
             if (i < config.ReadRuleGenerationsSize()) {
                 consumer->SetGeneration(config.GetReadRuleGenerations(i));
             }
-            consumer->SetImportant(IsImportantClient(config, consumer.GetName()));
+            consumer->SetImportant(IsImportantClient(config, consumer->GetName()));
         }
     }
 }

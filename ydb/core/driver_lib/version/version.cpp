@@ -35,21 +35,21 @@ TCompatibilityInfo::TCompatibilityInfo() {
         .CanLoadFrom = {
             TCompatibilityRuleConstructor{
                 .Application = "ydb",
-                .LowerLimit = TVersionConstructor{ .Year = 23, .Major = 3 },
+                .LowerLimit = TVersionConstructor{ .Year = 23, .Major = 4 },
                 .UpperLimit = TVersionConstructor{ .Year = 24, .Major = 1 },
             },
         },
         .StoresReadableBy = {
             TCompatibilityRuleConstructor{
                 .Application = "ydb",
-                .LowerLimit = TVersionConstructor{ .Year = 23, .Major = 3 },
+                .LowerLimit = TVersionConstructor{ .Year = 23, .Major = 4 },
                 .UpperLimit = TVersionConstructor{ .Year = 24, .Major = 1 },
             },
         },
         .CanConnectTo = {
             TCompatibilityRuleConstructor{
                 .Application = "ydb",
-                .LowerLimit = TVersionConstructor{ .Year = 23, .Major = 3 },
+                .LowerLimit = TVersionConstructor{ .Year = 23, .Major = 4 },
                 .UpperLimit = TVersionConstructor{ .Year = 24, .Major = 1 },
             },
         }
@@ -107,7 +107,6 @@ TMaybe<NActors::TInterconnectProxyCommon::TVersionInfo> VERSION = NActors::TInte
     // compatible versions; must include all compatible old ones, including this one; version verification occurs on both
     // peers and connection is accepted if at least one of peers accepts the version of the other peer
     {
-        "stable-23-3",
         "stable-23-4",
         "stable-24-1"
     }

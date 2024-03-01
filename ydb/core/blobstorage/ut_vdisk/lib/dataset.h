@@ -229,6 +229,14 @@ IDataGenerator* CreateBlobGenerator(ui64 maxCumSize, ui32 maxNumBlobs, ui32 minB
         ui32 differentTablets, ui32 startingStep, TIntrusivePtr<NKikimr::TBlobStorageGroupInfo> info,
         TVector<NKikimr::TVDiskID> matchingVDisks, bool reuseData = false);
 
+////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+// TBadIdsDataSet
+////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+class TBadIdsDataSet : public TVectorDataSet {
+public:
+    TBadIdsDataSet(NKikimrBlobStorage::EPutHandleClass cls, ui32 minHugeBlobSize, bool huge);
+};
+
 
 
 

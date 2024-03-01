@@ -8,6 +8,7 @@
 #include <ydb/core/blobstorage/ut_vdisk/lib/test_localrecovery.h>
 #include <ydb/core/blobstorage/ut_vdisk/lib/test_many.h>
 #include <ydb/core/blobstorage/ut_vdisk/lib/test_outofspace.h>
+#include <ydb/core/blobstorage/ut_vdisk/lib/test_bad_blobid.h>
 #include <ydb/core/blobstorage/ut_vdisk/lib/test_brokendevice.h>
 #include <ydb/core/blobstorage/ut_vdisk/lib/test_repl.h>
 #include <ydb/core/blobstorage/ut_vdisk/lib/test_simplebs.h>
@@ -853,5 +854,17 @@ Y_UNIT_TEST_SUITE(TBsVDiskRepl3) {
         bool success1 = Conf.Run<TSyncLogTestWrite>(&test, TIMEOUT, 1, false);
         Conf.Shutdown();
         UNIT_ASSERT(success1);
+    }
+}
+
+///////////////////////////////////////////////////////////////////////////////////////////////////////
+// BAD BLOBID
+///////////////////////////////////////////////////////////////////////////////////////////////////////
+Y_UNIT_TEST_SUITE(TBsVDiskBadBlobId) {
+    // Ensure that putting blob with bad id results in ERROR status
+
+    Y_UNIT_TEST(PutBlobWithBadId) {
+        TWriteAndExpectError test;
+        TestRun<TWriteAndExpectError, TDefaultVDiskSetup>(&test, TIMEOUT);
     }
 }

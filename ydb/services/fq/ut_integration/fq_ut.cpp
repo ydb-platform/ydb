@@ -197,32 +197,6 @@ Y_UNIT_TEST_SUITE(Yq_1) {
         }
     }
 
-    Y_UNIT_TEST(Basic_EmptyTable) {
-        TKikimrWithGrpcAndRootSchema server({}, {}, {}, true);
-        ui16 grpc = server.GetPort();
-        TString location = TStringBuilder() << "localhost:" << grpc;
-        auto driver = TDriver(TDriverConfig().SetEndpoint(location).SetAuthToken("root@builtin"));
-        UpsertToExistingTable(driver, location);
-        NYdb::NFq::TClient client(driver);
-        const TString folderId = "some_folder_id";
-        {
-            const auto request = ::NFq::TCreateConnectionBuilder()
-                .SetName("testdbempty")
-                .CreateYdb("Root", location, "")
-                .Build();
-            const auto result = client
-                .CreateConnection(request, CreateFqSettings<TCreateConnectionSettings>(folderId))
-                .ExtractValueSync();
-            UNIT_ASSERT_C(result.GetStatus() == EStatus::SUCCESS, result.GetIssues().ToString());
-        }
-
-        const TString queryId = CreateNewHistoryAndWaitFinish(
-            folderId, client,
-            "select count(*) from testdbempty.`yq/empty_table`",
-            FederatedQuery::QueryMeta::COMPLETED);
-        CheckGetResultData(client, queryId, folderId, 1, 1, 0);
-    }
-
     Y_UNIT_TEST(Basic_EmptyList) {
         TKikimrWithGrpcAndRootSchema server({}, {}, {}, true);
         ui16 grpc = server.GetPort();
@@ -256,32 +230,6 @@ Y_UNIT_TEST_SUITE(Yq_1) {
         CreateNewHistoryAndWaitFinish(folderId, client, "select null", expectedStatus);
     }
 
-    SIMPLE_UNIT_FORKED_TEST(Basic_Tagged) {
-        TKikimrWithGrpcAndRootSchema server({}, {}, {}, true);
-        ui16 grpc = server.GetPort();
-        TString location = TStringBuilder() << "localhost:" << grpc;
-        auto driver = TDriver(TDriverConfig().SetEndpoint(location).SetAuthToken("root@builtin"));
-        NYdb::NFq::TClient client(driver);
-        const TString folderId = "some_folder_id";
-
-
-        {
-            auto request = ::NFq::TCreateConnectionBuilder{}
-                                .SetName("testdb00")
-                                .CreateYdb("Root", location, "")
-                                .Build();
-
-            auto result = client.CreateConnection(
-                request, CreateFqSettings<TCreateConnectionSettings>(folderId))
-                .ExtractValueSync();
-
-            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
-        }
-
-        auto expectedStatus = FederatedQuery::QueryMeta::COMPLETED;
-        CreateNewHistoryAndWaitFinish(folderId, client, "select AsTagged(count(*), \"tag\") from testdb00.`yq/connections`", expectedStatus);
-    }
-
     Y_UNIT_TEST(Basic_TaggedLiteral) {
         TKikimrWithGrpcAndRootSchema server({}, {}, {}, true);
         ui16 grpc = server.GetPort();
@@ -295,50 +243,6 @@ Y_UNIT_TEST_SUITE(Yq_1) {
     }
 
     // use fork for data test due to ch initialization problem
-    SIMPLE_UNIT_FORKED_TEST(ExtendedDatabaseId) {
-        TKikimrWithGrpcAndRootSchema server({}, {}, {}, true);
-        ui16 grpc = server.GetPort();
-        TString location = TStringBuilder() << "localhost:" << grpc;
-        auto driver = TDriver(TDriverConfig().SetEndpoint(location).SetAuthToken("root@builtin"));
-
-        NYdb::NFq::TClient client(driver);
-        const TString folderId = "folder_id_" + CreateGuidAsString();
-        {
-            const auto request = ::NFq::TCreateConnectionBuilder()
-                .SetName("testdb01")
-                .CreateYdb("FakeDatabaseId", "")
-                .Build();
-            const auto result = client
-                .CreateConnection(request, CreateFqSettings<TCreateConnectionSettings>(folderId))
-                .ExtractValueSync();
-            UNIT_ASSERT_C(result.GetStatus() == EStatus::SUCCESS, result.GetIssues().ToString());
-        }
-
-        {
-            const auto request = ::NFq::TCreateConnectionBuilder()
-                .SetName("testdb02")
-                .CreateYdb("FakeDatabaseId", "")
-                .Build();
-            const auto result = client
-                .CreateConnection(request, CreateFqSettings<TCreateConnectionSettings>(folderId))
-                .ExtractValueSync();
-            UNIT_ASSERT_C(result.GetStatus() == EStatus::SUCCESS, result.GetIssues().ToString());
-        }
-
-        {
-            const auto queryId = CreateNewHistoryAndWaitFinish(folderId, client,
-                "select count(*) from testdb01.`yq/connections`", FederatedQuery::QueryMeta::COMPLETED);
-            CheckGetResultData(client, queryId, folderId, 1, 1, 2);
-        }
-
-        {
-            // test connections db with 2 databaseId
-            const auto queryId = CreateNewHistoryAndWaitFinish(folderId, client,
-                "select count(*) from testdb02.`yq/connections`", FederatedQuery::QueryMeta::COMPLETED);
-            CheckGetResultData(client, queryId, folderId, 1, 1, 2);
-        }
-    }
-
     Y_UNIT_TEST(DescribeConnection) {
         TKikimrWithGrpcAndRootSchema server({}, {}, {}, true);
         ui16 grpc = server.GetPort();

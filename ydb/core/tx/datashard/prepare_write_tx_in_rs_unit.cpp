@@ -32,13 +32,12 @@ bool TPrepareWriteTxInRSUnit::IsReadyToExecute(TOperation::TPtr) const {
 EExecutionStatus TPrepareWriteTxInRSUnit::Execute(TOperation::TPtr op, TTransactionContext &txc,
     const TActorContext &ctx)
 {
-    TWriteOperation* writeOp = dynamic_cast<TWriteOperation*>(op.Get());
-    Y_VERIFY_S(writeOp, "cannot cast operation of kind " << op->GetKind());
+    TWriteOperation* writeOp = TWriteOperation::CastWriteOperation(op);
 
     const TValidatedWriteTx::TPtr& writeTx = writeOp->GetWriteTx();
 
     if (writeOp->IsTxDataReleased()) {
-        switch (Pipeline.RestoreDataTx(writeOp, txc)) {
+        switch (Pipeline.RestoreWriteTx(writeOp, txc)) {
             case ERestoreDataStatus::Ok:
                 break;
             case ERestoreDataStatus::Restart:

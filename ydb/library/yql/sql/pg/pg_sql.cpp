@@ -274,6 +274,7 @@ public:
     using TViews = THashMap<TString, TView>;
 
     struct TState {
+        TMaybe<TString> ApplicationName;
         TString CostBasedOptimizer;
         TVector<TAstNode*> Statements;
         ui32 ReadIndex = 0;
@@ -292,6 +293,7 @@ public:
         , BlockEngineEnabled(Settings.BlockDefaultAuto->Allow())
         , PerStatementResult(perStatementResult)
     {
+        State.ApplicationName = Settings.ApplicationName;
         AstParseResults.push_back({});
         ScanRows(query);
 
@@ -2279,6 +2281,20 @@ public:
                 AddError(TStringBuilder() << "VariableSetStmt, expected string literal for " << value->name << " option");
                 return nullptr;
             }
+        } else if (name == "applicationname") {
+            if (ListLength(value->args) != 1) {
+                AddError(TStringBuilder() << "VariableSetStmt, expected 1 arg, but got: " << ListLength(value->args));
+                return nullptr;
+            }
+
+            auto arg = ListNodeNth(value->args, 0);
+            if (NodeTag(arg) == T_A_Const && (NodeTag(CAST_NODE(A_Const, arg)->val) == T_String)) {
+                auto rawStr = StrVal(CAST_NODE(A_Const, arg)->val);
+                State.ApplicationName = rawStr;
+            } else {
+                AddError(TStringBuilder() << "VariableSetStmt, expected string literal for " << value->name << " option");
+                return nullptr;
+            }
         } else {
             AddError(TStringBuilder() << "VariableSetStmt, not supported name: " << value->name);
             return nullptr;
@@ -3060,6 +3076,20 @@ public:
                 L(A("PgType"), QA("timestamptz")),
                 L(A("PgConst"), QA(ToString(value->typmod)), L(A("PgType"), QA("int4")))
             );
+        case SVFOP_CURRENT_USER:
+        case SVFOP_CURRENT_ROLE:
+        case SVFOP_USER:
+            return L(A("PgConst"), QA("postgres"), L(A("PgType"), QA("name")));
+        case SVFOP_CURRENT_CATALOG:
+            return L(A("PgConst"), QA("postgres"), L(A("PgType"), QA("name")));
+        case SVFOP_CURRENT_SCHEMA: {
+            std::optional<TString> searchPath;
+            if (Settings.GUCSettings) {
+                searchPath = Settings.GUCSettings->Get("search_path");
+            }
+
+            return L(A("PgConst"), QA(searchPath ? *searchPath : "public"), L(A("PgType"), QA("name")));
+        }
         default:
             AddError(TStringBuilder() << "Usupported SQLValueFunction: " << (int)value->op);
             return nullptr;
@@ -4275,6 +4305,11 @@ public:
         case AEXPR_BETWEEN_SYM:
         case AEXPR_NOT_BETWEEN_SYM:
             return ParseAExprBetween(value, settings);
+        case AEXPR_OP_ANY:
+            if (State.ApplicationName && State.ApplicationName->StartsWith("pgAdmin")) {
+                AddWarning(TIssuesIds::PG_COMPAT, "AEXPR_OP_ANY forced to false");
+                return L(A("PgConst"), QA("false"), L(A("PgType"), QA("bool")));
+            }
         default:
             AddError(TStringBuilder() << "A_Expr_Kind unsupported value: " << (int)value->kind);
             return nullptr;

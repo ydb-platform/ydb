@@ -50,7 +50,7 @@ EExecutionStatus TBuildWriteOutRSUnit::Execute(TOperation::TPtr op, TTransaction
     DataShard.ReleaseCache(*writeOp);
 
     if (writeOp->IsTxDataReleased()) {
-        switch (Pipeline.RestoreDataTx(writeOp, txc)) {
+        switch (Pipeline.RestoreWriteTx(writeOp, txc)) {
             case ERestoreDataStatus::Ok:
                 break;
             case ERestoreDataStatus::Restart:
@@ -71,8 +71,6 @@ EExecutionStatus TBuildWriteOutRSUnit::Execute(TOperation::TPtr op, TTransaction
         DataShard.IncCounter(COUNTER_WRITE_CANCELLED);
         return EExecutionStatus::Executed;
     }
-
-    writeTx->SetReadVersion(DataShard.GetReadWriteVersions(writeOp).ReadVersion);
 
     try {
         const auto& kqpLocks = writeTx->GetKqpLocks() ? writeTx->GetKqpLocks().value() : NKikimrDataEvents::TKqpLocks{};

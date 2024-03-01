@@ -2683,12 +2683,22 @@ TMkqlCommonCallableCompiler::TShared::TShared() {
         return ctx.ProgramBuilder.PgClone(input, dependentNodes);
     });
 
-     AddCallable("PgTableContent", [](const TExprNode& node, TMkqlBuildContext& ctx) {
+    AddCallable("PgTableContent", [](const TExprNode& node, TMkqlBuildContext& ctx) {
         auto returnType = BuildType(node, *node.GetTypeAnn(), ctx.ProgramBuilder);
         return ctx.ProgramBuilder.PgTableContent(
             node.Child(0)->Content(),
             node.Child(1)->Content(),
             returnType);
+    });
+
+    AddCallable("PgToRecord", [](const TExprNode& node, TMkqlBuildContext& ctx) {
+        auto input = MkqlBuildExpr(*node.Child(0), ctx);
+        TVector<std::pair<std::string_view, std::string_view>> members;
+        for (auto child : node.Child(1)->Children()) {
+            members.push_back({child->Head().Content(), child->Tail().Content()});
+        }
+
+        return ctx.ProgramBuilder.PgToRecord(input, members);
     });
 
     AddCallable("WithContext", [](const TExprNode& node, TMkqlBuildContext& ctx) {

@@ -28,8 +28,8 @@ public:
 
 class IWriteController {
 private:
-    THashMap<NOlap::TUnifiedBlobId, std::shared_ptr<NOlap::IBlobsWritingAction>> BlobActions;
-    THashMap<i64, std::shared_ptr<NOlap::IBlobsWritingAction>> WritingActions;
+    THashMap<TString, std::shared_ptr<NOlap::IBlobsWritingAction>> WaitingActions;
+    NOlap::TWriteActionsCollection WritingActions;
     std::deque<NOlap::TBlobWriteInfo> WriteTasks;
 protected:
     virtual void DoOnReadyResult(const NActors::TActorContext& ctx, const TBlobPutResult::TPtr& putResult) = 0;
@@ -40,12 +40,12 @@ protected:
 
     }
 
-    NOlap::TBlobWriteInfo& AddWriteTask(NOlap::TBlobWriteInfo&& task) {
-        WritingActions.emplace(task.GetWriteOperator()->GetActionId(), task.GetWriteOperator());
-        WriteTasks.emplace_back(std::move(task));
-        return WriteTasks.back();
-    }
+    NOlap::TBlobWriteInfo& AddWriteTask(NOlap::TBlobWriteInfo&& task);
 public:
+    const NOlap::TWriteActionsCollection& GetBlobActions() const {
+        return WritingActions;
+    }
+
     TString DebugString() const {
         TStringBuilder sb;
         for (auto&& i : WritingActions) {
@@ -76,14 +76,7 @@ public:
         DoOnReadyResult(ctx, putResult);
     }
 
-    void OnBlobWriteResult(const TEvBlobStorage::TEvPutResult& result) {
-        NOlap::TUnifiedBlobId blobId(result.GroupId, result.Id);
-        auto it = BlobActions.find(blobId);
-        AFL_VERIFY(it != BlobActions.end());
-        it->second->OnBlobWriteResult(blobId, result.Status);
-        BlobActions.erase(it);
-        DoOnBlobWriteResult(result);
-    }
+    void OnBlobWriteResult(const TEvBlobStorage::TEvPutResult& result);
 
     std::optional<NOlap::TBlobWriteInfo> Next() {
         if (WriteTasks.empty()) {
@@ -91,19 +84,11 @@ public:
         }
         auto result = std::move(WriteTasks.front());
         WriteTasks.pop_front();
-        BlobActions.emplace(result.GetBlobId(), result.GetWriteOperator());
         return result;
 
     }
-    bool IsBlobActionsReady() const {
-        return BlobActions.empty();
-    }
-    std::vector<std::shared_ptr<NOlap::IBlobsWritingAction>> GetBlobActions() const {
-        std::vector<std::shared_ptr<NOlap::IBlobsWritingAction>> actions;
-        for (auto&& i : WritingActions) {
-            actions.emplace_back(i.second);
-        }
-        return actions;
+    bool IsReady() const {
+        return WaitingActions.empty();
     }
 };
 

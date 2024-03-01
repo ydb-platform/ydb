@@ -672,6 +672,7 @@ public:
         const std::string_view& cluster,
         const std::string_view& table,
         TType* returnType);
+    TRuntimeNode PgToRecord(TRuntimeNode input, const TArrayRef<std::pair<std::string_view, std::string_view>>& members);
 
     TRuntimeNode ScalarApply(const TArrayRef<const TRuntimeNode>& args, const TArrayLambda& handler);
 

@@ -700,8 +700,10 @@ void TBasicServicesInitializer::InitializeServices(NActors::TActorSystemSetup* s
                         data.Yellow ? NKikimrWhiteboard::EFlag::Yellow :
                         data.Orange ? NKikimrWhiteboard::EFlag::Orange :
                         data.Red ? NKikimrWhiteboard::EFlag::Red : NKikimrWhiteboard::EFlag()));
-                    data.ActorSystem->Send(whiteboardId, new NNodeWhiteboard::TEvWhiteboard::TEvClockSkewUpdate(
-                        data.PeerId, data.ClockSkew));
+                    if (data.ReportClockSkew) {
+                        data.ActorSystem->Send(whiteboardId, new NNodeWhiteboard::TEvWhiteboard::TEvClockSkewUpdate(
+                            data.PeerId, data.ClockSkew));
+                    }
                 };
             }
 

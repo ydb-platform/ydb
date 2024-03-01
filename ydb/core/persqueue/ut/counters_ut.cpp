@@ -105,6 +105,44 @@ Y_UNIT_TEST(Partition) {
     }
 }
 
+Y_UNIT_TEST(PartitionWriteQuota) {
+    TTestContext tc;
+
+    TFinalizer finalizer(tc);
+    bool activeZone{false};
+    tc.Prepare("", [](TTestActorRuntime&) {}, activeZone, false, true);
+    tc.Runtime->SetScheduledLimit(100);
+    tc.Runtime->GetAppData(0).PQConfig.MutableQuotingConfig()->SetEnableQuoting(true);
+
+    PQTabletPrepare({.partitions = 1, .writeSpeed = 50_KB}, {}, tc);
+    TVector<std::pair<ui64, TString>> data;
+    TString s{50_KB, 'c'};
+    data.push_back({1, s});
+    for (auto i = 0u; i < 7; i++) {
+        CmdWrite(0, "sourceid0", data, tc, false);
+        data[0].first++;
+    }
+
+    {
+        auto counters = tc.Runtime->GetAppData(0).Counters;
+        Y_ABORT_UNLESS(counters);
+        auto dbGroup = GetServiceCounters(counters, "pqproxy");
+
+        auto quotaWait = dbGroup->FindSubgroup("subsystem", "partitionWriteQuotaWait")
+                             ->FindSubgroup("Account", "total")
+                             ->FindSubgroup("Producer", "total")
+                             ->FindSubgroup("Topic", "total")
+                             ->FindSubgroup("TopicPath", "total")
+                             ->FindSubgroup("OriginDC", "cluster");
+        auto histogram = quotaWait->FindSubgroup("sensor", "PartitionWriteQuotaWaitOriginal");
+        TStringStream histogramStr;
+        histogram->OutputHtml(histogramStr);
+        Cerr << "**** Total histogram: **** \n " << histogramStr.Str() << "**** **** **** ****" << Endl;
+        UNIT_ASSERT_VALUES_EQUAL(histogram->FindNamedCounter("Interval", "1000ms")->Val(), 3);
+        UNIT_ASSERT_VALUES_EQUAL(histogram->FindNamedCounter("Interval", "2500ms")->Val(), 1);
+    }
+}
+
 Y_UNIT_TEST(PartitionFirstClass) {
     TTestContext tc;
     TFinalizer finalizer(tc);

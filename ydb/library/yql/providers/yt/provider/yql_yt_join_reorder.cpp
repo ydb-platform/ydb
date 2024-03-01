@@ -134,6 +134,21 @@ public:
     TYtJoinNodeLeaf* OriginalLeaf;
 };
 
+class TYtJoinOptimizerNode: public TJoinOptimizerNode {
+public:
+    TYtJoinOptimizerNode(const std::shared_ptr<IBaseOptimizerNode>& left,
+        const std::shared_ptr<IBaseOptimizerNode>& right,
+        const std::set<std::pair<NDq::TJoinColumn, NDq::TJoinColumn>>& joinConditions,
+        const EJoinKind joinType,
+        const EJoinAlgoType joinAlgo,
+        TYtJoinNodeOp* originalOp)
+        : TJoinOptimizerNode(left, right, joinConditions, joinType, joinAlgo, originalOp != nullptr)
+        , OriginalOp(originalOp)
+    { }
+
+    TYtJoinNodeOp* OriginalOp; // Only for nonReorderable
+};
+
 class TOptimizerTreeBuilder
 {
 public:
@@ -175,9 +190,10 @@ private:
             NDq::TJoinColumn rcol{TString(rtable), TString(rcolumn)};
             joinConditions.insert({lcol, rcol});
         }
+        bool nonReorderable = op->LinkSettings.ForceSortedMerge;
 
-        return std::make_shared<TJoinOptimizerNode>(
-            left, right, joinConditions, joinKind, EJoinAlgoType::GraceJoin
+        return std::make_shared<TYtJoinOptimizerNode>(
+            left, right, joinConditions, joinKind, EJoinAlgoType::GraceJoin, nonReorderable ? op : nullptr
             );
     }
 
@@ -229,27 +245,33 @@ TYtJoinNode::TPtr BuildYtJoinTree(std::shared_ptr<IBaseOptimizerNode> node, TVec
         scope.insert(scope.end(), leaf->Scope.begin(), leaf->Scope.end());
         return leaf;
     } else if (node->Kind == JoinNodeType) {
-        auto ret = MakeIntrusive<TYtJoinNodeOp>();
         auto* op = static_cast<TJoinOptimizerNode*>(node.get());
-        ret->JoinKind = ctx.NewAtom(pos, ConvertToJoinString(op->JoinType));
-        TVector<TExprNodePtr> leftLabel, rightLabel;
-        leftLabel.reserve(op->JoinConditions.size() * 2);
-        rightLabel.reserve(op->JoinConditions.size() * 2);
-        for (auto& [left, right] : op->JoinConditions) {
-            leftLabel.emplace_back(ctx.NewAtom(pos, left.RelName));
-            leftLabel.emplace_back(ctx.NewAtom(pos, left.AttributeName));
+        auto* ytop = dynamic_cast<TYtJoinOptimizerNode*>(op);
+        TYtJoinNodeOp::TPtr ret;
+        if (ytop && !ytop->IsReorderable) {
+            ret = ytop->OriginalOp;
+        } else {
+            ret = MakeIntrusive<TYtJoinNodeOp>();
+            ret->JoinKind = ctx.NewAtom(pos, ConvertToJoinString(op->JoinType));
+            TVector<TExprNodePtr> leftLabel, rightLabel;
+            leftLabel.reserve(op->JoinConditions.size() * 2);
+            rightLabel.reserve(op->JoinConditions.size() * 2);
+            for (auto& [left, right] : op->JoinConditions) {
+                leftLabel.emplace_back(ctx.NewAtom(pos, left.RelName));
+                leftLabel.emplace_back(ctx.NewAtom(pos, left.AttributeName));
 
-            rightLabel.emplace_back(ctx.NewAtom(pos, right.RelName));
-            rightLabel.emplace_back(ctx.NewAtom(pos, right.AttributeName));
+                rightLabel.emplace_back(ctx.NewAtom(pos, right.RelName));
+                rightLabel.emplace_back(ctx.NewAtom(pos, right.AttributeName));
+            }
+            ret->LeftLabel = Build<TCoAtomList>(ctx, pos)
+                .Add(leftLabel)
+                .Done()
+                .Ptr();
+            ret->RightLabel = Build<TCoAtomList>(ctx, pos)
+                .Add(rightLabel)
+                .Done()
+                .Ptr();
         }
-        ret->LeftLabel = Build<TCoAtomList>(ctx, pos)
-            .Add(leftLabel)
-            .Done()
-            .Ptr();
-        ret->RightLabel = Build<TCoAtomList>(ctx, pos)
-            .Add(rightLabel)
-            .Done()
-            .Ptr();
         int index = scope.size();
         ret->Left = BuildYtJoinTree(op->LeftArg, scope, ctx, pos);
         ret->Right = BuildYtJoinTree(op->RightArg, scope, ctx, pos);

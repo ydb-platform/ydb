@@ -17,6 +17,7 @@
 #include <ydb/library/ydb_issue/issue_helpers.h>
 #include <ydb/core/base/tx_processing.h>
 #include <ydb/library/mkql_proto/protos/minikql.pb.h>
+#include <ydb/core/protos/query_stats.pb.h>
 #include <ydb/core/engine/mkql_engine_flat.h>
 #include <ydb/core/engine/mkql_proto.h>
 #include <ydb/core/scheme/scheme_types_defs.h>

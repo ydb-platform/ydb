@@ -24,12 +24,12 @@ using TRow = TKvWorkloadGenerator::TRow;
 // Note: there is no mechanism to update row values for now so all keys should be different
 struct TRowsVerifyer {
     TRowsVerifyer(size_t capacity = 10000)
-        : Capacity(capacity) 
+        : Capacity(capacity)
     {
         Rows.reserve(Capacity);
     }
 
-    void TryInsert(TRow row) {        
+    void TryInsert(TRow row) {
         std::unique_lock<std::mutex> lock(Mutex, std::try_to_lock);
         if (!lock.owns_lock()) {
             return;
@@ -43,7 +43,7 @@ struct TRowsVerifyer {
         Rows[RandomNumber<size_t>(Rows.size())] = row;
     }
 
-    std::optional<TRow> GetRandom() {        
+    std::optional<TRow> GetRandom() {
         std::unique_lock<std::mutex> lock(Mutex, std::try_to_lock);
         if (!lock.owns_lock()) {
             return { };
@@ -75,7 +75,7 @@ void AddResultSet(const NYdb::TResultSet& resultSet, TVector<TRow>& rows) {
     NYdb::TResultSetParser parser(resultSet);
     while (parser.TryNextRow()) {
         TRow row;
-        
+
         for (size_t col = 0; col < parser.ColumnsCount(); col++) {
             auto& valueParser = parser.ColumnParser(col);
             if (valueParser.GetPrimitiveType() == NYdb::EPrimitiveType::Uint64) {
@@ -101,7 +101,7 @@ void VerifyRows(const TRow& checkRow, const TVector<TRow>& readRows, TString mes
 
     if (readRows.size() > 1) {
         Cerr << "Expected to have " << checkRow.ToString()
-            << " but got " << readRows.size() << " rows " 
+            << " but got " << readRows.size() << " rows "
             << message
             << Endl;
 
@@ -388,9 +388,9 @@ TQueryInfoList TKvWorkloadGenerator::Mixed() {
             if (Params.MixedDoReadRows) doReadRows = true;
             if (Params.MixedDoSelect) doSelect = true;
         } else {
-            if (RandomNumber<ui32>(2) == 0) 
-                doReadRows = true; 
-            else 
+            if (RandomNumber<ui32>(2) == 0)
+                doReadRows = true;
+            else
                 doSelect = true;
         }
         Y_ABORT_UNLESS(doReadRows ^ doSelect);
@@ -417,7 +417,7 @@ TQueryInfoList TKvWorkloadGenerator::Mixed() {
             }
 
             return selectQuery;
-        } 
+        }
         if (doReadRows) {
             auto readRowsQuery = ReadRows(std::move(rows));
 
@@ -495,6 +495,8 @@ void TKvWorkloadParams::ConfigureOpts(NLastGetopt::TOpts& opts, const ECommandTy
             .DefaultValue((ui64)KvWorkloadConstants::INIT_ROW_COUNT).StoreResult(&InitRowCount);
         opts.AddLongOption("min-partitions", "Minimum partitions for tables.")
             .DefaultValue((ui64)KvWorkloadConstants::MIN_PARTITIONS).StoreResult(&MinPartitions);
+        opts.AddLongOption("max-partitions", "Maximum partitions for tables.")
+            .DefaultValue((ui64)KvWorkloadConstants::MAX_PARTITIONS).StoreResult(&MaxPartitions);
         opts.AddLongOption("partition-size", "Maximum partition size in megabytes (AUTO_PARTITIONING_PARTITION_SIZE_MB).")
             .DefaultValue((ui64)KvWorkloadConstants::PARTITION_SIZE_MB).StoreResult(&PartitionSizeMb);
         opts.AddLongOption("auto-partition", "Enable auto partitioning by load.")

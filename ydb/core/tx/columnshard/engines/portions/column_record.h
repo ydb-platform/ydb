@@ -114,6 +114,9 @@ public:
     ui16 GetChunkIdx() const {
         return Chunk;
     }
+    const TBlobRange& GetBlobRange() const {
+        return BlobRange;
+    }
 
     NKikimrColumnShardDataSharingProto::TColumnRecord SerializeToProto() const;
     static TConclusion<TColumnRecord> BuildFromProto(const NKikimrColumnShardDataSharingProto::TColumnRecord& proto, const TIndexInfo& indexInfo) {

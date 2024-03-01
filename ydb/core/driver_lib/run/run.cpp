@@ -1,6 +1,5 @@
 #include "auto_config_initializer.h"
 #include "run.h"
-#include "dummy.h"
 #include "cert_auth_props.h"
 #include "service_initializer.h"
 #include "kikimr_services_initializers.h"
@@ -26,6 +25,7 @@
 #include <ydb/library/actors/interconnect/interconnect_tcp_server.h>
 #include <ydb/library/actors/interconnect/interconnect_mon.h>
 #include <ydb/core/actorlib_impl/mad_squirrel.h>
+#include <ydb/core/config/init/dummy.h>
 
 #include <ydb/core/control/immediate_control_board_actor.h>
 
@@ -55,6 +55,9 @@
 #include <ydb/core/base/event_filter.h>
 #include <ydb/core/base/statestorage_impl.h>
 #include <ydb/library/services/services.pb.h>
+#include <ydb/core/protos/alloc.pb.h>
+#include <ydb/core/protos/http_config.pb.h>
+#include <ydb/core/protos/datashard_config.pb.h>
 
 #include <ydb/core/mind/local.h>
 #include <ydb/core/mind/tenant_pool.h>

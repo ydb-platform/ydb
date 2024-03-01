@@ -3,6 +3,7 @@
 #include "datashard_user_table.h"
 
 #include <ydb/core/protos/flat_scheme_op.pb.h>
+#include <ydb/public/api/protos/ydb_table.pb.h>
 #include <ydb/library/actors/core/log.h>
 
 #include <util/generic/map.h>

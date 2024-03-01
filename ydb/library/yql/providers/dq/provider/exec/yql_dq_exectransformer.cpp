@@ -275,7 +275,7 @@ private:
 
     void AfterTypeAnnotation(TTransformationPipeline* pipeline) const final {
         // First truncate graph by calculated precomputes
-        pipeline->Add(NDqs::CreateDqsReplacePrecomputesTransformer(*pipeline->GetTypeAnnotationContext(), State_->FunctionRegistry), "ReplacePrecomputes");
+        pipeline->Add(NDqs::CreateDqsReplacePrecomputesTransformer(*pipeline->GetTypeAnnotationContext()), "ReplacePrecomputes");
 
         // Then apply provider specific transformers on truncated graph
         std::for_each(UniqIntegrations_.cbegin(), UniqIntegrations_.cend(), [&](const auto dqInt) {

@@ -6,6 +6,7 @@
 #include <ydb/core/engine/minikql/minikql_engine_host.h>
 #include <ydb/core/formats/arrow/arrow_batch_builder.h>
 #include <ydb/core/kqp/common/kqp_yql.h>
+#include <ydb/core/protos/kqp_physical.pb.h>
 #include <ydb/core/scheme/scheme_types_proto.h>
 #include <ydb/core/tx/data_events/events.h>
 #include <ydb/core/tx/data_events/payload_helper.h>

@@ -14,6 +14,7 @@ PEERDIR(
     library/cpp/json
     ydb/library/actors/core
     ydb/library/actors/protos
+    ydb/library/grpc/actor_client
     ydb/core/fq/libs/compute/ydb/synchronization_service
     ydb/core/fq/libs/control_plane_storage/proto
     ydb/core/fq/libs/quota_manager/proto

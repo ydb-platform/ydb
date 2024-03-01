@@ -48,7 +48,7 @@ TConclusion<std::unique_ptr<NTabletFlatExecutor::ITransaction>> TSourceSession::
         return ackResult;
     }
     if (Cursor->IsReadyForNext()) {
-        Cursor->Next(self->GetStoragesManager()->GetSharedBlobsManager());
+        Cursor->Next(self->GetStoragesManager()->GetSharedBlobsManager(), self->GetIndexAs<TColumnEngineForLogs>().GetVersionedIndex());
         return std::unique_ptr<NTabletFlatExecutor::ITransaction>(new TTxDataAckToSource(self, selfPtr, "ack_to_source_on_ack_data"));
     } else {
         return std::unique_ptr<NTabletFlatExecutor::ITransaction>(new TTxWriteSourceCursor(self, selfPtr, "write_source_cursor_on_ack_data"));
@@ -61,7 +61,7 @@ TConclusion<std::unique_ptr<NTabletFlatExecutor::ITransaction>> TSourceSession::
         return ackResult;
     }
     if (Cursor->IsReadyForNext()) {
-        Cursor->Next(self->GetStoragesManager()->GetSharedBlobsManager());
+        Cursor->Next(self->GetStoragesManager()->GetSharedBlobsManager(), self->GetIndexAs<TColumnEngineForLogs>().GetVersionedIndex());
         return std::unique_ptr<NTabletFlatExecutor::ITransaction>(new TTxDataAckToSource(self, selfPtr, "ack_to_source_on_ack_links"));
     } else {
         return std::unique_ptr<NTabletFlatExecutor::ITransaction>(new TTxWriteSourceCursor(self, selfPtr, "write_source_cursor_on_ack_links"));
@@ -99,7 +99,7 @@ void TSourceSession::ActualizeDestination(const std::shared_ptr<NDataLocks::TMan
 
 bool TSourceSession::DoStart(const NColumnShard::TColumnShard& shard, const THashMap<ui64, std::vector<std::shared_ptr<TPortionInfo>>>& portions) {
     AFL_VERIFY(Cursor);
-    if (Cursor->Start(shard.GetStoragesManager()->GetSharedBlobsManager(), portions)) {
+    if (Cursor->Start(shard.GetStoragesManager()->GetSharedBlobsManager(), portions, shard.GetIndexAs<TColumnEngineForLogs>().GetVersionedIndex())) {
         ActualizeDestination(shard.GetDataLocksManager());
         return true;
     } else {

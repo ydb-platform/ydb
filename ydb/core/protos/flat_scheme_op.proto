@@ -418,6 +418,7 @@ message TOlapColumnDiff {
     optional string Name = 1;
     optional TDictionaryEncodingSettings DictionaryEncoding = 4;
     optional TOlapColumn.TSerializer Serializer = 5;
+    optional string StorageId = 6;
 }
 
 message TOlapColumnDescription {
@@ -435,6 +436,7 @@ message TOlapColumnDescription {
     optional TCompressionOptions Compression = 8[deprecated = true];
     optional TDictionaryEncodingSettings DictionaryEncoding = 9;
     optional TOlapColumn.TSerializer Serializer = 10;
+    optional string StorageId = 11;
 }
 
 message TRequestedBloomFilter {
@@ -445,8 +447,9 @@ message TRequestedBloomFilter {
 message TOlapIndexRequested {
     optional string Name = 1;
     optional TCompressionOptions Compression = 3;
+    optional string StorageId = 4;
 
-    optional string ClassName = 2;
+    optional string ClassName = 39;
     oneof Implementation {
         TRequestedBloomFilter BloomFilter = 40;
     }
@@ -465,9 +468,11 @@ message TOlapIndexDescription {
     optional string Name = 2;
     optional TCompressionOptions Compression = 3;
 
-    optional string ClassName = 4;
+    optional string StorageId = 4;
+
+    optional string ClassName = 40;
     oneof Implementation {
-        TBloomFilter BloomFilter = 40;
+        TBloomFilter BloomFilter = 41;
     }
 }
 

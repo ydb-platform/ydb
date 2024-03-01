@@ -17,10 +17,6 @@ TConclusionStatus TChunkMeta::DeserializeFromProto(const TChunkAddress& address,
     if (proto.HasRawBytes()) {
         RawBytes = proto.GetRawBytes();
     }
-    if (proto.HasMinValue()) {
-        AFL_VERIFY(field)("field_id", address.GetColumnId())("field_name", indexInfo.GetColumnName(address.GetColumnId()));
-        Min = ConstantToScalar(proto.GetMinValue(), field->type());
-    }
     if (proto.HasMaxValue()) {
         AFL_VERIFY(field)("field_id", address.GetColumnId())("field_name", indexInfo.GetColumnName(address.GetColumnId()));
         Max = ConstantToScalar(proto.GetMaxValue(), field->type());
@@ -45,9 +41,9 @@ NKikimrTxColumnShard::TIndexColumnMeta TChunkMeta::SerializeToProto() const {
     if (RawBytes) {
         meta.SetRawBytes(*RawBytes);
     }
-    if (HasMinMax()) {
-        ScalarToConstant(*Min, *meta.MutableMinValue());
+    if (HasMax()) {
         ScalarToConstant(*Max, *meta.MutableMaxValue());
+        ScalarToConstant(*Max, *meta.MutableMinValue());
     }
     return meta;
 }

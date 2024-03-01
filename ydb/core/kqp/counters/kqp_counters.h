@@ -13,6 +13,7 @@
 
 #include <ydb/library/yql/minikql/aligned_page_pool.h>
 #include <ydb/library/yql/dq/actors/spilling/spilling_counters.h>
+#include <ydb/public/api/protos/ydb_status_codes.pb.h>
 
 #include <util/system/spinlock.h>
 
@@ -345,6 +346,8 @@ public:
     void RemoveDbCounters(const TString& database);
 
 public:
+    ::NMonitoring::TDynamicCounters::TCounterPtr FullScansExecuted;
+    
     // Lease updates counters
     ::NMonitoring::THistogramPtr LeaseUpdateLatency;
     ::NMonitoring::THistogramPtr RunActorLeaseUpdateBacklog;

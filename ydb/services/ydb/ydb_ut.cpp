@@ -14,6 +14,10 @@
 #include <ydb/public/api/grpc/ydb_table_v1.grpc.pb.h>
 #include <ydb/public/api/grpc/draft/dummy.grpc.pb.h>
 #include <ydb/public/api/protos/ydb_table.pb.h>
+#include <ydb/core/protos/follower_group.pb.h>
+#include <ydb/core/protos/console_config.pb.h>
+#include <ydb/core/protos/console_base.pb.h>
+#include <ydb/public/api/protos/ydb_status_codes.pb.h>
 
 #include <ydb/library/grpc/client/grpc_client_low.h>
 

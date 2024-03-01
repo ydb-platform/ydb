@@ -4,6 +4,7 @@
 #include "tablet_info.h"
 #include "follower_tablet_info.h"
 #include <ydb/core/base/channel_profiles.h>
+#include <ydb/core/protos/blobstorage.pb.h>
 
 namespace NKikimr {
 namespace NHive {

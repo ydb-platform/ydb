@@ -91,8 +91,8 @@ public:
 
 namespace {
 
-static const std::vector<std::pair<TString, TTypeInfo>> testYdbSchema = TTestSchema::YdbSchema();
-static const std::vector<std::pair<TString, TTypeInfo>> testYdbPk = TTestSchema::YdbPkSchema();
+static const std::vector<NArrow::NTest::TTestColumn> testYdbSchema = TTestSchema::YdbSchema();
+static const std::vector<NArrow::NTest::TTestColumn> testYdbPk = TTestSchema::YdbPkSchema();
 
 std::shared_ptr<arrow::RecordBatch> UpdateColumn(std::shared_ptr<arrow::RecordBatch> batch, TString columnName, i64 seconds) {
     std::string name(columnName.c_str(), columnName.size());
@@ -185,7 +185,7 @@ bool CheckSame(const std::shared_ptr<arrow::RecordBatch>& batch, const ui32 expe
 }
 
 std::vector<TString> MakeData(const std::vector<ui64>& ts, ui32 portionSize, ui32 overlapSize, const TString& ttlColumnName,
-                              const std::vector<std::pair<TString, TTypeInfo>>& ydbSchema = testYdbSchema) {
+                              const std::vector<NArrow::NTest::TTestColumn>& ydbSchema = testYdbSchema) {
     UNIT_ASSERT(ts.size() > 0);
 
     ui32 numRows = portionSize + (ts.size() - 1) * (portionSize - overlapSize);
@@ -233,16 +233,16 @@ static constexpr ui32 PORTION_ROWS = 80 * 1000;
 // ts[0] = 1600000000; // date -u --date='@1600000000' Sun Sep 13 12:26:40 UTC 2020
 // ts[1] = 1620000000; // date -u --date='@1620000000' Mon May  3 00:00:00 UTC 2021
 void TestTtl(bool reboots, bool internal, TTestSchema::TTableSpecials spec = {},
-             const std::vector<std::pair<TString, TTypeInfo>>& ydbSchema = testYdbSchema)
+             const std::vector<NArrow::NTest::TTestColumn>& ydbSchema = testYdbSchema)
 {
     auto csControllerGuard = NKikimr::NYDBTest::TControllers::RegisterCSControllerGuard<TWaitCompactionController>();
     csControllerGuard->SetCompactionEnabled(false);
     std::vector<ui64> ts = {1600000000, 1620000000};
 
     ui32 ttlIncSeconds = 1;
-    for (auto& [name, typeInfo] : ydbSchema) {
-        if (name == spec.TtlColumn) {
-            if (typeInfo.GetTypeId() == NTypeIds::Date) {
+    for (auto& c : ydbSchema) {
+        if (c.GetName() == spec.TtlColumn) {
+            if (c.GetType().GetTypeId() == NTypeIds::Date) {
                 ttlIncSeconds = TDuration::Days(1).Seconds();
             }
             break;
@@ -1199,13 +1199,12 @@ Y_UNIT_TEST_SUITE(TColumnShardTestSchema) {
             NTypeIds::Datetime
         };
 
-        auto schema = TTestSchema::YdbSchema({"k0", TTypeInfo(NTypeIds::Timestamp)});
-        auto pk = schema;
-        pk.resize(4);
+        auto schema = TTestSchema::YdbSchema(NArrow::NTest::TTestColumn("k0", TTypeInfo(NTypeIds::Timestamp)));
+        auto pk = NArrow::NTest::TTestColumn::CropSchema(schema, 4);
 
         for (auto& ydbType : intTypes) {
-            schema[0].second = TTypeInfo(ydbType);
-            pk[0].second = TTypeInfo(ydbType);
+            schema[0].SetType(TTypeInfo(ydbType));
+            pk[0].SetType(TTypeInfo(ydbType));
             auto txBody = TTestSchema::CreateTableTxBody(tableId, schema, pk);
             bool ok = TestCreateTable(txBody);
             UNIT_ASSERT(ok);
@@ -1218,8 +1217,8 @@ Y_UNIT_TEST_SUITE(TColumnShardTestSchema) {
         };
 
         for (auto& ydbType : floatTypes) {
-            schema[0].second = TTypeInfo(ydbType);
-            pk[0].second = TTypeInfo(ydbType);
+            schema[0].SetType(TTypeInfo(ydbType));
+            pk[0].SetType(TTypeInfo(ydbType));
             auto txBody = TTestSchema::CreateTableTxBody(tableId, schema, pk);
             bool ok = TestCreateTable(txBody);
             UNIT_ASSERT(!ok);
@@ -1231,8 +1230,8 @@ Y_UNIT_TEST_SUITE(TColumnShardTestSchema) {
         };
 
         for (auto& ydbType : strTypes) {
-            schema[0].second = TTypeInfo(ydbType);
-            pk[0].second = TTypeInfo(ydbType);
+            schema[0].SetType(TTypeInfo(ydbType));
+            pk[0].SetType(TTypeInfo(ydbType));
             auto txBody = TTestSchema::CreateTableTxBody(tableId, schema, pk);
             bool ok = TestCreateTable(txBody);
             UNIT_ASSERT(ok);
@@ -1245,8 +1244,8 @@ Y_UNIT_TEST_SUITE(TColumnShardTestSchema) {
         };
 
         for (auto& ydbType : xsonTypes) {
-            schema[0].second = TTypeInfo(ydbType);
-            pk[0].second = TTypeInfo(ydbType);
+            schema[0].SetType(TTypeInfo(ydbType));
+            pk[0].SetType(TTypeInfo(ydbType));
             auto txBody = TTestSchema::CreateTableTxBody(tableId, schema, pk);
             bool ok = TestCreateTable(txBody);
             UNIT_ASSERT(!ok);
@@ -1260,8 +1259,8 @@ Y_UNIT_TEST_SUITE(TColumnShardTestSchema) {
     Y_UNIT_TEST(ExternalTTL_Types) {
         auto ydbSchema = testYdbSchema;
         for (auto typeId : {NTypeIds::Datetime, NTypeIds::Date, NTypeIds::Uint32, NTypeIds::Uint64}) {
-            UNIT_ASSERT_EQUAL(ydbSchema[8].first, "saved_at");
-            ydbSchema[8].second = TTypeInfo(typeId);
+            UNIT_ASSERT_EQUAL(ydbSchema[8].GetName(), "saved_at");
+            ydbSchema[8].SetType(TTypeInfo(typeId));
 
             TTestSchema::TTableSpecials specs;
             specs.SetTtlColumn("saved_at");
@@ -1282,8 +1281,8 @@ Y_UNIT_TEST_SUITE(TColumnShardTestSchema) {
     Y_UNIT_TEST(InternalTTL_Types) {
         auto ydbSchema = testYdbSchema;
         for (auto typeId : {NTypeIds::Datetime, NTypeIds::Date, NTypeIds::Uint32, NTypeIds::Uint64}) {
-            UNIT_ASSERT_EQUAL(ydbSchema[8].first, "saved_at");
-            ydbSchema[8].second = TTypeInfo(typeId);
+            UNIT_ASSERT_EQUAL(ydbSchema[8].GetName(), "saved_at");
+            ydbSchema[8].SetType(TTypeInfo(typeId));
 
             TTestSchema::TTableSpecials specs;
             specs.SetTtlColumn("saved_at");

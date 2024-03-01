@@ -108,6 +108,8 @@
 
 #include <ydb/library/services/services.pb.h>
 #include <ydb/core/protos/console_config.pb.h>
+#include <ydb/core/protos/node_limits.pb.h>
+#include <ydb/core/protos/compile_service_config.pb.h>
 
 #include <ydb/core/public_http/http_service.h>
 
@@ -698,8 +700,10 @@ void TBasicServicesInitializer::InitializeServices(NActors::TActorSystemSetup* s
                         data.Yellow ? NKikimrWhiteboard::EFlag::Yellow :
                         data.Orange ? NKikimrWhiteboard::EFlag::Orange :
                         data.Red ? NKikimrWhiteboard::EFlag::Red : NKikimrWhiteboard::EFlag()));
-                    data.ActorSystem->Send(whiteboardId, new NNodeWhiteboard::TEvWhiteboard::TEvClockSkewUpdate(
-                        data.PeerId, data.ClockSkew));
+                    if (data.ReportClockSkew) {
+                        data.ActorSystem->Send(whiteboardId, new NNodeWhiteboard::TEvWhiteboard::TEvClockSkewUpdate(
+                            data.PeerId, data.ClockSkew));
+                    }
                 };
             }
 
@@ -849,7 +853,7 @@ void TBasicServicesInitializer::InitializeServices(NActors::TActorSystemSetup* s
                     break;
                 }
 
-                NWilson::WilsonUploaderParams uploaderParams {
+                NWilson::TWilsonUploaderParams uploaderParams {
                     .CollectorUrl = opentelemetry.GetCollectorUrl(),
                     .ServiceName = opentelemetry.GetServiceName(),
                     .GrpcSigner = std::move(grpcSigner),
@@ -869,14 +873,11 @@ void TBasicServicesInitializer::InitializeServices(NActors::TActorSystemSetup* s
                     GET_FIELD_FROM_CONFIG(MaxExportedSpansPerSecond)
                     GET_FIELD_FROM_CONFIG(MaxSpansInBatch)
                     GET_FIELD_FROM_CONFIG(MaxBytesInBatch)
+                    GET_FIELD_FROM_CONFIG(MaxBatchAccumulationMilliseconds)
                     GET_FIELD_FROM_CONFIG(SpanExportTimeoutSeconds)
                     GET_FIELD_FROM_CONFIG(MaxExportRequestsInflight)
 
 #undef GET_FIELD_FROM_CONFIG
-
-                    if (uploaderConfig.HasMaxBatchAccumulationMilliseconds()) {
-                        uploaderParams.MaxBatchAccumulation = TDuration::MilliSeconds(uploaderConfig.GetMaxBatchAccumulationMilliseconds());
-                    }
                 }
 
                 wilsonUploader.reset(std::move(uploaderParams).CreateUploader());

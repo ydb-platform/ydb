@@ -231,7 +231,7 @@ std::shared_ptr<arrow::Field> TIndexInfo::ArrowColumnFieldOptional(const ui32 co
     }
 }
 
-void TIndexInfo::SetAllKeys() {
+void TIndexInfo::SetAllKeys(const std::shared_ptr<IStoragesManager>& operators) {
     /// @note Setting replace and sorting key to PK we are able to:
     /// * apply REPLACE by MergeSort
     /// * apply PK predicate before REPLACE
@@ -256,7 +256,7 @@ void TIndexInfo::SetAllKeys() {
     MinMaxIdxColumnsIds.insert(GetPKFirstColumnId());
     if (!Schema) {
         AFL_VERIFY(!SchemaWithSpecials);
-        InitializeCaches();
+        InitializeCaches(operators);
     }
 }
 
@@ -305,7 +305,7 @@ TColumnSaver TIndexInfo::GetColumnSaver(const ui32 columnId, const TSaverContext
     }
 
     if (!!context.GetExternalSerializer()) {
-        return TColumnSaver(transformer, *context.GetExternalSerializer());
+        return TColumnSaver(transformer, context.GetExternalSerializer());
     } else if (!!serializer) {
         return TColumnSaver(transformer, serializer);
     } else if (DefaultSerializer) {
@@ -364,7 +364,7 @@ std::shared_ptr<arrow::Schema> TIndexInfo::GetColumnSchema(const ui32 columnId) 
     return GetColumnsSchema({columnId});
 }
 
-bool TIndexInfo::DeserializeFromProto(const NKikimrSchemeOp::TColumnTableSchema& schema) {
+bool TIndexInfo::DeserializeFromProto(const NKikimrSchemeOp::TColumnTableSchema& schema, const std::shared_ptr<IStoragesManager>& operators) {
     if (schema.GetEngine() != NKikimrSchemeOp::COLUMN_ENGINE_REPLACING_TIMESERIES) {
         AFL_ERROR(NKikimrServices::TX_COLUMNSHARD)("event", "cannot_parse_index_info")("reason", "incorrect_engine_in_schema");
         return false;
@@ -384,9 +384,9 @@ bool TIndexInfo::DeserializeFromProto(const NKikimrSchemeOp::TColumnTableSchema&
         Columns[id] = NTable::TColumn(name, id, typeInfoMod.TypeInfo, typeInfoMod.TypeMod, notNull);
         ColumnNames[name] = id;
     }
-    InitializeCaches();
+    InitializeCaches(operators);
     for (const auto& col : schema.GetColumns()) {
-        std::optional<TColumnFeatures> cFeatures = TColumnFeatures::BuildFromProto(col, *this);
+        std::optional<TColumnFeatures> cFeatures = TColumnFeatures::BuildFromProto(col, *this, operators);
         if (!cFeatures) {
             AFL_ERROR(NKikimrServices::TX_COLUMNSHARD)("event", "cannot_parse_column_feature");
             return false;
@@ -450,9 +450,9 @@ std::vector<TNameTypeInfo> GetColumns(const NTable::TScheme::TTableSchema& table
     return out;
 }
 
-std::optional<TIndexInfo> TIndexInfo::BuildFromProto(const NKikimrSchemeOp::TColumnTableSchema& schema) {
+std::optional<TIndexInfo> TIndexInfo::BuildFromProto(const NKikimrSchemeOp::TColumnTableSchema& schema, const std::shared_ptr<IStoragesManager>& operators) {
     TIndexInfo result("");
-    if (!result.DeserializeFromProto(schema)) {
+    if (!result.DeserializeFromProto(schema, operators)) {
         return std::nullopt;
     }
     return result;
@@ -462,17 +462,17 @@ std::shared_ptr<arrow::Field> TIndexInfo::SpecialColumnField(const ui32 columnId
     return ArrowSchemaSnapshot()->GetFieldByName(GetColumnName(columnId, true));
 }
 
-void TIndexInfo::InitializeCaches() {
+void TIndexInfo::InitializeCaches(const std::shared_ptr<IStoragesManager>& operators) {
     BuildArrowSchema();
     BuildSchemaWithSpecials();
 
     for (auto&& c : Columns) {
         AFL_VERIFY(ArrowColumnByColumnIdCache.emplace(c.first, GetColumnFieldVerified(c.first)).second);
-        AFL_VERIFY(ColumnFeatures.emplace(c.first, TColumnFeatures::BuildFromIndexInfo(c.first, *this)).second);
+        AFL_VERIFY(ColumnFeatures.emplace(c.first, TColumnFeatures::BuildFromIndexInfo(c.first, *this, operators->GetDefaultOperator())).second);
     }
     for (auto&& cId : GetSpecialColumnIds()) {
         AFL_VERIFY(ArrowColumnByColumnIdCache.emplace(cId, GetColumnFieldVerified(cId)).second);
-        AFL_VERIFY(ColumnFeatures.emplace(cId, TColumnFeatures::BuildFromIndexInfo(cId, *this)).second);
+        AFL_VERIFY(ColumnFeatures.emplace(cId, TColumnFeatures::BuildFromIndexInfo(cId, *this, operators->GetDefaultOperator())).second);
     }
 }
 

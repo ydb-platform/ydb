@@ -5,6 +5,7 @@
 #include <ydb/core/protos/config.pb.h>
 #include <ydb/library/aclib/aclib.h>
 #include <ydb/public/api/protos/persqueue_error_codes_v1.pb.h>
+#include <ydb/public/api/protos/draft/persqueue_error_codes.pb.h> // strange
 
 #include "../kafka_messages.h"
 

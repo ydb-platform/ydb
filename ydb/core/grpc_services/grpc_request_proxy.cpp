@@ -13,6 +13,7 @@
 #include <ydb/core/tx/tx_proxy/proxy.h>
 #include <ydb/core/tx/scheme_board/scheme_board.h>
 #include <ydb/library/wilson_ids/wilson.h>
+#include <ydb/core/protos/table_service_config.pb.h>
 
 #include <shared_mutex>
 

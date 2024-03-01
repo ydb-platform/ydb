@@ -31,6 +31,7 @@ ENDIF()
 PEERDIR(
     ydb/library/actors/core
     ydb/library/actors/http
+    ydb/library/grpc/actor_client
     library/cpp/monlib/service/pages
     library/cpp/openssl/io
     ydb/core/base

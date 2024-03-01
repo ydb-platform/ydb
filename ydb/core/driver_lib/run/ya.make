@@ -7,8 +7,6 @@ SRCS(
     config_parser.cpp
     config_parser.h
     driver.h
-    dummy.cpp
-    dummy.h
     factories.h
     factories.cpp
     kikimr_services_initializers.cpp

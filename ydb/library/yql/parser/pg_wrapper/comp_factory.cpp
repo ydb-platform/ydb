@@ -1304,6 +1304,121 @@ public:
     }
 };
 
+class TPgToRecord : public TMutableComputationNode<TPgToRecord> {
+    typedef TMutableComputationNode<TPgToRecord> TBaseComputation;
+public:
+    TPgToRecord(
+        TComputationMutables& mutables,
+        IComputationNode* arg,
+        TStructType* structType,
+        TVector<std::pair<TString,TString>>&& members
+    )
+        : TBaseComputation(mutables)
+        , Arg(arg)
+        , StructType(structType)
+        , Members(std::move(members))
+        , StateIndex(mutables.CurValueIndex++)
+    {
+        StructIndicies.resize(Members.size());
+        FieldTypes.resize(Members.size());
+        for (ui32 i = 0; i < Members.size(); ++i) {
+            StructIndicies[i] = structType->GetMemberIndex(Members[i].second);
+            auto itemType = structType->GetMemberType(StructIndicies[i]);
+            ui32 oid;
+            if (itemType->IsNull()) {
+                oid = UNKNOWNOID;
+            } else {
+                oid = AS_TYPE(TPgType, itemType)->GetTypeId();
+            }
+
+            FieldTypes[i] = &NPg::LookupType(oid);
+        }
+    }
+
+    NUdf::TUnboxedValuePod DoCalculate(TComputationContext& compCtx) const {
+        auto input = Arg->GetValue(compCtx);
+        auto& state = GetState(compCtx);
+
+        auto elements = input.GetElements();
+        TVector<NUdf::TUnboxedValue> elemValues;
+        if (!elements) {
+            elemValues.reserve(StructType->GetMembersCount());
+            for (ui32 i = 0; i < StructType->GetMembersCount(); ++i) {
+                elemValues.push_back(input.GetElement(i));
+            }
+
+            elements = elemValues.data();
+        }
+
+        for (ui32 i = 0; i < Members.size(); ++i) {
+            auto index = StructIndicies[i];
+            if (!elements[index]) {
+                state.Nulls[i] = true;
+            } else {
+                state.Nulls[i] = false;
+                if (FieldTypes[i]->PassByValue) {
+                    state.Values[i] = ScalarDatumFromPod(elements[index]);
+                } else {
+                    state.Values[i] = PointerDatumFromPod(elements[index]);
+                }
+            }
+        }
+
+        HeapTuple tuple = heap_form_tuple(state.Desc, state.Values.get(), state.Nulls.get());
+        auto result = (HeapTupleHeader) palloc(tuple->t_len);
+        memcpy(result, tuple->t_data, tuple->t_len);
+        heap_freetuple(tuple);
+        return PointerDatumToPod((Datum)result);
+    }
+
+private:
+    void RegisterDependencies() const final {
+        DependsOn(Arg);
+    }
+
+    struct TPgToRecordState : public TComputationValue<TPgToRecordState> {
+        TPgToRecordState(TMemoryUsageInfo* memInfo, const TVector<std::pair<TString,TString>>& members,
+            const TVector<const NPg::TTypeDesc*>& fieldTypes)
+            : TComputationValue(memInfo)
+        {
+            Values.reset(new Datum[members.size()]);
+            Nulls.reset(new bool[members.size()]);
+            Desc = CreateTemplateTupleDesc(members.size());
+            for (ui32 i = 0; i < members.size(); ++i) {
+                TupleDescInitEntry(Desc, (AttrNumber) 1 + i, members[i].first.c_str(), fieldTypes[i]->TypeId, -1, 0);
+            }
+
+            Desc = BlessTupleDesc(Desc);
+        }
+
+        ~TPgToRecordState()
+        {
+            FreeTupleDesc(Desc);
+        }
+
+        std::unique_ptr<Datum[]> Values;
+        std::unique_ptr<bool[]> Nulls;
+        TupleDesc Desc;
+    };
+
+    TPgToRecordState& GetState(TComputationContext& compCtx) const {
+        auto& result = compCtx.MutableValues[StateIndex];
+        if (!result.HasValue()) {
+            result = compCtx.HolderFactory.Create<TPgToRecordState>(Members, FieldTypes);
+        }
+
+        return *static_cast<TPgToRecordState*>(result.AsBoxed().Get());
+    }
+
+
+    IComputationNode* const Arg;
+    TStructType* const StructType;
+    const TVector<std::pair<TString,TString>> Members;
+    const ui32 StateIndex;
+    TVector<ui32> StructIndicies;
+    TVector<const NPg::TTypeDesc*> FieldTypes;
+};
+
 class TPgCast : public TMutableComputationNode<TPgCast> {
     typedef TMutableComputationNode<TPgCast> TBaseComputation;
 public:
@@ -2466,6 +2581,23 @@ TComputationNodeFactory GetPgFactory() {
                 const auto table = tableData->AsValue().AsStringRef();
                 const auto returnType = callable.GetType()->GetReturnType();
                 return new TPgTableContent(ctx.Mutables, cluster, table, returnType);
+            }
+
+            if (name == "PgToRecord") {
+                auto structType = AS_TYPE(TStructType, callable.GetInput(0).GetStaticType());
+                auto input = LocateNode(ctx.NodeLocator, callable, 0);
+                TVector<std::pair<TString, TString>> members;
+                auto tuple = AS_VALUE(TTupleLiteral, callable.GetInput(1));
+                MKQL_ENSURE(tuple->GetValuesCount() % 2 == 0, "Malformed names");
+                for (ui32 i = 0; i < tuple->GetValuesCount(); i += 2) {
+                    const auto recordFieldData = AS_VALUE(TDataLiteral, tuple->GetValue(i));
+                    const auto struсtMemberData = AS_VALUE(TDataLiteral, tuple->GetValue(i + 1));
+                    const TString recordField(recordFieldData->AsValue().AsStringRef());
+                    const TString struсtMember(struсtMemberData->AsValue().AsStringRef());
+                    members.push_back({recordField, struсtMember});
+                }
+
+                return new TPgToRecord(ctx.Mutables, input, structType, std::move(members));
             }
 
             if (name == "PgResolvedCall") {

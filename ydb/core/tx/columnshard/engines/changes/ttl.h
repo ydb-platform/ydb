@@ -39,7 +39,7 @@ private:
         }
     };
 
-    std::optional<TPortionInfoWithBlobs> UpdateEvictedPortion(TPortionForEviction& info, THashMap<TBlobRange, TString>& srcBlobs,
+    std::optional<TPortionInfoWithBlobs> UpdateEvictedPortion(TPortionForEviction& info, NBlobOperations::NRead::TCompositeReadBlobs& srcBlobs,
         TConstructionContext& context) const;
 
     std::vector<TPortionForEviction> PortionsToEvict; // {portion, TPortionEvictionFeatures}

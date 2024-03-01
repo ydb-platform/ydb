@@ -12,6 +12,7 @@
 #include <util/generic/size_literals.h>
 
 #include <ydb/library/yql/core/issue/protos/issue_id.pb.h>
+#include <ydb/public/api/protos/ydb_issue_message.pb.h>
 
 namespace NKikimr {
 namespace NKqp {
@@ -828,6 +829,8 @@ TKqpCounters::TKqpCounters(const ::NMonitoring::TDynamicCounterPtr& counters, co
         "PhyTx/DataTxTotalTimeMs", NMonitoring::ExponentialHistogram(20, 2, 1));
     ScanTxTotalTimeHistogram = KqpGroup->GetHistogram(
         "PhyTx/ScanTxTotalTimeMs", NMonitoring::ExponentialHistogram(20, 2, 1));
+
+    FullScansExecuted = KqpGroup->GetCounter("FullScans", true);
 }
 
 ::NMonitoring::TDynamicCounterPtr TKqpCounters::GetKqpCounters() const {

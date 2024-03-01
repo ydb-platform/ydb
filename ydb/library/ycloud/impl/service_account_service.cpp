@@ -2,13 +2,13 @@
 #include <ydb/library/actors/core/actor.h>
 #include <ydb/public/api/client/yc_private/iam/service_account_service.grpc.pb.h>
 #include "service_account_service.h"
-#include "grpc_service_client.h"
+#include <ydb/library/grpc/actor_client/grpc_service_client.h>
 
 namespace NCloud {
 
 using namespace NKikimr;
 
-class TServiceAccountService : public NActors::TActor<TServiceAccountService>, TGrpcServiceClient<yandex::cloud::priv::iam::v1::ServiceAccountService> {
+class TServiceAccountService : public NActors::TActor<TServiceAccountService>, NGrpcActorClient::TGrpcServiceClient<yandex::cloud::priv::iam::v1::ServiceAccountService> {
     using TThis = TServiceAccountService;
     using TBase = NActors::TActor<TServiceAccountService>;
 

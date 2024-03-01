@@ -3,6 +3,8 @@
 #include "defs.h"
 #include "resolved_value.h"
 
+#include <ydb/core/protos/blob_depot_config.pb.h>
+
 namespace NKikimr::NBlobDepot {
 
 #define ENUMERATE_INCOMING_EVENTS(XX) \

@@ -779,6 +779,8 @@ private:
     const NKikimrPQ::TPQTabletConfig::TPartition* GetPartitionConfig(const NKikimrPQ::TPQTabletConfig& config);
 
     bool ClosedInternalPartition = false;
+
+    bool IsSupportive() const;
 };
 
 } // namespace NKikimr::NPQ

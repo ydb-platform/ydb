@@ -94,6 +94,7 @@ public:
         TSmallVec<NTable::TUpdateOp> ops;
 
         const TSerializedCellMatrix& matrix = writeTx->GetMatrix();
+        const auto operationType = writeTx->GetOperationType();
 
         for (ui32 rowIdx = 0; rowIdx < matrix.GetRowCount(); ++rowIdx)
         {
@@ -110,23 +111,48 @@ public:
                 }
             }
 
-            ops.clear();
-            Y_ABORT_UNLESS(matrix.GetColCount() >= TableInfo_.KeyColumnIds.size());
-            ops.reserve(matrix.GetColCount() - TableInfo_.KeyColumnIds.size());
+            switch (operationType) {
+                case NKikimrDataEvents::TEvWrite::TOperation::OPERATION_UPSERT:
+                {
+                    ops.clear();
+                    Y_ABORT_UNLESS(matrix.GetColCount() >= TableInfo_.KeyColumnIds.size());
+                    ops.reserve(matrix.GetColCount() - TableInfo_.KeyColumnIds.size());
 
-            for (ui16 valueColIdx = TableInfo_.KeyColumnIds.size(); valueColIdx < matrix.GetColCount(); ++valueColIdx) {
-                ui32 columnTag = writeTx->GetColumnIds()[valueColIdx];
-                const TCell& cell = matrix.GetCell(rowIdx, valueColIdx);
+                    for (ui16 valueColIdx = TableInfo_.KeyColumnIds.size(); valueColIdx < matrix.GetColCount(); ++valueColIdx) {
+                        ui32 columnTag = writeTx->GetColumnIds()[valueColIdx];
+                        const TCell& cell = matrix.GetCell(rowIdx, valueColIdx);
 
-                NScheme::TTypeInfo vtypeInfo = scheme.GetColumnInfo(tableInfo, columnTag)->PType;
-                ops.emplace_back(columnTag, NTable::ECellOp::Set, cell.IsNull() ? TRawTypeValue() : TRawTypeValue(cell.Data(), cell.Size(), vtypeInfo));
+                        NScheme::TTypeInfo vtypeInfo = scheme.GetColumnInfo(tableInfo, columnTag)->PType;
+                        ops.emplace_back(columnTag, NTable::ECellOp::Set, cell.IsNull() ? TRawTypeValue() : TRawTypeValue(cell.Data(), cell.Size(), vtypeInfo));
+                    }
+
+                    userDb.UpdateRow(fullTableId, key, ops);
+                    break;
+                }
+                case NKikimrDataEvents::TEvWrite::TOperation::OPERATION_DELETE:
+                {
+                    userDb.EraseRow(fullTableId, key);
+                    break;
+                }
+                default:
+                    Y_FAIL_S(operationType << " operation is not supported now");
             }
-
-            userDb.UpdateRow(fullTableId, key, ops);
         }
 
-        DataShard.IncCounter(COUNTER_WRITE_ROWS, matrix.GetRowCount());
-        DataShard.IncCounter(COUNTER_WRITE_BYTES, matrix.GetBuffer().size());
+        switch (operationType) {
+            case NKikimrDataEvents::TEvWrite::TOperation::OPERATION_UPSERT: {
+                DataShard.IncCounter(COUNTER_WRITE_ROWS, matrix.GetRowCount());
+                DataShard.IncCounter(COUNTER_WRITE_BYTES, matrix.GetBuffer().size());
+                break;
+            }
+            case NKikimrDataEvents::TEvWrite::TOperation::OPERATION_DELETE: {
+                DataShard.IncCounter(COUNTER_ERASE_ROWS, matrix.GetRowCount());
+                break;
+            }
+            default:
+                Y_FAIL_S(operationType << " operation is not supported now");
+        }
+
 
         LOG_DEBUG_S(ctx, NKikimrServices::TX_DATASHARD, "Executed write operation for " << *writeOp << " at " << DataShard.TabletID() << ", row count=" << matrix.GetRowCount());
     }

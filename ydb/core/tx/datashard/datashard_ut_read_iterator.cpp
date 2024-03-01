@@ -3523,7 +3523,7 @@ Y_UNIT_TEST_SUITE(DataShardReadIterator) {
         Cerr << "========= Write many rows" << Endl;
         for (ui64 i = 0; i < writeCount; ++i) {
             ui64 seed = 1000000 + i * rowCount * columns.size();
-            auto writeRequest = MakeWriteRequest(++helper.TxId, NKikimrDataEvents::TEvWrite::MODE_IMMEDIATE, tableId, columns, rowCount, seed);
+            auto writeRequest = MakeWriteRequest(++helper.TxId, NKikimrDataEvents::TEvWrite::MODE_IMMEDIATE, NKikimrDataEvents::TEvWrite::TOperation::OPERATION_UPSERT, tableId, columns, rowCount, seed);
             writeRequest->Record.SetLockTxId(lockTxId);
             writeRequest->Record.SetLockNodeId(nodeId);
 

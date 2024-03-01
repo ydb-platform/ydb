@@ -63,7 +63,14 @@ TValidatedWriteTx::TValidatedWriteTx(TDataShard* self, ui64 globalTxId, TInstant
 
     if (record.operations().size() != 0) {
         Y_ABORT_UNLESS(record.operations().size() == 1, "Only one operation is supported now");
-        Y_ABORT_UNLESS(record.operations(0).GetType() == NKikimrDataEvents::TEvWrite::TOperation::OPERATION_UPSERT, "Only UPSERT operation is supported now");
+        OperationType = record.operations(0).GetType();
+        switch (OperationType) {
+            case NKikimrDataEvents::TEvWrite::TOperation::OPERATION_UPSERT:
+            case NKikimrDataEvents::TEvWrite::TOperation::OPERATION_DELETE:
+                break;
+            default:
+                Y_FAIL_S(OperationType << " operation is not supported now");
+        }
         const NKikimrDataEvents::TEvWrite::TOperation& recordOperation = record.operations(0);
 
         ColumnIds = {recordOperation.GetColumnIds().begin(), recordOperation.GetColumnIds().end()};

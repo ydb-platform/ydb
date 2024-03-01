@@ -1,6 +1,7 @@
 #include "columnshard_impl.h"
 
 #include <ydb/core/kqp/compute_actor/kqp_compute_events.h>
+#include <ydb/core/tx/columnshard/backup_actor_state.h>
 #include <ydb/core/tx/columnshard/blobs_action/abstract/storages_manager.h>
 #include <ydb/core/tx/columnshard/blobs_action/tier/storage.h>
 #include <ydb/core/tx/columnshard/engines/writer/indexed_blob_constructor.h>
@@ -15,30 +16,6 @@ namespace NKikimr::NColumnShard {
 constexpr auto DefaultFreeSpace = 8 * 1024 * 1024;
 constexpr auto DefaultGeneration = 0;
 constexpr auto DefaultMaxChunks = 1;
-
-enum class BackupActorState : ui8 {
-    Invalid,
-    Init,
-    Progress,
-    Done
-};
-
-std::string ToString(BackupActorState s) {
-    switch (s) {
-        case BackupActorState::Invalid: {
-            return "Invalid";
-        }
-        case BackupActorState::Init: {
-            return "Init";
-        }
-        case BackupActorState::Progress: {
-            return "Progress";
-        }
-        case BackupActorState::Done: {
-            return "Done";
-        }
-    }
-}
 
 class TBackupWriteController : public IWriteController, public TMonitoringObjectsCounter<TBackupWriteController, true> {
 private:

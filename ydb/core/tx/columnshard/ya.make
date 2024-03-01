@@ -32,6 +32,7 @@ SRCS(
 
 GENERATE_ENUM_SERIALIZATION(columnshard.h)
 GENERATE_ENUM_SERIALIZATION(columnshard_impl.h)
+GENERATE_ENUM_SERIALIZATION(backup_actor_state.h)
 
 PEERDIR(
     ydb/library/actors/core

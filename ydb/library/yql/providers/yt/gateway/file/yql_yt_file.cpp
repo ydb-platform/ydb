@@ -1081,6 +1081,9 @@ public:
         return res;
     }
 
+    void AddCluster(const TYtClusterConfig&) override {
+    }
+
 private:
     static NYT::TNode LoadTableAttrs(const TString& path) {
         NYT::TNode attrs = NYT::TNode::CreateMap();

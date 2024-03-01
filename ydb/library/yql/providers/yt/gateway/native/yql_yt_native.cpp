@@ -1217,6 +1217,10 @@ public:
         }
     }
 
+    void AddCluster(const TYtClusterConfig& cluster) override {
+        Clusters_->AddCluster(cluster, false);
+    }
+
 private:
     class TNodeResultBuilder {
     public:

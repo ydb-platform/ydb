@@ -11,6 +11,7 @@
 #include <ydb/library/yql/providers/yt/common/yql_names.h>
 #include <ydb/library/yql/providers/yt/common/yql_configuration.h>
 #include <ydb/library/yql/providers/yt/lib/schema/schema.h>
+#include <ydb/library/yql/providers/common/proto/gateways_config.pb.h>
 #include <ydb/library/yql/providers/common/provider/yql_provider_names.h>
 #include <ydb/library/yql/providers/common/provider/yql_provider.h>
 #include <ydb/library/yql/providers/common/provider/yql_data_provider_impl.h>
@@ -91,6 +92,15 @@ public:
         })
         , DqOptimizer_([this]() { return CreateYtDqOptimizers(State_); })
     {
+    }
+
+    void AddCluster(const TString& name, const THashMap<TString, TString>& properties) override {
+        State_->Configuration->AddValidCluster(name);
+
+        TYtClusterConfig cluster;
+        cluster.SetName(name);
+        cluster.SetCluster(properties.Value("location", ""));
+        State_->Gateway->AddCluster(cluster);
     }
 
     TStringBuf GetName() const override {

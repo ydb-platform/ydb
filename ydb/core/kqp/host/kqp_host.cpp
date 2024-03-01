@@ -1627,9 +1627,7 @@ private:
         if (addExternalDataSources && FederatedQuerySetup) {
             InitS3Provider(queryType);
             InitGenericProvider();
-            if (FederatedQuerySetup->YtGatewayConfig.ClusterMappingSize()) {
-                InitYtProvider();
-            }
+            InitYtProvider();
         }
 
         InitPgProvider();

@@ -7,6 +7,7 @@
 
 namespace NYql {
 
+class TYtClusterConfig;
 class TYtGatewayConfig;
 
 class TConfigClusters: public TThrRefBase {
@@ -20,6 +21,8 @@ public:
     using TPtr = TIntrusivePtr<TConfigClusters>;
 
     explicit TConfigClusters(const TYtGatewayConfig& config);
+
+    void AddCluster(const TYtClusterConfig& cluster, bool checkDuplicate);
 
     const TString& GetServer(const TString& name) const;
     TString TryGetServer(const TString& name) const;

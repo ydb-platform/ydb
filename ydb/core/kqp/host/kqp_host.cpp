@@ -1493,6 +1493,7 @@ private:
             TypesCtx.Get(),
             FuncRegistry,
             FederatedQuerySetup->DatabaseAsyncResolver,
+            nullptr,
             FederatedQuerySetup->ConnectorClient,
             FederatedQuerySetup->GenericGatewayConfig
         );

@@ -99,11 +99,10 @@ namespace NYql {
                     const auto settings = maybeSettings.Cast();
                     const auto& clusterName = source.DataSource().Cast<TGenDataSource>().Cluster().StringValue();
                     const auto& table = settings.Table().StringValue();
-                    const auto& token = settings.Token().Name().StringValue();
-                    const auto& endpoint = State_->Configuration->ClusterNamesToClusterConfigs[clusterName].endpoint();
+                    const auto& clusterConfig = State_->Configuration->ClusterNamesToClusterConfigs[clusterName];
+                    const auto& endpoint = clusterConfig.endpoint();
 
-                    Generic::TSource srcDesc;
-                    srcDesc.set_token(token);
+                    NConnector::TSource source;
 
                     // for backward compability full path can be used (cluster_name.`db_name.table`)
                     // TODO: simplify during https://st.yandex-team.ru/YQ-2494
@@ -126,7 +125,7 @@ namespace NYql {
                     }
 
                     // prepare select
-                    auto select = srcDesc.mutable_select();
+                    auto select = source.mutable_select();
                     select->mutable_from()->set_table(TString(dbTable));
                     select->mutable_data_source_instance()->CopyFrom(tableMeta.value()->DataSourceInstance);
 
@@ -149,13 +148,17 @@ namespace NYql {
                         }
                     }
 
-                    // store data source instance
-                    srcDesc.mutable_data_source_instance()->CopyFrom(tableMeta.value()->DataSourceInstance);
+                    // Managed YDB supports access via IAM token.
+                    // Copy service account ids to obtain tokens during request execution phase.
+                    if (clusterConfig.kind() == NConnector::NApi::EDataSourceKind::YDB) {
+                        source.SetServiceAccountId(clusterConfig.GetServiceAccountId());
+                        source.SetServiceAccountIdSignature(clusterConfig.GetServiceAccountIdSignature());
+                    }
 
                     // preserve source description for read actor
-                    protoSettings.PackFrom(srcDesc);
+                    protoSettings.PackFrom(source);
 
-                    switch (srcDesc.data_source_instance().kind()) {
+                    switch (select->data_source_instance().kind()) {
                         case NYql::NConnector::NApi::CLICKHOUSE:
                             sourceType = "ClickHouseGeneric";
                             break;

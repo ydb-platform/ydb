@@ -17,6 +17,13 @@ protected:
     virtual void DoSerializeToProto(NKikimrColumnShardStatisticsProto::TConstructorContainer& proto) const override;
     virtual TConclusionStatus DoDeserializeFromJson(const NJson::TJsonValue& jsonData) override;
 public:
+    TConstructor(const TString& columnName)
+        : TBase(EType::Max)
+        , ColumnName(columnName)
+    {
+
+    }
+
     TConstructor()
         :TBase(EType::Max) {
 

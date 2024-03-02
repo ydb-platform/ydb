@@ -14,13 +14,17 @@ namespace NKikimr::NSchemeShard {
         YDB_READONLY_OPT(NKikimrSchemeOp::EColumnTableEngine, Engine);
         YDB_READONLY_DEF(TOlapColumnsDescription, Columns);
         YDB_READONLY_DEF(TOlapIndexesDescription, Indexes);
-        YDB_READONLY_DEF(TOlapStatisticsDescription, Statistics);
+        mutable TOlapStatisticsDescription Statistics;
 
         YDB_READONLY(ui32, NextColumnId, 1);
         YDB_READONLY(ui32, Version, 0);
         YDB_READONLY_FLAG(CompositeMarks, true);
 
     public:
+        const TOlapStatisticsDescription& GetStatistics() const {
+            return Statistics;
+        }
+
         bool Update(const TOlapSchemaUpdate& schemaUpdate, IErrorCollector& errors);
 
         void ParseFromLocalDB(const NKikimrSchemeOp::TColumnTableSchema& tableSchema);

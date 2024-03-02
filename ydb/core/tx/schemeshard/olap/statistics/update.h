@@ -14,6 +14,12 @@ namespace NKikimr::NSchemeShard {
         NOlap::NStatistics::TConstructorContainer Constructor;
     public:
         TOlapStatisticsUpsert() = default;
+        TOlapStatisticsUpsert(const TString& name, const NOlap::NStatistics::TConstructorContainer& constructor)
+            : Name(name)
+            , Constructor(constructor)
+        {
+
+        }
 
         const NOlap::NStatistics::TConstructorContainer& GetConstructor() const {
             return Constructor;
@@ -28,6 +34,10 @@ namespace NKikimr::NSchemeShard {
         YDB_READONLY_DEF(TVector<TOlapStatisticsUpsert>, Upsert);
         YDB_READONLY_DEF(TSet<TString>, Drop);
     public:
+        void AddUpsert(const TString& name, const NOlap::NStatistics::TConstructorContainer container) {
+            Upsert.emplace_back(TOlapStatisticsUpsert(name, container));
+        }
+
         bool Parse(const NKikimrSchemeOp::TAlterColumnTableSchema& alterRequest, IErrorCollector& errors);
     };
 }

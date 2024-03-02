@@ -1,5 +1,6 @@
 #include "schema.h"
 #include <ydb/core/tx/schemeshard/common/validation.h>
+#include <ydb/core/tx/columnshard/engines/scheme/statistics/max/constructor.h>
 
 namespace NKikimr::NSchemeShard {
 
@@ -83,8 +84,12 @@ bool TOlapSchema::ValidateTtlSettings(const NKikimrSchemeOp::TColumnDataLifeCycl
                 return false;
             }
             if (!Statistics.GetByIdOptional(NOlap::NStatistics::EType::Max, {column->GetId()})) {
-                errors.AddError("no statistic (MAX) for ttl usage");
-                return false;
+                TOlapStatisticsModification modification;
+                NOlap::NStatistics::TConstructorContainer container(std::make_shared<NOlap::NStatistics::NMax::TConstructor>(column->GetName()));
+                modification.AddUpsert("__TTL_PROVIDER::" + TGUID::CreateTimebased().AsUuidString(), container);
+                if (!Statistics.ApplyUpdate(*this, modification, errors)) {
+                    return false;
+                }
             }
             return ValidateColumnTableTtl(ttl.GetEnabled(), {}, Columns.GetColumns(), Columns.GetColumnsByName(), errors);
         }

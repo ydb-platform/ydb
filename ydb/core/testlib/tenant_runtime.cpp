@@ -1034,7 +1034,12 @@ void TTenantTestRuntime::Setup(bool createTenantPools)
                 labels[label.GetName()] = label.GetValue();
             }
             labels.emplace("node_id", ToString(i));
-            auto aid = Register(CreateConfigsDispatcher(Extension, labels));
+            auto aid = Register(CreateConfigsDispatcher(
+                    NKikimr::NConsole::TConfigsDispatcherInitInfo {
+                        .InitialConfig = Extension,
+                        .Labels = labels,
+                    }
+                ));
             EnableScheduleForActor(aid, true);
             RegisterService(MakeConfigsDispatcherID(GetNodeId(0)), aid, 0);
         }

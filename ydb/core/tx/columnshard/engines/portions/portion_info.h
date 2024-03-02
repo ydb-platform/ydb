@@ -37,8 +37,23 @@ private:
     ui64 DeprecatedGranuleId = 0;
     YDB_READONLY_DEF(std::vector<TIndexChunk>, Indexes);
 
+    std::vector<TUnifiedBlobId> BlobIds;
+
     TConclusionStatus DeserializeFromProto(const NKikimrColumnShardDataSharingProto::TPortionInfo& proto, const TIndexInfo& info);
 public:
+    const TBlobRange RestoreBlobRange(const TBlobRangeLink16& linkRange) const {
+        return linkRange.RestoreRange(GetBlobId(linkRange.GetBlobIdxVerified()));
+    }
+
+    const TUnifiedBlobId& GetBlobId(const TBlobRangeLink16::TLinkId linkId) const {
+        AFL_VERIFY(linkId < BlobIds.size());
+        return BlobIds[linkId];
+    }
+
+    ui32 GetBlobIdsCount() const {
+        return BlobIds.size();
+    }
+
     THashMap<TChunkAddress, TString> DecodeBlobAddresses(NBlobOperations::NRead::TCompositeReadBlobs&& blobs, const TIndexInfo& indexInfo) const;
 
     const TString& GetColumnStorageId(const ui32 columnId, const TIndexInfo& indexInfo) const;
@@ -75,16 +90,28 @@ public:
         return PathId;
     }
 
-    void RegisterBlobId(const TChunkAddress& address, const TUnifiedBlobId& blobId) {
+    TBlobRangeLink16::TLinkId RegisterBlobId(const TUnifiedBlobId& blobId) {
+        TBlobRangeLink16::TLinkId idx = 0;
+        for (auto&& i : BlobIds) {
+            if (i == blobId) {
+                return idx;
+            }
+            ++idx;
+        }
+        BlobIds.emplace_back(blobId);
+        return idx;
+    }
+
+    void RegisterBlobIdx(const TChunkAddress& address, const TBlobRangeLink16::TLinkId blobIdx) {
         for (auto it = Records.begin(); it != Records.end(); ++it) {
             if (it->ColumnId == address.GetEntityId() && it->Chunk == address.GetChunkIdx()) {
-                it->RegisterBlobId(blobId);
+                it->RegisterBlobIdx(blobIdx);
                 return;
             }
         }
         for (auto it = Indexes.begin(); it != Indexes.end(); ++it) {
             if (it->GetIndexId() == address.GetEntityId() && it->GetChunkIdx() == address.GetChunkIdx()) {
-                it->RegisterBlobId(blobId);
+                it->RegisterBlobIdx(blobIdx);
                 return;
             }
         }
@@ -194,7 +221,6 @@ public:
     bool CanHaveDups() const { return !Produced(); /* || IsInserted(); */ }
     bool CanIntersectOthers() const { return !Valid() || IsInserted() || IsEvicted(); }
     size_t NumChunks() const { return Records.size(); }
-    size_t NumBlobs() const;
 
     TPortionInfo CopyWithFilteredColumns(const THashSet<ui32>& columnIds) const;
 

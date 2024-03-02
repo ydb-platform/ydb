@@ -127,7 +127,7 @@ public:
         portionLocal.Records.swap(filtered);
     }
 
-    bool LoadColumns(const std::function<void(const TPortionInfo&, const TColumnChunkLoadContext&)>& callback) override {
+    bool LoadColumns(const std::function<void(TPortionInfo&, const TColumnChunkLoadContext&)>& callback) override {
         auto& columns = Indices[0].Columns;
         for (auto& [pathId, portions] : columns) {
             for (auto& [portionId, portionLocal] : portions) {

@@ -54,7 +54,7 @@ void TChangesWithAppend::DoWriteIndexOnExecute(NColumnShard::TColumnShard* self,
         THashSet<TUnifiedBlobId> blobsDeactivated;
         for (auto& [_, portionInfo] : PortionsToRemove) {
             for (auto& rec : portionInfo.Records) {
-                blobsDeactivated.insert(rec.BlobRange.BlobId);
+                blobsDeactivated.insert(portionInfo.RestoreBlobRange(rec.BlobRange.GetBlobIdxVerified()));
             }
             self->IncCounter(NColumnShard::COUNTER_RAW_BYTES_DEACTIVATED, portionInfo.RawBytesSum());
         }

@@ -1,5 +1,6 @@
 #include "blob.h"
 #include <ydb/core/tx/columnshard/common/protos/blob_range.pb.h>
+#include <ydb/library/actors/core/log.h>
 
 #include <charconv>
 
@@ -110,6 +111,40 @@ NKikimrColumnShardProto::TBlobRange TBlobRange::SerializeToProto() const {
     result.SetOffset(Offset);
     result.SetSize(Size);
     return result;
+}
+
+NKikimr::TConclusionStatus TBlobRangeLink16::DeserializeFromProto(const NKikimrColumnShardProto::TBlobRangeLink16& proto) {
+    BlobIdx = proto.GetBlobIdx();
+    Offset = proto.GetOffset();
+    Size = proto.GetSize();
+    return TConclusionStatus::Success();
+}
+
+NKikimr::TConclusion<NKikimr::NOlap::TBlobRangeLink16> TBlobRangeLink16::BuildFromProto(const NKikimrColumnShardProto::TBlobRangeLink16& proto) {
+    TBlobRangeLink16 result;
+    auto parsed = result.DeserializeFromProto(proto);
+    if (!parsed) {
+        return parsed;
+    } else {
+        return result;
+    }
+}
+
+NKikimrColumnShardProto::TBlobRangeLink16 TBlobRangeLink16::SerializeToProto() const {
+    NKikimrColumnShardProto::TBlobRangeLink16 result;
+    result.SetBlobIdx(GetBlobIdxVerified());
+    result.SetOffset(Offset);
+    result.SetSize(Size);
+    return result;
+}
+
+ui16 TBlobRangeLink16::GetBlobIdxVerified() const {
+    AFL_VERIFY(BlobIdx);
+    return *BlobIdx;
+}
+
+NKikimr::NOlap::TBlobRange TBlobRangeLink16::RestoreRange(const TUnifiedBlobId& blobId) const {
+    return TBlobRange(blobId, Offset, Size);
 }
 
 }

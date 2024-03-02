@@ -141,7 +141,7 @@ TString TPortionInfo::DebugString(const bool withDetails) const {
     if (IS_TRACE_LOG_ENABLED(NKikimrServices::TX_COLUMNSHARD)) {
         THashSet<TBlobRange> blobRanges;
         for (auto&& i : Records) {
-            blobRanges.emplace(i.BlobRange);
+            blobRanges.emplace(RestoreBlobRange(i.BlobRange));
         }
         sb << "blobs:" << JoinSeq(",", blobRanges) << ";ranges_count:" << blobRanges.size() << ";";
     }
@@ -167,14 +167,6 @@ std::vector<const NKikimr::NOlap::TColumnRecord*> TPortionInfo::GetColumnChunksP
         }
     }
     return result;
-}
-
-size_t TPortionInfo::NumBlobs() const {
-    THashSet<TUnifiedBlobId> blobIds;
-    for (auto&& i : Records) {
-        blobIds.emplace(i.BlobRange.BlobId);
-    }
-    return blobIds.size();
 }
 
 bool TPortionInfo::IsEqualWithSnapshots(const TPortionInfo& item) const {
@@ -345,7 +337,7 @@ THashMap<NKikimr::NOlap::TChunkAddress, TString> TPortionInfo::DecodeBlobAddress
             TString columnStorageId;
             ui32 columnId = 0;
             for (auto&& record : Records) {
-                if (record.GetBlobRange() == b.first) {
+                if (RestoreBlobRange(record.GetBlobRange()) == b.first) {
                     if (columnId != record.GetColumnId()) {
                         columnStorageId = GetColumnStorageId(record.GetColumnId(), indexInfo);
                     }
@@ -361,7 +353,7 @@ THashMap<NKikimr::NOlap::TChunkAddress, TString> TPortionInfo::DecodeBlobAddress
                 continue;
             }
             for (auto&& record : Indexes) {
-                if (record.GetBlobRange() == b.first) {
+                if (RestoreBlobRange(record.GetBlobRange()) == b.first) {
                     if (columnId != record.GetIndexId()) {
                         columnStorageId = indexInfo.GetIndexStorageId(record.GetIndexId());
                     }
@@ -386,11 +378,11 @@ const TString& TPortionInfo::GetColumnStorageId(const ui32 columnId, const TInde
 void TPortionInfo::FillBlobRangesByStorage(THashMap<TString, THashSet<TBlobRange>>& result, const TIndexInfo& indexInfo) const {
     for (auto&& i : Records) {
         const TString& storageId = GetColumnStorageId(i.GetColumnId(), indexInfo);
-        AFL_VERIFY(result[storageId].emplace(i.GetBlobRange()).second)("blob_id", i.GetBlobRange().ToString());
+        AFL_VERIFY(result[storageId].emplace(RestoreBlobRange(i.GetBlobRange())).second)("blob_id", RestoreBlobRange(i.GetBlobRange()).ToString());
     }
     for (auto&& i : Indexes) {
         const TString& storageId = indexInfo.GetIndexStorageId(i.GetIndexId());
-        AFL_VERIFY(result[storageId].emplace(i.GetBlobRange()).second)("blob_id", i.GetBlobRange().ToString());
+        AFL_VERIFY(result[storageId].emplace(RestoreBlobRange(i.GetBlobRange())).second)("blob_id", RestoreBlobRange(i.GetBlobRange()).ToString());
     }
 }
 
@@ -400,17 +392,19 @@ void TPortionInfo::FillBlobRangesByStorage(THashMap<TString, THashSet<TBlobRange
 }
 
 void TPortionInfo::FillBlobIdsByStorage(THashMap<TString, THashSet<TUnifiedBlobId>>& result, const TIndexInfo& indexInfo) const {
-    THashMap<TString, THashSet<TUnifiedBlobId>> local;
+    THashMap<TString, THashSet<TBlobRangeLink16::TLinkId>> local;
     for (auto&& i : Records) {
         const TString& storageId = GetColumnStorageId(i.GetColumnId(), indexInfo);
-        if (local[storageId].emplace(i.BlobRange.BlobId).second) {
-            AFL_VERIFY(result[storageId].emplace(i.GetBlobRange().BlobId).second)("blob_id", i.GetBlobRange().BlobId.ToStringNew());
+        if (local[storageId].emplace(i.GetBlobRange().GetBlobIdxVerified()).second) {
+            auto blobId = GetBlobId(i.GetBlobRange().GetBlobIdxVerified());
+            AFL_VERIFY(result[storageId].emplace(blobId).second)("blob_id", blobId.ToStringNew());
         }
     }
     for (auto&& i : Indexes) {
         const TString& storageId = indexInfo.GetIndexStorageId(i.GetIndexId());
-        if (local[storageId].emplace(i.GetBlobRange().BlobId).second) {
-            AFL_VERIFY(result[storageId].emplace(i.GetBlobRange().BlobId).second)("blob_id", i.GetBlobRange().BlobId.ToStringNew());
+        if (local[storageId].emplace(i.GetBlobRange().GetBlobIdxVerified()).second) {
+            auto blobId = GetBlobId(i.GetBlobRange().GetBlobIdxVerified());
+            AFL_VERIFY(result[storageId].emplace(blobId).second)("blob_id", blobId.ToStringNew());
         }
     }
 }

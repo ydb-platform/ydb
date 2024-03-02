@@ -7,6 +7,7 @@
 
 namespace NKikimrColumnShardProto {
 class TBlobRange;
+class TBlobRangeLink16;
 }
 
 namespace NKikimr::NOlap {
@@ -121,6 +122,52 @@ public:
 
 
 // Describes a range of bytes in a blob. It is used for read requests and for caching.
+struct TBlobRange;
+class TBlobRangeLink16 {
+public:
+    using TLinkId = ui16;
+
+    std::optional<ui16> BlobIdx;
+    ui32 Offset;
+    ui32 Size;
+
+    TBlobRangeLink16() = default;
+
+    ui32 GetSize() const {
+        return Size;
+    }
+
+    ui32 GetOffset() const {
+        return Offset;
+    }
+
+    explicit TBlobRangeLink16(ui32 offset, ui32 size)
+        : Offset(offset)
+        , Size(size) {
+    }
+
+    explicit TBlobRangeLink16(const ui16 blobIdx, ui32 offset, ui32 size)
+        : BlobIdx(blobIdx)
+        , Offset(offset)
+        , Size(size) {
+    }
+
+    ui16 GetBlobIdxVerified() const;
+
+    bool IsValid() const {
+        return !!BlobIdx;
+    }
+
+    NKikimrColumnShardProto::TBlobRangeLink16 SerializeToProto() const;
+    TConclusionStatus DeserializeFromProto(const NKikimrColumnShardProto::TBlobRangeLink16& proto);
+    static TConclusion<TBlobRangeLink16> BuildFromProto(const NKikimrColumnShardProto::TBlobRangeLink16& proto);
+    TString ToString() const {
+        return TStringBuilder() << "[" << BlobIdx << ":" << Offset << ":" << Size << "]";
+    }
+
+    TBlobRange RestoreRange(const TUnifiedBlobId& blobId) const;
+};
+
 struct TBlobRange {
     TUnifiedBlobId BlobId;
     ui32 Offset;
@@ -128,6 +175,10 @@ struct TBlobRange {
 
     const TUnifiedBlobId& GetBlobId() const {
         return BlobId;
+    }
+
+    TBlobRangeLink16 BuildLink(const TBlobRangeLink16::TLinkId idx) const {
+        return TBlobRangeLink16(idx, Offset, Size);
     }
 
     bool IsValid() const {
@@ -179,7 +230,6 @@ struct TBlobRange {
     NKikimrColumnShardProto::TBlobRange SerializeToProto() const;
 
     TConclusionStatus DeserializeFromProto(const NKikimrColumnShardProto::TBlobRange& proto);
-
     static TConclusion<TBlobRange> BuildFromProto(const NKikimrColumnShardProto::TBlobRange& proto);
 };
 

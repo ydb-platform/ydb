@@ -69,7 +69,7 @@ void TOlapStatisticsDescription::Serialize(NKikimrSchemeOp::TColumnTableSchema& 
     }
 }
 
-bool TOlapStatisticsDescription::Validate(const TOlapColumnsDescription& columns, const NKikimrSchemeOp::TColumnTableSchema& opSchema, IErrorCollector& errors) const {
+bool TOlapStatisticsDescription::Validate(const NKikimrSchemeOp::TColumnTableSchema& opSchema, IErrorCollector& errors) const {
     THashSet<TString> usedObjects;
     for (const auto& proto : opSchema.GetStatistics()) {
         if (proto.GetName().empty()) {

@@ -36,10 +36,13 @@ private:
     TPortionMeta Meta;
     ui64 DeprecatedGranuleId = 0;
     YDB_READONLY_DEF(std::vector<TIndexChunk>, Indexes);
-
     TConclusionStatus DeserializeFromProto(const NKikimrColumnShardDataSharingProto::TPortionInfo& proto, const TIndexInfo& info);
 public:
     THashMap<TChunkAddress, TString> DecodeBlobAddresses(NBlobOperations::NRead::TCompositeReadBlobs&& blobs, const TIndexInfo& indexInfo) const;
+
+    void SetStatisticsStorage(NStatistics::TPortionStorage&& storage) {
+        Meta.SetStatisticsStorage(std::move(storage));
+    }
 
     const TString& GetColumnStorageId(const ui32 columnId, const TIndexInfo& indexInfo) const;
 

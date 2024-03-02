@@ -16,15 +16,11 @@ public:
     std::pair<TStatus, TAsyncTransformCallbackFuture> CallbackTransform(const TExprNode::TPtr& input, TExprNode::TPtr& output, TExprContext& ctx) {
         Y_UNUSED(ctx);
         output = input;
-
-        if (State_->PassiveExecution) {
-            return SyncStatus(IGraphTransformer::TStatus::Ok);
-        }
-
         auto future = State_->Gateway->Finalize(
             IYtGateway::TFinalizeOptions(State_->SessionId)
                 .Config(State_->Configuration->Snapshot())
                 .Abort(State_->Types->HiddenMode == EHiddenMode::Force)
+                .DetachSnapshotTxs(State_->PassiveExecution)
         );
         return WrapFuture(future, [](const IYtGateway::TFinalizeResult& res, const TExprNode::TPtr& input, TExprContext& ctx) {
             Y_UNUSED(res);

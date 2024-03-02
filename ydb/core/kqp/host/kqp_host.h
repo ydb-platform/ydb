@@ -112,7 +112,7 @@ TIntrusivePtr<IKqpHost> CreateKqpHost(TIntrusivePtr<IKqpGateway> gateway,
     std::optional<TKqpFederatedQuerySetup> federatedQuerySetup, const TIntrusiveConstPtr<NACLib::TUserToken>& userToken,
     const TMaybe<TString>& applicationName = Nothing(), const NKikimr::NMiniKQL::IFunctionRegistry* funcRegistry = nullptr,
     bool keepConfigChanges = false, bool isInternalCall = false, TKqpTempTablesState::TConstPtr tempTablesState = nullptr,
-    NActors::TActorSystem* actorSystem = nullptr /*take from TLS by default*/, TString sessionId = "");
+    NActors::TActorSystem* actorSystem = nullptr /*take from TLS by default*/);
 
 } // namespace NKqp
 } // namespace NKikimr

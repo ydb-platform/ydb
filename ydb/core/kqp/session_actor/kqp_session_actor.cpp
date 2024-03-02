@@ -170,7 +170,6 @@ public:
         , KqpSettings(kqpSettings)
         , Config(CreateConfig(kqpSettings, workerSettings))
         , Transactions(*Config->_KqpMaxActiveTxPerSession.Get(), TDuration::Seconds(*Config->_KqpTxIdleTimeoutSec.Get()))
-        , ActorSystem(TActivationContext::ActorSystem())
         , QueryServiceConfig(queryServiceConfig)
         , MetadataProviderConfig(metadataProviderConfig)
         , KqpTempTablesAgentActor(kqpTempTablesAgentActor)
@@ -1890,18 +1889,6 @@ public:
         if (isFinal)
             Counters->ReportSessionActorClosedRequest(Settings.DbCounters);
 
-        if (isFinal && FederatedQuerySetup && FederatedQuerySetup->YtGateway) {
-            FederatedQuerySetup->YtGateway->CloseSession(
-                IYtGateway::TCloseSessionOptions(SessionId)
-            ).Subscribe([actorSystem = this->ActorSystem, sessionId = this->SessionId](const NThreading::TFuture<void>& future) {
-                try {
-                    future.GetValue();
-                } catch (...) {
-                    LOG_ERROR_S(*actorSystem, NKikimrServices::KQP_SESSION, "Failed to close yt session with id: " << sessionId << ", exception: " << CurrentExceptionMessage());
-                }
-            });
-        }
-
         if (isFinal) {
             // no longer intrested in any compilation responses
             CompilationCookie->store(false);
@@ -2353,7 +2340,6 @@ private:
     std::optional<TSessionShutdownState> ShutdownState;
     TULIDGenerator UlidGen;
     NTxProxy::TRequestControls RequestControls;
-    TActorSystem* const ActorSystem;
 
     TKqpTempTablesState TempTablesState;
 

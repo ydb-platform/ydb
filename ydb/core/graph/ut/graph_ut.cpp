@@ -282,7 +282,7 @@ Y_UNIT_TEST_SUITE(Graph) {
             TAutoPtr<IEventHandle> handle;
             NGraph::TEvGraph::TEvMetricsResult* response = runtime.GrabEdgeEventRethrow<NGraph::TEvGraph::TEvMetricsResult>(handle);
             Ctest << "Received result: " << response->Record.ShortDebugString() << Endl;
-            UNIT_ASSERT_VALUES_EQUAL(response->Record.TimeSize(), 24);
+            UNIT_ASSERT_VALUES_EQUAL(response->Record.TimeSize(), 25);
             UNIT_ASSERT_VALUES_EQUAL(response->Record.GetTime(0), 559);
             UNIT_ASSERT_VALUES_EQUAL(response->Record.GetTime(1), 569);
             UNIT_ASSERT_VALUES_EQUAL(response->Record.GetTime(2), 574);

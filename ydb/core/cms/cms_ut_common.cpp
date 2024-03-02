@@ -486,8 +486,18 @@ static void SetupServices(TTestActorRuntime &runtime, const TTestEnvOpts &option
     NKikimrConfig::TAppConfig appConfig;
     appConfig.MutableBootstrapConfig()->CopyFrom(TFakeNodeWhiteboardService::BootstrapConfig);
     appConfig.MutableFeatureFlags()->SetEnableCMSRequestPriorities(options.EnableCMSRequestPriorities);
-    runtime.AddLocalService(MakeConfigsDispatcherID(runtime.GetNodeId(0)),
-                            TActorSetupCmd(CreateConfigsDispatcher(appConfig, {}), TMailboxType::Simple, 0), 0);
+    runtime.AddLocalService(
+        MakeConfigsDispatcherID(
+            runtime.GetNodeId(0)),
+            TActorSetupCmd(
+                CreateConfigsDispatcher(
+                    NKikimr::NConsole::TConfigsDispatcherInitInfo {
+                        .InitialConfig = initial,
+                    }),
+                TMailboxType::Simple,
+                0
+            ),
+        0);
 
     runtime.Initialize(app.Unwrap());
     auto dnsConfig = new TDynamicNameserviceConfig();

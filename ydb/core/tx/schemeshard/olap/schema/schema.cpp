@@ -156,7 +156,7 @@ bool TOlapSchema::Validate(const NKikimrSchemeOp::TColumnTableSchema& opSchema, 
         return false;
     }
 
-    if (!Statistics.Validate(Columns, opSchema, errors)) {
+    if (!Statistics.Validate(opSchema, errors)) {
         return false;
     }
 

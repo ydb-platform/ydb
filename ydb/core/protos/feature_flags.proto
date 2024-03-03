@@ -130,4 +130,5 @@ message TFeatureFlags {
     optional bool EnableAddColumsWithDefaults = 115 [ default = false];
     optional bool EnableReplaceIfExistsForExternalEntities = 116 [ default = false];
     optional bool EnableCMSRequestPriorities = 117 [default = false];
+    optional bool EnableKeyvalueLogBatching = 118 [default = true];
 }

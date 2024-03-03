@@ -345,6 +345,8 @@ TDqPhyMapJoin DqMakePhyMapJoin(const TDqJoin& join, const TExprBase& leftInput, 
         .RightLabel(join.RightLabel())
         .JoinType(join.JoinType())
         .JoinKeys(join.JoinKeys())
+        .LeftJoinKeyNames(join.LeftJoinKeyNames())
+        .RightJoinKeyNames(join.RightJoinKeyNames())
         .Done();
 }
 
@@ -730,6 +732,8 @@ TExprBase DqBuildPhyJoin(const TDqJoin& join, bool pushLeftStage, TExprContext& 
             .RightLabel(join.RightLabel())
             .JoinType(join.JoinType())
             .JoinKeys(join.JoinKeys())
+            .LeftJoinKeyNames(join.LeftJoinKeyNames())
+            .RightJoinKeyNames(join.RightJoinKeyNames())
             .Done();
     }
 

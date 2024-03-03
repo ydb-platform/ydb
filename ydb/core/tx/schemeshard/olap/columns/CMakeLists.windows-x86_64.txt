@@ -16,7 +16,8 @@ target_link_libraries(schemeshard-olap-columns PUBLIC
   yutil
   ydb-core-protos
   formats-arrow-dictionary
-  formats-arrow-compression
+  formats-arrow-serializer
+  schemeshard-olap-common
 )
 target_sources(schemeshard-olap-columns PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/core/tx/schemeshard/olap/columns/schema.cpp

@@ -7,7 +7,6 @@
 
 
 add_subdirectory(common)
-add_subdirectory(compression)
 add_subdirectory(dictionary)
 add_subdirectory(hash)
 add_subdirectory(reader)

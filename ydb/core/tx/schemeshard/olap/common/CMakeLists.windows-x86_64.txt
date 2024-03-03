@@ -13,6 +13,7 @@ target_link_libraries(schemeshard-olap-common PUBLIC
   yutil
   ydb-library-ydb_issue
   ydb-core-base
+  ydb-library-aclib
 )
 target_sources(schemeshard-olap-common PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/core/tx/schemeshard/olap/common/common.cpp

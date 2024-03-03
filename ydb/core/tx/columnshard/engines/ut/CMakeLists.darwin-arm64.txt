@@ -37,9 +37,10 @@ target_link_options(ydb-core-tx-columnshard-engines-ut PRIVATE
   -fPIC
 )
 target_sources(ydb-core-tx-columnshard-engines-ut PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/core/tx/columnshard/engines/ut_insert_table.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/tx/columnshard/engines/ut_logs_engine.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/tx/columnshard/engines/ut_program.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/tx/columnshard/engines/ut/ut_insert_table.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/tx/columnshard/engines/ut/ut_logs_engine.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/tx/columnshard/engines/ut/ut_program.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/tx/columnshard/engines/ut/helper.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/tx/columnshard/columnshard_ut_common.cpp
 )
 set_property(

@@ -15,7 +15,7 @@ target_link_libraries(behaviour-tablestore-operations PUBLIC
   contrib-libs-cxxsupp
   yutil
   services-metadata-manager
-  formats-arrow-compression
+  formats-arrow-serializer
   kqp-gateway-utils
   ydb-core-protos
 )
@@ -31,7 +31,7 @@ target_link_libraries(behaviour-tablestore-operations.global PUBLIC
   contrib-libs-cxxsupp
   yutil
   services-metadata-manager
-  formats-arrow-compression
+  formats-arrow-serializer
   kqp-gateway-utils
   ydb-core-protos
 )

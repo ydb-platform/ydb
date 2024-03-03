@@ -98,7 +98,6 @@ target_link_libraries(core-tx-schemeshard PUBLIC
   core-engine-minikql
   ydb-core-external_sources
   core-filestore-core
-  formats-arrow-compression
   core-kesus-tablet
   ydb-core-metering
   ydb-core-persqueue

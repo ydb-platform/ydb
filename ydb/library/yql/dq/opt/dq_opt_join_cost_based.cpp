@@ -57,9 +57,29 @@ struct TEdge {
         }
 
     void BuildCondVectors() {
+        LeftJoinKeys.clear();
+        RightJoinKeys.clear();
+
         for (auto [left, right] : JoinConditions) {
-            LeftJoinKeys.emplace_back(left.AttributeName);
-            RightJoinKeys.emplace_back(right.AttributeName);
+            auto leftKey = left.AttributeName;
+            auto rightKey = right.AttributeName;
+
+            for (size_t i = leftKey.size() - 1; i>0; i--) {
+                if (leftKey[i]=='.') {
+                    leftKey = leftKey.substr(i+1);
+                    break;
+                }
+            }
+
+            for (size_t i = rightKey.size() - 1; i>0; i--) {
+                if (rightKey[i]=='.') {
+                    rightKey = rightKey.substr(i+1);
+                    break;
+                }
+            }
+
+            LeftJoinKeys.emplace_back(leftKey);
+            RightJoinKeys.emplace_back(rightKey);
         }
     }
 
@@ -506,12 +526,19 @@ struct TGraph {
                         AddEdge(TEdge(leftNodeId,rightNodeId,std::make_pair(left, right)));
                     } else {
                         Y_ABORT_UNLESS(maybeEdge1 != Edges.end() && maybeEdge2 != Edges.end());
-                        maybeEdge1->JoinConditions.emplace(left, right);
-                        maybeEdge2->JoinConditions.emplace(right, left);
-                        maybeEdge1->LeftJoinKeys.emplace_back(left.AttributeName);
-                        maybeEdge1->RightJoinKeys.emplace_back(right.AttributeName);
-                        maybeEdge2->LeftJoinKeys.emplace_back(right.AttributeName);
-                        maybeEdge2->RightJoinKeys.emplace_back(left.AttributeName);
+                        auto edge1 = *maybeEdge1;
+                        auto edge2 = *maybeEdge2;
+
+                        edge1.JoinConditions.emplace(left, right);
+                        edge2.JoinConditions.emplace(right, left);
+                        edge1.BuildCondVectors();
+                        edge2.BuildCondVectors();
+
+                        Edges.erase(maybeEdge1);
+                        Edges.erase(maybeEdge2);
+
+                        Edges.emplace(edge1);
+                        Edges.emplace(edge2);
                     }
                 }
             }
@@ -536,6 +563,14 @@ struct TGraph {
                     << p.second.RelName << "."
                     << p.second.AttributeName << "\n";
             }
+            for (auto l : e.LeftJoinKeys) {
+                stream << l << ",";
+            }
+            stream << "=";
+            for (auto r : e.RightJoinKeys) {
+                stream << r << ",";
+            }
+            stream << "\n";
         }
     }
 };
@@ -1215,7 +1250,7 @@ std::shared_ptr<TJoinOptimizerNode> OptimizeSubtree(const std::shared_ptr<TJoinO
         joinGraph.AddEdge(TEdge(fromNode, toNode, cond));
     }
 
-     if (NYql::NLog::YqlLogger().NeedToLog(NYql::NLog::EComponent::ProviderKqp, NYql::NLog::ELevel::TRACE)) {
+     if (NYql::NLog::YqlLogger().NeedToLog(NYql::NLog::EComponent::CoreDq, NYql::NLog::ELevel::TRACE)) {
         std::stringstream str;
         str << "Initial join graph:\n";
         joinGraph.PrintGraph(str);
@@ -1225,7 +1260,7 @@ std::shared_ptr<TJoinOptimizerNode> OptimizeSubtree(const std::shared_ptr<TJoinO
     // make a transitive closure of the graph and reorder the graph via BFS
     joinGraph.ComputeTransitiveClosure(joinConditions);
 
-    if (NYql::NLog::YqlLogger().NeedToLog(NYql::NLog::EComponent::ProviderKqp, NYql::NLog::ELevel::TRACE)) {
+    if (NYql::NLog::YqlLogger().NeedToLog(NYql::NLog::EComponent::CoreDq, NYql::NLog::ELevel::TRACE)) {
         std::stringstream str;
         str << "Join graph after transitive closure:\n";
         joinGraph.PrintGraph(str);
@@ -1244,7 +1279,7 @@ std::shared_ptr<TJoinOptimizerNode> OptimizeSubtree(const std::shared_ptr<TJoinO
     // feed the graph to DPccp algorithm
     auto result = solver.Solve();
 
-    if (NYql::NLog::YqlLogger().NeedToLog(NYql::NLog::EComponent::ProviderKqp, NYql::NLog::ELevel::TRACE)) {
+    if (NYql::NLog::YqlLogger().NeedToLog(NYql::NLog::EComponent::CoreDq, NYql::NLog::ELevel::TRACE)) {
         std::stringstream str;
         str << "Join tree after cost based optimization:\n";
         result->Print(str);

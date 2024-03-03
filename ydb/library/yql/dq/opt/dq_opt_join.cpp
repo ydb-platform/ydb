@@ -167,6 +167,11 @@ TMaybe<TJoinInputDesc> BuildDqJoin(const TCoEquiJoinTuple& joinTuple,
     leftJoinKeys.reserve(joinKeysCount);
     TVector<TCoAtom> rightJoinKeys;
     rightJoinKeys.reserve(joinKeysCount);
+    TVector<TCoAtom> leftJoinKeyNames;
+    leftJoinKeyNames.reserve(joinKeysCount);
+    TVector<TCoAtom> rightJoinKeyNames;
+    rightJoinKeyNames.reserve(joinKeysCount);
+
     auto joinKeysBuilder = Build<TDqJoinKeyTupleList>(ctx, left->Input.Pos());
 
     for (size_t i = 0; i < joinKeysCount; ++i) {
@@ -197,6 +202,9 @@ TMaybe<TJoinInputDesc> BuildDqJoin(const TCoEquiJoinTuple& joinTuple,
 
         leftJoinKeys.emplace_back(leftKey);
         rightJoinKeys.emplace_back(rightKey);
+
+        leftJoinKeyNames.emplace_back(leftColumnAtom);
+        rightJoinKeyNames.emplace_back(rightColumnAtom);
     }
 
     if (EHashJoinMode::Off == mode || EHashJoinMode::Map == mode || !(leftAny || rightAny)) {
@@ -207,6 +215,12 @@ TMaybe<TJoinInputDesc> BuildDqJoin(const TCoEquiJoinTuple& joinTuple,
             .RightLabel(rightTableLabel)
             .JoinType(joinTuple.Type())
             .JoinKeys(joinKeysBuilder.Done())
+            .LeftJoinKeyNames()
+                .Add(leftJoinKeyNames)
+                .Build()
+            .RightJoinKeyNames()
+                .Add(rightJoinKeyNames)
+                .Build()
             .Done();
         return TJoinInputDesc(Nothing(), dqJoin, std::move(resultKeys));
     } else {
@@ -223,6 +237,12 @@ TMaybe<TJoinInputDesc> BuildDqJoin(const TCoEquiJoinTuple& joinTuple,
             .RightLabel(rightTableLabel)
             .JoinType(joinTuple.Type())
             .JoinKeys(joinKeysBuilder.Done())
+            .LeftJoinKeyNames()
+                .Add(leftJoinKeyNames)
+                .Build()
+            .RightJoinKeyNames()
+                .Add(rightJoinKeyNames)
+                .Build()
             .Flags().Add(std::move(flags)).Build()
             .Done();
         return TJoinInputDesc(Nothing(), dqJoin, std::move(resultKeys));
@@ -501,6 +521,8 @@ TExprBase DqRewriteRightJoinToLeft(const TExprBase node, TExprContext& ctx) {
             .Value(RotateRightJoinType(dqJoin.JoinType().Value()))
             .Build()
         .JoinKeys(joinKeysBuilder.Done())
+        .LeftJoinKeyNames(dqJoin.LeftJoinKeyNames())
+        .RightJoinKeyNames(dqJoin.RightJoinKeyNames())
         .Flags(newFlags)
         .Done();
 }
@@ -1285,7 +1307,9 @@ TExprBase DqBuildHashJoin(const TDqJoin& join, EHashJoinMode mode, TExprContext&
                             return parent;
                         })
                     .Seal()
-                    .List(shift + 5).Add(std::move(flags)).Seal()
+                    .List(shift + 5).Add(join.LeftJoinKeyNames().Ref().ChildrenList()).Seal()
+                    .List(shift + 6).Add(join.RightJoinKeyNames().Ref().ChildrenList()).Seal()
+                    .List(shift + 7).Add(std::move(flags)).Seal()
                 .Seal()
                 .Build();
             break;

@@ -202,12 +202,14 @@ protected:
         const google::protobuf::RepeatedPtrField<TYdbIssueMessageType>& message, const TActorContext& ctx)
     {
         Request_->SendResult(status, message);
+        Span_.EndOk();
         this->Die(ctx);
     }
 
     void Reply(Ydb::StatusIds::StatusCode status, const NYql::TIssues& issues, const TActorContext& ctx) {
         Request_->RaiseIssues(issues);
         Request_->ReplyWithYdbStatus(status);
+        Span_.EndOk();
         this->Die(ctx);
     }
 
@@ -219,6 +221,7 @@ protected:
 
     void Reply(Ydb::StatusIds::StatusCode status, const TActorContext& ctx) {
         Request_->ReplyWithYdbStatus(status);
+        Span_.EndOk();
         this->Die(ctx);
     }
 
@@ -226,6 +229,7 @@ protected:
         const google::protobuf::RepeatedPtrField<TYdbIssueMessageType>& message, const TActorContext &ctx)
     {
         Request_->SendResult(status, message);
+        Span_.EndOk();
         this->Die(ctx);
     }
 
@@ -236,6 +240,7 @@ protected:
         const TActorContext& ctx)
     {
         Request_->SendResult(result, status, message);
+        Span_.EndOk();
         this->Die(ctx);
     }
 
@@ -244,12 +249,14 @@ protected:
                          const TResult& result,
                          const TActorContext& ctx) {
         Request_->SendResult(result, status);
+        Span_.EndOk();
         this->Die(ctx);
     }
 
     void ReplyOperation(Ydb::Operations::Operation& operation)
     {
         Request_->SendOperation(operation);
+        Span_.EndOk();
         this->PassAway();
     }
 

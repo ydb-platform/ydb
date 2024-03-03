@@ -8,6 +8,7 @@
 
 #include <ydb/core/grpc_services/local_rpc/local_rpc.h>
 
+#include <ydb/library/wilson_ids/wilson.h>
 #include <ydb/library/yql/public/issue/yql_issue_message.h>
 #include <ydb/library/yql/public/issue/yql_issue.h>
 #include <ydb/public/sdk/cpp/client/resources/ydb_resources.h>
@@ -33,7 +34,9 @@ using TEvDeleteSessionQueryRequest = TGrpcRequestOperationCall<Ydb::Query::Delet
 class TCreateSessionRPC : public TActorBootstrapped<TCreateSessionRPC> {
 public:
     TCreateSessionRPC(IRequestCtx* msg)
-        : Request(msg) {}
+        : Request(msg)
+        , Span(TWilsonGrpc::RequestActor, msg->GetWilsonTraceId(), "CreateSessionRpcActor")
+    {}
 
     void Bootstrap(const TActorContext&) {
         Become(&TCreateSessionRPC::StateWork);
@@ -77,7 +80,7 @@ private:
 
         SetDatabase(ev, *Request);
 
-        Send(NKqp::MakeKqpProxyID(SelfId().NodeId()), ev.Release());
+        Send(NKqp::MakeKqpProxyID(SelfId().NodeId()), ev.Release(), 0, 0, Span.GetTraceId());
     }
 
     void StateWork(TAutoPtr<IEventHandle>& ev) {
@@ -113,6 +116,7 @@ private:
         const auto& record = ev->Get()->Record;
         if (record.GetResourceExhausted()) {
             Request->ReplyWithRpcStatus(grpc::StatusCode::RESOURCE_EXHAUSTED, record.GetError());
+            Span.EndOk();
             Die(ctx);
             return;
         }
@@ -125,6 +129,7 @@ private:
                 Reply(Ydb::StatusIds::INTERNAL_ERROR);
             } else {
                 SendSessionResult(kqpResponse);
+                Span.EndOk();
                 PassAway();
                 return;
             }
@@ -146,16 +151,19 @@ private:
 
     void Reply(Ydb::StatusIds::StatusCode status) {
         Request->ReplyWithYdbStatus(status);
+        Span.EndOk();
         this->PassAway();
     }
 
     void Reply(Ydb::StatusIds::StatusCode status, NProtoBuf::Message* resp) {
         Request->Reply(resp, status);
+        Span.EndOk();
         this->PassAway();
     }
 
 protected:
     std::shared_ptr<IRequestCtx> Request;
+    NWilson::TSpan Span;
 
 private:
     bool ClientLost = false;
@@ -202,7 +210,9 @@ private:
 class TDeleteSessionRPC : public TActorBootstrapped<TDeleteSessionRPC> {
 public:
     TDeleteSessionRPC(IRequestCtx* msg)
-        : Request(msg) {}
+        : Request(msg)
+        , Span(TWilsonGrpc::RequestActor, msg->GetWilsonTraceId(), "DeleteSessionRpcActor")
+    {}
 
     void Bootstrap(const TActorContext&) {
         DeleteSessionImpl();
@@ -220,12 +230,13 @@ private:
             return Reply(Ydb::StatusIds::BAD_REQUEST);
         }
 
-        Send(NKqp::MakeKqpProxyID(SelfId().NodeId()), ev.Release()); //no respose will be sended, so don't wait for anything
+        Send(NKqp::MakeKqpProxyID(SelfId().NodeId()), ev.Release(), 0, 0, Span.GetTraceId()); //no respose will be sended, so don't wait for anything
         Reply(Ydb::StatusIds::SUCCESS);
     }
 
     void Reply(Ydb::StatusIds::StatusCode status) {
         Request->ReplyWithYdbStatus(status);
+        Span.EndOk();
         this->PassAway();
     }
 
@@ -233,6 +244,7 @@ private:
 
 protected:
     std::shared_ptr<IRequestCtx> Request;
+    NWilson::TSpan Span;
 };
 
 class TDeleteSessionTableService : public TDeleteSessionRPC {

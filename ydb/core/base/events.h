@@ -172,7 +172,7 @@ struct TKikimrEvents : TEvents {
         ES_PQ_PARTITION_CHOOSER,
         ES_GRAPH,
         ES_REPLICATION_SERVICE,
-        ES_CHANGE_EXCHANGE,
+        ES_CHANGE_EXCHANGE_NEW,  // rename ES_CHANGE_EXCHANGE to if path with rename of old ES_CHANGE_EXCHANGE to ES_CHANGE_EXCHANGE_DATASHARD is merged
         ES_S3_FILE_QUEUE,
     };
 };

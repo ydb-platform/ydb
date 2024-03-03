@@ -8,6 +8,7 @@
 namespace NKikimrColumnShardProto {
 class TBlobRange;
 class TBlobRangeLink16;
+class TUnifiedBlobId;
 }
 
 namespace NKikimr::NOlap {
@@ -64,6 +65,12 @@ public:
     TUnifiedBlobId& operator = (const TUnifiedBlobId& logoBlobId) = default;
     TUnifiedBlobId(TUnifiedBlobId&& other) = default;
     TUnifiedBlobId& operator = (TUnifiedBlobId&& logoBlobId) = default;
+
+    NKikimrColumnShardProto::TUnifiedBlobId SerializeToProto() const;
+
+    TConclusionStatus DeserializeFromProto(const NKikimrColumnShardProto::TUnifiedBlobId& proto);
+
+    static TConclusion<TUnifiedBlobId> BuildFromProto(const NKikimrColumnShardProto::TUnifiedBlobId& proto);
 
     static TConclusion<TUnifiedBlobId> BuildFromString(const TString& id, const IBlobGroupSelector* dsGroupSelector) {
         TString error;
@@ -162,7 +169,14 @@ public:
     TConclusionStatus DeserializeFromProto(const NKikimrColumnShardProto::TBlobRangeLink16& proto);
     static TConclusion<TBlobRangeLink16> BuildFromProto(const NKikimrColumnShardProto::TBlobRangeLink16& proto);
     TString ToString() const {
-        return TStringBuilder() << "[" << BlobIdx << ":" << Offset << ":" << Size << "]";
+        TStringBuilder result;
+        result << "[";
+        if (BlobIdx) {
+            result << *BlobIdx;
+        } else {
+            result << "NO_BLOB";
+        }
+        return result << ":" << Offset << ":" << Size << "]";
     }
 
     TBlobRange RestoreRange(const TUnifiedBlobId& blobId) const;
@@ -179,6 +193,10 @@ struct TBlobRange {
 
     TBlobRangeLink16 BuildLink(const TBlobRangeLink16::TLinkId idx) const {
         return TBlobRangeLink16(idx, Offset, Size);
+    }
+
+    TBlobRangeLink16 IncorrectLink() const {
+        return TBlobRangeLink16(Offset, Size);
     }
 
     bool IsValid() const {
@@ -321,6 +339,11 @@ IOutputStream& operator <<(IOutputStream& out, const NKikimr::NOlap::TUnifiedBlo
 
 inline
 IOutputStream& operator <<(IOutputStream& out, const NKikimr::NOlap::TBlobRange& blobRange) {
+    return out << blobRange.ToString();
+}
+
+inline
+IOutputStream& operator <<(IOutputStream& out, const NKikimr::NOlap::TBlobRangeLink16& blobRange) {
     return out << blobRange.ToString();
 }
 

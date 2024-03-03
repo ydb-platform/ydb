@@ -170,15 +170,14 @@ bool TColumnEngineForLogs::Load(IDbWrapper& db) {
 bool TColumnEngineForLogs::LoadColumns(IDbWrapper& db) {
     TSnapshot lastSnapshot(0, 0);
     const TIndexInfo* currentIndexInfo = nullptr;
-    if (!db.LoadColumns([&](TPortionInfo& portion, const TColumnChunkLoadContext& loadContext) {
+    if (!db.LoadColumns([&](const TPortionInfo& portion, const TColumnChunkLoadContext& loadContext) {
         if (!currentIndexInfo || lastSnapshot != portion.GetMinSnapshot()) {
             currentIndexInfo = &VersionedIndex.GetSchema(portion.GetMinSnapshot())->GetIndexInfo();
             lastSnapshot = portion.GetMinSnapshot();
         }
         AFL_VERIFY(portion.ValidSnapshotInfo())("details", portion.DebugString());
         // Locate granule and append the record.
-        TColumnRecord rec(portion.RegisterBlobId(loadContext.GetBlobRange().GetBlobId()), loadContext, *currentIndexInfo);
-        GetGranulePtrVerified(portion.GetPathId())->AddColumnRecord(*currentIndexInfo, portion, rec, loadContext.GetPortionMeta());
+        GetGranulePtrVerified(portion.GetPathId())->AddColumnRecordOnLoad(*currentIndexInfo, portion, loadContext, loadContext.GetPortionMeta());
     })) {
         return false;
     }

@@ -30,7 +30,7 @@ public:
 
     void WriteColumn(const TPortionInfo&, const TColumnRecord&) override {}
     void EraseColumn(const TPortionInfo&, const TColumnRecord&) override {}
-    bool LoadColumns(const std::function<void(TPortionInfo&, const TColumnChunkLoadContext&)>&) override { return true; }
+    bool LoadColumns(const std::function<void(const TPortionInfo&, const TColumnChunkLoadContext&)>&) override { return true; }
 
     virtual void WriteIndex(const TPortionInfo& /*portion*/, const TIndexChunk& /*row*/) override {}
     virtual void EraseIndex(const TPortionInfo& /*portion*/, const TIndexChunk& /*row*/) override {}

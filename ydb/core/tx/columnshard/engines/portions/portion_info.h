@@ -90,17 +90,7 @@ public:
         return PathId;
     }
 
-    TBlobRangeLink16::TLinkId RegisterBlobId(const TUnifiedBlobId& blobId) {
-        TBlobRangeLink16::TLinkId idx = 0;
-        for (auto&& i : BlobIds) {
-            if (i == blobId) {
-                return idx;
-            }
-            ++idx;
-        }
-        BlobIds.emplace_back(blobId);
-        return idx;
-    }
+    TBlobRangeLink16::TLinkId RegisterBlobId(const TUnifiedBlobId& blobId);
 
     void RegisterBlobIdx(const TChunkAddress& address, const TBlobRangeLink16::TLinkId blobIdx) {
         for (auto it = Records.begin(); it != Records.end(); ++it) {

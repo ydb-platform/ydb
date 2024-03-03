@@ -139,11 +139,12 @@ TString TPortionInfo::DebugString(const bool withDetails) const {
     }
     sb << "chunks:(" << Records.size() << ");";
     if (IS_TRACE_LOG_ENABLED(NKikimrServices::TX_COLUMNSHARD)) {
-        THashSet<TBlobRange> blobRanges;
+        std::vector<TBlobRangeLink16> blobRanges;
         for (auto&& i : Records) {
-            blobRanges.emplace(RestoreBlobRange(i.BlobRange));
+            blobRanges.emplace_back(i.BlobRange);
         }
         sb << "blobs:" << JoinSeq(",", blobRanges) << ";ranges_count:" << blobRanges.size() << ";";
+        sb << "blob_ids:" << JoinSeq(",", BlobIds) << ";blobs_count:" << BlobIds.size() << ";";
     }
     return sb << ")";
 }
@@ -274,6 +275,10 @@ void TPortionInfo::SerializeToProto(NKikimrColumnShardDataSharingProto::TPortion
     if (!RemoveSnapshot.IsZero()) {
         *proto.MutableRemoveSnapshot() = RemoveSnapshot.SerializeToProto();
     }
+    for (auto&& i : BlobIds) {
+        *proto.AddBlobIds() = i.SerializeToProto();
+    }
+
     *proto.MutableMeta() = Meta.SerializeToProto();
 
     for (auto&& r : Records) {
@@ -288,6 +293,13 @@ void TPortionInfo::SerializeToProto(NKikimrColumnShardDataSharingProto::TPortion
 TConclusionStatus TPortionInfo::DeserializeFromProto(const NKikimrColumnShardDataSharingProto::TPortionInfo& proto, const TIndexInfo& info) {
     PathId = proto.GetPathId();
     Portion = proto.GetPortionId();
+    for (auto&& i : proto.GetBlobIds()) {
+        auto blobId = TUnifiedBlobId::BuildFromProto(i);
+        if (!blobId) {
+            return blobId;
+        }
+        BlobIds.emplace_back(blobId.DetachResult());
+    }
     {
         auto parse = MinSnapshot.DeserializeFromProto(proto.GetMinSnapshot());
         if (!parse) {
@@ -412,6 +424,18 @@ void TPortionInfo::FillBlobIdsByStorage(THashMap<TString, THashSet<TUnifiedBlobI
 void TPortionInfo::FillBlobIdsByStorage(THashMap<TString, THashSet<TUnifiedBlobId>>& result, const TVersionedIndex& index) const {
     auto schema = index.GetSchema(GetMinSnapshot());
     return FillBlobIdsByStorage(result, schema->GetIndexInfo());
+}
+
+TBlobRangeLink16::TLinkId TPortionInfo::RegisterBlobId(const TUnifiedBlobId& blobId) {
+    TBlobRangeLink16::TLinkId idx = 0;
+    for (auto&& i : BlobIds) {
+        if (i == blobId) {
+            return idx;
+        }
+        ++idx;
+    }
+    BlobIds.emplace_back(blobId);
+    return idx;
 }
 
 std::shared_ptr<arrow::ChunkedArray> TPortionInfo::TPreparedColumn::Assemble() const {

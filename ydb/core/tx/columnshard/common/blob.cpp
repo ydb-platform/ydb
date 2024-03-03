@@ -83,6 +83,29 @@ TUnifiedBlobId TUnifiedBlobId::ParseFromString(const TString& str,
     return TUnifiedBlobId();
 }
 
+NKikimr::TConclusionStatus TUnifiedBlobId::DeserializeFromProto(const NKikimrColumnShardProto::TUnifiedBlobId& proto) {
+    Id.DsGroup = proto.GetDsGroup();
+    TStringBuf sb(proto.GetBlobId().data(), proto.GetBlobId().size());
+    Id.BlobId = TLogoBlobID::FromBinary(sb);
+    return TConclusionStatus::Success();
+}
+
+NKikimr::TConclusion<NKikimr::NOlap::TUnifiedBlobId> TUnifiedBlobId::BuildFromProto(const NKikimrColumnShardProto::TUnifiedBlobId& proto) {
+    TUnifiedBlobId result;
+    auto parse = result.DeserializeFromProto(proto);
+    if (!parse) {
+        return parse;
+    }
+    return result;
+}
+
+NKikimrColumnShardProto::TUnifiedBlobId TUnifiedBlobId::SerializeToProto() const {
+    NKikimrColumnShardProto::TUnifiedBlobId result;
+    result.SetDsGroup(Id.DsGroup);
+    result.SetBlobId(Id.BlobId.AsBinaryString());
+    return result;
+}
+
 NKikimr::TConclusionStatus TBlobRange::DeserializeFromProto(const NKikimrColumnShardProto::TBlobRange& proto) {
     auto parsed = TUnifiedBlobId::BuildFromString(proto.GetBlobId(), nullptr);
     if (!parsed) {

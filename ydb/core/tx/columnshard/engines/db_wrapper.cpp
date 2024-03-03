@@ -67,7 +67,7 @@ void TDbWrapper::EraseColumn(const NOlap::TPortionInfo& portion, const TColumnRe
         portion.GetMinSnapshot().GetPlanStep(), portion.GetMinSnapshot().GetTxId(), portion.GetPortion(), row.Chunk).Delete();
 }
 
-bool TDbWrapper::LoadColumns(const std::function<void(NOlap::TPortionInfo&, const TColumnChunkLoadContext&)>& callback) {
+bool TDbWrapper::LoadColumns(const std::function<void(const NOlap::TPortionInfo&, const TColumnChunkLoadContext&)>& callback) {
     NIceDb::TNiceDb db(Database);
     using IndexColumns = NColumnShard::Schema::IndexColumns;
     auto rowset = db.Table<IndexColumns>().Prefix(0).Select();

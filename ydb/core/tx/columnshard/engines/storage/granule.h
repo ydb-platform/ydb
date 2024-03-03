@@ -8,6 +8,7 @@
 namespace NKikimr::NOlap {
 
 class TGranulesStorage;
+class TColumnChunkLoadContext;
 
 class TDataClassSummary: public NColumnShard::TBaseGranuleDataClassSummary {
 private:
@@ -267,7 +268,9 @@ public:
             ;
     }
 
-    void AddColumnRecord(const TIndexInfo& indexInfo, const TPortionInfo& portion, const TColumnRecord& rec, const NKikimrTxColumnShard::TIndexPortionMeta* portionMeta);
+    std::shared_ptr<TPortionInfo> UpsertPortionOnLoad(const TPortionInfo& portion);
+
+    void AddColumnRecordOnLoad(const TIndexInfo& indexInfo, const TPortionInfo& portion, const TColumnChunkLoadContext& rec, const NKikimrTxColumnShard::TIndexPortionMeta* portionMeta);
 
     const THashMap<ui64, std::shared_ptr<TPortionInfo>>& GetPortions() const {
         return Portions;

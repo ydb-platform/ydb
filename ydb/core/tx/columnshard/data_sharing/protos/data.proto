@@ -31,6 +31,7 @@ message TPortionInfo {
     optional NKikimrTxColumnShard.TIndexPortionMeta Meta = 5;
     repeated TColumnRecord Records = 6;
     repeated TIndexChunk Indexes = 7;
+    repeated NKikimrColumnShardProto.TUnifiedBlobId BlobIds = 8;
 }
 
 message TPathIdData {

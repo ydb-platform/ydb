@@ -1,5 +1,10 @@
 package NKikimrColumnShardProto;
 
+message TUnifiedBlobId {
+    optional uint32 DsGroup = 1;
+    optional string BlobId = 2;
+}
+
 message TBlobRange {
     optional string BlobId = 1;
     optional uint64 Offset = 2;

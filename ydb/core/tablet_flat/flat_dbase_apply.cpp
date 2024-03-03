@@ -243,7 +243,7 @@ bool TSchemeModifier::DropTable(ui32 id)
 
 bool TSchemeModifier::AddColumn(ui32 tid, const TString &name, ui32 id, ui32 type, bool notNull, TCell null)
 {
-    Y_ABORT_UNLESS(type != (ui32)NScheme::NTypeIds::Pg, "No pg type data");
+    Y_ABORT_UNLESS(type < NScheme::NTypeIds::PgFamily, "No pg type data");
     return AddPgColumn(tid, name, id, type, 0, "", notNull, null);
 }
 
@@ -256,7 +256,7 @@ bool TSchemeModifier::AddPgColumn(ui32 tid, const TString &name, ui32 id, ui32 t
 
     NScheme::TTypeInfo typeInfo;
     if (pgType != 0) {
-        Y_ABORT_UNLESS((NScheme::TTypeId)type == NScheme::NTypeIds::Pg);
+        Y_ABORT_UNLESS((NScheme::TTypeId)type > NScheme::NTypeIds::PgFamily);
         auto* typeDesc = NPg::TypeDescFromPgTypeId(pgType);
         Y_ABORT_UNLESS(typeDesc);
         typeInfo = NScheme::TTypeInfo(type, typeDesc);

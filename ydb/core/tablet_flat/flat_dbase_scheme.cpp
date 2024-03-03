@@ -101,7 +101,7 @@ TAlter& TAlter::DropTable(ui32 id)
 
 TAlter& TAlter::AddColumn(ui32 table, const TString& name, ui32 id, ui32 type, bool notNull, TCell null)
 {
-    Y_ABORT_UNLESS(type != (ui32)NScheme::NTypeIds::Pg, "No pg type data");
+    Y_ABORT_UNLESS(type < NScheme::NTypeIds::PgFamily, "No pg type data");
     return AddPgColumn(table, name, id, type, 0, "", notNull, null);
 }
 

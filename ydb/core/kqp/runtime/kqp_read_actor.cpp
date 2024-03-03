@@ -431,7 +431,7 @@ public:
             KeyColumnTypes.push_back(
                 NScheme::TTypeInfo(
                     (NScheme::TTypeId)typeId,
-                    (typeId == NScheme::NTypeIds::Pg) ?
+                    (typeId > NScheme::NTypeIds::PgFamily) ?
                         NPg::TypeDescFromPgTypeId(
                             Settings->GetKeyColumnTypeInfos(i).GetPgTypeId()
                         ) : nullptr));
@@ -1430,7 +1430,7 @@ private:
         auto typeId = info.GetType();
         return NScheme::TTypeInfo(
             (NScheme::TTypeId)typeId,
-            (typeId == NScheme::NTypeIds::Pg) ?
+            (typeId > NScheme::NTypeIds::PgFamily) ?
                 NPg::TypeDescFromPgTypeId(
                     info.GetTypeInfo().GetPgTypeId()
                 ) : nullptr);

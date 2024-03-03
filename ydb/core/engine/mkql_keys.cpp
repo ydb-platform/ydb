@@ -42,9 +42,9 @@ bool ExtractKeyData(TRuntimeNode valueNode, bool isOptional, NUdf::TUnboxedValue
 NScheme::TTypeInfo UnpackTypeInfo(NKikimr::NMiniKQL::TType *type, bool &isOptional) {
     isOptional = false;
     if (type->GetKind() == TType::EKind::Pg) {
-        auto pgType = static_cast<TPgType*>(type);
-        auto pgTypeId = pgType->GetTypeId();
-        return NScheme::TTypeInfo(NScheme::NTypeIds::Pg, NPg::TypeDescFromPgTypeId(pgTypeId));
+        const auto pgType = static_cast<TPgType*>(type);
+        const auto pgTypeId = pgType->GetTypeId();
+        return NScheme::TTypeInfo(NPg::TypeIdFromPgTypeId(pgTypeId), NPg::TypeDescFromPgTypeId(pgTypeId));
     } else {
         auto dataType = UnpackOptionalData(type, isOptional);
         return NScheme::TTypeInfo(dataType->GetSchemeType());
@@ -281,7 +281,7 @@ TCell MakeCell(NScheme::TTypeInfo type, const NUdf::TUnboxedValuePod& value,
 
     TString binary;
     NYql::NUdf::TStringRef ref;
-    bool isPg = (type.GetTypeId() == NScheme::NTypeIds::Pg);
+    bool isPg = (type.GetTypeId() > NScheme::NTypeIds::PgFamily);
     if (isPg) {
         auto typeDesc = type.GetTypeDesc();
         if (typmod != -1 && NPg::TypeDescNeedsCoercion(typeDesc)) {

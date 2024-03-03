@@ -92,7 +92,7 @@ class TYtUploader: public TActorBootstrapped<TYtUploader> {
 
         for (const auto& [_, column] : columns) {
             // TODO: support pg types
-            Y_ABORT_UNLESS(column.Type.GetTypeId() != NScheme::NTypeIds::Pg, "pg types are not supported");
+            Y_ABORT_UNLESS(column.Type.GetTypeId() < NScheme::NTypeIds::PgFamily, "pg types are not supported");
             schema.emplace_back(column.Name, ConvertType(column.Type.GetTypeId()));
         }
 
@@ -465,7 +465,7 @@ class TYtBuffer: public IBuffer {
         int i = 0;
         for (const auto& [tag, column] : columns) {
             // TODO: support pg types
-            Y_ABORT_UNLESS(column.Type.GetTypeId() != NScheme::NTypeIds::Pg, "pg types are not supported");
+            Y_ABORT_UNLESS(column.Type.GetTypeId() < NScheme::NTypeIds::PgFamily, "pg types are not supported");
             result[tag] = {column.Type.GetTypeId(), i++};
         }
 

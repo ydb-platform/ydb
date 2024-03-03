@@ -398,6 +398,10 @@ IOptimizerNew* MakePgOptimizerNew(IProviderContext& pctx, TExprContext& ctx, con
 
 namespace NKikimr::NPg {
 
+ui32 TypeIdFromPgTypeId(ui32 pgTypeId) {
+    return 0x3000U + pgTypeId;
+}
+
 ui32 PgTypeIdFromTypeDesc(void* typeDesc) {
     Y_UNUSED(typeDesc);
     return 0;

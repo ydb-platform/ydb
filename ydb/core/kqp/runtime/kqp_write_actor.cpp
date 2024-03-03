@@ -467,7 +467,7 @@ private:
                     column.GetId(),
                     NScheme::TTypeInfo {
                         static_cast<NScheme::TTypeId>(column.GetTypeId()),
-                        column.GetTypeId() == NScheme::NTypeIds::Pg
+                        column.GetTypeId() > NScheme::NTypeIds::PgFamily
                             ? NPg::TypeDescFromPgTypeId(column.GetTypeInfo().GetPgTypeId())
                             : nullptr
                     },

@@ -31,7 +31,7 @@ TVector<TKqpTableColumn> GetKqpColumns(const TKikimrTableMetadata& table, const 
         if (columnData) {
             columnId = columnData->Id;
             columnType = columnData->TypeInfo.GetTypeId();
-            if (columnType == NScheme::NTypeIds::Pg) {
+            if (columnType > NScheme::NTypeIds::PgFamily) {
                 columnTypeDesc = columnData->TypeInfo.GetTypeDesc();
             }
             notNull = columnData->NotNull;
@@ -76,7 +76,7 @@ NMiniKQL::TType* CreateColumnType(const NKikimr::NScheme::TTypeInfo& typeInfo, c
     auto typeId = typeInfo.GetTypeId();
     if (typeId == NUdf::TDataType<NUdf::TDecimal>::Id) {
         return ctx.PgmBuilder().NewDecimalType(22, 9);
-    } else if (typeId == NKikimr::NScheme::NTypeIds::Pg) {
+    } else if (typeId > NKikimr::NScheme::NTypeIds::PgFamily) {
         return ctx.PgmBuilder().NewPgType(NPg::PgTypeIdFromTypeDesc(typeInfo.GetTypeDesc()));
     } else {
         return ctx.PgmBuilder().NewDataType(typeId);
@@ -86,7 +86,7 @@ NMiniKQL::TType* CreateColumnType(const NKikimr::NScheme::TTypeInfo& typeInfo, c
 void ValidateColumnType(const TTypeAnnotationNode* type, NKikimr::NScheme::TTypeId columnTypeId) {
     YQL_ENSURE(type);
     bool isOptional;
-    if (columnTypeId == NKikimr::NScheme::NTypeIds::Pg) {
+    if (columnTypeId > NKikimr::NScheme::NTypeIds::PgFamily) {
         const TPgExprType* pgType = nullptr;
         YQL_ENSURE(IsPg(type, pgType));
     } else {

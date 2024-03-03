@@ -479,7 +479,22 @@ public:
         CONVERT(ActorId,        String);
         CONVERT(StepOrderId,    String);
 
-        case NScheme::NTypeIds::Pg:
+        case NScheme::NTypeIds::PgBool:
+        case NScheme::NTypeIds::PgBytea:
+        case NScheme::NTypeIds::PgChar:
+        case NScheme::NTypeIds::PgInt8:
+        case NScheme::NTypeIds::PgInt2:
+        case NScheme::NTypeIds::PgInt4:
+        case NScheme::NTypeIds::PgText:
+        case NScheme::NTypeIds::PgFloat4:
+        case NScheme::NTypeIds::PgFloat8:
+        case NScheme::NTypeIds::PgVarchar:
+        case NScheme::NTypeIds::PgDate:
+        case NScheme::NTypeIds::PgTime:
+        case NScheme::NTypeIds::PgTimemstamp:
+        case NScheme::NTypeIds::PgInterval:
+        case NScheme::NTypeIds::PgDecimal:
+        case NScheme::NTypeIds::PgCstring:
             // TODO: support pg types
             throw yexception() << "Unsupported pg type";
 
@@ -543,7 +558,7 @@ size_t AddValue(const TMutableColumnPtr& column, const TCell& cell, NScheme::TTy
         AddNull(column);
     } else {
         auto typeId = type.GetTypeId();
-        if (typeId == NScheme::NTypeIds::Pg) {
+        if (typeId > NScheme::NTypeIds::PgFamily) {
             // TODO: support pg types
             Y_ABORT_UNLESS(false, "pg types are not supported");
         } else if (typeId == NScheme::NTypeIds::Decimal) {

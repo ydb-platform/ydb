@@ -147,8 +147,8 @@ IComputationNode* WrapKqpDeleteRows(TCallable& callable, const TComputationNodeF
         }
 
         if (memberType->IsPg()) {
-            auto pgType = AS_TYPE(TPgType, memberType);
-            rowTypes[i] = NScheme::TTypeInfo(NScheme::NTypeIds::Pg, NPg::TypeDescFromPgTypeId(pgType->GetTypeId()));
+            const auto pgType = AS_TYPE(TPgType, memberType);
+            rowTypes[i] = NScheme::TTypeInfo(NPg::TypeIdFromPgTypeId(pgType->GetTypeId()), NPg::TypeDescFromPgTypeId(pgType->GetTypeId()));
         } else {
             rowTypes[i] = NScheme::TTypeInfo(AS_TYPE(TDataType, memberType)->GetSchemeType());
         }

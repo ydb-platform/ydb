@@ -1099,7 +1099,22 @@ bool CheckValueData(NScheme::TTypeInfo type, const TCell& cell, TString& err) {
         // Uuid value was verified at parsing time
         break;
 
-    case NScheme::NTypeIds::Pg:
+    case NScheme::NTypeIds::PgBool:
+    case NScheme::NTypeIds::PgBytea:
+    case NScheme::NTypeIds::PgChar:
+    case NScheme::NTypeIds::PgInt8:
+    case NScheme::NTypeIds::PgInt2:
+    case NScheme::NTypeIds::PgInt4:
+    case NScheme::NTypeIds::PgText:
+    case NScheme::NTypeIds::PgFloat4:
+    case NScheme::NTypeIds::PgFloat8:
+    case NScheme::NTypeIds::PgVarchar:
+    case NScheme::NTypeIds::PgDate:
+    case NScheme::NTypeIds::PgTime:
+    case NScheme::NTypeIds::PgTimemstamp:
+    case NScheme::NTypeIds::PgInterval:
+    case NScheme::NTypeIds::PgDecimal:
+    case NScheme::NTypeIds::PgCstring:
         // no pg validation here
         break;
 
@@ -1194,7 +1209,22 @@ bool CellFromProtoVal(NScheme::TTypeInfo type, i32 typmod, const Ydb::Value* vp,
         c = TCell((const char*)&valInPool, sizeof(valInPool));
         break;
     }
-    case NScheme::NTypeIds::Pg : {
+    case NScheme::NTypeIds::PgBool:
+    case NScheme::NTypeIds::PgBytea:
+    case NScheme::NTypeIds::PgChar:
+    case NScheme::NTypeIds::PgInt8:
+    case NScheme::NTypeIds::PgInt2:
+    case NScheme::NTypeIds::PgInt4:
+    case NScheme::NTypeIds::PgText:
+    case NScheme::NTypeIds::PgFloat4:
+    case NScheme::NTypeIds::PgFloat8:
+    case NScheme::NTypeIds::PgVarchar:
+    case NScheme::NTypeIds::PgDate:
+    case NScheme::NTypeIds::PgTime:
+    case NScheme::NTypeIds::PgTimemstamp:
+    case NScheme::NTypeIds::PgInterval:
+    case NScheme::NTypeIds::PgDecimal:
+    case NScheme::NTypeIds::PgCstring: {
         TString binary;
         bool isText = false;
         TString text = val.Gettext_value();

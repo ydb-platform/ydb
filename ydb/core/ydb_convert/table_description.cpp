@@ -597,7 +597,7 @@ bool ExtractColumnTypeInfo(NScheme::TTypeInfo& outTypeInfo, TString& outTypeMod,
                 error = TStringBuilder() << "Invalid PG type name: " << typeName;
                 return false;
             }
-            outTypeInfo = NScheme::TTypeInfo(NScheme::NTypeIds::Pg, desc);
+            outTypeInfo = NScheme::TTypeInfo(NPg::TypeIdFromPgTypeId(NPg::PgTypeIdFromTypeDesc(desc)), desc);
             outTypeMod = pgType.type_modifier();
             return true;
         }

@@ -21,7 +21,7 @@ namespace NYql {
 
 static Ydb::Type CreateYdbType(const NKikimr::NScheme::TTypeInfo& typeInfo, bool notNull) {
     Ydb::Type ydbType;
-    if (typeInfo.GetTypeId() == NKikimr::NScheme::NTypeIds::Pg) {
+    if (typeInfo.GetTypeId() > NKikimr::NScheme::NTypeIds::PgFamily) {
         auto* typeDesc = typeInfo.GetTypeDesc();
         auto* pg = ydbType.mutable_pg_type();
         pg->set_type_name(NKikimr::NPg::PgTypeNameFromTypeDesc(typeDesc));

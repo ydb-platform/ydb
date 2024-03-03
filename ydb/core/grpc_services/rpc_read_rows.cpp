@@ -170,7 +170,7 @@ public:
                     return false;
                 }
 
-                const auto typeInRequest = NScheme::TTypeInfo(NScheme::NTypeIds::Pg, typeDesc);
+                const auto typeInRequest = NScheme::TTypeInfo(NPg::TypeIdFromPgTypeId(NPg::PgTypeIdFromTypeDesc(typeDesc)), typeDesc);
                 if (typeInRequest != colInfo.PType) {
                     errorMessage = Sprintf("Type mismatch for column %s: expected %s, got %s",
                                            name.c_str(), NScheme::TypeName(colInfo.PType).c_str(),
@@ -571,7 +571,7 @@ public:
         };
 
         const auto getTypeFromColMeta = [&](const auto &colMeta) {
-            if (colMeta.Type.GetTypeId() == NScheme::NTypeIds::Pg) {
+            if (colMeta.Type.GetTypeId() > NScheme::NTypeIds::PgFamily) {
                 return NYdb::TTypeBuilder().Pg(getPgTypeFromColMeta(colMeta)).Build();
             } else {
                 return NYdb::TTypeBuilder()
@@ -601,7 +601,7 @@ public:
                     );
                     const auto& cell = row[i];
                     vb.AddMember(colMeta.Name);
-                    if (colMeta.Type.GetTypeId() == NScheme::NTypeIds::Pg)
+                    if (colMeta.Type.GetTypeId() > NScheme::NTypeIds::PgFamily)
                     {
                         const NPg::TConvertResult& pgResult = NPg::PgNativeTextFromNativeBinary(cell.AsBuf(), colMeta.Type.GetTypeDesc());
                         if (pgResult.Error) {

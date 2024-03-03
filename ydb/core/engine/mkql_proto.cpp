@@ -153,7 +153,22 @@ bool CellsFromTuple(const NKikimrMiniKQL::TType* tupleType,
             }
             break;
         }
-        case NScheme::NTypeIds::Pg:
+        case NScheme::NTypeIds::PgBool:
+        case NScheme::NTypeIds::PgBytea:
+        case NScheme::NTypeIds::PgChar:
+        case NScheme::NTypeIds::PgInt8:
+        case NScheme::NTypeIds::PgInt2:
+        case NScheme::NTypeIds::PgInt4:
+        case NScheme::NTypeIds::PgText:
+        case NScheme::NTypeIds::PgFloat4:
+        case NScheme::NTypeIds::PgFloat8:
+        case NScheme::NTypeIds::PgVarchar:
+        case NScheme::NTypeIds::PgDate:
+        case NScheme::NTypeIds::PgTime:
+        case NScheme::NTypeIds::PgTimemstamp:
+        case NScheme::NTypeIds::PgInterval:
+        case NScheme::NTypeIds::PgDecimal:
+        case NScheme::NTypeIds::PgCstring:
         {
             if (v.HasBytes()) {
                 c = TCell(v.GetBytes().data(), v.GetBytes().size());
@@ -290,7 +305,22 @@ bool CellToValue(NScheme::TTypeInfo type, const TCell& c, NKikimrMiniKQL::TValue
         val.MutableOptional()->SetText(c.Data(), c.Size());
         break;
 
-    case NScheme::NTypeIds::Pg: {
+    case NScheme::NTypeIds::PgBool:
+    case NScheme::NTypeIds::PgBytea:
+    case NScheme::NTypeIds::PgChar:
+    case NScheme::NTypeIds::PgInt8:
+    case NScheme::NTypeIds::PgInt2:
+    case NScheme::NTypeIds::PgInt4:
+    case NScheme::NTypeIds::PgText:
+    case NScheme::NTypeIds::PgFloat4:
+    case NScheme::NTypeIds::PgFloat8:
+    case NScheme::NTypeIds::PgVarchar:
+    case NScheme::NTypeIds::PgDate:
+    case NScheme::NTypeIds::PgTime:
+    case NScheme::NTypeIds::PgTimemstamp:
+    case NScheme::NTypeIds::PgInterval:
+    case NScheme::NTypeIds::PgDecimal:
+    case NScheme::NTypeIds::PgCstring: {
         auto convert = NPg::PgNativeTextFromNativeBinary(c.AsBuf(), type.GetTypeDesc());
         if (convert.Error) {
             errStr = *convert.Error;

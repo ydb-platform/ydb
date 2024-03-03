@@ -6694,6 +6694,55 @@ Y_UNIT_TEST_SUITE(TPersQueueTest) {
         }
     }
 
+    Y_UNIT_TEST(DisableWrongSettings) {
+        NPersQueue::TTestServer server;
+        server.EnableLogs({NKikimrServices::PQ_READ_PROXY, NKikimrServices::BLACKBOX_VALIDATOR });
+        server.EnableLogs({NKikimrServices::PERSQUEUE}, NActors::NLog::EPriority::PRI_INFO);
+        TString topicFullName = "rt3.dc1--acc--topic1";
+        auto driver = SetupTestAndGetDriver(server, topicFullName, 3);
+
+        std::shared_ptr<grpc::Channel> Channel_;
+        std::unique_ptr<Ydb::Topic::V1::TopicService::Stub> TopicStubP_;
+        {
+            Channel_ = grpc::CreateChannel("localhost:" + ToString(server.GrpcPort), grpc::InsecureChannelCredentials());
+            TopicStubP_ = Ydb::Topic::V1::TopicService::NewStub(Channel_);
+        }
+
+        {
+            grpc::ClientContext rcontext1;
+            auto writeStream1 = TopicStubP_->StreamWrite(&rcontext1);
+            UNIT_ASSERT(writeStream1);
+            Ydb::Topic::StreamWriteMessage::FromClient req;
+            Ydb::Topic::StreamWriteMessage::FromServer resp;
+
+            req.mutable_init_request()->set_path("acc/topic1");
+            req.mutable_init_request()->set_message_group_id("some-group");
+            if (!writeStream1->Write(req)) {
+                ythrow yexception() << "write fail";
+            }
+            UNIT_ASSERT(writeStream1->Read(&resp));
+            Cerr << "===Got response: " << resp.ShortDebugString() << Endl;
+            UNIT_ASSERT(resp.status() == Ydb::StatusIds::BAD_REQUEST);
+        }
+        {
+            grpc::ClientContext rcontext1;
+            auto writeStream1 = TopicStubP_->StreamWrite(&rcontext1);
+            UNIT_ASSERT(writeStream1);
+            Ydb::Topic::StreamWriteMessage::FromClient req;
+            Ydb::Topic::StreamWriteMessage::FromServer resp;
+
+            req.mutable_init_request()->set_path("acc/topic1");
+            req.mutable_init_request()->set_message_group_id("some-group");
+            req.mutable_init_request()->set_producer_id("producer");
+            if (!writeStream1->Write(req)) {
+                ythrow yexception() << "write fail";
+            }
+            UNIT_ASSERT(writeStream1->Read(&resp));
+            Cerr << "===Got response: " << resp.ShortDebugString() << Endl;
+            UNIT_ASSERT(resp.status() == Ydb::StatusIds::BAD_REQUEST);
+        }
+    }
+
     Y_UNIT_TEST(DisableDeduplication) {
         NPersQueue::TTestServer server;
         TString topicFullName = "rt3.dc1--topic1";

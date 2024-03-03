@@ -186,6 +186,10 @@ class TPartitionWriter: public TActorBootstrapped<TPartitionWriter>, private TRl
         return InitResult(reason, std::move(response));
     }
 
+    void Retry() {
+        Schedule(TDuration::MilliSeconds(100), new TEvents::TEvWakeup());
+    }
+
     template <typename... Args>
     void SendWriteResult(Args&&... args) {
         Send(Client, new TEvPartitionWriter::TEvWriteResponse(Opts.SessionId, Opts.TxId, std::forward<Args>(args)...));
@@ -229,15 +233,13 @@ class TPartitionWriter: public TActorBootstrapped<TPartitionWriter>, private TRl
     }
 
     void HandleWriteId(NKqp::TEvKqp::TEvQueryResponse::TPtr& ev, const TActorContext& ctx) {
-        Y_UNUSED(ctx);
-
         auto& record = ev->Get()->Record.GetRef();
         switch (record.GetYdbStatus()) {
         case Ydb::StatusIds::SUCCESS:
             break;
         case Ydb::StatusIds::SESSION_BUSY:
-            Schedule(TDuration::MilliSeconds(100), new TEvents::TEvWakeup());
-            return;
+        case Ydb::StatusIds::PRECONDITION_FAILED: // see TKqpSessionActor::ReplyBusy
+            return Retry();
         default:
             return InitResult("Invalid KQP session", record);
         }

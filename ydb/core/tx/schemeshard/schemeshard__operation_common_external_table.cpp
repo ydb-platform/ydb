@@ -53,7 +53,7 @@ bool Validate(const TString& sourceType, const NKikimrSchemeOp::TExternalTableDe
 
 Ydb::Type CreateYdbType(const NScheme::TTypeInfo& typeInfo, bool notNull) {
     Ydb::Type ydbType;
-    if (typeInfo.GetTypeId() == NScheme::NTypeIds::Pg) {
+    if (typeInfo.GetTypeId() > NScheme::NTypeIds::PgFamily) {
         auto* typeDesc = typeInfo.GetTypeDesc();
         auto* pg = ydbType.mutable_pg_type();
         pg->set_type_name(NPg::PgTypeNameFromTypeDesc(typeDesc));
@@ -129,7 +129,7 @@ std::pair<TExternalTableInfo::TPtr, TMaybe<TString>> CreateExternalTable(
                 errStr = Sprintf("Type '%s' specified for column '%s' is not supported by storage", col.GetType().data(), colName.data());
                 return std::make_pair(nullptr, errStr);
             }
-            typeInfo = NScheme::TTypeInfo(NScheme::NTypeIds::Pg, typeDesc);
+            typeInfo = NScheme::TTypeInfo(NPg::TypeIdFromPgTypeId(NPg::PgTypeIdFromTypeDesc(typeDesc)), typeDesc);
         }
 
         ui32 colId = col.HasId() ? col.GetId() : nextColumnId;

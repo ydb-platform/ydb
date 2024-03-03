@@ -19,7 +19,22 @@ TBytesStatistics GetUnboxedValueSize(const NUdf::TUnboxedValue& value, const NSc
         return { sizeof(NUdf::TUnboxedValue), 8 }; // Special value for NULL elements
     }
     switch (type.GetTypeId()) {
-        case NTypeIds::Pg:
+        case NTypeIds::PgBool:
+        case NTypeIds::PgBytea:
+        case NTypeIds::PgChar:
+        case NTypeIds::PgInt8:
+        case NTypeIds::PgInt2:
+        case NTypeIds::PgInt4:
+        case NTypeIds::PgText:
+        case NTypeIds::PgFloat4:
+        case NTypeIds::PgFloat8:
+        case NTypeIds::PgVarchar:
+        case NTypeIds::PgDate:
+        case NTypeIds::PgTime:
+        case NTypeIds::PgTimemstamp:
+        case NTypeIds::PgInterval:
+        case NTypeIds::PgDecimal:
+        case NTypeIds::PgCstring:
         {
             return {
                 sizeof(NUdf::TUnboxedValue),
@@ -398,7 +413,22 @@ TBytesStatistics WriteColumnValuesFromArrowImpl(TAccessor editAccessor,
             Y_VERIFY_DEBUG_S(false, "Unsupported (deprecated) type: " << NScheme::TypeName(columnType.GetTypeId()));
             return WriteColumnValuesFromArrowSpecImpl<TElementAccessor<arrow::FixedSizeBinaryArray, NUdf::TStringRef>>(editAccessor, batch, columnIndex, columnPtr, columnType);
         }
-        case NTypeIds::Pg:
+        case NTypeIds::PgBool:
+        case NTypeIds::PgBytea:
+        case NTypeIds::PgChar:
+        case NTypeIds::PgInt8:
+        case NTypeIds::PgInt2:
+        case NTypeIds::PgInt4:
+        case NTypeIds::PgText:
+        case NTypeIds::PgFloat4:
+        case NTypeIds::PgFloat8:
+        case NTypeIds::PgVarchar:
+        case NTypeIds::PgDate:
+        case NTypeIds::PgTime:
+        case NTypeIds::PgTimemstamp:
+        case NTypeIds::PgInterval:
+        case NTypeIds::PgDecimal:
+        case NTypeIds::PgCstring:
             // TODO: support pg types
             YQL_ENSURE(false, "Unsupported pg type at column " << columnIndex);
 

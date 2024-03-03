@@ -253,8 +253,22 @@ inline int CompareTypedCells(const TCell& a, const TCell& b, NScheme::TTypeInfoO
             return va.first == vb.first ? 0 : ((va.first < vb.first) != type.IsDescending() ? -1 : 1);
         return (va.second < vb.second) != type.IsDescending() ? -1 : 1;
     }
-
-    case NKikimr::NScheme::NTypeIds::Pg:
+    case NScheme::NTypeIds::PgBool:
+    case NScheme::NTypeIds::PgBytea:
+    case NScheme::NTypeIds::PgChar:
+    case NScheme::NTypeIds::PgInt8:
+    case NScheme::NTypeIds::PgInt2:
+    case NScheme::NTypeIds::PgInt4:
+    case NScheme::NTypeIds::PgText:
+    case NScheme::NTypeIds::PgFloat4:
+    case NScheme::NTypeIds::PgFloat8:
+    case NScheme::NTypeIds::PgVarchar:
+    case NScheme::NTypeIds::PgDate:
+    case NScheme::NTypeIds::PgTime:
+    case NScheme::NTypeIds::PgTimemstamp:
+    case NScheme::NTypeIds::PgInterval:
+    case NScheme::NTypeIds::PgDecimal:
+    case NScheme::NTypeIds::PgCstring:
     {
         auto typeDesc = type.GetTypeDesc();
         Y_ABORT_UNLESS(typeDesc, "no pg type descriptor");
@@ -352,14 +366,28 @@ inline ui64 GetValueHash(NScheme::TTypeInfo info, const TCell& cell) {
     case NYql::NProto::TypeIds::Uuid:
         return ComputeHash(TStringBuf{cell.Data(), cell.Size()});
 
-    default:
-        break;
-    }
-
-    if (typeId == NKikimr::NScheme::NTypeIds::Pg) {
-        auto typeDesc = info.GetTypeDesc();
+    case NScheme::NTypeIds::PgBool:
+    case NScheme::NTypeIds::PgBytea:
+    case NScheme::NTypeIds::PgChar:
+    case NScheme::NTypeIds::PgInt8:
+    case NScheme::NTypeIds::PgInt2:
+    case NScheme::NTypeIds::PgInt4:
+    case NScheme::NTypeIds::PgText:
+    case NScheme::NTypeIds::PgFloat4:
+    case NScheme::NTypeIds::PgFloat8:
+    case NScheme::NTypeIds::PgVarchar:
+    case NScheme::NTypeIds::PgDate:
+    case NScheme::NTypeIds::PgTime:
+    case NScheme::NTypeIds::PgTimemstamp:
+    case NScheme::NTypeIds::PgInterval:
+    case NScheme::NTypeIds::PgDecimal:
+    case NScheme::NTypeIds::PgCstring: {
+        const auto typeDesc = info.GetTypeDesc();
         Y_ABORT_UNLESS(typeDesc, "no pg type descriptor");
         return NPg::PgNativeBinaryHash(cell.Data(), cell.Size(), typeDesc);
+    }
+    default:
+        break;
     }
 
     Y_DEBUG_ABORT_UNLESS(false, "Type not supported for user columns: %d", typeId);

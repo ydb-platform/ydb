@@ -34,4 +34,21 @@ enum TypeIds {
     Interval64 = 0x0043;
     Decimal = 0x1301;
     DyNumber = 0x1302;
+
+    PgBool = 0x3010;
+    PgBytea = 0x3011;
+    PgChar = 0x3012;
+    PgInt8 = 0x3014;
+    PgInt2 = 0x3015;
+    PgInt4 = 0x3017;
+    PgText = 0x3019;
+    PgFloat4 = 0x32BC;
+    PgFloat8 = 0x32BD;
+    PgVarchar = 0x3413;
+    PgDate = 0x343A;
+    PgTime = 0x343B;
+    PgTimestamp = 0x345A;
+    PgInterval = 0x34A2;
+    PgDecimal = 0x36A4;
+    PgCstring = 0x38E3;
 }

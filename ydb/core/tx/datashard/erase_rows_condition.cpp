@@ -133,7 +133,7 @@ public:
         Y_ABORT_UNLESS(Pos < scheme->Tags().size());
 
         Type = columnInfo->TypeInfo.GetTypeId();
-        Y_ABORT_UNLESS(Type != NScheme::NTypeIds::Pg, "pg types are not supported");
+        Y_ABORT_UNLESS(Type < NScheme::NTypeIds::PgFamily, "pg types are not supported");
     }
 
     bool Check(const NTable::TRowState& row) const override {

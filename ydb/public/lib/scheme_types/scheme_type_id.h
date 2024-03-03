@@ -59,7 +59,23 @@ static constexpr TTypeId DyNumber = NYql::NProto::DyNumber;
 
 static constexpr TTypeId Decimal = NYql::NProto::Decimal;
 
-static constexpr TTypeId Pg = 0x3000;
+static constexpr TTypeId PgFamily = 0x3000;
+static constexpr TTypeId PgBool = NYql::NProto::PgBool;
+static constexpr TTypeId PgBytea = NYql::NProto::PgBytea;
+static constexpr TTypeId PgChar = NYql::NProto::PgChar;
+static constexpr TTypeId PgInt8 = NYql::NProto::PgInt8;
+static constexpr TTypeId PgInt2 = NYql::NProto::PgInt2;
+static constexpr TTypeId PgInt4 = NYql::NProto::PgInt4;
+static constexpr TTypeId PgText = NYql::NProto::PgText;
+static constexpr TTypeId PgFloat4 = NYql::NProto::PgFloat4;
+static constexpr TTypeId PgFloat8 = NYql::NProto::PgFloat8;
+static constexpr TTypeId PgVarchar = NYql::NProto::PgVarchar;
+static constexpr TTypeId PgDate = NYql::NProto::PgDate;
+static constexpr TTypeId PgTime = NYql::NProto::PgTime;
+static constexpr TTypeId PgTimemstamp = NYql::NProto::PgTimestamp;
+static constexpr TTypeId PgInterval = NYql::NProto::PgInterval;
+static constexpr TTypeId PgDecimal = NYql::NProto::PgDecimal;
+static constexpr TTypeId PgCstring = NYql::NProto::PgCstring;
 
 static constexpr TTypeId YqlIds[] = {
     Int8,
@@ -141,6 +157,22 @@ const char *TypeName(TTypeId typeId) {
         case NTypeIds::Decimal:         return "Decimal";
         case NTypeIds::DyNumber:        return "DyNumber";
         case NTypeIds::Uuid:            return "Uuid";
+        case NTypeIds::PgBool:          return "PgBool";
+        case NTypeIds::PgBytea:         return "PgBytea";
+        case NTypeIds::PgChar:          return "PgChar";
+        case NTypeIds::PgInt8:          return "PgInt8";
+        case NTypeIds::PgInt2:          return "PgInt2";
+        case NTypeIds::PgInt4:          return "PgInt4";
+        case NTypeIds::PgText:          return "PgText";
+        case NTypeIds::PgFloat4:        return "PgFloat4";
+        case NTypeIds::PgFloat8:        return "PgFloat8";
+        case NTypeIds::PgVarchar:       return "PgVarchar";
+        case NTypeIds::PgDate:          return "PgDate";
+        case NTypeIds::PgTime:          return "PgTime";
+        case NTypeIds::PgTimemstamp:    return "PgTimemstamp";
+        case NTypeIds::PgInterval:      return "PgInterval";
+        case NTypeIds::PgDecimal:       return "PgDecimal";
+        case NTypeIds::PgCstring:       return "PgCstring";
         default:                        return "Unknown";
     }
 }

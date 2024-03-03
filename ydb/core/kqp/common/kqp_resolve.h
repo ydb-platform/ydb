@@ -46,7 +46,7 @@ struct TTableConstInfo : public TAtomicRefCount<TTableConstInfo> {
         NSharding::TShardingBase::TColumn column;
         column.Id = phyColumn.GetId().GetId();
 
-        if (phyColumn.GetTypeId() != NScheme::NTypeIds::Pg) {
+        if (phyColumn.GetTypeId() < NScheme::NTypeIds::PgFamily) {
             column.Type = NScheme::TTypeInfo(phyColumn.GetTypeId());
         } else {
             column.Type = NScheme::TTypeInfo(phyColumn.GetTypeId(),

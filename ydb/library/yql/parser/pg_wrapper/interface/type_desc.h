@@ -5,6 +5,7 @@
 
 namespace NKikimr::NPg {
 
+ui32 TypeIdFromPgTypeId(ui32 pgTypeId);
 ui32 PgTypeIdFromTypeDesc(void* typeDesc);
 void* TypeDescFromPgTypeId(ui32 pgTypeId);
 

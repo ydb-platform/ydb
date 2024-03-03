@@ -181,7 +181,7 @@ void FillTable(const TKikimrTableMetadata& tableMeta, THashSet<TStringBuf>&& col
             phyColumn.MutableDefaultFromLiteral()->CopyFrom(column->DefaultFromLiteral);
         }
         phyColumn.SetNotNull(column->NotNull);
-        if (column->TypeInfo.GetTypeId() == NScheme::NTypeIds::Pg) {
+        if (column->TypeInfo.GetTypeId() > NScheme::NTypeIds::PgFamily) {
             phyColumn.SetPgTypeName(NPg::PgTypeNameFromTypeDesc(column->TypeInfo.GetTypeDesc()));
         }
     }
@@ -1012,7 +1012,7 @@ private:
                 keyColumnProto->SetName(columnName);
                 keyColumnProto->SetTypeId(columnMeta->TypeInfo.GetTypeId());
 
-                if (columnMeta->TypeInfo.GetTypeId() == NScheme::NTypeIds::Pg) {
+                if (columnMeta->TypeInfo.GetTypeId() > NScheme::NTypeIds::PgFamily) {
                     auto& typeInfo = *keyColumnProto->MutableTypeInfo();
                     typeInfo.SetPgTypeId(NPg::PgTypeIdFromTypeDesc(columnMeta->TypeInfo.GetTypeDesc()));
                     typeInfo.SetPgTypeMod(columnMeta->TypeMod);
@@ -1029,7 +1029,7 @@ private:
                 columnProto->SetName(columnName);
                 columnProto->SetTypeId(columnMeta->TypeInfo.GetTypeId());
 
-                if (columnMeta->TypeInfo.GetTypeId() == NScheme::NTypeIds::Pg) {
+                if (columnMeta->TypeInfo.GetTypeId() > NScheme::NTypeIds::PgFamily) {
                     auto& typeInfo = *columnProto->MutableTypeInfo();
                     typeInfo.SetPgTypeId(NPg::PgTypeIdFromTypeDesc(columnMeta->TypeInfo.GetTypeDesc()));
                     typeInfo.SetPgTypeMod(columnMeta->TypeMod);

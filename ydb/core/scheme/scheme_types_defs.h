@@ -59,7 +59,22 @@ inline ui32 GetFixedSize(TTypeInfo typeInfo) {
 #define KIKIMR_TYPE_MACRO(typeEnum, typeType, ...) case NTypeIds::typeEnum: return typeType::GetFixedSize();
     KIKIMR_FOREACH_TYPE(KIKIMR_TYPE_MACRO)
 #undef KIKIMR_TYPE_MACRO
-    case NTypeIds::Pg:
+    case NTypeIds::PgBool:
+    case NTypeIds::PgBytea:
+    case NTypeIds::PgChar:
+    case NTypeIds::PgInt8:
+    case NTypeIds::PgInt2:
+    case NTypeIds::PgInt4:
+    case NTypeIds::PgText:
+    case NTypeIds::PgFloat4:
+    case NTypeIds::PgFloat8:
+    case NTypeIds::PgVarchar:
+    case NTypeIds::PgDate:
+    case NTypeIds::PgTime:
+    case NTypeIds::PgTimemstamp:
+    case NTypeIds::PgInterval:
+    case NTypeIds::PgDecimal:
+    case NTypeIds::PgCstring:
         return NPg::TypeDescGetStoredSize(typeInfo.GetTypeDesc());
     default:
         return 0;

@@ -170,7 +170,22 @@ Y_FORCE_INLINE bool AddCell(TOutValue& row, NScheme::TTypeInfo type, const TCell
         val.set_text_value(*number);
         break;
     }
-    case NScheme::NTypeIds::Pg: {
+    case NScheme::NTypeIds::PgBool:
+    case NScheme::NTypeIds::PgBytea:
+    case NScheme::NTypeIds::PgChar:
+    case NScheme::NTypeIds::PgInt8:
+    case NScheme::NTypeIds::PgInt2:
+    case NScheme::NTypeIds::PgInt4:
+    case NScheme::NTypeIds::PgText:
+    case NScheme::NTypeIds::PgFloat4:
+    case NScheme::NTypeIds::PgFloat8:
+    case NScheme::NTypeIds::PgVarchar:
+    case NScheme::NTypeIds::PgDate:
+    case NScheme::NTypeIds::PgTime:
+    case NScheme::NTypeIds::PgTimemstamp:
+    case NScheme::NTypeIds::PgInterval:
+    case NScheme::NTypeIds::PgDecimal:
+    case NScheme::NTypeIds::PgCstring: {
         auto result = NPg::PgNativeTextFromNativeBinary(cell.AsBuf(), type.GetTypeDesc());
         if (result.Error) {
             err = Sprintf("Failed to add cell to Ydb::Value: %s", (*result.Error).c_str());
@@ -336,7 +351,7 @@ private:
             auto typeInfoMod = NScheme::TypeInfoModFromProtoColumnType(col.GetTypeId(),
                 col.HasTypeInfo() ? &col.GetTypeInfo() : nullptr);
 
-            if (col.GetTypeId() == NScheme::NTypeIds::Pg) {
+            if (col.GetTypeId() > NScheme::NTypeIds::PgFamily) {
                 auto* pg = meta->mutable_type()->mutable_pg_type();
                 auto* typeDesc = typeInfoMod.TypeInfo.GetTypeDesc();
                 pg->set_type_name(NPg::PgTypeNameFromTypeDesc(typeDesc));

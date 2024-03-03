@@ -30,7 +30,22 @@ inline bool IsAllowedKeyType(NScheme::TTypeInfo typeInfo) {
         case NScheme::NTypeIds::Double:
         case NScheme::NTypeIds::JsonDocument:
             return false;
-        case NScheme::NTypeIds::Pg:
+        case NScheme::NTypeIds::PgBool:
+        case NScheme::NTypeIds::PgBytea:
+        case NScheme::NTypeIds::PgChar:
+        case NScheme::NTypeIds::PgInt8:
+        case NScheme::NTypeIds::PgInt2:
+        case NScheme::NTypeIds::PgInt4:
+        case NScheme::NTypeIds::PgText:
+        case NScheme::NTypeIds::PgFloat4:
+        case NScheme::NTypeIds::PgFloat8:
+        case NScheme::NTypeIds::PgVarchar:
+        case NScheme::NTypeIds::PgDate:
+        case NScheme::NTypeIds::PgTime:
+        case NScheme::NTypeIds::PgTimemstamp:
+        case NScheme::NTypeIds::PgInterval:
+        case NScheme::NTypeIds::PgDecimal:
+        case NScheme::NTypeIds::PgCstring:
             return NPg::TypeDescIsComparable(typeInfo.GetTypeDesc());
         default:
             return true;

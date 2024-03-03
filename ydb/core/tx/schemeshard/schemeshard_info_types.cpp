@@ -169,7 +169,7 @@ TTableInfo::TAlterDataPtr TTableInfo::CreateAlterData(
                     errStr = Sprintf("Type '%s' specified for column '%s', but support for pg types is disabled (EnableTablePgTypes feature flag is off)", col.GetType().data(), colName.data());
                     return nullptr;
                 }
-                typeInfo = NScheme::TTypeInfo(NScheme::NTypeIds::Pg, typeDesc);
+                typeInfo = NScheme::TTypeInfo(NPg::TypeIdFromPgTypeId(NPg::PgTypeIdFromTypeDesc(typeDesc)), typeDesc);
                 typeMod = NPg::TypeModFromPgTypeName(typeName);
             }
 

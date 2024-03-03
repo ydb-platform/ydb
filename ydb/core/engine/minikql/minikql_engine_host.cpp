@@ -493,7 +493,7 @@ public:
                     typeIds.reserve(tuple.ColumnCount);
                     for (ui32 i = 0; i < tuple.ColumnCount; ++i) {
                         auto typeId = tuple.Types[i].GetTypeId();
-                        Y_ENSURE(typeId != NScheme::NTypeIds::Pg, "pg types are not supported");
+                        Y_ENSURE(typeId < NScheme::NTypeIds::PgFamily, "pg types are not supported");
                         typeIds.push_back(typeId);
                     }
                     firstKey.AppendNoAlias((const char*)typeIds.data(), tuple.ColumnCount * sizeof(NScheme::TTypeId));
@@ -1086,7 +1086,7 @@ NUdf::TUnboxedValue GetCellValue(const TCell& cell, NScheme::TTypeInfo type) {
             break;
     }
 
-    if (type.GetTypeId() == NScheme::NTypeIds::Pg) {
+    if (type.GetTypeId() > NScheme::NTypeIds::PgFamily) {
         return NYql::NCommon::PgValueFromNativeBinary(cell.AsBuf(), NPg::PgTypeIdFromTypeDesc(type.GetTypeDesc()));
     }
 

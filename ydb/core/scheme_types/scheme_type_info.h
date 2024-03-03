@@ -13,7 +13,7 @@ public:
         : TypeId(typeId)
         , TypeDesc(typeDesc)
     {
-        if (TypeId != NTypeIds::Pg) {
+        if (TypeId < NTypeIds::PgFamily) {
             Y_ABORT_UNLESS(!TypeDesc);
         }
     }

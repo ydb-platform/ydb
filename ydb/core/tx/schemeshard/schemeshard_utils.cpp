@@ -492,7 +492,7 @@ bool ExtractTypes(const NKikimrSchemeOp::TTableDescription& baseTableDescr, TCol
                 explain += TStringBuilder() << "Type '" << column.GetType() << "' specified for column '" << columnName << "' is not supported by storage";
                 return false;
             }
-            columnTypes[columnName] = NScheme::TTypeInfo(NScheme::NTypeIds::Pg, typeDesc);
+            columnTypes[columnName] = NScheme::TTypeInfo(NPg::TypeIdFromPgTypeId(NPg::PgTypeIdFromTypeDesc(typeDesc)), typeDesc);
         } else {
             columnTypes[columnName] = NScheme::TTypeInfo(type->GetTypeId());
         }
@@ -524,7 +524,7 @@ bool IsCompatibleKeyTypes(
         auto& columnName = item.first;
         auto typeId = item.second.GetTypeId();
 
-        if (typeId == NScheme::NTypeIds::Pg) {
+        if (typeId > NScheme::NTypeIds::PgFamily) {
             if (!item.second.GetTypeDesc()) {
                 explain += TStringBuilder() << "unknown pg type for column '" << columnName << "'";
                 return false;

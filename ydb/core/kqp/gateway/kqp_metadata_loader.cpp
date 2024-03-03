@@ -122,7 +122,7 @@ void IndexProtoToMetadata(const TIndexProto& indexes, NYql::TKikimrTableMetadata
 
 TString GetTypeName(const NScheme::TTypeInfoMod& typeInfoMod) {
     TString typeName;
-    if (typeInfoMod.TypeInfo.GetTypeId() != NScheme::NTypeIds::Pg) {
+    if (typeInfoMod.TypeInfo.GetTypeId() < NScheme::NTypeIds::PgFamily) {
         YQL_ENSURE(NScheme::TryGetTypeName(typeInfoMod.TypeInfo.GetTypeId(), typeName));
     } else {
         YQL_ENSURE(typeInfoMod.TypeInfo.GetTypeDesc(), "no pg type descriptor");

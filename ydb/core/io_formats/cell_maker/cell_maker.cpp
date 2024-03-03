@@ -295,7 +295,22 @@ bool MakeCell(TCell& cell, TStringBuf value, NScheme::TTypeInfo type, TMemoryPoo
         return TCellMaker<TMaybe<TString>, TStringBuf>::Make(cell, value, pool, err, &DyNumberToStringBuf);
     case NScheme::NTypeIds::Decimal:
         return TCellMaker<NYql::NDecimal::TInt128, std::pair<ui64, ui64>>::Make(cell, value, pool, err, &Int128ToPair);
-    case NScheme::NTypeIds::Pg:
+    case NScheme::NTypeIds::PgBool:
+    case NScheme::NTypeIds::PgBytea:
+    case NScheme::NTypeIds::PgChar:
+    case NScheme::NTypeIds::PgInt8:
+    case NScheme::NTypeIds::PgInt2:
+    case NScheme::NTypeIds::PgInt4:
+    case NScheme::NTypeIds::PgText:
+    case NScheme::NTypeIds::PgFloat4:
+    case NScheme::NTypeIds::PgFloat8:
+    case NScheme::NTypeIds::PgVarchar:
+    case NScheme::NTypeIds::PgDate:
+    case NScheme::NTypeIds::PgTime:
+    case NScheme::NTypeIds::PgTimemstamp:
+    case NScheme::NTypeIds::PgInterval:
+    case NScheme::NTypeIds::PgDecimal:
+    case NScheme::NTypeIds::PgCstring:
         return TCellMaker<NPg::TConvertResult, TStringBuf>::Make(cell, value, pool, err, &PgToStringBuf, type.GetTypeDesc());
     default:
         return false;
@@ -389,7 +404,22 @@ bool CheckCellValue(const TCell& cell, NScheme::TTypeInfo type) {
     case NScheme::NTypeIds::String2m:
     case NScheme::NTypeIds::JsonDocument: // checked at parsing time
     case NScheme::NTypeIds::DyNumber: // checked at parsing time
-    case NScheme::NTypeIds::Pg:       // checked at parsing time
+    case NScheme::NTypeIds::PgBool:
+    case NScheme::NTypeIds::PgBytea:
+    case NScheme::NTypeIds::PgChar:
+    case NScheme::NTypeIds::PgInt8:
+    case NScheme::NTypeIds::PgInt2:
+    case NScheme::NTypeIds::PgInt4:
+    case NScheme::NTypeIds::PgText:
+    case NScheme::NTypeIds::PgFloat4:
+    case NScheme::NTypeIds::PgFloat8:
+    case NScheme::NTypeIds::PgVarchar:
+    case NScheme::NTypeIds::PgDate:
+    case NScheme::NTypeIds::PgTime:
+    case NScheme::NTypeIds::PgTimemstamp:
+    case NScheme::NTypeIds::PgInterval:
+    case NScheme::NTypeIds::PgDecimal:
+    case NScheme::NTypeIds::PgCstring:
         return true;
     case NScheme::NTypeIds::Date:
         return cell.AsValue<ui16>() < NUdf::MAX_DATE;

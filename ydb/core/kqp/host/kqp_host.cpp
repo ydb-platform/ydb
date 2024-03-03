@@ -1474,11 +1474,11 @@ private:
         state->CredentialsFactory = FederatedQuerySetup->CredentialsFactory;
         state->Configuration->WriteThroughDqIntegration = true;
         state->Configuration->AllowAtomicUploadCommit = queryType == EKikimrQueryType::Script;
-
         state->Configuration->Init(FederatedQuerySetup->S3GatewayConfig, TypesCtx);
+        state->Gateway = FederatedQuerySetup->HttpGateway;
 
-        auto dataSource = NYql::CreateS3DataSource(state, FederatedQuerySetup->HttpGateway);
-        auto dataSink = NYql::CreateS3DataSink(state, FederatedQuerySetup->HttpGateway);
+        auto dataSource = NYql::CreateS3DataSource(state);
+        auto dataSink = NYql::CreateS3DataSink(state);
 
         TypesCtx->AddDataSource(NYql::S3ProviderName, std::move(dataSource));
         TypesCtx->AddDataSink(NYql::S3ProviderName, std::move(dataSink));

@@ -24,7 +24,8 @@ std::vector<std::shared_ptr<IPortionDataChunk>> IPortionColumnChunk::DoInternalS
     return result;
 }
 
-void IPortionColumnChunk::DoAddIntoPortion(const TBlobRange& bRange, TPortionInfo& portionInfo) const {
+void IPortionColumnChunk::DoAddIntoPortionBeforeBlob(const TBlobRangeLink16& bRange, TPortionInfo& portionInfo) const {
+    AFL_VERIFY(!bRange.IsValid());
     TColumnRecord rec(GetChunkAddress(), bRange, BuildSimpleChunkMeta());
     portionInfo.AppendOneChunkColumn(std::move(rec));
 }

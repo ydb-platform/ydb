@@ -62,7 +62,7 @@ void TPortionDataSource::NeedFetchColumns(const std::set<ui32>& columnIds,
             if (!itFilter.IsBatchForSkip(c->GetMeta().GetNumRowsVerified())) {
                 auto reading = blobsAction.GetReading(Schema->GetIndexInfo().GetColumnStorageId(c->GetColumnId(), Portion->GetMeta().GetTierName()));
                 reading->SetIsBackgroundProcess(false);
-                reading->AddRange(c->BlobRange);
+                reading->AddRange(Portion->RestoreBlobRange(c->BlobRange));
                 ++fetchedChunks;
             } else {
                 nullBlocks.emplace(c->GetAddress(), c->GetMeta().GetNumRowsVerified());
@@ -114,7 +114,7 @@ bool TPortionDataSource::DoStartFetchingIndexes(const std::shared_ptr<IDataSourc
             indexIds.emplace(i.GetIndexId());
             auto readAction = action.GetReading(Schema->GetIndexInfo().GetIndexStorageId(i.GetIndexId()));
             readAction->SetIsBackgroundProcess(false);
-            readAction->AddRange(i.GetBlobRange());
+            readAction->AddRange(Portion->RestoreBlobRange(i.GetBlobRange()));
         }
         if (indexes->GetIndexIdsSet().size() != indexIds.size()) {
             return false;

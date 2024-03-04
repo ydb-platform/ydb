@@ -210,8 +210,9 @@ void TMemoryBackend::DownsampleData(TInstant now, const TAggregateSettings& sett
 
     TMetricsValues values;
     TInstant prevTimestamp = {};
+    const TInstant itStopTs = itStop->Timestamp;
 
-    for (auto it = itStart; it->Timestamp < itStop->Timestamp; ++it) {
+    for (auto it = itStart; it->Timestamp < itStopTs; ++it) {
         TDuration step = it->Timestamp - prevTimestamp;
         if (prevTimestamp == TInstant() || step >= settings.SampleSize) {
             prevTimestamp = it->Timestamp;
@@ -219,8 +220,8 @@ void TMemoryBackend::DownsampleData(TInstant now, const TAggregateSettings& sett
         }
         values.Clear();
         values.Values.resize(MetricsIndex.size());
-        TInstant stop = std::min(TInstant::FromValue(prevTimestamp.GetValue() / settings.SampleSize.GetValue() * settings.SampleSize.GetValue()) + settings.SampleSize, itStop->Timestamp);
-        auto point = std::prev(it);
+        TInstant stop = std::min(TInstant::FromValue(prevTimestamp.GetValue() / settings.SampleSize.GetValue() * settings.SampleSize.GetValue()) + settings.SampleSize, itStopTs);
+        const auto point = std::prev(it);
         auto jt = point;
         for (; jt->Timestamp < stop; ++jt) {
             values.Timestamps.emplace_back(jt->Timestamp);
@@ -244,7 +245,7 @@ void TMemoryBackend::DownsampleData(TInstant now, const TAggregateSettings& sett
         }
         prevTimestamp = it->Timestamp;
     }
-    settings.StartTimestamp = itStop->Timestamp;
+    settings.StartTimestamp = itStopTs;
     BLOG_D("Downsampled " << before - MetricsValues.size() << " logical rows");
 }
 

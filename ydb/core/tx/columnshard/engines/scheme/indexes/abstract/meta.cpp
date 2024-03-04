@@ -10,7 +10,8 @@
 
 namespace NKikimr::NOlap::NIndexes {
 
-void TPortionIndexChunk::DoAddIntoPortion(const TBlobRange& bRange, TPortionInfo& portionInfo) const {
+void TPortionIndexChunk::DoAddIntoPortionBeforeBlob(const TBlobRangeLink16& bRange, TPortionInfo& portionInfo) const {
+    AFL_VERIFY(!bRange.IsValid());
     portionInfo.AddIndex(TIndexChunk(GetEntityId(), GetChunkIdx(), RecordsCount, RawBytes, bRange));
 }
 

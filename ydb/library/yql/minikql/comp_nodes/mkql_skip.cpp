@@ -139,7 +139,7 @@ public:
     EProcessResult DoProcess(ui64& skipCount, TComputationContext&, EFetchResult fetchRes, NUdf::TUnboxedValue*const*) const {
         if (fetchRes == EFetchResult::One && skipCount) {
             skipCount--;
-            return EProcessResult::Fetch;
+            return EProcessResult::Again;
         }
         return static_cast<EProcessResult>(fetchRes);
     }

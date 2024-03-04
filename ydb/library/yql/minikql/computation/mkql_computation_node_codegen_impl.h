@@ -19,7 +19,7 @@ protected:
         Finish = -1,
         Yield = 0,
         One = 1,
-        Fetch = std::numeric_limits<i32>::max()
+        Again = std::numeric_limits<i32>::max()
     };
 
 private:
@@ -63,8 +63,8 @@ public:
             state = NUdf::TUnboxedValuePod();
             InitStateWrapper(state, ctx);
         }
-        EProcessResult res = EProcessResult::Fetch;
-        while (res == EProcessResult::Fetch) {
+        EProcessResult res = EProcessResult::Again;
+        while (res == EProcessResult::Again) {
             NUdf::TUnboxedValue*const* input = nullptr;
             if constexpr (StateKind == EValueRepresentation::Embedded) {
                 input = static_cast<const TDerived*>(this)->PrepareInput(*static_cast<TState*>(state.GetRawPtr()), ctx, output);
@@ -133,7 +133,7 @@ public:
                 return value;
             });
         }
-        const auto brk = CmpInst::Create(Instruction::ICmp, ICmpInst::ICMP_NE, processResVal, ConstantInt::get(processResVal->getType(), static_cast<i32>(EProcessResult::Fetch)), "brk", block);
+        const auto brk = CmpInst::Create(Instruction::ICmp, ICmpInst::ICMP_NE, processResVal, ConstantInt::get(processResVal->getType(), static_cast<i32>(EProcessResult::Again)), "brk", block);
         BranchInst::Create(done, loop, brk, block);
 
         block = done;

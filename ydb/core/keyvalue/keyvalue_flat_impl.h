@@ -85,8 +85,8 @@ protected:
                     return true;
                 }
                 Self.State.UpdateResourceMetrics(ctx);
-                auto &alter = txc.DB.Alter();
-                ApplyLogBatching(ctx, alter);
+                // auto &alter = txc.DB.Alter();
+                // ApplyLogBatching(ctx, alter);
             }
             Self.State.InitExecute(Self.TabletID(), KeyValueActorId, txc.Generation, db, ctx, Self.Info());
             LOG_DEBUG_S(ctx, NKikimrServices::KEYVALUE, "KeyValue# " << txc.Tablet

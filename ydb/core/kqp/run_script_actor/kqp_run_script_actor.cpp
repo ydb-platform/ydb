@@ -199,10 +199,6 @@ private:
             WaitFinalizationRequest = true;
             RunState = IsExecuting() ? ERunState::Finishing : RunState;
 
-            if (RunState == ERunState::Cancelling) {
-                Issues.AddIssue("Script execution is cancelled");
-            }
-
             auto scriptFinalizeRequest = std::make_unique<TEvScriptFinalizeRequest>(
                 GetFinalizationStatusFromRunState(), ExecutionId, Database, Status, GetExecStatusFromStatusCode(Status),
                 Issues, std::move(QueryStats), std::move(QueryPlan), std::move(QueryAst), LeaseGeneration

@@ -39,6 +39,7 @@ struct IActorFactory : public TThrRefBase {
                                                              FederatedQuery::QueryMeta::ComputeStatus status) const = 0;
     virtual std::unique_ptr<NActors::IActor> CreateStopper(const NActors::TActorId& parent,
                                                            const NActors::TActorId& connector,
+                                                           const NActors::TActorId& pinger,
                                                            const NYdb::TOperation::TOperationId& operationId) const = 0;
 };
 

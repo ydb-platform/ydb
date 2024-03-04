@@ -79,8 +79,9 @@ struct TActorFactory : public IActorFactory {
 
     std::unique_ptr<NActors::IActor> CreateStopper(const NActors::TActorId& parent,
                                                    const NActors::TActorId& connector,
+                                                   const NActors::TActorId& pinger,
                                                    const NYdb::TOperation::TOperationId& operationId) const override {
-        return CreateStopperActor(Params, parent, connector, operationId, Counters);
+        return CreateStopperActor(Params, parent, connector, pinger, operationId, Counters);
     }
 
 private:

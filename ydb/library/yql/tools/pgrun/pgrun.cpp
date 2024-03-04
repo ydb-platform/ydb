@@ -662,8 +662,8 @@ TString GetFormattedStmt(const TStringBuf& stmt) {
     size_t pos = 0, next_pos = TStringBuf::npos;
 
     while (TStringBuf::npos != (next_pos = stmt.find('\n', pos))) {
-        if (1 < next_pos - pos) {
-            if (!(stmt[pos] == '\r' && 2 == next_pos - pos)) {
+        if (0 < next_pos - pos) {
+            if (!(stmt[pos] == '\r' && 1 == next_pos - pos)) {
                 result += stmt.substr(pos, next_pos - pos + 1);
             }
         }

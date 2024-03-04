@@ -43,7 +43,7 @@ THolder<TEvSchemeShard::TEvModifySchemeTransaction> CreateTablePropose(
 
     Y_ABORT_UNLESS(ss->TableProfilesLoaded);
     Ydb::StatusIds::StatusCode status;
-    if (!FillTableDescription(modifyScheme, item.Scheme, ss->TableProfiles, status, error)) {
+    if (!FillTableDescription(modifyScheme, item.Scheme, ss->TableProfiles, status, error, true)) {
         return nullptr;
     }
 
@@ -54,12 +54,24 @@ THolder<TEvSchemeShard::TEvModifySchemeTransaction> CreateTablePropose(
 
                 auto seqDesc = indexedTable->MutableSequenceDescription()->Add();
                 seqDesc->SetName(fromSequence.name());
-                seqDesc->SetMinValue(fromSequence.min_value());
-                seqDesc->SetMaxValue(fromSequence.max_value());
-                seqDesc->SetStartValue(fromSequence.start_value());
-                seqDesc->SetCache(fromSequence.cache());
-                seqDesc->SetIncrement(fromSequence.increment());
-                seqDesc->SetCycle(fromSequence.cycle());
+                if (fromSequence.has_min_value()) {
+                    seqDesc->SetMinValue(fromSequence.min_value());
+                }
+                if (fromSequence.has_max_value()) {
+                    seqDesc->SetMaxValue(fromSequence.max_value());
+                }
+                if (fromSequence.has_start_value()) {
+                    seqDesc->SetStartValue(fromSequence.start_value());
+                }
+                if (fromSequence.has_cache()) {
+                    seqDesc->SetCache(fromSequence.cache());
+                }
+                if (fromSequence.has_increment()) {
+                    seqDesc->SetIncrement(fromSequence.increment());
+                }
+                if (fromSequence.has_cycle()) {
+                    seqDesc->SetCycle(fromSequence.cycle());
+                }
 
                 break;
             }

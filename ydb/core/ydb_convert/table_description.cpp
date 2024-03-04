@@ -1339,21 +1339,27 @@ void FillReadReplicasSettings(Ydb::Table::CreateTableRequest& out,
 
 bool FillTableDescription(NKikimrSchemeOp::TModifyScheme& out,
         const Ydb::Table::CreateTableRequest& in, const TTableProfiles& profiles,
-        Ydb::StatusIds::StatusCode& status, TString& error)
+        Ydb::StatusIds::StatusCode& status, TString& error, bool indexedTable)
 {
-    auto& tableDesc = *out.MutableCreateTable();
 
-    if (!FillColumnDescription(tableDesc, in.columns(), status, error)) {
+    NKikimrSchemeOp::TTableDescription* tableDesc = nullptr;
+    if (indexedTable) {
+        tableDesc = out.MutableCreateIndexedTable()->MutableTableDescription();
+    } else {
+        tableDesc = out.MutableCreateTable();
+    }
+
+    if (!FillColumnDescription(*tableDesc, in.columns(), status, error)) {
         return false;
     }
 
-    tableDesc.MutableKeyColumnNames()->CopyFrom(in.primary_key());
+    tableDesc->MutableKeyColumnNames()->CopyFrom(in.primary_key());
 
-    if (!profiles.ApplyTableProfile(in.profile(), tableDesc, status, error)) {
+    if (!profiles.ApplyTableProfile(in.profile(), *tableDesc, status, error)) {
         return false;
     }
 
-    TColumnFamilyManager families(tableDesc.MutablePartitionConfig());
+    TColumnFamilyManager families(tableDesc->MutablePartitionConfig());
     if (in.has_storage_settings() && !families.ApplyStorageSettings(in.storage_settings(), &status, &error)) {
         return false;
     }
@@ -1370,7 +1376,7 @@ bool FillTableDescription(NKikimrSchemeOp::TModifyScheme& out,
     }
 
     TList<TString> warnings;
-    if (!FillCreateTableSettingsDesc(tableDesc, in, status, error, warnings, false)) {
+    if (!FillCreateTableSettingsDesc(*tableDesc, in, status, error, warnings, false)) {
         return false;
     }
 
@@ -1392,11 +1398,21 @@ void FillSequenceDescription(Ydb::Table::CreateTableRequest& out, const NKikimrS
 
                 const auto& sequenceDescription = sequences.at(fromSequence->name());
 
-                fromSequence->set_min_value(sequenceDescription.GetMinValue());
-                fromSequence->set_max_value(sequenceDescription.GetMaxValue());
-                fromSequence->set_start_value(sequenceDescription.GetStartValue());
-                fromSequence->set_cache(sequenceDescription.GetCache());
-                fromSequence->set_increment(sequenceDescription.GetIncrement());
+                if (sequenceDescription.HasMinValue()) {
+                    fromSequence->set_min_value(sequenceDescription.GetMinValue());
+                }
+                if (sequenceDescription.HasMaxValue()) {
+                    fromSequence->set_max_value(sequenceDescription.GetMaxValue());
+                }
+                if (sequenceDescription.HasStartValue()) {
+                    fromSequence->set_start_value(sequenceDescription.GetStartValue());
+                }
+                if (sequenceDescription.HasCache()) {
+                    fromSequence->set_cache(sequenceDescription.GetCache());
+                }
+                if (sequenceDescription.HasIncrement()) {
+                    fromSequence->set_increment(sequenceDescription.GetIncrement());
+                }
                 break;
             }
             case Ydb::Table::ColumnMeta::kFromLiteral: {

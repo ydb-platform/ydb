@@ -19,6 +19,9 @@ class TColumnShard;
 namespace NKikimr::NOlap {
 class TColumnEngineChanges;
 class IBlobsGCAction;
+namespace NStatistics {
+class TOperatorContainer;
+}
 }
 namespace arrow {
 class RecordBatch;
@@ -79,7 +82,11 @@ public:
     void OnDataSharingStarted(const ui64 tabletId, const TString& sessionId) {
         return DoOnDataSharingStarted(tabletId, sessionId);
     }
-
+    virtual void OnStatisticsUsage(const NOlap::NStatistics::TOperatorContainer& /*statOperator*/) {
+        
+    }
+    virtual void OnMaxValueUsage() {
+    }
     void OnTabletInitCompleted(const NColumnShard::TColumnShard& shard) {
         DoOnTabletInitCompleted(shard);
     }

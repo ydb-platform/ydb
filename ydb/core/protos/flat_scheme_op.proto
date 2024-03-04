@@ -17,6 +17,7 @@ import "ydb/public/api/protos/ydb_value.proto";
 import "ydb/library/actors/protos/actors.proto";
 import "ydb/library/mkql_proto/protos/minikql.proto";
 import "ydb/core/protos/index_builder.proto";
+import "ydb/core/tx/columnshard/engines/scheme/statistics/protos/data.proto";
 
 import "google/protobuf/empty.proto";
 
@@ -512,6 +513,7 @@ message TColumnTableSchema {
 
     optional bool CompositeMarks = 9 [ default = false ];
     repeated TOlapIndexDescription Indexes = 10;
+    repeated NKikimrColumnShardStatisticsProto.TOperatorContainer Statistics = 11;
 }
 
 message TAlterColumnTableSchema {
@@ -521,6 +523,8 @@ message TAlterColumnTableSchema {
     repeated TOlapColumnDiff AlterColumns = 7;
     repeated TOlapIndexRequested UpsertIndexes = 8;
     repeated string DropIndexes = 9;
+    repeated NKikimrColumnShardStatisticsProto.TConstructorContainer UpsertStatistics = 10;
+    repeated string DropStatistics = 11;
 }
 
 // Schema presets are used to manage multiple tables with the same schema

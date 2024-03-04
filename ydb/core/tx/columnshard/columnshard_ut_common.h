@@ -3,6 +3,7 @@
 #include "columnshard.h"
 #include "columnshard_impl.h"
 #include "blob_cache.h"
+#include "engines/scheme/statistics/max/operator.h"
 
 #include <ydb/core/formats/arrow/arrow_batch_builder.h>
 #include <ydb/core/tx/columnshard/test_helper/helper.h>
@@ -105,10 +106,21 @@ struct TTestSchema {
     };
 
     struct TTableSpecials : public TStorageTier {
+    private:
+        bool NeedTestStatisticsFlag = true;
+    public:
         std::vector<TStorageTier> Tiers;
         bool WaitEmptyAfter = false;
 
         TTableSpecials() noexcept = default;
+
+        bool NeedTestStatistics() const {
+            return NeedTestStatisticsFlag;
+        }
+
+        void SetNeedTestStatistics(const bool value) {
+            NeedTestStatisticsFlag = value;
+        }
 
         bool HasTiers() const {
             return !Tiers.empty();
@@ -217,6 +229,12 @@ struct TTestSchema {
 
         for (ui32 i = 0; i < columns.size(); ++i) {
             *schema->MutableColumns()->Add() = columns[i].CreateColumn(i + 1);
+            if (!specials.NeedTestStatistics()) {
+                continue;
+            }
+            if (NOlap::NStatistics::NMax::TOperator::IsAvailableType(columns[i].GetType())) {
+                *schema->AddStatistics() = NOlap::NStatistics::TOperatorContainer(std::make_shared<NOlap::NStatistics::NMax::TOperator>(i + 1)).SerializeToProto();
+            }
         }
 
         Y_ABORT_UNLESS(pk.size() > 0);

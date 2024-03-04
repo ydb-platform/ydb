@@ -3,6 +3,10 @@
 #include "column_features.h"
 #include "tier_info.h"
 
+#include "indexes/abstract/meta.h"
+#include "statistics/abstract/operator.h"
+#include "statistics/abstract/common.h"
+
 #include <ydb/core/tx/columnshard/common/snapshot.h>
 
 #include <ydb/core/sys_view/common/schema.h>
@@ -12,7 +16,6 @@
 #include <ydb/core/formats/arrow/serializer/abstract.h>
 #include <ydb/core/formats/arrow/transformer/abstract.h>
 #include <ydb/core/scheme/scheme_types_proto.h>
-#include "indexes/abstract/meta.h"
 
 namespace arrow {
     class Array;
@@ -26,6 +29,7 @@ namespace NKikimr::NArrow {
 
 namespace NKikimr::NOlap {
 
+class TPortionInfoWithBlobs;
 struct TInsertedData;
 class TSnapshotColumnInfo;
 using TNameTypeInfo = std::pair<TString, NScheme::TTypeInfo>;
@@ -37,6 +41,7 @@ private:
     THashMap<ui32, TColumnFeatures> ColumnFeatures;
     THashMap<ui32, std::shared_ptr<arrow::Field>> ArrowColumnByColumnIdCache;
     THashMap<ui32, NIndexes::TIndexMetaContainer> Indexes;
+    std::map<NStatistics::TIdentifier, NStatistics::TOperatorContainer> Statistics;
     TIndexInfo(const TString& name);
     bool DeserializeFromProto(const NKikimrSchemeOp::TColumnTableSchema& schema, const std::shared_ptr<IStoragesManager>& operators);
     TColumnFeatures& GetOrCreateColumnFeatures(const ui32 columnId) const;
@@ -48,6 +53,16 @@ public:
     static constexpr const char* SPEC_COL_TX_ID = NOlap::NPortion::TSpecialColumns::SPEC_COL_TX_ID;
     static const TString STORE_INDEX_STATS_TABLE;
     static const TString TABLE_INDEX_STATS_TABLE;
+
+    void FillStatistics(TPortionInfoWithBlobs& portion) const;
+
+    NStatistics::TOperatorContainer GetStatistics(const NStatistics::TIdentifier& id) const {
+        auto it = Statistics.find(id);
+        if (it != Statistics.end()) {
+            return it->second;
+        }
+        return NStatistics::TOperatorContainer();
+    }
 
     const THashMap<ui32, NIndexes::TIndexMetaContainer>& GetIndexes() const {
         return Indexes;

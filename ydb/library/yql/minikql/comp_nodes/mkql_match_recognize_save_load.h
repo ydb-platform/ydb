@@ -9,6 +9,15 @@ namespace NKikimr::NMiniKQL::NMatchRecognize {
 
 struct TSerializerContext {
 
+    TSerializerContext(
+        TComputationContext& ctx,
+        TType* rowType,
+        const TMutableObjectOverBoxedValue<TValuePackerBoxed>& rowPacker)
+        : Ctx(ctx)
+        , RowType(rowType)
+        , RowPacker(rowPacker)
+        {}
+
     TComputationContext&    Ctx;
     TType*                  RowType;
     const TMutableObjectOverBoxedValue<TValuePackerBoxed>& RowPacker;

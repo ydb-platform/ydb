@@ -7,6 +7,7 @@
 #include "rpc_common.h"
 
 #include <ydb/core/grpc_services/local_rpc/local_rpc.h>
+#include <ydb/core/util/wilson.h>
 
 #include <ydb/library/wilson_ids/wilson.h>
 #include <ydb/library/yql/public/issue/yql_issue_message.h>
@@ -91,6 +92,7 @@ private:
     }
 
     void Handle(TEvents::TEvWakeup::TPtr&) {
+        Span.Event("client_lost", {});
         ClientLost = true;
     }
 
@@ -115,8 +117,9 @@ private:
     void Handle(NKqp::TEvKqp::TEvCreateSessionResponse::TPtr& ev, const TActorContext& ctx) {
         const auto& record = ev->Get()->Record;
         if (record.GetResourceExhausted()) {
-            Request->ReplyWithRpcStatus(grpc::StatusCode::RESOURCE_EXHAUSTED, record.GetError());
-            Span.EndOk();
+            auto responseCode = grpc::StatusCode::RESOURCE_EXHAUSTED;
+            Request->ReplyWithRpcStatus(responseCode, record.GetError());
+            NWilson::EndSpanWithStatus(Span, responseCode);
             Die(ctx);
             return;
         }
@@ -151,13 +154,13 @@ private:
 
     void Reply(Ydb::StatusIds::StatusCode status) {
         Request->ReplyWithYdbStatus(status);
-        Span.EndOk();
+        NWilson::EndSpanWithStatus(Span, status);
         this->PassAway();
     }
 
     void Reply(Ydb::StatusIds::StatusCode status, NProtoBuf::Message* resp) {
         Request->Reply(resp, status);
-        Span.EndOk();
+        NWilson::EndSpanWithStatus(Span, status);
         this->PassAway();
     }
 
@@ -236,7 +239,7 @@ private:
 
     void Reply(Ydb::StatusIds::StatusCode status) {
         Request->ReplyWithYdbStatus(status);
-        Span.EndOk();
+        NWilson::EndSpanWithStatus(Span, status);
         this->PassAway();
     }
 

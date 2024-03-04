@@ -259,14 +259,16 @@ namespace {
         return columnTypeError;
     }
 
-    TStringBuf GetColumnTypeName(const TTypeAnnotationNode* type) {
+    TString GetColumnTypeName(const TTypeAnnotationNode* type) {
+        TString name;
         if (type->GetKind() == ETypeAnnotationKind::Data) {
-            return type->Cast<TDataExprType>()->GetName();
+            name = type->Cast<TDataExprType>()->GetName();
         } else {
-            auto pgTypeId = type->Cast<TPgExprType>()->GetId();
-            auto typeDesc = NKikimr::NPg::TypeDescFromPgTypeId(pgTypeId);
-            return NKikimr::NPg::PgTypeNameFromTypeDesc(typeDesc);
+            const auto pgTypeId = type->Cast<TPgExprType>()->GetId();
+            const auto typeDesc = NKikimr::NPg::TypeDescFromPgTypeId(pgTypeId);
+            name = NKikimr::NPg::PgTypeNameFromTypeDesc(typeDesc);
         }
+        return name;
     }
 
     bool ValidateColumnDataType(const TDataExprType* type, const TExprBase& typeNode, const TString& columnName,

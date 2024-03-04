@@ -6,8 +6,7 @@ namespace NKikimr::NScheme {
 
 class TTypeInfo {
 public:
-    constexpr TTypeInfo()
-    {}
+    constexpr TTypeInfo() = default;
 
     explicit constexpr TTypeInfo(TTypeId typeId, void* typeDesc = {})
         : TypeId(typeId)

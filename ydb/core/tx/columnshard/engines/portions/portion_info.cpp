@@ -427,6 +427,7 @@ void TPortionInfo::FillBlobIdsByStorage(THashMap<TString, THashSet<TUnifiedBlobI
 }
 
 TBlobRangeLink16::TLinkId TPortionInfo::RegisterBlobId(const TUnifiedBlobId& blobId) {
+    AFL_VERIFY(blobId.IsValid());
     TBlobRangeLink16::TLinkId idx = 0;
     for (auto&& i : BlobIds) {
         if (i == blobId) {

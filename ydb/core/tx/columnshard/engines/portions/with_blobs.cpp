@@ -19,18 +19,15 @@ void TPortionInfoWithBlobs::TBlobInfo::RestoreChunk(const TPortionInfoWithBlobs&
 void TPortionInfoWithBlobs::TBlobInfo::AddChunk(TPortionInfoWithBlobs& owner, const std::shared_ptr<IPortionDataChunk>& chunk) {
     AFL_VERIFY(chunk);
     Y_ABORT_UNLESS(!ResultBlob);
-    TBlobRange bRange;
     const TString& data = chunk->GetData();
 
-    bRange.Offset = Size;
-    bRange.Size = data.size();
-
+    TBlobRangeLink16 bRange(Size, data.size());
     Size += data.size();
 
     Y_ABORT_UNLESS(Chunks.emplace(chunk->GetChunkAddress(), chunk).second);
     ChunksOrdered.emplace_back(chunk);
 
-    chunk->AddIntoPortion(bRange, owner.PortionInfo);
+    chunk->AddIntoPortionBeforeBlob(bRange, owner.PortionInfo);
 }
 
 void TPortionInfoWithBlobs::TBlobInfo::RegisterBlobId(TPortionInfoWithBlobs& owner, const TUnifiedBlobId& blobId) {

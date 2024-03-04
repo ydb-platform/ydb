@@ -124,7 +124,7 @@ protected:
     virtual std::shared_ptr<arrow::Scalar> DoGetLastScalar() const override {
         return nullptr;
     }
-    virtual void DoAddIntoPortion(const TBlobRange& bRange, TPortionInfo& portionInfo) const override;
+    virtual void DoAddIntoPortionBeforeBlob(const TBlobRangeLink16& bRange, TPortionInfo& portionInfo) const override;
 public:
     TPortionIndexChunk(const ui32 entityId, const ui32 recordsCount, const ui64 rawBytes, const TString& data)
         : TBase(entityId, 0)

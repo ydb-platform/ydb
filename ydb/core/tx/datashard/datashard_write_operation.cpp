@@ -455,7 +455,7 @@ void TWriteOperation::ReleaseTxData(NTabletFlatExecutor::TTxMemoryProviderBase& 
     LocksCache().Locks.clear();
     ArtifactFlags = 0;
 
-    LOG_D("tx " << GetTxId() << " released its data");
+    LOG_D("tx " << GetTxId() << " at " << TabletId << " released its data");
 }
 
 void TWriteOperation::DbStoreLocksAccessLog(NTable::TDatabase& txcDb)
@@ -476,7 +476,7 @@ void TWriteOperation::DbStoreLocksAccessLog(NTable::TDatabase& txcDb)
     TStringBuf vecData(vecDataStart, vecDataSize);
     db.Table<Schema::TxArtifacts>().Key(GetTxId()).Update(NIceDb::TUpdate<Schema::TxArtifacts::Locks>(vecData));
 
-    LOG_T("Storing " << vec.size() << " locks for txid=" << GetTxId() << " in " << TabletId);
+    LOG_T("Storing " << vec.size() << " locks for txid=" << GetTxId() << " at " << TabletId);
 }
 
 void TWriteOperation::DbStoreArtifactFlags(NTable::TDatabase& txcDb)
@@ -486,7 +486,7 @@ void TWriteOperation::DbStoreArtifactFlags(NTable::TDatabase& txcDb)
     NIceDb::TNiceDb db(txcDb);
     db.Table<Schema::TxArtifacts>().Key(GetTxId()).Update<Schema::TxArtifacts::Flags>(ArtifactFlags);
 
-    LOG_T("Storing artifactflags=" << ArtifactFlags << " for txid=" << GetTxId() << " in " << TabletId);
+    LOG_T("Storing artifactflags=" << ArtifactFlags << " for txid=" << GetTxId() << " at " << TabletId);
 }
 
 ui64 TWriteOperation::GetMemoryConsumption() const {
@@ -659,7 +659,7 @@ void TWriteOperation::UntrackMemory() const {
 void TWriteOperation::SetError(const NKikimrDataEvents::TEvWriteResult::EStatus& status, const TString& errorMsg) {
     SetAbortedFlag();
     WriteResult = NEvents::TDataEvents::TEvWriteResult::BuildError(TabletId, GetTxId(), status, errorMsg);
-    LOG_I(errorMsg);
+    LOG_I("Write transaction " << GetTxId() << " at " << TabletId << " has an error: " << errorMsg);
 }
 
 void TWriteOperation::SetWriteResult(std::unique_ptr<NEvents::TDataEvents::TEvWriteResult>&& writeResult) {

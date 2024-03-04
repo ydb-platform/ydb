@@ -229,36 +229,12 @@ SELECT p.name, p.age FROM person* p ORDER BY age using >, name;
 --
 select foo from (select 1 offset 0) as foo;
 </sql-statement>
--stdin-:<main>: Error: Type annotation
-
-    -stdin-:<main>:1:1: Error: At function: RemovePrefixMembers, At function: PgSelect, At function: PgSetItem
-    	--
-	^
-        -stdin-:<main>:4:8: Error: No such column: foo
-        	select foo from (select 1 offset 0) as foo;
-	       ^
 <sql-statement>
 select foo from (select null offset 0) as foo;
 </sql-statement>
--stdin-:<main>: Error: Type annotation
-
-    -stdin-:<main>:1:1: Error: At function: RemovePrefixMembers, At function: PgSelect, At function: PgSetItem
-    	select foo from (select null offset 0) as foo;
-	^
-        -stdin-:<main>:1:8: Error: No such column: foo
-        	select foo from (select null offset 0) as foo;
-	       ^
 <sql-statement>
 select foo from (select 'xyzzy',1,null offset 0) as foo;
 </sql-statement>
--stdin-:<main>: Error: Type annotation
-
-    -stdin-:<main>:1:1: Error: At function: RemovePrefixMembers, At function: PgSelect, At function: PgSetItem
-    	select foo from (select 'xyzzy',1,null offset 0) as foo;
-	^
-        -stdin-:<main>:1:8: Error: No such column: foo
-        	select foo from (select 'xyzzy',1,null offset 0) as foo;
-	       ^
 <sql-statement>
 --
 -- Test VALUES lists
@@ -347,22 +323,12 @@ SELECT * FROM foo ORDER BY f1 ASC;	-- same thing
 <sql-statement>
 SELECT * FROM foo ORDER BY f1 NULLS FIRST;
 </sql-statement>
--stdin-:<main>: Error: Parse Sql
-
-    -stdin-:<main>:1:1: Error: sortby_nulls unsupported value: 1
-    	SELECT * FROM foo ORDER BY f1 NULLS FIRST;
-	^
 <sql-statement>
 SELECT * FROM foo ORDER BY f1 DESC;
 </sql-statement>
 <sql-statement>
 SELECT * FROM foo ORDER BY f1 DESC NULLS LAST;
 </sql-statement>
--stdin-:<main>: Error: Parse Sql
-
-    -stdin-:<main>:1:1: Error: sortby_nulls unsupported value: 2
-    	SELECT * FROM foo ORDER BY f1 DESC NULLS LAST;
-	^
 <sql-statement>
 -- check if indexscans do the right things
 CREATE INDEX fooi ON foo (f1);
@@ -381,22 +347,12 @@ SELECT * FROM foo ORDER BY f1;
 <sql-statement>
 SELECT * FROM foo ORDER BY f1 NULLS FIRST;
 </sql-statement>
--stdin-:<main>: Error: Parse Sql
-
-    -stdin-:<main>:1:1: Error: sortby_nulls unsupported value: 1
-    	SELECT * FROM foo ORDER BY f1 NULLS FIRST;
-	^
 <sql-statement>
 SELECT * FROM foo ORDER BY f1 DESC;
 </sql-statement>
 <sql-statement>
 SELECT * FROM foo ORDER BY f1 DESC NULLS LAST;
 </sql-statement>
--stdin-:<main>: Error: Parse Sql
-
-    -stdin-:<main>:1:1: Error: sortby_nulls unsupported value: 2
-    	SELECT * FROM foo ORDER BY f1 DESC NULLS LAST;
-	^
 <sql-statement>
 DROP INDEX fooi;
 </sql-statement>
@@ -414,22 +370,12 @@ SELECT * FROM foo ORDER BY f1;
 <sql-statement>
 SELECT * FROM foo ORDER BY f1 NULLS FIRST;
 </sql-statement>
--stdin-:<main>: Error: Parse Sql
-
-    -stdin-:<main>:1:1: Error: sortby_nulls unsupported value: 1
-    	SELECT * FROM foo ORDER BY f1 NULLS FIRST;
-	^
 <sql-statement>
 SELECT * FROM foo ORDER BY f1 DESC;
 </sql-statement>
 <sql-statement>
 SELECT * FROM foo ORDER BY f1 DESC NULLS LAST;
 </sql-statement>
--stdin-:<main>: Error: Parse Sql
-
-    -stdin-:<main>:1:1: Error: sortby_nulls unsupported value: 2
-    	SELECT * FROM foo ORDER BY f1 DESC NULLS LAST;
-	^
 <sql-statement>
 DROP INDEX fooi;
 </sql-statement>
@@ -447,22 +393,12 @@ SELECT * FROM foo ORDER BY f1;
 <sql-statement>
 SELECT * FROM foo ORDER BY f1 NULLS FIRST;
 </sql-statement>
--stdin-:<main>: Error: Parse Sql
-
-    -stdin-:<main>:1:1: Error: sortby_nulls unsupported value: 1
-    	SELECT * FROM foo ORDER BY f1 NULLS FIRST;
-	^
 <sql-statement>
 SELECT * FROM foo ORDER BY f1 DESC;
 </sql-statement>
 <sql-statement>
 SELECT * FROM foo ORDER BY f1 DESC NULLS LAST;
 </sql-statement>
--stdin-:<main>: Error: Parse Sql
-
-    -stdin-:<main>:1:1: Error: sortby_nulls unsupported value: 2
-    	SELECT * FROM foo ORDER BY f1 DESC NULLS LAST;
-	^
 <sql-statement>
 --
 -- Test planning of some cases with partial indexes

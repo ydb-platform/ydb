@@ -1248,6 +1248,7 @@ with testdata(bits) as (values
   (x'1330000000000000'),
   (x'133fffffffffffff'),
   (x'3a6fa7161a4d6e0c')
+)
 select float8send(flt) as ibits,
        flt,
        flt::text::float8 as r_flt,
@@ -1259,10 +1260,9 @@ select float8send(flt) as ibits,
 </sql-statement>
 -stdin-:<main>: Error: Parse Sql
 
-    -stdin-:<main>:139:1: Error: ERROR:  syntax error at or near "select"
-
-    	select float8send(flt) as ibits,
-	^
+    -stdin-:<main>:145:30: Error: Unknown type: xfloat8
+    	  from (select bits::bigint::xfloat8::float8 as flt
+	                             ^
 <sql-statement>
 -- clean up, lest opr_sanity complain
 drop type xfloat8 cascade;

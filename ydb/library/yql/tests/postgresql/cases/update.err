@@ -230,9 +230,6 @@ UPDATE update_test t
 </sql-statement>
 -stdin-:<main>: Error: Parse Sql
 
-    -stdin-:<main>:3:9: Error: Usupported SQLValueFunction: 10
-    	  WHERE CURRENT_USER = SESSION_USER;
-	        ^
     -stdin-:<main>:3:24: Error: Usupported SQLValueFunction: 12
     	  WHERE CURRENT_USER = SESSION_USER;
 	                       ^

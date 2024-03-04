@@ -22,8 +22,8 @@ int2,49,47,95.92
 int4,70,68,97.14
 int8,142,127,89.44
 interval,168,115,68.45
-join,591,138,23.35
-json,450,135,30.0
+join,591,198,33.5
+json,450,139,30.89
 json_encoding,42,42,100.0
 jsonb,1013,404,39.88
 jsonb_jsonpath,427,88,20.61
@@ -34,7 +34,7 @@ name,40,22,55.0
 numeric,915,813,88.85
 numerology,24,16,66.67
 oid,27,27,100.0
-select,88,19,21.59
+select,88,26,29.55
 select_distinct,46,1,2.17
 select_distinct_on,4,0,0.0
 select_having,23,19,82.61
@@ -53,5 +53,5 @@ union,186,61,32.8
 update,288,23,7.99
 uuid,36,29,80.56
 varchar,24,15,62.5
-window,298,19,6.38
+window,298,60,20.13
 xml,234,18,7.69

@@ -2609,6 +2609,7 @@ select b.unique1 from
 <sql-statement>
 explain (costs off)
 select * from
+(
   select unique1, q1, coalesce(unique1, -1) + q1 as fault
   from int8_tbl left join tenk1 on (q2 = unique2)
 ) ss
@@ -2617,24 +2618,26 @@ order by fault;
 </sql-statement>
 -stdin-:<main>: Error: Parse Sql
 
-    -stdin-:<main>:3:3: Error: ERROR:  syntax error at or near "select"
-
-    	  select unique1, q1, coalesce(unique1, -1) + q1 as fault
-	  ^
+    -stdin-:<main>:1:1: Error: RawStmt: alternative is not implemented yet : 276
+    	explain (costs off)
+	^
 <sql-statement>
 select * from
+(
   select unique1, q1, coalesce(unique1, -1) + q1 as fault
   from int8_tbl left join tenk1 on (q2 = unique2)
 ) ss
 where fault = 122
 order by fault;
 </sql-statement>
--stdin-:<main>: Error: Parse Sql
+-stdin-:<main>: Error: Type annotation
 
-    -stdin-:<main>:2:3: Error: ERROR:  syntax error at or near "select"
-
-    	  select unique1, q1, coalesce(unique1, -1) + q1 as fault
-	  ^
+    -stdin-:<main>:1:1: Error: At function: PgSelect, At function: PgSetItem, At function: AssumeColumnOrder, At function: PgReplaceUnknown, At function: OrderedMap, At function: OrderedMap, At function: EquiJoin
+    	select * from
+	^
+        -stdin-:<main>:1:1: Error: Cannot compare key columns (a._alias_int8_tbl.q2 has type: pgint8, b._alias_tenk1.unique2 has type: pgint4)
+        	select * from
+	^
 <sql-statement>
 explain (costs off)
 select * from

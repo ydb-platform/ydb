@@ -127,7 +127,7 @@ std::vector<NKikimr::NOlap::TPortionInfoWithBlobs> TPortionInfoWithBlobs::Restor
 }
 
 NKikimr::NOlap::TPortionInfoWithBlobs TPortionInfoWithBlobs::BuildByBlobs(std::vector<TSplittedBlob>&& chunks,
-    std::shared_ptr<arrow::RecordBatch> batch, const ui64 granule, const TSnapshot& snapshot, const std::shared_ptr<IStoragesManager>& operators)
+    std::shared_ptr<arrow::RecordBatch> batch, const ui64 granule, const TSnapshot& snapshot, const std::shared_ptr<IStoragesManager>& operators, const std::shared_ptr<ISnapshotSchema>& schema)
 {
     TPortionInfoWithBlobs result(TPortionInfo(granule, 0, snapshot), batch);
     for (auto&& blob: chunks) {
@@ -142,6 +142,7 @@ NKikimr::NOlap::TPortionInfoWithBlobs TPortionInfoWithBlobs::BuildByBlobs(std::v
         return l.GetAddress() < r.GetAddress();
     };
     std::sort(result.GetPortionInfo().Records.begin(), result.GetPortionInfo().Records.end(), pred);
+    schema->GetIndexInfo().FillStatistics(result);
     return result;
 }
 
@@ -220,4 +221,17 @@ bool TPortionInfoWithBlobs::ExtractColumnChunks(const ui32 columnId, std::vector
     std::swap(chunksLocal, chunks);
     return true;
 }
+
+void TPortionInfoWithBlobs::FillStatistics(const std::map<NStatistics::TIdentifier, NStatistics::TOperatorContainer>& operators, const TIndexInfo& index) {
+    NStatistics::TPortionStorage storage;
+    for (auto&& i : operators) {
+        THashMap<ui32, std::vector<std::shared_ptr<IPortionDataChunk>>> data;
+        for (auto&& entityId : i.second->GetEntityIds()) {
+            data.emplace(entityId, GetEntityChunks(entityId));
+        }
+        i.second->FillStatisticsData(data, storage, index);
+    }
+    PortionInfo.SetStatisticsStorage(std::move(storage));
+}
+
 }

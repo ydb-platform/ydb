@@ -3,6 +3,8 @@
 #include <ydb/core/tx/columnshard/blob.h>
 #include <ydb/core/tx/columnshard/splitter/blob_info.h>
 #include <ydb/core/tx/columnshard/splitter/chunks.h>
+#include <ydb/core/tx/columnshard/engines/scheme/statistics/abstract/common.h>
+#include <ydb/core/tx/columnshard/engines/scheme/statistics/abstract/operator.h>
 
 #include <ydb/library/accessor/accessor.h>
 
@@ -106,8 +108,11 @@ public:
         return PortionInfo.BlobsBytes();
     }
 
+    void FillStatistics(const std::map<NStatistics::TIdentifier, NStatistics::TOperatorContainer>& operators, const TIndexInfo& index);
+
     static TPortionInfoWithBlobs BuildByBlobs(std::vector<TSplittedBlob>&& chunks,
-        std::shared_ptr<arrow::RecordBatch> batch, const ui64 granule, const TSnapshot& snapshot, const std::shared_ptr<IStoragesManager>& operators);
+        std::shared_ptr<arrow::RecordBatch> batch, const ui64 granule, const TSnapshot& snapshot, const std::shared_ptr<IStoragesManager>& operators,
+        const std::shared_ptr<ISnapshotSchema>& schema);
 
     std::optional<TPortionInfoWithBlobs> ChangeSaver(ISnapshotSchema::TPtr currentSchema, const TSaverContext& saverContext) const;
 

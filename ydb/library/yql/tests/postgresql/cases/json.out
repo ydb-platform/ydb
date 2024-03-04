@@ -299,6 +299,36 @@ SELECT array_to_json('{{1,5},{99,100}}'::int[]);
 
 BEGIN;
 COMMIT;
+-- non-numeric output
+SELECT row_to_json(q)
+FROM (SELECT 'NaN'::float8 AS "float8field") q;
+      row_to_json      
+-----------------------
+ {"float8field":"NaN"}
+(1 row)
+
+SELECT row_to_json(q)
+FROM (SELECT 'Infinity'::float8 AS "float8field") q;
+        row_to_json         
+----------------------------
+ {"float8field":"Infinity"}
+(1 row)
+
+SELECT row_to_json(q)
+FROM (SELECT '-Infinity'::float8 AS "float8field") q;
+         row_to_json         
+-----------------------------
+ {"float8field":"-Infinity"}
+(1 row)
+
+-- json input
+SELECT row_to_json(q)
+FROM (SELECT '{"a":1,"b": [2,3,4,"d","e","f"],"c":{"p":1,"q":2}}'::json AS "jsonfield") q;
+                           row_to_json                            
+------------------------------------------------------------------
+ {"jsonfield":{"a":1,"b": [2,3,4,"d","e","f"],"c":{"p":1,"q":2}}}
+(1 row)
+
 -- json extraction functions
 CREATE TEMP TABLE test_json (
        json_type text,

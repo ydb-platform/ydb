@@ -13,14 +13,13 @@ SELECT now()::timetz(4)::text = current_time(4)::text;
 SELECT current_timestamp = NOW();
 -- precision
 SELECT length(current_timestamp::text) >= length(current_timestamp(0)::text);
-select count(*) from date_tbl
-  where f1 between '1997-01-01' and '1998-01-01';
-select count(*) from date_tbl
-  where f1 not between '1997-01-01' and '1998-01-01';
-select count(*) from date_tbl
-  where f1 between symmetric '1997-01-01' and '1998-01-01';
-select count(*) from date_tbl
-  where f1 not between symmetric '1997-01-01' and '1998-01-01';
+-- current_role/user/user is tested in rolnames.sql
+-- current database / catalog
+SELECT current_catalog = current_database();
+-- current_schema
+SELECT current_schema;
+SET search_path = 'pg_catalog';
+SELECT current_schema;
 --
 -- Test parsing of a no-op cast to a type with unspecified typmod
 --

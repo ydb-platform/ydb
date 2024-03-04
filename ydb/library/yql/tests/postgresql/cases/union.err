@@ -1,9 +1,14 @@
 Registering pre-existing tables
+	int4_tbl
 	INT4_TBL
+	tenk1
+	text_tbl
 	VARCHAR_TBL
+	float8_tbl
 	CHAR_TBL
 	TEXT_TBL
 	FLOAT8_TBL
+	varchar_tbl
 	int8_tbl
 <sql-statement>
 --
@@ -201,10 +206,6 @@ select count(*) from
 select count(*) from
   ( select unique1 from tenk1 union select fivethous from tenk1 ) ss;
 </sql-statement>
--stdin-:<main>: Fatal: Table metadata loading
-
-    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.tenk1
-    
 <sql-statement>
 explain (costs off)
 select count(*) from
@@ -219,10 +220,6 @@ select count(*) from
 select count(*) from
   ( select unique1 from tenk1 intersect select fivethous from tenk1 ) ss;
 </sql-statement>
--stdin-:<main>: Fatal: Table metadata loading
-
-    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.tenk1
-    
 <sql-statement>
 explain (costs off)
 select unique1 from tenk1 except select unique2 from tenk1 where unique2 != 10;
@@ -235,10 +232,6 @@ select unique1 from tenk1 except select unique2 from tenk1 where unique2 != 10;
 <sql-statement>
 select unique1 from tenk1 except select unique2 from tenk1 where unique2 != 10;
 </sql-statement>
--stdin-:<main>: Fatal: Table metadata loading
-
-    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.tenk1
-    
 <sql-statement>
 set enable_hashagg to off;
 </sql-statement>
@@ -261,10 +254,6 @@ select count(*) from
 select count(*) from
   ( select unique1 from tenk1 union select fivethous from tenk1 ) ss;
 </sql-statement>
--stdin-:<main>: Fatal: Table metadata loading
-
-    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.tenk1
-    
 <sql-statement>
 explain (costs off)
 select count(*) from
@@ -279,10 +268,6 @@ select count(*) from
 select count(*) from
   ( select unique1 from tenk1 intersect select fivethous from tenk1 ) ss;
 </sql-statement>
--stdin-:<main>: Fatal: Table metadata loading
-
-    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.tenk1
-    
 <sql-statement>
 explain (costs off)
 select unique1 from tenk1 except select unique2 from tenk1 where unique2 != 10;
@@ -295,10 +280,6 @@ select unique1 from tenk1 except select unique2 from tenk1 where unique2 != 10;
 <sql-statement>
 select unique1 from tenk1 except select unique2 from tenk1 where unique2 != 10;
 </sql-statement>
--stdin-:<main>: Fatal: Table metadata loading
-
-    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.tenk1
-    
 <sql-statement>
 reset enable_hashagg;
 </sql-statement>
@@ -656,17 +637,9 @@ reset enable_hashagg;
 --
 SELECT f1 FROM float8_tbl INTERSECT SELECT f1 FROM int4_tbl ORDER BY 1;
 </sql-statement>
--stdin-:<main>: Fatal: Table metadata loading
-
-    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.float8_tbl
-    
 <sql-statement>
 SELECT f1 FROM float8_tbl EXCEPT SELECT f1 FROM int4_tbl ORDER BY 1;
 </sql-statement>
--stdin-:<main>: Fatal: Table metadata loading
-
-    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.float8_tbl
-    
 <sql-statement>
 --
 -- Operator precedence and (((((extra))))) parentheses
@@ -940,10 +913,6 @@ UNION
 SELECT b.f1 FROM (SELECT f1 FROM varchar_tbl) b
 ORDER BY 1;
 </sql-statement>
--stdin-:<main>: Fatal: Table metadata loading
-
-    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.varchar_tbl
-    
 <sql-statement>
 -- This should fail, but it should produce an error cursor
 SELECT '3.4'::numeric UNION SELECT 'foo';

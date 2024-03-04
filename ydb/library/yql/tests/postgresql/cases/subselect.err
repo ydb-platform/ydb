@@ -1,5 +1,9 @@
 Registering pre-existing tables
+	onek
+	int4_tbl
 	INT4_TBL
+	tenk1
+	text_tbl
 	TEXT_TBL
 	int8_tbl
 <sql-statement>
@@ -207,7 +211,7 @@ from int8_tbl group by q1 order by q1;
 </sql-statement>
 -stdin-:<main>: Fatal: Optimization
 
-    -stdin-:<main>:1:1: Fatal: ydb/library/yql/core/common_opt/yql_co_pgselect.cpp:3236  ExpandPgSelectImpl(): requirement order failed
+    -stdin-:<main>:1:1: Fatal: ydb/library/yql/core/common_opt/yql_co_pgselect.cpp:3241  ExpandPgSelectImpl(): requirement order failed
     	select q1, float8(count(*)) / (select count(*) from int8_tbl)
 	^
     -stdin-:<main>: Fatal: ydb/library/yql/core/common_opt/yql_co_pgselect.cpp:704  RewriteSubLinksPartial(): requirement status.Level != IGraphTransformer::TStatus::Error failed
@@ -297,37 +301,21 @@ select count(*) from
   (select 1 from tenk1 a
    where unique1 IN (select hundred from tenk1 b)) ss;
 </sql-statement>
--stdin-:<main>: Fatal: Table metadata loading
-
-    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.tenk1
-    
 <sql-statement>
 select count(distinct ss.ten) from
   (select ten from tenk1 a
    where unique1 IN (select hundred from tenk1 b)) ss;
 </sql-statement>
--stdin-:<main>: Fatal: Table metadata loading
-
-    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.tenk1
-    
 <sql-statement>
 select count(*) from
   (select 1 from tenk1 a
    where unique1 IN (select distinct hundred from tenk1 b)) ss;
 </sql-statement>
--stdin-:<main>: Fatal: Table metadata loading
-
-    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.tenk1
-    
 <sql-statement>
 select count(distinct ss.ten) from
   (select ten from tenk1 a
    where unique1 IN (select distinct hundred from tenk1 b)) ss;
 </sql-statement>
--stdin-:<main>: Fatal: Table metadata loading
-
-    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.tenk1
-    
 <sql-statement>
 --
 -- Test cases to check for overenthusiastic optimization of
@@ -569,10 +557,6 @@ select f1, ss1 as relabel from
     (select *, (select sum(f1) from int4_tbl b where f1 >= a.f1) as ss1
      from int4_tbl a) ss;
 </sql-statement>
--stdin-:<main>: Fatal: Table metadata loading
-
-    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.int4_tbl
-    
 <sql-statement>
 --
 -- Test cases involving PARAM_EXEC parameters and min/max index optimizations.
@@ -583,20 +567,12 @@ select * from (
   where exists (select 1 from tenk1 as b where b.thousand = a.unique2)
 ) ss;
 </sql-statement>
--stdin-:<main>: Fatal: Table metadata loading
-
-    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.tenk1
-    
 <sql-statement>
 select * from (
   select min(unique1) from tenk1 as a
   where not exists (select 1 from tenk1 as b where b.unique2 = 10000)
 ) ss;
 </sql-statement>
--stdin-:<main>: Fatal: Table metadata loading
-
-    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.tenk1
-    
 <sql-statement>
 --
 -- Test that an IN implemented using a UniquePath does unique-ification
@@ -761,18 +737,28 @@ select (select (a.*)::text) from view_a a;
 --
 select q from (select max(f1) from int4_tbl group by f1 order by f1) q;
 </sql-statement>
--stdin-:<main>: Fatal: Table metadata loading
+-stdin-:<main>: Fatal: Execution
 
-    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.int4_tbl
-    
+    -stdin-:<main>:1:1: Fatal: Execution of node: Pull
+    	--
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  input of anonymous composite types is not implemented
+
+        	--
+	^
 <sql-statement>
 with q as (select max(f1) from int4_tbl group by f1 order by f1)
   select q from q;
 </sql-statement>
--stdin-:<main>: Fatal: Table metadata loading
+-stdin-:<main>: Fatal: Execution
 
-    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.int4_tbl
-    
+    -stdin-:<main>:1:1: Fatal: Execution of node: Pull
+    	with q as (select max(f1) from int4_tbl group by f1 order by f1)
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  input of anonymous composite types is not implemented
+
+        	with q as (select max(f1) from int4_tbl group by f1 order by f1)
+	^
 <sql-statement>
 --
 -- Test case for sublinks pulled up into joinaliasvars lists in an
@@ -809,10 +795,17 @@ from
   join
   int4_tbl i4 on dummy = i4.f1;
 </sql-statement>
--stdin-:<main>: Fatal: Table metadata loading
+-stdin-:<main>: Error: Type annotation
 
-    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.int4_tbl
-    
+    -stdin-:<main>:1:1: Error: At function: OrderedFlatMap, At function: EquiJoin, At function: OrderedFlatMap, At function: EquiJoin, At function: OrderedFlatMap, At function: EquiJoin
+    	--
+	^
+        -stdin-:<main>:7:11: Error: At function: Aggregate, At function: OrderedMap, At function: EquiJoin
+        	  (select exists(select 1 from int4_tbl where f1 = q2) as sq1, 42 as dummy
+	          ^
+            -stdin-:<main>:7:11: Error: Cannot compare key columns (a._alias_int4_tbl.f1 has type: pgint4, b._alias_int8_tbl.q2 has type: pgint8)
+            	  (select exists(select 1 from int4_tbl where f1 = q2) as sq1, 42 as dummy
+	          ^
 <sql-statement>
 --
 -- Test case for subselect within UPDATE of INSERT...ON CONFLICT DO UPDATE
@@ -1154,10 +1147,6 @@ where (exists(select 1 from tenk1 k where k.unique1 = t.unique2) or ten < 0);
 select count(*) from tenk1 t
 where (exists(select 1 from tenk1 k where k.unique1 = t.unique2) or ten < 0);
 </sql-statement>
--stdin-:<main>: Fatal: Table metadata loading
-
-    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.tenk1
-    
 <sql-statement>
 explain (costs off)
 select count(*) from tenk1 t
@@ -1174,10 +1163,6 @@ select count(*) from tenk1 t
 where (exists(select 1 from tenk1 k where k.unique1 = t.unique2) or ten < 0)
   and thousand = 1;
 </sql-statement>
--stdin-:<main>: Fatal: Table metadata loading
-
-    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.tenk1
-    
 <sql-statement>
 -- It's possible for the same EXISTS to get resolved both ways
 create temp table exists_tbl (c1 int, c2 int, c3 int) partition by list (c1);
@@ -1246,10 +1231,39 @@ where a.thousand = b.thousand
                    and not exists ( select 1 from tenk1 d
                                     where a.thousand = d.thousand ) );
 </sql-statement>
--stdin-:<main>: Fatal: Table metadata loading
+-stdin-:<main>: Error: Type annotation
 
-    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.tenk1
-    
+    -stdin-:<main>:1:1: Error: At function: RemovePrefixMembers, At function: PgSelect
+    	--
+	^
+        -stdin-:<main>: Error: At function: PgSetItem
+        
+            -stdin-:<main>:1:1: Error: At function: PgWhere
+            	--
+	^
+                -stdin-:<main>:6:3: Error: At function: PgAnd
+                	  and exists ( select 1 from tenk1 c where b.hundred = c.hundred
+	  ^
+                    -stdin-:<main>:6:7: Error: At function: PgSubLink, At function: PgSelect
+                    	  and exists ( select 1 from tenk1 c where b.hundred = c.hundred
+	      ^
+                        -stdin-:<main>: Error: At function: PgSetItem
+                        
+                            -stdin-:<main>:6:7: Error: At function: PgWhere
+                            	  and exists ( select 1 from tenk1 c where b.hundred = c.hundred
+	      ^
+                                -stdin-:<main>:7:20: Error: At function: PgAnd
+                                	                   and not exists ( select 1 from tenk1 d
+	                   ^
+                                    -stdin-:<main>:7:24: Error: At function: PgNot
+                                    	                   and not exists ( select 1 from tenk1 d
+	                       ^
+                                        -stdin-:<main>:7:28: Error: At function: PgSubLink, At function: PgSelect, At function: PgSetItem
+                                        	                   and not exists ( select 1 from tenk1 d
+	                           ^
+                                            -stdin-:<main>:8:43: Error: No such column: thousand
+                                            	                                    where a.thousand = d.thousand ) );
+	                                          ^
 <sql-statement>
 --
 -- Check that nested sub-selects are not pulled up if they contain volatiles
@@ -1479,10 +1493,28 @@ select * from int4_tbl where
   (case when f1 in (select unique1 from tenk1 a) then f1 else null end) in
   (select ten from tenk1 b);
 </sql-statement>
--stdin-:<main>: Fatal: Table metadata loading
+-stdin-:<main>: Error: Type annotation
 
-    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.tenk1
-    
+    -stdin-:<main>:1:1: Error: At function: RemovePrefixMembers, At function: PgSelect
+    	select * from int4_tbl where
+	^
+        -stdin-:<main>: Error: At function: PgSetItem
+        
+            -stdin-:<main>:1:1: Error: At function: PgWhere
+            	select * from int4_tbl where
+	^
+                -stdin-:<main>:2:73: Error: At function: PgSubLink, At function: PgOp
+                	  (case when f1 in (select unique1 from tenk1 a) then f1 else null end) in
+	                                                                        ^
+                    -stdin-:<main>:2:4: Error: At function: If, At function: Coalesce, At function: FromPg
+                    	  (case when f1 in (select unique1 from tenk1 a) then f1 else null end) in
+	   ^
+                        -stdin-:<main>:2:17: Error: Expected computable data, but got: Unit
+                        	  (case when f1 in (select unique1 from tenk1 a) then f1 else null end) in
+	                ^
+                        -stdin-:<main>:2:17: Error: Computable required. Atom, key, world, datasink, datasource, type, lambda are not computable
+                        	  (case when f1 in (select unique1 from tenk1 a) then f1 else null end) in
+	                ^
 <sql-statement>
 --
 -- Check for incorrect optimization when IN subquery contains a SRF
@@ -1516,10 +1548,26 @@ select (select q from
          ) q )
 from int4_tbl;
 </sql-statement>
--stdin-:<main>: Fatal: Table metadata loading
+-stdin-:<main>: Error: Type annotation
 
-    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.int4_tbl
-    
+    -stdin-:<main>:1:1: Error: At function: RemovePrefixMembers, At function: PgSelect, At function: PgSetItem, At function: PgResultItem
+    	--
+	^
+        -stdin-:<main>:4:8: Error: At function: PgSubLink, At function: PgSelect, At function: PgSetItem, At function: PgSelect
+        	select (select q from
+	       ^
+            -stdin-:<main>:4:8: Error: At function: PgSetItem
+            	select (select q from
+	       ^
+                -stdin-:<main>:5:30: Error: Column reference can't be used without FROM
+                	         (select 1,2,3 where f1 > 0
+	                             ^
+            -stdin-:<main>:4:8: Error: At function: PgSetItem
+            	select (select q from
+	       ^
+                -stdin-:<main>:7:32: Error: Column reference can't be used without FROM
+                	          select 4,5,6.0 where f1 <= 0
+	                               ^
 <sql-statement>
 --
 -- Check for sane handling of a lateral reference in a subquery's quals
@@ -1576,10 +1624,15 @@ select * from
   where ten < 10 + nextval('ts1')
   order by 1;
 </sql-statement>
--stdin-:<main>: Fatal: Table metadata loading
+-stdin-:<main>: Fatal: Execution
 
-    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.tenk1
-    
+    -stdin-:<main>:1:1: Fatal: Execution of node: YtMapReduce!
+    	select * from
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  relation "ts1" does not exist
+
+        	select * from
+	^
 <sql-statement>
 select nextval('ts1');
 </sql-statement>

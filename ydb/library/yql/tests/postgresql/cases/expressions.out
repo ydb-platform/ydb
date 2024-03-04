@@ -38,32 +38,26 @@ SELECT length(current_timestamp::text) >= length(current_timestamp(0)::text);
  t
 (1 row)
 
-select count(*) from date_tbl
-  where f1 between '1997-01-01' and '1998-01-01';
- count 
--------
-     3
+-- current_role/user/user is tested in rolnames.sql
+-- current database / catalog
+SELECT current_catalog = current_database();
+ ?column? 
+----------
+ t
 (1 row)
 
-select count(*) from date_tbl
-  where f1 not between '1997-01-01' and '1998-01-01';
- count 
--------
-    13
+-- current_schema
+SELECT current_schema;
+ current_schema 
+----------------
+ public
 (1 row)
 
-select count(*) from date_tbl
-  where f1 between symmetric '1997-01-01' and '1998-01-01';
- count 
--------
-     3
-(1 row)
-
-select count(*) from date_tbl
-  where f1 not between symmetric '1997-01-01' and '1998-01-01';
- count 
--------
-    13
+SET search_path = 'pg_catalog';
+SELECT current_schema;
+ current_schema 
+----------------
+ pg_catalog
 (1 row)
 
 --

@@ -129,6 +129,16 @@ public:
         return { };
     }
 
+    TMaybe<TString> AcquireFile(const TString& objectId) override {
+        Y_UNUSED(objectId);
+        return { };
+    }
+
+    void ReleaseFile(const TString& objectId) override {
+        Y_UNUSED(objectId);
+        return;
+    }
+
     bool Contains(const TString& objectId) override {
         Y_UNUSED(objectId);
         return false;
@@ -141,7 +151,7 @@ public:
         }
     }
 
-    ui64 FreeDiskSize() override {
+    i64 FreeDiskSize() override {
         return 0;
     }
 

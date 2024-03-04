@@ -75,6 +75,7 @@ target_sources(ydb-library-yql-minikql-comp_nodes-llvm14-ut PRIVATE
   ${CMAKE_BINARY_DIR}/ydb/library/yql/minikql/comp_nodes/llvm14/ut/mkql_match_recognize_matched_vars_ut.cpp
   ${CMAKE_BINARY_DIR}/ydb/library/yql/minikql/comp_nodes/llvm14/ut/mkql_match_recognize_list_ut.cpp
   ${CMAKE_BINARY_DIR}/ydb/library/yql/minikql/comp_nodes/llvm14/ut/mkql_match_recognize_nfa_ut.cpp
+  ${CMAKE_BINARY_DIR}/ydb/library/yql/minikql/comp_nodes/llvm14/ut/mkql_match_recognize_ut.cpp
   ${CMAKE_BINARY_DIR}/ydb/library/yql/minikql/comp_nodes/llvm14/ut/mkql_safe_circular_buffer_ut.cpp
   ${CMAKE_BINARY_DIR}/ydb/library/yql/minikql/comp_nodes/llvm14/ut/mkql_sort_ut.cpp
   ${CMAKE_BINARY_DIR}/ydb/library/yql/minikql/comp_nodes/llvm14/ut/mkql_switch_ut.cpp
@@ -262,6 +263,10 @@ copy_file(
 copy_file(
   ${CMAKE_SOURCE_DIR}/ydb/library/yql/minikql/comp_nodes/ut/mkql_match_recognize_nfa_ut.cpp
   ${CMAKE_BINARY_DIR}/ydb/library/yql/minikql/comp_nodes/llvm14/ut/mkql_match_recognize_nfa_ut.cpp
+)
+copy_file(
+  ${CMAKE_SOURCE_DIR}/ydb/library/yql/minikql/comp_nodes/ut/mkql_match_recognize_ut.cpp
+  ${CMAKE_BINARY_DIR}/ydb/library/yql/minikql/comp_nodes/llvm14/ut/mkql_match_recognize_ut.cpp
 )
 copy_file(
   ${CMAKE_SOURCE_DIR}/ydb/library/yql/minikql/comp_nodes/ut/mkql_safe_circular_buffer_ut.cpp

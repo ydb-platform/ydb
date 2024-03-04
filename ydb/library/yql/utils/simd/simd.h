@@ -207,6 +207,7 @@ struct Perfomancer {
             }
 
             Trait reg(result);
+            delete[] result;
             return reg;
         }
         void PrepareMasks(size_t sizes[4], std::vector<Trait>& mask) {

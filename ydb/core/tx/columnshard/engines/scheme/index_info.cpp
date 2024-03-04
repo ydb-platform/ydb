@@ -1,5 +1,7 @@
 #include "index_info.h"
+#include "statistics/abstract/operator.h"
 
+#include <ydb/core/tx/columnshard/engines/portions/with_blobs.h>
 #include <ydb/core/formats/arrow/arrow_batch_builder.h>
 #include <ydb/core/formats/arrow/sort_cursor.h>
 #include <ydb/core/sys_view/common/schema.h>
@@ -370,6 +372,17 @@ bool TIndexInfo::DeserializeFromProto(const NKikimrSchemeOp::TColumnTableSchema&
         return false;
     }
 
+    {
+        NStatistics::TPortionStorageCursor cursor;
+        for (const auto& stat : schema.GetStatistics()) {
+            NStatistics::TOperatorContainer container;
+            AFL_VERIFY(container.DeserializeFromProto(stat));
+            container.SetCursor(cursor);
+            Statistics.emplace(container->GetIdentifier(), container);
+            container->ShiftCursor(cursor);
+        }
+    }
+
     for (const auto& idx : schema.GetIndexes()) {
         NIndexes::TIndexMetaContainer meta;
         AFL_VERIFY(meta.DeserializeFromProto(idx));
@@ -474,6 +487,10 @@ void TIndexInfo::InitializeCaches(const std::shared_ptr<IStoragesManager>& opera
         AFL_VERIFY(ArrowColumnByColumnIdCache.emplace(cId, GetColumnFieldVerified(cId)).second);
         AFL_VERIFY(ColumnFeatures.emplace(cId, TColumnFeatures::BuildFromIndexInfo(cId, *this, operators->GetDefaultOperator())).second);
     }
+}
+
+void TIndexInfo::FillStatistics(TPortionInfoWithBlobs& portion) const {
+    portion.FillStatistics(Statistics, *this);
 }
 
 } // namespace NKikimr::NOlap

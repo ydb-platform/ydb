@@ -36,6 +36,8 @@ private:
     NMetadata::NFetcher::ISnapshot::TPtr CurrentConfig;
     bool CompactionEnabledFlag = true;
     ui32 TiersModificationsCount = 0;
+    YDB_READONLY(TAtomicCounter, StatisticsUsageCount, 0);
+    YDB_READONLY(TAtomicCounter, MaxValueUsageCount, 0);
 protected:
     virtual void OnTieringModified(const std::shared_ptr<TTiersManager>& /*tiers*/) override {
         ++TiersModificationsCount;
@@ -60,6 +62,12 @@ protected:
         return true;
     }
 public:
+    virtual void OnStatisticsUsage(const NOlap::NStatistics::TOperatorContainer& /*statOperator*/) override {
+        StatisticsUsageCount.Inc();
+    }
+    virtual void OnMaxValueUsage() override {
+        MaxValueUsageCount.Inc();
+    }
     void SetCompactionEnabled(const bool value) {
         CompactionEnabledFlag = value;
     }
@@ -396,6 +404,14 @@ void TestTtl(bool reboots, bool internal, TTestSchema::TTableSpecials spec = {},
         auto rb = reader.ReadAll();
         UNIT_ASSERT(reader.IsCorrectlyFinished());
         UNIT_ASSERT(CheckSame(rb, PORTION_ROWS, spec.TtlColumn, ts[0]));
+    }
+
+    if (spec.NeedTestStatistics()) {
+        AFL_VERIFY(csControllerGuard->GetStatisticsUsageCount().Val());
+        AFL_VERIFY(!csControllerGuard->GetMaxValueUsageCount().Val());
+    } else {
+        AFL_VERIFY(!csControllerGuard->GetStatisticsUsageCount().Val());
+        AFL_VERIFY(csControllerGuard->GetMaxValueUsageCount().Val());
     }
 }
 
@@ -758,6 +774,14 @@ std::vector<std::pair<ui32, ui64>> TestTiers(bool reboots, const std::vector<TSt
         }
     }
 
+    if (specs[0].NeedTestStatistics()) {
+        AFL_VERIFY(csControllerGuard->GetStatisticsUsageCount().Val());
+        AFL_VERIFY(!csControllerGuard->GetMaxValueUsageCount().Val());
+    } else {
+        AFL_VERIFY(!csControllerGuard->GetStatisticsUsageCount().Val());
+        AFL_VERIFY(csControllerGuard->GetMaxValueUsageCount().Val());
+    }
+
     return specRowsBytes;
 }
 
@@ -904,10 +928,11 @@ std::vector<std::pair<ui32, ui64>> TestOneTierExport(const TTestSchema::TTableSp
     return rowsBytes;
 }
 
-void TestTwoHotTiers(bool reboot, bool changeTtl, const EInitialEviction initial = EInitialEviction::None,
+void TestTwoHotTiers(bool reboot, bool changeTtl, const bool statisticsUsage, const EInitialEviction initial = EInitialEviction::None,
                     bool revCompaction = false) {
     TTestSchema::TTableSpecials spec;
     spec.SetTtlColumn("timestamp");
+    spec.SetNeedTestStatistics(statisticsUsage);
     spec.Tiers.emplace_back(TTestSchema::TStorageTier("tier0").SetTtlColumn("timestamp"));
     spec.Tiers.emplace_back(TTestSchema::TStorageTier("tier1").SetTtlColumn("timestamp"));
     spec.Tiers[(revCompaction ? 0 : 1)].SetCodec("zstd");
@@ -940,13 +965,13 @@ void TestTwoHotTiers(bool reboot, bool changeTtl, const EInitialEviction initial
     }
 }
 
-void TestHotAndColdTiers(bool reboot, const EInitialEviction initial) {
+void TestHotAndColdTiers(bool reboot, const EInitialEviction initial, const bool statisticsUsage) {
     TTestSchema::TTableSpecials spec;
     spec.SetTtlColumn("timestamp");
     spec.Tiers.emplace_back(TTestSchema::TStorageTier("tier0").SetTtlColumn("timestamp"));
     spec.Tiers.emplace_back(TTestSchema::TStorageTier("tier1").SetTtlColumn("timestamp"));
     spec.Tiers.back().S3 = TTestSchema::TStorageTier::FakeS3();
-
+    spec.SetNeedTestStatistics(statisticsUsage);
     TestTiersAndTtl(spec, reboot, initial);
 }
 
@@ -1329,64 +1354,91 @@ Y_UNIT_TEST_SUITE(TColumnShardTestSchema) {
     // TODO: EnableOneTierAfterTtl, EnableTtlAfterOneTier
 
     Y_UNIT_TEST(HotTiers) {
-        TestTwoHotTiers(false, false);
+        TestTwoHotTiers(false, false, false);
     }
 
     Y_UNIT_TEST(RebootHotTiers) {
-        TestTwoHotTiers(true, false);
+        TestTwoHotTiers(true, false, false);
+    }
+
+    Y_UNIT_TEST(HotTiersWithStat) {
+        TestTwoHotTiers(false, false, true);
+    }
+
+    Y_UNIT_TEST(RebootHotTiersWithStat) {
+        TestTwoHotTiers(true, false, true);
     }
 
     Y_UNIT_TEST(HotTiersRevCompression) {
-        TestTwoHotTiers(false, false, EInitialEviction::None, true);
+        TestTwoHotTiers(false, false, false, EInitialEviction::None, true);
     }
 
     Y_UNIT_TEST(RebootHotTiersRevCompression) {
-        TestTwoHotTiers(true, false, EInitialEviction::None, true);
+        TestTwoHotTiers(true, false, false, EInitialEviction::None, true);
     }
 
     Y_UNIT_TEST(HotTiersTtl) {
         NColumnShard::gAllowLogBatchingDefaultValue = false;
-        TestTwoHotTiers(false, true);
+        TestTwoHotTiers(false, true, false);
     }
 
     Y_UNIT_TEST(RebootHotTiersTtl) {
         NColumnShard::gAllowLogBatchingDefaultValue = false;
-        TestTwoHotTiers(true, true);
+        TestTwoHotTiers(true, true, false);
+    }
+
+    Y_UNIT_TEST(HotTiersTtlWithStat) {
+        NColumnShard::gAllowLogBatchingDefaultValue = false;
+        TestTwoHotTiers(false, true, true);
+    }
+
+    Y_UNIT_TEST(RebootHotTiersTtlWithStat) {
+        NColumnShard::gAllowLogBatchingDefaultValue = false;
+        TestTwoHotTiers(true, true, true);
     }
 
     Y_UNIT_TEST(HotTiersAfterTtl) {
-        TestTwoHotTiers(false, false, EInitialEviction::Ttl);
+        TestTwoHotTiers(false, false, false, EInitialEviction::Ttl);
     }
 
     Y_UNIT_TEST(RebootHotTiersAfterTtl) {
-        TestTwoHotTiers(true, false, EInitialEviction::Ttl);
+        TestTwoHotTiers(true, false, false, EInitialEviction::Ttl);
     }
 
     // TODO: EnableTtlAfterHotTiers
 
     Y_UNIT_TEST(ColdTiers) {
-        TestHotAndColdTiers(false, EInitialEviction::Tiering);
+        TestHotAndColdTiers(false, EInitialEviction::Tiering, false);
     }
 
     Y_UNIT_TEST(RebootColdTiers) {
         //NColumnShard::gAllowLogBatchingDefaultValue = false;
-        TestHotAndColdTiers(true, EInitialEviction::Tiering);
+        TestHotAndColdTiers(true, EInitialEviction::Tiering, false);
+    }
+
+    Y_UNIT_TEST(ColdTiersWithStat) {
+        TestHotAndColdTiers(false, EInitialEviction::Tiering, true);
+    }
+
+    Y_UNIT_TEST(RebootColdTiersWithStat) {
+        //NColumnShard::gAllowLogBatchingDefaultValue = false;
+        TestHotAndColdTiers(true, EInitialEviction::Tiering, true);
     }
 
     Y_UNIT_TEST(EnableColdTiersAfterNoEviction) {
-        TestHotAndColdTiers(false, EInitialEviction::None);
+        TestHotAndColdTiers(false, EInitialEviction::None, false);
     }
 
     Y_UNIT_TEST(RebootEnableColdTiersAfterNoEviction) {
-        TestHotAndColdTiers(true, EInitialEviction::None);
+        TestHotAndColdTiers(true, EInitialEviction::None, false);
     }
 
     Y_UNIT_TEST(EnableColdTiersAfterTtl) {
-        TestHotAndColdTiers(false, EInitialEviction::Ttl);
+        TestHotAndColdTiers(false, EInitialEviction::Ttl, false);
     }
 
     Y_UNIT_TEST(RebootEnableColdTiersAfterTtl) {
-        TestHotAndColdTiers(true, EInitialEviction::Ttl);
+        TestHotAndColdTiers(true, EInitialEviction::Ttl, false);
     }
 
     Y_UNIT_TEST(OneColdTier) {

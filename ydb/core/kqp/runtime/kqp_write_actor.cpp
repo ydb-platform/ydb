@@ -55,8 +55,24 @@ namespace {
             ui64 Cookie = 0;
         };
 
+        bool Size() const {
+            return Batches.size();
+        }
+
         bool IsEmpty() const {
             return Batches.empty();
+        }
+
+        bool IsClosed() const {
+            return Closed;
+        }
+
+        bool IsFinished() const {
+            return IsClosed() && IsEmpty();
+        }
+
+        void Close() {
+            Closed = true;
         }
 
         TInFlightBatch& CurrentBatch() {
@@ -69,6 +85,11 @@ namespace {
             return Batches.front();
         }
 
+        const TInFlightBatch& LastBatch() const {
+            YQL_ENSURE(!IsEmpty());
+            return Batches.back();
+        }
+
         std::optional<TInFlightBatch> PopBatch(const ui64 Cookie) {
             if (!IsEmpty() && Cookie == CurrentBatch().Cookie) {
                 auto batch = std::move(Batches.front());
@@ -79,16 +100,22 @@ namespace {
         }
 
         void PushBatch(TString&& data) {
+            YQL_ENSURE(!IsClosed());
             Batches.push_back(TInFlightBatch{
                 .Data = std::move(data),
                 .SendAttempts = 0,
-                .Cookie = 0, //++NextCookie,
+                .Cookie = ++NextCookie,
             });
         }
 
+        // TODO: add&check locks
+
+        // TODO: get locks
+
     private:
         std::deque<TInFlightBatch> Batches;
-        //ui64 NextCookie = 0;
+        ui64 NextCookie = 0;
+        bool Closed = false;
     };
 
     class TShardsInfo {
@@ -114,6 +141,19 @@ namespace {
                 }
             }
             return true;
+        }
+
+        bool IsFinished() const {
+            for (const auto& [_, shard] : ShardsInfo) {
+                if (!shard.IsFinished()) {
+                    return false;
+                }
+            }
+            return true;
+        }
+
+        THashMap<ui64, TShardInfo>& GetShards() {
+            return ShardsInfo;
         }
 
     private:
@@ -174,12 +214,16 @@ public:
     {
         YQL_ENSURE(std::holds_alternative<ui64>(TxId));
         EgressStats.Level = args.StatsLevel;
+
+        // TMP
+        Settings.SetLockTxId(std::get<ui64>(TxId));
+        Settings.SetLockNodeId(0);
     }
 
     void Bootstrap() {
         LogPrefix = TStringBuilder() << "SelfId: " << this->SelfId() << ", " << LogPrefix;
         ResolveTable();
-        Become(&TKqpWriteActor::StateFunc);
+        Become(&TKqpWriteActor::WriteState);
     }
 
     static constexpr char ActorName[] = "KQP_WRITE_ACTOR";
@@ -207,31 +251,64 @@ private:
 
     void SendData(NMiniKQL::TUnboxedValueBatch&& data, i64, const TMaybe<NYql::NDqProto::TCheckpoint>&, bool finished) final {
         YQL_ENSURE(!data.IsWide(), "Wide stream is not supported yet");
-
+        YQL_ENSURE(!Finished);
+        Finished = finished;
         EgressStats.Resume();
 
         YQL_ENSURE(Serializer);
         try {
-            Serializer->AddData(std::move(data), finished);
+            Serializer->AddData(std::move(data), Finished);
         } catch (...) {
             RuntimeError(
                 CurrentExceptionMessage(),
                 NYql::NDqProto::StatusIds::INTERNAL_ERROR);
         }
 
-        Finished = finished;
+        for (auto& [shardId, batches] : Serializer->FlushBatches()) {
+            for (auto& batch : batches) {
+                ShardsInfo.GetShard(shardId).PushBatch(std::move(batch));
+            }
+        }
+        YQL_ENSURE(!Finished || Serializer->IsFinished());
 
-        ProcessRows();
+        if (Finished) {
+            for (auto& [_, shardInfo] : ShardsInfo.GetShards()) {
+                // Add fake empty batch to each shard without unsent data for commit evwrite.
+                if (shardInfo.IsEmpty() || shardInfo.LastBatch().SendAttempts != 0) {
+                    shardInfo.PushBatch("");
+                }
+                shardInfo.Close();
+            }
+        }
+
+        ProcessBatches();
     }
 
-    STFUNC(StateFunc) {
+    STFUNC(WriteState) {
         try {
             switch (ev->GetTypeRewrite()) {
-                hFunc(NKikimr::NEvents::TDataEvents::TEvWriteResult, Handle);
-                hFunc(TEvTxProxySchemeCache::TEvNavigateKeySetResult, Handle);
-                hFunc(TEvPipeCache::TEvDeliveryProblem, Handle);
-                hFunc(TEvTxUserProxy::TEvAllocateTxIdResult, Handle);
-                hFunc(TEvPrivate::TEvShardRequestTimeout, Handle);
+                hFunc(NKikimr::NEvents::TDataEvents::TEvWriteResult, HandleWrite);
+                hFunc(TEvTxProxySchemeCache::TEvNavigateKeySetResult, HandleWrite);
+                hFunc(TEvPipeCache::TEvDeliveryProblem, HandleWrite);
+                IgnoreFunc(TEvTxUserProxy::TEvAllocateTxIdResult);
+                hFunc(TEvPrivate::TEvShardRequestTimeout, HandleWrite);
+                IgnoreFunc(TEvInterconnect::TEvNodeConnected);
+                IgnoreFunc(TEvTxProxySchemeCache::TEvInvalidateTableResult);
+                // TODO: locks broken
+            }
+        } catch (const yexception& e) {
+            RuntimeError(e.what(), NYql::NDqProto::StatusIds::INTERNAL_ERROR);
+        }
+    }
+
+    STFUNC(CommitState) {
+        try {
+            switch (ev->GetTypeRewrite()) {
+                hFunc(NKikimr::NEvents::TDataEvents::TEvWriteResult, HandleWrite);
+                IgnoreFunc(TEvTxProxySchemeCache::TEvNavigateKeySetResult);
+                hFunc(TEvPipeCache::TEvDeliveryProblem, HandleWrite);
+                IgnoreFunc(TEvTxUserProxy::TEvAllocateTxIdResult);
+                IgnoreFunc(TEvPrivate::TEvShardRequestTimeout);
                 IgnoreFunc(TEvInterconnect::TEvNodeConnected);
                 IgnoreFunc(TEvTxProxySchemeCache::TEvInvalidateTableResult);
             }
@@ -252,7 +329,7 @@ private:
         Send(MakeSchemeCacheID(), new TEvTxProxySchemeCache::TEvNavigateKeySet(request));
     }
 
-    void Handle(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr& ev) {
+    void HandleWrite(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr& ev) {
         if (SchemeEntry) {
             return;
         }
@@ -279,123 +356,154 @@ private:
         Callbacks->ResumeExecution();
     }
 
-    void Handle(NKikimr::NEvents::TDataEvents::TEvWriteResult::TPtr& ev) {
-        if (ev->Get()->GetStatus() == NKikimrDataEvents::TEvWriteResult::STATUS_PREPARED) {
-            CA_LOG_D("Got prepared result TxId=" << ev->Get()->Record.GetTxId() << ", TabletId=" << ev->Get()->Record.GetOrigin());
-            // Until LockIds are supported by columnshards we have to commit each write
-            // using separate coordinated transaction. 
+    void HandleWrite(NKikimr::NEvents::TDataEvents::TEvWriteResult::TPtr& ev) {
+        switch (ev->Get()->GetStatus()) {
+        case NKikimrDataEvents::TEvWriteResult::STATUS_PREPARED:
+            ProcessWritePreparedShard(ev);
+            break;
+        case NKikimrDataEvents::TEvWriteResult::STATUS_COMPLETED:
+            ProcessWriteCompletedShard(ev);
+            break;
+        // TODO: process errors
+        default:
+            break;
+        }
+    }
+
+    void ProcessWriteCompletedShard(NKikimr::NEvents::TDataEvents::TEvWriteResult::TPtr& ev) {
+        CA_LOG_D("Got completed result TxId=" << ev->Get()->Record.GetTxId()
+            << ", TabletId=" << ev->Get()->Record.GetOrigin()
+            << ", Cookie=" << ev->Cookie);
+
+        PopShardBatch(ev->Get()->Record.GetOrigin(), ev->Cookie);
+        ProcessBatches();
+    }
+
+    void ProcessWritePreparedShard(NKikimr::NEvents::TDataEvents::TEvWriteResult::TPtr& ev) {
+        CA_LOG_D("Got prepared result TxId=" << ev->Get()->Record.GetTxId()
+            << ", TabletId=" << ev->Get()->Record.GetOrigin()
+            << ", Cookie=" << ev->Cookie);
+
+        PopShardBatch(ev->Get()->Record.GetOrigin(), ev->Cookie);
+
+        if (!ProposeTransaction) {
+            ProposeTransaction = MakeHolder<TEvTxProxy::TEvProposeTransaction>();
+        }
+
+        auto& transaction = *ProposeTransaction->Record.MutableTransaction();
+        auto& affectedSet = *transaction.MutableAffectedSet();
+
+        auto& item = *affectedSet.Add();
+        item.SetTabletId(ev->Get()->Record.GetOrigin());
+        item.SetFlags(TEvTxProxy::TEvProposeTransaction::AffectedWrite);
+
+        if (ShardsInfo.IsFinished()) {
             ui64 coordinator = 0;
             if (ev->Get()->Record.DomainCoordinatorsSize()) {
                 auto domainCoordinators = TCoordinators(TVector<ui64>(
-                    ev->Get()->Record.GetDomainCoordinators().begin(),
-                    ev->Get()->Record.GetDomainCoordinators().end()));
+                    std::begin(ev->Get()->Record.GetDomainCoordinators()),
+                    std::end(ev->Get()->Record.GetDomainCoordinators())));
                 coordinator = domainCoordinators.Select(ev->Get()->Record.GetTxId());
             }
 
             YQL_ENSURE(coordinator != 0);
+            ProposeTransaction->Record.SetCoordinatorID(coordinator);
 
-            auto evTnx = MakeHolder<TEvTxProxy::TEvProposeTransaction>();
-            evTnx->Record.SetCoordinatorID(coordinator);
-
-            auto& transaction = *evTnx->Record.MutableTransaction();
-            auto& affectedSet = *transaction.MutableAffectedSet();
-
-            auto& item = *affectedSet.Add();
-            item.SetTabletId(ev->Get()->Record.GetOrigin());
-            item.SetFlags(TEvTxProxy::TEvProposeTransaction::AffectedWrite);
-
+            auto& transaction = *ProposeTransaction->Record.MutableTransaction();
             transaction.SetTxId(ev->Get()->Record.GetTxId());
             transaction.SetMinStep(ev->Get()->Record.GetMinStep());
             transaction.SetMaxStep(ev->Get()->Record.GetMaxStep());
 
             Send(
                 PipeCacheId,
-                new TEvPipeCache::TEvForward(evTnx.Release(), coordinator, /* subscribe */ true),
-                IEventHandle::FlagTrackDelivery);
-        } else if (ev->Get()->GetStatus() == NKikimrDataEvents::TEvWriteResult::STATUS_COMPLETED) {
-            CA_LOG_D("Got completed result TxId=" << ev->Get()->Record.GetTxId() << ", TabletId=" << ev->Get()->Record.GetOrigin());
-
-            auto& shardInfo = ShardsInfo.GetShard(ev->Get()->Record.GetOrigin());
-            if (const auto batch = shardInfo.PopBatch(ev->Get()->Record.GetTxId()); batch) {
-                EgressStats.Bytes += batch->Data.size();
-                EgressStats.Chunks++;
-                EgressStats.Splits++;
-                EgressStats.Resume();
-            }
-        }
-
-        ProcessRows();
-    }
-
-    void ProcessRows() {
-        for (auto& [shard, batches] : Serializer->FlushBatches()) {
-            for (auto& batch : batches) {
-                ShardsInfo.GetShard(shard).PushBatch(std::move(batch));
-            }
-        }
-
-        SendBatchesToShards();
-
-        if (Serializer && Serializer->IsFinished() && ShardsInfo.IsEmpty()) {
+                new TEvPipeCache::TEvForward(ProposeTransaction.Release(), coordinator, true),
+                0);
             Callbacks->OnAsyncOutputFinished(GetOutputIndex());
         }
+    }
+
+    void PopShardBatch(ui64 shardId, ui64 cookie) {
+        auto& shardInfo = ShardsInfo.GetShard(shardId);
+        if (const auto batch = shardInfo.PopBatch(cookie); batch) {
+            EgressStats.Bytes += batch->Data.size();
+            EgressStats.Chunks++;
+            EgressStats.Splits++;
+            EgressStats.Resume();
+        }
+    }
+
+    void ProcessBatches() {
+        SendBatchesToShards();
     }
 
     void SendBatchesToShards() {
         for (size_t shardId : ShardsInfo.GetPendingShards()) {
             auto& shard = ShardsInfo.GetShard(shardId);
             YQL_ENSURE(!shard.IsEmpty());
-            auto& batch = shard.CurrentBatch();
-            if (batch.Cookie == 0) {
-                if (const auto txId = AllocateTxId(); txId) {
-                    batch.Cookie = *txId;
-                    SendRequestShard(shardId);
-                } else {
-                    RequestNewTxId();
-                }
-            }
+
+            SendDataToShard(shardId);
         }
     }
 
-    void SendRequestShard(const ui64 shardId) {
+    void SendDataToShard(const ui64 shardId) {
         auto& shard = ShardsInfo.GetShard(shardId);
         YQL_ENSURE(!shard.IsEmpty());
         auto& inFlightBatch = shard.CurrentBatch();
-
         if (inFlightBatch.SendAttempts >= BackoffSettings()->MaxWriteAttempts) {
             RuntimeError(
-                TStringBuilder() << "ShardId=" << shardId << " for table '" << Settings.GetTable().GetPath() << "' retry limit exceeded",
+                TStringBuilder() << "ShardId=" << shardId << " for table '" << Settings.GetTable().GetPath() << "': retry limit exceeded",
                 NYql::NDqProto::StatusIds::UNAVAILABLE);
             return;
         }
 
-        auto evWrite = std::make_unique<NKikimr::NEvents::TDataEvents::TEvWrite>(
-            inFlightBatch.Cookie, NKikimrDataEvents::TEvWrite::MODE_PREPARE);
-        ui64 payloadIndex = NKikimr::NEvWrite::TPayloadWriter<NKikimr::NEvents::TDataEvents::TEvWrite>(*evWrite)
-            .AddDataToPayload(TString(inFlightBatch.Data));
-        evWrite->AddOperation(
-            NKikimrDataEvents::TEvWrite::TOperation::OPERATION_REPLACE,
-            {
-                Settings.GetTable().GetOwnerId(),
-                Settings.GetTable().GetTableId(),
-                Settings.GetTable().GetVersion() + 1 // TODO: SchemeShard returns wrong version.
-            },
-            Serializer->GetWriteColumnIds(),
-            payloadIndex,
-            Serializer->GetDataFormat());
-        // evWrite->Cookie = inFlightBatch.Cookie;
+        const bool isLastBatch = shard.Size() == 1 && Finished;
+        if (isLastBatch && inFlightBatch.SendAttempts != 0) {
+            RuntimeError(
+                TStringBuilder() << "ShardId=" << shardId << " for table '" << Settings.GetTable().GetPath() << "': last batch can't be retried",
+                NYql::NDqProto::StatusIds::INTERNAL_ERROR);
+            return;
+        }
 
-        CA_LOG_D("Send EvWrite to ShardID=" << shardId << ", TxId=" << inFlightBatch.Cookie << ", Size = " << inFlightBatch.Data.size());
+        auto evWrite = std::make_unique<NKikimr::NEvents::TDataEvents::TEvWrite>(
+            std::get<ui64>(TxId),
+            NKikimrDataEvents::TEvWrite::MODE_PREPARE);
+        if (!inFlightBatch.Data.empty()) {
+            const ui64 payloadIndex = NKikimr::NEvWrite::TPayloadWriter<NKikimr::NEvents::TDataEvents::TEvWrite>(*evWrite)
+                .AddDataToPayload(TString(inFlightBatch.Data));
+            evWrite->AddOperation(
+                NKikimrDataEvents::TEvWrite::TOperation::OPERATION_REPLACE,
+                {
+                    Settings.GetTable().GetOwnerId(),
+                    Settings.GetTable().GetTableId(),
+                    Settings.GetTable().GetVersion() + 1 // TODO: SchemeShard returns wrong version.
+                },
+                Serializer->GetWriteColumnIds(),
+                payloadIndex,
+                Serializer->GetDataFormat());
+        } else {
+            YQL_ENSURE(isLastBatch);
+        }
+
+        if (isLastBatch) {
+            // TODO: Send locks structs
+        } else {
+            evWrite->SetLockId(Settings.GetLockTxId(), Settings.GetLockNodeId());
+        }
+
+        CA_LOG_D("Send EvWrite to ShardID=" << shardId << ", TxId=" << std::get<ui64>(TxId)
+            << ", Size=" << inFlightBatch.Data.size() << ", Cookie=" << inFlightBatch.Cookie);
         Send(
             PipeCacheId,
             new TEvPipeCache::TEvForward(evWrite.release(), shardId, true),
-            IEventHandle::FlagTrackDelivery);
-
-        TlsActivationContext->Schedule(
-            CalculateNextAttemptDelay(inFlightBatch.SendAttempts),
-            new IEventHandle(SelfId(), SelfId(), new TEvPrivate::TEvShardRequestTimeout(shardId, inFlightBatch.Cookie)));
-
+            0, //IEventHandle::FlagTrackDelivery,
+            inFlightBatch.Cookie);
         ++inFlightBatch.SendAttempts;
+
+        if (!isLastBatch) {
+            TlsActivationContext->Schedule(
+                CalculateNextAttemptDelay(inFlightBatch.SendAttempts),
+                new IEventHandle(SelfId(), SelfId(), new TEvPrivate::TEvShardRequestTimeout(shardId, inFlightBatch.Cookie)));
+        }
     }
 
     void RetryShard(const ui64 shardId) {
@@ -413,7 +521,7 @@ private:
         RequestNewTxId();*/
     }
 
-    void Handle(TEvPrivate::TEvShardRequestTimeout::TPtr& ev) {
+    void HandleWrite(TEvPrivate::TEvShardRequestTimeout::TPtr& ev) {
         //if (!InFlightBatches.contains(ev->Get()->ShardId)) {
         //    return;
         //}
@@ -425,30 +533,12 @@ private:
         Y_UNUSED(ev);
     }
 
-    void Handle(TEvPipeCache::TEvDeliveryProblem::TPtr& ev) {
+    void HandleWrite(TEvPipeCache::TEvDeliveryProblem::TPtr& ev) {
         CA_LOG_D("TEvDeliveryProblem was received from tablet: " << ev->Get()->TabletId);
         //if (!InFlightBatches.contains(ev->Get()->TabletId)) {
         //    return;
         //}
         //RetryShard(ev->Get()->TabletId);
-    }
-
-    void Handle(TEvTxUserProxy::TEvAllocateTxIdResult::TPtr& ev) {
-        FreeTxIds.push_back(ev->Get()->TxId);
-        ProcessRows();
-    }
-
-    void RequestNewTxId() {
-        Send(TxProxyId, new TEvTxUserProxy::TEvAllocateTxId);
-    }
-
-    std::optional<ui64> AllocateTxId() {
-        if (FreeTxIds.empty()) {
-            return std::nullopt;
-        }
-        const ui64 result = FreeTxIds.front();
-        FreeTxIds.pop_front();
-        return result;
     }
 
     void RuntimeError(const TString& message, NYql::NDqProto::StatusIds::StatusCode statusCode, const NYql::TIssues& subIssues = {}) {
@@ -505,7 +595,7 @@ private:
     NActors::TActorId PipeCacheId = NKikimr::MakePipePeNodeCacheID(false);
 
     TString LogPrefix;
-    const NKikimrKqp::TKqpTableSinkSettings Settings;
+    /*const*/ NKikimrKqp::TKqpTableSinkSettings Settings;
     const ui64 OutputIndex;
     NYql::NDq::TDqAsyncStats EgressStats;
     NYql::NDq::IDqComputeActorAsyncOutput::ICallbacks * Callbacks = nullptr;
@@ -523,7 +613,8 @@ private:
 
     const i64 MemoryLimit = kInFlightMemoryLimitPerActor;
 
-    std::deque<ui64> FreeTxIds;
+    //TODO: delete it
+    THolder<TEvTxProxy::TEvProposeTransaction> ProposeTransaction = nullptr;
 };
 
 void RegisterKqpWriteActor(NYql::NDq::TDqAsyncIoFactory& factory, TIntrusivePtr<TKqpCounters> counters) {

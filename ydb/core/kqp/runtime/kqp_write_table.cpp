@@ -123,6 +123,7 @@ public:
 
     void AddData(NMiniKQL::TUnboxedValueBatch&& data, bool close) override {
         YQL_ENSURE(!Closed);
+        Closed = close;
 
         TVector<TCell> cells(Columns.size());
         data.ForEachRow([&](const auto& row) {
@@ -135,8 +136,6 @@ public:
             }
             BatchBuilder.AddRow(TConstArrayRef<TCell>{cells.begin(), cells.end()});
         });
-
-        Closed |= close;
 
         const auto batch = BatchBuilder.FlushBatch(true);
         if (batch) {

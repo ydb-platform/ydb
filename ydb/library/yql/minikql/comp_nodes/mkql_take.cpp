@@ -100,7 +100,7 @@ class TWideTakeWrapper : public TSimpleStatefulWideFlowCodegeneratorNode<TWideTa
 using TBaseComputation = TSimpleStatefulWideFlowCodegeneratorNode<TWideTakeWrapper, ui64>;
 public:
      TWideTakeWrapper(TComputationMutables& mutables, IComputationWideFlowNode* flow, IComputationNode* count)
-        : TBaseComputation(mutables, flow, EValueRepresentation::Embedded), Flow(flow), Count(count)
+        : TBaseComputation(mutables, flow), Flow(flow), Count(count)
     {}
 
     void InitState(ui64 &count, TComputationContext& ctx) const {

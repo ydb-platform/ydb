@@ -143,7 +143,7 @@ using TBaseComputation = TSimpleStatefulWideFlowCodegeneratorNode<TWideFilterWit
 public:
     TWideFilterWithLimitWrapper(TComputationMutables& mutables, IComputationWideFlowNode* flow, IComputationNode* limit,
             TComputationExternalNodePtrVector&& items, IComputationNode* predicate)
-        : TBaseComputation(mutables, flow)
+        : TBaseComputation(mutables, flow, items.size(), items.size())
         , TBaseWideFilterWrapper(mutables, flow, std::move(items), predicate)
         , Limit(limit)
     {}
@@ -189,7 +189,7 @@ using TBaseComputation = TSimpleStatefulWideFlowCodegeneratorNode<TWideTakeWhile
 public:
      TWideTakeWhileWrapper(TComputationMutables& mutables, IComputationWideFlowNode* flow, TComputationExternalNodePtrVector&& items,
             IComputationNode* predicate)
-        : TBaseComputation(mutables, flow)
+        : TBaseComputation(mutables, flow, items.size(), items.size())
         , TBaseWideFilterWrapper(mutables, flow, std::move(items), predicate)
     {}
 
@@ -233,7 +233,7 @@ class TWideSkipWhileWrapper : public TSimpleStatefulWideFlowCodegeneratorNode<TW
 using TBaseComputation = TSimpleStatefulWideFlowCodegeneratorNode<TWideSkipWhileWrapper<Inclusive>, bool>;
 public:
      TWideSkipWhileWrapper(TComputationMutables& mutables, IComputationWideFlowNode* flow, TComputationExternalNodePtrVector&& items, IComputationNode* predicate)
-        : TBaseComputation(mutables, flow)
+        : TBaseComputation(mutables, flow, items.size(), items.size())
         , TBaseWideFilterWrapper(mutables, flow, std::move(items), predicate)
     {}
 

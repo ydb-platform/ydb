@@ -99,8 +99,8 @@ private:
 class TWideTakeWrapper : public TSimpleStatefulWideFlowCodegeneratorNode<TWideTakeWrapper, ui64> {
 using TBaseComputation = TSimpleStatefulWideFlowCodegeneratorNode<TWideTakeWrapper, ui64>;
 public:
-     TWideTakeWrapper(TComputationMutables& mutables, IComputationWideFlowNode* flow, IComputationNode* count)
-        : TBaseComputation(mutables, flow), Flow(flow), Count(count)
+     TWideTakeWrapper(TComputationMutables& mutables, IComputationWideFlowNode* flow, IComputationNode* count, ui32 size)
+        : TBaseComputation(mutables, flow, size, size), Flow(flow), Count(count)
     {}
 
     void InitState(ui64 &count, TComputationContext& ctx) const {
@@ -248,7 +248,7 @@ IComputationNode* WrapTake(TCallable& callable, const TComputationNodeFactoryCon
     const auto count = LocateNode(ctx.NodeLocator, callable, 1);
     if (type->IsFlow()) {
         if (const auto wide = dynamic_cast<IComputationWideFlowNode*>(flow))
-            return new TWideTakeWrapper(ctx.Mutables, wide, count);
+            return new TWideTakeWrapper(ctx.Mutables, wide, count, GetWideComponentsCount(AS_TYPE(TFlowType, type)));
         else
             return new TTakeFlowWrapper(ctx.Mutables, GetValueRepresentation(type), flow, count);
     } else if (type->IsStream()) {

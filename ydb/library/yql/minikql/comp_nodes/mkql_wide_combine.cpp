@@ -291,6 +291,7 @@ public:
     }
 
     EFetchResult InputStatus = EFetchResult::One;
+    bool IsReading = false;
     NUdf::TUnboxedValuePod* Tongue = nullptr;
     NUdf::TUnboxedValuePod* Throat = nullptr;
 
@@ -354,7 +355,7 @@ class TWideCombinerWrapper: public TSimpleStatefulWideFlowCodegeneratorNode<TWid
 using TBaseComputation = TSimpleStatefulWideFlowCodegeneratorNode<TWideCombinerWrapper<TrackRss, SkipYields>, TState, EValueRepresentation::Boxed>;
 public:
     TWideCombinerWrapper(TComputationMutables& mutables, IComputationWideFlowNode* flow, TCombinerNodes&& nodes, TKeyTypes&& keyTypes, ui64 memLimit)
-        : TBaseComputation(mutables, flow)
+        : TBaseComputation(mutables, flow, nodes.ItemNodes.size(), nodes.FinishNodes.size())
         , Flow(flow)
         , Nodes(std::move(nodes))
         , KeyTypes(std::move(keyTypes))
@@ -367,14 +368,16 @@ public:
     }
 
     NUdf::TUnboxedValue*const* PrepareInput(TState* state, TComputationContext& ctx, NUdf::TUnboxedValue*const*) const {
-        if (state->ReadMore<SkipYields>()) {
-            switch (state->InputStatus) {
-                case EFetchResult::One: break;
-                case EFetchResult::Yield: {
-                    if constexpr (SkipYields) break;
-                    else return nullptr;
+        if (state->IsReading || state->ReadMore<SkipYields>()) {
+            if (!state->IsReading) {
+                switch (state->InputStatus) {
+                    case EFetchResult::One: break;
+                    case EFetchResult::Yield: {
+                        if constexpr (SkipYields) break;
+                        else return nullptr;
+                    }
+                    case EFetchResult::Finish: return nullptr;
                 }
-                case EFetchResult::Finish: return nullptr;
             }
             auto **fields = ctx.WideFields.data() + WideFieldsIndex;
             for (auto i = 0U; i < Nodes.ItemNodes.size(); ++i) {
@@ -388,17 +391,22 @@ public:
     }
 
     TBaseComputation::EProcessResult DoProcess(TState* state, TComputationContext& ctx, EFetchResult fetchRes, NUdf::TUnboxedValue*const* output) const {
-        if (state->ReadMore<SkipYields>()) {
-            switch (state->InputStatus) {
-                case EFetchResult::One: break;
-                case EFetchResult::Yield:
-                    state->InputStatus = EFetchResult::One;
-                    if constexpr (SkipYields) break;
-                    else return TBaseComputation::EProcessResult::Yield;
-                case EFetchResult::Finish: return TBaseComputation::EProcessResult::Finish;
+        if (state->IsReading || state->ReadMore<SkipYields>()) {
+            if (!state->IsReading) {
+                switch (state->InputStatus) {
+                    case EFetchResult::One:
+                        break;
+                    case EFetchResult::Yield:
+                        state->InputStatus = EFetchResult::One;
+                        if constexpr (SkipYields) break;
+                        else return TBaseComputation::EProcessResult::Yield;
+                    case EFetchResult::Finish:
+                        return TBaseComputation::EProcessResult::Finish;
+                }
             }
             auto **fields = ctx.WideFields.data() + WideFieldsIndex;
             state->InputStatus = fetchRes;
+            state->IsReading = false;
             if constexpr (SkipYields) {
                 if (fetchRes == EFetchResult::Yield) {
                     return TBaseComputation::EProcessResult::Yield;
@@ -410,8 +418,10 @@ public:
                     return TBaseComputation::EProcessResult::Again;
                 }
             }
+            state->IsReading = true;
             Nodes.ExtractKey(ctx, fields, static_cast<NUdf::TUnboxedValue*>(state->Tongue));
             Nodes.ProcessItem(ctx, state->TasteIt() ? nullptr : static_cast<NUdf::TUnboxedValue*>(state->Tongue), static_cast<NUdf::TUnboxedValue*>(state->Throat));
+            return TBaseComputation::EProcessResult::Again;
         }
         if (const auto values = static_cast<NUdf::TUnboxedValue*>(state->Extract())) {
             Nodes.FinishItem(ctx, values, output);

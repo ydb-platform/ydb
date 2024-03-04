@@ -122,7 +122,7 @@ class TWideSkipWrapper : public TSimpleStatefulWideFlowCodegeneratorNode<TWideSk
 using TBaseComputation = TSimpleStatefulWideFlowCodegeneratorNode<TWideSkipWrapper, ui64>;
 public:
      TWideSkipWrapper(TComputationMutables& mutables, IComputationWideFlowNode* flow, IComputationNode* count, ui32 size)
-        : TBaseComputation(mutables, flow)
+        : TBaseComputation(mutables, flow, size, size)
         , Flow(flow)
         , Count(count)
         , StubsIndex(mutables.IncrementWideFieldsIndex(size))

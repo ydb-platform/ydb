@@ -181,7 +181,7 @@ void TFileCache::ReleaseFile(const TString& objectId) {
     auto maybeFile = Files.find(objectId);
     if (maybeFile != Files.end()) {
         maybeFile->second.UseCount = std::max((i64)0, maybeFile->second.UseCount-1);
-        if (maybeFile->second.UseCount == 0) {
+        if (maybeFile->second.UseCount == 0 && maybeFile->second.Position == LRU.end()) {
             UsedSize -= maybeFile->second.Size;
             Files.erase(maybeFile);
         }

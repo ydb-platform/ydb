@@ -60,6 +60,18 @@ Y_UNIT_TEST(Evict) {
     UNIT_ASSERT(!fc.FindFile("3"));
 }
 
+Y_UNIT_TEST(AcquireRelease) {
+    NFs::RemoveRecursive("dir_acquire");
+    TFileCache fc("dir_acquire", 20);
+    fc.AddFile(GetFile(10), "1");
+    fc.AcquireFile("1");
+    UNIT_ASSERT_EQUAL(fc.FreeDiskSize(), 10);
+    UNIT_ASSERT_EQUAL(fc.UsedDiskSize(), 10);
+    fc.ReleaseFile("1");
+    UNIT_ASSERT_EQUAL(fc.FreeDiskSize(), 10);
+    UNIT_ASSERT_EQUAL(fc.UsedDiskSize(), 10);
+}
+ 
 Y_UNIT_TEST(Acquire) {
     NFs::RemoveRecursive("dir_acquire");
     TFileCache fc("dir_acquire", 20);

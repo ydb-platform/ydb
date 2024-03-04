@@ -80,12 +80,14 @@ IF (CLANG AND NOT WITH_VALGRIND)
         src/Core/SettingsEnums.cpp
         src/Core/SettingsFields.cpp
 
+        src/Formats/EscapingRuleUtils.cpp
         src/Formats/FormatFactory.cpp
         src/Formats/JSONEachRowUtils.cpp
         src/Formats/NativeFormat.cpp
         src/Formats/ProtobufReader.cpp
         src/Formats/ProtobufWriter.cpp
         src/Formats/registerFormats.cpp
+        src/Formats/SchemaInferenceUtils.cpp
         src/Formats/verbosePrintString.cpp
 
         src/AggregateFunctions/AggregateFunctionFactory.cpp
@@ -198,6 +200,7 @@ IF (CLANG AND NOT WITH_VALGRIND)
         src/DataTypes/getLeastSupertype.cpp
         src/DataTypes/NestedUtils.cpp
         src/DataTypes/registerDataTypeDateTime.cpp
+        src/DataTypes/transformTypesRecursively.cpp
 
         src/DataTypes/Serializations/ISerialization.cpp
         src/DataTypes/Serializations/SerializationArray.cpp
@@ -340,10 +343,12 @@ IF (CLANG AND NOT WITH_VALGRIND)
 
         src/Processors/Formats/IRowOutputFormat.cpp
         src/Processors/Formats/IRowInputFormat.cpp
+        src/Processors/Formats/ISchemaReader.cpp
         src/Processors/Formats/IInputFormat.cpp
         src/Processors/Formats/IOutputFormat.cpp
         src/Processors/Formats/OutputStreamToOutputFormat.cpp
         src/Processors/Formats/RowInputFormatWithDiagnosticInfo.cpp
+        src/Processors/Formats/RowInputFormatWithNamesAndTypes.cpp
 
         src/Interpreters/castColumn.cpp
         src/Interpreters/ClientInfo.cpp

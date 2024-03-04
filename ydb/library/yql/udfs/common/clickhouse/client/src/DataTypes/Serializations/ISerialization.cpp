@@ -1,3 +1,4 @@
+#include "IO/ReadBufferFromString.h"
 #include <DataTypes/Serializations/ISerialization.h>
 #include <Compression/CompressionFactory.h>
 #include <Columns/IColumn.h>
@@ -193,6 +194,20 @@ bool ISerialization::isSpecialCompressionAllowed(const SubstreamPath & path)
             return false;
     }
     return true;
+}
+
+void ISerialization::deserializeTextRaw(IColumn & column, ReadBuffer & istr, const FormatSettings & settings) const
+{
+    String field;
+    /// Read until \t or \n.
+    readString(field, istr);
+    ReadBufferFromString buf(field);
+    deserializeWholeText(column, buf, settings);
+}
+
+void ISerialization::serializeTextRaw(const IColumn & column, size_t row_num, WriteBuffer & ostr, const FormatSettings & settings) const
+{
+    serializeText(column, row_num, ostr, settings);
 }
 
 }

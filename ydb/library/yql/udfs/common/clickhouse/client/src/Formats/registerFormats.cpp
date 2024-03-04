@@ -25,6 +25,8 @@ void registerOutputFormatProcessorTSKV(FormatFactory & factory);
 void registerInputFormatProcessorTabSeparated(FormatFactory & factory);
 void registerOutputFormatProcessorTabSeparated(FormatFactory & factory);
 
+void registerCSVSchemaReader(FormatFactory & factory);
+
 void registerFormats()
 {
     auto & factory = FormatFactory::instance();
@@ -47,6 +49,8 @@ void registerFormats()
         registerOutputFormatProcessorTSKV(factory);
         registerInputFormatProcessorTabSeparated(factory);
         registerOutputFormatProcessorTabSeparated(factory);
+
+        registerCSVSchemaReader(factory);
     }
 }
 

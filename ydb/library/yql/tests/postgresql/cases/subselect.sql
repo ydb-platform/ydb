@@ -31,6 +31,22 @@ SELECT f1 AS "Constant Select" FROM SUBSELECT_TBL
   WHERE f1 IN (SELECT 1);
 select 1 = all (select (select 1));
 --
+-- Test cases to catch unpleasant interactions between IN-join processing
+-- and subquery pullup.
+--
+select count(*) from
+  (select 1 from tenk1 a
+   where unique1 IN (select hundred from tenk1 b)) ss;
+select count(distinct ss.ten) from
+  (select ten from tenk1 a
+   where unique1 IN (select hundred from tenk1 b)) ss;
+select count(*) from
+  (select 1 from tenk1 a
+   where unique1 IN (select distinct hundred from tenk1 b)) ss;
+select count(distinct ss.ten) from
+  (select ten from tenk1 a
+   where unique1 IN (select distinct hundred from tenk1 b)) ss;
+--
 -- Test cases to check for overenthusiastic optimization of
 -- "IN (SELECT DISTINCT ...)" and related cases.  Per example from
 -- Luca Pireddu and Michael Fuhr.
@@ -92,6 +108,18 @@ create temp table shipped (
     value       float8
 );
 insert into parts (partnum, cost) values (1, 1234.56);
+--
+-- Test cases involving PARAM_EXEC parameters and min/max index optimizations.
+-- Per bug report from David Sanchez i Gregori.
+--
+select * from (
+  select max(unique1) from tenk1 as a
+  where exists (select 1 from tenk1 as b where b.thousand = a.unique2)
+) ss;
+select * from (
+  select min(unique1) from tenk1 as a
+  where not exists (select 1 from tenk1 as b where b.unique2 = 10000)
+) ss;
 --
 -- Test that an IN implemented using a UniquePath does unique-ification
 -- with the right semantics, as per bug #4113.  (Unfortunately we have
@@ -165,6 +193,11 @@ insert into inner_text values ('a', null);
 insert into inner_text values ('123', '456');
 begin;
 rollback;  -- to get rid of the bogus operator
+select count(*) from tenk1 t
+where (exists(select 1 from tenk1 k where k.unique1 = t.unique2) or ten < 0);
+select count(*) from tenk1 t
+where (exists(select 1 from tenk1 k where k.unique1 = t.unique2) or ten < 0)
+  and thousand = 1;
 --
 -- Check we don't misoptimize a NOT IN where the subquery returns no rows.
 --

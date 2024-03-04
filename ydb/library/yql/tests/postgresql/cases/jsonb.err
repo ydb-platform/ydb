@@ -1357,12 +1357,9 @@ SELECT jsonb_build_object(
             -stdin-:<main>:3:13: Error: At function: PgCall
             	       'd', jsonb_build_object('e',array[9,8,7]::int[],
 	            ^
-                -stdin-:<main>:4:17: Error: At function: PgSubLink, At function: PgSelect, At function: PgSetItem
-                	           'f', (select row_to_json(r) from ( select relkind, oid::regclass as name from pg_class where relname = 'pg_class') r)));
-	                ^
-                    -stdin-:<main>:4:37: Error: No such column: r
-                    	           'f', (select row_to_json(r) from ( select relkind, oid::regclass as name from pg_class where relname = 'pg_class') r)));
-	                                    ^
+                -stdin-:<main>:3:13: Error: Unable to find an overload for proc jsonb_build_object with given argument types: (unknown,_int4,unknown,json)
+                	       'd', jsonb_build_object('e',array[9,8,7]::int[],
+	            ^
 <sql-statement>
 SELECT jsonb_build_object('{a,b,c}'::text[]); -- error
 </sql-statement>
@@ -1539,12 +1536,15 @@ SELECT jsonb_build_object(r,2) FROM (SELECT 1 AS a, 2 AS b) r;
 </sql-statement>
 -stdin-:<main>: Error: Type annotation
 
-    -stdin-:<main>:1:1: Error: At function: RemovePrefixMembers, At function: PgSelect, At function: PgSetItem
+    -stdin-:<main>:1:1: Error: At function: RemovePrefixMembers, At function: PgSelect, At function: PgSetItem, At function: PgResultItem
     	SELECT jsonb_build_object(r,2) FROM (SELECT 1 AS a, 2 AS b) r;
 	^
-        -stdin-:<main>:1:27: Error: No such column: r
+        -stdin-:<main>:1:8: Error: At function: PgCall
         	SELECT jsonb_build_object(r,2) FROM (SELECT 1 AS a, 2 AS b) r;
-	                          ^
+	       ^
+            -stdin-:<main>:1:8: Error: Unable to find an overload for proc jsonb_build_object with given argument types: (record,int4)
+            	SELECT jsonb_build_object(r,2) FROM (SELECT 1 AS a, 2 AS b) r;
+	       ^
 <sql-statement>
 SELECT jsonb_build_object(json '{"a":1,"b":2}', 3);
 </sql-statement>

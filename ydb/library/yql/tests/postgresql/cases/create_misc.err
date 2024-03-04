@@ -1,3 +1,8 @@
+Registering pre-existing tables
+	tenk1
+	equipment_r
+	tenk2
+	hobbies_r
 <sql-statement>
 --
 -- CREATE_MISC
@@ -7,10 +12,6 @@
 --
 INSERT INTO tenk2 SELECT * FROM tenk1;
 </sql-statement>
--stdin-:<main>: Fatal: Table metadata loading
-
-    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.tenk1
-    
 <sql-statement>
 CREATE TABLE onek2 AS SELECT * FROM onek;
 </sql-statement>
@@ -60,38 +61,18 @@ INSERT INTO hobbies_r (name, person)
 <sql-statement>
 INSERT INTO hobbies_r (name) VALUES ('skywalking');
 </sql-statement>
--stdin-:<main>: Fatal: Table metadata loading
-
-    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.hobbies_r
-    
 <sql-statement>
 INSERT INTO equipment_r (name, hobby) VALUES ('advil', 'posthacking');
 </sql-statement>
--stdin-:<main>: Fatal: Table metadata loading
-
-    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.equipment_r
-    
 <sql-statement>
 INSERT INTO equipment_r (name, hobby) VALUES ('peet''s coffee', 'posthacking');
 </sql-statement>
--stdin-:<main>: Fatal: Table metadata loading
-
-    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.equipment_r
-    
 <sql-statement>
 INSERT INTO equipment_r (name, hobby) VALUES ('hightops', 'basketball');
 </sql-statement>
--stdin-:<main>: Fatal: Table metadata loading
-
-    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.equipment_r
-    
 <sql-statement>
 INSERT INTO equipment_r (name, hobby) VALUES ('guts', 'skywalking');
 </sql-statement>
--stdin-:<main>: Fatal: Table metadata loading
-
-    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.equipment_r
-    
 <sql-statement>
 INSERT INTO city VALUES
 ('Podunk', '(1,2),(3,4)', '100,127,1000'),

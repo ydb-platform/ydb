@@ -48,6 +48,16 @@ SELECT q1 FROM int8_tbl EXCEPT ALL SELECT DISTINCT q2 FROM int8_tbl ORDER BY 1;
 (SELECT 1,2,3 UNION SELECT 4,5,6 ORDER BY 1,2) INTERSECT SELECT 4,5,6;
 (SELECT 1,2,3 UNION SELECT 4,5,6) EXCEPT SELECT 4,5,6;
 (SELECT 1,2,3 UNION SELECT 4,5,6 ORDER BY 1,2) EXCEPT SELECT 4,5,6;
+select count(*) from
+  ( select unique1 from tenk1 union select fivethous from tenk1 ) ss;
+select count(*) from
+  ( select unique1 from tenk1 intersect select fivethous from tenk1 ) ss;
+select unique1 from tenk1 except select unique2 from tenk1 where unique2 != 10;
+select count(*) from
+  ( select unique1 from tenk1 union select fivethous from tenk1 ) ss;
+select count(*) from
+  ( select unique1 from tenk1 intersect select fivethous from tenk1 ) ss;
+select unique1 from tenk1 except select unique2 from tenk1 where unique2 != 10;
 select x from (values (array[1, 2]), (array[1, 3])) _(x) intersect select x from (values (array[1, 2]), (array[1, 4])) _(x);
 select x from (values (array[1, 2]), (array[1, 3])) _(x) except select x from (values (array[1, 2]), (array[1, 4])) _(x);
 select x from (values (array[1, 2]), (array[1, 3])) _(x) intersect select x from (values (array[1, 2]), (array[1, 4])) _(x);
@@ -69,6 +79,15 @@ ORDER BY q2,q1;
 -- New syntaxes (7.1) permit new tests
 --
 (((((select * from int8_tbl)))));
+--
+-- Check handling of a case with unknown constants.  We don't guarantee
+-- an undecorated constant will work in all cases, but historically this
+-- usage has worked, so test we don't break it.
+--
+SELECT a.f1 FROM (SELECT 'test' AS f1 FROM varchar_tbl) a
+UNION
+SELECT b.f1 FROM (SELECT f1 FROM varchar_tbl) b
+ORDER BY 1;
 -- This should fail, but it should produce an error cursor
 SELECT '3.4'::numeric UNION SELECT 'foo';
 --

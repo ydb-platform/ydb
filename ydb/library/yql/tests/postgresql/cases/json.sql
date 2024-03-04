@@ -64,6 +64,16 @@ SELECT array_to_json(array_agg(x),false) from generate_series(5,10) x;
 SELECT array_to_json('{{1,5},{99,100}}'::int[]);
 BEGIN;
 COMMIT;
+-- non-numeric output
+SELECT row_to_json(q)
+FROM (SELECT 'NaN'::float8 AS "float8field") q;
+SELECT row_to_json(q)
+FROM (SELECT 'Infinity'::float8 AS "float8field") q;
+SELECT row_to_json(q)
+FROM (SELECT '-Infinity'::float8 AS "float8field") q;
+-- json input
+SELECT row_to_json(q)
+FROM (SELECT '{"a":1,"b": [2,3,4,"d","e","f"],"c":{"p":1,"q":2}}'::json AS "jsonfield") q;
 -- json extraction functions
 CREATE TEMP TABLE test_json (
        json_type text,

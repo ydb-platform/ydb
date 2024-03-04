@@ -1,4 +1,5 @@
 Registering pre-existing tables
+	tenk1
 	int8_tbl
 <sql-statement>
 --
@@ -2796,17 +2797,9 @@ select cardinality('{{{1,9},{5,6}},{{2,3},{3,4}}}'::int[]);
 -- array_agg(anynonarray)
 select array_agg(unique1) from (select unique1 from tenk1 where unique1 < 15 order by unique1) ss;
 </sql-statement>
--stdin-:<main>: Fatal: Table metadata loading
-
-    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.tenk1
-    
 <sql-statement>
 select array_agg(ten) from (select ten from tenk1 where unique1 < 15 order by unique1) ss;
 </sql-statement>
--stdin-:<main>: Fatal: Table metadata loading
-
-    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.tenk1
-    
 <sql-statement>
 select array_agg(nullif(ten, 4)) from (select ten from tenk1 where unique1 < 15 order by unique1) ss;
 </sql-statement>
@@ -2818,10 +2811,6 @@ select array_agg(nullif(ten, 4)) from (select ten from tenk1 where unique1 < 15 
 <sql-statement>
 select array_agg(unique1) from tenk1 where unique1 < -15;
 </sql-statement>
--stdin-:<main>: Fatal: Table metadata loading
-
-    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.tenk1
-    
 <sql-statement>
 -- array_agg(anyarray)
 select array_agg(ar)

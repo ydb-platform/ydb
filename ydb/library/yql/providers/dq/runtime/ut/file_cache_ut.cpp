@@ -89,7 +89,7 @@ Y_UNIT_TEST(Acquire) {
     UNIT_ASSERT_EQUAL(fc.UsedDiskSize(), 22);
 }
 
-Y_UNIT_TEST(AcquireSingleFileTimes) {
+Y_UNIT_TEST(AcquireSingleFile2Times) {
     NFs::RemoveRecursive("dir_acquire");
     TFileCache fc("dir_acquire", 20);
     fc.AddFile(GetFile(10), "1");

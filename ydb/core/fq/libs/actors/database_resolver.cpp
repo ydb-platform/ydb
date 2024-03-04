@@ -99,8 +99,6 @@ private:
     }
 
     void DieOnTtl() {
-        Success = false;
-
         auto errorMsg  = TStringBuilder() << "Could not resolve database ids: ";
         bool firstUnresolvedDbId = true;
         for (const auto& [_, params]: Requests) {
@@ -113,26 +111,20 @@ private:
         }
         errorMsg << " in " << ResolvingTtl << " seconds.";
         LOG_E("ResponseProcessor::DieOnTtl: errorMsg=" << errorMsg);
-
-        SendResolvedEndpointsAndDie(errorMsg);
+        Issues.AddIssue(errorMsg);
+        SendResolvedEndpointsAndDie();
     }
 
-    void SendResolvedEndpointsAndDie(const TString& errorMsg) {
-        NYql::TIssues issues;
-        if (errorMsg) {
-            issues.AddIssue(errorMsg);
-        }
-
+    void SendResolvedEndpointsAndDie() {
         Send(Sender,
             new TEvents::TEvEndpointResponse(
-                NYql::TDatabaseResolverResponse(std::move(DatabaseId2Description), Success, issues)));
+                NYql::TDatabaseResolverResponse(std::move(DatabaseId2Description), Issues.Empty(), Issues)));
         PassAway();
         LOG_D("ResponseProcessor::SendResolvedEndpointsAndDie: passed away");
     }
 
     void Handle(NHttp::TEvHttpProxy::TEvHttpIncomingResponse::TPtr& ev)
     {
-        TString errorMessage;
         TMaybe<TDatabaseDescription> result;
         const auto requestIter = Requests.find(ev->Get()->Request);
         HandledIds++;
@@ -140,19 +132,20 @@ private:
         LOG_T("ResponseProcessor::Handle(HttpIncomingResponse): got API response: code=" << ev->Get()->Response->Status);
 
         try {
-            HandleResponse(ev, requestIter, errorMessage, result);
+            HandleResponse(ev, requestIter, result);
         } catch (...) {
             const TString msg = TStringBuilder() << "error while response processing, params "
                 << ((requestIter != Requests.end()) ? requestIter->second.ToDebugString() : TString{"unknown"})
                 << ", details: " << CurrentExceptionMessage();
             LOG_E("ResponseProccessor::Handle(TEvHttpIncomingResponse): " << msg);
+            Issues.AddIssue(msg);
         }
 
         LOG_T("ResponseProcessor::Handle(HttpIncomingResponse): progress: " 
               << DatabaseId2Description.size() << " of " << Requests.size() << " requests are done");
 
         if (HandledIds == Requests.size()) {
-            SendResolvedEndpointsAndDie(errorMessage);
+            SendResolvedEndpointsAndDie();
         }
     }
 
@@ -161,9 +154,9 @@ private:
     void HandleResponse(
         NHttp::TEvHttpProxy::TEvHttpIncomingResponse::TPtr& ev,
         const TRequestMap::const_iterator& requestIter,
-        TString& errorMessage,
         TMaybe<TDatabaseDescription>& result)
     {
+        TString errorMessage;
         if (ev->Get()->Error.empty() && (ev->Get()->Response && ev->Get()->Response->Status == "200")) {
             errorMessage = HandleSuccessfulResponse(ev, requestIter, result);
         } else {
@@ -171,8 +164,8 @@ private:
         }
 
         if (errorMessage) {
+            Issues.AddIssue(errorMessage);
             LOG_E("ResponseProcessor::Handle(HttpIncomingResponse): error=" << errorMessage);
-            Success = false;
         } else {
             const auto& params = requestIter->second;
             auto key = std::make_tuple(params.Id, params.DatabaseType, params.DatabaseAuth);
@@ -276,7 +269,7 @@ private:
     const NYql::IMdbEndpointGenerator::TPtr MdbEndpointGenerator;
     TDatabaseResolverResponse::TDatabaseDescriptionMap DatabaseId2Description;
     size_t HandledIds = 0;
-    bool Success = true;
+    NYql::TIssues Issues;
     const TParsers& Parsers;
     TDuration ResolvingTtl = TDuration::Seconds(30); //TODO: Use cfg
 };

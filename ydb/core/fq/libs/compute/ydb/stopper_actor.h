@@ -11,6 +11,7 @@ namespace NFq {
 std::unique_ptr<NActors::IActor> CreateStopperActor(const TRunActorParams& params,
                                                     const NActors::TActorId& parent,
                                                     const NActors::TActorId& connector,
+                                                    const NActors::TActorId& pinger,
                                                     const NYdb::TOperation::TOperationId& operationId,
                                                     const ::NYql::NCommon::TServiceCounters& queryCounters);
 

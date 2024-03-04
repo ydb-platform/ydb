@@ -163,7 +163,7 @@ public:
         // Start cancel operation only when StatusTracker or ResultWriter is running
         if (Params.OperationId.GetKind() != Ydb::TOperationId::UNUSED && !IsAborted && !FinalizationStarted) {
             IsAborted = true;
-            Register(ActorFactory->CreateStopper(SelfId(), Connector, Params.OperationId).release());
+            Register(ActorFactory->CreateStopper(SelfId(), Connector, Pinger, Params.OperationId).release());
         }
     }
 

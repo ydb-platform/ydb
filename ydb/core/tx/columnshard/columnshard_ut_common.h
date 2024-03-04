@@ -106,10 +106,21 @@ struct TTestSchema {
     };
 
     struct TTableSpecials : public TStorageTier {
+    private:
+        bool NeedTestStatisticsFlag = true;
+    public:
         std::vector<TStorageTier> Tiers;
         bool WaitEmptyAfter = false;
 
         TTableSpecials() noexcept = default;
+
+        bool NeedTestStatistics() const {
+            return NeedTestStatisticsFlag;
+        }
+
+        void SetNeedTestStatistics(const bool value) {
+            NeedTestStatisticsFlag = value;
+        }
 
         bool HasTiers() const {
             return !Tiers.empty();
@@ -218,9 +229,12 @@ struct TTestSchema {
 
         for (ui32 i = 0; i < columns.size(); ++i) {
             *schema->MutableColumns()->Add() = columns[i].CreateColumn(i + 1);
-//            if (NOlap::NStatistics::NMax::TOperator::IsAvailableType(columns[i].GetType())) {
-//                *schema->AddStatistics() = NOlap::NStatistics::TOperatorContainer(std::make_shared<NOlap::NStatistics::NMax::TOperator>(i + 1)).SerializeToProto();
-//            }
+            if (!specials.NeedTestStatistics()) {
+                continue;
+            }
+            if (NOlap::NStatistics::NMax::TOperator::IsAvailableType(columns[i].GetType())) {
+                *schema->AddStatistics() = NOlap::NStatistics::TOperatorContainer(std::make_shared<NOlap::NStatistics::NMax::TOperator>(i + 1)).SerializeToProto();
+            }
         }
 
         Y_ABORT_UNLESS(pk.size() > 0);

@@ -362,9 +362,11 @@ TDuration TColumnEngineForLogs::ProcessTiering(const ui64 pathId, const TTiering
                 SignalCounters.OnPortionNoBorder(info->BlobsBytes());
                 continue;
             } else {
+                NYDBTest::TControllers::GetColumnShardController()->OnMaxValueUsage();
                 SignalCounters.OnChunkUsageForTTL();
             }
         } else {
+            NYDBTest::TControllers::GetColumnShardController()->OnStatisticsUsage(statOperator);
             SignalCounters.OnStatUsageForTTL();
             max = statOperator.GetScalarVerified(info->GetMeta().GetStatisticsStorage());
         }

@@ -3,6 +3,7 @@ Registering pre-existing tables
 	INT4_TBL
 	tenk1
 	VARCHAR_TBL
+	varchar_tbl
 	int8_tbl
 <sql-statement>
 --

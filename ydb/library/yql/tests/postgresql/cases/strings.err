@@ -2,6 +2,7 @@ Registering pre-existing tables
 	VARCHAR_TBL
 	CHAR_TBL
 	TEXT_TBL
+	varchar_tbl
 <sql-statement>
 --
 -- STRINGS

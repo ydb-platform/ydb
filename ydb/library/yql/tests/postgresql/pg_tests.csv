@@ -49,7 +49,7 @@ timestamptz,315,97,30.79
 timetz,45,19,42.22
 truncate,193,41,21.24
 unicode,13,4,30.77
-union,186,61,32.8
+union,186,62,33.33
 update,288,23,7.99
 uuid,36,29,80.56
 varchar,24,15,62.5

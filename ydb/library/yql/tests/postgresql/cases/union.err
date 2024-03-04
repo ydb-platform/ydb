@@ -5,6 +5,7 @@ Registering pre-existing tables
 	CHAR_TBL
 	TEXT_TBL
 	FLOAT8_TBL
+	varchar_tbl
 	int8_tbl
 <sql-statement>
 --
@@ -917,10 +918,6 @@ UNION
 SELECT b.f1 FROM (SELECT f1 FROM varchar_tbl) b
 ORDER BY 1;
 </sql-statement>
--stdin-:<main>: Fatal: Table metadata loading
-
-    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.varchar_tbl
-    
 <sql-statement>
 -- This should fail, but it should produce an error cursor
 SELECT '3.4'::numeric UNION SELECT 'foo';

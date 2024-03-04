@@ -716,7 +716,7 @@ Y_UNIT_TEST_SUITE(TPersQueueTest) {
         TPersQueueV1TestServer server;
         SET_LOCALS;
         MAKE_INSECURE_STUB(Ydb::Topic::V1::TopicService);
-        server.EnablePQLogs({ NKikimrServices::PQ_METACACHE, NKikimrServices::PQ_READ_PROXY});
+        server.EnablePQLogs({ NKikimrServices::PQ_METACACHE, NKikimrServices::PQ_READ_PROXY, NKikimrServices::PERSQUEUE});
         server.EnablePQLogs({ NKikimrServices::KQP_PROXY }, NLog::EPriority::PRI_EMERG);
         server.EnablePQLogs({ NKikimrServices::FLAT_TX_SCHEMESHARD }, NLog::EPriority::PRI_ERROR);
 
@@ -742,8 +742,8 @@ Y_UNIT_TEST_SUITE(TPersQueueTest) {
         }
 
         // await and confirm CreatePartitionStreamRequest from server
-        i64 assignId = 0;
-        i64 generation = 0;
+        i64 assignId;
+        i64 generation;
         {
             Ydb::Topic::StreamReadMessage::FromServer resp;
 
@@ -756,8 +756,8 @@ Y_UNIT_TEST_SUITE(TPersQueueTest) {
             UNIT_ASSERT_VALUES_EQUAL(resp.start_partition_session_request().partition_session().path(), "acc/topic1");
             UNIT_ASSERT(resp.start_partition_session_request().partition_session().partition_id() == 0);
             UNIT_ASSERT(resp.start_partition_session_request().partition_location().generation() > 0);
-            generation = resp.start_partition_session_request().partition_location().generation();
             assignId = resp.start_partition_session_request().partition_session().partition_session_id();
+            generation = resp.start_partition_session_request().partition_location().generation();
         }
 
         server.Server->AnnoyingClient->RestartPartitionTablets(server.Server->CleverServer->GetRuntime(), "rt3.dc1--acc--topic1");

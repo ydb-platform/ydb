@@ -883,7 +883,7 @@ private:
                 auto& cteNode = AddPlanNode(QueryPlanNodes.begin()->second);
                 cteNode.Plans.insert(stageId);
                 cteNode.TypeName = TStringBuilder() << commonNode.TypeName;
-                cteNode.CteName = cteNode.TypeName;
+                cteNode.CteName = TStringBuilder() << cteNode.TypeName << "_" << stageId;
 
                 parentNode.CteRefName = *cteNode.CteName;
                 planNode.CteRefName = *cteNode.CteName;

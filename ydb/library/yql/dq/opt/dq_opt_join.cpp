@@ -840,6 +840,8 @@ TExprBase DqBuildJoinDict(const TDqJoin& join, TExprContext& ctx) {
             .RightLabel(join.RightLabel())
             .JoinType(join.JoinType())
             .JoinKeys(join.JoinKeys())
+            .LeftJoinKeyNames(join.LeftJoinKeyNames())
+            .RightJoinKeyNames(join.RightJoinKeyNames())
             .Done();
 
         joinStage = Build<TDqStage>(ctx, join.Pos())

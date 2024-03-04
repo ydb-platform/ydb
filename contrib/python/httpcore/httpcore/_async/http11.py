@@ -10,7 +10,6 @@ from typing import (
     Tuple,
     Type,
     Union,
-    cast,
 )
 
 import h11
@@ -228,7 +227,7 @@ class AsyncHTTP11Connection(AsyncConnectionInterface):
                 self._h11_state.receive_data(data)
             else:
                 # mypy fails to narrow the type in the above if statement above
-                return cast(Union[h11.Event, Type[h11.PAUSED]], event)
+                return event  # type: ignore[return-value]
 
     async def _response_closed(self) -> None:
         async with self._state_lock:

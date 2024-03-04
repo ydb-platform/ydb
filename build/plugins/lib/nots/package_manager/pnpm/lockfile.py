@@ -10,21 +10,22 @@ from six import iteritems
 
 from ..base import PackageJson, BaseLockfile, LockfilePackageMeta, LockfilePackageMetaInvalidError
 
+LOCKFILE_VERSION = "lockfileVersion"
+
 
 class PnpmLockfile(BaseLockfile):
     IMPORTER_KEYS = PackageJson.DEP_KEYS + ("specifiers",)
 
     def read(self):
         with io.open(self.path, "rb") as f:
-            self.data = yaml.load(f, Loader=yaml.CSafeLoader)
+            self.data = yaml.load(f, Loader=yaml.CSafeLoader) or {LOCKFILE_VERSION: "6.0"}
 
-            lockfileVersion = "lockfileVersion"
-            version_in_data = lockfileVersion in self.data
+            version_in_data = LOCKFILE_VERSION in self.data
             r = re.compile('^[56]\\.\\d$')
-            if not version_in_data or not r.match(str(self.data[lockfileVersion])):
+            if not version_in_data or not r.match(str(self.data[LOCKFILE_VERSION])):
                 raise Exception(
                     'Error of project configuration: {} has lockfileVersion: {}. '.format(
-                        self.path, self.data[lockfileVersion] if version_in_data else "<no-version>"
+                        self.path, self.data[LOCKFILE_VERSION] if version_in_data else "<no-version>"
                     )
                     + 'This version is not supported. Please, delete pnpm-lock.yaml and regenerate it using "ya tool nots --clean update-lockfile"'
                 )
@@ -129,7 +130,7 @@ def _parse_package_meta(key, meta, allow_file_protocol=False):
     except LockfilePackageMetaInvalidError as e:
         raise TypeError("Invalid package meta for key {}, parse error: {}".format(key, e))
 
-    return LockfilePackageMeta(tarball_url, sky_id, integrity, integrity_algorithm)
+    return LockfilePackageMeta(key, tarball_url, sky_id, integrity, integrity_algorithm)
 
 
 def _parse_tarball_url(tarball_url, allow_file_protocol):

@@ -42,9 +42,9 @@ const inline std::map<TString, ui64> GetTablets(ui64 idx) {
         {TString{"NodeBroker"}, 72057594037936129},
         {TString{"TenantSlotBroker"}, 72057594037936130},
         {TString{"Console"}, 72057594037936131},
-        {TString{"TxAllocator"}, TDomainsInfo::MakeTxAllocatorIDFixed(1, idx)},
-        {TString{"FlatTxCoordinator"}, TDomainsInfo::MakeTxCoordinatorIDFixed(1, idx)},
-        {TString{"TxMediator"}, TDomainsInfo::MakeTxMediatorIDFixed(1, idx)},
+        {TString{"TxAllocator"}, TDomainsInfo::MakeTxAllocatorIDFixed(idx)},
+        {TString{"FlatTxCoordinator"}, TDomainsInfo::MakeTxCoordinatorIDFixed(idx)},
+        {TString{"TxMediator"}, TDomainsInfo::MakeTxMediatorIDFixed(idx)},
     };
 }
 

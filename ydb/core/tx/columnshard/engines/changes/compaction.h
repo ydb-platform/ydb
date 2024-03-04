@@ -14,13 +14,12 @@ private:
 protected:
     std::shared_ptr<TGranuleMeta> GranuleMeta;
 
+    virtual void DoWriteIndexOnComplete(NColumnShard::TColumnShard* self, TWriteIndexCompleteContext& context) override;
+
     virtual void DoStart(NColumnShard::TColumnShard& self) override;
-    virtual void DoWriteIndexComplete(NColumnShard::TColumnShard& self, TWriteIndexCompleteContext& context) override;
     virtual void DoOnFinish(NColumnShard::TColumnShard& self, TChangesFinishContext& context) override;
-    virtual void DoWriteIndex(NColumnShard::TColumnShard& self, TWriteIndexContext& context) override;
     virtual void DoDebugString(TStringOutput& out) const override;
     virtual void DoCompile(TFinalizationContext& context) override;
-    virtual bool DoApplyChanges(TColumnEngineForLogs& self, TApplyChangesContext& context) override;
     virtual TPortionMeta::EProduced GetResultProducedClass() const = 0;
     virtual void OnAbortEmergency() override {
         NeedGranuleStatusProvide = false;

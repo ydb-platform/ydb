@@ -15,7 +15,7 @@ struct TTestEnvironment {
     THolder<TTestBasicRuntime> Runtime;
     const ui32 NodeCount;
     TActorId Edge;
-    const ui64 TabletId = MakeTabletID(0, 0, 1);
+    const ui64 TabletId = MakeTabletID(false, 1);
     const TTabletTypes::EType TabletType = TTabletTypes::KeyValue;
     NWilson::TFakeWilsonUploader* WilsonUploader = nullptr;
 
@@ -47,7 +47,7 @@ struct TTestEnvironment {
         Runtime = MakeHolder<TTestBasicRuntime>(NodeCount, 1u);
 
         for (ui32 i = 0; i < NodeCount; ++i) {
-            SetupStateStorage(*Runtime, i, 0, true);
+            SetupStateStorage(*Runtime, i, true);
             SetupTabletResolver(*Runtime, i);
         }
     }

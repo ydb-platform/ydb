@@ -48,6 +48,10 @@ class TTabletsByBlob {
 private:
     THashMap<TUnifiedBlobId, THashSet<TTabletId>> Data;
 public:
+    void Clear() {
+        Data.clear();
+    }
+
     NKikimrColumnShardBlobOperationsProto::TTabletsByBlob SerializeToProto() const;
 
     TConclusionStatus DeserializeFromProto(const NKikimrColumnShardBlobOperationsProto::TTabletsByBlob& proto);

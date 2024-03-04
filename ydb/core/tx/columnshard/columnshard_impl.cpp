@@ -503,6 +503,8 @@ void TColumnShard::RunAlterStore(const NKikimrTxColumnShard::TAlterStore& proto,
 void TColumnShard::EnqueueBackgroundActivities(bool periodic, TBackgroundActivity activity) {
     TLogContextGuard gLogging(NActors::TLogContextBuilder::Build(NKikimrServices::TX_COLUMNSHARD)("tablet_id", TabletID()));
     ACFL_DEBUG("event", "EnqueueBackgroundActivities")("periodic", periodic)("activity", activity.DebugString());
+    StoragesManager->GetOperatorVerified(NOlap::IStoragesManager::DefaultStorageId);
+    StoragesManager->GetSharedBlobsManager()->GetStorageManagerVerified(NOlap::IStoragesManager::DefaultStorageId);
     CSCounters.OnStartBackground();
     SendPeriodicStats();
 
@@ -590,8 +592,8 @@ protected:
             NConveyor::TCompServiceOperator::SendTaskToExecute(task);
         }
     }
-    virtual bool DoOnError(const NOlap::TBlobRange& range, const NOlap::IBlobsReadingAction::TErrorStatus& status) override {
-        AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("event", "DoOnError")("blob_id", range)("status", status.GetErrorMessage())("status_code", status.GetStatus());
+    virtual bool DoOnError(const TString& storageId, const NOlap::TBlobRange& range, const NOlap::IBlobsReadingAction::TErrorStatus& status) override {
+        AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("event", "DoOnError")("storage_id", storageId)("blob_id", range)("status", status.GetErrorMessage())("status_code", status.GetStatus());
         AFL_VERIFY(false)("blob_id", range)("status", status.GetStatus());
         TxEvent->SetPutStatus(NKikimrProto::ERROR);
         TActorContext::AsActorContext().Send(ParentActorId, std::move(TxEvent));

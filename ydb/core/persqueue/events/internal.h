@@ -183,6 +183,7 @@ struct TEvPQ {
         EvGetWriteInfoRequest,
         EvGetWriteInfoResponse,
         EvGetWriteInfoError,
+        EvReadingPartitionStatusRequest,
         EvEnd
     };
 
@@ -800,6 +801,7 @@ struct TEvPQ {
         ui64 Step;
         ui64 TxId;
         TVector<NKikimrPQ::TPartitionOperation> Operations;
+        TActorId SupportivePartitionActor;
     };
 
     struct TEvTxCalcPredicateResult : public TEventLocal<TEvTxCalcPredicateResult, EvTxCalcPredicateResult> {
@@ -1074,6 +1076,15 @@ struct TEvPQ {
             Cookie(cookie),
             Message(std::move(message))
         {
+        }
+    };
+
+    struct TEvReadingPartitionStatusRequest : public TEventPB<TEvReadingPartitionStatusRequest, NKikimrPQ::TEvReadingPartitionStatusRequest, EvReadingPartitionStatusRequest> {
+        TEvReadingPartitionStatusRequest() = default;
+
+        TEvReadingPartitionStatusRequest(const TString& consumer, ui32 partitionId) {
+            Record.SetConsumer(consumer);
+            Record.SetPartitionId(partitionId);
         }
     };
 };

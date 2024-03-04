@@ -30,12 +30,16 @@ private:
     YDB_READONLY(ui32, ChunkIdx, 0);
     YDB_READONLY(ui32, RecordsCount, 0);
     YDB_READONLY(ui32, RawBytes, 0);
-    YDB_READONLY_DEF(TBlobRange, BlobRange);
+    YDB_READONLY_DEF(TBlobRangeLink16, BlobRange);
 
     TIndexChunk() = default;
     TConclusionStatus DeserializeFromProto(const NKikimrColumnShardDataSharingProto::TIndexChunk& proto);
 public:
-    TIndexChunk(const ui32 indexId, const ui32 chunkIdx, const ui32 recordsCount, const ui64 rawBytes, const TBlobRange& blobRange)
+    TChunkAddress GetAddress() const {
+        return TChunkAddress(IndexId, ChunkIdx);
+    }
+
+    TIndexChunk(const ui32 indexId, const ui32 chunkIdx, const ui32 recordsCount, const ui64 rawBytes, const TBlobRangeLink16& blobRange)
         : IndexId(indexId)
         , ChunkIdx(chunkIdx)
         , RecordsCount(recordsCount)
@@ -44,9 +48,9 @@ public:
 
     }
 
-    void RegisterBlobId(const TUnifiedBlobId& blobId) {
+    void RegisterBlobIdx(const TBlobRangeLink16::TLinkId blobLinkId) {
 //        AFL_VERIFY(!BlobRange.BlobId.GetTabletId())("original", BlobRange.BlobId.ToStringNew())("new", blobId.ToStringNew());
-        BlobRange.BlobId = blobId;
+        BlobRange.BlobIdx = blobLinkId;
     }
 
     static TConclusion<TIndexChunk> BuildFromProto(const NKikimrColumnShardDataSharingProto::TIndexChunk& proto) {

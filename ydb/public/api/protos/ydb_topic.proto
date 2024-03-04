@@ -1021,7 +1021,7 @@ message DescribePartitionResponse {
     Ydb.Operations.Operation operation = 1;
 }
 
-// Describe partition result message that will be inside DescribeTopicResponse.operation.
+// Describe partition result message that will be inside DescribePartitionResponse.operation.
 message DescribePartitionResult {
     // Partitions description.
     DescribeTopicResult.PartitionInfo partition = 1;

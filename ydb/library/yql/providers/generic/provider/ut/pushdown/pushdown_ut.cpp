@@ -144,7 +144,7 @@ struct TFakeGenericClient: public NConnector::IClient {
 
 class TBuildDqSourceSettingsTransformer: public TOptimizeTransformerBase {
 public:
-    explicit TBuildDqSourceSettingsTransformer(TTypeAnnotationContext* types, Generic::TSource* dqSourceSettings, bool* dqSourceSettingsWereBuilt)
+    explicit TBuildDqSourceSettingsTransformer(TTypeAnnotationContext* types, NConnector::TSource* dqSourceSettings, bool* dqSourceSettingsWereBuilt)
         : TOptimizeTransformerBase(types, NLog::EComponent::ProviderGeneric, {})
         , DqSourceSettings_(dqSourceSettings)
         , DqSourceSettingsWereBuilt_(dqSourceSettingsWereBuilt)
@@ -180,15 +180,15 @@ public:
                 .Ptr();
         ::google::protobuf::Any settings;
         TString sourceType;
-        dqIntegration->FillSourceSettings(*dqSourceNode, settings, sourceType);
+        dqIntegration->FillSourceSettings(*dqSourceNode, settings, sourceType, 1);
         UNIT_ASSERT_STRINGS_EQUAL(sourceType, "PostgreSqlGeneric");
-        UNIT_ASSERT(settings.Is<Generic::TSource>());
+        UNIT_ASSERT(settings.Is<NConnector::TSource>());
         settings.UnpackTo(DqSourceSettings_);
         *DqSourceSettingsWereBuilt_ = true;
     }
 
 private:
-    Generic::TSource* DqSourceSettings_;
+    NConnector::TSource* DqSourceSettings_;
     bool* DqSourceSettingsWereBuilt_;
 };
 
@@ -207,7 +207,7 @@ struct TPushdownFixture: public NUnitTest::TBaseFixture {
 
     TAutoPtr<IGraphTransformer> Transformer;
     TAutoPtr<IGraphTransformer> BuildDqSourceSettingsTransformer;
-    Generic::TSource DqSourceSettings;
+    NConnector::TSource DqSourceSettings;
     bool DqSourceSettingsWereBuilt = false;
 
     TExprNode::TPtr InitialExprRoot;
@@ -243,6 +243,7 @@ struct TPushdownFixture: public NUnitTest::TBaseFixture {
             TypesCtx.Get(),
             FunctionRegistry.Get(),
             DatabaseResolver,
+            nullptr,
             GenericClient,
             GatewaysCfg.GetGeneric());
 

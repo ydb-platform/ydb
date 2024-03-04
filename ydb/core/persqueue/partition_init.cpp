@@ -163,6 +163,9 @@ void TInitConfigStep::Handle(TEvKeyValue::TEvResponse::TPtr& ev, const TActorCon
     switch (response.GetStatus()) {
     case NKikimrProto::OK:
         Y_ABORT_UNLESS(Partition()->Config.ParseFromString(response.GetValue()));
+
+        Migrate(Partition()->Config);
+
         if (Partition()->Config.GetVersion() < Partition()->TabletConfig.GetVersion()) {
             auto event = MakeHolder<TEvPQ::TEvChangePartitionConfig>(Partition()->TopicConverter,
                                                                      Partition()->TabletConfig);
@@ -883,7 +886,7 @@ void TPartition::SetupStreamCounters(const TActorContext& ctx) {
     SLIBigLatency = NKikimr::NPQ::TMultiCounter(subGroup, aggr, {}, {"WriteBigLatency"}, true, "name", false);
     WritesTotal = NKikimr::NPQ::TMultiCounter(subGroup, aggr, {}, {"WritesTotal"}, true, "name", false);
     if (IsQuotingEnabled()) {
-        subgroups.push_back({"name", "api.grpc.topic.stream_write.topic_throttled_milliseconds"});
+        subgroups.push_back({"name", "topic.write.topic_throttled_milliseconds"});
         TopicWriteQuotaWaitCounter = THolder<NKikimr::NPQ::TPercentileCounter>(
             new NKikimr::NPQ::TPercentileCounter(
                 NPersQueue::GetCountersForTopic(counters, IsServerless), {},
@@ -896,7 +899,7 @@ void TPartition::SetupStreamCounters(const TActorContext& ctx) {
         subgroups.pop_back();
     }
 
-    subgroups.push_back({"name", "api.grpc.topic.stream_write.partition_throttled_milliseconds"});
+    subgroups.push_back({"name", "topic.write.partition_throttled_milliseconds"});
     PartitionWriteQuotaWaitCounter = THolder<NKikimr::NPQ::TPercentileCounter>(
         new NKikimr::NPQ::TPercentileCounter(
             NPersQueue::GetCountersForTopic(counters, IsServerless), {}, subgroups, "bin",

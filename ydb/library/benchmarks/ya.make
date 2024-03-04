@@ -1,1 +1,4 @@
-RECURSE(template)
+RECURSE(
+    template
+    gen_queries
+)

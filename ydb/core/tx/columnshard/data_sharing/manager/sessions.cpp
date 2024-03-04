@@ -48,7 +48,6 @@ bool TSessionsManager::Load(NTable::TDatabase& database, const TColumnEngineForL
         }
 
         while (!rowset.EndOfSet()) {
-            const TString& sessionId = rowset.GetValue<Schema::SourceSessions::SessionId>();
             auto session = std::make_shared<TSourceSession>((TTabletId)index->GetTabletId());
 
             NKikimrColumnShardDataSharingProto::TSourceSession protoSession;
@@ -77,7 +76,6 @@ bool TSessionsManager::Load(NTable::TDatabase& database, const TColumnEngineForL
         }
 
         while (!rowset.EndOfSet()) {
-            const TString& sessionId = rowset.GetValue<Schema::DestinationSessions::SessionId>();
             auto session = std::make_shared<TDestinationSession>();
 
             NKikimrColumnShardDataSharingProto::TDestinationSession protoSession;

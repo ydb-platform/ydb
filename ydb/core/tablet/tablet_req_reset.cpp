@@ -125,7 +125,7 @@ public:
     }
 
     void Bootstrap(const TActorContext& ctx) {
-        TActorId stateStorageProxyId = MakeStateStorageProxyID(StateStorageGroupFromTabletID(TabletStorageInfo->TabletID));
+        TActorId stateStorageProxyId = MakeStateStorageProxyID();
         ctx.Send(stateStorageProxyId, new TEvStateStorage::TEvLookup(TabletStorageInfo->TabletID, 0));
         if (Generation == 0) {
             FindLatestLogEntry(ctx);

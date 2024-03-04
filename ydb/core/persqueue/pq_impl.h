@@ -89,6 +89,7 @@ class TPersQueue : public NKeyValue::TKeyValueFlat {
     void Handle(TEvPersQueue::TEvHasDataInfo::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvPersQueue::TEvPartitionClientInfo::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvPQ::TEvSubDomainStatus::TPtr& ev, const TActorContext& ctx);
+    void Handle(TEvPQ::TEvReadingPartitionStatusRequest::TPtr& ev, const TActorContext& ctx);
 
     bool OnRenderAppHtmlPage(NMon::TEvRemoteHttpInfo::TPtr ev, const TActorContext& ctx) override;
 
@@ -204,6 +205,7 @@ private:
     ui32 NextSupportivePartitionId = 100'000;
 
     TActorId CacheActor;
+    TActorId ReadBalancerActorId;
 
     TSet<TChangeNotification> ChangeConfigNotification;
     NKikimrPQ::TPQTabletConfig NewConfig;
@@ -427,7 +429,7 @@ private:
     THashMap<ui32, TVector<TEvPQ::TEvCheckPartitionStatusRequest::TPtr>> CheckPartitionStatusRequests;
     TMaybe<ui64> TabletGeneration;
 
-    TPartitionId MakePartitionId(ui32 originalPartitionId, TMaybe<ui64> writeId) const;
+    TMaybe<TPartitionId> FindPartitionId(const NKikimrPQ::TDataTransaction& txBody) const;
 
     void InitPlanStep(const NKikimrPQ::TTabletTxInfo& info = {});
     void SavePlanStep(NKikimrPQ::TTabletTxInfo& info);
@@ -471,6 +473,7 @@ private:
     void AddSupportivePartition(const TPartitionId& shadowPartitionId);
     void CreateSupportivePartitionActors(const TActorContext& ctx);
     void CreateSupportivePartitionActor(const TPartitionId& shadowPartitionId, const TActorContext& ctx);
+    NKikimrPQ::TPQTabletConfig MakeSupportivePartitionConfig() const;
     void SubscribeWriteId(ui64 writeId, const TActorContext& ctx);
 
     bool AllOriginalPartitionsInited() const;

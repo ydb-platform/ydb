@@ -120,15 +120,7 @@ protected:
     }
 
     ui64 GetBSControllerId() {
-        auto domainInfo = AppData()->DomainsInfo;
-        if (domainInfo->Domains.empty()) {
-            ReplyErrorAndDie(Ydb::StatusIds::UNAVAILABLE, "Invalid domain info");
-            return 0;
-        }
-
-        auto domain = domainInfo->Domains.begin()->second;
-        auto defaultSSGroup = domainInfo->GetDefaultStateStorageGroup(domain->DomainUid);
-        return MakeBSControllerID(defaultSSGroup);
+        return MakeBSControllerID();
     }
 
     template <typename TResponse, typename TEntry, typename TExtractorsMap, bool BatchSupport = false>
@@ -243,13 +235,7 @@ private:
         if (entry.DomainInfo->Params.HasHive()) {
             HiveId = entry.DomainInfo->Params.GetHive();
         } else {
-            auto domainInfo = AppData()->DomainsInfo;
-            if (domainInfo->Domains.empty()) {
-                ReplyErrorAndDie(Ydb::StatusIds::UNAVAILABLE, "Invalid domain info");
-                return;
-            }
-            auto domain = domainInfo->Domains.begin()->second;
-            HiveId = domainInfo->GetHive(domain->DefaultHiveUid);
+            HiveId = AppData()->DomainsInfo->GetHive();
         }
 
         DomainKey = entry.DomainInfo->DomainKey;

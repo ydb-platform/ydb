@@ -175,7 +175,7 @@ message TDomainsConfig {
             optional bool IsDisabled = 6 [default = false]; // used in the intermediate reconfiguration step
         }
 
-        optional uint32 SSId = 1;
+        optional uint32 SSId = 1 [default = 1];
         optional TRing Ring = 2;
         optional uint32 StateStorageVersion = 3 [default = 0];
         repeated uint32 CompatibleVersions = 4;
@@ -211,7 +211,7 @@ message TDomainsConfig {
     }
 
     message THiveConfig { // look for another THiveConfig later in this file
-        optional uint32 HiveUid = 1;
+        optional uint32 HiveUid = 1 [default = 1];
         optional fixed64 Hive = 2;
     }
 
@@ -1541,12 +1541,12 @@ message TTracingConfig {
         optional TAuthConfig AuthConfig = 2;
     }
 
-    // Only global scope for now
     message TSelectors {
         optional string RequestType = 1;
+        optional string Database = 2;
     }
 
-    message TSamplingScope {
+    message TSamplingRule {
         // scope to which the rule applies
         optional TSelectors Scope = 1;
         // fraction of requests sampled by this rule
@@ -1554,21 +1554,21 @@ message TTracingConfig {
         // detalisation of traces sampled by this rule
         optional uint32 Level = 3;
         // maximum average amount of traces sampled by this rule
-        optional uint64 MaxRatePerMinute = 4;
+        optional uint64 MaxTracesPerMinute = 4;
         // maximum burst of traces sampled by this rule
-        optional uint64 MaxBurst = 5;
+        optional uint64 MaxTracesBurst = 5;
     }
 
-    // field meaning is the same as in TSamplingScope
-    message TExternalThrottlingScope {
+    // field meaning is the same as in TSamplingRule
+    message TExternalThrottlingRule {
         optional TSelectors Scope = 1;
-        optional uint64 MaxRatePerMinute = 2;
-        optional uint64 MaxBurst = 3;
+        optional uint64 MaxTracesPerMinute = 2;
+        optional uint64 MaxTracesBurst = 3;
     }
 
     message TUploaderConfig {
         // maximum average amount of spans uploaded from the node
-        optional uint64 MaxSpansPerSecond = 1;
+        optional uint64 MaxExportedSpansPerSecond = 1;
         // maximum batch size in spans
         optional uint64 MaxSpansInBatch = 2;
         // maximum batch size in bytes
@@ -1585,8 +1585,8 @@ message TTracingConfig {
     reserved 1 to 5;
 
     optional TBackendConfig Backend = 6;
-    repeated TSamplingScope Sampling = 7;
-    repeated TExternalThrottlingScope ExternalThrottling = 8;
+    repeated TSamplingRule Sampling = 7;
+    repeated TExternalThrottlingRule ExternalThrottling = 8;
     optional TUploaderConfig Uploader = 9;
 }
 

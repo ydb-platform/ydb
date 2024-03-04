@@ -32,6 +32,7 @@ private:
 
     void ApplyConfigs(const NKikimrConfig::TTracingConfig& cfg);
     static TMaybe<ERequestType> GetRequestType(const NKikimrConfig::TTracingConfig::TSelectors& selectors);
+    static TMaybe<TString> GetDatabase(const NKikimrConfig::TTracingConfig::TSelectors& selectors);
     static TSettings<double, TThrottlingSettings> GetSettings(const NKikimrConfig::TTracingConfig& cfg);
 
     TSamplingThrottlingConfigurator TracingConfigurator;
@@ -85,25 +86,35 @@ TMaybe<ERequestType> TJaegerTracingConfigurator::GetRequestType(const NKikimrCon
     return {};
 }
 
+TMaybe<TString> TJaegerTracingConfigurator::GetDatabase(const NKikimrConfig::TTracingConfig::TSelectors& selectors) {
+    if (selectors.HasDatabase()) {
+        return selectors.GetDatabase();
+    }
+    return NothingObject;
+}
+
 TSettings<double, TThrottlingSettings> TJaegerTracingConfigurator::GetSettings(const NKikimrConfig::TTracingConfig& cfg) {
     TSettings<double, TThrottlingSettings> settings;
 
     for (const auto& samplingRule : cfg.GetSampling()) {
+        const auto& scope = samplingRule.GetScope();
+
         ERequestType requestType;
-        if (auto parsedRequestType = GetRequestType(samplingRule.GetScope())) {
+        if (auto parsedRequestType = GetRequestType(scope)) {
             requestType = *parsedRequestType;
         } else {
             ALOG_ERROR(NKikimrServices::CMS_CONFIGS, "failed to parse request type in the rule "
                        << samplingRule.ShortDebugString() << ". Skipping the rule");
             continue;
         }
-        if (!samplingRule.HasLevel() || !samplingRule.HasFraction() || !samplingRule.HasMaxRatePerMinute()) {
+
+        if (!samplingRule.HasLevel() || !samplingRule.HasFraction() || !samplingRule.HasMaxTracesPerMinute()) {
             ALOG_ERROR(NKikimrServices::CMS_CONFIGS, "missing required fields in rule " << samplingRule.ShortDebugString()
-                       << " (required fields are: level, fraction, max_rate_per_minute). Skipping the rule");
+                       << " (required fields are: level, fraction, max_traces_per_minute). Skipping the rule");
             continue;
         }
-        if (samplingRule.GetMaxRatePerMinute() == 0) {
-            ALOG_ERROR(NKikimrServices::CMS_CONFIGS, "max_rate_per_minute should never be zero. Found in rule " << samplingRule.GetMaxRatePerMinute()
+        if (samplingRule.GetMaxTracesPerMinute() == 0) {
+            ALOG_ERROR(NKikimrServices::CMS_CONFIGS, "max_traces_per_minute should never be zero. Found in rule " << samplingRule.GetMaxTracesPerMinute()
                        << ". Skipping the rule");
             continue;
         }
@@ -125,14 +136,23 @@ TSettings<double, TThrottlingSettings> TJaegerTracingConfigurator::GetSettings(c
             .Level = static_cast<ui8>(level),
             .Sampler = fraction,
             .Throttler = TThrottlingSettings {
-                .MaxRatePerMinute = samplingRule.GetMaxRatePerMinute(),
-                .MaxBurst = samplingRule.GetMaxBurst(),
+                .MaxTracesPerMinute = samplingRule.GetMaxTracesPerMinute(),
+                .MaxTracesBurst = samplingRule.GetMaxTracesBurst(),
             },
         };
-        settings.SamplingRules[static_cast<size_t>(requestType)].push_back(rule);
+
+        auto& requestTypeRules = settings.SamplingRules[static_cast<size_t>(requestType)];
+        auto database = GetDatabase(scope);
+        if (database) {
+            requestTypeRules.DatabaseRules[*database].push_back(rule);
+        } else {
+            requestTypeRules.Global.push_back(rule);
+        }
     }
 
     for (const auto& throttlingRule : cfg.GetExternalThrottling()) {
+        const auto& scope = throttlingRule.GetScope();
+
         ERequestType requestType;
         if (auto parsedRequestType = GetRequestType(throttlingRule.GetScope())) {
             requestType = *parsedRequestType;
@@ -142,33 +162,32 @@ TSettings<double, TThrottlingSettings> TJaegerTracingConfigurator::GetSettings(c
             continue;
         }
 
-        if (!throttlingRule.HasMaxRatePerMinute()) {
-            ALOG_ERROR(NKikimrServices::CMS_CONFIGS, "missing required field max_rate_per_minute in rule "
+        if (!throttlingRule.HasMaxTracesPerMinute()) {
+            ALOG_ERROR(NKikimrServices::CMS_CONFIGS, "missing required field max_traces_per_minute in rule "
                        << throttlingRule.ShortDebugString() << ". Skipping the rule");
             continue;
         }
-        if (throttlingRule.GetMaxRatePerMinute() == 0) {
-            ALOG_ERROR(NKikimrServices::CMS_CONFIGS, "max_rate_per_minute should never be zero. Found in rule " << throttlingRule.GetMaxRatePerMinute()
+        if (throttlingRule.GetMaxTracesPerMinute() == 0) {
+            ALOG_ERROR(NKikimrServices::CMS_CONFIGS, "max_traces_per_minute should never be zero. Found in rule " << throttlingRule.GetMaxTracesPerMinute()
                        << ". Skipping the rule");
             continue;
         }
 
-        ui64 maxRatePerMinute = throttlingRule.GetMaxRatePerMinute();
-        ui64 maxBurst = throttlingRule.GetMaxBurst();
+        ui64 maxRatePerMinute = throttlingRule.GetMaxTracesPerMinute();
+        ui64 maxBurst = throttlingRule.GetMaxTracesBurst();
         TExternalThrottlingRule<TThrottlingSettings> rule {
             .Throttler = TThrottlingSettings {
-                .MaxRatePerMinute = maxRatePerMinute,
-                .MaxBurst = maxBurst,
+                .MaxTracesPerMinute = maxRatePerMinute,
+                .MaxTracesBurst = maxBurst,
             },
         };
-        auto& currentRule = settings.ExternalThrottlingRules[static_cast<size_t>(requestType)];
-        if (currentRule) {
-            ALOG_WARN(NKikimrServices::CMS_CONFIGS, "duplicate external throttling rule for scope "
-                      << throttlingRule.GetScope() << ". Adding the limits");
-            currentRule->Throttler.MaxBurst += rule.Throttler.MaxBurst;
-            currentRule->Throttler.MaxRatePerMinute += rule.Throttler.MaxRatePerMinute;
+
+        auto& requestTypeRules = settings.ExternalThrottlingRules[static_cast<size_t>(requestType)];
+        auto database = GetDatabase(scope);
+        if (database) {
+            requestTypeRules.DatabaseRules[*database].push_back(rule);
         } else {
-            currentRule = rule;
+            requestTypeRules.Global.push_back(rule);
         }
     }
 
@@ -176,12 +195,12 @@ TSettings<double, TThrottlingSettings> TJaegerTracingConfigurator::GetSettings(c
     if (cfg.GetExternalThrottling().empty()){
         TExternalThrottlingRule<TThrottlingSettings> rule {
             .Throttler = TThrottlingSettings {
-                .MaxRatePerMinute = Max<ui64>(),
-                .MaxBurst = 0,
+                .MaxTracesPerMinute = Max<ui64>(),
+                .MaxTracesBurst = 0,
             },
         };
 
-        settings.ExternalThrottlingRules[static_cast<size_t>(ERequestType::UNSPECIFIED)] = rule;
+        settings.ExternalThrottlingRules[static_cast<size_t>(ERequestType::UNSPECIFIED)].Global.push_back(rule);
     }
 
     return settings;

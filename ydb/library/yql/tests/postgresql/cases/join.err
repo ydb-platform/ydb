@@ -1,3 +1,9 @@
+Registering pre-existing tables
+	INT4_TBL
+	INT2_TBL
+	TEXT_TBL
+	FLOAT8_TBL
+	int8_tbl
 <sql-statement>
 --
 -- JOIN
@@ -868,10 +874,14 @@ select * from int8_tbl i1 left join (int8_tbl i2 join
   (select 123 as x) ss on i2.q1 = x) on i1.q2 = i2.q2
 order by 1, 2;
 </sql-statement>
--stdin-:<main>: Fatal: Table metadata loading
+-stdin-:<main>: Error: Type annotation
 
-    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.int8_tbl
-    
+    -stdin-:<main>:1:1: Error: At function: RemovePrefixMembers, At function: PgSelect, At function: PgSetItem
+    	select * from int8_tbl i1 left join (int8_tbl i2 join
+	^
+        -stdin-:<main>:2:35: Error: No such column: x
+        	  (select 123 as x) ss on i2.q1 = x) on i1.q2 = i2.q2
+	                                  ^
 <sql-statement>
 --
 -- regression test: check a case where join_clause_is_movable_into() gives
@@ -1635,28 +1645,49 @@ select t1.q2, count(t2.*)
 from int8_tbl t1 left join int8_tbl t2 on (t1.q2 = t2.q1)
 group by t1.q2 order by 1;
 </sql-statement>
--stdin-:<main>: Fatal: Table metadata loading
+-stdin-:<main>: Error: Type annotation
 
-    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.int8_tbl
-    
+    -stdin-:<main>:1:1: Error: At function: RemovePrefixMembers, At function: PgSelect, At function: PgSetItem, At function: PgResultItem
+    	--
+	^
+        -stdin-:<main>:4:15: Error: At function: PgAgg
+        	select t1.q2, count(t2.*)
+	              ^
+            -stdin-:<main>:4:21: Error: Expected PG type, but got: Struct
+            	select t1.q2, count(t2.*)
+	                    ^
 <sql-statement>
 select t1.q2, count(t2.*)
 from int8_tbl t1 left join (select * from int8_tbl) t2 on (t1.q2 = t2.q1)
 group by t1.q2 order by 1;
 </sql-statement>
--stdin-:<main>: Fatal: Table metadata loading
+-stdin-:<main>: Error: Type annotation
 
-    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.int8_tbl
-    
+    -stdin-:<main>:1:1: Error: At function: RemovePrefixMembers, At function: PgSelect, At function: PgSetItem, At function: PgResultItem
+    	select t1.q2, count(t2.*)
+	^
+        -stdin-:<main>:1:15: Error: At function: PgAgg
+        	select t1.q2, count(t2.*)
+	              ^
+            -stdin-:<main>:1:21: Error: Expected PG type, but got: Struct
+            	select t1.q2, count(t2.*)
+	                    ^
 <sql-statement>
 select t1.q2, count(t2.*)
 from int8_tbl t1 left join (select * from int8_tbl offset 0) t2 on (t1.q2 = t2.q1)
 group by t1.q2 order by 1;
 </sql-statement>
--stdin-:<main>: Fatal: Table metadata loading
+-stdin-:<main>: Error: Type annotation
 
-    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.int8_tbl
-    
+    -stdin-:<main>:1:1: Error: At function: RemovePrefixMembers, At function: PgSelect, At function: PgSetItem, At function: PgResultItem
+    	select t1.q2, count(t2.*)
+	^
+        -stdin-:<main>:1:15: Error: At function: PgAgg
+        	select t1.q2, count(t2.*)
+	              ^
+            -stdin-:<main>:1:21: Error: Expected PG type, but got: Struct
+            	select t1.q2, count(t2.*)
+	                    ^
 <sql-statement>
 select t1.q2, count(t2.*)
 from int8_tbl t1 left join
@@ -1664,10 +1695,17 @@ from int8_tbl t1 left join
   on (t1.q2 = t2.q1)
 group by t1.q2 order by 1;
 </sql-statement>
--stdin-:<main>: Fatal: Table metadata loading
+-stdin-:<main>: Error: Type annotation
 
-    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.int8_tbl
-    
+    -stdin-:<main>:1:1: Error: At function: RemovePrefixMembers, At function: PgSelect, At function: PgSetItem, At function: PgSelect, At function: PgSetItem, At function: PgResultItem
+    	select t1.q2, count(t2.*)
+	^
+        -stdin-:<main>:3:15: Error: At function: If
+        	  (select q1, case when q2=1 then 1 else q2 end as q2 from int8_tbl) t2
+	              ^
+            -stdin-:<main>:3:15: Error: Cannot infer common type for int4 and int8
+            	  (select q1, case when q2=1 then 1 else q2 end as q2 from int8_tbl) t2
+	              ^
 <sql-statement>
 --
 -- test incorrect failure to NULL pulled-up subexpressions
@@ -1959,10 +1997,6 @@ where
   1 = (select 1 from int8_tbl t3 where ss.y is not null limit 1)
 order by 1,2;
 </sql-statement>
--stdin-:<main>: Fatal: Table metadata loading
-
-    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.int8_tbl
-    
 <sql-statement>
 --
 -- variant where a PlaceHolderVar is needed at a join, but not above the join
@@ -3083,10 +3117,6 @@ select a.q2, b.q1
   from int8_tbl a left join int8_tbl b on a.q2 = coalesce(b.q1, 1)
   where coalesce(b.q1, 1) > 0;
 </sql-statement>
--stdin-:<main>: Fatal: Table metadata loading
-
-    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.int8_tbl
-    
 <sql-statement>
 reset enable_hashjoin;
 </sql-statement>
@@ -3405,10 +3435,6 @@ SELECT * FROM
      FROM int8_tbl LEFT JOIN innertab ON q2 = id) ss2
   ON true;
 </sql-statement>
--stdin-:<main>: Fatal: Table metadata loading
-
-    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.int8_tbl
-    
 <sql-statement>
 rollback;
 </sql-statement>
@@ -3692,10 +3718,26 @@ explain (costs off)
 -- the first of these should return int8_tbl.q2, the second int8_tbl.q1
 select *, (select r from (select q1 as q2) x, (select q2 as r) y) from int8_tbl;
 </sql-statement>
--stdin-:<main>: Fatal: Table metadata loading
+-stdin-:<main>: Error: Type annotation
 
-    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.int8_tbl
-    
+    -stdin-:<main>:1:1: Error: At function: RemovePrefixMembers, At function: PgSelect, At function: PgSetItem, At function: PgResultItem
+    	-- check scoping of lateral versus parent references
+	^
+        -stdin-:<main>:3:11: Error: At function: PgSubLink, At function: PgSelect
+        	select *, (select r from (select q1 as q2) x, (select q2 as r) y) from int8_tbl;
+	          ^
+            -stdin-:<main>:3:11: Error: At function: PgSetItem, At function: PgSelect, At function: PgSetItem
+            	select *, (select r from (select q1 as q2) x, (select q2 as r) y) from int8_tbl;
+	          ^
+                -stdin-:<main>:3:34: Error: Column reference can't be used without FROM
+                	select *, (select r from (select q1 as q2) x, (select q2 as r) y) from int8_tbl;
+	                                 ^
+            -stdin-:<main>:3:11: Error: At function: PgSelect, At function: PgSetItem
+            	select *, (select r from (select q1 as q2) x, (select q2 as r) y) from int8_tbl;
+	          ^
+                -stdin-:<main>:3:55: Error: Column reference can't be used without FROM
+                	select *, (select r from (select q1 as q2) x, (select q2 as r) y) from int8_tbl;
+	                                                      ^
 <sql-statement>
 select *, (select r from (select q1 as q2) x, lateral (select q2 as r) y) from int8_tbl;
 </sql-statement>

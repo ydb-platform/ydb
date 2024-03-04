@@ -1,3 +1,25 @@
+-- Test null limit and offset.  The planner would discard a simple null
+-- constant, so to ensure executor is exercised, do this:
+select * from int8_tbl limit (case when random() < 0.5 then null::bigint end);
+        q1        |        q2         
+------------------+-------------------
+              123 |               456
+              123 |  4567890123456789
+ 4567890123456789 |               123
+ 4567890123456789 |  4567890123456789
+ 4567890123456789 | -4567890123456789
+(5 rows)
+
+select * from int8_tbl offset (case when random() < 0.5 then null::bigint end);
+        q1        |        q2         
+------------------+-------------------
+              123 |               456
+              123 |  4567890123456789
+ 4567890123456789 |               123
+ 4567890123456789 |  4567890123456789
+ 4567890123456789 | -4567890123456789
+(5 rows)
+
 -- Test assorted cases involving backwards fetch from a LIMIT plan node
 begin;
 rollback;

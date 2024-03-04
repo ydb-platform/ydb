@@ -3,6 +3,8 @@
 #include "schemeshard_impl.h"
 
 #include <util/generic/xrange.h>
+#include <ydb/public/api/protos/ydb_export.pb.h>
+#include <ydb/public/api/protos/ydb_import.pb.h>
 
 namespace NKikimr {
 namespace NSchemeShard {

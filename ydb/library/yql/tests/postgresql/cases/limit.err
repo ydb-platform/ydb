@@ -1,3 +1,5 @@
+Registering pre-existing tables
+	int8_tbl
 <sql-statement>
 --
 -- LIMIT
@@ -88,17 +90,9 @@ SELECT ''::text AS five, unique1, unique2, stringu1
 -- constant, so to ensure executor is exercised, do this:
 select * from int8_tbl limit (case when random() < 0.5 then null::bigint end);
 </sql-statement>
--stdin-:<main>: Fatal: Table metadata loading
-
-    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.int8_tbl
-    
 <sql-statement>
 select * from int8_tbl offset (case when random() < 0.5 then null::bigint end);
 </sql-statement>
--stdin-:<main>: Fatal: Table metadata loading
-
-    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.int8_tbl
-    
 <sql-statement>
 -- Test assorted cases involving backwards fetch from a LIMIT plan node
 begin;

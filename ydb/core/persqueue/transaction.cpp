@@ -70,6 +70,8 @@ void TDistributedTransaction::InitConfigTransaction(const NKikimrPQ::TTransactio
     TabletConfig = tx.GetTabletConfig();
     BootstrapConfig = tx.GetBootstrapConfig();
 
+    Migrate(TabletConfig);
+
     InitPartitions();
 }
 
@@ -156,6 +158,8 @@ void TDistributedTransaction::OnProposeTransaction(const NKikimrPQ::TConfigTrans
 
     TabletConfig = txBody.GetTabletConfig();
     BootstrapConfig = txBody.GetBootstrapConfig();
+
+    Migrate(TabletConfig);
 
     TPartitionGraph graph = MakePartitionGraph(TabletConfig);
 

@@ -154,6 +154,11 @@ public:
         return BorrowedBlobIds.emplace(blobId, ownerTabletId).second;
     }
 
+    void Clear() {
+        SharedBlobIds.Clear();
+        BorrowedBlobIds.clear();
+    }
+
     void OnTransactionExecuteAfterCleaning(const TBlobsCategories& removeTask, NTable::TDatabase& db);
     void OnTransactionCompleteAfterCleaning(const TBlobsCategories& removeTask);
 };
@@ -224,7 +229,7 @@ public:
 
     std::shared_ptr<TStorageSharedBlobsManager> GetStorageManagerVerified(const TString& storageId) const {
         auto it = Storages.find(storageId);
-        AFL_VERIFY(it != Storages.end());
+        AFL_VERIFY(it != Storages.end())("storage_id", storageId);
         return it->second;
     }
 
@@ -236,7 +241,7 @@ public:
         return it->second;
     }
 
-    bool Load(NTable::TDatabase& database);
+    bool LoadIdempotency(NTable::TDatabase& database);
 };
 
 }

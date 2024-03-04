@@ -24,7 +24,7 @@ protected:
     virtual std::optional<ui32> DoGetRecordsCount() const = 0;
     virtual std::shared_ptr<arrow::Scalar> DoGetFirstScalar() const = 0;
     virtual std::shared_ptr<arrow::Scalar> DoGetLastScalar() const = 0;
-    virtual void DoAddIntoPortion(const TBlobRange& bRange, TPortionInfo& portionInfo) const = 0;
+    virtual void DoAddIntoPortionBeforeBlob(const TBlobRangeLink16& bRange, TPortionInfo& portionInfo) const = 0;
 public:
     IPortionDataChunk(const ui32 entityId, const std::optional<ui16>& chunkIdx = {})
         : EntityId(entityId)
@@ -87,8 +87,9 @@ public:
         return TChunkAddress(GetEntityId(), GetChunkIdx());
     }
 
-    void AddIntoPortion(const TBlobRange& bRange, TPortionInfo& portionInfo) const {
-        return DoAddIntoPortion(bRange, portionInfo);
+    void AddIntoPortionBeforeBlob(const TBlobRangeLink16& bRange, TPortionInfo& portionInfo) const {
+        AFL_VERIFY(!bRange.IsValid());
+        return DoAddIntoPortionBeforeBlob(bRange, portionInfo);
     }
 };
 
@@ -103,7 +104,7 @@ protected:
         return DoGetRecordsCountImpl();
     }
 
-    virtual void DoAddIntoPortion(const TBlobRange& bRange, TPortionInfo& portionInfo) const override;
+    virtual void DoAddIntoPortionBeforeBlob(const TBlobRangeLink16& bRange, TPortionInfo& portionInfo) const override;
 
     virtual std::vector<std::shared_ptr<IPortionDataChunk>> DoInternalSplitImpl(const TColumnSaver& saver, const std::shared_ptr<NColumnShard::TSplitterCounters>& counters, const std::vector<ui64>& splitSizes) const = 0;
     virtual std::vector<std::shared_ptr<IPortionDataChunk>> DoInternalSplit(const TColumnSaver& saver, const std::shared_ptr<NColumnShard::TSplitterCounters>& counters, const std::vector<ui64>& splitSizes) const override;

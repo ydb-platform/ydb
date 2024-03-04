@@ -115,10 +115,7 @@ protected:
     }
 
     NNodeWhiteboard::TTabletId GetConsoleId() {
-        TIntrusivePtr<TDomainsInfo> domains = AppData()->DomainsInfo;
-        TIntrusivePtr<TDomainsInfo::TDomain> domain = domains->Domains.begin()->second;
-        auto group = domains->GetDefaultStateStorageGroup(domain->DomainUid);
-        return MakeConsoleID(group);
+        return MakeConsoleID();
     }
 
     void RequestConsoleListTenants() {
@@ -135,10 +132,7 @@ protected:
     }
 
     NNodeWhiteboard::TTabletId GetBSControllerId() {
-        TIntrusivePtr<TDomainsInfo> domains = AppData()->DomainsInfo;
-        TIntrusivePtr<TDomainsInfo::TDomain> domain = domains->Domains.begin()->second;
-        ui32 stateStorageGroup = domains->GetDefaultStateStorageGroup(domain->DomainUid);
-        return MakeBSControllerID(stateStorageGroup);
+        return MakeBSControllerID();
     }
 
     void RequestBSControllerConfig() {
@@ -187,14 +181,12 @@ protected:
     }
 
     void RequestStateStorageEndpointsLookup(const TString& path) {
-        if (AppData()->DomainsInfo->Domains.empty()) {
+        if (!AppData()->DomainsInfo->Domain) {
             return;
         }
-        auto domainInfo = AppData()->DomainsInfo->Domains.begin()->second;
         TBase::RegisterWithSameMailbox(CreateBoardLookupActor(MakeEndpointsBoardPath(path),
                                                               TBase::SelfId(),
-                                                            domainInfo->DefaultStateStorageGroup,
-                                                               EBoardLookupMode::Second));
+                                                              EBoardLookupMode::Second));
         ++Requests;
     }
 

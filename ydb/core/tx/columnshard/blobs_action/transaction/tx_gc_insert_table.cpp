@@ -15,12 +15,17 @@ bool TTxInsertTableCleanup::Execute(TTransactionContext& txc, const TActorContex
     auto storage = Self->StoragesManager->GetInsertOperator();
     BlobsAction = storage->StartDeclareRemovingAction("TX_CLEANUP");
     for (auto& [abortedWriteId, abortedData] : allAborted) {
-        Self->InsertTable->EraseAborted(dbTable, abortedData, BlobsAction);
+        Self->InsertTable->EraseAbortedOnExecute(dbTable, abortedData, BlobsAction);
     }
     BlobsAction->OnExecuteTxAfterRemoving(*Self, blobManagerDb, true);
     return true;
 }
 void TTxInsertTableCleanup::Complete(const TActorContext& /*ctx*/) {
+    auto allAborted = Self->InsertTable->GetAborted();
+    for (auto& [abortedWriteId, abortedData] : allAborted) {
+        Self->InsertTable->EraseAbortedOnComplete(abortedData);
+    }
+
     Y_ABORT_UNLESS(BlobsAction);
     BlobsAction->OnCompleteTxAfterRemoving(*Self, true);
     Self->EnqueueBackgroundActivities();

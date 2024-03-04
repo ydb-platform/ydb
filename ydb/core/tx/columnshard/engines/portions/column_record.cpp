@@ -17,10 +17,6 @@ TConclusionStatus TChunkMeta::DeserializeFromProto(const TChunkAddress& address,
     if (proto.HasRawBytes()) {
         RawBytes = proto.GetRawBytes();
     }
-    if (proto.HasMinValue()) {
-        AFL_VERIFY(field)("field_id", address.GetColumnId())("field_name", indexInfo.GetColumnName(address.GetColumnId()));
-        Min = ConstantToScalar(proto.GetMinValue(), field->type());
-    }
     if (proto.HasMaxValue()) {
         AFL_VERIFY(field)("field_id", address.GetColumnId())("field_name", indexInfo.GetColumnName(address.GetColumnId()));
         Max = ConstantToScalar(proto.GetMaxValue(), field->type());
@@ -45,18 +41,18 @@ NKikimrTxColumnShard::TIndexColumnMeta TChunkMeta::SerializeToProto() const {
     if (RawBytes) {
         meta.SetRawBytes(*RawBytes);
     }
-    if (HasMinMax()) {
-        ScalarToConstant(*Min, *meta.MutableMinValue());
+    if (HasMax()) {
         ScalarToConstant(*Max, *meta.MutableMaxValue());
+        ScalarToConstant(*Max, *meta.MutableMinValue());
     }
     return meta;
 }
 
-TColumnRecord::TColumnRecord(const TColumnChunkLoadContext& loadContext, const TIndexInfo& info)
+TColumnRecord::TColumnRecord(const TBlobRangeLink16::TLinkId blobLinkId, const TColumnChunkLoadContext& loadContext, const TIndexInfo& info)
     : Meta(loadContext, info)
     , ColumnId(loadContext.GetAddress().GetColumnId())
     , Chunk(loadContext.GetAddress().GetChunk())
-    , BlobRange(loadContext.GetBlobRange())
+    , BlobRange(loadContext.GetBlobRange().BuildLink(blobLinkId))
 {
 }
 
@@ -86,7 +82,7 @@ NKikimr::TConclusionStatus TColumnRecord::DeserializeFromProto(const NKikimrColu
         }
     }
     {
-        auto parsed = TBlobRange::BuildFromProto(proto.GetBlobRange());
+        auto parsed = TBlobRangeLink16::BuildFromProto(proto.GetBlobRange());
         if (!parsed) {
             return parsed;
         }

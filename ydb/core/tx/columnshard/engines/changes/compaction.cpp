@@ -27,23 +27,21 @@ void TCompactColumnEngineChanges::DoCompile(TFinalizationContext& context) {
     }
 }
 
-bool TCompactColumnEngineChanges::DoApplyChanges(TColumnEngineForLogs& self, TApplyChangesContext& context) {
-    return TBase::DoApplyChanges(self, context);
-}
-
-void TCompactColumnEngineChanges::DoWriteIndex(NColumnShard::TColumnShard& self, TWriteIndexContext& context) {
-    TBase::DoWriteIndex(self, context);
-}
-
 void TCompactColumnEngineChanges::DoStart(NColumnShard::TColumnShard& self) {
     TBase::DoStart(self);
 
     Y_ABORT_UNLESS(SwitchedPortions.size());
+    THashMap<TString, THashSet<TBlobRange>> blobRanges;
+    auto& index = self.GetIndexAs<TColumnEngineForLogs>().GetVersionedIndex();
     for (const auto& p : SwitchedPortions) {
         Y_ABORT_UNLESS(!p.Empty());
-        auto action = BlobsAction.GetReading(p);
-        for (const auto& rec : p.Records) {
-            action->AddRange(rec.BlobRange);
+        p.FillBlobRangesByStorage(blobRanges, index);
+    }
+
+    for (const auto& p : blobRanges) {
+        auto action = BlobsAction.GetReading(p.first);
+        for (auto&& b: p.second) {
+            action->AddRange(b);
         }
     }
 
@@ -52,9 +50,11 @@ void TCompactColumnEngineChanges::DoStart(NColumnShard::TColumnShard& self) {
     GranuleMeta->OnCompactionStarted();
 }
 
-void TCompactColumnEngineChanges::DoWriteIndexComplete(NColumnShard::TColumnShard& self, TWriteIndexCompleteContext& context) {
-    TBase::DoWriteIndexComplete(self, context);
-    self.IncCounter(NColumnShard::COUNTER_COMPACTION_TIME, context.Duration.MilliSeconds());
+void TCompactColumnEngineChanges::DoWriteIndexOnComplete(NColumnShard::TColumnShard* self, TWriteIndexCompleteContext& context) {
+    TBase::DoWriteIndexOnComplete(self, context);
+    if (self) {
+        self->IncCounter(NColumnShard::COUNTER_COMPACTION_TIME, context.Duration.MilliSeconds());
+    }
 }
 
 void TCompactColumnEngineChanges::DoOnFinish(NColumnShard::TColumnShard& self, TChangesFinishContext& context) {

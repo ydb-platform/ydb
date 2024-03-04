@@ -36,6 +36,9 @@ SPLIT_FACTOR(10)
 DEPENDS(
     ydb/library/yql/tests/postgresql/common
     ydb/library/yql/tools/pgrun
+    ydb/library/yql/tools/pg-make-test
+    ydb/library/yql/udfs/common/set
+    ydb/library/yql/udfs/common/re2
 )
 
 END()

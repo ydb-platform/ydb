@@ -110,6 +110,7 @@ protected:
         Y_ABORT_UNLESS(false);
         return Data.front();
     }
+    bool GroupBlobsImpl(const TString& currentGroupName, const std::set<ui32>& entityIds, std::vector<TSplittedBlob>& blobs);
 
 public:
 
@@ -137,17 +138,15 @@ public:
         return Size;
     }
 
-    std::vector<std::vector<std::shared_ptr<IPortionDataChunk>>> GroupChunksByBlobs() {
-        std::vector<std::vector<std::shared_ptr<IPortionDataChunk>>> result;
+    std::vector<TSplittedBlob> GroupChunksByBlobs(const TEntityGroups& groups) {
         std::vector<TSplittedBlob> blobs;
-        GroupBlobs(blobs);
-        for (auto&& i : blobs) {
-            result.emplace_back(i.GetChunks());
-        }
-        return result;
+        AFL_VERIFY(GroupBlobs(blobs, groups));
+        return blobs;
     }
 
-    explicit TGeneralSerializedSlice(TVectorView<TGeneralSerializedSlice>&& objects) {
+    explicit TGeneralSerializedSlice(TVectorView<TGeneralSerializedSlice>&& objects, const TSplitSettings& settings)
+        : Settings(settings)
+    {
         Y_ABORT_UNLESS(objects.size());
         std::swap(*this, objects.front());
         for (ui32 i = 1; i < objects.size(); ++i) {
@@ -159,7 +158,22 @@ public:
 
     void MergeSlice(TGeneralSerializedSlice&& slice);
 
-    bool GroupBlobs(std::vector<TSplittedBlob>& blobs);
+    bool GroupBlobs(std::vector<TSplittedBlob>& blobs, const TEntityGroups& groups) {
+        if (groups.IsEmpty()) {
+            return GroupBlobsImpl(groups.GetDefaultGroupName(), {}, blobs);
+        } else {
+            std::vector<TSplittedBlob> result;
+            for (auto&& i : groups) {
+                std::vector<TSplittedBlob> blobsLocal;
+                if (!GroupBlobsImpl(i.first, i.second, blobsLocal)) {
+                    return false;
+                }
+                result.insert(result.end(), blobsLocal.begin(), blobsLocal.end());
+            }
+            std::swap(result, blobs);
+            return true;
+        }
+    }
 
     bool operator<(const TGeneralSerializedSlice& item) const {
         return Size < item.Size;

@@ -182,7 +182,7 @@ public:
 
         result->Record.SetInstanceId(Self->InstanceId);
         result->Record.SetComprehensive(false);
-        result->Record.SetAvailDomain(AppData()->DomainsInfo->GetDomainUidByTabletId(Self->TabletID()));
+        result->Record.SetAvailDomain(AppData()->DomainsInfo->GetDomain()->DomainUid);
         Response = std::make_unique<IEventHandle>(MakeBlobStorageNodeWardenID(nodeId), Self->SelfId(), result.release(), 0, 0);
 
         TString error;
@@ -309,7 +309,7 @@ public:
 
         res->Record.SetInstanceId(Self->InstanceId);
         res->Record.SetComprehensive(true);
-        res->Record.SetAvailDomain(AppData()->DomainsInfo->GetDomainUidByTabletId(Self->TabletID()));
+        res->Record.SetAvailDomain(AppData()->DomainsInfo->GetDomain()->DomainUid);
         Response = std::make_unique<IEventHandle>(request->Sender, Self->SelfId(), res.release(), 0, request->Cookie);
 
         NIceDb::TNiceDb db(txc.DB);

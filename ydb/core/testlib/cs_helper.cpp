@@ -5,6 +5,7 @@
 #include <ydb/library/binary_json/write.h>
 
 #include <ydb/library/actors/core/event.h>
+#include <ydb/public/api/protos/ydb_table.pb.h>
 #include <library/cpp/testing/unittest/registar.h>
 
 #include <contrib/libs/apache/arrow/cpp/src/arrow/buffer.h>
@@ -183,9 +184,9 @@ TString THelper::GetTestTableSchema() const {
     TStringBuilder sb;
     sb << R"(Columns{ Name: "timestamp" Type : "Timestamp" NotNull : true })";
     sb << R"(Columns{ Name: "resource_id" Type : "Utf8" })";
-    sb << R"(Columns{ Name: "uid" Type : "Utf8" })";
+    sb << "Columns{ Name: \"uid\" Type : \"Utf8\" StorageId : \"" + OptionalStorageId + "\" }";
     sb << R"(Columns{ Name: "level" Type : "Int32" })";
-    sb << R"(Columns{ Name: "message" Type : "Utf8" })";
+    sb << "Columns{ Name: \"message\" Type : \"Utf8\" StorageId : \"" + OptionalStorageId + "\" }";
     if (GetWithJsonDocument()) {
         sb << R"(Columns{ Name: "json_payload" Type : "JsonDocument" })";
     }

@@ -140,7 +140,7 @@ private:
 public:
     TTablesManager(const std::shared_ptr<NOlap::IStoragesManager>& storagesManager, const ui64 tabletId);
 
-    bool TryFinalizeDropPath(NTabletFlatExecutor::TTransactionContext& txc, const ui64 pathId);
+    bool TryFinalizeDropPath(NTable::TDatabase& dbTable, const ui64 pathId);
 
     const TTtl& GetTtl() const {
         return Ttl;
@@ -236,7 +236,6 @@ public:
     bool FillMonitoringReport(NTabletFlatExecutor::TTransactionContext& txc, NJson::TJsonValue& json);
 private:
     void IndexSchemaVersion(const NOlap::TSnapshot& version, const NKikimrSchemeOp::TColumnTableSchema& schema);
-    static NOlap::TIndexInfo DeserializeIndexInfoFromProto(const NKikimrSchemeOp::TColumnTableSchema& schema);
 };
 
 }

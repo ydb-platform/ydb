@@ -157,7 +157,7 @@ void Run(TVector<IActor*> tests, TTestRunConfig runCfg) {
         VERBOSE_COUT("Sending TEvBoot to test");
         for (ui32 i = 0; i < runCfg.Instances; ++i) {
             actorSystem1->Send(testIds[i], new TEvTablet::TEvBoot(
-                        MakeTabletID(0, 0, 1), 0, nullptr, TActorId(), nullptr));
+                        MakeTabletID(false, 1), 0, nullptr, TActorId(), nullptr));
         }
 
         TAtomicBase doneCount = 0;

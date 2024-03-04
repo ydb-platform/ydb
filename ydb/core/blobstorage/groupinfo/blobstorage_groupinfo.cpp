@@ -6,6 +6,7 @@
 #include <ydb/core/base/services/blobstorage_service_id.h>
 #include <ydb/core/blobstorage/vdisk/ingress/blobstorage_ingress.h>
 #include <ydb/core/protos/blobstorage.pb.h>
+#include <ydb/core/protos/blobstorage_disk.pb.h>
 
 #include <ydb/library/actors/core/interconnect.h>
 

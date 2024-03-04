@@ -49,10 +49,25 @@ void TOperator::InitNewExternalOperator(const NColumnShard::NTiers::TManager* ti
     } else {
         settings.SetEndpoint("nowhere");
     }
+    {
+        TGuard<TSpinLock> changeLock(ChangeOperatorLock);
+        if (CurrentS3Settings && CurrentS3Settings->SerializeAsString() == settings.SerializeAsString()) {
+            return;
+        }
+    }
     auto extStorageConfig = NWrappers::NExternalStorage::IExternalStorageConfig::Construct(settings);
     AFL_VERIFY(extStorageConfig);
     auto extStorageOperator = extStorageConfig->ConstructStorageOperator(false);
-    extStorageOperator->InitReplyAdapter(std::make_shared<NOlap::NBlobOperations::NTier::TRepliesAdapter>());
+    extStorageOperator->InitReplyAdapter(std::make_shared<NOlap::NBlobOperations::NTier::TRepliesAdapter>(GetStorageId()));
+    TGuard<TSpinLock> changeLock(ChangeOperatorLock);
+    CurrentS3Settings = settings;
+    ExternalStorageOperator = extStorageOperator;
+}
+
+void TOperator::InitNewExternalOperator() {
+    AFL_VERIFY(InitializationConfig);
+    auto extStorageOperator = InitializationConfig->ConstructStorageOperator(false);
+    extStorageOperator->InitReplyAdapter(std::make_shared<NOlap::NBlobOperations::NTier::TRepliesAdapter>(GetStorageId()));
     TGuard<TSpinLock> changeLock(ChangeOperatorLock);
     ExternalStorageOperator = extStorageOperator;
 }
@@ -62,6 +77,15 @@ TOperator::TOperator(const TString& storageId, const NColumnShard::TColumnShard&
     , TabletActorId(shard.SelfId())
 {
     InitNewExternalOperator(shard.GetTierManagerPointer(storageId));
+}
+
+TOperator::TOperator(const TString& storageId, const TActorId& shardActorId, const std::shared_ptr<NWrappers::IExternalStorageConfig>& storageConfig,
+    const std::shared_ptr<NDataSharing::TStorageSharedBlobsManager>& storageSharedBlobsManager)
+    : TBase(storageId, storageSharedBlobsManager)
+    , TabletActorId(shardActorId)
+    , InitializationConfig(storageConfig)
+{
+    InitNewExternalOperator();
 }
 
 void TOperator::DoOnTieringModified(const std::shared_ptr<NColumnShard::TTiersManager>& tiers) {

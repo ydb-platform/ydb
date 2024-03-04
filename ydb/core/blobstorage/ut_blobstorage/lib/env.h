@@ -13,7 +13,7 @@ struct TEnvironmentSetup {
     static constexpr ui32 DrivesPerNode = 5;
     const TString DomainName = "Root";
     const ui32 DomainId = 1;
-    const ui64 TabletId = MakeBSControllerID(DomainId);
+    const ui64 TabletId = MakeBSControllerID();
     const ui32 GroupId = 0;
     const TString StoragePoolName = "test";
     const ui32 NumGroups = 1;
@@ -39,6 +39,8 @@ struct TEnvironmentSetup {
         const bool SuppressCompatibilityCheck = false;
         const TFeatureFlags FeatureFlags;
         const NPDisk::EDeviceType DiskType = NPDisk::EDeviceType::DEVICE_TYPE_NVME;
+        const ui32 BurstThresholdNs = 0;
+        const TString VDiskKind = "";
     };
 
     const TSettings Settings;
@@ -136,7 +138,7 @@ struct TEnvironmentSetup {
         auto domain = TDomainsInfo::TDomain::ConstructEmptyDomain(DomainName, DomainId);
         domainsInfo->AddDomain(domain.Get());
         if (Settings.SetupHive) {
-            domainsInfo->AddHive(domain->DefaultHiveUid, MakeDefaultHiveID(domain->DefaultStateStorageGroup));
+            domainsInfo->AddHive(MakeDefaultHiveID());
         }
 
         return std::make_unique<TTestActorSystem>(Settings.NodeCount, NLog::PRI_ERROR, domainsInfo, featureFlags);
@@ -323,6 +325,16 @@ struct TEnvironmentSetup {
                     config->CacheAccessor = std::make_unique<TAccessor>(Cache[nodeId]);
                 }
                 config->FeatureFlags = Settings.FeatureFlags;
+                if (Settings.VDiskKind) {
+                    NKikimrBlobStorage::TAllVDiskKinds vdiskConfig;
+                    auto* kind = vdiskConfig.AddVDiskKinds();
+                    kind->SetKind(NKikimrBlobStorage::TVDiskKind::Test1);
+                    if (Settings.BurstThresholdNs) {
+                        kind->MutableConfig()->SetBurstThresholdNs(Settings.BurstThresholdNs);
+                    }
+
+                    config->AllVDiskKinds = MakeIntrusive<TAllVDiskKinds>(vdiskConfig);
+                }
                 warden.reset(CreateBSNodeWarden(config));
             }
 
@@ -339,11 +351,10 @@ struct TEnvironmentSetup {
             ui32 NumChannels = 3;
         };
         std::vector<TTabletInfo> tablets{
-            {MakeBSControllerID(DomainId), TTabletTypes::BSController, &CreateFlatBsController},
+            {MakeBSControllerID(), TTabletTypes::BSController, &CreateFlatBsController},
         };
 
-
-        for (const auto& [uid, tabletId] : Runtime->GetDomainsInfo()->HivesByHiveUid) {
+        if (const ui64 tabletId = Runtime->GetDomainsInfo()->GetHive(); tabletId != TDomainsInfo::BadTabletId) {
             tablets.push_back(TTabletInfo{tabletId, TTabletTypes::Hive, &CreateDefaultHive});
         }
 
@@ -408,7 +419,11 @@ struct TEnvironmentSetup {
         cmd2->SetName(StoragePoolName);
         cmd2->SetKind(StoragePoolName);
         cmd2->SetErasureSpecies(TBlobStorageGroupType::ErasureSpeciesName(Settings.Erasure.GetErasure()));
-        cmd2->SetVDiskKind("Default");
+        if (Settings.VDiskKind) {
+            cmd2->SetVDiskKind(Settings.VDiskKind);
+        } else {
+            cmd2->SetVDiskKind("Default");
+        }
         cmd2->SetNumGroups(numGroups ? numGroups : NumGroups);
         cmd2->AddPDiskFilter()->AddProperty()->SetType(pdiskType);
         if (Settings.Encryption) {
@@ -428,7 +443,11 @@ struct TEnvironmentSetup {
         cmd->SetName(poolName);
         cmd->SetKind(poolName);
         cmd->SetErasureSpecies(TBlobStorageGroupType::ErasureSpeciesName(Settings.Erasure.GetErasure()));
-        cmd->SetVDiskKind("Default");
+        if (Settings.VDiskKind) {
+            cmd->SetVDiskKind(Settings.VDiskKind);
+        } else {
+            cmd->SetVDiskKind("Default");
+        }
         cmd->SetNumGroups(1);
         cmd->AddPDiskFilter()->AddProperty()->SetType(NKikimrBlobStorage::EPDiskType::ROT);
         if (Settings.Encryption) {

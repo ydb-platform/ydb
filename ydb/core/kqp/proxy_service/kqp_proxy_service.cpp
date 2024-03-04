@@ -68,15 +68,6 @@ static constexpr TDuration DEFAULT_CREATE_SESSION_TIMEOUT = TDuration::MilliSeco
 using namespace NKikimrConfig;
 
 
-std::optional<ui32> GetDefaultStateStorageGroupId(const TString& database) {
-    if (auto* domainInfo = AppData()->DomainsInfo->GetDomainByName(ExtractDomain(database))) {
-        return domainInfo->DefaultStateStorageGroup;
-    }
-
-    return std::nullopt;
-}
-
-
 std::optional<ui32> TryDecodeYdbSessionId(const TString& sessionId) {
     if (sessionId.empty()) {
         return std::nullopt;
@@ -423,16 +414,9 @@ public:
             return;
         }
 
-        auto groupId = GetDefaultStateStorageGroupId(AppData()->TenantName);
-        if (!groupId) {
-            KQP_PROXY_LOG_D("Unable to determine default state storage group id for database " <<
-                AppData()->TenantName);
-            return;
-        }
-
         NodeResources.SetActiveWorkersCount(LocalSessions->size());
         PublishBoardPath = MakeKqpProxyBoardPath(AppData()->TenantName);
-        auto actor = CreateBoardPublishActor(PublishBoardPath, NodeResources.SerializeAsString(), SelfId(), *groupId, 0, true);
+        auto actor = CreateBoardPublishActor(PublishBoardPath, NodeResources.SerializeAsString(), SelfId(), 0, true);
         BoardPublishActor = Register(actor);
         LastPublishResourcesAt = TAppData::TimeProvider->Now();
     }
@@ -597,7 +581,8 @@ public:
         const auto deadline = TInstant::MicroSeconds(event.GetDeadlineUs());
 
         if (CheckRequestDeadline(requestInfo, deadline, result) &&
-            CreateNewSessionWorker(requestInfo, TString(DefaultKikimrPublicClusterName), true, request.GetDatabase(), event.GetSupportsBalancing(), event.GetPgWire(), result))
+            CreateNewSessionWorker(requestInfo, TString(DefaultKikimrPublicClusterName), true, request.GetDatabase(),
+                request.GetApplicationName(), event.GetSupportsBalancing(), event.GetPgWire(), result))
         {
             auto& response = *responseEv->Record.MutableResponse();
             response.SetSessionId(result.Value->SessionId);
@@ -630,7 +615,7 @@ public:
         if (ev->Get()->GetSessionId().empty()) {
             TProcessResult<TKqpSessionInfo*> result;
             if (!CreateNewSessionWorker(requestInfo, TString(DefaultKikimrPublicClusterName), false,
-                database, false, false, result))
+                database, {}, false, false, result))
             {
                 ReplyProcessError(result.YdbStatus, result.Error, requestId);
                 return;
@@ -912,14 +897,8 @@ public:
             return;
         }
 
-        auto groupId = GetDefaultStateStorageGroupId(AppData()->TenantName);
-        if (!groupId) {
-            KQP_PROXY_LOG_W("Unable to determine default state storage group id");
-            return;
-        }
-
         if (PublishBoardPath) {
-            auto actor = CreateBoardLookupActor(PublishBoardPath, SelfId(), *groupId, EBoardLookupMode::Majority);
+            auto actor = CreateBoardLookupActor(PublishBoardPath, SelfId(), EBoardLookupMode::Majority);
             BoardLookupActor = Register(actor);
         }
     }
@@ -1421,8 +1400,8 @@ private:
         }
     }
 
-    bool CreateNewSessionWorker(const TKqpRequestInfo& requestInfo,
-        const TString& cluster, bool longSession, const TString& database, bool supportsBalancing, bool pgWire, TProcessResult<TKqpSessionInfo*>& result)
+    bool CreateNewSessionWorker(const TKqpRequestInfo& requestInfo, const TString& cluster, bool longSession,
+        const TString& database, const TMaybe<TString>& applicationName, bool supportsBalancing, bool pgWire, TProcessResult<TKqpSessionInfo*>& result)
     {
         if (!database.empty() && AppData()->TenantName.empty()) {
             TString error = TStringBuilder() << "Node isn't ready to serve database requests.";
@@ -1460,7 +1439,7 @@ private:
 
         auto dbCounters = Counters->GetDbCounters(database);
 
-        TKqpWorkerSettings workerSettings(cluster, database, TableServiceConfig, QueryServiceConfig, dbCounters);
+        TKqpWorkerSettings workerSettings(cluster, database, applicationName, TableServiceConfig, QueryServiceConfig, dbCounters);
         workerSettings.LongSession = longSession;
 
         auto config = CreateConfig(KqpSettings, workerSettings);

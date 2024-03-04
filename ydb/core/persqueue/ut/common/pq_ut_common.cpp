@@ -5,6 +5,7 @@
 #include <ydb/core/persqueue/key.h>
 #include <ydb/core/persqueue/partition.h>
 #include <ydb/core/persqueue/ut/common/pq_ut_common.h>
+#include <ydb/core/persqueue/utils.h>
 #include <ydb/core/security/ticket_parser.h>
 #include <ydb/core/tablet/tablet_counters_aggregator.h>
 #include <ydb/core/tablet_flat/tablet_flat_executed.h>
@@ -49,7 +50,7 @@ void PQTabletPrepare(const TTabletPreparationParameters& parameters,
             }
             request->Record.MutableTabletConfig()->SetCacheSize(10_MB);
             request->Record.SetTxId(12345);
-            auto tabletConfig = request->Record.MutableTabletConfig();
+            auto* tabletConfig = request->Record.MutableTabletConfig();
             if (runtime.GetAppData().PQConfig.GetTopicsAreFirstClassCitizen()) {
                 tabletConfig->SetTopicName("topic");
                 tabletConfig->SetTopicPath(runtime.GetAppData().PQConfig.GetDatabase() + "/topic");
@@ -93,6 +94,7 @@ void PQTabletPrepare(const TTabletPreparationParameters& parameters,
                 if (u.first != "user")
                     tabletConfig->AddReadRules(u.first);
             }
+
             runtime.SendToPipe(tabletId, edge, request.Release(), 0, GetPipeConfigWithRetries());
             TEvPersQueue::TEvUpdateConfigResponse* result =
                 runtime.GrabEdgeEvent<TEvPersQueue::TEvUpdateConfigResponse>(handle);
@@ -136,7 +138,7 @@ void PQTabletPrepare(const TTabletPreparationParameters& parameters,
 }
 
 
-void CmdGetOffset(const ui32 partition, const TString& user, i64 offset, TTestContext& tc, i64 ctime,
+void CmdGetOffset(const ui32 partition, const TString& user, i64 expectedOffset, TTestContext& tc, i64 ctime,
                   ui64 writeTime) {
     TAutoPtr<IEventHandle> handle;
     TEvPersQueue::TEvResponse *result;
@@ -174,7 +176,7 @@ void CmdGetOffset(const ui32 partition, const TString& user, i64 offset, TTestCo
                     }
                 }
             }
-            UNIT_ASSERT((offset == -1 && !resp.HasOffset()) || (i64)resp.GetOffset() == offset);
+            UNIT_ASSERT((expectedOffset == -1 && !resp.HasOffset()) || (i64)resp.GetOffset() == expectedOffset);
             if (writeTime > 0) {
                 UNIT_ASSERT(resp.HasWriteTimestampEstimateMS());
                 UNIT_ASSERT(resp.GetWriteTimestampEstimateMS() >= writeTime);
@@ -589,6 +591,7 @@ void CmdWrite(TTestActorRuntime* runtime, ui64 tabletId, const TActorId& sender,
 
             if (error) {
                 UNIT_ASSERT(
+                    result->Record.GetErrorCode() == NPersQueue::NErrorCode::WRITE_ERROR_PARTITION_INACTIVE ||
                     result->Record.GetErrorCode() == NPersQueue::NErrorCode::WRITE_ERROR_PARTITION_IS_FULL ||
                     result->Record.GetErrorCode() == NPersQueue::NErrorCode::BAD_REQUEST ||
                     result->Record.GetErrorCode() == NPersQueue::NErrorCode::WRONG_COOKIE

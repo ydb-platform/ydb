@@ -154,7 +154,9 @@ protected:
     }
     virtual void DoOnDataSharingStarted(const ui64 /*tabletId*/, const TString& sessionId) override {
         TGuard<TMutex> g(Mutex);
-        CheckInvariants();
+        if (SharingIds.empty()) {
+            CheckInvariants();
+        }
         SharingIds.emplace(sessionId);
     }
 

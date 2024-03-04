@@ -71,7 +71,7 @@ public:
     {
         NTabletPipe::TClientConfig pipeConfig;
         pipeConfig.RetryPolicy = FastConnectRetryPolicy();
-        auto tid = MakeBSControllerID(Domain->DefaultStateStorageGroup);
+        auto tid = MakeBSControllerID();
         auto pipe = NTabletPipe::CreateClient(ctx.SelfID, tid, pipeConfig);
         BSControllerPipe = ctx.ExecutorThread.RegisterActor(pipe);
     }
@@ -1742,7 +1742,7 @@ void TTenantsManager::OpenTenantSlotBrokerPipe(const TActorContext &ctx)
 {
     NTabletPipe::TClientConfig pipeConfig;
     pipeConfig.RetryPolicy = FastConnectRetryPolicy();
-    auto aid = MakeTenantSlotBrokerID(Domain->DefaultStateStorageGroup);
+    auto aid = MakeTenantSlotBrokerID();
     auto pipe = NTabletPipe::CreateClient(ctx.SelfID, aid, pipeConfig);
     TenantSlotBrokerPipe = ctx.ExecutorThread.RegisterActor(pipe);
 }

@@ -1653,9 +1653,9 @@
     ],
     "test.test[pg-select_win_column_order_by-default.txt-Debug]": [
         {
-            "checksum": "8624b88b8cf3805877bb6a86dcf88edd",
-            "size": 873,
-            "uri": "https://{canondata_backend}/1937027/642fd2ff53bdb0fed32ca89598d70c9c5848ac20/resource.tar.gz#test.test_pg-select_win_column_order_by-default.txt-Debug_/opt.yql"
+            "checksum": "88ba8e7c0217944affcc3a2c04993d9f",
+            "size": 879,
+            "uri": "https://{canondata_backend}/1784826/423768e553686c05753c4315370fa73fb7009697/resource.tar.gz#test.test_pg-select_win_column_order_by-default.txt-Debug_/opt.yql"
         }
     ],
     "test.test[pg-select_win_column_order_by-default.txt-Plan]": [
@@ -1880,6 +1880,27 @@
             "checksum": "bec9b807ec5e51094ba20c22b9e687b2",
             "size": 4018,
             "uri": "https://{canondata_backend}/1942671/ba1b384ae189e43a41610dd3346b04832beabd4c/resource.tar.gz#test.test_pg_catalog-pg_roles-default.txt-Results_/results.txt"
+        }
+    ],
+    "test.test[pg_catalog-user-default.txt-Debug]": [
+        {
+            "checksum": "7ab5adcfb187ee635f09477cf2928c4f",
+            "size": 659,
+            "uri": "https://{canondata_backend}/1871182/d5d77cc71ca6fdf79a7b29949a38e9a14f2ad62a/resource.tar.gz#test.test_pg_catalog-user-default.txt-Debug_/opt.yql"
+        }
+    ],
+    "test.test[pg_catalog-user-default.txt-Plan]": [
+        {
+            "checksum": "a3b64a2cf9903b3868a2dd88a18fc46e",
+            "size": 922,
+            "uri": "https://{canondata_backend}/1871182/d5d77cc71ca6fdf79a7b29949a38e9a14f2ad62a/resource.tar.gz#test.test_pg_catalog-user-default.txt-Plan_/plan.txt"
+        }
+    ],
+    "test.test[pg_catalog-user-default.txt-Results]": [
+        {
+            "checksum": "e1e2e785490aa85b00e4b0e1646abac1",
+            "size": 3712,
+            "uri": "https://{canondata_backend}/1871182/d5d77cc71ca6fdf79a7b29949a38e9a14f2ad62a/resource.tar.gz#test.test_pg_catalog-user-default.txt-Results_/results.txt"
         }
     ],
     "test.test[produce-process_with_lambda-default.txt-Debug]": [

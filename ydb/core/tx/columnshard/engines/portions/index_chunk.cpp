@@ -14,7 +14,7 @@ NKikimr::TConclusionStatus TIndexChunk::DeserializeFromProto(const NKikimrColumn
         RawBytes = proto.GetMeta().GetRawBytes();
     }
     {
-        auto parsed = TBlobRange::BuildFromProto(proto.GetBlobRange());
+        auto parsed = TBlobRangeLink16::BuildFromProto(proto.GetBlobRange());
         if (!parsed) {
             return parsed;
         }

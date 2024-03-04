@@ -24,6 +24,7 @@ enum HealthCheckResponseFormat {
 };
 
 class TJsonHealthCheck : public TActorBootstrapped<TJsonHealthCheck> {
+    IViewer* Viewer;
     static const bool WithRetry = false;
     NMon::TEvHttpInfo::TPtr Event;
     TJsonSettings JsonSettings;
@@ -36,8 +37,9 @@ public:
         return NKikimrServices::TActivity::VIEWER_HANDLER;
     }
 
-    TJsonHealthCheck(IViewer*, NMon::TEvHttpInfo::TPtr& ev)
-        : Event(ev)
+    TJsonHealthCheck(IViewer* viewer, NMon::TEvHttpInfo::TPtr& ev)
+        : Viewer(viewer)
+        , Event(ev)
     {}
 
     void Bootstrap(const TActorContext& ctx) {
@@ -78,7 +80,7 @@ public:
             if (Ydb::Monitoring::StatusFlag_Status_Parse(params.Get("min_status"), &minStatus)) {
                 request->Request.set_minimum_status(minStatus);
             } else {
-                Send(Event->Sender, new NMon::TEvHttpInfoRes(HTTPBADREQUEST, 0, NMon::IEvHttpInfoRes::EContentType::Custom));
+                Send(Event->Sender, new NMon::TEvHttpInfoRes(Viewer->GetHTTPBADREQUEST(Event->Get()), 0, NMon::IEvHttpInfoRes::EContentType::Custom));
                 return PassAway();
             }
         }
@@ -104,7 +106,7 @@ public:
         THashMap<TMetricRecord, ui32> recordCounters;
         for (auto& log : ev->Get()->Result.issue_log()) {
             TMetricRecord record {
-                .Database = log.location().database().name(), 
+                .Database = log.location().database().name(),
                 .Message = log.message(),
                 .Status = descriptor->FindValueByNumber(log.status())->name(),
                 .Type = log.type()
@@ -124,7 +126,7 @@ public:
     void HandleJSON(NHealthCheck::TEvSelfCheckResult::TPtr& ev, const TActorContext &ctx) {
         TStringStream json;
         TProtoToJson::ProtoToJson(json, ev->Get()->Result, JsonSettings);
-        ctx.Send(Event->Sender, new NMon::TEvHttpInfoRes(HTTPOKJSON + json.Str(), 0, NMon::IEvHttpInfoRes::EContentType::Custom));
+        ctx.Send(Event->Sender, new NMon::TEvHttpInfoRes(Viewer->GetHTTPOKJSON(Event->Get()) + json.Str(), 0, NMon::IEvHttpInfoRes::EContentType::Custom));
         Die(ctx);
     }
 
@@ -134,9 +136,9 @@ public:
         TStringStream ss;
         IMetricEncoderPtr encoder = EncoderPrometheus(&ss);
         IMetricEncoder* e = encoder.Get();
-        
+
         TIntrusivePtr<TDomainsInfo> domains = AppData()->DomainsInfo;
-        TIntrusivePtr<TDomainsInfo::TDomain> domain = domains->Domains.begin()->second;
+        auto *domain = domains->GetDomain();
         auto filterDatabase = Database ? Database : "/" + domain->Name;
         e->OnStreamBegin();
         if (recordCounters->size() > 0) {
@@ -173,7 +175,7 @@ public:
         e->OnMetricEnd();
         e->OnStreamEnd();
 
-        ctx.Send(Event->Sender, new NMon::TEvHttpInfoRes(HTTPOKTEXT + ss.Str(), 0, NMon::IEvHttpInfoRes::EContentType::Custom));
+        ctx.Send(Event->Sender, new NMon::TEvHttpInfoRes(Viewer->GetHTTPOKTEXT(Event->Get()) + ss.Str(), 0, NMon::IEvHttpInfoRes::EContentType::Custom));
         Die(ctx);
     }
 
@@ -186,7 +188,7 @@ public:
     }
 
     void HandleTimeout(const TActorContext &ctx) {
-        Send(Event->Sender, new NMon::TEvHttpInfoRes(HTTPGATEWAYTIMEOUT, 0, NMon::IEvHttpInfoRes::EContentType::Custom));
+        Send(Event->Sender, new NMon::TEvHttpInfoRes(Viewer->GetHTTPGATEWAYTIMEOUT(Event->Get()), 0, NMon::IEvHttpInfoRes::EContentType::Custom));
         Die(ctx);
     }
 };

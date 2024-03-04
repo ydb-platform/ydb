@@ -69,20 +69,16 @@ void TColumnEngineForLogs::UpdatePortionStats(const TPortionInfo& portionInfo, E
 
 TColumnEngineStats::TPortionsStats DeltaStats(const TPortionInfo& portionInfo, ui64& metadataBytes) {
     TColumnEngineStats::TPortionsStats deltaStats;
-    THashSet<TUnifiedBlobId> blobs;
+    deltaStats.Bytes = 0;
     for (auto& rec : portionInfo.Records) {
         metadataBytes += rec.GetMeta().GetMetadataSize();
-        blobs.insert(rec.BlobRange.BlobId);
+        deltaStats.Bytes += rec.GetBlobRange().GetSize();
         deltaStats.BytesByColumn[rec.ColumnId] += rec.BlobRange.Size;
         deltaStats.RawBytesByColumn[rec.ColumnId] += rec.GetMeta().GetRawBytes().value_or(0);
     }
     deltaStats.Rows = portionInfo.NumRows();
     deltaStats.RawBytes = portionInfo.RawBytesSum();
-    deltaStats.Bytes = 0;
-    for (auto& blobId : blobs) {
-        deltaStats.Bytes += blobId.BlobSize();
-    }
-    deltaStats.Blobs = blobs.size();
+    deltaStats.Blobs = portionInfo.GetBlobIdsCount();
     deltaStats.Portions = 1;
     return deltaStats;
 }
@@ -181,8 +177,7 @@ bool TColumnEngineForLogs::LoadColumns(IDbWrapper& db) {
         }
         AFL_VERIFY(portion.ValidSnapshotInfo())("details", portion.DebugString());
         // Locate granule and append the record.
-        TColumnRecord rec(loadContext, *currentIndexInfo);
-        GetGranulePtrVerified(portion.GetPathId())->AddColumnRecord(*currentIndexInfo, portion, rec, loadContext.GetPortionMeta());
+        GetGranulePtrVerified(portion.GetPathId())->AddColumnRecordOnLoad(*currentIndexInfo, portion, loadContext, loadContext.GetPortionMeta());
     })) {
         return false;
     }
@@ -190,7 +185,8 @@ bool TColumnEngineForLogs::LoadColumns(IDbWrapper& db) {
     if (!db.LoadIndexes([&](const ui64 pathId, const ui64 portionId, const TIndexChunkLoadContext& loadContext) {
         auto portion = GetGranulePtrVerified(pathId)->GetPortionPtr(portionId);
         AFL_VERIFY(portion);
-        portion->AddIndex(loadContext.BuildIndexChunk());
+        const auto linkBlobId = portion->RegisterBlobId(loadContext.GetBlobRange().GetBlobId());
+        portion->AddIndex(loadContext.BuildIndexChunk(linkBlobId));
     })) {
         return false;
     };
@@ -225,8 +221,7 @@ bool TColumnEngineForLogs::LoadCounters(IDbWrapper& db) {
 std::shared_ptr<TInsertColumnEngineChanges> TColumnEngineForLogs::StartInsert(std::vector<TInsertedData>&& dataToIndex) noexcept {
     Y_ABORT_UNLESS(dataToIndex.size());
 
-    TSaverContext saverContext(StoragesManager->GetInsertOperator(), StoragesManager);
-
+    TSaverContext saverContext(StoragesManager);
     auto changes = std::make_shared<TInsertColumnEngineChanges>(std::move(dataToIndex), TSplitSettings(), saverContext);
     auto pkSchema = VersionedIndex.GetLastSchema()->GetIndexInfo().GetReplaceKey();
 
@@ -353,74 +348,87 @@ TDuration TColumnEngineForLogs::ProcessTiering(const ui64 pathId, const TTiering
             AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("event", "skip ttl through busy portion")("portion_id", info->GetAddress().DebugString());
             continue;
         }
+        auto portionSchema = VersionedIndex.GetSchema(info->GetMinSnapshot());
+        auto statOperator = portionSchema->GetIndexInfo().GetStatistics(NStatistics::TIdentifier(NStatistics::EType::Max, {ttlColumnId}));
+        std::shared_ptr<arrow::Scalar> max;
+        if (!statOperator) {
+            max = info->MaxValue(ttlColumnId);
+            if (!max) {
+                AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("event", "scalar_less_not_max");
+                SignalCounters.OnPortionNoBorder(info->BlobsBytes());
+                continue;
+            } else {
+                NYDBTest::TControllers::GetColumnShardController()->OnMaxValueUsage();
+                SignalCounters.OnChunkUsageForTTL();
+            }
+        } else {
+            NYDBTest::TControllers::GetColumnShardController()->OnStatisticsUsage(statOperator);
+            SignalCounters.OnStatUsageForTTL();
+            max = statOperator.GetScalarVerified(info->GetMeta().GetStatisticsStorage());
+        }
 
         const bool tryEvictPortion = ttl.HasTiers() && context.HasLimitsForEviction();
 
-        if (auto max = info->MaxValue(ttlColumnId)) {
-            bool keep = !expireTimestampOpt;
-            if (expireTimestampOpt) {
-                auto mpiOpt = ttl.Ttl->ScalarToInstant(max);
-                Y_ABORT_UNLESS(mpiOpt);
-                const TInstant maxTtlPortionInstant = *mpiOpt;
-                const TDuration d = maxTtlPortionInstant - *expireTimestampOpt;
-                keep = !!d;
-                AFL_TRACE(NKikimrServices::TX_COLUMNSHARD)("event", "keep_detect")("max", maxTtlPortionInstant.Seconds())("expire", expireTimestampOpt->Seconds());
-                if (d && dWaiting > d) {
-                    dWaiting = d;
-                }
+        bool keep = !expireTimestampOpt;
+        if (expireTimestampOpt) {
+            auto mpiOpt = ttl.Ttl->ScalarToInstant(max);
+            Y_ABORT_UNLESS(mpiOpt);
+            const TInstant maxTtlPortionInstant = *mpiOpt;
+            const TDuration d = maxTtlPortionInstant - *expireTimestampOpt;
+            keep = !!d;
+            AFL_TRACE(NKikimrServices::TX_COLUMNSHARD)("event", "keep_detect")("max", maxTtlPortionInstant.Seconds())("expire", expireTimestampOpt->Seconds());
+            if (d && dWaiting > d) {
+                dWaiting = d;
             }
+        }
 
-            AFL_TRACE(NKikimrServices::TX_COLUMNSHARD)("event", "scalar_less_result")("keep", keep)("tryEvictPortion", tryEvictPortion)("allowDrop", context.HasLimitsForTtl());
-            if (keep && tryEvictPortion) {
-                const TString currentTierName = info->GetMeta().GetTierName() ? info->GetMeta().GetTierName() : IStoragesManager::DefaultStorageId;
-                TString tierName = "";
-                const TInstant maxChangePortionInstant = info->RecordSnapshotMax().GetPlanInstant();
-                if (now - maxChangePortionInstant < TDuration::Minutes(60)) {
-                    AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("event", "skip_portion_to_evict")("reason", "too_fresh")("delta", now - maxChangePortionInstant);
+        AFL_TRACE(NKikimrServices::TX_COLUMNSHARD)("event", "scalar_less_result")("keep", keep)("tryEvictPortion", tryEvictPortion)("allowDrop", context.HasLimitsForTtl());
+        if (keep && tryEvictPortion) {
+            const TString currentTierName = info->GetMeta().GetTierName() ? info->GetMeta().GetTierName() : IStoragesManager::DefaultStorageId;
+            TString tierName = "";
+            const TInstant maxChangePortionInstant = info->RecordSnapshotMax().GetPlanInstant();
+            if (now - maxChangePortionInstant < TDuration::Minutes(60)) {
+                AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("event", "skip_portion_to_evict")("reason", "too_fresh")("delta", now - maxChangePortionInstant);
+                continue;
+            }
+            for (auto& tierRef : ttl.GetOrderedTiers()) {
+                auto& tierInfo = tierRef.Get();
+                if (!indexInfo.AllowTtlOverColumn(tierInfo.GetEvictColumnName())) {
+                    SignalCounters.OnPortionNoTtlColumn(info->BlobsBytes());
                     continue;
                 }
-                for (auto& tierRef : ttl.GetOrderedTiers()) {
-                    auto& tierInfo = tierRef.Get();
-                    if (!indexInfo.AllowTtlOverColumn(tierInfo.GetEvictColumnName())) {
-                        SignalCounters.OnPortionNoTtlColumn(info->BlobsBytes());
-                        continue;
-                    }
-                    auto mpiOpt = tierInfo.ScalarToInstant(max);
-                    Y_ABORT_UNLESS(mpiOpt);
-                    const TInstant maxTieringPortionInstant = *mpiOpt;
+                auto mpiOpt = tierInfo.ScalarToInstant(max);
+                Y_ABORT_UNLESS(mpiOpt);
+                const TInstant maxTieringPortionInstant = *mpiOpt;
 
-                    const TDuration d = tierInfo.GetEvictInstant(context.Now) - maxTieringPortionInstant;
-                    AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("event", "tiering_choosing")("max", maxTieringPortionInstant.Seconds())
-                        ("evict", tierInfo.GetEvictInstant(context.Now).Seconds())("tier_name", tierInfo.GetName())("d", d);
-                    if (d) {
-                        tierName = tierInfo.GetName();
-                        break;
-                    } else {
-                        auto dWaitLocal = maxTieringPortionInstant - tierInfo.GetEvictInstant(context.Now);
-                        if (dWaiting > dWaitLocal) {
-                            dWaiting = dWaitLocal;
-                        }
+                const TDuration d = tierInfo.GetEvictInstant(context.Now) - maxTieringPortionInstant;
+                AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("event", "tiering_choosing")("max", maxTieringPortionInstant.Seconds())
+                    ("evict", tierInfo.GetEvictInstant(context.Now).Seconds())("tier_name", tierInfo.GetName())("d", d);
+                if (d) {
+                    tierName = tierInfo.GetName();
+                    break;
+                } else {
+                    auto dWaitLocal = maxTieringPortionInstant - tierInfo.GetEvictInstant(context.Now);
+                    if (dWaiting > dWaitLocal) {
+                        dWaiting = dWaitLocal;
                     }
                 }
-                if (!tierName) {
-                    tierName = IStoragesManager::DefaultStorageId;
-                }
-                if (currentTierName != tierName) {
-                    AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("event", "tiering switch detected")("from", currentTierName)("to", tierName);
-                    context.Changes->AddPortionToEvict(*info, TPortionEvictionFeatures(tierName, pathId, StoragesManager->GetOperator(tierName)));
-                    context.AppPortionForEvictionChecker(*info);
-                    SignalCounters.OnPortionToEvict(info->BlobsBytes());
-                }
             }
-            if (!keep && context.HasLimitsForTtl()) {
-                AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("event", "portion_remove")("portion", info->DebugString());
-                AFL_VERIFY(context.Changes->PortionsToRemove.emplace(info->GetAddress(), *info).second);
-                SignalCounters.OnPortionToDrop(info->BlobsBytes());
-                context.AppPortionForTtlChecker(*info);
+            if (!tierName) {
+                tierName = IStoragesManager::DefaultStorageId;
             }
-        } else {
-            AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("event", "scalar_less_not_max");
-            SignalCounters.OnPortionNoBorder(info->BlobsBytes());
+            if (currentTierName != tierName) {
+                AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("event", "tiering switch detected")("from", currentTierName)("to", tierName);
+                context.Changes->AddPortionToEvict(*info, TPortionEvictionFeatures(tierName, pathId));
+                context.AppPortionForEvictionChecker(*info);
+                SignalCounters.OnPortionToEvict(info->BlobsBytes());
+            }
+        }
+        if (!keep && context.HasLimitsForTtl()) {
+            AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("event", "portion_remove")("portion", info->DebugString());
+            AFL_VERIFY(context.Changes->PortionsToRemove.emplace(info->GetAddress(), *info).second);
+            SignalCounters.OnPortionToDrop(info->BlobsBytes());
+            context.AppPortionForTtlChecker(*info);
         }
     }
     if (dWaiting > TDuration::MilliSeconds(500) && (!context.HasLimitsForEviction() || !context.HasLimitsForTtl())) {
@@ -470,7 +478,7 @@ std::shared_ptr<TTTLColumnEngineChanges> TColumnEngineForLogs::StartTtl(const TH
         ("internal", EvictionsController.MutableNextCheckInstantForTierings().size())
         ;
 
-    TSaverContext saverContext(StoragesManager->GetDefaultOperator(), StoragesManager);
+    TSaverContext saverContext(StoragesManager);
 
     auto changes = std::make_shared<TTTLColumnEngineChanges>(TSplitSettings(), saverContext);
 
@@ -496,10 +504,6 @@ bool TColumnEngineForLogs::ApplyChanges(IDbWrapper& db, std::shared_ptr<TColumnE
     {
         TFinalizationContext context(LastGranule, LastPortion, snapshot);
         indexChanges->Compile(context);
-    }
-    {
-        TApplyChangesContext context(db, snapshot);
-        Y_ABORT_UNLESS(indexChanges->ApplyChanges(*this, context));
     }
     db.WriteCounter(LAST_PORTION, LastPortion);
     db.WriteCounter(LAST_GRANULE, LastGranule);

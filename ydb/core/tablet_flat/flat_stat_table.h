@@ -26,7 +26,7 @@ public:
         Heap.push(iteratorPtr);
     }
 
-    EReady Next(TPartDataStats& stats) {
+    EReady Next(TDataStats& stats) {
         ui64 lastRowCount = stats.RowCount;
         ui64 lastDataSize = stats.DataSize.Size;
 
@@ -100,8 +100,8 @@ using THistogram = TVector<TBucket>;
 
 struct TStats {
     ui64 RowCount = 0;
-    TPartDataSize DataSize = { };
-    TPartDataSize IndexSize = { };
+    TChanneledDataSize DataSize = { };
+    TChanneledDataSize IndexSize = { };
     THistogram RowCountHistogram;
     THistogram DataSizeHistogram;
 

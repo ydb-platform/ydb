@@ -13,12 +13,14 @@ using namespace NDataShardReadTableTest;
 Y_UNIT_TEST_SUITE(DataShardWrite) {
     const TString expectedTableState = "key = 0, value = 1\nkey = 2, value = 3\nkey = 4, value = 5\n";
 
-    std::tuple<TTestActorRuntime&, Tests::TServer::TPtr, TActorId> TestCreateServer() {
-        TPortManager pm;
-        TServerSettings serverSettings(pm.GetPort(2134));
-        serverSettings.SetDomainName("Root").SetUseRealThreads(false);
+    std::tuple<TTestActorRuntime&, Tests::TServer::TPtr, TActorId> TestCreateServer(std::optional<TServerSettings> serverSettings = {}) {
+        if (!serverSettings) {
+            TPortManager pm;
+            serverSettings = TServerSettings(pm.GetPort(2134));
+            serverSettings->SetDomainName("Root").SetUseRealThreads(false);
+        }
 
-        Tests::TServer::TPtr server = new TServer(serverSettings);
+        Tests::TServer::TPtr server = new TServer(serverSettings.value());
         auto& runtime = *server->GetRuntime();
         auto sender = runtime.AllocateEdgeActor();
 
@@ -53,11 +55,10 @@ Y_UNIT_TEST_SUITE(DataShardWrite) {
         }
     }
 
-    Y_UNIT_TEST_TWIN(UpsertPrepared, EvWrite) {
+    Y_UNIT_TEST_QUAD(UpsertPrepared, EvWrite, Volatile) {
         auto [runtime, server, sender] = TestCreateServer();
 
-        // Disable volatile transactions, since EvWrite has not yet supported them.
-        runtime.GetAppData().FeatureFlags.SetEnableDataShardVolatileTransactions(false);
+        runtime.GetAppData().FeatureFlags.SetEnableDataShardVolatileTransactions(Volatile);
 
         auto opts = TShardedTableOptions();
         auto [shards1, tableId1] = CreateShardedTable(server, sender, "/Root", "table-1", opts);
@@ -160,11 +161,12 @@ Y_UNIT_TEST_SUITE(DataShardWrite) {
         }
     }
 
-    Y_UNIT_TEST(WritePrepared) {
+    Y_UNIT_TEST_TWIN(WritePrepared, Volatile) {
         auto [runtime, server, sender] = TestCreateServer();
 
         TShardedTableOptions opts;
-        const auto [shards, tableId] = CreateShardedTable(server, sender, "/Root", "table-1", opts);
+        const TString tableName = "table-1";
+        const auto [shards, tableId] = CreateShardedTable(server, sender, "/Root", tableName, opts);
         const ui64 shard = shards[0];
         const ui64 coordinator = ChangeStateStorage(Coordinator, server->GetSettings().Domain);
         const ui32 rowCount = 3;
@@ -174,9 +176,9 @@ Y_UNIT_TEST_SUITE(DataShardWrite) {
 
         Cout << "========= Send prepare =========\n";
         {
-            const auto writeResult = Write(runtime, sender, shard, tableId, opts.Columns_, rowCount, txId, NKikimrDataEvents::TEvWrite::MODE_PREPARE);
+            const auto writeResult = Write(runtime, sender, shard, tableId, opts.Columns_, rowCount, txId, 
+                Volatile ? NKikimrDataEvents::TEvWrite::MODE_VOLATILE_PREPARE : NKikimrDataEvents::TEvWrite::MODE_PREPARE);
 
-            UNIT_ASSERT_VALUES_EQUAL(writeResult.GetStatus(), NKikimrDataEvents::TEvWriteResult::STATUS_PREPARED);
             UNIT_ASSERT_GT(writeResult.GetMinStep(), 0);
             UNIT_ASSERT_GT(writeResult.GetMaxStep(), writeResult.GetMinStep());
             UNIT_ASSERT_VALUES_EQUAL(writeResult.GetOrigin(), shard);
@@ -198,7 +200,6 @@ Y_UNIT_TEST_SUITE(DataShardWrite) {
         {
             auto writeResult = WaitForWriteCompleted(runtime, sender);
 
-            UNIT_ASSERT_VALUES_EQUAL_C(writeResult.GetStatus(), NKikimrDataEvents::TEvWriteResult::STATUS_COMPLETED, "Status: " << writeResult.GetStatus() << " Issues: " << writeResult.GetIssues());
             UNIT_ASSERT_VALUES_EQUAL(writeResult.GetOrigin(), shard);
             UNIT_ASSERT_GE(writeResult.GetStep(), minStep);
             UNIT_ASSERT_LE(writeResult.GetStep(), maxStep);
@@ -206,19 +207,18 @@ Y_UNIT_TEST_SUITE(DataShardWrite) {
             UNIT_ASSERT_VALUES_EQUAL(writeResult.GetTxId(), txId);
 
             const auto& tableAccessStats = writeResult.GetTxStats().GetTableAccessStats(0);
-            UNIT_ASSERT_VALUES_EQUAL(tableAccessStats.GetTableInfo().GetName(), "/Root/table-1");
+            UNIT_ASSERT_VALUES_EQUAL(tableAccessStats.GetTableInfo().GetName(), "/Root/" + tableName);
             UNIT_ASSERT_VALUES_EQUAL(tableAccessStats.GetUpdateRow().GetCount(), rowCount);
         }
 
         Cout << "========= Read table =========\n";
         {
-            auto tableState = TReadTableState(server, MakeReadTableSettings("/Root/table-1")).All();
+            auto tableState = TReadTableState(server, MakeReadTableSettings("/Root/" + tableName)).All();
             UNIT_ASSERT_VALUES_EQUAL(tableState, expectedTableState);
         }
-
     }
 
-    Y_UNIT_TEST(WritePreparedManyTables) {
+    Y_UNIT_TEST_TWIN(WritePreparedManyTables, Volatile) {
         auto [runtime, server, sender] = TestCreateServer();
 
         TShardedTableOptions opts;
@@ -236,7 +236,8 @@ Y_UNIT_TEST_SUITE(DataShardWrite) {
 
         Cerr << "===== Write prepared to table 1" << Endl;
         {
-            const auto writeResult = Write(runtime, sender, tabletId1, tableId1, opts.Columns_, rowCount, txId, NKikimrDataEvents::TEvWrite::MODE_PREPARE);
+            const auto writeResult = Write(runtime, sender, tabletId1, tableId1, opts.Columns_, rowCount, txId, 
+                Volatile ? NKikimrDataEvents::TEvWrite::MODE_VOLATILE_PREPARE : NKikimrDataEvents::TEvWrite::MODE_PREPARE);
 
             minStep1 = writeResult.GetMinStep();
             maxStep1 = writeResult.GetMaxStep();
@@ -282,7 +283,7 @@ Y_UNIT_TEST_SUITE(DataShardWrite) {
     }
 
     
-    Y_UNIT_TEST(WritePreparedNoTxCache) {
+    Y_UNIT_TEST_TWIN(WritePreparedNoTxCache, Volatile) {
         auto [runtime, server, sender] = TestCreateServer();
 
         TShardedTableOptions opts;
@@ -296,7 +297,9 @@ Y_UNIT_TEST_SUITE(DataShardWrite) {
 
         Cout << "========= Send prepare =========\n";
         {
-            const auto writeResult = Write(runtime, sender, shard, tableId, opts.Columns_, rowCount, txId, NKikimrDataEvents::TEvWrite::MODE_PREPARE);
+            const auto writeResult = Write(runtime, sender, shard, tableId, opts.Columns_, rowCount, txId, 
+                Volatile ? NKikimrDataEvents::TEvWrite::MODE_VOLATILE_PREPARE : NKikimrDataEvents::TEvWrite::MODE_PREPARE);
+
             minStep = writeResult.GetMinStep();
             maxStep = writeResult.GetMaxStep();
         }
@@ -317,7 +320,60 @@ Y_UNIT_TEST_SUITE(DataShardWrite) {
             UNIT_ASSERT_VALUES_EQUAL(tableState, expectedTableState);
         }
 
-    } // Y_UNIT_TEST
+    }
+
+    Y_UNIT_TEST(RejectOnChangeQueueOverflow) {
+        TPortManager pm;
+        TServerSettings serverSettings(pm.GetPort(2134));
+        serverSettings.SetDomainName("Root").SetUseRealThreads(false).SetChangesQueueItemsLimit(1);
+
+        auto [runtime, server, sender] = TestCreateServer(serverSettings);
+
+        auto opts = TShardedTableOptions()
+            .Columns({{"key", "Uint32", true, false},{"value", "Uint32", false, false}})
+            .Indexes({TShardedTableOptions::TIndex{"by_value", {"value"}, {}, NKikimrSchemeOp::EIndexTypeGlobalAsync}});
+
+        auto [shards, tableId] = CreateShardedTable(server, sender, "/Root", "table-1", opts);
+
+        TVector<THolder<IEventHandle>> blockedEnqueueRecords;
+        auto prevObserverFunc = runtime.SetObserverFunc([&](TAutoPtr<IEventHandle>& ev) {
+            if (ev->GetTypeRewrite() == NChangeExchange::TEvChangeExchange::EvEnqueueRecords) {
+                blockedEnqueueRecords.emplace_back(ev.Release());
+                return TTestActorRuntime::EEventAction::DROP;
+            }
+
+            return TTestActorRuntime::EEventAction::PROCESS;
+        });
+
+        const ui64 shard = shards[0];
+        const ui32 rowCount = 1;
+
+        ui64 txId = 100;
+
+        Cout << "========= Send immediate write, expecting success =========\n";
+        {
+            Write(runtime, sender, shard, tableId, opts.Columns_, rowCount, ++txId, NKikimrDataEvents::TEvWrite::MODE_IMMEDIATE);
+        }
+
+        UNIT_ASSERT_VALUES_EQUAL(blockedEnqueueRecords.size(), rowCount);
+
+        Cout << "========= Send immediate write, expecting overloaded =========\n";
+        {
+            Write(runtime, sender, shard, tableId, opts.Columns_, rowCount, ++txId, NKikimrDataEvents::TEvWrite::MODE_IMMEDIATE, NKikimrDataEvents::TEvWriteResult::STATUS_OVERLOADED);
+        }
+
+        Cout << "========= Send immediate write + OverloadSubscribe, expecting overloaded =========\n";
+        {
+            ui64 secNo = 55;
+
+            auto request = MakeWriteRequest(++txId, NKikimrDataEvents::TEvWrite::MODE_IMMEDIATE, tableId, opts.Columns_, rowCount);
+            request->Record.SetOverloadSubscribe(secNo);
+           
+            auto writeResult = Write(runtime, sender, shard, std::move(request), NKikimrDataEvents::TEvWriteResult::STATUS_OVERLOADED);
+            UNIT_ASSERT_VALUES_EQUAL(writeResult.GetOverloadSubscribed(), secNo);
+        }
+
+    }  // Y_UNIT_TEST
 
 } // Y_UNIT_TEST_SUITE
 } // namespace NKikimr

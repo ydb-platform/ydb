@@ -5025,6 +5025,54 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
         UNIT_ASSERT_VALUES_EQUAL(externalTable.ExternalTableInfo->Description.GetLocation(), "/folder1/*");
     }
 
+    Y_UNIT_TEST(CreateExternalTableWithUpperCaseSettings) {
+        TKikimrRunner kikimr;
+        kikimr.GetTestServer().GetRuntime()->GetAppData(0).FeatureFlags.SetEnableExternalDataSources(true);
+        auto db = kikimr.GetTableClient();
+        auto session = db.CreateSession().GetValueSync().GetSession();
+        TString externalDataSourceName = "/Root/ExternalDataSource";
+        TString externalTableName = "/Root/ExternalTable";
+        auto query = TStringBuilder() << R"(
+            CREATE EXTERNAL DATA SOURCE `)" << externalDataSourceName << R"(` WITH (
+                SOURCE_TYPE="ObjectStorage",
+                LOCATION="my-bucket",
+                AUTH_METHOD="NONE"
+            );
+            CREATE EXTERNAL TABLE `)" << externalTableName << R"(` (
+                Key Uint64,
+                Value String,
+                Year Int64 NOT NULL,
+                Month Int64 NOT NULL
+            ) WITH (
+                DATA_SOURCE=")" << externalDataSourceName << R"(",
+                LOCATION="/folder1/*",
+                FORMAT="json_as_string",
+                `projection.enabled`="true",
+                `projection.Year.type`="integer",
+                `projection.Year.min`="2010",
+                `projection.Year.max`="2022",
+                `projection.Year.interval`="1",
+                `projection.Month.type`="integer",
+                `projection.Month.min`="1",
+                `projection.Month.max`="12",
+                `projection.Month.interval`="1",
+                `projection.Month.digits`="2",
+                `storage.location.template`="${Year}/${Month}",
+                PARTITIONED_BY = "[Year, Month]"
+            );)";
+        auto result = session.ExecuteSchemeQuery(query).GetValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+
+        auto& runtime = *kikimr.GetTestServer().GetRuntime();
+        auto externalTableDesc = Navigate(runtime, runtime.AllocateEdgeActor(), externalTableName, NKikimr::NSchemeCache::TSchemeCacheNavigate::EOp::OpUnknown);
+        const auto& externalTable = externalTableDesc->ResultSet.at(0);
+        UNIT_ASSERT_EQUAL(externalTable.Kind, NKikimr::NSchemeCache::TSchemeCacheNavigate::EKind::KindExternalTable);
+        UNIT_ASSERT(externalTable.ExternalTableInfo);
+        UNIT_ASSERT_VALUES_EQUAL(externalTable.ExternalTableInfo->Description.ColumnsSize(), 4);
+        UNIT_ASSERT_VALUES_EQUAL(externalTable.ExternalTableInfo->Description.GetDataSourcePath(), externalDataSourceName);
+        UNIT_ASSERT_VALUES_EQUAL(externalTable.ExternalTableInfo->Description.GetLocation(), "/folder1/*");
+    }
+
     Y_UNIT_TEST(DoubleCreateExternalTable) {
         TKikimrRunner kikimr;
         kikimr.GetTestServer().GetRuntime()->GetAppData(0).FeatureFlags.SetEnableExternalDataSources(true);

@@ -26,6 +26,7 @@
 #include <ydb/core/testlib/tablet_helpers.h>
 #include <ydb/core/testlib/test_client.h>
 #include <ydb/core/testlib/cs_helper.h>
+#include <ydb/core/wrappers/fake_storage.h>
 #include <util/system/sanitizers.h>
 
 #include <fmt/format.h>
@@ -232,6 +233,7 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
             }
             result += R"(
                 Columns { Name: "pk_int" Type: "Int64" }
+                Columns { Name: "ts" Type: "Timestamp" }
                 KeyColumnNames: "pk_int"
                 Engine: COLUMN_ENGINE_REPLACING_TIMESERIES
             )";
@@ -2127,6 +2129,7 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
 
         TLocalHelper(kikimr).CreateTestOlapTable();
         auto tableClient = kikimr.GetTableClient();
+        auto csController = NYDBTest::TControllers::RegisterCSControllerGuard<NYDBTest::NColumnShard::TController>();
 
         {
             WriteTestData(kikimr, "/Root/olapStore/olapTable", 10000, 3000000, 1000);
@@ -2137,6 +2140,11 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
             WriteTestData(kikimr, "/Root/olapStore/olapTable", 20000, 2000000, 7000);
             WriteTestData(kikimr, "/Root/olapStore/olapTable", 30000, 1000000, 11000);
         }
+        while (csController->GetIndexations().Val() == 0) {
+            Cout << "Wait indexation..." << Endl;
+            Sleep(TDuration::Seconds(2));
+        }
+        AFL_VERIFY(Singleton<NWrappers::NExternalStorage::TFakeExternalStorage>()->GetSize());
 
         {
             TString query = R"(
@@ -3637,12 +3645,12 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
         auto settings = TKikimrSettings()
             .SetWithSampleTables(false);
         TKikimrRunner kikimr(settings);
-        auto csController = NYDBTest::TControllers::RegisterCSControllerGuard<NYDBTest::NColumnShard::TController>();
         static ui32 numKinds = 2;
 
+        auto csController = NYDBTest::TControllers::RegisterCSControllerGuard<NYDBTest::NColumnShard::TController>();
         TLocalHelper(kikimr).CreateTestOlapTable();
         for (ui64 i = 0; i < 100; ++i) {
-            WriteTestData(kikimr, "/Root/olapStore/olapTable", 0, 1000000 + i*10000, 1000);
+            WriteTestData(kikimr, "/Root/olapStore/olapTable", 0, 1000000 + i * 10000, 1000);
         }
 
         auto tableClient = kikimr.GetTableClient();
@@ -3827,6 +3835,72 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
         result << "pk_size : " << rawBytesPK1 << " / " << bytesPK1 << Endl;
         Cerr << result << Endl;
         Y_ABORT_UNLESS(bytesPack / bytesUnpack < 0.1);
+    }
+
+    Y_UNIT_TEST(StatsUsage) {
+        auto csController = NYDBTest::TControllers::RegisterCSControllerGuard<NYDBTest::NColumnShard::TController>();
+        {
+            auto settings = TKikimrSettings().SetWithSampleTables(false);
+            TKikimrRunner kikimr(settings);
+            Tests::NCommon::TLoggerInit(kikimr).Initialize();
+            TTypedLocalHelper helper("Utf8", kikimr);
+            helper.CreateTestOlapTable();
+            auto tableClient = kikimr.GetTableClient();
+            {
+                auto alterQuery = TStringBuilder() << "ALTER OBJECT `/Root/olapStore` (TYPE TABLESTORE) SET (ACTION=UPSERT_STAT, TYPE=max, NAME=max_pk_int, FEATURES=`{\"column_name\": \"pk_int\"}`);";
+                auto session = tableClient.CreateSession().GetValueSync().GetSession();
+                auto alterResult = session.ExecuteSchemeQuery(alterQuery).GetValueSync();
+                UNIT_ASSERT_VALUES_EQUAL_C(alterResult.GetStatus(), EStatus::SUCCESS, alterResult.GetIssues().ToString());
+            }
+            {
+                auto alterQuery = TStringBuilder() << "ALTER OBJECT `/Root/olapStore` (TYPE TABLESTORE) SET (ACTION=UPSERT_STAT, TYPE=max, NAME=max_field, FEATURES=`{\"column_name\": \"field\"}`);";
+                auto session = tableClient.CreateSession().GetValueSync().GetSession();
+                auto alterResult = session.ExecuteSchemeQuery(alterQuery).GetValueSync();
+                UNIT_ASSERT_VALUES_UNEQUAL_C(alterResult.GetStatus(), EStatus::SUCCESS, alterResult.GetIssues().ToString());
+            }
+            {
+                auto alterQuery = TStringBuilder() << "ALTER OBJECT `/Root/olapStore` (TYPE TABLESTORE) SET (ACTION=UPSERT_STAT, TYPE=max, NAME=max_pk_int, FEATURES=`{\"column_name\": \"pk_int\"}`);";
+                auto session = tableClient.CreateSession().GetValueSync().GetSession();
+                auto alterResult = session.ExecuteSchemeQuery(alterQuery).GetValueSync();
+                UNIT_ASSERT_VALUES_UNEQUAL_C(alterResult.GetStatus(), EStatus::SUCCESS, alterResult.GetIssues().ToString());
+            }
+            {
+                auto alterQuery = TStringBuilder() << "ALTER OBJECT `/Root/olapStore` (TYPE TABLESTORE) SET (ACTION=DROP_STAT, NAME=max_pk_int);";
+                auto session = tableClient.CreateSession().GetValueSync().GetSession();
+                auto alterResult = session.ExecuteSchemeQuery(alterQuery).GetValueSync();
+                UNIT_ASSERT_VALUES_EQUAL_C(alterResult.GetStatus(), EStatus::SUCCESS, alterResult.GetIssues().ToString());
+            }
+        }
+    }
+
+    Y_UNIT_TEST(StatsUsageWithTTL) {
+        auto csController = NYDBTest::TControllers::RegisterCSControllerGuard<NYDBTest::NColumnShard::TController>();
+        {
+            auto settings = TKikimrSettings().SetWithSampleTables(false);
+            TKikimrRunner kikimr(settings);
+            Tests::NCommon::TLoggerInit(kikimr).Initialize();
+            TTypedLocalHelper helper("Utf8", kikimr);
+            helper.CreateTestOlapTable();
+            auto tableClient = kikimr.GetTableClient();
+            {
+                auto alterQuery = TStringBuilder() << "ALTER OBJECT `/Root/olapStore` (TYPE TABLESTORE) SET (ACTION=UPSERT_STAT, TYPE=max, NAME=max_ts, FEATURES=`{\"column_name\": \"ts\"}`);";
+                auto session = tableClient.CreateSession().GetValueSync().GetSession();
+                auto alterResult = session.ExecuteSchemeQuery(alterQuery).GetValueSync();
+                UNIT_ASSERT_VALUES_EQUAL_C(alterResult.GetStatus(), EStatus::SUCCESS, alterResult.GetIssues().ToString());
+            }
+            {
+                auto alterQuery = TStringBuilder() << "ALTER TABLE `/Root/olapStore/olapTable` SET (TTL = Interval(\"P1D\") ON ts);";
+                auto session = tableClient.CreateSession().GetValueSync().GetSession();
+                auto alterResult = session.ExecuteSchemeQuery(alterQuery).GetValueSync();
+                UNIT_ASSERT_VALUES_EQUAL_C(alterResult.GetStatus(), EStatus::SUCCESS, alterResult.GetIssues().ToString());
+            }
+            {
+                auto alterQuery = TStringBuilder() << "ALTER OBJECT `/Root/olapStore` (TYPE TABLESTORE) SET (ACTION=DROP_STAT, NAME=max_ts);";
+                auto session = tableClient.CreateSession().GetValueSync().GetSession();
+                auto alterResult = session.ExecuteSchemeQuery(alterQuery).GetValueSync();
+                UNIT_ASSERT_VALUES_UNEQUAL_C(alterResult.GetStatus(), EStatus::SUCCESS, alterResult.GetIssues().ToString());
+            }
+        }
     }
 
     namespace {

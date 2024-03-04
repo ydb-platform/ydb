@@ -5,6 +5,8 @@
 #include "types.h"
 #include "schema.h"
 
+#include <ydb/core/protos/blob_depot_config.pb.h>
+
 namespace NKikimr::NTesting {
 
     class TGroupOverseer;

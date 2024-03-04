@@ -14,6 +14,7 @@
 #include <ydb/library/yql/public/issue/yql_issue_message.h>
 
 #include <ydb/core/util/pb.h>
+#include <ydb/public/api/protos/ydb_export.pb.h>
 
 #include <library/cpp/testing/unittest/registar.h>
 

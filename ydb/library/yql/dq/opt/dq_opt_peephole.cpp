@@ -554,7 +554,9 @@ NNodes::TExprBase DqPeepholeRewriteJoinDict(const NNodes::TExprBase& node, TExpr
     auto unpackData = UnpackJoinedData(leftRowType, rightRowType, leftTableLabel, rightTableLabel, join.Pos(), ctx);
 
     return Build<TCoMap>(ctx, joinDict.Pos())
-        .Input(join)
+        .Input<TCoToFlow>()
+            .Input(join)
+            .Build()
         .Lambda(unpackData)
         .Done();
 }

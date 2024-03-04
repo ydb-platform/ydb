@@ -1683,6 +1683,28 @@
         }
     ],
     "test.test[pg-range_function_multi_record-default.txt-Results]": [],
+    "test.test[pg-record_from_table_row-default.txt-Analyze]": [
+        {
+            "checksum": "b4dd508a329723c74293d80f0278c705",
+            "size": 505,
+            "uri": "https://{canondata_backend}/1937429/8c415fc988c547984fa23f72063d4859ddd65412/resource.tar.gz#test.test_pg-record_from_table_row-default.txt-Analyze_/plan.txt"
+        }
+    ],
+    "test.test[pg-record_from_table_row-default.txt-Debug]": [
+        {
+            "checksum": "354f6fa3bd19b858fa7537772200c7fb",
+            "size": 527,
+            "uri": "https://{canondata_backend}/1937429/8c415fc988c547984fa23f72063d4859ddd65412/resource.tar.gz#test.test_pg-record_from_table_row-default.txt-Debug_/opt.yql_patched"
+        }
+    ],
+    "test.test[pg-record_from_table_row-default.txt-Plan]": [
+        {
+            "checksum": "b4dd508a329723c74293d80f0278c705",
+            "size": 505,
+            "uri": "https://{canondata_backend}/1937429/8c415fc988c547984fa23f72063d4859ddd65412/resource.tar.gz#test.test_pg-record_from_table_row-default.txt-Plan_/plan.txt"
+        }
+    ],
+    "test.test[pg-record_from_table_row-default.txt-Results]": [],
     "test.test[pg-select_agg_gs_cube-default.txt-Analyze]": [
         {
             "checksum": "b4dd508a329723c74293d80f0278c705",
@@ -1846,9 +1868,9 @@
     ],
     "test.test[pg-select_win_count_all-default.txt-Debug]": [
         {
-            "checksum": "4e5298a8cb161db246107189ba31c985",
-            "size": 1788,
-            "uri": "https://{canondata_backend}/1777230/91a147d17132375579c4f4ec545f8c73b8b69ee1/resource.tar.gz#test.test_pg-select_win_count_all-default.txt-Debug_/opt.yql_patched"
+            "checksum": "bec03ada15eb4738066a2bdf5063877a",
+            "size": 1794,
+            "uri": "https://{canondata_backend}/1880306/279c7aba2c44599afb6ffd3e15e09f8e37a8e4ce/resource.tar.gz#test.test_pg-select_win_count_all-default.txt-Debug_/opt.yql_patched"
         }
     ],
     "test.test[pg-select_win_count_all-default.txt-Plan]": [

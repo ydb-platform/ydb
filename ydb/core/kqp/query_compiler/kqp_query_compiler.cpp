@@ -520,12 +520,27 @@ public:
                 return false;
             }
 
-            auto resultMeta = queryBindingProto.MutableResultSetMeta();
+            auto resultMetaColumns = queryBindingProto.MutableResultSetMeta()->Mutablecolumns();
+            for (size_t i = 0; i < kikimrProto.GetStruct().MemberSize(); i++) {
+                resultMetaColumns->Add();
+            }
 
+            THashMap<TString, int> columnOrder;
+            columnOrder.reserve(kikimrProto.GetStruct().MemberSize());
+            if (!txResult.GetColumnHints().empty()) {
+                YQL_ENSURE(txResult.GetColumnHints().size() == (int)kikimrProto.GetStruct().MemberSize());
+                for (int i = 0; i < txResult.GetColumnHints().size(); i++) {
+                    const auto& hint = txResult.GetColumnHints().at(i);
+                    columnOrder[TString(hint)] = i;
+                }
+            }
+
+            int id = 0;
             for (const auto& column : kikimrProto.GetStruct().GetMember()) {
-                auto columnMeta = resultMeta->add_columns();
-                columnMeta->set_name(column.GetName());
-                ConvertMiniKQLTypeToYdbType(column.GetType(), *columnMeta->mutable_type());
+                int bindingColumnId = columnOrder.count(column.GetName()) ? columnOrder.at(column.GetName()) : id++;
+                auto& columnMeta = resultMetaColumns->at(bindingColumnId);
+                columnMeta.Setname(column.GetName());
+                ConvertMiniKQLTypeToYdbType(column.GetType(), *columnMeta.mutable_type());
             }
         }
 
@@ -947,11 +962,6 @@ private:
             NYql::IDqIntegration* dqIntegration = provider->second->GetDqIntegration();
             YQL_ENSURE(dqIntegration, "Unsupported dq source for provider: \"" << dataSourceCategory << "\"");
             auto& externalSource = *protoSource->MutableExternalSource();
-            google::protobuf::Any& settings = *externalSource.MutableSettings();
-            TString& sourceType = *externalSource.MutableType();
-            dqIntegration->FillSourceSettings(source.Ref(), settings, sourceType);
-            YQL_ENSURE(!settings.type_url().empty(), "Data source provider \"" << dataSourceCategory << "\" did't fill dq source settings for its dq source node");
-            YQL_ENSURE(sourceType, "Data source provider \"" << dataSourceCategory << "\" did't fill dq source settings type for its dq source node");
 
             // Partitioning
             TVector<TString> partitionParams;
@@ -976,6 +986,12 @@ private:
                 externalSource.SetAuthInfo(CreateStructuredTokenParser(token).ToBuilder().RemoveSecrets().ToJson());
                 CreateStructuredTokenParser(token).ListReferences(SecretNames);
             }
+
+            google::protobuf::Any& settings = *externalSource.MutableSettings();
+            TString& sourceType = *externalSource.MutableType();
+            dqIntegration->FillSourceSettings(source.Ref(), settings, sourceType, maxTasksPerStage);
+            YQL_ENSURE(!settings.type_url().empty(), "Data source provider \"" << dataSourceCategory << "\" didn't fill dq source settings for its dq source node");
+            YQL_ENSURE(sourceType, "Data source provider \"" << dataSourceCategory << "\" didn't fill dq source settings type for its dq source node");
         }
     }
 

@@ -152,7 +152,7 @@ std::shared_ptr<List> ListMake1(void* cell) {
 
 #define CAST_NODE(nodeType, nodeptr) CastNode<nodeType>(nodeptr, T_##nodeType)
 #define CAST_NODE_EXT(nodeType, tag, nodeptr) CastNode<nodeType>(nodeptr, tag)
-#define LIST_CAST_NTH(nodeType, list, index) CAST_NODE(nodeType, list_nth(list, i))
+#define LIST_CAST_NTH(nodeType, list, index) CAST_NODE(nodeType, list_nth(list, index))
 #define LIST_CAST_EXT_NTH(nodeType, tag, list, index) CAST_NODE_EXT(nodeType, tag, list_nth(list, i))
 
 const Node* ListNodeNth(const List* list, int index) {
@@ -273,13 +273,28 @@ public:
 
     using TViews = THashMap<TString, TView>;
 
-    TConverter(TAstParseResult& astParseResult, const NSQLTranslation::TTranslationSettings& settings, const TString& query)
-        : AstParseResult(astParseResult)
+    struct TState {
+        TMaybe<TString> ApplicationName;
+        TString CostBasedOptimizer;
+        TVector<TAstNode*> Statements;
+        ui32 ReadIndex = 0;
+        TViews Views;
+        TVector<TViews> CTE;
+        TVector<NYql::TPosition> Positions = {NYql::TPosition()};
+        THashMap<TString, TString> ParamNameToPgTypeName;
+        THashMap<TString, Ydb::TypedValue> AutoParamValues;
+    };
+
+    TConverter(TVector<TAstParseResult>& astParseResults, const NSQLTranslation::TTranslationSettings& settings,
+            const TString& query, bool perStatementResult)
+        : AstParseResults(astParseResults)
         , Settings(settings)
         , DqEngineEnabled(Settings.DqDefaultAuto->Allow())
         , BlockEngineEnabled(Settings.BlockDefaultAuto->Allow())
+        , PerStatementResult(perStatementResult)
     {
-        Positions.push_back({});
+        State.ApplicationName = Settings.ApplicationName;
+        AstParseResults.push_back({});
         ScanRows(query);
 
         for (auto& flag : Settings.Flags) {
@@ -314,77 +329,95 @@ public:
             const auto typeOid = Settings.PgParameterTypeOids[i];
             const auto& typeName =
                 typeOid != UNKNOWNOID ? NPg::LookupType(typeOid).Name : DEFAULT_PARAM_TYPE;
-            ParamNameToPgTypeName[paramName] = typeName;
+            State.ParamNameToPgTypeName[paramName] = typeName;
         }
 
     }
 
     void OnResult(const List* raw) {
-        AstParseResult.Pool = std::make_unique<TMemoryPool>(4096);
-        AstParseResult.Root = ParseResult(raw);
-        if (!AutoParamValues.empty()) {
-            AstParseResult.PgAutoParamValues = std::move(AutoParamValues);
+        if (!PerStatementResult) {
+             AstParseResults[StatementId].Pool = std::make_unique<TMemoryPool>(4096);
+            AstParseResults[StatementId].Root = ParseResult(raw);
+            if (!State.AutoParamValues.empty()) {
+                AstParseResults[StatementId].PgAutoParamValues = std::move(State.AutoParamValues);
+            }
+            return;
+        }
+        AstParseResults.resize(ListLength(raw));
+        for (; StatementId < AstParseResults.size(); ++StatementId) {
+            AstParseResults[StatementId].Pool = std::make_unique<TMemoryPool>(4096);
+            AstParseResults[StatementId].Root = ParseResult(raw, StatementId);
+            if (!State.AutoParamValues.empty()) {
+                AstParseResults[StatementId].PgAutoParamValues = std::move(State.AutoParamValues);
+            }
+            State = {};
         }
     }
 
     void OnError(const TIssue& issue) {
-        AstParseResult.Issues.AddIssue(issue);
+        AstParseResults[StatementId].Issues.AddIssue(issue);
     }
 
-    TAstNode* ParseResult(const List* raw) {
+    TAstNode* ParseResult(const List* raw, const TMaybe<ui32> statementId = Nothing()) {
         auto configSource = L(A("DataSource"), QA(TString(NYql::ConfigProviderName)));
-        Statements.push_back(L(A("let"), A("world"), L(A(TString(NYql::ConfigureName)), A("world"), configSource,
+        State.Statements.push_back(L(A("let"), A("world"), L(A(TString(NYql::ConfigureName)), A("world"), configSource,
             QA("OrderedColumns"))));
 
-        ui32 blockEnginePgmPos = Statements.size();
-        Statements.push_back(configSource);
-        ui32 costBasedOptimizerPos = Statements.size();
-        Statements.push_back(configSource);
-        ui32 dqEnginePgmPos = Statements.size();
-        Statements.push_back(configSource);
+        ui32 blockEnginePgmPos = State.Statements.size();
+        State.Statements.push_back(configSource);
+        ui32 costBasedOptimizerPos = State.Statements.size();
+        State.Statements.push_back(configSource);
+        ui32 dqEnginePgmPos = State.Statements.size();
+        State.Statements.push_back(configSource);
 
-        for (int i = 0; i < ListLength(raw); ++i) {
-            if (!ParseRawStmt(LIST_CAST_NTH(RawStmt, raw, i))) {
+        if (statementId) {
+            if (!ParseRawStmt(LIST_CAST_NTH(RawStmt, raw, *statementId))) {
                 return nullptr;
+            }
+        } else {
+            for (int i = 0; i < ListLength(raw); ++i) {
+                if (!ParseRawStmt(LIST_CAST_NTH(RawStmt, raw, i))) {
+                    return nullptr;
+                }
             }
         }
 
-        if (!Views.empty()) {
+        if (!State.Views.empty()) {
             AddError("Not all views have been dropped");
             return nullptr;
         }
 
         if (Settings.EndOfQueryCommit) {
-            Statements.push_back(L(A("let"), A("world"), L(A("CommitAll!"),
+            State.Statements.push_back(L(A("let"), A("world"), L(A("CommitAll!"),
                 A("world"))));
         }
 
         AddVariableDeclarations();
 
-        Statements.push_back(L(A("return"), A("world")));
+        State.Statements.push_back(L(A("return"), A("world")));
 
         if (DqEngineEnabled) {
-            Statements[dqEnginePgmPos] = L(A("let"), A("world"), L(A(TString(NYql::ConfigureName)), A("world"), configSource,
+            State.Statements[dqEnginePgmPos] = L(A("let"), A("world"), L(A(TString(NYql::ConfigureName)), A("world"), configSource,
                 QA("DqEngine"), QA(DqEngineForce ? "force" : "auto")));
         } else {
-            Statements.erase(Statements.begin() + dqEnginePgmPos);
+            State.Statements.erase(State.Statements.begin() + dqEnginePgmPos);
         }
 
-        if (CostBasedOptimizer) {
-            Statements[costBasedOptimizerPos] = L(A("let"), A("world"), L(A(TString(NYql::ConfigureName)), A("world"), configSource,
-                QA("CostBasedOptimizer"), QA(CostBasedOptimizer)));
+        if (State.CostBasedOptimizer) {
+            State.Statements[costBasedOptimizerPos] = L(A("let"), A("world"), L(A(TString(NYql::ConfigureName)), A("world"), configSource,
+                QA("CostBasedOptimizer"), QA(State.CostBasedOptimizer)));
         } else {
-            Statements.erase(Statements.begin() + costBasedOptimizerPos);
+            State.Statements.erase(State.Statements.begin() + costBasedOptimizerPos);
         }
 
         if (BlockEngineEnabled) {
-            Statements[blockEnginePgmPos] = L(A("let"), A("world"), L(A(TString(NYql::ConfigureName)), A("world"), configSource,
+            State.Statements[blockEnginePgmPos] = L(A("let"), A("world"), L(A(TString(NYql::ConfigureName)), A("world"), configSource,
                 QA("BlockEngine"), QA(BlockEngineForce ? "force" : "auto")));
         } else {
-            Statements.erase(Statements.begin() + blockEnginePgmPos);
+            State.Statements.erase(State.Statements.begin() + blockEnginePgmPos);
         }
 
-        return VL(Statements.data(), Statements.size());
+        return VL(State.Statements.data(), State.Statements.size());
     }
 
     [[nodiscard]]
@@ -542,8 +575,8 @@ public:
 
     using TAutoParamName = TString;
     TAutoParamName AddAutoParam(Ydb::TypedValue&& val) {
-        auto nextName = TString(AUTO_PARAM_PREFIX) + ToString(AutoParamValues.size());
-        AutoParamValues.emplace(nextName, std::move(val));
+        auto nextName = TString(AUTO_PARAM_PREFIX) + ToString(State.AutoParamValues.size());
+        State.AutoParamValues.emplace(nextName, std::move(val));
         return nextName;
     }
 
@@ -570,9 +603,9 @@ public:
         const auto paramType = L(A("ListType"), VL(autoParamTupleType));
 
         const auto paramName = AddAutoParam(MakeYdbListTupleParamValue(std::move(ydbValues), std::move(columnTypes)));
-        Statements.push_back(L(A("declare"), A(paramName), paramType));
+        State.Statements.push_back(L(A("declare"), A(paramName), paramType));
 
-        YQL_CLOG(INFO, Default) << "Successfully autoparametrized VALUES at" << Positions.back();
+        YQL_CLOG(INFO, Default) << "Successfully autoparametrized VALUES at" << State.Positions.back();
 
         return A(paramName);
     }
@@ -708,9 +741,9 @@ public:
     ) {
         bool isValuesClauseOfInsertStmt = fillTargetColumns;
 
-        CTE.emplace_back();
+        State.CTE.emplace_back();
         Y_DEFER {
-            CTE.pop_back();
+            State.CTE.pop_back();
         };
 
         if (value->withClause) {
@@ -1215,13 +1248,13 @@ public:
         }
 
         auto resOptions = QL(QL(QA("type")), QL(QA("autoref")));
-        Statements.push_back(L(A("let"), A("output"), output));
-        Statements.push_back(L(A("let"), A("result_sink"), L(A("DataSink"), QA(TString(NYql::ResultProviderName)))));
-        Statements.push_back(L(A("let"), A("world"), L(A("Write!"),
+        State.Statements.push_back(L(A("let"), A("output"), output));
+        State.Statements.push_back(L(A("let"), A("result_sink"), L(A("DataSink"), QA(TString(NYql::ResultProviderName)))));
+        State.Statements.push_back(L(A("let"), A("world"), L(A("Write!"),
             A("world"), A("result_sink"), L(A("Key")), A("output"), resOptions)));
-        Statements.push_back(L(A("let"), A("world"), L(A("Commit!"),
+        State.Statements.push_back(L(A("let"), A("world"), L(A("Commit!"),
             A("world"), A("result_sink"))));
-        return Statements.back();
+        return State.Statements.back();
     }
 
     [[nodiscard]]
@@ -1273,7 +1306,7 @@ public:
             return false;
         }
 
-        auto& currentCTEs = CTE.back();
+        auto& currentCTEs = State.CTE.back();
         if (currentCTEs.find(view.Name) != currentCTEs.end()) {
             AddError(TStringBuilder() << "CTE already exists: '" << view.Name << "'");
             return false;
@@ -1426,7 +1459,7 @@ public:
 
         const auto writeOptions = BuildWriteOptions(value, std::move(returningList));
 
-        Statements.push_back(L(
+        State.Statements.push_back(L(
             A("let"),
             A("world"),
             L(
@@ -1439,7 +1472,7 @@ public:
             )
         ));
 
-        return Statements.back();
+        return State.Statements.back();
     }
 
     [[nodiscard]]
@@ -1498,13 +1531,13 @@ public:
                 L(A("Void")),
                 QVL(options.data(), options.size())))
             ));
-        Statements.push_back(L(
+        State.Statements.push_back(L(
             A("let"),
             A("world"),
             writeUpdate
         ));
 
-        return Statements.back();
+        return State.Statements.back();
     }
 
     [[nodiscard]]
@@ -1562,14 +1595,14 @@ public:
             return nullptr;
         }
 
-        auto it = Views.find(view.Name);
-        if (it != Views.end() && !value->replace) {
+        auto it = State.Views.find(view.Name);
+        if (it != State.Views.end() && !value->replace) {
             AddError(TStringBuilder() << "View already exists: '" << view.Name << "'");
             return nullptr;
         }
 
-        Views[view.Name] = view;
-        return Statements.back();
+        State.Views[view.Name] = view;
+        return State.Statements.back();
     }
 
 #pragma region CreateTable
@@ -1942,12 +1975,12 @@ public:
             }
         }
 
-        Statements.push_back(
+        State.Statements.push_back(
                 L(A("let"), A("world"),
                   L(A("Write!"), A("world"), sink, key, L(A("Void")),
                     BuildCreateTableOptions(ctx))));
 
-        return Statements.back();
+        return State.Statements.back();
     }
 #pragma endregion CreateTable
 
@@ -1996,18 +2029,18 @@ public:
             }
 
             const auto name = StrVal(nameNode);
-            auto it = Views.find(name);
-            if (!value->missing_ok && it == Views.end()) {
+            auto it = State.Views.find(name);
+            if (!value->missing_ok && it == State.Views.end()) {
                 AddError(TStringBuilder() << "View not found: '" << name << "'");
                 return nullptr;
             }
 
-            if (it != Views.end()) {
-                Views.erase(it);
+            if (it != State.Views.end()) {
+                State.Views.erase(it);
             }
         }
 
-        return Statements.back();
+        return State.Statements.back();
     }
 
     TAstNode* ParseDropTableStmt(const DropStmt* value, const TVector<const List*>& names) {
@@ -2030,7 +2063,7 @@ public:
             }
 
             TString mode = (value->missing_ok) ? "drop_if_exists" : "drop";
-            Statements.push_back(L(
+            State.Statements.push_back(L(
                 A("let"),
                 A("world"),
                 L(
@@ -2046,7 +2079,7 @@ public:
             ));
         }
 
-        return Statements.back();
+        return State.Statements.back();
     }
 
     TAstNode* ParseDropIndexStmt(const DropStmt* value, const TVector<const List*>& names) {
@@ -2070,7 +2103,7 @@ public:
             );
 
             TString missingOk = (value->missing_ok) ? "true" : "false";
-            Statements.push_back(L(
+            State.Statements.push_back(L(
                 A("let"),
                 A("world"),
                 L(
@@ -2087,7 +2120,7 @@ public:
             ));
         }
 
-        return Statements.back();
+        return State.Statements.back();
     }
 
     [[nodiscard]]
@@ -2098,21 +2131,26 @@ public:
         }
 
         auto name = to_lower(TString(value->name));
-        if (isSetConfig) {
+        if (name == "search_path") {
             if (ListLength(value->args) != 1) {
                 AddError(TStringBuilder() << "VariableSetStmt, expected 1 arg, but got: " << ListLength(value->args));
                 return nullptr;
             }
             auto val = ListNodeNth(value->args, 0);
+            if (!isSetConfig) {
+                if (NodeTag(val) == T_A_Const) {
+                    val = (const Node*)&CAST_NODE(A_Const, val)->val;
+                } else {
+                    AddError(TStringBuilder() << "VariableSetStmt, expected const for " << value->name << " option");
+                    return nullptr;
+                }
+            }
+
             if (NodeTag(val) != T_String) {
                 AddError(TStringBuilder() << "VariableSetStmt, expected string literal for " << value->name << " option");
                 return nullptr;
             }
             TString rawStr = to_lower(TString(StrVal(val)));
-            if (name != "search_path") {
-                AddError(TStringBuilder() << "VariableSetStmt, set_config doesn't support that option:" << name);
-                return nullptr;
-            }
             if (rawStr != "pg_catalog" && rawStr != "public" && rawStr != "" && rawStr != "information_schema") {
                 AddError(TStringBuilder() << "VariableSetStmt, search path supports only 'information_schema', 'public', 'pg_catalog', '' but got: '" << rawStr << "'");
                 return nullptr;
@@ -2120,7 +2158,14 @@ public:
             if (Settings.GUCSettings) {
                 Settings.GUCSettings->Set(name, rawStr, value->is_local);
             }
-            return Statements.back();
+            return State.Statements.back();
+        }
+
+        if (isSetConfig) {
+            if (name != "search_path") {
+                AddError(TStringBuilder() << "VariableSetStmt, set_config doesn't support that option:" << name);
+                return nullptr;
+            }
         }
 
         if (name == "useblocks" || name == "emitaggapply") {
@@ -2133,7 +2178,7 @@ public:
             if (NodeTag(arg) == T_A_Const && (NodeTag(CAST_NODE(A_Const, arg)->val) == T_String)) {
                 TString rawStr = StrVal(CAST_NODE(A_Const, arg)->val);
                 auto configSource = L(A("DataSource"), QA(TString(NYql::ConfigProviderName)));
-                Statements.push_back(L(A("let"), A("world"), L(A(TString(NYql::ConfigureName)), A("world"), configSource,
+                State.Statements.push_back(L(A("let"), A("world"), L(A(TString(NYql::ConfigureName)), A("world"), configSource,
                     QA(TString(rawStr == "true" ? "" : "Disable") + TString((name == "useblocks") ? "UseBlocks" : "PgEmitAggApply")))));
             } else {
                 AddError(TStringBuilder() << "VariableSetStmt, expected string literal for " << value->name << " option");
@@ -2169,7 +2214,7 @@ public:
                 AddError(TStringBuilder() << "VariableSetStmt, expected string literal for " << value->name << " option");
                 return nullptr;
             }
-        } else if (name.StartsWith("dq.") || name.StartsWith("yt.") || name.StartsWith("s3.")) {
+        } else if (name.StartsWith("dq.") || name.StartsWith("yt.") || name.StartsWith("s3.") || name.StartsWith("ydb.")) {
             if (ListLength(value->args) != 1) {
                 AddError(TStringBuilder() << "VariableSetStmt, expected 1 arg, but got: " << ListLength(value->args));
                 return nullptr;
@@ -2184,15 +2229,19 @@ public:
                     providerName = NYql::DqProviderName;
                 } else if (name.StartsWith("yt.")) {
                     providerName = NYql::YtProviderName;
-                } else {
+                } else if (name.StartsWith("s3.")) {
                     providerName = NYql::S3ProviderName;
+                } else if (name.StartsWith("ydb.")) {
+                    providerName = NYql::YdbProviderName;
+                } else {
+                    Y_ASSERT(0);
                 }
 
                 auto providerSource = L(A("DataSource"), QA(providerName), QA("$all"));
 
                 auto rawStr = StrVal(CAST_NODE(A_Const, arg)->val);
 
-                Statements.push_back(L(A("let"), A("world"), L(A(TString(NYql::ConfigureName)), A("world"), providerSource,
+                State.Statements.push_back(L(A("let"), A("world"), L(A(TString(NYql::ConfigureName)), A("world"), providerSource,
                     QA("Attr"), QAX(name.substr(dotPos + 1)), QAX(rawStr))));
             } else {
                 AddError(TStringBuilder() << "VariableSetStmt, expected string literal for " << value->name << " option");
@@ -2227,7 +2276,21 @@ public:
                     return nullptr;
                 }
 
-                CostBasedOptimizer = str;
+                State.CostBasedOptimizer = str;
+            } else {
+                AddError(TStringBuilder() << "VariableSetStmt, expected string literal for " << value->name << " option");
+                return nullptr;
+            }
+        } else if (name == "applicationname") {
+            if (ListLength(value->args) != 1) {
+                AddError(TStringBuilder() << "VariableSetStmt, expected 1 arg, but got: " << ListLength(value->args));
+                return nullptr;
+            }
+
+            auto arg = ListNodeNth(value->args, 0);
+            if (NodeTag(arg) == T_A_Const && (NodeTag(CAST_NODE(A_Const, arg)->val) == T_String)) {
+                auto rawStr = StrVal(CAST_NODE(A_Const, arg)->val);
+                State.ApplicationName = rawStr;
             } else {
                 AddError(TStringBuilder() << "VariableSetStmt, expected string literal for " << value->name << " option");
                 return nullptr;
@@ -2237,7 +2300,7 @@ public:
             return nullptr;
         }
 
-        return Statements.back();
+        return State.Statements.back();
     }
 
     [[nodiscard]]
@@ -2316,7 +2379,7 @@ public:
         if (!returningList.empty()) {
             options.push_back(QL(QA("returning"), QVL(returningList.data(), returningList.size())));
         }
-        Statements.push_back(L(
+        State.Statements.push_back(L(
             A("let"),
             A("world"),
             L(
@@ -2328,7 +2391,7 @@ public:
                 QVL(options.data(), options.size())
             )
         ));
-        return Statements.back();
+        return State.Statements.back();
     }
 
     TMaybe<TString> GetConfigVariable(const TString& varName) {
@@ -2387,15 +2450,15 @@ public:
         const auto selectOptions = QL(setItems, setOps);
 
         const auto output = L(A("PgSelect"), selectOptions);
-        Statements.push_back(L(A("let"), A("output"), output));
-        Statements.push_back(L(A("let"), A("result_sink"), L(A("DataSink"), QA(TString(NYql::ResultProviderName)))));
+        State.Statements.push_back(L(A("let"), A("output"), output));
+        State.Statements.push_back(L(A("let"), A("result_sink"), L(A("DataSink"), QA(TString(NYql::ResultProviderName)))));
 
         const auto resOptions = QL(QL(QA("type")), QL(QA("autoref")));
-        Statements.push_back(L(A("let"), A("world"), L(A("Write!"),
+        State.Statements.push_back(L(A("let"), A("world"), L(A("Write!"),
             A("world"), A("result_sink"), L(A("Key")), A("output"), resOptions)));
-        Statements.push_back(L(A("let"), A("world"), L(A("Commit!"),
+        State.Statements.push_back(L(A("let"), A("world"), L(A("Commit!"),
             A("world"), A("result_sink"))));
-        return Statements.back();
+        return State.Statements.back();
     }
 
     [[nodiscard]]
@@ -2408,14 +2471,14 @@ public:
         case TRANS_STMT_ROLLBACK_TO:
             return true;
         case TRANS_STMT_COMMIT:
-            Statements.push_back(L(A("let"), A("world"), L(A("CommitAll!"),
+            State.Statements.push_back(L(A("let"), A("world"), L(A("CommitAll!"),
                 A("world"))));
             if (Settings.GUCSettings) {
                 Settings.GUCSettings->Commit();
             }
             return true;
         case TRANS_STMT_ROLLBACK:
-            Statements.push_back(L(A("let"), A("world"), L(A("CommitAll!"),
+            State.Statements.push_back(L(A("let"), A("world"), L(A("CommitAll!"),
                 A("world"), QL(QL(QA("mode"), QA("rollback"))))));
             if (Settings.GUCSettings) {
                 Settings.GUCSettings->RollBack();
@@ -2485,7 +2548,7 @@ public:
         desc.emplace_back(QL(QA("dataColumns"), QVL(coverColumns->data(), coverColumns->size())));
         desc.emplace_back(QL(QA("flags"), QVL(flags.data(), flags.size())));
 
-        Statements.push_back(L(
+        State.Statements.push_back(L(
             A("let"),
             A("world"),
             L(
@@ -2501,7 +2564,7 @@ public:
             )
         ));
 
-        return Statements.back();
+        return State.Statements.back();
     }
 
     TFromDesc ParseFromClause(const Node* node) {
@@ -2527,11 +2590,11 @@ public:
 
         auto colNamesTuple = QVL(colNamesNodes.data(), colNamesNodes.size());
         if (p.InjectRead) {
-            auto label = "read" + ToString(ReadIndex);
-            Statements.push_back(L(A("let"), A(label), p.Source));
-            Statements.push_back(L(A("let"), A("world"), L(A("Left!"), A(label))));
+            auto label = "read" + ToString(State.ReadIndex);
+            State.Statements.push_back(L(A("let"), A(label), p.Source));
+            State.Statements.push_back(L(A("let"), A("world"), L(A("Left!"), A(label))));
             fromList.push_back(QL(L(A("Right!"), A(label)), aliasNode, colNamesTuple));
-            ++ReadIndex;
+            ++State.ReadIndex;
         } else {
             fromList.push_back(QL(p.Source, aliasNode, colNamesTuple));
         }
@@ -2660,7 +2723,7 @@ public:
 
         const TView* view = nullptr;
         if (StrLength(value->schemaname) == 0) {
-            for (auto rit = CTE.rbegin(); rit != CTE.rend(); ++rit) {
+            for (auto rit = State.CTE.rbegin(); rit != State.CTE.rend(); ++rit) {
                 auto cteIt = rit->find(value->relname);
                 if (cteIt != rit->end()) {
                     view = &cteIt->second;
@@ -2668,8 +2731,8 @@ public:
                 }
             }
             if (!view) {
-                auto viewIt = Views.find(value->relname);
-                if (viewIt != Views.end()) {
+                auto viewIt = State.Views.find(value->relname);
+                if (viewIt != State.Views.end()) {
                     view = &viewIt->second;
                 }
             }
@@ -2980,8 +3043,8 @@ public:
 
     TAstNode* ParseParamRefExpr(const ParamRef* value) {
         const auto varName = PREPARED_PARAM_PREFIX + ToString(value->number);
-        if (!ParamNameToPgTypeName.contains(varName)) {
-            ParamNameToPgTypeName[varName] = DEFAULT_PARAM_TYPE;
+        if (!State.ParamNameToPgTypeName.contains(varName)) {
+            State.ParamNameToPgTypeName[varName] = DEFAULT_PARAM_TYPE;
         }
         return A(varName);
     }
@@ -3013,6 +3076,20 @@ public:
                 L(A("PgType"), QA("timestamptz")),
                 L(A("PgConst"), QA(ToString(value->typmod)), L(A("PgType"), QA("int4")))
             );
+        case SVFOP_CURRENT_USER:
+        case SVFOP_CURRENT_ROLE:
+        case SVFOP_USER:
+            return L(A("PgConst"), QA("postgres"), L(A("PgType"), QA("name")));
+        case SVFOP_CURRENT_CATALOG:
+            return L(A("PgConst"), QA("postgres"), L(A("PgType"), QA("name")));
+        case SVFOP_CURRENT_SCHEMA: {
+            std::optional<TString> searchPath;
+            if (Settings.GUCSettings) {
+                searchPath = Settings.GUCSettings->Get("search_path");
+            }
+
+            return L(A("PgConst"), QA(searchPath ? *searchPath : "public"), L(A("PgType"), QA("name")));
+        }
         default:
             AddError(TStringBuilder() << "Usupported SQLValueFunction: " << (int)value->op);
             return nullptr;
@@ -3121,9 +3198,9 @@ public:
         }
 
         const auto& paramName = AddAutoParam(std::move(typedValue));
-        Statements.push_back(L(A("declare"), A(paramName), pgType));
+        State.Statements.push_back(L(A("declare"), A(paramName), pgType));
 
-        YQL_CLOG(INFO, Default) << "Autoparametrized " << paramName << " at " << Positions.back();
+        YQL_CLOG(INFO, Default) << "Autoparametrized " << paramName << " at " << State.Positions.back();
 
         return A(paramName);
     }
@@ -3932,10 +4009,13 @@ public:
     TAstNode* ParseSortBy(const PG_SortBy* value, bool allowAggregates, bool useProjectionRefs) {
         AT_LOCATION(value);
         bool asc = true;
+        bool nullsFirst = true;
         switch (value->sortby_dir) {
         case SORTBY_DEFAULT:
-            break;
         case SORTBY_ASC:
+            if (Settings.PgSortNulls) {
+                nullsFirst = false;
+            }
             break;
         case SORTBY_DESC:
             asc = false;
@@ -3945,8 +4025,17 @@ public:
             return nullptr;
         }
 
-        if (value->sortby_nulls != SORTBY_NULLS_DEFAULT) {
-            AddError(TStringBuilder() << "sortby_nulls unsupported value: " << (int)value->sortby_nulls);
+        switch (value->sortby_nulls) {
+        case SORTBY_NULLS_DEFAULT:
+            break;
+        case SORTBY_NULLS_FIRST:
+            nullsFirst = true;
+            break;
+        case SORTBY_NULLS_LAST:
+            nullsFirst = false;
+            break;
+        default:
+            AddError(TStringBuilder() << "sortby_dir unsupported value: " << (int)value->sortby_dir);
             return nullptr;
         }
 
@@ -3972,7 +4061,7 @@ public:
         }
 
         auto lambda = L(A("lambda"), QL(), expr);
-        return L(A("PgSort"), L(A("Void")), lambda, QA(asc ? "asc" : "desc"));
+        return L(A("PgSort"), L(A("Void")), lambda, QA(asc ? "asc" : "desc"), QA(nullsFirst ? "first" : "last"));
     }
 
     TAstNode* ParseColumnRef(const ColumnRef* value, const TExprSettings& settings) {
@@ -4228,6 +4317,11 @@ public:
         case AEXPR_BETWEEN_SYM:
         case AEXPR_NOT_BETWEEN_SYM:
             return ParseAExprBetween(value, settings);
+        case AEXPR_OP_ANY:
+            if (State.ApplicationName && State.ApplicationName->StartsWith("pgAdmin")) {
+                AddWarning(TIssuesIds::PG_COMPAT, "AEXPR_OP_ANY forced to false");
+                return L(A("PgConst"), QA("false"), L(A("PgType"), QA("bool")));
+            }
         default:
             AddError(TStringBuilder() << "A_Expr_Kind unsupported value: " << (int)value->kind);
             return nullptr;
@@ -4236,9 +4330,9 @@ public:
     }
 
     void AddVariableDeclarations() {
-      for (const auto& [varName, typeName] : ParamNameToPgTypeName) {
+      for (const auto& [varName, typeName] : State.ParamNameToPgTypeName) {
         const auto pgType = L(A("PgType"), QA(typeName));
-        Statements.push_back(L(A("declare"), A(varName), pgType));
+        State.Statements.push_back(L(A("declare"), A(varName), pgType));
       }
     }
 
@@ -4277,11 +4371,11 @@ public:
     }
 
     TAstNode* VL(TAstNode** nodes, ui32 size, TPosition pos = {}) {
-        return TAstNode::NewList(pos.Row ? pos : Positions.back(), nodes, size, *AstParseResult.Pool);
+        return TAstNode::NewList(pos.Row ? pos : State.Positions.back(), nodes, size, *AstParseResults[StatementId].Pool);
     }
 
     TAstNode* VL(TArrayRef<TAstNode*> nodes, TPosition pos = {}) {
-        return TAstNode::NewList(pos.Row ? pos : Positions.back(), nodes.data(), nodes.size(), *AstParseResult.Pool);
+        return TAstNode::NewList(pos.Row ? pos : State.Positions.back(), nodes.data(), nodes.size(), *AstParseResults[StatementId].Pool);
     }
 
     TAstNode* QVL(TAstNode** nodes, ui32 size, TPosition pos = {}) {
@@ -4297,11 +4391,11 @@ public:
     }
 
     TAstNode* A(const TStringBuf str, TPosition pos = {}, ui32 flags = 0) {
-        return TAstNode::NewAtom(pos.Row ? pos : Positions.back(), str, *AstParseResult.Pool, flags);
+        return TAstNode::NewAtom(pos.Row ? pos : State.Positions.back(), str, *AstParseResults[StatementId].Pool, flags);
     }
 
     TAstNode* AX(const TString& str, TPosition pos = {}) {
-        return A(str, pos.Row ? pos : Positions.back(), TNodeFlags::ArbitraryContent);
+        return A(str, pos.Row ? pos : State.Positions.back(), TNodeFlags::ArbitraryContent);
     }
 
     TAstNode* Q(TAstNode* node, TPosition pos = {}) {
@@ -4320,7 +4414,7 @@ public:
     TAstNode* L(TNodes... nodes) {
         TLState state;
         LImpl(state, nodes...);
-        return TAstNode::NewList(state.Position.Row ? state.Position : Positions.back(), state.Nodes.data(), state.Nodes.size(), *AstParseResult.Pool);
+        return TAstNode::NewList(state.Position.Row ? state.Position : State.Positions.back(), state.Nodes.data(), state.Nodes.size(), *AstParseResults[StatementId].Pool);
     }
 
     template <typename... TNodes>
@@ -4344,11 +4438,11 @@ public:
 
 private:
     void AddError(const TString& value) {
-        AstParseResult.Issues.AddIssue(TIssue(Positions.back(), value));
+        AstParseResults[StatementId].Issues.AddIssue(TIssue(State.Positions.back(), value));
     }
 
     void AddWarning(int code, const TString& value) {
-        AstParseResult.Issues.AddIssue(TIssue(Positions.back(), value).SetCode(code, ESeverity::TSeverityIds_ESeverityId_S_WARNING));
+        AstParseResults[StatementId].Issues.AddIssue(TIssue(State.Positions.back(), value).SetCode(code, ESeverity::TSeverityIds_ESeverityId_S_WARNING));
     }
 
     struct TLState {
@@ -4379,15 +4473,15 @@ private:
 
     void PushPosition(int location) {
         if (location == -1) {
-            Positions.push_back(Positions.back());
+            State.Positions.push_back(State.Positions.back());
             return;
         }
 
-        Positions.push_back(Location2Position(location));
+        State.Positions.push_back(Location2Position(location));
     };
 
     void PopPosition() {
-        Positions.pop_back();
+        State.Positions.pop_back();
     }
 
     NYql::TPosition Location2Position(int location) const {
@@ -4439,26 +4533,21 @@ private:
     }
 
 private:
-    TAstParseResult& AstParseResult;
+    TVector<TAstParseResult>& AstParseResults;
     NSQLTranslation::TTranslationSettings Settings;
     bool DqEngineEnabled = false;
     bool DqEngineForce = false;
-    TString CostBasedOptimizer;
     bool BlockEngineEnabled = false;
     bool BlockEngineForce = false;
-    TVector<TAstNode*> Statements;
-    ui32 ReadIndex = 0;
-    TViews Views;
-    TVector<TViews> CTE;
     TString TablePathPrefix;
-    TVector<NYql::TPosition> Positions;
     TVector<ui32> RowStarts;
     ui32 QuerySize;
     TString Provider;
     static const THashMap<TStringBuf, TString> ProviderToInsertModeMap;
 
-    THashMap<TString, TString> ParamNameToPgTypeName;
-    THashMap<TString, Ydb::TypedValue> AutoParamValues;
+    TState State;
+    ui32 StatementId = 0;
+    bool PerStatementResult;
 };
 
 const THashMap<TStringBuf, TString> TConverter::ProviderToInsertModeMap = {
@@ -4467,10 +4556,18 @@ const THashMap<TStringBuf, TString> TConverter::ProviderToInsertModeMap = {
 };
 
 NYql::TAstParseResult PGToYql(const TString& query, const NSQLTranslation::TTranslationSettings& settings) {
-    NYql::TAstParseResult result;
-    TConverter converter(result, settings, query);
+    TVector<NYql::TAstParseResult> results;
+    TConverter converter(results, settings, query, false);
     NYql::PGParse(query, converter);
-    return result;
+    Y_ENSURE(!results.empty());
+    return std::move(results.back());
+}
+
+TVector<NYql::TAstParseResult> PGToYqlStatements(const TString& query, const NSQLTranslation::TTranslationSettings& settings) {
+    TVector<NYql::TAstParseResult> results;
+    TConverter converter(results, settings, query, true);
+    NYql::PGParse(query, converter);
+    return results;
 }
 
 }  // NSQLTranslationPG

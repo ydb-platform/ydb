@@ -9,6 +9,9 @@
 #include <ydb/library/ydb_issue/proto/issue_id.pb.h>
 #include <ydb/library/yql/public/issue/yql_issue.h>
 #include <ydb/core/scheme/scheme_pathid.h>
+#include <ydb/core/protos/kqp_physical.pb.h>
+#include <ydb/core/protos/table_stats.pb.h>
+#include <ydb/core/protos/follower_group.pb.h>
 
 #include <util/generic/hash.h>
 
@@ -528,10 +531,6 @@ void FillColumnDescription(Ydb::Table::DescribeTableResult& out, const NKikimrSc
     auto& schema = in.GetSchema();
 
     for (const auto& column : schema.GetColumns()) {
-        Y_ENSURE(
-            column.GetTypeId() != NScheme::NTypeIds::Pg || !column.GetNotNull(),
-            "It is not allowed to create NOT NULL column with pg type"
-        );
         auto newColumn = out.add_columns();
         AddColumn(newColumn, column);
     }

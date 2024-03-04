@@ -145,8 +145,7 @@ public:
             NTabletPipe::SendData(ctx, pipeClient, new TEvTablet::TEvGetCounters(), tabletId);
             ++Requests;
             ctx.Send(BrowseContext.Owner, new NViewerEvents::TEvBrowseRequestSent(pipeClient, tabletId, TEvTablet::EvGetCounters));
-            auto hiveUid = HiveUidFromTabletID(tabletId);
-            auto hiveTabletId = domainsInfo->GetHive(hiveUid);
+            ui64 hiveTabletId = domainsInfo->GetHive();
             pipeClient = GetTabletPipe(hiveTabletId, ctx);
             NTabletPipe::SendData(ctx, pipeClient, new TEvHive::TEvLookupChannelInfo(tabletId), tabletId);
             ++Requests;

@@ -394,26 +394,17 @@ TWriteSettings ISource::GetWriteSettings() const {
     return {};
 }
 
-TNodePtr ISource::PrepareSamplingRate(TPosition pos, ESampleClause clause, TNodePtr samplingRate, bool tempUseBlockExpr) {
+TNodePtr ISource::PrepareSamplingRate(TPosition pos, ESampleClause clause, TNodePtr samplingRate) {
     if (ESampleClause::Sample == clause) {
         samplingRate = Y("*", samplingRate, Y("Double", Q("100")));
     }
-    //TODO YQL-17526 temp for minimizing diff in canonized tests
-    if (tempUseBlockExpr) {
-        auto ensureLow  = Y("Ensure", "samplingRate", Y(">=", "samplingRate", Y("Double", Q("0"))), Y("String", BuildQuotedAtom(pos, "Expected sampling rate to be nonnegative")));
-        auto ensureHigh = Y("Ensure", "samplingRate", Y("<=", "samplingRate", Y("Double", Q("100"))), Y("String", BuildQuotedAtom(pos, "Sampling rate is over 100%")));
+    auto ensureLow  = Y("Ensure", "samplingRate", Y(">=", "samplingRate", Y("Double", Q("0"))), Y("String", BuildQuotedAtom(pos, "Expected sampling rate to be nonnegative")));
+    auto ensureHigh = Y("Ensure", "samplingRate", Y("<=", "samplingRate", Y("Double", Q("100"))), Y("String", BuildQuotedAtom(pos, "Sampling rate is over 100%")));
 
-        auto block(Y(Y("let", "samplingRate", samplingRate)));
-        block = L(block, Y("let", "samplingRate", ensureLow));
-        block = L(block, Y("let", "samplingRate", ensureHigh));
-
-        samplingRate = Y("block", Q(L(block, Y("return", "samplingRate"))));
-    } else {
-        samplingRate = Y("Ensure", samplingRate, Y(">=", samplingRate, Y("Double", Q("0"))),
-                         Y("String", Q("\"Expected sampling rate to be nonnegative\"")));
-        samplingRate = Y("Ensure", samplingRate, Y("<=", samplingRate, Y("Double", Q("100"))),
-                         Y("String", Q("\"Sampling rate is over 100%\"")));
-    }
+    auto block(Y(Y("let", "samplingRate", samplingRate)));
+    block = L(block, Y("let", "samplingRate", ensureLow));
+    block = L(block, Y("let", "samplingRate", ensureHigh));
+    samplingRate = Y("block", Q(L(block, Y("return", "samplingRate"))));
     return samplingRate;
 }
 
@@ -560,7 +551,7 @@ bool ISource::SetSamplingRate(TContext& ctx, ESampleClause clause, TNodePtr samp
         if (!samplingRate->Init(ctx, this)) {
             return false;
         }
-        SamplingRate = PrepareSamplingRate(Pos, clause, samplingRate, false);
+        SamplingRate = PrepareSamplingRate(Pos, clause, samplingRate);
     }
     return true;
 }

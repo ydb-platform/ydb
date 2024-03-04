@@ -22,100 +22,118 @@ class TStatsPartGroupBtreeIndexIterator : public IStatsPartGroupIterator {
         TRowId BeginRowId;
         TRowId EndRowId;
         TCellsIterable BeginKey;
-        TCellsIterable EndKey;
-        std::optional<TBtreeIndexNode> Node;
-        std::optional<TRecIdx> Pos;
+        ui64 BeginDataSize;
+        ui64 EndDataSize;
 
-        TNodeState(TPageId pageId, TRowId beginRowId, TRowId endRowId, TCellsIterable beginKey, TCellsIterable endKey)
+        TNodeState(TPageId pageId, TRowId beginRowId, TRowId endRowId, TCellsIterable beginKey, ui64 beginDataSize, ui64 endDataSize)
             : PageId(pageId)
             , BeginRowId(beginRowId)
             , EndRowId(endRowId)
             , BeginKey(beginKey)
-            , EndKey(endKey)
+            , BeginDataSize(beginDataSize)
+            , EndDataSize(endDataSize)
         {
         }
-
-        bool IsLastPos() const noexcept {
-            Y_ABORT_UNLESS(Node);
-            Y_ABORT_UNLESS(Pos);
-            return *Pos == Node->GetKeysCount();
-        }
-
-        bool IsFirstPos() const noexcept {
-            Y_ABORT_UNLESS(Node);
-            Y_ABORT_UNLESS(Pos);
-            return *Pos == 0;
-        }
-    };
-
-    struct TSeekRowId {
-        TSeekRowId(TRowId rowId)
-            : RowId(rowId)
-        {}
-
-        bool BelongsTo(const TNodeState& state) const noexcept {
-            return TBtreeIndexNode::Has(RowId, state.BeginRowId, state.EndRowId);
-        }
-
-        TRecIdx Do(const TNodeState& state) const noexcept {
-            return state.Node->Seek(RowId, state.Pos);
-        }
-
-        const TRowId RowId;
     };
 
 public:
-    TStatsPartGroupBtreeIndexIterator(const TPart* part, IPages* env, TGroupId groupId)
+    TStatsPartGroupBtreeIndexIterator(const TPart* part, IPages* env, TGroupId groupId,
+            ui64 rowCountResolution, ui64 dataSizeResolution, const TVector<TRowId>& splitPoints)
         : Part(part)
         , Env(env)
         , GroupId(groupId)
         , GroupInfo(part->Scheme->GetLayout(groupId))
         , Meta(groupId.IsHistoric() ? part->IndexPages.BTreeHistoric[groupId.Index] : part->IndexPages.BTreeGroups[groupId.Index])
-        , State(Reserve(Meta.LevelCount + 1))
+        , GroupChannel(Part->GetGroupChannel(GroupId))
+        , NodeIndex(0)
+        , RowCountResolution(rowCountResolution)
+        , DataSizeResolution(dataSizeResolution)
+        , SplitPoints(splitPoints) // make copy for Start
     {
-        const static TCellsIterable EmptyKey(static_cast<const char*>(nullptr), TColumns());
-        State.emplace_back(Meta.PageId, 0, GetEndRowId(), EmptyKey, EmptyKey);
+        Y_DEBUG_ABORT_UNLESS(std::is_sorted(SplitPoints.begin(), SplitPoints.end()));
     }
     
     EReady Start() override {
-        return DoSeek<TSeekRowId>({0});
+        const static TCellsIterable EmptyKey(static_cast<const char*>(nullptr), TColumns());
+
+        bool ready = true;
+        TVector<TNodeState> nextNodes;
+        Nodes.emplace_back(Meta.PageId, 0, GetEndRowId(), EmptyKey, 0, Meta.DataSize);
+
+        for (ui32 height = 0; height < Meta.LevelCount; height++) {
+            bool hasChanges = false;
+            size_t splitPointIndex = 0;
+
+            for (auto &nodeState : Nodes) {
+                while (splitPointIndex < SplitPoints.size() && SplitPoints[splitPointIndex] < nodeState.BeginRowId) {
+                    splitPointIndex++;
+                }
+                if (splitPointIndex < SplitPoints.size() && SplitPoints[splitPointIndex] < nodeState.EndRowId) {
+                    // split node and go deeper
+                } else if (nodeState.EndRowId - nodeState.BeginRowId <= RowCountResolution
+                        && nodeState.EndDataSize - nodeState.BeginDataSize <= DataSizeResolution) {
+                    nextNodes.push_back(nodeState); // lift current node on the next level as-is
+                    continue; // don't go deeper
+                }
+
+                auto page = Env->TryGetPage(Part, nodeState.PageId);
+                if (!page) {
+                    ready = false;
+                    continue; // continue requesting other nodes
+                }
+                TBtreeIndexNode node(*page);
+
+                for (TRecIdx pos : xrange<TRecIdx>(0, node.GetChildrenCount())) {
+                    auto& child = node.GetShortChild(pos);
+
+                    TRowId beginRowId = pos ? node.GetShortChild(pos - 1).RowCount : nodeState.BeginRowId;
+                    TRowId endRowId = child.RowCount;
+                    TCellsIterable beginKey = pos ? node.GetKeyCellsIterable(pos - 1, GroupInfo.ColsKeyIdx) : nodeState.BeginKey;
+                    ui64 beginDataSize = pos ? node.GetShortChild(pos - 1).DataSize : nodeState.BeginDataSize;
+                    ui64 endDataSize = child.DataSize;
+
+                    nextNodes.emplace_back(child.PageId, beginRowId, endRowId, beginKey, beginDataSize, endDataSize);
+                    hasChanges = true;
+                }
+            }
+
+            Nodes.swap(nextNodes);
+            nextNodes.clear();
+
+            if (!hasChanges) {
+                break; // don't go deeper
+            }
+        }
+
+        if (!ready) {
+            Nodes.clear(); // some invalid subset
+            return EReady::Page;
+        }
+
+        return DataOrGone();
     }
 
     EReady Next() override {
-        Y_ABORT_UNLESS(!IsExhausted());
+        Y_ABORT_UNLESS(IsValid());
 
-        if (Meta.LevelCount == 0) {
-            return Exhaust();
-        }
+        NodeIndex++;
 
-        if (IsLeaf()) {
-            do {
-                State.pop_back();
-            } while (State.size() > 1 && State.back().IsLastPos());
-            if (State.back().IsLastPos()) {
-                return Exhaust();
-            }
-            PushNextState(*State.back().Pos + 1);
-        }
+        Y_DEBUG_ABORT_UNLESS(NodeIndex == Nodes.size() || Nodes[NodeIndex - 1].EndRowId == Nodes[NodeIndex].BeginRowId);
 
-        for (ui32 level : xrange<ui32>(State.size() - 1, Meta.LevelCount)) {
-            if (!TryLoad(State[level])) {
-                // exiting with an intermediate state
-                Y_DEBUG_ABORT_UNLESS(!IsLeaf() && !IsExhausted());
-                return EReady::Page;
-            }
-            PushNextState(0);
-        }
+        return DataOrGone();
+    }
 
-        // State.back() points to the target data page
-        Y_ABORT_UNLESS(IsLeaf());
-        return EReady::Data;
+    void AddLastDeltaDataSize(TChanneledDataSize& dataSize) override {
+        Y_DEBUG_ABORT_UNLESS(NodeIndex);
+        Y_DEBUG_ABORT_UNLESS(Nodes[NodeIndex - 1].EndDataSize >= Nodes[NodeIndex - 1].BeginDataSize);
+        ui64 delta = Nodes[NodeIndex - 1].EndDataSize - Nodes[NodeIndex - 1].BeginDataSize;
+        ui8 channel = Part->GetGroupChannel(GroupId);
+        dataSize.Add(delta, channel);
     }
 
 public:
     bool IsValid() const override {
-        Y_DEBUG_ABORT_UNLESS(IsLeaf() || IsExhausted());
-        return IsLeaf();
+        return NodeIndex < Nodes.size();
     }
 
     TRowId GetEndRowId() const override {
@@ -123,105 +141,29 @@ public:
     }
 
     TPageId GetPageId() const override {
-        Y_ABORT_UNLESS(IsLeaf());
-        return State.back().PageId;
+        return GetCurrentNode().PageId;
     }
 
     TRowId GetRowId() const override {
-        Y_ABORT_UNLESS(IsLeaf());
-        return State.back().BeginRowId;
+        return GetCurrentNode().BeginRowId;
     }
 
     TPos GetKeyCellsCount() const override {
-        Y_ABORT_UNLESS(IsLeaf());
-        return State.back().BeginKey.Count();
+        return GetCurrentNode().BeginKey.Count();
     }
 
     TCell GetKeyCell(TPos index) const override {
-        Y_ABORT_UNLESS(IsLeaf());
-        return State.back().BeginKey.Iter().At(index);
+        return GetCurrentNode().BeginKey.Iter().At(index);
     }
 
 private:
-    template<typename TSeek>
-    EReady DoSeek(TSeek seek) {
-        while (State.size() > 1 && !seek.BelongsTo(State.back())) {
-            State.pop_back();
-        }
-
-        if (IsExhausted()) {
-            // don't use exhausted state as an initial one
-            State[0].Pos = { };
-        }
-
-        for (ui32 level : xrange<ui32>(State.size() - 1, Meta.LevelCount)) {
-            auto &state = State[level];
-            Y_DEBUG_ABORT_UNLESS(seek.BelongsTo(state));
-            if (!TryLoad(state)) {
-                // exiting with an intermediate state
-                Y_DEBUG_ABORT_UNLESS(!IsLeaf() && !IsExhausted());
-                return EReady::Page;
-            }
-            auto pos = seek.Do(state);
-            
-            PushNextState(pos);
-        }
-
-        // State.back() points to the target data page
-        Y_ABORT_UNLESS(IsLeaf());
-        Y_DEBUG_ABORT_UNLESS(seek.BelongsTo(State.back()));
-        return EReady::Data;
+    EReady DataOrGone() const {
+        return IsValid() ? EReady::Data : EReady::Gone;
     }
 
-    bool IsRoot() const noexcept {
-        return State.size() == 1;
-    }
-    
-    bool IsExhausted() const noexcept {
-        return State[0].Pos == Max<TRecIdx>();
-    }
-
-    bool IsLeaf() const noexcept {
-        // Note: it is possible to have 0 levels in B-Tree
-        // so we may have exhausted state with leaf (data) node
-        return State.size() == Meta.LevelCount + 1 && !IsExhausted();
-    }
-
-    EReady Exhaust() {
-        while (State.size() > 1) {
-            State.pop_back();
-        }
-        State[0].Pos = Max<TRecIdx>();
-        return EReady::Gone;
-    }
-
-    void PushNextState(TRecIdx pos) {
-        TNodeState& current = State.back();
-        Y_ABORT_UNLESS(pos < current.Node->GetChildrenCount(), "Should point to some child");
-        current.Pos.emplace(pos);
-
-        auto& child = current.Node->GetShortChild(pos);
-
-        TRowId beginRowId = pos ? current.Node->GetShortChild(pos - 1).RowCount : current.BeginRowId;
-        TRowId endRowId = child.RowCount;
-        
-        TCellsIterable beginKey = pos ? current.Node->GetKeyCellsIterable(pos - 1, GroupInfo.ColsKeyIdx) : current.BeginKey;
-        TCellsIterable endKey = pos < current.Node->GetKeysCount() ? current.Node->GetKeyCellsIterable(pos, GroupInfo.ColsKeyIdx) : current.EndKey;
-        
-        State.emplace_back(child.PageId, beginRowId, endRowId, beginKey, endKey);
-    }
-
-    bool TryLoad(TNodeState& state) {
-        if (state.Node) {
-            return true;
-        }
-
-        auto page = Env->TryGetPage(Part, state.PageId);
-        if (page) {
-            state.Node.emplace(*page);
-            return true;
-        }
-        return false;
+    const TNodeState& GetCurrentNode() const {
+        Y_ABORT_UNLESS(IsValid());
+        return Nodes[NodeIndex];
     }
 
 private:
@@ -230,7 +172,12 @@ private:
     const TGroupId GroupId;
     const TPartScheme::TGroupInfo& GroupInfo;
     const TBtreeIndexMeta Meta;
-    TVector<TNodeState> State;
+    ui8 GroupChannel;
+    ui32 NodeIndex;
+    TVector<TNodeState> Nodes;
+    ui64 RowCountResolution;
+    ui64 DataSizeResolution;
+    TVector<TRowId> SplitPoints;
 };
 
 }

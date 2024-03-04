@@ -118,6 +118,7 @@ SELECT CAST('42'::int2 AS int8), CAST('-37'::int2 AS int8);
 SELECT CAST('36854775807.0'::float4 AS int8);
 SELECT CAST('922337203685477580700.0'::float8 AS int8);
 SELECT CAST(q1 AS oid) FROM INT8_TBL;
+SELECT oid::int8 FROM pg_class WHERE relname = 'pg_class';
 -- bit operations
 SELECT q1, q2, q1 & q2 AS "and", q1 | q2 AS "or", q1 # q2 AS "xor", ~q1 AS "not" FROM INT8_TBL;
 SELECT q1, q1 << 2 AS "shl", q1 >> 3 AS "shr" FROM INT8_TBL;

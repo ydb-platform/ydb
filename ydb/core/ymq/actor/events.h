@@ -16,6 +16,8 @@
 #include <ydb/core/ymq/base/queue_path.h>
 #include <ydb/core/ymq/proto/events.pb.h>
 #include <ydb/core/ymq/proto/records.pb.h>
+#include <ydb/core/protos/http_config.pb.h>
+#include <ydb/public/api/protos/ydb_issue_message.pb.h>
 
 #include <ydb/library/actors/core/event_pb.h>
 #include <ydb/library/actors/core/event_local.h>

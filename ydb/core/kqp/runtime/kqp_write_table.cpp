@@ -155,13 +155,10 @@ public:
 
             for (auto& [shard, infos] : splittedData.GetShardsInfo()) {
                 for (auto&& shardInfo : infos) {
-                    auto& inFlightBatch = Batches[shard].emplace_back();
-                    inFlightBatch = shardInfo->GetData();
-                    ++BatchesCount;
-                    MemoryInFlight += inFlightBatch.size();
-                    YQL_ENSURE(!inFlightBatch.empty());
-
-                    PendingShards.insert(shard);
+                    auto& batch = Batches[shard].emplace_back();
+                    batch = shardInfo->GetData();
+                    Memory += batch.size();
+                    YQL_ENSURE(!batch.empty());
                 }
             }
         }
@@ -175,33 +172,8 @@ public:
         return WriteColumnIds;
     }
 
-    std::optional<TStringBuf> GetBatch(const ui64 shard) override {
-        auto it = Batches.find(shard);
-        if (it == std::end(Batches) || it->second.empty()) {
-            return std::nullopt;
-        }
-       return TStringBuf(it->second.front());
-    }
-
-    void NextBatch(const ui64 shard) override {
-        auto it = Batches.find(shard);
-        YQL_ENSURE(it != std::end(Batches));
-        YQL_ENSURE(!it->second.empty());
-        --BatchesCount;
-        MemoryInFlight += it->second.front().size();
-        it->second.pop_front();
-
-        if (it->second.empty()) {
-            PendingShards.erase(shard);
-        }
-    }
-
-    const THashSet<ui64>& GetPendingShards() override {
-        return PendingShards;
-    }
-
-    i64 GetMemoryInFlight() override {
-        return MemoryInFlight;
+    i64 GetMemory() override {
+        return Memory;
     }
 
     bool IsClosed() override {
@@ -209,11 +181,17 @@ public:
     }
 
     bool IsEmpty() override {
-        return BatchesCount == 0;
+        return Batches.empty();
     }
 
     bool IsFinished() override {
         return IsClosed() && IsEmpty();
+    }
+
+    TBatches FlushBatches() override {
+        TBatches newBatches;
+        std::swap(Batches, newBatches);
+        return std::move(newBatches);
     }
 
 private:
@@ -247,11 +225,9 @@ private:
 
     NArrow::TArrowBatchBuilder BatchBuilder;
 
-    ui64 BatchesCount = 0;
-    THashMap<ui64, std::deque<TString>> Batches;
-    THashSet<ui64> PendingShards;
+    TBatches Batches;
 
-    i64 MemoryInFlight = 0;
+    i64 Memory = 0;
 
     bool Closed = false;
 };

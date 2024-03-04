@@ -23,12 +23,11 @@ public:
     virtual NKikimrDataEvents::EDataFormat GetDataFormat() = 0;
     virtual std::vector<ui32> GetWriteColumnIds() = 0;
 
-    virtual std::optional<TStringBuf> GetBatch(const ui64 shard) = 0;
-    virtual void NextBatch(const ui64 shard) = 0;
+    using TBatches = THashMap<ui64, std::deque<TString>>;
 
-    virtual const THashSet<ui64>& GetPendingShards() = 0;
+    virtual TBatches FlushBatches() = 0;
 
-    virtual i64 GetMemoryInFlight() = 0;
+    virtual i64 GetMemory() = 0;
 };
 
 using IPayloadSerializerPtr = TIntrusivePtr<IPayloadSerializer>;

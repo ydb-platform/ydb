@@ -122,8 +122,13 @@ TString TPGErrorResponse::Dump() const {
 TString TPGParse::Dump() const {
     TPGStreamInput stream(*this);
     TStringBuf name;
+    TStringBuf query;
     stream >> name;
-    return TStringBuilder() << "Statement: \"" << name << "\"";
+    stream >> query;
+    while (!query.empty() && query.EndsWith('\0')) {
+        query.Chop(1);
+    }
+    return TStringBuilder() << "Statement: \"" << name << "\" Query: \"" << query <<"\"";
 }
 
 TPGParse::TQueryData TPGParse::GetQueryData() const {

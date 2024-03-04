@@ -14,6 +14,7 @@ extern "C" {
 #include "catalog/pg_authid.h"
 #include "access/htup_details.h"
 #include "utils/fmgroids.h"
+#include "utils/array.h"
 }
 
 #undef TypeName
@@ -143,6 +144,8 @@ struct TSysCache {
         auto& cacheItem = Items[PROCOID] = std::make_unique<TSysCacheItem>(OidHasher1, OidEquals1, tupleDesc);
         auto& map = cacheItem->Map;
 
+        const auto& oidDesc = NPg::LookupType(OIDOID);
+
         NPg::EnumProc([&](ui32 oid, const NPg::TProcDesc& desc){
             auto key = THeapTupleKey(oid, 0, 0, 0);
 
@@ -155,11 +158,26 @@ struct TSysCache {
             FillDatum(Natts_pg_proc, values, nulls, Anum_pg_proc_prorettype, desc.ResultType);
             auto name = MakeFixedString(desc.Name, NAMEDATALEN);
             FillDatum(Natts_pg_proc, values, nulls, Anum_pg_proc_proname, (Datum)name);
+            FillDatum(Natts_pg_proc, values, nulls, Anum_pg_proc_pronargs, (Datum)desc.ArgTypes.size());
+            {
+                int dims[MAXDIM];
+                int lbs[MAXDIM];
+                dims[0] = desc.ArgTypes.size();
+                lbs[0] = 1;
+                std::unique_ptr<Datum[]> dvalues(new Datum[desc.ArgTypes.size()]);
+                std::unique_ptr<bool[]> dnulls(new bool[desc.ArgTypes.size()]);
+                std::copy(desc.ArgTypes.begin(), desc.ArgTypes.end(), dvalues.get());
+                std::fill_n(dnulls.get(), desc.ArgTypes.size(), false);
+
+                auto arr = construct_md_array(dvalues.get(), dnulls.get(), 1, dims, lbs, OIDOID, oidDesc.TypeLen, oidDesc.PassByValue, oidDesc.TypeAlign);
+                FillDatum(Natts_pg_proc, values, nulls, Anum_pg_proc_proargtypes, (Datum)arr);
+            }
             HeapTuple h = heap_form_tuple(tupleDesc, values, nulls);
             auto row = (Form_pg_proc)GETSTRUCT(h);
             Y_ENSURE(row->oid == oid);
             Y_ENSURE(row->prorettype == desc.ResultType);
             Y_ENSURE(NameStr(row->proname) == desc.Name);
+            Y_ENSURE(row->pronargs == desc.ArgTypes.size());
             map.emplace(key, h);
         });
     }
@@ -461,12 +479,19 @@ Oid GetSysCacheOid(int cacheId, AttrNumber oidcol, Datum key1, Datum key2, Datum
     Oid result;
 
     tuple = SearchSysCache(cacheId, key1, key2, key3, key4);
-    if (!HeapTupleIsValid(tuple))
+    if (!HeapTupleIsValid(tuple)) {
         return InvalidOid;
+    }
+
     result = heap_getattr(tuple, oidcol, cacheItem->Desc, &isNull);
     Y_ENSURE(!isNull); /* columns used as oids should never be NULL */
     ReleaseSysCache(tuple);
     return result;
 }
 
-
+Datum SysCacheGetAttr(int cacheId, HeapTuple tup, AttrNumber attributeNumber, bool *isNull) {
+    Y_ENSURE(cacheId >= 0 && cacheId < SysCacheSize);
+    const auto& cacheItem = NYql::TSysCache::Instance().Items[cacheId];
+    Y_ENSURE(cacheItem);
+    return heap_getattr(tup, attributeNumber, cacheItem->Desc, isNull);
+}

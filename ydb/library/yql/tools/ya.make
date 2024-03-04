@@ -4,6 +4,7 @@ RECURSE(
     dq
     mrjob
     mrrun
+    pg_catalog_dump
     pgrun
     pg-make-test
     purebench

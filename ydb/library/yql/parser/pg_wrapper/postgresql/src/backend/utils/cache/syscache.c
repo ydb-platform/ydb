@@ -1385,7 +1385,7 @@ SearchSysCacheCopyAttNum(Oid relid, int16 attnum)
  * a different cache for the same catalog the tuple was fetched from.
  */
 Datum
-SysCacheGetAttr(int cacheId, HeapTuple tup,
+SysCacheGetAttr_original(int cacheId, HeapTuple tup,
 				AttrNumber attributeNumber,
 				bool *isNull)
 {

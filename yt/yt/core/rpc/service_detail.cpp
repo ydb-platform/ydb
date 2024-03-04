@@ -1532,10 +1532,10 @@ void TRequestQueue::IncrementQueueSize(const TServiceBase::TServiceContextPtr& c
 void  TRequestQueue::DecrementQueueSize(const TServiceBase::TServiceContextPtr& context)
 {
     auto newQueueSize = --QueueSize_;
-    auto oldQueueBytesSize = QueueByteSize_.fetch_sub(GetTotalRequestSize(context));
+    auto oldQueueByteSize = QueueByteSize_.fetch_sub(GetTotalRequestSize(context));
 
     YT_ASSERT(newQueueSize >= 0);
-    YT_ASSERT(oldQueueBytesSize >= 0);
+    YT_ASSERT(oldQueueByteSize >= 0);
 }
 
 i64 TRequestQueue::GetTotalRequestSize(const TServiceBase::TServiceContextPtr& context)

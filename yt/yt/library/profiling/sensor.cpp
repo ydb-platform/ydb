@@ -182,7 +182,7 @@ void TGaugeHistogram::Remove(double value, int count) const noexcept
     Histogram_->Remove(value, count);
 }
 
-void TGaugeHistogram::Reset() noexcept
+void TGaugeHistogram::Reset() const noexcept
 {
     if (!Histogram_) {
         return;
@@ -200,7 +200,7 @@ THistogramSnapshot TGaugeHistogram::GetSnapshot() const
     return Histogram_->GetSnapshot(false);
 }
 
-void TGaugeHistogram::LoadSnapshot(THistogramSnapshot snapshot)
+void TGaugeHistogram::LoadSnapshot(THistogramSnapshot snapshot) const
 {
     if (!Histogram_) {
         return;

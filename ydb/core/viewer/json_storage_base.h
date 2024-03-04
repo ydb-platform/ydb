@@ -62,6 +62,7 @@ protected:
 
     struct TStoragePoolInfo {
         TString Kind;
+        TString MediaType;
         TSet<TString> Groups;
         NKikimrViewer::EFlag Overall = NKikimrViewer::EFlag::Grey;
     };
@@ -98,6 +99,7 @@ protected:
         TString PoolName;
         TString GroupId;
         TString Kind;
+        TString MediaType;
         TString Erasure;
         ui32 Degraded;
         float Usage;
@@ -205,6 +207,17 @@ public:
         RequestDone();
     }
 
+    TString GetMediaType(const NKikimrBlobStorage::TDefineStoragePool& pool) const {
+        for (const NKikimrBlobStorage::TPDiskFilter& filter : pool.GetPDiskFilter()) {
+            for (const NKikimrBlobStorage::TPDiskFilter::TRequiredProperty& property : filter.GetProperty()) {
+                if (property.HasType()) {
+                    return ToString(property.GetType());
+                }
+            }
+        }
+        return TString();
+    }
+
     void Handle(TEvBlobStorage::TEvControllerConfigResponse::TPtr& ev) {
         const NKikimrBlobStorage::TEvControllerConfigResponse& pbRecord(ev->Get()->Record);
 
@@ -230,6 +243,9 @@ public:
                     for (TNodeId nodeId : additionalNodeIds) {
                         SendNodeRequests(nodeId);
                     }
+                }
+                for (const NKikimrBlobStorage::TDefineStoragePool& pool : pbStatus.GetStoragePool()) {
+                    StoragePoolInfo[pool.GetName()].MediaType = GetMediaType(pool);
                 }
             }
         }

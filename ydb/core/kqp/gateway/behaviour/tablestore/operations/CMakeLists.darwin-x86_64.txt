@@ -41,4 +41,6 @@ target_sources(behaviour-tablestore-operations.global PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/core/kqp/gateway/behaviour/tablestore/operations/drop_column.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/kqp/gateway/behaviour/tablestore/operations/upsert_index.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/kqp/gateway/behaviour/tablestore/operations/drop_index.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/kqp/gateway/behaviour/tablestore/operations/upsert_stat.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/kqp/gateway/behaviour/tablestore/operations/drop_stat.cpp
 )

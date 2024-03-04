@@ -11,6 +11,7 @@ add_subdirectory(common)
 add_subdirectory(indexes)
 add_subdirectory(operations)
 add_subdirectory(schema)
+add_subdirectory(statistics)
 
 add_library(tx-schemeshard-olap INTERFACE)
 target_link_libraries(tx-schemeshard-olap INTERFACE
@@ -21,4 +22,5 @@ target_link_libraries(tx-schemeshard-olap INTERFACE
   schemeshard-olap-schema
   schemeshard-olap-common
   schemeshard-olap-operations
+  schemeshard-olap-statistics
 )

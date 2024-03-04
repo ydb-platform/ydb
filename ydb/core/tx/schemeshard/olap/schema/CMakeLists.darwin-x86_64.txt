@@ -13,6 +13,7 @@ target_link_libraries(schemeshard-olap-schema PUBLIC
   yutil
   schemeshard-olap-columns
   schemeshard-olap-indexes
+  tx-schemeshard-common
 )
 target_sources(schemeshard-olap-schema PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/core/tx/schemeshard/olap/schema/schema.cpp

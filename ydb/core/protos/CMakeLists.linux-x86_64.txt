@@ -1653,6 +1653,7 @@ target_link_libraries(ydb-core-protos PUBLIC
   yql-public-types
   ydb-library-services
   library-ydb_issue-proto
+  scheme-statistics-protos
   contrib-libs-protobuf
 )
 target_proto_messages(ydb-core-protos PRIVATE

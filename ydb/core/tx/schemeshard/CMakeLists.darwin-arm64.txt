@@ -6,6 +6,7 @@
 # original buildsystem will not be accepted.
 
 
+add_subdirectory(common)
 add_subdirectory(olap)
 add_subdirectory(ut_auditsettings)
 add_subdirectory(ut_background_cleaning)
@@ -112,6 +113,7 @@ target_link_libraries(core-tx-schemeshard PUBLIC
   ydb-core-tablet_flat
   ydb-core-tx
   core-tx-datashard
+  tx-schemeshard-common
   tx-schemeshard-olap
   core-tx-scheme_board
   core-tx-tx_allocator_client

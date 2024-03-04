@@ -32,11 +32,8 @@ ydb/core/tx/columnshard/ut_schema TColumnShardTestSchema.RebootForgetAfterFail
 ydb/core/tx/columnshard/engines/ut *
 ydb/core/tx/coordinator/ut Coordinator.RestoreTenantConfiguration
 ydb/core/tx/datashard/ut_change_exchange Cdc.InitialScanDebezium
-ydb/core/tx/scheme_board/ut_cache TCacheTest.MigrationLostMessage
-ydb/core/tx/scheme_board/ut_cache [3/10]*
 ydb/core/tx/schemeshard/ut_base TSchemeShardTest.CreatePersQueueGroup
 ydb/core/tx/schemeshard/ut_base TSchemeShardTest.DropPQ
-ydb/core/tx/schemeshard/ut_move TSchemeShardMoveTest.MoveMigratedTable
 ydb/core/tx/schemeshard/ut_restore TImportTests.ShouldSucceedOnManyTables
 ydb/core/tx/schemeshard/ut_split_merge TSchemeShardSplitBySizeTest.Merge1KShards
 ydb/core/tx/tx_proxy/ut_ext_tenant TExtSubDomainTest.CreateTableInsideAndAlterDomainAndTable-AlterDatabaseCreateHiveFirst*

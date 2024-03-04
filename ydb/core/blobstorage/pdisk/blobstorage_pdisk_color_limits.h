@@ -49,7 +49,7 @@ struct TColorLimits {
         str << "  Cyan = Total * " << Cyan.ToString() << "\n";
     }
 
-    static TColorLimits MakeChunkLimits(i64 cyan = 130) {
+    static TColorLimits MakeChunkLimits(i64 cyan) {
         cyan = Min<i64>(130, cyan);
         cyan = Max<i64>(13, cyan);
 

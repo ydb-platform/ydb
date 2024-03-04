@@ -166,7 +166,7 @@ public:
                 limit--;
                 return EProcessResult::One;
             }
-            return EProcessResult::Fetch;
+            return EProcessResult::Again;
         }
         return static_cast<EProcessResult>(fetchRes);
     }
@@ -255,7 +255,7 @@ public:
                 FillOutputs(ctx, output);
                 return TBaseComputation::EProcessResult::One;
             }
-            return TBaseComputation::EProcessResult::Fetch;
+            return TBaseComputation::EProcessResult::Again;
         }
         return static_cast<TBaseComputation::EProcessResult>(fetchRes);
     }

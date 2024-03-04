@@ -11,8 +11,8 @@ class TSimpleStatefulWideFlowCodegeneratorNode
     using TBase = TStatefulWideFlowCodegeneratorNode<TSimpleStatefulWideFlowCodegeneratorNode>;
 
 protected:
-    TSimpleStatefulWideFlowCodegeneratorNode(TComputationMutables& mutables, IComputationWideFlowNode* source)
-            : TBase(mutables, source, StateKind), SourceFlow(source)
+    TSimpleStatefulWideFlowCodegeneratorNode(TComputationMutables& mutables, IComputationWideFlowNode* source, ui32 inWidth, ui32 outWidth)
+            : TBase(mutables, source, StateKind), SourceFlow(source), InWidth(inWidth), OutWidth(outWidth)
     {}
 
     enum class EProcessResult : i32 {
@@ -31,12 +31,11 @@ private:
         }
     }
 
-    EProcessResult DoProcessWrapper(NUdf::TUnboxedValue &state, TComputationContext& ctx, EFetchResult fetchRes, NUdf::TUnboxedValuePod* values, size_t width) const {
-        TVector<NUdf::TUnboxedValuePod> inputVec(values, values + width);
-        Fill(values, values + width, NUdf::TUnboxedValuePod());
-        TVector<NUdf::TUnboxedValue*> outputPtrsVec(width, nullptr);
-        for (size_t pos = 0; pos < width; pos++) {
-            outputPtrsVec[pos] = static_cast<NUdf::TUnboxedValue*>(values + pos);
+    EProcessResult DoProcessWrapper(NUdf::TUnboxedValue &state, TComputationContext& ctx, EFetchResult fetchRes, NUdf::TUnboxedValuePod* inputValues, NUdf::TUnboxedValuePod* outputValues) const {
+        Fill(outputValues, outputValues + OutWidth, NUdf::TUnboxedValuePod());
+        TVector<NUdf::TUnboxedValue*> outputPtrsVec(OutWidth, nullptr);
+        for (size_t pos = 0; pos < OutWidth; pos++) {
+            outputPtrsVec[pos] = static_cast<NUdf::TUnboxedValue*>(outputValues + pos);
         }
         NUdf::TUnboxedValue*const* inputPtrs = nullptr;
         if constexpr (StateKind == EValueRepresentation::Embedded) {
@@ -44,9 +43,11 @@ private:
         } else {
             inputPtrs = static_cast<const TDerived*>(this)->PrepareInput(static_cast<TState*>(state.AsBoxed().Get()), ctx, outputPtrsVec.data());
         }
-        for (size_t pos = 0; pos < width; pos++) {
-            if (auto in = inputPtrs[pos]) {
-                *in = inputVec[pos];
+        if (inputPtrs) {
+            for (size_t pos = 0; pos < InWidth; pos++) {
+                if (auto in = inputPtrs[pos]) {
+                    *in = inputValues[pos];
+                }
             }
         }
         if constexpr (StateKind == EValueRepresentation::Embedded) {
@@ -113,22 +114,27 @@ public:
         block = loop;
 
         const auto [fetchResVal, getters] = GetNodeValues(SourceFlow, ctx, block);
-        const auto values = new AllocaInst(valueType, 0, ConstantInt::get(Type::getInt64Ty(context), getters.size()), "values", &ctx.Func->getEntryBlock().back());
-        for (size_t pos = 0; pos < getters.size(); pos++) {
-            const auto offset = GetElementPtrInst::CreateInBounds(valueType, values, {ConstantInt::get(Type::getInt64Ty(context), pos)}, "offset", block);
+        const auto inputValues = new AllocaInst(valueType, 0, ConstantInt::get(Type::getInt64Ty(context), InWidth), "inputValues", &ctx.Func->getEntryBlock().back());
+        for (size_t pos = 0; pos < InWidth; pos++) {
+            const auto offset = GetElementPtrInst::CreateInBounds(valueType, inputValues, {ConstantInt::get(Type::getInt64Ty(context), pos)}, "offset", block);
             new StoreInst(getters[pos](ctx, block), offset, block);
         }
-        const auto processFuncType = FunctionType::get(Type::getInt32Ty(context), {thisType, statePtr->getType(), ctx.Ctx->getType(), Type::getInt32Ty(context), values->getType(), Type::getInt64Ty(context)}, false);
+        const auto outputValues = new AllocaInst(valueType, 0, ConstantInt::get(Type::getInt64Ty(context), OutWidth), "outputValues", &ctx.Func->getEntryBlock().back());
+        for (size_t pos = 0; pos < OutWidth; pos++) {
+            const auto offset = GetElementPtrInst::CreateInBounds(valueType, outputValues, {ConstantInt::get(Type::getInt64Ty(context), pos)}, "offset", block);
+            new StoreInst(ConstantInt::get(valueType, 0), offset, block);
+        }
+        const auto processFuncType = FunctionType::get(Type::getInt32Ty(context), {thisType, statePtr->getType(), ctx.Ctx->getType(), Type::getInt32Ty(context), inputValues->getType(), outputValues->getType()}, false);
         const auto processFuncRawVal = ConstantInt::get(Type::getInt64Ty(context), GetMethodPtr(&TSimpleStatefulWideFlowCodegeneratorNode::DoProcessWrapper));
         const auto thisRawVal2 = ConstantInt::get(Type::getInt64Ty(context), reinterpret_cast<ui64>(this));
         const auto thisVal2 = CastInst::Create(Instruction::IntToPtr, thisRawVal2, thisType, "this", block);
         const auto processFuncVal = CastInst::Create(Instruction::IntToPtr, processFuncRawVal, PointerType::getUnqual(processFuncType), "process_func", block);
-        const auto processResVal = CallInst::Create(processFuncType, processFuncVal, {thisVal2, statePtr, ctx.Ctx, fetchResVal, values, ConstantInt::get(Type::getInt64Ty(context), getters.size())}, "process_res", block);
+        const auto processResVal = CallInst::Create(processFuncType, processFuncVal, {thisVal2, statePtr, ctx.Ctx, fetchResVal, inputValues, outputValues}, "process_res", block);
         ICodegeneratorInlineWideNode::TGettersList new_getters;
-        new_getters.reserve(getters.size());
-        for (size_t pos = 0; pos < getters.size(); pos++) {
-            new_getters.push_back([pos, values, valueType] (const TCodegenContext& ctx, BasicBlock*& block) -> Value* {
-                const auto offset = GetElementPtrInst::CreateInBounds(valueType, values, {ConstantInt::get(Type::getInt64Ty(ctx.Codegen.GetContext()), pos)}, "offset", block);
+        new_getters.reserve(OutWidth);
+        for (size_t pos = 0; pos < OutWidth; pos++) {
+            new_getters.push_back([pos, outputValues, valueType] (const TCodegenContext& ctx, BasicBlock*& block) -> Value* {
+                const auto offset = GetElementPtrInst::CreateInBounds(valueType, outputValues, {ConstantInt::get(Type::getInt64Ty(ctx.Codegen.GetContext()), pos)}, "offset", block);
                 const auto value = new LoadInst(valueType, offset, "value", block);
                 return value;
             });
@@ -143,6 +149,7 @@ public:
 
 private:
     IComputationWideFlowNode* const SourceFlow;
+    const ui32 InWidth, OutWidth;
 };
 
 }

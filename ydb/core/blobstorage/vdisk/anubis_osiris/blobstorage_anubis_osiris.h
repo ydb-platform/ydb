@@ -6,12 +6,6 @@
 
 namespace NKikimr {
 
-    // prepared data to insert to Hull Database
-    struct THullDbInsert {
-        TLogoBlobID Id;
-        TIngress Ingress;
-    };
-
     struct TAnubisOsirisPutRecoveryLogRec;
 
     ////////////////////////////////////////////////////////////////////////////

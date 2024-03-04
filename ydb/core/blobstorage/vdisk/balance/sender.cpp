@@ -6,6 +6,7 @@
 
 
 namespace NKikimr {
+namespace NBalancing {
 namespace {
     class TReader {
     private:
@@ -120,23 +121,21 @@ namespace {
                 SendParts(*batch, ctx);
             }
             LOG_DEBUG_S(ctx, NKikimrServices::BS_VDISK_BALANCING,
-                        Ctx->GInfo->GetTopology().GetOrderNumber(Ctx->VCtx->ShortSelfVDisk) << "$ " << "Reader status "
+                        Ctx->VCtx->VDiskLogPrefix << "Reader status "
                         << ": " << (ui32)status << " " << Stats.PartsRead << " " << Stats.PartsSent);
             if (status == TReader::EReaderState::FINISHED && Stats.PartsRead == Stats.PartsSent) {
-                Send(NotifyId, new NActors::TEvents::TEvCompleted(SENDER_ID));
                 Send(SelfId(), new NActors::TEvents::TEvPoison);
             }
         }
 
         void SendParts(const TVector<TPart>& batch, const TActorContext &ctx) {
             LOG_DEBUG_S(ctx, NKikimrServices::BS_VDISK_BALANCING,
-                        Ctx->GInfo->GetTopology().GetOrderNumber(Ctx->VCtx->ShortSelfVDisk) << "$ "
-                        << "Sending parts " << batch.size());
+                        Ctx->VCtx->VDiskLogPrefix << "Sending parts " << batch.size());
             for (const auto& part: batch) {
                 auto vDiskId = GetVDiskId(*Ctx->GInfo, part.Key);
                 LOG_DEBUG_S(ctx, NKikimrServices::BS_VDISK_BALANCING,
-                            Ctx->GInfo->GetTopology().GetOrderNumber(Ctx->VCtx->ShortSelfVDisk) << "$ "
-                            << "Sending " << part.Key.ToString() << " to " << Ctx->GInfo->GetTopology().GetOrderNumber(TVDiskIdShort(vDiskId))
+                            Ctx->VCtx->VDiskLogPrefix << "Sending " << part.Key.ToString()
+                            << " to " << Ctx->GInfo->GetTopology().GetOrderNumber(TVDiskIdShort(vDiskId))
                             << "; Data size = " << part.PartData.size());
                 auto& queue = (*QueueActorMapPtr)[TVDiskIdShort(vDiskId)];
                 auto ev = std::make_unique<TEvBlobStorage::TEvVPut>(
@@ -155,8 +154,12 @@ namespace {
         void Handle(TEvBlobStorage::TEvVPutResult::TPtr ev, const TActorContext &ctx) {
             Stats.PartsSent += 1;
             LOG_DEBUG_S(ctx, NKikimrServices::BS_VDISK_BALANCING,
-                        Ctx->GInfo->GetTopology().GetOrderNumber(Ctx->VCtx->ShortSelfVDisk) << "$ "
-                        << "Put result: " << ev->Get()->ToString());
+                        Ctx->VCtx->VDiskLogPrefix << "Put result: " << ev->Get()->ToString());
+        }
+
+        void Die(const TActorContext &ctx) override {
+            Send(NotifyId, new NActors::TEvents::TEvCompleted(SENDER_ID));
+            TActorBootstrapped::Die(ctx);
         }
 
         STRICT_STFUNC(StateFunc,
@@ -194,4 +197,5 @@ IActor* CreateSenderActor(
     return new TSender(notifyId, parts, queueActorMapPtr, ctx);
 }
 
-}
+} // NBalancing
+} // NKikimr

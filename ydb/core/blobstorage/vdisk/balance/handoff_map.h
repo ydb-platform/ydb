@@ -72,23 +72,18 @@ namespace NKikimr {
         // the record unchanged.
         template <class TIterator>
         void BuildMap(
-                const TActorContext &ctx,
-                const TLevelIndexSnapshot &levelSnap,
-                const TIterator &i)
+                const TActorContext& /*ctx*/,
+                const TLevelIndexSnapshot& /*levelSnap*/,
+                const TIterator& /*i*/)
         {
             // do nothing by default, all work is done in template specialization for logo blobs
-            Y_UNUSED(ctx);
-            Y_UNUSED(levelSnap);
-            Y_UNUSED(i);
         }
 
         // Transforms record according to the built handoff map. It returns item we need to write, pointer is
         // valid until next call. Nullptr indicates that item is to be removed completely.
-        const TTransformedItem *Transform(const TActorContext &ctx, const TKey &key, const TMemRec *memRec,
-                                          const TDataMerger *dataMerger, bool keepData) {
+        const TTransformedItem *Transform(const TActorContext& /*ctx*/, const TKey& key, const TMemRec* memRec,
+                                          const TDataMerger* dataMerger, bool /*keepData*/) {
             // do nothing by default, all work is done in template specialization for logo blobs
-            Y_UNUSED(ctx);
-            Y_UNUSED(keepData);
             Counter++;
             Y_DEBUG_ABORT_UNLESS(dataMerger->Empty());
             return TrRes.SetRaw(key, memRec, dataMerger);
@@ -168,13 +163,12 @@ namespace NKikimr {
     template <>
     inline const THandoffMap<TKeyLogoBlob, TMemRecLogoBlob>::TTransformedItem *
         THandoffMap<TKeyLogoBlob, TMemRecLogoBlob>::Transform(
-            const TActorContext &ctx,
-            const TKeyLogoBlob &key,
-            const TMemRecLogoBlob *memRec,
-            const TDataMerger *dataMerger,
+            const TActorContext& /*ctx*/,
+            const TKeyLogoBlob& key,
+            const TMemRecLogoBlob* memRec,
+            const TDataMerger* dataMerger,
             bool keepData)
     {
-        Y_UNUSED(ctx);
         Y_DEFER { Counter++; };
 
         if (!keepData) {
@@ -186,114 +180,96 @@ namespace NKikimr {
             return defaultResult;
         }
 
-        Y_DEBUG_ABORT_UNLESS(Counter < DelMap.size());
-        const NMatrix::TVectorType localVec = memRec->GetIngress().LocalParts(Top->GType);
+        Y_VERIFY(Counter < DelMap.size());
+        TIngress ingress = memRec->GetIngress(); // ingress we are going to change
+        NMatrix::TVectorType localParts = ingress.LocalParts(Top->GType);
         ui8 vecSize = Top->GType.TotalPartCount();
 
         const NMatrix::TVectorType delPlan(DelMap.at(Counter), vecSize);
-        const NMatrix::TVectorType delVec = delPlan & localVec;
+        const NMatrix::TVectorType delVec = delPlan & localParts;
 
         if (delVec.Empty()) {
             return defaultResult;
         }
 
-        TIngress ingress = memRec->GetIngress(); // ingress we are going to change
-        NMatrix::TVectorType localParts = ingress.LocalParts(Top->GType);
+        // mark deleted handoff parts in ingress
+        for (ui8 i = localParts.FirstPosition(); i != localParts.GetSize(); i = localParts.NextPosition(i)) {
+            if (delVec.Get(i)) {
+                const ui8 partId = i + 1;
+                TLogoBlobID id(key.LogoBlobID(), partId);
+                ingress.DeleteHandoff(Top.get(), HullCtx->VCtx->ShortSelfVDisk, id, true);
+                localParts.Clear(i);
+            }
+        }
 
+        if (localParts.Empty()) {
+            // we have deleted all parts, we can remove the record completely
+            return nullptr;
+        }
+
+        TDataMerger newMerger;
         switch (memRec->GetType()) {
             case TBlobType::DiskBlob: {
                 const TDiskBlob& blob = dataMerger->GetDiskBlobMerger().GetDiskBlob();
 
-                // mark deleted handoff parts in ingress
-                for (ui8 i = localParts.FirstPosition(); i != localParts.GetSize(); i = localParts.NextPosition(i)) {
-                    if (delVec.Get(i)) {
-                        const ui8 partId = i + 1;
-                        TLogoBlobID id(key.LogoBlobID(), partId);
-                        ingress.DeleteHandoff(Top.get(), HullCtx->VCtx->ShortSelfVDisk, id, true);
-                        localParts.Clear(i);
-                    }
-                }
-
                 // create new blob from kept parts
-                TDataMerger newMerger;
                 for (auto it = blob.begin(); it != blob.end(); ++it) {
                     if (localParts.Get(it.GetPartId() - 1)) {
                         newMerger.AddPart(blob, it);
                     }
                 }
-
-                if (localParts.Empty()) {
-                    // we have deleted all parts, we can remove the record completely
-                    return nullptr;
-                }
-
-                // SetNewDisk can handle empty dataMerger correctly.
-                // If dataMerger is empty, we still keep the record, it contains knowledge about
-                // this logoblob, only garbage collection removes records completely
-                return TrRes.SetNewDisk(key, ingress, newMerger);
             }
             case TBlobType::HugeBlob:
             case TBlobType::ManyHugeBlobs: {
                 const auto& oldMerger = dataMerger->GetHugeBlobMerger();
-                TDataMerger newMerger;
 
                 Y_DEBUG_ABORT_UNLESS(oldMerger.SavedData().size() == localParts.CountBits());
                 Y_DEBUG_ABORT_UNLESS(oldMerger.SavedData().size() == oldMerger.GetCircaLsns().size());
 
                 for (ui8 i = localParts.FirstPosition(), j = 0; i != localParts.GetSize(); i = localParts.NextPosition(i), ++j) {
                     if (delVec.Get(i)) {
-                        const ui8 partId = i + 1;
-                        TLogoBlobID id(key.LogoBlobID(), partId);
-                        ingress.DeleteHandoff(Top.get(), HullCtx->VCtx->ShortSelfVDisk, id, true);
-                        localParts.Clear(i);
                         newMerger.AddDeletedHugeBlob(oldMerger.SavedData()[j]);
                     } else {
-                        auto parts = NMatrix::TVectorType(0, localParts.GetSize());
-                        parts.Set(i);
+                        auto parts = NMatrix::TVectorType::MakeOneHot(i, localParts.GetSize());
                         newMerger.AddHugeBlob(&oldMerger.SavedData()[j], &oldMerger.SavedData()[j] + 1, parts, oldMerger.GetCircaLsns()[j]);
                     }
                 }
-
-                if (localParts.CountBits() == 0) {
-                    return nullptr;
-                }
-
-                return TrRes.SetNewDisk(key, ingress, newMerger);
             }
             default: {
                 Y_DEBUG_ABORT_UNLESS(false);
                 return defaultResult;
             }
         }
+
+        // SetNewDisk can handle empty dataMerger correctly.
+        // If dataMerger is empty, we still keep the record, it contains knowledge about
+        // this logoblob, only garbage collection removes records completely
+        return TrRes.SetNewDisk(key, ingress, newMerger);
     }
 
 
     template <>
     template <class TIterator>
     inline void THandoffMap<TKeyLogoBlob, TMemRecLogoBlob>::BuildMap(
-            const TActorContext &ctx,
-            const TLevelIndexSnapshot &levelSnap,
-            const TIterator &i)
+            const TActorContext& ctx,
+            const TLevelIndexSnapshot& levelSnap,
+            const TIterator& i)
     {
         typedef ::NKikimr::TIndexRecordMerger<TKeyLogoBlob, TMemRecLogoBlob> TIndexRecordMerger;
         typedef TLogoBlobsSnapshot::TForwardIterator TLevelIt;
 
         if (RunHandoff) {
 
-            auto newItem = [this] (const TIterator &subsIt, const TIndexRecordMerger &subsMerger) {
-                Y_UNUSED(subsIt);
-                Y_UNUSED(subsMerger);
+            auto newItem = [this] (const TIterator& /*subsIt*/, const TIndexRecordMerger& /*subsMerger*/) {
                 Stat.ItemsTotal++;
             };
 
-            auto doMerge = [this] (const TIterator &subsIt, const TLevelIt &dbIt,
-                                   const TIndexRecordMerger &subsMerger, const TIndexRecordMerger &dbMerger) {
-                Y_UNUSED(subsIt);
-                Y_UNUSED(subsMerger);
+            auto doMerge = [this] (const TIterator& /*subsIt*/, const TLevelIt& dbIt,
+                                   const TIndexRecordMerger& /*subsMerger*/, const TIndexRecordMerger& dbMerger) {
                 // check ingress
                 TLogoBlobID id(dbIt.GetCurKey().LogoBlobID());
-                TIngress levelIngress = dbMerger.GetMemRec().GetIngress();
-                auto del = levelIngress.GetVDiskHandoffDeletedVec(Top.get(), HullCtx->VCtx->ShortSelfVDisk, id) & levelIngress.LocalParts(Top->GType);
+                TIngress globalIngress = dbMerger.GetMemRec().GetIngress();
+                auto del = globalIngress.GetVDiskHandoffDeletedVec(Top.get(), HullCtx->VCtx->ShortSelfVDisk, id) & globalIngress.LocalParts(Top->GType);
                 DelMap.push_back(del.Raw());
 
                 // update stat
@@ -325,9 +301,9 @@ namespace NKikimr {
     ////////////////////////////////////////////////////////////////////////////
     template <class TKey, class TMemRec>
     TIntrusivePtr<THandoffMap<TKey, TMemRec>> CreateHandoffMap(
-                const THullCtxPtr &hullCtx,
+                const THullCtxPtr& hullCtx,
                 bool runHandoff,
-                const TActorId &skeletonId) {
+                const TActorId& skeletonId) {
         return new THandoffMap<TKey, TMemRec>(hullCtx, runHandoff, skeletonId);
     }
 

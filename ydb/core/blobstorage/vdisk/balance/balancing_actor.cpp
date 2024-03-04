@@ -7,7 +7,7 @@
 
 
 namespace NKikimr {
-
+namespace NBalancing {
     class TBalancingActor : public TActorBootstrapped<TBalancingActor> {
     private:
         std::shared_ptr<TBalancingCtx> Ctx;
@@ -15,6 +15,9 @@ namespace NKikimr {
         TQueueActorMapPtr QueueActorMapPtr;
         TActiveActors ActiveActors;
         THashSet<TVDiskID> ConnectedVDisks;
+
+        TQueue<TPartInfo> SendOnMainParts;
+        TQueue<TPartInfo> TryDeleteParts;
 
         TActorId SenderId;
         TActorId DeleterId;
@@ -39,47 +42,71 @@ namespace NKikimr {
                     "DisksBalancing", interconnectChannel);
         }
 
-        std::pair<TQueue<TPartInfo>, TQueue<TPartInfo>> CollectKeys(const TActorContext &ctx) {
-            TQueue<TPartInfo> sendOnMainParts, tryDeleteParts;
+        constexpr static TDuration JOB_GRANULARITY = TDuration::MilliSeconds(1);
 
-            for (It.SeekToFirst(); It.Valid(); It.Next()) {
+        void CollectKeys(const TActorContext &ctx) {
+            THPTimer timer;
+
+            for (ui32 cnt = 0; It.Valid(); It.Next(), ++cnt) {
+                if (cnt % 1000 == 0 && TDuration::Seconds(timer.Passed()) > JOB_GRANULARITY) {
+                    LOG_DEBUG_S(ctx, NKikimrServices::BS_VDISK_BALANCING,
+                        Ctx->VCtx->VDiskLogPrefix<< "Collected " << cnt << " keys");
+                    Send(SelfId(), new NActors::TEvents::TEvWakeup());
+                    return;
+                }
+
                 TPartsCollectorMerger merger(Ctx->GInfo->GetTopology().GType);
                 It.PutToMerger(&merger);
 
                 for (ui8 partIdx: PartsToSendOnMain(Ctx->GInfo->GetTopology(), Ctx->VCtx->ShortSelfVDisk, It.GetCurKey().LogoBlobID(), merger.Ingress)) {
                     if (!merger.Parts[partIdx - 1].has_value()) {
                         LOG_WARN_S(ctx, NKikimrServices::BS_VDISK_BALANCING,
-                            Ctx->GInfo->GetTopology().GetOrderNumber(Ctx->VCtx->ShortSelfVDisk) << "$ "
-                            << "not found part " << (ui32)partIdx << " for " << It.GetCurKey().LogoBlobID().ToString());
+                            Ctx->VCtx->VDiskLogPrefix << "not found part " << (ui32)partIdx << " for " << It.GetCurKey().LogoBlobID().ToString());
                         continue;  // something strange
                     }
-                    sendOnMainParts.push(TPartInfo{
+                    SendOnMainParts.push(TPartInfo{
                         .Key=TLogoBlobID(It.GetCurKey().LogoBlobID(), partIdx),
                         .Ingress=merger.Ingress,
                         .PartData=*merger.Parts[partIdx - 1]
                     });
                     LOG_DEBUG_S(ctx, NKikimrServices::BS_VDISK_BALANCING,
-                            Ctx->GInfo->GetTopology().GetOrderNumber(Ctx->VCtx->ShortSelfVDisk) << "$ "
-                            << "Send on main: " << sendOnMainParts.back().Key.ToString() << " " << sendOnMainParts.back().Ingress.ToString(&Ctx->GInfo->GetTopology(), Ctx->VCtx->ShortSelfVDisk, sendOnMainParts.back().Key));
+                            Ctx->VCtx->VDiskLogPrefix << "Send on main: " << SendOnMainParts.back().Key.ToString()
+                            << " " << SendOnMainParts.back().Ingress.ToString(&Ctx->GInfo->GetTopology(), Ctx->VCtx->ShortSelfVDisk, SendOnMainParts.back().Key));
                 }
 
                 for (ui8 partIdx: PartsToDelete(Ctx->GInfo->GetTopology(), Ctx->VCtx->ShortSelfVDisk, It.GetCurKey().LogoBlobID(), merger.Ingress)) {
-                    tryDeleteParts.push(TPartInfo{
+                    TryDeleteParts.push(TPartInfo{
                         .Key=TLogoBlobID(It.GetCurKey().LogoBlobID(), partIdx),
                         .Ingress=merger.Ingress,
                     });
                     LOG_DEBUG_S(ctx, NKikimrServices::BS_VDISK_BALANCING,
-                            Ctx->GInfo->GetTopology().GetOrderNumber(Ctx->VCtx->ShortSelfVDisk) << "$ "
-                            << "Delete: " << tryDeleteParts.back().Key.ToString() << " " << tryDeleteParts.back().Ingress.ToString(&Ctx->GInfo->GetTopology(), Ctx->VCtx->ShortSelfVDisk, tryDeleteParts.back().Key));
+                            Ctx->VCtx->VDiskLogPrefix << "Delete: " << TryDeleteParts.back().Key.ToString()
+                            << " " << TryDeleteParts.back().Ingress.ToString(&Ctx->GInfo->GetTopology(), Ctx->VCtx->ShortSelfVDisk, TryDeleteParts.back().Key));
                 }
                 merger.Clear();
             }
-            return {sendOnMainParts, tryDeleteParts};
+
+            Send(SelfId(), new NActors::TEvents::TEvCompleted());
+        }
+
+        void FinishCollecting(const TActorContext &ctx) {
+            LOG_DEBUG_S(ctx, NKikimrServices::BS_VDISK_BALANCING,
+                Ctx->VCtx->VDiskLogPrefix << ctx.Now().MilliSeconds() << " Bootstrap" << ": "
+                << "sendOnMainParts size = " << SendOnMainParts.size() << "; tryDeleteParts size = " << TryDeleteParts.size());
+
+            SenderId = ctx.Register(CreateSenderActor(SelfId(), std::move(SendOnMainParts), QueueActorMapPtr, Ctx));
+            ActiveActors.Insert(SenderId, __FILE__, __LINE__, ctx, NKikimrServices::BLOBSTORAGE);
+
+            DeleterId = ctx.Register(CreateDeleterActor(SelfId(), std::move(TryDeleteParts), QueueActorMapPtr, Ctx));
+            ActiveActors.Insert(DeleterId, __FILE__, __LINE__, ctx, NKikimrServices::BLOBSTORAGE);
+
+            Become(&TThis::StateFunc);
+            Schedule(TDuration::Seconds(1), new NActors::TEvents::TEvWakeup());
         }
 
         void StartBalancing(const TActorContext &ctx) {
             LOG_DEBUG_S(ctx, NKikimrServices::BS_VDISK_BALANCING,
-                        Ctx->GInfo->GetTopology().GetOrderNumber(Ctx->VCtx->ShortSelfVDisk) << "$ " << "Ask repl token");
+                        Ctx->VCtx->VDiskLogPrefix << "Ask repl token");
             if (!Send(MakeBlobStorageReplBrokerID(), new TEvQueryReplToken(Ctx->VDiskCfg->BaseInfo.PDiskId))) {
                 HandleReplToken(ctx);
             }
@@ -87,7 +114,7 @@ namespace NKikimr {
 
         void HandleReplToken(const TActorContext &ctx) {
             LOG_DEBUG_S(ctx, NKikimrServices::BS_VDISK_BALANCING,
-                        Ctx->GInfo->GetTopology().GetOrderNumber(Ctx->VCtx->ShortSelfVDisk) << "$ " << "Repl token acquired");
+                        Ctx->VCtx->VDiskLogPrefix << "Repl token acquired");
             DoJobQuant(ctx);
             Send(MakeBlobStorageReplBrokerID(), new TEvReleaseReplToken);
             Schedule(TDuration::Seconds(1), new NActors::TEvents::TEvWakeup());
@@ -108,7 +135,7 @@ namespace NKikimr {
             }
             if (Stats.SendCompleted && Stats.DeleteCompleted) {
                 LOG_DEBUG_S(ctx, NKikimrServices::BS_VDISK_BALANCING,
-                            Ctx->GInfo->GetTopology().GetOrderNumber(Ctx->VCtx->ShortSelfVDisk) << "$ " << "Balancing completed");
+                            Ctx->VCtx->VDiskLogPrefix << "Balancing completed");
                 Send(Ctx->SkeletonId, new TEvStartBalancing());
                 Send(SelfId(), new NActors::TEvents::TEvPoison);
             }
@@ -135,25 +162,38 @@ namespace NKikimr {
 
         void DoJobQuant(const TActorContext& ctx) {
             LOG_DEBUG_S(ctx, NKikimrServices::BS_VDISK_BALANCING,
-                Ctx->GInfo->GetTopology().GetOrderNumber(Ctx->VCtx->ShortSelfVDisk) << "$ " << "Connected vdisks " << ConnectedVDisks.size() << "/" << Ctx->GInfo->GetTotalVDisksNum() - 1);
+                Ctx->VCtx->VDiskLogPrefix << "Connected vdisks " << ConnectedVDisks.size() << "/" << Ctx->GInfo->GetTotalVDisksNum() - 1);
             Send(SenderId, new NActors::TEvents::TEvWakeup());
             Send(DeleterId, new NActors::TEvents::TEvWakeup());
         }
 
-        void PassAway() override {
+        void Die(const TActorContext &ctx) override {
+            ActiveActors.KillAndClear(ctx);
             for (const auto& kv : *QueueActorMapPtr) {
                 Send(kv.second, new TEvents::TEvPoison);
             }
-            TActorBootstrapped::PassAway();
+            TActorBootstrapped::Die(ctx);
         }
 
-        STRICT_STFUNC(StateFunc,
-            CFunc(TEvReplToken::EventType, HandleReplToken)
-            HFunc(NActors::TEvents::TEvCompleted, Handle)
+        STRICT_STFUNC(CollectKeysState,
+            CFunc(NActors::TEvents::TEvWakeup::EventType, CollectKeys)
+            CFunc(NActors::TEvents::TEvCompleted::EventType, FinishCollecting)
+            CFunc(NActors::TEvents::TEvPoison::EventType, Die)
+
+            // BSQueue specific events
             hFunc(TEvProxyQueueState, Handle)
             hFunc(TEvVGenerationChange, Handle)
+        );
+
+        STRICT_STFUNC(StateFunc,
             CFunc(NActors::TEvents::TEvWakeup::EventType, StartBalancing)
-            cFunc(NActors::TEvents::TEvPoison::EventType, PassAway)
+            CFunc(TEvReplToken::EventType, HandleReplToken)
+            HFunc(NActors::TEvents::TEvCompleted, Handle)
+            CFunc(NActors::TEvents::TEvPoison::EventType, Die)
+
+            // BSQueue specific events
+            hFunc(TEvProxyQueueState, Handle)
+            hFunc(TEvVGenerationChange, Handle)
         );
 
     public:
@@ -164,26 +204,17 @@ namespace NKikimr {
         {
         }
 
-        void Bootstrap(const TActorContext &ctx) {
+        void Bootstrap() {
             CreateVDisksQueues();
-            auto [sendOnMainParts, tryDeleteParts] = CollectKeys(ctx);
-            LOG_DEBUG_S(ctx, NKikimrServices::BS_VDISK_BALANCING,
-                Ctx->GInfo->GetTopology().GetOrderNumber(Ctx->VCtx->ShortSelfVDisk) << "$ "
-                << ctx.Now().MilliSeconds() << " Bootstrap" << ": "
-                << "sendOnMainParts size = " << sendOnMainParts.size() << "; tryDeleteParts size = " << tryDeleteParts.size());
-
-            SenderId = ctx.Register(CreateSenderActor(SelfId(), std::move(sendOnMainParts), QueueActorMapPtr, Ctx));
-            ActiveActors.Insert(SenderId, __FILE__, __LINE__, ctx, NKikimrServices::BLOBSTORAGE);
-
-            DeleterId = ctx.Register(CreateDeleterActor(SelfId(), std::move(tryDeleteParts), QueueActorMapPtr, Ctx));
-            ActiveActors.Insert(DeleterId, __FILE__, __LINE__, ctx, NKikimrServices::BLOBSTORAGE);
-
-            Become(&TThis::StateFunc);
-            Schedule(TDuration::Seconds(1), new NActors::TEvents::TEvWakeup());
+            It.SeekToFirst();
+            Become(&TThis::CollectKeysState);
+            Schedule(TDuration::Seconds(1), new NActors::TEvents::TEvWakeup());            
         }
     };
 
+} // NBalancing
+
     IActor* CreateBalancingActor(std::shared_ptr<TBalancingCtx> ctx) {
-        return new TBalancingActor(ctx);
+        return new NBalancing::TBalancingActor(ctx);
     }
 } // NKikimr

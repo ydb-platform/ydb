@@ -394,14 +394,13 @@ namespace NKikimr {
                 ui8 vec = 0;
                 TIterator it = Begin();
                 while (!it.IsEnd()) {
-                    vec <<= 1;
                     bool firstBit = it.Get();
+                    vec <<= 1;
+                    vec |= ui8(firstBit);
+
                     it.Next();
                     Y_DEBUG_ABORT_UNLESS(!it.IsEnd());
-                    bool secondBit = it.Get();
-                    Y_UNUSED(secondBit);
                     it.Next();
-                    vec |= ui8(firstBit);
                 }
                 vec <<= 8 - ((End - Beg) >> 1);
                 return TVectorType(vec, (End - Beg) >> 1);

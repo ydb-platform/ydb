@@ -37,6 +37,9 @@ namespace NKikimr {
         }
     };
 
+    struct TEvStartBalancing : TEventLocal<TEvStartBalancing, TEvBlobStorage::EvStartBalancing> {};
+
+namespace NBalancing {
     struct TPartInfo {
         TLogoBlobID Key;
         TIngress Ingress;
@@ -57,6 +60,5 @@ namespace NKikimr {
 
     constexpr ui32 SENDER_ID = 0;
     constexpr ui32 DELETER_ID = 1;
-
-    struct TEvStartBalancing : TEventLocal<TEvStartBalancing, TEvBlobStorage::EvStartBalancing> {};
+} // NBalancing
 } // NKikimr

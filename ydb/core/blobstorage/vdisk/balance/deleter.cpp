@@ -8,6 +8,7 @@
 #include <ydb/core/blobstorage/vdisk/common/vdisk_private_events.h>
 
 namespace NKikimr {
+namespace NBalancing {
 
 namespace {
     class TPartsRequester {
@@ -125,9 +126,8 @@ namespace {
                 }
             }
             LOG_DEBUG_S(ctx, NKikimrServices::BS_VDISK_BALANCING,
-                        Ctx->GInfo->GetTopology().GetOrderNumber(Ctx->VCtx->ShortSelfVDisk) << "$ " << "PartsRequester status " << ": " << (ui32)status << " " << Stats.PartsDecidedToDelete);
+                        Ctx->VCtx->VDiskLogPrefix << "PartsRequester status " << ": " << (ui32)status << " " << Stats.PartsDecidedToDelete);
             if (status == TPartsRequester::EState::FINISHED && Stats.PartsDecidedToDelete == Stats.PartsMarkedDeleted) {
-                Send(NotifyId, new NActors::TEvents::TEvCompleted(DELETER_ID));
                 Send(SelfId(), new NActors::TEvents::TEvPoison);
             }
         }
@@ -139,7 +139,7 @@ namespace {
             patchedIngress.DeleteHandoff(&Ctx->GInfo->GetTopology(), Ctx->VCtx->ShortSelfVDisk, key);
 
             LOG_DEBUG_S(ctx, NKikimrServices::BS_VDISK_BALANCING,
-                Ctx->GInfo->GetTopology().GetOrderNumber(Ctx->VCtx->ShortSelfVDisk) << "$ " 
+                Ctx->VCtx->VDiskLogPrefix 
                  << "Deleting local: " << keyWithoutPartId.ToString() << " " << patchedIngress.ToString(&Ctx->GInfo->GetTopology(), Ctx->VCtx->ShortSelfVDisk, keyWithoutPartId));
 
             ctx.Send(Ctx->SkeletonId, new TEvDelLogoBlobDataSyncLog(keyWithoutPartId, patchedIngress, OrderId++));
@@ -147,6 +147,11 @@ namespace {
 
         void Handle(TEvDelLogoBlobDataSyncLogResult::TPtr ev) {
             Y_VERIFY(ev->Get()->OrderId == Stats.PartsMarkedDeleted++);
+        }
+
+        void Die(const TActorContext &ctx) override {
+            Send(NotifyId, new NActors::TEvents::TEvCompleted(DELETER_ID));
+            TActorBootstrapped::Die(ctx);
         }
 
         STRICT_STFUNC(StateFunc,
@@ -185,4 +190,5 @@ IActor* CreateDeleterActor(
     return new TDeleter(notifyId, parts, queueActorMapPtr, ctx);
 }
 
-}
+} // NBalancing
+} // NKikimr

@@ -2,6 +2,7 @@
 
 
 namespace NKikimr {
+namespace NBalancing {
 
     TVector<ui8> GetRequiredParts(NMatrix::TVectorType vec, NMatrix::TVectorType mask) {
         auto parts = vec & mask;
@@ -96,4 +97,5 @@ namespace NKikimr {
         Parts.resize(GType.TotalPartCount());
     }
 
+} // NBalancing
 } // NKikimr

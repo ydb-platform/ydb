@@ -7,6 +7,7 @@
 
 
 namespace NKikimr {
+namespace NBalancing {
 
     TVector<ui8> PartsToSendOnMain(
         const TBlobStorageGroupInfo::TTopology& top,
@@ -37,4 +38,5 @@ namespace NKikimr {
         void Clear();
     };
 
+} // NBalancing
 } // NKikimr

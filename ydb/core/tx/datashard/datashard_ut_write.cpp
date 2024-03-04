@@ -151,14 +151,14 @@ Y_UNIT_TEST_SUITE(DataShardWrite) {
         }
     }
 
-    Y_UNIT_TEST(UpsertImmediateHugeKey) {
+    Y_UNIT_TEST(WriteImmediateBadRequest) {
         auto [runtime, server, sender] = TestCreateServer();
 
         auto opts = TShardedTableOptions().Columns({{"key", "Utf8", true, false}});
         auto [shards, tableId] = CreateShardedTable(server, sender, "/Root", "table-1", opts);
         const ui64 shard = shards[0];
 
-        Cout << "========= Send immediate write =========\n";
+        Cout << "========= Send immediate write with huge key=========\n";
         {
             TString hugeStringValue(NLimits::MaxWriteKeySize + 1, 'X');
             TSerializedCellMatrix matrix({TCell(hugeStringValue.c_str(), hugeStringValue.size())}, 1, 1);
@@ -170,6 +170,27 @@ Y_UNIT_TEST_SUITE(DataShardWrite) {
             const auto writeResult = Write(runtime, sender, shard, std::move(evWrite), NKikimrDataEvents::TEvWriteResult::STATUS_BAD_REQUEST);
             UNIT_ASSERT_VALUES_EQUAL(writeResult.GetIssues().size(), 1);
             UNIT_ASSERT(writeResult.GetIssues(0).message().Contains("Row key size of 1049601 bytes is larger than the allowed threshold 1049600"));
+        }
+
+        Cout << "========= Send immediate write with OPERATION_UNSPECIFIED =========\n";
+        {
+            TString stringValue('X');
+            TSerializedCellMatrix matrix({TCell(stringValue.c_str(), stringValue.size())}, 1, 1);
+
+            auto evWrite = std::make_unique<NKikimr::NEvents::TDataEvents::TEvWrite>(100, NKikimrDataEvents::TEvWrite::MODE_IMMEDIATE);
+            ui64 payloadIndex = NKikimr::NEvWrite::TPayloadWriter<NKikimr::NEvents::TDataEvents::TEvWrite>(*evWrite).AddDataToPayload(matrix.ReleaseBuffer());
+            auto operation = evWrite->Record.AddOperations();
+            operation->SetType(NKikimrDataEvents::TEvWrite::TOperation::OPERATION_UNSPECIFIED);
+            operation->SetPayloadFormat(NKikimrDataEvents::FORMAT_CELLVEC);
+            operation->SetPayloadIndex(payloadIndex);
+            operation->MutableTableId()->SetOwnerId(tableId.PathId.OwnerId);
+            operation->MutableTableId()->SetTableId(tableId.PathId.LocalPathId);
+            operation->MutableTableId()->SetSchemaVersion(tableId.SchemaVersion);
+            operation->MutableColumnIds()->Add(1);
+
+            const auto writeResult = Write(runtime, sender, shards[0], std::move(evWrite), NKikimrDataEvents::TEvWriteResult::STATUS_BAD_REQUEST);
+            UNIT_ASSERT_VALUES_EQUAL(writeResult.GetIssues().size(), 1);
+            UNIT_ASSERT(writeResult.GetIssues(0).message().Contains("OPERATION_UNSPECIFIED operation is not supported now"));
         }
     }
 

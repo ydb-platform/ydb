@@ -63,14 +63,7 @@ TValidatedWriteTx::TValidatedWriteTx(TDataShard* self, ui64 globalTxId, TInstant
 
     if (record.operations().size() != 0) {
         Y_ABORT_UNLESS(record.operations().size() == 1, "Only one operation is supported now");
-        OperationType = record.operations(0).GetType();
-        switch (OperationType) {
-            case NKikimrDataEvents::TEvWrite::TOperation::OPERATION_UPSERT:
-            case NKikimrDataEvents::TEvWrite::TOperation::OPERATION_DELETE:
-                break;
-            default:
-                Y_FAIL_S(OperationType << " operation is not supported now");
-        }
+
         const NKikimrDataEvents::TEvWrite::TOperation& recordOperation = record.operations(0);
 
         ColumnIds = {recordOperation.GetColumnIds().begin(), recordOperation.GetColumnIds().end()};
@@ -91,6 +84,19 @@ TValidatedWriteTx::~TValidatedWriteTx() {
 }
 
 bool TValidatedWriteTx::ParseOperation(const NEvents::TDataEvents::TEvWrite& ev, const NKikimrDataEvents::TEvWrite::TOperation& recordOperation, const TUserTable::TTableInfos& tableInfos) {
+    
+    OperationType = recordOperation.GetType();
+    switch (OperationType) {
+        case NKikimrDataEvents::TEvWrite::TOperation::OPERATION_UPSERT:
+        case NKikimrDataEvents::TEvWrite::TOperation::OPERATION_DELETE:
+            break;
+        default: {
+            ErrCode = NKikimrTxDataShard::TError::BAD_ARGUMENT;
+            ErrStr = TStringBuilder() << OperationType << " operation is not supported now";
+            return false;
+        }
+    }
+
     const NKikimrDataEvents::TTableId& tableIdRecord = recordOperation.GetTableId();
 
     auto tableInfoPtr = tableInfos.FindPtr(tableIdRecord.GetTableId());
@@ -653,7 +659,7 @@ void TWriteOperation::UntrackMemory() const {
 void TWriteOperation::SetError(const NKikimrDataEvents::TEvWriteResult::EStatus& status, const TString& errorMsg) {
     SetAbortedFlag();
     WriteResult = NEvents::TDataEvents::TEvWriteResult::BuildError(TabletId, GetTxId(), status, errorMsg);
-    LOG_E(errorMsg);
+    LOG_I(errorMsg);
 }
 
 void TWriteOperation::SetWriteResult(std::unique_ptr<NEvents::TDataEvents::TEvWriteResult>&& writeResult) {

@@ -77,18 +77,10 @@ public:
 
         const ui64 tableId = writeTx->GetTableId().PathId.LocalPathId;
         const TTableId fullTableId(DataShard.GetPathOwnerId(), tableId);
-        const ui64 localTableId = DataShard.GetLocalTableId(fullTableId);
-        if (localTableId == 0) {
-            writeOp->SetError(NKikimrDataEvents::TEvWriteResult::STATUS_BAD_REQUEST, TStringBuilder() << "Unknown table id " << tableId);
-            return;
-        }
-        const ui64 shadowTableId = DataShard.GetShadowTableId(fullTableId);
-        const TUserTable& TableInfo_ = *DataShard.GetUserTables().at(tableId);
-        Y_ABORT_UNLESS(TableInfo_.LocalTid == localTableId);
-        Y_ABORT_UNLESS(TableInfo_.ShadowTid == shadowTableId);
+        const TUserTable& userTable = *DataShard.GetUserTables().at(tableId);
 
         const NTable::TScheme& scheme = txc.DB.GetScheme();
-        const NTable::TScheme::TTableInfo* tableInfo = scheme.GetTableInfo(localTableId);
+        const NTable::TScheme::TTableInfo* tableInfo = scheme.GetTableInfo(userTable.LocalTid);
 
         TSmallVec<TRawTypeValue> key;
         TSmallVec<NTable::TUpdateOp> ops;
@@ -99,8 +91,8 @@ public:
         for (ui32 rowIdx = 0; rowIdx < matrix.GetRowCount(); ++rowIdx)
         {
             key.clear();
-            key.reserve(TableInfo_.KeyColumnIds.size());
-            for (ui16 keyColIdx = 0; keyColIdx < TableInfo_.KeyColumnIds.size(); ++keyColIdx) {
+            key.reserve(userTable.KeyColumnIds.size());
+            for (ui16 keyColIdx = 0; keyColIdx < userTable.KeyColumnIds.size(); ++keyColIdx) {
                 const TCell& cell = matrix.GetCell(rowIdx, keyColIdx);
                 ui32 keyCol = tableInfo->KeyColumns[keyColIdx];
                 if (cell.IsNull()) {
@@ -115,10 +107,10 @@ public:
                 case NKikimrDataEvents::TEvWrite::TOperation::OPERATION_UPSERT:
                 {
                     ops.clear();
-                    Y_ABORT_UNLESS(matrix.GetColCount() >= TableInfo_.KeyColumnIds.size());
-                    ops.reserve(matrix.GetColCount() - TableInfo_.KeyColumnIds.size());
+                    Y_ABORT_UNLESS(matrix.GetColCount() >= userTable.KeyColumnIds.size());
+                    ops.reserve(matrix.GetColCount() - userTable.KeyColumnIds.size());
 
-                    for (ui16 valueColIdx = TableInfo_.KeyColumnIds.size(); valueColIdx < matrix.GetColCount(); ++valueColIdx) {
+                    for (ui16 valueColIdx = userTable.KeyColumnIds.size(); valueColIdx < matrix.GetColCount(); ++valueColIdx) {
                         ui32 columnTag = writeTx->GetColumnIds()[valueColIdx];
                         const TCell& cell = matrix.GetCell(rowIdx, valueColIdx);
 
@@ -134,10 +126,9 @@ public:
                     userDb.EraseRow(fullTableId, key);
                     break;
                 }
-                default: {
-                    writeOp->SetError(NKikimrDataEvents::TEvWriteResult::STATUS_BAD_REQUEST, TStringBuilder() << operationType << " operation is not supported now");
-                    return;
-                }
+                default:
+                    // Checked before in TWriteOperation
+                    Y_FAIL_S(operationType << " operation is not supported now");
             }
         }
 
@@ -151,10 +142,9 @@ public:
                 DataShard.IncCounter(COUNTER_ERASE_ROWS, matrix.GetRowCount());
                 break;
             }
-            default: {
-                writeOp->SetError(NKikimrDataEvents::TEvWriteResult::STATUS_BAD_REQUEST, TStringBuilder() << operationType << " operation is not supported now");
-                return;
-            }
+            default:
+                // Checked before in TWriteOperation
+                Y_FAIL_S(operationType << " operation is not supported now");
         }
 
         LOG_DEBUG_S(ctx, NKikimrServices::TX_DATASHARD, "Executed write operation for " << *writeOp << " at " << DataShard.TabletID() << ", row count=" << matrix.GetRowCount());

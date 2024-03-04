@@ -956,30 +956,30 @@
     "test.test[join-count_bans--Results]": [],
     "test.test[join-grace_join2--Analyze]": [
         {
-            "checksum": "45db7c8306c9626a640bcb81c9c76780",
-            "size": 4462,
-            "uri": "https://{canondata_backend}/1599023/ee6490b3365cf6b396283cb8bd07f94ceff767b4/resource.tar.gz#test.test_join-grace_join2--Analyze_/plan.txt"
+            "checksum": "759025fd6317614a253eae816ff5941d",
+            "size": 5059,
+            "uri": "https://{canondata_backend}/1923547/c3f064ea25dafaabdc78d527cb888e8c29c155df/resource.tar.gz#test.test_join-grace_join2--Analyze_/plan.txt"
         }
     ],
     "test.test[join-grace_join2--Debug]": [
         {
-            "checksum": "0684948a27f55b655c998444a9060053",
-            "size": 1890,
-            "uri": "https://{canondata_backend}/1599023/ee6490b3365cf6b396283cb8bd07f94ceff767b4/resource.tar.gz#test.test_join-grace_join2--Debug_/opt.yql_patched"
+            "checksum": "34fdff009f1cfcdc53164eeb5db58dd7",
+            "size": 2171,
+            "uri": "https://{canondata_backend}/1923547/c3f064ea25dafaabdc78d527cb888e8c29c155df/resource.tar.gz#test.test_join-grace_join2--Debug_/opt.yql_patched"
         }
     ],
     "test.test[join-grace_join2--Plan]": [
         {
-            "checksum": "45db7c8306c9626a640bcb81c9c76780",
-            "size": 4462,
-            "uri": "https://{canondata_backend}/1599023/ee6490b3365cf6b396283cb8bd07f94ceff767b4/resource.tar.gz#test.test_join-grace_join2--Plan_/plan.txt"
+            "checksum": "759025fd6317614a253eae816ff5941d",
+            "size": 5059,
+            "uri": "https://{canondata_backend}/1923547/c3f064ea25dafaabdc78d527cb888e8c29c155df/resource.tar.gz#test.test_join-grace_join2--Plan_/plan.txt"
         }
     ],
     "test.test[join-grace_join2--Results]": [
         {
-            "checksum": "65a9b307bc9899b17f61962a5d4a49fb",
+            "checksum": "2ad0b4f3207032d285d5f99430e9abaf",
             "size": 5737,
-            "uri": "https://{canondata_backend}/1899731/149477001e0a8762e03fe5262dd2d939b716f0bf/resource.tar.gz#test.test_join-grace_join2--Results_/results.txt"
+            "uri": "https://{canondata_backend}/1923547/c3f064ea25dafaabdc78d527cb888e8c29c155df/resource.tar.gz#test.test_join-grace_join2--Results_/results.txt"
         }
     ],
     "test.test[join-inmem_by_uncomparable_structs--Analyze]": [

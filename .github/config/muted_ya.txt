@@ -12,7 +12,6 @@ ydb/core/kqp/provider/ut KikimrIcGateway.TestLoadBasicSecretValueFromExternalDat
 ydb/core/kqp/ut/federated_query/generic *
 ydb/core/kqp/ut/olap *
 ydb/core/kqp/ut/pg KqpPg.CreateIndex
-ydb/core/kqp/ut/pg KqpPg.Returning
 ydb/core/kqp/ut/query KqpLimits.QueryReplySize
 ydb/core/kqp/ut/query KqpQuery.QueryTimeout
 ydb/core/kqp/ut/scan KqpRequestContext.TraceIdInErrorMessage

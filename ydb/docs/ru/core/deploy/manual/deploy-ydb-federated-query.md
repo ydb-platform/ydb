@@ -43,7 +43,7 @@
                     host: localhost                 # имя хоста, где развернут коннектор
                     port: 2130                      # номер порта для слушающего сокета коннектора
                 use_ssl: false                      # флаг, включающий шифрование соединений
-                ssl_ca_crt: "/usr/local/etc/ca.crt" # (опционально) путь к сертификату CA
+                ssl_ca_crt: "/opt/ydb/certs/ca.crt" # (опционально) путь к сертификату CA
             default_settings:
                 - name: DateTimeFormat
                   value: string

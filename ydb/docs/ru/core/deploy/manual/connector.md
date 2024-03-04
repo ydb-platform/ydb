@@ -28,10 +28,16 @@
     tar -xzf fq-connector-go-v0.2.4-linux-amd64.tar.gz
     ```
 
-1. Разместите исполняемый и конфигурационный файлы коннектора в удобные для вас директории, например, `/usr/local/bin` и `/usr/local/etc`:
+1. Если на сервере ещё не были развёрнуты узлы {{ ydb-short-name }}, создайте директории для хранения исполняемых и конфигурационных файлов:
+
     ```bash
-    sudo cp fq-connector-go /usr/local/bin
-    sudo cp fq-connector-go.yaml /usr/local/etc
+    sudo mkdir -p /opt/ydb/bin /opt/ydb/cfg
+    ```
+
+1. Разместите разархивированные исполняемый и конфигурационный файлы коннектора в только что созданные директории:
+    ```bash
+    sudo cp fq-connector-go /opt/ydb/bin
+    sudo cp fq-connector-go.yaml /opt/ydb/cfg
     ```
 
 1. В [рекомендуемом режиме использования](../../deploy/manual/deploy-ydb-federated-query.md#general-scheme) коннектор развёртывается на тех же серверах, что и динамические узлы {{ ydb-short-name }}, следовательно, шифрование сетевых соединений между ними *не требуется*. Однако если вам всё же необходимо включить шифрование, [подготовьте пару TLS-ключей](../manual/deploy-ydb-on-premises.md#tls-certificates) и пропишите пути до публичного и приватного ключа в поля `connector_server.tls.cert` и `connector_server.tls.key` конфигурационного файла `fq-connector-go.yaml`:
@@ -39,8 +45,8 @@
     connector_server:
       # ...
       tls:
-        cert: "/usr/local/etc/tls/cert.crt"
-        key: "/usr/local/etc/tls/key.key"
+        cert: "/opt/ydb/certs/fq-connector-go.crt"
+        key: "/opt/ydb/certs/fq-connector-go.key"
     ```
 1. В случае, если внешние источники данных используют TLS, для организации шифрованных соединений с ними коннектору потребуется корневой или промежуточный сертификат удостоверяющего центра (Certificate Authority, CA), которым были подписаны сертификаты источников. На Linux-серверах обычно предустанавливается некоторое количество корневых сертификатов CA. Для ОС Ubuntu список поддерживаемых CA можно вывести следующей командой:
     ```bash
@@ -60,7 +66,7 @@
 
         Запустите сервис из консоли следующей командой:
         ```bash
-        /usr/local/bin/fq-connector-go server -c /usr/local/etc/fq-connector-go.yaml
+        /opt/ydb/bin/fq-connector-go server -c /opt/ydb/cfg/fq-connector-go.yaml
         ```
 
     - С использованием systemd
@@ -107,7 +113,7 @@
     docker run -d \
         --name=fq-connector-go \
         -p 2130:2130 \
-        -v /path/to/config.yaml:/usr/local/etc/fq-connector-go.yaml
+        -v /path/to/config.yaml:/opt/ydb/cfg/fq-connector-go.yaml
         ghcr.io/ydb-platform/fq-connector-go:latest
     ```
 
@@ -117,8 +123,8 @@
     connector_server:
       # ...
       tls:
-        cert: "/usr/local/etc/tls/cert.crt"
-        key: "/usr/local/etc/tls/key.key"
+        cert: "/opt/ydb/certs/fq-connector-go.crt"
+        key: "/opt/ydb/certs/fq-connector-go.key"
     ```
     При запуске контейнера примонтируйте внутрь него директорию с парой TLS-ключей так, чтобы они оказались доступны для процесса `fq-connector-go` по путям, указанным в конфигурационном файле: 
 
@@ -126,8 +132,8 @@
     docker run -d \
         --name=fq-connector-go \
         -p 2130:2130 \
-        -v /path/to/config.yaml:/usr/local/etc/fq-connector-go.yaml
-        -v /path/to/tls/:/usr/local/etc/tls/
+        -v /path/to/config.yaml:/opt/ydb/cfg/fq-connector-go.yaml
+        -v /path/to/keys/:/opt/ydb/certs/
         ghcr.io/ydb-platform/fq-connector-go:latest
     ```
 

@@ -1,6 +1,7 @@
 Registering pre-existing tables
 	INT4_TBL
 	tenk1
+	text_tbl
 	VARCHAR_TBL
 	CHAR_TBL
 	TEXT_TBL

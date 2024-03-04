@@ -2,6 +2,7 @@ Registering pre-existing tables
 	onek
 	INT4_TBL
 	tenk1
+	text_tbl
 	TEXT_TBL
 	int8_tbl
 <sql-statement>

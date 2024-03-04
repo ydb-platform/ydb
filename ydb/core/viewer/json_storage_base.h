@@ -174,7 +174,7 @@ public:
             return;
         }
 
-        RequestBSControllerConfig();
+        RequestBSControllerConfigWithStoragePools();
 
         TBase::Become(&TThis::StateWork);
         Schedule(TDuration::MilliSeconds(Timeout / 100 * 70), new TEvents::TEvWakeup(TimeoutBSC)); // 70% timeout (for bsc)

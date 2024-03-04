@@ -653,6 +653,7 @@ void TWriteOperation::UntrackMemory() const {
 void TWriteOperation::SetError(const NKikimrDataEvents::TEvWriteResult::EStatus& status, const TString& errorMsg) {
     SetAbortedFlag();
     WriteResult = NEvents::TDataEvents::TEvWriteResult::BuildError(TabletId, GetTxId(), status, errorMsg);
+    LOG_E(errorMsg);
 }
 
 void TWriteOperation::SetWriteResult(std::unique_ptr<NEvents::TDataEvents::TEvWriteResult>&& writeResult) {

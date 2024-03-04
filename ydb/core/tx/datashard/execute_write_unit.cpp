@@ -134,8 +134,10 @@ public:
                     userDb.EraseRow(fullTableId, key);
                     break;
                 }
-                default:
-                    Y_FAIL_S(operationType << " operation is not supported now");
+                default: {
+                    writeOp->SetError(NKikimrDataEvents::TEvWriteResult::STATUS_BAD_REQUEST, TStringBuilder() << operationType << " operation is not supported now");
+                    return;
+                }
             }
         }
 
@@ -149,10 +151,11 @@ public:
                 DataShard.IncCounter(COUNTER_ERASE_ROWS, matrix.GetRowCount());
                 break;
             }
-            default:
-                Y_FAIL_S(operationType << " operation is not supported now");
+            default: {
+                writeOp->SetError(NKikimrDataEvents::TEvWriteResult::STATUS_BAD_REQUEST, TStringBuilder() << operationType << " operation is not supported now");
+                return;
+            }
         }
-
 
         LOG_DEBUG_S(ctx, NKikimrServices::TX_DATASHARD, "Executed write operation for " << *writeOp << " at " << DataShard.TabletID() << ", row count=" << matrix.GetRowCount());
     }

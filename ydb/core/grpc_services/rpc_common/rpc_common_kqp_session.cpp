@@ -119,7 +119,7 @@ private:
         if (record.GetResourceExhausted()) {
             auto responseCode = grpc::StatusCode::RESOURCE_EXHAUSTED;
             Request->ReplyWithRpcStatus(responseCode, record.GetError());
-            NWilson::EndSpanWithStatus(Span, responseCode);
+            Span.EndError("Resource exhausted");
             Die(ctx);
             return;
         }

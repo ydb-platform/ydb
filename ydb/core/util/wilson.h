@@ -3,8 +3,7 @@
 
 namespace NWilson {
 
-template<class T>
-inline void EndSpanWithStatus(NWilson::TSpan& span, T statusCode) {
+inline void EndSpanWithStatus(NWilson::TSpan& span, Ydb::StatusIds::StatusCode statusCode) {
     if (statusCode == Ydb::StatusIds::SUCCESS) {
         span.EndOk();
     } else {

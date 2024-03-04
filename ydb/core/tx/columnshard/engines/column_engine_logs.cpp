@@ -324,10 +324,10 @@ std::shared_ptr<TCleanupColumnEngineChanges> TColumnEngineForLogs::StartCleanup(
     return changes;
 }
 
-TDuration TColumnEngineForLogs::ProcessTiering(const ui64 pathId, const TTiering& ttl, TTieringProcessContext& context) const {
-    AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("event", "ProcessTiering")("path_id", pathId)("ttl", ttl.GetDebugString());
+TDuration TColumnEngineForLogs::ProcessTiering(const ui64 pathId, const TTiering& tiering, TTieringProcessContext& context) const {
+    AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("event", "ProcessTiering")("path_id", pathId)("tiering", tiering.GetDebugString());
     auto& indexInfo = VersionedIndex.GetLastSchema()->GetIndexInfo();
-    Y_ABORT_UNLESS(context.Changes->Tiering.emplace(pathId, ttl).second);
+    Y_ABORT_UNLESS(context.Changes->Tiering.emplace(pathId, tiering).second);
 
     TDuration dWaiting = NYDBTest::TControllers::GetColumnShardController()->GetTTLDefaultWaitingDuration(TDuration::Minutes(1));
     auto itTable = Tables.find(pathId);
@@ -335,14 +335,9 @@ TDuration TColumnEngineForLogs::ProcessTiering(const ui64 pathId, const TTiering
         return dWaiting;
     }
 
-    std::optional<TInstant> expireTimestampOpt;
-    if (ttl.Ttl) {
-        expireTimestampOpt = ttl.Ttl->GetEvictInstant(context.Now);
-    }
+    auto ttlTier = tiering.GetTierByName(TTierInfo::GetTtlTierName());
+    ui32 evictColumnId = indexInfo.GetColumnId(tiering.GetEvictColumnName());
 
-    auto ttlColumnNames = ttl.GetTtlColumns();
-    Y_ABORT_UNLESS(ttlColumnNames.size() == 1); // TODO: support different ttl columns
-    ui32 ttlColumnId = indexInfo.GetColumnId(*ttlColumnNames.begin());
     const TInstant now = TInstant::Now();
     for (auto& [portion, info] : itTable->second->GetPortions()) {
         if (info->HasRemoveSnapshot()) {
@@ -353,22 +348,22 @@ TDuration TColumnEngineForLogs::ProcessTiering(const ui64 pathId, const TTiering
             continue;
         }
 
-        const bool tryEvictPortion = ttl.HasTiers() && context.HasLimitsForEviction();
-
-        if (auto max = info->MaxValue(ttlColumnId)) {
-            bool keep = !expireTimestampOpt;
-            if (expireTimestampOpt) {
-                auto mpiOpt = ttl.Ttl->ScalarToInstant(max);
+        if (auto max = info->MaxValue(evictColumnId)) {
+            bool keep = !ttlTier;
+            if (!!ttlTier) {
+                const auto expireTimestamp = ttlTier->GetEvictInstant(context.Now);
+                auto mpiOpt = ttlTier->ScalarToInstant(max);
                 Y_ABORT_UNLESS(mpiOpt);
                 const TInstant maxTtlPortionInstant = *mpiOpt;
-                const TDuration d = maxTtlPortionInstant - *expireTimestampOpt;
+                const TDuration d = maxTtlPortionInstant - expireTimestamp;
                 keep = !!d;
-                AFL_TRACE(NKikimrServices::TX_COLUMNSHARD)("event", "keep_detect")("max", maxTtlPortionInstant.Seconds())("expire", expireTimestampOpt->Seconds());
+                AFL_TRACE(NKikimrServices::TX_COLUMNSHARD)("event", "keep_detect")("max", maxTtlPortionInstant.Seconds())("expire", expireTimestamp.Seconds());
                 if (d && dWaiting > d) {
                     dWaiting = d;
                 }
             }
 
+            const bool tryEvictPortion = tiering.HasTiers() && context.HasLimitsForEviction();
             AFL_TRACE(NKikimrServices::TX_COLUMNSHARD)("event", "scalar_less_result")("keep", keep)("tryEvictPortion", tryEvictPortion)("allowDrop", context.HasLimitsForTtl());
             if (keep && tryEvictPortion) {
                 const TString currentTierName = info->GetMeta().GetTierName() ? info->GetMeta().GetTierName() : IStoragesManager::DefaultStorageId;
@@ -378,7 +373,7 @@ TDuration TColumnEngineForLogs::ProcessTiering(const ui64 pathId, const TTiering
                     AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("event", "skip_portion_to_evict")("reason", "too_fresh")("delta", now - maxChangePortionInstant);
                     continue;
                 }
-                for (auto& tierRef : ttl.GetOrderedTiers()) {
+                for (auto& tierRef : tiering.GetOrderedTiers()) {
                     auto& tierInfo = tierRef.Get();
                     if (!indexInfo.AllowTtlOverColumn(tierInfo.GetEvictColumnName())) {
                         SignalCounters.OnPortionNoTtlColumn(info->BlobsBytes());
@@ -465,9 +460,7 @@ bool TColumnEngineForLogs::DrainEvictionQueue(std::map<TMonotonic, std::vector<T
 
 std::shared_ptr<TTTLColumnEngineChanges> TColumnEngineForLogs::StartTtl(const THashMap<ui64, TTiering>& pathEviction, const std::shared_ptr<NDataLocks::TManager>& dataLocksManager, const ui64 memoryUsageLimit) noexcept {
     AFL_VERIFY(dataLocksManager);
-    AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("event", "StartTtl")("external", pathEviction.size())
-        ("internal", EvictionsController.MutableNextCheckInstantForTierings().size())
-        ;
+    AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("event", "StartTtl")("external", pathEviction.size())("internal", EvictionsController.MutableNextCheckInstantForTierings().size());
 
     TSaverContext saverContext(StoragesManager);
 
@@ -604,7 +597,7 @@ void TEvictionsController::RefreshTierings(std::optional<THashMap<ui64, TTiering
         OriginalTierings = std::move(*tierings);
     }
     auto copy = OriginalTierings;
-    ttl.AddTtls(copy);
+    AFL_VERIFY(ttl.AddTtls(copy));
     NextCheckInstantForTierings = BuildNextInstantCheckers(std::move(copy));
     AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("event", "RefreshTierings")("count", NextCheckInstantForTierings.size());
 }

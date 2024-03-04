@@ -3,6 +3,27 @@
 
 namespace NKikimr {
 namespace NKqp {
+
+    TString GetConfigProtoWithName(const TString & tierName) {
+        return TStringBuilder() << "Name : \"" << tierName << "\"\n" <<
+        R"(
+            ObjectStorage : {
+                Endpoint: "fake"
+                Bucket: "fake"
+                SecretableAccessKey: {
+                    Value: {
+                        Data: "secretAccessKey"
+                    }
+                }
+                SecretableSecretKey: {
+                    Value: {
+                        Data: "secretSecretKey"
+                    }
+                }
+            }
+        )";
+    }
+
     using namespace NYdb;
 
     TTestHelper::TTestHelper(const TKikimrSettings& settings)
@@ -26,6 +47,38 @@ namespace NKqp {
     void TTestHelper::CreateTable(const TColumnTableBase& table) {
         std::cerr << (table.BuildQuery()) << std::endl;
         auto result = Session.ExecuteSchemeQuery(table.BuildQuery()).GetValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+    }
+
+    void TTestHelper::CreateTier(const TString& tierName) {
+        auto result = Session.ExecuteSchemeQuery("CREATE OBJECT " + tierName + " (TYPE TIER) WITH tierConfig = `" + GetConfigProtoWithName(tierName) + "`").GetValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+    }
+
+    TString TTestHelper::CreateTieringRule(const TString& tierName, const TString& columnName) {
+        const TString ruleName = tierName + "_" + columnName;
+        const TString configTieringStr = TStringBuilder() <<  R"({
+            "rules" : [
+                {
+                    "tierName" : ")" << tierName << R"(",
+                    "durationForEvict" : "10d"
+                }
+            ]
+        })";
+        auto result = Session.ExecuteSchemeQuery("CREATE OBJECT IF NOT EXISTS " + ruleName + " (TYPE TIERING_RULE) WITH (defaultColumn = " + columnName + ", description = `" + configTieringStr + "`)").GetValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        return ruleName;
+    }
+
+    void TTestHelper::SetTiering(const TString& tableName, const TString& ruleName) {
+        auto alterQuery = TStringBuilder() << "ALTER TABLE `" << tableName <<  "` SET (TIERING = '" << ruleName << "')";
+        auto result = Session.ExecuteSchemeQuery(alterQuery).GetValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+    }
+
+    void TTestHelper::ResetTiering(const TString& tableName) {
+        auto alterQuery = TStringBuilder() << "ALTER TABLE `" << tableName <<  "` RESET (TIERING)";
+        auto result = Session.ExecuteSchemeQuery(alterQuery).GetValueSync();
         UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
     }
 
@@ -62,7 +115,8 @@ namespace NKqp {
             }
         }
         for (auto shard : shards) {
-            RebootTablet(*runtime, shard, sender);
+            Kikimr.GetTestServer().GetRuntime()->Send(MakePipePeNodeCacheID(false), NActors::TActorId(), new TEvPipeCache::TEvForward(
+                    new TEvents::TEvPoisonPill(), shard, false));
         }
     }
 

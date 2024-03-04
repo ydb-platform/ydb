@@ -16,7 +16,7 @@ template<typename T>
 void AssertDataWithWatermarks(
     const std::vector<std::variant<T, TInstant>>& actual,
     const std::vector<T>& expected,
-    const std::vector<ui32> watermarkBeforePositions)
+    const std::vector<ui32>& watermarkBeforePositions)
 {
     auto expectedPos = 0U;
     auto watermarksBeforeIter = watermarkBeforePositions.begin();

@@ -5,14 +5,14 @@
 namespace NKikimr {
 namespace NMiniKQL {
 
-template<typename TDerived, typename TState>
+template<typename TDerived, typename TState, EValueRepresentation StateKind = EValueRepresentation::Embedded>
 class TSimpleStatefulWideFlowCodegeneratorNode
-        : public TStatefulWideFlowCodegeneratorNode<TSimpleStatefulWideFlowCodegeneratorNode<TDerived, TState>> {
+        : public TStatefulWideFlowCodegeneratorNode<TSimpleStatefulWideFlowCodegeneratorNode<TDerived, TState, StateKind>> {
     using TBase = TStatefulWideFlowCodegeneratorNode<TSimpleStatefulWideFlowCodegeneratorNode>;
 
 protected:
-    TSimpleStatefulWideFlowCodegeneratorNode(TComputationMutables& mutables, IComputationWideFlowNode* source, EValueRepresentation stateKind)
-            : TBase(mutables, source, stateKind), SourceFlow(source)
+    TSimpleStatefulWideFlowCodegeneratorNode(TComputationMutables& mutables, IComputationWideFlowNode* source)
+            : TBase(mutables, source, StateKind), SourceFlow(source)
     {}
 
     enum class EProcessResult : i32 {
@@ -24,7 +24,11 @@ protected:
 
 private:
     void InitStateWrapper(NUdf::TUnboxedValue &state, TComputationContext &ctx) const {
-        static_cast<const TDerived*>(this)->InitState(*static_cast<TState*>(state.GetRawPtr()), ctx);
+        if constexpr (StateKind == EValueRepresentation::Embedded) {
+            static_cast<const TDerived *>(this)->InitState(*static_cast<TState *>(state.GetRawPtr()), ctx);
+        } else {
+            static_cast<const TDerived *>(this)->InitState(state, ctx);
+        }
     }
 
     EProcessResult DoProcessWrapper(NUdf::TUnboxedValue &state, TComputationContext& ctx, EFetchResult fetchRes, NUdf::TUnboxedValuePod* values, size_t width) const {
@@ -34,13 +38,22 @@ private:
         for (size_t pos = 0; pos < width; pos++) {
             outputPtrsVec[pos] = static_cast<NUdf::TUnboxedValue*>(values + pos);
         }
-        auto *const *inputPtrs = static_cast<const TDerived*>(this)->PrepareInput(*static_cast<TState*>(state.GetRawPtr()), ctx, outputPtrsVec.data());
+        NUdf::TUnboxedValue*const* inputPtrs = nullptr;
+        if constexpr (StateKind == EValueRepresentation::Embedded) {
+            inputPtrs = static_cast<const TDerived*>(this)->PrepareInput(*static_cast<TState*>(state.GetRawPtr()), ctx, outputPtrsVec.data());
+        } else {
+            inputPtrs = static_cast<const TDerived*>(this)->PrepareInput(static_cast<TState*>(state.AsBoxed().Get()), ctx, outputPtrsVec.data());
+        }
         for (size_t pos = 0; pos < width; pos++) {
-            if(auto in = inputPtrs[pos]) {
+            if (auto in = inputPtrs[pos]) {
                 *in = inputVec[pos];
             }
         }
-        return static_cast<const TDerived*>(this)->DoProcess(*static_cast<TState*>(state.GetRawPtr()), ctx, fetchRes, outputPtrsVec.data());
+        if constexpr (StateKind == EValueRepresentation::Embedded) {
+            return static_cast<const TDerived*>(this)->DoProcess(*static_cast<TState*>(state.GetRawPtr()), ctx, fetchRes, outputPtrsVec.data());
+        } else {
+            return static_cast<const TDerived*>(this)->DoProcess(static_cast<TState*>(state.AsBoxed().Get()), ctx, fetchRes, outputPtrsVec.data());
+        }
     }
 
 public:
@@ -52,9 +65,18 @@ public:
         }
         EProcessResult res = EProcessResult::Fetch;
         while (res == EProcessResult::Fetch) {
-            auto *const *input = static_cast<const TDerived*>(this)->PrepareInput(*static_cast<TState*>(state.GetRawPtr()), ctx, output);
+            NUdf::TUnboxedValue*const* input = nullptr;
+            if constexpr (StateKind == EValueRepresentation::Embedded) {
+                input = static_cast<const TDerived*>(this)->PrepareInput(*static_cast<TState*>(state.GetRawPtr()), ctx, output);
+            } else {
+                input = static_cast<const TDerived*>(this)->PrepareInput(static_cast<TState*>(state.AsBoxed().Get()), ctx, output);
+            }
             auto fetchRes = input ? SourceFlow->FetchValues(ctx, input) : EFetchResult::One;
-            res = static_cast<const TDerived*>(this)->DoProcess(*static_cast<TState*>(state.GetRawPtr()), ctx, fetchRes, output);
+            if constexpr (StateKind == EValueRepresentation::Embedded) {
+                res = static_cast<const TDerived*>(this)->DoProcess(*static_cast<TState*>(state.GetRawPtr()), ctx, fetchRes, output);
+            } else {
+                res = static_cast<const TDerived*>(this)->DoProcess(static_cast<TState*>(state.AsBoxed().Get()), ctx, fetchRes, output);
+            }
         }
         return static_cast<EFetchResult>(res);
     }

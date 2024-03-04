@@ -328,7 +328,7 @@ Y_UNIT_TEST_SUITE(TPqGroupTestReboots) {
         });
     }
 
-    //RUN: Reboot tablet 9437195 (#44)
+    //RUN: Reboot tablet 72075186233409547 (#44)
     //VERIFY failed:
     //ydb/core/blobstorage/dsproxy/mock/dsproxy_mock.cpp:289
     //Handle(): requirement std::make_pair(msg->CollectGeneration, msg->CollectStep) >= barrier.MakeCollectPair() failed

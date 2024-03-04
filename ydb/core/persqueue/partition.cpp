@@ -1906,7 +1906,7 @@ void TPartition::OnProcessTxsAndUserActsWriteComplete(ui64 cookie, const TActorC
     }
 }
 
-void TPartition::EndChangePartitionConfig(const NKikimrPQ::TPQTabletConfig& config,
+void TPartition::EndChangePartitionConfig(NKikimrPQ::TPQTabletConfig& config,
                                           NPersQueue::TTopicConverterPtr topicConverter,
                                           const TActorContext& ctx)
 {

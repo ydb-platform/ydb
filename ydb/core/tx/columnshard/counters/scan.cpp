@@ -15,7 +15,15 @@ TScanCounters::TScanCounters(const TString& module)
     , HasResultsAckRequest(TBase::GetDeriviative("HasResultsAckRequest"))
     , NoResultsAckRequest(TBase::GetDeriviative("NoResultsAckRequest"))
     , AckWaitingDuration(TBase::GetDeriviative("AckWaitingDuration"))
+
     , ScanDuration(TBase::GetDeriviative("ScanDuration"))
+
+    , NoScanRecords(TBase::GetDeriviative("NoScanRecords"))
+    , NoScanIntervals(TBase::GetDeriviative("NoScanIntervals"))
+    , LinearScanRecords(TBase::GetDeriviative("LinearScanRecords"))
+    , LinearScanIntervals(TBase::GetDeriviative("LinearScanIntervals"))
+    , LogScanRecords(TBase::GetDeriviative("LogScanRecords"))
+    , LogScanIntervals(TBase::GetDeriviative("LogScanIntervals"))
 
     , PortionBytes(TBase::GetDeriviative("PortionBytes"))
     , FilterBytes(TBase::GetDeriviative("FilterBytes"))
@@ -51,7 +59,10 @@ TScanCounters::TScanCounters(const TString& module)
     , HistogramBlobsWaitingDuration(TBase::GetHistogram("BlobsWaitingDuration", NMonitoring::ExponentialHistogram(20, 2, 256)))
 
     , BlobsReceivedCount(TBase::GetDeriviative("BlobsReceivedCount"))
-    , BlobsReceivedBytes(TBase::GetDeriviative("BlobsReceivedBytes")) {
+    , BlobsReceivedBytes(TBase::GetDeriviative("BlobsReceivedBytes"))
+{
+    ResourcesSubscriberCounters = std::make_shared<NOlap::NResourceBroker::NSubscribe::TSubscriberCounters>();
+
 }
 
 NKikimr::NColumnShard::TScanAggregations TScanCounters::BuildAggregations() {

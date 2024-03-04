@@ -12,7 +12,7 @@ target_link_libraries(columnshard-hooks-testing PUBLIC
   contrib-libs-cxxsupp
   yutil
   columnshard-hooks-abstract
-  engines-reader-order_control
+  columnshard-engines-changes
 )
 target_sources(columnshard-hooks-testing PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/core/tx/columnshard/hooks/testing/controller.cpp

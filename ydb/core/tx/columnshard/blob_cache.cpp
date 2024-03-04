@@ -39,7 +39,7 @@ private:
             : TReadBlobRangeOptions(opts)
             , BlobRange(blobRange)
         {
-            Y_VERIFY(blobRange.BlobId.IsValid());
+            Y_ABORT_UNLESS(blobRange.BlobId.IsValid());
         }
 
         bool PromoteInCache() const {
@@ -63,7 +63,7 @@ private:
         std::tuple<ui64, ui32, EReadVariant> BlobSource() const {
             const TUnifiedBlobId& blobId = BlobRange.BlobId;
 
-            Y_VERIFY(blobId.IsValid());
+            Y_ABORT_UNLESS(blobId.IsValid());
 
             if (blobId.IsDsBlob()) {
                 // Tablet & group restriction
@@ -100,7 +100,6 @@ private:
     };
 
     static constexpr i64 MAX_IN_FLIGHT_BYTES = 250ll << 20;
-    static constexpr i64 MAX_IN_FLIGHT_FALLBACK_BYTES = 100ll << 20;
     static constexpr i64 MAX_REQUEST_BYTES = 8ll << 20;
     static constexpr TDuration DEFAULT_READ_DEADLINE = TDuration::Seconds(30);
     static constexpr TDuration FAST_READ_DEADLINE = TDuration::Seconds(10);
@@ -113,7 +112,6 @@ private:
 
     TControlWrapper MaxCacheDataSize;
     TControlWrapper MaxInFlightDataSize;
-    TControlWrapper MaxFallbackDataSize; // It's expected to be less then MaxInFlightDataSize
     i64 CacheDataSize;              // Current size of all blobs in cache
     ui64 ReadCookie;
     THashMap<ui64, std::vector<TBlobRange>> CookieToRange;  // All in-flight requests
@@ -121,7 +119,6 @@ private:
     TDeque<TReadItem> ReadQueue;    // Reads that are waiting to be sent
                                     // TODO: Consider making per-group queues
     i64 InFlightDataSize;           // Current size of all in-flight blobs
-    i64 FallbackDataSize;           // Current size of in-flight fallback blobs
 
     THashMap<ui64, TActorId> ShardPipes;    // TabletId -> PipeClient for small blob read requests
     THashMap<ui64, THashSet<ui64>> InFlightTabletRequests;  // TabletId -> list to read cookies
@@ -137,6 +134,10 @@ private:
     const TCounterPtr HitsBytes;
     const TCounterPtr EvictedBytes;
     const TCounterPtr ReadBytes;
+    const TCounterPtr ReadRangeFailedBytes;
+    const TCounterPtr ReadRangeFailedCount;
+    const TCounterPtr ReadSimpleFailedBytes;
+    const TCounterPtr ReadSimpleFailedCount;
     const TCounterPtr AddBytes;
     const TCounterPtr ForgetBytes;
     const TCounterPtr SizeBytesInFlight;
@@ -155,11 +156,9 @@ public:
         , Cache(SIZE_MAX)
         , MaxCacheDataSize(maxSize, 0, 1ull << 40)
         , MaxInFlightDataSize(Min<i64>(MaxCacheDataSize, MAX_IN_FLIGHT_BYTES), 0, 10ull << 30)
-        , MaxFallbackDataSize(Min<i64>(MaxCacheDataSize / 2, MAX_IN_FLIGHT_FALLBACK_BYTES), 0, 5ull << 30)
         , CacheDataSize(0)
         , ReadCookie(1)
         , InFlightDataSize(0)
-        , FallbackDataSize(0)
         , SizeBytes(counters->GetCounter("SizeBytes"))
         , SizeBlobs(counters->GetCounter("SizeBlobs"))
         , Hits(counters->GetCounter("Hits", true))
@@ -170,6 +169,10 @@ public:
         , HitsBytes(counters->GetCounter("HitsBytes", true))
         , EvictedBytes(counters->GetCounter("EvictedBytes", true))
         , ReadBytes(counters->GetCounter("ReadBytes", true))
+        , ReadRangeFailedBytes(counters->GetCounter("ReadRangeFailedBytes", true))
+        , ReadRangeFailedCount(counters->GetCounter("ReadRangeFailedCount", true))
+        , ReadSimpleFailedBytes(counters->GetCounter("ReadSimpleFailedBytes", true))
+        , ReadSimpleFailedCount(counters->GetCounter("ReadSimpleFailedCount", true))
         , AddBytes(counters->GetCounter("AddBytes", true))
         , ForgetBytes(counters->GetCounter("ForgetBytes", true))
         , SizeBytesInFlight(counters->GetCounter("SizeBytesInFlight"))
@@ -182,10 +185,8 @@ public:
         auto& icb = AppData(ctx)->Icb;
         icb->RegisterSharedControl(MaxCacheDataSize, "BlobCache.MaxCacheDataSize");
         icb->RegisterSharedControl(MaxInFlightDataSize, "BlobCache.MaxInFlightDataSize");
-        icb->RegisterSharedControl(MaxFallbackDataSize, "BlobCache.MaxFallbackDataSize");
 
         LOG_S_NOTICE("MaxCacheDataSize: " << (i64)MaxCacheDataSize
-            << " MaxFallbackDataSize: " << (i64)MaxFallbackDataSize
             << " InFlightDataSize: " << (i64)InFlightDataSize);
 
         Become(&TBlobCache::StateFunc);
@@ -204,7 +205,6 @@ private:
             HFunc(TEvBlobStorage::TEvGetResult, Handle);
             HFunc(TEvTabletPipe::TEvClientConnected, Handle);
             HFunc(TEvTabletPipe::TEvClientDestroyed, Handle);
-            HFunc(TEvColumnShard::TEvReadBlobRangesResult, Handle);
         default:
             LOG_S_WARN("Unhandled event type: " << ev->GetTypeRewrite()
                        << " event: " << ev->ToString());
@@ -231,9 +231,8 @@ private:
     void Handle(TEvBlobCache::TEvReadBlobRange::TPtr& ev, const TActorContext& ctx) {
         const TBlobRange& blobRange = ev->Get()->BlobRange;
         const bool promote = (i64)MaxCacheDataSize && ev->Get()->ReadOptions.CacheAfterRead;
-        const bool fallback = ev->Get()->ReadOptions.ForceFallback;
 
-        LOG_S_DEBUG("Read request: " << blobRange << " cache: " << (ui32)promote << " fallback: " << (ui32)fallback << " sender:" << ev->Sender);
+        LOG_S_DEBUG("Read request: " << blobRange << " cache: " << (ui32)promote << " sender:" << ev->Sender);
 
         if (!HandleSingleRangeRead(TReadItem(ev->Get()->ReadOptions, blobRange), ev->Sender, ctx)) {
             MakeReadRequests(ctx);
@@ -242,6 +241,7 @@ private:
 
     bool HandleSingleRangeRead(TReadItem readItem, const TActorId& sender, const TActorContext& ctx) {
         const TBlobRange& blobRange = readItem.BlobRange;
+        AFL_DEBUG(NKikimrServices::BLOB_CACHE)("ask", blobRange);
 
         // Is in cache?
         auto it = readItem.PromoteInCache() ? Cache.Find(blobRange) : Cache.FindWithoutPromote(blobRange);
@@ -254,16 +254,6 @@ private:
 
         LOG_S_DEBUG("Miss cache: " << blobRange << " sender:" << sender);
         Misses->Inc();
-
-        // Prevent full cache flushing by exported blobs. Decrease propability of caching depending on cache size.
-        // TODO: better cache strategy
-        if (readItem.ForceFallback && readItem.CacheAfterRead) {
-            if (CacheDataSize > (MaxCacheDataSize / 4) * 3) {
-                readItem.CacheAfterRead = !(ReadCookie % 256);
-            } else if (CacheDataSize > (MaxCacheDataSize / 2)) {
-                readItem.CacheAfterRead = !(ReadCookie % 32);
-            }
-        }
 
         // Update set of outstanding requests.
         TReadInfo& blobInfo = OutstandingReads[blobRange];
@@ -357,13 +347,13 @@ private:
     void SendBatchReadRequestToDS(const std::vector<TBlobRange>& blobRanges, const ui64 cookie,
         ui32 dsGroup, TReadItem::EReadVariant readVariant, const TActorContext& ctx)
     {
-        LOG_S_DEBUG("Sending read from DS: group: " << dsGroup
+        LOG_S_DEBUG("Sending read from BlobCache: group: " << dsGroup
             << " ranges: " << JoinStrings(blobRanges.begin(), blobRanges.end(), " ")
             << " cookie: " << cookie);
 
         TArrayHolder<TEvBlobStorage::TEvGet::TQuery> queires(new TEvBlobStorage::TEvGet::TQuery[blobRanges.size()]);
         for (size_t i = 0; i < blobRanges.size(); ++i) {
-            Y_VERIFY(dsGroup == blobRanges[i].BlobId.GetDsGroup());
+            Y_ABORT_UNLESS(dsGroup == blobRanges[i].BlobId.GetDsGroup());
             queires[i].Set(blobRanges[i].BlobId.GetLogoBlobId(), blobRanges[i].Offset, blobRanges[i].Size);
         }
 
@@ -386,7 +376,7 @@ private:
         return TInstant::Max(); // EReadVariant::DEFAULT_NO_DEADLINE
     }
 
-    void MakeReadRequests(const TActorContext& ctx, THashMap<TUnifiedBlobId, std::vector<TBlobRange>>&& fallbackRanges = {}) {
+    void MakeReadRequests(const TActorContext& ctx) {
         THashMap<std::tuple<ui64, ui32, TReadItem::EReadVariant>, std::vector<TBlobRange>> groupedBlobRanges;
 
         while (!ReadQueue.empty()) {
@@ -401,23 +391,8 @@ private:
             SizeBytesInFlight->Add(blobRange.Size);
             SizeBlobsInFlight->Inc();
 
-            if (readItem.ForceFallback) {
-                Y_VERIFY(blobRange.BlobId.IsDsBlob());
-
-                if (FallbackDataSize && FallbackDataSize >= MaxFallbackDataSize) {
-                    // 1. Do not block DS reads by fallbacks (fallback reads form S3 could be much slower then DS ones)
-                    // 2. Limit max fallback data in flight
-                    // Requires MaxFallbackDataSize < MaxInFlightDataSize
-                    ReadQueue.push_back(readItem);
-                } else {
-                    // Tablet cannot read different blobs in fallback now. Group reads by blobId.
-                    fallbackRanges[blobRange.BlobId].push_back(blobRange);
-                    FallbackDataSize += blobRange.Size;
-                }
-            } else {
-                auto blobSrc = readItem.BlobSource();
-                groupedBlobRanges[blobSrc].push_back(blobRange);
-            }
+            auto blobSrc = readItem.BlobSource();
+            groupedBlobRanges[blobSrc].push_back(blobRange);
 
             ReadQueue.pop_front();
         }
@@ -427,17 +402,6 @@ private:
         // We might need to free some space to accommodate the results of new reads
         Evict(ctx);
 
-        std::vector<ui64> tabletReads;
-        tabletReads.reserve(groupedBlobRanges.size() + fallbackRanges.size());
-
-        for (auto& [blobId, ranges] : fallbackRanges) {
-            Y_VERIFY(blobId.IsDsBlob());
-
-            ui64 cookie = ++ReadCookie;
-            CookieToRange[cookie] = std::move(ranges);
-            tabletReads.push_back(cookie);
-        }
-
         ui64 cookie = ++ReadCookie;
 
         // TODO: fix small blobs mix with dsGroup == 0 (it could be zero in tests)
@@ -445,17 +409,13 @@ private:
             ui64 requestSize = 0;
             ui32 dsGroup = std::get<1>(target);
             TReadItem::EReadVariant readVariant = std::get<2>(target);
-            bool isDS = rangesGroup.begin()->BlobId.IsDsBlob();
+            Y_ABORT_UNLESS(rangesGroup.begin()->BlobId.IsDsBlob());
 
             std::vector<ui64> dsReads;
 
             for (auto& blobRange : rangesGroup) {
                 if (requestSize && (requestSize + blobRange.Size > MAX_REQUEST_BYTES)) {
-                    if (isDS) {
-                        dsReads.push_back(cookie);
-                    } else {
-                        tabletReads.push_back(cookie);
-                    }
+                    dsReads.push_back(cookie);
                     cookie = ++ReadCookie;
                     requestSize = 0;
                 }
@@ -464,11 +424,7 @@ private:
                 CookieToRange[cookie].emplace_back(std::move(blobRange));
             }
             if (requestSize) {
-                if (isDS) {
-                    dsReads.push_back(cookie);
-                } else {
-                    tabletReads.push_back(cookie);
-                }
+                dsReads.push_back(cookie);
                 cookie = ++ReadCookie;
                 requestSize = 0;
             }
@@ -476,10 +432,6 @@ private:
             for (ui64 cookie : dsReads) {
                 SendBatchReadRequestToDS(CookieToRange[cookie], cookie, dsGroup, readVariant, ctx);
             }
-        }
-
-        for (ui64 cookie : tabletReads) {
-            SendBatchReadRequestToTablet(CookieToRange[cookie], cookie, ctx);
         }
     }
 
@@ -494,11 +446,15 @@ private:
         const ui64 readCookie = ev->Cookie;
 
         if (ev->Get()->ResponseSz < 1) {
-            Y_FAIL("Unexpected reply from blobstorage");
+            Y_ABORT("Unexpected reply from blobstorage");
         }
 
         if (ev->Get()->Status != NKikimrProto::EReplyStatus::OK) {
-            LOG_S_WARN("Read failed: " << ev->Get()->ToString());
+            AFL_WARN(NKikimrServices::BLOB_CACHE)("fail", ev->Get()->ToString());
+            ReadSimpleFailedBytes->Add(ev->Get()->ResponseSz);
+            ReadSimpleFailedCount->Add(1);
+        } else {
+            AFL_DEBUG(NKikimrServices::BLOB_CACHE)("success", ev->Get()->ToString());
         }
 
         auto cookieIt = CookieToRange.find(readCookie);
@@ -511,25 +467,20 @@ private:
         std::vector<TBlobRange> blobRanges = std::move(cookieIt->second);
         CookieToRange.erase(readCookie);
 
-        Y_VERIFY(blobRanges.size() == ev->Get()->ResponseSz, "Mismatched number of results for read request!");
+        Y_ABORT_UNLESS(blobRanges.size() == ev->Get()->ResponseSz, "Mismatched number of results for read request!");
 
-        // We could find blob ranges evicted (NODATA). Try to fallback them to tablet.
-        THashMap<TUnifiedBlobId, std::vector<TBlobRange>> fallbackRanges;
         for (size_t i = 0; i < ev->Get()->ResponseSz; ++i) {
             const auto& res = ev->Get()->Responses[i];
-            if (res.Status == NKikimrProto::EReplyStatus::NODATA) {
-                fallbackRanges[blobRanges[i].BlobId].emplace_back(std::move(blobRanges[i]));
-            } else {
-                ProcessSingleRangeResult(blobRanges[i], readCookie, res.Status, res.Buffer.ConvertToString(), ctx);
-            }
+            ProcessSingleRangeResult(blobRanges[i], readCookie, res.Status, res.Buffer.ConvertToString(), ctx);
         }
 
-        MakeReadRequests(ctx, std::move(fallbackRanges));
+        MakeReadRequests(ctx);
     }
 
     void ProcessSingleRangeResult(const TBlobRange& blobRange, const ui64 readCookie,
-        ui32 status, const TString& data, const TActorContext& ctx)
+        ui32 status, const TString& data, const TActorContext& ctx) noexcept
     {
+        AFL_DEBUG(NKikimrServices::BLOB_CACHE)("ProcessSingleRangeResult", blobRange);
         auto readIt = OutstandingReads.find(blobRange);
         if (readIt == OutstandingReads.end()) {
             // This shouldn't happen
@@ -541,11 +492,11 @@ private:
         SizeBlobsInFlight->Dec();
         InFlightDataSize -= blobRange.Size;
 
-        Y_VERIFY(Cache.Find(blobRange) == Cache.End(),
+        Y_ABORT_UNLESS(Cache.Find(blobRange) == Cache.End(),
             "Range %s must not be already in cache", blobRange.ToString().c_str());
 
         if (status == NKikimrProto::EReplyStatus::OK) {
-            Y_VERIFY(blobRange.Size == data.size(),
+            Y_ABORT_UNLESS(blobRange.Size == data.size(),
                 "Read %s, size %" PRISZT, blobRange.ToString().c_str(), data.size());
             ReadBytes->Add(blobRange.Size);
 
@@ -555,8 +506,11 @@ private:
         } else {
             LOG_S_WARN("Read failed for range: " << blobRange
                 << " status: " << NKikimrProto::EReplyStatus_Name(status));
+            ReadRangeFailedBytes->Add(blobRange.Size);
+            ReadRangeFailedCount->Add(1);
         }
 
+        AFL_DEBUG(NKikimrServices::BLOB_CACHE)("ProcessSingleRangeResult", blobRange)("send_replies", readIt->second.Waiting.size());
         // Send results to all waiters
         for (const auto& to : readIt->second.Waiting) {
             SendResult(to, blobRange, (NKikimrProto::EReplyStatus)status, data, ctx);
@@ -565,36 +519,7 @@ private:
         OutstandingReads.erase(readIt);
     }
 
-    void SendBatchReadRequestToTablet(const std::vector<TBlobRange>& blobRanges,
-        const ui64 cookie, const TActorContext& ctx)
-    {
-        Y_VERIFY(!blobRanges.empty());
-        ui64 tabletId = blobRanges.front().BlobId.GetTabletId();
-
-        LOG_S_INFO("Sending read from Tablet: " << tabletId
-            << " ranges: " << JoinStrings(blobRanges.begin(), blobRanges.end(), " ")
-            << " cookie: " << cookie);
-
-        if (!ShardPipes.contains(tabletId)) {
-            NTabletPipe::TClientConfig clientConfig;
-            clientConfig.AllowFollower = false;
-            clientConfig.CheckAliveness = true;
-            clientConfig.RetryPolicy = {
-                .RetryLimitCount = 10,
-                .MinRetryTime = TDuration::MilliSeconds(5),
-            };
-            ShardPipes[tabletId] = ctx.Register(NTabletPipe::CreateClient(ctx.SelfID, tabletId, clientConfig));
-        }
-
-        auto ev = std::make_unique<TEvColumnShard::TEvReadBlobRanges>(blobRanges);
-
-        InFlightTabletRequests[tabletId].insert(cookie);
-        NTabletPipe::SendData(ctx, ShardPipes[tabletId], ev.release(), cookie);
-
-        ReadRequests->Inc();
-    }
-
-    // Frogets the pipe to the tablet and fails all in-flight requests to it
+    // Forgets the pipe to the tablet and fails all in-flight requests to it
     void DestroyPipe(ui64 tabletId, const TActorContext& ctx) {
         ShardPipes.erase(tabletId);
         // Send errors for in-flight requests
@@ -612,7 +537,7 @@ private:
             CookieToRange.erase(readCookie);
 
             for (size_t i = 0; i < blobRanges.size(); ++i) {
-                Y_VERIFY(blobRanges[i].BlobId.GetTabletId() == tabletId);
+                Y_ABORT_UNLESS(blobRanges[i].BlobId.GetTabletId() == tabletId);
                 ProcessSingleRangeResult(blobRanges[i], readCookie, NKikimrProto::EReplyStatus::NOTREADY, {}, ctx);
             }
         }
@@ -623,7 +548,7 @@ private:
     void Handle(TEvTabletPipe::TEvClientConnected::TPtr& ev, const TActorContext& ctx) {
         TEvTabletPipe::TEvClientConnected* msg = ev->Get();
         const ui64 tabletId = msg->TabletId;
-        Y_VERIFY(tabletId != 0);
+        Y_ABORT_UNLESS(tabletId != 0);
         if (msg->Status == NKikimrProto::OK) {
             LOG_S_DEBUG("Pipe connected to tablet: " << tabletId);
         } else {
@@ -634,68 +559,10 @@ private:
 
     void Handle(TEvTabletPipe::TEvClientDestroyed::TPtr& ev, const TActorContext& ctx) {
         const ui64 tabletId = ev->Get()->TabletId;
-        Y_VERIFY(tabletId != 0);
+        Y_ABORT_UNLESS(tabletId != 0);
 
         LOG_S_DEBUG("Closed pipe connection to tablet: " << tabletId);
         DestroyPipe(tabletId, ctx);
-    }
-
-    void Handle(TEvColumnShard::TEvReadBlobRangesResult::TPtr& ev, const TActorContext& ctx) {
-        const auto& record = ev->Get()->Record;
-        ui64 tabletId = record.GetTabletId();
-        ui64 readCookie = ev->Cookie;
-        LOG_S_INFO("Got read result from tablet: " << tabletId);
-
-        auto cookieIt = CookieToRange.find(readCookie);
-        if (cookieIt == CookieToRange.end()) {
-            // This might only happen in case fo race between response and pipe close
-            LOG_S_NOTICE("Unknown read result cookie: " << readCookie);
-            return;
-        }
-
-        std::vector<TBlobRange> blobRanges = std::move(cookieIt->second);
-
-        Y_VERIFY(record.ResultsSize(), "Zero results for read request!");
-        Y_VERIFY(blobRanges.size() >= record.ResultsSize(), "Mismatched number of results for read request");
-
-        if (blobRanges.size() == record.ResultsSize()) {
-            InFlightTabletRequests[tabletId].erase(readCookie);
-            CookieToRange.erase(readCookie);
-        } else {
-            // Extract blobRanges for returned blobId. Keep others ordered.
-            TString strReturnedBlobId = record.GetResults(0).GetBlobRange().GetBlobId();
-            std::vector<TBlobRange> same;
-            std::vector<TBlobRange> others;
-            same.reserve(record.ResultsSize());
-            others.reserve(blobRanges.size() - record.ResultsSize());
-
-            for (auto&& blobRange : blobRanges) {
-                TString strBlobId = blobRange.BlobId.ToStringNew();
-                if (strBlobId == strReturnedBlobId) {
-                    same.emplace_back(std::move(blobRange));
-                } else {
-                    others.emplace_back(std::move(blobRange));
-                }
-            }
-            blobRanges.swap(same);
-
-            CookieToRange[readCookie] = std::move(others);
-        }
-
-        for (size_t i = 0; i < record.ResultsSize(); ++i) {
-            const auto& res = record.GetResults(i);
-            const auto& blobRange = blobRanges[i];
-            if (!blobRange.BlobId.IsSmallBlob()) {
-                FallbackDataSize -= blobRange.Size;
-            }
-
-            Y_VERIFY(blobRange.BlobId.ToStringNew() == res.GetBlobRange().GetBlobId());
-            Y_VERIFY(blobRange.Offset == res.GetBlobRange().GetOffset());
-            Y_VERIFY(blobRange.Size == res.GetBlobRange().GetSize());
-            ProcessSingleRangeResult(blobRange, readCookie, res.GetStatus(), res.GetData(), ctx);
-        }
-
-        MakeReadRequests(ctx);
     }
 
     void InsertIntoCache(const TBlobRange& blobRange, TString data) {
@@ -703,7 +570,7 @@ private:
         if (data.capacity() > data.size() * 1.1) {
             data = TString(data.begin(), data.end());
         }
-
+        AFL_DEBUG(NKikimrServices::BLOB_CACHE)("insert_cache", blobRange);
         if (Cache.Insert(blobRange, data)) {
             CachedRanges.insert(blobRange);
 
@@ -723,8 +590,7 @@ private:
             LOG_S_DEBUG("Evict: " << it.Key()
                 << " CacheDataSize: " << CacheDataSize
                 << " InFlightDataSize: " << (i64)InFlightDataSize
-                << " MaxCacheDataSize: " << (i64)MaxCacheDataSize
-                << " MaxFallbackDataSize: " << (i64)MaxFallbackDataSize);
+                << " MaxCacheDataSize: " << (i64)MaxCacheDataSize);
 
             Evictions->Inc();
             EvictedBytes->Add(it.Key().Size);

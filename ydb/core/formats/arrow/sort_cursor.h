@@ -67,10 +67,14 @@ struct TSortCursorImpl {
 
     void Reset(std::shared_ptr<arrow::RecordBatch> batch) {
         current_batch = batch;
-        sort_columns = std::make_shared<TArrayVec>(ExtractColumns(batch, desc->SortingKey)->columns());
+        auto rbSorting = ExtractColumns(batch, desc->SortingKey);
+        Y_ABORT_UNLESS(rbSorting);
+        sort_columns = std::make_shared<TArrayVec>(rbSorting->columns());
         all_columns = &batch->columns();
         if (desc->ReplaceKey) {
-            replace_columns = std::make_shared<TArrayVec>(ExtractColumns(batch, desc->ReplaceKey)->columns());
+            auto rbReplace = ExtractColumns(batch, desc->ReplaceKey);
+            Y_ABORT_UNLESS(rbReplace);
+            replace_columns = std::make_shared<TArrayVec>(rbReplace->columns());
         }
         pos = 0;
     }
@@ -163,7 +167,7 @@ public:
     TSortCursor& NextChild() { return Queue[NextChildIndex()]; }
 
     void Next() {
-        Y_VERIFY(IsValid());
+        Y_ABORT_UNLESS(IsValid());
 
         if (!Current()->isLast()) {
             Current()->next();

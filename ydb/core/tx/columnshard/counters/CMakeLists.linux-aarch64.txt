@@ -25,4 +25,5 @@ target_sources(tx-columnshard-counters PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/core/tx/columnshard/counters/columnshard.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/tx/columnshard/counters/insert_table.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/tx/columnshard/counters/common_data.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/tx/columnshard/counters/splitter.cpp
 )

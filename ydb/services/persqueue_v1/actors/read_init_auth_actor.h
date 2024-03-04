@@ -22,7 +22,7 @@ public:
     TReadInitAndAuthActor(const TActorContext& ctx, const TActorId& parentId, const TString& clientId, const ui64 cookie,
                           const TString& session, const NActors::TActorId& schemeCache, const NActors::TActorId& newSchemeCache,
                           TIntrusivePtr<::NMonitoring::TDynamicCounters> counters, TIntrusiveConstPtr<NACLib::TUserToken> token,
-                          const NPersQueue::TTopicsToConverter& topics, const TString& localCluster);
+                          const NPersQueue::TTopicsToConverter& topics, const TString& localCluster, bool skipReadRuleCheck = false);
 
     ~TReadInitAndAuthActor();
 
@@ -71,6 +71,7 @@ private:
 
     const TString ClientId;
     const TString ClientPath;
+    const bool SkipReadRuleCheck;
 
     TIntrusiveConstPtr<NACLib::TUserToken> Token;
 

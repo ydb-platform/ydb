@@ -6,7 +6,9 @@
 
 #include <ydb/core/base/tablet_pipe.h>
 #include <ydb/core/client/server/msgbus_server_pq_metacache.h>
+#include <ydb/core/persqueue/pq_rl_helpers.h>
 #include <ydb/core/persqueue/user_info.h>
+#include <ydb/core/persqueue/write_meta.h>
 
 #include <ydb/public/lib/base/msgbus_status.h>
 
@@ -21,7 +23,7 @@ using namespace NSchemeCache;
 
 
 namespace {
-    const ui32 DefaultTimeout = 30000;
+    static constexpr TDuration DefaultTimeout = TDuration::MilliSeconds(30000);
 }
 
 struct TTabletInfo { // ToDo !! remove
@@ -52,7 +54,22 @@ struct TTopicInfo {
 
 using namespace NActors;
 
-class TPQFetchRequestActor : public TActorBootstrapped<TPQFetchRequestActor> {
+class TPQFetchRequestActor : public TActorBootstrapped<TPQFetchRequestActor>
+                           , private TRlHelpers {
+
+struct TEvPrivate {
+    enum EEv {
+        EvTimeout = EventSpaceBegin(NActors::TEvents::ES_PRIVATE),
+        EvEnd
+    };
+
+    static_assert(EvEnd < EventSpaceEnd(NActors::TEvents::ES_PRIVATE), "expect EvEnd < EventSpaceEnd(NActors::TEvents::ES_PRIVATE)");
+
+    struct TEvTimeout : NActors::TEventLocal<TEvTimeout, EvTimeout> {
+    };
+
+};
+
 private:
     TFetchRequestSettings Settings;
 
@@ -74,6 +91,7 @@ private:
     ui32 PartTabletsRequested;
     TString ErrorReason;
     TActorId RequesterId;
+    ui64 PendingQuotaAmount;
 
 public:
     static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
@@ -81,7 +99,8 @@ public:
     }
 
     TPQFetchRequestActor(const TFetchRequestSettings& settings, const TActorId& schemeCacheId, const TActorId& requesterId)
-        : Settings(settings)
+        : TRlHelpers({}, settings.RlCtx, 8_KB, false, TDuration::Seconds(1))
+        , Settings(settings)
         , CanProcessFetchRequest(false)
         , FetchRequestReadsDone(0)
         , FetchRequestCurrentReadTablet(0)
@@ -92,7 +111,6 @@ public:
         , PartTabletsRequested(0)
         , RequesterId(requesterId)
     {
-        
         ui64 deadline = TAppData::TimeProvider->Now().MilliSeconds() + Min<ui32>(Settings.MaxWaitTimeMs, 30000);
         FetchRequestBytesLeft = Settings.TotalMaxBytes;
         for (const auto& p : Settings.Partitions) {
@@ -103,7 +121,8 @@ public:
                 Response = CreateErrorReply(Ydb::StatusIds::BAD_REQUEST, "No maxBytes for partition in fetch request");
                 return;
             }
-            bool res = TopicInfo[p.Topic].PartitionsToRequest.insert(p.Partition).second;
+            auto path = CanonizePath(p.Topic);
+            bool res = TopicInfo[path].PartitionsToRequest.insert(p.Partition).second;
             if (!res) {
                 Response = CreateErrorReply(Ydb::StatusIds::BAD_REQUEST, "Some partition specified multiple times in fetch request");
                 return;
@@ -112,10 +131,28 @@ public:
             fetchInfo->Record.SetPartition(p.Partition);
             fetchInfo->Record.SetOffset(p.Offset);
             fetchInfo->Record.SetDeadline(deadline);
-            TopicInfo[p.Topic].FetchInfo[p.Partition] = fetchInfo;
+            TopicInfo[path].FetchInfo[p.Partition] = fetchInfo;
         }
     }
-    //savnik хендлить таймаут запроса
+
+    void Handle(TEvents::TEvWakeup::TPtr& ev, const TActorContext& ctx) {
+        const auto tag = static_cast<EWakeupTag>(ev->Get()->Tag);
+        OnWakeup(tag);
+        switch (tag) {
+            case EWakeupTag::RlAllowed:
+                ProceedFetchRequest(ctx);
+                PendingQuotaAmount = 0;
+                break;
+
+            case EWakeupTag::RlNoResource:
+                // Re-requesting the quota. We do this until we get a quota. 
+                RequestDataQuota(PendingQuotaAmount, ctx);
+                break;
+            
+            default:
+                Y_VERIFY_DEBUG_S(false, "Unsupported tag: " << static_cast<ui64>(tag));
+        }
+    }
 
     void Bootstrap(const TActorContext& ctx) {
         LOG_INFO_S(ctx, NKikimrServices::PQ_FETCH_REQUEST, "Fetch request actor boostrapped. Request is valid: " << (!Response));
@@ -128,7 +165,8 @@ public:
         ctx.Schedule(TDuration::MilliSeconds(Min<ui32>(Settings.MaxWaitTimeMs, 30000)), new TEvPersQueue::TEvHasDataInfoResponse);
 
         SendSchemeCacheRequest(ctx);
-        Become(&TPQFetchRequestActor::StateFunc, ctx, TDuration::MilliSeconds(DefaultTimeout), new TEvents::TEvWakeup());
+        Schedule(DefaultTimeout, new TEvPrivate::TEvTimeout());
+        Become(&TPQFetchRequestActor::StateFunc);
     }
 
     void SendSchemeCacheRequest(const TActorContext& ctx) {
@@ -159,7 +197,6 @@ public:
     void HandleSchemeCacheResponse(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr& ev, const TActorContext& ctx) {
         LOG_DEBUG_S(ctx, NKikimrServices::PQ_FETCH_REQUEST, "Handle SchemeCache response");
         auto& result = ev->Get()->Request;
-
         for (const auto& entry : result->ResultSet) {
             auto path = CanonizePath(NKikimr::JoinPath(entry.Path));
             switch (entry.Status) {
@@ -239,11 +276,11 @@ public:
 
         ++TopicsAnswered;
         auto it = TopicInfo.find(name);
-        Y_VERIFY(it != TopicInfo.end(), "topic '%s'", name.c_str());
+        Y_ABORT_UNLESS(it != TopicInfo.end(), "topic '%s'", name.c_str());
         it->second.Config = pqDescr.GetPQTabletConfig();
         it->second.Config.SetVersion(pqDescr.GetAlterVersion());
         it->second.NumParts = pqDescr.PartitionsSize();
-        Y_VERIFY(it->second.BalancerTabletId);
+        Y_ABORT_UNLESS(it->second.BalancerTabletId);
 
         for (ui32 i = 0; i < pqDescr.PartitionsSize(); ++i) {
             ui32 part = pqDescr.GetPartitions(i).GetPartitionId();
@@ -252,7 +289,7 @@ public:
                 continue;
             }
             bool res = it->second.PartitionToTablet.insert({part, tabletId}).second;
-            Y_VERIFY(res);
+            Y_ABORT_UNLESS(res);
             if (TabletInfo.find(tabletId) == TabletInfo.end()) {
                 auto& tabletInfo = TabletInfo[tabletId];
                 tabletInfo.Topic = name;
@@ -283,7 +320,7 @@ public:
             auto reason = TStringBuilder() << "no one of requested partitions in topic " << name << ", Marker# PQ12";
             return SendReplyAndDie(CreateErrorReply(Ydb::StatusIds::BAD_REQUEST, reason), ctx);
         }
-        Y_VERIFY(!TabletInfo.empty()); // if TabletInfo is empty - topic is empty
+        Y_ABORT_UNLESS(!TabletInfo.empty()); // if TabletInfo is empty - topic is empty
     }
 
     bool HandlePipeError(const ui64 tabletId, const TActorContext& ctx)
@@ -333,6 +370,7 @@ public:
         for (auto& actor: PQClient) {
             NTabletPipe::CloseClient(ctx, actor);
         }
+        TRlHelpers::PassAway(SelfId());
         TActorBootstrapped<TPQFetchRequestActor>::Die(ctx);
     }
 
@@ -354,24 +392,25 @@ public:
             CreateOkResponse();
             return SendReplyAndDie(std::move(Response), ctx);
         }
-        Y_VERIFY(FetchRequestReadsDone < Settings.Partitions.size());
+        Y_ABORT_UNLESS(FetchRequestReadsDone < Settings.Partitions.size());
         const auto& req = Settings.Partitions[FetchRequestReadsDone];
         const auto& topic = req.Topic;
         const auto& offset = req.Offset;
         const auto& part = req.Partition;
         const auto& maxBytes = req.MaxBytes;
         const auto& readTimestampMs = req.ReadTimestampMs;
-        auto it = TopicInfo.find(topic);
-        Y_VERIFY(it != TopicInfo.end());
+        const auto& clientId = req.ClientId;
+        auto it = TopicInfo.find(CanonizePath(topic));
+        Y_ABORT_UNLESS(it != TopicInfo.end());
         if (it->second.PartitionToTablet.find(part) == it->second.PartitionToTablet.end()) {
             return;
         }
         ui64 tabletId = it->second.PartitionToTablet[part];
-        Y_VERIFY(tabletId);
+        Y_ABORT_UNLESS(tabletId);
         FetchRequestCurrentReadTablet = tabletId;
         ++CurrentCookie;
         auto jt = TabletInfo.find(tabletId);
-        Y_VERIFY(jt != TabletInfo.end());
+        Y_ABORT_UNLESS(jt != TabletInfo.end());
         if (jt->second.BrokenPipe || FetchRequestBytesLeft == 0) { //answer right now
             ctx.Send(ctx.SelfID, FormEmptyCurrentRead(CurrentCookie).Release());
             return;
@@ -388,7 +427,7 @@ public:
         partReq->SetTopic(topic);
         partReq->SetPartition(part);
         auto read = partReq->MutableCmdRead();
-        read->SetClientId(NKikimr::NPQ::CLIENTID_WITHOUT_CONSUMER);
+        read->SetClientId(clientId);
         read->SetOffset(offset);
         read->SetCount(1000000);
         read->SetTimeoutMs(0);
@@ -399,12 +438,13 @@ public:
 
     void ProcessFetchRequestResult(TEvPersQueue::TEvResponse::TPtr& ev, const TActorContext& ctx) {
         auto& record = ev->Get()->Record;
-        Y_VERIFY(record.HasPartitionResponse());
+        Y_ABORT_UNLESS(record.HasPartitionResponse());
         if (record.GetPartitionResponse().GetCookie() != CurrentCookie || FetchRequestCurrentReadTablet == 0) {
             LOG_ERROR_S(ctx, NKikimrServices::PQ_FETCH_REQUEST, "proxy fetch error: got response from tablet " << record.GetPartitionResponse().GetCookie()
                                 << " while waiting from " << CurrentCookie << " and requested tablet is " << FetchRequestCurrentReadTablet);
             return;
         }
+
 
         if (FetchRequestBytesLeft >= (ui32)record.ByteSize())
             FetchRequestBytesLeft -= (ui32)record.ByteSize();
@@ -416,7 +456,7 @@ public:
         }
 
         auto res = Response->Response.AddPartResult();
-        Y_VERIFY(FetchRequestReadsDone < Settings.Partitions.size());
+        Y_ABORT_UNLESS(FetchRequestReadsDone < Settings.Partitions.size());
         const auto& req = Settings.Partitions[FetchRequestReadsDone];
         const auto& topic = req.Topic;
         const auto& part = req.Partition;
@@ -432,7 +472,32 @@ public:
             read->SetErrorReason(record.GetErrorReason());
 
         ++FetchRequestReadsDone;
-        ProceedFetchRequest(ctx);
+
+        auto it = TopicInfo.find(CanonizePath(topic));
+        Y_ABORT_UNLESS(it != TopicInfo.end());
+
+        SetMeteringMode(it->second.PQInfo->Description.GetPQTabletConfig().GetMeteringMode());
+
+        if (IsQuotaRequired()) {
+            PendingQuotaAmount = CalcRuConsumption(GetPayloadSize(record));
+            RequestDataQuota(PendingQuotaAmount, ctx);
+        } else {
+            ProceedFetchRequest(ctx);
+        }
+
+    }
+
+    ui64 GetPayloadSize(const NKikimrClient::TResponse& record) const {
+        ui64 readBytesSize = 0;
+        const auto& response = record.GetPartitionResponse();
+        if (response.HasCmdReadResult()) {
+            const auto& results = response.GetCmdReadResult().GetResult();
+            for (auto& r : results) {
+                auto proto(NKikimr::GetDeserializedData(r.GetData()));
+                readBytesSize += proto.GetData().Size();
+            }
+        }
+        return readBytesSize;
     }
 
     bool CheckAccess(const TSecurityObject& access) {
@@ -465,9 +530,10 @@ public:
             HFunc(TEvTabletPipe::TEvClientDestroyed, Handle);
             HFunc(TEvTabletPipe::TEvClientConnected, Handle);
             HFunc(TEvPersQueue::TEvResponse, Handle);
+            HFunc(TEvents::TEvWakeup, Handle);
             HFunc(TEvTxProxySchemeCache::TEvNavigateKeySetResult, HandleSchemeCacheResponse);
             HFunc(TEvPersQueue::TEvHasDataInfoResponse, Handle);
-            CFunc(TEvents::TSystem::Wakeup, HandleTimeout);
+            CFunc(TEvPrivate::EvTimeout, HandleTimeout);
             CFunc(NActors::TEvents::TSystem::PoisonPill, Die);
     )
 };

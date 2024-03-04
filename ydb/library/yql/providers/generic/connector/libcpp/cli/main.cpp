@@ -92,7 +92,7 @@ int main() {
     NYql::TGenericConnectorConfig cfg;
     cfg.mutable_endpoint()->set_host("connector.yql-streaming.cloud.yandex.net");
     cfg.mutable_endpoint()->set_port(50051);
-    cfg.SetUseTLS(true);
+    cfg.SetUseSsl(true);
 
     auto client = NYql::NConnector::MakeClientGRPC(cfg);
 

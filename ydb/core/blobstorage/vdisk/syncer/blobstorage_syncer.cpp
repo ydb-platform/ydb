@@ -187,7 +187,7 @@ namespace NKikimr {
             TSyncerDataSerializer sds;
             SyncerData->Serialize(sds, GInfo.Get());
             CommitterId = ctx.Register(CreateSyncerCommitter(SyncerCtx, std::move(sds)));
-            ActiveActors.Insert(CommitterId);
+            ActiveActors.Insert(CommitterId, __FILE__, __LINE__, ctx, NKikimrServices::BLOBSTORAGE);
             // Sync VDisk Guid
             SyncGuid(ctx);
         }
@@ -210,7 +210,7 @@ namespace NKikimr {
                                                                    va,
                                                                    state,
                                                                    guid));
-                ActiveActors.Insert(aid);
+                ActiveActors.Insert(aid, __FILE__, __LINE__, ctx, NKikimrServices::BLOBSTORAGE);
                 PropagatorIds.push_back(aid);
             }
         }
@@ -222,7 +222,7 @@ namespace NKikimr {
             Become(&TThis::SyncGuidStateFunc);
             GuidRecoveryId = ctx.Register(CreateVDiskGuidRecoveryActor(SyncerCtx->VCtx, GInfo, CommitterId, SelfId(),
                 LocalSyncerState));
-            ActiveActors.Insert(GuidRecoveryId);
+            ActiveActors.Insert(GuidRecoveryId, __FILE__, __LINE__, ctx, NKikimrServices::BLOBSTORAGE);
             Phase = TPhaseVal::PhaseSyncGuid;
         }
 
@@ -292,7 +292,7 @@ namespace NKikimr {
             Become(&TThis::RecoverLostDataStateFunc);
             const TVDiskEternalGuid guid = GuidRecovOutcome->Guid;
             RecoverLostDataId = ctx.Register(CreateSyncerRecoverLostDataActor(SyncerCtx, GInfo, CommitterId, ctx.SelfID, guid));
-            ActiveActors.Insert(RecoverLostDataId);
+            ActiveActors.Insert(RecoverLostDataId, __FILE__, __LINE__, ctx, NKikimrServices::BLOBSTORAGE);
             Phase = TPhaseVal::PhaseRecoverLostData;
         }
 
@@ -331,7 +331,7 @@ namespace NKikimr {
             SyncerData->Neighbors->DbBirthLsn = LocalSyncerState.DbBirthLsn;
             Become(&TThis::StandardModeStateFunc);
             SchedulerId = ctx.Register(CreateSyncerSchedulerActor(SyncerCtx, GInfo, SyncerData, CommitterId));
-            ActiveActors.Insert(SchedulerId);
+            ActiveActors.Insert(SchedulerId, __FILE__, __LINE__, ctx, NKikimrServices::BLOBSTORAGE);
             Phase = TPhaseVal::PhaseStandardMode;
         }
 
@@ -453,7 +453,7 @@ namespace NKikimr {
             // create an actor to handle request
             auto actor = std::make_unique<TSyncerHttpInfoActor>(SyncerCtx, ev, ctx.SelfID, schId, str.Str());
             auto aid = ctx.Register(actor.release());
-            ActiveActors.Insert(aid);
+            ActiveActors.Insert(aid, __FILE__, __LINE__, ctx, NKikimrServices::BLOBSTORAGE);
         }
 
         void Handle(TEvSublogLine::TPtr &ev, const TActorContext &ctx) {

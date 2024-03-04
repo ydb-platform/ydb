@@ -16,15 +16,27 @@ private:
     NMonitoring::TDynamicCounters::TCounterPtr EraseBytes;
     NMonitoring::TDynamicCounters::TCounterPtr SkipEraseCount;
     NMonitoring::TDynamicCounters::TCounterPtr SkipEraseBytes;
+    std::shared_ptr<TValueAggregationClient> DataSize;
+    std::shared_ptr<TValueAggregationClient> ChunksCount;
 public:
     TDataOwnerSignals(const TString& module, const TString dataName);
 
-    void Add(const ui64 size) const {
-        AddCount->Add(1);
-        AddBytes->Add(size);
+    i64 GetDataSize() const {
+        return DataSize->GetValueSimple();
+    }
+
+    void Add(const ui64 size, const bool load) const {
+        DataSize->Add(size);
+        ChunksCount->Add(1);
+        if (!load) {
+            AddCount->Add(1);
+            AddBytes->Add(size);
+        }
     }
 
     void Erase(const ui64 size) const {
+        DataSize->Remove(size);
+        ChunksCount->Remove(1);
         EraseCount->Add(1);
         EraseBytes->Add(size);
     }

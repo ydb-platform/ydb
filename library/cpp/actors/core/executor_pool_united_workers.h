@@ -2,9 +2,9 @@
 
 #include "defs.h"
 #include "balancer.h"
-#include "indexes.h"
 #include "scheduler_queue.h"
 
+#include <library/cpp/actors/actor_type/indexes.h>
 #include <library/cpp/actors/util/cpu_load_log.h>
 #include <library/cpp/actors/util/datetime.h>
 #include <util/generic/noncopyable.h>

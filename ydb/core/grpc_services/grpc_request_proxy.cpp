@@ -70,7 +70,6 @@ public:
     }
 
 private:
-    void HandleRefreshToken(TRefreshTokenImpl::TPtr& ev, const TActorContext& ctx);
     void HandleConfig(NConsole::TEvConfigsDispatcher::TEvSetConfigSubscriptionResponse::TPtr& ev);
     void HandleConfig(NConsole::TEvConsole::TEvConfigNotificationRequest::TPtr& ev);
     void HandleProxyService(TEvTxUserProxy::TEvGetProxyServicesResponse::TPtr& ev);
@@ -103,7 +102,8 @@ private:
         }
     }
 
-    void Handle(TRefreshTokenImpl::TPtr& event, const TActorContext& ctx) {
+    template <ui32 TRpcId>
+    void Handle(TAutoPtr<TEventHandle<TRefreshTokenImpl<TRpcId>>>& event, const TActorContext& ctx) {
         const auto record = event->Get();
         ctx.Send(record->GetFromId(), new TGRpcRequestProxy::TEvRefreshTokenResponse {
             record->GetAuthState().State == NGrpc::TAuthState::EAuthState::AS_OK,
@@ -355,15 +355,6 @@ void TGRpcRequestProxyImpl::ReplayEvents(const TString& databaseName, const TAct
     }
 }
 
-void TGRpcRequestProxyImpl::HandleRefreshToken(TRefreshTokenImpl::TPtr& ev, const TActorContext& ctx) {
-    const auto record = ev->Get();
-    ctx.Send(record->GetFromId(), new TGRpcRequestProxy::TEvRefreshTokenResponse {
-        record->GetAuthState().State == NGrpc::TAuthState::EAuthState::AS_OK,
-        record->GetInternalToken(),
-        record->GetAuthState().State == NGrpc::TAuthState::EAuthState::AS_UNAVAILABLE,
-        NYql::TIssues()});
-}
-
 void TGRpcRequestProxyImpl::HandleConfig(NConsole::TEvConfigsDispatcher::TEvSetConfigSubscriptionResponse::TPtr&) {
     LOG_INFO(*TlsActivationContext, NKikimrServices::GRPC_SERVER, "Subscribed for config changes");
 }
@@ -542,7 +533,8 @@ void TGRpcRequestProxyImpl::StateFunc(TAutoPtr<IEventHandle>& ev) {
 
     // handle external events
     switch (ev->GetTypeRewrite()) {
-        HFunc(TRefreshTokenImpl, PreHandle);
+        HFunc(TRefreshTokenGenericRequest, PreHandle);
+        HFunc(TRefreshTokenStreamWriteSpecificRequest, PreHandle);
         HFunc(TEvLoginRequest, PreHandle);
         HFunc(TEvListEndpointsRequest, PreHandle);
         HFunc(TEvBiStreamPingRequest, PreHandle);

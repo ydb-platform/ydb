@@ -194,7 +194,7 @@ namespace NKikimr {
             // start loading bulk-formed segments that are already not in index, but still required to recover SyncLog
             auto aid = ctx.Register(LocRecCtx->HullDbRecovery->GetHullDs()->LogoBlobs->CurSlice->BulkFormedSegments.CreateLoaderActor(
                     LocRecCtx->VCtx, LocRecCtx->PDiskCtx, SyncLogMaxLsnStored, ctx.SelfID));
-            ActiveActors.Insert(aid);
+            ActiveActors.Insert(aid, __FILE__, __LINE__, ctx, NKikimrServices::BLOBSTORAGE);
         }
 
         void Handle(TEvBulkSstsLoaded::TPtr& ev, const TActorContext& ctx) {
@@ -205,7 +205,7 @@ namespace NKikimr {
 
         void BeginApplyingLog(const TActorContext& ctx) {
             auto replayerId = ctx.RegisterWithSameMailbox(CreateRecoveryLogReplayer(ctx.SelfID, LocRecCtx));
-            ActiveActors.Insert(replayerId);
+            ActiveActors.Insert(replayerId, __FILE__, __LINE__, ctx, NKikimrServices::BLOBSTORAGE);
             Become(&TThis::StateApplyRecoveryLog);
             VDiskMonGroup.VDiskLocalRecoveryState() = TDbMon::TDbLocalRecovery::ApplyLog;
         }
@@ -267,7 +267,7 @@ namespace NKikimr {
                 initFlag = false;
                 // run reader actor
                 auto aid = ctx.Register(new TLoader(LocRecCtx->VCtx, LocRecCtx->PDiskCtx, metabase.Get(), ctx.SelfID));
-                ActiveActors.Insert(aid);
+                ActiveActors.Insert(aid, __FILE__, __LINE__, ctx, NKikimrServices::BLOBSTORAGE);
             }
             return true;
         }

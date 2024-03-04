@@ -1,8 +1,10 @@
 #pragma once
-#include <contrib/libs/apache/arrow/cpp/src/arrow/api.h>
-#include <util/system/yassert.h>
 #include <ydb/core/scheme_types/scheme_type_info.h>
 #include <ydb/core/scheme/scheme_type_id.h>
+#include <ydb/core/formats/arrow/common/validation.h>
+
+#include <contrib/libs/apache/arrow/cpp/src/arrow/api.h>
+#include <util/system/yassert.h>
 
 namespace NKikimr::NArrow {
 
@@ -102,7 +104,7 @@ bool SwitchTypeWithNull(arrow::Type::type typeId, TFunc&& f) {
 template <typename TFunc>
 bool SwitchArrayType(const arrow::Datum& column, TFunc&& f) {
     auto type = column.type();
-    Y_VERIFY(type);
+    Y_ABORT_UNLESS(type);
     return SwitchType(type->id(), std::forward<TFunc>(f));
 }
 
@@ -196,36 +198,36 @@ template <typename T>
 bool Append(arrow::ArrayBuilder& builder, const typename T::c_type& value) {
     using TBuilder = typename arrow::TypeTraits<T>::BuilderType;
 
-    auto status = static_cast<TBuilder&>(builder).Append(value);
-    return status.ok();
+    TStatusValidator::Validate(static_cast<TBuilder&>(builder).Append(value));
+    return true;
 }
 
 template <typename T>
 bool Append(arrow::ArrayBuilder& builder, arrow::util::string_view value) {
     using TBuilder = typename arrow::TypeTraits<T>::BuilderType;
 
-    auto status = static_cast<TBuilder&>(builder).Append(value);
-    return status.ok();
+    TStatusValidator::Validate(static_cast<TBuilder&>(builder).Append(value));
+    return true;
 }
 
 template <typename T>
 bool Append(arrow::ArrayBuilder& builder, const typename T::c_type* values, size_t size) {
     using TBuilder = typename arrow::NumericBuilder<T>;
 
-    auto status = static_cast<TBuilder&>(builder).AppendValues(values, size);
-    return status.ok();
+    TStatusValidator::Validate(static_cast<TBuilder&>(builder).AppendValues(values, size));
+    return true;
 }
 
 template <typename T>
 bool Append(arrow::ArrayBuilder& builder, const std::vector<typename T::c_type>& values) {
     using TBuilder = typename arrow::NumericBuilder<T>;
 
-    auto status = static_cast<TBuilder&>(builder).AppendValues(values.data(), values.size());
-    return status.ok();
+    TStatusValidator::Validate(static_cast<TBuilder&>(builder).AppendValues(values.data(), values.size()));
+    return true;
 }
 
 template <typename T>
-bool Append(T& builder, const arrow::Array& array, int position) {
+bool Append(T& builder, const arrow::Array& array, int position, ui64* recordSize = nullptr) {
     return SwitchType(array.type_id(), [&](const auto& type) {
         using TWrap = std::decay_t<decltype(type)>;
         using TArray = typename arrow::TypeTraits<typename TWrap::T>::ArrayType;
@@ -235,12 +237,29 @@ bool Append(T& builder, const arrow::Array& array, int position) {
         auto& typedBuilder = static_cast<TBuilder&>(builder);
 
         if (typedArray.IsNull(position)) {
-            auto status = typedBuilder.AppendNull();
-            return status.ok();
+            TStatusValidator::Validate(typedBuilder.AppendNull());
+            if (recordSize) {
+                *recordSize += 4;
+            }
+            return true;
         } else {
-            auto status = typedBuilder.Append(typedArray.GetView(position));
-            return status.ok();
+            if constexpr (!arrow::has_string_view<typename TWrap::T>::value) {
+                TStatusValidator::Validate(typedBuilder.Append(typedArray.GetView(position)));
+                if (recordSize) {
+                    *recordSize += sizeof(typedArray.GetView(position));
+                }
+                return true;
+            }
+            if constexpr (arrow::has_string_view<typename TWrap::T>::value) {
+                TStatusValidator::Validate(typedBuilder.Append(typedArray.GetView(position)));
+                if (recordSize) {
+                    *recordSize += typedArray.GetView(position).size();
+                }
+                return true;
+            }
         }
+        Y_ABORT_UNLESS(false, "unpredictable variant");
+        return false;
     });
 }
 

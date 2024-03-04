@@ -69,21 +69,21 @@ std::pair<TString, TString> SplitPath(const TString& path) {
     return {path.substr(0, splitPos), path.substr(splitPos + 1)};
 }
 
-void RefreshToken(const TString& token, const TString& database, const TActorContext& ctx, TActorId from) {
-    ctx.Send(CreateGRpcRequestProxyId(), new TRefreshTokenImpl(token, database, from));
+void RefreshTokenSendRequest(const TActorContext& ctx, IEventBase* refreshTokenRequest) {
+    ctx.Send(CreateGRpcRequestProxyId(), refreshTokenRequest);
 }
 
-void TRefreshTokenImpl::ReplyUnauthenticated(const TString&) {
-    TActivationContext::Send(new IEventHandle(From_, TActorId(),
-        new TGRpcRequestProxy::TEvRefreshTokenResponse
-            { false, nullptr, false, IssueManager_.GetIssues()}));
+void RefreshTokenReplyUnauthenticated(TActorId recipient, TActorId sender, NYql::TIssues&& issues) {
+    TActivationContext::Send(new IEventHandle(recipient, sender,
+        new TGRpcRequestProxy::TEvRefreshTokenResponse{false, nullptr, false, std::move(issues)}
+    ));
 }
 
-void TRefreshTokenImpl::ReplyUnavaliable() {
+void RefreshTokenReplyUnavailable(TActorId recipient, NYql::TIssues&& issues) {
     const TActorContext& ctx = TActivationContext::AsActorContext();
-    ctx.Send(From_,
-        new TGRpcRequestProxy::TEvRefreshTokenResponse
-            { false, nullptr, true, IssueManager_.GetIssues()});
+    ctx.Send(recipient,
+        new TGRpcRequestProxy::TEvRefreshTokenResponse{false, nullptr, true, std::move(issues)}
+    );
 }
 
 } // namespace NGRpcService

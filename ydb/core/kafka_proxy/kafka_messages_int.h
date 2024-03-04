@@ -11,6 +11,7 @@
 #include <contrib/libs/cxxsupp/libcxx/include/type_traits>
 
 #include "kafka_records.h"
+#include "kafka_consumer_protocol.h"
 #include "kafka_log_impl.h"
 
 namespace NKafka {

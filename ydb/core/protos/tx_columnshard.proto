@@ -48,10 +48,9 @@ message TReadStats {
 
 message TLogicalMetadata {
     optional uint32 NumRows = 1;
-    repeated NKikimrSSA.TProgram.TConstant FirstPkValue = 2; // It's min PK if batch is sorted
-    repeated NKikimrSSA.TProgram.TConstant LastPkValue = 3; // It's max PK if batch is sorted
     optional uint64 RawBytes = 4;
     optional uint64 DirtyWriteTimeSeconds = 5;
+    optional string SpecialKeysRawData = 6;
 }
 
 message TMetadata {
@@ -126,6 +125,7 @@ enum ETransactionKind {
     TX_KIND_COMMIT = 2;
     TX_KIND_TTL = 3; // Immediate (not planned)
     TX_KIND_DATA = 4;
+    TX_KIND_COMMIT_WRITE = 5;
 }
 
 enum ETransactionFlag {
@@ -259,6 +259,11 @@ message TIndexGranuleMeta {
     optional uint32 MarkSize = 1; // Composite key mark (granule border) size: count of first PK elements in mark
 }
 
+message TSnapshot {
+    optional uint64 PlanStep = 1;
+    optional uint64 TxId = 2;
+}
+
 message TIndexPortionMeta {
     oneof Produced {
         bool IsInserted = 1;
@@ -268,6 +273,8 @@ message TIndexPortionMeta {
     }
     optional string TierName = 5;
     optional bytes PrimaryKeyBorders = 6; // arrow::RecordBatch with first and last ReplaceKey rows
+    optional TSnapshot RecordSnapshotMin = 7;
+    optional TSnapshot RecordSnapshotMax = 8;
 }
 
 message TIndexColumnMeta {
@@ -317,4 +324,8 @@ message TEvReadBlobRangesResult {
 
     optional uint64 TabletId = 1;
     repeated TResult Results = 2;
+}
+
+message TInternalOperationData {
+    repeated uint64 InternalWriteIds = 1;
 }

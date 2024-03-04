@@ -851,6 +851,18 @@ Y_UNIT_TEST_SUITE(TTicketParserTest) {
         result = runtime->GrabEdgeEvent<TEvTicketParser::TEvAuthorizeTicketResult>(handle);
         UNIT_ASSERT(result->Error.empty());
         UNIT_ASSERT(result->Token->IsExist("something.read-bbbb4554@as"));
+
+        // Authorization successful for gizmo resource
+        accessServiceMock.AllowedResourceIds.clear();
+        accessServiceMock.AllowedResourceIds.emplace("gizmo");
+        runtime->Send(new IEventHandle(MakeTicketParserID(), sender, new TEvTicketParser::TEvAuthorizeTicket(
+                                           userToken,
+                                           {{"gizmo_id", "gizmo"}, },
+                                           {"monitoring.view"})), 0);
+        result = runtime->GrabEdgeEvent<TEvTicketParser::TEvAuthorizeTicketResult>(handle);
+        UNIT_ASSERT(result->Error.empty());
+        UNIT_ASSERT(result->Token->IsExist("monitoring.view@as"));
+        UNIT_ASSERT(result->Token->IsExist("monitoring.view-gizmo@as"));
     }
 
     Y_UNIT_TEST(AuthorizationWithRequiredPermissions) {

@@ -67,7 +67,7 @@ public:
 
     STATEFN(StateFunc) {
         auto gTimeFull = KqpComputeActorSpan.StartStackTimeGuard("processing");
-        auto gTime = KqpComputeActorSpan.StartStackTimeGuard("event_" + ::ToString(ev->GetTypeRewrite()));
+        auto gTime = KqpComputeActorSpan.StartStackTimeGuard("event_" + ev->GetTypeName());
         try {
             switch (ev->GetTypeRewrite()) {
                 hFunc(TEvKqpCompute::TEvScanInitActor, HandleExecute);
@@ -83,7 +83,7 @@ public:
                 IgnoreFunc(TEvInterconnect::TEvNodeConnected);
                 IgnoreFunc(TEvTxProxySchemeCache::TEvInvalidateTableResult);
                 default:
-                    StopOnError("unexpected message on data fetching: " + ::ToString(ev->GetTypeRewrite()));
+                    StopOnError("unexpected message on data fetching: " + ev->GetTypeName());
             }
         } catch (...) {
             StopOnError("unexpected exception: " + CurrentExceptionMessage());

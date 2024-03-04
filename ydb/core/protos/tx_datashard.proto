@@ -864,6 +864,7 @@ message TEvUploadRowsRequest {
     repeated TSerializedRowToLoad Rows = 3;
     optional uint64 CancelDeadlineMs = 4; // Wallclock timestamp (not duration)
     optional bool WriteToTableShadow = 5;
+    optional uint64 SchemaVersion = 9;
 }
 
 message TEvUploadRowsResponse {

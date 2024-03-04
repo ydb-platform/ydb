@@ -1,11 +1,12 @@
 #include "arrow_helpers.h"
 #include "permutations.h"
+#include "replace_key.h"
 #include <ydb/core/formats/arrow/common/validation.h>
 #include <contrib/libs/apache/arrow/cpp/src/arrow/array/builder_primitive.h>
 
 namespace NKikimr::NArrow {
 
-std::shared_ptr<arrow::UInt64Array> MakePermutation(int size, bool reverse) {
+std::shared_ptr<arrow::UInt64Array> MakePermutation(const int size, const bool reverse) {
     if (size < 1) {
         return {};
     }
@@ -38,7 +39,7 @@ std::shared_ptr<arrow::UInt64Array> MakePermutation(int size, bool reverse) {
 }
 
 std::shared_ptr<arrow::UInt64Array> MakeSortPermutation(const std::shared_ptr<arrow::RecordBatch>& batch,
-                                                        const std::shared_ptr<arrow::Schema>& sortingKey) {
+                                                        const std::shared_ptr<arrow::Schema>& sortingKey, const bool andUnique) {
     auto keyBatch = ExtractColumns(batch, sortingKey);
     auto keyColumns = std::make_shared<TArrayVec>(keyBatch->columns());
     std::vector<TRawReplaceKey> points;
@@ -69,8 +70,31 @@ std::shared_ptr<arrow::UInt64Array> MakeSortPermutation(const std::shared_ptr<ar
     arrow::UInt64Builder builder;
     TStatusValidator::Validate(builder.Reserve(points.size()));
 
+    TRawReplaceKey* predKey = nullptr;
+    int predPosition = -1;
+    bool isTrivial = true;
     for (auto& point : points) {
+        if (andUnique) {
+            if (predKey) {
+                if (haveNulls) {
+                    if (*predKey == point) {
+                        continue;
+                    }
+                } else if (predKey->CompareNotNull(point) == std::partial_ordering::equivalent) {
+                    continue;
+                }
+            }
+        }
+        if (point.GetPosition() != predPosition + 1) {
+            isTrivial = false;
+        }
+        predPosition = point.GetPosition();
         TStatusValidator::Validate(builder.Append(point.GetPosition()));
+        predKey = &point;
+    }
+
+    if (isTrivial && builder.length() == (i64)points.size()) {
+        return nullptr;
     }
 
     std::shared_ptr<arrow::UInt64Array> out;
@@ -96,6 +120,16 @@ std::shared_ptr<arrow::UInt64Array> MakeFilterPermutation(const std::vector<ui64
     return out;
 }
 
+std::shared_ptr<arrow::RecordBatch> CopyRecords(const std::shared_ptr<arrow::RecordBatch>& source, const std::vector<ui64>& indexes) {
+    Y_ABORT_UNLESS(!!source);
+    auto schema = source->schema();
+    std::vector<std::shared_ptr<arrow::Array>> columns;
+    for (auto&& i : source->columns()) {
+        columns.emplace_back(CopyRecords(i, indexes));
+    }
+    return arrow::RecordBatch::Make(schema, indexes.size(), columns);
+}
+
 std::shared_ptr<arrow::Array> CopyRecords(const std::shared_ptr<arrow::Array>& source, const std::vector<ui64>& indexes) {
     if (!source) {
         return source;
@@ -109,19 +143,30 @@ std::shared_ptr<arrow::Array> CopyRecords(const std::shared_ptr<arrow::Array>& s
 
         std::unique_ptr<arrow::ArrayBuilder> builder;
         TStatusValidator::Validate(arrow::MakeBuilder(arrow::default_memory_pool(), source->type(), &builder));
+        auto& builderImpl = static_cast<TBuilder&>(*builder);
+
+        if constexpr (arrow::has_string_view<typename TWrap::T>::value) {
+            ui64 sumByIndexes = 0;
+            for (auto&& idx : indexes) {
+                sumByIndexes += column.GetView(idx).size();
+            }
+            TStatusValidator::Validate(builderImpl.ReserveData(sumByIndexes));
+        }
+
         TStatusValidator::Validate(builder->Reserve(indexes.size()));
 
         {
-            auto& builderImpl = static_cast<TBuilder&>(*builder);
+            const ui32 arraySize = column.length();
             for (auto&& i : indexes) {
-                TStatusValidator::Validate(builderImpl.Append(column.GetView(i)));
+                Y_ABORT_UNLESS(i < arraySize);
+                builderImpl.UnsafeAppend(column.GetView(i));
             }
         }
 
         TStatusValidator::Validate(builder->Finish(&result));
         return true;
     });
-    Y_VERIFY(result);
+    Y_ABORT_UNLESS(result);
     return result;
 }
 

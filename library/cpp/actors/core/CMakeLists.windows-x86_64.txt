@@ -25,18 +25,13 @@ get_built_tool_path(
   tools/enum_parser/enum_parser
   enum_parser
 )
-get_built_tool_path(
-  TOOL_enum_parser_bin
-  TOOL_enum_parser_dependency
-  tools/enum_parser/enum_parser
-  enum_parser
-)
 
 add_library(cpp-actors-core)
 target_link_libraries(cpp-actors-core PUBLIC
   contrib-libs-cxxsupp
   yutil
   tools-enum_parser-enum_serialization_runtime
+  cpp-actors-actor_type
   cpp-actors-memory_log
   cpp-actors-prof
   cpp-actors-protos
@@ -64,6 +59,7 @@ target_sources(cpp-actors-core PRIVATE
   ${CMAKE_SOURCE_DIR}/library/cpp/actors/core/callstack.cpp
   ${CMAKE_SOURCE_DIR}/library/cpp/actors/core/cpu_manager.cpp
   ${CMAKE_SOURCE_DIR}/library/cpp/actors/core/event.cpp
+  ${CMAKE_SOURCE_DIR}/library/cpp/actors/core/event_load.cpp
   ${CMAKE_SOURCE_DIR}/library/cpp/actors/core/event_pb.cpp
   ${CMAKE_SOURCE_DIR}/library/cpp/actors/core/events_undelivered.cpp
   ${CMAKE_SOURCE_DIR}/library/cpp/actors/core/executor_pool_base.cpp
@@ -73,7 +69,6 @@ target_sources(cpp-actors-core PRIVATE
   ${CMAKE_SOURCE_DIR}/library/cpp/actors/core/executor_thread.cpp
   ${CMAKE_SOURCE_DIR}/library/cpp/actors/core/harmonizer.cpp
   ${CMAKE_SOURCE_DIR}/library/cpp/actors/core/interconnect.cpp
-  ${CMAKE_SOURCE_DIR}/library/cpp/actors/core/indexes.cpp
   ${CMAKE_SOURCE_DIR}/library/cpp/actors/core/io_dispatcher.cpp
   ${CMAKE_SOURCE_DIR}/library/cpp/actors/core/log.cpp
   ${CMAKE_SOURCE_DIR}/library/cpp/actors/core/log_settings.cpp
@@ -97,11 +92,6 @@ generate_enum_serilization(cpp-actors-core
   ${CMAKE_SOURCE_DIR}/library/cpp/actors/core/actor.h
   INCLUDE_HEADERS
   library/cpp/actors/core/actor.h
-)
-generate_enum_serilization(cpp-actors-core
-  ${CMAKE_SOURCE_DIR}/library/cpp/actors/core/indexes.h
-  INCLUDE_HEADERS
-  library/cpp/actors/core/indexes.h
 )
 generate_enum_serilization(cpp-actors-core
   ${CMAKE_SOURCE_DIR}/library/cpp/actors/core/log_iface.h

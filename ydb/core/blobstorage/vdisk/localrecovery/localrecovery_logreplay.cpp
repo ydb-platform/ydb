@@ -773,7 +773,7 @@ namespace NKikimr {
                 IActor *actor = CreateBulkSstLoaderActor(LocRecCtx->VCtx, LocRecCtx->PDiskCtx, proto, ctx.SelfID,
                         lsn, loadLogoBlobs, loadBlocks, loadBarriers);
                 auto aid = ctx.Register(actor);
-                ActiveActors.Insert(aid);
+                ActiveActors.Insert(aid, __FILE__, __LINE__, ctx, NKikimrServices::BLOBSTORAGE);
                 return EDispatchStatus::Async;
             } else {
                 // skip record for all databases

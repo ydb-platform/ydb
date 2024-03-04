@@ -19,7 +19,7 @@
                     "scan_by": [
                         "Type (-\u221e, +\u221e)"
                     ],
-                    "type": "Lookup"
+                    "type": "Scan"
                 },
                 {
                     "columns": [
@@ -33,7 +33,7 @@
                     "scan_by": [
                         "Type (-\u221e, +\u221e)"
                     ],
-                    "type": "Lookup"
+                    "type": "Scan"
                 }
             ]
         }

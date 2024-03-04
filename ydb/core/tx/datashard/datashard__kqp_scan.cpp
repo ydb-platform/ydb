@@ -4,6 +4,7 @@
 
 #include <ydb/core/actorlib_impl/long_timer.h>
 #include <ydb/core/formats/arrow/arrow_batch_builder.h>
+#include <ydb/core/formats/arrow/size_calcer.h>
 #include <ydb/core/kqp/compute_actor/kqp_compute_events.h>
 #include <ydb/core/tablet_flat/flat_row_celled.h>
 

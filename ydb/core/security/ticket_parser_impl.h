@@ -198,28 +198,30 @@ class TTicketParserImpl : public TActorBootstrapped<TDerived> {
 
             auto request = CreateAccessServiceRequest<TEvAccessServiceAuthorizeRequest>(key, record);
 
+            auto addResourcePath = [&request] (const TString& id, const TString& type) {
+                auto* resourcePath = request->Request.add_resource_path();
+                resourcePath->set_id(id);
+                resourcePath->set_type(type);
+            };
+
             request->Request.set_permission(permission);
 
             if (const auto databaseId = record.GetAttributeValue(permission, "database_id"); databaseId) {
-                auto* resourcePath = request->Request.add_resource_path();
-                resourcePath->set_id(databaseId);
-                resourcePath->set_type("ydb.database");
+                addResourcePath(databaseId, "ydb.database");
             } else if (const auto serviceAccountId = record.GetAttributeValue(permission, "service_account_id"); serviceAccountId) {
-                auto* resourcePath = request->Request.add_resource_path();
-                resourcePath->set_id(serviceAccountId);
-                resourcePath->set_type("iam.serviceAccount");
+                addResourcePath(serviceAccountId, "iam.serviceAccount");
             }
 
             if (const auto folderId = record.GetAttributeValue(permission, "folder_id"); folderId) {
-                auto* resourcePath = request->Request.add_resource_path();
-                resourcePath->set_id(folderId);
-                resourcePath->set_type("resource-manager.folder");
+                addResourcePath(folderId, "resource-manager.folder");
             }
 
             if (const auto cloudId = record.GetAttributeValue(permission, "cloud_id"); cloudId) {
-                auto* resourcePath = request->Request.add_resource_path();
-                resourcePath->set_id(cloudId);
-                resourcePath->set_type("resource-manager.cloud");
+                addResourcePath(cloudId, "resource-manager.cloud");
+            }
+
+            if (const TString gizmoId = record.GetAttributeValue(permission, "gizmo_id"); gizmoId) {
+                addResourcePath(gizmoId, "iam.gizmo");
             }
 
             record.ResponsesLeft++;
@@ -1025,7 +1027,12 @@ protected:
 
     void AddPermissionSids(TVector<TString>& sids, const TTokenRecordBase& record, const TString& permission) const {
         sids.emplace_back(permission + '@' + AccessServiceDomain);
-        sids.emplace_back(permission + '-' + record.GetAttributeValue(permission, "database_id") + '@' + AccessServiceDomain);
+        if (const TString databaseId = record.GetAttributeValue(permission, "database_id"); databaseId) {
+            sids.emplace_back(permission + '-' + databaseId + '@' + AccessServiceDomain);
+        }
+        if (const TString gizmoId = record.GetAttributeValue(permission, "gizmo_id"); gizmoId) {
+            sids.emplace_back(permission + '-' + gizmoId + '@' + AccessServiceDomain);
+        }
     }
 
     template <typename TTokenRecord>

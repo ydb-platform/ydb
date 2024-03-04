@@ -22,7 +22,7 @@ private:
     THashMap<TWriteId, TInsertedData> Inserted;
     THashMap<TWriteId, TInsertedData> Aborted;
 
-    std::map<ui64, std::set<const TPathInfo*>> Priorities;
+    std::map<TPathInfoIndexPriority, std::set<const TPathInfo*>> Priorities;
     THashMap<ui64, TPathInfo> PathInfo;
     void RemovePriority(const TPathInfo& pathInfo) noexcept;
     void AddPriority(const TPathInfo& pathInfo) noexcept;
@@ -31,7 +31,7 @@ private:
     void OnEraseCommitted(TPathInfo& pathInfo, const ui64 dataSize) noexcept;
     void OnNewInserted(TPathInfo& pathInfo, const ui64 dataSize, const bool load) noexcept;
     void OnEraseInserted(TPathInfo& pathInfo, const ui64 dataSize) noexcept;
-
+    static TAtomicCounter CriticalInserted;
 public:
     THashSet<TWriteId> GetInsertedByPathId(const ui64 pathId) const;
 
@@ -66,13 +66,9 @@ public:
         return PathInfo;
     }
 
-    void Clear();
-
     bool IsOverloaded(const ui64 pathId) const;
 
-
-
-    const std::map<ui64, std::set<const TPathInfo*>>& GetPathPriorities() const {
+    const std::map<TPathInfoIndexPriority, std::set<const TPathInfo*>>& GetPathPriorities() const {
         return Priorities;
     }
 };

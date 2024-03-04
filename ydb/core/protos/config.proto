@@ -28,6 +28,7 @@ import "ydb/core/protos/key.proto";
 import "ydb/core/protos/alloc.proto";
 import "ydb/core/protos/node_limits.proto";
 import "ydb/core/fq/libs/config/protos/fq_config.proto";
+import "ydb/library/yql/providers/common/proto/gateways_config.proto";
 
 package NKikimrConfig;
 option java_package = "ru.yandex.kikimr.proto";
@@ -613,6 +614,7 @@ message TConveyorConfig {
     optional bool Enabled = 1 [default = true];
     optional uint32 WorkersCount = 2;
     optional uint32 QueueSizeLimit = 3;
+    optional double DefaultFractionOfThreadsCount = 4;
 }
 
 message TExternalIndexConfig {
@@ -817,9 +819,10 @@ message TFeatureFlags {
     optional bool ForceColumnTablesCompositeMarks = 97 [default = false];
     optional bool EnableSubscriptionsInDiscovery = 98 [default = false];
     optional bool EnableGetNodeLabels = 99 [default = false];
-    optional bool EnableTopicMessageMeta = 100 [default = false];
+    optional bool EnableTopicMessageMeta = 100 [default = true];
     optional bool EnableIcNodeCache = 101 [default = true];
     optional bool SuppressCompatibilityCheck = 103 [default = false];
+    optional bool EnablePDiskHighHDDInFlight = 110 [default = false];
 }
 
 message THttpProxyConfig {
@@ -1347,6 +1350,18 @@ message TTableServiceConfig {
     optional uint64 ExtractPredicateRangesLimit = 54 [default = 10000];
 };
 
+message TQueryServiceConfig {
+    optional uint64 ScriptOperationTimeoutDefaultSeconds = 1;
+    optional uint64 ScriptForgetAfterDefaultSeconds = 2; // 0 = infinity
+    optional uint64 ScriptResultsTtlDefaultSeconds = 3; // 0 = infinity
+    optional uint64 ScriptResultSizeLimit = 4; // 0 = infinity
+    optional uint64 ScriptResultRowsLimit = 5; // 0 = infinity
+
+    optional NYql.TS3GatewayConfig S3 = 6;
+    optional NYql.THttpGatewayConfig HttpGateway = 7;
+    optional NYql.TGenericConnectorConfig Connector = 8;
+}
+
 // Config describes immediate controls and allows
 // to manage their values (not variety and limits)
 // via CMS. All fields should be either [u]int64 or
@@ -1732,6 +1747,12 @@ message TColumnShardConfig {
     }
     optional TTablesStorageLayoutPolicy TablesStorageLayoutPolicy = 1;
     optional bool DisabledOnSchemeShard = 2 [default = true];
+    optional bool SkipOldGranules = 3 [default = true];
+    optional bool IndexationEnabled = 4 [default = true];
+    optional bool CompactionEnabled = 5 [default = true];
+    optional bool TTLEnabled = 6 [default = true];
+    optional bool UseChunkedMergeOnCompaction = 9 [default = false];
+    optional uint64 CompactionMemoryLimit = 10 [default = 536870912];
 }
 
 message TSchemeShardConfig {
@@ -1968,11 +1989,14 @@ message TAppConfig {
     optional TClientCertificateAuthorization ClientCertificateAuthorization = 62;
     optional TExternalIndexConfig ExternalIndexConfig = 63;
     optional bool YamlConfigEnabled = 64;
-    optional TConveyorConfig ConveyorConfig = 65;
+    optional TConveyorConfig ScanConveyorConfig = 65;
     optional TColumnShardConfig ColumnShardConfig = 66;
     optional TLocalPgWireConfig LocalPgWireConfig = 69;
     optional TAwsCompatibilityConfig AwsCompatibilityConfig = 70;
     optional TKafkaProxyConfig KafkaProxyConfig = 71;
+    optional TConveyorConfig CompConveyorConfig = 72;
+    optional TQueryServiceConfig QueryServiceConfig = 73;
+    optional TConveyorConfig InsertConveyorConfig = 74;
 
     repeated TNamedConfig NamedConfigs = 100;
     optional string ClusterYamlConfig = 101;

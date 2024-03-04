@@ -18,13 +18,13 @@ bool TPathInfo::SetInsertedOverload(const bool value) {
 
 void TPathInfo::AddCommittedSize(const i64 size, const ui64 overloadLimit) {
     CommittedSize += size;
-    Y_VERIFY(CommittedSize >= 0);
+    Y_ABORT_UNLESS(CommittedSize >= 0);
     SetCommittedOverload((ui64)CommittedSize > overloadLimit);
 }
 
 void TPathInfo::AddInsertedSize(const i64 size, const ui64 overloadLimit) {
     InsertedSize += size;
-    Y_VERIFY(InsertedSize >= 0);
+    Y_ABORT_UNLESS(InsertedSize >= 0);
     PathIdCounters.Inserted.OnPathIdDataInfo(InsertedSize, 0);
     SetInsertedOverload((ui64)InsertedSize > overloadLimit);
 }
@@ -56,6 +56,16 @@ TPathInfo::TPathInfo(TInsertionSummary& summary, const ui64 pathId)
     , PathIdCounters(Summary->GetCounters().GetPathIdCounters())
 {
 
+}
+
+NKikimr::NOlap::TPathInfoIndexPriority TPathInfo::GetIndexationPriority() const {
+    if (CommittedSize > (i64)TCompactionLimits::WARNING_INSERT_TABLE_SIZE_BY_PATH_ID) {
+        return TPathInfoIndexPriority(TPathInfoIndexPriority::EIndexationPriority::PreventOverload, CommittedSize);
+    } else if (Committed.size() > TCompactionLimits::WARNING_INSERT_TABLE_COUNT_BY_PATH_ID) {
+        return TPathInfoIndexPriority(TPathInfoIndexPriority::EIndexationPriority::PreventManyPortions, Committed.size());
+    } else {
+        return TPathInfoIndexPriority(TPathInfoIndexPriority::EIndexationPriority::NoPriority, CommittedSize * Committed.size() * Committed.size());
+    }
 }
 
 }

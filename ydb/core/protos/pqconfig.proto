@@ -644,6 +644,7 @@ message TOffsetsResponse {
 message TStatus {
     optional string ClientId = 1;
     optional bool GetStatForAllConsumers = 2;
+    repeated string Consumers = 3;
 }
 
 message TClientPosition {
@@ -747,6 +748,8 @@ message TStatusResponse {
         optional uint64 WriteLagMs = 5;
         optional uint64 ReadLagMs = 6;
         optional uint64 LastReadTimestampMs = 7;
+        optional NPersQueue.NErrorCode.EErrorCode ErrorCode = 8;
+        optional uint64 CommitedOffset = 9;
     }
 
     optional uint64 TabletId = 1;

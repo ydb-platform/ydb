@@ -145,6 +145,10 @@ Y_DECLARE_OUT_SPEC(, NKikimrTxDataShard::EDatashardState, stream, value) {
     stream << NKikimrTxDataShard::EDatashardState_Name(value);
 }
 
+Y_DECLARE_OUT_SPEC(, NKikimrTxDataShard::TError::EKind, stream, value) {
+    stream << NKikimrTxDataShard::TError::EKind_Name(value);
+}
+
 Y_DECLARE_OUT_SPEC(, NKikimrBlobStorage::TPDiskState::E, stream, value) {
     stream << NKikimrBlobStorage::TPDiskState::E_Name(value);
 }

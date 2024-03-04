@@ -42,13 +42,14 @@ void TKafkaListOffsetsActor::SendOffsetsRequests(const NActors::TActorContext& c
         }
 
         responseTopic.Name = requestTopic.Name;
-        std::unordered_map<ui64, TPartitionRequestInfo> partitionsMap; 
-
+        TTopicRequestInfo topicRequestInfo;
+        topicRequestInfo.TopicIndex = i;
+        
         for (auto& partition: requestTopic.Partitions) {
-            partitionsMap[partition.PartitionIndex] = TPartitionRequestInfo{.Timestamp = partition.Timestamp};
+            topicRequestInfo.Partitions.push_back(TPartitionRequestInfo{.PartitionId = partition.PartitionIndex, .Timestamp = partition.Timestamp});
         }
 
-        TopicsRequestsInfo[SendOffsetsRequest(requestTopic, ctx)] = {i, partitionsMap};
+        TopicsRequestsInfo[SendOffsetsRequest(requestTopic, ctx)] = topicRequestInfo;
     }
 }
 
@@ -83,36 +84,41 @@ void TKafkaListOffsetsActor::Handle(TEvKafka::TEvTopicOffsetsResponse::TPtr& ev,
     auto it = TopicsRequestsInfo.find(ev->Sender);
 
     Y_VERIFY_DEBUG(it != TopicsRequestsInfo.end()); 
-
     if (it == TopicsRequestsInfo.end()) {
         KAFKA_LOG_CRIT("ListOffsets actor: received unexpected TEvTopicOffsetsResponse. Ignoring.");
         return RespondIfRequired(ctx);
     }
 
-    const auto& topicIndex = it->second.first;
-    auto& partitionsRequestInfoMap = it->second.second;
+    const auto& topicRequestInfo = it->second;
+    auto& responseTopic = ListOffsetsResponseData->Topics[topicRequestInfo.TopicIndex];
 
-    auto& responseTopic = ListOffsetsResponseData->Topics[topicIndex];
-    responseTopic.Partitions.reserve(ev->Get()->Partitions.size());
+    std::unordered_map<ui64, TEvKafka::TPartitionOffsetsInfo> responseFromPQPartitionsMap;
+    for (size_t i = 0; i < ev->Get()->Partitions.size(); ++i) {
+        responseFromPQPartitionsMap[ev->Get()->Partitions[i].PartitionId] = ev->Get()->Partitions[i];
+    }
 
-    for (auto& partition: ev->Get()->Partitions) {
+    for (auto& partitionRequestInfo: topicRequestInfo.Partitions) {
         TListOffsetsPartitionResponse responsePartition {};
-        responsePartition.PartitionIndex = partition.PartitionId;
+        responsePartition.PartitionIndex = partitionRequestInfo.PartitionId;
 
         if (ev->Get()->Status == Ydb::StatusIds::SUCCESS) {
-            responsePartition.LeaderEpoch = partition.Generation;
-
-            auto timestamp = partitionsRequestInfoMap[partition.PartitionId].Timestamp;
+            auto it = responseFromPQPartitionsMap.find(partitionRequestInfo.PartitionId);
+            if (it == responseFromPQPartitionsMap.end()) {
+                KAFKA_LOG_CRIT("ListOffsets actor: partition not found. Expect malformed/incompled reply");
+                continue;
+            }
+            auto& responseFromPQPartition = it->second;
+            responsePartition.LeaderEpoch = responseFromPQPartition.Generation;
             responsePartition.Timestamp = TIMESTAMP_DEFAULT_RESPONSE_VALUE;
             
-            if (timestamp == TIMESTAMP_START_OFFSET) {
-                responsePartition.Offset = partition.StartOffset;
+            if (partitionRequestInfo.Timestamp == TIMESTAMP_START_OFFSET) {
+                responsePartition.Offset = responseFromPQPartition.StartOffset;
                 responsePartition.ErrorCode = NONE_ERROR;
-            } else if (timestamp == TIMESTAMP_END_OFFSET) {
-                responsePartition.Offset = partition.EndOffset;
+            } else if (partitionRequestInfo.Timestamp == TIMESTAMP_END_OFFSET) {
+                responsePartition.Offset = responseFromPQPartition.EndOffset;
                 responsePartition.ErrorCode = NONE_ERROR;
             } else {
-                responsePartition.ErrorCode = INVALID_REQUEST; //TODO savnik: handle it
+                responsePartition.ErrorCode = INVALID_REQUEST; // FIXME(savnik): handle it
                 ErrorCode = INVALID_REQUEST;
             }
         } else {

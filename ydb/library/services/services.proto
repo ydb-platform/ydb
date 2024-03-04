@@ -999,5 +999,7 @@ message TActivity {
         PERSQUEUE_READ_QUOTER = 616;
         KAFKA_PRODUCE_ACTOR = 617;
         PQ_FETCH_REQUEST = 621;
+        STATISTICS_AGGREGATOR = 622;
+        KAFKA_READ_SESSION_ACTOR = 623;
     };
 };

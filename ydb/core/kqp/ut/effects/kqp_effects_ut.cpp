@@ -509,7 +509,7 @@ Y_UNIT_TEST_SUITE(KqpEffects) {
         UNIT_ASSERT_VALUES_EQUAL(table["name"], "/Root/Tmp");
         auto reads = table["reads"].GetArraySafe();
         UNIT_ASSERT_VALUES_EQUAL(reads.size(), 1);
-        UNIT_ASSERT_VALUES_EQUAL(reads[0]["type"], "Lookup");
+        UNIT_ASSERT_VALUES_EQUAL(reads[0]["type"], "Scan");
         UNIT_ASSERT_VALUES_EQUAL(reads[0]["columns"].GetArraySafe().size(), 3);
     }
 }

@@ -93,7 +93,7 @@ class TUnifiedBlobId {
 
         TS3BlobId(const TUnifiedBlobId& dsBlob, const ui64 pathId)
         {
-            Y_VERIFY(dsBlob.IsDsBlob());
+            Y_ABORT_UNLESS(dsBlob.IsDsBlob());
             DsBlobId = std::get<TDsBlobId>(dsBlob.Id);
             Key = DsIdToS3Key(dsBlob, pathId);
         }
@@ -144,7 +144,7 @@ public:
     TUnifiedBlobId(const TUnifiedBlobId& blob, EBlobType type, const ui64 pathId)
         : Id(TS3BlobId(blob, pathId))
     {
-        Y_VERIFY(type == S3_BLOB);
+        Y_ABORT_UNLESS(type == S3_BLOB);
     }
 
     TUnifiedBlobId(const TUnifiedBlobId& other) = default;
@@ -153,7 +153,7 @@ public:
     TUnifiedBlobId& operator = (TUnifiedBlobId&& logoBlobId) = default;
 
     TUnifiedBlobId MakeS3BlobId(ui64 pathId) const {
-        Y_VERIFY(IsDsBlob());
+        Y_ABORT_UNLESS(IsDsBlob());
         return TUnifiedBlobId(*this, TUnifiedBlobId::S3_BLOB, pathId);
     }
 
@@ -181,9 +181,9 @@ public:
         case S3_BLOB:
             return std::get<TS3BlobId>(Id).DsBlobId.BlobId.BlobSize();
         case INVALID:
-            Y_FAIL("Invalid blob id");
+            Y_ABORT("Invalid blob id");
         }
-        Y_FAIL();
+        Y_ABORT();
     }
 
     bool IsSmallBlob() const {
@@ -199,17 +199,17 @@ public:
     }
 
     TLogoBlobID GetLogoBlobId() const {
-        Y_VERIFY(IsDsBlob());
+        Y_ABORT_UNLESS(IsDsBlob());
         return std::get<TDsBlobId>(Id).BlobId;
     }
 
     ui32 GetDsGroup() const {
-        Y_VERIFY(IsDsBlob());
+        Y_ABORT_UNLESS(IsDsBlob());
         return std::get<TDsBlobId>(Id).DsGroup;
     }
 
     TString GetS3Key() const {
-        Y_VERIFY(IsS3Blob());
+        Y_ABORT_UNLESS(IsS3Blob());
         return std::get<TS3BlobId>(Id).Key;
     }
 
@@ -222,9 +222,9 @@ public:
         case S3_BLOB:
             return std::get<TS3BlobId>(Id).DsBlobId.BlobId.TabletID();
         case INVALID:
-            Y_FAIL("Invalid blob id");
+            Y_ABORT("Invalid blob id");
         }
-        Y_FAIL();
+        Y_ABORT();
     }
 
     ui64 Hash() const noexcept {
@@ -238,13 +238,13 @@ public:
         case S3_BLOB:
             return std::get<TS3BlobId>(Id).Hash();
         }
-        Y_FAIL();
+        Y_ABORT();
     }
 
     // This is only implemented for DS for backward compatibility with persisted data.
     // All new functionality should rahter use string blob id representation
     TString SerializeBinary() const {
-        Y_VERIFY(IsDsBlob());
+        Y_ABORT_UNLESS(IsDsBlob());
         return TString((const char*)GetLogoBlobId().GetRaw(), sizeof(TLogoBlobID));
     }
 
@@ -255,11 +255,11 @@ public:
         case TABLET_SMALL_BLOB:
             return std::get<TSmallBlobId>(Id).ToStringLegacy();
         case S3_BLOB:
-            Y_FAIL("Not implemented");
+            Y_ABORT("Not implemented");
         case INVALID:
             return "<Invalid blob id>";
         }
-        Y_FAIL();
+        Y_ABORT();
     }
 
     TString ToStringNew() const {
@@ -273,7 +273,7 @@ public:
         case INVALID:
             return "<Invalid blob id>";
         }
-        Y_FAIL();
+        Y_ABORT();
     }
 };
 
@@ -284,11 +284,32 @@ struct TBlobRange {
     ui32 Offset;
     ui32 Size;
 
+    const TUnifiedBlobId& GetBlobId() const {
+        return BlobId;
+    }
+
+    ui32 GetBlobSize() const {
+        return Size;
+    }
+
+    bool IsFullBlob() const {
+        return Size == BlobId.BlobSize();
+    }
+
     explicit TBlobRange(const TUnifiedBlobId& blobId = TUnifiedBlobId(), ui32 offset = 0, ui32 size = 0)
         : BlobId(blobId)
         , Offset(offset)
         , Size(size)
-    {}
+    {
+        if (Size > 0) {
+            Y_ABORT_UNLESS(Offset < BlobId.BlobSize());
+            Y_ABORT_UNLESS(Offset + Size <= BlobId.BlobSize());
+        }
+    }
+
+    static TBlobRange FromBlobId(const TUnifiedBlobId& blobId) {
+        return TBlobRange(blobId, 0, blobId.BlobSize());
+    }
 
     bool operator == (const TBlobRange& other) const {
         return
@@ -308,6 +329,23 @@ struct TBlobRange {
         return Sprintf("{ Blob: %s Offset: %" PRIu32 " Size: %" PRIu32 " }",
                        BlobId.ToStringNew().c_str(), Offset, Size);
     }
+};
+
+class IBlobInUseTracker {
+private:
+    virtual bool DoFreeBlob(const NOlap::TUnifiedBlobId& blobId) = 0;
+    virtual bool DoUseBlob(const NOlap::TUnifiedBlobId& blobId) = 0;
+public:
+    virtual ~IBlobInUseTracker() = default;
+
+    bool FreeBlob(const NOlap::TUnifiedBlobId& blobId) {
+        return DoFreeBlob(blobId);
+    }
+    bool UseBlob(const NOlap::TUnifiedBlobId& blobId) {
+        return DoUseBlob(blobId);
+    }
+
+    virtual bool IsBlobInUsage(const NOlap::TUnifiedBlobId& blobId) const = 0;
 };
 
 // Expected blob lifecycle: EVICTING -> SELF_CACHED -> EXTERN <-> CACHED
@@ -358,7 +396,7 @@ struct TEvictedBlob {
 
     bool IsExternal() const {
         if (State == EEvictState::EXTERN) {
-            Y_VERIFY(ExternBlob.IsValid());
+            Y_ABORT_UNLESS(ExternBlob.IsValid());
             return true;
         }
         return false;

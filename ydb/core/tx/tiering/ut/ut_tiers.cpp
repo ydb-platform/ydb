@@ -1,8 +1,10 @@
 #include <ydb/core/cms/console/configs_dispatcher.h>
 #include <ydb/core/testlib/cs_helper.h>
 #include <ydb/core/tx/tiering/external_data.h>
+#include <ydb/core/tx/columnshard/hooks/abstract/abstract.h>
 #include <ydb/core/tx/schemeshard/schemeshard.h>
 #include <ydb/core/tx/tx_proxy/proxy.h>
+#include <ydb/core/formats/arrow/size_calcer.h>
 #include <ydb/core/wrappers/ut_helpers/s3_mock.h>
 #include <ydb/core/wrappers/s3_wrapper.h>
 #include <ydb/core/wrappers/fake_storage.h>
@@ -23,6 +25,14 @@
 namespace NKikimr {
 
 using namespace NColumnShard;
+
+class TFastTTLCompactionController: public NKikimr::NYDBTest::ICSController {
+public:
+    virtual TDuration GetTTLDefaultWaitingDuration(const TDuration /*defaultValue*/) const override {
+        return TDuration::Seconds(1);
+    }
+
+};
 
 class TLocalHelper: public Tests::NCS::THelper {
 private:
@@ -107,9 +117,25 @@ public:
 
 Y_UNIT_TEST_SUITE(ColumnShardTiers) {
 
-    const TString ConfigProtoStr = "Name : \"abc\"";
-    const TString ConfigProtoStr1 = "Name : \"abc1\"";
-    const TString ConfigProtoStr2 = "Name : \"abc2\"";
+    TString GetConfigProtoWithName(const TString & tierName) {
+        return TStringBuilder() << "Name : \"" << tierName << "\"\n" <<
+            R"(
+                ObjectStorage : {
+                    Endpoint: "fake"
+                    Bucket: "fake"
+                    SecretableAccessKey: {
+                        Value: {
+                            Data: "secretAccessKey"
+                        }
+                    }
+                    SecretableSecretKey: {
+                        Value: {
+                            Data: "secretSecretKey"
+                        }
+                    }
+                }
+            )";
+    }
 
     const TString ConfigTiering1Str = R"({
         "rules" : [
@@ -129,6 +155,19 @@ Y_UNIT_TEST_SUITE(ColumnShardTiers) {
             {
                 "tierName" : "tier1",
                 "durationForEvict" : "10d"
+            }
+        ]
+    })";
+
+    const TString ConfigTieringNothingStr = R"({
+        "rules" : [
+            {
+                "tierName" : "tier1",
+                "durationForEvict" : "10000d"
+            },
+            {
+                "tierName" : "tier2",
+                "durationForEvict" : "20000d"
             }
         ]
     })";
@@ -182,7 +221,7 @@ Y_UNIT_TEST_SUITE(ColumnShardTiers) {
             switch (ev->GetTypeRewrite()) {
                 hFunc(NMetadata::NProvider::TEvRefreshSubscriberData, Handle);
                 default:
-                    Y_VERIFY(false);
+                    Y_ABORT_UNLESS(false);
             }
         }
 
@@ -205,7 +244,7 @@ Y_UNIT_TEST_SUITE(ColumnShardTiers) {
                 runtime.SimulateSleep(TDuration::Seconds(1));
             }
             runtime.SetObserverFunc(TTestActorRuntime::DefaultObserverFunc);
-            Y_VERIFY(IsFound());
+            Y_ABORT_UNLESS(IsFound());
         }
 
         void CheckFound(NMetadata::NProvider::TEvRefreshSubscriberData* event) {
@@ -233,7 +272,7 @@ Y_UNIT_TEST_SUITE(ColumnShardTiers) {
                     auto value = snapshot->GetTierById(i.first.substr(13));
                     jsonData = value->SerializeConfigToJson();
                 } else {
-                    Y_VERIFY(false);
+                    Y_ABORT_UNLESS(false);
                 }
                 if (!i.second.Check(jsonData)) {
                     Cerr << "config value incorrect:" << snapshot->SerializeToString() << ";snapshot_check_path=" << i.first << Endl;
@@ -263,7 +302,7 @@ Y_UNIT_TEST_SUITE(ColumnShardTiers) {
     public:
         virtual void OnAlteringProblem(const TString& errorMessage) override {
             Cerr << errorMessage << Endl;
-            Y_VERIFY(false);
+            Y_ABORT_UNLESS(false);
         }
         virtual void OnAlteringFinished() override {
             FinishedFlag = true;
@@ -305,10 +344,10 @@ Y_UNIT_TEST_SUITE(ColumnShardTiers) {
             runtime.SimulateSleep(TDuration::Seconds(10));
             Cerr << "Initialization finished" << Endl;
 
-            lHelper.StartSchemaRequest("CREATE OBJECT tier1 (TYPE TIER) WITH tierConfig = `" + ConfigProtoStr + "`");
+            lHelper.StartSchemaRequest("CREATE OBJECT tier1 (TYPE TIER) WITH tierConfig = `" + GetConfigProtoWithName("abc") + "`");
             lHelper.StartSchemaRequest("CREATE OBJECT tiering1 ("
                 "TYPE TIERING_RULE) WITH (defaultColumn = timestamp, description = `" + ConfigTiering1Str + "` )", false);
-            lHelper.StartSchemaRequest("CREATE OBJECT tier2 (TYPE TIER) WITH tierConfig = `" + ConfigProtoStr + "`");
+            lHelper.StartSchemaRequest("CREATE OBJECT tier2 (TYPE TIER) WITH tierConfig = `" + GetConfigProtoWithName("abc") + "`");
             lHelper.StartSchemaRequest("CREATE OBJECT tiering1 ("
                 "TYPE TIERING_RULE) WITH (defaultColumn = timestamp, description = `" + ConfigTiering1Str + "` )");
             {
@@ -316,21 +355,21 @@ Y_UNIT_TEST_SUITE(ColumnShardTiers) {
                 while (!emulator->IsFound() && Now() - start < TDuration::Seconds(2000)) {
                     runtime.SimulateSleep(TDuration::Seconds(1));
                 }
-                Y_VERIFY(emulator->IsFound());
+                Y_ABORT_UNLESS(emulator->IsFound());
             }
             {
                 emulator->ResetConditions();
                 emulator->SetExpectedTiersCount(2);
                 emulator->MutableCheckers().emplace("TIER.tier1", TJsonChecker("Name", "abc1"));
 
-                lHelper.StartSchemaRequest("ALTER OBJECT tier1 (TYPE TIER) SET tierConfig = `" + ConfigProtoStr1 + "`");
+                lHelper.StartSchemaRequest("ALTER OBJECT tier1 (TYPE TIER) SET tierConfig = `" + GetConfigProtoWithName("abc1") + "`");
 
                 {
                     const TInstant start = Now();
                     while (!emulator->IsFound() && Now() - start < TDuration::Seconds(2000)) {
                         runtime.SimulateSleep(TDuration::Seconds(1));
                     }
-                    Y_VERIFY(emulator->IsFound());
+                    Y_ABORT_UNLESS(emulator->IsFound());
                 }
             }
             {
@@ -350,7 +389,7 @@ Y_UNIT_TEST_SUITE(ColumnShardTiers) {
                     while (!emulator->IsFound() && Now() - start < TDuration::Seconds(20)) {
                         runtime.SimulateSleep(TDuration::Seconds(1));
                     }
-                    Y_VERIFY(emulator->IsFound());
+                    Y_ABORT_UNLESS(emulator->IsFound());
                 }
             }
         }
@@ -387,7 +426,7 @@ Y_UNIT_TEST_SUITE(ColumnShardTiers) {
         runtime.SimulateSleep(TDuration::Seconds(10));
         Cerr << "Initialization finished" << Endl;
 
-        lHelper.StartSchemaRequest("CREATE OBJECT tier1 (TYPE TIER) WITH tierConfig = `" + ConfigProtoStr1 + "`", true, false);
+        lHelper.StartSchemaRequest("CREATE OBJECT tier1 (TYPE TIER) WITH tierConfig = `" + GetConfigProtoWithName("abc1") + "`", true, false);
         {
             TTestCSEmulator emulator;
             emulator.MutableCheckers().emplace("TIER.tier1", TJsonChecker("Name", "abc1"));
@@ -396,7 +435,7 @@ Y_UNIT_TEST_SUITE(ColumnShardTiers) {
             emulator.CheckRuntime(runtime);
         }
 
-        lHelper.StartSchemaRequest("CREATE OBJECT tier2 (TYPE TIER) WITH tierConfig = `" + ConfigProtoStr2 + "`");
+        lHelper.StartSchemaRequest("CREATE OBJECT tier2 (TYPE TIER) WITH tierConfig = `" + GetConfigProtoWithName("abc2") + "`");
         lHelper.StartSchemaRequest("CREATE OBJECT tiering1 (TYPE TIERING_RULE) "
             "WITH (defaultColumn = timestamp, description = `" + ConfigTiering1Str + "`)");
         lHelper.StartSchemaRequest("CREATE OBJECT tiering2 (TYPE TIERING_RULE) "
@@ -472,6 +511,8 @@ Y_UNIT_TEST_SUITE(ColumnShardTiers) {
 #endif
 
     Y_UNIT_TEST(TieringUsage) {
+        auto csControllerGuard = NKikimr::NYDBTest::TControllers::RegisterCSControllerGuard<TFastTTLCompactionController>();
+
         TPortManager pm;
 
         ui32 grpcPort = pm.GetPort();
@@ -490,15 +531,16 @@ Y_UNIT_TEST_SUITE(ColumnShardTiers) {
         Tests::TServer::TPtr server = new Tests::TServer(serverSettings);
         server->EnableGRpc(grpcPort);
         Tests::TClient client(serverSettings);
+        Tests::NCommon::TLoggerInit(server->GetRuntime()).SetComponents({ NKikimrServices::TX_COLUMNSHARD }).Initialize();
 
         auto& runtime = *server->GetRuntime();
-        runtime.SetLogPriority(NKikimrServices::TX_PROXY, NLog::PRI_TRACE);
-        runtime.SetLogPriority(NKikimrServices::KQP_YQL, NLog::PRI_TRACE);
+//        runtime.SetLogPriority(NKikimrServices::TX_PROXY, NLog::PRI_TRACE);
+//        runtime.SetLogPriority(NKikimrServices::KQP_YQL, NLog::PRI_TRACE);
 
         auto sender = runtime.AllocateEdgeActor();
         server->SetupRootStoragePools(sender);
 
-        runtime.SetLogPriority(NKikimrServices::TX_DATASHARD, NLog::PRI_NOTICE);
+//        runtime.SetLogPriority(NKikimrServices::TX_DATASHARD, NLog::PRI_NOTICE);
         runtime.SetLogPriority(NKikimrServices::TX_COLUMNSHARD, NLog::PRI_DEBUG);
         runtime.SetLogPriority(NKikimrServices::BG_TASKS, NLog::PRI_DEBUG);
         //        runtime.SetLogPriority(NKikimrServices::TX_PROXY_SCHEME_CACHE, NLog::PRI_DEBUG);
@@ -532,22 +574,26 @@ Y_UNIT_TEST_SUITE(ColumnShardTiers) {
         Cerr << "Wait tables" << Endl;
         runtime.SimulateSleep(TDuration::Seconds(20));
         Cerr << "Initialization tables" << Endl;
-        const TInstant pkStart = Now() - TDuration::Days(15);
-        ui32 idx = 0;
+        const TInstant now = Now() - TDuration::Days(100);
+        runtime.UpdateCurrentTime(now);
+        const TInstant pkStart = now - TDuration::Days(15);
 
-        auto batch = lHelper.TestArrowBatch(0, (pkStart + TDuration::Seconds(2 * idx++)).GetValue(), 6000);
+        auto batch = lHelper.TestArrowBatch(0, pkStart.GetValue(), 6000);
+        auto batchSmall = lHelper.TestArrowBatch(0, now.GetValue(), 1);
         auto batchSize = NArrow::GetBatchDataSize(batch);
         Cerr << "Inserting " << batchSize << " bytes..." << Endl;
         UNIT_ASSERT(batchSize > 4 * 1024 * 1024); // NColumnShard::TLimits::MIN_BYTES_TO_INSERT
         UNIT_ASSERT(batchSize < 8 * 1024 * 1024);
 
-        for (ui32 i = 0; i < 4; ++i) {
-            lHelper.SendDataViaActorSystem("/Root/olapStore/olapTable", batch);
+        {
+            TAtomic unusedPrev;
+            runtime.GetAppData().Icb->SetValue("ColumnShardControls.GranuleIndexedPortionsCountLimit", 1, unusedPrev);
         }
+        lHelper.SendDataViaActorSystem("/Root/olapStore/olapTable", batch);
         {
             const TInstant start = Now();
             bool check = false;
-            while (Now() - start < TDuration::Seconds(60)) {
+            while (Now() - start < TDuration::Seconds(600)) {
                 Cerr << "Waiting..." << Endl;
 #ifndef S3_TEST_USAGE
                 if (Singleton<NKikimr::NWrappers::NExternalStorage::TFakeExternalStorage>()->GetSize()) {
@@ -558,15 +604,20 @@ Y_UNIT_TEST_SUITE(ColumnShardTiers) {
 #else
                 check = true;
 #endif
-                runtime.SimulateSleep(TDuration::Seconds(1));
+                runtime.AdvanceCurrentTime(TDuration::Minutes(6));
+                lHelper.SendDataViaActorSystem("/Root/olapStore/olapTable", batchSmall);
             }
             UNIT_ASSERT(check);
         }
 #ifdef S3_TEST_USAGE
         Cerr << "storage initialized..." << Endl;
 #endif
-
+/*
         lHelper.DropTable("/Root/olapStore/olapTable");
+        lHelper.StartDataRequest("DELETE FROM `/Root/olapStore/olapTable`");
+*/
+        lHelper.StartSchemaRequest("UPSERT OBJECT tiering1 ("
+            "TYPE TIERING_RULE) WITH (defaultColumn = timestamp, description = `" + ConfigTieringNothingStr + "` )");
         {
             const TInstant start = Now();
             bool check = false;
@@ -581,7 +632,8 @@ Y_UNIT_TEST_SUITE(ColumnShardTiers) {
 #else
                 check = true;
 #endif
-                runtime.SimulateSleep(TDuration::Seconds(1));
+                runtime.AdvanceCurrentTime(TDuration::Minutes(6));
+                lHelper.SendDataViaActorSystem("/Root/olapStore/olapTable", batchSmall);
             }
             UNIT_ASSERT(check);
         }
@@ -693,10 +745,10 @@ Y_UNIT_TEST_SUITE(ColumnShardTiers) {
         }
         void ReduceSize(const ui64 size) {
             BytesSize -= size;
-            Y_VERIFY(BytesSize >= 0);
+            Y_ABORT_UNLESS(BytesSize >= 0);
         }
         void SetBarrier(const TCurrentBarrier& b) {
-            Y_VERIFY(!(b < Barrier));
+            Y_ABORT_UNLESS(!(b < Barrier));
             Barrier = b;
             RefreshBarrier();
         }
@@ -725,6 +777,7 @@ Y_UNIT_TEST_SUITE(ColumnShardTiers) {
                     ReduceSize(it->first.BlobSize());
                     it = Blobs.erase(it);
                 } else {
+                    Cerr << "SKIPPED_BLOB:" << it->first << " deprecated=" << Barrier.IsDeprecated(it->first) << ";removable=" << it->second.IsRemovable() << ";" << Endl;
                     ++it;
                 }
             }
@@ -796,7 +849,7 @@ Y_UNIT_TEST_SUITE(ColumnShardTiers) {
         server->SetupRootStoragePools(sender);
 
 //        runtime.SetLogPriority(NKikimrServices::TX_DATASHARD, NLog::PRI_NOTICE);
-        runtime.SetLogPriority(NKikimrServices::TX_COLUMNSHARD, NLog::PRI_DEBUG);
+        runtime.SetLogPriority(NKikimrServices::TX_COLUMNSHARD, NLog::PRI_TRACE);
 //        runtime.SetLogPriority(NKikimrServices::BG_TASKS, NLog::PRI_DEBUG);
         //        runtime.SetLogPriority(NKikimrServices::TX_PROXY_SCHEME_CACHE, NLog::PRI_DEBUG);
 
@@ -812,7 +865,7 @@ Y_UNIT_TEST_SUITE(ColumnShardTiers) {
         TBSDataCollector bsCollector;
         auto captureEvents = [&](TTestActorRuntimeBase&, TAutoPtr<IEventHandle>& ev) {
             if (auto* msg = dynamic_cast<TEvBlobStorage::TEvCollectGarbageResult*>(ev->StaticCastAsLocal<IEventBase>())) {
-                Y_VERIFY(msg->Status == NKikimrProto::EReplyStatus::OK);
+                Y_ABORT_UNLESS(msg->Status == NKikimrProto::EReplyStatus::OK);
             }
             if (auto* msg = dynamic_cast<TEvBlobStorage::TEvCollectGarbage*>(ev->StaticCastAsLocal<IEventBase>())) {
                 TGCSource gcSource(msg->TabletId, msg->Channel);
@@ -828,13 +881,14 @@ Y_UNIT_TEST_SUITE(ColumnShardTiers) {
                     }
                 }
 
-                Y_VERIFY(!msg->Hard);
+                Y_ABORT_UNLESS(!msg->Hard);
                 if (msg->Collect) {
                     gcSourceData.SetBarrier(TCurrentBarrier(msg->CollectGeneration, msg->CollectStep));
+                    Cerr << "TEvBlobStorage::TEvCollectGarbage COLLECT:" << msg->CollectGeneration << "/" << msg->CollectStep << ":" << gcSource.DebugString() << ":" << ++gcCounter << ";" << bsCollector.StatusString() << Endl;
                 } else {
                     gcSourceData.RefreshBarrier();
+                    Cerr << "TEvBlobStorage::TEvCollectGarbage REFRESH:" << gcSource.DebugString() << ":" << ++gcCounter << "/" << bsCollector.StatusString() << Endl;
                 }
-                Cerr << "TEvBlobStorage::TEvCollectGarbage " << gcSource.DebugString() << ":" << ++gcCounter << "/" << bsCollector.StatusString() << Endl;
             }
             if (auto* msg = dynamic_cast<TEvBlobStorage::TEvPut*>(ev->StaticCastAsLocal<IEventBase>())) {
                 TGCSource gcSource(msg->Id.TabletID(), msg->Id.Channel());
@@ -861,11 +915,12 @@ Y_UNIT_TEST_SUITE(ColumnShardTiers) {
         const ui32 reduceStepsCount = 1;
         for (ui32 i = 0; i < reduceStepsCount; ++i) {
             runtime.AdvanceCurrentTime(TDuration::Seconds(numRecords * (i + 1) / reduceStepsCount + 500000));
-            const TInstant start = TInstant::Now();
             const ui64 purposeSize = 800000000.0 * (1 - 1.0 * (i + 1) / reduceStepsCount);
             const ui64 purposeRecords = numRecords * (1 - 1.0 * (i + 1) / reduceStepsCount);
             const ui64 purposeMinTimestamp = numRecords * 1.0 * (i + 1) / reduceStepsCount * 1000000;
+            const TInstant start = TInstant::Now();
             while (bsCollector.GetChannelSize(2) > purposeSize && TInstant::Now() - start < TDuration::Seconds(60)) {
+                runtime.AdvanceCurrentTime(TDuration::Minutes(6));
                 runtime.SimulateSleep(TDuration::Seconds(1));
             }
             Cerr << bsCollector.GetChannelSize(2) << "/" << purposeSize << Endl;
@@ -879,7 +934,7 @@ Y_UNIT_TEST_SUITE(ColumnShardTiers) {
                 UNIT_ASSERT(GetValueResult(result.front(), "b")->GetProto().uint64_value() == purposeMinTimestamp);
             }
 
-            Y_VERIFY(bsCollector.GetChannelSize(2) <= purposeSize);
+            AFL_VERIFY(bsCollector.GetChannelSize(2) <= purposeSize)("collector", bsCollector.GetChannelSize(2))("purpose", purposeSize);
         }
 
         {

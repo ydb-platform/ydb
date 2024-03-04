@@ -5,10 +5,10 @@ namespace NKikimr::NSsa {
 namespace {
 
 void ReplaceCountAll(TProgram& program) {
-    Y_VERIFY(!program.SourceColumns.empty());
+    Y_ABORT_UNLESS(!program.SourceColumns.empty());
 
     for (auto& step : program.Steps) {
-        Y_VERIFY(step);
+        Y_ABORT_UNLESS(step);
 
         for (auto& groupBy : step->GroupBy) {
             if (groupBy.GetOperation() == EAggregate::Count && groupBy.GetArguments().empty()) {

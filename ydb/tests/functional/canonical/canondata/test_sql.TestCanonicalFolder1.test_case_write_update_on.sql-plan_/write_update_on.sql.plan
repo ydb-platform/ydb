@@ -31,13 +31,6 @@
             "reads": [
                 {
                     "columns": [
-                        "Group",
-                        "Name"
-                    ],
-                    "type": "Lookup"
-                },
-                {
-                    "columns": [
                         "Amount",
                         "Group",
                         "Name"
@@ -47,6 +40,13 @@
                     ],
                     "scan_by": [
                         "Name (-\u221e, +\u221e)"
+                    ],
+                    "type": "Scan"
+                },
+                {
+                    "columns": [
+                        "Group",
+                        "Name"
                     ],
                     "type": "Lookup"
                 }

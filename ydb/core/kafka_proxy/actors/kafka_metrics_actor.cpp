@@ -33,7 +33,6 @@ namespace NKafka {
             switch (ev->GetTypeRewrite()) {
                 HFunc(TEvKafka::TEvUpdateCounter, Handle);
                 HFunc(TEvKafka::TEvUpdateHistCounter, Handle);
-
             }
         }
 

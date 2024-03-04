@@ -3,12 +3,19 @@
 #include <ydb/library/yql/core/arrow_kernels/registry/registry.h>
 #include <ydb/library/yql/minikql/invoke_builtins/mkql_builtins.h>
 #include <ydb/library/yql/minikql/comp_nodes/mkql_factories.h>
+#include <util/system/tls.h>
 
 namespace NKikimr::NOlap {
 
+::NTls::TValue<NMiniKQL::IBuiltinFunctionRegistry::TPtr> Registry;
+
 bool TKernelsRegistry::Parse(const TString& serialized) {
-    Y_VERIFY(!!serialized);
-    auto functionRegistry = NMiniKQL::CreateFunctionRegistry(NMiniKQL::CreateBuiltinRegistry())->Clone();
+    Y_ABORT_UNLESS(!!serialized);
+    if (!Registry.Get()) {
+        Registry = NMiniKQL::CreateBuiltinRegistry();
+    }
+    auto copy = Registry.Get();
+    auto functionRegistry = NMiniKQL::CreateFunctionRegistry(std::move(copy))->Clone();
     NMiniKQL::FillStaticModules(*functionRegistry);
     auto nodeFactory = NMiniKQL::GetBuiltinFactory();
     auto kernels =  NYql::LoadKernels(serialized, *functionRegistry, nodeFactory);

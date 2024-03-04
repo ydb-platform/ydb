@@ -197,7 +197,7 @@ namespace NKikimr {
             QuorumTracker.Clear();
             AnubisId = ctx.Register(CreateAnubis(AnubisCtx->HullCtx, GInfo, ctx.SelfID, AnubisCtx->SkeletonId,
                 AnubisCtx->ReplInterconnectChannel, AnubisCtx->AnubisOsirisMaxInFly));
-            ActiveActors.Insert(AnubisId);
+            ActiveActors.Insert(AnubisId, __FILE__, __LINE__, ctx, NKikimrServices::BLOBSTORAGE);
         }
 
         // This handler is called when TAnubisRunnerHttpInfoActor is finished
@@ -260,7 +260,7 @@ namespace NKikimr {
             // create an actor to handle request
             auto actor = std::make_unique<TAnubisRunnerHttpInfoActor>(ev, ctx.SelfID, AnubisId, s);
             auto aid = ctx.Register(actor.release());
-            ActiveActors.Insert(aid);
+            ActiveActors.Insert(aid, __FILE__, __LINE__, ctx, NKikimrServices::BLOBSTORAGE);
         }
 
     public:

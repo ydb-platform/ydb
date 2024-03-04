@@ -13,12 +13,12 @@ TColumnSaver TSnapshotSchema::GetColumnSaver(const ui32 columnId, const TSaverCo
     return IndexInfo.GetColumnSaver(columnId, context);
 }
 
-std::shared_ptr<TColumnLoader> TSnapshotSchema::GetColumnLoader(const ui32 columnId) const {
-    return IndexInfo.GetColumnLoader(columnId);
+std::shared_ptr<TColumnLoader> TSnapshotSchema::GetColumnLoaderOptional(const ui32 columnId) const {
+    return IndexInfo.GetColumnLoaderOptional(columnId);
 }
 
-ui32 TSnapshotSchema::GetColumnId(const std::string& columnName) const {
-    return IndexInfo.GetColumnId(columnName);
+std::optional<ui32> TSnapshotSchema::GetColumnIdOptional(const std::string& columnName) const {
+    return IndexInfo.GetColumnIdOptional(columnName);
 }
 
 int TSnapshotSchema::GetFieldIndex(const ui32 columnId) const {
@@ -40,6 +40,14 @@ const TIndexInfo& TSnapshotSchema::GetIndexInfo() const {
 
 const TSnapshot& TSnapshotSchema::GetSnapshot() const {
     return Snapshot;
+}
+
+ui32 TSnapshotSchema::GetColumnsCount() const {
+    return Schema->num_fields();
+}
+
+ui64 TSnapshotSchema::GetVersion() const {
+    return IndexInfo.GetVersion();
 }
 
 }

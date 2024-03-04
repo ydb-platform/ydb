@@ -44,7 +44,7 @@ public:
                     return nullptr;
                 } else {
                     auto status = c->GetScalar(RecordIdx);
-                    Y_VERIFY(status.ok());
+                    Y_ABORT_UNLESS(status.ok());
                     return *status;
                 }
             }
@@ -109,13 +109,13 @@ public:
             : Owner(owner)
             , WithCast(withCast)
         {
-            Y_VERIFY(!Owner.InConstruction);
+            Y_ABORT_UNLESS(!Owner.InConstruction);
             CurrentBuilder = Owner.Builders.begin();
             Owner.InConstruction = true;
         }
         ~TRecordConstructor() {
             for (; CurrentBuilder != Owner.Builders.end(); ++CurrentBuilder) {
-                Y_VERIFY((*CurrentBuilder)->AppendNull().ok());
+                Y_ABORT_UNLESS((*CurrentBuilder)->AppendNull().ok());
             }
             Owner.InConstruction = false;
             ++Owner.RecordsCount;
@@ -126,7 +126,7 @@ public:
     TRecordBatchConstructor& InitColumns(const std::shared_ptr<arrow::Schema>& schema);
 
     TRecordConstructor StartRecord(const bool withCast = false) {
-        Y_VERIFY(!InConstruction);
+        Y_ABORT_UNLESS(!InConstruction);
         return TRecordConstructor(*this, withCast);
     }
 
@@ -134,7 +134,7 @@ public:
 
     void Reserve(const ui32 recordsCount) {
         for (auto&& i : Builders) {
-            Y_VERIFY(i->Reserve(recordsCount).ok());
+            Y_ABORT_UNLESS(i->Reserve(recordsCount).ok());
         }
     }
 

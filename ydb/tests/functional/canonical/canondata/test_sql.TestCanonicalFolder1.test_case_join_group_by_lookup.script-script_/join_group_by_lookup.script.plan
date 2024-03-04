@@ -55,12 +55,12 @@
                                                                 "PlanNodeId": 15,
                                                                 "Operators": [
                                                                     {
-                                                                        "Iterator": "%kqp%tx_result_binding_0_0",
+                                                                        "Iterator": "precompute_0_0",
                                                                         "Name": "Iterator"
                                                                     }
                                                                 ],
                                                                 "Node Type": "ConstantExpr",
-                                                                "CTE Name": "tx_result_binding_2_0"
+                                                                "CTE Name": "precompute_0_0"
                                                             }
                                                         ],
                                                         "Node Type": "Map",
@@ -94,12 +94,12 @@
                                                                                         "Table": "base_join_group_by_lookup_script_script/Temp"
                                                                                     },
                                                                                     {
-                                                                                        "Iterator": "%kqp%tx_result_binding_1_0",
+                                                                                        "Iterator": "precompute_1_0",
                                                                                         "Name": "Iterator"
                                                                                     }
                                                                                 ],
                                                                                 "Node Type": "Filter-TablePointLookup-ConstantExpr",
-                                                                                "CTE Name": "tx_result_binding_2_0"
+                                                                                "CTE Name": "precompute_1_0"
                                                                             }
                                                                         ],
                                                                         "Node Type": "UnionAll",
@@ -149,11 +149,15 @@
                     },
                     {
                         "PlanNodeId": 9,
-                        "Subplan Name": "CTE tx_result_binding_1_0",
+                        "Subplan Name": "CTE precompute_1_0",
                         "Plans": [
                             {
                                 "PlanNodeId": 8,
                                 "Operators": [
+                                    {
+                                        "Name": "PartitionByKey",
+                                        "Input": "precompute_0_0"
+                                    },
                                     {
                                         "Predicate": "Exist(item.Group)",
                                         "Name": "Filter"
@@ -163,7 +167,8 @@
                                         "Limit": "1"
                                     }
                                 ],
-                                "Node Type": "Filter-Limit"
+                                "Node Type": "Aggregate-Filter-Limit",
+                                "CTE Name": "precompute_0_0"
                             }
                         ],
                         "Node Type": "Precompute_1",
@@ -172,7 +177,7 @@
                     },
                     {
                         "PlanNodeId": 6,
-                        "Subplan Name": "CTE tx_result_binding_0_0",
+                        "Subplan Name": "CTE precompute_0_0",
                         "Plans": [
                             {
                                 "PlanNodeId": 5,
@@ -269,12 +274,12 @@
                                         "Table": "base_join_group_by_lookup_script_script/Temp"
                                     },
                                     {
-                                        "Iterator": "%kqp%tx_result_binding_0_0",
+                                        "Iterator": "precompute_0_0",
                                         "Name": "Iterator"
                                     }
                                 ],
                                 "Node Type": "Upsert-ConstantExpr",
-                                "CTE Name": "tx_result_binding_1_0"
+                                "CTE Name": "precompute_0_0"
                             }
                         ],
                         "Node Type": "Effect"

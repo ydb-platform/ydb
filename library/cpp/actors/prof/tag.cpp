@@ -15,6 +15,8 @@
 #include <util/generic/string.h>
 #include <util/generic/vector.h>
 #include <util/system/mutex.h>
+#include <library/cpp/actors/util/local_process_key.h>
+#include <library/cpp/actors/actor_type/index_constructor.h>
 
 namespace NProfiling {
     class TStringAtoms {
@@ -117,4 +119,14 @@ namespace NProfiling {
 #endif
 
     TSetThreadAllocTag* SetThreadAllocTag = SetThreadAllocTagFn();
+}
+
+TMemoryProfileGuard::TMemoryProfileGuard(const TString& id)
+    : Id(id)
+{
+    NProfiling::TMemoryTagScope::Reset(TLocalProcessKeyState<NActors::TActorActivityTag>::GetInstance().Register(Id + "-Start"));
+}
+
+TMemoryProfileGuard::~TMemoryProfileGuard() {
+    NProfiling::TMemoryTagScope::Reset(TLocalProcessKeyState<NActors::TActorActivityTag>::GetInstance().Register(Id + "-Finish"));
 }

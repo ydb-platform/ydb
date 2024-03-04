@@ -1,9 +1,15 @@
 #pragma once
 
 #include "blob_manager.h"
+#include "blobs_action/abstract/gc.h"
 #include "defs.h"
 
 #include <ydb/core/protos/counters_columnshard.pb.h>
+#include <ydb/core/tx/columnshard/engines/column_engine.h>
+#include <ydb/core/tx/columnshard/normalizer/abstract/abstract.h>
+#include <ydb/core/tx/columnshard/engines/writer/write_controller.h>
+#include <ydb/core/tx/ev_write/write_data.h>
+#include <ydb/core/formats/arrow/special_keys.h>
 
 namespace NKikimr::NColumnShard {
 
@@ -19,102 +25,83 @@ struct TEvPrivate {
         EvExport,
         EvForget,
         EvGetExported,
+        EvWriteBlobsResult,
+        EvStartReadTask,
+        EvWriteDraft,
+        EvGarbageCollectionFinished,
+        EvTieringModified,
+        EvStartResourceUsageTask,
+        EvNormalizerResult,
         EvEnd
     };
 
     static_assert(EvEnd < EventSpaceEnd(TEvents::ES_PRIVATE), "expect EvEnd < EventSpaceEnd(TEvents::ES_PRIVATE)");
 
+    struct TEvTieringModified: public TEventLocal<TEvTieringModified, EvTieringModified> {
+    };
+
+    struct TEvWriteDraft: public TEventLocal<TEvWriteDraft, EvWriteDraft> {
+        const std::shared_ptr<IWriteController> WriteController;
+        TEvWriteDraft(std::shared_ptr<IWriteController> controller)
+            : WriteController(controller) {
+
+        }
+    };
+
+    class TEvNormalizerResult: public TEventLocal<TEvNormalizerResult, EvNormalizerResult> {
+        NOlap::INormalizerChanges::TPtr Changes;
+    public:
+        TEvNormalizerResult(NOlap::INormalizerChanges::TPtr changes)
+            : Changes(changes)
+        {}
+
+        NOlap::INormalizerChanges::TPtr GetChanges() const {
+            Y_ABORT_UNLESS(!!Changes);
+            return Changes;
+        }
+    };
+
+    struct TEvGarbageCollectionFinished: public TEventLocal<TEvGarbageCollectionFinished, EvGarbageCollectionFinished> {
+        const std::shared_ptr<NOlap::IBlobsGCAction> Action;
+        TEvGarbageCollectionFinished(const std::shared_ptr<NOlap::IBlobsGCAction>& action)
+            : Action(action) {
+
+        }
+    };
+
     /// Common event for Indexing and GranuleCompaction: write index data in TTxWriteIndex transaction.
-    struct TEvWriteIndex : public TEventLocal<TEvWriteIndex, EvWriteIndex>, public TPutStatus {
+    struct TEvWriteIndex : public TEventLocal<TEvWriteIndex, EvWriteIndex> {
         NOlap::TVersionedIndex IndexInfo;
-        THashMap<ui64, NKikimr::NOlap::TTiering> Tiering;
         std::shared_ptr<NOlap::TColumnEngineChanges> IndexChanges;
-        THashMap<TUnifiedBlobId, std::shared_ptr<arrow::RecordBatch>> CachedBlobs;
-        std::vector<TString> Blobs;
         bool GranuleCompaction{false};
-        TBlobBatch BlobBatch;
         TUsage ResourceUsage;
         bool CacheData{false};
         TDuration Duration;
+        TBlobPutResult::TPtr PutResult;
 
         TEvWriteIndex(NOlap::TVersionedIndex&& indexInfo,
             std::shared_ptr<NOlap::TColumnEngineChanges> indexChanges,
-            bool cacheData,
-            THashMap<TUnifiedBlobId, std::shared_ptr<arrow::RecordBatch>>&& cachedBlobs = {})
+            bool cacheData)
             : IndexInfo(std::move(indexInfo))
             , IndexChanges(indexChanges)
-            , CachedBlobs(std::move(cachedBlobs))
             , CacheData(cacheData)
-        {}
-
-        TEvWriteIndex& SetTiering(const THashMap<ui64, NKikimr::NOlap::TTiering>& tiering) {
-            Tiering = tiering;
-            return *this;
-        }
-    };
-
-    struct TEvIndexing : public TEventLocal<TEvIndexing, EvIndexing> {
-        std::unique_ptr<TEvPrivate::TEvWriteIndex> TxEvent;
-
-        explicit TEvIndexing(std::unique_ptr<TEvPrivate::TEvWriteIndex> txEvent)
-            : TxEvent(std::move(txEvent))
-        {}
-    };
-
-    struct TEvCompaction : public TEventLocal<TEvCompaction, EvIndexing> {
-        std::unique_ptr<TEvPrivate::TEvWriteIndex> TxEvent;
-        THashMap<TUnifiedBlobId, std::vector<TBlobRange>> GroupedBlobRanges;
-        THashSet<TUnifiedBlobId> Externals;
-
-        explicit TEvCompaction(std::unique_ptr<TEvPrivate::TEvWriteIndex> txEvent, IBlobExporter& blobManager)
-            : TxEvent(std::move(txEvent))
         {
-            TxEvent->GranuleCompaction = true;
-            Y_VERIFY(TxEvent->IndexChanges);
-
-            GroupedBlobRanges = NOlap::TColumnEngineChanges::GroupedBlobRanges(TxEvent->IndexChanges->SwitchedPortions);
-
-            if (blobManager.HasExternBlobs()) {
-                for (const auto& [blobId, _] : GroupedBlobRanges) {
-                    TEvictMetadata meta;
-                    if (blobManager.GetEvicted(blobId, meta).IsExternal()) {
-                        Externals.insert(blobId);
-                    }
-                }
-            }
-        }
-    };
-
-    struct TEvEviction : public TEventLocal<TEvEviction, EvEviction> {
-        std::unique_ptr<TEvPrivate::TEvWriteIndex> TxEvent;
-        THashMap<TUnifiedBlobId, std::vector<TBlobRange>> GroupedBlobRanges;
-        THashSet<TUnifiedBlobId> Externals;
-
-        explicit TEvEviction(std::unique_ptr<TEvPrivate::TEvWriteIndex> txEvent, IBlobExporter& blobManager,
-                             bool needWrites)
-            : TxEvent(std::move(txEvent))
-        {
-            Y_VERIFY(TxEvent->IndexChanges);
-
-            if (needWrites) {
-                GroupedBlobRanges =
-                    NOlap::TColumnEngineChanges::GroupedBlobRanges(TxEvent->IndexChanges->PortionsToEvict);
-
-                if (blobManager.HasExternBlobs()) {
-                    for (auto& [blobId, _] : GroupedBlobRanges) {
-                        TEvictMetadata meta;
-                        if (blobManager.GetEvicted(blobId, meta).IsExternal()) {
-                            Externals.insert(blobId);
-                        }
-                    }
-                }
-            } else {
-                TxEvent->SetPutStatus(NKikimrProto::OK);
-            }
+            PutResult = std::make_shared<TBlobPutResult>(NKikimrProto::UNKNOWN);
         }
 
-        bool NeedDataReadWrite() const {
-            return (TxEvent->GetPutStatus() != NKikimrProto::OK);
+        const TBlobPutResult& GetPutResult() const {
+            Y_ABORT_UNLESS(PutResult);
+            return *PutResult;
+        }
+
+        NKikimrProto::EReplyStatus GetPutStatus() const {
+            Y_ABORT_UNLESS(PutResult);
+            return PutResult->GetPutStatus();
+        }
+
+        void SetPutStatus(const NKikimrProto::EReplyStatus& status) {
+            Y_ABORT_UNLESS(PutResult);
+            PutResult->SetPutStatus(status);
         }
     };
 
@@ -142,10 +129,10 @@ struct TEvPrivate {
             : ExportNo(exportNo)
             , TierName(tierName)
         {
-            Y_VERIFY(ExportNo);
-            Y_VERIFY(!TierName.empty());
-            Y_VERIFY(pathId);
-            Y_VERIFY(!blobIds.empty());
+            Y_ABORT_UNLESS(ExportNo);
+            Y_ABORT_UNLESS(!TierName.empty());
+            Y_ABORT_UNLESS(pathId);
+            Y_ABORT_UNLESS(!blobIds.empty());
 
             for (auto& blobId : blobIds) {
                 Blobs.emplace(blobId, TString());
@@ -157,13 +144,13 @@ struct TEvPrivate {
             : ExportNo(exportNo)
             , TierName(tierName)
         {
-            Y_VERIFY(ExportNo);
-            Y_VERIFY(!TierName.empty());
-            Y_VERIFY(!evictSet.empty());
+            Y_ABORT_UNLESS(ExportNo);
+            Y_ABORT_UNLESS(!TierName.empty());
+            Y_ABORT_UNLESS(!evictSet.empty());
 
             for (auto& evict : evictSet) {
-                Y_VERIFY(evict.IsEvicting());
-                Y_VERIFY(evict.ExternBlob.IsS3Blob());
+                Y_ABORT_UNLESS(evict.IsEvicting());
+                Y_ABORT_UNLESS(evict.ExternBlob.IsS3Blob());
 
                 Blobs.emplace(evict.Blob, TString());
                 SrcToDstBlobs[evict.Blob] = evict.ExternBlob;
@@ -173,10 +160,10 @@ struct TEvPrivate {
         void AddResult(const TUnifiedBlobId& blobId, const TString& key, const bool hasError, const TString& errStr) {
             if (hasError) {
                 Status = NKikimrProto::ERROR;
-                Y_VERIFY(ErrorStrings.emplace(key, errStr).second, "%s", key.data());
+                Y_ABORT_UNLESS(ErrorStrings.emplace(key, errStr).second, "%s", key.data());
                 Blobs.erase(blobId);
             } else if (!ErrorStrings.contains(key)) { // (OK + !OK) == !OK
-                Y_VERIFY(Blobs.contains(blobId));
+                Y_ABORT_UNLESS(Blobs.contains(blobId));
                 if (Status == NKikimrProto::UNKNOWN) {
                     Status = NKikimrProto::OK;
                 }
@@ -230,6 +217,92 @@ struct TEvPrivate {
         {}
 
         bool Manual;
+    };
+
+    class TEvWriteBlobsResult : public TEventLocal<TEvWriteBlobsResult, EvWriteBlobsResult> {
+    public:
+        class TPutBlobData {
+            YDB_READONLY_DEF(TBlobRange, BlobRange);
+            YDB_READONLY_DEF(NKikimrTxColumnShard::TLogicalMetadata, LogicalMeta);
+            YDB_ACCESSOR(ui64, RowsCount, 0);
+            YDB_ACCESSOR(ui64, RawBytes, 0);
+        public:
+            TPutBlobData() = default;
+
+            TPutBlobData(const TBlobRange& blobRange, const NArrow::TFirstLastSpecialKeys& specialKeys, ui64 rowsCount, ui64 rawBytes, const TInstant dirtyTime)
+                : BlobRange(blobRange)
+                , RowsCount(rowsCount)
+                , RawBytes(rawBytes)
+            {
+                LogicalMeta.SetNumRows(rowsCount);
+                LogicalMeta.SetRawBytes(rawBytes);
+                LogicalMeta.SetDirtyWriteTimeSeconds(dirtyTime.Seconds());
+                LogicalMeta.SetSpecialKeysRawData(specialKeys.SerializeToString());
+            }
+        };
+
+        TString GetBlobVerified(const TBlobRange& bRange) const {
+            for (auto&& i : Actions) {
+                for (auto&& b : i->GetBlobsForWrite()) {
+                    if (bRange.GetBlobId() == b.first) {
+                        AFL_VERIFY(bRange.Size + bRange.Offset <= b.second.size());
+                        if (bRange.Size == b.second.size()) {
+                            return b.second;
+                        } else {
+                            return b.second.substr(bRange.Offset, bRange.Size);
+                        }
+                    }
+                }
+            }
+            AFL_VERIFY(false);
+            return "";
+        }
+
+        TEvWriteBlobsResult(const NColumnShard::TBlobPutResult::TPtr& putResult, const NEvWrite::TWriteMeta& writeMeta)
+            : PutResult(putResult)
+            , WriteMeta(writeMeta)
+        {
+            Y_ABORT_UNLESS(PutResult);
+        }
+
+        TEvWriteBlobsResult(const NColumnShard::TBlobPutResult::TPtr& putResult, TVector<TPutBlobData>&& blobData, const std::vector<std::shared_ptr<NOlap::IBlobsWritingAction>>& actions, const NEvWrite::TWriteMeta& writeMeta, const ui64 schemaVersion)
+            : TEvWriteBlobsResult(putResult, writeMeta)
+        {
+            Actions = actions;
+            BlobData = std::move(blobData);
+            SchemaVersion = schemaVersion;
+        }
+
+        const std::vector<std::shared_ptr<NOlap::IBlobsWritingAction>>& GetActions() const {
+            return Actions;
+        }
+
+        const TVector<TPutBlobData>& GetBlobData() const {
+            return BlobData;
+        }
+
+        const NColumnShard::TBlobPutResult& GetPutResult() const {
+            return *PutResult;
+        }
+
+        const NColumnShard::TBlobPutResult::TPtr GetPutResultPtr() {
+            return PutResult;
+        }
+
+        const NEvWrite::TWriteMeta& GetWriteMeta() const {
+            return WriteMeta;
+        }
+
+        ui64 GetSchemaVersion() const {
+            return SchemaVersion;
+        }
+
+    private:
+        NColumnShard::TBlobPutResult::TPtr PutResult;
+        TVector<TPutBlobData> BlobData;
+        std::vector<std::shared_ptr<NOlap::IBlobsWritingAction>> Actions;
+        NEvWrite::TWriteMeta WriteMeta;
+        ui64 SchemaVersion = 0;
     };
 };
 

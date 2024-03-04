@@ -9,9 +9,9 @@ bool TErasureCounterBase::IsDown(const TVDiskInfo &vdisk, TClusterInfoPtr info, 
 
     // Check we received info for PDisk.
     if (!pdisk.NodeId) {
-        Down.insert(vdisk.VDiskId);
         error.Code = TStatus::DISALLOW_TEMP;
-        error.Reason = TStringBuilder() << "Missing info for " << pdisk.PrettyItemName();
+        error.Reason = TStringBuilder() << vdisk.PrettyItemName() << " has missing info for " << pdisk.PrettyItemName();
+        Down.emplace(vdisk.VDiskId, error.Reason);
         return false;
     }
 
@@ -28,9 +28,9 @@ bool TErasureCounterBase::IsLocked(const TVDiskInfo &vdisk, TClusterInfoPtr info
 
     // Check we received info for VDisk.
     if (!vdisk.NodeId || !vdisk.PDiskId) {
-        Down.insert(vdisk.VDiskId);
         error.Code = TStatus::DISALLOW_TEMP;
-        error.Reason = TStringBuilder() << "Missing info for " << vdisk.PrettyItemName();
+        error.Reason = TStringBuilder() << vdisk.PrettyItemName() << " has missing info";
+        Down.emplace(vdisk.VDiskId, error.Reason);
         return false;
     }
 
@@ -43,7 +43,7 @@ bool TErasureCounterBase::GroupAlreadyHasLockedDisks() const {
     return HasAlreadyLockedDisks;
 }
 
-static TString DumpVDisksInfo(const TSet<TVDiskID>& vdisks, TClusterInfoPtr info) {
+static TString DumpVDisksInfo(const THashMap<TVDiskID, TString>& vdisks, TClusterInfoPtr info) {
     if (vdisks.empty()) {
         return "<empty>";
     }
@@ -51,12 +51,17 @@ static TString DumpVDisksInfo(const TSet<TVDiskID>& vdisks, TClusterInfoPtr info
     TStringBuilder dump;
 
     bool comma = false;
-    for (const auto& vdisk : vdisks) {
+    for (const auto& [vdisk, reason] : vdisks) {
         if (comma) {
             dump << ", ";
         }
-        dump << info->VDisk(vdisk).PrettyItemName();
         comma = true;
+
+        if (reason) {
+            dump << reason;
+        } else {
+            dump << info->VDisk(vdisk).PrettyItemName();
+        }
     }
 
     return dump;
@@ -91,7 +96,7 @@ bool TErasureCounterBase::CountVDisk(const TVDiskInfo &vdisk, TClusterInfoPtr in
     // Check locks.
     TErrorInfo err;
     if (IsLocked(vdisk, info, retryTime, duration, err)) {
-        Locked.insert(vdisk.VDiskId);
+        Locked.emplace(vdisk.VDiskId, err.Reason);
         error.Code = err.Code;
         error.Reason = TStringBuilder() << "Issue in affected group with id '" << GroupId << "'"
             << ": " << err.Reason;
@@ -101,7 +106,7 @@ bool TErasureCounterBase::CountVDisk(const TVDiskInfo &vdisk, TClusterInfoPtr in
 
     // Check if disk is down.
     if (IsDown(vdisk, info, retryTime, err)) {
-        Down.insert(vdisk.VDiskId);
+        Down.emplace(vdisk.VDiskId, err.Reason);
         error.Code = err.Code;
         error.Reason = TStringBuilder() << "Issue in affected group with id '" << GroupId << "'"
             << ": " << err.Reason;
@@ -122,7 +127,7 @@ void TErasureCounterBase::CountGroupState(TClusterInfoPtr info, TDuration retryT
         HasAlreadyLockedDisks = true;
     }
 
-    Locked.insert(VDisk.VDiskId);
+    Locked.emplace(VDisk.VDiskId, TStringBuilder() << VDisk.PrettyItemName() << " is locked by this request");
 }
 
 bool TDefaultErasureCounter::CheckForKeepAvailability(TClusterInfoPtr info, TErrorInfo &error,
@@ -159,8 +164,6 @@ bool TDefaultErasureCounter::CheckForKeepAvailability(TClusterInfoPtr info, TErr
 bool TMirror3dcCounter::CheckForKeepAvailability(TClusterInfoPtr info, TErrorInfo &error,
         TInstant &defaultDeadline, bool allowPartial) const
 {
-    Y_UNUSED(info);
-
     if (HasAlreadyLockedDisks && allowPartial) {
         error.Code = TStatus::DISALLOW_TEMP;
         error.Reason = "You cannot get two or more disks from the same group at the same time"

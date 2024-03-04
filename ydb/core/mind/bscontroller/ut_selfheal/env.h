@@ -176,7 +176,7 @@ struct TEnvironmentSetup {
 
     void SetupStorage() {
         const TActorId proxyId = MakeBlobStorageProxyID(GroupId);
-        Runtime->RegisterService(proxyId, Runtime->Register(CreateBlobStorageGroupProxyMockActor(), NodeId));
+        Runtime->RegisterService(proxyId, Runtime->Register(CreateBlobStorageGroupProxyMockActor(GroupId), NodeId));
 
         for (ui32 nodeId : Runtime->GetNodes()) {
             const TActorId wardenId = Runtime->Register(new TNodeWardenMock(nodeId, TabletId), nodeId);

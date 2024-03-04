@@ -9,8 +9,10 @@ private:
     YDB_OPT(ui32, WorkersCount);
     YDB_READONLY(ui32, QueueSizeLimit, 256 * 1024);
     YDB_READONLY_FLAG(Enabled, true);
+    YDB_OPT(double, DefaultFractionOfThreadsCount);
 public:
     bool DeserializeFromProto(const NKikimrConfig::TConveyorConfig& config);
+    ui32 GetWorkersCountForConveyor(const ui32 poolThreadsCount) const;
 };
 
 }

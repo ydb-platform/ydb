@@ -44,7 +44,7 @@ struct TTestSchema {
         TString Name;
         TString Codec;
         std::optional<int> CompressionLevel;
-        std::optional<NKikimrSchemeOp::TS3Settings> S3;
+        NKikimrSchemeOp::TS3Settings S3 = FakeS3();
 
         TStorageTier(const TString& name = {})
             : Name(name)
@@ -58,7 +58,7 @@ struct TTestSchema {
             } else if (Codec == "zstd") {
                 return NKikimrSchemeOp::EColumnCodec::ColumnCodecZSTD;
             }
-            Y_VERIFY(false);
+            Y_ABORT_UNLESS(false);
         }
 
         bool HasCodec() const {
@@ -105,7 +105,7 @@ struct TTestSchema {
 
     struct TTableSpecials : public TStorageTier {
         std::vector<TStorageTier> Tiers;
-        bool CompositeMarks = false;
+        bool WaitEmptyAfter = false;
 
         TTableSpecials() noexcept = default;
 
@@ -120,12 +120,6 @@ struct TTestSchema {
         TTableSpecials WithCodec(const TString& codec) const {
             TTableSpecials out = *this;
             out.SetCodec(codec);
-            return out;
-        }
-
-        TTableSpecials WithCompositeMarks(bool composite) const {
-            TTableSpecials out = *this;
-            out.CompositeMarks = composite;
             return out;
         }
 
@@ -236,7 +230,7 @@ struct TTestSchema {
             *schema->MutableColumns()->Add() = CreateColumn(i + 1, columns[i].first, columns[i].second);
         }
 
-        Y_VERIFY(pk.size() > 0);
+        Y_ABORT_UNLESS(pk.size() > 0);
         for (auto& column : ExtractNames(pk)) {
             schema->AddKeyColumnNames(column);
         }
@@ -247,12 +241,11 @@ struct TTestSchema {
         if (specials.CompressionLevel) {
             schema->MutableDefaultCompression()->SetCompressionLevel(*specials.CompressionLevel);
         }
-        schema->SetCompositeMarks(specials.CompositeMarks);
     }
 
     static void InitTtl(const TTableSpecials& specials, NKikimrSchemeOp::TColumnDataLifeCycle::TTtl* ttl) {
-        Y_VERIFY(specials.HasTtl());
-        Y_VERIFY(!specials.TtlColumn.empty());
+        Y_ABORT_UNLESS(specials.HasTtl());
+        Y_ABORT_UNLESS(!specials.TtlColumn.empty());
         ttl->SetColumnName(specials.TtlColumn);
         ttl->SetExpireAfterSeconds((*specials.EvictAfter).Seconds());
     }
@@ -261,20 +254,18 @@ struct TTestSchema {
         ttlSettings->SetVersion(1);
         if (specials.HasTiers()) {
             ttlSettings->SetUseTiering("Tiering1");
-            if (specials.HasTtl()) {
-                InitTtl(specials, ttlSettings->MutableEnabled());
-            }
-            return true;
-        } else if (specials.HasTtl()) {
-            InitTtl(specials, ttlSettings->MutableEnabled());
-            return true;
         }
-        return false;
+        if (specials.HasTtl()) {
+            InitTtl(specials, ttlSettings->MutableEnabled());
+        }
+        return specials.HasTiers() || specials.HasTtl();
     }
 
     static TString CreateTableTxBody(ui64 pathId, const std::vector<std::pair<TString, TTypeInfo>>& columns,
         const std::vector<std::pair<TString, TTypeInfo>>& pk,
-        const TTableSpecials& specials = {}) {
+        const TTableSpecials& specialsExt = {})
+    {
+        auto specials = specialsExt;
         NKikimrTxColumnShard::TSchemaTxBody tx;
         auto* table = tx.MutableEnsureTables()->AddTables();
         table->SetPathId(pathId);
@@ -362,11 +353,8 @@ struct TTestSchema {
 
     static NMetadata::NFetcher::ISnapshot::TPtr BuildSnapshot(const TTableSpecials& specials);
 
-    static TString CommitTxBody(ui64 metaShard, const std::vector<ui64>& writeIds) {
+    static TString CommitTxBody(ui64, const std::vector<ui64>& writeIds) {
         NKikimrTxColumnShard::TCommitTxBody proto;
-        if (metaShard) {
-            proto.SetTxInitiator(metaShard);
-        }
         for (ui64 id : writeIds) {
             proto.AddWriteIds(id);
         }
@@ -409,18 +397,30 @@ struct TTestSchema {
 };
 
 bool ProposeSchemaTx(TTestBasicRuntime& runtime, TActorId& sender, const TString& txBody, NOlap::TSnapshot snap);
-void ProvideTieringSnapshot(TTestBasicRuntime& runtime, TActorId& sender, NMetadata::NFetcher::ISnapshot::TPtr snapshot);
+void ProvideTieringSnapshot(TTestBasicRuntime& runtime, const TActorId& sender, NMetadata::NFetcher::ISnapshot::TPtr snapshot);
 void PlanSchemaTx(TTestBasicRuntime& runtime, TActorId& sender, NOlap::TSnapshot snap);
-bool WriteData(TTestBasicRuntime& runtime, TActorId& sender, ui64 metaShard, ui64 writeId, ui64 tableId,
-               const TString& data, std::shared_ptr<arrow::Schema> schema = {}, bool waitResult = true);
+
+void PlanWriteTx(TTestBasicRuntime& runtime, TActorId& sender, NOlap::TSnapshot snap, bool waitResult = true);
+
+bool WriteData(TTestBasicRuntime& runtime, TActorId& sender, const ui64 shardId, const ui64 writeId, const ui64 tableId, const TString& data,
+                              const std::vector<std::pair<TString, TTypeInfo>>& ydbSchema, std::vector<ui64>* writeIds);
+
+bool WriteData(TTestBasicRuntime& runtime, TActorId& sender, const ui64 writeId, const ui64 tableId, const TString& data,
+                              const std::vector<std::pair<TString, TTypeInfo>>& ydbSchema, bool waitResult = true, std::vector<ui64>* writeIds = nullptr);
+
 std::optional<ui64> WriteData(TTestBasicRuntime& runtime, TActorId& sender, const NLongTxService::TLongTxId& longTxId,
-                              ui64 tableId, const TString& dedupId, const TString& data,
-                              std::shared_ptr<arrow::Schema> schema = {});
-ui32 WaitWriteResult(TTestBasicRuntime& runtime, ui64 metaShard);
+                              ui64 tableId, const ui64 writePartId, const TString& data,
+                              const std::vector<std::pair<TString, TTypeInfo>>& ydbSchema);
+
+ui32 WaitWriteResult(TTestBasicRuntime& runtime, ui64 shardId, std::vector<ui64>* writeIds = nullptr);
+
 void ScanIndexStats(TTestBasicRuntime& runtime, TActorId& sender, const std::vector<ui64>& pathIds,
                     NOlap::TSnapshot snap, ui64 scanId = 0);
-void ProposeCommit(TTestBasicRuntime& runtime, TActorId& sender, ui64 metaShard, ui64 txId, const std::vector<ui64>& writeIds);
+
+void ProposeCommit(TTestBasicRuntime& runtime, TActorId& sender, ui64 shardId, ui64 txId, const std::vector<ui64>& writeIds);
 void ProposeCommit(TTestBasicRuntime& runtime, TActorId& sender, ui64 txId, const std::vector<ui64>& writeIds);
+
+void PlanCommit(TTestBasicRuntime& runtime, TActorId& sender, ui64 shardId, ui64 planStep, const TSet<ui64>& txIds);
 void PlanCommit(TTestBasicRuntime& runtime, TActorId& sender, ui64 planStep, const TSet<ui64>& txIds);
 
 inline void PlanCommit(TTestBasicRuntime& runtime, TActorId& sender, ui64 planStep, ui64 txId) {
@@ -465,10 +465,10 @@ namespace NKikimr::NColumnShard {
 
             template <class TData>
             TRowBuilder Add(const TData& data) {
-                Y_VERIFY(Index < Owner.Builders.size());
+                Y_ABORT_UNLESS(Index < Owner.Builders.size());
                 auto& builder = Owner.Builders[Index];
                 auto type = builder->type();
-                
+
                 NArrow::SwitchType(type->id(), [&](const auto& t) {
                     using TWrap = std::decay_t<decltype(t)>;
                     using T = typename TWrap::T;
@@ -478,24 +478,24 @@ namespace NKikimr::NColumnShard {
                     if constexpr (std::is_arithmetic<TData>::value) {
                         if constexpr (arrow::has_c_type<T>::value) {
                             using CType = typename T::c_type;
-                            Y_VERIFY(typedBuilder.Append((CType)data).ok());
+                            Y_ABORT_UNLESS(typedBuilder.Append((CType)data).ok());
                             return true;
                         }
                     }
                     if constexpr (std::is_same<TData, std::string>::value) {
                         if constexpr (arrow::has_string_view<T>::value && arrow::is_parameter_free_type<T>::value) {
-                            Y_VERIFY(typedBuilder.Append(data.data(), data.size()).ok());
+                            Y_ABORT_UNLESS(typedBuilder.Append(data.data(), data.size()).ok());
                             return true;
                         }
                     }
-                    Y_FAIL("Unknown type combination");
+                    Y_ABORT("Unknown type combination");
                     return false;
                 });
                 return TRowBuilder(Index + 1, Owner);
             }
 
             TRowBuilder AddNull() {
-                Y_VERIFY(Index < Owner.Builders.size());
+                Y_ABORT_UNLESS(Index < Owner.Builders.size());
                 auto res = Owner.Builders[Index]->AppendNull();
                 return TRowBuilder(Index + 1, Owner);
             }
@@ -505,7 +505,7 @@ namespace NKikimr::NColumnShard {
             : Schema(schema)
         {
             Builders = NArrow::MakeBuilders(schema);
-            Y_VERIFY(Builders.size() == schema->fields().size());
+            Y_ABORT_UNLESS(Builders.size() == schema->fields().size());
         }
 
         TRowBuilder AddRow() {
@@ -518,7 +518,7 @@ namespace NKikimr::NColumnShard {
             columns.reserve(Builders.size());
             for (auto&& builder : Builders) {
                 auto arrayDataRes = builder->Finish();
-                Y_VERIFY(arrayDataRes.ok());
+                Y_ABORT_UNLESS(arrayDataRes.ok());
                 columns.push_back(*arrayDataRes);
             }
             return arrow::RecordBatch::Make(Schema, RowsCount, columns);
@@ -527,4 +527,41 @@ namespace NKikimr::NColumnShard {
 
     NOlap::TIndexInfo BuildTableInfo(const std::vector<std::pair<TString, NScheme::TTypeInfo>>& ydbSchema,
                          const std::vector<std::pair<TString, NScheme::TTypeInfo>>& key);
+
+
+    struct TestTableDescription {
+        std::vector<std::pair<TString, NScheme::TTypeInfo>> Schema = NTxUT::TTestSchema::YdbSchema();
+        std::vector<std::pair<TString, NScheme::TTypeInfo>> Pk = NTxUT::TTestSchema::YdbPkSchema();
+        bool InStore = true;
+    };
+
+    class TArrowDataConstructor : public NKikimr::NEvents::IDataConstructor {
+        std::vector<std::pair<TString, NScheme::TTypeInfo>> YdbSchema;
+        ui64 Index;
+
+    public:
+        TArrowDataConstructor(const std::vector<std::pair<TString, NScheme::TTypeInfo>>& ydbSchema, const ui64 idx)
+            : YdbSchema(ydbSchema)
+            , Index(idx)
+        {
+        }
+
+        void Serialize(NKikimrDataEvents::TOperationData& proto) const override {
+            for (ui32 i = 0; i < YdbSchema.size(); ++i) {
+                proto.AddColumnIds(i + 1);
+            }
+            proto.MutableArrowData()->SetPayloadIndex(Index);
+        }
+
+        ui64 GetSchemaVersion() const override {
+            return 1;
+        }
+    };
+
+    void SetupSchema(TTestBasicRuntime& runtime, TActorId& sender, ui64 pathId,
+                 const TestTableDescription& table = {}, TString codec = "none");
+
+    void PrepareTablet(TTestBasicRuntime& runtime, const ui64 tableId, const std::vector<std::pair<TString, NScheme::TTypeInfo>>& schema, const ui32 keySize = 1);
+
+    std::shared_ptr<arrow::RecordBatch> ReadAllAsBatch(TTestBasicRuntime& runtime, const ui64 tableId, const NOlap::TSnapshot& snapshot, const std::vector<std::pair<TString, NScheme::TTypeInfo>>& schema);
 }

@@ -27,10 +27,11 @@ protected:
     using TRequest = typename TEvRequest::TRequest;
     using TOutcome = typename TEvResponse::TOutcome;
 public:
-    explicit TCommonContextBase(const TActorSystem* sys, const TActorId& sender, IRequestContext::TPtr requestContext, const Aws::S3::Model::StorageClass storageClass)
+    explicit TCommonContextBase(const TActorSystem* sys, const TActorId& sender, IRequestContext::TPtr requestContext, const Aws::S3::Model::StorageClass storageClass, const TReplyAdapterContainer& replyAdapter)
         : AsyncCallerContext()
         , RequestContext(requestContext)
         , StorageClass(storageClass)
+        , ReplyAdapter(replyAdapter)
         , ActorSystem(sys)
         , Sender(sender)
     {
@@ -45,17 +46,18 @@ public:
     }
 
 protected:
-    void Send(const TActorId& recipient, IEventBase* ev) const {
-        ActorSystem->Send(recipient, ev);
+    void Send(const TActorId& recipient, std::unique_ptr<IEventBase>&& ev) const {
+        ActorSystem->Send(ReplyAdapter.GetRecipient(recipient), ev.release());
     }
 
-    void Send(IEventBase* ev) const {
-        Send(Sender, ev);
+    void Send(std::unique_ptr<IEventBase>&& ev) const {
+        Send(Sender, std::move(ev));
     }
 
     mutable bool Replied = false;
     IRequestContext::TPtr RequestContext;
     const Aws::S3::Model::StorageClass StorageClass;
+    const TReplyAdapterContainer& ReplyAdapter;
 private:
     const TActorSystem* ActorSystem;
     const TActorId Sender;
@@ -66,21 +68,21 @@ class TContextBase: public TCommonContextBase<TEvRequest, TEvResponse> {
 private:
     using TBase = TCommonContextBase<TEvRequest, TEvResponse>;
 protected:
-    virtual THolder<IEventBase> MakeResponse(const typename TEvResponse::TKey& key, const typename TBase::TOutcome& outcome) const {
-        return MakeHolder<TEvResponse>(key, outcome);
+    virtual std::unique_ptr<IEventBase> MakeResponse(const typename TEvResponse::TKey& key, const typename TBase::TOutcome& outcome) const {
+        return TBase::ReplyAdapter.RebuildReplyEvent(std::make_unique<TEvResponse>(key, outcome));
     }
 
 public:
     using TBase::Send;
     using TBase::TBase;
     void Reply(const typename TBase::TRequest& request, const typename TBase::TOutcome& outcome) const {
-        Y_VERIFY(!std::exchange(TBase::Replied, true), "Double-reply");
+        Y_ABORT_UNLESS(!std::exchange(TBase::Replied, true), "Double-reply");
 
         typename TEvResponse::TKey key;
         if (request.KeyHasBeenSet()) {
             key = request.GetKey();
         }
-        Send(MakeResponse(key, outcome).Release());
+        Send(MakeResponse(key, outcome));
     }
 };
 
@@ -93,9 +95,9 @@ public:
     using TBase::Send;
     using TBase::TBase;
     void Reply(const typename TBase::TRequest& /*request*/, const typename TBase::TOutcome& outcome) const {
-        Y_VERIFY(!std::exchange(TBase::Replied, true), "Double-reply");
+        Y_ABORT_UNLESS(!std::exchange(TBase::Replied, true), "Double-reply");
 
-        Send(MakeHolder<TEvListObjectsResponse>(outcome).Release());
+        Send(std::make_unique<TEvListObjectsResponse>(outcome));
     }
 };
 
@@ -108,9 +110,9 @@ public:
     using TBase::Send;
     using TBase::TBase;
     void Reply(const typename TBase::TRequest& /*request*/, const typename TBase::TOutcome& outcome) const {
-        Y_VERIFY(!std::exchange(TBase::Replied, true), "Double-reply");
+        Y_ABORT_UNLESS(!std::exchange(TBase::Replied, true), "Double-reply");
 
-        Send(MakeHolder<TEvDeleteObjectsResponse>(outcome).Release());
+        Send(std::make_unique<TEvDeleteObjectsResponse>(outcome));
     }
 };
 
@@ -123,13 +125,15 @@ public:
     using TBase::Send;
     using TBase::TBase;
     void Reply(const typename TBase::TRequest& /*request*/, const typename TBase::TOutcome& outcome) const {
-        Y_VERIFY(!std::exchange(TBase::Replied, true), "Double-reply");
-        Send(MakeHolder<TEvCheckObjectExistsResponse>(outcome, RequestContext).Release());
+        Y_ABORT_UNLESS(!std::exchange(TBase::Replied, true), "Double-reply");
+        Send(std::make_unique<TEvCheckObjectExistsResponse>(outcome, RequestContext));
     }
 };
 
 template <typename TEvRequest, typename TEvResponse>
 class TOutputStreamContext: public TContextBase<TEvRequest, TEvResponse> {
+private:
+    using TBase = TContextBase<TEvRequest, TEvResponse>;
 protected:
     using TRequest = typename TEvRequest::TRequest;
     using TOutcome = typename TEvResponse::TOutcome;
@@ -168,6 +172,7 @@ private:
         return true;
     }
 
+    std::optional<std::pair<ui64, ui64>> Range;
 public:
     using TContextBase<TEvRequest, TEvResponse>::TContextBase;
 
@@ -175,7 +180,8 @@ public:
         auto& request = ev->Get()->Request;
 
         std::pair<ui64, ui64> range;
-        Y_VERIFY(request.RangeHasBeenSet() && TryParseRange(request.GetRange().c_str(), range));
+        Y_ABORT_UNLESS(request.RangeHasBeenSet() && TryParseRange(request.GetRange().c_str(), range));
+        Range = range;
 
         Buffer.resize(range.second - range.first + 1);
         request.SetResponseStreamFactory([this]() {
@@ -187,12 +193,15 @@ public:
     }
 
 protected:
-    THolder<IEventBase> MakeResponse(const typename TEvResponse::TKey& key, const TOutcome& outcome) const override {
+    std::unique_ptr<IEventBase> MakeResponse(const typename TEvResponse::TKey& key, const TOutcome& outcome) const override {
+        Y_ABORT_UNLESS(Range);
+        std::unique_ptr<TEvResponse> response;
         if (outcome.IsSuccess()) {
-            return MakeHolder<TEvResponse>(key, outcome, std::move(Buffer));
+            response = std::make_unique<TEvResponse>(key, *Range, outcome, std::move(Buffer));
         } else {
-            return MakeHolder<TEvResponse>(key, outcome);
+            response = std::make_unique<TEvResponse>(key, *Range, outcome);
         }
+        return TBase::ReplyAdapter.RebuildReplyEvent(std::move(response));
     }
 
 private:

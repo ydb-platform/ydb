@@ -5,6 +5,7 @@
 #include <ydb/library/dynumber/dynumber.h>
 
 #include <util/memory/pool.h>
+#include <library/cpp/containers/stack_vector/stack_vec.h>
 
 #include <contrib/libs/apache/arrow/cpp/src/arrow/builder.h>
 #include <contrib/libs/apache/arrow/cpp/src/arrow/record_batch.h>
@@ -77,7 +78,7 @@ static bool ConvertColumn(const NScheme::TTypeInfo colType, std::shared_ptr<arro
             for (i32 i = 0; i < binaryArray.length(); ++i) {
                 auto value = binaryArray.Value(i);
                 if (!value.size()) {
-                    Y_VERIFY(builder.AppendNull().ok());
+                    Y_ABORT_UNLESS(builder.AppendNull().ok());
                     continue;
                 }
                 const auto binaryJson = NBinaryJson::SerializeToBinaryJson(TStringBuf(value.data(), value.size()));
@@ -108,7 +109,7 @@ std::shared_ptr<arrow::RecordBatch> ConvertColumns(const std::shared_ptr<arrow::
 {
     std::vector<std::shared_ptr<arrow::Array>> columns = batch->columns();
     std::vector<std::shared_ptr<arrow::Field>> fields = batch->schema()->fields();
-    Y_VERIFY(columns.size() == fields.size());
+    Y_ABORT_UNLESS(columns.size() == fields.size());
     for (i32 i = 0; i < batch->num_columns(); ++i) {
         auto& colName = batch->column_name(i);
         auto it = columnsToConvert.find(TString(colName.data(), colName.size()));
@@ -125,30 +126,30 @@ static std::shared_ptr<arrow::Array> InplaceConvertColumn(const std::shared_ptr<
                                                    NScheme::TTypeInfo colType) {
     switch (colType.GetTypeId()) {
         case NScheme::NTypeIds::Bytes: {
-            Y_VERIFY(column->type()->id() == arrow::Type::STRING);
+            Y_ABORT_UNLESS(column->type()->id() == arrow::Type::STRING);
             return std::make_shared<arrow::BinaryArray>(
                 arrow::ArrayData::Make(arrow::binary(), column->data()->length,
                     column->data()->buffers, column->data()->null_count, column->data()->offset));
         }
         case NScheme::NTypeIds::Date: {
-            Y_VERIFY(arrow::is_primitive(column->type()->id()));
-            Y_VERIFY(arrow::bit_width(column->type()->id()) == 16);
+            Y_ABORT_UNLESS(arrow::is_primitive(column->type()->id()));
+            Y_ABORT_UNLESS(arrow::bit_width(column->type()->id()) == 16);
 
             auto newData = column->data()->Copy();
             newData->type = arrow::uint16();
             return std::make_shared<arrow::NumericArray<arrow::UInt16Type>>(newData);
         }
         case NScheme::NTypeIds::Datetime: {
-            Y_VERIFY(arrow::is_primitive(column->type()->id()));
-            Y_VERIFY(arrow::bit_width(column->type()->id()) == 32);
+            Y_ABORT_UNLESS(arrow::is_primitive(column->type()->id()));
+            Y_ABORT_UNLESS(arrow::bit_width(column->type()->id()) == 32);
 
             auto newData = column->data()->Copy();
             newData->type = arrow::uint32();
             return std::make_shared<arrow::NumericArray<arrow::UInt32Type>>(newData);
         }
         case NScheme::NTypeIds::Timestamp: {
-            Y_VERIFY(arrow::is_primitive(column->type()->id()));
-            Y_VERIFY(arrow::bit_width(column->type()->id()) == 64);
+            Y_ABORT_UNLESS(arrow::is_primitive(column->type()->id()));
+            Y_ABORT_UNLESS(arrow::bit_width(column->type()->id()) == 64);
 
             auto newData = column->data()->Copy();
             newData->type = arrow::timestamp(arrow::TimeUnit::MICRO);
@@ -177,8 +178,8 @@ std::shared_ptr<arrow::RecordBatch> InplaceConvertColumns(const std::shared_ptr<
     auto resultSchemaFixed = std::make_shared<arrow::Schema>(std::move(fields));
     auto convertedBatch = arrow::RecordBatch::Make(resultSchemaFixed, batch->num_rows(), std::move(columns));
 
-    Y_VERIFY(convertedBatch->Validate().ok());
-    Y_VERIFY_DEBUG(convertedBatch->ValidateFull().ok());
+    Y_ABORT_UNLESS(convertedBatch->Validate().ok());
+    Y_DEBUG_ABORT_UNLESS(convertedBatch->ValidateFull().ok());
     return convertedBatch;
 }
 
@@ -251,7 +252,7 @@ bool TArrowToYdbConverter::Process(const arrow::RecordBatch& batch, TString& err
         ui32 col = 0;
         for (auto& [colName, colType] : YdbSchema_) {
             // TODO: support pg types
-            Y_VERIFY(colType.GetTypeId() != NScheme::NTypeIds::Pg, "pg types are not supported");
+            Y_ABORT_UNLESS(colType.GetTypeId() != NScheme::NTypeIds::Pg, "pg types are not supported");
 
             auto& column = allColumns[col];
             bool success = SwitchYqlTypeToArrowType(colType, [&]<typename TType>(TTypeWrapper<TType> typeHolder) {
@@ -301,7 +302,7 @@ bool TArrowToYdbConverter::Process(const arrow::RecordBatch& batch, TString& err
         ui32 col = 0;
         for (auto& [colName, colType] : YdbSchema_) {
             // TODO: support pg types
-            Y_VERIFY(colType.GetTypeId() != NScheme::NTypeIds::Pg, "pg types are not supported");
+            Y_ABORT_UNLESS(colType.GetTypeId() != NScheme::NTypeIds::Pg, "pg types are not supported");
 
             auto& column = allColumns[col];
             auto& curCell = cells[0][col];

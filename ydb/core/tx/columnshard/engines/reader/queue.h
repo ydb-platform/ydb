@@ -1,36 +1,37 @@
 #pragma once
 #include <ydb/library/accessor/accessor.h>
 #include <ydb/core/tx/columnshard/blob.h>
+#include <ydb/core/tx/columnshard/blobs_reader/task.h>
 
 namespace NKikimr::NOlap {
 
-class TBatchBlobRange {
+class TBatchReadTask {
 private:
-    const ui64 GranuleId;
-    const TBlobRange Range;
+    const ui64 ObjectId;
+    const std::shared_ptr<NBlobOperations::NRead::ITask> ReadTask;
 public:
-    ui64 GetGranuleId() const {
-        return GranuleId;
+    ui64 GetObjectId() const {
+        return ObjectId;
     }
 
-    const TBlobRange& GetRange() const {
-        return Range;
+    const std::shared_ptr<NBlobOperations::NRead::ITask>& GetTask() const {
+        return ReadTask;
     }
 
-    TBatchBlobRange(const ui64 granuleId, const TBlobRange range)
-        : GranuleId(granuleId)
-        , Range(range)
+    TBatchReadTask(const ui64 objectId, const std::shared_ptr<NBlobOperations::NRead::ITask>& readTask)
+        : ObjectId(objectId)
+        , ReadTask(readTask)
     {
-
     }
 };
 
-class TFetchBlobsQueue {
+template <class TFetchTask>
+class TFetchBlobsQueueImpl {
 private:
     bool StoppedFlag = false;
-    std::deque<TBatchBlobRange> IteratorBlobsSequential;
+    std::deque<TFetchTask> IteratorBlobsSequential;
 public:
-    const std::deque<TBatchBlobRange>& GetIteratorBlobsSequential() const noexcept {
+    const std::deque<TFetchTask>& GetIteratorBlobsSequential() const noexcept {
         return IteratorBlobsSequential;
     }
 
@@ -51,15 +52,31 @@ public:
         return IteratorBlobsSequential.size();
     }
 
-    const TBatchBlobRange* front() const {
+    const TFetchTask* front() const {
         if (!IteratorBlobsSequential.size()) {
             return nullptr;
         }
         return &IteratorBlobsSequential.front();
     }
-    TBlobRange pop_front();
 
-    void emplace_back(const ui64 granuleId, const TBlobRange& range);
+    std::optional<std::shared_ptr<NBlobOperations::NRead::ITask>> pop_front() {
+        if (!StoppedFlag && IteratorBlobsSequential.size()) {
+            auto result = IteratorBlobsSequential.front();
+            IteratorBlobsSequential.pop_front();
+            return result.GetTask();
+        } else {
+            return {};
+        }
+    }
+
+    void emplace_back(const ui64 objectId, const std::shared_ptr<NBlobOperations::NRead::ITask>& task) {
+        Y_ABORT_UNLESS(!StoppedFlag);
+        Y_ABORT_UNLESS(task);
+        IteratorBlobsSequential.emplace_back(objectId, task);
+    }
+
 };
+
+using TFetchBlobsQueue = TFetchBlobsQueueImpl<TBatchReadTask>;
 
 }

@@ -10,7 +10,7 @@
 namespace NKikimr::NColumnShard::NTiers {
 
 bool TConfigsSnapshot::DoDeserializeFromResultSet(const Ydb::Table::ExecuteQueryResult& rawDataResult) {
-    Y_VERIFY(rawDataResult.result_sets().size() == 2);
+    Y_ABORT_UNLESS(rawDataResult.result_sets().size() == 2);
     ParseSnapshotObjects<TTierConfig>(rawDataResult.result_sets()[0], [this](TTierConfig&& s) {TierConfigs.emplace(s.GetTierName(), s); });
     ParseSnapshotObjects<TTieringRule>(rawDataResult.result_sets()[1], [this](TTieringRule&& s) {TableTierings.emplace(s.GetTieringRuleId(), s); });
     return true;

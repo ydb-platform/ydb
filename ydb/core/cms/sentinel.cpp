@@ -1140,7 +1140,7 @@ class TSentinel: public TActorBootstrapped<TSentinel> {
     }
 
     void OnPipeDisconnected() {
-        if (const TActorId& actor = std::exchange(ConfigUpdater.Id, {})) {
+        if (const TActorId& actor = ConfigUpdater.Id) {
             Send(actor, new TEvSentinel::TEvBSCPipeDisconnected());
         }
 

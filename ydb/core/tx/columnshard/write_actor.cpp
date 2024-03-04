@@ -1,40 +1,28 @@
 #include "columnshard_impl.h"
+#include "columnshard_private_events.h"
 
-#include <ydb/core/blobstorage/dsproxy/blobstorage_backoff.h>
 #include <library/cpp/actors/core/actor_bootstrapped.h>
-
-#include <ydb/core/tx/columnshard/engines/writer/indexed_blob_constructor.h>
-#include <ydb/core/tx/columnshard/engines/writer/compacted_blob_constructor.h>
-
+#include <ydb/core/blobstorage/dsproxy/blobstorage_backoff.h>
 
 namespace NKikimr::NColumnShard {
 
 namespace {
 
-class TWriteActor : public TActorBootstrapped<TWriteActor> {
+class TWriteActor : public TActorBootstrapped<TWriteActor>, public TMonitoringObjectsCounter<TWriteActor> {
     ui64 TabletId;
-    TActorId DstActor;
+    TUsage ResourceUsage;
 
-    TBlobBatch BlobBatch;
-    NOlap::IBlobConstructor::TPtr BlobsConstructor;
+    IWriteController::TPtr WriteController;
 
     THashSet<ui32> YellowMoveChannels;
     THashSet<ui32> YellowStopChannels;
     TInstant Deadline;
-    std::optional<ui64> MaxSmallBlobSize;
 
 public:
-    static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
-        return NKikimrServices::TActivity::TX_COLUMNSHARD_WRITE_ACTOR;
-    }
-
-    TWriteActor(ui64 tabletId, const TActorId& dstActor, TBlobBatch&& blobBatch, NOlap::IBlobConstructor::TPtr blobsConstructor, const TInstant& deadline, std::optional<ui64> maxSmallBlobSize = {})
+    TWriteActor(ui64 tabletId, IWriteController::TPtr writeController, const TInstant deadline)
         : TabletId(tabletId)
-        , DstActor(dstActor)
-        , BlobBatch(std::move(blobBatch))
-        , BlobsConstructor(blobsConstructor)
+        , WriteController(writeController)
         , Deadline(deadline)
-        , MaxSmallBlobSize(maxSmallBlobSize)
     {}
 
     void Handle(TEvBlobStorage::TEvPutResult::TPtr& ev, const TActorContext& ctx) {
@@ -49,21 +37,19 @@ public:
         }
 
         if (status != NKikimrProto::OK) {
-            LOG_S_ERROR("Unsuccessful TEvPutResult for blob " << msg->Id.ToString() << " status: " << status << " reason: " << msg->ErrorReason);
+            ACFL_ERROR("event", "TEvPutResult")("blob_id", msg->Id.ToString())("status", status)("error", msg->ErrorReason);
+            WriteController->Abort();
             return SendResultAndDie(ctx, status);
         }
 
-        LOG_S_TRACE("TEvPutResult for blob " << msg->Id.ToString());
-
-        BlobBatch.OnBlobWriteResult(ev);
-        if (BlobBatch.AllBlobWritesCompleted()) {
+        WriteController->OnBlobWriteResult(*msg);
+        if (WriteController->IsBlobActionsReady()) {
             return SendResultAndDie(ctx, NKikimrProto::OK);
         }
     }
 
-    void Handle(TEvents::TEvWakeup::TPtr& ev, const TActorContext& ctx) {
-        Y_UNUSED(ev);
-        LOG_S_WARN("TEvWakeup: write timeout at tablet " << TabletId << " (write)");
+    void Handle(TEvents::TEvWakeup::TPtr& /*ev*/, const TActorContext& ctx) {
+        ACFL_WARN("event", "wakeup");
         SendResultAndDie(ctx, NKikimrProto::TIMEOUT);
     }
 
@@ -75,14 +61,18 @@ public:
                 putStatus = NKikimrProto::TIMEOUT;
             }
         }
-        auto ev = BlobsConstructor->BuildResult(putStatus, std::move(BlobBatch),
+
+        auto putResult = std::make_shared<TBlobPutResult>(putStatus,
                 std::move(YellowMoveChannels),
-                std::move(YellowStopChannels));
-        ctx.Send(DstActor, ev.Release());
+                std::move(YellowStopChannels),
+                ResourceUsage);
+
+        WriteController->OnReadyResult(ctx, putResult);
         Die(ctx);
     }
 
     void Bootstrap(const TActorContext& ctx) {
+        WriteController->OnStartSending();
         if (Deadline != TInstant::Max()) {
             TInstant now = TAppData::TimeProvider->Now();
             if (Deadline <= now) {
@@ -93,26 +83,19 @@ public:
             ctx.Schedule(timeout, new TEvents::TEvWakeup());
         }
 
-        auto status = NOlap::IBlobConstructor::EStatus::Finished;
-        while (true) {
-            status = BlobsConstructor->BuildNext();
-            if (status != NOlap::IBlobConstructor::EStatus::Ok) {
-                break;
-            }
-            auto blobId = SendWriteBlobRequest(BlobsConstructor->GetBlob(), ctx);
-            BlobsConstructor->RegisterBlobId(blobId);
-        }
-        if (status != NOlap::IBlobConstructor::EStatus::Finished) {
-            return SendResultAndDie(ctx, NKikimrProto::CORRUPTED);
+        while (auto writeInfo = WriteController->Next()) {
+            ResourceUsage.Network += writeInfo->GetData().size();
+            writeInfo->GetWriteOperator()->SendWriteBlobRequest(writeInfo->GetData(), writeInfo->GetBlobId());
         }
 
-        if (BlobBatch.AllBlobWritesCompleted()) {
+        if (WriteController->IsBlobActionsReady()) {
             return SendResultAndDie(ctx, NKikimrProto::OK);
         }
         Become(&TThis::StateWait);
     }
 
     STFUNC(StateWait) {
+        NActors::TLogContextGuard logGuard = NActors::TLogContextBuilder::Build(NKikimrServices::TX_COLUMNSHARD)("tablet_id", TabletId);
         switch (ev->GetTypeRewrite()) {
             HFunc(TEvBlobStorage::TEvPutResult, Handle);
             HFunc(TEvents::TEvWakeup, Handle);
@@ -120,32 +103,12 @@ public:
                 break;
         }
     }
-
-private:
-    TUnifiedBlobId SendWriteBlobRequest(const TString& data, const TActorContext& ctx) {
-        BlobsConstructor->GetResourceUsage().Network += data.size();
-        if (MaxSmallBlobSize && data.size() <= *MaxSmallBlobSize) {
-            TUnifiedBlobId smallBlobId = BlobBatch.AddSmallBlob(data);
-            Y_VERIFY(smallBlobId.IsSmallBlob());
-            return smallBlobId;
-        }
-        return BlobBatch.SendWriteBlobRequest(data, Deadline, ctx);
-    }
 };
 
 } // namespace
 
-IActor* CreateWriteActor(ui64 tabletId, const NOlap::ISnapshotSchema::TPtr& snapshotSchema,
-                        const TActorId& dstActor, TBlobBatch&& blobBatch, bool,
-                        TAutoPtr<TEvColumnShard::TEvWrite> ev, const TInstant& deadline, const ui64 maxSmallBlobSize) {
-    auto constructor = std::make_shared<NOlap::TIndexedBlobConstructor>(ev,snapshotSchema);
-    return new TWriteActor(tabletId, dstActor, std::move(blobBatch), constructor, deadline, maxSmallBlobSize);
-}
-
-IActor* CreateWriteActor(ui64 tabletId, const TActorId& dstActor, TBlobBatch&& blobBatch, bool blobGrouppingEnabled,
-                        TAutoPtr<TEvPrivate::TEvWriteIndex> ev, const TInstant& deadline) {
-    auto constructor = std::make_shared<NOlap::TCompactedBlobsConstructor>(ev, blobGrouppingEnabled);
-    return new TWriteActor(tabletId, dstActor, std::move(blobBatch), constructor, deadline);
+IActor* CreateWriteActor(ui64 tabletId, IWriteController::TPtr writeController, const TInstant deadline) {
+    return new TWriteActor(tabletId, writeController, deadline);
 }
 
 }

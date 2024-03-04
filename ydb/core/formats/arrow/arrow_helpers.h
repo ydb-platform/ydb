@@ -1,7 +1,5 @@
 #pragma once
 #include "switch_type.h"
-#include "size_calcer.h"
-#include "replace_key.h"
 #include <ydb/core/formats/factory.h>
 #include <ydb/core/scheme/scheme_tablecell.h>
 #include <library/cpp/json/writer/json_value.h>
@@ -9,14 +7,11 @@
 #include <contrib/libs/apache/arrow/cpp/src/arrow/type_traits.h>
 #include <contrib/libs/apache/arrow/cpp/src/arrow/ipc/writer.h>
 #include <contrib/libs/apache/arrow/cpp/src/arrow/util/compression.h>
+#include <ydb/library/accessor/accessor.h>
 
 namespace NKikimr::NArrow {
 
 using TArrayVec = std::vector<std::shared_ptr<arrow::Array>>;
-template<typename T>
-class TReplaceKeyTemplate;
-using TReplaceKey = TReplaceKeyTemplate<std::shared_ptr<TArrayVec>>;
-using TRawReplaceKey = TReplaceKeyTemplate<const TArrayVec*>;
 
 std::shared_ptr<arrow::DataType> GetArrowType(NScheme::TTypeInfo typeInfo);
 std::shared_ptr<arrow::DataType> GetCSVArrowType(NScheme::TTypeInfo typeId);
@@ -63,6 +58,10 @@ std::shared_ptr<arrow::RecordBatch> MakeEmptyBatch(const std::shared_ptr<arrow::
 std::shared_ptr<arrow::RecordBatch> ExtractColumns(const std::shared_ptr<arrow::RecordBatch>& srcBatch,
                                                    const std::vector<TString>& columnNames);
 std::shared_ptr<arrow::RecordBatch> ExtractColumns(const std::shared_ptr<arrow::RecordBatch>& srcBatch,
+                                                   const std::vector<std::string>& columnNames); 
+std::shared_ptr<arrow::RecordBatch> ExtractColumnsValidate(const std::shared_ptr<arrow::RecordBatch>& srcBatch,
+                                                   const std::vector<TString>& columnNames);
+std::shared_ptr<arrow::RecordBatch> ExtractColumns(const std::shared_ptr<arrow::RecordBatch>& srcBatch,
                                                    const std::shared_ptr<arrow::Schema>& dstSchema,
                                                    bool addNotExisted = false);
 std::shared_ptr<arrow::RecordBatch> ExtractExistedColumns(const std::shared_ptr<arrow::RecordBatch>& srcBatch,
@@ -74,10 +73,11 @@ inline std::shared_ptr<arrow::RecordBatch> ExtractExistedColumns(const std::shar
 }
 
 std::shared_ptr<arrow::Table> CombineInTable(const std::vector<std::shared_ptr<arrow::RecordBatch>>& batches);
-std::shared_ptr<arrow::RecordBatch> ToBatch(const std::shared_ptr<arrow::Table>& combinedTable);
+std::shared_ptr<arrow::RecordBatch> ToBatch(const std::shared_ptr<arrow::Table>& combinedTable, const bool combine = false);
 std::shared_ptr<arrow::RecordBatch> CombineBatches(const std::vector<std::shared_ptr<arrow::RecordBatch>>& batches);
 std::shared_ptr<arrow::RecordBatch> CombineSortedBatches(const std::vector<std::shared_ptr<arrow::RecordBatch>>& batches,
                                                          const std::shared_ptr<TSortDescription>& description);
+std::shared_ptr<arrow::RecordBatch> MergeColumns(const std::vector<std::shared_ptr<arrow::RecordBatch>>& rb);
 std::vector<std::shared_ptr<arrow::RecordBatch>> MergeSortedBatches(const std::vector<std::shared_ptr<arrow::RecordBatch>>& batches,
                                                                     const std::shared_ptr<TSortDescription>& description,
                                                                     size_t maxBatchRows);
@@ -88,18 +88,20 @@ std::vector<std::shared_ptr<arrow::RecordBatch>> ShardingSplit(const std::shared
     const std::vector<ui32>& sharding,
     ui32 numShards);
 
+std::unique_ptr<arrow::ArrayBuilder> MakeBuilder(const std::shared_ptr<arrow::Field>& field);
+
 std::vector<std::unique_ptr<arrow::ArrayBuilder>> MakeBuilders(const std::shared_ptr<arrow::Schema>& schema,
     size_t reserve = 0, const std::map<std::string, ui64>& sizeByColumn = {});
 std::vector<std::shared_ptr<arrow::Array>> Finish(std::vector<std::unique_ptr<arrow::ArrayBuilder>>&& builders);
 
 std::shared_ptr<arrow::UInt64Array> MakeUI64Array(ui64 value, i64 size);
 std::vector<TString> ColumnNames(const std::shared_ptr<arrow::Schema>& schema);
-size_t LowerBound(const std::vector<TRawReplaceKey>& batchKeys, const TReplaceKey& key, size_t offset = 0);
 bool ReserveData(arrow::ArrayBuilder& builder, const size_t size);
 bool MergeBatchColumns(const std::vector<std::shared_ptr<arrow::RecordBatch>>& batches, std::shared_ptr<arrow::RecordBatch>& result, const std::vector<std::string>& columnsOrder = {}, const bool orderFieldsAreNecessary = true);
+bool MergeBatchColumns(const std::vector<std::shared_ptr<arrow::Table>>& batches, std::shared_ptr<arrow::Table>& result, const std::vector<std::string>& columnsOrder = {}, const bool orderFieldsAreNecessary = true);
 
 std::shared_ptr<arrow::RecordBatch> SortBatch(const std::shared_ptr<arrow::RecordBatch>& batch,
-                                              const std::shared_ptr<arrow::Schema>& sortingKey);
+                                              const std::shared_ptr<arrow::Schema>& sortingKey, const bool andUnique);
 bool IsSorted(const std::shared_ptr<arrow::RecordBatch>& batch,
               const std::shared_ptr<arrow::Schema>& sortingKey,
               bool desc = false);
@@ -122,8 +124,6 @@ bool ScalarLess(const std::shared_ptr<arrow::Scalar>& x, const std::shared_ptr<a
 bool ScalarLess(const arrow::Scalar& x, const arrow::Scalar& y);
 std::shared_ptr<arrow::RecordBatch> ReallocateBatch(std::shared_ptr<arrow::RecordBatch> original);
 
-std::shared_ptr<arrow::RecordBatch> BuildSingleRecordBatch(const std::shared_ptr<arrow::Schema> schema, const std::vector<std::shared_ptr<arrow::Scalar>>& recordData);
-
 inline bool HasNulls(const std::shared_ptr<arrow::Array>& column) {
     return column->null_bitmap_data();
 }
@@ -131,7 +131,11 @@ inline bool HasNulls(const std::shared_ptr<arrow::Array>& column) {
 bool ArrayScalarsEqual(const std::shared_ptr<arrow::Array>& lhs, const std::shared_ptr<arrow::Array>& rhs);
 std::shared_ptr<arrow::Array> BoolVecToArray(const std::vector<bool>& vec);
 
-NJson::TJsonValue DebugJson(std::shared_ptr<arrow::Array> array, const ui32 head = 5, const ui32 tail = 5);
-NJson::TJsonValue DebugJson(std::shared_ptr<arrow::RecordBatch> batch, const ui32 head = 5, const ui32 tail = 5);
+NJson::TJsonValue DebugJson(std::shared_ptr<arrow::Array> array, const ui32 head, const ui32 tail);
+NJson::TJsonValue DebugJson(std::shared_ptr<arrow::RecordBatch> batch, const ui32 head, const ui32 tail);
+
+NJson::TJsonValue DebugJson(std::shared_ptr<arrow::Array> array, const ui32 position);
+TString DebugString(std::shared_ptr<arrow::Array> array, const ui32 position);
+NJson::TJsonValue DebugJson(std::shared_ptr<arrow::RecordBatch> array, const ui32 position);
 
 }

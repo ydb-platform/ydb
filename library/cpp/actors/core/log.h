@@ -15,6 +15,7 @@
 #include <util/generic/vector.h>
 #include <util/string/printf.h>
 #include <util/string/builder.h>
+#include <util/system/yassert.h>
 #include <library/cpp/logger/all.h>
 #include <library/cpp/json/writer/json.h>
 #include <library/cpp/svnversion/svnversion.h>
@@ -399,13 +400,23 @@ namespace NActors {
         }
     };
 
-    class TFormatedStreamWriter {
+    class TFormatedStreamWriter: TNonCopyable {
     private:
         TStringBuilder Builder;
     protected:
         template <class TKey, class TValue>
         TFormatedStreamWriter& Write(const TKey& pName, const TValue& pValue) {
             Builder << pName << "=" << pValue << ";";
+            return *this;
+        }
+
+        template <class TKey, class TValue>
+        TFormatedStreamWriter& Write(const TKey& pName, const std::optional<TValue>& pValue) {
+            if (pValue) {
+                Builder << pName << "=" << *pValue << ";";
+            } else {
+                Builder << pName << "=NO_VALUE_OPTIONAL;";
+            }
             return *this;
         }
 
@@ -423,7 +434,7 @@ namespace NActors {
         }
     };
 
-    class TLogContextBuilder: TNonCopyable, public TFormatedStreamWriter {
+    class TLogContextBuilder: public TFormatedStreamWriter {
     private:
         using TBase = TFormatedStreamWriter;
         std::optional<::NActors::NLog::EComponent> Component;
@@ -447,7 +458,7 @@ namespace NActors {
         }
     };
 
-    class TLogContextGuard: TNonCopyable, public TFormatedStreamWriter {
+    class TLogContextGuard: public TFormatedStreamWriter {
     private:
         using TBase = TFormatedStreamWriter;
         std::optional<::NActors::NLog::EComponent> Component;
@@ -469,10 +480,24 @@ namespace NActors {
 
         template <class TKey, class TValue>
         TLogContextGuard& Write(const TKey& pName, const TValue& pValue) {
-            Write(pName, pValue);
+            TBase::Write(pName, pValue);
             return *this;
         }
 
+    };
+
+    class TLogRecordConstructor: public TFormatedStreamWriter {
+    private:
+        using TBase = TFormatedStreamWriter;
+    public:
+
+        TLogRecordConstructor();
+
+        template <class TKey, class TValue>
+        TLogRecordConstructor& operator()(const TKey& pName, const TValue& pValue) {
+            TBase::Write(pName, pValue);
+            return *this;
+        }
     };
 
     class TFormattedRecordWriter: public TFormatedStreamWriter {
@@ -500,7 +525,33 @@ namespace NActors {
         }
     };
 
+    class TVerifyFormattedRecordWriter: public TFormatedStreamWriter {
+    private:
+        using TBase = TFormatedStreamWriter;
+        const TString ConditionText;
+    public:
+
+        TVerifyFormattedRecordWriter(const TString& conditionText);
+
+        template <class TKey, class TValue>
+        TVerifyFormattedRecordWriter& operator()(const TKey& pName, const TValue& pValue) {
+            TBase::Write(pName, pValue);
+            return *this;
+        }
+
+        ~TVerifyFormattedRecordWriter();
+    };
+
 }
+
+#define AFL_VERIFY(condition) if (condition); else NActors::TVerifyFormattedRecordWriter(#condition)("fline", TStringBuilder() << TStringBuf(__FILE__).RAfter(LOCSLASH_C) << ":" << __LINE__)
+
+#ifndef NDEBUG
+/// Assert that depend on NDEBUG macro and outputs message like printf
+#define AFL_VERIFY_DEBUG AFL_VERIFY
+#else
+#define AFL_VERIFY_DEBUG(condition) if (true); else NActors::TVerifyFormattedRecordWriter(#condition)("fline", TStringBuilder() << TStringBuf(__FILE__).RAfter(LOCSLASH_C) << ":" << __LINE__)
+#endif
 
 #define ACTORS_FORMATTED_LOG(mPriority, mComponent) \
     if (NActors::TlsActivationContext && !IS_LOG_PRIORITY_ENABLED(mPriority, mComponent));\

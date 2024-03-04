@@ -1,7 +1,7 @@
 #pragma once
 #include "conveyor_task.h"
 #include "description.h"
-#include "read_context.h"
+#include "read_filter_merger.h"
 #include <ydb/library/accessor/accessor.h>
 #include <ydb/core/tx/columnshard/blob.h>
 #include <ydb/core/tx/columnshard/counters.h>
@@ -21,9 +21,7 @@ class TScanIteratorBase;
 
 namespace NKikimr::NOlap {
 
-namespace NIndexedReader {
-class IOrderPolicy;
-}
+class TReadContext;
 
 struct TReadStats {
     TInstant BeginTimestamp;
@@ -58,15 +56,12 @@ class TDataStorageAccessor {
 private:
     const std::unique_ptr<NOlap::TInsertTable>& InsertTable;
     const std::unique_ptr<NOlap::IColumnEngine>& Index;
-    const NColumnShard::TBatchCache& BatchCache;
 
 public:
     TDataStorageAccessor(const std::unique_ptr<NOlap::TInsertTable>& insertTable,
-                                 const std::unique_ptr<NOlap::IColumnEngine>& index,
-                                 const NColumnShard::TBatchCache& batchCache);
+                                 const std::unique_ptr<NOlap::IColumnEngine>& index);
     std::shared_ptr<NOlap::TSelectInfo> Select(const NOlap::TReadDescription& readDescription, const THashSet<ui32>& columnIds) const;
-    std::vector<NOlap::TCommittedBlob> GetCommitedBlobs(const NOlap::TReadDescription& readDescription) const;
-    std::shared_ptr<arrow::RecordBatch> GetCachedBatch(const TUnifiedBlobId& blobId) const;
+    std::vector<NOlap::TCommittedBlob> GetCommitedBlobs(const NOlap::TReadDescription& readDescription, const std::shared_ptr<arrow::Schema>& pkSchema) const;
 };
 
 // Holds all metadata that is needed to perform read/scan
@@ -85,13 +80,13 @@ public:
     using TConstPtr = std::shared_ptr<const TReadMetadataBase>;
 
     void SetPKRangesFilter(const TPKRangesFilter& value) {
-        Y_VERIFY(IsSorted() && value.IsReverse() == IsDescSorted());
-        Y_VERIFY(!PKRangesFilter);
+        Y_ABORT_UNLESS(IsSorted() && value.IsReverse() == IsDescSorted());
+        Y_ABORT_UNLESS(!PKRangesFilter);
         PKRangesFilter = value;
     }
 
     const TPKRangesFilter& GetPKRangesFilter() const {
-        Y_VERIFY(!!PKRangesFilter);
+        Y_ABORT_UNLESS(!!PKRangesFilter);
         return *PKRangesFilter;
     }
 
@@ -104,7 +99,6 @@ public:
 
     std::shared_ptr<NOlap::TPredicate> LessPredicate;
     std::shared_ptr<NOlap::TPredicate> GreaterPredicate;
-    std::shared_ptr<const THashSet<TUnifiedBlobId>> ExternBlobs;
     ui64 Limit{0}; // TODO
 
     virtual void Dump(IOutputStream& out) const {
@@ -118,7 +112,7 @@ public:
 
     virtual std::vector<std::pair<TString, NScheme::TTypeInfo>> GetResultYqlSchema() const = 0;
     virtual std::vector<std::pair<TString, NScheme::TTypeInfo>> GetKeyYqlSchema() const = 0;
-    virtual std::unique_ptr<NColumnShard::TScanIteratorBase> StartScan(const NOlap::TReadContext& readContext) const = 0;
+    virtual std::unique_ptr<NColumnShard::TScanIteratorBase> StartScan(const std::shared_ptr<NOlap::TReadContext>& readContext) const = 0;
 
     // TODO:  can this only be done for base class?
     friend IOutputStream& operator << (IOutputStream& out, const TReadMetadataBase& meta) {
@@ -140,25 +134,24 @@ private:
     std::shared_ptr<ISnapshotSchema> ResultIndexSchema;
     std::vector<ui32> AllColumns;
     std::vector<ui32> ResultColumnsIds;
-    std::shared_ptr<NIndexedReader::IOrderPolicy> DoBuildSortingPolicy() const;
     mutable std::map<TSnapshot, ISnapshotSchema::TPtr> SchemasByVersionCache;
     mutable ISnapshotSchema::TPtr EmptyVersionSchemaCache;
 public:
     using TConstPtr = std::shared_ptr<const TReadMetadata>;
+
+    NIndexedReader::TSortableBatchPosition BuildSortedPosition(const NArrow::TReplaceKey& key) const;
+    std::shared_ptr<IDataReader> BuildReader(const std::shared_ptr<NOlap::TReadContext>& context) const;
 
     const std::vector<ui32>& GetAllColumns() const {
         return AllColumns;
     }
     std::shared_ptr<TSelectInfo> SelectInfo;
     std::vector<TCommittedBlob> CommittedBlobs;
-    THashMap<TUnifiedBlobId, std::shared_ptr<arrow::RecordBatch>> CommittedBatches;
     std::shared_ptr<TReadStats> ReadStats;
 
     const TSnapshot& GetSnapshot() const {
         return Snapshot;
     }
-
-    std::shared_ptr<NIndexedReader::IOrderPolicy> BuildSortingPolicy() const;
 
     TReadMetadata(const TVersionedIndex& info, const TSnapshot& snapshot, const ESorting sorting, const TProgramContainer& ssaProgram)
         : TBase(sorting, ssaProgram)
@@ -181,7 +174,7 @@ public:
         }
         return IndexVersions.GetSchema(version);
     }
-    
+
     ISnapshotSchema::TPtr GetLoadSchema(const std::optional<TSnapshot>& version = {}) const {
         if (!version) {
             if (!EmptyVersionSchemaCache) {
@@ -197,7 +190,7 @@ public:
         return it->second;
     }
 
-    std::shared_ptr<arrow::Schema> GetBlobSchema(const TSnapshot& version) const {
+    std::shared_ptr<arrow::Schema> GetBlobSchema(const ui64 version) const {
         return IndexVersions.GetSchema(version)->GetIndexInfo().ArrowSchema();
     }
 
@@ -222,12 +215,11 @@ public:
     }
 
     std::set<ui32> GetEarlyFilterColumnIds() const;
-    std::set<ui32> GetUsedColumnIds() const;
     std::set<ui32> GetPKColumnIds() const;
 
     bool Empty() const {
-        Y_VERIFY(SelectInfo);
-        return SelectInfo->Portions.empty() && CommittedBlobs.empty();
+        Y_ABORT_UNLESS(SelectInfo);
+        return SelectInfo->PortionsOrderedPK.empty() && CommittedBlobs.empty();
     }
 
     std::shared_ptr<arrow::Schema> GetSortingKey() const {
@@ -241,7 +233,7 @@ public:
     std::vector<TNameTypeInfo> GetResultYqlSchema() const override {
         auto& indexInfo = ResultIndexSchema->GetIndexInfo();
         auto resultSchema = GetResultSchema();
-        Y_VERIFY(resultSchema);
+        Y_ABORT_UNLESS(resultSchema);
         std::vector<NTable::TTag> columnIds;
         columnIds.reserve(resultSchema->num_fields());
         for (const auto& field: resultSchema->fields()) {
@@ -255,21 +247,21 @@ public:
         return ResultIndexSchema->GetIndexInfo().GetPrimaryKey();
     }
 
-    size_t NumIndexedRecords() const {
-        Y_VERIFY(SelectInfo);
-        return SelectInfo->NumRecords();
+    size_t NumIndexedChunks() const {
+        Y_ABORT_UNLESS(SelectInfo);
+        return SelectInfo->NumChunks();
     }
 
     size_t NumIndexedBlobs() const {
-        Y_VERIFY(SelectInfo);
+        Y_ABORT_UNLESS(SelectInfo);
         return SelectInfo->Stats().Blobs;
     }
 
-    std::unique_ptr<NColumnShard::TScanIteratorBase> StartScan(const NOlap::TReadContext& readContext) const override;
+    std::unique_ptr<NColumnShard::TScanIteratorBase> StartScan(const std::shared_ptr<NOlap::TReadContext>& readContext) const override;
 
     void Dump(IOutputStream& out) const override {
         out << "columns: " << GetSchemaColumnsCount()
-            << " index records: " << NumIndexedRecords()
+            << " index chunks: " << NumIndexedChunks()
             << " index blobs: " << NumIndexedBlobs()
             << " committed blobs: " << CommittedBlobs.size()
       //      << " with program steps: " << (Program ? Program->Steps.size() : 0)
@@ -306,7 +298,7 @@ public:
 
     std::vector<std::pair<TString, NScheme::TTypeInfo>> GetKeyYqlSchema() const override;
 
-    std::unique_ptr<NColumnShard::TScanIteratorBase> StartScan(const NOlap::TReadContext& readContext) const override;
+    std::unique_ptr<NColumnShard::TScanIteratorBase> StartScan(const std::shared_ptr<NOlap::TReadContext>& readContext) const override;
 };
 
 }

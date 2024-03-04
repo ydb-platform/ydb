@@ -2,6 +2,7 @@
 #include "private.h"
 #include <ydb/core/base/appdata.h>
 #include <ydb/core/base/counters.h>
+#include <library/cpp/actors/core/log.h>
 
 namespace NKikimr::NColumnShard {
 
@@ -47,7 +48,23 @@ std::shared_ptr<TValueAggregationClient> TCommonCountersOwner::GetValueAutoAggre
 }
 
 void TCommonCountersOwner::DeepSubGroup(const TString& id, const TString& value) {
+    AFL_VERIFY(SignalKeys.emplace(id, value).second)(id, value);
     SubGroup = SubGroup->GetSubgroup(id, value);
+}
+
+void TCommonCountersOwner::DeepSubGroup(const TString& componentName) {
+    AFL_VERIFY(SignalKeys.emplace("component", componentName).second)("component", componentName);
+    SubGroup = SubGroup->GetSubgroup("component", componentName);
+}
+
+TString TCommonCountersOwner::GetAggregationPathInfo() const {
+    TStringBuilder result;
+
+    result << ModuleId << "/";
+    for (auto&& i : SignalKeys) {
+        result << i.first << "/" << i.second << "/";
+    }
+    return result;
 }
 
 }

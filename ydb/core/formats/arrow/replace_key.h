@@ -1,14 +1,20 @@
 #pragma once
+#include "arrow_helpers.h"
 #include "permutations.h"
 #include "common/validation.h"
 #include <ydb/core/base/defs.h>
+
+#include <library/cpp/actors/core/log.h>
+
 #include <contrib/libs/apache/arrow/cpp/src/arrow/api.h>
 #include <contrib/libs/apache/arrow/cpp/src/arrow/compute/api_vector.h>
+
+#include <util/string/builder.h>
+#include <util/string/join.h>
+
 #include <compare>
 
 namespace NKikimr::NArrow {
-
-bool IsGoodScalar(const std::shared_ptr<arrow::Scalar>& x);
 
 using TArrayVec = std::vector<std::shared_ptr<arrow::Array>>;
 
@@ -19,7 +25,7 @@ public:
 
     void ShrinkToFit() {
         if (Columns->front()->length() == 1) {
-            Y_VERIFY(Position == 0);
+            Y_ABORT_UNLESS(Position == 0);
         } else {
             auto columnsNew = std::make_shared<TArrayVec>();
             for (auto&& i : *Columns) {
@@ -30,11 +36,24 @@ public:
         }
     }
 
+    TString DebugString() const {
+        TStringBuilder sb;
+        for (auto&& i : *Columns) {
+            auto res = i->GetScalar(Position);
+            if (!res.ok()) {
+                sb << res.status().ToString() << ";";
+            } else {
+                sb << (*res)->ToString() << ";";
+            }
+        }
+        return sb;
+    }
+
     TReplaceKeyTemplate(TArrayVecPtr columns, const ui64 position)
         : Columns(columns)
         , Position(position)
     {
-        Y_VERIFY_DEBUG(Size() > 0 && Position < (ui64)Column(0).length());
+        Y_ABORT_UNLESS(Size() > 0 && Position < (ui64)Column(0).length());
     }
 
     template<typename T = TArrayVecPtr> requires IsOwning
@@ -42,7 +61,7 @@ public:
         : Columns(std::make_shared<TArrayVec>(std::move(columns)))
         , Position(position)
     {
-        Y_VERIFY_DEBUG(Size() > 0 && Position < (ui64)Column(0).length());
+        Y_ABORT_UNLESS(Size() > 0 && Position < (ui64)Column(0).length());
     }
 
     size_t Hash() const {
@@ -51,7 +70,7 @@ public:
 
     template<typename T>
     bool operator == (const TReplaceKeyTemplate<T>& key) const {
-        Y_VERIFY_DEBUG(Size() == key.Size());
+        Y_ABORT_UNLESS(Size() == key.Size());
 
         for (int i = 0; i < Size(); ++i) {
             auto cmp = CompareColumnValue(i, key, i);
@@ -64,7 +83,7 @@ public:
 
     template<typename T>
     std::partial_ordering operator <=> (const TReplaceKeyTemplate<T>& key) const {
-        Y_VERIFY_DEBUG(Size() == key.Size());
+        Y_ABORT_UNLESS(Size() == key.Size());
 
         for (int i = 0; i < Size(); ++i) {
             auto cmp = CompareColumnValue(i, key, i);
@@ -77,7 +96,7 @@ public:
 
     template<typename T>
     std::partial_ordering CompareNotNull(const TReplaceKeyTemplate<T>& key) const {
-        Y_VERIFY_DEBUG(Size() == key.Size());
+        Y_ABORT_UNLESS(Size() == key.Size());
 
         for (int i = 0; i < Size(); ++i) {
             auto cmp = CompareColumnValueNotNull(i, key, i);
@@ -90,8 +109,8 @@ public:
 
     template<typename T>
     std::partial_ordering ComparePartNotNull(const TReplaceKeyTemplate<T>& key, int size) const {
-        Y_VERIFY_DEBUG(size <= key.Size());
-        Y_VERIFY_DEBUG(size <= Size());
+        Y_ABORT_UNLESS(size <= key.Size());
+        Y_ABORT_UNLESS(size <= Size());
 
         for (int i = 0; i < size; ++i) {
             auto cmp = CompareColumnValueNotNull(i, key, i);
@@ -104,20 +123,20 @@ public:
 
     template<typename T>
     std::partial_ordering CompareColumnValueNotNull(int column, const TReplaceKeyTemplate<T>& key, int keyColumn) const {
-        Y_VERIFY_DEBUG(Column(column).type_id() == key.Column(keyColumn).type_id());
+        Y_DEBUG_ABORT_UNLESS(Column(column).type_id() == key.Column(keyColumn).type_id());
 
         return TypedCompare<true>(Column(column), Position, key.Column(keyColumn), key.Position);
     }
 
     template<typename T>
     std::partial_ordering CompareColumnValue(int column, const TReplaceKeyTemplate<T>& key, int keyColumn) const {
-        Y_VERIFY_DEBUG(Column(column).type_id() == key.Column(keyColumn).type_id());
+        Y_DEBUG_ABORT_UNLESS(Column(column).type_id() == key.Column(keyColumn).type_id());
 
         return TypedCompare<false>(Column(column), Position, key.Column(keyColumn), key.Position);
     }
 
     int Size() const {
-        Y_VERIFY_DEBUG(Columns);
+        Y_DEBUG_ABORT_UNLESS(Columns);
         return Columns->size();
     }
 
@@ -126,15 +145,15 @@ public:
     }
 
     const arrow::Array& Column(int i) const {
-        Y_VERIFY_DEBUG(Columns);
-        Y_VERIFY_DEBUG((size_t)i < Columns->size());
-        Y_VERIFY_DEBUG((*Columns)[i]);
+        Y_DEBUG_ABORT_UNLESS(Columns);
+        Y_DEBUG_ABORT_UNLESS((size_t)i < Columns->size());
+        Y_DEBUG_ABORT_UNLESS((*Columns)[i]);
         return *(*Columns)[i];
     }
 
     std::shared_ptr<arrow::Array> ColumnPtr(int i) const {
-        Y_VERIFY_DEBUG(Columns);
-        Y_VERIFY_DEBUG((size_t)i < Columns->size());
+        Y_DEBUG_ABORT_UNLESS(Columns);
+        Y_DEBUG_ABORT_UNLESS((size_t)i < Columns->size());
         return (*Columns)[i];
     }
 
@@ -148,7 +167,7 @@ public:
 
     template<typename T = TArrayVecPtr> requires IsOwning
     std::shared_ptr<arrow::RecordBatch> RestoreBatch(const std::shared_ptr<arrow::Schema>& schema) const {
-        Y_VERIFY(Size() && Size() == schema->num_fields());
+        AFL_VERIFY(Size() && Size() == schema->num_fields())("columns", DebugString())("schema", JoinSeq(",", schema->field_names()));
         const auto& columns = *Columns;
         return arrow::RecordBatch::Make(schema, columns[0]->length(), columns);
     }
@@ -156,22 +175,22 @@ public:
     template<typename T = TArrayVecPtr> requires IsOwning
     std::shared_ptr<arrow::RecordBatch> ToBatch(const std::shared_ptr<arrow::Schema>& schema) const {
         auto batch = RestoreBatch(schema);
-        Y_VERIFY(Position < (ui64)batch->num_rows());
+        Y_ABORT_UNLESS(Position < (ui64)batch->num_rows());
         return batch->Slice(Position, 1);
     }
 
     template<typename T = TArrayVecPtr> requires IsOwning
     static TReplaceKeyTemplate<TArrayVecPtr> FromBatch(const std::shared_ptr<arrow::RecordBatch>& batch,
                                                        const std::shared_ptr<arrow::Schema>& key, int row) {
-        Y_VERIFY(key->num_fields() <= batch->num_columns());
+        Y_ABORT_UNLESS(key->num_fields() <= batch->num_columns());
 
         TArrayVec columns;
         columns.reserve(key->num_fields());
         for (int i = 0; i < key->num_fields(); ++i) {
             auto& keyField = key->field(i);
             auto array = batch->GetColumnByName(keyField->name());
-            Y_VERIFY(array);
-            Y_VERIFY(keyField->type()->Equals(array->type()));
+            Y_ABORT_UNLESS(array);
+            Y_ABORT_UNLESS(keyField->type()->Equals(array->type()));
             columns.push_back(array);
         }
 
@@ -185,18 +204,18 @@ public:
     }
 
     static TReplaceKeyTemplate<TArrayVecPtr> FromScalar(const std::shared_ptr<arrow::Scalar>& s) {
-        Y_VERIFY_DEBUG(IsGoodScalar(s));
+        Y_DEBUG_ABORT_UNLESS(IsGoodScalar(s));
         auto res = MakeArrayFromScalar(*s, 1);
-        Y_VERIFY(res.status().ok(), "%s", res.status().ToString().c_str());
+        Y_ABORT_UNLESS(res.status().ok(), "%s", res.status().ToString().c_str());
         return TReplaceKeyTemplate<TArrayVecPtr>(std::make_shared<TArrayVec>(1, *res), 0);
     }
 
     static std::shared_ptr<arrow::Scalar> ToScalar(const TReplaceKeyTemplate<TArrayVecPtr>& key, int colNumber = 0) {
-        Y_VERIFY_DEBUG(colNumber < key.Size());
+        Y_DEBUG_ABORT_UNLESS(colNumber < key.Size());
         auto& column = key.Column(colNumber);
         auto res = column.GetScalar(key.GetPosition());
-        Y_VERIFY(res.status().ok(), "%s", res.status().ToString().c_str());
-        Y_VERIFY_DEBUG(IsGoodScalar(*res));
+        Y_ABORT_UNLESS(res.status().ok(), "%s", res.status().ToString().c_str());
+        Y_DEBUG_ABORT_UNLESS(IsGoodScalar(*res));
         return *res;
     }
 
@@ -267,7 +286,7 @@ private:
             case arrow::Type::MAX_ID:
             case arrow::Type::SPARSE_UNION:
             case arrow::Type::STRUCT:
-                Y_FAIL("not implemented");
+                Y_ABORT("not implemented");
                 break;
         }
         return 0;
@@ -334,7 +353,7 @@ private:
             case arrow::Type::MAX_ID:
             case arrow::Type::SPARSE_UNION:
             case arrow::Type::STRUCT:
-                Y_FAIL("not implemented");
+                Y_ABORT("not implemented");
                 break;
         }
         return std::partial_ordering::equivalent;
@@ -383,6 +402,22 @@ private:
 using TReplaceKey = TReplaceKeyTemplate<std::shared_ptr<TArrayVec>>;
 using TRawReplaceKey = TReplaceKeyTemplate<const TArrayVec*>;
 
+class TStoreReplaceKey: public TReplaceKey {
+private:
+    using TBase = TReplaceKey;
+public:
+    TStoreReplaceKey(const TReplaceKey& baseKey)
+        : TBase(baseKey)
+    {
+        TBase::ShrinkToFit();
+    }
+};
+
+class TReplaceKeyHelper {
+public:
+    static size_t LowerBound(const std::vector<TRawReplaceKey>& batchKeys, const TReplaceKey& key, size_t offset);
+};
+
 }
 
 template<>
@@ -398,3 +433,4 @@ struct THash<NKikimr::NArrow::TRawReplaceKey> {
         return x.Hash();
     }
 };
+

@@ -1,47 +1,23 @@
 #pragma once
 
 #include "blob_constructor.h"
+#include "write_controller.h"
 
 #include <ydb/core/tx/columnshard/columnshard.h>
 #include <ydb/core/tx/columnshard/columnshard_private_events.h>
+#include <ydb/core/tx/columnshard/engines/portions/with_blobs.h>
 
 namespace NKikimr::NOlap {
 
-class TCompactedBlobsConstructor : public IBlobConstructor {
-    TAutoPtr<NColumnShard::TEvPrivate::TEvWriteIndex> WriteIndexEv;
-    NColumnShard::TUsage ResourceUsage;
-    const NOlap::TColumnEngineChanges& IndexChanges;
-    const std::vector<TString>& Blobs;
-    const bool BlobGrouppingEnabled;
-    const bool CacheData;
-    const bool IsEviction;
-
-    TString AccumulatedBlob;
-    std::vector<std::pair<size_t, TString>> RecordsInBlob;
-    std::vector<NOlap::TPortionInfo> PortionUpdates;
-
-    ui64 CurrentPortion = 0;
-    ui64 LastPortion = 0;
-    ui64 CurrentBlob = 0;
-    ui64 CurrentPortionRecord = 0;
-
-public:
-    TCompactedBlobsConstructor(TAutoPtr<NColumnShard::TEvPrivate::TEvWriteIndex> writeIndexEv, bool blobGrouppingEnabled);
-    const TString& GetBlob() const override;
-    bool RegisterBlobId(const TUnifiedBlobId& blobId) override;
-    EStatus BuildNext() override;
-
-    NColumnShard::TUsage& GetResourceUsage() override {
-        return ResourceUsage;
-    }
-
-    TAutoPtr<IEventBase> BuildResult(
-        NKikimrProto::EReplyStatus status,
-        NColumnShard::TBlobBatch&& blobBatch,
-        THashSet<ui32>&& yellowMoveChannels, THashSet<ui32>&& yellowStopChannels) override;
-
+class TCompactedWriteController : public NColumnShard::IWriteController {
 private:
-    const NOlap::TPortionInfo& GetPortionInfo(const ui64 index) const;
+    TAutoPtr<NColumnShard::TEvPrivate::TEvWriteIndex> WriteIndexEv;
+    TActorId DstActor;
+protected:
+    void DoOnReadyResult(const NActors::TActorContext& ctx, const NColumnShard::TBlobPutResult::TPtr& putResult) override;
+public:
+    TCompactedWriteController(const TActorId& dstActor, TAutoPtr<NColumnShard::TEvPrivate::TEvWriteIndex> writeEv);
+    ~TCompactedWriteController();
 };
 
 }

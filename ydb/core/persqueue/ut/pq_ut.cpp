@@ -2057,6 +2057,88 @@ Y_UNIT_TEST(TestManyConsumers) {
 
 }
 
+Y_UNIT_TEST(TestStatusWithMultipleConsumers) {
+    TTestContext tc;
+    TFinalizer finalizer(tc);
+    tc.Prepare();
+
+    tc.Runtime->SetScheduledLimit(150);
+    tc.Runtime->SetDispatchTimeout(TDuration::Seconds(1));
+    tc.Runtime->SetLogPriority(NKikimrServices::PERSQUEUE, NLog::PRI_DEBUG);
+
+    TVector<std::pair<TString, bool>> consumers {
+        std::pair("consumer-0", false),
+        std::pair("consumer-1", false)};
+
+    PQTabletPrepare({}, consumers, tc);
+
+    TVector<std::pair<ui64, TString>> data{{1,"foobar"}};
+    CmdWrite(0, "sourceid0", data, tc);
+
+    CmdSetOffset(0, "consumer-0", 1, false, tc);
+
+    TFakeSchemeShardState::TPtr state {new TFakeSchemeShardState()};
+    ui64 ssId = 325;
+    BootFakeSchemeShard(*tc.Runtime, ssId, state);
+
+    for (ui32 i = 0; i < 100; ++i) {
+        PQBalancerPrepare(TOPIC_NAME, {{0,{tc.TabletId, 1}}}, ssId, tc, false, false);
+    }
+
+    {
+        THolder<TEvPersQueue::TEvStatus> statusEvent = MakeHolder<TEvPersQueue::TEvStatus>();
+        statusEvent->Record.AddConsumers("consumer-0");
+        statusEvent->Record.AddConsumers("consumer-1");
+        tc.Runtime->SendToPipe(tc.TabletId, tc.Edge, statusEvent.Release(), 0, GetPipeConfigWithRetries());
+        TAutoPtr<IEventHandle> handle;
+        TEvPersQueue::TEvStatusResponse *result;
+        result = tc.Runtime->GrabEdgeEvent<TEvPersQueue::TEvStatusResponse>(handle);
+        UNIT_ASSERT_EQUAL(result->Record.GetPartResult()[0].GetConsumerResult().size(),  2);
+        UNIT_ASSERT_EQUAL(result->Record.GetPartResult()[0].GetConsumerResult()[0].GetErrorCode(), NPersQueue::NErrorCode::OK);
+        UNIT_ASSERT_EQUAL(result->Record.GetPartResult()[0].GetConsumerResult()[1].GetErrorCode(), NPersQueue::NErrorCode::OK);
+    }
+
+    {
+        THolder<TEvPersQueue::TEvStatus> statusEvent = MakeHolder<TEvPersQueue::TEvStatus>();
+        statusEvent->Record.AddConsumers("nonex-consumer-2");
+        statusEvent->Record.AddConsumers("nonex-consumer-3");
+        tc.Runtime->SendToPipe(tc.TabletId, tc.Edge, statusEvent.Release(), 0, GetPipeConfigWithRetries());
+        TAutoPtr<IEventHandle> handle;
+        TEvPersQueue::TEvStatusResponse *result;
+        result = tc.Runtime->GrabEdgeEvent<TEvPersQueue::TEvStatusResponse>(handle);
+        UNIT_ASSERT_EQUAL(result->Record.GetPartResult()[0].GetConsumerResult().size(),  2);
+        UNIT_ASSERT_EQUAL(result->Record.GetPartResult()[0].GetConsumerResult()[0].GetErrorCode(), NPersQueue::NErrorCode::SCHEMA_ERROR);
+        UNIT_ASSERT_EQUAL(result->Record.GetPartResult()[0].GetConsumerResult()[1].GetErrorCode(), NPersQueue::NErrorCode::SCHEMA_ERROR);
+    }
+
+    {   
+        THolder<TEvPersQueue::TEvStatus> statusEvent = MakeHolder<TEvPersQueue::TEvStatus>();
+        statusEvent->Record.AddConsumers("consumer-0");
+        statusEvent->Record.AddConsumers("nonex-consumer");
+        tc.Runtime->SendToPipe(tc.TabletId, tc.Edge, statusEvent.Release(), 0, GetPipeConfigWithRetries());
+        TAutoPtr<IEventHandle> handle;
+        TEvPersQueue::TEvStatusResponse *result;
+        result = tc.Runtime->GrabEdgeEvent<TEvPersQueue::TEvStatusResponse>(handle);
+        
+        auto consumer0Result = std::find_if(
+            result->Record.GetPartResult()[0].GetConsumerResult().begin(),
+            result->Record.GetPartResult()[0].GetConsumerResult().end(),
+            [](const auto& consumerResult) { return consumerResult.GetConsumer() == "consumer-0"; });
+        
+        UNIT_ASSERT_EQUAL(consumer0Result->GetErrorCode(), NPersQueue::NErrorCode::OK);
+        UNIT_ASSERT_EQUAL(consumer0Result->GetCommitedOffset(), 1);
+        
+        auto nonexConsumerResult =  std::find_if(
+            result->Record.GetPartResult()[0].GetConsumerResult().begin(),
+            result->Record.GetPartResult()[0].GetConsumerResult().end(),
+            [](const auto& consumerResult) { return consumerResult.GetConsumer() == "nonex-consumer"; });
+        
+        UNIT_ASSERT_EQUAL(nonexConsumerResult->GetErrorCode(), NPersQueue::NErrorCode::SCHEMA_ERROR);
+    }
+
+    PQBalancerPrepare(TOPIC_NAME, {{0,{tc.TabletId, 1}}}, ssId, tc, false, true);
+
+}
 
 
 void CheckEventSequence(TTestContext& tc, std::function<void()> scenario, std::deque<ui32> expectedEvents) {

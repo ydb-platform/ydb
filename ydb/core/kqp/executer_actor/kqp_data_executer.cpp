@@ -298,7 +298,8 @@ public:
                 default:
                     UnexpectedEvent("WaitResolveState", ev->GetTypeRewrite());
             }
-
+        } catch (const NKikimr::TMemoryLimitExceededException& e) {
+            InternalError("Memory limit exception");
         } catch (const yexception& e) {
             InternalError(e.what());
         }
@@ -347,6 +348,9 @@ private:
                     UnexpectedEvent("PrepareState", ev->GetTypeRewrite());
                 }
             }
+        } catch (const NKikimr::TMemoryLimitExceededException& e) {
+            CancelProposal(0);
+            InternalError("Memory limit exception");
         } catch (const yexception& e) {
             CancelProposal(0);
             InternalError(e.what());
@@ -925,6 +929,8 @@ private:
                 default:
                     UnexpectedEvent("ExecuteState", ev->GetTypeRewrite());
             }
+        } catch (const NKikimr::TMemoryLimitExceededException& e) {
+            InternalError("Memory limit exception");
         } catch (const yexception& e) {
             InternalError(e.what());
         }

@@ -128,7 +128,7 @@ namespace NKikimr {
                 stage,
                 std::move(result));
             auto aid = ctx.Register(actor);
-            ActiveActors.Insert(aid);
+            ActiveActors.Insert(aid, __FILE__, __LINE__, ctx, NKikimrServices::BLOBSTORAGE);
             Become(&TThis::StateFunc);
         }
 

@@ -38,13 +38,33 @@ class TJsonQuery : public TViewerPipeClient<TJsonQuery> {
     TString Database;
     TString Action;
     TString Stats;
-    TString Schema = "classic";
     TString Syntax;
     TString UserToken;
 
+    enum ESchemaType {
+        Classic,
+        Modern,
+        Multi,
+        Ydb,
+    };
+    ESchemaType Schema = ESchemaType::Classic;
 public:
     static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
         return NKikimrServices::TActivity::VIEWER_HANDLER;
+    }
+
+    ESchemaType StringToSchemaType(const TString& schemaStr) {
+        if (schemaStr == "classic") {
+            return ESchemaType::Classic;
+        } else if (schemaStr == "modern") {
+            return ESchemaType::Modern;
+        } else if (schemaStr == "multi") {
+            return ESchemaType::Multi;
+        } else if (schemaStr == "ydb") {
+            return ESchemaType::Ydb;
+        } else {
+            return ESchemaType::Classic;
+        }
     }
 
     void ParseCgiParameters(const TCgiParameters& params) {
@@ -55,10 +75,8 @@ public:
         Database = params.Get("database");
         Stats = params.Get("stats");
         Action = params.Get("action");
-        Schema = params.Get("schema");
-        if (Schema.empty()) {
-            Schema = "classic";
-        }
+        TString schemaStr = params.Get("schema");
+        Schema = StringToSchemaType(schemaStr);
         Syntax = params.Get("syntax");
     }
 
@@ -277,7 +295,7 @@ private:
             MakeErrorReply(out, jsonResponse, record);
         }
 
-        if (Schema == "classic" && Stats.empty() && (Action.empty() || Action == "execute")) {
+        if (Schema == ESchemaType::Classic && Stats.empty() && (Action.empty() || Action == "execute")) {
             jsonResponse = std::move(jsonResponse["result"]);
         }
 
@@ -371,7 +389,7 @@ private:
 
         out << Viewer->GetHTTPOKJSON(Event->Get());
         if (ResultSets.size() > 0) {
-            if (Schema == "classic") {
+            if (Schema == ESchemaType::Classic) {
                 NJson::TJsonValue& jsonResults = jsonResponse["result"];
                 jsonResults.SetType(NJson::JSON_ARRAY);
                 for (auto it = ResultSets.begin(); it != ResultSets.end(); ++it) {
@@ -388,7 +406,7 @@ private:
                 }
             }
 
-            if (Schema == "modern") {
+            if (Schema == ESchemaType::Modern) {
                 {
                     NJson::TJsonValue& jsonColumns = jsonResponse["columns"];
                     NYdb::TResultSet resultSet(ResultSets.front());
@@ -419,7 +437,37 @@ private:
                 }
             }
 
-            if (Schema == "ydb") {
+            if (Schema == ESchemaType::Multi) {
+                NJson::TJsonValue& jsonResults = jsonResponse["result"];
+                jsonResults.SetType(NJson::JSON_ARRAY);
+                for (auto it = ResultSets.begin(); it != ResultSets.end(); ++it) {
+                    NYdb::TResultSet resultSet(*it);
+                    const auto& columnsMeta = resultSet.GetColumnsMeta();
+                    NJson::TJsonValue& jsonResult = jsonResults.AppendValue({});
+
+                    NJson::TJsonValue& jsonColumns = jsonResult["columns"];
+                    jsonColumns.SetType(NJson::JSON_ARRAY);
+                    for (size_t columnNum = 0; columnNum < columnsMeta.size(); ++columnNum) {
+                        NJson::TJsonValue& jsonColumn = jsonColumns.AppendValue({});
+                        const NYdb::TColumn& columnMeta = columnsMeta[columnNum];
+                        jsonColumn["name"] = columnMeta.Name;
+                        jsonColumn["type"] = columnMeta.Type.ToString();
+                    }
+
+                    NJson::TJsonValue& jsonRows = jsonResult["rows"];
+                    NYdb::TResultSetParser rsParser(resultSet);
+                    while (rsParser.TryNextRow()) {
+                        NJson::TJsonValue& jsonRow = jsonRows.AppendValue({});
+                        jsonRow.SetType(NJson::JSON_ARRAY);
+                        for (size_t columnNum = 0; columnNum < columnsMeta.size(); ++columnNum) {
+                            NJson::TJsonValue& jsonColumn = jsonRow.AppendValue({});
+                            jsonColumn = ColumnValueToJsonValue(rsParser.ColumnParser(columnNum));
+                        }
+                    }
+                }
+            }
+
+            if (Schema == ESchemaType::Ydb) {
                 NJson::TJsonValue& jsonResults = jsonResponse["result"];
                 jsonResults.SetType(NJson::JSON_ARRAY);
                 for (auto it = ResultSets.begin(); it != ResultSets.end(); ++it) {
@@ -454,7 +502,7 @@ struct TJsonRequestParameters<TJsonQuery> {
                       {"name":"query","in":"query","description":"query text","required":true,"type":"string"},
                       {"name":"syntax","in":"query","description":"query syntax (yql_v1, pg)","required":false,"type":"string"},
                       {"name":"database","in":"query","description":"database name","required":false,"type":"string"},
-                      {"name":"schema","in":"query","description":"result format schema (classic, modern, ydb)","required":false,"type":"string"},
+                      {"name":"schema","in":"query","description":"result format schema (classic, modern, ydb, multi)","required":false,"type":"string"},
                       {"name":"stats","in":"query","description":"return stats (profile)","required":false,"type":"string"},
                       {"name":"action","in":"query","description":"execute method (execute-scan, execute-script, execute-query, execute-data,explain-ast, explain-scan, explain-script, explain-query, explain-data)","required":false,"type":"string"},
                       {"name":"timeout","in":"query","description":"timeout in ms","required":false,"type":"integer"}])___";

@@ -4,73 +4,64 @@
 
 namespace NKikimr::NColumnShard {
 
-TColumnShardScanIterator::TColumnShardScanIterator(NOlap::TReadMetadata::TConstPtr readMetadata, const NOlap::TReadContext& context)
+TColumnShardScanIterator::TColumnShardScanIterator(const std::shared_ptr<NOlap::TReadContext>& context, const NOlap::TReadMetadata::TConstPtr& readMetadata)
     : Context(context)
-    , ReadyResults(context.GetCounters())
     , ReadMetadata(readMetadata)
-    , IndexedData(ReadMetadata, false, context)
+    , ReadyResults(context->GetCounters())
 {
-    IndexedData.InitRead();
-    Y_VERIFY(ReadMetadata->IsSorted());
+    IndexedData = readMetadata->BuildReader(Context);
+    Y_ABORT_UNLESS(Context->GetReadMetadata()->IsSorted());
 
-    if (ReadMetadata->Empty()) {
-        IndexedData.Abort();
+    if (readMetadata->Empty()) {
+        IndexedData->Abort();
     }
 }
 
-void TColumnShardScanIterator::AddData(const TBlobRange& blobRange, TString data) {
-    IndexedData.AddData(blobRange, data);
-}
-
-NKikimr::NOlap::TPartialReadResult TColumnShardScanIterator::GetBatch() {
+std::optional<NOlap::TPartialReadResult> TColumnShardScanIterator::GetBatch() {
     FillReadyResults();
     return ReadyResults.pop_front();
 }
 
-NKikimr::NColumnShard::TBlobRange TColumnShardScanIterator::GetNextBlobToRead() {
-    return IndexedData.ExtractNextBlob(ReadyResults.size());
+void TColumnShardScanIterator::PrepareResults() {
+    FillReadyResults();
+}
+
+bool TColumnShardScanIterator::ReadNextInterval() {
+    return IndexedData->ReadNextInterval();
 }
 
 void TColumnShardScanIterator::FillReadyResults() {
-    auto ready = IndexedData.GetReadyResults(MaxRowsInBatch);
-    i64 limitLeft = ReadMetadata->Limit == 0 ? INT64_MAX : ReadMetadata->Limit - ItemsRead;
+    auto ready = IndexedData->ExtractReadyResults(MaxRowsInBatch);
+    i64 limitLeft = Context->GetReadMetadata()->Limit == 0 ? INT64_MAX : Context->GetReadMetadata()->Limit - ItemsRead;
     for (size_t i = 0; i < ready.size() && limitLeft; ++i) {
-        if (ready[i].GetResultBatch()->num_rows() == 0 && !ready[i].GetLastReadKey()) {
-            Y_VERIFY(i + 1 == ready.size(), "Only last batch can be empty!");
+        if (ready[i].GetResultBatch().num_rows() == 0 && !ready[i].GetLastReadKey()) {
+            Y_ABORT_UNLESS(i + 1 == ready.size(), "Only last batch can be empty!");
             break;
         }
 
         auto& batch = ReadyResults.emplace_back(std::move(ready[i]));
-        if (batch.GetResultBatch()->num_rows() > limitLeft) {
+        if (batch.GetResultBatch().num_rows() > limitLeft) {
             batch.Slice(0, limitLeft);
         }
-        limitLeft -= batch.GetResultBatch()->num_rows();
-        ItemsRead += batch.GetResultBatch()->num_rows();
+        limitLeft -= batch.GetResultBatch().num_rows();
+        ItemsRead += batch.GetResultBatch().num_rows();
     }
 
     if (limitLeft == 0) {
-        IndexedData.Abort();
+        AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", "abort_scan")("limit", Context->GetReadMetadata()->Limit)("ready", ItemsRead);
+        IndexedData->Abort();
     }
-
-    if (IndexedData.IsFinished()) {
-        Context.MutableProcessor().Stop();
-    }
-}
-
-bool TColumnShardScanIterator::HasWaitingTasks() const {
-    return Context.GetProcessor().InWaiting();
 }
 
 TColumnShardScanIterator::~TColumnShardScanIterator() {
-    IndexedData.Abort();
+    IndexedData->Abort();
     ReadMetadata->ReadStats->PrintToLog();
 }
 
 void TColumnShardScanIterator::Apply(IDataTasksProcessor::ITask::TPtr task) {
-    if (!task->IsDataProcessed() || Context.GetProcessor().IsStopped() || !task->IsSameProcessor(Context.GetProcessor())) {
-        return;
+    if (!IndexedData->IsFinished()) {
+        Y_ABORT_UNLESS(task->Apply(*IndexedData));
     }
-    Y_VERIFY(task->Apply(IndexedData.GetGranulesContext()));
 }
 
 }

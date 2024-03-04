@@ -31,7 +31,7 @@ public:
         , Committed(MAX_COMMITTED_COUNT)
     {}
 
-    void Insert(TWriteId writeId, const TUnifiedBlobId& blobId, std::shared_ptr<arrow::RecordBatch>& batch) {
+    void Insert(TWriteId writeId, const TUnifiedBlobId& blobId, const std::shared_ptr<arrow::RecordBatch>& batch) {
         if (Bytes() + blobId.BlobSize() > MAX_TOTAL_SIZE) {
             return;
         }

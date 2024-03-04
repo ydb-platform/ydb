@@ -224,6 +224,7 @@ namespace NKikimr::NDataStreams::V1 {
         void Bootstrap(const NActors::TActorContext &ctx);
         void PreparePartitionActors(const NActors::TActorContext& ctx);
         void HandleCacheNavigateResponse(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr& ev);
+        void Die(const TActorContext& ctx) override;
 
     protected:
         void Write(const TActorContext& ctx);
@@ -257,6 +258,12 @@ namespace NKikimr::NDataStreams::V1 {
             };
         }
     };
+
+    template<class TDerived, class TProto>
+    void TPutRecordsActorBase<TDerived, TProto>::Die(const TActorContext& ctx) {
+        TRlHelpers::PassAway(TDerived::SelfId());
+        TBase::Die(ctx);
+    }
 
     template<class TDerived, class TProto>
     TPutRecordsActorBase<TDerived, TProto>::TPutRecordsActorBase(NGRpcService::IRequestOpCtx* request)

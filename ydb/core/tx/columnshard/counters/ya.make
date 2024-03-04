@@ -8,6 +8,7 @@ SRCS(
     columnshard.cpp
     insert_table.cpp
     common_data.cpp
+    splitter.cpp
 )
 
 PEERDIR(

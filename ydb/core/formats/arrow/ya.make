@@ -11,6 +11,8 @@ PEERDIR(
     ydb/core/formats/arrow/simple_builder
     ydb/core/formats/arrow/dictionary
     ydb/core/formats/arrow/transformer
+    ydb/core/formats/arrow/reader
+    library/cpp/actors/core
     ydb/library/arrow_kernels
     ydb/library/binary_json
     ydb/library/dynumber
@@ -35,20 +37,23 @@ YQL_LAST_ABI_VERSION()
 
 SRCS(
     arrow_batch_builder.cpp
-    arrow_helpers.cpp
     arrow_filter.cpp
-    converter.h
+    arrow_helpers.cpp
     converter.cpp
+    converter.h
     custom_registry.cpp
     input_stream.h
     merging_sorted_input_stream.cpp
     merging_sorted_input_stream.h
     one_batch_input_stream.h
     permutations.cpp
-    sort_cursor.h
     program.cpp
-    ssa_program_optimizer.cpp
+    replace_key.cpp
     size_calcer.cpp
+    sort_cursor.h
+    ssa_program_optimizer.cpp
+    special_keys.cpp
+    simple_arrays_cache.cpp
 )
 
 END()

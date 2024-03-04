@@ -106,7 +106,7 @@ public:
         std::shared_ptr<TScanMemoryLimiter> Owner;
         friend class TScanMemoryLimiter;
         void StartWaiting() {
-            Y_VERIFY(InWaitingFlag.Val() == 0);
+            Y_ABORT_UNLESS(InWaitingFlag.Val() == 0);
             InWaitingFlag = 1;
         }
     protected:
@@ -137,7 +137,7 @@ public:
         }
 
         void OnBufferReady() {
-            Y_VERIFY(InWaitingFlag.Val() == 1);
+            Y_ABORT_UNLESS(InWaitingFlag.Val() == 1);
             InWaitingFlag = 0;
             DoOnBufferReady();
         }

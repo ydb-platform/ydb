@@ -118,7 +118,7 @@ Aws::Client::ClientConfiguration TS3ExternalStorageConfig::ConfigFromSettings(co
             config.scheme = Aws::Http::Scheme::HTTPS;
             break;
         default:
-            Y_FAIL("Unknown scheme");
+            Y_ABORT("Unknown scheme");
     }
 
     if (settings.HasRegion()) {
@@ -164,7 +164,7 @@ Aws::Client::ClientConfiguration TS3ExternalStorageConfig::ConfigFromSettings(co
             config.scheme = Http::Scheme::HTTPS;
             break;
         default:
-            Y_FAIL("Unknown scheme");
+            Y_ABORT("Unknown scheme");
     }
 
     return config;
@@ -182,8 +182,8 @@ TString TS3ExternalStorageConfig::DoGetStorageId() const {
     return TString(Config.endpointOverride.data(), Config.endpointOverride.size());
 }
 
-IExternalStorageOperator::TPtr TS3ExternalStorageConfig::DoConstructStorageOperator() const {
-    return std::make_shared<TS3ExternalStorage>(Config, Credentials, Bucket, StorageClass);
+IExternalStorageOperator::TPtr TS3ExternalStorageConfig::DoConstructStorageOperator(bool verbose) const {
+    return std::make_shared<TS3ExternalStorage>(Config, Credentials, Bucket, StorageClass, verbose);
 }
 
 TS3ExternalStorageConfig::TS3ExternalStorageConfig(const Ydb::Import::ImportFromS3Settings& settings): Config(ConfigFromSettings(settings))

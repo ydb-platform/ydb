@@ -1,4 +1,5 @@
 #include "filtered_scheme.h"
+#include <util/string/join.h>
 
 
 namespace NKikimr::NOlap {
@@ -21,18 +22,33 @@ TFilteredSnapshotSchema::TFilteredSnapshotSchema(ISnapshotSchema::TPtr originalS
     Schema = std::make_shared<arrow::Schema>(schemaFields);
 }
 
+TFilteredSnapshotSchema::TFilteredSnapshotSchema(ISnapshotSchema::TPtr originalSnapshot, const std::set<std::string>& columnNames)
+    : OriginalSnapshot(originalSnapshot) {
+    for (auto&& i : columnNames) {
+        ColumnIds.emplace(OriginalSnapshot->GetColumnId(i));
+    }
+    std::vector<std::shared_ptr<arrow::Field>> schemaFields;
+    for (auto&& i : OriginalSnapshot->GetSchema()->fields()) {
+        if (!columnNames.contains(i->name())) {
+            continue;
+        }
+        schemaFields.emplace_back(i);
+    }
+    Schema = std::make_shared<arrow::Schema>(schemaFields);
+}
+
 TColumnSaver TFilteredSnapshotSchema::GetColumnSaver(const ui32 columnId, const TSaverContext& context) const {
-    Y_VERIFY(ColumnIds.contains(columnId));
+    Y_ABORT_UNLESS(ColumnIds.contains(columnId));
     return OriginalSnapshot->GetColumnSaver(columnId, context);
 }
 
-std::shared_ptr<TColumnLoader> TFilteredSnapshotSchema::GetColumnLoader(const ui32 columnId) const {
-    Y_VERIFY(ColumnIds.contains(columnId));
-    return OriginalSnapshot->GetColumnLoader(columnId);
+std::shared_ptr<TColumnLoader> TFilteredSnapshotSchema::GetColumnLoaderOptional(const ui32 columnId) const {
+    Y_ABORT_UNLESS(ColumnIds.contains(columnId));
+    return OriginalSnapshot->GetColumnLoaderOptional(columnId);
 }
 
-ui32 TFilteredSnapshotSchema::GetColumnId(const std::string& columnName) const {
-    return OriginalSnapshot->GetColumnId(columnName);
+std::optional<ui32> TFilteredSnapshotSchema::GetColumnIdOptional(const std::string& columnName) const {
+    return OriginalSnapshot->GetColumnIdOptional(columnName);
 }
 
 int TFilteredSnapshotSchema::GetFieldIndex(const ui32 columnId) const {
@@ -57,6 +73,22 @@ const TIndexInfo& TFilteredSnapshotSchema::GetIndexInfo() const {
 
 const TSnapshot& TFilteredSnapshotSchema::GetSnapshot() const {
     return OriginalSnapshot->GetSnapshot();
+}
+
+ui32 TFilteredSnapshotSchema::GetColumnsCount() const {
+    return Schema->num_fields();
+}
+
+ui64 TFilteredSnapshotSchema::GetVersion() const {
+    return OriginalSnapshot->GetIndexInfo().GetVersion();
+}
+
+TString TFilteredSnapshotSchema::DoDebugString() const {
+    return TStringBuilder() << "("
+        << "original=" << OriginalSnapshot->DebugString() << ";"
+        << "column_ids=[" << JoinSeq(",", ColumnIds) << "];"
+        << ")"
+        ;
 }
 
 }

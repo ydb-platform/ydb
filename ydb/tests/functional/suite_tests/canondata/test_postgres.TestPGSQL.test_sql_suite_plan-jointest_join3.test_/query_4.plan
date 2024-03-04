@@ -42,11 +42,11 @@
                                                 "PlanNodeType": "Connection",
                                                 "Plans": [
                                                     {
-                                                        "CTE Name": "tx_result_binding_2_0",
+                                                        "CTE Name": "precompute_0_0",
                                                         "Node Type": "ConstantExpr",
                                                         "Operators": [
                                                             {
-                                                                "Iterator": "%kqp%tx_result_binding_0_0",
+                                                                "Iterator": "precompute_0_0",
                                                                 "Name": "Iterator"
                                                             }
                                                         ],
@@ -69,7 +69,7 @@
                                                                 "PlanNodeType": "Connection",
                                                                 "Plans": [
                                                                     {
-                                                                        "CTE Name": "tx_result_binding_2_0",
+                                                                        "CTE Name": "precompute_1_0",
                                                                         "Node Type": "Filter-TablePointLookup-ConstantExpr",
                                                                         "Operators": [
                                                                             {
@@ -84,7 +84,7 @@
                                                                                 "Table": "postgres_jointest/join3.test_plan/child"
                                                                             },
                                                                             {
-                                                                                "Iterator": "%kqp%tx_result_binding_1_0",
+                                                                                "Iterator": "precompute_1_0",
                                                                                 "Name": "Iterator"
                                                                             }
                                                                         ],
@@ -114,8 +114,13 @@
                 "PlanNodeType": "Materialize",
                 "Plans": [
                     {
-                        "Node Type": "Filter-Limit",
+                        "CTE Name": "precompute_0_0",
+                        "Node Type": "Aggregate-Filter-Limit",
                         "Operators": [
+                            {
+                                "Input": "precompute_0_0",
+                                "Name": "PartitionByKey"
+                            },
                             {
                                 "Name": "Filter",
                                 "Predicate": "Exist(item.k)"
@@ -128,7 +133,7 @@
                         "PlanNodeId": 6
                     }
                 ],
-                "Subplan Name": "CTE tx_result_binding_1_0"
+                "Subplan Name": "CTE precompute_1_0"
             },
             {
                 "Node Type": "Precompute_0",
@@ -170,7 +175,7 @@
                         ]
                     }
                 ],
-                "Subplan Name": "CTE tx_result_binding_0_0"
+                "Subplan Name": "CTE precompute_0_0"
             }
         ]
     },

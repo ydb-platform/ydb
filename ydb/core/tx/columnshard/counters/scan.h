@@ -1,6 +1,7 @@
 #pragma once
 #include "common/owner.h"
 #include <ydb/core/tx/columnshard/resources/memory.h>
+#include <ydb/core/tx/columnshard/resource_subscriber/counters.h>
 #include <library/cpp/monlib/dynamic_counters/counters.h>
 
 namespace NKikimr::NColumnShard {
@@ -55,7 +56,18 @@ private:
 
     NMonitoring::TDynamicCounters::TCounterPtr ScanDuration;
 
+    NMonitoring::TDynamicCounters::TCounterPtr NoScanRecords;
+    NMonitoring::TDynamicCounters::TCounterPtr NoScanIntervals;
+    NMonitoring::TDynamicCounters::TCounterPtr LinearScanRecords;
+    NMonitoring::TDynamicCounters::TCounterPtr LinearScanIntervals;
+    NMonitoring::TDynamicCounters::TCounterPtr LogScanRecords;
+    NMonitoring::TDynamicCounters::TCounterPtr LogScanIntervals;
+
 public:
+
+    std::shared_ptr<NOlap::NResourceBroker::NSubscribe::TSubscriberCounters> ResourcesSubscriberCounters;
+
+
     NMonitoring::TDynamicCounters::TCounterPtr PortionBytes;
     NMonitoring::TDynamicCounters::TCounterPtr FilterBytes;
     NMonitoring::TDynamicCounters::TCounterPtr PostFilterBytes;
@@ -93,6 +105,21 @@ public:
     NMonitoring::TDynamicCounters::TCounterPtr BlobsReceivedBytes;
 
     TScanCounters(const TString& module = "Scan");
+
+    void OnNoScanInterval(const ui32 recordsCount) const {
+        NoScanRecords->Add(recordsCount);
+        NoScanIntervals->Add(1);
+    }
+
+    void OnLinearScanInterval(const ui32 recordsCount) const {
+        LinearScanRecords->Add(recordsCount);
+        LinearScanIntervals->Add(1);
+    }
+
+    void OnLogScanInterval(const ui32 recordsCount) const {
+        LogScanRecords->Add(recordsCount);
+        LogScanIntervals->Add(1);
+    }
 
     void OnScanDuration(const TDuration d) const {
         ScanDuration->Add(d.MicroSeconds());
@@ -140,11 +167,58 @@ public:
     TScanAggregations BuildAggregations();
 };
 
+class TCounterGuard: TNonCopyable {
+private:
+    std::shared_ptr<TAtomicCounter> Counter;
+public:
+    TCounterGuard(TCounterGuard&& guard) {
+        Counter = guard.Counter;
+        guard.Counter = nullptr;
+    }
+
+    TCounterGuard(const std::shared_ptr<TAtomicCounter>& counter)
+        : Counter(counter)
+    {
+        AFL_VERIFY(Counter);
+        Counter->Inc();
+    }
+    ~TCounterGuard() {
+        if (Counter) {
+            AFL_VERIFY(Counter->Dec() >= 0);
+        }
+    }
+
+};
+
 class TConcreteScanCounters: public TScanCounters {
 private:
     using TBase = TScanCounters;
+    std::shared_ptr<TAtomicCounter> MergeTasksCount;
+    std::shared_ptr<TAtomicCounter> AssembleTasksCount;
+    std::shared_ptr<TAtomicCounter> ReadTasksCount;
+    std::shared_ptr<TAtomicCounter> ResourcesAllocationTasksCount;
 public:
     TScanAggregations Aggregations;
+
+    TCounterGuard GetMergeTasksGuard() const {
+        return TCounterGuard(MergeTasksCount);
+    }
+
+    TCounterGuard GetReadTasksGuard() const {
+        return TCounterGuard(ReadTasksCount);
+    }
+
+    TCounterGuard GetResourcesAllocationTasksGuard() const {
+        return TCounterGuard(ResourcesAllocationTasksCount);
+    }
+
+    TCounterGuard GetAssembleTasksGuard() const {
+        return TCounterGuard(AssembleTasksCount);
+    }
+
+    bool InWaiting() const {
+        return MergeTasksCount->Val() || AssembleTasksCount->Val() || ReadTasksCount->Val() || ResourcesAllocationTasksCount->Val();
+    }
 
     void OnBlobsWaitDuration(const TDuration d, const TDuration fullScanDuration) const {
         TBase::OnBlobsWaitDuration(d);
@@ -153,6 +227,10 @@ public:
 
     TConcreteScanCounters(const TScanCounters& counters)
         : TBase(counters)
+        , MergeTasksCount(std::make_shared<TAtomicCounter>())
+        , AssembleTasksCount(std::make_shared<TAtomicCounter>())
+        , ReadTasksCount(std::make_shared<TAtomicCounter>())
+        , ResourcesAllocationTasksCount(std::make_shared<TAtomicCounter>())
         , Aggregations(TBase::BuildAggregations())
     {
 

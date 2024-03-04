@@ -1,19 +1,24 @@
 #pragma once
 
+#include <ydb/core/persqueue/pq_rl_helpers.h>
 #include <library/cpp/actors/core/actor.h>
 #include <ydb/library/aclib/aclib.h>
+
+#include "user_info.h"
 
 namespace NKikimr::NPQ {
 
 struct TPartitionFetchRequest {
     TString Topic;
+    TString ClientId;
     ui32 Partition;
     ui64 Offset;
     ui64 MaxBytes;
     ui64 ReadTimestampMs;
     
-    TPartitionFetchRequest(const TString& topic, ui32 partition, ui64 offset, ui64 maxBytes, ui64 readTimestampMs = 0)
+    TPartitionFetchRequest(const TString& topic, ui32 partition, ui64 offset, ui64 maxBytes, ui64 readTimestampMs = 0, const TString& clientId = NKikimr::NPQ::CLIENTID_WITHOUT_CONSUMER)
         : Topic(topic)
+        , ClientId(clientId)
         , Partition(partition)
         , Offset(offset)
         , MaxBytes(maxBytes)
@@ -29,10 +34,11 @@ struct TFetchRequestSettings {
     TMaybe<NACLib::TUserToken> User;
     ui64 MaxWaitTimeMs;
     ui64 TotalMaxBytes;
+    TRlContext RlCtx;
 
     ui64 RequestId = 0;
     TFetchRequestSettings(
-            const TString& database, const TVector<TPartitionFetchRequest>& partitions, ui64 maxWaitTimeMs, ui64 totalMaxBytes,
+            const TString& database, const TVector<TPartitionFetchRequest>& partitions, ui64 maxWaitTimeMs, ui64 totalMaxBytes, TRlContext rlCtx,
             const TMaybe<NACLib::TUserToken>& user = {}, ui64 requestId = 0
     )
         : Database(database)
@@ -40,6 +46,7 @@ struct TFetchRequestSettings {
         , User(user)
         , MaxWaitTimeMs(maxWaitTimeMs)
         , TotalMaxBytes(totalMaxBytes)
+        , RlCtx(rlCtx)
         , RequestId(requestId)
     {}
 };

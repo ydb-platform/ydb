@@ -53,7 +53,7 @@ TTierCleaner::TTierCleaner(const TString& tierName, const TActorId& ownerId,
     , PathId(pathId)
     , StorageConfig(storageConfig) {
     Storage = StorageConfig->ConstructStorageOperator();
-    Y_VERIFY(Storage);
+    Y_ABORT_UNLESS(Storage);
 }
 }
 #endif

@@ -13,6 +13,10 @@ private:
 protected:
     virtual TString DoSerialize(const std::shared_ptr<arrow::RecordBatch>& batch) const override;
 public:
+    virtual bool IsHardPacker() const override {
+        return Options.codec && Options.codec->compression_type() == arrow::Compression::ZSTD && Options.codec->compression_level() > 3;
+    }
+
     TFullDataSerializer(const arrow::ipc::IpcWriteOptions& options)
         : Options(options) {
 

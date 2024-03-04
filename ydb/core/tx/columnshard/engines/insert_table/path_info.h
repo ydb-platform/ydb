@@ -5,12 +5,41 @@
 
 namespace NKikimr::NOlap {
 class TInsertionSummary;
+
+class TPathInfoIndexPriority {
+public:
+    enum class EIndexationPriority {
+        PreventOverload = 100,
+        PreventManyPortions = 50,
+        NoPriority = 0
+    };
+
+private:
+    YDB_READONLY(EIndexationPriority, Category, EIndexationPriority::NoPriority);
+    const ui32 Weight;
+public:
+    TPathInfoIndexPriority(const EIndexationPriority category, const ui32 weight)
+        : Category(category)
+        , Weight(weight)
+    {
+
+    }
+
+    bool operator!() const {
+        return !Weight;
+    }
+
+    bool operator<(const TPathInfoIndexPriority& item) const {
+        return std::tie(Category, Weight) < std::tie(item.Category, item.Weight);
+    }
+};
+
 class TPathInfo: public TMoveOnly {
 private:
     const ui64 PathId = 0;
     TSet<TInsertedData> Committed;
-    i64 CommittedSize = 0;
-    i64 InsertedSize = 0;
+    YDB_READONLY(i64, CommittedSize, 0);
+    YDB_READONLY(i64, InsertedSize, 0);
     bool CommittedOverload = false;
     bool InsertedOverload = false;
     TInsertionSummary* Summary = nullptr;
@@ -30,9 +59,7 @@ public:
         return PathId;
     }
 
-    ui64 GetIndexationPriority() const {
-        return CommittedSize * Committed.size() * Committed.size();
-    }
+    TPathInfoIndexPriority GetIndexationPriority() const;
 
     bool EraseCommitted(const TInsertedData& data);
 

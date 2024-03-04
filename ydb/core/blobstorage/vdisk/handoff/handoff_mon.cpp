@@ -142,7 +142,7 @@ namespace NKikimr {
             Y_VERIFY_DEBUG(ev->Get()->SubRequestId == TDbMon::HandoffMonId);
             auto actor = std::make_unique<THandoffMonRequestActor>(ctx.SelfID, SelfVDisk, Top, ProxiesPtr, ev);
             auto aid = ctx.Register(actor.release());
-            ActiveActors.Insert(aid);
+            ActiveActors.Insert(aid, __FILE__, __LINE__, ctx, NKikimrServices::BLOBSTORAGE);
         }
 
         void Handle(TEvents::TEvActorDied::TPtr &ev, const TActorContext &ctx) {

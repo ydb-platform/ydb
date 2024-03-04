@@ -34,7 +34,7 @@ public:
 
     static std::optional<TPKRangeFilter> Build(TPredicateContainer&& from, TPredicateContainer&& to);
 
-    NArrow::TColumnFilter BuildFilter(std::shared_ptr<arrow::RecordBatch> data) const;
+    NArrow::TColumnFilter BuildFilter(const arrow::Datum& data) const;
 
     bool IsPortionInUsage(const TPortionInfo& info, const TIndexInfo& indexInfo) const;
 

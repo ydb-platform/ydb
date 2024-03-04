@@ -17,13 +17,12 @@ private:
     const TString SecretKey;
 protected:
     virtual TString DoGetStorageId() const override;
-    virtual IExternalStorageOperator::TPtr DoConstructStorageOperator() const override;
+    virtual IExternalStorageOperator::TPtr DoConstructStorageOperator(bool verbose) const override;
 public:
     TFakeExternalStorageConfig(const TString& bucket, const TString& secretKey)
         : Bucket(bucket)
         , SecretKey(secretKey)
     {
-
     }
 };
 } // NKikimr::NWrappers::NExternalStorage

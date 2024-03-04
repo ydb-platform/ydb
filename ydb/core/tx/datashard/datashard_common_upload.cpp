@@ -47,6 +47,17 @@ bool TCommonUploadOps<TEvRequest, TEvResponse>::Execute(TDataShard* self, TTrans
         return true;
     }
 
+    if (record.GetSchemaVersion() && tableInfo.GetTableSchemaVersion() &&
+        record.GetSchemaVersion() != tableInfo.GetTableSchemaVersion())
+    {
+        SetError(NKikimrTxDataShard::TError::SCHEME_ERROR, TStringBuilder()
+            << "Schema version mismatch"
+            << ": requested " << record.GetSchemaVersion()
+            << ", expected " << tableInfo.GetTableSchemaVersion()
+            << ". Retry request with an updated schema.");
+        return true;
+    }
+
     for (size_t i = 0; i < tableInfo.KeyColumnIds.size(); ++i) {
         if (record.GetRowScheme().GetKeyColumnIds(i) != tableInfo.KeyColumnIds[i]) {
             SetError(NKikimrTxDataShard::TError::SCHEME_ERROR, Sprintf("Key column schema at position %" PRISZT, i));

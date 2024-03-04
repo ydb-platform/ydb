@@ -29,14 +29,17 @@ public:
     ~TLoggerInit() {
         Initialize();
     }
-    void SetComponents(const std::vector<NKikimrServices::EServiceKikimr> services) {
+    TLoggerInit& SetComponents(const std::vector<NKikimrServices::EServiceKikimr> services) {
         Services = { services };
+        return *this;
     }
-    void AddComponents(const std::vector<NKikimrServices::EServiceKikimr> services) {
+    TLoggerInit& AddComponents(const std::vector<NKikimrServices::EServiceKikimr> services) {
         Services.emplace_back(services);
+        return *this;
     }
-    void SetPriority(const NActors::NLog::EPriority priority) {
+    TLoggerInit& SetPriority(const NActors::NLog::EPriority priority) {
         Priority = priority;
+        return *this;
     }
 };
 

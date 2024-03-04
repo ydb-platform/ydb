@@ -2,7 +2,7 @@
 
 namespace NKikimr::NColumnShard {
 
-NKikimr::NOlap::TPartialReadResult TStatsIterator::GetBatch() {
+std::optional<NOlap::TPartialReadResult> TStatsIterator::GetBatch() {
     // Take next raw batch
     auto batch = FillStatsBatch();
 
@@ -15,7 +15,7 @@ NKikimr::NOlap::TPartialReadResult TStatsIterator::GetBatch() {
     // Leave only requested columns
     auto resultBatch = NArrow::ExtractColumns(batch, ResultSchema);
 
-    NOlap::TPartialReadResult out(nullptr, resultBatch, lastKey);
+    NOlap::TPartialReadResult out({}, resultBatch, lastKey);
 
     out.ApplyProgram(ReadMetadata->GetProgram());
     return std::move(out);
@@ -36,7 +36,7 @@ std::shared_ptr<arrow::RecordBatch> TStatsIterator::FillStatsBatch() {
     while (!IndexStats.empty()) {
         auto it = Reverse ? std::prev(IndexStats.end()) : IndexStats.begin();
         const auto& stats = it->second;
-        Y_VERIFY(stats);
+        Y_ABORT_UNLESS(stats);
         AppendStats(builders, it->first, *stats);
         IndexStats.erase(it);
     }

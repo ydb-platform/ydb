@@ -9,6 +9,7 @@
 add_subdirectory(common)
 add_subdirectory(compression)
 add_subdirectory(dictionary)
+add_subdirectory(reader)
 add_subdirectory(serializer)
 add_subdirectory(simple_builder)
 add_subdirectory(switch)
@@ -32,6 +33,8 @@ target_link_libraries(core-formats-arrow PUBLIC
   formats-arrow-simple_builder
   formats-arrow-dictionary
   formats-arrow-transformer
+  formats-arrow-reader
+  cpp-actors-core
   ydb-library-arrow_kernels
   ydb-library-binary_json
   ydb-library-dynumber
@@ -40,13 +43,16 @@ target_link_libraries(core-formats-arrow PUBLIC
 )
 target_sources(core-formats-arrow PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/core/formats/arrow/arrow_batch_builder.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/formats/arrow/arrow_helpers.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/formats/arrow/arrow_filter.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/formats/arrow/arrow_helpers.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/formats/arrow/converter.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/formats/arrow/custom_registry.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/formats/arrow/merging_sorted_input_stream.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/formats/arrow/permutations.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/formats/arrow/program.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/formats/arrow/ssa_program_optimizer.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/formats/arrow/replace_key.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/formats/arrow/size_calcer.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/formats/arrow/ssa_program_optimizer.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/formats/arrow/special_keys.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/formats/arrow/simple_arrays_cache.cpp
 )

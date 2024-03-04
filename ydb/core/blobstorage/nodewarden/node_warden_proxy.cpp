@@ -22,7 +22,7 @@ void TNodeWarden::StartLocalProxy(ui32 groupId) {
 
     if (EnableProxyMock) {
         // create mock proxy
-        proxy.reset(CreateBlobStorageGroupProxyMockActor());
+        proxy.reset(CreateBlobStorageGroupProxyMockActor(groupId));
     } else if (auto info = NeedGroupInfo(groupId)) {
         if (info->BlobDepotId) {
             TActorId proxyActorId;

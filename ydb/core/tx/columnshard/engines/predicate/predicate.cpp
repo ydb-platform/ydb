@@ -9,16 +9,16 @@ TPredicate::TPredicate(EOperation op, std::shared_ptr<arrow::RecordBatch> batch)
     : Operation(op)
     , Batch(std::move(batch))
 {
-    Y_VERIFY(IsFrom() || IsTo());
+    Y_ABORT_UNLESS(IsFrom() || IsTo());
 }
 
 TPredicate::TPredicate(EOperation op, const TString& serializedBatch, const std::shared_ptr<arrow::Schema>& schema)
     : Operation(op)
 {
-    Y_VERIFY(IsFrom() || IsTo());
+    Y_ABORT_UNLESS(IsFrom() || IsTo());
     if (!serializedBatch.empty()) {
         Batch = NArrow::DeserializeBatch(serializedBatch, schema);
-        Y_VERIFY(Batch);
+        Y_ABORT_UNLESS(Batch);
     }
 }
 

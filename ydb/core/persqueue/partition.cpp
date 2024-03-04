@@ -565,16 +565,32 @@ void TPartition::Handle(TEvPQ::TEvPartitionStatus::TPtr& ev, const TActorContext
     TVector<ui64> resSpeed;
     resSpeed.resize(4);
     ui64 maxQuota = 0;
+    bool filterConsumers = !ev->Get()->Consumers.empty();
+    TSet<TString> requiredConsumers(ev->Get()->Consumers.begin(), ev->Get()->Consumers.end());
     for (auto& userInfoPair : UsersInfoStorage->GetAll()) {
         auto& userInfo = userInfoPair.second;
-        if (ev->Get()->ClientId.empty() || ev->Get()->ClientId == userInfo.User) {
-            Y_VERIFY(userInfo.AvgReadBytes.size() == 4);
+        auto& clientId = ev->Get()->ClientId;
+        bool consumerShouldBeProcessed = filterConsumers
+            ? requiredConsumers.contains(userInfo.User)
+            : clientId.empty() || clientId == userInfo.User;
+        if (consumerShouldBeProcessed) {
+            Y_ABORT_UNLESS(userInfo.AvgReadBytes.size() == 4);
             for (ui32 i = 0; i < 4; ++i) {
                 resSpeed[i] += userInfo.AvgReadBytes[i].GetValue();
             }
             maxQuota += userInfo.ReadQuota.GetTotalSpeed();
         }
-        if (ev->Get()->ClientId == userInfo.User) { //fill lags
+        if (filterConsumers) {
+            if (requiredConsumers.contains(userInfo.User)) {
+                auto* clientInfo = result.AddConsumerResult();
+                clientInfo->SetConsumer(userInfo.User);
+                clientInfo->set_errorcode(NPersQueue::NErrorCode::EErrorCode::OK);
+                clientInfo->SetCommitedOffset(userInfo.Offset);
+                requiredConsumers.extract(userInfo.User);
+            }
+            continue;
+        }
+        if (clientId == userInfo.User) { //fill lags
             NKikimrPQ::TClientInfo* clientInfo = result.MutableLagsInfo();
             clientInfo->SetClientId(userInfo.User);
             auto write = clientInfo->MutableWritePosition();
@@ -614,29 +630,40 @@ void TPartition::Handle(TEvPQ::TEvPartitionStatus::TPtr& ev, const TActorContext
         }
 
     }
-    result.SetAvgReadSpeedPerSec(resSpeed[0]);
-    result.SetAvgReadSpeedPerMin(resSpeed[1]);
-    result.SetAvgReadSpeedPerHour(resSpeed[2]);
-    result.SetAvgReadSpeedPerDay(resSpeed[3]);
 
-    result.SetReadBytesQuota(maxQuota);
-
-    result.SetPartitionSize(MeteringDataSize(ctx));
-    result.SetUsedReserveSize(UsedReserveSize(ctx));
+ 
     result.SetStartOffset(StartOffset);
     result.SetEndOffset(EndOffset);
 
-    result.SetLastWriteTimestampMs(WriteTimestamp.MilliSeconds());
-    result.SetWriteLagMs(WriteLagMs.GetValue());
+    if (filterConsumers) {
+        for (TString consumer : requiredConsumers) {
+            auto* clientInfo = result.AddConsumerResult();
+            clientInfo->SetConsumer(consumer);
+            clientInfo->set_errorcode(NPersQueue::NErrorCode::EErrorCode::SCHEMA_ERROR);
+        }
+    } else {
+        result.SetAvgReadSpeedPerSec(resSpeed[0]);
+        result.SetAvgReadSpeedPerMin(resSpeed[1]);
+        result.SetAvgReadSpeedPerHour(resSpeed[2]);
+        result.SetAvgReadSpeedPerDay(resSpeed[3]);
 
-    *result.MutableErrors() = {Errors.begin(), Errors.end()};
+        result.SetReadBytesQuota(maxQuota);
 
-    LOG_DEBUG_S(ctx, NKikimrServices::PERSQUEUE,
-                "Topic PartitionStatus PartitionSize: " << result.GetPartitionSize()
-                << " UsedReserveSize: " << result.GetUsedReserveSize()
-                << " ReserveSize: " << ReserveSize()
-                << " PartitionConfig" << Config.GetPartitionConfig();
-    );
+        result.SetPartitionSize(MeteringDataSize(ctx));
+        result.SetUsedReserveSize(UsedReserveSize(ctx));
+
+        result.SetLastWriteTimestampMs(WriteTimestamp.MilliSeconds());
+        result.SetWriteLagMs(WriteLagMs.GetValue());
+
+        *result.MutableErrors() = {Errors.begin(), Errors.end()};
+
+        LOG_DEBUG_S(ctx, NKikimrServices::PERSQUEUE,
+                    "Topic PartitionStatus PartitionSize: " << result.GetPartitionSize()
+                    << " UsedReserveSize: " << result.GetUsedReserveSize()
+                    << " ReserveSize: " << ReserveSize()
+                    << " PartitionConfig" << Config.GetPartitionConfig();
+        );
+    }
 
     UpdateCounters(ctx);
     if (PartitionCountersLabeled) {

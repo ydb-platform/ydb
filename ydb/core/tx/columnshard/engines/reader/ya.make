@@ -1,15 +1,8 @@
 LIBRARY()
 
 SRCS(
-    batch.cpp
-    common.cpp
     conveyor_task.cpp
     description.cpp
-    filling_context.cpp
-    filter_assembler.cpp
-    granule.cpp
-    processing_context.cpp
-    postfilter_assembler.cpp
     queue.cpp
     read_filter_merger.cpp
     read_metadata.cpp
@@ -24,7 +17,7 @@ PEERDIR(
     ydb/core/tx/columnshard/hooks/abstract
     ydb/core/tx/columnshard/resources
     ydb/core/tx/program
-    ydb/core/tx/columnshard/engines/reader/order_control
+    ydb/core/tx/columnshard/engines/reader/plain_reader
     ydb/core/tx/columnshard/engines/scheme
 )
 

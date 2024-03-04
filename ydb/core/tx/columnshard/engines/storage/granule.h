@@ -1,344 +1,296 @@
 #pragma once
+#include <ydb/core/base/appdata.h>
 #include <ydb/core/tx/columnshard/counters/engine_logs.h>
 #include <ydb/core/tx/columnshard/engines/column_engine.h>
 #include <ydb/core/tx/columnshard/engines/portion_info.h>
+#include "optimizer/abstract/optimizer.h"
 
 namespace NKikimr::NOlap {
 
 class TGranulesStorage;
 
-class TCompactionPriorityInfo {
-protected:
-    ui32 ProblemSequenceLength = 0;
-    TInstant NextAttemptInstant;
-public:
-    TInstant GetNextAttemptInstant() const {
-        return NextAttemptInstant;
-    }
-
-    void OnCompactionFailed() {
-        ++ProblemSequenceLength;
-        NextAttemptInstant = TInstant::Now() + TDuration::Seconds(1);
-    }
-
-    void OnCompactionFinished() {
-        ProblemSequenceLength = 0;
-        NextAttemptInstant = TInstant::Zero();
-    }
-
-    void OnCompactionCanceled() {
-        NextAttemptInstant = TInstant::Now() + TDuration::Seconds(1);
-    }
-};
-
 class TDataClassSummary: public NColumnShard::TBaseGranuleDataClassSummary {
 private:
     friend class TGranuleMeta;
+    THashMap<ui32, TSimpleSerializationStat> ColumnStats;
 public:
+    const THashMap<ui32, TSimpleSerializationStat>& GetColumnStats() const {
+        return ColumnStats;
+    }
+
     void AddPortion(const TPortionInfo& info) {
         const auto sizes = info.BlobsSizes();
         PortionsSize += sizes.first;
-        MaxColumnsSize += sizes.second;
         RecordsCount += info.NumRows();
         ++PortionsCount;
+
+        for (auto&& c : info.Records) {
+            auto it = ColumnStats.find(c.ColumnId);
+            if (it == ColumnStats.end()) {
+                it = ColumnStats.emplace(c.ColumnId, c.GetSerializationStat()).first;
+            } else {
+                it->second.AddStat(c.GetSerializationStat());
+            }
+        }
     }
 
     void RemovePortion(const TPortionInfo& info) {
         const auto sizes = info.BlobsSizes();
         PortionsSize -= sizes.first;
-        Y_VERIFY(PortionsSize >= 0);
-        MaxColumnsSize -= sizes.second;
-        Y_VERIFY(MaxColumnsSize >= 0);
+        Y_ABORT_UNLESS(PortionsSize >= 0);
         RecordsCount -= info.NumRows();
-        Y_VERIFY(RecordsCount >= 0);
+        Y_ABORT_UNLESS(RecordsCount >= 0);
         --PortionsCount;
-        Y_VERIFY(PortionsCount >= 0);
-    }
+        Y_ABORT_UNLESS(PortionsCount >= 0);
 
-    TDataClassSummary operator+(const TDataClassSummary& item) const {
-        TDataClassSummary result;
-        result.PortionsSize = PortionsSize + item.PortionsSize;
-        result.MaxColumnsSize = MaxColumnsSize + item.MaxColumnsSize;
-        result.PortionsCount = PortionsCount + item.PortionsCount;
-        result.RecordsCount = RecordsCount + item.RecordsCount;
-        return result;
-    }
-};
-
-class TColumnSummary {
-private:
-    ui32 ColumnId;
-    ui64 PackedBlobsSize = 0;
-    ui64 PackedRecordsCount = 0;
-    ui64 InsertedBlobsSize = 0;
-    ui64 InsertedRecordsCount = 0;
-public:
-    void AddData(const bool isInserted, const ui64 bytes, const ui64 records) {
-        if (isInserted) {
-            InsertedRecordsCount += records;
-            InsertedBlobsSize += bytes;
-        } else {
-            PackedRecordsCount += records;
-            PackedBlobsSize += bytes;
+        for (auto&& c : info.Records) {
+            auto it = ColumnStats.find(c.ColumnId);
+            if (it == ColumnStats.end()) {
+                it = ColumnStats.emplace(c.ColumnId, c.GetSerializationStat()).first;
+            } else {
+                it->second.RemoveStat(c.GetSerializationStat());
+            }
         }
-    }
-
-    TColumnSummary(const ui32 columnId)
-        : ColumnId(columnId)
-    {
-
-    }
-
-    ui32 GetColumnId() const {
-        return ColumnId;
-    }
-
-    ui32 GetRecordsCount() const {
-        return PackedRecordsCount + InsertedRecordsCount;
-    }
-
-    ui64 GetBlobsSize() const {
-        return PackedBlobsSize + InsertedBlobsSize;
-    }
-
-    ui32 GetPackedRecordsCount() const {
-        return PackedRecordsCount;
-    }
-
-    ui64 GetPackedBlobsSize() const {
-        return PackedBlobsSize;
-    }
-};
-
-class TGranuleHardSummary {
-private:
-    std::vector<TColumnSummary> ColumnIdsSortedBySizeDescending;
-    bool DifferentBorders = false;
-    friend class TGranuleMeta;
-public:
-    bool GetDifferentBorders() const {
-        return DifferentBorders;
-    }
-    const std::vector<TColumnSummary>& GetColumnIdsSortedBySizeDescending() const {
-        return ColumnIdsSortedBySizeDescending;
     }
 };
 
 class TGranuleAdditiveSummary {
 private:
     TDataClassSummary Inserted;
-    TDataClassSummary Other;
+    TDataClassSummary Compacted;
     friend class TGranuleMeta;
 public:
+    enum class ECompactionClass: ui32 {
+        Split = 100,
+        Internal = 50,
+        WaitInternal = 30,
+        NoCompaction = 0
+    };
+
+    ECompactionClass GetCompactionClass(const TCompactionLimits& limits, const TMonotonic lastModification, const TMonotonic now) const {
+        if (GetActivePortionsCount() <= 1) {
+            return ECompactionClass::NoCompaction;
+        }
+        if ((i64)GetGranuleSize() >= limits.GranuleSizeForOverloadPrevent)
+        {
+            return ECompactionClass::Split;
+        }
+
+        if (now - lastModification > TDuration::Seconds(limits.InGranuleCompactSeconds)) {
+            if (GetInserted().GetPortionsCount()) {
+                return ECompactionClass::Internal;
+            }
+        } else {
+            if (GetInserted().GetPortionsCount() > 1 &&
+                (GetInserted().GetPortionsSize() >= limits.GranuleIndexedPortionsSizeLimit ||
+                    GetInserted().GetPortionsCount() >= limits.GranuleIndexedPortionsCountLimit)) {
+                return ECompactionClass::Internal;
+            }
+            if (GetInserted().GetPortionsCount()) {
+                return ECompactionClass::WaitInternal;
+            }
+        }
+
+        return ECompactionClass::NoCompaction;
+    }
+
     const TDataClassSummary& GetInserted() const {
         return Inserted;
     }
-    const TDataClassSummary& GetOther() const {
-        return Other;
+    const TDataClassSummary& GetCompacted() const {
+        return Compacted;
     }
     ui64 GetGranuleSize() const {
-        return (Inserted + Other).GetPortionsSize();
+        return Inserted.GetPortionsSize() + Compacted.GetPortionsSize();
     }
     ui64 GetActivePortionsCount() const {
-        return (Inserted + Other).GetPortionsCount();
+        return Inserted.GetPortionsCount() + Compacted.GetPortionsCount();
     }
-    ui64 GetMaxColumnsSize() const {
-        return (Inserted + Other).GetMaxColumnsSize();
-    }
-    void AddPortion(const TPortionInfo& info) {
-        if (info.IsInserted()) {
-            Inserted.AddPortion(info);
-        } else {
-            Other.AddPortion(info);
-        }
-    }
-    void RemovePortion(const TPortionInfo& info) {
-        if (info.IsInserted()) {
-            Inserted.RemovePortion(info);
-        } else {
-            Other.RemovePortion(info);
-        }
-    }
-};
 
-class TCompactionPriority: public TCompactionPriorityInfo {
-private:
-    using TBase = TCompactionPriorityInfo;
-    TGranuleAdditiveSummary GranuleSummary;
+    class TEditGuard: TNonCopyable {
+    private:
+        const NColumnShard::TGranuleDataCounters& Counters;
+        TGranuleAdditiveSummary& Owner;
+    public:
+        TEditGuard(const NColumnShard::TGranuleDataCounters& counters, TGranuleAdditiveSummary& owner)
+            : Counters(counters)
+            , Owner(owner)
+        {
 
-    enum class EProblemPriorityPrediction: ui32 {
-        GranuleOverload = 100,
-        BigInsertedSize = 90,
-        ManyInsertedPortions = 80,
-        Other = 0
+        }
+
+        ~TEditGuard() {
+            Counters.OnPortionsDataRefresh(Owner.GetInserted(), Owner.GetCompacted());
+        }
+
+        void AddPortion(const TPortionInfo& info) {
+            if (info.IsInserted()) {
+                Owner.Inserted.AddPortion(info);
+            } else {
+                Owner.Compacted.AddPortion(info);
+            }
+        }
+        void RemovePortion(const TPortionInfo& info) {
+            if (info.IsInserted()) {
+                Owner.Inserted.RemovePortion(info);
+            } else {
+                Owner.Compacted.RemovePortion(info);
+            }
+        }
     };
 
-    EProblemPriorityPrediction GetPriorityClass() const {
-        if (GranuleSummary.GetActivePortionsCount() <= 1) {
-            return EProblemPriorityPrediction::Other;
-        }
-        if (GranuleSummary.GetGranuleSize() > TCompactionLimits::MAX_BLOB_SIZE * 10) {
-            return EProblemPriorityPrediction::GranuleOverload;
-        } else if (GranuleSummary.GetInserted().GetPortionsSize() > (i64)TCompactionLimits::MAX_BLOB_SIZE * 5) {
-            return EProblemPriorityPrediction::BigInsertedSize;
-        } else if (GranuleSummary.GetInserted().GetPortionsCount() > 50) {
-            return EProblemPriorityPrediction::ManyInsertedPortions;
-        } else {
-            return EProblemPriorityPrediction::Other;
-        }
-
+    TEditGuard StartEdit(const NColumnShard::TGranuleDataCounters& counters) {
+        return TEditGuard(counters, *this);
     }
 
-    ui64 GetWeightCorrected() const {
-        if (GranuleSummary.GetActivePortionsCount() <= 1) {
-            return 0;
-        }
-        return GranuleSummary.GetGranuleSize() * GranuleSummary.GetActivePortionsCount() * GranuleSummary.GetActivePortionsCount();
+    TString DebugString() const {
+        return TStringBuilder() << "inserted:(" << Inserted.DebugString() << ");other:(" << Compacted.DebugString() << "); ";
     }
-public:
-    TCompactionPriority(const TCompactionPriorityInfo& data, const TGranuleAdditiveSummary& granuleSummary)
-        : TBase(data)
-        , GranuleSummary(granuleSummary)
-    {
-
-    }
-    bool operator<(const TCompactionPriority& item) const {
-        return std::tuple((ui32)GetPriorityClass(), GetWeightCorrected(), GranuleSummary.GetActivePortionsCount(), item.NextAttemptInstant)
-            < std::tuple((ui32)item.GetPriorityClass(), item.GetWeightCorrected(), item.GranuleSummary.GetActivePortionsCount(), NextAttemptInstant);
-    }
-
 };
 
-class TGranuleMeta: public ICompactionObjectCallback, TNonCopyable {
+class TGranuleMeta: TNonCopyable {
+public:
+    enum class EActivity {
+        GeneralCompaction
+    };
+
 private:
-    THashMap<ui64, TPortionInfo> Portions; // portion -> portionInfo
+    TMonotonic ModificationLastTime = TMonotonic::Now();
+    THashMap<ui64, std::shared_ptr<TPortionInfo>> Portions;
     mutable std::optional<TGranuleAdditiveSummary> AdditiveSummaryCache;
-    mutable std::optional<TGranuleHardSummary> HardSummaryCache;
-    bool NeedSplit(const TCompactionLimits& limits, bool& inserted) const;
+
     void RebuildHardMetrics() const;
     void RebuildAdditiveMetrics() const;
 
-    enum class EActivity {
-        SplitCompaction,
-        InternalCompaction,
-    };
-
     std::set<EActivity> Activity;
-    TCompactionPriorityInfo CompactionPriorityInfo;
     mutable bool AllowInsertionFlag = false;
+    const ui64 PathId;
     std::shared_ptr<TGranulesStorage> Owner;
     const NColumnShard::TGranuleDataCounters Counters;
+    NColumnShard::TEngineLogsCounters::TPortionsInfoGuard PortionInfoGuard;
+    std::shared_ptr<NStorageOptimizer::IOptimizerPlanner> OptimizerPlanner;
+    std::map<NArrow::TReplaceKey, THashMap<ui64, std::shared_ptr<TPortionInfo>>> PortionsByPK;
 
-    void OnBeforeChangePortion(const TPortionInfo* portionBefore, const TPortionInfo* portionAfter);
-    void OnAfterChangePortion();
+    void OnBeforeChangePortion(const std::shared_ptr<TPortionInfo> portionBefore);
+    void OnAfterChangePortion(const std::shared_ptr<TPortionInfo> portionAfter, NStorageOptimizer::IOptimizerPlanner::TModificationGuard* modificationGuard);
     void OnAdditiveSummaryChange() const;
+    YDB_READONLY(TMonotonic, LastCompactionInstant, TMonotonic::Zero());
 public:
-    const TGranuleHardSummary& GetHardSummary() const {
-        if (!HardSummaryCache) {
-            RebuildHardMetrics();
-        }
-        return *HardSummaryCache;
+    NJson::TJsonValue OptimizerSerializeToJson() const {
+        return OptimizerPlanner->SerializeToJsonVisual();
     }
+
+    std::vector<NIndexedReader::TSortableBatchPosition> GetBucketPositions() const {
+        return OptimizerPlanner->GetBucketPositions();
+    }
+
+    void OnStartCompaction() {
+        LastCompactionInstant = TMonotonic::Now();
+    }
+
+    std::shared_ptr<TColumnEngineChanges> GetOptimizationTask(const TCompactionLimits& limits, std::shared_ptr<TGranuleMeta> self, const THashSet<TPortionAddress>& busyPortions) const {
+        return OptimizerPlanner->GetOptimizationTask(limits, self, busyPortions);
+    }
+
+    const std::map<NArrow::TReplaceKey, THashMap<ui64, std::shared_ptr<TPortionInfo>>>& GroupOrderedPortionsByPK() const {
+        return PortionsByPK;
+    }
+
+    void OnAfterPortionsLoad() {
+        auto g = OptimizerPlanner->StartModificationGuard();
+        for (auto&& i : Portions) {
+            OnAfterChangePortion(i.second, &g);
+        }
+    }
+
+    std::shared_ptr<NOlap::TSerializationStats> BuildSerializationStats(ISnapshotSchema::TPtr schema) const {
+        auto result = std::make_shared<NOlap::TSerializationStats>();
+        for (auto&& i : GetAdditiveSummary().GetCompacted().GetColumnStats()) {
+            auto field = schema->GetFieldByColumnId(i.first);
+            if (!field) {
+                continue;
+            }
+            NOlap::TColumnSerializationStat columnInfo(i.first, field->name());
+            columnInfo.Merge(i.second);
+            result->AddStat(columnInfo);
+        }
+        return result;
+    }
+
+    TGranuleAdditiveSummary::ECompactionClass GetCompactionType(const TCompactionLimits& limits) const;
     const TGranuleAdditiveSummary& GetAdditiveSummary() const;
-    TCompactionPriority GetCompactionPriority() const {
-        return TCompactionPriority(CompactionPriorityInfo, GetAdditiveSummary());
+
+    NStorageOptimizer::TOptimizationPriority GetCompactionPriority() const {
+        return OptimizerPlanner->GetUsefulMetric();
+    }
+
+    void ActualizeOptimizer(const TInstant currentInstant) const {
+        if (currentInstant - OptimizerPlanner->GetActualizationInstant() > TDuration::Seconds(1)) {
+            OptimizerPlanner->Actualize(currentInstant);
+        }
     }
 
     bool NeedCompaction(const TCompactionLimits& limits) const {
         if (InCompaction() || Empty()) {
-            AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("event", "granule_skipped_by_state")("granule_id", GetGranuleId())("granule_size", Size());
+            AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("event", "granule_skipped_by_state")("path_id", GetPathId())("granule_size", Size());
             return false;
         }
-        return NeedSplitCompaction(limits) || NeedInternalCompaction(limits);
+        return GetCompactionType(limits) != TGranuleAdditiveSummary::ECompactionClass::NoCompaction;
     }
 
-    bool InCompaction() const {
-        return Activity.contains(EActivity::SplitCompaction) || Activity.contains(EActivity::InternalCompaction);
-    }
-
-    void AllowedInsertion() const {
-        if (InCompaction()) {
-            AllowInsertionFlag = true;
-        }
-    }
-
-    bool IsInsertAllowed() const {
-        return AllowInsertionFlag || !Activity.contains(EActivity::SplitCompaction);
-    }
+    bool InCompaction() const;
 
     bool IsErasable() const {
-        return Activity.empty();
+        return Activity.empty() && Portions.empty();
     }
 
-    virtual void OnCompactionStarted(const bool inGranule) override;
+    void OnCompactionStarted();
 
-    virtual void OnCompactionCanceled(const TString& reason) override;
-    virtual void OnCompactionFailed(const TString& reason) override;
-    virtual void OnCompactionFinished() override;
+    void OnCompactionFailed(const TString& reason);
+    void OnCompactionFinished();
 
     void UpsertPortion(const TPortionInfo& info);
 
-    virtual TString DebugString() const override {
-        return TStringBuilder() << "granule:" << GetGranuleId() << ";"
-            << "path_id:" << Record.PathId << ";"
+    TString DebugString() const {
+        return TStringBuilder() << "(granule:" << GetPathId() << ";"
+            << "path_id:" << GetPathId() << ";"
             << "size:" << GetAdditiveSummary().GetGranuleSize() << ";"
             << "portions_count:" << Portions.size() << ";"
+            << ")"
             ;
     }
 
-    const TGranuleRecord Record;
+    void AddColumnRecord(const TIndexInfo& indexInfo, const TPortionInfo& portion, const TColumnRecord& rec, const NKikimrTxColumnShard::TIndexPortionMeta* portionMeta);
 
-    void AddColumnRecord(const TIndexInfo& indexInfo, const TColumnRecord& rec);
-
-    const THashMap<ui64, TPortionInfo>& GetPortions() const {
+    const THashMap<ui64, std::shared_ptr<TPortionInfo>>& GetPortions() const {
         return Portions;
     }
 
     ui64 GetPathId() const {
-        return Record.PathId;
+        return PathId;
     }
 
     const TPortionInfo& GetPortionVerified(const ui64 portion) const {
         auto it = Portions.find(portion);
-        Y_VERIFY(it != Portions.end());
-        return it->second;
+        AFL_VERIFY(it != Portions.end())("portion_id", portion)("count", Portions.size());
+        return *it->second;
     }
 
-    const TPortionInfo* GetPortionPointer(const ui64 portion) const {
+    std::shared_ptr<TPortionInfo> GetPortionPtr(const ui64 portion) const {
         auto it = Portions.find(portion);
         if (it == Portions.end()) {
             return nullptr;
         }
-        return &it->second;
+        return it->second;
     }
 
     bool ErasePortion(const ui64 portion);
 
-    explicit TGranuleMeta(const TGranuleRecord& rec, std::shared_ptr<TGranulesStorage> owner, const NColumnShard::TGranuleDataCounters& counters)
-        : Owner(owner)
-        , Counters(counters)
-        , Record(rec)
-    {
-    }
+    explicit TGranuleMeta(const ui64 pathId, std::shared_ptr<TGranulesStorage> owner, const NColumnShard::TGranuleDataCounters& counters, const TVersionedIndex& versionedIndex);
 
-    ui64 GetGranuleId() const {
-        return Record.Granule;
-    }
-    ui64 PathId() const noexcept { return Record.PathId; }
     bool Empty() const noexcept { return Portions.empty(); }
 
     ui64 Size() const;
-    bool IsOverloaded(const TCompactionLimits& limits) const {
-        return Size() >= limits.GranuleOverloadSize;
-    }
-    bool NeedSplitCompaction(const TCompactionLimits& limits) const {
-        bool inserted = false;
-        return NeedSplit(limits, inserted);
-    }
-    bool NeedInternalCompaction(const TCompactionLimits& limits) const {
-        bool inserted = false;
-        return !NeedSplit(limits, inserted) && inserted;
-    }
 };
 
 } // namespace NKikimr::NOlap

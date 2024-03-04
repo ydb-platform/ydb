@@ -291,6 +291,7 @@ private:
 
     ui64 BalancerTabletId;
     TActorId PipeToBalancer;
+    std::optional<ui32> PartitionIdFromBalancer;
 
     // PQ tablet configuration that we get at the time of session initialization
     NKikimrPQ::TPQTabletConfig InitialPQTabletConfig;

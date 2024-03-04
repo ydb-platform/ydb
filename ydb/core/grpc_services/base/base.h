@@ -48,7 +48,6 @@ using TYdbIssueMessageType = Ydb::Issue::IssueMessage;
 
 std::pair<TString, TString> SplitPath(const TMaybe<TString>& database, const TString& path);
 std::pair<TString, TString> SplitPath(const TString& path);
-void RefreshToken(const TString& token, const TString& database, const TActorContext& ctx, TActorId id);
 
 struct TRpcServices {
     enum EServiceId {
@@ -98,7 +97,7 @@ struct TRpcServices {
         EvExplainDataQueryAst,
         EvReadColumns,
         EvBiStreamPing,
-        EvRefreshTokenRequest, // internal call
+        EvRefreshToken, // internal call, pair to EvStreamWriteRefreshToken
         EvGetShardLocations,
         EvExperimentalStreamQuery,
         EvStreamPQWrite,
@@ -221,7 +220,9 @@ struct TRpcServices {
         EvDescribeYndxRateLimiterResource,
         EvAcquireYndxRateLimiterResource,
         EvGrpcRuntimeRequest,
-        EvNodeCheckRequest // !!! DO NOT ADD NEW REQUEST !!!
+        EvNodeCheckRequest,
+        EvStreamWriteRefreshToken    // internal call, pair to EvRefreshToken
+        // !!! DO NOT ADD NEW REQUEST !!!
     };
 
     struct TEvGrpcNextReply : public TEventLocal<TEvGrpcNextReply, TRpcServices::EvGrpcStreamIsReady> {
@@ -460,9 +461,10 @@ struct TCommonResponseFiller<TResp, false> : private TCommonResponseFillerImpl {
     }
 };
 
+template <ui32 TRpcId>
 class TRefreshTokenImpl
     : public IRequestProxyCtx
-    , public TEventLocal<TRefreshTokenImpl, TRpcServices::EvRefreshTokenRequest>
+    , public TEventLocal<TRefreshTokenImpl<TRpcId>, TRpcId>
 {
 public:
     TRefreshTokenImpl(const TString& token, const TString& database, TActorId from)
@@ -848,9 +850,7 @@ public:
         return false;
     }
 
-    void RefreshToken(const TString& token, const TActorContext& ctx, TActorId id) {
-        NGRpcService::RefreshToken(token, GetDatabaseName().GetOrElse(""), ctx, id);
-    }
+    void RefreshToken(const TString& token, const TActorContext& ctx, TActorId id);
 
     void SetRespHook(TRespHook&&) override {
         /* cannot add hook to bidirect streaming */

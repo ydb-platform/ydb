@@ -176,7 +176,7 @@
                             "scan_by": [
                                 "Name (-\u221e, +\u221e)"
                             ],
-                            "type": "Lookup"
+                            "type": "Scan"
                         }
                     ],
                     "writes": [
@@ -214,12 +214,12 @@
                                         "Table": "base_write_multi_usage_script_script/Temp"
                                     },
                                     {
-                                        "Iterator": "%kqp%tx_result_binding_0_1",
+                                        "Iterator": "precompute_0_1",
                                         "Name": "Iterator"
                                     }
                                 ],
                                 "Node Type": "Upsert-ConstantExpr",
-                                "CTE Name": "tx_result_binding_1_1"
+                                "CTE Name": "precompute_0_1"
                             }
                         ],
                         "Node Type": "Effect"
@@ -238,19 +238,19 @@
                                         "Table": "base_write_multi_usage_script_script/Input1"
                                     },
                                     {
-                                        "Iterator": "%kqp%tx_result_binding_0_0",
+                                        "Iterator": "precompute_0_0",
                                         "Name": "Iterator"
                                     }
                                 ],
                                 "Node Type": "Delete-ConstantExpr",
-                                "CTE Name": "tx_result_binding_1_0"
+                                "CTE Name": "precompute_0_0"
                             }
                         ],
                         "Node Type": "Effect"
                     },
                     {
                         "PlanNodeId": 6,
-                        "Subplan Name": "CTE tx_result_binding_0_0",
+                        "Subplan Name": "CTE precompute_0_0",
                         "Plans": [
                             {
                                 "PlanNodeId": 5,
@@ -263,7 +263,7 @@
                     },
                     {
                         "PlanNodeId": 4,
-                        "Subplan Name": "CTE tx_result_binding_0_1",
+                        "Subplan Name": "CTE precompute_0_1",
                         "Plans": [
                             {
                                 "PlanNodeId": 3,
@@ -285,11 +285,11 @@
                                                         "ReadColumns": [
                                                             "Amount"
                                                         ],
-                                                        "Name": "TablePointLookup",
+                                                        "Name": "TableRangeScan",
                                                         "Table": "base_write_multi_usage_script_script/Input1"
                                                     }
                                                 ],
-                                                "Node Type": "TablePointLookup"
+                                                "Node Type": "TableRangeScan"
                                             }
                                         ],
                                         "Node Type": "UnionAll",

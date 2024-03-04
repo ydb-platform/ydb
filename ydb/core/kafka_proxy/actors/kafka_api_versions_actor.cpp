@@ -4,46 +4,47 @@
 
 namespace NKafka {
 
+template<class T>
+struct TApiVersionParams {
+    TApiVersionsResponseData::TApiVersion::MinVersionMeta::Type MinVersion = T::MessageMeta::PresentVersions.Min;
+    TApiVersionsResponseData::TApiVersion::MaxVersionMeta::Type MaxVersion = T::MessageMeta::PresentVersions.Max;
+};
+
+template<class T>
+void AddApiKey(TApiVersionsResponseData::ApiKeysMeta::Type& apiKeys,
+               const TApiVersionsResponseData::TApiVersion::ApiKeyMeta::Type apiKey,
+               const TApiVersionParams<T> versions = {})
+{
+    auto& back = apiKeys.emplace_back();
+
+    back.ApiKey = apiKey;
+    back.MinVersion = versions.MinVersion;
+    back.MaxVersion = versions.MaxVersion;
+}
+
 NActors::IActor* CreateKafkaApiVersionsActor(const TContext::TPtr context, const ui64 correlationId, const TMessagePtr<TApiVersionsRequestData>& message) {
     return new TKafkaApiVersionsActor(context, correlationId, message);
-}    
+}
 
 TApiVersionsResponseData::TPtr GetApiVersions() {
     TApiVersionsResponseData::TPtr response = std::make_shared<TApiVersionsResponseData>();
     response->ErrorCode = EKafkaErrors::NONE_ERROR;
-    response->ApiKeys.resize(8);
 
-    response->ApiKeys[0].ApiKey = PRODUCE;
-    response->ApiKeys[0].MinVersion = 3; // From version 3 record batch format is 2. Supported only 2th batch format.
-    response->ApiKeys[0].MaxVersion = TProduceRequestData::MessageMeta::PresentVersions.Max;
-
-    response->ApiKeys[1].ApiKey = API_VERSIONS;
-    response->ApiKeys[1].MinVersion = TApiVersionsRequestData::MessageMeta::PresentVersions.Min;
-    response->ApiKeys[1].MaxVersion = TApiVersionsRequestData::MessageMeta::PresentVersions.Max;
-
-    response->ApiKeys[2].ApiKey = METADATA;
-    response->ApiKeys[2].MinVersion = TMetadataRequestData::MessageMeta::PresentVersions.Min;
-    response->ApiKeys[2].MaxVersion = TMetadataRequestData::MessageMeta::PresentVersions.Max;
-
-    response->ApiKeys[3].ApiKey = INIT_PRODUCER_ID;
-    response->ApiKeys[3].MinVersion = TInitProducerIdRequestData::MessageMeta::PresentVersions.Min;
-    response->ApiKeys[3].MaxVersion = TInitProducerIdRequestData::MessageMeta::PresentVersions.Max;
-
-    response->ApiKeys[4].ApiKey = SASL_HANDSHAKE;
-    response->ApiKeys[4].MinVersion = TSaslHandshakeRequestData::MessageMeta::PresentVersions.Min;
-    response->ApiKeys[4].MaxVersion = TSaslHandshakeRequestData::MessageMeta::PresentVersions.Max;
-
-    response->ApiKeys[5].ApiKey = SASL_AUTHENTICATE;
-    response->ApiKeys[5].MinVersion = TSaslAuthenticateRequestData::MessageMeta::PresentVersions.Min;
-    response->ApiKeys[5].MaxVersion = TSaslAuthenticateRequestData::MessageMeta::PresentVersions.Max;
-
-    response->ApiKeys[6].ApiKey = LIST_OFFSETS;
-    response->ApiKeys[6].MinVersion = TListOffsetsRequestData::MessageMeta::PresentVersions.Min;
-    response->ApiKeys[6].MaxVersion = TListOffsetsRequestData::MessageMeta::PresentVersions.Max;
-    //savnik: feature flag
-    response->ApiKeys[7].ApiKey = FETCH;
-    response->ApiKeys[7].MinVersion = TFetchRequestData::MessageMeta::PresentVersions.Min;
-    response->ApiKeys[7].MaxVersion = 3;
+    AddApiKey<TProduceRequestData>(response->ApiKeys, PRODUCE, {.MinVersion=3, .MaxVersion=9});
+    AddApiKey<TApiVersionsRequestData>(response->ApiKeys, API_VERSIONS, {.MaxVersion=2});
+    AddApiKey<TMetadataRequestData>(response->ApiKeys, METADATA, {.MaxVersion=9});
+    AddApiKey<TInitProducerIdRequestData>(response->ApiKeys, INIT_PRODUCER_ID, {.MaxVersion=4});
+    AddApiKey<TSaslHandshakeRequestData>(response->ApiKeys, SASL_HANDSHAKE, {.MaxVersion=1});
+    AddApiKey<TSaslAuthenticateRequestData>(response->ApiKeys, SASL_AUTHENTICATE, {.MaxVersion=2});
+    AddApiKey<TListOffsetsRequestData>(response->ApiKeys, LIST_OFFSETS, {.MinVersion=1, .MaxVersion=1});
+    AddApiKey<TFetchRequestData>(response->ApiKeys, FETCH, {.MaxVersion=3});
+    AddApiKey<TJoinGroupRequestData>(response->ApiKeys, JOIN_GROUP, {.MaxVersion=9});
+    AddApiKey<TSyncGroupRequestData>(response->ApiKeys, SYNC_GROUP, {.MaxVersion=3});
+    AddApiKey<TLeaveGroupRequestData>(response->ApiKeys, LEAVE_GROUP, {.MaxVersion=5});
+    AddApiKey<THeartbeatRequestData>(response->ApiKeys, HEARTBEAT, {.MaxVersion=4});
+    AddApiKey<TFindCoordinatorRequestData>(response->ApiKeys, FIND_COORDINATOR, {.MaxVersion=0});
+    AddApiKey<TOffsetCommitRequestData>(response->ApiKeys, OFFSET_COMMIT, {.MaxVersion=0});
+    AddApiKey<TOffsetFetchRequestData>(response->ApiKeys, OFFSET_FETCH, {.MaxVersion=8});
 
     return response;
 }

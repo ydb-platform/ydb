@@ -27,7 +27,7 @@
                         "Key1",
                         "Value"
                     ],
-                    "type": "Lookup"
+                    "type": "Scan"
                 }
             ]
         }

@@ -77,11 +77,11 @@
                                                 "PlanNodeType": "Connection",
                                                 "Plans": [
                                                     {
-                                                        "CTE Name": "tx_result_binding_1_0",
+                                                        "CTE Name": "precompute_0_0",
                                                         "Node Type": "ConstantExpr",
                                                         "Operators": [
                                                             {
-                                                                "Iterator": "%kqp%tx_result_binding_0_0",
+                                                                "Iterator": "precompute_0_0",
                                                                 "Name": "Iterator"
                                                             }
                                                         ],
@@ -164,7 +164,7 @@
                         ]
                     }
                 ],
-                "Subplan Name": "CTE tx_result_binding_0_0"
+                "Subplan Name": "CTE precompute_0_0"
             }
         ]
     },

@@ -1,6 +1,7 @@
 #pragma once
 
 #include "blob_cache.h"
+#include "blobs_reader/task.h"
 #include "engines/reader/conveyor_task.h"
 #include "resources/memory.h"
 #include <ydb/core/formats/arrow/size_calcer.h>
@@ -11,8 +12,7 @@ namespace NKikimr::NOlap {
 // Represents a batch of rows produced by ASC or DESC scan with applied filters and partial aggregation
 class TPartialReadResult {
 private:
-    std::shared_ptr<TScanMemoryLimiter::TGuard> MemoryGuardExternal;
-    std::shared_ptr<TScanMemoryLimiter::TGuard> MemoryGuardInternal;
+    YDB_READONLY_DEF(std::vector<std::shared_ptr<NResourceBroker::NSubscribe::TResourcesGuard>>, ResourcesGuards);
     std::shared_ptr<arrow::RecordBatch> ResultBatch;
 
     // This 1-row batch contains the last key that was read while producing the ResultBatch.
@@ -20,23 +20,56 @@ private:
     std::shared_ptr<arrow::RecordBatch> LastReadKey;
 
 public:
+    ui64 GetRecordsCount() const {
+        return ResultBatch ? ResultBatch->num_rows() : 0;
+    }
+
+    void InitDirection(const bool reverse) {
+        if (reverse && ResultBatch && ResultBatch->num_rows()) {
+            auto permutation = NArrow::MakePermutation(ResultBatch->num_rows(), true);
+            ResultBatch = NArrow::TStatusValidator::GetValid(arrow::compute::Take(ResultBatch, permutation)).record_batch();
+        }
+    }
+
+    void StripColumns(const std::shared_ptr<arrow::Schema>& schema) {
+        if (ResultBatch) {
+            ResultBatch = NArrow::ExtractColumns(ResultBatch, schema);
+        }
+    }
+
+    void BuildLastKey(const std::shared_ptr<arrow::Schema>& schema) {
+        Y_ABORT_UNLESS(!LastReadKey);
+        if (ResultBatch && ResultBatch->num_rows()) {
+            auto keyColumns = NArrow::ExtractColumns(ResultBatch, schema);
+            Y_ABORT_UNLESS(keyColumns);
+            LastReadKey = keyColumns->Slice(keyColumns->num_rows() - 1);
+        }
+    }
+
+    static std::vector<TPartialReadResult> SplitResults(const std::vector<TPartialReadResult>& resultsExt, const ui32 maxRecordsInResult, const bool mergePartsToMax);
+
     void Slice(const ui32 offset, const ui32 length) {
         ResultBatch = ResultBatch->Slice(offset, length);
     }
 
     void ApplyProgram(const NOlap::TProgramContainer& program) {
-        Y_VERIFY(!MemoryGuardInternal);
+        if (!program.HasProgram()) {
+            return;
+        }
         auto status = program.ApplyProgram(ResultBatch);
         if (!status.ok()) {
             ErrorString = status.message();
-        } else if (MemoryGuardExternal) {
-            MemoryGuardInternal = MemoryGuardExternal->MakeSame();
-            MemoryGuardInternal->Take(NArrow::GetBatchMemorySize(ResultBatch));
         }
     }
 
-    const std::shared_ptr<arrow::RecordBatch>& GetResultBatch() const {
+    const std::shared_ptr<arrow::RecordBatch>& GetResultBatchPtrVerified() const {
+        Y_ABORT_UNLESS(ResultBatch);
         return ResultBatch;
+    }
+
+    const arrow::RecordBatch& GetResultBatch() const {
+        Y_ABORT_UNLESS(ResultBatch);
+        return *ResultBatch;
     }
 
     const std::shared_ptr<arrow::RecordBatch>& GetLastReadKey() const {
@@ -45,23 +78,23 @@ public:
 
     std::string ErrorString;
 
-    TPartialReadResult() = default;
-
     explicit TPartialReadResult(
-        std::shared_ptr<TScanMemoryLimiter::TGuard> memGuard,
+        const std::vector<std::shared_ptr<NResourceBroker::NSubscribe::TResourcesGuard>>& resourcesGuards,
         std::shared_ptr<arrow::RecordBatch> batch)
-        : MemoryGuardExternal(memGuard)
+        : ResourcesGuards(resourcesGuards)
         , ResultBatch(batch)
     {
+        Y_ABORT_UNLESS(ResultBatch);
     }
 
     explicit TPartialReadResult(
-        std::shared_ptr<TScanMemoryLimiter::TGuard> memGuard,
+        const std::vector<std::shared_ptr<NResourceBroker::NSubscribe::TResourcesGuard>>& resourcesGuards,
         std::shared_ptr<arrow::RecordBatch> batch, std::shared_ptr<arrow::RecordBatch> lastKey)
-        : MemoryGuardExternal(memGuard)
+        : ResourcesGuards(resourcesGuards)
         , ResultBatch(batch)
         , LastReadKey(lastKey)
     {
+        Y_ABORT_UNLESS(ResultBatch);
     }
 };
 }
@@ -78,12 +111,14 @@ public:
     virtual std::optional<ui32> GetAvailableResultsCount() const {
         return {};
     }
-    virtual void AddData(const NBlobCache::TBlobRange& /*blobRange*/, TString /*data*/) {}
-    virtual bool HasWaitingTasks() const = 0;
     virtual bool Finished() const = 0;
-    virtual NOlap::TPartialReadResult GetBatch() = 0;
-    virtual NBlobCache::TBlobRange GetNextBlobToRead() { return NBlobCache::TBlobRange(); }
-    virtual TString DebugString() const {
+    virtual std::optional<NOlap::TPartialReadResult> GetBatch() = 0;
+    virtual void PrepareResults() {
+
+    }
+    virtual bool ReadNextInterval() { return false; }
+    virtual TString DebugString(const bool verbose = false) const {
+        Y_UNUSED(verbose);
         return "NO_DATA";
     }
 };

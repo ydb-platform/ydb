@@ -1,8 +1,10 @@
 #pragma once
 
-#include <library/cpp/actors/core/event.h>
 #include <ydb/core/protos/base.pb.h>
+#include <ydb/core/tx/columnshard/blobs_action/abstract/write.h>
+#include <ydb/library/accessor/accessor.h>
 
+#include <library/cpp/actors/core/event.h>
 
 namespace NKikimr {
 
@@ -17,28 +19,22 @@ struct TUsage;
 
 namespace NOlap {
 
-class TUnifiedBlobId;
+class TBlobWriteInfo {
+private:
+    YDB_READONLY_DEF(TUnifiedBlobId, BlobId);
+    YDB_READONLY_DEF(TString, Data);
+    YDB_READONLY_DEF(std::shared_ptr<IBlobsWritingAction>, WriteOperator);
 
-class IBlobConstructor {
+    TBlobWriteInfo(const TString& data, const std::shared_ptr<IBlobsWritingAction>& writeOperator)
+        : Data(data)
+        , WriteOperator(writeOperator) {
+        Y_ABORT_UNLESS(WriteOperator);
+        BlobId = WriteOperator->AddDataForWrite(data);
+    }
 public:
-    using TPtr = std::shared_ptr<IBlobConstructor>;
-
-    enum class EStatus {
-        Ok,
-        Finished,
-        Error
-    };
-
-    virtual ~IBlobConstructor() {}
-    virtual const TString& GetBlob() const = 0;
-    virtual bool RegisterBlobId(const TUnifiedBlobId& blobId) = 0;
-    virtual EStatus BuildNext() = 0;
-    virtual NColumnShard::TUsage& GetResourceUsage() = 0;
-
-    virtual TAutoPtr<NActors::IEventBase> BuildResult(
-        NKikimrProto::EReplyStatus status,
-        NColumnShard::TBlobBatch&& blobBatch,
-        THashSet<ui32>&& yellowMoveChannels, THashSet<ui32>&& yellowStopChannels) = 0;
+    static TBlobWriteInfo BuildWriteTask(const TString& data, const std::shared_ptr<IBlobsWritingAction>& writeOperator) {
+        return TBlobWriteInfo(data, writeOperator);
+    }
 };
 
 }

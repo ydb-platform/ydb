@@ -23,6 +23,8 @@ PEERDIR(
     ydb/library/yql/sql/pg_dummy
     ydb/library/yql/core/arrow_kernels/request
     ydb/core/testlib/default
+    ydb/core/tx/columnshard/hooks/abstract
+    ydb/core/tx/columnshard/hooks/testing
 
     ydb/library/yql/udfs/common/json2
 )

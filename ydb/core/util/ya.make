@@ -1,6 +1,7 @@
 LIBRARY()
 
 SRCS(
+    activeactors.h
     address_classifier.cpp
     cache.cpp
     cache.h

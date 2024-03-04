@@ -8,19 +8,17 @@ namespace NKikimr::NArrow {
 
 class TStatusValidator {
 public:
-    static void Validate(const arrow::Status& status) {
-        Y_VERIFY(status.ok(), "%s", status.ToString().c_str());
-    }
+    static void Validate(const arrow::Status& status);
 
     template <class T>
     static T GetValid(const arrow::Result<T>& result) {
-        Y_VERIFY(result.ok(), "%s", result.status().ToString().c_str());
+        Validate(result.status());
         return *result;
     }
 
     template <class T>
     static T GetValid(arrow::Result<T>&& result) {
-        Y_VERIFY(result.ok(), "%s", result.status().ToString().c_str());
+        Validate(result.status());
         return std::move(*result);
     }
 };

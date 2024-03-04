@@ -16,23 +16,33 @@ bool TValueAggregationAgent::CalcAggregationsAndClean(i64& sum, i64& minValue, i
         return false;
     }
     sum = 0;
-    minValue = Values.front()->GetValue();
-    maxValue = Values.front()->GetValue();
+    const TInstant now = TInstant::Now();
+    auto minValueLocal = Values.front()->GetValue(now);
+    auto maxValueLocal = Values.front()->GetValue(now);
     for (auto it = Values.begin(); it != Values.end();) {
         if (it->use_count() == 1) {
             it = Values.erase(it);
         } else {
-            const i64 v = (*it)->GetValue();
-            sum += v;
-            if (minValue > v) {
-                minValue = v;
+            const std::optional<i64> v = (*it)->GetValue(now);
+            if (!v) {
+                ++it;
+                continue;
             }
-            if (maxValue < v) {
-                maxValue = v;
+            sum += *v;
+            if (!minValueLocal || *minValueLocal > *v) {
+                minValueLocal = *v;
+            }
+            if (!maxValueLocal || *maxValueLocal < *v) {
+                maxValueLocal = *v;
             }
             ++it;
         }
     }
+    if (!maxValueLocal) {
+        return false;
+    }
+    minValue = maxValueLocal.value_or(0);
+    maxValue = maxValueLocal.value_or(0);
     return true;
 }
 

@@ -24,7 +24,7 @@
                                 "PlanNodeType": "Connection",
                                 "Plans": [
                                     {
-                                        "Node Type": "TopSort-Aggregate-TablePointLookup",
+                                        "Node Type": "TopSort-Aggregate-TableRangeScan",
                                         "Operators": [
                                             {
                                                 "Inputs": [
@@ -39,7 +39,7 @@
                                                 "Name": "Aggregate"
                                             },
                                             {
-                                                "Name": "TablePointLookup",
+                                                "Name": "TableRangeScan",
                                                 "ReadColumns": [
                                                     "a",
                                                     "b",
@@ -85,7 +85,7 @@
                         "PlanNodeId": 5
                     }
                 ],
-                "Subplan Name": "CTE tx_result_binding_0_0"
+                "Subplan Name": "CTE precompute_0_0"
             },
             {
                 "Node Type": "Precompute_0_1",
@@ -142,7 +142,7 @@
                         ]
                     }
                 ],
-                "Subplan Name": "CTE tx_result_binding_0_1"
+                "Subplan Name": "CTE precompute_0_1"
             }
         ]
     },
@@ -184,7 +184,7 @@
                         "d (-\u221e, +\u221e)",
                         "e (-\u221e, +\u221e)"
                     ],
-                    "type": "Lookup"
+                    "type": "Scan"
                 }
             ]
         }

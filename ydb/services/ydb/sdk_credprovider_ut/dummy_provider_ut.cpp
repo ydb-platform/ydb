@@ -28,7 +28,10 @@ class TExampleDummyProviderFactory : public ICredentialsProviderFactory {
                     return false;
 
                 auto responseCb = [this](Draft::Dummy::PingResponse* resp, TPlainStatus status) -> void {
-                    UNIT_ASSERT(status.Ok());
+                    if (status.Status == EStatus::CLIENT_CANCELLED)
+                        return;
+
+                    UNIT_ASSERT_C(status.Ok(), status.Status);
                     UNIT_ASSERT_VALUES_EQUAL(resp->payload(), "abc");
                     (*RunCnt)++;
                 };

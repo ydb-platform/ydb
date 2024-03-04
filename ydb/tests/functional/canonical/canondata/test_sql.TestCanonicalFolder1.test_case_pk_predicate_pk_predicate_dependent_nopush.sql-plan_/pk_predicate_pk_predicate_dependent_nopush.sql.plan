@@ -20,7 +20,7 @@
                     "scan_by": [
                         "Name (-\u221e, +\u221e)"
                     ],
-                    "type": "Lookup"
+                    "type": "Scan"
                 }
             ]
         },

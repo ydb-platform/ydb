@@ -4,7 +4,9 @@
 
 #include <ydb/core/tx/sharding/sharding.h>
 #include <ydb/core/tx/columnshard/columnshard.h>
+#include <ydb/core/formats/arrow/size_calcer.h>
 #include <ydb/core/formats/arrow/arrow_helpers.h>
+#include <ydb/core/scheme/scheme_types_proto.h>
 
 
 namespace NKikimr::NEvWrite {
@@ -106,16 +108,17 @@ private:
     }
 
     TYdbConclusionStatus SplitByHashImpl(const std::shared_ptr<arrow::RecordBatch>& batch, const NKikimrSchemeOp::TColumnTableSharding& descSharding) {
-        Y_VERIFY(descSharding.HasHashSharding());
-        Y_VERIFY(batch);
+        Y_ABORT_UNLESS(descSharding.HasHashSharding());
+        Y_ABORT_UNLESS(batch);
 
         TVector<ui64> tabletIds(descSharding.GetColumnShards().begin(), descSharding.GetColumnShards().end());
         const ui32 numShards = tabletIds.size();
-        Y_VERIFY(numShards);
-        
+        Y_ABORT_UNLESS(numShards);
+
         TFullSplitData result(numShards);
         if (numShards == 1) {
-            NArrow::TSplitBlobResult blobsSplitted = NArrow::SplitByBlobSize(batch, NColumnShard::TLimits::GetMaxBlobSize());
+            NArrow::TBatchSplitttingContext context(NColumnShard::TLimits::GetMaxBlobSize() * 0.875);
+            NArrow::TSplitBlobResult blobsSplitted = NArrow::SplitByBlobSize(batch, context);
             if (!blobsSplitted) {
                 return TYdbConclusionStatus::Fail(Ydb::StatusIds::SCHEME_ERROR, "cannot split batch in according to limits: " + blobsSplitted.GetErrorMessage());
             }
@@ -138,12 +141,13 @@ private:
         }
 
         std::vector<std::shared_ptr<arrow::RecordBatch>> sharded = NArrow::ShardingSplit(batch, rowSharding, numShards);
-        Y_VERIFY(sharded.size() == numShards);
+        Y_ABORT_UNLESS(sharded.size() == numShards);
 
         THashMap<ui64, TString> out;
         for (size_t i = 0; i < sharded.size(); ++i) {
             if (sharded[i]) {
-                NArrow::TSplitBlobResult blobsSplitted = NArrow::SplitByBlobSize(sharded[i], NColumnShard::TLimits::GetMaxBlobSize());
+                NArrow::TBatchSplitttingContext context(NColumnShard::TLimits::GetMaxBlobSize() * 0.875);
+                NArrow::TSplitBlobResult blobsSplitted = NArrow::SplitByBlobSize(sharded[i], context);
                 if (!blobsSplitted) {
                     return TYdbConclusionStatus::Fail(Ydb::StatusIds::SCHEME_ERROR, "cannot split batch in according to limits: " + blobsSplitted.GetErrorMessage());
                 }
@@ -153,7 +157,7 @@ private:
             }
         }
 
-        Y_VERIFY(result.GetShardsInfo().size());
+        Y_ABORT_UNLESS(result.GetShardsInfo().size());
         FullSplitData = result;
         return TYdbConclusionStatus::Success();
     }
@@ -161,7 +165,7 @@ private:
     std::shared_ptr<arrow::Schema> ExtractArrowSchema(const NKikimrSchemeOp::TColumnTableSchema& schema) {
         TVector<std::pair<TString, NScheme::TTypeInfo>> columns;
         for (auto& col : schema.GetColumns()) {
-            Y_VERIFY(col.HasTypeId());
+            Y_ABORT_UNLESS(col.HasTypeId());
             auto typeInfoMod = NScheme::TypeInfoModFromProtoColumnType(col.GetTypeId(),
                 col.HasTypeInfo() ? &col.GetTypeInfo() : nullptr);
             columns.emplace_back(col.GetName(), typeInfoMod.TypeInfo);

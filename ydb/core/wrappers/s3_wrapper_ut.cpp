@@ -34,11 +34,11 @@ class TS3MockTest: public NUnitTest::TTestBase, private NExternalStorage::TS3Use
 
 public:
     void SetUp() override {
-        Y_VERIFY(!Port.Defined());
+        Y_ABORT_UNLESS(!Port.Defined());
         Port = PortManager.GetPort();
 
         S3Mock = MakeHolder<TS3Mock>(TS3Mock::TSettings(*Port));
-        Y_VERIFY(S3Mock->Start());
+        Y_ABORT_UNLESS(S3Mock->Start());
 
         Runtime = MakeHolder<TTestBasicRuntime>();
         Runtime->Initialize(TAppPrepare().Unwrap());

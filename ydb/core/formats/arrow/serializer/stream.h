@@ -19,7 +19,7 @@ public:
     explicit TBufferOverString(TString str)
         : arrow::Buffer((const unsigned char*)str.data(), str.size())
         , Str(str) {
-        Y_VERIFY(data() == (const unsigned char*)Str.data());
+        Y_ABORT_UNLESS(data() == (const unsigned char*)Str.data());
     }
 };
 

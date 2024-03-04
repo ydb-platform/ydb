@@ -24,7 +24,7 @@ public:
         } else if (Operation == EOperation::Less) {
             return NArrow::ECompareType::LESS;
         } else {
-            Y_VERIFY(false);
+            Y_ABORT_UNLESS(false);
         }
     }
 

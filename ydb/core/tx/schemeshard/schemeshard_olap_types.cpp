@@ -436,7 +436,16 @@ namespace NKikimr::NSchemeShard {
             keyColumnIds.push_back(col->GetId());
         }
         if (keyColumnIds != KeyColumnIds) {
-            errors.AddError("Specified schema key columns not matching schema preset");
+            TStringBuilder err;
+            err << "Specified schema key columns not matching schema preset:";
+            for (auto&& k : KeyColumnIds) {
+                err << k << ",";
+            }
+            err << "/";
+            for (auto&& k : keyColumnIds) {
+                err << k << ",";
+            }
+            errors.AddError(err);
             return false;
         }
 

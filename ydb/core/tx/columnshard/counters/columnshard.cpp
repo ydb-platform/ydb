@@ -24,8 +24,6 @@ TCSCounters::TCSCounters()
 
     OverloadInsertTableBytes = TBase::GetDeriviative("OverloadInsertTable/Bytes");
     OverloadInsertTableCount = TBase::GetDeriviative("OverloadInsertTable/Count");
-    OverloadGranuleBytes = TBase::GetDeriviative("OverloadGranule/Bytes");
-    OverloadGranuleCount = TBase::GetDeriviative("OverloadGranule/Count");
     OverloadShardBytes = TBase::GetDeriviative("OverloadShard/Bytes");
     OverloadShardCount = TBase::GetDeriviative("OverloadShard/Count");
 
@@ -34,6 +32,19 @@ TCSCounters::TCSCounters()
 
     SplitCompactionGranuleBytes = TBase::GetValueAutoAggregationsClient("SplitCompaction/Bytes");
     SplitCompactionGranulePortionsCount = TBase::GetValueAutoAggregationsClient("SplitCompaction/PortionsCount");
+
+    HistogramSuccessWritePutBlobsDurationMs = TBase::GetHistogram("SuccessWritePutBlobsDurationMs", NMonitoring::ExponentialHistogram(18, 2, 5));
+    HistogramSuccessWriteMiddle1PutBlobsDurationMs = TBase::GetHistogram("SuccessWriteMiddle1PutBlobsDurationMs", NMonitoring::ExponentialHistogram(18, 2, 5));
+    HistogramSuccessWriteMiddle2PutBlobsDurationMs = TBase::GetHistogram("SuccessWriteMiddle2PutBlobsDurationMs", NMonitoring::ExponentialHistogram(18, 2, 5));
+    HistogramSuccessWriteMiddle3PutBlobsDurationMs = TBase::GetHistogram("SuccessWriteMiddle3PutBlobsDurationMs", NMonitoring::ExponentialHistogram(18, 2, 5));
+    HistogramSuccessWriteMiddle4PutBlobsDurationMs = TBase::GetHistogram("SuccessWriteMiddle4PutBlobsDurationMs", NMonitoring::ExponentialHistogram(18, 2, 5));
+    HistogramSuccessWriteMiddle5PutBlobsDurationMs = TBase::GetHistogram("SuccessWriteMiddle5PutBlobsDurationMs", NMonitoring::ExponentialHistogram(18, 2, 5));
+    HistogramFailedWritePutBlobsDurationMs = TBase::GetHistogram("FailedWritePutBlobsDurationMs", NMonitoring::ExponentialHistogram(18, 2, 5));
+    HistogramWriteTxCompleteDurationMs = TBase::GetHistogram("WriteTxCompleteDurationMs", NMonitoring::ExponentialHistogram(18, 2, 5));
+    WritePutBlobsCount = TBase::GetValue("WritePutBlobs");
+    WriteRequests = TBase::GetValue("WriteRequests");
+    FailedWriteRequests = TBase::GetDeriviative("FailedWriteRequests");
+    SuccessWriteRequests = TBase::GetDeriviative("SuccessWriteRequests");
 }
 
 }

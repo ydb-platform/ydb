@@ -35,7 +35,7 @@ namespace NKikimr {
                 auto actor = std::make_unique<TLevelSegmentLoader>(VCtx, PDiskCtx, Addition[Index++].Sst.Get(),
                         ctx.SelfID, Origin);
                 auto aid = ctx.Register(actor.release());
-                ActiveActors.Insert(aid);
+                ActiveActors.Insert(aid, __FILE__, __LINE__, ctx, NKikimrServices::BLOBSTORAGE);
             }
         }
 
@@ -132,7 +132,7 @@ namespace NKikimr {
                 auto actor = std::make_unique<TLoader>(VCtx, PDiskCtx, *Proto.MutableLogoBlobsAdditions(),
                         ctx.SelfID, RecoveryLogRecLsn, origin);
                 auto aid = ctx.Register(actor.release());
-                ActiveActors.Insert(aid);
+                ActiveActors.Insert(aid, __FILE__, __LINE__, ctx, NKikimrServices::BLOBSTORAGE);
                 ++RunActors;
             }
             if (Proto.BlocksAdditionsSize() && LoadBlocks) {
@@ -140,7 +140,7 @@ namespace NKikimr {
                 auto actor = std::make_unique<TLoader>(VCtx, PDiskCtx, *Proto.MutableBlocksAdditions(),
                         ctx.SelfID, RecoveryLogRecLsn, origin);
                 auto aid = ctx.Register(actor.release());
-                ActiveActors.Insert(aid);
+                ActiveActors.Insert(aid, __FILE__, __LINE__, ctx, NKikimrServices::BLOBSTORAGE);
                 ++RunActors;
             }
             if (Proto.BarriersAdditionsSize() && LoadBarriers) {
@@ -148,7 +148,7 @@ namespace NKikimr {
                 auto actor = std::make_unique<TLoader>(VCtx, PDiskCtx, *Proto.MutableBarriersAdditions(),
                         ctx.SelfID, RecoveryLogRecLsn, origin);
                 auto aid = ctx.Register(actor.release());
-                ActiveActors.Insert(aid);
+                ActiveActors.Insert(aid, __FILE__, __LINE__, ctx, NKikimrServices::BLOBSTORAGE);
                 ++RunActors;
             }
             Y_VERIFY(RunActors);

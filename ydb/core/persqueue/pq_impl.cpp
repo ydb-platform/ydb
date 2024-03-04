@@ -1561,8 +1561,17 @@ void TPersQueue::Handle(TEvPersQueue::TEvStatus::TPtr& ev, const TActorContext& 
     for (auto& p : Partitions) {
         if (!p.second.InitDone)
             continue;
-        THolder<TEvPQ::TEvPartitionStatus> event = MakeHolder<TEvPQ::TEvPartitionStatus>(ans, ev->Get()->Record.HasClientId() ? ev->Get()->Record.GetClientId() : "",
-                                                    ev->Get()->Record.HasGetStatForAllConsumers() ? ev->Get()->Record.GetGetStatForAllConsumers() : false);
+        THolder<TEvPQ::TEvPartitionStatus> event;
+        if (ev->Get()->Record.GetConsumers().empty()) {
+            event = MakeHolder<TEvPQ::TEvPartitionStatus>(ans, ev->Get()->Record.HasClientId() ? ev->Get()->Record.GetClientId() : "",
+                ev->Get()->Record.HasGetStatForAllConsumers() ? ev->Get()->Record.GetGetStatForAllConsumers() : false);
+        } else {
+            TVector<TString> consumers;
+            for (auto consumer : ev->Get()->Record.GetConsumers()) {
+                consumers.emplace_back(consumer);
+            }
+            event = MakeHolder<TEvPQ::TEvPartitionStatus>(ans, consumers);
+        }
         ctx.Send(p.second.Actor, event.Release());
     }
 }

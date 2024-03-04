@@ -4,16 +4,16 @@
 
 namespace NKikimr::NOlap {
 std::partial_ordering TPredicateContainer::ComparePredicatesSamePrefix(const NOlap::TPredicate& l, const NOlap::TPredicate& r) {
-    Y_VERIFY(l.Batch);
-    Y_VERIFY(r.Batch);
-    Y_VERIFY(l.Batch->num_columns());
-    Y_VERIFY(r.Batch->num_columns());
-    Y_VERIFY(l.Batch->num_rows() == r.Batch->num_rows());
-    Y_VERIFY(l.Batch->num_rows() == 1);
+    Y_ABORT_UNLESS(l.Batch);
+    Y_ABORT_UNLESS(r.Batch);
+    Y_ABORT_UNLESS(l.Batch->num_columns());
+    Y_ABORT_UNLESS(r.Batch->num_columns());
+    Y_ABORT_UNLESS(l.Batch->num_rows() == r.Batch->num_rows());
+    Y_ABORT_UNLESS(l.Batch->num_rows() == 1);
     std::vector<std::shared_ptr<arrow::Array>> lColumns;
     std::vector<std::shared_ptr<arrow::Array>> rColumns;
     for (ui32 i = 0; i < std::min(l.Batch->columns().size(), r.Batch->columns().size()); ++i) {
-        Y_VERIFY(l.Batch->column_name(i) == r.Batch->column_name(i));
+        Y_ABORT_UNLESS(l.Batch->column_name(i) == r.Batch->column_name(i));
         lColumns.emplace_back(l.Batch->column(i));
         rColumns.emplace_back(r.Batch->column(i));
     }
@@ -39,9 +39,9 @@ int TPredicateContainer::MatchScalar(const ui32 columnIdx, const std::shared_ptr
         return 1;
     }
     auto c = Object->Batch->column(columnIdx);
-    Y_VERIFY(c);
+    Y_ABORT_UNLESS(c);
     auto sPredicate = c->GetScalar(0);
-    Y_VERIFY(sPredicate.ok());
+    Y_ABORT_UNLESS(sPredicate.ok());
     const int cmpResult = NArrow::ScalarCompare(*sPredicate, s);
     if (cmpResult == 0) {
         switch (CompareType) {
@@ -72,7 +72,7 @@ int TPredicateContainer::MatchScalar(const ui32 columnIdx, const std::shared_ptr
                 return -1;
         }
     } else {
-        Y_VERIFY(false);
+        Y_ABORT_UNLESS(false);
     }
 }
 
@@ -137,7 +137,7 @@ std::optional<NKikimr::NOlap::TPredicateContainer> TPredicateContainer::BuildPre
                     break;
                 }
             }
-            Y_VERIFY(countSortingFields == object->Batch->num_columns());
+            Y_ABORT_UNLESS(countSortingFields == object->Batch->num_columns());
         }
         return TPredicateContainer(object);
     }
@@ -165,7 +165,7 @@ std::optional<NKikimr::NOlap::TPredicateContainer> TPredicateContainer::BuildPre
                     break;
                 }
             }
-            Y_VERIFY(countSortingFields == object->Batch->num_columns());
+            Y_ABORT_UNLESS(countSortingFields == object->Batch->num_columns());
         }
         return TPredicateContainer(object);
     }

@@ -37,7 +37,7 @@ private:
 
 
 bool TTxPlanStep::Execute(TTransactionContext& txc, const TActorContext& ctx) {
-    Y_VERIFY(Ev);
+    Y_ABORT_UNLESS(Ev);
     LOG_S_DEBUG(TxPrefix() << "execute" << TxSuffix());
 
     txc.DB.NoMoreReadsForTx();
@@ -48,8 +48,8 @@ bool TTxPlanStep::Execute(TTransactionContext& txc, const TActorContext& ctx) {
 
     std::vector<ui64> txIds;
     for (const auto& tx : record.GetTransactions()) {
-        Y_VERIFY(tx.HasTxId());
-        Y_VERIFY(tx.HasAckTo());
+        Y_ABORT_UNLESS(tx.HasTxId());
+        Y_ABORT_UNLESS(tx.HasAckTo());
 
         txIds.push_back(tx.GetTxId());
 
@@ -61,27 +61,29 @@ bool TTxPlanStep::Execute(TTransactionContext& txc, const TActorContext& ctx) {
     if (step > Self->LastPlannedStep) {
         ui64 lastTxId = 0;
         for (ui64 txId : txIds) {
-            Y_VERIFY(lastTxId < txId, "Transactions must be sorted and unique");
-            auto it = Self->BasicTxInfo.find(txId);
-            if (it != Self->BasicTxInfo.end()) {
-                if (it->second.PlanStep == 0) {
-                    it->second.PlanStep = step;
-                    Schema::UpdateTxInfoPlanStep(db, txId, step);
-                    Self->PlanQueue.emplace(step, txId);
-                    if (it->second.MaxStep != Max<ui64>()) {
-                        Self->DeadlineQueue.erase(TColumnShard::TDeadlineQueueItem(it->second.MaxStep, txId));
-                    }
-                    ++plannedCount;
-                } else {
+            Y_ABORT_UNLESS(lastTxId < txId, "Transactions must be sorted and unique");
+            auto planResult = Self->ProgressTxController->PlanTx(step, txId, txc);
+            switch (planResult) {
+                case TTxController::EPlanResult::Skipped:
+                {
+                    LOG_S_WARN(TxPrefix() << "Ignoring step " << step
+                    << " for unknown txId " << txId
+                    << TxSuffix());
+                    break;
+                }
+                case TTxController::EPlanResult::AlreadyPlanned:
+                {
                     LOG_S_WARN(TxPrefix() << "Ignoring step " << step
                         << " for txId " << txId
                         << " which is already planned for step " << step
                         << TxSuffix());
+                    break;
                 }
-            } else {
-                LOG_S_WARN(TxPrefix() << "Ignoring step " << step
-                    << " for unknown txId " << txId
-                    << TxSuffix());
+                case TTxController::EPlanResult::Planned:
+                {
+                    ++plannedCount;
+                    break;
+                }
             }
             lastTxId = txId;
         }
@@ -102,15 +104,15 @@ bool TTxPlanStep::Execute(TTransactionContext& txc, const TActorContext& ctx) {
 
     Self->IncCounter(COUNTER_PLAN_STEP_ACCEPTED);
 
-    if (plannedCount > 0 || Self->HaveOutdatedTxs()) {
+    if (plannedCount > 0 || Self->ProgressTxController->HaveOutdatedTxs()) {
         Self->EnqueueProgressTx(ctx);
     }
     return true;
 }
 
 void TTxPlanStep::Complete(const TActorContext& ctx) {
-    Y_VERIFY(Ev);
-    Y_VERIFY(Result);
+    Y_ABORT_UNLESS(Ev);
+    Y_ABORT_UNLESS(Result);
     LOG_S_DEBUG(TxPrefix() << "complete" << TxSuffix());
 
     ui64 step = Ev->Get()->Record.GetStep();

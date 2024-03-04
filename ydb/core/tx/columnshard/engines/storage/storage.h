@@ -1,25 +1,25 @@
 #pragma once
 #include "granule.h"
 #include <ydb/core/tx/columnshard/counters/engine_logs.h>
+#include <ydb/core/tx/columnshard/blobs_action/abstract/storage.h>
+#include <ydb/core/tx/columnshard/blobs_action/abstract/storages_manager.h>
 
 namespace NKikimr::NOlap {
 
 class TGranulesStorage {
 private:
     const TCompactionLimits Limits;
-    THashMap<ui64, THashSet<ui64>> PathsGranulesOverloaded;
     const NColumnShard::TEngineLogsCounters Counters;
-    THashMap<ui64, TCompactionPriority> GranulesCompactionPriority;
-    std::map<TCompactionPriority, std::set<ui64>> GranuleCompactionPrioritySorting;
+    std::shared_ptr<IStoragesManager> StoragesManager;
     bool PackModificationFlag = false;
     THashMap<ui64, const TGranuleMeta*> PackModifiedGranules;
     void StartModificationImpl() {
-        Y_VERIFY(!PackModificationFlag);
+        Y_ABORT_UNLESS(!PackModificationFlag);
         PackModificationFlag = true;
     }
 
     void FinishModificationImpl() {
-        Y_VERIFY(PackModificationFlag);
+        Y_ABORT_UNLESS(PackModificationFlag);
         PackModificationFlag = false;
         for (auto&& i : PackModifiedGranules) {
             UpdateGranuleInfo(*i.second);
@@ -28,13 +28,23 @@ private:
     }
 
 public:
-    TGranulesStorage(const NColumnShard::TEngineLogsCounters counters, const TCompactionLimits& limits)
+    TGranulesStorage(const NColumnShard::TEngineLogsCounters counters, const TCompactionLimits& limits, const std::shared_ptr<IStoragesManager>& storagesManager)
         : Limits(limits)
-        , Counters(counters) {
+        , Counters(counters)
+        , StoragesManager(storagesManager)
+    {
 
     }
 
-    class TModificationGuard {
+    const std::shared_ptr<IStoragesManager>& GetStoragesManager() const {
+        return StoragesManager;
+    }
+
+    const NColumnShard::TEngineLogsCounters& GetCounters() const {
+        return Counters;
+    }
+
+    class TModificationGuard: TNonCopyable {
     private:
         TGranulesStorage& Owner;
     public:
@@ -48,49 +58,11 @@ public:
         }
     };
 
-    ui32 GetOverloadedGranulesCount() const {
-        ui32 result = 0;
-        for (auto&& i : PathsGranulesOverloaded) {
-            result += i.second.size();
-        }
-        return result;
-    }
-
-    bool HasOverloadedGranules() const {
-        return PathsGranulesOverloaded.size();
-    }
-
     TModificationGuard StartPackModification() {
         return TModificationGuard(*this);
     }
 
-    const THashSet<ui64>* GetOverloaded(ui64 pathId) const;
-    template <class TFilter>
-    std::optional<ui64> GetGranuleForCompaction(const TFilter& filter) const {
-        if (!GranuleCompactionPrioritySorting.size()) {
-            AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("event", "no_granules_for_compaction");
-            return {};
-        }
-        const TInstant now = TInstant::Now();
-        std::optional<ui64> reserve;
-        TInstant reserveInstant;
-        for (auto it = GranuleCompactionPrioritySorting.rbegin(); it != GranuleCompactionPrioritySorting.rend(); ++it) {
-            Y_VERIFY(it->second.size());
-            for (auto&& i : it->second) {
-                if (filter(i)) {
-                    if (it->first.GetNextAttemptInstant() > now) {
-                        if (!reserve || reserveInstant > it->first.GetNextAttemptInstant()) {
-                            reserveInstant = it->first.GetNextAttemptInstant();
-                            reserve = i;
-                        }
-                    } else {
-                        return i;
-                    }
-                }
-            }
-        }
-        return reserve;
-    }
+    std::shared_ptr<TGranuleMeta> GetGranuleForCompaction(const THashMap<ui64, std::shared_ptr<TGranuleMeta>>& granules) const;
 
     void UpdateGranuleInfo(const TGranuleMeta& granule);
 

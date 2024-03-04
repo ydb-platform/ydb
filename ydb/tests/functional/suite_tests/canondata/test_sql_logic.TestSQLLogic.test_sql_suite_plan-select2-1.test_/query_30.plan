@@ -24,7 +24,7 @@
                                 "PlanNodeType": "Connection",
                                 "Plans": [
                                     {
-                                        "Node Type": "TopSort-TablePointLookup",
+                                        "Node Type": "TopSort-TableRangeScan",
                                         "Operators": [
                                             {
                                                 "Limit": "1001",
@@ -32,7 +32,7 @@
                                                 "TopSortBy": "row.col1"
                                             },
                                             {
-                                                "Name": "TablePointLookup",
+                                                "Name": "TableRangeScan",
                                                 "ReadColumns": [
                                                     "a",
                                                     "b",
@@ -91,7 +91,7 @@
                         "d (-\u221e, +\u221e)",
                         "e (-\u221e, +\u221e)"
                     ],
-                    "type": "Lookup"
+                    "type": "Scan"
                 }
             ]
         }

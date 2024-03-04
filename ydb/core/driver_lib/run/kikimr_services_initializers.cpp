@@ -2102,24 +2102,77 @@ void TKqpServiceInitializer::InitializeServices(NActors::TActorSystemSetup* setu
     }
 }
 
-TConveyorInitializer::TConveyorInitializer(const TKikimrRunConfig& runConfig)
+TCompConveyorInitializer::TCompConveyorInitializer(const TKikimrRunConfig& runConfig)
     : IKikimrServicesInitializer(runConfig) {
 }
 
-void TConveyorInitializer::InitializeServices(NActors::TActorSystemSetup* setup, const NKikimr::TAppData* appData) {
+void TCompConveyorInitializer::InitializeServices(NActors::TActorSystemSetup* setup, const NKikimr::TAppData* appData) {
     NConveyor::TConfig serviceConfig;
-    if (Config.HasConveyorConfig()) {
-        Y_VERIFY(serviceConfig.DeserializeFromProto(Config.GetConveyorConfig()));
+    if (Config.HasCompConveyorConfig()) {
+        Y_VERIFY(serviceConfig.DeserializeFromProto(Config.GetCompConveyorConfig()));
+    }
+    if (!serviceConfig.HasDefaultFractionOfThreadsCount()) {
+        serviceConfig.SetDefaultFractionOfThreadsCount(0.33);
     }
 
     if (serviceConfig.IsEnabled()) {
         TIntrusivePtr<::NMonitoring::TDynamicCounters> tabletGroup = GetServiceCounters(appData->Counters, "tablets");
-        TIntrusivePtr<::NMonitoring::TDynamicCounters> conveyorGroup = tabletGroup->GetSubgroup("type", "TX_CONVEYOR");
+        TIntrusivePtr<::NMonitoring::TDynamicCounters> conveyorGroup = tabletGroup->GetSubgroup("type", "TX_COMP_CONVEYOR");
 
-        auto service = NConveyor::CreateService(serviceConfig, conveyorGroup);
+        auto service = NConveyor::TCompServiceOperator::CreateService(serviceConfig, conveyorGroup);
 
         setup->LocalServices.push_back(std::make_pair(
-            NConveyor::MakeServiceId(NodeId),
+            NConveyor::TCompServiceOperator::MakeServiceId(NodeId),
+            TActorSetupCmd(service, TMailboxType::HTSwap, appData->UserPoolId)));
+    }
+}
+
+TScanConveyorInitializer::TScanConveyorInitializer(const TKikimrRunConfig& runConfig)
+    : IKikimrServicesInitializer(runConfig) {
+}
+
+void TScanConveyorInitializer::InitializeServices(NActors::TActorSystemSetup* setup, const NKikimr::TAppData* appData) {
+    NConveyor::TConfig serviceConfig;
+    if (Config.HasScanConveyorConfig()) {
+        Y_VERIFY(serviceConfig.DeserializeFromProto(Config.GetScanConveyorConfig()));
+    }
+    if (!serviceConfig.HasDefaultFractionOfThreadsCount()) {
+        serviceConfig.SetDefaultFractionOfThreadsCount(0.33);
+    }
+
+    if (serviceConfig.IsEnabled()) {
+        TIntrusivePtr<::NMonitoring::TDynamicCounters> tabletGroup = GetServiceCounters(appData->Counters, "tablets");
+        TIntrusivePtr<::NMonitoring::TDynamicCounters> conveyorGroup = tabletGroup->GetSubgroup("type", "TX_SCAN_CONVEYOR");
+
+        auto service = NConveyor::TScanServiceOperator::CreateService(serviceConfig, conveyorGroup);
+
+        setup->LocalServices.push_back(std::make_pair(
+            NConveyor::TScanServiceOperator::MakeServiceId(NodeId),
+            TActorSetupCmd(service, TMailboxType::HTSwap, appData->UserPoolId)));
+    }
+}
+
+TInsertConveyorInitializer::TInsertConveyorInitializer(const TKikimrRunConfig& runConfig)
+    : IKikimrServicesInitializer(runConfig) {
+}
+
+void TInsertConveyorInitializer::InitializeServices(NActors::TActorSystemSetup* setup, const NKikimr::TAppData* appData) {
+    NConveyor::TConfig serviceConfig;
+    if (Config.HasInsertConveyorConfig()) {
+        Y_VERIFY(serviceConfig.DeserializeFromProto(Config.GetInsertConveyorConfig()));
+    }
+    if (!serviceConfig.HasDefaultFractionOfThreadsCount()) {
+        serviceConfig.SetDefaultFractionOfThreadsCount(0.2);
+    }
+
+    if (serviceConfig.IsEnabled()) {
+        TIntrusivePtr<::NMonitoring::TDynamicCounters> tabletGroup = GetServiceCounters(appData->Counters, "tablets");
+        TIntrusivePtr<::NMonitoring::TDynamicCounters> conveyorGroup = tabletGroup->GetSubgroup("type", "TX_INSERT_CONVEYOR");
+
+        auto service = NConveyor::TInsertServiceOperator::CreateService(serviceConfig, conveyorGroup);
+
+        setup->LocalServices.push_back(std::make_pair(
+            NConveyor::TInsertServiceOperator::MakeServiceId(NodeId),
             TActorSetupCmd(service, TMailboxType::HTSwap, appData->UserPoolId)));
     }
 }

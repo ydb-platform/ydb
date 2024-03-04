@@ -291,7 +291,7 @@ namespace NKikimr::NPrivate {
             }
         }
 
-        void SendVPatchResult(NKikimrProto::EReplyStatus status)
+        void SendVPatchResult(NKikimrProto::EReplyStatus status, bool forceEnd = false)
         {
             STLOG(PRI_INFO, BS_VDISK_PATCH, BSVSP07,
                     VDiskLogPrefix << " TEvVPatch: send patch result;",
@@ -307,6 +307,9 @@ namespace NKikimr::NPrivate {
                 CurrentEventTrace->AdditionalTrace = nullptr;
             }
             AddMark((status == NKikimrProto::OK ? "Patch ends with OK" : "Patch ends witn NOT OK"));
+            if (forceEnd) {
+                ResultEvent->SetForceEndResponse();
+            }
             CurrentEventTrace = nullptr;
             SendVDiskResponse(TActivationContext::AsActorContext(), Sender, ResultEvent.release(), Cookie);
         }
@@ -365,7 +368,7 @@ namespace NKikimr::NPrivate {
                     (ResultSize, record.ResultSize()),
                     (ParityPart, (blobId.PartId() <= GType.DataParts() ? "no" : "yes")));
 
-            ui8 *buffer = reinterpret_cast<ui8*>(Buffer.UnsafeGetContiguousSpanMut().data());
+            ui8 *buffer = reinterpret_cast<ui8*>(Buffer.GetContiguousSpanMut().data());
             if (PatchedPartId <= GType.DataParts()) {
                 AddMark("Data part");
                 if (GType.ErasureFamily() != TErasureType::ErasureMirror) {
@@ -501,7 +504,7 @@ namespace NKikimr::NPrivate {
             Cookie = ev->Cookie;
             CurrentEventTrace = ev->Get()->VDiskSkeletonTrace;
             AddMark("Error: HandleError TEvVPatchDiff");
-            SendVPatchResult(NKikimrProto::ERROR);
+            SendVPatchResult(NKikimrProto::ERROR, ev->Get()->IsForceEnd());
         }
 
         void HandleForceEnd(TEvBlobStorage::TEvVPatchDiff::TPtr &ev) {
@@ -566,7 +569,7 @@ namespace NKikimr::NPrivate {
 
             if (forceEnd) {
                 AddMark("Force end");
-                SendVPatchResult(NKikimrProto::OK);
+                SendVPatchResult(NKikimrProto::OK, true);
                 NotifySkeletonAboutDying();
                 Become(&TThis::ErrorState);
                 return;
@@ -675,7 +678,7 @@ namespace NKikimr::NPrivate {
             }
 
             if (Buffer) {
-                ui8 *buffer = reinterpret_cast<ui8*>(Buffer.UnsafeGetContiguousSpanMut().data());
+                ui8 *buffer = reinterpret_cast<ui8*>(Buffer.GetContiguousSpanMut().data());
                 ui32 dataSize = OriginalBlobId.BlobSize();
 
                 AddMark("Apply xor diff");

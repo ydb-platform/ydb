@@ -36,7 +36,7 @@ private:
     static Aws::Auth::AWSCredentials CredentialsFromSettings(const Ydb::Import::ImportFromS3Settings& settings);
 protected:
     virtual TString DoGetStorageId() const override;
-    virtual IExternalStorageOperator::TPtr DoConstructStorageOperator() const override;
+    virtual IExternalStorageOperator::TPtr DoConstructStorageOperator(bool verbose) const override;
 public:
     static Aws::S3::Model::StorageClass ConvertStorageClass(const Ydb::Export::ExportToS3Settings::StorageClass storage);
 

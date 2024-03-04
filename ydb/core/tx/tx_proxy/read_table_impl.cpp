@@ -11,6 +11,8 @@
 #include <ydb/core/scheme/scheme_types_proto.h>
 #include <ydb/core/engine/mkql_proto.h>
 
+#include <ydb/library/yql/core/issue/yql_issue.h>
+#include <ydb/library/yql/core/issue/protos/issue_id.pb.h>
 #include <ydb/library/yql/public/issue/yql_issue_message.h>
 #include <ydb/library/yql/public/issue/yql_issue_manager.h>
 
@@ -851,6 +853,16 @@ private:
         ++TabletsToPrepare;
     }
 
+    void RaiseShardOverloaded(const NKikimrTxDataShard::TEvProposeTransactionResult& record, ui64 shardId) {
+        auto issue = NYql::YqlIssue({}, NYql::TIssuesIds::KIKIMR_OVERLOADED, TStringBuilder()
+            << "Shard " << shardId << " is overloaded");
+        for (const auto& err : record.GetError()) {
+            issue.AddSubIssue(new NYql::TIssue(TStringBuilder()
+                << "[" << err.GetKind() << "] " << err.GetReason()));
+        }
+        IssueManager.RaiseIssue(std::move(issue));
+    }
+
     void HandlePrepare(TEvDataShard::TEvProposeTransactionResult::TPtr& ev, const TActorContext& ctx) {
         const auto* msg = ev->Get();
         const auto& record = msg->Record;
@@ -971,6 +983,7 @@ private:
                 TxProxyMon->TxResultShardOverloaded->Inc();
                 status = TEvTxUserProxy::TEvProposeTransactionStatus::EStatus::ProxyShardOverloaded;
                 code = NKikimrIssues::TStatusIds::OVERLOADED;
+                RaiseShardOverloaded(record, shardId);
                 break;
             case NKikimrTxDataShard::TEvProposeTransactionResult::EXEC_ERROR:
                 TxProxyMon->TxResultExecError->Inc();
@@ -1936,6 +1949,7 @@ private:
 
                 status = TEvTxUserProxy::TEvProposeTransactionStatus::EStatus::ProxyShardOverloaded;
                 code = NKikimrIssues::TStatusIds::OVERLOADED;
+                RaiseShardOverloaded(record, state.ShardId);
                 break;
 
             case NKikimrTxDataShard::TEvProposeTransactionResult::EXEC_ERROR:

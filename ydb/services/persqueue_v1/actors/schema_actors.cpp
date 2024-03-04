@@ -645,10 +645,18 @@ void TDescribeTopicActorImpl::RequestBalancer(const TActorContext& ctx) {
 }
 
 void TDescribeTopicActorImpl::RequestPartitionStatus(const TTabletInfo& tablet, const TActorContext& ctx) {
-    THolder<NKikimr::TEvPersQueue::TEvStatus> ev(new NKikimr::TEvPersQueue::TEvStatus(
-                Settings.Consumer.empty() ? "" : NPersQueue::ConvertNewConsumerName(Settings.Consumer, ctx),
-                Settings.Consumer.empty()
-    ));
+    THolder<NKikimr::TEvPersQueue::TEvStatus> ev;
+    if (Settings.Consumers.empty()) {
+        ev = MakeHolder<NKikimr::TEvPersQueue::TEvStatus>(
+            Settings.Consumer.empty() ? "" : NPersQueue::ConvertNewConsumerName(Settings.Consumer, ctx),
+            Settings.Consumer.empty()
+        );
+    } else {
+        ev = MakeHolder<NKikimr::TEvPersQueue::TEvStatus>();
+        for (const auto& consumer : Settings.Consumers) {
+            ev->Record.AddConsumers(consumer);
+        }
+    }
     NTabletPipe::SendData(ctx, tablet.Pipe, ev.Release());
     ++RequestsInfly;
 }

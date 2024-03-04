@@ -614,6 +614,7 @@ class TPartitionWriter: public TActorBootstrapped<TPartitionWriter>, private TRl
             NTabletPipe::CloseAndForgetClient(SelfId(), PipeClient);
         }
         SendError("Unexpected termination");
+        TRlHelpers::PassAway(SelfId());
         TActorBootstrapped::PassAway();
     }
 

@@ -69,7 +69,7 @@ public:
     }
 
     const TFullSplitData& GetSplitData() const {
-        Y_VERIFY(FullSplitData);
+        Y_ABORT_UNLESS(FullSplitData);
         return *FullSplitData;
     }
 

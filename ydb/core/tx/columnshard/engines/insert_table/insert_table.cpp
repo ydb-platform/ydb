@@ -14,21 +14,17 @@ bool TInsertTable::Insert(IDbWrapper& dbTable, TInsertedData&& data) {
     }
 }
 
-TInsertionSummary::TCounters TInsertTable::Commit(IDbWrapper& dbTable, ui64 planStep, ui64 txId, ui64 metaShard,
+TInsertionSummary::TCounters TInsertTable::Commit(IDbWrapper& dbTable, ui64 planStep, ui64 txId,
                                              const THashSet<TWriteId>& writeIds, std::function<bool(ui64)> pathExists) {
-    Y_VERIFY(!writeIds.empty());
-    Y_UNUSED(metaShard);
+    Y_ABORT_UNLESS(!writeIds.empty());
 
     TInsertionSummary::TCounters counters;
     for (auto writeId : writeIds) {
         std::optional<TInsertedData> data = Summary.ExtractInserted(writeId);
-        Y_VERIFY(data, "Commit %" PRIu64 ":%" PRIu64 " : writeId %" PRIu64 " not found", planStep, txId, (ui64)writeId);
+        Y_ABORT_UNLESS(data, "Commit %" PRIu64 ":%" PRIu64 " : writeId %" PRIu64 " not found", planStep, txId, (ui64)writeId);
 
-        NKikimrTxColumnShard::TLogicalMetadata meta;
-        if (meta.ParseFromString(data->Metadata)) {
-            counters.Rows += meta.GetNumRows();
-            counters.RawBytes += meta.GetRawBytes();
-        }
+        counters.Rows += data->GetMeta().GetNumRows();
+        counters.RawBytes += data->GetMeta().GetRawBytes();
         counters.Bytes += data->BlobSize();
 
         dbTable.EraseInserted(*data);
@@ -42,17 +38,16 @@ TInsertionSummary::TCounters TInsertTable::Commit(IDbWrapper& dbTable, ui64 plan
 
             pathInfo->AddCommitted(std::move(*data));
         } else {
-             dbTable.Abort(*data);
-             Summary.AddAborted(std::move(*data));
+            dbTable.Abort(*data);
+            Summary.AddAborted(std::move(*data));
         }
     }
 
     return counters;
 }
 
-void TInsertTable::Abort(IDbWrapper& dbTable, ui64 metaShard, const THashSet<TWriteId>& writeIds) {
-    Y_VERIFY(!writeIds.empty());
-    Y_UNUSED(metaShard);
+void TInsertTable::Abort(IDbWrapper& dbTable, const THashSet<TWriteId>& writeIds) {
+    Y_ABORT_UNLESS(!writeIds.empty());
 
     for (auto writeId : writeIds) {
         // There could be inconsistency with txs and writes in case of bugs. So we could find no record for writeId.
@@ -104,26 +99,37 @@ void TInsertTable::EraseAborted(IDbWrapper& dbTable, const TInsertedData& data) 
 }
 
 bool TInsertTable::Load(IDbWrapper& dbTable, const TInstant loadTime) {
-    Clear();
+    Y_ABORT_UNLESS(!Loaded);
+    Loaded = true;
     return dbTable.Load(*this, loadTime);
 }
 
-std::vector<TCommittedBlob> TInsertTable::Read(ui64 pathId, const TSnapshot& snapshot) const {
+std::vector<TCommittedBlob> TInsertTable::Read(ui64 pathId, const TSnapshot& snapshot, const std::shared_ptr<arrow::Schema>& pkSchema) const {
     const TPathInfo* pInfo = Summary.GetPathInfoOptional(pathId);
     if (!pInfo) {
         return {};
     }
 
-    std::vector<TCommittedBlob> ret;
+    std::vector<const TInsertedData*> ret;
     ret.reserve(pInfo->GetCommitted().size());
 
     for (const auto& data : pInfo->GetCommitted()) {
         if (std::less_equal<TSnapshot>()(data.GetSnapshot(), snapshot)) {
-            ret.emplace_back(TCommittedBlob(data.BlobId, data.GetSnapshot(), data.GetSchemaSnapshot()));
+            ret.emplace_back(&data);
         }
     }
+    const auto pred = [pkSchema](const TInsertedData* l, const TInsertedData* r) {
+        return l->GetMeta().GetFirstPK(pkSchema) < r->GetMeta().GetFirstPK(pkSchema);
+    };
+    std::sort(ret.begin(), ret.end(), pred);
 
-    return ret;
+    std::vector<TCommittedBlob> result;
+    result.reserve(ret.size());
+    for (auto&& i : ret) {
+        result.emplace_back(TCommittedBlob(i->GetBlobRange(), i->GetSnapshot(), i->GetSchemaVersion(), i->GetMeta().GetFirstPK(pkSchema), i->GetMeta().GetLastPK(pkSchema)));
+    }
+
+    return result;
 }
 
 }

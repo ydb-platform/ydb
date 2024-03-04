@@ -16,6 +16,8 @@ public:
     TString Serialize(const std::shared_ptr<arrow::RecordBatch>& batch) const {
         return DoSerialize(batch);
     }
+
+    virtual bool IsHardPacker() const = 0;
 };
 
 class IDeserializer {
@@ -30,9 +32,7 @@ public:
         return DoDebugString();
     }
 
-    arrow::Result<std::shared_ptr<arrow::RecordBatch>> Deserialize(const TString& data) const {
-        return DoDeserialize(data);
-    }
+    arrow::Result<std::shared_ptr<arrow::RecordBatch>> Deserialize(const TString& data) const;
 };
 
 }

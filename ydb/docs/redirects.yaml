@@ -13,5 +13,4 @@ common:
     to: /reference/ydb-cli/index.md
   - from: /getting_started/sdk.md
     to: /reference/ydb-sdk/index.md
-  - from: /getting_started/index.md
-    to: /getting_started/quickstart.md
+

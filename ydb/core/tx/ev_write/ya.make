@@ -16,7 +16,7 @@ PEERDIR(
     library/cpp/actors/core
     library/cpp/actors/wilson
 
-    # Temporary fix dep ydb/core/tx/columnshard  
+    # Temporary fix dep ydb/core/tx/columnshard
     ydb/core/tablet_flat/protos
     ydb/core/tablet_flat
     ydb/core/blobstorage/vdisk/protos
@@ -26,6 +26,7 @@ PEERDIR(
 SRCS(
     shard_writer.cpp
     shards_splitter.cpp
+    write_data.cpp
 )
 
 END()

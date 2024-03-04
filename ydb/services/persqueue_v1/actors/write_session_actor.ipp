@@ -318,6 +318,7 @@ void TWriteSessionActor<UseMigrationProtocol>::Die(const TActorContext& ctx) {
     State = ES_DYING;
 
     TryCloseSession(ctx);
+    TRlHelpers::PassAway(TActorBootstrapped<TWriteSessionActor>::SelfId());
     TActorBootstrapped<TWriteSessionActor>::Die(ctx);
 }
 
@@ -811,10 +812,18 @@ void TWriteSessionActor<UseMigrationProtocol>::UpdatePartition(const TActorConte
 template<bool UseMigrationProtocol>
 void TWriteSessionActor<UseMigrationProtocol>::RequestNextPartition(const TActorContext& ctx) {
     Y_VERIFY(State == ES_WAIT_TABLE_REQUEST_1);
+
     State = ES_WAIT_NEXT_PARTITION;
-    THolder<TEvPersQueue::TEvGetPartitionIdForWrite> x(new TEvPersQueue::TEvGetPartitionIdForWrite);
+
+    if (PartitionIdFromBalancer) {
+        Partition = PartitionIdFromBalancer.value();
+        return UpdateOrProceedPartition(ctx);
+    }
+
     Y_VERIFY(!PipeToBalancer);
     Y_VERIFY(BalancerTabletId);
+
+    THolder<TEvPersQueue::TEvGetPartitionIdForWrite> x(new TEvPersQueue::TEvGetPartitionIdForWrite);
     NTabletPipe::TClientConfig clientConfig;
     clientConfig.RetryPolicy = {
         .RetryLimitCount = 6,
@@ -832,6 +841,7 @@ template<bool UseMigrationProtocol>
 void TWriteSessionActor<UseMigrationProtocol>::Handle(TEvPersQueue::TEvGetPartitionIdForWriteResponse::TPtr& ev, const TActorContext& ctx) {
     Y_VERIFY(State == ES_WAIT_NEXT_PARTITION);
     Partition = ev->Get()->Record.GetPartitionId();
+    PartitionIdFromBalancer = Partition;
     LOG_DEBUG_S(ctx, NKikimrServices::PQ_WRITE_PROXY, "session v1 cookie: " << Cookie << " sessionId: " << OwnerCookie
                                                       << ". Got next partition from server: " << Partition);
     UpdateOrProceedPartition(ctx);

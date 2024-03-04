@@ -51,7 +51,7 @@ namespace NKikimr {
                 PeerSyncState, JobCtx);
             // run task
             const TActorId aid = ctx.Register(CreateSyncerJob(SyncerCtx, std::move(task), ctx.SelfID));
-            ActiveActors.Insert(aid);
+            ActiveActors.Insert(aid, __FILE__, __LINE__, ctx, NKikimrServices::BLOBSTORAGE);
             // state func
             Become(&TThis::WaitForSyncStateFunc);
         }

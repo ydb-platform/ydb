@@ -4,7 +4,7 @@
 #include "executor_thread.h"
 #include "scheduler_queue.h"
 #include "executor_pool_base.h"
-#include "indexes.h"
+#include <library/cpp/actors/actor_type/indexes.h>
 #include <library/cpp/actors/util/ticket_lock.h>
 #include <library/cpp/actors/util/unordered_cache.h>
 #include <library/cpp/actors/util/threadparkpad.h>

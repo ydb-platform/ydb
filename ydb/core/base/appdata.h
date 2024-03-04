@@ -209,6 +209,19 @@ inline TAppData* AppData(TActorSystem* actorSystem) {
     return x;
 }
 
+inline bool HasAppData() {
+    return !!NActors::TlsActivationContext;
+}
+
+inline TAppData& AppDataVerified() {
+    Y_ABORT_UNLESS(HasAppData());
+    auto& actorSystem = NActors::TlsActivationContext->ExecutorThread.ActorSystem;
+    Y_ABORT_UNLESS(actorSystem);
+    TAppData* const x = actorSystem->AppData<TAppData>();
+    Y_ABORT_UNLESS(x && x->Magic == TAppData::MagicTag);
+    return *x;
+}
+
 inline TAppData* AppData() {
     return AppData(TlsActivationContext->ExecutorThread.ActorSystem);
 }

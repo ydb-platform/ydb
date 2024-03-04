@@ -117,7 +117,7 @@ namespace NKikimr {
                 lastLsn, rtCtx->LsnMngr->GetConfirmedLsnForHull());
 
         auto actorId = RunInBatchPool(ctx, compaction.release());
-        rtCtx->LevelIndex->ActorCtx->ActiveActors.Insert(actorId);
+        rtCtx->LevelIndex->ActorCtx->ActiveActors.Insert(actorId, __FILE__, __LINE__, ctx, NKikimrServices::BLOBSTORAGE);
     }
 
     ////////////////////////////////////////////////////////////////////////////
@@ -201,7 +201,7 @@ namespace NKikimr {
             auto selector = std::make_unique<TSelectorActor>(HullDs->HullCtx, params, std::move(levelSnap),
                 std::move(barriersSnap), ctx.SelfID, std::move(CompactionTask), AllowGarbageCollection);
             auto aid = RunInBatchPool(ctx, selector.release());
-            ActiveActors.Insert(aid);
+            ActiveActors.Insert(aid, __FILE__, __LINE__, ctx, NKikimrServices::BLOBSTORAGE);
             return true;
         }
 
@@ -257,7 +257,7 @@ namespace NKikimr {
                     mergeElementsApproximation, it, firstLsn, lastLsn, TDuration::Minutes(2), {},
                     AllowGarbageCollection));
             NActors::TActorId actorId = RunInBatchPool(ctx, compaction.release());
-            ActiveActors.Insert(actorId);
+            ActiveActors.Insert(actorId, __FILE__, __LINE__, ctx, NKikimrServices::BLOBSTORAGE);
         }
 
         void Handle(typename TSelected::TPtr &ev, const TActorContext &ctx) {
@@ -404,7 +404,7 @@ namespace NKikimr {
             auto committer = std::make_unique<TAsyncLevelCommitter>(HullLogCtx, HullDbCommitterCtx, RTCtx->LevelIndex,
                     ctx.SelfID, std::move(chunksAdded), std::move(deleteChunks), std::move(removedHugeBlobs));
             TActorId committerID = ctx.RegisterWithSameMailbox(committer.release());
-            ActiveActors.Insert(committerID);
+            ActiveActors.Insert(committerID, __FILE__, __LINE__, ctx, NKikimrServices::BLOBSTORAGE);
 
             // drop prev slice, some snapshot can still have a pointer to it
             prevSlice.Drop();
@@ -463,7 +463,7 @@ namespace NKikimr {
                         ctx.SelfID, std::move(msg->CommitChunks), std::move(msg->ReservedChunks),
                         std::move(msg->FreedHugeBlobs), dbg.Str());
                 auto aid = ctx.RegisterWithSameMailbox(committer.release());
-                ActiveActors.Insert(aid);
+                ActiveActors.Insert(aid, __FILE__, __LINE__, ctx, NKikimrServices::BLOBSTORAGE);
             } else {
                 Y_VERIFY(RTCtx->LevelIndex->GetCompState() == TLevelIndexBase::StateCompInProgress);
 
@@ -505,7 +505,7 @@ namespace NKikimr {
                     ctx.SelfID, std::move(msg->ChunksToCommit), std::move(msg->ReservedChunks),
                     oneAddition.Sst, oneAddition.RecsNum, msg->NotifyId);
             auto aid = ctx.RegisterWithSameMailbox(actor.release());
-            ActiveActors.Insert(aid);
+            ActiveActors.Insert(aid, __FILE__, __LINE__, ctx, NKikimrServices::BLOBSTORAGE);
         }
 
         void Handle(THullCommitFinished::TPtr &ev, const TActorContext &ctx) {
@@ -562,7 +562,7 @@ namespace NKikimr {
                         << "}";
                     auto aid = ctx.RegisterWithSameMailbox(new TAsyncAdvanceLsnCommitter(HullLogCtx, HullDbCommitterCtx,
                         RTCtx->LevelIndex, ctx.SelfID, dbg.Str()));
-                    ActiveActors.Insert(aid);
+                    ActiveActors.Insert(aid, __FILE__, __LINE__, ctx, NKikimrServices::BLOBSTORAGE);
                     AdvanceCommitInProgress = true;
                     moveEntryPointStarted = true;
                 }

@@ -9,7 +9,8 @@ TString TFakeExternalStorageConfig::DoGetStorageId() const {
     return "fake";
 }
 
-IExternalStorageOperator::TPtr TFakeExternalStorageConfig::DoConstructStorageOperator() const {
+IExternalStorageOperator::TPtr TFakeExternalStorageConfig::DoConstructStorageOperator(bool verbose) const {
+    Y_UNUSED(verbose);
     return std::make_shared<TFakeExternalStorageOperator>(Bucket, SecretKey);
 }
 }

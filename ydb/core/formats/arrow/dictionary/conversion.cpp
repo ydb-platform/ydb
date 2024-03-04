@@ -7,7 +7,7 @@
 namespace NKikimr::NArrow {
 
 std::shared_ptr<arrow::Array> DictionaryToArray(const std::shared_ptr<arrow::DictionaryArray>& data) {
-    Y_VERIFY(data);
+    Y_ABORT_UNLESS(data);
     return DictionaryToArray(*data);
 }
 
@@ -19,7 +19,7 @@ std::shared_ptr<arrow::Array> DictionaryToArray(const arrow::DictionaryArray& da
         using TDictionary = typename arrow::TypeTraits<TDictionaryValue>::ArrayType;
         constexpr bool noParams = arrow::TypeTraits<TDictionaryValue>::is_parameter_free;
         if constexpr (!noParams) {
-            Y_VERIFY(false);
+            Y_ABORT_UNLESS(false);
             return true;
         }
         if constexpr (noParams) {
@@ -43,13 +43,13 @@ std::shared_ptr<arrow::Array> DictionaryToArray(const arrow::DictionaryArray& da
                         return true;
                     }
                 }
-                Y_VERIFY(false);
+                Y_ABORT_UNLESS(false);
                 return true;
             });
         }
         return true;
     });
-    Y_VERIFY(result);
+    Y_ABORT_UNLESS(result);
     return result;
 }
 
@@ -82,20 +82,20 @@ std::shared_ptr<arrow::RecordBatch> DictionaryToArray(const std::shared_ptr<arro
 }
 
 std::shared_ptr<arrow::DictionaryArray> ArrayToDictionary(const std::shared_ptr<arrow::Array>& data) {
-    Y_VERIFY(IsDictionableArray(data));
+    Y_ABORT_UNLESS(IsDictionableArray(data));
     std::shared_ptr<arrow::DictionaryArray> result;
     SwitchType(data->type_id(), [&](const auto& type) {
         using TWrap = std::decay_t<decltype(type)>;
         if constexpr (arrow::has_string_view<typename TWrap::T>::value && arrow::TypeTraits<typename TWrap::T>::is_parameter_free) {
             auto resultArray = NConstruction::TDictionaryArrayConstructor<NConstruction::TLinearArrayAccessor<typename TWrap::T>>("absent", *data).BuildArray(data->length());
-            Y_VERIFY(resultArray->type()->id() == arrow::Type::DICTIONARY);
+            Y_ABORT_UNLESS(resultArray->type()->id() == arrow::Type::DICTIONARY);
             result = static_pointer_cast<arrow::DictionaryArray>(resultArray);
         } else {
-            Y_VERIFY(false);
+            Y_ABORT_UNLESS(false);
         }
         return true;
     });
-    Y_VERIFY(result);
+    Y_ABORT_UNLESS(result);
     return result;
 }
 
@@ -121,7 +121,7 @@ std::shared_ptr<arrow::RecordBatch> ArrayToDictionary(const std::shared_ptr<arro
 }
 
 bool IsDictionableArray(const std::shared_ptr<arrow::Array>& data) {
-    Y_VERIFY(data);
+    Y_ABORT_UNLESS(data);
     bool result = false;
     SwitchType(data->type_id(), [&](const auto& type) {
         using TWrap = std::decay_t<decltype(type)>;

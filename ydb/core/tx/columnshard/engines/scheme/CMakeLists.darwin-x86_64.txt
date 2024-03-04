@@ -22,4 +22,7 @@ target_sources(columnshard-engines-scheme PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/core/tx/columnshard/engines/scheme/abstract_scheme.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/tx/columnshard/engines/scheme/snapshot_scheme.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/tx/columnshard/engines/scheme/filtered_scheme.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/tx/columnshard/engines/scheme/index_info.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/tx/columnshard/engines/scheme/tier_info.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/tx/columnshard/engines/scheme/column_features.cpp
 )

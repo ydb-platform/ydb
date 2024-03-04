@@ -13,6 +13,7 @@ target_link_libraries(formats-arrow-switch PUBLIC
   yutil
   libs-apache-arrow
   ydb-core-scheme_types
+  cpp-actors-core
 )
 target_sources(formats-arrow-switch PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/core/formats/arrow/switch/switch_type.cpp

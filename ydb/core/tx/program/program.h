@@ -35,7 +35,8 @@ public:
     const THashMap<ui32, TString>& GetSourceColumns() const;
     bool HasProgram() const;
 
-    std::shared_ptr<NArrow::TColumnFilter> BuildEarlyFilter(std::shared_ptr<arrow::RecordBatch> batch) const;
+    std::shared_ptr<NArrow::TColumnFilter> BuildEarlyFilter(const std::shared_ptr<arrow::Table>& batch) const;
+    std::shared_ptr<NArrow::TColumnFilter> BuildEarlyFilter(const std::shared_ptr<arrow::RecordBatch>& batch) const;
     std::set<std::string> GetEarlyFilterColumns() const;
 
     bool HasEarlyFilterOnly() const;

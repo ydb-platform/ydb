@@ -804,7 +804,7 @@ namespace NKikimr {
 
             // create and run skeleton
             SkeletonId = ctx.Register(CreateVDiskSkeleton(Config, GInfo, ctx.SelfID, VCtx));
-            ActiveActors.Insert(SkeletonId);
+            ActiveActors.Insert(SkeletonId, __FILE__, __LINE__, ctx, NKikimrServices::BLOBSTORAGE);
 
             SetupMonitoring(ctx);
             Become(&TThis::StateLocalRecoveryInProgress);
@@ -1382,8 +1382,13 @@ namespace NKikimr {
                 const auto& record = ev->Get()->Record;
                 if (record.HasVDiskID()) {
                     const TVDiskID& vdiskId = VDiskIDFromVDiskID(record.GetVDiskID());
-                    Y_VERIFY(vdiskId.GroupID == SelfVDiskId.GroupID);
-                    Y_VERIFY(TVDiskIdShort(vdiskId) == TVDiskIdShort(SelfVDiskId));
+                    if (!SelfVDiskId.SameExceptGeneration(vdiskId)) {
+                        LOG_CRIT_S(ctx, NKikimrServices::BS_SKELETON, VCtx->VDiskLogPrefix
+                            << "VDiskId mismatch expected# " << SelfVDiskId << " provided# " << vdiskId
+                            << " Marker# BSVSF05");
+                        Y_VERIFY_DEBUG(false, "VDiskId mismatch");
+                        return Reply(ev, ctx, NKikimrProto::ERROR, "VDiskId mismatch", TAppData::TimeProvider->Now());
+                    }
                     if (vdiskId != SelfVDiskId) {
                         if (SelfVDiskId.GroupGeneration < vdiskId.GroupGeneration && record.HasRecentGroup()) {
                             auto newInfo = TBlobStorageGroupInfo::Parse(record.GetRecentGroup(), nullptr, nullptr);
@@ -1508,7 +1513,7 @@ namespace NKikimr {
 
             auto aid = ctx.Register(CreateFrontSkeletonMonRequestHandler(SelfVDiskId, ctx.SelfID, SkeletonId,
                 ctx.SelfID, Config, Top, ev, html));
-            ActiveActors.Insert(aid);
+            ActiveActors.Insert(aid, __FILE__, __LINE__, ctx, NKikimrServices::BLOBSTORAGE);
         }
 
         void Handle(TEvVDiskStatRequest::TPtr &ev) {
@@ -1519,7 +1524,7 @@ namespace NKikimr {
         void Handle(TEvGetLogoBlobRequest::TPtr &ev) {
             auto aid = Register(CreateFrontSkeletonGetLogoBlobRequestHandler(SelfVDiskId, SelfId(), SkeletonId,
                 Config, Top, ev));
-            ActiveActors.Insert(aid);
+            ActiveActors.Insert(aid, __FILE__, __LINE__, TActivationContext::AsActorContext(), NKikimrServices::BLOBSTORAGE);
         }
 
 
@@ -1531,7 +1536,9 @@ namespace NKikimr {
             extQueue.Completed(ctx, msgCtx, event);
             TIntQueueClass &intQueue = GetIntQueue(msgCtx.IntQueueId);
             intQueue.Completed(ctx, msgCtx, *this, id);
-            TActivationContext::Send(event.release());
+            if (!ev->Get()->DoNotResend) {
+                TActivationContext::Send(event.release());
+            }
         }
 
         void ChangeGeneration(const TVDiskID& vdiskId, const TIntrusivePtr<TBlobStorageGroupInfo>& info,
@@ -1881,19 +1888,25 @@ namespace NKikimr {
             return true;
         }
 
-        template <class TEv, class Decayed = std::decay_t<TEv>>
-        static constexpr bool IsWithoutVDiskId = std::is_same_v<TEv, Decayed>;
+        template<typename TEv>
+        static constexpr bool IsWithoutVDiskId = std::is_same_v<TEv, TEvGetLogoBlobIndexStatRequest>;
 
         template <typename TEventType>
         void Check(TAutoPtr<TEventHandle<TEventType>>& ev, const TActorContext& ctx) {
             const auto& record = ev->Get()->Record;
-            bool isSameVDisk = true;
             if constexpr (!IsWithoutVDiskId<TEventType>) {
-                isSameVDisk = SelfVDiskId.SameDisk(record.GetVDiskID());
+                const auto& vdiskId = VDiskIDFromVDiskID(record.GetVDiskID());
+                if (!vdiskId.SameExceptGeneration(SelfVDiskId)) {
+                    LOG_CRIT_S(ctx, NKikimrServices::BS_SKELETON, VCtx->VDiskLogPrefix
+                        << "VDiskId mismatch expected# " << SelfVDiskId << " provided# " << vdiskId
+                        << " Type# " << TypeName<TEventType>() << " Marker# BSVSF06");
+                    Y_VERIFY_DEBUG(false, "VDiskId mismatch");
+                    return Reply(ev, ctx, NKikimrProto::ERROR, "VDiskId mismatch", TAppData::TimeProvider->Now());
+                } else if (!vdiskId.SameDisk(SelfVDiskId)) {
+                    return Reply(ev, ctx, NKikimrProto::RACE, "group generation mismatch", TAppData::TimeProvider->Now());
+                }
             }
-            if (!isSameVDisk) {
-                return Reply(ev, ctx, NKikimrProto::RACE, "group generation mismatch", TAppData::TimeProvider->Now());
-            } else if (!GInfo->CheckScope(TKikimrScopeId(ev->OriginScopeId), ctx, true)) {
+            if (!GInfo->CheckScope(TKikimrScopeId(ev->OriginScopeId), ctx, true)) {
                 DatabaseAccessDeniedHandle(ev, ctx);
             } else {
                 SetReceivedTime(ev);

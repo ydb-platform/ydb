@@ -64,7 +64,7 @@ set_yunittest_property(
   ydb-core-kafka_proxy-ut
   PROPERTY
   LABELS
-  SMALL
+  medium
 )
 set_yunittest_property(
   TEST

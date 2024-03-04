@@ -40,12 +40,13 @@ EOperation ValidateOperation(EOperation op, ui32 argsSize);
 struct TDatumBatch {
     std::shared_ptr<arrow::Schema> Schema;
     std::vector<arrow::Datum> Datums;
-    int64_t Rows{};
+    int64_t Rows = 0;
 
     arrow::Status AddColumn(const std::string& name, arrow::Datum&& column);
     arrow::Result<arrow::Datum> GetColumnByName(const std::string& name) const;
     std::shared_ptr<arrow::RecordBatch> ToRecordBatch() const;
-    static std::shared_ptr<TDatumBatch> FromRecordBatch(std::shared_ptr<arrow::RecordBatch>& batch);
+    static std::shared_ptr<TDatumBatch> FromRecordBatch(const std::shared_ptr<arrow::RecordBatch>& batch);
+    static std::shared_ptr<TDatumBatch> FromTable(const std::shared_ptr<arrow::Table>& batch);
 };
 
 template <class TAssignObject>
@@ -94,7 +95,7 @@ public:
         : Name(name)
         , Operation(ValidateOperation(op, args.size()))
         , Arguments(std::move(args))
-        , FuncOpts(funcOpts)
+        , FuncOpts(std::move(funcOpts))
     {}
 
     explicit TAssign(const std::string& name, bool value)
@@ -167,8 +168,8 @@ public:
             std::shared_ptr<arrow::compute::FunctionOptions> funcOpts)
         : Name(name)
         , Arguments(std::move(args))
-        , FuncOpts(funcOpts)
-        , KernelFunction(kernelFunction)
+        , FuncOpts(std::move(funcOpts))
+        , KernelFunction(std::move(kernelFunction))
     {}
 
     bool IsConstant() const { return Operation == EOperation::Constant; }
@@ -299,7 +300,11 @@ struct TProgram {
 
     std::set<std::string> GetEarlyFilterColumns() const;
     NArrow::TColumnFilter MakeEarlyFilter(const std::shared_ptr<arrow::RecordBatch>& batch,
-                                      arrow::compute::ExecContext* ctx) const;
+        arrow::compute::ExecContext* ctx) const;
+    NArrow::TColumnFilter MakeEarlyFilter(const std::shared_ptr<arrow::Table>& batch,
+        arrow::compute::ExecContext* ctx) const;
+
+    NArrow::TColumnFilter MakeEarlyFilter(const std::shared_ptr<TProgramStep::TDatumBatch>& batch, arrow::compute::ExecContext* ctx) const;
 };
 
 inline arrow::Status ApplyProgram(

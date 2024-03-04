@@ -206,17 +206,6 @@ public:
         DEFINE_GENERIC_REQUEST(name); \
         DEFINE_GENERIC_RESPONSE(name)
 
-DEFINE_GENERIC_REQUEST(GetObject);
-DECLARE_RESPONSE_WITH_BODY(GetObject, Aws::String)
-    static TResult ResultFromOutcome(const TOutcome & outcome) {
-        if (outcome.IsSuccess()) {
-            return outcome.GetResult().GetETag();
-        } else {
-            return outcome.GetError();
-        }
-    }
-};
-
 DEFINE_REQUEST(PutObject, TRequestWithBody);
 DEFINE_GENERIC_RESPONSE(PutObject);
 

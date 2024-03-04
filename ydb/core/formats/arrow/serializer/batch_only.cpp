@@ -17,7 +17,7 @@ arrow::Result<std::shared_ptr<arrow::RecordBatch>> TBatchPayloadDeserializer::Do
 
     std::shared_ptr<arrow::Buffer> buffer(std::make_shared<TBufferOverString>(data));
     arrow::io::BufferReader reader(buffer);
-    AFL_DEBUG(NKikimrServices::ARROW_HELPER)("event", "parsing")("size", data.size())("columns", Schema->num_fields());
+    AFL_TRACE(NKikimrServices::ARROW_HELPER)("event", "parsing")("size", data.size())("columns", Schema->num_fields());
     auto batchResult = arrow::ipc::ReadRecordBatch(Schema, &dictMemo, options, &reader);
     if (!batchResult.ok()) {
         return batchResult;
@@ -49,8 +49,8 @@ TString TBatchPayloadSerializer::DoSerialize(const std::shared_ptr<arrow::Record
     TFixedStringOutputStream out(&str);
     // Write prepared payload into the resultant string. No extra allocation will be made.
     TStatusValidator::Validate(arrow::ipc::WriteIpcPayload(payload, Options, &out, &metadata_length));
-    Y_VERIFY(out.GetPosition() == str.size());
-    Y_VERIFY_DEBUG(TBatchPayloadDeserializer(batch->schema()).Deserialize(str).ok());
+    Y_ABORT_UNLESS(out.GetPosition() == str.size());
+    Y_DEBUG_ABORT_UNLESS(TBatchPayloadDeserializer(batch->schema()).Deserialize(str).ok());
     AFL_DEBUG(NKikimrServices::ARROW_HELPER)("event", "serialize")("size", str.size())("columns", batch->schema()->num_fields());
     return str;
 }

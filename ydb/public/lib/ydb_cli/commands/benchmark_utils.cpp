@@ -234,7 +234,7 @@ public:
 
 TQueryBenchmarkResult Execute(const TString& query, NTable::TTableClient& client) {
     TStreamExecScanQuerySettings settings;
-    settings.CollectQueryStats(ECollectQueryStatsMode::Full);
+    settings.CollectQueryStats(ECollectQueryStatsMode::Basic);
     auto it = client.StreamExecuteScanQuery(query, settings).GetValueSync();
     ThrowOnError(it);
 

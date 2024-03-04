@@ -371,7 +371,7 @@ namespace NKikimr {
                     IsRepl()));
                 if (a) {
                     auto aid = ctx.Register(a.release());
-                    ActiveActors.Insert(aid);
+                    ActiveActors.Insert(aid, __FILE__, __LINE__, ctx, NKikimrServices::BLOBSTORAGE);
                     Become(&TThis::StateFunc);
                     // wait for reply
                 } else {

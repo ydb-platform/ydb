@@ -30,15 +30,11 @@ class TS3Wrapper: public TActor<TS3Wrapper> {
     }
 
 public:
-    static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
-        return NKikimrServices::TActivity::S3_WRAPPER_ACTOR;
-    }
-
     explicit TS3Wrapper(IExternalStorageOperator::TPtr storageOperator)
         : TActor(&TThis::StateWork)
         , StorageOperator(storageOperator)
     {
-        Y_VERIFY(!!StorageOperator, "not initialized operator. incorrect config.");
+        Y_ABORT_UNLESS(!!StorageOperator, "not initialized operator. incorrect config.");
     }
 
     virtual ~TS3Wrapper() = default;

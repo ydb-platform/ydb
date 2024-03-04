@@ -2,70 +2,33 @@
 
 namespace NKikimr::NOlap {
 
-const THashSet<ui64>* TGranulesStorage::GetOverloaded(ui64 pathId) const {
-    if (auto pi = PathsGranulesOverloaded.find(pathId); pi != PathsGranulesOverloaded.end()) {
-        return &pi->second;
-    }
-    return nullptr;
-}
-
 void TGranulesStorage::UpdateGranuleInfo(const TGranuleMeta& granule) {
     if (PackModificationFlag) {
-        PackModifiedGranules[granule.GetGranuleId()] = &granule;
+        PackModifiedGranules[granule.GetPathId()] = &granule;
         return;
     }
-    {
-        auto it = GranulesCompactionPriority.find(granule.GetGranuleId());
-        auto gPriority = granule.GetCompactionPriority();
-        if (it == GranulesCompactionPriority.end()) {
-            it = GranulesCompactionPriority.emplace(granule.GetGranuleId(), gPriority).first;
-            Y_VERIFY(GranuleCompactionPrioritySorting[gPriority].emplace(granule.GetGranuleId()).second);
-        } else {
-            auto itSorting = GranuleCompactionPrioritySorting.find(it->second);
-            Y_VERIFY(itSorting != GranuleCompactionPrioritySorting.end());
-            Y_VERIFY(itSorting->second.erase(granule.GetGranuleId()));
-            if (itSorting->second.empty()) {
-                GranuleCompactionPrioritySorting.erase(itSorting);
-            }
-            it->second = gPriority;
-            Y_VERIFY(GranuleCompactionPrioritySorting[gPriority].emplace(granule.GetGranuleId()).second);
-        }
-    }
-    const ui64 pathId = granule.Record.PathId;
+}
 
-    // Size exceeds the configured limit. Mark granule as overloaded.
-    if (granule.Size() >= Limits.GranuleOverloadSize) {
-        if (PathsGranulesOverloaded[pathId].emplace(granule.GetGranuleId()).second) {
-            AFL_INFO(NKikimrServices::TX_COLUMNSHARD)("event", "overloaded")("path_id", pathId)("granule", granule.GetGranuleId());
-        }
-    } else if (auto pi = PathsGranulesOverloaded.find(pathId); pi != PathsGranulesOverloaded.end()) {
-        // Size is under limit. Remove granule from the overloaded set.
-        if (pi->second.erase(granule.GetGranuleId())) {
-            AFL_INFO(NKikimrServices::TX_COLUMNSHARD)("event", "reset_overload")("path_id", pathId)("granule", granule.GetGranuleId())("remained", pi->second.size());
-        }
-        // Remove entry for the pathId if there it has no overloaded granules any more.
-        if (pi->second.empty()) {
-            PathsGranulesOverloaded.erase(pi);
+std::shared_ptr<NKikimr::NOlap::TGranuleMeta> TGranulesStorage::GetGranuleForCompaction(const THashMap<ui64, std::shared_ptr<TGranuleMeta>>& granules) const {
+    const TInstant now = TInstant::Now();
+    std::optional<NStorageOptimizer::TOptimizationPriority> priority;
+    std::shared_ptr<TGranuleMeta> granule;
+    for (auto&& i : granules) {
+        i.second->ActualizeOptimizer(now);
+        if (!priority || *priority < i.second->GetCompactionPriority()) {
+            priority = i.second->GetCompactionPriority();
+            granule = i.second;
         }
     }
-    Counters.OverloadGranules->Set(PathsGranulesOverloaded.size());
-    if (IS_DEBUG_LOG_ENABLED(NKikimrServices::TX_COLUMNSHARD) && PathsGranulesOverloaded.size()) {
-        TStringBuilder sb;
-        for (auto&& i : PathsGranulesOverloaded) {
-            sb << i.first << ":";
-            bool isFirst = true;
-            for (auto&& g : i.second) {
-                if (!isFirst) {
-                    sb << ",";
-                } else {
-                    isFirst = false;
-                }
-                sb << g;
-            }
-            sb << ";";
-        }
-        AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("overload_granules", sb);
+    if (!priority) {
+        AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("event", "no_granules");
+        return nullptr;
     }
+    if (priority->IsZero()) {
+        AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("event", "zero_priority");
+        return nullptr;
+    }
+    return granule;
 }
 
 } // namespace NKikimr::NOlap

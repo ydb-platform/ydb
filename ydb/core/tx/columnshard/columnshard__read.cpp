@@ -5,7 +5,6 @@
 #include <ydb/core/tx/columnshard/columnshard_schema.h>
 #include <ydb/core/tx/columnshard/columnshard__read_base.h>
 #include <ydb/core/tx/columnshard/columnshard__index_scan.h>
-#include <ydb/core/tx/columnshard/engines/indexed_read_data.h>
 
 namespace NKikimr::NColumnShard {
 
@@ -48,9 +47,9 @@ private:
 };
 
 
-bool TTxRead::Execute(TTransactionContext& txc, const TActorContext& ctx) {
-    Y_VERIFY(Ev);
-    Y_VERIFY(Self->TablesManager.HasPrimaryIndex());
+bool TTxRead::Execute(TTransactionContext& txc, const TActorContext& /*ctx*/) {
+    Y_ABORT_UNLESS(Ev);
+    Y_ABORT_UNLESS(Self->TablesManager.HasPrimaryIndex());
     Y_UNUSED(txc);
     LOG_S_DEBUG(TxPrefix() << "execute" << TxSuffix());
 
@@ -85,21 +84,20 @@ bool TTxRead::Execute(TTransactionContext& txc, const TActorContext& ctx) {
         toPredicate = std::make_shared<NOlap::TPredicate>(
             proto.GetInclusive() ? NArrow::EOperation::LessEqual : NArrow::EOperation::Less, proto.GetRow(), schema);
     }
-    Y_VERIFY(read.PKRangesFilter.Add(fromPredicate, toPredicate, &indexInfo));
+    Y_ABORT_UNLESS(read.PKRangesFilter.Add(fromPredicate, toPredicate, &indexInfo));
 
     bool parseResult = ParseProgram(record.GetOlapProgramType(), record.GetOlapProgram(), read,
         TIndexColumnResolver(indexInfo));
 
     std::shared_ptr<NOlap::TReadMetadata> metadata;
     if (parseResult) {
-        metadata = PrepareReadMetadata(read, Self->InsertTable, Self->TablesManager.GetPrimaryIndex(), Self->BatchCache,
+        metadata = PrepareReadMetadata(read, Self->InsertTable, Self->TablesManager.GetPrimaryIndex(),
                                        ErrorDescription, false);
     }
 
     ui32 status = NKikimrTxColumnShard::EResultStatus::ERROR;
 
     if (metadata) {
-        Self->MapExternBlobs(ctx, *metadata);
         ReadMetadata = metadata;
         status = NKikimrTxColumnShard::EResultStatus::SUCCESS;
     }
@@ -116,8 +114,8 @@ bool TTxRead::Execute(TTransactionContext& txc, const TActorContext& ctx) {
 }
 
 void TTxRead::Complete(const TActorContext& ctx) {
-    Y_VERIFY(Ev);
-    Y_VERIFY(Result);
+    Y_ABORT_UNLESS(Ev);
+    Y_ABORT_UNLESS(Result);
 
     bool noData = !ReadMetadata || ReadMetadata->Empty();
     bool success = (Proto(Result.get()).GetStatus() == NKikimrTxColumnShard::EResultStatus::SUCCESS);
@@ -132,18 +130,17 @@ void TTxRead::Complete(const TActorContext& ctx) {
         LOG_S_DEBUG(TxPrefix() << "complete" << TxSuffix() << " Metadata: " << *ReadMetadata);
 
         const ui64 requestCookie = Self->InFlightReadsTracker.AddInFlightRequest(
-            std::static_pointer_cast<const NOlap::TReadMetadataBase>(ReadMetadata), *Self->BlobManager);
+            std::static_pointer_cast<const NOlap::TReadMetadataBase>(ReadMetadata));
         auto statsDelta = Self->InFlightReadsTracker.GetSelectStatsDelta();
 
-        Self->IncCounter(COUNTER_READ_INDEX_GRANULES, statsDelta.Granules);
         Self->IncCounter(COUNTER_READ_INDEX_PORTIONS, statsDelta.Portions);
         Self->IncCounter(COUNTER_READ_INDEX_BLOBS, statsDelta.Blobs);
         Self->IncCounter(COUNTER_READ_INDEX_ROWS, statsDelta.Rows);
         Self->IncCounter(COUNTER_READ_INDEX_BYTES, statsDelta.Bytes);
 
         TInstant deadline = TInstant::Max(); // TODO
-        ctx.Register(CreateReadActor(Self->TabletID(), Ev->Get()->GetSource(),
-            std::move(Result), ReadMetadata, deadline, Self->SelfId(), requestCookie, Self->ReadCounters));
+        ctx.Register(CreateReadActor(Self->TabletID(), Self->SelfId(), Ev->Get()->GetSource(),
+            Self->GetStoragesManager(), std::move(Result), ReadMetadata, deadline, Self->SelfId(), requestCookie, Self->ReadCounters));
     }
 }
 

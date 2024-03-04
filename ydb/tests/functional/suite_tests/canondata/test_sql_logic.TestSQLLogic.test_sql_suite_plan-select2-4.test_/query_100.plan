@@ -24,7 +24,7 @@
                                 "PlanNodeType": "Connection",
                                 "Plans": [
                                     {
-                                        "Node Type": "TopSort-Filter-TableRangesScan",
+                                        "Node Type": "TopSort-Filter-TableRangeScan",
                                         "Operators": [
                                             {
                                                 "Limit": "1001",
@@ -36,7 +36,7 @@
                                                 "Predicate": "item.d < 110 Or item.d > 150"
                                             },
                                             {
-                                                "Name": "TableRangesScan",
+                                                "Name": "TableRangeScan",
                                                 "ReadColumns": [
                                                     "a",
                                                     "b",

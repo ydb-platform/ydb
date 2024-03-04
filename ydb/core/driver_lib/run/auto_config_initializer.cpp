@@ -3,6 +3,7 @@
 #include <ydb/core/protos/config.pb.h>
 
 #include <library/cpp/actors/util/affinity.h>
+#include <ydb/library/yverify_stream/yverify_stream.h>
 #include <util/system/info.h>
 
 namespace {
@@ -50,27 +51,27 @@ namespace {
         {  {2, 4},  {4, 8},   {1, 2}, {0, 0}, {1, 3} },     // 8
         {  {2, 5},  {4, 9},   {2, 3}, {0, 0}, {1, 3} },     // 9
         {  {2, 5},  {5, 10},  {2, 3}, {0, 0}, {1, 3} },     // 10
-        {  {2, 6},  {6, 11},  {2, 3}, {0, 0}, {2, 4} },     // 11
-        {  {2, 6},  {7, 12},  {2, 3}, {0, 0}, {2, 5} },     // 12
-        {  {3, 7},  {7, 13},  {2, 3}, {0, 0}, {2, 5} },     // 13
-        {  {3, 7},  {7, 14},  {2, 3}, {0, 0}, {3, 6} },     // 14
-        {  {3, 8},  {8, 15},  {2, 4}, {0, 0}, {3, 6} },     // 15
-        {  {3, 8},  {9, 16},  {2, 4}, {0, 0}, {3, 6} },     // 16
-        {  {3, 9},  {10, 17}, {2, 4}, {0, 0}, {3, 7} },     // 17
-        {  {3, 9},  {10, 18}, {3, 5}, {0, 0}, {3, 7} },     // 18
-        {  {4, 10}, {10, 19}, {3, 5}, {0, 0}, {4, 8} },     // 19
-        {  {4, 10}, {10, 20}, {3, 5}, {0, 0}, {4, 8} },     // 20
-        {  {4, 11}, {11, 21}, {3, 5}, {0, 0}, {4, 8} },     // 21
-        {  {4, 11}, {12, 22}, {3, 5}, {0, 0}, {4, 9} },     // 22
-        {  {4, 12}, {13, 23}, {3, 6}, {0, 0}, {4, 9} },     // 23
-        {  {4, 12}, {13, 24}, {3, 6}, {0, 0}, {5, 10} },    // 24
-        {  {5, 13}, {13, 25}, {3, 6}, {0, 0}, {5, 10} },    // 25
-        {  {5, 13}, {13, 26}, {4, 7}, {0, 0}, {5, 10} },    // 26
-        {  {5, 14}, {14, 27}, {4, 7}, {0, 0}, {5, 11} },    // 27
+        {  {2, 6},  {5, 11},  {2, 3}, {0, 0}, {2, 4} },     // 11
+        {  {2, 6},  {6, 12},  {2, 3}, {0, 0}, {2, 5} },     // 12
+        {  {3, 7},  {6, 13},  {2, 3}, {0, 0}, {2, 5} },     // 13
+        {  {3, 7},  {6, 14},  {2, 3}, {0, 0}, {3, 6} },     // 14
+        {  {3, 8},  {7, 15},  {2, 4}, {0, 0}, {3, 6} },     // 15
+        {  {3, 8},  {8, 16},  {2, 4}, {0, 0}, {3, 6} },     // 16
+        {  {3, 9},  {9, 17},  {2, 4}, {0, 0}, {3, 7} },     // 17
+        {  {3, 9},  {9, 18},  {3, 5}, {0, 0}, {3, 7} },     // 18
+        {  {3, 10}, {9, 19},  {3, 5}, {0, 0}, {4, 8} },     // 19
+        {  {4, 10}, {9, 20},  {3, 5}, {0, 0}, {4, 8} },     // 20
+        {  {4, 11}, {10, 21}, {3, 5}, {0, 0}, {4, 8} },     // 21
+        {  {4, 11}, {11, 22}, {3, 5}, {0, 0}, {4, 9} },     // 22
+        {  {4, 12}, {12, 23}, {3, 6}, {0, 0}, {4, 9} },     // 23
+        {  {4, 12}, {12, 24}, {3, 6}, {0, 0}, {5, 10} },    // 24
+        {  {5, 13}, {12, 25}, {3, 6}, {0, 0}, {5, 10} },    // 25
+        {  {5, 13}, {12, 26}, {4, 7}, {0, 0}, {5, 10} },    // 26
+        {  {5, 14}, {13, 27}, {4, 7}, {0, 0}, {5, 11} },    // 27
         {  {5, 14}, {14, 28}, {4, 7}, {0, 0}, {5, 11} },    // 28
-        {  {5, 15}, {15, 29}, {4, 8}, {0, 0}, {6, 12} },    // 29
-        {  {5, 15}, {16, 30}, {4, 8}, {0, 0}, {6, 12} },    // 30
-        {  {6, 18}, {16, 31}, {4, 8}, {0, 0}, {6, 12} },    // 31
+        {  {5, 15}, {14, 29}, {4, 8}, {0, 0}, {6, 12} },    // 29
+        {  {5, 15}, {15, 30}, {4, 8}, {0, 0}, {6, 12} },    // 30
+        {  {6, 18}, {15, 31}, {4, 8}, {0, 0}, {6, 12} },    // 31
     };
 
     TShortPoolCfg HybridCpuTable[MaxPreparedCpuCount + 1][5] {
@@ -158,9 +159,11 @@ namespace {
         TShortPoolCfg result = cpuTable[MaxPreparedCpuCount][poolIdx];
         result.ThreadCount *= k;
         result.MaxThreadCount *= k;
-        TShortPoolCfg additional = cpuTable[mod][poolIdx];
-        result.ThreadCount += additional.ThreadCount;
-        result.MaxThreadCount += additional.MaxThreadCount;
+        if (mod) {
+            TShortPoolCfg additional = cpuTable[mod][poolIdx];
+            result.ThreadCount += additional.ThreadCount;
+            result.MaxThreadCount += additional.MaxThreadCount;
+        }
         return result;
     }
 
@@ -266,6 +269,13 @@ namespace NKikimr::NAutoConfigInitializer {
                           config->GetNodeType() == NKikimrConfig::TActorSystemConfig::COMPUTE ? ComputeCpuTable :
                           HybridCpuTable );
 
+        // check cpu table
+        i16 cpuSum = 0;
+        for (auto poolKind : {EPoolKind::System, EPoolKind::User, EPoolKind::Batch, EPoolKind::IC}) {
+            TShortPoolCfg cfg = GetShortPoolChg(poolKind, cpuCount, cpuTable);
+            cpuSum += cfg.ThreadCount;
+        }
+        Y_VERIFY_S(cpuSum == cpuCount, "cpuSum# " << cpuSum << " cpuCount# " << cpuCount);
 
         for (ui32 poolIdx = 0; poolIdx < poolCount; ++poolIdx) {
             auto *executor = executors[poolIdx];

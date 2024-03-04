@@ -150,6 +150,13 @@ public:
 
     void UpdateYamlVersion(const TSubscription::TPtr &kinds) const;
 
+    struct TCheckKindsResult {
+        bool HasYamlKinds = false;
+        bool HasNonYamlKinds = false;
+    };
+
+    TCheckKindsResult CheckKinds(const TVector<ui32>& kinds, const char* errorContext) const;
+
     NKikimrConfig::TAppConfig ParseYamlProtoConfig();
         
     void Handle(NMon::TEvHttpInfo::TPtr &ev);
@@ -758,16 +765,17 @@ void TConfigsDispatcher::Handle(TEvConfigsDispatcher::TEvGetConfigRequest::TPtr 
 {
     auto resp = MakeHolder<TEvConfigsDispatcher::TEvGetConfigResponse>();
 
-    for (auto kind : ev->Get()->ConfigItemKinds) {
-        if (!DYNAMIC_KINDS.contains(kind)) {
-            TStringStream sstr;
-            sstr << static_cast<NKikimrConsole::TConfigItem::EKind>(kind);
-            Y_FAIL("unexpected kind in GetConfigRequest: %s", sstr.Str().data());
-        }
-    }
+    auto [yamlKinds, _] = CheckKinds(
+        ev->Get()->ConfigItemKinds,
+        "TEvGetConfigRequest handler");
 
     auto trunc = std::make_shared<NKikimrConfig::TAppConfig>();
-    ReplaceConfigItems(CurrentConfig, *trunc, KindsToBitMap(ev->Get()->ConfigItemKinds), InitialConfig);
+    auto kinds = KindsToBitMap(ev->Get()->ConfigItemKinds);
+    if (YamlConfigEnabled && yamlKinds) {
+        ReplaceConfigItems(YamlProtoConfig, *trunc, kinds, InitialConfig);
+    } else {
+        ReplaceConfigItems(CurrentConfig, *trunc, kinds, InitialConfig);
+    }
     resp->Config = trunc;
 
     BLOG_TRACE("Send TEvConfigsDispatcher::TEvGetConfigResponse"
@@ -776,15 +784,14 @@ void TConfigsDispatcher::Handle(TEvConfigsDispatcher::TEvGetConfigRequest::TPtr 
     Send(ev->Sender, std::move(resp), 0, ev->Cookie);
 }
 
-void TConfigsDispatcher::Handle(TEvConfigsDispatcher::TEvSetConfigSubscriptionRequest::TPtr &ev)
-{
+TConfigsDispatcher::TCheckKindsResult TConfigsDispatcher::CheckKinds(const TVector<ui32>& kinds, const char* errorContext) const {
     bool yamlKinds = false;
     bool nonYamlKinds = false;
-    for (auto kind : ev->Get()->ConfigItemKinds) {
+    for (auto kind : kinds) {
         if (!DYNAMIC_KINDS.contains(kind)) {
             TStringStream sstr;
             sstr << static_cast<NKikimrConsole::TConfigItem::EKind>(kind);
-            Y_FAIL("unexpected kind in SetConfigSubscriptionRequest: %s", sstr.Str().data());
+            Y_FAIL("unexpected kind in %s: %s", errorContext, sstr.Str().data());
         }
 
         if (NON_YAML_KINDS.contains(kind)) {
@@ -795,9 +802,18 @@ void TConfigsDispatcher::Handle(TEvConfigsDispatcher::TEvSetConfigSubscriptionRe
     }
 
     if (yamlKinds && nonYamlKinds) {
-        Y_FAIL("both yaml and non yaml kinds in SetConfigSubscriptionRequest");
+        Y_FAIL("both yaml and non yaml kinds in %s", errorContext);
     }
 
+    return {yamlKinds, nonYamlKinds};
+}
+
+void TConfigsDispatcher::Handle(TEvConfigsDispatcher::TEvSetConfigSubscriptionRequest::TPtr &ev)
+{
+    auto [yamlKinds, nonYamlKinds] = CheckKinds(
+        ev->Get()->ConfigItemKinds,
+        "SetConfigSubscriptionRequest handler");
+    Y_UNUSED(nonYamlKinds);
     auto kinds = KindsToBitMap(ev->Get()->ConfigItemKinds);
     auto subscriberActor = ev->Get()->Subscriber ? ev->Get()->Subscriber : ev->Sender;
 

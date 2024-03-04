@@ -324,7 +324,7 @@ namespace NKikimr {
             TimeAccount.SetState(ETimeState::PREPARE_PLAN);
             auto actor = std::make_unique<THullReplPlannerActor>(ReplCtx, GInfo, StartKey, ReplInfo, BlobsToReplicatePtr, UnreplicatedBlobsPtr);
             auto aid = RunInBatchPool(ActorContext(), actor.release());
-            ActiveActors.Insert(aid);
+            ActiveActors.Insert(aid, __FILE__, __LINE__, TActivationContext::AsActorContext(), NKikimrServices::BLOBSTORAGE);
             Become(&TThis::StatePreparePlan);
         }
 
@@ -373,7 +373,8 @@ namespace NKikimr {
             Y_VERIFY(!NumRunningProxies);
             for (const TVDiskProxyPtr& p : DiskProxySet) {
                 if (p) {
-                    ActiveActors.Insert(p->Run(SelfId()));
+                    ActiveActors.Insert(p->Run(SelfId()), __FILE__, __LINE__, TActivationContext::AsActorContext(),
+                        NKikimrServices::BLOBSTORAGE);
                     ++NumRunningProxies;
                 }
             }

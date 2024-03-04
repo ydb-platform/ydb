@@ -1567,8 +1567,16 @@ TIntrusivePtr<TServiceInitializersList> TKikimrRunner::CreateServiceInitializers
         sil->AddServiceInitializer(new TExternalIndexInitializer(runConfig));
     }
 
-    if (serviceMask.EnableConveyor) {
-        sil->AddServiceInitializer(new TConveyorInitializer(runConfig));
+    if (serviceMask.EnableScanConveyor) {
+        sil->AddServiceInitializer(new TScanConveyorInitializer(runConfig));
+    }
+
+    if (serviceMask.EnableCompConveyor) {
+        sil->AddServiceInitializer(new TCompConveyorInitializer(runConfig));
+    }
+
+    if (serviceMask.EnableInsertConveyor) {
+        sil->AddServiceInitializer(new TInsertConveyorInitializer(runConfig));
     }
 
     if (serviceMask.EnableBackgroundTasks) {

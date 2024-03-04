@@ -140,8 +140,7 @@ namespace NKikimr {
                 }
             }
 
-            void Bootstrap(const TActorContext &ctx) {
-                Y_UNUSED(ctx);
+            void Bootstrap() {
                 NKikimrBlobStorage::TEvVMultiPut &record = Event->Get()->Record;
 
                 for (ui64 idx = 0; idx < record.ItemsSize(); ++idx) {
@@ -163,6 +162,11 @@ namespace NKikimr {
                 }
 
                 Become(&TThis::StateWait);
+            }
+
+            void PassAway() override {
+                TActivationContext::Send(new IEventHandle(TEvents::TSystem::ActorDied, 0, LeaderId, SelfId(), nullptr, 0));
+                TActorBootstrapped::PassAway();
             }
 
             STFUNC(StateWait) {

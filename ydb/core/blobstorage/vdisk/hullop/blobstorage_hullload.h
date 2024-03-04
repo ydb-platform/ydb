@@ -363,7 +363,7 @@ namespace NKikimr {
                 std::unique_ptr<TLevelSegmentLoader> actor(new TLevelSegmentLoader(VCtx, PDiskCtx,
                         Segs->Segments[Pos].Get(), ctx.SelfID, "OrderedLevelSegmentsLoader"));
                 NActors::TActorId aid = ctx.Register(actor.Release());
-                ActiveActors.Insert(aid);
+                ActiveActors.Insert(aid, __FILE__, __LINE__, ctx, NKikimrServices::BLOBSTORAGE);
                 ++Pos;
             } else {
                 Y_VERIFY_DEBUG(Pos == Size);
@@ -443,7 +443,7 @@ namespace NKikimr {
             if (Pos != End) {
                 std::unique_ptr<TLevelSegmentLoader> actor(new TLevelSegmentLoader(VCtx, PDiskCtx, Pos->Get(), ctx.SelfID));
                 NActors::TActorId aid = ctx.Register(actor.Release());
-                ActiveActors.Insert(aid);
+                ActiveActors.Insert(aid, __FILE__, __LINE__, ctx, NKikimrServices::BLOBSTORAGE);
             } else {
                 ctx.Send(Recipient, new THullSegmentsLoaded(std::move(Segs)));
                 TThis::Die(ctx);
@@ -532,7 +532,7 @@ namespace NKikimr {
                 auto actor = std::make_unique<TLevelSegmentLoader>(VCtx, PDiskCtx, It.Get().SstPtr.Get(), ctx.SelfID,
                     "LevelIndexLoader");
                 NActors::TActorId aid = ctx.Register(actor.release());
-                ActiveActors.Insert(aid);
+                ActiveActors.Insert(aid, __FILE__, __LINE__, ctx, NKikimrServices::BLOBSTORAGE);
                 It.Next();
             } else {
                 // Done

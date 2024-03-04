@@ -30,7 +30,7 @@ namespace NKikimr {
 
         void Bootstrap(const TActorContext &ctx) {
             CliId = ctx.Register(Actor.release());
-            ActiveActors.Insert(CliId);
+            ActiveActors.Insert(CliId, __FILE__, __LINE__, ctx, NKikimrServices::BLOBSTORAGE);
             Become(&TThis::StateFunc);
         }
 

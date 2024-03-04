@@ -17,7 +17,7 @@ public:
     }
 
     const TPKRangeFilter& Front() const {
-        Y_VERIFY(Size());
+        Y_ABORT_UNLESS(Size());
         return SortedRanges.front();
     }
 
@@ -35,7 +35,7 @@ public:
 
     bool IsPortionInUsage(const TPortionInfo& info, const TIndexInfo& indexInfo) const;
 
-    NArrow::TColumnFilter BuildFilter(std::shared_ptr<arrow::RecordBatch> data) const;
+    NArrow::TColumnFilter BuildFilter(const arrow::Datum& data) const;
 
     bool Add(std::shared_ptr<NOlap::TPredicate> f, std::shared_ptr<NOlap::TPredicate> t, const TIndexInfo* indexInfo) Y_WARN_UNUSED_RESULT;
 

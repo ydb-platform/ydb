@@ -40,7 +40,7 @@ SRCS(
     defs.h
     event.cpp
     event.h
-    event_load.h
+    event_load.cpp
     event_local.h
     event_pb.cpp
     event_pb.h
@@ -63,7 +63,6 @@ SRCS(
     interconnect.cpp
     interconnect.h
     invoke.h
-    indexes.cpp
     io_dispatcher.cpp
     io_dispatcher.h
     lease.h
@@ -102,10 +101,10 @@ SRCS(
 
 GENERATE_ENUM_SERIALIZATION(defs.h)
 GENERATE_ENUM_SERIALIZATION(actor.h)
-GENERATE_ENUM_SERIALIZATION(indexes.h)
 GENERATE_ENUM_SERIALIZATION(log_iface.h)
 
 PEERDIR(
+    library/cpp/actors/actor_type
     library/cpp/actors/memory_log
     library/cpp/actors/prof
     library/cpp/actors/protos

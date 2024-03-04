@@ -8,6 +8,9 @@ ydb/core/debug_tools/ut OperationLog.ConcurrentWrites
 ydb/core/quoter/ut QuoterWithKesusTest.PrefetchCoefficient
 ydb/core/kafka_proxy/ut KafkaProtocol.CreatePartitionsScenario
 ydb/core/kafka_proxy/ut KafkaProtocol.ProduceScenario
+ydb/core/keyvalue/ut TKeyValueTest.TestWriteReadWhileWriteWorks
+ydb/core/keyvalue/ut_trace TKeyValueTracingTest.WriteHuge
+ydb/core/keyvalue/ut_trace TKeyValueTracingTest.WriteSmall
 ydb/core/kqp/provider/ut KikimrIcGateway.TestLoadBasicSecretValueFromExternalDataSourceMetadata
 ydb/core/kqp/ut/federated_query/generic *
 ydb/core/kqp/ut/olap *
@@ -29,6 +32,11 @@ ydb/core/tx/columnshard/ut_schema TColumnShardTestSchema.RebootForgetAfterFail
 ydb/core/tx/columnshard/engines/ut *
 ydb/core/tx/coordinator/ut Coordinator.RestoreTenantConfiguration
 ydb/core/tx/datashard/ut_change_exchange Cdc.InitialScanDebezium
+ydb/core/tx/scheme_board/ut_cache TCacheTest.MigrationLostMessage
+ydb/core/tx/scheme_board/ut_cache [3/10]*
+ydb/core/tx/schemeshard/ut_base TSchemeShardTest.CreatePersQueueGroup
+ydb/core/tx/schemeshard/ut_base TSchemeShardTest.DropPQ
+ydb/core/tx/schemeshard/ut_move TSchemeShardMoveTest.MoveMigratedTable
 ydb/core/tx/schemeshard/ut_restore TImportTests.ShouldSucceedOnManyTables
 ydb/core/tx/schemeshard/ut_split_merge TSchemeShardSplitBySizeTest.Merge1KShards
 ydb/core/tx/tx_proxy/ut_ext_tenant TExtSubDomainTest.CreateTableInsideAndAlterDomainAndTable-AlterDatabaseCreateHiveFirst*
@@ -60,6 +68,9 @@ ydb/services/persqueue_v1/ut TPersQueueTest.SetupLockSession
 ydb/services/persqueue_v1/ut TPersQueueTest.TopicServiceCommitOffsetBadOffsets
 ydb/services/persqueue_v1/ut TPQCompatTest.BadTopics
 ydb/services/persqueue_v1/ut [3/10]*
+ydb/services/persqueue_v1/ut TPartitionWriterCacheActorTests.DropOldWriter
+ydb/services/persqueue_v1/ut TPartitionWriterCacheActorTests.WriteReplyOrder
+ydb/services/persqueue_v1/ut TPersQueueTest.DisableWrongSettings
 ydb/services/ydb/sdk_sessions_pool_ut YdbSdkSessionsPool.StressTestSync*
 ydb/services/ydb/sdk_sessions_ut YdbSdkSessions.TestActiveSessionCountAfterBadSession
 ydb/services/ydb/sdk_sessions_ut [6/10]*

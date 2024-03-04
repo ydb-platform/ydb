@@ -2,7 +2,7 @@ syntax = "proto3";
 
 option cc_enable_arenas = true;
 
-package NYql.NConnector;
+package NYql.Generic;
 
 import "ydb/library/yql/providers/generic/connector/api/service/protos/connector.proto";
 import "ydb/library/yql/providers/generic/connector/api/common/data_source.proto";
@@ -11,11 +11,14 @@ message TSource {
     // Prepared Select expression
     NYql.NConnector.NApi.TSelect select = 2;
 
-    // ServiceAccountId and ServiceAccountIdSignature are used to obtain tokens
-    // to access external data source supporting this kind of authentication
-    // during the runtime phase.
+    // Credentials used to access managed databases APIs.
+    // When working with external data source instances deployed in clouds,
+    // one should either set (ServiceAccountId, ServiceAccountIdSignature) pair 
+    // that will be resolved into IAM Token via Token Accessor, 
+    // or provide IAM Token directly.
     string ServiceAccountId = 4;
     string ServiceAccountIdSignature = 5;
+    string Token = 6;
 
     reserved 1, 3;
 }

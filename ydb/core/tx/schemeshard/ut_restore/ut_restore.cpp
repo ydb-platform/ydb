@@ -375,7 +375,7 @@ Y_UNIT_TEST_SUITE(TRestoreTests) {
 
     bool CheckDefaultFromSequence(const NKikimrSchemeOp::TTableDescription& desc) {
         for (const auto& column: desc.GetColumns()) {
-            if (column.GetName() == "value") {
+            if (column.GetName() == "key") {
                 switch (column.GetDefaultValueCase()) {
                     case NKikimrSchemeOp::TColumnDescription::kDefaultFromSequence: {
                         const auto& fromSequence = column.GetDefaultFromSequence();

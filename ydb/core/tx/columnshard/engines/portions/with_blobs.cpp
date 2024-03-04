@@ -19,23 +19,21 @@ void TPortionInfoWithBlobs::TBlobInfo::RestoreChunk(const TPortionInfoWithBlobs&
 void TPortionInfoWithBlobs::TBlobInfo::AddChunk(TPortionInfoWithBlobs& owner, const std::shared_ptr<IPortionDataChunk>& chunk) {
     AFL_VERIFY(chunk);
     Y_ABORT_UNLESS(!ResultBlob);
-    TBlobRange bRange;
     const TString& data = chunk->GetData();
 
-    bRange.Offset = Size;
-    bRange.Size = data.size();
-
+    TBlobRangeLink16 bRange(Size, data.size());
     Size += data.size();
 
     Y_ABORT_UNLESS(Chunks.emplace(chunk->GetChunkAddress(), chunk).second);
     ChunksOrdered.emplace_back(chunk);
 
-    chunk->AddIntoPortion(bRange, owner.PortionInfo);
+    chunk->AddIntoPortionBeforeBlob(bRange, owner.PortionInfo);
 }
 
 void TPortionInfoWithBlobs::TBlobInfo::RegisterBlobId(TPortionInfoWithBlobs& owner, const TUnifiedBlobId& blobId) {
+    const TBlobRangeLink16::TLinkId idx = owner.PortionInfo.RegisterBlobId(blobId);
     for (auto&& i : Chunks) {
-        owner.PortionInfo.RegisterBlobId(i.first, blobId);
+        owner.PortionInfo.RegisterBlobIdx(i.first, idx);
     }
 }
 
@@ -96,7 +94,7 @@ NKikimr::NOlap::TPortionInfoWithBlobs TPortionInfoWithBlobs::RestorePortion(cons
     for (auto&& c : result.PortionInfo.Records) {
         const TString& storageId = portion.GetColumnStorageId(c.GetColumnId(), indexInfo);
         auto& storageRecords = records[storageId];
-        auto& blobRecords = storageRecords[c.BlobRange.BlobId];
+        auto& blobRecords = storageRecords[portion.GetBlobId(c.GetBlobRange().GetBlobIdxVerified())];
         blobRecords.emplace_back(&c);
     }
 
@@ -110,7 +108,7 @@ NKikimr::NOlap::TPortionInfoWithBlobs TPortionInfoWithBlobs::RestorePortion(cons
             std::sort(i.second.begin(), i.second.end(), predOffset);
             auto builder = result.StartBlob(storage);
             for (auto&& d : i.second) {
-                auto blobData = blobs.Extract(portion.GetColumnStorageId(d->GetColumnId(), indexInfo), d->BlobRange);
+                auto blobData = blobs.Extract(portion.GetColumnStorageId(d->GetColumnId(), indexInfo), portion.RestoreBlobRange(d->BlobRange));
                 builder.RestoreChunk(std::make_shared<TSimpleOrderedColumnChunk>(*d, std::move(blobData)));
             }
         }

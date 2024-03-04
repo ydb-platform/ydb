@@ -19,23 +19,21 @@ void TPortionInfoWithBlobs::TBlobInfo::RestoreChunk(const TPortionInfoWithBlobs&
 void TPortionInfoWithBlobs::TBlobInfo::AddChunk(TPortionInfoWithBlobs& owner, const std::shared_ptr<IPortionDataChunk>& chunk) {
     AFL_VERIFY(chunk);
     Y_ABORT_UNLESS(!ResultBlob);
-    TBlobRange bRange;
     const TString& data = chunk->GetData();
 
-    bRange.Offset = Size;
-    bRange.Size = data.size();
-
+    TBlobRangeLink16 bRange(Size, data.size());
     Size += data.size();
 
     Y_ABORT_UNLESS(Chunks.emplace(chunk->GetChunkAddress(), chunk).second);
     ChunksOrdered.emplace_back(chunk);
 
-    chunk->AddIntoPortion(bRange, owner.PortionInfo);
+    chunk->AddIntoPortionBeforeBlob(bRange, owner.PortionInfo);
 }
 
 void TPortionInfoWithBlobs::TBlobInfo::RegisterBlobId(TPortionInfoWithBlobs& owner, const TUnifiedBlobId& blobId) {
+    const TBlobRangeLink16::TLinkId idx = owner.PortionInfo.RegisterBlobId(blobId);
     for (auto&& i : Chunks) {
-        owner.PortionInfo.RegisterBlobId(i.first, blobId);
+        owner.PortionInfo.RegisterBlobIdx(i.first, idx);
     }
 }
 
@@ -96,7 +94,7 @@ NKikimr::NOlap::TPortionInfoWithBlobs TPortionInfoWithBlobs::RestorePortion(cons
     for (auto&& c : result.PortionInfo.Records) {
         const TString& storageId = portion.GetColumnStorageId(c.GetColumnId(), indexInfo);
         auto& storageRecords = records[storageId];
-        auto& blobRecords = storageRecords[c.BlobRange.BlobId];
+        auto& blobRecords = storageRecords[portion.GetBlobId(c.GetBlobRange().GetBlobIdxVerified())];
         blobRecords.emplace_back(&c);
     }
 
@@ -110,7 +108,7 @@ NKikimr::NOlap::TPortionInfoWithBlobs TPortionInfoWithBlobs::RestorePortion(cons
             std::sort(i.second.begin(), i.second.end(), predOffset);
             auto builder = result.StartBlob(storage);
             for (auto&& d : i.second) {
-                auto blobData = blobs.Extract(portion.GetColumnStorageId(d->GetColumnId(), indexInfo), d->BlobRange);
+                auto blobData = blobs.Extract(portion.GetColumnStorageId(d->GetColumnId(), indexInfo), portion.RestoreBlobRange(d->BlobRange));
                 builder.RestoreChunk(std::make_shared<TSimpleOrderedColumnChunk>(*d, std::move(blobData)));
             }
         }
@@ -129,7 +127,7 @@ std::vector<NKikimr::NOlap::TPortionInfoWithBlobs> TPortionInfoWithBlobs::Restor
 }
 
 NKikimr::NOlap::TPortionInfoWithBlobs TPortionInfoWithBlobs::BuildByBlobs(std::vector<TSplittedBlob>&& chunks,
-    std::shared_ptr<arrow::RecordBatch> batch, const ui64 granule, const TSnapshot& snapshot, const std::shared_ptr<IStoragesManager>& operators)
+    std::shared_ptr<arrow::RecordBatch> batch, const ui64 granule, const TSnapshot& snapshot, const std::shared_ptr<IStoragesManager>& operators, const std::shared_ptr<ISnapshotSchema>& schema)
 {
     TPortionInfoWithBlobs result(TPortionInfo(granule, 0, snapshot), batch);
     for (auto&& blob: chunks) {
@@ -144,6 +142,7 @@ NKikimr::NOlap::TPortionInfoWithBlobs TPortionInfoWithBlobs::BuildByBlobs(std::v
         return l.GetAddress() < r.GetAddress();
     };
     std::sort(result.GetPortionInfo().Records.begin(), result.GetPortionInfo().Records.end(), pred);
+    schema->GetIndexInfo().FillStatistics(result);
     return result;
 }
 
@@ -222,4 +221,17 @@ bool TPortionInfoWithBlobs::ExtractColumnChunks(const ui32 columnId, std::vector
     std::swap(chunksLocal, chunks);
     return true;
 }
+
+void TPortionInfoWithBlobs::FillStatistics(const std::map<NStatistics::TIdentifier, NStatistics::TOperatorContainer>& operators, const TIndexInfo& index) {
+    NStatistics::TPortionStorage storage;
+    for (auto&& i : operators) {
+        THashMap<ui32, std::vector<std::shared_ptr<IPortionDataChunk>>> data;
+        for (auto&& entityId : i.second->GetEntityIds()) {
+            data.emplace(entityId, GetEntityChunks(entityId));
+        }
+        i.second->FillStatisticsData(data, storage, index);
+    }
+    PortionInfo.SetStatisticsStorage(std::move(storage));
+}
+
 }

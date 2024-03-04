@@ -243,6 +243,9 @@ private:
     NMonitoring::TDynamicCounters::TCounterPtr PortionNoTtlColumnCount;
     NMonitoring::TDynamicCounters::TCounterPtr PortionNoTtlColumnBytes;
 
+    NMonitoring::TDynamicCounters::TCounterPtr StatUsageForTTLCount;
+    NMonitoring::TDynamicCounters::TCounterPtr ChunkUsageForTTLCount;
+
     NMonitoring::TDynamicCounters::TCounterPtr PortionNoBorderCount;
     NMonitoring::TDynamicCounters::TCounterPtr PortionNoBorderBytes;
 
@@ -300,6 +303,14 @@ public:
     void OnPortionNoTtlColumn(const ui64 size) const {
         PortionNoTtlColumnCount->Add(1);
         PortionNoTtlColumnBytes->Add(size);
+    }
+
+    void OnChunkUsageForTTL() const {
+        ChunkUsageForTTLCount->Add(1);
+    }
+
+    void OnStatUsageForTTL() const {
+        StatUsageForTTLCount->Add(1);
     }
 
     void OnPortionNoBorder(const ui64 size) const {

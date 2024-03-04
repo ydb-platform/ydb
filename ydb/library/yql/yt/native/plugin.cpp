@@ -332,7 +332,12 @@ public:
             if (options.YTTokenPath) {
                 TFsPath path(options.YTTokenPath);
                 YqlAgentToken_ = TIFStream(path).ReadAll();
+            } else if (!NYT::TConfig::Get()->Token.empty()) {
+                YqlAgentToken_ = NYT::TConfig::Get()->Token;
             }
+            // do not use token from .yt/token or env in queries
+            NYT::TConfig::Get()->Token = {};
+
             ProgramFactory_->AddUserDataTable(userDataTable);
             ProgramFactory_->SetCredentials(MakeIntrusive<NYql::TCredentials>());
             ProgramFactory_->SetModules(ModuleResolver_);

@@ -63,12 +63,9 @@ struct TSelectInfo {
             out.Records += portionInfo->NumChunks();
             out.Rows += portionInfo->NumRows();
             for (auto& rec : portionInfo->Records) {
-                uniqBlob.insert(rec.BlobRange.BlobId);
+                out.Bytes += rec.BlobRange.Size;
             }
-        }
-        out.Blobs += uniqBlob.size();
-        for (auto blobId : uniqBlob) {
-            out.Bytes += blobId.BlobSize();
+            out.Blobs += portionInfo->GetBlobIdsCount();
         }
         return out;
     }

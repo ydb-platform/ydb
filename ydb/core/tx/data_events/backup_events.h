@@ -14,9 +14,10 @@ struct TBackupEvents {
     static_assert(EEventType::EvEnd < EventSpaceEnd(TKikimrEvents::ES_BACKUP_SHARD),
                   "expect EvEnd < EventSpaceEnd(TKikimrEvents::ES_BACKUP_SHARD)");
 
-    struct TEvBackupShardResult
+    class TEvBackupShardResult
         : public NActors::TEventPB<TEvBackupShardResult, NKikimrBackupEvents::TEvBackupShardResult,
                                    EvBackupShardResult> {
+    public:
         TEvBackupShardResult() = default;
     };
 };

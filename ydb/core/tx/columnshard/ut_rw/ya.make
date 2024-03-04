@@ -35,6 +35,7 @@ SRCS(
     ut_columnshard_read_write.cpp
     ut_normalizer.cpp
     ut_backup.cpp
+    common.cpp
 )
 
 END()

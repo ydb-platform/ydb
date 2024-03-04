@@ -68,7 +68,7 @@ class TBackupActor : public TActorBootstrapped<TBackupActor> {
     const NOlap::TSnapshot Snapshot;
     const std::vector<TString> ColumnsNames;
 
-    BackupActorState State = BackupActorState::Invalid;
+    EBackupActorState State = EBackupActorState::Invalid;
 
     NKikimrSSA::TProgram ProgramProto = NKikimrSSA::TProgram();
 
@@ -87,7 +87,7 @@ public:
     }
 
     void Bootstrap(const TActorContext& ctx) {
-        ProcessState(ctx, BackupActorState::Init);
+        ProcessState(ctx, EBackupActorState::Init);
         Become(&TThis::StateWork);
     }
 
@@ -105,13 +105,13 @@ public:
     void Handle(NKqp::TEvKqpCompute::TEvScanInitActor::TPtr& ev, const TActorContext& ctx) {
         AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("TBackupActor.Handle", "creaTEvScanInitActorte");
 
-        AFL_VERIFY(State == BackupActorState::Init);
+        AFL_VERIFY(State == EBackupActorState::Init);
         AFL_VERIFY(ev);
 
         auto& msg = ev->Get()->Record;
         ScanActorId = ActorIdFromProto(msg.GetScanActorId());
 
-        ProcessState(ctx, BackupActorState::Progress);
+        ProcessState(ctx, EBackupActorState::Progress);
     }
 
     void Handle(NKqp::TEvKqpCompute::TEvScanError::TPtr&, const TActorContext& ctx) {
@@ -124,7 +124,7 @@ public:
 
     void Handle(NKqp::TEvKqpCompute::TEvScanData::TPtr& ev, const TActorContext& ctx) {
         AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("TBackupActor.Handle", "TEvScanData");
-        AFL_VERIFY(State == BackupActorState::Progress);
+        AFL_VERIFY(State == EBackupActorState::Progress);
 
         auto batch = ev->Get()->ArrowBatch;
         if (batch) {
@@ -144,37 +144,37 @@ public:
 
         AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("TBackupActor.Handle", "not finished, send ack");
 
-        ProcessState(ctx, BackupActorState::Progress);
+        ProcessState(ctx, EBackupActorState::Progress);
     }
 
     void Handle(TEvPrivate::TEvWriteBlobsResult::TPtr&, const TActorContext& ctx) {
         AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("TBackupActor.Handle", "TEvWriteBlobsResult");
 
-        ProcessState(ctx, BackupActorState::Done);
+        ProcessState(ctx, EBackupActorState::Done);
 
         SendBackupShardResult(ctx);
     }
 
 private:
-    void ProcessState(const TActorContext& ctx, const BackupActorState newState) {
+    void ProcessState(const TActorContext& ctx, const EBackupActorState newState) {
         AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)
         ("BackupActor.ProcessState", "change state")("from", ToString(State))("to", ToString(newState));
 
         State = newState;
 
         switch (State) {
-            case BackupActorState::Invalid: {
+            case EBackupActorState::Invalid: {
                 break;
             }
-            case BackupActorState::Init: {
+            case EBackupActorState::Init: {
                 SendScanEvent(ctx);
                 break;
             }
-            case BackupActorState::Progress: {
+            case EBackupActorState::Progress: {
                 SendScanDataAck(ctx);
                 break;
             }
-            case BackupActorState::Done: {
+            case EBackupActorState::Done: {
                 SendBackupShardResult(ctx);
                 break;
             }
@@ -241,7 +241,7 @@ private:
     }
 
     void SendScanDataAck(const TActorContext& ctx) {
-        AFL_VERIFY(State != BackupActorState::Done);
+        AFL_VERIFY(State != EBackupActorState::Done);
         AFL_VERIFY(ScanActorId);
 
         AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("ScanActorId", ScanActorId->ToString());

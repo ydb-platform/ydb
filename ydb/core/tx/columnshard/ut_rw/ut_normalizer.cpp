@@ -2,6 +2,7 @@
 
 #include <ydb/core/tx/columnshard/hooks/abstract/abstract.h>
 #include <ydb/core/tx/columnshard/hooks/testing/controller.h>
+#include <ydb/core/tx/columnshard/ut_rw/common.h>
 
 #include <ydb/core/tx/columnshard/operations/write_data.h>
 
@@ -215,6 +216,21 @@ public:
     }
 };
 
+namespace {
+
+std::shared_ptr<arrow::RecordBatch> BuildBatch() {
+    using namespace NArrow;
+
+    NConstruction::IArrayBuilder::TPtr key1Column = std::make_shared<NConstruction::TSimpleArrayConstructor<NConstruction::TIntSeqFiller<arrow::UInt64Type>>>("key1");
+        NConstruction::IArrayBuilder::TPtr key2Column = std::make_shared<NConstruction::TSimpleArrayConstructor<NConstruction::TIntSeqFiller<arrow::UInt64Type>>>("key2");
+        NConstruction::IArrayBuilder::TPtr column = std::make_shared<NConstruction::TSimpleArrayConstructor<NConstruction::TStringPoolFiller>>(
+            "field", NConstruction::TStringPoolFiller(8, 100));
+
+    return NConstruction::TRecordBatchConstructor({ key1Column, key2Column, column }).BuildBatch(20048);
+}
+
+}
+
 Y_UNIT_TEST_SUITE(Normalizers) {
 
     template <class TLocalDBModifier>
@@ -237,18 +253,7 @@ Y_UNIT_TEST_SUITE(Normalizers) {
         PrepareTablet(runtime, tableId, schema, 2);
         const ui64 txId = 111;
 
-        NConstruction::IArrayBuilder::TPtr key1Column = std::make_shared<NConstruction::TSimpleArrayConstructor<NConstruction::TIntSeqFiller<arrow::UInt64Type>>>("key1");
-        NConstruction::IArrayBuilder::TPtr key2Column = std::make_shared<NConstruction::TSimpleArrayConstructor<NConstruction::TIntSeqFiller<arrow::UInt64Type>>>("key2");
-        NConstruction::IArrayBuilder::TPtr column = std::make_shared<NConstruction::TSimpleArrayConstructor<NConstruction::TStringPoolFiller>>(
-            "field", NConstruction::TStringPoolFiller(8, 100));
-
-        auto batch = NConstruction::TRecordBatchConstructor({ key1Column, key2Column, column }).BuildBatch(20048);
-        TString blobData = NArrow::SerializeBatchNoCompression(batch);
-
-        auto evWrite = std::make_unique<NKikimr::NEvents::TDataEvents::TEvWrite>(NKikimrDataEvents::TEvWrite::MODE_PREPARE);
-        evWrite->SetTxId(txId);
-        ui64 payloadIndex = NEvWrite::TPayloadWriter<NKikimr::NEvents::TDataEvents::TEvWrite>(*evWrite).AddDataToPayload(std::move(blobData));
-        evWrite->AddOperation(NKikimrDataEvents::TEvWrite::TOperation::OPERATION_REPLACE, {ownerId, tableId, schemaVersion}, columnsIds, payloadIndex, NKikimrDataEvents::FORMAT_ARROW);
+        auto evWrite = PrepareEvWrite(BuildBatch(), txId, tableId, ownerId, schemaVersion, columnsIds);
 
         TActorId sender = runtime.AllocateEdgeActor();
         ForwardToTablet(runtime, TTestTxConfig::TxTablet0, sender, evWrite.release());

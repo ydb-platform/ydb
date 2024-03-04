@@ -4,7 +4,7 @@
 
 namespace NKikimr::NColumnShard {
 
-enum class BackupActorState : ui8 {
+enum class EBackupActorState : ui8 {
     Invalid,
     Init,
     Progress,

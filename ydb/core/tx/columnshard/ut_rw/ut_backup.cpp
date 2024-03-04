@@ -18,6 +18,7 @@
 #include <ydb/core/tx/conveyor/usage/abstract.h>
 #include <ydb/core/tx/data_events/backup_events.h>
 #include <ydb/core/wrappers/fake_storage.h>
+#include <ydb/core/tx/columnshard/ut_rw/common.h>
 
 #include <ydb/library/actors/protos/unittests.pb.h>
 #include <ydb/library/yverify_stream/yverify_stream.h>
@@ -37,17 +38,29 @@ using TTestColumn = NArrow::NTest::TTestColumn;
 using TFakeExternalStorage = NWrappers::NExternalStorage::TFakeExternalStorage;
 using TTypeId = NScheme::TTypeId;
 using TTypeInfo = NScheme::TTypeInfo;
-using TDefaultTestsController = NYDBTest::NColumnShard::TController;
 
 namespace NTypeIds = NScheme::NTypeIds;
-namespace NTier = NOlap::NBlobOperations::NTier;
 
 constexpr ui64 txId = 111;
 constexpr int writePlanStep = 11;
 constexpr ui64 tableId = 1;
 
-const std::vector<TTestColumn> schema = {TTestColumn{"key", NScheme::TTypeInfo{NTypeIds::Uint64}},
-                                         TTestColumn{"field", NScheme::TTypeInfo{NTypeIds::Utf8}}};
+const std::vector<TTestColumn> schema = {TTestColumn{"key", TTypeInfo{NTypeIds::Uint64}},
+                                         TTestColumn{"field", TTypeInfo{NTypeIds::Utf8}}};
+
+namespace {
+
+std::shared_ptr<arrow::RecordBatch> BuildBatch() {
+    auto keyColumn =
+        std::make_shared<NArrow::NConstruction::TSimpleArrayConstructor<NArrow::NConstruction::TIntSeqFiller<arrow::UInt64Type>>>(
+            "key");
+    auto column = std::make_shared<NArrow::NConstruction::TSimpleArrayConstructor<NArrow::NConstruction::TStringPoolFiller>>(
+        "field", NArrow::NConstruction::TStringPoolFiller(8, 100));
+
+    return NArrow::NConstruction::TRecordBatchConstructor({keyColumn, column}).BuildBatch(2048);
+}
+
+} // namespace
 
 TActorIdentity PrepareCSTable(TTestBasicRuntime& runtime, TActorId& sender) {
     using namespace NArrow;
@@ -56,23 +69,10 @@ TActorIdentity PrepareCSTable(TTestBasicRuntime& runtime, TActorId& sender) {
     const ui64 schemaVersion = 1;
 
     const std::vector<ui32> columnsIds = {1, 2};
-    auto res = PrepareTabletActor(runtime, tableId, schema);
+    auto res = PrepareTablet(runtime, tableId, schema);
+    UNIT_ASSERT(res);
 
-    auto keyColumn =
-        std::make_shared<NConstruction::TSimpleArrayConstructor<NConstruction::TIntSeqFiller<arrow::UInt64Type>>>(
-            "key");
-    auto column = std::make_shared<NConstruction::TSimpleArrayConstructor<NConstruction::TStringPoolFiller>>(
-        "field", NConstruction::TStringPoolFiller(16, 16));
-
-    auto batch = NConstruction::TRecordBatchConstructor({keyColumn, column}).BuildBatch(2048);
-    TString blobData = NArrow::SerializeBatchNoCompression(batch);
-    UNIT_ASSERT(blobData.size() < TLimits::GetMaxBlobSize());
-
-    auto evWrite = std::make_unique<NEvents::TDataEvents::TEvWrite>(txId, NKikimrDataEvents::TEvWrite::MODE_PREPARE);
-    const ui64 payloadIndex =
-        NEvWrite::TPayloadWriter<NEvents::TDataEvents::TEvWrite>(*evWrite).AddDataToPayload(std::move(blobData));
-    evWrite->AddOperation(NKikimrDataEvents::TEvWrite::TOperation::OPERATION_REPLACE, {ownerId, tableId, schemaVersion},
-                          columnsIds, payloadIndex, NKikimrDataEvents::FORMAT_ARROW);
+    auto evWrite = PrepareEvWrite(BuildBatch(), txId, tableId, ownerId, schemaVersion, columnsIds);
 
     ForwardToTablet(runtime, TTestTxConfig::TxTablet0, sender, evWrite.release());
 
@@ -88,30 +88,6 @@ TActorIdentity PrepareCSTable(TTestBasicRuntime& runtime, TActorId& sender) {
     return res->SelfId();
 }
 
-std::shared_ptr<NTier::TOperator> PrepareInsertOp(const TActorId& sender) {
-    const auto storageId = "some storageId";
-    const TActorIdentity tabletActorID(sender);
-
-    auto sharedBlobsManager = std::make_shared<NOlap::NDataSharing::TSharedBlobsManager>(NOlap::TTabletId{tableId});
-
-    NKikimrSchemeOp::TStorageTierConfig cfgProto;
-    cfgProto.SetName("some_name");
-
-    ::NKikimrSchemeOp::TS3Settings s3_settings;
-    s3_settings.set_secretkey(Singleton<TFakeExternalStorage>()->GetSecretKey());
-    s3_settings.set_endpoint("fake");
-
-    *cfgProto.MutableObjectStorage() = s3_settings;
-    NTiers::TTierConfig cfg("tier_name", cfgProto);
-
-    auto* tierManager = new NTiers::TManager(tableId, tabletActorID, cfg);
-
-    tierManager->Start(nullptr);
-
-    return std::make_shared<NTier::TOperator>(storageId, tabletActorID, tierManager,
-                                              sharedBlobsManager->GetStorageManagerGuarantee(storageId));
-}
-
 Y_UNIT_TEST_SUITE(TColumnShardBackup) {
     Y_UNIT_TEST(ActorScan) {
         TTestBasicRuntime runtime;
@@ -120,7 +96,7 @@ Y_UNIT_TEST_SUITE(TColumnShardBackup) {
 
         const auto csActorId = PrepareCSTable(runtime, sender);
 
-        auto op = PrepareInsertOp(sender);
+        auto op = PrepareInsertOp(sender, tableId);
 
         runtime.Register(CreatBackupActor(op, sender, csActorId, tableId, NOlap::TSnapshot{writePlanStep, txId},
                                           TTestSchema::ExtractNames(schema)));

@@ -8,3 +8,4 @@ ydb-core-tx-columnshard-ut_schema/TColumnShardTestSchema::RebootForgetAfterFail
 ydb-library-yql-sql-pg-ut/PgSqlParsingAutoparam::AutoParamValues_DifferentTypes
 ydb-core-blobstorage-ut_blobstorage/[6/10]*
 ydb/core/blobstorage/ut_blobstorage/Defragmentation::DoesItWork
+ydb/core/keyvalue/ut_trace/*

@@ -175,34 +175,34 @@ Uploader – локальный для узла компонент, как сл
 
 | Уровень | Значение |
 | ------- | -------- |
-| `NONE` | Отсутствие трассировки |
-| `INFO-1` | Самая низкая детализация, не более 2 спанов на каждый запрос к компоненту |
-| `INFO-2` | Спаны главных операций компонента |
-| `INFO-3` | Более подробная детализация компонента |
-| `INFO-4` | Самая высокая детализация, применимая для диагностирования проблем в production |
-| `TRACE-1` | Детальная отладочная информация для разработчиков |
-| `TRACE-2` | Очень детальная отладочная информация |
+| `Off` | Отсутствие трассировки |
+| `Mininal` | Самая низкая детализация, не более 2 спанов на каждый запрос к компоненту |
+| `Basic` | Спаны главных операций компонента |
+| `Detailed` | Более подробная детализация компонента |
+| `Full` | Самая высокая детализация, применимая для диагностирования проблем в production |
+| `Diagnostic` | Детальная отладочная информация для разработчиков |
+| `Trace` | Очень детальная отладочная информация |
 
 Ниже приведено распределение уровней детализации слоев системы по уровням детализации трассы:
 
 | Уровен детализации трассы | gRPC Proxies | Query Processor | Distributed Transactions | Tablets | Distributed Storage |
 | ------------------------- | :----------: | :-------------: | :----------------------: | :-----: | :-----------------: |
-|  0 | `INFO-1` | `NONE` | `NONE` | `NONE` | `NONE` |
-|  1 | `INFO-1` | **`INFO-1`** | `NONE` | `NONE` | `NONE` |
-|  2 | `INFO-1` | `INFO-1` | **`INFO-1`** | `NONE` | `NONE` |
-|  3 | `INFO-1` | `INFO-1` | `INFO-1` | **`INFO-1`** | `NONE` |
-|  4 | `INFO-1` | `INFO-1` | `INFO-1` | `INFO-1` | **`INFO-1`** |
-|  5 | **`INFO-2`** | **`INFO-2`** | `INFO-1` | `INFO-1` | `INFO-1` |
-|  6 | `INFO-2` | `INFO-2` | **`INFO-2`** | `INFO-1` | `INFO-1` |
-|  7 | `INFO-2` | `INFO-2` | `INFO-2` | **`INFO-2`** | `INFO-1` |
-|  8 | `INFO-2` | `INFO-2` | `INFO-2` | `INFO-2` | **`INFO-2`** |
-|  9 | **`INFO-3`** | **`INFO-3`** | `INFO-2` | `INFO-2` | `INFO-2` |
-| 10 | `INFO-3` | `INFO-3` | **`INFO-3`** | `INFO-2` | `INFO-2` |
-| 11 | `INFO-3` | `INFO-3` | `INFO-3` | **`INFO-3`** | `INFO-2` |
-| 12 | `INFO-3` | `INFO-3` | `INFO-3` | `INFO-3` | **`INFO-3`** |
-| 13 | **`INFO-4`** | **`INFO-4`** | **`INFO-4`** | **`INFO-4`** | **`INFO-4`** |
-| 14 | **`TRACE-1`** | **`TRACE-1`** | **`TRACE-1`** | **`TRACE-1`** | **`TRACE-1`** |
-| 15 | **`TRACE-2`** | **`TRACE-2`** | **`TRACE-2`** | **`TRACE-2`** | **`TRACE-2`** |
+|  0 | `Mininal` | `Off` | `Off` | `Off` | `Off` |
+|  1 | `Mininal` | **`Mininal`** | `Off` | `Off` | `Off` |
+|  2 | `Mininal` | `Mininal` | **`Mininal`** | `Off` | `Off` |
+|  3 | `Mininal` | `Mininal` | `Mininal` | **`Mininal`** | `Off` |
+|  4 | `Mininal` | `Mininal` | `Mininal` | `Mininal` | **`Mininal`** |
+|  5 | **`Basic`** | **`Basic`** | `Mininal` | `Mininal` | `Mininal` |
+|  6 | `Basic` | `Basic` | **`Basic`** | `Mininal` | `Mininal` |
+|  7 | `Basic` | `Basic` | `Basic` | **`Basic`** | `Mininal` |
+|  8 | `Basic` | `Basic` | `Basic` | `Basic` | **`Basic`** |
+|  9 | **`Detailed`** | **`Detailed`** | `Basic` | `Basic` | `Basic` |
+| 10 | `Detailed` | `Detailed` | **`Detailed`** | `Basic` | `Basic` |
+| 11 | `Detailed` | `Detailed` | `Detailed` | **`Detailed`** | `Basic` |
+| 12 | `Detailed` | `Detailed` | `Detailed` | `Detailed` | **`Detailed`** |
+| 13 | **`Full`** | **`Full`** | **`Full`** | **`Full`** | **`Full`** |
+| 14 | **`Diagnostic`** | **`Diagnostic`** | **`Diagnostic`** | **`Diagnostic`** | **`Diagnostic`** |
+| 15 | **`Trace`** | **`Trace`** | **`Trace`** | **`Trace`** | **`Trace`** |
 
 ### Правила
 

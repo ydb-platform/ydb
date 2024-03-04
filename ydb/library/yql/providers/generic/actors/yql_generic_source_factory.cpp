@@ -10,14 +10,14 @@ namespace NYql::NDq {
                                          ISecuredServiceAccountCredentialsFactory::TPtr credentialsFactory,
                                          NYql::NConnector::IClient::TPtr genericClient) {
         auto genericFactory = [credentialsFactory, genericClient](
-                                  NConnector::TSource&& settings,
+                                  Generic::TSource&& settings,
                                   IDqAsyncIoFactory::TSourceArguments&& args) {
             return CreateGenericReadActor(genericClient, std::move(settings), args.InputIndex, args.StatsLevel,
                                           args.SecureParams, args.TaskParams, args.ComputeActorId, credentialsFactory, args.HolderFactory);
         };
 
         for (auto& sourceName : {"ClickHouseGeneric", "PostgreSqlGeneric", "YdbGeneric"}) {
-            factory.RegisterSource<NConnector::TSource>(sourceName, genericFactory);
+            factory.RegisterSource<Generic::TSource>(sourceName, genericFactory);
         }
     }
 

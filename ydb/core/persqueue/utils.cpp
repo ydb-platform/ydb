@@ -45,6 +45,65 @@ ui64 PutUnitsSize(const ui64 size) {
     return putUnitsCount;        
 }
 
+bool IsImportantClient(const NKikimrPQ::TPQTabletConfig& config, const TString& consumerName) {
+    for (const auto& i : config.GetPartitionConfig().GetImportantClientId()) {
+        if (consumerName == i) {
+            return true;
+        }
+    }
+
+    return false;
+}
+
+void Migrate(NKikimrPQ::TPQTabletConfig& config) {
+    // if ReadRules isn`t empty than it is old configuration format
+    // when modify new format (add or alter a consumer) readRules is cleared
+    if (config.ReadRulesSize()) {
+        config.ClearConsumers();
+
+        for(size_t i = 0; i < config.ReadRulesSize(); ++i) {
+            auto* consumer = config.AddConsumers();
+
+            consumer->SetName(config.GetReadRules(i));
+            if (i < config.ReadFromTimestampsMsSize()) {
+                consumer->SetReadFromTimestampsMs(config.GetReadFromTimestampsMs(i));
+            }
+            if (i < config.ConsumerFormatVersionsSize()) {
+                consumer->SetFormatVersion(config.GetConsumerFormatVersions(i));
+            }
+            if (i < config.ConsumerCodecsSize()) {
+                auto& src = config.GetConsumerCodecs(i);
+                auto* dst = consumer->MutableCodec();
+                dst->CopyFrom(src);
+            }
+            if (i < config.ReadRuleServiceTypesSize()) {
+                consumer->SetServiceType(config.GetReadRuleServiceTypes(i));
+            }
+            if (i < config.ReadRuleVersionsSize()) {
+                consumer->SetVersion(config.GetReadRuleVersions(i));
+            }
+            if (i < config.ReadRuleGenerationsSize()) {
+                consumer->SetGeneration(config.GetReadRuleGenerations(i));
+            }
+            consumer->SetImportant(IsImportantClient(config, consumer->GetName()));
+        }
+    }
+}
+
+bool HasConsumer(const NKikimrPQ::TPQTabletConfig& config, const TString& consumerName) {
+    for (auto& cons : config.GetConsumers()) {
+        if (cons.GetName() == consumerName) {
+            return true;
+        }
+    }
+
+    return false;
+}
+
+size_t ConsumerCount(const NKikimrPQ::TPQTabletConfig& config) {
+    return config.ConsumersSize();
+}
+
 const NKikimrPQ::TPQTabletConfig::TPartition* GetPartitionConfig(const NKikimrPQ::TPQTabletConfig& config, const ui32 partitionId) {
     for(const auto& p : config.GetPartitions()) {
         if (partitionId == p.GetPartitionId()) {

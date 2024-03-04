@@ -4,6 +4,8 @@
 #include "partition_log.h"
 #include "partition.h"
 #include "read.h"
+#include "utils.h"
+
 #include <ydb/core/base/tx_processing.h>
 #include <ydb/core/base/feature_flags.h>
 #include <ydb/core/persqueue/config/config.h>
@@ -1013,6 +1015,8 @@ void TPersQueue::ReadConfig(const NKikimrClient::TKeyValueResponse::TReadResult&
         bool res = Config.ParseFromString(read.GetValue());
         Y_ABORT_UNLESS(res);
 
+        Migrate(Config);
+
         if (!Config.PartitionsSize()) {
             for (const auto partitionId : Config.GetPartitionIds()) {
                 Config.AddPartitions()->SetPartitionId(partitionId);
@@ -1145,10 +1149,12 @@ void TPersQueue::InitializeMeteringSink(const TActorContext& ctx) {
     }
 
     auto countReadRulesWithPricing = [&](const TActorContext& ctx, const auto& config) {
+        auto& defaultClientServiceType = AppData(ctx)->PQConfig.GetDefaultClientServiceType().GetName();
+
         ui32 result = 0;
-        for (ui32 i = 0; i < config.ReadRulesSize(); ++i) {
-            TString rrServiceType = config.ReadRuleServiceTypesSize() <= i ? "" : config.GetReadRuleServiceTypes(i);
-            if (rrServiceType.empty() || rrServiceType == AppData(ctx)->PQConfig.GetDefaultClientServiceType().GetName())
+        for (auto& consumer : config.GetConsumers()) {
+            TString serviceType = consumer.GetServiceType();
+            if (serviceType.empty() || serviceType == defaultClientServiceType)
                 ++result;
         }
         return result;
@@ -1618,24 +1624,27 @@ void TPersQueue::ProcessUpdateConfigRequest(TAutoPtr<TEvPersQueue::TEvUpdateConf
     if (!cfg.HasCacheSize() && Config.HasCacheSize()) //if not set and it is alter - preserve old cache size
         cfg.SetCacheSize(Config.GetCacheSize());
 
+    Migrate(cfg);
+
     // set rr generation for provided read rules
     {
         THashMap<TString, std::pair<ui64, ui64>> existed; // map name -> rrVersion, rrGeneration
-        for (ui32 i = 0; i < Config.ReadRulesSize(); ++i) {
-            auto version = i < Config.ReadRuleVersionsSize() ? Config.GetReadRuleVersions(i) : 0;
-            auto generation = i < Config.ReadRuleGenerationsSize() ? Config.GetReadRuleGenerations(i) : 0;
-            existed[Config.GetReadRules(i)] = std::make_pair(version, generation);
+        for (const auto& c : Config.GetConsumers()) {
+            existed[c.GetName()] = std::make_pair(c.GetVersion(), c.GetGeneration());
         }
-        for (ui32 i = 0; i < cfg.ReadRulesSize(); ++i) {
-            auto version = i < cfg.ReadRuleVersionsSize() ? cfg.GetReadRuleVersions(i) : 0;
-            auto it = existed.find(cfg.GetReadRules(i));
+
+        for (auto& c : *cfg.MutableConsumers()) {
+            auto it = existed.find(c.GetName());
             ui64 generation = 0;
-            if (it != existed.end() && it->second.first == version) {
+            if (it != existed.end() && it->second.first == c.GetVersion()) {
                 generation = it->second.second;
             } else {
                 generation = curConfigVersion;
             }
-            cfg.AddReadRuleGenerations(generation);
+            c.SetGeneration(generation);
+            if (ReadRuleCompatible()) {
+                cfg.AddReadRuleGenerations(generation);
+            }
         }
     }
 
@@ -1648,7 +1657,7 @@ void TPersQueue::ProcessUpdateConfigRequest(TAutoPtr<TEvPersQueue::TEvUpdateConf
 
     BeginWriteConfig(cfg, bootstrapCfg, ctx);
 
-    NewConfig = cfg;
+    NewConfig = std::move(cfg);
 }
 
 void TPersQueue::BeginWriteConfig(const NKikimrPQ::TPQTabletConfig& cfg,

@@ -281,6 +281,13 @@ select * from
 where
   1 = (select 1 from int8_tbl t3 where ss.y is not null limit 1)
 order by 1,2;
+select count(*) from
+  tenk1 a join tenk1 b on a.unique1 = b.unique2
+  left join tenk1 c on a.unique2 = b.unique1 and c.thousand = a.thousand
+  join int4_tbl on b.thousand = f1;
+select f1, unique2, case when unique2 is null then f1 else 0 end
+  from int4_tbl a left join tenk1 b on f1 = unique2
+  where (case when unique2 is null then f1 else 0 end) = 0;
 --
 -- test join removal
 --

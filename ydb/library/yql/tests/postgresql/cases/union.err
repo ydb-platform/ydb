@@ -1,8 +1,10 @@
 Registering pre-existing tables
+	int4_tbl
 	INT4_TBL
 	tenk1
 	text_tbl
 	VARCHAR_TBL
+	float8_tbl
 	CHAR_TBL
 	TEXT_TBL
 	FLOAT8_TBL
@@ -635,17 +637,9 @@ reset enable_hashagg;
 --
 SELECT f1 FROM float8_tbl INTERSECT SELECT f1 FROM int4_tbl ORDER BY 1;
 </sql-statement>
--stdin-:<main>: Fatal: Table metadata loading
-
-    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.float8_tbl
-    
 <sql-statement>
 SELECT f1 FROM float8_tbl EXCEPT SELECT f1 FROM int4_tbl ORDER BY 1;
 </sql-statement>
--stdin-:<main>: Fatal: Table metadata loading
-
-    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.float8_tbl
-    
 <sql-statement>
 --
 -- Operator precedence and (((((extra))))) parentheses

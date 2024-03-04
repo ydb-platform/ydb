@@ -1,10 +1,13 @@
 Registering pre-existing tables
 	onek
+	int4_tbl
 	INT4_TBL
 	tenk1
 	text_tbl
+	float8_tbl
 	INT2_TBL
 	tenk2
+	int2_tbl
 	TEXT_TBL
 	FLOAT8_TBL
 	int8_tbl
@@ -799,10 +802,6 @@ select count(*) from tenk1 x where
   x.unique1 = 0 and
   x.unique1 in (select aa.f1 from int4_tbl aa,float8_tbl bb where aa.f1=bb.f1);
 </sql-statement>
--stdin-:<main>: Fatal: Table metadata loading
-
-    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.float8_tbl
-    
 <sql-statement>
 -- try that with GEQO too
 begin;
@@ -829,10 +828,6 @@ select count(*) from tenk1 x where
   x.unique1 = 0 and
   x.unique1 in (select aa.f1 from int4_tbl aa,float8_tbl bb where aa.f1=bb.f1);
 </sql-statement>
--stdin-:<main>: Fatal: Table metadata loading
-
-    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.float8_tbl
-    
 <sql-statement>
 rollback;
 </sql-statement>
@@ -925,10 +920,14 @@ select a.f1, b.f1, t.thousand, t.tenthous from
   (select sum(f1) as f1 from int4_tbl i4b) b
 where b.f1 = t.thousand and a.f1 = b.f1 and (a.f1+b.f1+999) = t.tenthous;
 </sql-statement>
--stdin-:<main>: Fatal: Table metadata loading
+-stdin-:<main>: Error: Type annotation
 
-    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.int4_tbl
-    
+    -stdin-:<main>:1:1: Error: At function: RemovePrefixMembers, At function: PgSelect, At function: PgSetItem
+    	select a.f1, b.f1, t.thousand, t.tenthous from
+	^
+        -stdin-:<main>:1:1: Error: Duplicated member: f1
+        	select a.f1, b.f1, t.thousand, t.tenthous from
+	^
 <sql-statement>
 --
 -- check a case where we formerly got confused by conflicting sort orders
@@ -2037,17 +2036,25 @@ where i41.f1 > 0;
 --
 select * from int4_tbl a full join int4_tbl b on true;
 </sql-statement>
--stdin-:<main>: Fatal: Table metadata loading
+-stdin-:<main>: Error: Type annotation
 
-    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.int4_tbl
-    
+    -stdin-:<main>:1:1: Error: At function: RemovePrefixMembers, At function: PgSelect, At function: PgSetItem
+    	--
+	^
+        -stdin-:<main>:1:1: Error: Duplicated member: f1
+        	--
+	^
 <sql-statement>
 select * from int4_tbl a full join int4_tbl b on false;
 </sql-statement>
--stdin-:<main>: Fatal: Table metadata loading
+-stdin-:<main>: Error: Type annotation
 
-    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.int4_tbl
-    
+    -stdin-:<main>:1:1: Error: At function: RemovePrefixMembers, At function: PgSelect, At function: PgSetItem
+    	select * from int4_tbl a full join int4_tbl b on false;
+	^
+        -stdin-:<main>:1:1: Error: Duplicated member: f1
+        	select * from int4_tbl a full join int4_tbl b on false;
+	^
 <sql-statement>
 --
 -- test for ability to use a cartesian join when necessary
@@ -2158,10 +2165,14 @@ select t1.unique2, t1.stringu1, t2.unique1, t2.stringu2 from
   on (subq1.y1 = t2.unique1)
 where t1.unique2 < 42 and t1.stringu1 > t2.stringu2;
 </sql-statement>
--stdin-:<main>: Fatal: Table metadata loading
+-stdin-:<main>: Error: Type annotation
 
-    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.int4_tbl
-    
+    -stdin-:<main>:1:1: Error: At function: RemovePrefixMembers, At function: PgSelect, At function: PgSetItem
+    	select t1.unique2, t1.stringu1, t2.unique1, t2.stringu2 from
+	^
+        -stdin-:<main>:8:17: Error: Unknown alias: subq1
+        	    on (i1.f1 = subq1.x2)
+	                ^
 <sql-statement>
 -- variant that isn't quite a star-schema case
 select ss1.d1 from
@@ -2220,10 +2231,14 @@ select t1.unique2, t1.stringu1, t2.unique1, t2.stringu2 from
   on (subq1.y1 = t2.unique1)
 where t1.unique2 < 42 and t1.stringu1 > t2.stringu2;
 </sql-statement>
--stdin-:<main>: Fatal: Table metadata loading
+-stdin-:<main>: Error: Type annotation
 
-    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.int4_tbl
-    
+    -stdin-:<main>:1:1: Error: At function: RemovePrefixMembers, At function: PgSelect, At function: PgSetItem
+    	select t1.unique2, t1.stringu1, t2.unique1, t2.stringu2 from
+	^
+        -stdin-:<main>:8:17: Error: Unknown alias: subq1
+        	    on (i1.f1 = subq1.x2)
+	                ^
 <sql-statement>
 -- Here's a variant that we can't fold too aggressively, though,
 -- or we end up with noplace to evaluate the lateral PHV
@@ -2577,10 +2592,6 @@ select count(*) from
   left join tenk1 c on a.unique2 = b.unique1 and c.thousand = a.thousand
   join int4_tbl on b.thousand = f1;
 </sql-statement>
--stdin-:<main>: Fatal: Table metadata loading
-
-    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.int4_tbl
-    
 <sql-statement>
 explain (costs off)
 select b.unique1 from
@@ -2603,10 +2614,6 @@ select b.unique1 from
   right join int4_tbl i2 on i2.f1 = b.tenthous
   order by 1;
 </sql-statement>
--stdin-:<main>: Fatal: Table metadata loading
-
-    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.int4_tbl
-    
 <sql-statement>
 explain (costs off)
 select * from
@@ -2705,10 +2712,6 @@ select f1, unique2, case when unique2 is null then f1 else 0 end
   from int4_tbl a left join tenk1 b on f1 = unique2
   where (case when unique2 is null then f1 else 0 end) = 0;
 </sql-statement>
--stdin-:<main>: Fatal: Table metadata loading
-
-    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.int4_tbl
-    
 <sql-statement>
 --
 -- another case with equivalence clauses above outer joins (bug #8591)
@@ -2811,10 +2814,17 @@ select t1.* from
   left join int4_tbl i4
   on (i8.q2 = i4.f1);
 </sql-statement>
--stdin-:<main>: Fatal: Table metadata loading
+-stdin-:<main>: Error: Type annotation
 
-    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.int4_tbl
-    
+    -stdin-:<main>:1:1: Error: At function: RemovePrefixMembers, At function: PgSelect, At function: PgSetItem
+    	select t1.* from
+	^
+        -stdin-:<main>:6:11: Error: Unknown alias: i8
+        	      on (i8.q1 = b2.q1)
+	          ^
+        -stdin-:<main>:6:19: Error: Unknown alias: b2
+        	      on (i8.q1 = b2.q1)
+	                  ^
 <sql-statement>
 explain (verbose, costs off)
 select t1.* from
@@ -2845,10 +2855,17 @@ select t1.* from
   left join int4_tbl i4
   on (i8.q2 = i4.f1);
 </sql-statement>
--stdin-:<main>: Fatal: Table metadata loading
+-stdin-:<main>: Error: Type annotation
 
-    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.int4_tbl
-    
+    -stdin-:<main>:1:1: Error: At function: RemovePrefixMembers, At function: PgSelect, At function: PgSetItem
+    	select t1.* from
+	^
+        -stdin-:<main>:6:11: Error: Unknown alias: i8
+        	      on (i8.q1 = b2.q1)
+	          ^
+        -stdin-:<main>:6:19: Error: Unknown alias: b2
+        	      on (i8.q1 = b2.q1)
+	                  ^
 <sql-statement>
 explain (verbose, costs off)
 select t1.* from
@@ -2881,10 +2898,17 @@ select t1.* from
   left join int4_tbl i4
   on (i8.q2 = i4.f1);
 </sql-statement>
--stdin-:<main>: Fatal: Table metadata loading
+-stdin-:<main>: Error: Type annotation
 
-    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.int4_tbl
-    
+    -stdin-:<main>:1:1: Error: At function: RemovePrefixMembers, At function: PgSelect, At function: PgSetItem
+    	select t1.* from
+	^
+        -stdin-:<main>:7:11: Error: Unknown alias: i8
+        	      on (i8.q1 = b2.q1)
+	          ^
+        -stdin-:<main>:7:19: Error: Unknown alias: b2
+        	      on (i8.q1 = b2.q1)
+	                  ^
 <sql-statement>
 explain (verbose, costs off)
 select * from
@@ -2911,10 +2935,14 @@ select * from
   left join int4_tbl i4
   on i8.q1 = i4.f1;
 </sql-statement>
--stdin-:<main>: Fatal: Table metadata loading
+-stdin-:<main>: Error: Type annotation
 
-    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.int4_tbl
-    
+    -stdin-:<main>:1:1: Error: At function: RemovePrefixMembers, At function: PgSelect, At function: PgSetItem
+    	select * from
+	^
+        -stdin-:<main>:1:1: Error: Duplicated member: f1
+        	select * from
+	^
 <sql-statement>
 --
 -- test for appropriate join order in the presence of lateral references
@@ -3502,10 +3530,14 @@ from
   on t0.f1 = ss.case1
 where ss.stringu2 !~* ss.case1;
 </sql-statement>
--stdin-:<main>: Fatal: Table metadata loading
+-stdin-:<main>: Error: Type annotation
 
-    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.int4_tbl
-    
+    -stdin-:<main>:1:1: Error: At function: PgSelect, At function: PgSetItem, At function: AssumeColumnOrder, At function: PgReplaceUnknown, At function: OrderedMap, At function: OrderedMap, At function: EquiJoin
+    	select t0.*
+	^
+        -stdin-:<main>:1:1: Error: Cannot compare key columns (a._alias_t1.string4 has type: pgname, b._alias_u1.f1 has type: pgtext)
+        	select t0.*
+	^
 <sql-statement>
 rollback;
 </sql-statement>
@@ -4310,31 +4342,47 @@ lateral (select * from int8_tbl t1,
 -- test some error cases where LATERAL should have been used but wasn't
 select f1,g from int4_tbl a, (select f1 as g) ss;
 </sql-statement>
--stdin-:<main>: Fatal: Table metadata loading
+-stdin-:<main>: Error: Type annotation
 
-    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.int4_tbl
-    
+    -stdin-:<main>:1:1: Error: At function: RemovePrefixMembers, At function: PgSelect, At function: PgSetItem, At function: PgSelect, At function: PgSetItem
+    	-- test some error cases where LATERAL should have been used but wasn't
+	^
+        -stdin-:<main>:2:38: Error: Column reference can't be used without FROM
+        	select f1,g from int4_tbl a, (select f1 as g) ss;
+	                                     ^
 <sql-statement>
 select f1,g from int4_tbl a, (select a.f1 as g) ss;
 </sql-statement>
--stdin-:<main>: Fatal: Table metadata loading
+-stdin-:<main>: Error: Type annotation
 
-    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.int4_tbl
-    
+    -stdin-:<main>:1:1: Error: At function: RemovePrefixMembers, At function: PgSelect, At function: PgSetItem, At function: PgSelect, At function: PgSetItem
+    	select f1,g from int4_tbl a, (select a.f1 as g) ss;
+	^
+        -stdin-:<main>:1:38: Error: Column reference can't be used without FROM
+        	select f1,g from int4_tbl a, (select a.f1 as g) ss;
+	                                     ^
 <sql-statement>
 select f1,g from int4_tbl a cross join (select f1 as g) ss;
 </sql-statement>
--stdin-:<main>: Fatal: Table metadata loading
+-stdin-:<main>: Error: Type annotation
 
-    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.int4_tbl
-    
+    -stdin-:<main>:1:1: Error: At function: RemovePrefixMembers, At function: PgSelect, At function: PgSetItem, At function: PgSelect, At function: PgSetItem
+    	select f1,g from int4_tbl a cross join (select f1 as g) ss;
+	^
+        -stdin-:<main>:1:48: Error: Column reference can't be used without FROM
+        	select f1,g from int4_tbl a cross join (select f1 as g) ss;
+	                                               ^
 <sql-statement>
 select f1,g from int4_tbl a cross join (select a.f1 as g) ss;
 </sql-statement>
--stdin-:<main>: Fatal: Table metadata loading
+-stdin-:<main>: Error: Type annotation
 
-    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.int4_tbl
-    
+    -stdin-:<main>:1:1: Error: At function: RemovePrefixMembers, At function: PgSelect, At function: PgSetItem, At function: PgSelect, At function: PgSetItem
+    	select f1,g from int4_tbl a cross join (select a.f1 as g) ss;
+	^
+        -stdin-:<main>:1:48: Error: Column reference can't be used without FROM
+        	select f1,g from int4_tbl a cross join (select a.f1 as g) ss;
+	                                               ^
 <sql-statement>
 -- SQL:2008 says the left table is in scope but illegal to access here
 select f1,g from int4_tbl a right join lateral generate_series(0, a.f1) g on true;

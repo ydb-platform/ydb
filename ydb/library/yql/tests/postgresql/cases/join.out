@@ -443,6 +443,23 @@ order by 1,2;
  4567890123456789 | 4567890123456789 | 4567890123456789 | 42
 (8 rows)
 
+select count(*) from
+  tenk1 a join tenk1 b on a.unique1 = b.unique2
+  left join tenk1 c on a.unique2 = b.unique1 and c.thousand = a.thousand
+  join int4_tbl on b.thousand = f1;
+ count 
+-------
+    10
+(1 row)
+
+select f1, unique2, case when unique2 is null then f1 else 0 end
+  from int4_tbl a left join tenk1 b on f1 = unique2
+  where (case when unique2 is null then f1 else 0 end) = 0;
+ f1 | unique2 | case 
+----+---------+------
+  0 |       0 |    0
+(1 row)
+
 --
 -- test join removal
 --

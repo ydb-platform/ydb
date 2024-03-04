@@ -1,5 +1,6 @@
 Registering pre-existing tables
 	onek
+	int4_tbl
 	INT4_TBL
 	tenk1
 	text_tbl
@@ -556,10 +557,6 @@ select f1, ss1 as relabel from
     (select *, (select sum(f1) from int4_tbl b where f1 >= a.f1) as ss1
      from int4_tbl a) ss;
 </sql-statement>
--stdin-:<main>: Fatal: Table metadata loading
-
-    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.int4_tbl
-    
 <sql-statement>
 --
 -- Test cases involving PARAM_EXEC parameters and min/max index optimizations.
@@ -740,18 +737,28 @@ select (select (a.*)::text) from view_a a;
 --
 select q from (select max(f1) from int4_tbl group by f1 order by f1) q;
 </sql-statement>
--stdin-:<main>: Fatal: Table metadata loading
+-stdin-:<main>: Fatal: Execution
 
-    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.int4_tbl
-    
+    -stdin-:<main>:1:1: Fatal: Execution of node: Pull
+    	--
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  input of anonymous composite types is not implemented
+
+        	--
+	^
 <sql-statement>
 with q as (select max(f1) from int4_tbl group by f1 order by f1)
   select q from q;
 </sql-statement>
--stdin-:<main>: Fatal: Table metadata loading
+-stdin-:<main>: Fatal: Execution
 
-    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.int4_tbl
-    
+    -stdin-:<main>:1:1: Fatal: Execution of node: Pull
+    	with q as (select max(f1) from int4_tbl group by f1 order by f1)
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  input of anonymous composite types is not implemented
+
+        	with q as (select max(f1) from int4_tbl group by f1 order by f1)
+	^
 <sql-statement>
 --
 -- Test case for sublinks pulled up into joinaliasvars lists in an
@@ -788,10 +795,17 @@ from
   join
   int4_tbl i4 on dummy = i4.f1;
 </sql-statement>
--stdin-:<main>: Fatal: Table metadata loading
+-stdin-:<main>: Error: Type annotation
 
-    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.int4_tbl
-    
+    -stdin-:<main>:1:1: Error: At function: OrderedFlatMap, At function: EquiJoin, At function: OrderedFlatMap, At function: EquiJoin, At function: OrderedFlatMap, At function: EquiJoin
+    	--
+	^
+        -stdin-:<main>:7:11: Error: At function: Aggregate, At function: OrderedMap, At function: EquiJoin
+        	  (select exists(select 1 from int4_tbl where f1 = q2) as sq1, 42 as dummy
+	          ^
+            -stdin-:<main>:7:11: Error: Cannot compare key columns (a._alias_int4_tbl.f1 has type: pgint4, b._alias_int8_tbl.q2 has type: pgint8)
+            	  (select exists(select 1 from int4_tbl where f1 = q2) as sq1, 42 as dummy
+	          ^
 <sql-statement>
 --
 -- Test case for subselect within UPDATE of INSERT...ON CONFLICT DO UPDATE
@@ -1479,10 +1493,28 @@ select * from int4_tbl where
   (case when f1 in (select unique1 from tenk1 a) then f1 else null end) in
   (select ten from tenk1 b);
 </sql-statement>
--stdin-:<main>: Fatal: Table metadata loading
+-stdin-:<main>: Error: Type annotation
 
-    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.int4_tbl
-    
+    -stdin-:<main>:1:1: Error: At function: RemovePrefixMembers, At function: PgSelect
+    	select * from int4_tbl where
+	^
+        -stdin-:<main>: Error: At function: PgSetItem
+        
+            -stdin-:<main>:1:1: Error: At function: PgWhere
+            	select * from int4_tbl where
+	^
+                -stdin-:<main>:2:73: Error: At function: PgSubLink, At function: PgOp
+                	  (case when f1 in (select unique1 from tenk1 a) then f1 else null end) in
+	                                                                        ^
+                    -stdin-:<main>:2:4: Error: At function: If, At function: Coalesce, At function: FromPg
+                    	  (case when f1 in (select unique1 from tenk1 a) then f1 else null end) in
+	   ^
+                        -stdin-:<main>:2:17: Error: Expected computable data, but got: Unit
+                        	  (case when f1 in (select unique1 from tenk1 a) then f1 else null end) in
+	                ^
+                        -stdin-:<main>:2:17: Error: Computable required. Atom, key, world, datasink, datasource, type, lambda are not computable
+                        	  (case when f1 in (select unique1 from tenk1 a) then f1 else null end) in
+	                ^
 <sql-statement>
 --
 -- Check for incorrect optimization when IN subquery contains a SRF
@@ -1516,10 +1548,26 @@ select (select q from
          ) q )
 from int4_tbl;
 </sql-statement>
--stdin-:<main>: Fatal: Table metadata loading
+-stdin-:<main>: Error: Type annotation
 
-    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.int4_tbl
-    
+    -stdin-:<main>:1:1: Error: At function: RemovePrefixMembers, At function: PgSelect, At function: PgSetItem, At function: PgResultItem
+    	--
+	^
+        -stdin-:<main>:4:8: Error: At function: PgSubLink, At function: PgSelect, At function: PgSetItem, At function: PgSelect
+        	select (select q from
+	       ^
+            -stdin-:<main>:4:8: Error: At function: PgSetItem
+            	select (select q from
+	       ^
+                -stdin-:<main>:5:30: Error: Column reference can't be used without FROM
+                	         (select 1,2,3 where f1 > 0
+	                             ^
+            -stdin-:<main>:4:8: Error: At function: PgSetItem
+            	select (select q from
+	       ^
+                -stdin-:<main>:7:32: Error: Column reference can't be used without FROM
+                	          select 4,5,6.0 where f1 <= 0
+	                               ^
 <sql-statement>
 --
 -- Check for sane handling of a lateral reference in a subquery's quals

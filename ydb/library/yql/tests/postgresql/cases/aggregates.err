@@ -1,5 +1,6 @@
 Registering pre-existing tables
 	onek
+	int4_tbl
 	INT4_TBL
 	tenk1
 	VARCHAR_TBL
@@ -965,10 +966,6 @@ explain (costs off)
 select f1, (select min(unique1) from tenk1 where unique1 > f1) AS gt
   from int4_tbl;
 </sql-statement>
--stdin-:<main>: Fatal: Table metadata loading
-
-    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.int4_tbl
-    
 <sql-statement>
 -- check some cases that were handled incorrectly in 8.3.0
 explain (costs off)
@@ -2399,10 +2396,17 @@ select cleast_agg(q1,q2) from int8_tbl;
 <sql-statement>
 select cleast_agg(4.5,f1) from int4_tbl;
 </sql-statement>
--stdin-:<main>: Fatal: Table metadata loading
+-stdin-:<main>: Error: Type annotation
 
-    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.int4_tbl
-    
+    -stdin-:<main>:1:1: Error: At function: RemovePrefixMembers, At function: PgSelect, At function: PgSetItem, At function: PgResultItem
+    	select cleast_agg(4.5,f1) from int4_tbl;
+	^
+        -stdin-:<main>:1:8: Error: At function: PgCall
+        	select cleast_agg(4.5,f1) from int4_tbl;
+	       ^
+            -stdin-:<main>:1:8: Error: No such proc: cleast_agg
+            	select cleast_agg(4.5,f1) from int4_tbl;
+	       ^
 <sql-statement>
 select cleast_agg(variadic array[4.5,f1]) from int4_tbl;
 </sql-statement>

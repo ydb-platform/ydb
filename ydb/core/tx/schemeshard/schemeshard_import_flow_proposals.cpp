@@ -47,15 +47,27 @@ THolder<TEvSchemeShard::TEvModifySchemeTransaction> CreateTablePropose(
         return nullptr;
     }
 
-    for(const auto& sequenceDescription: item.Scheme.sequence_descriptions()) {
-        auto seqDesc = indexedTable->MutableSequenceDescription()->Add();
-        seqDesc->SetName(sequenceDescription.name());
-        seqDesc->SetMinValue(sequenceDescription.min_value());
-        seqDesc->SetMaxValue(sequenceDescription.max_value());
-        seqDesc->SetStartValue(sequenceDescription.start_value());
-        seqDesc->SetCache(sequenceDescription.cache());
-        seqDesc->SetIncrement(sequenceDescription.increment());
-        seqDesc->SetCycle(sequenceDescription.cycle());
+    for(const auto& column: item.Scheme.columns()) {
+        switch (column.default_value_case()) {
+            case Ydb::Table::ColumnMeta::kFromSequence: {
+                const auto& fromSequence = column.from_sequence();
+
+                auto seqDesc = indexedTable->MutableSequenceDescription()->Add();
+                seqDesc->SetName(fromSequence.name());
+                seqDesc->SetMinValue(fromSequence.min_value());
+                seqDesc->SetMaxValue(fromSequence.max_value());
+                seqDesc->SetStartValue(fromSequence.start_value());
+                seqDesc->SetCache(fromSequence.cache());
+                seqDesc->SetIncrement(fromSequence.increment());
+                seqDesc->SetCycle(fromSequence.cycle());
+
+                break;
+            }
+            case Ydb::Table::ColumnMeta::kFromLiteral: {
+                break;
+            }
+            default: break;
+        }
     }
 
     return propose;

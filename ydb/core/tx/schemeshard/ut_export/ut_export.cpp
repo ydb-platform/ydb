@@ -302,20 +302,7 @@ Y_UNIT_TEST_SUITE(TExportToS3Tests) {
             Columns {
                 Name: "value"
                 Type: "Utf8"
-                DefaultFromLiteral {
-                    type {
-                        optional_type {
-                            item {
-                                type_id: UTF8
-                            }
-                        }
-                    }
-                    value {
-                        items {
-                            text_value: "a"
-                        }
-                    }
-                }
+                DefaultFromSequence: "myseq"
             }
             KeyColumnNames: ["key"]
             PartitionConfig {
@@ -336,6 +323,15 @@ Y_UNIT_TEST_SUITE(TExportToS3Tests) {
                   }
                 }
               }
+            }
+            Sequences {
+                Name: "myseq"
+                MinValue: 1
+                MaxValue: 20
+                StartValue: 1
+                Cache: 1
+                Increment: 1
+                Cycle: false
             }
         )"};
 
@@ -390,20 +386,7 @@ columns {
     }
   }
   not_null: false
-  from_literal {
-    type {
-      optional_type {
-        item {
-          type_id: UTF8
-        }
-      }
-    }
-    value {
-      items {
-        text_value: "a"
-      }
-    }
-  }
+  from_sequence: "myseq"
 }
 primary_key: "key"
 storage_settings {
@@ -417,6 +400,15 @@ partitioning_settings {
   partitioning_by_size: DISABLED
   partitioning_by_load: DISABLED
   min_partitions_count: 1
+}
+sequence_descriptions {
+    name: "myseq"
+    min_value: 1
+    max_value: 3
+    start_value: 1
+    cache: 1
+    increment: 1
+    cycle: true
 }
 )");
     }

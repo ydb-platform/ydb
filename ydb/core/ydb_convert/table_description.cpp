@@ -437,8 +437,8 @@ Ydb::Type* AddColumn<NKikimrSchemeOp::TColumnDescription>(Ydb::Table::ColumnMeta
             break;
         }
         case NKikimrSchemeOp::TColumnDescription::kDefaultFromSequence: {
-            auto fromSequence = newColumn->mutable_from_sequence();
-            *fromSequence = column.GetDefaultFromSequence();
+            auto* fromSequence = newColumn->mutable_from_sequence();
+            fromSequence->set_name(column.GetDefaultFromSequence());
             break;
         }
         default: break;
@@ -665,7 +665,7 @@ bool FillColumnDescription(NKikimrSchemeOp::TTableDescription& out,
             }
             case Ydb::Table::ColumnMeta::kFromSequence: {
                 auto fromSequence = cd->MutableDefaultFromSequence();
-                *fromSequence = column.from_sequence();
+                *fromSequence = column.from_sequence().name();
                 break;
             }
             default: break;
@@ -1378,15 +1378,32 @@ bool FillTableDescription(NKikimrSchemeOp::TModifyScheme& out,
 }
 
 void FillSequenceDescription(Ydb::Table::CreateTableRequest& out, const NKikimrSchemeOp::TTableDescription& in) {
-    for (const auto& sequenceDescription : in.GetSequences()) {
-        auto sequence = out.add_sequence_descriptions();
+    THashMap<TString, NKikimrSchemeOp::TSequenceDescription> sequences;
 
-        sequence->set_name(sequenceDescription.GetName());
-        sequence->set_min_value(sequenceDescription.GetMinValue());
-        sequence->set_max_value(sequenceDescription.GetMaxValue());
-        sequence->set_start_value(sequenceDescription.GetStartValue());
-        sequence->set_cache(sequenceDescription.GetCache());
-        sequence->set_increment(sequenceDescription.GetIncrement());
+    for (const auto& sequenceDescription : in.GetSequences()) {
+        sequences[sequenceDescription.GetName()] = sequenceDescription;
+    }
+
+    for (auto& column : *out.mutable_columns()) {
+
+        switch (column.default_value_case()) {
+            case Ydb::Table::ColumnMeta::kFromSequence: {
+                auto* fromSequence = column.mutable_from_sequence();
+
+                const auto& sequenceDescription = sequences.at(fromSequence->name());
+
+                fromSequence->set_min_value(sequenceDescription.GetMinValue());
+                fromSequence->set_max_value(sequenceDescription.GetMaxValue());
+                fromSequence->set_start_value(sequenceDescription.GetStartValue());
+                fromSequence->set_cache(sequenceDescription.GetCache());
+                fromSequence->set_increment(sequenceDescription.GetIncrement());
+                break;
+            }
+            case Ydb::Table::ColumnMeta::kFromLiteral: {
+                break;
+            }
+            default: break;
+        }
     }
 }
 

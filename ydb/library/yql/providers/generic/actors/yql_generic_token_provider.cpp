@@ -4,7 +4,7 @@
 
 namespace NYql::NDq {
     TGenericTokenProvider::TGenericTokenProvider(
-        const NYql::NGeneric::TSource& source, const ISecuredServiceAccountCredentialsFactory::TPtr& credentialsFactory)
+        const NYql::Generic::TSource& source, const ISecuredServiceAccountCredentialsFactory::TPtr& credentialsFactory)
         : Source_(source)
         , StaticIAMToken_(source.GetToken())
         , CredentialsProvider_(nullptr)
@@ -60,7 +60,7 @@ namespace NYql::NDq {
     }
 
     TGenericTokenProvider::TPtr
-    CreateGenericTokenProvider(const NYql::NGeneric::TSource& source,
+    CreateGenericTokenProvider(const NYql::Generic::TSource& source,
                                const ISecuredServiceAccountCredentialsFactory::TPtr& credentialsFactory) {
         return std::make_unique<TGenericTokenProvider>(source, credentialsFactory);
     }

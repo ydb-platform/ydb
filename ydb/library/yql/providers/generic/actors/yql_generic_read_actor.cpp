@@ -104,7 +104,7 @@ namespace NYql::NDq {
             TCollectStatsLevel statsLevel,
             NConnector::IClient::TPtr client,
             TGenericTokenProvider::TPtr tokenProvider,
-            NGeneric::TSource&& source,
+            Generic::TSource&& source,
             const NActors::TActorId& computeActorId,
             const NKikimr::NMiniKQL::THolderFactory& holderFactory)
             : InputIndex_(inputIndex)
@@ -499,12 +499,12 @@ namespace NYql::NDq {
 
         NKikimr::NMiniKQL::TPlainContainerCache ArrowRowContainerCache_;
         const NKikimr::NMiniKQL::THolderFactory& HolderFactory_;
-        NGeneric::TSource Source_;
+        Generic::TSource Source_;
     };
 
     std::pair<NYql::NDq::IDqComputeActorAsyncInput*, IActor*>
     CreateGenericReadActor(NConnector::IClient::TPtr genericClient,
-                           NGeneric::TSource&& source,
+                           Generic::TSource&& source,
                            ui64 inputIndex,
                            TCollectStatsLevel statsLevel,
                            const THashMap<TString, TString>& /*secureParams*/,

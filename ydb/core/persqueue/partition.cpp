@@ -1832,7 +1832,7 @@ void TPartition::OnProcessTxsAndUserActsWriteComplete(ui64 cookie, const TActorC
     Y_ABORT_UNLESS(cookie == SET_OFFSET_COOKIE);
 
     if (ChangeConfig) {
-        EndChangePartitionConfig(ChangeConfig->Config,
+        EndChangePartitionConfig(std::move(ChangeConfig->Config),
                                  ChangeConfig->TopicConverter,
                                  ctx);
     }
@@ -1906,7 +1906,7 @@ void TPartition::OnProcessTxsAndUserActsWriteComplete(ui64 cookie, const TActorC
     }
 }
 
-void TPartition::EndChangePartitionConfig(NKikimrPQ::TPQTabletConfig& config,
+void TPartition::EndChangePartitionConfig(NKikimrPQ::TPQTabletConfig&& config,
                                           NPersQueue::TTopicConverterPtr topicConverter,
                                           const TActorContext& ctx)
 {

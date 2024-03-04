@@ -229,7 +229,7 @@ public:
     }
 
     void StartExecutionSpan() noexcept {
-        TransactionExecutionSpan = NWilson::TSpan(TWilsonTablet::Tablet, TransactionSpan.GetTraceId(), "Tablet.Transaction.Execute");
+        TransactionExecutionSpan = NWilson::TSpan(TWilsonTablet::TabletInternals, TransactionSpan.GetTraceId(), "Tablet.Transaction.Execute");
     }
 
     void FinishExecutionSpan() noexcept {
@@ -289,7 +289,7 @@ public:
     { }
 
     ITransaction(NWilson::TTraceId &&traceId)
-        : TxSpan(NWilson::TSpan(TWilsonTablet::Tablet, std::move(traceId), "Tablet.Transaction"))
+        : TxSpan(NWilson::TSpan(TWilsonTablet::TabletBasic, std::move(traceId), "Tablet.Transaction"))
     { }
 
     virtual ~ITransaction() = default;
@@ -314,7 +314,7 @@ public:
     }
 
     void SetupTxSpan(NWilson::TTraceId traceId) noexcept {
-        TxSpan = NWilson::TSpan(TWilsonTablet::Tablet, std::move(traceId), "Tablet.Transaction");
+        TxSpan = NWilson::TSpan(TWilsonTablet::TabletBasic, std::move(traceId), "Tablet.Transaction");
         if (TxSpan) {
             TxSpan.Attribute("Type", TypeName(*this));
         }

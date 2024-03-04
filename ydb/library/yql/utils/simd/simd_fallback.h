@@ -104,7 +104,7 @@ struct FallbackTrait {
         Value = *ptr;
     }
 
-    inline void Load(T* ptr) {
+    inline void Get(const T* ptr) {
         Value = *ptr;
     }
 

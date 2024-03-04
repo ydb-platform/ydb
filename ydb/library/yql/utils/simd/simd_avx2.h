@@ -117,6 +117,10 @@ struct TSimd8 {
         return TSimd8<T>(values);
     }
 
+    inline void Get(const T* ptr) {
+        Value = _mm256_load_si256(reinterpret_cast<const __m256i *>(ptr));
+    }
+
     static inline TSimd8<T> LoadAligned(const T values[32]) {
         return _mm256_load_si256(reinterpret_cast<const __m256i *>(values));
     }

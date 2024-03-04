@@ -127,20 +127,20 @@ struct Perfomancer {
 
             if (shift) {
                 for (size_t i = 0; i < size2; ++i) {
-                    result[cnt++] = 0;
+                    result[cnt++] = 0xFF;
                 }
             }
 
             while (cnt + size1 + size2 <= Trait::SIZE) {
 
                 for (size_t i = 0; i < size1; ++i) {
-                    result[cnt++] = 0xFF;
+                    result[cnt++] = 0x00;
                 }
 
                 if (cnt + size2 > Trait::SIZE) break;
 
                 for (size_t i = 0; i < size2; ++i) {
-                    result[cnt++] = 0x00;
+                    result[cnt++] = 0xFF;
                 }
             }
 
@@ -183,8 +183,7 @@ struct Perfomancer {
                 }
             }
 
-            Trait reg;
-            reg.Load(result);
+            Trait reg(result);
             delete[] result;
             return reg;
         }
@@ -207,8 +206,7 @@ struct Perfomancer {
                 result[cnt++] = start++;
             }
 
-            Trait reg;
-            reg.Load(result);
+            Trait reg(result);
             return reg;
         }
         void PrepareMasks(size_t sizes[4], std::vector<Trait>& mask) {
@@ -234,10 +232,10 @@ struct Perfomancer {
 
         void Iteration(size_t sizes[4], i8* const data[4], i8* result, int ind, int addr, int step, std::vector<Trait>& reg, std::vector<Trait>& mask) {
 
-            reg[0].Load(&data[0][ind * sizes[0]]);
-            reg[1].Load(&data[1][ind * sizes[1]]);
-            reg[2].Load(&data[2][ind * sizes[2]]);
-            reg[3].Load(&data[3][ind * sizes[3]]);
+            reg[0].Get(&data[0][ind * sizes[0]]);
+            reg[1].Get(&data[1][ind * sizes[1]]);
+            reg[2].Get(&data[2][ind * sizes[2]]);
+            reg[3].Get(&data[3][ind * sizes[3]]);
 
             //shuffle to blend
             reg[4] = reg[0].Shuffle128(mask[0]);

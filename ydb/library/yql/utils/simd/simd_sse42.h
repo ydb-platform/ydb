@@ -107,6 +107,10 @@ struct TSimd8 {
         return TSimd8<T>(values);
     }
 
+    inline void Get(const T* ptr) {
+        Value = _mm_load_si128(reinterpret_cast<const __m128i *>(ptr));
+    }
+
     static inline TSimd8<T> Load128(const T values[16]) {
         return Load(values);
     }

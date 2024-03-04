@@ -74,14 +74,14 @@ Y_UNIT_TEST_SUITE(TSchemeShardSplitTestReboots) {
             runtime.SetObserverFunc(suppressEvent);
 
             TestSplitTable(runtime, ++t.TxId, "/MyRoot/Table", R"(
-                            SourceTabletId: 9437194
-                            SourceTabletId: 9437195
+                            SourceTabletId: 72075186233409546
+                            SourceTabletId: 72075186233409547
                             )");
             t.TestEnv->TestWaitNotification(runtime, t.TxId);
 
             TestSplitTable(runtime, ++t.TxId, "/MyRoot/Table", R"(
-                            SourceTabletId: 9437194
-                            SourceTabletId: 9437195
+                            SourceTabletId: 72075186233409546
+                            SourceTabletId: 72075186233409547
                             )",
                            {NKikimrScheme::StatusInvalidParameter});
             t.TestEnv->TestWaitNotification(runtime, t.TxId);
@@ -138,12 +138,12 @@ Y_UNIT_TEST_SUITE(TSchemeShardSplitTestReboots) {
             }
 
             TestSplitTable(runtime, ++t.TxId, "/MyRoot/Table", R"(
-                            SourceTabletId: 9437194
-                            SourceTabletId: 9437195
+                            SourceTabletId: 72075186233409546
+                            SourceTabletId: 72075186233409547
                             )");
             AsyncSplitTable(runtime, ++t.TxId, "/MyRoot/Table", R"(
-                            SourceTabletId: 9437196
-                            SourceTabletId: 9437197
+                            SourceTabletId: 72075186233409548
+                            SourceTabletId: 72075186233409549
                             )");
 
             AsyncAlterTable(runtime, ++t.TxId, "/MyRoot", R"(
@@ -189,12 +189,12 @@ Y_UNIT_TEST_SUITE(TSchemeShardSplitTestReboots) {
             }
 
             TestSplitTable(runtime, ++t.TxId, "/MyRoot/Table", R"(
-                                SourceTabletId: 9437194
-                                SourceTabletId: 9437195
+                                SourceTabletId: 72075186233409546
+                                SourceTabletId: 72075186233409547
                                 )");
             AsyncSplitTable(runtime, ++t.TxId, "/MyRoot/Table", R"(
-                                SourceTabletId: 9437196
-                                SourceTabletId: 9437197
+                                SourceTabletId: 72075186233409548
+                                SourceTabletId: 72075186233409549
                                 )");
             t.TestEnv->ReliablePropose(runtime, CopyTableRequest(++t.TxId, "/MyRoot", "NewTable", "/MyRoot/Table"),
                                        {NKikimrScheme::StatusAccepted, NKikimrScheme::StatusMultipleModifications});
@@ -248,12 +248,12 @@ Y_UNIT_TEST_SUITE(TSchemeShardSplitTestReboots) {
             }
 
             TestSplitTable(runtime, ++t.TxId, "/MyRoot/Table", R"(
-                            SourceTabletId: 9437194
-                            SourceTabletId: 9437195
+                            SourceTabletId: 72075186233409546
+                            SourceTabletId: 72075186233409547
                             )");
             AsyncSplitTable(runtime, ++t.TxId, "/MyRoot/Table", R"(
-                            SourceTabletId: 9437196
-                            SourceTabletId: 9437197
+                            SourceTabletId: 72075186233409548
+                            SourceTabletId: 72075186233409549
                             )");
             AsyncDropTable(runtime, ++t.TxId, "/MyRoot", "Table");
 
@@ -290,7 +290,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardSplitTestReboots) {
             }
 
             AsyncSplitTable(runtime, ++t.TxId, "/MyRoot/Table", R"(
-                                SourceTabletId: 9437195
+                                SourceTabletId: 72075186233409547
                                 SplitBoundary {
                                     KeyPrefix {
                                         Tuple { Optional { Text: "Marla" } }
@@ -304,7 +304,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardSplitTestReboots) {
 
             // Second split request must be rejected
             AsyncSplitTable(runtime, ++t.TxId, "/MyRoot/Table", R"(
-                                SourceTabletId: 9437195
+                                SourceTabletId: 72075186233409547
                                 SplitBoundary {
                                     KeyPrefix {
                                         Tuple { Optional { Text: "Marla Singer" } }
@@ -349,7 +349,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardSplitTestReboots) {
                                    {NLs::PartitionKeys({"Jack", ""})});
 
                 TestSplitTable(runtime, ++t.TxId, "/MyRoot/Table", R"(
-                                    SourceTabletId: 9437195
+                                    SourceTabletId: 72075186233409547
                                     SplitBoundary {
                                         KeyPrefix {
                                             Tuple { Optional { Text: "Marla" } }
@@ -366,7 +366,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardSplitTestReboots) {
             }
 
             AsyncSplitTable(runtime, ++t.TxId, "/MyRoot/Table", R"(
-                                SourceTabletId: 9437197
+                                SourceTabletId: 72075186233409549
                                 SplitBoundary {
                                     KeyPrefix {
                                         Tuple { Optional { Text: "Marla Singer" } }
@@ -374,7 +374,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardSplitTestReboots) {
                                     }
                                 })");
             AsyncSplitTable(runtime, ++t.TxId, "/MyRoot/Table", R"(
-                            SourceTabletId: 9437198
+                            SourceTabletId: 72075186233409550
                             SplitBoundary {
                                 KeyPrefix {
                                     Tuple { Optional { Text: "Robert Paulson" } }
@@ -388,7 +388,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardSplitTestReboots) {
                             })");
 
             t.TestEnv->TestWaitNotification(runtime, {t.TxId-1, t.TxId});
-            t.TestEnv->TestWaitTabletDeletion(runtime, {9437197, 9437198}); //delete src
+            t.TestEnv->TestWaitTabletDeletion(runtime, {72075186233409549, 72075186233409550}); //delete src
 
             {
                 TInactiveZone inactive(activeZone);
@@ -425,12 +425,12 @@ Y_UNIT_TEST_SUITE(TSchemeShardSplitTestReboots) {
             // Merge 2 partitions into 1
             AsyncSplitTable(runtime, ++t.TxId, "/MyRoot/Table",
                             R"(
-                                SourceTabletId: 9437194
-                                SourceTabletId: 9437195
+                                SourceTabletId: 72075186233409546
+                                SourceTabletId: 72075186233409547
                             )");
 
             t.TestEnv->TestWaitNotification(runtime, t.TxId);
-            t.TestEnv->TestWaitTabletDeletion(runtime, {9437194, 9437195}); //delete src
+            t.TestEnv->TestWaitTabletDeletion(runtime, {72075186233409546, 72075186233409547}); //delete src
 
             {
                 TInactiveZone inactive(activeZone);
@@ -497,8 +497,8 @@ Y_UNIT_TEST_SUITE(TSchemeShardSplitTestReboots) {
             // Merge 2 partitions into 1
             TestSplitTable(runtime, ++t.TxId, "/MyRoot/Table",
                            R"(
-                                SourceTabletId: 9437194
-                                SourceTabletId: 9437195
+                                SourceTabletId: 72075186233409546
+                                SourceTabletId: 72075186233409547
                             )");
 
             t.TestEnv->TestWaitNotification(runtime, t.TxId);
@@ -545,11 +545,11 @@ Y_UNIT_TEST_SUITE(TSchemeShardSplitTestReboots) {
             }
 
             AsyncSplitTable(runtime, ++t.TxId, "/MyRoot/Table", R"(
-                                SourceTabletId: 9437194
-                                SourceTabletId: 9437195
+                                SourceTabletId: 72075186233409546
+                                SourceTabletId: 72075186233409547
                             )");
             AsyncSplitTable(runtime, ++t.TxId, "/MyRoot/Table", R"(
-                            SourceTabletId: 9437196
+                            SourceTabletId: 72075186233409548
                             SplitBoundary {
                                 KeyPrefix {
                                     Tuple { Optional { Text: "C" } }
@@ -588,7 +588,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardSplitTestReboots) {
             }
 
             AsyncSplitTable(runtime, ++t.TxId, "/MyRoot/Table", R"(
-                            SourceTabletId: 9437195
+                            SourceTabletId: 72075186233409547
                             SplitBoundary {
                                 KeyPrefix {
                                     Tuple { Optional { Text: "D" } }
@@ -638,8 +638,8 @@ Y_UNIT_TEST_SUITE(TSchemeShardSplitTestReboots) {
             }
 
             AsyncSplitTable(runtime, ++t.TxId, "/MyRoot/Table", R"(
-                            SourceTabletId: 9437194
-                            SourceTabletId: 9437195
+                            SourceTabletId: 72075186233409546
+                            SourceTabletId: 72075186233409547
                             )");
             t.TestEnv->ReliablePropose(runtime, AlterTableRequest(++t.TxId, "/MyRoot", R"(
                                                         Name: "Table"
@@ -656,7 +656,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardSplitTestReboots) {
             }
 
             t.TestEnv->ReliablePropose(runtime, SplitTableRequest(++t.TxId, "/MyRoot/Table", R"(
-                                                                SourceTabletId: 9437196
+                                                                SourceTabletId: 72075186233409548
                                                                 SplitBoundary {
                                                                     KeyPrefix {
                                                                         Tuple { Optional { Text: "B" } }
@@ -703,8 +703,8 @@ Y_UNIT_TEST_SUITE(TSchemeShardSplitTestReboots) {
             }
 
             AsyncSplitTable(runtime, ++t.TxId, "/MyRoot/Table", R"(
-                            SourceTabletId: 9437194
-                            SourceTabletId: 9437195
+                            SourceTabletId: 72075186233409546
+                            SourceTabletId: 72075186233409547
                             )");
             t.TestEnv->ReliablePropose(runtime, AlterTableRequest(++t.TxId, "/MyRoot",
                                                         R"(Name: "Table"
@@ -760,7 +760,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardSplitTestReboots) {
 
             AsyncSplitTable(runtime, ++t.TxId, "/MyRoot/Table",
                             R"(
-                            SourceTabletId: 9437195
+                            SourceTabletId: 72075186233409547
                             SplitBoundary {
                                 KeyPrefix {
                                     Tuple { Optional { Text: "D" } }
@@ -831,8 +831,8 @@ Y_UNIT_TEST_SUITE(TSchemeShardSplitTestReboots) {
 
             AsyncSplitTable(runtime, ++t.TxId, "/MyRoot/DirA/USER_0/Table",
                            R"(
-                            SourceTabletId: 9437196
-                            SourceTabletId: 9437197
+                            SourceTabletId: 72075186233409548
+                            SourceTabletId: 72075186233409549
                             )");
 
             t.TestEnv->ReliablePropose(runtime, CopyTableRequest(++t.TxId, "/MyRoot/DirA/USER_0", "TableCopy", "/MyRoot/DirA/USER_0/Table",
@@ -873,7 +873,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardSplitTestReboots) {
             AsyncForceDropUnsafe(runtime, ++t.TxId, 2);
 
             AsyncSplitTable(runtime, ++t.TxId, "/MyRoot/DirA/Table", R"(
-                            SourceTabletId: 9437194
+                            SourceTabletId: 72075186233409546
                             SplitBoundary {
                                 KeyPrefix {
                                     Tuple { Optional { Text: "AA" } }
@@ -932,8 +932,8 @@ Y_UNIT_TEST_SUITE(TSchemeShardSplitTestReboots) {
 
             AsyncSplitTable(runtime, ++t.TxId, "/MyRoot/Table",
                            R"(
-                            SourceTabletId: 9437194
-                            SourceTabletId: 9437195
+                            SourceTabletId: 72075186233409546
+                            SourceTabletId: 72075186233409547
                             )");
 
             t.TestEnv->ReliablePropose(runtime, CopyTableRequest(++t.TxId, "/MyRoot", "TableCopy", "/MyRoot/Table", {pathVersion}),
@@ -953,7 +953,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardSplitTestReboots) {
             }
 
             t.TestEnv->ReliablePropose(runtime, SplitTableRequest(++t.TxId, "/MyRoot/TableCopy", R"(
-                                                            SourceTabletId: 9437197
+                                                            SourceTabletId: 72075186233409549
                                                             SplitBoundary {
                                                                 KeyPrefix {
                                                                     Tuple { Optional { Text: "E" } }
@@ -1006,13 +1006,13 @@ Y_UNIT_TEST_SUITE(TSchemeShardSplitTestReboots) {
             }
 
             t.TestEnv->ReliablePropose(runtime, SplitTableRequest(++t.TxId, "/MyRoot/Table", R"(
-                                            SourceTabletId: 9437197
+                                            SourceTabletId: 72075186233409549
                                             SplitBoundary {
                                                 KeyPrefix {
                                                     Tuple { Optional { Text: "DDDD" } }
                                                 }
                                             }
-                                            )", {pathVersion}), // 9437197 ->  9437200, 9437201
+                                            )", {pathVersion}), // 72075186233409549 ->  72075186233409552, 72075186233409553
                                        {NKikimrScheme::StatusAccepted, NKikimrScheme::StatusMultipleModifications, NKikimrScheme::StatusPreconditionFailed});
             t.TestEnv->TestWaitNotification(runtime, t.TxId);
 
@@ -1023,8 +1023,8 @@ Y_UNIT_TEST_SUITE(TSchemeShardSplitTestReboots) {
             }
 
             t.TestEnv->ReliablePropose(runtime, SplitTableRequest(++t.TxId, "/MyRoot/Table", R"(
-                                            SourceTabletId: 9437196
-                                            SourceTabletId: 9437200
+                                            SourceTabletId: 72075186233409548
+                                            SourceTabletId: 72075186233409552
                                             )", {pathVersion}),
                                        {NKikimrScheme::StatusAccepted, NKikimrScheme::StatusMultipleModifications, NKikimrScheme::StatusPreconditionFailed});
             t.TestEnv->TestWaitNotification(runtime, t.TxId);
@@ -1069,9 +1069,9 @@ Y_UNIT_TEST_SUITE(TSchemeShardSplitTestReboots) {
             }
 
             t.TestEnv->ReliablePropose(runtime, SplitTableRequest(++t.TxId, "/MyRoot/Table", R"(
-                                                    SourceTabletId: 9437195
-                                                    SourceTabletId: 9437196
-                                            )", {pathVersion}), // -> 9437198
+                                                    SourceTabletId: 72075186233409547
+                                                    SourceTabletId: 72075186233409548
+                                            )", {pathVersion}), // -> 72075186233409550
                                        {NKikimrScheme::StatusAccepted, NKikimrScheme::StatusMultipleModifications, NKikimrScheme::StatusPreconditionFailed});
             t.TestEnv->TestWaitNotification(runtime, t.TxId);
 
@@ -1083,7 +1083,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardSplitTestReboots) {
             }
 
             t.TestEnv->ReliablePropose(runtime, SplitTableRequest(++t.TxId, "/MyRoot/Table", R"(
-                                                SourceTabletId: 9437198
+                                                SourceTabletId: 72075186233409550
                                                 SplitBoundary {
                                                     KeyPrefix {
                                                         Tuple { Optional { Text: "BBBBB" } }
@@ -1146,7 +1146,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardSplitTestReboots) {
             // Split partition #2 into 2
             AsyncSplitTable(runtime, ++t.TxId, "/MyRoot/Table",
                             R"(
-                                SourceTabletId: 9437195
+                                SourceTabletId: 72075186233409547
                                 SplitBoundary {
                                     KeyPrefix {
                                         Tuple { Optional { Text: "Marla" } }

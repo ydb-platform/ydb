@@ -1475,7 +1475,8 @@ void TRequestQueue::ScheduleRequestsFromQueue()
 
     // NB: Racy, may lead to overcommit in concurrency semaphore and request bytes throttler.
     auto concurrencyLimit = RuntimeInfo_->ConcurrencyLimit.GetDynamicLimit();
-    while (QueueSize_.load() > 0 && Concurrency_.load() < concurrencyLimit) {
+    auto concurrencyByteLimit = RuntimeInfo_->ConcurrencyByteLimit.GetDynamicByteLimit();
+    while (QueueSize_.load() > 0 && Concurrency_.load() < concurrencyLimit && ConcurrencyByte_.load() < concurrencyByteLimit) {
         if (AreThrottlersOverdrafted()) {
             SubscribeToThrottlers();
             return;

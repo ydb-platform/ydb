@@ -16,7 +16,3 @@ RECURSE(
     Fallback_algo
     main
 )
-
-RECURSE_FOR_TESTS(
-    ut
-)

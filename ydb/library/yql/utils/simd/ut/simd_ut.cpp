@@ -4,7 +4,7 @@
 #include <util/system/cpu_id.h>
 #include <util/system/types.h>
 
-#include "simd.h"
+#include "../simd.h"
 
 template<typename TTraits>
 void Reverse(ui8* buf, ui8* result_buf, int len) {

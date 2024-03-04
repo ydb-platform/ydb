@@ -784,6 +784,46 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
         }
     }
 
+    Y_UNIT_TEST(CreateTableWithPgColumns) {
+        TKikimrRunner kikimr;
+        auto db = kikimr.GetTableClient();
+        auto session = db.CreateSession().GetValueSync().GetSession();
+        TString tableName = "/Root/TableWithPartitioningBySize";
+        auto query = TStringBuilder() << R"(
+            CREATE TABLE `)" << tableName << R"(` (
+                Key Uint64,
+                Bool PgBool,
+                Char PgChar,
+                Int2 PgInt2,
+                Int4 PgInt4,
+                Int8 PgInt8,
+                Float4 PgFloat4,
+                Float8 PgFloat8,
+                Text PgText,
+                Bytea PgBytea,
+                Varchar PgVarchar,
+                Cstring PgCstring,
+                Date PgDate,
+                Time PgTime,
+                Timestamp PgTimestamp,
+                Interval PgInterval,
+                Decimal PgDecimal,
+                PRIMARY KEY (Key)
+            );)";
+        auto result = session.ExecuteSchemeQuery(query).GetValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+
+        {
+            TDescribeTableResult describe = session.DescribeTable(tableName).GetValueSync();
+            UNIT_ASSERT_EQUAL(describe.GetStatus(), EStatus::SUCCESS);
+            const auto& partSettings = describe.GetTableDescription().GetPartitioningSettings();
+            UNIT_ASSERT(partSettings.GetPartitioningBySize().Defined());
+            UNIT_ASSERT_VALUES_EQUAL(partSettings.GetPartitioningBySize().GetRef(), false);
+            UNIT_ASSERT(partSettings.GetPartitioningByLoad().Defined());
+            UNIT_ASSERT_VALUES_EQUAL(partSettings.GetPartitioningByLoad().GetRef(), false);
+        }
+    }
+
     void AlterTableSetttings(
             NYdb::NTable::TSession& session, const TString& tableName,
             const THashMap<TString, TString>& settings, bool compat,

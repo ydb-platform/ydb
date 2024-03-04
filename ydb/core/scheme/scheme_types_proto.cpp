@@ -22,7 +22,7 @@ TTypeInfoMod TypeInfoModFromProtoColumnType(ui32 typeId, const NKikimrProto::TTy
     if (type > NTypeIds::PgFamily) {
         Y_ABORT_UNLESS(typeInfo, "no type info for pg type");
         TTypeInfoMod res;
-        res.TypeInfo = TTypeInfo(type, NPg::TypeDescFromPgTypeId(typeInfo->GetPgTypeId()));
+        res.TypeInfo = TTypeInfo(NPg::TypeIdFromPgTypeId(typeInfo->GetPgTypeId()), NPg::TypeDescFromPgTypeId(typeInfo->GetPgTypeId()));
         if (typeInfo->HasPgTypeMod()) {
             res.TypeMod = typeInfo->GetPgTypeMod();
         }

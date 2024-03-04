@@ -4909,10 +4909,16 @@ private:
     THashMap<TString, ui32> ByName;
 };
 
+
+ui32 TypeIdFromPgTypeId(ui32 pgTypeId) {
+    return 0x3000U + pgTypeId;
+}
+
 ui32 PgTypeIdFromTypeDesc(void* typeDesc) {
     if (!typeDesc) {
         return 0;
     }
+
     return static_cast<TPgTypeDescriptor*>(typeDesc)->TypeId;
 }
 

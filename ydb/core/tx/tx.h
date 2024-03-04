@@ -234,7 +234,7 @@ struct TTestTxConfig {
     static constexpr ui64 TxTablet5 = 0x0000000000900005;
     static constexpr ui64 TxTablet6 = 0x0000000000900006;
     static constexpr ui64 TxTablet7 = 0x0000000000900006;
-    static constexpr ui64 FakeHiveTablets = 0x000000000090000a;
+    static constexpr ui64 FakeHiveTablets = MakeTabletID(true, 0x000000000090000a);
     static constexpr ui64 SchemeShard = MakeTabletID(false, 0x00000000008587a0);
     static constexpr ui64 Hive = MakeTabletID(false,  0x000000000000A001);
     static constexpr ui64 UseLessId = 0xFFFFFFFFFFFFFFF;

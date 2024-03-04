@@ -497,6 +497,18 @@ void TExecutor::Active(const TActorContext &ctx) {
     Owner->ActivateExecutor(OwnerCtx());
 
     UpdateCounters(ctx);
+
+    if (loadedState->ShouldSnapshotScheme) {
+        TTxStamp stamp = Stamp();
+        auto alter = Database->GetScheme().GetSnapshot();
+        alter->SetRewrite(true);
+        auto change = alter->SerializeAsString();
+        auto commit = CommitManager->Begin(true, ECommit::Misc, {});
+        Database->RollUp(stamp, change, {}, {});
+        LogicAlter->Clear();
+        LogicAlter->WriteLog(*commit, std::move(change));
+        CommitManager->Commit(commit);
+    }
 }
 
 void TExecutor::TranscriptBootOpResult(ui32 res, const TActorContext &ctx) {

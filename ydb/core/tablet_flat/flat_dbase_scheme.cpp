@@ -58,7 +58,6 @@ TAutoPtr<TSchemeChanges> TScheme::GetSnapshot() const {
     delta.SetExecutorLogFlushPeriod(Executor.LogFlushPeriod);
     delta.SetExecutorResourceProfile(Executor.ResourceProfile);
     delta.SetExecutorFastLogPolicy(Executor.LogFastTactic);
-
     return delta.Flush();
 }
 
@@ -316,6 +315,15 @@ TAlter& TAlter::SetEraseCache(ui32 tableId, bool enabled, ui32 minRows, ui32 max
     return ApplyLastRecord();
 }
 
+TAlter& TAlter::SetRewrite()
+{
+    Log.SetRewrite(true);
+    if (Sink) {
+        Sink->SetRewriteScheme();
+    }
+    return *this;
+}
+
 TAlter::operator bool() const noexcept
 {
     return Log.DeltaSize() > 0;
@@ -324,7 +332,7 @@ TAlter::operator bool() const noexcept
 TAutoPtr<TSchemeChanges> TAlter::Flush()
 {
     TAutoPtr<TSchemeChanges> log(new TSchemeChanges);
-    log->MutableDelta()->Swap(Log.MutableDelta());
+    log->Swap(&Log);
     return log;
 }
 

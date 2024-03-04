@@ -596,6 +596,60 @@ Y_UNIT_TEST_SUITE(TFlatTableCompactionScan) {
         env->GrabEdgeEventRethrow<TEvTestFlatTablet::TEvScanFinished>(handle);
         env.SendSync(new TEvents::TEvPoison, false, true);
     }
+
+    Y_UNIT_TEST(TestCompactionScanWIthReassignAndReboots) {
+        TMyEnvBase env;
+        TRowsModel data;
+
+        env->SetLogPriority(NKikimrServices::TABLET_FLATBOOT, NActors::NLog::PRI_DEBUG);
+
+        env.FireTablet(env.Edge, env.Tablet, [&env](const TActorId &tablet, TTabletStorageInfo *info) {
+            return new TTestFlatTablet(env.Edge, tablet, info);
+        });
+
+        env.WaitForWakeUp();
+
+        TIntrusivePtr<TCompactionPolicy> policy = new TCompactionPolicy();
+        policy->InMemSizeToSnapshot = 40 * 1024 *1024;
+        policy->InMemStepsToSnapshot = 10;
+        policy->InMemForceStepsToSnapshot = 10;
+        policy->InMemForceSizeToSnapshot = 64 * 1024 * 1024;
+        policy->InMemResourceBrokerTask = NLocalDb::LegacyQueueIdToTaskName(0);
+        policy->ReadAheadHiThreshold = 100000;
+        policy->ReadAheadLoThreshold = 50000;
+        policy->Generations.push_back({100 * 1024 * 1024, 5, 5, 200 * 1024 * 1024, NLocalDb::LegacyQueueIdToTaskName(1), true});
+        policy->Generations.push_back({400 * 1024 * 1024, 5, 5, 800 * 1024 * 1024, NLocalDb::LegacyQueueIdToTaskName(2), false});
+        for (auto& gen : policy->Generations) {
+            gen.ExtraCompactionPercent = 0;
+            gen.ExtraCompactionMinSize = 0;
+            gen.ExtraCompactionExpPercent = 0;
+            gen.ExtraCompactionExpMaxSize = 0;
+            gen.UpliftPartSize = 0;
+        }
+
+        env.SendSync(data.MakeScheme(std::move(policy)));
+        env.SendSync(data.MakeRows(249));
+
+        env.SendSync(new TEvents::TEvPoison, false, true);
+        IActor *tabletActor = nullptr; // save tablet to get its actor id and avoid using tablet resolver which has outdated info
+        for (unsigned iter = 0; iter < 3; ++iter) {
+            struct TReassignedStarter : NFake::TStarter {
+                NFake::TStorageInfo* MakeTabletInfo(ui64 tablet) noexcept override {
+                    auto *info = TStarter::MakeTabletInfo(tablet);
+                    info->Channels[0].History.emplace_back(3, 3);
+                    return info;
+                }
+            };
+            TReassignedStarter starter;
+            env.FireTablet(env.Edge, env.Tablet, [&env, &tabletActor](const TActorId &tablet, TTabletStorageInfo *info) mutable {
+                return tabletActor = new TTestFlatTablet(env.Edge, tablet, info);
+            }, 0, &starter);
+            env.WaitForWakeUp();
+            env.SendEv(tabletActor->SelfId(), data.MakeRows(500));
+            env.SendEv(tabletActor->SelfId(), new TEvents::TEvPoison);
+        }
+        env.SendEv(tabletActor->SelfId(), new TEvents::TEvPoison);
+    }
 }
 
 

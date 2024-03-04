@@ -73,4 +73,5 @@ message TAlterRecord {
 
 message TSchemeChanges {
     repeated TAlterRecord Delta = 1;
+    optional bool Rewrite = 2 [default = false]; // If set, we are allowed to forget all scheme changes before this
 };

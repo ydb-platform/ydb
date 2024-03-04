@@ -217,6 +217,8 @@ public:
      * is true the record is deemed useful, otherwise it is discarded.
      */
     virtual bool ApplyAlterRecord(const TAlterRecord& record) = 0;
+
+    virtual void SetRewriteScheme() {};
 };
 
 // scheme delta
@@ -259,6 +261,7 @@ public:
     TAlter& SetByKeyFilter(ui32 tableId, bool enabled);
     TAlter& SetColdBorrow(ui32 tableId, bool enabled);
     TAlter& SetEraseCache(ui32 tableId, bool enabled, ui32 minRows, ui32 maxBytes);
+    TAlter& SetRewrite();
 
     TAutoPtr<TSchemeChanges> Flush();
 

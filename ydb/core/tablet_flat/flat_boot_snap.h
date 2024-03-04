@@ -142,8 +142,18 @@ namespace NBoot {
 
             blobs.reserve(Proto.SchemeInfoBodiesSize());
 
-            for (const auto &one : Proto.GetSchemeInfoBodies())
+            ui32 fromGeneration = 0;
+            const auto* systemChannel = Logic->Info->ChannelInfo(0);
+            if (systemChannel) {
+                fromGeneration = systemChannel->LatestEntry()->FromGeneration;
+            }
+
+            for (const auto &one : Proto.GetSchemeInfoBodies()) {
                 blobs.emplace_back(LogoBlobIDFromLogoBlobID(one));
+                if (blobs.back().Generation() < fromGeneration) {
+                    Logic->Result().ShouldSnapshotScheme = true;
+                }
+            }
 
             NPageCollection::TGroupBlobsByCookie chop(blobs);
 

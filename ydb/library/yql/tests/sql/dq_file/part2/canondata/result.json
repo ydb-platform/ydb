@@ -1966,9 +1966,9 @@
     ],
     "test.test[pg-select_win_rank_order-default.txt-Debug]": [
         {
-            "checksum": "9e3bf889ad48a519614dded4395c5003",
-            "size": 1180,
-            "uri": "https://{canondata_backend}/1924537/bdd623f6bf35175946f1cc01358daf53d53a4755/resource.tar.gz#test.test_pg-select_win_rank_order-default.txt-Debug_/opt.yql_patched"
+            "checksum": "bdc84f4ec0b4878a2d5429312e37370d",
+            "size": 1186,
+            "uri": "https://{canondata_backend}/1937429/4d6d40c3a4ce04d771c904f20d857351312e3e4b/resource.tar.gz#test.test_pg-select_win_rank_order-default.txt-Debug_/opt.yql_patched"
         }
     ],
     "test.test[pg-select_win_rank_order-default.txt-Plan]": [
@@ -2054,9 +2054,9 @@
     ],
     "test.test[pg-tpcds-q67-default.txt-Debug]": [
         {
-            "checksum": "48b08b53870cb9f505eef9e6a85d2c01",
-            "size": 3793,
-            "uri": "https://{canondata_backend}/1942671/6d2caf417069cf56304b9a87bee6e46557c6040d/resource.tar.gz#test.test_pg-tpcds-q67-default.txt-Debug_/opt.yql_patched"
+            "checksum": "24ad36b9144234343f4041f8499b0732",
+            "size": 3799,
+            "uri": "https://{canondata_backend}/1936842/baf80494bd9561ab5e7825bd062823ca1bfa64ba/resource.tar.gz#test.test_pg-tpcds-q67-default.txt-Debug_/opt.yql_patched"
         }
     ],
     "test.test[pg-tpcds-q67-default.txt-Plan]": [
@@ -2076,9 +2076,9 @@
     ],
     "test.test[pg-tpcds-q70-default.txt-Debug]": [
         {
-            "checksum": "8c8a6cf483e2db41183a163b83c24b83",
-            "size": 2953,
-            "uri": "https://{canondata_backend}/1942173/61b2e01110faecf0f5c4f213e07ca9a795ac4758/resource.tar.gz#test.test_pg-tpcds-q70-default.txt-Debug_/opt.yql_patched"
+            "checksum": "9340fd0eb2214a38e6284845c6be6fd5",
+            "size": 2959,
+            "uri": "https://{canondata_backend}/1936842/baf80494bd9561ab5e7825bd062823ca1bfa64ba/resource.tar.gz#test.test_pg-tpcds-q70-default.txt-Debug_/opt.yql_patched"
         }
     ],
     "test.test[pg-tpcds-q70-default.txt-Plan]": [

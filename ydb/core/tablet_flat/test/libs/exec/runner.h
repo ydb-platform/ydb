@@ -132,11 +132,10 @@ namespace NFake {
         void SetupStaticServices()
         {
             {
-                const auto replica = MakeStateStorageReplicaID(NodeId, 0, 0);
+                const auto replica = MakeStateStorageReplicaID(NodeId, 0);
 
                 TIntrusivePtr<TStateStorageInfo> info(new TStateStorageInfo());
 
-                info->StateStorageGroup = 0;
                 info->NToSelect = 1;
                 info->Rings.resize(1);
                 info->Rings[0].Replicas.push_back(replica);
@@ -150,7 +149,7 @@ namespace NFake {
                 {
                     auto *actor = CreateStateStorageProxy(info, nullptr, nullptr);
 
-                    AddService(MakeStateStorageProxyID(0), actor, TMailboxType::Revolving);
+                    AddService(MakeStateStorageProxyID(), actor, TMailboxType::Revolving);
                 }
             }
 

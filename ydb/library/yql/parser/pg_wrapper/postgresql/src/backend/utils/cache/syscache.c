@@ -1233,7 +1233,7 @@ SearchSysCacheExists(int cacheId,
  * No lock is retained on the syscache entry.
  */
 Oid
-GetSysCacheOid(int cacheId,
+GetSysCacheOid_original(int cacheId,
 			   AttrNumber oidcol,
 			   Datum key1,
 			   Datum key2,

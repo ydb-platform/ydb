@@ -14,24 +14,10 @@ TString MakeTenantNodeEnumerationPath(const TString &tenantName) {
     return "node+" + tenantName;
 }
 
-static ui32 ExtractDefaultGroupForPath(const TString &path) {
-    auto *domains = AppData()->DomainsInfo.Get();
-    const TStringBuf domainName = ExtractDomain(path);
-    auto *domainInfo = domains->GetDomainByName(domainName);
-    if (domainInfo)
-        return domainInfo->DefaultStateStorageGroup;
-    else
-        return Max<ui32>();
-}
-
 class TTenantNodeEnumerationPublisher : public TActorBootstrapped<TTenantNodeEnumerationPublisher> {
     void StartPublishing() {
         const TString assignedPath = MakeTenantNodeEnumerationPath(AppData()->TenantName);
-        const ui32 statestorageGroupId = ExtractDefaultGroupForPath(AppData()->TenantName);
-        if (statestorageGroupId == Max<ui32>())
-            return;
-
-        Register(CreateBoardPublishActor(assignedPath, TString(), SelfId(), statestorageGroupId, 0, true));
+        Register(CreateBoardPublishActor(assignedPath, TString(), SelfId(), 0, true));
     }
 
 public:
@@ -95,12 +81,8 @@ public:
     {}
 
     void Bootstrap() {
-        const ui32 statestorageGroupId = ExtractDefaultGroupForPath(TenantName);
-        if (statestorageGroupId == Max<ui32>())
-            return ReportErrorAndDie();
-
         const TString path = MakeTenantNodeEnumerationPath(TenantName);
-        LookupActor = Register(CreateBoardLookupActor(path, SelfId(), statestorageGroupId, EBoardLookupMode::Majority));
+        LookupActor = Register(CreateBoardLookupActor(path, SelfId(), EBoardLookupMode::Majority));
 
         Become(&TThis::StateWait);
     }

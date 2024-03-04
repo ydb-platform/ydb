@@ -14,10 +14,11 @@
 #include <ydb/library/yql/minikql/mkql_program_builder.h>
 #include <ydb/library/yql/minikql/mkql_type_ops.h>
 #include <ydb/library/yql/providers/common/provider/yql_provider_names.h>
-#include <ydb/library/yql/providers/generic/expr_nodes/yql_generic_expr_nodes.h>
-#include <ydb/library/yql/utils/log/log.h>
+#include <ydb/library/yql/providers/common/structured_token/yql_token_builder.h>
 #include <ydb/library/yql/providers/generic/connector/libcpp/client.h>
 #include <ydb/library/yql/providers/generic/connector/libcpp/error.h>
+#include <ydb/library/yql/providers/generic/expr_nodes/yql_generic_expr_nodes.h>
+#include <ydb/library/yql/utils/log/log.h>
 
 namespace NYql {
     using namespace NNodes;
@@ -32,7 +33,8 @@ namespace NYql {
     };
 
     class TGenericLoadTableMetadataTransformer: public TGraphTransformerBase {
-        using TMapType = std::unordered_map<TGenericState::TTableAddress, TGenericTableDescription::TPtr, THash<TGenericState::TTableAddress>>;
+        using TMapType =
+            std::unordered_map<TGenericState::TTableAddress, TGenericTableDescription::TPtr, THash<TGenericState::TTableAddress>>;
 
     public:
         TGenericLoadTableMetadataTransformer(TGenericState::TPtr state)
@@ -48,42 +50,37 @@ namespace NYql {
             }
 
             std::unordered_set<TMapType::key_type, TMapType::hasher> pendingTables;
-            const auto& reads = FindNodes(input,
-                                          [&](const TExprNode::TPtr& node) {
-                                              if (const auto maybeRead = TMaybeNode<TGenRead>(node)) {
-                                                  return maybeRead.Cast().DataSource().Category().Value() == GenericProviderName;
-                                              }
-                                              return false;
-                                          });
+            const auto& reads = FindNodes(input, [&](const TExprNode::TPtr& node) {
+                if (const auto maybeRead = TMaybeNode<TGenRead>(node)) {
+                    return maybeRead.Cast().DataSource().Category().Value() == GenericProviderName;
+                }
+                return false;
+            });
             if (!reads.empty()) {
                 for (const auto& r : reads) {
                     const TGenRead read(r);
                     if (!read.FreeArgs().Get(2).Ref().IsCallable("MrTableConcat")) {
-                        ctx.AddError(
-                            TIssue(ctx.GetPosition(read.FreeArgs().Get(0).Pos()), TStringBuilder() << "Expected key"));
+                        ctx.AddError(TIssue(ctx.GetPosition(read.FreeArgs().Get(0).Pos()), "Expected key"));
                         return TStatus::Error;
                     }
 
                     const auto maybeKey = TExprBase(read.FreeArgs().Get(2).Ref().HeadPtr()).Maybe<TCoKey>();
                     if (!maybeKey) {
-                        ctx.AddError(
-                            TIssue(ctx.GetPosition(read.FreeArgs().Get(0).Pos()), TStringBuilder() << "Expected key"));
+                        ctx.AddError(TIssue(ctx.GetPosition(read.FreeArgs().Get(0).Pos()), "Expected key"));
                         return TStatus::Error;
                     }
 
                     const auto& keyArg = maybeKey.Cast().Ref().Head();
                     if (!keyArg.IsList() || keyArg.ChildrenSize() != 2U || !keyArg.Head().IsAtom("table") ||
                         !keyArg.Tail().IsCallable(TCoString::CallableName())) {
-                        ctx.AddError(
-                            TIssue(ctx.GetPosition(keyArg.Pos()), TStringBuilder() << "Expected single table name"));
+                        ctx.AddError(TIssue(ctx.GetPosition(keyArg.Pos()), "Expected single table name"));
                         return TStatus::Error;
                     }
 
                     const auto clusterName = read.DataSource().Cluster().StringValue();
                     const auto tableName = TString(keyArg.Tail().Head().Content());
                     if (pendingTables.insert(TGenericState::TTableAddress(clusterName, tableName)).second) {
-                        YQL_CLOG(INFO, ProviderGeneric)
-                            << "Loading table meta for: `" << clusterName << "`.`" << tableName << "`";
+                        YQL_CLOG(INFO, ProviderGeneric) << "Loading table meta for: `" << clusterName << "`.`" << tableName << "`";
                     }
                 }
             }
@@ -108,6 +105,7 @@ namespace NYql {
                 auto desc = emplaceIt.first->second;
                 desc->DataSourceInstance = request.data_source_instance();
 
+                Y_ENSURE(State_->GenericClient);
                 State_->GenericClient->DescribeTable(request).Subscribe(
                     [desc = std::move(desc), promise = std::move(promise)](const NConnector::TDescribeTableAsyncResult& f1) mutable {
                         NConnector::TDescribeTableAsyncResult f2(f1);
@@ -196,14 +194,13 @@ namespace NYql {
                     } else {
                         const auto& error = response.error();
                         NConnector::ErrorToExprCtx(error, ctx, ctx.GetPosition(read.Pos()),
-                                                   TStringBuilder()
-                                                       << "Loading metadata for table: " << clusterName << '.' << tableName);
+                                                   TStringBuilder() << "Loading metadata for table: " << clusterName << '.' << tableName);
                         hasErrors = true;
                         break;
                     }
                 } else {
-                    ctx.AddError(TIssue(ctx.GetPosition(read.Pos()),
-                                        TStringBuilder() << "Not found result for " << clusterName << '.' << tableName));
+                    ctx.AddError(TIssue(ctx.GetPosition(read.Pos()), TStringBuilder()
+                                                                         << "Not found result for " << clusterName << '.' << tableName));
                     hasErrors = true;
                     break;
                 }
@@ -222,10 +219,8 @@ namespace NYql {
         }
 
     private:
-        const TStructExprType* ParseTableMeta(const NConnector::NApi::TSchema& schema,
-                                              const std::string_view& cluster,
-                                              const std::string_view& table, TExprContext& ctx,
-                                              TVector<TString>& columnOrder) try {
+        const TStructExprType* ParseTableMeta(const NConnector::NApi::TSchema& schema, const std::string_view& cluster,
+                                              const std::string_view& table, TExprContext& ctx, TVector<TString>& columnOrder) try {
             TVector<const TItemExprType*> items;
 
             auto columns = schema.columns();
@@ -250,18 +245,58 @@ namespace NYql {
             return nullptr;
         }
 
-        void FillDescribeTableRequest(NConnector::NApi::TDescribeTableRequest& request, const TGenericClusterConfig& clusterConfig, const TString& tablePath) {
+        void FillDescribeTableRequest(NConnector::NApi::TDescribeTableRequest& request, const TGenericClusterConfig& clusterConfig,
+                                      const TString& tablePath) {
             const auto dataSourceKind = clusterConfig.GetKind();
             auto dsi = request.mutable_data_source_instance();
-
             *dsi->mutable_endpoint() = clusterConfig.GetEndpoint();
             dsi->set_kind(dataSourceKind);
-            *dsi->mutable_credentials() = clusterConfig.GetCredentials();
             dsi->set_use_tls(clusterConfig.GetUseSsl());
             dsi->set_protocol(clusterConfig.GetProtocol());
+            FillCredentials(request, clusterConfig);
             FillTypeMappingSettings(request);
             FillDataSourceOptions(request, clusterConfig);
             FillTablePath(request, clusterConfig, tablePath);
+        }
+
+        void FillCredentials(NConnector::NApi::TDescribeTableRequest& request, const TGenericClusterConfig& clusterConfig) {
+            auto dsi = request.mutable_data_source_instance();
+
+            // If login/password is provided, just copy them into request
+            if (clusterConfig.GetCredentials().Hasbasic()) {
+                *dsi->mutable_credentials() = clusterConfig.GetCredentials();
+                return;
+            }
+
+            Y_ENSURE(State_->CredentialsFactory, "CredentialsFactory is not initialized");
+
+            // If service account is provided, prepare to obtain IAM-token
+
+            auto structuredTokenJSON = TStructuredTokenBuilder().SetServiceAccountIdAuth(
+                                                                    clusterConfig.GetServiceAccountId(),
+                                                                    clusterConfig.GetServiceAccountIdSignature())
+                                           .ToJson();
+            Y_ENSURE(structuredTokenJSON, "empty structured token");
+
+            // Create provider or get existing one.
+            // It's crucial to reuse providers because their construction implies synchronous IO.
+            auto providersIt = State_->CredentialProviders.find(clusterConfig.name());
+            if (providersIt == State_->CredentialProviders.end()) {
+                auto credentialsProviderFactory = CreateCredentialsProviderFactoryForStructuredToken(
+                    State_->CredentialsFactory,
+                    structuredTokenJSON,
+                    false);
+
+                providersIt = State_->CredentialProviders.emplace(
+                                                             std::make_pair(clusterConfig.name(), credentialsProviderFactory->CreateProvider()))
+                                  .first;
+            }
+
+            auto iamToken = providersIt->second->GetAuthInfo();
+            Y_ENSURE(iamToken, "empty IAM token");
+
+            *dsi->mutable_credentials()->mutable_token()->mutable_value() = iamToken;
+            *dsi->mutable_credentials()->mutable_token()->mutable_type() = "IAM";
         }
 
         void FillDataSourceOptions(NConnector::NApi::TDescribeTableRequest& request, const TGenericClusterConfig& clusterConfig) {
@@ -287,13 +322,14 @@ namespace NYql {
                 } break;
 
                 default:
-                    ythrow yexception() << "Unexpected data source kind: '"
-                                        << NYql::NConnector::NApi::EDataSourceKind_Name(dataSourceKind) << "'";
+                    ythrow yexception() << "Unexpected data source kind: '" << NYql::NConnector::NApi::EDataSourceKind_Name(dataSourceKind)
+                                        << "'";
             }
         }
 
         void FillTypeMappingSettings(NConnector::NApi::TDescribeTableRequest& request) {
-            const TString dateTimeFormat = State_->Configuration->DateTimeFormat.Get().GetOrElse(TGenericSettings::TDefault::DateTimeFormat);
+            const TString dateTimeFormat =
+                State_->Configuration->DateTimeFormat.Get().GetOrElse(TGenericSettings::TDefault::DateTimeFormat);
             if (dateTimeFormat == "string") {
                 request.mutable_type_mapping_settings()->set_date_time_format(NConnector::NApi::STRING_FORMAT);
             } else if (dateTimeFormat == "YQL") {
@@ -303,7 +339,8 @@ namespace NYql {
             }
         }
 
-        void FillTablePath(NConnector::NApi::TDescribeTableRequest& request, const TGenericClusterConfig& clusterConfig, const TString& tablePath) {
+        void FillTablePath(NConnector::NApi::TDescribeTableRequest& request, const TGenericClusterConfig& clusterConfig,
+                           const TString& tablePath) {
             // for backward compability full path can be used (cluster_name.`db_name.table`)
             // TODO: simplify during https://st.yandex-team.ru/YQ-2494
             const auto dataSourceKind = clusterConfig.GetKind();

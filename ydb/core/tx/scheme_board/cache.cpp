@@ -542,11 +542,7 @@ namespace {
                 << ", tabletId# " << tabletId
                 << ", domainOwnerId# " << domainOwnerId);
 
-            const auto& domains = *AppData()->DomainsInfo;
-            const ui32 domainId = domains.GetDomainUidByTabletId(tabletId);
-            const ui32 boardSSId = domains.GetDomain(domainId).DefaultSchemeBoardGroup;
-
-            return Register(CreateSchemeBoardSubscriber(SelfId(), path, boardSSId, domainOwnerId));
+            return Register(CreateSchemeBoardSubscriber(SelfId(), path, domainOwnerId));
         }
 
         TActorId CreateSubscriber(const TPathId& pathId) const {
@@ -2158,23 +2154,15 @@ class TSchemeCache: public TMonitorableActor<TSchemeCache> {
     }
 
     template <typename TPath>
-    TSubscriber CreateSubscriber(const TPath& path, const ui64 tabletId, const ui64 domainOwnerId) const {
+    TSubscriber CreateSubscriber(const TPath& path, const ui64 domainOwnerId) const {
         SBC_LOG_T("Create subscriber"
             << ": self# " << SelfId()
             << ", path# " << path
             << ", domainOwnerId# " << domainOwnerId);
 
-        const auto& domains = *AppData()->DomainsInfo;
-        const ui32 domainId = domains.GetDomainUidByTabletId(tabletId);
-        const ui32 boardSSId = domains.GetDomain(domainId).DefaultSchemeBoardGroup;
-
         return TSubscriber(
-            Register(CreateSchemeBoardSubscriber(SelfId(), path, boardSSId, domainOwnerId)), domainOwnerId, path
+            Register(CreateSchemeBoardSubscriber(SelfId(), path, domainOwnerId)), domainOwnerId, path
         );
-    }
-
-    TSubscriber CreateSubscriber(const TPathId& pathId, const ui64 domainOwnerId) const {
-        return CreateSubscriber(pathId, pathId.OwnerId, domainOwnerId);
     }
 
     template <typename TContextPtr, typename TEntry, typename TPathExtractor, typename TTabletIdExtractor>
@@ -2190,8 +2178,7 @@ class TSchemeCache: public TMonitorableActor<TSchemeCache> {
             case EPathType::RegularPath:
             {
                 const ui64 tabletId = tabletIdExtractor(entry);
-                const ui32 domainId = AppData()->DomainsInfo->GetDomainUidByTabletId(tabletId);
-                if (tabletId == ui64(NSchemeShard::InvalidTabletId) || domainId == TDomainsInfo::BadDomainId) {
+                if (tabletId == ui64(NSchemeShard::InvalidTabletId) || (tabletId >> 56) != 1) {
                     return SetRootUnknown(context.Get(), entry);
                 }
 
@@ -2219,7 +2206,7 @@ class TSchemeCache: public TMonitorableActor<TSchemeCache> {
                     domainOwnerId = tabletId;
                 }
 
-                cacheItem = &Cache.Upsert(path, TCacheItem(this, CreateSubscriber(path, tabletId, domainOwnerId), false));
+                cacheItem = &Cache.Upsert(path, TCacheItem(this, CreateSubscriber(path, domainOwnerId), false));
                 break;
             }
             case EPathType::SysPath:
@@ -2277,7 +2264,7 @@ class TSchemeCache: public TMonitorableActor<TSchemeCache> {
         }
 
         if (!byPath) {
-            TSubscriber subscriber = CreateSubscriber(notifyPath, notifyPathId.OwnerId, byPathId->GetSubcriber().DomainOwnerId);
+            TSubscriber subscriber = CreateSubscriber(notifyPath, byPathId->GetSubcriber().DomainOwnerId);
             return &Cache.Upsert(notifyPath, notifyPathId, TCacheItem(this, subscriber, false));
         }
 

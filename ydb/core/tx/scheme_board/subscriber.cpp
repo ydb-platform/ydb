@@ -945,8 +945,7 @@ class TSubscriber: public TMonitorableActor<TDerived> {
         const auto& replicas = ev->Get()->Replicas;
 
         if (replicas.empty()) {
-            SBS_LOG_E("Subscribe on unconfigured SchemeBoard"
-                << ": StateStorage group# " << StateStorageGroup);
+            SBS_LOG_E("Subscribe on unconfigured SchemeBoard");
             this->Become(&TDerived::StateCalm);
             return;
         }
@@ -1006,8 +1005,7 @@ class TSubscriber: public TMonitorableActor<TDerived> {
     }
 
     void HandleUndelivered() {
-        SBS_LOG_E("Subscribe on unavailable SchemeBoard"
-            << ": StateStorage group# " << StateStorageGroup);
+        SBS_LOG_E("Subscribe on unavailable SchemeBoard");
         this->Become(&TDerived::StateCalm);
     }
 
@@ -1038,11 +1036,9 @@ public:
     explicit TSubscriber(
             const TActorId& owner,
             const TPath& path,
-            const ui64 stateStorageGroup,
             const ui64 domainOwnerId)
         : Owner(owner)
         , Path(path)
-        , StateStorageGroup(stateStorageGroup)
         , DomainOwnerId(domainOwnerId)
         , DelayedSyncRequest(0)
         , CurrentSyncRequest(0)
@@ -1052,7 +1048,7 @@ public:
     void Bootstrap(const TActorContext&) {
         TMonitorableActor<TDerived>::Bootstrap();
 
-        const TActorId proxy = MakeStateStorageProxyID(StateStorageGroup);
+        const TActorId proxy = MakeStateStorageProxyID();
         this->Send(proxy, new TEvStateStorage::TEvResolveSchemeBoard(Path), IEventHandle::FlagTrackDelivery);
         this->Become(&TDerived::StateResolve);
     }
@@ -1095,7 +1091,6 @@ public:
 private:
     const TActorId Owner;
     const TPath Path;
-    const ui64 StateStorageGroup;
     const ui64 DomainOwnerId;
 
     TSet<TActorId> Proxies;
@@ -1126,50 +1121,43 @@ IActor* CreateSchemeBoardSubscriber(
     const TActorId& owner,
     const TString& path
 ) {
-    auto& domains = AppData()->DomainsInfo->Domains;
-    Y_ABORT_UNLESS(!domains.empty());
-    auto& domain = domains.begin()->second;
-    ui32 schemeBoardGroup = domain->DefaultSchemeBoardGroup;
+    auto *domain = AppData()->DomainsInfo->GetDomain();
     ui64 domainOwnerId = domain->SchemeRoot;
-    return CreateSchemeBoardSubscriber(owner, path, schemeBoardGroup, domainOwnerId);
+    return CreateSchemeBoardSubscriber(owner, path, domainOwnerId);
 }
 
 IActor* CreateSchemeBoardSubscriber(
     const TActorId& owner,
     const TString& path,
-    const ui64 stateStorageGroup,
     const ui64 domainOwnerId
 ) {
-    return new NSchemeBoard::TSubscriberByPath(owner, path, stateStorageGroup, domainOwnerId);
+    return new NSchemeBoard::TSubscriberByPath(owner, path, domainOwnerId);
 }
 
 IActor* CreateSchemeBoardSubscriber(
     const TActorId& owner,
     const TPathId& pathId,
-    const ui64 stateStorageGroup,
     const ui64 domainOwnerId
 ) {
-    return new NSchemeBoard::TSubscriberByPathId(owner, pathId, stateStorageGroup, domainOwnerId);
+    return new NSchemeBoard::TSubscriberByPathId(owner, pathId, domainOwnerId);
 }
 
 IActor* CreateSchemeBoardSubscriber(
     const TActorId& owner,
     const TString& path,
-    const ui64 stateStorageGroup,
     const EDeletionPolicy deletionPolicy
 ) {
     Y_UNUSED(deletionPolicy);
-    return new NSchemeBoard::TSubscriberByPath(owner, path, stateStorageGroup, 0);
+    return new NSchemeBoard::TSubscriberByPath(owner, path, 0);
 }
 
 IActor* CreateSchemeBoardSubscriber(
     const TActorId& owner,
     const TPathId& pathId,
-    const ui64 stateStorageGroup,
     const EDeletionPolicy deletionPolicy
 ) {
     Y_UNUSED(deletionPolicy);
-    return new NSchemeBoard::TSubscriberByPathId(owner, pathId, stateStorageGroup, 0);
+    return new NSchemeBoard::TSubscriberByPathId(owner, pathId, 0);
 }
 
 } // NKikimr

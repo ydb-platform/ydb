@@ -43,13 +43,6 @@ void TCms::DefaultSignalTabletActive(const TActorContext &)
 
 void TCms::OnActivateExecutor(const TActorContext &ctx)
 {
-    if (AppData(ctx)->DomainsInfo->Domains.size() > 1) {
-        NotSupportedReason = "Multiple domains are not supported.";
-        Become(&TThis::StateNotSupported);
-        SignalTabletActive(ctx);
-        return;
-    }
-
     EnableCMSRequestPriorities = AppData(ctx)->FeatureFlags.GetEnableCMSRequestPriorities();
 
     Executor()->RegisterExternalTabletCounters(TabletCountersPtr.Release());

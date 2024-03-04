@@ -96,10 +96,9 @@ public:
             ALOG_DEBUG(NActorsServices::HTTP, "Login: Requesting LDAP provider for user " << AuthCredentials.Login);
             Send(MakeLdapAuthProviderID(), new TEvLdapAuthProvider::TEvAuthenticateRequest(AuthCredentials.Login, AuthCredentials.Password));
         } else {
-            TDomainsInfo* domainsInfo = AppData()->DomainsInfo.Get();
-            const TDomainsInfo::TDomain& domain = *domainsInfo->Domains.begin()->second.Get();
-            TString rootDatabase = "/" + domain.Name;
-            ui64 rootSchemeShardTabletId = domain.SchemeRoot;
+            auto *domain = AppData()->DomainsInfo->GetDomain();
+            TString rootDatabase = "/" + domain->Name;
+            ui64 rootSchemeShardTabletId = domain->SchemeRoot;
             if (!Database.empty() && Database != rootDatabase) {
                 Database = rootDatabase;
                 ALOG_DEBUG(NActorsServices::HTTP, "Login: Requesting schemecache for database " << Database);

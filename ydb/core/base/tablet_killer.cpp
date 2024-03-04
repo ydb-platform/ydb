@@ -46,7 +46,7 @@ public:
     {}
 
     void Bootstrap(const TActorContext &ctx) {
-        const TActorId stateStorageProxyId = MakeStateStorageProxyID(StateStorageGroupFromTabletID(TabletId));
+        const TActorId stateStorageProxyId = MakeStateStorageProxyID();
         ctx.Send(stateStorageProxyId, new TEvStateStorage::TEvLookup(TabletId, 0));
         Become(&TTabletKillRequest::StateFunc);
     }

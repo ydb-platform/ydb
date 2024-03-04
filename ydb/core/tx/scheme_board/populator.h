@@ -12,7 +12,6 @@ namespace NKikimr {
 IActor* CreateSchemeBoardPopulator(
     const ui64 owner,
     const ui64 generation,
-    const ui32 schemeBoardSSId,
     std::vector<std::pair<TPathId, NSchemeBoard::TTwoPartDescription>>&& twoPartDescriptions,
     const ui64 maxPathId
 );

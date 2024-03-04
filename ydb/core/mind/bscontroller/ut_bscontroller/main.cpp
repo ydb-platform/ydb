@@ -39,7 +39,7 @@ struct TEnvironmentSetup {
     const ui32 NodeCount;
     const ui32 DataCenterCount;
     const ui32 Domain = 0;
-    const ui64 TabletId = MakeBSControllerID(Domain);
+    const ui64 TabletId = MakeBSControllerID();
     const TVector<ui64> TabletIds = {TabletId};
     const TDuration Timeout = TDuration::Seconds(30);
     const ui32 GroupId = 0;
@@ -200,7 +200,7 @@ struct TEnvironmentSetup {
         TAppPrepare app;
         app.AddDomain(TDomainsInfo::TDomain::ConstructEmptyDomain("dc-1").Release());
         for (ui32 i = 0; i < nodeCount; ++i) {
-            SetupStateStorage(*Runtime, i, 0, true);
+            SetupStateStorage(*Runtime, i, true);
             SetupTabletResolver(*Runtime, i);
         }
         Runtime->Initialize(app.Unwrap());

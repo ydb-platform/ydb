@@ -22,8 +22,7 @@ class TReplicationService: public TActorBootstrapped<TReplicationService> {
         }
 
         const auto boardPath = MakeDiscoveryPath(tenant);
-        const auto groupId = domainInfo->DefaultStateStorageGroup;
-        BoardPublisher = Register(CreateBoardPublishActor(boardPath, TString(), SelfId(), groupId, 0, true));
+        BoardPublisher = Register(CreateBoardPublishActor(boardPath, TString(), SelfId(), 0, true));
     }
 
     void PassAway() override {

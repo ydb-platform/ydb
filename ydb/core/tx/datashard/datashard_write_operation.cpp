@@ -55,6 +55,8 @@ TValidatedWriteTx::TValidatedWriteTx(TDataShard* self, ui64 globalTxId, TInstant
         LockNodeId = record.GetLockNodeId();
     }
 
+    OverloadSubscribe = record.HasOverloadSubscribe() ? record.GetOverloadSubscribe() : std::optional<ui64>{};
+
     NKikimrTxDataShard::TKqpTransaction::TDataTaskMeta meta;
 
     LOG_T("Parsing write transaction for " << globalTxId << " at " << TabletId << ", record: " << record.ShortDebugString());
@@ -307,6 +309,7 @@ TWriteOperation::TWriteOperation(const TBasicOpInfo& op, ui64 tabletId)
 TWriteOperation::TWriteOperation(const TBasicOpInfo& op, NEvents::TDataEvents::TEvWrite::TPtr&& ev, TDataShard* self)
     : TWriteOperation(op, self->TabletID())
 {
+    Recipient = ev->Recipient;
     SetTarget(ev->Sender);
     SetCookie(ev->Cookie);
 

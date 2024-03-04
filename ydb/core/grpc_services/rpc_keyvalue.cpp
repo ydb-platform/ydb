@@ -684,16 +684,13 @@ protected:
 
     TActorId MakeLocalRegistrarID() {
         auto &ctx = TActivationContext::AsActorContext();
-        auto &domainsInfo = *AppData(ctx)->DomainsInfo;
-        auto domainIt = domainsInfo.Domains.find(1);
-        if (domainIt == domainsInfo.Domains.end()) {
-            TActorId invalidId;
-            return invalidId;
+        auto &domainsInfo = AppData(ctx)->DomainsInfo;
+        if (domainsInfo->GetDomain()->DomainUid != 1) { // TODO: WAT?
+            return {};
         }
         auto &rec = *this->GetProtoRequest();
         ui32 nodeId = rec.node_id() ? rec.node_id() : ctx.SelfID.NodeId();
-        ui32 hiveUid = domainsInfo.GetDefaultHiveUid(1);
-        ui64 hiveId = domainsInfo.GetHive(hiveUid);
+        ui64 hiveId = domainsInfo->GetHive();
         return ::NKikimr::MakeLocalRegistrarID(nodeId, hiveId);
     }
 

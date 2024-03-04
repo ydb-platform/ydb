@@ -127,6 +127,8 @@ Ydb::StatusIds::StatusCode ConvertPersQueueInternalCodeToStatus(const Ydb::PersQ
             return Ydb::StatusIds::UNAUTHORIZED;
         case ERROR:
             return Ydb::StatusIds::UNAVAILABLE;
+        case UNKNOWN_TXID:
+            return Ydb::StatusIds::NOT_FOUND;
 
         default:
             return Ydb::StatusIds::STATUS_CODE_UNSPECIFIED;

@@ -2138,9 +2138,9 @@
     ],
     "test.test[pg-pg_types_window2-default.txt-Debug]": [
         {
-            "checksum": "fdb6570b7f0e2e9f698f34e611afdd83",
-            "size": 1138,
-            "uri": "https://{canondata_backend}/1924537/c2e51d9e2e0a5d416aad46b25a797e584ed51fa2/resource.tar.gz#test.test_pg-pg_types_window2-default.txt-Debug_/opt.yql_patched"
+            "checksum": "bc5b35c42c427a5c7e1d0115198b7288",
+            "size": 1184,
+            "uri": "https://{canondata_backend}/1937027/751768eb2f05a82d5c0ae53923fca610307cec52/resource.tar.gz#test.test_pg-pg_types_window2-default.txt-Debug_/opt.yql_patched"
         }
     ],
     "test.test[pg-pg_types_window2-default.txt-Plan]": [
@@ -2314,9 +2314,9 @@
     ],
     "test.test[pg-select_win_partition_sort-default.txt-Debug]": [
         {
-            "checksum": "2aeb060d1f8ab384fc0fc6b2498e9109",
-            "size": 1408,
-            "uri": "https://{canondata_backend}/1924537/c2e51d9e2e0a5d416aad46b25a797e584ed51fa2/resource.tar.gz#test.test_pg-select_win_partition_sort-default.txt-Debug_/opt.yql_patched"
+            "checksum": "d65a3d3d9e2d71503114935166a0fc7e",
+            "size": 1453,
+            "uri": "https://{canondata_backend}/1937027/751768eb2f05a82d5c0ae53923fca610307cec52/resource.tar.gz#test.test_pg-select_win_partition_sort-default.txt-Debug_/opt.yql_patched"
         }
     ],
     "test.test[pg-select_win_partition_sort-default.txt-Plan]": [
@@ -2336,9 +2336,9 @@
     ],
     "test.test[pg-select_win_sum_null-default.txt-Debug]": [
         {
-            "checksum": "fe1b96ce1e0eb7909825980ae27cb0c9",
-            "size": 1731,
-            "uri": "https://{canondata_backend}/1924537/c2e51d9e2e0a5d416aad46b25a797e584ed51fa2/resource.tar.gz#test.test_pg-select_win_sum_null-default.txt-Debug_/opt.yql_patched"
+            "checksum": "4e02da8b8382807b54779ed396e7abf3",
+            "size": 1737,
+            "uri": "https://{canondata_backend}/1937027/751768eb2f05a82d5c0ae53923fca610307cec52/resource.tar.gz#test.test_pg-select_win_sum_null-default.txt-Debug_/opt.yql_patched"
         }
     ],
     "test.test[pg-select_win_sum_null-default.txt-Plan]": [

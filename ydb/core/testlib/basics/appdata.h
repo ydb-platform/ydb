@@ -66,7 +66,7 @@ namespace NKikimr {
         NActors::TTestActorRuntime::TEgg Unwrap() noexcept;
 
         void AddDomain(TDomainsInfo::TDomain* domain);
-        void AddHive(ui32 hiveUid, ui64 hive);
+        void AddHive(ui64 hive);
         void ClearDomainsAndHive();
         void SetChannels(TIntrusivePtr<TChannelProfiles> channels);
         void SetBSConf(NKikimrBlobStorage::TNodeWardenServiceSet config);

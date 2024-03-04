@@ -4137,12 +4137,7 @@ void TPersQueue::InitProcessingParams(const TActorContext& ctx)
         return;
     }
 
-    auto appdata = AppData(ctx);
-    const ui32 domainId = appdata->DomainsInfo->GetDomainUidByTabletId(TabletID());
-    Y_ABORT_UNLESS(domainId != appdata->DomainsInfo->BadDomainId);
-
-    const auto& domain = appdata->DomainsInfo->GetDomain(domainId);
-    ProcessingParams = ExtractProcessingParams(domain);
+    ProcessingParams = ExtractProcessingParams(*AppData(ctx)->DomainsInfo->GetDomain());
 
     InitMediatorTimeCast(ctx);
 }

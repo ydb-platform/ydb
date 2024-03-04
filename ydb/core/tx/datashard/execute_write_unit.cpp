@@ -79,7 +79,7 @@ public:
         const TTableId fullTableId(DataShard.GetPathOwnerId(), tableId);
         const ui64 localTableId = DataShard.GetLocalTableId(fullTableId);
         if (localTableId == 0) {
-            writeOp->SetError(NKikimrDataEvents::TEvWriteResult::STATUS_INTERNAL_ERROR, TStringBuilder() << "Unknown table id " << tableId);
+            writeOp->SetError(NKikimrDataEvents::TEvWriteResult::STATUS_BAD_REQUEST, TStringBuilder() << "Unknown table id " << tableId);
             return;
         }
         const ui64 shadowTableId = DataShard.GetShadowTableId(fullTableId);

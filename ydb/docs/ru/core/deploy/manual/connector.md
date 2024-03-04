@@ -21,11 +21,11 @@
 
 Для установки коннектора на физический или виртуальный Linux-сервер без средств контейнерной виртуализации используйте бинарные дистрибутивы.
 
-1. На [странице с релизами](https://github.com/ydb-platform/fq-connector-go/releases) коннектора выберите последний релиз, скачайте архив для подходящей вам платформы и архитектуры. Так выглядит команда для скачивания коннектора версии `v0.2.3` под платформу Linux и архитектуру процессора `amd64`:
+1. На [странице с релизами](https://github.com/ydb-platform/fq-connector-go/releases) коннектора выберите последний релиз, скачайте архив для подходящей вам платформы и архитектуры. Так выглядит команда для скачивания коннектора версии `v0.2.4` под платформу Linux и архитектуру процессора `amd64`:
     ```bash
     mkdir /tmp/connector && cd /tmp/connector
-    wget https://github.com/ydb-platform/fq-connector-go/releases/download/v0.2.3/fq-connector-go-v0.2.3-linux-amd64.tar.gz
-    tar -xzf fq-connector-go-v0.2.3-linux-amd64.tar.gz
+    wget https://github.com/ydb-platform/fq-connector-go/releases/download/v0.2.4/fq-connector-go-v0.2.4-linux-amd64.tar.gz
+    tar -xzf fq-connector-go-v0.2.4-linux-amd64.tar.gz
     ```
 
 1. Разместите исполняемый и конфигурационный файлы коннектора в удобные для вас директории, например, `/usr/local/bin` и `/usr/local/etc`:
@@ -95,18 +95,18 @@
     ```bash
     docker run -d \
         --name=fq-connector-go \
-        -p 50051:50051 \
+        -p 2130:2130 \
         ghcr.io/ydb-platform/fq-connector-go:latest
     ```
 
-    На порту 50051 публичного сетевого интерфейса вашего хоста запустится слушающий сокет GRPC-сервиса коннектора. В дальнейшем сервер {{ ydb-short-name }} должен будет установить соединение именно с этим сетевым адресом.
+    На порту 2130 публичного сетевого интерфейса вашего хоста запустится слушающий сокет GRPC-сервиса коннектора. В дальнейшем сервер {{ ydb-short-name }} должен будет установить соединение именно с этим сетевым адресом.
 
 1. При необходимости изменения конфигурации подготовьте конфигурационный файл [по образцу](#fq-connector-go-config) и примонтируйте его к контейнеру:
 
     ```bash
     docker run -d \
         --name=fq-connector-go \
-        -p 50051:50051 \
+        -p 2130:2130 \
         -v /path/to/config.yaml:/usr/local/etc/fq-connector-go.yaml
         ghcr.io/ydb-platform/fq-connector-go:latest
     ```
@@ -125,7 +125,7 @@
     ```bash
     docker run -d \
         --name=fq-connector-go \
-        -p 50051:50051 \
+        -p 2130:2130 \
         -v /path/to/config.yaml:/usr/local/etc/fq-connector-go.yaml
         -v /path/to/tls/:/usr/local/etc/tls/
         ghcr.io/ydb-platform/fq-connector-go:latest

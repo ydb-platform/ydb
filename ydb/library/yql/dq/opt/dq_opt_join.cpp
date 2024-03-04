@@ -581,25 +581,13 @@ TExprBase DqRewriteLeftPureJoin(const TExprBase node, TExprContext& ctx, const T
     // We only need matching key from the right side. Instead of broadcasting
     // all right input data to single task, we can do a "partial" right semi join
     // on in the right stage to extract only necessary rows.
-//    return Build<TDqJoin>(ctx, join.Pos())
-//        .InitFrom(join)
-//        .LeftInput(leftConnection)
-//        .JoinType().Build(joinType)
- //       .LeftJoinKeyNames(join.LeftJoinKeyNames())
- //       .RightJoinKeyNames(join.RightJoinKeyNames())
- //       .Done();
-
     return Build<TDqJoin>(ctx, join.Pos())
+        .InitFrom(join)
         .LeftInput(leftConnection)
-        .LeftLabel(join.LeftLabel())
-        .RightInput(join.RightInput())
-        .RightLabel(join.RightLabel())
         .JoinType().Build(joinType)
-        .JoinKeys(join.JoinKeys())
         .LeftJoinKeyNames(join.LeftJoinKeyNames())
         .RightJoinKeyNames(join.RightJoinKeyNames())
-        .Flags(join.Flags())
-        .Done();    
+        .Done();  
 }
 
 TExprBase DqBuildPhyJoin(const TDqJoin& join, bool pushLeftStage, TExprContext& ctx, IOptimizationContext& optCtx) {

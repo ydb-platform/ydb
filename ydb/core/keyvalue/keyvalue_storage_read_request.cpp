@@ -511,7 +511,7 @@ public:
         : IntermediateResult(std::move(intermediate))
         , TabletInfo(const_cast<TTabletStorageInfo*>(tabletInfo))
         , TabletGeneration(tabletGeneration)
-        , Span(TWilsonTablet::Tablet, IntermediateResult->Span.GetTraceId(), "KeyValue.StorageReadRequest")
+        , Span(TWilsonTablet::TabletBasic, IntermediateResult->Span.GetTraceId(), "KeyValue.StorageReadRequest")
     {}
 };
 

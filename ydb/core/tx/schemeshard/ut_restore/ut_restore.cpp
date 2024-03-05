@@ -920,7 +920,6 @@ value {
                 Name: "myseq"
             }
         )");
-        env.TestWaitNotification(runtime, txId);
 
         TestExport(runtime, ++txId, "/MyRoot", Sprintf(R"(
             ExportToS3Settings {

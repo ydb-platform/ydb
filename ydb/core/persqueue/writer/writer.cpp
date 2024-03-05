@@ -20,6 +20,8 @@
 #include <util/generic/map.h>
 #include <util/string/builder.h>
 
+#include <library/cpp/retry/retry_policy.h>
+
 namespace NKikimr::NPQ {
 
 #if defined(LOG_PREFIX) || defined(TRACE) || defined(DEBUG) || defined(INFO) || defined(ERROR)
@@ -186,8 +188,14 @@ class TPartitionWriter: public TActorBootstrapped<TPartitionWriter>, private TRl
         return InitResult(reason, std::move(response));
     }
 
-    void Retry() {
-        Schedule(TDuration::MilliSeconds(100), new TEvents::TEvWakeup());
+    void Retry(Ydb::StatusIds::StatusCode code) {
+        if (!RetryState) {
+            RetryState = GetRetryPolicy()->CreateRetryState();
+        }
+
+        if (auto delay = RetryState->GetNextRetryDelay(code); delay.Defined()) {
+            Schedule(*delay, new TEvents::TEvWakeup());
+        }
     }
 
     template <typename... Args>
@@ -239,7 +247,7 @@ class TPartitionWriter: public TActorBootstrapped<TPartitionWriter>, private TRl
             break;
         case Ydb::StatusIds::SESSION_BUSY:
         case Ydb::StatusIds::PRECONDITION_FAILED: // see TKqpSessionActor::ReplyBusy
-            return Retry();
+            return Retry(record.GetYdbStatus());
         default:
             return InitResult("Invalid KQP session", record);
         }
@@ -861,6 +869,25 @@ private:
     EErrorCode ErrorCode = EErrorCode::InternalError;
 
     ui64 WriteId = INVALID_WRITE_ID;
+
+    using IRetryPolicy = IRetryPolicy<Ydb::StatusIds::StatusCode>;
+    using IRetryState = IRetryPolicy::IRetryState;
+
+    static IRetryPolicy::TPtr GetRetryPolicy() {
+        return IRetryPolicy::GetExponentialBackoffPolicy(Retryable);
+    };
+
+    static ERetryErrorClass Retryable(Ydb::StatusIds::StatusCode code) {
+        switch (code) {
+        case Ydb::StatusIds::SESSION_BUSY:
+        case Ydb::StatusIds::PRECONDITION_FAILED:
+            return ERetryErrorClass::ShortRetry;
+        default:
+            return ERetryErrorClass::NoRetry;
+        }
+    };
+
+    IRetryState::TPtr RetryState;
 }; // TPartitionWriter
 
 

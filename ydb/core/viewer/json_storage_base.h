@@ -221,7 +221,7 @@ public:
     void Handle(TEvBlobStorage::TEvControllerConfigResponse::TPtr& ev) {
         const NKikimrBlobStorage::TEvControllerConfigResponse& pbRecord(ev->Get()->Record);
 
-        if (pbRecord.HasResponse() && pbRecord.GetResponse().StatusSize() > 0) {
+        if (pbRecord.HasResponse() && pbRecord.GetResponse().StatusSize() > 1) {
             const NKikimrBlobStorage::TConfigResponse::TStatus& pbStatus(pbRecord.GetResponse().GetStatus(0));
             if (pbStatus.HasBaseConfig()) {
                 BaseConfig = ev->Release();
@@ -244,9 +244,10 @@ public:
                         SendNodeRequests(nodeId);
                     }
                 }
-                for (const NKikimrBlobStorage::TDefineStoragePool& pool : pbStatus.GetStoragePool()) {
-                    StoragePoolInfo[pool.GetName()].MediaType = GetMediaType(pool);
-                }
+            }
+            const NKikimrBlobStorage::TConfigResponse::TStatus& spStatus(pbRecord.GetResponse().GetStatus(1));
+            for (const NKikimrBlobStorage::TDefineStoragePool& pool : spStatus.GetStoragePool()) {
+                StoragePoolInfo[pool.GetName()].MediaType = GetMediaType(pool);
             }
         }
         RequestDone();

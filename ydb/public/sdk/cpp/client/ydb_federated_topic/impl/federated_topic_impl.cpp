@@ -33,10 +33,14 @@ TFederatedTopicClient::TImpl::CreateWriteSession(const TFederatedWriteSessionSet
     TFederatedWriteSessionSettings splitSettings = settings;
     splitSettings.MaxMemoryUsage(splitSize);
     InitObserver();
+    with_lock(Lock) {
+        if (!splitSettings.EventHandlers_.HandlersExecutor_) {
+            splitSettings.EventHandlers_.HandlersExecutor(ClientSettings.DefaultHandlersExecutor_);
+        }
+    }
     auto session = std::make_shared<TFederatedWriteSession>(splitSettings, Connections, ClientSettings, GetObserver());
     session->Start();
     return std::move(session);
-
 }
 
 void TFederatedTopicClient::TImpl::InitObserver() {

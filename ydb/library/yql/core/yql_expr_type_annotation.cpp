@@ -319,6 +319,7 @@ IGraphTransformer::TStatus TryConvertToImpl(TExprContext& ctx, TExprNode::TPtr& 
             allow = GetNumericDataTypeLevel(to) >= GetNumericDataTypeLevel(from);
             isSafe = false;
         } else if (from == EDataSlot::Date && (
+                    to == EDataSlot::Date32 ||
                     to == EDataSlot::TzDate ||
                     to == EDataSlot::Datetime ||
                     to == EDataSlot::Timestamp ||
@@ -330,6 +331,7 @@ IGraphTransformer::TStatus TryConvertToImpl(TExprContext& ctx, TExprNode::TPtr& 
             allow = true;
             useCast = true;
         } else if (from == EDataSlot::Datetime && (
+                    to == EDataSlot::Datetime64 ||
                     to == EDataSlot::TzDatetime ||
                     to == EDataSlot::Timestamp ||
                     to == EDataSlot::TzTimestamp ||

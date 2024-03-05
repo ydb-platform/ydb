@@ -1,17 +1,43 @@
-$date_min = unwrap(cast(0 as date));
-$date_max = unwrap(cast(49672 as date));
-$date32_min = unwrap(cast(-53375809 as date32));
-$date32_max = unwrap(cast(53375807 as date32));
+$date_val = unwrap(cast(1 as date));
+$date32_val = unwrap(cast(-1 as date32));
 
-$datetime64_min = unwrap(cast(-4611669897600 as datetime64));
-$datetime64_max = unwrap(cast(4611669811199 as datetime64));
+$datetime_val = unwrap(cast(86400 as datetime));
+$datetime64_val = unwrap(cast(-86400 as datetime64));
 
-$timestamp64_min = unwrap(cast(-4611669897600000000 as timestamp64));
-$timestamp64_max = unwrap(cast(4611669811199999999 as timestamp64));
+$timestamp_val = unwrap(cast(86400l*1000000 as timestamp));
+$timestamp64_val = unwrap(cast(-86400l*1000000 as timestamp64));
 
-$interval64_min = unwrap(cast(-9223339708799999999 as interval64));
-$interval64_max = unwrap(cast(9223339708799999999 as interval64));
+select 1, [$date_val, $datetime_val]
+, [$date_val, $timestamp_val]
+, [$date_val, $date32_val]
+, [$date_val, $datetime64_val]
+, [$date_val, $timestamp64_val]
+, 2, [$datetime_val, $date_val]
+, [$datetime_val, $timestamp_val]
+, [$datetime_val, $date32_val]
+, [$datetime_val, $datetime64_val]
+, [$datetime_val, $timestamp64_val]
+, 3, [$timestamp_val, $date_val]
+, [$timestamp_val, $datetime_val]
+, [$timestamp_val, $date32_val]
+, [$timestamp_val, $datetime64_val]
+, [$timestamp_val, $timestamp64_val]
+, 4, [$date32_val, $date_val]
+, [$date32_val, $datetime_val]
+, [$date32_val, $timestamp_val]
+, [$date32_val, $datetime64_val]
+, [$date32_val, $timestamp64_val]
+, 5, [$datetime64_val, $date_val]
+, [$datetime64_val, $datetime_val]
+, [$datetime64_val, $timestamp_val]
+, [$datetime64_val, $date32_val]
+, [$datetime64_val, $timestamp64_val]
+, 6, [$timestamp64_val, $date_val]
+, [$timestamp64_val, $datetime_val]
+, [$timestamp64_val, $timestamp_val]
+, [$timestamp64_val, $date32_val]
+, [$timestamp64_val, $datetime64_val];
 
+select [$date_val, $datetime_val, $timestamp_val, $date32_val, $datetime64_val, $timestamp64_val];
 
-select [$datetime64_min, $date32_min]
--- todo
+select [unwrap(cast(1 as interval)), unwrap(cast(-1 as interval64))];

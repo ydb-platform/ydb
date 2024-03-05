@@ -199,6 +199,11 @@ void DoFederatedQueryListQueriesRequest(std::unique_ptr<IRequestOpCtx> p, const 
     f.RegisterActor(new TFederatedQueryListQueriesRPC(p.release()));
 }
 
+template <>
+IActor* TGrpcRequestOperationCall<FederatedQuery::ListQueriesRequest, FederatedQuery::ListQueriesResponse>::CreateRpcActor(IRequestOpCtx* msg) {
+    return new TFederatedQueryListQueriesRPC(msg);
+}
+
 using TFederatedQueryDescribeQueryRPC = TFederatedQueryRequestRPC<
     TGrpcFqRequestOperationCall<FederatedQuery::DescribeQueryRequest, FederatedQuery::DescribeQueryResponse>,
     NFq::TEvControlPlaneProxy::TEvDescribeQueryRequest,
@@ -206,6 +211,11 @@ using TFederatedQueryDescribeQueryRPC = TFederatedQueryRequestRPC<
 
 void DoFederatedQueryDescribeQueryRequest(std::unique_ptr<IRequestOpCtx> p, const IFacilityProvider& f) {
     f.RegisterActor(new TFederatedQueryDescribeQueryRPC(p.release()));
+}
+
+template <>
+IActor* TGrpcRequestOperationCall<FederatedQuery::DescribeQueryRequest, FederatedQuery::DescribeQueryResponse>::CreateRpcActor(IRequestOpCtx* msg) {
+    return new TFederatedQueryDescribeQueryRPC(msg);
 }
 
 using TFederatedQueryGetQueryStatusRPC = TFederatedQueryRequestRPC<
@@ -217,6 +227,11 @@ void DoFederatedQueryGetQueryStatusRequest(std::unique_ptr<IRequestOpCtx> p, con
     f.RegisterActor(new TFederatedQueryGetQueryStatusRPC(p.release()));
 }
 
+template <>
+IActor* TGrpcRequestOperationCall<FederatedQuery::GetQueryStatusRequest, FederatedQuery::GetQueryStatusResponse>::CreateRpcActor(IRequestOpCtx* msg) {
+    return new TFederatedQueryGetQueryStatusRPC(msg);
+}
+
 using TFederatedQueryModifyQueryRPC = TFederatedQueryRequestRPC<
     TGrpcFqRequestOperationCall<FederatedQuery::ModifyQueryRequest, FederatedQuery::ModifyQueryResponse>,
     NFq::TEvControlPlaneProxy::TEvModifyQueryRequest,
@@ -224,6 +239,11 @@ using TFederatedQueryModifyQueryRPC = TFederatedQueryRequestRPC<
 
 void DoFederatedQueryModifyQueryRequest(std::unique_ptr<IRequestOpCtx> p, const IFacilityProvider& f) {
     f.RegisterActor(new TFederatedQueryModifyQueryRPC(p.release()));
+}
+
+template <>
+IActor* TGrpcRequestOperationCall<FederatedQuery::ModifyQueryRequest, FederatedQuery::ModifyQueryResponse>::CreateRpcActor(IRequestOpCtx* msg) {
+    return new TFederatedQueryModifyQueryRPC(msg);
 }
 
 using TFederatedQueryDeleteQueryRPC = TFederatedQueryRequestRPC<
@@ -235,6 +255,11 @@ void DoFederatedQueryDeleteQueryRequest(std::unique_ptr<IRequestOpCtx> p, const 
     f.RegisterActor(new TFederatedQueryDeleteQueryRPC(p.release()));
 }
 
+template <>
+IActor* TGrpcRequestOperationCall<FederatedQuery::DeleteQueryRequest, FederatedQuery::DeleteQueryResponse>::CreateRpcActor(IRequestOpCtx* msg) {
+    return new TFederatedQueryDeleteQueryRPC(msg);
+}
+
 using TFederatedQueryControlQueryRPC = TFederatedQueryRequestRPC<
     TGrpcFqRequestOperationCall<FederatedQuery::ControlQueryRequest, FederatedQuery::ControlQueryResponse>,
     NFq::TEvControlPlaneProxy::TEvControlQueryRequest,
@@ -242,6 +267,11 @@ using TFederatedQueryControlQueryRPC = TFederatedQueryRequestRPC<
 
 void DoFederatedQueryControlQueryRequest(std::unique_ptr<IRequestOpCtx> p, const IFacilityProvider& f) {
     f.RegisterActor(new TFederatedQueryControlQueryRPC(p.release()));
+}
+
+template <>
+IActor* TGrpcRequestOperationCall<FederatedQuery::ControlQueryRequest, FederatedQuery::ControlQueryResponse>::CreateRpcActor(IRequestOpCtx* msg) {
+    return new TFederatedQueryControlQueryRPC(msg);
 }
 
 using TFederatedQueryGetResultDataRPC = TFederatedQueryRequestRPC<
@@ -253,6 +283,11 @@ void DoFederatedQueryGetResultDataRequest(std::unique_ptr<IRequestOpCtx> p, cons
     f.RegisterActor(new TFederatedQueryGetResultDataRPC(p.release()));
 }
 
+template <>
+IActor* TGrpcRequestOperationCall<FederatedQuery::GetResultDataRequest, FederatedQuery::GetResultDataResponse>::CreateRpcActor(IRequestOpCtx* msg) {
+    return new TFederatedQueryGetResultDataRPC(msg);
+}
+
 using TFederatedQueryListJobsRPC = TFederatedQueryRequestRPC<
     TGrpcFqRequestOperationCall<FederatedQuery::ListJobsRequest, FederatedQuery::ListJobsResponse>,
     NFq::TEvControlPlaneProxy::TEvListJobsRequest,
@@ -260,6 +295,11 @@ using TFederatedQueryListJobsRPC = TFederatedQueryRequestRPC<
 
 void DoFederatedQueryListJobsRequest(std::unique_ptr<IRequestOpCtx> p, const IFacilityProvider& f) {
     f.RegisterActor(new TFederatedQueryListJobsRPC(p.release()));
+}
+
+template <>
+IActor* TGrpcRequestOperationCall<FederatedQuery::ListJobsRequest, FederatedQuery::ListJobsResponse>::CreateRpcActor(IRequestOpCtx* msg) {
+    return new TFederatedQueryListJobsRPC(msg);
 }
 
 using TFederatedQueryDescribeJobRPC = TFederatedQueryRequestRPC<
@@ -271,6 +311,11 @@ void DoFederatedQueryDescribeJobRequest(std::unique_ptr<IRequestOpCtx> p, const 
     f.RegisterActor(new TFederatedQueryDescribeJobRPC(p.release()));
 }
 
+template <>
+IActor* TGrpcRequestOperationCall<FederatedQuery::DescribeJobRequest, FederatedQuery::DescribeJobResponse>::CreateRpcActor(IRequestOpCtx* msg) {
+    return new TFederatedQueryDescribeJobRPC(msg);
+}
+
 using TFederatedQueryCreateConnectionRPC = TFederatedQueryRequestRPC<
     TGrpcFqRequestOperationCall<FederatedQuery::CreateConnectionRequest, FederatedQuery::CreateConnectionResponse>,
     NFq::TEvControlPlaneProxy::TEvCreateConnectionRequest,
@@ -278,6 +323,11 @@ using TFederatedQueryCreateConnectionRPC = TFederatedQueryRequestRPC<
 
 void DoFederatedQueryCreateConnectionRequest(std::unique_ptr<IRequestOpCtx> p, const IFacilityProvider& f) {
     f.RegisterActor(new TFederatedQueryCreateConnectionRPC(p.release()));
+}
+
+template <>
+IActor* TGrpcRequestOperationCall<FederatedQuery::CreateConnectionRequest, FederatedQuery::CreateConnectionResponse>::CreateRpcActor(IRequestOpCtx* msg) {
+    return new TFederatedQueryCreateConnectionRPC(msg);
 }
 
 using TFederatedQueryListConnectionsRPC = TFederatedQueryRequestRPC<
@@ -289,6 +339,11 @@ void DoFederatedQueryListConnectionsRequest(std::unique_ptr<IRequestOpCtx> p, co
     f.RegisterActor(new TFederatedQueryListConnectionsRPC(p.release()));
 }
 
+template <>
+IActor* TGrpcRequestOperationCall<FederatedQuery::ListConnectionsRequest, FederatedQuery::ListConnectionsResponse>::CreateRpcActor(IRequestOpCtx* msg) {
+    return new TFederatedQueryListConnectionsRPC(msg);
+}
+
 using TFederatedQueryDescribeConnectionRPC = TFederatedQueryRequestRPC<
     TGrpcFqRequestOperationCall<FederatedQuery::DescribeConnectionRequest, FederatedQuery::DescribeConnectionResponse>,
     NFq::TEvControlPlaneProxy::TEvDescribeConnectionRequest,
@@ -296,6 +351,11 @@ using TFederatedQueryDescribeConnectionRPC = TFederatedQueryRequestRPC<
 
 void DoFederatedQueryDescribeConnectionRequest(std::unique_ptr<IRequestOpCtx> p, const IFacilityProvider& f) {
     f.RegisterActor(new TFederatedQueryDescribeConnectionRPC(p.release()));
+}
+
+template <>
+IActor* TGrpcRequestOperationCall<FederatedQuery::DescribeConnectionRequest, FederatedQuery::DescribeConnectionResponse>::CreateRpcActor(IRequestOpCtx* msg) {
+    return new TFederatedQueryDescribeConnectionRPC(msg);
 }
 
 using TFederatedQueryModifyConnectionRPC = TFederatedQueryRequestRPC<
@@ -307,6 +367,11 @@ void DoFederatedQueryModifyConnectionRequest(std::unique_ptr<IRequestOpCtx> p, c
     f.RegisterActor(new TFederatedQueryModifyConnectionRPC(p.release()));
 }
 
+template <>
+IActor* TGrpcRequestOperationCall<FederatedQuery::ModifyConnectionRequest, FederatedQuery::ModifyConnectionResponse>::CreateRpcActor(IRequestOpCtx* msg) {
+    return new TFederatedQueryModifyConnectionRPC(msg);
+}
+
 using TFederatedQueryDeleteConnectionRPC = TFederatedQueryRequestRPC<
     TGrpcFqRequestOperationCall<FederatedQuery::DeleteConnectionRequest, FederatedQuery::DeleteConnectionResponse>,
     NFq::TEvControlPlaneProxy::TEvDeleteConnectionRequest,
@@ -314,6 +379,11 @@ using TFederatedQueryDeleteConnectionRPC = TFederatedQueryRequestRPC<
 
 void DoFederatedQueryDeleteConnectionRequest(std::unique_ptr<IRequestOpCtx> p, const IFacilityProvider& f) {
     f.RegisterActor(new TFederatedQueryDeleteConnectionRPC(p.release()));
+}
+
+template <>
+IActor* TGrpcRequestOperationCall<FederatedQuery::DeleteConnectionRequest, FederatedQuery::DeleteConnectionResponse>::CreateRpcActor(IRequestOpCtx* msg) {
+    return new TFederatedQueryDeleteConnectionRPC(msg);
 }
 
 using TFederatedQueryTestConnectionRPC = TFederatedQueryRequestRPC<
@@ -325,6 +395,11 @@ void DoFederatedQueryTestConnectionRequest(std::unique_ptr<IRequestOpCtx> p, con
     f.RegisterActor(new TFederatedQueryTestConnectionRPC(p.release()));
 }
 
+template <>
+IActor* TGrpcRequestOperationCall<FederatedQuery::TestConnectionRequest, FederatedQuery::TestConnectionResponse>::CreateRpcActor(IRequestOpCtx* msg) {
+    return new TFederatedQueryTestConnectionRPC(msg);
+}
+
 using TFederatedQueryCreateBindingRPC = TFederatedQueryRequestRPC<
     TGrpcFqRequestOperationCall<FederatedQuery::CreateBindingRequest, FederatedQuery::CreateBindingResponse>,
     NFq::TEvControlPlaneProxy::TEvCreateBindingRequest,
@@ -332,6 +407,11 @@ using TFederatedQueryCreateBindingRPC = TFederatedQueryRequestRPC<
 
 void DoFederatedQueryCreateBindingRequest(std::unique_ptr<IRequestOpCtx> p, const IFacilityProvider& f) {
     f.RegisterActor(new TFederatedQueryCreateBindingRPC(p.release()));
+}
+
+template <>
+IActor* TGrpcRequestOperationCall<FederatedQuery::CreateBindingRequest, FederatedQuery::CreateBindingResponse>::CreateRpcActor(IRequestOpCtx* msg) {
+    return new TFederatedQueryCreateBindingRPC(msg);
 }
 
 using TFederatedQueryListBindingsRPC = TFederatedQueryRequestRPC<
@@ -343,6 +423,11 @@ void DoFederatedQueryListBindingsRequest(std::unique_ptr<IRequestOpCtx> p, const
     f.RegisterActor(new TFederatedQueryListBindingsRPC(p.release()));
 }
 
+template <>
+IActor* TGrpcRequestOperationCall<FederatedQuery::ListBindingsRequest, FederatedQuery::ListBindingsResponse>::CreateRpcActor(IRequestOpCtx* msg) {
+    return new TFederatedQueryListBindingsRPC(msg);
+}
+
 using TFederatedQueryDescribeBindingRPC = TFederatedQueryRequestRPC<
     TGrpcFqRequestOperationCall<FederatedQuery::DescribeBindingRequest, FederatedQuery::DescribeBindingResponse>,
     NFq::TEvControlPlaneProxy::TEvDescribeBindingRequest,
@@ -350,6 +435,11 @@ using TFederatedQueryDescribeBindingRPC = TFederatedQueryRequestRPC<
 
 void DoFederatedQueryDescribeBindingRequest(std::unique_ptr<IRequestOpCtx> p, const IFacilityProvider& f) {
     f.RegisterActor(new TFederatedQueryDescribeBindingRPC(p.release()));
+}
+
+template <>
+IActor* TGrpcRequestOperationCall<FederatedQuery::DescribeBindingRequest, FederatedQuery::DescribeBindingResponse>::CreateRpcActor(IRequestOpCtx* msg) {
+    return new TFederatedQueryDescribeBindingRPC(msg);
 }
 
 using TFederatedQueryModifyBindingRPC = TFederatedQueryRequestRPC<
@@ -361,6 +451,11 @@ void DoFederatedQueryModifyBindingRequest(std::unique_ptr<IRequestOpCtx> p, cons
     f.RegisterActor(new TFederatedQueryModifyBindingRPC(p.release()));
 }
 
+template <>
+IActor* TGrpcRequestOperationCall<FederatedQuery::ModifyBindingRequest, FederatedQuery::ModifyBindingResponse>::CreateRpcActor(IRequestOpCtx* msg) {
+    return new TFederatedQueryModifyBindingRPC(msg);
+}
+
 using TFederatedQueryDeleteBindingRPC = TFederatedQueryRequestRPC<
     TGrpcFqRequestOperationCall<FederatedQuery::DeleteBindingRequest, FederatedQuery::DeleteBindingResponse>,
     NFq::TEvControlPlaneProxy::TEvDeleteBindingRequest,
@@ -368,6 +463,11 @@ using TFederatedQueryDeleteBindingRPC = TFederatedQueryRequestRPC<
 
 void DoFederatedQueryDeleteBindingRequest(std::unique_ptr<IRequestOpCtx> p, const IFacilityProvider& f) {
     f.RegisterActor(new TFederatedQueryDeleteBindingRPC(p.release()));
+}
+
+template <>
+IActor* TGrpcRequestOperationCall<FederatedQuery::DeleteBindingRequest, FederatedQuery::DeleteBindingResponse>::CreateRpcActor(IRequestOpCtx* msg) {
+    return new TFederatedQueryDeleteBindingRPC(msg);
 }
 
 NFederatedQuery::TPermissionsFunc<FederatedQuery::CreateQueryRequest> GetFederatedQueryCreateQueryPermissions() {

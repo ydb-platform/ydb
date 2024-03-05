@@ -1,7 +1,8 @@
 #pragma once
 
-#include "ydb/core/grpc_services/base/base.h"
-#include "ydb/library/actors/core/actor_bootstrapped.h"
+#include <ydb/core/grpc_services/base/base.h>
+#include <ydb/core/grpc_services/service_fq.h>
+#include <ydb/core/fq/libs/events/event_subspace.h>
 #include <memory>
 
 namespace NKikimr::NGRpcService {
@@ -12,56 +13,87 @@ class IFacilityProvider;
 
 namespace NYdbOverFq {
 
-class TRequestActor : public NActors::TActorBootstrapped<TRequestActor> {
+template <typename TMsg, ui32 EMsgType>
+class TEvent : public TEventLocal<TEvent<TMsg, EMsgType>, EMsgType> {
 public:
-    TRequestActor(std::unique_ptr<IRequestCtx> request)
-        : Request{std::move(request)} {}
+    TEvent() = default;
 
-    void Bootstrap() {
-        auto now = TInstant::Now();
-        const auto& deadline = Request->GetDeadline();
+    TEvent(TMsg message)
+        : Message{std::move(message)}
+    {}
 
-        if (deadline <= now) {
-            LOG_WARN_S(*TlsActivationContext, NKikimrServices::GRPC_PROXY,
-                SelfId() << " Request deadline has expired for " << now - deadline << " seconds");
+    TMsg Message;
+};
 
-            Reply(Ydb::StatusIds::TIMEOUT);
-            return;
+enum EEventTypes {
+    EvCreateQueryRequest = NFq::YqEventSubspaceBegin(NFq::TYqEventSubspace::TableOverFq),
+    EvCreateQueryResponse,
+    EvGetQueryStatusRequest,
+    EvGetQueryStatusResponse,
+    EvDescribeQueryRequest,
+    EvDescribeQueryResponse,
+    EvGetResultDataRequest,
+    EvGetResultDataResponse,
+};
+
+#define DEFINE_EVENT(Event) \
+using TEv##Event = TEvent<FederatedQuery::Event, Ev##Event>;
+
+#define DEFINE_REQ_RESP(Name) \
+DEFINE_EVENT(Name##Request)  \
+DEFINE_EVENT(Name##Response) \
+
+DEFINE_REQ_RESP(CreateQuery)
+DEFINE_REQ_RESP(GetQueryStatus)
+DEFINE_REQ_RESP(DescribeQuery)
+DEFINE_REQ_RESP(GetResultData)
+
+#undef DEFINE_REQ_RESP
+#undef DEFINE_EVENT
+
+template <typename TReq, typename TResp>
+class TGrpcYdbOverFqOpCall
+    : public TGrpcRequestOperationCall<TReq, TResp>
+    , public TFqPermissionsBase<TReq> {
+public:
+    using TBase = TGrpcRequestOperationCall<TReq, TResp>;
+    using TPermissionsBase = TFqPermissionsBase<TReq>;
+    using TPermissionsFunc = typename TPermissionsBase::TPermissionsFunc;
+    using TCallback = void(std::unique_ptr<IRequestOpCtx>, const IFacilityProvider&);
+
+    TGrpcYdbOverFqOpCall(NYdbGrpc::IRequestContextBase* ctx, TCallback* cb, NFederatedQuery::TPermissionsVec&& permissions)
+        : TBase{ctx, cb, {}}, TPermissionsBase{AsConst(std::move(permissions))}
+    {}
+
+    bool TryCustomAttributeProcess(const TSchemeBoardEvents::TDescribeSchemeResult& , ICheckerIface* iface) override {
+        TString scope = "yandexcloud:/" + TBase::GetDatabaseName().GetOrElse("/");
+        TVector entries = TPermissionsBase::FillSids(scope, *TBase::GetProtoRequest());
+        if (entries.empty()) {
+            return false;
         }
-    }
 
-protected:
-    void Reply(Ydb::StatusIds::StatusCode status) {
-        Request->ReplyWithYdbStatus(status);
-        this->PassAway();
+        iface->SetEntries(entries);
+        return true;
     }
 
 private:
-    std::unique_ptr<IRequestCtx> Request;
-
+    static TPermissionsFunc AsConst(NFederatedQuery::TPermissionsVec&& permissions) {
+        return [permissions = std::move(permissions)](const TReq&) {
+            return permissions;
+        };
+    }
 };
+
+NFederatedQuery::TPermissionsVec GetCreateSessionPermissions();
+NFederatedQuery::TPermissionsVec GetExecuteDataQueryPermissions();
 
 // table
 void DoCreateSessionRequest(std::unique_ptr<IRequestOpCtx> p, const IFacilityProvider& f);
 void DoKeepAliveRequest(std::unique_ptr<IRequestOpCtx> p, const IFacilityProvider& f);
 void DoDescribeTableRequest(std::unique_ptr<IRequestOpCtx> p, const IFacilityProvider&);
 void DoExplainDataQueryRequest(std::unique_ptr<IRequestOpCtx> p, const IFacilityProvider& f);
-// void DoPrepareDataQueryRequest(std::unique_ptr<IRequestOpCtx> p, const IFacilityProvider& f);
 void DoExecuteDataQueryRequest(std::unique_ptr<IRequestOpCtx> p, const IFacilityProvider& f);
 void DoListDirectoryRequest(std::unique_ptr<IRequestOpCtx> p, const IFacilityProvider& f);
-
-// scheme
-
-
-void DoExecuteQuery(std::unique_ptr<IRequestNoOpCtx> p, const IFacilityProvider& f);
-void DoExecuteScript(std::unique_ptr<IRequestNoOpCtx> p, const IFacilityProvider& f);
-void DoFetchScriptResults(std::unique_ptr<IRequestNoOpCtx> p, const IFacilityProvider&);
-void DoCreateSession(std::unique_ptr<IRequestNoOpCtx> p, const IFacilityProvider& f);
-void DoDeleteSession(std::unique_ptr<IRequestNoOpCtx> p, const IFacilityProvider& f);
-void DoAttachSession(std::unique_ptr<IRequestNoOpCtx> p, const IFacilityProvider& f);
-void DoBeginTransaction(std::unique_ptr<IRequestNoOpCtx> p, const IFacilityProvider& f);
-void DoCommitTransaction(std::unique_ptr<IRequestNoOpCtx> p, const IFacilityProvider& f);
-void DoRollbackTransaction(std::unique_ptr<IRequestNoOpCtx> p, const IFacilityProvider& f);
 
 } // namespace NYdbOverFq
 

@@ -42,7 +42,8 @@ MakeIntrusive<TGRpcRequest<Ydb::Table::NAME##Request, Ydb::Table::NAME##Response
     this, &Service_, CQ_,                                                                                      \
     [this](NYdbGrpc::IRequestContextBase *ctx) {                                                                  \
         NGRpcService::ReportGrpcReqToMon(*ActorSystem_, ctx->GetPeer());                                       \
-        auto op_call = new TGrpcRequestOperationCall<Ydb::Table::NAME##Request, Ydb::Table::NAME##Response>(ctx, &NYdbOverFq::Do##NAME##Request); \
+        auto op_call = new NYdbOverFq::TGrpcYdbOverFqOpCall<Ydb::Table::NAME##Request, Ydb::Table::NAME##Response>( \
+            ctx, &NYdbOverFq::Do##NAME##Request, NYdbOverFq::Get##NAME##Permissions()); \
         ActorSystem_->Send(GRpcRequestProxyId_, op_call);            \
     },                                                                                                         \
     &Ydb::Table::V1::TableService::AsyncService::Request##NAME,                                  \

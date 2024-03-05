@@ -16,8 +16,10 @@ inline TMaybe<TString> GetYdbToken(const IRequestCtx& req) {
     return req.GetPeerMetaValues(NYdb::YDB_AUTH_TICKET_HEADER);
 }
 
+using TPermissionsVec = TVector<NKikimr::TEvTicketParser::TEvAuthorizeTicket::TPermission>;
+
 template <typename TReq>
-using TPermissionsFunc = std::function<TVector<NKikimr::TEvTicketParser::TEvAuthorizeTicket::TPermission>(const TReq&)>;
+using TPermissionsFunc = std::function<TPermissionsVec(const TReq&)>;
 }
 
 class IRequestOpCtx;
@@ -38,6 +40,10 @@ public:
         return Sids;
     }
 
+    NFederatedQuery::TPermissionsVec GetPermissions(const TReq& proto) const {
+        return Permissions(proto);
+    }
+
     TVector<TEvTicketParser::TEvAuthorizeTicket::TEntry> FillSids(const TString& scope, const TReq& req) {
         if (!scope.StartsWith("yandexcloud://")) {
             return {};
@@ -49,7 +55,7 @@ public:
         }
 
         const TString& folderId = path.back();
-        const auto& permissions = Permissions(req);
+        auto permissions = GetPermissions(req);
         TVector<TEvTicketParser::TEvAuthorizeTicket::TEntry> entries {{
             permissions,
             {
@@ -71,7 +77,7 @@ public:
 
         return entries;
     }
-private:
+protected:
     TVector<TString> Sids;
     TPermissionsFunc Permissions;
 };

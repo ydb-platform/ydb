@@ -1,6 +1,7 @@
 #include "service.h"
-#include "ydb/core/grpc_services/base/base.h"
-#include "ydb/core/grpc_services/rpc_deferrable.h"
+
+#include <ydb/core/grpc_services/base/base.h>
+#include <ydb/core/grpc_services/rpc_deferrable.h>
 
 namespace NKikimr::NGRpcService::NYdbOverFq {
 
@@ -33,7 +34,6 @@ private:
 };
 
 void DoCreateSessionRequest(std::unique_ptr<IRequestOpCtx> p, const IFacilityProvider& f) {
-    Cerr << "MY_MARKER fake CreateSession" << Endl;
     f.RegisterActor(new TCreateSessionRPC(p.release()));
 }
 

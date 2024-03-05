@@ -117,7 +117,7 @@ public:
         , Tasks{TSchemaQueryTask{.SQL = queryFactoryMethod(Request)}}
         , CompletionStatuses(Tasks.size(), ETaskCompletionStatus::NONE)
         , ErrorMessageFactoryMethod(std::move(errorMessageFactoryMethod))
-        , DBPath(Request->Get()->ComputeDatabase->connection().database()) { }
+        , DBPath(Request->Get()->ComputeDatabase ? Request->Get()->ComputeDatabase->connection().database() : "") { }
 
     TSchemaQueryYDBActor(const TActorId& proxyActorId,
                          const TEventRequestPtr request,
@@ -130,7 +130,7 @@ public:
         , Tasks{tasksFactoryMethod(Request)}
         , CompletionStatuses(Tasks.size(), ETaskCompletionStatus::NONE)
         , ErrorMessageFactoryMethod(std::move(errorMessageFactoryMethod))
-        , DBPath(Request->Get()->ComputeDatabase->connection().database()) { }
+        , DBPath(Request->Get()->ComputeDatabase ? Request->Get()->ComputeDatabase->connection().database() : "") { }
 
     static constexpr char ActorName[] = "YQ_CONTROL_PLANE_PROXY_YDB_SCHEMA_QUERY_ACTOR";
 

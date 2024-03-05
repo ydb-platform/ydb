@@ -1,9 +1,9 @@
 {
     "test.test[action-eval_column--Debug]": [
         {
-            "checksum": "143677221988607d21e054b612f83982",
-            "size": 7823,
-            "uri": "https://{canondata_backend}/1923547/94f377eaa1d93890e1345ac4940cc6fa07bddd4f/resource.tar.gz#test.test_action-eval_column--Debug_/opt.yql_patched"
+            "checksum": "ab6cb977565d7f58210f0eb358e69d9b",
+            "size": 7829,
+            "uri": "https://{canondata_backend}/1942100/4543aeedf0ceb10a54d6b6dab3efe169750636d0/resource.tar.gz#test.test_action-eval_column--Debug_/opt.yql_patched"
         }
     ],
     "test.test[action-eval_column--Plan]": [
@@ -1821,9 +1821,9 @@
     ],
     "test.test[optimizers-yql-8223_direct_row_and_skipnullmembers--Debug]": [
         {
-            "checksum": "bdb6366155aedfe1ae038bb3b0e869f7",
-            "size": 3765,
-            "uri": "https://{canondata_backend}/1923547/94f377eaa1d93890e1345ac4940cc6fa07bddd4f/resource.tar.gz#test.test_optimizers-yql-8223_direct_row_and_skipnullmembers--Debug_/opt.yql_patched"
+            "checksum": "caa8c1be46814f970a251ea2b0e9d936",
+            "size": 3771,
+            "uri": "https://{canondata_backend}/212715/577bb43a4680fd329e2b0761a25ac5dc15416716/resource.tar.gz#test.test_optimizers-yql-8223_direct_row_and_skipnullmembers--Debug_/opt.yql_patched"
         }
     ],
     "test.test[optimizers-yql-8223_direct_row_and_skipnullmembers--Plan]": [
@@ -2731,9 +2731,9 @@
     ],
     "test.test[select-table_content_with_tmp_folder--Debug]": [
         {
-            "checksum": "ab1bd38aa806c4ebf64353c550e5aa9a",
-            "size": 2960,
-            "uri": "https://{canondata_backend}/1923547/94f377eaa1d93890e1345ac4940cc6fa07bddd4f/resource.tar.gz#test.test_select-table_content_with_tmp_folder--Debug_/opt.yql_patched"
+            "checksum": "4920352cabcadf156266dcfbdd81fc24",
+            "size": 2968,
+            "uri": "https://{canondata_backend}/1937492/6bc2ecea7af0b506427596734b34e36bc943c010/resource.tar.gz#test.test_select-table_content_with_tmp_folder--Debug_/opt.yql_patched"
         }
     ],
     "test.test[select-table_content_with_tmp_folder--Plan]": [

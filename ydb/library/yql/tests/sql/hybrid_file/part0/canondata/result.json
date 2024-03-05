@@ -1611,9 +1611,9 @@
     ],
     "test.test[optimizers-yql-5978_fill_multi_usage--Debug]": [
         {
-            "checksum": "bedca95bdedd949a56572c946e60f758",
-            "size": 4696,
-            "uri": "https://{canondata_backend}/937458/86cd9556e848ee086e123481cd12ceae5d55267c/resource.tar.gz#test.test_optimizers-yql-5978_fill_multi_usage--Debug_/opt.yql_patched"
+            "checksum": "74d30f72102683002eab98f15de1a7fa",
+            "size": 4704,
+            "uri": "https://{canondata_backend}/1936842/2549828342e494c863ab9746607ebce291e8ac4a/resource.tar.gz#test.test_optimizers-yql-5978_fill_multi_usage--Debug_/opt.yql_patched"
         }
     ],
     "test.test[optimizers-yql-5978_fill_multi_usage--Plan]": [
@@ -1779,9 +1779,9 @@
     ],
     "test.test[pg-select_alias_partial-default.txt-Debug]": [
         {
-            "checksum": "25cc2a9812df3ff065149a71debb246d",
-            "size": 2771,
-            "uri": "https://{canondata_backend}/1936947/581aa6d896ffe57e25bdb8006459e912860e61fa/resource.tar.gz#test.test_pg-select_alias_partial-default.txt-Debug_/opt.yql_patched"
+            "checksum": "023f09fe163fb1ff62f9e6db4c17ae7e",
+            "size": 2779,
+            "uri": "https://{canondata_backend}/1773845/1fb22e6f6730979afa380ca25a720b1c01051f45/resource.tar.gz#test.test_pg-select_alias_partial-default.txt-Debug_/opt.yql_patched"
         }
     ],
     "test.test[pg-select_alias_partial-default.txt-Plan]": [
@@ -1849,9 +1849,9 @@
     ],
     "test.test[pg-select_subquery2-default.txt-Debug]": [
         {
-            "checksum": "32acc821b735e5a7c1ba21f55e6868b7",
-            "size": 3199,
-            "uri": "https://{canondata_backend}/1936947/581aa6d896ffe57e25bdb8006459e912860e61fa/resource.tar.gz#test.test_pg-select_subquery2-default.txt-Debug_/opt.yql_patched"
+            "checksum": "c5396bb2e81b65c4542de6b65bc6df76",
+            "size": 3207,
+            "uri": "https://{canondata_backend}/1937027/c54918690b9e8a33b5d4252d7ad55a10f0cc12f3/resource.tar.gz#test.test_pg-select_subquery2-default.txt-Debug_/opt.yql_patched"
         }
     ],
     "test.test[pg-select_subquery2-default.txt-Plan]": [

@@ -1191,9 +1191,9 @@
     ],
     "test.test[in-in_immediate_subquery-default.txt-Debug]": [
         {
-            "checksum": "d6fef687ec492ec2a3b717928f385e07",
-            "size": 3463,
-            "uri": "https://{canondata_backend}/1936842/11d23d4a39031af80d6dc470ce99f9427771e7d4/resource.tar.gz#test.test_in-in_immediate_subquery-default.txt-Debug_/opt.yql_patched"
+            "checksum": "7f3ba78c35838d3f93cac1780ebcadf4",
+            "size": 3475,
+            "uri": "https://{canondata_backend}/1871182/855d98f5b1db78c91df8e3b3af515aa83bfc5ecf/resource.tar.gz#test.test_in-in_immediate_subquery-default.txt-Debug_/opt.yql_patched"
         }
     ],
     "test.test[in-in_immediate_subquery-default.txt-Plan]": [
@@ -1219,9 +1219,9 @@
     ],
     "test.test[in-in_sorted_by_tuple--Debug]": [
         {
-            "checksum": "44215295f296c11528ba8811d7ea324b",
-            "size": 6152,
-            "uri": "https://{canondata_backend}/1936842/11d23d4a39031af80d6dc470ce99f9427771e7d4/resource.tar.gz#test.test_in-in_sorted_by_tuple--Debug_/opt.yql_patched"
+            "checksum": "dde8245a364ca14ddee4a46b772ec9b0",
+            "size": 6160,
+            "uri": "https://{canondata_backend}/1871182/855d98f5b1db78c91df8e3b3af515aa83bfc5ecf/resource.tar.gz#test.test_in-in_sorted_by_tuple--Debug_/opt.yql_patched"
         }
     ],
     "test.test[in-in_sorted_by_tuple--Plan]": [
@@ -1765,9 +1765,9 @@
     ],
     "test.test[optimizers-yql-6038_direct_row--Debug]": [
         {
-            "checksum": "2a07db3869fe555a6fde3684fdf72012",
-            "size": 4752,
-            "uri": "https://{canondata_backend}/1936842/11d23d4a39031af80d6dc470ce99f9427771e7d4/resource.tar.gz#test.test_optimizers-yql-6038_direct_row--Debug_/opt.yql_patched"
+            "checksum": "94e934683de5ba519025df239f25b149",
+            "size": 4760,
+            "uri": "https://{canondata_backend}/1937367/49abf200ba7948f5fa69adeceda30eefcf4cc997/resource.tar.gz#test.test_optimizers-yql-6038_direct_row--Debug_/opt.yql_patched"
         }
     ],
     "test.test[optimizers-yql-6038_direct_row--Plan]": [

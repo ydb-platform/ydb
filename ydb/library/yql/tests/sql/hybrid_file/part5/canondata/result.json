@@ -1737,9 +1737,9 @@
     ],
     "test.test[pg-select_table2-default.txt-Debug]": [
         {
-            "checksum": "e05d88a4fa24de9db0af6a20005cca25",
-            "size": 2346,
-            "uri": "https://{canondata_backend}/1936947/a5f83e5d38179c14126d53519dc062cef98113ec/resource.tar.gz#test.test_pg-select_table2-default.txt-Debug_/opt.yql_patched"
+            "checksum": "65bfa057b63a4e24af4a21695ff80f5c",
+            "size": 2354,
+            "uri": "https://{canondata_backend}/1937027/3423e4b4827904e9c958ae32fc400e91b7478258/resource.tar.gz#test.test_pg-select_table2-default.txt-Debug_/opt.yql_patched"
         }
     ],
     "test.test[pg-select_table2-default.txt-Plan]": [

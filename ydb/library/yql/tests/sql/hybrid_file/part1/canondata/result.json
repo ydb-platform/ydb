@@ -995,9 +995,9 @@
     ],
     "test.test[in-in_compact_distinct--Debug]": [
         {
-            "checksum": "f1adc67452eae8c858b94c1c3f1d8eeb",
-            "size": 3177,
-            "uri": "https://{canondata_backend}/1936273/85968a675c17dd0728c8d7ba5fd43bd0b237dc65/resource.tar.gz#test.test_in-in_compact_distinct--Debug_/opt.yql_patched"
+            "checksum": "a3ced4351d90b96badb8517000167e4e",
+            "size": 3185,
+            "uri": "https://{canondata_backend}/1880306/1f6b0567cc6794ca9c219756983f27dbb8b921b9/resource.tar.gz#test.test_in-in_compact_distinct--Debug_/opt.yql_patched"
         }
     ],
     "test.test[in-in_compact_distinct--Plan]": [
@@ -1009,9 +1009,9 @@
     ],
     "test.test[in-in_compact_distinct-empty-Debug]": [
         {
-            "checksum": "cddbcc56b9a60a008f99c281b98e30a0",
-            "size": 3178,
-            "uri": "https://{canondata_backend}/1936273/85968a675c17dd0728c8d7ba5fd43bd0b237dc65/resource.tar.gz#test.test_in-in_compact_distinct-empty-Debug_/opt.yql_patched"
+            "checksum": "7f8959ef3da6322b195f858a4b14f014",
+            "size": 3186,
+            "uri": "https://{canondata_backend}/1880306/1f6b0567cc6794ca9c219756983f27dbb8b921b9/resource.tar.gz#test.test_in-in_compact_distinct-empty-Debug_/opt.yql_patched"
         }
     ],
     "test.test[in-in_compact_distinct-empty-Plan]": [
@@ -1051,9 +1051,9 @@
     ],
     "test.test[in-in_scalar_vector_subquery-default.txt-Debug]": [
         {
-            "checksum": "4d7776c163d6c551f0445d9df14318ac",
-            "size": 8390,
-            "uri": "https://{canondata_backend}/1936273/85968a675c17dd0728c8d7ba5fd43bd0b237dc65/resource.tar.gz#test.test_in-in_scalar_vector_subquery-default.txt-Debug_/opt.yql_patched"
+            "checksum": "92dce94af9d54a919f57e22551e3a008",
+            "size": 8422,
+            "uri": "https://{canondata_backend}/1880306/1f6b0567cc6794ca9c219756983f27dbb8b921b9/resource.tar.gz#test.test_in-in_scalar_vector_subquery-default.txt-Debug_/opt.yql_patched"
         }
     ],
     "test.test[in-in_scalar_vector_subquery-default.txt-Plan]": [

@@ -319,7 +319,14 @@ protected:
         KAFKA_LOG_D("process message: ApiKey=" << Request->Header.RequestApiKey << ", ExpectedSize=" << Request->ExpectedSize
                                                << ", Size=" << Request->Size);
 
-        Request->Method = EApiKeyNames.find(static_cast<EApiKey>(Request->Header.RequestApiKey))->second;
+        auto apiKeyNameIt = EApiKeyNames.find(static_cast<EApiKey>(Request->Header.RequestApiKey));
+        if (apiKeyNameIt == EApiKeyNames.end()) {
+            KAFKA_LOG_ERROR("Unsupported message: ApiKey=" << Request->Header.RequestApiKey);
+            PassAway();
+            return false;
+        }
+
+        Request->Method = apiKeyNameIt->second;
 
         PendingRequestsQueue.push_back(Request);
         PendingRequests[Request->Header.CorrelationId] = Request;

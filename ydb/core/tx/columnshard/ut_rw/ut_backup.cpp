@@ -15,10 +15,10 @@
 #include <ydb/core/tx/columnshard/hooks/abstract/abstract.h>
 #include <ydb/core/tx/columnshard/hooks/testing/controller.h>
 #include <ydb/core/tx/columnshard/operations/write_data.h>
+#include <ydb/core/tx/columnshard/ut_rw/common.h>
 #include <ydb/core/tx/conveyor/usage/abstract.h>
 #include <ydb/core/tx/data_events/backup_events.h>
 #include <ydb/core/wrappers/fake_storage.h>
-#include <ydb/core/tx/columnshard/ut_rw/common.h>
 
 #include <ydb/library/actors/protos/unittests.pb.h>
 #include <ydb/library/yverify_stream/yverify_stream.h>
@@ -51,16 +51,16 @@ const std::vector<TTestColumn> schema = {TTestColumn{"key", TTypeInfo{NTypeIds::
 namespace {
 
 std::shared_ptr<arrow::RecordBatch> BuildBatch() {
-    auto keyColumn =
-        std::make_shared<NArrow::NConstruction::TSimpleArrayConstructor<NArrow::NConstruction::TIntSeqFiller<arrow::UInt64Type>>>(
-            "key");
-    auto column = std::make_shared<NArrow::NConstruction::TSimpleArrayConstructor<NArrow::NConstruction::TStringPoolFiller>>(
-        "field", NArrow::NConstruction::TStringPoolFiller(8, 100));
+    auto keyColumn = std::make_shared<
+        NArrow::NConstruction::TSimpleArrayConstructor<NArrow::NConstruction::TIntSeqFiller<arrow::UInt64Type>>>("key");
+    auto column =
+        std::make_shared<NArrow::NConstruction::TSimpleArrayConstructor<NArrow::NConstruction::TStringPoolFiller>>(
+            "field", NArrow::NConstruction::TStringPoolFiller(8, 100));
 
     return NArrow::NConstruction::TRecordBatchConstructor({keyColumn, column}).BuildBatch(2048);
 }
 
-} // namespace
+}   // namespace
 
 TActorIdentity PrepareCSTable(TTestBasicRuntime& runtime, TActorId& sender) {
     using namespace NArrow;

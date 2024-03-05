@@ -24,7 +24,8 @@ struct TBackupEvents {
     };
 
     class TEvBackupShardBatchPersistResult
-        : public NActors::TEventPB<TEvBackupShardBatchPersistResult, NKikimrBackupEvents::TEvBackupShardBatchPersistResult,
+        : public NActors::TEventPB<TEvBackupShardBatchPersistResult,
+                                   NKikimrBackupEvents::TEvBackupShardBatchPersistResult,
                                    EvBackupShardBatchPersistResult> {
     public:
         TEvBackupShardBatchPersistResult() = default;

@@ -33,8 +33,7 @@ private:
     }
 
 public:
-    TBackupWriteController(const TActorId& actorID,
-                           const std::shared_ptr<NOlap::IBlobsWritingAction>& action,
+    TBackupWriteController(const TActorId& actorID, const std::shared_ptr<NOlap::IBlobsWritingAction>& action,
                            std::shared_ptr<arrow::RecordBatch> arrowBatch)
         : actorID(actorID) {
         NArrow::TBatchSplitttingContext splitCtx(NColumnShard::TLimits::GetMaxBlobSize());

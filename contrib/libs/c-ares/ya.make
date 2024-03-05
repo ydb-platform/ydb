@@ -40,6 +40,10 @@ IF (ARCH_ARM7)
     )
 ENDIF()
 
+IF (OS_DARWIN OR OS_IOS)
+    LDFLAGS(-lresolv)
+ENDIF()
+
 IF (NOT EXPORT_CMAKE)
     CHECK_CONFIG_H(src/lib/ares_setup.h)
 ENDIF()

@@ -355,6 +355,7 @@ public:
                 ++foundGroups;
                 if (Version == EVersion::v1) {
                     pool->AddGroups()->SetGroupId(groupId);
+                    pool->SetMediaType(poolInfo.MediaType);
                 } else if (Version == EVersion::v2) {
                     if (!UsageBuckets.empty() && !BinarySearch(UsageBuckets.begin(), UsageBuckets.end(), (ui32)(row.Usage * 100) / UsagePace)) {
                         continue;

@@ -11,7 +11,7 @@ namespace NKikimr {
 #define DEFINE_TRACING_LEVELS(COMPONENT, MINIMAL, BASIC, DETAILED, FULL, DIAGNOSTIC, TRACE) \
         struct COMPONENT { \
             enum : ui8 { \
-                Minimal = MINIMAL, \
+                TopLevel = MINIMAL, \
                 Basic = BASIC, \
                 Detailed = DETAILED, \
                 Full = FULL, \
@@ -33,7 +33,7 @@ namespace NKikimr {
 
     struct TWilson {
         enum {
-            BlobStorage = TComponentTracingLevels::TDistributedStorage::Minimal,
+            BlobStorage = TComponentTracingLevels::TDistributedStorage::TopLevel,
             DsProxyInternals = TComponentTracingLevels::TDistributedStorage::Detailed,
             VDiskTopLevel = TComponentTracingLevels::TDistributedStorage::Basic,
             VDiskInternals = TComponentTracingLevels::TDistributedStorage::Detailed,
@@ -44,7 +44,7 @@ namespace NKikimr {
 
     struct TWilsonKqp {
         enum {
-            KqpSession = TComponentTracingLevels::TQueryProcessor::Minimal,
+            KqpSession = TComponentTracingLevels::TQueryProcessor::TopLevel,
                 CompileService = TComponentTracingLevels::TQueryProcessor::Basic,
                 CompileActor = TComponentTracingLevels::TQueryProcessor::Basic,
                 SessionAcquireSnapshot = TComponentTracingLevels::TQueryProcessor::Basic,
@@ -73,23 +73,23 @@ namespace NKikimr {
                 LookupActor = TComponentTracingLevels::TQueryProcessor::Basic,
                     LookupActorShardsResolve = TComponentTracingLevels::TQueryProcessor::Detailed,
                 
-            BulkUpsertActor = TComponentTracingLevels::TQueryProcessor::Minimal,
+            BulkUpsertActor = TComponentTracingLevels::TQueryProcessor::TopLevel,
         };
     };
 
     struct TWilsonTablet {
         enum {
-            TabletTopLevel = TComponentTracingLevels::TTablet::Minimal,
+            TabletTopLevel = TComponentTracingLevels::TTablet::TopLevel,
             TabletBasic = TComponentTracingLevels::TTablet::Basic,
-            TabletInternals = TComponentTracingLevels::TTablet::Detailed,
+            TabletDetailed = TComponentTracingLevels::TTablet::Detailed,
             TabletFull = TComponentTracingLevels::TTablet::Full,
         };
     };
 
     struct TWilsonGrpc {
         enum {
-            RequestProxy = TComponentTracingLevels::TGrpcProxy::Minimal,
-            RequestActor = TComponentTracingLevels::TGrpcProxy::Minimal,
+            RequestProxy = TComponentTracingLevels::TGrpcProxy::TopLevel,
+            RequestActor = TComponentTracingLevels::TGrpcProxy::TopLevel,
         };
     };
 

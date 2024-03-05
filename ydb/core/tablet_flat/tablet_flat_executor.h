@@ -229,7 +229,7 @@ public:
     }
 
     void StartExecutionSpan() noexcept {
-        TransactionExecutionSpan = NWilson::TSpan(TWilsonTablet::TabletInternals, TransactionSpan.GetTraceId(), "Tablet.Transaction.Execute");
+        TransactionExecutionSpan = NWilson::TSpan(TWilsonTablet::TabletDetailed, TransactionSpan.GetTraceId(), "Tablet.Transaction.Execute");
     }
 
     void FinishExecutionSpan() noexcept {

@@ -154,7 +154,7 @@ public:
         , CommitTactic(commitTactic)
         , Info(info)
         , RepliesToWait(Max<ui32>())
-        , RequestSpan(TWilsonTablet::TabletInternals, std::move(traceId), "Tablet.WriteLog")
+        , RequestSpan(TWilsonTablet::TabletDetailed, std::move(traceId), "Tablet.WriteLog")
     {
         References.swap(refs);
         Y_ABORT_UNLESS(Info);

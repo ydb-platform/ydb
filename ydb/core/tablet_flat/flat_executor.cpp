@@ -4234,7 +4234,7 @@ TString TExecutor::CheckBorrowConsistency() {
 
 TTransactionWaitPad::TTransactionWaitPad(THolder<TSeat> seat)
     : Seat(std::move(seat))
-    , WaitingSpan(NWilson::TSpan(TWilsonTablet::TabletInternals, Seat->GetTxTraceId(), "Tablet.Transaction.Wait"))
+    , WaitingSpan(NWilson::TSpan(TWilsonTablet::TabletDetailed, Seat->GetTxTraceId(), "Tablet.Transaction.Wait"))
 {}
 
 TTransactionWaitPad::~TTransactionWaitPad()

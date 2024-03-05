@@ -97,6 +97,50 @@ void TTcpConnection::TPacket::EnableCancel(TTcpConnectionPtr connection)
 
 ////////////////////////////////////////////////////////////////////////////////
 
+TTcpConnection::TBlobWithMemoryUsageGuard::TBlobWithMemoryUsageGuard(
+    TBlob&& blob,
+    TMemoryUsageTrackerGuard&& guard)
+    : Blob_(std::move(blob))
+    , Guard_(std::move(guard))
+{ }
+
+char* TTcpConnection::TBlobWithMemoryUsageGuard::Begin()
+{
+    return Blob_.Begin();
+}
+
+char* TTcpConnection::TBlobWithMemoryUsageGuard::End()
+{
+    return Blob_.End();
+}
+
+size_t TTcpConnection::TBlobWithMemoryUsageGuard::Capacity()
+{
+    return Blob_.Capacity();
+}
+
+i64 TTcpConnection::TBlobWithMemoryUsageGuard::Size()
+{
+    return Blob_.Size();
+}
+
+void TTcpConnection::TBlobWithMemoryUsageGuard::Append(TRef ref)
+{
+    Blob_.Append(ref);
+}
+
+void TTcpConnection::TBlobWithMemoryUsageGuard::Clear()
+{
+    Blob_.Clear();
+}
+
+void TTcpConnection::TBlobWithMemoryUsageGuard::Reserve(i64 size)
+{
+    Blob_.Reserve(size);
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
 TTcpConnection::TTcpConnection(
     TBusConfigPtr config,
     EConnectionType connectionType,
@@ -110,7 +154,8 @@ TTcpConnection::TTcpConnection(
     const std::optional<TString>& unixDomainSocketPath,
     IMessageHandlerPtr handler,
     IPollerPtr poller,
-    IPacketTranscoderFactory* packetTranscoderFactory)
+    IPacketTranscoderFactory* packetTranscoderFactory,
+    IMemoryUsageTrackerPtr memoryUsageTracker)
     : Config_(std::move(config))
     , ConnectionType_(connectionType)
     , Id_(id)
@@ -137,6 +182,7 @@ TTcpConnection::TTcpConnection(
     , WriteStallTimeout_(NProfiling::DurationToCpuDuration(Config_->WriteStallTimeout))
     , EncryptionMode_(Config_->EncryptionMode)
     , VerificationMode_(Config_->VerificationMode)
+    , MemoryUsageTracker_(std::move(memoryUsageTracker))
 { }
 
 TTcpConnection::~TTcpConnection()
@@ -211,7 +257,14 @@ void TTcpConnection::Start()
     }
 
     TTcpDispatcher::TImpl::Get()->RegisterConnection(this);
-    InitBuffers();
+
+    auto result = InitBuffers();
+
+    if (!result.IsOK()) {
+        YT_LOG_ERROR(result, "I/O buffers allocation error");
+        Abort(TError(NBus::EErrorCode::TransportError, "I/O buffers allocation error"));
+        return;
+    }
 
     switch (ConnectionType_) {
         case EConnectionType::Client:
@@ -548,12 +601,34 @@ bool TTcpConnection::AbortIfNetworkingDisabled()
     return true;
 }
 
-void TTcpConnection::InitBuffers()
+TError TTcpConnection::InitBuffers()
 {
-    ReadBuffer_ = TBlob(GetRefCountedTypeCookie<TTcpConnectionReadBufferTag>(), ReadBufferSize, /*initializeStorage*/ false);
+    auto readBufferGuardOrError = MemoryUsageTracker_
+        ? TMemoryUsageTrackerGuard::TryAcquire(MemoryUsageTracker_, ReadBufferSize)
+        : TMemoryUsageTrackerGuard();
+    auto writeBufferGuardOrError = MemoryUsageTracker_
+        ? TMemoryUsageTrackerGuard::TryAcquire(MemoryUsageTracker_, WriteBufferSize)
+        : TMemoryUsageTrackerGuard();
 
-    WriteBuffers_.push_back(std::make_unique<TBlob>(GetRefCountedTypeCookie<TTcpConnectionWriteBufferTag>()));
+    if (!readBufferGuardOrError.IsOK()) {
+        return readBufferGuardOrError.Wrap();
+    }
+
+    if (!writeBufferGuardOrError.IsOK()) {
+        return writeBufferGuardOrError.Wrap();
+    }
+
+    ReadBuffer_ = TBlobWithMemoryUsageGuard(
+        TBlob(GetRefCountedTypeCookie<TTcpConnectionReadBufferTag>(), ReadBufferSize, /*initializeStorage*/ false),
+        std::move(readBufferGuardOrError.Value())
+    );
+
+    WriteBuffers_.push_back(std::make_unique<TBlobWithMemoryUsageGuard>(
+        TBlob(GetRefCountedTypeCookie<TTcpConnectionWriteBufferTag>()),
+        std::move(writeBufferGuardOrError.Value())));
     WriteBuffers_[0]->Reserve(WriteBufferSize);
+
+    return TError();
 }
 
 int TTcpConnection::GetSocketPort()
@@ -1445,10 +1520,18 @@ bool TTcpConnection::MaybeEncodeFragments()
         if (buffer->Size() + fragment.Size() > buffer->Capacity()) {
             // Make sure we never reallocate.
             flushCoalesced();
-            WriteBuffers_.push_back(std::make_unique<TBlob>(GetRefCountedTypeCookie<TTcpConnectionWriteBufferTag>()));
+
+            auto writeBufferGuard = MemoryUsageTracker_
+                ? TMemoryUsageTrackerGuard::Acquire(MemoryUsageTracker_, WriteBufferSize)
+                : TMemoryUsageTrackerGuard();
+            WriteBuffers_.push_back(std::make_unique<TBlobWithMemoryUsageGuard>(
+                TBlob(GetRefCountedTypeCookie<TTcpConnectionWriteBufferTag>()),
+                std::move(writeBufferGuard)));
+
             buffer = WriteBuffers_.back().get();
             buffer->Reserve(std::max(WriteBufferSize, fragment.Size()));
         }
+
         buffer->Append(fragment);
         coalescedSize += fragment.Size();
     };

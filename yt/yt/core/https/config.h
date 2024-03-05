@@ -16,6 +16,7 @@ class TServerCredentialsConfig
 public:
     NCrypto::TPemBlobConfigPtr PrivateKey;
     NCrypto::TPemBlobConfigPtr CertChain;
+    TDuration UpdatePeriod;
 
     REGISTER_YSON_STRUCT(TServerCredentialsConfig);
 

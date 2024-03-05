@@ -37,6 +37,7 @@ public:
 
         Context->AddCertificate(TestCertificate);
         Context->AddPrivateKey(TestCertificate);
+        Context->Commit();
 
         Poller = CreateThreadPoolPoller(2, "TlsTest");
     }
@@ -78,7 +79,10 @@ TEST_F(TTlsTest, SimplePingPong)
     config->SetDefaults();
     auto dialer = Context->CreateDialer(config, Poller, NetLogger);
 
-    auto asyncFirstSide = dialer->Dial(listener->GetAddress());
+    auto context = New<TRemoteContext>();
+    context->Host = "localhost";
+
+    auto asyncFirstSide = dialer->Dial(listener->GetAddress(), context);
     auto asyncSecondSide = listener->Accept();
 
     auto firstSide = asyncFirstSide.Get().ValueOrThrow();
@@ -106,6 +110,7 @@ TEST(TTlsTestWithoutFixture, LoadCertificateChain)
     auto grpcLock = NRpc::NGrpc::TDispatcher::Get()->GetLibraryLock();
     auto context = New<TSslContext>();
     context->AddCertificateChain(TestCertificateChain);
+    context->Commit();
 }
 
 ////////////////////////////////////////////////////////////////////////////////

@@ -100,7 +100,7 @@ using parse_options = parse_options_t<char>;
 #if defined(__APPLE__) || defined(__FreeBSD__)
 #include <machine/endian.h>
 #elif defined(sun) || defined(__sun)
-#include <sys/byteorder.h>
+#error #include <sys/byteorder.h>
 #elif defined(__MVS__)
 #include <sys/endian.h>
 #else

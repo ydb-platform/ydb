@@ -39,7 +39,7 @@ void TKafkaReadSessionActor::HandleWakeup(TEvKafka::TEvWakeup::TPtr, const TActo
     for (auto& topicToPartitions: NewPartitionsToLockOnTime) {
         auto& partitions = topicToPartitions.second;
         for (auto partitionsIt = partitions.begin(); partitionsIt != partitions.end(); ) {
-            if (partitionsIt->LockOn >= ctx.Now()) {
+            if (partitionsIt->LockOn <= ctx.Now()) {
                 TopicPartitions[topicToPartitions.first].ToLock.emplace(partitionsIt->PartitionId);
                 NeedRebalance = true;
                 partitionsIt = partitions.erase(partitionsIt);
@@ -86,8 +86,8 @@ void TKafkaReadSessionActor::HandleJoinGroup(TEvKafka::TEvJoinGroupRequest::TPtr
 
     switch (ReadStep) {
         case WAIT_JOIN_GROUP: { // join first time
-            if (joinGroupRequest->ProtocolType != SUPPORTED_JOIN_GROUP_PROTOCOL) {
-                SendJoinGroupResponseFail(ctx, ev->Get()->CorrelationId, INVALID_REQUEST, TStringBuilder() << "unknown protocolType# " << joinGroupRequest->ProtocolType);
+            if (joinGroupRequest->ProtocolType.has_value() && !joinGroupRequest->ProtocolType.value().empty() && joinGroupRequest->ProtocolType.value() != SUPPORTED_JOIN_GROUP_PROTOCOL) {
+                SendJoinGroupResponseFail(ctx, ev->Get()->CorrelationId, INVALID_REQUEST, TStringBuilder() << "unknown protocolType# " << joinGroupRequest->ProtocolType.value());
                 CloseReadSession(ctx);
                 return;  
             }
@@ -156,8 +156,8 @@ void TKafkaReadSessionActor::HandleSyncGroup(TEvKafka::TEvSyncGroupRequest::TPtr
         return;
     }
 
-    if (syncGroupRequest->ProtocolType != SUPPORTED_JOIN_GROUP_PROTOCOL) {
-        SendJoinGroupResponseFail(ctx, ev->Get()->CorrelationId, INVALID_REQUEST, TStringBuilder() << "unknown protocolType# " << syncGroupRequest->ProtocolType);
+    if (syncGroupRequest->ProtocolType.has_value() && !syncGroupRequest->ProtocolType.value().empty() && syncGroupRequest->ProtocolType.value() != SUPPORTED_JOIN_GROUP_PROTOCOL) {
+        SendSyncGroupResponseFail(ctx, ev->Get()->CorrelationId, INVALID_REQUEST, TStringBuilder() << "unknown protocolType# " << syncGroupRequest->ProtocolType.value());
         CloseReadSession(ctx);
         return;  
     }
@@ -361,9 +361,9 @@ TConsumerProtocolAssignment TKafkaReadSessionActor::BuildAssignmentAndInformBala
         for (auto part: finalPartitionsToRead) {
             KAFKA_LOG_D("SYNC_GROUP assigned partition number: " << part);
             topicPartition.Partitions.push_back(part);
-            assignment.AssignedPartitions.push_back(topicPartition);
             partitions.ReadingNow.emplace(part);
         }
+        assignment.AssignedPartitions.push_back(topicPartition);
     }
 
     return assignment;

@@ -13,6 +13,7 @@ ydb/core/client/ut TClientTest.PromoteFollower
 ydb/core/client/ut TClientTest.ReadFromFollower
 ydb/core/client/ut TFlatTest.AutoSplitMergeQueue
 ydb/core/cms/ut_sentinel TSentinelTests.BSControllerCantChangeStatus
+ydb/core/debug_tools/ut OperationLog.ConcurrentWrites
 ydb/core/persqueue/ut [31/40]*
 ydb/core/persqueue/ut TopicSplitMerge.PartitionSplit
 ydb/core/persqueue/ut TPersQueueMirrorer.TestBasicRemote

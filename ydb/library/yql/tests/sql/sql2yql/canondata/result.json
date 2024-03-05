@@ -7512,9 +7512,9 @@
     ],
     "test_sql2yql.test[join-grace_join2]": [
         {
-            "checksum": "4909542187f7c74060abc053d5707f26",
-            "size": 1627,
-            "uri": "https://{canondata_backend}/1942278/d84f6d9ab025b27e11f463124468076d499ed9b3/resource.tar.gz#test_sql2yql.test_join-grace_join2_/sql.yql"
+            "checksum": "dec15765d9200297261bb22775ec5338",
+            "size": 1782,
+            "uri": "https://{canondata_backend}/1871182/e726c72e47d3c077e5ba351b53dba460544020da/resource.tar.gz#test_sql2yql.test_join-grace_join2_/sql.yql"
         }
     ],
     "test_sql2yql.test[join-group_compact_by]": [
@@ -25243,9 +25243,9 @@
     ],
     "test_sql_format.test[join-grace_join2]": [
         {
-            "checksum": "4946227ff929407fc62f749ef756ef4d",
-            "size": 185,
-            "uri": "https://{canondata_backend}/1880306/64654158d6bfb1289c66c626a8162239289559d0/resource.tar.gz#test_sql_format.test_join-grace_join2_/formatted.sql"
+            "checksum": "7656454a9434ff51ab800908ae346c42",
+            "size": 233,
+            "uri": "https://{canondata_backend}/1871182/e726c72e47d3c077e5ba351b53dba460544020da/resource.tar.gz#test_sql_format.test_join-grace_join2_/formatted.sql"
         }
     ],
     "test_sql_format.test[join-group_compact_by]": [
@@ -26013,9 +26013,9 @@
     ],
     "test_sql_format.test[join-nopushdown_filter_with_depends_on]": [
         {
-            "checksum": "7c0b7c120f321f9b415663ece29a09cd",
-            "size": 247,
-            "uri": "https://{canondata_backend}/1880306/64654158d6bfb1289c66c626a8162239289559d0/resource.tar.gz#test_sql_format.test_join-nopushdown_filter_with_depends_on_/formatted.sql"
+            "checksum": "956eea7d7ef4126950ed02a322c6c492",
+            "size": 272,
+            "uri": "https://{canondata_backend}/212715/1c52a4632d14126361f7585c218d202718c6fa0f/resource.tar.gz#test_sql_format.test_join-nopushdown_filter_with_depends_on_/formatted.sql"
         }
     ],
     "test_sql_format.test[join-opt_on_opt_side]": [

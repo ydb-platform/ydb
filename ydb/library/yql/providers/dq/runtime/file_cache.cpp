@@ -131,6 +131,8 @@ void TFileCache::AddFile(const TString& path, const TString& objectId)
 
     TGuard<TMutex> guard(Mutex);
     Clean();
+
+    YQL_CLOG(DEBUG, ProviderDq) << "FreeDiskSize/UsedDiskSize " << FreeDiskSize() << "/" << UsedDiskSize();
 }
 
 THashMap<TString, TFileCache::TFileObject>::iterator TFileCache::FindFileObject(const TString& objectId)

@@ -73,7 +73,6 @@ private:
     THashMap<TString, TString> TablesMapping; // [cluster].[name] -> [file path]
     TString TmpDir;
     bool KeepTempTables;
-    THashMap<TString, TString> TmpTablesMappings;
 
     std::unordered_multimap<TString, TString> Contents; // path -> pickled content
     THashMap<TString, TString> Locks;

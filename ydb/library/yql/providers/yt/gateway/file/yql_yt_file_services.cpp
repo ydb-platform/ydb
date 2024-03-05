@@ -27,17 +27,11 @@ TYtFileServices::~TYtFileServices() {
 }
 
 TString TYtFileServices::GetTablePath(TStringBuf cluster, TStringBuf table, bool isTemp, bool noLocks) {
-    auto fullTableName = TString(YtProviderName).append('.').append(cluster).append('.').append(table);
     if (isTemp) {
-        auto guard = Guard(Mutex);
-        auto it = TmpTablesMappings.find(fullTableName);
-        if (it != TmpTablesMappings.end()) {
-            return it->second;
-        }
-
-        return TmpTablesMappings[fullTableName] = TString(TFsPath(TmpDir) / TString(cluster).append(table.substr(4)).append(ToString(RandomNumber<float>())).append(TStringBuf(".tmp")));
+        return TString(TFsPath(TmpDir) / TString(table.substr(4)).append(TStringBuf(".tmp")));
     }
 
+    auto fullTableName = TString(YtProviderName).append('.').append(cluster).append('.').append(table);
     if (!noLocks) {
         auto guard = Guard(Mutex);
         if (auto p = Locks.FindPtr(fullTableName)) {

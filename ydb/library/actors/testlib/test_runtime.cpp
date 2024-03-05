@@ -1206,13 +1206,14 @@ namespace NActors {
                                     for (auto& ev : events) {
                                         TInverseGuard<TMutex> inverseGuard(Mutex);
 
-                                        for (auto observer : ObserverFuncs) {
+                                        for (auto& observer : ObserverFuncs) {
                                             observer(ev);
                                             if (!ev) break;
                                         }
 
-                                        if(ev && ObserverFunc(ev) != EEventAction::DROP && ev)
+                                        if (ev && ObserverFunc(ev) != EEventAction::DROP) {
                                             eventsToPush.push_back(ev);
+                                        }
                                     }
                                     mbox.second->PushFront(eventsToPush);
                                 }
@@ -1237,37 +1238,38 @@ namespace NActors {
                                     }
 
                                     hasProgress = true;
-                                    EEventAction action = EEventAction::PROCESS;
+                                    EEventAction action;
                                     {
                                         TInverseGuard<TMutex> inverseGuard(Mutex);
 
-                                        for (auto observer : ObserverFuncs) {
+                                        for (auto& observer : ObserverFuncs) {
                                             observer(ev);
-                                            if(!ev) break;
+                                            if (!ev) break;
                                         }
 
-                                        if (ev)
+                                        if (ev) {
                                             action = ObserverFunc(ev);
+                                        } else {
+                                            action = EEventAction::DROP;
+                                        }
                                     }
 
-                                    if (ev) {
-                                        switch (action) {
-                                            case EEventAction::PROCESS:
-                                                UpdateFinalEventsStatsForEachContext(*ev);
-                                                SendInternal(ev.Release(), mbox.first.NodeId - FirstNodeId, false);
-                                                break;
-                                            case EEventAction::DROP:
-                                                // do nothing
-                                                break;
-                                            case EEventAction::RESCHEDULE: {
-                                                TInstant deadline = TInstant::MicroSeconds(CurrentTimestamp) + ReschedulingDelay;
-                                                mbox.second->Freeze(deadline);
-                                                mbox.second->PushFront(ev);
-                                                break;
-                                            }
-                                            default:
-                                                Y_ABORT("Unknown action");
+                                    switch (action) {
+                                        case EEventAction::PROCESS:
+                                            UpdateFinalEventsStatsForEachContext(*ev);
+                                            SendInternal(ev.Release(), mbox.first.NodeId - FirstNodeId, false);
+                                            break;
+                                        case EEventAction::DROP:
+                                            // do nothing
+                                            break;
+                                        case EEventAction::RESCHEDULE: {
+                                            TInstant deadline = TInstant::MicroSeconds(CurrentTimestamp) + ReschedulingDelay;
+                                            mbox.second->Freeze(deadline);
+                                            mbox.second->PushFront(ev);
+                                            break;
                                         }
+                                        default:
+                                            Y_ABORT("Unknown action");
                                     }
                                 }
                             }

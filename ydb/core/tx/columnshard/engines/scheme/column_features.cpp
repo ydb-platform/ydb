@@ -62,18 +62,4 @@ TColumnFeatures::TColumnFeatures(const ui32 columnId, const std::shared_ptr<IBlo
 
 }
 
-TString TColumnLoader::DebugString() const {
-    TStringBuilder result;
-    if (ExpectedSchema) {
-        result << "schema:" << ExpectedSchema->ToString() << ";";
-    }
-    if (Transformer) {
-        result << "transformer:" << Transformer->DebugString() << ";";
-    }
-    if (Serializer) {
-        result << "serializer:" << Serializer->DebugString() << ";";
-    }
-    return result;
-}
-
 } // namespace NKikimr::NOlap

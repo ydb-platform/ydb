@@ -2,10 +2,17 @@
 #include "common.h"
 #include "portion_storage.h"
 
-#include <ydb/core/tx/columnshard/splitter/chunks.h>
 #include <ydb/core/tx/columnshard/engines/scheme/statistics/protos/data.pb.h>
+#include <ydb/core/tx/columnshard/engines/scheme/abstract/index_info.h>
 
+#include <ydb/services/bg_tasks/abstract/interface.h>
 #include <ydb/library/accessor/accessor.h>
+
+#include <library/cpp/object_factory/object_factory.h>
+
+namespace NKikimr::NOlap {
+class IPortionDataChunk;
+}
 
 namespace NKikimr::NOlap::NStatistics {
 
@@ -14,7 +21,7 @@ private:
     YDB_READONLY(EType, Type, EType::Undefined);
     IOperator() = default;
 protected:
-    virtual void DoFillStatisticsData(const THashMap<ui32, std::vector<std::shared_ptr<IPortionDataChunk>>>& data, TPortionStorage& portionStats, const TIndexInfo& index) const = 0;
+    virtual void DoFillStatisticsData(const THashMap<ui32, std::vector<std::shared_ptr<IPortionDataChunk>>>& data, TPortionStorage& portionStats, const IIndexInfo& index) const = 0;
     virtual void DoShiftCursor(TPortionStorageCursor& cursor) const = 0;
     virtual bool DoDeserializeFromProto(const NKikimrColumnShardStatisticsProto::TOperatorContainer& proto) = 0;
     virtual void DoSerializeToProto(NKikimrColumnShardStatisticsProto::TOperatorContainer& proto) const = 0;
@@ -35,7 +42,7 @@ public:
         DoShiftCursor(cursor);
     }
 
-    void FillStatisticsData(const THashMap<ui32, std::vector<std::shared_ptr<IPortionDataChunk>>>& data, TPortionStorage& portionStats, const TIndexInfo& index) const {
+    void FillStatisticsData(const THashMap<ui32, std::vector<std::shared_ptr<IPortionDataChunk>>>& data, TPortionStorage& portionStats, const IIndexInfo& index) const {
         DoFillStatisticsData(data, portionStats, index);
     }
 

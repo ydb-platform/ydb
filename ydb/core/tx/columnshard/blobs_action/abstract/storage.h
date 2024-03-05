@@ -10,10 +10,7 @@
 #include <ydb/core/tx/columnshard/data_sharing/manager/shared_blobs.h>
 
 #include <ydb/library/accessor/accessor.h>
-
-namespace NKikimr::NColumnShard {
-class TTiersManager;
-}
+#include <ydb/core/tx/tiering/abstract/manager.h>
 
 namespace NKikimr::NOlap {
 
@@ -46,7 +43,7 @@ protected:
         return true;
     }
 
-    virtual void DoOnTieringModified(const std::shared_ptr<NColumnShard::TTiersManager>& tiers) = 0;
+    virtual void DoOnTieringModified(const std::shared_ptr<NColumnShard::ITiersManager>& tiers) = 0;
     virtual TString DoDebugString() const {
         return "";
     }
@@ -79,7 +76,7 @@ public:
     bool Load(IBlobManagerDb& dbBlobs) {
         return DoLoad(dbBlobs);
     }
-    void OnTieringModified(const std::shared_ptr<NColumnShard::TTiersManager>& tiers) {
+    void OnTieringModified(const std::shared_ptr<NColumnShard::ITiersManager>& tiers) {
         return DoOnTieringModified(tiers);
     }
 

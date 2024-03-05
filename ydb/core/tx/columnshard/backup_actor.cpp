@@ -25,7 +25,6 @@ private:
         AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("TBackupWriteController.DoOnReadyResult", "start");
 
         NOlap::TWritingBuffer bufferStub;
-
         auto result = std::make_unique<TEvPrivate::TEvWriteBlobsResult>(putResult, std::move(bufferStub));
         ctx.Send(actorID, result.release());
     }
@@ -39,22 +38,15 @@ public:
                            std::shared_ptr<arrow::RecordBatch> arrowBatch)
         : actorID(actorID) {
         NArrow::TBatchSplitttingContext splitCtx(NColumnShard::TLimits::GetMaxBlobSize());
-
         NArrow::TSerializedBatch batch = NArrow::TSerializedBatch::Build(arrowBatch, splitCtx);
-
         NOlap::TWritingBlob currentBlob;
 
         // @TODO stub
         NOlap::TWriteAggregation aggreagtion(nullptr);
-
         NOlap::TWideSerializedBatch wideBatch(std::move(batch), aggreagtion);
-
         currentBlob.AddData(wideBatch);
-
         auto& task = AddWriteTask(NOlap::TBlobWriteInfo::BuildWriteTask(currentBlob.GetBlobData(), action));
-
         AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("TBackupWriteController.ctor", "create")("task", task.GetBlobId());
-
         currentBlob.InitBlobId(task.GetBlobId());
     }
 };
@@ -73,6 +65,8 @@ class TBackupActor : public TActorBootstrapped<TBackupActor> {
     NKikimrSSA::TProgram ProgramProto = NKikimrSSA::TProgram();
 
     std::optional<NActors::TActorId> ScanActorId;
+
+    std::shared_ptr<arrow::RecordBatch> Batch;
 
 public:
     TBackupActor(std::shared_ptr<NOlap::NBlobOperations::NTier::TOperator> insertOperator, const TActorId senderActorId,
@@ -97,6 +91,8 @@ public:
             HFunc(NKqp::TEvKqpCompute::TEvScanError, Handle);
             HFunc(NKqp::TEvKqpCompute::TEvScanData, Handle);
             HFunc(TEvPrivate::TEvWriteBlobsResult, Handle);
+            HFunc(NEvents::TBackupEvents::TEvBackupShardBatchPersist, Handle);
+            HFunc(NEvents::TBackupEvents::TEvBackupShardBatchPersistResult, Handle);
             default:
                 break;
         }
@@ -110,7 +106,6 @@ public:
 
         auto& msg = ev->Get()->Record;
         ScanActorId = ActorIdFromProto(msg.GetScanActorId());
-
         ProcessState(ctx, EBackupActorState::Progress);
     }
 
@@ -129,30 +124,42 @@ public:
         auto batch = ev->Get()->ArrowBatch;
         if (batch) {
             NArrow::TStatusValidator::Validate(batch->ValidateFull());
-            LoadBatchToStorage(ctx, batch);
+            SendBackupShardPersist(ctx);
+
+            // We read only one batch right now.
+            Batch = std::move(batch);
         } else {
             AFL_VERIFY(ev->Get()->Finished);
         }
 
         if (ev->Get()->Finished) {
             AFL_VERIFY(ev->Get()->StatsOnFinished);
-            // ResultStats = ev->Get()->StatsOnFinished->GetMetrics();
-
             AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("TBackupActor.Handle", "finished");
             return;
         }
 
         AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("TBackupActor.Handle", "not finished, send ack");
-
         ProcessState(ctx, EBackupActorState::Progress);
     }
 
     void Handle(TEvPrivate::TEvWriteBlobsResult::TPtr&, const TActorContext& ctx) {
         AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("TBackupActor.Handle", "TEvWriteBlobsResult");
-
         ProcessState(ctx, EBackupActorState::Done);
+    }
 
-        SendBackupShardResult(ctx);
+    void Handle(NEvents::TBackupEvents::TEvBackupShardBatchPersist::TPtr&, const TActorContext& ctx) {
+        // temporary solution for persist
+
+        AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("TBackupActor.Handle", "TEvBackupShardBatchPersist");
+        auto ProposePersist = std::make_unique<NEvents::TBackupEvents::TEvBackupShardBatchPersistResult>();
+        ctx.Send(SelfId(), ProposePersist.release());
+    }
+
+    void Handle(NEvents::TBackupEvents::TEvBackupShardBatchPersistResult::TPtr&, const TActorContext& ctx) {
+        AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("TBackupActor.Handle", "TEvBackupShardBatchPersistResult");
+
+        LoadBatchToStorage(ctx, Batch);
+        Batch.reset();
     }
 
 private:
@@ -207,13 +214,8 @@ private:
         ev->Record.SetLocalPathId(TableId);
         ev->Record.MutableSnapshot()->SetStep(Snapshot.GetPlanStep());
         ev->Record.MutableSnapshot()->SetTxId(Snapshot.GetTxId());
-
         ev->Record.SetStatsMode(NYql::NDqProto::DQ_STATS_MODE_FULL);
         ev->Record.SetTxId(Snapshot.GetTxId());
-
-        // // ev->Record.SetReverse(Reverse);
-        // // ev->Record.SetItemsLimit(Limit);
-
         ev->Record.SetDataFormat(NKikimrDataEvents::FORMAT_ARROW);
 
         NKikimrSSA::TOlapProgram olapProgram;
@@ -253,6 +255,13 @@ private:
     void SendBackupShardResult(const TActorContext& ctx) {
         auto ProposeResult = std::make_unique<NEvents::TBackupEvents::TEvBackupShardResult>();
         ctx.Send(SenderActorId, ProposeResult.release());
+    }
+
+    void SendBackupShardPersist(const TActorContext& ctx) {
+        AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("BackupActor.SendBackupShardPersist", "call");
+
+        auto ProposePersist = std::make_unique<NEvents::TBackupEvents::TEvBackupShardBatchPersist>();
+        ctx.Send(SelfId(), ProposePersist.release());
     }
 
     void LoadBatchToStorage(const TActorContext& ctx, std::shared_ptr<arrow::RecordBatch> arrowBatch) {

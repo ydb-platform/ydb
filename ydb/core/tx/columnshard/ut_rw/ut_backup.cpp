@@ -95,7 +95,6 @@ Y_UNIT_TEST_SUITE(TColumnShardBackup) {
         TActorId sender = runtime.AllocateEdgeActor();
 
         const auto csActorId = PrepareCSTable(runtime, sender);
-
         auto op = PrepareInsertOp(sender, tableId);
 
         runtime.Register(CreatBackupActor(op, sender, csActorId, tableId, NOlap::TSnapshot{writePlanStep, txId},

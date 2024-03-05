@@ -3,6 +3,12 @@ import "ydb/library/actors/protos/actors.proto";
 package NKikimrBackupEvents;
 option java_package = "ru.yandex.kikimr.proto";
 
+message TEvBackupShardBatchPersist {
+}
+
+message TEvBackupShardBatchPersistResult {
+}
+
 message TEvBackupShardResult {
     enum EStatus {
         STATUS_UNSPECIFIED = 0;

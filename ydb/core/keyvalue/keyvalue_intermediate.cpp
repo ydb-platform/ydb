@@ -80,7 +80,7 @@ TIntermediate::TIntermediate(TActorId respondTo, TActorId keyValueActorId, ui64 
     , CreatedAtGeneration(channelGeneration)
     , CreatedAtStep(channelStep)
     , IsReplied(false)
-    , Span(TWilsonTablet::Tablet, std::move(traceId), "KeyValue.Intermediate", NWilson::EFlags::AUTO_END)
+    , Span(TWilsonTablet::TabletTopLevel, std::move(traceId), "KeyValue.Intermediate", NWilson::EFlags::AUTO_END)
 {
     Stat.IntermediateCreatedAt = TAppData::TimeProvider->Now();
     Stat.RequestType = requestType;
@@ -106,7 +106,7 @@ void TIntermediate::UpdateStat() {
                 }
             }
         } else {
-        Stat.IndexRangeRead++;
+            Stat.IndexRangeRead++;
         }
     };
 

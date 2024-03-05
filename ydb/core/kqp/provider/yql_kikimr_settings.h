@@ -163,6 +163,7 @@ struct TKikimrConfiguration : public TKikimrSettings, public NCommon::TSettingDi
     bool EnablePgConstsToParams = false;
     ui64 ExtractPredicateRangesLimit = 0;
     bool EnablePerStatementQueryExecution = false;
+    bool EnableCreateTableAs = false;
 };
 
 }

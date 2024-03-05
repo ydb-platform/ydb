@@ -27,7 +27,7 @@ protected:
         return sb;
     }
 
-    virtual std::vector<TPartialReadResult> DoExtractReadyResults(const int64_t /*maxRowsInBatch*/) override;
+    virtual std::vector<TPartialReadResult> DoExtractReadyResults(const int64_t maxRowsInBatch) override;
     virtual bool DoReadNextInterval() override;
 
     virtual void DoAbort() override {

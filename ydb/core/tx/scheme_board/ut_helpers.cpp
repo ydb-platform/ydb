@@ -31,10 +31,11 @@ TSchemeBoardEvents::TEvUpdate* GenerateUpdate(
     ui64 generation,
     bool isDeletion
 ) {
-    auto* update = new TSchemeBoardEvents::TEvUpdateBuilder(owner, generation, describe, isDeletion);
+    const auto& pathDescription = MakeOpaquePathDescription("", describe);
+    auto* update = new TSchemeBoardEvents::TEvUpdateBuilder(owner, generation, pathDescription, isDeletion);
 
     if (!isDeletion) {
-        update->SetDescribeSchemeResult(describe);
+        update->SetDescribeSchemeResultSerialized(std::move(pathDescription.DescribeSchemeResultSerialized));
     }
 
     return update;

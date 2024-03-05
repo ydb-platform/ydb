@@ -72,6 +72,14 @@ TOperator::TOperator(const TString& storageId, const NColumnShard::TColumnShard&
     InitNewExternalOperator(shard.GetTierManagerPointer(storageId));
 }
 
+TOperator::TOperator(const TString& storageId, const TActorIdentity tabletActorID,
+                     const NColumnShard::NTiers::TManager* tierManager,
+                     const std::shared_ptr<NDataSharing::TStorageSharedBlobsManager>& storageSharedBlobsManager)
+    : TBase(storageId, storageSharedBlobsManager)
+    , TabletActorId(tabletActorID) {
+    InitNewExternalOperator(tierManager);
+}
+
 TOperator::TOperator(const TString& storageId, const TActorId& shardActorId, const std::shared_ptr<NWrappers::IExternalStorageConfig>& storageConfig,
     const std::shared_ptr<NDataSharing::TStorageSharedBlobsManager>& storageSharedBlobsManager)
     : TBase(storageId, storageSharedBlobsManager)
@@ -79,14 +87,6 @@ TOperator::TOperator(const TString& storageId, const TActorId& shardActorId, con
     , InitializationConfig(storageConfig)
 {
     InitNewExternalOperator();
-}
-
-TOperator::TOperator(const TString& storageId, const TActorIdentity tabletActorID,
-                     const NColumnShard::NTiers::TManager* tierManager,
-                     const std::shared_ptr<NDataSharing::TStorageSharedBlobsManager>& storageSharedBlobsManager)
-    : TBase(storageId, storageSharedBlobsManager)
-    , TabletActorId(tabletActorID) {
-    InitNewExternalOperator(tierManager);
 }
 
 void TOperator::DoOnTieringModified(const std::shared_ptr<NColumnShard::TTiersManager>& tiers) {

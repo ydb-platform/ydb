@@ -146,7 +146,7 @@ void TFetchingInterval::ConstructResult() {
     } else {
         AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", "start_construct_result")("interval_idx", IntervalIdx);
     }
-    if (AtomicCas(&ResultConstructionInProgress, 1, 0)) {
+    if (AtomicCas(&SourcesFinalized, 1, 0)) {
         auto task = std::make_shared<TMergeTask>(std::move(MergingContext), Context, std::move(Sources));
         task->SetPriority(NConveyor::ITask::EPriority::High);
         NConveyor::TScanServiceOperator::SendTaskToExecute(task);

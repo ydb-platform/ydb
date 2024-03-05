@@ -84,4 +84,8 @@ namespace NKikimr {
         return TActorId(0, TStringBuf(x, 12));
     }
 
+    // NEVER USE THIS
+    /*[[deprecated]]*/ inline ui64 MakeBSControllerID(ui32) { return MakeBSControllerID(); }
+    /*[[deprecated]]*/ inline ui64 MakeDefaultHiveID(ui32) { return MakeDefaultHiveID(); }
+    /*[[deprecated]]*/ inline ui64 MakeTabletID(ui32, ui32 hiveId, ui64 uniqId) { return MakeTabletID(hiveId != 0, uniqId); }
 }

@@ -95,10 +95,7 @@ public:
 
         TString lastCommonPath; // we will skip a common prefix iff it has been already returned from the prevoius shard
         if (Ev->Get()->Record.HasLastCommonPrefix()) {
-            TSerializedCellVec lastCommonPrefix(Ev->Get()->Record.GetLastCommonPrefix());
-            if (lastCommonPrefix.GetCells().size() > 0) {
-                lastCommonPath = TString(lastCommonPrefix.GetCells()[0].Data(), lastCommonPrefix.GetCells()[0].Size());
-            }
+            lastCommonPath = Ev->Get()->Record.GetLastCommonPrefix();
         }
 
         // If this trasaction has restarted we want to continue from the last seen key
@@ -213,7 +210,7 @@ public:
                 // For prefix save a row with 1 column
                 if (path > startAfterPath && path != lastCommonPath) {
                     LastCommonPath = path;
-                    Result->Record.AddCommonPrefixesRows(TSerializedCellVec::Serialize({TCell(path.data(), path.size())}));
+                    Result->Record.AddCommonPrefixesRows(path);
                     if (++foundKeys >= maxKeys)
                         break;
                 }

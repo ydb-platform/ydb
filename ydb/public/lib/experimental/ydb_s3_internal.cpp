@@ -15,13 +15,13 @@
 namespace NYdb {
 namespace NS3Internal {
 
-TS3ListingResult::TS3ListingResult(TResultSet&& commonPrefixes, TResultSet&& contents, TStatus&& status)
+TS3ListingResult::TS3ListingResult(std::vector<std::string>&& commonPrefixes, TResultSet&& contents, TStatus&& status)
     : TStatus(std::move(status))
     , CommonPrefixes(std::move(commonPrefixes))
     , Contents(std::move(contents))
 {}
 
-const TResultSet& TS3ListingResult::GetCommonPrefixes() const {
+const std::vector<std::string>& TS3ListingResult::GetCommonPrefixes() const {
     return CommonPrefixes;
 }
 
@@ -68,7 +68,10 @@ public:
                 if (any) {
                     any->UnpackTo(&result);
                 }
-                TResultSet commonPrefixes(result.Getcommon_prefixes());
+                std::vector<std::string> commonPrefixes;
+                for (auto commonPrefix : result.Getcommon_prefixes()) {
+                    commonPrefixes.push_back(commonPrefix);
+                }
                 TResultSet contents(result.Getcontents());
 
                 TS3ListingResult val(std::move(commonPrefixes), std::move(contents), TStatus(std::move(status)));

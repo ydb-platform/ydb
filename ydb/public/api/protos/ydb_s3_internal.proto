@@ -25,6 +25,6 @@ message S3ListingResponse {
 }
 
 message S3ListingResult {
-    Ydb.ResultSet common_prefixes = 1;    // Every Contents row starts with key suffix with KeySuffixSize columns
+    repeated string common_prefixes = 1;    // Every Contents row starts with key suffix with KeySuffixSize columns
     Ydb.ResultSet contents = 2;           // Every Contents row starts with key suffix with KeySuffixSize columns
 }

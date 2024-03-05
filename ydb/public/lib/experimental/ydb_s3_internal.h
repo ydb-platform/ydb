@@ -12,14 +12,14 @@ struct TS3ListingSettings : public TOperationRequestSettings<TS3ListingSettings>
 class TS3ListingResult : public TStatus {
     friend class TS3InternalClient;
 private:
-    TS3ListingResult(TResultSet&& commonPrefixes, TResultSet&& contents, TStatus&& status);
+    TS3ListingResult(std::vector<std::string>&& commonPrefixes, TResultSet&& contents, TStatus&& status);
 
 public:
-    const TResultSet& GetCommonPrefixes() const;
+    const std::vector<std::string>& GetCommonPrefixes() const;
     const TResultSet& GetContents() const;
 
 private:
-    TResultSet CommonPrefixes;
+    std::vector<std::string> CommonPrefixes;
     TResultSet Contents;
 };
 

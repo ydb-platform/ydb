@@ -829,7 +829,7 @@ message TEvS3ListingResponse {
     optional uint64 TabletID = 1;
     optional uint32 Status = 2;
     optional string ErrorDescription = 3;
-    repeated bytes CommonPrefixesRows = 4;  // TSerializedCellVec
+    repeated string CommonPrefixesRows = 4;
     repeated bytes ContentsRows = 5;        // TSerializedCellVec
     optional bool MoreRows = 6;
 }

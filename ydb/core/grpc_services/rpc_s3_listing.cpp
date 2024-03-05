@@ -215,7 +215,7 @@ private:
     TSerializedCellVec KeyRangeFrom;
     TSerializedCellVec KeyRangeTo;
     ui32 CurrentShardIdx;
-    TVector<TSerializedCellVec> CommonPrefixesRows;
+    TVector<TString> CommonPrefixesRows;
     TVector<TSerializedCellVec> ContentsRows;
 
 public:
@@ -576,7 +576,7 @@ private:
         ev->Record.SetMaxKeys(MaxKeys - ContentsRows.size() - CommonPrefixesRows.size());
         if (!CommonPrefixesRows.empty()) {
             // Next shard might have the same common prefix, need to skip it
-            ev->Record.SetLastCommonPrefix(CommonPrefixesRows.back().GetBuffer());
+            ev->Record.SetLastCommonPrefix(CommonPrefixesRows.back());
         }
 
         for (const auto& ci : ContentsColumns) {
@@ -634,7 +634,7 @@ private:
         }
 
         for (size_t i = 0; i < shardResponse.CommonPrefixesRowsSize(); ++i) {
-            if (!CommonPrefixesRows.empty() && CommonPrefixesRows.back().GetBuffer() == shardResponse.GetCommonPrefixesRows(i)) {
+            if (!CommonPrefixesRows.empty() && CommonPrefixesRows.back() == shardResponse.GetCommonPrefixesRows(i)) {
                 LOG_ERROR_S(ctx, NKikimrServices::RPC_REQUEST, "S3 listing got duplicate common prefix from shard " << shardResponse.GetTabletID());
             }
             CommonPrefixesRows.emplace_back(shardResponse.GetCommonPrefixesRows(i));
@@ -674,7 +674,8 @@ private:
         for (const auto& colMeta : columns) {
             const auto type = getTypeFromColMeta(colMeta);
             auto* col = resultSet.Addcolumns();
-            *col->mutable_type() = NYdb::TProtoAccessor::GetProto(type);
+            
+            *col->mutable_type()->mutable_optional_type()->mutable_item() = NYdb::TProtoAccessor::GetProto(type);
             *col->mutable_name() = colMeta.Name;
         }
 
@@ -697,7 +698,15 @@ private:
                 }
                 else
                 {
-                    ProtoValueFromCell(vb, colMeta.PType, cell);
+                    const NScheme::TTypeInfo& typeInfo = colMeta.PType;
+
+                    if (cell.IsNull()) {
+                        vb.EmptyOptional((NYdb::EPrimitiveType)typeInfo.GetTypeId());
+                    } else {
+                        vb.BeginOptional();
+                        ProtoValueFromCell(vb, typeInfo, cell);
+                        vb.EndOptional();
+                    }
                 }
             }
             vb.EndStruct();
@@ -709,12 +718,12 @@ private:
     void ReplySuccess(const NActors::TActorContext& ctx) {
         Ydb::S3Internal::S3ListingResult resp;
 
-        auto &commonPrefixes = *resp.mutable_common_prefixes();
-        commonPrefixes.set_truncated(false);
+        for (auto commonPrefix : CommonPrefixesRows) {
+            resp.add_common_prefixes(commonPrefix);
+        }
+
         auto &contents = *resp.mutable_contents();
         contents.set_truncated(false);
-
-        FillResultRows(commonPrefixes, CommonPrefixesColumns, CommonPrefixesRows);
         FillResultRows(contents, ContentsColumns, ContentsRows);
 
         try {

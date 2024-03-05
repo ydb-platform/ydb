@@ -80,19 +80,17 @@ Y_UNIT_TEST_SUITE(YdbS3Internal) {
         UNIT_ASSERT_EQUAL(res.GetStatus(), EStatus::SUCCESS);
 
         {
-            UNIT_ASSERT_VALUES_EQUAL(res.GetCommonPrefixes().RowsCount(), 1);
-            TResultSetParser parser(res.GetCommonPrefixes());
-            UNIT_ASSERT(parser.TryNextRow());
-            UNIT_ASSERT_VALUES_EQUAL(parser.ColumnParser("Path").GetUtf8(), "/home/Music/");
+            UNIT_ASSERT_VALUES_EQUAL(res.GetCommonPrefixes().size(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(res.GetCommonPrefixes()[0], "/home/Music/");
         }
 
         {
             UNIT_ASSERT_VALUES_EQUAL(res.GetContents().RowsCount(), 1);
             TResultSetParser parser(res.GetContents());
             UNIT_ASSERT(parser.TryNextRow());
-            UNIT_ASSERT_VALUES_EQUAL(parser.ColumnParser("Name").GetUtf8(), "bucket50");
-            UNIT_ASSERT_VALUES_EQUAL(parser.ColumnParser("Path").GetUtf8(), "/home/.bashrc");
-            UNIT_ASSERT_VALUES_EQUAL(parser.ColumnParser("Timestamp").GetUint64(), 10);
+            UNIT_ASSERT_VALUES_EQUAL(parser.ColumnParser("Name").GetOptionalUtf8().GetRef(), "bucket50");
+            UNIT_ASSERT_VALUES_EQUAL(parser.ColumnParser("Path").GetOptionalUtf8().GetRef(), "/home/.bashrc");
+            UNIT_ASSERT_VALUES_EQUAL(parser.ColumnParser("Timestamp").GetOptionalUint64().GetRef(), 10);
         }
     }
 

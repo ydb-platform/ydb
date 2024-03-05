@@ -28,6 +28,7 @@ Y_UNIT_TEST_SUITE(TS3ListingTest) {
                     (let value '(
                         '('Timestamp (Uint64 '%llu))
                         '('Data (String '"%s"))
+                        '('Int32Data (Null))
                     ))
                     (let ret_ (AsList
                         (UpdateRow '/dc-1/Dir/%s key value)
@@ -70,6 +71,7 @@ Y_UNIT_TEST_SUITE(TS3ListingTest) {
                 Columns { Name: "Timestamp" Type: "Uint64"}
                 Columns { Name: "Data"      Type: "String"}
                 Columns { Name: "ExtraData" Type: "String"}
+                Columns { Name: "Int32Data" Type: "Int32"}
                 Columns { Name: "Unused1"   Type: "Uint32"}
                 KeyColumnNames: [
                     "Hash",
@@ -370,17 +372,13 @@ Y_UNIT_TEST_SUITE(TS3ListingTest) {
         commonPrefixes.clear();
         contents.clear();
 
-        if (listingResult.has_common_prefixes()) {
+        if (listingResult.common_prefixes_size() > 0) {
             auto &folders = listingResult.common_prefixes();
-            for (auto row : folders.rows()) {
-                for (auto item : row.items()) {
-                    if (item.has_text_value()) {
-                        commonPrefixes.emplace_back(item.text_value());
-                        break;
-                    }
-                }
+            for (auto row : folders) {
+                commonPrefixes.emplace_back(row);
             }
         }
+        
         if (listingResult.has_contents()) {
             auto &files = listingResult.contents();
             for (auto row : files.rows()) {
@@ -456,7 +454,6 @@ Y_UNIT_TEST_SUITE(TS3ListingTest) {
         cleverServer.GetRuntime()->SetLogPriority(NKikimrServices::MSGBUS_REQUEST, NActors::NLog::PRI_DEBUG);
 //        cleverServer.GetRuntime()->SetLogPriority(NKikimrServices::TX_DATASHARD, NActors::NLog::PRI_TRACE);
 
-
         TestS3Listing(annoyingClient, 50, "", "", 10, {});
         TestS3Listing(annoyingClient, 50, "", "/", 7, {});
         TestS3Listing(annoyingClient, 50, "Music/", "/", 9, {});
@@ -483,6 +480,7 @@ Y_UNIT_TEST_SUITE(TS3ListingTest) {
         TestS3Listing(annoyingClient, 50, "Photos/", "", 2, {"Unused1"});
         TestS3Listing(annoyingClient, 50, "Music/", "/", 11, {"ExtraData"});
         TestS3Listing(annoyingClient, 50, "/", "", 8, {"Unused1"});
+        TestS3Listing(annoyingClient, 50, "Music/Nirvana", "/", 11, {"Int32Data"});
 
         TestS3Listing(annoyingClient, 333, "", "", 2, {});
         TestS3Listing(annoyingClient, 333, "", "/", 2, {});

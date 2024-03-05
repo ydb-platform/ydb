@@ -9,7 +9,7 @@ When adding, updating, or deleting a table row, CDC generates a change record by
 * Change records are sharded across topic partitions by primary key.
 * Each change is only delivered once (exactly-once delivery).
 * Changes by the same primary key are delivered to the same topic partition in the order they took place in the table.
-* Change record is delivered to the topic partition only after the commit of the corresponding transaction in the table.
+* Change record is delivered to the topic partition only after the corresponding transaction in the table has been committed.
 
 ## Limitations {#restrictions}
 

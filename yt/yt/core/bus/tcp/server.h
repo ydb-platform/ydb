@@ -10,8 +10,7 @@ namespace NYT::NBus {
 
 IBusServerPtr CreateBusServer(
     TBusServerConfigPtr config,
-    IPacketTranscoderFactory* packetTranscoderFactory = GetYTPacketTranscoderFactory(),
-    IMemoryUsageTrackerPtr memoryUsageTracker = nullptr);
+    IPacketTranscoderFactory* packetTranscoderFactory = GetYTPacketTranscoderFactory());
 
 ////////////////////////////////////////////////////////////////////////////////
 

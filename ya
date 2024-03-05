@@ -23,6 +23,11 @@ exit 2
 import os
 import sys
 import platform
+import time
+
+def add_stage_start_to_environ(stage_name):
+    stages = os.environ.get('YA_STAGES', '')
+    os.environ['YA_STAGES'] = stages + (':' if stages else '') + '{}@{}'.format(stage_name, time.time())
 
 RETRIES = 5
 HASH_PREFIX = 10
@@ -66,6 +71,7 @@ PLATFORM_MAP = {
     }
 } # End of mapping
 
+add_stage_start_to_environ('ya-script-initialization')
 
 def create_dirs(path):
     try:
@@ -158,6 +164,8 @@ def _fetch(url, into):
 
     _tune_ssl()
 
+    add_stage_start_to_environ('ya-script-download')
+
     from urllib.request import urlopen
     from urllib.request import Request
     from urllib.parse import urlparse
@@ -240,8 +248,6 @@ def _get(urls, md5):
                 if iter + 1 == RETRIES:
                     raise
                 else:
-                    import time
-
                     time.sleep(iter)
 
     return dest_path
@@ -259,6 +265,8 @@ def _get_dir(urls, md5, ya_name):
         if os.path.isfile(os.path.join(dest_dir, ya_name)):
             return dest_dir
         raise
+
+    add_stage_start_to_environ('ya-script-extract')
 
     tmp_dir = dest_dir + '.' + uniq()
     try:
@@ -325,6 +333,7 @@ def main():
 
     ya_name = {'win32': 'ya-bin.exe', 'win32-clang-cl': 'ya-bin.exe'}.get(best_key, 'ya-bin')  # XXX
     ya_dir = _get_dir(value['urls'], value['md5'], ya_name)
+    add_stage_start_to_environ('ya-script-prepare')
 
     # Popen `args` must have `str` type
     ya_path = str(os.path.join(ya_dir, ya_name))

@@ -1,6 +1,6 @@
 PY3_LIBRARY()
 
-VERSION(5.8.0)
+VERSION(5.9.8)
 
 LICENSE(BSD-3-Clause)
 
@@ -24,7 +24,7 @@ NO_CHECK_IMPORTS(
 NO_UTIL()
 
 CFLAGS(
-    -DPSUTIL_VERSION=580
+    -DPSUTIL_VERSION=598
 )
 
 SRCS(
@@ -40,6 +40,11 @@ IF (OS_LINUX)
     SRCS(
         psutil/_psutil_linux.c
         psutil/_psutil_posix.c
+        psutil/arch/linux/disk.c
+        psutil/arch/linux/mem.c
+        psutil/arch/linux/net.c
+        psutil/arch/linux/proc.c
+        psutil/arch/linux/users.c
     )
 
     PY_REGISTER(
@@ -62,7 +67,13 @@ IF (OS_DARWIN)
     SRCS(
         psutil/_psutil_osx.c
         psutil/_psutil_posix.c
-        psutil/arch/osx/process_info.c
+        psutil/arch/osx/cpu.c
+        psutil/arch/osx/disk.c
+        psutil/arch/osx/mem.c
+        psutil/arch/osx/net.c
+        psutil/arch/osx/proc.c
+        psutil/arch/osx/sensors.c
+        psutil/arch/osx/sys.c
     )
 
     PY_REGISTER(
@@ -88,13 +99,17 @@ IF (OS_WINDOWS)
         psutil/_psutil_windows.c
         psutil/arch/windows/cpu.c
         psutil/arch/windows/disk.c
+        psutil/arch/windows/mem.c
         psutil/arch/windows/net.c
-        psutil/arch/windows/process_handles.c
-        psutil/arch/windows/process_info.c
-        psutil/arch/windows/process_utils.c
+        psutil/arch/windows/proc.c
+        psutil/arch/windows/proc_handles.c
+        psutil/arch/windows/proc_info.c
+        psutil/arch/windows/proc_utils.c
         psutil/arch/windows/security.c
+        psutil/arch/windows/sensors.c
         psutil/arch/windows/services.c
         psutil/arch/windows/socks.c
+        psutil/arch/windows/sys.c
         psutil/arch/windows/wmi.c
     )
 

@@ -20,7 +20,6 @@
 #include <yt/yt/core/misc/mpsc_stack.h>
 #include <yt/yt/core/misc/ring_queue.h>
 #include <yt/yt/core/misc/atomic_ptr.h>
-#include <yt/yt/core/misc/memory_usage_tracker.h>
 
 #include <yt/yt/core/net/public.h>
 
@@ -87,8 +86,7 @@ public:
         const std::optional<TString>& unixDomainSocketPath,
         IMessageHandlerPtr handler,
         NConcurrency::IPollerPtr poller,
-        IPacketTranscoderFactory* packetTranscoderFactory,
-        IMemoryUsageTrackerPtr memoryUsageTracker);
+        IPacketTranscoderFactory* packetTranscoderFactory);
 
     ~TTcpConnection();
 
@@ -183,39 +181,6 @@ private:
         void EnableCancel(TTcpConnectionPtr connection);
     };
 
-    class TBlobWithMemoryUsageGuard {
-    public:
-        TBlobWithMemoryUsageGuard(
-            TBlob&& blob,
-            TMemoryUsageTrackerGuard&& guard);
-
-        TBlobWithMemoryUsageGuard() = default;
-        TBlobWithMemoryUsageGuard(const TBlobWithMemoryUsageGuard& other) = delete;
-        TBlobWithMemoryUsageGuard(TBlobWithMemoryUsageGuard&& other) = default;
-        ~TBlobWithMemoryUsageGuard() = default;
-
-        TBlobWithMemoryUsageGuard& operator=(const TBlobWithMemoryUsageGuard& other) = delete;
-        TBlobWithMemoryUsageGuard& operator=(TBlobWithMemoryUsageGuard&& other) = default;
-
-        char* Begin();
-
-        char* End();
-
-        size_t Capacity();
-
-        i64 Size();
-
-        void Append(TRef ref);
-
-        void Clear();
-
-        void Reserve(i64 size);
-
-    private:
-        TBlob Blob_;
-        TMemoryUsageTrackerGuard Guard_;
-    };
-
     using TPacketPtr = TIntrusivePtr<TPacket>;
 
     const TBusConfigPtr Config_;
@@ -274,7 +239,7 @@ private:
     std::unique_ptr<IPacketDecoder> Decoder_;
     const NProfiling::TCpuDuration ReadStallTimeout_;
     std::atomic<NProfiling::TCpuInstant> LastIncompleteReadTime_ = std::numeric_limits<NProfiling::TCpuInstant>::max();
-    TBlobWithMemoryUsageGuard ReadBuffer_;
+    TBlob ReadBuffer_;
 
     TRingQueue<TPacketPtr> QueuedPackets_;
     TRingQueue<TPacketPtr> EncodedPackets_;
@@ -283,7 +248,7 @@ private:
     std::unique_ptr<IPacketEncoder> Encoder_;
     const NProfiling::TCpuDuration WriteStallTimeout_;
     std::atomic<NProfiling::TCpuInstant> LastIncompleteWriteTime_ = std::numeric_limits<NProfiling::TCpuInstant>::max();
-    std::vector<std::unique_ptr<TBlobWithMemoryUsageGuard>> WriteBuffers_;
+    std::vector<std::unique_ptr<TBlob>> WriteBuffers_;
     TRingQueue<TRef> EncodedFragments_;
     TRingQueue<size_t> EncodedPacketSizes_;
 
@@ -312,8 +277,6 @@ private:
     const EEncryptionMode EncryptionMode_;
     const EVerificationMode VerificationMode_;
 
-    const IMemoryUsageTrackerPtr MemoryUsageTracker_;
-
     NYTree::IAttributeDictionaryPtr PeerAttributes_;
 
     size_t MaxFragmentsPerWrite_ = 256;
@@ -326,7 +289,7 @@ private:
     bool AbortIfNetworkingDisabled();
     void AbortSslSession();
 
-    TError InitBuffers();
+    void InitBuffers();
 
     int GetSocketPort();
 

@@ -43,13 +43,11 @@ public:
         TBusServerConfigPtr config,
         IPollerPtr poller,
         IMessageHandlerPtr handler,
-        IPacketTranscoderFactory* packetTranscoderFactory,
-        IMemoryUsageTrackerPtr memoryUsageTracker)
+        IPacketTranscoderFactory* packetTranscoderFactory)
         : Config_(std::move(config))
         , Poller_(std::move(poller))
         , Handler_(std::move(handler))
         , PacketTranscoderFactory_(std::move(packetTranscoderFactory))
-        , MemoryUsageTracker_(std::move(memoryUsageTracker))
     {
         YT_VERIFY(Config_);
         YT_VERIFY(Poller_);
@@ -124,8 +122,6 @@ protected:
     const IMessageHandlerPtr Handler_;
 
     IPacketTranscoderFactory* const PacketTranscoderFactory_;
-
-    const IMemoryUsageTrackerPtr MemoryUsageTracker_;
 
     YT_DECLARE_SPIN_LOCK(NThreading::TSpinLock, ControlSpinLock_);
     SOCKET ServerSocket_ = INVALID_SOCKET;
@@ -257,8 +253,7 @@ protected:
                 std::nullopt,
                 Handler_,
                 std::move(poller),
-                PacketTranscoderFactory_,
-                MemoryUsageTracker_);
+                PacketTranscoderFactory_);
 
             {
                 auto guard = WriterGuard(ConnectionsSpinLock_);
@@ -352,14 +347,12 @@ public:
         TBusServerConfigPtr config,
         IPollerPtr poller,
         IMessageHandlerPtr handler,
-        IPacketTranscoderFactory* packetTranscoderFactory,
-        IMemoryUsageTrackerPtr memoryUsageTracker)
+        IPacketTranscoderFactory* packetTranscoderFactory)
         : TTcpBusServerBase(
             std::move(config),
             std::move(poller),
             std::move(handler),
-            packetTranscoderFactory,
-            std::move(memoryUsageTracker))
+            packetTranscoderFactory)
     { }
 
 private:
@@ -397,11 +390,9 @@ class TTcpBusServerProxy
 public:
     explicit TTcpBusServerProxy(
         TBusServerConfigPtr config,
-        IPacketTranscoderFactory* packetTranscoderFactory,
-        IMemoryUsageTrackerPtr memoryUsageTracker)
+        IPacketTranscoderFactory* packetTranscoderFactory)
         : Config_(std::move(config))
         , PacketTranscoderFactory_(packetTranscoderFactory)
-        , MemoryUsageTracker_(std::move(memoryUsageTracker))
     {
         YT_VERIFY(Config_);
     }
@@ -417,8 +408,7 @@ public:
             Config_,
             TTcpDispatcher::TImpl::Get()->GetAcceptorPoller(),
             std::move(handler),
-            PacketTranscoderFactory_,
-            MemoryUsageTracker_);
+            PacketTranscoderFactory_);
 
         Server_.Store(server);
         server->Start();
@@ -437,8 +427,6 @@ private:
     const TBusServerConfigPtr Config_;
 
     IPacketTranscoderFactory* const PacketTranscoderFactory_;
-
-    const IMemoryUsageTrackerPtr MemoryUsageTracker_;
 
     TAtomicIntrusivePtr<TServer> Server_;
 };
@@ -479,8 +467,7 @@ private:
 
 IBusServerPtr CreateBusServer(
     TBusServerConfigPtr config,
-    IPacketTranscoderFactory* packetTranscoderFactory,
-    IMemoryUsageTrackerPtr memoryUsageTracker)
+    IPacketTranscoderFactory* packetTranscoderFactory)
 {
     std::vector<IBusServerPtr> servers;
 
@@ -488,16 +475,14 @@ IBusServerPtr CreateBusServer(
         servers.push_back(
             New<TTcpBusServerProxy<TRemoteTcpBusServer>>(
                 config,
-                packetTranscoderFactory,
-                memoryUsageTracker));
+                packetTranscoderFactory));
     }
 #ifdef _linux_
     // Abstract unix sockets are supported only on Linux.
     servers.push_back(
         New<TTcpBusServerProxy<TLocalTcpBusServer>>(
             config,
-            packetTranscoderFactory,
-            memoryUsageTracker));
+            packetTranscoderFactory));
 #endif
 
     return New<TCompositeBusServer>(std::move(servers));
